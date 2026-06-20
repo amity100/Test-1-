@@ -17,7 +17,18 @@ import { ClipRecorder } from './replay/ClipRecorder';
 import { HUD } from './ui/HUD';
 import { SFXManager } from './audio/SFXManager';
 
-const app = document.querySelector<HTMLDivElement>('#app')!;
+const appRoot = document.querySelector<HTMLDivElement>('#app');
+if (!appRoot) throw new Error('Missing #app root element');
+const app = appRoot;
+
+function showBootError(error: unknown) {
+  const message = error instanceof Error ? `${error.name}: ${error.message}\n${error.stack ?? ''}` : String(error);
+  app.innerHTML = `<div class="boot error">Puppet Brawl failed to start.\n\n${message}</div>`;
+}
+
+window.addEventListener('error', (event) => showBootError(event.error ?? event.message));
+window.addEventListener('unhandledrejection', (event) => showBootError(event.reason));
+
 let currentMatch: { dispose: () => void } | undefined;
 
 function createMatch() {
@@ -146,6 +157,9 @@ function createMatch() {
   };
 }
 
-RAPIER.init().then(() => {
-  currentMatch = createMatch();
-});
+app.innerHTML = '<div class="boot">Starting physics engine…</div>';
+RAPIER.init()
+  .then(() => {
+    currentMatch = createMatch();
+  })
+  .catch(showBootError);
