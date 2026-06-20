@@ -1,0 +1,2 @@
+import * as THREE from 'three';
+export class VFX { private shake=0; constructor(private camera:THREE.Camera, private scene:THREE.Scene){} snap(pos:THREE.Vector3){this.shake=.18; const s=new THREE.Mesh(new THREE.SphereGeometry(.08,8,8),new THREE.MeshBasicMaterial({color:0xffd166})); s.position.copy(pos); this.scene.add(s); setTimeout(()=>this.scene.remove(s),180);} update(dt:number){ if(this.shake>0){this.camera.position.x+=(Math.random()-.5)*this.shake; this.shake-=dt;} } }

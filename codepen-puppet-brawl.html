@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Puppet Brawl — CodePen Single File</title>
+  <style>
+    html,body,#app{margin:0;width:100%;height:100%;overflow:hidden;background:#14100b;color:#fff;font-family:Inter,system-ui,sans-serif;touch-action:none}
+    .hud{position:fixed;inset:0;pointer-events:none}.title{position:absolute;top:14px;left:50%;transform:translateX(-50%);font-weight:900;letter-spacing:.08em;text-shadow:0 2px #000}.panel{position:absolute;left:12px;bottom:12px;background:#0008;padding:12px;border:1px solid #ffffff26;border-radius:14px;max-width:370px}.bar{height:10px;background:#33251a;border-radius:9px;overflow:hidden;margin:6px 0}.fill{height:100%;background:linear-gradient(90deg,#ffd166,#ef476f)}button{pointer-events:auto;border:0;border-radius:999px;padding:10px 14px;margin:3px;background:#f4a261;color:#23160d;font-weight:800}.topright{position:absolute;right:12px;top:12px;text-align:right}.prompt{position:absolute;left:50%;bottom:26px;transform:translateX(-50%);background:#0009;padding:10px 16px;border-radius:999px}.result{position:absolute;inset:0;display:grid;place-items:center;background:#0009}.card{background:#22170f;border:1px solid #fff2;border-radius:20px;padding:24px;text-align:center;box-shadow:0 20px 60px #000}.loading{position:fixed;inset:0;display:grid;place-items:center;background:#14100b;font-size:18px}
+  </style>
+</head>
+<body>
+  <div id="app"><div class="loading">Loading Puppet Brawl…</div></div>
+  <script type="module">
+    import * as THREE from 'https://esm.sh/three@0.169.0';
+    import RAPIER from 'https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.14.0/+esm';
+
+    const GAME_CONFIG = {
+      physicsHz: 60,
+      gravity: { x: 0, y: -9.81, z: 0 },
+      arenaRadius: 5.2,
+      postureKoHeight: 0.72,
+      postureKoSeconds: 2.2,
+      puppet: { anchorPull: 22, strikePull: 38, snapImpulse: 6.8 },
+      stamina: { max: 100, regenPerSecond: 16, anchorCostPerSecond: 1.4, strikeCostPerSecond: 26, slackThreshold: 1, slackSeconds: 1.1 },
+      replaySeconds: 8,
+    };
+
+    class SimulationClock {
+      constructor(fixedDelta = 1 / 60, maxSteps = 4) { this.fixedDelta = fixedDelta; this.maxSteps = maxSteps; this.accumulator = 0; this.last = performance.now(); }
+      tick(step) { const now = performance.now(); this.accumulator += Math.min(0.08, (now - this.last) / 1000); this.last = now; let steps = 0; while (this.accumulator >= this.fixedDelta && steps < this.maxSteps) { step(this.fixedDelta); this.accumulator -= this.fixedDelta; steps++; } }
+    }
+
+    class SeededRandom { constructor(state) { this.state = state; } next(){ this.state=(1664525*this.state+1013904223)>>>0; return this.state/4294967296; } range(a,b){ return a+(b-a)*this.next(); } pick(v){ return v[Math.floor(this.next()*v.length)]; } }
+
+    class PhysicsWorld {
+      constructor() { this.world = new RAPIER.World(GAME_CONFIG.gravity); this.world.timestep = 1 / GAME_CONFIG.physicsHz; this.ids = new Map(); }
+      register(handle, id) { this.ids.set(handle, id); }
+      step() { this.world.step(); }
+      snapshots() { const out = []; this.world.forEachRigidBody((b) => { const id = this.ids.get(b.handle); if (!id) return; out.push({ id, position: b.translation(), rotation: b.rotation() }); }); return out; }
+      addArena() { const ground = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.05, 0)); this.world.createCollider(RAPIER.ColliderDesc.cylinder(0.08, GAME_CONFIG.arenaRadius).setFriction(1.2).setRestitution(0.2), ground); }
+    }
+
+    class PuppetState {
+      constructor() { this.stamina = GAME_CONFIG.stamina.max; this.activeLimb = 'rightHand'; this.slackTimer = 0; this.tension = 0; }
+      update(dt, strikeHeld) { if (this.slackTimer > 0) { this.slackTimer -= dt; this.tension = 0; this.stamina = Math.min(GAME_CONFIG.stamina.max, this.stamina + GAME_CONFIG.stamina.regenPerSecond * 0.45 * dt); return; } this.tension = strikeHeld ? 1 : 0; this.stamina += (GAME_CONFIG.stamina.regenPerSecond - GAME_CONFIG.stamina.anchorCostPerSecond - (strikeHeld ? GAME_CONFIG.stamina.strikeCostPerSecond : 0)) * dt; if (this.stamina <= GAME_CONFIG.stamina.slackThreshold) { this.stamina = 0; this.slackTimer = GAME_CONFIG.stamina.slackSeconds; } this.stamina = Math.max(0, Math.min(GAME_CONFIG.stamina.max, this.stamina)); }
+      get isSlack() { return this.slackTimer > 0; }
+    }
+
+    class Ragdoll {
+      constructor(physics, id, origin, color) { this.physics = physics; this.id = id; this.color = color; this.bodies = new Map(); this.build(origin); }
+      body(name, pos, half, density = 0.8) { const rb = this.physics.world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(pos.x,pos.y,pos.z).setLinearDamping(1.1).setAngularDamping(1.6)); this.physics.world.createCollider(RAPIER.ColliderDesc.cuboid(half.x,half.y,half.z).setDensity(density).setFriction(0.9).setRestitution(0.28), rb); this.physics.register(rb.handle, `${this.id}:${name}`); this.bodies.set(name, rb); return rb; }
+      joint(a, b, pa, pb) { this.physics.world.createImpulseJoint(RAPIER.JointData.spherical({x:pa.x,y:pa.y,z:pa.z},{x:pb.x,y:pb.y,z:pb.z}), a, b, true); }
+      build(o) { const chest=this.body('chest',o.clone().add(new THREE.Vector3(0,1.55,0)),new THREE.Vector3(.32,.36,.18),1.2), hips=this.body('hips',o.clone().add(new THREE.Vector3(0,1.02,0)),new THREE.Vector3(.28,.22,.16),1.1), head=this.body('head',o.clone().add(new THREE.Vector3(0,2.05,0)),new THREE.Vector3(.22,.22,.2),.7); this.joint(chest,hips,new THREE.Vector3(0,-.34,0),new THREE.Vector3(0,.22,0)); this.joint(chest,head,new THREE.Vector3(0,.36,0),new THREE.Vector3(0,-.22,0)); for (const s of [-1,1]) { const side=s<0?'left':'right'; const ua=this.body(`${side}UpperArm`,o.clone().add(new THREE.Vector3(s*.55,1.55,0)),new THREE.Vector3(.12,.31,.12)); const la=this.body(`${side}LowerArm`,o.clone().add(new THREE.Vector3(s*.85,1.25,0)),new THREE.Vector3(.11,.28,.11)); const hand=this.body(`${side}Hand`,o.clone().add(new THREE.Vector3(s*1.04,.97,0)),new THREE.Vector3(.13,.13,.13),1.4); this.joint(chest,ua,new THREE.Vector3(s*.33,.23,0),new THREE.Vector3(0,.3,0)); this.joint(ua,la,new THREE.Vector3(0,-.3,0),new THREE.Vector3(0,.27,0)); this.joint(la,hand,new THREE.Vector3(0,-.27,0),new THREE.Vector3(0,.1,0)); const ul=this.body(`${side}UpperLeg`,o.clone().add(new THREE.Vector3(s*.19,.62,0)),new THREE.Vector3(.13,.34,.13)); const ll=this.body(`${side}LowerLeg`,o.clone().add(new THREE.Vector3(s*.19,.08,0)),new THREE.Vector3(.12,.32,.12)); this.joint(hips,ul,new THREE.Vector3(s*.18,-.2,0),new THREE.Vector3(0,.33,0)); this.joint(ul,ll,new THREE.Vector3(0,-.33,0),new THREE.Vector3(0,.31,0)); } }
+      center(){ const c=this.bodies.get('chest').translation(); return new THREE.Vector3(c.x,c.y,c.z); }
+    }
+
+    class MarionetteController {
+      constructor(ragdoll, input, facing) { this.ragdoll = ragdoll; this.input = input; this.facing = facing; this.state = new PuppetState(); this.cross = ragdoll.center().add(new THREE.Vector3(0,1.6,0)); this.justSnapped = false; }
+      update(dt){ const f=this.input.update(dt); this.state.activeLimb=f.activeLimb; this.state.update(dt,f.strikeHeld); this.cross.lerp(f.crossTarget,0.18); if(!this.state.isSlack){ this.pull('chest', this.cross.clone().add(new THREE.Vector3(-.22*this.facing,-1.1,0)), GAME_CONFIG.puppet.anchorPull); this.pull('hips', this.cross.clone().add(new THREE.Vector3(.18*this.facing,-1.65,0)), GAME_CONFIG.puppet.anchorPull*.6); if(f.strikeHeld) this.pull(f.activeLimb, f.strikeTarget, GAME_CONFIG.puppet.strikePull); } this.justSnapped=false; if(!f.strikeHeld && f.releaseVelocity.length()>1.5 && this.state.stamina>8){ const b=this.ragdoll.bodies.get(f.activeLimb); const v=f.releaseVelocity.clone().multiplyScalar(GAME_CONFIG.puppet.snapImpulse); b.applyImpulse(new RAPIER.Vector3(v.x,v.y,v.z), true); this.justSnapped=true; } }
+      pull(name, target, strength){ const b=this.ragdoll.bodies.get(name); const p=b.translation(); const lv=b.linvel(); const force=target.clone().sub(new THREE.Vector3(p.x,p.y,p.z)).multiplyScalar(strength).sub(new THREE.Vector3(lv.x,lv.y,lv.z).multiplyScalar(2.4)); b.addForce(new RAPIER.Vector3(force.x,force.y,force.z), true); }
+    }
+
+    class LocalPointerInput {
+      constructor(element, camera, base) { this.element = element; this.camera = camera; this.base = base; this.pointer = new THREE.Vector2(); this.down=false; this.last = new THREE.Vector3(); this.cur = new THREE.Vector3(); this.vel = new THREE.Vector3(); this.limb='rightHand'; this.release = new THREE.Vector3(); this.plane = new THREE.Plane(new THREE.Vector3(0,1,0), -1.55); this.ray = new THREE.Raycaster(); element.addEventListener('pointermove',e=>this.set(e)); element.addEventListener('pointerdown',e=>{this.down=true; this.set(e);}); element.addEventListener('pointerup',()=>{this.down=false; this.release.copy(this.vel);}); window.addEventListener('keydown',e=>{ if(e.key.toLowerCase()==='q') this.limb='leftHand'; if(e.key.toLowerCase()==='e') this.limb='rightHand';}); }
+      setLimb(l){this.limb=l;}
+      set(e){this.pointer.set((e.clientX/innerWidth)*2-1,-(e.clientY/innerHeight)*2+1);}
+      update(dt) { this.ray.setFromCamera(this.pointer,this.camera); const hit=new THREE.Vector3(); this.ray.ray.intersectPlane(this.plane,hit); if(!hit.length()) hit.copy(this.base()); hit.x=Math.max(-4.5,Math.min(4.5,hit.x)); hit.z=Math.max(-2.5,Math.min(2.5,hit.z)); this.last.copy(this.cur); this.cur.copy(hit); this.vel.copy(this.cur).sub(this.last).multiplyScalar(1/Math.max(dt,.001)); const rv=this.release.clone(); this.release.set(0,0,0); return { crossTarget: hit.clone().add(new THREE.Vector3(0,1.2,0)), activeLimb:this.limb, strikeHeld:this.down, strikeTarget:hit, releaseVelocity:rv }; }
+    }
+
+    class AIOpponent { constructor(self, target, rng=new SeededRandom(99)){ this.self=self; this.target=target; this.rng=rng; this.t=0; this.hold=false; this.limb='leftHand'; this.release=new THREE.Vector3(); } update(dt){ this.t-=dt; if(this.t<=0){this.hold=!this.hold; this.t=this.rng.range(.25,1.05); this.limb=this.rng.pick(['leftHand','rightHand']); if(!this.hold) this.release.set(this.rng.range(-2,2),this.rng.range(.5,2.2),0).add(this.target().sub(this.self()).normalize().multiplyScalar(4));} const s=this.self(), trg=this.target(); const cross=s.clone().lerp(trg,.35).add(new THREE.Vector3(this.rng.range(-.8,.8),1.7,this.rng.range(-.4,.4))); const hand=trg.clone().add(new THREE.Vector3(this.rng.range(-.3,.3),1.1,this.rng.range(-.4,.4))); const r=this.release.clone(); this.release.set(0,0,0); return {crossTarget:cross,activeLimb:this.limb,strikeHeld:this.hold,strikeTarget:hand,releaseVelocity:r};} }
+
+    class SceneManager { constructor(root){ this.scene=new THREE.Scene(); this.camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,.1,100); this.renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true}); this.scene.background=new THREE.Color(0x15100c); this.renderer.setSize(innerWidth,innerHeight); this.renderer.setPixelRatio(Math.min(2,devicePixelRatio)); root.innerHTML=''; root.appendChild(this.renderer.domElement); this.camera.position.set(0,3.2,7); this.camera.lookAt(0,1,0); this.scene.add(new THREE.HemisphereLight(0xffe7c2,0x3b2413,2.4)); const d=new THREE.DirectionalLight(0xffffff,2); d.position.set(3,6,4); this.scene.add(d); window.addEventListener('resize',()=>{this.camera.aspect=innerWidth/innerHeight;this.camera.updateProjectionMatrix();this.renderer.setSize(innerWidth,innerHeight);}); } render(){this.renderer.render(this.scene,this.camera);} }
+
+    const dims={head:[.44,.44,.4],chest:[.64,.72,.36],hips:[.56,.44,.32],leftUpperArm:[.24,.62,.24],leftLowerArm:[.22,.56,.22],leftHand:[.26,.26,.26],rightUpperArm:[.24,.62,.24],rightLowerArm:[.22,.56,.22],rightHand:[.26,.26,.26],leftUpperLeg:[.26,.68,.26],leftLowerLeg:[.24,.64,.24],rightUpperLeg:[.26,.68,.26],rightLowerLeg:[.24,.64,.24]};
+    class RagdollRenderer { constructor(scene, ragdoll){ this.ragdoll=ragdoll; this.meshes=new Map(); this.group=new THREE.Group(); const mat=new THREE.MeshStandardMaterial({color:ragdoll.color,roughness:.85}); const jointMat=new THREE.MeshStandardMaterial({color:0x4a2d18,metalness:.1}); for(const [name] of ragdoll.bodies){ const geo=new THREE.BoxGeometry(...dims[name]); const mesh=new THREE.Mesh(geo,mat); this.meshes.set(name,mesh); this.group.add(mesh); const bolt=new THREE.Mesh(new THREE.SphereGeometry(.08,8,8),jointMat); mesh.add(bolt);} scene.add(this.group); } update(){ for(const [n,b] of this.ragdoll.bodies){ const m=this.meshes.get(n); const p=b.translation(), r=b.rotation(); m.position.set(p.x,p.y,p.z); m.quaternion.set(r.x,r.y,r.z,r.w);} } }
+
+    class MatchManager { constructor(){this.low=new Map(); this.result=null;} update(dt, puppets){ if(this.result)return; for(const p of puppets){ const c=p.center(); if(Math.hypot(c.x,c.z)>GAME_CONFIG.arenaRadius){ this.result={winner:puppets.find(x=>x!==p)?.id??'none',reason:'Ring-Out'}; return;} const t=(this.low.get(p.id)??0)+(c.y<GAME_CONFIG.postureKoHeight?dt:-999); this.low.set(p.id,Math.max(0,t)); if((this.low.get(p.id)??0)>GAME_CONFIG.postureKoSeconds){this.result={winner:puppets.find(x=>x!==p)?.id??'none',reason:'Posture-KO'};return;} } } }
+    class CameraRig { constructor(camera){this.camera=camera;} update(points){ const c=points.reduce((a,p)=>a.add(p),new THREE.Vector3()).multiplyScalar(1/points.length); this.camera.position.lerp(new THREE.Vector3(c.x,2.8,7.2),.04); this.camera.lookAt(c.x,1,c.z);} }
+    class VFX { constructor(camera, scene){this.camera=camera; this.scene=scene; this.shake=0;} snap(pos){this.shake=.18; const s=new THREE.Mesh(new THREE.SphereGeometry(.08,8,8),new THREE.MeshBasicMaterial({color:0xffd166})); s.position.copy(pos); this.scene.add(s); setTimeout(()=>this.scene.remove(s),180);} update(dt){ if(this.shake>0){this.camera.position.x+=(Math.random()-.5)*this.shake; this.shake-=dt;} } }
+    class SFXManager { beep(freq,dur=.08){this.ctx??=new AudioContext(); const o=this.ctx.createOscillator(), g=this.ctx.createGain(); o.frequency.value=freq; g.gain.value=.04; o.connect(g).connect(this.ctx.destination); o.start(); o.stop(this.ctx.currentTime+dur);} snap(){this.beep(180,.05)} ko(){this.beep(80,.25)} }
+    class ClipRecorder { constructor(seconds=8){this.seconds=seconds; this.frames=[];} record(time,bodies){this.frames.push({time,bodies}); const min=time-this.seconds; while(this.frames[0]&&this.frames[0].time<min)this.frames.shift();} async exportCanvas(canvas){ const stream=canvas.captureStream(30); const chunks=[]; const rec=new MediaRecorder(stream,{mimeType:'video/webm'}); rec.ondataavailable=e=>chunks.push(e.data); rec.start(); await new Promise(r=>setTimeout(r,3000)); rec.stop(); await new Promise(r=>rec.onstop=r); return new Blob(chunks,{type:'video/webm'});} }
+
+    class HUD { constructor(){ this.root=document.createElement('div'); this.root.className='hud'; this.root.innerHTML='<div class="title">PUPPET BRAWL</div><div class="topright"><button id="left">Left Wire (Q)</button><button id="right">Right Wire (E)</button><div>Drag to steer • Hold/release to snap</div></div><div class="panel"><b>CodePen physics prototype</b><div>Player stamina</div><div class="bar"><div id="pbar" class="fill"></div></div><div>AI stamina</div><div class="bar"><div id="ebar" class="fill"></div></div></div><div class="prompt">↕ Pull the wooden cross, hold then release for a chaotic punch</div>'; document.body.appendChild(this.root); this.pfill=this.root.querySelector('#pbar'); this.efill=this.root.querySelector('#ebar'); this.prompt=this.root.querySelector('.prompt'); this.root.querySelector('#left').onclick=()=>this.onLimb?.('leftHand'); this.root.querySelector('#right').onclick=()=>this.onLimb?.('rightHand'); }
+      update(p,e){this.pfill.style.width=p.state.stamina+'%'; this.efill.style.width=e.state.stamina+'%'; this.prompt.textContent=p.state.isSlack?'Puppet Slack! Let the strings recover.':'↕ Drag to move • Hold/release to snap • switch hands with buttons';}
+      showResult(r, canShare, share){ this.result?.remove(); this.result=document.createElement('div'); this.result.className='result'; this.result.innerHTML=`<div class="card"><h1>${r.winner} wins!</h1><p>${r.reason}</p><button id="again">Fight again</button><button id="share">${canShare?'Share clip':'Download clip'}</button></div>`; document.body.appendChild(this.result); this.result.querySelector('#again').onclick=()=>location.reload(); this.result.querySelector('#share').onclick=share; } }
+
+    await RAPIER.init();
+    const app = document.querySelector('#app');
+    const scene = new SceneManager(app); const physics = new PhysicsWorld(); physics.addArena();
+    const arena = new THREE.Mesh(new THREE.CylinderGeometry(GAME_CONFIG.arenaRadius, GAME_CONFIG.arenaRadius, .1, 64), new THREE.MeshStandardMaterial({color:0x8b5a2b,roughness:.9})); arena.position.y=-.05; scene.scene.add(arena);
+    const player = new Ragdoll(physics,'Player',new THREE.Vector3(-1.2,0,0),'#d9904a'); const enemy = new Ragdoll(physics,'AI',new THREE.Vector3(1.2,0,0),'#6db4ff');
+    const pr = new RagdollRenderer(scene.scene,player), er = new RagdollRenderer(scene.scene,enemy);
+    const input = new LocalPointerInput(scene.renderer.domElement, scene.camera, () => player.center()); const pc = new MarionetteController(player,input,1); const ai = new AIOpponent(()=>enemy.center(),()=>player.center()); const ec = new MarionetteController(enemy,ai,-1);
+    const match = new MatchManager(); const clock = new SimulationClock(); const cam = new CameraRig(scene.camera); const vfx = new VFX(scene.camera,scene.scene); const sfx = new SFXManager(); const recorder = new ClipRecorder(GAME_CONFIG.replaySeconds); const hud = new HUD(); hud.onLimb=l=>input.setLimb(l);
+    let elapsed=0, ended=false; const lines = new THREE.Group(); scene.scene.add(lines);
+    function drawWire(a,b,color){ const g=new THREE.BufferGeometry().setFromPoints([a,b]); const l=new THREE.Line(g,new THREE.LineBasicMaterial({color,transparent:true,opacity:.8})); lines.add(l); }
+    function animate(){ requestAnimationFrame(animate); clock.tick((dt)=>{ elapsed+=dt; pc.update(dt); ec.update(dt); physics.step(); recorder.record(elapsed,physics.snapshots()); match.update(dt,[player,enemy]); if(pc.justSnapped){sfx.snap();vfx.snap(player.center());} if(ec.justSnapped)vfx.snap(enemy.center()); if(match.result&&!ended){ ended=true; sfx.ko(); hud.showResult(match.result, 'share' in navigator, async()=>{ const blob=await recorder.exportCanvas(scene.renderer.domElement); const file=new File([blob],'puppet-brawl.webm',{type:'video/webm'}); if(navigator.canShare?.({files:[file]})) await navigator.share({files:[file],title:'Puppet Brawl KO'}); else { const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=file.name; a.click(); }}); } }); pr.update(); er.update(); lines.clear(); for(const c of [pc,ec]){ const chest=c.ragdoll.bodies.get('chest').translation(); const hand=c.ragdoll.bodies.get(c.state.activeLimb).translation(); drawWire(c.cross,new THREE.Vector3(chest.x,chest.y,chest.z),0xffffff); drawWire(c.cross,new THREE.Vector3(hand.x,hand.y,hand.z),c.state.tension?0xffd166:0x6c757d);} cam.update([player.center(),enemy.center()]); vfx.update(1/60); hud.update(pc,ec); scene.render(); }
+    animate();
+  </script>
+</body>
+</html>

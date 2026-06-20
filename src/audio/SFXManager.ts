@@ -1,0 +1,1 @@
+export class SFXManager { private ctx?:AudioContext; private beep(freq:number,dur=.08){this.ctx??=new AudioContext(); const o=this.ctx.createOscillator(), g=this.ctx.createGain(); o.frequency.value=freq; g.gain.value=.04; o.connect(g).connect(this.ctx.destination); o.start(); o.stop(this.ctx.currentTime+dur);} snap(){this.beep(180,.05)} ko(){this.beep(80,.25)} }

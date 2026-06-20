@@ -1,0 +1,4 @@
+import { GAME_CONFIG } from '../core/config';
+import type { Ragdoll } from '../entities/Ragdoll';
+export type MatchResult={winner:string;reason:'Ring-Out'|'Posture-KO'};
+export class MatchManager { private low=new Map<string,number>(); result?:MatchResult; update(dt:number, puppets:Ragdoll[]){ if(this.result)return; for(const p of puppets){ const c=p.center(); if(Math.hypot(c.x,c.z)>GAME_CONFIG.arenaRadius){ this.result={winner:puppets.find(x=>x!==p)?.id??'none',reason:'Ring-Out'}; return;} const t=(this.low.get(p.id)??0)+(c.y<GAME_CONFIG.postureKoHeight?dt:-999); this.low.set(p.id,Math.max(0,t)); if((this.low.get(p.id)??0)>GAME_CONFIG.postureKoSeconds){this.result={winner:puppets.find(x=>x!==p)?.id??'none',reason:'Posture-KO'};return;} } } reset(){this.low.clear();this.result=undefined;} }

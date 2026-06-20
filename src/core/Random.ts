@@ -1,0 +1,1 @@
+export class SeededRandom { constructor(private state: number) {} next(){this.state=(1664525*this.state+1013904223)>>>0;return this.state/4294967296;} range(a:number,b:number){return a+(b-a)*this.next();} pick<T>(v:T[]){return v[Math.floor(this.next()*v.length)]!;} }
