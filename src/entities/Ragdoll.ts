@@ -104,7 +104,7 @@ export class Ragdoll {
       this.joint(lowerArm, hand, new Vector3(0, -0.22, 0), new Vector3(0, 0.09, 0));
 
       const upperLeg = this.body(`${side}UpperLeg` as PartName, o.clone().add(new Vector3(s * 0.16, 0.7, 0)), new Vector3(0.1, 0.3, 0.1), 0.95);
-      const lowerLeg = this.body(`${side}LowerLeg` as PartName, o.clone().add(new Vector3(s * 0.16, 0.22, 0)), new Vector3(0.09, 0.28, 0.09), 0.9);
+      const lowerLeg = this.body(`${side}LowerLeg` as PartName, o.clone().add(new Vector3(s * 0.16, 0.36, 0)), new Vector3(0.09, 0.28, 0.09), 0.9);
 
       this.joint(hips, upperLeg, new Vector3(s * 0.16, -0.18, 0), new Vector3(0, 0.28, 0));
       this.joint(upperLeg, lowerLeg, new Vector3(0, -0.28, 0), new Vector3(0, 0.26, 0));
