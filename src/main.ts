@@ -1,255 +1,125 @@
 import './style.css';
 import * as THREE from 'three';
-import { GAME_CONFIG } from './core/config';
 
-type Limb = 'leftHand' | 'rightHand';
-type PartName = 'head' | 'chest' | 'hips' | 'leftHand' | 'rightHand' | 'leftFoot' | 'rightFoot';
-type Part = { name: PartName; pos: THREE.Vector3; vel: THREE.Vector3; mesh: THREE.Mesh; radius: number };
-type Puppet = { id: string; color: string; parts: Record<PartName, Part>; stamina: number; slack: number; activeLimb: Limb; cross: THREE.Vector3; aiTimer: number; aiPhase: number; isAI: boolean };
+type BiomeActor = { group: THREE.Group; velocity: THREE.Vector3; phase: number; kind: 'fish' | 'shark' | 'dolphinAlly' };
+type Vehicle = { group: THREE.Group; phase: number; speed: number };
 
-type InputFrame = { target: THREE.Vector3; held: boolean; activeLimb: Limb; release: THREE.Vector3 };
+type DolphinState = {
+  position: THREE.Vector3;
+  velocity: THREE.Vector3;
+  heading: number;
+  chargeHeld: boolean;
+  diveCharge: number;
+  combo: number;
+  perfects: number;
+  bestHeight: number;
+};
 
-const appRoot = document.querySelector<HTMLDivElement>('#app');
-if (!appRoot) throw new Error('Missing #app root element');
-const app = appRoot;
+const app = document.querySelector<HTMLDivElement>('#app');
+if (!app) throw new Error('Missing #app root element');
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x17110c);
-const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 100);
-camera.position.set(0, 3.2, 7.5);
-const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+scene.fog = new THREE.FogExp2(0xf5a760, 0.0065);
+const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 2500);
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
 renderer.setSize(innerWidth, innerHeight);
-renderer.setPixelRatio(Math.min(2, devicePixelRatio));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.28;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 app.innerHTML = '';
 app.appendChild(renderer.domElement);
 
-scene.add(new THREE.HemisphereLight(0xffe7c2, 0x3b2413, 2.7));
-const sun = new THREE.DirectionalLight(0xffffff, 2.2);
-sun.position.set(4, 7, 5);
+const clock = new THREE.Clock();
+const waterLevel = 0;
+const world = new THREE.Group();
+scene.add(world);
+
+const sun = new THREE.DirectionalLight(0xfff0c2, 5.4);
+sun.position.set(-120, 62, -210);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
 scene.add(sun);
+scene.add(new THREE.HemisphereLight(0xffcf9a, 0x06365e, 2.8));
 
-const arena = new THREE.Mesh(
-  new THREE.CylinderGeometry(GAME_CONFIG.arenaRadius, GAME_CONFIG.arenaRadius, 0.14, 96),
-  new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.9 }),
+const sky = new THREE.Mesh(
+  new THREE.SphereGeometry(1800, 32, 16),
+  new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    uniforms: { top: { value: new THREE.Color(0x7d3e58) }, horizon: { value: new THREE.Color(0xffb15e) }, glow: { value: new THREE.Color(0xfff0a8) } },
+    vertexShader: 'varying vec3 vPos; void main(){vPos=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+    fragmentShader: 'varying vec3 vPos; uniform vec3 top; uniform vec3 horizon; uniform vec3 glow; void main(){float h=normalize(vPos).y; vec3 c=mix(horizon,top,smoothstep(-.05,.75,h)); float sun=pow(max(dot(normalize(vPos),normalize(vec3(-.55,.22,-.8))),0.),22.); gl_FragColor=vec4(c+glow*sun*1.7,1.);}'
+  })
 );
-arena.position.y = -0.08;
-scene.add(arena);
-const ring = new THREE.Mesh(new THREE.TorusGeometry(GAME_CONFIG.arenaRadius, 0.045, 8, 128), new THREE.MeshBasicMaterial({ color: 0xffd166 }));
-ring.rotation.x = Math.PI / 2;
-ring.position.y = 0.02;
-scene.add(ring);
+scene.add(sky);
 
-const wireGroup = new THREE.Group();
-scene.add(wireGroup);
+const waterUniforms = { time: { value: 0 }, sunDir: { value: sun.position.clone().normalize() } };
+const ocean = new THREE.Mesh(
+  new THREE.PlaneGeometry(2400, 2400, 220, 220),
+  new THREE.ShaderMaterial({
+    uniforms: waterUniforms,
+    transparent: true,
+    vertexShader: `varying vec3 vWorld; varying vec3 vNormal; uniform float time;
+      float wave(vec2 p,float s,float a){return sin(p.x*s+time*1.2)+cos((p.y+p.x*.35)*s*.72+time*.9)*a;}
+      void main(){vec3 p=position; float h=wave(p.xz,.035,.7)*1.2+wave(p.zx,.09,.45)*.42+sin(length(p.xz)*.018-time)*.35; p.z+=h; vNormal=normalize(vec3(-.08*h,1.,-.06*h)); vec4 w=modelMatrix*vec4(p,1.); vWorld=w.xyz; gl_Position=projectionMatrix*viewMatrix*w;}`,
+    fragmentShader: `varying vec3 vWorld; varying vec3 vNormal; uniform vec3 sunDir; uniform float time;
+      void main(){vec3 viewDir=normalize(cameraPosition-vWorld); float fres=pow(1.-max(dot(viewDir,vNormal),0.),3.); float sparkle=pow(max(dot(reflect(-sunDir,vNormal),viewDir),0.),80.); float lane=pow(max(dot(normalize(vec3(-.48,.08,-.88)),normalize(vWorld-cameraPosition)),0.),12.); vec3 deep=vec3(.015,.17,.28); vec3 teal=vec3(.02,.42,.50); vec3 gold=vec3(1.,.62,.18); vec3 col=mix(deep,teal,fres*.75+.18)+gold*(sparkle*3.2+lane*.38)*(sin(vWorld.x*.5+time*4.)*.25+.75); col+=vec3(1.,.82,.42)*pow(max(dot(normalize(vWorld-cameraPosition),normalize(vec3(-.5,.08,-.85))),0.),45.)*.75; gl_FragColor=vec4(col,.92);}`
+  })
+);
+ocean.rotation.x = -Math.PI / 2;
+ocean.receiveShadow = true;
+world.add(ocean);
 
-const hud = document.createElement('div');
-hud.className = 'hud';
-hud.innerHTML = `
-  <div class="title">PUPPET BRAWL</div>
-  <div class="topright">
-    <button id="left">Left Wire (Q / 1)</button>
-    <button id="right">Right Wire (E / 2)</button>
-    <div class="hint">Drag to steer. Hold, aim, release to punch.</div>
-  </div>
-  <div class="panel">
-    <b>Playable physics puppet duel</b>
-    <div>Player stamina</div><div class="bar"><div id="pbar" class="fill"></div></div>
-    <div>AI stamina</div><div class="bar"><div id="ebar" class="fill"></div></div>
-    <small>Push the blue puppet out of the ring. No instant AI wins.</small>
-  </div>
-  <div class="prompt">Drag slowly to walk. Hold and release for a snap strike.</div>`;
-document.body.appendChild(hud);
-const pbar = hud.querySelector<HTMLDivElement>('#pbar')!;
-const ebar = hud.querySelector<HTMLDivElement>('#ebar')!;
-const prompt = hud.querySelector<HTMLDivElement>('.prompt')!;
+function mat(color: number, roughness = 0.55, metalness = 0) { return new THREE.MeshStandardMaterial({ color, roughness, metalness }); }
+function add(mesh: THREE.Mesh, parent = world) { mesh.castShadow = true; mesh.receiveShadow = true; parent.add(mesh); return mesh; }
 
-const raycaster = new THREE.Raycaster();
-const pointer = new THREE.Vector2(0, 0.1);
-const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -1.25);
-let pointerDown = false;
-let selected: Limb = 'rightHand';
-let previousTarget = new THREE.Vector3();
-let releaseVelocity = new THREE.Vector3();
-let hasPointer = false;
-
-hud.querySelector<HTMLButtonElement>('#left')!.onclick = () => (selected = 'leftHand');
-hud.querySelector<HTMLButtonElement>('#right')!.onclick = () => (selected = 'rightHand');
-window.addEventListener('keydown', (event) => {
-  if (event.key.toLowerCase() === 'q' || event.key === '1') selected = 'leftHand';
-  if (event.key.toLowerCase() === 'e' || event.key === '2') selected = 'rightHand';
-});
-renderer.domElement.addEventListener('pointermove', setPointer);
-renderer.domElement.addEventListener('pointerdown', (event) => {
-  pointerDown = true;
-  setPointer(event);
-  renderer.domElement.setPointerCapture(event.pointerId);
-});
-renderer.domElement.addEventListener('pointerup', (event) => {
-  pointerDown = false;
-  renderer.domElement.releasePointerCapture(event.pointerId);
-});
-
-function setPointer(event: PointerEvent) {
-  hasPointer = true;
-  pointer.set((event.clientX / innerWidth) * 2 - 1, -(event.clientY / innerHeight) * 2 + 1);
+function createDolphin(color = 0x6da8b8) {
+  const g = new THREE.Group();
+  const body = add(new THREE.Mesh(new THREE.CapsuleGeometry(0.55, 2.3, 12, 28), mat(color, 0.36)), g);
+  body.rotation.z = Math.PI / 2;
+  body.scale.set(1, 0.62, 0.48);
+  const nose = add(new THREE.Mesh(new THREE.ConeGeometry(0.24, 0.8, 24), mat(0xb8d4d9, 0.42)), g); nose.rotation.z = -Math.PI / 2; nose.position.x = 1.55;
+  const tail = add(new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.9, 24), mat(color, 0.38)), g); tail.rotation.z = Math.PI / 2; tail.position.x = -1.55;
+  const fin = add(new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.8, 3), mat(0x4a7989, 0.44)), g); fin.position.set(-0.2, 0.55, 0); fin.rotation.z = Math.PI;
+  for (const z of [-0.42, 0.42]) { const fl = add(new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.8, 3), mat(0x477384, 0.45)), g); fl.position.set(0.35, -0.12, z); fl.rotation.set(Math.PI / 2, 0, z > 0 ? -0.6 : 0.6); }
+  return g;
 }
+const dolphin = createDolphin();
+world.add(dolphin);
+const state: DolphinState = { position: new THREE.Vector3(0, -1.2, 0), velocity: new THREE.Vector3(0, 0, -18), heading: 0, chargeHeld: false, diveCharge: 0, combo: 0, perfects: 0, bestHeight: 0 };
 
-function makeMesh(name: PartName, color: string) {
-  const sizes: Record<PartName, [number, number, number]> = {
-    head: [0.38, 0.38, 0.34], chest: [0.62, 0.68, 0.34], hips: [0.54, 0.36, 0.3],
-    leftHand: [0.22, 0.22, 0.22], rightHand: [0.22, 0.22, 0.22], leftFoot: [0.22, 0.22, 0.28], rightFoot: [0.22, 0.22, 0.28],
-  };
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(...sizes[name]), new THREE.MeshStandardMaterial({ color, roughness: 0.82 }));
-  scene.add(mesh);
-  return mesh;
+function island(x: number, z: number, s: number) {
+  const g = new THREE.Group(); g.position.set(x, -1.7, z); g.scale.setScalar(s); world.add(g);
+  add(new THREE.Mesh(new THREE.ConeGeometry(16, 10, 8), mat(0x5e4a35, 0.88)), g);
+  for (let i = 0; i < 18; i++) { const p = add(new THREE.Mesh(new THREE.CylinderGeometry(.08,.13,3.5,7), mat(0x6a4324)), g); p.position.set((Math.random()-.5)*22,5,(Math.random()-.5)*22); const crown=add(new THREE.Mesh(new THREE.SphereGeometry(.85,8,6), mat(0x2f7d42,.75)), g); crown.position.copy(p.position).y+=2.1; }
 }
+island(-95, -210, 1.3); island(120, -390, .9); island(-180, -520, .7);
 
-function makePuppet(id: string, x: number, color: string, isAI: boolean): Puppet {
-  const coords: Record<PartName, THREE.Vector3> = {
-    head: new THREE.Vector3(x, 2.18, 0), chest: new THREE.Vector3(x, 1.62, 0), hips: new THREE.Vector3(x, 1.08, 0),
-    leftHand: new THREE.Vector3(x - 0.74, 1.18, 0), rightHand: new THREE.Vector3(x + 0.74, 1.18, 0),
-    leftFoot: new THREE.Vector3(x - 0.22, 0.32, 0), rightFoot: new THREE.Vector3(x + 0.22, 0.32, 0),
-  };
-  const parts = Object.fromEntries(Object.entries(coords).map(([name, pos]) => [name, { name: name as PartName, pos, vel: new THREE.Vector3(), mesh: makeMesh(name as PartName, color), radius: name.includes('Hand') ? 0.18 : 0.28 }])) as unknown as Record<PartName, Part>;
-  return { id, color, parts, stamina: 100, slack: 0, activeLimb: 'rightHand', cross: new THREE.Vector3(x, 2.9, 0), aiTimer: 0, aiPhase: 0, isAI };
-}
+function createBoat(x: number, z: number, scale: number): Vehicle { const g = new THREE.Group(); g.position.set(x, .4, z); g.scale.setScalar(scale); world.add(g); add(new THREE.Mesh(new THREE.BoxGeometry(8,1.1,2.1), mat(0x6f3f22,.6)), g); const cabin=add(new THREE.Mesh(new THREE.BoxGeometry(2.4,1.3,1.7), mat(0xf4e4c2,.5)), g); cabin.position.y=1.1; const mast=add(new THREE.Mesh(new THREE.CylinderGeometry(.06,.08,6,8), mat(0x4a2a17)), g); mast.position.y=3; const sail=add(new THREE.Mesh(new THREE.PlaneGeometry(2.6,3.8), mat(0xfff1d0,.35)), g); sail.position.set(.4,3,0); sail.rotation.y=Math.PI/2; for(let i=0;i<4;i++){const h=add(new THREE.Mesh(new THREE.CapsuleGeometry(.16,.55,5,8), mat(0xffc79a,.5)),g); h.position.set(-2+i*1.1,1.25,(i%2-.5)*1.2);} return { group:g, phase:Math.random()*10, speed:.5+Math.random()*.5 }; }
+const vehicles = [createBoat(34,-86,1), createBoat(-70,-310,1.3), createBoat(150,-170,.55)];
 
-const player = makePuppet('Player', -1.35, '#d9904a', false);
-const enemy = makePuppet('AI', 1.35, '#6db4ff', true);
-let elapsed = 0;
-let resultShown = false;
+const actors: BiomeActor[] = [];
+for (let i=0;i<42;i++){ const kind = i%17===0?'shark':i%11===0?'dolphinAlly':'fish'; const g = kind==='dolphinAlly'?createDolphin(0x8ac6d1):new THREE.Group(); if(kind!=='dolphinAlly'){ add(new THREE.Mesh(new THREE.CapsuleGeometry(kind==='shark'?0.28:.09, kind==='shark'?1.5:.45, 6, 10), mat(kind==='shark'?0x56616a:0xffcf5a,.5)), g); g.rotation.z=Math.PI/2; } g.position.set((Math.random()-.5)*180, -2-Math.random()*16, -80-Math.random()*620); g.scale.setScalar(kind==='fish'?.7+Math.random()*1.2:1); world.add(g); actors.push({group:g, velocity:new THREE.Vector3((Math.random()-.5)*2,0,-1-Math.random()*2), phase:Math.random()*6, kind}); }
 
-function projectedTarget(base: THREE.Vector3, dt: number): InputFrame {
-  raycaster.setFromCamera(pointer, camera);
-  const hit = new THREE.Vector3();
-  raycaster.ray.intersectPlane(plane, hit);
-  if (!hasPointer) hit.copy(base).add(new THREE.Vector3(0, 0.15, 0));
-  hit.x = THREE.MathUtils.clamp(hit.x, -4.3, 4.3);
-  hit.z = THREE.MathUtils.clamp(hit.z, -2.2, 2.2);
-  if (pointerDown) releaseVelocity.copy(hit).sub(previousTarget).multiplyScalar(1 / Math.max(dt, 0.001)).clampLength(0, 4.5);
-  previousTarget.copy(hit);
-  return { target: hit, held: pointerDown, activeLimb: selected, release: pointerDown ? new THREE.Vector3() : releaseVelocity.clone() };
-}
+const wakeMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .42 });
+const wake = new THREE.Mesh(new THREE.RingGeometry(1.1, 2.4, 48), wakeMat); wake.rotation.x=-Math.PI/2; world.add(wake);
 
-function aiInput(puppet: Puppet, target: Puppet, dt: number): InputFrame {
-  puppet.aiTimer += dt;
-  const dir = target.parts.chest.pos.clone().sub(puppet.parts.chest.pos).normalize();
-  const passive = elapsed < 5;
-  const held = !passive && Math.sin(puppet.aiTimer * 2.1) > 0.55;
-  const aim = target.parts.chest.pos.clone().add(new THREE.Vector3(-0.25, held ? 0.15 : 0.55, 0));
-  const release = !held && Math.sin(puppet.aiTimer * 2.1) < -0.86 ? dir.multiplyScalar(1.2) : new THREE.Vector3();
-  return { target: aim, held, activeLimb: puppet.aiTimer % 4 > 2 ? 'leftHand' : 'rightHand', release };
-}
+const hud = document.createElement('div'); hud.className='hud'; hud.innerHTML=`<div class="brand">DOLPHIN SOLAR ODYSSEY</div><div class="panel"><b>Prototype: cinematic dolphin simulator</b><p>Hold Space / touch to dive during descent. Release under water to convert momentum into a bigger breach.</p><div>combo <span id="combo">0</span> · best height <span id="height">0</span>m</div></div><div class="prompt" id="prompt">Swim toward the sunset. Chain perfect dives to reach ridiculous skyscraper heights.</div>`; document.body.appendChild(hud);
+const comboEl=hud.querySelector('#combo')!; const heightEl=hud.querySelector('#height')!; const promptEl=hud.querySelector('#prompt')!;
+function setHeld(v:boolean){ state.chargeHeld=v; }
+addEventListener('keydown', e=>{ if(e.code==='Space') setHeld(true); if(e.key.toLowerCase()==='a') state.heading+=.08; if(e.key.toLowerCase()==='d') state.heading-=.08; });
+addEventListener('keyup', e=>{ if(e.code==='Space') setHeld(false); });
+renderer.domElement.addEventListener('pointerdown',()=>setHeld(true)); renderer.domElement.addEventListener('pointerup',()=>setHeld(false));
 
-function spring(a: Part, b: Part, rest: number, strength: number) {
-  const delta = b.pos.clone().sub(a.pos);
-  const len = Math.max(0.001, delta.length());
-  const force = delta.multiplyScalar((len - rest) * strength);
-  a.vel.add(force);
-  b.vel.sub(force);
-}
+function animate(){ const dt=Math.min(clock.getDelta(),.033); const t=clock.elapsedTime; waterUniforms.time.value=t; state.velocity.z=-22- state.combo*1.6; state.velocity.x=Math.sin(state.heading)*18; if(state.chargeHeld && state.velocity.y<1){ state.diveCharge=Math.min(state.diveCharge+dt*(state.velocity.y<0?1.8:.7),2.7); state.velocity.y-=24*dt*(.35+state.diveCharge); }
+ if(!state.chargeHeld && state.position.y<waterLevel-.25 && state.diveCharge>0){ const timing=THREE.MathUtils.clamp((-state.position.y)/7,0,1); const boost=(18+state.combo*3.2)*state.diveCharge*(.65+timing); state.velocity.y=Math.max(state.velocity.y, boost); state.combo += timing>.45?1:0; state.perfects += timing>.62?1:0; state.diveCharge=0; promptEl.textContent=timing>.62?'Perfect breach! keep the rhythm.':'Good release — dive deeper for more boost.'; }
+ state.velocity.y += (state.position.y>waterLevel?-13:5.5)*dt; state.velocity.multiplyScalar(state.position.y<waterLevel?.997:.992); state.position.addScaledVector(state.velocity,dt); state.bestHeight=Math.max(state.bestHeight,state.position.y); if(state.position.y<-22){ state.position.y=-22; state.velocity.y=Math.abs(state.velocity.y)*.35; }
+ dolphin.position.copy(state.position); dolphin.rotation.y=state.heading; dolphin.rotation.z=THREE.MathUtils.lerp(dolphin.rotation.z, -state.velocity.y*.018, .08); dolphin.rotation.x=Math.sin(t*8)*.04;
+ wake.position.set(state.position.x, .03, state.position.z+2); wake.scale.setScalar(THREE.MathUtils.clamp(Math.abs(state.velocity.y)*.05+1,1,5)); wakeMat.opacity=state.position.y<.8?.36:0;
+ vehicles.forEach(v=>{v.group.position.x+=Math.sin(t*.2+v.phase)*dt*v.speed; v.group.position.y=.35+Math.sin(t*1.6+v.phase)*.22; v.group.rotation.z=Math.sin(t*1.3+v.phase)*.04;});
+ actors.forEach(a=>{a.group.position.addScaledVector(a.velocity,dt); a.group.position.x+=Math.sin(t+a.phase)*dt*2; a.group.rotation.y=Math.atan2(a.velocity.x,a.velocity.z)+Math.PI/2; if(a.group.position.z>state.position.z+90){a.group.position.z=state.position.z-650; a.group.position.x=state.position.x+(Math.random()-.5)*220;}});
+ camera.position.lerp(state.position.clone().add(new THREE.Vector3(Math.sin(state.heading)*-10, 7+Math.max(state.position.y,0)*.28, 18)), .045); camera.lookAt(state.position.x, state.position.y+1.4, state.position.z-18); comboEl.textContent=String(state.combo); heightEl.textContent=String(Math.max(0,Math.round(state.bestHeight))); renderer.render(scene,camera); requestAnimationFrame(animate); }
 
-function pull(part: Part, target: THREE.Vector3, strength: number, damping = 0.88) {
-  part.vel.add(target.clone().sub(part.pos).multiplyScalar(strength));
-  part.vel.multiplyScalar(damping);
-}
-
-function updatePuppet(puppet: Puppet, input: InputFrame, dt: number, facing: 1 | -1) {
-  puppet.activeLimb = input.activeLimb;
-  puppet.cross.lerp(input.target.clone().add(new THREE.Vector3(0, 1.55, 0)), 0.13);
-  puppet.stamina = THREE.MathUtils.clamp(puppet.stamina + (input.held ? -18 : 16) * dt, 0, 100);
-
-  const p = puppet.parts;
-  pull(p.chest, puppet.cross.clone().add(new THREE.Vector3(-0.12 * facing, -1.18, 0)), 0.045);
-  pull(p.hips, puppet.cross.clone().add(new THREE.Vector3(0.1 * facing, -1.7, 0)), 0.038);
-  pull(p.head, puppet.cross.clone().add(new THREE.Vector3(0, -0.58, 0)), 0.025);
-
-  const relaxedLeft = p.chest.pos.clone().add(new THREE.Vector3(-0.72, -0.38, 0));
-  const relaxedRight = p.chest.pos.clone().add(new THREE.Vector3(0.72, -0.38, 0));
-  pull(p.leftHand, input.held && input.activeLimb === 'leftHand' ? input.target : relaxedLeft, input.held ? 0.08 : 0.035);
-  pull(p.rightHand, input.held && input.activeLimb === 'rightHand' ? input.target : relaxedRight, input.held ? 0.08 : 0.035);
-
-  if (input.release.lengthSq() > 0.04 && puppet.stamina > 8) {
-    p[input.activeLimb].vel.add(input.release.clone().multiplyScalar(0.95));
-  }
-
-  pull(p.leftFoot, p.hips.pos.clone().add(new THREE.Vector3(-0.24, -0.82, 0.08)), 0.032);
-  pull(p.rightFoot, p.hips.pos.clone().add(new THREE.Vector3(0.24, -0.82, -0.08)), 0.032);
-
-  spring(p.head, p.chest, 0.58, 0.028); spring(p.chest, p.hips, 0.58, 0.035);
-  spring(p.chest, p.leftHand, 0.92, 0.018); spring(p.chest, p.rightHand, 0.92, 0.018);
-  spring(p.hips, p.leftFoot, 0.95, 0.024); spring(p.hips, p.rightFoot, 0.95, 0.024);
-
-  for (const part of Object.values(p)) {
-    part.vel.y -= 1.2 * dt;
-    part.vel.clampLength(0, 0.16);
-    part.pos.add(part.vel);
-    if (part.pos.y < part.radius) { part.pos.y = part.radius; part.vel.y = Math.abs(part.vel.y) * 0.18; part.vel.multiplyScalar(0.82); }
-    part.mesh.position.copy(part.pos);
-    part.mesh.rotation.z = THREE.MathUtils.lerp(part.mesh.rotation.z, (part.vel.x * -2.2), 0.08);
-  }
-}
-
-function collide(a: Puppet, b: Puppet) {
-  for (const handName of ['leftHand', 'rightHand'] as Limb[]) {
-    const hand = a.parts[handName];
-    for (const partName of ['head', 'chest', 'hips'] as PartName[]) {
-      const target = b.parts[partName];
-      const delta = target.pos.clone().sub(hand.pos);
-      const dist = delta.length();
-      if (dist < 0.48) {
-        const push = delta.normalize().multiplyScalar((0.48 - dist) * 0.065 + hand.vel.length() * 0.028);
-        target.vel.add(push);
-        hand.vel.sub(push.multiplyScalar(0.45));
-      }
-    }
-  }
-}
-
-function drawWire(a: THREE.Vector3, b: THREE.Vector3, color: number) {
-  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([a, b]), new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.75 }));
-  wireGroup.add(line);
-}
-
-function checkWin() {
-  if (elapsed < 6 || resultShown) return;
-  for (const p of [player, enemy]) {
-    const c = p.parts.chest.pos;
-    if (Math.hypot(c.x, c.z) > GAME_CONFIG.arenaRadius + 0.35) showResult(p === player ? enemy : player, 'Ring-Out');
-  }
-}
-
-function showResult(winner: Puppet, reason: string) {
-  resultShown = true;
-  const result = document.createElement('div');
-  result.className = 'result';
-  result.innerHTML = `<div class="card"><h1>${winner.id} wins!</h1><p>${reason}</p><button onclick="location.reload()">Fight again</button></div>`;
-  document.body.appendChild(result);
-}
-
-let last = performance.now();
-function animate(now = performance.now()) {
-  const dt = Math.min(0.033, (now - last) / 1000);
-  last = now;
-  elapsed += dt;
-  const playerInput = projectedTarget(player.parts.chest.pos, dt);
-  const enemyInput = aiInput(enemy, player, dt);
-  updatePuppet(player, playerInput, dt, 1);
-  updatePuppet(enemy, enemyInput, dt, -1);
-  collide(player, enemy); collide(enemy, player); checkWin();
-
-  wireGroup.clear();
-  drawWire(player.cross, player.parts.chest.pos, 0xffffff); drawWire(player.cross, player.parts[player.activeLimb].pos, playerInput.held ? 0xffd166 : 0x777777);
-  drawWire(enemy.cross, enemy.parts.chest.pos, 0xffffff); drawWire(enemy.cross, enemy.parts[enemy.activeLimb].pos, enemyInput.held ? 0xffd166 : 0x777777);
-  pbar.style.width = `${player.stamina}%`; ebar.style.width = `${enemy.stamina}%`;
-  prompt.textContent = elapsed < 5 ? 'Opening grace period: learn the controls. Drag, hold, release.' : 'Push the AI out of the ring. Hold/release to punch.';
-
-  const center = player.parts.chest.pos.clone().add(enemy.parts.chest.pos).multiplyScalar(0.5);
-  camera.position.lerp(new THREE.Vector3(center.x, 3.2, 7.5), 0.035);
-  camera.lookAt(center.x, 1.2, center.z);
-  renderer.render(scene, camera);
-  requestAnimationFrame(animate);
-}
-
-window.addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight);});
 requestAnimationFrame(animate);
