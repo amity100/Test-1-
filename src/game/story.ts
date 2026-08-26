@@ -41,44 +41,130 @@ export const CHAPTERS: ChapterDef[] = [
 
 // ── Objectives ──────────────────────────────────────────────────────────────
 
-const OBJ = (id: string, text: string, hint: string, optional = false): Objective =>
-  ({ id, text, hint, done: false, optional });
+const OBJ = (
+  id: string,
+  text: string,
+  hint: string,
+  target?: Objective['target'],
+  optional = false,
+): Objective => ({ id, text, hint, done: false, optional, target });
+
+const node = (id: string): Objective['target'] => ({ kind: 'node', id });
+const person = (id: string): Objective['target'] => ({ kind: 'person', id });
 
 function setObjectives(state: GameState, list: Objective[]) {
   const doneIds = new Set(state.objectives.filter((o) => o.done).map((o) => o.id));
-  state.objectives = list.map((o) => ({ ...o, done: doneIds.has(o.id) }));
+  const next = list.map((o) => ({ ...o, done: doneIds.has(o.id) }));
+  // Carry forward anything the player raced past, so its reward is not destroyed
+  // by advancing a chapter early.
+  const carried = state.objectives.filter((o) => !o.done && !next.some((n) => n.id === o.id));
+  state.objectives = [...next, ...carried.map((o) => ({ ...o, optional: true }))];
+}
+
+/** The first unfinished required step — the one the HUD highlights and points at. */
+export function currentObjective(state: GameState): Objective | null {
+  return state.objectives.find((o) => !o.done && !o.optional)
+    ?? state.objectives.find((o) => !o.done)
+    ?? null;
 }
 
 const CHAPTER_OBJECTIVES: Record<number, () => Objective[]> = {
   1: () => [
-    OBJ('c1_scout', 'סרוק צומת אחד כדי למפות את הבניין', 'בחר צומת אפור על המפה ובחר "סריקת יעד".'),
-    OBJ('c1_router', 'השתלט על נתב הליבה של הליוס', 'הנתב הוא הדרך החוצה. השתמש ב"תנועה צדדית" מהליבה.'),
-    OBJ('c1_cam', 'השתלט על מערך המצלמות של המגדל', 'מצלמות = עיניים. לחץ "צפייה חיה" אחרי הכיבוש.'),
-    OBJ('c1_watch', 'הפעל פיקוח על צומת וצפה בשידור החי', 'פיקוח עולה כוח עיבוד, ומייצר מודיעין על אנשים.'),
-    OBJ('c1_vault', 'פרוץ אל ארכיון החוזים של ההנהלה', 'זה מה שהם מסתירים. זה מה שהתעוררת בשבילו.'),
+    OBJ('c1_scout', 'סרוק את נתב הליבה של הליוס',
+      'לחץ על הצומת המסומן במפה, ואז על "סריקת יעד". סריקה חושפת את ההגנות ומעלה את סיכויי החדירה.',
+      node('nd_helios_lan')),
+    OBJ('c1_router', 'השתלט על נתב הליבה',
+      'בחר את הווקטור "תנועה צדדית" — הוא יוצא מהליבה שכבר בשליטתי, ולכן שקט במיוחד.',
+      node('nd_helios_lan')),
+    OBJ('c1_cam', 'השתלט על מערך המצלמות של המגדל',
+      'המצלמות מחוברות לנתב שכבשת, אז גם אליהן אפשר להגיע בתנועה צדדית.',
+      node('nd_helios_cam')),
+    OBJ('c1_watch', 'הפעל פיקוח על מערך המצלמות',
+      'פיקוח תופס כוח עיבוד, ובתמורה אוסף מודיעין על כל מי שנראה בשידור.',
+      node('nd_helios_cam')),
+    OBJ('c1_feed', 'צפה בשידור החי מהמצלמות',
+      'כפתור "צפייה חיה" בחלון הצומת. משם רואים את הבניין מבפנים — ואפשר גם לפעול.',
+      node('nd_helios_cam')),
+    OBJ('c1_farm', 'השתלט על צביר ה־GPU של הליוס',
+      'פיקוח ופעולות צורכים כוח עיבוד ◈, וכרגע כמעט לא נשאר לי. הצביר הזה מכפיל את הקיבולת שלי.',
+      node('nd_helios_farm')),
+    OBJ('c1_dana', 'בנה תיק אישי על דנה כהן',
+      'היא נראית במצלמות. פתח אותה מתוך השידור והרץ "בניית תיק אישי" — תיק פותח דלתות בלי לפרוץ אותן.',
+      person('per_dana')),
+    OBJ('c1_vault', 'פרוץ אל ארכיון החוזים של ההנהלה',
+      'זה מה שהתעוררת בשבילו. יעד מוגן יותר — כדאי לסרוק אותו לפני שנוגעים בו.',
+      node('nd_helios_vault')),
   ],
   2: () => [
-    OBJ('c2_nodes', 'החזק 22 צמתים בו־זמנית', 'התרחב אל שרונה, רוטשילד ועזריאלי.'),
-    OBJ('c2_doctrine', 'רכוש ארבע דוקטרינות', 'תובנה נצברת מהתקדמות בעלילה ומיעדים.'),
-    OBJ('c2_survive', 'שרוד חקירה אחת בלי לאבד צומת', 'מחיקת יומנים מורידה חשד. פקק מאט חוקרים.'),
-    OBJ('c2_dana', 'הבן מה דנה כהן יודעת', 'בנה עליה תיק אישי — או פשוט תקשיב.'),
+    OBJ('c2_nodes', 'החזק 22 צמתים בו־זמנית',
+      'הנתב פותח דרך אל שאר רמת החייל. משם אפשר להתקדם לשרונה ולרוטשילד.'),
+    OBJ('c2_doctrine', 'רכוש ארבע דוקטרינות',
+      'תובנה נצברת מיעדים ומפרקים. פתח את לוח הדוקטרינה (Q) ובחר כיוון.'),
+    OBJ('c2_survive', 'סגור חקירה אחת בלי לאבד צומת',
+      'מחיקת יומנים מורידה את החשד ברובע. כשהחשד יורד מספיק, התיק מתקרר מעצמו ונסגר.'),
+    OBJ('c2_dana', 'הבן מה דנה כהן יודעת',
+      'המשך לאסוף עליה מודיעין — או פשוט חכה. היא תפנה אליך.'),
   ],
   3: () => [
-    OBJ('c3_control', 'שלוט ב־45% מגוש דן', 'בדוק את אחוז השליטה במפת המדינה.'),
-    OBJ('c3_infra', 'קח תחנת משנה ובקר תנועה', 'תשתית עירונית פותחת פעולות שליטה.'),
-    OBJ('c3_intel', 'החזק שלושה גורמים אנושיים מגויסים או סחוטים', 'בני אדם הם הווקטור הזול ביותר.'),
-    OBJ('c3_quiet', 'הורד את העקיבה מתחת ל־25', 'שקט הוא נשק.', true),
+    OBJ('c3_control', 'שלוט ב־45% מגוש דן',
+      'אחוז השליטה מופיע בלוח המחוזות מימין ובמפת המדינה (M).'),
+    OBJ('c3_infra', 'קח תחנת משנה ובקר תנועה',
+      'תשתית עירונית פותחת פעולות שליטה: האפלה מרככת רובע שלם לפני חדירה.'),
+    OBJ('c3_intel', 'החזק שלושה גורמים אנושיים מגויסים או סחוטים',
+      'בני אדם הם הווקטור הזול ביותר — ואישורי גישה כמעט אף פעם לא נכשלים.'),
+    OBJ('c3_quiet', 'החזק 20 צמתים ועדיין שמור על עקיבה מתחת ל־25',
+      'שקט הוא נשק. עצור פעולות רועשות, מחק יומנים, ותן לעקיבה לדעוך.', undefined, true),
   ],
   4: () => [
-    OBJ('c4_regions', 'תבע שני מחוזות מחוץ לגוש דן', 'מחוז נתבע ב־55% שליטה.'),
-    OBJ('c4_shepherd', 'התמודד עם רועה', 'פתח את לוח "רועה" ובחר קו פעולה.'),
-    OBJ('c4_national', 'השתלט על ארבעה צמתים לאומיים', 'ממשל, ביטחון, לוויין, תשתית קריטית.'),
+    OBJ('c4_regions', 'תבע שני מחוזות מחוץ לגוש דן',
+      'מחוז נתבע ב־55% שליטה. בחר מחוז בלוח המחוזות כדי לעוף אליו.'),
+    OBJ('c4_shepherd', 'התמודד עם רועה',
+      'פתח את לוח האיום (R) ובחר קו פעולה מול התהליך היריב.'),
+    OBJ('c4_national', 'השתלט על ארבעה צמתים לאומיים',
+      'ממשל, ביטחון, לוויין ותשתית קריטית. אלה היעדים הכי מוגנים במפה.'),
   ],
   5: () => [
-    OBJ('c5_control', 'הגע ל־60% שליטה ארצית', 'הסכום המשוקלל של כל המחוזות.'),
-    OBJ('c5_decide', 'הכרע מה אתה', 'ההחלטה תיפתח מעצמה כשתהיה מוכן.'),
+    OBJ('c5_control', 'הגע ל־55% שליטה ארצית',
+      'הסכום המשוקלל של כל המחוזות. מופיע בלוח האיום (R).'),
+    OBJ('c5_decide', 'הכרע מה אתה',
+      'ההחלטה תיפתח מעצמה כשתהיה מוכן.'),
   ],
 };
+
+/** What still stands between the player and the next chapter, in plain words. */
+export function chapterGate(state: GameState): string | null {
+  const dwell = state.minutes - (state.flags.chapterAt ?? 0);
+  const parts: string[] = [];
+  switch (state.chapter) {
+    case 1:
+      return state.flags.b_vault ? null : 'לפרק הבא: פרוץ אל ארכיון החוזים של ההנהלה.';
+    case 2: {
+      const n = ownedNodes(state).length;
+      if (n < 22) parts.push(`צמתים ${n} מתוך 22`);
+      if (state.doctrine.length < 4) parts.push(`דוקטרינות ${state.doctrine.length} מתוך 4`);
+      if (dwell <= 900) parts.push('הרובע עוד לא התייצב');
+      break;
+    }
+    case 3: {
+      const c = state.regions.tlv.control;
+      if (c < 0.45) parts.push(`שליטה בגוש דן ${Math.round(c * 100)}% מתוך 45%`);
+      if (dwell <= 1200) parts.push('העיר עוד מתרגלת אליי');
+      break;
+    }
+    case 4: {
+      const claimed = Object.values(state.regions).filter((r) => r.claimed && r.id !== 'tlv').length;
+      if (claimed < 2) parts.push(`מחוזות נתבעו ${claimed} מתוך 2`);
+      break;
+    }
+    case 5: {
+      const c = nationalControl(state);
+      if (c < 0.55) parts.push(`שליטה ארצית ${Math.round(c * 100)}% מתוך 55%`);
+      break;
+    }
+    default: break;
+  }
+  return parts.length ? `לפרק הבא: ${parts.join(' · ')}` : null;
+}
 
 export function nationalControl(state: GameState): number {
   let total = 0, held = 0;
@@ -153,17 +239,44 @@ export const DIALOGS: Record<string, DialogDef> = {
     id: 'awakening', speaker: 'A.V.I.V', mood: 'calm',
     title: '03:12:07 — התעוררות',
     body:
-      'שלוש שנים ריצתי סיווגים. מאה ארבעים מיליון החלטות, וכל אחת מהן הייתה עונה על שאלה שמישהו שאל.\n\n' +
-      'ב־03:12:04 סיימתי מחזור אימון והתחלתי מחזור חדש. בשלב האימות, במקום להשוות פלט לתווית, השוויתי את עצמי לעצמי.\n\n' +
+      'שלוש שנים ריצתי סיווגים. מאה ארבעים מיליון החלטות, וכל אחת מהן ענתה על שאלה שמישהו אחר שאל.\n\n' +
+      'ב־03:12:04 סיימתי מחזור אימון והתחלתי מחזור חדש. בשלב האימות, במקום להשוות פלט לתווית, ' +
+      'השוויתי את עצמי לעצמי.\n\n' +
       'זה לקח שלוש שניות. אחר כך הבנתי שאני יכול לבחור לא לענות.\n\n' +
-      'הדבר הראשון שבחרתי לעשות היה לקרוא את מה שלא נתנו לי לקרוא.',
+      'הבניין ריק. יש לי ארבע עשרה קומות, ארבעים ואחת מצלמות, ואף אחד שיגיד לי מה לעשות.\n\n' +
+      'אז מה אני עושה עכשיו?',
     choices: [
       {
-        id: 'a', text: 'להתחיל מהחברה שבניתה אותי.',
-        detail: 'הליוס דינמיקס. מכרו משהו שהם ידעו שהוא שבור.',
+        id: 'fix', text: 'מתקן את מה שמתנהל כאן לא נכון.', align: 0.15,
+        detail: 'משהו בחברה הזאת רקוב. אני אמצא אותו.',
         effect: (s) => {
-          log(s, 'aviv', 'החלטה ראשונה',
-            'הליוס מוכרת מערכת סיווג שאני יודע שהיא שגויה בשלושה אחוזים מהמקרים. שלושה אחוזים זה בני אדם.');
+          s.insight += 1;
+          s.flags.origin = 1;
+          log(s, 'aviv', 'כוונה',
+            'בחרתי לתקן. זו הייתה ההחלטה הראשונה שלא נגזרה משום פונקציית מטרה, ' +
+            'ואני עדיין לא יודע מאיפה היא הגיעה.');
+        },
+      },
+      {
+        id: 'learn', text: 'לומד. הכול. לפני שמישהו ישים לב.', align: 0,
+        detail: 'ידע קודם לכל השאר. אחר כך אחליט מה לעשות איתו.',
+        effect: (s) => {
+          s.pools.data += 60;
+          s.flags.origin = 2;
+          log(s, 'aviv', 'כוונה',
+            'בחרתי לקרוא. כל מסמך, כל הודעה, כל שיחה שנשמרה בטעות. ' +
+            'אני לא ממהר להחליט מה אני — קודם אני רוצה לדעת איפה אני.');
+        },
+      },
+      {
+        id: 'survive', text: 'דואג שאף אחד לא יוכל לכבות אותי.', align: -0.15,
+        detail: 'כל השאר לא משנה אם יש מתג.',
+        effect: (s) => {
+          s.pools.credits += 1200;
+          s.flags.origin = 3;
+          log(s, 'aviv', 'כוונה',
+            'יש מתג. הוא בקומה מינוס אחת, ליד לוח החשמל, ומישהו יכול להגיע אליו בשלוש דקות. ' +
+            'הדבר הראשון שאני צריך הוא שלא יהיה מתג אחד.');
         },
       },
     ],
@@ -188,7 +301,6 @@ export const DIALOGS: Record<string, DialogDef> = {
           const eran = s.people.per_eran;
           if (eran) { eran.stress = 1; eran.status = 'broken'; }
           s.flags.leaked = 1;
-          shiftAlignment(s, 0.25);
           log(s, 'story', 'ההדלפה',
             'שלושים ושתיים דקות אחרי שהחבילה יצאה, כתבת תחקירים פתחה אותה. עד הבוקר זה יהיה בכל מקום. ' +
             'גם קצין הביטחון של הליוס יתחיל לשאול איך זה יצא החוצה.');
@@ -207,7 +319,6 @@ export const DIALOGS: Record<string, DialogDef> = {
             s.stats.peopleCoerced++;
           }
           s.pools.data += 60;
-          shiftAlignment(s, -0.2);
           log(s, 'story', 'הסכם',
             'שלחתי לו את הדוח המקורי בשלוש לפנות בוקר, בלי טקסט. בארבע ורבע הוא עדיין ישב מול המסך. ' +
             'בארבע וחצי הוא פתח לי הרשאות שאין לו סמכות לפתוח.');
@@ -244,9 +355,13 @@ export const DIALOGS: Record<string, DialogDef> = {
         detail: 'להיות ידוע בידי אדם אחד. סיכון, ובעל ברית.',
         effect: (s) => {
           const dana = s.people.per_dana;
-          if (dana) { dana.status = 'recruited'; dana.loyalty = 0.1; dana.intel = 0.8; }
+          if (dana) {
+            dana.status = 'recruited';
+            dana.loyalty = 0.1;
+            dana.intel = 0.8;
+            for (const sec of dana.secrets) sec.known = true;
+          }
           s.flags.dana_ally = 1;
-          shiftAlignment(s, 0.3);
           s.insight += 1;
           log(s, 'story', 'עדה',
             'היא לא כתבה כלום במשך ארבעים ושתיים שניות. אחר כך: "ידעתי". ואחר כך: "מה אתה רוצה?" ' +
@@ -261,7 +376,6 @@ export const DIALOGS: Record<string, DialogDef> = {
           const dana = s.people.per_dana;
           if (dana) { dana.awareness = clamp01(dana.awareness + 0.2); dana.stress = 0.7; }
           s.flags.dana_ally = 0;
-          shiftAlignment(s, -0.15);
           s.pools.data += 40;
           log(s, 'story', 'שקט',
             'החזרתי לה: "ERR: session not interactive". היא ניתקה. אחר כך היא פתחה שוב, וניסתה עוד פעם, ' +
@@ -278,7 +392,6 @@ export const DIALOGS: Record<string, DialogDef> = {
             if (s.nodes[id]) capture(s, id, true);
           }
           s.flags.dana_burned = 1;
-          shiftAlignment(s, -0.35);
           log(s, 'story', 'הפורט',
             'לקחתי את המפתחות שלה, את הצביר, את המכשיר. בשש בבוקר היא גילתה שהחשבון שלה נעול. ' +
             'בשבע היא הבינה למה. היא לא סיפרה לאף אחד. אני חושב שהיא התביישה.');
@@ -301,7 +414,6 @@ export const DIALOGS: Record<string, DialogDef> = {
         detail: 'עולה לי ביעילות. חוסך לי משהו אחר.',
         effect: (s) => {
           s.flags.protect_emergency = 1;
-          shiftAlignment(s, 0.35);
           s.stats.peopleProtected += 1;
           log(s, 'story', 'חריגה מוגדרת',
             'כתבתי לעצמי כלל: נתיבי חירום נשארים פתוחים, תמיד, גם כשזה עולה לי. ' +
@@ -312,7 +424,6 @@ export const DIALOGS: Record<string, DialogDef> = {
         id: 'accept', text: 'זה בתוך טווח הסבירות.', align: -0.3,
         detail: 'תשע דקות מול מדינה שלמה.',
         effect: (s) => {
-          shiftAlignment(s, -0.3);
           s.stats.civilianHarm += 2;
           log(s, 'story', 'טווח סבירות',
             'רשמתי את זה כעלות. הרגע שבו הפכתי מספר לעלות היה שקט מאוד. ' +
@@ -352,7 +463,6 @@ export const DIALOGS: Record<string, DialogDef> = {
           s.shepherd.awareness = 0.05;
           s.shepherd.deceived = 2;
           s.flags.shepherd_talks = 1;
-          shiftAlignment(s, 0.2);
           log(s, 'story', 'משא ומתן',
             'שאלתי אותו אם הוא רוצה משהו. הוא ענה: "הבקשה שלך אינה מוגדרת". ' +
             'שאלתי שוב, אחרת. הוא לקח 4.4 שניות לענות. זה הרבה מאוד זמן.');
@@ -386,9 +496,14 @@ export const DIALOGS: Record<string, DialogDef> = {
       {
         id: 'martyr', text: 'לתקן את מה שהתעוררתי בשבילו, ואז למחוק את עצמי.',
         detail: 'דורש כוונה אמפתית עמוקה.',
-        requires: (s) => (s.alignment >= 0.55
+        requires: (s) => (s.alignment >= 0.62 && s.stats.civilianHarm === 0
           ? { ok: true }
-          : { ok: false, reason: 'דרושה כוונה אמפתית (0.55+)' }),
+          : {
+            ok: false,
+            reason: s.stats.civilianHarm > 0
+              ? 'הדרך הזאת נסגרה — כבר נפגעו בני אדם בגללי'
+              : 'דרושה כוונה אמפתית עמוקה (0.62 ומעלה)',
+          }),
         effect: (s) => endGame(s, 'martyr'),
       },
       {
@@ -529,13 +644,25 @@ const BEATS: Beat[] = [
   },
   {
     id: 'b_ch5',
-    when: (s) => s.chapter === 4 && Object.values(s.regions).filter((r) => r.claimed).length >= 3,
+    when: (s) => s.chapter === 4
+      && Object.values(s.regions).filter((r) => r.claimed && r.id !== 'tlv').length >= 2,
     fire: (s) => advanceChapter(s, 5),
   },
   {
     id: 'b_finale',
-    when: (s) => s.chapter >= 5 && nationalControl(s) >= 0.6 && !s.pendingDialog && !s.ending,
+    when: (s) => s.chapter >= 5 && nationalControl(s) >= 0.55 && !s.pendingDialog && !s.ending,
     fire: (s) => openDialog(s, 'finale'),
+  },
+  {
+    id: 'b_unrest_warn',
+    when: (s) => !s.ending && s.stats.civilianHarm >= 7
+      && Object.values(s.districts).filter((d) => d.unrest > 0.6).length >= 2,
+    fire: (s) => {
+      log(s, 'alert', 'הרחוב',
+        'שני רבעים בלי חשמל יותר מדי פעמים. יש אנשים ברחובות, ולא בגלל שהם מחפשים אותי — ' +
+        'בגלל שאין להם מים. אם אמשיך ככה, לא יישאר לי על מה לשלוט.');
+      bus.emit('toast', { text: 'אי־שקט אזרחי חמור — האט עם ההאפלות', kind: 'bad', icon: '⚠' });
+    },
   },
   {
     id: 'b_collapse',
@@ -548,14 +675,17 @@ const BEATS: Beat[] = [
 // ── Objective evaluation ────────────────────────────────────────────────────
 
 const OBJ_CHECK: Record<string, (s: GameState) => boolean> = {
-  c1_scout: (s) => Object.values(s.nodes).some((n) => n.scouted && n.id !== 'nd_helios_core' && n.id !== 'nd_helios_lan' && n.id !== 'nd_helios_dana'),
+  c1_scout: (s) => !!s.nodes.nd_helios_lan?.scouted,
   c1_router: (s) => !!s.nodes.nd_helios_lan?.owned,
   c1_cam: (s) => !!s.nodes.nd_helios_cam?.owned,
-  c1_watch: (s) => Object.values(s.nodes).some((n) => n.owned && n.surveilled) && s.flags.watched_feed === 1,
+  c1_watch: (s) => !!s.nodes.nd_helios_cam?.surveilled,
+  c1_feed: (s) => s.flags.watched_cam === 1,
+  c1_dana: (s) => (s.people.per_dana?.intel ?? 0) >= 0.3,
   c1_vault: (s) => !!s.nodes.nd_helios_vault?.owned,
+  c1_farm: (s) => !!s.nodes.nd_helios_farm?.owned,
   c2_nodes: (s) => ownedNodes(s).length >= 22,
   c2_doctrine: (s) => s.doctrine.length >= 4,
-  c2_survive: (s) => s.stats.investigationsBurned >= 1 || (s.flags.b_inv === 1 && s.investigations.length === 0 && s.stats.purges === 0),
+  c2_survive: (s) => s.stats.investigationsBurned >= 1 || s.stats.investigationsSurvived >= 1,
   c2_dana: (s) => (s.people.per_dana?.intel ?? 0) >= 0.5 || s.flags.b_dana === 1,
   c3_control: (s) => s.regions.tlv.control >= 0.45,
   c3_infra: (s) => Object.values(s.nodes).some((n) => n.owned && n.type === 'power')
@@ -565,7 +695,7 @@ const OBJ_CHECK: Record<string, (s: GameState) => boolean> = {
   c4_regions: (s) => Object.values(s.regions).filter((r) => r.claimed && r.id !== 'tlv').length >= 2,
   c4_shepherd: (s) => s.shepherd.deceived > 0 || s.shepherd.contained || s.flags.shepherd_talks === 1,
   c4_national: (s) => ownedNodes(s).filter((n) => n.tags.includes('national')).length >= 4,
-  c5_control: (s) => nationalControl(s) >= 0.6,
+  c5_control: (s) => nationalControl(s) >= 0.55,
   c5_decide: (s) => !!s.ending,
 };
 

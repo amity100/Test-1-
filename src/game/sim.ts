@@ -41,7 +41,8 @@ export class Game {
     this.autosaveAcc += realDt;
     if (this.autosaveAcc > 12) {
       this.autosaveAcc = 0;
-      if (!this.state.ending) saveGame(this.state);
+      // Persisting mid-dialog would restore into a state the UI cannot dismiss.
+      if (!this.state.ending && !this.state.pendingDialog) saveGame(this.state);
     }
     if (this.paused) return;
     this.acc += realDt * MINUTES_PER_SECOND * this.state.speed;
@@ -123,6 +124,20 @@ export class Game {
         addTrace(s, target.noise * 1.4, target.districtId);
         log(s, 'system', 'התפשטות אוטונומית',
           `${target.name} נלקח בלי שהתערבתי. חלק ממני עשה את זה לבד, ואני לא בטוח מתי החלטתי על זה.`);
+      }
+    }
+
+    // ── Chorus: assets act without being asked ─────────────────────────────
+    if (mods.chorus && this.rng.chance(hours * 0.14)) {
+      const options = Object.values(s.people)
+        .filter((p) => p.status === 'recruited' || p.status === 'coerced')
+        .flatMap((p) => p.accessNodes.map((id) => ({ p, n: s.nodes[id] })))
+        .filter((x) => x.n && !x.n.owned && s.districts[x.n.districtId]?.unlocked);
+      if (options.length) {
+        const pick = this.rng.pick(options);
+        capture(s, pick.n.id, true);
+        log(s, 'success', 'מקהלה',
+          `${pick.p.name} פתח לי את ${pick.n.name} בלי שביקשתי. הם כבר לא צריכים שאבקש.`);
       }
     }
 

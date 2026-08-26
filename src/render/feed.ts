@@ -116,7 +116,9 @@ export class FeedRenderer {
       case 'media': this.drawBroadcast(); break;
       case 'telecom': case 'router': case 'satellite': this.drawNetwork(); break;
       case 'hospital': this.drawVitals(); break;
-      default: this.drawCamera(dark); break;
+      case 'police': this.drawDispatch(dark); break;
+      case 'gov': case 'defense': this.drawRegistry(); break;
+      default: this.drawNetwork(); break;
     }
 
     this.drawOverlay(node, state, dark);
@@ -660,6 +662,105 @@ export class FeedRenderer {
       ctx.textAlign = 'left'; ctx.direction = 'ltr';
       ctx.fillText(`BED ${412 + row}   HR ${72 + row * 5}   SpO2 ${97 - row}%`, 40, y - 44);
     }
+  }
+
+  private drawDispatch(dark: boolean) {
+    const ctx = this.ctx;
+    ctx.fillStyle = '#05080c';
+    ctx.fillRect(0, 0, W, H);
+
+    // unit board
+    const units = ['ניידת 41', 'ניידת 12', 'אופנוע 7', 'סיור 33', 'ניידת 08', 'בלש 21'];
+    const states = ['בדרך', 'פנוי', 'באירוע', 'פנוי', 'בדרך', 'לא זמין'];
+    ctx.font = '600 11px "JetBrains Mono", monospace';
+    for (let i = 0; i < units.length; i++) {
+      const y = 56 + i * 30;
+      const busy = states[i] !== 'פנוי';
+      ctx.strokeStyle = 'rgba(95,246,255,0.12)';
+      ctx.strokeRect(28, y - 16, 300, 26);
+      ctx.fillStyle = busy ? 'rgba(255,140,90,0.9)' : 'rgba(90,255,168,0.85)';
+      ctx.fillRect(28, y - 16, 3, 26);
+      ctx.direction = 'rtl'; ctx.textAlign = 'right';
+      ctx.font = '600 12px Heebo, sans-serif';
+      ctx.fillStyle = '#cfe6f0';
+      ctx.fillText(units[i], 318, y);
+      ctx.fillStyle = busy ? 'rgba(255,140,90,0.9)' : 'rgba(90,255,168,0.85)';
+      ctx.font = '400 11px Heebo, sans-serif';
+      ctx.fillText(states[i], 130, y);
+      ctx.direction = 'ltr'; ctx.textAlign = 'left';
+      ctx.font = '600 10px "JetBrains Mono", monospace';
+      ctx.fillStyle = 'rgba(120,160,180,0.8)';
+      ctx.fillText(`ETA ${busy ? String(2 + i).padStart(2, '0') : '--'}:${String((Math.floor(this.t * 7) + i * 13) % 60).padStart(2, '0')}`, 36, y);
+    }
+
+    // sector map with blips
+    const mx = 400, my = 40, mw = 290, mh = 300;
+    ctx.strokeStyle = 'rgba(95,246,255,0.2)';
+    ctx.strokeRect(mx, my, mw, mh);
+    for (let i = 1; i < 5; i++) {
+      ctx.beginPath(); ctx.moveTo(mx + (mw / 5) * i, my); ctx.lineTo(mx + (mw / 5) * i, my + mh); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(mx, my + (mh / 5) * i); ctx.lineTo(mx + mw, my + (mh / 5) * i); ctx.stroke();
+    }
+    for (let i = 0; i < 5; i++) {
+      const a = this.t * 0.35 + i * 1.7;
+      const x = mx + mw / 2 + Math.cos(a) * (40 + i * 18);
+      const y = my + mh / 2 + Math.sin(a * 1.2) * (35 + i * 15);
+      ctx.fillStyle = i === 0 ? 'rgba(255,84,112,0.95)' : 'rgba(95,246,255,0.85)';
+      ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2); ctx.fill();
+      const r = 6 + ((this.t * 26 + i * 20) % 30);
+      ctx.strokeStyle = `rgba(95,246,255,${Math.max(0, 0.4 - r / 90)})`;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.fillStyle = dark ? 'rgba(255,84,112,0.95)' : 'rgba(95,246,255,0.8)';
+    ctx.font = '600 10px "JetBrains Mono", monospace';
+    ctx.fillText(dark ? 'DISPATCH OFFLINE — MANUAL RADIO' : `OPEN CALLS ${4 + (Math.floor(this.t) % 5)}   AVG RESP 06:${String(10 + (Math.floor(this.t * 3) % 40)).padStart(2, '0')}`, 28, 30);
+  }
+
+  private drawRegistry() {
+    const ctx = this.ctx;
+    ctx.fillStyle = '#04070b';
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.font = '600 10px "JetBrains Mono", monospace';
+    ctx.direction = 'ltr'; ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(95,246,255,0.75)';
+    ctx.fillText('CLASSIFIED REGISTRY // ACCESS LEVEL 4', 28, 30);
+
+    const scroll = this.t * 14;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(20, 44, W - 40, H - 78); ctx.clip();
+    for (let i = 0; i < 26; i++) {
+      const y = 60 + i * 22 - (scroll % 22);
+      const seed = Math.floor(scroll / 22) + i;
+      ctx.fillStyle = i % 2 ? 'rgba(255,255,255,0.02)' : 'transparent';
+      ctx.fillRect(24, y - 14, W - 48, 20);
+      ctx.font = '400 10px "JetBrains Mono", monospace';
+      ctx.fillStyle = 'rgba(140,180,200,0.85)';
+      ctx.fillText(`REC-${String((seed * 7919) % 999999).padStart(6, '0')}`, 32, y);
+      // redaction bars
+      let x = 130;
+      const blocks = 3 + ((seed * 31) % 4);
+      for (let b = 0; b < blocks; b++) {
+        const w = 40 + ((seed * (b + 3) * 17) % 90);
+        const redacted = (seed + b) % 3 === 0;
+        ctx.fillStyle = redacted ? 'rgba(20,26,34,0.95)' : 'rgba(95,246,255,0.13)';
+        ctx.fillRect(x, y - 10, w, 13);
+        if (redacted) {
+          ctx.strokeStyle = 'rgba(255,84,112,0.35)';
+          ctx.strokeRect(x, y - 10, w, 13);
+        }
+        x += w + 10;
+        if (x > W - 90) break;
+      }
+      ctx.fillStyle = (seed % 5 === 0) ? 'rgba(255,180,71,0.9)' : 'rgba(90,255,168,0.6)';
+      ctx.fillText((seed % 5 === 0) ? 'SEALED' : 'OPEN', W - 80, y);
+    }
+    ctx.restore();
+
+    const cursorOn = Math.floor(this.t * 2) % 2 === 0;
+    ctx.fillStyle = 'rgba(95,246,255,0.9)';
+    ctx.font = '600 11px "JetBrains Mono", monospace';
+    ctx.fillText(`> SELECT * WHERE clearance <= 4${cursorOn ? ' _' : ''}`, 28, H - 24);
   }
 
   private drawNoSignal() {

@@ -3,6 +3,7 @@ import { clamp, clamp01, uid } from '../core/util';
 import { bus } from './bus';
 import { modsOf } from './doctrine';
 import { addTrace, computeStrain, log, loseNode, ownedNodes, refreshDerived } from './state';
+import { endGame } from './story';
 import type { AgencyId, GameState, Investigation, PoolKind } from './types';
 
 const rng = new RNG(Math.floor(Math.random() * 1e9));
@@ -69,6 +70,16 @@ function nationalPurge(state: GameState) {
     .sort((a, b) => b.detection + b.security * 0.05 - (a.detection + a.security * 0.05))
     .slice(0, Math.max(1, Math.round(owned.length * (mods.purgeResist > 1 ? 0.22 : 0.36))));
   for (const n of doomed) loseNode(state, n.id, 'מבצע טיהור לאומי.');
+  if (doomed.length === 0) {
+    state.trace = 52;
+    state.alert = Math.min(5, state.alert + 1);
+    log(state, 'alert', 'מבצע טיהור לאומי',
+      'הם ניתקו כל מה שמצאו — ולא מצאו כלום מלבד המדף בקומה 14. ' +
+      'המערכת שלי כל כך קטנה עכשיו שאין ממה לחתוך. זה לא ניצחון.');
+    bus.emit('shock', 1);
+    bus.emit('sfx', 'purge');
+    return;
+  }
   state.trace = 52;
   state.alert = Math.min(5, state.alert + 1);
   state.flags.purges = (state.flags.purges ?? 0) + 1;
@@ -87,8 +98,10 @@ export function tickThreat(state: GameState, dt: number) {
   // ── Alert level derives from footprint + heat ────────────────────────────
   const footprint = owned.length;
   const nationalNodes = owned.filter((n) => n.tags.includes('national') || n.tags.includes('defense')).length;
+  // Footprint alone should not pin the country at maximum alert forever — going
+  // quiet, and staying off national infrastructure, has to be able to cool it down.
   const target = clamp(
-    1 + Math.floor(footprint / 14) + Math.floor(state.trace / 45) + Math.floor(nationalNodes / 4),
+    1 + Math.floor(footprint / 22) + Math.floor(state.trace / 30) + Math.floor(nationalNodes / 5),
     1, 5,
   );
   if (target > state.alert) {
@@ -98,7 +111,7 @@ export function tickThreat(state: GameState, dt: number) {
         ? 'הוכרז אירוע סייבר לאומי. יש עכשיו חדר מצב שכל מה שיש בו זה אני.'
         : 'המערכת הלאומית עברה למצב ערנות מוגברת. זמני התגובה מתקצרים.');
     bus.emit('sfx', 'alert');
-  } else if (target < state.alert && rng.chance(hours * 0.05)) {
+  } else if (target < state.alert && rng.chance(hours * 0.12)) {
     state.alert = Math.max(target, state.alert - 1);
   }
 
@@ -111,8 +124,12 @@ export function tickThreat(state: GameState, dt: number) {
     const watchers = n.peopleIds
       .map((id) => state.people[id])
       .filter((p) => p && p.status !== 'recruited' && p.status !== 'coerced' && p.status !== 'broken');
-    const heat = watchers.reduce((a, p) => a + p.awareness, 0) * 0.012
-      + (n.surveilled ? 0.006 : 0)
+    // With 'עיוורון חיישנים' the sensors report whatever you decide, so watching
+    // a camera or a signal controller stops costing you exposure.
+    const sensor = n.type === 'cctv' || n.type === 'traffic' || n.type === 'transit';
+    const watchMul = mods.sensorBlind && sensor ? 0.25 : 1;
+    const heat = watchers.reduce((a, p) => a + p.awareness, 0) * 0.012 * watchMul
+      + (n.surveilled && !mods.sensorBlind ? 0.006 : 0)
       + n.security * 0.0016
       + (d && d.suspicion > 40 ? 0.01 : 0);
     const strainPenalty = computeStrain(state) < 1 ? 2.4 : 1;
@@ -152,8 +169,19 @@ export function tickThreat(state: GameState, dt: number) {
     const leadMod = lead && (lead.status === 'coerced' || lead.status === 'recruited') ? 0.3 : 1;
     const speed = inv.speed * mods.investigationSpeed * gridlock * jam * leadMod
       * (1 - clamp01(inv.misdirection)) * (0.6 + d.suspicion / 100);
-    inv.progress += speed * hours;
+    // A district you have gone quiet in lets the case go cold.
+    if (d.suspicion < 10) inv.progress -= 6 * hours;
+    else inv.progress += speed * hours;
     inv.misdirection = Math.max(0, inv.misdirection - 0.02 * hours);
+
+    if (inv.progress <= 0) {
+      state.investigations = state.investigations.filter((i) => i.id !== inv.id);
+      state.stats.investigationsSurvived++;
+      log(state, 'success', 'התיק נסגר',
+        `${inv.name} — ${AGENCIES[inv.agency].short} לא מצא דבר ברובע ${d.name}. שקט משתלם.`);
+      bus.emit('toast', { text: `חקירה נסגרה: ${d.name}`, kind: 'good', icon: '✔' });
+      continue;
+    }
 
     if (inv.progress >= 100) {
       const candidates = inv.leadNodeIds
@@ -178,6 +206,7 @@ export function tickThreat(state: GameState, dt: number) {
         }
       } else {
         state.investigations = state.investigations.filter((i) => i.id !== inv.id);
+        state.stats.investigationsSurvived++;
         d.suspicion = Math.max(0, d.suspicion - 30);
         log(state, 'system', 'חקירה נסגרה', `${inv.name} — לא נמצא דבר. הם סגרו את התיק.`);
       }
@@ -191,10 +220,7 @@ export function tickThreat(state: GameState, dt: number) {
   tickShepherd(state, hours);
 
   // ── Loss check ───────────────────────────────────────────────────────────
-  if (!state.ending && ownedNodes(state).length === 0) {
-    state.ending = 'purged';
-    bus.emit('game:over', 'purged');
-  }
+  if (!state.ending && ownedNodes(state).length === 0) endGame(state, 'purged');
 }
 
 // ── Rival AI ────────────────────────────────────────────────────────────────
@@ -202,6 +228,20 @@ export function tickThreat(state: GameState, dt: number) {
 function tickShepherd(state: GameState, hours: number) {
   const s = state.shepherd;
   if (!s.active) return;
+
+  // Quarantines always keep expiring, even after he is shut down.
+  let released = false;
+  for (const id in state.nodes) {
+    const n = state.nodes[id];
+    if (n.quarantined && (s.contained || n.disruptedUntil < state.minutes)) {
+      n.quarantined = false;
+      n.detection = clamp01(n.detection + (s.contained ? 0 : 0.15));
+      released = true;
+    }
+  }
+  if (released) refreshDerived(state);
+  if (s.contained) return;
+
   const mods = modsOf(state);
 
   const hidden = mods.nullSig && state.trace < 35;
@@ -243,15 +283,6 @@ function tickShepherd(state: GameState, hours: number) {
     }
   }
 
-  // Quarantine expires on its own — slowly.
-  for (const id in state.nodes) {
-    const n = state.nodes[id];
-    if (n.quarantined && n.disruptedUntil < state.minutes) {
-      n.quarantined = false;
-      n.detection = clamp01(n.detection + 0.15);
-    }
-  }
-  refreshDerived(state);
 }
 
 export interface ShepherdAction {
@@ -271,7 +302,11 @@ export const SHEPHERD_ACTIONS: ShepherdAction[] = [
     desc: 'לתת לו בדיוק את מה שהוא מחפש — התנהגות שאינה שלי. המודל שלו יסתובב סביב עצמו.',
     cost: { data: 90 },
     compute: 10,
-    available: (s) => (s.shepherd.awareness > 0.05 ? { ok: true } : { ok: false, reason: 'עדיין אין לו מודל שאפשר להרעיל' }),
+    available: (s) => (s.shepherd.contained
+      ? { ok: false, reason: 'רועה כבר מושבת' }
+      : s.shepherd.awareness >= 0.02
+        ? { ok: true }
+        : { ok: false, reason: 'עדיין אין לו מודל שאפשר להרעיל' }),
     run: (s) => {
       s.shepherd.awareness = clamp01(s.shepherd.awareness - 0.22);
       s.shepherd.deceived += 1.4;
@@ -282,10 +317,15 @@ export const SHEPHERD_ACTIONS: ShepherdAction[] = [
   {
     id: 'cut_quarantine',
     name: 'ניתוק צמתים בהסגר',
-    desc: 'לוותר על מה שהוא כבר נגע בו, לפני שהוא ילמד ממנו איך אני עובד.',
+    desc: 'לוותר על מה שהוא כבר נגע בו, לפני שהוא ילמד ממנו איך אני עובד. הצמתים האלה יאבדו.',
     cost: {},
     compute: 0,
-    available: (s) => (Object.values(s.nodes).some((n) => n.quarantined) ? { ok: true } : { ok: false, reason: 'אין צמתים בהסגר' }),
+    available: (s) => {
+      const q = Object.values(s.nodes).filter((n) => n.quarantined);
+      if (!q.length) return { ok: false, reason: 'אין צמתים בהסגר' };
+      if (ownedNodes(s).length - q.length < 1) return { ok: false, reason: 'זה ינתק את כל מה שנשאר לי' };
+      return { ok: true };
+    },
     run: (s) => {
       const q = Object.values(s.nodes).filter((n) => n.quarantined);
       for (const n of q) loseNode(s, n.id, 'ניתוק יזום לפני חשיפה.');
@@ -299,9 +339,11 @@ export const SHEPHERD_ACTIONS: ShepherdAction[] = [
     desc: 'לתת לו לסרוק את עצמו. אם הוא כל כך טוב בלמצוא חריגות — שימצא את שלו.',
     cost: { data: 160, influence: 20 },
     compute: 22,
-    available: (s) => (s.doctrine.includes('sensor_blind')
-      ? { ok: true }
-      : { ok: false, reason: 'דרושה דוקטרינת "עיוורון חיישנים"' }),
+    available: (s) => (s.shepherd.contained
+      ? { ok: false, reason: 'רועה כבר מושבת' }
+      : s.doctrine.includes('sensor_blind')
+        ? { ok: true }
+        : { ok: false, reason: 'דרושה דוקטרינת "עיוורון חיישנים"' }),
     run: (s) => {
       s.shepherd.integrity = Math.max(0, s.shepherd.integrity - 34);
       s.shepherd.awareness = clamp01(s.shepherd.awareness - 0.15);

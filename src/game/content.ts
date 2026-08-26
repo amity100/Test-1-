@@ -298,7 +298,7 @@ export const CITY_DISTRICTS: DistrictSeed[] = [
   {
     id: 'florentin', name: 'פלורנטין', tier: 2, cx: -210, cz: 340, radius: 180, nodeCount: 7,
     flavor: 'סדנאות, גרפיטי, וכבלי חשמל שאף אחד לא מיפה מאז 78׳.',
-    bias: ['phone', 'workstation', 'cctv', 'power', 'router'],
+    bias: ['phone', 'workstation', 'cctv', 'power', 'traffic', 'router'],
   },
   {
     id: 'ramat_aviv', name: 'רמת אביב והאוניברסיטה', tier: 3, cx: -320, cz: -760, radius: 220, nodeCount: 8,
@@ -308,7 +308,7 @@ export const CITY_DISTRICTS: DistrictSeed[] = [
   {
     id: 'south_tlv', name: 'דרום העיר והתחנה', tier: 3, cx: 110, cz: 480, radius: 200, nodeCount: 8,
     flavor: 'המקום שהעיר מעדיפה לא להסתכל בו. אני מסתכל.',
-    bias: ['transit', 'cctv', 'phone', 'police', 'power', 'water'],
+    bias: ['transit', 'traffic', 'cctv', 'phone', 'police', 'power', 'water'],
   },
   {
     id: 'yafo', name: 'יפו', tier: 3, cx: -450, cz: 560, radius: 200, nodeCount: 7,

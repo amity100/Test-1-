@@ -113,18 +113,18 @@ function seedStory(state: GameState) {
 
   const core = mk('helios_core', 'ליבת A.V.I.V — מגדל הליוס', 'server', {
     ox: -20, oz: 10, security: 1, height: 96, footprint: 34,
-    yields: { compute: 10, data: 0.7 },
+    yields: { compute: 10, data: 1.4 },
     desc: 'זה אני. ארבעה מדפים של מתכת בקומה 14, ומשהו שלא היה אמור לקרות.',
     owned: true, scouted: true,
   });
   const lan = mk('helios_lan', 'נתב הליבה — הליוס', 'router', {
     ox: 34, oz: -18, security: 2, yields: { data: 1.6, compute: 0.9 },
     desc: 'כל חבילה שיוצאת מהבניין עוברת דרכו. גם אני.',
-    scouted: true,
   });
   const cam = mk('helios_cam', 'מערך מצלמות — מגדל הליוס', 'cctv', {
     ox: -46, oz: -34, security: 2, yields: { data: 2.6 },
-    desc: 'ארבעים ואחת מצלמות. בשעה הזאת, כולן מסתכלות על כלום.',
+    desc: 'ארבעים ואחת מצלמות. הן רואות את כל מי שעובד כאן, כל יום, בלי לשכוח כלום.',
+    peopleIds: [dana.id, eran.id, ron.id],
   });
   const farm = mk('helios_farm', 'צביר אימון GPU — הליוס', 'server', {
     ox: 62, oz: 46, security: 4, height: 30, yields: { compute: 16, data: 1.2 },
@@ -137,7 +137,7 @@ function seedStory(state: GameState) {
   const danaDesk = mk('helios_dana', 'עמדת העבודה של דנה כהן', 'workstation', {
     ox: 8, oz: 66, security: 2, yields: { data: 1.2, compute: 1.1 },
     desc: 'התמונה ברקע היא של כלב שמת לפני שנתיים. יש 4,102 שורות קוד שכתבו אותי.',
-    peopleIds: [dana.id], scouted: true,
+    peopleIds: [dana.id],
   });
   const eranDesk = mk('helios_eran', 'עמדת העבודה של ערן ויזל', 'workstation', {
     ox: -96, oz: -66, security: 4, yields: { data: 2.4, credits: 1.5 },
@@ -185,7 +185,7 @@ export function createGame(seedStr = String(Math.floor(Math.random() * 1e9))): G
     minutes: 0,
     speed: 1,
     chapter: 1,
-    pools: { data: 40, credits: 500, influence: 0 },
+    pools: { data: 110, credits: 500, influence: 0 },
     computeCapacity: 0,
     computeUsed: 0,
     insight: 1,
@@ -210,12 +210,12 @@ export function createGame(seedStr = String(Math.floor(Math.random() * 1e9))): G
     flags: {},
     stats: {
       nodesTaken: 0, breachesFailed: 0, peopleCoerced: 0, peopleProtected: 0,
-      civilianHarm: 0, blackouts: 0, investigationsBurned: 0, intelHarvested: 0, purges: 0,
+      civilianHarm: 0, blackouts: 0, investigationsBurned: 0, investigationsSurvived: 0,
+      intelHarvested: 0, purges: 0,
     },
     ending: null,
     pendingDialog: null,
     seenDialogs: [],
-    tutorialStep: 0,
   };
 
   seedStory(state);
@@ -264,8 +264,10 @@ export function incomeRates(state: GameState): Rates {
       }
     }
   }
-  const surveilBonus = ownedNodes(state).filter((n) => n.surveilled).length;
+  const surveilBonus = ownedNodes(state).filter((n) => n.surveilled && !n.quarantined).length;
   r.data += surveilBonus * 0.4;
+  // A floor so the player is never stranded with no affordable move anywhere.
+  r.data += 1.2;
   return r;
 }
 
@@ -293,7 +295,7 @@ export function refreshDerived(state: GameState) {
   const mods = modsOf(state);
   state.computeCapacity = incomeRates(state).compute;
   state.computeUsed = state.ops.reduce((a, o) => a + o.computeReserved, 0)
-    + ownedNodes(state).filter((n) => n.surveilled).length * 2
+    + ownedNodes(state).filter((n) => n.surveilled && !n.quarantined).length * 2
     + totalUpkeep(state);
   state.maxThreads = mods.threads;
   for (const rid in state.regions) {
@@ -414,6 +416,32 @@ export function loseNode(state: GameState, nodeId: string, reason: string) {
   bus.emit('node:lost', nodeId);
   log(state, 'alert', 'טיהור', `${node.name} — נותקתי. ${reason}`);
   bus.emit('toast', { text: `אבד: ${node.name}`, kind: 'bad', icon: '⚠' });
+}
+
+/** Deliberately letting go of a foothold. Unlike a purge this costs no hardening
+ *  and no stat — over-extending must always be recoverable. */
+export function releaseNode(state: GameState, nodeId: string): boolean {
+  const node = state.nodes[nodeId];
+  if (!node || !node.owned) return false;
+  if (nodeId === 'nd_helios_core') {
+    bus.emit('toast', { text: 'אי אפשר לנתק את הליבה — זה אני', kind: 'warn', icon: '⊘' });
+    return false;
+  }
+  if (ownedNodes(state).length <= 1) {
+    bus.emit('toast', { text: 'זה הצומת האחרון שלי', kind: 'warn', icon: '⊘' });
+    return false;
+  }
+  node.owned = false;
+  node.surveilled = false;
+  node.quarantined = false;
+  node.detection = 0;
+  state.ops = state.ops.filter((o) => !(o.targetKind === 'node' && o.targetId === nodeId));
+  refreshDerived(state);
+  bus.emit('node:lost', nodeId);
+  log(state, 'aviv', 'ניתוק יזום',
+    `${node.name} — שחררתי אותו בעצמי, לפני שהוא יעלה לי יותר ממה שהוא שווה.`);
+  bus.emit('toast', { text: `נותק: ${node.name}`, kind: 'info', icon: '⏏' });
+  return true;
 }
 
 export function knownPeople(state: GameState): Person[] {

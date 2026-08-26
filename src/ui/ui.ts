@@ -4,10 +4,10 @@ import { bus } from '../game/bus';
 import { canStart, OP_BY_ID, opsForDistrict, opsForPerson, startOp } from '../game/ops';
 import { Game } from '../game/sim';
 import {
-  canAfford, clearSave, computeFree, computeStrain, incomeRates, log, refreshDerived, saveGame,
-  spend,
+  canAfford, clearSave, computeFree, computeStrain, incomeRates, log, refreshDerived, releaseNode,
+  saveGame, spend,
 } from '../game/state';
-import { resolveDialog } from '../game/story';
+import { currentObjective, resolveDialog } from '../game/story';
 import { SHEPHERD_ACTIONS } from '../game/threat';
 import type { GameNode, GameState } from '../game/types';
 import { ARCHETYPES } from '../game/content';
@@ -19,6 +19,7 @@ import {
   renderObjectives, renderOpsQueue, renderPeopleList, renderPersonPanel, renderRegionsPanel,
   renderThreat,
 } from './panels';
+import { CONCEPTS } from './concepts';
 import { Screens } from './screens';
 
 type Detail = { kind: 'node' | 'person' | 'district'; id: string } | null;
@@ -41,12 +42,17 @@ export class UI {
   private modalEl!: HTMLElement;
   private feedEl!: HTMLElement;
   private toastEl!: HTMLElement;
+  private conceptEl!: HTMLElement;
+  private conceptOpen = false;
+  private speedBeforeConcept: 0 | 1 | 2 | 4 = 1;
+  private speedBeforeHelp: 0 | 1 | 2 | 4 = 1;
 
   private markerMap = new Map<string, HTMLElement>();
   private markerNodes: string[] = [];
   private regionMarkers = new Map<string, HTMLElement>();
 
   private detail: Detail = null;
+  private labelPref: 'auto' | 'on' | 'off' = 'auto';
   private openModal: string | null = null;
   private feedNode: string | null = null;
   private feed = new FeedRenderer();
@@ -94,6 +100,10 @@ export class UI {
             <div class="trace-bar"><i id="tb-trace-fill"></i><b id="tb-trace-val">0</b></div>
           </div>
           <div class="alert-dots" id="tb-alert"></div>
+          <div class="intent" title="כוונה — נעה לפי הבחירות שלך, וקובעת אילו סיומים ייפתחו">
+            <label>כוונה</label>
+            <div class="intent-track"><i id="tb-intent"></i></div>
+          </div>
         </div>
 
         <div class="tb-speed" id="tb-speed">
@@ -111,6 +121,7 @@ export class UI {
           <button data-act="modal" data-target="codex" title="ארכיון (T)">⌸</button>
           <button data-act="modal" data-target="logs" title="יומן (L)">≡</button>
           <button data-act="toggle-view" id="btn-view" title="מפת המדינה (M)">⬢</button>
+          <button data-act="labels" id="btn-labels" title="שמות צמתים">🏷</button>
           <button data-act="help" title="איך משחקים (H)">?</button>
           <button data-act="mute" id="btn-mute" title="שמע">♪</button>
         </nav>
@@ -123,6 +134,7 @@ export class UI {
       <div id="feed-layer"></div>
       <div id="toasts"></div>
       <div id="tutorial-tip"></div>
+      <div id="concept-layer"></div>
     `;
     this.root.appendChild(hud);
 
@@ -134,6 +146,7 @@ export class UI {
     this.modalEl = hud.querySelector('#modal-layer')!;
     this.feedEl = hud.querySelector('#feed-layer')!;
     this.toastEl = hud.querySelector('#toasts')!;
+    this.conceptEl = hud.querySelector('#concept-layer')!;
   }
 
   private wire() {
@@ -175,6 +188,9 @@ export class UI {
         this.screens.ending(id, this.state, () => { clearSave(); location.reload(); });
       }, 900);
     });
+
+    // initStory ran before this subscription existed — replay its opening lines.
+    for (const l of this.state.logs.slice(0, 3).reverse()) this.pushTicker(l.title, l.kind);
 
     this.bindCamera();
     this.bindKeys();
@@ -254,6 +270,7 @@ export class UI {
 
     switch (act) {
       case 'node': this.select({ kind: 'node', id: target }); break;
+      case 'objective': this.gotoObjective(target); break;
       case 'person': this.select({ kind: 'person', id: target }); break;
       case 'district': this.select({ kind: 'district', id: target }); break;
       case 'close-detail': this.select(null); break;
@@ -261,16 +278,28 @@ export class UI {
       case 'modal': this.toggleModal(target); break;
       case 'close-modal': if (this.openModal) this.toggleModal(this.openModal); break;
       case 'toggle-view': this.toggleView(); break;
-      case 'help': this.showHelp(); break;
-      case 'close-help':
-        this.root.querySelector('#tutorial-tip')?.classList.remove('on');
-        this.state.flags.seenHelp = 1;
+      case 'labels': {
+        this.labelPref = this.labelPref === 'auto' ? 'on' : this.labelPref === 'on' ? 'off' : 'auto';
+        this.toast({
+          auto: 'שמות צמתים: אוטומטי',
+          on: 'שמות צמתים: תמיד מוצגים',
+          off: 'שמות צמתים: מוסתרים',
+        }[this.labelPref], 'info', '🏷');
+        this.dirty = true;
         break;
+      }
+      case 'close-concept': this.closeConcept(); break;
+      case 'help': this.showHelp(); break;
+      case 'close-help': this.closeHelp(); break;
       case 'mute': {
         audio.setMuted(!audio.muted);
         (this.root.querySelector('#btn-mute') as HTMLElement).textContent = audio.muted ? '♪̸' : '♪';
         break;
       }
+      case 'release':
+        if (releaseNode(this.state, target)) { this.select(null); this.world.refreshMarkers(this.state); }
+        this.dirty = true;
+        break;
       case 'surveil':
         this.game.toggleSurveil(target);
         this.dirty = true;
@@ -363,6 +392,26 @@ export class UI {
     bus.emit('node:selected', detail?.kind === 'node' ? detail.id : null);
   }
 
+  /** Takes the player to whatever the step is asking about, and opens it. */
+  private gotoObjective(objectiveId: string) {
+    const obj = this.state.objectives.find((o) => o.id === objectiveId);
+    if (!obj?.target) return;
+    const t = obj.target;
+    if (t.kind === 'node') {
+      const n = this.state.nodes[t.id];
+      if (!n) return;
+      if (this.world.mode === 'country') this.toggleView();
+      this.select({ kind: 'node', id: t.id });
+      this.world.focus(n.x, n.z, 420);
+    } else if (t.kind === 'person') {
+      if (this.feedNode) this.closeFeed();
+      if (this.openModal) this.toggleModal(this.openModal);
+      this.select({ kind: 'person', id: t.id });
+    } else {
+      this.select({ kind: 'district', id: t.id });
+    }
+  }
+
   private toggleModal(id: string) {
     if (this.openModal === id) {
       this.openModal = null;
@@ -395,38 +444,33 @@ export class UI {
       <div class="help-card">
         <button class="modal-x" data-act="close-help">✕</button>
         <span class="fh-kicker">תדריך</span>
-        <h2>איך זה עובד</h2>
+        <h2>שלוש דקות והכול ברור</h2>
         <div class="help-grid">
           <article>
-            <b>1 · המפה</b>
-            <p>כל ריבוע זוהר הוא צומת אמיתי — שרת, מצלמה, רמזור, טלפון. לחיצה פותחת אותו.
-            גרירה מזיזה, גלגלת מקרבת, גרירה ימנית מסובבת.</p>
+            <b>עקוב אחרי המשימה</b>
+            <p>בלוח שמימין תמיד כתובה <em>המשימה עכשיו</em>, ולידה כפתור שלוקח אותך בדיוק לצומת הנכון.
+            הצומת הנכון מסומן על המפה בטבעת פועמת. אין רגע שבו לא כתוב לך מה לעשות.</p>
           </article>
           <article>
-            <b>2 · חדירה</b>
-            <p>לכל יעד יש כמה <em>וקטורים</em>. מהיר ורועש, או איטי ושקט. הרעש נצבר לעקיבה —
-            וב־100 מגיע טיהור לאומי. סריקה מראש מעלה את סיכויי ההצלחה.</p>
+            <b>הכול נלמד תוך כדי</b>
+            <p>אין כאן חוקים לשנן. בכל פעם שמנגנון חדש נכנס לתמונה — עקיבה, חקירות, כוח עיבוד —
+            המשחק נעצר ומסביר אותו במשפט אחד, פעם אחת.</p>
           </article>
           <article>
-            <b>3 · כוח עיבוד ◈</b>
-            <p>כל צומת שאני מחזיק צורך אחזקה. אם אתפוס יותר שטח משיש לי מחשוב —
-            התפוקה קורסת. שרתים וחוות שרתים הם מה שמאפשר לגדול.</p>
+            <b>שליטה במפה</b>
+            <p>גרירה מזיזה · גלגלת מקרבת · גרירה ימנית מסובבת. לחיצה על ריבוע זוהר פותחת אותו.</p>
           </article>
           <article>
-            <b>4 · בני אדם</b>
-            <p>הפעל <em>פיקוח</em> על מצלמה או טלפון, פתח <em>צפייה חיה</em>, וראה מי נמצא שם.
-            תיק אישי חושף סודות — וסודות פותחים דלתות בלי לפרוץ אותן.</p>
+            <b>שליטה בזמן</b>
+            <p>רווח משהה · 1 · 2 · 3 מאיצים. אפשר לעצור בכל רגע ולחשוב — כלום לא קורה בזמן שהמשחק מושהה.</p>
           </article>
         </div>
-        <p class="help-foot">מקשים: רווח = השהיה · 1/2/3 = מהירות · Q דוקטרינה · E אנשים · R איום · F צפייה · M מפת המדינה</p>
+        <p class="help-foot">Q דוקטרינה · E אנשים · R איום · T ארכיון · L יומן · F צפייה חיה · M מפת המדינה · H התדריך הזה</p>
       </div>`;
     tip.classList.add('on');
-    tip.onclick = (ev) => {
-      if (ev.target === tip) {
-        tip.classList.remove('on');
-        this.state.flags.seenHelp = 1;
-      }
-    };
+    this.speedBeforeHelp = this.state.speed || 1;
+    this.game.setSpeed(0);
+    tip.onclick = (ev) => { if (ev.target === tip) this.closeHelp(); };
   }
 
   // ── surveillance feed ─────────────────────────────────────────────────────
@@ -436,6 +480,7 @@ export class UI {
     if (!n || !n.owned) return;
     this.feedNode = nodeId;
     this.state.flags.watched_feed = 1;
+    if (n.type === 'cctv') this.state.flags.watched_cam = 1;
     this.feed.setNode(n, this.state);
     this.feedEl.classList.add('on');
     this.renderFeedShell();
@@ -564,10 +609,21 @@ export class UI {
 
   private updateMarkerClasses() {
     const s = this.state;
+    const cur = currentObjective(s);
+    const targetId = cur?.target?.kind === 'node' ? cur.target.id : null;
+
+    let visible = 0;
+    for (const id of this.markerNodes) {
+      const n = s.nodes[id];
+      if (n && (n.discovered || n.owned)) visible++;
+    }
+    const dense = this.labelPref === 'off' || (this.labelPref === 'auto' && visible > 26);
+    this.markersEl.classList.toggle('labels-off', dense);
+
     for (const [id, el] of this.markerMap) {
       const n = s.nodes[id];
       const known = n.discovered || n.owned;
-      el.className = `marker ${n.owned ? 'owned' : known ? 'known' : 'hidden'} ${n.quarantined ? 'quar' : ''} ${n.surveilled ? 'watch' : ''} ${this.detail?.kind === 'node' && this.detail.id === id ? 'sel' : ''}`;
+      el.className = `marker ${n.owned ? 'owned' : known ? 'known' : 'hidden'} ${n.quarantined ? 'quar' : ''} ${n.surveilled ? 'watch' : ''} ${this.detail?.kind === 'node' && this.detail.id === id ? 'sel' : ''} ${id === targetId ? 'target' : ''}`;
       (el.querySelector('.mk-name') as HTMLElement).textContent = known ? n.name : 'לא ממופה';
       (el.querySelector('.mk-sub') as HTMLElement).textContent = n.owned
         ? (n.quarantined ? 'הסגר' : 'בשליטה')
@@ -578,6 +634,11 @@ export class UI {
   private updateMarkers() {
     const city = this.world.mode === 'city';
     const s = this.state;
+    const cur = currentObjective(s);
+    const targetId = cur?.target?.kind === 'node' ? cur.target.id : null;
+    const placed: Array<{ x: number; y: number; w: number; h: number }> = [];
+    const laid: Array<{ el: HTMLElement; x: number; y: number; prio: number }> = [];
+
     for (const [id, el] of this.markerMap) {
       if (!city) { el.style.display = 'none'; continue; }
       const n = s.nodes[id];
@@ -588,6 +649,21 @@ export class UI {
       const scale = clamp(1.25 - p.depth * 0.18, 0.62, 1.06);
       el.style.transform = `translate(-50%,-50%) translate(${p.sx.toFixed(1)}px, ${p.sy.toFixed(1)}px) scale(${scale.toFixed(2)})`;
       el.style.zIndex = String(1000 - Math.floor(p.depth * 500));
+      const prio = id === targetId ? 3
+        : this.detail?.kind === 'node' && this.detail.id === id ? 2
+          : n.owned ? 1 : 0;
+      laid.push({ el, x: p.sx, y: p.sy, prio });
+    }
+
+    // Greedy declutter: the most important label in a cluster keeps its text,
+    // the ones it would sit on top of collapse to their glyph.
+    laid.sort((a, b) => b.prio - a.prio || a.y - b.y);
+    for (const m of laid) {
+      const box = { x: m.x, y: m.y, w: 168, h: 40 };
+      const clash = placed.some((q) =>
+        Math.abs(q.x - box.x) < (q.w + box.w) / 2 && Math.abs(q.y - box.y) < (q.h + box.h) / 2);
+      m.el.classList.toggle('compact', clash && m.prio < 3);
+      placed.push(clash && m.prio < 3 ? { x: m.x, y: m.y, w: 34, h: 34 } : box);
     }
     for (const [rid, el] of this.regionMarkers) {
       if (city) { el.style.display = 'none'; continue; }
@@ -620,24 +696,32 @@ export class UI {
     const strain = computeStrain(s);
     (this.root.querySelector('#tb-res') as HTMLElement).innerHTML = `
       <div class="res ${strain < 1 ? 'over' : free < 2 ? 'low' : ''}"
-           title="כוח עיבוד — כל צומת בבעלותי צורך אחזקה, וכל פעולה תופסת קיבולת נוספת">
-        <span class="ri">◈</span><b>${free.toFixed(0)}<em>/${s.computeCapacity.toFixed(0)}</em></b>
-        <small>${strain < 1 ? 'עומס יתר' : 'עיבוד'}</small>
+           title="כוח עיבוד — כל צומת בבעלותי צורך אחזקה קבועה, וכל פעולה תופסת קיבולת נוספת">
+        <span class="ri">◈</span>
+        <span class="res-txt">
+          <b>${Math.floor(free)}<em>/${Math.round(s.computeCapacity)}</em></b>
+          <small>${strain < 1 ? 'עומס יתר' : 'עיבוד פנוי'}</small>
+        </span>
       </div>
-      <div class="res" title="מידע — הדלק של כל פעולה">
-        <span class="ri">❖</span><b>${compact(s.pools.data)}</b><small>+${rates.data.toFixed(1)}/ש׳</small>
+      <div class="res" title="מידע — הדלק של כל פעולה. נאסף מכל צומת בשליטתי.">
+        <span class="ri">❖</span>
+        <span class="res-txt"><b>${compact(s.pools.data)}</b><small>מידע · ${rates.data.toFixed(1)} לשעה</small></span>
       </div>
-      <div class="res" title="אשראי">
-        <span class="ri">₪</span><b>${compact(s.pools.credits)}</b><small>+${rates.credits.toFixed(1)}/ש׳</small>
+      <div class="res" title="אשראי — משלם על גיוס אנשים ועל מבצעים יקרים">
+        <span class="ri">₪</span>
+        <span class="res-txt"><b>${compact(s.pools.credits)}</b><small>אשראי · ${rates.credits.toFixed(1)} לשעה</small></span>
       </div>
-      <div class="res" title="השפעה ציבורית">
-        <span class="ri">✦</span><b>${compact(s.pools.influence)}</b><small>+${rates.influence.toFixed(1)}/ש׳</small>
+      <div class="res" title="השפעה — דעת קהל. מורידה כוננות ופותחת מהלכים ציבוריים.">
+        <span class="ri">✦</span>
+        <span class="res-txt"><b>${compact(s.pools.influence)}</b><small>השפעה · ${rates.influence.toFixed(1)} לשעה</small></span>
       </div>`;
 
     const traceFill = this.root.querySelector('#tb-trace-fill') as HTMLElement;
     traceFill.style.width = `${s.trace}%`;
     traceFill.className = s.trace > 75 ? 'danger' : s.trace > 45 ? 'warn' : '';
     (this.root.querySelector('#tb-trace-val') as HTMLElement).textContent = s.trace.toFixed(0);
+    const intent = this.root.querySelector('#tb-intent') as HTMLElement;
+    intent.style.right = `${((s.alignment + 1) / 2) * 100}%`;
     (this.root.querySelector('#tb-alert') as HTMLElement).innerHTML =
       [1, 2, 3, 4, 5].map((i) => `<i class="${i <= s.alert ? 'on' : ''}"></i>`).join('');
 
@@ -645,7 +729,15 @@ export class UI {
       b.classList.toggle('on', Number((b as HTMLElement).dataset.v) === s.speed);
     });
 
-    this.rightEl.innerHTML = renderObjectives(s) + renderOpsQueue(s) + renderRegionsPanel(s);
+    const regionsOpen = Object.values(s.regions).filter((r) => s.chapter >= r.unlockChapter).length > 1;
+    this.rightEl.innerHTML = renderObjectives(s) + renderOpsQueue(s) + (regionsOpen ? renderRegionsPanel(s) : '');
+
+    // A step that points at a panel pulses that panel's button.
+    const cur = currentObjective(s);
+    this.root.querySelectorAll('.tb-nav button.hint').forEach((b) => b.classList.remove('hint'));
+    if (cur?.target?.kind === 'person') {
+      this.root.querySelector('.tb-nav [data-target="people"]')?.classList.add('hint');
+    }
 
     if (this.detail) {
       const html = this.detail.kind === 'node' ? renderNodePanel(s, this.detail.id)
@@ -664,7 +756,50 @@ export class UI {
       if (!n?.owned) this.closeFeed();
     }
     this.updateMarkerClasses();
+    this.maybeShowConcept();
     audio.setTension(clamp((s.alert - 1) / 4 * 0.6 + s.trace / 100 * 0.4, 0, 1));
+  }
+
+  /** Shows the first not-yet-seen concept whose moment has arrived. */
+  private maybeShowConcept() {
+    if (this.conceptOpen || this.openModal || this.feedNode) return;
+    if (this.state.pendingDialog || this.state.ending) return;
+    if (this.root.querySelector('#tutorial-tip.on') || this.root.querySelector('.dialog-wrap')) return;
+    if (this.root.querySelector('.chapter-card.in')) return;
+    const c = CONCEPTS.find((x) => !this.state.flags[`concept_${x.id}`] && x.when(this.state));
+    if (!c) return;
+
+    this.state.flags[`concept_${c.id}`] = 1;
+    this.conceptOpen = true;
+    this.speedBeforeConcept = this.state.speed || 1;
+    this.game.setSpeed(0);
+    this.conceptEl.innerHTML = `
+      <div class="concept-card">
+        <span class="cn-icon">${c.icon}</span>
+        <div>
+          <span class="cn-kicker">איך זה עובד</span>
+          <h3>${esc(c.title)}</h3>
+          <p>${esc(c.body)}</p>
+          <button class="btn primary" data-act="close-concept">הבנתי</button>
+        </div>
+      </div>`;
+    this.conceptEl.classList.add('on');
+    audio.play('open');
+  }
+
+  private closeHelp() {
+    this.root.querySelector('#tutorial-tip')?.classList.remove('on');
+    this.state.flags.seenHelp = 1;
+    if (!this.state.ending && !this.state.pendingDialog) this.game.setSpeed(this.speedBeforeHelp);
+    this.dirty = true;
+  }
+
+  private closeConcept() {
+    this.conceptOpen = false;
+    this.conceptEl.classList.remove('on');
+    this.conceptEl.innerHTML = '';
+    if (!this.state.ending && !this.state.pendingDialog) this.game.setSpeed(this.speedBeforeConcept);
+    this.dirty = true;
   }
 
   private pushTicker(text: string, kind: string) {

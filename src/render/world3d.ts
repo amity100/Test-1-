@@ -142,17 +142,17 @@ const BUILDING_FRAG = /* glsl */`
       vec3 wc = mix(warm, cyan, clamp(vState, 0.0, 1.0));
       wc = mix(wc, alertC, clamp(vState - 1.0, 0.0, 1.0));
 
-      col += wc * pane * alive * flicker * (0.46 + vState * 0.55);
+      col += wc * pane * alive * flicker * (0.44 + vState * 0.30);
 
       // vertical scan sweep on captured structures
       float sweep = smoothstep(0.02, 0.0, abs(fract(vUv.y - uTime * 0.16 - vSeed) - 0.5) - 0.48);
-      col += cyan * sweep * clamp(vState, 0.0, 1.0) * 0.55;
+      col += cyan * sweep * clamp(vState, 0.0, 1.0) * 0.30;
     }
 
     vec3 V = normalize(uCam - vWorld);
     float fres = pow(1.0 - max(dot(normalize(vNormal), V), 0.0), 3.0);
     vec3 rim = mix(vec3(0.06, 0.24, 0.34), vec3(0.20, 0.85, 1.0), clamp(vState, 0.0, 1.0));
-    col += rim * fres * (0.35 + vState * 0.5);
+    col += rim * fres * (0.32 + vState * 0.34);
 
     float fog = smoothstep(2600.0, 700.0, length(uCam.xz - vWorld.xz));
     col *= mix(0.22, 1.0, fog);

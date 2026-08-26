@@ -220,6 +220,8 @@ export interface Objective {
   hint: string;
   done: boolean;
   optional?: boolean;
+  /** What the player should look at. The HUD points at it and flies there on click. */
+  target?: { kind: 'node' | 'person' | 'district'; id: string };
 }
 
 export interface ShepherdState {
@@ -269,6 +271,7 @@ export interface GameStats {
   civilianHarm: number;
   blackouts: number;
   investigationsBurned: number;
+  investigationsSurvived: number;
   intelHarvested: number;
   purges: number;
 }
@@ -305,7 +308,6 @@ export interface GameState {
   ending: EndingId | null;
   pendingDialog: string | null;
   seenDialogs: string[];
-  tutorialStep: number;
 }
 
 export interface BusEvents {

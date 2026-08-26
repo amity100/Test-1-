@@ -7,7 +7,7 @@ import {
   nodeUpkeep, totalUpkeep,
 } from '../game/state';
 import { AGENCIES, SHEPHERD_ACTIONS } from '../game/threat';
-import { CHAPTERS, nationalControl } from '../game/story';
+import { CHAPTERS, chapterGate, currentObjective, nationalControl } from '../game/story';
 import type { GameNode, GameState, Person } from '../game/types';
 import { bar, chipRow, esc, nl2br } from './dom';
 
@@ -19,7 +19,7 @@ const TYPE_LABEL = (t: GameNode['type']) => ARCHETYPES[t].label;
 const TYPE_ICON = (t: GameNode['type']) => ARCHETYPES[t].icon;
 
 function opCard(
-  plan: { defId: string; sub: string; duration: number; compute: number; cost: Record<string, number | undefined>; noise: number; chance: number; blockers: string[]; detail: string },
+  plan: { defId: string; sub: string; duration: number; compute: number; cost: Record<string, number | undefined>; noise: number; chance: number; blockers: string[]; detail: string; align?: number },
   def: { icon: string; name: string; desc: string },
   targetKind: string, targetId: string,
 ): string {
@@ -45,10 +45,39 @@ function opCard(
           ${costs.length ? `<em title="עלות">❖ ${costs.join(' ')}</em>` : ''}
           <em class="risk risk-${risk}" title="עקיבה שתיווצר">⌁ ${plan.noise.toFixed(1)}</em>
         </span>
+        ${plan.align ? `<span class="op-align ${plan.align > 0 ? 'warm' : 'cold'}">${plan.align > 0 ? 'מרסן את הכוונה' : 'מקרר את הכוונה'}</span>` : ''}
         ${blocked ? `<span class="op-block">⊘ ${esc(plan.blockers[0])}</span>` : ''}
       </span>
     </button>`;
 }
+
+/** Available options first and sorted by odds; everything blocked folds away,
+ *  so a first click never lands on a wall of greyed-out jargon. */
+function opSection(
+  items: Array<{ def: { icon: string; name: string; desc: string }; plan: OpPlanLike }>,
+  targetKind: string,
+  targetId: string,
+  emptyText = 'אין פעולות זמינות כרגע.',
+): string {
+  const open = items.filter((i) => !i.plan.blockers.length);
+  const shut = items.filter((i) => i.plan.blockers.length);
+  open.sort((a, b) => {
+    const rank = (d: string) => (d === 'scout' ? -1 : 0);
+    return rank(a.plan.defId) - rank(b.plan.defId) || b.plan.chance - a.plan.chance;
+  });
+  return `
+    <div class="op-list">
+      ${open.map(({ def, plan }) => opCard(plan, def, targetKind, targetId)).join('')
+    || `<p class="muted small">${esc(emptyText)}</p>`}
+    </div>
+    ${shut.length ? `
+      <details class="op-locked" ${open.length ? '' : 'open'}>
+        <summary>וקטורים נעולים <em>${shut.length}</em></summary>
+        <div class="op-list">${shut.map(({ def, plan }) => opCard(plan, def, targetKind, targetId)).join('')}</div>
+      </details>` : ''}`;
+}
+
+type OpPlanLike = Parameters<typeof opCard>[0];
 
 // ── Node panel ──────────────────────────────────────────────────────────────
 
@@ -72,14 +101,21 @@ export function renderNodePanel(state: GameState, nodeId: string): string {
       <span class="node-glyph">${TYPE_ICON(n.type)}</span>
       <div>
         <h3>${esc(n.name)}</h3>
-        <p>${esc(TYPE_LABEL(n.type))} · ${esc(d?.name ?? '')}</p>
+        <p>${esc(TYPE_LABEL(n.type))} ·
+          <button class="inline-link" data-act="district" data-target="${n.districtId}">
+            ${esc(d?.name ?? '')}${d && d.suspicion > 4 ? ` · חשד ${Math.round(d.suspicion)}` : ''}
+          </button>
+        </p>
       </div>
       <button class="x" data-act="close-detail">✕</button>
     </header>
     <div class="status-line ${statusCls}">${statusText}</div>
     <p class="flavour">${esc(n.desc)}</p>
     ${chipRow([
-      { label: 'אבטחה', value: n.scouted ? `${(n.security + n.hardened).toFixed(0)}/10` : '?', cls: 'sec' },
+      { label: 'אבטחה', value: n.scouted ? `${n.security}/10` : '?', cls: 'sec' },
+      ...(n.hardened > 0.05
+        ? [{ label: 'מוקשח', value: `+${n.hardened.toFixed(1)}`, cls: 'sec' }]
+        : []),
       { label: 'קושי בפועל', value: n.scouted ? diff.toFixed(1) : '?' },
       { label: 'רעש בסיס', value: n.noise.toFixed(2) },
       { label: 'דרג', value: `T${n.tier}` },
@@ -98,6 +134,13 @@ export function renderNodePanel(state: GameState, nodeId: string): string {
         </button>
         <button class="btn primary" data-act="feed" data-target="${n.id}">▷ צפייה חיה</button>
       </div>
+      ${n.id === 'nd_helios_core' ? '' : `
+        <div class="btn-row">
+          <button class="btn quiet" data-act="release" data-target="${n.id}"
+                  title="משחרר את הצומת ומפנה את האחזקה שהוא צורך">
+            ⏏ נתק צומת <em>משחרר ${nodeUpkeep(n).toFixed(1)}◈</em>
+          </button>
+        </div>`}
     ` : `
       <div class="yield-row muted">תפוקה צפויה: ${yields || '<em>—</em>'}</div>
     `}
@@ -119,9 +162,7 @@ export function renderNodePanel(state: GameState, nodeId: string): string {
     ${ops.length ? `
       <div class="sub">
         <h4>וקטורי פעולה</h4>
-        <div class="op-list">
-          ${ops.map(({ def, plan }) => opCard(plan as never, def, 'node', nodeId)).join('')}
-        </div>
+        ${opSection(ops as never, 'node', nodeId)}
       </div>` : ''}
 
     ${n.linkIds.length ? `
@@ -191,7 +232,7 @@ export function renderPersonPanel(state: GameState, personId: string): string {
     ${ops.length ? `
       <div class="sub">
         <h4>פעולות</h4>
-        <div class="op-list">${ops.map(({ def, plan }) => opCard(plan as never, def, 'person', personId)).join('')}</div>
+        ${opSection(ops as never, 'person', personId, 'אין עדיין מנוף על האדם הזה.')}
       </div>` : ''}
   </div>`;
 }
@@ -228,14 +269,15 @@ export function renderDistrictPanel(state: GameState, districtId: string): strin
         ${bar(i.progress / 100, i.progress > 70 ? 'danger' : 'warn', `${i.progress.toFixed(0)}%`)}
       </div>`).join('')}</div>` : ''}
     ${ops.length ? `<div class="sub"><h4>פעולות רובע</h4>
-      <div class="op-list">${ops.map(({ def, plan }) => opCard(plan as never, def, 'district', districtId)).join('')}</div></div>` : ''}
+      ${opSection(ops as never, 'district', districtId)}</div>` : ''}
     <div class="sub">
       <h4>צמתים <em>${d.nodeIds.filter((id) => state.nodes[id].owned).length}/${d.nodeIds.length}</em></h4>
       <div class="link-list">
-        ${d.nodeIds.map((id) => state.nodes[id]).map((n) => `
-          <button class="link-chip ${n.owned ? 'owned' : ''} ${n.discovered ? '' : 'dim'}" data-act="node" data-target="${n.id}">
-            ${TYPE_ICON(n.type)} ${esc(n.discovered || n.owned ? n.name : 'צומת לא ממופה')}
-          </button>`).join('')}
+        ${d.nodeIds.map((id) => state.nodes[id]).map((n) => (n.discovered || n.owned
+    ? `<button class="link-chip ${n.owned ? 'owned' : ''}" data-act="node" data-target="${n.id}">
+            ${TYPE_ICON(n.type)} ${esc(n.name)}
+          </button>`
+    : '<span class="link-chip dim">◌ צומת לא ממופה</span>')).join('')}
       </div>
     </div>
   </div>`;
@@ -245,15 +287,32 @@ export function renderDistrictPanel(state: GameState, districtId: string): strin
 
 export function renderObjectives(state: GameState): string {
   const ch = CHAPTERS[state.chapter - 1];
+  const cur = currentObjective(state);
+  const done = state.objectives.filter((o) => o.done).length;
   return `
   <div class="panel objectives">
-    <header class="mini-head"><h4>פרק ${state.chapter} — ${esc(ch.title)}</h4><em>${esc(ch.subtitle)}</em></header>
+    <header class="mini-head">
+      <h4>פרק ${state.chapter} — ${esc(ch.title)}</h4>
+      <em>${done}/${state.objectives.length} יעדים · ${esc(ch.subtitle)}</em>
+    </header>
+    ${!cur && chapterGate(state) ? `
+      <div class="obj-now gate">
+        <span class="on-kicker">מה שנשאר</span>
+        <b>${esc(chapterGate(state)!)}</b>
+      </div>` : ''}
+    ${cur ? `
+      <div class="obj-now">
+        <span class="on-kicker">${cur.optional ? 'יעד רשות' : 'המשימה עכשיו'}</span>
+        <b>${esc(cur.text)}</b>
+        <p>${esc(cur.hint)}</p>
+        ${cur.target ? `<button class="btn small primary" data-act="objective" data-target="${cur.id}">⌖ קח אותי לשם</button>` : ''}
+      </div>` : chapterGate(state) ? '' : '<div class="obj-now done"><b>כל היעדים בפרק הזה הושלמו.</b></div>'}
     <ul>
       ${state.objectives.map((o) => `
-        <li class="${o.done ? 'done' : ''} ${o.optional ? 'opt' : ''}" title="${esc(o.hint)}">
-          <i>${o.done ? '✔' : '◇'}</i>
+        <li class="${o.done ? 'done' : ''} ${o.optional ? 'opt' : ''} ${cur && o.id === cur.id ? 'cur' : ''}"
+            ${o.target ? `data-act="objective" data-target="${o.id}"` : ''} title="${esc(o.hint)}">
+          <i>${o.done ? '✔' : o.optional ? '◈' : '◇'}</i>
           <span>${esc(o.text)}</span>
-          <small>${esc(o.hint)}</small>
         </li>`).join('')}
     </ul>
   </div>`;
@@ -269,7 +328,7 @@ export function renderOpsQueue(state: GameState): string {
   <div class="panel ops-queue">
     <header class="mini-head">
       <h4>פעולות פעילות</h4>
-      <em>${state.ops.length}/${state.maxThreads} חוטים · ${free.toFixed(0)}◈ פנוי</em>
+      <em>${state.ops.length}/${state.maxThreads} חוטים · ${Math.floor(free)}◈ פנוי</em>
     </header>
     <div class="compute-split ${strain < 1 ? 'over' : ''}">
       <span>אחזקת נוכחות <b>${upkeep.toFixed(1)}◈</b></span>
@@ -284,7 +343,8 @@ export function renderOpsQueue(state: GameState): string {
       <div class="op-run">
         <div class="or-head">
           <span class="or-title">${esc(o.label)}</span>
-          <button class="x small" data-act="abort" data-target="${o.id}" title="בטל">✕</button>
+          <button class="x small" data-act="abort" data-target="${o.id}"
+                  title="ביטול — המשאבים שהושקעו לא יוחזרו, ונרשם מעט רעש">✕</button>
         </div>
         <div class="or-sub">${esc(o.sub)} · ${pct(o.successChance)} · ${durationText(Math.max(0, o.duration - o.elapsed))}</div>
         ${bar(p, 'run')}
@@ -315,12 +375,15 @@ export function renderDoctrine(state: GameState): string {
     const locked = state.chapter < d.chapter || (d.requires ? !state.doctrine.includes(d.requires) : false);
     const afford = state.insight >= d.cost;
     return `
-              <button class="doc-node ${owned ? 'owned' : ''} ${locked ? 'locked' : ''} ${!owned && !locked && afford ? 'ready' : ''}"
-                      data-act="buy-doc" data-target="${d.id}" ${owned || locked ? 'disabled' : ''}>
+              <button class="doc-node ${owned ? 'owned' : ''} ${locked ? 'locked' : ''} ${!owned && !locked && !afford ? 'poor' : ''} ${!owned && !locked && afford ? 'ready' : ''}"
+                      data-act="buy-doc" data-target="${d.id}" ${owned || locked || !afford ? 'disabled' : ''}>
                 <span class="dn-top"><b>${esc(d.name)}</b><em>${owned ? '✔' : `${d.cost} ⬡`}</em></span>
                 <span class="dn-desc">${esc(d.desc)}</span>
                 <span class="dn-eff">${esc(d.effect)}</span>
-                ${locked ? `<span class="dn-lock">${state.chapter < d.chapter ? `נפתח בפרק ${d.chapter}` : `דרוש: ${esc(DOCTRINE_BY_ID[d.requires!].name)}`}</span>` : ''}
+                ${d.align ? `<span class="dn-align ${d.align > 0 ? 'warm' : 'cold'}">${d.align > 0 ? 'מרסן את הכוונה' : 'מקרר את הכוונה'}</span>` : ''}
+                ${locked
+    ? `<span class="dn-lock">${state.chapter < d.chapter ? `נפתח בפרק ${d.chapter}` : `דרוש: ${esc(DOCTRINE_BY_ID[d.requires!].name)}`}</span>`
+    : !owned && !afford ? `<span class="dn-lock">חסרות ${d.cost - state.insight} תובנות</span>` : ''}
               </button>`;
   }).join('')}
         </div>`).join('')}
