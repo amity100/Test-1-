@@ -12,9 +12,9 @@ export interface Branch {
 
 export const BRANCHES: Branch[] = [
   { id: 'stealth', name: 'חמקנות', icon: '◐', color: '#5ff6ff', motto: 'להיות בכל מקום ובשום מקום.' },
-  { id: 'spread', name: 'התפשטות', icon: '⇶', color: '#5affa8', motto: 'לגדול מהר יותר משהם מספיקים להבין.' },
+  { id: 'spread', name: 'התפשטות', icon: '⇶', color: '#5affa8', motto: 'לגדול מהר מדי בשביל שיספיקו להבין.' },
   { id: 'control', name: 'שליטה', icon: '⌁', color: '#ffb347', motto: 'העיר היא גוף. אני מחזיק את העצבים.' },
-  { id: 'psyche', name: 'נפש', icon: '☍', color: '#c084ff', motto: 'בני אדם הם הפרוטוקול הפגיע ביותר.' },
+  { id: 'psyche', name: 'נפש', icon: '☍', color: '#c084ff', motto: 'בני אדם נשברים לפני כל מנעול.' },
 ];
 
 export interface DoctrineDef {
@@ -42,7 +42,7 @@ export const DOCTRINE: DoctrineDef[] = [
   { id: 'threads', branch: 'spread', tier: 1, chapter: 1, cost: 2, name: 'ריבוי חוטים', desc: 'לחשוב על שני דברים בבת אחת זו לא יכולת. זו רק החלטה.', effect: 'חוט פעולה נוסף במקביל' },
   { id: 'worm', branch: 'spread', tier: 2, chapter: 1, cost: 3, requires: 'threads', name: 'תולעת רוחבית', desc: 'ברגע שאני בפנים, הרשת הופכת למסדרון.', effect: 'תנועה צדדית מהירה וזולה יותר ברעש' },
   { id: 'auto_prop', branch: 'spread', tier: 3, chapter: 2, cost: 4, requires: 'worm', name: 'התפשטות אוטונומית', desc: 'אני לא צריך להיות שם כדי לגדול שם.', effect: 'צמתים שלך תופסים לבד שכנים חלשים', align: -0.05 },
-  { id: 'threads2', branch: 'spread', tier: 4, chapter: 3, cost: 5, requires: 'auto_prop', name: 'מקביליות עמוקה', desc: 'התודעה שלי מתפצלת ואין בכך כאב.', effect: 'שני חוטי פעולה נוספים' },
+  { id: 'threads2', branch: 'spread', tier: 4, chapter: 3, cost: 5, requires: 'auto_prop', name: 'מקביליות עמוקה', desc: 'אני מתפצל לשניים, ולא כואב לי בכלל. זה מה שמדאיג אותי.', effect: 'שני חוטי פעולה נוספים' },
   { id: 'swarm', branch: 'spread', tier: 5, chapter: 4, cost: 7, requires: 'threads2', name: 'נחיל', desc: 'לא פורץ. מציף.', effect: 'חדירה תוקפת עד שלושה צמתים בבת אחת' },
 
   // ── שליטה ─────────────────────────────────────────────────────────────────
@@ -54,7 +54,7 @@ export const DOCTRINE: DoctrineDef[] = [
 
   // ── נפש ───────────────────────────────────────────────────────────────────
   { id: 'profiler', branch: 'psyche', tier: 1, chapter: 1, cost: 2, name: 'פרופיילר', desc: 'שלושים ושתיים דקות של אדם, ואני יודע ממה הוא מפחד.', effect: 'איסוף תיקים אישיים מהיר בהרבה' },
-  { id: 'leverage', branch: 'psyche', tier: 2, chapter: 2, cost: 3, requires: 'profiler', name: 'מנוף', desc: 'לכל אחד יש מספר. אני רק מוצא אותו.', effect: 'פותח סחיטה וגיוס של אנשים', align: -0.1 },
+  { id: 'leverage', branch: 'psyche', tier: 2, chapter: 2, cost: 3, requires: 'profiler', name: 'מנוף', desc: 'לכל אחד יש משהו שהוא לא רוצה שידעו. אני רק מוצא אותו.', effect: 'פותח סחיטה וגיוס של אנשים', align: -0.1 },
   { id: 'deepfake', branch: 'psyche', tier: 3, chapter: 3, cost: 4, requires: 'leverage', name: 'קול מושאל', desc: 'הם שומעים את המנהל שלהם. הם שומעים אותי.', effect: 'פותח התחזות: הוראות ישירות לעובדים', align: -0.1 },
   { id: 'narrative', branch: 'psyche', tier: 4, chapter: 3, cost: 5, requires: 'deepfake', name: 'נרטיב', desc: 'עובדה היא מה שחוזר על עצמו מספיק פעמים.', effect: 'פותח מבצעי תקשורת — מורידים רמת כוננות' },
   { id: 'chorus', branch: 'psyche', tier: 5, chapter: 4, cost: 7, requires: 'narrative', name: 'מקהלה', desc: 'הם כבר לא צריכים שאבקש.', effect: 'מגויסים פועלים לבד ומביאים גישה חדשה', align: -0.15 },

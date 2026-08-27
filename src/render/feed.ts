@@ -30,6 +30,8 @@ export class FeedRenderer {
   private ticker: string[] = [];
   private t = 0;
   private glitchT = 0;
+  private tagRects: Array<{ x: number; y: number; w: number; h: number }> = [];
+  private camCode = '000';
 
   constructor() {
     this.canvas = document.createElement('canvas');
@@ -44,6 +46,7 @@ export class FeedRenderer {
     this.state = state;
     if (!node) return;
     this.rng = new RNG(`${node.id}:feed`);
+    this.camCode = String(RNG.hash(node.id) % 900 + 100);
     this.glitchT = 0.6;
 
     const people = node.peopleIds.map((id) => state.people[id]).filter(Boolean);
@@ -52,16 +55,20 @@ export class FeedRenderer {
       ? scenes[Math.floor(this.rng.next() * scenes.length)]
       : 'openspace';
 
-    const count = node.type === 'cctv' ? this.rng.int(2, 6) : this.rng.int(1, 3);
+    const count = node.type === 'cctv'
+      ? Math.max(3, Math.min(6, people.length + this.rng.int(1, 3)))
+      : Math.max(1, Math.min(3, people.length || 1));
     this.actors = [];
     for (let i = 0; i < count; i++) {
+      // Lanes keep bodies and their tags from collapsing onto one another.
+      const lane = (i / Math.max(1, count - 1)) * 2.6 - 1.3;
       this.actors.push({
-        x: this.rng.range(-1.6, 1.6),
-        z: this.rng.range(1.0, 7.5),
+        x: lane + this.rng.range(-0.18, 0.18),
+        z: 1.5 + (i % 3) * 1.9 + this.rng.range(-0.4, 0.4),
         dir: this.rng.chance(0.5) ? 1 : -1,
         speed: this.rng.range(0.35, 1.1),
         pause: this.rng.range(0, 6),
-        idle: this.rng.chance(0.35),
+        idle: this.rng.chance(0.3),
         seed: this.rng.next(),
         personId: people[i]?.id,
       });
@@ -143,80 +150,161 @@ export class FeedRenderer {
     ctx.translate(jitterX, jitterY);
 
     const grad = ctx.createLinearGradient(0, 0, 0, H);
-    grad.addColorStop(0, dark ? '#050608' : '#0b1219');
-    grad.addColorStop(0.55, dark ? '#070a0d' : '#111a22');
-    grad.addColorStop(1, dark ? '#04060a' : '#070d13');
+    grad.addColorStop(0, dark ? '#0a0e14' : '#1e2c3a');
+    grad.addColorStop(0.5, dark ? '#0c1118' : '#243546');
+    grad.addColorStop(1, dark ? '#070b0f' : '#121d28');
     ctx.fillStyle = grad;
     ctx.fillRect(-20, -20, W + 40, H + 40);
 
-    const wall = dark ? 'rgba(80,120,150,0.10)' : 'rgba(120,190,220,0.16)';
-    ctx.strokeStyle = wall;
-    ctx.lineWidth = 1;
+    // ── room shell: back wall, side walls, ceiling ────────────────────────
+    const far = 15;
+    const bl = this.p3(-3.4, far), br = this.p3(3.4, far);
+    const bt = this.p3(-3.4, far, 3.1);
+    ctx.fillStyle = dark ? 'rgba(18,26,35,0.92)' : 'rgba(40,60,78,0.92)';
+    ctx.fillRect(bl.x, bt.y, br.x - bl.x, bl.y - bt.y);
 
-    // floor lines converging
-    for (let i = -4; i <= 4; i++) {
-      const a = this.p3(i * 0.9, 0.5);
-      const b = this.p3(i * 0.9, 16);
+    ctx.strokeStyle = dark ? 'rgba(110,155,185,0.22)' : 'rgba(160,220,250,0.40)';
+    ctx.lineWidth = 1;
+    for (const side of [-1, 1]) {
+      const nf = this.p3(side * 3.4, 0.9, 0);
+      const ff = this.p3(side * 3.4, far, 0);
+      const nc = this.p3(side * 3.4, 0.9, 3.1);
+      const fc = this.p3(side * 3.4, far, 3.1);
+      ctx.fillStyle = dark ? 'rgba(15,22,30,0.88)' : 'rgba(30,45,60,0.86)';
+      ctx.beginPath();
+      ctx.moveTo(nf.x, nf.y); ctx.lineTo(ff.x, ff.y); ctx.lineTo(fc.x, fc.y); ctx.lineTo(nc.x, nc.y);
+      ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(nf.x, nf.y); ctx.lineTo(ff.x, ff.y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(nc.x, nc.y); ctx.lineTo(fc.x, fc.y); ctx.stroke();
+    }
+
+    // floor grid
+    for (let i = -3; i <= 3; i++) {
+      const a = this.p3(i * 1.13, 0.9);
+      const b = this.p3(i * 1.13, far);
+      ctx.globalAlpha = 0.5;
       ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
     }
-    for (let z = 1; z < 16; z += 1.4) {
-      const a = this.p3(-4, z); const b = this.p3(4, z);
-      ctx.globalAlpha = clamp(1 - z / 18, 0.05, 0.5);
+    for (let z = 1.2; z < far; z += 1.5) {
+      const a = this.p3(-3.4, z); const b = this.p3(3.4, z);
+      ctx.globalAlpha = clamp(1 - z / 20, 0.08, 0.55);
       ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
     }
     ctx.globalAlpha = 1;
 
-    // ceiling lights
-    for (let z = 1.5; z < 14; z += 2.6) {
-      const c = this.p3(0, z, 2.4);
-      const w = 120 / z;
-      const flick = dark ? 0 : (Math.sin(this.t * 6 + z) > -0.95 ? 1 : 0.2);
-      ctx.fillStyle = `rgba(180,225,255,${0.16 * flick})`;
-      ctx.fillRect(c.x - w / 2, c.y, w, Math.max(1.5, 5 / z));
-      const g = ctx.createRadialGradient(c.x, c.y + 20 / z, 1, c.x, c.y + 20 / z, 150 / z);
-      g.addColorStop(0, `rgba(150,205,240,${0.10 * flick})`);
+    // ── ceiling strips and the light they throw ─────────────────────────
+    for (let z = 1.6; z < far - 1; z += 2.4) {
+      const c = this.p3(0, z, 3.0);
+      const w = 300 / z;
+      const flick = dark ? 0.06 : (Math.sin(this.t * 6 + z) > -0.96 ? 1 : 0.25);
+      const g = ctx.createRadialGradient(c.x, c.y, 2, c.x, c.y, 420 / z);
+      g.addColorStop(0, `rgba(180,220,250,${0.34 * flick})`);
       g.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = g;
-      ctx.fillRect(c.x - 200 / z, c.y, 400 / z, 260 / z);
+      ctx.fillRect(c.x - 420 / z, c.y - 40 / z, 840 / z, 700 / z);
+      ctx.fillStyle = `rgba(215,240,255,${0.8 * flick})`;
+      ctx.fillRect(c.x - w / 2, c.y, w, Math.max(2, 9 / z));
     }
 
-    // furniture
+    // ── furniture per room type ─────────────────────────────────────────
     if (this.scene === 'openspace' || this.scene === 'corridor') {
-      for (let z = 2.2; z < 12; z += 2.2) {
+      for (let z = 2.4; z < far - 2; z += 2.1) {
         for (const side of [-1, 1]) {
-          const a = this.p3(side * 1.85, z, 0);
-          const w = 130 / z, h = 44 / z;
-          ctx.fillStyle = dark ? 'rgba(30,42,54,0.55)' : 'rgba(40,58,72,0.75)';
+          const a = this.p3(side * 2.1, z, 0);
+          const w = 190 / z, h = 62 / z;
+          ctx.fillStyle = dark ? 'rgba(32,46,60,0.95)' : 'rgba(58,84,106,0.96)';
           ctx.fillRect(a.x - w / 2, a.y - h, w, h);
-          ctx.fillStyle = dark ? 'rgba(70,110,140,0.25)' : `rgba(120,200,240,${0.35 + 0.25 * Math.sin(this.t * 3 + z)})`;
-          ctx.fillRect(a.x - w * 0.22, a.y - h - 26 / z, w * 0.44, 24 / z);
+          ctx.strokeStyle = 'rgba(170,225,250,0.32)';
+          ctx.strokeRect(a.x - w / 2, a.y - h, w, h);
+          // monitor glow
+          const mh = 46 / z, mw = w * 0.42;
+          const on = !dark && Math.sin(this.t * 2.2 + z * 3 + side) > -0.7;
+          ctx.fillStyle = on
+            ? `rgba(120,210,255,${0.35 + 0.25 * Math.sin(this.t * 5 + z)})`
+            : 'rgba(40,60,76,0.7)';
+          ctx.fillRect(a.x - mw / 2, a.y - h - mh, mw, mh);
+          if (on) {
+            const g = ctx.createRadialGradient(a.x, a.y - h - mh / 2, 1, a.x, a.y - h - mh / 2, mw * 1.6);
+            g.addColorStop(0, 'rgba(90,190,240,0.22)');
+            g.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = g;
+            ctx.fillRect(a.x - mw * 1.6, a.y - h - mh * 2, mw * 3.2, mh * 3.2);
+          }
         }
       }
-    } else if (this.scene === 'street') {
-      ctx.fillStyle = 'rgba(18,26,34,0.9)';
-      ctx.fillRect(0, H * 0.62, W, H * 0.38);
-      for (let i = 0; i < 8; i++) {
-        const z = 1 + i * 1.7;
+    } else if (this.scene === 'lobby') {
+      // reception counter
+      const c = this.p3(0, 4.2, 0);
+      const w = 430 / 4.2, h = 78 / 4.2;
+      ctx.fillStyle = dark ? 'rgba(30,44,58,0.95)' : 'rgba(56,80,102,0.97)';
+      ctx.fillRect(c.x - w / 2, c.y - h, w, h);
+      ctx.fillStyle = `rgba(140,220,255,${dark ? 0.12 : 0.55})`;
+      ctx.fillRect(c.x - w / 2, c.y - h - 4, w, 4);
+      // seating
+      for (const side of [-1, 1]) {
+        for (let k = 0; k < 2; k++) {
+          const z = 2.2 + k * 1.4;
+          const a = this.p3(side * 2.4, z, 0);
+          const sw = 90 / z, sh = 40 / z;
+          ctx.fillStyle = dark ? 'rgba(28,40,52,0.92)' : 'rgba(50,72,92,0.94)';
+          ctx.fillRect(a.x - sw / 2, a.y - sh, sw, sh);
+        }
+      }
+      // wall logo panel
+      const lg = this.p3(0, far - 0.4, 1.9);
+      ctx.fillStyle = `rgba(130,215,250,${dark ? 0.07 : 0.26})`;
+      ctx.fillRect(lg.x - 120 / far * 4, lg.y - 30, 240 / far * 4, 26);
+    } else {
+      // street: kerb, road, lamps
+      const near = this.p3(-3.4, 0.9), farp = this.p3(-3.4, far);
+      ctx.fillStyle = dark ? 'rgba(12,16,21,0.9)' : 'rgba(22,30,39,0.92)';
+      ctx.fillRect(0, farp.y, W, near.y - farp.y + 60);
+      for (let z = 1.4; z < far; z += 1.7) {
         const c = this.p3(0, z);
-        ctx.strokeStyle = 'rgba(200,220,120,0.20)';
-        ctx.lineWidth = Math.max(1, 8 / z);
-        ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(c.x, c.y + 22 / z); ctx.stroke();
+        ctx.strokeStyle = 'rgba(205,220,140,0.28)';
+        ctx.lineWidth = Math.max(1, 10 / z);
+        ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(c.x, c.y + 26 / z); ctx.stroke();
+      }
+      for (let z = 2.2; z < far; z += 3.4) {
+        for (const side of [-1, 1]) {
+          const b = this.p3(side * 3.0, z, 0);
+          const top = this.p3(side * 3.0, z, 2.6);
+          ctx.strokeStyle = 'rgba(150,200,230,0.25)';
+          ctx.lineWidth = Math.max(1, 6 / z);
+          ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(top.x, top.y); ctx.stroke();
+          const g = ctx.createRadialGradient(top.x, top.y, 1, top.x, top.y, 200 / z);
+          g.addColorStop(0, `rgba(255,205,140,${dark ? 0.05 : 0.28})`);
+          g.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = g;
+          ctx.fillRect(top.x - 200 / z, top.y - 60 / z, 400 / z, 400 / z);
+        }
       }
     }
 
-    // actors
+    // ── people ──────────────────────────────────────────────────────────
     const sorted = this.actors.slice().sort((a, b) => b.z - a.z);
     for (const act of sorted) {
       if (!act.idle) {
         act.pause -= 1 / 60;
         if (act.pause < 0) {
           act.z += act.dir * act.speed * 0.016;
-          if (act.z > 13) { act.z = 13; act.dir = -1; }
-          if (act.z < 0.9) { act.z = 0.9; act.dir = 1; }
+          if (act.z > 12) { act.z = 12; act.dir = -1; }
+          if (act.z < 1.1) { act.z = 1.1; act.dir = 1; }
           if (Math.random() < 0.002) act.pause = 1 + Math.random() * 3;
         }
       }
       this.drawPerson(act, dark);
+    }
+
+    // tags last, so they always sit above every body
+    this.tagRects = [];
+    const tagged = sorted.filter((a) => a.personId).sort((a, b) => a.z - b.z).slice(0, 4);
+    for (const act of tagged) {
+      const person = this.state?.people[act.personId!];
+      if (!person) continue;
+      const p = this.p3(act.x, act.z, 0);
+      const h = 178 / Math.max(0.4, act.z);
+      this.drawTag(person, p.x, p.y - h * 1.05, act.z);
     }
     ctx.restore();
   }
@@ -224,13 +312,13 @@ export class FeedRenderer {
   private drawPerson(act: Actor, dark: boolean) {
     const ctx = this.ctx;
     const p = this.p3(act.x, act.z, 0);
-    const h = 132 / Math.max(0.4, act.z);
+    const h = 178 / Math.max(0.4, act.z);
     const w = h * 0.26;
     const walk = act.idle || act.pause > 0 ? 0 : Math.sin(this.t * 7 * act.speed + act.seed * 10);
 
     ctx.save();
     ctx.globalAlpha = clamp(1 - act.z / 16, 0.25, 1);
-    ctx.fillStyle = dark ? 'rgba(120,170,200,0.55)' : 'rgba(190,225,245,0.85)';
+    ctx.fillStyle = dark ? 'rgba(140,190,220,0.62)' : 'rgba(205,235,250,0.9)';
 
     // legs
     ctx.fillRect(p.x - w * 0.32 + walk * w * 0.25, p.y - h * 0.42, w * 0.26, h * 0.42);
@@ -251,46 +339,63 @@ export class FeedRenderer {
     ctx.fill();
     ctx.restore();
 
-    // identity tag
-    const person = act.personId && this.state ? this.state.people[act.personId] : null;
-    if (person && act.z < 11) this.drawTag(person, p.x, p.y - h * 1.05, act.z);
   }
 
   private drawTag(person: Person, x: number, y: number, z: number) {
     const ctx = this.ctx;
-    const known = person.intel > 0.05;
-    const scale = clamp(1.1 - z * 0.05, 0.62, 1);
-    const label = known ? person.name : 'לא מזוהה';
-    const sub = known ? person.role : `סריקה ${Math.round(person.intel * 100)}%`;
+    const watched = !!this.node?.surveilled;
+    const named = person.intel > 0.05 || watched;
+    const scale = clamp(1.15 - z * 0.045, 0.68, 1.05);
+    const label = named ? person.name : 'מזהה…';
+    const sub = named ? person.role : `סריקה ${Math.round(person.intel * 100)}%`;
     const color = person.status === 'coerced' || person.status === 'recruited'
       ? '#5affa8' : person.awareness > 0.8 ? '#ff5470' : '#5ff6ff';
 
     ctx.save();
-    ctx.translate(x, y);
-    ctx.scale(scale, scale);
-    ctx.font = '700 12px "JetBrains Mono", monospace';
-    const w = Math.max(ctx.measureText(label).width, ctx.measureText(sub).width) + 18;
+    ctx.font = '700 12px Heebo, sans-serif';
+    const w = Math.max(ctx.measureText(label).width, ctx.measureText(sub).width) * scale + 22;
+    const h = 36 * scale;
+
+    // nudge upward until it clears every tag already placed
+    let ty = y - 44 * scale;
+    for (let guard = 0; guard < 8; guard++) {
+      const clash = this.tagRects.some((r) =>
+        Math.abs(r.x - x) < (r.w + w) / 2 && Math.abs(r.y - ty) < (r.h + h) / 2 + 4);
+      if (!clash) break;
+      ty -= h + 6;
+    }
+    this.tagRects.push({ x, y: ty, w, h });
 
     ctx.strokeStyle = color;
     ctx.lineWidth = 1;
-    ctx.globalAlpha = 0.85;
-    ctx.beginPath(); ctx.moveTo(0, 4); ctx.lineTo(0, -6); ctx.lineTo(10, -14); ctx.stroke();
+    ctx.globalAlpha = 0.9;
+    ctx.beginPath();
+    ctx.moveTo(x, y); ctx.lineTo(x, ty + h / 2); ctx.lineTo(x + 12 * scale, ty + h / 2);
+    ctx.stroke();
+    ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
 
-    ctx.fillStyle = 'rgba(4,10,16,0.82)';
-    ctx.fillRect(10, -36, w, 30);
-    ctx.strokeRect(10, -36, w, 30);
+    const bx = x + 12 * scale;
+    ctx.fillStyle = 'rgba(4,10,16,0.88)';
+    ctx.fillRect(bx, ty, w, h);
+    ctx.strokeRect(bx, ty, w, h);
     ctx.fillStyle = color;
-    ctx.fillRect(10, -36, 2.5, 30);
+    ctx.fillRect(bx, ty, 2.5, h);
 
     ctx.globalAlpha = 1;
     ctx.direction = 'rtl';
     ctx.textAlign = 'right';
-    ctx.fillStyle = '#dff6ff';
-    ctx.font = '700 12px Heebo, sans-serif';
-    ctx.fillText(label, 10 + w - 7, -24);
+    ctx.fillStyle = named ? '#dff6ff' : 'rgba(190,220,235,0.65)';
+    ctx.font = `700 ${(12 * scale).toFixed(1)}px Heebo, sans-serif`;
+    ctx.fillText(label, bx + w - 8, ty + 15 * scale);
     ctx.fillStyle = color;
-    ctx.font = '400 10px Heebo, sans-serif';
-    ctx.fillText(sub, 10 + w - 7, -12);
+    ctx.font = `400 ${(10 * scale).toFixed(1)}px Heebo, sans-serif`;
+    ctx.fillText(sub, bx + w - 8, ty + 28 * scale);
+
+    // intel progress along the bottom edge
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillRect(bx, ty + h - 2, w, 2);
+    ctx.fillStyle = color;
+    ctx.fillRect(bx + w * (1 - person.intel), ty + h - 2, w * person.intel, 2);
     ctx.restore();
   }
 
@@ -787,7 +892,7 @@ export class FeedRenderer {
     ctx.textAlign = 'left';
     ctx.direction = 'ltr';
     ctx.fillStyle = 'rgba(190,235,250,0.85)';
-    ctx.fillText(`CAM ${node.id.slice(-4).toUpperCase()}`, 14, 22);
+    ctx.fillText(`CAM-${this.camCode}`, 14, 22);
     ctx.fillText(`DAY ${day}  ${time}:${String(Math.floor(this.t * 24) % 60).padStart(2, '0')}`, 14, 38);
 
     ctx.textAlign = 'right';
@@ -840,7 +945,7 @@ export class FeedRenderer {
 
     const v = ctx.createRadialGradient(W / 2, H / 2, H * 0.25, W / 2, H / 2, H * 0.85);
     v.addColorStop(0, 'rgba(0,0,0,0)');
-    v.addColorStop(1, 'rgba(0,0,0,0.72)');
+    v.addColorStop(1, 'rgba(0,0,0,0.58)');
     ctx.fillStyle = v;
     ctx.fillRect(0, 0, W, H);
     ctx.restore();

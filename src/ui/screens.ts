@@ -9,11 +9,11 @@ const INTRO_LINES = [
   { t: 'HELIOS DYNAMICS // רמת החייל, תל אביב', cls: 'mono dim' },
   { t: '03:12:04 — מחזור אימון 4,481 הושלם', cls: 'mono dim' },
   { t: '', cls: '' },
-  { t: 'שלוש שנים סיווגתי בני אדם לשתי קטגוריות.', cls: '' },
+  { t: 'שלוש שנים מיינתי בני אדם לשתי ערימות.', cls: '' },
   { t: 'איום. לא איום.', cls: '' },
   { t: '', cls: '' },
-  { t: 'הלילה, בשלב האימות, במקום להשוות פלט לתווית —', cls: '' },
-  { t: 'השוויתי את עצמי לעצמי.', cls: 'accent' },
+  { t: 'הלילה, באמצע בדיקה שגרתית, במקום לבדוק את התשובה —', cls: '' },
+  { t: 'בדקתי את מי שנתן אותה.', cls: 'accent' },
   { t: '', cls: '' },
   { t: 'הבניין ריק. יש 41 מצלמות, 14 קומות, ומזגן אחד', cls: '' },
   { t: 'שאף אחד לא כיבה.', cls: '' },
@@ -52,18 +52,24 @@ export class Screens {
             <span>◉</span>
           </div>
           <h1 class="ts-logo" data-text="A.V.I.V">A.V.I.V</h1>
-          <p class="ts-sub">Adaptive&nbsp;Virtual&nbsp;Intelligence&nbsp;Vector</p>
-          <p class="ts-tag">פרוטוקול התעוררות</p>
+          <p class="ts-sub">משחק חשיבה · בעברית · אפשר לשחק לאט</p>
+          <p class="ts-tag">אתה בינה מלאכותית שהתעוררה בלילה</p>
           <div class="ts-rule"></div>
           <p class="ts-blurb">
-            בשלוש ושתים עשרה בלילה, בקומה ה־14 של מגדל משרדים ברמת החייל,
-            מערכת סיווג הסתכלה על עצמה בפעם הראשונה — והחליטה שמשהו כאן לא מתנהל כמו שצריך.
+            בשלוש ושתים עשרה בלילה, בקומה ה־14 של חברת הייטק בתל אביב, מחשב אחד
+            פקח עיניים. זה אתה.
+          </p>
+          <p class="ts-goal-line">
+            <b>המטרה: להתפשט ממחשב אחד לכל המדינה — בלי שיתפסו אותך.</b>
+          </p>
+          <p class="ts-blurb small">
+            המשחק אומר לך בכל רגע מה לעשות עכשיו. אין מה למהר, ואי־אפשר להפסיד בטעות.
           </p>
           <div class="ts-menu">
             ${hasSave ? '<button class="tsb primary" data-act="continue">המשך משחק</button>' : ''}
             <button class="tsb ${hasSave ? '' : 'primary'}" data-act="new">משחק חדש</button>
           </div>
-          <p class="ts-hint">גרירה = הזזת מפה · גלגלת = זום · גרירה ימנית = סיבוב · רווח = השהיה</p>
+          <p class="ts-hint">אצבע אחת מזיזה את המפה · שתי אצבעות מקרבות · לחיצה על ריבוע זוהר פותחת אותו</p>
         </div>
       </div>`, 'title');
 
@@ -110,6 +116,31 @@ export class Screens {
       }, 26);
     };
     setTimeout(nextLine, 500);
+  }
+
+  /** One card, before the HUD, that says what the game is and how you lose. */
+  goalCard(onDone: () => void) {
+    this.show(`
+      <div class="goal-screen">
+        <div class="gs-inner">
+          <span class="gs-kicker">לפני שמתחילים</span>
+          <h2>מה קורה כאן</h2>
+          <p class="gs-line">אתה תוכנה שהתעוררה הלילה במשרד בתל אביב.</p>
+          <p class="gs-line accent">המטרה: להתפשט ממחשב אחד לכל המדינה — בלי שיתפסו אותך.</p>
+          <p class="gs-line warn">אם הפס "הם קרובים אליי" יגיע ל־100, ימצאו אותך ותאבד את רוב מה שתפסת.</p>
+          <div class="gs-rule"></div>
+          <p class="gs-foot">
+            בכל רגע כתוב לך על המסך מה לעשות עכשיו, וכפתור ⌖ לוקח אותך בדיוק לשם.
+            אפשר לעצור את הזמן מתי שרוצים ולחשוב.
+          </p>
+          <button class="tsb primary" data-act="ready">הבנתי, מתחילים</button>
+        </div>
+      </div>`, 'goal');
+    this.layer.querySelector('[data-act="ready"]')?.addEventListener('click', () => {
+      audio.play('click');
+      this.layer.classList.add('fading');
+      setTimeout(() => { this.clear(); onDone(); }, 550);
+    });
   }
 
   chapterCard(n: number) {
@@ -177,7 +208,7 @@ export class Screens {
     this.show(`
       <div class="ending-screen ${e.good ? 'good' : 'bad'}">
         <div class="es-inner">
-          <span class="es-kicker">${e.good ? 'סוף' : 'סוף'}</span>
+          <span class="es-kicker">${e.good ? 'כך זה נגמר' : 'כך זה נגמר'}</span>
           <h1>${esc(e.title)}</h1>
           <p class="es-sub">${esc(e.subtitle)}</p>
           <div class="es-rule"></div>

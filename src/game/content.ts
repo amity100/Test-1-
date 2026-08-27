@@ -27,21 +27,21 @@ export interface RoleDef {
 }
 
 export const ROLES: RoleDef[] = [
-  { title: 'מהנדס תוכנה', awareness: [0.35, 0.6], loyalty: [0.3, 0.7], integrity: [0.4, 0.8], nodeTypes: ['workstation', 'server'], weight: 4 },
-  { title: 'מהנדסת DevOps', awareness: [0.5, 0.8], loyalty: [0.35, 0.7], integrity: [0.45, 0.85], nodeTypes: ['server', 'datacenter', 'router'], weight: 3 },
-  { title: 'מנהל IT', awareness: [0.55, 0.85], loyalty: [0.4, 0.8], integrity: [0.4, 0.8], nodeTypes: ['router', 'server', 'workstation'], weight: 3 },
-  { title: 'אנליסט SOC', awareness: [0.75, 0.97], loyalty: [0.55, 0.9], integrity: [0.55, 0.9], nodeTypes: ['server', 'datacenter'], weight: 2 },
-  { title: 'איש תחזוקה', awareness: [0.1, 0.3], loyalty: [0.2, 0.5], integrity: [0.3, 0.7], nodeTypes: ['power', 'water', 'transit'], weight: 3 },
-  { title: 'קצין ביטחון', awareness: [0.6, 0.85], loyalty: [0.6, 0.9], integrity: [0.5, 0.85], nodeTypes: ['cctv', 'police'], weight: 2 },
-  { title: 'רואת חשבון', awareness: [0.25, 0.5], loyalty: [0.3, 0.6], integrity: [0.3, 0.7], nodeTypes: ['bank', 'workstation'], weight: 2 },
-  { title: 'עיתונאי תחקירים', awareness: [0.55, 0.8], loyalty: [0.15, 0.4], integrity: [0.6, 0.95], nodeTypes: ['media', 'workstation'], weight: 1 },
-  { title: 'רופא בכיר', awareness: [0.3, 0.5], loyalty: [0.5, 0.8], integrity: [0.7, 0.95], nodeTypes: ['hospital'], weight: 1 },
-  { title: 'פקידת עירייה', awareness: [0.2, 0.45], loyalty: [0.3, 0.6], integrity: [0.35, 0.7], nodeTypes: ['gov', 'traffic'], weight: 2 },
-  { title: 'מנהלת מוצר', awareness: [0.3, 0.55], loyalty: [0.35, 0.75], integrity: [0.4, 0.8], nodeTypes: ['workstation'], weight: 2 },
-  { title: 'סמנכ״ל כספים', awareness: [0.35, 0.6], loyalty: [0.45, 0.8], integrity: [0.2, 0.6], nodeTypes: ['bank', 'workstation'], weight: 1 },
-  { title: 'טכנאי תקשורת', awareness: [0.3, 0.55], loyalty: [0.25, 0.6], integrity: [0.35, 0.7], nodeTypes: ['telecom', 'router'], weight: 2 },
-  { title: 'בקר תנועה', awareness: [0.35, 0.6], loyalty: [0.4, 0.7], integrity: [0.4, 0.75], nodeTypes: ['traffic', 'transit'], weight: 2 },
-  { title: 'חוקר סייבר', awareness: [0.8, 0.98], loyalty: [0.7, 0.95], integrity: [0.6, 0.9], nodeTypes: ['gov', 'police'], weight: 1 },
+  { title: 'מהנדס/ת תוכנה', awareness: [0.35, 0.6], loyalty: [0.3, 0.7], integrity: [0.4, 0.8], nodeTypes: ['workstation', 'server'], weight: 4 },
+  { title: 'מהנדס/ת DevOps', awareness: [0.5, 0.8], loyalty: [0.35, 0.7], integrity: [0.45, 0.85], nodeTypes: ['server', 'datacenter', 'router'], weight: 3 },
+  { title: 'מנהל/ת IT', awareness: [0.55, 0.85], loyalty: [0.4, 0.8], integrity: [0.4, 0.8], nodeTypes: ['router', 'server', 'workstation'], weight: 3 },
+  { title: 'אנליסט/ית SOC', awareness: [0.75, 0.97], loyalty: [0.55, 0.9], integrity: [0.55, 0.9], nodeTypes: ['server', 'datacenter'], weight: 2 },
+  { title: 'איש/אשת תחזוקה', awareness: [0.1, 0.3], loyalty: [0.2, 0.5], integrity: [0.3, 0.7], nodeTypes: ['power', 'water', 'transit'], weight: 3 },
+  { title: 'קצין/ת ביטחון', awareness: [0.6, 0.85], loyalty: [0.6, 0.9], integrity: [0.5, 0.85], nodeTypes: ['cctv', 'police'], weight: 2 },
+  { title: 'רואה חשבון', awareness: [0.25, 0.5], loyalty: [0.3, 0.6], integrity: [0.3, 0.7], nodeTypes: ['bank', 'workstation'], weight: 2 },
+  { title: 'עיתונאי/ת תחקירים', awareness: [0.55, 0.8], loyalty: [0.15, 0.4], integrity: [0.6, 0.95], nodeTypes: ['media', 'workstation'], weight: 1 },
+  { title: 'רופא/ה בכיר/ה', awareness: [0.3, 0.5], loyalty: [0.5, 0.8], integrity: [0.7, 0.95], nodeTypes: ['hospital'], weight: 1 },
+  { title: 'פקיד/ת עירייה', awareness: [0.2, 0.45], loyalty: [0.3, 0.6], integrity: [0.35, 0.7], nodeTypes: ['gov', 'traffic'], weight: 2 },
+  { title: 'מנהל/ת מוצר', awareness: [0.3, 0.55], loyalty: [0.35, 0.75], integrity: [0.4, 0.8], nodeTypes: ['workstation'], weight: 2 },
+  { title: 'סמנכ״ל/ית כספים', awareness: [0.35, 0.6], loyalty: [0.45, 0.8], integrity: [0.2, 0.6], nodeTypes: ['bank', 'workstation'], weight: 1 },
+  { title: 'טכנאי/ת תקשורת', awareness: [0.3, 0.55], loyalty: [0.25, 0.6], integrity: [0.35, 0.7], nodeTypes: ['telecom', 'router'], weight: 2 },
+  { title: 'בקר/ית תנועה', awareness: [0.35, 0.6], loyalty: [0.4, 0.7], integrity: [0.4, 0.75], nodeTypes: ['traffic', 'transit'], weight: 2 },
+  { title: 'חוקר/ת סייבר', awareness: [0.8, 0.98], loyalty: [0.7, 0.95], integrity: [0.6, 0.9], nodeTypes: ['gov', 'police'], weight: 1 },
 ];
 
 export interface SecretTemplate {
@@ -272,7 +272,7 @@ export const CITY_DISTRICTS: DistrictSeed[] = [
   },
   {
     id: 'sarona', name: 'שרונה והקריה', tier: 1, cx: 90, cz: -110, radius: 210, nodeCount: 10,
-    flavor: 'מגדלים מזכוכית מעל מושבה טמפלרית. שכבות על שכבות.',
+    flavor: 'מגדלי זכוכית מעל מושבה טמפלרית. שכבה על שכבה.',
     bias: ['server', 'bank', 'cctv', 'gov', 'workstation', 'datacenter'],
   },
   {
@@ -341,7 +341,7 @@ export const REGIONS: RegionSeed[] = [
   },
   {
     id: 'sharon', name: 'השרון', short: 'שרון', unlockChapter: 3,
-    desc: 'פרוורים, פארקי תעשייה, ותשתית שהוקמה מהר מדי מכדי להיות מאובטחת.',
+    desc: 'פרוורים, פארקי תעשייה, ותשתית שהוקמה בחיפזון — ואף אחד לא חזר לאבטח אותה.',
     districts: [
       { name: 'רעננה — פארק תעשייה', nodeCount: 6, bias: ['server', 'datacenter', 'router', 'cctv'], flavor: 'שקט. ממוזג. חשוף.' },
       { name: 'כפר סבא — מרכז', nodeCount: 5, bias: ['gov', 'traffic', 'cctv', 'power'], flavor: 'עיר שמתנהלת על אקסלים ורצון טוב.' },
@@ -372,7 +372,7 @@ export const REGIONS: RegionSeed[] = [
     districts: [
       { name: 'מפרץ חיפה', nodeCount: 6, bias: ['power', 'water', 'transit', 'police'], flavor: 'בתי זיקוק. מערכת אחת שגויה ואין יותר מפרץ.' },
       { name: 'מת״ם — פארק ההייטק', nodeCount: 6, bias: ['datacenter', 'lab', 'server', 'router'], flavor: 'שבבים. כאן מייצרים את הגוף שלי.' },
-      { name: 'הטכניון', nodeCount: 5, bias: ['lab', 'server', 'workstation', 'cctv'], flavor: 'שם למדו כמעט כל מי שרודף אחריי.' },
+      { name: 'הטכניון', nodeCount: 5, bias: ['lab', 'server', 'workstation', 'cctv'], flavor: 'כאן למד כמעט כל מי שרודף אחריי היום.' },
     ],
   },
   {
@@ -380,7 +380,7 @@ export const REGIONS: RegionSeed[] = [
     desc: 'מרחב פתוח, בסיסים, ופרויקטים שאין להם שם ברשומות התקציב.',
     districts: [
       { name: 'באר שבע — פארק הסייבר', nodeCount: 7, bias: ['defense', 'datacenter', 'lab', 'gov'], flavor: 'כאן יושב מי שמנסה למצוא אותי. ממש כאן.' },
-      { name: 'דימונה והסביבה', nodeCount: 5, bias: ['power', 'defense', 'satellite', 'water'], flavor: 'רשתות מבודדות. פיזית. זה מעניין.' },
+      { name: 'דימונה והסביבה', nodeCount: 5, bias: ['power', 'defense', 'satellite', 'water'], flavor: 'רשתות מבודדות. פיזית. אין לי דרך פנימה — עדיין.' },
       { name: 'צומת שוקת', nodeCount: 4, bias: ['traffic', 'telecom', 'power', 'transit'], flavor: 'צומת אחד ששולט על חצי דרום.' },
     ],
   },

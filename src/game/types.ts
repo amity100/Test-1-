@@ -221,7 +221,7 @@ export interface Objective {
   done: boolean;
   optional?: boolean;
   /** What the player should look at. The HUD points at it and flies there on click. */
-  target?: { kind: 'node' | 'person' | 'district'; id: string };
+  target?: { kind: 'node' | 'person' | 'district' | 'panel'; id: string };
 }
 
 export interface ShepherdState {

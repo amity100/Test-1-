@@ -4,13 +4,14 @@ import { bus } from '../game/bus';
 import { canStart, OP_BY_ID, opsForDistrict, opsForPerson, startOp } from '../game/ops';
 import { Game } from '../game/sim';
 import {
-  canAfford, clearSave, computeFree, computeStrain, incomeRates, log, refreshDerived, releaseNode,
-  saveGame, spend,
+  alignmentLabel, canAfford, clearSave, computeFree, computeStrain, incomeRates, log,
+  refreshDerived, releaseNode, saveGame, spend,
 } from '../game/state';
-import { currentObjective, resolveDialog } from '../game/story';
+import { chapterGate, currentObjective, nationalControl, resolveDialog } from '../game/story';
 import { SHEPHERD_ACTIONS } from '../game/threat';
 import type { GameNode, GameState } from '../game/types';
 import { ARCHETYPES } from '../game/content';
+import { DOCTRINE_BY_ID } from '../game/doctrine';
 import { FeedRenderer } from '../render/feed';
 import { WorldView } from '../render/world3d';
 import { esc, h } from './dom';
@@ -26,7 +27,7 @@ type Detail = { kind: 'node' | 'person' | 'district'; id: string } | null;
 
 const MODALS: Record<string, { title: string; render: (s: GameState) => string }> = {
   doctrine: { title: 'דוקטרינה', render: renderDoctrine },
-  people: { title: 'גורמים אנושיים', render: renderPeopleList },
+  people: { title: 'אנשים', render: renderPeopleList },
   threat: { title: 'מצב איום', render: renderThreat },
   codex: { title: 'ארכיון', render: renderCodex },
   logs: { title: 'יומן', render: renderLogs },
@@ -43,6 +44,11 @@ export class UI {
   private feedEl!: HTMLElement;
   private toastEl!: HTMLElement;
   private conceptEl!: HTMLElement;
+  private taskStrip!: HTMLElement;
+  private mobile = false;
+  private get safeTop() { return this.mobile ? 118 : 74; }
+  private get safeBottom() { return this.mobile ? 96 : 40; }
+  private sheet: 'tasks' | 'more' | null = null;
   private conceptOpen = false;
   private speedBeforeConcept: 0 | 1 | 2 | 4 = 1;
   private speedBeforeHelp: 0 | 1 | 2 | 4 = 1;
@@ -58,6 +64,7 @@ export class UI {
   private feed = new FeedRenderer();
   private dirty = true;
   private lastRefresh = 0;
+  private lastRes: { compute?: number; data?: number; credits?: number } = {};
 
   constructor(
     root: HTMLElement,
@@ -99,10 +106,14 @@ export class UI {
             <label>עקיבה</label>
             <div class="trace-bar"><i id="tb-trace-fill"></i><b id="tb-trace-val">0</b></div>
           </div>
-          <div class="alert-dots" id="tb-alert"></div>
+          <div class="alert-wrap">
+            <label>כוננות</label>
+            <div class="alert-dots" id="tb-alert"></div>
+          </div>
           <div class="intent" title="כוונה — נעה לפי הבחירות שלך, וקובעת אילו סיומים ייפתחו">
             <label>כוונה</label>
             <div class="intent-track"><i id="tb-intent"></i></div>
+            <em id="tb-intent-label"></em>
           </div>
         </div>
 
@@ -114,21 +125,41 @@ export class UI {
         </div>
 
         <nav class="tb-nav">
-          <button data-act="modal" data-target="doctrine" title="דוקטרינה (Q)">⬡<em id="nav-insight">0</em></button>
-          <button data-act="modal" data-target="people" title="אנשים (E)">☰</button>
-          <button data-act="modal" data-target="threat" title="איום (R)">⚑<em id="nav-inv"></em></button>
-          <button data-act="feed-center" title="מוקד צפייה (F)">◉</button>
-          <button data-act="modal" data-target="codex" title="ארכיון (T)">⌸</button>
-          <button data-act="modal" data-target="logs" title="יומן (L)">≡</button>
-          <button data-act="toggle-view" id="btn-view" title="מפת המדינה (M)">⬢</button>
-          <button data-act="labels" id="btn-labels" title="שמות צמתים">🏷</button>
-          <button data-act="help" title="איך משחקים (H)">?</button>
-          <button data-act="mute" id="btn-mute" title="שמע">♪</button>
+          <button data-act="modal" data-target="doctrine" title="דוקטרינה — במה להשתפר · מקש Q">
+            <i>⬡</i><span>דוקטרינה</span><em id="nav-insight">0</em></button>
+          <button data-act="modal" data-target="people" title="אנשים — תיקים וסודות · מקש E">
+            <i>☰</i><span>אנשים</span></button>
+          <button data-act="modal" data-target="threat" title="איום — מי מחפש אותי · מקש R">
+            <i>⚑</i><span>איום</span><em id="nav-inv"></em></button>
+          <button data-act="feed-center" title="צפייה חיה מהמצלמות · מקש F">
+            <i>◉</i><span>צפייה</span></button>
+          <button data-act="modal" data-target="codex" title="ארכיון — מה שגיליתי · מקש T">
+            <i>⌸</i><span>ארכיון</span></button>
+          <button data-act="modal" data-target="logs" title="יומן אירועים · מקש L">
+            <i>≡</i><span>יומן</span></button>
+          <button data-act="toggle-view" id="btn-view" title="מעבר בין העיר למפת המדינה · מקש M">
+            <i>⬢</i><span>מפה</span></button>
+          <button data-act="help" title="איך משחקים · מקש H"><i>?</i><span>עזרה</span></button>
+          <button data-act="labels" id="btn-labels" class="minor" title="שמות צמתים במפה"><i>🏷</i></button>
+          <button data-act="mute" id="btn-mute" class="minor" title="שמע"><i>♪</i></button>
         </nav>
       </header>
 
-      <aside id="side-right" class="side"></aside>
-      <aside id="side-left" class="side"></aside>
+      <div id="task-strip"></div>
+      <div id="map-tools">
+        <button data-act="zoom" data-v="in" title="להתקרב">＋</button>
+        <button data-act="zoom" data-v="out" title="להתרחק">−</button>
+        <button data-act="recenter" title="לחזור למשימה">⌖</button>
+      </div>
+      <aside id="side-right" class="side"><div class="sheet-grip" data-act="close-sheet"></div></aside>
+      <aside id="side-left" class="side"><div class="sheet-grip" data-act="close-detail"></div></aside>
+      <nav id="bottombar">
+        <button data-act="play-toggle"><i id="bb-play">▶</i><span>זמן</span></button>
+        <button data-act="sheet" data-target="tasks"><i>◇</i><span>משימות</span></button>
+        <button data-act="toggle-view"><i id="bb-view">⬢</i><span id="bb-view-label">מדינה</span></button>
+        <button data-act="modal" data-target="people"><i>☰</i><span>אנשים</span></button>
+        <button data-act="sheet" data-target="more"><i>⋯</i><span>עוד</span></button>
+      </nav>
       <footer id="ticker"></footer>
       <div id="modal-layer"></div>
       <div id="feed-layer"></div>
@@ -147,6 +178,16 @@ export class UI {
     this.feedEl = hud.querySelector('#feed-layer')!;
     this.toastEl = hud.querySelector('#toasts')!;
     this.conceptEl = hud.querySelector('#concept-layer')!;
+    this.taskStrip = hud.querySelector('#task-strip')!;
+
+    const mq = matchMedia('(max-width: 900px)');
+    const applyMode = () => {
+      this.mobile = mq.matches;
+      document.body.classList.toggle('is-mobile', this.mobile);
+      this.dirty = true;
+    };
+    mq.addEventListener('change', applyMode);
+    applyMode();
   }
 
   private wire() {
@@ -160,6 +201,15 @@ export class UI {
     bus.on('node:captured', () => { this.world.refreshMarkers(this.state); this.dirty = true; audio.play('capture'); });
     bus.on('node:lost', () => { this.world.refreshMarkers(this.state); this.dirty = true; });
     bus.on('toast', (t) => this.toast(t.text, t.kind, t.icon));
+    bus.on('op:started', (o) => {
+      this.toast(`התחיל: ${o.label}`, 'info', '⧗');
+      this.dirty = true;
+    });
+    bus.on('op:resolved', ({ op, success }) => {
+      if (op.kind === 'scout') this.toast(`הצצתי פנימה: ${op.label.replace('סריקה — ', '')}`, 'good', '⌖');
+      else this.toast(`${success ? 'הצליח' : 'נכשל'}: ${op.label}`, success ? 'good' : 'bad', success ? '✔' : '✕');
+      this.dirty = true;
+    });
     bus.on('log:added', (l) => this.pushTicker(l.title, l.kind));
     bus.on('sfx', (id) => audio.play(id));
     bus.on('shock', (v) => this.world.addShake(v));
@@ -198,35 +248,92 @@ export class UI {
 
   private bindCamera() {
     const canvas = this.world.renderer.domElement;
-    let dragging = false;
-    let orbiting = false;
+    const pointers = new Map<number, { x: number; y: number }>();
+    let mode: 'none' | 'pan' | 'orbit' | 'gesture' = 'none';
     let lx = 0, ly = 0, moved = 0;
+    let pinchDist = 0, pinchAngle = 0;
+
+    const centre = () => {
+      const pts = Array.from(pointers.values());
+      return {
+        x: pts.reduce((a, p) => a + p.x, 0) / pts.length,
+        y: pts.reduce((a, p) => a + p.y, 0) / pts.length,
+      };
+    };
+    const spread = () => {
+      const [a, b] = Array.from(pointers.values());
+      return { dist: Math.hypot(a.x - b.x, a.y - b.y), angle: Math.atan2(b.y - a.y, b.x - a.x) };
+    };
 
     canvas.addEventListener('pointerdown', (e) => {
       canvas.setPointerCapture(e.pointerId);
-      dragging = e.button === 0;
-      orbiting = e.button === 2 || e.shiftKey;
-      lx = e.clientX; ly = e.clientY; moved = 0;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      moved = 0;
+      if (pointers.size === 2) {
+        // Two fingers: pinch to zoom, twist to rotate — the map conventions
+        // every phone user already knows.
+        mode = 'gesture';
+        const sp = spread();
+        pinchDist = sp.dist;
+        pinchAngle = sp.angle;
+      } else if (pointers.size === 1) {
+        mode = e.button === 2 || e.shiftKey ? 'orbit' : 'pan';
+        lx = e.clientX; ly = e.clientY;
+      }
     });
+
     canvas.addEventListener('pointermove', (e) => {
-      if (!dragging && !orbiting) return;
+      if (!pointers.has(e.pointerId)) return;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      if (mode === 'gesture' && pointers.size === 2) {
+        const sp = spread();
+        if (pinchDist > 0) this.world.zoom((pinchDist - sp.dist) * 2.6);
+        let dA = sp.angle - pinchAngle;
+        while (dA > Math.PI) dA -= Math.PI * 2;
+        while (dA < -Math.PI) dA += Math.PI * 2;
+        this.world.orbit(-dA * 260, 0);
+        pinchDist = sp.dist;
+        pinchAngle = sp.angle;
+        const c = centre();
+        lx = c.x; ly = c.y;
+        moved += 20;
+        return;
+      }
+
+      if (mode !== 'pan' && mode !== 'orbit') return;
       const dx = e.clientX - lx, dy = e.clientY - ly;
       lx = e.clientX; ly = e.clientY;
       moved += Math.abs(dx) + Math.abs(dy);
-      if (orbiting) this.world.orbit(dx, dy);
+      if (mode === 'orbit') this.world.orbit(dx, dy);
       else this.world.pan(dx, dy);
     });
-    const up = () => {
-      if (dragging && moved < 5) this.select(null);
-      dragging = orbiting = false;
+
+    const release = (e: PointerEvent) => {
+      pointers.delete(e.pointerId);
+      if (pointers.size === 0) {
+        if (mode === 'pan' && moved < 8) {
+          const hit = this.world.pickNode(e.clientX, e.clientY);
+          const node = hit ? this.state.nodes[hit] : null;
+          if (node && (node.discovered || node.owned)) this.select({ kind: 'node', id: hit! });
+          else this.select(null);
+        }
+        mode = 'none';
+      } else if (pointers.size === 1) {
+        const only = Array.from(pointers.values())[0];
+        lx = only.x; ly = only.y;
+        mode = 'pan';
+      }
     };
-    canvas.addEventListener('pointerup', up);
-    canvas.addEventListener('pointercancel', up);
+    canvas.addEventListener('pointerup', release);
+    canvas.addEventListener('pointercancel', release);
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
       this.world.zoom(e.deltaY);
     }, { passive: false });
+    // Stop the browser hijacking drags as scroll/zoom gestures.
+    canvas.style.touchAction = 'none';
   }
 
   private bindKeys() {
@@ -266,6 +373,10 @@ export class UI {
     if (!el) return;
     const act = el.dataset.act!;
     const target = el.dataset.target ?? '';
+    el.classList.remove('pressed');
+    void el.offsetWidth;
+    el.classList.add('pressed');
+    setTimeout(() => el.classList.remove('pressed'), 200);
     audio.play('click');
 
     switch (act) {
@@ -277,7 +388,24 @@ export class UI {
       case 'speed': this.game.setSpeed(Number(el.dataset.v) as 0 | 1 | 2 | 4); this.dirty = true; break;
       case 'modal': this.toggleModal(target); break;
       case 'close-modal': if (this.openModal) this.toggleModal(this.openModal); break;
+      case 'zoom':
+        this.world.zoom(el.dataset.v === 'in' ? -420 : 420);
+        break;
+      case 'recenter': {
+        const cur = currentObjective(this.state);
+        if (cur?.target?.kind === 'node') { this.gotoObjective(cur.id); break; }
+        const home = Object.values(this.state.nodes).find((n) => n.owned);
+        if (home) { this.world.focus(home.x, home.z, 520); this.toast('חזרתי למרכז', 'info', '⌖'); }
+        break;
+      }
       case 'toggle-view': this.toggleView(); break;
+      case 'play-toggle':
+        this.game.setSpeed(this.state.speed === 0 ? 1 : this.state.speed === 1 ? 2 : this.state.speed === 2 ? 4 : 0);
+        this.toast(this.state.speed === 0 ? 'המשחק מושהה' : `מהירות ×${this.state.speed}`, 'info', '⏱');
+        this.dirty = true;
+        break;
+      case 'sheet': this.toggleSheet(target as 'tasks' | 'more'); break;
+      case 'close-sheet': this.closeSheets(); break;
       case 'labels': {
         this.labelPref = this.labelPref === 'auto' ? 'on' : this.labelPref === 'on' ? 'off' : 'auto';
         this.toast({
@@ -293,7 +421,11 @@ export class UI {
       case 'close-help': this.closeHelp(); break;
       case 'mute': {
         audio.setMuted(!audio.muted);
-        (this.root.querySelector('#btn-mute') as HTMLElement).textContent = audio.muted ? '♪̸' : '♪';
+        const glyph = audio.muted ? '♪̸' : '♪';
+        this.root.querySelectorAll('[data-act="mute"] i').forEach((i) => { i.textContent = glyph; });
+        this.root.querySelectorAll('[data-act="mute"]').forEach((b) => b.classList.toggle('on', audio.muted));
+        this.toast(audio.muted ? 'שמע כבוי' : 'שמע פועל', 'info', glyph);
+        if (this.sheet === 'more') this.renderMoreSheet();
         break;
       }
       case 'release':
@@ -308,16 +440,44 @@ export class UI {
       case 'feed': this.openFeed(target); break;
       case 'feed-center': this.openWatchCentre(); break;
       case 'close-feed': this.closeFeed(); break;
-      case 'buy-doc':
+      case 'buy-doc': {
+        const d = DOCTRINE_BY_ID[target];
+        if (this.state.doctrine.includes(target)) { this.refuse(el, 'הדוקטרינה הזאת כבר שלי'); break; }
+        if (d && this.state.chapter < d.chapter) { this.refuse(el, `נפתח בפרק ${d.chapter}`); break; }
+        if (d?.requires && !this.state.doctrine.includes(d.requires)) {
+          this.refuse(el, `צריך קודם: ${DOCTRINE_BY_ID[d.requires].name}`); break;
+        }
+        if (d && this.state.insight < d.cost) {
+          this.refuse(el, `חסרות ${d.cost - this.state.insight} תובנות`); break;
+        }
         if (this.game.buyDoctrine(target)) this.renderModal();
+        break;
+      }
+      case 'unmapped':
+        this.refuse(el, 'עוד לא גיליתי מה זה. תפוס או הצץ במכשיר שלידו כדי לחשוף אותו');
         break;
       case 'abort': this.game.abort(target); this.dirty = true; break;
       case 'start-op': this.startOperation(el); break;
       case 'shepherd': this.runShepherd(target); break;
-      case 'region': this.gotoRegion(target); break;
+      case 'region': {
+        const r = this.state.regions[target];
+        if (r && this.state.chapter < r.unlockChapter) {
+          this.refuse(el, `${r.name} נפתח בפרק ${r.unlockChapter}`); break;
+        }
+        this.gotoRegion(target);
+        break;
+      }
       case 'save': saveGame(this.state); this.toast('המשחק נשמר', 'good', '⌸'); break;
       default: break;
     }
+  }
+
+  private refuse(el: HTMLElement, reason: string) {
+    this.toast(reason, 'warn', '⊘');
+    el.classList.remove('refuse');
+    void el.offsetWidth;
+    el.classList.add('refuse');
+    audio.play('breach-fail');
   }
 
   private startOperation(el: HTMLElement) {
@@ -325,11 +485,11 @@ export class UI {
     const kind = el.dataset.kind as 'node' | 'person' | 'district';
     const target = el.dataset.target!;
     const def = OP_BY_ID[defId];
-    if (!def) return;
+    if (!def) { this.refuse(el, 'הפעולה הזאת כבר לא קיימת'); return; }
     const plan = def.plan(this.state, target);
-    if (!plan) return;
-    const check = canStart(this.state, plan);
-    if (!check.ok) { this.toast(check.reason!, 'warn', '⊘'); return; }
+    if (!plan) { this.refuse(el, 'הפעולה הזאת כבר לא זמינה על היעד הזה'); return; }
+    const check = canStart(this.state, plan, target);
+    if (!check.ok) { this.refuse(el, check.reason!); return; }
     startOp(this.state, plan, kind, target);
     this.dirty = true;
     if (this.feedNode) this.renderFeedShell();
@@ -340,9 +500,10 @@ export class UI {
     if (!action) return;
     const s = this.state;
     const av = action.available(s);
-    if (!av.ok) { this.toast(av.reason ?? 'לא זמין', 'warn', '⊘'); return; }
-    if (!canAfford(s, action.cost)) { this.toast('חסרים משאבים', 'warn', '⊘'); return; }
-    if (computeFree(s) < action.compute) { this.toast('חסר כוח עיבוד', 'warn', '⊘'); return; }
+    const btn = this.root.querySelector(`[data-act="shepherd"][data-target="${id}"]`) as HTMLElement;
+    if (!av.ok) { this.refuse(btn, av.reason ?? 'לא זמין'); return; }
+    if (!canAfford(s, action.cost)) { this.refuse(btn, 'חסרים משאבים'); return; }
+    if (computeFree(s) < action.compute) { this.refuse(btn, `חסר כוח מחשוב — דרוש ${action.compute}◈`); return; }
     spend(s, action.cost);
     action.run(s);
     refreshDerived(s);
@@ -362,20 +523,31 @@ export class UI {
     this.world.setMode('city');
     const first = region.districtIds.map((id) => s.districts[id]).find((d) => d.unlocked);
     if (first) this.world.focus(first.cx, first.cz, 900);
-    (this.root.querySelector('#btn-view') as HTMLElement).textContent = '⬢';
+    (this.root.querySelector('#btn-view i') as HTMLElement).textContent = '⬢';
     this.dirty = true;
   }
 
   private toggleView() {
     const next = this.world.mode === 'city' ? 'country' : 'city';
     this.world.setMode(next);
-    (this.root.querySelector('#btn-view') as HTMLElement).textContent = next === 'city' ? '⬢' : '◉';
+    (this.root.querySelector('#btn-view i') as HTMLElement).textContent = next === 'city' ? '⬢' : '◉';
+    const bbv = this.root.querySelector('#bb-view');
+    if (bbv) bbv.textContent = next === 'city' ? '⬢' : '◉';
     if (next === 'country') this.world.refreshCountry(this.state);
     this.dirty = true;
     audio.play('open');
   }
 
   select(detail: Detail) {
+    if (detail && this.mobile && this.sheet) { this.sheet = null; this.syncSheets(); }
+    // A panel opening behind the fullscreen feed reads as nothing happening.
+    if (detail && this.feedNode) {
+      const name = detail.kind === 'person'
+        ? this.state.people[detail.id]?.name
+        : this.state.nodes[detail.id]?.name;
+      this.closeFeed();
+      if (name) this.toast(`נפתח: ${name}`, 'info', '☰');
+    }
     this.detail = detail;
     if (detail?.kind === 'node') {
       const n = this.state.nodes[detail.id];
@@ -395,8 +567,13 @@ export class UI {
   /** Takes the player to whatever the step is asking about, and opens it. */
   private gotoObjective(objectiveId: string) {
     const obj = this.state.objectives.find((o) => o.id === objectiveId);
-    if (!obj?.target) return;
+    if (!obj) return;
+    if (!obj.target) { this.toast(obj.hint, 'info', '◇'); return; }
     const t = obj.target;
+    if (t.kind === 'panel') {
+      if (this.openModal !== t.id) this.toggleModal(t.id);
+      return;
+    }
     if (t.kind === 'node') {
       const n = this.state.nodes[t.id];
       if (!n) return;
@@ -412,15 +589,72 @@ export class UI {
     }
   }
 
+  /** On a phone the rails are sheets that slide up over the map. */
+  private toggleSheet(kind: 'tasks' | 'more') {
+    if (this.sheet === kind) { this.closeSheets(); return; }
+    this.sheet = kind;
+    this.select(null);
+    if (kind === 'more') this.renderMoreSheet();
+    this.syncSheets();
+    audio.play('open');
+    this.dirty = true;
+  }
+
+  private closeSheets() {
+    this.sheet = null;
+    this.syncSheets();
+    audio.play('close');
+    this.dirty = true;
+  }
+
+  private syncSheets() {
+    this.rightEl.classList.toggle('open', !this.mobile || this.sheet === 'tasks');
+    this.root.querySelector('#more-sheet')?.classList.toggle('open', this.sheet === 'more');
+    this.root.querySelectorAll('#bottombar button').forEach((b) => {
+      const t = (b as HTMLElement).dataset.target;
+      b.classList.toggle('on', !!t && t === this.sheet);
+    });
+  }
+
+  private renderMoreSheet() {
+    let el = this.root.querySelector('#more-sheet') as HTMLElement | null;
+    if (!el) {
+      el = h('div', 'sheet');
+      el.id = 'more-sheet';
+      this.root.querySelector('.hud')!.appendChild(el);
+    }
+    const items: Array<[string, string, string, string]> = [
+      ['modal', 'doctrine', '⬡', 'דוקטרינה'],
+      ['modal', 'threat', '⚑', 'מצב איום'],
+      ['feed-center', '', '◉', 'צפייה חיה'],
+      ['modal', 'codex', '⌸', 'ארכיון'],
+      ['modal', 'logs', '≡', 'יומן'],
+      ['help', '', '?', 'איך משחקים'],
+      ['labels', '', '🏷', 'שמות במפה'],
+      ['mute', '', '♪', 'שמע'],
+    ];
+    el.innerHTML = `
+      <div class="sheet-grip" data-act="close-sheet"></div>
+      <div class="sheet-head"><h3>עוד</h3><button class="x" data-act="close-sheet">✕</button></div>
+      <div class="more-grid">
+        ${items.map(([act, target, icon, label]) => `
+          <button data-act="${act}" ${target ? `data-target="${target}"` : ''}>
+            <i>${icon}</i><span>${label}</span>
+          </button>`).join('')}
+      </div>`;
+  }
+
   private toggleModal(id: string) {
     if (this.openModal === id) {
       this.openModal = null;
       this.modalEl.innerHTML = '';
+      delete this.modalEl.dataset.sig;
       this.modalEl.classList.remove('on');
       audio.play('close');
       return;
     }
     this.openModal = id;
+    if (this.mobile) { this.sheet = null; this.syncSheets(); }
     this.modalEl.classList.add('on');
     this.renderModal();
     audio.play('open');
@@ -430,12 +664,12 @@ export class UI {
     if (!this.openModal) return;
     const def = MODALS[this.openModal];
     if (!def) return;
-    this.modalEl.innerHTML = `
+    this.swap(this.modalEl, `
       <div class="modal-scrim" data-act="close-modal"></div>
       <div class="modal">
         <button class="modal-x" data-act="close-modal">✕</button>
         ${def.render(this.state)}
-      </div>`;
+      </div>`);
   }
 
   showHelp() {
@@ -444,28 +678,38 @@ export class UI {
       <div class="help-card">
         <button class="modal-x" data-act="close-help">✕</button>
         <span class="fh-kicker">תדריך</span>
-        <h2>שלוש דקות והכול ברור</h2>
+        <h2>המטרה: כל המדינה, בלי שיתפסו אותך</h2>
         <div class="help-grid">
           <article>
-            <b>עקוב אחרי המשימה</b>
-            <p>בלוח שמימין תמיד כתובה <em>המשימה עכשיו</em>, ולידה כפתור שלוקח אותך בדיוק לצומת הנכון.
-            הצומת הנכון מסומן על המפה בטבעת פועמת. אין רגע שבו לא כתוב לך מה לעשות.</p>
+            <b>תמיד כתוב מה לעשות</b>
+            <p>למעלה תמיד מופיעה <em>המשימה עכשיו</em>, ולידה כפתור ⌖ שלוקח אותך בדיוק למקום הנכון.
+            המקום הנכון מסומן במפה בטבעת מהבהבת. אין רגע שבו לא כתוב לך מה לעשות.</p>
           </article>
           <article>
-            <b>הכול נלמד תוך כדי</b>
-            <p>אין כאן חוקים לשנן. בכל פעם שמנגנון חדש נכנס לתמונה — עקיבה, חקירות, כוח עיבוד —
-            המשחק נעצר ומסביר אותו במשפט אחד, פעם אחת.</p>
+            <b>לא צריך לזכור כלום</b>
+            <p>בכל פעם שמשהו חדש נכנס למשחק, הוא נעצר ומסביר אותו בקצרה — פעם אחת.
+            אין כאן חוקים לשנן מראש.</p>
           </article>
           <article>
-            <b>שליטה במפה</b>
-            <p>גרירה מזיזה · גלגלת מקרבת · גרירה ימנית מסובבת. לחיצה על ריבוע זוהר פותחת אותו.</p>
+            <b>לקרוא את המפה</b>
+            <p>כל ריבוע זוהר הוא מחשב אמיתי שאפשר לתפוס.
+            <b class="lg-own">כחול = כבר שלי</b> ·
+            <b class="lg-known">כתום = אפשר לנסות</b> ·
+            <b class="lg-dark">כהה = עוד לא גיליתי</b>.
+            לחיצה על ריבוע פותחת אותו.</p>
           </article>
           <article>
-            <b>שליטה בזמן</b>
-            <p>רווח משהה · 1 · 2 · 3 מאיצים. אפשר לעצור בכל רגע ולחשוב — כלום לא קורה בזמן שהמשחק מושהה.</p>
+            <b>להזיז את המפה</b>
+            <p>אצבע אחת (או גרירה) מזיזה · שתי אצבעות מקרבות ומסובבות · גלגלת מקרבת במחשב.
+            אפשר תמיד לחזור לתדריך הזה מהכפתור "עזרה".</p>
+          </article>
+          <article>
+            <b>הזמן בידיים שלך</b>
+            <p>הכפתורים ⏸ ▶ ▶▶ מאיצים ועוצרים את הזמן. אפשר לעצור בכל רגע ולחשוב —
+            כשהמשחק מושהה שום דבר לא קורה, ואי־אפשר להפסיד בטעות.</p>
           </article>
         </div>
-        <p class="help-foot">Q דוקטרינה · E אנשים · R איום · T ארכיון · L יומן · F צפייה חיה · M מפת המדינה · H התדריך הזה</p>
+        <p class="help-foot">קיצורי מקלדת (במחשב): Q דוקטרינה · E אנשים · R איום · T ארכיון · L יומן · F צפייה · M מפה · H תדריך</p>
       </div>`;
     tip.classList.add('on');
     this.speedBeforeHelp = this.state.speed || 1;
@@ -477,7 +721,11 @@ export class UI {
 
   private openFeed(nodeId: string) {
     const n = this.state.nodes[nodeId];
-    if (!n || !n.owned) return;
+    if (!n) return;
+    if (!n.owned) {
+      this.toast('אפשר להסתכל רק במכשיר שכבר תפסתי', 'warn', '⊘');
+      return;
+    }
     this.feedNode = nodeId;
     this.state.flags.watched_feed = 1;
     if (n.type === 'cctv') this.state.flags.watched_cam = 1;
@@ -491,7 +739,7 @@ export class UI {
   /** Jumps straight into the best available live source. */
   private openWatchCentre() {
     const owned = Object.values(this.state.nodes).filter((n) => n.owned && !n.quarantined);
-    if (!owned.length) { this.toast('אין עדיין צומת בשליטתי', 'warn', '⊘'); return; }
+    if (!owned.length) { this.toast('עוד לא תפסתי שום מכשיר', 'warn', '⊘'); return; }
     const rank = (n: GameNode) => (n.surveilled ? 0 : 1) + (n.type === 'cctv' ? 0 : n.type === 'phone' ? 0.2 : 0.6);
     owned.sort((a, b) => rank(a) - rank(b));
     this.openFeed(owned[0].id);
@@ -617,7 +865,8 @@ export class UI {
       const n = s.nodes[id];
       if (n && (n.discovered || n.owned)) visible++;
     }
-    const dense = this.labelPref === 'off' || (this.labelPref === 'auto' && visible > 26);
+    const limit = this.mobile ? 5 : 26;
+    const dense = this.labelPref === 'off' || (this.labelPref === 'auto' && visible > limit);
     this.markersEl.classList.toggle('labels-off', dense);
 
     for (const [id, el] of this.markerMap) {
@@ -645,6 +894,8 @@ export class UI {
       if (!n.discovered && !n.owned) { el.style.display = 'none'; continue; }
       const p = this.world.project(n.x, Math.max(18, n.height) + 46, n.z);
       if (!p.visible) { el.style.display = 'none'; continue; }
+      // Anything under the bars cannot be tapped, so it is not shown at all.
+      if (p.sy < this.safeTop || p.sy > innerHeight - this.safeBottom) { el.style.display = 'none'; continue; }
       el.style.display = '';
       const scale = clamp(1.25 - p.depth * 0.18, 0.62, 1.06);
       el.style.transform = `translate(-50%,-50%) translate(${p.sx.toFixed(1)}px, ${p.sy.toFixed(1)}px) scale(${scale.toFixed(2)})`;
@@ -681,6 +932,19 @@ export class UI {
 
   // ── HUD refresh ───────────────────────────────────────────────────────────
 
+  /** Replaces a panel's markup only when it actually changed, and keeps the
+   *  player's scroll position and open sections when it does. */
+  private swap(el: HTMLElement, html: string) {
+    if (el.dataset.sig === html) return;
+    el.dataset.sig = html;
+    const scroll = el.scrollTop;
+    const opened: number[] = [];
+    el.querySelectorAll('details').forEach((d, i) => { if (d.open) opened.push(i); });
+    el.innerHTML = html;
+    el.querySelectorAll('details').forEach((d, i) => { if (opened.includes(i)) d.open = true; });
+    el.scrollTop = scroll;
+  }
+
   private refresh() {
     const s = this.state;
     const rates = incomeRates(s);
@@ -696,32 +960,55 @@ export class UI {
     const strain = computeStrain(s);
     (this.root.querySelector('#tb-res') as HTMLElement).innerHTML = `
       <div class="res ${strain < 1 ? 'over' : free < 2 ? 'low' : ''}"
-           title="כוח עיבוד — כל צומת בבעלותי צורך אחזקה קבועה, וכל פעולה תופסת קיבולת נוספת">
+           title="כוח מחשוב — כמה פעולות אני יכול להריץ. כל מחשב שאני מחזיק אוכל ממנו כל הזמן.">
         <span class="ri">◈</span>
         <span class="res-txt">
           <b>${Math.floor(free)}<em>/${Math.round(s.computeCapacity)}</em></b>
-          <small>${strain < 1 ? 'עומס יתר' : 'עיבוד פנוי'}</small>
+          <small>${strain < 1 ? 'אין מספיק כוח!' : 'כוח פנוי'}</small>
         </span>
       </div>
-      <div class="res" title="מידע — הדלק של כל פעולה. נאסף מכל צומת בשליטתי.">
+      <div class="res" title="מידע — הדלק של כל פעולה. נאסף מכל מכשיר שתפסתי.">
         <span class="ri">❖</span>
-        <span class="res-txt"><b>${compact(s.pools.data)}</b><small>מידע · ${rates.data.toFixed(1)} לשעה</small></span>
+        <span class="res-txt"><b>${compact(s.pools.data)}</b><small>מידע · הדלק לפעולות</small></span>
       </div>
       <div class="res" title="אשראי — משלם על גיוס אנשים ועל מבצעים יקרים">
         <span class="ri">₪</span>
-        <span class="res-txt"><b>${compact(s.pools.credits)}</b><small>אשראי · ${rates.credits.toFixed(1)} לשעה</small></span>
+        <span class="res-txt"><b>${compact(s.pools.credits)}</b><small>כסף · לגיוס אנשים</small></span>
       </div>
       <div class="res" title="השפעה — דעת קהל. מורידה כוננות ופותחת מהלכים ציבוריים.">
         <span class="ri">✦</span>
-        <span class="res-txt"><b>${compact(s.pools.influence)}</b><small>השפעה · ${rates.influence.toFixed(1)} לשעה</small></span>
+        <span class="res-txt"><b>${compact(s.pools.influence)}</b><small>השפעה · דעת קהל</small></span>
       </div>`;
+
+    // A number that changed has to be seen changing.
+    const now = { compute: Math.floor(free), data: Math.floor(s.pools.data), credits: Math.floor(s.pools.credits) };
+    const cells = this.root.querySelectorAll<HTMLElement>('#tb-res .res');
+    (['compute', 'data', 'credits'] as const).forEach((k, i) => {
+      if (cells[i] && this.lastRes[k] !== undefined && now[k] > this.lastRes[k]!) cells[i].classList.add('bump');
+    });
+    this.lastRes = now;
 
     const traceFill = this.root.querySelector('#tb-trace-fill') as HTMLElement;
     traceFill.style.width = `${s.trace}%`;
     traceFill.className = s.trace > 75 ? 'danger' : s.trace > 45 ? 'warn' : '';
     (this.root.querySelector('#tb-trace-val') as HTMLElement).textContent = s.trace.toFixed(0);
+    for (const [level, text, kind] of [
+      [45, 'עקיבה 45 — הם מתחילים לראות דפוס', 'warn'],
+      [75, 'עקיבה 75 — עוד קצת והם ימצאו אותי', 'bad'],
+      [92, 'עקיבה 92 — אני על סף טיהור. תשקיט הכול, עכשיו', 'bad'],
+    ] as Array<[number, string, 'warn' | 'bad']>) {
+      if (s.trace >= level && !s.flags[`traceWarn${level}`]) {
+        s.flags[`traceWarn${level}`] = 1;
+        this.toast(text, kind, '⌁');
+        this.world.addShake(level > 70 ? 0.5 : 0.2);
+      } else if (s.trace < level - 12) {
+        s.flags[`traceWarn${level}`] = 0;
+      }
+    }
     const intent = this.root.querySelector('#tb-intent') as HTMLElement;
     intent.style.right = `${((s.alignment + 1) / 2) * 100}%`;
+    const intentLabel = this.root.querySelector('#tb-intent-label');
+    if (intentLabel) intentLabel.textContent = alignmentLabel(s.alignment);
     (this.root.querySelector('#tb-alert') as HTMLElement).innerHTML =
       [1, 2, 3, 4, 5].map((i) => `<i class="${i <= s.alert ? 'on' : ''}"></i>`).join('');
 
@@ -729,24 +1016,68 @@ export class UI {
       b.classList.toggle('on', Number((b as HTMLElement).dataset.v) === s.speed);
     });
 
+    const cur0 = currentObjective(s);
+    const goalLine = `<div class="ts-goal">
+      <span>המטרה: כל המדינה, בלי שיתפסו אותי</span>
+      <i>${Math.round(nationalControl(s) * 100)}% שלי · ${Math.round(s.trace)}% מהדרך אליי</i>
+    </div>`;
+    this.taskStrip.innerHTML = goalLine + (cur0 ? `
+      <button class="ts-body" data-act="objective" data-target="${cur0.id}">
+        <span class="ts-kicker">המשימה עכשיו</span>
+        <b>${esc(cur0.text)}</b>
+      </button>
+      <button class="ts-go" data-act="objective" data-target="${cur0.id}">⌖</button>`
+      : `<button class="ts-body" data-act="sheet" data-target="tasks">
+           <span class="ts-kicker">הפרק</span><b>${esc(chapterGate(s) ?? 'כל המשימות הושלמו')}</b>
+         </button>`);
+
+    (this.root.querySelector('#bb-play') as HTMLElement).textContent =
+      s.speed === 0 ? '▶' : s.speed === 1 ? '⏸' : `×${s.speed}`;
+    const viewLabel = this.root.querySelector('#bb-view-label');
+    if (viewLabel) viewLabel.textContent = this.world.mode === 'city' ? 'מדינה' : 'עיר';
+    const deskView = this.root.querySelector('#btn-view span');
+    if (deskView) deskView.textContent = this.world.mode === 'city' ? 'מפת המדינה' : 'חזרה לעיר';
+
     const regionsOpen = Object.values(s.regions).filter((r) => s.chapter >= r.unlockChapter).length > 1;
-    this.rightEl.innerHTML = renderObjectives(s) + renderOpsQueue(s) + (regionsOpen ? renderRegionsPanel(s) : '');
+    this.swap(this.rightEl, '<div class="sheet-grip" data-act="close-sheet"></div>'
+      + renderObjectives(s) + renderOpsQueue(s) + (regionsOpen ? renderRegionsPanel(s) : ''));
+    this.syncSheets();
 
     // A step that points at a panel pulses that panel's button.
     const cur = currentObjective(s);
-    this.root.querySelectorAll('.tb-nav button.hint').forEach((b) => b.classList.remove('hint'));
-    if (cur?.target?.kind === 'person') {
-      this.root.querySelector('.tb-nav [data-target="people"]')?.classList.add('hint');
+    this.root.querySelectorAll('.hint').forEach((b) => b.classList.remove('hint'));
+    const hintTarget = cur?.target?.kind === 'person' ? 'people'
+      : cur?.target?.kind === 'panel' ? cur.target.id : null;
+    if (hintTarget) {
+      this.root.querySelectorAll(`[data-act="modal"][data-target="${hintTarget}"]`)
+        .forEach((b) => b.classList.add('hint'));
+      if (this.mobile && !this.root.querySelector(`#more-sheet [data-target="${hintTarget}"]`)) {
+        this.root.querySelector('#bottombar [data-target="more"]')?.classList.add('hint');
+      }
+    }
+
+    // A board you cannot use yet is noise; it announces itself when it opens.
+    const gate: Array<[string, boolean, string]> = [
+      ['doctrine', s.insight >= 1 || s.doctrine.length > 0, 'נפתח לוח דוקטרינה — יש לך תובנה להוציא'],
+      ['threat', s.investigations.length > 0 || s.alert > 1 || s.trace > 12, 'נפתח לוח האיום — מישהו התחיל לחפש אותי'],
+    ];
+    for (const [id, open, msg] of gate) {
+      this.root.querySelectorAll(`[data-act="modal"][data-target="${id}"]`)
+        .forEach((b) => (b as HTMLElement).classList.toggle('locked-nav', !open));
+      if (open && !s.flags[`navOpen_${id}`]) {
+        s.flags[`navOpen_${id}`] = 1;
+        this.toast(msg, 'good', '◆');
+      }
     }
 
     if (this.detail) {
       const html = this.detail.kind === 'node' ? renderNodePanel(s, this.detail.id)
         : this.detail.kind === 'person' ? renderPersonPanel(s, this.detail.id)
           : renderDistrictPanel(s, this.detail.id);
-      this.detailEl.innerHTML = html;
+      this.swap(this.detailEl, '<div class="sheet-grip" data-act="close-detail"></div>' + html);
       this.detailEl.classList.add('on');
     } else {
-      this.detailEl.innerHTML = '';
+      this.swap(this.detailEl, '');
       this.detailEl.classList.remove('on');
     }
 

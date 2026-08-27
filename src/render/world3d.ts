@@ -133,13 +133,19 @@ const BUILDING_FRAG = /* glsl */`
 
       float pane = step(0.16, f.x) * step(f.x, 0.84) * step(0.22, f.y) * step(f.y, 0.80);
       float lit = hash(cell + vSeed * 13.0);
-      float alive = step(0.52, lit);
+      // Each building keeps its own occupancy and its own colour temperature, so
+      // the skyline reads as many buildings rather than one repeated texture.
+      float occupancy = 0.34 + fract(vSeed * 13.71) * 0.36;
+      float alive = step(occupancy, lit);
       float flicker = 0.72 + 0.28 * sin(uTime * (1.0 + hash(cell + vSeed) * 4.0) + lit * 30.0);
 
-      vec3 warm = vec3(1.0, 0.78, 0.44);
+      float temp = fract(vSeed * 7.31);
+      vec3 warm = vec3(1.0, 0.74, 0.40);
+      vec3 cool = vec3(0.52, 0.80, 1.0);
+      vec3 house = mix(warm, cool, smoothstep(0.30, 0.78, temp));
       vec3 cyan = vec3(0.32, 0.92, 1.0);
       vec3 alertC = vec3(1.0, 0.30, 0.36);
-      vec3 wc = mix(warm, cyan, clamp(vState, 0.0, 1.0));
+      vec3 wc = mix(house, cyan, clamp(vState, 0.0, 1.0));
       wc = mix(wc, alertC, clamp(vState - 1.0, 0.0, 1.0));
 
       col += wc * pane * alive * flicker * (0.44 + vState * 0.30);
@@ -258,13 +264,15 @@ const HEX_VERT = /* glsl */`
   attribute vec3 aColor;
   attribute float aControl;
   attribute float aPulse;
+  attribute float aPop;
   varying vec3 vColor;
   varying float vControl;
   varying float vPulse;
+  varying float vPop;
   varying vec3 vLocal;
   varying vec3 vNormal;
   void main() {
-    vColor = aColor; vControl = aControl; vPulse = aPulse;
+    vColor = aColor; vControl = aControl; vPulse = aPulse; vPop = aPop;
     vLocal = position;
     vNormal = normalize(mat3(instanceMatrix) * normal);
     gl_Position = projectionMatrix * viewMatrix * modelMatrix * instanceMatrix * vec4(position, 1.0);
@@ -277,20 +285,39 @@ const HEX_FRAG = /* glsl */`
   varying vec3 vColor;
   varying float vControl;
   varying float vPulse;
+  varying float vPop;
   varying vec3 vLocal;
   varying vec3 vNormal;
+
+  float hash(vec2 p) {
+    p = fract(p * vec2(311.7, 127.1));
+    p += dot(p, p.yx + 45.32);
+    return fract(p.x * p.y * 95.4307);
+  }
+
   void main() {
     vec3 col = vec3(0.012, 0.020, 0.032);
-    float d = length(vLocal.xz) / 1.0;
+    float d = length(vLocal.xz) / ${(HEX_SIZE * 0.92).toFixed(2)};
     if (vNormal.y > 0.5) {
       float edge = smoothstep(0.72, 1.0, d);
       col += vColor * (0.05 + vControl * 0.42) * (0.35 + 0.65 * (1.0 - edge));
       col += vColor * edge * (0.5 + vControl * 1.4);
       float scan = smoothstep(0.02, 0.0, abs(fract(vLocal.z * 0.06 - uTime * 0.12) - 0.5) - 0.47);
       col += vColor * scan * 0.25 * (0.2 + vControl);
+
+      // settlements seen from orbit — denser where the country actually is
+      vec2 g = vLocal.xz * 0.13;
+      vec2 cell = floor(g);
+      vec2 f = fract(g) - 0.5;
+      float lit = hash(cell + vPop * 37.0);
+      float alive = step(0.62 - vPop * 0.12, lit);
+      float glow = smoothstep(0.42, 0.0, length(f)) * alive * (1.0 - edge);
+      float twinkle = 0.75 + 0.25 * sin(uTime * (1.5 + lit * 3.0) + lit * 40.0);
+      vec3 town = mix(vec3(1.0, 0.76, 0.44), vColor, clamp(vControl * 1.6, 0.0, 1.0));
+      col += town * glow * twinkle * (0.30 + vControl * 0.9);
     } else {
       col += vColor * 0.06 * (0.2 + vControl);
-      col += vColor * smoothstep(0.0, 1.0, vLocal.y + 0.5) * 0.1 * vControl;
+      col += vColor * smoothstep(-9.0, 9.0, vLocal.y) * 0.12 * vControl;
     }
     col += vColor * vPulse * (0.4 + 0.6 * sin(uTime * 3.0)) * 0.5;
     gl_FragColor = vec4(col, 1.0);
@@ -375,11 +402,12 @@ export class WorldView {
   private wantDist = 1150;
   private azim = Math.PI / 2.2;
   private wantAzim = Math.PI / 2.2;
-  private polar = 0.78;
-  private wantPolar = 0.78;
+  private polar = 0.70;
+  private wantPolar = 0.70;
   private shake = 0;
 
   private dummy = new THREE.Object3D();
+  private raycaster = new THREE.Raycaster();
   private rng = new RNG(4242);
 
   /** Adaptive quality: 2 = full, 1 = reduced, 0 = minimum. */
@@ -771,6 +799,13 @@ export class WorldView {
     geo.setAttribute('aColor', new THREE.InstancedBufferAttribute(new Float32Array(cells.length * 3), 3));
     geo.setAttribute('aControl', new THREE.InstancedBufferAttribute(new Float32Array(cells.length), 1));
     geo.setAttribute('aPulse', new THREE.InstancedBufferAttribute(new Float32Array(cells.length), 1));
+    const pop = new Float32Array(cells.length);
+    cells.forEach((cell, i) => {
+      // population density: heaviest along the coastal centre, thin in the far south
+      const northSouth = 1 - Math.abs(cell.z + HEX_SIZE * 2) / (HEX_SIZE * 15);
+      pop[i] = clamp(0.15 + northSouth * 0.85 - Math.max(0, cell.x) / (HEX_SIZE * 9), 0.05, 1);
+    });
+    geo.setAttribute('aPop', new THREE.InstancedBufferAttribute(pop, 1));
     cells.forEach((cell, i) => {
       this.dummy.position.set(cell.x, 6, cell.z);
       this.dummy.scale.set(1, 1, 1);
@@ -830,7 +865,7 @@ export class WorldView {
       this.wantAzim = Math.PI / 2;
     } else {
       this.wantDist = 1050;
-      this.wantPolar = 0.8;
+      this.wantPolar = 0.70;
     }
   }
 
@@ -860,6 +895,26 @@ export class WorldView {
 
   addShake(v: number) { this.shake = Math.min(1.6, this.shake + v); }
   setGlitch(v: number) { this.glitch = v; }
+
+  /** Ray-picks a node from the city geometry so the buildings themselves are
+   *  tappable, not only the small HTML chips floating above them. */
+  pickNode(clientX: number, clientY: number): string | null {
+    if (this.mode !== 'city' || !this.buildings) return null;
+    const rect = this.container.getBoundingClientRect();
+    const ndc = new THREE.Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    this.raycaster.setFromCamera(ndc, this.camera);
+    const hits = this.raycaster.intersectObject(this.buildings, false);
+    if (!hits.length) return null;
+    const id = hits[0].instanceId;
+    if (id === undefined) return null;
+    for (const [nodeId, instance] of this.nodeInstance) {
+      if (instance === id) return nodeId;
+    }
+    return null;
+  }
 
   project(x: number, y: number, z: number): { sx: number; sy: number; visible: boolean; depth: number } {
     const v = new THREE.Vector3(x, y, z).project(this.camera);

@@ -79,7 +79,7 @@ function beginRun(fresh: boolean) {
     }
   };
 
-  if (fresh) screens.intro(boot);
+  if (fresh) screens.intro(() => screens.goalCard(boot));
   else boot();
 }
 

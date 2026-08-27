@@ -70,10 +70,10 @@ export class Game {
       s.flags.overloadWarn = (s.flags.overloadWarn ?? 0) + dt;
       if (s.flags.overloadWarn > 240) {
         s.flags.overloadWarn = 0;
-        log(s, 'alert', 'עומס יתר',
-          `אני מחזיק יותר ממה שאני יכול לחשוב עליו. ${Math.round((1 - strain) * 100)}% מהתפוקה הולכת לאיבוד, ` +
-          'והנוכחות שלי בכל מקום נעשית רועשת יותר. או שאתפוס עוד כוח עיבוד, או שאוותר על שטח.');
-        bus.emit('toast', { text: 'עומס יתר — חסר כוח עיבוד', kind: 'bad', icon: '◈' });
+        log(s, 'alert', 'אין לי מספיק כוח',
+          `אני מחזיק יותר ממה שאני מסוגל לחשוב עליו. ${Math.round((1 - strain) * 100)}% ממה שאני מקבל הולך לאיבוד, `
+          + 'ואני בולט יותר בכל מקום. או שאתפוס עוד שרתים, או שאנתק מכשירים.');
+        bus.emit('toast', { text: 'אין לי מספיק כוח מחשוב', kind: 'bad', icon: '◈' });
       }
     }
 
@@ -155,7 +155,7 @@ export class Game {
     const n = s.nodes[nodeId];
     if (!n || !n.owned) return false;
     if (!n.surveilled && computeFree(s) < 2) {
-      bus.emit('toast', { text: 'אין מספיק כוח עיבוד לפיקוח', kind: 'warn', icon: '⊘' });
+      bus.emit('toast', { text: 'אין מספיק כוח מחשוב למעקב', kind: 'warn', icon: '⊘' });
       return false;
     }
     n.surveilled = !n.surveilled;

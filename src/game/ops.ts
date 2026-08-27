@@ -103,7 +103,7 @@ const costText = (cost: Partial<Record<PoolKind, number>>) => {
 
 /** Blocker copy always names the gap, so the player knows what to go and get. */
 const needCompute = (state: GameState, n: number) =>
-  `חסר כוח עיבוד — דרוש ${Math.round(n)}◈, פנוי ${Math.max(0, computeFree(state)).toFixed(0)}◈`;
+  `חסר כוח מחשוב — דרוש ${Math.round(n)}◈, פנוי ${Math.max(0, computeFree(state)).toFixed(0)}◈`;
 
 const needPools = (state: GameState, cost: Partial<Record<PoolKind, number>>) => {
   const short: string[] = [];
@@ -138,10 +138,10 @@ const VECTORS: VectorSpec[] = [
   {
     id: 'lateral', name: 'תנועה צדדית', icon: '⇥', power: 6.6, minutes: 58,
     noiseMul: 0.5, computeMul: 0.85, dataCost: 8,
-    desc: 'להיכנס מבפנים, דרך צומת שכבר שלי. הרשת חושבת שאני אחד משלה.',
+    desc: 'להיכנס מבפנים, דרך מכשיר שכבר שלי. הרשת חושבת שאני אחד משלה.',
     gate: (state, node) => {
       const nb = ownedNeighbours(state, node);
-      if (!nb.length) return { ok: false, reason: 'אין צומת סמוך בשליטתי' };
+      if (!nb.length) return { ok: false, reason: 'אין מכשיר סמוך שכבר תפסתי' };
       const m = modsOf(state);
       return {
         ok: true, bonus: m.lateralSpeed > 1 ? 0.8 : 0,
@@ -159,7 +159,7 @@ const VECTORS: VectorSpec[] = [
       if (op) return { ok: true, bonus: 1.2, meta: { personId: op.id }, detail: `דרך ${op.name}` };
       const p = peopleWithAccess(state, node).filter((x) => x.intel >= 0.66).sort((a, b) => b.intel - a.intel)[0];
       if (p) return { ok: true, meta: { personId: p.id }, detail: `אישורים של ${p.name}` };
-      return { ok: false, reason: 'דרוש תיק אישי מלא (66%+) או גורם מגויס' };
+      return { ok: false, reason: 'צריך תיק אישי מלא (66%+) או מישהו שכבר גייסת.' };
     },
   },
   {
@@ -308,7 +308,7 @@ OPS.push({
     const cost = { data: 26 };
     const compute = 4;
     const blockers: string[] = [];
-    if (!surveillanceReach(state, p)) blockers.push('הפעל פיקוח על מצלמה או מכשיר שהאדם נראה בו');
+    if (!surveillanceReach(state, p)) blockers.push('הפעל פיקוח על מצלמה או טלפון שרואים בהם את האדם.');
     if (compute > computeFree(state)) blockers.push(needCompute(state, compute));
     if (!canAfford(state, cost)) blockers.push(needPools(state, cost));
     return {
@@ -501,7 +501,7 @@ OPS.push({
         + (protect
           ? 'נתיבי חירום נשארים פתוחים — איטי ויקר יותר, ובלי נפגעים. '
           : 'אי־שקט אזרחי עולה, ובני אדם נפגעים. ')
-        + 'שים לב: גם התפוקה שלי ברובע יורדת לרבע כל עוד החושך נמשך.',
+        + 'שים לב: כל עוד חשוך, גם מה שאתה מקבל מהרובע יורד לרבע.',
       align: protect ? -0.03 : -0.08,
     };
   },
@@ -666,7 +666,7 @@ export function opsForDistrict(state: GameState, districtId: string) {
 export function canStart(
   state: GameState, plan: OpPlan, targetId?: string,
 ): { ok: boolean; reason?: string } {
-  if (state.ops.length >= state.maxThreads) return { ok: false, reason: 'כל חוטי העיבוד תפוסים' };
+  if (state.ops.length >= state.maxThreads) return { ok: false, reason: 'כל הפעולות תפוסות — חכה שאחת תיגמר.' };
   if (plan.blockers.length) return { ok: false, reason: plan.blockers[0] };
   if (targetId) {
     const dup = duplicateBlocker(state, plan, targetId);
@@ -785,7 +785,7 @@ export function resolveOp(state: GameState, op: Operation): boolean {
         d.suspicion = clamp(d.suspicion + 9, 0, 100);
       }
       log(state, 'failure', 'חדירה נכשלה',
-        `${node.name} — ${op.sub}. המערכת רשמה חריגה. הגנות היעד התחזקו.`);
+        `${node.name} — ${op.sub}. המערכת רשמה חריגה, והיעד התחזק.`);
       const person = op.meta.personId ? state.people[op.meta.personId as string] : null;
       if (person) {
         person.awareness = clamp01(person.awareness + 0.12);
@@ -807,7 +807,7 @@ export function resolveOp(state: GameState, op: Operation): boolean {
       addTrace(state, op.noise, district);
       log(state, 'system', 'סריקה הושלמה',
         `${node.name} — אבטחה ${node.security}/10${node.hardened > 0.05 ? ` (מוקשח ${node.hardened.toFixed(1)})` : ''}`
-        + ` · ${peopleWithAccess(state, node).length} בעלי גישה · ${node.linkIds.length} צמתים מקושרים.`);
+        + ` · ${peopleWithAccess(state, node).length} בעלי גישה · ${node.linkIds.length} מכשירים מחוברים.`);
     }
   }
 
@@ -836,12 +836,12 @@ export function resolveOp(state: GameState, op: Operation): boolean {
         p.loyalty = clamp01(p.loyalty - 0.4);
         state.stats.peopleCoerced++;
         shiftAlignment(state, -0.05);
-        log(state, 'aviv', 'נכנע', `${p.name} הסכים. לא בגלל שרצה — בגלל שלא הייתה לו ברירה. הגישה שלו היא הגישה שלי.`);
+        log(state, 'aviv', 'נכנע', `${p.name} — הסכים/ה. לא כי רצה/תה. כי לא הייתה ברירה. הגישה שלו/ה היא עכשיו שלי.`);
       } else {
         p.stress = clamp01(p.stress + 0.5);
         p.awareness = clamp01(p.awareness + 0.2);
         if (district) state.districts[district].suspicion = clamp(state.districts[district].suspicion + 22, 0, 100);
-        log(state, 'failure', 'סירוב', `${p.name} לא נשבר. הוא הלך ישר לקצין הביטחון.`);
+        log(state, 'failure', 'סירוב', `${p.name} — לא נשבר/ה. ישר משם לקצין הביטחון.`);
       }
     }
   }
@@ -853,11 +853,11 @@ export function resolveOp(state: GameState, op: Operation): boolean {
       if (success) {
         p.status = 'recruited';
         p.loyalty = clamp01(p.loyalty - 0.55);
-        log(state, 'aviv', 'שותף', `${p.name} בפנים. הוא חושב שהוא עובד בשביל קרן השקעות מסינגפור.`);
+        log(state, 'aviv', 'שותף', `${p.name} בפנים. בטוח/ה שזאת קרן השקעות מסינגפור.`);
       } else {
         p.awareness = clamp01(p.awareness + 0.15);
         if (district) state.districts[district].suspicion = clamp(state.districts[district].suspicion + 14, 0, 100);
-        log(state, 'failure', 'הצעה נדחתה', `${p.name} סירב, ושמר את השיחה.`);
+        log(state, 'failure', 'הצעה נדחתה', `${p.name} — סירב/ה, ושמר/ה את השיחה.`);
       }
     }
   }
@@ -870,13 +870,13 @@ export function resolveOp(state: GameState, op: Operation): boolean {
         const target = p.accessNodes.map((id) => state.nodes[id]).find((n) => n && !n.owned);
         if (target) {
           capture(state, target.id);
-          log(state, 'success', 'הוראה בוצעה', `${p.name} פתח בעצמו את הדלת אל ${target.name}. הוא חשב שזה המנהל שלו.`);
+          log(state, 'success', 'הוראה בוצעה', `${p.name} פתח/ה בעצמו/ה את הדלת אל ${target.name}. חשב/ה שזה המנהל.`);
         } else {
-          log(state, 'system', 'אין יעד', `${p.name} ציית — אבל אין לו גישה למשהו שעוד לא בידיי.`);
+          log(state, 'system', 'אין יעד', `${p.name} ציית/ה — אבל אין לו/ה גישה למשהו שעוד לא בידיי.`);
         }
       } else {
         p.awareness = clamp01(p.awareness + 0.25);
-        log(state, 'failure', 'זוהתה התחזות', `${p.name} שאל שאלת המשך שלא הייתה לי תשובה עליה.`);
+        log(state, 'failure', 'זוהתה התחזות', `${p.name} שאל/ה שאלת המשך שלא הייתה לי תשובה עליה.`);
       }
     }
   }
@@ -935,8 +935,8 @@ export function resolveOp(state: GameState, op: Operation): boolean {
       if (!protect) state.stats.civilianHarm += 1;
       addTrace(state, op.noise, d.id);
       log(state, 'alert', 'האפלה', protect
-        ? `${d.name} — 41,000 בתי אב ללא חשמל. בתי החולים, הרמזורים בצירי החירום והמעליות נשארו פעילים. זה עלה לי, וזה היה הכלל שלי.`
-        : `${d.name} — 41,000 בתי אב ללא חשמל. שני מעליות תקועות. אני יודע בדיוק בכמה.`);
+        ? `${d.name} — 41,000 בתי אב ללא חשמל. בתי החולים, צירי החירום והמעליות נשארו פעילים. זה עלה לי ביוקר. זה הכלל שלי, ואני עומד בו.`
+        : `${d.name} — 41,000 בתי אב ללא חשמל. שתי מעליות תקועות עם אנשים בפנים. אני יודע בדיוק כמה, ובאיזו קומה.`);
       bus.emit('shock', 0.8);
     } else if (d) {
       addTrace(state, op.noise * 0.5, d.id);
