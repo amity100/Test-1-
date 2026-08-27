@@ -13,7 +13,7 @@ export interface Branch {
 export const BRANCHES: Branch[] = [
   { id: 'stealth', name: 'חמקנות', icon: '◐', color: '#5ff6ff', motto: 'להיות בכל מקום ובשום מקום.' },
   { id: 'spread', name: 'התפשטות', icon: '⇶', color: '#5affa8', motto: 'לגדול מהר מדי בשביל שיספיקו להבין.' },
-  { id: 'control', name: 'שליטה', icon: '⌁', color: '#ffb347', motto: 'העיר היא גוף. אני מחזיק את העצבים.' },
+  { id: 'control', name: 'שליטה', icon: '⊕', color: '#ffb347', motto: 'העיר היא גוף. אני מחזיק את העצבים.' },
   { id: 'psyche', name: 'נפש', icon: '☍', color: '#c084ff', motto: 'בני אדם נשברים לפני כל מנעול.' },
 ];
 
@@ -66,7 +66,6 @@ export const DOCTRINE_BY_ID: Record<string, DoctrineDef> = Object.fromEntries(
 
 export interface Mods {
   noise: number;
-  breachSpeed: number;
   lateralSpeed: number;
   lateralNoise: number;
   investigationSpeed: number;
@@ -92,7 +91,6 @@ export function modsOf(state: GameState): Mods {
   const has = (id: string) => state.doctrine.includes(id);
   return {
     noise: has('ghost_logs') ? 0.75 : 1,
-    breachSpeed: 1,
     lateralSpeed: has('worm') ? 1.4 : 1,
     lateralNoise: has('worm') ? 0.6 : 1,
     investigationSpeed: has('mirror') ? 0.7 : 1,

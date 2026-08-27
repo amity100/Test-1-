@@ -420,6 +420,10 @@ em, small { font-style: normal; }
 .mini-head h4 { font-size: 12px; color: #eaf9ff; }
 .mini-head em { display: block; font-size: 10px; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
 
+.chapter-goal { margin: 0 0 10px; padding: 9px 11px; font-size: 12px; line-height: 1.7;
+  color: #a9c6d4; background: rgba(30,52,66,.42); border-radius: 8px;
+  border-inline-start: 2px solid rgba(95,246,255,.35); }
+.chapter-goal b { color: var(--cy); }
 .goal-bar {
   padding: 10px 13px; border-bottom: 1px solid var(--line);
   background: linear-gradient(180deg, rgba(90,255,168,0.07), transparent);
@@ -824,6 +828,9 @@ h3.shep { color: var(--violet); }
 .chapter-card p { font-size: 13px; color: var(--muted); letter-spacing: 2px; }
 .cc-rule { width: 120px; height: 1px; margin: 22px auto; background: linear-gradient(90deg, transparent, var(--cy), transparent); }
 .cc-intro { max-width: 540px; font-size: 14px; line-height: 1.9; color: #a9c6d4; letter-spacing: 0; font-style: italic; }
+.cc-goal { max-width: 540px; margin-top: 16px; padding-top: 14px; font-size: 13.5px; line-height: 1.9;
+  color: #d8ecf5; letter-spacing: 0; border-top: 1px solid rgba(120,190,220,.22); }
+.cc-goal b { color: var(--cy); font-weight: 700; }
 
 .dialog-wrap {
   position: fixed; inset: 0; z-index: 180; display: grid; place-items: center;
@@ -865,6 +872,9 @@ h3.shep { color: var(--violet); }
 .es-sub { font-size: 14px; color: var(--muted); letter-spacing: 2px; }
 .es-rule { width: 120px; height: 1px; margin: 26px auto; background: linear-gradient(90deg, transparent, var(--cy), transparent); }
 .es-body { font-size: 14.5px; line-height: 2.1; color: #bcd8e5; text-align: right; }
+.es-people { margin-top: 22px; padding-top: 18px; border-top: 1px solid rgba(120,190,220,.18);
+  font-size: 13.5px; line-height: 2; color: #93b4c4; text-align: right; }
+.es-people .es-kicker { display: block; margin-bottom: 10px; }
 .es-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 34px 0; }
 .es-stats div { padding: 12px; border: 1px solid var(--line); background: rgba(6,14,20,0.5); }
 .es-stats em { display: block; font-family: var(--mono); font-size: 20px; color: var(--cy); }
@@ -1199,3 +1209,30 @@ button:not(:disabled):active { transform: scale(0.985); }
 #map-tools button:active { background: rgba(95,246,255,0.2); border-color: var(--cy); }
 body.is-mobile #map-tools { bottom: calc(80px + env(safe-area-inset-bottom, 0px)); left: 10px; }
 body.is-mobile #map-tools button { width: 48px; height: 48px; }
+
+/* Task rows are things you tap, so they get a real finger's worth of height. */
+.objectives ul li { min-height: 44px; }
+body.is-mobile .objectives ul li { min-height: 46px; }
+
+/* ── "press this one" ─────────────────────────────────────────────────────────
+   The step the game just asked for gets a ring, a label and the top slot, so
+   following an instruction never turns into a search. */
+.op-card.wanted, .btn.wanted {
+  border-color: var(--cy);
+  box-shadow: 0 0 0 1px var(--cy), 0 0 22px rgba(95, 246, 255, .28);
+  animation: wantedPulse 2.4s ease-in-out infinite;
+}
+.op-wanted {
+  display: block; margin-bottom: 5px; font-size: 10.5px; letter-spacing: .5px;
+  color: var(--cy); font-family: var(--mono);
+}
+.btn-hint {
+  margin: 10px 0 -2px; font-size: 11.5px; color: var(--cy); font-family: var(--mono);
+}
+@keyframes wantedPulse {
+  0%, 100% { box-shadow: 0 0 0 1px var(--cy), 0 0 18px rgba(95, 246, 255, .22); }
+  50%      { box-shadow: 0 0 0 1px var(--cy), 0 0 30px rgba(95, 246, 255, .42); }
+}
+@media (prefers-reduced-motion: reduce) { .op-card.wanted, .btn.wanted { animation: none; } }
+.op-wanted.busy { color: var(--amber); }
+.op-card.wanted.blocked { animation: none; box-shadow: 0 0 0 1px rgba(255, 179, 71, .5); border-color: var(--amber); }

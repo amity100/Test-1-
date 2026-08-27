@@ -36,11 +36,17 @@ export function spawnInvestigation(state: GameState, districtId: string, agency?
   if (state.investigations.some((i) => i.districtId === districtId)) return null;
   const a = agency ?? pickAgency(state);
   const owned = d.nodeIds.map((id) => state.nodes[id]).filter((n) => n.owned);
-  const leadPerson = d.nodeIds
+  // National-level cases are run by the national response team, and that team
+  // has a name. Below that level, the most alert person on site takes it.
+  const noa = state.people.per_noa;
+  const localLead = d.nodeIds
     .flatMap((id) => state.nodes[id].peopleIds)
     .map((pid) => state.people[pid])
     .filter(Boolean)
     .sort((x, y) => y.awareness - x.awareness)[0];
+  const noaLeads = (a === 'cyber' || a === 'shabak')
+    && !!noa && noa.status !== 'coerced' && noa.status !== 'recruited' && noa.status !== 'broken';
+  const leadPerson = noaLeads ? noa : localLead;
 
   const inv: Investigation = {
     id: uid('inv'),

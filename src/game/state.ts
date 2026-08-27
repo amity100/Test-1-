@@ -173,6 +173,84 @@ function seedStory(state: GameState) {
   for (const n of neighbours) link(lan, n);
 
   state.people[dana.id] = dana;
+
+  // ── The other side of the board: the people who will come looking ──────────
+  // Noa Bar-On leads the national response team. She has an address and a
+  // phone like anyone else, and until chapter 3 the player has no reason to
+  // know either exists.
+  const sarona = state.districts.sarona;
+  const mkAway = (
+    key: string, name: string, type: GameNode['type'], opts: Partial<GameNode> & { ox: number; oz: number },
+  ): GameNode => {
+    const arch = ARCHETYPES[type];
+    const node: GameNode = {
+      id: `nd_${key}`,
+      name,
+      type,
+      desc: opts.desc ?? arch.desc,
+      districtId: sarona.id,
+      regionId: 'tlv',
+      x: sarona.cx + opts.ox,
+      z: sarona.cz + opts.oz,
+      height: opts.height ?? rng.range(arch.height[0], arch.height[1]),
+      footprint: opts.footprint ?? rng.range(arch.footprint[0], arch.footprint[1]),
+      tier: 3,
+      security: opts.security ?? 6,
+      hardened: 0,
+      noise: opts.noise ?? arch.noise,
+      yields: opts.yields ?? { ...arch.yields },
+      tags: arch.tags.concat(opts.tags ?? []),
+      peopleIds: opts.peopleIds ?? [],
+      linkIds: [],
+      discovered: false,
+      owned: false,
+      ownedAt: 0,
+      detection: 0,
+      surveilled: false,
+      quarantined: false,
+      disruptedUntil: 0,
+      scouted: false,
+    };
+    state.nodes[node.id] = node;
+    sarona.nodeIds.push(node.id);
+    return node;
+  };
+
+  const cyberHq = mkAway('cyber_hq', 'חדר מצב — מערך הסייבר הלאומי', 'gov', {
+    ox: -110, oz: 74, security: 9, height: 42, tags: ['national'],
+    yields: { data: 4.2, compute: 2 },
+    desc: 'שתים עשרה עמדות, קפה גרוע, ולוח אחד שעליו כתוב מה מחפשים היום. השם שלי לא כתוב שם. עדיין.',
+  });
+  const noaPhone = mkAway('noa_phone', 'המכשיר של נעה בר־און', 'phone', {
+    ox: -138, oz: 96, security: 5,
+    yields: { data: 2.4 },
+    desc: 'רקע מסך: ילד בן ארבע מחזיק גלידה. מאה שמונים ואחת התראות שלא נפתחו.',
+    peopleIds: [noa.id],
+  });
+  noa.accessNodes = [cyberHq.id, noaPhone.id];
+  noa.device = noaPhone.id;
+
+  const linkAway = (a: GameNode, b: GameNode) => {
+    if (!a.linkIds.includes(b.id)) a.linkIds.push(b.id);
+    if (!b.linkIds.includes(a.id)) b.linkIds.push(a.id);
+  };
+  linkAway(cyberHq, noaPhone);
+  // Wire the response centre into Sarona so lateral movement can actually
+  // arrive there instead of it floating unreachable.
+  const saronaHosts = sarona.nodeIds
+    .map((id) => state.nodes[id])
+    .filter((n) => n !== cyberHq && n !== noaPhone)
+    .slice(0, 3);
+  for (const n of saronaHosts) linkAway(cyberHq, n);
+  if (saronaHosts[0]) linkAway(noaPhone, saronaHosts[0]);
+}
+
+/** Chapter 3 puts a name and an address on the people hunting you. */
+export function revealResponseTeam(state: GameState) {
+  for (const id of ['nd_cyber_hq', 'nd_noa_phone']) {
+    const n = state.nodes[id];
+    if (n) n.discovered = true;
+  }
 }
 
 // ── Construction ────────────────────────────────────────────────────────────
@@ -400,7 +478,7 @@ export function capture(state: GameState, nodeId: string, quiet = false) {
   }
   refreshDerived(state);
   bus.emit('node:captured', nodeId);
-  if (!quiet) bus.emit('toast', { text: `נכבש: ${node.name}`, kind: 'good', icon: '◈' });
+  if (!quiet) bus.emit('toast', { text: `נכבש: ${node.name}`, kind: 'good', icon: '▣' });
 }
 
 export function loseNode(state: GameState, nodeId: string, reason: string) {

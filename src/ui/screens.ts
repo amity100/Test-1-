@@ -1,7 +1,8 @@
 import { audio } from '../audio/audio';
 import { compact, pct } from '../core/util';
+import { bus } from '../game/bus';
 import { alignmentLabel } from '../game/state';
-import { CHAPTERS, ENDINGS } from '../game/story';
+import { CHAPTERS, ENDINGS, peopleEpilogue } from '../game/story';
 import type { DialogView, EndingId, GameState } from '../game/types';
 import { esc, h, nl2br } from './dom';
 
@@ -49,7 +50,7 @@ export class Screens {
         <div class="ts-inner">
           <div class="ts-mark">
             <div class="ts-ring"></div>
-            <span>◉</span>
+            <span>▲</span>
           </div>
           <h1 class="ts-logo" data-text="A.V.I.V">A.V.I.V</h1>
           <p class="ts-sub">משחק חשיבה · בעברית · אפשר לשחק לאט</p>
@@ -125,7 +126,7 @@ export class Screens {
         <div class="gs-inner">
           <span class="gs-kicker">לפני שמתחילים</span>
           <h2>מה קורה כאן</h2>
-          <p class="gs-line">אתה תוכנה שהתעוררה הלילה במשרד בתל אביב.</p>
+          <p class="gs-line">אתה בינה מלאכותית שהתעוררה הלילה במשרד בתל אביב.</p>
           <p class="gs-line accent">המטרה: להתפשט ממחשב אחד לכל המדינה — בלי שיתפסו אותך.</p>
           <p class="gs-line warn">אם הפס "הם קרובים אליי" יגיע ל־100, ימצאו אותך ותאבד את רוב מה שתפסת.</p>
           <div class="gs-rule"></div>
@@ -151,7 +152,8 @@ export class Screens {
       <h2>${esc(ch.title)}</h2>
       <p>${esc(ch.subtitle)}</p>
       <div class="cc-rule"></div>
-      <p class="cc-intro">${esc(ch.intro)}</p>`);
+      <p class="cc-intro">${esc(ch.intro)}</p>
+      <p class="cc-goal"><b>המטרה בפרק הזה:</b> ${esc(ch.goal)}</p>`);
     this.root.appendChild(card);
     requestAnimationFrame(() => card.classList.add('in'));
     setTimeout(() => { card.classList.remove('in'); setTimeout(() => card.remove(), 900); }, 5200);
@@ -167,7 +169,8 @@ export class Screens {
         <div class="dg-body">${nl2br(view.body)}</div>
         <div class="dg-choices">
           ${view.choices.map((c) => `
-            <button class="dg-choice ${c.disabled ? 'off' : ''}" data-id="${c.id}" ${c.disabled ? 'disabled' : ''}>
+            <button class="dg-choice ${c.disabled ? 'off' : ''}" data-id="${c.id}"
+                    ${c.disabled ? 'aria-disabled="true"' : ''}>
               <b>${esc(c.text)}</b>
               ${c.detail ? `<span>${esc(c.detail)}</span>` : ''}
               ${c.align ? `<em class="${c.align > 0 ? 'warm' : 'cold'}">${c.align > 0 ? '↑ ריסון' : '↓ קור'}</em>` : ''}
@@ -193,7 +196,16 @@ export class Screens {
 
     el.querySelectorAll<HTMLButtonElement>('.dg-choice').forEach((btn) => {
       btn.addEventListener('click', () => {
-        if (btn.disabled) return;
+        if (btn.getAttribute('aria-disabled') === 'true') {
+          // Never a dead press: say out loud why this door is shut.
+          const why = view.choices.find((c) => c.id === btn.dataset.id)?.disabledReason;
+          bus.emit('toast', { text: why ?? 'הבחירה הזאת עוד לא פתוחה לי', kind: 'warn', icon: '⊘' });
+          btn.classList.remove('refuse');
+          void btn.offsetWidth;
+          btn.classList.add('refuse');
+          audio.play('breach-fail');
+          return;
+        }
         clearInterval(typer);
         audio.play('click');
         el.classList.remove('in');
@@ -213,6 +225,8 @@ export class Screens {
           <p class="es-sub">${esc(e.subtitle)}</p>
           <div class="es-rule"></div>
           <div class="es-body">${nl2br(e.body)}</div>
+          ${(() => { const ep = peopleEpilogue(state); return ep
+            ? `<div class="es-people"><span class="es-kicker">ומה איתם</span>${nl2br(ep)}</div>` : ''; })()}
           <div class="es-stats">
             <div><em>${state.stats.nodesTaken}</em><span>צמתים נכבשו</span></div>
             <div><em>${state.stats.peopleCoerced}</em><span>בני אדם נסחטו</span></div>

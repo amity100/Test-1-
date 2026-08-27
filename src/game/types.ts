@@ -222,6 +222,13 @@ export interface Objective {
   optional?: boolean;
   /** What the player should look at. The HUD points at it and flies there on click. */
   target?: { kind: 'node' | 'person' | 'district' | 'panel'; id: string };
+  /**
+   * The exact button this step wants pressed — an op defId ('scout',
+   * 'breach_lateral', 'dossier'…) or a panel action ('surveil', 'feed').
+   * The panel puts a ring around it and sorts it to the top, so "press the
+   * thing the game just told you to press" is never a hunt.
+   */
+  op?: string;
 }
 
 export interface ShepherdState {

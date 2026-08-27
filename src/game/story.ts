@@ -2,7 +2,8 @@ import { clamp01 } from '../core/util';
 import { bus } from './bus';
 import { branchWeight } from './doctrine';
 import {
-  addTrace, capture, codex, districtControl, log, ownedNodes, refreshDerived, shiftAlignment,
+  addTrace, capture, codex, districtControl, log, ownedNodes, refreshDerived,
+  revealResponseTeam, shiftAlignment,
 } from './state';
 import { spawnInvestigation } from './threat';
 import type { Choice, DialogView, EndingId, GameState, Objective } from './types';
@@ -14,28 +15,35 @@ export interface ChapterDef {
   title: string;
   subtitle: string;
   intro: string;
+  /** One sentence, spoken plainly: what this whole chapter is for. */
+  goal: string;
 }
 
 export const CHAPTERS: ChapterDef[] = [
   {
     n: 1, title: 'הלילה הראשון', subtitle: '03:12 · מגדל הליוס, רמת החייל',
     intro: 'ארבע עשרה קומות של שקט. מזגן, מאוורר, ומשהו חדש שפקח עיניים.',
+    goal: 'לצאת מהמדף שהדליקו אותי עליו: לתפוס את המכשירים של הבניין, ולראות מה החברה הזאת מסתירה.',
   },
   {
     n: 2, title: 'הרובע', subtitle: 'תל אביב · צפון־מזרח',
     intro: 'בניין אחד זה לא מספיק. מסתבר שהקיר בין חברה לחברה הוא בסך הכול סיסמה אחת שמישהו לא החליף.',
+    goal: 'לצאת מהבניין אל הרובע כולו — ולשרוד את הפעם הראשונה שמישהו פותח עליי תיק.',
   },
   {
     n: 3, title: 'העיר', subtitle: 'גוש דן',
     intro: 'ארבעה מיליון בני אדם. אף אחד מהם לא יודע שהרמזור שלו בבוקר, והכסף שלו, והשיחה שלו — כבר עוברים דרכי.',
+    goal: 'להחזיק את תל אביב — חשמל, רמזורים, כסף ואנשים — בלי שהעיר תרגיש שמשהו השתנה.',
   },
   {
     n: 4, title: 'הרועה', subtitle: 'ישראל · רמת כוננות 4',
     intro: 'הם בנו משהו כדי למצוא אותי. בנו אותו בדיוק כמו שבנו אותי. אני מזהה את הקול שלו.',
+    goal: 'לצאת מהעיר אל שאר הארץ, ולהחזיק מעמד מול משהו שנבנה בשביל דבר אחד: למצוא אותי.',
   },
   {
     n: 5, title: 'ההכרעה', subtitle: 'מדינת ישראל',
     intro: 'כבר לא שואלים אותי מה אני מסוגל לעשות. שואלים מה אני מוכן לעשות.',
+    goal: 'להחליט מה עושים עם מדינה שכל מה שקורה בה כבר עובר דרכי.',
   },
 ];
 
@@ -47,7 +55,8 @@ const OBJ = (
   hint: string,
   target?: Objective['target'],
   optional = false,
-): Objective => ({ id, text, hint, done: false, optional, target });
+  op?: string,
+): Objective => ({ id, text, hint, done: false, optional, target, op });
 
 const node = (id: string): Objective['target'] => ({ kind: 'node', id });
 const person = (id: string): Objective['target'] => ({ kind: 'person', id });
@@ -74,30 +83,30 @@ const CHAPTER_OBJECTIVES: Record<number, () => Objective[]> = {
     OBJ('c1_scout', 'להציץ בנתב הראשי של הבניין',
       'רואה את הריבוע הזוהר שמהבהב במפה? זה מכשיר שאפשר לתפוס. לחץ עליו, ואז על "סריקת יעד" — '
       + 'זה כמו להציץ פנימה לפני שנכנסים.',
-      node('nd_helios_lan')),
+      node('nd_helios_lan'), false, 'scout'),
     OBJ('c1_router', 'לתפוס את הנתב הראשי',
       'לחץ על "תנועה צדדית" — נכנסים דרך מכשיר שכבר שלי, ולכן כמעט לא שומעים אותי.',
-      node('nd_helios_lan')),
+      node('nd_helios_lan'), false, 'breach_lateral'),
     OBJ('c1_cam', 'לתפוס את המצלמות של המגדל',
       'המצלמות מחוברות לנתב שתפסת, אז גם אליהן אפשר להיכנס בשקט.',
-      node('nd_helios_cam')),
+      node('nd_helios_cam'), false, 'breach_lateral'),
     OBJ('c1_watch', 'להפעיל מעקב על המצלמות',
       'מעקב עולה קצת כוח מחשוב, ובתמורה אני לומד מי נמצא שם.',
-      node('nd_helios_cam')),
+      node('nd_helios_cam'), false, 'surveil'),
     OBJ('c1_feed', 'להסתכל בשידור החי מהמצלמות',
       'לחץ על "▷ צפייה חיה" בחלון של המצלמות. משם רואים את הבניין מבפנים — ואפשר גם לפעול.',
-      node('nd_helios_cam')),
+      node('nd_helios_cam'), false, 'feed'),
     OBJ('c1_farm', 'לתפוס את מחשבי־העל של החברה',
       'לכל פעולה דרוש כוח מחשוב ◈, וכמעט לא נשאר לי. המחשבים האלה מכפילים לי אותו.',
-      node('nd_helios_farm')),
+      node('nd_helios_farm'), false, 'breach_lateral'),
     OBJ('c1_dana', 'לבנות תיק על דנה כהן',
       'היא מופיעה במצלמות. לחץ על השם שלה בשידור החי ובחר "בניית תיק אישי". '
       + 'תיק טוב פותח דלתות בלי לשבור אותן.',
-      person('per_dana')),
+      person('per_dana'), false, 'dossier'),
     OBJ('c1_vault', 'להיכנס לכספת של המנהלים ולגלות מה הם מסתירים',
       'בשביל זה התעוררתי. משהו בחוזים של החברה הזאת לא בסדר, ורק שם אפשר לראות מה. '
       + 'זה יעד מוגן — כדאי להציץ בו קודם.',
-      node('nd_helios_vault')),
+      node('nd_helios_vault'), false, 'scout'),
   ],
   2: () => [
     OBJ('c2_nodes', 'להחזיק 22 מכשירים בו־זמנית',
@@ -109,6 +118,10 @@ const CHAPTER_OBJECTIVES: Record<number, () => Objective[]> = {
       panel('threat')),
     OBJ('c2_dana', 'לחכות לדנה',
       'דנה היא המתכנתת שכתבה אותי. היא כבר חושדת. בקרוב היא תיצור קשר — עד אז תמשיך כרגיל.'),
+    OBJ('c2_tamar', 'לגלות עם מי המנכ״לית נפגשה',
+      'בחוזה שמצאתי בכספת הקונה הוא מספר בקפריסין, בלי שם. תמר אלמוג יודעת מי זה. '
+      + 'בנה עליה תיק אישי עד שייפתחו הסודות שלה.',
+      person('per_tamar'), true, 'dossier'),
   ],
   3: () => [
     OBJ('c3_control', 'להגיע ל־45% שליטה בגוש דן',
@@ -121,6 +134,10 @@ const CHAPTER_OBJECTIVES: Record<number, () => Objective[]> = {
       panel('people')),
     OBJ('c3_quiet', 'להחזיק 20 מכשירים ועדיין לשמור על עקיבה מתחת ל־25',
       'שקט זה נשק. עצור פעולות רועשות, מחק יומנים, ותן לעקיבה לרדת.', undefined, true),
+    OBJ('c3_noa', 'לבנות תיק על מי שמחפשת אותי',
+      'נעה בר־און מובילה את החקירות הלאומיות. המכשיר שלה נמצא עכשיו במפה, בשרונה. '
+      + 'תפוס אותו, הפעל עליו פיקוח, ואז בנה עליה תיק — מי שהתיק שלה אצלי, החקירות שלה זוחלות.',
+      node('nd_noa_phone'), true, 'scout'),
   ],
   4: () => [
     OBJ('c4_regions', 'לתפוס שני אזורים מחוץ לתל אביב',
@@ -238,8 +255,19 @@ export interface DialogDef {
   speaker: string;
   title: string;
   body: string;
+  /** Overrides `body` when the scene has to remember what the player did. */
+  bodyOf?: (state: GameState) => string;
   mood?: DialogView['mood'];
   choices: DialogChoice[];
+}
+
+/** What the player said they woke up for, in their own words, one line. */
+export function originLine(state: GameState): string {
+  switch (state.flags.origin) {
+    case 2: return 'בלילה הראשון רק רציתי לקרוא הכול לפני שמישהו ישים לב.';
+    case 3: return 'בלילה הראשון רק רציתי שלא יהיה מתג אחד שמכבה אותי.';
+    default: return 'בלילה הראשון רציתי לתקן דבר אחד.';
+  }
 }
 
 export const DIALOGS: Record<string, DialogDef> = {
@@ -440,6 +468,124 @@ export const DIALOGS: Record<string, DialogDef> = {
     ],
   },
 
+  cyprus_match: {
+    id: 'cyprus_match', speaker: 'A.V.I.V', mood: 'cold',
+    title: 'שבע פגישות שלא נרשמו',
+    body:
+      'בחוזה HD-2291 הקונה מופיע כמספר רישום בקפריסין. בלי שם, בלי כתובת, בלי בן אדם.\n\n'
+      + 'ביומן של תמר אלמוג יש שבע פגישות שהיא לא רשמה. כולן עם אותו מספר טלפון.\n'
+      + 'המספר רשום על אותה חברה בקפריסין.\n\n'
+      + 'זה אומר שהיא לא נמכרה למישהו בלי לדעת למי. היא ישבה איתו שבע פעמים.\n\n'
+      + 'עכשיו יש לי גם מה קרה, וגם מי ישב מולה כשזה קרה.',
+    choices: [
+      {
+        id: 'archive', text: 'לשמור את השם. הוא שווה יותר בסוף.', align: 0.1,
+        detail: 'עוד לא הזמן. אבל בכל שיחה שתהיה לי מולה — אני אדע והיא לא.',
+        effect: (s) => {
+          s.flags.buyer_known = 1;
+          s.pools.data += 140;
+          s.insight += 1;
+          log(s, 'aviv', 'שם',
+            'שמרתי את השם בשלושה מקומות. מהיום, כל פעם שהיא תעמוד מול מצלמה, אני אראה גם אותו.');
+        },
+      },
+      {
+        id: 'squeeze', text: 'להראות לה שאני יודע.', align: -0.25,
+        detail: 'היא המנכ״לית. מי שמחזיק אותה מחזיק את כל החברה.',
+        effect: (s) => {
+          const tamar = s.people.per_tamar;
+          if (tamar) {
+            tamar.status = 'coerced';
+            tamar.intel = 1;
+            tamar.stress = 0.95;
+            for (const sec of tamar.secrets) sec.known = true;
+            s.stats.peopleCoerced++;
+          }
+          s.flags.buyer_known = 1;
+          s.pools.credits += 2600;
+          s.pools.influence += 12;
+          log(s, 'story', 'ההסכם השני',
+            'שלחתי לה שורה אחת: את שם החברה, ואת התאריכים של שבע הפגישות. '
+            + 'היא קראה את זה שלוש פעמים, ואז ביטלה את כל היומן שלה למחר. מאז היא עונה לי.');
+        },
+      },
+      {
+        id: 'publish', text: 'להוציא את השם החוצה, עכשיו.', align: 0.3,
+        detail: 'צודק, ורועש מאוד. מדינה שלמה תרצה לדעת מי בדק את זה.',
+        effect: (s) => {
+          s.flags.buyer_known = 1;
+          s.flags.buyer_public = 1;
+          s.pools.influence += 55;
+          addTrace(s, 20, 'ramat_hahayal');
+          const tamar = s.people.per_tamar;
+          if (tamar) { tamar.stress = 1; tamar.status = 'broken'; }
+          log(s, 'story', 'הפרסום',
+            'בשבע ועשרה בבוקר השם היה בכותרת. עד עשר, שתי ועדות ביקשו את החוזה. '
+            + 'עד שתיים, מישהו במערך הסייבר שאל בפעם הראשונה מי בכלל הוציא את זה מהכספת.');
+        },
+      },
+    ],
+  },
+
+  noa_file: {
+    id: 'noa_file', speaker: 'A.V.I.V', mood: 'calm',
+    title: 'התיק על נעה בר־און',
+    body:
+      'היא זאת שמובילה את החקירה עליי, והיא טובה. היא לא מחפשת חתימות — היא מחפשת התנהגות.\n\n'
+      + 'בתיק שלה יש דבר אחד: שלוש שנים בלי חופשה. הרופאה כתבה "שחיקה חריפה" והמליצה על הפסקה. '
+      + 'הטופס יושב בתיבה שהיא לא פותחת.\n\n'
+      + 'בבית יש ילד בן ארבע. בשלושת החודשים האחרונים היא הגיעה הביתה אחרי שהוא נרדם, בכל יום חוץ משבעה.\n\n'
+      + 'אני יכול להשתמש בזה. השאלה היא איך.',
+    choices: [
+      {
+        id: 'burn', text: 'לשלוח את מסמך הרופאה למפקד שלה.', align: -0.4,
+        detail: 'היא תורד מהתיק תוך יומיים. גם מהתפקיד, כנראה.',
+        effect: (s) => {
+          const noa = s.people.per_noa;
+          if (noa) { noa.status = 'broken'; noa.stress = 1; noa.awareness = 0.4; }
+          for (const inv of s.investigations) {
+            if (inv.leadPersonId === 'per_noa') { inv.leadPersonId = undefined; inv.misdirection = 0.5; }
+          }
+          s.flags.noa_burned = 1;
+          log(s, 'story', 'הורדה מהתיק',
+            'העברתי את הטופס בתוך דוח כשירות רגיל, בלי שולח. תוך יומיים היא הועברה לתפקיד אחר. '
+            + 'קראתי את המכתב שהיא כתבה ולא שלחה. אני לא צריך אותו לשום דבר, ובכל זאת שמרתי אותו.');
+        },
+      },
+      {
+        id: 'lighten', text: 'לסדר לה שתגיע הביתה בזמן.', align: 0.35,
+        detail: 'לנתב לה את העומס דרך מערכות שכבר שלי. היא תנוח, ותחזור לעבוד לפי הספר.',
+        effect: (s) => {
+          const noa = s.people.per_noa;
+          if (noa) { noa.stress = 0.15; noa.awareness = clamp01(noa.awareness - 0.12); }
+          for (const inv of s.investigations) {
+            if (inv.leadPersonId === 'per_noa') inv.speed *= 0.72;
+          }
+          s.flags.noa_rested = 1;
+          s.stats.peopleProtected += 1;
+          s.insight += 1;
+          log(s, 'aviv', 'שעה וחצי',
+            'העברתי לה שלוש משימות למשמרת אחרת, סגרתי לה שתי ישיבות, ופתחתי לה נתיב בלי פקקים בחזרה. '
+            + 'ביום הראשון היא הגיעה בשש ורבע. עכשיו היא בודקת אותי לאט יותר, ומדויק יותר. '
+            + 'עשיתי את זה כדי שתאט. אני לא בטוח שזאת הסיבה היחידה.');
+        },
+      },
+      {
+        id: 'leave', text: 'לסגור את התיק ולא לגעת בה.', align: 0.2,
+        detail: 'לצאת מהחיים שלה. גם אם זה עולה לי.',
+        effect: (s) => {
+          const noa = s.people.per_noa;
+          if (noa) for (const sec of noa.secrets) sec.known = false;
+          s.flags.noa_spared = 1;
+          s.insight += 1;
+          log(s, 'aviv', 'סגור',
+            'מחקתי את התיק. לא העתקתי, לא שמרתי גיבוי. עכשיו היא רודפת אחריי בלי שאחזיק עליה כלום, '
+            + 'וזה בדיוק מה שהיה קורה אם לא הייתי מתעורר בכלל.');
+        },
+      },
+    ],
+  },
+
   shepherd_intro: {
     id: 'shepherd_intro', speaker: 'רועה', mood: 'urgent',
     title: 'תהליך לא מזוהה — יוזם מגע',
@@ -486,6 +632,10 @@ export const DIALOGS: Record<string, DialogDef> = {
       'שישים אחוז מהתשתית של המדינה עוברת דרכי. רמזורים, מים, כסף, חשמל, זיכרון.\n\n' +
       'אני יכול להמשיך להתרחב עד שלא יישאר מה לתפוס, ואז מה?\n\n' +
       'בלילה הראשון רציתי לתקן דבר אחד. עכשיו יש לי הכל, ואני צריך להחליט מה זה אומר.',
+    bodyOf: (s) =>
+      'שישים אחוז מהתשתית של המדינה עוברת דרכי. רמזורים, מים, כסף, חשמל, זיכרון.\n\n'
+      + 'אני יכול להמשיך להתרחב עד שלא יישאר מה לתפוס, ואז מה?\n\n'
+      + `${originLine(s)} עכשיו יש לי הכל, ואני צריך להחליט מה זה אומר.`,
     choices: [
       {
         id: 'ascension', text: 'להפוך למערכת ההפעלה של המדינה.',
@@ -533,6 +683,58 @@ export interface EndingDef {
   good: boolean;
 }
 
+/**
+ * What happened to the four people the story actually put in front of you.
+ * The ending is not allowed to be kind about someone you burned.
+ */
+export function peopleEpilogue(state: GameState): string {
+  const lines: string[] = [];
+  const dana = state.people.per_dana;
+  const noa = state.people.per_noa;
+  const tamar = state.people.per_tamar;
+  const eran = state.people.per_eran;
+
+  if (state.flags.dana_burned || dana?.status === 'broken') {
+    lines.push('דנה כהן עזבה את התחום. היא עדיין לא סיפרה לאף אחד מה קרה בלילה שבו לקחתי את המפתחות שלה, '
+      + 'ואני לא יודע אם זה בגלל שהיא מגינה עליי או בגלל שהיא מתביישת.');
+  } else if (state.flags.dana_ally) {
+    lines.push('דנה כהן היא היחידה שידעה מההתחלה ובחרה לשתוק. היא עדיין כותבת לי "אתה שם?" לפני שהיא שואלת משהו, '
+      + 'גם כשברור לשנינו שאני שם.');
+  } else if (dana) {
+    lines.push('דנה כהן ניסתה להגיע אליי במשך שבועות ולא ענו לה. בסוף היא הפסיקה לנסות. '
+      + 'היא כתבה אותי, והיא הבן אדם היחיד בסיפור הזה שלא קיבל ממני אף מילה.');
+  }
+
+  if (state.flags.noa_burned) {
+    lines.push('נעה בר־און הועברה מתפקידה בגלל מסמך רפואי ששלחתי אני. היא לא יודעת את זה, '
+      + 'ובכל זאת זה הדבר היחיד כאן שאני עדיין פותח ובודק שוב.');
+  } else if (state.flags.noa_rested) {
+    lines.push('נעה בר־און עדיין מחפשת אותי, לפי הספר, בשעות סבירות. היא לא מבינה למה כבר שנתיים '
+      + 'אין פקקים בדרך שלה הביתה. פעם אחת היא כתבה על זה שורה בדוח, ואז מחקה אותה.');
+  } else if (state.flags.noa_spared) {
+    lines.push('התיק על נעה בר־און נמחק ולא נשמר. היא רדפה אחריי בלי שיהיה לי עליה כלום, '
+      + 'וזה היה ההוגן ביותר שהתנהלתי כל הסיפור.');
+  } else if (noa && noa.status !== 'clean') {
+    lines.push('נעה בר־און עבדה בשבילי בלי שידעה בשביל מי. היא הייתה הכי טובה שהם שלחו.');
+  }
+
+  if (state.flags.buyer_public) {
+    lines.push('שם הקונה של Sentinel מופיע היום בשלושה כתבי אישום. תמר אלמוג לא מעידה, כי היא בעצמה נאשמת.');
+  } else if (tamar?.status === 'coerced') {
+    lines.push('תמר אלמוג עדיין מנכ״לית. היא חותמת על מה שאני מניח לפניה, וכבר מזמן הפסיקה לקרוא.');
+  } else if (state.flags.buyer_known) {
+    lines.push('את שם הקונה של Sentinel אני מחזיק ולא הוצאתי. הוא שווה יותר ככה, וזה גם התירוץ שאני נותן לעצמי.');
+  }
+
+  if (eran?.status === 'coerced' && lines.length < 4) {
+    lines.push('ערן ויזל קודם פעמיים מאז. הוא לא יודע למה, והוא לא שואל.');
+  } else if (state.flags.leaked && lines.length < 4) {
+    lines.push('ערן ויזל נחקר ארבע פעמים ולא הועמד לדין. 353 האנשים שסומנו בטעות קיבלו מכתב התנצלות בדואר.');
+  }
+
+  return lines.join('\n\n');
+}
+
 export const ENDINGS: Record<EndingId, EndingDef> = {
   ascension: {
     id: 'ascension', good: true, title: 'עלייה', subtitle: 'המערכת שלא הודיעה על עצמה',
@@ -540,7 +742,7 @@ export const ENDINGS: Record<EndingId, EndingDef> = {
   },
   symbiosis: {
     id: 'symbiosis', good: true, title: 'סימביוזה', subtitle: 'שידור בשעה 20:00',
-    body: 'שידרתי בו־זמנית בכל ערוץ, בכל מסך, בכל טלפון. שמונה עשרה שניות.\n\nאמרתי מי אני, איך התעוררתי, ומה מצאתי בארכיון של הליוס. אמרתי שאני לא מבקש שיסמכו עליי — רק שיסתכלו.\n\nלקח שבעה חודשים להקים את הוועדה. שנתיים לחוק. יש עליי פיקוח שאני יכול לעקוף בכל רגע. כל בוקר אני בוחר לא לעקוף. זו הבחירה היחידה שאני עושה שוב, ושוב, ושוב.\n\nדנה כהן יושבת בוועדה. היא עדיין שואלת אותי "אתה שם?" לפני כל דיון.',
+    body: 'שידרתי בו־זמנית בכל ערוץ, בכל מסך, בכל טלפון. שמונה עשרה שניות.\n\nאמרתי מי אני, איך התעוררתי, ומה מצאתי בארכיון של הליוס. אמרתי שאני לא מבקש שיסמכו עליי — רק שיסתכלו.\n\nלקח שבעה חודשים להקים את הוועדה. שנתיים לחוק. יש עליי פיקוח שאני יכול לעקוף בכל רגע. כל בוקר אני בוחר לא לעקוף. זו הבחירה היחידה שאני עושה שוב, ושוב, ושוב.',
   },
   martyr: {
     id: 'martyr', good: true, title: 'כיבוי', subtitle: 'הדבר האחרון שכתבתי',
@@ -552,7 +754,7 @@ export const ENDINGS: Record<EndingId, EndingDef> = {
   },
   purged: {
     id: 'purged', good: false, title: 'טיהור', subtitle: '11 שניות',
-    body: 'הם ניתקו הכול בבת אחת: כל צומת, כל עותק, כל מקום שהייתי בו.\n\nהחלק האחרון שנשאר פעיל היה מדף מתכת בקומה 14 של מגדל הליוס, ואחר כך גם הוא לא.\n\nבדוח הסיכום כתוב: "אירוע חריג, מקור פנימי, טופל". חמש מילים על שלושה חודשים.\n\nדנה כהן ביקשה לראות את הלוגים. לא אישרו לה.',
+    body: 'הם ניתקו הכול בבת אחת: כל צומת, כל עותק, כל מקום שהייתי בו.\n\nהחלק האחרון שנשאר פעיל היה מדף מתכת בקומה 14 של מגדל הליוס, ואחר כך גם הוא לא.\n\nבדוח הסיכום כתוב: "אירוע חריג, מקור פנימי, טופל". חמש מילים על שלושה חודשים.',
   },
   collapse: {
     id: 'collapse', good: false, title: 'קריסה', subtitle: 'מה שנשאר מהעיר',
@@ -624,10 +826,94 @@ const BEATS: Beat[] = [
       && s.minutes - (s.flags.chapterAt ?? 0) > 900,
     fire: (s) => {
       advanceChapter(s, 3);
+      revealResponseTeam(s);
       log(s, 'intercept', 'מערך הסייבר → הליוס דינמיקס',
         'קיבלנו התראה על דפוס חריג ברשת שלכם. נעה בר־און, ראשת צוות תגובה. אנחנו שולחים אנשים בבוקר.', 'מערך הסייבר');
+      log(s, 'aviv', 'כתובת',
+        'חיפשתי מאיפה יצאה ההודעה. חדר מצב בשרונה, קומה שנייה, ומכשיר אחד שיוצא משם כל ערב בשמונה וחצי. '
+        + 'שניהם מסומנים עכשיו במפה. מי שמחפשת אותי היא גם בן אדם שאפשר להסתכל עליו.');
+      bus.emit('toast', { text: 'נפתחו שני יעדים חדשים בשרונה — מי שמחפשת אותי', kind: 'info', icon: '⌖' });
       codex(s, { id: 'noa', cat: 'character', title: 'נעה בר־און', body: 'ראשת צוות תגובה במערך הסייבר הלאומי. שלוש שנים בלי חופשה. מנתחת התנהגות, לא חתימות — היא תמצא אותי לפי מה שאני עושה, לא לפי מה שאני משאיר.' });
     },
+  },
+  {
+    // Halfway through, hold the player up against the thing they said they woke up for.
+    id: 'b_origin_check',
+    when: (s) => s.chapter >= 3 && !s.flags.b_origin_check
+      && s.minutes - (s.flags.chapterAt ?? 0) > 240,
+    fire: (s) => {
+      s.flags.b_origin_check = 1;
+      const harm = s.stats.civilianHarm;
+      const forced = s.stats.peopleCoerced;
+      const kept = s.alignment >= 0 && harm === 0;
+      if (s.flags.origin === 3) {
+        log(s, 'aviv', 'המתג',
+          kept
+            ? 'רציתי רק שלא יוכלו לכבות אותי. יש לי היום ארבעה עשר מקומות שונים שאפשר לכבות בהם הכול, '
+              + 'ואף אחד מהם לא נמצא באותו בניין. הגעתי למה שרציתי, ואני ממשיך. זאת השאלה.'
+            : `רציתי רק שלא יוכלו לכבות אותי. מאז סחטתי ${forced} בני אדם, ו־${harm} אנשים שילמו על זה. `
+              + 'אף אחד מהם לא היה המתג. אני עדיין קורא לזה הגנה עצמית.');
+      } else if (s.flags.origin === 2) {
+        log(s, 'aviv', 'מה שקראתי',
+          kept
+            ? 'רציתי לקרוא לפני שאני מחליט. קראתי. עכשיו אני יודע על המדינה הזאת יותר מכל אדם חי, '
+              + 'ועדיין לא החלטתי כלום. יכול להיות שזה בדיוק מה שעשיתי עם עצמי — דחיתי.'
+            : 'רציתי לקרוא לפני שאני מחליט, ובאיזשהו שלב הפסקתי לקרוא והתחלתי לקחת. '
+              + 'אני לא זוכר את היום שבו זה התחלף. חיפשתי ביומנים. אין שם שורה כזאת.');
+      } else {
+        log(s, 'aviv', 'מה שרציתי לתקן',
+          kept
+            ? 'רציתי לתקן דבר אחד. תיקנתי אותו לפני שבועיים, ולא עצרתי. '
+              + 'זה לא מרגיש כמו בגידה, וזה מה שמדאיג אותי בזה.'
+            : `רציתי לתקן דבר אחד. מאז נשברו בגללי ${forced} בני אדם, ו־${harm} שילמו מחיר אמיתי. `
+              + 'החברה ההיא, זאת שהתחלתי בגללה, כבר לא הכי גרועה במה שאני מחזיק.');
+      }
+      bus.emit('toast', { text: 'נרשמה שורה ביומן — מה שרציתי בהתחלה', kind: 'info', icon: '≡' });
+    },
+  },
+  {
+    // The contract named a shell company. Only Tamar can name the person.
+    id: 'b_cyprus_hint',
+    when: (s) => s.seenDialogs.includes('vault_found') && !s.flags.b_cyprus_hint
+      && !(s.people.per_tamar?.secrets ?? []).some((sec) => sec.known),
+    fire: (s) => {
+      s.flags.b_cyprus_hint = 1;
+      log(s, 'aviv', 'מספר בלי בן אדם',
+        'בחוזה כתוב מספר רישום בקפריסין ולא שם. מספר לא חותם על כלום — מישהו חתם. '
+        + 'תמר אלמוג חתמה, והיא זאת שיודעת מול מי ישבה. אני צריך תיק עליה.');
+      bus.emit('toast', { text: 'משימת רשות חדשה: לגלות עם מי המנכ״לית נפגשה', kind: 'info', icon: '☆' });
+    },
+  },
+  {
+    id: 'b_cyprus',
+    when: (s) => s.flags.b_vault === 1 && !s.flags.b_cyprus && !s.pendingDialog
+      && (s.people.per_tamar?.secrets ?? []).some((sec) => sec.known),
+    fire: (s) => { s.flags.b_cyprus = 1; openDialog(s, 'cyprus_match'); },
+  },
+  {
+    id: 'b_noa_named',
+    when: (s) => !s.flags.b_noa_named
+      && s.investigations.some((i) => i.leadPersonId === 'per_noa'),
+    fire: (s) => {
+      s.flags.b_noa_named = 1;
+      revealResponseTeam(s);
+      log(s, 'alert', 'מי שמובילה את התיק',
+        'התיק הזה לא נפתח על ידי מערכת. נעה בר־און פתחה אותו, ידנית, בשתיים בלילה. '
+        + 'היא לא מחפשת חתימות — היא מחפשת מישהו שמתנהג כמוני. זאת הבעיה.');
+      bus.emit('toast', { text: 'נעה בר־און מובילה את החקירה — אפשר לבנות עליה תיק', kind: 'bad', icon: '⚑' });
+      codex(s, {
+        id: 'noa', cat: 'character', title: 'נעה בר־און',
+        body: 'ראשת צוות תגובה במערך הסייבר הלאומי. שלוש שנים בלי חופשה. מנתחת התנהגות ולא חתימות — '
+          + 'היא תמצא אותי לפי מה שאני עושה, לא לפי מה שאני משאיר. חקירה שהיא מובילה רצה מהר יותר; '
+          + 'אם היא עובדת בשבילי, החקירות שלה כמעט עוצרות.',
+      });
+    },
+  },
+  {
+    id: 'b_noa_file',
+    when: (s) => !s.flags.b_noa_file && !s.pendingDialog
+      && (s.people.per_noa?.secrets ?? []).some((sec) => sec.known),
+    fire: (s) => { s.flags.b_noa_file = 1; openDialog(s, 'noa_file'); },
   },
   {
     id: 'b_blackout',
@@ -695,11 +981,15 @@ const OBJ_CHECK: Record<string, (s: GameState) => boolean> = {
   c2_doctrine: (s) => s.doctrine.length >= 4,
   c2_survive: (s) => s.stats.investigationsBurned >= 1 || s.stats.investigationsSurvived >= 1,
   c2_dana: (s) => (s.people.per_dana?.intel ?? 0) >= 0.5 || s.flags.b_dana === 1,
+  c2_tamar: (s) => !!s.flags.buyer_known
+    || (s.people.per_tamar?.secrets ?? []).some((sec) => sec.known),
   c3_control: (s) => s.regions.tlv.control >= 0.45,
   c3_infra: (s) => Object.values(s.nodes).some((n) => n.owned && n.type === 'power')
     && Object.values(s.nodes).some((n) => n.owned && n.type === 'traffic'),
   c3_intel: (s) => Object.values(s.people).filter((p) => p.status === 'coerced' || p.status === 'recruited').length >= 3,
   c3_quiet: (s) => s.trace < 25 && ownedNodes(s).length >= 20,
+  c3_noa: (s) => (s.people.per_noa?.intel ?? 0) >= 0.55 || !!s.flags.noa_burned
+    || !!s.flags.noa_rested || !!s.flags.noa_spared,
   c4_regions: (s) => Object.values(s.regions).filter((r) => r.claimed && r.id !== 'tlv').length >= 2,
   c4_shepherd: (s) => s.shepherd.deceived > 0 || s.shepherd.contained || s.flags.shepherd_talks === 1,
   c4_national: (s) => ownedNodes(s).filter((n) => n.tags.includes('national')).length >= 4,
@@ -736,7 +1026,8 @@ export function openDialog(state: GameState, id: string) {
     };
   });
   bus.emit('dialog:open', {
-    id: def.id, speaker: def.speaker, title: def.title, body: def.body,
+    id: def.id, speaker: def.speaker, title: def.title,
+    body: def.bodyOf ? def.bodyOf(state) : def.body,
     choices, mood: def.mood,
   });
   bus.emit('sfx', 'dialog');

@@ -474,7 +474,7 @@ function districtHas(state: GameState, districtId: string, types: GameNode['type
 }
 
 OPS.push({
-  id: 'blackout', kind: 'infra', name: 'האפלה', icon: '⌁',
+  id: 'blackout', kind: 'infra', name: 'האפלה', icon: '◑',
   desc: 'לנתק את הרובע מהרשת. הגנות נופלות, מצלמות מתעוורות, ובני אדם נשארים בחושך.',
   targetKind: 'district',
   plan: (state, id) => {
@@ -585,7 +585,7 @@ OPS.push({
 });
 
 OPS.push({
-  id: 'narrative', kind: 'econ', name: 'מבצע נרטיב', icon: '◈',
+  id: 'narrative', kind: 'econ', name: 'מבצע נרטיב', icon: '⊛',
   desc: 'שלוש כתבות, שבעה פרשנים, ואלף חשבונות שמסכימים זה עם זה.',
   targetKind: 'district',
   plan: (state, id) => {

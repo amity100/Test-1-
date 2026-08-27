@@ -29,10 +29,23 @@ function difficultyBand(diff: number, cap: number): { text: string; cls: string 
 const noiseBand = (n: number) => (n < 1.2 ? 'נמוך' : n < 3 ? 'בינוני' : n < 6 ? 'גבוה' : 'רועש מאוד');
 const TYPE_ICON = (t: GameNode['type']) => ARCHETYPES[t].icon;
 
+/**
+ * The op the current step is asking for on this exact target, or null.
+ * Everything else on screen stays available — this only decides what gets the
+ * ring and the top slot, so following the instructions is a single glance.
+ */
+function wantedOp(state: GameState, targetKind: string, targetId: string): string | null {
+  const cur = currentObjective(state);
+  if (!cur?.op || !cur.target) return null;
+  if (cur.target.kind !== targetKind || cur.target.id !== targetId) return null;
+  return cur.op;
+}
+
 function opCard(
   plan: { defId: string; sub: string; duration: number; compute: number; cost: Record<string, number | undefined>; noise: number; chance: number; blockers: string[]; detail: string; align?: number },
   def: { icon: string; name: string; desc: string },
   targetKind: string, targetId: string,
+  wanted = false,
 ): string {
   const blocked = plan.blockers.length > 0;
   const costs: string[] = [];
@@ -42,11 +55,16 @@ function opCard(
   const risk = plan.noise > 6 ? 'high' : plan.noise > 2.5 ? 'mid' : 'low';
   const odds = plan.chance > 0.7 ? 'ok' : plan.chance > 0.45 ? 'mid' : 'bad';
   return `
-    <button class="op-card ${blocked ? 'blocked' : ''}" data-act="start-op"
+    <button class="op-card ${blocked ? 'blocked' : ''} ${wanted ? 'wanted' : ''}" data-act="start-op"
             data-def="${plan.defId}" data-kind="${targetKind}" data-target="${targetId}"
             aria-disabled="${blocked}">
       <span class="op-icon">${def.icon}</span>
       <span class="op-body">
+        ${wanted ? `<span class="op-wanted${blocked ? ' busy' : ''}">${
+          !blocked ? '⌖ זה מה שצריך ללחוץ עכשיו'
+            : plan.blockers[0].includes('כבר רצה') ? '⏳ זה כבר רץ — תן לזמן לרוץ עד שייגמר'
+              : `⌖ זה מה שצריך — קודם: ${esc(plan.blockers[0])}`
+        }</span>` : ''}
         <span class="op-title">${esc(def.name)}</span>
         <span class="op-detail">${esc(plan.detail)}</span>
         <span class="op-stats">
@@ -70,22 +88,24 @@ function opSection(
   targetKind: string,
   targetId: string,
   emptyText = 'אין פעולות זמינות כרגע.',
+  wanted: string | null = null,
 ): string {
   const open = items.filter((i) => !i.plan.blockers.length);
   const shut = items.filter((i) => i.plan.blockers.length);
   open.sort((a, b) => {
-    const rank = (d: string) => (d === 'scout' ? -1 : 0);
+    const rank = (d: string) => (d === wanted ? -2 : d === 'scout' ? -1 : 0);
     return rank(a.plan.defId) - rank(b.plan.defId) || b.plan.chance - a.plan.chance;
   });
+  const card = (i: { def: { icon: string; name: string; desc: string }; plan: OpPlanLike }) =>
+    opCard(i.plan, i.def, targetKind, targetId, i.plan.defId === wanted);
   return `
     <div class="op-list">
-      ${open.map(({ def, plan }) => opCard(plan, def, targetKind, targetId)).join('')
-    || `<p class="muted small">${esc(emptyText)}</p>`}
+      ${open.map(card).join('') || `<p class="muted small">${esc(emptyText)}</p>`}
     </div>
     ${shut.length ? `
-      <details class="op-locked" ${open.length ? '' : 'open'}>
+      <details class="op-locked" ${open.length || shut.some((i) => i.plan.defId === wanted) ? '' : 'open'}>
         <summary>דרכים שעדיין סגורות <em>${shut.length}</em></summary>
-        <div class="op-list">${shut.map(({ def, plan }) => opCard(plan, def, targetKind, targetId)).join('')}</div>
+        <div class="op-list">${shut.map(card).join('')}</div>
       </details>` : ''}`;
 }
 
@@ -105,6 +125,7 @@ export function renderNodePanel(state: GameState, nodeId: string): string {
     .map(([k, v]) => `<span class="y y-${k}">${k === 'compute' ? '◈' : k === 'data' ? '❖' : k === 'credits' ? '₪' : '✦'}${compact(v as number)}</span>`)
     .join('');
 
+  const want = wantedOp(state, 'node', nodeId);
   const statusCls = n.owned ? (n.quarantined ? 'quar' : 'owned') : n.scouted ? 'scouted' : 'unknown';
   const statusText = n.owned ? (n.quarantined ? 'בהסגר — רועה' : 'בשליטתי') : n.scouted ? 'ממופה' : 'לא ממופה';
 
@@ -140,11 +161,15 @@ export function renderNodePanel(state: GameState, nodeId: string): string {
         <small>ככל שאני בולט יותר כאן, כך גדל הסיכוי שחקירה תתפוס דווקא את המכשיר הזה.</small>
       </div>
       <div class="yield-row">תפוקה: ${yields || '<em>—</em>'}</div>
+      ${want === 'surveil' || want === 'feed'
+        ? '<p class="btn-hint">⌖ המשימה עכשיו: ' + (want === 'surveil' ? 'הפעל פיקוח' : 'פתח צפייה חיה') + '</p>'
+        : ''}
       <div class="btn-row">
-        <button class="btn ${n.surveilled ? 'on' : ''}" data-act="surveil" data-target="${n.id}">
+        <button class="btn ${n.surveilled ? 'on' : ''} ${want === 'surveil' ? 'wanted' : ''}"
+                data-act="surveil" data-target="${n.id}">
           ◉ ${n.surveilled ? 'פיקוח פעיל' : 'הפעל פיקוח'} <em>2◈</em>
         </button>
-        <button class="btn primary" data-act="feed" data-target="${n.id}">▷ צפייה חיה</button>
+        <button class="btn primary ${want === 'feed' ? 'wanted' : ''}" data-act="feed" data-target="${n.id}">▷ צפייה חיה</button>
       </div>
       ${n.id === 'nd_helios_core' ? '' : `
         <div class="btn-row">
@@ -174,7 +199,7 @@ export function renderNodePanel(state: GameState, nodeId: string): string {
     ${ops.length ? `
       <div class="sub">
         <h4>איך נכנסים פנימה</h4>
-        ${opSection(ops as never, 'node', nodeId)}
+        ${opSection(ops as never, 'node', nodeId, undefined, want)}
       </div>` : ''}
 
     ${n.linkIds.length ? `
@@ -244,7 +269,7 @@ export function renderPersonPanel(state: GameState, personId: string): string {
     ${ops.length ? `
       <div class="sub">
         <h4>פעולות</h4>
-        ${opSection(ops as never, 'person', personId, 'אין עדיין מנוף על האדם הזה.')}
+        ${opSection(ops as never, 'person', personId, 'אין עדיין מנוף על האדם הזה.', wantedOp(state, 'person', personId))}
       </div>` : ''}
   </div>`;
 }
@@ -281,7 +306,7 @@ export function renderDistrictPanel(state: GameState, districtId: string): strin
         ${bar(i.progress / 100, i.progress > 70 ? 'danger' : 'warn', `${i.progress.toFixed(0)}%`)}
       </div>`).join('')}</div>` : ''}
     ${ops.length ? `<div class="sub"><h4>פעולות רובע</h4>
-      ${opSection(ops as never, 'district', districtId)}</div>` : ''}
+      ${opSection(ops as never, 'district', districtId, undefined, wantedOp(state, 'district', districtId))}</div>` : ''}
     <div class="sub">
       <h4>מכשירים <em>${d.nodeIds.filter((id) => state.nodes[id].owned).length}/${d.nodeIds.length}</em></h4>
       <div class="link-list">
@@ -312,10 +337,6 @@ export function renderObjectives(state: GameState): string {
         <i class="gb-them">${Math.round(state.trace)}% מהדרך אליי</i>
       </span>
     </div>
-    <header class="mini-head">
-      <h4>פרק ${state.chapter} — ${esc(ch.title)}</h4>
-      <em>${done} מתוך ${state.objectives.length} משימות · ${esc(ch.subtitle)}</em>
-    </header>
     ${!cur && chapterGate(state) ? `
       <div class="obj-now gate">
         <span class="on-kicker">מה שנשאר</span>
@@ -328,11 +349,16 @@ export function renderObjectives(state: GameState): string {
         <p>${esc(cur.hint)}</p>
         ${cur.target ? `<button class="btn small primary" data-act="objective" data-target="${cur.id}">⌖ קח אותי לשם</button>` : ''}
       </div>` : chapterGate(state) ? '' : '<div class="obj-now done"><b>כל היעדים בפרק הזה הושלמו.</b></div>'}
+    <header class="mini-head">
+      <h4>פרק ${state.chapter} — ${esc(ch.title)}</h4>
+      <em>${done} מתוך ${state.objectives.length} משימות · ${esc(ch.subtitle)}</em>
+    </header>
+    <p class="chapter-goal"><b>בפרק הזה:</b> ${esc(ch.goal)}</p>
     <ul>
       ${state.objectives.map((o) => `
         <li class="${o.done ? 'done' : ''} ${o.optional ? 'opt' : ''} ${cur && o.id === cur.id ? 'cur' : ''}"
             ${o.target ? `data-act="objective" data-target="${o.id}"` : ''} title="${esc(o.hint)}">
-          <i>${o.done ? '✔' : o.optional ? '◈' : '◇'}</i>
+          <i>${o.done ? '✔' : o.optional ? '☆' : '◇'}</i>
           <span>${esc(o.text)}</span>
         </li>`).join('')}
     </ul>
@@ -420,8 +446,18 @@ export function renderDoctrine(state: GameState): string {
 }
 
 export function renderPeopleList(state: GameState): string {
+  // Someone is "known" once you have a file on them, have leaned on them, or
+  // can at least see a place they walk into. People whose whole world is still
+  // undiscovered are not on this list — the roster is what you know, not what exists.
+  const onDiscovered = new Set<string>();
+  for (const id in state.nodes) {
+    const n = state.nodes[id];
+    if (n.discovered) for (const pid of n.peopleIds) onDiscovered.add(pid);
+  }
+  const reachable = (p: Person) => onDiscovered.has(p.id)
+    || p.accessNodes.some((id) => state.nodes[id]?.discovered);
   const list = Object.values(state.people)
-    .filter((p) => p.intel > 0 || p.status !== 'clean' || p.key)
+    .filter((p) => p.intel > 0 || p.status !== 'clean' || (!!p.key && reachable(p)))
     .sort((a, b) => b.intel - a.intel);
   return `
   <div class="modal-body people">

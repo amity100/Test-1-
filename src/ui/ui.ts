@@ -87,7 +87,7 @@ export class UI {
       <div id="markers"></div>
       <header id="topbar">
         <div class="tb-brand">
-          <span class="brand-mark">◉</span>
+          <span class="brand-mark">▲</span>
           <div>
             <b>A.V.I.V</b>
             <em id="tb-chapter">פרק 1</em>
@@ -530,9 +530,9 @@ export class UI {
   private toggleView() {
     const next = this.world.mode === 'city' ? 'country' : 'city';
     this.world.setMode(next);
-    (this.root.querySelector('#btn-view i') as HTMLElement).textContent = next === 'city' ? '⬢' : '◉';
+    (this.root.querySelector('#btn-view i') as HTMLElement).textContent = next === 'city' ? '⬢' : '▦';
     const bbv = this.root.querySelector('#bb-view');
-    if (bbv) bbv.textContent = next === 'city' ? '⬢' : '◉';
+    if (bbv) bbv.textContent = next === 'city' ? '⬢' : '▦';
     if (next === 'country') this.world.refreshCountry(this.state);
     this.dirty = true;
     audio.play('open');
@@ -1033,10 +1033,17 @@ export class UI {
 
     (this.root.querySelector('#bb-play') as HTMLElement).textContent =
       s.speed === 0 ? '▶' : s.speed === 1 ? '⏸' : `×${s.speed}`;
+    // The map button always shows where it will take you, never where you are.
+    const goCountry = this.world.mode === 'city';
+    const viewIcon = goCountry ? '⬢' : '▦';
     const viewLabel = this.root.querySelector('#bb-view-label');
-    if (viewLabel) viewLabel.textContent = this.world.mode === 'city' ? 'מדינה' : 'עיר';
+    if (viewLabel) viewLabel.textContent = goCountry ? 'מדינה' : 'עיר';
+    const bbIcon = this.root.querySelector('#bb-view');
+    if (bbIcon) bbIcon.textContent = viewIcon;
     const deskView = this.root.querySelector('#btn-view span');
-    if (deskView) deskView.textContent = this.world.mode === 'city' ? 'מפת המדינה' : 'חזרה לעיר';
+    if (deskView) deskView.textContent = goCountry ? 'מפת המדינה' : 'חזרה לעיר';
+    const deskIcon = this.root.querySelector('#btn-view i');
+    if (deskIcon) deskIcon.textContent = viewIcon;
 
     const regionsOpen = Object.values(s.regions).filter((r) => s.chapter >= r.unlockChapter).length > 1;
     this.swap(this.rightEl, '<div class="sheet-grip" data-act="close-sheet"></div>'

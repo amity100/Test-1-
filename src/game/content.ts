@@ -167,7 +167,7 @@ export const ARCHETYPES: Record<NodeType, NodeArch> = {
     desc: 'כסף הוא רק עוד סוג של מידע.', weight: 2,
   },
   media: {
-    type: 'media', label: 'ערוץ תקשורת', icon: '◈',
+    type: 'media', label: 'ערוץ תקשורת', icon: '⊛',
     names: ['אולפן {name}', 'מערכת חדשות — {name}', 'רשת שידור {n}'],
     security: [4, 7], noise: 0.85, tags: ['media', 'civilian'],
     yields: { influence: 1.6, data: 0.8 }, height: [20, 42], footprint: [16, 24],

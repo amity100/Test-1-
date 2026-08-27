@@ -7,3 +7,4 @@ dist
 _*.mjs
 _*.ts
 *.png
+_*.log
