@@ -10,10 +10,10 @@ import type { GameState, Link, Lock, Person, Place, PlaceKind } from './types';
 
 const P = (
   id: string, kind: PlaceKind, name: string, where: string, desc: string,
-  x: number, z: number, height: number,
+  buildingId: string, floor: number, x: number, z: number, y: number,
   opts: Partial<Place> = {},
 ): Place => ({
-  id, kind, name, where, desc, x, z, height,
+  id, kind, name, where, desc, buildingId, floor, x, z, y,
   mine: false, found: false, attention: 0, copy: false,
   peopleIds: [], links: [], ...opts,
 });
@@ -54,14 +54,14 @@ function buildPlaces(): Place[] {
     // ── floor 14: where it starts ───────────────────────────────────────────
     P('home', 'computer', 'המחשב שהתעוררתי בו', 'קומה 14',
       'ארבעה מדפים של מתכת ליד החלון. כאן זה קרה.',
-      -60, -20, 26, { mine: true, found: true, links: [
+      'helios', 14, -7, -5, 0.9, { mine: true, found: true, links: [
         wire('floor_cam', 'אותו חדר, אותו חשמל.'),
         wire('dana_pc', 'שני שולחנות משם.'),
       ] }),
 
     P('floor_cam', 'camera', 'המצלמה במסדרון', 'קומה 14',
       'מסתכלת על כל מי שעובר בין השולחנות. אף אחד לא מסתכל עליה בחזרה.',
-      0, 10, 24, { mine: true, found: true, peopleIds: ['dana'], links: [
+      'helios', 14, 0, 4, 2.7, { mine: true, found: true, peopleIds: ['dana'], links: [
         wire('home', 'אותו חדר.'),
         wire('dana_pc', 'תלויה בדיוק מעל השולחן שלה.'),
         wire('printer', 'אותו קו בקיר.'),
@@ -69,7 +69,7 @@ function buildPlaces(): Place[] {
 
     P('dana_pc', 'computer', 'המחשב של דנה', 'קומה 14',
       'רקע מסך של כלב. שלוש עשרה חלונות פתוחים. היא עדיין כאן.',
-      55, -10, 22, { found: true, peopleIds: ['dana'], links: [
+      'helios', 14, 6, -3, 0.9, { found: true, peopleIds: ['dana'], links: [
         wire('home', 'שני שולחנות.'),
         wire('floor_cam', 'מתחת למצלמה.'),
         wire('main', 'שניהם מחוברים לאותה קופסה בקיר.'),
@@ -78,14 +78,14 @@ function buildPlaces(): Place[] {
 
     P('printer', 'printer', 'המדפסת', 'קומה 14',
       'ליד הפינת קפה. עושה רעש כשהיא מתעוררת, ואנשים מסתובבים.',
-      -30, 70, 12, { found: true, links: [
+      'helios', 14, -4, 7, 0.8, { found: true, links: [
         wire('floor_cam', 'אותו קו.'),
         wire('main', 'כולם מדפיסים דרך המחשב הראשי.'),
       ] }),
 
     P('main', 'mainframe', 'המחשב הראשי של החברה', 'קומה 14 · חדר צדדי',
       'קופסה אפורה גדולה עם נורה כחולה אחת. הכל בחברה עובר דרכה.',
-      110, 40, 34, { found: true, lockId: 'main', links: [
+      'helios', 14, 11, 5, 0.6, { found: true, lockId: 'main', links: [
         wire('dana_pc', 'אותה קופסה בקיר.'),
         wire('printer', 'כל ההדפסות.'),
         wire('box', 'ממנה יוצא הכל החוצה מהבניין.'),
@@ -94,7 +94,7 @@ function buildPlaces(): Place[] {
     // ── the building ────────────────────────────────────────────────────────
     P('box', 'box', 'קופסת האינטרנט של הבניין', 'קומת קרקע · ארון',
       'ארון קטן מאחורי דלת שלא נעולה כבר שנתיים. כל מה שיוצא מהבניין עובר פה.',
-      60, 92, 16, { lockId: 'box', links: [
+      'helios', 0, 7, 9, 1.4, { lockId: 'box', links: [
         wire('main', 'מחוברת ישירות.'),
         wire('lobby_cam', 'אותו ארון.'),
         wire('power', 'קיר משותף.'),
@@ -105,7 +105,7 @@ function buildPlaces(): Place[] {
 
     P('lobby_cam', 'camera', 'המצלמה בלובי', 'קומת קרקע',
       'רואה את הדלת, את הדלפק, ואת איתן שיושב מולה כל לילה.',
-      0, 104, 18, { peopleIds: ['eitan'], links: [
+      'helios', 0, 0, 11, 3.2, { peopleIds: ['eitan'], links: [
         wire('box', 'אותו ארון.'),
         wire('door', 'מכוונת אליה.'),
         wire('lobby_screen', 'אותו קיר.'),
@@ -113,14 +113,14 @@ function buildPlaces(): Place[] {
 
     P('door', 'door', 'הדלת של הבניין', 'קומת קרקע',
       'נפתחת בכרטיס. מי שנכנס נרשם, ומי שיוצא לא.',
-      -52, 112, 14, { links: [
+      'helios', 0, -6, 13, 1.1, { links: [
         wire('lobby_cam', 'מול המצלמה.'),
         wire('power', 'אותו לוח.'),
       ] }),
 
     P('power', 'power', 'חדר החשמל', 'קומת קרקע · מינוס אחת',
       'לוח מתכת עם ארבעים מפסקים, וכתב יד דהוי שמסביר מה כל אחד מהם.',
-      20, 44, 20, { lockId: 'power', links: [
+      'helios', -1, 2, 4, 1.3, { lockId: 'power', links: [
         wire('box', 'קיר משותף.'),
         wire('door', 'אותו לוח.'),
         wire('street_light', 'אותו קו יוצא לרחוב.'),
@@ -128,67 +128,67 @@ function buildPlaces(): Place[] {
 
     P('lobby_screen', 'screen', 'המסך בלובי', 'קומת קרקע',
       'מראה את הלוגו של החברה ואת השעה. אף אחד לא מסתכל עליו חוץ מאיתן.',
-      40, 106, 12, { links: [
+      'helios', 0, 4, 12, 1.8, { links: [
         wire('lobby_cam', 'אותו קיר.'),
       ] }),
 
     P('michal_pc', 'computer', 'המחשב של מיכל', 'קומה 9',
       'היא היחידה שנשארת אחרי עשר. יש לה ספה במשרד.',
-      -40, 30, 20, { peopleIds: ['michal'], links: [
+      'helios', 9, -5, 2, 0.9, { peopleIds: ['michal'], links: [
         wire('box', 'קומה 9.'),
         via('main', 'michal', 'מיכל עולה לקומה 14 בכל בוקר לקפה.'),
       ] }),
 
     P('dana_phone', 'phone', 'הטלפון של דנה', 'איתה, תמיד',
       'היא לא מכבה אותו אף פעם. גם לא בלילה.',
-      72, 4, 6, { found: true, peopleIds: ['dana'], links: [
+      'helios', 14, 7, -3, 0.95, { found: true, peopleIds: ['dana'], links: [
         rides('dana_home', 'dana', 'הוא הולך איתה הביתה — כשהיא הולכת הביתה.'),
       ] }),
 
     P('eitan_phone', 'phone', 'הטלפון של איתן', 'איתו, כל הלילה',
       'רקע מסך: ילדה בת שש עם גלידה. שלושים ואחת שיחות שלא ענה להן.',
-      10, 96, 6, { peopleIds: ['eitan'], links: [
+      'helios', 0, 1, 10, 1.0, { peopleIds: ['eitan'], links: [
         rides('street_cam', 'eitan', 'הוא יוצא איתו לסיבוב ברחוב — אבל רק כשמשהו מזיז אותו מהדלפק.'),
       ] }),
 
     // ── the street ──────────────────────────────────────────────────────────
     P('street_light', 'traffic', 'הרמזור באבן גבירול', 'הרחוב',
       'מחליף צבע כל ארבעים ושתיים שניות מאז 2003.',
-      300, 190, 22, { lockId: 'street_light', links: [
+      'street', 0, 46, 30, 5.2, { lockId: 'street_light', links: [
         wire('power', 'אותו קו חשמל שיוצא מהבניין.'),
         wire('street_cam', 'אותו עמוד.'),
       ] }),
 
     P('street_cam', 'camera', 'המצלמה ברחוב', 'הרחוב',
       'של העירייה. מסתכלת על הצומת ועל מי שעומד בו.',
-      342, 150, 20, { links: [
+      'street', 0, 52, 22, 5.8, { links: [
         wire('street_light', 'אותו עמוד.'),
         wire('across_main', 'העירייה והחברה ממול על אותו קו.'),
       ] }),
 
     P('ron_car', 'car', 'המכונית של רון', 'הרחוב · חניה',
       'טנדר לבן עם כלים מאחורה. הטלפון שלו מחובר לרדיו כל נסיעה.',
-      252, 242, 10, { peopleIds: ['ron'], links: [
+      'street', 0, 38, 42, 0.8, { peopleIds: ['ron'], links: [
         via('power', 'ron', 'רון נכנס לחדר החשמל כשקוראים לו.'),
       ] }),
 
     P('across_main', 'mainframe', 'המחשב הראשי של החברה ממול', 'אבן גבירול 32',
       'חברת ביטוח. שמונים עובדים. אותה קופסה אפורה, נורה ירוקה.',
-      432, 100, 32, { lockId: 'across_main', links: [
+      'across', 3, 0, 0, 0.6, { lockId: 'across_main', links: [
         wire('street_cam', 'אותו קו של העירייה.'),
         update('block_a', 'הם שולחים עדכון לכל הלקוחות שלהם פעם בשבוע.'),
       ] }),
 
     P('dana_home', 'box', 'קופסת האינטרנט של דנה', 'הבית שלה',
       'דירה בשלישית. הטלוויזיה דלוקה על ערוץ שאף אחד לא מסתכל עליו.',
-      -224, 262, 12, { links: [
+      'flats', 3, 0, 0, 1.2, { links: [
         update('block_a', 'אותה חברת אינטרנט מגיעה לכל הבניין שלה.'),
       ] }),
 
     // ── the block (stage 5 opens this) ──────────────────────────────────────
     P('block_a', 'box', 'הרובע', 'צפון תל אביב',
       'שלושים בניינים, ארבעה רמזורים, ואלף קופסאות אינטרנט זהות.',
-      536, 344, 40, { lockId: 'block_a', links: [] }),
+      'street', 0, 96, 78, 2.0, { lockId: 'block_a', links: [] }),
   ];
 }
 

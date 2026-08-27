@@ -8,3 +8,4 @@ _*.mjs
 _*.ts
 *.png
 _*.log
+_probe*

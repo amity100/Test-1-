@@ -67,10 +67,15 @@ export interface Place {
   lockId?: string;
   peopleIds: string[];
   links: Link[];
-  /** Position in the little 3D world. */
+  /** Which building it sits in. Street furniture uses 'street'. */
+  buildingId: string;
+  /** Which floor. 0 is the lobby, -1 is the basement, and the street is 0. */
+  floor: number;
+  /** Where in the room, in metres from the middle of the building. */
   x: number;
   z: number;
-  height: number;
+  /** How high off the floor it sits: a camera is high, a phone is on a desk. */
+  y: number;
 }
 
 // ── People ──────────────────────────────────────────────────────────────────

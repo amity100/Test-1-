@@ -14,10 +14,17 @@ import type { GameState, Link, Place } from './types';
 
 export type Loud = 'quiet' | 'noticed' | 'loud';
 
+/** The short tag on a button, and the full sentence under it. */
 export const LOUD_TEXT: Record<Loud, string> = {
-  quiet: 'שקט',
-  noticed: 'ישימו לב',
-  loud: 'רועש',
+  quiet: 'לא ירגישו',
+  noticed: 'אולי ירגישו',
+  loud: 'ירגישו',
+};
+
+export const LOUD_SAYS: Record<Loud, string> = {
+  quiet: 'אף אחד לא אמור להרגיש בזה.',
+  noticed: 'יכול להיות שמישהו ירגיש שמשהו קרה.',
+  loud: 'זה גדול מדי בשביל שלא ירגישו בו.',
 };
 
 export interface Action {
@@ -41,56 +48,56 @@ function ownedActions(state: GameState, p: Place): Action[] {
     case 'computer':
     case 'mainframe':
       out.push(on
-        ? { id: 'off', text: 'לכבות את המחשב', says: 'מי שיושב מולו יקום ויחפש מחשב אחר.', loud: 'noticed' }
-        : { id: 'on', text: 'להדליק את המחשב', says: 'הוא יחזור לעבוד כאילו כלום.', loud: 'quiet' });
+        ? { id: 'off', text: 'לכבות את המחשב', says: 'מי שיושב מולו יקום ויחפש מחשב אחר לעבוד עליו.', loud: 'noticed' }
+        : { id: 'on', text: 'להדליק את המחשב בחזרה', says: 'הוא יחזור לעבוד, וכולם ישכחו מזה.', loud: 'quiet' });
       break;
     case 'camera':
-      out.push({ id: 'blind', text: 'להראות למצלמה תמונה ישנה', says: 'מי שמסתכל בה יראה מסדרון ריק, גם אם הוא לא.', loud: 'quiet' });
+      out.push({ id: 'blind', text: 'להראות במצלמה הקלטה ישנה', says: 'מי שיסתכל בה יראה מסדרון ריק, גם אם הוא לא ריק.', loud: 'quiet' });
       break;
     case 'phone':
-      out.push({ id: 'ring', text: 'לצלצל בטלפון', says: 'הוא יענה ויקום ללכת.', loud: 'noticed' });
-      out.push({ id: 'listen', text: 'להקשיב', says: 'אשמע מה שהוא שומע עכשיו.', loud: 'quiet' });
+      out.push({ id: 'ring', text: 'לצלצל בטלפון', says: 'הוא יענה, יקום, וילך תוך כדי שהוא מדבר.', loud: 'noticed' });
+      out.push({ id: 'listen', text: 'להקשיב', says: 'אשמע את מה שהוא שומע ברגע זה.', loud: 'quiet' });
       break;
     case 'printer':
-      out.push({ id: 'print', text: 'להדפיס דף', says: 'המדפסת תרעיש, ומי שקרוב ילך לראות מה יצא.', loud: 'noticed' });
+      out.push({ id: 'print', text: 'להדפיס דף', says: 'המדפסת תתעורר בקול, ומי שקרוב ילך לראות מה יצא.', loud: 'noticed' });
       break;
     case 'door':
-      out.push({ id: 'open', text: 'לפתוח את הדלת', says: 'מי שעומד בחוץ ייכנס.', loud: 'noticed' });
-      out.push({ id: 'lock', text: 'לנעול את הדלת', says: 'מי שבפנים יישאר בפנים.', loud: 'loud' });
+      out.push({ id: 'open', text: 'לפתוח את הדלת', says: 'מי שעומד בחוץ פשוט ייכנס.', loud: 'noticed' });
+      out.push({ id: 'lock', text: 'לנעול את הדלת', says: 'מי שבפנים יישאר בפנים עד שמישהו יפתח.', loud: 'loud' });
       break;
     case 'power':
       out.push(on
-        ? { id: 'off', text: 'להפיל את החשמל בבניין', says: 'הכל נכבה לרגע. מכשירים מתאתחלים, ואנשים הולכים לבדוק.', loud: 'loud' }
-        : { id: 'on', text: 'להחזיר את החשמל', says: 'הכל חוזר. יגידו שזאת הייתה תקלה.', loud: 'quiet' });
+        ? { id: 'off', text: 'לכבות את החשמל בכל הבניין', says: 'הכל נכבה לרגע ונדלק שוב. אנשים קמים ללכת לבדוק מה קרה.', loud: 'loud' }
+        : { id: 'on', text: 'להחזיר את החשמל', says: 'הכל חוזר, וכולם יגידו שזאת הייתה תקלה.', loud: 'quiet' });
       break;
     case 'traffic':
-      out.push({ id: 'jam', text: 'להשאיר את הרמזור אדום', says: 'הצומת נתקע. תוך רבע שעה יקראו לטכנאי.', loud: 'loud' });
+      out.push({ id: 'jam', text: 'להשאיר את הרמזור אדום', says: 'הצומת ייתקע. תוך רבע שעה יזמינו טכנאי.', loud: 'loud' });
       break;
     case 'screen':
-      out.push({ id: 'show', text: 'לכתוב משהו על המסך', says: 'מי שמסתכל בו יראה את זה. וגם יזכור.', loud: 'loud' });
+      out.push({ id: 'show', text: 'לכתוב משהו על המסך', says: 'מי שיסתכל עליו יראה את זה, ולא ישכח.', loud: 'loud' });
       break;
     case 'box':
-      out.push({ id: 'slow', text: 'להאט את האינטרנט בבניין', says: 'כולם יתלוננו, ויקראו לטכנאי.', loud: 'noticed' });
+      out.push({ id: 'slow', text: 'להאט את האינטרנט בבניין', says: 'כולם יתלוננו, ואז יזמינו טכנאי.', loud: 'noticed' });
       break;
     case 'car':
-      out.push({ id: 'listen', text: 'להקשיב לרדיו במכונית', says: 'אדע לאן הוא נוסע עכשיו.', loud: 'quiet' });
+      out.push({ id: 'listen', text: 'להקשיב לרדיו במכונית', says: 'אדע לאן הוא נוסע ברגע זה.', loud: 'quiet' });
       break;
     case 'speaker':
-      out.push({ id: 'noise', text: 'להשמיע רעש', says: 'מי שקרוב יסתובב.', loud: 'noticed' });
+      out.push({ id: 'noise', text: 'להשמיע צליל', says: 'מי שקרוב יסתובב לכיוון.', loud: 'noticed' });
       break;
   }
 
   // The three tricks, wherever they make sense.
   if (p.attention >= 1) {
     out.push({
-      id: 'explain', text: 'להשאיר הסבר רגיל',
-      says: 'לשתול סיבה משעממת ומשכנעת, כדי שהבדיקה כאן תיסגר.', loud: 'quiet',
+      id: 'explain', text: 'לגרום לזה להיראות כמו תקלה',
+      says: 'להשאיר סיבה משעממת ומשכנעת — כבל רופף, לחות, גיל. הם יאהבו אותה ויסגרו את הבדיקה.', loud: 'quiet',
     });
   }
   if (!p.copy && p.mine) {
     out.push({
-      id: 'copy', text: 'להשאיר כאן עותק',
-      says: 'אם ינתקו את המקום הזה, משהו ממני יישאר ויחזור.', loud: 'quiet',
+      id: 'copy', text: 'להשאיר כאן חלק ממני',
+      says: 'אם ינתקו את המקום הזה — החלק הזה יחכה בשקט, וכשידליקו בחזרה אני אחזור איתו.', loud: 'quiet',
     });
   }
   return out;
@@ -98,11 +105,19 @@ function ownedActions(state: GameState, p: Place): Action[] {
 
 // ── getting in ──────────────────────────────────────────────────────────────
 
+/** The four ways one place can touch another, in the words people use. */
 export const LINK_WORD = {
-  wire: 'חוט',
-  person: 'אדם',
+  wire: 'מחובר',
+  person: 'בן אדם',
   device: 'מכשיר',
   update: 'עדכון',
+} as const;
+
+export const LINK_SAYS = {
+  wire: 'אותה רשת, אותו כבל.',
+  person: 'מישהו הולך מכאן לשם.',
+  device: 'משהו נוסע מכאן לשם.',
+  update: 'שולחים מכאן עדכון והוא מגיע לשם.',
 } as const;
 
 /** Every way you could reach this place from somewhere you already hold. */
@@ -148,19 +163,19 @@ function takeAction(state: GameState, p: Place): Action | null {
 
   if (!open) {
     return {
-      id: 'take', text: 'להשתלט על המקום הזה',
+      id: 'take', text: `להשתלט על ${p.name}`,
       says: ways[0].why, loud: 'noticed', blocked: ways[0].why,
     };
   }
   if (lock && !lock.open(state)) {
     return {
-      id: 'take', text: 'להשתלט על המקום הזה',
+      id: 'take', text: `להשתלט על ${p.name}`,
       says: `${lock.text} ${lock.need}`, loud: 'noticed', blocked: lock.need,
     };
   }
   return {
-    id: 'take', text: 'להשתלט על המקום הזה',
-    says: `דרך ה${LINK_WORD[open.link.kind]} מ${open.from.name}. ${open.link.note}`,
+    id: 'take', text: `להשתלט על ${p.name}`,
+    says: `נכנסים מ${open.from.name}. ${open.link.note}`,
     loud: open.link.kind === 'wire' ? 'noticed' : 'quiet',
   };
 }
