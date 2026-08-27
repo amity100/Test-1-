@@ -133,6 +133,13 @@ function buildPlaces(): Place[] {
         wire('lobby_cam', 'אותו קיר.'),
       ] }),
 
+    P('lobby_speaker', 'speaker', 'הרמקול בלובי', 'קומת קרקע',
+      'רמקול אחד מעל הדלפק. פעם בחודש מכריזים בו על תרגיל, ואף אחד לא מקשיב.',
+      'helios', 0, -2, 12, 2.4, { links: [
+        wire('lobby_screen', 'אותו קו של הלובי.'),
+        wire('power', 'אותו לוח.'),
+      ] }),
+
     P('michal_pc', 'computer', 'המחשב של מיכל', 'קומה 9',
       'היא היחידה שנשארת אחרי עשר. יש לה ספה במשרד.',
       'helios', 9, -5, 2, 0.9, { peopleIds: ['michal'], links: [

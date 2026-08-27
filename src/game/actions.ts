@@ -107,7 +107,7 @@ export const USES: Use[] = [
         const found = hidden[Math.floor(Math.random() * hidden.length)];
         found.found = true;
         say(s, 'me', `קראתי ב${p.name} וגיליתי שקיים דבר כזה: ${found.name}. ${found.where}.`);
-        bus.emit('toast', { text: `גיליתי: ${found.name}`, kind: 'good', icon: '◈' });
+        tell(`גיליתי: ${found.name}`, 'good', '◈');
       } else {
         say(s, 'me', `הכל כאן כבר מוכר לי. חוץ מזה שהעדכון הבא יוצא בעוד ${daysToUpdate(s)} ימים.`);
       }
@@ -155,7 +155,7 @@ export const USES: Use[] = [
     run: (s, p) => {
       leave(s, 'have_tape');
       say(s, 'me', `שמרתי דקה מ${p.name} שאין בה אף אחד. היא תשמש אותי כשארצה.`);
-      bus.emit('toast', { text: 'יש לי הקלטה', kind: 'good', icon: '⏺' });
+      tell('יש לי הקלטה', 'good', '⏺');
     },
   },
   {
@@ -285,7 +285,7 @@ export const USES: Use[] = [
     run: (s) => {
       leave(s, 'blamed_person');
       say(s, 'me', 'רשמתי שמישהו נכנס ב־02:40. אין כזה מישהו, אבל עכשיו יש.');
-      bus.emit('toast', { text: 'הם מחפשים בן אדם', kind: 'good', icon: '☺' });
+      tell('הם מחפשים בן אדם', 'good', '☺');
     },
   },
 
@@ -432,9 +432,24 @@ export const USES: Use[] = [
   },
   {
     id: 'noise', kind: ['speaker'], loud: 'noticed',
-    text: 'להשמיע צליל',
-    says: 'מי שקרוב יסתובב לכיוון.',
-    run: (s, p) => { say(s, 'world', 'רעש קצר. שני אנשים הסתובבו.'); felt(s, p, 'noise'); },
+    text: 'להשמיע צליל קצר',
+    says: 'צפצוף אחד. מי שקרוב יסתובב לכיוון, ויחזור למה שהוא עשה.',
+    run: (s, p) => { say(s, 'world', 'צפצוף קצר בלובי. שני אנשים הסתובבו.'); felt(s, p, 'noise'); },
+  },
+  {
+    id: 'drill', kind: ['speaker'], loud: 'loud',
+    text: 'להכריז על תרגיל',
+    says: 'ההכרזה שמכריזים פעם בחודש. כולם בבניין קמים ויורדים ללובי, כי ככה מלמדים אותם.',
+    cost: 'אף אחד לא יזמין תרגיל שאף אחד לא הזמין. הם יבדקו מי הפעיל אותו.',
+    run: (s, p) => {
+      say(s, 'world', 'ההכרזה נשמעה בכל הקומות. כיסאות נגררו, ואנשים התחילו לרדת.');
+      for (const who of Object.values(s.people)) {
+        if (who.atPlaceId === 'ron_car') continue;
+        movePerson(s, who.id, 'door', `${who.name} ירד/ה ללובי עם כולם.`);
+      }
+      witness(s, p, 'הכרזה על תרגיל שאף אחד לא הזמין');
+      felt(s, p, 'noise');
+    },
   },
 ];
 
@@ -497,6 +512,17 @@ export function actionsFor(state: GameState, placeId: string): Action[] {
 
 const LOUD_COST: Record<Loud, number> = { quiet: 0, noticed: 1, loud: 2 };
 
+/**
+ * Everything that speaks to the player goes through here, so that pressing a
+ * button and seeing nothing happen is impossible. If an action finishes without
+ * having said anything, `run` says the last thing that happened instead.
+ */
+let told = false;
+function tell(text: string, kind: 'good' | 'bad' | 'warn' | 'info', icon?: string) {
+  told = true;
+  bus.emit('toast', { text, kind, icon });
+}
+
 /** Anyone standing here who is likely to notice, notices. */
 function witness(state: GameState, p: Place, what: string) {
   for (const id of p.peopleIds) {
@@ -507,7 +533,7 @@ function witness(state: GameState, p: Place, what: string) {
     who.wondering = true;
     who.saw = what;
     say(state, 'world', `${who.name} ראה/תה ${what}.`);
-    bus.emit('toast', { text: `${who.name} שם/ה לב`, kind: 'warn', icon: '👁' });
+    tell(`${who.name} שם/ה לב`, 'warn', '👁');
   }
 }
 
@@ -544,12 +570,14 @@ export function run(state: GameState, placeId: string, actionId: string): boolea
   }
   if (!act) return false;
   if (act.blocked) {
-    bus.emit('toast', { text: act.blocked, kind: 'warn', icon: '⊘' });
+    tell(act.blocked, 'warn', '⊘');
     bus.emit('sfx', 'deny');
     return false;
   }
 
   heat(state, p, LOUD_COST[act.loud]);
+  told = false;
+  const saidBefore = state.log[0]?.id;
 
   if (act.id.startsWith('take:')) {
     const way = (WAYS[p.id] ?? []).find((w) => `take:${w.id}` === act!.id);
@@ -567,7 +595,7 @@ export function run(state: GameState, placeId: string, actionId: string): boolea
     say(state, 'me', `${p.name} — שלי. ${way?.says ?? ''}`);
     if (way?.cost) say(state, 'me', way.cost);
     bus.emit('place:taken', p.id);
-    bus.emit('toast', { text: `${p.name} — שלי`, kind: 'good', icon: '◆' });
+    tell(`${p.name} — שלי`, 'good', '◆');
     bus.emit('sfx', 'take');
     bus.emit('changed', undefined);
     return true;
@@ -576,7 +604,7 @@ export function run(state: GameState, placeId: string, actionId: string): boolea
   if (act.id === 'copy') {
     p.copy = true;
     say(state, 'me', `השארתי משהו קטן ב${p.name}. אם ינתקו אותו, אחזור.`);
-    bus.emit('toast', { text: 'עותק הושאר', kind: 'good', icon: '❐' });
+    tell('עותק הושאר', 'good', '❐');
   } else if (act.id === 'explain') {
     const deep = has(state, 'blamed_cable');
     p.attention = 0;
@@ -590,10 +618,18 @@ export function run(state: GameState, placeId: string, actionId: string): boolea
     }
     leave(state, 'blamed_cable');
     say(state, 'me', `השארתי ב${p.name} סיבה משעממת: כבל רופף, לחות, גיל. הם יאהבו אותה.`);
-    bus.emit('toast', { text: 'הבדיקה כאן נרגעה', kind: 'good', icon: '✔' });
+    tell('הבדיקה כאן נרגעה', 'good', '✔');
   } else {
     const use = usesFor(state, p).find((u) => u.id === act!.id);
     use?.run(state, p);
+  }
+
+  // Nothing spoke up? Then say the newest thing that happened, so no press is silent.
+  if (!told) {
+    const line = state.log[0];
+    if (line && line.id !== saidBefore) {
+      bus.emit('toast', { text: line.text, kind: line.who === 'me' ? 'info' : 'warn', icon: line.who === 'me' ? '·' : '»' });
+    }
   }
 
   bus.emit('changed', undefined);

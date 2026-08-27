@@ -307,6 +307,21 @@ export const WAYS: Record<string, Way[]> = {
     },
   ],
 
+  lobby_speaker: [
+    {
+      id: 'screen', from: 'lobby_screen',
+      text: 'לעבור מהמסך לרמקול',
+      says: 'המסך והרמקול על אותו קו בלובי.',
+      cost: '', loud: 'quiet', need: '', can: () => true,
+    },
+    {
+      id: 'board', from: 'power',
+      text: 'לבוא מלוח החשמל',
+      says: 'הרמקול מקבל חשמל מאותו לוח.',
+      cost: '', loud: 'noticed', need: '', can: () => true,
+    },
+  ],
+
   michal_pc: [
     {
       id: 'box', from: 'box',
@@ -362,9 +377,11 @@ export const WAYS: Record<string, Way[]> = {
       id: 'pocket', from: 'eitan_phone',
       text: 'לצאת בכיס של איתן',
       says: 'ברגע שהוא עומד ברחוב אני עומד ברחוב, והמצלמה של העירייה בדיוק מעליו.',
-      cost: '', loud: 'quiet',
+      cost: 'אשאר תלוי בטלפון שלו: כל מקום שהוא הולך אליו אני רואה — אבל אם אאבד את הטלפון, אאבד גם את המצלמה.',
+      loud: 'quiet',
       need: 'איתן עדיין יושב בדלפק. צריך משהו שיוציא אותו החוצה.',
       can: (s) => away(s, 'eitan'),
+      after: (s) => leave(s, 'on_phone'),
     },
     {
       id: 'cable', from: 'power',
@@ -561,6 +578,26 @@ export function traceDay(s: GameState): TraceEffect[] {
       who.atPlaceId = to;
       s.places[to]?.peopleIds.push('ron');
       out.push({ text: `רון הגיע לבניין מעצמו, והוא עומד ליד ${s.places[to]?.name}.`, kind: 'good' });
+    }
+  }
+  if (has(s, 'on_phone')) {
+    const phone = s.places.eitan_phone;
+    if (!phone?.mine) {
+      // The ride ended. Whatever I reached by riding it goes with it.
+      drop(s, 'on_phone');
+      const cam = s.places.street_cam;
+      if (cam?.mine && !cam.copy) {
+        cam.mine = false;
+        cam.attention = 0;
+        out.push({ text: 'איתן לקח את הטלפון והלך. המצלמה ברחוב הלכה איתו.', kind: 'bad' });
+      }
+    } else {
+      // Everywhere he walks, I see, and what I see I can go to later.
+      const at = s.places[s.people.eitan?.atPlaceId ?? ''];
+      if (at && !at.found) {
+        at.found = true;
+        out.push({ text: `איתן עבר ליד ${at.name}, ועכשיו אני יודע שהוא קיים.`, kind: 'good' });
+      }
     }
   }
   if (has(s, 'slow_net') && s.day % 2 === 0) {

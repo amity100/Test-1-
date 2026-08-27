@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "node scripts/words.mjs && npm run check && tsc && vite build && node scripts/inline.mjs",
+    "build": "node scripts/words.mjs && npm run check && npm run buttons && tsc && vite build && node scripts/inline.mjs",
     "preview": "vite preview --host 0.0.0.0",
-    "check": "esbuild scripts/check-play.ts --bundle --platform=node --format=esm --outfile=node_modules/.check.mjs --external:three && node node_modules/.check.mjs"
+    "check": "esbuild scripts/check-play.ts --bundle --platform=node --format=esm --outfile=node_modules/.check.mjs --external:three && node node_modules/.check.mjs",
+    "buttons": "esbuild scripts/check-buttons.ts --bundle --platform=node --format=esm --outfile=node_modules/.buttons.mjs --external:three && node node_modules/.buttons.mjs"
   },
   "dependencies": {
     "three": "^0.169.0"

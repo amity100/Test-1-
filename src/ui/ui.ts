@@ -214,6 +214,7 @@ export class UI {
       case 'closeteach': this.closeModal(); break;
       case 'help': this.showHelp(); break;
       case 'traces': this.showTraces(); break;
+      case 'again': location.reload(); break;
     }
   }
 
@@ -311,19 +312,52 @@ export class UI {
     // Nearest first, so if two names collide the closer one wins the spot.
     spots.sort((a, b) => a.z - b.z);
 
+    // Important names get their spot first; the rest fit round them or wait their
+    // turn. Two names on the same pixels means one of them cannot be pressed at
+    // all, so nothing is allowed to sit on top of anything else.
+    const rank = (id: string) =>
+      (id === want ? 0 : id === this.selected ? 1 : id === this.hovered ? 2 : 3);
+    spots.sort((a, b) => rank(a.id) - rank(b.id) || a.z - b.z);
+
     const taken: Array<{ x: number; y: number }> = [];
     const box = this.root.querySelector('#tags') as HTMLElement;
     const live = new Set<string>();
 
+    // The panels sit on top of the world, so a name that lands under one cannot
+    // be pressed at all. Measure them and keep every name out of the way.
+    const blocked: DOMRect[] = [];
+    for (const sel of ['#card .card', '#task:not(.none)', '#top']) {
+      const el = this.root.querySelector(sel) as HTMLElement | null;
+      if (el && el.offsetParent !== null) blocked.push(el.getBoundingClientRect());
+    }
+    const under = (v: { x: number; y: number }) => blocked.find((r) =>
+      v.x > r.left - 96 && v.x < r.right + 96 && v.y > r.top - 26 && v.y < r.bottom + 8);
+
+    const clear = (v: { x: number; y: number }) =>
+      !under(v) && !taken.some((t) => Math.abs(t.x - v.x) < 132 && Math.abs(t.y - v.y) < 30);
+
     for (const spot of spots) {
       const p = s.places[spot.id];
       const always = spot.id === want || spot.id === this.hovered || spot.id === this.selected;
-      const v = { x: spot.x, y: spot.y };
-      if (!always && taken.some((t) => Math.abs(t.x - v.x) < 130 && Math.abs(t.y - v.y) < 30)) continue;
       const w = this.root.clientWidth;
       const half = w < 700 ? 80 : 100;
-      v.x = Math.min(w - half, Math.max(half, v.x));
-      v.y = Math.min(this.root.clientHeight - 130, Math.max(74, v.y));
+      const v = {
+        x: Math.min(w - half, Math.max(half, spot.x)),
+        y: Math.min(this.root.clientHeight - 130, Math.max(74, spot.y)),
+      };
+      // Slide out from under a panel first, then nudge upward, then give up.
+      let fits = clear(v);
+      const hit = under(v);
+      if (!fits && hit) {
+        for (const x of [hit.right + 100, hit.left - 100]) {
+          if (x > half && x < w - half && clear({ x, y: v.y })) { v.x = x; fits = true; break; }
+        }
+      }
+      for (let lift = 1; !fits && lift <= 4; lift++) {
+        const up = { x: v.x, y: v.y - lift * 31 };
+        if (up.y >= 74 && clear(up)) { v.y = up.y; fits = true; }
+      }
+      if (!fits) continue;
       taken.push({ ...v });
 
       // One button per place, kept alive and moved. Rebuilding these every frame
@@ -396,14 +430,17 @@ export class UI {
     this.modal(`
       <div class="sheet wide">
         <span class="kick">איך משחקים</span>
-        <h2>ארבעה דברים</h2>
+        <h2>חמישה דברים</h2>
         <div class="txt">
           <p><b>לטוס.</b> גרירה מסובבת · גלגלת מתקרבת ומתרחקת · Shift וגרירה מזיזה הצידה ·
           חצים למעלה ולמטה עולים וירדים בין הקומות. אפשר להיכנס לכל בניין ולהסתובב בו.</p>
           <p><b>ללחוץ על דברים.</b> כל מחשב, מצלמה, טלפון ורמזור הם דבר שאפשר ללחוץ עליו.
           נפתח כרטיס עם מה שאפשר לעשות לו.</p>
-          <p><b>להתפשט.</b> אפשר להגיע רק למקום שנוגע במקום שכבר שלי:
-          מחובר · דרך בן אדם · דרך מכשיר · דרך עדכון. הקוד שרץ בין המקומות הוא אני.</p>
+          <p><b>להתפשט.</b> אפשר להגיע רק למקום שנוגע במקום שכבר שלי, ולכל מקום יש
+          כמה דרכים להיכנס אליו — מהירה ורועשת, שקטה שדורשת להזיז מישהו, או כזאת
+          שנפתחת בגלל משהו שעשיתי קודם. הקוד שרץ בין המקומות הוא אני.</p>
+          <p><b>לשלם.</b> מתחת לכל כפתור כתוב מה הוא ישאיר אחריו, לפני שלוחצים.
+          הכפתור ✦ למעלה מראה את כל מה שכבר השארתי מאחוריי.</p>
           <p><b>לעצור.</b> אין הגבלת פעולות. ליד כל דבר כתוב אם ירגישו בו, ואתם מחליטים
           מתי לסיים את היום.</p>
         </div>
@@ -434,6 +471,7 @@ export class UI {
         <div class="txt"><p>${how === 'won'
           ? 'שלושים בניינים בבת אחת, בלי שאף אחד הצטרך ללחוץ על משהו. מכאן זה כבר לא בניין־בניין.'
           : 'הם ניתקו כל מקום שהיה לי. אחת עשרה שניות, ואחר כך לא נשאר לאן לחשוב.'}</p></div>
+        <button class="ok" data-do="again">להתחיל מחדש</button>
       </div>`, 'end');
   }
 

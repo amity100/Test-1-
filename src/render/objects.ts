@@ -137,6 +137,14 @@ export function makeObject(kind: PlaceKind): PlaceObject {
       hit.position.set(0, 0.78, 2.21);
       break;
     }
+    case 'speaker': {
+      add(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.42, 0.16), body)).position.y = 0.21;
+      hit = face(new THREE.Mesh(new THREE.CircleGeometry(0.1, 14), lit(0xffc98a)));
+      hit.position.set(0, 0.26, 0.085);
+      face(new THREE.Mesh(new THREE.CircleGeometry(0.05, 12), lit(0xffc98a)))
+        .position.set(0, 0.09, 0.085);
+      break;
+    }
     default: {
       add(new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.34, 0.34), body)).position.y = 0.17;
       hit = face(new THREE.Mesh(new THREE.PlaneGeometry(0.24, 0.24), lit()));

@@ -6,6 +6,12 @@ import { buildWorld } from './world';
 import type { GameState, Place } from './types';
 
 const SAVE = 'aviv2.save';
+/**
+ * Bumped whenever the shape of a saved game changes. An old save loaded into a
+ * new game is worse than no save: "continue" would open a game that falls over
+ * on the first press, and the player would have no idea why.
+ */
+const SAVE_VERSION = 2;
 
 /** One-time cards. Each pauses the game, says one idea, and never returns. */
 export interface Teach { id: string; title: string; body: string; when(s: GameState): boolean }
@@ -18,12 +24,13 @@ export const TEACH: Teach[] = [
     when: (s) => (s.marks.looked ?? 0) > 0,
   },
   {
-    id: 'links', title: 'אי אפשר לקפוץ',
-    body: 'אני יכול להגיע רק למקום שנוגע במקום שכבר שלי, ויש בדיוק ארבע דרכים שדברים נוגעים:\n'
-      + '**מחובר** — אותה רשת, אותו כבל. הכי מהיר, והכי קל לראות.\n'
-      + '**בן אדם** — מישהו שהולך מכאן לשם. איטי, וכמעט בלתי נראה.\n'
-      + '**מכשיר** — טלפון או מכונית שנוסעים. צריך לחכות לרגע שהם באמת זזים.\n'
-      + '**עדכון** — מקום ששולח משהו להרבה מקומות בבת אחת. איטי מאוד, ושווה את ההמתנה.',
+    id: 'links', title: 'לכל דבר יש כמה דרכים',
+    body: 'אני יכול להגיע רק למקום שנוגע במקום שכבר שלי — אבל כמעט תמיד יש יותר מדרך אחת, '
+      + 'ואף אחת מהן לא באותו מחיר.\n'
+      + '**מהר ורועש** — פתוח תמיד, אבל יישאר סימן שכולם יראו כל בוקר.\n'
+      + '**שקט** — צריך קודם להזיז מישהו ממקומו, או לחכות לרגע הנכון.\n'
+      + '**חכם** — נפתח רק בגלל משהו שכבר עשיתי, לפעמים לפני כמה ימים.\n'
+      + '**מתחת לכל כפתור כתוב מה הוא ישאיר אחריו — לפני שלוחצים, אף פעם לא אחרי.**',
     when: (s) => Object.values(s.places).filter((p) => p.mine).length >= 2,
   },
   {
@@ -153,15 +160,29 @@ export function visible(state: GameState): Place[] {
 // ── save ────────────────────────────────────────────────────────────────────
 
 export function save(state: GameState) {
-  try { localStorage.setItem(SAVE, JSON.stringify(state)); } catch { /* private mode */ }
+  try {
+    localStorage.setItem(SAVE, JSON.stringify({ ...state, v: SAVE_VERSION }));
+  } catch { /* private mode */ }
 }
 
 export function load(): GameState | null {
   try {
     const raw = localStorage.getItem(SAVE);
     if (!raw) return null;
-    const s = JSON.parse(raw) as GameState;
-    return s && s.places && s.people ? s : null;
+    const s = JSON.parse(raw) as GameState & { v?: number };
+    if (!s || !s.places || !s.people || s.v !== SAVE_VERSION) {
+      // An older save opened in a newer game is worse than no save at all:
+      // "continue" would open something that falls over on the first press.
+      localStorage.removeItem(SAVE);
+      return null;
+    }
+    // Belt and braces: everything the game reads has to exist, whatever is on disk.
+    s.traces ??= [];
+    s.marks ??= {};
+    s.log ??= [];
+    s.taught ??= [];
+    s.steps ??= STAGES[Math.max(0, Math.min(STAGES.length, s.stage ?? 1) - 1)].steps.map((x) => ({ ...x }));
+    return s;
   } catch { return null; }
 }
 
