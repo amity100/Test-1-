@@ -13,7 +13,12 @@ const ok = (cond: boolean, what: string) => {
   if (!cond) bad += 1;
 };
 const can = (s: GameState, place: string, act: string) =>
-  actionsFor(s, place).some((a) => a.id === act && !a.blocked);
+  actionsFor(s, place).some((a) => (a.id === act || a.id.startsWith(`${act}:`)) && !a.blocked);
+/** One named way in, rather than any way at all. */
+const canWay = (s: GameState, place: string, way: string) =>
+  actionsFor(s, place).some((a) => a.id === `take:${way}` && !a.blocked);
+const ways = (s: GameState, place: string) =>
+  actionsFor(s, place).filter((a) => a.id.startsWith('take:')).length;
 
 const s = newGame('check');
 
@@ -28,11 +33,16 @@ ok(can(s, 'main', 'take'), 'ואז המנעול נפתח');
 run(s, 'main', 'take'); refresh(s);
 ok(s.places.main.mine && s.stage === 2, 'שלב 1 נגמר והתחיל שלב 2');
 
-// ── stage 2: the technician opens the cupboard for you ──────────────────────
-ok(!can(s, 'box', 'take'), 'הארון סגור כל עוד אין טכנאי');
+// ── stage 2: the technician opens the cupboard, or you break out loudly ─────
+ok(ways(s, 'box') >= 2, 'לארון יש יותר מדרך אחת להיכנס אליו');
+ok(!canWay(s, 'box', 'ron'), 'הדרך השקטה לארון סגורה כל עוד אין טכנאי');
+ok(canWay(s, 'box', 'force'), 'ויש דרך רועשת שפתוחה תמיד — במחיר');
 run(s, 'main', 'off'); refresh(s);
 ok(s.people.ron.atPlaceId === 'box', 'כיבוי המחשב הראשי מזמן את הטכנאי');
-run(s, 'box', 'take'); refresh(s);
+ok(!canWay(s, 'power', 'wall'), 'הקיצור לחדר החשמל עוד לא קיים');
+run(s, 'box', 'take:ron'); refresh(s);
+ok(s.traces.includes('ron_comes'), 'הכניסה אחרי הטכנאי השאירה סימן: הוא בא לכאן עכשיו כל יום');
+ok(canWay(s, 'power', 'wall'), 'והסימן הזה פתח דרך חדשה לחדר החשמל');
 run(s, 'power', 'take'); refresh(s);
 ok(s.places.box.mine && s.places.power.mine, 'הארון וחדר החשמל נתפסו');
 ok(s.stage === 3, 'שלב 2 נגמר');
@@ -40,10 +50,10 @@ ok(s.stage === 3, 'שלב 2 נגמר');
 // ── stage 3: a phone only carries you while its owner is walking ────────────
 run(s, 'eitan_phone', 'take'); refresh(s);
 ok(s.places.eitan_phone.mine, 'הטלפון של השומר נתפס דרך רשת הבניין');
-ok(!can(s, 'street_cam', 'take'), 'הטלפון לא מוציא אותך החוצה כל עוד הוא יושב');
+ok(!canWay(s, 'street_cam', 'pocket'), 'הטלפון לא מוציא אותך החוצה כל עוד הוא יושב');
 run(s, 'eitan_phone', 'ring'); refresh(s);
 ok(s.people.eitan.atPlaceId !== s.people.eitan.homePlaceId, 'צלצול מזיז אותו מהדלפק');
-ok(can(s, 'street_cam', 'take'), 'ועכשיו אפשר לצאת איתו לרחוב');
+ok(canWay(s, 'street_cam', 'pocket'), 'ועכשיו אפשר לצאת איתו לרחוב');
 run(s, 'street_cam', 'take'); refresh(s);
 run(s, 'street_light', 'take'); refresh(s);
 ok(s.places.street_light.mine && s.stage === 4, 'הרמזור נתפס ושלב 3 נגמר');
@@ -74,5 +84,19 @@ for (let i = 0; i < 8 && !s.places.block_a.mine; i++) {
 ok(s.places.block_a.mine, 'הרובע נתפס דרך העדכון');
 ok(s.over === 'won', 'והמשחק נגמר כמו שצריך');
 
-console.log(bad ? `\n✗ ${bad} דברים לא עובדים.` : '\n✓ כל חמשת השלבים עוברים.');
+// ── the marks bite: a borrowed name is a name someone can change ────────────
+const t = newGame('traces');
+t.marks.looked = 1; refresh(t);
+ok(ways(t, 'dana_pc') >= 2, 'גם למחשב של דנה יש כמה דרכים');
+run(t, 'dana_pc', 'take:shoulder'); refresh(t);
+ok(t.traces.includes('on_dana'), 'להיכנס בשם שלה משאיר סימן');
+ok(canWay(t, 'main', 'name'), 'והסימן הזה פותח דרך שלא הייתה קיימת למחשב הראשי');
+run(t, 'main', 'take:name'); refresh(t);
+ok(t.places.main.mine, 'המחשב הראשי נלקח בשם שלה');
+t.people.dana.wondering = true;
+endDay(t); refresh(t);
+ok(!t.places.main.mine && !t.places.dana_pc.mine,
+  'וברגע שדנה חשדה — היא החליפה סיסמה, ושני המקומות אבדו');
+
+console.log(bad ? `\n✗ ${bad} דברים לא עובדים.` : '\n✓ הכל עובד: חמשת השלבים, כמה דרכים לכל מקום, והסימנים שנשארים.');
 process.exit(bad ? 1 : 0);

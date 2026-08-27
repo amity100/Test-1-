@@ -22,6 +22,9 @@ export type PlaceKind =
   | 'car'           // מכונית
   | 'speaker';      // רמקול
 
+/** How much a thing you do will be felt. One word, never a number. */
+export type Loud = 'quiet' | 'noticed' | 'loud';
+
 /** How loudly a place is being looked at right now. Shown as a picture, never a number. */
 export type Attention = 0 | 1 | 2 | 3;
 // 0 שקט · 1 מישהו שם לב · 2 בודקים · 3 עומדים לנתק
@@ -35,16 +38,6 @@ export interface Link {
   carrierId?: string;
   /** One plain sentence: "דנה עולה לקומה 14 כל בוקר". */
   note: string;
-}
-
-/** What stands between you and taking a place. Always one sentence a person can act on. */
-export interface Lock {
-  /** "המחשב נעול." */
-  text: string;
-  /** "צריך שמישהו יהיה יושב מולו." */
-  need: string;
-  /** True when the way in is open right now. */
-  open(state: GameState): boolean;
 }
 
 export interface Place {
@@ -64,7 +57,6 @@ export interface Place {
   cutOn?: number;
   /** Set when you left something behind here before it was cut. */
   copy: boolean;
-  lockId?: string;
   peopleIds: string[];
   links: Link[];
   /** Which building it sits in. Street furniture uses 'street'. */
@@ -163,6 +155,8 @@ export interface GameState {
   taught: string[];
   /** Free-form marks the stages use. */
   marks: Record<string, number>;
+  /** What I have left behind me in the world, in the order I left it. */
+  traces: string[];
   over: 'won' | 'lost' | null;
 }
 
@@ -177,6 +171,8 @@ export interface BusEvents {
   toast: { text: string; kind: 'good' | 'bad' | 'warn' | 'info'; icon?: string };
   teach: string;
   look: string | null;
+  /** Something happened in a room, and the people in it should feel it. */
+  felt: { placeId: string; kind: 'dark' | 'light' | 'ring' | 'print' | 'screen' | 'door' | 'noise' | 'stop' };
   sfx: string;
   over: 'won' | 'lost';
 }

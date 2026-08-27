@@ -21,9 +21,9 @@ export function buildInteriors(): Interior {
   const floors = new Map<string, THREE.Group>();
   const rng = new RNG('inside');
 
-  const slabMat = new THREE.MeshStandardMaterial({ color: 0x3b444e, roughness: 0.9 });
+  const slabMat = new THREE.MeshStandardMaterial({ color: 0x2e3640, roughness: 0.92 });
   const partMat = new THREE.MeshStandardMaterial({
-    color: 0x525d69, roughness: 0.85, transparent: true, opacity: 0.92,
+    color: 0x39424c, roughness: 0.9, transparent: true, opacity: 0.66,
   });
   const deskMat = new THREE.MeshStandardMaterial({ color: 0x7a6650, roughness: 0.78 });
   const chairMat = new THREE.MeshStandardMaterial({ color: 0x3a434e, roughness: 0.72 });
@@ -45,7 +45,7 @@ export function buildInteriors(): Interior {
 
       const carpet = new THREE.Mesh(
         new THREE.PlaneGeometry(b.w - 2, b.d - 2),
-        new THREE.MeshStandardMaterial({ color: f === -1 ? 0x39424c : 0x4a5560, roughness: 1 }),
+        new THREE.MeshStandardMaterial({ color: f === -1 ? 0x2c343d : 0x394450, roughness: 1 }),
       );
       carpet.rotation.x = -Math.PI / 2;
       carpet.position.set(b.x, y + 0.16, b.z);
@@ -55,10 +55,26 @@ export function buildInteriors(): Interior {
       // A core: lifts and stairs, in the middle of every floor.
       const core = new THREE.Mesh(
         new THREE.BoxGeometry(6, FLOOR_H - 0.4, 5),
-        new THREE.MeshStandardMaterial({ color: 0x47515c, roughness: 0.85 }),
+        new THREE.MeshStandardMaterial({ color: 0x333c46, roughness: 0.9 }),
       );
       core.position.set(b.x - b.w * 0.18, y + FLOOR_H / 2, b.z + b.d * 0.2);
       g.add(core);
+
+      // Two lift doors, so the block in the middle of the floor reads as a lift.
+      for (const dx of [-1.3, 1.3]) {
+        const door = new THREE.Mesh(
+          new THREE.BoxGeometry(1.9, 2.4, 0.12),
+          new THREE.MeshStandardMaterial({ color: 0x8d959c, roughness: 0.4, metalness: 0.7 }),
+        );
+        door.position.set(b.x - b.w * 0.18 + dx, y + 1.3, b.z + b.d * 0.2 - 2.55);
+        g.add(door);
+        const slit = new THREE.Mesh(
+          new THREE.BoxGeometry(0.06, 2.3, 0.05),
+          new THREE.MeshBasicMaterial({ color: 0x0b1015 }),
+        );
+        slit.position.set(b.x - b.w * 0.18 + dx, y + 1.3, b.z + b.d * 0.2 - 2.62);
+        g.add(slit);
+      }
 
       // A couple of partitions, so a floor is rooms and not a shoebox.
       for (let i = 0; i < 2; i++) {
@@ -135,7 +151,7 @@ export function buildInteriors(): Interior {
         strip.position.set(b.x, y + FLOOR_H - 0.45, b.z + i * b.d * 0.3);
         g.add(strip);
         if (!on) continue;
-        const lamp = new THREE.PointLight(0xbfe0f0, 90, 34, 2);
+        const lamp = new THREE.PointLight(0xbfe0f0, 46, 30, 2);
         lamp.position.set(b.x, y + FLOOR_H - 0.9, b.z + i * b.d * 0.3);
         g.add(lamp);
       }

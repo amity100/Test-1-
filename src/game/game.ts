@@ -70,6 +70,7 @@ export function newGame(seed = String(Date.now())): GameState {
     log: [],
     taught: [],
     marks: {},
+    traces: [],
     over: null,
   };
   // Everyone starts where the world says they are.

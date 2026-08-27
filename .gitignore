@@ -9,3 +9,7 @@ _*.ts
 *.png
 _*.log
 _probe*
+
+# local capture harnesses
+.*.mjs
+_probe/

@@ -1,9 +1,10 @@
-import type { GameState, Link, Lock, Person, Place, PlaceKind } from './types';
+import type { Link, Person, Place, PlaceKind } from './types';
 
 /**
  * The world is hand-built, not generated. Five stages happen in one tower on
- * Ibn Gvirol and the street outside it, and every place, person and lock is
- * placed on purpose so that each stage has exactly one good idea in it.
+ * Ibn Gvirol and the street outside it, and every place and person is placed on
+ * purpose. What you can do with each of them lives in ways.ts: several ways in,
+ * several things to do once you are there, and a price on every one of them.
  */
 
 // ── helpers ─────────────────────────────────────────────────────────────────
@@ -85,7 +86,7 @@ function buildPlaces(): Place[] {
 
     P('main', 'mainframe', 'המחשב הראשי של החברה', 'קומה 14 · חדר צדדי',
       'קופסה אפורה גדולה עם נורה כחולה אחת. הכל בחברה עובר דרכה.',
-      'helios', 14, 11, 5, 0.6, { found: true, lockId: 'main', links: [
+      'helios', 14, 11, 5, 0.6, { found: true, links: [
         wire('dana_pc', 'אותה קופסה בקיר.'),
         wire('printer', 'כל ההדפסות.'),
         wire('box', 'ממנה יוצא הכל החוצה מהבניין.'),
@@ -94,7 +95,7 @@ function buildPlaces(): Place[] {
     // ── the building ────────────────────────────────────────────────────────
     P('box', 'box', 'קופסת האינטרנט של הבניין', 'קומת קרקע · ארון',
       'ארון קטן מאחורי דלת שלא נעולה כבר שנתיים. כל מה שיוצא מהבניין עובר פה.',
-      'helios', 0, 7, 9, 1.4, { lockId: 'box', links: [
+      'helios', 0, 7, 9, 1.4, { links: [
         wire('main', 'מחוברת ישירות.'),
         wire('lobby_cam', 'אותו ארון.'),
         wire('power', 'קיר משותף.'),
@@ -120,7 +121,7 @@ function buildPlaces(): Place[] {
 
     P('power', 'power', 'חדר החשמל', 'קומת קרקע · מינוס אחת',
       'לוח מתכת עם ארבעים מפסקים, וכתב יד דהוי שמסביר מה כל אחד מהם.',
-      'helios', -1, 2, 4, 1.3, { lockId: 'power', links: [
+      'helios', -1, 2, 4, 1.3, { links: [
         wire('box', 'קיר משותף.'),
         wire('door', 'אותו לוח.'),
         wire('street_light', 'אותו קו יוצא לרחוב.'),
@@ -154,7 +155,7 @@ function buildPlaces(): Place[] {
     // ── the street ──────────────────────────────────────────────────────────
     P('street_light', 'traffic', 'הרמזור באבן גבירול', 'הרחוב',
       'מחליף צבע כל ארבעים ושתיים שניות מאז 2003.',
-      'street', 0, 46, 30, 5.2, { lockId: 'street_light', links: [
+      'street', 0, 46, 30, 5.2, { links: [
         wire('power', 'אותו קו חשמל שיוצא מהבניין.'),
         wire('street_cam', 'אותו עמוד.'),
       ] }),
@@ -168,13 +169,13 @@ function buildPlaces(): Place[] {
 
     P('ron_car', 'car', 'המכונית של רון', 'הרחוב · חניה',
       'טנדר לבן עם כלים מאחורה. הטלפון שלו מחובר לרדיו כל נסיעה.',
-      'street', 0, 38, 42, 0.8, { peopleIds: ['ron'], links: [
+      'street', 0, 63, 44, 0.8, { peopleIds: ['ron'], links: [
         via('power', 'ron', 'רון נכנס לחדר החשמל כשקוראים לו.'),
       ] }),
 
     P('across_main', 'mainframe', 'המחשב הראשי של החברה ממול', 'אבן גבירול 32',
       'חברת ביטוח. שמונים עובדים. אותה קופסה אפורה, נורה ירוקה.',
-      'across', 3, 0, 0, 0.6, { lockId: 'across_main', links: [
+      'across', 3, 0, 0, 0.6, { links: [
         wire('street_cam', 'אותו קו של העירייה.'),
         update('block_a', 'הם שולחים עדכון לכל הלקוחות שלהם פעם בשבוע.'),
       ] }),
@@ -188,47 +189,9 @@ function buildPlaces(): Place[] {
     // ── the block (stage 5 opens this) ──────────────────────────────────────
     P('block_a', 'box', 'הרובע', 'צפון תל אביב',
       'שלושים בניינים, ארבעה רמזורים, ואלף קופסאות אינטרנט זהות.',
-      'street', 0, 96, 78, 2.0, { lockId: 'block_a', links: [] }),
+      'street', 0, 96, 78, 2.0, { links: [] }),
   ];
 }
-
-// ── the locks: what stands in your way, in one sentence each ────────────────
-
-export const LOCKS: Record<string, Lock> = {
-  main: {
-    text: 'המחשב הראשי נעול.',
-    need: 'הוא נפתח רק כשמישהו מחובר אליו.',
-    open: (s) => Object.values(s.people).some((p) => p.atPlaceId === 'main'),
-  },
-  box: {
-    text: 'הארון סגור.',
-    need: 'הוא פתוח רק כשטכנאי עומד מולו. קוראים לטכנאי כשמשהו גדול מתקלקל.',
-    open: (s) => s.people.ron?.atPlaceId === 'box',
-  },
-  power: {
-    text: 'חדר החשמל נעול במפתח.',
-    need: 'הדלת פתוחה רק כשיש טכנאי בבניין.',
-    open: (s) => {
-      const at = s.people.ron?.atPlaceId ?? '';
-      return at !== 'ron_car';
-    },
-  },
-  street_light: {
-    text: 'הרמזור מקבל פקודות רק מהעירייה.',
-    need: 'המצלמה שעל אותו עמוד יושבת על הקו של העירייה. צריך אותה קודם.',
-    open: (s) => s.places.street_cam?.mine === true,
-  },
-  across_main: {
-    text: 'החברה ממול היא בניין אחר לגמרי.',
-    need: 'המצלמה של העירייה מחוברת גם אליהם. קודם צריך אותה.',
-    open: (s) => s.places.street_cam?.mine === true,
-  },
-  block_a: {
-    text: 'רובע שלם זה יותר מדי מקומות בשביל להיכנס אחד־אחד.',
-    need: 'צריך עדכון: חברה שמחוברת לכולם ושולחת להם משהו.',
-    open: (s) => s.places.across_main?.mine === true,
-  },
-};
 
 // ── build ───────────────────────────────────────────────────────────────────
 
@@ -250,8 +213,4 @@ export function buildWorld(): { places: Record<string, Place>; people: Record<st
   const people: Record<string, Person> = {};
   for (const p of PEOPLE) people[p.id] = { ...p };
   return { places, people };
-}
-
-export function lockOf(state: GameState, place: Place): Lock | null {
-  return place.lockId ? LOCKS[place.lockId] ?? null : null;
 }

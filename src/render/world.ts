@@ -9,6 +9,7 @@ import { BUILDINGS, FLOOR_H, buildCity, buildingOf, floorY, spotAt, type CityPar
 import { buildInteriors, revealFloors, type Interior } from './interior';
 import { CodeVeins, type Vein } from './glyphs';
 import { Figures } from './figures';
+import { bus } from '../game/bus';
 import { makeObject, type PlaceObject } from './objects';
 import type { GameState, Place } from '../game/types';
 
@@ -44,6 +45,9 @@ export class World {
   private objectGroup = new THREE.Group();
   private ray = new THREE.Raycaster();
   private t = 0;
+  /** Which building is open right now, and which floor the camera is on. */
+  private host: string | null = null;
+  private onFloor = 0;
   /** A soft light that travels with you, so a room is never a black box. */
   private here = new THREE.PointLight(0xbfe4f5, 0, 30, 2);
   private hereWant = 0;
@@ -62,7 +66,7 @@ export class World {
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.45;
+    this.renderer.toneMappingExposure = 1.42;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.domElement.className = 'world-canvas';
@@ -78,7 +82,7 @@ export class World {
 
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.42, 0.72, 0.42);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.34, 0.7, 0.62);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
     this.grade = new ShaderPass(GradeShader);
@@ -88,6 +92,12 @@ export class World {
     this.grade.uniforms.uGrain.value = 0.34;
     this.grade.uniforms.uChroma.value = 0.5;
 
+    // Something happened in a room: everyone near enough turns and looks.
+    bus.on('felt', ({ placeId, kind }) => {
+      const m = this.markers.get(placeId);
+      if (m) this.figures.felt(m.obj.group.position.clone().setY(m.obj.group.position.y + 1.2), kind);
+    });
+
     this.resize();
     window.addEventListener('resize', () => this.resize());
   }
@@ -95,12 +105,14 @@ export class World {
   // ── night ─────────────────────────────────────────────────────────────────
 
   private light() {
-    this.scene.fog = new THREE.FogExp2(0x050a11, 0.0016);
-    this.scene.background = new THREE.Color(0x04070d);
+    this.scene.fog = new THREE.FogExp2(0x061020, 0.0011);
+    this.scene.background = new THREE.Color(0x060d1a);
 
-    this.scene.add(new THREE.HemisphereLight(0x22384a, 0x05080d, 0.7));
+    // Sky glow above, the warm wash off the pavement below.
+    this.scene.add(new THREE.HemisphereLight(0x3d5a78, 0x2a2013, 1.45));
+    this.scene.add(new THREE.AmbientLight(0x2e3646, 0.5));
 
-    const moon = new THREE.DirectionalLight(0x9fc4e0, 0.85);
+    const moon = new THREE.DirectionalLight(0xa9c9e4, 1.15);
     moon.position.set(-140, 190, 90);
     moon.castShadow = true;
     moon.shadow.mapSize.set(2048, 2048);
@@ -111,7 +123,7 @@ export class World {
     this.scene.add(moon);
 
     // A warm bounce off the street, so the ground floor is not a black hole.
-    const street = new THREE.PointLight(0xffb060, 900, 200, 2);
+    const street = new THREE.PointLight(0xffb060, 1400, 210, 2);
     street.position.set(34, 9, 40);
     this.scene.add(street);
 
@@ -196,9 +208,10 @@ export class World {
   /** Fly to a place and stand close enough to see what is on the desk. */
   goTo(place: Place, close = true) {
     const at = spotAt(place.buildingId, place.floor, place.x, place.z, place.y);
-    this.want.copy(at).add(new THREE.Vector3(0, 1.1, 0));
-    this.wantDist = close ? 13 : 34;
-    this.wantPitch = 0.26;
+    this.want.copy(at).add(new THREE.Vector3(0, 1.2, 0));
+    this.wantDist = close ? 12 : 34;
+    // Inside a room you look across it, not down onto it through the ceiling.
+    this.wantPitch = place.buildingId === 'street' ? 0.3 : 0.1;
   }
 
   /** Back out to where you can see the whole block. */
@@ -297,13 +310,19 @@ export class World {
     this.openBuildings();
 
     // The travelling light comes up only when you are close enough to be indoors.
-    this.here.position.copy(this.camera.position);
-    this.hereWant = this.dist < 46 ? 240 : this.dist < 110 ? 90 : 0;
+    // Behind and above the eye, so the near wall is not the brightest thing in the room.
+    this.here.position.copy(this.camera.position).sub(
+      this.target.clone().sub(this.camera.position).normalize().multiplyScalar(-2.4),
+    );
+    this.here.position.y += 1.6;
+    // Enough to see the room by, and no more: this light is a torch, not a sun.
+    this.hereWant = this.dist < 46 ? 26 : this.dist < 110 ? 34 : 0;
     this.here.intensity += (this.hereWant - this.here.intensity) * Math.min(1, dt * 4);
-    this.here.distance = 22 + this.dist * 0.9;
+    this.here.distance = 26 + this.dist * 0.7;
+    this.city.tick(this.t, dt);
     this.veins.setScale(THREE.MathUtils.clamp(this.dist * 0.0055, 0.16, 1.5));
     this.veins.update(dt);
-    this.figures.update(dt);
+    this.figures.update(dt, this.camera.position, this.host, this.onFloor);
 
     // Rings and lit faces breathe, so a live board never looks like a picture.
     const pulse = 0.72 + Math.abs(Math.sin(this.t * 2.2)) * 0.28;
@@ -343,13 +362,16 @@ export class World {
       const parts = this.city.shells.get(b.id);
       if (!parts) continue;
       const open = host === b.id;
+      // Standing in the room is different from looking into it from the street:
+      // from inside, every wall has to get out of the way, not just the near one.
+      const within = Math.abs(cam.x - b.x) < b.w / 2 + 2 && Math.abs(cam.z - b.z) < b.d / 2 + 2;
       for (const part of parts) {
         const mat = part.material as THREE.MeshStandardMaterial;
-        // Only the walls between you and the room dissolve; the far ones stay.
+        // From outside: only the walls between you and the room dissolve.
         const toWall = part.position.clone().sub(new THREE.Vector3(b.x, part.position.y, b.z));
         const toCam = cam.clone().sub(new THREE.Vector3(b.x, cam.y, b.z));
         const facing = toWall.normalize().dot(toCam.normalize()) > 0.15;
-        const want = open ? (facing ? 0.06 : 0.42) : 1;
+        const want = open ? (within ? 0.04 : facing ? 0.06 : 0.42) : 1;
         mat.opacity += (want - mat.opacity) * 0.12;
         mat.transparent = mat.opacity < 0.99;
         mat.depthWrite = mat.opacity > 0.55;
@@ -362,6 +384,8 @@ export class World {
     }
 
     const floor = Math.round(this.target.y / FLOOR_H);
+    this.host = host;
+    this.onFloor = floor;
     revealFloors(this.inside, host, floor, host ? 3 : 0);
   }
 }

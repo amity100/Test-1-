@@ -1,5 +1,6 @@
 import { bus } from './bus';
 import { say } from './actions';
+import { traceDay, traceWorry } from './ways';
 import type { GameState, HuntLevel, Place } from './types';
 
 /**
@@ -64,8 +65,14 @@ export function endOfDay(state: GameState) {
   // The update either goes out today, or it does not. Nothing else decides it.
   state.marks.update_ready = state.day % UPDATE_EVERY === 0 ? 1 : 0;
 
+  // What I left behind me does its work first, before they decide anything.
+  for (const e of traceDay(state)) {
+    say(state, e.kind === 'good' ? 'me' : 'world', e.text);
+    if (e.kind === 'bad') bus.emit('toast', { text: e.text, kind: 'warn', icon: '↯' });
+  }
+
   const hot = hottest(state);
-  const worry = wondering(state);
+  const worry = Math.max(0, wondering(state) + traceWorry(state));
   const loudPlaces = hot.filter((p) => p.attention >= 2).length;
 
   // ── did the day count as quiet? ──────────────────────────────────────────

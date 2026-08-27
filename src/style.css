@@ -343,7 +343,7 @@ body.is-mobile .objectives ul li { min-height: 46px; }
 /* ── a name, only for the thing you are looking at ─────────────────────── */
 #tags { position: absolute; inset: 0; pointer-events: none; }
 .tag {
-  position: absolute; transform: translate(-50%, -100%);
+  position: absolute; left: 0; top: 0; will-change: transform;
   padding: 5px 11px; border: 1px solid rgba(120,170,195,.3);
   background: rgba(4,9,14,.8); backdrop-filter: blur(6px);
   border-radius: 20px; pointer-events: auto; white-space: nowrap;
@@ -540,3 +540,32 @@ body.is-mobile .objectives ul li { min-height: 46px; }
 @media (hover: none) { .act:hover, .tag:hover, .task .go:hover { background: inherit; } }
 .tag.faint { opacity: .62; font-size: 11.5px; padding: 4px 9px; }
 .tag.faint:hover { opacity: 1; }
+
+/* ── what a choice leaves behind ─────────────────────────────────────────── */
+.icon#tracebtn { position: relative; }
+.icon#tracebtn.off { opacity: .32; }
+.icon#tracebtn i {
+  position: absolute; inset-block-start: -3px; inset-inline-start: -3px;
+  min-width: 15px; height: 15px; line-height: 15px; border-radius: 8px;
+  background: #5ff6ff; color: #04121a; font: 700 10px/15px system-ui; font-style: normal;
+}
+.sheet .trace {
+  border-inline-start: 3px solid currentColor; padding-inline-start: 10px; margin: 9px 0;
+}
+.sheet .trace.good { color: #7de8c8; }
+.sheet .trace.bad { color: #ffab6b; }
+.act u.cost {
+  display: block; font-size: 11.5px; font-style: normal; text-decoration: none;
+  color: #ffab6b; opacity: .92; margin-top: 3px;
+}
+.act u.why {
+  display: block; font-size: 11.5px; font-style: normal; text-decoration: none;
+  color: #8fa3b5; margin-top: 3px;
+}
+
+/* A card with several ways in is a long card. Let it scroll on its own. */
+.card { max-height: min(74vh, 620px); overflow-y: auto; overscroll-behavior: contain; }
+
+@media (max-width: 700px) {
+  .card { max-height: 62vh; }
+}

@@ -2,13 +2,13 @@ import { audio } from '../audio/audio';
 import { World } from '../render/world';
 import { KIND_NAME } from '../game/content';
 import {
-  actionsFor, LINK_SAYS, LINK_WORD, LOUD_SAYS, LOUD_TEXT, run, waysIn,
+  actionsFor, LOUD_SAYS, LOUD_TEXT, run,
 } from '../game/actions';
 import { bus } from '../game/bus';
 import { HUNT_WORD } from '../game/hunt';
 import { TEACH, currentStep, endDay, refresh, save, stageOf } from '../game/game';
 import { whatIsLeft } from '../game/stages';
-import { lockOf } from '../game/world';
+import { TRACES, waysTo } from '../game/ways';
 import type { GameState } from '../game/types';
 import { esc, h } from './dom';
 
@@ -25,6 +25,8 @@ export class UI {
   private dirty = true;
   private last = performance.now();
   private paused = false;
+  /** One live button per named place, moved rather than rebuilt. */
+  private tags = new Map<string, HTMLButtonElement>();
 
   constructor(private root: HTMLElement, private state: GameState) {
     this.worldEl = h('div', 'world');
@@ -53,6 +55,7 @@ export class UI {
         <div class="them" id="them">
           <span>הם</span><b id="huntword"></b><em id="believe"></em>
         </div>
+        <button class="icon" id="tracebtn" data-do="traces" title="מה השארתי מאחוריי">✦<i></i></button>
         <button class="icon" data-do="wide" title="לראות את כל הרובע">⤢</button>
         <button class="icon" data-do="help" title="איך משחקים">?</button>
       </header>
@@ -193,7 +196,6 @@ export class UI {
           break;
         }
         refresh(s);
-        this.world.build(s);
         this.world.sync(s);
         this.dirty = true;
         save(s);
@@ -211,6 +213,7 @@ export class UI {
 
       case 'closeteach': this.closeModal(); break;
       case 'help': this.showHelp(); break;
+      case 'traces': this.showTraces(); break;
     }
   }
 
@@ -239,10 +242,9 @@ export class UI {
     if (!p || (!p.found && !p.mine)) return '';
 
     const acts = actionsFor(s, p.id);
-    const lock = lockOf(s, p);
     const people = p.peopleIds.map((id) => s.people[id]).filter(Boolean);
     const step = currentStep(s);
-    const ways = p.mine ? [] : waysIn(s, p);
+    const ways = p.mine ? [] : waysTo(s, p.id);
 
     const heat = p.cutOn !== undefined
       ? `<p class="line hot">מנתקים את זה בעוד ${Math.max(1, p.cutOn - s.day)} ימים. אם לא יהיה כאן חלק ממני — אאבד את המקום.</p>`
@@ -262,16 +264,12 @@ export class UI {
           `<b>${esc(q.name)}</b>${q.wondering ? ` — לא מצליח/ה להסביר לעצמו/ה ${esc(q.saw ?? 'משהו')}` : ` · ${esc(q.role)}`}`,
         ).join(' · ')}</p>` : ''}
 
-        ${!p.mine && lock ? (lock.open(s)
-          ? `<p class="line open">${esc(lock.need)} — וזה קורה ברגע זה.</p>`
-          : `<p class="line shut"><b>${esc(lock.text)}</b> ${esc(lock.need)}</p>`) : ''}
-
-        ${!p.mine && ways.length ? `<div class="ways">${ways.map((w) => `
-          <span class="way ${w.ready ? 'ok' : ''}">
-            <i>${LINK_WORD[w.link.kind]}</i>
-            <em>מ${esc(w.from.name)} · ${esc(w.link.note)}</em>
-            ${w.ready ? '' : `<u>${esc(w.why)}</u>`}
-          </span>`).join('')}</div>` : ''}
+        ${!p.mine && ways.length ? `<p class="line soft">${
+          ((n) => n === 0 ? 'אני יודע על המקום הזה, אבל אין לי עדיין דרך להיכנס אליו.'
+            : n === 1 ? 'יש דרך אחת שפתוחה לי לכאן ברגע זה. לשאר כתוב מה חסר להן.'
+              : `יש ${n} דרכים שפתוחות לי לכאן ברגע זה, ולכל אחת מחיר אחר.`)(
+            ways.filter((w) => w.ready).length)
+        }</p>` : ''}
 
         <div class="acts">
           ${acts.map((a) => `
@@ -279,6 +277,8 @@ export class UI {
                     data-do="run" data-arg="${p.id}|${a.id}" title="${esc(LOUD_SAYS[a.loud])}">
               <b>${esc(a.text)}</b>
               <span>${esc(a.says)}</span>
+              ${a.cost ? `<u class="cost">${esc(a.cost)}</u>` : ''}
+              ${a.blocked ? `<u class="why">${esc(a.blocked)}</u>` : ''}
               <em class="l-${a.loud}">${LOUD_TEXT[a.loud]}</em>
             </button>`).join('') || '<p class="muted">אין כאן מה לעשות כרגע.</p>'}
         </div>
@@ -312,7 +312,9 @@ export class UI {
     spots.sort((a, b) => a.z - b.z);
 
     const taken: Array<{ x: number; y: number }> = [];
-    let html = '';
+    const box = this.root.querySelector('#tags') as HTMLElement;
+    const live = new Set<string>();
+
     for (const spot of spots) {
       const p = s.places[spot.id];
       const always = spot.id === want || spot.id === this.hovered || spot.id === this.selected;
@@ -323,14 +325,31 @@ export class UI {
       v.x = Math.min(w - half, Math.max(half, v.x));
       v.y = Math.min(this.root.clientHeight - 130, Math.max(74, v.y));
       taken.push({ ...v });
+
+      // One button per place, kept alive and moved. Rebuilding these every frame
+      // pulled the element out from under your finger between press and release,
+      // and the tap simply never arrived.
+      let el = this.tags.get(spot.id);
+      if (!el) {
+        el = document.createElement('button');
+        el.dataset.do = 'place';
+        el.dataset.arg = spot.id;
+        el.innerHTML = `<span>${esc(p.name)}</span>`;
+        box.appendChild(el);
+        this.tags.set(spot.id, el);
+      }
       const cls = p.cutOn !== undefined ? 'cut' : p.attention >= 2 ? 'hot' : p.mine ? 'mine' : '';
-      const goal = spot.id === want ? ' goal' : '';
-      const dim = always ? '' : ' faint';
-      html += `<button class="tag ${cls}${goal}${dim}" style="left:${Math.round(v.x)}px;top:${Math.round(v.y)}px"
-                data-do="place" data-arg="${spot.id}"><span>${esc(p.name)}</span></button>`;
+      const want2 = `tag ${cls}${spot.id === want ? ' goal' : ''}${always ? '' : ' faint'}`;
+      if (el.className !== want2) el.className = want2;
+      el.style.transform = `translate(calc(${Math.round(v.x)}px - 50%), calc(${Math.round(v.y)}px - 100%))`;
+      live.add(spot.id);
     }
-    const box = this.root.querySelector('#tags') as HTMLElement;
-    if (box.dataset.sig !== html) { box.dataset.sig = html; box.innerHTML = html; }
+
+    for (const [id, el] of this.tags) {
+      if (live.has(id)) continue;
+      el.remove();
+      this.tags.delete(id);
+    }
   }
 
   // ── modals: the one place words are allowed ──────────────────────────────
@@ -354,6 +373,23 @@ export class UI {
         <button class="ok" data-do="closeteach">הבנתי</button>
       </div>`);
     audio.play('dialog');
+  }
+
+  /** Everything I have left behind me, and what each thing is going to cost. */
+  private showTraces() {
+    const list = this.state.traces.map((id) => TRACES[id]).filter(Boolean);
+    this.modal(`
+      <div class="sheet wide">
+        <span class="kick">מה השארתי מאחוריי</span>
+        <h2>${list.length ? 'כל בחירה נשארת' : 'עוד לא השארתי כלום'}</h2>
+        <div class="txt">
+          ${list.length
+            ? list.map((t) => `<p class="trace ${t.good ? 'good' : 'bad'}">${esc(t.text)}</p>`).join('')
+            : '<p>לכל דבר שאני נכנס אליו יש כמה דרכים, ולכל דרך יש מחיר אחר. '
+              + 'מה שאבחר יישאר כאן, וישנה את מה שאפשר לעשות אחר כך.</p>'}
+        </div>
+        <button class="ok" data-do="closeteach">הבנתי</button>
+      </div>`);
   }
 
   private showHelp() {
@@ -425,6 +461,9 @@ export class UI {
 
     (this.root.querySelector('#dayn') as HTMLElement).textContent = String(s.day + 1);
     (this.root.querySelector('#huntword') as HTMLElement).textContent = HUNT_WORD[s.hunt.level];
+    const tb = this.root.querySelector('#tracebtn') as HTMLElement;
+    tb.classList.toggle('off', s.traces.length === 0);
+    (tb.querySelector('i') as HTMLElement).textContent = s.traces.length ? String(s.traces.length) : '';
     (this.root.querySelector('#believe') as HTMLElement).textContent = s.hunt.believe;
     (this.root.querySelector('#them') as HTMLElement).className = `them lv-${s.hunt.level}`;
 
@@ -455,4 +494,3 @@ export class UI {
   };
 }
 
-export { LINK_SAYS };
