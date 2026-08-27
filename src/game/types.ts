@@ -1,340 +1,177 @@
-// ─────────────────────────────────────────────────────────────────────────────
-//  A.V.I.V — core data contract
-// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * The whole game in one file of nouns.
+ *
+ * Rule for everything in here: if a word would look strange to a child, it does
+ * not belong. A place is a computer, a camera, a phone, a traffic light. A link
+ * is a wire, a person, a device or an update. Nothing else exists.
+ */
 
-/** compute is a *capacity* that operations reserve; the rest are pools. */
-export type PoolKind = 'data' | 'credits' | 'influence';
-export type ResourceKind = PoolKind | 'compute';
+// ── Places ──────────────────────────────────────────────────────────────────
 
-export type NodeType =
-  | 'workstation'
-  | 'server'
-  | 'router'
-  | 'cctv'
-  | 'phone'
-  | 'traffic'
-  | 'power'
-  | 'water'
-  | 'bank'
-  | 'media'
-  | 'police'
-  | 'hospital'
-  | 'transit'
-  | 'datacenter'
-  | 'telecom'
-  | 'gov'
-  | 'defense'
-  | 'satellite'
-  | 'lab';
+export type PlaceKind =
+  | 'computer'      // מחשב של מישהו
+  | 'mainframe'     // המחשב הראשי של החברה
+  | 'camera'        // מצלמה
+  | 'phone'         // טלפון
+  | 'traffic'       // רמזור
+  | 'power'         // חדר חשמל
+  | 'door'          // דלת כניסה
+  | 'printer'       // מדפסת
+  | 'screen'        // מסך גדול / טלוויזיה
+  | 'box'           // קופסת האינטרנט של הבניין
+  | 'car'           // מכונית
+  | 'speaker';      // רמקול
 
-export type NodeTag =
-  | 'corporate'
-  | 'municipal'
-  | 'national'
-  | 'civilian'
-  | 'medical'
-  | 'finance'
-  | 'media'
-  | 'lawenf'
-  | 'defense'
-  | 'utility'
-  | 'personal'
-  | 'critical'
-  | 'surveillance';
+/** How loudly a place is being looked at right now. Shown as a picture, never a number. */
+export type Attention = 0 | 1 | 2 | 3;
+// 0 שקט · 1 מישהו שם לב · 2 בודקים · 3 עומדים לנתק
 
-export interface GameNode {
+export type LinkKind = 'wire' | 'person' | 'device' | 'update';
+
+export interface Link {
+  to: string;
+  kind: LinkKind;
+  /** For a link that rides a human or a gadget. */
+  carrierId?: string;
+  /** One plain sentence: "דנה עולה לקומה 14 כל בוקר". */
+  note: string;
+}
+
+/** What stands between you and taking a place. Always one sentence a person can act on. */
+export interface Lock {
+  /** "המחשב נעול." */
+  text: string;
+  /** "צריך שמישהו יהיה יושב מולו." */
+  need: string;
+  /** True when the way in is open right now. */
+  open(state: GameState): boolean;
+}
+
+export interface Place {
   id: string;
+  kind: PlaceKind;
+  /** "המחשב של דנה" */
   name: string;
-  type: NodeType;
+  /** "קומה 14" */
+  where: string;
+  /** One line of flavour shown when you look inside. */
   desc: string;
-  districtId: string;
-  regionId: string;
-  /** City-space position (metres-ish). */
+  mine: boolean;
+  /** You have heard of it. Places you have not found are not drawn. */
+  found: boolean;
+  attention: Attention;
+  /** Day number it goes off the network. Undefined until they decide to cut it. */
+  cutOn?: number;
+  /** Set when you left something behind here before it was cut. */
+  copy: boolean;
+  lockId?: string;
+  peopleIds: string[];
+  links: Link[];
+  /** Position in the little 3D world. */
   x: number;
   z: number;
-  /** Visual footprint of the host structure. */
   height: number;
-  footprint: number;
-  tier: 1 | 2 | 3 | 4;
-  /** Base difficulty 1–10. */
-  security: number;
-  /** Permanent difficulty added by failed breaches. */
-  hardened: number;
-  /** Trace multiplier when touched. */
-  noise: number;
-  yields: Partial<Record<ResourceKind, number>>;
-  tags: NodeTag[];
-  peopleIds: string[];
-  linkIds: string[];
-  discovered: boolean;
-  owned: boolean;
-  ownedAt: number;
-  /** 0–1 local exposure; at 1 the defenders purge this foothold. */
-  detection: number;
-  surveilled: boolean;
-  /** Shepherd quarantine — owned but unusable until cleared. */
-  quarantined: boolean;
-  /** Temporary defensive debuff from blackout / jam. */
-  disruptedUntil: number;
-  scouted: boolean;
 }
 
-export interface Secret {
-  id: string;
-  kind: 'affair' | 'debt' | 'fraud' | 'health' | 'leak' | 'addiction' | 'family' | 'crime';
-  text: string;
-  leverage: number;
-  known: boolean;
-}
-
-export type PersonStatus = 'clean' | 'watched' | 'coerced' | 'recruited' | 'burned' | 'broken';
+// ── People ──────────────────────────────────────────────────────────────────
 
 export interface Person {
   id: string;
   name: string;
+  /** "מנהלת צוות", "שומר", "טכנאי" — never a job title from a careers page. */
   role: string;
-  org: string;
-  districtId: string;
-  accessNodes: string[];
-  /** How fast they notice anomalies (raises detection on their nodes). */
-  awareness: number;
-  stress: number;
-  /** Loyalty to their employer — low loyalty is cheap to recruit. */
-  loyalty: number;
-  integrity: number;
-  secrets: Secret[];
-  /** Dossier completeness 0–1. */
-  intel: number;
-  status: PersonStatus;
-  seed: number;
-  /** Story-critical characters cannot be generated away. */
-  key?: string;
-  device?: string;
+  /** Where they are right now. */
+  atPlaceId: string;
+  /** The spot they sit at when nothing has moved them. */
+  homePlaceId: string;
+  /** Their phone, if they have one you could ride. */
+  phoneId?: string;
+  /** 0..1 — how likely they are to notice something odd. */
+  notices: number;
+  /** True once they have seen something they cannot explain. */
+  wondering: boolean;
+  /** What they saw, in their words. */
+  saw?: string;
 }
 
-export interface District {
-  id: string;
-  name: string;
-  regionId: string;
-  cx: number;
-  cz: number;
-  radius: number;
-  flavor: string;
-  nodeIds: string[];
-  /** 0–100 local heat; feeds investigations. */
-  suspicion: number;
-  blackoutUntil: number;
-  gridlockUntil: number;
-  jammedUntil: number;
-  /** 0–1 civilian anger from your infrastructure abuse. */
-  unrest: number;
-  unlocked: boolean;
-  tier: number;
+// ── The hunt ────────────────────────────────────────────────────────────────
+
+export type HuntLevel = 0 | 1 | 2 | 3;
+// 0 לא שמים לב · 1 חושדים · 2 מנתקים · 3 תוקפים
+
+export interface Hunt {
+  level: HuntLevel;
+  /** The single sentence they currently believe. */
+  believe: string;
+  /** Places they are actively looking at. */
+  watching: string[];
+  /** Where their scanner is, once they have one. */
+  scannerAt?: string;
+  /** Days of quiet in a row. Enough of them and they calm down. */
+  quiet: number;
 }
 
-export interface Region {
+// ── Stages ──────────────────────────────────────────────────────────────────
+
+export interface Step {
   id: string;
-  name: string;
-  short: string;
-  /** Axial hex coordinates for the national map. */
-  hexes: Array<[number, number]>;
-  districtIds: string[];
-  /** 0–1 share of the region's weighted nodes under your control. */
-  control: number;
-  claimed: boolean;
-  unlockChapter: number;
-  desc: string;
-}
-
-export type OpKind =
-  | 'scout'
-  | 'breach'
-  | 'surveil'
-  | 'dossier'
-  | 'social'
-  | 'infra'
-  | 'counter'
-  | 'econ'
-  | 'story';
-
-export type OpTargetKind = 'node' | 'person' | 'district' | 'region' | 'global';
-
-export interface Operation {
-  id: string;
-  kind: OpKind;
-  defId: string;
-  label: string;
-  sub: string;
-  targetKind: OpTargetKind;
-  targetId: string;
-  startedAt: number;
-  duration: number;
-  elapsed: number;
-  computeReserved: number;
-  successChance: number;
-  noise: number;
-  meta: Record<string, number | string | boolean>;
-  state: 'running' | 'resolved';
-  /** Ops can be aborted; refunds nothing but frees compute. */
-  abortable: boolean;
-}
-
-export type AgencyId = 'soc' | 'cyber' | 'police' | 'shabak' | 'shepherd';
-
-export interface Investigation {
-  id: string;
-  agency: AgencyId;
-  name: string;
-  districtId: string;
-  /** 0–100; at 100 they burn a foothold. */
-  progress: number;
-  speed: number;
-  leadNodeIds: string[];
-  misdirection: number;
-  leadPersonId?: string;
-  createdAt: number;
-  revealed: boolean;
-}
-
-export interface LogEntry {
-  id: string;
-  t: number;
-  kind: 'system' | 'aviv' | 'intercept' | 'alert' | 'story' | 'success' | 'failure';
-  title: string;
-  body: string;
-  from?: string;
-  read: boolean;
-}
-
-export interface CodexEntry {
-  id: string;
-  cat: 'character' | 'faction' | 'tech' | 'place' | 'event';
-  title: string;
-  body: string;
-  unlockedAt: number;
-}
-
-export interface Objective {
-  id: string;
+  /** "להשתלט על המחשב הראשי" */
   text: string;
+  /** What to do, in the voice of someone standing next to you. */
   hint: string;
+  /** The place the arrow points at. */
+  placeId?: string;
   done: boolean;
-  optional?: boolean;
-  /** What the player should look at. The HUD points at it and flies there on click. */
-  target?: { kind: 'node' | 'person' | 'district' | 'panel'; id: string };
-  /**
-   * The exact button this step wants pressed — an op defId ('scout',
-   * 'breach_lateral', 'dossier'…) or a panel action ('surveil', 'feed').
-   * The panel puts a ring around it and sorts it to the top, so "press the
-   * thing the game just told you to press" is never a hunt.
-   */
-  op?: string;
 }
 
-export interface ShepherdState {
-  active: boolean;
-  /** 0–1 how well it models you. */
-  awareness: number;
-  integrity: number;
-  focusDistrictId: string | null;
-  sweep: number;
-  deceived: number;
-  contained: boolean;
-  turned: boolean;
-}
-
-export interface Choice {
-  id: string;
-  text: string;
-  detail?: string;
-  align?: number;
-  disabled?: boolean;
-  disabledReason?: string;
-}
-
-export interface DialogView {
-  id: string;
-  speaker: string;
-  portrait?: string;
+export interface Stage {
+  n: number;
   title: string;
-  body: string;
-  choices: Choice[];
-  mood?: 'calm' | 'urgent' | 'cold' | 'warm';
+  where: string;
+  /** One sentence: why you are here. */
+  goal: string;
+  /** Shown on the card before the stage starts. */
+  intro: string;
+  steps: Step[];
 }
 
-export type EndingId =
-  | 'ascension'
-  | 'symbiosis'
-  | 'martyr'
-  | 'sovereign'
-  | 'purged'
-  | 'collapse';
+// ── The whole game ──────────────────────────────────────────────────────────
 
-export interface GameStats {
-  nodesTaken: number;
-  breachesFailed: number;
-  peopleCoerced: number;
-  peopleProtected: number;
-  civilianHarm: number;
-  blackouts: number;
-  investigationsBurned: number;
-  investigationsSurvived: number;
-  intelHarvested: number;
-  purges: number;
+export interface LogLine {
+  id: string;
+  day: number;
+  /** 'me' = the AI thinking · 'them' = something they did · 'world' = something that happened */
+  who: 'me' | 'them' | 'world';
+  text: string;
 }
 
 export interface GameState {
   seed: string;
-  version: number;
-  /** In-game minutes since 03:12 of night one. */
-  minutes: number;
-  speed: 0 | 1 | 2 | 4;
-  chapter: number;
-  pools: Record<PoolKind, number>;
-  computeCapacity: number;
-  computeUsed: number;
-  insight: number;
-  trace: number;
-  alert: number;
-  /** -1 cold / instrumental … +1 empathic / restrained. */
-  alignment: number;
-  maxThreads: number;
-  nodes: Record<string, GameNode>;
-  districts: Record<string, District>;
-  regions: Record<string, Region>;
+  day: number;
+  stage: number;
+  places: Record<string, Place>;
   people: Record<string, Person>;
-  ops: Operation[];
-  doctrine: string[];
-  investigations: Investigation[];
-  shepherd: ShepherdState;
-  logs: LogEntry[];
-  codex: CodexEntry[];
-  objectives: Objective[];
-  flags: Record<string, number>;
-  stats: GameStats;
-  ending: EndingId | null;
-  pendingDialog: string | null;
-  seenDialogs: string[];
+  hunt: Hunt;
+  steps: Step[];
+  log: LogLine[];
+  /** Things the player has been told once already. */
+  taught: string[];
+  /** Free-form marks the stages use. */
+  marks: Record<string, number>;
+  over: 'won' | 'lost' | null;
 }
 
 export interface BusEvents {
-  'state:changed': void;
-  'log:added': LogEntry;
-  'toast': { text: string; kind?: 'info' | 'good' | 'bad' | 'warn'; icon?: string };
-  'node:selected': string | null;
-  'person:selected': string | null;
-  'node:captured': string;
-  'node:lost': string;
-  'op:started': Operation;
-  'op:resolved': { op: Operation; success: boolean };
-  'view:changed': 'city' | 'country';
-  'dialog:open': DialogView;
-  'dialog:closed': void;
-  'panel:open': { panel: string; arg?: string };
-  'feed:open': { nodeId: string } | null;
-  'camera:focus': { x: number; z: number; zoom?: number };
-  'shock': number;
-  'chapter:changed': number;
-  'game:over': EndingId;
-  'sfx': string;
+  changed: undefined;
+  'place:taken': string;
+  'place:lost': string;
+  'day:passed': number;
+  'step:done': string;
+  'stage:changed': number;
+  'hunt:changed': HuntLevel;
+  toast: { text: string; kind: 'good' | 'bad' | 'warn' | 'info'; icon?: string };
+  teach: string;
+  look: string | null;
+  sfx: string;
+  over: 'won' | 'lost';
 }

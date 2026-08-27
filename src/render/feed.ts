@@ -1,7 +1,7 @@
 import { RNG } from '../core/rng';
-import { clamp, gameClock } from '../core/util';
+import { clamp } from '../core/util';
 import { INTERCEPTS } from '../game/content';
-import type { GameNode, GameState, Person } from '../game/types';
+import type { GameState, Person, Place } from '../game/types';
 
 const W = 720;
 const H = 405;
@@ -20,7 +20,7 @@ type Scene = 'corridor' | 'openspace' | 'street' | 'lobby';
 export class FeedRenderer {
   readonly canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
-  private node: GameNode | null = null;
+  private node: Place | null = null;
   private state: GameState | null = null;
   private actors: Actor[] = [];
   private rng = new RNG(1);
@@ -41,7 +41,7 @@ export class FeedRenderer {
     this.ctx = this.canvas.getContext('2d')!;
   }
 
-  setNode(node: GameNode | null, state: GameState) {
+  setNode(node: Place | null, state: GameState) {
     this.node = node;
     this.state = state;
     if (!node) return;
@@ -49,13 +49,13 @@ export class FeedRenderer {
     this.camCode = String(RNG.hash(node.id) % 900 + 100);
     this.glitchT = 0.6;
 
-    const people = node.peopleIds.map((id) => state.people[id]).filter(Boolean);
+    const people = node.peopleIds.map((id: string) => state.people[id]).filter(Boolean);
     const scenes: Scene[] = ['corridor', 'openspace', 'lobby', 'street'];
-    this.scene = node.type === 'cctv'
+    this.scene = node.kind === 'camera'
       ? scenes[Math.floor(this.rng.next() * scenes.length)]
       : 'openspace';
 
-    const count = node.type === 'cctv'
+    const count = node.kind === 'camera'
       ? Math.max(3, Math.min(6, people.length + this.rng.int(1, 3)))
       : Math.max(1, Math.min(3, people.length || 1));
     this.actors = [];
@@ -109,22 +109,21 @@ export class FeedRenderer {
       return;
     }
 
-    const district = state.districts[node.districtId];
-    const dark = district && district.blackoutUntil > state.minutes;
+    const dark = (state.marks[`dark_${node.id}`] ?? 0) > 0 || (state.marks.power_off ?? 0) > 0;
+    const off = (state.marks[`off_${node.id}`] ?? 0) > 0;
 
-    switch (node.type) {
-      case 'cctv': this.drawCamera(dark); break;
+    switch (node.kind) {
+      case 'camera': this.drawCamera(dark); break;
       case 'phone': this.drawPhone(); break;
-      case 'workstation': this.drawWorkstation(); break;
-      case 'server': case 'datacenter': case 'lab': this.drawRacks(); break;
-      case 'traffic': case 'transit': this.drawIntersection(district?.gridlockUntil > state.minutes); break;
-      case 'power': case 'water': this.drawScada(dark); break;
-      case 'bank': this.drawFinance(); break;
-      case 'media': this.drawBroadcast(); break;
-      case 'telecom': case 'router': case 'satellite': this.drawNetwork(); break;
-      case 'hospital': this.drawVitals(); break;
-      case 'police': this.drawDispatch(dark); break;
-      case 'gov': case 'defense': this.drawRegistry(); break;
+      case 'computer': this.drawWorkstation(off); break;
+      case 'mainframe': this.drawRacks(off); break;
+      case 'traffic': this.drawIntersection((state.marks.jam ?? 0) > 0); break;
+      case 'power': this.drawScada(dark); break;
+      case 'screen': this.drawBroadcast(); break;
+      case 'box': this.drawNetwork(); break;
+      case 'printer': this.drawWorkstation(false); break;
+      case 'door': this.drawCamera(dark); break;
+      case 'car': this.drawIntersection(false); break;
       default: this.drawNetwork(); break;
     }
 
@@ -343,13 +342,11 @@ export class FeedRenderer {
 
   private drawTag(person: Person, x: number, y: number, z: number) {
     const ctx = this.ctx;
-    const watched = !!this.node?.surveilled;
-    const named = person.intel > 0.05 || watched;
+    const named = true;
     const scale = clamp(1.15 - z * 0.045, 0.68, 1.05);
     const label = named ? person.name : 'מזהה…';
-    const sub = named ? person.role : `סריקה ${Math.round(person.intel * 100)}%`;
-    const color = person.status === 'coerced' || person.status === 'recruited'
-      ? '#5affa8' : person.awareness > 0.8 ? '#ff5470' : '#5ff6ff';
+    const sub = person.role;
+    const color = person.wondering ? '#ffb347' : '#5ff6ff';
 
     ctx.save();
     ctx.font = '700 12px Heebo, sans-serif';
@@ -391,11 +388,11 @@ export class FeedRenderer {
     ctx.font = `400 ${(10 * scale).toFixed(1)}px Heebo, sans-serif`;
     ctx.fillText(sub, bx + w - 8, ty + 28 * scale);
 
-    // intel progress along the bottom edge
+    // a warm underline on anyone who has seen something they cannot explain
     ctx.fillStyle = 'rgba(255,255,255,0.12)';
     ctx.fillRect(bx, ty + h - 2, w, 2);
     ctx.fillStyle = color;
-    ctx.fillRect(bx + w * (1 - person.intel), ty + h - 2, w * person.intel, 2);
+    if (person.wondering) ctx.fillRect(bx, ty + h - 2, w, 2);
     ctx.restore();
   }
 
@@ -463,7 +460,8 @@ export class FeedRenderer {
     ctx.beginPath(); ctx.arc(px - 54, py + 82, 5 + Math.sin(this.t * 3) * 2, 0, Math.PI * 2); ctx.stroke();
   }
 
-  private drawWorkstation() {
+  private drawWorkstation(off = false) {
+    if (off) { this.drawDeadScreen(); return; }
     const ctx = this.ctx;
     ctx.fillStyle = '#060a10';
     ctx.fillRect(0, 0, W, H);
@@ -501,7 +499,7 @@ export class FeedRenderer {
     win(444, 26, 252, 150, 'mail — inbox (14)');
     ctx.direction = 'rtl'; ctx.textAlign = 'right';
     ctx.font = '400 10px Heebo, sans-serif';
-    const mails = ['re: דוח QA — טיוטה', 'עסקת רכישה — לו״ז', 'תזכורת: 1:1 מחר', 'חשבונית ספק', 'FW: לקוח חדש'];
+    const mails = ['re: הדוח מאתמול — טיוטה', 'עסקת רכישה — לו״ז', 'תזכורת: 1:1 מחר', 'חשבונית ספק', 'FW: לקוח חדש'];
     mails.forEach((m, i) => {
       ctx.fillStyle = i === 0 ? 'rgba(255,180,71,0.95)' : 'rgba(170,200,215,0.75)';
       ctx.fillText(m, 686, 62 + i * 20);
@@ -526,7 +524,7 @@ export class FeedRenderer {
     ctx.fillText('FP RATE  3.1%', 452, 368);
   }
 
-  private drawRacks() {
+  private drawRacks(off = false) {
     const ctx = this.ctx;
     const g = ctx.createLinearGradient(0, 0, 0, H);
     g.addColorStop(0, '#060c12');
@@ -707,7 +705,7 @@ export class FeedRenderer {
     ctx.fillStyle = '#fff';
     ctx.font = '700 14px Heebo, sans-serif';
     ctx.textAlign = 'right'; ctx.direction = 'rtl';
-    ctx.fillText('מבזק: תקלות תשתית נרחבות בגוש דן', W - 80, 271);
+    ctx.fillText('מבזק: תקלות חשמל בכמה בניינים בתל אביב', W - 80, 271);
     ctx.strokeStyle = 'rgba(95,246,255,0.7)';
     ctx.beginPath();
     for (let i = 0; i < 160; i++) {
@@ -884,9 +882,10 @@ export class FeedRenderer {
 
   // ── chrome ────────────────────────────────────────────────────────────────
 
-  private drawOverlay(node: GameNode, state: GameState, dark: boolean) {
+  private drawOverlay(node: Place, state: GameState, dark: boolean) {
     const ctx = this.ctx;
-    const { time, day } = gameClock(state.minutes);
+    const time = '03:12';
+    const day = state.day + 1;
     ctx.save();
     ctx.font = '600 11px "JetBrains Mono", monospace';
     ctx.textAlign = 'left';
@@ -912,6 +911,26 @@ export class FeedRenderer {
       ctx.stroke();
     }
     ctx.restore();
+  }
+
+  /** A computer you turned off. The room is still there; the screen is not. */
+  private drawDeadScreen() {
+    const ctx = this.ctx;
+    ctx.fillStyle = '#05090e';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#0b1420';
+    ctx.fillRect(W * 0.18, H * 0.2, W * 0.64, H * 0.5);
+    ctx.strokeStyle = '#16293a';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(W * 0.18, H * 0.2, W * 0.64, H * 0.5);
+    ctx.fillStyle = '#16293a';
+    ctx.fillRect(W * 0.44, H * 0.7, W * 0.12, H * 0.08);
+    ctx.fillRect(W * 0.36, H * 0.78, W * 0.28, 6);
+    ctx.fillStyle = '#3d5568';
+    ctx.font = '600 17px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('כבוי', W / 2, H * 0.47);
+    ctx.textAlign = 'start';
   }
 
   private drawCRT() {

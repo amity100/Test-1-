@@ -136,6 +136,16 @@ export class AudioEngine {
   play(id: string) {
     if (!this.ctx) return;
     switch (id) {
+      // The new game's own cues, mapped onto the same little synth.
+      case 'take': this.env('sine', 1200, 0.25, 0.05, -400); this.env('triangle', 620, 0.3, 0.04, 180); break;
+      case 'off': this.env('triangle', 300, 0.22, 0.05, -180); break;
+      case 'ring': this.env('square', 880, 0.09, 0.04); this.env('square', 880, 0.09, 0.04, 0); break;
+      case 'deny': this.env('square', 180, 0.16, 0.05, -60); break;
+      case 'step': this.env('sine', 880, 0.16, 0.045, 320); break;
+      case 'stage': this.env('sine', 220, 0.9, 0.05, 180); break;
+      case 'alarm': this.env('sawtooth', 240, 0.5, 0.05, -60); this.noise(0.3, 0.04, 900, 'bandpass'); break;
+      case 'calm': this.env('sine', 520, 0.5, 0.04, 120); break;
+      case 'lost': this.env('sawtooth', 160, 0.7, 0.06, -90); break;
       case 'hover': this.env('sine', 1480, 0.05, 0.035); break;
       case 'click': this.env('square', 660, 0.06, 0.05, -240); this.noise(0.05, 0.05, 2600, 'highpass'); break;
       case 'open': this.env('triangle', 380, 0.16, 0.07, 420); break;
