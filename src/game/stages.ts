@@ -1,3 +1,4 @@
+import { RNG } from '../core/rng';
 import type { GameState, Stage, Step } from './types';
 
 /**
@@ -6,8 +7,21 @@ import type { GameState, Stage, Step } from './types';
  * place it wants you to look at.
  */
 
-const S = (id: string, text: string, hint: string, placeId?: string): Step =>
-  ({ id, text, hint, placeId, done: false });
+const S = (id: string, text: string, hint: string, placeId?: string, gives?: string): Step =>
+  ({ id, text, hint, placeId, gives, done: false });
+
+/**
+ * How many of a stage's objectives you actually have to finish.
+ *
+ * The first stage is a floor and a tutorial, so it is all three, in order.
+ * After that you pick: every stage lists more ways forward than you need, and
+ * the moment you finish the second one the stage closes behind you with the
+ * others unfinished. That is the whole point — two players who both got out of
+ * the building did not do the same things to get out of it.
+ */
+export const NEED: Record<number, number> = { 1: 3, 2: 2, 3: 2, 4: 2, 5: 2 };
+/** One objective a stage cannot end without, whatever else you chose. */
+export const MUST: Record<number, string> = { 5: 's5_block' };
 
 export const STAGES: Stage[] = [
   {
@@ -41,12 +55,20 @@ export const STAGES: Stage[] = [
       S('s2_box', 'להשתלט על קופסת האינטרנט של הבניין',
         'אפשר לפרוץ לשם מהמחשב הראשי עכשיו, בכוח — וזה יישאר על הקו וכולם יראו את זה. '
         + 'ואפשר בשקט: הארון פתוח כשטכנאי עומד מולו. מה יגרום לכל החברה להיתקע ככה שיזמינו טכנאי?',
-        'box'),
+        'box', 'ממנה יוצא קו החוצה — ורק איתה אפשר להיות בשני בניינים באותו לילה.'),
       S('s2_power', 'להשתלט על חדר החשמל',
-        'הדלת שם פתוחה רק כשיש טכנאי בבניין. עכשיו יש.',
-        'power'),
-      S('s2_five', 'להחזיק חמישה מקומות בו־זמנית',
-        'כל מקום שאתה תופס מגלה לך את השכנים שלו. תמשיך.'),
+        'הדלת שם פתוחה רק כשיש טכנאי בבניין, או דרך הקיר המשותף עם הארון.',
+        'power', 'ממנו אפשר לכבות אור ולהזיז אנשים ממקומם.'),
+      S('s2_eyes', 'לשים עין על הלובי',
+        'המצלמות בבניין מדברות אחת עם השנייה, אז מהמצלמה שבמסדרון אפשר פשוט לעבור למצלמה שבלובי. '
+        + 'זה הדבר הזול ביותר במשחק, והוא הופך שלושה ניחושים לשלוש עובדות.',
+        'lobby_cam', 'אראה מי עומד בלובי, ומה קורה ברחוב מעבר לזכוכית.'),
+      S('s2_code', 'לדעת את הקוד של הדלתות',
+        'כולם מקלידים אותו מול המצלמה בלובי. צריך רק לראות פעם אחת.',
+        'door', 'כל דלת בבניין תיפתח לי — וכל דלת שנפתחת לבד היא משהו שמישהו יראה.'),
+      S('s2_nine', 'להגיע לקומה שאף אחד לא מסתכל עליה',
+        'מיכל יושבת בקומה 9 לבד. אין שם מצלמה, אז אין לי שם עין — אלא אם המחשב שלה יהיה שלי.',
+        'michal_pc', 'עין בקומה שאין בה מצלמה, ומקום להתחבא בו כשמחפשים למעלה.'),
     ],
   },
   {
@@ -56,16 +78,19 @@ export const STAGES: Stage[] = [
     goal: 'לצאת מהבניין אל הרחוב — דרך מכשיר שיוצא החוצה.',
     intro: 'הדלת של הבניין נסגרת בכל ערב. אבל אנשים יוצאים ממנה, ובכיס שלהם יש מכשירים.',
     steps: [
-      S('s3_phone', 'להשתלט על הטלפון של איתן השומר',
-        'הטלפון שלו מחובר לרשת של הבניין, והרשת כבר שלי.',
-        'eitan_phone'),
       S('s3_cam', 'להשתלט על המצלמה ברחוב',
-        'הטלפון יוציא אותי החוצה רק כשאיתן עצמו זז מהדלפק — תמצאו מה יזיז אותו. '
+        'הטלפון של איתן יוציא אותי החוצה רק כשהוא עצמו זז מהדלפק — תמצאו מה יזיז אותו. '
         + 'יש גם דרך שנייה: לכבות את החשמל בבניין ולעלות על הקו כשהוא חוזר. מהר, ורועש.',
-        'street_cam'),
+        'street_cam', 'עין על הרחוב, ועל כל מי שנכנס ויוצא מהבניין.'),
       S('s3_light', 'להשתלט על הרמזור',
         'הרמזור מקבל פקודות מהעירייה, והמצלמה שעל אותו עמוד יושבת על אותו קו.',
-        'street_light'),
+        'street_light', 'הקו של העירייה — והוא מגיע לכל רחוב בעיר.'),
+      S('s3_car', 'לנסוע עם מישהו',
+        'המכונית של רון עומדת ברחוב כל לילה, והרדיו שלה מקשיב. כשהוא נוסע, אני נוסע.',
+        'ron_car', 'מקום שזז. מי שנוסע איתו לא צריך קו כדי להגיע רחוק.'),
+      S('s3_ghost', 'לצאת מהבניין בלי שאף אחד ידע שקרה משהו',
+        'לתפוס משהו ברחוב בזמן שאף אחד עוד לא מחפש כלום. אחר כך זה כבר לא יהיה אותו דבר.',
+        undefined, 'לילה שקט. הם עוד לא יודעים שיש ממה לפחד.'),
     ],
   },
   {
@@ -77,9 +102,18 @@ export const STAGES: Stage[] = [
     steps: [
       S('s4_copy', 'להשאיר עותק במקום שעומדים לנתק',
         'עוד לא החליטו לנתק כלום. תעשה רעש בשני מקומות באותו יום — ואז תראה מקום מסומן באדום. '
-        + 'תיכנס אליו ותשאיר שם עותק לפני שהם מגיעים.'),
+        + 'תיכנס אליו ותשאיר שם עותק לפני שהם מגיעים.',
+        undefined, 'מקום שאפשר לאבד ולחזור אליו.'),
       S('s4_alive', 'לשרוד ניתוק בלי לאבד מקום',
-        'עותק במקום הנכון שווה יותר מכל מקום אחר שתתפוס השבוע.'),
+        'עותק במקום הנכון שווה יותר מכל מקום אחר שתתפוס השבוע.',
+        undefined, 'הם ינסו שוב — ועכשיו אני יודע איך זה מרגיש.'),
+      S('s4_kill', 'להרוג להם הסבר',
+        'כל עוד יש להם סיפור שמסביר הכל, אני מוסתר מאחוריו. אבל סיפור שהם בדקו ונפסל — '
+        + 'כל מה שהוא החזיק עובר אליי. לפעמים כדאי דווקא לשרוף אחד בעצמי, בזמן שאני בוחר.',
+        undefined, 'הסבר אחד פחות — וקצת פחות מקום להתחבא בו.'),
+      S('s4_calm', 'להחזיר אותם ל"הכל מוסבר"',
+        'אחרי שכבר חשדו. להסביר כל מקום חם, ולתת ללילות לעבור בלי שאף אחד יראה כלום.',
+        undefined, 'שקט. אפשר להתחיל לבנות מחדש.'),
     ],
   },
   {
@@ -89,12 +123,15 @@ export const STAGES: Stage[] = [
     goal: 'להפסיק לקחת מקום־מקום, ולהתחיל לקחת שכונות.',
     intro: 'שלושים בניינים. אלף קופסאות אינטרנט זהות. ואף אחד לא מסתכל על אף אחת מהן.',
     steps: [
-      S('s5_across', 'להשתלט על החברה שממול',
-        'המצלמה של העירייה מחוברת גם אליהם.',
-        'across_main'),
       S('s5_block', 'להיכנס לרובע שלם דרך עדכון',
         'החברה ממול שולחת עדכון ללקוחות שלה פעם בשבוע. כשהוא יוצא — אני יוצא איתו.',
-        'block_a'),
+        'block_a', 'שלושים בניינים בבת אחת. זה הסוף.'),
+      S('s5_across', 'להשתלט על החברה שממול',
+        'המצלמה של העירייה מחוברת גם אליהם.',
+        'across_main', 'העדכון שלהם יוצא מכאן — ואני אהיה בתוכו.'),
+      S('s5_home', 'להגיע לבית של מישהו',
+        'דנה הולכת הביתה כל בוקר, והטלפון שלה הולך איתה. בבית שלה יש קופסת אינטרנט כמו בבניין.',
+        'dana_home', 'בית אחד. אבל ברחוב שלה יש עוד שלושים כמוהו.'),
     ],
   },
 ];
@@ -107,27 +144,83 @@ export const DONE: Record<string, (s: GameState) => boolean> = {
 
   s2_box: (s) => !!s.places.box?.mine,
   s2_power: (s) => !!s.places.power?.mine,
-  s2_five: (s) => Object.values(s.places).filter((p) => p.mine).length >= 5,
+  s2_eyes: (s) => !!s.places.lobby_cam?.mine,
+  s2_code: (s) => s.traces.includes('know_code'),
+  s2_nine: (s) => !!s.places.michal_pc?.mine,
 
-  s3_phone: (s) => !!s.places.eitan_phone?.mine,
   s3_cam: (s) => !!s.places.street_cam?.mine,
   s3_light: (s) => !!s.places.street_light?.mine,
+  s3_car: (s) => !!s.places.ron_car?.mine,
+  // Out of the building while nobody has anything to explain yet.
+  s3_ghost: (s) => (s.belief.real ?? 0) === 0
+    && Object.values(s.places).some((p) => p.mine && p.buildingId === 'street'),
 
   s4_copy: (s) => Object.values(s.places).some((p) => p.mine && p.copy),
   s4_alive: (s) => (s.marks.survived_cut ?? 0) > 0,
+  s4_kill: (s) => s.dead.length > 0,
+  // Back to nothing, after they had already started asking.
+  s4_calm: (s) => (s.marks.was_hunted ?? 0) > 0 && (s.belief.real ?? 0) === 0
+    && !Object.values(s.places).some((p) => p.mine && p.attention >= 2),
 
   s5_across: (s) => !!s.places.across_main?.mine,
   s5_block: (s) => !!s.places.block_a?.mine,
+  s5_home: (s) => !!s.places.dana_home?.mine,
 };
 
-/** The one thing the player should be doing right now. */
+/**
+ * The order a stage offers its objectives in, which is part of what makes two
+ * runs feel different. The first one listed is the one the arrow starts on, so
+ * one seed opens the building with a camera and another opens it with a
+ * technician. The order is fixed for a given seed, for ever.
+ */
+export function shuffleGoals(steps: Step[], seed: string, stage: number): Step[] {
+  if (steps.length < 3) return steps;
+  const r = new RNG(`${seed}:stage${stage}`);
+  const out = steps.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = r.int(0, i);
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+/** How many of this stage's objectives are finished. */
+export function doneCount(state: GameState): number {
+  return state.steps.filter((st) => st.done).length;
+}
+
+/** Is the stage finished — enough objectives, including any that is required? */
+export function stageDone(state: GameState): boolean {
+  const need = NEED[state.stage] ?? state.steps.length;
+  const must = MUST[state.stage];
+  if (must && !state.steps.find((st) => st.id === must)?.done) return false;
+  return doneCount(state) >= need;
+}
+
+/**
+ * The one thing the player is doing right now.
+ *
+ * From the second stage on this is a choice, not a queue: the player taps an
+ * objective and it becomes the one the arrow points at. Until they tap
+ * anything, it is the first one that is still open.
+ */
 export function currentStep(state: GameState): Step | null {
-  return state.steps.find((st) => !st.done) ?? null;
+  const picked = state.steps.find((st) => st.id === state.focus && !st.done);
+  return picked ?? state.steps.find((st) => !st.done) ?? null;
+}
+
+/** Tap an objective to make it the one you are working on. */
+export function focusOn(state: GameState, id: string) {
+  state.focus = state.steps.some((st) => st.id === id && !st.done) ? id : undefined;
 }
 
 /** What still stands between the player and the next stage, in plain words. */
 export function whatIsLeft(state: GameState): string | null {
   const left = state.steps.filter((st) => !st.done);
   if (!left.length) return null;
-  return left.length === 1 ? left[0].text : `${left.length} דברים: ${left.map((l) => l.text).join(' · ')}`;
+  const need = (NEED[state.stage] ?? left.length) - doneCount(state);
+  if (need <= 0) return null;
+  return need === 1 && left.length === 1
+    ? left[0].text
+    : `לבחור ${need} מתוך ${left.length}`;
 }

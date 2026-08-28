@@ -150,6 +150,8 @@ export interface Step {
   hint: string;
   /** The place the arrow points at. */
   placeId?: string;
+  /** What finishing it hands you, in one sentence. */
+  gives?: string;
   done: boolean;
 }
 
@@ -162,6 +164,8 @@ export interface Stage {
   /** Shown on the card before the stage starts. */
   intro: string;
   steps: Step[];
+  /** The objective the player tapped. The arrow follows this one. */
+  focus?: string;
 }
 
 // ── The whole game ──────────────────────────────────────────────────────────
@@ -192,6 +196,8 @@ export interface GameState {
   /** What they did last night, to be shown in the morning. */
   night_log: string[];
   steps: Step[];
+  /** The objective the player tapped. The arrow follows this one. */
+  focus?: string;
   log: LogLine[];
   /** Things the player has been told once already. */
   taught: string[];

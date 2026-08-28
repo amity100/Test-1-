@@ -1,7 +1,7 @@
 import { bus } from './bus';
 import { say } from './actions';
 import { endOfDay } from './hunt';
-import { DONE, STAGES, currentStep } from './stages';
+import { DONE, STAGES, currentStep, shuffleGoals, stageDone } from './stages';
 import { buildWorld } from './world';
 import { NIGHT_START } from './night';
 import type { GameState, Place } from './types';
@@ -12,7 +12,7 @@ const SAVE = 'aviv2.save';
  * new game is worse than no save: "continue" would open a game that falls over
  * on the first press, and the player would have no idea why.
  */
-const SAVE_VERSION = 2;
+const SAVE_VERSION = 3;
 
 /** One-time cards. Each pauses the game, says one idea, and never returns. */
 export interface Teach { id: string; title: string; body: string; when(s: GameState): boolean }
@@ -115,7 +115,7 @@ export function refresh(state: GameState) {
     }
   }
 
-  if (state.steps.every((s) => s.done)) nextStage(state);
+  if (stageDone(state)) nextStage(state);
 
   for (const t of TEACH) {
     if (state.taught.includes(t.id)) continue;
@@ -134,7 +134,8 @@ export function nextStage(state: GameState) {
     return;
   }
   state.stage = next.n;
-  state.steps = next.steps.map((s) => ({ ...s }));
+  state.steps = shuffleGoals(next.steps.map((s) => ({ ...s })), state.seed, next.n);
+  state.focus = undefined;
   say(state, 'me', next.intro);
   bus.emit('stage:changed', next.n);
   bus.emit('sfx', 'stage');

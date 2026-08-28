@@ -805,8 +805,12 @@ body.is-mobile .objectives ul li { min-height: 46px; }
 
 /* ── everywhere you could go ─────────────────────────────────────────────── */
 .places .list { display: flex; flex-direction: column; gap: 6px; max-height: 58vh; overflow-y: auto; }
+/* The list scrolls; the rows in it do not get squeezed to make it fit. Without
+   this the last line of every row is shaved off. */
+.places .list > button { flex: 0 0 auto; }
 .pl {
-  display: block; width: 100%; text-align: start; padding: 11px 13px; border-radius: 11px;
+  display: flex; flex-direction: column; align-items: stretch;
+  width: 100%; text-align: start; padding: 11px 13px 12px; border-radius: 11px;
   border: 1px solid rgba(120,170,195,.2); background: rgba(255,255,255,.03); min-height: 52px;
 }
 .pl b { display: block; font-size: 13.5px; color: #dff2fb; }
@@ -815,6 +819,40 @@ body.is-mobile .objectives ul li { min-height: 46px; }
 .pl.mine b { color: var(--cy); }
 .pl.hot { border-color: rgba(255,179,71,.4); }
 .pl.hot b { color: var(--amber); }
+
+
+.rb.guess { border-style: dashed; }
+.rb.guess b { opacity: .75; }
+.pl u { display: block; font-size: 10.5px; text-decoration: none; color: var(--cy-2); margin-top: 2px; }
+
+/* ── what I am trying to do, and what I am giving up instead ─────────────── */
+.task .tasktext {
+  display: block; width: 100%; text-align: start; min-height: 44px;
+  padding: 6px 8px 7px 26px; margin-bottom: 6px; border-radius: 9px;
+  font-size: 13.5px; color: #eaf9ff; line-height: 1.4;
+  border: 1px solid transparent; background: rgba(255,255,255,.03);
+  position: relative;
+}
+.task .tasktext::after {
+  content: '⌄'; position: absolute; inset-inline-end: 9px; inset-block-start: 8px;
+  font-size: 15px; color: var(--cy-2);
+}
+.task .tasktext:hover { border-color: rgba(95,246,255,.28); }
+.places .need { color: var(--cy-2); font-size: 12px; }
+.gl {
+  /* A button does not grow to fit its own text on every browser; a column of
+     flex children does, and nothing gets clipped off the bottom. */
+  display: flex; flex-direction: column; align-items: stretch;
+  width: 100%; text-align: start; padding: 11px 13px 13px; border-radius: 11px;
+  border: 1px solid rgba(120,170,195,.2); background: rgba(255,255,255,.03); min-height: 56px;
+}
+.gl b { display: block; font-size: 13.5px; color: #dff2fb; margin-bottom: 3px; }
+.gl em { font-style: normal; display: block; font-size: 11px; line-height: 1.6; color: var(--muted); }
+.gl u { display: block; font-size: 10.5px; text-decoration: none; color: var(--cy-2); margin-top: 4px; }
+.gl.on { border-color: rgba(95,246,255,.5); background: rgba(95,246,255,.07); }
+.gl.on b { color: var(--cy); }
+.gl.done { opacity: .5; }
+.gl.done b { color: var(--muted); }
 
 /* The narrowest phones people still use: everything shrinks together rather
    than one thing falling off the end. */
@@ -826,7 +864,3 @@ body.is-mobile .objectives ul li { min-height: 46px; }
   #top .icon { width: 40px; min-height: 40px; font-size: 14px; }
   #top .endnight { padding: 0 7px; font-size: 10px; min-height: 40px; }
 }
-
-.rb.guess { border-style: dashed; }
-.rb.guess b { opacity: .75; }
-.pl u { display: block; font-size: 10.5px; text-decoration: none; color: var(--cy-2); margin-top: 2px; }

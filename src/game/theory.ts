@@ -144,6 +144,43 @@ export function collapse(s: GameState, id: string): number {
   return moved;
 }
 
+/**
+ * Did what I just did prove one of their explanations wrong?
+ *
+ * This is the sharpest tool in the game and it is double-edged. A story that
+ * dies hands everything it was holding to the truth — so killing one costs me
+ * immediately. But a story I killed is a story they will never come back to,
+ * and a story I did not kill is one they can act on later, at a moment they
+ * choose rather than one I choose.
+ *
+ * Each of the three dies the same way: something happens that it cannot
+ * possibly explain.
+ *   · the wiring — while the power in the building was off
+ *   · somebody inside — while every single person had gone home
+ *   · somebody outside — while they had the building cut off from the street
+ */
+export function killed(
+  s: GameState, took: string, where: { buildingId: string; kind: string },
+): { id: string; why: string } | null {
+  if (took === TRUTH || s.dead.includes(took)) return null;
+  const nobody = Object.values(s.people).every((p) => p.gone || p.atPlaceId === 'gone'
+    || s.places[p.atPlaceId]?.buildingId !== where.buildingId);
+  const impossible: Record<string, [boolean, string]> = {
+    // The wiring cannot be blamed for something that happened while the wiring
+    // was dead — unless the thing itself happened in the wiring, which the
+    // wiring explains perfectly well.
+    fault: [(s.marks.power_off ?? 0) > 0 && where.buildingId === 'helios' && where.kind !== 'power',
+      'זה קרה בזמן שהחשמל בבניין היה כבוי. עכשיו הם יודעים שזו לא תקלת חשמל.'],
+    insider: [nobody,
+      'זה קרה כשאף אחד לא היה בבניין. עכשיו הם יודעים שזה לא מישהו מבפנים.'],
+    outside: [(s.marks.line_cut ?? 0) > 0,
+      'זה קרה כשהבניין היה מנותק מהקו של הרחוב. עכשיו הם יודעים שזה לא בא מבחוץ.'],
+  };
+  const test = impossible[took];
+  if (!test || !test[0]) return null;
+  return { id: took, why: test[1] };
+}
+
 /** How close they are, in four words rather than a number. */
 export function howClose(s: GameState): { word: string; level: 0 | 1 | 2 | 3 } {
   const w = s.belief[TRUTH] ?? 0;

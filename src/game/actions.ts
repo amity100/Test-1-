@@ -3,7 +3,7 @@ import { daysToUpdate } from './hunt';
 import { WAYS, has, leave, waysTo } from './ways';
 import { NIGHT_END, clock, crowd, spend } from './night';
 import { markWhere, reachable, seenAt, show } from './sight';
-import { evidence, leading } from './theory';
+import { collapse, evidence, killed, leading, theoryOf } from './theory';
 import type { GameState, Look, Loud, Place, PlaceKind } from './types';
 
 /**
@@ -676,6 +676,18 @@ export function run(state: GameState, placeId: string, actionId: string): boolea
     state.night_log.push(`${clock(state.at)} · ${act.text} — ${p.name}`);
     if (went === 'real') {
       say(state, 'them', `מה שעשיתי ב${p.name} לא נראה כמו שום דבר שיש להם שם בשבילו.`);
+    }
+    // And it may have proved one of their explanations impossible. Everything
+    // that story was holding is mine now.
+    const dead = killed(state, went, { buildingId: p.buildingId, kind: p.kind });
+    if (dead) {
+      const moved = collapse(state, dead.id);
+      say(state, 'them', dead.why);
+      if (moved > 0) {
+        say(state, 'me', `כל מה ש"${theoryOf(dead.id).name}" החזיק — ${moved} דברים — נשאר בלי הסבר. `
+          + 'כלומר, נשאר עליי.');
+      }
+      bus.emit('toast', { text: `נגמר להם ההסבר: ${theoryOf(dead.id).name}`, kind: 'bad', icon: '⊗' });
     }
   } else {
     state.night_log.push(`${clock(state.at)} · ${act.text} — ${p.name}`);

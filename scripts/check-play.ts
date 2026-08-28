@@ -4,7 +4,7 @@
  */
 import { endDay, newGame, refresh } from '../src/game/game';
 import { actionsFor, run } from '../src/game/actions';
-import { currentStep } from '../src/game/stages';
+import { NEED, currentStep, focusOn } from '../src/game/stages';
 import { canSee, knowsWhere, reachable } from '../src/game/sight';
 import type { GameState } from '../src/game/types';
 
@@ -91,7 +91,7 @@ if (doomed && !s.over) {
 // Quiet nights while they calm down, then the update goes out.
 s.belief = {}; s.dead = [];
 for (const p of Object.values(s.places)) p.attention = 0;
-while (s.stage === 4 && s.day < 20) { endDay(s); refresh(s); }
+while (s.stage === 4 && s.day < 20 && !s.over) { endDay(s); refresh(s); }
 run(s, 'across_main', 'take'); refresh(s);
 ok(s.places.across_main.mine, 'החברה ממול נתפסה דרך המצלמה של העירייה');
 for (let i = 0; i < 8 && !s.places.block_a.mine; i++) {
@@ -144,6 +144,44 @@ const far = r.places.street_light;
 ok(!!reachable(r, far), 'בלי קופסת האינטרנט אי אפשר לקפוץ לבניין אחר באותו לילה');
 r.places.box.mine = true;
 ok(!reachable(r, far), 'ועם הקופסה — אפשר');
+
+// ── the objectives are a choice, and finishing two closes the stage ────────
+const g = newGame('goals');
+g.marks.looked = 1; refresh(g);
+run(g, 'dana_pc', 'take'); run(g, 'dana_pc', 'off'); run(g, 'main', 'take'); refresh(g);
+ok(g.stage === 2 && g.steps.length === 5, `שלב 2 מציע ${g.steps.length} מטרות`);
+ok(NEED[2] === 2, '   וצריך רק שתיים מהן');
+const order = (seed: string) => {
+  const x = newGame(seed);
+  x.marks.looked = 1; refresh(x);
+  run(x, 'dana_pc', 'take'); run(x, 'dana_pc', 'off'); run(x, 'main', 'take'); refresh(x);
+  return x.steps.map((st) => st.id).join(',');
+};
+ok(order('one') !== order('two'), 'זרעים שונים פותחים את הבניין בסדר אחר');
+ok(order('one') === order('one'), '   ואותו זרע — תמיד אותו סדר');
+focusOn(g, 's2_box');
+ok(currentStep(g)?.id === 's2_box', 'אפשר לבחור על מה עובדים עכשיו');
+run(g, 'lobby_cam', 'take'); refresh(g);
+ok(g.stage === 2, 'מטרה אחת לא מסיימת שלב');
+run(g, 'box', 'take:force'); refresh(g);
+ok(g.stage === 3, 'שתיים כן — והשאר נשארות מאחור');
+ok(g.steps.some((st) => st.id.startsWith('s3_')), '   ושלב 3 מציע מטרות חדשות');
+
+// ── burning one of their explanations, on purpose ──────────────────────────
+const k = newGame('kill');
+k.marks.looked = 1; refresh(k);
+for (const p of Object.values(k.places)) { p.found = true; p.mine = true; }
+run(k, 'power', 'off'); run(k, 'power', 'on'); refresh(k);
+ok((k.belief.fault ?? 0) > 0, 'הם מאמינים שזו תקלת חשמל');
+const before = k.belief.real ?? 0;
+const banked = k.belief.fault ?? 0;
+run(k, 'power', 'off'); refresh(k);
+run(k, 'lobby_screen', 'show'); refresh(k);
+run(k, 'printer', 'print'); refresh(k);
+ok(k.dead.includes('fault'), 'משהו שקרה כשהחשמל היה כבוי — וההסבר הזה מת');
+ok((k.belief.real ?? 0) >= before + banked,
+  `   וכל מה שהוא החזיק עבר אליי (${before} → ${k.belief.real ?? 0})`);
+ok((k.marks.power_off ?? 0) > 0, '   כי החשמל באמת היה כבוי כשזה קרה');
 
 console.log(bad ? `\n✗ ${bad} דברים לא עובדים.` : '\n✓ הכל עובד: חמשת השלבים, כמה דרכים לכל מקום, והסימנים שנשארים.');
 process.exit(bad ? 1 : 0);

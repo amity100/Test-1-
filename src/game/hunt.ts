@@ -56,6 +56,10 @@ export function daysToUpdate(state: GameState): number {
  */
 export function endOfDay(state: GameState) {
   state.marks.update_ready = state.night % UPDATE_EVERY === 0 ? 1 : 0;
+  if (state.marks.line_cut) state.marks.line_cut -= 1;
+  // Once they have properly started asking, "nobody is asking any more" is a
+  // thing you can work towards — and it is not the same as never having been asked.
+  if ((state.belief[TRUTH] ?? 0) >= 4) state.marks.was_hunted = 1;
   const said: string[] = [];
 
   // ── what I left behind me does its work ──────────────────────────────────
@@ -114,6 +118,10 @@ export function endOfDay(state: GameState) {
       bus.emit('place:lost', pid);
     }
     state.traces = state.traces.filter((t) => !act.clears.includes(t));
+    // Cutting the building off from the street is a thing I can be caught
+    // inside: anything that happens while the line is down cannot have come
+    // from outside, and they will know it.
+    if (id === 'outside') state.marks.line_cut = 2;
     // And a fix that does not fix anything makes them wonder about the fix.
     evidence(state, 'wrong', 1);
   }

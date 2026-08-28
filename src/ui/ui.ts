@@ -9,7 +9,7 @@ import { clock } from '../game/hunt';
 import { NIGHT_END, NIGHT_START, hourSays } from '../game/night';
 import { ACT_ON, FOUND_OUT, THEORIES, TRUTH, howClose, leading, nextMove } from '../game/theory';
 import { TEACH, currentStep, endDay, refresh, save, stageOf } from '../game/game';
-import { whatIsLeft } from '../game/stages';
+import { MUST, NEED, STAGES, doneCount, focusOn, whatIsLeft } from '../game/stages';
 import { TRACES } from '../game/ways';
 import { BUILDINGS, FLOOR_H } from '../render/city';
 import { POWER_NAME, POWER_OF, known, seenAt } from '../game/sight';
@@ -100,7 +100,7 @@ export class UI {
 
       <div id="bottom">
         <div id="task" class="task">
-          <b id="tasktext"></b>
+          <button class="tasktext" id="tasktext" data-do="goals"></button>
           <div class="row">
             <button class="go" data-do="goto">קחו אותי לשם</button>
             <button class="icon wide" data-do="wide" title="לראות הכל">⤢</button>
@@ -258,6 +258,15 @@ export class UI {
       case 'down': this.world.lift(-FLOOR_H); this.dirty = true; break;
       case 'believe': this.showBelief(); break;
       case 'places': this.showPlaces(); break;
+      case 'goals': this.showGoals(); break;
+      case 'focus': {
+        focusOn(s, arg);
+        this.closeModal();
+        const p = currentStep(s)?.placeId ? s.places[currentStep(s)!.placeId!] : null;
+        if (p) { this.world.goTo(p, true); }
+        this.dirty = true;
+        break;
+      }
       case 'fly': {
         this.closeModal();
         const p = s.places[arg];
@@ -647,6 +656,43 @@ export class UI {
   }
 
   /** Everywhere you could go, in one list, so flying is never the only way. */
+  /**
+   * What I am trying to do, and what else I could be trying to do instead.
+   *
+   * From the second stage on there are more objectives than the stage needs.
+   * Finishing enough of them closes the stage with the rest unfinished, so this
+   * list is a decision, not a checklist — which is why every line says what
+   * finishing it hands you.
+   */
+  private showGoals() {
+    const s = this.state;
+    const stage = STAGES.find((x) => x.n === s.stage);
+    const need = NEED[s.stage] ?? s.steps.length;
+    const left = Math.max(0, need - doneCount(s));
+    const must = MUST[s.stage];
+    const now = currentStep(s)?.id;
+    const rows = s.steps.map((st) => `
+      <button class="gl ${st.done ? 'done' : ''} ${st.id === now ? 'on' : ''}"
+          data-do="focus" data-arg="${st.id}" ${st.done ? 'disabled' : ''}>
+        <b>${st.done ? '✔ ' : ''}${esc(st.text)}${st.id === must ? ' ★' : ''}</b>
+        <em>${esc(st.hint)}</em>
+        ${st.gives ? `<u>${esc(st.gives)}</u>` : ''}
+      </button>`).join('');
+    this.modal(`
+      <div class="sheet wide places">
+        <span class="kick">${esc(stage?.where ?? '')}</span>
+        <h2>${esc(stage?.title ?? '')}</h2>
+        <div class="txt">
+          <p>${esc(stage?.goal ?? '')}</p>
+          <p class="need">${left > 0
+    ? `צריך עוד ${left} מתוך ${s.steps.filter((x) => !x.done).length}. השאר יישארו מאחור.`
+    : 'זהו. השלב הבא נפתח.'}${must ? ' ★ = בלי זה אין סוף.' : ''}</p>
+        </div>
+        <div class="txt list">${rows}</div>
+        <button class="ok" data-do="closeteach">סגור</button>
+      </div>`);
+  }
+
   private showPlaces() {
     const s = this.state;
     const rows = Object.values(s.places)
@@ -770,7 +816,11 @@ export class UI {
     (tb.querySelector('i') as HTMLElement).textContent = s.traces.length ? String(s.traces.length) : '';
 
     // ── what to do now ──────────────────────────────────────────────────────
-    set('tasktext', step?.text ?? whatIsLeft(s) ?? 'הכל בשלב הזה נגמר.');
+    const need = NEED[s.stage] ?? s.steps.length;
+    const left = Math.max(0, need - doneCount(s));
+    set('tasktext', step
+      ? `${step.text}${s.steps.length > need ? `  ·  עוד ${left} מתוך ${s.steps.filter((x) => !x.done).length}` : ''}`
+      : whatIsLeft(s) ?? 'הכל בשלב הזה נגמר.');
     // While you are choosing, the task line gets out of the way. Two panels
     // stacked at the bottom of a small phone is most of the screen.
     (this.root.querySelector('#task') as HTMLElement)
