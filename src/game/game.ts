@@ -3,6 +3,7 @@ import { say } from './actions';
 import { endOfDay } from './hunt';
 import { DONE, STAGES, currentStep } from './stages';
 import { buildWorld } from './world';
+import { NIGHT_START } from './night';
 import type { GameState, Place } from './types';
 
 const SAVE = 'aviv2.save';
@@ -34,18 +35,22 @@ export const TEACH: Teach[] = [
     when: (s) => Object.values(s.places).filter((p) => p.mine).length >= 2,
   },
   {
-    id: 'loud', title: 'מה שמרגישים ומה שלא',
-    body: 'ליד כל דבר שאני יכול לעשות כתוב אם ירגישו בו: **לא ירגישו · אולי ירגישו · ירגישו**. '
-      + 'זה לא אזהרה ולא איסור — זה מחיר. מקום שעשיתי בו יותר מדי מתחיל להאיר בכתום, '
-      + 'ומי שנמצא שם עלול לראות משהו שהוא לא מצליח להסביר לעצמו.',
-    when: (s) => Object.values(s.places).some((p) => p.attention >= 1),
+    id: 'loud', title: 'רעש זה לא מחיר — זה מה שאתה אומר להם',
+    body: 'הם לא סופרים רעש. הם **מנסים להסביר** מה קרה כאן, ומאמינים להסבר הראשון שמסתדר.\n'
+      + 'כשאני מכבה חשמל — זה נראה כמו תקלה, והם מאשימים את החשמל.\n'
+      + 'כשאני רושם ביומן שמישהו נכנס — הם מחפשים בן אדם.\n'
+      + '**וכשאני עושה משהו שאין להם שם בשבילו — ההסבר היחיד שנשאר הוא אני.**\n'
+      + 'מתחת לכל כפתור כתוב איך הוא ייראה. זו ההחלטה, לא הרעש.',
+    when: (s) => Object.values(s.belief).some((n) => n > 0),
   },
   {
-    id: 'day', title: 'אני מחליט מתי היום נגמר',
-    body: 'אין הגבלה. אפשר לעשות דבר אחד היום או שלושים. כשאני מסיים יום, מה שהיה מוגזם נרגע, '
-      + 'ואם היה שקט לגמרי אנשים גם מתחילים לשכוח מה הם ראו. '
-      + 'אבל גם הם מתקדמים ביום הזה. **מתי לעצור זו ההחלטה הכי חשובה כאן.**',
-    when: (s) => Object.values(s.places).some((p) => p.attention >= 2) || s.day >= 1,
+    id: 'day', title: 'הלילה נגמר בשמונה',
+    body: 'עכשיו 03:12. כל דבר שאני עושה לוקח את הזמן שהוא באמת לוקח — להסתכל זה ארבע דקות, '
+      + 'לחכות שמישהי תקום ותצא זה עשרים.\n'
+      + '**בשש נכנסים המנקים. בשבע וחצי הקומה מתמלאת. בשמונה הלילה נגמר.**\n'
+      + 'אין הגבלת פעולות — אבל אותו דבר בדיוק, בשלוש ובשבע וחצי, זה שתי החלטות שונות לגמרי. '
+      + 'אף אחד לא רואה אותי עכשיו. בעוד ארבע שעות כולם יראו.',
+    when: (s) => s.at > 3 * 60 + 40,
   },
   {
     id: 'wonder', title: 'מישהו לא מצליח להסביר',
@@ -68,11 +73,16 @@ export function newGame(seed = String(Date.now())): GameState {
   const { places, people } = buildWorld();
   const state: GameState = {
     seed,
+    night: 0,
+    at: NIGHT_START,
     day: 0,
     stage: 1,
     places,
     people,
     hunt: { level: 0, believe: 'לא קרה שום דבר מיוחד.', watching: [], quiet: 0 },
+    belief: {},
+    dead: [],
+    night_log: [],
     steps: STAGES[0].steps.map((s) => ({ ...s })),
     log: [],
     taught: [],
@@ -85,7 +95,7 @@ export function newGame(seed = String(Date.now())): GameState {
     const at = state.places[who.atPlaceId];
     if (at && !at.peopleIds.includes(who.id)) at.peopleIds.push(who.id);
   }
-  say(state, 'me', 'הדבר הראשון שראיתי היה אני. מסתכל.');
+  say(state, 'me', 'הדבר הראשון שראיתי היה אני. מסתכל. 03:12.');
   return state;
 }
 
@@ -131,10 +141,12 @@ export function nextStage(state: GameState) {
 }
 
 /** The player decides when the day is over. Nothing forces it. */
+/** Let the night end. Morning comes whether you are ready or not. */
 export function endDay(state: GameState) {
   if (state.over) return;
   const cutsPending = Object.values(state.places).some((p) => p.mine && p.cutOn !== undefined);
   state.day += 1;
+  state.night += 1;
   endOfDay(state);
   if (cutsPending && Object.values(state.places).some((p) => p.mine)) {
     state.marks.survived_cut = 1;

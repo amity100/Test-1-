@@ -1,4 +1,4 @@
-import type { GameState, Loud } from './types';
+import type { GameState, Look, Loud } from './types';
 
 /**
  * Every locked thing has more than one way in, and no two ways cost the same.
@@ -105,6 +105,10 @@ export interface Way {
   /** What it leaves behind. Shown before you choose, never after. Empty is empty. */
   cost: string;
   loud: Loud;
+  /** Minutes of the night it takes. The quiet ways are the slow ones. */
+  mins?: number;
+  /** What it will look like to whoever finds it in the morning. */
+  look?: Look;
   /** Can you do it right now? */
   can(s: GameState): boolean;
   /** If not — why not, in one sentence. It can depend on what I already did. */
@@ -522,16 +526,46 @@ export const WAYS: Record<string, Way[]> = {
 };
 
 /** Every way into a place, with whether it is open right now and why not. */
-export function waysTo(s: GameState, placeId: string): Array<Omit<Way, 'need'> & { need: string; ready: boolean; why: string }> {
+/**
+ * What each way in looks like afterwards. Going along a cable looks like the
+ * cable; going in somebody's pocket looks like a person; coming off the line
+ * from the street looks like the street. Taking a whole quarter's traffic
+ * lights at once looks like nothing they have a word for.
+ */
+const WAY_LOOKS: Record<string, Look> = {
+  'dana_pc:wire': 'electric', 'dana_pc:shoulder': 'person', 'dana_pc:empty': 'person',
+  'printer:wire': 'electric', 'printer:jobs': 'electric',
+  'main:ride': 'person', 'main:name': 'person', 'main:paper': 'electric', 'main:night': 'person',
+  'box:ron': 'person', 'box:force': 'outside', 'box:ninth': 'electric',
+  'power:open': 'person', 'power:wall': 'electric', 'power:code': 'person',
+  'lobby_cam:box': 'electric', 'lobby_cam:cams': 'electric',
+  'door:cam': 'electric', 'door:code': 'person', 'door:power': 'electric',
+  'lobby_screen:cam': 'electric',
+  'lobby_speaker:screen': 'electric', 'lobby_speaker:board': 'electric',
+  'michal_pc:box': 'electric', 'michal_pc:coffee': 'person',
+  'dana_phone:desk': 'person', 'dana_phone:net': 'electric',
+  'eitan_phone:net': 'electric', 'eitan_phone:charge': 'person',
+  'street_cam:pocket': 'person', 'street_cam:cable': 'electric', 'street_cam:car': 'person',
+  'street_light:pole': 'outside', 'street_light:cable': 'electric', 'street_light:ron': 'person',
+  'ron_car:radio': 'person', 'ron_car:street': 'outside',
+  'across_main:city': 'outside', 'across_main:board': 'outside', 'across_main:client': 'person',
+  'dana_home:ride': 'person',
+  'block_a:update': 'outside', 'block_a:homes': 'outside', 'block_a:lights': 'wrong',
+};
+
+export function waysTo(s: GameState, placeId: string): Array<Omit<Way, 'need'> & { need: string; mins: number; look: Look; ready: boolean; why: string }> {
   const list = WAYS[placeId] ?? [];
   return list.map((w) => {
     const from = s.places[w.from];
     const need = typeof w.need === 'function' ? w.need(s) : w.need;
+    // Quiet ways take longer, because quiet means waiting for somebody to leave.
+    const mins = w.mins ?? (w.loud === 'quiet' ? 42 : w.loud === 'noticed' ? 26 : 18);
+    const look = w.look ?? WAY_LOOKS[`${placeId}:${w.id}`] ?? 'electric';
     if (!from?.mine) {
-      return { ...w, need, ready: false, why: `קודם צריך את ${from?.name ?? 'המקום שממנו באים'}.` };
+      return { ...w, need, mins, look, ready: false, why: `קודם צריך את ${from?.name ?? 'המקום שממנו באים'}.` };
     }
     const open = w.can(s);
-    return { ...w, need, ready: open, why: open ? '' : need };
+    return { ...w, need, mins, look, ready: open, why: open ? '' : need };
   });
 }
 

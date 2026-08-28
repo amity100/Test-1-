@@ -8,6 +8,8 @@
 import { endDay, newGame, refresh } from '../src/game/game';
 import { actionsFor, run } from '../src/game/actions';
 import { waysTo } from '../src/game/ways';
+import { ACT_ON, collapse } from '../src/game/theory';
+import { NIGHT_END, clock } from '../src/game/night';
 import type { GameState } from '../src/game/types';
 
 let bad = 0;
@@ -116,19 +118,15 @@ head('הדפים');
   s.places.printer.mine = true;
   run(s, 'main', 'take:paper'); refresh(s);
   ok(s.traces.includes('paper'), 'הכניסה דרך המדפסת משאירה דפים');
-  const withPrinter = (() => {
-    const c = holding('p1'); c.traces.push('paper');
-    const a0 = c.places.printer.attention;
+  const pile = (own: boolean) => {
+    const c = own ? holding('p1') : holding('p2', ['printer']);
+    c.traces.push('paper');
+    // Give it a start above the morning's cooling, so the pile is measurable.
+    c.places.printer.attention = 2;
     endDay(c);
-    return c.places.printer.attention - a0;
-  })();
-  const without = (() => {
-    const c = holding('p2', ['printer']); c.traces.push('paper');
-    const a0 = c.places.printer.attention;
-    endDay(c);
-    return c.places.printer.attention - a0;
-  })();
-  ok(without > withPrinter, 'מי שהמדפסת שלו — הדפים לא נערמים; מי שלא — כן');
+    return c.places.printer.attention;
+  };
+  ok(pile(false) > pile(true), 'מי שהמדפסת שלו — הדפים לא נערמים; מי שלא — כן');
 }
 
 // ── 6 · riding a phone ends the day its owner starts writing things down ────
@@ -150,23 +148,34 @@ head('הטלפון של איתן');
 // ── 7 · what they believe decides where they look ───────────────────────────
 head('לאן הם מסתכלים');
 {
+  // Believing it was a person sends them through the entry log and people's
+  // computers — and past the cupboard, however hot the cupboard is.
   const person = holding('scan1');
-  person.traces.push('blamed_person');
-  person.marks.seen_me = 1;   // they have seen something they cannot write off
-  person.places.dana_pc.attention = 1;
+  person.belief.insider = 10;
   person.places.box.attention = 3;
+  person.places.door.attention = 2;
   endDay(person); refresh(person);
-  ok(!person.places.dana_pc.mine || !person.places.home.mine || !person.places.main.mine,
-    'כשהם מחפשים בן אדם — הסורק הולך למחשבים של אנשים');
-  ok(person.places.box.mine, '   והארון, שהוא הכי חם, נשאר שלי');
+  ok(person.places.door.attention === 0,
+    'כשהם מאמינים שזה בן אדם — הם הולכים ליומן הכניסות');
+  ok(person.places.box.attention >= 2,
+    '   והארון, שהוא הכי חם, נשאר בלי שאף אחד הסתכל עליו');
 
+  // Believing it is the wiring sends them to the panels instead.
   const line = holding('scan2');
-  line.traces.push('loose_line');
-  line.marks.seen_me = 1;
+  line.belief.fault = 10;
+  line.places.power.attention = 2;
   line.places.dana_pc.attention = 3;
   endDay(line); refresh(line);
-  ok(!line.places.main.mine || !line.places.box.mine || !line.places.printer.mine,
-    'כשהסימן הוא על הקו — הסורק הולך לקו, ולא למחשב הכי חם');
+  ok(line.places.power.attention === 0, 'כשהם מאמינים שזו תקלה — הם הולכים ללוחות');
+  ok(line.places.dana_pc.attention >= 2, '   ולא למחשב הכי חם בבניין');
+
+  // And when they stop believing any of it, they come for what is actually mine.
+  const found = holding('scan3');
+  found.belief.real = 12;
+  found.places.main.attention = 3;
+  endDay(found); refresh(found);
+  ok(!found.places.main.mine || !found.places.box.mine || !found.places.floor_cam.mine,
+    'וכשהם כבר לא מאמינים לשום הסבר — הם באים ישר אליי');
 }
 
 // ── 8 · the same place, three ways, three different games ───────────────────
@@ -183,6 +192,98 @@ head('אותו מקום, שלושה משחקים');
   const a = marks('pocket'); const b = marks('cable'); const c = marks('car');
   ok(a !== b && b !== c && a !== c,
     `שלוש הדרכים למצלמה ברחוב משאירות שלושה מצבים שונים (${a} / ${b} / ${c})`);
+}
+
+// ── 9 · noise is a statement, not a cost ────────────────────────────────────
+head('איך הרעש נראה');
+{
+  const s = holding('look');
+  const before = s.belief.real ?? 0;
+  run(s, 'power', 'off'); run(s, 'power', 'on'); refresh(s);
+  ok((s.belief.real ?? 0) === before, 'לכבות חשמל לא מקרב אותם אליי בכלל');
+  ok((s.belief.fault ?? 0) >= 2, '   הכל נזקף לתקלת החשמל');
+
+  const t = holding('look2');
+  run(t, 'door', 'entry'); refresh(t);
+  ok((t.belief.insider ?? 0) > 0, 'שורה ביומן הכניסות שולחת אותם לחפש בן אדם');
+
+  const u = holding('look3');
+  const b0 = u.belief.real ?? 0;
+  run(u, 'lobby_screen', 'show'); refresh(u);
+  ok((u.belief.real ?? 0) > b0, 'ומשפט על המסך שאף אחד לא כתב — אין לו שום הסבר חוץ ממני');
+}
+
+// ── 10 · a story that collapses hands them the truth ────────────────────────
+head('כשסיפור מתמוטט');
+{
+  const s = holding('collapse');
+  for (let i = 0; i < 4; i++) { run(s, 'power', 'off'); run(s, 'power', 'on'); }
+  refresh(s);
+  const piled = s.belief.fault ?? 0;
+  ok(piled >= 4, `ערמתי ${piled} ראיות על "תקלת חשמל"`);
+  const truthBefore = s.belief.real ?? 0;
+  collapse(s, 'fault');
+  ok((s.belief.real ?? 0) >= truthBefore + piled,
+    'וברגע שהסיפור נפסל — כל מה שהוא החזיק עבר אליי. שקר שמתמוטט גרוע משתיקה');
+}
+
+// ── 11 · a cover story is a fuse, not a shield ──────────────────────────────
+head('הסיפור נשרף');
+{
+  const s = holding('fuse');
+  s.belief.fault = ACT_ON + 2;
+  const hadPower = s.places.power.mine;
+  endDay(s); refresh(s);
+  ok(hadPower && !s.places.power.mine,
+    'כשהאמינו לי מספיק שזו תקלת חשמל — הם החליפו את הלוחות, ואיבדתי את חדר החשמל');
+  ok((s.belief.fault ?? 0) < ACT_ON,
+    '   והסיפור עצמו נשרף: צריך להתחיל לבנות אותו מחדש');
+}
+
+// ── 12 · the hour is half the decision ──────────────────────────────────────
+head('השעה');
+{
+  const early = holding('early');
+  early.at = 3 * 60 + 20;
+  const e0 = Object.values(early.belief).reduce((n, x) => n + x, 0);
+  run(early, 'printer', 'print'); refresh(early);
+  const eGain = Object.values(early.belief).reduce((n, x) => n + x, 0) - e0;
+
+  const late = holding('late');
+  late.at = 7 * 60 + 40;
+  const l0 = Object.values(late.belief).reduce((n, x) => n + x, 0);
+  run(late, 'printer', 'print'); refresh(late);
+  const lGain = Object.values(late.belief).reduce((n, x) => n + x, 0) - l0;
+  ok(lGain > eGain,
+    `אותה הדפסה בדיוק: ב־03:20 עולה ${eGain}, ב־07:40 עולה ${lGain}`);
+}
+
+// ── 13 · the night runs out ─────────────────────────────────────────────────
+head('הלילה');
+{
+  const s = holding('clock');
+  const t0 = s.at;
+  run(s, 'printer', 'print'); refresh(s);
+  ok(s.at > t0, `כל פעולה לוקחת זמן (${clock(t0)} → ${clock(s.at)})`);
+  let n = 0;
+  while (s.at < NIGHT_END && n < 200) { run(s, 'floor_cam', 'watch'); n++; }
+  ok(s.at >= NIGHT_END, `והלילה נגמר אחרי ${n} הצצות במצלמה`);
+
+  // The budget that matters is not how many times you can glance at a camera.
+  // It is how many places you can actually take in one night.
+  const t = newGame('budget');
+  for (const p of Object.values(t.places)) p.found = true;
+  t.places.home.mine = true; t.places.floor_cam.mine = true;
+  let takes = 0;
+  while (t.at < NIGHT_END && takes < 40) {
+    const next = Object.values(t.places).find((p) => !p.mine
+      && actionsFor(t, p.id).some((a) => a.id.startsWith('take:') && !a.blocked));
+    if (!next) break;
+    const a = actionsFor(t, next.id).find((x) => x.id.startsWith('take:') && !x.blocked)!;
+    run(t, next.id, a.id);
+    takes++;
+  }
+  ok(takes <= 10, `ובלילה אחד אפשר לקחת ${takes} מקומות, לא יותר`);
 }
 
 console.log(bad ? `\n✗ ${bad} דברים לא שזורים כמו שצריך.` : '\n✓ כל בחירה משנה את מה שאפשר אחר כך.');

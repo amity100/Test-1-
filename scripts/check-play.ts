@@ -58,22 +58,34 @@ run(s, 'street_cam', 'take'); refresh(s);
 run(s, 'street_light', 'take'); refresh(s);
 ok(s.places.street_light.mine && s.stage === 4, 'הרמזור נתפס ושלב 3 נגמר');
 
-// ── stage 4: be loud, they unplug, a copy brings you back ───────────────────
-run(s, 'street_light', 'jam');
-run(s, 'power', 'off');
-endDay(s); refresh(s);
-ok(s.hunt.level >= 2, 'רעש בשני מקומות באותו יום מביא אותם לנתק');
-const doomed = Object.values(s.places).find((p) => p.cutOn !== undefined);
-ok(!!doomed, 'מקום מסוים מסומן לניתוק, ורואים מתי');
-if (doomed) {
+// ── stage 4: do things nobody can explain, and they come looking ────────────
+run(s, 'lobby_screen', 'take'); refresh(s);
+const beforeTruth = s.belief.real ?? 0;
+run(s, 'power', 'off'); run(s, 'power', 'on'); refresh(s);
+ok((s.belief.real ?? 0) === beforeTruth, 'לכבות חשמל נראה כמו תקלה — ולא מקרב אותם אליי');
+ok((s.belief.fault ?? 0) > 0, '   וזה נזקף לחשבון של תקלת החשמל');
+for (let i = 0; i < 6; i++) { run(s, 'lobby_screen', 'show'); }
+refresh(s); endDay(s); refresh(s);
+ok((s.belief.real ?? 0) > beforeTruth,
+  'משפט על המסך שאף אחד לא כתב — אין לזה שום הסבר אחר, וזה נזקף עליי');
+let doomed = Object.values(s.places).find((p) => p.cutOn !== undefined);
+for (let i = 0; i < 6 && !doomed && !s.over; i++) {
+  run(s, 'lobby_screen', 'show'); refresh(s);
+  endDay(s); refresh(s);
+  doomed = Object.values(s.places).find((p) => p.cutOn !== undefined);
+}
+ok(!!doomed, 'כשהם מפסיקים להאמין להסברים — הם מכריזים מה הם מנתקים');
+if (doomed && !s.over) {
   run(s, doomed.id, 'copy'); refresh(s);
-  const held = Object.values(s.places).filter((p) => p.mine).length;
-  endDay(s); endDay(s); refresh(s);
-  ok(s.places[doomed.id].mine, 'העותק החזיר אותי אחרי הניתוק');
-  ok(Object.values(s.places).filter((p) => p.mine).length >= held - 1, 'ולא איבדתי את כל הבניין');
+  endDay(s); refresh(s);
+  ok(s.places[doomed.id].mine || (s.marks.survived_cut ?? 0) > 0,
+    'ועותק שהשארתי שם מראש מחזיר אותי אחרי הניתוק');
 }
 
 // ── stage 5: wait for the update, take the block ────────────────────────────
+// Quiet nights while they calm down, then the update goes out.
+s.belief = {}; s.dead = [];
+for (const p of Object.values(s.places)) p.attention = 0;
 while (s.stage === 4 && s.day < 20) { endDay(s); refresh(s); }
 run(s, 'across_main', 'take'); refresh(s);
 ok(s.places.across_main.mine, 'החברה ממול נתפסה דרך המצלמה של העירייה');

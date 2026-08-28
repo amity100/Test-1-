@@ -25,6 +25,32 @@ export type PlaceKind =
 /** How much a thing you do will be felt. One word, never a number. */
 export type Loud = 'quiet' | 'noticed' | 'loud';
 
+/**
+ * What a thing you did looks like to somebody who finds it in the morning.
+ * This is the whole of the game's bluffing: noise is not a cost, it is a
+ * statement, and this is what the statement says.
+ */
+export type Look =
+  | 'electric'   // like the building's wiring giving up again
+  | 'person'     // like somebody with a card who was here at night
+  | 'outside'    // like it came in on the line from the street
+  | 'wrong';     // like nothing anybody here has a word for
+
+export const LOOK_NAME: Record<Look, string> = {
+  electric: 'נראה כמו תקלת חשמל',
+  person: 'נראה כמו מישהו מבפנים',
+  outside: 'נראה כאילו הגיע מבחוץ',
+  wrong: 'לא נראה כמו שום דבר שיש להם שם בשבילו',
+};
+
+/** What holding a place lets you do. This is why one place is not another. */
+export type Power =
+  | 'sight'     // cameras: you know who is where
+  | 'reach'     // the cupboard: you can act on places you are not standing in
+  | 'move'      // the power room: you can move people about
+  | 'ride'      // phones and cars: you go where they go
+  | 'speed';    // the main computer: everything costs fewer minutes
+
 /** How loudly a place is being looked at right now. Shown as a picture, never a number. */
 export type Attention = 0 | 1 | 2 | 3;
 // 0 שקט · 1 מישהו שם לב · 2 בודקים · 3 עומדים לנתק
@@ -57,6 +83,8 @@ export interface Place {
   cutOn?: number;
   /** Set when you left something behind here before it was cut. */
   copy: boolean;
+  /** It has already been looked at hard once. It cannot count against me twice. */
+  screamed?: boolean;
   peopleIds: string[];
   links: Link[];
   /** Which building it sits in. Street furniture uses 'street'. */
@@ -89,6 +117,10 @@ export interface Person {
   wondering: boolean;
   /** What they saw, in their words. */
   saw?: string;
+  /** The night they saw it. A thing seen is a shock, not a slow leak. */
+  sawOn?: number;
+  /** Their shift ended and they went home. Back tomorrow night. */
+  gone?: boolean;
 }
 
 // ── The hunt ────────────────────────────────────────────────────────────────
@@ -144,11 +176,21 @@ export interface LogLine {
 
 export interface GameState {
   seed: string;
+  /** Which night this is. */
+  night: number;
+  /** Minutes past midnight. The night runs from 03:12 to 08:00. */
+  at: number;
   day: number;
   stage: number;
   places: Record<string, Place>;
   people: Record<string, Person>;
   hunt: Hunt;
+  /** How much they believe each explanation. */
+  belief: Record<string, number>;
+  /** Explanations the player has made impossible. */
+  dead: string[];
+  /** What they did last night, to be shown in the morning. */
+  night_log: string[];
   steps: Step[];
   log: LogLine[];
   /** Things the player has been told once already. */

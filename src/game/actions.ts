@@ -1,7 +1,9 @@
 import { bus } from './bus';
 import { daysToUpdate } from './hunt';
 import { WAYS, has, leave, waysTo } from './ways';
-import type { GameState, Loud, Place, PlaceKind } from './types';
+import { NIGHT_END, clock, crowd, spend } from './night';
+import { evidence, leading } from './theory';
+import type { GameState, Look, Loud, Place, PlaceKind } from './types';
 
 /**
  * Everything the player can press, and exactly what it does.
@@ -28,6 +30,60 @@ export const LOUD_SAYS: Record<Loud, string> = {
   loud: 'זה גדול מדי בשביל שלא ירגישו בו.',
 };
 
+/**
+ * What each thing you can do looks like to somebody who finds it in the morning.
+ *
+ * This is the most important table in the game. Noise is not a cost here — it is
+ * a statement. Cut the power and they blame the wiring. Write a line in the
+ * entry log and they look for a person. Put a sentence on the screen in the
+ * lobby that nobody typed, and there is nothing in their world it could be
+ * except you.
+ */
+const LOOKS: Record<string, Look> = {
+  off: 'electric', on: 'electric', flicker: 'electric', onefloor: 'electric',
+  slowdown: 'electric', slow: 'electric', blank: 'electric', print: 'electric',
+  jam: 'electric', noise: 'electric', flat: 'electric', blind: 'electric',
+  write: 'person', message: 'person', entry: 'person', drill: 'person',
+  open: 'person', route: 'person',
+  lock: 'wrong', page: 'wrong', show: 'wrong', green: 'wrong', ring: 'wrong',
+  // Looking, listening and reading are machines doing machine things. If anybody
+  // notices them at all, they notice a flicker.
+  read: 'electric', watch: 'electric', listen: 'electric', record: 'electric',
+  hear: 'electric', drift: 'electric', copy: 'electric', explain: 'electric',
+};
+
+/**
+ * A thing with no look of its own looks like the building being old. Only the
+ * handful of things in the table above as 'wrong' have no explanation at all,
+ * and that is the point: the unexplainable has to be chosen, never stumbled into.
+ */
+const PLAIN: Look = 'electric';
+
+/**
+ * And what each one costs in minutes. Quiet is not free: the quiet way to do a
+ * thing is nearly always the slow one, because it means waiting for somebody to
+ * get up and leave. That is the trade the whole night is made of.
+ */
+const MINS: Record<string, number> = {
+  read: 9, watch: 8, listen: 12, blank: 7, blind: 12, record: 16,
+  ring: 11, message: 13, flat: 14, print: 10, page: 14,
+  off: 14, on: 8, flicker: 12, onefloor: 17, open: 9, lock: 9, entry: 21,
+  write: 22, slowdown: 26, slow: 24, jam: 16, drift: 28, green: 12,
+  show: 13, hear: 15, route: 14, noise: 7, drill: 24,
+  copy: 32, explain: 38,
+};
+
+const MINS_BY_LOUD: Record<Loud, number> = { quiet: 10, noticed: 16, loud: 20 };
+/** How heavy a piece of evidence a thing you did leaves behind. */
+const WEIGHT: Record<Loud, number> = { quiet: 0, noticed: 1, loud: 3 };
+
+export function minutesFor(state: GameState, id: string, loud: Loud): number {
+  const base = MINS[id.replace(/^take:/, '')] ?? MINS_BY_LOUD[loud];
+  // The main computer runs everything in this building. Holding it makes every
+  // single thing quicker, which is the only reason to want it for itself.
+  return Math.max(1, Math.round(base * (state.places.main?.mine ? 0.7 : 1)));
+}
+
 export interface Action {
   id: string;
   /** The button. "לכבות את המחשב" */
@@ -37,6 +93,10 @@ export interface Action {
   /** What it leaves behind. Shown before you press it. */
   cost?: string;
   loud: Loud;
+  /** How many minutes of the night it takes. */
+  mins: number;
+  /** What it will look like to them, if anybody finds it. */
+  look?: Look;
   /** When set, the button is shown but pressing it explains why not. */
   blocked?: string;
 }
@@ -459,7 +519,8 @@ function tricks(s: GameState, p: Place): Action[] {
   const out: Action[] = [];
   if (p.attention >= 1) {
     out.push({
-      id: 'explain', text: 'לגרום לזה להיראות כמו תקלה',
+      id: 'explain', text: 'לגרום לזה להיראות כמו תקלה', mins: minutesFor(s, 'explain', 'quiet'),
+      look: 'electric' as Look,
       says: has(s, 'blamed_cable')
         ? 'כבר מאמינים שיש כאן כבל רופף. מספיק להזכיר להם אותו, וכל הקומה תירגע.'
         : 'להשאיר סיבה משעממת ומשכנעת — כבל רופף, לחות, גיל. הם יאהבו אותה ויסגרו את הבדיקה.',
@@ -469,7 +530,7 @@ function tricks(s: GameState, p: Place): Action[] {
   }
   if (!p.copy && p.mine) {
     out.push({
-      id: 'copy', text: 'להשאיר כאן חלק ממני',
+      id: 'copy', text: 'להשאיר כאן חלק ממני', mins: minutesFor(s, 'copy', 'quiet'),
       says: 'אם ינתקו את המקום הזה — החלק הזה יחכה בשקט, וכשידליקו בחזרה אני אחזור איתו.',
       loud: 'quiet',
     });
@@ -497,6 +558,8 @@ export function actionsFor(state: GameState, placeId: string): Action[] {
       says: w.says,
       cost: w.cost,
       loud: w.loud,
+      mins: w.mins ?? minutesFor(state, w.loud === 'quiet' ? 'wayQuiet' : 'wayLoud', w.loud),
+      look: w.look,
       blocked: w.ready ? undefined : w.why,
     }));
   }
@@ -504,6 +567,7 @@ export function actionsFor(state: GameState, placeId: string): Action[] {
   return [
     ...usesFor(state, p).map((u) => ({
       id: u.id, text: u.text, says: u.says, cost: u.cost, loud: u.loud,
+      mins: minutesFor(state, u.id, u.loud), look: LOOKS[u.id],
     })),
     ...tricks(state, p),
   ];
@@ -524,15 +588,20 @@ function tell(text: string, kind: 'good' | 'bad' | 'warn' | 'info', icon?: strin
   bus.emit('toast', { text, kind, icon });
 }
 
-/** Anyone standing here who is likely to notice, notices. */
+/**
+ * Anyone close enough to see it, sees it — and how many people that is depends
+ * entirely on the hour. At twenty past three the answer is nobody. At half past
+ * seven the same act is done in front of a room.
+ */
 function witness(state: GameState, p: Place, what: string) {
   for (const id of p.peopleIds) {
     const who = state.people[id];
-    if (!who || who.atPlaceId !== p.id) continue;
+    if (!who || who.gone || who.atPlaceId !== p.id) continue;
     if (Math.random() > who.notices) continue;
     if (who.wondering) continue;
     who.wondering = true;
     who.saw = what;
+    who.sawOn = state.night;
     say(state, 'world', `${who.name} ראה/תה ${what}.`);
     tell(`${who.name} שם/ה לב`, 'warn', '👁');
   }
@@ -576,9 +645,28 @@ export function run(state: GameState, placeId: string, actionId: string): boolea
     return false;
   }
 
+  // The night is the budget. Everything takes the time it really takes.
+  const mins = act.mins ?? MINS_BY_LOUD[act.loud];
+  spend(state, mins);
   heat(state, p, LOUD_COST[act.loud]);
   told = false;
   const saidBefore = state.log[0]?.id;
+
+  // And everything loud leaves something behind that has to be explained. Who
+  // ends up explaining it depends on what it looked like — and on how many
+  // people were standing there when it happened.
+  const seen = Math.min(2, crowd(state, p.floor, p.buildingId));
+  const w = WEIGHT[act.loud] === 0 ? (seen >= 1 ? 1 : 0) : WEIGHT[act.loud] + seen;
+  if (w > 0) {
+    const look = act.look ?? PLAIN;
+    const went = evidence(state, look, w);
+    state.night_log.push(`${clock(state.at)} · ${act.text} — ${p.name}`);
+    if (went === 'real') {
+      say(state, 'them', `מה שעשיתי ב${p.name} לא נראה כמו שום דבר שיש להם שם בשבילו.`);
+    }
+  } else {
+    state.night_log.push(`${clock(state.at)} · ${act.text} — ${p.name}`);
+  }
 
   if (act.id.startsWith('take:')) {
     const way = (WAYS[p.id] ?? []).find((w) => `take:${w.id}` === act!.id);
@@ -610,6 +698,21 @@ export function run(state: GameState, placeId: string, actionId: string): boolea
     const deep = has(state, 'blamed_cable');
     p.attention = 0;
     delete p.cutOn;
+    // Anybody standing here who could not explain what they saw now can, and
+    // two of the things they could not explain become one thing they can.
+    for (const id of p.peopleIds) {
+      const who = state.people[id];
+      if (!who?.wondering) continue;
+      who.wondering = false;
+      who.saw = undefined;
+      say(state, 'me', `${who.name} מצא/ה את הכבל השרוף, והפסיק/ה לחשוב על זה.`);
+    }
+    p.screamed = false;
+    const moved = Math.min(2, state.belief.real ?? 0);
+    if (moved > 0) {
+      state.belief.real = (state.belief.real ?? 0) - moved;
+      state.belief.fault = (state.belief.fault ?? 0) + moved;
+    }
     if (deep) {
       for (const q of Object.values(state.places)) {
         if (q.floor === p.floor && q.buildingId === p.buildingId) {

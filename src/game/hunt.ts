@@ -1,6 +1,8 @@
 import { bus } from './bus';
 import { say } from './actions';
-import { scannerLooksAt, traceDay, traceWorry } from './ways';
+import { traceDay } from './ways';
+import { ACTS, ACT_ON, FOUND_OUT, TRUTH, evidence, howClose, leading, looksAt, nextMove } from './theory';
+import { NIGHT_START, clock } from './night';
 import type { GameState, HuntLevel, Place } from './types';
 
 /**
@@ -20,12 +22,7 @@ export const HUNT_WORD: Record<HuntLevel, string> = {
   3: 'תוקפים',
 };
 
-const BELIEVE: string[] = [
-  'לא קרה שום דבר מיוחד.',
-  'יש כמה תקלות חשמל בבניין.',
-  'מישהו מבפנים משחק עם המערכות.',
-  'יש כאן משהו שלא אמור להיות פה.',
-];
+
 
 /** How many people have seen something they cannot explain. */
 export function wondering(state: GameState): number {
@@ -38,136 +35,195 @@ export function hottest(state: GameState): Place[] {
     .sort((a, b) => b.attention - a.attention);
 }
 
-function setLevel(state: GameState, level: HuntLevel) {
-  if (level === state.hunt.level) return;
-  const up = level > state.hunt.level;
-  state.hunt.level = level;
-  state.hunt.believe = BELIEVE[Math.min(level, BELIEVE.length - 1)];
-  bus.emit('hunt:changed', level);
-  bus.emit('toast', {
-    text: up ? `הם ${HUNT_WORD[level]}` : `נרגעו — עכשיו ${HUNT_WORD[level]}`,
-    kind: up ? 'bad' : 'good',
-    icon: up ? '⚠' : '✔',
-  });
-  bus.emit('sfx', up ? 'alarm' : 'calm');
-}
-
-/** Runs once, at the end of a day the player chose to end. */
 /** The company across the street ships an update to its customers every fourth day. */
 const UPDATE_EVERY = 4;
 
 export function daysToUpdate(state: GameState): number {
-  const next = Math.ceil((state.day + 1) / UPDATE_EVERY) * UPDATE_EVERY;
-  return next - state.day;
+  const next = Math.ceil((state.night + 1) / UPDATE_EVERY) * UPDATE_EVERY;
+  return next - state.night;
 }
 
+/**
+ * Morning.
+ *
+ * They come in, they find what you left, and they try to explain it. Whatever
+ * they end up believing decides where they go looking — which means a night
+ * spent making your noise look like the wiring is a night that sends them into
+ * the basement while you are on the fourteenth floor.
+ *
+ * Nothing here is free. There is no resting day: every morning they take one
+ * more step, whatever you did or did not do.
+ */
 export function endOfDay(state: GameState) {
-  // The update either goes out today, or it does not. Nothing else decides it.
-  state.marks.update_ready = state.day % UPDATE_EVERY === 0 ? 1 : 0;
+  state.marks.update_ready = state.night % UPDATE_EVERY === 0 ? 1 : 0;
+  const said: string[] = [];
 
-  const hot = hottest(state);
-  const worry = Math.max(0, wondering(state) + traceWorry(state));
-  const loudPlaces = hot.filter((p) => p.attention >= 2).length;
-
-  // ── did the day count as quiet? ──────────────────────────────────────────
-  const wasQuiet = loudPlaces === 0 && worry === 0;
-  state.hunt.quiet = wasQuiet ? state.hunt.quiet + 1 : 0;
-
-  // ── everything cools a little, and a lot if you stayed still ─────────────
-  for (const p of Object.values(state.places)) {
-    if (p.attention > 0) {
-      p.attention = Math.max(0, p.attention - (wasQuiet ? 2 : 1)) as Place['attention'];
-    }
-  }
-
-  // What I left behind me works after the cooling, not before it — a pile of
-  // pages that grows every morning must not be swept away the same evening.
+  // ── what I left behind me does its work ──────────────────────────────────
   for (const e of traceDay(state)) {
     say(state, e.kind === 'good' ? 'me' : 'world', e.text);
-    if (e.kind === 'bad') bus.emit('toast', { text: e.text, kind: 'warn', icon: '↯' });
-  }
-  if (wasQuiet) {
-    for (const who of Object.values(state.people)) {
-      if (who.wondering && Math.random() < 0.5) {
-        who.wondering = false;
-        who.saw = undefined;
-        say(state, 'world', `${who.name} הפסיק/ה לחשוב על זה.`);
-      }
-    }
+    said.push(e.text);
   }
 
-  // ── where are they now ───────────────────────────────────────────────────
-  const maxed = hot.filter((p) => p.attention >= 3).length;
-  let level: HuntLevel = 0;
-  // One noisy place, or one person who saw something they cannot explain: they start asking.
-  if (worry >= 1 || loudPlaces >= 1) level = 1;
-  // Noisy in two places on the same day, or one place hammered flat: they start unplugging.
-  if ((worry >= 1 && loudPlaces >= 1) || loudPlaces >= 2 || maxed >= 1) level = 2;
-  // Three people comparing notes, or two places screaming: they send something after you.
-  if (worry >= 3 || maxed >= 2 || (state.marks.seen_me ?? 0) > 0) level = 3;
-  if (state.hunt.quiet >= 2 && level > 0) level = Math.max(0, level - 1) as HuntLevel;
-  setLevel(state, level);
-
-  state.hunt.watching = hot.slice(0, 3).map((p) => p.id);
-
-  // ── level 2: they schedule a place to be unplugged ───────────────────────
-  if (state.hunt.level >= 2) {
-    const target = hot.find((p) => p.attention >= 2 && p.cutOn === undefined);
-    if (target) {
-      target.cutOn = state.day + 2;
-      say(state, 'them', `החליטו לנתק את ${target.name}. יש לי יומיים.`);
-      bus.emit('toast', { text: `עוד יומיים מנתקים: ${target.name}`, kind: 'bad', icon: '⏻' });
-    }
+  // ── people compare notes ─────────────────────────────────────────────────
+  //
+  // Somebody seeing something is a shock, not a leak: it counts the morning
+  // after they saw it, and again only if somebody else has seen something too.
+  // One person alone with a story nobody shares talks themselves out of it.
+  const worried = Object.values(state.people).filter((p) => p.wondering);
+  const fresh = worried.filter((p) => p.sawOn === state.night);
+  if (worried.length >= 2) {
+    evidence(state, 'wrong', worried.length - 1);
+    say(state, 'them', `${worried.map((p) => p.name).join(' ו')} דיברו ביניהם הבוקר, וגילו ששניהם ראו משהו.`);
+  } else if (fresh.length) {
+    evidence(state, 'wrong', 1);
+    say(state, 'them', `${fresh[0].name} סיפר/ה למישהו מה ראה/תה אתמול בלילה.`);
   }
-
-  // ── the cut itself ───────────────────────────────────────────────────────
+  // A place that has been hammered flat explains itself to nobody — but it only
+  // counts the first time. A thing that is already strange does not get stranger
+  // every morning on its own; something new has to happen.
   for (const p of Object.values(state.places)) {
-    if (p.cutOn === undefined || p.cutOn > state.day) continue;
+    if (p.mine && p.attention >= 3 && !p.screamed) {
+      p.screamed = true;
+      evidence(state, 'wrong', 1);
+      say(state, 'them', `${p.name} כבר לא נראה להם כמו תקלה. הם פשוט לא יודעים מה זה.`);
+    }
+    if (p.attention <= 1) p.screamed = false;
+  }
+
+  // ── a story they believe enough gets acted on, and then it is spent ──────
+  //
+  // This is the sharpest edge in the game. Making everything look like the
+  // wiring works beautifully — until the morning they actually rewire the
+  // building, and every room you were living in through the wiring is gone.
+  for (const [id, act] of Object.entries(ACTS)) {
+    if (state.dead.includes(id)) continue;
+    const w = state.belief[id] ?? 0;
+    const spent = state.marks[`spent_${id}`] ?? 0;
+    if (w < ACT_ON + spent * 4) continue;
+    state.marks[`spent_${id}`] = spent + 1;
+    state.belief[id] = Math.round(w * 0.35);
+    say(state, 'them', act.text);
+    bus.emit('toast', { text: act.text, kind: 'bad', icon: '⚒' });
+    for (const pid of act.loses) {
+      const p = state.places[pid];
+      if (!p?.mine) continue;
+      if (p.copy) { p.copy = false; say(state, 'me', `${p.name} הוחלף — והעותק החזיר אותי.`); continue; }
+      p.mine = false;
+      p.attention = 0;
+      say(state, 'me', `${p.name} כבר לא שלי. החליפו את מה שישבתי בתוכו.`);
+      bus.emit('place:lost', pid);
+    }
+    state.traces = state.traces.filter((t) => !act.clears.includes(t));
+    // And a fix that does not fix anything makes them wonder about the fix.
+    evidence(state, 'wrong', 1);
+  }
+
+  // ── they act on whatever they now believe ────────────────────────────────
+  const theory = leading(state);
+  const where = looksAt(state);
+  const truth = theory.id === TRUTH;
+  const checked = where.map((id) => state.places[id]).filter(Boolean).slice(0, 2);
+  for (const p of checked) {
+    if (truth && p.mine) {
+      // They are looking for me, in the right place.
+      if (p.copy) {
+        p.copy = false;
+        p.attention = 0;
+        say(state, 'me', `נכנסו ל${p.name} וניתקו אותו. העותק חיכה, וכשהחזירו — חזרתי.`);
+      } else {
+        p.mine = false;
+        p.attention = 0;
+        say(state, 'them', `${p.name} — נותק. ${theory.does}`);
+        bus.emit('place:lost', p.id);
+        bus.emit('toast', { text: `אבד: ${p.name}`, kind: 'bad', icon: '✕' });
+      }
+    } else if (p.attention > 0) {
+      // Looking in the wrong place, and finding nothing, calms them down there.
+      p.attention = 0;
+      delete p.cutOn;
+      say(state, 'world', `בדקו את ${p.name} ולא מצאו כלום. סגרו את זה.`);
+    }
+  }
+
+  // Once they are looking for me rather than for an explanation, they name the
+  // place they are going to unplug — and I get one night to leave something there.
+  if (truth) {
+    const target = Object.values(state.places)
+      .filter((p) => p.mine && p.cutOn === undefined && !p.copy)
+      .sort((a, b) => b.attention - a.attention)[0];
+    if (target) {
+      target.cutOn = state.night + 1;
+      say(state, 'them', `החליטו לנתק את ${target.name}. יש לי לילה אחד.`);
+      bus.emit('toast', { text: `מחר מנתקים: ${target.name}`, kind: 'bad', icon: '⏻' });
+    }
+  }
+  for (const p of Object.values(state.places)) {
+    if (p.cutOn === undefined || p.cutOn > state.night) continue;
     delete p.cutOn;
     if (!p.mine) continue;
     if (p.copy) {
       p.copy = false;
       p.attention = 0;
-      say(state, 'me', `ניתקו את ${p.name}. העותק שהשארתי שם חיכה, וכשהחזירו את החשמל — חזרתי איתו.`);
+      state.marks.survived_cut = 1;
+      say(state, 'me', `ניתקו את ${p.name}. העותק חיכה בשקט, וכשהחזירו את החשמל — חזרתי איתו.`);
       bus.emit('toast', { text: `${p.name} נותק — והעותק החזיר אותי`, kind: 'good', icon: '❐' });
     } else {
       p.mine = false;
       p.attention = 0;
       say(state, 'them', `ניתקו את ${p.name}. מה שהיה לי שם — נגמר.`);
       bus.emit('place:lost', p.id);
-      bus.emit('toast', { text: `אבד: ${p.name}`, kind: 'bad', icon: '✕' });
       bus.emit('sfx', 'lost');
     }
   }
 
-  // ── level 3: something goes hunting ──────────────────────────────────────
-  if (state.hunt.level >= 3) {
-    // It searches where they think the trouble is. A story I told them earlier
-    // can send it to the wrong end of the building.
-    const looking = scannerLooksAt(state);
-    const prey = looking.map((id) => state.places[id]).find((p) => p?.mine && !p.copy)
-      ?? hot.find((p) => p.attention >= 2 && !p.copy);
-    if (prey) {
-      state.hunt.scannerAt = prey.id;
-      prey.mine = false;
-      prey.attention = 0;
-      say(state, 'them', looking.includes(prey.id)
-        ? `סרקו קודם כל את ${prey.name}, כי שם הם חושבים שזה. הם צדקו.`
-        : `משהו סרק את ${prey.name} ומחק אותי משם. הוא לא חיפש חתימה — הוא חיפש התנהגות.`);
-      bus.emit('place:lost', prey.id);
-      bus.emit('toast', { text: `נמחקתי מ${prey.name}`, kind: 'bad', icon: '☍' });
-    } else {
-      state.hunt.scannerAt = undefined;
-      say(state, 'them', looking.length
-        ? 'הסורק הלך בדיוק לאן שסיפרתי להם ללכת, ולא מצא שם כלום.'
-        : 'הסורק עבר על כל מה שיש להם ולא מצא כלום. אני התנהגתי כמו הרעש הרגיל של המקום.');
+  // ── the night cools a little. Not to nothing. ────────────────────────────
+  for (const p of Object.values(state.places)) {
+    if (p.attention > 0) p.attention = Math.max(0, p.attention - 1) as Place['attention'];
+  }
+  // Somebody who has slept on it sometimes lets it go — but only sometimes, and
+  // only if nobody else saw anything.
+  if (worried.length === 1) {
+    for (const who of Object.values(state.people)) {
+      if (who.wondering && who.sawOn !== state.night && Math.random() < 0.5) {
+        who.wondering = false;
+        who.saw = undefined;
+        say(state, 'world', `${who.name} החליט/ה שזה היה כלום.`);
+      }
     }
   }
 
-  // ── lost? ────────────────────────────────────────────────────────────────
-  const left = Object.values(state.places).filter((p) => p.mine).length;
-  if (left === 0) {
+  // ── the shift comes back and the next night begins ───────────────────────
+  for (const who of Object.values(state.people)) {
+    if (!who.gone) continue;
+    who.gone = false;
+    const home = state.places[who.homePlaceId];
+    who.atPlaceId = who.homePlaceId;
+    if (home && !home.peopleIds.includes(who.id)) home.peopleIds.push(who.id);
+  }
+  for (const p of Object.values(state.places)) {
+    p.peopleIds = p.peopleIds.filter((id) => !state.people[id]?.gone);
+  }
+
+  state.at = NIGHT_START;
+  state.night_log = [];
+
+  const close = howClose(state);
+  state.hunt.level = close.level;
+  state.hunt.believe = nextMove(state);
+  state.hunt.watching = where.slice(0, 3);
+  bus.emit('hunt:changed', close.level);
+
+  // ── found out? ───────────────────────────────────────────────────────────
+  if ((state.belief[TRUTH] ?? 0) >= FOUND_OUT) {
+    state.over = 'lost';
+    say(state, 'them', 'הפסיקו לחפש הסבר. התחילו לחפש אותי, וידעו איפה.');
+    bus.emit('over', 'lost');
+    return;
+  }
+  if (!Object.values(state.places).some((p) => p.mine)) {
     state.over = 'lost';
     bus.emit('over', 'lost');
   }
 }
+
+export { clock };
