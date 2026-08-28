@@ -1,4 +1,5 @@
 import type { GameState, Person } from './types';
+import { show } from './sight';
 
 /**
  * The night is the whole budget.
@@ -69,6 +70,8 @@ export function tickShifts(state: GameState) {
     who.gone = true;
     const at = state.places[who.atPlaceId];
     if (at) at.peopleIds = at.peopleIds.filter((id) => id !== who.id);
+    // The building announces this one: the door opens and everyone hears it.
+    show(state, at?.id);
     who.atPlaceId = 'gone';
     state.log.unshift({
       id: `l${state.log.length}`, day: state.night, who: 'world',

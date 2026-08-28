@@ -432,7 +432,9 @@ export class World {
       }
     }
 
-    const floor = Math.round(this.target.y / FLOOR_H);
+    // Which floor am I standing on — not which one am I nearest. The eye sits a
+    // little above the desk, and rounding sent you up a storey the whole time.
+    const floor = Math.floor(this.target.y / FLOOR_H + 0.001);
     this.host = host;
     this.onFloor = floor;
     revealFloors(this.inside, host, floor, host ? 3 : 0);

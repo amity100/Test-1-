@@ -2,6 +2,7 @@ import { bus } from './bus';
 import { daysToUpdate } from './hunt';
 import { WAYS, has, leave, waysTo } from './ways';
 import { NIGHT_END, clock, crowd, spend } from './night';
+import { markWhere, reachable, seenAt, show } from './sight';
 import { evidence, leading } from './theory';
 import type { GameState, Look, Loud, Place, PlaceKind } from './types';
 
@@ -99,6 +100,10 @@ export interface Action {
   look?: Look;
   /** When set, the button is shown but pressing it explains why not. */
   blocked?: string;
+  /** True when I am doing this without being able to see whether it will work. */
+  guess?: boolean;
+  /** Why it is a guess: which spot I cannot see. */
+  hint?: string;
 }
 
 // ── the things you can do with a place that is already yours ────────────────
@@ -551,6 +556,7 @@ export function actionsFor(state: GameState, placeId: string): Action[] {
   if (!p) return [];
 
   if (!p.mine) {
+    const far = reachable(state, p);
     const ways = waysTo(state, p.id).filter((w) => state.places[w.from]?.mine || w.ready);
     return ways.map((w) => ({
       id: `take:${w.id}`,
@@ -560,7 +566,10 @@ export function actionsFor(state: GameState, placeId: string): Action[] {
       loud: w.loud,
       mins: w.mins ?? minutesFor(state, w.loud === 'quiet' ? 'wayQuiet' : 'wayLoud', w.loud),
       look: w.look,
-      blocked: w.ready ? undefined : w.why,
+      // A blind way is one I may attempt without knowing whether it will work.
+      blocked: far ?? (w.ready || w.blind ? undefined : w.why),
+      guess: w.blind,
+      hint: w.blind ? w.why : undefined,
     }));
   }
 
@@ -568,6 +577,7 @@ export function actionsFor(state: GameState, placeId: string): Action[] {
     ...usesFor(state, p).map((u) => ({
       id: u.id, text: u.text, says: u.says, cost: u.cost, loud: u.loud,
       mins: minutesFor(state, u.id, u.loud), look: LOOKS[u.id],
+      blocked: reachable(state, p) ?? undefined,
     })),
     ...tricks(state, p),
   ];
@@ -636,7 +646,10 @@ export function run(state: GameState, placeId: string, actionId: string): boolea
   // "take" on its own means: use the best way that is open right now.
   let act = acts.find((a) => a.id === actionId);
   if (!act && actionId === 'take') {
-    act = acts.find((a) => a.id.startsWith('take:') && !a.blocked) ?? acts.find((a) => a.id.startsWith('take:'));
+    // A way I can see is open beats a way I would only be guessing at.
+    act = acts.find((a) => a.id.startsWith('take:') && !a.blocked && !a.guess)
+      ?? acts.find((a) => a.id.startsWith('take:') && !a.blocked)
+      ?? acts.find((a) => a.id.startsWith('take:'));
   }
   if (!act) return false;
   if (act.blocked) {
@@ -668,8 +681,17 @@ export function run(state: GameState, placeId: string, actionId: string): boolea
     state.night_log.push(`${clock(state.at)} · ${act.text} — ${p.name}`);
   }
 
+  markWhere(state, p);
+
   if (act.id.startsWith('take:')) {
     const way = (WAYS[p.id] ?? []).find((w) => `take:${w.id}` === act!.id);
+    if (way && !way.can(state)) {
+      // I could not see whether the room was empty, and it was not.
+      say(state, 'me', `חיכיתי ב${p.name} בלי לראות מה קורה שם, וזה לא היה הרגע הנכון.`);
+      tell('לא הצלחתי. הזמן נגמר ולא קרה כלום.', 'warn', '◌');
+      bus.emit('changed', undefined);
+      return true;
+    }
     p.mine = true;
     p.found = true;
     for (const l of p.links) {
@@ -754,6 +776,9 @@ export function movePerson(state: GameState, personId: string, toPlaceId: string
   const from = state.places[who.atPlaceId];
   if (from) from.peopleIds = from.peopleIds.filter((id) => id !== personId);
   who.atPlaceId = toPlaceId;
+  // The world says this out loud, so both spots are things I know tonight,
+  // camera or no camera.
+  show(state, from?.id, toPlaceId);
   const to = state.places[toPlaceId];
   if (to && !to.peopleIds.includes(personId)) to.peopleIds.push(personId);
   say(state, 'world', line);

@@ -12,6 +12,7 @@ import { TEACH, currentStep, endDay, refresh, save, stageOf } from '../game/game
 import { whatIsLeft } from '../game/stages';
 import { TRACES } from '../game/ways';
 import { BUILDINGS, FLOOR_H } from '../render/city';
+import { POWER_NAME, POWER_OF, known, seenAt } from '../game/sight';
 import { LOOK_NAME } from '../game/types';
 import type { GameState } from '../game/types';
 import { esc, h } from './dom';
@@ -389,7 +390,7 @@ export class UI {
         this.ring.set(a.id, el);
       }
       const cls = `rb look-${a.look ?? 'electric'} l-${a.loud}`
-        + `${a.blocked ? ' shut' : ''}${this.focused === a.id ? ' on' : ''}`;
+        + `${a.blocked ? ' shut' : ''}${a.guess ? ' guess' : ''}${this.focused === a.id ? ' on' : ''}`;
       if (el.className !== cls) el.className = cls;
       el.style.transform = `translate(calc(${Math.round(x)}px - 50%), calc(${Math.round(y)}px - 50%))`;
       live.add(a.id);
@@ -412,26 +413,30 @@ export class UI {
     pick.classList.toggle('hidden', !p);
     if (!p) return;
 
-    const people = p.peopleIds.map((id) => s.people[id]).filter((q) => q && !q.gone);
+    const eye = known(s, p.id);
+    const seen = seenAt(s, p);
     const heat = p.cutOn !== undefined
       ? `מנתקים את זה בעוד ${Math.max(1, p.cutOn - s.night)} לילות`
       : p.attention >= 2 ? 'מסתכלים לכאן עכשיו'
-        : people.length ? `${people.map((q) => q.name).join(' · ')} כאן`
-          : 'אין כאן אף אחד';
+        : !eye ? 'אין לי כאן עין'
+          : seen.length ? `${seen.join(' · ')} כאן`
+            : 'אין כאן אף אחד';
     const set = (id: string, text: string) => {
       const el = this.root.querySelector(`#${id}`) as HTMLElement;
       if (el.textContent !== text) el.textContent = text;
     };
     set('pickwho', `${p.name} · ${heat}`);
     set('picktitle', a ? a.text : 'מה לעשות כאן?');
-    set('picksays', a ? (a.blocked ?? a.says) : 'בחרו אחת מהאפשרויות שסביב.');
+    set('picksays', a
+      ? (a.blocked ?? (a.guess ? (a.hint ?? a.says) : a.says))
+      : 'בחרו אחת מהאפשרויות שסביב.');
     set('pickcost', a?.cost ?? '');
     set('pickmins', a ? String(a.mins) : '—');
     set('picklook', a?.look ? LOOK_NAME[a.look] : '');
     (this.root.querySelector('#pickcost') as HTMLElement).classList.toggle('none', !a?.cost);
     const go = this.root.querySelector('#pickdo') as HTMLButtonElement;
     go.className = `do${a && !a.blocked ? '' : ' off'}`;
-    go.textContent = a?.blocked ? 'אי אפשר עדיין' : 'לעשות את זה';
+    go.textContent = a?.blocked ? 'אי אפשר עדיין' : a?.guess ? 'לנסות בכל זאת' : 'לעשות את זה';
     go.dataset.arg = a ? `${p.id}|${a.id}` : '';
     (this.root.querySelector('#picklook') as HTMLElement).className =
       `look look-${a?.look ?? 'none'}`;
@@ -649,13 +654,15 @@ export class UI {
       .sort((a, b) => (b.mine ? 1 : 0) - (a.mine ? 1 : 0)
         || a.buildingId.localeCompare(b.buildingId) || b.floor - a.floor)
       .map((p) => {
-        const who = p.peopleIds.map((id) => s.people[id]).filter((q) => q && !q.gone);
+        const who = seenAt(s, p);
         const state = p.cutOn !== undefined ? 'מנתקים' : p.attention >= 2 ? 'מסתכלים לכאן'
           : p.mine ? 'שלי' : 'לא שלי';
+        const power = POWER_OF[p.kind];
         return `<button class="pl ${p.mine ? 'mine' : ''} ${p.attention >= 2 ? 'hot' : ''}"
             data-do="fly" data-arg="${p.id}">
           <b>${esc(p.name)}</b>
-          <em>${esc(p.where)} · ${esc(state)}${who.length ? ` · ${esc(who.map((q) => q!.name).join(', '))}` : ''}</em>
+          <em>${esc(p.where)} · ${esc(state)}${who.length ? ` · ${esc(who.join(', '))}` : ''}</em>
+          ${power ? `<u>${esc(POWER_NAME[power])}</u>` : ''}
         </button>`;
       }).join('');
     this.modal(`
@@ -769,16 +776,26 @@ export class UI {
     (this.root.querySelector('#task') as HTMLElement)
       .classList.toggle('none', !step || !!this.selected);
 
-    // ── which floor you are standing on ─────────────────────────────────────
-    const inB = this.world.inBuilding;
-    const floors = this.root.querySelector('#floors') as HTMLElement;
-    floors.classList.toggle('hidden', !inB);
-    if (inB) set('flnum', String(this.world.onFloorNow));
-
     this.renderPick();
     this.world.point(step?.placeId ?? null);
     this.world.sync(s);
     this.dirty = false;
+  }
+
+  /**
+   * Which floor am I standing on. This has to be drawn every frame, not on the
+   * game changing: flying across the building changes nothing in the game and
+   * everything about where I am, and a stepper showing the last floor you were
+   * on is worse than no stepper at all.
+   */
+  private drawFloor() {
+    const inB = this.world.inBuilding;
+    const floors = this.root.querySelector('#floors') as HTMLElement;
+    floors.classList.toggle('hidden', !inB);
+    if (!inB) return;
+    const el = this.root.querySelector('#flnum') as HTMLElement;
+    const now = String(this.world.onFloorNow);
+    if (el.textContent !== now) el.textContent = now;
   }
 
   private tick = () => {
@@ -787,6 +804,7 @@ export class UI {
     this.last = now;
     this.world.render(dt);
     if (this.dirty) this.refresh();
+    this.drawFloor();
     this.drawTags();
     this.drawRing();
     requestAnimationFrame(this.tick);

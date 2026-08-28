@@ -199,6 +199,10 @@ export interface GameState {
   marks: Record<string, number>;
   /** What I have left behind me in the world, in the order I left it. */
   traces: string[];
+  /** Which building I opened tonight in. Without the cupboard, it is the only one. */
+  startedIn?: string;
+  /** Spots the world showed me tonight out loud. Not fog until morning. */
+  shown?: string[];
   over: 'won' | 'lost' | null;
 }
 

@@ -826,3 +826,7 @@ body.is-mobile .objectives ul li { min-height: 46px; }
   #top .icon { width: 40px; min-height: 40px; font-size: 14px; }
   #top .endnight { padding: 0 7px; font-size: 10px; min-height: 40px; }
 }
+
+.rb.guess { border-style: dashed; }
+.rb.guess b { opacity: .75; }
+.pl u { display: block; font-size: 10.5px; text-decoration: none; color: var(--cy-2); margin-top: 2px; }

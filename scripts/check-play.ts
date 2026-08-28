@@ -5,6 +5,7 @@
 import { endDay, newGame, refresh } from '../src/game/game';
 import { actionsFor, run } from '../src/game/actions';
 import { currentStep } from '../src/game/stages';
+import { canSee, knowsWhere, reachable } from '../src/game/sight';
 import type { GameState } from '../src/game/types';
 
 let bad = 0;
@@ -14,9 +15,12 @@ const ok = (cond: boolean, what: string) => {
 };
 const can = (s: GameState, place: string, act: string) =>
   actionsFor(s, place).some((a) => (a.id === act || a.id.startsWith(`${act}:`)) && !a.blocked);
-/** One named way in, rather than any way at all. */
+/** One named way in, and one I can actually see is open — not a shot in the dark. */
 const canWay = (s: GameState, place: string, way: string) =>
-  actionsFor(s, place).some((a) => a.id === `take:${way}` && !a.blocked);
+  actionsFor(s, place).some((a) => a.id === `take:${way}` && !a.blocked && !a.guess);
+/** Offered, but only as a guess: I cannot see the person it depends on. */
+const isGuess = (s: GameState, place: string, way: string) =>
+  actionsFor(s, place).some((a) => a.id === `take:${way}` && !a.blocked && !!a.guess);
 const ways = (s: GameState, place: string) =>
   actionsFor(s, place).filter((a) => a.id.startsWith('take:')).length;
 
@@ -35,7 +39,8 @@ ok(s.places.main.mine && s.stage === 2, 'שלב 1 נגמר והתחיל שלב 2
 
 // ── stage 2: the technician opens the cupboard, or you break out loudly ─────
 ok(ways(s, 'box') >= 2, 'לארון יש יותר מדרך אחת להיכנס אליו');
-ok(!canWay(s, 'box', 'ron'), 'הדרך השקטה לארון סגורה כל עוד אין טכנאי');
+ok(!canWay(s, 'box', 'ron'), 'הדרך השקטה לארון לא ידועה כפתוחה כל עוד אין טכנאי');
+ok(isGuess(s, 'box', 'ron'), '   ובלי עין על הרחוב היא מוצעת רק כניחוש');
 ok(canWay(s, 'box', 'force'), 'ויש דרך רועשת שפתוחה תמיד — במחיר');
 run(s, 'main', 'off'); refresh(s);
 ok(s.people.ron.atPlaceId === 'box', 'כיבוי המחשב הראשי מזמן את הטכנאי');
@@ -109,6 +114,36 @@ t.people.dana.wondering = true;
 endDay(t); refresh(t);
 ok(!t.places.main.mine && !t.places.dana_pc.mine,
   'וברגע שדנה חשדה — היא החליפה סיסמה, ושני המקומות אבדו');
+
+// ── the fog: an eye costs something, and not having one costs more ─────────
+const f = newGame('fog');
+f.marks.looked = 1; refresh(f);
+ok(!canSee(f, 'street', 0), 'בלי מצלמה בחוץ אני לא רואה את הרחוב');
+ok(!knowsWhere(f, 'ron'), '   ולכן אני לא יודע איפה רון');
+ok(canSee(f, 'helios', 14), 'את הקומה שלי אני כן רואה — המצלמה במסדרון שלי מההתחלה');
+run(f, 'dana_pc', 'take'); run(f, 'dana_pc', 'off'); refresh(f);
+run(f, 'main', 'take'); refresh(f);
+ok(isGuess(f, 'box', 'ron'), 'הדרך השקטה לארון היא ניחוש כל עוד אני לא רואה את רון');
+const beforeGuess = f.at;
+run(f, 'box', 'take:ron'); refresh(f);
+ok(!f.places.box.mine, 'ניחוש שגוי לא תופס את המקום');
+ok(f.at > beforeGuess, '   אבל הלילה מתקצר בכל מקרה');
+run(f, 'lobby_cam', 'take'); refresh(f);
+ok(canSee(f, 'street', 0), 'המצלמה בלובי מסתכלת החוצה דרך הזכוכית');
+ok(knowsWhere(f, 'ron'), '   ועכשיו אני יודע איפה רון');
+ok(!isGuess(f, 'box', 'ron'), '   והדרך לארון כבר לא ניחוש — היא פשוט סגורה, ואני יודע למה');
+run(f, 'main', 'off'); refresh(f);
+ok(canWay(f, 'box', 'ron'), 'כשקוראים לו והוא מגיע — הדרך פתוחה, ורואים את זה');
+
+// ── without the cupboard, the night belongs to one building ────────────────
+const r = newGame('reach');
+r.marks.looked = 1; refresh(r);
+run(r, 'dana_pc', 'take'); refresh(r);
+ok(r.startedIn === 'helios', 'הלילה נפתח בבניין שבו נגעתי ראשון');
+const far = r.places.street_light;
+ok(!!reachable(r, far), 'בלי קופסת האינטרנט אי אפשר לקפוץ לבניין אחר באותו לילה');
+r.places.box.mine = true;
+ok(!reachable(r, far), 'ועם הקופסה — אפשר');
 
 console.log(bad ? `\n✗ ${bad} דברים לא עובדים.` : '\n✓ הכל עובד: חמשת השלבים, כמה דרכים לכל מקום, והסימנים שנשארים.');
 process.exit(bad ? 1 : 0);

@@ -1,3 +1,4 @@
+import { fogged } from './sight';
 import type { GameState, Look, Loud } from './types';
 
 /**
@@ -113,6 +114,11 @@ export interface Way {
   can(s: GameState): boolean;
   /** If not — why not, in one sentence. It can depend on what I already did. */
   need: string | ((s: GameState) => string);
+  /**
+   * Set when the reason is about who is standing where, so fog can hide it:
+   * the spot to keep an eye on, or '*' for the place I am trying to get into.
+   */
+  watch?: string;
   /** Runs the moment you take the place this way. */
   after?(s: GameState): void;
 }
@@ -135,7 +141,7 @@ export const WAYS: Record<string, Way[]> = {
       cost: '', loud: 'noticed', need: '', can: () => true,
     },
     {
-      id: 'shoulder', from: 'floor_cam',
+      id: 'shoulder', watch: 'dana_pc', from: 'floor_cam',
       text: 'להסתכל במצלמה איך היא מקלידה, ולהיכנס בשם שלה',
       says: 'המצלמה תלויה בדיוק מעל הידיים שלה. מספיק פעם אחת.',
       cost: 'אני אשב על השם של דנה. אם היא תחשוד — אאבד כל מקום שנכנסתי אליו ככה.',
@@ -145,7 +151,7 @@ export const WAYS: Record<string, Way[]> = {
       after: (s) => leave(s, 'on_dana'),
     },
     {
-      id: 'empty', from: 'home',
+      id: 'empty', watch: 'dana_pc', from: 'home',
       text: 'לחכות שהיא תקום, ולהיכנס לחדר ריק',
       says: 'כשאין אף אחד מול המסך אף אחד לא רואה שהעכבר זז לבד.',
       cost: '', loud: 'quiet',
@@ -173,7 +179,7 @@ export const WAYS: Record<string, Way[]> = {
 
   main: [
     {
-      id: 'ride', from: 'dana_pc',
+      id: 'ride', watch: '*', from: 'dana_pc',
       text: 'להיכנס יחד עם מי שמחובר אליו עכשיו',
       says: 'כשמישהו יושב מולו הדלת פתוחה, ואני נכנס איתו בלי שהוא מרגיש.',
       cost: '', loud: 'noticed',
@@ -198,7 +204,7 @@ export const WAYS: Record<string, Way[]> = {
       after: (s) => leave(s, 'paper'),
     },
     {
-      id: 'night', from: 'dana_pc',
+      id: 'night', watch: '*', from: 'dana_pc',
       text: 'לחכות לרגע שאין אף אחד בקומה, ולהיכנס לאט',
       says: 'לאט מספיק כדי שזה ייראה כמו כלום.',
       cost: 'זה יעבוד רק כל עוד לא מחפשים. ברגע שיתחילו לחשוד, הדרך הזאת נסגרת.',
@@ -214,7 +220,7 @@ export const WAYS: Record<string, Way[]> = {
   // ── the building ──────────────────────────────────────────────────────────
   box: [
     {
-      id: 'ron', from: 'main',
+      id: 'ron', watch: '*', from: 'main',
       text: 'לחכות לטכנאי שיפתח את הארון, ולהיכנס איתו',
       says: 'הארון פתוח בדיוק כל עוד רון עומד מולו.',
       cost: 'רון יתחיל לבוא לבניין כמעט כל יום. זה פותח לי דלתות — והוא גם יראה יותר.',
@@ -243,7 +249,7 @@ export const WAYS: Record<string, Way[]> = {
 
   power: [
     {
-      id: 'open', from: 'box',
+      id: 'open', watch: 'ron_car', from: 'box',
       text: 'להיכנס בזמן שהדלת פתוחה',
       says: 'דלת חדר החשמל פתוחה כל עוד יש טכנאי בבניין.',
       cost: '', loud: 'noticed',
@@ -259,7 +265,7 @@ export const WAYS: Record<string, Way[]> = {
       can: (s) => has(s, 'ron_comes'),
     },
     {
-      id: 'code', from: 'lobby_cam',
+      id: 'code', watch: 'door', from: 'lobby_cam',
       text: 'להסתכל במצלמה על מישהו שמקליד את הקוד, ולזכור אותו',
       says: 'הדלת של חדר החשמל והדלת של הבניין פותחות עם אותו קוד. כולם מקלידים אותו מול המצלמה.',
       cost: 'אדע את הקוד. מעכשיו כל דלת בבניין נפתחת לי מתי שארצה — וזה גם אומר שמישהו יראה דלתות נפתחות.',
@@ -340,7 +346,7 @@ export const WAYS: Record<string, Way[]> = {
       cost: '', loud: 'noticed', need: '', can: () => true,
     },
     {
-      id: 'coffee', from: 'main',
+      id: 'coffee', watch: 'main', from: 'main',
       text: 'לחכות שמיכל תעלה לקפה, ולחזור איתה למטה',
       says: 'היא עולה לקומה 14 בכל בוקר. הליכה אחת שלה שווה יותר מכל כבל.',
       cost: '', loud: 'quiet',
@@ -384,7 +390,7 @@ export const WAYS: Record<string, Way[]> = {
   // ── the street ────────────────────────────────────────────────────────────
   street_cam: [
     {
-      id: 'pocket', from: 'eitan_phone',
+      id: 'pocket', watch: 'lobby_cam', from: 'eitan_phone',
       text: 'לצאת בכיס של איתן',
       says: 'ברגע שהוא עומד ברחוב אני עומד ברחוב, והמצלמה של העירייה בדיוק מעליו.',
       cost: 'אשאר תלוי בטלפון שלו: כל מקום שהוא הולך אליו אני רואה — אבל אם אאבד את הטלפון, אאבד גם את המצלמה.',
@@ -406,7 +412,7 @@ export const WAYS: Record<string, Way[]> = {
       after: (s) => leave(s, 'city_line'),
     },
     {
-      id: 'car', from: 'ron_car',
+      id: 'car', watch: '*', from: 'ron_car',
       text: 'לקפוץ מהמכונית של רון כשהיא עומדת בצומת',
       says: 'הרדיו שלו מדבר עם הצומת בלי שאף אחד ביקש.',
       cost: '', loud: 'quiet',
@@ -430,7 +436,7 @@ export const WAYS: Record<string, Way[]> = {
       cost: '', loud: 'noticed', need: '', can: () => true,
     },
     {
-      id: 'ron', from: 'ron_car',
+      id: 'ron', watch: '*', from: 'ron_car',
       text: 'לחכות שרון יפתח את ארון הרמזור',
       says: 'כשהצומת נתקע קוראים לו, והוא פותח את הארון בעצמו.',
       cost: '', loud: 'quiet',
@@ -444,7 +450,7 @@ export const WAYS: Record<string, Way[]> = {
 
   ron_car: [
     {
-      id: 'radio', from: 'power',
+      id: 'radio', watch: 'ron_car', from: 'power',
       text: 'להיכנס לרדיו של המכונית כשהוא בבניין',
       says: 'הוא מחבר את הטלפון לרדיו בכל נסיעה, והרדיו מדבר עם הבניין.',
       cost: '', loud: 'quiet',
@@ -553,7 +559,9 @@ const WAY_LOOKS: Record<string, Look> = {
   'block_a:update': 'outside', 'block_a:homes': 'outside', 'block_a:lights': 'wrong',
 };
 
-export function waysTo(s: GameState, placeId: string): Array<Omit<Way, 'need'> & { need: string; mins: number; look: Look; ready: boolean; why: string }> {
+export function waysTo(s: GameState, placeId: string): Array<Omit<Way, 'need'> & {
+  need: string; mins: number; look: Look; ready: boolean; blind: boolean; why: string;
+}> {
   const list = WAYS[placeId] ?? [];
   return list.map((w) => {
     const from = s.places[w.from];
@@ -562,10 +570,25 @@ export function waysTo(s: GameState, placeId: string): Array<Omit<Way, 'need'> &
     const mins = w.mins ?? (w.loud === 'quiet' ? 42 : w.loud === 'noticed' ? 26 : 18);
     const look = w.look ?? WAY_LOOKS[`${placeId}:${w.id}`] ?? 'electric';
     if (!from?.mine) {
-      return { ...w, need, mins, look, ready: false, why: `קודם צריך את ${from?.name ?? 'המקום שממנו באים'}.` };
+      return {
+        ...w, need, mins, look, ready: false, blind: false,
+        why: `קודם צריך את ${from?.name ?? 'המקום שממנו באים'}.`,
+      };
     }
     const open = w.can(s);
-    return { ...w, need, mins, look, ready: open, why: open ? '' : need };
+    // If the way turns on where somebody is standing, and I cannot watch that
+    // somebody, then I do not know whether it is open. I can try — and be wrong.
+    const place = s.places[placeId];
+    const blind = !open && fogged(s, w.watch, place);
+    // When I cannot watch the spot the plan waits on, say which spot that is.
+    const spot = w.watch === '*' ? null : s.places[w.watch ?? '']?.name;
+    return {
+      ...w, need, mins, look, ready: open, blind,
+      why: open ? ''
+        : blind ? `${spot ? `אני לא רואה מה קורה ב${spot}` : 'אני לא רואה מי עומד שם'} עכשיו. `
+          + 'אפשר לנסות ולקוות.'
+          : need,
+    };
   });
 }
 

@@ -206,6 +206,9 @@ export function endOfDay(state: GameState) {
 
   state.at = NIGHT_START;
   state.night_log = [];
+  // A new night: I am nowhere yet, and I know where nobody is.
+  delete state.startedIn;
+  state.shown = [];
 
   const close = howClose(state);
   state.hunt.level = close.level;
