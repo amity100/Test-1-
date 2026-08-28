@@ -301,6 +301,7 @@ export const USES: Use[] = [
         if (q.where.includes('קומה') || q.where.includes('קרקע')) s.marks[`dark_${q.id}`] = 1;
       }
       s.marks.power_off = 1;
+      s.marks.blackout_ever = 1;
       movePerson(s, 'eitan', 'power', 'איתן ירד לבדוק מה קרה לחשמל.');
       say(s, 'world', 'כל הבניין חשוך. שלוש נורות חירום, ומאוורר אחד שנעצר.');
       witness(s, p, 'את כל הבניין נכבה בבת אחת');

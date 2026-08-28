@@ -33,8 +33,10 @@ for (const [placeId, list] of Object.entries(WAYS)) {
     ids.add(w.id);
     ok(w.text.trim().length > 0, `${placeId}/${w.id}: יש כיתוב על הכפתור`);
     ok(w.says.trim().length > 0, `${placeId}/${w.id}: כתוב מה יקרה`);
-    // A way that is shut must say what is missing, or the player is stuck with no clue.
-    ok(w.can(base) || w.need.trim().length > 0, `${placeId}/${w.id}: כתוב מה חסר כשהיא סגורה`);
+    // A way that is shut must say what is missing, or the player is stuck with no
+    // clue. The reason may depend on what has already happened, so ask for it.
+    const need = typeof w.need === 'function' ? w.need(base) : w.need;
+    ok(w.can(base) || need.trim().length > 0, `${placeId}/${w.id}: כתוב מה חסר כשהיא סגורה`);
   }
 }
 

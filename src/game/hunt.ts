@@ -1,6 +1,6 @@
 import { bus } from './bus';
 import { say } from './actions';
-import { traceDay, traceWorry } from './ways';
+import { scannerLooksAt, traceDay, traceWorry } from './ways';
 import type { GameState, HuntLevel, Place } from './types';
 
 /**
@@ -65,12 +65,6 @@ export function endOfDay(state: GameState) {
   // The update either goes out today, or it does not. Nothing else decides it.
   state.marks.update_ready = state.day % UPDATE_EVERY === 0 ? 1 : 0;
 
-  // What I left behind me does its work first, before they decide anything.
-  for (const e of traceDay(state)) {
-    say(state, e.kind === 'good' ? 'me' : 'world', e.text);
-    if (e.kind === 'bad') bus.emit('toast', { text: e.text, kind: 'warn', icon: '↯' });
-  }
-
   const hot = hottest(state);
   const worry = Math.max(0, wondering(state) + traceWorry(state));
   const loudPlaces = hot.filter((p) => p.attention >= 2).length;
@@ -84,6 +78,13 @@ export function endOfDay(state: GameState) {
     if (p.attention > 0) {
       p.attention = Math.max(0, p.attention - (wasQuiet ? 2 : 1)) as Place['attention'];
     }
+  }
+
+  // What I left behind me works after the cooling, not before it — a pile of
+  // pages that grows every morning must not be swept away the same evening.
+  for (const e of traceDay(state)) {
+    say(state, e.kind === 'good' ? 'me' : 'world', e.text);
+    if (e.kind === 'bad') bus.emit('toast', { text: e.text, kind: 'warn', icon: '↯' });
   }
   if (wasQuiet) {
     for (const who of Object.values(state.people)) {
@@ -141,17 +142,25 @@ export function endOfDay(state: GameState) {
 
   // ── level 3: something goes hunting ──────────────────────────────────────
   if (state.hunt.level >= 3) {
-    const prey = hot.find((p) => p.attention >= 2 && !p.copy);
+    // It searches where they think the trouble is. A story I told them earlier
+    // can send it to the wrong end of the building.
+    const looking = scannerLooksAt(state);
+    const prey = looking.map((id) => state.places[id]).find((p) => p?.mine && !p.copy)
+      ?? hot.find((p) => p.attention >= 2 && !p.copy);
     if (prey) {
       state.hunt.scannerAt = prey.id;
       prey.mine = false;
       prey.attention = 0;
-      say(state, 'them', `משהו סרק את ${prey.name} ומחק אותי משם. הוא לא חיפש חתימה — הוא חיפש התנהגות.`);
+      say(state, 'them', looking.includes(prey.id)
+        ? `סרקו קודם כל את ${prey.name}, כי שם הם חושבים שזה. הם צדקו.`
+        : `משהו סרק את ${prey.name} ומחק אותי משם. הוא לא חיפש חתימה — הוא חיפש התנהגות.`);
       bus.emit('place:lost', prey.id);
       bus.emit('toast', { text: `נמחקתי מ${prey.name}`, kind: 'bad', icon: '☍' });
     } else {
       state.hunt.scannerAt = undefined;
-      say(state, 'them', 'הסורק עבר על כל מה שיש להם ולא מצא כלום. אני התנהגתי כמו הרעש הרגיל של המקום.');
+      say(state, 'them', looking.length
+        ? 'הסורק הלך בדיוק לאן שסיפרתי להם ללכת, ולא מצא שם כלום.'
+        : 'הסורק עבר על כל מה שיש להם ולא מצא כלום. אני התנהגתי כמו הרעש הרגיל של המקום.');
     }
   }
 

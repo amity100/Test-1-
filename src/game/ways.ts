@@ -107,8 +107,8 @@ export interface Way {
   loud: Loud;
   /** Can you do it right now? */
   can(s: GameState): boolean;
-  /** If not — why not, in one sentence. */
-  need: string;
+  /** If not — why not, in one sentence. It can depend on what I already did. */
+  need: string | ((s: GameState) => string);
   /** Runs the moment you take the place this way. */
   after?(s: GameState): void;
 }
@@ -145,8 +145,10 @@ export const WAYS: Record<string, Way[]> = {
       text: 'לחכות שהיא תקום, ולהיכנס לחדר ריק',
       says: 'כשאין אף אחד מול המסך אף אחד לא רואה שהעכבר זז לבד.',
       cost: '', loud: 'quiet',
-      need: 'צריך משהו שיזיז את דנה מהשולחן שלה.',
-      can: (s) => !at(s, 'dana', 'dana_pc'),
+      need: (s) => (has(s, 'on_dana')
+        ? 'מאז שנכנסתי בשם שלה היא נועלת את המסך בכל פעם שהיא קמה. הדרך הזאת נסגרה.'
+        : 'צריך משהו שיזיז את דנה מהשולחן שלה.'),
+      can: (s) => !at(s, 'dana', 'dana_pc') && !has(s, 'on_dana'),
     },
   ],
 
@@ -197,8 +199,10 @@ export const WAYS: Record<string, Way[]> = {
       says: 'לאט מספיק כדי שזה ייראה כמו כלום.',
       cost: 'זה יעבוד רק כל עוד לא מחפשים. ברגע שיתחילו לחשוד, הדרך הזאת נסגרת.',
       loud: 'quiet',
-      need: 'צריך שלא יישאר אף אחד בקומה 14, ושעדיין לא יחשדו בכלום.',
-      can: (s) => nobodyOn(s, 14) && s.hunt.level <= 1,
+      need: (s) => (has(s, 'loose_line')
+        ? 'מאז שיצאתי מכאן בכוח מסתכלים על הקו הזה כל בוקר. אי אפשר יותר להיכנס לאט.'
+        : 'צריך שלא יישאר אף אחד בקומה 14, ושעדיין לא יחשדו בכלום.'),
+      can: (s) => nobodyOn(s, 14) && s.hunt.level <= 1 && !has(s, 'loose_line'),
       after: (s) => leave(s, 'night_only'),
     },
   ],
@@ -211,8 +215,10 @@ export const WAYS: Record<string, Way[]> = {
       says: 'הארון פתוח בדיוק כל עוד רון עומד מולו.',
       cost: 'רון יתחיל לבוא לבניין כמעט כל יום. זה פותח לי דלתות — והוא גם יראה יותר.',
       loud: 'quiet',
-      need: 'צריך שרון יעמוד מול הארון. משהו גדול צריך להתקלקל כדי שיקראו לו.',
-      can: (s) => at(s, 'ron', 'box'),
+      need: (s) => (has(s, 'ron_tired')
+        ? 'רון כבר לא בא לבד. מאז שהוא הפסיק להאמין לתקלות מגיע איתו עוד מישהו, והארון לא נשאר פתוח לרגע.'
+        : 'צריך שרון יעמוד מול הארון. משהו גדול צריך להתקלקל כדי שיקראו לו.'),
+      can: (s) => at(s, 'ron', 'box') && !has(s, 'ron_tired'),
       after: (s) => leave(s, 'ron_comes'),
     },
     {
@@ -379,8 +385,10 @@ export const WAYS: Record<string, Way[]> = {
       says: 'ברגע שהוא עומד ברחוב אני עומד ברחוב, והמצלמה של העירייה בדיוק מעליו.',
       cost: 'אשאר תלוי בטלפון שלו: כל מקום שהוא הולך אליו אני רואה — אבל אם אאבד את הטלפון, אאבד גם את המצלמה.',
       loud: 'quiet',
-      need: 'איתן עדיין יושב בדלפק. צריך משהו שיוציא אותו החוצה.',
-      can: (s) => away(s, 'eitan'),
+      need: (s) => (has(s, 'eitan_writes')
+        ? 'מאז שהוא התחיל לרשום דברים הוא גם מסתכל על הטלפון. הוא כבר לא נושא אותו בלי לשים לב.'
+        : 'איתן עדיין יושב בדלפק. צריך משהו שיוציא אותו החוצה.'),
+      can: (s) => away(s, 'eitan') && !has(s, 'eitan_writes'),
       after: (s) => leave(s, 'on_phone'),
     },
     {
@@ -422,8 +430,10 @@ export const WAYS: Record<string, Way[]> = {
       text: 'לחכות שרון יפתח את ארון הרמזור',
       says: 'כשהצומת נתקע קוראים לו, והוא פותח את הארון בעצמו.',
       cost: '', loud: 'quiet',
-      need: 'צריך שרון יעמוד ליד הרמזור.',
-      can: (s) => at(s, 'ron', 'street_light'),
+      need: (s) => (has(s, 'ron_tired')
+        ? 'רון מביא איתו מישהו עכשיו. הארון לא נשאר פתוח בלי שמסתכלים עליו.'
+        : 'צריך שרון יעמוד ליד הרמזור.'),
+      can: (s) => at(s, 'ron', 'street_light') && !has(s, 'ron_tired'),
       after: (s) => { if (s.hunt.level >= 2) leave(s, 'ron_tired'); },
     },
   ],
@@ -512,15 +522,16 @@ export const WAYS: Record<string, Way[]> = {
 };
 
 /** Every way into a place, with whether it is open right now and why not. */
-export function waysTo(s: GameState, placeId: string): Array<Way & { ready: boolean; why: string }> {
+export function waysTo(s: GameState, placeId: string): Array<Omit<Way, 'need'> & { need: string; ready: boolean; why: string }> {
   const list = WAYS[placeId] ?? [];
   return list.map((w) => {
     const from = s.places[w.from];
+    const need = typeof w.need === 'function' ? w.need(s) : w.need;
     if (!from?.mine) {
-      return { ...w, ready: false, why: `קודם צריך את ${from?.name ?? 'המקום שממנו באים'}.` };
+      return { ...w, need, ready: false, why: `קודם צריך את ${from?.name ?? 'המקום שממנו באים'}.` };
     }
     const open = w.can(s);
-    return { ...w, ready: open, why: open ? '' : w.need };
+    return { ...w, need, ready: open, why: open ? '' : need };
   });
 }
 
@@ -540,8 +551,13 @@ export function traceDay(s: GameState): TraceEffect[] {
   };
 
   if (has(s, 'paper')) {
-    bump('printer', 1);
-    out.push({ text: 'עוד דף ריק יצא מהמדפסת. הערימה שם כבר לא נראית כמו טעות.', kind: 'bad' });
+    if (s.places.printer?.mine) {
+      // The printer is mine, so the pages never reach the tray.
+      out.push({ text: 'עוד דף יצא — ומיד נשאב בחזרה פנימה. המדפסת שלי, אז אין ערימה.', kind: 'good' });
+    } else {
+      bump('printer', 1);
+      out.push({ text: 'עוד דף ריק יצא מהמדפסת. הערימה שם כבר לא נראית כמו טעות.', kind: 'bad' });
+    }
   }
   if (has(s, 'loose_line')) {
     bump('main', 1);
@@ -568,7 +584,8 @@ export function traceDay(s: GameState): TraceEffect[] {
     out.push({ text: 'התחילו לחפש. הדרך השקטה של הלילה כבר לא פתוחה לי.', kind: 'bad' });
   }
   if (has(s, 'ron_comes')) {
-    // He turns up on his own now, and every locked door in the building opens near him.
+    // He turns up on his own now — but once he has stopped believing in faults,
+    // he brings somebody with him, and the same visit works against me.
     const spots = ['box', 'power', 'street_light'];
     const to = spots[s.day % spots.length];
     const who = s.people.ron;
@@ -577,7 +594,12 @@ export function traceDay(s: GameState): TraceEffect[] {
       if (from) from.peopleIds = from.peopleIds.filter((x) => x !== 'ron');
       who.atPlaceId = to;
       s.places[to]?.peopleIds.push('ron');
-      out.push({ text: `רון הגיע לבניין מעצמו, והוא עומד ליד ${s.places[to]?.name}.`, kind: 'good' });
+      if (has(s, 'ron_tired')) {
+        bump(to, 1);
+        out.push({ text: `רון הגיע ל${s.places[to]?.name} — ולא לבד. שניהם הסתכלו סביב.`, kind: 'bad' });
+      } else {
+        out.push({ text: `רון הגיע לבניין מעצמו, והוא עומד ליד ${s.places[to]?.name}.`, kind: 'good' });
+      }
     }
   }
   if (has(s, 'on_phone')) {
@@ -591,6 +613,10 @@ export function traceDay(s: GameState): TraceEffect[] {
         cam.attention = 0;
         out.push({ text: 'איתן לקח את הטלפון והלך. המצלמה ברחוב הלכה איתו.', kind: 'bad' });
       }
+    } else if (has(s, 'eitan_writes')) {
+      // A man who writes things down also looks at his phone.
+      drop(s, 'on_phone');
+      out.push({ text: 'איתן הסתכל על הטלפון שלו והחזיק אותו קצת יותר מדי זמן. ירדתי ממנו.', kind: 'bad' });
     } else {
       // Everywhere he walks, I see, and what I see I can go to later.
       const at = s.places[s.people.eitan?.atPlaceId ?? ''];
@@ -601,7 +627,30 @@ export function traceDay(s: GameState): TraceEffect[] {
     }
   }
   if (has(s, 'slow_net') && s.day % 2 === 0) {
-    out.push({ text: 'שלוש תלונות על האינטרנט. קראו לטכנאי שוב.', kind: 'good' });
+    if (has(s, 'blamed_cable')) {
+      // The boring reason absorbs it: nobody comes out for a cable everyone knows about.
+      out.push({ text: 'האינטרנט זוחל, וכולם אומרים "זה הכבל". אף אחד לא בא לבדוק.', kind: 'good' });
+    } else {
+      out.push({ text: 'שלוש תלונות על האינטרנט. קראו לטכנאי שוב.', kind: 'good' });
+    }
+  }
+
+  // Two stories that cannot both be true. A blackout is not something a person
+  // walks in and does, and a loose cable in this building does not stop a
+  // junction two streets away. Telling both is worse than telling neither.
+  if (has(s, 'blamed_person') && (s.marks.blackout_ever ?? 0) > 0) {
+    drop(s, 'blamed_person');
+    out.push({
+      text: 'סיפרתי להם שנכנס מישהו — ואז כיביתי את החשמל בכל הבניין. בן אדם אחד לא עושה דבר כזה. הם הפסיקו לחפש בן אדם.',
+      kind: 'bad',
+    });
+  }
+  if (has(s, 'blamed_cable') && (s.marks.jam ?? 0) > 0) {
+    drop(s, 'blamed_cable');
+    out.push({
+      text: 'הכבל הרופף בבניין לא יכול לתקוע צומת שני רחובות משם. הסיפור המשעמם נגמר.',
+      kind: 'bad',
+    });
   }
 
   return out;
@@ -612,7 +661,23 @@ export function traceWorry(s: GameState): number {
   let n = 0;
   if (has(s, 'eitan_writes')) n += 1;
   if (has(s, 'ron_tired')) n += 1;
+  if (has(s, 'loose_line')) n += 1;
+  // Pages nobody printed only worry people who find them.
+  if (has(s, 'paper') && !s.places.printer?.mine) n += 1;
   if (has(s, 'blamed_person')) n -= 2;
   if (has(s, 'blamed_cable')) n -= 1;
+  // His diary names the person I invented, which makes the person real to them.
+  if (has(s, 'blamed_person') && has(s, 'eitan_writes')) n -= 1;
   return n;
+}
+
+/** What a scanner goes looking for depends on what they believe. */
+export function scannerLooksAt(s: GameState): string[] {
+  if (has(s, 'blamed_person')) {
+    // Looking for a person means looking at people's computers, not at cupboards.
+    return ['dana_pc', 'michal_pc', 'home', 'main'];
+  }
+  if (has(s, 'loose_line')) return ['main', 'box', 'printer'];
+  if (has(s, 'city_line')) return ['street_cam', 'street_light', 'across_main'];
+  return [];
 }

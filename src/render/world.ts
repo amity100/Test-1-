@@ -10,7 +10,7 @@ import { buildInteriors, revealFloors, type Interior } from './interior';
 import { CodeVeins, type Vein } from './glyphs';
 import { Figures } from './figures';
 import { bus } from '../game/bus';
-import { makeObject, type PlaceObject } from './objects';
+import { makeObject, type ObjState, type PlaceObject } from './objects';
 import type { GameState, Place } from '../game/types';
 
 /**
@@ -27,7 +27,7 @@ const COLD = new THREE.Color('#5c7383');
 const WARM = new THREE.Color('#ffb347');
 const HOT = new THREE.Color('#ff5470');
 
-interface Marker { place: Place; obj: PlaceObject; ring: THREE.Mesh }
+interface Marker { place: Place; obj: PlaceObject; ring: THREE.Mesh; busy: number }
 
 export class World {
   private renderer: THREE.WebGLRenderer;
@@ -42,6 +42,7 @@ export class World {
   private veins = new CodeVeins();
   private figures = new Figures();
   private markers = new Map<string, Marker>();
+  private state: GameState | null = null;
   private objectGroup = new THREE.Group();
   private ray = new THREE.Raycaster();
   private t = 0;
@@ -95,7 +96,11 @@ export class World {
     // Something happened in a room: everyone near enough turns and looks.
     bus.on('felt', ({ placeId, kind }) => {
       const m = this.markers.get(placeId);
-      if (m) this.figures.felt(m.obj.group.position.clone().setY(m.obj.group.position.y + 1.2), kind);
+      if (!m) return;
+      // The thing itself reacts too: the phone lights up, the door swings, the
+      // printer pushes a sheet out. It settles down again over a second or two.
+      m.busy = 1;
+      this.figures.felt(m.obj.group.position.clone().setY(m.obj.group.position.y + 1.2), kind);
     });
 
     this.resize();
@@ -153,8 +158,17 @@ export class World {
       ring.position.y = 1.1;
       obj.group.add(ring);
 
+      // Anything hung on a wall looks into the room; a front door looks out of it.
+      const b = buildingOf(place.buildingId);
+      if (b) {
+        const inward = ['camera', 'box', 'screen', 'power', 'speaker'].includes(place.kind);
+        const outward = place.kind === 'door';
+        if (inward) obj.group.rotation.y = Math.atan2(-place.x, -place.z);
+        else if (outward) obj.group.rotation.y = Math.atan2(place.x, place.z);
+      }
+
       this.objectGroup.add(obj.group);
-      this.markers.set(place.id, { place, obj, ring });
+      this.markers.set(place.id, { place, obj, ring, busy: 0 });
     }
     this.figures.build(state);
     this.figures.sync(state);
@@ -162,6 +176,7 @@ export class World {
 
   /** Colour is the whole readout: cyan is mine, amber is watched, red is going. */
   sync(state: GameState) {
+    this.state = state;
     for (const [id, m] of this.markers) {
       const p = state.places[id];
       m.place = p;
@@ -326,8 +341,19 @@ export class World {
 
     // Rings and lit faces breathe, so a live board never looks like a picture.
     const pulse = 0.72 + Math.abs(Math.sin(this.t * 2.2)) * 0.28;
+    const s = this.state;
+    const dark = !!s && (s.marks.power_off ?? 0) > 0;
     for (const m of this.markers.values()) {
       if (!m.obj.group.visible) continue;
+      m.busy = Math.max(0, m.busy - dt * 0.55);
+      const st: ObjState = {
+        mine: m.place.mine,
+        off: !!s && (s.marks[`off_${m.place.id}`] ?? 0) > 0,
+        dark: dark && m.place.buildingId !== 'street',
+        attention: m.place.attention,
+        busy: m.busy,
+      };
+      m.obj.tick(this.t, st);
       m.ring.rotation.z += dt * 0.9;
       const mat = m.ring.material as THREE.MeshBasicMaterial;
       if (mat.opacity > 0) mat.opacity = 0.45 + pulse * 0.5;

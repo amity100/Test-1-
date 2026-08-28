@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { RNG } from '../core/rng';
 import { BUILDINGS, FLOOR_H, buildingOf, floorY } from './city';
+import { buildWorld } from '../game/world';
 
 /**
  * What is inside the two buildings you can enter: floor slabs, partition walls,
@@ -20,6 +21,13 @@ export function buildInteriors(): Interior {
   const group = new THREE.Group();
   const floors = new Map<string, THREE.Group>();
   const rng = new RNG('inside');
+
+  // Where the things you can press actually are. The furniture is laid out round
+  // them: nothing generic is allowed to stand inside a desk you can click on,
+  // and every computer in the game gets a chair pulled up to it.
+  const spots = Object.values(buildWorld().places);
+  const near = (b: string, f: number, x: number, z: number, r: number) =>
+    spots.some((p) => p.buildingId === b && p.floor === f && Math.hypot(p.x - x, p.z - z) < r);
 
   const slabMat = new THREE.MeshStandardMaterial({ color: 0x2e3640, roughness: 0.92 });
   const partMat = new THREE.MeshStandardMaterial({
@@ -85,11 +93,10 @@ export function buildInteriors(): Interior {
             : new THREE.BoxGeometry(b.w * rng.range(0.3, 0.55), FLOOR_H * 0.72, 0.3),
           partMat,
         );
-        wall.position.set(
-          b.x + rng.range(-b.w * 0.28, b.w * 0.32),
-          y + FLOOR_H * 0.36,
-          b.z + rng.range(-b.d * 0.3, b.d * 0.3),
-        );
+        const wx = rng.range(-b.w * 0.28, b.w * 0.32);
+        const wz = rng.range(-b.d * 0.3, b.d * 0.3);
+        if (near(b.id, f, wx, wz, 3.2)) continue;
+        wall.position.set(b.x + wx, y + FLOOR_H * 0.36, b.z + wz);
         g.add(wall);
       }
 
@@ -99,6 +106,8 @@ export function buildInteriors(): Interior {
         const dx = b.x + rng.range(-b.w * 0.34, b.w * 0.34);
         const dz = b.z + rng.range(-b.d * 0.34, b.d * 0.34);
         const rot = rng.chance(0.5) ? 0 : Math.PI / 2;
+        // Never on top of something the player can press.
+        if (near(b.id, f, dx - b.x, dz - b.z, 2.6)) continue;
 
         const desk = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.1, 1.2), deskMat);
         desk.position.set(dx, y + 0.75, dz);
@@ -124,6 +133,31 @@ export function buildInteriors(): Interior {
         const back = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.55, 0.08), chairMat);
         back.position.copy(chair.position).add(new THREE.Vector3(0, 0.32, 0.24));
         g.add(back);
+      }
+
+      // A chair pulled up to every computer that is part of the game.
+      for (const p of spots) {
+        if (p.buildingId !== b.id || p.floor !== f) continue;
+        if (p.kind !== 'computer' && p.kind !== 'mainframe') continue;
+        const cx = b.x + p.x;
+        const cz = b.z + p.z + 0.95;
+        const seat = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.09, 0.5), chairMat);
+        seat.position.set(cx, y + 0.46, cz);
+        seat.castShadow = true;
+        g.add(seat);
+        const back = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.52, 0.07), chairMat);
+        back.position.set(cx, y + 0.75, cz + 0.22);
+        g.add(back);
+        const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.4, 8), chairMat);
+        stem.position.set(cx, y + 0.24, cz);
+        g.add(stem);
+        for (let k = 0; k < 5; k++) {
+          const a = (k / 5) * Math.PI * 2;
+          const foot = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.04, 0.26), chairMat);
+          foot.position.set(cx + Math.cos(a) * 0.12, y + 0.06, cz + Math.sin(a) * 0.12);
+          foot.rotation.y = -a;
+          g.add(foot);
+        }
       }
 
       if (f >= 0 && rng.chance(0.5)) {
