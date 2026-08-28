@@ -10,7 +10,8 @@
     "check": "esbuild scripts/check-play.ts --bundle --platform=node --format=esm --outfile=node_modules/.check.mjs --external:three && node node_modules/.check.mjs",
     "buttons": "esbuild scripts/check-buttons.ts --bundle --platform=node --format=esm --outfile=node_modules/.buttons.mjs --external:three && node node_modules/.buttons.mjs",
     "weave": "esbuild scripts/check-weave.ts --bundle --platform=node --format=esm --outfile=node_modules/.weave.mjs --external:three && node node_modules/.weave.mjs",
-    "web": "esbuild scripts/report-web.ts --bundle --platform=node --format=esm --outfile=node_modules/.web.mjs --external:three && node node_modules/.web.mjs"
+    "web": "esbuild scripts/report-web.ts --bundle --platform=node --format=esm --outfile=node_modules/.web.mjs --external:three && node node_modules/.web.mjs",
+    "phone": "node scripts/check-phone.mjs"
   },
   "dependencies": {
     "three": "^0.169.0"
