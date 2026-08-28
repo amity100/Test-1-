@@ -7,7 +7,7 @@ import {
 import { bus } from '../game/bus';
 import { clock } from '../game/hunt';
 import { NIGHT_END, NIGHT_START, hourSays } from '../game/night';
-import { ACT_ON, FOUND_OUT, THEORIES, TRUTH, howClose, leading, nextMove } from '../game/theory';
+import { ACT_ON, FOUND_OUT, THEORIES, TRUTH, asking, howClose, leading, nextMove } from '../game/theory';
 import { TEACH, currentStep, endDay, refresh, save, stageOf } from '../game/game';
 import { MUST, NEED, STAGES, doneCount, focusOn, whatIsLeft } from '../game/stages';
 import { TRACES } from '../game/ways';
@@ -120,6 +120,9 @@ export class UI {
         </div>
       </div>
 
+      <button id="morning" class="morning hidden" data-do="skipmorning">
+        <b id="mornwhen"></b><p id="mornsays"></p><u>נגיעה מדלגת</u>
+      </button>
       <div id="modal" class="modal hidden"></div>
       <div id="toasts"></div>
     `;
@@ -225,6 +228,9 @@ export class UI {
 
   private act(what: string, arg: string, el: HTMLElement) {
     const s = this.state;
+    // While the morning is playing there is exactly one thing to do: watch it,
+    // or say you have seen enough.
+    if (this.morning && what !== 'skipmorning') return;
     switch (what) {
       case 'place': this.select(arg); break;
       case 'close': this.select(null); break;
@@ -259,7 +265,7 @@ export class UI {
       case 'believe': this.showBelief(); break;
       case 'places': this.showPlaces(); break;
       case 'goals': this.showGoals(); break;
-      case 'focus': {
+      case 'goal': {
         focusOn(s, arg);
         this.closeModal();
         const p = currentStep(s)?.placeId ? s.places[currentStep(s)!.placeId!] : null;
@@ -290,15 +296,13 @@ export class UI {
       }
 
       case 'endday': {
-        if (this.paused) break;
-        endDay(s);
-        this.world.sync(s);
-        this.dirty = true;
-        save(s);
+        if (this.paused || this.morning) break;
+        void this.playMorning();
         break;
       }
 
       case 'closeteach': this.closeModal(); break;
+      case 'skipmorning': this.morning = false; break;
       case 'help': this.showHelp(); break;
       case 'traces': this.showTraces(); break;
 
@@ -638,9 +642,11 @@ export class UI {
       </div>`;
     }).join('');
     const truth = s.belief[TRUTH] ?? 0;
+    // Not "they". One of the four people in this building is carrying it.
+    const who = asking(s);
     this.modal(`
       <div class="sheet wide belief">
-        <span class="kick">מה הם חושבים</span>
+        <span class="kick">${esc(who ? `${who.name} · ${who.job}` : 'מה הם חושבים')}</span>
         <h2>${esc(lead.name)}</h2>
         <div class="txt">
           <p>${esc(nextMove(s))}</p>
@@ -673,7 +679,7 @@ export class UI {
     const now = currentStep(s)?.id;
     const rows = s.steps.map((st) => `
       <button class="gl ${st.done ? 'done' : ''} ${st.id === now ? 'on' : ''}"
-          data-do="focus" data-arg="${st.id}" ${st.done ? 'disabled' : ''}>
+          data-do="goal" data-arg="${st.id}" ${st.done ? 'disabled' : ''}>
         <b>${st.done ? '✔ ' : ''}${esc(st.text)}${st.id === must ? ' ★' : ''}</b>
         <em>${esc(st.hint)}</em>
         ${st.gives ? `<u>${esc(st.gives)}</u>` : ''}
@@ -775,6 +781,70 @@ export class UI {
     m.className = 'modal hidden';
     m.innerHTML = '';
     this.paused = false;
+    this.dirty = true;
+  }
+
+  /**
+   * The morning, watched rather than read.
+   *
+   * Ending the night used to be a button that made a wall of text appear. It is
+   * the most important minute in the game — it is the only time you see what
+   * they made of everything you did — so now the sun comes up, the camera goes
+   * to whatever they are about to open, and it happens one line at a time in
+   * front of you.
+   */
+  private morning = false;
+
+  private async playMorning() {
+    const s = this.state;
+    const was = s.log.length;
+    this.morning = true;
+    this.select(null);
+
+    endDay(s);
+    save(s);
+    // Everything that just happened, oldest first — the log grows at the front.
+    const fresh = s.log.slice(0, Math.max(0, s.log.length - was)).reverse();
+    const spots = s.hunt.watching.map((id) => s.places[id]).filter(Boolean);
+
+    const strip = this.root.querySelector('#morning') as HTMLElement;
+    const when = this.root.querySelector('#mornwhen') as HTMLElement;
+    const says = this.root.querySelector('#mornsays') as HTMLElement;
+    const wait = (ms: number) => new Promise((r) => { window.setTimeout(r, ms); });
+
+    // Even a morning where nothing happened has something to show: who is
+    // asking, and where they are going to look.
+    const beats: Array<{ text: string; at?: string }> = [
+      { text: s.night_log.length
+        ? 'הם נכנסים. אתמול בלילה נשארו כאן דברים.'
+        : 'הם נכנסים. אתמול בלילה לא קרה כאן כלום.' },
+      ...fresh.map((l, i) => ({ text: l.text, at: spots[i]?.id })),
+      { text: nextMove(s), at: spots[0]?.id },
+    ];
+
+    this.world.dawn(1);
+    this.world.sync(s);
+    strip.classList.remove('hidden');
+    when.textContent = `בוקר · יום ${s.day}`;
+
+    for (const beat of beats) {
+      const at = beat.at ? s.places[beat.at] : null;
+      if (at) this.world.goTo(at, true);
+      says.textContent = beat.text;
+      strip.classList.remove('beat'); void strip.offsetWidth; strip.classList.add('beat');
+      audio.play('click');
+      // Long enough to read a sentence in Hebrew, and no longer.
+      await wait(Math.min(5000, 1700 + beat.text.length * 44));
+      if (!this.morning) break;           // the player said they had seen enough
+    }
+
+    when.textContent = '03:12 · הלילה הבא';
+    says.textContent = hourSays(s);
+    await wait(1500);
+    strip.classList.add('hidden');
+    this.world.dawn(0);
+    this.morning = false;
+    this.world.sync(s);
     this.dirty = true;
   }
 

@@ -14,6 +14,8 @@ import { chromium } from 'playwright';
 import fs from 'node:fs';
 
 const [out = 'shot.png', tapsRaw = '[]', savePath] = process.argv.slice(2);
+/** Milliseconds to sit still after the last tap, for things that play out. */
+const settle = Number(process.env.SHOT_WAIT ?? 1400);
 const taps = JSON.parse(tapsRaw);
 const save = savePath ? fs.readFileSync(savePath, 'utf8') : null;
 
@@ -52,9 +54,9 @@ await page.waitForTimeout(1200);
 for (const [sel, text] of taps) {
   const hit = await tap(sel, text ?? '');
   console.log(`${hit ? '✓' : '✗'} ${sel} ${text ?? ''}`);
-  await page.waitForTimeout(1500);
+  await page.waitForTimeout(taps.length === 1 ? 200 : 1500);
 }
-await page.waitForTimeout(1400);
+await page.waitForTimeout(settle);
 await page.screenshot({ path: out });
 console.log(`→ ${out}`);
 await browser.close();

@@ -49,6 +49,12 @@ export class World {
   /** Which building is open right now, and which floor the camera is on. */
   private host: string | null = null;
   private onFloor = 0;
+  /** 0 in the dark, 1 when the sun is up. The morning is a thing you watch. */
+  private dawnNow = 0;
+  private wantDawn = 0;
+  private hemi!: THREE.HemisphereLight;
+  private amb!: THREE.AmbientLight;
+  private moon!: THREE.DirectionalLight;
   /** A soft light that travels with you, so a room is never a black box. */
   private here = new THREE.PointLight(0xbfe4f5, 0, 30, 2);
   private hereWant = 0;
@@ -114,8 +120,12 @@ export class World {
     this.scene.background = new THREE.Color(0x060d1a);
 
     // Sky glow above, the warm wash off the pavement below.
-    this.scene.add(new THREE.HemisphereLight(0x3d5a78, 0x2a2013, 1.45));
-    this.scene.add(new THREE.AmbientLight(0x2e3646, 0.5));
+    const hemi = new THREE.HemisphereLight(0x3d5a78, 0x2a2013, 1.45);
+    const amb = new THREE.AmbientLight(0x2e3646, 0.5);
+    this.scene.add(hemi);
+    this.scene.add(amb);
+    this.hemi = hemi;
+    this.amb = amb;
 
     const moon = new THREE.DirectionalLight(0xa9c9e4, 1.15);
     moon.position.set(-140, 190, 90);
@@ -126,6 +136,7 @@ export class World {
     const c = moon.shadow.camera as THREE.OrthographicCamera;
     c.left = -140; c.right = 140; c.top = 140; c.bottom = -140;
     this.scene.add(moon);
+    this.moon = moon;
 
     // A warm bounce off the street, so the ground floor is not a black hole.
     const street = new THREE.PointLight(0xffb060, 1400, 210, 2);
@@ -313,6 +324,15 @@ export class World {
   /** Where you would stand to go into a building. */
   doorOf(buildingId: string): THREE.Vector3 { return doorSpot(buildingId); }
 
+  /**
+   * Bring the sun up, or put it away again.
+   *
+   * The whole game happens between 03:12 and eight in the morning, so daylight
+   * is not decoration: it is the thing that ends the night. When they come in
+   * and start looking, you watch it happen in the light.
+   */
+  dawn(a: number) { this.wantDawn = Math.max(0, Math.min(1, a)); }
+
   shake(a: number) { this.grade.uniforms.uGlitch.value = a; }
   alert(a: number) { this.grade.uniforms.uAlert.value = a; }
 
@@ -387,6 +407,21 @@ export class World {
       }
     }
 
+    // The sun coming up, eased so it reads as time passing rather than a switch.
+    this.dawnNow += (this.wantDawn - this.dawnNow) * Math.min(1, dt * 1.1);
+    const d = this.dawnNow;
+    if (this.hemi) {
+      this.hemi.intensity = 1.45 + d * 2.5;
+      this.hemi.color.setHex(0x3d5a78).lerp(new THREE.Color(0xbcd8ef), d);
+      this.amb.intensity = 0.5 + d * 1.15;
+      this.moon.intensity = 1.15 + d * 1.1;
+      this.moon.color.setHex(0xa9c9e4).lerp(new THREE.Color(0xffe6bd), d);
+      const fog = this.scene.fog as THREE.FogExp2;
+      fog.density = 0.0011 * (1 - d * 0.55);
+      fog.color.setHex(0x061020).lerp(new THREE.Color(0x9fb8cc), d);
+      (this.scene.background as THREE.Color).setHex(0x060d1a).lerp(new THREE.Color(0x8fabc4), d);
+    }
+    this.grade.uniforms.uDawn.value = d;
     this.grade.uniforms.uTime.value = this.t;
     this.grade.uniforms.uGlitch.value = Math.max(0, this.grade.uniforms.uGlitch.value - dt * 1.7);
     this.composer.render();

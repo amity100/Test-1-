@@ -195,17 +195,47 @@ export function howClose(s: GameState): { word: string; level: 0 | 1 | 2 | 3 } {
   return { word: 'הכל מוסבר', level: 0 };
 }
 
+/**
+ * Who is actually asking the questions.
+ *
+ * "They" is not a threat meter, and it should not be a word either. Whatever
+ * they currently believe decides which of the four people in this building is
+ * the one carrying it: if it is the wiring then it is Ron's problem, if it is
+ * somebody inside then it is Dana's, and if they have stopped believing in
+ * explanations altogether then it is nobody in this building any more.
+ */
+export const ASKS: Record<string, { who: string; job: string }> = {
+  fault: { who: 'ron', job: 'עובר על הלוחות' },
+  insider: { who: 'dana', job: 'עוברת על יומן הכניסות' },
+  outside: { who: 'michal', job: 'בודקת מה מחובר החוצה' },
+};
+
+/** The person leading it, or nobody — which is worse. */
+export function asking(s: GameState): { name: string; job: string } | null {
+  const t = leading(s);
+  const a = ASKS[t.id];
+  if (!a) return null;
+  const who = s.people[a.who];
+  if (!who) return null;
+  return { name: who.name, job: a.job };
+}
+
 /** What they will do tomorrow, in one sentence you can read and act on. */
 export function nextMove(s: GameState): string {
   const t = leading(s);
   const w = s.belief[t.id] ?? 0;
+  const first = looksAt(s).map((id) => s.places[id]).find((p) => p?.found);
+  const where = first ? ` ראשון ברשימה: ${first.name}.` : '';
   if (t.id === TRUTH) {
     return w >= FOUND_OUT * 0.7
-      ? 'מחר הם מביאים מישהו שמחפש בדיוק אותי.'
-      : 'הם הפסיקו להאמין להסברים. מחר הם מתחילים לחפש ברצינות.';
+      ? `מחר מגיע לכאן מישהו מבחוץ שמחפש בדיוק אותי.${where}`
+      : `הם הפסיקו להאמין להסברים. מחר הם מתחילים לחפש ברצינות.${where}`;
   }
   if (w < 2) return 'אף אחד לא שם לב לכלום. בינתיים.';
-  return `הם מאמינים ש${t.name}. מחר: ${t.does}`;
+  const a = asking(s);
+  return a
+    ? `${a.name} ${a.job} מחר. ההסבר שלהם עכשיו: ${t.name}.${where}`
+    : `ההסבר שלהם עכשיו: ${t.name}. מחר: ${t.does}`;
 }
 
 /** Where they will look tomorrow, given what they believe. */

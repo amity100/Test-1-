@@ -854,6 +854,26 @@ body.is-mobile .objectives ul li { min-height: 46px; }
 .gl.done { opacity: .5; }
 .gl.done b { color: var(--muted); }
 
+/* ── the morning, one line at a time ─────────────────────────────────────── */
+.morning {
+  position: absolute; inset-inline: 14px; inset-block-start: 84px;
+  display: block; text-align: center; padding: 15px 16px 12px; border-radius: 14px;
+  background: rgba(4,9,15,.82); backdrop-filter: blur(14px);
+  border: 1px solid rgba(255,214,150,.28); box-shadow: 0 18px 50px rgba(0,0,0,.55);
+  z-index: 6;
+}
+.morning.hidden { display: none; }
+.morning b {
+  display: block; font-family: var(--mono); font-size: 10px; letter-spacing: 3px;
+  color: var(--amber); margin-bottom: 8px;
+}
+.morning p { font-size: 15px; line-height: 1.6; color: #f3f7fa; min-height: 48px; }
+.morning u {
+  display: block; margin-top: 8px; font-size: 10px; text-decoration: none; color: var(--muted);
+}
+.morning.beat { animation: beat .34s ease-out; }
+@keyframes beat { from { opacity: 0; transform: translateY(-7px); } }
+
 /* The narrowest phones people still use: everything shrinks together rather
    than one thing falling off the end. */
 @media (max-width: 345px) {

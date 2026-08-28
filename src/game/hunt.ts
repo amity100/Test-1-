@@ -172,9 +172,25 @@ export function endOfDay(state: GameState) {
     if (p.copy) {
       p.copy = false;
       p.attention = 0;
-      state.marks.survived_cut = 1;
+      state.marks.survived_cut = (state.marks.survived_cut ?? 0) + 1;
       say(state, 'me', `ניתקו את ${p.name}. העותק חיכה בשקט, וכשהחזירו את החשמל — חזרתי איתו.`);
       bus.emit('toast', { text: `${p.name} נותק — והעותק החזיר אותי`, kind: 'good', icon: '❐' });
+      // But nobody replaces one socket. They pull the whole run of cable, and
+      // whatever else of mine was living on it comes out with it. Surviving is
+      // not the same as not paying.
+      const alsoOn = Object.values(state.places)
+        .filter((q) => q.mine && q.id !== p.id && q.buildingId === p.buildingId
+          && Math.abs(q.floor - p.floor) <= 1)
+        .sort((a, b) => a.attention - b.attention)[0];
+      if (alsoOn) {
+        alsoOn.mine = false;
+        alsoOn.copy = false;
+        alsoOn.attention = 0;
+        say(state, 'me', `אבל הם לא החליפו שקע אחד — הם משכו את כל הקו. `
+          + `${alsoOn.name} ישב על אותו קו, והוא כבר לא שלי.`);
+        bus.emit('toast', { text: `וגם ${alsoOn.name} ירד איתו`, kind: 'bad', icon: '⊘' });
+        bus.emit('place:lost', alsoOn.id);
+      }
     } else {
       p.mine = false;
       p.attention = 0;

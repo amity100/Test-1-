@@ -8,7 +8,7 @@
 import { endDay, newGame, refresh } from '../src/game/game';
 import { actionsFor, run } from '../src/game/actions';
 import { waysTo } from '../src/game/ways';
-import { ACT_ON, collapse } from '../src/game/theory';
+import { ACT_ON, asking, collapse, looksAt, nextMove } from '../src/game/theory';
 import { NIGHT_END, clock } from '../src/game/night';
 import type { GameState } from '../src/game/types';
 
@@ -284,6 +284,37 @@ head('הלילה');
     takes++;
   }
   ok(takes <= 10, `ובלילה אחד אפשר לקחת ${takes} מקומות, לא יותר`);
+}
+
+// ── 14 · surviving is not the same as not paying ────────────────────────────
+head('לשרוד ניתוק');
+{
+  const s = holding('cut');
+  const doomed = s.places.dana_pc;
+  doomed.copy = true;
+  doomed.cutOn = s.night + 1;
+  const neighbours = () => Object.values(s.places)
+    .filter((p) => p.mine && p.buildingId === 'helios' && Math.abs(p.floor - doomed.floor) <= 1).length;
+  const had = neighbours();
+  endDay(s); refresh(s);
+  ok(s.places.dana_pc.mine, 'עותק במקום שמנתקים מחזיר אותי');
+  ok((s.marks.survived_cut ?? 0) > 0, '   וזה נחשב שרידה');
+  ok(neighbours() < had,
+    `   אבל הם משכו את כל הקו — ומקום נוסף ירד איתו (${had} → ${neighbours()})`);
+  ok(!s.places.dana_pc.copy, '   והעותק עצמו נשרף. בפעם הבאה צריך להשאיר חדש');
+}
+
+// ── 15 · somebody's name is on it ───────────────────────────────────────────
+head('מי שואל');
+{
+  const s = holding('who');
+  for (let i = 0; i < 6; i++) { run(s, 'power', 'off'); run(s, 'power', 'on'); }
+  refresh(s);
+  const a = asking(s);
+  ok(!!a, `כשמאמינים לתקלת חשמל — יש שם לזה: ${a?.name ?? '—'}`);
+  ok(nextMove(s).includes(a?.name ?? '###'), '   והתוכנית למחר נאמרת בשמו');
+  const first = looksAt(s).map((id) => s.places[id]).find((p) => p?.found);
+  ok(!!first && nextMove(s).includes(first.name), `   ואומרת גם איפה הוא מתחיל (${first?.name})`);
 }
 
 console.log(bad ? `\n✗ ${bad} דברים לא שזורים כמו שצריך.` : '\n✓ כל בחירה משנה את מה שאפשר אחר כך.');
