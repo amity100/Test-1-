@@ -57,6 +57,19 @@ button:disabled { cursor: not-allowed; }
 
 #app { position: fixed; inset: 0; }
 
+/* What you see for the second before the game starts. */
+#boot-screen {
+  position: absolute; inset: 0; display: grid; place-items: center; gap: 18px;
+  align-content: center; background: var(--bg);
+}
+.boot-core {
+  width: 46px; height: 46px; border-radius: 50%;
+  border: 1px solid rgba(95,246,255,.35); border-top-color: var(--cy);
+  animation: bootSpin 1.1s linear infinite;
+}
+.boot-text { font-family: var(--mono); font-size: 12px; letter-spacing: 4px; color: var(--muted); }
+@keyframes bootSpin { to { transform: rotate(360deg); } }
+
 .world-canvas { display: block; width: 100%; height: 100%; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
@@ -76,7 +89,22 @@ body.is-mobile #markers.labels-off .marker.owned:not(.sel):not(.target) .mk-sub 
 @keyframes fade { from { opacity: 0; } }
 @keyframes modalIn { from { opacity: 0; transform: translateY(16px) scale(.99); } }
 
+/*
+ * The screens before the game can be taller than the phone they are read on, and
+ * the page itself does not scroll — so the layer scrolls instead. Without this,
+ * the button that leaves the screen sits below the fold and cannot be reached.
+ */
+.screen-layer {
+  position: absolute; inset: 0;
+  overflow-y: auto; overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
 .screen-layer.active { display: block; }
+.title-screen, .goal-screen, .intro-screen {
+  position: relative; inset: auto;
+  min-height: 100%; box-sizing: border-box;
+  padding: 20px 0 26px;
+}
 
 .screen-layer.fading { opacity: 0; transition: opacity .7s; }
 
@@ -319,7 +347,11 @@ button:not(:disabled):active { transform: scale(0.985); }
 
 .gs-foot { font-size: 12.5px; line-height: 1.9; color: var(--muted); margin-bottom: 28px; }
 
-.goal-screen .tsb { min-height: 52px; padding: 14px 36px; font-size: 15px; }
+/* And the way out stays on the screen while the words scroll behind it. */
+.goal-screen .tsb {
+  min-height: 52px; padding: 14px 36px; font-size: 15px;
+  position: sticky; bottom: 10px;
+}
 
 body.is-mobile #map-tools { bottom: calc(80px + env(safe-area-inset-bottom, 0px)); left: 10px; }
 
@@ -561,6 +593,38 @@ body.is-mobile .objectives ul li { min-height: 46px; }
 .act u.why {
   display: block; font-size: 11.5px; font-style: normal; text-decoration: none;
   color: #8fa3b5; margin-top: 3px;
+}
+
+/* A narrow phone: the strip along the top has to give things up in order.
+   The sentence they believe goes first, then the word "day", then the padding —
+   but the two icons keep their places, because they are the way out of things. */
+@media (max-width: 430px) {
+  #top { height: 54px; }
+  #top .day { padding: 0 10px; gap: 5px; }
+  #top .day > span { display: none; }
+  #top .day > em { padding: 6px 10px; font-size: 11.5px; }
+  #top .them { padding: 0 4px; gap: 6px; overflow: hidden; }
+  #top .them > span { display: none; }
+  #top .them > em { display: none; }
+  #top .them > b { font-size: 12.5px; }
+  #top .icon { flex: none; width: 34px; }
+}
+@media (max-width: 350px) {
+  #top .them > b { font-size: 11.5px; }
+  #top .day > em { padding: 6px 8px; font-size: 11px; }
+}
+
+/* A sheet with a lot on it must scroll too, or its button falls off the bottom. */
+.modal { overflow-y: auto; overscroll-behavior: contain; padding: 14px 0; }
+.modal .sheet { max-height: none; margin: auto; }
+
+/* Short screens: tighten the reading screens so they mostly fit as they are. */
+@media (max-height: 820px), (max-width: 700px) {
+  .goal-screen h2 { margin: 8px 0 14px; }
+  .gs-line { line-height: 1.68; margin-bottom: 7px; }
+  .gs-rule { margin: 15px auto; }
+  .gs-foot { margin-bottom: 16px; }
+  .modal .sheet { padding: 22px 20px 20px; }
 }
 
 /* A card with several ways in is a long card. Let it scroll on its own. */

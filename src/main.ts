@@ -7,6 +7,11 @@ import './style.css';
 
 const app = document.getElementById('app')!;
 
+// The splash in index.html is there for the second before this file runs. Nothing
+// used to take it away, so it sat at the top of every screen that followed —
+// and on a short phone it pushed the button you needed off the bottom.
+document.getElementById('boot-screen')?.remove();
+
 function boot(fresh: boolean) {
   const state = fresh ? newGame() : (load() ?? newGame());
   app.innerHTML = '';

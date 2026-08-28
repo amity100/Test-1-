@@ -170,5 +170,20 @@ for (const field of ['traces', 'marks', 'log', 'taught', 'steps']) {
   ok(gameSrc.includes(`s.${field} ??=`), `שדה חסר בשמירה מקבל ברירת מחדל: ${field}`);
 }
 
+// ── 9 · nothing left over from the page that loaded the game ────────────────
+//
+// index.html shows something while the game is still loading. If nothing takes
+// it away, it stays on top of every screen after it — which is exactly what
+// happened: a stray "one moment" line pushed the button you needed off the
+// bottom of a short phone.
+const html = readFileSync('index.html', 'utf8');
+const main = readFileSync('src/main.ts', 'utf8');
+const inApp = html.slice(html.indexOf('<div id="app">'), html.indexOf('</body>'));
+for (const m of inApp.matchAll(/id="([a-z-]+)"/g)) {
+  if (m[1] === 'app') continue;
+  ok(main.includes(`'${m[1]}'`) || main.includes(`"${m[1]}"`),
+    `מה ש-index.html מציג לפני הטעינה (#${m[1]}) מוסר כשהמשחק עולה`);
+}
+
 console.log(bad ? `\n✗ ${bad} כפתורים לא בסדר.` : '\n✓ כל כפתור במשחק פעיל, מוסבר, ומוביל למשהו.');
 process.exit(bad ? 1 : 0);
