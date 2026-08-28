@@ -16,6 +16,8 @@ import { RNG } from '../core/rng';
 
 export interface BuildingSpec {
   id: string;
+  /** What it is called from the street. */
+  name?: string;
   x: number;
   z: number;
   w: number;
@@ -31,9 +33,9 @@ export const FLOOR_H = 4.2;
 const HOME_H = 2.95;
 
 export const BUILDINGS: BuildingSpec[] = [
-  { id: 'helios', x: 0, z: 0, w: 30, d: 26, floors: 15, inside: true },
-  { id: 'across', x: 78, z: -14, w: 24, d: 22, floors: 8, inside: true },
-  { id: 'flats', x: -70, z: 22, w: 20, d: 18, floors: 6, inside: false },
+  { id: 'helios', name: 'מגדל הליוס', x: 0, z: 0, w: 30, d: 26, floors: 15, inside: true },
+  { id: 'across', name: 'הבניין ממול', x: 78, z: -14, w: 24, d: 22, floors: 8, inside: true },
+  { id: 'flats', name: 'הבית של דנה', x: -70, z: 22, w: 20, d: 18, floors: 6, inside: false },
 ];
 
 const CY = new THREE.Color('#5ff6ff');
@@ -60,6 +62,13 @@ export function spotAt(buildingId: string, floor: number, x: number, z: number, 
   const b = buildingOf(buildingId);
   if (!b) return new THREE.Vector3(x, floorY(floor) + y, z);
   return new THREE.Vector3(b.x + x, floorY(floor) + y, b.z + z);
+}
+
+/** The pavement in front of a building's door, where you would stand to go in. */
+export function doorSpot(buildingId: string): THREE.Vector3 {
+  const b = buildingOf(buildingId);
+  if (!b) return new THREE.Vector3();
+  return new THREE.Vector3(b.x, 2.4, b.z + b.d / 2 + 3);
 }
 
 /** Where the lift doors are on a floor — everyone walks through here. */

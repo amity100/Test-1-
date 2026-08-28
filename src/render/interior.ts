@@ -9,10 +9,24 @@ import { buildWorld } from '../game/world';
  * floor as the camera comes down through the building.
  */
 
+/** A chair somebody can actually be sitting on. */
+export interface Seat {
+  building: string;
+  floor: number;
+  /** World position of the seat surface. */
+  x: number; y: number; z: number;
+  /** Which way the person on it is facing. */
+  yaw: number;
+  /** True for the chairs that belong to a place in the game. */
+  named: boolean;
+}
+
 export interface Interior {
   group: THREE.Group;
   /** One group per floor, so a floor can be shown or hidden on its own. */
   floors: Map<string, THREE.Group>;
+  /** Every chair in the building, so nobody has to sit on air. */
+  seats: Seat[];
 }
 
 const key = (b: string, f: number) => `${b}:${f}`;
@@ -26,13 +40,15 @@ export function buildInteriors(): Interior {
   // them: nothing generic is allowed to stand inside a desk you can click on,
   // and every computer in the game gets a chair pulled up to it.
   const spots = Object.values(buildWorld().places);
+  const seats: Seat[] = [];
   const near = (b: string, f: number, x: number, z: number, r: number) =>
     spots.some((p) => p.buildingId === b && p.floor === f && Math.hypot(p.x - x, p.z - z) < r);
 
   const slabMat = new THREE.MeshStandardMaterial({ color: 0x2e3640, roughness: 0.92 });
-  const partMat = new THREE.MeshStandardMaterial({
-    color: 0x39424c, roughness: 0.9, transparent: true, opacity: 0.66,
-  });
+  // Office dividers, not walls: solid, and low enough to see the room over them.
+  // As full-height translucent sheets they hung across the view like fog.
+  const partMat = new THREE.MeshStandardMaterial({ color: 0x3c4652, roughness: 0.94 });
+  const partTop = new THREE.MeshStandardMaterial({ color: 0x55606c, roughness: 0.7 });
   const deskMat = new THREE.MeshStandardMaterial({ color: 0x7a6650, roughness: 0.78 });
   const chairMat = new THREE.MeshStandardMaterial({ color: 0x3a434e, roughness: 0.72 });
   const screenOn = new THREE.MeshBasicMaterial({ color: 0x9fe8ff });
@@ -87,17 +103,28 @@ export function buildInteriors(): Interior {
       // A couple of partitions, so a floor is rooms and not a shoebox.
       for (let i = 0; i < 2; i++) {
         const vertical = rng.chance(0.5);
+        const long = rng.range(0.3, 0.55);
         const wall = new THREE.Mesh(
           vertical
-            ? new THREE.BoxGeometry(0.3, FLOOR_H * 0.72, b.d * rng.range(0.3, 0.55))
-            : new THREE.BoxGeometry(b.w * rng.range(0.3, 0.55), FLOOR_H * 0.72, 0.3),
+            ? new THREE.BoxGeometry(0.12, 1.35, b.d * long)
+            : new THREE.BoxGeometry(b.w * long, 1.35, 0.12),
           partMat,
         );
+        wall.castShadow = true;
         const wx = rng.range(-b.w * 0.28, b.w * 0.32);
         const wz = rng.range(-b.d * 0.3, b.d * 0.3);
         if (near(b.id, f, wx, wz, 3.2)) continue;
-        wall.position.set(b.x + wx, y + FLOOR_H * 0.36, b.z + wz);
+        wall.position.set(b.x + wx, y + 0.85, b.z + wz);
         g.add(wall);
+        // A capping rail along the top, the way these things always have.
+        const cap = new THREE.Mesh(
+          vertical
+            ? new THREE.BoxGeometry(0.2, 0.05, b.d * long)
+            : new THREE.BoxGeometry(b.w * long, 0.05, 0.2),
+          partTop,
+        );
+        cap.position.set(b.x + wx, y + 1.55, b.z + wz);
+        g.add(cap);
       }
 
       // Desks with chairs and screens.
@@ -133,6 +160,13 @@ export function buildInteriors(): Interior {
         const back = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.55, 0.08), chairMat);
         back.position.copy(chair.position).add(new THREE.Vector3(0, 0.32, 0.24));
         g.add(back);
+        seats.push({
+          building: b.id, floor: f,
+          x: chair.position.x, y: y + 0.5, z: chair.position.z,
+          // Facing the desk, which is the other way from where the chair sits.
+          yaw: Math.atan2(dx - chair.position.x, dz - chair.position.z),
+          named: false,
+        });
       }
 
       // A chair pulled up to every computer that is part of the game.
@@ -158,6 +192,11 @@ export function buildInteriors(): Interior {
           foot.rotation.y = -a;
           g.add(foot);
         }
+        seats.push({
+          building: b.id, floor: f, x: cx, y: y + 0.5, z: cz,
+          yaw: Math.PI,   // looking at the screen, which faces the room
+          named: true,
+        });
       }
 
       if (f >= 0 && rng.chance(0.5)) {
@@ -196,7 +235,7 @@ export function buildInteriors(): Interior {
     }
   }
 
-  return { group, floors };
+  return { group, floors, seats };
 }
 
 /** Show the floors near the camera and hide the rest, so you can see in. */

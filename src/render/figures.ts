@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { RNG } from '../core/rng';
 import { BUILDINGS, FLOOR_H, WALKS, coreSpot, floorY, spotAt } from './city';
 import { buildBody, idle, lookAt, randomBuild, sit, walk, type Joints } from './rig';
+import type { Seat } from './interior';
 import type { GameState, Person, Place } from '../game/types';
 
 /**
@@ -65,7 +66,8 @@ interface Actor {
   floor: number;
   /** Their chair, for the extras who work here. */
   home: THREE.Vector3;
-  seat: boolean;
+  /** The actual chair they are on. Nobody sits without one. */
+  seat: Seat | null;
   street: boolean;
   /** Named people are moved by the game; extras move themselves. */
   person?: Person;
@@ -94,12 +96,15 @@ export class Figures {
   private halo = haloTexture();
   private rng = new RNG('people');
   private tmp = new THREE.Vector3();
+  private seats: Seat[] = [];
 
-  build(state: GameState) {
+  build(state: GameState, seats: Seat[] = []) {
+    this.seats = seats;
     this.group.clear();
     this.actors = [];
     this.byPerson.clear();
 
+    const free = seats.filter((x) => !x.named);
     for (const person of Object.values(state.people)) {
       const a = this.spawn(person.id, this.standSpot(state, person.atPlaceId));
       a.person = person;
@@ -114,27 +119,26 @@ export class Figures {
       this.byPerson.set(person.id, a);
     }
 
-    // The rest of the night shift, and the people who never went home.
-    const desks: Array<[string, number, number]> = [
-      ['helios', 14, 3], ['helios', 9, 2], ['helios', 0, 1], ['helios', -1, 1],
-      ['helios', 6, 2], ['helios', 11, 2], ['across', 3, 3], ['across', 5, 2],
-    ];
+    // The rest of the night shift — every one of them on a chair that exists.
+    // Never more than a couple per floor, and never on a floor with nothing on it.
+    const wanted = ['helios:14', 'helios:9', 'helios:11', 'helios:6', 'helios:0', 'across:3', 'across:5'];
     let n = 0;
-    for (const [b, f, count] of desks) {
-      const spec = BUILDINGS.find((x) => x.id === b)!;
-      for (let i = 0; i < count; i++) {
-        const at = new THREE.Vector3(
-          spec.x + this.rng.range(-spec.w * 0.32, spec.w * 0.32),
-          floorY(f) + 0.16,
-          spec.z + this.rng.range(-spec.d * 0.3, spec.d * 0.3),
-        );
-        const a = this.spawn(`w${n++}`, at);
+    for (const key of wanted) {
+      const [b, fs] = key.split(':');
+      const f = Number(fs);
+      const here = free.filter((x) => x.building === b && x.floor === f);
+      this.rng.shuffle(here);
+      for (const seat of here.slice(0, 2)) {
+        const a = this.spawn(`w${n++}`, new THREE.Vector3(seat.x, seat.y - 0.34, seat.z));
         a.building = b;
         a.floor = f;
-        a.home.copy(at);
-        a.seat = true;
+        a.standH = seat.y - 0.5;
+        a.home.set(seat.x, a.standH, seat.z);
+        a.seat = seat;
         a.doing = 'sit';
-        a.yaw = a.wantYaw = this.rng.range(-Math.PI, Math.PI);
+        a.yaw = a.wantYaw = seat.yaw;
+        a.root.position.set(seat.x, a.standH, seat.z);
+        a.root.rotation.y = seat.yaw;
       }
     }
 
@@ -163,7 +167,7 @@ export class Figures {
       doing: 'stand', path: [], phase: this.rng.next(), speed: 0, want: 0,
       yaw: this.rng.range(-Math.PI, Math.PI), wantYaw: 0,
       look: null, lookFor: 0, shock: 0, next: this.rng.range(1, 6),
-      building: 'helios', floor: 0, home: at.clone(), seat: false, street: false,
+      building: 'helios', floor: 0, home: at.clone(), seat: null, street: false,
       legIndex: 0,
     };
     a.wantYaw = a.yaw;
@@ -174,10 +178,20 @@ export class Figures {
 
   // ── where the game says a person is ───────────────────────────────────────
 
+  /** The chair that belongs to a place, if it has one. */
+  private seatFor(p: Place): Seat | null {
+    const at = spotAt(p.buildingId, p.floor, p.x, p.z, 0);
+    return this.seats.find((s) => s.named && s.building === p.buildingId && s.floor === p.floor
+      && Math.hypot(s.x - at.x, s.z - at.z) < 2) ?? null;
+  }
+
   private standSpot(state: GameState, placeId: string): THREE.Vector3 {
     const p = state.places[placeId];
     if (!p) return new THREE.Vector3();
-    // Stand beside the thing, not inside it.
+    // If there is a chair here, that is where they go. Otherwise they stand
+    // beside the thing — never inside it, and never on top of it.
+    const seat = this.seatFor(p);
+    if (seat) return new THREE.Vector3(seat.x, seat.y - 0.5, seat.z);
     const v = spotAt(p.buildingId, p.floor, p.x, p.z, 0);
     return v.add(new THREE.Vector3(1.15, 0.16, 0.9));
   }
@@ -231,7 +245,13 @@ export class Figures {
       }
       a.building = place.buildingId;
       a.floor = place.floor;
-      a.seat = place.kind === 'computer' || place.kind === 'mainframe';
+      a.seat = this.seatFor(place);
+      // Already where they belong, and there is a chair there: sit on it.
+      if (arrived && a.seat && a.doing !== 'walk') {
+        a.doing = 'sit';
+        a.standH = a.seat.y - 0.5;
+      }
+      if (arrived && !a.seat && a.doing === 'sit') a.doing = 'stand';
 
       if (a.halo) {
         const m = a.halo.material as THREE.SpriteMaterial;
@@ -305,7 +325,10 @@ export class Figures {
         }
       } else if (dist < 0.35) {
         a.path.shift();
-        if (!a.path.length) a.doing = a.seat ? 'sit' : 'stand';
+        if (!a.path.length) {
+          a.doing = a.seat ? 'sit' : 'stand';
+          if (a.seat) a.standH = a.seat.y - 0.5;
+        }
       } else {
         a.doing = 'walk';
         a.wantYaw = Math.atan2(flat.x, flat.z);
@@ -334,8 +357,11 @@ export class Figures {
     // ── the pose ────────────────────────────────────────────────────────────
     if (a.doing === 'walk' && a.speed > 0.12) {
       walk(j, a.phase, a.speed, a.standH);
-    } else if (a.doing === 'sit') {
-      sit(j, t, a.standH + 0.42, a.seed);
+    } else if (a.doing === 'sit' && a.seat) {
+      a.root.position.x = a.seat.x;
+      a.root.position.z = a.seat.z;
+      a.wantYaw = a.seat.yaw;
+      sit(j, t, a.seat.y, a.seed);
     } else {
       idle(j, t, a.standH, a.seed);
     }
@@ -388,7 +414,7 @@ export class Figures {
         a.want = 1.15 + this.rng.next() * 0.5;
       } else if (!a.person) {
         // Get up, go and get water, come back and sit down again.
-        if (a.doing === 'sit' && this.rng.chance(0.45)) {
+        if (a.doing === 'sit' && a.seat && this.rng.chance(0.4)) {
           const spec = BUILDINGS.find((x) => x.id === a.building);
           const to = this.rng.chance(0.5) && spec
             ? new THREE.Vector3(
@@ -396,8 +422,9 @@ export class Figures {
               spec.z + this.rng.range(-spec.d * 0.3, spec.d * 0.3),
             )
             : coreSpot(a.building, a.floor);
-          a.path = [to, a.home.clone()];
+          a.path = [to, new THREE.Vector3(a.seat.x, a.seat.y - 0.5, a.seat.z)];
           a.want = 1.15;
+          a.doing = 'walk';
         } else {
           a.wantYaw = a.yaw + this.rng.range(-1.1, 1.1);
         }

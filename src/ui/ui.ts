@@ -9,6 +9,7 @@ import { HUNT_WORD } from '../game/hunt';
 import { TEACH, currentStep, endDay, refresh, save, stageOf } from '../game/game';
 import { whatIsLeft } from '../game/stages';
 import { TRACES, waysTo } from '../game/ways';
+import { BUILDINGS } from '../render/city';
 import type { GameState } from '../game/types';
 import { esc, h } from './dom';
 
@@ -27,6 +28,8 @@ export class UI {
   private paused = false;
   /** One live button per named place, moved rather than rebuilt. */
   private tags = new Map<string, HTMLButtonElement>();
+  /** On a phone the card is a sheet you can pull up over the world, or push down. */
+  private cardBig = false;
 
   constructor(private root: HTMLElement, private state: GameState) {
     this.worldEl = h('div', 'world');
@@ -171,6 +174,7 @@ export class UI {
     switch (what) {
       case 'place': this.select(arg); break;
       case 'close': this.select(null); break;
+      case 'grow': this.cardBig = !this.cardBig; this.dirty = true; break;
       case 'wide': this.world.wide(); this.select(null); break;
 
       case 'goto': {
@@ -214,11 +218,23 @@ export class UI {
       case 'closeteach': this.closeModal(); break;
       case 'help': this.showHelp(); break;
       case 'traces': this.showTraces(); break;
+
+      case 'enter': {
+        // Go in on the floor the game is pointing at, or the lobby if it is not
+        // pointing anywhere in there.
+        const step = currentStep(s);
+        const goal = step?.placeId ? s.places[step.placeId] : undefined;
+        const floor = goal && goal.buildingId === arg ? goal.floor : 0;
+        this.world.enter(arg, floor);
+        this.select(null);
+        break;
+      }
       case 'again': location.reload(); break;
     }
   }
 
   private select(id: string | null) {
+    if (id !== this.selected) this.cardBig = false;
     this.selected = id;
     if (id) {
       const p = this.state.places[id];
@@ -253,7 +269,8 @@ export class UI {
         : p.attention === 1 ? '<p class="line soft">מישהו הרגיש שמשהו קרה כאן.</p>' : '';
 
     return `
-      <div class="card">
+      <div class="card${this.cardBig ? ' big' : ''}">
+        <button class="grab" data-do="grow" title="${this.cardBig ? 'להקטין' : 'להגדיל'}"><i></i></button>
         <button class="x" data-do="close">✕</button>
         <header>
           <b>${esc(p.name)}</b>
@@ -291,32 +308,62 @@ export class UI {
   private drawTags() {
     const s = this.state;
     const want = currentStep(s)?.placeId ?? null;
-
-    // Up close you see the names of everything around you. From above the city
-    // stays clean: only the one the game is pointing at, and whatever you touch.
+    const inB = this.world.inBuilding;
+    const onFloor = this.world.onFloorNow;
     const near = this.world.near;
-    const ids = new Set<string>();
-    if (want) ids.add(want);
-    if (this.hovered) ids.add(this.hovered);
-    if (this.selected) ids.add(this.selected);
-    if (near) for (const p of Object.values(s.places)) if (p.mine || p.found) ids.add(p.id);
 
-    const spots: Array<{ id: string; x: number; y: number; z: number }> = [];
+    // What you can see the name of depends on where you are. From the street a
+    // building is a building — you are offered the way in, not a list of the
+    // things on its fourteenth floor. Once you are inside it, the room opens up.
+    const ids = new Set<string>();
+    const shownIn = (p: { buildingId: string; floor: number }) =>
+      p.buildingId === 'street' ? near : inB === p.buildingId && Math.abs(p.floor - onFloor) <= 3;
+
+    for (const id of [want, this.hovered, this.selected]) {
+      if (!id) continue;
+      const p = s.places[id];
+      if (p && shownIn(p)) ids.add(id);
+    }
+    if (near) {
+      for (const p of Object.values(s.places)) {
+        if ((p.mine || p.found) && shownIn(p)) ids.add(p.id);
+      }
+    }
+
+    const spots: Array<{ id: string; x: number; y: number; z: number; label: string;
+      cls: string; act: string; arg: string }> = [];
     for (const id of ids) {
       const p = s.places[id];
       if (!p || (!p.mine && !p.found)) continue;
       const v = this.world.project(id);
       if (!v || v.z > 1) continue;
-      spots.push({ id, ...v });
+      const cls = p.cutOn !== undefined ? 'cut' : p.attention >= 2 ? 'hot' : p.mine ? 'mine' : '';
+      spots.push({ id, ...v, label: p.name, cls, act: 'place', arg: p.id });
     }
-    // Nearest first, so if two names collide the closer one wins the spot.
-    spots.sort((a, b) => a.z - b.z);
+
+    // The doors. One per building you are not standing in, and only for the ones
+    // you have any reason to go into.
+    for (const b of BUILDINGS) {
+      if (!b.inside || inB === b.id) continue;
+      const holds = Object.values(s.places).some((p) => p.buildingId === b.id && (p.mine || p.found));
+      if (!holds) continue;
+      const v = this.world.projectPoint(this.world.doorOf(b.id));
+      if (!v || v.z > 1) continue;
+      const goalHere = !!want && s.places[want]?.buildingId === b.id;
+      const mine = Object.values(s.places).some((p) => p.buildingId === b.id && p.mine);
+      spots.push({
+        id: `enter:${b.id}`, ...v,
+        label: `${b.name ?? 'הבניין'} · להיכנס`,
+        cls: `door${goalHere ? ' goal' : ''}${mine ? ' mine' : ''}`,
+        act: 'enter', arg: b.id,
+      });
+    }
 
     // Important names get their spot first; the rest fit round them or wait their
     // turn. Two names on the same pixels means one of them cannot be pressed at
     // all, so nothing is allowed to sit on top of anything else.
     const rank = (id: string) =>
-      (id === want ? 0 : id === this.selected ? 1 : id === this.hovered ? 2 : 3);
+      (id.startsWith('enter:') ? 0 : id === want ? 1 : id === this.selected ? 2 : id === this.hovered ? 3 : 4);
     spots.sort((a, b) => rank(a.id) - rank(b.id) || a.z - b.z);
 
     const taken: Array<{ x: number; y: number }> = [];
@@ -332,20 +379,18 @@ export class UI {
     }
     const under = (v: { x: number; y: number }) => blocked.find((r) =>
       v.x > r.left - 96 && v.x < r.right + 96 && v.y > r.top - 26 && v.y < r.bottom + 8);
-
     const clear = (v: { x: number; y: number }) =>
       !under(v) && !taken.some((t) => Math.abs(t.x - v.x) < 132 && Math.abs(t.y - v.y) < 30);
 
     for (const spot of spots) {
-      const p = s.places[spot.id];
-      const always = spot.id === want || spot.id === this.hovered || spot.id === this.selected;
+      const always = spot.id === want || spot.id === this.hovered || spot.id === this.selected
+        || spot.id.startsWith('enter:');
       const w = this.root.clientWidth;
       const half = w < 700 ? 80 : 100;
       const v = {
         x: Math.min(w - half, Math.max(half, spot.x)),
         y: Math.min(this.root.clientHeight - 130, Math.max(74, spot.y)),
       };
-      // Slide out from under a panel first, then nudge upward, then give up.
       let fits = clear(v);
       const hit = under(v);
       if (!fits && hit) {
@@ -360,21 +405,20 @@ export class UI {
       if (!fits) continue;
       taken.push({ ...v });
 
-      // One button per place, kept alive and moved. Rebuilding these every frame
+      // One button per name, kept alive and moved. Rebuilding these every frame
       // pulled the element out from under your finger between press and release,
       // and the tap simply never arrived.
       let el = this.tags.get(spot.id);
       if (!el) {
         el = document.createElement('button');
-        el.dataset.do = 'place';
-        el.dataset.arg = spot.id;
-        el.innerHTML = `<span>${esc(p.name)}</span>`;
+        el.dataset.do = spot.act;
+        el.dataset.arg = spot.arg;
+        el.innerHTML = `<span>${esc(spot.label)}</span>`;
         box.appendChild(el);
         this.tags.set(spot.id, el);
       }
-      const cls = p.cutOn !== undefined ? 'cut' : p.attention >= 2 ? 'hot' : p.mine ? 'mine' : '';
-      const want2 = `tag ${cls}${spot.id === want ? ' goal' : ''}${always ? '' : ' faint'}`;
-      if (el.className !== want2) el.className = want2;
+      const wantCls = `tag ${spot.cls}${spot.id === want ? ' goal' : ''}${always ? '' : ' faint'}`;
+      if (el.className !== wantCls) el.className = wantCls;
       el.style.transform = `translate(calc(${Math.round(v.x)}px - 50%), calc(${Math.round(v.y)}px - 100%))`;
       live.add(spot.id);
     }

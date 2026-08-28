@@ -633,3 +633,34 @@ body.is-mobile .objectives ul li { min-height: 46px; }
 @media (max-width: 700px) {
   .card { max-height: 62vh; }
 }
+
+/* The way into a building, seen from the street. */
+.tag.door {
+  color: #eaf9ff; border-color: rgba(95,246,255,.5);
+  background: rgba(6,14,22,.9); font-size: 13.5px; padding: 8px 15px;
+}
+.tag.door.mine { color: var(--cy); }
+
+/* ── the card as a sheet you can pull up ─────────────────────────────────── */
+.card .grab { display: none; }
+
+@media (max-width: 700px) {
+  /* Small by default, so more than half the screen is still the city. Pull it
+     up when you want to read all the ways in, push it down when you want to
+     look at what you are doing it to. */
+  .card { max-height: 40vh; padding-top: 26px; }
+  .card.big { max-height: 84vh; }
+  .card .grab {
+    display: block; position: sticky; top: -16px; z-index: 3;
+    width: 100%; height: 22px; margin: -26px 0 2px; padding: 0;
+    background: linear-gradient(to bottom, rgba(6,12,19,.98) 60%, rgba(6,12,19,0));
+  }
+  .card .grab i {
+    display: block; width: 42px; height: 4px; margin: 7px auto 0;
+    border-radius: 3px; background: rgba(150,200,225,.42);
+  }
+  .card.big .grab i { background: rgba(95,246,255,.6); }
+  .card .x { inset-block-start: 22px; }
+  /* While a card is open the task panel gets out of the way. */
+  body:has(#card:not(.hidden)) #taskhint { display: none; }
+}

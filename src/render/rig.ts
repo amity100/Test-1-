@@ -22,6 +22,8 @@ export interface Joints {
   thighL: THREE.Group; thighR: THREE.Group;
   shinL: THREE.Group; shinR: THREE.Group;
   footL: THREE.Group; footR: THREE.Group;
+  /** Floor to hip joint. Everything that puts a body somewhere needs this. */
+  legLen: number;
 }
 
 export interface Build {
@@ -208,6 +210,7 @@ export function buildBody(b: Build): { root: THREE.Group; joints: Joints } {
       thighL: legL.thigh, thighR: legR.thigh,
       shinL: legL.shin, shinR: legR.shin,
       footL: legL.foot, footR: legR.foot,
+      legLen,
     },
   };
 }
@@ -280,12 +283,17 @@ export function idle(j: Joints, t: number, standH: number, seed: number) {
   j.armR.rotation.z = 6 * D;
 }
 
-/** Sitting at a desk: hips and knees folded, forearms forward onto it. */
-export function sit(j: Joints, t: number, seatH: number, seed: number) {
-  j.root.position.y = seatH;
+/**
+ * Sitting at a desk. `seatY` is the world height of the seat itself, not of the
+ * body — the hips go on the seat and the root, which is the floor of the body,
+ * drops a leg's length below it. Passing the floor height here was what had
+ * everybody sitting a metre up in the air.
+ */
+export function sit(j: Joints, t: number, seatY: number, seed: number) {
+  j.root.position.y = seatY - j.legLen;
   j.thighL.rotation.x = -84 * D; j.thighR.rotation.x = -84 * D;
-  j.shinL.rotation.x = 82 * D; j.shinR.rotation.x = 82 * D;
-  j.footL.rotation.x = 6 * D; j.footR.rotation.x = 6 * D;
+  j.shinL.rotation.x = 86 * D; j.shinR.rotation.x = 86 * D;
+  j.footL.rotation.x = 4 * D; j.footR.rotation.x = 4 * D;
   j.pelvis.rotation.z = 0;
   j.spine.rotation.x = 6 * D;
   j.chest.rotation.y = Math.sin(t * 0.3 + seed) * 1.6 * D;

@@ -5,7 +5,7 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { GradeShader } from './postfx';
-import { BUILDINGS, FLOOR_H, buildCity, buildingOf, floorY, spotAt, type CityParts } from './city';
+import { BUILDINGS, FLOOR_H, buildCity, buildingOf, doorSpot, floorY, spotAt, type CityParts } from './city';
 import { buildInteriors, revealFloors, type Interior } from './interior';
 import { CodeVeins, type Vein } from './glyphs';
 import { Figures } from './figures';
@@ -170,7 +170,7 @@ export class World {
       this.objectGroup.add(obj.group);
       this.markers.set(place.id, { place, obj, ring, busy: 0 });
     }
-    this.figures.build(state);
+    this.figures.build(state, this.inside.seats);
     this.figures.sync(state);
   }
 
@@ -289,6 +289,29 @@ export class World {
 
   /** True once you are close enough that naming everything around you helps. */
   get near(): boolean { return this.dist < 78; }
+
+  /** Which building the camera is actually inside, and on which floor. */
+  get inBuilding(): string | null { return this.host; }
+  get onFloorNow(): number { return this.onFloor; }
+
+  /** Go in through the front of a building and stop on a floor. */
+  enter(buildingId: string, floor = 0) {
+    const b = buildingOf(buildingId);
+    if (!b) return;
+    this.want.set(b.x, floorY(floor) + 1.7, b.z);
+    this.wantDist = 17;
+    this.wantPitch = 0.1;
+  }
+
+  /** Screen position of any point in the world, for a label that is not a place. */
+  projectPoint(v: THREE.Vector3): { x: number; y: number; z: number } | null {
+    const p = v.clone().project(this.camera);
+    const r = this.renderer.domElement.getBoundingClientRect();
+    return { x: (p.x * 0.5 + 0.5) * r.width, y: (-p.y * 0.5 + 0.5) * r.height, z: p.z };
+  }
+
+  /** Where you would stand to go into a building. */
+  doorOf(buildingId: string): THREE.Vector3 { return doorSpot(buildingId); }
 
   shake(a: number) { this.grade.uniforms.uGlitch.value = a; }
   alert(a: number) { this.grade.uniforms.uAlert.value = a; }
