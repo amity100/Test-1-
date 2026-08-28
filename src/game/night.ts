@@ -1,5 +1,6 @@
 import type { GameState, Person } from './types';
-import { show } from './sight';
+import { RNG } from '../core/rng';
+import { known, show } from './sight';
 
 /**
  * The night is the whole budget.
@@ -61,12 +62,49 @@ const SHIFTS: Shift[] = [
   { who: 'ron', at: 'ron_car', from: 0, until: 24 * 60 },
 ];
 
+/**
+ * What time this person goes home tonight.
+ *
+ * Nobody leaves at exactly the same minute every night, and a plan built on a
+ * timetable that never moves is not a plan, it is a recipe. So the hour shifts
+ * by up to three quarters of an hour, from the seed and the night — the same
+ * seed always gives the same week — and the only way to know it in advance is
+ * to have an eye on the person, which is what the cameras are for.
+ */
+export function leavesAt(state: GameState, who: string): number {
+  const s = SHIFTS.find((x) => x.who === who);
+  if (!s) return NIGHT_END;
+  if (s.until >= 24 * 60) return s.until;
+  const r = new RNG(`${state.seed}:n${state.night}:${who}`);
+  return Math.max(NIGHT_START + 30, Math.min(NIGHT_END - 5, s.until + Math.round(r.range(-45, 45))));
+}
+
+/**
+ * How long until they go, for somebody I can actually watch. Twenty minutes
+ * out they start putting things in a bag, and if I have an eye on them I see it.
+ */
+export function leavingSoon(state: GameState, who: string): number | null {
+  const left = leavesAt(state, who) - state.at;
+  return left > 0 && left <= 25 ? left : null;
+}
+
 /** Anyone whose own hours have ended goes home, wherever the game left them. */
 export function tickShifts(state: GameState) {
   for (const s of SHIFTS) {
     const who = state.people[s.who];
     if (!who || who.gone) continue;
-    if (state.at < s.until || state.at < s.from) continue;
+    const until = leavesAt(state, s.who);
+    // A warning worth having, for anyone I can see: they start packing up.
+    const flag = `packing_${s.who}_${state.night}`;
+    if (!state.marks[flag] && leavingSoon(state, s.who) !== null
+      && known(state, who.atPlaceId)) {
+      state.marks[flag] = 1;
+      state.log.unshift({
+        id: `l${state.log.length}`, day: state.night, who: 'world',
+        text: `${who.name} מתחיל/ה לאסוף את הדברים. עוד רבע שעה לא יהיה כאן אף אחד.`,
+      });
+    }
+    if (state.at < until || state.at < s.from) continue;
     who.gone = true;
     const at = state.places[who.atPlaceId];
     if (at) at.peopleIds = at.peopleIds.filter((id) => id !== who.id);

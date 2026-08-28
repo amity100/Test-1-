@@ -5,6 +5,7 @@
 import { endDay, newGame, refresh } from '../src/game/game';
 import { actionsFor, run } from '../src/game/actions';
 import { NEED, currentStep, focusOn } from '../src/game/stages';
+import { NIGHT_END, NIGHT_START, leavesAt } from '../src/game/night';
 import { canSee, knowsWhere, reachable } from '../src/game/sight';
 import type { GameState } from '../src/game/types';
 
@@ -182,6 +183,28 @@ ok(k.dead.includes('fault'), 'משהו שקרה כשהחשמל היה כבוי �
 ok((k.belief.real ?? 0) >= before + banked,
   `   וכל מה שהוא החזיק עבר אליי (${before} → ${k.belief.real ?? 0})`);
 ok((k.marks.power_off ?? 0) > 0, '   כי החשמל באמת היה כבוי כשזה קרה');
+
+// ── no two weeks are the same week ─────────────────────────────────────────
+{
+  const a = newGame('week-a');
+  const b = newGame('week-b');
+  const hours = (x: GameState, n: number) => {
+    x.night = n;
+    return ['dana', 'eitan', 'michal'].map((w) => leavesAt(x, w)).join(',');
+  };
+  ok(hours(a, 0) !== hours(b, 0), 'שני זרעים — שתי משמרות אחרות');
+  ok(hours(a, 0) !== hours(a, 3), 'ובאותו משחק, אף לילה לא זהה לקודמו');
+  ok(hours(a, 0) === hours(newGame('week-a'), 0), 'אבל אותו זרע — תמיד אותו שבוע');
+  const n = newGame('week-a');
+  for (let d = 0; d < 12; d++) {
+    n.night = d;
+    for (const w of ['dana', 'eitan', 'michal']) {
+      const t = leavesAt(n, w);
+      if (t <= NIGHT_START || t >= NIGHT_END) { ok(false, `${w} הולך/ת בשעה בלתי אפשרית`); }
+    }
+  }
+  ok(true, 'ואף אחד לא הולך הביתה לפני שהלילה התחיל או אחרי שהוא נגמר');
+}
 
 console.log(bad ? `\n✗ ${bad} דברים לא עובדים.` : '\n✓ הכל עובד: חמשת השלבים, כמה דרכים לכל מקום, והסימנים שנשארים.');
 process.exit(bad ? 1 : 0);

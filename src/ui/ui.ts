@@ -6,7 +6,7 @@ import {
 } from '../game/actions';
 import { bus } from '../game/bus';
 import { clock } from '../game/hunt';
-import { NIGHT_END, NIGHT_START, hourSays } from '../game/night';
+import { NIGHT_END, NIGHT_START, hourSays, leavingSoon } from '../game/night';
 import { ACT_ON, FOUND_OUT, THEORIES, TRUTH, asking, howClose, leading, nextMove } from '../game/theory';
 import { TEACH, currentStep, endDay, refresh, save, stageOf } from '../game/game';
 import { MUST, NEED, STAGES, doneCount, focusOn, whatIsLeft } from '../game/stages';
@@ -428,12 +428,19 @@ export class UI {
 
     const eye = known(s, p.id);
     const seen = seenAt(s, p);
+    // Somebody I can watch, who is about to go home. Nobody leaves at the same
+    // minute twice, so this is a thing an eye buys you and nothing else does.
+    const going = Object.values(s.people)
+      .filter((q) => !q.gone && q.atPlaceId === p.id && known(s, q.atPlaceId))
+      .map((q) => ({ q, mins: leavingSoon(s, q.id) }))
+      .find((x) => x.mins !== null);
     const heat = p.cutOn !== undefined
       ? `מנתקים את זה בעוד ${Math.max(1, p.cutOn - s.night)} לילות`
       : p.attention >= 2 ? 'מסתכלים לכאן עכשיו'
         : !eye ? 'אין לי כאן עין'
-          : seen.length ? `${seen.join(' · ')} כאן`
-            : 'אין כאן אף אחד';
+          : going ? `${going.q.name} הולך/ת עוד ${going.mins} דקות`
+            : seen.length ? `${seen.join(' · ')} כאן`
+              : 'אין כאן אף אחד';
     const set = (id: string, text: string) => {
       const el = this.root.querySelector(`#${id}`) as HTMLElement;
       if (el.textContent !== text) el.textContent = text;
