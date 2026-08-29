@@ -197,7 +197,7 @@ export class World {
 
       let color = p.mine ? MINE : COLD;
       if (p.attention >= 2) color = WARM;
-      if (p.cutOn !== undefined) color = HOT;
+      if (p.cutAt !== undefined) color = HOT;
       for (const part of m.obj.glowParts) {
         (part.material as THREE.MeshBasicMaterial).color.copy(color);
       }
@@ -400,7 +400,7 @@ export class World {
       m.ring.rotation.z += dt * 0.9;
       const mat = m.ring.material as THREE.MeshBasicMaterial;
       if (mat.opacity > 0) mat.opacity = 0.45 + pulse * 0.5;
-      if (m.place.cutOn !== undefined) {
+      if (m.place.cutAt !== undefined) {
         for (const part of m.obj.glowParts) {
           (part.material as THREE.MeshBasicMaterial).color.copy(HOT).multiplyScalar(pulse);
         }

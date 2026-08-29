@@ -240,7 +240,7 @@ export class Figures {
         if (!last || last.distanceTo(to) > 0.6) {
           a.path = this.route(a, to, place);
           a.doing = 'walk';
-          a.want = person.wondering ? 1.85 : 1.35;
+          a.want = person.worry >= 30 ? 1.85 : 1.35;
         }
       }
       a.building = place.buildingId;
@@ -255,8 +255,8 @@ export class Figures {
 
       if (a.halo) {
         const m = a.halo.material as THREE.SpriteMaterial;
-        m.color.set(person.wondering ? 0xffb347 : 0xffd9a0);
-        m.opacity = person.wondering ? 0.34 : 0.13;
+        m.color.set(person.worry >= 30 ? 0xffb347 : 0xffd9a0);
+        m.opacity = person.worry >= 30 ? 0.34 : 0.13;
       }
     }
   }
@@ -395,7 +395,7 @@ export class Figures {
     }
 
     // Somebody who has seen something they cannot explain keeps looking round.
-    if (a.person?.wondering && a.lookFor <= 0) {
+    if ((a.person?.worry ?? 0) >= 30 && a.lookFor <= 0) {
       a.next -= dt;
       if (a.next <= 0) {
         a.next = 1.4 + this.rng.next() * 2.2;

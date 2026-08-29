@@ -21,16 +21,22 @@ for (const [W, H] of [[320, 640], [360, 740], [390, 844], [430, 932]]) {
   }, [sel, text]);
   const shut = async () => { while (await tap('#modal .ok')) await p.waitForTimeout(280); };
   await p.waitForTimeout(1100);
-  for (let i = 0; i < 4; i++) { if (!(await tap('button'))) break; await p.waitForTimeout(450); }
-  await p.waitForTimeout(3400); await shut();
+  for (const label of ['משחק חדש', 'דלג', 'יאללה']) {
+    if (await tap('.screen-layer button', label)) await p.waitForTimeout(800);
+  }
+  await p.waitForTimeout(3600); await shut();
 
   // Every button that is on screen must be big enough for a thumb, fully on the
   // screen, and not have anything sitting on top of it.
   const audit = async (what) => {
     const rows = await p.evaluate(() => {
       const out = [];
+      // While a window is open it owns the screen on purpose. Only the buttons
+      // inside it have to be reachable; the world behind it is meant to be covered.
+      const sheet = document.querySelector('#modal .sheet');
       for (const el of document.querySelectorAll('[data-do]')) {
         if (el.offsetParent === null) continue;
+        if (sheet && !sheet.contains(el)) continue;
         const r = el.getBoundingClientRect();
         if (r.width < 1) continue;
         const x = r.x + r.width / 2, y = r.y + r.height / 2;
@@ -51,23 +57,32 @@ for (const [W, H] of [[320, 640], [360, 740], [390, 844], [430, 932]]) {
     return rows.length;
   };
 
-  const n1 = await audit('רחוב');
-  ok(n1 >= 4, `${W}×${H} · יש כפתורים על מסך הרחוב (${n1})`);
+  // The game opens looking at the machine it woke in, with its ring already up.
+  const n1 = await audit('פתיחה');
+  ok(n1 >= 4, `${W}×${H} · יש כפתורים על המסך הראשון (${n1})`);
 
-  await tap('#tags button', 'להיכנס');
-  // Wait until the camera has actually arrived and the room has opened up.
-  for (let i = 0; i < 30; i++) {
-    await p.waitForTimeout(400);
-    if ((await p.locator('#tags button').count()) > 1) break;
-  }
-  await shut();
-  const names = await p.locator('#tags button').allInnerTexts();
-  const target = names.find((n) => !n.includes('להיכנס')) ?? names[0];
-  ok(!!target, `${W}×${H} · יש שמות ללחוץ עליהם (${names.length})`);
-  await tap('#tags button', target); await p.waitForTimeout(2600); await shut();
-  const ring = await p.locator('#ring .rb').count();
-  ok(ring >= 2, `${W}×${H} · הטבעת נפתחה עם ${ring} אפשרויות`);
+  const verbs = await p.locator('#ring .rb').count();
+  ok(verbs >= 3, `${W}×${H} · הטבעת נפתחה עם ${verbs} דרכים`);
   await audit('טבעת');
+
+  // Open one of the seven and check its own options are reachable too.
+  await tap('#ring .rb'); await p.waitForTimeout(900);
+  const inner = await p.locator('#ring .rb').count();
+  ok(inner >= 2, `${W}×${H} · ובתוכה ${inner} אפשרויות`);
+  await audit('אפשרויות');
+
+  // Everything along the top opens something and closes again.
+  for (const [what, label] of [['jobs', 'מה רץ'], ['areas', 'מה אני יודע'],
+    ['them', 'הם'], ['grown', 'מה נהייתי'], ['help', 'עזרה']]) {
+    const opened = await p.evaluate((w) => {
+      const el = document.querySelector(`[data-do="${w}"]`);
+      if (!el) return false;
+      el.click();
+      return !!document.querySelector('#modal .sheet');
+    }, what);
+    ok(opened, `${W}×${H} · "${label}" נפתח`);
+    if (opened) { await p.waitForTimeout(260); await audit(`חלון ${label}`); await shut(); }
+  }
 
   // The middle of the screen — where the world is — must stay clear.
   // How much of the screen do the solid panels take? On a phone, the world has

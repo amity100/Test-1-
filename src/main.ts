@@ -1,6 +1,6 @@
 import { audio } from './audio/audio';
 import { bus } from './game/bus';
-import { clearSave, load, newGame, refresh, save } from './game/game';
+import { clearSave, load, newGame, save } from './game/game';
 import { UI } from './ui/ui';
 import { Screens } from './ui/screens';
 import './style.css';
@@ -13,9 +13,8 @@ const app = document.getElementById('app')!;
 document.getElementById('boot-screen')?.remove();
 
 function boot(fresh: boolean) {
-  const state = fresh ? newGame() : (load() ?? newGame());
+  const state = fresh ? newGame(String(Date.now())) : (load() ?? newGame());
   app.innerHTML = '';
-  refresh(state);
   const ui = new UI(app, state);
   void ui;
   save(state);

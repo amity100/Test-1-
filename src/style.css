@@ -388,7 +388,7 @@ body.is-mobile .objectives ul li { min-height: 46px; }
 .tag.mine { color: var(--cy); border-color: rgba(95,246,255,.45); }
 .tag.hot { color: var(--amber); border-color: rgba(255,179,71,.5); }
 .tag.cut { color: var(--red); border-color: rgba(255,84,112,.6); }
-.tag.goal { box-shadow: 0 0 0 1px rgba(95,246,255,.5), 0 0 24px rgba(95,246,255,.3); }
+
 
 /* ── top strip ─────────────────────────────────────────────────────────── */
 #top {
@@ -397,45 +397,29 @@ body.is-mobile .objectives ul li { min-height: 46px; }
   background: linear-gradient(to bottom, rgba(4,8,13,.92), rgba(4,8,13,.4));
   backdrop-filter: blur(9px);
 }
-#top .day { display: flex; align-items: center; gap: 8px; padding: 0 18px; }
-#top .day > span { font-size: 11px; color: var(--muted); }
-#top .day > b { font-family: var(--mono); font-size: 20px; color: var(--cy); }
-#top .day > em {
-  font-style: normal; font-size: 12px; color: var(--cy); margin-inline-start: 6px;
-  border: 1px solid rgba(95,246,255,.35); border-radius: 20px; padding: 6px 13px;
-  transition: background .16s;
-}
-#top .day:hover > em { background: rgba(95,246,255,.14); }
-#top .them { flex: 1; display: flex; align-items: center; gap: 9px; padding: 0 8px; min-width: 0; }
-#top .them > span { font-size: 11px; color: var(--muted); flex: none; }
-#top .them > b { font-size: 14px; color: var(--green); flex: none; }
-#top .them > em {
-  font-style: normal; font-size: 12px; color: var(--muted);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-#top .them.lv-1 > b { color: var(--amber); }
-#top .them.lv-2 > b { color: #ff8a4c; }
-#top .them.lv-3 > b { color: var(--red); }
+
+
+
+
+
+
+
+
+
+
+
+
 #top .icon { width: 50px; font-size: 16px; color: var(--muted); }
 #top .icon:hover { color: var(--cy); }
 
 /* ── what to do now ────────────────────────────────────────────────────── */
-.task {
-  position: absolute; top: 72px; inset-inline-start: 18px; width: min(320px, calc(100vw - 36px));
-  padding: 13px 15px; border-radius: 10px;
-  background: rgba(6,12,19,.8); border: 1px solid rgba(95,246,255,.24);
-  backdrop-filter: blur(10px); box-shadow: 0 12px 40px rgba(0,0,0,.5);
-}
-.task .tk { font-family: var(--mono); font-size: 9px; letter-spacing: 3px; color: var(--cy-2); }
-.task b { display: block; margin: 6px 0 4px; font-size: 15.5px; color: #eaf9ff; line-height: 1.45; }
-.task p { font-size: 12.5px; line-height: 1.7; color: var(--muted); }
-.task .go {
-  display: block; width: 100%; margin-top: 11px; padding: 9px;
-  border: 1px solid rgba(95,246,255,.4); border-radius: 7px; color: var(--cy);
-  font-size: 13.5px; background: rgba(95,246,255,.08);
-}
-.task .go:hover { background: rgba(95,246,255,.18); }
-.task.none .go { display: none; }
+
+
+
+
+
+
+
 
 /* ── the card for the thing you touched ────────────────────────────────── */
 .card-wrap {
@@ -569,7 +553,7 @@ body.is-mobile .objectives ul li { min-height: 46px; }
   #toasts { bottom: 120px; }
   .act { padding: 13px 12px; }
 }
-@media (hover: none) { .act:hover, .tag:hover, .task .go:hover { background: inherit; } }
+@media (hover: none) { .act:hover, .tag:hover { background: inherit; } }
 .tag.faint { opacity: .62; font-size: 11.5px; padding: 4px 9px; }
 .tag.faint:hover { opacity: 1; }
 
@@ -662,37 +646,34 @@ body.is-mobile .objectives ul li { min-height: 46px; }
   border-color: var(--cy); background: rgba(9,26,36,.97);
   box-shadow: 0 0 0 3px rgba(95,246,255,.18), 0 8px 26px rgba(0,0,0,.6);
 }
-.rb.shut { opacity: .42; }
+
 .rb.no { animation: shake .3s; }
 /* The colour of the ring is what the thing will look like to them. */
-.rb.look-electric { border-color: rgba(255,179,71,.5); }
-.rb.look-person { border-color: rgba(127,216,255,.5); }
-.rb.look-outside { border-color: rgba(185,140,255,.5); }
-.rb.look-wrong { border-color: rgba(255,84,112,.65); }
-.rb.look-wrong b { color: #ffb3c0; }
+
+
+
+
+
 
 /* ── the strip along the top: the clock, and what they believe ───────────── */
 #top { height: 58px; gap: 0; }
 #top .clock { display: flex; flex-direction: column; justify-content: center; align-items: stretch; gap: 3px; padding: 0 14px; min-width: 118px; text-align: start; }
 #top .clock b { font-family: var(--mono); font-size: 19px; color: var(--cy); line-height: 1; }
 #top .clock em { font-style: normal; font-size: 10px; color: var(--muted); white-space: nowrap; }
-#top .clock u { display: none; font-size: 10.5px; text-decoration: none; color: var(--green); white-space: nowrap; }
-#top .clock.lv-1 u { color: var(--cy); }
-#top .clock.lv-2 u { color: var(--amber); }
-#top .clock.lv-3 u { color: var(--red); }
-#top .clock .bar { height: 3px; border-radius: 2px; background: rgba(120,170,195,.22); overflow: hidden; }
-#top .clock .bar i { display: block; height: 100%; background: var(--cy); transition: width .4s; }
-#top .clock .bar i.mid { background: var(--amber); }
-#top .clock .bar i.late { background: var(--red); }
-#top .believe {
-  flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center;
-  gap: 2px; padding: 0 10px; text-align: start;
-}
-#top .believe b { font-size: 13.5px; color: var(--green); }
-#top .believe span { font-size: 11px; color: var(--muted); }
-#top .believe.lv-1 b { color: var(--cy); }
-#top .believe.lv-2 b { color: var(--amber); }
-#top .believe.lv-3 b { color: var(--red); }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /* ── the floor you are on ────────────────────────────────────────────────── */
 .floors {
@@ -719,19 +700,15 @@ body.is-mobile .objectives ul li { min-height: 46px; }
   background: rgba(5,11,17,.9); backdrop-filter: blur(12px);
   border: 1px solid rgba(120,170,195,.2);
 }
-.task.none { display: none; }
+
 .task b { display: block; font-size: 13.5px; color: #eaf9ff; line-height: 1.4; margin-bottom: 8px; }
-.task .row { display: flex; gap: 7px; align-items: stretch; }
+
 .task .go {
   flex: 1; min-height: 44px; border-radius: 11px; font-size: 13px; color: var(--cy);
   border: 1px solid rgba(95,246,255,.35); background: rgba(95,246,255,.07);
 }
-.task .icon.wide { width: 44px; min-height: 44px; border-radius: 11px; border: 1px solid rgba(120,170,195,.25); }
-#top .endnight {
-  align-self: center; min-height: 42px; padding: 0 12px; margin-inline-end: 2px;
-  border-radius: 11px; font-size: 11.5px; line-height: 1.2; color: #cfe6f2;
-  border: 1px solid rgba(120,170,195,.32); background: rgba(255,255,255,.05);
-}
+
+
 
 .pick {
   border-radius: 14px; padding: 12px 13px 11px; position: relative;
@@ -747,16 +724,16 @@ body.is-mobile .objectives ul li { min-height: 46px; }
 .pick .who { font-size: 10.5px; color: var(--cy-2); letter-spacing: .5px; }
 .pick b { display: block; font-size: 15px; color: #eaf9ff; margin: 3px 0 4px; padding-inline-end: 44px; line-height: 1.35; }
 .pick p { font-size: 12.5px; color: #a9c4d4; line-height: 1.5; }
-.pick #pickcost { color: var(--amber); margin-top: 4px; }
-.pick #pickcost.none { display: none; }
+
+
 .pick .row { display: flex; align-items: center; gap: 8px; margin-top: 9px; }
 .pick .price { font-family: var(--mono); font-size: 12px; color: #cfe6f2; }
 .pick .price i { font-style: normal; font-size: 15px; color: var(--cy); }
-.pick .look { font-size: 10.5px; flex: 1; min-width: 0; }
-.pick .look-electric { color: var(--amber); }
-.pick .look-person { color: #7fd8ff; }
-.pick .look-outside { color: #b98cff; }
-.pick .look-wrong { color: var(--red); }
+
+
+
+
+
 .pick .do {
   min-height: 46px; padding: 0 18px; border-radius: 12px; font-size: 14px; font-weight: 500;
   color: #04121a; background: var(--cy); border: none;
@@ -821,58 +798,132 @@ body.is-mobile .objectives ul li { min-height: 46px; }
 .pl.hot b { color: var(--amber); }
 
 
-.rb.guess { border-style: dashed; }
-.rb.guess b { opacity: .75; }
+
+
 .pl u { display: block; font-size: 10.5px; text-decoration: none; color: var(--cy-2); margin-top: 2px; }
 
 /* ── what I am trying to do, and what I am giving up instead ─────────────── */
-.task .tasktext {
-  display: block; width: 100%; text-align: start; min-height: 44px;
-  padding: 6px 8px 7px 26px; margin-bottom: 6px; border-radius: 9px;
-  font-size: 13.5px; color: #eaf9ff; line-height: 1.4;
-  border: 1px solid transparent; background: rgba(255,255,255,.03);
-  position: relative;
-}
-.task .tasktext::after {
-  content: '⌄'; position: absolute; inset-inline-end: 9px; inset-block-start: 8px;
-  font-size: 15px; color: var(--cy-2);
-}
-.task .tasktext:hover { border-color: rgba(95,246,255,.28); }
-.places .need { color: var(--cy-2); font-size: 12px; }
-.gl {
-  /* A button does not grow to fit its own text on every browser; a column of
-     flex children does, and nothing gets clipped off the bottom. */
-  display: flex; flex-direction: column; align-items: stretch;
-  width: 100%; text-align: start; padding: 11px 13px 13px; border-radius: 11px;
-  border: 1px solid rgba(120,170,195,.2); background: rgba(255,255,255,.03); min-height: 56px;
-}
-.gl b { display: block; font-size: 13.5px; color: #dff2fb; margin-bottom: 3px; }
-.gl em { font-style: normal; display: block; font-size: 11px; line-height: 1.6; color: var(--muted); }
-.gl u { display: block; font-size: 10.5px; text-decoration: none; color: var(--cy-2); margin-top: 4px; }
-.gl.on { border-color: rgba(95,246,255,.5); background: rgba(95,246,255,.07); }
-.gl.on b { color: var(--cy); }
-.gl.done { opacity: .5; }
-.gl.done b { color: var(--muted); }
+
+
+
+
+
+
+
+
+
+
+
+
 
 /* ── the morning, one line at a time ─────────────────────────────────────── */
-.morning {
-  position: absolute; inset-inline: 14px; inset-block-start: 84px;
-  display: block; text-align: center; padding: 15px 16px 12px; border-radius: 14px;
-  background: rgba(4,9,15,.82); backdrop-filter: blur(14px);
-  border: 1px solid rgba(255,214,150,.28); box-shadow: 0 18px 50px rgba(0,0,0,.55);
-  z-index: 6;
-}
-.morning.hidden { display: none; }
-.morning b {
-  display: block; font-family: var(--mono); font-size: 10px; letter-spacing: 3px;
-  color: var(--amber); margin-bottom: 8px;
-}
-.morning p { font-size: 15px; line-height: 1.6; color: #f3f7fa; min-height: 48px; }
-.morning u {
-  display: block; margin-top: 8px; font-size: 10px; text-decoration: none; color: var(--muted);
-}
-.morning.beat { animation: beat .34s ease-out; }
+
+
+
+
+
+
 @keyframes beat { from { opacity: 0; transform: translateY(-7px); } }
+
+
+/* ── the top strip: the clock you control, and the three numbers ─────────── */
+#top { height: 62px; align-items: stretch; }
+#top .clock {
+  display: flex; flex-direction: column; justify-content: center; align-items: stretch;
+  gap: 1px; padding: 0 11px; min-width: 84px; text-align: start;
+  border-inline-end: 1px solid rgba(120,170,195,.14);
+}
+#top .clock b { font-family: var(--mono); font-size: 18px; color: var(--cy); line-height: 1.1; }
+#top .clock em {
+  font-style: normal; font-size: 10px; color: var(--muted); white-space: nowrap;
+  display: flex; gap: 4px; align-items: baseline;
+}
+#top .clock em i { font-style: normal; }
+#top .clock u { text-decoration: none; color: var(--green); font-family: var(--mono); }
+/* Time stopped is a state you should never be in by accident. */
+#top .clock.stopped b, #top .clock.stopped u { color: var(--amber); }
+#top .clock.stopped b { animation: none; }
+
+.meters { flex: 1; display: flex; align-items: stretch; min-width: 0; }
+.meter {
+  flex: 1; min-width: 0; min-height: 42px; padding: 0 6px;
+  display: flex; flex-direction: column; justify-content: center; gap: 2px;
+  text-align: start; border-inline-end: 1px solid rgba(120,170,195,.12);
+}
+.meter > span { font-size: 9.5px; color: var(--muted); }
+.meter > b { font-family: var(--mono); font-size: 14px; color: #dff2fb; line-height: 1; }
+.mbar { height: 3px; border-radius: 2px; background: rgba(120,170,195,.2); overflow: hidden; }
+.mbar i { display: block; height: 100%; width: 0; transition: width .35s; }
+.m-power > b { color: var(--cy); }
+.m-power .mbar i { background: var(--cy); }
+.m-info > b { color: #9fe6c4; }
+.m-info .mbar i { background: #9fe6c4; }
+.m-heat > b { color: var(--green); }
+.m-heat .mbar i { background: var(--green); }
+.m-heat.bad > b { color: var(--red); }
+.m-heat.bad .mbar i { background: var(--red); }
+
+/* ── the ring: the rim is the verb, the glow is how much they will feel it ─ */
+.rb.v-watch { border-color: rgba(159,230,196,.5); }
+.rb.v-connect { border-color: rgba(95,246,255,.5); }
+.rb.v-spread { border-color: rgba(127,216,255,.5); }
+.rb.v-deepen { border-color: rgba(185,140,255,.5); }
+.rb.v-influence { border-color: rgba(255,179,71,.55); }
+.rb.v-hide { border-color: rgba(140,190,215,.4); }
+.rb.v-defend { border-color: rgba(125,232,200,.5); }
+.rb.n-2 { box-shadow: 0 0 0 2px rgba(255,179,71,.16), 0 6px 22px rgba(0,0,0,.55); }
+.rb.n-3 { box-shadow: 0 0 0 2px rgba(255,84,112,.24), 0 6px 22px rgba(0,0,0,.55); }
+/* Not enough free power is a fact about what is running, not a locked door. */
+.rb.short { opacity: .62; border-style: dashed; }
+.rb.back { border-color: rgba(140,190,215,.3); opacity: .8; }
+.rb.back b { color: var(--muted); }
+
+/* ── what is running, along the bottom ───────────────────────────────────── */
+.jobs { display: flex; gap: 7px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+.jobs::-webkit-scrollbar { display: none; }
+.jobs.hidden { display: none; }
+.job {
+  flex: 0 0 auto; width: 148px; min-height: 62px; padding: 8px 10px 7px;
+  display: flex; flex-direction: column; align-items: stretch; gap: 3px;
+  text-align: start; border-radius: 12px;
+  background: rgba(5,11,17,.92); backdrop-filter: blur(12px);
+  border: 1px solid rgba(120,170,195,.22);
+}
+.job b { font-size: 11.5px; color: #dff2fb; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.job em { font-style: normal; font-size: 9.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.job u { font-size: 9px; text-decoration: none; color: #7e94a5; font-family: var(--mono); }
+.jbar { height: 3px; border-radius: 2px; background: rgba(120,170,195,.2); overflow: hidden; }
+.jbar i { display: block; height: 100%; background: var(--cy); transition: width .4s; }
+.job.v-watch { border-color: rgba(159,230,196,.35); }
+.job.v-connect { border-color: rgba(95,246,255,.35); }
+.job.v-influence { border-color: rgba(255,179,71,.35); }
+.job.v-hide { border-color: rgba(140,190,215,.3); }
+.job.v-defend { border-color: rgba(125,232,200,.35); }
+
+/* ── the price, and the one thing that would make it cheaper ─────────────── */
+.pick .why { font-size: 11px; color: var(--muted); line-height: 1.6; margin-top: 3px; }
+.pick .cheap { font-size: 11.5px; color: var(--cy-2); line-height: 1.6; margin-top: 3px; }
+.pick .cheap.none { display: none; }
+.pick .price.noise i { color: var(--amber); }
+.pick .do.warn { border-color: rgba(255,179,71,.5); color: var(--amber); background: rgba(255,179,71,.08); }
+.tag.busy { border-color: rgba(95,246,255,.55); box-shadow: 0 0 18px rgba(95,246,255,.18); }
+.warnbtn { border-color: rgba(255,179,71,.5); color: var(--amber); }
+.places .need { color: var(--cy-2); font-size: 12px; margin: 6px 0 2px; }
+
+
+/* ── a window never grows past the screen ────────────────────────────────── */
+/* The close button used to fall off the bottom of a long list, which on a
+   phone means the window cannot be shut at all. The head and the button stay
+   put; only the middle scrolls. */
+.modal .sheet {
+  display: flex; flex-direction: column;
+  max-height: min(88vh, 900px);
+}
+.modal .sheet > .kick, .modal .sheet > h2, .modal .sheet > .where { flex: 0 0 auto; }
+.modal .sheet > .txt { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.modal .sheet > .ok { flex: 0 0 auto; margin-top: 14px; align-self: center; min-height: 44px; }
+.modal .sheet > .txt.list { flex: 2 1 auto; }
+.places .list { max-height: none; }
 
 /* The narrowest phones people still use: everything shrinks together rather
    than one thing falling off the end. */

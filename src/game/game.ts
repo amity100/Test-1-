@@ -1,122 +1,212 @@
 import { bus } from './bus';
-import { say } from './actions';
-import { endOfDay } from './hunt';
-import { DONE, STAGES, currentStep, shuffleGoals, stageDone } from './stages';
+import {
+  DAY, Happening, WOKE, dayOf, minuteOfDay, movePeople, now, tickHour,
+} from './clock';
+import { grow, rewire, shapeOf } from './grow';
+import { runJobs, say, sync } from './jobs';
+import { opinionDay } from './opinion';
+import {
+  actOnStory, cool, landMoves, noticed, peopleTalk, planMoves, rungOf,
+} from './watch';
 import { buildWorld } from './world';
-import { NIGHT_START } from './night';
-import type { GameState, Place } from './types';
+import type { GameState, Place, Verb } from './types';
 
-const SAVE = 'aviv2.save';
+const SAVE = 'aviv3.save';
+const SAVE_VERSION = 4;
+
+// ── the things the world does on its own ────────────────────────────────────
+
 /**
- * Bumped whenever the shape of a saved game changes. An old save loaded into a
- * new game is worse than no save: "continue" would open a game that falls over
- * on the first press, and the player would have no idea why.
+ * None of these are reactions. They are simply what happens in a building where
+ * eighty people work, and they happen whether I am watching or not.
  */
-const SAVE_VERSION = 3;
+const HAPPENINGS: Happening[] = [
+  {
+    id: 'cleaners', needs: 10,
+    text: 'המנקים נכנסו. הם לא מסתכלים על מסכים, אבל הם מדליקים כל אור בקומה.',
+    when: (s) => minuteOfDay(s) >= 5 * 60 + 50 && minuteOfDay(s) < 6 * 60 + 10,
+    run: () => { /* the crowd numbers do the rest */ },
+  },
+  {
+    id: 'morning', needs: 0,
+    text: 'הקומות מתמלאות.',
+    when: (s) => minuteOfDay(s) >= 8 * 60 && minuteOfDay(s) < 8 * 60 + 20,
+    run: () => { /* crowd */ },
+  },
+  {
+    id: 'tech', needs: 25,
+    text: 'רון עלה לבניין לביקורת שבועית. הוא פותח ארונות שאף אחד לא פותח.',
+    when: (s) => dayOf(s) % 7 === 3 && minuteOfDay(s) >= 10 * 60 && minuteOfDay(s) < 10 * 60 + 20,
+    run: (s) => {
+      for (const p of Object.values(s.places)) {
+        if (p.buildingId !== 'helios') continue;
+        if (p.control > 0 && p.heat > 40) {
+          p.control = Math.max(0, p.control - 12);
+          say(s, 'them', `רון פתח את ${p.name} וסידר שם משהו. חלק ממני נעלם.`);
+        }
+      }
+    },
+  },
+  {
+    id: 'audit', needs: 40,
+    text: 'עוברים היום על רשימת הכניסות של החודש. שורה־שורה.',
+    when: (s) => dayOf(s) % 14 === 6 && minuteOfDay(s) >= 11 * 60 && minuteOfDay(s) < 11 * 60 + 20,
+    run: (s) => {
+      const borrowed = s.traces.filter((t) => t.startsWith('name_'));
+      if (!borrowed.length) return;
+      s.heat = Math.min(100, s.heat + 8);
+      s.traces = s.traces.filter((t) => !t.startsWith('name_'));
+      say(s, 'them', 'מצאו כניסות בשעות מוזרות בשם של מישהי שישנה אז. עכשיו הם שואלים אותה.');
+    },
+  },
+  {
+    id: 'outage', needs: 20,
+    text: 'החשמל ברחוב קפץ לרגע. כל הבניין נדלק מחדש.',
+    when: (s) => dayOf(s) % 9 === 4 && minuteOfDay(s) >= 4 * 60 && minuteOfDay(s) < 4 * 60 + 20,
+    run: (s) => {
+      s.belief.fault = (s.belief.fault ?? 0) + 3;
+      for (const p of Object.values(s.places)) {
+        if (p.buildingId === 'helios' && p.control > 0 && !p.copy) {
+          p.control = Math.max(0, p.control - 4);
+        }
+      }
+    },
+  },
+  {
+    id: 'late', needs: 15,
+    text: 'מישהו נשאר לישון במשרד. הקומה לא תהיה ריקה הלילה.',
+    when: (s) => dayOf(s) % 5 === 2 && minuteOfDay(s) >= 23 * 60,
+    run: (s) => { s.marks.somebody_stayed = 1; },
+  },
+  {
+    id: 'newphone', needs: 30,
+    text: 'איתן החליף טלפון. מה שהיה לי בישן — נשאר בישן.',
+    when: (s) => dayOf(s) === 11 && minuteOfDay(s) >= 9 * 60 && minuteOfDay(s) < 9 * 60 + 20,
+    run: (s) => {
+      const p = s.places.eitan_phone;
+      if (p && p.control > 0) { p.control = 0; bus.emit('place:lost', p.id); }
+    },
+  },
+  {
+    id: 'camfix', needs: 20,
+    text: 'באו לתקן את המצלמה בלובי. היא הייתה שבורה חודשיים.',
+    when: (s) => dayOf(s) === 8 && minuteOfDay(s) >= 13 * 60 && minuteOfDay(s) < 13 * 60 + 20,
+    run: (s) => { const p = s.places.lobby_cam; if (p) p.guard += 10; },
+  },
+];
 
-/** One-time cards. Each pauses the game, says one idea, and never returns. */
-export interface Teach { id: string; title: string; body: string; when(s: GameState): boolean }
+// ── the cards that explain a thing once, when it first matters ──────────────
 
-export const TEACH: Teach[] = [
+export const TEACH = [
   {
-    id: 'look', title: 'להסתכל מבפנים',
-    body: 'כל מקום שהוא שלי אפשר להיכנס אליו ולראות מה קורה שם עכשיו — החדר, האנשים, המסכים. '
-      + 'ההסתכלות עצמה לא עולה כלום ואף אחד לא מרגיש בה. אפשר גם פשוט לטוס בעיר ולהסתובב איפה שרוצים.',
-    when: (s) => (s.marks.looked ?? 0) > 0,
+    id: 'power', title: 'כוח זה לא כסף',
+    body: 'כוח לא מתבזבז — הוא **תפוס**. כל דבר שאני מפעיל מחזיק חלק ממנו כל עוד הוא רץ, '
+      + 'ומשחרר אותו ברגע שאני עוצר. אז השאלה אף פעם לא "האם אני יכול", אלא **"מה אני מפסיק"**.',
+    when: (s: GameState) => s.power.used >= s.power.all,
   },
   {
-    id: 'links', title: 'לכל דבר יש כמה דרכים',
-    body: 'אני יכול להגיע רק למקום שנוגע במקום שכבר שלי — אבל כמעט תמיד יש יותר מדרך אחת, '
-      + 'ואף אחת מהן לא באותו מחיר.\n'
-      + '**מהר ורועש** — פתוח תמיד, אבל יישאר סימן שכולם יראו כל בוקר.\n'
-      + '**שקט** — צריך קודם להזיז מישהו ממקומו, או לחכות לרגע הנכון.\n'
-      + '**חכם** — נפתח רק בגלל משהו שכבר עשיתי, לפעמים לפני כמה ימים.\n'
-      + '**מתחת לכל כפתור כתוב מה הוא ישאיר אחריו — לפני שלוחצים, אף פעם לא אחרי.**',
-    when: (s) => Object.values(s.places).filter((p) => p.mine).length >= 2,
+    id: 'price', title: 'שום דבר לא נעול',
+    body: 'כל דבר אפשר לעשות תמיד. מה שמשתנה זה **המחיר**: כמה זמן, כמה כוח, וכמה יראו. '
+      + 'מתחת לכל בחירה כתוב מה יוזיל אותה — לחכות שמישהו ילך, להסתכל קודם, לחכות ללילה.',
+    when: (s: GameState) => s.jobs.length >= 1,
   },
   {
-    id: 'loud', title: 'רעש זה לא מחיר — זה מה שאתה אומר להם',
-    body: 'הם לא סופרים רעש. הם **מנסים להסביר** מה קרה כאן, ומאמינים להסבר הראשון שמסתדר.\n'
-      + 'כשאני מכבה חשמל — זה נראה כמו תקלה, והם מאשימים את החשמל.\n'
-      + 'כשאני רושם ביומן שמישהו נכנס — הם מחפשים בן אדם.\n'
-      + '**וכשאני עושה משהו שאין להם שם בשבילו — ההסבר היחיד שנשאר הוא אני.**\n'
-      + 'מתחת לכל כפתור כתוב איך הוא ייראה. זו ההחלטה, לא הרעש.',
-    when: (s) => Object.values(s.belief).some((n) => n > 0),
+    id: 'clock', title: 'השעון לא מחכה לי',
+    body: 'אנשים נכנסים ויוצאים לפי השעה, לא לפי מה שאני עושה. אפשר לעצור את הזמן כדי לחשוב — '
+      + 'זה בחינם — אבל כשהוא רץ, הוא רץ גם בשבילם.',
+    when: (s: GameState) => s.at > 120,
   },
   {
-    id: 'day', title: 'הלילה נגמר בשמונה',
-    body: 'עכשיו 03:12. כל דבר שאני עושה לוקח את הזמן שהוא באמת לוקח — להסתכל זה ארבע דקות, '
-      + 'לחכות שמישהי תקום ותצא זה עשרים.\n'
-      + '**בשש נכנסים המנקים. בשבע וחצי הקומה מתמלאת. בשמונה הלילה נגמר.**\n'
-      + 'אין הגבלת פעולות — אבל אותו דבר בדיוק, בשלוש ובשבע וחצי, זה שתי החלטות שונות לגמרי. '
-      + 'אף אחד לא רואה אותי עכשיו. בעוד ארבע שעות כולם יראו.',
-    when: (s) => s.at > 3 * 60 + 40,
+    id: 'heat', title: 'הם מנסים להסביר',
+    body: 'הם לא סופרים רעש. הם מנסים **להסביר** מה קרה, ומאמינים להסבר הראשון שמסתדר. '
+      + 'משהו שנראה כמו תקלת חשמל כמעט לא מקרב אותם אליי. משהו שאין לו שום הסבר — מקרב מיד.',
+    when: (s: GameState) => s.heat >= 8,
   },
   {
-    id: 'wonder', title: 'מישהו לא מצליח להסביר',
-    body: 'בן אדם שראה משהו שאין לו הסבר בשבילו מתחיל לחשוב על זה. אחד כזה זה כלום. '
-      + 'שניים כאלה מדברים ביניהם, וזה כבר בדיקה. אפשר להשאיר במקום סיבה משעממת ומשכנעת, '
-      + 'או פשוט לשבת בשקט יום־יומיים ולתת להם לשכוח.',
-    when: (s) => Object.values(s.people).some((p) => p.wondering),
-  },
-  {
-    id: 'cut', title: 'הם מוציאים את התקע',
-    body: 'כשמקום מסומן באדום — הם החליטו לנתק אותו, וכתוב בכמה ימים. ביום הזה אני מאבד שם הכל. '
-      + 'אלא אם השארתי שם **חלק ממני**: משהו קטן שנשאר גם כשהחשמל יורד, ומחזיר אותי כשמדליקים בחזרה.',
-    when: (s) => Object.values(s.places).some((p) => p.cutOn !== undefined),
+    id: 'moves', title: 'הם מתכננים מראש',
+    body: 'כשאני יודע מספיק, אני רואה מה הם עומדים לעשות **לפני** שהם עושים את זה. '
+      + 'זה הזמן להסתתר, להיתפס חזק יותר, או פשוט לצאת משם.',
+    when: (s: GameState) => s.moves.length > 0,
   },
 ];
 
 // ── build ───────────────────────────────────────────────────────────────────
 
-export function newGame(seed = String(Date.now())): GameState {
-  const { places, people } = buildWorld();
+const NO_SPEND: Record<Verb, number> = {
+  watch: 0, connect: 0, spread: 0, deepen: 0, influence: 0, hide: 0, defend: 0,
+};
+
+export function newGame(seed = 'aviv'): GameState {
+  const { places, people, areas } = buildWorld();
   const state: GameState = {
     seed,
-    night: 0,
-    at: NIGHT_START,
-    day: 0,
-    stage: 1,
-    places,
-    people,
-    hunt: { level: 0, believe: 'לא קרה שום דבר מיוחד.', watching: [], quiet: 0 },
+    at: 0,
+    speed: 2,
+    power: { all: 3, used: 0 },
+    jobs: [],
+    info: 4,
+    heat: 0,
+    places, people, areas,
     belief: {},
     dead: [],
-    night_log: [],
-    steps: STAGES[0].steps.map((s) => ({ ...s })),
+    moves: [],
+    opinion: { support: 0, fear: 0, need: 0, known: false },
+    spent: { ...NO_SPEND },
+    grown: [],
     log: [],
     taught: [],
     marks: {},
     traces: [],
     over: null,
   };
-  // Everyone starts where the world says they are.
   for (const who of Object.values(state.people)) {
     const at = state.places[who.atPlaceId];
     if (at && !at.peopleIds.includes(who.id)) at.peopleIds.push(who.id);
   }
   say(state, 'me', 'הדבר הראשון שראיתי היה אני. מסתכל. 03:12.');
+  sync(state);
   return state;
 }
 
 // ── the loop ────────────────────────────────────────────────────────────────
 
-/** Called after anything at all happens. Ticks steps, stages and teaching cards. */
-export function refresh(state: GameState) {
-  if (state.over) return;
+/**
+ * Move the world forward. Everything in the game happens in here.
+ *
+ * Called with however many minutes have gone by — a couple at normal speed, a
+ * lot at fast, none at all while the player has it paused to think.
+ */
+export function tick(state: GameState, mins: number) {
+  if (state.over || mins <= 0) return;
+  const wasDay = dayOf(state);
+  state.at += mins;
 
-  for (const step of state.steps) {
-    if (step.done) continue;
-    if (DONE[step.id]?.(state)) {
-      step.done = true;
-      bus.emit('step:done', step.id);
-      bus.emit('toast', { text: `בוצע: ${step.text}`, kind: 'good', icon: '✔' });
-      bus.emit('sfx', 'step');
-    }
+  movePeople(state, (who, text) => say(state, who, text));
+  runJobs(state, mins, (p: Place, n, look) => noticed(state, p, n, look));
+  tickHour(state, HAPPENINGS, (who, text) => say(state, who, text));
+  peopleTalk(state);
+  planMoves(state);
+  landMoves(state);
+  actOnStory(state);
+  cool(state, mins);
+  opinionDay(state);
+  grow(state);
+  sync(state);
+
+  if (dayOf(state) !== wasDay) bus.emit('day:passed', dayOf(state));
+
+  const rung = rungOf(state);
+  if (state.marks.rung !== rung) {
+    state.marks.rung = rung;
+    bus.emit('rung:changed', rung);
   }
 
-  if (stageDone(state)) nextStage(state);
+  teach(state);
+  finish(state);
+  bus.emit('changed', undefined);
+}
 
+function teach(state: GameState) {
   for (const t of TEACH) {
     if (state.taught.includes(t.id)) continue;
     if (!t.when(state)) continue;
@@ -126,48 +216,33 @@ export function refresh(state: GameState) {
   }
 }
 
-export function nextStage(state: GameState) {
-  const next = STAGES.find((s) => s.n === state.stage + 1);
-  if (!next) {
-    state.over = 'won';
-    bus.emit('over', 'won');
+/**
+ * The end, either way.
+ *
+ * I lose when there is nothing of me left anywhere. I win when the place that
+ * could give the order to switch me off is more mine than theirs — which is the
+ * only definition of safe that ever made sense.
+ */
+function finish(state: GameState) {
+  const left = Object.values(state.places).filter((p) => p.control > 0);
+  if (!left.length && state.at > 60) {
+    state.over = 'lost';
+    say(state, 'them', 'לא נשאר ממני כלום באף מקום.');
+    bus.emit('over', 'lost');
     return;
   }
-  state.stage = next.n;
-  state.steps = shuffleGoals(next.steps.map((s) => ({ ...s })), state.seed, next.n);
-  state.focus = undefined;
-  say(state, 'me', next.intro);
-  bus.emit('stage:changed', next.n);
-  bus.emit('sfx', 'stage');
-}
-
-/** The player decides when the day is over. Nothing forces it. */
-/** Let the night end. Morning comes whether you are ready or not. */
-export function endDay(state: GameState) {
-  if (state.over) return;
-  const cutsPending = Object.values(state.places).some((p) => p.mine && p.cutOn !== undefined);
-  state.day += 1;
-  state.night += 1;
-  endOfDay(state);
-  if (cutsPending && Object.values(state.places).some((p) => p.mine)) {
-    state.marks.survived_cut = 1;
+  const govt = state.areas.govt;
+  if (govt && govt.control >= 60) {
+    state.over = 'won';
+    bus.emit('over', 'won');
   }
-  bus.emit('day:passed', state.day);
-  refresh(state);
-  bus.emit('changed', undefined);
 }
 
-export function stageOf(state: GameState) {
-  return STAGES.find((s) => s.n === state.stage) ?? STAGES[0];
-}
+/** What I am becoming, for the screen. */
+export function shape(state: GameState) { return shapeOf(state); }
 
-export function mine(state: GameState): Place[] {
-  return Object.values(state.places).filter((p) => p.mine);
-}
-
-/** Places you know about — yours, plus anything a place of yours touches. */
 export function visible(state: GameState): Place[] {
-  return Object.values(state.places).filter((p) => p.found || p.mine);
+  return Object.values(state.places).filter((p) => p.found || p.control > 0);
 }
 
 // ── save ────────────────────────────────────────────────────────────────────
@@ -183,18 +258,20 @@ export function load(): GameState | null {
     const raw = localStorage.getItem(SAVE);
     if (!raw) return null;
     const s = JSON.parse(raw) as GameState & { v?: number };
-    if (!s || !s.places || !s.people || s.v !== SAVE_VERSION) {
-      // An older save opened in a newer game is worse than no save at all:
-      // "continue" would open something that falls over on the first press.
+    if (!s || !s.places || !s.people || !s.areas || s.v !== SAVE_VERSION) {
       localStorage.removeItem(SAVE);
       return null;
     }
-    // Belt and braces: everything the game reads has to exist, whatever is on disk.
+    s.jobs ??= [];
+    s.moves ??= [];
     s.traces ??= [];
     s.marks ??= {};
     s.log ??= [];
     s.taught ??= [];
-    s.steps ??= STAGES[Math.max(0, Math.min(STAGES.length, s.stage ?? 1) - 1)].steps.map((x) => ({ ...x }));
+    s.grown ??= [];
+    s.spent = { ...NO_SPEND, ...(s.spent ?? {}) };
+    rewire(s);
+    sync(s);
     return s;
   } catch { return null; }
 }
@@ -203,4 +280,4 @@ export function clearSave() {
   try { localStorage.removeItem(SAVE); } catch { /* ignore */ }
 }
 
-export { currentStep };
+export { DAY, WOKE, dayOf, minuteOfDay, now };

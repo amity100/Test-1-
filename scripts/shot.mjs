@@ -42,10 +42,10 @@ const tap = (sel, text) => page.evaluate(([sel, text]) => {
   return true;
 }, [sel, text]);
 
-// Through the opening cards and into the game.
-for (let i = 0; i < 5; i++) {
-  if (!(await tap('button', save ? 'המשך' : ''))) break;
-  await page.waitForTimeout(600);
+// Through the opening screens and into the game. Named buttons only: tapping
+// "whatever is first" used to walk straight into the game's own controls.
+for (const label of save ? ['המשך משחק'] : ['משחק חדש', 'דלג', 'יאללה']) {
+  if (await tap('.screen-layer button', label)) await page.waitForTimeout(900);
 }
 await page.waitForTimeout(3200);
 while (await tap('#modal .ok')) await page.waitForTimeout(300);

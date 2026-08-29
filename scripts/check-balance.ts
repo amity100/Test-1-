@@ -1,26 +1,24 @@
 /**
- * Can this game be lost?
+ * Four different creatures play the same game.
  *
- * For a long time it could not: you could do anything, every night, for ever,
- * and nothing ever caught up with you. A strategy game where every choice is
- * safe is not a strategy game. So three players play it here, with no browser
- * and no mercy, and the build refuses to ship unless all three end the way the
- * design says they should:
+ * The design promise is that how you spend your power decides what you become,
+ * and that the four shapes are genuinely different games rather than the same
+ * game in four colours. So four bots play a month each, and the build refuses
+ * to ship unless:
  *
- *   פזיז   — does the loudest thing available, always. Must be caught, fast.
- *   רעב    — does everything it can every night, quietly. Must be caught too:
- *            quiet is not free, because the night is short and mornings add up.
- *   זהיר   — buys eyes first, stays under the clock, explains itself. Survives.
+ *   · being loud gets you erased
+ *   · being silent keeps you alive and gets you nowhere
+ *   · playing well gets you both — alive, and much bigger
+ *   · and the four of them do not end up as the same creature
  *
- * And one more thing the fog owes us: a player who never buys a camera should
- * waste real nights guessing.
+ * The bots are deliberately simple. If a simple rule can win, the game is too
+ * easy; if no simple rule survives, it is too hard.
  */
-import { endDay, newGame, refresh } from '../src/game/game';
-import { actionsFor, run } from '../src/game/actions';
-import { ACT_ON, FOUND_OUT, TRUTH } from '../src/game/theory';
-import { NIGHT_END } from '../src/game/night';
-import { currentStep } from '../src/game/stages';
-import type { Action, GameState } from '../src/game/types';
+import { newGame, shape, tick } from '../src/game/game';
+import { Offer, offersAt, start, stop } from '../src/game/jobs';
+import { SHAPE_NAME } from '../src/game/grow';
+import { rungOf } from '../src/game/watch';
+import type { GameState } from '../src/game/types';
 
 let bad = 0;
 const ok = (cond: boolean, what: string) => {
@@ -28,130 +26,130 @@ const ok = (cond: boolean, what: string) => {
   if (!cond) bad += 1;
 };
 
-const LOUDNESS = { quiet: 0, noticed: 1, loud: 2 } as const;
-const truth = (s: GameState) => s.belief[TRUTH] ?? 0;
+const held = (s: GameState) => Object.values(s.places).filter((p) => p.control > 0).length;
+const total = (s: GameState) =>
+  Math.round(Object.values(s.places).reduce((n, p) => n + p.control, 0));
 
-/** Everything the player could press right now, anywhere on the map. */
-function open(s: GameState): Array<{ placeId: string; act: Action }> {
-  const out: Array<{ placeId: string; act: Action }> = [];
+/** Everything I could start right now, anywhere I can reach. */
+function open(s: GameState): Array<{ placeId: string; o: Offer }> {
+  const out: Array<{ placeId: string; o: Offer }> = [];
   for (const p of Object.values(s.places)) {
-    if (!p.found) continue;
-    for (const act of actionsFor(s, p.id)) {
-      if (act.blocked) continue;
-      out.push({ placeId: p.id, act });
+    if (!p.found && p.control <= 0) continue;
+    for (const o of offersAt(s, p.id)) {
+      if (o.short > 0) continue;
+      out.push({ placeId: p.id, o });
     }
   }
   return out;
 }
 
-interface Play {
+interface Bot {
   name: string;
-  /** Picks the next thing to press, or nothing to end the night here. */
-  pick(s: GameState, choices: Array<{ placeId: string; act: Action }>):
-    { placeId: string; act: Action } | undefined;
+  /** What to start next, or nothing to sit still for a while. */
+  pick(s: GameState, can: Array<{ placeId: string; o: Offer }>): { placeId: string; o: Offer } | undefined;
+  /** Should this job be stopped to make room? */
+  drop?(s: GameState): string | undefined;
 }
 
-function play(who: Play, nights: number, seed: string) {
-  const s = newGame(`${seed}-${who.name}`);
-  s.marks.looked = 1;
-  refresh(s);
-  let guesses = 0;
-  let wasted = 0;
-  for (let n = 0; n < nights && !s.over; n++) {
-    for (let step = 0; step < 40 && !s.over; step++) {
-      if (s.at >= NIGHT_END) break;
-      const choice = who.pick(s, open(s));
+function play(bot: Bot, days: number) {
+  const s = newGame(`bal-${bot.name}`);
+  for (let step = 0; step < days * 24 * 4 && !s.over; step++) {
+    // Four decisions an hour, then the world runs for fifteen minutes.
+    for (let n = 0; n < 3; n++) {
+      const choice = bot.pick(s, open(s));
       if (!choice) break;
-      const held = Object.values(s.places).filter((p) => p.mine).length;
-      const before = s.at;
-      if (choice.act.guess) guesses += 1;
-      run(s, choice.placeId, choice.act.id);
-      refresh(s);
-      const after = Object.values(s.places).filter((p) => p.mine).length;
-      if (choice.act.guess && after === held) wasted += s.at - before;
+      if (!start(s, choice.placeId, choice.o.task.id)) {
+        const drop = bot.drop?.(s);
+        if (drop) stop(s, drop);
+        break;
+      }
     }
-    if (s.over) break;
-    endDay(s);
-    refresh(s);
+    tick(s, 15);
   }
-  return { s, nights: s.night, guesses, wasted };
+  return s;
 }
 
-// ── פזיז: the loudest thing on the board, every single time ─────────────────
+const noisiest = (can: Array<{ placeId: string; o: Offer }>) =>
+  [...can].sort((a, b) => b.o.noise - a.o.noise)[0];
+const quietest = (can: Array<{ placeId: string; o: Offer }>) =>
+  [...can].sort((a, b) => a.o.noise - b.o.noise || a.o.minutes - b.o.minutes)[0];
+const oldestJob = (s: GameState) => s.jobs[0]?.id;
+
+// ── פזיז ───────────────────────────────────────────────────────────────────
 const wild = play({
   name: 'wild',
-  pick: (_s, c) => [...c].sort((a, b) =>
-    LOUDNESS[b.act.loud] - LOUDNESS[a.act.loud])[0],
-}, 60, 'bal');
-ok(wild.s.over === 'lost', `פזיז נתפס (${wild.nights} לילות, האמת על ${truth(wild.s)})`);
-ok(wild.nights <= 30, '   ומהר — מי שרק עושה רעש לא שורד חודש');
+  pick: (_s, can) => noisiest(can),
+  drop: oldestJob,
+}, 30);
+ok(wild.over === 'lost' || rungOf(wild) >= 4,
+  `פזיז נשרף (${wild.over ?? 'שרד בקושי'} · דרגה ${rungOf(wild)} · חשד ${Math.round(wild.heat)})`);
+ok(total(wild) < 900, `   ולא נשאר לו הרבה (${total(wild)} נקודות שליטה)`);
 
-// ── רעב: everything, every night, cheapest-looking first ────────────────────
-const greedy = play({
-  name: 'greedy',
-  pick: (_s, c) => [...c].sort((a, b) =>
-    LOUDNESS[a.act.loud] - LOUDNESS[b.act.loud])[0],
-}, 60, 'bal');
-ok(greedy.s.over === 'lost', `רעב נתפס גם הוא (${greedy.nights} לילות, האמת על ${truth(greedy.s)})`);
-ok(greedy.nights <= 40, '   כי גם בשקט, לילה אחרי לילה זה נצבר');
-
-// ── זהיר: quiet only, never a single thing they cannot explain ─────────────
-const careful = play({
-  name: 'careful',
-  pick: (s, c) => {
-    const eye = c.find((x) => x.act.id.startsWith('take:')
-      && s.places[x.placeId]?.kind === 'camera' && !x.act.guess);
-    if (eye) return eye;
-    return c.find((x) => x.act.id.startsWith('take:')
-      && x.act.loud === 'quiet' && !x.act.guess);
+// ── שקט ────────────────────────────────────────────────────────────────────
+const quiet = play({
+  name: 'quiet',
+  pick: (_s, can) => {
+    const safe = can.filter((c) => c.o.noise === 0 && (c.o.task.verb === 'watch' || c.o.task.verb === 'hide'));
+    return safe.length ? safe[0] : undefined;
   },
-}, 40, 'bal');
-ok(!careful.s.over, `זהיר שרד 40 לילות (האמת על ${truth(careful.s)} מתוך ${FOUND_OUT})`);
-ok(truth(careful.s) === 0, '   מי שלא עושה שום דבר בלתי מוסבר — אף אחד לא מחפש אותו');
-ok(careful.s.stage < 4, '   אבל גם לא מגיע לסוף. שקט מוחלט זה לא ניצחון, זה תקיעות');
+}, 30);
+ok(!quiet.over, `שקט שרד חודש (חשד ${Math.round(quiet.heat)})`);
+ok(rungOf(quiet) === 0, '   ואף אחד לא חיפש אותו אף פעם');
+ok(held(quiet) <= 3, `   אבל הוא גם לא הגיע לשום מקום (${held(quiet)} מקומות)`);
 
-// ── מחושב: pushes forward, buys eyes, and pulls back before the story breaks ─
-const LOOK_AT = ['off', 'ring', 'print', 'page', 'show'];
-const calm = (s: GameState, c: Array<{ placeId: string; act: Action }>) =>
-  c.filter((x) => x.act.id === 'explain' && (s.places[x.placeId]?.attention ?? 0) > 0)
-    .sort((a, b) => (s.places[b.placeId]?.attention ?? 0) - (s.places[a.placeId]?.attention ?? 0))[0];
+// ── מחושב ──────────────────────────────────────────────────────────────────
 const smart = play({
   name: 'smart',
-  pick: (s, c) => {
-    // Close to being found out: stop taking, start explaining.
-    if (truth(s) >= ACT_ON) return calm(s, c);
-    const want = currentStep(s)?.placeId;
-    const eye = c.find((x) => x.act.id.startsWith('take:')
-      && s.places[x.placeId]?.kind === 'camera' && !x.act.guess);
-    if (eye) return eye;
-    const quietest = (list: Array<{ placeId: string; act: Action }>) =>
-      [...list].sort((a, b) => LOUDNESS[a.act.loud] - LOUDNESS[b.act.loud])[0];
-    const goal = c.filter((x) => x.placeId === want && !x.act.guess);
-    if (goal.length) return quietest(goal);
-    const takes = c.filter((x) => x.act.id.startsWith('take:') && !x.act.guess);
-    if (takes.length) return quietest(takes);
-    return calm(s, c) ?? c.find((x) => LOOK_AT.includes(x.act.id));
+  pick: (s, can) => {
+    // Getting close to being looked at: stop growing, start cleaning up.
+    if (s.heat >= 20) {
+      const calm = can.find((c) => c.o.task.verb === 'hide');
+      if (calm) return calm;
+    }
+    // A couple of eyes, no more — every one of them holds power for ever, and
+    // a pool with nothing free in it is a pool that cannot do anything.
+    const eyes = s.jobs.filter((j) => j.forever).length;
+    if (eyes < 2) {
+      const eye = can.find((c) => c.o.task.verb === 'watch' && c.o.task.minutes === 0
+        && s.places[c.placeId].seen < 40);
+      if (eye) return eye;
+    }
+    const grow = can.filter((c) => (c.o.task.verb === 'connect' || c.o.task.verb === 'deepen')
+      && c.o.noise <= 2);
+    if (grow.length) return quietest(grow);
+    const reach = can.filter((c) => c.o.task.verb === 'spread' && c.o.noise <= 2);
+    if (reach.length) return quietest(reach);
+    const read = can.filter((c) => c.o.task.verb === 'watch' && c.o.task.minutes > 0);
+    return read.length ? quietest(read) : undefined;
   },
-}, 40, 'bal');
-ok(!smart.s.over, `מחושב שרד 40 לילות (האמת על ${truth(smart.s)} מתוך ${FOUND_OUT})`);
-ok(Object.values(smart.s.places).filter((p) => p.mine).length >= 15,
-  `   ובנה משהו — ${Object.values(smart.s.places).filter((p) => p.mine).length} מקומות`);
-ok(smart.s.stage >= 3, '   ועבר שלבים. מי ששולט בסיפור יכול להתקדם בלי להיתפס');
+  // When the pool is full, the thing to give back is an eye, not a job that is
+  // halfway through something.
+  drop: (s) => s.jobs.filter((j) => j.forever).slice(-1)[0]?.id,
+}, 30);
+ok(!smart.over, `מחושב שרד חודש (חשד ${Math.round(smart.heat)}, דרגה ${rungOf(smart)})`);
+ok(held(smart) > held(quiet), `   וגדל הרבה יותר מהשקט (${held(smart)} מקומות מול ${held(quiet)})`);
+ok(total(smart) > total(quiet) * 2, `   ובעומק (${total(smart)} מול ${total(quiet)})`);
 
-// ── the fog has a price, and it is paid in minutes ──────────────────────────
-const blindly = play({
+// ── עיוור ──────────────────────────────────────────────────────────────────
+const blind = play({
   name: 'blind',
-  pick: (s, c) => {
-    // Never buys an eye. Takes whatever is offered, guesses included.
-    const takes = c.filter((x) => x.act.id.startsWith('take:')
-      && s.places[x.placeId]?.kind !== 'camera');
-    return takes[0];
+  pick: (_s, can) => {
+    const grab = can.filter((c) => c.o.task.verb === 'connect' || c.o.task.verb === 'spread');
+    return grab.length ? grab[0] : undefined;
   },
-}, 12, 'bal');
-ok(blindly.guesses > 0, `מי שלא קונה עיניים מנחש (${blindly.guesses} פעמים)`);
-ok(blindly.wasted > 0, `   ומשלם על זה בזמן (${blindly.wasted} דקות לילה שירדו לריק)`);
+  drop: oldestJob,
+}, 30);
+ok(blind.heat > smart.heat,
+  `מי שלא מסתכל משלם על זה (חשד ${Math.round(blind.heat)} מול ${Math.round(smart.heat)})`);
+
+// ── and they really are four different creatures ───────────────────────────
+const shapes = [wild, quiet, smart, blind].map((s) => shape(s));
+console.log(`\n   פזיז: ${SHAPE_NAME[shapes[0]]} · שקט: ${SHAPE_NAME[shapes[1]]}`
+  + ` · מחושב: ${SHAPE_NAME[shapes[2]]} · עיוור: ${SHAPE_NAME[shapes[3]]}`);
+ok(new Set(shapes).size >= 2, 'ארבע דרכי משחק — לא אותו יצור בסוף');
+ok(smart.grown.length > 0, `ומי ששיחק הרבה באמת השתנה (${smart.grown.length} דברים גדלו בו)`);
 
 console.log(bad
   ? `\n✗ ${bad} דברים במאזן לא בסדר.`
-  : '\n✓ אפשר להפסיד, אפשר לשרוד, ולא לראות עולה כסף.');
+  : '\n✓ אפשר להישרף, אפשר לשרוד בלי לגדול, ואפשר לשחק טוב ולקבל את שניהם.');
 process.exit(bad ? 1 : 0);

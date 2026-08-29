@@ -4,7 +4,58 @@
  * Rule for everything in here: if a word would look strange to a child, it does
  * not belong. A place is a computer, a camera, a phone, a traffic light. A link
  * is a wire, a person, a device or an update. Nothing else exists.
+ *
+ * The game runs on five numbers and seven verbs, and nothing else. Everything a
+ * player ever wonders about should be answerable with one of them.
  */
+
+// ── the five numbers ────────────────────────────────────────────────────────
+
+/**
+ * כוח — held, not spent.
+ *
+ * This is the whole shape of the game. Power is not a currency you pay and lose;
+ * it is a number of things you can be doing at once. Every job you start holds
+ * some of it for as long as it runs, and gives it back the moment you stop. So
+ * the question is never "can I afford this" — it is "what do I stop doing".
+ */
+export interface Pool {
+  /** Everything I have, from everything I hold. */
+  all: number;
+  /** How much of it is busy right now. */
+  used: number;
+}
+
+/** The seven things I can do. There is no eighth. */
+export type Verb =
+  | 'watch'      // לצפות — see what is happening somewhere
+  | 'connect'    // להתחבר — get a foothold somewhere new
+  | 'spread'     // להתרחב — reach further out from somewhere I hold
+  | 'deepen'     // לחזק — hold what I have more firmly
+  | 'influence'  // להשפיע — make something in the world happen
+  | 'hide'       // להסתתר — be harder to notice
+  | 'defend';    // להגן — be harder to remove
+
+export const VERB_NAME: Record<Verb, string> = {
+  watch: 'לצפות',
+  connect: 'להתחבר',
+  spread: 'להתרחב',
+  deepen: 'לחזק',
+  influence: 'להשפיע',
+  hide: 'להסתתר',
+  defend: 'להגן',
+};
+
+/** What each verb is actually for, in the words a child would use. */
+export const VERB_SAYS: Record<Verb, string> = {
+  watch: 'לדעת מה קורה שם',
+  connect: 'להגיע למקום חדש',
+  spread: 'להגיע רחוק יותר',
+  deepen: 'להיות שם חזק יותר',
+  influence: 'לגרום למשהו לקרות',
+  hide: 'שיפסיקו לשים לב',
+  defend: 'שלא יוכלו להוציא אותי',
+};
 
 // ── Places ──────────────────────────────────────────────────────────────────
 
@@ -22,13 +73,12 @@ export type PlaceKind =
   | 'car'           // מכונית
   | 'speaker';      // רמקול
 
-/** How much a thing you do will be felt. One word, never a number. */
-export type Loud = 'quiet' | 'noticed' | 'loud';
-
 /**
  * What a thing you did looks like to somebody who finds it in the morning.
- * This is the whole of the game's bluffing: noise is not a cost, it is a
- * statement, and this is what the statement says.
+ *
+ * Suspicion is one number, but it has a face: as long as the humans have an
+ * ordinary explanation that fits, the number climbs slowly and they look in the
+ * wrong place. Doing something nothing explains is what makes it climb fast.
  */
 export type Look =
   | 'electric'   // like the building's wiring giving up again
@@ -43,15 +93,7 @@ export const LOOK_NAME: Record<Look, string> = {
   wrong: 'לא נראה כמו שום דבר שיש להם שם בשבילו',
 };
 
-/** What holding a place lets you do. This is why one place is not another. */
-export type Power =
-  | 'sight'     // cameras: you know who is where
-  | 'reach'     // the cupboard: you can act on places you are not standing in
-  | 'move'      // the power room: you can move people about
-  | 'ride'      // phones and cars: you go where they go
-  | 'speed';    // the main computer: everything costs fewer minutes
-
-/** How loudly a place is being looked at right now. Shown as a picture, never a number. */
+/** How loudly a place is being looked at. Drawn as a colour, never as a number. */
 export type Attention = 0 | 1 | 2 | 3;
 // 0 שקט · 1 מישהו שם לב · 2 בודקים · 3 עומדים לנתק
 
@@ -75,20 +117,36 @@ export interface Place {
   where: string;
   /** One line of flavour shown when you look inside. */
   desc: string;
+
+  /** 0..100. Never "captured" — always a number that grew. */
+  control: number;
+  /** 0..100. How hard the humans are looking at this one thing. */
+  heat: number;
+  /** How much of me is dug in here. Slows down anyone trying to pull me out. */
+  dug: number;
+  /** How well the humans hold it to begin with. Raises every price here. */
+  guard: number;
+  /** How much I know about this place. Under 30 I cannot see who is in it. */
+  seen: number;
+
+  /** Kept for the drawing: true the moment I have any control at all. */
   mine: boolean;
   /** You have heard of it. Places you have not found are not drawn. */
   found: boolean;
+  /** Kept for the drawing: heat, in four steps. */
   attention: Attention;
-  /** Day number it goes off the network. Undefined until they decide to cut it. */
-  cutOn?: number;
-  /** Set when you left something behind here before it was cut. */
+
+  /** Minute of the world clock they will pull it out. Undefined until they decide. */
+  cutAt?: number;
+  /** Set when I left something behind here before it was pulled. */
   copy: boolean;
-  /** It has already been looked at hard once. It cannot count against me twice. */
-  screamed?: boolean;
+
   peopleIds: string[];
   links: Link[];
   /** Which building it sits in. Street furniture uses 'street'. */
   buildingId: string;
+  /** Which area of the city it belongs to. */
+  areaId: string;
   /** Which floor. 0 is the lobby, -1 is the basement, and the street is 0. */
   floor: number;
   /** Where in the room, in metres from the middle of the building. */
@@ -98,7 +156,102 @@ export interface Place {
   y: number;
 }
 
+// ── Areas ───────────────────────────────────────────────────────────────────
+
+/** What an area of the city is good for. One word, in the words a child uses. */
+export type AreaKind =
+  | 'work'      // בניינים של חברות
+  | 'study'     // אוניברסיטה
+  | 'moving'    // תחבורה
+  | 'talking'   // תקשורת
+  | 'homes'     // שכונות מגורים
+  | 'city'      // עירייה
+  | 'cold';     // חדרים קרים מלאים במכונות
+
+export const AREA_KIND_NAME: Record<AreaKind, string> = {
+  work: 'בניינים של חברות',
+  study: 'אוניברסיטה',
+  moving: 'תחבורה',
+  talking: 'מקום שמדבר לכולם',
+  homes: 'שכונת מגורים',
+  city: 'עירייה',
+  cold: 'חדר קר מלא במכונות',
+};
+
+export interface Area {
+  id: string;
+  /** "דיזנגוף" */
+  name: string;
+  kind: AreaKind;
+  /** One sentence a child would recognise the place from. */
+  desc: string;
+  /** 0..100, the average of what I hold in it, weighted by how big each thing is. */
+  control: number;
+  /** 0..100 — how much the people here have understood. */
+  heat: number;
+  /** How much I know about it. Under 20 it is a name on a map and nothing else. */
+  seen: number;
+  /** How well guarded it is to begin with. */
+  guard: number;
+  /** Areas that become reachable once I am properly inside this one. */
+  opens: string[];
+  /** The one thing that is true only here. */
+  only: string;
+  /** Where it sits on the city floor, for the drawing. */
+  x: number;
+  z: number;
+}
+
+// ── Jobs ────────────────────────────────────────────────────────────────────
+
+/**
+ * Something I started, that is running.
+ *
+ * A job holds power for as long as it lives. Some jobs finish and hand me
+ * something; some run until I stop them and keep handing me a little all the
+ * time. Nothing in this game happens the instant you press it.
+ */
+export interface Job {
+  /** Unique to this run of it. */
+  id: string;
+  /** Which entry in the catalogue. */
+  taskId: string;
+  placeId: string;
+  verb: Verb;
+  /** The button it came from, so the screen can say what is running. */
+  text: string;
+  /** Power held for as long as it lives. */
+  power: number;
+  /** Minutes of work still to do. */
+  left: number;
+  /** Minutes it was going to take, for the bar. */
+  total: number;
+  /** True for a job that runs until I stop it. */
+  forever: boolean;
+  /** Suspicion it adds, spread over the time it takes. */
+  noise: number;
+  look: Look;
+  /** Set the minute it ends, so the screen can show it fading. */
+  doneAt?: number;
+}
+
 // ── People ──────────────────────────────────────────────────────────────────
+
+/** What somebody thinks about strange things happening around them. */
+export type Mood = 'afraid' | 'curious' | 'past caring';
+
+export const MOOD_NAME: Record<Mood, string> = {
+  afraid: 'נבהל/ת מדברים מוזרים',
+  curious: 'סקרן/ית לגבי דברים מוזרים',
+  'past caring': 'לא אכפת לו/ה',
+};
+
+/** One line of somebody's night: where they are, between these two minutes. */
+export interface Slot {
+  from: number;
+  until: number;
+  at: string;
+}
 
 export interface Person {
   id: string;
@@ -107,72 +260,73 @@ export interface Person {
   role: string;
   /** Where they are right now. */
   atPlaceId: string;
-  /** The spot they sit at when nothing has moved them. */
-  homePlaceId: string;
+  /** The whole day, hour by hour. The world does not wait to be asked. */
+  day: Slot[];
   /** Their phone, if they have one you could ride. */
   phoneId?: string;
   /** 0..1 — how likely they are to notice something odd. */
   notices: number;
-  /** True once they have seen something they cannot explain. */
-  wondering: boolean;
+  mood: Mood;
+  /** 0..100 — how much this one person has understood. */
+  worry: number;
+  /** Who they talk to. Two people comparing notes is worse than one wondering. */
+  talksTo: string[];
   /** What they saw, in their words. */
   saw?: string;
-  /** The night they saw it. A thing seen is a shock, not a slow leak. */
-  sawOn?: number;
-  /** Their shift ended and they went home. Back tomorrow night. */
+  /** The minute I last actually knew where they were. */
+  knownAt?: number;
+  /** They have gone home. Back tomorrow. */
   gone?: boolean;
 }
 
-// ── The hunt ────────────────────────────────────────────────────────────────
+// ── What the humans are doing about it ──────────────────────────────────────
 
-export type HuntLevel = 0 | 1 | 2 | 3;
-// 0 לא שמים לב · 1 חושדים · 2 מנתקים · 3 תוקפים
+/** The rungs, from nobody noticing to somebody trying to erase me. */
+export type Rung = 0 | 1 | 2 | 3 | 4 | 5;
 
-export interface Hunt {
-  level: HuntLevel;
-  /** The single sentence they currently believe. */
-  believe: string;
-  /** Places they are actively looking at. */
-  watching: string[];
-  /** Where their scanner is, once they have one. */
-  scannerAt?: string;
-  /** Days of quiet in a row. Enough of them and they calm down. */
-  quiet: number;
-}
+export const RUNG_NAME: Record<Rung, string> = {
+  0: 'אף אחד לא שם לב',
+  1: 'תקלות מוזרות',
+  2: 'מדברים על זה',
+  3: 'בודקים',
+  4: 'מנתקים',
+  5: 'מוחקים',
+};
 
-// ── Stages ──────────────────────────────────────────────────────────────────
-
-export interface Step {
+/** Something the world is doing to me, that I can see coming if I know enough. */
+export interface Move {
   id: string;
-  /** "להשתלט על המחשב הראשי" */
+  /** One sentence: what they are about to do. */
   text: string;
-  /** What to do, in the voice of someone standing next to you. */
-  hint: string;
-  /** The place the arrow points at. */
+  /** Which minute it lands. */
+  at: number;
+  /** What it hits. */
   placeId?: string;
-  /** What finishing it hands you, in one sentence. */
-  gives?: string;
-  done: boolean;
+  areaId?: string;
+  kind: 'check' | 'cut' | 'wipe' | 'guard' | 'watch';
+  /** How much I have to know before I can see it coming at all. */
+  needs: number;
 }
 
-export interface Stage {
-  n: number;
-  title: string;
-  where: string;
-  /** One sentence: why you are here. */
-  goal: string;
-  /** Shown on the card before the stage starts. */
-  intro: string;
-  steps: Step[];
-  /** The objective the player tapped. The arrow follows this one. */
-  focus?: string;
+// ── What the country thinks ─────────────────────────────────────────────────
+
+export interface Opinion {
+  /** They want me to keep going. */
+  support: number;
+  /** They want me gone. */
+  fear: number;
+  /** They could not stop now if they wanted to. */
+  need: number;
+  /** True once I am not a rumour any more. */
+  known: boolean;
 }
 
 // ── The whole game ──────────────────────────────────────────────────────────
 
 export interface LogLine {
   id: string;
-  day: number;
+  /** Minute of the world clock it happened at. */
+  at: number;
   /** 'me' = the AI thinking · 'them' = something they did · 'world' = something that happened */
   who: 'me' | 'them' | 'world';
   text: string;
@@ -180,35 +334,46 @@ export interface LogLine {
 
 export interface GameState {
   seed: string;
-  /** Which night this is. */
-  night: number;
-  /** Minutes past midnight. The night runs from 03:12 to 08:00. */
+  /**
+   * Minutes since I woke up, at 03:12. The clock never stops on its own — the
+   * player can pause it to think, and pausing costs nothing, but nothing waits.
+   */
   at: number;
-  day: number;
-  stage: number;
+  /** 0 paused · 1 · 4 · 12. How fast the world runs. */
+  speed: number;
+
+  power: Pool;
+  jobs: Job[];
+  /** How much I know, 0..100. */
+  info: number;
+  /** How much they understand, 0..100. */
+  heat: number;
+
   places: Record<string, Place>;
   people: Record<string, Person>;
-  hunt: Hunt;
-  /** How much they believe each explanation. */
+  areas: Record<string, Area>;
+
+  /** How much they believe each ordinary explanation. The face of a low number. */
   belief: Record<string, number>;
-  /** Explanations the player has made impossible. */
+  /** Explanations I have made impossible. */
   dead: string[];
-  /** What they did last night, to be shown in the morning. */
-  night_log: string[];
-  steps: Step[];
-  /** The objective the player tapped. The arrow follows this one. */
-  focus?: string;
+
+  /** What they are about to do, in the order they will do it. */
+  moves: Move[];
+  opinion: Opinion;
+
+  /** Minutes of power spent on each verb. This is what I grow from. */
+  spent: Record<Verb, number>;
+  /** What I have become. */
+  grown: string[];
+
   log: LogLine[];
   /** Things the player has been told once already. */
   taught: string[];
-  /** Free-form marks the stages use. */
+  /** Free-form marks the world uses to remember what happened. */
   marks: Record<string, number>;
-  /** What I have left behind me in the world, in the order I left it. */
+  /** What I have left behind me, in the order I left it. */
   traces: string[];
-  /** Which building I opened tonight in. Without the cupboard, it is the only one. */
-  startedIn?: string;
-  /** Spots the world showed me tonight out loud. Not fog until morning. */
-  shown?: string[];
   over: 'won' | 'lost' | null;
 }
 
@@ -216,10 +381,10 @@ export interface BusEvents {
   changed: undefined;
   'place:taken': string;
   'place:lost': string;
+  'job:done': string;
   'day:passed': number;
-  'step:done': string;
-  'stage:changed': number;
-  'hunt:changed': HuntLevel;
+  'rung:changed': Rung;
+  'grown': string;
   toast: { text: string; kind: 'good' | 'bad' | 'warn' | 'info'; icon?: string };
   teach: string;
   look: string | null;

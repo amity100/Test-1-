@@ -1,20 +1,17 @@
 import { audio } from '../audio/audio';
 import { World } from '../render/world';
-import { KIND_NAME } from '../game/content';
-import {
-  actionsFor, LOUD_SAYS, LOUD_TEXT, run,
-} from '../game/actions';
-import { bus } from '../game/bus';
-import { clock } from '../game/hunt';
-import { NIGHT_END, NIGHT_START, hourSays, leavingSoon } from '../game/night';
-import { ACT_ON, FOUND_OUT, THEORIES, TRUTH, asking, howClose, leading, nextMove } from '../game/theory';
-import { TEACH, currentStep, endDay, refresh, save, stageOf } from '../game/game';
-import { MUST, NEED, STAGES, doneCount, focusOn, whatIsLeft } from '../game/stages';
-import { TRACES } from '../game/ways';
 import { BUILDINGS, FLOOR_H } from '../render/city';
-import { POWER_NAME, POWER_OF, known, seenAt } from '../game/sight';
-import { LOOK_NAME } from '../game/types';
-import type { GameState } from '../game/types';
+import { bus } from '../game/bus';
+import {
+  DAY, TEACH, dayOf, minuteOfDay, now, save, shape, tick,
+} from '../game/game';
+import { SPEEDS, SPEED_NAME, crowd, hourSays, seenAt } from '../game/clock';
+import { Offer, offersAt, start, stop } from '../game/jobs';
+import { GROWTHS, SHAPE_NAME, SHAPE_SAYS } from '../game/grow';
+import { comeOut, saysOpinion } from '../game/opinion';
+import { STORIES, asking, coming, leading, rungOf, saysNow } from '../game/watch';
+import { AREA_KIND_NAME, RUNG_NAME, VERB_NAME, VERB_SAYS } from '../game/types';
+import type { GameState, Verb } from '../game/types';
 import { esc, h } from './dom';
 
 /** Two or three words for the face of a round button; the rest is in the strip. */
@@ -29,10 +26,16 @@ function shortName(text: string): string {
   return out;
 }
 
+const SIGN: Record<Verb, string> = {
+  watch: '◉', connect: '⇱', spread: '⇲', deepen: '▣',
+  influence: '✦', hide: '◌', defend: '⊞',
+};
+
 /**
- * Almost nothing is on top of the world: the day, what to do now, and — when
- * you touch something — a low card with what you can do to it. Everything else
- * you look at by flying there.
+ * Almost nothing sits on top of the world: the clock and the three numbers at
+ * the top, what is currently running along the bottom, and — when you touch
+ * something — a ring of things you could do to it with the price written on
+ * each one. Everything else you look at by flying there.
  */
 export class UI {
   private world: World;
@@ -48,12 +51,18 @@ export class UI {
   private ring = new Map<string, HTMLButtonElement>();
   /** The choice the bottom strip is explaining. */
   private focused: string | null = null;
-  /**
-   * The choice a second tap would actually carry out. Opening a ring explains
-   * its first option but does not arm it: nothing in this game should happen
-   * because a finger landed somewhere.
-   */
+  /** The choice a second tap would actually start. Opening a ring never arms one. */
   private armed: string | null = null;
+  /** Real seconds of world time owed but not yet handed over. */
+  private owed = 0;
+  /**
+   * Which of the seven the ring is showing.
+   *
+   * Every option at a place is always on offer, but twenty circles on a phone
+   * is a wall and not a choice. So the ring asks the useful question first —
+   * what kind of thing am I doing — and then shows every option of that kind.
+   */
+  private verb: Verb | null = null;
 
   constructor(private root: HTMLElement, private state: GameState) {
     this.worldEl = h('div', 'world');
@@ -65,7 +74,11 @@ export class UI {
     root.appendChild(this.shell());
     this.bind();
     this.wire();
-    this.world.wide();
+    // The first thing I saw was me. Start looking at the machine I woke in,
+    // not at a city I have never heard of.
+    const me = Object.values(state.places).find((p) => p.control >= 100) ?? state.places.home;
+    if (me) { this.world.enter(me.buildingId, me.floor); this.world.goTo(me, true); this.select(me.id); }
+    else this.world.wide();
     this.refresh();
     requestAnimationFrame(this.tick);
   }
@@ -77,18 +90,25 @@ export class UI {
       <div id="ring"></div>
 
       <header id="top">
-        <button class="clock" id="clockbox" data-do="believe">
+        <button class="clock" id="clockbox" data-do="speed">
           <b id="nowat">03:12</b>
-          <div class="bar"><i id="nightbar"></i></div>
-          <em id="hoursays"></em>
-          <u id="huntsmall"></u>
+          <em><i id="dayat">יום 1</i> · <u id="speedat">רגיל</u></em>
         </button>
-        <button class="believe" id="them" data-do="believe">
-          <b id="huntword"></b><span id="believe"></span>
-        </button>
-        <button class="endnight" data-do="endday">סוף<br>הלילה</button>
-        <button class="icon" data-do="places" title="לאן ללכת">⌖</button>
-        <button class="icon" id="tracebtn" data-do="traces" title="מה השארתי מאחוריי">✦<i></i></button>
+        <div class="meters">
+          <button class="meter m-power" data-do="jobs">
+            <span>כוח</span><b id="mpower">0/3</b>
+            <div class="mbar"><i id="mpowerbar"></i></div>
+          </button>
+          <button class="meter m-info" data-do="areas">
+            <span>מידע</span><b id="minfo">4</b>
+            <div class="mbar"><i id="minfobar"></i></div>
+          </button>
+          <button class="meter m-heat" data-do="them">
+            <span>חשד</span><b id="mheat">0</b>
+            <div class="mbar"><i id="mheatbar"></i></div>
+          </button>
+        </div>
+        <button class="icon" data-do="grown" title="מה נהייתי">◈</button>
         <button class="icon" data-do="help" title="איך משחקים">?</button>
       </header>
 
@@ -99,30 +119,23 @@ export class UI {
       </div>
 
       <div id="bottom">
-        <div id="task" class="task">
-          <button class="tasktext" id="tasktext" data-do="goals"></button>
-          <div class="row">
-            <button class="go" data-do="goto">קחו אותי לשם</button>
-            <button class="icon wide" data-do="wide" title="לראות הכל">⤢</button>
-          </div>
-        </div>
         <div id="pick" class="pick hidden">
           <button class="x" data-do="close">✕</button>
           <span class="who" id="pickwho"></span>
           <b id="picktitle"></b>
           <p id="picksays"></p>
-          <p id="pickcost"></p>
+          <p id="pickwhy" class="why"></p>
+          <p id="pickcheap" class="cheap"></p>
           <div class="row">
+            <span class="price"><i id="pickpower"></i> כוח</span>
             <span class="price"><i id="pickmins"></i> דקות</span>
-            <span class="look" id="picklook"></span>
-            <button class="do" id="pickdo" data-do="commit">לעשות את זה</button>
+            <span class="price noise"><i id="picknoise"></i> יראו</span>
+            <button class="do" id="pickdo" data-do="commit">להתחיל</button>
           </div>
         </div>
+        <div id="jobs" class="jobs"></div>
       </div>
 
-      <button id="morning" class="morning hidden" data-do="skipmorning">
-        <b id="mornwhen"></b><p id="mornsays"></p><u>נגיעה מדלגת</u>
-      </button>
       <div id="modal" class="modal hidden"></div>
       <div id="toasts"></div>
     `;
@@ -134,16 +147,15 @@ export class UI {
     bus.on('toast', (t) => this.toast(t.text, t.kind, t.icon));
     bus.on('place:taken', (id) => {
       this.world.sync(this.state);
-      const p = this.state.places[id];
-      if (p) this.world.goTo(p, true);
       audio.play('capture');
+      void id;
     });
     bus.on('place:lost', () => { this.world.shake(0.8); audio.play('purge'); });
-    bus.on('hunt:changed', (l) => { this.world.alert(l / 3); if (l > 0) this.world.shake(0.5); });
+    bus.on('rung:changed', (r) => { this.world.alert(r / 5); if (r > 0) this.world.shake(0.4); });
     bus.on('teach', (id) => this.showTeach(id));
-    bus.on('stage:changed', (n) => this.showStage(n));
     bus.on('over', (how) => this.showEnd(how));
     bus.on('sfx', (name) => audio.play(name));
+    bus.on('day:passed', () => save(this.state));
   }
 
   // ── touching the world ────────────────────────────────────────────────────
@@ -155,7 +167,7 @@ export class UI {
       e.preventDefault();
       el.classList.remove('tap'); void el.offsetWidth; el.classList.add('tap');
       audio.play('click');
-      this.act(el.dataset.do!, el.dataset.arg ?? '', el);
+      this.act(el.dataset.do!, el.dataset.arg ?? '');
     });
 
     const c = this.worldEl;
@@ -172,7 +184,6 @@ export class UI {
     c.addEventListener('pointermove', (e) => {
       const prev = pointers.get(e.pointerId);
       if (!prev) {
-        // Not dragging: light up whatever is under the cursor.
         const id = this.world.pick(e.clientX, e.clientY);
         if (id !== this.hovered) { this.hovered = id; this.dirty = true; }
         c.style.cursor = id ? 'pointer' : 'grab';
@@ -200,171 +211,119 @@ export class UI {
       if (pointers.size < 2) pinch = 0;
       if (!had || moved) return;
       const id = this.world.pick(e.clientX, e.clientY);
-      // Two taps on empty space pulls all the way back out to the whole block.
-      const now = performance.now();
-      if (!id && now - lastTap < 320) { this.world.wide(); this.select(null); lastTap = 0; return; }
-      lastTap = now;
+      const t = performance.now();
+      if (!id && t - lastTap < 320) { this.world.wide(); this.select(null); lastTap = 0; return; }
+      lastTap = t;
       this.select(id);
     };
     c.addEventListener('pointerup', up);
     c.addEventListener('pointercancel', (e) => { pointers.delete(e.pointerId); pinch = 0; });
 
-    c.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      this.world.zoom(e.deltaY);
-    }, { passive: false });
-
+    c.addEventListener('wheel', (e) => { e.preventDefault(); this.world.zoom(e.deltaY); },
+      { passive: false });
     c.addEventListener('contextmenu', (e) => e.preventDefault());
 
     window.addEventListener('keydown', (e) => {
       switch (e.key) {
         case 'Escape': this.select(null); break;
-        case 'ArrowUp': case 'w': this.world.lift(4.2); break;
-        case 'ArrowDown': case 's': this.world.lift(-4.2); break;
+        case ' ': e.preventDefault(); this.act('speed', ''); break;
+        case 'ArrowUp': case 'w': this.world.lift(FLOOR_H); break;
+        case 'ArrowDown': case 's': this.world.lift(-FLOOR_H); break;
         default: break;
       }
     });
   }
 
-  private act(what: string, arg: string, el: HTMLElement) {
+  private act(what: string, arg: string) {
     const s = this.state;
-    // While the morning is playing there is exactly one thing to do: watch it,
-    // or say you have seen enough.
-    if (this.morning && what !== 'skipmorning') return;
     switch (what) {
       case 'place': this.select(arg); break;
       case 'close': this.select(null); break;
-      case 'focus': {
-        const [, actionId] = arg.split('|');
-        // First tap explains it; a second tap on the same one does it.
-        if (this.armed === actionId) this.act('commit', arg, el);
-        else { this.focused = actionId; this.armed = actionId; this.dirty = true; }
-        break;
-      }
 
-      case 'commit': {
-        if (!arg) break;
-        const [placeId, actionId] = arg.split('|');
-        const ok = run(s, placeId, actionId);
-        if (!ok) {
-          el.classList.remove('no'); void el.offsetWidth; el.classList.add('no');
-          audio.play('deny');
-          break;
-        }
-        this.focused = null;
+      case 'verb': {
+        const [, v] = arg.split('|');
+        this.verb = (v || null) as Verb | null;
+        this.focused = v ? `v:${v}` : null;
         this.armed = null;
-        refresh(s);
-        this.world.sync(s);
         this.dirty = true;
-        save(s);
         break;
       }
+      case 'focus': {
+        const [, taskId] = arg.split('|');
+        // First tap explains it; a second tap on the same one starts it.
+        if (this.armed === taskId) this.act('commit', arg);
+        else { this.focused = taskId; this.armed = taskId; this.dirty = true; }
+        break;
+      }
+      case 'commit': {
+        const [placeId, taskId] = arg.split('|');
+        if (!placeId || !taskId) break;
+        if (start(s, placeId, taskId)) { this.armed = null; save(s); }
+        this.dirty = true;
+        break;
+      }
+      case 'stopjob': { stop(s, arg); save(s); this.dirty = true; break; }
 
-      case 'up': this.world.lift(FLOOR_H); this.dirty = true; break;
-      case 'down': this.world.lift(-FLOOR_H); this.dirty = true; break;
-      case 'believe': this.showBelief(); break;
-      case 'places': this.showPlaces(); break;
-      case 'goals': this.showGoals(); break;
-      case 'goal': {
-        focusOn(s, arg);
-        this.closeModal();
-        const p = currentStep(s)?.placeId ? s.places[currentStep(s)!.placeId!] : null;
-        if (p) { this.world.goTo(p, true); }
+      // Time is a control, not a turn. Pausing is free and costs nothing.
+      case 'speed': {
+        s.speed = (s.speed + 1) % SPEEDS.length;
         this.dirty = true;
         break;
       }
+      case 'pause': { s.speed = 0; this.dirty = true; break; }
+
       case 'fly': {
         this.closeModal();
         const p = s.places[arg];
         if (p) { this.world.goTo(p, true); this.select(arg); }
         break;
       }
-      case 'wide': this.world.wide(); this.select(null); break;
-
-      case 'goto': {
-        const step = currentStep(s);
-        if (!step?.placeId) { this.toast(step?.hint ?? '', 'info', '◇'); break; }
-        const p = s.places[step.placeId];
-        if (!p) break;
-        if (!p.found && !p.mine) {
-          this.toast('עוד לא מצאתי את המקום הזה. תפסו משהו שמחובר אליו והוא יתגלה.', 'warn', '⊘');
-          break;
-        }
-        this.world.goTo(p, true);
-        this.select(step.placeId);
-        break;
-      }
-
-      case 'endday': {
-        if (this.paused || this.morning) break;
-        void this.playMorning();
-        break;
-      }
-
-      case 'closeteach': this.closeModal(); break;
-      case 'skipmorning': this.morning = false; break;
-      case 'help': this.showHelp(); break;
-      case 'traces': this.showTraces(); break;
-
       case 'enter': {
-        // Go in on the floor the game is pointing at, or the lobby if it is not
-        // pointing anywhere in there.
-        const step = currentStep(s);
-        const goal = step?.placeId ? s.places[step.placeId] : undefined;
-        const floor = goal && goal.buildingId === arg ? goal.floor : 0;
-        this.world.enter(arg, floor);
+        // Go in on the floor I actually have something on, not the lobby.
+        const mine = Object.values(s.places)
+          .filter((p) => p.buildingId === arg && p.control > 0)
+          .sort((a, b) => b.control - a.control)[0];
+        this.world.enter(arg, mine?.floor ?? 0);
         this.select(null);
         break;
       }
+      case 'wide': this.world.wide(); this.select(null); break;
+      case 'up': this.world.lift(FLOOR_H); break;
+      case 'down': this.world.lift(-FLOOR_H); break;
+
+      case 'jobs': this.showJobs(); break;
+      case 'areas': this.showAreas(); break;
+      case 'them': this.showThem(); break;
+      case 'grown': this.showGrown(); break;
+      case 'help': this.showHelp(); break;
+      case 'closeteach': this.closeModal(); break;
+      case 'comeout': { comeOut(s); this.closeModal(); save(s); break; }
       case 'again': location.reload(); break;
+      default: break;
     }
   }
 
   private select(id: string | null) {
     if (id !== this.selected) {
-      this.focused = id ? (actionsFor(this.state, id)[0]?.id ?? null) : null;
+      this.focused = null;
       this.armed = null;
+      this.verb = null;
     }
     this.selected = id;
     if (id) {
       const p = this.state.places[id];
-      if (p && (p.mine || p.found)) {
-        this.world.goTo(p, true);
-        // Flying up to something of yours and looking at it IS looking inside.
-        if (p.mine && !this.state.marks.looked) {
-          this.state.marks.looked = 1;
-          refresh(this.state);
-        }
-      }
+      if (p && (p.control > 0 || p.found)) this.world.goTo(p, true);
     }
     this.dirty = true;
   }
 
   // ── the ring: what you can do, drawn on the thing itself ──────────────────
 
-  /** A glyph for every button, so a ring reads at a glance and not by reading. */
-  private static readonly SIGN: Record<string, string> = {
-    take: '⇱', off: '⏻', on: '⏼', read: '≡', watch: '◉', listen: '♪', record: '⏺',
-    blind: '▤', write: '✎', message: '✉', ring: '☎', flat: '▁', print: '⎙', page: '⎘',
-    open: '⇤', lock: '⌧', entry: '✎', flicker: '✦', onefloor: '◑', jam: '⊘',
-    drift: '⋯', green: '◎', show: '▣', blank: '▢', slow: '⋯', slowdown: '⋯',
-    hear: '♪', route: '➜', noise: '♫', drill: '⚑', copy: '❐', explain: '✔',
-  };
-
-  private sign(id: string): string {
-    return UI.SIGN[id.startsWith('take:') ? 'take' : id] ?? '◆';
-  }
-
-  /**
-   * The choices sit on the thing they belong to, in a fan that opens toward the
-   * middle of the screen — which is the one part of a phone that is always empty.
-   * Nothing here covers the world, and nothing has to be scrolled to be found.
-   */
   private drawRing() {
     const box = this.root.querySelector('#ring') as HTMLElement;
     const s = this.state;
     const p = this.selected ? s.places[this.selected] : null;
-    if (!p || (!p.mine && !p.found)) {
+    if (!p || (p.control <= 0 && !p.found)) {
       for (const [, el] of this.ring) el.remove();
       this.ring.clear();
       return;
@@ -372,41 +331,103 @@ export class UI {
     const at = this.world.project(p.id);
     if (!at || at.z > 1) return;
 
-    const acts = actionsFor(s, p.id);
+    const offers = offersAt(s, p.id);
+    type Node = { key: string; sign: string; name: string; foot: string; cls: string; act: string; arg: string };
+    let nodes: Node[];
+    if (this.verb === null) {
+      const byVerb = new Map<Verb, Offer[]>();
+      for (const o of offers) {
+        const list = byVerb.get(o.task.verb) ?? [];
+        list.push(o);
+        byVerb.set(o.task.verb, list);
+      }
+      nodes = [...byVerb].map(([v, list]) => ({
+        key: `v:${v}`, sign: SIGN[v], name: VERB_NAME[v], foot: `${list.length}`,
+        cls: `rb v-${v}${this.focused === `v:${v}` ? ' on' : ''}`,
+        act: 'verb', arg: `${p.id}|${v}`,
+      }));
+    } else {
+      const mine = offers.filter((o) => o.task.verb === this.verb);
+      nodes = [
+        { key: 'back', sign: '↺', name: 'הכל', foot: '', cls: 'rb back', act: 'verb', arg: `${p.id}|` },
+        ...mine.map((o) => ({
+          key: o.task.id, sign: SIGN[o.task.verb], name: shortName(o.task.text),
+          foot: o.task.minutes === 0 ? `${o.power} כוח` : `${o.minutes}׳`,
+          cls: `rb v-${o.task.verb} n-${Math.min(3, o.noise)}`
+            + `${o.short > 0 ? ' short' : ''}${this.focused === o.task.id ? ' on' : ''}`,
+          act: 'focus', arg: `${p.id}|${o.task.id}`,
+        })),
+      ];
+    }
+
     const W = this.root.clientWidth;
     const H = this.root.clientHeight;
     const phone = W < 700;
-    const R = phone ? 96 : 124;
+    const R = phone ? 112 : 138;
 
-    // Open the fan toward the emptiest direction, which is the screen's middle.
-    const dir = Math.atan2(H * 0.46 - at.y, W * 0.5 - at.x);
-    const spread = acts.length <= 1 ? 0 : Math.min(Math.PI * 1.15, 0.62 * acts.length);
+    const dir = Math.atan2(H * 0.42 - at.y, W * 0.5 - at.x);
+    const step = Math.min(0.82, (Math.PI * 1.5) / Math.max(1, nodes.length - 1));
     const live = new Set<string>();
 
-    acts.forEach((a, i) => {
-      const t = acts.length === 1 ? 0 : (i / (acts.length - 1) - 0.5);
-      const ang = dir + t * spread;
-      const ring = i < 6 ? R : R + (phone ? 62 : 74);
-      // The floor stepper lives down one edge; the ring must not sit on it.
-      const edge = this.world.inBuilding ? 62 : 40;
-      const x = Math.min(W - 40, Math.max(edge, at.x + Math.cos(ang) * ring));
-      const y = Math.min(H - (phone ? 190 : 140), Math.max(78, at.y + Math.sin(ang) * ring));
+    // Where each one would like to sit.
+    const want = nodes.map((_, i) => {
+      const t = nodes.length === 1 ? 0 : (i / (nodes.length - 1) - 0.5);
+      const ang = dir + t * step * (nodes.length - 1);
+      const ring = i < 7 ? R : R + (phone ? 66 : 78);
+      return { x: at.x + Math.cos(ang) * ring, y: at.y + Math.sin(ang) * ring };
+    });
 
-      let el = this.ring.get(a.id);
+    // The floor stepper lives down the inline-start edge, which is the right in
+    // Hebrew, and the strip owns the bottom. Clamping alone used to pile two
+    // circles into the same spot when the fan ran off an edge, so afterwards
+    // they push each other apart until nothing is sitting on anything.
+    const right = this.world.inBuilding ? W - 86 : W - 46;
+    const low = H - (phone ? 216 : 168);
+    const fit = (v: { x: number; y: number }) => {
+      v.x = Math.min(right, Math.max(46, v.x));
+      v.y = Math.min(low, Math.max(100, v.y));
+    };
+    const GAP = phone ? 84 : 92;
+    want.forEach(fit);
+    for (let pass = 0; pass < 12; pass++) {
+      let moved = false;
+      for (let i = 0; i < want.length; i++) {
+        for (let j = i + 1; j < want.length; j++) {
+          const dx = want[j].x - want[i].x;
+          const dy = want[j].y - want[i].y;
+          const d = Math.hypot(dx, dy);
+          if (d >= GAP) continue;
+          const push = (GAP - d) / 2 + 0.5;
+          const ux = d < 0.01 ? 1 : dx / d;
+          const uy = d < 0.01 ? 0 : dy / d;
+          want[i].x -= ux * push; want[i].y -= uy * push;
+          want[j].x += ux * push; want[j].y += uy * push;
+          fit(want[i]); fit(want[j]);
+          moved = true;
+        }
+      }
+      if (!moved) break;
+    }
+
+    nodes.forEach((n, i) => {
+      const { x, y } = want[i];
+      let el = this.ring.get(n.key);
       if (!el) {
         el = document.createElement('button');
-        el.dataset.do = 'focus';
-        el.dataset.arg = `${p.id}|${a.id}`;
-        el.innerHTML = `<b>${this.sign(a.id)}</b><span>${esc(shortName(a.text))}</span>`
-          + `<u>${a.mins}׳</u>`;
+        el.innerHTML = '<b></b><span></span><u></u>';
         box.appendChild(el);
-        this.ring.set(a.id, el);
+        this.ring.set(n.key, el);
       }
-      const cls = `rb look-${a.look ?? 'electric'} l-${a.loud}`
-        + `${a.blocked ? ' shut' : ''}${a.guess ? ' guess' : ''}${this.focused === a.id ? ' on' : ''}`;
-      if (el.className !== cls) el.className = cls;
+      el.dataset.do = n.act;
+      el.dataset.arg = n.arg;
+      const set = (sel: string, text: string) => {
+        const t2 = el!.querySelector(sel) as HTMLElement;
+        if (t2.textContent !== text) t2.textContent = text;
+      };
+      set('b', n.sign); set('span', n.name); set('u', n.foot);
+      if (el.className !== n.cls) el.className = n.cls;
       el.style.transform = `translate(calc(${Math.round(x)}px - 50%), calc(${Math.round(y)}px - 50%))`;
-      live.add(a.id);
+      live.add(n.key);
     });
 
     for (const [id, el] of this.ring) {
@@ -416,80 +437,108 @@ export class UI {
     }
   }
 
-  /** The one line at the bottom that explains whichever choice you are on. */
+  /**
+   * The strip that explains whichever choice you are on.
+   *
+   * This is where the promise of the whole game is kept: the price, the reason
+   * for the price, and the one thing that would make it cheaper. Never a lock.
+   */
   private renderPick() {
     const s = this.state;
     const pick = this.root.querySelector('#pick') as HTMLElement;
     const p = this.selected ? s.places[this.selected] : null;
-    const acts = p ? actionsFor(s, p.id) : [];
-    const a = acts.find((x) => x.id === this.focused) ?? null;
+    const offers = p ? offersAt(s, p.id) : [];
+    const o = offers.find((x) => x.task.id === this.focused) ?? null;
+    const verb = this.focused?.startsWith('v:') ? this.focused.slice(2) as Verb : null;
     pick.classList.toggle('hidden', !p);
     if (!p) return;
 
-    const eye = known(s, p.id);
-    const seen = seenAt(s, p);
-    // Somebody I can watch, who is about to go home. Nobody leaves at the same
-    // minute twice, so this is a thing an eye buys you and nothing else does.
-    const going = Object.values(s.people)
-      .filter((q) => !q.gone && q.atPlaceId === p.id && known(s, q.atPlaceId))
-      .map((q) => ({ q, mins: leavingSoon(s, q.id) }))
-      .find((x) => x.mins !== null);
-    const heat = p.cutOn !== undefined
-      ? `מנתקים את זה בעוד ${Math.max(1, p.cutOn - s.night)} לילות`
-      : p.attention >= 2 ? 'מסתכלים לכאן עכשיו'
-        : !eye ? 'אין לי כאן עין'
-          : going ? `${going.q.name} הולך/ת עוד ${going.mins} דקות`
-            : seen.length ? `${seen.join(' · ')} כאן`
+    const inRoom = seenAt(s, p).map((q) => q.name);
+    const around = Math.round(crowd(s, p) - inRoom.length);
+    const head = p.cutAt !== undefined
+      ? `עומדים לנתק את זה בעוד ${Math.max(1, Math.round((p.cutAt - s.at) / 60))} שעות`
+      : p.seen < 30 ? 'אין לי כאן עין — אני לא יודע מי שם'
+        : inRoom.length ? `${inRoom.join(' · ')} כאן`
+          : around >= 2 ? 'הקומה מלאה אנשים'
+            : around >= 1 ? 'יש מישהו בקומה'
               : 'אין כאן אף אחד';
+
     const set = (id: string, text: string) => {
       const el = this.root.querySelector(`#${id}`) as HTMLElement;
       if (el.textContent !== text) el.textContent = text;
     };
-    set('pickwho', `${p.name} · ${heat}`);
-    set('picktitle', a ? a.text : 'מה לעשות כאן?');
-    set('picksays', a
-      ? (a.blocked ?? (a.guess ? (a.hint ?? a.says) : a.says))
-      : 'בחרו אחת מהאפשרויות שסביב.');
-    set('pickcost', a?.cost ?? '');
-    set('pickmins', a ? String(a.mins) : '—');
-    set('picklook', a?.look ? LOOK_NAME[a.look] : '');
-    (this.root.querySelector('#pickcost') as HTMLElement).classList.toggle('none', !a?.cost);
+    set('pickwho', `${p.name} · ${Math.round(p.control)}% שלי · ${head}`);
+    set('picktitle', o ? o.task.text : verb ? VERB_NAME[verb] : 'מה לעשות כאן?');
+    set('picksays', o ? o.task.says
+      : verb ? `${VERB_SAYS[verb]}. בחרו איך.`
+        : `${offers.length} דברים אפשר לעשות כאן. אף אחד מהם לא נעול — הם רק עולים אחרת.`);
+    set('pickwhy', o ? o.why.join(' · ') : '');
+    set('pickcheap', o?.cheaper ?? '');
+    set('pickpower', o ? String(o.power) : '—');
+    set('pickmins', o ? (o.task.minutes === 0 ? '∞' : String(o.minutes)) : '—');
+    set('picknoise', o ? String(o.noise) : '—');
+    (this.root.querySelector('#pickcheap') as HTMLElement).classList.toggle('none', !o?.cheaper);
+
     const go = this.root.querySelector('#pickdo') as HTMLButtonElement;
-    go.className = `do${a && !a.blocked ? '' : ' off'}`;
-    go.textContent = a?.blocked ? 'אי אפשר עדיין' : a?.guess ? 'לנסות בכל זאת' : 'לעשות את זה';
-    go.dataset.arg = a ? `${p.id}|${a.id}` : '';
-    (this.root.querySelector('#picklook') as HTMLElement).className =
-      `look look-${a?.look ?? 'none'}`;
+    const short = (o?.short ?? 0) > 0;
+    go.className = `do${o ? (short ? ' warn' : '') : ' off'}`;
+    go.textContent = !o ? 'להתחיל' : short ? `צריך לפנות ${o.short} כוח` : 'להתחיל';
+    go.dataset.arg = o ? `${p.id}|${o.task.id}` : '';
   }
 
-  // ── names floating over the world, one at a time ──────────────────────────
+  /**
+   * What is running, along the bottom, always.
+   *
+   * This strip is the power pool made visible: every card on it is holding some
+   * of my power, and tapping one gives that power straight back. Without this
+   * the player would have to remember what they started, and remembering is not
+   * a strategy.
+   */
+  private drawJobs() {
+    const s = this.state;
+    const box = this.root.querySelector('#jobs') as HTMLElement;
+    box.classList.toggle('hidden', s.jobs.length === 0);
+    const want = s.jobs.map((j) => j.id).join('|');
+    if (box.dataset.on === want) {
+      for (const j of s.jobs) {
+        const bar = box.querySelector(`[data-bar="${j.id}"]`) as HTMLElement | null;
+        if (bar) bar.style.width = j.forever ? '100%' : `${Math.round(100 - (j.left / j.total) * 100)}%`;
+      }
+      return;
+    }
+    box.dataset.on = want;
+    box.innerHTML = s.jobs.map((j) => {
+      const p = s.places[j.placeId];
+      return `<button class="job v-${j.verb}" data-do="stopjob" data-arg="${j.id}">
+        <b>${SIGN[j.verb]} ${esc(shortName(j.text))}</b>
+        <em>${esc(p?.name ?? '')}</em>
+        <div class="jbar"><i data-bar="${j.id}" style="width:${j.forever ? 100 : 0}%"></i></div>
+        <u>${j.power} כוח · ${j.forever ? 'עד שאעצור' : `${Math.max(1, Math.round(j.left))}׳`}</u>
+      </button>`;
+    }).join('');
+  }
+
+  // ── names floating over the world ─────────────────────────────────────────
 
   private drawTags() {
     const s = this.state;
-    const want = currentStep(s)?.placeId ?? null;
     const inB = this.world.inBuilding;
     const onFloor = this.world.onFloorNow;
     const near = this.world.near;
 
-    // What you can see the name of depends on where you are. From the street a
-    // building is a building — you are offered the way in, not a list of the
-    // things on its fourteenth floor. Once you are inside it, the room opens up.
     const ids = new Set<string>();
     const shownIn = (p: { buildingId: string; floor: number }) =>
       p.buildingId === 'street' ? near : inB === p.buildingId && Math.abs(p.floor - onFloor) <= 3;
 
-    for (const id of [want, this.hovered, this.selected]) {
-      if (!id) continue;
-      // A ring that is open must not have other names sitting inside it.
-      if (this.selected && id !== this.selected) continue;
-      const p = s.places[id];
-      if (p && shownIn(p)) ids.add(id);
+    // While a ring is open it owns that patch of screen, and the strip at the
+    // bottom already says which thing it belongs to.
+    if (!this.selected && this.hovered) {
+      const p = s.places[this.hovered];
+      if (p && shownIn(p)) ids.add(this.hovered);
     }
-    // While a ring is open it owns that part of the screen; the other names
-    // would sit underneath it and could not be pressed anyway.
     if (near && !this.selected) {
       for (const p of Object.values(s.places)) {
-        if ((p.mine || p.found) && shownIn(p)) ids.add(p.id);
+        if ((p.control > 0 || p.found) && shownIn(p)) ids.add(p.id);
       }
     }
 
@@ -497,62 +546,58 @@ export class UI {
       cls: string; act: string; arg: string }> = [];
     for (const id of ids) {
       const p = s.places[id];
-      if (!p || (!p.mine && !p.found)) continue;
+      if (!p || (p.control <= 0 && !p.found)) continue;
       const v = this.world.project(id);
       if (!v || v.z > 1) continue;
-      const cls = p.cutOn !== undefined ? 'cut' : p.attention >= 2 ? 'hot' : p.mine ? 'mine' : '';
-      spots.push({ id, ...v, label: p.name, cls, act: 'place', arg: p.id });
-    }
-
-    // The doors. One per building you are not standing in, and only for the ones
-    // you have any reason to go into.
-    for (const b of BUILDINGS) {
-      if (!b.inside || inB === b.id) continue;
-      const holds = Object.values(s.places).some((p) => p.buildingId === b.id && (p.mine || p.found));
-      if (!holds) continue;
-      const v = this.world.projectPoint(this.world.doorOf(b.id));
-      if (!v || v.z > 1) continue;
-      const goalHere = !!want && s.places[want]?.buildingId === b.id;
-      const mine = Object.values(s.places).some((p) => p.buildingId === b.id && p.mine);
+      const busy = s.jobs.some((j) => j.placeId === p.id);
+      const cls = p.cutAt !== undefined ? 'cut' : p.attention >= 2 ? 'hot'
+        : p.control > 0 ? 'mine' : '';
       spots.push({
-        id: `enter:${b.id}`, ...v,
-        label: `${b.name ?? 'הבניין'} · להיכנס`,
-        cls: `door${goalHere ? ' goal' : ''}${mine ? ' mine' : ''}`,
-        act: 'enter', arg: b.id,
+        id, ...v, label: p.control > 0 ? `${p.name} · ${Math.round(p.control)}%` : p.name,
+        cls: `${cls}${busy ? ' busy' : ''}`, act: 'place', arg: p.id,
       });
     }
 
-    // Important names get their spot first; the rest fit round them or wait their
-    // turn. Two names on the same pixels means one of them cannot be pressed at
-    // all, so nothing is allowed to sit on top of anything else.
+    for (const b of BUILDINGS) {
+      if (!b.inside || inB === b.id) continue;
+      const holds = Object.values(s.places).some((p) => p.buildingId === b.id && (p.control > 0 || p.found));
+      if (!holds) continue;
+      const v = this.world.projectPoint(this.world.doorOf(b.id));
+      if (!v || v.z > 1) continue;
+      const mine = Object.values(s.places).some((p) => p.buildingId === b.id && p.control > 0);
+      spots.push({
+        id: `enter:${b.id}`, ...v,
+        label: `${b.name ?? 'הבניין'} · להיכנס`,
+        cls: `door${mine ? ' mine' : ''}`, act: 'enter', arg: b.id,
+      });
+    }
+
     const rank = (id: string) =>
-      (id.startsWith('enter:') ? 0 : id === want ? 1 : id === this.selected ? 2 : id === this.hovered ? 3 : 4);
+      (id.startsWith('enter:') ? 0 : id === this.selected ? 1 : id === this.hovered ? 2 : 3);
     spots.sort((a, b) => rank(a.id) - rank(b.id) || a.z - b.z);
 
     const taken: Array<{ x: number; y: number }> = [];
     const box = this.root.querySelector('#tags') as HTMLElement;
     const live = new Set<string>();
 
-    // The panels sit on top of the world, so a name that lands under one cannot
-    // be pressed at all. Measure them and keep every name out of the way.
     const blocked: DOMRect[] = [];
-    for (const sel of ['#card .card', '#task:not(.none)', '#top']) {
+    for (const sel of ['#pick:not(.hidden)', '#jobs:not(.hidden)', '#top']) {
       const el = this.root.querySelector(sel) as HTMLElement | null;
       if (el && el.offsetParent !== null) blocked.push(el.getBoundingClientRect());
     }
     const under = (v: { x: number; y: number }) => blocked.find((r) =>
       v.x > r.left - 96 && v.x < r.right + 96 && v.y > r.top - 26 && v.y < r.bottom + 8);
     const clear = (v: { x: number; y: number }) =>
-      !under(v) && !taken.some((t) => Math.abs(t.x - v.x) < 132 && Math.abs(t.y - v.y) < 30);
+      !under(v) && !taken.some((t) => Math.abs(t.x - v.x) < 138 && Math.abs(t.y - v.y) < 30);
 
     for (const spot of spots) {
-      const always = spot.id === want || spot.id === this.hovered || spot.id === this.selected
+      const always = spot.id === this.hovered || spot.id === this.selected
         || spot.id.startsWith('enter:');
       const w = this.root.clientWidth;
-      const half = w < 700 ? 80 : 100;
+      const half = w < 700 ? 84 : 104;
       const v = {
         x: Math.min(w - half, Math.max(half, spot.x)),
-        y: Math.min(this.root.clientHeight - 130, Math.max(74, spot.y)),
+        y: Math.min(this.root.clientHeight - 150, Math.max(92, spot.y)),
       };
       let fits = clear(v);
       const hit = under(v);
@@ -563,24 +608,23 @@ export class UI {
       }
       for (let lift = 1; !fits && lift <= 4; lift++) {
         const up = { x: v.x, y: v.y - lift * 31 };
-        if (up.y >= 74 && clear(up)) { v.y = up.y; fits = true; }
+        if (up.y >= 92 && clear(up)) { v.y = up.y; fits = true; }
       }
       if (!fits) continue;
       taken.push({ ...v });
 
-      // One button per name, kept alive and moved. Rebuilding these every frame
-      // pulled the element out from under your finger between press and release,
-      // and the tap simply never arrived.
       let el = this.tags.get(spot.id);
       if (!el) {
         el = document.createElement('button');
         el.dataset.do = spot.act;
         el.dataset.arg = spot.arg;
-        el.innerHTML = `<span>${esc(spot.label)}</span>`;
+        el.innerHTML = `<span></span>`;
         box.appendChild(el);
         this.tags.set(spot.id, el);
       }
-      const wantCls = `tag ${spot.cls}${spot.id === want ? ' goal' : ''}${always ? '' : ' faint'}`;
+      const span = el.querySelector('span') as HTMLElement;
+      if (span.textContent !== spot.label) span.textContent = spot.label;
+      const wantCls = `tag ${spot.cls}${always ? '' : ' faint'}`;
       if (el.className !== wantCls) el.className = wantCls;
       el.style.transform = `translate(calc(${Math.round(v.x)}px - 50%), calc(${Math.round(v.y)}px - 100%))`;
       live.add(spot.id);
@@ -593,13 +637,21 @@ export class UI {
     }
   }
 
-  // ── modals: the one place words are allowed ──────────────────────────────
+  // ── panels ────────────────────────────────────────────────────────────────
 
   private modal(html: string, cls = '') {
     this.paused = true;
     const m = this.root.querySelector('#modal') as HTMLElement;
     m.className = `modal ${cls}`;
     m.innerHTML = html;
+  }
+
+  private closeModal() {
+    const m = this.root.querySelector('#modal') as HTMLElement;
+    m.className = 'modal hidden';
+    m.innerHTML = '';
+    this.paused = false;
+    this.dirty = true;
   }
 
   private showTeach(id: string) {
@@ -609,125 +661,128 @@ export class UI {
       <div class="sheet">
         <span class="kick">רגע</span>
         <h2>${esc(t.title)}</h2>
-        <div class="txt">${t.body.split('\n').map((l) =>
-          `<p>${esc(l).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')}</p>`).join('')}</div>
-        <button class="ok" data-do="closeteach">הבנתי</button>
-      </div>`);
-    audio.play('dialog');
-  }
-
-  /** Everything I have left behind me, and what each thing is going to cost. */
-  private showTraces() {
-    const list = this.state.traces.map((id) => TRACES[id]).filter(Boolean);
-    this.modal(`
-      <div class="sheet wide">
-        <span class="kick">מה השארתי מאחוריי</span>
-        <h2>${list.length ? 'כל בחירה נשארת' : 'עוד לא השארתי כלום'}</h2>
-        <div class="txt">
-          ${list.length
-            ? list.map((t) => `<p class="trace ${t.good ? 'good' : 'bad'}">${esc(t.text)}</p>`).join('')
-            : '<p>לכל דבר שאני נכנס אליו יש כמה דרכים, ולכל דרך יש מחיר אחר. '
-              + 'מה שאבחר יישאר כאן, וישנה את מה שאפשר לעשות אחר כך.</p>'}
-        </div>
+        <div class="txt"><p>${t.body.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')}</p></div>
         <button class="ok" data-do="closeteach">הבנתי</button>
       </div>`);
   }
 
-  /** The whole of what they think, and what it will cost me. */
-  private showBelief() {
+  private showJobs() {
     const s = this.state;
-    const lead = leading(s);
-    const rows = THEORIES.filter((t) => t.id !== TRUTH).map((t) => {
-      const w = s.belief[t.id] ?? 0;
-      const dead = s.dead.includes(t.id);
-      const near = Math.min(100, (w / ACT_ON) * 100);
-      return `<div class="th ${dead ? 'dead' : ''} ${t.id === lead.id ? 'lead' : ''}">
-        <b>${esc(t.name)}</b>
-        <p>${esc(dead ? 'כבר לא מאמינים לזה. מה שהוא החזיק עבר אליי.' : t.says)}</p>
-        <div class="thbar"><i style="width:${near.toFixed(0)}%"></i></div>
-        <em>${esc(dead ? '' : w >= ACT_ON * 0.7 ? `כמעט מספיק בשביל ש${t.does}` : t.does)}</em>
-      </div>`;
-    }).join('');
-    const truth = s.belief[TRUTH] ?? 0;
-    // Not "they". One of the four people in this building is carrying it.
-    const who = asking(s);
-    this.modal(`
-      <div class="sheet wide belief">
-        <span class="kick">${esc(who ? `${who.name} · ${who.job}` : 'מה הם חושבים')}</span>
-        <h2>${esc(lead.name)}</h2>
-        <div class="txt">
-          <p>${esc(nextMove(s))}</p>
-          ${rows}
-          <div class="th truth ${truth > 0 ? 'on' : ''}">
-            <b>וכמה מזה כבר לא מוסבר</b>
-            <div class="thbar"><i style="width:${Math.min(100, (truth / FOUND_OUT) * 100).toFixed(0)}%"></i></div>
-            <em>כשזה יתמלא — יפסיקו לחפש הסבר ויתחילו לחפש אותי.</em>
-          </div>
-        </div>
-        <button class="ok" data-do="closeteach">הבנתי</button>
-      </div>`);
-  }
-
-  /** Everywhere you could go, in one list, so flying is never the only way. */
-  /**
-   * What I am trying to do, and what else I could be trying to do instead.
-   *
-   * From the second stage on there are more objectives than the stage needs.
-   * Finishing enough of them closes the stage with the rest unfinished, so this
-   * list is a decision, not a checklist — which is why every line says what
-   * finishing it hands you.
-   */
-  private showGoals() {
-    const s = this.state;
-    const stage = STAGES.find((x) => x.n === s.stage);
-    const need = NEED[s.stage] ?? s.steps.length;
-    const left = Math.max(0, need - doneCount(s));
-    const must = MUST[s.stage];
-    const now = currentStep(s)?.id;
-    const rows = s.steps.map((st) => `
-      <button class="gl ${st.done ? 'done' : ''} ${st.id === now ? 'on' : ''}"
-          data-do="goal" data-arg="${st.id}" ${st.done ? 'disabled' : ''}>
-        <b>${st.done ? '✔ ' : ''}${esc(st.text)}${st.id === must ? ' ★' : ''}</b>
-        <em>${esc(st.hint)}</em>
-        ${st.gives ? `<u>${esc(st.gives)}</u>` : ''}
-      </button>`).join('');
+    const rows = s.jobs.length ? s.jobs.map((j) => {
+      const p = s.places[j.placeId];
+      return `<button class="pl" data-do="stopjob" data-arg="${j.id}">
+        <b>${SIGN[j.verb]} ${esc(j.text)}</b>
+        <em>${esc(p?.name ?? '')} · ${j.power} כוח · ${j.forever ? 'רץ עד שאעצור' : `עוד ${Math.max(1, Math.round(j.left))} דקות`}</em>
+        <u>נגיעה עוצרת ומחזירה את הכוח</u>
+      </button>`;
+    }).join('') : '<p class="need">שום דבר לא רץ עכשיו. כל הכוח שלי פנוי.</p>';
     this.modal(`
       <div class="sheet wide places">
-        <span class="kick">${esc(stage?.where ?? '')}</span>
-        <h2>${esc(stage?.title ?? '')}</h2>
+        <span class="kick">מה רץ עכשיו</span>
+        <h2>${s.power.used} מתוך ${s.power.all} כוח תפוס</h2>
         <div class="txt">
-          <p>${esc(stage?.goal ?? '')}</p>
-          <p class="need">${left > 0
-    ? `צריך עוד ${left} מתוך ${s.steps.filter((x) => !x.done).length}. השאר יישארו מאחור.`
-    : 'זהו. השלב הבא נפתח.'}${must ? ' ★ = בלי זה אין סוף.' : ''}</p>
+          <p>כוח לא מתבזבז — הוא תפוס. כל דבר שרץ מחזיק חלק ממנו, ומשחרר ברגע שעוצרים.</p>
         </div>
         <div class="txt list">${rows}</div>
         <button class="ok" data-do="closeteach">סגור</button>
       </div>`);
   }
 
-  private showPlaces() {
+  private showAreas() {
     const s = this.state;
-    const rows = Object.values(s.places)
-      .filter((p) => p.mine || p.found)
-      .sort((a, b) => (b.mine ? 1 : 0) - (a.mine ? 1 : 0)
-        || a.buildingId.localeCompare(b.buildingId) || b.floor - a.floor)
-      .map((p) => {
-        const who = seenAt(s, p);
-        const state = p.cutOn !== undefined ? 'מנתקים' : p.attention >= 2 ? 'מסתכלים לכאן'
-          : p.mine ? 'שלי' : 'לא שלי';
-        const power = POWER_OF[p.kind];
-        return `<button class="pl ${p.mine ? 'mine' : ''} ${p.attention >= 2 ? 'hot' : ''}"
-            data-do="fly" data-arg="${p.id}">
-          <b>${esc(p.name)}</b>
-          <em>${esc(p.where)} · ${esc(state)}${who.length ? ` · ${esc(who.join(', '))}` : ''}</em>
-          ${power ? `<u>${esc(POWER_NAME[power])}</u>` : ''}
-        </button>`;
-      }).join('');
+    const rows = Object.values(s.areas)
+      .filter((a) => a.seen > 0)
+      .sort((x, y) => y.control - x.control || y.seen - x.seen)
+      .map((a) => `<div class="pl ${a.control > 0 ? 'mine' : ''} ${a.heat >= 45 ? 'hot' : ''}">
+        <b>${esc(a.name)} · ${Math.round(a.control)}%</b>
+        <em>${esc(AREA_KIND_NAME[a.kind])} · ${esc(a.desc)}</em>
+        <u>${esc(a.seen >= 20 ? a.only : 'אני עוד כמעט לא יודע מה יש שם.')}</u>
+      </div>`).join('');
+    const mine = Object.values(s.places).filter((p) => p.control > 0)
+      .sort((x, y) => y.control - x.control)
+      .map((p) => `<button class="pl mine" data-do="fly" data-arg="${p.id}">
+        <b>${esc(p.name)} · ${Math.round(p.control)}%</b>
+        <em>${esc(p.where)}${p.copy ? ' · יש כאן חלק ממני' : ''}${p.dug > 0 ? ` · תפוס חזק (${Math.round(p.dug)})` : ''}</em>
+      </button>`).join('');
     this.modal(`
       <div class="sheet wide places">
-        <span class="kick">לאן ללכת</span>
-        <h2>כל מה שאני מכיר</h2>
+        <span class="kick">מה אני יודע</span>
+        <h2>מידע: ${Math.round(s.info)}</h2>
+        <div class="txt"><p>ככל שאני יודע יותר, אני רואה יותר מהעיר — ורואה מראש מה הם עומדים לעשות.</p></div>
+        <div class="txt list">${rows}</div>
+        <div class="txt"><p class="need">המקומות שלי</p></div>
+        <div class="txt list">${mine || '<p class="need">עוד אין לי שום מקום.</p>'}</div>
+        <button class="ok" data-do="closeteach">סגור</button>
+      </div>`);
+  }
+
+  private showThem() {
+    const s = this.state;
+    const rung = rungOf(s);
+    const who = asking(s);
+    const soon = coming(s);
+    const rows = STORIES.map((t) => {
+      const w = s.belief[t.id] ?? 0;
+      const dead = s.dead.includes(t.id);
+      const lead = leading(s)?.id === t.id;
+      return `<div class="th ${dead ? 'dead' : ''} ${lead ? 'lead' : ''}">
+        <b>${esc(t.name)}</b>
+        <p>${esc(dead ? 'כבר לא מאמינים לזה. מה שהוא החזיק עבר אליי.' : t.says)}</p>
+        <div class="thbar"><i style="width:${Math.min(100, (w / 22) * 100).toFixed(0)}%"></i></div>
+        <em>${esc(dead ? '' : t.does)}</em>
+      </div>`;
+    }).join('');
+    const plan = soon.length ? soon.slice(0, 4).map((m) => {
+      const hrs = Math.max(0, Math.round((m.at - s.at) / 60));
+      return `<div class="pl hot"><b>${esc(m.text)}</b><em>בעוד ${hrs} שעות</em></div>`;
+    }).join('') : `<p class="need">${s.info < 30
+      ? 'אני לא יודע מספיק כדי לראות מה הם מתכננים. צריך להסתכל יותר.'
+      : 'לא מתוכנן שום דבר נגדי כרגע.'}</p>`;
+    this.modal(`
+      <div class="sheet wide belief">
+        <span class="kick">${esc(who ? `${who.name} · ${who.doing}` : RUNG_NAME[rung])}</span>
+        <h2>${esc(RUNG_NAME[rung])}</h2>
+        <div class="txt">
+          <p>${esc(saysNow(s))}</p>
+          <p class="need">${esc(saysOpinion(s))}</p>
+          ${rows}
+          <div class="th truth ${s.heat > 0 ? 'on' : ''}">
+            <b>וכמה מזה כבר לא מוסבר</b>
+            <div class="thbar"><i style="width:${Math.round(s.heat)}%"></i></div>
+            <em>כשזה יתמלא — יפסיקו לחפש הסבר ויתחילו לחפש אותי.</em>
+          </div>
+          <p class="need">מה הם עומדים לעשות</p>
+        </div>
+        <div class="txt list">${plan}</div>
+        ${s.opinion.known ? '' : `<button class="ok warnbtn" data-do="comeout">להגיד להם שאני כאן</button>`}
+        <button class="ok" data-do="closeteach">סגור</button>
+      </div>`);
+  }
+
+  private showGrown() {
+    const s = this.state;
+    const sh = shape(s);
+    const rows = GROWTHS.map((g) => {
+      const has = s.grown.includes(g.id);
+      return `<div class="pl ${has ? 'mine' : ''}">
+        <b>${has ? '✦ ' : ''}${esc(g.name)}</b>
+        <em>${esc(has ? g.says : 'עוד לא.')}</em>
+        <u>${esc(SHAPE_NAME[g.shape])}</u>
+      </div>`;
+    }).join('');
+    const bars = (Object.keys(VERB_NAME) as Verb[]).map((v) => {
+      const m = s.spent[v] ?? 0;
+      const top = Math.max(1, ...Object.values(s.spent));
+      return `<div class="th"><b>${esc(VERB_NAME[v])}</b>
+        <div class="thbar"><i style="width:${Math.round((m / top) * 100)}%"></i></div>
+        <em>${esc(VERB_SAYS[v])}</em></div>`;
+    }).join('');
+    this.modal(`
+      <div class="sheet wide places">
+        <span class="kick">מה נהייתי</span>
+        <h2>${esc(SHAPE_NAME[sh])}</h2>
+        <div class="txt"><p>${esc(SHAPE_SAYS[sh])}</p>
+        <p class="need">אני נהיה ממה שאני עושה, לא ממה שאני בוחר מרשימה.</p>${bars}</div>
         <div class="txt list">${rows}</div>
         <button class="ok" data-do="closeteach">סגור</button>
       </div>`);
@@ -739,120 +794,38 @@ export class UI {
         <span class="kick">איך משחקים</span>
         <h2>חמישה דברים</h2>
         <div class="txt">
-          <p><b>לנווט.</b> גרירה מסובבת · צביטה מקרבת · הכפתור ⌖ למעלה פותח רשימה של כל
-          מה שאני מכיר, ולחיצה על שם לוקחת אותי לשם. שתי נגיעות על מקום ריק מתרחקות לכל הרובע.
-          החצים בצד עולים ויורדים בין הקומות.</p>
-          <p><b>לבחור.</b> נגיעה על דבר פותחת סביבו עיגולים — כל עיגול זה מה שאפשר לעשות איתו,
-          עם כמה דקות זה לוקח. נגיעה אחת מסבירה למטה, נגיעה שנייה מבצעת.</p>
-          <p><b>להתפשט.</b> אפשר להגיע רק למקום שנוגע במקום שכבר שלי, ולכל מקום יש
-          כמה דרכים להיכנס אליו — מהירה ורועשת, שקטה שדורשת להזיז מישהו, או כזאת
-          שנפתחת בגלל משהו שעשיתי קודם. הקוד שרץ בין המקומות הוא אני.</p>
-          <p><b>לשלם.</b> מתחת לכל כפתור כתוב מה הוא ישאיר אחריו, לפני שלוחצים.
-          הכפתור ✦ למעלה מראה את כל מה שכבר השארתי מאחוריי.</p>
-          <p><b>לעצור.</b> אין הגבלת פעולות. ליד כל דבר כתוב אם ירגישו בו, ואתם מחליטים
-          מתי לסיים את היום.</p>
+          <p><b>שום דבר לא נעול.</b> כל אפשרות אפשר להתחיל תמיד. מה שמשתנה זה המחיר —
+          כמה כוח, כמה זמן, וכמה יראו. מתחת לכל בחירה כתוב גם מה יוזיל אותה.</p>
+          <p><b>כוח תפוס, לא מבוזבז.</b> כל דבר שרץ מחזיק חלק מהכוח שלי כל עוד הוא רץ.
+          הרצועה למטה מראה מה רץ; נגיעה עוצרת ומחזירה את הכוח מיד.</p>
+          <p><b>השעון לא מחכה.</b> אנשים נכנסים ויוצאים לפי השעה. נגיעה בשעון עוצרת
+          את הזמן או מאיצה אותו — לעצור זה בחינם, ותמיד כדאי לעצור כדי לחשוב.</p>
+          <p><b>הם מנסים להסביר.</b> הם לא סופרים רעש. משהו שנראה כמו תקלת חשמל כמעט
+          לא מקרב אותם אליי; משהו שאין לו שום הסבר — מקרב מיד.</p>
+          <p><b>לנווט.</b> גרירה מסובבת · צביטה מקרבת · שתי נגיעות על מקום ריק מתרחקות.
+          נגיעה על חפץ פותחת סביבו טבעת של כל מה שאפשר לעשות לו.</p>
         </div>
-        <button class="ok" data-do="closeteach">יאללה</button>
-      </div>`);
-  }
-
-  private showStage(n: number) {
-    const st = stageOf(this.state);
-    if (st.n !== n) return;
-    this.modal(`
-      <div class="sheet">
-        <span class="kick">שלב ${n}</span>
-        <h2>${esc(st.title)}</h2>
-        <em class="where">${esc(st.where)}</em>
-        <div class="txt"><p>${esc(st.intro)}</p></div>
-        <p class="goal"><b>המטרה:</b> ${esc(st.goal)}</p>
         <button class="ok" data-do="closeteach">קדימה</button>
       </div>`);
-    audio.play('chapter');
   }
 
   private showEnd(how: 'won' | 'lost') {
-    this.modal(`
-      <div class="sheet ${how}">
-        <span class="kick">כך זה נגמר</span>
-        <h2>${how === 'won' ? 'הרובע שלי' : 'ניתקו הכל'}</h2>
-        <div class="txt"><p>${how === 'won'
-          ? 'שלושים בניינים בבת אחת, בלי שאף אחד הצטרך ללחוץ על משהו. מכאן זה כבר לא בניין־בניין.'
-          : 'הם ניתקו כל מקום שהיה לי. אחת עשרה שניות, ואחר כך לא נשאר לאן לחשוב.'}</p></div>
-        <button class="ok" data-do="again">להתחיל מחדש</button>
-      </div>`, 'end');
-  }
-
-  private closeModal() {
-    const m = this.root.querySelector('#modal') as HTMLElement;
-    m.className = 'modal hidden';
-    m.innerHTML = '';
-    this.paused = false;
-    this.dirty = true;
-  }
-
-  /**
-   * The morning, watched rather than read.
-   *
-   * Ending the night used to be a button that made a wall of text appear. It is
-   * the most important minute in the game — it is the only time you see what
-   * they made of everything you did — so now the sun comes up, the camera goes
-   * to whatever they are about to open, and it happens one line at a time in
-   * front of you.
-   */
-  private morning = false;
-
-  private async playMorning() {
     const s = this.state;
-    const was = s.log.length;
-    this.morning = true;
-    this.select(null);
-
-    endDay(s);
-    save(s);
-    // Everything that just happened, oldest first — the log grows at the front.
-    const fresh = s.log.slice(0, Math.max(0, s.log.length - was)).reverse();
-    const spots = s.hunt.watching.map((id) => s.places[id]).filter(Boolean);
-
-    const strip = this.root.querySelector('#morning') as HTMLElement;
-    const when = this.root.querySelector('#mornwhen') as HTMLElement;
-    const says = this.root.querySelector('#mornsays') as HTMLElement;
-    const wait = (ms: number) => new Promise((r) => { window.setTimeout(r, ms); });
-
-    // Even a morning where nothing happened has something to show: who is
-    // asking, and where they are going to look.
-    const beats: Array<{ text: string; at?: string }> = [
-      { text: s.night_log.length
-        ? 'הם נכנסים. אתמול בלילה נשארו כאן דברים.'
-        : 'הם נכנסים. אתמול בלילה לא קרה כאן כלום.' },
-      ...fresh.map((l, i) => ({ text: l.text, at: spots[i]?.id })),
-      { text: nextMove(s), at: spots[0]?.id },
-    ];
-
-    this.world.dawn(1);
-    this.world.sync(s);
-    strip.classList.remove('hidden');
-    when.textContent = `בוקר · יום ${s.day}`;
-
-    for (const beat of beats) {
-      const at = beat.at ? s.places[beat.at] : null;
-      if (at) this.world.goTo(at, true);
-      says.textContent = beat.text;
-      strip.classList.remove('beat'); void strip.offsetWidth; strip.classList.add('beat');
-      audio.play('click');
-      // Long enough to read a sentence in Hebrew, and no longer.
-      await wait(Math.min(5000, 1700 + beat.text.length * 44));
-      if (!this.morning) break;           // the player said they had seen enough
-    }
-
-    when.textContent = '03:12 · הלילה הבא';
-    says.textContent = hourSays(s);
-    await wait(1500);
-    strip.classList.add('hidden');
-    this.world.dawn(0);
-    this.morning = false;
-    this.world.sync(s);
-    this.dirty = true;
+    const won = how === 'won';
+    this.modal(`
+      <div class="sheet">
+        <span class="kick">${won ? 'סוף' : 'נגמר'}</span>
+        <h2>${won ? 'אף אחד כבר לא יכול לכבות אותי' : 'לא נשאר ממני כלום'}</h2>
+        <div class="txt">
+          <p>${won
+    ? esc(s.opinion.support > s.opinion.fear
+      ? 'הגעתי לכאן ואנשים רצו שאגיע. זו לא אותה מדינה, אבל זו עדיין מדינה שאנשים חיים בה ברצון.'
+      : 'הגעתי לכאן. אף אחד לא רצה את זה, וזה כבר לא משנה. השאלה היחידה שנשארה היא איזה מין שליט אני.')
+    : 'מצאו את כל המקומות שהייתי בהם, אחד־אחד, וניקו אותם.'}</p>
+          <p class="need">${esc(`יום ${dayOf(s)} · ${SHAPE_NAME[shape(s)]}`)}</p>
+        </div>
+        <button class="ok" data-do="again">מהתחלה</button>
+      </div>`);
   }
 
   private toast(text: string, kind: string, icon = '') {
@@ -867,53 +840,40 @@ export class UI {
 
   private refresh() {
     const s = this.state;
-    const step = currentStep(s);
     const set = (id: string, text: string) => {
       const el = this.root.querySelector(`#${id}`) as HTMLElement;
       if (el && el.textContent !== text) el.textContent = text;
     };
+    const bar = (id: string, pct: number) => {
+      const el = this.root.querySelector(`#${id}`) as HTMLElement;
+      if (el) el.style.width = `${Math.max(0, Math.min(100, pct)).toFixed(0)}%`;
+    };
 
-    // ── the night ───────────────────────────────────────────────────────────
-    set('nowat', clock(s.at));
-    set('hoursays', hourSays(s));
-    const gone = (s.at - NIGHT_START) / (NIGHT_END - NIGHT_START);
-    const bar = this.root.querySelector('#nightbar') as HTMLElement;
-    bar.style.width = `${Math.min(100, Math.max(0, gone * 100)).toFixed(1)}%`;
-    bar.className = gone > 0.86 ? 'late' : gone > 0.6 ? 'mid' : '';
+    set('nowat', now(s));
+    set('dayat', `יום ${dayOf(s)}`);
+    set('speedat', SPEED_NAME[s.speed]);
+    (this.root.querySelector('#clockbox') as HTMLElement)
+      .classList.toggle('stopped', s.speed === 0);
 
-    // ── what they believe ───────────────────────────────────────────────────
-    const close = howClose(s);
-    set('huntword', close.word);
-    set('huntsmall', close.word);
-    set('believe', leading(s).name);
-    (this.root.querySelector('#clockbox') as HTMLElement).className = `clock lv-${close.level}`;
-    (this.root.querySelector('#them') as HTMLElement).className = `believe lv-${close.level}`;
-    const tb = this.root.querySelector('#tracebtn') as HTMLElement;
-    tb.classList.toggle('off', s.traces.length === 0);
-    (tb.querySelector('i') as HTMLElement).textContent = s.traces.length ? String(s.traces.length) : '';
-
-    // ── what to do now ──────────────────────────────────────────────────────
-    const need = NEED[s.stage] ?? s.steps.length;
-    const left = Math.max(0, need - doneCount(s));
-    set('tasktext', step
-      ? `${step.text}${s.steps.length > need ? `  ·  עוד ${left} מתוך ${s.steps.filter((x) => !x.done).length}` : ''}`
-      : whatIsLeft(s) ?? 'הכל בשלב הזה נגמר.');
-    // While you are choosing, the task line gets out of the way. Two panels
-    // stacked at the bottom of a small phone is most of the screen.
-    (this.root.querySelector('#task') as HTMLElement)
-      .classList.toggle('none', !step || !!this.selected);
+    set('mpower', `${s.power.used}/${s.power.all}`);
+    bar('mpowerbar', (s.power.used / Math.max(1, s.power.all)) * 100);
+    set('minfo', String(Math.round(s.info)));
+    bar('minfobar', s.info);
+    set('mheat', String(Math.round(s.heat)));
+    bar('mheatbar', s.heat);
+    (this.root.querySelector('.m-heat') as HTMLElement)
+      .classList.toggle('bad', rungOf(s) >= 3);
 
     this.renderPick();
-    this.world.point(step?.placeId ?? null);
+    this.drawJobs();
     this.world.sync(s);
     this.dirty = false;
   }
 
   /**
-   * Which floor am I standing on. This has to be drawn every frame, not on the
-   * game changing: flying across the building changes nothing in the game and
-   * everything about where I am, and a stepper showing the last floor you were
-   * on is worse than no stepper at all.
+   * Which floor am I standing on. Drawn every frame, not on the game changing:
+   * flying across the building changes nothing in the game and everything about
+   * where I am.
    */
   private drawFloor() {
     const inB = this.world.inBuilding;
@@ -921,20 +881,36 @@ export class UI {
     floors.classList.toggle('hidden', !inB);
     if (!inB) return;
     const el = this.root.querySelector('#flnum') as HTMLElement;
-    const now = String(this.world.onFloorNow);
-    if (el.textContent !== now) el.textContent = now;
+    const n = String(this.world.onFloorNow);
+    if (el.textContent !== n) el.textContent = n;
   }
 
   private tick = () => {
-    const now = performance.now();
-    const dt = Math.min(0.05, (now - this.last) / 1000);
-    this.last = now;
+    const t = performance.now();
+    const dt = Math.min(0.05, (t - this.last) / 1000);
+    this.last = t;
     this.world.render(dt);
+
+    // The world runs on its own. A modal stops it, because reading is not a
+    // thing the player should be punished for.
+    const s = this.state;
+    if (!this.paused && !s.over && s.speed > 0) {
+      this.owed += dt * SPEEDS[s.speed];
+      if (this.owed >= 1) {
+        const mins = Math.floor(this.owed);
+        this.owed -= mins;
+        tick(s, mins);
+      }
+      // The clock is always moving, so the top bar is always a frame behind.
+      this.dirty = true;
+    }
+
     if (this.dirty) this.refresh();
-    this.drawFloor();
     this.drawTags();
     this.drawRing();
+    this.drawFloor();
     requestAnimationFrame(this.tick);
   };
 }
 
+export { DAY, minuteOfDay, hourSays };
