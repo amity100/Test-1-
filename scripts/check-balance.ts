@@ -114,6 +114,10 @@ const smart = play({
         && s.places[c.placeId].seen < 40);
       if (eye) return eye;
     }
+    // Getting somewhere new beats polishing somewhere I already am.
+    const reachOut = can.filter((c) => c.o.task.verb === 'connect'
+      && s.places[c.placeId].control < 40 && c.o.noise <= 2);
+    if (reachOut.length) return quietest(reachOut);
     const grow = can.filter((c) => (c.o.task.verb === 'connect' || c.o.task.verb === 'deepen')
       && c.o.noise <= 2);
     if (grow.length) return quietest(grow);

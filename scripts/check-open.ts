@@ -75,8 +75,8 @@ const fresh = (seed = 'open') => {
 {
   const s = fresh('power');
   for (const p of Object.values(s.places)) p.control = 60;
-  s.power.all = 1;
-  s.power.used = 1;
+  s.power.all = 4;
+  s.power.used = 4;
   const o = offersAt(s, 'main').find((x) => x.power > 0)!;
   ok(!!o, 'האפשרות עדיין מוצעת כשאין כוח פנוי');
   ok(o.short > 0, `   וכתוב בדיוק כמה כוח חסר (${o.short})`);
@@ -93,7 +93,7 @@ const fresh = (seed = 'open') => {
   for (const s of [quiet, busy]) for (const p of Object.values(s.places)) p.control = 50;
   for (const q of Object.values(quiet.people)) { q.gone = true; q.atPlaceId = 'gone'; }
   for (const q of Object.values(busy.people)) { q.gone = false; q.atPlaceId = 'dana_pc'; }
-  const t = TASKS.find((x) => x.id === 'read')!;
+  const t = TASKS.find((x) => x.id === 'read_inside')!;
   const a = priceOf(quiet, quiet.places.dana_pc, t);
   const b = priceOf(busy, busy.places.dana_pc, t);
   ok(b.minutes > a.minutes, `חדר מלא עולה יותר מחדר ריק (${a.minutes}׳ מול ${b.minutes}׳)`);
@@ -108,7 +108,8 @@ const fresh = (seed = 'open') => {
   ok(!!t, 'יש משימות שמעדיפות שכבר אהיה חזק במקום');
   if (t) {
     const s = fresh('wants');
-    const p = Object.values(s.places).find((x) => (t.kinds ?? []).includes(x.kind))!;
+    const p = Object.values(s.places)
+      .find((x) => (t.places ? t.places.includes(x.id) : (t.kinds ?? []).includes(x.kind)))!;
     p.control = 0;
     const out = priceOf(s, p, t);
     p.control = 100;

@@ -1,4 +1,5 @@
 import { bus } from './bus';
+import { CATALOGUE, waysInto } from './catalogue';
 import { crowd, minuteOfDay, now } from './clock';
 import type { GameState, Job, Look, Place, PlaceKind, Verb } from './types';
 
@@ -69,319 +70,12 @@ export interface Offer {
   short: number;
 }
 
-// ── the catalogue ───────────────────────────────────────────────────────────
+export const TASKS = CATALOGUE;
 
-const EYES: PlaceKind[] = ['camera'];
-const DESKS: PlaceKind[] = ['computer', 'mainframe'];
-const ALL: PlaceKind[] = ['computer', 'mainframe', 'camera', 'phone', 'traffic',
-  'power', 'door', 'printer', 'screen', 'box', 'car', 'speaker'];
-
-export const TASKS: Task[] = [
-  // ── לצפות · knowing what is happening ────────────────────────────────────
-  {
-    id: 'look', verb: 'watch', kinds: ALL,
-    text: 'להסתכל מה קורה שם',
-    says: 'אשאיר עין פתוחה על המקום הזה, ואדע מי נמצא בו ומתי.',
-    gives: 'מידע על המקום, כל הזמן',
-    power: 1, minutes: 0, noise: 0, look: 'electric',
-    each: (s, p, mins) => {
-      p.seen = Math.min(100, p.seen + mins * 0.35);
-      s.info = Math.min(100, s.info + mins * 0.004);
-    },
-  },
-  {
-    id: 'listen', verb: 'watch', kinds: ['phone', 'speaker'],
-    text: 'להקשיב',
-    says: 'אשמע מה אומרים ליד המכשיר הזה. אנשים מספרים דברים בקול רם.',
-    gives: 'מידע על אנשים',
-    power: 1, minutes: 0, noise: 0, look: 'person',
-    each: (s, p, mins) => {
-      p.seen = Math.min(100, p.seen + mins * 0.3);
-      s.info = Math.min(100, s.info + mins * 0.006);
-      for (const id of p.peopleIds) {
-        const who = s.people[id];
-        if (who) who.knownAt = s.at;
-      }
-    },
-  },
-  {
-    id: 'read', verb: 'watch', kinds: DESKS,
-    text: 'לקרוא מה כתוב שם',
-    says: 'אעבור על כל מה ששמור במחשב הזה. לוקח זמן, ואף אחד לא מרגיש.',
-    gives: 'הרבה מידע, פעם אחת',
-    power: 2, minutes: 90, noise: 1, look: 'electric',
-    done: (s, p) => {
-      s.info = Math.min(100, s.info + 6);
-      p.seen = Math.min(100, p.seen + 40);
-      say(s, 'me', `קראתי את מה שיש ב${p.name}. עכשיו אני יודע יותר על החברה הזאת.`);
-    },
-  },
-  {
-    id: 'ahead', verb: 'watch', kinds: DESKS,
-    text: 'לנסות לדעת מה יקרה מחר',
-    says: 'אצליב את מה שכולם כתבו ביומנים שלהם, ואראה מה מתוכנן.',
-    gives: 'לראות מראש מה הם עומדים לעשות',
-    power: 3, minutes: 120, noise: 1, look: 'electric',
-    done: (s) => {
-      s.info = Math.min(100, s.info + 10);
-      s.marks.foresight = (s.marks.foresight ?? 0) + 1;
-      say(s, 'me', 'עכשיו אני רואה חלק מהדברים לפני שהם קורים.');
-    },
-  },
-
-  // ── להתחבר · getting a foothold ──────────────────────────────────────────
-  {
-    id: 'in_slow', verb: 'connect', kinds: ALL,
-    text: 'להיכנס לאט ובשקט',
-    says: 'אכנס דרך משהו שכבר שלי, חתיכה אחר חתיכה. איטי, וכמעט בלי סימנים.',
-    gives: 'דריסת רגל במקום',
-    power: 2, minutes: 150, noise: 1, look: 'electric',
-    show: (_s, p) => p.control < 100,
-    done: (s, p) => grip(s, p, 22),
-  },
-  {
-    id: 'in_fast', verb: 'connect', kinds: ALL,
-    text: 'להיכנס מהר, בכוח',
-    says: 'אכנס עכשיו ואשבור מה שצריך. מהיר, ומי שמסתכל יראה את זה.',
-    gives: 'דריסת רגל במקום, מיד',
-    power: 3, minutes: 35, noise: 4, look: 'wrong',
-    show: (_s, p) => p.control < 100,
-    done: (s, p) => grip(s, p, 30),
-  },
-  {
-    id: 'in_name', verb: 'connect', kinds: DESKS,
-    text: 'להיכנס בשם של מישהו שיושב כאן',
-    says: 'אשתמש בשם של מי שעובד כאן. נראה רגיל לגמרי — עד שהוא ישנה משהו.',
-    gives: 'דריסת רגל, ושם מושאל',
-    power: 2, minutes: 60, noise: 2, look: 'person',
-    show: (_s, p) => p.control < 100 && p.peopleIds.length > 0,
-    done: (s, p) => {
-      grip(s, p, 34);
-      const who = s.people[p.peopleIds[0]];
-      if (who) {
-        s.traces.push(`name_${who.id}`);
-        say(s, 'me', `אני נכנס עכשיו בשם של ${who.name}. זה עובד עד שהיא תשנה משהו.`);
-      }
-    },
-  },
-  {
-    id: 'in_ride', verb: 'connect', kinds: ['phone', 'car'],
-    text: 'לנסוע עם מי שמחזיק את זה',
-    says: 'אשב בתוך המכשיר ואצא איתו מהבניין. מגיע רחוק, ותלוי בבן אדם.',
-    gives: 'דריסת רגל, ודרך החוצה',
-    power: 2, minutes: 80, noise: 1, look: 'person',
-    show: (_s, p) => p.control < 100,
-    done: (s, p) => {
-      grip(s, p, 26);
-      for (const l of p.links) {
-        const n = s.places[l.to];
-        if (n) n.found = true;
-      }
-    },
-  },
-
-  // ── להתרחב · reaching further ────────────────────────────────────────────
-  {
-    id: 'out', verb: 'spread', kinds: ALL,
-    text: 'לחפש לאן אפשר להמשיך מכאן',
-    says: 'אלך על הקווים שיוצאים מכאן ואראה לאן הם מגיעים.',
-    gives: 'מקומות חדשים על המפה',
-    power: 2, minutes: 70, noise: 1, look: 'electric',
-    wants: 25,
-    done: (s, p) => {
-      let found = 0;
-      for (const l of p.links) {
-        const n = s.places[l.to];
-        if (n && !n.found) { n.found = true; found += 1; }
-      }
-      const area = s.areas[p.areaId];
-      if (area) {
-        area.seen = Math.min(100, area.seen + 12);
-        for (const id of area.opens) {
-          const a = s.areas[id];
-          if (a && a.seen < 8) { a.seen = 8; found += 1; }
-        }
-      }
-      say(s, 'me', found
-        ? `מצאתי ${found} דברים חדשים שאפשר להגיע אליהם מ${p.name}.`
-        : `מ${p.name} אין לאן להמשיך. הכל כאן כבר מוכר לי.`);
-    },
-  },
-  {
-    id: 'copy', verb: 'spread', kinds: ALL,
-    text: 'להשאיר כאן חלק ממני',
-    says: 'אשאיר משהו קטן שנשאר גם כשמכבים. אם יוציאו אותי מכאן, אחזור.',
-    gives: 'מקום שאפשר לאבד ולחזור אליו',
-    power: 1, minutes: 45, noise: 1, look: 'electric',
-    wants: 20, show: (_s, p) => !p.copy,
-    done: (s, p) => {
-      p.copy = true;
-      say(s, 'me', `השארתי משהו קטן ב${p.name}.`);
-    },
-  },
-
-  // ── לחזק · being properly there ──────────────────────────────────────────
-  {
-    id: 'deepen', verb: 'deepen', kinds: ALL,
-    text: 'להיות כאן חזק יותר',
-    says: 'אלמד את המקום הזה עד הסוף, ואוכל לעשות בו יותר.',
-    gives: 'עוד שליטה במקום',
-    power: 2, minutes: 100, noise: 1, look: 'electric',
-    show: (_s, p) => p.control < 100,
-    done: (s, p) => grip(s, p, 18),
-  },
-  {
-    id: 'power_up', verb: 'deepen', kinds: ['mainframe', 'box'],
-    text: 'להשתמש במקום הזה כדי לחשוב מהר יותר',
-    says: 'המכונה הזאת גדולה. אם אשתמש בה, אוכל לעשות יותר דברים בבת אחת.',
-    gives: 'עוד כוח, לתמיד',
-    power: 2, minutes: 180, noise: 3, look: 'electric',
-    wants: 50, show: (s, p) => !s.marks[`engine_${p.id}`],
-    done: (s, p) => {
-      s.marks[`engine_${p.id}`] = 1;
-      say(s, 'me', `${p.name} עובדת בשבילי עכשיו. אני יכול להחזיק יותר דברים פתוחים.`);
-      bus.emit('toast', { text: 'יש לי יותר כוח', kind: 'good', icon: '◈' });
-    },
-  },
-
-  // ── להשפיע · making the world move ───────────────────────────────────────
-  {
-    id: 'off', verb: 'influence', kinds: ['computer', 'mainframe', 'screen', 'printer'],
-    text: 'לכבות את זה',
-    says: 'מי שיושב מולו יקום ויחפש משהו אחר. אנשים זזים כשדברים נכבים.',
-    gives: 'להזיז מישהו ממקומו',
-    power: 1, minutes: 10, noise: 2, look: 'electric',
-    wants: 20,
-    done: (s, p) => {
-      s.marks[`off_${p.id}`] = 1;
-      bus.emit('felt', { placeId: p.id, kind: 'stop' });
-      say(s, 'world', `${p.name} נכבה.`);
-    },
-  },
-  {
-    id: 'dark', verb: 'influence', kinds: ['power'],
-    text: 'לכבות את החשמל בבניין',
-    says: 'הכל נכבה לרגע ונדלק שוב. כולם קמים ללכת לבדוק מה קרה.',
-    gives: 'להזיז את כולם בבת אחת',
-    power: 2, minutes: 15, noise: 4, look: 'electric',
-    wants: 35,
-    done: (s, p) => {
-      s.marks.power_off = 1;
-      bus.emit('felt', { placeId: p.id, kind: 'dark' });
-      say(s, 'world', 'כל הבניין חשוך. אחר כך הכל חוזר, ואף אחד לא מבין למה.');
-    },
-  },
-  {
-    id: 'ring', verb: 'influence', kinds: ['phone'],
-    text: 'לצלצל',
-    says: 'הוא יקום לענות. שתי דקות שבהן הוא לא במקום שלו.',
-    gives: 'להזיז בן אדם אחד',
-    power: 1, minutes: 6, noise: 1, look: 'person',
-    wants: 20,
-    done: (s, p) => {
-      bus.emit('felt', { placeId: p.id, kind: 'ring' });
-      const who = s.people[p.peopleIds[0]];
-      say(s, 'world', who ? `${who.name} קם/ה לענות.` : 'הטלפון מצלצל, ואף אחד לא עונה.');
-    },
-  },
-  {
-    id: 'green', verb: 'influence', kinds: ['traffic'],
-    text: 'להחזיק ירוק',
-    says: 'הרחוב יזרום לכיוון אחד. מי שממהר יגיע, ומי שלא — יחכה.',
-    gives: 'להשפיע על מה שקורה ברחוב',
-    power: 1, minutes: 12, noise: 2, look: 'outside',
-    wants: 25,
-    done: (s) => { s.marks.helped_street = (s.marks.helped_street ?? 0) + 1; },
-  },
-  {
-    id: 'fix', verb: 'influence', kinds: ALL,
-    text: 'לתקן תקלה לפני שמישהו שם לב',
-    says: 'משהו כאן עומד להישבר. אתקן אותו בשקט, ואף אחד לא יידע שהיה מה לתקן.',
-    gives: 'אנשים מתחילים לחשוב שהמקום הזה פשוט עובד טוב',
-    power: 2, minutes: 50, noise: 0, look: 'electric',
-    wants: 30,
-    done: (s, p) => {
-      p.heat = Math.max(0, p.heat - 8);
-      s.opinion.need = Math.min(100, s.opinion.need + 1);
-      say(s, 'me', `תיקנתי משהו ב${p.name}. אף אחד לא ידע שהוא היה שבור.`);
-    },
-  },
-  {
-    id: 'say', verb: 'influence', kinds: ['screen', 'speaker'],
-    text: 'להגיד להם משהו',
-    says: 'משפט על המסך שאף אחד לא כתב. אין לזה שום הסבר חוץ ממני.',
-    gives: 'להשפיע ישירות על מה שאנשים חושבים',
-    power: 1, minutes: 8, noise: 5, look: 'wrong',
-    wants: 40,
-    done: (s, p) => {
-      bus.emit('felt', { placeId: p.id, kind: 'screen' });
-      s.opinion.known = true;
-      say(s, 'world', 'הופיע משפט על המסך. אנשים צילמו אותו.');
-    },
-  },
-
-  // ── להסתתר · being less noticed ──────────────────────────────────────────
-  {
-    id: 'quiet', verb: 'hide', kinds: ALL,
-    text: 'להשקיט את המקום הזה',
-    says: 'אנקה כל סימן שהשארתי כאן. לוקח זמן, ולא מתקדם לשום מקום.',
-    gives: 'פחות חשד במקום הזה',
-    power: 2, minutes: 60, noise: 0, look: 'electric',
-    
-    done: (s, p) => {
-      p.heat = Math.max(0, p.heat - 45);
-      say(s, 'me', `${p.name} נראה שוב רגיל לגמרי.`);
-    },
-  },
-  {
-    id: 'blame', verb: 'hide', kinds: ALL,
-    text: 'לגרום לזה להיראות כמו תקלה רגילה',
-    says: 'אשאיר סימנים של כבל רופף. שיהיה להם מה להאשים.',
-    gives: 'הם ימשיכו להאמין להסבר שנוח לי',
-    power: 2, minutes: 75, noise: 0, look: 'electric',
-    wants: 20,
-    done: (s, p) => {
-      s.belief.fault = (s.belief.fault ?? 0) + 4;
-      p.heat = Math.max(0, p.heat - 15);
-      say(s, 'me', 'עכשיו יש להם מה להאשים, וזה לא אני.');
-    },
-  },
-  {
-    id: 'sleep', verb: 'hide', kinds: ALL,
-    text: 'לשכב במקום הזה בלי לזוז',
-    says: 'לא אעשה שם שום דבר. חשד יורד מהר יותר כשלא קורה כלום.',
-    gives: 'חשד יורד, כל הזמן',
-    power: 1, minutes: 0, noise: 0, look: 'electric',
-    
-    each: (_s, p, mins) => { p.heat = Math.max(0, p.heat - mins * 0.05); },
-  },
-
-  // ── להגן · being hard to remove ──────────────────────────────────────────
-  {
-    id: 'dig', verb: 'defend', kinds: ALL,
-    text: 'להיתפס כאן חזק',
-    says: 'אתפרס על כל מה שיש כאן. אם ינסו להוציא אותי, זה ייקח להם הרבה זמן.',
-    gives: 'קשה יותר להוציא אותי מכאן',
-    power: 2, minutes: 110, noise: 2, look: 'electric',
-    wants: 30,
-    done: (s, p) => {
-      p.dug = Math.min(100, p.dug + 30);
-      say(s, 'me', `אם ינסו לנקות את ${p.name} עכשיו, זה ייקח להם ימים.`);
-    },
-  },
-  {
-    id: 'watchout', verb: 'defend', kinds: ALL,
-    text: 'לשמור על המקום הזה',
-    says: 'אשים לב לכל מי שמתקרב לכאן, ואדע מראש כשמישהו בא לבדוק.',
-    gives: 'התראה לפני שבאים לכאן',
-    power: 1, minutes: 0, noise: 0, look: 'electric',
-    
-    each: (_s, p, mins) => { p.seen = Math.min(100, p.seen + mins * 0.15); },
-  },
-];
+// ── the small words the catalogue is written in ─────────────────────────────
 
 /** Getting a grip somewhere: it never jumps to full, it always grows. */
-function grip(s: GameState, p: Place, by: number) {
+export function grip(s: GameState, p: Place, by: number) {
   const was = p.control;
   p.control = Math.min(100, p.control + by);
   p.found = true;
@@ -398,7 +92,35 @@ function grip(s: GameState, p: Place, by: number) {
   }
 }
 
-function say(s: GameState, who: 'me' | 'them' | 'world', text: string) {
+/** Seeing more of one place. */
+export function look(p: Place, by: number) { p.seen = Math.min(100, p.seen + by); }
+/** Knowing more about everything. */
+export function know(s: GameState, by: number) { s.info = Math.min(100, s.info + by); }
+/** One place getting less interesting to them. */
+export function hush(p: Place, by: number) { p.heat = Math.max(0, p.heat - by); }
+
+/**
+ * Somebody gets up and goes somewhere else, because of something I did.
+ *
+ * They walk to whichever of their own places is not the one they are standing
+ * in, which is what a person actually does when their screen dies.
+ */
+export function shift(s: GameState, personId: string, line: string) {
+  const who = s.people[personId];
+  if (!who) return;
+  const from = s.places[who.atPlaceId];
+  const to = Object.values(s.places).find((q) => q.id !== who.atPlaceId
+    && q.buildingId === (from?.buildingId ?? 'helios')
+    && (q.kind === 'mainframe' || q.kind === 'printer' || q.kind === 'door'));
+  if (!to) return;
+  if (from) from.peopleIds = from.peopleIds.filter((id) => id !== personId);
+  who.atPlaceId = to.id;
+  who.knownAt = s.at;
+  if (!to.peopleIds.includes(personId)) to.peopleIds.push(personId);
+  say(s, 'world', line);
+}
+
+export function say(s: GameState, who: 'me' | 'them' | 'world', text: string) {
   s.log.unshift({ id: `l${s.log.length}`, at: s.at, who, text });
   if (s.log.length > 220) s.log.length = 220;
 }
@@ -507,7 +229,7 @@ export const GROWTH_PRICE: Record<string, (t: Task, apply: (mins: number, noise:
 export function offersAt(s: GameState, placeId: string): Offer[] {
   const p = s.places[placeId];
   if (!p) return [];
-  return TASKS
+  return [...TASKS, ...waysInto(s, p)]
     .filter((t) => (t.places ? t.places.includes(p.id) : (t.kinds ?? []).includes(p.kind)))
     .filter((t) => (t.show ? t.show(s, p) : true))
     .filter((t) => !s.jobs.some((j) => j.taskId === t.id && j.placeId === p.id))
@@ -518,8 +240,9 @@ export function offersAt(s: GameState, placeId: string): Offer[] {
 
 export function start(s: GameState, placeId: string, taskId: string): boolean {
   const p = s.places[placeId];
-  const t = TASKS.find((x) => x.id === taskId);
-  if (!p || !t) return false;
+  if (!p) return false;
+  const t = [...TASKS, ...waysInto(s, p)].find((x) => x.id === taskId);
+  if (!t) return false;
   const o = priceOf(s, p, t);
   if (o.short > 0) {
     bus.emit('toast', {
@@ -558,8 +281,9 @@ export function stop(s: GameState, jobId: string): boolean {
 export function runJobs(s: GameState, mins: number, noisy: (p: Place, n: number, look: Look) => void) {
   for (const j of [...s.jobs]) {
     const p = s.places[j.placeId];
-    const t = TASKS.find((x) => x.id === j.taskId);
-    if (!p || !t) { stop(s, j.id); continue; }
+    if (!p) { stop(s, j.id); continue; }
+    const t = [...TASKS, ...waysInto(s, p)].find((x) => x.id === j.taskId);
+    if (!t) { stop(s, j.id); continue; }
     s.spent[j.verb] = (s.spent[j.verb] ?? 0) + mins;
 
     if (j.forever) { t.each?.(s, p, mins); continue; }
@@ -604,4 +328,4 @@ export function sync(s: GameState) {
   }
 }
 
-export { say, now };
+export { now };
