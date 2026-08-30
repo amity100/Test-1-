@@ -18,6 +18,7 @@ import { newGame, shape, tick } from '../src/game/game';
 import { Offer, offersAt, start, stop } from '../src/game/jobs';
 import { SHAPE_NAME } from '../src/game/grow';
 import { rungOf } from '../src/game/watch';
+import { answer, liveHunts, rowsOf, stillNeeds } from '../src/game/hunt';
 import type { GameState } from '../src/game/types';
 
 let bad = 0;
@@ -49,11 +50,35 @@ interface Bot {
   pick(s: GameState, can: Array<{ placeId: string; o: Offer }>): { placeId: string; o: Offer } | undefined;
   /** Should this job be stopped to make room? */
   drop?(s: GameState): string | undefined;
+  /**
+   * Does this one deal with somebody standing in the room?
+   *
+   * A real player cannot miss a hunt: it takes over the screen and its answers
+   * are the biggest buttons on it. So a bot that ignores them is not modelling a
+   * careless player, it is modelling somebody who is not looking at the game,
+   * and balancing against that would make the whole mechanic look far crueller
+   * than it is. The reckless ones still ignore it, because that is what reckless
+   * means and burning for it is the point.
+   */
+  answers?: boolean;
+}
+
+/** Press whatever would close whatever is running, cheapest first. */
+function dealWith(s: GameState) {
+  for (const h of liveHunts(s)) {
+    let guard = 0;
+    while (stillNeeds(s, h) > 0 && guard++ < 4) {
+      const row = rowsOf(s, h).find((r) => !r.met && r.can);
+      if (!row) break;
+      answer(s, h.id, row.id);
+    }
+  }
 }
 
 function play(bot: Bot, days: number) {
   const s = newGame(`bal-${bot.name}`);
   for (let step = 0; step < days * 24 * 4 && !s.over; step++) {
+    if (bot.answers) dealWith(s);
     // Four decisions an hour, then the world runs for fifteen minutes.
     for (let n = 0; n < 3; n++) {
       const choice = bot.pick(s, open(s));
@@ -88,6 +113,7 @@ ok(total(wild) < 900, `   ולא נשאר לו הרבה (${total(wild)} נקוד
 // ── שקט ────────────────────────────────────────────────────────────────────
 const quiet = play({
   name: 'quiet',
+  answers: true,
   pick: (_s, can) => {
     const safe = can.filter((c) => c.o.noise === 0 && (c.o.task.verb === 'watch' || c.o.task.verb === 'hide'));
     return safe.length ? safe[0] : undefined;
@@ -100,6 +126,7 @@ ok(held(quiet) <= 3, `   אבל הוא גם לא הגיע לשום מקום (${h
 // ── מחושב ──────────────────────────────────────────────────────────────────
 const smart = play({
   name: 'smart',
+  answers: true,
   pick: (s, can) => {
     // Getting close to being looked at: stop growing, start cleaning up.
     if (s.heat >= 20) {

@@ -2,6 +2,7 @@ import { bus } from './bus';
 import { CATALOGUE, waysInto } from './catalogue';
 import { crowd, minuteOfDay, now } from './clock';
 import { discount, known, standing } from './standing';
+import { afterJob, at, snap, tell } from './story';
 import type { GameState, Job, Look, Place, PlaceKind, Verb } from './types';
 
 /**
@@ -49,6 +50,17 @@ export interface Task {
    * says so. A number here is a price curve, never a door.
    */
   wants?: number;
+  /**
+   * This one belongs to the map, not to the object.
+   *
+   * Six tasks used to appear on every single thing in the world — settle in,
+   * learn how it works, lie still, hold on, look for a way onward, fix a fault.
+   * They are all real, but they are not decisions *about the printer*, and
+   * repeating them on all twenty things flattened every object into the same
+   * list and buried what made each one different. Up on the map they are what
+   * they always were: decisions about a whole building at once.
+   */
+  wide?: boolean;
   /** Only hide it when it would be nonsense here, never when it is merely hard. */
   show?(s: GameState, p: Place): boolean;
   /** The moment it lands. */
@@ -72,6 +84,17 @@ export interface Offer {
 }
 
 export const TASKS = CATALOGUE;
+
+/**
+ * What doing it from the map costs, over doing it in the room.
+ *
+ * Deliberately one number and not a table: going in is always the same promise —
+ * less than half the time and much less noticed — so the player can hold the
+ * whole trade in their head and never has to read a price list to make it.
+ */
+export const ABOVE_MINUTES = 2.2;
+export const ABOVE_NOISE = 2;
+export const ABOVE_SAYS = 'מלמעלה זה לוקח יותר מפי שניים ורואים אותי יותר. מבפנים זה זול.';
 
 // ── the small words the catalogue is written in ─────────────────────────────
 
@@ -123,9 +146,14 @@ export function shift(s: GameState, personId: string, line: string, forMins = 25
   say(s, 'world', line);
 }
 
+/**
+ * Kept as the name every other file already calls, now with one writer behind
+ * it. Everything that reaches the player's eyes goes through story.ts, so the
+ * rules about repeating yourself and about what deserves to interrupt live in
+ * exactly one place.
+ */
 export function say(s: GameState, who: 'me' | 'them' | 'world', text: string) {
-  s.log.unshift({ id: `l${s.log.length}`, at: s.at, who, text });
-  if (s.log.length > 220) s.log.length = 220;
+  tell(s, who, text);
 }
 
 // ── what it costs right now ─────────────────────────────────────────────────
@@ -138,17 +166,30 @@ export function say(s: GameState, who: 'me' | 'them' | 'world', text: string) {
  * the humans hold it, and what I have become. Nothing is hidden and nothing is
  * refused.
  */
-export function priceOf(s: GameState, p: Place, t: Task): Offer {
+export function priceOf(s: GameState, p: Place, t: Task, above = false): Offer {
   const why: string[] = [];
   let mins = t.minutes;
   let noise = t.noise;
   let power = t.power;
 
+  // Who is standing here, and what hour it is, used to move the price by about
+  // seventy per cent between the best moment and the worst — which is to say,
+  // barely at all, so waiting for four in the morning was never worth doing.
+  // Between them they now swing it by four times or more, and that is the
+  // difference between a game about timing and a game about clicking.
   const people = crowd(s, p);
   if (t.minutes > 0) {
-    if (people >= 3) { mins *= 1.7; noise += 2; why.push('יש כאן הרבה אנשים עכשיו'); }
-    else if (people >= 1) { mins *= 1.25; noise += 1; why.push('יש כאן מישהו עכשיו'); }
-    else why.push('אין כאן אף אחד עכשיו');
+    if (people >= 3) { mins *= 2.3; noise += 3; why.push('יש כאן הרבה אנשים עכשיו'); }
+    else if (people >= 1) { mins *= 1.6; noise += 2; why.push('יש כאן מישהו עכשיו'); }
+    else { mins *= 0.8; why.push('אין כאן אף אחד עכשיו'); }
+  }
+
+  // Doing it from the map instead of from inside the room. One number, always
+  // the same, so the trade stays in the player's head: going in is cheap.
+  if (above) {
+    mins *= ABOVE_MINUTES;
+    noise += ABOVE_NOISE;
+    why.push('אני עושה את זה מרחוק, בלי להיות שם בפנים');
   }
 
   if (p.guard > 20) { mins *= 1 + (p.guard - 20) / 60; why.push('המקום הזה שמור היטב'); }
@@ -193,8 +234,26 @@ export function priceOf(s: GameState, p: Place, t: Task): Offer {
     if (f) f(t, (m, n) => { mins *= m; noise *= n; });
   }
 
-  const night = minuteOfDay(s) < 6 * 60 || minuteOfDay(s) >= 22 * 60;
-  if (night && t.noise > 0) { noise = Math.max(0, noise - 1); why.push('לילה — פחות אנשים ישימו לב'); }
+  // The hour itself, not just who happens to be standing here. Four in the
+  // morning is the whole strategy of this game, so it has to be worth something
+  // the player can feel: a third off the clock and two off what they notice.
+  const hour = minuteOfDay(s);
+  const deep = hour >= 1 * 60 && hour < 5 * 60;
+  const night = hour < 6 * 60 || hour >= 22 * 60;
+  const rush = (hour >= 8 * 60 && hour < 10 * 60) || (hour >= 16 * 60 && hour < 18 * 60);
+  if (deep) {
+    mins *= 0.65;
+    if (t.noise > 0) noise -= 2;
+    why.push('שלוש לפנות בוקר — הבניין כולו שלי');
+  } else if (night) {
+    mins *= 0.85;
+    if (t.noise > 0) noise -= 1;
+    why.push('לילה — פחות אנשים ישימו לב');
+  } else if (rush) {
+    mins *= 1.35;
+    noise += 1;
+    why.push('שעת שיא — כולם כאן ואף אחד לא רגוע');
+  }
 
   mins = Math.max(1, Math.round(mins));
   // Discounts stack, and left alone they stack all the way to silence — which
@@ -247,24 +306,93 @@ export const GROWTH_PRICE: Record<string, (t: Task, apply: (mins: number, noise:
 
 // ── what is on offer here ───────────────────────────────────────────────────
 
+/** How many choices one thing is allowed to put in front of the player. */
+export const MOST_OFFERS = 6;
+
+/**
+ * What this one thing can do for me.
+ *
+ * Capped, and the cap is the point. Twenty circles round a printer is not
+ * twenty decisions, it is one decision buried in nineteen near-duplicates, and
+ * the player rightly called it work rather than play. So each verb offers its
+ * best one first and the list stops at six — which leaves room for what makes a
+ * camera different from a door, and no room for what makes them the same.
+ */
 export function offersAt(s: GameState, placeId: string): Offer[] {
+  return trim(allOffersAt(s, placeId), MOST_OFFERS);
+}
+
+/**
+ * Everything this thing can do, uncapped.
+ *
+ * The cap above is about what the screen puts in front of you, and it must never
+ * become a lock: a choice you cannot see is a choice you cannot make, and this
+ * game's one rule is that nothing is ever refused. So the short list is what the
+ * ring draws, this is what "עוד" opens, and `start` will run any of it.
+ */
+export function allOffersAt(s: GameState, placeId: string): Offer[] {
   const p = s.places[placeId];
   if (!p) return [];
   return [...TASKS, ...waysInto(s, p)]
+    .filter((t) => !t.wide)
     .filter((t) => (t.places ? t.places.includes(p.id) : (t.kinds ?? []).includes(p.kind)))
     .filter((t) => (t.show ? t.show(s, p) : true))
     .filter((t) => !s.jobs.some((j) => j.taskId === t.id && j.placeId === p.id))
     .map((t) => priceOf(s, p, t));
 }
 
+/**
+ * Keep the best of each verb before keeping anything twice.
+ *
+ * Cutting by price alone would hand back six ways of watching and no way in.
+ * One of each kind first is what keeps the short list a real set of choices.
+ */
+function trim(all: Offer[], most: number): Offer[] {
+  const cheap = (a: Offer, b: Offer) => (a.noise - b.noise) || (a.minutes - b.minutes);
+  const byVerb = new Map<Verb, Offer[]>();
+  for (const o of all) {
+    const list = byVerb.get(o.task.verb) ?? [];
+    list.push(o);
+    byVerb.set(o.task.verb, list);
+  }
+  const out: Offer[] = [];
+  const rest: Offer[] = [];
+  for (const list of byVerb.values()) {
+    const sorted = [...list].sort(cheap);
+    out.push(sorted[0]);
+    rest.push(...sorted.slice(1));
+  }
+  out.sort(cheap);
+  if (out.length >= most) return out.slice(0, most);
+  return [...out, ...rest.sort(cheap).slice(0, most - out.length)];
+}
+
+/**
+ * The things that are about a whole building rather than about one object in it.
+ *
+ * Started from the map, run at whichever thing inside is the strongest foothold,
+ * and — because the decision was "this building", not "this printer" — what they
+ * do lands on everything of mine in there at once.
+ */
+export function wideOffersAt(s: GameState, placeId: string): Offer[] {
+  const p = s.places[placeId];
+  if (!p) return [];
+  return TASKS
+    .filter((t) => t.wide)
+    .filter((t) => (t.places ? t.places.includes(p.id) : (t.kinds ?? []).includes(p.kind)))
+    .filter((t) => (t.show ? t.show(s, p) : true))
+    .filter((t) => !s.jobs.some((j) => j.taskId === t.id && j.placeId === p.id))
+    .map((t) => priceOf(s, p, t, true));
+}
+
 // ── starting, running, stopping ─────────────────────────────────────────────
 
-export function start(s: GameState, placeId: string, taskId: string): boolean {
+export function start(s: GameState, placeId: string, taskId: string, above = false): boolean {
   const p = s.places[placeId];
   if (!p) return false;
   const t = [...TASKS, ...waysInto(s, p)].find((x) => x.id === taskId);
   if (!t) return false;
-  const o = priceOf(s, p, t);
+  const o = priceOf(s, p, t, above);
   if (o.short > 0) {
     bus.emit('toast', {
       text: `אין לי מספיק כוח פנוי. צריך לעצור משהו אחר.`, kind: 'warn', icon: '⊘',
@@ -276,8 +404,15 @@ export function start(s: GameState, placeId: string, taskId: string): boolean {
     taskId, placeId, verb: t.verb, text: t.text,
     power: o.power, left: o.minutes, total: Math.max(1, o.minutes),
     forever: t.minutes === 0, noise: o.noise, look: t.look,
+    above: above || undefined,
+    // A decision made about a building lands on the building, not on whichever
+    // object happened to be the way in.
+    wideIn: t.wide ? p.buildingId : undefined,
   });
   s.power.used += o.power;
+  tell(s, 'me', above
+    ? `התחלתי: ${t.text}${t.wide ? ` — בכל ${p.where}` : ` ${at(p.name)}`}. מרחוק, אז זה ייקח יותר זמן.`
+    : `התחלתי: ${t.text} ${at(p.name)}.`, 0, p.id);
   bus.emit('sfx', 'step');
   bus.emit('changed', undefined);
   return true;
@@ -325,8 +460,22 @@ export function runJobs(s: GameState, mins: number, noisy: (p: Place, n: number,
 
     j.left -= mins;
     if (j.left > 0) continue;
-    t.done?.(s, p);
+    // What the world looked like a breath before this landed, so that when it
+    // lands we can say what it actually moved rather than announcing that a
+    // button finished. This is the promise that nothing happens silently.
+    const was = snap(s, p);
+    if (j.wideIn) {
+      // Started from the map about a whole building, so it lands on everything
+      // of mine in it — that is what made it worth its higher price.
+      const across = Object.values(s.places)
+        .filter((q) => q.buildingId === j.wideIn && (q.control > 0 || q.id === p.id));
+      for (const q of across) t.done?.(s, q);
+      tell(s, 'me', `${j.text} — על כל ${across.length} הדברים שלי ${at(p.where)}.`, 1, p.id);
+    } else {
+      t.done?.(s, p);
+    }
     if (j.noise > 0) noisy(p, j.noise, j.look);
+    afterJob(s, p, was, j.text);
     bus.emit('job:done', j.id);
     bus.emit('toast', { text: `${j.text} — נגמר`, kind: 'good', icon: '✔' });
     stop(s, j.id);

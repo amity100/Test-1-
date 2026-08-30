@@ -10,7 +10,7 @@
  * hardest conditions it can build, and refuses to ship if it ever finds a door.
  */
 import { newGame, tick } from '../src/game/game';
-import { TASKS, offersAt, priceOf, start } from '../src/game/jobs';
+import { TASKS, allOffersAt, offersAt, priceOf, start } from '../src/game/jobs';
 import type { GameState } from '../src/game/types';
 
 let bad = 0;
@@ -118,8 +118,14 @@ const fresh = (seed = 'open') => {
       `מבחוץ זה עולה הרבה יותר, אבל אפשר (${out.minutes}׳ מול ${inside.minutes}׳)`);
     p.control = 0;
     s.power.all = 99;
-    ok(offersAt(s, p.id).some((o) => o.task.id === t.id && o.short === 0),
+    // The ring now shows a short list rather than everything, so this asks the
+    // uncapped list: the cap is about what the screen puts in front of you and
+    // must never become a lock. Both halves are checked — it is still offered,
+    // and the short list still leads somewhere.
+    ok(allOffersAt(s, p.id).some((o) => o.task.id === t.id && o.short === 0),
       '   וזה מוצע ואפשר להתחיל אותו, גם מבחוץ');
+    ok(offersAt(s, p.id).length > 0 && offersAt(s, p.id).every((o) => o.short === 0),
+      '   והרשימה הקצרה שמוצגת — כולה ניתנת להתחלה');
   }
 }
 

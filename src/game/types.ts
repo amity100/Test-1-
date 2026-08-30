@@ -235,6 +235,10 @@ export interface Job {
   doneAt?: number;
   /** Noise a never-ending job has built up but not yet spilled. */
   leaked?: number;
+  /** Started from the map rather than from inside the room, and priced that way. */
+  above?: boolean;
+  /** A decision made about a whole building: it lands on everything of mine in it. */
+  wideIn?: string;
 }
 
 // ── People ──────────────────────────────────────────────────────────────────
@@ -285,6 +289,16 @@ export interface Person {
    * every dead screen and every message was theatre.
    */
   awayUntil?: number;
+  /**
+   * Sent somewhere, right now, because of something I did.
+   *
+   * `awayUntil` only says "not in your chair". This says **go there**, and it is
+   * what makes a break-in something you watch happen: the screen goes dark, and
+   * within minutes a person with a name is walking across the floor towards it.
+   * The timetable does not get them back until `sentUntil` has passed.
+   */
+  sentTo?: string;
+  sentUntil?: number;
   /** They have gone home. Back tomorrow. */
   gone?: boolean;
 }
@@ -333,13 +347,78 @@ export interface Opinion {
 
 // ── The whole game ──────────────────────────────────────────────────────────
 
+/**
+ * Who is speaking.
+ *
+ * The player asked for one thing above all others: that everything that happens
+ * be *written down*, so a number never has to be interpreted. So the log is not
+ * a debug trail any more, it is the game's main surface, and it has four voices
+ * that the screen keeps visually apart.
+ */
+export type Voice =
+  | 'me'       // what I did, and what it got me
+  | 'them'     // what the people did back
+  | 'world'    // what simply happened, that nobody chose
+  | 'country'; // what changed in the country because of me
+
+export const VOICE_NAME: Record<Voice, string> = {
+  me: 'אני',
+  them: 'הם',
+  world: 'מה שקרה',
+  country: 'המדינה',
+};
+
 export interface LogLine {
   id: string;
   /** Minute of the world clock it happened at. */
   at: number;
-  /** 'me' = the AI thinking · 'them' = something they did · 'world' = something that happened */
-  who: 'me' | 'them' | 'world';
+  who: Voice;
   text: string;
+  /**
+   * How hard the screen should push it.
+   *
+   * 0 is ordinary and scrolls past · 1 is worth stopping on · 2 is the kind of
+   * line the whole screen should make room for. Without this the feed becomes
+   * a wall of equal grey and the important line is the one nobody reads.
+   */
+  weight?: 0 | 1 | 2;
+  /** The place it happened at, so the screen can offer to fly there. */
+  placeId?: string;
+}
+
+// ── the hunt ────────────────────────────────────────────────────────────────
+
+/**
+ * Somebody came looking, and there is a clock on it.
+ *
+ * This is the shape of the answer to "actions have no consequences". A hunt is
+ * not a number going up: it is a named person who walked to a named place, a
+ * clock the player can watch run down, and a short list of things that would
+ * end it — each written out in full, each pressable. If the clock finishes and
+ * not enough of the list is done, something real is taken away.
+ *
+ * Only the facts live here. The words, the list and the bite live in the
+ * catalogue in hunt.ts, keyed by `scriptId` — because a saved game has to
+ * survive being written to disk, and a function cannot be.
+ */
+export interface Hunt {
+  id: string;
+  /** Which script in the catalogue this is a run of. */
+  scriptId: string;
+  /** Who brought it, by name, so it is never "the system". */
+  whoId: string;
+  /** Where it is running. */
+  placeId: string;
+  /** The minute it lands. */
+  at: number;
+  /** Minutes it had when it started, so the bar knows how full it is. */
+  total: number;
+  /** Which of its answers are already satisfied. */
+  met: string[];
+  /** Set the minute it ended, so the screen can show it fading rather than vanish. */
+  doneAt?: number;
+  /** How it ended, once it has. */
+  how?: 'answered' | 'landed';
 }
 
 export interface GameState {
@@ -370,6 +449,10 @@ export interface GameState {
 
   /** What they are about to do, in the order they will do it. */
   moves: Move[];
+  /** Somebody is looking for me right now, with a clock on it. */
+  hunts: Hunt[];
+  /** Which country-sized things have already been said, so none is said twice. */
+  told: string[];
   opinion: Opinion;
 
   /** Minutes of power spent on each verb. This is what I grow from. */
@@ -396,6 +479,12 @@ export interface BusEvents {
   'rung:changed': Rung;
   'grown': string;
   toast: { text: string; kind: 'good' | 'bad' | 'warn' | 'info'; icon?: string };
+  /** Somebody started looking, and the screen should stop and say so. */
+  'hunt:started': string;
+  /** It ended, one way or the other. */
+  'hunt:ended': { id: string; how: 'answered' | 'landed' };
+  /** Something the size of a country happened. */
+  country: string;
   teach: string;
   look: string | null;
   /** Something happened in a room, and the people in it should feel it. */

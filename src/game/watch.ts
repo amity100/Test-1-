@@ -1,7 +1,9 @@
 import { RNG } from '../core/rng';
 import { bus } from './bus';
 import { dayOf, minuteOfDay, now } from './clock';
+import { maybeHunt } from './hunt';
 import { say } from './jobs';
+import { at, feltIt } from './story';
 import type { GameState, Look, Move, Place, Rung } from './types';
 
 /**
@@ -78,6 +80,11 @@ export function noticed(s: GameState, p: Place, amount: number, look: Look) {
   const thin = s.marks.many ? 0.7 : 1;
   p.heat = Math.min(100, p.heat + amount * 4 * thin);
 
+  // The room felt it. This is the line that turns "noise 3" into something the
+  // player watched happen, and it comes before any of the bookkeeping below.
+  feltIt(s, p, `משהו ${at(p.name)} עשה רעש.`);
+  bus.emit('felt', { placeId: p.id, kind: amount >= 3 ? 'noise' : 'light' });
+
   const able = STORIES
     .filter((t) => !s.dead.includes(t.id) && t.holds.includes(look))
     .sort((a, b) => (s.belief[b.id] ?? 0) - (s.belief[a.id] ?? 0));
@@ -92,15 +99,22 @@ export function noticed(s: GameState, p: Place, amount: number, look: Look) {
     say(s, 'them', `מה שקרה ב${p.name} לא נראה כמו שום דבר שיש להם שם בשבילו.`);
   }
 
-  // Anybody standing there might have seen it.
+  // Anybody standing there might have seen it. Seeded, because the same night
+  // played the same way has to come out the same way.
+  const r = new RNG(`${s.seed}:saw:${s.at}:${p.id}`);
   for (const id of p.peopleIds) {
     const who = s.people[id];
     if (!who || who.gone) continue;
-    if (Math.random() < who.notices * (amount / 5)) {
+    if (r.next() < who.notices * (amount / 5)) {
       who.worry = Math.min(100, who.worry + amount * 6);
-      who.saw = `משהו ב${p.name}`;
+      who.saw = `משהו ${at(p.name)}`;
+      say(s, 'them', `${who.name} ראה/תה משהו ${at(p.name)}, ולא הבין/ה מה.`);
     }
   }
+
+  // And if it was loud enough, somebody gets up and comes. Not in an hour, not
+  // tomorrow morning — now, on their feet, across the floor.
+  maybeHunt(s, p, amount);
 }
 
 /**

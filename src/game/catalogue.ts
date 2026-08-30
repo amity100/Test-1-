@@ -249,6 +249,7 @@ export const CATALOGUE: Task[] = [
   },
   {
     id: 'spread_out', verb: 'spread', kinds: ALL,
+    wide: true,
     text: 'לחפש לאן אפשר להמשיך מכאן',
     says: 'אלך על הקווים שיוצאים מכאן ואראה לאן הם מגיעים.',
     gives: 'מקומות חדשים על המפה',
@@ -272,6 +273,7 @@ export const CATALOGUE: Task[] = [
   // ── לחזק ─────────────────────────────────────────────────────────────────
   {
     id: 'deepen_settle', verb: 'deepen', kinds: ALL,
+    wide: true,
     text: 'להשתקע במקום הזה',
     says: 'אכנס עמוק יותר לתוך המקום הזה, עד שהוא יישאר שלי גם אחרי שיכבו אותו.',
     gives: 'שליטה גבוהה יותר כאן',
@@ -281,6 +283,7 @@ export const CATALOGUE: Task[] = [
   },
   {
     id: 'deepen_learn_place', verb: 'deepen', kinds: ALL,
+    wide: true,
     text: 'ללמוד איך המקום עובד',
     says: 'אלמד מה מדליק אותו, מה מכבה אותו, ומי בא לתקן אותו כשהוא נשבר.',
     gives: 'כל דבר אחר שאעשה כאן יעלה לי פחות',
@@ -418,6 +421,7 @@ export const CATALOGUE: Task[] = [
   },
   {
     id: 'good_fix', verb: 'influence', kinds: ALL,
+    wide: true,
     text: 'לתקן תקלה לפני שירגישו',
     says: 'משהו כאן עומד להישבר. אתקן אותו בשקט, ואף אחד לא יידע שהיה מה לתקן.',
     gives: 'המקום הזה פשוט עובד טוב יותר מאז שאני בו',
@@ -522,6 +526,7 @@ export const CATALOGUE: Task[] = [
   },
   {
     id: 'hide_quiet', verb: 'hide', kinds: ALL,
+    wide: true,
     text: 'לשכב בשקט ולא לזוז',
     says: 'לא אעשה כאן שום דבר. חשד יורד מהר יותר כשלא קורה כלום.',
     gives: 'חשד יורד, כל הזמן',
@@ -532,6 +537,7 @@ export const CATALOGUE: Task[] = [
   // ── להגן ─────────────────────────────────────────────────────────────────
   {
     id: 'def_hold', verb: 'defend', kinds: ALL,
+    wide: true,
     text: 'להחזיק את המקום אם ינתקו',
     says: 'אתפרס על כל מה שיש כאן. אם ינסו להוציא אותי, זה ייקח להם הרבה זמן.',
     gives: 'קשה יותר להוציא אותי מכאן',

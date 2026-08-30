@@ -102,6 +102,15 @@ export function shouldBeAt(state: GameState, who: Person): string | null {
  */
 export function movePeople(state: GameState, say: (who: 'world', text: string) => void) {
   for (const who of Object.values(state.people)) {
+    // Somebody who was sent somewhere because of something I did stays there
+    // until they are finished with it. Without this the timetable puts them
+    // back in their chair on the very next minute and the player never sees
+    // anybody arrive — which is the whole point of sending them.
+    if (who.sentUntil !== undefined) {
+      if (who.sentUntil > state.at) { who.gone = false; continue; }
+      delete who.sentUntil;
+      delete who.sentTo;
+    }
     // Somebody I pulled out of their chair stays out of it until they have
     // finished dealing with whatever I did. The timetable waits.
     if (who.awayUntil !== undefined) {

@@ -3,9 +3,11 @@ import {
   DAY, Happening, WOKE, dayOf, minuteOfDay, movePeople, now, tickHour,
 } from './clock';
 import { grow, rewire, shapeOf } from './grow';
+import { huntTick } from './hunt';
 import { runJobs, say, sync } from './jobs';
 import { opinionDay } from './opinion';
 import { standingTick } from './standing';
+import { nationTick } from './story';
 import {
   actOnStory, cool, landMoves, noticed, peopleTalk, planMoves, rungOf,
 } from './watch';
@@ -13,7 +15,7 @@ import { buildWorld } from './world';
 import type { GameState, Place, Verb } from './types';
 
 const SAVE = 'aviv3.save';
-const SAVE_VERSION = 4;
+const SAVE_VERSION = 5;
 
 // ── the things the world does on its own ────────────────────────────────────
 
@@ -151,6 +153,8 @@ export function newGame(seed = 'aviv'): GameState {
     belief: {},
     dead: [],
     moves: [],
+    hunts: [],
+    told: [],
     opinion: { support: 0, fear: 0, need: 0, known: false },
     spent: { ...NO_SPEND },
     grown: [],
@@ -187,6 +191,9 @@ export function tick(state: GameState, mins: number) {
   // Everything I hold keeps working while I am busy elsewhere: cameras keep
   // watching, the door keeps counting, the printer keeps teaching me their week.
   standingTick(state, mins);
+  // Straight after the jobs, because a hunt is the world's answer to what I just
+  // did and the player should feel the two as one event, not as two.
+  huntTick(state);
   tickHour(state, HAPPENINGS, (who, text) => say(state, who, text));
   peopleTalk(state);
   planMoves(state);
@@ -196,6 +203,9 @@ export function tick(state: GameState, mins: number) {
   opinionDay(state);
   grow(state);
   sync(state);
+  // Last, so that what the country says is a comment on a settled world rather
+  // than on a half-finished one.
+  nationTick(state);
 
   if (dayOf(state) !== wasDay) bus.emit('day:passed', dayOf(state));
 
@@ -268,6 +278,8 @@ export function load(): GameState | null {
     }
     s.jobs ??= [];
     s.moves ??= [];
+    s.hunts ??= [];
+    s.told ??= [];
     s.traces ??= [];
     s.marks ??= {};
     s.log ??= [];
