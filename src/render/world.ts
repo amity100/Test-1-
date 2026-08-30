@@ -218,6 +218,27 @@ export class World {
         });
       }
     }
+
+    // And a nest of them climbing the place itself, thicker the more of it is
+    // mine. This is the one thing on screen that answers "how much of this is
+    // yours" without a number: a place at a fifth has two strands feeling their
+    // way up it, and a place that is entirely mine is wrapped.
+    for (const p of Object.values(state.places)) {
+      if (p.control <= 0) continue;
+      const strands = Math.max(1, Math.round((p.control / 100) * 9));
+      const root = spotAt(p.buildingId, p.floor, p.x, p.z, p.y);
+      for (let i = 0; i < strands; i++) {
+        // Fixed angles rather than random ones, so a vein does not jump to a
+        // new side of the building every time anything in the game changes.
+        const a = (i / strands) * Math.PI * 2 + p.x * 0.13;
+        const reach = 1.1 + (i % 3) * 0.55;
+        const up = 0.7 + ((i * 7) % 5) * 0.55;
+        veins.set(`${p.id}~${i}`, {
+          from: root.clone(),
+          to: root.clone().add(new THREE.Vector3(Math.cos(a) * reach, up, Math.sin(a) * reach)),
+        });
+      }
+    }
     this.veins.set(veins);
     this.figures.sync(state);
   }

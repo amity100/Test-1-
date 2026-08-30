@@ -109,7 +109,9 @@ export function afterJob(s: GameState, p: Place, was: Snap, label: string) {
   if (grip >= 1) {
     bits.push(was.control <= 0
       ? `נכנסתי ${to(p.name)}. יש לי שם רגל בדלת`
-      : `${p.name} — ${Math.round(was.control)} אחוז הפכו ל${Math.round(p.control)}`);
+      // A digit glued straight onto a lamed reads as a typo, and in a
+      // right-to-left line it drags its neighbours around with it.
+      : `${p.name} — ${Math.round(was.control)} אחוז הפכו ל־${Math.round(p.control)}`);
   } else if (grip <= -1) {
     bits.push(`איבדתי אחיזה ${at(p.name)} — נשארתי עם ${Math.round(p.control)} אחוז`);
   }
