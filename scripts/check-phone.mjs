@@ -105,7 +105,10 @@ for (const [W, H] of [[320, 640], [360, 740], [390, 844], [430, 932]]) {
   await p.waitForTimeout(1200);
 
   const ops = await p.locator('#pick .op').count();
-  ok(ops >= 2, `${W}×${H} · בתוך מקום, נפתחה רשימה עם ${ops} אפשרויות`);
+  // One is a legitimate answer — a place that is entirely yours and entirely
+  // quiet really does have one thing left to do — so this asks for something
+  // rather than for a number, and checks below that the list is readable.
+  ok(ops >= 1, `${W}×${H} · בתוך מקום, נפתחה רשימה עם ${ops} אפשרויות`);
   // The whole point of the trim: a list you can read, not a wall.
   ok(ops <= 6, `${W}×${H} · והרשימה נשארה קריאה (${ops})`);
   await audit('אפשרויות');

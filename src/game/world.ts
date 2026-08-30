@@ -194,7 +194,11 @@ function buildPlaces(): Place[] {
     P('helios', 'company', 'מגדל הליוס', 'אבן גבירול',
       'שמונים אנשים, ארבע עשרה קומות, ומכונות שעובדות כל הלילה בשביל אף אחד.',
       'helios', 'gvirol', 14, 0, 0, 1,
-      { control: 100, seen: 100, guard: 0, found: true, mine: true, links: [
+      // Not quite all of it. Waking up already finished with the only place you
+      // are in leaves exactly one button on the first screen you look at, and
+      // teaches nothing; a few floors still to take teaches spreading in the
+      // first minute, which is the action the whole game is built on.
+      { control: 72, seen: 100, guard: 0, found: true, mine: true, links: [
         wire('across', 'אותו רחוב, אותו קו שנכנס לשני הבניינים.'),
         wire('gvirol_lights', 'הרמזור בפינה מקבל חשמל מאותו לוח.'),
         via('dana_home', 'dana', 'דנה נוסעת הביתה כל ערב, והטלפון שלה בא איתה.'),
