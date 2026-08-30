@@ -5,12 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "node scripts/words.mjs && npm run open && npm run alive && npm run balance && tsc && vite build && node scripts/inline.mjs",
+    "build": "node scripts/words.mjs && npm run open && npm run effect && npm run alive && npm run balance && tsc && vite build && node scripts/inline.mjs",
     "preview": "vite preview --host 0.0.0.0",
     "phone": "node scripts/check-phone.mjs",
     "open": "esbuild scripts/check-open.ts --bundle --platform=node --format=esm --outfile=node_modules/.open.mjs --external:three && node node_modules/.open.mjs",
     "alive": "esbuild scripts/check-alive.ts --bundle --platform=node --format=esm --outfile=node_modules/.alive.mjs --external:three && node node_modules/.alive.mjs",
-    "balance": "esbuild scripts/check-balance.ts --bundle --platform=node --format=esm --outfile=node_modules/.balance.mjs --external:three && node node_modules/.balance.mjs"
+    "balance": "esbuild scripts/check-balance.ts --bundle --platform=node --format=esm --outfile=node_modules/.balance.mjs --external:three && node node_modules/.balance.mjs",
+    "effect": "esbuild scripts/check-effect.ts --bundle --platform=node --format=esm --outfile=node_modules/.effect.mjs --external:three && node node_modules/.effect.mjs"
   },
   "dependencies": {
     "three": "^0.169.0"

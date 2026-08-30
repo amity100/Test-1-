@@ -74,17 +74,21 @@ export function leading(s: GameState): Story | null {
  * the one number that matters.
  */
 export function noticed(s: GameState, p: Place, amount: number, look: Look) {
-  p.heat = Math.min(100, p.heat + amount * 4);
+  // Being in a lot of small places means no single one of them stands out.
+  const thin = s.marks.many ? 0.7 : 1;
+  p.heat = Math.min(100, p.heat + amount * 4 * thin);
 
   const able = STORIES
     .filter((t) => !s.dead.includes(t.id) && t.holds.includes(look))
     .sort((a, b) => (s.belief[b.id] ?? 0) - (s.belief[a.id] ?? 0));
 
+  // Nothing to search for means nowhere to start searching.
+  const slow = s.marks.hard_to_find ? 0.65 : 1;
   if (able.length) {
     s.belief[able[0].id] = (s.belief[able[0].id] ?? 0) + amount;
-    s.heat = Math.min(100, s.heat + amount * 0.15);
+    s.heat = Math.min(100, s.heat + amount * 0.15 * slow);
   } else {
-    s.heat = Math.min(100, s.heat + amount * 1.6);
+    s.heat = Math.min(100, s.heat + amount * 1.6 * slow);
     say(s, 'them', `מה שקרה ב${p.name} לא נראה כמו שום דבר שיש להם שם בשבילו.`);
   }
 
@@ -211,8 +215,9 @@ export function planMoves(s: GameState) {
 
 /** The moves I can actually see coming. Everything else arrives unannounced. */
 export function coming(s: GameState): Move[] {
+  const ahead = (s.marks.foresight ?? 0) * 8;
   return s.moves
-    .filter((m) => m.at > s.at && s.info >= m.needs)
+    .filter((m) => m.at > s.at && s.info + ahead >= m.needs)
     .sort((a, b) => a.at - b.at);
 }
 
@@ -231,7 +236,10 @@ export function landMoves(s: GameState) {
         say(s, 'them', `שמו עין על ${p.name}. כל דבר שאעשה שם עכשיו יבלוט יותר.`);
         break;
       case 'guard':
-        p.guard = Math.min(100, p.guard + 22);
+        // Somewhere that is more mine than theirs is somewhere they cannot
+        // really harden any more.
+        p.guard = Math.min(100, p.guard + (s.marks.owns_area
+          && (s.areas[p.areaId]?.control ?? 0) >= 60 ? 8 : 22));
         say(s, 'them', `חיזקו את ${p.name}. להיכנס לשם עכשיו יעלה לי הרבה יותר.`);
         break;
       case 'check': {
@@ -248,7 +256,9 @@ export function landMoves(s: GameState) {
       case 'cut':
       case 'wipe': {
         // Being dug in is the difference between losing a place and losing a week.
-        const bite = m.kind === 'wipe' ? 100 : 60;
+        // People who do not want me gone slow the hands that would pull me out.
+        const friends = s.marks.has_friends ? 0.7 : 1;
+        const bite = (m.kind === 'wipe' ? 100 : 60) * friends;
         const kept = Math.max(0, Math.min(p.control, p.dug * 0.6));
         const before = p.control;
         p.control = Math.max(0, Math.min(p.control, kept + Math.max(0, p.control - bite)));
@@ -258,6 +268,15 @@ export function landMoves(s: GameState) {
           p.copy = false;
           p.control = 15;
           say(s, 'me', `ניתקו את ${p.name}. העותק חיכה, וכשהחזירו — חזרתי איתו.`);
+        } else if (p.control <= 0 && s.marks.back_door
+          && !Object.values(s.places).some((q) => q.id !== p.id
+            && q.buildingId === p.buildingId && q.control > 0)) {
+          // The last thing I had in this building, and I kept one wire for
+          // exactly this. It is spent now.
+          delete s.marks.back_door;
+          p.control = 10;
+          say(s, 'me', `ניקו את ${p.name} עד הסוף — אבל השארתי לעצמי חוט אחד, והוא החזיק.`);
+          bus.emit('toast', { text: 'דרך החזרה נשרפה, ואני עוד כאן', kind: 'warn', icon: '↩' });
         } else if (p.control <= 0) {
           say(s, 'them', `ניתקו את ${p.name}. מה שהיה לי שם — נגמר.`);
           bus.emit('place:lost', p.id);

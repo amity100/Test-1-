@@ -102,6 +102,12 @@ export function shouldBeAt(state: GameState, who: Person): string | null {
  */
 export function movePeople(state: GameState, say: (who: 'world', text: string) => void) {
   for (const who of Object.values(state.people)) {
+    // Somebody I pulled out of their chair stays out of it until they have
+    // finished dealing with whatever I did. The timetable waits.
+    if (who.awayUntil !== undefined) {
+      if (who.awayUntil > state.at) continue;
+      delete who.awayUntil;
+    }
     const want = shouldBeAt(state, who);
     const to = want ?? 'gone';
     // Kept in step even when nobody moved: somebody who starts the game

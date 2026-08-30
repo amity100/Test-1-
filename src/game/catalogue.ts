@@ -151,9 +151,12 @@ export const CATALOGUE: Task[] = [
     done: (s) => {
       for (const id of ['street_light', 'street_cam']) {
         const n = s.places[id];
-        if (n) { n.found = true; }
+        if (!n) continue;
+        n.found = true;
+        // A way out that leaves me holding nothing is not a way out.
+        if (id === 'street_light') grip(s, n, 20);
       }
-      say(s, 'me', 'הקו יוצא מהבניין אל העמוד ברחוב. אני רואה משם את כל הרחוב.');
+      say(s, 'me', 'הקו יוצא מהבניין אל העמוד ברחוב. אני על העמוד עכשיו.');
     },
   },
   {
@@ -182,7 +185,7 @@ export const CATALOGUE: Task[] = [
       for (const q of Object.values(s.places)) {
         if (q.buildingId !== p.buildingId || q.floor !== p.floor || q.id === p.id) continue;
         q.found = true;
-        if (q.control < 40) { grip(s, q, 18); n += 1; }
+        grip(s, q, q.control < 40 ? 18 : 6); n += 1;
       }
       say(s, 'me', n ? `עברתי על ${n} דברים בקומה הזאת.` : 'הקומה הזאת כבר כולה שלי.');
     },
@@ -199,7 +202,7 @@ export const CATALOGUE: Task[] = [
       for (const q of Object.values(s.places)) {
         if (q.buildingId !== p.buildingId || q.id === p.id) continue;
         q.found = true;
-        if (q.control < 30) { grip(s, q, 14); n += 1; }
+        grip(s, q, q.control < 30 ? 14 : 5); n += 1;
       }
       say(s, 'me', `אני עכשיו בכל הבניין. ${n} מקומות חדשים.`);
     },
@@ -216,7 +219,7 @@ export const CATALOGUE: Task[] = [
       for (const q of Object.values(s.places)) {
         if (q.kind !== 'phone') continue;
         q.found = true;
-        if (q.control < 40) { grip(s, q, 22); n += 1; }
+        grip(s, q, q.control < 40 ? 22 : 7); n += 1;
       }
       say(s, 'me', n ? `${n} טלפונים לוקחים אותי איתם עכשיו.` : 'כל הטלפונים כאן כבר שלי.');
     },
@@ -235,7 +238,7 @@ export const CATALOGUE: Task[] = [
       for (const q of Object.values(s.places)) {
         if (q.buildingId !== 'street') continue;
         q.found = true;
-        if (q.control < 35) { grip(s, q, 20); n += 1; }
+        grip(s, q, q.control < 35 ? 20 : 6); n += 1;
       }
       for (const id of a?.opens ?? []) {
         const next = s.areas[id];

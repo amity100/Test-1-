@@ -9,6 +9,7 @@ import { SPEEDS, SPEED_NAME, crowd, hourSays, seenAt } from '../game/clock';
 import { Offer, offersAt, start, stop } from '../game/jobs';
 import { GROWTHS, SHAPE_NAME, SHAPE_SAYS } from '../game/grow';
 import { comeOut, saysOpinion } from '../game/opinion';
+import { WORTH } from '../game/standing';
 import { STORIES, asking, coming, leading, rungOf, saysNow } from '../game/watch';
 import { AREA_KIND_NAME, RUNG_NAME, VERB_NAME, VERB_SAYS } from '../game/types';
 import type { GameState, Verb } from '../game/types';
@@ -469,9 +470,11 @@ export class UI {
     };
     set('pickwho', `${p.name} · ${Math.round(p.control)}% שלי · ${head}`);
     set('picktitle', o ? o.task.text : verb ? VERB_NAME[verb] : 'מה לעשות כאן?');
+    // With nothing chosen, the strip answers the only question that matters
+    // about a place you have not taken: what is it even for.
     set('picksays', o ? o.task.says
       : verb ? `${VERB_SAYS[verb]}. בחרו איך.`
-        : `${offers.length} דברים אפשר לעשות כאן. אף אחד מהם לא נעול — הם רק עולים אחרת.`);
+        : `${WORTH[p.kind]}${p.control > 0 ? '' : ' — כשהוא יהיה שלי.'}`);
     set('pickwhy', o ? o.why.join(' · ') : '');
     set('pickcheap', o?.cheaper ?? '');
     set('pickpower', o ? String(o.power) : '—');
@@ -698,20 +701,28 @@ export class UI {
         <em>${esc(AREA_KIND_NAME[a.kind])} · ${esc(a.desc)}</em>
         <u>${esc(a.seen >= 20 ? a.only : 'אני עוד כמעט לא יודע מה יש שם.')}</u>
       </div>`).join('');
-    const mine = Object.values(s.places).filter((p) => p.control > 0)
-      .sort((x, y) => y.control - x.control)
-      .map((p) => `<button class="pl mine" data-do="fly" data-arg="${p.id}">
-        <b>${esc(p.name)} · ${Math.round(p.control)}%</b>
+    const row = (p: typeof s.places[string]) => `<button class="pl ${p.control > 0 ? 'mine' : ''}"
+        data-do="fly" data-arg="${p.id}">
+        <b>${esc(p.name)}${p.control > 0 ? ` · ${Math.round(p.control)}%` : ''}</b>
         <em>${esc(p.where)}${p.copy ? ' · יש כאן חלק ממני' : ''}${p.dug > 0 ? ` · תפוס חזק (${Math.round(p.dug)})` : ''}</em>
-      </button>`).join('');
+        <u>${esc(WORTH[p.kind])}</u>
+      </button>`;
+    const mine = Object.values(s.places).filter((p) => p.control > 0)
+      .sort((x, y) => y.control - x.control).map(row).join('');
+    const rest = Object.values(s.places).filter((p) => p.control <= 0 && p.found)
+      .map(row).join('');
     this.modal(`
       <div class="sheet wide places">
         <span class="kick">מה אני יודע</span>
         <h2>מידע: ${Math.round(s.info)}</h2>
-        <div class="txt"><p>ככל שאני יודע יותר, אני רואה יותר מהעיר — ורואה מראש מה הם עומדים לעשות.</p></div>
-        <div class="txt list">${rows}</div>
-        <div class="txt"><p class="need">המקומות שלי</p></div>
-        <div class="txt list">${mine || '<p class="need">עוד אין לי שום מקום.</p>'}</div>
+        <div class="txt list">
+          <p>ככל שאני יודע יותר, אני רואה יותר מהעיר — ורואה מראש מה הם עומדים לעשות.</p>
+          ${rows}
+          <p class="need">המקומות שלי</p>
+          ${mine || '<p class="need">עוד אין לי שום מקום.</p>'}
+          <p class="need">מה עוד יש כאן, ולמה הוא שווה</p>
+          ${rest || '<p class="need">גיליתי את הכל.</p>'}
+        </div>
         <button class="ok" data-do="closeteach">סגור</button>
       </div>`);
   }

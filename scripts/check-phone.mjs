@@ -41,11 +41,25 @@ for (const [W, H] of [[320, 640], [360, 740], [390, 844], [430, 932]]) {
         if (r.width < 1) continue;
         const x = r.x + r.width / 2, y = r.y + r.height / 2;
         const top = document.elementFromPoint(x, y);
+        // A row inside a list you can scroll is allowed to be out of sight —
+        // that is what scrolling is for. What matters is that it is big enough,
+        // that it fits across the screen, and that when it IS scrolled into
+        // view nothing sits on top of it. So judge it against its own list, not
+        // against the whole screen.
+        let box = null;
+        for (let e = el.parentElement; e; e = e.parentElement) {
+          const oy = getComputedStyle(e).overflowY;
+          if (oy === 'auto' || oy === 'scroll') { box = e.getBoundingClientRect(); break; }
+        }
+        const across = r.left >= -1 && r.right <= innerWidth + 1;
+        const down = r.top >= -1 && r.bottom <= innerHeight + 1;
+        // Fully inside the list's own window, so it really is on show right now.
+        const showing = box ? (r.top >= box.top - 1 && r.bottom <= box.bottom + 1) : down;
         out.push({
           id: el.dataset.do + (el.dataset.arg ? `:${el.dataset.arg.split('|')[1] ?? ''}` : ''),
           big: r.width >= 38 && r.height >= 38,
-          onScreen: r.left >= -1 && r.right <= innerWidth + 1 && r.top >= -1 && r.bottom <= innerHeight + 1,
-          free: !!top && (el === top || el.contains(top)),
+          onScreen: box ? across : across && down,
+          free: showing ? !!top && (el === top || el.contains(top)) : true,
         });
       }
       return out;

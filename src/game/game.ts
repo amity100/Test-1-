@@ -5,6 +5,7 @@ import {
 import { grow, rewire, shapeOf } from './grow';
 import { runJobs, say, sync } from './jobs';
 import { opinionDay } from './opinion';
+import { standingTick } from './standing';
 import {
   actOnStory, cool, landMoves, noticed, peopleTalk, planMoves, rungOf,
 } from './watch';
@@ -183,6 +184,9 @@ export function tick(state: GameState, mins: number) {
 
   movePeople(state, (who, text) => say(state, who, text));
   runJobs(state, mins, (p: Place, n, look) => noticed(state, p, n, look));
+  // Everything I hold keeps working while I am busy elsewhere: cameras keep
+  // watching, the door keeps counting, the printer keeps teaching me their week.
+  standingTick(state, mins);
   tickHour(state, HAPPENINGS, (who, text) => say(state, who, text));
   peopleTalk(state);
   planMoves(state);

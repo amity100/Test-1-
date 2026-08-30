@@ -1,6 +1,7 @@
 import { bus } from './bus';
 import { CATALOGUE, waysInto } from './catalogue';
 import { crowd, minuteOfDay, now } from './clock';
+import { discount, known, standing } from './standing';
 import type { GameState, Job, Look, Place, PlaceKind, Verb } from './types';
 
 /**
@@ -105,7 +106,7 @@ export function hush(p: Place, by: number) { p.heat = Math.max(0, p.heat - by); 
  * They walk to whichever of their own places is not the one they are standing
  * in, which is what a person actually does when their screen dies.
  */
-export function shift(s: GameState, personId: string, line: string) {
+export function shift(s: GameState, personId: string, line: string, forMins = 25) {
   const who = s.people[personId];
   if (!who) return;
   const from = s.places[who.atPlaceId];
@@ -116,6 +117,8 @@ export function shift(s: GameState, personId: string, line: string) {
   if (from) from.peopleIds = from.peopleIds.filter((id) => id !== personId);
   who.atPlaceId = to.id;
   who.knownAt = s.at;
+  // And they stay away long enough for it to be worth having done.
+  who.awayUntil = s.at + forMins;
   if (!to.peopleIds.includes(personId)) to.peopleIds.push(personId);
   say(s, 'world', line);
 }
@@ -173,6 +176,18 @@ export function priceOf(s: GameState, p: Place, t: Task): Offer {
     why.push('כבר לקחתי כאן את החלקים הקלים');
   }
 
+  // Everything I already hold makes this cheaper, and says why.
+  const help = discount(standing(s), p, t.verb);
+  mins *= help.mins;
+  noise += help.noise;
+  why.push(...help.why);
+
+  // And everything I have learned or become.
+  const mine = known(s, p, t.verb);
+  mins *= mine.mins;
+  noise += mine.noise;
+  why.push(...mine.why);
+
   for (const g of s.grown) {
     const f = GROWTH_PRICE[g];
     if (f) f(t, (m, n) => { mins *= m; noise *= n; });
@@ -182,7 +197,13 @@ export function priceOf(s: GameState, p: Place, t: Task): Offer {
   if (night && t.noise > 0) { noise = Math.max(0, noise - 1); why.push('לילה — פחות אנשים ישימו לב'); }
 
   mins = Math.max(1, Math.round(mins));
-  noise = Math.max(0, Math.round(noise));
+  // Discounts stack, and left alone they stack all the way to silence — which
+  // let a careful player take a whole building without anybody ever wondering
+  // about anything. Something that was going to be noticed at all always
+  // leaves something behind; only what was silent to begin with stays silent.
+  noise = t.noise > 0
+    ? Math.max(1, Math.round(noise))
+    : Math.max(0, Math.round(noise));
 
   return {
     task: t, power, minutes: mins, noise,
@@ -286,7 +307,21 @@ export function runJobs(s: GameState, mins: number, noisy: (p: Place, n: number,
     if (!t) { stop(s, j.id); continue; }
     s.spent[j.verb] = (s.spent[j.verb] ?? 0) + mins;
 
-    if (j.forever) { t.each?.(s, p, mins); continue; }
+    if (j.forever) {
+      t.each?.(s, p, mins);
+      // Something that runs for ever is not free for ever. It leaks, slowly,
+      // at its own noise per hour — which is why sitting on somebody's phone
+      // all week is a decision and not a freebie.
+      if (j.noise > 0) {
+        j.leaked = (j.leaked ?? 0) + (j.noise * mins) / 60;
+        if (j.leaked >= 1) {
+          const whole = Math.floor(j.leaked);
+          j.leaked -= whole;
+          noisy(p, whole, j.look);
+        }
+      }
+      continue;
+    }
 
     j.left -= mins;
     if (j.left > 0) continue;
@@ -307,6 +342,7 @@ export function poolOf(s: GameState): number {
     all += (p.control / 100) * w;
     if (s.marks[`engine_${p.id}`]) all += 3;
   }
+  if (s.marks.big_engine) all += 3;
   return Math.floor(all);
 }
 

@@ -233,6 +233,8 @@ export interface Job {
   look: Look;
   /** Set the minute it ends, so the screen can show it fading. */
   doneAt?: number;
+  /** Noise a never-ending job has built up but not yet spilled. */
+  leaked?: number;
 }
 
 // ── People ──────────────────────────────────────────────────────────────────
@@ -275,6 +277,14 @@ export interface Person {
   saw?: string;
   /** The minute I last actually knew where they were. */
   knownAt?: number;
+  /**
+   * Pulled away from their own day until this minute.
+   *
+   * Without this, making somebody get up did nothing at all: the timetable put
+   * them straight back in their chair on the very next minute, so every ring,
+   * every dead screen and every message was theatre.
+   */
+  awayUntil?: number;
   /** They have gone home. Back tomorrow. */
   gone?: boolean;
 }

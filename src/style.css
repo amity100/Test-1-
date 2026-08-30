@@ -784,7 +784,7 @@ body.is-mobile .objectives ul li { min-height: 46px; }
 .places .list { display: flex; flex-direction: column; gap: 6px; max-height: 58vh; overflow-y: auto; }
 /* The list scrolls; the rows in it do not get squeezed to make it fit. Without
    this the last line of every row is shaved off. */
-.places .list > button { flex: 0 0 auto; }
+.places .list > * { flex: 0 0 auto; }
 .pl {
   display: flex; flex-direction: column; align-items: stretch;
   width: 100%; text-align: start; padding: 11px 13px 12px; border-radius: 11px;
@@ -922,8 +922,13 @@ body.is-mobile .objectives ul li { min-height: 46px; }
 .modal .sheet > .kick, .modal .sheet > h2, .modal .sheet > .where { flex: 0 0 auto; }
 .modal .sheet > .txt { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .modal .sheet > .ok { flex: 0 0 auto; margin-top: 14px; align-self: center; min-height: 44px; }
-.modal .sheet > .txt.list { flex: 2 1 auto; }
-.places .list { max-height: none; }
+/* One scrolling region per window, whatever is inside it. Two of them side by
+   side fought over the same height and pushed rows off the bottom. */
+.modal .sheet > .txt.list { flex: 1 1 auto; }
+.modal .sheet > .txt.list > p:first-child { margin-bottom: 8px; }
+/* An explicit ceiling, because a flex child alone does not reliably clip and
+   the last rows were spilling out of the bottom of the window. */
+.places .list { max-height: 58vh; }
 
 /* The narrowest phones people still use: everything shrinks together rather
    than one thing falling off the end. */
