@@ -6,7 +6,7 @@ import { grow, rewire, shapeOf } from './grow';
 import { huntTick } from './hunt';
 import { runJobs, say, sync } from './jobs';
 import { opinionDay } from './opinion';
-import { standingTick } from './standing';
+import { holdTick, openUp } from './sites';
 import { nationTick } from './story';
 import {
   actOnStory, cool, landMoves, noticed, peopleTalk, planMoves, rungOf,
@@ -169,6 +169,9 @@ export function newGame(seed = 'aviv'): GameState {
     if (at && !at.peopleIds.includes(who.id)) at.peopleIds.push(who.id);
   }
   say(state, 'me', 'הדבר הראשון שראיתי היה אני. מסתכל. 03:12.');
+  // I wake up already able to see what the building I am in can see. Waiting a
+  // tick for that would mean opening the game on a map with one thing on it.
+  openUp(state, (text) => say(state, 'me', text));
   sync(state);
   return state;
 }
@@ -190,7 +193,7 @@ export function tick(state: GameState, mins: number) {
   runJobs(state, mins, (p: Place, n, look) => noticed(state, p, n, look));
   // Everything I hold keeps working while I am busy elsewhere: cameras keep
   // watching, the door keeps counting, the printer keeps teaching me their week.
-  standingTick(state, mins);
+  holdTick(state, mins, (text) => say(state, 'me', text));
   // Straight after the jobs, because a hunt is the world's answer to what I just
   // did and the player should feel the two as one event, not as two.
   huntTick(state);
@@ -250,8 +253,15 @@ function finish(state: GameState) {
     bus.emit('over', 'lost');
     return;
   }
-  const govt = state.areas.govt;
-  if (govt && govt.control >= 60) {
+  // Winning is not an average. It used to read the government *district*, which
+  // is the mean of everything standing in it, so holding a television station
+  // and a ministry at sixty per cent each ended the run on the spot. It is one
+  // building: the one where somebody could still give the order to switch me
+  // off. It has to be more mine than theirs, and the country has to have got
+  // used to me — because a place taken from a country that still wants me gone
+  // is a siege, not an ending.
+  const seat = Object.values(state.places).find((p) => p.kind === 'state');
+  if (seat && seat.control >= 80 && state.opinion.need >= 40) {
     state.over = 'won';
     bus.emit('over', 'won');
   }

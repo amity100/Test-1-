@@ -1,5 +1,5 @@
-import { AREA_KIND_NAME } from './types';
-import { WORTH } from './standing';
+
+import { GIFT, KIND_NAME, weight as worthOf } from './sites';
 import { liveHunts } from './hunt';
 import { at, places as placeCount, things } from './story';
 import type { GameState, Place } from './types';
@@ -19,19 +19,6 @@ import type { GameState, Place } from './types';
  * in. Everything here is a view over the same state the rooms use — there is no
  * second set of rules to learn, which is the whole point.
  */
-
-/**
- * What each building is called out loud.
- *
- * Kept here rather than read out of the drawing, because the map has to be able
- * to name a building the camera has never been near.
- */
-const BUILDING_NAME: Record<string, string> = {
-  helios: 'מגדל הליוס',
-  across: 'הבניין ממול',
-  flats: 'הבית של דנה',
-  street: 'הרחוב עצמו',
-};
 
 export interface Target {
   id: string;
@@ -84,37 +71,8 @@ export function pointOf(s: GameState, t: Target): Place | null {
   })[0];
 }
 
-/** How much a single thing is worth having, in one number, for sorting only. */
-function worthOf(p: Place): number {
-  const by: Record<Place['kind'], number> = {
-    mainframe: 10, box: 9, power: 8, traffic: 7, door: 6, camera: 5,
-    printer: 5, computer: 4, phone: 4, car: 3, screen: 3, speaker: 3,
-  };
-  return by[p.kind] ?? 1;
-}
 
 // ── what a target is worth ──────────────────────────────────────────────────
-
-/**
- * One line saying why I would want this.
- *
- * An area says the one thing that is true only there — that sentence is already
- * written into the city. A building says whichever of the things inside it is
- * the most useful, borrowing the same sentence the room screen uses, so the two
- * levels never contradict each other.
- */
-function worthLine(s: GameState, kind: 'area' | 'building', places: Place[], only?: string): string {
-  if (kind === 'area' && only) return only;
-  const best = [...places].sort((a, b) => worthOf(b) - worthOf(a))[0];
-  if (!best) return 'עוד לא ראיתי מה יש שם.';
-  const held = places.filter((p) => p.control > 0).length;
-  if (held === 0) return WORTH[best.kind];
-  const missing = places.filter((p) => p.control <= 0)
-    .sort((a, b) => worthOf(b) - worthOf(a))[0];
-  return missing
-    ? `${placeCount(held)} כאן כבר שלי. מה שחסר הכי הרבה: ${missing.name} — ${WORTH[missing.kind]}`
-    : `הכל כאן כבר שלי.`;
-}
 
 /** One line saying what is happening there this minute, if anything is. */
 function nowLine(s: GameState, places: Place[]): string | null {
@@ -167,79 +125,45 @@ function riskOf(s: GameState, places: Place[]): number {
 export function board(s: GameState): Target[] {
   const out: Target[] = [];
 
-  // Buildings first: they are what the player actually pushes on.
-  const byBuilding = new Map<string, Place[]>();
+  // Every place I have heard of, because a place *is* the unit of the game now.
+  // This used to group them by building, which made sense when a place was one
+  // object inside one — and made nonsense of a country, where twenty-two of the
+  // twenty-five places are not in a building at all and all collapsed into a
+  // single row called "the street".
   for (const p of Object.values(s.places)) {
     if (!p.found && p.control <= 0) continue;
-    const list = byBuilding.get(p.buildingId) ?? [];
-    list.push(p);
-    byBuilding.set(p.buildingId, list);
-  }
-
-  for (const [id, places] of byBuilding) {
-    const area = s.areas[places[0].areaId];
-    const mine = places.filter((p) => p.control > 0).length;
-    const control = places.reduce((n, p) => n + p.control, 0) / places.length;
+    const area = s.areas[p.areaId];
     out.push({
-      id: `b:${id}`,
+      id: `p:${p.id}`,
       kind: 'building',
-      // The building's own name, not the floor the first thing in it happens to
-      // sit on: "קומה 14" is where something is, never what it is.
-      name: BUILDING_NAME[id] ?? 'בניין',
-      where: area ? area.name : 'תל אביב',
-      control,
-      heat: Math.max(0, ...places.map((p) => p.heat)),
-      mine,
-      found: places.length,
-      worth: worthLine(s, 'building', places),
-      now: nowLine(s, places),
-      risk: riskOf(s, places),
-      seen: places.reduce((n, p) => n + p.seen, 0) / places.length,
-      places: places.map((p) => p.id),
+      name: p.name,
+      where: `${KIND_NAME[p.kind]} · ${area ? area.name : 'תל אביב'}`,
+      control: p.control,
+      heat: p.heat,
+      mine: p.control > 0 ? 1 : 0,
+      found: 1,
+      worth: GIFT[p.kind].says,
+      now: nowLine(s, [p]),
+      risk: riskOf(s, [p]),
+      seen: p.seen,
+      places: [p.id],
       x: area?.x ?? 0,
       z: area?.z ?? 0,
     });
   }
 
-  // Then the city itself, so "where next" is always a question on screen —
-  // but only the parts of it I have actually seen something of. Seven rows all
-  // reading "שם על המפה. עוד לא יודע מה יש שם" is not a map with holes in it,
-  // it is a wall of the same sentence, and it buried the two rows that meant
-  // something. What I have not reached yet gets one row at the end, below.
-  for (const a of Object.values(s.areas)) {
-    if (a.seen < 20 && a.control <= 0) continue;
-    const places = Object.values(s.places).filter((p) => p.areaId === a.id
-      && (p.found || p.control > 0));
-    out.push({
-      id: `a:${a.id}`,
-      kind: 'area',
-      name: a.name,
-      where: AREA_KIND_NAME[a.kind],
-      control: a.control,
-      heat: a.heat,
-      mine: places.filter((p) => p.control > 0).length,
-      found: places.length,
-      worth: a.seen >= 20 ? a.only : 'שם על המפה. עוד לא יודע מה יש שם.',
-      now: nowLine(s, places),
-      risk: riskOf(s, places),
-      seen: a.seen,
-      places: places.map((p) => p.id),
-      x: a.x,
-      z: a.z,
-    });
-  }
-
-  // Everywhere I have not reached yet, as one line rather than as seven.
-  const dark = Object.values(s.areas).filter((a) => a.seen < 20 && a.control <= 0);
+  // Everywhere I have not reached yet, as one line rather than as a dozen.
+  const dark = Object.values(s.areas).filter((a) => !Object.values(s.places)
+    .some((p) => p.areaId === a.id && (p.found || p.control > 0)));
   if (dark.length) {
     out.push({
       id: 'a:dark',
       kind: 'area',
-      name: 'שאר העיר',
-      where: `${placeCount(dark.length).replace('מקום', 'אזור').replace('מקומות', 'אזורים')} שעוד לא ראיתי`,
+      name: 'שאר הארץ',
+      where: `${dark.length} אזורים שעוד לא ראיתי`,
       control: 0, heat: 0, mine: 0, found: 0,
       worth: `${dark.slice(0, 3).map((a) => a.name).join(' · ')}`
-        + `${dark.length > 3 ? ' ועוד' : ''} — כדי להגיע לשם צריך קודם משהו שיוצא מהבניין.`,
+        + `${dark.length > 3 ? ' ועוד' : ''} — כדי להגיע לשם צריך קודם מקום שיוצא לשם.`,
       now: null, risk: 0, seen: 0,
       places: [],
       x: 0, z: 0,
@@ -252,11 +176,11 @@ export function board(s: GameState): Target[] {
     const moving = (y.now ? 1 : 0) - (x.now ? 1 : 0);
     if (moving) return moving;
     if (y.mine !== x.mine) return y.mine - x.mine;
-    return y.found - x.found;
+    const px = s.places[x.places[0]];
+    const py = s.places[y.places[0]];
+    return (py ? worthOf(py) : 0) - (px ? worthOf(px) : 0);
   });
 }
-
-// ── acting from up here ─────────────────────────────────────────────────────
 
 /** The price of reaching in from up here lives with the rest of the prices. */
 export { ABOVE_MINUTES, ABOVE_NOISE, ABOVE_SAYS } from './jobs';
@@ -308,7 +232,7 @@ export function bestNow(s: GameState): string {
   const near = Object.values(s.places)
     .filter((p) => p.found && p.control <= 0)
     .sort((a, b) => worthOf(b) - worthOf(a))[0];
-  if (near) return `${near.name} — ${WORTH[near.kind]}`;
+  if (near) return `${near.name} — ${GIFT[near.kind].says}`;
 
   if (s.heat >= 40) return 'הם מבינים יותר מדי. שווה עכשיו יותר להסתתר מאשר להתרחב.';
   return 'שקט. שקט זה בדיוק הזמן להתרחב.';

@@ -103,6 +103,7 @@ const oldestJob = (s: GameState) => s.jobs[0]?.id;
 // ── פזיז ───────────────────────────────────────────────────────────────────
 const wild = play({
   name: 'wild',
+  // Takes the loudest thing available, always, everywhere.
   pick: (_s, can) => noisiest(can),
   drop: oldestJob,
 }, 30);
@@ -114,10 +115,9 @@ ok(total(wild) < 900, `   ולא נשאר לו הרבה (${total(wild)} נקוד
 const quiet = play({
   name: 'quiet',
   answers: true,
-  pick: (_s, can) => {
-    const safe = can.filter((c) => c.o.noise === 0 && (c.o.task.verb === 'watch' || c.o.task.verb === 'hide'));
-    return safe.length ? safe[0] : undefined;
-  },
+  // Never does anything anybody could notice. Which means it never gets in
+  // anywhere either, because getting in is the loud one.
+  pick: (_s, can) => can.filter((c) => c.o.noise === 0)[0],
 }, 30);
 ok(!quiet.over, `שקט שרד חודש (חשד ${Math.round(quiet.heat)})`);
 ok(rungOf(quiet) === 0, '   ואף אחד לא חיפש אותו אף פעם');
@@ -128,34 +128,26 @@ const smart = play({
   name: 'smart',
   answers: true,
   pick: (s, can) => {
-    // Getting close to being looked at: stop growing, start cleaning up.
-    if (s.heat >= 20) {
-      const calm = can.find((c) => c.o.task.verb === 'hide');
+    // Getting close to being looked at: stop growing, start tidying.
+    if (s.heat >= 22) {
+      const calm = can.find((c) => c.o.task.id === 'quiet');
       if (calm) return calm;
     }
-    // A couple of eyes, no more — every one of them holds power for ever, and
-    // a pool with nothing free in it is a pool that cannot do anything.
-    const eyes = s.jobs.filter((j) => j.forever).length;
-    if (eyes < 2) {
-      const eye = can.find((c) => c.o.task.verb === 'watch' && c.o.task.minutes === 0
-        && s.places[c.placeId].seen < 40);
-      if (eye) return eye;
-    }
-    // Getting somewhere new beats polishing somewhere I already am.
-    const reachOut = can.filter((c) => c.o.task.verb === 'connect'
-      && s.places[c.placeId].control < 40 && c.o.noise <= 2);
-    if (reachOut.length) return quietest(reachOut);
-    const grow = can.filter((c) => (c.o.task.verb === 'connect' || c.o.task.verb === 'deepen')
-      && c.o.noise <= 2);
+    // Finish what is nearly finished — a place at ninety is worth far more
+    // than two at forty, because what a place gives scales with how much of it
+    // is really mine.
+    const nearly = can.filter((c) => c.o.task.id === 'grow'
+      && s.places[c.placeId].control >= 55);
+    if (nearly.length) return quietest(nearly);
+    // Then somewhere new, quietly, and only at a decent hour.
+    const doors = can.filter((c) => c.o.task.id === 'enter');
+    if (doors.length && s.heat < 16) return quietest(doors);
+    // Otherwise keep growing whatever is cheapest.
+    const grow = can.filter((c) => c.o.task.id === 'grow');
     if (grow.length) return quietest(grow);
-    const reach = can.filter((c) => c.o.task.verb === 'spread' && c.o.noise <= 2);
-    if (reach.length) return quietest(reach);
-    const read = can.filter((c) => c.o.task.verb === 'watch' && c.o.task.minutes > 0);
-    return read.length ? quietest(read) : undefined;
+    return can.find((c) => c.o.task.id === 'quiet');
   },
-  // When the pool is full, the thing to give back is an eye, not a job that is
-  // halfway through something.
-  drop: (s) => s.jobs.filter((j) => j.forever).slice(-1)[0]?.id,
+  drop: oldestJob,
 }, 30);
 ok(!smart.over, `מחושב שרד חודש (חשד ${Math.round(smart.heat)}, דרגה ${rungOf(smart)})`);
 ok(held(smart) > held(quiet), `   וגדל הרבה יותר מהשקט (${held(smart)} מקומות מול ${held(quiet)})`);
@@ -164,9 +156,10 @@ ok(total(smart) > total(quiet) * 2, `   ובעומק (${total(smart)} מול ${t
 // ── עיוור ──────────────────────────────────────────────────────────────────
 const blind = play({
   name: 'blind',
+  // Grabs and grabs and never once tidies up after itself.
   pick: (_s, can) => {
-    const grab = can.filter((c) => c.o.task.verb === 'connect' || c.o.task.verb === 'spread');
-    return grab.length ? grab[0] : undefined;
+    const grab = can.filter((c) => c.o.task.id === 'enter' || c.o.task.id === 'use');
+    return grab.length ? grab[0] : can.find((c) => c.o.task.id === 'grow');
   },
   drop: oldestJob,
 }, 30);

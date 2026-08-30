@@ -9,7 +9,7 @@ import { SPEEDS, SPEED_NAME, clock as clockAt, crowd, hourSays, seenAt } from '.
 import { ABOVE_SAYS, Offer, offersAt, start, stop, wideOffersAt } from '../game/jobs';
 import { GROWTHS, SHAPE_NAME, SHAPE_SAYS } from '../game/grow';
 import { comeOut, saysOpinion } from '../game/opinion';
-import { WORTH } from '../game/standing';
+import { GIFT, KIND_NAME } from '../game/sites';
 import { answer, liveHunts, rowsOf, scriptOf, stillNeeds } from '../game/hunt';
 import { board, bestNow, pointOf } from '../game/board';
 import { mins as minsWord, reach, to as toPlace } from '../game/story';
@@ -350,7 +350,7 @@ export class UI {
     pick.innerHTML = `
       <button class="x" data-do="close">✕</button>
       <span class="who">${esc(p.name)} · ${Math.round(p.control)}% שלי · ${esc(head)}</span>
-      <p class="worth">${esc(WORTH[p.kind])}</p>
+      <p class="worth">${esc(GIFT[p.kind].says)}</p>
       <div class="ops">${rows || '<p class="need">אין כאן מה לעשות כרגע.</p>'}</div>`;
   }
 
@@ -571,7 +571,7 @@ export class UI {
         data-do="fly" data-arg="${p.id}">
         <b>${esc(p.name)}${p.control > 0 ? ` · ${Math.round(p.control)}%` : ''}</b>
         <em>${esc(p.where)}${p.copy ? ' · יש כאן חלק ממני' : ''}${p.dug > 0 ? ` · תפוס חזק (${Math.round(p.dug)})` : ''}</em>
-        <u>${esc(WORTH[p.kind])}</u>
+        <u>${esc(GIFT[p.kind].says)}</u>
       </button>`;
     const mine = Object.values(s.places).filter((p) => p.control > 0)
       .sort((x, y) => y.control - x.control).map(row).join('');
@@ -825,7 +825,7 @@ export class UI {
       return `<button class="tg ${t.mine > 0 ? 'mine' : ''} ${risk}"
           data-do="target" data-arg="${t.id}">
         <b>${esc(t.name)}${t.control > 0 ? ` · ${Math.round(t.control)}%` : ''}</b>
-        <em>${esc(t.where)}${t.mine > 0 ? ` · ${t.mine} מתוך ${t.found} כבר שלי` : ''}</em>
+        <em>${esc(t.where)}</em>
         <u>${esc(t.worth)}</u>
         ${t.now ? `<i class="tnow">${esc(t.now)}</i>` : ''}
       </button>`;
@@ -839,7 +839,14 @@ export class UI {
       </div>`);
   }
 
-  /** One target opened: what I can do to it from up here, and the way in. */
+  /**
+   * One place opened: the four things, and the way in.
+   *
+   * There is no longer a difference between acting on "the whole building" and
+   * acting on "something in it", because a place *is* the whole building. So
+   * this shows the four actions once, at what they cost, and a button to go and
+   * watch it happen — which is a thing you may do, never a thing you must.
+   */
   private showTarget(id: string) {
     const s = this.state;
     const t = board(s).find((x) => x.id === id);
@@ -848,38 +855,35 @@ export class UI {
     if (!p) {
       this.modal(`<div class="sheet">
         <span class="kick">${esc(t.name)}</span>
-        <h2>עוד לא ראיתי מה יש שם</h2>
-        <div class="txt"><p>${esc(t.worth)}</p>
-          <p class="need">צריך קודם להגיע לשם דרך משהו שכבר שלי.</p></div>
+        <h2>עוד לא הגעתי לשם</h2>
+        <div class="txt"><p>${esc(t.worth)}</p></div>
         <button class="ok" data-do="board">חזרה למפה</button>
       </div>`);
       return;
     }
 
-    const wide = wideOffersAt(s, p.id).slice(0, 4);
-    const inside = offersAt(s, p.id).slice(0, 3);
-    const line = (o: Offer, above: boolean) => `<button class="tg ${o.short > 0 ? 'poor' : ''}"
-        data-do="doat" data-arg="${p.id}|${o.task.id}|${above ? '1' : '0'}">
+    const offers = offersAt(s, p.id);
+    const line = (o: Offer) => `<button class="tg ${o.short > 0 ? 'poor' : ''}"
+        data-do="doat" data-arg="${p.id}|${o.task.id}|0">
       <b>${SIGN[o.task.verb]} ${esc(o.task.text)}</b>
       <em>${esc(o.task.says)}</em>
-      <u>${o.power} כוח · ${esc(o.task.minutes === 0 ? 'עד שאעצור' : minsWord(o.minutes))} · ${o.noise} יראו${o.short > 0 ? ` · חסר ${o.short} כוח` : ''}</u>
+      <u>${o.power} כוח · ${esc(o.task.minutes === 0 ? 'עד שאעצור' : minsWord(o.minutes))}`
+      + ` · ${o.noise} יראו${o.short > 0 ? ` · חסר ${o.short} כוח` : ''}</u>
+      ${o.cheaper ? `<i class="tnow">${esc(o.cheaper)}</i>` : ''}
     </button>`;
 
     this.modal(`
       <div class="sheet wide boardsheet">
-        <span class="kick">${esc(t.name)} · ${esc(t.where)}</span>
-        <h2>${Math.round(t.control)}% שלי</h2>
+        <span class="kick">${esc(t.where)}</span>
+        <h2>${esc(p.name)}${p.control > 0 ? ` — ${Math.round(p.control)}% שלי` : ''}</h2>
         <div class="txt">
-          <p>${esc(t.worth)}</p>
+          <p>${esc(GIFT[p.kind].says)}</p>
           ${t.now ? `<p class="need">${esc(t.now)}</p>` : ''}
         </div>
         <div class="txt list">
-          <p class="need">על כל ${esc(t.name)} בבת אחת — ${esc(ABOVE_SAYS)}</p>
-          ${wide.map((o) => line(o, true)).join('') || '<p class="need">אין כרגע משהו שאפשר לעשות על כל המקום.</p>'}
-          <p class="need">או להיכנס פנימה, ${esc(toPlace(p.name))}, ולעשות את זה בזול</p>
-          ${inside.map((o) => line(o, false)).join('')}
+          ${offers.map(line).join('') || '<p class="need">אין כאן מה לעשות כרגע.</p>'}
         </div>
-        <button class="ok" data-do="fly" data-arg="${p.id}">להיכנס לשם</button>
+        <button class="ok" data-do="fly" data-arg="${p.id}">לראות את זה</button>
       </div>`);
   }
 

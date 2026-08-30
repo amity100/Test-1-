@@ -68,8 +68,8 @@ export interface Script {
 // ── the small words the scripts are written in ──────────────────────────────
 
 /** Everything of mine that is running in this building. */
-function busyIn(s: GameState, buildingId: string) {
-  return s.jobs.filter((j) => s.places[j.placeId]?.buildingId === buildingId);
+function busyIn(s: GameState, areaId: string) {
+  return s.jobs.filter((j) => s.places[j.placeId]?.areaId === areaId);
 }
 
 /** Everything of mine that is running at this one thing. */
@@ -78,9 +78,9 @@ function busyAt(s: GameState, placeId: string) {
 }
 
 /** Do I hold a thing of this kind in this building? */
-function haveKind(s: GameState, buildingId: string, kind: Place['kind'], at = 30) {
+function haveKind(s: GameState, areaId: string, kind: Place['kind'], at = 30) {
   return Object.values(s.places).some(
-    (q) => q.buildingId === buildingId && q.kind === kind && q.control >= at,
+    (q) => q.areaId === areaId && q.kind === kind && q.control >= at,
   );
 }
 
@@ -134,10 +134,10 @@ const STILL_ALL: Answer = {
   id: 'still_all',
   text: 'לשכב בשקט בכל הבניין',
   says: 'לעצור כל דבר שלי בכל הבניין. יקר, אבל אין מה למצוא.',
-  met: (s, p) => busyIn(s, p.buildingId).length === 0,
-  can: (s, p) => busyIn(s, p.buildingId).length > 0,
+  met: (s, p) => busyIn(s, p.areaId).length === 0,
+  can: (s, p) => busyIn(s, p.areaId).length > 0,
   press: (s, p) => {
-    const stopped = busyIn(s, p.buildingId);
+    const stopped = busyIn(s, p.areaId);
     letGo(s, stopped);
     tell(s, 'me', `הפסקתי הכל בבניין. ${stopped.length} דברים שלי עמדו מלכת בבת אחת.`, 1, p.id);
   },
@@ -164,7 +164,7 @@ const DARK: Answer = {
   text: 'לכבות את האור בקומה',
   says: 'חושך פתאומי. הוא ילך להביא פנס, ועד שיחזור זה כבר לא יעניין אותו.',
   met: (s, _p, h) => (s.marks[`dark_${h.id}`] ?? 0) > 0,
-  can: (s, p) => haveKind(s, p.buildingId, 'power'),
+  can: (s, p) => haveKind(s, p.areaId, 'power'),
   lacks: () => 'צריך שחדר החשמל של הבניין יהיה שלי.',
   press: (s, p, h) => {
     s.marks[`dark_${h.id}`] = 1;
@@ -183,7 +183,7 @@ const CUT_LINE: Answer = {
   text: 'לנתק את הבניין מהרחוב',
   says: 'מה שהוא מחפש — לא יוכל לספר עליו לאף אחד בחוץ. גם אני לא אוכל לצאת.',
   met: (s) => (s.marks.line_cut ?? 0) > 0,
-  can: (s, p) => haveKind(s, p.buildingId, 'box') || haveKind(s, p.buildingId, 'power'),
+  can: (s, p) => haveKind(s, p.areaId, 'power') || haveKind(s, p.areaId, 'company'),
   lacks: () => 'צריך שקופסת האינטרנט או חדר החשמל של הבניין יהיו שלי.',
   press: (s, p) => {
     s.marks.line_cut = (s.marks.line_cut ?? 0) + 1;
@@ -197,14 +197,12 @@ const ELSEWHERE: Answer = {
   text: 'לתת לו סיבה ללכת',
   says: 'משהו קטן ייפול בקצה השני של הבניין, והוא ילך לבדוק אותו.',
   met: (s, _p, h) => (s.marks[`pulled_${h.id}`] ?? 0) > 0,
-  can: (s, p) => haveKind(s, p.buildingId, 'printer', 20)
-    || haveKind(s, p.buildingId, 'screen', 20)
-    || haveKind(s, p.buildingId, 'speaker', 20)
-    || haveKind(s, p.buildingId, 'computer', 20),
+  can: (s, p) => Object.values(s.places).some((q) => q.areaId === p.areaId
+    && q.id !== p.id && q.control >= 20),
   lacks: () => 'צריך שיהיה לי משהו אחר בבניין שאני יכול להרעיש איתו.',
   press: (s, p, h) => {
     s.marks[`pulled_${h.id}`] = 1;
-    const far = Object.values(s.places).find((q) => q.buildingId === p.buildingId
+    const far = Object.values(s.places).find((q) => q.areaId === p.areaId
       && q.id !== p.id && q.control >= 20);
     const who = s.people[h.whoId];
     if (who) who.awayUntil = s.at + 40;
@@ -360,14 +358,14 @@ export const SCRIPTS: Script[] = [
         id: 'move_out',
         text: 'לעבור למשהו אחר בבניין',
         says: 'לקחת את מה שיש לי כאן ולהזיז אותו לדבר אחר שכבר שלי. כשיזרקו את הישן — לא אהיה בו.',
-        met: (s, p) => Object.values(s.places).some((q) => q.buildingId === p.buildingId
+        met: (s, p) => Object.values(s.places).some((q) => q.areaId === p.areaId
           && q.id !== p.id && q.control >= 40),
-        can: (s, p) => Object.values(s.places).some((q) => q.buildingId === p.buildingId
+        can: (s, p) => Object.values(s.places).some((q) => q.areaId === p.areaId
           && q.id !== p.id && q.control >= 15),
         lacks: () => 'אין לי עוד שום דבר בבניין הזה לעבור אליו.',
         press: (s, p) => {
           const spare = Object.values(s.places)
-            .filter((q) => q.buildingId === p.buildingId && q.id !== p.id && q.control >= 15)
+            .filter((q) => q.areaId === p.areaId && q.id !== p.id && q.control >= 15)
             .sort((a, b) => b.control - a.control)[0];
           if (!spare) return;
           const moved = Math.min(35, p.control);
@@ -402,8 +400,8 @@ export const SCRIPTS: Script[] = [
         says: 'אם יש לי מקומות בבניינים אחרים, אין להם מה לכבות — אני כבר לא במקום אחד.',
         met: (s, p) => {
           const others = new Set(Object.values(s.places)
-            .filter((q) => q.control >= 25 && q.buildingId !== p.buildingId)
-            .map((q) => q.buildingId));
+            .filter((q) => q.control >= 25 && q.areaId !== p.areaId)
+            .map((q) => q.areaId));
           return others.size >= 2;
         },
         lacks: () => 'צריך שיהיו לי מקומות בשני בניינים אחרים לפחות.',
@@ -440,7 +438,7 @@ export function send(s: GameState, personId: string, placeId: string, mins: numb
 function pick(s: GameState, p: Place, role: Script['role']): Person | null {
   const all = Object.values(s.people);
   const fits = (q: Person) => role === 'כל אחד' || q.role.includes(role);
-  const near = (q: Person) => s.places[q.atPlaceId]?.buildingId === p.buildingId;
+  const near = (q: Person) => s.places[q.atPlaceId]?.areaId === p.areaId;
   return all.find((q) => fits(q) && near(q) && !q.gone)
     ?? all.find((q) => fits(q))
     ?? all.find((q) => near(q) && !q.gone)
@@ -674,7 +672,7 @@ function land(s: GameState, p: Place, sc: Script, name: string, he = true) {
     case 'wake': {
       // Only the end of everything if there really is nothing else left.
       const elsewhere = Object.values(s.places)
-        .filter((q) => q.control > 0 && q.buildingId !== p.buildingId).length;
+        .filter((q) => q.control > 0 && q.areaId !== p.areaId).length;
       p.control = 0;
       p.dug = 0;
       bus.emit('place:lost', p.id);

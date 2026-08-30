@@ -32,7 +32,7 @@ const run = (s: GameState, mins: number, step = 5) => {
 
 {
   const s = newGame('answer');
-  const p = s.places.dana_pc;
+  const p = s.places.atidim;
   p.found = true;
   p.control = 40;
   p.seen = 60;
@@ -65,7 +65,7 @@ const run = (s: GameState, mins: number, step = 5) => {
 
 {
   const s = newGame('answer2');
-  const p = s.places.dana_pc;
+  const p = s.places.atidim;
   p.found = true; p.control = 60; p.seen = 60;
   // Something of mine running here, so "lie still" has something to stop.
   const offer = offersAt(s, p.id).find((o) => o.task.minutes > 0);
@@ -99,7 +99,7 @@ const run = (s: GameState, mins: number, step = 5) => {
 
 {
   const s = newGame('answer3');
-  const p = s.places.dana_pc;
+  const p = s.places.atidim;
   p.found = true; p.control = 70; p.dug = 0; p.seen = 60;
   const was = p.control;
   const h = startHunt(s, p, 'looker');
@@ -129,7 +129,7 @@ const run = (s: GameState, mins: number, step = 5) => {
 {
   for (const sc of SCRIPTS) {
     const s = newGame(`script_${sc.id}`);
-    const p = s.places.dana_pc;
+    const p = s.places.atidim;
     p.found = true; p.control = 55; p.seen = 60;
     const h = startHunt(s, p, sc.id);
     if (!h) { ok(false, `${sc.id} — לא מצליח להתחיל`); continue; }
@@ -147,7 +147,7 @@ const run = (s: GameState, mins: number, step = 5) => {
 
 {
   const s = newGame('loud');
-  const p = s.places.dana_pc;
+  const p = s.places.atidim;
   p.found = true; p.control = 50; p.seen = 60; p.heat = 60;
   s.heat = 30;
   // A whole day of being loud should produce at least one visit.
@@ -165,7 +165,7 @@ const run = (s: GameState, mins: number, step = 5) => {
 
 {
   const s = newGame('written');
-  const p = s.places.dana_pc;
+  const p = s.places.atidim;
   p.found = true; p.control = 45; p.seen = 60;
 
   let wrote = 0;
@@ -214,7 +214,7 @@ const run = (s: GameState, mins: number, step = 5) => {
   ok(!!mineTarget, 'המפה יודעת מה כבר שלי');
 
   // Acting from above must cost real money, and must actually start.
-  const p = s.places.home;
+  const p = s.places.helios;
   const wide = wideOffersAt(s, p.id);
   ok(wide.length > 0, 'יש פעולות שאפשר לעשות על בניין שלם מלמעלה');
   if (wide.length) {
@@ -226,7 +226,7 @@ const run = (s: GameState, mins: number, step = 5) => {
     const went = start(s, p.id, t.id, true);
     ok(went, 'אפשר באמת להתחיל פעולה מהמפה');
     const job = s.jobs[s.jobs.length - 1];
-    ok(!!job && job.wideIn === p.buildingId, 'הפעולה נרשמה כמשהו שחל על כל הבניין');
+    ok(!!job && job.above === true, 'הפעולה נרשמה כמשהו שנעשה מרחוק');
   }
 }
 
@@ -244,17 +244,17 @@ const run = (s: GameState, mins: number, step = 5) => {
   }
   ok(worst <= MOST_OFFERS, `שום חפץ לא מציע יותר מ־${MOST_OFFERS} דברים (הכי גרוע: ${worst})`);
   console.log(`  · ${total} אפשרויות בסך הכל, לעומת 324 קודם`);
-  ok(total < 200, `סך האפשרויות ירד משמעותית (${total})`);
-  ok(CATALOGUE.filter((t) => t.wide).length === 6, 'שש המשימות הכלליות עברו למפה');
+  ok(total < 120, `סך האפשרויות ירד משמעותית (${total})`);
+  ok(CATALOGUE.length === 4, `יש בדיוק ארבע פעולות בכל המשחק (${CATALOGUE.length})`);
 }
 
 // ── waiting for the right hour is worth something ───────────────────────────
 
 {
   const s = newGame('timing');
-  const p = s.places.dana_pc;
+  const p = s.places.atidim;
   p.found = true; p.control = 40; p.seen = 40;
-  const t = CATALOGUE.find((x) => x.id === 'read_inside')!;
+  const t = CATALOGUE.find((x) => x.id === 'grow')!;
 
   // The worst moment: the middle of the working day, with the room full.
   s.at = 9 * 60 - 3 * 60 - 12 + 60; // just past 09:00 on day one

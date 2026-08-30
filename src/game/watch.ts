@@ -4,6 +4,7 @@ import { dayOf, minuteOfDay, now } from './clock';
 import { maybeHunt } from './hunt';
 import { say } from './jobs';
 import { at, feltIt } from './story';
+import { fadeRate } from './sites';
 import type { GameState, Look, Move, Place, Rung } from './types';
 
 /**
@@ -337,7 +338,9 @@ export function peopleTalk(s: GameState) {
 
 /** Everything cools a little all the time. Doing nothing is a real move. */
 export function cool(s: GameState, mins: number) {
-  s.heat = Math.max(0, s.heat - mins * 0.0035);
+  // Everywhere I can disappear into makes forgetting faster, which is what a
+  // neighbourhood is actually for.
+  s.heat = Math.max(0, s.heat - mins * 0.0035 / fadeRate(s));
   for (const p of Object.values(s.places)) p.heat = Math.max(0, p.heat - mins * 0.012);
   for (const t of STORIES) {
     if (s.belief[t.id]) s.belief[t.id] = Math.max(0, s.belief[t.id] - mins * 0.002);
@@ -358,9 +361,9 @@ export function actOnStory(s: GameState) {
 
     // What they replace, I lose my grip on.
     const hit = Object.values(s.places).filter((p) => p.control > 0
-      && ((t.id === 'fault' && (p.kind === 'power' || p.kind === 'box'))
-        || (t.id === 'insider' && (p.kind === 'door' || p.kind === 'computer'))
-        || (t.id === 'outside' && (p.buildingId === 'street' || p.kind === 'box'))));
+      && ((t.id === 'fault' && (p.kind === 'power' || p.kind === 'water'))
+        || (t.id === 'insider' && (p.kind === 'company' || p.kind === 'city'))
+        || (t.id === 'outside' && (p.kind === 'roads' || p.kind === 'transport'))));
     for (const p of hit.slice(0, 2)) {
       p.control = Math.max(0, p.control - 40);
       p.guard = Math.min(100, p.guard + 12);

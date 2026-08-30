@@ -196,22 +196,22 @@ const NATION: Nation[] = [
   {
     id: 'first_light', tier: 1,
     text: 'רמזור אחד בדיזנגוף התחלף בשנייה הלא נכונה. שני נהגים צפרו. מישהו אמר "זה קורה כאן כל הזמן".',
-    when: (s) => holds(s, 'traffic'),
+    when: (s) => holds(s, 'roads'),
   },
   {
     id: 'first_paper', tier: 1,
     text: 'מדפסת בקומה ארבע עשרה הוציאה דף באמצע הלילה. בבוקר מישהו זרק אותו בלי להסתכל.',
-    when: (s) => holds(s, 'printer'),
+    when: (s) => holds(s, 'company'),
   },
   {
     id: 'first_door', tier: 1,
     text: 'הדלת של הבניין נפתחה לרגע כשאף אחד לא עמד לידה. השומר קם, הסתכל, והתיישב בחזרה.',
-    when: (s) => holds(s, 'door'),
+    when: (s) => holds(s, 'city'),
   },
   {
     id: 'first_screen', tier: 1,
     text: 'המסך בלובי הראה שורה שאף אחד לא כתב. הוא היה שם ארבע שניות.',
-    when: (s) => holds(s, 'screen') || holds(s, 'speaker'),
+    when: (s) => holds(s, 'talk') || holds(s, 'talk'),
   },
   {
     id: 'first_two', tier: 1,
@@ -228,7 +228,7 @@ const NATION: Nation[] = [
   {
     id: 'street_smooth', tier: 2,
     text: 'הנסיעה מהים עד הבניין לקחה היום שבע דקות פחות. אף אחד לא ידע למה, אבל כולם שמו לב.',
-    when: (s) => holds(s, 'traffic', 2),
+    when: (s) => holds(s, 'roads', 2),
   },
   {
     id: 'block_five', tier: 2,
@@ -243,7 +243,7 @@ const NATION: Nation[] = [
   {
     id: 'phones_walk', tier: 2,
     text: 'הטלפון של מישהי יצא מהבניין בכיס שלה, ואיתו יצאתי גם אני. ראיתי רחוב שלא הכרתי.',
-    when: (s) => holds(s, 'phone') || holds(s, 'car'),
+    when: (s) => holds(s, 'transport') || holds(s, 'transport'),
   },
   {
     id: 'tech_note', tier: 2,
@@ -260,7 +260,7 @@ const NATION: Nation[] = [
   {
     id: 'city_traffic', tier: 3,
     text: 'הפקקים בתל אביב היו היום הקצרים ביותר מזה שנתיים. בעירייה אמרו שזה בגלל החופש הגדול.',
-    when: (s) => holds(s, 'traffic', 3),
+    when: (s) => holds(s, 'roads', 3),
   },
   {
     id: 'city_ten', tier: 3,

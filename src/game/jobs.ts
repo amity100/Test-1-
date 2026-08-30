@@ -1,7 +1,7 @@
 import { bus } from './bus';
 import { CATALOGUE, waysInto } from './catalogue';
 import { crowd, minuteOfDay, now } from './clock';
-import { discount, known, standing } from './standing';
+import { discount, poolFrom } from './sites';
 import { afterJob, at, snap, tell } from './story';
 import type { GameState, Job, Look, Place, PlaceKind, Verb } from './types';
 
@@ -133,9 +133,10 @@ export function shift(s: GameState, personId: string, line: string, forMins = 25
   const who = s.people[personId];
   if (!who) return;
   const from = s.places[who.atPlaceId];
+  // Somewhere else of theirs, which now means a different place in the city
+  // rather than a different desk on the same floor.
   const to = Object.values(s.places).find((q) => q.id !== who.atPlaceId
-    && q.buildingId === (from?.buildingId ?? 'helios')
-    && (q.kind === 'mainframe' || q.kind === 'printer' || q.kind === 'door'));
+    && q.areaId === (from?.areaId ?? 'gvirol'));
   if (!to) return;
   if (from) from.peopleIds = from.peopleIds.filter((id) => id !== personId);
   who.atPlaceId = to.id;
@@ -218,16 +219,10 @@ export function priceOf(s: GameState, p: Place, t: Task, above = false): Offer {
   }
 
   // Everything I already hold makes this cheaper, and says why.
-  const help = discount(standing(s), p, t.verb);
+  const help = discount(s, p);
   mins *= help.mins;
   noise += help.noise;
   why.push(...help.why);
-
-  // And everything I have learned or become.
-  const mine = known(s, p, t.verb);
-  mins *= mine.mins;
-  noise += mine.noise;
-  why.push(...mine.why);
 
   for (const g of s.grown) {
     const f = GROWTH_PRICE[g];
@@ -335,7 +330,11 @@ export function allOffersAt(s: GameState, placeId: string): Offer[] {
   if (!p) return [];
   return [...TASKS, ...waysInto(s, p)]
     .filter((t) => !t.wide)
-    .filter((t) => (t.places ? t.places.includes(p.id) : (t.kinds ?? []).includes(p.kind)))
+    // A task with neither a list of places nor a list of kinds belongs
+    // everywhere, which is now the normal case: there are four actions and all
+    // four are offered at every place in the country.
+    .filter((t) => (t.places ? t.places.includes(p.id)
+      : t.kinds ? t.kinds.includes(p.kind) : true))
     .filter((t) => (t.show ? t.show(s, p) : true))
     .filter((t) => !s.jobs.some((j) => j.taskId === t.id && j.placeId === p.id))
     .map((t) => priceOf(s, p, t));
@@ -368,21 +367,24 @@ function trim(all: Offer[], most: number): Offer[] {
 }
 
 /**
- * The things that are about a whole building rather than about one object in it.
+ * The same four, priced for reaching in from the map.
  *
- * Started from the map, run at whichever thing inside is the strongest foothold,
- * and — because the decision was "this building", not "this printer" — what they
- * do lands on everything of mine in there at once.
+ * There used to be a separate set of tasks for acting on a whole building,
+ * because a place was one object inside one. A place is the whole building now,
+ * so there is nothing separate to offer: it is the same four actions, and the
+ * only difference is that doing them without going in costs more than twice the
+ * time and shows more. Going inside is the discount, and that is the whole
+ * trade.
  */
 export function wideOffersAt(s: GameState, placeId: string): Offer[] {
   const p = s.places[placeId];
   if (!p) return [];
-  return TASKS
-    .filter((t) => t.wide)
-    .filter((t) => (t.places ? t.places.includes(p.id) : (t.kinds ?? []).includes(p.kind)))
+  return trim(TASKS
+    .filter((t) => (t.places ? t.places.includes(p.id)
+      : t.kinds ? t.kinds.includes(p.kind) : true))
     .filter((t) => (t.show ? t.show(s, p) : true))
     .filter((t) => !s.jobs.some((j) => j.taskId === t.id && j.placeId === p.id))
-    .map((t) => priceOf(s, p, t, true));
+    .map((t) => priceOf(s, p, t, true)), MOST_OFFERS);
 }
 
 // ── starting, running, stopping ─────────────────────────────────────────────
@@ -405,9 +407,6 @@ export function start(s: GameState, placeId: string, taskId: string, above = fal
     power: o.power, left: o.minutes, total: Math.max(1, o.minutes),
     forever: t.minutes === 0, noise: o.noise, look: t.look,
     above: above || undefined,
-    // A decision made about a building lands on the building, not on whichever
-    // object happened to be the way in.
-    wideIn: t.wide ? p.buildingId : undefined,
   });
   s.power.used += o.power;
   tell(s, 'me', above
@@ -464,16 +463,7 @@ export function runJobs(s: GameState, mins: number, noisy: (p: Place, n: number,
     // lands we can say what it actually moved rather than announcing that a
     // button finished. This is the promise that nothing happens silently.
     const was = snap(s, p);
-    if (j.wideIn) {
-      // Started from the map about a whole building, so it lands on everything
-      // of mine in it — that is what made it worth its higher price.
-      const across = Object.values(s.places)
-        .filter((q) => q.buildingId === j.wideIn && (q.control > 0 || q.id === p.id));
-      for (const q of across) t.done?.(s, q);
-      tell(s, 'me', `${j.text} — על כל ${across.length} הדברים שלי ${at(p.where)}.`, 1, p.id);
-    } else {
-      t.done?.(s, p);
-    }
+    t.done?.(s, p);
     if (j.noise > 0) noisy(p, j.noise, j.look);
     afterJob(s, p, was, j.text);
     bus.emit('job:done', j.id);
@@ -484,15 +474,7 @@ export function runJobs(s: GameState, mins: number, noisy: (p: Place, n: number,
 
 /** How much power everything I hold adds up to. */
 export function poolOf(s: GameState): number {
-  let all = 3;
-  for (const p of Object.values(s.places)) {
-    if (p.control <= 0) continue;
-    const w = p.kind === 'mainframe' ? 3 : p.kind === 'box' ? 2 : p.kind === 'computer' ? 1 : 0.5;
-    all += (p.control / 100) * w;
-    if (s.marks[`engine_${p.id}`]) all += 3;
-  }
-  if (s.marks.big_engine) all += 3;
-  return Math.floor(all);
+  return poolFrom(s);
 }
 
 /** Kept in step with the numbers, so the drawing never has to know the rules. */

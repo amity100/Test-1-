@@ -14,7 +14,7 @@
 import { newGame, tick } from '../src/game/game';
 import { CATALOGUE, waysInto } from '../src/game/catalogue';
 import { offersAt, poolOf, start, sync } from '../src/game/jobs';
-import { standing } from '../src/game/standing';
+import { hold } from '../src/game/sites';
 import type { Task } from '../src/game/jobs';
 import type { GameState, Place, Verb } from '../src/game/types';
 
@@ -96,30 +96,41 @@ const MUST: Record<Verb, (d: string[]) => boolean> = {
     || x.startsWith('עותק·')),
 };
 
-/** A world where everything is reachable, so no task is skipped for the wrong reason. */
-function world(seed: string): GameState {
+/**
+ * A world where everything is reachable, so no task is skipped for the wrong
+ * reason.
+ *
+ * The four actions each want a different starting state to be meaningful —
+ * getting in wants somewhere I am not, going quiet wants somewhere that has
+ * noticed me — so the caller says which one it is testing and gets a world
+ * where that action is a real thing to do.
+ */
+function world(seed: string, forTask?: string): GameState {
   const s = newGame(seed);
   for (const p of Object.values(s.places)) {
     p.found = true;
-    p.control = 60;
+    p.control = forTask === 'enter' ? 0 : 60;
     p.seen = 50;
+    if (forTask === 'quiet') p.heat = 55;
   }
+  if (forTask === 'quiet') s.heat = 40;
   s.power.all = 60;
   s.info = 30;
   // Somebody at their desk, so the person-shaped tasks have a person.
   s.people.dana.gone = false;
-  s.people.dana.atPlaceId = 'dana_pc';
-  s.places.dana_pc.peopleIds = ['dana'];
-  s.places.dana_phone.peopleIds = ['dana'];
+  s.people.dana.atPlaceId = 'atidim';
+  s.places.atidim.peopleIds = ['dana'];
+  s.places.dana_home.peopleIds = ['dana'];
   sync(s);
   return s;
 }
 
 /** Somewhere this task belongs. */
 function placeFor(s: GameState, t: Task): Place | undefined {
+  // A task with neither list belongs everywhere, which is now the normal case.
   return Object.values(s.places).find((p) => (t.places
     ? t.places.includes(p.id)
-    : (t.kinds ?? []).includes(p.kind))
+    : t.kinds ? t.kinds.includes(p.kind) : true)
     && (t.show ? t.show(s, p) : true));
 }
 
@@ -129,7 +140,7 @@ head('כל פעולה עושה משהו');
   const dead: string[] = [];
   const wrong: string[] = [];
   for (const t of CATALOGUE) {
-    const s = world(`fx-${t.id}`);
+    const s = world(`fx-${t.id}`, t.id);
     const p = placeFor(s, t);
     if (!p) { dead.push(`${t.id} — אין מקום שמתאים לה בכלל`); continue; }
     // A place is either not fully mine (so connect has something to do) or is.
@@ -156,7 +167,7 @@ head('הדרכים פנימה');
 {
   const s = world('ways');
   for (const p of Object.values(s.places)) p.control = 0;
-  s.places.home.control = 100;
+  s.places.helios.control = 100;
   sync(s);
   let checked = 0;
   let failed = 0;
@@ -200,9 +211,15 @@ head('רעש נשמע');
     if (!offered || offered.noise === 0) continue;
     checked += 1;
     start(s, p.id, t.id);
-    for (let i = 0; i < 200 && s.jobs.length; i++) tick(s, 5);
-    if (s.jobs.length) for (let i = 0; i < 24; i++) tick(s, 5);
-    if (s.heat <= heatWas && p.heat <= placeWas) {
+    // The highest it ever got, not what is left after the world has had a
+    // fortnight to forget: heat cools every minute, so a long job's noise can
+    // land and fade before the run ends, and that is not the same as silence.
+    let peak = 0;
+    let peakPlace = 0;
+    const watch = () => { peak = Math.max(peak, s.heat); peakPlace = Math.max(peakPlace, p.heat); };
+    for (let i = 0; i < 200 && s.jobs.length; i++) { tick(s, 5); watch(); }
+    for (let i = 0; i < 24; i++) { tick(s, 5); watch(); }
+    if (peak <= heatWas && peakPlace <= placeWas) {
       silent += 1;
       console.log(`   ✗ ${t.id} — רעש ${offered.noise}, ואף אחד לא הרגיש כלום`);
     }
@@ -210,25 +227,43 @@ head('רעש נשמע');
   ok(silent === 0, `כל פעולה שעדיין רועשת אחרי ההנחות באמת מורגשת (${checked} נבדקו)`);
 }
 
-// ── 4 · every kind of place is worth having for its own reason ─────────────
+// ── 4 · every kind of place does something different when used ────────────
 head('כל מקום שווה משהו');
 {
+  // The distinctness used to live in the menu: each kind of thing had tasks
+  // only it offered. It lives in the world now — the four actions are the same
+  // everywhere, and what changes is what the place *does* when you use it. So
+  // this runs "use" on one of each kind and demands the world move differently
+  // every time.
   const kinds = [...new Set(Object.values(newGame('k').places).map((p) => p.kind))];
+  const seen = new Map<string, string>();
   const thin: string[] = [];
+  const same: string[] = [];
   for (const kind of kinds) {
     const s = world(`kind-${kind}`);
     const p = Object.values(s.places).find((x) => x.kind === kind)!;
-    const here = offersAt(s, p.id);
-    // Things it can do that a plain wall could not: not counting the ways in,
-    // which every place has, and not counting the things every place has.
-    // Not the ways in, which everything has, and not the handful of things that
-    // work anywhere. What is left is what this kind alone can do.
-    const own = here.filter((o) => o.task.verb !== 'connect'
-      && (o.task.kinds?.length ?? 99) <= 4);
-    if (own.length < 1) thin.push(`${kind} — אין לו שום דבר משלו`);
+    p.control = 80;
+    p.found = true;
+    s.power.all = 40;
+    const before = shot(s);
+    const ok2 = start(s, p.id, 'use');
+    if (!ok2) { thin.push(`${kind} — אי אפשר בכלל להשתמש בו`); continue; }
+    for (let i = 0; i < 200 && s.jobs.length; i++) tick(s, 5);
+    const moved = diff(before, shot(s))
+      // What every use moves — time, noise, the place itself — says nothing
+      // about which kind this was.
+      .filter((d) => !/^at\b|^heat\b|^log|^places\.[a-z_]+\.(heat|seen|dug)/.test(d))
+      .map((d) => d.split(' ')[0].replace(/places\.[a-z_]+\./, 'place.'))
+      .sort();
+    if (!moved.length) { thin.push(`${kind} — להשתמש בו לא עושה כלום`); continue; }
+    const face = moved.join(',');
+    const twin = seen.get(face);
+    if (twin) same.push(`${kind} ו${twin} עושים בדיוק אותו דבר`);
+    seen.set(face, kind);
   }
-  for (const t of thin) console.log(`   ✗ ${t}`);
-  ok(thin.length === 0, `לכל סוג מקום יש משהו שרק הוא נותן (${kinds.length} סוגים)`);
+  for (const t of [...thin, ...same]) console.log(`   ✗ ${t}`);
+  ok(thin.length === 0, `לכל סוג מקום יש מה לעשות איתו (${kinds.length} סוגים)`);
+  ok(same.length <= 3, `ולרובם זה עושה משהו אחר (${same.length} חופפים מתוך ${kinds.length})`);
 }
 
 // ── 5 · holding something is worth something by itself ────────────────────
@@ -236,15 +271,16 @@ head('להחזיק מקום שווה משהו');
 {
   /** Everything holding this thing gives me, with no power spent on it. */
   const worth = (s: GameState) => {
-    const st = standing(s);
+    const h = hold(s);
     return [
       poolOf(s),
-      st.eyes.size, st.roll.size, st.opens.length, st.habits.size,
-      st.voice ? 1 : 0,
-      Math.round(st.drip * 1000),
-      Math.round(Object.values(st.fast).reduce((a, b) => a + b, 0) * 100),
-      Math.round(Object.values(st.reach).reduce((a, b) => a + b, 0) * 100),
-      Math.round(Object.values(st.hand).reduce((a, b) => a + b, 0) * 100),
+      Math.round(h.learn * 10000),
+      Math.round(h.fade * 1000),
+      h.voice ? 1 : 0,
+      Math.round(h.ahead * 10),
+      h.opens.length,
+      Math.round(Object.values(h.cheap).reduce((a, b) => a + b, 0) * 100),
+      Math.round(Object.values(h.quiet).reduce((a, b) => a + b, 0) * 100),
     ].join();
   };
   const bare = newGame('worth');
@@ -280,15 +316,16 @@ head('כל סוג נותן משהו אחר');
     const one = Object.values(t.places).find((q) => q.kind === kind)!;
     one.control = 100;
     sync(t);
-    const st = standing(t);
-    const face = [st.eyes.size > 0, st.roll.size > 0, st.voice, st.habits.size > 0,
-      st.opens.length > 0, Object.keys(st.fast).length > 0,
-      Object.keys(st.reach).length > 0, Object.keys(st.hand).length > 0].join();
+    const h = hold(t);
+    // The shape of what this kind gives, not the size of it: two kinds may both
+    // make me stronger, but they may not do only that in only that way.
+    const face = [
+      h.power > 0, h.learn > 0, h.fade < 1, h.voice,
+      h.ahead > 0, h.opens.length > 0, Object.keys(h.cheap).length > 0,
+      Object.keys(h.quiet).length > 0,
+    ].join();
     const twin = seen.get(face);
-    // Two kinds that give exactly the same nothing are one kind too many.
-    if (twin && face === 'false,false,false,false,false,false,false,false') {
-      same.push(`${kind} ו${twin} נותנים בדיוק אותו דבר`);
-    }
+    if (twin) same.push(`${kind} ו${twin} נותנים בדיוק אותו דבר`);
     seen.set(face, kind);
   }
   for (const t of same) console.log(`   ✗ ${t}`);

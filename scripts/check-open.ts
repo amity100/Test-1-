@@ -31,7 +31,7 @@ const fresh = (seed = 'open') => {
     ['בלי שום שליטה בכלל', (s) => { for (const p of Object.values(s.places)) p.control = 0; }],
     ['עם דריסת רגל קטנה', (s) => { for (const p of Object.values(s.places)) p.control = 5; }],
     ['עם שליטה מלאה', (s) => { for (const p of Object.values(s.places)) p.control = 100; }],
-    ['כשכולם בבניין', (s) => { for (const q of Object.values(s.people)) { q.gone = false; q.atPlaceId = 'main'; } }],
+    ['כשכולם בבניין', (s) => { for (const q of Object.values(s.people)) { q.gone = false; q.atPlaceId = 'helios'; } }],
     ['כשהחשד בשיא', (s) => { s.heat = 100; for (const p of Object.values(s.places)) p.heat = 100; }],
     ['כשהמקום שמור מאוד', (s) => { for (const p of Object.values(s.places)) p.guard = 100; }],
     ['כשאני לא יודע כלום', (s) => { s.info = 0; for (const p of Object.values(s.places)) p.seen = 0; }],
@@ -77,13 +77,13 @@ const fresh = (seed = 'open') => {
   for (const p of Object.values(s.places)) p.control = 60;
   s.power.all = 4;
   s.power.used = 4;
-  const o = offersAt(s, 'main').find((x) => x.power > 0)!;
+  const o = offersAt(s, 'helios').find((x) => x.power > 0)!;
   ok(!!o, 'האפשרות עדיין מוצעת כשאין כוח פנוי');
   ok(o.short > 0, `   וכתוב בדיוק כמה כוח חסר (${o.short})`);
   s.power.used = 0;
-  const after = offersAt(s, 'main').find((x) => x.task.id === o.task.id)!;
+  const after = offersAt(s, 'helios').find((x) => x.task.id === o.task.id)!;
   ok(after.short === 0, '   וברגע שמפנים כוח, אפשר להתחיל מיד');
-  ok(start(s, 'main', after.task.id), '   וזה באמת מתחיל');
+  ok(start(s, 'helios', after.task.id), '   וזה באמת מתחיל');
 }
 
 // ── 4 · the price really does move with the world ──────────────────────────
@@ -92,10 +92,10 @@ const fresh = (seed = 'open') => {
   const busy = fresh('busy');
   for (const s of [quiet, busy]) for (const p of Object.values(s.places)) p.control = 50;
   for (const q of Object.values(quiet.people)) { q.gone = true; q.atPlaceId = 'gone'; }
-  for (const q of Object.values(busy.people)) { q.gone = false; q.atPlaceId = 'dana_pc'; }
-  const t = TASKS.find((x) => x.id === 'read_inside')!;
-  const a = priceOf(quiet, quiet.places.dana_pc, t);
-  const b = priceOf(busy, busy.places.dana_pc, t);
+  for (const q of Object.values(busy.people)) { q.gone = false; q.atPlaceId = 'atidim'; }
+  const t = TASKS.find((x) => x.id === 'grow')!;
+  const a = priceOf(quiet, quiet.places.atidim, t);
+  const b = priceOf(busy, busy.places.atidim, t);
   ok(b.minutes > a.minutes, `חדר מלא עולה יותר מחדר ריק (${a.minutes}׳ מול ${b.minutes}׳)`);
   ok(b.noise >= a.noise, '   וגם יותר אנשים ירגישו');
   ok(a.why.length > 0 && b.why.length > 0, 'ולכל מחיר יש הסבר בשפה רגילה');
@@ -109,7 +109,8 @@ const fresh = (seed = 'open') => {
   if (t) {
     const s = fresh('wants');
     const p = Object.values(s.places)
-      .find((x) => (t.places ? t.places.includes(x.id) : (t.kinds ?? []).includes(x.kind)))!;
+      .find((x) => (t.places ? t.places.includes(x.id)
+        : t.kinds ? t.kinds.includes(x.kind) : true))!;
     p.control = 0;
     const out = priceOf(s, p, t);
     p.control = 100;

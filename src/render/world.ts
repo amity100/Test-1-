@@ -172,8 +172,8 @@ export class World {
       // Anything hung on a wall looks into the room; a front door looks out of it.
       const b = buildingOf(place.buildingId);
       if (b) {
-        const inward = ['camera', 'box', 'screen', 'power', 'speaker'].includes(place.kind);
-        const outward = place.kind === 'door';
+        const inward = ['power', 'talk', 'water', 'money', 'company'].includes(place.kind);
+        const outward = place.kind === 'city' || place.kind === 'state';
         if (inward) obj.group.rotation.y = Math.atan2(-place.x, -place.z);
         else if (outward) obj.group.rotation.y = Math.atan2(place.x, place.z);
       }

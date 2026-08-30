@@ -59,19 +59,27 @@ export const VERB_SAYS: Record<Verb, string> = {
 
 // ── Places ──────────────────────────────────────────────────────────────────
 
+/**
+ * What sort of place this is.
+ *
+ * Not what object it is — the game stopped being about objects. A place is a
+ * whole company, a whole hospital, a whole neighbourhood, and its kind is the
+ * one thing holding it gives you that nothing else does. Twelve kinds, twelve
+ * different reasons to want somewhere.
+ */
 export type PlaceKind =
-  | 'computer'      // מחשב של מישהו
-  | 'mainframe'     // המחשב הראשי של החברה
-  | 'camera'        // מצלמה
-  | 'phone'         // טלפון
-  | 'traffic'       // רמזור
-  | 'power'         // חדר חשמל
-  | 'door'          // דלת כניסה
-  | 'printer'       // מדפסת
-  | 'screen'        // מסך גדול / טלוויזיה
-  | 'box'           // קופסת האינטרנט של הבניין
-  | 'car'           // מכונית
-  | 'speaker';      // רמקול
+  | 'company'       // חברה — מכונות שעובדות בשבילי
+  | 'power'         // תחנת חשמל — הכל באזור נעשה זול ושקט
+  | 'water'         // מים — כשהם זורמים, אוהבים אותי
+  | 'roads'         // רמזורים וכבישים — הרחוב עושה מה שאני אומר
+  | 'transport'     // רכבות ואוטובוסים — הם נוסעים, ואני איתם
+  | 'talk'          // רדיו, טלוויזיה, מסכים — שומעים אותי בכל הארץ
+  | 'care'          // בית חולים — הכי הרבה אנשים והכי הרבה שאלות
+  | 'study'         // אוניברסיטה — כאן אני נעשה טוב יותר
+  | 'homes'         // שכונה — אלף בתים שאפשר להיעלם בהם
+  | 'money'         // בנק — מי שמזיז כסף מזיז הכל
+  | 'city'          // עירייה — עיר שלמה מחדר אחד
+  | 'state';        // ממשלה — מה שנחתם כאן נכון לכל הארץ
 
 /**
  * What a thing you did looks like to somebody who finds it in the morning.

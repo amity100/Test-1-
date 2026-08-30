@@ -172,7 +172,8 @@ export function buildInteriors(): Interior {
       // A chair pulled up to every computer that is part of the game.
       for (const p of spots) {
         if (p.buildingId !== b.id || p.floor !== f) continue;
-        if (p.kind !== 'computer' && p.kind !== 'mainframe') continue;
+        // Desks belong wherever people work, which is now a company.
+        if (p.kind !== 'company') continue;
         const cx = b.x + p.x;
         const cz = b.z + p.z + 0.95;
         const seat = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.09, 0.5), chairMat);
