@@ -94,25 +94,26 @@ for (const [W, H] of [[320, 640], [360, 740], [390, 844], [430, 932]]) {
   const best = await p.evaluate(() => document.querySelector('#best')?.textContent?.trim() ?? '');
   ok(best.length > 10, `${W}×${H} · כתוב מה כדאי עכשיו: "${best.slice(0, 40)}"`);
 
-  // Now go inside, the way a player would, and check the ring in there.
-  await p.evaluate(() => {
-    const el = document.querySelector('#tags button');
-    if (el) el.click();
-  });
-  await p.waitForTimeout(700);
-  const verbs = await p.locator('#ring .rb').count();
-  ok(verbs >= 3, `${W}×${H} · בתוך מקום, הטבעת נפתחה עם ${verbs} דרכים`);
-  await audit('טבעת');
+  // Now go inside, the way a player would: from a target on the map, through
+  // its "go in there" button, and then touch something in the room.
+  await p.evaluate(() => document.querySelector('[data-do="board"]')?.click());
+  await p.waitForTimeout(500);
+  await tap('#modal .tg'); await p.waitForTimeout(600);
+  await p.evaluate(() => document.querySelector('#modal .ok')?.click());
+  await p.waitForTimeout(1800);
+  await p.evaluate(() => document.querySelector('#tags button')?.click());
+  await p.waitForTimeout(1200);
 
-  // Open one of the seven and check its own options are reachable too.
-  if (verbs) {
-    await tap('#ring .rb'); await p.waitForTimeout(900);
-    const inner = await p.locator('#ring .rb').count();
-    ok(inner >= 2, `${W}×${H} · ובתוכה ${inner} אפשרויות`);
-    // The whole point of the trim: a ring you can read, not a wall.
-    ok(inner <= 9, `${W}×${H} · והטבעת נשארה קריאה (${inner})`);
-    await audit('אפשרויות');
-  }
+  const ops = await p.locator('#pick .op').count();
+  ok(ops >= 2, `${W}×${H} · בתוך מקום, נפתחה רשימה עם ${ops} אפשרויות`);
+  // The whole point of the trim: a list you can read, not a wall.
+  ok(ops <= 6, `${W}×${H} · והרשימה נשארה קריאה (${ops})`);
+  await audit('אפשרויות');
+
+  // And every row says its price, so one tap is never a surprise.
+  const priced = await p.evaluate(() => Array.from(document.querySelectorAll('#pick .op'))
+    .every((el) => /כוח/.test(el.querySelector('u')?.textContent || '')));
+  ok(priced, `${W}×${H} · לכל שורה כתוב מה היא עולה`);
 
   // Everything along the top opens something and closes again.
   for (const [what, label] of [['jobs', 'מה רץ'], ['areas', 'מה אני יודע'],

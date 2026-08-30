@@ -1,7 +1,7 @@
 import { AREA_KIND_NAME } from './types';
 import { WORTH } from './standing';
 import { liveHunts } from './hunt';
-import { at } from './story';
+import { at, places as placeCount, things } from './story';
 import type { GameState, Place } from './types';
 
 /**
@@ -112,7 +112,7 @@ function worthLine(s: GameState, kind: 'area' | 'building', places: Place[], onl
   const missing = places.filter((p) => p.control <= 0)
     .sort((a, b) => worthOf(b) - worthOf(a))[0];
   return missing
-    ? `יש לי כאן ${held}. מה שחסר הכי הרבה: ${missing.name} — ${WORTH[missing.kind]}`
+    ? `${placeCount(held)} כאן כבר שלי. מה שחסר הכי הרבה: ${missing.name} — ${WORTH[missing.kind]}`
     : `הכל כאן כבר שלי.`;
 }
 
@@ -201,8 +201,13 @@ export function board(s: GameState): Target[] {
     });
   }
 
-  // Then the city itself, so "where next" is always a question on screen.
+  // Then the city itself, so "where next" is always a question on screen —
+  // but only the parts of it I have actually seen something of. Seven rows all
+  // reading "שם על המפה. עוד לא יודע מה יש שם" is not a map with holes in it,
+  // it is a wall of the same sentence, and it buried the two rows that meant
+  // something. What I have not reached yet gets one row at the end, below.
   for (const a of Object.values(s.areas)) {
+    if (a.seen < 20 && a.control <= 0) continue;
     const places = Object.values(s.places).filter((p) => p.areaId === a.id
       && (p.found || p.control > 0));
     out.push({
@@ -221,6 +226,23 @@ export function board(s: GameState): Target[] {
       places: places.map((p) => p.id),
       x: a.x,
       z: a.z,
+    });
+  }
+
+  // Everywhere I have not reached yet, as one line rather than as seven.
+  const dark = Object.values(s.areas).filter((a) => a.seen < 20 && a.control <= 0);
+  if (dark.length) {
+    out.push({
+      id: 'a:dark',
+      kind: 'area',
+      name: 'שאר העיר',
+      where: `${placeCount(dark.length).replace('מקום', 'אזור').replace('מקומות', 'אזורים')} שעוד לא ראיתי`,
+      control: 0, heat: 0, mine: 0, found: 0,
+      worth: `${dark.slice(0, 3).map((a) => a.name).join(' · ')}`
+        + `${dark.length > 3 ? ' ועוד' : ''} — כדי להגיע לשם צריך קודם משהו שיוצא מהבניין.`,
+      now: null, risk: 0, seen: 0,
+      places: [],
+      x: 0, z: 0,
     });
   }
 
@@ -273,7 +295,7 @@ export function bestNow(s: GameState): string {
   if (held.length <= 1) {
     // Never end a Hebrew sentence on a digit: the full stop jumps to the wrong
     // side of the number and the line reads as broken even when it is right.
-    return `יש לי מקום אחד בעולם, וכוח ל־${free} דברים במקביל. הדבר החשוב ביותר עכשיו הוא מקום שני.`;
+    return `יש לי מקום אחד בעולם, וכוח ל${things(free)} במקביל. עכשיו צריך מקום שני.`;
   }
 
   const nearly = Object.values(s.places)

@@ -12,7 +12,7 @@ import { comeOut, saysOpinion } from '../game/opinion';
 import { WORTH } from '../game/standing';
 import { answer, liveHunts, rowsOf, scriptOf, stillNeeds } from '../game/hunt';
 import { board, bestNow, pointOf } from '../game/board';
-import { reach } from '../game/story';
+import { mins as minsWord, reach, to as toPlace } from '../game/story';
 import { STORIES, asking, coming, leading, rungOf, saysNow } from '../game/watch';
 import { AREA_KIND_NAME, RUNG_NAME, VERB_NAME, VERB_SAYS, VOICE_NAME } from '../game/types';
 import type { GameState, Verb } from '../game/types';
@@ -51,22 +51,8 @@ export class UI {
   private paused = false;
   /** One live button per named place, moved rather than rebuilt. */
   private tags = new Map<string, HTMLButtonElement>();
-  /** One live button per choice, moved rather than rebuilt. */
-  private ring = new Map<string, HTMLButtonElement>();
-  /** The choice the bottom strip is explaining. */
-  private focused: string | null = null;
-  /** The choice a second tap would actually start. Opening a ring never arms one. */
-  private armed: string | null = null;
   /** Real seconds of world time owed but not yet handed over. */
   private owed = 0;
-  /**
-   * Which of the seven the ring is showing.
-   *
-   * Every option at a place is always on offer, but twenty circles on a phone
-   * is a wall and not a choice. So the ring asks the useful question first —
-   * what kind of thing am I doing — and then shows every option of that kind.
-   */
-  private verb: Verb | null = null;
 
   constructor(private root: HTMLElement, private state: GameState) {
     this.worldEl = h('div', 'world');
@@ -93,7 +79,6 @@ export class UI {
     const hud = h('div', 'hud');
     hud.innerHTML = `
       <div id="tags"></div>
-      <div id="ring"></div>
 
       <header id="top">
         <button class="clock" id="clockbox" data-do="speed">
@@ -131,20 +116,7 @@ export class UI {
 
       <div id="bottom">
         <button id="feed" class="feed hidden" data-do="feed"></button>
-        <div id="pick" class="pick hidden">
-          <button class="x" data-do="close">✕</button>
-          <span class="who" id="pickwho"></span>
-          <b id="picktitle"></b>
-          <p id="picksays"></p>
-          <p id="pickwhy" class="why"></p>
-          <p id="pickcheap" class="cheap"></p>
-          <div class="row">
-            <span class="price"><i id="pickpower"></i> כוח</span>
-            <span class="price"><i id="pickmins"></i> דקות</span>
-            <span class="price noise"><i id="picknoise"></i> יראו</span>
-            <button class="do" id="pickdo" data-do="commit">להתחיל</button>
-          </div>
-        </div>
+        <div id="pick" class="pick hidden"></div>
         <div id="jobs" class="jobs"></div>
       </div>
 
@@ -252,28 +224,6 @@ export class UI {
       case 'place': this.select(arg); break;
       case 'close': this.select(null); break;
 
-      case 'verb': {
-        const [, v] = arg.split('|');
-        this.verb = (v || null) as Verb | null;
-        this.focused = v ? `v:${v}` : null;
-        this.armed = null;
-        this.dirty = true;
-        break;
-      }
-      case 'focus': {
-        const [, taskId] = arg.split('|');
-        // First tap explains it; a second tap on the same one starts it.
-        if (this.armed === taskId) this.act('commit', arg);
-        else { this.focused = taskId; this.armed = taskId; this.dirty = true; }
-        break;
-      }
-      case 'commit': {
-        const [placeId, taskId] = arg.split('|');
-        if (!placeId || !taskId) break;
-        if (start(s, placeId, taskId)) { this.armed = null; save(s); }
-        this.dirty = true;
-        break;
-      }
       case 'stopjob': { stop(s, arg); save(s); this.dirty = true; break; }
 
       // ── the map, and doing things from it ────────────────────────────────
@@ -341,9 +291,6 @@ export class UI {
 
   private select(id: string | null) {
     if (id !== this.selected) {
-      this.focused = null;
-      this.armed = null;
-      this.verb = null;
     }
     this.selected = id;
     if (id) {
@@ -353,139 +300,23 @@ export class UI {
     this.dirty = true;
   }
 
-  // ── the ring: what you can do, drawn on the thing itself ──────────────────
-
-  private drawRing() {
-    const box = this.root.querySelector('#ring') as HTMLElement;
-    const s = this.state;
-    const p = this.selected ? s.places[this.selected] : null;
-    if (!p || (p.control <= 0 && !p.found)) {
-      for (const [, el] of this.ring) el.remove();
-      this.ring.clear();
-      return;
-    }
-    const at = this.world.project(p.id);
-    if (!at || at.z > 1) return;
-
-    const offers = offersAt(s, p.id);
-    type Node = { key: string; sign: string; name: string; foot: string; cls: string; act: string; arg: string };
-    let nodes: Node[];
-    if (this.verb === null) {
-      const byVerb = new Map<Verb, Offer[]>();
-      for (const o of offers) {
-        const list = byVerb.get(o.task.verb) ?? [];
-        list.push(o);
-        byVerb.set(o.task.verb, list);
-      }
-      nodes = [...byVerb].map(([v, list]) => ({
-        key: `v:${v}`, sign: SIGN[v], name: VERB_NAME[v], foot: `${list.length}`,
-        cls: `rb v-${v}${this.focused === `v:${v}` ? ' on' : ''}`,
-        act: 'verb', arg: `${p.id}|${v}`,
-      }));
-    } else {
-      const mine = offers.filter((o) => o.task.verb === this.verb);
-      nodes = [
-        { key: 'back', sign: '↺', name: 'הכל', foot: '', cls: 'rb back', act: 'verb', arg: `${p.id}|` },
-        ...mine.map((o) => ({
-          key: o.task.id, sign: SIGN[o.task.verb], name: shortName(o.task.text),
-          foot: o.task.minutes === 0 ? `${o.power} כוח` : `${o.minutes}׳`,
-          cls: `rb v-${o.task.verb} n-${Math.min(3, o.noise)}`
-            + `${o.short > 0 ? ' short' : ''}${this.focused === o.task.id ? ' on' : ''}`,
-          act: 'focus', arg: `${p.id}|${o.task.id}`,
-        })),
-      ];
-    }
-
-    const W = this.root.clientWidth;
-    const H = this.root.clientHeight;
-    const phone = W < 700;
-    const R = phone ? 112 : 138;
-
-    const dir = Math.atan2(H * 0.42 - at.y, W * 0.5 - at.x);
-    const step = Math.min(0.82, (Math.PI * 1.5) / Math.max(1, nodes.length - 1));
-    const live = new Set<string>();
-
-    // Where each one would like to sit.
-    const want = nodes.map((_, i) => {
-      const t = nodes.length === 1 ? 0 : (i / (nodes.length - 1) - 0.5);
-      const ang = dir + t * step * (nodes.length - 1);
-      const ring = i < 7 ? R : R + (phone ? 66 : 78);
-      return { x: at.x + Math.cos(ang) * ring, y: at.y + Math.sin(ang) * ring };
-    });
-
-    // The floor stepper lives down the inline-start edge, which is the right in
-    // Hebrew, and the strip owns the bottom. Clamping alone used to pile two
-    // circles into the same spot when the fan ran off an edge, so afterwards
-    // they push each other apart until nothing is sitting on anything.
-    const right = this.world.inBuilding ? W - 86 : W - 46;
-    const low = H - (phone ? 216 : 168);
-    const fit = (v: { x: number; y: number }) => {
-      v.x = Math.min(right, Math.max(46, v.x));
-      v.y = Math.min(low, Math.max(100, v.y));
-    };
-    const GAP = phone ? 84 : 92;
-    want.forEach(fit);
-    for (let pass = 0; pass < 12; pass++) {
-      let moved = false;
-      for (let i = 0; i < want.length; i++) {
-        for (let j = i + 1; j < want.length; j++) {
-          const dx = want[j].x - want[i].x;
-          const dy = want[j].y - want[i].y;
-          const d = Math.hypot(dx, dy);
-          if (d >= GAP) continue;
-          const push = (GAP - d) / 2 + 0.5;
-          const ux = d < 0.01 ? 1 : dx / d;
-          const uy = d < 0.01 ? 0 : dy / d;
-          want[i].x -= ux * push; want[i].y -= uy * push;
-          want[j].x += ux * push; want[j].y += uy * push;
-          fit(want[i]); fit(want[j]);
-          moved = true;
-        }
-      }
-      if (!moved) break;
-    }
-
-    nodes.forEach((n, i) => {
-      const { x, y } = want[i];
-      let el = this.ring.get(n.key);
-      if (!el) {
-        el = document.createElement('button');
-        el.innerHTML = '<b></b><span></span><u></u>';
-        box.appendChild(el);
-        this.ring.set(n.key, el);
-      }
-      el.dataset.do = n.act;
-      el.dataset.arg = n.arg;
-      const set = (sel: string, text: string) => {
-        const t2 = el!.querySelector(sel) as HTMLElement;
-        if (t2.textContent !== text) t2.textContent = text;
-      };
-      set('b', n.sign); set('span', n.name); set('u', n.foot);
-      if (el.className !== n.cls) el.className = n.cls;
-      el.style.transform = `translate(calc(${Math.round(x)}px - 50%), calc(${Math.round(y)}px - 50%))`;
-      live.add(n.key);
-    });
-
-    for (const [id, el] of this.ring) {
-      if (live.has(id)) continue;
-      el.remove();
-      this.ring.delete(id);
-    }
-  }
+  // ── what this thing can do for me ─────────────────────────────────────────
 
   /**
-   * The strip that explains whichever choice you are on.
+   * One list, in one place, for every choice in the game.
    *
-   * This is where the promise of the whole game is kept: the price, the reason
-   * for the price, and the one thing that would make it cheaper. Never a lock.
+   * There used to be two menus for the same decision: circles floating over the
+   * object in the world, and a strip along the bottom explaining whichever one
+   * you had touched. Playing it, the circles hung over blank wall while the
+   * strip described something else, and the map made a third way to choose the
+   * same thing. So the circles are gone and this is what is left: touch a thing
+   * in the world and its options are listed the same way the map lists them,
+   * with the price on every row, so one tap starts what the row says.
    */
   private renderPick() {
     const s = this.state;
     const pick = this.root.querySelector('#pick') as HTMLElement;
     const p = this.selected ? s.places[this.selected] : null;
-    const offers = p ? offersAt(s, p.id) : [];
-    const o = offers.find((x) => x.task.id === this.focused) ?? null;
-    const verb = this.focused?.startsWith('v:') ? this.focused.slice(2) as Verb : null;
     pick.classList.toggle('hidden', !p);
     if (!p) return;
 
@@ -499,30 +330,30 @@ export class UI {
             : around >= 1 ? 'יש מישהו בקומה'
               : 'אין כאן אף אחד';
 
-    const set = (id: string, text: string) => {
-      const el = this.root.querySelector(`#${id}`) as HTMLElement;
-      if (el.textContent !== text) el.textContent = text;
-    };
-    set('pickwho', `${p.name} · ${Math.round(p.control)}% שלי · ${head}`);
-    set('picktitle', o ? o.task.text : verb ? VERB_NAME[verb] : 'מה לעשות כאן?');
-    // With nothing chosen, the strip answers the only question that matters
-    // about a place you have not taken: what is it even for.
-    set('picksays', o ? o.task.says
-      : verb ? `${VERB_SAYS[verb]}. בחרו איך.`
-        : `${WORTH[p.kind]}${p.control > 0 ? '' : ' — כשהוא יהיה שלי.'}`);
-    set('pickwhy', o ? o.why.join(' · ') : '');
-    set('pickcheap', o?.cheaper ?? '');
-    set('pickpower', o ? String(o.power) : '—');
-    set('pickmins', o ? (o.task.minutes === 0 ? '∞' : String(o.minutes)) : '—');
-    set('picknoise', o ? String(o.noise) : '—');
-    (this.root.querySelector('#pickcheap') as HTMLElement).classList.toggle('none', !o?.cheaper);
+    const offers = offersAt(s, p.id);
+    const running = s.jobs.filter((j) => j.placeId === p.id).length;
+    const key = `${p.id}|${Math.round(p.control)}|${head}|${running}|`
+      + offers.map((o) => `${o.task.id}${o.minutes}${o.noise}${o.short}`).join(',');
+    if (pick.dataset.key === key) return;
+    pick.dataset.key = key;
 
-    const go = this.root.querySelector('#pickdo') as HTMLButtonElement;
-    const short = (o?.short ?? 0) > 0;
-    go.className = `do${o ? (short ? ' warn' : '') : ' off'}`;
-    go.textContent = !o ? 'להתחיל' : short ? `צריך לפנות ${o.short} כוח` : 'להתחיל';
-    go.dataset.arg = o ? `${p.id}|${o.task.id}` : '';
+    const rows = offers.map((o) => `
+      <button class="op ${o.short > 0 ? 'poor' : ''}" data-do="doat"
+        data-arg="${p.id}|${o.task.id}|0">
+        <b>${SIGN[o.task.verb]} ${esc(o.task.text)}</b>
+        <em>${esc(o.task.says)}</em>
+        <u>${o.power} כוח · ${esc(o.task.minutes === 0 ? 'עד שאעצור' : minsWord(o.minutes))}`
+        + ` · ${o.noise} יראו${o.short > 0 ? ` · חסר ${o.short} כוח` : ''}</u>
+        ${o.cheaper ? `<i class="ch">${esc(o.cheaper)}</i>` : ''}
+      </button>`).join('');
+
+    pick.innerHTML = `
+      <button class="x" data-do="close">✕</button>
+      <span class="who">${esc(p.name)} · ${Math.round(p.control)}% שלי · ${esc(head)}</span>
+      <p class="worth">${esc(WORTH[p.kind])}</p>
+      <div class="ops">${rows || '<p class="need">אין כאן מה לעשות כרגע.</p>'}</div>`;
   }
+
 
   /**
    * What is running, along the bottom, always.
@@ -1031,7 +862,7 @@ export class UI {
         data-do="doat" data-arg="${p.id}|${o.task.id}|${above ? '1' : '0'}">
       <b>${SIGN[o.task.verb]} ${esc(o.task.text)}</b>
       <em>${esc(o.task.says)}</em>
-      <u>${o.power} כוח · ${o.minutes} דקות · ${o.noise} יראו${o.short > 0 ? ` · חסר ${o.short} כוח` : ''}</u>
+      <u>${o.power} כוח · ${esc(o.task.minutes === 0 ? 'עד שאעצור' : minsWord(o.minutes))} · ${o.noise} יראו${o.short > 0 ? ` · חסר ${o.short} כוח` : ''}</u>
     </button>`;
 
     this.modal(`
@@ -1045,7 +876,7 @@ export class UI {
         <div class="txt list">
           <p class="need">על כל ${esc(t.name)} בבת אחת — ${esc(ABOVE_SAYS)}</p>
           ${wide.map((o) => line(o, true)).join('') || '<p class="need">אין כרגע משהו שאפשר לעשות על כל המקום.</p>'}
-          <p class="need">או להיכנס פנימה, ל${esc(p.name)}, ולעשות את זה בזול</p>
+          <p class="need">או להיכנס פנימה, ${esc(toPlace(p.name))}, ולעשות את זה בזול</p>
           ${inside.map((o) => line(o, false)).join('')}
         </div>
         <button class="ok" data-do="fly" data-arg="${p.id}">להיכנס לשם</button>
@@ -1128,7 +959,6 @@ export class UI {
 
     if (this.dirty) this.refresh();
     this.drawTags();
-    this.drawRing();
     this.drawFloor();
     this.drawFeed();
     // Every frame, not on change: a clock nobody can watch running down is just

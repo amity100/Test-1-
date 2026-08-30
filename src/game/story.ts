@@ -412,3 +412,43 @@ export function reach(s: GameState): { tier: number; says: string } {
   ];
   return { tier, says: says[tier] };
 }
+
+// ── counting things in Hebrew ───────────────────────────────────────────────
+
+/**
+ * Hebrew does not say "1 דקות".
+ *
+ * Every price in this game is a number followed by a noun, and a number
+ * followed by the wrong form of the noun is the fastest way to make a screen
+ * full of careful writing look careless.
+ */
+export function mins(n: number): string {
+  if (n === 0) return 'בלי זמן';
+  if (n === 1) return 'דקה';
+  if (n === 2) return 'שתי דקות';
+  return `${n} דקות`;
+}
+
+/**
+ * Small numbers, spelled.
+ *
+ * "כוח ל3 דברים" puts a digit where Hebrew wants a word, and in a right-to-left
+ * line a lone digit also drags its neighbours around. Under eleven it is always
+ * a word; above that a numeral is what a person would write anyway.
+ */
+const COUNT = ['', 'אחד', 'שני', 'שלושה', 'ארבעה', 'חמישה',
+  'שישה', 'שבעה', 'שמונה', 'תשעה', 'עשרה'];
+
+/** "דבר אחד" · "שני דברים" · "שלושה דברים" · "12 דברים" */
+export function things(n: number): string {
+  if (n === 1) return 'דבר אחד';
+  if (n >= 2 && n <= 10) return `${COUNT[n]} דברים`;
+  return `${n} דברים`;
+}
+
+/** "מקום אחד" · "שני מקומות" · "12 מקומות" */
+export function places(n: number): string {
+  if (n === 1) return 'מקום אחד';
+  if (n >= 2 && n <= 10) return `${COUNT[n]} מקומות`;
+  return `${n} מקומות`;
+}
