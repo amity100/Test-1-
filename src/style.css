@@ -1196,3 +1196,7 @@ body.is-mobile .objectives ul li { min-height: 46px; }
 /* And the floor buttons sat behind that stack, so on a short screen you could
    not change floor while looking at something. They ride above it. */
 .floors { z-index: 12; top: 42%; }
+
+/* The line saying what is worth doing now opens the map, so it is a button,
+   and at one line of text it came out shorter than a thumb is wide. */
+.best { min-height: 42px; }
