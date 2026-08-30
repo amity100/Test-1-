@@ -20,6 +20,19 @@ import type { GameState, Place } from './types';
  * second set of rules to learn, which is the whole point.
  */
 
+/**
+ * What each building is called out loud.
+ *
+ * Kept here rather than read out of the drawing, because the map has to be able
+ * to name a building the camera has never been near.
+ */
+const BUILDING_NAME: Record<string, string> = {
+  helios: 'מגדל הליוס',
+  across: 'הבניין ממול',
+  flats: 'הבית של דנה',
+  street: 'הרחוב עצמו',
+};
+
 export interface Target {
   id: string;
   kind: 'area' | 'building';
@@ -111,7 +124,7 @@ function nowLine(s: GameState, places: Place[]): string | null {
   if (hunt) {
     const who = s.people[hunt.whoId];
     const left = Math.max(0, hunt.at - s.at);
-    return `${who ? who.name : 'מישהו'} שם עכשיו. ${Math.round(left)} דקות.`;
+    return `${who ? who.name : 'מישהו'} שם עכשיו, ונשארו ${Math.round(left)} דקות.`;
   }
 
   const cut = places.filter((p) => p.cutAt !== undefined)
@@ -170,7 +183,9 @@ export function board(s: GameState): Target[] {
     out.push({
       id: `b:${id}`,
       kind: 'building',
-      name: id === 'street' ? 'ברחוב' : (places[0].where.split(',')[0] || 'בניין'),
+      // The building's own name, not the floor the first thing in it happens to
+      // sit on: "קומה 14" is where something is, never what it is.
+      name: BUILDING_NAME[id] ?? 'בניין',
       where: area ? area.name : 'תל אביב',
       control,
       heat: Math.max(0, ...places.map((p) => p.heat)),
@@ -239,7 +254,9 @@ export function bestNow(s: GameState): string {
     const p = s.places[h.placeId];
     const who = s.people[h.whoId];
     const left = Math.max(0, Math.round(h.at - s.at));
-    return `${who ? who.name : 'מישהו'} עומד/ת ${p ? at(p.name) : 'במקום שלי'}. ${left} דקות. זה הדבר היחיד שחשוב עכשיו.`;
+    const stands = who ? `${who.name} ${who.he ? 'עומד' : 'עומדת'}` : 'מישהו עומד';
+    return `${stands} ${p ? at(p.name) : 'במקום שלי'}, ויש ${left} דקות על השעון. `
+      + 'זה הדבר היחיד שחשוב עכשיו.';
   }
 
   const cut = Object.values(s.places)
@@ -254,14 +271,16 @@ export function bestNow(s: GameState): string {
   const free = s.power.all - s.power.used;
   const held = Object.values(s.places).filter((p) => p.control > 0);
   if (held.length <= 1) {
-    return `יש לי מקום אחד בעולם. הדבר החשוב ביותר עכשיו הוא מקום שני — יש לי כוח ל${free}.`;
+    // Never end a Hebrew sentence on a digit: the full stop jumps to the wrong
+    // side of the number and the line reads as broken even when it is right.
+    return `יש לי מקום אחד בעולם, וכוח ל־${free} דברים במקביל. הדבר החשוב ביותר עכשיו הוא מקום שני.`;
   }
 
   const nearly = Object.values(s.places)
     .filter((p) => p.control > 0 && p.control < 50)
     .sort((a, b) => b.control - a.control)[0];
   if (nearly) {
-    return `${nearly.name} כבר ${Math.round(nearly.control)} אחוז שלי. עוד קצת ואוכל להשתמש בו באמת.`;
+    return `${nearly.name} כבר ${Math.round(nearly.control)} אחוז שלי — עוד קצת, ואוכל להשתמש בו באמת.`;
   }
 
   const near = Object.values(s.places)

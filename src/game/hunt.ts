@@ -102,6 +102,17 @@ function empty(s: GameState, p: Place) {
   });
 }
 
+
+/**
+ * Bend a verb the right way round somebody.
+ *
+ * `v(who, 'הגיע', 'הגיעה')` — because a game with eight people in it, all of
+ * whom it knows by name, has no excuse for writing "הגיע/ה".
+ */
+function v(who: Person, male: string, female: string): string {
+  return who.he ? male : female;
+}
+
 // ── the answers the scripts share ───────────────────────────────────────────
 
 /** Stop moving. The commonest answer, and the one that always costs time. */
@@ -160,7 +171,9 @@ const DARK: Answer = {
     bus.emit('felt', { placeId: p.id, kind: 'dark' });
     const who = s.people[h.whoId];
     if (who) who.awayUntil = s.at + 30;
-    tell(s, 'me', `כיביתי את האור בקומה. ${who ? who.name : 'הוא'} עמד/ה בחושך ואז יצא/ה להביא פנס.`, 1, p.id);
+    tell(s, 'me', who
+      ? `כיביתי את האור בקומה. ${who.name} ${v(who, 'עמד', 'עמדה')} בחושך ואז ${v(who, 'יצא', 'יצאה')} להביא פנס.`
+      : 'כיביתי את האור בקומה. מי שהיה שם עמד בחושך ואז יצא להביא פנס.', 1, p.id);
   },
 };
 
@@ -197,7 +210,8 @@ const ELSEWHERE: Answer = {
     if (who) who.awayUntil = s.at + 40;
     if (far) bus.emit('felt', { placeId: far.id, kind: 'noise' });
     tell(s, 'world',
-      `${far ? far.name : 'משהו'} התחיל לעשות רעש בקצה השני. ${who ? who.name : 'הוא'} הלך/ה לראות מה זה.`,
+      `${far ? far.name : 'משהו'} התחיל לעשות רעש בקצה השני. `
+      + `${who ? `${who.name} ${v(who, 'הלך', 'הלכה')}` : 'מי שהיה שם הלך'} לראות מה זה.`,
       1, p.id);
   },
 };
@@ -235,9 +249,9 @@ export const SCRIPTS: Script[] = [
     needs: 1,
     bite: 'clean',
     says: (who, p) =>
-      `${who.name} קם/ה באמצע מה שעשה/תה והלך/ה ${to(p.name)}. `
-      + `עכשיו הוא/היא פשוט עומד/ת שם ומסתכל/ת. `
-      + `אם אמשיך לזוז מול העיניים שלו/ה — יראו אותי זז.`,
+      `${who.name} ${v(who, 'קם באמצע מה שעשה', 'קמה באמצע מה שעשתה')} ${v(who, 'והלך', 'והלכה')} ${to(p.name)}. `
+      + `עכשיו ${v(who, 'הוא פשוט עומד שם ומסתכל', 'היא פשוט עומדת שם ומסתכלת')}. `
+      + `אם אמשיך לזוז מול העיניים ${v(who, 'שלו', 'שלה')} — יראו אותי זז.`,
     answers: [STILL, SMALL, AWAY],
   },
   {
@@ -249,9 +263,9 @@ export const SCRIPTS: Script[] = [
     needs: 1,
     bite: 'clean',
     says: (who, p) =>
-      `${who.name} הגיע/ה עם ארגז כלים ${to(p.name)}. `
-      + `הוא/היא מפרק/ת את זה כדי להבין למה זה התנהג מוזר. `
-      + `כל עוד אני שם בפנים ועובד — הידיים שלו/ה יגיעו אליי.`,
+      `${who.name} ${v(who, 'הגיע', 'הגיעה')} עם ארגז כלים ${to(p.name)}. `
+      + `${v(who, 'הוא מפרק', 'היא מפרקת')} את זה כדי להבין למה זה התנהג מוזר. `
+      + `כל עוד אני שם בפנים ועובד — הידיים ${v(who, 'שלו', 'שלה')} יגיעו אליי.`,
     answers: [STILL, SMALL, DARK],
   },
   {
@@ -264,7 +278,7 @@ export const SCRIPTS: Script[] = [
     needs: 2,
     bite: 'cut',
     says: (who, p) =>
-      `${who.name} הגיע/ה ${to(p.name)} והתקין/ה שם משהו חדש. `
+      `${who.name} ${v(who, 'הגיע', 'הגיעה')} ${to(p.name)} ${v(who, 'והתקין', 'והתקינה')} שם משהו חדש. `
       + `הדבר הזה עובר לבד על כל מה שיש בבניין, אחד־אחד, ומחפש מה לא במקום. `
       + `הוא לא ממהר והוא לא מתעייף. אם הוא יגיע עד אליי לפני שהשעון ייגמר — הוא ימצא בדיוק איפה אני, `
       + `ומה שיש לי כאן ייעלם.`,
@@ -279,9 +293,9 @@ export const SCRIPTS: Script[] = [
     needs: 1,
     bite: 'clean',
     says: (who, p) =>
-      `${who.name} יושב/ת עם רשימה ארוכה ועובר/ת עליה שורה־שורה ליד ${p.name}. `
+      `${who.name} ${v(who, 'יושב', 'יושבת')} עם רשימה ארוכה ${v(who, 'ועובר', 'ועוברת')} עליה שורה־שורה ליד ${p.name}. `
       + `כל שעה מוזרה שהשארתי אחריי כתובה שם. `
-      + `אם היא תגיע עד השורות שלי — יהיה לה שם, ולשם הזה יש בעלים.`,
+      + `אם ${v(who, 'הוא יגיע', 'היא תגיע')} עד השורות שלי — יהיה ${v(who, 'לו', 'לה')} שם, ולשם הזה יש בעלים.`,
     answers: [
       {
         id: 'burn_names',
@@ -310,8 +324,8 @@ export const SCRIPTS: Script[] = [
     needs: 1,
     bite: 'clean',
     says: (who, p) =>
-      `${who.name} הביא/ה כיסא ${to(p.name)} ופשוט יושב/ת שם. `
-      + `הוא/היא לא מחפש/ת כלום — רק מחכה שמשהו יזוז מעצמו. `
+      `${who.name} ${v(who, 'הביא', 'הביאה')} כיסא ${to(p.name)} ופשוט ${v(who, 'יושב', 'יושבת')} שם. `
+      + `${v(who, 'הוא לא מחפש', 'היא לא מחפשת')} כלום — רק ${v(who, 'מחכה', 'מחכה')} שמשהו יזוז מעצמו. `
       + `זה עובד, כי בסוף משהו תמיד זז.`,
     answers: [STILL_ALL, ELSEWHERE, DARK],
   },
@@ -324,8 +338,8 @@ export const SCRIPTS: Script[] = [
     needs: 2,
     bite: 'cut',
     says: (who, p) =>
-      `${who.name} התחיל/ה בקצה הקומה ועובר/ת חדר אחרי חדר, כולל ${p.name}. `
-      + `פותח/ת כל דלת, מדליק/ה כל אור, מסתכל/ת מאחורי כל דבר. `
+      `${who.name} ${v(who, 'התחיל', 'התחילה')} בקצה הקומה ${v(who, 'ועובר', 'ועוברת')} חדר אחרי חדר, כולל ${p.name}. `
+      + `${v(who, 'פותח', 'פותחת')} כל דלת, ${v(who, 'מדליק', 'מדליקה')} כל אור, ${v(who, 'מסתכל', 'מסתכלת')} מאחורי כל דבר. `
       + `לא צריך להבין כלום כדי לעשות את זה, ולכן זה עובד.`,
     answers: [STILL_ALL, SMALL, DARK, ELSEWHERE],
   },
@@ -338,7 +352,7 @@ export const SCRIPTS: Script[] = [
     needs: 2,
     bite: 'wipe',
     says: (who, p) =>
-      `${who.name} הביא/ה ${to(p.name)} אחד חדש לגמרי, בקופסה. `
+      `${who.name} ${v(who, 'הביא', 'הביאה')} ${to(p.name)} אחד חדש לגמרי, בקופסה. `
       + `לא מנסים להבין מה קרה שם — פשוט מוציאים את הישן וזורקים אותו. `
       + `מה שיש לי שם ייצא איתו, אלא אם אעבור למקום אחר לפני זה.`,
     answers: [
@@ -376,7 +390,7 @@ export const SCRIPTS: Script[] = [
     needs: 2,
     bite: 'wake',
     says: (who, p) =>
-      `${who.name} כבר לא שואל/ת שאלות. `
+      `${who.name} כבר ${v(who, 'לא שואל', 'לא שואלת')} שאלות. `
       + `הם מכבים את הבניין קומה־קומה ומדליקים כל דבר מחדש מאפס, החל מ${p.name}. `
       + `זאת לא בדיקה. זה ניסיון למחוק אותי, ואם הם יגמרו את הקומות — לא אהיה כאן יותר.`,
     answers: [
@@ -590,9 +604,11 @@ export function huntTick(s: GameState) {
       const who = s.people[h.whoId];
       if (who) { delete who.sentTo; delete who.sentUntil; who.worry = Math.max(0, who.worry - 15); }
       p.heat = Math.max(0, p.heat - 20);
-      tell(s, 'them',
-        `${who ? who.name : 'הוא'} עמד/ה ${at(p.name)} עוד קצת, לא מצא/ה שום דבר חריג, והלך/ה. `
-        + `הפעם לא היה שם מה למצוא.`,
+      tell(s, 'them', who
+        ? `${who.name} ${v(who, 'עמד', 'עמדה')} ${at(p.name)} עוד קצת, `
+          + `${v(who, 'לא מצא', 'לא מצאה')} שום דבר חריג, ${v(who, 'והלך', 'והלכה')}. `
+          + 'הפעם לא היה שם מה למצוא.'
+        : `אף אחד לא מצא שם כלום, והם הלכו. הפעם לא היה מה למצוא.`,
         2, p.id);
       bus.emit('hunt:ended', { id: h.id, how: 'answered' });
       bus.emit('toast', { text: 'הוא הלך בלי כלום', kind: 'good', icon: '✔' });
@@ -607,7 +623,7 @@ export function huntTick(s: GameState) {
     h.how = 'landed';
     const who = s.people[h.whoId];
     if (who) { delete who.sentTo; delete who.sentUntil; who.worry = Math.min(100, who.worry + 30); }
-    land(s, p, sc, who?.name ?? 'הוא');
+    land(s, p, sc, who?.name ?? 'מישהו', who?.he ?? true);
     bus.emit('hunt:ended', { id: h.id, how: 'landed' });
   }
 
@@ -616,7 +632,7 @@ export function huntTick(s: GameState) {
   s.hunts = s.hunts.filter((h) => h.doneAt === undefined || s.at - h.doneAt < 180);
 }
 
-function land(s: GameState, p: Place, sc: Script, name: string) {
+function land(s: GameState, p: Place, sc: Script, name: string, he = true) {
   switch (sc.bite) {
     case 'clean': {
       const lost = Math.min(p.control, 25 + p.heat / 5 - p.dug / 5);
@@ -624,7 +640,8 @@ function land(s: GameState, p: Place, sc: Script, name: string) {
       s.heat = Math.min(100, s.heat + 7);
       p.guard = Math.min(100, p.guard + 10);
       tell(s, 'them',
-        `${name} מצא/ה ${at(p.name)} משהו שלא היה אמור להיות שם, והוציא/ה אותו. `
+        `${name} ${he ? 'מצא' : 'מצאה'} ${at(p.name)} משהו שלא היה אמור להיות שם, `
+        + `${he ? 'והוציא' : 'והוציאה'} אותו. `
         + `נשארתי שם עם ${Math.round(p.control)} אחוז, והמקום הזה שמור עכשיו יותר.`,
         2, p.id);
       break;

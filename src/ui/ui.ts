@@ -5,13 +5,16 @@ import { bus } from '../game/bus';
 import {
   DAY, TEACH, dayOf, minuteOfDay, now, save, shape, tick,
 } from '../game/game';
-import { SPEEDS, SPEED_NAME, crowd, hourSays, seenAt } from '../game/clock';
-import { Offer, offersAt, start, stop } from '../game/jobs';
+import { SPEEDS, SPEED_NAME, clock as clockAt, crowd, hourSays, seenAt } from '../game/clock';
+import { ABOVE_SAYS, Offer, offersAt, start, stop, wideOffersAt } from '../game/jobs';
 import { GROWTHS, SHAPE_NAME, SHAPE_SAYS } from '../game/grow';
 import { comeOut, saysOpinion } from '../game/opinion';
 import { WORTH } from '../game/standing';
+import { answer, liveHunts, rowsOf, scriptOf, stillNeeds } from '../game/hunt';
+import { board, bestNow, pointOf } from '../game/board';
+import { reach } from '../game/story';
 import { STORIES, asking, coming, leading, rungOf, saysNow } from '../game/watch';
-import { AREA_KIND_NAME, RUNG_NAME, VERB_NAME, VERB_SAYS } from '../game/types';
+import { AREA_KIND_NAME, RUNG_NAME, VERB_NAME, VERB_SAYS, VOICE_NAME } from '../game/types';
 import type { GameState, Verb } from '../game/types';
 import { esc, h } from './dom';
 
@@ -75,12 +78,14 @@ export class UI {
     root.appendChild(this.shell());
     this.bind();
     this.wire();
-    // The first thing I saw was me. Start looking at the machine I woke in,
-    // not at a city I have never heard of.
+    // The first thing I saw was me, so the camera still starts on the machine I
+    // woke in — but the game is played from above, so the map is what is open.
+    // Being inside a room is a thing you choose, not the place you are put.
     const me = Object.values(state.places).find((p) => p.control >= 100) ?? state.places.home;
-    if (me) { this.world.enter(me.buildingId, me.floor); this.world.goTo(me, true); this.select(me.id); }
+    if (me) { this.world.enter(me.buildingId, me.floor); this.world.goTo(me, true); }
     else this.world.wide();
     this.refresh();
+    this.showBoard();
     requestAnimationFrame(this.tick);
   }
 
@@ -109,9 +114,12 @@ export class UI {
             <div class="mbar"><i id="mheatbar"></i></div>
           </button>
         </div>
+        <button class="icon" data-do="board" title="המפה">▦</button>
         <button class="icon" data-do="grown" title="מה נהייתי">◈</button>
         <button class="icon" data-do="help" title="איך משחקים">?</button>
       </header>
+
+      <button id="best" class="best" data-do="board"></button>
 
       <div id="floors" class="floors hidden">
         <button class="fl" data-do="up">▲</button>
@@ -119,7 +127,10 @@ export class UI {
         <button class="fl" data-do="down">▼</button>
       </div>
 
+      <div id="hunt" class="hunt hidden"></div>
+
       <div id="bottom">
+        <button id="feed" class="feed hidden" data-do="feed"></button>
         <div id="pick" class="pick hidden">
           <button class="x" data-do="close">✕</button>
           <span class="who" id="pickwho"></span>
@@ -264,6 +275,30 @@ export class UI {
         break;
       }
       case 'stopjob': { stop(s, arg); save(s); this.dirty = true; break; }
+
+      // ── the map, and doing things from it ────────────────────────────────
+      case 'board': { this.closeModal(); this.showBoard(); break; }
+      case 'feed': { this.showFeed(); break; }
+      case 'target': { this.closeModal(); this.showTarget(arg); break; }
+      case 'doat': {
+        const [placeId, taskId, above] = arg.split('|');
+        if (!placeId || !taskId) break;
+        if (start(s, placeId, taskId, above === '1')) {
+          save(s);
+          this.closeModal();
+        }
+        this.dirty = true;
+        break;
+      }
+
+      // ── answering somebody who is standing in the room ───────────────────
+      case 'answer': {
+        const [huntId, answerId] = arg.split('|');
+        if (!huntId || !answerId) break;
+        if (answer(s, huntId, answerId)) { save(s); audio.play('take'); }
+        this.dirty = true;
+        break;
+      }
 
       // Time is a control, not a turn. Pausing is free and costs nothing.
       case 'speed': {
@@ -847,6 +882,176 @@ export class UI {
     setTimeout(() => { el.classList.remove('in'); setTimeout(() => el.remove(), 400); }, 3600);
   }
 
+  // ── the feed: everything that happened, always on screen ──────────────────
+
+  /**
+   * The last thing that happened, permanently visible.
+   *
+   * The player's sharpest complaint was that things happened and he could not
+   * tell. So one line of what just happened is never more than a glance away,
+   * it is colour-coded by who is speaking, and touching it opens the rest.
+   */
+  private drawFeed() {
+    const s = this.state;
+    const el = this.root.querySelector('#feed') as HTMLElement;
+    const top = s.log[0];
+    if (!top) { el.classList.add('hidden'); return; }
+    el.classList.remove('hidden');
+    const key = `${top.id}:${s.log.length}`;
+    if (el.dataset.key === key) return;
+    el.dataset.key = key;
+    el.className = `feed v-${top.who}${top.weight ? ` w${top.weight}` : ''}`;
+    el.innerHTML = `<span class="vc">${esc(VOICE_NAME[top.who])}</span>`
+      + `<b>${esc(top.text)}</b>`
+      + `<u>${s.log.length}</u>`;
+  }
+
+  private showFeed() {
+    const s = this.state;
+    const r = reach(s);
+    const rows = s.log.slice(0, 70).map((l) => `<div class="ln v-${l.who}${l.weight ? ` w${l.weight}` : ''}">
+        <span class="vc">${esc(VOICE_NAME[l.who])}</span>
+        <b>${esc(l.text)}</b>
+        <em>${esc(clockAt(l.at))}</em>
+      </div>`).join('');
+    this.modal(`
+      <div class="sheet wide feedsheet">
+        <span class="kick">מה קרה עד עכשיו</span>
+        <h2>${esc(r.says)}</h2>
+        <div class="txt list">${rows || '<p class="need">עוד לא קרה כלום.</p>'}</div>
+        <button class="ok" data-do="closeteach">סגור</button>
+      </div>`);
+  }
+
+  // ── the hunt: somebody is here, and there is a clock ──────────────────────
+
+  /**
+   * Drawn every frame rather than on change, because the whole point is a clock
+   * the player can watch running down. Nothing else on screen moves by itself.
+   */
+  private drawHunt() {
+    const s = this.state;
+    const el = this.root.querySelector('#hunt') as HTMLElement;
+    const live = liveHunts(s);
+    const h = live[0];
+    if (!h) {
+      if (!el.classList.contains('hidden')) { el.classList.add('hidden'); el.innerHTML = ''; el.dataset.key = ''; }
+      return;
+    }
+    const sc = scriptOf(h);
+    const p = s.places[h.placeId];
+    const who = s.people[h.whoId];
+    if (!sc || !p) return;
+
+    const left = Math.max(0, h.at - s.at);
+    const need = stillNeeds(s, h);
+    const rows = rowsOf(s, h);
+    // Only the parts that change every minute are rewritten every minute; the
+    // rest is left alone so a button never moves under a thumb mid-press.
+    const key = `${h.id}:${rows.map((r) => `${r.met}${r.can}`).join('')}:${need}`;
+    if (el.dataset.key !== key) {
+      el.dataset.key = key;
+      el.classList.remove('hidden');
+      el.innerHTML = `
+        <div class="hbody">
+          <span class="kick">${esc(sc.name)}</span>
+          <p class="hsays">${esc(sc.says(who, p))}</p>
+          <div class="hclock"><b id="hleft"></b><i id="hbar"></i></div>
+          <p class="hneed">${need === 1
+            ? 'צריך עוד דבר אחד מהרשימה כדי שזה ייגמר טוב.'
+            : `צריך עוד ${need} דברים מהרשימה כדי שזה ייגמר טוב.`}</p>
+          <div class="hrows">${rows.map((r) => `
+            <button class="hrow ${r.met ? 'met' : ''} ${r.can ? 'can' : 'cant'}"
+              data-do="answer" data-arg="${h.id}|${r.id}" ${r.met || !r.can ? 'disabled' : ''}>
+              <b>${r.met ? '✔ ' : ''}${esc(r.text)}</b>
+              <em>${esc(r.says)}</em>
+              ${!r.met && r.lacks ? `<u>${esc(r.lacks)}</u>` : ''}
+            </button>`).join('')}</div>
+          <button class="hgo" data-do="fly" data-arg="${p.id}">לראות את זה מקרוב</button>
+        </div>`;
+    }
+    const b = this.root.querySelector('#hleft') as HTMLElement;
+    if (b) b.textContent = `${Math.ceil(left)} דקות`;
+    const bar = this.root.querySelector('#hbar') as HTMLElement;
+    if (bar) bar.style.width = `${Math.max(0, Math.min(100, (left / Math.max(1, h.total)) * 100))}%`;
+  }
+
+  // ── the map: the screen the game is actually played on ────────────────────
+
+  /**
+   * Every place worth a thought, biggest question first.
+   *
+   * This is the half of the game the player said was missing: deciding where to
+   * push, from above, without having to fly into a room and pick through a
+   * printer. Everything here can be acted on from where it stands; going inside
+   * is the cheaper option, never the only one.
+   */
+  private showBoard() {
+    const s = this.state;
+    const list = board(s).slice(0, 14);
+    const rows = list.map((t) => {
+      const risk = t.risk >= 3 ? 'hot' : t.risk >= 2 ? 'warm' : '';
+      return `<button class="tg ${t.mine > 0 ? 'mine' : ''} ${risk}"
+          data-do="target" data-arg="${t.id}">
+        <b>${esc(t.name)}${t.control > 0 ? ` · ${Math.round(t.control)}%` : ''}</b>
+        <em>${esc(t.where)}${t.mine > 0 ? ` · ${t.mine} מתוך ${t.found} כבר שלי` : ''}</em>
+        <u>${esc(t.worth)}</u>
+        ${t.now ? `<i class="tnow">${esc(t.now)}</i>` : ''}
+      </button>`;
+    }).join('');
+    this.modal(`
+      <div class="sheet wide boardsheet">
+        <span class="kick">המפה</span>
+        <h2>${esc(bestNow(s))}</h2>
+        <div class="txt list">${rows}</div>
+        <button class="ok" data-do="closeteach">סגור</button>
+      </div>`);
+  }
+
+  /** One target opened: what I can do to it from up here, and the way in. */
+  private showTarget(id: string) {
+    const s = this.state;
+    const t = board(s).find((x) => x.id === id);
+    if (!t) return;
+    const p = pointOf(s, t);
+    if (!p) {
+      this.modal(`<div class="sheet">
+        <span class="kick">${esc(t.name)}</span>
+        <h2>עוד לא ראיתי מה יש שם</h2>
+        <div class="txt"><p>${esc(t.worth)}</p>
+          <p class="need">צריך קודם להגיע לשם דרך משהו שכבר שלי.</p></div>
+        <button class="ok" data-do="board">חזרה למפה</button>
+      </div>`);
+      return;
+    }
+
+    const wide = wideOffersAt(s, p.id).slice(0, 4);
+    const inside = offersAt(s, p.id).slice(0, 3);
+    const line = (o: Offer, above: boolean) => `<button class="tg ${o.short > 0 ? 'poor' : ''}"
+        data-do="doat" data-arg="${p.id}|${o.task.id}|${above ? '1' : '0'}">
+      <b>${SIGN[o.task.verb]} ${esc(o.task.text)}</b>
+      <em>${esc(o.task.says)}</em>
+      <u>${o.power} כוח · ${o.minutes} דקות · ${o.noise} יראו${o.short > 0 ? ` · חסר ${o.short} כוח` : ''}</u>
+    </button>`;
+
+    this.modal(`
+      <div class="sheet wide boardsheet">
+        <span class="kick">${esc(t.name)} · ${esc(t.where)}</span>
+        <h2>${Math.round(t.control)}% שלי</h2>
+        <div class="txt">
+          <p>${esc(t.worth)}</p>
+          ${t.now ? `<p class="need">${esc(t.now)}</p>` : ''}
+        </div>
+        <div class="txt list">
+          <p class="need">על כל ${esc(t.name)} בבת אחת — ${esc(ABOVE_SAYS)}</p>
+          ${wide.map((o) => line(o, true)).join('') || '<p class="need">אין כרגע משהו שאפשר לעשות על כל המקום.</p>'}
+          <p class="need">או להיכנס פנימה, ל${esc(p.name)}, ולעשות את זה בזול</p>
+          ${inside.map((o) => line(o, false)).join('')}
+        </div>
+        <button class="ok" data-do="fly" data-arg="${p.id}">להיכנס לשם</button>
+      </div>`);
+  }
+
   // ── frame ─────────────────────────────────────────────────────────────────
 
   private refresh() {
@@ -874,6 +1079,11 @@ export class UI {
     bar('mheatbar', s.heat);
     (this.root.querySelector('.m-heat') as HTMLElement)
       .classList.toggle('bad', rungOf(s) >= 3);
+
+    // The one line at the top saying what is worth doing now. It reads the same
+    // board the player is looking at, so it mostly agrees with what they were
+    // already going to do — its job is to make the first ten minutes make sense.
+    set('best', bestNow(s));
 
     this.renderPick();
     this.drawJobs();
@@ -920,6 +1130,10 @@ export class UI {
     this.drawTags();
     this.drawRing();
     this.drawFloor();
+    this.drawFeed();
+    // Every frame, not on change: a clock nobody can watch running down is just
+    // a number, and this one is meant to be watched.
+    this.drawHunt();
     requestAnimationFrame(this.tick);
   };
 }

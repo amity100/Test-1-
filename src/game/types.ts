@@ -264,6 +264,14 @@ export interface Person {
   name: string;
   /** "מנהלת צוות", "שומר", "טכנאי" — never a job title from a careers page. */
   role: string;
+  /**
+   * Which way to bend the verbs around them.
+   *
+   * Hebrew makes you choose, and "רון הגיע/ה והתקין/ה" is the sound of nobody
+   * having chosen. These are eight people with names that the whole game knows,
+   * so it can simply say "רון הגיע והתקין" and "דנה הגיעה והתקינה".
+   */
+  he: boolean;
   /** Where they are right now. */
   atPlaceId: string;
   /** The whole day, hour by hour. The world does not wait to be asked. */

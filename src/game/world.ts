@@ -45,6 +45,7 @@ const H = 60;
 const PEOPLE: Person[] = [
   {
     id: 'dana', name: 'דנה', role: 'כותבת תוכנה, קומה 14',
+    he: false,
     atPlaceId: 'dana_pc', phoneId: 'dana_phone',
     notices: 0.7, mood: 'curious', worry: 0, talksTo: ['michal', 'eitan'],
     day: [
@@ -53,6 +54,7 @@ const PEOPLE: Person[] = [
   },
   {
     id: 'eitan', name: 'איתן', role: 'שומר לילה',
+    he: true,
     atPlaceId: 'lobby_cam', phoneId: 'eitan_phone',
     notices: 0.5, mood: 'past caring', worry: 0, talksTo: ['dana', 'ron'],
     day: [
@@ -61,6 +63,7 @@ const PEOPLE: Person[] = [
   },
   {
     id: 'michal', name: 'מיכל', role: 'עובדת, נשארת עד מאוחר',
+    he: false,
     atPlaceId: 'michal_pc', notices: 0.4, mood: 'afraid', worry: 0, talksTo: ['dana'],
     day: [
       at(13 * H, 4 * H + 20, 'michal_pc'),
@@ -68,6 +71,7 @@ const PEOPLE: Person[] = [
   },
   {
     id: 'ron', name: 'רון', role: 'טכנאי, מגיע כשקוראים לו',
+    he: true,
     atPlaceId: 'ron_car', notices: 0.3, mood: 'past caring', worry: 0, talksTo: ['eitan'],
     day: [
       at(7 * H + 30, 18 * H, 'ron_car'),
@@ -75,6 +79,7 @@ const PEOPLE: Person[] = [
   },
   {
     id: 'sigal', name: 'סיגל', role: 'מנקה, מגיעה לפני כולם',
+    he: false,
     atPlaceId: 'gone', notices: 0.15, mood: 'past caring', worry: 0, talksTo: ['eitan'],
     day: [
       at(5 * H + 50, 6 * H + 40, 'lobby_cam'),
@@ -83,6 +88,7 @@ const PEOPLE: Person[] = [
   },
   {
     id: 'amir', name: 'אמיר', role: 'מנהל, כמעט אף פעם לא כאן',
+    he: true,
     atPlaceId: 'gone', notices: 0.8, mood: 'afraid', worry: 0, talksTo: ['dana', 'ron'],
     day: [
       at(10 * H + 30, 15 * H, 'main'),
@@ -90,6 +96,7 @@ const PEOPLE: Person[] = [
   },
   {
     id: 'yara', name: 'יערה', role: 'עובדת חדשה, שבוע ראשון',
+    he: false,
     atPlaceId: 'gone', notices: 0.25, mood: 'curious', worry: 0, talksTo: ['dana', 'michal'],
     day: [
       at(9 * H, 18 * H + 30, 'printer'),
@@ -97,6 +104,7 @@ const PEOPLE: Person[] = [
   },
   {
     id: 'nir', name: 'ניר', role: 'בעל בית הקפה למטה',
+    he: true,
     atPlaceId: 'gone', notices: 0.35, mood: 'curious', worry: 0, talksTo: ['eitan', 'sigal'],
     day: [
       at(6 * H, 17 * H, 'door'),

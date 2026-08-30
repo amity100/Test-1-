@@ -221,6 +221,11 @@ export function tick(state: GameState, mins: number) {
 }
 
 function teach(state: GameState) {
+  // Never in the middle of somebody standing in the room with a clock running.
+  // A card that explains the rules while the player is trying to answer a hunt
+  // is the game talking over itself, and there is always a quieter minute
+  // afterwards to say the same thing in.
+  if (state.hunts.some((h) => h.doneAt === undefined)) return;
   for (const t of TEACH) {
     if (state.taught.includes(t.id)) continue;
     if (!t.when(state)) continue;
@@ -280,6 +285,14 @@ export function load(): GameState | null {
     s.moves ??= [];
     s.hunts ??= [];
     s.told ??= [];
+    // A saved person who is missing a field would silently take the falsy
+    // branch everywhere — which, for `he`, means the whole cast quietly turns
+    // female. Heal anything the world knows the answer to.
+    const fresh = buildWorld();
+    for (const [id, q] of Object.entries(s.people)) {
+      const known = fresh.people[id];
+      if (known && typeof q.he !== 'boolean') q.he = known.he;
+    }
     s.traces ??= [];
     s.marks ??= {};
     s.log ??= [];

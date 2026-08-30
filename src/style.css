@@ -940,3 +940,155 @@ body.is-mobile .objectives ul li { min-height: 46px; }
   #top .icon { width: 40px; min-height: 40px; font-size: 14px; }
   #top .endnight { padding: 0 7px; font-size: 10px; min-height: 40px; }
 }
+
+/* ── the feed: what just happened, never more than a glance away ───────────
+   Four voices, told apart by colour rather than by a label the eye has to
+   read. It sits above everything running, because what the world just did
+   matters more than what I started twenty minutes ago. */
+.feed {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center;
+  gap: 8px; width: 100%; min-height: 44px; padding: 7px 11px;
+  margin-bottom: 6px; text-align: right; direction: rtl;
+  background: var(--panel); border: 1px solid var(--line);
+  border-right-width: 3px; border-radius: 11px;
+  color: var(--txt); font-family: var(--sans); cursor: pointer;
+}
+.feed .vc {
+  font-size: 9.5px; letter-spacing: 1px; color: var(--muted);
+  font-family: var(--mono); white-space: nowrap;
+}
+.feed b {
+  font-size: 12.5px; font-weight: 500; line-height: 1.45;
+  overflow: hidden; text-overflow: ellipsis; display: -webkit-box;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.feed u { text-decoration: none; font-size: 9.5px; color: var(--muted); font-family: var(--mono); }
+.feed.v-me { border-right-color: var(--cy); }
+.feed.v-me .vc { color: var(--cy-2); }
+.feed.v-them { border-right-color: var(--red); }
+.feed.v-them .vc { color: var(--red); }
+.feed.v-world { border-right-color: var(--muted); }
+.feed.v-country { border-right-color: var(--violet); }
+.feed.v-country .vc { color: var(--violet); }
+.feed.w2 { background: var(--panel-2); box-shadow: 0 0 0 1px var(--line-hot); }
+.feed.w2 b { font-size: 13.5px; color: #fff; }
+
+.feedsheet .ln {
+  display: grid; grid-template-columns: auto 1fr auto; gap: 8px;
+  align-items: baseline; padding: 8px 10px; margin-bottom: 5px;
+  background: rgba(255,255,255,.03); border-radius: 9px;
+  border-right: 3px solid var(--line);
+}
+.feedsheet .ln b { font-size: 12.5px; font-weight: 500; line-height: 1.5; }
+.feedsheet .ln em { font-size: 9.5px; color: var(--muted); font-family: var(--mono); font-style: normal; }
+.feedsheet .ln .vc { font-size: 9.5px; color: var(--muted); font-family: var(--mono); }
+.feedsheet .ln.v-me { border-right-color: var(--cy); }
+.feedsheet .ln.v-them { border-right-color: var(--red); }
+.feedsheet .ln.v-country { border-right-color: var(--violet); }
+.feedsheet .ln.v-country b { color: var(--violet); }
+.feedsheet .ln.w2 { background: rgba(255,255,255,.07); }
+
+/* ── the one line saying what is worth doing now ───────────────────────────
+   Under the top bar, always there, and it opens the map. */
+.best {
+  position: absolute; top: 62px; inset-inline: 8px; z-index: 6;
+  min-height: 34px; padding: 7px 12px; text-align: right; direction: rtl;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  color: var(--txt); font-family: var(--sans); font-size: 12px; line-height: 1.4;
+  cursor: pointer;
+}
+
+/* ── the hunt: somebody is here, and there is a clock ──────────────────────
+   It takes the screen, because it is the only thing that matters while it
+   runs, and its answers are the biggest buttons in the game. */
+.hunt {
+  position: absolute; inset-inline: 8px; top: 104px; bottom: 128px; z-index: 40;
+  display: flex; align-items: flex-start; justify-content: center;
+  pointer-events: none; direction: rtl;
+}
+.hunt .hbody {
+  pointer-events: auto; width: 100%; max-width: 460px; max-height: 100%;
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: 13px; border-radius: 15px;
+  background: var(--panel-2); border: 1px solid var(--red);
+  box-shadow: 0 0 0 1px rgba(255,84,112,.2), var(--shadow);
+}
+.hunt .kick {
+  display: block; font-family: var(--mono); font-size: 10px; letter-spacing: 2px;
+  color: var(--red); margin-bottom: 7px;
+}
+.hunt .hsays { font-size: 13px; line-height: 1.65; color: var(--txt); margin: 0 0 11px; }
+.hunt .hclock {
+  position: relative; height: 22px; margin-bottom: 9px; border-radius: 6px;
+  background: rgba(255,84,112,.12); overflow: hidden;
+}
+.hunt .hclock i {
+  position: absolute; inset: 0 auto 0 0; display: block; height: 100%;
+  background: linear-gradient(90deg, rgba(255,84,112,.55), rgba(255,84,112,.2));
+  transition: width .3s linear;
+}
+.hunt .hclock b {
+  position: relative; z-index: 1; display: block; line-height: 22px;
+  text-align: center; font-family: var(--mono); font-size: 11.5px; color: #fff;
+}
+.hunt .hneed { font-size: 11.5px; color: var(--amber); margin: 0 0 9px; }
+.hunt .hrows { display: grid; gap: 7px; }
+.hunt .hrow {
+  display: block; width: 100%; min-height: 48px; padding: 9px 11px;
+  text-align: right; direction: rtl; border-radius: 11px;
+  background: rgba(95,246,255,.07); border: 1px solid var(--line);
+  color: var(--txt); font-family: var(--sans); cursor: pointer;
+}
+.hunt .hrow b { display: block; font-size: 13px; margin-bottom: 3px; }
+.hunt .hrow em { display: block; font-size: 11px; color: var(--muted); font-style: normal; line-height: 1.45; }
+.hunt .hrow u {
+  display: block; text-decoration: none; font-size: 10.5px;
+  color: var(--amber); margin-top: 4px;
+}
+.hunt .hrow.can { border-color: var(--line-hot); background: rgba(95,246,255,.13); }
+.hunt .hrow.met { border-color: var(--green); background: rgba(90,255,168,.1); }
+.hunt .hrow.met b { color: var(--green); }
+.hunt .hrow.cant { opacity: .62; cursor: default; }
+.hunt .hgo {
+  width: 100%; min-height: 44px; margin-top: 9px; border-radius: 11px;
+  background: transparent; border: 1px solid var(--line);
+  color: var(--muted); font-family: var(--sans); font-size: 12px; cursor: pointer;
+}
+
+/* ── the map: the screen the game is played on ─────────────────────────────*/
+.boardsheet .tg {
+  display: block; width: 100%; min-height: 46px; padding: 9px 11px;
+  margin-bottom: 6px; text-align: right; direction: rtl; border-radius: 11px;
+  background: rgba(255,255,255,.035); border: 1px solid var(--line);
+  border-right-width: 3px; color: var(--txt); font-family: var(--sans); cursor: pointer;
+}
+.boardsheet .tg b { display: block; font-size: 13px; margin-bottom: 2px; }
+.boardsheet .tg em { display: block; font-size: 10.5px; color: var(--muted); font-style: normal; }
+.boardsheet .tg u {
+  display: block; text-decoration: none; font-size: 11px;
+  color: var(--txt); opacity: .8; line-height: 1.45; margin-top: 4px;
+}
+.boardsheet .tg .tnow {
+  display: block; font-style: normal; font-size: 11px;
+  color: var(--amber); margin-top: 5px;
+}
+.boardsheet .tg.mine { border-right-color: var(--cy); }
+.boardsheet .tg.mine b { color: var(--cy); }
+.boardsheet .tg.warm { border-right-color: var(--amber); }
+.boardsheet .tg.hot { border-right-color: var(--red); background: rgba(255,84,112,.07); }
+.boardsheet .tg.hot .tnow { color: var(--red); }
+.boardsheet .tg.poor { opacity: .55; }
+.boardsheet .list { max-height: 60vh; }
+
+@media (max-width: 345px) {
+  .best { font-size: 11px; top: 58px; }
+  .hunt { top: 96px; }
+  .hunt .hsays { font-size: 12px; }
+}
+
+/* The map's headline is a whole sentence, not a two-word title, so it is set
+   at reading size. A full stop rendered in title type reads as shouting. */
+.boardsheet h2, .feedsheet h2 {
+  font-size: 15px; line-height: 1.55; font-weight: 600;
+  letter-spacing: 0; margin-bottom: 10px;
+}

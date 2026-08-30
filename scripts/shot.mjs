@@ -29,7 +29,7 @@ const page = await browser.newPage({
 page.on('pageerror', (e) => console.log('שגיאה:', String(e)));
 await page.goto('http://localhost:5173/', { waitUntil: 'domcontentloaded' });
 if (save) {
-  await page.evaluate((s) => localStorage.setItem('aviv2.save', s), save);
+  await page.evaluate((s) => localStorage.setItem('aviv3.save', s), save);
   await page.reload({ waitUntil: 'domcontentloaded' });
 }
 await page.waitForTimeout(1600);
@@ -57,6 +57,6 @@ for (const [sel, text] of taps) {
   await page.waitForTimeout(taps.length === 1 ? 200 : 1500);
 }
 await page.waitForTimeout(settle);
-await page.screenshot({ path: out });
+await page.screenshot({ path: out, timeout: 60000 });
 console.log(`→ ${out}`);
 await browser.close();

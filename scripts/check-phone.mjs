@@ -71,23 +71,53 @@ for (const [W, H] of [[320, 640], [360, 740], [390, 844], [430, 932]]) {
     return rows.length;
   };
 
-  // The game opens looking at the machine it woke in, with its ring already up.
+  // The game opens on the map, because it is a game about deciding where to
+  // push and not about rummaging through rooms. Going into a room is a thing
+  // you choose, so this checks the map first and then the way in.
   const n1 = await audit('פתיחה');
   ok(n1 >= 4, `${W}×${H} · יש כפתורים על המסך הראשון (${n1})`);
 
+  await p.evaluate(() => document.querySelector('[data-do="board"]')?.click());
+  await p.waitForTimeout(400);
+  const targets = await p.locator('#modal .tg').count();
+  ok(targets >= 3, `${W}×${H} · המפה נפתחה עם ${targets} מקומות לבחור מהם`);
+  await audit('מפה');
+
+  // And one of them opens, with something on it you can actually press.
+  await tap('#modal .tg'); await p.waitForTimeout(500);
+  const doable = await p.locator('#modal .tg').count();
+  ok(doable >= 1, `${W}×${H} · ובתוך יעד יש ${doable} דברים לעשות`);
+  await audit('יעד');
+  await shut();
+
+  // The line that always says what is worth doing now.
+  const best = await p.evaluate(() => document.querySelector('#best')?.textContent?.trim() ?? '');
+  ok(best.length > 10, `${W}×${H} · כתוב מה כדאי עכשיו: "${best.slice(0, 40)}"`);
+
+  // Now go inside, the way a player would, and check the ring in there.
+  await p.evaluate(() => {
+    const el = document.querySelector('#tags button');
+    if (el) el.click();
+  });
+  await p.waitForTimeout(700);
   const verbs = await p.locator('#ring .rb').count();
-  ok(verbs >= 3, `${W}×${H} · הטבעת נפתחה עם ${verbs} דרכים`);
+  ok(verbs >= 3, `${W}×${H} · בתוך מקום, הטבעת נפתחה עם ${verbs} דרכים`);
   await audit('טבעת');
 
   // Open one of the seven and check its own options are reachable too.
-  await tap('#ring .rb'); await p.waitForTimeout(900);
-  const inner = await p.locator('#ring .rb').count();
-  ok(inner >= 2, `${W}×${H} · ובתוכה ${inner} אפשרויות`);
-  await audit('אפשרויות');
+  if (verbs) {
+    await tap('#ring .rb'); await p.waitForTimeout(900);
+    const inner = await p.locator('#ring .rb').count();
+    ok(inner >= 2, `${W}×${H} · ובתוכה ${inner} אפשרויות`);
+    // The whole point of the trim: a ring you can read, not a wall.
+    ok(inner <= 9, `${W}×${H} · והטבעת נשארה קריאה (${inner})`);
+    await audit('אפשרויות');
+  }
 
   // Everything along the top opens something and closes again.
   for (const [what, label] of [['jobs', 'מה רץ'], ['areas', 'מה אני יודע'],
-    ['them', 'הם'], ['grown', 'מה נהייתי'], ['help', 'עזרה']]) {
+    ['them', 'הם'], ['board', 'המפה'], ['feed', 'מה קרה'],
+    ['grown', 'מה נהייתי'], ['help', 'עזרה']]) {
     const opened = await p.evaluate((w) => {
       const el = document.querySelector(`[data-do="${w}"]`);
       if (!el) return false;
