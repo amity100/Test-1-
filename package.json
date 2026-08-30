@@ -12,7 +12,8 @@
     "alive": "esbuild scripts/check-alive.ts --bundle --platform=node --format=esm --outfile=node_modules/.alive.mjs --external:three && node node_modules/.alive.mjs",
     "balance": "esbuild scripts/check-balance.ts --bundle --platform=node --format=esm --outfile=node_modules/.balance.mjs --external:three && node node_modules/.balance.mjs",
     "effect": "esbuild scripts/check-effect.ts --bundle --platform=node --format=esm --outfile=node_modules/.effect.mjs --external:three && node node_modules/.effect.mjs",
-    "answer": "esbuild scripts/check-answer.ts --bundle --platform=node --format=esm --outfile=node_modules/.answer.mjs --external:three && node node_modules/.answer.mjs"
+    "answer": "esbuild scripts/check-answer.ts --bundle --platform=node --format=esm --outfile=node_modules/.answer.mjs --external:three && node node_modules/.answer.mjs",
+    "artifact": "npm run build && node scripts/artifact.mjs artifact.html"
   },
   "dependencies": {
     "three": "^0.169.0"

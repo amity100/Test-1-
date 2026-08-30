@@ -13,3 +13,7 @@ _probe*
 # local capture harnesses
 .*.mjs
 _probe/
+
+# the playable page, rebuilt by `npm run artifact` from dist/
+artifact.html
+scratch-artifact.html
