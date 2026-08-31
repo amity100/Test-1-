@@ -386,9 +386,15 @@ export class UI {
     box.classList.toggle('hidden', s.jobs.length === 0);
     const want = s.jobs.map((j) => j.id).join('|');
     if (box.dataset.on === want) {
+      // The bar was being kept up to date and the number beside it was not, so
+      // a job that started at 68׳ still said 68׳ an hour later. A player
+      // watching something run has exactly one question — how much longer —
+      // and the answer was frozen on screen.
       for (const j of s.jobs) {
         const bar = box.querySelector(`[data-bar="${j.id}"]`) as HTMLElement | null;
         if (bar) bar.style.width = j.forever ? '100%' : `${Math.round(100 - (j.left / j.total) * 100)}%`;
+        const left = box.querySelector(`[data-left="${j.id}"]`) as HTMLElement | null;
+        if (left && !j.forever) left.textContent = `${Math.max(1, Math.round(j.left))}׳`;
       }
       return;
     }
@@ -399,7 +405,8 @@ export class UI {
         <b>${SIGN[j.verb]} ${esc(shortName(j.text))}</b>
         <em>${esc(p?.name ?? '')}</em>
         <div class="jbar"><i data-bar="${j.id}" style="width:${j.forever ? 100 : 0}%"></i></div>
-        <u>${j.power} כוח · ${j.forever ? 'עד שאעצור' : `${Math.max(1, Math.round(j.left))}׳`}</u>
+        <u>${j.power} כוח · <span data-left="${j.id}">${j.forever ? 'עד שאעצור'
+          : `${Math.max(1, Math.round(j.left))}׳`}</span></u>
       </button>`;
     }).join('');
   }

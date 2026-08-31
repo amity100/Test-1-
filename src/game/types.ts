@@ -112,16 +112,16 @@ export interface Link {
   kind: LinkKind;
   /** For a link that rides a human or a gadget. */
   carrierId?: string;
-  /** One plain sentence: "דנה עולה לקומה 14 כל בוקר". */
+  /** One plain sentence: "אותו ארון חשמל ברחוב". */
   note: string;
 }
 
 export interface Place {
   id: string;
   kind: PlaceKind;
-  /** "המחשב של דנה" */
+  /** "תחנת הכוח של תל אביב" */
   name: string;
-  /** "קומה 14" */
+  /** "קרית עתידים" */
   where: string;
   /** One line of flavour shown when you look inside. */
   desc: string;

@@ -88,7 +88,7 @@ export const CATALOGUE: Task[] = [
     textFor: (p) => GIFT[p.kind].button,
     says: 'זה הכפתור החזק — וגם הרועש. פס המצוד יעלה.',
     gives: 'משהו קורה בארץ בגללי',
-    gainFor: (_s, p) => GIFT[p.kind].gain,
+    gainFor: (s, p) => GIFT[p.kind].gain(s.areas[p.areaId]?.name ?? p.name),
     power: 2, minutes: 90, noise: 3, look: 'wrong',
     // A place you barely hold will mostly notice you trying — but that is a
     // price, not a locked door, and this game has no locked doors. Below a

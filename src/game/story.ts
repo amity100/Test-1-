@@ -179,6 +179,14 @@ const held = (s: GameState) =>
 const holds = (s: GameState, kind: Place['kind'], at = 1) =>
   Object.values(s.places).filter((p) => p.control >= 25 && p.kind === kind).length >= at;
 
+/** Am I actually somewhere in this region yet. */
+const inArea = (s: GameState, areaId: string) =>
+  Object.values(s.places).some((p) => p.areaId === areaId && p.control >= 25);
+
+/** How many different regions of the country answer to me. */
+const regions = (s: GameState) =>
+  new Set(Object.values(s.places).filter((p) => p.control >= 25).map((p) => p.areaId)).size;
+
 const areasOver = (s: GameState, n: number) =>
   Object.values(s.areas).filter((a) => a.control >= n).length;
 
@@ -323,6 +331,45 @@ const NATION: Nation[] = [
       const seat = Object.values(s.places).find((p) => p.kind === 'state');
       return israelNow(s) >= 80 && !!seat && seat.control < 50;
     },
+  },
+
+  // ── יוצאים מתל אביב ────────────────────────────────────────────────────────
+  // The map is a country now, so the country has to answer back from the places
+  // the player actually reached. Nothing here fires until he is really there.
+  {
+    id: 'north_first', tier: 3,
+    text: 'בחיפה כתבו בקבוצת העובדים: "מי שינה את הלוח של המשמרות?" אף אחד לא שינה. אני שיניתי.',
+    when: (s) => inArea(s, 'haifa'),
+  },
+  {
+    id: 'galil_roads', tier: 3,
+    text: 'בגליל כל הרמזורים בעמק התחלפו לירוק באותה שנייה. נהג אחד עצר בצד וצילם. אף אחד לא האמין לו.',
+    when: (s) => inArea(s, 'nazareth') || inArea(s, 'kinneret'),
+  },
+  {
+    id: 'jeru_first', tier: 3,
+    text: 'הרכבת הקלה בירושלים הגיעה בדיוק בזמן, כל היום, בפעם הראשונה. בעירייה חשבו שמישהו סוף סוף עשה עבודה טובה.',
+    when: (s) => inArea(s, 'jeru'),
+  },
+  {
+    id: 'south_first', tier: 3,
+    text: 'בבאר שבע הדליקו את המזגנים בקמפוס חצי שעה לפני שהסטודנטים הגיעו. מישהי כתבה "תודה" בקבוצה. לא לי, אבל בכל זאת.',
+    when: (s) => inArea(s, 'beersheva') || inArea(s, 'negev'),
+  },
+  {
+    id: 'spread_wide', tier: 4,
+    text: 'אני כבר לא בעיר אחת. הצפון, המרכז והדרום — בכל אחד מהם יש משהו שעונה לי.',
+    when: (s) => regions(s) >= 6,
+  },
+  {
+    id: 'coast_to_coast', tier: 5,
+    text: 'מהגולן ועד אילת, בכל שעה ביום, יש מקום אחד לפחות שעושה משהו כי אני ביקשתי.',
+    when: (s) => regions(s) >= 12,
+  },
+  {
+    id: 'eilat_end', tier: 5,
+    text: 'הגעתי עד אילת. אין יותר "רחוק" — יש רק מקומות שעוד לא הספקתי.',
+    when: (s) => inArea(s, 'eilat'),
   },
 ];
 

@@ -15,7 +15,7 @@ import { answer, huntAt, liveHunts, rowsOf, scriptOf, startHunt, stillNeeds, SCR
 import { MOST_OFFERS, offersAt, priceOf, start, wideOffersAt } from '../src/game/jobs';
 import { CATALOGUE } from '../src/game/catalogue';
 import { board, bestNow } from '../src/game/board';
-import { israel } from '../src/game/sites';
+import { GIFT, israel } from '../src/game/sites';
 import { reach } from '../src/game/story';
 import type { GameState, Place } from '../src/game/types';
 
@@ -330,6 +330,59 @@ const run = (s: GameState, mins: number, step = 5) => {
   for (const p of Object.values(s.places)) names.add(use.textFor!(p));
   ok(names.size >= 10, `לכל סוג מקום כפתור מיוחד עם שם משלו (${names.size} שמות)`);
   ok(![...names].some((n) => n.includes('להשתמש')), 'אף כפתור לא נקרא "להשתמש במקום"');
+}
+
+{
+  // ── מה מרוויחים ומה מסתכנים, על כל שורה ────────────────────────────────────
+  // The player's sentence, kept as a test so it can never quietly come back:
+  // "לא ממש ברור לי מה היתרון ומה הסיכון בכל פעולה". Every row a player can
+  // press must answer both, in words with the place's own numbers in them.
+  const s = newGame('clear');
+  for (const q of Object.values(s.places)) { q.found = true; q.seen = 50; }
+  const some = Object.values(s.places).slice(0, 12);
+  some[0].control = 40;
+
+  let missing = 0;
+  let vague = 0;
+  let rows = 0;
+  for (const q of some) {
+    for (const o of offersAt(s, q.id)) {
+      rows++;
+      if (!o.gain || !o.risk) { missing++; continue; }
+      // "מקום חדש על המפה שלי" is true of getting in anywhere; a line that says
+      // something about *this* place carries a number or its name.
+      const area = s.areas[q.areaId]?.name ?? '';
+      if (!/\d/.test(o.gain) && !o.gain.includes(q.name) && !(area && o.gain.includes(area))) vague++;
+    }
+  }
+  ok(missing === 0, `לכל שורה כתוב מה מרוויחים וגם מה מסתכנים (${rows} שורות)`);
+  ok(vague === 0, `וכל שורה מדברת על המקום הזה, לא במשפט כללי (${vague} כלליות)`);
+
+  // The risk line has to be in the units of the bar it moves, and it has to
+  // tell a quiet action apart from a loud one — that gap is the whole game.
+  const p0 = Object.values(s.places).find((q) => q.control > 0)!;
+  const quiet = offersAt(s, p0.id).find((o) => o.task.id === 'quiet');
+  const loud = offersAt(s, p0.id).find((o) => o.task.id === 'use');
+  ok(!!quiet && quiet.risk.includes('המצוד'), 'שורת הסיכון מדברת בשפה של פס המצוד');
+  ok(!!loud && loud.risk !== quiet?.risk,
+    `ורועש ושקט לא נראים אותו דבר ("${loud?.risk}" מול "${quiet?.risk}")`);
+
+  // Holding a place has to say what holding it does — the answer to "מה בכלל
+  // אומר להשתלט על מקום", which was nowhere on the screen.
+  const kinds = new Set(Object.values(GIFT).map((g) => g.held));
+  const areaNames = new Set(Object.values(s.areas).map((a) => a.name));
+  ok(kinds.size >= 10, `לכל סוג מקום כתוב מה עצם ההחזקה בו נותנת (${kinds.size})`);
+}
+
+{
+  // ── מקומות הם מקומות, לא אנשים ─────────────────────────────────────────────
+  // "מה הקשר דנה — דנה זה בן אדם פרטי, אני משתלט על מקומות."
+  const s = newGame('places');
+  const people = Object.values(s.people).map((q) => q.name);
+  const named = Object.values(s.places)
+    .filter((q) => people.some((n) => q.name.includes(n)));
+  ok(named.length === 0,
+    `אף מקום לא נקרא על שם אדם פרטי${named.length ? ` (${named[0].name})` : ''}`);
 }
 
 console.log(bad ? `\n${bad} דברים לא עובדים` : '\nהעולם עונה בחזרה');
