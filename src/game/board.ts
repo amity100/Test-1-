@@ -235,8 +235,20 @@ export function bestNow(s: GameState): string {
       + 'כי כבר כמעט לא נשאר לך מאחורי מה להתחבא. תתפשט מהר, ותרד למחתרת בין לבין.';
   }
 
-  if (s.power.used >= s.power.all) {
-    return 'כל הכוח שלך תפוס. כדי להתחיל משהו חדש — תעצור משהו שרץ.';
+  // Two is what getting into anywhere costs, so anything less than two free is
+  // stuck even though the pool is not technically full. Watched in play: a
+  // player with three of four held sat pressing rows that could not start,
+  // while the line at the top talked about somewhere else entirely.
+  const free = s.power.all - s.power.used;
+  if (free <= 0) {
+    return 'כל הכוח שלך תפוס. כדי להתחיל משהו חדש — תעצור משהו שרץ ברצועה למטה.';
+  }
+  if (free < 2 && s.jobs.length) {
+    const slow = [...s.jobs].sort((a, b) => b.left - a.left)[0];
+    const where = s.places[slow.placeId];
+    return `נשאר לך רק ${free} כוח פנוי — לא מספיק כדי לחדור למקום חדש. `
+      + `אם זה דחוף, תעצור את "${slow.text}"${where ? ` ${at(where.name)}` : ''} `
+      + 'ותקבל את הכוח בחזרה מיד.';
   }
 
   const held = Object.values(s.places).filter((p) => p.control > 0);
@@ -244,8 +256,14 @@ export function bestNow(s: GameState): string {
     return 'יש לך מקום אחד בעולם. הדבר הכי חשוב עכשיו: לחדור למקום שני.';
   }
 
+  // Never recommend something already under way. The line was telling a player
+  // to finish taking a place while the bar for exactly that push was running
+  // along the bottom of his screen — advice he had already taken, which reads
+  // as the game not watching what he does.
+  const busy = new Set(s.jobs.map((j) => j.placeId));
+
   const nearly = Object.values(s.places)
-    .filter((p) => p.control > 0 && p.control < 60)
+    .filter((p) => p.control > 0 && p.control < 60 && !busy.has(p.id))
     .sort((a, b) => b.control - a.control)[0];
   if (nearly) {
     return `${nearly.name} כבר ${Math.round(nearly.control)} אחוז שלך. תסיים להשתלט עליו — ואז הכפתור המיוחד שלו ייפתח.`;
@@ -255,7 +273,8 @@ export function bestNow(s: GameState): string {
   // is the one piece of strategy the game most wants a new player to find:
   // spread out from a place that helps, not at random across the country.
   const helped = Object.values(s.places)
-    .filter((p) => p.found && p.control <= 0 && (s.areas[p.areaId]?.control ?? 0) >= 25)
+    .filter((p) => p.found && p.control <= 0 && !busy.has(p.id)
+      && (s.areas[p.areaId]?.control ?? 0) >= 25)
     .sort((a, b) => worthOf(b) - worthOf(a))[0];
   // Two lines is all the strip gets before it clamps, and a sentence that ends
   // in an ellipsis mid-word is worse than a shorter one: it was running to
@@ -266,9 +285,20 @@ export function bestNow(s: GameState): string {
   }
 
   const near = Object.values(s.places)
-    .filter((p) => p.found && p.control <= 0)
+    .filter((p) => p.found && p.control <= 0 && !busy.has(p.id))
     .sort((a, b) => worthOf(b) - worthOf(a))[0];
   if (near) return `הבא בתור: ${near.name} — ${GIFT[near.kind].short}.`;
+
+  // Everything worth starting is already started. That is a good place to be,
+  // and saying so is more use than inventing an errand.
+  const ready = Object.values(s.places)
+    .filter((p) => p.control >= 60 && !busy.has(p.id))
+    .sort((a, b) => worthOf(b) - worthOf(a))[0];
+  if (s.jobs.length && ready) {
+    return `הכל כבר רץ. כשיתפנה לך כוח — ${GIFT[ready.kind].button} ב${ready.name} `
+      + 'זה הדבר הכי חזק שאתה יכול לעשות עכשיו.';
+  }
+  if (s.jobs.length) return 'הכל כבר רץ. שווה לחכות שמשהו ייגמר לפני שמתחילים עוד.';
 
   return 'שקט עכשיו, והמצוד נמוך. זה בדיוק הזמן להתפשט לאזור חדש.';
 }

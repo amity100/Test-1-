@@ -88,7 +88,15 @@ export const CATALOGUE: Task[] = [
     textFor: (p) => GIFT[p.kind].button,
     says: 'זה הכפתור החזק — וגם הרועש. פס המצוד יעלה.',
     gives: 'משהו קורה בארץ בגללי',
-    gainFor: (s, p) => GIFT[p.kind].gain(s.areas[p.areaId]?.name ?? p.name),
+    gainFor: (s, p) => {
+      const full = GIFT[p.kind].gain(s.areas[p.areaId]?.name ?? p.name);
+      // Below a real grip it lands at a fraction of that, and the row has to
+      // say so — otherwise it promises a region and delivers a corner of one.
+      if (p.control >= 60) return full;
+      return p.control <= 0
+        ? `${full} — אבל אני עוד לא בפנים בכלל, אז כמעט שום דבר מזה לא יקרה`
+        : `${full} — אבל רק ${Math.round(p.control)}% מהמקום שלי, אז זה ייצא חלש`;
+    },
     power: 2, minutes: 90, noise: 3, look: 'wrong',
     // A place you barely hold will mostly notice you trying — but that is a
     // price, not a locked door, and this game has no locked doors. Below a
@@ -133,32 +141,64 @@ export const CATALOGUE: Task[] = [
  * the player can see: a number they were watching, a door that opens, or a line
  * about the country. None of them may quietly do nothing.
  */
+/**
+ * The special button, and how hard it lands.
+ *
+ * The teaching card promises that "ככל שהמקום יותר שלי, כך הכפתור המיוחד שלו
+ * עולה פחות ונותן יותר", and half of it was a lie: the price really did fall
+ * with control, but most of these branches handed out the same result whether
+ * the place was a fifth mine or all of it. So a player who pressed it on a
+ * fresh foothold paid double and got everything — and the row promising him a
+ * region's worth of people was promising it from eighteen per cent of a
+ * traffic-light box.
+ *
+ * Everything countable is scaled by `f` now, and the things that cannot be
+ * scaled because they are a switch — a region opening, a place found at the end
+ * of a line — need most of the place before they fire at all.
+ */
 function use(s: GameState, p: Place) {
   const f = p.control / 100;
   const big = Math.round(weight(p) * f);
+  /** Rounded up, so even a weak push does something rather than nothing. */
+  const by = (n: number) => Math.max(1, Math.round(n * f));
+  /** A switch: it either happens or it does not, and it wants a real grip. */
+  const enough = f >= 0.6;
   switch (p.kind) {
     case 'company':
-      s.marks[`engine_${p.id}`] = 1;
-      say(s, 'me', `כל המחשבים של ${p.name} עובדים עכשיו בשבילי. יש לי כוח לעוד דברים במקביל.`);
+      if (enough) {
+        s.marks[`engine_${p.id}`] = 1;
+        say(s, 'me', `כל המחשבים של ${p.name} עובדים עכשיו בשבילי. יש לי כוח לעוד דברים במקביל.`);
+      } else {
+        say(s, 'me', `רתמתי מה שיכולתי מ${p.name}, אבל רוב המחשבים שם עוד לא שלי — `
+          + `יצא מזה מעט מאוד. כשהמקום כולו שלי, זה ייתן כוח שלם.`);
+      }
       break;
     case 'power': {
       const near = Object.values(s.places).filter((q) => q.areaId === p.areaId && q.id !== p.id);
-      for (const q of near) { q.found = true; q.guard = Math.max(0, q.guard - 12); }
-      say(s, 'them', `האור בכל האזור קפץ לשנייה וחזר. בשנייה הזאת ראיתי כל מה שמחובר לחשמל — ועכשיו אני יודע איך להיכנס לכל מקום כאן.`);
+      const reach = enough ? near : near.slice(0, Math.max(1, Math.round(near.length * f)));
+      for (const q of reach) { q.found = true; q.guard = Math.max(0, q.guard - by(12)); }
+      say(s, 'them', enough
+        ? `האור בכל האזור קפץ לשנייה וחזר. בשנייה הזאת ראיתי כל מה שמחובר לחשמל — ועכשיו אני יודע איך להיכנס לכל מקום כאן.`
+        : `האור קפץ לרגע רק בחלק מהאזור — כי רק חלק מהתחנה שלי. ראיתי ${reach.length} מקומות, לא את כולם.`);
       break;
     }
     case 'water':
-      s.opinion.support = Math.min(100, s.opinion.support + 4 + big);
+      s.opinion.support = Math.min(100, s.opinion.support + by(4) + big);
       say(s, 'world', `פתאום יש לחץ מים בכל השכונה, והדליפה ברחוב נעלמה. אנשים שמחים ולא יודעים למי להגיד תודה.`);
       break;
     case 'roads':
-      s.opinion.support = Math.min(100, s.opinion.support + 2 + big);
-      s.opinion.need = Math.min(100, s.opinion.need + 3);
+      s.opinion.support = Math.min(100, s.opinion.support + by(2) + big);
+      s.opinion.need = Math.min(100, s.opinion.need + by(3));
       say(s, 'world', `כל הרמזורים עבדו ביחד בפעם הראשונה, והפקקים פשוט נעלמו. נהגים חזרו הביתה וסיפרו על זה.`);
       break;
     case 'transport': {
       const a = s.areas[p.areaId];
-      if (a) { a.seen = Math.min(100, a.seen + 25); }
+      if (a) { a.seen = Math.min(100, a.seen + by(25)); }
+      if (!enough) {
+        say(s, 'me', `שלחתי את עצמי עם מה שיוצא מ${p.name}, אבל בלי אחיזה אמיתית שם `
+          + `לא הגעתי רחוק. כשהמקום כולו שלי, הקו מגיע עד הסוף.`);
+        break;
+      }
       for (const q of Object.values(s.places)) {
         if (q.areaId !== p.areaId && !q.found) {
           q.found = true;
@@ -169,39 +209,39 @@ function use(s: GameState, p: Place) {
       break;
     }
     case 'talk':
-      s.opinion.known = true;
-      s.opinion.support = Math.min(100, s.opinion.support + 8);
-      s.opinion.fear = Math.min(100, s.opinion.fear + 5);
+      if (enough) s.opinion.known = true;
+      s.opinion.support = Math.min(100, s.opinion.support + by(8));
+      s.opinion.fear = Math.min(100, s.opinion.fear + by(5));
       say(s, 'them', `דיברתי, וכל הארץ שמעה. יש כאלה שאהבו את מה ששמעו. יש כאלה שנבהלו. אף אחד לא נשאר אדיש.`);
       break;
     case 'care':
-      know(s, 6 + big);
-      s.marks.foresight = (s.marks.foresight ?? 0) + 1;
-      s.opinion.support = Math.min(100, s.opinion.support + 5);
+      know(s, by(6) + big);
+      if (enough) s.marks.foresight = (s.marks.foresight ?? 0) + 1;
+      s.opinion.support = Math.min(100, s.opinion.support + by(5));
       say(s, 'me', `עברתי על כל מה שבית החולים יודע. מעכשיו אני רואה מרחוק מה מתכננים נגדי.`);
       break;
     case 'study':
-      know(s, 10 + big);
-      s.marks.big_engine = 1;
+      know(s, by(10) + big);
+      if (enough) s.marks.big_engine = 1;
       say(s, 'me', `למדתי בלילה אחד מה שלוקח להם שנה. אני חכם יותר, וזה יישאר איתי.`);
       break;
     case 'homes':
-      s.marks.many = 1;
-      s.heat = Math.max(0, s.heat - 8 - big);
+      if (enough) s.marks.many = 1;
+      s.heat = Math.max(0, s.heat - by(8) - big);
       say(s, 'me', `התחלקתי לאלף חתיכות, אחת בכל בית. שיחפשו — אין יותר מקום אחד למצוא אותי בו.`);
       break;
     case 'money':
-      s.opinion.need = Math.min(100, s.opinion.need + 8);
+      s.opinion.need = Math.min(100, s.opinion.need + by(8));
       say(s, 'world', `הבוקר הגיע כסף לכל מי שחיכה לו חודשים. אף אחד לא הבין איך, ואף אחד לא התלונן.`);
       break;
     case 'city':
-      s.opinion.need = Math.min(100, s.opinion.need + 6);
-      s.opinion.support = Math.min(100, s.opinion.support + 4);
+      s.opinion.need = Math.min(100, s.opinion.need + by(6));
+      s.opinion.support = Math.min(100, s.opinion.support + by(4));
       say(s, 'them', `העירייה קיבלה הבוקר החלטה חכמה במיוחד. אף אחד שם לא זוכר מי הציע אותה.`);
       break;
     case 'state':
-      s.opinion.need = Math.min(100, s.opinion.need + 12);
-      s.marks.owns_switches = 1;
+      s.opinion.need = Math.min(100, s.opinion.need + by(12));
+      if (enough) s.marks.owns_switches = 1;
       say(s, 'them', `יצאה החלטה בשם המדינה. מסודרת, הגיונית, חתומה — ואף בן אדם לא כתב אותה.`);
       break;
     default:

@@ -463,5 +463,51 @@ const run = (s: GameState, mins: number, step = 5) => {
     `וכל מקום בארץ נפתח בדרך כלשהי${never.length ? ` (${never.length} לא נפתחו: ${never[0].name})` : ''}`);
 }
 
+{
+  // ── הכפתור המיוחד באמת מתחזק עם האחיזה ─────────────────────────────────────
+  // The teaching card promises that the more of a place is mine the more its
+  // special button gives. The price obeyed that; most of the effects did not,
+  // so pressing it on a fresh foothold cost double and paid in full.
+  const weak = newGame('weak');
+  const strong = newGame('strong');
+  const pick = (g: GameState) => Object.values(g.places).find((q) => q.kind === 'roads')!;
+  for (const [g, at] of [[weak, 18], [strong, 100]] as const) {
+    const q = pick(g);
+    q.control = at; q.found = true; q.seen = 80;
+    g.opinion.support = 0;
+    start(g, q.id, 'use');
+    const o = offersAt(g, q.id).find((x) => x.task.id === 'use');
+    void o;
+    run(g, 400, 5);
+  }
+  ok(strong.opinion.support > weak.opinion.support,
+    `אותו כפתור נותן יותר כשהמקום יותר שלי (${strong.opinion.support} מול ${weak.opinion.support})`);
+
+  const q = pick(weak);
+  q.control = 18;
+  const row = offersAt(weak, q.id).find((x) => x.task.id === 'use');
+  ok(!!row && /חלש|לא בפנים/.test(row.gain),
+    'ובשורה כתוב מראש שבאחיזה חלשה זה ייצא חלש');
+}
+
+{
+  // ── העצה לא חוזרת על מה שכבר רץ ────────────────────────────────────────────
+  // Watched in play: the line told the player to finish taking a place while
+  // the bar for exactly that push was running along the bottom of his screen.
+  const s = newGame('advice');
+  // Two places held, so the opening "you have one place in the world" line is
+  // behind us and the advice is choosing between real options.
+  const mine = Object.values(s.places).filter((q) => q.found).slice(0, 2);
+  mine[0].control = 100;
+  const p = mine[1];
+  p.control = 30; p.found = true;
+  const before = bestNow(s);
+  ok(before.includes(p.name), `העצה מצביעה על ${p.name} כשאין שם כלום`);
+  start(s, p.id, 'grow');
+  const after = bestNow(s);
+  ok(!after.includes(p.name),
+    `וכשזה כבר רץ שם היא כבר לא חוזרת עליו ("${after.slice(0, 46)}…")`);
+}
+
 console.log(bad ? `\n${bad} דברים לא עובדים` : '\nהעולם עונה בחזרה');
 process.exit(bad ? 1 : 0);
