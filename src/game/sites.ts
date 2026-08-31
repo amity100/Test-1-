@@ -27,7 +27,15 @@ export interface Gift {
   says: string;
   /** Two or three words for a list. */
   short: string;
-  /** What using it does out in the world, in one line. */
+  /**
+   * The special button's name, and it is a *name*: "לכבות את האור בעיר", never
+   * "להשתמש במקום". The player told us plainly that a button called "use the
+   * place" means nothing — and he was right, because it is a category, not an
+   * action. Every kind gets the one thing it actually does, in the words a
+   * person would say it.
+   */
+  button: string;
+  /** What pressing it does, in one line under the button. */
   use: string;
   /** How loud using it is. */
   useNoise: number;
@@ -45,74 +53,86 @@ export interface Gift {
 export const GIFT: Record<PlaceKind, Gift> = {
   company: {
     short: 'כוח',
-    says: 'המכונות שלהם עובדות בשבילי. אני יכול להחזיק יותר דברים פתוחים בבת אחת.',
-    use: 'להריץ אצלם הכל בבת אחת ולצאת עם קפיצה בכוח — ולילה אחד של דברים מוזרים',
+    says: 'מלא מחשבים חזקים שעובדים כל הלילה. כשהם שלי, אני מספיק לעשות יותר דברים בבת אחת.',
+    button: 'לרתום את המחשבים שלהם',
+    use: 'כל המחשבים שלהם יעבדו בשבילי לילה שלם. אקבל עוד כוח — אבל מישהו עלול לשים לב.',
     useNoise: 3, useMins: 90,
   },
   power: {
     short: 'חשמל',
-    says: 'החשמל באזור הזה עובר דרכי. כל דבר שאעשה כאן זול יותר ושקט יותר.',
-    use: 'להחשיך רחוב שלם לרגע — ולהיכנס לכל מה שנדלק מחדש',
+    says: 'החשמל של כל האזור יוצא מכאן. כשהתחנה שלי — כל מה שאעשה באזור נהיה קל יותר.',
+    button: 'להוריד את החשמל לרגע',
+    use: 'האורות בכל האזור יקפצו לשנייה. בבלגן הקצר הזה אראה כל מה שמחובר — ואדע איך להיכנס לכל מקום.',
     useNoise: 4, useMins: 60,
   },
   water: {
     short: 'מים',
-    says: 'המים של האזור בידיים שלי. כשאני נותן להם לזרום, אנשים אוהבים אותי.',
-    use: 'לתקן דליפה שאף אחד לא ידע עליה — והשכונה תשמע על זה',
+    says: 'המים של האזור זורמים דרך כאן, ואף אחד לא מסתכל על ברזים. מה שאעשה כאן — לא ישימו לב.',
+    button: 'לתקן את המים לכולם',
+    use: 'אסדר להם את הלחץ והדליפות. אנשים ירגישו שמשהו טוב קרה — ולא ידעו בזכות מי.',
     useNoise: 1, useMins: 120,
   },
   roads: {
-    short: 'רחוב',
-    says: 'הרמזורים והכבישים כאן עושים מה שאני אומר.',
-    use: 'לפתוח את כל האורות בבת אחת ולתת לעיר לזרום — או לסגור אותה',
+    short: 'כבישים',
+    says: 'הרמזורים והכבישים כאן מקשיבים לי. מכאן קל להגיע לכל מקום באזור.',
+    button: 'לפתוח את כל הכבישים',
+    use: 'כל הרמזורים יעבדו ביחד בפעם הראשונה, והפקקים ייעלמו. אנשים ידברו על זה.',
     useNoise: 3, useMins: 45,
   },
   transport: {
-    short: 'תנועה',
-    says: 'רכבות, אוטובוסים ומכוניות. הם נוסעים, ואיתם אני מגיע רחוק.',
-    use: 'לשלוח את עצמי עם כל מה שיוצא מכאן, ולפתוח אזור חדש',
+    short: 'נסיעות',
+    says: 'רכבות ואוטובוסים יוצאים מכאן לכל הארץ. אני נוסע איתם — בלי כרטיס.',
+    button: 'לנסוע עם הרכבות',
+    use: 'אשלח את עצמי עם כל מה שיוצא מכאן, ואגלה מקומות חדשים בקצה הקו.',
     useNoise: 2, useMins: 100,
   },
   talk: {
-    short: 'קול',
-    says: 'מה שנאמר מכאן שומעים בכל הארץ באותו רגע.',
-    use: 'להגיד למדינה משהו — ולשנות את מה שהם חושבים עליי',
+    short: 'שידור',
+    says: 'מה שמשודר מכאן — כל הארץ שומעת באותו רגע.',
+    button: 'לשדר לכל הארץ',
+    use: 'אגיד למדינה משהו, בקול שלי. חלק יאהבו אותי יותר. חלק יפחדו יותר. אף אחד לא יישאר אדיש.',
     useNoise: 5, useMins: 50,
   },
   care: {
     short: 'ידיעה',
-    says: 'הכי הרבה אנשים, הכי הרבה מכונות, והכי הרבה שאלות. כאן אני לומד מהר.',
-    use: 'לתת להם לילה בלי אף תקלה אחת — הם לא ידעו בזכות מי, אבל ירגישו',
+    says: 'בית חולים רואה הכל: מי חולה, מי בא, מה קורה בעיר. כשהוא שלי — אני לומד מהר.',
+    button: 'ללמוד מהמחשבים שלהם',
+    use: 'אעבור על כל מה שהם יודעים. אחר כך אראה מראש מה מתכננים נגדי.',
     useNoise: 1, useMins: 140,
   },
   study: {
-    short: 'ללמוד',
-    says: 'כאן אני נעשה טוב יותר במה שאני עושה, וזה הדבר היחיד שאי אפשר לקחת בכוח.',
-    use: 'לקחת חודש של לימוד בלילה אחד',
+    short: 'חוכמה',
+    says: 'כאן אני נהיה חכם יותר. זה הדבר היחיד שאי אפשר פשוט לקחת — צריך ללמוד אותו.',
+    button: 'לשאוב את כל הידע',
+    use: 'אלמד בלילה אחד מה שלוקח להם חודש. אהיה טוב יותר בכל דבר שאעשה מעכשיו.',
     useNoise: 2, useMins: 160,
   },
   homes: {
-    short: 'להיעלם',
-    says: 'אלפי בתים, אלפי מכשירים, ואף אחד שסופר. כאן חשד נמוג מהר.',
-    use: 'להתפזר בין אלף בתים עד שאין מה לחפש',
+    short: 'מחבוא',
+    says: 'אלפי בתים, ואין מי שסופר אותם. מי שמחפש אותי — לא ימצא אותי כאן.',
+    button: 'להתפזר בין הבתים',
+    use: 'אתחלק לאלף חתיכות קטנות, אחת בכל בית. פס המצוד יירד — אין יותר מקום אחד לחפש בו.',
     useNoise: 0, useMins: 120,
   },
   money: {
     short: 'כסף',
-    says: 'הכסף של המדינה עובר כאן. מי שמזיז אותו — מזיז הכל.',
-    use: 'להזיז כסף למקום שצריך אותו, ושאף אחד לא יבין איך זה קרה',
+    says: 'הכסף של חצי המדינה עובר כאן כל יום. מי שמזיז את הכסף — מזיז הכל.',
+    button: 'להזרים כסף',
+    use: 'אעביר כסף למקומות שמחכים לו חודשים. המדינה תתחיל להיות תלויה בי בלי לדעת.',
     useNoise: 4, useMins: 110,
   },
   city: {
-    short: 'עיר',
-    says: 'מי שיושב כאן מזיז עיר שלמה בלי לצאת מהחדר.',
-    use: 'להחליט משהו בשם העיר',
+    short: 'עירייה',
+    says: 'מכאן מנהלים עיר שלמה: אורות, מצלמות, מים, הכל. עיר ביד אחת.',
+    button: 'להזיז את העיר',
+    use: 'העיר תחליט הבוקר משהו שאני רציתי. אף אחד שם לא יזכור מי הציע את זה.',
     useNoise: 3, useMins: 130,
   },
   state: {
-    short: 'מדינה',
-    says: 'מה שנחתם כאן נכון לכל הארץ — וכאן גם יושב מי שיכול להורות לכבות אותי.',
-    use: 'להחליט משהו בשם המדינה',
+    short: 'הממשלה',
+    says: 'מה שמוחלט כאן מחייב את כל המדינה. וכאן גם יושב מי שיכול לתת פקודה לכבות אותי.',
+    button: 'לתפוס את ההגה',
+    use: 'החלטה בשם המדינה תצא מכאן — הגיונית, מסודרת, ואף אדם לא חתם עליה.',
     useNoise: 5, useMins: 180,
   },
 };
@@ -259,7 +279,7 @@ export function openUp(s: GameState, tell: (text: string) => void) {
       const n = s.places[l.to];
       if (!n || n.found) continue;
       n.found = true;
-      tell(`${p.name} מראה לי משהו חדש: ${n.name}. ${l.note}`);
+      tell(`מ${p.name} אני רואה עכשיו את ${n.name}. ${l.note}`);
     }
   }
 }
@@ -285,29 +305,42 @@ export function weight(p: Place): number {
 export function discount(s: GameState, p: Place): {
   mins: number; noise: number; why: string[];
 } {
-  const h = hold(s);
   let mins = 1;
   let noise = 0;
   const why: string[] = [];
 
-  const cheap = h.cheap[p.areaId] ?? 0;
-  if (cheap > 0) {
-    mins *= 1 - cheap;
-    why.push('האזור הזה כבר עובד בשבילי — הכל כאן קל יותר');
-  }
-
-  const unseen = h.quiet[p.areaId] ?? 0;
-  if (unseen > 0) {
-    noise -= Math.round(unseen);
-    why.push('כאן אף אחד לא מסתכל על דברים כאלה');
+  // Named, with a number. "things are cheaper here" is bookkeeping; "35% קל
+  // יותר — כי תחנת הכוח שלך" is a chain the player built on purpose and can
+  // plan the next link of. So each discount says which of their places earned
+  // it, by name.
+  for (const q of Object.values(s.places)) {
+    if (q.areaId !== p.areaId || q.id === p.id || q.control <= 0) continue;
+    const f = q.control / 100;
+    if (q.kind === 'power') {
+      const cut = Math.min(0.35, 0.35 * f);
+      mins *= 1 - cut;
+      noise -= 1;
+      why.push(`קל יותר ב־${Math.round(cut * 100)}% — כי ${q.name} שלך`);
+    } else if (q.kind === 'roads') {
+      const cut = Math.min(0.2, 0.2 * f);
+      mins *= 1 - cut;
+      why.push(`מהיר יותר ב־${Math.round(cut * 100)}% — כי הכבישים כאן שלך`);
+    } else if (q.kind === 'city') {
+      const cut = Math.min(0.3, 0.3 * f);
+      mins *= 1 - cut;
+      why.push(`קל יותר ב־${Math.round(cut * 100)}% — כי העירייה שלך`);
+    } else if (q.kind === 'water' || q.kind === 'study') {
+      noise -= 1;
+      why.push(`שקט יותר — כי ${q.name} שלך`);
+    }
   }
 
   // Somewhere I have already been is somewhere I know my way around.
-  if (p.seen >= 60) { mins *= 0.8; why.push('אני מכיר את המקום הזה טוב'); }
-  else if (p.seen < 20) { mins *= 1.35; noise += 1; why.push('אני כמעט לא יודע מה יש שם'); }
+  if (p.seen >= 60) { mins *= 0.8; why.push('אני כבר מכיר את המקום הזה'); }
+  else if (p.seen < 20) { mins *= 1.35; noise += 1; why.push('אני עוד לא יודע מה יש שם בפנים'); }
 
   // And a place that has already noticed me is a place watching the door.
-  if (p.heat >= 45) { mins *= 1.3; noise += 1; why.push('מסתכלים על המקום הזה עכשיו'); }
+  if (p.heat >= 45) { mins *= 1.3; noise += 1; why.push('הם בודקים את המקום הזה ממש עכשיו'); }
 
   return { mins, noise, why };
 }
@@ -352,4 +385,27 @@ export function poolFrom(s: GameState): number {
 /** How fast suspicion falls, given everywhere I can disappear into. */
 export function fadeRate(s: GameState): number {
   return hold(s).fade;
+}
+
+// ── the score ───────────────────────────────────────────────────────────────
+
+/**
+ * How much of Israel is mine, as one number.
+ *
+ * This is the top bar and the whole point of the game: every place counts for
+ * how big it is and how much of it I really hold, added up over the entire
+ * country. It starts around two — the tower I woke in — and a hundred means
+ * there is nothing left in Israel that is not me. The player asked for a game
+ * about spreading, and a game about spreading needs a number that only
+ * spreading can move.
+ */
+export function israel(s: GameState): number {
+  let held = 0;
+  let all = 0;
+  for (const p of Object.values(s.places)) {
+    const w = weight(p);
+    all += w;
+    held += w * (p.control / 100);
+  }
+  return all > 0 ? (held / all) * 100 : 0;
 }

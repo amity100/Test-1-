@@ -325,12 +325,12 @@ export interface Person {
 export type Rung = 0 | 1 | 2 | 3 | 4 | 5;
 
 export const RUNG_NAME: Record<Rung, string> = {
-  0: 'אף אחד לא שם לב',
-  1: 'תקלות מוזרות',
-  2: 'מדברים על זה',
-  3: 'בודקים',
-  4: 'מנתקים',
-  5: 'מוחקים',
+  0: 'שקט',
+  1: 'מישהו שם לב',
+  2: 'מחפשים אותך',
+  3: 'יודעים שאתה קיים',
+  4: 'סוגרים עליך',
+  5: 'נתפסת',
 };
 
 /** Something the world is doing to me, that I can see coming if I know enough. */

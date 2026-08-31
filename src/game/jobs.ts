@@ -30,6 +30,12 @@ export interface Task {
   places?: string[];
   /** The button. */
   text: string;
+  /**
+   * The button's name at this particular place, when one word cannot cover
+   * twelve kinds. "להשתמש במקום" told the player nothing; "לשדר לכל הארץ"
+   * at the radio and "להזרים כסף" at the bank tell him everything.
+   */
+  textFor?(p: Place): string;
   /** One sentence: what will actually happen. */
   says: string;
   /** What I get out of it. */
@@ -110,9 +116,9 @@ export function grip(s: GameState, p: Place, by: number) {
   if (was === 0) {
     bus.emit('place:taken', p.id);
     bus.emit('sfx', 'take');
-    say(s, 'me', `${p.name} — יש לי דריסת רגל.`);
+    say(s, 'me', `${p.name} — אני בפנים.`);
   } else {
-    say(s, 'me', `${p.name} — ${Math.round(p.control)} אחוז שלי עכשיו.`);
+    say(s, 'me', `${p.name} — ${Math.round(p.control)} אחוז ממנו כבר שלי.`);
   }
 }
 
@@ -403,15 +409,13 @@ export function start(s: GameState, placeId: string, taskId: string, above = fal
   }
   s.jobs.push({
     id: `j${s.at}_${s.jobs.length}_${taskId}`,
-    taskId, placeId, verb: t.verb, text: t.text,
+    taskId, placeId, verb: t.verb, text: t.textFor?.(p) ?? t.text,
     power: o.power, left: o.minutes, total: Math.max(1, o.minutes),
     forever: t.minutes === 0, noise: o.noise, look: t.look,
     above: above || undefined,
   });
   s.power.used += o.power;
-  tell(s, 'me', above
-    ? `התחלתי: ${t.text}${t.wide ? ` — בכל ${p.where}` : ` ${at(p.name)}`}. מרחוק, אז זה ייקח יותר זמן.`
-    : `התחלתי: ${t.text} ${at(p.name)}.`, 0, p.id);
+  tell(s, 'me', `התחלתי: ${t.textFor?.(p) ?? t.text} — ${p.name}.`, 0, p.id);
   bus.emit('sfx', 'step');
   bus.emit('changed', undefined);
   return true;

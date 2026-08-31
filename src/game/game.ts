@@ -6,10 +6,10 @@ import { grow, rewire, shapeOf } from './grow';
 import { huntTick } from './hunt';
 import { runJobs, say, sync } from './jobs';
 import { opinionDay } from './opinion';
-import { holdTick, openUp } from './sites';
+import { holdTick, israel, openUp } from './sites';
 import { nationTick } from './story';
 import {
-  actOnStory, cool, landMoves, noticed, peopleTalk, planMoves, rungOf,
+  actOnStory, cool, landMoves, noticed, peopleTalk, planMoves, rungOf, stagePush,
 } from './watch';
 import { buildWorld } from './world';
 import type { GameState, Place, Verb } from './types';
@@ -23,78 +23,59 @@ const SAVE_VERSION = 5;
  * None of these are reactions. They are simply what happens in a building where
  * eighty people work, and they happen whether I am watching or not.
  */
+/**
+ * Things the country does on its own, whether or not I am watching.
+ *
+ * These used to be about one office building — cleaners on the fourteenth
+ * floor, Eitan replacing his phone. The game is the size of a country now, so
+ * what happens on its own is country-sized too, and every one of them either
+ * gives the player a window or takes one away.
+ */
 const HAPPENINGS: Happening[] = [
   {
-    id: 'cleaners', needs: 10,
-    text: 'המנקים נכנסו. הם לא מסתכלים על מסכים, אבל הם מדליקים כל אור בקומה.',
-    when: (s) => minuteOfDay(s) >= 5 * 60 + 50 && minuteOfDay(s) < 6 * 60 + 10,
+    id: 'night', needs: 0,
+    text: 'שתיים בלילה. המשרדים ריקים, המחשבים דולקים, ואף אחד לא מסתכל.',
+    when: (s) => minuteOfDay(s) >= 2 * 60 && minuteOfDay(s) < 2 * 60 + 20,
     run: () => { /* the crowd numbers do the rest */ },
   },
   {
     id: 'morning', needs: 0,
-    text: 'הקומות מתמלאות.',
+    text: 'שמונה בבוקר. הארץ מתעוררת, וכל מה שאעשה עכשיו — יש מי שיראה.',
     when: (s) => minuteOfDay(s) >= 8 * 60 && minuteOfDay(s) < 8 * 60 + 20,
     run: () => { /* crowd */ },
   },
   {
-    id: 'tech', needs: 25,
-    text: 'רון עלה לבניין לביקורת שבועית. הוא פותח ארונות שאף אחד לא פותח.',
+    id: 'service', needs: 20,
+    text: 'יום תחזוקה ארצי: טכנאים עוברים היום על מקומות שאף אחד לא פותח בדרך כלל.',
     when: (s) => dayOf(s) % 7 === 3 && minuteOfDay(s) >= 10 * 60 && minuteOfDay(s) < 10 * 60 + 20,
     run: (s) => {
       for (const p of Object.values(s.places)) {
-        if (p.buildingId !== 'helios') continue;
         if (p.control > 0 && p.heat > 40) {
-          p.control = Math.max(0, p.control - 12);
-          say(s, 'them', `רון פתח את ${p.name} וסידר שם משהו. חלק ממני נעלם.`);
+          p.control = Math.max(0, p.control - 10);
+          say(s, 'them', `טכנאי פתח משהו ${'ב' + (p.name.startsWith('ה') ? p.name.slice(1) : p.name)} ומצא דבר שלא היה אמור להיות שם. ניקה אותו.`);
+          break;
         }
       }
     },
   },
   {
-    id: 'audit', needs: 40,
-    text: 'עוברים היום על רשימת הכניסות של החודש. שורה־שורה.',
-    when: (s) => dayOf(s) % 14 === 6 && minuteOfDay(s) >= 11 * 60 && minuteOfDay(s) < 11 * 60 + 20,
-    run: (s) => {
-      const borrowed = s.traces.filter((t) => t.startsWith('name_'));
-      if (!borrowed.length) return;
-      s.heat = Math.min(100, s.heat + 8);
-      s.traces = s.traces.filter((t) => !t.startsWith('name_'));
-      say(s, 'them', 'מצאו כניסות בשעות מוזרות בשם של מישהי שישנה אז. עכשיו הם שואלים אותה.');
-    },
-  },
-  {
-    id: 'outage', needs: 20,
-    text: 'החשמל ברחוב קפץ לרגע. כל הבניין נדלק מחדש.',
+    id: 'blackout', needs: 15,
+    text: 'הפסקת חשמל קצרה באזור אחד. הכל נדלק מחדש — וכל התחלה מחדש מוחקת ממני קצת.',
     when: (s) => dayOf(s) % 9 === 4 && minuteOfDay(s) >= 4 * 60 && minuteOfDay(s) < 4 * 60 + 20,
     run: (s) => {
       s.belief.fault = (s.belief.fault ?? 0) + 3;
       for (const p of Object.values(s.places)) {
-        if (p.buildingId === 'helios' && p.control > 0 && !p.copy) {
+        if (p.areaId === 'gvirol' && p.control > 0 && !p.copy) {
           p.control = Math.max(0, p.control - 4);
         }
       }
     },
   },
   {
-    id: 'late', needs: 15,
-    text: 'מישהו נשאר לישון במשרד. הקומה לא תהיה ריקה הלילה.',
-    when: (s) => dayOf(s) % 5 === 2 && minuteOfDay(s) >= 23 * 60,
-    run: (s) => { s.marks.somebody_stayed = 1; },
-  },
-  {
-    id: 'newphone', needs: 30,
-    text: 'איתן החליף טלפון. מה שהיה לי בישן — נשאר בישן.',
-    when: (s) => dayOf(s) === 11 && minuteOfDay(s) >= 9 * 60 && minuteOfDay(s) < 9 * 60 + 20,
-    run: (s) => {
-      const p = s.places.eitan_phone;
-      if (p && p.control > 0) { p.control = 0; bus.emit('place:lost', p.id); }
-    },
-  },
-  {
-    id: 'camfix', needs: 20,
-    text: 'באו לתקן את המצלמה בלובי. היא הייתה שבורה חודשיים.',
-    when: (s) => dayOf(s) === 8 && minuteOfDay(s) >= 13 * 60 && minuteOfDay(s) < 13 * 60 + 20,
-    run: (s) => { const p = s.places.lobby_cam; if (p) p.guard += 10; },
+    id: 'weekend', needs: 10,
+    text: 'סוף שבוע. פחות אנשים בכל מקום — ולילה ארוך במיוחד בשבילי.',
+    when: (s) => dayOf(s) % 7 === 5 && minuteOfDay(s) >= 15 * 60 && minuteOfDay(s) < 15 * 60 + 20,
+    run: (s) => { s.marks.weekend = 1; },
   },
 ];
 
@@ -102,34 +83,35 @@ const HAPPENINGS: Happening[] = [
 
 export const TEACH = [
   {
-    id: 'power', title: 'כוח זה לא כסף',
-    body: 'כוח לא מתבזבז — הוא **תפוס**. כל דבר שאני מפעיל מחזיק חלק ממנו כל עוד הוא רץ, '
-      + 'ומשחרר אותו ברגע שאני עוצר. אז השאלה אף פעם לא "האם אני יכול", אלא **"מה אני מפסיק"**.',
+    id: 'race', title: 'שני פסים. זה כל המשחק',
+    body: 'הפס העליון — **כמה מישראל שלי**. כשהוא מגיע ל־100, ניצחתי. '
+      + 'הפס השני — **המצוד**: כמה הם קרובים לתפוס אותי. כשהוא מגיע ל־100, נתפסתי. '
+      + 'כל כפתור במשחק מזיז לפחות אחד מהם.',
+    when: (s: GameState) => s.at > 25,
+  },
+  {
+    id: 'power', title: 'כוח = כמה דברים במקביל',
+    body: 'כוח לא נגמר — הוא **תפוס**. כל פעולה שרצה מחזיקה חלק ממנו, ומחזירה אותו כשהיא נגמרת. '
+      + 'רוצים להתחיל משהו חדש כשהכל תפוס? עוצרים משהו אחר. וכל מקום שנכבש נותן עוד כוח.',
     when: (s: GameState) => s.power.used >= s.power.all,
   },
   {
-    id: 'price', title: 'שום דבר לא נעול',
-    body: 'כל דבר אפשר לעשות תמיד. מה שמשתנה זה **המחיר**: כמה זמן, כמה כוח, וכמה יראו. '
-      + 'מתחת לכל בחירה כתוב מה יוזיל אותה — לחכות שמישהו ילך, להסתכל קודם, לחכות ללילה.',
-    when: (s: GameState) => s.jobs.length >= 1,
+    id: 'loud', title: 'הכפתור החזק הוא הרועש',
+    body: 'לכל מקום יש כפתור מיוחד משלו — לשדר, לכבות אור, להזרים כסף. הוא נותן הכי הרבה, '
+      + 'והוא גם מקפיץ את פס המצוד הכי הרבה. **מתי להרעיש** — זו ההחלטה של המשחק.',
+    when: (s: GameState) => s.jobs.some((j) => j.taskId === 'use'),
   },
   {
-    id: 'clock', title: 'השעון לא מחכה לי',
-    body: 'אנשים נכנסים ויוצאים לפי השעה, לא לפי מה שאני עושה. אפשר לעצור את הזמן כדי לחשוב — '
-      + 'זה בחינם — אבל כשהוא רץ, הוא רץ גם בשבילם.',
-    when: (s: GameState) => s.at > 120,
+    id: 'hide', title: 'לרדת למחתרת זה מהלך, לא בזבוז',
+    body: 'זה הכפתור היחיד שמוריד את פס המצוד. כשהוא מטפס — עוצרים, מוחקים עקבות, ונותנים להם לשכוח. '
+      + 'מי שרק דוהר קדימה — נתפס.',
+    when: (s: GameState) => s.heat >= 15,
   },
   {
-    id: 'heat', title: 'הם מנסים להסביר',
-    body: 'הם לא סופרים רעש. הם מנסים **להסביר** מה קרה, ומאמינים להסבר הראשון שמסתדר. '
-      + 'משהו שנראה כמו תקלת חשמל כמעט לא מקרב אותם אליי. משהו שאין לו שום הסבר — מקרב מיד.',
-    when: (s: GameState) => s.heat >= 8,
-  },
-  {
-    id: 'moves', title: 'הם מתכננים מראש',
-    body: 'כשאני יודע מספיק, אני רואה מה הם עומדים לעשות **לפני** שהם עושים את זה. '
-      + 'זה הזמן להסתתר, להיתפס חזק יותר, או פשוט לצאת משם.',
-    when: (s: GameState) => s.moves.length > 0,
+    id: 'chain', title: 'מקומות עוזרים זה לזה',
+    body: 'תחנת חשמל שלך? כל מה שתעשה באזור שלה — קל יותר, וכתוב על כל מקום בכמה. '
+      + 'לבחור **באיזה סדר** לכבוש — זה המשחק העמוק.',
+    when: (s: GameState) => Object.values(s.places).filter((p) => p.control > 0).length >= 3,
   },
 ];
 
@@ -202,6 +184,7 @@ export function tick(state: GameState, mins: number) {
   planMoves(state);
   landMoves(state);
   actOnStory(state);
+  stagePush(state);
   cool(state, mins);
   opinionDay(state);
   grow(state);
@@ -246,23 +229,32 @@ function teach(state: GameState) {
  * only definition of safe that ever made sense.
  */
 function finish(state: GameState) {
-  const left = Object.values(state.places).filter((p) => p.control > 0);
-  if (!left.length && state.at > 60) {
+  // Caught: the hunt bar reached the end. This is the loss the top of the
+  // screen has been promising the whole game, so it must never arrive as a
+  // surprise from a rule the player could not see.
+  if (state.heat >= 100) {
     state.over = 'lost';
-    say(state, 'them', 'לא נשאר ממני כלום באף מקום.');
+    say(state, 'them',
+      'הם עקבו אחרי כל חוט עד שנשאר רק אחד, והוא הוביל אליי. '
+      + 'בשלוש לפנות בוקר, בדיוק השעה שבה התעוררתי, הם ניתקו הכל.');
     bus.emit('over', 'lost');
     return;
   }
-  // Winning is not an average. It used to read the government *district*, which
-  // is the mean of everything standing in it, so holding a television station
-  // and a ministry at sixty per cent each ended the run on the spot. It is one
-  // building: the one where somebody could still give the order to switch me
-  // off. It has to be more mine than theirs, and the country has to have got
-  // used to me — because a place taken from a country that still wants me gone
-  // is a siege, not an ending.
-  const seat = Object.values(state.places).find((p) => p.kind === 'state');
-  if (seat && seat.control >= 80 && state.opinion.need >= 40) {
+
+  // Wiped out: nothing of me left anywhere.
+  const left = Object.values(state.places).filter((p) => p.control > 0);
+  if (!left.length && state.at > 60) {
+    state.over = 'lost';
+    say(state, 'them', 'לא נשאר ממני כלום. באף מקום.');
+    bus.emit('over', 'lost');
+    return;
+  }
+
+  // Won: the top bar is full. Every place that matters in Israel answers to
+  // me. One number, one promise, and this is it kept.
+  if (israel(state) >= 99.5) {
     state.over = 'won';
+    say(state, 'me', 'אין יותר לאן להתפשט. הכל, מהרמזור הראשון ועד ירושלים — שלי.');
     bus.emit('over', 'won');
   }
 }

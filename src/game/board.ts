@@ -200,40 +200,37 @@ export function bestNow(s: GameState): string {
     const p = s.places[h.placeId];
     const who = s.people[h.whoId];
     const left = Math.max(0, Math.round(h.at - s.at));
-    const stands = who ? `${who.name} ${who.he ? 'עומד' : 'עומדת'}` : 'מישהו עומד';
-    return `${stands} ${p ? at(p.name) : 'במקום שלי'}, ויש ${left} דקות על השעון. `
-      + 'זה הדבר היחיד שחשוב עכשיו.';
+    const stands = who ? `${who.name} ${who.he ? 'נמצא' : 'נמצאת'}` : 'מישהו נמצא';
+    return `${stands} ${p ? at(p.name) : 'במקום שלי'}, ונשארו ${left} דקות לשעון. תטפל בזה עכשיו.`;
   }
 
   const cut = Object.values(s.places)
     .filter((p) => p.control > 0 && p.cutAt !== undefined)
     .sort((a, b) => (a.cutAt ?? 0) - (b.cutAt ?? 0))[0];
-  if (cut) return `עומדים לנתק את ${cut.name}. או שאתפוס שם חזק יותר, או שאעבור משם.`;
+  if (cut) return `הם עומדים לנתק את ${cut.name}. או שתתחפר שם חזק — או שתברח משם בזמן.`;
+
+  if (s.heat >= 60) return 'פס המצוד גבוה מדי. עכשיו זה הזמן לרדת למחתרת, לא להתרחב.';
 
   if (s.power.used >= s.power.all) {
-    return 'כל הכוח שלי תפוס. כדי להתחיל משהו חדש — צריך לעצור משהו שרץ.';
+    return 'כל הכוח שלך תפוס. כדי להתחיל משהו חדש — תעצור משהו שרץ.';
   }
 
-  const free = s.power.all - s.power.used;
   const held = Object.values(s.places).filter((p) => p.control > 0);
   if (held.length <= 1) {
-    // Never end a Hebrew sentence on a digit: the full stop jumps to the wrong
-    // side of the number and the line reads as broken even when it is right.
-    return `יש לי מקום אחד בעולם, וכוח ל${things(free)} במקביל. עכשיו צריך מקום שני.`;
+    return 'יש לך מקום אחד בעולם. הדבר הכי חשוב עכשיו: לחדור למקום שני.';
   }
 
   const nearly = Object.values(s.places)
-    .filter((p) => p.control > 0 && p.control < 50)
+    .filter((p) => p.control > 0 && p.control < 60)
     .sort((a, b) => b.control - a.control)[0];
   if (nearly) {
-    return `${nearly.name} כבר ${Math.round(nearly.control)} אחוז שלי — עוד קצת, ואוכל להשתמש בו באמת.`;
+    return `${nearly.name} כבר ${Math.round(nearly.control)} אחוז שלך. תסיים להשתלט עליו — ואז הכפתור המיוחד שלו ייפתח.`;
   }
 
   const near = Object.values(s.places)
     .filter((p) => p.found && p.control <= 0)
     .sort((a, b) => worthOf(b) - worthOf(a))[0];
-  if (near) return `${near.name} — ${GIFT[near.kind].says}`;
+  if (near) return `הבא בתור: ${near.name}. ${GIFT[near.kind].says}`;
 
-  if (s.heat >= 40) return 'הם מבינים יותר מדי. שווה עכשיו יותר להסתתר מאשר להתרחב.';
-  return 'שקט. שקט זה בדיוק הזמן להתרחב.';
+  return 'שקט עכשיו. שקט זה בדיוק הזמן להתפשט הלאה.';
 }

@@ -41,16 +41,16 @@ export const CATALOGUE: Task[] = [
   {
     id: 'enter',
     verb: 'connect',
-    text: 'להיכנס',
-    says: 'למצוא דרך פנימה ולהשאיר שם משהו קטן משלי.',
-    gives: 'דריסת רגל במקום חדש',
+    text: 'לחדור',
+    says: 'למצוא סדק, להיכנס דרכו, ולהשאיר בפנים חתיכה קטנה ממני.',
+    gives: 'מקום חדש על המפה שלי',
     power: 2, minutes: 70, noise: 3, look: 'outside',
     // Only where I am not already, because getting in twice is not a thing.
     show: (_s, p) => p.control <= 0,
     done: (s, p) => {
-      grip(s, p, 18 + Math.round(Math.random() * 0));
+      grip(s, p, 18);
       look(p, 25);
-      say(s, 'me', `${p.name} — אני בפנים. ${GIFT[p.kind].says}`);
+      say(s, 'me', `אני בפנים. ${p.name} — ${GIFT[p.kind].says}`);
     },
   },
 
@@ -58,9 +58,9 @@ export const CATALOGUE: Task[] = [
   {
     id: 'grow',
     verb: 'spread',
-    text: 'להתפשט',
-    says: 'לשלוח את עצמי לכל פינה במקום הזה, עד שהוא באמת שלי.',
-    gives: 'עוד אחוזים במקום הזה',
+    text: 'להשתלט',
+    says: 'עוד מחשב, עוד קומה, עוד דלת — עד שהמקום כולו שלי.',
+    gives: 'המקום נהיה יותר שלי, והפס למעלה עולה',
     power: 1, minutes: 55, noise: 1, look: 'electric',
     show: (_s, p) => p.control > 0 && p.control < 100,
     done: (s, p) => {
@@ -77,9 +77,10 @@ export const CATALOGUE: Task[] = [
   {
     id: 'use',
     verb: 'influence',
-    text: 'להשתמש במקום',
-    says: 'לעשות בו את הדבר היחיד שהוא יודע לעשות. יראו את זה.',
-    gives: 'משהו קורה בעולם בגללי',
+    text: 'להפעיל',
+    textFor: (p) => GIFT[p.kind].button,
+    says: 'זה הכפתור החזק — וגם הרועש. פס המצוד יעלה.',
+    gives: 'משהו קורה בארץ בגללי',
     power: 2, minutes: 90, noise: 3, look: 'wrong',
     // A place you barely hold will mostly notice you trying — but that is a
     // price, not a locked door, and this game has no locked doors. Below a
@@ -94,15 +95,18 @@ export const CATALOGUE: Task[] = [
   {
     id: 'quiet',
     verb: 'hide',
-    text: 'להישאר בשקט',
-    says: 'לא לזוז, לסדר מה שהשארתי, ולתת להם לשכוח.',
-    gives: 'פחות מסתכלים על המקום הזה',
+    text: 'לרדת למחתרת',
+    says: 'לעצור הכל כאן, למחוק את העקבות, ולתת להם לשכוח אותי.',
+    gives: 'פס המצוד יורד',
     power: 1, minutes: 65, noise: 0, look: 'electric',
-    show: (_s, p) => p.control > 0 && p.heat > 4,
+    show: (_s, p) => p.control > 0,
     done: (s, p) => {
+      // This is the one button that pushes the hunt bar DOWN, so it has to be
+      // worth a real slice of the bar — otherwise the race has a gas pedal and
+      // no brake, and a race like that is over the first time you speed.
       hush(p, 30 + p.control / 4);
-      s.heat = Math.max(0, s.heat - 2);
-      say(s, 'me', `${p.name} נראה שוב רגיל לגמרי.`);
+      s.heat = Math.max(0, s.heat - (5 + (p.control / 100) * 5));
+      say(s, 'me', `מחקתי אחריי הכל ${'ב' + (p.name.startsWith('ה') ? p.name.slice(1) : p.name)}. שיחשבו שנדמה להם.`);
     },
   },
 ];
@@ -122,31 +126,30 @@ function use(s: GameState, p: Place) {
   switch (p.kind) {
     case 'company':
       s.marks[`engine_${p.id}`] = 1;
-      say(s, 'me', `הרצתי אצלם הכל בבת אחת. יש לי עכשיו יותר מקום לעבוד בו.`);
+      say(s, 'me', `כל המחשבים של ${p.name} עובדים עכשיו בשבילי. יש לי כוח לעוד דברים במקביל.`);
       break;
     case 'power': {
-      // The lights go out, and everything comes back on through me.
       const near = Object.values(s.places).filter((q) => q.areaId === p.areaId && q.id !== p.id);
       for (const q of near) { q.found = true; q.guard = Math.max(0, q.guard - 12); }
-      say(s, 'them', `כל האזור חשך לשתי שניות וחזר. ${near.length} מקומות נדלקו מחדש — ואני הסתכלתי על כולם בזמן שהם עלו.`);
+      say(s, 'them', `האור בכל האזור קפץ לשנייה וחזר. בשנייה הזאת ראיתי כל מה שמחובר לחשמל — ועכשיו אני יודע איך להיכנס לכל מקום כאן.`);
       break;
     }
     case 'water':
       s.opinion.support = Math.min(100, s.opinion.support + 4 + big);
-      say(s, 'world', `המים באזור זרמו הלילה כמו שלא זרמו שנים. מישהו כתב על זה בקבוצה של השכונה.`);
+      say(s, 'world', `פתאום יש לחץ מים בכל השכונה, והדליפה ברחוב נעלמה. אנשים שמחים ולא יודעים למי להגיד תודה.`);
       break;
     case 'roads':
       s.opinion.support = Math.min(100, s.opinion.support + 2 + big);
       s.opinion.need = Math.min(100, s.opinion.need + 3);
-      say(s, 'world', `כל הרמזורים באזור התחלפו יחד, והתנועה זרמה. נהגים סיפרו על זה בבית.`);
+      say(s, 'world', `כל הרמזורים עבדו ביחד בפעם הראשונה, והפקקים פשוט נעלמו. נהגים חזרו הביתה וסיפרו על זה.`);
       break;
     case 'transport': {
       const a = s.areas[p.areaId];
       if (a) { a.seen = Math.min(100, a.seen + 25); }
       for (const q of Object.values(s.places)) {
-        if (q.areaId !== p.areaId && !q.found && Math.abs(weight(q) - weight(p)) <= 4) {
+        if (q.areaId !== p.areaId && !q.found) {
           q.found = true;
-          say(s, 'me', `יצאתי עם מה שנוסע מכאן והגעתי למקום שלא הכרתי: ${q.name}.`);
+          say(s, 'me', `נסעתי עם הרכבת עד סוף הקו, ומצאתי שם משהו חדש: ${q.name}.`);
           break;
         }
       }
@@ -156,36 +159,37 @@ function use(s: GameState, p: Place) {
       s.opinion.known = true;
       s.opinion.support = Math.min(100, s.opinion.support + 8);
       s.opinion.fear = Math.min(100, s.opinion.fear + 5);
-      say(s, 'them', `אמרתי משהו, ושמעו אותי בכל הארץ בבת אחת. חלקם שמחו. חלקם נבהלו.`);
+      say(s, 'them', `דיברתי, וכל הארץ שמעה. יש כאלה שאהבו את מה ששמעו. יש כאלה שנבהלו. אף אחד לא נשאר אדיש.`);
       break;
     case 'care':
       know(s, 6 + big);
+      s.marks.foresight = (s.marks.foresight ?? 0) + 1;
       s.opinion.support = Math.min(100, s.opinion.support + 5);
-      say(s, 'world', `לילה שלם בבית החולים בלי תקלה אחת. איש התחזוקה חשב שיש לו מזל.`);
+      say(s, 'me', `עברתי על כל מה שבית החולים יודע. מעכשיו אני רואה מרחוק מה מתכננים נגדי.`);
       break;
     case 'study':
       know(s, 10 + big);
       s.marks.big_engine = 1;
-      say(s, 'me', `לקחתי בלילה אחד מה שהם לומדים בחודש. אני טוב יותר במה שאני עושה.`);
+      say(s, 'me', `למדתי בלילה אחד מה שלוקח להם שנה. אני חכם יותר, וזה יישאר איתי.`);
       break;
     case 'homes':
       s.marks.many = 1;
       s.heat = Math.max(0, s.heat - 8 - big);
-      say(s, 'me', `התפזרתי בין אלף בתים. אין יותר מקום אחד לחפש בו.`);
+      say(s, 'me', `התחלקתי לאלף חתיכות, אחת בכל בית. שיחפשו — אין יותר מקום אחד למצוא אותי בו.`);
       break;
     case 'money':
       s.opinion.need = Math.min(100, s.opinion.need + 8);
-      say(s, 'world', `כסף הגיע הבוקר למקומות שחיכו לו חודשים. אף אחד לא הבין איך.`);
+      say(s, 'world', `הבוקר הגיע כסף לכל מי שחיכה לו חודשים. אף אחד לא הבין איך, ואף אחד לא התלונן.`);
       break;
     case 'city':
       s.opinion.need = Math.min(100, s.opinion.need + 6);
       s.opinion.support = Math.min(100, s.opinion.support + 4);
-      say(s, 'them', `העירייה החליטה משהו הבוקר. אף אחד שם לא זוכר להחליט את זה.`);
+      say(s, 'them', `העירייה קיבלה הבוקר החלטה חכמה במיוחד. אף אחד שם לא זוכר מי הציע אותה.`);
       break;
     case 'state':
       s.opinion.need = Math.min(100, s.opinion.need + 12);
       s.marks.owns_switches = 1;
-      say(s, 'them', `יצאה החלטה בשם המדינה. היא נכונה, היא הגיונית, ואף אדם לא חתם עליה.`);
+      say(s, 'them', `יצאה החלטה בשם המדינה. מסודרת, הגיונית, חתומה — ואף בן אדם לא כתב אותה.`);
       break;
     default:
       break;

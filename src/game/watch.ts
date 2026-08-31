@@ -140,13 +140,21 @@ export function burn(s: GameState, id: string): number {
 
 // ── the rungs ───────────────────────────────────────────────────────────────
 
+/**
+ * Where the hunt stands, in the four stages the player was promised.
+ *
+ * The thresholds are the same round numbers printed on the bar — 25, 50, 75,
+ * 90 — because a stage that lands at 42 when the bar says 40 teaches the player
+ * that the bar lies. Stage five is not a stage: it is the bar reaching the end,
+ * and the end of the game.
+ */
 export function rungOf(s: GameState): Rung {
   const h = s.heat;
-  if (h >= 82) return 5;
-  if (h >= 62) return 4;
-  if (h >= 42) return 3;
-  if (h >= 24) return 2;
-  if (h >= 9) return 1;
+  if (h >= 100) return 5;
+  if (h >= 90) return 4;
+  if (h >= 75) return 3;
+  if (h >= 50) return 2;
+  if (h >= 25) return 1;
   return 0;
 }
 
@@ -166,16 +174,14 @@ export function saysNow(s: GameState): string {
   const rung = rungOf(s);
   const t = leading(s);
   switch (rung) {
-    case 0: return 'אף אחד לא שם לב לכלום. בינתיים.';
+    case 0: return 'אף אחד עוד לא מחפש אותי.';
     case 1: return t
-      ? `מדברים על תקלות מוזרות, ומאשימים את ${t.name}.`
-      : 'מדברים על תקלות מוזרות, ואין להם למה לקרוא לזה.';
-    case 2: return t
-      ? `כבר לא רק מדברים. ${t.name} — זה ההסבר שהם עובדים לפיו.`
-      : 'הם משווים סיפורים אחד עם השני, ואף הסבר לא מסתדר.';
-    case 3: return 'הם בודקים ברצינות. מישהו יושב ועובר על הכל.';
-    case 4: return 'הם מתחילים לנתק דברים. כל מקום שלי בסכנה.';
-    default: return 'הם כבר לא מנסים להבין. הם מנסים למחוק אותי.';
+      ? `מישהו שם לב שקורים דברים מוזרים. בינתיים הם חושבים ש${t.name}.`
+      : 'מישהו שם לב שקורים דברים מוזרים, ואין להם הסבר.';
+    case 2: return 'מחפשים אותי. צוות שלם עובר מקום־מקום.';
+    case 3: return 'כולם יודעים שאני קיים. כל דבר שאעשה עכשיו — בולט כפליים.';
+    case 4: return 'סוגרים עליי. מנתקים אזורים שלמים כדי לחנוק אותי.';
+    default: return 'הם מצאו אותי.';
   }
 }
 
@@ -237,6 +243,14 @@ export function coming(s: GameState): Move[] {
 }
 
 /** Everything that has come due. This is where the world hits back. */
+/** Crossing into stage three is the end of being a rumour. */
+export function stagePush(s: GameState) {
+  if (rungOf(s) >= 3 && !s.opinion.known) {
+    s.opinion.known = true;
+    say(s, 'them', 'זהו. זה בחדשות. כל המדינה יודעת שיש משהו בפנים.');
+  }
+}
+
 export function landMoves(s: GameState) {
   for (const m of [...s.moves]) {
     if (m.at > s.at) continue;

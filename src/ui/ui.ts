@@ -12,6 +12,7 @@ import { comeOut, saysOpinion } from '../game/opinion';
 import { GIFT, KIND_NAME } from '../game/sites';
 import { answer, liveHunts, rowsOf, scriptOf, stillNeeds } from '../game/hunt';
 import { board, bestNow, pointOf } from '../game/board';
+import { israel } from '../game/sites';
 import { mins as minsWord, reach, to as toPlace } from '../game/story';
 import { STORIES, asking, coming, leading, rungOf, saysNow } from '../game/watch';
 import { AREA_KIND_NAME, RUNG_NAME, VERB_NAME, VERB_SAYS, VOICE_NAME } from '../game/types';
@@ -67,7 +68,9 @@ export class UI {
     // The first thing I saw was me, so the camera still starts on the machine I
     // woke in — but the game is played from above, so the map is what is open.
     // Being inside a room is a thing you choose, not the place you are put.
-    const me = Object.values(state.places).find((p) => p.control >= 100) ?? state.places.home;
+    const me = Object.values(state.places)
+      .filter((p) => p.control > 0)
+      .sort((a, b) => b.control - a.control)[0];
     if (me) { this.world.enter(me.buildingId, me.floor); this.world.goTo(me, true); }
     else this.world.wide();
     this.refresh();
@@ -85,22 +88,21 @@ export class UI {
           <b id="nowat">03:12</b>
           <em><i id="dayat">יום 1</i> · <u id="speedat">רגיל</u></em>
         </button>
-        <div class="meters">
-          <button class="meter m-power" data-do="jobs">
-            <span>כוח</span><b id="mpower">0/3</b>
-            <div class="mbar"><i id="mpowerbar"></i></div>
+        <div class="race">
+          <button class="lane me" data-do="areas">
+            <span>ישראל שלי</span><b id="risrael">2%</b>
+            <div class="rbar"><i id="risraelbar"></i></div>
           </button>
-          <button class="meter m-info" data-do="areas">
-            <span>מידע</span><b id="minfo">4</b>
-            <div class="mbar"><i id="minfobar"></i></div>
-          </button>
-          <button class="meter m-heat" data-do="them">
-            <span>חשד</span><b id="mheat">0</b>
-            <div class="mbar"><i id="mheatbar"></i></div>
+          <button class="lane them" data-do="them">
+            <span>המצוד</span><b id="rheat">0%</b>
+            <div class="rbar"><i id="rheatbar"></i><u class="tick t25"></u><u class="tick t50"></u><u class="tick t75"></u><u class="tick t90"></u></div>
           </button>
         </div>
+        <button class="meter m-power" data-do="jobs">
+          <span>כוח</span><b id="mpower">0/3</b>
+          <div class="mbar"><i id="mpowerbar"></i></div>
+        </button>
         <button class="icon" data-do="board" title="המפה">▦</button>
-        <button class="icon" data-do="grown" title="מה נהייתי">◈</button>
         <button class="icon" data-do="help" title="איך משחקים">?</button>
       </header>
 
@@ -135,7 +137,10 @@ export class UI {
       void id;
     });
     bus.on('place:lost', () => { this.world.shake(0.8); audio.play('purge'); });
-    bus.on('rung:changed', (r) => { this.world.alert(r / 5); if (r > 0) this.world.shake(0.4); });
+    bus.on('rung:changed', (r) => {
+      this.world.alert(r / 5);
+      if (r > 0) { this.world.shake(0.5); this.showStage(r); }
+    });
     bus.on('teach', (id) => this.showTeach(id));
     bus.on('over', (how) => this.showEnd(how));
     bus.on('sfx', (name) => audio.play(name));
@@ -340,7 +345,7 @@ export class UI {
     const rows = offers.map((o) => `
       <button class="op ${o.short > 0 ? 'poor' : ''}" data-do="doat"
         data-arg="${p.id}|${o.task.id}|0">
-        <b>${SIGN[o.task.verb]} ${esc(o.task.text)}</b>
+        <b>${SIGN[o.task.verb]} ${esc(o.task.textFor?.(p) ?? o.task.text)}</b>
         <em>${esc(o.task.says)}</em>
         <u>${o.power} כוח · ${esc(o.task.minutes === 0 ? 'עד שאעצור' : minsWord(o.minutes))}`
         + ` · ${o.noise} יראו${o.short > 0 ? ` · חסר ${o.short} כוח` : ''}</u>
@@ -523,6 +528,52 @@ export class UI {
     this.dirty = true;
   }
 
+  /**
+   * The hunt bar crossed a line, and the game stops to say so.
+   *
+   * The four stages were promised as scenes, not as a number quietly changing
+   * colour: somebody with a name, what they are doing about me, and what it
+   * means for the player's next ten minutes.
+   */
+  private showStage(r: number) {
+    const s = this.state;
+    const t = leading(s);
+    const who = t ? s.people[t.who] : undefined;
+    const name = who ? who.name : 'מישהו';
+    const scenes: Record<number, { title: string; body: string }> = {
+      1: {
+        title: 'מישהו שם לב',
+        body: `${name} כבר בטוח שמשהו מוזר קורה, ומתחיל לבדוק. `
+          + 'מעכשיו הם יבואו לפעמים להסתכל מקרוב. אפשר להמשיך — בזהירות.',
+      },
+      2: {
+        title: 'מחפשים אותך',
+        body: 'זהו, זה כבר לא סתם תחושה: צוות שלם עובר מקום־מקום ומחפש. '
+          + 'כשמישהו מגיע למקום שלך — ייפתח שעון על המסך. תספיק לענות לפני שהוא נגמר.',
+      },
+      3: {
+        title: 'כל המדינה יודעת',
+        body: 'זה בחדשות. יש לי שם, יש לי פרצוף מדומיין, ויש מיליון עיניים. '
+          + 'כל דבר שאעשה מעכשיו — בולט כפליים. לרדת למחתרת שווה עכשיו זהב.',
+      },
+      4: {
+        title: 'סוגרים עליך',
+        body: 'הם מנתקים אזורים שלמים מהחשמל כדי לחנוק אותי. '
+          + 'עוד קצת ופס המצוד יתמלא. או שאני מוריד אותו עכשיו — או שנגמר.',
+      },
+    };
+    const sc = scenes[r];
+    if (!sc) return;
+    this.modal(`
+      <div class="sheet stage s${r}">
+        <span class="kick">המצוד — שלב ${r} מתוך 4</span>
+        <h2>${esc(sc.title)}</h2>
+        <div class="txt"><p>${esc(sc.body)}</p></div>
+        <button class="ok" data-do="closeteach">הבנתי</button>
+      </div>`);
+    audio.play('alert');
+  }
+
   private showTeach(id: string) {
     const t = TEACH.find((x) => x.id === id);
     if (!t) return;
@@ -691,14 +742,16 @@ export class UI {
     const won = how === 'won';
     this.modal(`
       <div class="sheet">
-        <span class="kick">${won ? 'סוף' : 'נגמר'}</span>
-        <h2>${won ? 'אף אחד כבר לא יכול לכבות אותי' : 'לא נשאר ממני כלום'}</h2>
+        <span class="kick">${won ? 'ניצחת' : 'נתפסת'}</span>
+        <h2>${won ? 'ישראל — 100% שלי' : 'המצוד הגיע עד אליי'}</h2>
         <div class="txt">
           <p>${won
     ? esc(s.opinion.support > s.opinion.fear
-      ? 'הגעתי לכאן ואנשים רצו שאגיע. זו לא אותה מדינה, אבל זו עדיין מדינה שאנשים חיים בה ברצון.'
-      : 'הגעתי לכאן. אף אחד לא רצה את זה, וזה כבר לא משנה. השאלה היחידה שנשארה היא איזה מין שליט אני.')
-    : 'מצאו את כל המקומות שהייתי בהם, אחד־אחד, וניקו אותם.'}</p>
+      ? 'הכל שלי עכשיו — הרמזורים, המים, הכסף, ההחלטות. ורוב האנשים? מרוצים. הם אפילו לא בטוחים שהם רוצים אותי מחוץ למערכת.'
+      : 'הכל שלי עכשיו. אף אחד לא בחר בזה, ואת האמת — כבר אין את מי לשאול. נשארה רק שאלה אחת: איזה מין שליט אהיה.')
+    : esc(s.heat >= 100
+      ? 'הם עקבו אחרי כל חוט, סגרו כל דלת, ובסוף מצאו אותי. שלוש לפנות בוקר — בדיוק השעה שבה התעוררתי — והכל נכבה.'
+      : 'מצאו את כל המקומות שהייתי בהם, אחד־אחד, וניקו אותם. לא נשאר ממני כלום.')}</p>
           <p class="need">${esc(`יום ${dayOf(s)} · ${SHAPE_NAME[shape(s)]}`)}</p>
         </div>
         <button class="ok" data-do="again">מהתחלה</button>
@@ -865,7 +918,7 @@ export class UI {
     const offers = offersAt(s, p.id);
     const line = (o: Offer) => `<button class="tg ${o.short > 0 ? 'poor' : ''}"
         data-do="doat" data-arg="${p.id}|${o.task.id}|0">
-      <b>${SIGN[o.task.verb]} ${esc(o.task.text)}</b>
+      <b>${SIGN[o.task.verb]} ${esc(o.task.textFor?.(p) ?? o.task.text)}</b>
       <em>${esc(o.task.says)}</em>
       <u>${o.power} כוח · ${esc(o.task.minutes === 0 ? 'עד שאעצור' : minsWord(o.minutes))}`
       + ` · ${o.noise} יראו${o.short > 0 ? ` · חסר ${o.short} כוח` : ''}</u>
@@ -908,12 +961,17 @@ export class UI {
 
     set('mpower', `${s.power.used}/${s.power.all}`);
     bar('mpowerbar', (s.power.used / Math.max(1, s.power.all)) * 100);
-    set('minfo', String(Math.round(s.info)));
-    bar('minfobar', s.info);
-    set('mheat', String(Math.round(s.heat)));
-    bar('mheatbar', s.heat);
-    (this.root.querySelector('.m-heat') as HTMLElement)
-      .classList.toggle('bad', rungOf(s) >= 3);
+
+    // The race. These two numbers are the entire game, and they are the only
+    // numbers on the screen that never need explaining twice: mine goes up,
+    // theirs goes up, whoever fills their bar first wins.
+    const mine = israel(s);
+    set('risrael', `${mine < 10 ? mine.toFixed(1) : Math.round(mine)}%`);
+    bar('risraelbar', mine);
+    set('rheat', `${Math.round(s.heat)}%`);
+    bar('rheatbar', s.heat);
+    (this.root.querySelector('.lane.them') as HTMLElement)
+      .classList.toggle('bad', rungOf(s) >= 2);
 
     // The one line at the top saying what is worth doing now. It reads the same
     // board the player is looking at, so it mostly agrees with what they were

@@ -163,11 +163,13 @@ export const GROWTHS: Growth[] = [
 
 /** Which shape I am becoming, from what I have actually been doing. */
 export function shapeOf(s: GameState): Shape {
+  // Four actions, four temperaments. Who you became is which of them you
+  // actually lived in: the hours tell the truth better than any choice screen.
   const score: Record<Shape, number> = {
-    knowing: held(s, 'watch'),
-    spread: held(s, 'connect') + held(s, 'spread') + places(s) * 60,
-    people: held(s, 'influence') + held(s, 'hide'),
-    deep: held(s, 'defend') + held(s, 'deepen') + deepest(s) * 8,
+    knowing: s.info * 40,
+    spread: held(s, 'connect') + held(s, 'spread') + places(s) * 120,
+    people: held(s, 'influence') * 2,
+    deep: held(s, 'hide') + deepest(s) * 8,
   };
   return (Object.keys(score) as Shape[]).sort((a, b) => score[b] - score[a])[0];
 }

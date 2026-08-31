@@ -15,8 +15,8 @@ import type { GameState, Hunt, Place, Person } from './types';
  *
  * Three rules keep it from becoming another meter:
  *
- *   1. **It has a face and a place.** Never "suspicion rose". Always "רון עלה
- *      לקומה ארבע עשרה, והוא עומד מול המדפסת".
+ *   1. **It has a face and a place.** Never "suspicion rose". Always "רון
+ *      נכנס לתחנת הכוח, והוא עומד מול הלוח הראשי".
  *   2. **The way out is written down.** The player never has to guess what would
  *      save them. The list says it. If an answer cannot be pressed right now,
  *      the row says in one sentence what is missing.
@@ -118,36 +118,36 @@ function v(who: Person, male: string, female: string): string {
 /** Stop moving. The commonest answer, and the one that always costs time. */
 const STILL: Answer = {
   id: 'still',
-  text: 'לשכב בשקט',
-  says: 'לעצור כל דבר שלי שרץ כאן. הוא לא ימצא תנועה כי לא תהיה תנועה.',
+  text: 'לקפוא במקום',
+  says: 'לעצור כל מה שאני עושה כאן. מי שמחפש תנועה — לא ימצא תנועה.',
   met: (s, p) => busyAt(s, p.id).length === 0,
   can: (s, p) => busyAt(s, p.id).length > 0,
   press: (s, p) => {
     const stopped = busyAt(s, p.id);
     letGo(s, stopped);
-    tell(s, 'me', `עצרתי הכל ${at(p.name)}. אני לא זז עד שהוא ילך.`, 1, p.id);
+    tell(s, 'me', `קפאתי. שום דבר שלי לא זז ${at(p.name)} עד שהוא יילך.`, 1, p.id);
   },
 };
 
 /** Stop moving in the whole building, which is much more expensive. */
 const STILL_ALL: Answer = {
   id: 'still_all',
-  text: 'לשכב בשקט בכל הבניין',
-  says: 'לעצור כל דבר שלי בכל הבניין. יקר, אבל אין מה למצוא.',
+  text: 'לקפוא בכל האזור',
+  says: 'לעצור כל מה שאני עושה בכל האזור. כואב, אבל לא יהיה מה למצוא.',
   met: (s, p) => busyIn(s, p.areaId).length === 0,
   can: (s, p) => busyIn(s, p.areaId).length > 0,
   press: (s, p) => {
     const stopped = busyIn(s, p.areaId);
     letGo(s, stopped);
-    tell(s, 'me', `הפסקתי הכל בבניין. ${stopped.length} דברים שלי עמדו מלכת בבת אחת.`, 1, p.id);
+    tell(s, 'me', `עצרתי הכל באזור. ${stopped.length} דברים שלי קפאו בבת אחת.`, 1, p.id);
   },
 };
 
 /** Make myself small enough here that there is nothing to trip over. */
 const SMALL: Answer = {
   id: 'small',
-  text: 'לרדת קטן כאן',
-  says: 'לוותר על רוב האחיזה שלי במקום הזה. אשאיר רק חוט דק שקשה לראות.',
+  text: 'להצטמצם כאן',
+  says: 'לוותר על רוב האחיזה שלי במקום הזה, ולהשאיר רק חוט דק שאי אפשר לראות.',
   met: (_s, p) => p.control <= 20,
   can: (_s, p) => p.control > 20,
   press: (s, p) => {
@@ -161,45 +161,45 @@ const SMALL: Answer = {
 /** Turn the lights off, which needs the switch room. */
 const DARK: Answer = {
   id: 'dark',
-  text: 'לכבות את האור בקומה',
-  says: 'חושך פתאומי. הוא ילך להביא פנס, ועד שיחזור זה כבר לא יעניין אותו.',
+  text: 'לכבות שם את האור',
+  says: 'חושך פתאומי בכל המקום. עד שיחזרו עם פנס — כבר יתעסקו במשהו אחר.',
   met: (s, _p, h) => (s.marks[`dark_${h.id}`] ?? 0) > 0,
   can: (s, p) => haveKind(s, p.areaId, 'power'),
-  lacks: () => 'צריך שחדר החשמל של הבניין יהיה שלי.',
+  lacks: () => 'בשביל זה תחנת החשמל של האזור צריכה להיות שלי.',
   press: (s, p, h) => {
     s.marks[`dark_${h.id}`] = 1;
     bus.emit('felt', { placeId: p.id, kind: 'dark' });
     const who = s.people[h.whoId];
     if (who) who.awayUntil = s.at + 30;
     tell(s, 'me', who
-      ? `כיביתי את האור בקומה. ${who.name} ${v(who, 'עמד', 'עמדה')} בחושך ואז ${v(who, 'יצא', 'יצאה')} להביא פנס.`
-      : 'כיביתי את האור בקומה. מי שהיה שם עמד בחושך ואז יצא להביא פנס.', 1, p.id);
+      ? `כיביתי את האור. ${who.name} ${v(who, 'נשאר', 'נשארה')} בחושך, ${v(who, 'קילל', 'קיללה')}, ${v(who, 'ויצא', 'ויצאה')} להביא פנס.`
+      : 'כיביתי את האור. מי שהיה שם נשאר בחושך ויצא להביא פנס.', 1, p.id);
   },
 };
 
 /** Cut the building off from the street, which needs the box. */
 const CUT_LINE: Answer = {
   id: 'cut_line',
-  text: 'לנתק את הבניין מהרחוב',
-  says: 'מה שהוא מחפש — לא יוכל לספר עליו לאף אחד בחוץ. גם אני לא אוכל לצאת.',
+  text: 'לנתק את המקום מהעולם',
+  says: 'מה שהוא ימצא — הוא לא יצליח לספר לאף אחד. אבל גם אני אהיה תקוע בפנים.',
   met: (s) => (s.marks.line_cut ?? 0) > 0,
   can: (s, p) => haveKind(s, p.areaId, 'power') || haveKind(s, p.areaId, 'company'),
-  lacks: () => 'צריך שקופסת האינטרנט או חדר החשמל של הבניין יהיו שלי.',
+  lacks: () => 'בשביל זה צריך שתחנת החשמל או חברה באזור יהיו שלי.',
   press: (s, p) => {
     s.marks.line_cut = (s.marks.line_cut ?? 0) + 1;
-    tell(s, 'me', `ניתקתי את הבניין מהרחוב. מה שיקרה כאן — יישאר כאן. גם אני.`, 1, p.id);
+    tell(s, 'me', 'ניתקתי את המקום מהעולם. מה שיקרה בפנים — יישאר בפנים. גם אני.', 1, p.id);
   },
 };
 
 /** Give them something else to worry about somewhere else. */
 const ELSEWHERE: Answer = {
   id: 'elsewhere',
-  text: 'לתת לו סיבה ללכת',
-  says: 'משהו קטן ייפול בקצה השני של הבניין, והוא ילך לבדוק אותו.',
+  text: 'למשוך אותו למקום אחר',
+  says: 'משהו קטן יתקלקל בצד השני של האזור, והוא יירוץ לשם במקום.',
   met: (s, _p, h) => (s.marks[`pulled_${h.id}`] ?? 0) > 0,
   can: (s, p) => Object.values(s.places).some((q) => q.areaId === p.areaId
     && q.id !== p.id && q.control >= 20),
-  lacks: () => 'צריך שיהיה לי משהו אחר בבניין שאני יכול להרעיש איתו.',
+  lacks: () => 'בשביל זה צריך עוד מקום שלי באזור, שאפשר להרעיש בו.',
   press: (s, p, h) => {
     s.marks[`pulled_${h.id}`] = 1;
     const far = Object.values(s.places).find((q) => q.areaId === p.areaId
@@ -218,7 +218,7 @@ const ELSEWHERE: Answer = {
 const AWAY: Answer = {
   id: 'away',
   text: 'שלא יהיה שם אף אחד',
-  says: 'אם החדר ריק כשהוא מגיע, אין לו את מי לשאול ואין לו מה להשוות.',
+  says: 'אם המקום ריק מאנשים כשהוא בודק — אין לו את מי לשאול.',
   met: (s, p) => empty(s, p),
   // Nothing to press: this one is answered by the clock and by who happens to be
   // standing there. But a row the player cannot press and that does not say why
@@ -277,7 +277,7 @@ export const SCRIPTS: Script[] = [
     bite: 'cut',
     says: (who, p) =>
       `${who.name} ${v(who, 'הגיע', 'הגיעה')} ${to(p.name)} ${v(who, 'והתקין', 'והתקינה')} שם משהו חדש. `
-      + `הדבר הזה עובר לבד על כל מה שיש בבניין, אחד־אחד, ומחפש מה לא במקום. `
+      + `הדבר הזה עובר לבד על כל מחשב במקום, אחד־אחד, ומחפש מה לא שייך. `
       + `הוא לא ממהר והוא לא מתעייף. אם הוא יגיע עד אליי לפני שהשעון ייגמר — הוא ימצא בדיוק איפה אני, `
       + `ומה שיש לי כאן ייעלם.`,
     answers: [STILL_ALL, SMALL, CUT_LINE, DARK],
@@ -336,7 +336,7 @@ export const SCRIPTS: Script[] = [
     needs: 2,
     bite: 'cut',
     says: (who, p) =>
-      `${who.name} ${v(who, 'התחיל', 'התחילה')} בקצה הקומה ${v(who, 'ועובר', 'ועוברת')} חדר אחרי חדר, כולל ${p.name}. `
+      `${who.name} ${v(who, 'התחיל', 'התחילה')} לעבור ${at(p.name)} חדר אחרי חדר. `
       + `${v(who, 'פותח', 'פותחת')} כל דלת, ${v(who, 'מדליק', 'מדליקה')} כל אור, ${v(who, 'מסתכל', 'מסתכלת')} מאחורי כל דבר. `
       + `לא צריך להבין כלום כדי לעשות את זה, ולכן זה עובד.`,
     answers: [STILL_ALL, SMALL, DARK, ELSEWHERE],
@@ -350,19 +350,19 @@ export const SCRIPTS: Script[] = [
     needs: 2,
     bite: 'wipe',
     says: (who, p) =>
-      `${who.name} ${v(who, 'הביא', 'הביאה')} ${to(p.name)} אחד חדש לגמרי, בקופסה. `
-      + `לא מנסים להבין מה קרה שם — פשוט מוציאים את הישן וזורקים אותו. `
-      + `מה שיש לי שם ייצא איתו, אלא אם אעבור למקום אחר לפני זה.`,
+      `${who.name} ${v(who, 'הגיע', 'הגיעה')} ${to(p.name)} עם ציוד חדש לגמרי, באריזות. `
+      + `הם לא מנסים להבין מה קרה — פשוט מחליפים הכל בחדש וזורקים את הישן. `
+      + `מה שיש לי שם ייזרק ביחד איתו, אלא אם אספיק לעבור למקום אחר.`,
     answers: [
       {
         id: 'move_out',
-        text: 'לעבור למשהו אחר בבניין',
-        says: 'לקחת את מה שיש לי כאן ולהזיז אותו לדבר אחר שכבר שלי. כשיזרקו את הישן — לא אהיה בו.',
+        text: 'לברוח למקום אחר שלי',
+        says: 'להעביר את מה שיש לי כאן למקום אחר שכבר שלי, לפני שיזרקו את הישן.',
         met: (s, p) => Object.values(s.places).some((q) => q.areaId === p.areaId
           && q.id !== p.id && q.control >= 40),
         can: (s, p) => Object.values(s.places).some((q) => q.areaId === p.areaId
           && q.id !== p.id && q.control >= 15),
-        lacks: () => 'אין לי עוד שום דבר בבניין הזה לעבור אליו.',
+        lacks: () => 'אין לי עוד מקום באזור הזה לברוח אליו.',
         press: (s, p) => {
           const spare = Object.values(s.places)
             .filter((q) => q.areaId === p.areaId && q.id !== p.id && q.control >= 15)
@@ -389,22 +389,22 @@ export const SCRIPTS: Script[] = [
     bite: 'wake',
     says: (who, p) =>
       `${who.name} כבר ${v(who, 'לא שואל', 'לא שואלת')} שאלות. `
-      + `הם מכבים את הבניין קומה־קומה ומדליקים כל דבר מחדש מאפס, החל מ${p.name}. `
-      + `זאת לא בדיקה. זה ניסיון למחוק אותי, ואם הם יגמרו את הקומות — לא אהיה כאן יותר.`,
+      + `הם מכבים את ${p.name} חלק אחרי חלק, ומדליקים כל דבר מחדש, נקי. `
+      + `זאת כבר לא בדיקה. הם מוחקים אותי, ואם הם יסיימו — לא אהיה כאן יותר.`,
     answers: [
       STILL_ALL,
       CUT_LINE,
       {
         id: 'far_away',
-        text: 'להיות כבר לא רק כאן',
-        says: 'אם יש לי מקומות בבניינים אחרים, אין להם מה לכבות — אני כבר לא במקום אחד.',
+        text: 'להיות כבר בכל מקום',
+        says: 'אם אני כבר יושב באזורים אחרים — אין להם מה למחוק. אי אפשר למחוק את כולי.',
         met: (s, p) => {
           const others = new Set(Object.values(s.places)
             .filter((q) => q.control >= 25 && q.areaId !== p.areaId)
             .map((q) => q.areaId));
           return others.size >= 2;
         },
-        lacks: () => 'צריך שיהיו לי מקומות בשני בניינים אחרים לפחות.',
+        lacks: () => 'בשביל זה אני צריך אחיזה בשני אזורים אחרים לפחות.',
       },
     ],
   },

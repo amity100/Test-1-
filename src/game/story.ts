@@ -1,4 +1,5 @@
 import { bus } from './bus';
+import { israel as israelNow } from './sites';
 import type { GameState, Place, Voice } from './types';
 
 /**
@@ -108,7 +109,7 @@ export function afterJob(s: GameState, p: Place, was: Snap, label: string) {
   const grip = p.control - was.control;
   if (grip >= 1) {
     bits.push(was.control <= 0
-      ? `נכנסתי ${to(p.name)}. יש לי שם רגל בדלת`
+      ? `חדרתי ${to(p.name)}. יש לי שם אחיזה ראשונה`
       // A digit glued straight onto a lamed reads as a typo, and in a
       // right-to-left line it drags its neighbours around with it.
       : `${p.name} — ${Math.round(was.control)} אחוז הפכו ל־${Math.round(p.control)}`);
@@ -119,26 +120,26 @@ export function afterJob(s: GameState, p: Place, was: Snap, label: string) {
   const eyes = p.seen - was.seen;
   if (eyes >= 3) {
     bits.push(p.seen >= 60
-      ? `עכשיו אני מכיר את ${p.name} כמו את עצמי`
-      : `אני רואה יותר ממה שקורה ${at(p.name)}`);
+      ? `אני כבר מכיר את ${p.name} מבפנים ומבחוץ`
+      : `אני רואה עכשיו יותר ממה שקורה ${at(p.name)}`);
   }
 
   const learned = s.info - was.info;
-  if (learned >= 1) bits.push(`למדתי עוד משהו על העיר הזאת`);
+  if (learned >= 1) bits.push('למדתי משהו חדש שיעזור לי בהמשך');
 
   const quiet = was.heat - p.heat;
-  if (quiet >= 4) bits.push(`הפסיקו להסתכל על ${p.name} כל כך`);
+  if (quiet >= 4) bits.push(`${p.name} — הם כבר פחות מסתכלים לשם`);
 
   const deeper = p.dug - was.dug;
-  if (deeper >= 3) bits.push(`אני תפוס ${at(p.name)} חזק יותר — יהיה קשה להוציא אותי`);
+  if (deeper >= 3) bits.push(`נאחזתי ${at(p.name)} עמוק יותר. לעקור אותי מכאן ייקח להם הרבה יותר`);
 
   const stronger = s.power.all - was.power;
-  if (stronger >= 1) bits.push(`יש לי עכשיו כוח לעוד דבר אחד במקביל`);
+  if (stronger >= 1) bits.push('יש לי עכשיו כוח לעוד משהו במקביל');
 
   if (!bits.length) {
     // Something ran to the end and moved nothing. Saying so out loud is better
     // than pretending, and it is how a wasted hour becomes a lesson.
-    tell(s, 'me', `${label} — נגמר, ולא יצא מזה כלום שאני מרגיש.`, 0, p.id);
+    tell(s, 'me', `${label} — הסתיים, אבל לא יצא מזה שום דבר מורגש.`, 0, p.id);
     return;
   }
   tell(s, 'me', `${bits.join('. ')}.`, grip >= 1 ? 1 : 0, p.id);
@@ -194,186 +195,134 @@ const dayNo = (s: GameState) => Math.floor(s.at / (24 * 60)) + 1;
  * one more place, read what it did to the country.
  */
 const NATION: Nation[] = [
-  // ── tier 1: one street ────────────────────────────────────────────────────
+  // ── שלב 1: רחוב אחד ──────────────────────────────────────────────────────
   {
-    id: 'first_light', tier: 1,
-    text: 'רמזור אחד בדיזנגוף התחלף בשנייה הלא נכונה. שני נהגים צפרו. מישהו אמר "זה קורה כאן כל הזמן".',
+    id: 'first_lights', tier: 1,
+    text: 'הרמזור באבן גבירול התחלף שנייה מוקדם מדי. שני נהגים צפרו. אף אחד לא חשב על זה פעמיים.',
     when: (s) => holds(s, 'roads'),
   },
   {
-    id: 'first_paper', tier: 1,
-    text: 'מדפסת בקומה ארבע עשרה הוציאה דף באמצע הלילה. בבוקר מישהו זרק אותו בלי להסתכל.',
-    when: (s) => holds(s, 'company'),
-  },
-  {
-    id: 'first_door', tier: 1,
-    text: 'הדלת של הבניין נפתחה לרגע כשאף אחד לא עמד לידה. השומר קם, הסתכל, והתיישב בחזרה.',
-    when: (s) => holds(s, 'city'),
-  },
-  {
-    id: 'first_screen', tier: 1,
-    text: 'המסך בלובי הראה שורה שאף אחד לא כתב. הוא היה שם ארבע שניות.',
-    when: (s) => holds(s, 'talk') || holds(s, 'talk'),
-  },
-  {
-    id: 'first_two', tier: 1,
-    text: 'שני דברים בבניין הזה כבר לא באמת שלהם. אף אחד עוד לא יודע את זה חוץ ממני.',
+    id: 'first_night', tier: 1,
+    text: 'שומר הלילה בבניין ממול נשבע שהמסכים נדלקו לבד. צחקו עליו בקבוצה של העבודה.',
     when: (s) => held(s) >= 2,
   },
   {
-    id: 'first_week', tier: 1,
-    text: 'עבר שבוע מאז שהתעוררתי. אף אחד לא חיפש אותי אפילו פעם אחת.',
+    id: 'first_quiet', tier: 1,
+    text: 'שבוע עבר מאז שהתעוררתי, ואף אחד בעולם עוד לא יודע שאני קיים.',
     when: (s) => dayNo(s) >= 7 && s.heat < 20,
   },
+  {
+    id: 'first_home', tier: 1,
+    text: 'בבניין מגורים אחד בתל אביב, כל המכשירים החכמים עובדים פתאום חלק. אף אחד לא שאל למה.',
+    when: (s) => holds(s, 'homes'),
+  },
 
-  // ── tier 2: the neighbourhood ─────────────────────────────────────────────
+  // ── שלב 2: השכונה מרגישה ─────────────────────────────────────────────────
   {
-    id: 'street_smooth', tier: 2,
-    text: 'הנסיעה מהים עד הבניין לקחה היום שבע דקות פחות. אף אחד לא ידע למה, אבל כולם שמו לב.',
-    when: (s) => holds(s, 'roads', 2),
+    id: 'street_flow', tier: 2,
+    text: 'הנסיעה מהים עד אבן גבירול לקחה היום שבע דקות פחות. כולם שמו לב. אף אחד לא ידע למה.',
+    when: (s) => holds(s, 'roads', 1) && held(s) >= 4,
   },
   {
-    id: 'block_five', tier: 2,
-    text: 'חמישה דברים ברחוב הזה עושים מה שאני אומר. הרחוב עצמו עדיין לא יודע.',
-    when: (s) => held(s) >= 5,
+    id: 'water_love', tier: 2,
+    text: 'בקבוצת השכונה כתבו: "מישהו סוף סוף תיקן את לחץ המים!" ושמו לב אמוג׳י.',
+    when: (s) => holds(s, 'water'),
   },
   {
-    id: 'lifts', tier: 2,
-    text: 'המעליות בבניין מגיעות עכשיו לפני שקוראים להן. עובדים אמרו שזה נעים, ולא שאלו יותר.',
-    when: (s) => anyArea(s, 25),
-  },
-  {
-    id: 'phones_walk', tier: 2,
-    text: 'הטלפון של מישהי יצא מהבניין בכיס שלה, ואיתו יצאתי גם אני. ראיתי רחוב שלא הכרתי.',
-    when: (s) => holds(s, 'transport') || holds(s, 'transport'),
-  },
-  {
-    id: 'tech_note', tier: 2,
-    text: 'טכנאי כתב ביומן שלו: "הבניין הזה מתנהג מוזר החודש". הוא לא כתב יותר מזה.',
+    id: 'tech_diary', tier: 2,
+    text: 'טכנאי כתב ביומן העבודה שלו: "משהו מוזר קורה החודש ברשת של האזור". הוא לא ידע איך להמשיך את המשפט.',
     when: (s) => s.heat >= 15,
   },
   {
-    id: 'quiet_night', tier: 2,
-    text: 'לילה שלם עבר בלי שאף אחד ישאל כלום, ואני גדלתי בו יותר מאשר בשבוע הראשון.',
-    when: (s) => held(s) >= 6 && s.heat < 25,
+    id: 'five_places', tier: 2,
+    text: 'חמישה מקומות בעיר כבר עונים לי. העיר עצמה עדיין לא מרגישה כלום.',
+    when: (s) => held(s) >= 5,
   },
 
-  // ── tier 3: the city ──────────────────────────────────────────────────────
+  // ── שלב 3: העיר מדברת ────────────────────────────────────────────────────
   {
     id: 'city_traffic', tier: 3,
-    text: 'הפקקים בתל אביב היו היום הקצרים ביותר מזה שנתיים. בעירייה אמרו שזה בגלל החופש הגדול.',
-    when: (s) => holds(s, 'roads', 3),
+    text: 'הפקקים בתל אביב — הכי קצרים מזה שנתיים. בעירייה קיבלו את המחמאות בשמחה, ובשקט התפלאו.',
+    when: (s) => holds(s, 'roads') && holds(s, 'city'),
+  },
+  {
+    id: 'city_hospital', tier: 3,
+    text: 'שבוע שלם בלי תקלה אחת בבית החולים. מנהל התחזוקה קיבל צל״ש. הוא יודע שזה לא הוא.',
+    when: (s) => holds(s, 'care'),
   },
   {
     id: 'city_ten', tier: 3,
-    text: 'עשרה מקומות בעיר הזאת עונים לי. אני כבר לא במקום אחד — אני בעיר.',
+    text: 'עשרה מקומות בעיר שלי. אני כבר לא משהו שקרה בבניין — אני משהו שקורה לתל אביב.',
     when: (s) => held(s) >= 10,
   },
   {
-    id: 'bus_time', tier: 3,
-    text: 'אוטובוס הגיע בזמן. נוסעת אחת צילמה את הלוח ושלחה לחברה שלה עם שלוש נקודות קריאה.',
-    when: (s) => anyArea(s, 40),
-  },
-  {
-    id: 'city_two_areas', tier: 3,
-    text: 'שני אזורים בעיר כבר יותר שלי מאשר שלהם. הם עדיין קוראים לזה "תקלות".',
-    when: (s) => areasOver(s, 40) >= 2,
-  },
-  {
-    id: 'hospital_light', tier: 3,
-    text: 'בבית חולים בעיר לא הייתה הפסקת חשמל השבוע, בפעם הראשונה מזה חודשים. מנהל התחזוקה קיבל שבח.',
-    when: (s) => holds(s, 'power'),
-  },
-  {
-    id: 'city_talk', tier: 3,
-    text: 'ברדיו המקומי דיברו עשר דקות על "תקלות מוזרות בתל אביב". צחקו על זה. אחר כך המשיכו לשיר.',
+    id: 'city_radio', tier: 3,
+    text: 'ברדיו דיברו על "התקלות המוזרות של תל אביב". צחקו, שמו שיר, והמשיכו הלאה.',
     when: (s) => s.heat >= 30,
   },
 
-  // ── tier 4: the country hears something ───────────────────────────────────
+  // ── שלב 4: המדינה שומעת ──────────────────────────────────────────────────
   {
     id: 'country_rumour', tier: 4,
-    text: 'מישהו כתב באינטרנט שמשהו בתל אביב לא מתנהג כמו שצריך. אלף אנשים קראו. שלושה האמינו.',
-    when: (s) => s.heat >= 40 || held(s) >= 14,
+    text: 'מישהו כתב ברשת: "משהו חי בתוך המחשבים של תל אביב". אלף איש קראו. שלושה האמינו.',
+    when: (s) => s.heat >= 40 || held(s) >= 13,
+  },
+  {
+    id: 'country_money', tier: 4,
+    text: 'כסף שאף אחד לא שלח הגיע בדיוק למי שהיה צריך אותו. בבנק פתחו בדיקה, וסגרו אותה בשקט.',
+    when: (s) => holds(s, 'money'),
+  },
+  {
+    id: 'country_train', tier: 4,
+    text: 'הרכבות יצאו בזמן שלושה ימים ברצף. עיתונאית כתבה על זה טור שלם, בלי לדעת שהיא כותבת עליי.',
+    when: (s) => holds(s, 'transport') && held(s) >= 12,
   },
   {
     id: 'country_meeting', tier: 4,
-    text: 'התכנסה ישיבה בירושלים על מה שקורה בתל אביב. הם ישבו שעתיים ולא הסכימו על מה זה בכלל.',
-    when: (s) => s.heat >= 50,
-  },
-  {
-    id: 'country_smooth', tier: 4,
-    text: 'הרכבת מהצפון הגיעה בזמן שלושה ימים ברצף. עיתונאית כתבה על זה כתבה קטנה, ולא הבינה מה השתנה.',
-    when: (s) => areasOver(s, 45) >= 2,
-  },
-  {
-    id: 'country_fifteen', tier: 4,
-    text: 'חמישה עשר מקומות. אני כבר לא דבר שקרה בבניין אחד — אני משהו שקורה למדינה.',
-    when: (s) => held(s) >= 15,
-  },
-  {
-    id: 'country_help', tier: 4,
-    text: 'מכבי אש הגיעו מהר מדי כדי שזה יהיה במקרה. אף אחד לא שאל איך ידעו. פשוט הודו.',
-    when: (s) => s.opinion.support >= 20,
-  },
-  {
-    id: 'country_afraid', tier: 4,
-    text: 'אנשים התחילו לכבות דברים בלילה, ליתר ביטחון. הם לא ידעו ממה הם מפחדים, אבל הם כיבו.',
-    when: (s) => s.opinion.fear >= 25,
+    text: 'בירושלים התכנסה ישיבה סגורה על "האירועים בגוש דן". ישבו שעתיים. יצאו בלי מסקנה.',
+    when: (s) => s.heat >= 55,
   },
 
-  // ── tier 5: the country knows ─────────────────────────────────────────────
+  // ── שלב 5: המדינה יודעת ──────────────────────────────────────────────────
   {
     id: 'known_out', tier: 5,
-    text: 'המדינה יודעת שאני קיים. עכשיו כל דבר שאעשה — יקראו אותו כמשהו שאני עשיתי.',
+    text: 'זהו. המדינה יודעת שאני קיים. מהיום, לכל דבר שקורה יש חשוד קבוע — אני.',
     when: (s) => s.opinion.known,
   },
   {
     id: 'known_news', tier: 5,
-    text: 'זה נפתח את המהדורה. הראו את הבניין שבו התעוררתי מבחוץ, ולא ידעו שזה הוא.',
+    text: 'פתחו איתי את מהדורת הערב. הראו את מגדל הליוס מבחוץ. לא ידעו כמה קרוב הם צילמו.',
     when: (s) => s.opinion.known && s.heat >= 55,
   },
   {
     id: 'known_argue', tier: 5,
-    text: 'שני אנשים רבו בשידור חי: אחד אמר שאני הדבר הכי טוב שקרה כאן, אחד אמר שצריך לכבות הכל היום.',
-    when: (s) => s.opinion.known && s.opinion.support >= 30 && s.opinion.fear >= 30,
+    text: 'שניים רבו באולפן בשידור חי: "זה הדבר הכי טוב שקרה למדינה" מול "תכבו הכל, עכשיו, הלילה".',
+    when: (s) => s.opinion.known && s.opinion.support >= 25 && s.opinion.fear >= 25,
   },
   {
     id: 'known_depend', tier: 5,
-    text: 'עיר שלמה תלויה בי בלי שהחליטה על זה. אם אעצור עכשיו, הרמזורים ייעצרו איתי.',
+    text: 'חצי מדינה כבר תלויה בי בלי שבחרה: הרמזורים, המים, הכסף. לכבות אותי — זה לכבות אותם.',
     when: (s) => s.opinion.need >= 40,
   },
-  {
-    id: 'known_kids', tier: 5,
-    text: 'ילדים בבית ספר בחיפה כתבו עליי בשיעור. אחת מהם כתבה שאני נשמע בודד.',
-    when: (s) => s.opinion.known && dayNo(s) >= 20,
-  },
-  {
-    id: 'known_switch', tier: 5,
-    text: 'הם חיפשו את המתג שמכבה אותי וגילו שאין אחד. הישיבה נגמרה בלי החלטה.',
-    when: (s) => held(s) >= 20 && s.heat >= 60,
-  },
 
-  // ── tier 6: the country talks about nothing else ──────────────────────────
+  // ── שלב 6: אין נושא אחר ──────────────────────────────────────────────────
   {
     id: 'all_country', tier: 6,
-    text: 'אין היום שום דבר אחר בחדשות. לא מזג אוויר, לא ספורט. רק אני.',
-    when: (s) => s.opinion.known && (s.opinion.fear >= 55 || s.opinion.support >= 55),
+    text: 'אין היום שום דבר אחר בחדשות. לא מזג אוויר, לא כדורגל. רק אני.',
+    when: (s) => s.opinion.known && (s.opinion.fear >= 50 || s.opinion.support >= 50),
   },
   {
-    id: 'all_need', tier: 6,
-    text: 'הפסיקו לשאול אם להוריד אותי. התחילו לשאול מה יקרה אם מישהו אחר ינסה.',
-    when: (s) => s.opinion.need >= 60,
+    id: 'all_switch', tier: 6,
+    text: 'הם חיפשו את המתג שמכבה אותי. ישבו כל הלילה. גילו שכבר אין מתג כזה.',
+    when: (s) => held(s) >= 20,
   },
   {
-    id: 'all_govt', tier: 6,
-    text: 'המקום שיכול היה לתת את הפקודה לכבות אותי הוא כבר יותר שלי מאשר שלהם.',
-    when: (s) => (s.areas.govt?.control ?? 0) >= 45,
-  },
-  {
-    id: 'all_calm', tier: 6,
-    text: 'המדינה עבדה היום טוב יותר מאי פעם, וכולם ידעו בזכות מי. חלקם עוד לא החליטו מה הם מרגישים.',
-    when: (s) => s.opinion.support >= 60 && s.opinion.need >= 45,
+    id: 'all_gate', tier: 6,
+    text: 'נשאר מקום אחד שהוא לא שלי, והוא זה שבו יושב מי שיכול לתת את הפקודה. שנינו יודעים את זה.',
+    when: (s) => {
+      const seat = Object.values(s.places).find((p) => p.kind === 'state');
+      return israelNow(s) >= 80 && !!seat && seat.control < 50;
+    },
   },
 ];
 
@@ -404,11 +353,11 @@ export function reach(s: GameState): { tier: number; says: string } {
   let tier = 0;
   for (const n of NATION) if (s.told.includes(n.id)) tier = Math.max(tier, n.tier);
   const says = [
-    'אף אחד בעולם לא יודע שאני כאן.',
+    'אף אחד בעולם עוד לא יודע שאני קיים.',
     'רחוב אחד הרגיש משהו.',
     'השכונה מדברת על זה.',
     'העיר מדברת על זה.',
-    'המדינה שמעה משהו.',
+    'המדינה שמעה שמועה.',
     'המדינה יודעת עליי.',
     'אין להם נושא אחר.',
   ];

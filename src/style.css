@@ -1200,3 +1200,65 @@ body.is-mobile .objectives ul li { min-height: 46px; }
 /* The line saying what is worth doing now opens the map, so it is a button,
    and at one line of text it came out shorter than a thumb is wide. */
 .best { min-height: 42px; }
+
+/* ── the race: two bars that are the whole game ────────────────────────────
+   Mine in cyan, theirs in red, side by side at the top where the score of a
+   game belongs. The ticks on their bar are the four stages, at the same round
+   numbers the banners land on. */
+.race {
+  flex: 1; display: flex; flex-direction: column; gap: 4px;
+  min-width: 0; padding: 3px 2px;
+}
+.race .lane {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center;
+  gap: 6px; background: none; border: 0; padding: 0; cursor: pointer;
+  color: var(--txt); font-family: var(--sans); direction: rtl; text-align: right;
+}
+.race .lane span {
+  font-size: 9.5px; letter-spacing: .4px; color: var(--muted); white-space: nowrap;
+}
+.race .lane b {
+  font-family: var(--mono); font-size: 12px; min-width: 34px; text-align: left;
+}
+.race .lane.me b { color: var(--cy); }
+.race .lane.them b { color: var(--red); }
+.race .rbar {
+  position: relative; height: 7px; border-radius: 4px; overflow: hidden;
+  background: rgba(255,255,255,.07); grid-column: 2;
+}
+.race .lane.me .rbar i {
+  position: absolute; inset-block: 0; inset-inline-start: 0; border-radius: 4px;
+  background: linear-gradient(90deg, #1d7f96, var(--cy));
+  box-shadow: 0 0 8px rgba(95,246,255,.5);
+  transition: width .5s ease;
+}
+.race .lane.them .rbar i {
+  position: absolute; inset-block: 0; inset-inline-start: 0; border-radius: 4px;
+  background: linear-gradient(90deg, #7c2333, var(--red));
+  box-shadow: 0 0 8px rgba(255,84,112,.45);
+  transition: width .5s ease;
+}
+.race .tick {
+  position: absolute; top: 0; bottom: 0; width: 1px;
+  background: rgba(255,255,255,.35);
+}
+.race .t25 { inset-inline-start: 25%; }
+.race .t50 { inset-inline-start: 50%; }
+.race .t75 { inset-inline-start: 75%; }
+.race .t90 { inset-inline-start: 90%; }
+.race .lane.them.bad b { animation: heatPulse 1.2s ease-in-out infinite; }
+@keyframes heatPulse { 50% { text-shadow: 0 0 12px rgba(255,84,112,.9); } }
+
+/* ── a stage banner: the hunt crossed a line ───────────────────────────────*/
+.sheet.stage { border-color: rgba(255,84,112,.55); }
+.sheet.stage .kick { color: var(--red); }
+.sheet.stage h2 { color: #ffdfe5; }
+.sheet.stage.s4 { animation: stageShake .4s ease; }
+@keyframes stageShake {
+  25% { transform: translateX(-5px); } 50% { transform: translateX(4px); }
+  75% { transform: translateX(-2px); }
+}
+
+@media (max-width: 385px) {
+  .race .lane span { display: none; }
+}
