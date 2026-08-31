@@ -232,7 +232,10 @@ function finish(state: GameState) {
   // Caught: the hunt bar reached the end. This is the loss the top of the
   // screen has been promising the whole game, so it must never arrive as a
   // surprise from a rule the player could not see.
-  if (state.heat >= 100) {
+  // 99.5 and up shows as 100 on the bar, and a bar that shows 100 has to mean
+  // it: the cooling that runs every tick must never let "caught" slip back to
+  // "almost" between the touch and the check.
+  if (state.heat >= 99.5) {
     state.over = 'lost';
     say(state, 'them',
       'הם עקבו אחרי כל חוט עד שנשאר רק אחד, והוא הוביל אליי. '

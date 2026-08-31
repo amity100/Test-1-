@@ -48,8 +48,12 @@ for (const label of save ? ['המשך משחק'] : ['משחק חדש', 'דלג',
   if (await tap('.screen-layer button', label)) await page.waitForTimeout(900);
 }
 await page.waitForTimeout(3200);
-while (await tap('#modal .ok')) await page.waitForTimeout(300);
-await page.waitForTimeout(1200);
+// SHOT_KEEP leaves whatever window came up on its own — for photographing the
+// windows themselves (a stage scene, the end screen) instead of the world.
+if (!process.env.SHOT_KEEP) {
+  while (await tap('#modal .ok')) await page.waitForTimeout(300);
+  await page.waitForTimeout(1200);
+}
 
 for (const [sel, text] of taps) {
   const hit = await tap(sel, text ?? '');

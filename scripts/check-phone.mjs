@@ -19,12 +19,26 @@ for (const [W, H] of [[320, 640], [360, 740], [390, 844], [430, 932]]) {
       .find((x) => (!text || x.textContent.includes(text)) && x.offsetParent !== null);
     if (!el) return false; el.click(); return true;
   }, [sel, text]);
-  const shut = async () => { while (await tap('#modal .ok')) await p.waitForTimeout(280); };
+  // Closing windows must never press the end screen's "start again" button —
+  // that reloads the page out from under the checks. If the end screen is up,
+  // leave it up; the check at the bottom reports it as what it is.
+  const shut = async () => { while (await tap('#modal .ok:not([data-do="again"])')) await p.waitForTimeout(280); };
   await p.waitForTimeout(1100);
   for (const label of ['משחק חדש', 'דלג', 'יאללה']) {
     if (await tap('.screen-layer button', label)) await p.waitForTimeout(800);
   }
   await p.waitForTimeout(3600); await shut();
+
+  // Stop the clock, the way a thinking player does — stopping is free. These
+  // checks poke every window at reading pace, and at eight world-minutes a
+  // second, half a game-day would pass — and the manhunt with it — while a
+  // check reads button sizes. The opening above already ran on a live clock.
+  for (let i = 0; i < 4; i++) {
+    const v = await p.evaluate(() => document.querySelector('#speedat')?.textContent);
+    if (v === 'עצור') break;
+    await p.evaluate(() => document.querySelector('[data-do="speed"]')?.click());
+    await p.waitForTimeout(150);
+  }
 
   // Every button that is on screen must be big enough for a thumb, fully on the
   // screen, and not have anything sitting on top of it.
@@ -146,6 +160,16 @@ for (const [W, H] of [[320, 640], [360, 740], [390, 844], [430, 932]]) {
     return h / innerHeight;
   });
   ok(covered < 0.5, `${W}×${H} · הפאנלים תופסים ${Math.round(covered * 100)}% מהמסך`);
+
+  // A few real minutes of poking around must not end the game. If it ended,
+  // that is the biggest finding on the page — say it with the screen's words.
+  const ended = await p.evaluate(() => {
+    const again = document.querySelector('[data-do="again"]');
+    if (!again) return null;
+    const sheet = again.closest('.sheet');
+    return (sheet?.querySelector('h2')?.textContent ?? 'נגמר').trim();
+  });
+  ok(!ended, `${W}×${H} · המשחק לא נגמר באמצע הבדיקות${ended ? ` ("${ended}")` : ''}`);
 
   await p.screenshot({ path: `/tmp/phone/${W}.png`, timeout: 60000 }).catch(() => {});
   ok(errs.length === 0, `${W}×${H} · בלי שגיאות ${errs.slice(0, 1)}`);

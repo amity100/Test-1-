@@ -15,6 +15,7 @@ import { answer, huntAt, liveHunts, rowsOf, scriptOf, startHunt, stillNeeds, SCR
 import { MOST_OFFERS, offersAt, priceOf, start, wideOffersAt } from '../src/game/jobs';
 import { CATALOGUE } from '../src/game/catalogue';
 import { board, bestNow } from '../src/game/board';
+import { israel } from '../src/game/sites';
 import { reach } from '../src/game/story';
 import type { GameState, Place } from '../src/game/types';
 
@@ -275,6 +276,53 @@ const run = (s: GameState, mins: number, step = 5) => {
   console.log(`  · יום ${day.minutes} דקות / רעש ${day.noise} · לילה ${night.minutes} דקות / רעש ${night.noise}`);
   ok(swing >= 3.5, `לחכות לשעה הנכונה שווה פי ${swing.toFixed(1)} (היעד: פי 3.5 ומעלה)`);
   ok(day.noise > night.noise, 'ביום גם רואים אותי יותר');
+}
+
+// ── the race keeps its promises ─────────────────────────────────────────────
+
+{
+  const s = newGame('race1');
+  const was = israel(s);
+  for (const p of Object.values(s.places)) p.control = Math.min(100, p.control + 30);
+  ok(israel(s) > was, 'הפס שלי עולה כשאני משתלט על עוד');
+
+  // Winning is the bar reaching the end, and only that.
+  for (const p of Object.values(s.places)) p.control = 100;
+  tick(s, 5);
+  ok(s.over === 'won', 'כשהפס מגיע ל־100 — ניצחון');
+}
+
+{
+  const s = newGame('race2');
+  s.heat = 100;
+  tick(s, 5);
+  ok(s.over === 'lost', 'כשהמצוד מגיע ל־100 — הפסד');
+}
+
+{
+  // The one button that pushes the hunt bar down really pushes it down.
+  const s = newGame('race3');
+  const p = Object.values(s.places).find((q) => q.control > 0)!;
+  s.heat = 40;
+  const before = s.heat;
+  const o = offersAt(s, p.id).find((x) => x.task.id === 'quiet');
+  ok(!!o, 'לרדת למחתרת מוצע במקום שלי');
+  if (o) {
+    start(s, p.id, 'quiet');
+    run(s, o.minutes + 20, 5);
+    ok(s.heat < before, `לרדת למחתרת באמת מוריד את פס המצוד (${before} → ${s.heat.toFixed(1)})`);
+  }
+}
+
+{
+  // Every special button has a name of its own — no two kinds share one, and
+  // none of them is called "use the place".
+  const use = CATALOGUE.find((t) => t.id === 'use')!;
+  const s = newGame('names');
+  const names = new Set<string>();
+  for (const p of Object.values(s.places)) names.add(use.textFor!(p));
+  ok(names.size >= 10, `לכל סוג מקום כפתור מיוחד עם שם משלו (${names.size} שמות)`);
+  ok(![...names].some((n) => n.includes('להשתמש')), 'אף כפתור לא נקרא "להשתמש במקום"');
 }
 
 console.log(bad ? `\n${bad} דברים לא עובדים` : '\nהעולם עונה בחזרה');

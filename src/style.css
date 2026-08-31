@@ -991,7 +991,7 @@ body.is-mobile .objectives ul li { min-height: 46px; }
 /* ── the one line saying what is worth doing now ───────────────────────────
    Under the top bar, always there, and it opens the map. */
 .best {
-  position: absolute; top: 102px; inset-inline: 8px; z-index: 6;
+  position: absolute; top: 118px; inset-inline: 8px; z-index: 6;
   min-height: 34px; padding: 7px 12px; text-align: right; direction: rtl;
   background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
   color: var(--txt); font-family: var(--sans); font-size: 12px; line-height: 1.4;
@@ -1002,7 +1002,7 @@ body.is-mobile .objectives ul li { min-height: 46px; }
    It takes the screen, because it is the only thing that matters while it
    runs, and its answers are the biggest buttons in the game. */
 .hunt {
-  position: absolute; inset-inline: 8px; top: 148px; bottom: 128px; z-index: 40;
+  position: absolute; inset-inline: 8px; top: 166px; bottom: 128px; z-index: 40;
   display: flex; align-items: flex-start; justify-content: center;
   pointer-events: none; direction: rtl;
 }
@@ -1080,9 +1080,11 @@ body.is-mobile .objectives ul li { min-height: 46px; }
 .boardsheet .tg.poor { opacity: .55; }
 .boardsheet .list { max-height: 60vh; }
 
+/* The narrowest phones used to pull this stack up under a shorter header.
+   The race strip made every width the same height, so they all stack alike
+   now — only the type gets smaller. */
 @media (max-width: 345px) {
-  .best { font-size: 11px; top: 58px; }
-  .hunt { top: 96px; }
+  .best { font-size: 11px; }
   .hunt .hsays { font-size: 12px; }
 }
 
@@ -1213,7 +1215,7 @@ body.is-mobile .objectives ul li { min-height: 46px; }
 }
 .race .lane {
   flex: 1; display: grid; grid-template-columns: auto 1fr auto;
-  align-items: center; gap: 6px; min-width: 0;
+  align-items: center; gap: 6px; min-width: 0; min-height: 40px;
   background: none; border: 0; padding: 0; cursor: pointer;
   color: var(--txt); font-family: var(--sans); direction: rtl; text-align: right;
 }
