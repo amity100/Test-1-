@@ -40,8 +40,32 @@ for (const file of files) {
   });
 }
 
+// ── ולא כותבים "הלך/ה" למישהו שיש לו שם ─────────────────────────────────────
+//
+// The game knows every one of its people by name and by gender, and it has a
+// helper — v(who, 'הלך', 'הלכה') — for bending a verb round them. Three lines
+// were still writing the form-filling slash instead, so a player who has known
+// Dana since the first night was reading "דנה הלך/ה" about her.
+const SLASH = /[\u0590-\u05FF]\/[\u0590-\u05FF]{1,3}\b/;
+let slashes = 0;
+for (const file of files) {
+  readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
+    const t = line.trim();
+    if (t.startsWith('//') || t.startsWith('*') || t.startsWith('/*')) return;
+    if (!HEB.test(line)) return;
+    const m = line.match(SLASH);
+    if (!m) return;
+    console.log(`${file}:${i + 1}  «${m[0]}»  ${t.slice(0, 96)}`);
+    slashes += 1;
+  });
+}
+if (slashes) {
+  console.error(`\n✗ ${slashes} פעמים כתוב "הלך/ה" במקום להטות לפי מי זה.`);
+  process.exit(1);
+}
+
 if (bad) {
   console.error(`\n✗ ${bad} מילים שאסור להן להיות על המסך.`);
   process.exit(1);
 }
-console.log('✓ אין אף מילה טכנית בטקסט שהשחקן רואה.');
+console.log('✓ אין אף מילה טכנית בטקסט שהשחקן רואה, ואף פועל לא כתוב עם לוכסן.');

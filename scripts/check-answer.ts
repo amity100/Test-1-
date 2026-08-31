@@ -385,5 +385,83 @@ const run = (s: GameState, mins: number, step = 5) => {
     `אף מקום לא נקרא על שם אדם פרטי${named.length ? ` (${named[0].name})` : ''}`);
 }
 
+{
+  // ── המרוץ באמת מרוץ ────────────────────────────────────────────────────────
+  // Played through, the two bars turned out to be a race in which only one of
+  // them could move: a patient player took sixty-one per cent of Israel over
+  // five nights with the hunt bar sitting at zero the whole time. Nothing in
+  // the build noticed, because everything was checking that pieces worked and
+  // nothing was checking that the game was a game.
+  const s = newGame('race');
+  const go = (pid: string, tid: string) => {
+    const o = offersAt(s, pid).find((x) => x.task.id === tid);
+    if (!o || o.short > 0) return false;
+    start(s, pid, tid);
+    return true;
+  };
+  let peak = 0;
+  for (let day = 0; day < 200 && !s.over; day++) {
+    for (const p of Object.values(s.places)) {
+      if (p.control > 0 && p.control < 100) go(p.id, 'grow');
+    }
+    const next = Object.values(s.places)
+      .filter((p) => p.found && p.control <= 0)
+      .sort((a, b) => b.guard - a.guard).pop();
+    if (next) go(next.id, 'enter');
+    for (let i = 0; i < 180; i++) tick(s, 1);
+    peak = Math.max(peak, s.heat);
+  }
+  ok(peak >= 25, `מי שגדל ולא בולם — המצוד באמת עולה עליו (הגיע ל־${peak.toFixed(0)})`);
+  ok(s.over === 'lost',
+    `ומי שאף פעם לא יורד למחתרת בסוף נתפס (${s.over ?? 'שרד לנצח'}, `
+    + `אחרי ${(s.at / 1440).toFixed(0)} ימים)`);
+}
+
+{
+  // ── ואפשר גם לנצח ──────────────────────────────────────────────────────────
+  // The other half: a player who expands, presses the loud buttons that open
+  // the country, and brakes before the bar catches him must be able to finish
+  // it. Without this, the top bar is a promise the map cannot keep.
+  const s = newGame('win');
+  const go = (pid: string, tid: string) => {
+    const o = offersAt(s, pid).find((x) => x.task.id === tid);
+    if (!o || o.short > 0) return false;
+    start(s, pid, tid);
+    return true;
+  };
+  for (let day = 0; day < 200 && !s.over; day++) {
+    if (s.heat > 55) {
+      for (const p of Object.values(s.places).filter((q) => q.control > 50).slice(0, 3)) {
+        go(p.id, 'quiet');
+      }
+    } else {
+      for (const p of Object.values(s.places)) {
+        if (p.control >= 90 && ['transport', 'power', 'talk', 'city'].includes(p.kind)
+          && !s.marks[`u_${p.id}`] && s.heat < 45) {
+          if (go(p.id, 'use')) s.marks[`u_${p.id}`] = 1;
+        }
+      }
+      for (const p of Object.values(s.places)) {
+        if (p.control > 0 && p.control < 100) go(p.id, 'grow');
+      }
+      const next = Object.values(s.places)
+        .filter((p) => p.found && p.control <= 0)
+        .sort((a, b) => b.guard - a.guard).pop();
+      if (next) go(next.id, 'enter');
+    }
+    for (let i = 0; i < 180; i++) tick(s, 1);
+  }
+  ok(s.over === 'won',
+    `ומי שמתפשט ובולם בזמן מגיע ל־100 (${s.over ?? 'נתקע'} · `
+    + `${israel(s).toFixed(0)}% אחרי ${(s.at / 1440).toFixed(0)} ימים)`);
+
+  // Every corner of the country has to be reachable, or the top bar can never
+  // fill. Seventeen places — Netanya, the Galilee, Ashdod, the Negev, Eilat —
+  // were unreachable for an entire game and nothing said a word.
+  const never = Object.values(s.places).filter((p) => !p.found && p.control <= 0);
+  ok(never.length === 0,
+    `וכל מקום בארץ נפתח בדרך כלשהי${never.length ? ` (${never.length} לא נפתחו: ${never[0].name})` : ''}`);
+}
+
 console.log(bad ? `\n${bad} דברים לא עובדים` : '\nהעולם עונה בחזרה');
 process.exit(bad ? 1 : 0);

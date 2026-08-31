@@ -1,5 +1,6 @@
 
-import { GIFT, KIND_NAME, weight as worthOf } from './sites';
+import { GIFT, KIND_NAME, fadeRate, israel, weight as worthOf } from './sites';
+import { pressure } from './watch';
 import { liveHunts } from './hunt';
 import { at, places as placeCount, things } from './story';
 import type { GameState, Place } from './types';
@@ -174,12 +175,21 @@ export function board(s: GameState): Target[] {
     });
   }
 
-  // Danger first, then what is already moving, then what is worth the most.
+  // Danger first, then what is already moving, then what there is still to do.
+  //
+  // It used to put everything I hold above everything I do not, which on a map
+  // of sixty-one places meant a player scrolled past his own finished work to
+  // find anything worth pressing — the top of his map was the part of the game
+  // he had already won. A place that is entirely mine and entirely quiet has
+  // nothing left to decide, so it sinks; a foothold I have not finished is the
+  // most useful row on the screen, so it rises.
+  const rank = (t: Target) => (t.control > 0 && t.control < 100 ? 0 : t.control <= 0 ? 1 : 2);
   return out.sort((x, y) => {
     if (y.risk !== x.risk) return y.risk - x.risk;
     const moving = (y.now ? 1 : 0) - (x.now ? 1 : 0);
     if (moving) return moving;
-    if (y.mine !== x.mine) return y.mine - x.mine;
+    const step = rank(x) - rank(y);
+    if (step) return step;
     const px = s.places[x.places[0]];
     const py = s.places[y.places[0]];
     return (py ? worthOf(py) : 0) - (px ? worthOf(px) : 0);
@@ -213,7 +223,17 @@ export function bestNow(s: GameState): string {
     .sort((a, b) => (a.cutAt ?? 0) - (b.cutAt ?? 0))[0];
   if (cut) return `הם עומדים לנתק את ${cut.name}. או שתתחפר שם חזק — או שתברח משם בזמן.`;
 
-  if (s.heat >= 60) return 'פס המצוד גבוה מדי. עכשיו זה הזמן לרדת למחתרת, לא להתרחב.';
+  if (s.heat >= 60) {
+    return `המצוד על ${Math.round(s.heat)} וזה כבר מסוכן. `
+      + 'עכשיו זה הזמן לרדת למחתרת במקום הכי חזק שלך, לא להתרחב.';
+  }
+
+  // Past the crossover the bar climbs whatever I do, and a player who has not
+  // noticed is a player about to lose to a number he thought was idle.
+  if (s.heat >= 35 && pressure(s) > 0.0035 / fadeRate(s)) {
+    return `${Math.round(israel(s))}% מהארץ שלך — ומכאן המצוד עולה לבד, `
+      + 'כי כבר כמעט לא נשאר לך מאחורי מה להתחבא. תתפשט מהר, ותרד למחתרת בין לבין.';
+  }
 
   if (s.power.used >= s.power.all) {
     return 'כל הכוח שלך תפוס. כדי להתחיל משהו חדש — תעצור משהו שרץ.';
@@ -237,16 +257,18 @@ export function bestNow(s: GameState): string {
   const helped = Object.values(s.places)
     .filter((p) => p.found && p.control <= 0 && (s.areas[p.areaId]?.control ?? 0) >= 25)
     .sort((a, b) => worthOf(b) - worthOf(a))[0];
+  // Two lines is all the strip gets before it clamps, and a sentence that ends
+  // in an ellipsis mid-word is worse than a shorter one: it was running to
+  // three lines and losing its own point off the bottom.
   if (helped) {
     const area = s.areas[helped.areaId];
-    return `${helped.name} — ובאזור של ${area ? area.name : 'שם'} אתה כבר חזק, `
-      + `אז זה יעלה לך פחות. ${GIFT[helped.kind].held}`;
+    return `${helped.name} — אתה כבר חזק ב${area ? area.name : 'אזור'}, אז זה יעלה פחות.`;
   }
 
   const near = Object.values(s.places)
     .filter((p) => p.found && p.control <= 0)
     .sort((a, b) => worthOf(b) - worthOf(a))[0];
-  if (near) return `הבא בתור: ${near.name}. ${GIFT[near.kind].held}`;
+  if (near) return `הבא בתור: ${near.name} — ${GIFT[near.kind].short}.`;
 
   return 'שקט עכשיו, והמצוד נמוך. זה בדיוק הזמן להתפשט לאזור חדש.';
 }

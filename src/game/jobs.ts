@@ -127,12 +127,13 @@ export function grip(s: GameState, p: Place, by: number) {
     const n = s.places[l.to];
     if (n) n.found = true;
   }
+  // Getting in somewhere for the first time is worth its own line. Growing is
+  // not: `afterJob` already writes the sentence about what changed here, and
+  // two lines about one push read as a stutter — the feed used to carry
+  // "…מ־70 אחוז ל־93" and then "…93 אחוז ממנו כבר שלי" back to back.
   if (was === 0) {
     bus.emit('place:taken', p.id);
     bus.emit('sfx', 'take');
-    say(s, 'me', `${p.name} — אני בפנים.`);
-  } else {
-    say(s, 'me', `${p.name} — ${Math.round(p.control)} אחוז ממנו כבר שלי.`);
   }
 }
 

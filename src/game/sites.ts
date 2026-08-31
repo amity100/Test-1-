@@ -270,7 +270,12 @@ export function hold(s: GameState): Hold {
         h.quiet[p.areaId] = Math.min(3, (h.quiet[p.areaId] ?? 0) + 0.8 * f);
         break;
       case 'homes':
-        h.fade *= 1 - 0.22 * f;
+        // Each neighbourhood makes forgetting faster, and they compound — but
+        // never past half. Left uncapped, eight of them took the decay to four
+        // times its base and the hunt bar could not rise at all: a patient
+        // player took sixty per cent of Israel with nobody ever looking for
+        // him, which is not a race, it is a walk with a scoreboard.
+        h.fade = Math.max(0.5, h.fade * (1 - 0.22 * f));
         break;
       case 'money':
         h.power += 0.8 * f;
@@ -313,6 +318,7 @@ export function reached(s: GameState): Set<string> {
  * find out what else there is.
  */
 export function openUp(s: GameState, tell: (text: string) => void) {
+  // A wire out of somewhere I hold shows me what is on the other end of it.
   for (const p of Object.values(s.places)) {
     if (p.control < 40) continue;
     for (const l of p.links) {
@@ -320,6 +326,31 @@ export function openUp(s: GameState, tell: (text: string) => void) {
       if (!n || n.found) continue;
       n.found = true;
       tell(`מ${p.name} אני רואה עכשיו את ${n.name}. ${l.note}`);
+    }
+  }
+
+  // And a region I am properly inside opens the regions it leads to.
+  //
+  // This is what `Area.opens` was always supposed to mean, and it was doing
+  // nothing: it raised a number nobody could see, while a place only ever
+  // became findable through a wire from another place. On a map of one street
+  // that was survivable. On a map of the whole country it capped a good player
+  // at forty-four places out of sixty-one, with seventeen of them — Netanya,
+  // the Galilee, Ashdod, the Negev, Eilat — unreachable for the entire game,
+  // which quietly made the top bar impossible to fill.
+  //
+  // Half of a region is the price, so the country unfolds the way the player
+  // asked for it to: take a region, and the next ones appear on the map.
+  for (const a of Object.values(s.areas)) {
+    if (a.control < 50) continue;
+    for (const id of a.opens) {
+      const next = s.areas[id];
+      if (!next) continue;
+      const inside = Object.values(s.places).filter((q) => q.areaId === id && !q.found);
+      if (!inside.length) continue;
+      for (const q of inside) q.found = true;
+      tell(`${a.name} כבר שלי, ומכאן נפתחת הדרך ל${next.name}: `
+        + `${inside.map((q) => q.name).join(' · ')}.`);
     }
   }
 }

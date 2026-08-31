@@ -13,8 +13,8 @@ import { GIFT, KIND_NAME } from '../game/sites';
 import { answer, liveHunts, rowsOf, scriptOf, stillNeeds } from '../game/hunt';
 import { board, bestNow, pointOf } from '../game/board';
 import { israel } from '../game/sites';
-import { mins as minsWord, reach, to as toPlace } from '../game/story';
-import { STORIES, asking, coming, leading, rungOf, saysNow } from '../game/watch';
+import { at as atName, mins as minsWord, reach, to as toPlace } from '../game/story';
+import { STORIES, asking, coming, driftSays, leading, rungOf, saysNow } from '../game/watch';
 import { AREA_KIND_NAME, RUNG_NAME, VERB_NAME, VERB_SAYS, VOICE_NAME } from '../game/types';
 import type { GameState, Verb } from '../game/types';
 import { esc, h } from './dom';
@@ -141,6 +141,24 @@ export class UI {
     bus.on('job:done', (id) => {
       const j = this.state.jobs.find((x) => x.id === id);
       if (j && j.taskId === 'use') { this.world.burst(j.placeId); this.world.shake(0.35); }
+    });
+    // Somebody has arrived and started a clock. Nothing was listening to this,
+    // and at eight world-minutes to the second a fifty-minute visit gave the
+    // player about six real seconds to read a stranger's name, understand four
+    // answers and press one — the tensest moment in the game was over before it
+    // could be played. Stopping time is free in this game and the player is
+    // told to do it often; here the game does it for him.
+    bus.on('hunt:started', (id) => {
+      const h = this.state.hunts.find((x) => x.id === id);
+      const p = h ? this.state.places[h.placeId] : undefined;
+      const who = h ? this.state.people[h.whoId] : undefined;
+      this.state.speed = 0;
+      this.dirty = true;
+      this.world.shake(0.7);
+      audio.play('alert');
+      if (p) this.world.goTo(p, true);
+      this.toast(who && p ? `${who.name} ${who.he ? 'הגיע' : 'הגיעה'} ${atName(p.name)}`
+        : 'מישהו הגיע למקום שלי', 'bad', '⏱');
     });
     bus.on('rung:changed', (r) => {
       this.world.alert(r / 5);
@@ -698,6 +716,7 @@ export class UI {
             <div class="thbar"><i style="width:${Math.round(s.heat)}%"></i></div>
             <em>כשזה יתמלא — יפסיקו לחפש הסבר ויתחילו לחפש אותי.</em>
           </div>
+          <p class="need">${esc(driftSays(s))}</p>
           <p class="need">מה הם עומדים לעשות</p>
         </div>
         <div class="txt list">${plan}</div>
@@ -758,6 +777,9 @@ export class UI {
           הכי הרבה — והוא גם הכי רועש. מתי להרעיש, זו כל ההחלטה.</p>
           <p><b>מתחת לכל כפתור כתוב מה מרוויחים ומה מסתכנים.</b> בכחול מה זה נותן,
           באדום כמה זה יקפיץ את המצוד. אין הפתעות.</p>
+          <p><b>הפס האדום עולה גם לבד.</b> ככל שיותר מהארץ שלי, כך פחות נשאר להתחבא
+          מאחוריו — בהתחלה הם שוכחים מהר יותר משהם לומדים, ובאמצע המשחק זה מתהפך.
+          לכן זה מרוץ ולא טיול.</p>
           <p><b>לרדת למחתרת</b> זה הכפתור היחיד שמוריד את המצוד. מי שרק דוהר — נתפס.</p>
           <p><b>הם מנסים להסביר.</b> משהו שנראה להם כמו תקלת חשמל כמעט לא מקרב אותם
           אליי; משהו שאין לו שום הסבר — מקרב מיד. לכן לא כל רעש עולה אותו דבר.</p>
@@ -865,7 +887,7 @@ export class UI {
     const rows = rowsOf(s, h);
     // Only the parts that change every minute are rewritten every minute; the
     // rest is left alone so a button never moves under a thumb mid-press.
-    const key = `${h.id}:${rows.map((r) => `${r.met}${r.can}`).join('')}:${need}`;
+    const key = `${h.id}:${rows.map((r) => `${r.met}${r.can}`).join('')}:${need}:${s.speed === 0}`;
     if (el.dataset.key !== key) {
       el.dataset.key = key;
       el.classList.remove('hidden');
@@ -874,9 +896,14 @@ export class UI {
           <span class="kick">${esc(sc.name)}</span>
           <p class="hsays">${esc(sc.says(who, p))}</p>
           <div class="hclock"><b id="hleft"></b><i id="hbar"></i></div>
-          <p class="hneed">${need === 1
-            ? 'צריך עוד דבר אחד מהרשימה כדי שזה ייגמר טוב.'
-            : `צריך עוד ${need} דברים מהרשימה כדי שזה ייגמר טוב.`}</p>
+          <p class="hneed">${need === 0
+            ? 'זהו — עשיתי מספיק. עכשיו רק צריך לתת לשעון להיגמר.'
+            : need === 1
+              ? 'צריך עוד דבר אחד מהרשימה כדי שזה ייגמר טוב.'
+              : `צריך עוד ${need} דברים מהרשימה כדי שזה ייגמר טוב.`}</p>
+          ${s.speed === 0
+            ? '<p class="hstop">עצרתי את הזמן בשבילך. תבחר בשקט — השעון ימשיך רק כשתריץ אותו.</p>'
+            : ''}
           <div class="hrows">${rows.map((r) => `
             <button class="hrow ${r.met ? 'met' : ''} ${r.can ? 'can' : 'cant'}"
               data-do="answer" data-arg="${h.id}|${r.id}" ${r.met || !r.can ? 'disabled' : ''}>

@@ -1,6 +1,6 @@
 import { RNG } from '../core/rng';
 import { bus } from './bus';
-import { at, tell, to } from './story';
+import { at, tell, to, v } from './story';
 import type { GameState, Hunt, Place, Person } from './types';
 
 /**
@@ -102,16 +102,6 @@ function empty(s: GameState, p: Place) {
   });
 }
 
-
-/**
- * Bend a verb the right way round somebody.
- *
- * `v(who, 'הגיע', 'הגיעה')` — because a game with eight people in it, all of
- * whom it knows by name, has no excuse for writing "הגיע/ה".
- */
-function v(who: Person, male: string, female: string): string {
-  return who.he ? male : female;
-}
 
 // ── the answers the scripts share ───────────────────────────────────────────
 
@@ -227,11 +217,15 @@ const AWAY: Answer = {
   lacks: (s, p) => {
     const here = p.peopleIds
       .map((id) => s.people[id])
-      .filter((q) => q && !q.gone && (q.awayUntil ?? 0) <= s.at)
-      .map((q) => q.name);
-    return here.length
-      ? `${here.slice(0, 2).join(' ו')} עומד/ים שם עכשיו. צריך לחכות שילכו.`
-      : 'צריך שהחדר יתרוקן.';
+      .filter((q) => q && !q.gone && (q.awayUntil ?? 0) <= s.at);
+    if (!here.length) return 'צריך שהחדר יתרוקן.';
+    if (here.length === 1) {
+      const q = here[0];
+      return `${q.name} ${v(q, 'עומד', 'עומדת')} שם עכשיו. `
+        + `צריך לחכות ש${v(q, 'ילך', 'תלך')}.`;
+    }
+    return `${here.slice(0, 2).map((q) => q.name).join(' ו')} עומדים שם עכשיו. `
+      + 'צריך לחכות שילכו.';
   },
 };
 

@@ -17,6 +17,7 @@
 import { newGame, shape, tick } from '../src/game/game';
 import { Offer, offersAt, start, stop } from '../src/game/jobs';
 import { SHAPE_NAME } from '../src/game/grow';
+import { israel } from '../src/game/sites';
 import { rungOf } from '../src/game/watch';
 import { answer, liveHunts, rowsOf, stillNeeds } from '../src/game/hunt';
 import type { GameState } from '../src/game/types';
@@ -149,7 +150,13 @@ const smart = play({
   },
   drop: oldestJob,
 }, 30);
-ok(!smart.over, `מחושב שרד חודש (חשד ${Math.round(smart.heat)}, דרגה ${rungOf(smart)})`);
+// A month is a long time now. The country itself pushes back the more of it I
+// hold, so surviving thirty days while taking sixty-one places is no longer the
+// bar — reaching the end of the race is. Either ending is a life well lived;
+// what must never happen is this player being wiped out or standing still.
+ok(smart.over !== 'lost' || israel(smart) >= 85,
+  `מחושב הגיע רחוק (${israel(smart).toFixed(0)}% מישראל, חשד ${Math.round(smart.heat)}, `
+  + `${smart.over === 'won' ? 'ניצח' : smart.over === 'lost' ? 'נתפס בסוף' : 'עוד רץ'})`);
 ok(held(smart) > held(quiet), `   וגדל הרבה יותר מהשקט (${held(smart)} מקומות מול ${held(quiet)})`);
 ok(total(smart) > total(quiet) * 2, `   ובעומק (${total(smart)} מול ${total(quiet)})`);
 

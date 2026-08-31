@@ -1,6 +1,18 @@
 import { bus } from './bus';
 import { israel as israelNow } from './sites';
-import type { GameState, Place, Voice } from './types';
+import type { GameState, Person, Place, Voice } from './types';
+
+/**
+ * Bend a verb the right way round somebody.
+ *
+ * `v(who, 'הגיע', 'הגיעה')` — because a game with eight people in it, all of
+ * whom it knows by name, has no excuse for writing "הגיע/ה". It lived inside
+ * the hunt, which is why three lines outside the hunt were still saying
+ * "דנה הלך/ה" to a player who has known Dana by name since the first night.
+ */
+export function v(who: Person, male: string, female: string): string {
+  return who.he ? male : female;
+}
 
 /**
  * Everything that happens, written down.
@@ -104,46 +116,61 @@ export function snap(s: GameState, p: Place): Snap {
  * bug the player was complaining about.
  */
 export function afterJob(s: GameState, p: Place, was: Snap, label: string) {
-  const bits: string[] = [];
-
+  // One thing happened, so this says one thing.
+  //
+  // It used to bolt together every number that moved, and the result read like
+  // a receipt: "עיריית ירושלים — 70 אחוז הפכו ל־93. אני כבר מכיר את עיריית
+  // ירושלים מבפנים ומבחוץ. נאחזתי בעיריית ירושלים עמוק יותר." — the same name
+  // three times in one breath, which is not how anybody says anything. The
+  // headline is whatever moved most; the rest is a short tail, and never
+  // repeats the name the headline already used.
   const grip = p.control - was.control;
-  if (grip >= 1) {
-    bits.push(was.control <= 0
-      ? `חדרתי ${to(p.name)}. יש לי שם אחיזה ראשונה`
-      // A digit glued straight onto a lamed reads as a typo, and in a
-      // right-to-left line it drags its neighbours around with it.
-      : `${p.name} — ${Math.round(was.control)} אחוז הפכו ל־${Math.round(p.control)}`);
-  } else if (grip <= -1) {
-    bits.push(`איבדתי אחיזה ${at(p.name)} — נשארתי עם ${Math.round(p.control)} אחוז`);
-  }
-
   const eyes = p.seen - was.seen;
-  if (eyes >= 3) {
-    bits.push(p.seen >= 60
-      ? `אני כבר מכיר את ${p.name} מבפנים ומבחוץ`
-      : `אני רואה עכשיו יותר ממה שקורה ${at(p.name)}`);
-  }
-
   const learned = s.info - was.info;
-  if (learned >= 1) bits.push('למדתי משהו חדש שיעזור לי בהמשך');
-
   const quiet = was.heat - p.heat;
-  if (quiet >= 4) bits.push(`${p.name} — הם כבר פחות מסתכלים לשם`);
-
   const deeper = p.dug - was.dug;
-  if (deeper >= 3) bits.push(`נאחזתי ${at(p.name)} עמוק יותר. לעקור אותי מכאן ייקח להם הרבה יותר`);
-
   const stronger = s.power.all - was.power;
-  if (stronger >= 1) bits.push('יש לי עכשיו כוח לעוד משהו במקביל');
 
-  if (!bits.length) {
+  let head: string;
+  if (grip >= 1) {
+    head = was.control <= 0
+      ? `חדרתי ${to(p.name)}. יש לי שם אחיזה ראשונה`
+      : p.control >= 100
+        ? `${p.name} כולו שלי עכשיו`
+        // A digit glued straight onto a lamed reads as a typo, and in a
+        // right-to-left line it drags its neighbours around with it.
+        : `${p.name} — מ־${Math.round(was.control)} אחוז ל־${Math.round(p.control)}`;
+  } else if (grip <= -1) {
+    head = `איבדתי אחיזה ${at(p.name)} — נשארתי עם ${Math.round(p.control)} אחוז`;
+  } else if (quiet >= 4) {
+    head = `מחקתי אחריי ${at(p.name)}. הם כבר פחות מסתכלים לשם`;
+  } else if (eyes >= 3) {
+    head = p.seen >= 60
+      ? `אני מכיר עכשיו את ${p.name} מבפנים ומבחוץ`
+      : `אני רואה עכשיו יותר ממה שקורה ${at(p.name)}`;
+  } else if (deeper >= 3) {
+    head = `נאחזתי ${at(p.name)} עמוק יותר`;
+  } else if (stronger >= 1) {
+    head = `יש לי עכשיו כוח לעוד משהו במקביל`;
+  } else if (learned >= 1) {
+    head = 'למדתי משהו חדש שיעזור לי בהמשך';
+  } else {
     // Something ran to the end and moved nothing. Saying so out loud is better
     // than pretending, and it is how a wasted hour becomes a lesson.
     tell(s, 'me', `${label} — הסתיים, אבל לא יצא מזה שום דבר מורגש.`, 0, p.id);
     return;
   }
-  tell(s, 'me', `${bits.join('. ')}.`, grip >= 1 ? 1 : 0, p.id);
+
+  // At most one more clause, and only if it says something the headline did not.
+  const tail: string[] = [];
+  if (grip >= 1 && deeper >= 3) tail.push('לעקור אותי מכאן ייקח להם הרבה יותר');
+  else if (grip >= 1 && stronger >= 1) tail.push('ויש לי עכשיו כוח לעוד משהו במקביל');
+  else if (grip >= 1 && eyes >= 3 && p.seen >= 60) tail.push('אני כבר מכיר את המקום מבפנים');
+  else if (learned >= 1 && grip < 1) tail.push('למדתי שם משהו שיעזור לי בהמשך');
+
+  tell(s, 'me', `${[head, ...tail.slice(0, 1)].join('. ')}.`, grip >= 1 ? 1 : 0, p.id);
 }
+
 
 /**
  * What the people in the room felt.

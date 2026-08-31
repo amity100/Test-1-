@@ -1,4 +1,5 @@
 import { RNG } from '../core/rng';
+import { v } from './story';
 import type { GameState, Person, Place } from './types';
 
 /**
@@ -136,7 +137,7 @@ export function movePeople(state: GameState, say: (who: 'world', text: string) =
       say('world', `${who.name} עכשיו ב${at.name}. ${now(state)}.`);
     } else if (!at && from && from.seen >= 30) {
       who.knownAt = state.at;
-      say('world', `${who.name} הלך/ה. ${now(state)}.`);
+      say('world', `${who.name} ${v(who, 'הלך', 'הלכה')}. ${now(state)}.`);
     }
   }
 }

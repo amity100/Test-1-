@@ -3,8 +3,8 @@ import { bus } from './bus';
 import { dayOf, minuteOfDay, now } from './clock';
 import { maybeHunt } from './hunt';
 import { say } from './jobs';
-import { at, feltIt } from './story';
-import { fadeRate } from './sites';
+import { at, feltIt, v } from './story';
+import { fadeRate, israel } from './sites';
 import type { GameState, Look, Move, Place, Rung } from './types';
 
 /**
@@ -109,7 +109,8 @@ export function noticed(s: GameState, p: Place, amount: number, look: Look) {
     if (r.next() < who.notices * (amount / 5)) {
       who.worry = Math.min(100, who.worry + amount * 6);
       who.saw = `משהו ${at(p.name)}`;
-      say(s, 'them', `${who.name} ראה/תה משהו ${at(p.name)}, ולא הבין/ה מה.`);
+      say(s, 'them', `${who.name} ${v(who, 'ראה', 'ראתה')} משהו ${at(p.name)}, `
+        + `ולא ${v(who, 'הבין', 'הבינה')} מה.`);
     }
   }
 
@@ -369,7 +370,7 @@ export function peopleTalk(s: GameState) {
   } else if (worried.length === 1) {
     const q = worried[0];
     // Somebody afraid tells a manager. Somebody curious goes and looks themselves.
-    if (q.mood === 'afraid') { s.heat = Math.min(100, s.heat + 4); say(s, 'them', `${q.name} סיפר/ה למישהו מה ראה/תה.`); }
+    if (q.mood === 'afraid') { s.heat = Math.min(100, s.heat + 4); say(s, 'them', `${q.name} ${v(q, 'סיפר', 'סיפרה')} למישהו מה ${v(q, 'ראה', 'ראתה')}.`); }
     else if (q.mood === 'curious') { say(s, 'world', `${q.name} התחיל/ה לחפש לבד מה קרה שם.`); q.worry += 6; }
     else q.worry = Math.max(0, q.worry - 12);
   }
@@ -379,7 +380,64 @@ export function peopleTalk(s: GameState) {
 }
 
 /** Everything cools a little all the time. Doing nothing is a real move. */
+/**
+ * The country noticing that it is being taken.
+ *
+ * Playing it through exposed the hole under the whole game: a patient player
+ * took thirty-seven places — sixty-one per cent of Israel — over five nights,
+ * and the hunt bar never once left zero. Growing is quiet, quiet noise lands on
+ * an explanation people already believe, and forgetting outran all of it. Two
+ * bars were drawn as a race in which only one of them could move.
+ *
+ * So the second bar now has an engine of its own, and it is the first bar.
+ * Every place that answers to me is a place somebody eventually wonders about,
+ * and the more of the country that is mine the less there is left to hide
+ * behind. Below about a fifth of Israel forgetting still wins and the opening
+ * stays calm; past half of it the bar climbs whatever I do, and going
+ * underground stops being a thing I may do and becomes a thing I must.
+ *
+ * It is deliberately a function of how much I hold and nothing else: the player
+ * can read it off the bar he is already watching, and every place he takes is a
+ * decision with a cost on the screen rather than a free square.
+ */
+export function pressure(s: GameState): number {
+  const mine = israel(s) / 100;
+  // Squared, so the first few places are nearly free and the last few are not.
+  // Tuned against the decay it races: under about a third of Israel forgetting
+  // still wins and the opening is calm, they cross around a third, and past
+  // half the bar climbs on its own however quietly I move.
+  return 0.036 * mine * mine * (s.marks.hard_to_find ? 0.8 : 1);
+}
+
+/**
+ * Why the bar is moving when I am not touching anything, in one sentence.
+ *
+ * The pressure is the fairest rule in the game and it would be the cruellest
+ * one to hide: a number that climbs on its own with no stated reason is exactly
+ * the "לא ברור לי מה כל דבר יכול לגרום" the player complained about. So it says
+ * which way it is going and why, in the same breath.
+ */
+export function driftSays(s: GameState): string {
+  const up = pressure(s) * 60;
+  const down = (0.0035 / fadeRate(s)) * 60;
+  const mine = Math.round(israel(s));
+  if (up < down * 0.8) {
+    return `${mine}% מהארץ שלי — עדיין מעט מדי בשביל שישימו לב מעצמם. `
+      + 'בינתיים הם שוכחים יותר מהר ממה שהם לומדים.';
+  }
+  if (up < down * 1.2) {
+    return `${mine}% מהארץ שלי. מכאן והלאה הם לומדים בערך באותו קצב שהם שוכחים — `
+      + 'כל רעש נוסף כבר נשאר.';
+  }
+  const hours = Math.max(1, Math.round((100 - s.heat) / Math.max(0.1, up - down)));
+  return `${mine}% מהארץ כבר שלי, וזה בעצמו מה שמעלה את הפס: ככל שיש לי יותר, `
+    + `כך פחות נשאר להתחבא מאחוריו. בקצב הזה ובלי לרדת למחתרת — כ־${hours} שעות עד הסוף.`;
+}
+
 export function cool(s: GameState, mins: number) {
+  // What I hold pushes back before forgetting gets its turn.
+  s.heat = Math.min(100, s.heat + mins * pressure(s));
+
   // Everywhere I can disappear into makes forgetting faster, which is what a
   // neighbourhood is actually for.
   s.heat = Math.max(0, s.heat - mins * 0.0035 / fadeRate(s));
