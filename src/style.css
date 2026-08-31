@@ -1183,6 +1183,11 @@ body.is-mobile .objectives ul li { min-height: 46px; }
 }
 .boardsheet .tg .gain, .txt .holds { color: var(--cy); }
 .boardsheet .tg .risk { color: #ffb3c0; }
+/* On the map, under what a place is: what holding it actually changes. This is
+   the line a player picks his next target with. */
+.boardsheet .tg .gives {
+  display: block; font-size: 11px; line-height: 1.5; margin-top: 3px; color: var(--cy);
+}
 .txt .holds { font-size: 11.5px; line-height: 1.55; margin-top: 4px; }
 
 /* A place's description is flavour; the choices under it are the game. At

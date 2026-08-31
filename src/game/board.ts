@@ -35,6 +35,8 @@ export interface Target {
   found: number;
   /** One line: what having this gives me that nothing else does. */
   worth: string;
+  /** And the same thing as a number: what holding it changes, mechanically. */
+  gives: string;
   /** One line: what is going on there right now, or nothing. */
   now: string | null;
   /** 0 quiet · 1 somebody is looking · 2 they are working on it · 3 it is going away */
@@ -143,6 +145,7 @@ export function board(s: GameState): Target[] {
       mine: p.control > 0 ? 1 : 0,
       found: 1,
       worth: GIFT[p.kind].says,
+      gives: GIFT[p.kind].held,
       now: nowLine(s, [p]),
       risk: riskOf(s, [p]),
       seen: p.seen,
@@ -164,6 +167,7 @@ export function board(s: GameState): Target[] {
       control: 0, heat: 0, mine: 0, found: 0,
       worth: `${dark.slice(0, 3).map((a) => a.name).join(' · ')}`
         + `${dark.length > 3 ? ' ועוד' : ''} — כדי להגיע לשם צריך קודם מקום שיוצא לשם.`,
+      gives: '',
       now: null, risk: 0, seen: 0,
       places: [],
       x: 0, z: 0,

@@ -913,6 +913,7 @@ export class UI {
         <b>${esc(t.name)}${t.control > 0 ? ` · ${Math.round(t.control)}%` : ''}</b>
         <em>${esc(t.where)}</em>
         <u>${esc(t.worth)}</u>
+        ${t.gives ? `<span class="gives">${esc(t.gives)}</span>` : ''}
         ${t.now ? `<i class="tnow">${esc(t.now)}</i>` : ''}
       </button>`;
     }).join('');
