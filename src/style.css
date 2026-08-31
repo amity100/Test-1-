@@ -1169,6 +1169,32 @@ body.is-mobile .objectives ul li { min-height: 46px; }
   color: var(--cy-2); margin-top: 3px; line-height: 1.45;
 }
 .pick .op.poor { opacity: .55; }
+
+/* ── מרוויח / מסתכן ────────────────────────────────────────────────────────
+   Two lines that answer the only two questions a player has before pressing
+   anything, in the two colours the whole game already uses for them: cyan is
+   me growing, red is the hunt closing in. */
+.pick .op .gain, .pick .op .risk {
+  display: block; font-size: 11px; line-height: 1.5; margin-top: 3px;
+}
+.pick .op .gain { color: var(--cy); }
+.boardsheet .tg .gain, .boardsheet .tg .risk {
+  display: block; font-size: 11.5px; line-height: 1.55; margin-top: 3px;
+}
+.boardsheet .tg .gain, .txt .holds { color: var(--cy); }
+.boardsheet .tg .risk { color: #ffb3c0; }
+.txt .holds { font-size: 11.5px; line-height: 1.55; margin-top: 4px; }
+
+/* A place's description is flavour; the choices under it are the game. At
+   reading-essay size the flavour pushed every button below the fold on a
+   phone, so a player met three lines of prose before a single thing he could
+   press. It keeps its own voice, one size down. */
+.boardsheet .txt > p { font-size: 12.5px; line-height: 1.65; margin-bottom: 6px; }
+.boardsheet > .txt:first-of-type { margin: 10px 0 4px; }
+.pick .op .risk { color: #ffb3c0; }
+.pick .holds {
+  font-size: 11px; color: var(--cy-2); line-height: 1.5; margin: -4px 0 9px;
+}
 .pick .x {
   position: absolute; inset-inline-end: 10px; top: 8px; z-index: 2;
   width: 30px; height: 30px; border-radius: 50%;

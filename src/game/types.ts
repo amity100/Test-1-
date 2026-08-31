@@ -174,7 +174,9 @@ export type AreaKind =
   | 'talking'   // תקשורת
   | 'homes'     // שכונות מגורים
   | 'city'      // עירייה
-  | 'cold';     // חדרים קרים מלאים במכונות
+  | 'cold'      // חדרים קרים מלאים במכונות
+  | 'water'     // אגם, משאבות, קווי מים
+  | 'power';    // תחנות כוח, טורבינות, שדות סולאריים
 
 export const AREA_KIND_NAME: Record<AreaKind, string> = {
   work: 'בניינים של חברות',
@@ -184,6 +186,8 @@ export const AREA_KIND_NAME: Record<AreaKind, string> = {
   homes: 'שכונת מגורים',
   city: 'עירייה',
   cold: 'חדר קר מלא במכונות',
+  water: 'מים',
+  power: 'חשמל',
 };
 
 export interface Area {

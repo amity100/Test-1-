@@ -119,6 +119,34 @@ export function noticed(s: GameState, p: Place, amount: number, look: Look) {
 }
 
 /**
+ * How much the hunt bar will move if I do something this loud, here.
+ *
+ * The same arithmetic `noticed` runs, read out loud before the player commits
+ * instead of after. It is the single most important number in the game and it
+ * used to be printed as "3 יראו", which says nothing: three people? three what?
+ * A player cannot weigh a risk written in a unit nobody explained.
+ *
+ * The gap between the two branches is the whole strategy of the game — noise
+ * that lands on an explanation people already believe is nearly free, and noise
+ * that lands on nothing costs ten times as much — so it has to be visible.
+ */
+export function wouldRise(s: GameState, amount: number, look: Look): number {
+  if (amount <= 0) return 0;
+  const slow = s.marks.hard_to_find ? 0.65 : 1;
+  const covered = STORIES.some((t) => !s.dead.includes(t.id) && t.holds.includes(look));
+  return amount * (covered ? 0.15 : 1.6) * slow;
+}
+
+/** The same number as a sentence a person can act on. */
+export function riseSays(s: GameState, amount: number, look: Look): string {
+  const up = wouldRise(s, amount, look);
+  if (up < 0.4) return 'המצוד כמעט לא יזוז';
+  if (up < 1.2) return `המצוד יעלה קצת (${up.toFixed(1)})`;
+  if (up < 3) return `המצוד יעלה ב־${up.toFixed(1)}`;
+  return `המצוד יקפוץ ב־${Math.round(up)} — זה רועש`;
+}
+
+/**
  * An explanation dies when something it took the blame for turns out to be
  * something it cannot possibly cover. Everything it was holding lands on me at
  * once, which makes burning one a knife with no handle — and sometimes exactly

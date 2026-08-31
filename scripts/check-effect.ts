@@ -120,7 +120,7 @@ function world(seed: string, forTask?: string): GameState {
   s.people.dana.gone = false;
   s.people.dana.atPlaceId = 'atidim';
   s.places.atidim.peopleIds = ['dana'];
-  s.places.dana_home.peopleIds = ['dana'];
+  s.places.bavli.peopleIds = ['dana'];
   sync(s);
   return s;
 }

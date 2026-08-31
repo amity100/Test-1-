@@ -3,6 +3,7 @@ import { CATALOGUE, waysInto } from './catalogue';
 import { crowd, minuteOfDay, now } from './clock';
 import { discount, poolFrom } from './sites';
 import { afterJob, at, snap, tell } from './story';
+import { riseSays } from './watch';
 import type { GameState, Job, Look, Place, PlaceKind, Verb } from './types';
 
 /**
@@ -38,8 +39,17 @@ export interface Task {
   textFor?(p: Place): string;
   /** One sentence: what will actually happen. */
   says: string;
-  /** What I get out of it. */
+  /** What I get out of it, in general. */
   gives: string;
+  /**
+   * What I get out of it *here*, with this place's actual numbers in it.
+   *
+   * The player's complaint, in his words: "לא ממש ברור לי מה היתרון ומה הסיכון
+   * בכל פעולה". A general promise cannot answer that — "מקום חדש על המפה שלי"
+   * is true of getting into anywhere. "אחרי זה 18% מהבנק הגדול יהיה שלי" is a
+   * sentence you can weigh against the noise it costs.
+   */
+  gainFor?(s: GameState, p: Place): string;
   /** Power held while it runs. */
   power: number;
   /** Minutes at the base price. 0 means it runs until I stop it. */
@@ -83,6 +93,10 @@ export interface Offer {
   noise: number;
   /** Why it costs what it costs. Plain sentences, always shown. */
   why: string[];
+  /** What I get out of it, in numbers I can check afterwards. */
+  gain: string;
+  /** What it does to the hunt bar, in the same units the bar is in. */
+  risk: string;
   /** The one thing that would make it cheaper. Never a requirement. */
   cheaper: string | null;
   /** Power I would have to free up first. 0 when I can start it now. */
@@ -268,6 +282,8 @@ export function priceOf(s: GameState, p: Place, t: Task, above = false): Offer {
   return {
     task: t, power, minutes: mins, noise,
     why,
+    gain: t.gainFor ? t.gainFor(s, p) : t.gives,
+    risk: riseSays(s, noise, t.look),
     cheaper: cheaperLine(s, p, t, people),
     short: Math.max(0, power - (s.power.all - s.power.used)),
   };

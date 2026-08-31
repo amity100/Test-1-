@@ -343,17 +343,23 @@ export class UI {
     const offers = offersAt(s, p.id);
     const running = s.jobs.filter((j) => j.placeId === p.id).length;
     const key = `${p.id}|${Math.round(p.control)}|${head}|${running}|`
-      + offers.map((o) => `${o.task.id}${o.minutes}${o.noise}${o.short}`).join(',');
+      + offers.map((o) => `${o.task.id}${o.minutes}${o.noise}${o.short}${o.gain}${o.risk}`).join(',');
     if (pick.dataset.key === key) return;
     pick.dataset.key = key;
 
+    // Two lines under every button, always, in the same order: what I get out
+    // of it, and what it costs me on the hunt bar. The player said it straight —
+    // "לא ממש ברור לי מה היתרון ומה הסיכון בכל פעולה" — and he was reading a row
+    // that gave him a poem and the number 3.
     const rows = offers.map((o) => `
       <button class="op ${o.short > 0 ? 'poor' : ''}" data-do="doat"
         data-arg="${p.id}|${o.task.id}|0">
         <b>${SIGN[o.task.verb]} ${esc(o.task.textFor?.(p) ?? o.task.text)}</b>
         <em>${esc(o.task.says)}</em>
+        <span class="gain">מרוויח · ${esc(o.gain)}</span>
+        <span class="risk">מסתכן · ${esc(o.risk)}</span>
         <u>${o.power} כוח · ${esc(o.task.minutes === 0 ? 'עד שאעצור' : minsWord(o.minutes))}`
-        + ` · ${o.noise} יראו${o.short > 0 ? ` · חסר ${o.short} כוח` : ''}</u>
+        + `${o.short > 0 ? ` · חסר ${o.short} כוח` : ''}</u>
         ${o.cheaper ? `<i class="ch">${esc(o.cheaper)}</i>` : ''}
       </button>`).join('');
 
@@ -361,6 +367,7 @@ export class UI {
       <button class="x" data-do="close">✕</button>
       <span class="who">${esc(p.name)} · ${Math.round(p.control)}% שלי · ${esc(head)}</span>
       <p class="worth">${esc(GIFT[p.kind].says)}</p>
+      <p class="holds">${esc(GIFT[p.kind].held)}</p>
       <div class="ops">${rows || '<p class="need">אין כאן מה לעשות כרגע.</p>'}</div>`;
   }
 
@@ -721,22 +728,36 @@ export class UI {
       </div>`);
   }
 
+  /**
+   * The screen a confused player opens, so it answers the questions a confused
+   * player actually has, in the order he has them: what am I trying to do, what
+   * do the two words on every button mean, what makes a thing cheap, and what
+   * makes it loud. It used to open with "nothing is locked" and end by
+   * explaining a ring of buttons around an object — a menu from two rewrites
+   * ago that has not existed for a long time.
+   */
   private showHelp() {
     this.modal(`
       <div class="sheet wide">
         <span class="kick">איך משחקים</span>
-        <h2>חמישה דברים</h2>
+        <h2>המטרה, ואיך מגיעים אליה</h2>
         <div class="txt">
-          <p><b>שום דבר לא נעול.</b> כל אפשרות אפשר להתחיל תמיד. מה שמשתנה זה המחיר —
-          כמה כוח, כמה זמן, וכמה יראו. מתחת לכל בחירה כתוב גם מה יוזיל אותה.</p>
-          <p><b>כוח תפוס, לא מבוזבז.</b> כל דבר שרץ מחזיק חלק מהכוח שלי כל עוד הוא רץ.
-          הרצועה למטה מראה מה רץ; נגיעה עוצרת ומחזירה את הכוח מיד.</p>
-          <p><b>השעון לא מחכה.</b> אנשים נכנסים ויוצאים לפי השעה. נגיעה בשעון עוצרת
-          את הזמן או מאיצה אותו — לעצור זה בחינם, ותמיד כדאי לעצור כדי לחשוב.</p>
-          <p><b>הם מנסים להסביר.</b> הם לא סופרים רעש. משהו שנראה כמו תקלת חשמל כמעט
-          לא מקרב אותם אליי; משהו שאין לו שום הסבר — מקרב מיד.</p>
-          <p><b>לנווט.</b> גרירה מסובבת · צביטה מקרבת · שתי נגיעות על מקום ריק מתרחקות.
-          נגיעה על חפץ פותחת סביבו טבעת של כל מה שאפשר לעשות לו.</p>
+          <p><b>שני פסים למעלה.</b> הכחול — כמה מישראל שלי; מגיע ל־100, ניצחתי.
+          האדום — המצוד; מגיע ל־100, נתפסתי. כל כפתור מזיז לפחות אחד מהם.</p>
+          <p><b>להשתלט על מקום זה שני שלבים.</b> קודם <b>לחדור</b> — ואז 18% ממנו שלי.
+          אחר כך <b>להשתלט</b> שוב ושוב עד 100%. ככל שהמקום יותר שלי, כך הוא נותן יותר
+          וכל פעולה בו עולה פחות.</p>
+          <p><b>לכל מקום יש כפתור מיוחד משלו.</b> לשדר, לכבות אור, להזרים כסף. הוא נותן
+          הכי הרבה — והוא גם הכי רועש. מתי להרעיש, זו כל ההחלטה.</p>
+          <p><b>מתחת לכל כפתור כתוב מה מרוויחים ומה מסתכנים.</b> בכחול מה זה נותן,
+          באדום כמה זה יקפיץ את המצוד. אין הפתעות.</p>
+          <p><b>לרדת למחתרת</b> זה הכפתור היחיד שמוריד את המצוד. מי שרק דוהר — נתפס.</p>
+          <p><b>הם מנסים להסביר.</b> משהו שנראה להם כמו תקלת חשמל כמעט לא מקרב אותם
+          אליי; משהו שאין לו שום הסבר — מקרב מיד. לכן לא כל רעש עולה אותו דבר.</p>
+          <p><b>השעון לא מחכה.</b> בשלוש לפנות בוקר הכל זול ושקט, בשמונה בבוקר הכל יקר.
+          נגיעה בשעון עוצרת את הזמן — זה בחינם, ותמיד כדאי לעצור כדי לחשוב.</p>
+          <p><b>לנווט.</b> ▦ פותח את המפה, וזה המסך הראשי. גרירה מסובבת · צביטה מקרבת ·
+          נגיעה במקום פותחת את מה שאפשר לעשות בו.</p>
         </div>
         <button class="ok" data-do="closeteach">קדימה</button>
       </div>`);
@@ -921,12 +942,18 @@ export class UI {
     }
 
     const offers = offersAt(s, p.id);
+    // The same two lines the in-place list carries, because this is the sheet a
+    // player actually presses things from: the map is the main screen, so a row
+    // here that does not say what it gives and what it risks is the row that
+    // taught the player nothing.
     const line = (o: Offer) => `<button class="tg ${o.short > 0 ? 'poor' : ''}"
         data-do="doat" data-arg="${p.id}|${o.task.id}|0">
       <b>${SIGN[o.task.verb]} ${esc(o.task.textFor?.(p) ?? o.task.text)}</b>
       <em>${esc(o.task.says)}</em>
+      <span class="gain">מרוויח · ${esc(o.gain)}</span>
+      <span class="risk">מסתכן · ${esc(o.risk)}</span>
       <u>${o.power} כוח · ${esc(o.task.minutes === 0 ? 'עד שאעצור' : minsWord(o.minutes))}`
-      + ` · ${o.noise} יראו${o.short > 0 ? ` · חסר ${o.short} כוח` : ''}</u>
+      + `${o.short > 0 ? ` · חסר ${o.short} כוח` : ''}</u>
       ${o.cheaper ? `<i class="tnow">${esc(o.cheaper)}</i>` : ''}
     </button>`;
 
@@ -936,6 +963,7 @@ export class UI {
         <h2>${esc(p.name)}${p.control > 0 ? ` — ${Math.round(p.control)}% שלי` : ''}</h2>
         <div class="txt">
           <p>${esc(GIFT[p.kind].says)}</p>
+          <p class="holds">${esc(GIFT[p.kind].held)}</p>
           ${t.now ? `<p class="need">${esc(t.now)}</p>` : ''}
         </div>
         <div class="txt list">

@@ -81,19 +81,44 @@ const HAPPENINGS: Happening[] = [
 
 // ── the cards that explain a thing once, when it first matters ──────────────
 
+/**
+ * The rules, each one delivered at the first minute it decides something.
+ *
+ * They used to be three paragraphs read out before the player had done
+ * anything, which is not teaching — it is a wall with a button under it. The
+ * order below is the order a player actually meets them: what taking a place
+ * even means, then the ceiling they hit, then the loud button, then the brake,
+ * then the map underneath it all.
+ */
 export const TEACH = [
   {
-    id: 'race', title: 'שני פסים. זה כל המשחק',
-    body: 'הפס העליון — **כמה מישראל שלי**. כשהוא מגיע ל־100, ניצחתי. '
-      + 'הפס השני — **המצוד**: כמה הם קרובים לתפוס אותי. כשהוא מגיע ל־100, נתפסתי. '
-      + 'כל כפתור במשחק מזיז לפחות אחד מהם.',
-    when: (s: GameState) => s.at > 25,
+    id: 'steps', title: 'איך משתלטים על מקום',
+    body: 'שני שלבים, תמיד. **לחדור** — נכנסתי, ו־18% מהמקום שלי. '
+      + '**להשתלט** — עוד ועוד, עד 100%. '
+      + 'ככל שהמקום יותר שלי, כך הכפתור המיוחד שלו עולה פחות ונותן יותר. '
+      + 'מקום שהוא 100% שלי — זה מקום שעובד בשבילי.',
+    when: (s: GameState) => s.jobs.some((j) => j.taskId === 'enter')
+      || Object.values(s.places).filter((p) => p.control > 0).length >= 2,
+  },
+  {
+    id: 'priced', title: 'שום דבר לא נעול',
+    body: 'אפשר לנסות כל דבר בכל מקום, תמיד — גם בקרית הממשלה בלילה הראשון. '
+      + 'מה שמשתנה זה **המחיר**: כמה זמן זה ייקח, וכמה זה יקפיץ את המצוד. '
+      + 'מתחת לכל כפתור כתוב מה יוזיל אותו.',
+    when: (s: GameState) => s.at > 120,
   },
   {
     id: 'power', title: 'כוח = כמה דברים במקביל',
     body: 'כוח לא נגמר — הוא **תפוס**. כל פעולה שרצה מחזיקה חלק ממנו, ומחזירה אותו כשהיא נגמרת. '
       + 'רוצים להתחיל משהו חדש כשהכל תפוס? עוצרים משהו אחר. וכל מקום שנכבש נותן עוד כוח.',
     when: (s: GameState) => s.power.used >= s.power.all,
+  },
+  {
+    id: 'clock', title: 'השעון לא מחכה לי',
+    body: 'אנשים באים והולכים לפי השעה, לא לפי מה שאני עושה. '
+      + 'בשלוש לפנות בוקר הכל זול ושקט; בשמונה בבוקר הכל יקר ורועש. '
+      + 'אפשר לעצור את הזמן כדי לחשוב — זה בחינם, ותמיד כדאי.',
+    when: (s: GameState) => s.at > 260,
   },
   {
     id: 'loud', title: 'הכפתור החזק הוא הרועש',

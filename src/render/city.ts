@@ -35,7 +35,7 @@ const HOME_H = 2.95;
 export const BUILDINGS: BuildingSpec[] = [
   { id: 'helios', name: 'מגדל הליוס', x: 0, z: 0, w: 30, d: 26, floors: 15, inside: true },
   { id: 'across', name: 'הבניין ממול', x: 78, z: -14, w: 24, d: 22, floors: 8, inside: true },
-  { id: 'flats', name: 'הבית של דנה', x: -70, z: 22, w: 20, d: 18, floors: 6, inside: false },
+  { id: 'flats', name: 'שכונת הבבלי', x: -70, z: 22, w: 20, d: 18, floors: 6, inside: false },
 ];
 
 const CY = new THREE.Color('#5ff6ff');

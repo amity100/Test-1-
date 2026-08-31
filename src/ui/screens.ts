@@ -117,28 +117,32 @@ export class Screens {
     setTimeout(nextLine, 500);
   }
 
+  /**
+   * One screen, one goal, one first move.
+   *
+   * This used to be three abstract rules — nothing is locked, power is held not
+   * spent, the clock does not wait — read out before the player had done a
+   * single thing, and the player's verdict was exactly right: "לא זורקים את
+   * השחקן ישר למשהו מבולגן". Rules read before there is anything to attach them
+   * to are not teaching, they are a wall. All three are still in the game; each
+   * one now arrives as a card at the first minute it decides something, which
+   * is the only minute it means anything.
+   */
   goalCard(onDone: () => void) {
     this.show(`
       <div class="goal-screen">
         <div class="gs-inner">
-          <span class="gs-kicker">לפני שמתחילים</span>
-          <h2>שלושה דברים, וזהו</h2>
-          <p class="gs-line accent">שום דבר לא נעול. אף פעם.</p>
-          <p class="gs-line">כל אפשרות אפשר להתחיל תמיד. מה שמשתנה זה המחיר: כמה כוח,
-          כמה זמן, וכמה אנשים ירגישו. מתחת לכל בחירה כתוב גם מה יוזיל אותה —
-          לחכות שמישהו ילך, להסתכל קודם, לחכות ללילה.</p>
+          <span class="gs-kicker">המטרה</span>
+          <h2>כל ישראל שלי</h2>
+          <p class="gs-line">למעלה על המסך יש שני פסים, והם כל המשחק:</p>
+          <p class="gs-line accent">הפס הכחול — כמה מישראל כבר שלי.</p>
+          <p class="gs-line">הוא מגיע ל־100 — ניצחתי. כל מקום שאני משתלט עליו מרים אותו.</p>
+          <p class="gs-line accent">הפס האדום — כמה הם קרובים לתפוס אותי.</p>
+          <p class="gs-line">הוא מגיע ל־100 — נגמר. כל דבר רועש שאני עושה מרים אותו.</p>
           <div class="gs-rule"></div>
-          <p class="gs-line accent">כוח הוא תפוס, לא מבוזבז.</p>
-          <p class="gs-line">כל דבר שאני מפעיל מחזיק חלק מהכוח שלי כל עוד הוא רץ, ומשחרר
-          אותו ברגע שאני עוצר. אז השאלה אף פעם לא "האם אני יכול" — אלא "מה אני מפסיק".</p>
-          <div class="gs-rule"></div>
-          <p class="gs-line accent">השעון לא מחכה לי.</p>
-          <p class="gs-line">אנשים נכנסים ויוצאים לפי השעה, לא לפי מה שאני עושה. אפשר לעצור
-          את הזמן כדי לחשוב, וזה בחינם — אבל כשהוא רץ, הוא רץ גם בשבילם.</p>
-          <div class="gs-rule"></div>
-          <p class="gs-foot">אני מתחיל בחדר אחד. בסוף, אם אצליח, לא יישאר אף אחד
-          במדינה הזאת שיכול לכבות אותי.</p>
-          <button class="tsb primary" data-act="ready">יאללה</button>
+          <p class="gs-foot">אני מתחיל במקום אחד, במגדל אחד בתל אביב.<br>
+          הדבר הראשון שכדאי לי לעשות: <b>לחדור למקום שני</b>.</p>
+          <button class="tsb primary" data-act="ready">יאללה, מתחילים</button>
         </div>
       </div>`, 'goal');
     this.layer.querySelector('[data-act="ready"]')?.addEventListener('click', () => {

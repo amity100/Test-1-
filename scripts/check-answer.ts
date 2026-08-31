@@ -243,9 +243,16 @@ const run = (s: GameState, mins: number, step = 5) => {
     worst = Math.max(worst, n);
     total += n;
   }
-  ok(worst <= MOST_OFFERS, `שום חפץ לא מציע יותר מ־${MOST_OFFERS} דברים (הכי גרוע: ${worst})`);
-  console.log(`  · ${total} אפשרויות בסך הכל, לעומת 324 קודם`);
-  ok(total < 120, `סך האפשרויות ירד משמעותית (${total})`);
+  // Two different promises, and they used to be confused for one. The one that
+  // matters to a player standing in front of a place is that the list in front
+  // of him is short — that is `worst`, and it is the real cap. The total across
+  // the country is not a wall; it is how much country there is to go and take,
+  // and the player asked for that number to be big: "שיהיה הרבה מקומות להשתלט
+  // עליהם בישראל ולהתרחב". So it is checked from below, not from above.
+  ok(worst <= MOST_OFFERS, `שום מקום לא מציע יותר מ־${MOST_OFFERS} דברים (הכי גרוע: ${worst})`);
+  const places = Object.keys(s.places).length;
+  ok(places >= 50, `יש הרבה מקומות להשתלט עליהם בישראל (${places})`);
+  console.log(`  · ${total} אפשרויות על פני ${places} מקומות`);
   ok(CATALOGUE.length === 4, `יש בדיוק ארבע פעולות בכל המשחק (${CATALOGUE.length})`);
 }
 

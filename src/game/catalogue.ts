@@ -44,6 +44,7 @@ export const CATALOGUE: Task[] = [
     text: 'לחדור',
     says: 'למצוא סדק, להיכנס דרכו, ולהשאיר בפנים חתיכה קטנה ממני.',
     gives: 'מקום חדש על המפה שלי',
+    gainFor: (_s, p) => `${p.name} ייכנס למפה שלי — 18% ממנו יהיה שלי`,
     power: 2, minutes: 70, noise: 3, look: 'outside',
     // Only where I am not already, because getting in twice is not a thing.
     show: (_s, p) => p.control <= 0,
@@ -61,6 +62,12 @@ export const CATALOGUE: Task[] = [
     text: 'להשתלט',
     says: 'עוד מחשב, עוד קומה, עוד דלת — עד שהמקום כולו שלי.',
     gives: 'המקום נהיה יותר שלי, והפס למעלה עולה',
+    gainFor: (_s, p) => {
+      const step = Math.max(4, Math.min(STEP, (100 - p.control) * 0.55 + 6));
+      const to = Math.min(100, Math.round(p.control + step));
+      return `${Math.round(p.control)}% ← ${to}% שלי`
+        + (to >= 100 ? ' — וזהו, המקום כולו שלי' : '');
+    },
     power: 1, minutes: 55, noise: 1, look: 'electric',
     show: (_s, p) => p.control > 0 && p.control < 100,
     done: (s, p) => {
@@ -81,6 +88,7 @@ export const CATALOGUE: Task[] = [
     textFor: (p) => GIFT[p.kind].button,
     says: 'זה הכפתור החזק — וגם הרועש. פס המצוד יעלה.',
     gives: 'משהו קורה בארץ בגללי',
+    gainFor: (_s, p) => GIFT[p.kind].gain,
     power: 2, minutes: 90, noise: 3, look: 'wrong',
     // A place you barely hold will mostly notice you trying — but that is a
     // price, not a locked door, and this game has no locked doors. Below a
@@ -98,6 +106,11 @@ export const CATALOGUE: Task[] = [
     text: 'לרדת למחתרת',
     says: 'לעצור הכל כאן, למחוק את העקבות, ולתת להם לשכוח אותי.',
     gives: 'פס המצוד יורד',
+    gainFor: (s, p) => {
+      const down = 5 + (p.control / 100) * 5;
+      return `פס המצוד ירד ב־${down.toFixed(1)} `
+        + `(${Math.round(s.heat)}% ← ${Math.max(0, Math.round(s.heat - down))}%)`;
+    },
     power: 1, minutes: 65, noise: 0, look: 'electric',
     show: (_s, p) => p.control > 0,
     done: (s, p) => {

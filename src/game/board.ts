@@ -227,10 +227,22 @@ export function bestNow(s: GameState): string {
     return `${nearly.name} כבר ${Math.round(nearly.control)} אחוז שלך. תסיים להשתלט עליו — ואז הכפתור המיוחד שלו ייפתח.`;
   }
 
+  // Where I am already strong makes the next place next door cheap, and that
+  // is the one piece of strategy the game most wants a new player to find:
+  // spread out from a place that helps, not at random across the country.
+  const helped = Object.values(s.places)
+    .filter((p) => p.found && p.control <= 0 && (s.areas[p.areaId]?.control ?? 0) >= 25)
+    .sort((a, b) => worthOf(b) - worthOf(a))[0];
+  if (helped) {
+    const area = s.areas[helped.areaId];
+    return `${helped.name} — ובאזור של ${area ? area.name : 'שם'} אתה כבר חזק, `
+      + `אז זה יעלה לך פחות. ${GIFT[helped.kind].held}`;
+  }
+
   const near = Object.values(s.places)
     .filter((p) => p.found && p.control <= 0)
     .sort((a, b) => worthOf(b) - worthOf(a))[0];
-  if (near) return `הבא בתור: ${near.name}. ${GIFT[near.kind].says}`;
+  if (near) return `הבא בתור: ${near.name}. ${GIFT[near.kind].held}`;
 
-  return 'שקט עכשיו. שקט זה בדיוק הזמן להתפשט הלאה.';
+  return 'שקט עכשיו, והמצוד נמוך. זה בדיוק הזמן להתפשט לאזור חדש.';
 }

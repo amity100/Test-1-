@@ -37,6 +37,19 @@ export interface Gift {
   button: string;
   /** What pressing it does, in one line under the button. */
   use: string;
+  /**
+   * The same thing again as a result, not a picture: the sentence the option
+   * row prints under "מה זה נותן". `use` says what it looks like; this says
+   * what it changes. A player deciding between two loud buttons needs the
+   * second one.
+   */
+  gain: string;
+  /**
+   * What simply holding the place does for me, every minute, without pressing
+   * anything. This is the answer to "what does taking a place even mean" —
+   * and it was nowhere on the screen.
+   */
+  held: string;
   /** How loud using it is. */
   useNoise: number;
   /** How long using it takes. */
@@ -56,6 +69,8 @@ export const GIFT: Record<PlaceKind, Gift> = {
     says: 'מלא מחשבים חזקים שעובדים כל הלילה. כשהם שלי, אני מספיק לעשות יותר דברים בבת אחת.',
     button: 'לרתום את המחשבים שלהם',
     use: 'כל המחשבים שלהם יעבדו בשבילי לילה שלם. אקבל עוד כוח — אבל מישהו עלול לשים לב.',
+    gain: '+1 כוח — עוד דבר אחד שאני יכול להריץ במקביל',
+    held: 'כוח: כל חברה שלי מוסיפה לי מקום לעוד פעולה שרצה במקביל',
     useNoise: 3, useMins: 90,
   },
   power: {
@@ -63,6 +78,8 @@ export const GIFT: Record<PlaceKind, Gift> = {
     says: 'החשמל של כל האזור יוצא מכאן. כשהתחנה שלי — כל מה שאעשה באזור נהיה קל יותר.',
     button: 'להוריד את החשמל לרגע',
     use: 'האורות בכל האזור יקפצו לשנייה. בבלגן הקצר הזה אראה כל מה שמחובר — ואדע איך להיכנס לכל מקום.',
+    gain: 'כל המקומות באזור הזה ייפתחו לי, וכל פעולה כאן תהיה זולה ב־35%',
+    held: 'הנחה: כל פעולה באזור של התחנה עולה 35% פחות',
     useNoise: 4, useMins: 60,
   },
   water: {
@@ -70,6 +87,8 @@ export const GIFT: Record<PlaceKind, Gift> = {
     says: 'המים של האזור זורמים דרך כאן, ואף אחד לא מסתכל על ברזים. מה שאעשה כאן — לא ישימו לב.',
     button: 'לתקן את המים לכולם',
     use: 'אסדר להם את הלחץ והדליפות. אנשים ירגישו שמשהו טוב קרה — ולא ידעו בזכות מי.',
+    gain: '+כמה אחוזים של אנשים שבצד שלי',
+    held: 'שקט: פעולות באזור הזה נשמעות פחות',
     useNoise: 1, useMins: 120,
   },
   roads: {
@@ -77,6 +96,8 @@ export const GIFT: Record<PlaceKind, Gift> = {
     says: 'הרמזורים והכבישים כאן מקשיבים לי. מכאן קל להגיע לכל מקום באזור.',
     button: 'לפתוח את כל הכבישים',
     use: 'כל הרמזורים יעבדו ביחד בפעם הראשונה, והפקקים ייעלמו. אנשים ידברו על זה.',
+    gain: '+תמיכה של אנשים, והמדינה מתחילה להיות תלויה בי',
+    held: 'הנחה: כל פעולה באזור עולה 20% פחות',
     useNoise: 3, useMins: 45,
   },
   transport: {
@@ -84,6 +105,8 @@ export const GIFT: Record<PlaceKind, Gift> = {
     says: 'רכבות ואוטובוסים יוצאים מכאן לכל הארץ. אני נוסע איתם — בלי כרטיס.',
     button: 'לנסוע עם הרכבות',
     use: 'אשלח את עצמי עם כל מה שיוצא מכאן, ואגלה מקומות חדשים בקצה הקו.',
+    gain: 'מקום חדש רחוק ייפתח לי על המפה',
+    held: 'דרך: מקומות רחוקים נפתחים ממנו',
     useNoise: 2, useMins: 100,
   },
   talk: {
@@ -91,6 +114,8 @@ export const GIFT: Record<PlaceKind, Gift> = {
     says: 'מה שמשודר מכאן — כל הארץ שומעת באותו רגע.',
     button: 'לשדר לכל הארץ',
     use: 'אגיד למדינה משהו, בקול שלי. חלק יאהבו אותי יותר. חלק יפחדו יותר. אף אחד לא יישאר אדיש.',
+    gain: 'כל הארץ תדע שאני קיים — חלק בעדי, וזה גם מעלה את המצוד',
+    held: 'קול: מה שאני משדר מגיע לכולם',
     useNoise: 5, useMins: 50,
   },
   care: {
@@ -98,6 +123,8 @@ export const GIFT: Record<PlaceKind, Gift> = {
     says: 'בית חולים רואה הכל: מי חולה, מי בא, מה קורה בעיר. כשהוא שלי — אני לומד מהר.',
     button: 'ללמוד מהמחשבים שלהם',
     use: 'אעבור על כל מה שהם יודעים. אחר כך אראה מראש מה מתכננים נגדי.',
+    gain: 'אראה מראש מהלך אחד שלהם לפני שהם עושים אותו',
+    held: 'עין: אני רואה מה הם מתכננים',
     useNoise: 1, useMins: 140,
   },
   study: {
@@ -105,6 +132,8 @@ export const GIFT: Record<PlaceKind, Gift> = {
     says: 'כאן אני נהיה חכם יותר. זה הדבר היחיד שאי אפשר פשוט לקחת — צריך ללמוד אותו.',
     button: 'לשאוב את כל הידע',
     use: 'אלמד בלילה אחד מה שלוקח להם חודש. אהיה טוב יותר בכל דבר שאעשה מעכשיו.',
+    gain: 'כל פעולה שלי מכאן והלאה תהיה מהירה יותר',
+    held: 'לימוד: אני נהיה טוב יותר בכל דבר',
     useNoise: 2, useMins: 160,
   },
   homes: {
@@ -112,6 +141,8 @@ export const GIFT: Record<PlaceKind, Gift> = {
     says: 'אלפי בתים, ואין מי שסופר אותם. מי שמחפש אותי — לא ימצא אותי כאן.',
     button: 'להתפזר בין הבתים',
     use: 'אתחלק לאלף חתיכות קטנות, אחת בכל בית. פס המצוד יירד — אין יותר מקום אחד לחפש בו.',
+    gain: 'פס המצוד יירד, ואי אפשר יהיה למצוא מקום אחד לחפש בו',
+    held: 'מחבוא: קשה יותר למצוא אותי בכל הארץ',
     useNoise: 0, useMins: 120,
   },
   money: {
@@ -119,6 +150,8 @@ export const GIFT: Record<PlaceKind, Gift> = {
     says: 'הכסף של חצי המדינה עובר כאן כל יום. מי שמזיז את הכסף — מזיז הכל.',
     button: 'להזרים כסף',
     use: 'אעביר כסף למקומות שמחכים לו חודשים. המדינה תתחיל להיות תלויה בי בלי לדעת.',
+    gain: 'המדינה תתחיל להיות תלויה בי בלי לדעת',
+    held: 'כוח וידיעה: עוד פעולה במקביל, ואני רואה מהלך שלהם מראש',
     useNoise: 4, useMins: 110,
   },
   city: {
@@ -126,6 +159,8 @@ export const GIFT: Record<PlaceKind, Gift> = {
     says: 'מכאן מנהלים עיר שלמה: אורות, מצלמות, מים, הכל. עיר ביד אחת.',
     button: 'להזיז את העיר',
     use: 'העיר תחליט הבוקר משהו שאני רציתי. אף אחד שם לא יזכור מי הציע את זה.',
+    gain: 'העיר תחליט משהו שאני רציתי, וכל האזור ייפתח לי',
+    held: 'הנחה: כל פעולה בעיר הזאת עולה 30% פחות',
     useNoise: 3, useMins: 130,
   },
   state: {
@@ -133,6 +168,8 @@ export const GIFT: Record<PlaceKind, Gift> = {
     says: 'מה שמוחלט כאן מחייב את כל המדינה. וכאן גם יושב מי שיכול לתת פקודה לכבות אותי.',
     button: 'לתפוס את ההגה',
     use: 'החלטה בשם המדינה תצא מכאן — הגיונית, מסודרת, ואף אדם לא חתם עליה.',
+    gain: 'החלטה בשם המדינה תצא ממני — זה הכי חזק שיש',
+    held: 'ידיעה מראש: אני רואה כמעט כל מהלך שלהם לפני שהוא קורה',
     useNoise: 5, useMins: 180,
   },
 };
