@@ -7,6 +7,7 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { GradeShader } from './postfx';
 import { BUILDINGS, FLOOR_H, buildCity, buildingOf, doorSpot, floorY, spotAt, type CityParts } from './city';
 import { buildInteriors, revealFloors, type Interior } from './interior';
+import { Swarm } from './swarm';
 import { CodeVeins, type Vein } from './glyphs';
 import { Figures } from './figures';
 import { bus } from '../game/bus';
@@ -40,6 +41,7 @@ export class World {
   private city: CityParts;
   private inside: Interior;
   private veins = new CodeVeins();
+  private swarm = new Swarm();
   private figures = new Figures();
   private markers = new Map<string, Marker>();
   private state: GameState | null = null;
@@ -84,7 +86,7 @@ export class World {
     this.city = buildCity();
     this.inside = buildInteriors();
     this.scene.add(this.city.group, this.inside.group, this.objectGroup,
-      this.veins.group, this.figures.group);
+      this.veins.group, this.swarm.group, this.figures.group);
     this.light();
 
     this.composer = new EffectComposer(this.renderer);
@@ -240,8 +242,47 @@ export class World {
       }
     }
     this.veins.set(veins);
+
+    // The storm. A churning wrap of source-tokens on every held place, sized
+    // by how much of it is really held — and a pour of them across the city
+    // toward anywhere a break-in is running, so spreading is something you
+    // watch travel.
+    const clouds = [];
+    const streams = [];
+    for (const p of Object.values(state.places)) {
+      if (p.control <= 0) continue;
+      clouds.push({
+        id: p.id,
+        center: spotAt(p.buildingId, p.floor, p.x, p.z, p.y + 1.2),
+        grip: p.control / 100,
+        size: 0.6 + Math.min(1, (p.guard + 20) / 80) * 0.7,
+      });
+    }
+    for (const j of state.jobs) {
+      if (j.taskId !== 'enter') continue;
+      const target = state.places[j.placeId];
+      if (!target) continue;
+      // The pour comes from wherever I am strongest nearby — the same story
+      // the game tells, drawn in the air.
+      const source = Object.values(state.places)
+        .filter((q) => q.control > 0 && q.id !== target.id)
+        .sort((a, b) => {
+          const near = (q: typeof a) => (q.areaId === target.areaId ? 0 : 1);
+          return near(a) - near(b) || b.control - a.control;
+        })[0];
+      if (!source) continue;
+      streams.push({
+        id: `pour_${j.id}`,
+        from: spotAt(source.buildingId, source.floor, source.x, source.z, source.y + 1.5),
+        to: spotAt(target.buildingId, target.floor, target.x, target.z, target.y + 1.0),
+      });
+    }
+    this.swarm.set(clouds, streams);
     this.figures.sync(state);
   }
+
+  /** A place's special button fired: its storm erupts for a couple of seconds. */
+  burst(placeId: string) { this.swarm.burst(placeId); }
 
   /** The ring that says "this is the one". */
   point(placeId: string | null) {
@@ -401,6 +442,8 @@ export class World {
     this.city.tick(this.t, dt);
     this.veins.setScale(THREE.MathUtils.clamp(this.dist * 0.0055, 0.16, 1.5));
     this.veins.update(dt);
+    this.swarm.setScale(THREE.MathUtils.clamp(this.dist * 0.0075, 0.28, 2.2));
+    this.swarm.update(dt);
     this.figures.update(dt, this.camera.position, this.host, this.onFloor);
 
     // Rings and lit faces breathe, so a live board never looks like a picture.

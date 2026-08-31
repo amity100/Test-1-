@@ -119,9 +119,9 @@ for (const [W, H] of [[320, 640], [360, 740], [390, 844], [430, 932]]) {
   ok(priced, `${W}×${H} · לכל שורה כתוב מה היא עולה`);
 
   // Everything along the top opens something and closes again.
-  for (const [what, label] of [['jobs', 'מה רץ'], ['areas', 'מה אני יודע'],
-    ['them', 'הם'], ['board', 'המפה'], ['feed', 'מה קרה'],
-    ['grown', 'מה נהייתי'], ['help', 'עזרה']]) {
+  for (const [what, label] of [['jobs', 'מה רץ'], ['areas', 'ישראל שלי'],
+    ['them', 'המצוד'], ['board', 'המפה'], ['feed', 'מה קרה'],
+    ['help', 'עזרה']]) {
     const opened = await p.evaluate((w) => {
       const el = document.querySelector(`[data-do="${w}"]`);
       if (!el) return false;

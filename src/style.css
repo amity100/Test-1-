@@ -991,7 +991,7 @@ body.is-mobile .objectives ul li { min-height: 46px; }
 /* ── the one line saying what is worth doing now ───────────────────────────
    Under the top bar, always there, and it opens the map. */
 .best {
-  position: absolute; top: 62px; inset-inline: 8px; z-index: 6;
+  position: absolute; top: 102px; inset-inline: 8px; z-index: 6;
   min-height: 34px; padding: 7px 12px; text-align: right; direction: rtl;
   background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
   color: var(--txt); font-family: var(--sans); font-size: 12px; line-height: 1.4;
@@ -1002,7 +1002,7 @@ body.is-mobile .objectives ul li { min-height: 46px; }
    It takes the screen, because it is the only thing that matters while it
    runs, and its answers are the biggest buttons in the game. */
 .hunt {
-  position: absolute; inset-inline: 8px; top: 104px; bottom: 128px; z-index: 40;
+  position: absolute; inset-inline: 8px; top: 148px; bottom: 128px; z-index: 40;
   display: flex; align-items: flex-start; justify-content: center;
   pointer-events: none; direction: rtl;
 }
@@ -1202,29 +1202,32 @@ body.is-mobile .objectives ul li { min-height: 46px; }
 .best { min-height: 42px; }
 
 /* ── the race: two bars that are the whole game ────────────────────────────
-   Mine in cyan, theirs in red, side by side at the top where the score of a
-   game belongs. The ticks on their bar are the four stages, at the same round
-   numbers the banners land on. */
+   A full-width strip of their own right under the clock. Mine in cyan,
+   theirs in red, and the ticks on theirs are the four stages, at the same
+   round numbers the banners land on. */
 .race {
-  flex: 1; display: flex; flex-direction: column; gap: 4px;
-  min-width: 0; padding: 3px 2px;
+  position: absolute; top: 58px; inset-inline: 8px; z-index: 7;
+  display: flex; gap: 8px; padding: 7px 10px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 11px;
+  direction: rtl;
 }
 .race .lane {
-  display: grid; grid-template-columns: auto 1fr auto; align-items: center;
-  gap: 6px; background: none; border: 0; padding: 0; cursor: pointer;
+  flex: 1; display: grid; grid-template-columns: auto 1fr auto;
+  align-items: center; gap: 6px; min-width: 0;
+  background: none; border: 0; padding: 0; cursor: pointer;
   color: var(--txt); font-family: var(--sans); direction: rtl; text-align: right;
 }
 .race .lane span {
-  font-size: 9.5px; letter-spacing: .4px; color: var(--muted); white-space: nowrap;
+  font-size: 10px; letter-spacing: .3px; color: var(--muted); white-space: nowrap;
 }
 .race .lane b {
-  font-family: var(--mono); font-size: 12px; min-width: 34px; text-align: left;
+  font-family: var(--mono); font-size: 12.5px; min-width: 36px; text-align: left;
 }
 .race .lane.me b { color: var(--cy); }
 .race .lane.them b { color: var(--red); }
 .race .rbar {
-  position: relative; height: 7px; border-radius: 4px; overflow: hidden;
-  background: rgba(255,255,255,.07); grid-column: 2;
+  position: relative; height: 8px; border-radius: 4px; overflow: hidden;
+  background: rgba(255,255,255,.08);
 }
 .race .lane.me .rbar i {
   position: absolute; inset-block: 0; inset-inline-start: 0; border-radius: 4px;
@@ -1259,6 +1262,4 @@ body.is-mobile .objectives ul li { min-height: 46px; }
   75% { transform: translateX(-2px); }
 }
 
-@media (max-width: 385px) {
-  .race .lane span { display: none; }
-}
+

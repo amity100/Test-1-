@@ -23,9 +23,12 @@ function atlas(): THREE.Texture {
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.fillStyle = '#ffffff';
+  // Code characters only. The player was explicit about this and he is right:
+  // source code has no Hebrew in it, and one aleph floating down a vein breaks
+  // the whole story the picture is telling.
   const chars = ('01x{}<>/*+=;:()[]!?&|^~#$@%_-.,'
-    + 'אבגדהוזחטיכלמנסעפצקרשת'
-    + 'abcdefgnrstuvw').split('');
+    + 'λσΣ∇πθ≈≠≤'
+    + 'abcdefgnrstuvwz').split('');
   for (let i = 0; i < COLS * ROWS; i++) {
     const ch = chars[i % chars.length];
     g.fillText(ch, (i % COLS) * CELL + CELL / 2, Math.floor(i / COLS) * CELL + CELL / 2);

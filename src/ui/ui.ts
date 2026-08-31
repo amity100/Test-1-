@@ -65,14 +65,10 @@ export class UI {
     root.appendChild(this.shell());
     this.bind();
     this.wire();
-    // The first thing I saw was me, so the camera still starts on the machine I
-    // woke in — but the game is played from above, so the map is what is open.
-    // Being inside a room is a thing you choose, not the place you are put.
-    const me = Object.values(state.places)
-      .filter((p) => p.control > 0)
-      .sort((a, b) => b.control - a.control)[0];
-    if (me) { this.world.enter(me.buildingId, me.floor); this.world.goTo(me, true); }
-    else this.world.wide();
+    // The game opens on the city at night, storms of code over everything that
+    // is mine. Starting inside a room put a wall in front of the one picture
+    // that sells the whole game.
+    this.world.wide();
     this.refresh();
     this.showBoard();
     requestAnimationFrame(this.tick);
@@ -88,16 +84,6 @@ export class UI {
           <b id="nowat">03:12</b>
           <em><i id="dayat">יום 1</i> · <u id="speedat">רגיל</u></em>
         </button>
-        <div class="race">
-          <button class="lane me" data-do="areas">
-            <span>ישראל שלי</span><b id="risrael">2%</b>
-            <div class="rbar"><i id="risraelbar"></i></div>
-          </button>
-          <button class="lane them" data-do="them">
-            <span>המצוד</span><b id="rheat">0%</b>
-            <div class="rbar"><i id="rheatbar"></i><u class="tick t25"></u><u class="tick t50"></u><u class="tick t75"></u><u class="tick t90"></u></div>
-          </button>
-        </div>
         <button class="meter m-power" data-do="jobs">
           <span>כוח</span><b id="mpower">0/3</b>
           <div class="mbar"><i id="mpowerbar"></i></div>
@@ -105,6 +91,19 @@ export class UI {
         <button class="icon" data-do="board" title="המפה">▦</button>
         <button class="icon" data-do="help" title="איך משחקים">?</button>
       </header>
+
+      <div id="race" class="race">
+        <button class="lane me" data-do="areas">
+          <span>ישראל שלי</span>
+          <div class="rbar"><i id="risraelbar"></i></div>
+          <b id="risrael">2%</b>
+        </button>
+        <button class="lane them" data-do="them">
+          <span>המצוד</span>
+          <div class="rbar"><i id="rheatbar"></i><u class="tick t25"></u><u class="tick t50"></u><u class="tick t75"></u><u class="tick t90"></u></div>
+          <b id="rheat">0%</b>
+        </button>
+      </div>
 
       <button id="best" class="best" data-do="board"></button>
 
@@ -137,6 +136,12 @@ export class UI {
       void id;
     });
     bus.on('place:lost', () => { this.world.shake(0.8); audio.play('purge'); });
+    // The special button erupts the place's storm the moment it lands. The
+    // job is still in the list when this event fires, so it can be looked up.
+    bus.on('job:done', (id) => {
+      const j = this.state.jobs.find((x) => x.id === id);
+      if (j && j.taskId === 'use') { this.world.burst(j.placeId); this.world.shake(0.35); }
+    });
     bus.on('rung:changed', (r) => {
       this.world.alert(r / 5);
       if (r > 0) { this.world.shake(0.5); this.showStage(r); }
