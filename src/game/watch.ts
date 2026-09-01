@@ -5,6 +5,7 @@ import { maybeHunt } from './hunt';
 import { say } from './jobs';
 import { at, feltIt, v } from './story';
 import { fadeRate, israel } from './sites';
+import { israelState } from './scale';
 import { saw } from './hunter';
 import type { GameState, Look, Move, Place, Rung } from './types';
 
@@ -179,10 +180,12 @@ export function riseSays(s: GameState, amount: number, look: Look): string {
     ? ` — זה ייכנס אצלם תחת "${cover.name}"${roomLeft(s, cover) <= amount * 1.5
       ? ', וזה כבר כמעט מלא: עוד קצת והם יבדקו את זה מקרוב' : ''}`
     : '';
+  // How much this actually costs, in words a person feels rather than a number
+  // they have to remember the scale of.
   if (up < 0.4) return `המצוד כמעט לא יזוז${tab}`;
-  if (up < 1.2) return `המצוד יעלה קצת (${up.toFixed(1)})${tab}`;
-  if (up < 3) return `המצוד יעלה ב־${up.toFixed(1)}${tab}`;
-  return `המצוד יקפוץ ב־${Math.round(up)} — זה רועש${tab}`;
+  if (up < 1.2) return `המצוד יעלה קצת${tab}`;
+  if (up < 3) return `המצוד יעלה בהרגשה${tab}`;
+  return `המצוד יקפוץ — זה רועש${tab}`;
 }
 
 /** How much more they can put on an explanation before they act on it. */
@@ -524,18 +527,23 @@ export function wantedSays(s: GameState): string {
 export function driftSays(s: GameState): string {
   const up = pressure(s) * 60;
   const down = (0.0035 / fadeRate(s) / wanted(s)) * 60;
-  const mine = Math.round(israel(s));
+  const mine = israelState(israel(s));
   if (up < down * 0.8) {
-    return `${mine}% מהארץ שלי — עדיין מעט מדי בשביל שישימו לב מעצמם. `
+    return `יש לי ${mine} — עדיין מעט מדי בשביל שישימו לב מעצמם. `
       + 'בינתיים הם שוכחים יותר מהר ממה שהם לומדים.';
   }
   if (up < down * 1.2) {
-    return `${mine}% מהארץ שלי. מכאן והלאה הם לומדים בערך באותו קצב שהם שוכחים — `
+    return `יש לי ${mine}. מכאן והלאה הם לומדים בערך באותו קצב שהם שוכחים — `
       + 'כל רעש נוסף כבר נשאר.';
   }
+  // How long until the end at this rate, in a shape a person can actually
+  // picture: a night is short, days are a while, a week is a long time.
   const hours = Math.max(1, Math.round((100 - s.heat) / Math.max(0.1, up - down)));
-  return `${mine}% מהארץ כבר שלי, וזה בעצמו מה שמעלה את הפס: ככל שיש לי יותר, `
-    + `כך פחות נשאר להתחבא מאחוריו. בקצב הזה ובלי למחוק עקבות — כ־${hours} שעות עד הסוף.`;
+  const when = hours <= 5 ? `עוד כמה שעות בקצב הזה`
+    : hours <= 20 ? `עוד לילה כזה, פחות או יותר`
+      : `עוד כמה ימים בקצב הזה`;
+  return `יש לי כבר ${mine}, וזה בעצמו מה שמעלה את הפס: ככל שיש לי יותר, `
+    + `כך פחות נשאר להתחבא מאחוריו. בלי למחוק עקבות — ${when} עד הסוף.`;
 }
 
 export function cool(s: GameState, mins: number) {

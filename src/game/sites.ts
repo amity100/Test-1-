@@ -1,4 +1,5 @@
 import { leanGives } from './grow';
+import { cheaperState } from './scale';
 import type { GameState, Look, Place, PlaceKind } from './types';
 
 /**
@@ -96,8 +97,8 @@ export const GIFT: Record<PlaceKind, Gift> = {
     button: 'לכבות את החשמל לשנייה',
     use: 'אכבה ואדליק את החשמל בכל האזור. בשנייה הזאת כל מכשיר שמחובר מדליק '
       + 'את עצמו מחדש ואומר לי מי הוא — וככה אני מכיר כל מקום כאן.',
-    gain: (w) => `כל המקומות ב${w} ייפתחו לי, וכל פעולה שם תעלה 35% פחות`,
-    held: 'הנחה: כל פעולה באזור של התחנה עולה 35% פחות',
+    gain: (w) => `כל המקומות ב${w} ייפתחו לי, וכל פעולה שם תהיה הרבה יותר קלה`,
+    held: 'הנחה גדולה: כל פעולה באזור של התחנה עולה לי הרבה פחות',
     useNoise: 4, useMins: 60,
     // the lights going and coming back is what the grid does
     useLook: 'electric',
@@ -120,8 +121,8 @@ export const GIFT: Record<PlaceKind, Gift> = {
     button: 'לסדר את כל הרמזורים',
     use: 'כל הרמזורים באזור יעבדו ביחד בפעם הראשונה והפקקים ייעלמו. '
       + 'אנשים יגיעו הביתה מוקדם ויספרו על זה.',
-    gain: (w) => `עוד אנשים בצד שלי, וכל פעולה ב${w} תעלה 20% פחות`,
-    held: 'הנחה: כל פעולה באזור עולה 20% פחות',
+    gain: (w) => `עוד אנשים בצד שלי, וכל פעולה ב${w} תהיה קלה יותר`,
+    held: 'הנחה: כל פעולה באזור עולה לי פחות',
     useNoise: 3, useMins: 45,
     // the lights finally agree with each other. about time
     useLook: 'normal',
@@ -204,8 +205,8 @@ export const GIFT: Record<PlaceKind, Gift> = {
     says: 'מכאן מנהלים עיר שלמה: אורות, מצלמות, מים, הכל. עיר ביד אחת.',
     button: 'להחליט במקום העירייה',
     use: 'העיר תחליט הבוקר בדיוק את מה שאני רוצה, ואף אחד שם לא יזכור מי הציע.',
-    gain: (w) => `${w} תחליט משהו שאני רציתי, וכל פעולה שם תעלה 30% פחות`,
-    held: 'הנחה: כל פעולה בעיר הזאת עולה 30% פחות',
+    gain: (w) => `${w} תחליט משהו שאני רציתי, וכל פעולה שם תהיה קלה משמעותית`,
+    held: 'הנחה גדולה: כל פעולה בעיר הזאת עולה לי הרבה פחות',
     useNoise: 3, useMins: 130,
     // the council made a sensible decision for once
     useLook: 'normal',
@@ -463,10 +464,11 @@ export function discount(s: GameState, p: Place): {
   let noise = 0;
   const why: string[] = [];
 
-  // Named, with a number. "things are cheaper here" is bookkeeping; "35% קל
-  // יותר — כי תחנת הכוח שלך" is a chain the player built on purpose and can
+  // Named, in words. "things are cheaper here" is bookkeeping; "עולה לי הרבה
+  // פחות — כי תחנת הכוח שלך" is a chain the player built on purpose and can
   // plan the next link of. So each discount says which of their places earned
-  // it, by name.
+  // it, by name — and how much it helped, in the same words the game uses
+  // everywhere else, never as a raw percentage.
   for (const q of Object.values(s.places)) {
     if (q.areaId !== p.areaId || q.id === p.id || q.control <= 0) continue;
     const f = q.control / 100;
@@ -474,15 +476,15 @@ export function discount(s: GameState, p: Place): {
       const cut = Math.min(0.35, 0.35 * f);
       mins *= 1 - cut;
       noise -= 1;
-      why.push(`קל יותר ב־${Math.round(cut * 100)}% — כי ${q.name} שלך`);
+      why.push(`${cheaperState(cut)} — כי ${q.name} שלך`);
     } else if (q.kind === 'roads') {
       const cut = Math.min(0.2, 0.2 * f);
       mins *= 1 - cut;
-      why.push(`מהיר יותר ב־${Math.round(cut * 100)}% — כי הכבישים כאן שלך`);
+      why.push(`הולך מהר יותר — כי הכבישים כאן שלך`);
     } else if (q.kind === 'city') {
       const cut = Math.min(0.3, 0.3 * f);
       mins *= 1 - cut;
-      why.push(`קל יותר ב־${Math.round(cut * 100)}% — כי העירייה שלך`);
+      why.push(`${cheaperState(cut)} — כי העירייה שלך`);
     } else if (q.kind === 'water' || q.kind === 'study') {
       noise -= 1;
       why.push(`שקט יותר — כי ${q.name} שלך`);

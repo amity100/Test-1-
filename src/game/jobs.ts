@@ -46,12 +46,13 @@ export interface Task {
   /** What I get out of it, in general. */
   gives: string;
   /**
-   * What I get out of it *here*, with this place's actual numbers in it.
+   * What I get out of it *here*, said the way a person would say it.
    *
    * The player's complaint, in his words: "לא ממש ברור לי מה היתרון ומה הסיכון
    * בכל פעולה". A general promise cannot answer that — "מקום חדש על המפה שלי"
-   * is true of getting into anywhere. "אחרי זה 18% מהבנק הגדול יהיה שלי" is a
-   * sentence you can weigh against the noise it costs.
+   * is true of getting into anywhere. "אחרי זה יש לי שם חלק גדול ממנו" is a
+   * sentence about *this* place, in words rather than a raw percentage —
+   * see `scale.ts`.
    */
   gainFor?(s: GameState, p: Place): string;
   /** Power held while it runs. */
@@ -614,7 +615,7 @@ export function runJobs(s: GameState, mins: number, noisy: (p: Place, n: number,
       const how = w ? howItWent(s, p, w, j.id) : 'plain';
       if (how === 'wrong') {
         heard = Math.max(1, Math.round(j.noise * 2.2 + 2));
-        wentWrong(s, p, w);
+        wentWrong(s, p);
       } else if (how === 'clean') {
         heard = Math.floor(j.noise * 0.35);
         tell(s, 'me', `${j.text} — ויצא חלק לגמרי. אף אחד לא ידע שהייתי שם.`, 1, p.id);
@@ -634,13 +635,12 @@ export function runJobs(s: GameState, mins: number, noisy: (p: Place, n: number,
  *
  * Never "the job failed". Failing a job the player watched run for an hour of
  * world time is a punishment, not a decision, and this game does not take back
- * what it gave. What goes wrong is the *cover*: twice the noise, a person with
- * a name who now has something to wonder about, and — for the way that rides
- * somebody — that person specifically.
+ * what it gave. What goes wrong is the *cover*: twice the noise, and — if
+ * anybody was in the room — a person with a name who now has something to
+ * wonder about.
  */
-function wentWrong(s: GameState, p: Place, w?: Way) {
-  const here = p.peopleIds.map((id) => s.people[id]).filter((q) => q && !q.gone);
-  const who = w?.needsPerson ? here[0] : here[0];
+function wentWrong(s: GameState, p: Place) {
+  const who = p.peopleIds.map((id) => s.people[id]).filter((q) => q && !q.gone)[0];
   if (who) {
     who.worry = Math.min(100, who.worry + 22);
     who.saw = `משהו ${at(p.name)}`;

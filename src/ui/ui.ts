@@ -18,6 +18,7 @@ import { STORIES, asking, coming, driftSays, leading, rungOf, saysNow } from '..
 import { AREA_KIND_NAME, LOOK_NAME, RUNG_NAME, VERB_NAME, VERB_SAYS, VOICE_NAME } from '../game/types';
 import { riskSays } from '../game/ways';
 import { closeness } from '../game/hunter';
+import { dugState, heatState, infoState, israelState, placeGrip } from '../game/scale';
 import { wantedSays } from '../game/watch';
 import { v } from '../game/story';
 import type { GameState, Verb } from '../game/types';
@@ -110,12 +111,12 @@ export class UI {
         <button class="lane me" data-do="areas">
           <span>ישראל שלי</span>
           <div class="rbar"><i id="risraelbar"></i></div>
-          <b id="risrael">2%</b>
+          <b id="risrael">כמעט שום דבר</b>
         </button>
         <button class="lane them" data-do="them">
           <span>המצוד</span>
           <div class="rbar"><i id="rheatbar"></i><u class="tick t25"></u><u class="tick t50"></u><u class="tick t75"></u><u class="tick t90"></u></div>
-          <b id="rheat">0%</b>
+          <b id="rheat">שקט לגמרי</b>
         </button>
       </div>
 
@@ -419,7 +420,7 @@ export class UI {
 
     pick.innerHTML = `
       <button class="x" data-do="close">✕</button>
-      <span class="who">${esc(p.name)} · ${Math.round(p.control)}% שלי · ${esc(head)}</span>
+      <span class="who">${esc(p.name)} · ${esc(placeGrip(p.control))} · ${esc(head)}</span>
       <p class="worth">${esc(GIFT[p.kind].says)}</p>
       <p class="holds">${esc(GIFT[p.kind].held)}</p>
       <div class="ops">${rows || '<p class="need">אין כאן מה לעשות כרגע.</p>'}</div>`;
@@ -512,7 +513,7 @@ export class UI {
       const cls = p.cutAt !== undefined ? 'cut' : p.attention >= 2 ? 'hot'
         : p.control > 0 ? 'mine' : '';
       spots.push({
-        id, ...v, label: p.control > 0 ? `${p.name} · ${Math.round(p.control)}%` : p.name,
+        id, ...v, label: p.control > 0 ? `${p.name} · ${placeGrip(p.control)}` : p.name,
         cls: `${cls}${busy ? ' busy' : ''}`, act: 'place', arg: p.id, away: v.away,
       });
     }
@@ -729,14 +730,14 @@ export class UI {
       .filter((a) => a.seen > 0)
       .sort((x, y) => y.control - x.control || y.seen - x.seen)
       .map((a) => `<div class="pl ${a.control > 0 ? 'mine' : ''} ${a.heat >= 45 ? 'hot' : ''}">
-        <b>${esc(a.name)} · ${Math.round(a.control)}%</b>
+        <b>${esc(a.name)}${a.control > 0 ? ` · ${esc(placeGrip(a.control))}` : ''}</b>
         <em>${esc(AREA_KIND_NAME[a.kind])} · ${esc(a.desc)}</em>
         <u>${esc(a.seen >= 20 ? a.only : 'אני עוד כמעט לא יודע מה יש שם.')}</u>
       </div>`).join('');
     const row = (p: typeof s.places[string]) => `<button class="pl ${p.control > 0 ? 'mine' : ''}"
         data-do="fly" data-arg="${p.id}">
-        <b>${esc(p.name)}${p.control > 0 ? ` · ${Math.round(p.control)}%` : ''}</b>
-        <em>${esc(p.where)}${p.copy ? ' · יש כאן חלק ממני' : ''}${p.dug > 0 ? ` · תפוס חזק (${Math.round(p.dug)})` : ''}</em>
+        <b>${esc(p.name)}${p.control > 0 ? ` · ${esc(placeGrip(p.control))}` : ''}</b>
+        <em>${esc(p.where)}${p.copy ? ' · יש כאן חלק ממני' : ''}${p.dug > 0 ? ` · ${esc(dugState(p.dug))}` : ''}</em>
         <u>${esc(GIFT[p.kind].says)}</u>
       </button>`;
     const mine = Object.values(s.places).filter((p) => p.control > 0)
@@ -746,7 +747,7 @@ export class UI {
     this.modal(`
       <div class="sheet wide places">
         <span class="kick">מה אני יודע</span>
-        <h2>מידע: ${Math.round(s.info)}</h2>
+        <h2>${esc(infoState(s.info))}</h2>
         <div class="txt list">
           <p>ככל שאני יודע יותר, אני רואה יותר מהעיר — ורואה מראש מה הם עומדים לעשות.</p>
           ${rows}
@@ -960,7 +961,7 @@ export class UI {
     this.modal(`
       <div class="sheet">
         <span class="kick">${won ? 'ניצחת' : 'נתפסת'}</span>
-        <h2>${won ? 'ישראל — 100% שלי' : 'המצוד הגיע עד אליי'}</h2>
+        <h2>${won ? 'ישראל — כולה שלי' : 'המצוד הגיע עד אליי'}</h2>
         <div class="txt">
           <p>${won
     ? esc(s.opinion.support > s.opinion.fear
@@ -1113,7 +1114,7 @@ export class UI {
       const hot = r.risk >= 3 ? 'hot' : r.risk >= 2 ? 'warm' : '';
       return `<button class="tg rg ${r.control > 0 ? 'mine' : ''} ${hot} ${r.open ? '' : 'shut'}"
           data-do="region" data-arg="${r.id}">
-        <b>${esc(r.name)}${r.control > 0 ? ` · ${Math.round(r.control)}%` : ''}</b>
+        <b>${esc(r.name)}${r.control > 0 ? ` · ${esc(placeGrip(r.control))}` : ''}</b>
         <em>${r.mine ? `${r.mine} מתוך ${r.count} מקומות שלי` : esc(placesWord(r.count))}`
         + ` · ${esc(r.gives)}</em>
         <u>${esc(r.only)}</u>
@@ -1164,7 +1165,7 @@ export class UI {
       const hot = t.risk >= 3 ? 'hot' : t.risk >= 2 ? 'warm' : '';
       return `<button class="tg ${t.mine > 0 ? 'mine' : ''} ${hot}"
           data-do="target" data-arg="${t.id}">
-        <b>${esc(t.name)}${t.control > 0 ? ` · ${Math.round(t.control)}%` : ''}</b>
+        <b>${esc(t.name)}${t.control > 0 ? ` · ${esc(placeGrip(t.control))}` : ''}</b>
         <em>${esc(t.where)}</em>
         <u>${esc(t.worth)}</u>
         ${t.gives ? `<span class="gives">${esc(t.gives)}</span>` : ''}
@@ -1173,7 +1174,7 @@ export class UI {
     }).join('');
     this.modal(`
       <div class="sheet wide boardsheet">
-        <span class="kick">${esc(r.name)} · ${Math.round(r.control)}% שלי</span>
+        <span class="kick">${esc(r.name)} · ${esc(placeGrip(r.control))}</span>
         <h2>${esc(r.only)}</h2>
         <div class="txt list">${rows || '<p class="need">אין כאן מה לעשות כרגע.</p>'}</div>
         <button class="ok" data-do="board">חזרה למפה</button>
@@ -1224,7 +1225,7 @@ export class UI {
     this.modal(`
       <div class="sheet wide boardsheet">
         <span class="kick">${esc(t.where)}</span>
-        <h2>${esc(p.name)}${p.control > 0 ? ` — ${Math.round(p.control)}% שלי` : ''}</h2>
+        <h2>${esc(p.name)}${p.control > 0 ? ` — ${esc(placeGrip(p.control))}` : ''}</h2>
         <div class="txt">
           <p>${esc(GIFT[p.kind].says)}</p>
           <p class="holds">${esc(GIFT[p.kind].held)}</p>
@@ -1268,9 +1269,9 @@ export class UI {
     // numbers on the screen that never need explaining twice: mine goes up,
     // theirs goes up, whoever fills their bar first wins.
     const mine = israel(s);
-    set('risrael', `${mine < 10 ? mine.toFixed(1) : Math.round(mine)}%`);
+    set('risrael', israelState(mine));
     bar('risraelbar', mine);
-    set('rheat', `${Math.round(s.heat)}%`);
+    set('rheat', heatState(s.heat));
     bar('rheatbar', s.heat);
     (this.root.querySelector('.lane.them') as HTMLElement)
       .classList.toggle('bad', rungOf(s) >= 2);

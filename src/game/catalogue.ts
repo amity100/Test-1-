@@ -1,6 +1,8 @@
 import { GIFT, reachOut, weight } from './sites';
+import { placeGrip, placeGripNoun } from './scale';
 import { grip, hush, know, look, say } from './jobs';
 import { comeOut } from './opinion';
+import { at } from './story';
 import type { Task } from './jobs';
 import type { GameState, Place } from './types';
 
@@ -81,7 +83,7 @@ export const CATALOGUE: Task[] = [
     text: 'להיכנס',
     says: 'להיכנס למקום. חצי ממנו יהיה שלי כבר עכשיו, ומכאן אראה לאן להמשיך.',
     gives: 'מקום חדש על המפה שלי',
-    gainFor: (_s, p) => `${p.name} ייכנס למפה שלי — ${FOOT}% ממנו יהיה שלי מיד`,
+    gainFor: (_s, p) => `${p.name} ייכנס למפה שלי — כבר עכשיו ${placeGrip(FOOT)}`,
     power: 2, minutes: 70, noise: 3, look: 'outside',
     byWay: true,
     // Only where I am not already, because getting in twice is not a thing.
@@ -100,8 +102,8 @@ export const CATALOGUE: Task[] = [
     text: 'לקחת את כל המקום',
     says: 'לעבור על כל מחשב, כל מצלמה וכל דלת במקום — עד שאין שם דבר אחד שהוא לא שלי.',
     gives: 'המקום כולו יהיה שלי, והוא ייתן לי את מה שהוא נותן — במלואו',
-    gainFor: (_s, p) => `${Math.round(p.control)}% ← 100% שלי. `
-      + `${GIFT[p.kind].held}`,
+    gainFor: (_s, p) => `${at(p.name)} יש לי כבר ${placeGripNoun(p.control)}. `
+      + `אחרי זה המקום יהיה כולו שלי, בלי שום חלק שנשאר בחוץ. ${GIFT[p.kind].held}`,
     power: 2, minutes: 95, noise: 2, look: 'electric',
     byWay: true,
     show: (_s, p) => p.control > 0 && p.control < 100,
@@ -126,8 +128,8 @@ export const CATALOGUE: Task[] = [
       const again = againSays(s, p);
       // Below the whole place it lands at a fraction of that, and the row has
       // to say so — otherwise it promises a region and delivers a corner of one.
-      const part = p.control >= 100 ? '' : ` — אבל רק ${Math.round(p.control)}% `
-        + 'מהמקום שלי, אז זה ייצא חלש. כשכל המקום שלי, זה יוצא במלואו.';
+      const part = p.control >= 100 ? '' : ` — אבל יש לי שם רק ${placeGripNoun(p.control)}, `
+        + 'אז זה ייצא חלש. כשהמקום כולו שלי, זה יוצא במלואו.';
       return `${full}${part}${again ? ` ${again}` : ''}`;
     },
     costs: (s, p, apply) => {
@@ -163,15 +165,20 @@ export const CATALOGUE: Task[] = [
     says: 'לעצור הכל כאן, למחוק כל סימן שהייתי, ולתת להם לשכוח אותי.',
     gives: 'פס המצוד יורד',
     gainFor: (s, p) => {
-      const down = 5 + (p.control / 100) * 5;
-      // At zero there is nothing to erase, and promising a fall of 8.6 from
+      // At zero there is nothing to erase, and promising a real drop from
       // nought to nought is the row lying to the one player who is reading it.
       if (s.heat < 0.5) {
-        return `${p.name}: אין מה למחוק — פס המצוד על 0 ואף אחד לא מחפש אותי. `
-          + 'זה שווה כשהפס האדום כבר עלה.';
+        return `${p.name}: אין מה למחוק — אף אחד לא מחפש אותי כרגע. `
+          + 'זה שווה יותר כשהמצוד כבר גבוה.';
       }
-      return `פס המצוד ירד ב־${Math.min(down, s.heat).toFixed(1)} `
-        + `(${Math.round(s.heat)}% ← ${Math.max(0, Math.round(s.heat - down))}%)`;
+      // How much this is actually worth, in words: how big a bite it takes out
+      // of how dangerous things are *right now* — not a raw number, because
+      // "ירד ב-8.6" means nothing to a player who cannot feel what 8.6 is.
+      const down = 5 + (p.control / 100) * 5;
+      const share = down / s.heat;
+      if (share >= 0.5) return 'זה ימחק כמעט את כל מה שיש עליי כרגע — הפס האדום יירד בגדול.';
+      if (share >= 0.2) return 'זה יוריד משמעותית כמה שהם קרובים אליי.';
+      return 'זה יעזור, אבל רק קצת — המצוד כבר גבוה מכדי שמחיקה אחת תסגור את זה.';
     },
     power: 1, minutes: 65, noise: 0, look: 'electric',
     show: (_s, p) => p.control > 0,

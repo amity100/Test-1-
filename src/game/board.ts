@@ -1,6 +1,8 @@
 
 import { GIFT, KIND_NAME, fadeRate, israel, weight as worthOf } from './sites';
 import { LOOK_NAME } from './types';
+import { v } from './story';
+import { israelState, placeGripNoun } from './scale';
 import { pressure } from './watch';
 import { liveHunts } from './hunt';
 import { at, places as placeCount, strip, things } from './story';
@@ -231,8 +233,6 @@ export interface Region {
   gives: string;
 }
 
-/** How much of a district must be mine before it opens the next ones. */
-export const OPENS_AT = 50;
 
 function areaControl(s: GameState, inside: Place[]): number {
   let held = 0;
@@ -268,8 +268,8 @@ export function regions(s: GameState): Region[] {
         .sort((x, y) => y.at - x.at);
       const best = ways[0];
       needs = best
-        ? `כדי להגיע לכאן: להחזיק ${OPENS_AT}% מ${strip(best.b.name)} `
-          + `— יש לך שם ${Math.round(best.at)}%`
+        ? `כדי להגיע לכאן: קודם צריך אחיזה טובה ב${strip(best.b.name)} — `
+          + (best.at > 0 ? `יש לי שם כרגע ${placeGripNoun(best.at)}` : 'עוד לא נגעתי שם בכלל')
         : 'עוד לא מצאתי דרך לשם';
     }
 
@@ -345,8 +345,8 @@ export function bestNow(s: GameState): string {
   const onto = s.hunters.find((h) => h.onLook || h.onKind);
   if (onto && s.heat >= 20) {
     if (onto.onLook) {
-      return `${onto.name} בודקת עכשיו כל דבר ש${LOOK_NAME[onto.onLook]}, וזה עולה לך `
-        + 'הרבה יותר. תיכנס למקומות בדרך אחרת — כל כיוון שהיא לא מסתכלת אליו זול עכשיו.';
+      return `${onto.name} ${v(onto, 'בודק', 'בודקת')} עכשיו כל דבר ש${LOOK_NAME[onto.onLook]}, `
+        + 'וזה עולה לך הרבה יותר. תיכנס למקומות בדרך אחרת — כל כיוון שהיא לא מסתכלת אליו זול עכשיו.';
     }
     return `שומרים במיוחד על כל ה${KIND_NAME[onto.onKind!]} בארץ בגלל ${onto.name}. `
       + 'כמה ימים במקומות מסוג אחר, והם ירדו מזה.';
@@ -360,7 +360,7 @@ export function bestNow(s: GameState): string {
   // Past the crossover the bar climbs whatever I do, and a player who has not
   // noticed is a player about to lose to a number he thought was idle.
   if (s.heat >= 35 && pressure(s) > 0.0035 / fadeRate(s)) {
-    return `${Math.round(israel(s))}% מהארץ שלך — ומכאן המצוד עולה לבד, `
+    return `${israelState(israel(s))} כבר שלך — ומכאן המצוד עולה לבד, `
       + 'כי כבר כמעט לא נשאר לך מאחורי מה להתחבא. תתפשט מהר, ותמחק עקבות בין לבין.';
   }
 

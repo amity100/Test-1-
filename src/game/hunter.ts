@@ -131,9 +131,9 @@ export function saw(s: GameState, amount: number, look: Look, kind: PlaceKind) {
     if (!h.onLook && h.id === 'noa'
       && (h.looks[look] ?? 0) >= SURE && (h.looks[look] ?? 0) >= looksAll * MOSTLY) {
       h.onLook = look;
-      tell(s, 'them', `${h.name} ${v(h, 'שם', 'שמה')} לב שהרבה מהדברים המוזרים `
-        + `נראים אותו דבר — ${LOOK_NAME[look]}. מעכשיו ${v(h, 'הוא בודק', 'היא בודקת')} `
-        + `כל דבר כזה מקרוב. ${now(s)}.`, 2);
+      tell(s, 'them', `${h.name} ${v(h, 'שם', 'שמה')} לב לדפוס: רוב מה שקורה כאן `
+        + `לאחרונה ${LOOK_NAME[look]}. מעכשיו ${v(h, 'הוא בודק', 'היא בודקת')} כל דבר `
+        + `כזה מקרוב. ${now(s)}.`, 2);
       bus.emit('toast', {
         text: `${h.name} תפסה את הדפוס: ${LOOK_NAME[look]}`, kind: 'bad', icon: '◎',
       });
@@ -141,8 +141,9 @@ export function saw(s: GameState, amount: number, look: Look, kind: PlaceKind) {
     if (!h.onKind && h.id === 'gadi'
       && (h.kinds[kind] ?? 0) >= SURE && (h.kinds[kind] ?? 0) >= kindsAll * MOSTLY) {
       h.onKind = kind;
-      tell(s, 'them', `${h.name} ${v(h, 'הבין', 'הבינה')} שכל מה שקורה קורה במקומות `
-        + `מאותו סוג: ${KIND_NAME[kind]}. עכשיו שומרים על כולם בארץ. ${now(s)}.`, 2);
+      tell(s, 'them', `${h.name} ${v(h, 'שם', 'שמה')} לב לדפוס: הכול קורה באותו `
+        + `סוג מקום — ${KIND_NAME[kind]}. עכשיו שומרים על כל ה${KIND_NAME[kind]} בארץ. `
+        + `${now(s)}.`, 2);
       bus.emit('toast', {
         text: `${h.name} שם עין על כל ה${KIND_NAME[kind]} בארץ`, kind: 'bad', icon: '◎',
       });

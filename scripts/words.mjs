@@ -84,4 +84,29 @@ if (bad) {
   console.error(`\n✗ ${bad} מילים שאסור להן להיות על המסך.`);
   process.exit(1);
 }
-console.log('✓ אין אף מילה טכנית בטקסט שהשחקן רואה, ואף פועל לא כתוב עם לוכסן.');
+
+// ── ולא מדברים עם השחקן באחוזים ──────────────────────────────────────────────
+//
+// The player's own words: "במקום לדבר כל הזמן באחוזים תמצא דרך טובה ומתאימה
+// יותר למשחק כזה... זה לא משחק מתמטיקה." Bars stay — a bar is a gauge, not a
+// number — but no sentence a person reads may carry a bare "72%" in it. Every
+// one of those turned out to be `scale.ts` not being called somewhere. The one
+// place a "%" is allowed on a Hebrew line is a CSS bar-fill, which always
+// carries the word "width:" right next to it; nothing else does.
+let percents = 0;
+for (const file of files) {
+  readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
+    const t = line.trim();
+    if (t.startsWith('//') || t.startsWith('*') || t.startsWith('/*')) return;
+    if (!HEB.test(line) || !line.includes('%') || line.includes('width:')) return;
+    console.log(`${file}:${i + 1}  ${t.slice(0, 96)}`);
+    percents += 1;
+  });
+}
+if (percents) {
+  console.error(`\n✗ ${percents} מקומות שבהם המשחק מדבר עם השחקן באחוזים במקום במילים.`);
+  process.exit(1);
+}
+
+console.log('✓ אין אף מילה טכנית בטקסט שהשחקן רואה, אף פועל לא כתוב עם לוכסן, '
+  + 'ואין אחוזים בטקסט — רק מילים.');
