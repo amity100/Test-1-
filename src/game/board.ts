@@ -339,14 +339,14 @@ export function bestNow(s: GameState): string {
 
   if (s.heat >= 60) {
     return `המצוד על ${Math.round(s.heat)} וזה כבר מסוכן. `
-      + 'עכשיו זה הזמן לרדת למחתרת במקום הכי חזק שלך, לא להתרחב.';
+      + 'עכשיו זה הזמן למחוק עקבות במקום הכי חזק שלך, לא להתרחב.';
   }
 
   // Past the crossover the bar climbs whatever I do, and a player who has not
   // noticed is a player about to lose to a number he thought was idle.
   if (s.heat >= 35 && pressure(s) > 0.0035 / fadeRate(s)) {
     return `${Math.round(israel(s))}% מהארץ שלך — ומכאן המצוד עולה לבד, `
-      + 'כי כבר כמעט לא נשאר לך מאחורי מה להתחבא. תתפשט מהר, ותרד למחתרת בין לבין.';
+      + 'כי כבר כמעט לא נשאר לך מאחורי מה להתחבא. תתפשט מהר, ותמחק עקבות בין לבין.';
   }
 
   // Two is what getting into anywhere costs, so anything less than two free is
@@ -360,14 +360,14 @@ export function bestNow(s: GameState): string {
   if (free < 2 && s.jobs.length) {
     const slow = [...s.jobs].sort((a, b) => b.left - a.left)[0];
     const where = s.places[slow.placeId];
-    return `נשאר לך רק ${free} כוח פנוי — לא מספיק כדי לחדור למקום חדש. `
+    return `נשאר לך רק ${free} כוח פנוי — לא מספיק כדי להיכנס למקום חדש. `
       + `אם זה דחוף, תעצור את "${slow.text}"${where ? ` ${at(where.name)}` : ''} `
       + 'ותקבל את הכוח בחזרה מיד.';
   }
 
   const held = Object.values(s.places).filter((p) => p.control > 0);
   if (held.length <= 1) {
-    return 'יש לך מקום אחד בעולם. הדבר הכי חשוב עכשיו: לחדור למקום שני.';
+    return 'יש לך מקום אחד בעולם. הדבר הכי חשוב עכשיו: להיכנס למקום שני.';
   }
 
   // Never recommend something already under way. The line was telling a player
@@ -377,10 +377,11 @@ export function bestNow(s: GameState): string {
   const busy = new Set(s.jobs.map((j) => j.placeId));
 
   const nearly = Object.values(s.places)
-    .filter((p) => p.control > 0 && p.control < 60 && !busy.has(p.id))
+    .filter((p) => p.control > 0 && p.control < 100 && !busy.has(p.id))
     .sort((a, b) => b.control - a.control)[0];
   if (nearly) {
-    return `${nearly.name} כבר ${Math.round(nearly.control)} אחוז שלך. תסיים להשתלט עליו — ואז הכפתור המיוחד שלו ייפתח.`;
+    return `${nearly.name} כבר ${Math.round(nearly.control)} אחוז שלך. `
+      + `תיקח את כל המקום — ואז ${GIFT[nearly.kind].button} ייתן הכל.`;
   }
 
   // Where I am already strong makes the next place next door cheap, and that

@@ -160,6 +160,9 @@ export function wouldRise(s: GameState, amount: number, look: Look): number {
  */
 export function riseSays(s: GameState, amount: number, look: Look): string {
   const up = wouldRise(s, amount, look);
+  // Nothing heard is nothing to explain. Saying it would go on somebody's tab
+  // when there is nothing to put there is noise about noise.
+  if (amount <= 0) return 'המצוד לא יזוז בכלל — אף אחד לא ישמע את זה';
   const cover = STORIES.find((t) => !s.dead.includes(t.id) && t.holds.includes(look));
   const tab = cover
     ? ` — זה ייכנס אצלם תחת "${cover.name}"${roomLeft(s, cover) <= amount * 1.5
@@ -521,7 +524,7 @@ export function driftSays(s: GameState): string {
   }
   const hours = Math.max(1, Math.round((100 - s.heat) / Math.max(0.1, up - down)));
   return `${mine}% מהארץ כבר שלי, וזה בעצמו מה שמעלה את הפס: ככל שיש לי יותר, `
-    + `כך פחות נשאר להתחבא מאחוריו. בקצב הזה ובלי לרדת למחתרת — כ־${hours} שעות עד הסוף.`;
+    + `כך פחות נשאר להתחבא מאחוריו. בקצב הזה ובלי למחוק עקבות — כ־${hours} שעות עד הסוף.`;
 }
 
 export function cool(s: GameState, mins: number) {

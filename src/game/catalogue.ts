@@ -164,7 +164,13 @@ export const CATALOGUE: Task[] = [
     gives: 'פס המצוד יורד',
     gainFor: (s, p) => {
       const down = 5 + (p.control / 100) * 5;
-      return `פס המצוד ירד ב־${down.toFixed(1)} `
+      // At zero there is nothing to erase, and promising a fall of 8.6 from
+      // nought to nought is the row lying to the one player who is reading it.
+      if (s.heat < 0.5) {
+        return `${p.name}: אין מה למחוק — פס המצוד על 0 ואף אחד לא מחפש אותי. `
+          + 'זה שווה כשהפס האדום כבר עלה.';
+      }
+      return `פס המצוד ירד ב־${Math.min(down, s.heat).toFixed(1)} `
         + `(${Math.round(s.heat)}% ← ${Math.max(0, Math.round(s.heat - down))}%)`;
     },
     power: 1, minutes: 65, noise: 0, look: 'electric',

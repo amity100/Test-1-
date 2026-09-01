@@ -365,7 +365,33 @@ export const MOST_OFFERS = 6;
  * camera different from a door, and no room for what makes them the same.
  */
 export function offersAt(s: GameState, placeId: string): Offer[] {
-  return trim(allOffersAt(s, placeId), MOST_OFFERS);
+  return order(s, trim(allOffersAt(s, placeId), MOST_OFFERS));
+}
+
+/**
+ * What to put at the top of the list.
+ *
+ * It used to be whatever was cheapest, and cheapest is not the same as useful:
+ * on the first night, with nobody looking for me at all, the quietest thing at
+ * every place in the country was erasing traces nobody had found — so the top
+ * row of every list was a button that did nothing, and the one that starts the
+ * game was underneath it.
+ *
+ * So the list is ordered by what is worth doing *now*. Getting somewhere new
+ * and finishing a place are always near the top; the brake climbs the list as
+ * the hunt does, and sits at the bottom while nobody is looking.
+ */
+function order(s: GameState, all: Offer[]): Offer[] {
+  const worth = (o: Offer): number => {
+    switch (o.task.id) {
+      case 'enter': return 100;
+      case 'grow': return 90;
+      case 'use': return 78;
+      case 'quiet': return s.heat;
+      default: return 50;
+    }
+  };
+  return [...all].sort((a, b) => (worth(b) - worth(a)) || (a.noise - b.noise));
 }
 
 /**

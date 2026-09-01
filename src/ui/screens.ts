@@ -141,7 +141,7 @@ export class Screens {
           <p class="gs-line">הוא מגיע ל־100 — נגמר. כל דבר רועש שאני עושה מרים אותו.</p>
           <div class="gs-rule"></div>
           <p class="gs-foot">אני מתחיל במקום אחד, במגדל אחד בתל אביב.<br>
-          הדבר הראשון שכדאי לי לעשות: <b>לחדור למקום שני</b>.</p>
+          הדבר הראשון שכדאי לי לעשות: <b>להיכנס למקום שני</b>.</p>
           <button class="tsb primary" data-act="ready">יאללה, מתחילים</button>
         </div>
       </div>`, 'goal');

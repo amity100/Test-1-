@@ -27,7 +27,7 @@ const page = await browser.newPage({
   viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2,
 });
 page.on('pageerror', (e) => console.log('שגיאה:', String(e)));
-await page.goto('http://localhost:5173/', { waitUntil: 'domcontentloaded' });
+await page.goto('http://localhost:5174/', { waitUntil: 'domcontentloaded' });
 if (save) {
   await page.evaluate((s) => localStorage.setItem('aviv3.save', s), save);
   await page.reload({ waitUntil: 'domcontentloaded' });
