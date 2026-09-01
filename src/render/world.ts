@@ -356,13 +356,17 @@ export class World {
     this.wantPitch = outside ? 0.5 : 0.1;
   }
 
-  /** Fly up and back until a whole district is in the picture. */
-  goToArea(x: number, z: number) {
+  /**
+   * Fly up and back until a whole district is in the picture.
+   *
+   * Districts are no longer all the same size: a generated one is a plate a
+   * hundred metres across, and the surveyed Tel Aviv ones are as wide as the
+   * ground they really cover — Ibn Gvirol's district is most of a kilometre.
+   * One fixed distance cannot frame both, so it is framed from the span.
+   */
+  goToArea(x: number, z: number, span = 96) {
     this.want.set(x, 6, z);
-    // A district plate is ninety-six metres across and the tallest thing on it
-    // is a chimney: from a hundred and twenty the camera is inside the power
-    // station rather than looking at the place it stands in.
-    this.wantDist = this.fit(250);
+    this.wantDist = this.fit(Math.max(240, span * 2.2));
     this.wantPitch = 0.62;
   }
 

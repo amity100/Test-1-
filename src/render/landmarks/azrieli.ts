@@ -207,8 +207,13 @@ function triangular(k: Kit) {
   return k.lamp(1.1, x, h + 7.4, z);
 }
 
-/** The Square Tower: 154 m, 44 m square, plant and masts on the roof. */
-function square(k: Kit) {
+/**
+ * The Square Tower: 154 m, 44 m square, plant and masts on the roof.
+ *
+ * Not called from `build`: this one is the enterable tower and is raised by
+ * the city builder instead. Kept because it is the record of its shape.
+ */
+export function square(k: Kit) {
   const { x, z, half, h } = SQR;
   k.box(half * 2 + 5, POD_H + 1, half * 2 + 5, M.dark, x, (POD_H + 1) / 2, z);
   k.box(half * 2, h - 6, half * 2, M.glass, x, (h - 6) / 2, z);
@@ -240,7 +245,11 @@ function square(k: Kit) {
 export function build(k: Kit): void {
   ground(k);
   podium(k);
-  const beacons = [circular(k), triangular(k), square(k)];
+  // The Square Tower is the one the player wakes up in, so it is built as a
+  // building you can walk into rather than as scenery — see BUILDINGS in
+  // city.ts, which stands it at exactly the offset `SQR` names. Drawing it here
+  // too would give the Azrieli Center four towers.
+  const beacons = [circular(k), triangular(k)];
 
   // Traffic on Derech Menachem Begin: southbound on the far lanes, north on
   // the near ones, red going away and white coming on.

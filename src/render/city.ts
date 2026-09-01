@@ -36,7 +36,7 @@ export const BUILDINGS: BuildingSpec[] = [
   // Where they really stand, in metres from Rabin Square. The ids are older
   // than the names — 'helios' was an invented tower before the map was surveyed
   // — and they are kept because the whole game refers to them by id.
-  { id: 'helios', name: 'מגדל עזריאלי העגול', x: 581, z: 391, w: 44, d: 44, floors: 49, inside: true },
+  { id: 'helios', name: 'מגדל עזריאלי המרובע', x: 694, z: 486, w: 44, d: 44, floors: 42, inside: true },
   { id: 'flats', name: 'שכונת הבבלי', x: 1007, z: -800, w: 22, d: 20, floors: 11, inside: false },
 ];
 

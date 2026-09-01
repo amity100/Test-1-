@@ -270,9 +270,9 @@ const CITY = ['gvirol', 'rothschild', 'yarkon', 'carmel', 'florentin',
 function buildPlaces(): Place[] {
   return [
     // ── the street I woke on ────────────────────────────────────────────────
-    P('helios', 'company', 'מגדל עזריאלי העגול', 'תל אביב',
-      'שמונים אנשים, ארבע עשרה קומות, ומכונות שעובדות כל הלילה בשביל אף אחד.',
-      'helios', 'gvirol', 14, 581, 391, 1,
+    P('helios', 'company', 'מגדל עזריאלי המרובע', 'תל אביב',
+      'ארבעים ושתיים קומות של משרדים, ומכונות שעובדות כל הלילה בשביל אף אחד.',
+      'helios', 'gvirol', 14, 0, 0, 1,
       // Not quite all of it. Waking up already finished with the only place you
       // are in leaves exactly one button on the first screen you look at, and
       // teaches nothing; a few floors still to take teaches spreading in the

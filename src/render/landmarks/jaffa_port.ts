@@ -288,7 +288,7 @@ export function build(k: Kit): void {
     const z = -115 + i * 25;
     k.cyl(0.36, 0.44, 1.5, M.wood, 6, EDGE + 2.0, QUAY + 0.75, z);
   }
-  for (const [px, pz] of [[17, -68], [17, 46], [17, 96], [15, -118]]) {
+  for (const [px, pz] of [[17, -68], [17, 46], [16, 20], [13, -84]]) {
     k.cyl(0.3, 0.38, 3.6, M.wood, 6, px, SEA + 1.4, pz);
   }
 
@@ -334,9 +334,9 @@ export function build(k: Kit): void {
     boat(k, 20 + k.rnd() * 1.6, 58 + i * 8, 8.5 + k.rnd() * 1.5, false, i === 1,
       floats, mastLamps);
   }
-  // Two bigger trawlers lying alongside the stone.
+  // Two bigger trawlers lying alongside the stone, inside the shelter.
   boat(k, 23, 8, 14, true, true, floats, mastLamps);
-  boat(k, 23, 112, 13, true, false, floats, mastLamps);
+  boat(k, 23, -50, 13, true, false, floats, mastLamps);
 
   // ---- Old Jaffa lifting away east above the port ------------------------
   k.box(56, 6, 150, M.stone, 104, 3, 20);

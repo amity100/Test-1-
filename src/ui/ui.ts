@@ -1026,7 +1026,7 @@ export class UI {
     // is where the choosing happens, and a district you have never seen from
     // the air is a name rather than a place.
     const a = s.areas[id];
-    if (a && r.open) this.world.goToArea(a.x, a.z);
+    if (a && r.open) this.world.goToArea(a.x, a.z, a.span);
     if (!r.open) {
       this.modal(`
         <div class="sheet wide boardsheet">
