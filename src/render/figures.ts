@@ -121,7 +121,9 @@ export class Figures {
 
     // The rest of the night shift — every one of them on a chair that exists.
     // Never more than a couple per floor, and never on a floor with nothing on it.
-    const wanted = ['helios:14', 'helios:9', 'helios:11', 'helios:6', 'helios:0', 'across:3', 'across:5'];
+    // The tower across the plaza is a building in the street now, not a room
+    // you walk into, so nobody is seated in it any more.
+    const wanted = ['helios:14', 'helios:9', 'helios:11', 'helios:6', 'helios:0'];
     let n = 0;
     for (const key of wanted) {
       const [b, fs] = key.split(':');

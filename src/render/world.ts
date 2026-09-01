@@ -13,7 +13,9 @@ import { Figures } from './figures';
 import { bus } from '../game/bus';
 import { makeObject, type ObjState, type PlaceObject } from './objects';
 import { makeStructure, ringSize } from './structures';
+import { hasLandmark, landmarkSize, makeLandmark } from './landmarks';
 import { buildLand, type Land } from './land';
+import { buildTelAviv, type TelAviv } from './telaviv';
 import type { GameState, Place } from '../game/types';
 
 /**
@@ -27,6 +29,11 @@ import type { GameState, Place } from '../game/types';
 
 const MINE = new THREE.Color('#5ff6ff');
 const COLD = new THREE.Color('#5c7383');
+/** How wide the thing standing here is: the real building, or its kind's shape. */
+function sizeOf(placeId: string, kind: Place['kind']): number {
+  return hasLandmark(placeId) ? landmarkSize(placeId) * 0.5 : ringSize(kind);
+}
+
 const MOON_OFF = new THREE.Vector3(-140, 190, 90);
 const LAMP_OFF = new THREE.Vector3(20, 90, 40);
 const WARM = new THREE.Color('#ffb347');
@@ -44,7 +51,9 @@ export class World {
 
   private city: CityParts;
   private lamp!: THREE.PointLight;
+  private fogBase = 0.0011;
   private land: Land | null = null;
+  private tlv: TelAviv;
   private inside: Interior;
   private veins = new CodeVeins();
   private swarm = new Swarm();
@@ -90,6 +99,10 @@ export class World {
     this.camera = new THREE.PerspectiveCamera(48, 1, 0.15, 4000);
 
     this.city = buildCity();
+    // The real city: sea, river, sand, streets and the ordinary blocks between
+    // the landmarks.
+    this.tlv = buildTelAviv();
+    this.scene.add(this.tlv.group);
     this.inside = buildInteriors();
     this.scene.add(this.city.group, this.inside.group, this.objectGroup,
       this.veins.group, this.swarm.group, this.figures.group);
@@ -128,8 +141,8 @@ export class World {
     this.scene.background = new THREE.Color(0x060d1a);
 
     // Sky glow above, the warm wash off the pavement below.
-    const hemi = new THREE.HemisphereLight(0x3d5a78, 0x2a2013, 1.45);
-    const amb = new THREE.AmbientLight(0x2e3646, 0.5);
+    const hemi = new THREE.HemisphereLight(0x44607e, 0x33281a, 2.1);
+    const amb = new THREE.AmbientLight(0x33405a, 0.95);
     this.scene.add(hemi);
     this.scene.add(amb);
     this.hemi = hemi;
@@ -180,13 +193,17 @@ export class World {
       // Inside one of the two towers you can walk into, a place is still the
       // thing on the desk. Everywhere else — which is the whole country — it is
       // a building, and it is drawn at the size of the building it is.
+      // A hand-built model of the real place if one has been authored, the
+      // generic shape for its kind if not, and the thing on the desk if you are
+      // standing inside a room rather than in the city.
       const outside = place.buildingId === 'street';
-      const obj = outside ? makeStructure(place.kind, place.id) : makeObject(place.kind);
+      const obj = (outside && makeLandmark(place.id))
+        || (outside ? makeStructure(place.kind, place.id) : makeObject(place.kind));
       obj.group.position.copy(spotAt(place.buildingId, place.floor, place.x, place.z, place.y));
       obj.group.userData.placeId = place.id;
       obj.hit.userData.placeId = place.id;
 
-      const wide = outside ? ringSize(place.kind) : 0.72;
+      const wide = outside ? sizeOf(place.id, place.kind) : 0.72;
       const ring = new THREE.Mesh(
         new THREE.TorusGeometry(wide, wide * 0.05, 6, 28),
         new THREE.MeshBasicMaterial({
@@ -326,7 +343,7 @@ export class World {
     const outside = place.buildingId === 'street';
     // Frame the structure, not a point in front of it. Twelve metres is the
     // right distance from a monitor and completely inside a power station.
-    const size = outside ? ringSize(place.kind) : 1.2;
+    const size = outside ? sizeOf(place.id, place.kind) : 1.2;
     // Far enough back that the whole structure is in the picture with some of
     // its district around it. Framed at three times its width the camera ends
     // up standing at the foot of a wall, which tells the player nothing about
@@ -351,9 +368,11 @@ export class World {
 
   /** Back out to where you can see the whole block. */
   wide() {
-    this.want.set(18, 26, 14);
-    this.wantDist = this.fit(190);
-    this.wantPitch = 0.62;
+    // Over the middle of Tel Aviv, high enough that the sea is on the right of
+    // the picture and the towers read as a skyline rather than as a wall.
+    this.want.set(120, 20, 380);
+    this.wantDist = this.fit(1250);
+    this.wantPitch = 0.58;
   }
 
   private fit(d: number) {
@@ -405,7 +424,7 @@ export class World {
     // Label a structure over its middle, not at its feet — a power station is
     // forty metres tall and a tag pinned to the tarmac beside it reads as
     // belonging to the ground.
-    v.y += m.place.buildingId === 'street' ? ringSize(m.place.kind) * 0.6 : 1.3;
+    v.y += m.place.buildingId === 'street' ? sizeOf(m.place.id, m.place.kind) * 0.6 : 1.3;
     v.project(this.camera);
     const r = this.renderer.domElement.getBoundingClientRect();
     return {
@@ -499,14 +518,39 @@ export class World {
 
     // Keep the moon over whatever is being looked at.
     this.moon.target.position.copy(this.target);
-    this.moon.position.copy(this.target).add(MOON_OFF);
     // Enough to see the room by, and no more: this light is a torch, not a sun.
     this.hereWant = this.dist < 46 ? 26 : this.dist < 110 ? 34 : 0;
     this.here.intensity += (this.hereWant - this.here.intensity) * Math.min(1, dt * 4);
     this.here.distance = 26 + this.dist * 0.7;
-    this.lamp.position.copy(this.target).add(LAMP_OFF);
-    this.lamp.intensity = 30000;
+    this.lamp.position.copy(this.target).add(LAMP_OFF.clone().multiplyScalar(
+      Math.max(1, this.dist / 90)));
+    this.lamp.distance = 320 + this.dist * 3.2;
+    this.lamp.intensity = 30000 + this.dist * this.dist * 2.2;
+
+    // Haze that belongs to the distance you are looking across. Tuned once for
+    // a two-hundred-metre block, the same density erased a four-kilometre city
+    // completely: from eighteen hundred metres up, Tel Aviv was a black screen
+    // with correct labels floating on it.
+    // How thick the haze should be for the distance being looked across. The
+    // daybreak code below thins it further as the sun comes up, so this is the
+    // base it works from rather than a value it can overwrite — which is what
+    // it was doing, pinning the night density at the figure that was tuned for
+    // a two-hundred-metre block and erasing a four-kilometre city completely.
+    this.fogBase = THREE.MathUtils.clamp(0.62 / Math.max(60, this.dist), 0.00010, 0.0014);
+
+    // And the moon's shadow box grows with the view, or a city seen from above
+    // is lit by a torch pointed at one street of it.
+    const box = this.moon.shadow.camera as THREE.OrthographicCamera;
+    const reach = THREE.MathUtils.clamp(this.dist * 1.15, 180, 1600);
+    if (Math.abs(box.right - reach) > 20) {
+      box.left = -reach; box.right = reach; box.top = reach; box.bottom = -reach;
+      box.far = 40 + reach * 6;
+      box.updateProjectionMatrix();
+    }
+    this.moon.position.copy(this.target)
+      .add(MOON_OFF.clone().multiplyScalar(Math.max(1, this.dist / 140)));
     this.city.tick(this.t, dt);
+    this.tlv.tick(this.t);
     this.veins.setScale(THREE.MathUtils.clamp(this.dist * 0.0055, 0.16, 1.5));
     this.veins.update(dt);
     this.swarm.setScale(THREE.MathUtils.clamp(this.dist * 0.0075, 0.28, 2.2));
@@ -548,7 +592,7 @@ export class World {
       this.moon.intensity = 1.15 + d * 1.1;
       this.moon.color.setHex(0xa9c9e4).lerp(new THREE.Color(0xffe6bd), d);
       const fog = this.scene.fog as THREE.FogExp2;
-      fog.density = 0.0011 * (1 - d * 0.55);
+      fog.density = this.fogBase * (1 - d * 0.55);
       fog.color.setHex(0x061020).lerp(new THREE.Color(0x9fb8cc), d);
       (this.scene.background as THREE.Color).setHex(0x060d1a).lerp(new THREE.Color(0x8fabc4), d);
     }

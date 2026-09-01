@@ -92,12 +92,15 @@ head('הם באים לבד');
   // top bar at a hundred, which pins the hunt bar there too, and the game ends
   // before anybody gets round to doing anything about me. What is being tested
   // here is the doing, so the run has to survive long enough to be done to.
+  // A slice of the country rather than all of it: holding everything pins the
+  // top bar at a hundred, which pins the hunt bar there too, and the game ends
+  // before anybody gets round to doing anything about me. What is being tested
+  // here is the doing, so the run has to survive long enough to be done to.
+  // Named districts were the wrong way to take a slice — the map was resurveyed
+  // and they stopped holding what they used to — so it is a plain fraction now.
   const s = newGame('noisy');
-  for (const p of Object.values(s.places)) {
-    if (['gvirol', 'center', 'rothschild', 'hall'].includes(p.areaId)) {
-      p.found = true; p.control = 60; p.seen = 60;
-    }
-  }
+  const some = Object.values(s.places).slice(0, 16);
+  for (const p of some) { p.found = true; p.control = 60; p.seen = 60; }
   s.power.all = 30;
   // The loudest thing available, over and over, and then hands off entirely.
   //

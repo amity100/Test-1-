@@ -556,10 +556,8 @@ const run = (s: GameState, mins: number, step = 5) => {
   // three people putting an eye on something, and nothing was ever taken back.
   const bite = (heat: number) => {
     const s = newGame(`bite${heat}`);
-    for (const p of Object.values(s.places)) {
-      if (['gvirol', 'center', 'rothschild', 'hall'].includes(p.areaId)) {
-        p.found = true; p.control = 80; p.seen = 70; p.heat = 45;
-      }
+    for (const p of Object.values(s.places).slice(0, 16)) {
+      p.found = true; p.control = 80; p.seen = 70; p.heat = 45;
     }
     const was: Record<string, number> = {};
     for (const p of Object.values(s.places)) was[p.id] = p.control;
@@ -593,7 +591,7 @@ const run = (s: GameState, mins: number, step = 5) => {
   // Every place stands inside its own district, not somewhere else's.
   const strays = all.filter((p) => {
     const a = s.areas[p.areaId];
-    return a && p.buildingId === 'street' && Math.hypot(p.x - a.x, p.z - a.z) > 96;
+    return a && p.buildingId === 'street' && Math.hypot(p.x - a.x, p.z - a.z) > a.span;
   });
   ok(strays.length === 0,
     `כל מקום עומד בתוך האזור שלו${strays.length ? ` (${strays[0].name})` : ''}`);
@@ -605,7 +603,11 @@ const run = (s: GameState, mins: number, step = 5) => {
   for (let i = 0; i < areas.length; i++) {
     for (let j = i + 1; j < areas.length; j++) {
       const d = Math.hypot(areas[i].x - areas[j].x, areas[i].z - areas[j].z);
-      if (d < 60) close = `${areas[i].name} ו${areas[j].name}`;
+      // Districts of a real city abut and overlap — Rabin Square and Dizengoff
+      // Square are five hundred metres apart and both are real districts. What
+      // must not happen is two of them sharing a centre, which would make them
+      // the same point on the map with two names.
+      if (d < 250) close = `${areas[i].name} ו${areas[j].name}`;
     }
   }
   ok(!close, `ואף שני אזורים לא יושבים אחד על השני${close ? ` (${close})` : ''}`);

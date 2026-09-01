@@ -33,9 +33,11 @@ export const FLOOR_H = 4.2;
 const HOME_H = 2.95;
 
 export const BUILDINGS: BuildingSpec[] = [
-  { id: 'helios', name: 'מגדל הליוס', x: 0, z: 0, w: 30, d: 26, floors: 15, inside: true },
-  { id: 'across', name: 'הבניין ממול', x: 78, z: -14, w: 24, d: 22, floors: 8, inside: true },
-  { id: 'flats', name: 'שכונת הבבלי', x: -70, z: 22, w: 20, d: 18, floors: 6, inside: false },
+  // Where they really stand, in metres from Rabin Square. The ids are older
+  // than the names — 'helios' was an invented tower before the map was surveyed
+  // — and they are kept because the whole game refers to them by id.
+  { id: 'helios', name: 'מגדל עזריאלי העגול', x: 581, z: 391, w: 44, d: 44, floors: 49, inside: true },
+  { id: 'flats', name: 'שכונת הבבלי', x: 1007, z: -800, w: 22, d: 20, floors: 11, inside: false },
 ];
 
 const CY = new THREE.Color('#5ff6ff');
@@ -542,20 +544,15 @@ export function buildCity(): CityParts {
   const lit: Lit[] = [];
   const ticks: Array<(t: number, dt: number) => void> = [];
 
-  ground(group, bag, rng);
-  sea(group, ticks);
-
-  for (const r of blocks()) {
-    const d = Math.hypot((r.x0 + r.x1) / 2, (r.z0 + r.z1) / 2);
-    if (d > 400) continue;
-    fillBlock(bag, rng, lit, r, d < 175);
-    yard(bag, rng, r, d < 260);
-  }
-
+  // The ground, the sea, the roads and the filler blocks used to be built here,
+  // as a generic city centred on the origin. They are built by `telaviv.ts` now,
+  // from the real coastline, the real Yarkon and the real streets — so what is
+  // left in this file is the two towers you can actually walk into, their lit
+  // windows and the traffic. Building both would give the city two floors, two
+  // seas and two sets of roads a metre apart.
   for (const b of BUILDINGS) shells.set(b.id, tower(group, b, rng, windows, lit));
 
   streetKit(bag, rng, group);
-  skyline(group, rng);
   litWindows(group, lit);
   cars(group, ticks);
 

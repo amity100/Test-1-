@@ -205,6 +205,15 @@ export interface Area {
   seen: number;
   /** How well guarded it is to begin with. */
   guard: number;
+  /**
+   * How far this district reaches, in metres from its centre.
+   *
+   * Generated districts are a plate a hundred metres across. The Tel Aviv ones
+   * are the real thing — Ibn Gvirol runs for kilometres and the district that
+   * holds it has to be the size of the ground it actually covers, or its own
+   * landmarks stand outside it.
+   */
+  span: number;
   /** Areas that become reachable once I am properly inside this one. */
   opens: string[];
   /** The one thing that is true only here. */

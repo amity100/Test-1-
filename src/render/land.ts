@@ -20,7 +20,7 @@ import type { Area } from '../game/types';
  */
 
 /** How far the detailed Tel Aviv block reaches. Beyond this is country. */
-export const CITY_REACH = 300;
+export const CITY_REACH = 2600;
 
 const GROUND = 0x14181c;
 
@@ -59,13 +59,21 @@ export function buildLand(areas: Area[]): Land {
   const plates = new Map<string, THREE.Vector3>();
   const rng = new RNG('land-0312');
 
-  // The country floor, well past the furthest district.
+  // The country floor, sized from where the districts actually are rather than
+  // from a number typed in once: the map grew from one street to Jaffa-to-Eilat
+  // and a fixed plane leaves the far ends of it standing on nothing.
+  const xs = areas.map((a) => a.x);
+  const zs = areas.map((a) => a.z);
+  const midX = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const midZ = (Math.min(...zs) + Math.max(...zs)) / 2;
+  const wide = (Math.max(...xs) - Math.min(...xs)) + 3000;
+  const deep = (Math.max(...zs) - Math.min(...zs)) + 3000;
   const base = new THREE.Mesh(
-    new THREE.PlaneGeometry(4200, 4800),
+    new THREE.PlaneGeometry(wide, deep),
     new THREE.MeshStandardMaterial({ color: GROUND, roughness: 1 }),
   );
   base.rotation.x = -Math.PI / 2;
-  base.position.set(120, -0.7, 300);
+  base.position.set(midX, -0.7, midZ);
   base.receiveShadow = true;
   group.add(base);
 
@@ -74,7 +82,7 @@ export function buildLand(areas: Area[]): Land {
     plates.set(a.id, new THREE.Vector3(a.x, 0, a.z));
     if (!far) continue;
 
-    const r = 96;
+    const r = a.span;
     const plate = new THREE.Mesh(
       new THREE.CircleGeometry(r, 26),
       new THREE.MeshStandardMaterial({ color: floorOf(a.kind), roughness: 0.96 }),
@@ -97,11 +105,11 @@ export function buildLand(areas: Area[]): Land {
 
     // The road in, pointing back the way the country runs.
     const road = new THREE.Mesh(
-      new THREE.PlaneGeometry(11, 260),
+      new THREE.PlaneGeometry(11, r * 2.7),
       new THREE.MeshStandardMaterial({ color: 0x1b1e22, roughness: 0.98 }),
     );
     road.rotation.x = -Math.PI / 2;
-    road.position.set(a.x, -0.5, a.z + (a.z > 0 ? -150 : 150));
+    road.position.set(a.x, -0.5, a.z + (a.z > 0 ? -r * 1.6 : r * 1.6));
     group.add(road);
 
     // And the low stuff a place has around its edges: sheds, walls, parked things.
