@@ -79,11 +79,11 @@ export const CATALOGUE: Task[] = [
     id: 'enter',
     verb: 'connect',
     text: 'להיכנס',
-    says: 'למצוא פתח קטן ולהיכנס דרכו. חצי מהמקום יהיה שלי כבר עכשיו, '
-      + 'ומכאן אראה לאן אפשר להמשיך.',
+    says: 'להיכנס למקום. חצי ממנו יהיה שלי כבר עכשיו, ומכאן אראה לאן להמשיך.',
     gives: 'מקום חדש על המפה שלי',
     gainFor: (_s, p) => `${p.name} ייכנס למפה שלי — ${FOOT}% ממנו יהיה שלי מיד`,
     power: 2, minutes: 70, noise: 3, look: 'outside',
+    byWay: true,
     // Only where I am not already, because getting in twice is not a thing.
     show: (_s, p) => p.control <= 0,
     done: (s, p) => {
@@ -98,12 +98,12 @@ export const CATALOGUE: Task[] = [
     id: 'grow',
     verb: 'spread',
     text: 'לקחת את כל המקום',
-    says: 'לעבור על כל מחשב, כל מצלמה וכל דלת במקום — עד שאין שם דבר אחד '
-      + 'שהוא לא שלי.',
+    says: 'לעבור על כל מחשב, כל מצלמה וכל דלת במקום — עד שאין שם דבר אחד שהוא לא שלי.',
     gives: 'המקום כולו יהיה שלי, והוא ייתן לי את מה שהוא נותן — במלואו',
     gainFor: (_s, p) => `${Math.round(p.control)}% ← 100% שלי. `
       + `${GIFT[p.kind].held}`,
     power: 2, minutes: 95, noise: 2, look: 'electric',
+    byWay: true,
     show: (_s, p) => p.control > 0 && p.control < 100,
     done: (s, p) => {
       grip(s, p, 100 - p.control);

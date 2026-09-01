@@ -5,6 +5,7 @@ import { maybeHunt } from './hunt';
 import { say } from './jobs';
 import { at, feltIt, v } from './story';
 import { fadeRate, israel } from './sites';
+import { saw } from './hunter';
 import type { GameState, Look, Move, Place, Rung } from './types';
 
 /**
@@ -88,6 +89,9 @@ export function leading(s: GameState): Story | null {
  * the one number that matters.
  */
 export function noticed(s: GameState, p: Place, amount: number, look: Look) {
+  // The people looking for me are counting. This is the only place noise lands,
+  // so there is no way to make a sound in this game that nobody counts.
+  saw(s, amount, look, p.kind);
   // Being in a lot of small places means no single one of them stands out.
   const thin = s.marks.many ? 0.7 : 1;
   p.heat = Math.min(100, p.heat + amount * 4 * thin);
@@ -103,11 +107,12 @@ export function noticed(s: GameState, p: Place, amount: number, look: Look) {
 
   // Nothing to search for means nowhere to start searching.
   const slow = s.marks.hard_to_find ? 0.65 : 1;
+  const want = wanted(s);
   if (able.length) {
     s.belief[able[0].id] = (s.belief[able[0].id] ?? 0) + amount;
-    s.heat = Math.min(100, s.heat + amount * 0.15 * slow);
+    s.heat = Math.min(100, s.heat + amount * 0.15 * slow * want);
   } else {
-    s.heat = Math.min(100, s.heat + amount * 1.6 * slow);
+    s.heat = Math.min(100, s.heat + amount * 1.6 * slow * want);
     say(s, 'them', `מה שקרה ב${p.name} לא נראה כמו שום דבר שיש להם שם בשבילו.`);
   }
 
@@ -146,7 +151,13 @@ export function wouldRise(s: GameState, amount: number, look: Look): number {
   if (amount <= 0) return 0;
   const slow = s.marks.hard_to_find ? 0.65 : 1;
   const covered = STORIES.some((t) => !s.dead.includes(t.id) && t.holds.includes(look));
-  return amount * (covered ? 0.15 : 1.6) * slow;
+  // And how hard the country is actually looking. Being needed does not only
+  // slow the drift — it softens every single thing I do, because the report
+  // nobody files is the investigation nobody opens. Without this the second way
+  // of playing was true on paper and invisible in the hand: two styles that
+  // both brake at the same line brake the same number of times, and the whole
+  // difference between them lived in a number neither of them ever felt.
+  return amount * (covered ? 0.15 : 1.6) * slow * wanted(s);
 }
 
 /**

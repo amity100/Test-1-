@@ -15,7 +15,11 @@ import { board, bestNow, inRegion, regions, type Region, pointOf } from '../game
 import { israel } from '../game/sites';
 import { at as atName, mins as minsWord, places as placesWord, reach, to as toPlace } from '../game/story';
 import { STORIES, asking, coming, driftSays, leading, rungOf, saysNow } from '../game/watch';
-import { AREA_KIND_NAME, RUNG_NAME, VERB_NAME, VERB_SAYS, VOICE_NAME } from '../game/types';
+import { AREA_KIND_NAME, LOOK_NAME, RUNG_NAME, VERB_NAME, VERB_SAYS, VOICE_NAME } from '../game/types';
+import { riskSays } from '../game/ways';
+import { closeness } from '../game/hunter';
+import { wantedSays } from '../game/watch';
+import { v } from '../game/story';
 import type { GameState, Verb } from '../game/types';
 import { esc, h } from './dom';
 
@@ -263,9 +267,9 @@ export class UI {
       case 'feed': { this.showFeed(); break; }
       case 'target': { this.closeModal(); this.showTarget(arg); break; }
       case 'doat': {
-        const [placeId, taskId, above] = arg.split('|');
+        const [placeId, taskId, above, wayId] = arg.split('|');
         if (!placeId || !taskId) break;
-        if (start(s, placeId, taskId, above === '1')) {
+        if (start(s, placeId, taskId, above === '1', wayId || undefined)) {
           save(s);
           this.closeModal();
         }
@@ -376,11 +380,12 @@ export class UI {
     // that gave him a poem and the number 3.
     const rows = offers.map((o) => `
       <button class="op ${o.short > 0 ? 'poor' : ''}" data-do="doat"
-        data-arg="${p.id}|${o.task.id}|0">
-        <b>${SIGN[o.task.verb]} ${esc(o.task.textFor?.(p) ?? o.task.text)}</b>
-        <em>${esc(o.task.saysFor?.(p) ?? o.task.says)}</em>
+        data-arg="${p.id}|${o.task.id}|0|${o.way?.id ?? ''}">
+        <b>${SIGN[o.task.verb]} ${esc(o.text)}</b>
+        <em>${esc(o.way?.says ?? o.task.saysFor?.(p) ?? o.task.says)}</em>
         <span class="gain">מרוויח · ${esc(o.gain)}</span>
         <span class="risk">מסתכן · ${esc(o.risk)}</span>
+        ${o.way ? `<span class="odds">${esc(LOOK_NAME[o.way.look])} · ${esc(riskSays(o.wrong))}</span>` : ''}
         <u>${o.power} כוח · ${esc(o.forever ? 'עד שאעצור' : minsWord(o.minutes))}`
         + `${o.short > 0 ? ` · חסר ${o.short} כוח` : ''}</u>
         ${o.cheaper ? `<i class="ch">${esc(o.cheaper)}</i>` : ''}
@@ -750,6 +755,27 @@ export class UI {
     }).join('') : `<p class="need">${s.info < 30
       ? 'אני לא יודע מספיק כדי לראות מה הם מתכננים. צריך להסתכל יותר.'
       : 'לא מתוכנן שום דבר נגדי כרגע.'}</p>`;
+    // Who is actually looking, and what each of them has worked out about the
+    // way I work. This is the half of the manhunt a player can out-think, so it
+    // is written in their words and their conclusions are shown *before* they
+    // start costing anything — with a bar for how close each is to a conclusion,
+    // so becoming predictable is something you watch happen and can still stop.
+    const eyes = s.hunters.map((hh) => {
+      const c = closeness(hh);
+      const on = hh.onLook ? LOOK_NAME[hh.onLook] : hh.onKind ? KIND_NAME[hh.onKind] : null;
+      const near = c.look ? LOOK_NAME[c.look] : c.kind ? KIND_NAME[c.kind] : null;
+      return `<div class="th ${on ? 'lead' : ''}">
+        <b>${esc(hh.name)}</b>
+        <p>${esc(on ? `${on} — על זה ${v(hh, 'הוא בודק', 'היא בודקת')} כל דבר עכשיו.`
+        : hh.style)}</p>
+        <div class="thbar"><i style="width:${Math.round(c.at * 100)}%"></i></div>
+        <em>${esc(on
+        ? `כל עוד אני ממשיך ככה — זה עולה לי הרבה יותר. כמה ימים אחרת, ${v(hh, 'והוא יורד', 'והיא יורדת')} מזה.`
+        : near ? `הכי הרבה ${v(hh, 'הוא ראה', 'היא ראתה')} עד עכשיו: ${near}.`
+          : `עוד אין ${v(hh, 'לו', 'לה')} כיוון.`)}</em>
+      </div>`;
+    }).join('');
+
     this.modal(`
       <div class="sheet wide belief">
         <span class="kick">${esc(who ? `${who.name} · ${who.doing}` : RUNG_NAME[rung])}</span>
@@ -757,6 +783,10 @@ export class UI {
         <div class="txt">
           <p>${esc(saysNow(s))}</p>
           <p class="need">${esc(saysOpinion(s))}</p>
+          <p class="need">מי מחפש אותי, ומה הוא כבר הבין</p>
+          ${eyes}
+          <p class="need">${esc(wantedSays(s))}</p>
+          <p class="need">איך הם מסבירים לעצמם את מה שקורה</p>
           ${rows}
           <div class="th truth ${s.heat > 0 ? 'on' : ''}">
             <b>וכמה מזה כבר לא מוסבר</b>
@@ -1105,11 +1135,12 @@ export class UI {
     // here that does not say what it gives and what it risks is the row that
     // taught the player nothing.
     const line = (o: Offer) => `<button class="tg ${o.short > 0 ? 'poor' : ''}"
-        data-do="doat" data-arg="${p.id}|${o.task.id}|0">
-      <b>${SIGN[o.task.verb]} ${esc(o.task.textFor?.(p) ?? o.task.text)}</b>
-      <em>${esc(o.task.saysFor?.(p) ?? o.task.says)}</em>
+        data-do="doat" data-arg="${p.id}|${o.task.id}|0|${o.way?.id ?? ''}">
+      <b>${SIGN[o.task.verb]} ${esc(o.text)}</b>
+      <em>${esc(o.way?.says ?? o.task.saysFor?.(p) ?? o.task.says)}</em>
       <span class="gain">מרוויח · ${esc(o.gain)}</span>
       <span class="risk">מסתכן · ${esc(o.risk)}</span>
+      ${o.way ? `<span class="odds">${esc(LOOK_NAME[o.way.look])} · ${esc(riskSays(o.wrong))}</span>` : ''}
       <u>${o.power} כוח · ${esc(o.forever ? 'עד שאעצור' : minsWord(o.minutes))}`
       + `${o.short > 0 ? ` · חסר ${o.short} כוח` : ''}</u>
       ${o.cheaper ? `<i class="tnow">${esc(o.cheaper)}</i>` : ''}

@@ -272,6 +272,15 @@ export interface Job {
   above?: boolean;
   /** A decision made about a whole building: it lands on everything of mine in it. */
   wideIn?: string;
+  /**
+   * Which way in this was, for the two actions that have ways.
+   *
+   * Kept on the job rather than worked out again at the end, because the way is
+   * what decides how the thing looked, how loud it was, and what could go wrong
+   * — and all three of those are settled the minute you press, not the minute
+   * it lands.
+   */
+  wayId?: string;
 }
 
 // ── People ──────────────────────────────────────────────────────────────────
@@ -466,6 +475,8 @@ export interface Hunt {
   how?: 'answered' | 'landed';
 }
 
+import type { Hunter } from './hunter';
+
 export interface GameState {
   seed: string;
   /**
@@ -496,6 +507,14 @@ export interface GameState {
   moves: Move[];
   /** Somebody is looking for me right now, with a clock on it. */
   hunts: Hunt[];
+  /**
+   * The people looking for me, and what each of them has worked out.
+   *
+   * Not a number and not a rung: a short list of named people who keep count of
+   * how my work looks and where it happens, and who say out loud the moment
+   * they see a pattern. See `hunter.ts`.
+   */
+  hunters: Hunter[];
   /** Which country-sized things have already been said, so none is said twice. */
   told: string[];
   opinion: Opinion;

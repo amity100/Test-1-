@@ -410,10 +410,12 @@ const run = (s: GameState, mins: number, step = 5) => {
   // the build noticed, because everything was checking that pieces worked and
   // nothing was checking that the game was a game.
   const s = newGame('race');
+  // All gas: the fast, loud way in every time, and never once a brake. That is
+  // what "רק דוהר קדימה" means, and it is the claim this check exists for.
   const go = (pid: string, tid: string) => {
-    const o = offersAt(s, pid).find((x) => x.task.id === tid);
+    const o = offersAt(s, pid).find((x) => x.task.id === tid && x.way?.id === 'force');
     if (!o || o.short > 0) return false;
-    start(s, pid, tid);
+    start(s, pid, tid, false, 'force');
     return true;
   };
   let peak = 0;
@@ -440,10 +442,12 @@ const run = (s: GameState, mins: number, step = 5) => {
   // the country, and brakes before the bar catches him must be able to finish
   // it. Without this, the top bar is a promise the map cannot keep.
   const s = newGame('win');
-  const go = (pid: string, tid: string) => {
-    const o = offersAt(s, pid).find((x) => x.task.id === tid);
+  // Sensible: the slow quiet way in, and the brake when the bar climbs.
+  const go = (pid: string, tid: string, way = 'quiet') => {
+    const o = offersAt(s, pid).find((x) => x.task.id === tid
+      && (!x.task.byWay || x.way?.id === way));
     if (!o || o.short > 0) return false;
-    start(s, pid, tid);
+    start(s, pid, tid, false, way);
     return true;
   };
   for (let day = 0; day < 200 && !s.over; day++) {

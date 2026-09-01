@@ -84,7 +84,10 @@ function play(bot: Bot, days: number) {
     for (let n = 0; n < 3; n++) {
       const choice = bot.pick(s, open(s));
       if (!choice) break;
-      if (!start(s, choice.placeId, choice.o.task.id)) {
+      // The way in is part of the choice now, and starting a different one from
+      // the row that was picked is how the reckless bot quietly became the
+      // careful one: it chose the loudest row on the screen and then sneaked in.
+      if (!start(s, choice.placeId, choice.o.task.id, false, choice.o.way?.id)) {
         const drop = bot.drop?.(s);
         if (drop) stop(s, drop);
         break;

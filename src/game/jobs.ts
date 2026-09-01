@@ -4,6 +4,8 @@ import { crowd, minuteOfDay, now } from './clock';
 import { discount, poolFrom } from './sites';
 import { afterJob, at, snap, tell, v } from './story';
 import { riseSays } from './watch';
+import { WAYS, howItWent, riskAt, riskSays, wayOf, type Way } from './ways';
+import { watching } from './hunter';
 import type { GameState, Job, Look, Place, PlaceKind, Verb } from './types';
 
 /**
@@ -95,6 +97,16 @@ export interface Task {
   wide?: boolean;
   /** Only hide it when it would be nonsense here, never when it is merely hard. */
   show?(s: GameState, p: Place): boolean;
+  /**
+   * True for the two actions that take a place, which are not one button.
+   *
+   * Getting in and finishing the job are the most pressed things in the game,
+   * and until there was a choice of *how*, they were a price and a number going
+   * up. Each of them is offered once per way in `ways.ts`, and the way decides
+   * the time, the noise, what it looks like in the morning, and what can go
+   * wrong.
+   */
+  byWay?: boolean;
   /** Anything about this place that changes what this particular task costs. */
   costs?(s: GameState, p: Place, apply: (mins: number, noise: number, why: string) => void): void;
   /** The moment it lands. */
@@ -106,6 +118,17 @@ export interface Task {
 /** What a job would cost if I started it right now, and why. */
 export interface Offer {
   task: Task;
+  /** Which way in this row is, for the two actions that have ways. */
+  way?: Way;
+  /**
+   * What the button says.
+   *
+   * Worked out once, here, because three things can decide it — the task, the
+   * kind of place ("לכבות את החשמל לשנייה" and not "להפעיל"), and the way in —
+   * and every screen that draws a row was working two of the three out for
+   * itself and getting the third wrong.
+   */
+  text: string;
   power: number;
   minutes: number;
   noise: number;
@@ -121,6 +144,8 @@ export interface Offer {
   short: number;
   /** True for the handful of things that run until I stop them. */
   forever: boolean;
+  /** How likely this way is to go wrong here, 0..1. Zero for a task without ways. */
+  wrong: number;
 }
 
 export const TASKS = CATALOGUE;
@@ -208,13 +233,14 @@ export function say(s: GameState, who: 'me' | 'them' | 'world', text: string) {
  * the humans hold it, and what I have become. Nothing is hidden and nothing is
  * refused.
  */
-export function priceOf(s: GameState, p: Place, t: Task, above = false): Offer {
+export function priceOf(s: GameState, p: Place, t: Task, above = false, way?: Way): Offer {
   const why: string[] = [];
-  const baseMins = t.minutesFor ? t.minutesFor(p) : t.minutes;
-  const baseNoise = t.noiseFor ? t.noiseFor(p) : t.noise;
+  const baseMins = (t.minutesFor ? t.minutesFor(p) : t.minutes) * (way?.mins ?? 1);
+  const baseNoise = (t.noiseFor ? t.noiseFor(p) : t.noise) * (way?.noise ?? 1);
   let mins = baseMins;
   let noise = baseNoise;
   let power = t.power;
+  if (way) why.push(`${way.text}: ${way.says}`);
 
   // Who is standing here, and what hour it is, used to move the price by about
   // seventy per cent between the best moment and the worst — which is to say,
@@ -264,6 +290,15 @@ export function priceOf(s: GameState, p: Place, t: Task, above = false): Offer {
   // Anything the task itself knows about this place.
   t.costs?.(s, p, (m, n, line) => { mins *= m; noise += n; why.push(line); });
 
+  // And what the people hunting me have worked out. A face somebody is
+  // specifically checking is three times as loud; while they are checking it,
+  // everything that does not look like it is quietly cheaper. This is the whole
+  // counterplay to an opponent who learns: stop being predictable.
+  const eye = watching(s, way?.look ?? (t.lookFor ? t.lookFor(p) : t.look), p.kind);
+  mins *= eye.mins;
+  noise *= eye.noise;
+  why.push(...eye.why);
+
   // Everything I already hold makes this cheaper, and says why.
   const help = discount(s, p);
   mins *= help.mins;
@@ -306,13 +341,15 @@ export function priceOf(s: GameState, p: Place, t: Task, above = false): Offer {
     : Math.max(0, Math.round(noise));
 
   return {
-    task: t, power, minutes: mins, noise,
+    task: t, way, power, minutes: mins, noise,
+    text: way ? way.text : (t.textFor?.(p) ?? t.text),
     why,
     gain: t.gainFor ? t.gainFor(s, p) : t.gives,
-    risk: riseSays(s, noise, t.lookFor ? t.lookFor(p) : t.look),
+    risk: riseSays(s, noise, way?.look ?? (t.lookFor ? t.lookFor(p) : t.look)),
     cheaper: cheaperLine(s, p, t, people),
     short: Math.max(0, power - (s.power.all - s.power.used)),
     forever: baseMins === 0,
+    wrong: way ? riskAt(s, p, way) : 0,
   };
 }
 
@@ -391,7 +428,11 @@ function order(s: GameState, all: Offer[]): Offer[] {
       default: return 50;
     }
   };
-  return [...all].sort((a, b) => (worth(b) - worth(a)) || (a.noise - b.noise));
+  // Among the ways into the same place, safest first. At three in the morning
+  // the one that rides somebody is the worst bet in the game — there is nobody
+  // to ride — and sorting by noise alone put it at the top of the list.
+  return [...all].sort((a, b) => (worth(b) - worth(a))
+    || (a.wrong - b.wrong) || (a.noise - b.noise));
 }
 
 /**
@@ -414,7 +455,20 @@ export function allOffersAt(s: GameState, placeId: string): Offer[] {
       : t.kinds ? t.kinds.includes(p.kind) : true))
     .filter((t) => (t.show ? t.show(s, p) : true))
     .filter((t) => !s.jobs.some((j) => j.taskId === t.id && j.placeId === p.id))
-    .map((t) => priceOf(s, p, t));
+    .flatMap((t) => spread(s, p, t, false));
+}
+
+/**
+ * One row, or one row per way in.
+ *
+ * The two actions that take a place are three rows each, and they are the only
+ * rows the player sees for that place while it is being taken — getting in and
+ * finishing are never both on the list, because one of them is always done. So
+ * the list stays five rows at its longest and every row is a different bet.
+ */
+function spread(s: GameState, p: Place, t: Task, above: boolean): Offer[] {
+  if (!t.byWay) return [priceOf(s, p, t, above)];
+  return WAYS.map((w) => priceOf(s, p, t, above, w));
 }
 
 /**
@@ -425,11 +479,15 @@ export function allOffersAt(s: GameState, placeId: string): Offer[] {
  */
 function trim(all: Offer[], most: number): Offer[] {
   const cheap = (a: Offer, b: Offer) => (a.noise - b.noise) || (a.minutes - b.minutes);
-  const byVerb = new Map<Verb, Offer[]>();
+  // Grouped by verb *and* by way: three ways into a place are three different
+  // decisions, and keeping "the cheapest of each verb" would quietly throw two
+  // of them away and hand back the slow one every time.
+  const byVerb = new Map<string, Offer[]>();
   for (const o of all) {
-    const list = byVerb.get(o.task.verb) ?? [];
+    const key = `${o.task.verb}:${o.way?.id ?? ''}`;
+    const list = byVerb.get(key) ?? [];
     list.push(o);
-    byVerb.set(o.task.verb, list);
+    byVerb.set(key, list);
   }
   const out: Offer[] = [];
   const rest: Offer[] = [];
@@ -461,17 +519,21 @@ export function wideOffersAt(s: GameState, placeId: string): Offer[] {
       : t.kinds ? t.kinds.includes(p.kind) : true))
     .filter((t) => (t.show ? t.show(s, p) : true))
     .filter((t) => !s.jobs.some((j) => j.taskId === t.id && j.placeId === p.id))
-    .map((t) => priceOf(s, p, t, true)), MOST_OFFERS);
+    .flatMap((t) => spread(s, p, t, true)), MOST_OFFERS);
 }
 
 // ── starting, running, stopping ─────────────────────────────────────────────
 
-export function start(s: GameState, placeId: string, taskId: string, above = false): boolean {
+export function start(s: GameState, placeId: string, taskId: string, above = false,
+  wayId?: string): boolean {
   const p = s.places[placeId];
   if (!p) return false;
   const t = [...TASKS, ...waysInto(s, p)].find((x) => x.id === taskId);
   if (!t) return false;
-  const o = priceOf(s, p, t, above);
+  // A way that was asked for but does not exist is not a reason to refuse — the
+  // slow, quiet one is what anybody means by "just get in there".
+  const way = t.byWay ? (wayOf(wayId) ?? WAYS[0]) : undefined;
+  const o = priceOf(s, p, t, above, way);
   if (o.short > 0) {
     bus.emit('toast', {
       text: `אין לי מספיק כוח פנוי. צריך לעצור משהו אחר.`, kind: 'warn', icon: '⊘',
@@ -480,14 +542,15 @@ export function start(s: GameState, placeId: string, taskId: string, above = fal
   }
   s.jobs.push({
     id: `j${s.at}_${s.jobs.length}_${taskId}`,
-    taskId, placeId, verb: t.verb, text: t.textFor?.(p) ?? t.text,
+    taskId, placeId, verb: t.verb, text: o.text,
     power: o.power, left: o.minutes, total: Math.max(1, o.minutes),
-    forever: (t.minutesFor ? t.minutesFor(p) : t.minutes) === 0, noise: o.noise,
-    look: t.lookFor ? t.lookFor(p) : t.look,
+    forever: o.forever, noise: o.noise,
+    look: way?.look ?? (t.lookFor ? t.lookFor(p) : t.look),
+    wayId: way?.id,
     above: above || undefined,
   });
   s.power.used += o.power;
-  tell(s, 'me', `התחלתי: ${t.textFor?.(p) ?? t.text} — ${p.name}.`, 0, p.id);
+  tell(s, 'me', `התחלתי: ${o.text} — ${p.name}.`, 0, p.id);
   bus.emit('sfx', 'step');
   bus.emit('changed', undefined);
   return true;
@@ -540,12 +603,56 @@ export function runJobs(s: GameState, mins: number, noisy: (p: Place, n: number,
     // button finished. This is the promise that nothing happens silently.
     const was = snap(s, p);
     t.done?.(s, p);
-    if (j.noise > 0) noisy(p, j.noise, j.look);
+
+    // How the way in actually went. Decided here, at the end, because that is
+    // where the player is watching — and printed as a sentence, because a bet
+    // whose result you have to infer from a number is not a bet you can learn
+    // from.
+    let heard = j.noise;
+    if (j.wayId) {
+      const w = wayOf(j.wayId);
+      const how = w ? howItWent(s, p, w, j.id) : 'plain';
+      if (how === 'wrong') {
+        heard = Math.max(1, Math.round(j.noise * 2.2 + 2));
+        wentWrong(s, p, w);
+      } else if (how === 'clean') {
+        heard = Math.floor(j.noise * 0.35);
+        tell(s, 'me', `${j.text} — ויצא חלק לגמרי. אף אחד לא ידע שהייתי שם.`, 1, p.id);
+        bus.emit('toast', { text: 'יצא חלק — כמעט בלי רעש', kind: 'good', icon: '◇' });
+      }
+    }
+    if (heard > 0) noisy(p, heard, j.look);
     afterJob(s, p, was, j.text);
     bus.emit('job:done', j.id);
     bus.emit('toast', { text: `${j.text} — נגמר`, kind: 'good', icon: '✔' });
     stop(s, j.id);
   }
+}
+
+/**
+ * It went wrong: I am in, and somebody knows something happened.
+ *
+ * Never "the job failed". Failing a job the player watched run for an hour of
+ * world time is a punishment, not a decision, and this game does not take back
+ * what it gave. What goes wrong is the *cover*: twice the noise, a person with
+ * a name who now has something to wonder about, and — for the way that rides
+ * somebody — that person specifically.
+ */
+function wentWrong(s: GameState, p: Place, w?: Way) {
+  const here = p.peopleIds.map((id) => s.people[id]).filter((q) => q && !q.gone);
+  const who = w?.needsPerson ? here[0] : here[0];
+  if (who) {
+    who.worry = Math.min(100, who.worry + 22);
+    who.saw = `משהו ${at(p.name)}`;
+    tell(s, 'them', `${who.name} ${v(who, 'הרגיש', 'הרגישה')} שמשהו לא בסדר ${at(p.name)} `
+      + `בדיוק כשנכנסתי. ${v(who, 'הוא לא יודע', 'היא לא יודעת')} מה זה היה — אבל `
+      + `${v(who, 'הוא יזכור', 'היא תזכור')} שזה קרה.`, 2, p.id);
+  } else {
+    tell(s, 'them', `נכנסתי, אבל לא בשקט. מי שיסתכל ${at(p.name)} בבוקר יראה שמישהו היה כאן.`,
+      2, p.id);
+  }
+  p.guard = Math.min(100, p.guard + 8);
+  bus.emit('toast', { text: 'משהו השתבש — נכנסתי, אבל שמעו אותי', kind: 'bad', icon: '✳' });
 }
 
 /** How much power everything I hold adds up to. */

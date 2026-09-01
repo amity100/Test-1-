@@ -194,8 +194,9 @@ export const GIFT: Record<PlaceKind, Gift> = {
     gain: (w) => `עוד אנשים בארץ יהיו תלויים בי — והכסף זז מ${w}`,
     held: 'כוח וידיעה: עוד פעולה במקביל, ואני רואה מהלך שלהם מראש',
     useNoise: 4, useMins: 110,
-    // the payment that was four months late simply arrived
-    useLook: 'normal',
+    // the payment that was four months late was authorised by somebody in the
+    // back office, which is the one explanation a bank always has to hand
+    useLook: 'person',
   },
   city: {
     short: 'עירייה',

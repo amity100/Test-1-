@@ -6,11 +6,12 @@ import type { GameState, Person, Place, Voice } from './types';
  * Bend a verb the right way round somebody.
  *
  * `v(who, 'הגיע', 'הגיעה')` — because a game with eight people in it, all of
- * whom it knows by name, has no excuse for writing "הגיע/ה". It lived inside
- * the hunt, which is why three lines outside the hunt were still saying
- * "דנה הלך/ה" to a player who has known Dana by name since the first night.
+ * whom it knows by name, has no excuse for writing "הגיע/ה".
+ *
+ * Takes anything that knows its own gender: the people in the building and the
+ * ones hunting me are different sorts of thing, and both get bent the same way.
  */
-export function v(who: Person, male: string, female: string): string {
+export function v(who: { he: boolean }, male: string, female: string): string {
   return who.he ? male : female;
 }
 

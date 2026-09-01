@@ -6,6 +6,7 @@ import { grow, rewire, shapeOf } from './grow';
 import { huntTick } from './hunt';
 import { runJobs, say, sync } from './jobs';
 import { opinionDay } from './opinion';
+import { coolOff, firstHunters, maybeJoin } from './hunter';
 import { holdTick, israel, openUp } from './sites';
 import { nationTick } from './story';
 import {
@@ -15,7 +16,11 @@ import { buildWorld } from './world';
 import type { GameState, Place, Verb } from './types';
 
 const SAVE = 'aviv3.save';
-const SAVE_VERSION = 5;
+// Six: the game a saved night was played under is not this one — there are
+// three ways into every place now, and named people keeping count of which one
+// I keep choosing. A night saved before either existed cannot be resumed into
+// a world that has both.
+const SAVE_VERSION = 6;
 
 // ── the things the world does on its own ────────────────────────────────────
 
@@ -184,6 +189,7 @@ export function newGame(seed = 'aviv'): GameState {
     dead: [],
     moves: [],
     hunts: [],
+    hunters: firstHunters(),
     told: [],
     opinion: { support: 0, fear: 0, need: 0, known: false },
     spent: { ...NO_SPEND },
@@ -234,6 +240,10 @@ export function tick(state: GameState, mins: number) {
   actOnStory(state);
   stagePush(state);
   cool(state, mins);
+  // A thread nobody has fed for a day goes cold, and the second one joins the
+  // moment the country knows I exist.
+  coolOff(state);
+  maybeJoin(state);
   opinionDay(state);
   grow(state);
   sync(state);

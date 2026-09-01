@@ -1208,6 +1208,16 @@ body.is-mobile .objectives ul li { min-height: 46px; }
 .boardsheet .txt > p { font-size: 12.5px; line-height: 1.65; margin-bottom: 6px; }
 .boardsheet > .txt:first-of-type { margin: 10px 0 4px; }
 .pick .op .risk { color: #ffb3c0; }
+
+/* ── the odds on a way in ──────────────────────────────────────────────────
+   The third line, and the one that turns getting into a place from a price
+   into a bet: what it will look like in the morning, and how likely it is to
+   go wrong. Amber, because it is neither what I gain nor what they gain —
+   it is the part I do not control. */
+.pick .op .odds, .boardsheet .tg .odds {
+  display: block; font-size: 11px; line-height: 1.5; margin-top: 3px;
+  color: var(--amber); opacity: .92;
+}
 .pick .holds {
   font-size: 11px; color: var(--cy-2); line-height: 1.5; margin: -4px 0 9px;
 }
