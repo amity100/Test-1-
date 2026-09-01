@@ -580,5 +580,55 @@ const run = (s: GameState, mins: number, step = 5) => {
     `וככל שהמצוד גבוה יותר הם לוקחים הרבה יותר (${hard} מול ${calm} במצוד נמוך)`);
 }
 
+{
+  // ── האזורים קיימים בעולם, לא רק ברשימה ────────────────────────────────────
+  // "זה רשימה כתובה ולא נמצא בתוך המשחק עצמו ויזואלית... כשאני לוחץ ברשימה על
+  // איזה מקום המשחק מוביל אותי סתם במפה לאיזה נקודה לא קשורה." He was right:
+  // sixty-one of sixty-four places carried coordinates picked when the whole
+  // game happened on one street, so every district in the country sat inside a
+  // single Tel Aviv block and flying to one arrived at a corner of another.
+  const s = newGame('space');
+  const all = Object.values(s.places);
+
+  // Every place stands inside its own district, not somewhere else's.
+  const strays = all.filter((p) => {
+    const a = s.areas[p.areaId];
+    return a && p.buildingId === 'street' && Math.hypot(p.x - a.x, p.z - a.z) > 96;
+  });
+  ok(strays.length === 0,
+    `כל מקום עומד בתוך האזור שלו${strays.length ? ` (${strays[0].name})` : ''}`);
+
+  // And no two districts stand on top of each other, or flying between them
+  // lands you in the same picture twice.
+  const areas = Object.values(s.areas);
+  let close: string | null = null;
+  for (let i = 0; i < areas.length; i++) {
+    for (let j = i + 1; j < areas.length; j++) {
+      const d = Math.hypot(areas[i].x - areas[j].x, areas[i].z - areas[j].z);
+      if (d < 60) close = `${areas[i].name} ו${areas[j].name}`;
+    }
+  }
+  ok(!close, `ואף שני אזורים לא יושבים אחד על השני${close ? ` (${close})` : ''}`);
+
+  // Two places in the same district must not stand in the same spot either.
+  let stacked: string | null = null;
+  for (const a of areas) {
+    const inside = all.filter((p) => p.areaId === a.id && p.buildingId === 'street');
+    for (let i = 0; i < inside.length; i++) {
+      for (let j = i + 1; j < inside.length; j++) {
+        if (Math.hypot(inside[i].x - inside[j].x, inside[i].z - inside[j].z) < 18) {
+          stacked = `${inside[i].name} ו${inside[j].name}`;
+        }
+      }
+    }
+  }
+  ok(!stacked, `ואף שני מבנים לא נבנים באותה נקודה${stacked ? ` (${stacked})` : ''}`);
+
+  // The country is genuinely spread out, so travelling across it is a journey.
+  const zs = areas.map((a) => a.z);
+  ok(Math.max(...zs) - Math.min(...zs) > 2000,
+    `והארץ באמת נפרסת מצפון לדרום (${Math.round(Math.max(...zs) - Math.min(...zs))} מטר)`);
+}
+
 console.log(bad ? `\n${bad} דברים לא עובדים` : '\nהעולם עונה בחזרה');
 process.exit(bad ? 1 : 0);

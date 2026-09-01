@@ -448,33 +448,75 @@ export class UI {
       const p = s.places[this.hovered];
       if (p && shownIn(p)) ids.add(this.hovered);
     }
-    if (near && !this.selected) {
+    // Everything standing in the district you are looking at gets its name on
+    // it. This used to require the camera to be within seventy-eight metres,
+    // which is close enough to touch a monitor and much closer than you can
+    // stand to a power station — so touring a district showed a country full
+    // of unlabelled shapes, and the only chip on the screen was a door back in
+    // Tel Aviv that happened to project into view from four hundred metres away.
+    if (!this.selected) {
       for (const p of Object.values(s.places)) {
-        if ((p.control > 0 || p.found) && shownIn(p)) ids.add(p.id);
+        if (p.control <= 0 && !p.found) continue;
+        if (p.buildingId === 'street') ids.add(p.id);
+        else if (shownIn(p)) ids.add(p.id);
       }
     }
 
     const spots: Array<{ id: string; x: number; y: number; z: number; label: string;
-      cls: string; act: string; arg: string }> = [];
+      cls: string; act: string; arg: string; away?: number }> = [];
     for (const id of ids) {
       const p = s.places[id];
       if (!p || (p.control <= 0 && !p.found)) continue;
       const v = this.world.project(id);
       if (!v || v.z > 1) continue;
+      // Only what is in front of you, in the district you are actually over —
+      // measured against how far back the camera is, so pulling up to look at a
+      // whole district does not strip the names off everything in it.
+      if (p.buildingId === 'street' && v.away > Math.max(340, this.world.howFar * 1.5)) continue;
       const busy = s.jobs.some((j) => j.placeId === p.id);
       const cls = p.cutAt !== undefined ? 'cut' : p.attention >= 2 ? 'hot'
         : p.control > 0 ? 'mine' : '';
       spots.push({
         id, ...v, label: p.control > 0 ? `${p.name} · ${Math.round(p.control)}%` : p.name,
-        cls: `${cls}${busy ? ' busy' : ''}`, act: 'place', arg: p.id,
+        cls: `${cls}${busy ? ' busy' : ''}`, act: 'place', arg: p.id, away: v.away,
       });
     }
+
+    // A phone screen holds about seven names before it stops being a view of a
+    // place and becomes a list drawn over one. Nearest first, and the rest
+    // arrive as you move — which is what makes flying over a district feel like
+    // going somewhere rather than reading a menu with a picture behind it.
+    spots.sort((a, b) => (a.away ?? 0) - (b.away ?? 0));
+    // Nearest wins the spot. Two names landing on the same patch of screen is
+    // one name the player cannot read and one he cannot press, so the further
+    // of the pair waits until the view moves.
+    // The clock, the race and the advice line own the top of the screen, and the
+    // running-jobs strip owns the bottom. A name drawn into either band is a
+    // button underneath a panel: readable in a screenshot, unpressable by a
+    // thumb. Those bands are not the world's to write in.
+    const roof = 176;
+    const floor = innerHeight - 150;
+    const kept: typeof spots = [];
+    for (const t of spots) {
+      if (kept.length >= 7) break;
+      if (t.y < roof || t.y > floor) continue;
+      // A name can run most of the width of a narrow phone, so how far apart two
+      // of them have to be is a fraction of the screen, not a fixed 130 pixels
+      // chosen while looking at a wide one.
+      if (kept.some((k) => Math.abs(k.x - t.x) < innerWidth * 0.7
+        && Math.abs(k.y - t.y) < 52)) continue;
+      kept.push(t);
+    }
+    spots.length = 0;
+    spots.push(...kept);
 
     for (const b of BUILDINGS) {
       if (!b.inside || inB === b.id) continue;
       const holds = Object.values(s.places).some((p) => p.buildingId === b.id && (p.control > 0 || p.found));
       if (!holds) continue;
-      const v = this.world.projectPoint(this.world.doorOf(b.id));
+      const door = this.world.doorOf(b.id);
+      if (this.world.awayFrom(door) > 260) continue;
+      const v = this.world.projectPoint(door);
       if (!v || v.z > 1) continue;
       const mine = Object.values(s.places).some((p) => p.buildingId === b.id && p.control > 0);
       spots.push({
@@ -980,6 +1022,11 @@ export class UI {
     const s = this.state;
     const r = regions(s).find((x) => x.id === id);
     if (!r) return;
+    // Opening a district takes you there. The list is how you choose; the world
+    // is where the choosing happens, and a district you have never seen from
+    // the air is a name rather than a place.
+    const a = s.areas[id];
+    if (a && r.open) this.world.goToArea(a.x, a.z);
     if (!r.open) {
       this.modal(`
         <div class="sheet wide boardsheet">

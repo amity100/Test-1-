@@ -12,6 +12,8 @@ import { CodeVeins, type Vein } from './glyphs';
 import { Figures } from './figures';
 import { bus } from '../game/bus';
 import { makeObject, type ObjState, type PlaceObject } from './objects';
+import { makeStructure, ringSize } from './structures';
+import { buildLand, type Land } from './land';
 import type { GameState, Place } from '../game/types';
 
 /**
@@ -25,6 +27,8 @@ import type { GameState, Place } from '../game/types';
 
 const MINE = new THREE.Color('#5ff6ff');
 const COLD = new THREE.Color('#5c7383');
+const MOON_OFF = new THREE.Vector3(-140, 190, 90);
+const LAMP_OFF = new THREE.Vector3(20, 90, 40);
 const WARM = new THREE.Color('#ffb347');
 const HOT = new THREE.Color('#ff5470');
 
@@ -39,6 +43,8 @@ export class World {
   private bloom: UnrealBloomPass;
 
   private city: CityParts;
+  private lamp!: THREE.PointLight;
+  private land: Land | null = null;
   private inside: Interior;
   private veins = new CodeVeins();
   private swarm = new Swarm();
@@ -136,14 +142,25 @@ export class World {
     moon.shadow.camera.near = 20;
     moon.shadow.camera.far = 520;
     const c = moon.shadow.camera as THREE.OrthographicCamera;
-    c.left = -140; c.right = 140; c.top = 140; c.bottom = -140;
+    c.left = -180; c.right = 180; c.top = 180; c.bottom = -180;
     this.scene.add(moon);
+    // The moon travels with the eye. Its shadow frustum is a box a few hundred
+    // metres across, and the map is a country three thousand metres long — nailed
+    // over Tel Aviv, it left everywhere else in permanent shadow, which is why
+    // flying to Haifa arrived at a black screen with the right name on it.
+    this.scene.add(moon.target);
     this.moon = moon;
 
     // A warm bounce off the street, so the ground floor is not a black hole.
     const street = new THREE.PointLight(0xffb060, 1400, 210, 2);
     street.position.set(34, 9, 40);
     this.scene.add(street);
+
+    // And the same courtesy everywhere else: a soft lamp riding the view, so a
+    // district four hundred metres from the city is lit like a place people
+    // live in rather than a silhouette.
+    this.lamp = new THREE.PointLight(0xffc98a, 0, 320, 2);
+    this.scene.add(this.lamp);
 
     // Wherever you are, there is enough light to see the room you are in.
     this.scene.add(this.here);
@@ -152,27 +169,37 @@ export class World {
   // ── the things you click ──────────────────────────────────────────────────
 
   build(state: GameState) {
+    // The country the districts stand in, built once from where they are.
+    if (this.land) this.scene.remove(this.land.group);
+    this.land = buildLand(Object.values(state.areas));
+    this.scene.add(this.land.group);
+
     this.objectGroup.clear();
     this.markers.clear();
     for (const place of Object.values(state.places)) {
-      const obj = makeObject(place.kind);
+      // Inside one of the two towers you can walk into, a place is still the
+      // thing on the desk. Everywhere else — which is the whole country — it is
+      // a building, and it is drawn at the size of the building it is.
+      const outside = place.buildingId === 'street';
+      const obj = outside ? makeStructure(place.kind, place.id) : makeObject(place.kind);
       obj.group.position.copy(spotAt(place.buildingId, place.floor, place.x, place.z, place.y));
       obj.group.userData.placeId = place.id;
       obj.hit.userData.placeId = place.id;
 
+      const wide = outside ? ringSize(place.kind) : 0.72;
       const ring = new THREE.Mesh(
-        new THREE.TorusGeometry(0.72, 0.035, 6, 28),
+        new THREE.TorusGeometry(wide, wide * 0.05, 6, 28),
         new THREE.MeshBasicMaterial({
           color: WARM, transparent: true, opacity: 0,
           blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false,
         }),
       );
       ring.rotation.x = Math.PI / 2;
-      ring.position.y = 1.1;
+      ring.position.y = outside ? 0.3 : 1.1;
       obj.group.add(ring);
 
       // Anything hung on a wall looks into the room; a front door looks out of it.
-      const b = buildingOf(place.buildingId);
+      const b = outside ? undefined : buildingOf(place.buildingId);
       if (b) {
         const inward = ['power', 'talk', 'water', 'money', 'company'].includes(place.kind);
         const outward = place.kind === 'city' || place.kind === 'state';
@@ -296,10 +323,30 @@ export class World {
   /** Fly to a place and stand close enough to see what is on the desk. */
   goTo(place: Place, close = true) {
     const at = spotAt(place.buildingId, place.floor, place.x, place.z, place.y);
-    this.want.copy(at).add(new THREE.Vector3(0, 1.2, 0));
-    this.wantDist = close ? 12 : 34;
+    const outside = place.buildingId === 'street';
+    // Frame the structure, not a point in front of it. Twelve metres is the
+    // right distance from a monitor and completely inside a power station.
+    const size = outside ? ringSize(place.kind) : 1.2;
+    // Far enough back that the whole structure is in the picture with some of
+    // its district around it. Framed at three times its width the camera ends
+    // up standing at the foot of a wall, which tells the player nothing about
+    // where he is.
+    this.want.copy(at).add(new THREE.Vector3(0, outside ? size * 0.55 : 1.2, 0));
+    this.wantDist = outside
+      ? this.fit(size * (close ? 5.5 : 9))
+      : (close ? 12 : 34);
     // Inside a room you look across it, not down onto it through the ceiling.
-    this.wantPitch = place.buildingId === 'street' ? 0.3 : 0.1;
+    this.wantPitch = outside ? 0.5 : 0.1;
+  }
+
+  /** Fly up and back until a whole district is in the picture. */
+  goToArea(x: number, z: number) {
+    this.want.set(x, 6, z);
+    // A district plate is ninety-six metres across and the tallest thing on it
+    // is a chimney: from a hundred and twenty the camera is inside the power
+    // station rather than looking at the place it stands in.
+    this.wantDist = this.fit(250);
+    this.wantPitch = 0.62;
   }
 
   /** Back out to where you can see the whole block. */
@@ -350,18 +397,32 @@ export class World {
     return hits.length ? (hits[0].object.userData.placeId as string) : null;
   }
 
-  project(placeId: string): { x: number; y: number; z: number } | null {
+  project(placeId: string): { x: number; y: number; z: number; away: number } | null {
     const m = this.markers.get(placeId);
     if (!m || !m.obj.group.visible) return null;
-    const v = m.obj.group.position.clone();
-    v.y += 1.3;
+    const at = m.obj.group.position;
+    const v = at.clone();
+    // Label a structure over its middle, not at its feet — a power station is
+    // forty metres tall and a tag pinned to the tarmac beside it reads as
+    // belonging to the ground.
+    v.y += m.place.buildingId === 'street' ? ringSize(m.place.kind) * 0.6 : 1.3;
     v.project(this.camera);
     const r = this.renderer.domElement.getBoundingClientRect();
-    return { x: (v.x * 0.5 + 0.5) * r.width, y: (-v.y * 0.5 + 0.5) * r.height, z: v.z };
+    return {
+      x: (v.x * 0.5 + 0.5) * r.width,
+      y: (-v.y * 0.5 + 0.5) * r.height,
+      z: v.z,
+      away: at.distanceTo(this.camera.position),
+    };
   }
+
+  /** How far the camera is from a point, for deciding what to name on screen. */
+  awayFrom(v: THREE.Vector3): number { return v.distanceTo(this.camera.position); }
 
   /** True once you are close enough that naming everything around you helps. */
   get near(): boolean { return this.dist < 78; }
+  /** How far back the camera is sitting right now. */
+  get howFar(): number { return this.dist; }
 
   /** Which building the camera is actually inside, and on which floor. */
   get inBuilding(): string | null { return this.host; }
@@ -435,10 +496,16 @@ export class World {
       this.target.clone().sub(this.camera.position).normalize().multiplyScalar(-2.4),
     );
     this.here.position.y += 1.6;
+
+    // Keep the moon over whatever is being looked at.
+    this.moon.target.position.copy(this.target);
+    this.moon.position.copy(this.target).add(MOON_OFF);
     // Enough to see the room by, and no more: this light is a torch, not a sun.
     this.hereWant = this.dist < 46 ? 26 : this.dist < 110 ? 34 : 0;
     this.here.intensity += (this.hereWant - this.here.intensity) * Math.min(1, dt * 4);
     this.here.distance = 26 + this.dist * 0.7;
+    this.lamp.position.copy(this.target).add(LAMP_OFF);
+    this.lamp.intensity = 30000;
     this.city.tick(this.t, dt);
     this.veins.setScale(THREE.MathUtils.clamp(this.dist * 0.0055, 0.16, 1.5));
     this.veins.update(dt);
