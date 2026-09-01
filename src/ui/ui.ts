@@ -68,6 +68,10 @@ export class UI {
     // The game opens on the city at night, storms of code over everything that
     // is mine. Starting inside a room put a wall in front of the one picture
     // that sells the whole game.
+    // Two handles for `npm run speed`, which counts what the phone is being
+    // asked to draw. Nothing in the game reads them.
+    (window as unknown as Record<string, unknown>).cost = () => this.world.cost();
+    (window as unknown as Record<string, unknown>).__world = this.world;
     this.world.wide();
     this.refresh();
     this.showBoard();

@@ -52,6 +52,26 @@ export class World {
   private city: CityParts;
   private lamp!: THREE.PointLight;
   private fogBase = 0.0011;
+  private drawn = 0;
+  private tris = 0;
+
+  /**
+   * How many real pixels to draw for each pixel of screen — and the machinery
+   * that keeps lowering it until the game runs smoothly.
+   *
+   * A phone reports three device pixels per screen pixel, and drawing three
+   * times as many pixels through a night scene with a glow pass is exactly the
+   * "מאוד איטי בפלאפון" the game was. So the picture starts sharp and steps
+   * down whenever frames take too long, and steps back up when there is room.
+   * The player never sees the switch; they see a game that keeps up.
+   */
+  private sharp = Math.min(devicePixelRatio || 1, 2);
+  private readonly sharpest = Math.min(devicePixelRatio || 1, 2);
+  /** Rolling frame times, in milliseconds. */
+  private frames: number[] = [];
+  /** Seconds until the next time the picture is allowed to change. */
+  private settle = 2.5;
+  private lastFrame = 0;
   private land: Land | null = null;
   private tlv: TelAviv;
   private inside: Interior;
@@ -86,8 +106,12 @@ export class World {
   private wantPitch = 0.5;
 
   constructor(private container: HTMLElement) {
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    // No multisampling: every pass after the first draws into a buffer of its
+    // own, so the flag would cost a phone a full extra sample per pixel and
+    // never reach the screen. The softening the picture actually gets comes
+    // from the grade pass at the end.
+    this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+    this.renderer.setPixelRatio(this.sharp);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.42;
@@ -96,7 +120,13 @@ export class World {
     this.renderer.domElement.className = 'world-canvas';
     container.appendChild(this.renderer.domElement);
 
+    // The near plane moves with the view — see `nearFor`. A fixed 0.15 metres
+    // against a four-kilometre horizon left barely a decimetre of depth
+    // accuracy half a kilometre out, which is why every window pane and road
+    // marking in the city flickered against the wall behind it.
     this.camera = new THREE.PerspectiveCamera(48, 1, 0.15, 4000);
+    // Counted by hand, so a frame with several passes reports the whole frame.
+    this.renderer.info.autoReset = false;
 
     this.city = buildCity();
     // The real city: sea, river, sand, streets and the ordinary blocks between
@@ -151,9 +181,14 @@ export class World {
     const moon = new THREE.DirectionalLight(0xa9c9e4, 1.15);
     moon.position.set(-140, 190, 90);
     moon.castShadow = true;
-    moon.shadow.mapSize.set(2048, 2048);
+    // A smaller map that covers less ground is both cheaper and sharper than a
+    // big one stretched over a whole city, and a stretched one is what put the
+    // crawling speckle on every wall.
+    moon.shadow.mapSize.set(1024, 1024);
     moon.shadow.camera.near = 20;
     moon.shadow.camera.far = 520;
+    moon.shadow.bias = -0.0006;
+    moon.shadow.normalBias = 0.6;
     const c = moon.shadow.camera as THREE.OrthographicCamera;
     c.left = -180; c.right = 180; c.top = 180; c.bottom = -180;
     this.scene.add(moon);
@@ -337,6 +372,24 @@ export class World {
 
   // ── camera ────────────────────────────────────────────────────────────────
 
+  /**
+   * The nearest thing the camera bothers to draw, for a given view distance.
+   *
+   * Depth accuracy is decided almost entirely by this number, and it decides
+   * whether the city shimmers. Held at fifteen centimetres against a
+   * four-kilometre horizon, half a kilometre out the card could only tell
+   * depths a decimetre apart — and every window pane in this city sits two
+   * centimetres in front of its own wall, every road marking a hand's breadth
+   * above its road. They flickered, all of them, all the time.
+   *
+   * From a kilometre up there is nothing within a few metres of the camera to
+   * lose, so it is pushed out with the view; down in a room it comes back in,
+   * because there a desk really is half a metre away.
+   */
+  static nearFor(dist: number): number {
+    return THREE.MathUtils.clamp(dist * 0.012, 0.12, 6);
+  }
+
   /** Fly to a place and stand close enough to see what is on the desk. */
   goTo(place: Place, close = true) {
     const at = spotAt(place.buildingId, place.floor, place.x, place.z, place.y);
@@ -405,6 +458,34 @@ export class World {
   /** Climb or drop through the floors of the building you are in. */
   lift(dy: number) {
     this.want.y = Math.max(-FLOOR_H, Math.min(floorY(15) + 30, this.want.y + dy));
+  }
+
+  /** What the renderer is actually being asked to do each frame. */
+  cost() {
+    const r = this.renderer.info.render;
+    let meshes = 0;
+    let inst = 0;
+    this.scene.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      meshes += 1;
+      if ((m as unknown as THREE.InstancedMesh).isInstancedMesh) inst += 1;
+    });
+    const count = (o: THREE.Object3D | null) => {
+      let n = 0;
+      o?.traverse((x) => { if ((x as THREE.Mesh).isMesh) n += 1; });
+      return n;
+    };
+    return {
+      city: count(this.city.group), tlv: count(this.tlv.group),
+      land: count(this.land ? this.land.group : null),
+      inside: count(this.inside.group), objs: count(this.objectGroup),
+      figs: count(this.figures.group),
+      calls: this.drawn, tris: this.tris, meshes, inst,
+      progs: this.renderer.info.programs?.length ?? 0,
+      geo: this.renderer.info.memory.geometries,
+      tex: this.renderer.info.memory.textures,
+    };
   }
 
   pick(clientX: number, clientY: number): string | null {
@@ -490,13 +571,16 @@ export class World {
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
     this.composer.setSize(w, h);
-    this.bloom.setSize(w, h);
+    // The glow is a blur to begin with, so it is built at half size: a quarter
+    // of the pixels for a difference nobody can point to.
+    this.bloom.setSize(Math.max(2, Math.round(w / 2)), Math.max(2, Math.round(h / 2)));
     this.grade.uniforms.uRes.value.set(w, h);
   }
 
   // ── frame ─────────────────────────────────────────────────────────────────
 
   render(dt: number) {
+    this.renderer.info.reset();
     this.t += dt;
     const k = Math.min(1, dt * 3.2);
     this.target.lerp(this.want, k);
@@ -545,14 +629,29 @@ export class World {
     // And the moon's shadow box grows with the view, or a city seen from above
     // is lit by a torch pointed at one street of it.
     const box = this.moon.shadow.camera as THREE.OrthographicCamera;
-    const reach = THREE.MathUtils.clamp(this.dist * 1.15, 180, 1600);
+    // Wide enough for the view, and no wider. Stretched over the whole country
+    // the same thousand pixels of shadow map gave every wall a crawling
+    // speckle, and every building in Israel was drawn a second time to fill it.
+    const reach = THREE.MathUtils.clamp(this.dist * 1.15, 180, 620);
     if (Math.abs(box.right - reach) > 20) {
       box.left = -reach; box.right = reach; box.top = reach; box.bottom = -reach;
       box.far = 40 + reach * 6;
       box.updateProjectionMatrix();
     }
+    // From high enough up a shadow is thinner than a pixel, so there is nothing
+    // to lose by not drawing the whole city a second time to cast one. The two
+    // thresholds are far apart on purpose: one line and the shadows would
+    // switch on and off every time the camera breathed.
+    const wantShadow = this.moon.castShadow ? this.dist < 1150 : this.dist < 900;
+    if (this.moon.castShadow !== wantShadow) this.moon.castShadow = wantShadow;
     this.moon.position.copy(this.target)
       .add(MOON_OFF.clone().multiplyScalar(Math.max(1, this.dist / 140)));
+
+    const near = World.nearFor(this.dist);
+    if (Math.abs(this.camera.near - near) > near * 0.08) {
+      this.camera.near = near;
+      this.camera.updateProjectionMatrix();
+    }
     this.city.tick(this.t, dt);
     this.tlv.tick(this.t);
     this.veins.setScale(THREE.MathUtils.clamp(this.dist * 0.0055, 0.16, 1.5));
@@ -565,17 +664,26 @@ export class World {
     const pulse = 0.72 + Math.abs(Math.sin(this.t * 2.2)) * 0.28;
     const s = this.state;
     const dark = !!s && (s.marks.power_off ?? 0) > 0;
+    // How far away a place stops being worth animating. Cars, waves and blinking
+    // lamps are under a pixel across at that range, and there are sixty-five
+    // places: keeping all of them awake was most of what the phone was drawing.
+    const LIVE = 640;
     for (const m of this.markers.values()) {
       if (!m.obj.group.visible) continue;
-      m.busy = Math.max(0, m.busy - dt * 0.55);
-      const st: ObjState = {
-        mine: m.place.mine,
-        off: !!s && (s.marks[`off_${m.place.id}`] ?? 0) > 0,
-        dark: dark && m.place.buildingId !== 'street',
-        attention: m.place.attention,
-        busy: m.busy,
-      };
-      m.obj.tick(this.t, st);
+      const near = m.obj.group.position.distanceTo(this.camera.position) < LIVE;
+      if (m.obj.movers && m.obj.movers.visible !== near) m.obj.movers.visible = near;
+      if (near) {
+        m.busy = Math.max(0, m.busy - dt * 0.55);
+        m.obj.tick(this.t, {
+          mine: m.place.mine,
+          off: !!s && (s.marks[`off_${m.place.id}`] ?? 0) > 0,
+          dark: dark && m.place.buildingId !== 'street',
+          attention: m.place.attention,
+          busy: m.busy,
+        });
+      }
+      // The ring and the red pulse keep going at any distance: they are how the
+      // player finds the place they just chose, and that is usually far away.
       m.ring.rotation.z += dt * 0.9;
       const mat = m.ring.material as THREE.MeshBasicMaterial;
       if (mat.opacity > 0) mat.opacity = 0.45 + pulse * 0.5;
@@ -603,7 +711,48 @@ export class World {
     this.grade.uniforms.uDawn.value = d;
     this.grade.uniforms.uTime.value = this.t;
     this.grade.uniforms.uGlitch.value = Math.max(0, this.grade.uniforms.uGlitch.value - dt * 1.7);
+    this.keepUp();
     this.composer.render();
+    // After the frame, not before it: this is what drawing it actually cost.
+    this.drawn = this.renderer.info.render.calls;
+    this.tris = this.renderer.info.render.triangles;
+  }
+
+  /**
+   * Keep the picture as sharp as the machine can hold, and no sharper.
+   *
+   * Judged on the middle frame of the last two seconds rather than the worst
+   * one, so a single hitch — a window opening, a place being built — does not
+   * blur the game. Both thresholds sit far apart and every change is followed
+   * by a quiet spell, because a picture that keeps changing its own sharpness
+   * is itself a flicker.
+   */
+  private keepUp() {
+    // Its own clock. The caller clamps its dt so the world never jumps when a
+    // phone is put down and picked up again, and a clamped dt cannot tell you
+    // how slow the phone actually is.
+    const now = performance.now();
+    const gap = now - this.lastFrame;
+    this.lastFrame = now;
+    if (gap <= 0 || gap > 2000) return;
+    this.frames.push(gap);
+    if (this.frames.length > 90) this.frames.shift();
+    this.settle -= gap / 1000;
+    if (this.settle > 0 || this.frames.length < 14) return;
+    const sorted = [...this.frames].sort((a, b) => a - b);
+    const mid = sorted[Math.floor(sorted.length / 2)];
+    // A machine this far behind gets the whole cut at once rather than waiting
+    // three seconds a step to catch up.
+    const drop = mid > 55 ? 0.7 : 0.35;
+    // Under 40 frames a second is where a phone starts to feel like a slideshow.
+    const want = mid > 25 ? this.sharp - drop : mid < 12 ? this.sharp + 0.35 : this.sharp;
+    const next = Math.max(0.6, Math.min(this.sharpest, Math.round(want * 20) / 20));
+    if (Math.abs(next - this.sharp) < 0.01) return;
+    this.sharp = next;
+    this.renderer.setPixelRatio(next);
+    this.resize();
+    this.frames.length = 0;
+    this.settle = 3;
   }
 
   /**

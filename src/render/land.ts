@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RNG } from '../core/rng';
-import type { Area } from '../game/types';
+import type { Area, AreaKind } from '../game/types';
 
 /**
  * The country the districts stand in.
@@ -77,56 +77,74 @@ export function buildLand(areas: Area[]): Land {
   base.receiveShadow = true;
   group.add(base);
 
+  // One material per district colour rather than one per district, one shared
+  // rim and road, and every shed in the country in a single instanced draw.
+  // Twenty-eight districts of separately-made scenery was two hundred and fifty
+  // draws for ground nobody is looking at.
+  const floors = new Map<string, THREE.MeshStandardMaterial>();
+  const floorMat = (kind: AreaKind) => {
+    let m = floors.get(kind);
+    if (!m) {
+      m = new THREE.MeshStandardMaterial({ color: floorOf(kind), roughness: 0.96 });
+      floors.set(kind, m);
+    }
+    return m;
+  };
+  const rimMat = new THREE.MeshBasicMaterial({
+    color: 0x5ff6ff, transparent: true, opacity: 0.09, side: THREE.DoubleSide,
+  });
+  const roadMat = new THREE.MeshStandardMaterial({ color: 0x1b1e22, roughness: 0.98 });
+  const dull = new THREE.MeshStandardMaterial({ color: 0x272c31, roughness: 0.95 });
+  const sheds: THREE.Matrix4[] = [];
+
   for (const a of areas) {
     const far = Math.hypot(a.x, a.z) > CITY_REACH;
     plates.set(a.id, new THREE.Vector3(a.x, 0, a.z));
     if (!far) continue;
 
     const r = a.span;
-    const plate = new THREE.Mesh(
-      new THREE.CircleGeometry(r, 26),
-      new THREE.MeshStandardMaterial({ color: floorOf(a.kind), roughness: 0.96 }),
-    );
+    const plate = new THREE.Mesh(new THREE.CircleGeometry(r, 26), floorMat(a.kind));
     plate.rotation.x = -Math.PI / 2;
     plate.position.set(a.x, -0.35, a.z);
     plate.receiveShadow = true;
     group.add(plate);
 
     // A rim, so the edge of a district is a line you can see from above.
-    const rim = new THREE.Mesh(
-      new THREE.RingGeometry(r - 1.6, r, 26),
-      new THREE.MeshBasicMaterial({
-        color: 0x5ff6ff, transparent: true, opacity: 0.09, side: THREE.DoubleSide,
-      }),
-    );
+    const rim = new THREE.Mesh(new THREE.RingGeometry(r - 1.6, r, 26), rimMat);
     rim.rotation.x = -Math.PI / 2;
     rim.position.set(a.x, -0.28, a.z);
     group.add(rim);
 
     // The road in, pointing back the way the country runs.
-    const road = new THREE.Mesh(
-      new THREE.PlaneGeometry(11, r * 2.7),
-      new THREE.MeshStandardMaterial({ color: 0x1b1e22, roughness: 0.98 }),
-    );
+    const road = new THREE.Mesh(new THREE.PlaneGeometry(11, r * 2.7), roadMat);
     road.rotation.x = -Math.PI / 2;
     road.position.set(a.x, -0.5, a.z + (a.z > 0 ? -r * 1.6 : r * 1.6));
     group.add(road);
 
     // And the low stuff a place has around its edges: sheds, walls, parked things.
-    const dull = new THREE.MeshStandardMaterial({ color: 0x272c31, roughness: 0.95 });
     const n = 10 + Math.floor(rng.next() * 8);
     for (let i = 0; i < n; i++) {
       const turn = rng.next() * Math.PI * 2;
       const at = r * (0.62 + rng.next() * 0.3);
       const w = 4 + rng.next() * 9;
       const h = 2.5 + rng.next() * 4;
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, 4 + rng.next() * 7), dull);
-      m.position.set(a.x + Math.cos(turn) * at, h / 2, a.z + Math.sin(turn) * at);
-      m.rotation.y = rng.next() * Math.PI;
-      m.castShadow = true;
-      m.receiveShadow = true;
-      group.add(m);
+      const d = 4 + rng.next() * 7;
+      sheds.push(new THREE.Matrix4().compose(
+        new THREE.Vector3(a.x + Math.cos(turn) * at, h / 2, a.z + Math.sin(turn) * at),
+        new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rng.next() * Math.PI, 0)),
+        new THREE.Vector3(w, h, d),
+      ));
     }
+  }
+
+  if (sheds.length) {
+    const im = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), dull, sheds.length);
+    sheds.forEach((m, i) => im.setMatrixAt(i, m));
+    im.instanceMatrix.needsUpdate = true;
+    im.castShadow = true;
+    im.receiveShadow = true;
+    im.frustumCulled = false;
+    group.add(im);
   }
 
   return { group, plates };

@@ -93,6 +93,16 @@ export function makeKit(seed: string): {
     return m;
   };
 
+  // One material for every lit surface on this landmark, and one per lamp
+  // colour. Sharing is not tidiness: the welder fuses meshes by material, so a
+  // hundred windows with a hundred identical materials stay a hundred draws,
+  // and the same hundred sharing one become a single draw.
+  const litMat = new THREE.MeshBasicMaterial({
+    color: 0x2f3c46, transparent: true, opacity: 0.9,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+  const lampMats = new Map<number, THREE.MeshBasicMaterial>();
+
   const kit: Kit = {
     g: group,
     box: (w, h, d, mat, x, y, z) =>
@@ -108,10 +118,7 @@ export function makeKit(seed: string): {
       return m;
     },
     lit: (w, h, x, y, z, turnY = 0) => {
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({
-        color: 0x2f3c46, transparent: true, opacity: 0.9,
-        blending: THREE.AdditiveBlending, depthWrite: false,
-      }));
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), litMat);
       m.position.set(x, y, z);
       m.rotation.y = turnY;
       glow.push(m);
@@ -119,8 +126,9 @@ export function makeKit(seed: string): {
       return m;
     },
     lamp: (r, x, y, z, colour = 0xff5470) => {
-      const m = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6),
-        new THREE.MeshBasicMaterial({ color: colour }));
+      let mat = lampMats.get(colour);
+      if (!mat) { mat = new THREE.MeshBasicMaterial({ color: colour }); lampMats.set(colour, mat); }
+      const m = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), mat);
       m.position.set(x, y, z);
       group.add(m);
       return m;

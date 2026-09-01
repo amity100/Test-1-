@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { RNG } from '../core/rng';
 import { BUILDINGS, FLOOR_H, buildingOf, floorY } from './city';
 import { buildWorld } from '../game/world';
+import { bake } from './bake';
 
 /**
  * What is inside the two buildings you can enter: floor slabs, partition walls,
@@ -54,6 +55,16 @@ export function buildInteriors(): Interior {
   const screenOn = new THREE.MeshBasicMaterial({ color: 0x9fe8ff });
   const screenOff = new THREE.MeshBasicMaterial({ color: 0x2b343d });
   const plantMat = new THREE.MeshStandardMaterial({ color: 0x4a7553, roughness: 0.9 });
+  // The rest of the room's materials, shared rather than made fresh per floor.
+  // Forty-odd floors of furniture used to be eight thousand separate meshes;
+  // sharing lets each floor weld down to one mesh per material.
+  const carpetGround = new THREE.MeshStandardMaterial({ color: 0x2c343d, roughness: 1 });
+  const carpetUp = new THREE.MeshStandardMaterial({ color: 0x394450, roughness: 1 });
+  const coreMat = new THREE.MeshStandardMaterial({ color: 0x333c46, roughness: 0.9 });
+  const doorMat = new THREE.MeshStandardMaterial({ color: 0x8d959c, roughness: 0.4, metalness: 0.7 });
+  const slitMat = new THREE.MeshBasicMaterial({ color: 0x0b1015 });
+  const tubeOn = new THREE.MeshBasicMaterial({ color: 0x4e6b7a, transparent: true, opacity: 0.85 });
+  const tubeOff = new THREE.MeshBasicMaterial({ color: 0x2a333c, transparent: true, opacity: 0.5 });
 
   for (const b of BUILDINGS) {
     if (!b.inside) continue;
@@ -69,7 +80,7 @@ export function buildInteriors(): Interior {
 
       const carpet = new THREE.Mesh(
         new THREE.PlaneGeometry(b.w - 2, b.d - 2),
-        new THREE.MeshStandardMaterial({ color: f === -1 ? 0x2c343d : 0x394450, roughness: 1 }),
+        f === -1 ? carpetGround : carpetUp,
       );
       carpet.rotation.x = -Math.PI / 2;
       carpet.position.set(b.x, y + 0.16, b.z);
@@ -77,25 +88,16 @@ export function buildInteriors(): Interior {
       g.add(carpet);
 
       // A core: lifts and stairs, in the middle of every floor.
-      const core = new THREE.Mesh(
-        new THREE.BoxGeometry(6, FLOOR_H - 0.4, 5),
-        new THREE.MeshStandardMaterial({ color: 0x333c46, roughness: 0.9 }),
-      );
+      const core = new THREE.Mesh(new THREE.BoxGeometry(6, FLOOR_H - 0.4, 5), coreMat);
       core.position.set(b.x - b.w * 0.18, y + FLOOR_H / 2, b.z + b.d * 0.2);
       g.add(core);
 
       // Two lift doors, so the block in the middle of the floor reads as a lift.
       for (const dx of [-1.3, 1.3]) {
-        const door = new THREE.Mesh(
-          new THREE.BoxGeometry(1.9, 2.4, 0.12),
-          new THREE.MeshStandardMaterial({ color: 0x8d959c, roughness: 0.4, metalness: 0.7 }),
-        );
+        const door = new THREE.Mesh(new THREE.BoxGeometry(1.9, 2.4, 0.12), doorMat);
         door.position.set(b.x - b.w * 0.18 + dx, y + 1.3, b.z + b.d * 0.2 - 2.55);
         g.add(door);
-        const slit = new THREE.Mesh(
-          new THREE.BoxGeometry(0.06, 2.3, 0.05),
-          new THREE.MeshBasicMaterial({ color: 0x0b1015 }),
-        );
+        const slit = new THREE.Mesh(new THREE.BoxGeometry(0.06, 2.3, 0.05), slitMat);
         slit.position.set(b.x - b.w * 0.18 + dx, y + 1.3, b.z + b.d * 0.2 - 2.62);
         g.add(slit);
       }
@@ -212,24 +214,29 @@ export function buildInteriors(): Interior {
       }
 
       // Ceiling strips. A few are still on, and they are what lights the room.
+      // Three strips, but one lamp: every light in view is another pass the
+      // shader has to make for every surface, and with several floors open at
+      // once a lamp per strip was a dozen lights on a phone. One in the middle
+      // of the room lights the room; the other two read as lit tubes.
       for (let i = -1; i <= 1; i++) {
         const on = f >= 0 && (rng.chance(0.55) || i === 0);
         const strip = new THREE.Mesh(
           new THREE.BoxGeometry(b.w * 0.52, 0.06, 0.16),
-          new THREE.MeshBasicMaterial({
-            // Bright enough to read as a lit tube, dim enough not to flare the room.
-            color: on ? 0x4e6b7a : 0x2a333c,
-            transparent: true, opacity: on ? 0.85 : 0.5,
-          }),
+          // Bright enough to read as a lit tube, dim enough not to flare the room.
+          on ? tubeOn : tubeOff,
         );
         strip.position.set(b.x, y + FLOOR_H - 0.45, b.z + i * b.d * 0.3);
         g.add(strip);
-        if (!on) continue;
-        const lamp = new THREE.PointLight(0xbfe0f0, 46, 30, 2);
-        lamp.position.set(b.x, y + FLOOR_H - 0.9, b.z + i * b.d * 0.3);
+      }
+      if (f >= 0) {
+        const lamp = new THREE.PointLight(0xbfe0f0, 78, 44, 2);
+        lamp.position.set(b.x, y + FLOOR_H - 0.9, b.z);
         g.add(lamp);
       }
 
+      // A floor is furniture and nothing else moves in it, so weld it down to
+      // one mesh per material before it is ever drawn.
+      bake(g, [], []);
       g.visible = false;
       group.add(g);
       floors.set(key(b.id, f), g);

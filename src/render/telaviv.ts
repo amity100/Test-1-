@@ -127,6 +127,24 @@ export function buildTelAviv(): TelAviv {
     pos.needsUpdate = true;
   });
 
+  interface Copy { m: THREE.Matrix4 }
+  const blocks: Copy[] = [];
+  const caps: Copy[] = [];
+  const faces: Copy[] = [];
+  const tanks: Copy[] = [];
+  const panels: Copy[] = [];
+  const trunks: Copy[] = [];
+  const crowns: Copy[] = [];
+  const lamps: Copy[] = [];
+  const put = (list: Copy[], x: number, y: number, z: number,
+    sx: number, sy: number, sz: number, ry = 0) => {
+    const m = new THREE.Matrix4();
+    m.compose(new THREE.Vector3(x, y, z),
+      new THREE.Quaternion().setFromEuler(new THREE.Euler(0, ry, 0)),
+      new THREE.Vector3(sx, sy, sz));
+    list.push({ m });
+  };
+
   group.add(ribbon(SHORE, 78, M.sand, 0.1));
   // A darker wet line where the water actually meets the sand.
   group.add(ribbon(SHORE.map(([x, z]) => [x - 44, z] as [number, number]), 26,
@@ -144,13 +162,9 @@ export function buildTelAviv(): TelAviv {
     const off = (rng.next() - 0.5) * 170;
     if (Math.abs(off) < 26) continue;
     const h = 6 + rng.next() * 5;
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.45, h, 5), M.wood);
-    trunk.position.set(x, h / 2, z + off);
-    group.add(trunk);
-    const crown = new THREE.Mesh(new THREE.SphereGeometry(2.6 + rng.next() * 1.6, 6, 4), M.green);
-    crown.scale.y = 0.7;
-    crown.position.set(x, h + 1.6, z + off);
-    group.add(crown);
+    const r = 2.6 + rng.next() * 1.6;
+    put(trunks, x, h / 2, z + off, 1, h, 1);
+    put(crowns, x, h + 1.6, z + off, r, r * 0.7, r);
   }
 
   // ── the streets ──────────────────────────────────────────────────────────
@@ -164,16 +178,19 @@ export function buildTelAviv(): TelAviv {
       const f = t - seg;
       const x = st.pts[seg][0] + (st.pts[seg + 1][0] - st.pts[seg][0]) * f;
       const z = st.pts[seg][1] + (st.pts[seg + 1][1] - st.pts[seg][1]) * f;
-      const lamp = new THREE.Mesh(new THREE.SphereGeometry(1.1, 6, 5),
-        new THREE.MeshBasicMaterial({ color: 0xffc07a }));
-      lamp.position.set(x + st.wide / 2 + 2, 8, z);
-      group.add(lamp);
+      put(lamps, x + st.wide / 2 + 2, 8, z, 1, 1, 1);
     }
   }
 
   // ── the city in between ──────────────────────────────────────────────────
+  //
   // Ordinary Tel Aviv: four- to nine-storey blocks on a loose grid, denser in
   // the middle, thinning toward the edges, never on the sea or the river.
+  //
+  // All of it is instanced. Built a mesh at a time this was ten thousand draw
+  // calls on its own, and a phone draws a few hundred before it starts to
+  // stutter — which is exactly what it did. Every block is the same unit cube
+  // scaled per copy, so the whole city is six calls.
   const onWater = (x: number, z: number) => {
     for (let i = 0; i < SHORE.length - 1; i++) {
       const [ax, az] = SHORE[i];
@@ -192,9 +209,12 @@ export function buildTelAviv(): TelAviv {
     return false;
   };
 
-  // Tel Aviv is a white city and it is lit from below by its own streets.
   const wall = new THREE.MeshStandardMaterial({ color: 0x8b8f8c, roughness: 0.86 });
-  const roof = M.roof;
+  const glass = new THREE.MeshBasicMaterial({
+    color: 0x6a5a34, transparent: true, opacity: 0.72,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+
   for (let i = 0; i < 2600; i++) {
     const x = -1750 + rng.next() * 4200;
     const z = -2150 + rng.next() * 4100;
@@ -206,36 +226,48 @@ export function buildTelAviv(): TelAviv {
     const d = 12 + rng.next() * 18;
     const floors = 3 + Math.floor(rng.next() * rng.next() * 12);
     const h = floors * 3.2;
-    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wall);
-    b.position.set(x, h / 2, z);
-    b.castShadow = true;
-    b.receiveShadow = true;
-    group.add(b);
-    const cap = new THREE.Mesh(new THREE.BoxGeometry(w + 0.8, 0.7, d + 0.8), roof);
-    cap.position.set(x, h + 0.35, z);
-    group.add(cap);
+    put(blocks, x, h / 2, z, w, h, d);
+    put(caps, x, h + 0.35, z, w + 0.8, 0.7, d + 0.8);
     // Lit windows on the side that faces the middle of town.
-    if (rng.next() > 0.25) {
-      const face = new THREE.Mesh(new THREE.PlaneGeometry(w * 0.82, h * 0.7),
-        new THREE.MeshBasicMaterial({
-          color: 0x6a5a34, transparent: true, opacity: 0.5 + rng.next() * 0.45,
-          blending: THREE.AdditiveBlending, depthWrite: false,
-        }));
-      face.position.set(x, h * 0.5, z + d / 2 + 0.05);
-      group.add(face);
-    }
+    if (rng.next() > 0.25) put(faces, x, h * 0.5, z + d / 2 + 0.06, w * 0.82, h * 0.7, 1);
     // Solar water heaters: a tank on legs, on nearly every roof in Israel.
     if (rng.next() > 0.4) {
-      const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 3.4, 7), M.metal);
-      tank.rotation.z = Math.PI / 2;
-      tank.position.set(x + (rng.next() - 0.5) * w * 0.5, h + 2.2, z + (rng.next() - 0.5) * d * 0.5);
-      group.add(tank);
-      const panel = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.2, 2.2), M.dark);
-      panel.position.set(tank.position.x, h + 1.1, tank.position.z + 2.2);
-      panel.rotation.x = -0.5;
-      group.add(panel);
+      const tx = x + (rng.next() - 0.5) * w * 0.5;
+      const tz = z + (rng.next() - 0.5) * d * 0.5;
+      put(tanks, tx, h + 2.2, tz, 1, 1, 1);
+      put(panels, tx, h + 1.1, tz + 2.2, 1, 1, 1);
     }
   }
+
+  const many = (geo: THREE.BufferGeometry, mat: THREE.Material, list: Copy[],
+    shadow = true) => {
+    if (!list.length) return;
+    const im = new THREE.InstancedMesh(geo, mat, list.length);
+    list.forEach((c, i) => im.setMatrixAt(i, c.m));
+    im.instanceMatrix.needsUpdate = true;
+    im.castShadow = shadow;
+    im.receiveShadow = shadow;
+    im.frustumCulled = false;
+    group.add(im);
+  };
+
+  // Three hundred street lamps and ninety trees along the river, each of which
+  // used to be its own mesh with its own material — a quarter of everything the
+  // city was drawing, for scenery nobody looks at twice.
+  many(new THREE.SphereGeometry(1.1, 6, 5),
+    new THREE.MeshBasicMaterial({ color: 0xffc07a }), lamps, false);
+  many(new THREE.CylinderGeometry(0.3, 0.45, 1, 5), M.wood, trunks, false);
+  many(new THREE.SphereGeometry(1, 6, 4), M.green, crowns, false);
+
+  many(new THREE.BoxGeometry(1, 1, 1), wall, blocks);
+  many(new THREE.BoxGeometry(1, 1, 1), M.roof, caps, false);
+  many(new THREE.PlaneGeometry(1, 1), glass, faces, false);
+  const tank = new THREE.CylinderGeometry(0.9, 0.9, 3.4, 7);
+  tank.rotateZ(Math.PI / 2);
+  many(tank, M.metal, tanks, false);
+  const panel = new THREE.BoxGeometry(3.6, 0.2, 2.2);
+  panel.rotateX(-0.5);
+  many(panel, M.dark, panels, false);
 
   return { group, tick: (t) => { for (const f of ticks) f(t); } };
 }

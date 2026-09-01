@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { RNG } from '../core/rng';
 import type { PlaceKind } from '../game/types';
+import { bake } from './bake';
 import type { ObjState, PlaceObject } from './objects';
 
 /**
@@ -36,14 +37,25 @@ const litFace = () => new THREE.MeshBasicMaterial({
   blending: THREE.AdditiveBlending, depthWrite: false,
 });
 
-/** A small always-on warning lamp, the kind that sits on top of tall things. */
-const LAMP = new THREE.MeshBasicMaterial({ color: 0xff5470 });
+/**
+ * A warning lamp, the kind that sits on top of tall things.
+ *
+ * Its own material every time, because it writes to its own opacity as it
+ * blinks — one shared material would have every warning light in the country
+ * blinking in step, which is both wrong and a flicker.
+ */
+const blinker = () => new THREE.MeshBasicMaterial({ color: 0xff5470, transparent: true });
+const DECK = new THREE.MeshStandardMaterial({ color: 0x2a2f35, roughness: 0.95 });
+const HEDGE = new THREE.MeshStandardMaterial({ color: 0x1e3327, roughness: 1 });
 
 export function makeStructure(kind: PlaceKind, seed: string): PlaceObject {
   const g = new THREE.Group();
   const glow: THREE.Mesh[] = [];
   const rng = new RNG(`build:${seed}`);
   let tick: (t: number, st: ObjState) => void = () => {};
+  // Every lit surface on this structure shares one material, so the game can
+  // tint the lot with one line and the welder can fuse the lot into one mesh.
+  const LIT = litFace();
 
   const put = (m: THREE.Mesh, x = 0, y = 0, z = 0) => {
     m.position.set(x, y, z);
@@ -59,7 +71,7 @@ export function makeStructure(kind: PlaceKind, seed: string): PlaceObject {
 
   /** A wall of lit windows, as one plane — cheap, and reads at any distance. */
   const windows = (w: number, h: number, x: number, y: number, z: number, turn = 0) => {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), litFace());
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), LIT);
     m.position.set(x, y, z);
     m.rotation.y = turn;
     glow.push(m);
@@ -74,6 +86,7 @@ export function makeStructure(kind: PlaceKind, seed: string): PlaceObject {
       new THREE.MeshBasicMaterial({ visible: false }),
     );
     m.position.y = y;
+    m.userData.keep = true;
     g.add(m);
     return m;
   };
@@ -109,17 +122,19 @@ export function makeStructure(kind: PlaceKind, seed: string): PlaceObject {
         put(cyl(2.6, 3.4, 40, CONCRETE, 14), x, 20, -9);
         const cap = put(cyl(2.7, 2.7, 0.8, DARKER, 14), x, 40.2, -9);
         void cap;
-        const lamp = put(new THREE.Mesh(new THREE.SphereGeometry(0.7, 8, 6), LAMP), x, 41, -9);
+        const lamp = put(new THREE.Mesh(new THREE.SphereGeometry(0.7, 8, 6), blinker()), x, 41, -9);
         cores.push(lamp);
       }
-      const core = new THREE.Mesh(new THREE.SphereGeometry(2.4, 14, 10), litFace());
+          const core = new THREE.Mesh(new THREE.SphereGeometry(2.4, 14, 10), LIT);
       core.position.set(0, 7, 0);
       glow.push(core);
       g.add(core);
       tick = (t) => {
         const beat = 0.9 + Math.sin(t * 2.1) * 0.12;
         core.scale.setScalar(beat);
-        for (const l of cores) (l.material as THREE.MeshBasicMaterial).opacity = 1;
+        for (const l of cores) {
+          (l.material as THREE.MeshBasicMaterial).opacity = 0.55 + Math.abs(Math.sin(t * 1.1)) * 0.45;
+        }
       };
       hit = hitBox(30, 42, 22, 21);
       break;
@@ -132,7 +147,7 @@ export function makeStructure(kind: PlaceKind, seed: string): PlaceObject {
         const r = 4.6 + rng.next() * 1.4;
         put(cyl(r, r, 11, METAL, 16), x, 5.5, 0);
         put(cyl(r + 0.3, r + 0.3, 0.6, DARKER, 16), x, 11.2, 0);
-        const band = new THREE.Mesh(new THREE.CylinderGeometry(r + 0.05, r + 0.05, 1.6, 16, 1, true), litFace());
+        const band = new THREE.Mesh(new THREE.CylinderGeometry(r + 0.05, r + 0.05, 1.6, 16, 1, true), LIT);
         band.position.set(x, 8.4, 0);
         glow.push(band);
         g.add(band);
@@ -146,7 +161,7 @@ export function makeStructure(kind: PlaceKind, seed: string): PlaceObject {
 
     // ── roads: an interchange, with the lights running along it ────────────
     case 'roads': {
-      const deck = new THREE.MeshStandardMaterial({ color: 0x2a2f35, roughness: 0.95 });
+      const deck = DECK;
       put(box(46, 1.2, 10, deck), 0, 5, 0);
       const cross = put(box(10, 1.2, 40, deck), 4, 2.4, 0);
       void cross;
@@ -201,8 +216,8 @@ export function makeStructure(kind: PlaceKind, seed: string): PlaceObject {
       }
       const dish = put(cyl(3.2, 0.2, 1.4, METAL, 14), 3.4, 30, -4);
       dish.rotation.z = -0.6;
-      const beacon = put(new THREE.Mesh(new THREE.SphereGeometry(0.9, 8, 6), LAMP), 0, 46.5, -4);
-      const wave = new THREE.Mesh(new THREE.TorusGeometry(5, 0.2, 5, 22), litFace());
+      const beacon = put(new THREE.Mesh(new THREE.SphereGeometry(0.9, 8, 6), blinker()), 0, 46.5, -4);
+      const wave = new THREE.Mesh(new THREE.TorusGeometry(5, 0.2, 5, 22), LIT);
       wave.rotation.x = Math.PI / 2;
       wave.position.set(0, 32, -4);
       glow.push(wave);
@@ -222,7 +237,7 @@ export function makeStructure(kind: PlaceKind, seed: string): PlaceObject {
       put(box(31, 0.9, 19, ROOF), 0, 16.4, 0);
       windows(28, 11, 0, 8, 9.1);
       windows(16, 11, 15.1, 8, 0, Math.PI / 2);
-      const pad = new THREE.Mesh(new THREE.TorusGeometry(4, 0.3, 6, 24), litFace());
+      const pad = new THREE.Mesh(new THREE.TorusGeometry(4, 0.3, 6, 24), LIT);
       pad.rotation.x = -Math.PI / 2;
       pad.position.set(8, 17, -2);
       glow.push(pad);
@@ -245,7 +260,7 @@ export function makeStructure(kind: PlaceKind, seed: string): PlaceObject {
       }
       const lawn = new THREE.Mesh(
         new THREE.PlaneGeometry(16, 12),
-        new THREE.MeshStandardMaterial({ color: 0x1e3327, roughness: 1 }),
+        HEDGE,
       );
       lawn.rotation.x = -Math.PI / 2;
       lawn.position.set(0, 0.06, 2);
@@ -317,7 +332,10 @@ export function makeStructure(kind: PlaceKind, seed: string): PlaceObject {
   }
 
   hit.name = 'hit';
-  return { group: g, glowParts: glow, hit, tick };
+  // Sixty-five of these stand across the country and every box in them used to
+  // be its own draw. Welded down by material, a structure costs a handful.
+  const baked = bake(g, glow, [tick]);
+  return { group: g, glowParts: baked.glowParts, movers: baked.movers, hit, tick };
 }
 
 /**

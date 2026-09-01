@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { ObjState, PlaceObject } from '../objects';
+import { bake } from '../bake';
 import { makeKit, type Landmark } from './kit';
 
 /**
@@ -76,12 +77,19 @@ export function makeLandmark(placeId: string): PlaceObject | null {
   const { kit, group, glow, ticks } = makeKit(placeId);
   mod.build(kit);
 
+  // Weld it down. A landmark is two or three hundred little boxes when it is
+  // built and about half a dozen meshes when it is finished — everything that
+  // does not move gets merged by material, and what does move is found by
+  // running the animation and watching.
+  const baked = bake(group, glow, ticks);
+
   // One invisible block round the whole thing is what the pointer tests
   // against, so a landmark made of two hundred little meshes is still one thing
   // to press.
   return {
     group,
-    glowParts: glow,
+    glowParts: baked.glowParts,
+    movers: baked.movers,
     hit: makeHit(group, mod.size),
     tick: (t: number, st: ObjState) => { for (const f of ticks) f(t, st); },
   };

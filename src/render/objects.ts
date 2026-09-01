@@ -37,6 +37,14 @@ export interface PlaceObject {
   hit: THREE.Mesh;
   /** Called every frame. */
   tick(t: number, st: ObjState): void;
+  /**
+   * The parts of it that move, under one switch.
+   *
+   * The world turns this off for places it is looking at from far away — cars,
+   * waves and blinking lamps are invisible at that distance and were most of
+   * what the phone was being asked to draw.
+   */
+  movers?: THREE.Group;
 }
 
 function lit(color = 0x8fe9ff) {
