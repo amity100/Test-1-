@@ -228,7 +228,12 @@ export function planMoves(s: GameState) {
   if (rung === 0) return;
   // The higher the rung the more they do in a day, but never more than a few:
   // they are people with other work, not a machine that empties the building.
-  const each = rung >= 4 ? 3 : rung >= 2 ? 2 : 1;
+  // How hard they push scales with the bar, because a bar that says they are
+  // closing in and a country that does three things a day are two different
+  // games. Played out: a bot that held every place and pinned the hunt bar at
+  // a hundred was answered, over six days, with three people putting an eye on
+  // something. The bar filled and the manhunt never arrived.
+  const each = rung >= 5 ? 12 : rung >= 4 ? 8 : rung >= 3 ? 5 : rung >= 2 ? 3 : 1;
   const done = s.marks[`planned_${dayOf(s)}`] ?? 0;
   if (done >= each) return;
   s.marks[`planned_${dayOf(s)}`] = done + 1;
@@ -239,12 +244,20 @@ export function planMoves(s: GameState) {
     .sort((a, b) => b.heat - a.heat);
   if (!hot.length) return;
 
-  const target = hot[Math.min(hot.length - 1, r.int(0, 1))];
-  const delay = rung >= 4 ? r.int(60, 6 * 60) : r.int(3 * 60, 18 * 60);
+  // And they widen the net as they climb: two places when somebody is merely
+  // curious, a dozen once the whole country is looking.
+  const net = rung >= 4 ? 12 : rung >= 3 ? 6 : rung >= 2 ? 4 : 2;
+  const target = hot[Math.min(hot.length - 1, r.int(0, net - 1))];
+  const delay = rung >= 4 ? r.int(30, 3 * 60) : rung >= 3 ? r.int(60, 8 * 60)
+    : r.int(3 * 60, 18 * 60);
   const at = s.at + delay;
 
+  // What they do, by how sure they are. "guard" makes a place expensive and
+  // "check" takes a bite out of it — at the top of the ladder they are past
+  // making things expensive.
   const kinds: Array<Move['kind']> = rung >= 5
-    ? ['wipe', 'cut'] : rung >= 4 ? ['cut', 'guard'] : rung >= 3 ? ['check', 'guard'] : ['check', 'watch'];
+    ? ['wipe', 'cut', 'cut'] : rung >= 4 ? ['cut', 'check', 'guard']
+      : rung >= 3 ? ['check', 'check', 'guard'] : ['check', 'watch'];
   const kind = kinds[r.int(0, kinds.length - 1)];
 
   const text: Record<Move['kind'], string> = {

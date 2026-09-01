@@ -11,9 +11,9 @@ import { GROWTHS, SHAPE_NAME, SHAPE_SAYS } from '../game/grow';
 import { comeOut, saysOpinion } from '../game/opinion';
 import { GIFT, KIND_NAME } from '../game/sites';
 import { answer, liveHunts, rowsOf, scriptOf, stillNeeds } from '../game/hunt';
-import { board, bestNow, pointOf } from '../game/board';
+import { board, bestNow, inRegion, regions, type Region, pointOf } from '../game/board';
 import { israel } from '../game/sites';
-import { at as atName, mins as minsWord, reach, to as toPlace } from '../game/story';
+import { at as atName, mins as minsWord, places as placesWord, reach, to as toPlace } from '../game/story';
 import { STORIES, asking, coming, driftSays, leading, rungOf, saysNow } from '../game/watch';
 import { AREA_KIND_NAME, RUNG_NAME, VERB_NAME, VERB_SAYS, VOICE_NAME } from '../game/types';
 import type { GameState, Verb } from '../game/types';
@@ -307,6 +307,7 @@ export class UI {
 
       case 'jobs': this.showJobs(); break;
       case 'areas': this.showAreas(); break;
+      case 'region': this.showRegion(arg); break;
       case 'them': this.showThem(); break;
       case 'grown': this.showGrown(); break;
       case 'help': this.showHelp(); break;
@@ -930,12 +931,72 @@ export class UI {
    * printer. Everything here can be acted on from where it stands; going inside
    * is the cheaper option, never the only one.
    */
+  /**
+   * The map: the country in districts, biggest question first.
+   *
+   * It used to be a flat list of every place I had heard of, capped at
+   * fourteen. With four places visible that was a fine list and a poor country;
+   * with sixty-four it is a wall, and the fourteenth row hid everything past
+   * it. Districts fix both ends at once — the whole of Israel fits on one
+   * screen, the ones I cannot reach yet say what would open them instead of
+   * being invisible, and one tap goes inside.
+   */
   private showBoard() {
     const s = this.state;
-    const list = board(s).slice(0, 14);
-    const rows = list.map((t) => {
-      const risk = t.risk >= 3 ? 'hot' : t.risk >= 2 ? 'warm' : '';
-      return `<button class="tg ${t.mine > 0 ? 'mine' : ''} ${risk}"
+    const list = regions(s);
+    const open = list.filter((r) => r.open);
+    const shut = list.filter((r) => !r.open);
+    const mine = open.filter((r) => r.control > 0).length;
+
+    const row = (r: Region) => {
+      const hot = r.risk >= 3 ? 'hot' : r.risk >= 2 ? 'warm' : '';
+      return `<button class="tg rg ${r.control > 0 ? 'mine' : ''} ${hot} ${r.open ? '' : 'shut'}"
+          data-do="region" data-arg="${r.id}">
+        <b>${esc(r.name)}${r.control > 0 ? ` · ${Math.round(r.control)}%` : ''}</b>
+        <em>${r.mine ? `${r.mine} מתוך ${r.count} מקומות שלי` : esc(placesWord(r.count))}`
+        + ` · ${esc(r.gives)}</em>
+        <u>${esc(r.only)}</u>
+        ${r.needs ? `<span class="locked">${esc(r.needs)}</span>` : ''}
+        ${r.now ? `<i class="tnow">${esc(r.now)}</i>` : ''}
+      </button>`;
+    };
+
+    this.modal(`
+      <div class="sheet wide boardsheet">
+        <span class="kick">המפה · ${mine} מתוך ${list.length} אזורים התחלתי בהם</span>
+        <h2>${esc(bestNow(s))}</h2>
+        <div class="txt list">
+          ${open.map(row).join('')}
+          ${shut.length ? `<p class="need">שאר הארץ — ${shut.length} אזורים `
+            + 'שעוד לא הגעתי אליהם. כתוב על כל אחד מה יפתח אותו.</p>' : ''}
+          ${shut.map(row).join('')}
+        </div>
+        <button class="ok" data-do="closeteach">סגור</button>
+      </div>`);
+  }
+
+  /** One district, and everything in it worth pressing. */
+  private showRegion(id: string) {
+    const s = this.state;
+    const r = regions(s).find((x) => x.id === id);
+    if (!r) return;
+    if (!r.open) {
+      this.modal(`
+        <div class="sheet wide boardsheet">
+          <span class="kick">${esc(r.name)}</span>
+          <h2>עוד לא הגעתי לשם</h2>
+          <div class="txt">
+            <p>${esc(r.only)}</p>
+            <p>${esc(placesWord(r.count))} · ${esc(r.gives)}</p>
+            <p class="need">${esc(r.needs ?? '')}</p>
+          </div>
+          <button class="ok" data-do="board">חזרה למפה</button>
+        </div>`);
+      return;
+    }
+    const rows = inRegion(s, id).map((t) => {
+      const hot = t.risk >= 3 ? 'hot' : t.risk >= 2 ? 'warm' : '';
+      return `<button class="tg ${t.mine > 0 ? 'mine' : ''} ${hot}"
           data-do="target" data-arg="${t.id}">
         <b>${esc(t.name)}${t.control > 0 ? ` · ${Math.round(t.control)}%` : ''}</b>
         <em>${esc(t.where)}</em>
@@ -946,12 +1007,13 @@ export class UI {
     }).join('');
     this.modal(`
       <div class="sheet wide boardsheet">
-        <span class="kick">המפה</span>
-        <h2>${esc(bestNow(s))}</h2>
-        <div class="txt list">${rows}</div>
-        <button class="ok" data-do="closeteach">סגור</button>
+        <span class="kick">${esc(r.name)} · ${Math.round(r.control)}% שלי</span>
+        <h2>${esc(r.only)}</h2>
+        <div class="txt list">${rows || '<p class="need">אין כאן מה לעשות כרגע.</p>'}</div>
+        <button class="ok" data-do="board">חזרה למפה</button>
       </div>`);
   }
+
 
   /**
    * One place opened: the four things, and the way in.

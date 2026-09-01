@@ -55,6 +55,11 @@ export function to(name: string): string {
   return `ל${name.startsWith('ה') ? name.slice(1) : name}`;
 }
 
+/** A name with its leading ה taken off, for gluing a preposition on by hand. */
+export function strip(name: string): string {
+  return name.startsWith('ה') ? name.slice(1) : name;
+}
+
 /** And for "from" — "מהמחשב" keeps its ה, so this one only needs the מ. */
 export function from(name: string): string {
   return `מ${name}`;

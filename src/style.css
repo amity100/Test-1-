@@ -1186,6 +1186,16 @@ body.is-mobile .objectives ul li { min-height: 46px; }
 .boardsheet .tg .risk { color: #ffb3c0; }
 /* On the map, under what a place is: what holding it actually changes. This is
    the line a player picks his next target with. */
+/* ── a district on the map ─────────────────────────────────────────────────
+   The country's first screen. A district I have not reached is still listed —
+   the size of the job should be visible from the first minute — but it is
+   dimmed and carries the one sentence that would open it. */
+.boardsheet .tg.rg u { color: var(--muted); }
+.boardsheet .tg.shut { opacity: .62; border-right-color: var(--line); }
+.boardsheet .tg .locked {
+  display: block; font-size: 11px; line-height: 1.5; margin-top: 4px;
+  color: var(--amber);
+}
 .boardsheet .tg .gives {
   display: block; font-size: 11px; line-height: 1.5; margin-top: 3px; color: var(--cy);
 }

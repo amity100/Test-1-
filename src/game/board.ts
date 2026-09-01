@@ -2,7 +2,7 @@
 import { GIFT, KIND_NAME, fadeRate, israel, weight as worthOf } from './sites';
 import { pressure } from './watch';
 import { liveHunts } from './hunt';
-import { at, places as placeCount, things } from './story';
+import { at, places as placeCount, strip, things } from './story';
 import type { GameState, Place } from './types';
 
 /**
@@ -193,6 +193,120 @@ export function board(s: GameState): Target[] {
     const px = s.places[x.places[0]];
     const py = s.places[y.places[0]];
     return (py ? worthOf(py) : 0) - (px ? worthOf(px) : 0);
+  });
+}
+
+// ── the country, one level up ───────────────────────────────────────────────
+
+/**
+ * A district of Israel, as the map's first screen.
+ *
+ * Sixty-four places is a country and it is also, on a phone, a wall. The player
+ * asked for both halves at once — "אמור להיות כבר בהתחלה הרבה מקומות ואז בהמשך
+ * עוד ועוד", and "שקל להתחבר אליה" — and the only way to have both is to stop
+ * showing him a flat list of everything. So the map is the country in
+ * districts, each district opens into its own places, and the ladder from the
+ * street I woke on to the whole of Israel is drawn on one screen.
+ */
+export interface Region {
+  id: string;
+  name: string;
+  /** The one thing that is true only here. */
+  only: string;
+  /** 0..100, weighted by how big the places in it are. */
+  control: number;
+  /** How many places it holds, and how many of them answer to me. */
+  count: number;
+  mine: number;
+  /** 0 quiet · 3 something is being pulled out right now. */
+  risk: number;
+  /** One line about what is happening in there, or nothing. */
+  now: string | null;
+  /** Can I reach into it at all yet. */
+  open: boolean;
+  /** When it is not open: the one sentence that would open it. */
+  needs: string | null;
+  /** What sorts of place are inside, so "where next" is a real question. */
+  gives: string;
+}
+
+/** How much of a district must be mine before it opens the next ones. */
+export const OPENS_AT = 50;
+
+function areaControl(s: GameState, inside: Place[]): number {
+  let held = 0;
+  let all = 0;
+  for (const p of inside) { const w = worthOf(p); all += w; held += w * (p.control / 100); }
+  return all > 0 ? (held / all) * 100 : 0;
+}
+
+/**
+ * Every district of the country, in the order a player works through them.
+ *
+ * Nothing is hidden — the whole of Israel is listed from the first minute, so
+ * the size of the job is visible — but a district I cannot reach yet says
+ * exactly what would open it rather than sitting there as a locked box.
+ */
+export function regions(s: GameState): Region[] {
+  const byArea: Record<string, Place[]> = {};
+  for (const p of Object.values(s.places)) (byArea[p.areaId] ??= []).push(p);
+
+  const out: Region[] = [];
+  for (const a of Object.values(s.areas)) {
+    const inside = byArea[a.id] ?? [];
+    if (!inside.length) continue;
+    const open = inside.some((p) => p.found || p.control > 0);
+
+    // Who could open it, and how far off they are. The nearest one is the
+    // sentence worth printing.
+    let needs: string | null = null;
+    if (!open) {
+      const ways = Object.values(s.areas)
+        .filter((b) => b.opens.includes(a.id))
+        .map((b) => ({ b, at: areaControl(s, byArea[b.id] ?? []) }))
+        .sort((x, y) => y.at - x.at);
+      const best = ways[0];
+      needs = best
+        ? `כדי להגיע לכאן: להחזיק ${OPENS_AT}% מ${strip(best.b.name)} `
+          + `— יש לך שם ${Math.round(best.at)}%`
+        : 'עוד לא מצאתי דרך לשם';
+    }
+
+    const kinds = [...new Set(inside.map((p) => GIFT[p.kind].short))];
+    out.push({
+      id: a.id,
+      name: a.name,
+      only: a.only,
+      control: areaControl(s, inside),
+      count: inside.length,
+      mine: inside.filter((p) => p.control > 0).length,
+      risk: riskOf(s, inside),
+      now: open ? nowLine(s, inside) : null,
+      open,
+      needs,
+      gives: kinds.join(' · '),
+    });
+  }
+
+  // Danger, then what is half-done, then what is open and untouched, then the
+  // country beyond it — nearest first, so the list reads as the way forward.
+  const rank = (r: Region) => (!r.open ? 3
+    : r.control > 0 && r.control < 100 ? 0
+      : r.control <= 0 ? 1 : 2);
+  return out.sort((x, y) => {
+    if (y.risk !== x.risk) return y.risk - x.risk;
+    const step = rank(x) - rank(y);
+    if (step) return step;
+    if (!x.open && !y.open) return y.control - x.control;
+    return y.count - x.count;
+  });
+}
+
+/** Everything inside one district that is worth a row. */
+export function inRegion(s: GameState, areaId: string): Target[] {
+  return board(s).filter((t) => {
+    const p = s.places[t.places[0]];
+    return p && p.areaId === areaId;
   });
 }
 

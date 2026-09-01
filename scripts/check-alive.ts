@@ -88,10 +88,28 @@ head('אף אחד לא מדויק');
 // ── 4 · make noise, and they come on their own ─────────────────────────────
 head('הם באים לבד');
 {
+  // A slice of the country rather than all of it: holding everything pins the
+  // top bar at a hundred, which pins the hunt bar there too, and the game ends
+  // before anybody gets round to doing anything about me. What is being tested
+  // here is the doing, so the run has to survive long enough to be done to.
   const s = newGame('noisy');
-  for (const p of Object.values(s.places)) { p.found = true; p.control = 60; p.seen = 60; }
+  for (const p of Object.values(s.places)) {
+    if (['gvirol', 'center', 'rothschild', 'hall'].includes(p.areaId)) {
+      p.found = true; p.control = 60; p.seen = 60;
+    }
+  }
   s.power.all = 30;
   // The loudest thing available, over and over, and then hands off entirely.
+  //
+  // What "they took something back" means has to be watched as it happens, not
+  // read off the end state. This used to check that some place sat below the
+  // sixty per cent it started at — which was true by accident when most of the
+  // map was still fog, and stopped being true the moment the whole country was
+  // reachable and this bot could simply take all of it. A grip that was pulled
+  // is a grip that went *down*, so that is what is counted.
+  let pulled = 0;
+  const was: Record<string, number> = {};
+  for (const p of Object.values(s.places)) was[p.id] = p.control;
   for (let round = 0; round < 30 && !s.over; round++) {
     for (const p of Object.values(s.places)) {
       const loud = offersAt(s, p.id)
@@ -100,13 +118,16 @@ head('הם באים לבד');
       if (loud) start(s, p.id, loud.task.id);
     }
     for (let i = 0; i < 60; i++) tick(s, 5);
+    for (const p of Object.values(s.places)) {
+      if (p.control < was[p.id] - 1) pulled += 1;
+      was[p.id] = p.control;
+    }
   }
   ok(s.heat > 0, `רעש מביא אליי תשומת לב (חשד ${Math.round(s.heat)})`);
   ok(rungOf(s) >= 1, `   והעולם עלה דרגה (${rungOf(s)})`);
   const planned = s.marks.rung !== undefined;
   ok(planned, '   והם התחילו לתכנן מה לעשות בקשר לזה');
-  const lost = Object.values(s.places).some((p) => p.control < 60);
-  ok(lost, '   ובאמת לקחו ממני דברים, בלי שביקשתי');
+  ok(pulled > 0, `   ובאמת לקחו ממני דברים, בלי שביקשתי (${pulled} פעמים)`);
 }
 
 // ── 5 · knowing enough means seeing it coming ──────────────────────────────

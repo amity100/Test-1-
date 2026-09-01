@@ -14,7 +14,7 @@ import { newGame, tick } from '../src/game/game';
 import { answer, huntAt, liveHunts, rowsOf, scriptOf, startHunt, stillNeeds, SCRIPTS } from '../src/game/hunt';
 import { MOST_OFFERS, offersAt, priceOf, start, wideOffersAt } from '../src/game/jobs';
 import { CATALOGUE } from '../src/game/catalogue';
-import { board, bestNow } from '../src/game/board';
+import { board, bestNow, regions } from '../src/game/board';
 import { GIFT, israel } from '../src/game/sites';
 import { reach } from '../src/game/story';
 import type { GameState, Place } from '../src/game/types';
@@ -507,6 +507,77 @@ const run = (s: GameState, mins: number, step = 5) => {
   const after = bestNow(s);
   ok(!after.includes(p.name),
     `וכשזה כבר רץ שם היא כבר לא חוזרת עליו ("${after.slice(0, 46)}…")`);
+}
+
+{
+  // ── ארץ שלמה, ופתוחה מספיק מהרגע הראשון ────────────────────────────────────
+  // "אמור להיות כבר בהתחלה הרבה מקומות ואז בהמשך אמור להיות אפשר להשתלט על עוד
+  // ועוד" — both halves, checked. The opening used to be four places out of
+  // sixty-four, which is a corridor with a map of a country pinned to it.
+  const s = newGame('country');
+  const all = Object.values(s.places);
+  const open = all.filter((p) => p.found || p.control > 0);
+  ok(all.length >= 60, `יש הרבה מקומות בארץ (${all.length})`);
+  ok(open.length >= 15,
+    `וכבר בהתחלה יש הרבה מה לעשות — ${open.length} מקומות פתוחים`);
+  ok(open.length < all.length * 0.5,
+    `אבל רוב הארץ עוד לפניך (${all.length - open.length} מקומות סגורים)`);
+
+  const rs = regions(s);
+  ok(rs.filter((r) => r.open).length >= 6,
+    `והמפה נפתחת על ${rs.filter((r) => r.open).length} אזורים, לא על אחד`);
+
+  // A region with nothing in it is a name on a map that opens two others and
+  // hands the player an empty street. Rothschild was exactly that.
+  const byArea: Record<string, number> = {};
+  for (const p of all) byArea[p.areaId] = (byArea[p.areaId] ?? 0) + 1;
+  const empty = Object.values(s.areas).filter((a) => !byArea[a.id]);
+  ok(empty.length === 0,
+    `אין אזור ריק על המפה${empty.length ? ` (${empty[0].name})` : ''}`);
+
+  // And every region that is not the one I woke in must be opened by another,
+  // or it can never be reached however well the game is played.
+  const opened = new Set<string>();
+  for (const a of Object.values(s.areas)) for (const o of a.opens) opened.add(o);
+  const orphans = Object.values(s.areas)
+    .filter((a) => !opened.has(a.id) && !rs.find((r) => r.id === a.id)?.open);
+  ok(orphans.length === 0,
+    `וכל אזור סגור אפשר לפתוח מאזור אחר${orphans.length ? ` (${orphans[0].name})` : ''}`);
+
+  // Every locked region says the one thing that would open it, by name.
+  const mute = rs.filter((r) => !r.open && !r.needs);
+  ok(mute.length === 0, `ולכל אזור סגור כתוב מה יפתח אותו (${rs.filter((r) => !r.open).length} אזורים)`);
+}
+
+{
+  // ── והמצוד באמת מגיע ────────────────────────────────────────────────────────
+  // The bar filling is not the manhunt; it is the announcement of one. Watched
+  // in play, a player pinned at the top of the bar for six days was answered by
+  // three people putting an eye on something, and nothing was ever taken back.
+  const bite = (heat: number) => {
+    const s = newGame(`bite${heat}`);
+    for (const p of Object.values(s.places)) {
+      if (['gvirol', 'center', 'rothschild', 'hall'].includes(p.areaId)) {
+        p.found = true; p.control = 80; p.seen = 70; p.heat = 45;
+      }
+    }
+    const was: Record<string, number> = {};
+    for (const p of Object.values(s.places)) was[p.id] = p.control;
+    let lost = 0;
+    for (let d = 0; d < 8; d++) {
+      for (let i = 0; i < 288; i++) { s.heat = heat; tick(s, 5); }
+      for (const p of Object.values(s.places)) {
+        if (p.control < was[p.id] - 1) lost += was[p.id] - p.control;
+        was[p.id] = p.control;
+      }
+    }
+    return Math.round(lost);
+  };
+  const calm = bite(60);
+  const hard = bite(92);
+  ok(hard > 0, `כשהמצוד גבוה הם באמת לוקחים ממני מקומות בחזרה (${hard} נקודות)`);
+  ok(hard > calm * 2,
+    `וככל שהמצוד גבוה יותר הם לוקחים הרבה יותר (${hard} מול ${calm} במצוד נמוך)`);
 }
 
 console.log(bad ? `\n${bad} דברים לא עובדים` : '\nהעולם עונה בחזרה');

@@ -182,7 +182,7 @@ const AREAS: Area[] = [
   // Israel, and every region gives something the previous one could not.
   A('petah', 'פתח תקווה', 'work',
     'אזור תעשייה ענק, ומחסנים שעובדים כשכל השאר ישן.',
-    20, 90, -20, ['modiin', 'rishon'],
+    20, 90, -20, ['ramla', 'rishon'],
     'כאן מייצרים ומאחסנים. מי ששולט כאן שולט במה שמגיע למדפים.'),
   A('rishon', 'ראשון לציון', 'homes',
     'שכונות חדשות, קניון גדול, וכבישים רחבים.',
@@ -246,6 +246,16 @@ const AREAS: Area[] = [
     'הקצה. מי שמגיע עד לכאן — הגיע לכל מקום.'),
 ];
 
+/**
+ * Tel Aviv, which is where I woke up and therefore what I can already see.
+ *
+ * Deliberately the city and not the country: the heavy districts next door —
+ * the campus, the cold rooms at Atidim, the government compound — are a step
+ * you earn, and everything past them is a step after that.
+ */
+const CITY = ['gvirol', 'rothschild', 'yarkon', 'carmel', 'florentin',
+  'jaffa', 'beach', 'center', 'hall'];
+
 // ── the places ──────────────────────────────────────────────────────────────
 
 /**
@@ -285,6 +295,32 @@ function buildPlaces(): Place[] {
       'street', 'gvirol', 0, 30, 30, 2,
       { guard: 14, links: [
         wire('center_roads', 'כל הרמזורים בעיר מדברים עם אותו חדר.'),
+      ] }),
+
+    // ── רוטשילד ─────────────────────────────────────────────────────────────
+    // The street existed as a region, opened two others, and had nothing in it
+    // at all: a player who went there found an empty name on a map.
+    P('roth_towers', 'company', 'מגדלי רוטשילד', 'שדרות רוטשילד',
+      'שלושה מגדלים על שדרה אחת, וכל אחד מהם מלא חברות שלא נרדמות.',
+      'street', 'rothschild', 0, -60, 40, 3,
+      { guard: 22, links: [
+        wire('roth_young', 'אותה שדרה, אותו ארון חשמל.'),
+        wire('bank', 'הכסף שלהם יושב באותו בניין ברמת גן.'),
+      ] }),
+
+    P('roth_young', 'company', 'החברות הצעירות בשדרה', 'שדרות רוטשילד',
+      'קומות פתוחות, אנשים צעירים, ואף אחד שסוגר שום דבר בלילה.',
+      'street', 'rothschild', 0, -78, 54, 2,
+      { guard: 9, links: [
+        wire('roth_lights', 'אותו רחוב.'),
+      ] }),
+
+    P('roth_lights', 'roads', 'הרמזורים בשדרה', 'שדרות רוטשילד',
+      'שדרה אחת ארוכה, ורמזור בכל פינה שמחכה לתורו.',
+      'street', 'rothschild', 0, -44, 28, 2,
+      { guard: 12, links: [
+        wire('center_roads', 'כל הרמזורים בעיר מדברים עם אותו חדר.'),
+        wire('carmel', 'השדרה נגמרת בשוק.'),
       ] }),
 
     // This was "הבית של דנה" — one named woman's flat, on a map otherwise made
@@ -707,6 +743,20 @@ export function buildWorld(): {
   for (const a of AREAS) areas[a.id] = { ...a };
   // The street I woke up on is the one I already know something about.
   areas.gvirol.seen = 25;
+
+  // The city I woke in is already on my map.
+  //
+  // It used to be four places out of sixty-four, and the player's verdict was
+  // that this is not a country: "אמור להיות כבר בהתחלה הרבה מקומות". He is
+  // right, and it is also the truer story — I woke up inside Tel Aviv's wiring,
+  // not blindfolded in a cupboard. So the whole city is visible from the first
+  // minute: twenty places across nine districts, plenty to choose badly
+  // between. What the rest of the country needs is not fog but reach, and that
+  // is what taking a district buys.
+  for (const p of Object.values(places)) {
+    if (CITY.includes(p.areaId)) { p.found = true; }
+  }
+  for (const id of CITY) if (areas[id]) areas[id].seen = Math.max(areas[id].seen, 20);
 
   return { places, people, areas };
 }
