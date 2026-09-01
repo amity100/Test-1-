@@ -1,3 +1,4 @@
+import { leanGives } from './grow';
 import type { GameState, Look, Place, PlaceKind } from './types';
 
 /**
@@ -338,6 +339,18 @@ export function hold(s: GameState): Hold {
         break;
       default:
         break;
+    }
+  }
+
+  // And what leaning one way three times is worth on top of the three
+  // themselves. A collection is a list; three of a kind is a creature.
+  const l = leanGives(s);
+  h.ahead += l.ahead;
+  h.fade = Math.max(0.4, h.fade * l.fade);
+  if (l.quiet > 0) {
+    for (const p of Object.values(s.places)) {
+      if (p.control <= 0) continue;
+      h.quiet[p.areaId] = Math.min(3, (h.quiet[p.areaId] ?? 0) + l.quiet);
     }
   }
   return h;

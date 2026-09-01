@@ -1,5 +1,6 @@
 
 import { GIFT, KIND_NAME, fadeRate, israel, weight as worthOf } from './sites';
+import { LOOK_NAME } from './types';
 import { pressure } from './watch';
 import { liveHunts } from './hunt';
 import { at, places as placeCount, strip, things } from './story';
@@ -336,6 +337,20 @@ export function bestNow(s: GameState): string {
     .filter((p) => p.control > 0 && p.cutAt !== undefined)
     .sort((a, b) => (a.cutAt ?? 0) - (b.cutAt ?? 0))[0];
   if (cut) return `הם עומדים לנתק את ${cut.name}. או שתתחפר שם חזק — או שתברח משם בזמן.`;
+
+  // Somebody has worked out how I work. This is the most useful sentence the
+  // game can say, because the answer is a move rather than a resource: not
+  // "wait", not "spend" — do it differently, and everything else gets cheaper
+  // while they carry on looking the way I stopped going.
+  const onto = s.hunters.find((h) => h.onLook || h.onKind);
+  if (onto && s.heat >= 20) {
+    if (onto.onLook) {
+      return `${onto.name} בודקת עכשיו כל דבר ש${LOOK_NAME[onto.onLook]}, וזה עולה לך `
+        + 'הרבה יותר. תיכנס למקומות בדרך אחרת — כל כיוון שהיא לא מסתכלת אליו זול עכשיו.';
+    }
+    return `שומרים במיוחד על כל ה${KIND_NAME[onto.onKind!]} בארץ בגלל ${onto.name}. `
+      + 'כמה ימים במקומות מסוג אחר, והם ירדו מזה.';
+  }
 
   if (s.heat >= 60) {
     return `המצוד על ${Math.round(s.heat)} וזה כבר מסוכן. `

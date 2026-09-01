@@ -523,6 +523,14 @@ export interface GameState {
   spent: Record<Verb, number>;
   /** What I have become. */
   grown: string[];
+  /**
+   * What is on the table right now, waiting to be chosen between.
+   *
+   * Growing used to simply happen to me. It is a decision now: earning one puts
+   * two or three on the table, from different temperaments, and taking one puts
+   * the rest back. See `grow.ts`.
+   */
+  offered: string[];
 
   log: LogLine[];
   /** Things the player has been told once already. */
@@ -542,6 +550,8 @@ export interface BusEvents {
   'day:passed': number;
   'rung:changed': Rung;
   'grown': string;
+  /** Something in me is ready to change, and there is a choice to make. */
+  choose: string[];
   toast: { text: string; kind: 'good' | 'bad' | 'warn' | 'info'; icon?: string };
   /** Somebody started looking, and the screen should stop and say so. */
   'hunt:started': string;

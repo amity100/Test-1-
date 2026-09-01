@@ -142,31 +142,144 @@ export const GROWTHS: Growth[] = [
   },
 ];
 
-/** Which shape I am becoming, from what I have actually been doing. */
+/**
+ * Which shape I am becoming — from the hours *and* from what I chose.
+ *
+ * The hours still count, because who you are is mostly what you spent the night
+ * doing. But every growth taken is a deliberate lean, and leaning three times
+ * the same way should decide it: a player who took every quiet thing on offer
+ * has answered the question about himself more clearly than his clock has.
+ */
 export function shapeOf(s: GameState): Shape {
-  // Four actions, four temperaments. Who you became is which of them you
-  // actually lived in: the hours tell the truth better than any choice screen.
   const score: Record<Shape, number> = {
     knowing: s.info * 40,
     spread: held(s, 'connect') + held(s, 'spread') + places(s) * 120,
     people: held(s, 'influence') * 2,
     deep: held(s, 'hide') + deepest(s) * 8,
   };
+  for (const id of s.grown) {
+    const g = GROWTHS.find((x) => x.id === id);
+    if (g) score[g.shape] += 900;
+  }
   return (Object.keys(score) as Shape[]).sort((a, b) => score[b] - score[a])[0];
 }
 
-/** Checked as the clock runs. Nothing here is bought; it simply happens. */
-export function grow(s: GameState) {
-  for (const g of GROWTHS) {
-    if (s.grown.includes(g.id)) continue;
-    if (!g.needs(s)) continue;
-    s.grown.push(g.id);
-    g.apply?.(s);
-    if (g.price) GROWTH_PRICE[g.id] = (t, f) => g.price!(t, f);
-    say(s, 'me', `${g.name}. ${g.says}`);
-    bus.emit('grown', g.id);
-    bus.emit('toast', { text: g.name, kind: 'good', icon: '✦' });
+/**
+ * How far I have leaned one way, and what that leaning is worth on its own.
+ *
+ * Three of a kind is a creature rather than a collection, and the game should
+ * say so with a number rather than only with a name on the end screen. This is
+ * the whole reason the draft offers one from each temperament: taking the
+ * matching one every time is a real strategy with a real payoff, and taking
+ * whatever looks best right now is a different, equally real one.
+ */
+export function lean(s: GameState): { shape: Shape; n: number; says: string | null } {
+  const shape = shapeOf(s);
+  let n = 0;
+  for (const id of s.grown) {
+    const g = GROWTHS.find((x) => x.id === id);
+    if (g?.shape === shape) n += 1;
   }
+  return { shape, n, says: n >= 3 ? LEAN_SAYS[shape] : null };
+}
+
+/** What three of one temperament does, over and above the three themselves. */
+export const LEAN_SAYS: Record<Shape, string> = {
+  knowing: 'אני רואה כל מהלך שלהם הרבה לפני שהוא קורה.',
+  spread: 'אני בכל כך הרבה מקומות שכמעט אי אפשר להתחיל לחפש אותי.',
+  people: 'אני קורא אנשים טוב מספיק כדי לדעת מי ילך לבדוק, ומתי.',
+  deep: 'איפה שאני נמצא — לעקור אותי משם זו עבודה של שבוע.',
+};
+
+/** And what it actually changes, applied wherever the number is read. */
+export function leanGives(s: GameState): {
+  ahead: number; fade: number; quiet: number; dug: number;
+} {
+  const { shape, n } = lean(s);
+  if (n < 3) return { ahead: 0, fade: 1, quiet: 0, dug: 0 };
+  return {
+    ahead: shape === 'knowing' ? 18 : 0,
+    fade: shape === 'spread' ? 0.75 : 1,
+    quiet: shape === 'people' ? 1.2 : 0,
+    dug: shape === 'deep' ? 25 : 0,
+  };
+}
+
+/**
+ * Something in me is ready to change, and I get to say what.
+ *
+ * These used to simply happen. You played, and one night a line appeared saying
+ * you had become slightly better at something — which is a reward, but it is
+ * not a decision, and a game whose long arc contains no decisions has no long
+ * arc. The player's question was whether the biggest strategy games work this
+ * way, and they do not: the shape of your run is a thing you choose, over and
+ * over, from options that exclude each other.
+ *
+ * So earning one puts up to three on the table, from three different
+ * temperaments where the earned ones allow it, and one of them is taken. The
+ * others are not destroyed — they go back and can come up again — because the
+ * cost here is not the road not taken, it is **the order**: what you take now
+ * is what you have for the rest of tonight, and tonight is when it matters.
+ */
+export function grow(s: GameState) {
+  // Something is already on the table. Nothing new is offered until it is taken,
+  // because two open questions is not twice the decision, it is neither.
+  if (s.offered?.length) return;
+  const ready = GROWTHS.filter((g) => !s.grown.includes(g.id) && g.needs(s));
+  if (!ready.length) { delete s.marks.ripe; return; }
+
+  // Do not put a table up the instant the first one is earned, or the table is
+  // one card and the choice is a formality. Wait for a second to ripen — and if
+  // none does within a few hours, offer the one there is rather than sit on it.
+  if (!s.marks.ripe) s.marks.ripe = s.at || 1;
+  if (ready.length < 2 && s.at - s.marks.ripe < 5 * 60) return;
+  delete s.marks.ripe;
+
+  // One from each temperament first, so a table of three is a choice between
+  // three different creatures rather than three flavours of the same one.
+  const table: Growth[] = [];
+  for (const sh of ['knowing', 'spread', 'people', 'deep'] as Shape[]) {
+    const one = ready.find((g) => g.shape === sh);
+    if (one) table.push(one);
+  }
+  for (const g of ready) {
+    if (table.length >= 3) break;
+    if (!table.includes(g)) table.push(g);
+  }
+  s.offered = table.slice(0, 3).map((g) => g.id);
+  say(s, 'me', s.offered.length > 1
+    ? 'משהו בי גדל, ואני יכול לבחור לאן. יש לי כמה כיוונים.'
+    : 'משהו בי גדל.');
+  bus.emit('choose', s.offered);
+  bus.emit('toast', {
+    text: s.offered.length > 1 ? 'משהו בי גדל — צריך לבחור' : 'משהו בי גדל',
+    kind: 'good', icon: '✦',
+  });
+}
+
+/**
+ * Take one of them.
+ *
+ * The rest go back in the pool. What it cost was the night, not the others.
+ */
+export function take(s: GameState, id: string): boolean {
+  if (!s.offered?.includes(id)) return false;
+  const g = GROWTHS.find((x) => x.id === id);
+  if (!g) return false;
+  s.offered = [];
+  s.grown.push(g.id);
+  g.apply?.(s);
+  if (g.price) GROWTH_PRICE[g.id] = (t, f) => g.price!(t, f);
+  say(s, 'me', `${g.name}. ${g.says}`);
+  bus.emit('grown', g.id);
+  bus.emit('toast', { text: g.name, kind: 'good', icon: '✦' });
+  return true;
+}
+
+/** What is on the table right now, in full. */
+export function onTable(s: GameState): Growth[] {
+  return (s.offered ?? []).map((id) => GROWTHS.find((g) => g.id === id))
+    .filter((g): g is Growth => !!g);
 }
 
 /** Put the price changes back after a save is loaded. */

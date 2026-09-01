@@ -11,6 +11,7 @@
  * Every assertion in this file is about something the player would see.
  */
 import { newGame, tick } from '../src/game/game';
+import { take } from '../src/game/grow';
 import { answer, huntAt, liveHunts, rowsOf, scriptOf, startHunt, stillNeeds, SCRIPTS } from '../src/game/hunt';
 import { MOST_OFFERS, offersAt, priceOf, start, wideOffersAt } from '../src/game/jobs';
 import { CATALOGUE } from '../src/game/catalogue';
@@ -428,6 +429,7 @@ const run = (s: GameState, mins: number, step = 5) => {
       .sort((a, b) => b.guard - a.guard).pop();
     if (next) go(next.id, 'enter');
     for (let i = 0; i < 180; i++) tick(s, 1);
+    if (s.offered.length) take(s, s.offered[0]);
     peak = Math.max(peak, s.heat);
   }
   ok(peak >= 25, `מי שגדל ולא בולם — המצוד באמת עולה עליו (הגיע ל־${peak.toFixed(0)})`);
@@ -471,6 +473,7 @@ const run = (s: GameState, mins: number, step = 5) => {
       if (next) go(next.id, 'enter');
     }
     for (let i = 0; i < 180; i++) tick(s, 1);
+    if (s.offered.length) take(s, s.offered[0]);
   }
   ok(s.over === 'won',
     `ומי שמתפשט ובולם בזמן מגיע ל־100 (${s.over ?? 'נתקע'} · `

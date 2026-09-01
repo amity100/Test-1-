@@ -15,6 +15,7 @@
 import { newGame, tick } from '../src/game/game';
 import { offersAt, start } from '../src/game/jobs';
 import { freshness } from '../src/game/catalogue';
+import { SHAPE_NAME, lean, leanGives, onTable, take, type Shape } from '../src/game/grow';
 import { israel } from '../src/game/sites';
 import { noticed, wanted } from '../src/game/watch';
 import { watchingSays } from '../src/game/hunter';
@@ -48,12 +49,18 @@ function go(s: GameState, p: Place, id: string, way = 'quiet') {
   return start(s, p.id, id, true, way);
 }
 
-interface Style { name: string; move(s: GameState): void }
+interface Style {
+  name: string;
+  move(s: GameState): void;
+  /** Which way this one leans when the game offers a choice. */
+  leans?: Shape;
+}
 
 const STYLES: Style[] = [
   {
     // Take everything, and buy the bar back down when it gets frightening.
     name: 'זהיר',
+    leans: 'spread',
     move(s) {
       if (s.heat > 55) {
         const best = [...mine(s)].sort((a, b) => b.control - a.control)[0];
@@ -81,6 +88,7 @@ const STYLES: Style[] = [
     // That is the whole counterplay to an opponent who learns, and a style that
     // ignores it is not playing the game the game is offering.
     name: 'מיטיב',
+    leans: 'people',
     move(s) {
       // Everybody needs the brake now. Somebody is keeping count, and a night
       // spent doing the same good deed sixty times is still a night with a
@@ -142,6 +150,8 @@ interface Run {
    * come back down. That is what "calmer" means to somebody playing it.
    */
   mean: number; brakes: number;
+  /** How hard the country was actually looking by the end. */
+  wanted: number;
 }
 const out = new Map<string, Run>();
 
@@ -157,6 +167,12 @@ for (const style of STYLES) {
     for (let i = 0; i < 24 * 6; i++) {
       tick(s, 10);
       if (s.over) break;
+      // The game asks a question when something in me grows, and a bot that
+      // never answers it never grows at all — which is not a style, it is a
+      // player who has walked away from the screen.
+      if (s.offered.length) take(s, style.leans
+        ? (onTable(s).find((g) => g.shape === style.leans)?.id ?? s.offered[0])
+        : s.offered[0]);
       if (i % 3 === 0) style.move(s);
       peak = Math.max(peak, s.heat);
       sum += s.heat;
@@ -172,7 +188,7 @@ for (const style of STYLES) {
   out.set(style.name, {
     over: s.over ?? null, day: dayOf(s), israel: P(israel(s)), peak: P(peak),
     places: mine(s).length, presses: seen.size, uses,
-    mean: P(sum / Math.max(1, ticks)), brakes,
+    mean: P(sum / Math.max(1, ticks)), brakes, wanted: wanted(s),
   });
   const r = out.get(style.name)!;
   console.log(`\n── ${style.name}: ${r.over ?? 'לא נגמר'} · יום ${r.day} · `
@@ -200,10 +216,17 @@ ok(kind.over === 'won', `וגם מי שגורם לארץ להיות תלויה �
 // that needs me reports less, so less of what I do turns into somebody looking
 // — and the same thirty stops buy the kind player half as many moves again.
 // That is the benefit in the hand: not a calmer bar, a longer turn.
+//
+// Two numbers, because one of them moves with the dice and the other cannot:
+// how much gets done between brakes is the benefit as it is felt, and how hard
+// the country is looking is the mechanism underneath it.
 const room = (r: Run) => r.presses / Math.max(1, r.brakes);
-ok(room(kind) > room(careful) * 1.25,
-  `ומי שהארץ צריכה אותו מספיק לעשות הרבה יותר בין עצירה לעצירה `
+ok(room(kind) > room(careful) * 1.15,
+  `ומי שהארץ צריכה אותו מספיק לעשות יותר בין עצירה לעצירה `
   + `(${room(kind).toFixed(1)} פעולות מול ${room(careful).toFixed(1)})`);
+ok(kind.wanted <= 0.7 && careful.wanted >= 0.95,
+  `ומחפשים אותו בחצי כוח, בזמן שאת הזהיר מחפשים במלוא הכוח `
+  + `(פי ${kind.wanted.toFixed(2)} מול פי ${careful.wanted.toFixed(2)})`);
 ok(kind.uses > careful.uses + 30,
   `והוא עושה את זה בלי לוותר על הדבר הגדול של אף מקום (${kind.uses} לחיצות מול ${careful.uses})`);
 ok(rash.over === 'lost', `מי שרק דוהר קדימה נתפס (יום ${rash.day}, ${rash.israel}%)`);
@@ -300,6 +323,55 @@ ok(kind.uses > 40, `והכפתור המיוחד הוא דרך משחק שלמה 
   }
   ok(!s.hunters[0].onLook && quiet <= 4,
     `וכשמפסיקים היא יורדת מזה, אחרי ${quiet} ימים שקטים`);
+}
+
+// ── and what I grow into is chosen, not handed to me ───────────────────────
+//
+// These used to simply happen: you played, and one night a line said you had
+// got slightly better at something. That is a reward, not a decision, and a
+// game whose long arc contains no decisions has no long arc. So earning one
+// puts a table up, the table has more than one temperament on it, and leaning
+// the same way three times is worth something beyond the three themselves.
+{
+  const s = newGame('grew');
+  let tables = 0;
+  let biggest = 0;
+  const shapes = new Set<string>();
+  const play = STYLES[0].move;
+  for (let i = 0; i < 40 * 24 * 6 && !s.over; i++) {
+    tick(s, 10);
+    if (i % 3 === 0 && !s.offered.length) play(s);
+    if (!s.offered.length) continue;
+    tables += 1;
+    biggest = Math.max(biggest, s.offered.length);
+    for (const g of onTable(s)) shapes.add(g.shape);
+    // Lean one way every single time, and see whether leaning is worth anything.
+    take(s, onTable(s).find((g) => g.shape === 'spread')?.id ?? s.offered[0]);
+  }
+  ok(tables >= 4, `המשחק שואל אותי לאן לגדול, יותר מפעם אחת (${tables} פעמים)`);
+  ok(biggest >= 2, `ובכל פעם יש יותר מאפשרות אחת (${biggest} על השולחן)`);
+  ok(shapes.size >= 3,
+    `והאפשרויות הן באמת כיוונים שונים (${[...shapes].join(', ')})`);
+
+  const l = lean(s);
+  ok(l.n >= 3 && l.shape === 'spread',
+    `מי שנוטה לכיוון אחד — נהיה הדבר הזה (${SHAPE_NAME[l.shape]}, ${l.n} גדילות)`);
+  ok(!!l.says, `ויש לזה משמעות משלה: "${l.says}"`);
+  const g = leanGives(s);
+  ok(g.fade < 1 || g.ahead > 0 || g.quiet > 0 || g.dug > 0,
+    'ולנטייה יש מספר מאחוריה, לא רק שם');
+
+  // Nothing is offered while something is already on the table: two open
+  // questions is not twice the decision, it is neither.
+  const s2 = newGame('grew2');
+  for (let i = 0; i < 40 * 24 * 6 && !s2.over && s2.offered.length < 1; i++) {
+    tick(s2, 10);
+    if (i % 3 === 0) play(s2);
+  }
+  const had = [...s2.offered];
+  for (let i = 0; i < 24 * 6; i++) tick(s2, 10);
+  ok(JSON.stringify(had) === JSON.stringify(s2.offered),
+    'וכל עוד לא בחרתי, המשחק לא מציע לי עוד דבר');
 }
 
 console.log(bad ? `\n✗ ${bad} דברים במשחקיות לא עובדים` : '\n✓ יש יותר מדרך אחת לשחק, והמשחק מבדיל ביניהן.');

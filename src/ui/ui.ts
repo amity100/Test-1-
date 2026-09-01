@@ -7,7 +7,7 @@ import {
 } from '../game/game';
 import { SPEEDS, SPEED_NAME, clock as clockAt, crowd, hourSays, seenAt } from '../game/clock';
 import { ABOVE_SAYS, Offer, offersAt, start, stop, wideOffersAt } from '../game/jobs';
-import { GROWTHS, SHAPE_NAME, SHAPE_SAYS } from '../game/grow';
+import { GROWTHS, SHAPE_NAME, SHAPE_SAYS, lean, onTable, take } from '../game/grow';
 import { comeOut, saysOpinion } from '../game/opinion';
 import { GIFT, KIND_NAME } from '../game/sites';
 import { answer, liveHunts, rowsOf, scriptOf, stillNeeds } from '../game/hunt';
@@ -79,6 +79,10 @@ export class UI {
     this.world.wide();
     this.refresh();
     this.showBoard();
+    // A question that was open when the night was saved is still open. Without
+    // this it was asked once, into a modal, and a player who saved at that
+    // moment lost the answer and the growth with it.
+    if (this.state.offered.length) this.showChoice();
     requestAnimationFrame(this.tick);
   }
 
@@ -96,6 +100,8 @@ export class UI {
           <span>כוח</span><b id="mpower">0/3</b>
           <div class="mbar"><i id="mpowerbar"></i></div>
         </button>
+        <button class="icon grew hidden" id="grewbtn" data-do="grown"
+          title="משהו בי גדל">✦</button>
         <button class="icon" data-do="board" title="המפה">▦</button>
         <button class="icon" data-do="help" title="איך משחקים">?</button>
       </header>
@@ -171,6 +177,15 @@ export class UI {
     bus.on('rung:changed', (r) => {
       this.world.alert(r / 5);
       if (r > 0) { this.world.shake(0.5); this.showStage(r); }
+    });
+    // Something in me is ready to change, and it is a decision — so the clock
+    // stops for it, the same way it stops for somebody walking into a room.
+    // A choice the world runs past is not a choice.
+    bus.on('choose', () => {
+      this.state.speed = 0;
+      this.dirty = true;
+      audio.play('upgrade');
+      this.showChoice();
     });
     bus.on('teach', (id) => this.showTeach(id));
     bus.on('over', (how) => this.showEnd(how));
@@ -317,7 +332,18 @@ export class UI {
       case 'areas': this.showAreas(); break;
       case 'region': this.showRegion(arg); break;
       case 'them': this.showThem(); break;
-      case 'grown': this.showGrown(); break;
+      // While something is on the table, this button is the table. The choice
+      // is never a modal you can lose by looking away.
+      case 'grown': {
+        if (s.offered.length) this.showChoice(); else this.showGrown();
+        break;
+      }
+      case 'choose': this.showChoice(); break;
+      case 'take': {
+        if (take(s, arg)) { this.closeModal(); save(s); }
+        this.dirty = true;
+        break;
+      }
       case 'help': this.showHelp(); break;
       case 'closeteach': this.closeModal(); break;
       case 'comeout': { comeOut(s); this.closeModal(); save(s); break; }
@@ -802,6 +828,45 @@ export class UI {
       </div>`);
   }
 
+  /**
+   * Something in me grew, and I say what it becomes.
+   *
+   * Two or three cards, each from a different temperament, and taking one puts
+   * the others back. It is the one screen in the game that stops everything —
+   * because it is the only decision here whose answer lasts the rest of the
+   * night, and answering it in the corner of the eye while a job runs out is
+   * how a run's whole shape gets decided by accident.
+   */
+  private showChoice() {
+    const s = this.state;
+    const table = onTable(s);
+    if (!table.length) { this.closeModal(); return; }
+    const l = lean(s);
+    const cards = table.map((g) => {
+      const same = g.shape === l.shape && l.n >= 2;
+      return `<button class="tg pick-grow ${same ? 'same' : ''}" data-do="take" data-arg="${g.id}">
+        <b>✦ ${esc(g.name)}</b>
+        <em>${esc(g.says)}</em>
+        <u>${esc(SHAPE_NAME[g.shape])}</u>
+        ${same ? `<i class="tnow">${esc(l.n >= 2 && l.n < 3
+        ? 'עוד אחד כזה, ואני נהיה באמת הדבר הזה.'
+        : 'עוד אחד מאותו כיוון.')}</i>` : ''}
+      </button>`;
+    }).join('');
+    this.modal(`
+      <div class="sheet wide places">
+        <span class="kick">משהו בי גדל</span>
+        <h2>${esc(table.length > 1 ? 'לאן' : 'זה מה שגדל')}</h2>
+        <div class="txt">
+          <p>${esc(table.length > 1
+        ? 'אני יכול לגדול לכיוון אחד מאלה. מה שלא אבחר יחכה — אבל מה שאבחר עכשיו, יהיה איתי הלילה.'
+        : 'זה מה שיש בי עכשיו.')}</p>
+          ${l.says ? `<p class="holds">${esc(l.says)}</p>` : ''}
+        </div>
+        <div class="txt list">${cards}</div>
+      </div>`);
+  }
+
   private showGrown() {
     const s = this.state;
     const sh = shape(s);
@@ -825,7 +890,9 @@ export class UI {
         <span class="kick">מה נהייתי</span>
         <h2>${esc(SHAPE_NAME[sh])}</h2>
         <div class="txt"><p>${esc(SHAPE_SAYS[sh])}</p>
-        <p class="need">אני נהיה ממה שאני עושה, לא ממה שאני בוחר מרשימה.</p>${bars}</div>
+        <p class="need">${esc(lean(s).says
+        ?? 'אני נהיה גם ממה שאני עושה וגם ממה שאני בוחר. שלוש בחירות לאותו כיוון — '
+        + 'ואני באמת הדבר הזה.')}</p>${bars}</div>
         <div class="txt list">${rows}</div>
         <button class="ok" data-do="closeteach">סגור</button>
       </div>`);
@@ -851,9 +918,17 @@ export class UI {
           <p><b>לקחת מקום זה שני צעדים.</b> קודם <b>להיכנס</b> — וכבר חצי מהמקום
           שלי. אחר כך <b>לקחת את כל המקום</b> — וזהו, הוא כולו שלי. מקום שכולו
           שלי נותן לי את מה שהוא נותן במלואו, ומקום שרק נכנסתי אליו נותן חצי.</p>
+          <p><b>לכל מקום שלוש דרכים להיכנס.</b> בשקט מהצד — לאט, וכמעט בלי
+          שישמעו. מהר ובכוח — חצי מהזמן, ורואים את זה בבוקר. דרך מישהו שנמצא
+          שם — מהיר ושקט, אם באמת יש שם מישהו. על כל דרך כתוב מראש איך היא
+          תיראה בבוקר ומה הסיכוי שמשהו ישתבש.</p>
           <p><b>לכל סוג מקום יש כפתור אחד גדול משלו.</b> תחנת כוח מכבה אור,
           בנק שולח כסף, אנטנה מדברת אל כל הארץ. זה מה שמבדיל בין מקום למקום —
           ולכן <em>איזה</em> מקום לקחת זו ההחלטה החשובה במשחק.</p>
+          <p><b>מישהי סופרת.</b> נעה לא מסתכלת על כמה אלא על איך. אם רוב מה
+          שאני עושה נראה אותו דבר — היא תתפוס את הדפוס, תגיד את זה בקול, וכל
+          דבר כזה יעלה לי הרבה יותר. בזמן שהיא מסתכלת לשם, כל כיוון אחר נהיה
+          זול. כמה ימים אחרת, והיא יורדת מזה.</p>
           <p><b>מתחת לכל כפתור כתוב מה מרוויחים ומה מסתכנים.</b> בכחול מה זה נותן,
           באדום כמה זה יזיז את הפס האדום. אין הפתעות.</p>
           <p><b>שתי דרכים לנצח, ואפשר לערבב.</b><br>
@@ -1183,6 +1258,11 @@ export class UI {
 
     set('mpower', `${s.power.used}/${s.power.all}`);
     bar('mpowerbar', (s.power.used / Math.max(1, s.power.all)) * 100);
+
+    // A star, only while something is waiting to be chosen. The question is
+    // never a modal that can be lost by looking away.
+    (this.root.querySelector('#grewbtn') as HTMLElement)
+      .classList.toggle('hidden', s.offered.length === 0);
 
     // The race. These two numbers are the entire game, and they are the only
     // numbers on the screen that never need explaining twice: mine goes up,

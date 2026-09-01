@@ -16,7 +16,7 @@
  */
 import { newGame, shape, tick } from '../src/game/game';
 import { Offer, offersAt, start, stop } from '../src/game/jobs';
-import { SHAPE_NAME } from '../src/game/grow';
+import { SHAPE_NAME, take } from '../src/game/grow';
 import { israel } from '../src/game/sites';
 import { rungOf } from '../src/game/watch';
 import { answer, liveHunts, rowsOf, stillNeeds } from '../src/game/hunt';
@@ -79,6 +79,7 @@ function dealWith(s: GameState) {
 function play(bot: Bot, days: number) {
   const s = newGame(`bal-${bot.name}`);
   for (let step = 0; step < days * 24 * 4 && !s.over; step++) {
+    if (s.offered.length) take(s, s.offered[0]);
     if (bot.answers) dealWith(s);
     // Four decisions an hour, then the world runs for fifteen minutes.
     for (let n = 0; n < 3; n++) {

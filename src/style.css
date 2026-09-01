@@ -1209,6 +1209,42 @@ body.is-mobile .objectives ul li { min-height: 46px; }
 .boardsheet > .txt:first-of-type { margin: 10px 0 4px; }
 .pick .op .risk { color: #ffb3c0; }
 
+.icon.grew {
+  color: var(--cy);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+/* ── choosing what I grow into ─────────────────────────────────────────────
+   The one screen that stops the world. Two or three cards, and the one that
+   continues a lean already started is marked — so a player who is building
+   something can see that he is building it, and one who is not can see the
+   choice for what it is. Full-width, because this is the only decision in the
+   game whose answer lasts the rest of the night. */
+.pick-grow {
+  display: block; width: 100%; text-align: start;
+  padding: 13px 14px; margin-bottom: 9px;
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.pick-grow b {
+  display: block; font-size: 15px; font-weight: 700; color: var(--cy);
+  margin-bottom: 4px;
+}
+.pick-grow em {
+  display: block; font-style: normal; font-size: 12.5px; line-height: 1.6;
+  color: var(--txt);
+}
+.pick-grow u {
+  display: block; text-decoration: none; font-family: var(--mono);
+  font-size: 10.5px; letter-spacing: 1px; color: var(--muted); margin-top: 6px;
+}
+.pick-grow .tnow {
+  display: block; font-style: normal; font-size: 11.5px; margin-top: 6px;
+}
+.pick-grow.same { border-color: var(--line-hot); box-shadow: inset 2px 0 0 var(--cy); }
+.pick-grow.same .tnow { color: var(--cy); }
+.pick-grow:active { background: rgba(95, 246, 255, .08); }
+
 /* ── the odds on a way in ──────────────────────────────────────────────────
    The third line, and the one that turns getting into a place from a price
    into a bet: what it will look like in the morning, and how likely it is to
