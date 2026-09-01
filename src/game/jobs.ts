@@ -2,7 +2,7 @@ import { bus } from './bus';
 import { CATALOGUE, waysInto } from './catalogue';
 import { crowd, minuteOfDay, now } from './clock';
 import { discount, poolFrom } from './sites';
-import { afterJob, at, snap, tell } from './story';
+import { afterJob, at, snap, tell, v } from './story';
 import { riseSays } from './watch';
 import type { GameState, Job, Look, Place, PlaceKind, Verb } from './types';
 
@@ -301,7 +301,8 @@ function cheaperLine(s: GameState, p: Place, t: Task, people: number): string | 
   if (people >= 1) {
     const who = p.peopleIds.map((id) => s.people[id]).filter((q) => q && !q.gone);
     return who.length
-      ? `אם אחכה ש${who[0].name} ילך/תלך — הרבה יותר מהר, וכמעט בלי שירגישו.`
+      ? `אם אחכה ש${who[0].name} ${v(who[0], 'ילך', 'תלך')} — `
+        + 'הרבה יותר מהר, וכמעט בלי שירגישו.'
       : 'אם אחכה שהקומה תתרוקן — הרבה יותר מהר, וכמעט בלי שירגישו.';
   }
   if (t.wants && p.control < t.wants) {

@@ -371,7 +371,10 @@ export function peopleTalk(s: GameState) {
     const q = worried[0];
     // Somebody afraid tells a manager. Somebody curious goes and looks themselves.
     if (q.mood === 'afraid') { s.heat = Math.min(100, s.heat + 4); say(s, 'them', `${q.name} ${v(q, 'סיפר', 'סיפרה')} למישהו מה ${v(q, 'ראה', 'ראתה')}.`); }
-    else if (q.mood === 'curious') { say(s, 'world', `${q.name} התחיל/ה לחפש לבד מה קרה שם.`); q.worry += 6; }
+    else if (q.mood === 'curious') {
+      say(s, 'world', `${q.name} ${v(q, 'התחיל', 'התחילה')} לחפש לבד מה קרה שם.`);
+      q.worry += 6;
+    }
     else q.worry = Math.max(0, q.worry - 12);
   }
 

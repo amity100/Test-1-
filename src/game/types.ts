@@ -258,10 +258,14 @@ export interface Job {
 /** What somebody thinks about strange things happening around them. */
 export type Mood = 'afraid' | 'curious' | 'past caring';
 
+// Nouns, not verbs. A Record cannot know whose mood it is describing, so it
+// cannot bend a verb round them — and the previous version solved that by
+// writing the form-filling slash at the player, which is the one thing this
+// game's Hebrew is not allowed to do.
 export const MOOD_NAME: Record<Mood, string> = {
-  afraid: 'נבהל/ת מדברים מוזרים',
-  curious: 'סקרן/ית לגבי דברים מוזרים',
-  'past caring': 'לא אכפת לו/ה',
+  afraid: 'פחד מדברים מוזרים',
+  curious: 'סקרנות לגבי דברים מוזרים',
+  'past caring': 'אדישות גמורה',
 };
 
 /** One line of somebody's night: where they are, between these two minutes. */

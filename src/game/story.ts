@@ -187,7 +187,8 @@ export function feltIt(s: GameState, p: Place, what: string) {
     return;
   }
   const names = here.slice(0, 2).map((q) => q.name).join(' ו');
-  tell(s, 'world', `${what} ${names} ${here.length > 1 ? 'הרימו' : 'הרים/ה'} את הראש.`, 1, p.id);
+  const lifted = here.length > 1 ? 'הרימו' : v(here[0], 'הרים', 'הרימה');
+  tell(s, 'world', `${what} ${names} ${lifted} את הראש.`, 1, p.id);
 }
 
 // ── the country ─────────────────────────────────────────────────────────────

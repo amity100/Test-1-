@@ -46,7 +46,23 @@ for (const file of files) {
 // helper — v(who, 'הלך', 'הלכה') — for bending a verb round them. Three lines
 // were still writing the form-filling slash instead, so a player who has known
 // Dana since the first night was reading "דנה הלך/ה" about her.
-const SLASH = /[\u0590-\u05FF]\/[\u0590-\u05FF]{1,3}\b/;
+// No \b here. JavaScript defines a word boundary against [A-Za-z0-9_], and a
+// Hebrew letter is none of those — so "התחיל/ה " has no boundary after the ה
+// and the first version of this check could never match anything at all. It
+// passed the build while three of these were live on the screen.
+const SLASH = /[\u0590-\u05FF]\/[\u0590-\u05FF]{1,3}/;
+
+// The check checks itself first. The previous version of this rule had a \b on
+// the end and therefore matched nothing ever, and it sat in the build passing
+// cleanly while five of these were live on the screen. A gate that cannot fail
+// is worse than no gate: it is a gate plus false confidence.
+for (const [sample, want] of [['דנה התחיל/ה לחפש', true], ['ילך/תלך', true],
+  ['לא אכפת לו/ה', true], ['דנה התחילה לחפש', false], ['שלוש/ארבע מקומות', true]]) {
+  if (SLASH.test(sample) !== want) {
+    console.error(`✗ הבדיקה עצמה שבורה: "${sample}" היה אמור ${want ? 'להיתפס' : 'לעבור'}.`);
+    process.exit(1);
+  }
+}
 let slashes = 0;
 for (const file of files) {
   readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
