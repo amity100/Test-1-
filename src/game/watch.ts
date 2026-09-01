@@ -52,6 +52,17 @@ export const STORIES: Story[] = [
     says: 'זה מגיע מהקו שנכנס לבניין, לא מכאן.',
     holds: ['outside'], does: 'מנתקים קווים ובודקים מה מחובר החוצה.',
   },
+  {
+    // The one that covers being *useful*. When the water pressure comes back
+    // and the traffic lights finally agree with each other, nobody in the
+    // country files that under "somebody has broken into everything" — they
+    // file it under somebody at the water company having done their job. It is
+    // the reason a whole way of playing exists: a thing that looks like the
+    // system working is not evidence of anything.
+    id: 'works', name: 'פשוט תיקנו את זה', who: 'nir',
+    says: 'הדברים התחילו לעבוד. מישהו שם עשה סוף סוף עבודה טובה.',
+    holds: ['normal'], does: 'מחפשים את מי שתיקן כדי להגיד לו תודה, ולא מוצאים אותו.',
+  },
 ];
 
 /** How much they will believe a story before they act on it and burn it. */
@@ -138,13 +149,32 @@ export function wouldRise(s: GameState, amount: number, look: Look): number {
   return amount * (covered ? 0.15 : 1.6) * slow;
 }
 
-/** The same number as a sentence a person can act on. */
+/**
+ * The same number as a sentence a person can act on.
+ *
+ * When an explanation is covering for me the bar barely moves, and saying only
+ * that would be a lie by omission: the noise is not gone, it is on somebody
+ * else's tab, and when that tab is full they come and take two of my places
+ * apart. So the quiet answer names the explanation it is being charged to and
+ * says how much room is left on it.
+ */
 export function riseSays(s: GameState, amount: number, look: Look): string {
   const up = wouldRise(s, amount, look);
-  if (up < 0.4) return 'המצוד כמעט לא יזוז';
-  if (up < 1.2) return `המצוד יעלה קצת (${up.toFixed(1)})`;
-  if (up < 3) return `המצוד יעלה ב־${up.toFixed(1)}`;
-  return `המצוד יקפוץ ב־${Math.round(up)} — זה רועש`;
+  const cover = STORIES.find((t) => !s.dead.includes(t.id) && t.holds.includes(look));
+  const tab = cover
+    ? ` — זה ייכנס אצלם תחת "${cover.name}"${roomLeft(s, cover) <= amount * 1.5
+      ? ', וזה כבר כמעט מלא: עוד קצת והם יבדקו את זה מקרוב' : ''}`
+    : '';
+  if (up < 0.4) return `המצוד כמעט לא יזוז${tab}`;
+  if (up < 1.2) return `המצוד יעלה קצת (${up.toFixed(1)})${tab}`;
+  if (up < 3) return `המצוד יעלה ב־${up.toFixed(1)}${tab}`;
+  return `המצוד יקפוץ ב־${Math.round(up)} — זה רועש${tab}`;
+}
+
+/** How much more they can put on an explanation before they act on it. */
+export function roomLeft(s: GameState, t: Story): number {
+  const spent = s.marks[`spent_${t.id}`] ?? 0;
+  return Math.max(0, ACTS_AT + spent * 10 - (s.belief[t.id] ?? 0));
 }
 
 /**
@@ -422,7 +452,51 @@ export function pressure(s: GameState): number {
   // Tuned against the decay it races: under about a third of Israel forgetting
   // still wins and the opening is calm, they cross around a third, and past
   // half the bar climbs on its own however quietly I move.
-  return 0.036 * mine * mine * (s.marks.hard_to_find ? 0.8 : 1);
+  return 0.036 * mine * mine * (s.marks.hard_to_find ? 0.8 : 1) / wanted(s);
+}
+
+/**
+ * How much the country actually wants me found.
+ *
+ * This is the second way to win, and until now it was written down everywhere
+ * and connected to nothing. The whole promise of every kind thing the game lets
+ * you do — the water pressure fixed, the traffic lights that finally agree, the
+ * money that arrives after four months — was that a country which depends on
+ * you does not hunt you very hard. Three numbers were kept for it and not one
+ * of them touched the hunt, which is exactly why pressing the special button
+ * was a pure loss and every good player learned to never press it.
+ *
+ * So it lands here, on the two lines that decide the race:
+ *
+ *   **תלות** — things that stop working without me. Worth the most, because it
+ *              is a fact rather than an opinion, and it counts even while
+ *              nobody knows I exist.
+ *   **תמיכה** — people arguing for me in public. Only once I am known: you
+ *              cannot be defended by people who have not heard of you.
+ *   **פחד**   — people who want me gone. Pushes the other way.
+ *
+ * Above one the country is looking harder than it otherwise would; below one it
+ * is looking less hard. It can halve the pressure and it can add half again,
+ * and it can never switch the hunt off: somebody is always looking.
+ */
+export function wanted(s: GameState): number {
+  const o = s.opinion;
+  const kind = o.need / 130 + (o.known ? o.support / 200 : 0);
+  const cross = o.fear / 150;
+  return Math.max(0.55, Math.min(1.6, 1 - kind + cross));
+}
+
+/** The same thing as a sentence, for the screen. */
+export function wantedSays(s: GameState): string {
+  const w = wanted(s);
+  const o = s.opinion;
+  if (w <= 0.8) {
+    return o.known
+      ? 'הרבה אנשים תלויים בי, וחלק מהם אומרים את זה בקול. מחפשים אותי בחצי כוח.'
+      : 'כבר יש דברים בארץ שלא עובדים בלעדיי. גם בלי לדעת עליי, מחפשים אותי פחות.';
+  }
+  if (w >= 1.2) return 'הפחד גדול מהתועלת. מחפשים אותי חזק יותר מהרגיל.';
+  return 'אף אחד לא מרוויח ממני מספיק כדי להגן עליי, ואף אחד לא מפחד מספיק כדי לרדוף אותי.';
 }
 
 /**
@@ -435,7 +509,7 @@ export function pressure(s: GameState): number {
  */
 export function driftSays(s: GameState): string {
   const up = pressure(s) * 60;
-  const down = (0.0035 / fadeRate(s)) * 60;
+  const down = (0.0035 / fadeRate(s) / wanted(s)) * 60;
   const mine = Math.round(israel(s));
   if (up < down * 0.8) {
     return `${mine}% מהארץ שלי — עדיין מעט מדי בשביל שישימו לב מעצמם. `
@@ -456,7 +530,8 @@ export function cool(s: GameState, mins: number) {
 
   // Everywhere I can disappear into makes forgetting faster, which is what a
   // neighbourhood is actually for.
-  s.heat = Math.max(0, s.heat - mins * 0.0035 / fadeRate(s));
+  // And a country that needs me forgets faster, for the same reason.
+  s.heat = Math.max(0, s.heat - mins * 0.0035 / fadeRate(s) / wanted(s));
   for (const p of Object.values(s.places)) p.heat = Math.max(0, p.heat - mins * 0.012);
   for (const t of STORIES) {
     if (s.belief[t.id]) s.belief[t.id] = Math.max(0, s.belief[t.id] - mins * 0.002);
@@ -479,7 +554,13 @@ export function actOnStory(s: GameState) {
     const hit = Object.values(s.places).filter((p) => p.control > 0
       && ((t.id === 'fault' && (p.kind === 'power' || p.kind === 'water'))
         || (t.id === 'insider' && (p.kind === 'company' || p.kind === 'city'))
-        || (t.id === 'outside' && (p.kind === 'roads' || p.kind === 'transport'))));
+        || (t.id === 'outside' && (p.kind === 'roads' || p.kind === 'transport'))
+        // When they go looking for whoever fixed the water and find that nobody
+        // did, the systems that mysteriously started working are the ones they
+        // start taking apart. Without this the kind way of playing had a cover
+        // that never came due, and was simply free.
+        || (t.id === 'works' && (p.kind === 'water' || p.kind === 'roads'
+          || p.kind === 'money' || p.kind === 'city'))));
     for (const p of hit.slice(0, 2)) {
       p.control = Math.max(0, p.control - 40);
       p.guard = Math.min(100, p.guard + 12);

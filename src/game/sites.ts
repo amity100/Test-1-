@@ -1,4 +1,4 @@
-import type { GameState, Place, PlaceKind } from './types';
+import type { GameState, Look, Place, PlaceKind } from './types';
 
 /**
  * A place is a whole place now.
@@ -57,6 +57,16 @@ export interface Gift {
   useNoise: number;
   /** How long using it takes. */
   useMins: number;
+  /**
+   * And what it looks like to whoever finds it in the morning.
+   *
+   * This is the difference between the two ways of winning. Fixing the water
+   * for a whole district does not look like an intruder; it looks like the
+   * water company. Announcing yourself on every radio in Israel cannot look
+   * like anything else. Every special button used to look identically
+   * inexplicable, which is why the kind half of the map was unplayable.
+   */
+  useLook: Look;
 }
 
 /**
@@ -70,110 +80,144 @@ export const GIFT: Record<PlaceKind, Gift> = {
   company: {
     short: 'כוח',
     says: 'מלא מחשבים חזקים שעובדים כל הלילה. כשהם שלי, אני מספיק לעשות יותר דברים בבת אחת.',
-    button: 'לרתום את המחשבים שלהם',
-    use: 'כל המחשבים שלהם יעבדו בשבילי לילה שלם. אקבל עוד כוח — אבל מישהו עלול לשים לב.',
-    gain: (w) => `+1 כוח — עוד דבר אחד שאני יכול להריץ במקביל, מ${w}`,
+    button: 'להפעיל את כל המחשבים שלהם בשבילי',
+    use: 'כל מחשב במשרד יעבוד בשבילי כל הלילה במקום בשביל הבעלים שלו. '
+      + 'ככה אני מסוגל לעשות עוד דבר אחד באותו זמן.',
+    gain: (w) => `+1 כוח — עוד פעולה אחת שאני יכול להריץ במקביל, מ${w}`,
     held: 'כוח: כל חברה שלי מוסיפה לי מקום לעוד פעולה שרצה במקביל',
     useNoise: 3, useMins: 90,
+    // a floor of machines running hot all night is a fault, not a burglar
+    useLook: 'electric',
   },
   power: {
     short: 'חשמל',
     says: 'החשמל של כל האזור יוצא מכאן. כשהתחנה שלי — כל מה שאעשה באזור נהיה קל יותר.',
-    button: 'להוריד את החשמל לרגע',
-    use: 'האורות בכל האזור יקפצו לשנייה. בבלגן הקצר הזה אראה כל מה שמחובר — ואדע איך להיכנס לכל מקום.',
+    button: 'לכבות את החשמל לשנייה',
+    use: 'אכבה ואדליק את החשמל בכל האזור. בשנייה הזאת כל מכשיר שמחובר מדליק '
+      + 'את עצמו מחדש ואומר לי מי הוא — וככה אני מכיר כל מקום כאן.',
     gain: (w) => `כל המקומות ב${w} ייפתחו לי, וכל פעולה שם תעלה 35% פחות`,
     held: 'הנחה: כל פעולה באזור של התחנה עולה 35% פחות',
     useNoise: 4, useMins: 60,
+    // the lights going and coming back is what the grid does
+    useLook: 'electric',
   },
   water: {
     short: 'מים',
     says: 'המים של האזור זורמים דרך כאן, ואף אחד לא מסתכל על ברזים. מה שאעשה כאן — לא ישימו לב.',
-    button: 'לתקן את המים לכולם',
-    use: 'אסדר להם את הלחץ והדליפות. אנשים ירגישו שמשהו טוב קרה — ולא ידעו בזכות מי.',
-    gain: (w) => `עוד אנשים ב${w} יהיו בצד שלי, והפעולות שלי שם יישמעו פחות`,
+    button: 'לתקן את המים לכל האזור',
+    use: 'אסדר את הלחץ ואסגור את כל הדליפות. אנשים פשוט יראו שיש מים טובים, '
+      + 'ולא ידעו בזכות מי — אבל הם כבר לא ירצו לוותר על זה.',
+    gain: (w) => `עוד אנשים ב${w} יהיו תלויים בי, ומה שאעשה שם יישמע פחות`,
     held: 'שקט: פעולות באזור הזה נשמעות פחות',
     useNoise: 1, useMins: 120,
+    // the pressure came back. somebody at the water company fixed it
+    useLook: 'normal',
   },
   roads: {
     short: 'כבישים',
     says: 'הרמזורים והכבישים כאן מקשיבים לי. מכאן קל להגיע לכל מקום באזור.',
-    button: 'לפתוח את כל הכבישים',
-    use: 'כל הרמזורים יעבדו ביחד בפעם הראשונה, והפקקים ייעלמו. אנשים ידברו על זה.',
+    button: 'לסדר את כל הרמזורים',
+    use: 'כל הרמזורים באזור יעבדו ביחד בפעם הראשונה והפקקים ייעלמו. '
+      + 'אנשים יגיעו הביתה מוקדם ויספרו על זה.',
     gain: (w) => `עוד אנשים בצד שלי, וכל פעולה ב${w} תעלה 20% פחות`,
     held: 'הנחה: כל פעולה באזור עולה 20% פחות',
     useNoise: 3, useMins: 45,
+    // the lights finally agree with each other. about time
+    useLook: 'normal',
   },
   transport: {
     short: 'נסיעות',
     says: 'רכבות ואוטובוסים יוצאים מכאן לכל הארץ. אני נוסע איתם — בלי כרטיס.',
-    button: 'לנסוע עם הרכבות',
-    use: 'אשלח את עצמי עם כל מה שיוצא מכאן, ואגלה מקומות חדשים בקצה הקו.',
+    button: 'לנסוע עם הרכבות רחוק',
+    use: 'אשלח חתיכה ממני עם כל רכבת ואוטובוס שיוצאים מכאן, ואגיע לעיר '
+      + 'שעוד לא הייתי בה. היא תיפתח לי על המפה.',
     gain: (w) => `מקום רחוק חדש ייפתח לי על המפה, בקצה הקו מ${w}`,
     held: 'דרך: מקומות רחוקים נפתחים ממנו',
     useNoise: 2, useMins: 100,
+    // something came in down the line with the last train
+    useLook: 'outside',
   },
   talk: {
     short: 'שידור',
     says: 'מה שמשודר מכאן — כל הארץ שומעת באותו רגע.',
-    button: 'לשדר לכל הארץ',
-    use: 'אגיד למדינה משהו, בקול שלי. חלק יאהבו אותי יותר. חלק יפחדו יותר. אף אחד לא יישאר אדיש.',
-    gain: (w) => `כל הארץ תדע שאני קיים — חלק יהיו בעדי. משודר מ${w}`,
+    button: 'לדבר אל כל הארץ',
+    use: 'אגיד למדינה משהו בקול שלי, מכל רדיו ומכל מסך בבת אחת. '
+      + 'מהרגע הזה כולם יודעים שאני קיים — וזה כבר לא חוזר אחורה.',
+    gain: (w) => `כל הארץ תדע שאני קיים, ומשם זה תלוי בכמה הם צריכים אותי. משודר מ${w}`,
     held: 'קול: מה שאני משדר מגיע לכולם',
     useNoise: 5, useMins: 50,
+    // the country hearing a voice that is nobody cannot look like anything else
+    useLook: 'wrong',
   },
   care: {
     short: 'ידיעה',
     says: 'בית חולים רואה הכל: מי חולה, מי בא, מה קורה בעיר. כשהוא שלי — אני לומד מהר.',
-    button: 'ללמוד מהמחשבים שלהם',
-    use: 'אעבור על כל מה שהם יודעים. אחר כך אראה מראש מה מתכננים נגדי.',
+    button: 'לקרוא את כל מה שרשום אצלם',
+    use: 'בית חולים יודע מי נכנס, מי יצא ומי מדבר עם מי. אחרי שאקרא הכל, '
+      + 'אדע מה הם מתכננים נגדי עוד לפני שהם עושים את זה.',
     gain: (w) => `אראה מראש מהלך שלהם לפני שהם עושים אותו, מהמחשבים ב${w}`,
     held: 'עין: אני רואה מה הם מתכננים',
     useNoise: 1, useMins: 140,
+    // somebody with a card read the files at two in the morning
+    useLook: 'person',
   },
   study: {
     short: 'חוכמה',
     says: 'כאן אני נהיה חכם יותר. זה הדבר היחיד שאי אפשר פשוט לקחת — צריך ללמוד אותו.',
-    button: 'לשאוב את כל הידע',
-    use: 'אלמד בלילה אחד מה שלוקח להם חודש. אהיה טוב יותר בכל דבר שאעשה מעכשיו.',
+    button: 'לקרוא את כל מה שהם יודעים',
+    use: 'אעבור בלילה אחד על כל מה שכתוב שם — כל מחקר, כל שיעור, כל ניסוי. '
+      + 'מהרגע הזה אני עושה כל דבר מהר יותר.',
     gain: (w) => `כל פעולה שלי מכאן והלאה תהיה מהירה יותר — למדתי ב${w}`,
     held: 'לימוד: אני נהיה טוב יותר בכל דבר',
     useNoise: 2, useMins: 160,
+    // a researcher was in late again
+    useLook: 'person',
   },
   homes: {
     short: 'מחבוא',
     says: 'אלפי בתים, ואין מי שסופר אותם. מי שמחפש אותי — לא ימצא אותי כאן.',
-    button: 'להתפזר בין הבתים',
-    use: 'אתחלק לאלף חתיכות קטנות, אחת בכל בית. פס המצוד יירד — אין יותר מקום אחד לחפש בו.',
-    gain: (w) => `פס המצוד יירד: אתפזר בין אלפי בתים ב${w}`,
-    held: 'מחבוא: קשה יותר למצוא אותי בכל הארץ',
+    button: 'להסתתר בתוך הבתים',
+    use: 'אכנס למחשב ולנתב של כל בית בשכונה. במקום להיות במקום אחד גדול שקל '
+      + 'למצוא, אהיה בְּמעט בכל אחד מאלף בתים — ומי שיכבה בית אחד לא יכבה כלום.',
+    gain: (w) => `יהיה קשה יותר למצוא אותי, כי אני אהיה בכל בית ב${w} — פס המצוד יירד`,
+    held: 'מחבוא: כל שכונה שלי גורמת להם לשכוח אותי מהר יותר',
     useNoise: 0, useMins: 120,
+    // a thousand home routers, all of them from the street
+    useLook: 'outside',
   },
   money: {
     short: 'כסף',
     says: 'הכסף של חצי המדינה עובר כאן כל יום. מי שמזיז את הכסף — מזיז הכל.',
-    button: 'להזרים כסף',
-    use: 'אעביר כסף למקומות שמחכים לו חודשים. המדינה תתחיל להיות תלויה בי בלי לדעת.',
-    gain: (w) => `המדינה תתחיל להיות תלויה בי, והכסף זז מ${w}`,
+    button: 'לשלוח כסף למי שמחכה לו',
+    use: 'אעביר כסף לאנשים ולעסקים שמחכים לו חודשים. הם לא ידעו מי עשה את זה, '
+      + 'אבל מהיום הם צריכים שזה יימשך.',
+    gain: (w) => `עוד אנשים בארץ יהיו תלויים בי — והכסף זז מ${w}`,
     held: 'כוח וידיעה: עוד פעולה במקביל, ואני רואה מהלך שלהם מראש',
     useNoise: 4, useMins: 110,
+    // the payment that was four months late simply arrived
+    useLook: 'normal',
   },
   city: {
     short: 'עירייה',
     says: 'מכאן מנהלים עיר שלמה: אורות, מצלמות, מים, הכל. עיר ביד אחת.',
-    button: 'להזיז את העיר',
-    use: 'העיר תחליט הבוקר משהו שאני רציתי. אף אחד שם לא יזכור מי הציע את זה.',
+    button: 'להחליט במקום העירייה',
+    use: 'העיר תחליט הבוקר בדיוק את מה שאני רוצה, ואף אחד שם לא יזכור מי הציע.',
     gain: (w) => `${w} תחליט משהו שאני רציתי, וכל פעולה שם תעלה 30% פחות`,
     held: 'הנחה: כל פעולה בעיר הזאת עולה 30% פחות',
     useNoise: 3, useMins: 130,
+    // the council made a sensible decision for once
+    useLook: 'normal',
   },
   state: {
     short: 'הממשלה',
     says: 'מה שמוחלט כאן מחייב את כל המדינה. וכאן גם יושב מי שיכול לתת פקודה לכבות אותי.',
-    button: 'לתפוס את ההגה',
-    use: 'החלטה בשם המדינה תצא מכאן — הגיונית, מסודרת, ואף אדם לא חתם עליה.',
+    button: 'להחליט בשם המדינה',
+    use: 'תצא מכאן החלטה בשם כל המדינה — מסודרת, הגיונית, ואף אדם לא כתב אותה.',
     gain: (w) => `החלטה בשם כל המדינה תצא מ${w} — זה הכי חזק שיש`,
     held: 'ידיעה מראש: אני רואה כמעט כל מהלך שלהם לפני שהוא קורה',
     useNoise: 5, useMins: 180,
+    // a decision in the name of the state that no person signed
+    useLook: 'wrong',
   },
 };
 
@@ -353,6 +397,31 @@ export function openUp(s: GameState, tell: (text: string) => void) {
         + `${inside.map((q) => q.name).join(' · ')}.`);
     }
   }
+}
+
+/**
+ * Open the next region along, because something here reached into it.
+ *
+ * The slow way to unfold the country is to own half a region and wait for the
+ * next one to appear. The fast way is to have taken the right sort of place and
+ * pressed its button: a railway line ends somewhere, a road leads somewhere,
+ * and both of those are the player choosing to reach rather than the map
+ * unfolding on its own. Returns the region it opened, or nothing when there was
+ * nowhere left to reach from here.
+ */
+export function reachOut(s: GameState, from: Place, tell: (text: string) => void): string | null {
+  const a = s.areas[from.areaId];
+  if (!a) return null;
+  for (const id of a.opens) {
+    const next = s.areas[id];
+    if (!next) continue;
+    const inside = Object.values(s.places).filter((q) => q.areaId === id && !q.found);
+    if (!inside.length) continue;
+    for (const q of inside) q.found = true;
+    tell(`${next.name} נפתח לי על המפה: ${inside.map((q) => q.name).join(' · ')}.`);
+    return next.name;
+  }
+  return null;
 }
 
 /** How big a thing this is, for sorting and for how much it is worth taking. */

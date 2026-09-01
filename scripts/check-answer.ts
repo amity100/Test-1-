@@ -358,14 +358,31 @@ const run = (s: GameState, mins: number, step = 5) => {
   ok(missing === 0, `לכל שורה כתוב מה מרוויחים וגם מה מסתכנים (${rows} שורות)`);
   ok(vague === 0, `וכל שורה מדברת על המקום הזה, לא במשפט כללי (${vague} כלליות)`);
 
-  // The risk line has to be in the units of the bar it moves, and it has to
-  // tell a quiet action apart from a loud one — that gap is the whole game.
+  // The risk line has to be in the units of the bar it moves.
   const p0 = Object.values(s.places).find((q) => q.control > 0)!;
   const quiet = offersAt(s, p0.id).find((o) => o.task.id === 'quiet');
-  const loud = offersAt(s, p0.id).find((o) => o.task.id === 'use');
   ok(!!quiet && quiet.risk.includes('המצוד'), 'שורת הסיכון מדברת בשפה של פס המצוד');
-  ok(!!loud && loud.risk !== quiet?.risk,
-    `ורועש ושקט לא נראים אותו דבר ("${loud?.risk}" מול "${quiet?.risk}")`);
+
+  // And the big thing a place does has to cost what *that* thing costs. Fixing
+  // the water for a district is not announcing yourself on every radio in
+  // Israel, and for a long time the game charged the same for both — which is
+  // why every good player learned never to press the button at all. So: across
+  // the country the special button must span a real range, and the row has to
+  // say which end of it the player is standing on.
+  const s2 = newGame('answer-loud');
+  const risks = new Map<string, string>();
+  for (const q of Object.values(s2.places)) {
+    q.control = 100;
+    const o = offersAt(s2, q.id).find((x) => x.task.id === 'use');
+    if (o) risks.set(q.kind, o.risk);
+  }
+  ok(risks.size >= 10, `לכל סוג מקום יש כפתור מיוחד עם מחיר משלו (${risks.size})`);
+  ok(new Set(risks.values()).size >= 3,
+    `ולא כולם עולים אותו דבר — יש ${new Set(risks.values()).size} מחירים שונים על המפה`);
+  const silent = [...risks].filter(([, r]) => r.includes('כמעט לא'));
+  const loudest = [...risks].filter(([, r]) => r.includes('יקפוץ'));
+  ok(silent.length > 0, `יש מקומות שהדבר הגדול שלהם כמעט לא נשמע (${silent.map(([k]) => k).join(', ')})`);
+  ok(loudest.length > 0, `ויש כאלה שהוא קפיצה בפס (${loudest.map(([k]) => k).join(', ')})`);
 
   // Holding a place has to say what holding it does — the answer to "מה בכלל
   // אומר להשתלט על מקום", which was nowhere on the screen.

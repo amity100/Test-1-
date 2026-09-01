@@ -39,6 +39,8 @@ export interface Task {
   textFor?(p: Place): string;
   /** One sentence: what will actually happen. */
   says: string;
+  /** The same sentence, when this place does something different from the rest. */
+  saysFor?(p: Place): string;
   /** What I get out of it, in general. */
   gives: string;
   /**
@@ -54,10 +56,24 @@ export interface Task {
   power: number;
   /** Minutes at the base price. 0 means it runs until I stop it. */
   minutes: number;
+  /**
+   * How long it takes *here*, when one number cannot cover twelve kinds.
+   *
+   * Fixing the water pressure for a whole district takes two hours and nobody
+   * ever hears about it; saying something to the country on the radio takes
+   * fifty minutes and everybody does. Both used to cost an identical ninety
+   * minutes and an identical three of noise, which meant the one line on the
+   * screen that says what a place is *for* had nothing behind it.
+   */
+  minutesFor?(p: Place): number;
   /** How much of it they notice, at the base price. */
   noise: number;
+  /** And how much of it they notice *here*, for the same reason. */
+  noiseFor?(p: Place): number;
   /** What it looks like to whoever finds it. */
   look: Look;
+  /** Or what it looks like *here*, when the place decides that too. */
+  lookFor?(p: Place): Look;
   /**
    * How much of a place I want under me before this is easy.
    *
@@ -79,6 +95,8 @@ export interface Task {
   wide?: boolean;
   /** Only hide it when it would be nonsense here, never when it is merely hard. */
   show?(s: GameState, p: Place): boolean;
+  /** Anything about this place that changes what this particular task costs. */
+  costs?(s: GameState, p: Place, apply: (mins: number, noise: number, why: string) => void): void;
   /** The moment it lands. */
   done?(s: GameState, p: Place): void;
   /** Every minute, for a job that runs for ever. */
@@ -101,6 +119,8 @@ export interface Offer {
   cheaper: string | null;
   /** Power I would have to free up first. 0 when I can start it now. */
   short: number;
+  /** True for the handful of things that run until I stop them. */
+  forever: boolean;
 }
 
 export const TASKS = CATALOGUE;
@@ -190,8 +210,10 @@ export function say(s: GameState, who: 'me' | 'them' | 'world', text: string) {
  */
 export function priceOf(s: GameState, p: Place, t: Task, above = false): Offer {
   const why: string[] = [];
-  let mins = t.minutes;
-  let noise = t.noise;
+  const baseMins = t.minutesFor ? t.minutesFor(p) : t.minutes;
+  const baseNoise = t.noiseFor ? t.noiseFor(p) : t.noise;
+  let mins = baseMins;
+  let noise = baseNoise;
   let power = t.power;
 
   // Who is standing here, and what hour it is, used to move the price by about
@@ -200,7 +222,7 @@ export function priceOf(s: GameState, p: Place, t: Task, above = false): Offer {
   // Between them they now swing it by four times or more, and that is the
   // difference between a game about timing and a game about clicking.
   const people = crowd(s, p);
-  if (t.minutes > 0) {
+  if (baseMins > 0) {
     if (people >= 3) { mins *= 2.3; noise += 3; why.push('יש כאן הרבה אנשים עכשיו'); }
     else if (people >= 1) { mins *= 1.6; noise += 2; why.push('יש כאן מישהו עכשיו'); }
     else { mins *= 0.8; why.push('אין כאן אף אחד עכשיו'); }
@@ -239,6 +261,9 @@ export function priceOf(s: GameState, p: Place, t: Task, above = false): Offer {
     why.push('כבר לקחתי כאן את החלקים הקלים');
   }
 
+  // Anything the task itself knows about this place.
+  t.costs?.(s, p, (m, n, line) => { mins *= m; noise += n; why.push(line); });
+
   // Everything I already hold makes this cheaper, and says why.
   const help = discount(s, p);
   mins *= help.mins;
@@ -259,11 +284,11 @@ export function priceOf(s: GameState, p: Place, t: Task, above = false): Offer {
   const rush = (hour >= 8 * 60 && hour < 10 * 60) || (hour >= 16 * 60 && hour < 18 * 60);
   if (deep) {
     mins *= 0.65;
-    if (t.noise > 0) noise -= 2;
+    if (baseNoise > 0) noise -= 2;
     why.push('שלוש לפנות בוקר — הבניין כולו שלי');
   } else if (night) {
     mins *= 0.85;
-    if (t.noise > 0) noise -= 1;
+    if (baseNoise > 0) noise -= 1;
     why.push('לילה — פחות אנשים ישימו לב');
   } else if (rush) {
     mins *= 1.35;
@@ -276,7 +301,7 @@ export function priceOf(s: GameState, p: Place, t: Task, above = false): Offer {
   // let a careful player take a whole building without anybody ever wondering
   // about anything. Something that was going to be noticed at all always
   // leaves something behind; only what was silent to begin with stays silent.
-  noise = t.noise > 0
+  noise = baseNoise > 0
     ? Math.max(1, Math.round(noise))
     : Math.max(0, Math.round(noise));
 
@@ -284,9 +309,10 @@ export function priceOf(s: GameState, p: Place, t: Task, above = false): Offer {
     task: t, power, minutes: mins, noise,
     why,
     gain: t.gainFor ? t.gainFor(s, p) : t.gives,
-    risk: riseSays(s, noise, t.look),
+    risk: riseSays(s, noise, t.lookFor ? t.lookFor(p) : t.look),
     cheaper: cheaperLine(s, p, t, people),
     short: Math.max(0, power - (s.power.all - s.power.used)),
+    forever: baseMins === 0,
   };
 }
 
@@ -297,7 +323,7 @@ export function priceOf(s: GameState, p: Place, t: Task, above = false): Offer {
  * never a requirement — it is information about the price.
  */
 function cheaperLine(s: GameState, p: Place, t: Task, people: number): string | null {
-  if (t.minutes === 0) return null;
+  if ((t.minutesFor ? t.minutesFor(p) : t.minutes) === 0) return null;
   if (people >= 1) {
     const who = p.peopleIds.map((id) => s.people[id]).filter((q) => q && !q.gone);
     return who.length
@@ -314,7 +340,8 @@ function cheaperLine(s: GameState, p: Place, t: Task, people: number): string | 
   if (p.guard > 20 && t.verb === 'connect') {
     return 'המקום הזה שמור. מקומות פשוטים יותר יעלו לי הרבה פחות.';
   }
-  if (!(minuteOfDay(s) < 6 * 60 || minuteOfDay(s) >= 22 * 60) && t.noise > 0) {
+  if (!(minuteOfDay(s) < 6 * 60 || minuteOfDay(s) >= 22 * 60)
+    && (t.noiseFor ? t.noiseFor(p) : t.noise) > 0) {
     return 'בלילה זה יבלוט הרבה פחות.';
   }
   return null;
@@ -429,7 +456,8 @@ export function start(s: GameState, placeId: string, taskId: string, above = fal
     id: `j${s.at}_${s.jobs.length}_${taskId}`,
     taskId, placeId, verb: t.verb, text: t.textFor?.(p) ?? t.text,
     power: o.power, left: o.minutes, total: Math.max(1, o.minutes),
-    forever: t.minutes === 0, noise: o.noise, look: t.look,
+    forever: (t.minutesFor ? t.minutesFor(p) : t.minutes) === 0, noise: o.noise,
+    look: t.lookFor ? t.lookFor(p) : t.look,
     above: above || undefined,
   });
   s.power.used += o.power;

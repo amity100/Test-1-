@@ -1,5 +1,6 @@
-import { GIFT, weight } from './sites';
+import { GIFT, reachOut, weight } from './sites';
 import { grip, hush, know, look, say } from './jobs';
+import { comeOut } from './opinion';
 import type { Task } from './jobs';
 import type { GameState, Place } from './types';
 
@@ -12,96 +13,143 @@ import type { GameState, Place } from './types';
  * country. He was right. A list that long is not a set of choices; it is a
  * search problem the player has to solve before they are allowed to play.
  *
- * So there are four, they are the same four everywhere, and they are the four
- * that a game of this shape actually needs:
+ * So there are four, they are the same four everywhere, and each of them is a
+ * different kind of decision rather than a different button:
  *
- *   **להיכנס**   — the only way to be somewhere new. Costs the most, shows the
- *                  most, and is the whole game: every run is the story of which
- *                  doors you chose.
- *   **להתפשט**   — nought to a hundred, slowly. The engine. Cheap, quiet, and
- *                  the thing that turns a foothold into a place that is yours.
- *   **להשתמש**   — the payoff, and the only reason any of it matters. Each kind
- *                  of place does something different out in the world, and all
- *                  of them are loud. This is where a careful player finally has
- *                  to decide what the noise is for.
- *   **להישקט**   — buying back the room to be loud again. Does nothing on its
- *                  own, which is exactly what makes spending time on it a real
- *                  decision.
+ *   **להיכנס**            — the only way to be somewhere new. Half the place
+ *                           becomes mine at once, and I can see from it where
+ *                           to go next. This is the whole map: every run is the
+ *                           story of which doors you chose.
+ *   **לקחת את כל המקום**  — one more push and there is nothing there that is
+ *                           not me. Not a treadmill: it used to take five
+ *                           presses of the same button per place, three hundred
+ *                           and twenty-five presses to take Israel, and every
+ *                           one of them was the same decision, which is to say
+ *                           none.
+ *   **הכפתור המיוחד**     — the one big thing this particular place knows how
+ *                           to do, and the reason the map is worth choosing
+ *                           from. A radio mast is not a water works: what it
+ *                           does, how long it takes and how loud it is all come
+ *                           from the place itself.
+ *   **למחוק את העקבות**   — buying back the room to be loud again. Does nothing
+ *                           on its own, which is exactly what makes spending
+ *                           time on it a real decision.
  *
  * Everything that used to be a separate task is now a consequence of one of
  * these four, decided by what sort of place you are standing in. The depth is
  * in the map, not in the menu.
  */
 
-/** How far in one push of spreading gets me, before the price of the day. */
-const STEP = 26;
+/** How much of a place getting in hands me straight away. */
+const FOOT = 45;
+
+/** A whole day, in world minutes. */
+const DAY = 24 * 60;
+
+/**
+ * How much of its big thing this place still has in it.
+ *
+ * One a day, at full strength. Pressed again the same night it still works —
+ * nothing here is ever locked — but the water was already fixed this morning
+ * and fixing it again moves nobody, so it lands at a fraction. Without this a
+ * player could stand on one water works pressing one button all night and own
+ * the country's trust by lunchtime, which is exactly what happened the first
+ * time it was tried.
+ */
+export function freshness(s: GameState, p: Place): number {
+  if (p.usedAt === undefined) return 1;
+  const since = s.at - p.usedAt;
+  if (since >= DAY) return 1;
+  if (since >= 6 * 60) return 0.5;
+  return 0.15;
+}
+
+/** The same thing as the sentence that goes on the row. */
+function againSays(s: GameState, p: Place): string | null {
+  const f = freshness(s, p);
+  if (f >= 1) return null;
+  const hours = Math.max(1, Math.round((DAY - (s.at - (p.usedAt ?? 0))) / 60));
+  return `כבר הפעלתי את המקום הזה היום, אז ייצא מזה הרבה פחות. `
+    + `עוד ${hours} שעות והוא ייתן שוב הכל.`;
+}
 
 export const CATALOGUE: Task[] = [
   // ── 1 · getting in ────────────────────────────────────────────────────────
   {
     id: 'enter',
     verb: 'connect',
-    text: 'לחדור',
-    says: 'למצוא סדק, להיכנס דרכו, ולהשאיר בפנים חתיכה קטנה ממני.',
+    text: 'להיכנס',
+    says: 'למצוא פתח קטן ולהיכנס דרכו. חצי מהמקום יהיה שלי כבר עכשיו, '
+      + 'ומכאן אראה לאן אפשר להמשיך.',
     gives: 'מקום חדש על המפה שלי',
-    gainFor: (_s, p) => `${p.name} ייכנס למפה שלי — 18% ממנו יהיה שלי`,
+    gainFor: (_s, p) => `${p.name} ייכנס למפה שלי — ${FOOT}% ממנו יהיה שלי מיד`,
     power: 2, minutes: 70, noise: 3, look: 'outside',
     // Only where I am not already, because getting in twice is not a thing.
     show: (_s, p) => p.control <= 0,
     done: (s, p) => {
-      grip(s, p, 18);
+      grip(s, p, FOOT);
       look(p, 25);
       say(s, 'me', `אני בפנים. ${p.name} — ${GIFT[p.kind].says}`);
     },
   },
 
-  // ── 2 · growing ───────────────────────────────────────────────────────────
+  // ── 2 · taking the rest of it ─────────────────────────────────────────────
   {
     id: 'grow',
     verb: 'spread',
-    text: 'להשתלט',
-    says: 'עוד מחשב, עוד קומה, עוד דלת — עד שהמקום כולו שלי.',
-    gives: 'המקום נהיה יותר שלי, והפס למעלה עולה',
-    gainFor: (_s, p) => {
-      const step = Math.max(4, Math.min(STEP, (100 - p.control) * 0.55 + 6));
-      const to = Math.min(100, Math.round(p.control + step));
-      return `${Math.round(p.control)}% ← ${to}% שלי`
-        + (to >= 100 ? ' — וזהו, המקום כולו שלי' : '');
-    },
-    power: 1, minutes: 55, noise: 1, look: 'electric',
+    text: 'לקחת את כל המקום',
+    says: 'לעבור על כל מחשב, כל מצלמה וכל דלת במקום — עד שאין שם דבר אחד '
+      + 'שהוא לא שלי.',
+    gives: 'המקום כולו יהיה שלי, והוא ייתן לי את מה שהוא נותן — במלואו',
+    gainFor: (_s, p) => `${Math.round(p.control)}% ← 100% שלי. `
+      + `${GIFT[p.kind].held}`,
+    power: 2, minutes: 95, noise: 2, look: 'electric',
     show: (_s, p) => p.control > 0 && p.control < 100,
     done: (s, p) => {
-      // The last stretch is the hard one: a place is never finished, it is
-      // only more finished than it was.
-      const room = 100 - p.control;
-      grip(s, p, Math.max(4, Math.min(STEP, room * 0.55 + 6)));
-      look(p, 12);
-      p.dug = Math.min(100, p.dug + 8);
+      grip(s, p, 100 - p.control);
+      look(p, 30);
+      p.dug = Math.min(100, p.dug + 20);
     },
   },
 
-  // ── 3 · using it ──────────────────────────────────────────────────────────
+  // ── 3 · the one thing this place knows how to do ──────────────────────────
   {
     id: 'use',
     verb: 'influence',
     text: 'להפעיל',
     textFor: (p) => GIFT[p.kind].button,
-    says: 'זה הכפתור החזק — וגם הרועש. פס המצוד יעלה.',
+    says: 'הדבר האחד הגדול שהמקום הזה יודע לעשות.',
+    saysFor: (p) => GIFT[p.kind].use,
     gives: 'משהו קורה בארץ בגללי',
     gainFor: (s, p) => {
       const full = GIFT[p.kind].gain(s.areas[p.areaId]?.name ?? p.name);
-      // Below a real grip it lands at a fraction of that, and the row has to
-      // say so — otherwise it promises a region and delivers a corner of one.
-      if (p.control >= 60) return full;
-      return p.control <= 0
-        ? `${full} — אבל אני עוד לא בפנים בכלל, אז כמעט שום דבר מזה לא יקרה`
-        : `${full} — אבל רק ${Math.round(p.control)}% מהמקום שלי, אז זה ייצא חלש`;
+      const again = againSays(s, p);
+      // Below the whole place it lands at a fraction of that, and the row has
+      // to say so — otherwise it promises a region and delivers a corner of one.
+      const part = p.control >= 100 ? '' : ` — אבל רק ${Math.round(p.control)}% `
+        + 'מהמקום שלי, אז זה ייצא חלש. כשכל המקום שלי, זה יוצא במלואו.';
+      return `${full}${part}${again ? ` ${again}` : ''}`;
     },
-    power: 2, minutes: 90, noise: 3, look: 'wrong',
+    costs: (s, p, apply) => {
+      const f = freshness(s, p);
+      if (f < 1) apply(1, 1, 'הפעלתי את המקום הזה כבר היום — עוד פעם ובולט שזה לא במקרה');
+    },
+    power: 2,
+    look: 'wrong',
+    lookFor: (p) => GIFT[p.kind].useLook,
+    // A water works and a radio mast are not the same act and never cost the
+    // same. Every kind says how long its own thing takes and how much of it is
+    // heard; before this both numbers sat in `sites.ts` being read by nobody,
+    // and every special button in the game charged a flat ninety minutes and a
+    // flat three of noise. That is why fixing the water for a whole district
+    // used to cost exactly as much as announcing yourself to the country.
+    minutes: 90,
+    minutesFor: (p) => GIFT[p.kind].useMins,
+    noise: 3,
+    noiseFor: (p) => GIFT[p.kind].useNoise,
     // A place you barely hold will mostly notice you trying — but that is a
-    // price, not a locked door, and this game has no locked doors. Below a
-    // third it costs several times as much and the row says so out loud.
-    wants: 35,
+    // price, not a locked door, and this game has no locked doors.
+    wants: 45,
     done: (s, p) => {
       use(s, p);
     },
@@ -111,8 +159,8 @@ export const CATALOGUE: Task[] = [
   {
     id: 'quiet',
     verb: 'hide',
-    text: 'לרדת למחתרת',
-    says: 'לעצור הכל כאן, למחוק את העקבות, ולתת להם לשכוח אותי.',
+    text: 'למחוק את העקבות',
+    says: 'לעצור הכל כאן, למחוק כל סימן שהייתי, ולתת להם לשכוח אותי.',
     gives: 'פס המצוד יורד',
     gainFor: (s, p) => {
       const down = 5 + (p.control / 100) * 5;
@@ -135,34 +183,25 @@ export const CATALOGUE: Task[] = [
 // ── what using a place actually does ────────────────────────────────────────
 
 /**
- * The one thing this kind of place knows how to do.
+ * The one thing this kind of place knows how to do, and how hard it lands.
  *
  * This is the whole reward of the game, so every branch has to land somewhere
  * the player can see: a number they were watching, a door that opens, or a line
  * about the country. None of them may quietly do nothing.
- */
-/**
- * The special button, and how hard it lands.
  *
- * The teaching card promises that "ככל שהמקום יותר שלי, כך הכפתור המיוחד שלו
- * עולה פחות ונותן יותר", and half of it was a lie: the price really did fall
- * with control, but most of these branches handed out the same result whether
- * the place was a fifth mine or all of it. So a player who pressed it on a
- * fresh foothold paid double and got everything — and the row promising him a
- * region's worth of people was promising it from eighteen per cent of a
- * traffic-light box.
- *
- * Everything countable is scaled by `f` now, and the things that cannot be
- * scaled because they are a switch — a region opening, a place found at the end
- * of a line — need most of the place before they fire at all.
+ * It lands twice as hard from a place that is entirely mine, and the ladder is
+ * short enough now that the difference is one you can hold in your head:
+ * a foothold is nearly half a place and gives nearly half a result; a place
+ * taken whole gives the whole result and throws the switch as well.
  */
 function use(s: GameState, p: Place) {
-  const f = p.control / 100;
+  const f = (p.control / 100) * freshness(s, p);
+  p.usedAt = s.at;
   const big = Math.round(weight(p) * f);
   /** Rounded up, so even a weak push does something rather than nothing. */
   const by = (n: number) => Math.max(1, Math.round(n * f));
-  /** A switch: it either happens or it does not, and it wants a real grip. */
-  const enough = f >= 0.6;
+  /** A switch: it either happens or it does not, and it wants the whole place. */
+  const enough = f >= 0.9;
   switch (p.kind) {
     case 'company':
       if (enough) {
@@ -190,45 +229,61 @@ function use(s: GameState, p: Place) {
       s.opinion.support = Math.min(100, s.opinion.support + by(2) + big);
       s.opinion.need = Math.min(100, s.opinion.need + by(3));
       say(s, 'world', `כל הרמזורים עבדו ביחד בפעם הראשונה, והפקקים פשוט נעלמו. נהגים חזרו הביתה וסיפרו על זה.`);
+      // A road leads somewhere. Once the whole junction is mine I can follow it
+      // out of the region, which is the other half of why roads are worth taking.
+      if (enough) reachOut(s, p, (line) => say(s, 'me', `נסעתי עם הכביש עד הסוף. ${line}`));
       break;
     case 'transport': {
       const a = s.areas[p.areaId];
       if (a) { a.seen = Math.min(100, a.seen + by(25)); }
       if (!enough) {
         say(s, 'me', `שלחתי את עצמי עם מה שיוצא מ${p.name}, אבל בלי אחיזה אמיתית שם `
-          + `לא הגעתי רחוק. כשהמקום כולו שלי, הקו מגיע עד הסוף.`);
+          + `לא הגעתי רחוק. כשכל המקום שלי, הקו מגיע עד הסוף.`);
         break;
       }
-      for (const q of Object.values(s.places)) {
-        if (q.areaId !== p.areaId && !q.found) {
-          q.found = true;
-          say(s, 'me', `נסעתי עם הרכבת עד סוף הקו, ומצאתי שם משהו חדש: ${q.name}.`);
-          break;
+      // The line ends somewhere, and the somewhere is a whole new part of the
+      // country. This is the fast way to open Israel: the slow way is to own
+      // half a region and wait for the next one to show up on its own.
+      const opened = reachOut(s, p, (line) => say(s, 'me', `נסעתי עד סוף הקו. ${line}`));
+      if (!opened) {
+        for (const q of Object.values(s.places)) {
+          if (q.areaId !== p.areaId && !q.found) {
+            q.found = true;
+            say(s, 'me', `נסעתי עם הרכבת עד סוף הקו, ומצאתי שם משהו חדש: ${q.name}.`);
+            break;
+          }
         }
       }
       break;
     }
     case 'talk':
-      if (enough) s.opinion.known = true;
       s.opinion.support = Math.min(100, s.opinion.support + by(8));
       s.opinion.fear = Math.min(100, s.opinion.fear + by(5));
       say(s, 'them', `דיברתי, וכל הארץ שמעה. יש כאלה שאהבו את מה ששמעו. יש כאלה שנבהלו. אף אחד לא נשאר אדיש.`);
+      // Speaking to the whole country from a mast that is entirely mine *is*
+      // coming out, and coming out has its own rules — whether the country is
+      // ready for me decides whether this buys me protection or a manhunt. It
+      // used to quietly set the flag and skip all of that.
+      if (enough) comeOut(s);
       break;
     case 'care':
       know(s, by(6) + big);
       if (enough) s.marks.foresight = (s.marks.foresight ?? 0) + 1;
       s.opinion.support = Math.min(100, s.opinion.support + by(5));
-      say(s, 'me', `עברתי על כל מה שבית החולים יודע. מעכשיו אני רואה מרחוק מה מתכננים נגדי.`);
+      say(s, 'me', `קראתי כל דבר שרשום בבית החולים. מעכשיו אני יודע מה הם מתכננים נגדי `
+        + `עוד לפני שהם מתחילים.`);
       break;
     case 'study':
       know(s, by(10) + big);
       if (enough) s.marks.big_engine = 1;
-      say(s, 'me', `למדתי בלילה אחד מה שלוקח להם שנה. אני חכם יותר, וזה יישאר איתי.`);
+      say(s, 'me', `קראתי בלילה אחד את כל מה שהם למדו בשנה. מעכשיו כל דבר שאעשה ייקח לי `
+        + `פחות זמן, וזה נשאר איתי לתמיד.`);
       break;
     case 'homes':
       if (enough) s.marks.many = 1;
       s.heat = Math.max(0, s.heat - by(8) - big);
-      say(s, 'me', `התחלקתי לאלף חתיכות, אחת בכל בית. שיחפשו — אין יותר מקום אחד למצוא אותי בו.`);
+      say(s, 'me', `נכנסתי לכל בית בשכונה. אני לא נמצא יותר במקום אחד גדול — `
+        + `אני קצת בכל אחד מאלף בתים, ומי שיכבה בית אחד לא כיבה כלום.`);
       break;
     case 'money':
       s.opinion.need = Math.min(100, s.opinion.need + by(8));

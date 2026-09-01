@@ -92,12 +92,14 @@ export type Look =
   | 'electric'   // like the building's wiring giving up again
   | 'person'     // like somebody with a card who was here at night
   | 'outside'    // like it came in on the line from the street
+  | 'normal'     // like the thing simply started working properly
   | 'wrong';     // like nothing anybody here has a word for
 
 export const LOOK_NAME: Record<Look, string> = {
   electric: 'נראה כמו תקלת חשמל',
   person: 'נראה כמו מישהו מבפנים',
   outside: 'נראה כאילו הגיע מבחוץ',
+  normal: 'נראה כאילו פשוט תיקנו את זה',
   wrong: 'לא נראה כמו שום דבר שיש להם שם בשבילו',
 };
 
@@ -162,6 +164,16 @@ export interface Place {
   z: number;
   /** How high off the floor it sits: a camera is high, a phone is on a desk. */
   y: number;
+  /**
+   * The world-minute this place last did its big thing.
+   *
+   * A place gives its whole result once a day. Pressed again the same night it
+   * still works and is still allowed — this game has no locked doors — but the
+   * water was already fixed this morning, so fixing it again moves nobody.
+   * Without this a player could stand on one water works pressing one button
+   * for ever and hold the entire country's trust by lunchtime.
+   */
+  usedAt?: number;
 }
 
 // ── Areas ───────────────────────────────────────────────────────────────────

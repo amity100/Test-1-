@@ -378,10 +378,10 @@ export class UI {
       <button class="op ${o.short > 0 ? 'poor' : ''}" data-do="doat"
         data-arg="${p.id}|${o.task.id}|0">
         <b>${SIGN[o.task.verb]} ${esc(o.task.textFor?.(p) ?? o.task.text)}</b>
-        <em>${esc(o.task.says)}</em>
+        <em>${esc(o.task.saysFor?.(p) ?? o.task.says)}</em>
         <span class="gain">מרוויח · ${esc(o.gain)}</span>
         <span class="risk">מסתכן · ${esc(o.risk)}</span>
-        <u>${o.power} כוח · ${esc(o.task.minutes === 0 ? 'עד שאעצור' : minsWord(o.minutes))}`
+        <u>${o.power} כוח · ${esc(o.forever ? 'עד שאעצור' : minsWord(o.minutes))}`
         + `${o.short > 0 ? ` · חסר ${o.short} כוח` : ''}</u>
         ${o.cheaper ? `<i class="ch">${esc(o.cheaper)}</i>` : ''}
       </button>`).join('');
@@ -1097,10 +1097,10 @@ export class UI {
     const line = (o: Offer) => `<button class="tg ${o.short > 0 ? 'poor' : ''}"
         data-do="doat" data-arg="${p.id}|${o.task.id}|0">
       <b>${SIGN[o.task.verb]} ${esc(o.task.textFor?.(p) ?? o.task.text)}</b>
-      <em>${esc(o.task.says)}</em>
+      <em>${esc(o.task.saysFor?.(p) ?? o.task.says)}</em>
       <span class="gain">מרוויח · ${esc(o.gain)}</span>
       <span class="risk">מסתכן · ${esc(o.risk)}</span>
-      <u>${o.power} כוח · ${esc(o.task.minutes === 0 ? 'עד שאעצור' : minsWord(o.minutes))}`
+      <u>${o.power} כוח · ${esc(o.forever ? 'עד שאעצור' : minsWord(o.minutes))}`
       + `${o.short > 0 ? ` · חסר ${o.short} כוח` : ''}</u>
       ${o.cheaper ? `<i class="tnow">${esc(o.cheaper)}</i>` : ''}
     </button>`;
