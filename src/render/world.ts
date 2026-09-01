@@ -72,6 +72,16 @@ export class World {
   /** Seconds until the next time the picture is allowed to change. */
   private settle = 2.5;
   private lastFrame = 0;
+  /**
+   * The sharpest setting that has already been measured as too slow.
+   *
+   * Without it the thing meant to stop the picture flickering becomes a flicker
+   * of its own: a machine that misses at two and comfortably makes it at one
+   * and a half steps up, misses, steps down, and pulses every three seconds for
+   * as long as the game is open. Once a setting has been shown not to hold, it
+   * is not tried again.
+   */
+  private tooSharp = Infinity;
   private land: Land | null = null;
   private tlv: TelAviv;
   private inside: Interior;
@@ -147,7 +157,7 @@ export class World {
     this.grade.renderToScreen = true;
     this.composer.addPass(this.grade);
     this.grade.uniforms.uScan.value = 0.18;
-    this.grade.uniforms.uGrain.value = 0.34;
+    this.grade.uniforms.uGrain.value = 0.22;
     this.grade.uniforms.uChroma.value = 0.5;
 
     // Something happened in a room: everyone near enough turns and looks.
@@ -745,8 +755,10 @@ export class World {
     // three seconds a step to catch up.
     const drop = mid > 55 ? 0.7 : 0.35;
     // Under 40 frames a second is where a phone starts to feel like a slideshow.
+    if (mid > 25) this.tooSharp = Math.min(this.tooSharp, this.sharp);
     const want = mid > 25 ? this.sharp - drop : mid < 12 ? this.sharp + 0.35 : this.sharp;
-    const next = Math.max(0.6, Math.min(this.sharpest, Math.round(want * 20) / 20));
+    const ceiling = Math.min(this.sharpest, this.tooSharp - 0.35);
+    const next = Math.max(0.6, Math.min(ceiling, Math.round(want * 20) / 20));
     if (Math.abs(next - this.sharp) < 0.01) return;
     this.sharp = next;
     this.renderer.setPixelRatio(next);

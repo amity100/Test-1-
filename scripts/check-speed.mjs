@@ -18,6 +18,7 @@
  */
 import { chromium } from 'playwright';
 import path from 'node:path';
+import fs from 'node:fs';
 
 /** What a phone draws comfortably in one frame. */
 const CALLS = 420;
@@ -112,6 +113,51 @@ if (near) {
     `וזה עולה עם המרחק: ${near.room.toFixed(2)} → ${near.street.toFixed(2)} → ${near.country.toFixed(2)}`);
 }
 
-console.log(bad ? `\n✗ ${bad} דברים כבדים מדי לפלאפון` : '\n✓ המשחק מבקש מהפלאפון מעט מספיק.');
+// And the other half of the complaint: "יש גם הרבה היבהובים".
+//
+// With the camera standing perfectly still, some of the picture is supposed to
+// change — cars on the motorway, the sea, the lights running along the veins.
+// What is not supposed to change is everything else, and the grade pass used to
+// draw a fresh random value into every pixel on every frame. On a small bright
+// screen showing a dark city that is not film grain, it is static, and it was a
+// third of the screen changing sixty times a second.
+//
+// Two checks, because the two things fail differently: the grain must not be
+// animated at all, and what is left over must stay small.
+const shader = fs.readFileSync(path.resolve('src/render/postfx.ts'), 'utf8');
+const grainLine = shader.split('\n').find((l) => l.includes('float g = hash('));
+ok(!!grainLine && !grainLine.includes('uTime'),
+  `הגרעיניות לא זזה בין פריימים (${(grainLine ?? '').trim()})`);
+
+await page.evaluate(() => window.__world.goToArea(0, 0, 500));
+await page.waitForTimeout(5000);
+const moving = await page.evaluate(async () => {
+  const w = window.__world;
+  const cv = w.renderer.domElement;
+  const grab = () => {
+    const c = document.createElement('canvas');
+    c.width = cv.width; c.height = cv.height;
+    c.getContext('2d').drawImage(cv, 0, 0);
+    return c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+  };
+  const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  const runs = [];
+  for (let k = 0; k < 3; k++) {
+    await frame();
+    const a = grab();
+    await frame();
+    const b = grab();
+    let moved = 0;
+    for (let i = 0; i < a.length; i += 4) {
+      if (Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]) > 6) moved += 1;
+    }
+    runs.push((moved / (a.length / 4)) * 100);
+  }
+  runs.sort((x, y) => x - y);
+  return Math.round(runs[1] * 10) / 10;
+});
+ok(moving < 25, `וכשעומדים במקום רק ${moving}% מהתמונה משתנה מפריים לפריים`);
+
+console.log(bad ? `\n✗ ${bad} דברים כבדים מדי לפלאפון` : '\n✓ המשחק מבקש מהפלאפון מעט מספיק, והתמונה לא מרצדת.');
 await browser.close();
 process.exit(bad ? 1 : 0);

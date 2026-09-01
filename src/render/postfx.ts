@@ -79,8 +79,18 @@ export const GradeShader = {
       float roll = smoothstep(0.0, 0.06, abs(fract(uv.y - uTime * 0.06) - 0.5) - 0.44);
       col += roll * 0.018;
 
-      // grain
-      float g = hash(uv * uRes + fract(uTime) * 91.7) - 0.5;
+      // Grain that does not move.
+      //
+      // This was the flicker. A fresh random value in every pixel on every
+      // frame is not film grain on a phone — it is a screen full of static, and
+      // on a small bright panel showing a dark city it is the first thing the
+      // eye finds. Standing perfectly still, a third of the screen changed
+      // every frame, and all of it was this. Slowing it to eight patterns a
+      // second only turned the static into a pulse eight times a second.
+      //
+      // Held still it is what it was always meant to be: texture on the glass,
+      // part of the picture rather than something happening to it.
+      float g = hash(uv * uRes) - 0.5;
       col += g * uGrain * 0.055 * (1.0 - uDawn * 0.7);
 
       // vignette
