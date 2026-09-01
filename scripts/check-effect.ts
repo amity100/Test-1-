@@ -16,7 +16,7 @@ import { CATALOGUE, waysInto } from '../src/game/catalogue';
 import { offersAt, poolOf, start, sync } from '../src/game/jobs';
 import { hold } from '../src/game/sites';
 import type { Task } from '../src/game/jobs';
-import type { GameState, Place, Verb } from '../src/game/types';
+import type { GameState, Place, PlaceKind, Verb } from '../src/game/types';
 
 let bad = 0;
 const ok = (cond: boolean, what: string) => {
@@ -132,6 +132,91 @@ function placeFor(s: GameState, t: Task): Place | undefined {
     ? t.places.includes(p.id)
     : t.kinds ? t.kinds.includes(p.kind) : true)
     && (t.show ? t.show(s, p) : true));
+}
+
+// ── 0 · the big button, at every kind of place and at both grips ───────────
+//
+// The one rule of the special button is that it is the payoff, and for a long
+// time one branch of it broke that rule: a company held below the threshold
+// paid two power and ninety minutes and moved not one number, so the feed
+// printed the game's own verdict — "לא יצא מזה שום דבר מורגש". A button that
+// can hand back nothing is worse than no button, because the player has no way
+// to know which time it was.
+head('הכפתור הגדול תמיד עושה משהו');
+{
+  const KINDS: PlaceKind[] = ['company', 'power', 'water', 'roads', 'transport',
+    'talk', 'care', 'study', 'homes', 'money', 'city', 'state'];
+
+  /**
+   * Only the things the button is supposed to move.
+   *
+   * Comparing whole snapshots is useless here: any job at all stirs the place's
+   * own heat, the explanations, and whoever was standing there, so a branch
+   * that does absolutely nothing still shows up as "the world moved". These are
+   * the channels a payoff can actually arrive on.
+   */
+  const payoff = (s: GameState, me: string) => ({
+    info: s.info,
+    power: poolOf(s),
+    opinion: JSON.stringify(s.opinion),
+    // Bookkeeping the engine writes for every job; not a payoff.
+    marks: JSON.stringify(Object.fromEntries(Object.entries(s.marks)
+      .filter(([k]) => !/^(did_|spent_|opinion_|helped_street)/.test(k)))),
+    others: Object.values(s.places).filter((q) => q.id !== me)
+      .map((q) => `${q.control}/${q.guard}/${q.found ? 1 : 0}`).join(),
+    areas: Object.values(s.areas).map((a) => `${a.seen}/${a.control}`).join(),
+    heat: s.heat,
+  });
+
+  /**
+   * The same world, same seed, same number of minutes — with and without the press.
+   *
+   * Just long enough for the job to land and no longer. Run for a day instead,
+   * and everything saturates: what I know reaches its ceiling either way, and
+   * the growths I earn over that day set the very marks the button sets, so a
+   * button that works reads as one that does not.
+   */
+  const run = (kind: PlaceKind, grip: number, press: boolean, steps = 0) => {
+    const s = world(`use-${kind}-${grip}`, 'use');
+    const p = Object.values(s.places).find((q) => q.kind === kind);
+    if (!p) return null;
+    p.control = grip;
+    p.seen = 60;
+    sync(s);
+    if (press && !start(s, p.id, 'use')) return null;
+    let n = 0;
+    if (press) {
+      while (n < 400 && s.jobs.length) { tick(s, 5); n += 1; }
+      tick(s, 5); n += 1;
+    } else {
+      for (; n < steps; n += 1) tick(s, 5);
+    }
+    return { ...payoff(s, p.id), steps: n };
+  };
+
+  const empty: string[] = [];
+  let ran = 0;
+  // 45 is what getting in hands you; 100 is the place taken whole. Both have to
+  // give something. And "something" is measured against the same world with the
+  // button left alone — otherwise the world simply carrying on (people moving,
+  // wires revealing what they lead to) counts as the button having worked, and
+  // this check passed happily with the branch deleted.
+  for (const grip of [45, 100]) {
+    for (const kind of KINDS) {
+      const pressed = run(kind, grip, true);
+      const left = pressed ? run(kind, grip, false, pressed.steps) : null;
+      if (!pressed || !left) { empty.push(`${kind} ב־${grip}% — אי אפשר להתחיל`); continue; }
+      ran += 1;
+      const moved = pressed.info > left.info || pressed.power > left.power
+        || pressed.opinion !== left.opinion || pressed.marks !== left.marks
+        || pressed.others !== left.others || pressed.areas !== left.areas
+        // Only downward: the bar going up is the price, never the reward.
+        || pressed.heat < left.heat;
+      if (!moved) empty.push(`${kind} ב־${grip}% — שילמתי, ולא קיבלתי כלום`);
+    }
+  }
+  for (const e of empty) console.log(`   ✗ ${e}`);
+  ok(empty.length === 0, `לכל סוג מקום הכפתור הגדול עושה משהו, גם באחיזה חלקית (${ran} נבדקו)`);
 }
 
 // ── 1 · every task in the catalogue moves the world ────────────────────────

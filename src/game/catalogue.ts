@@ -209,15 +209,28 @@ function use(s: GameState, p: Place) {
   /** A switch: it either happens or it does not, and it wants the whole place. */
   const enough = f >= 0.9;
   switch (p.kind) {
-    case 'company':
+    case 'company': {
+      // Scaled, not a switch. This was the one branch in the game that could
+      // hand back literally nothing: below the threshold it printed a sentence
+      // about how little had happened and changed no number at all, so the
+      // player paid two power and ninety minutes and the feed told him, in the
+      // game's own words, "לא יצא מזה שום דבר מורגש".
+      const was = s.marks[`engine_${p.id}`] ?? 0;
+      const now = Math.max(1, Math.round(2 * f));
+      s.marks[`engine_${p.id}`] = Math.max(was, now);
+      const gained = Math.max(0, Math.max(was, now) - was);
       if (enough) {
-        s.marks[`engine_${p.id}`] = 1;
-        say(s, 'me', `כל המחשבים של ${p.name} עובדים עכשיו בשבילי. יש לי כוח לעוד דברים במקביל.`);
+        say(s, 'me', `כל המחשבים של ${p.name} עובדים עכשיו בשבילי. `
+          + `יש לי כוח לעוד ${now} דברים במקביל.`);
+      } else if (gained > 0) {
+        say(s, 'me', `רתמתי את המחשבים ש${p.name} שכבר שלי — יצא מזה כוח לעוד `
+          + `${gained}. כשכל המקום שלי, זה ייתן את הכל.`);
       } else {
-        say(s, 'me', `רתמתי מה שיכולתי מ${p.name}, אבל רוב המחשבים שם עוד לא שלי — `
-          + `יצא מזה מעט מאוד. כשהמקום כולו שלי, זה ייתן כוח שלם.`);
+        say(s, 'me', `כבר רתמתי כאן את מה שאפשר. כדי לקבל עוד — צריך שכל `
+          + `${p.name} יהיה שלי.`);
       }
       break;
+    }
     case 'power': {
       const near = Object.values(s.places).filter((q) => q.areaId === p.areaId && q.id !== p.id);
       const reach = enough ? near : near.slice(0, Math.max(1, Math.round(near.length * f)));

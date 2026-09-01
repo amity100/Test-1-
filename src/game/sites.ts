@@ -516,7 +516,10 @@ export function poolFrom(s: GameState): number {
   const h = hold(s);
   let all = 3 + h.power;
   for (const p of Object.values(s.places)) {
-    if (s.marks[`engine_${p.id}`] && p.control > 0) all += 2;
+    // How much of that company's machines are actually working for me. It used
+    // to be a flag worth a flat two, so half a company gave the same as all of
+    // one — and a company held below the threshold gave nothing whatsoever.
+    if (p.control > 0) all += s.marks[`engine_${p.id}`] ?? 0;
   }
   if (s.marks.big_engine) all += 2;
   return Math.floor(all);
