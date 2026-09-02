@@ -1,6 +1,7 @@
 import { RNG } from '../core/rng';
 import { bus } from './bus';
-import { at, tell, to, v } from './story';
+import { at, tell, things, to, v } from './story';
+import { leftIn } from './scale';
 import type { GameState, Hunt, Place, Person } from './types';
 
 /**
@@ -129,7 +130,7 @@ const STILL_ALL: Answer = {
   press: (s, p) => {
     const stopped = busyIn(s, p.areaId);
     letGo(s, stopped);
-    tell(s, 'me', `עצרתי הכל באזור. ${stopped.length} דברים שלי קפאו בבת אחת.`, 1, p.id);
+    tell(s, 'me', `עצרתי הכול באזור. ${things(stopped.length)} שלי קפאו בבת אחת.`, 1, p.id);
   },
 };
 
@@ -144,7 +145,7 @@ const SMALL: Answer = {
     const was = p.control;
     p.control = 15;
     p.heat = Math.max(0, p.heat - 25);
-    tell(s, 'me', `ויתרתי על ${Math.round(was - 15)} אחוז ${at(p.name)} כדי שלא יהיה שם מה למצוא.`, 1, p.id);
+    tell(s, 'me', `ויתרתי על רוב האחיזה שלי ${at(p.name)} והשארתי שם רק חוט דק, כדי שלא יהיה שם מה למצוא.`, 1, p.id);
   },
 };
 
@@ -634,7 +635,7 @@ function land(s: GameState, p: Place, sc: Script, name: string, he = true) {
       tell(s, 'them',
         `${name} ${he ? 'מצא' : 'מצאה'} ${at(p.name)} משהו שלא היה אמור להיות שם, `
         + `${he ? 'והוציא' : 'והוציאה'} אותו. `
-        + `נשארתי שם עם ${Math.round(p.control)} אחוז, והמקום הזה שמור עכשיו יותר.`,
+        + `${leftIn(p.control)}, והמקום הזה שמור עכשיו יותר.`,
         2, p.id);
       break;
     }
@@ -645,7 +646,7 @@ function land(s: GameState, p: Place, sc: Script, name: string, he = true) {
       p.heat = 0;
       s.heat = Math.min(100, s.heat + 10);
       tell(s, 'them', p.control > 0
-        ? `ניתקו את ${p.name}. הייתי תפוס שם מספיק חזק כדי להישאר עם ${Math.round(p.control)} אחוז.`
+        ? `ניתקו את ${p.name}. הייתי תפוס שם מספיק חזק, ו${leftIn(p.control)}.`
         : `ניתקו את ${p.name} לגמרי. מה שהיה לי שם — נגמר.`,
         2, p.id);
       if (p.control <= 0) bus.emit('place:lost', p.id);

@@ -19,8 +19,24 @@ export function placeGripNoun(control: number): string {
   if (control >= 100) return 'הכול';
   if (control >= 90) return 'כמעט הכול';
   if (control >= 60) return 'רובו';
+  if (control >= 45) return 'בערך חצי ממנו';
   if (control >= 30) return 'חלק גדול ממנו';
   if (control > 0) return 'רק דריסת רגל';
+  return '';
+}
+
+/**
+ * The same, said about a named thing rather than "it": "בערך חצי מהמקום",
+ * "רוב המקום". For a sentence that has already named what it is talking about.
+ */
+export function gripOf(control: number, what: string): string {
+  const n = placeGripNoun(control);
+  if (n === 'הכול') return `כל ${what}`;
+  if (n === 'כמעט הכול') return `כמעט כל ${what}`;
+  if (n === 'רובו') return `רוב ${what}`;
+  if (n === 'בערך חצי ממנו') return `בערך חצי מ${what}`;
+  if (n === 'חלק גדול ממנו') return `חלק גדול מ${what}`;
+  if (n === 'רק דריסת רגל') return `רק דריסת רגל ב${what}`;
   return '';
 }
 
@@ -28,6 +44,16 @@ export function placeGripNoun(control: number): string {
 export function placeGrip(control: number): string {
   const n = placeGripNoun(control);
   return n ? `${n} שלי` : '';
+}
+
+/**
+ * What is left of a place after they took some of it back — a whole clause,
+ * because "נשאר לי שם" with nothing after it is not a sentence, and neither
+ * is a zero.
+ */
+export function leftIn(control: number): string {
+  const n = placeGripNoun(control);
+  return n ? `נשאר לי שם ${n}` : 'לא נשאר לי שם כלום';
 }
 
 /** How dug in I am somewhere — how hard it would be to pull me out. */

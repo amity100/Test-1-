@@ -160,7 +160,7 @@ export const TASKS = CATALOGUE;
  */
 export const ABOVE_MINUTES = 2.2;
 export const ABOVE_NOISE = 2;
-export const ABOVE_SAYS = 'מלמעלה זה לוקח יותר מפי שניים ורואים אותי יותר. מבפנים זה זול.';
+export const ABOVE_SAYS = 'כשאני עושה את זה מרחוק, בלי להיות בפנים, זה לוקח יותר מכפול זמן ורואים אותי יותר. מבפנים זה הרבה יותר זול.';
 
 // ── the small words the catalogue is written in ─────────────────────────────
 
@@ -370,7 +370,9 @@ function cheaperLine(s: GameState, p: Place, t: Task, people: number): string | 
       : 'אם אחכה שהקומה תתרוקן — הרבה יותר מהר, וכמעט בלי שירגישו.';
   }
   if (t.wants && p.control < t.wants) {
-    return `אם קודם אתחזק כאן עד ${t.wants} אחוז — זה יעלה הרבה פחות.`;
+    return t.wants >= 100
+      ? 'אם קודם אקח את כל המקום — זה יעלה הרבה פחות.'
+      : 'אם קודם אתחזק כאן קצת — זה יעלה הרבה פחות.';
   }
   if (p.seen < 20 && t.verb !== 'watch') {
     return 'אם קודם אסתכל על המקום הזה קצת — זה יעלה לי פחות זמן.';
@@ -537,13 +539,18 @@ export function start(s: GameState, placeId: string, taskId: string, above = fal
   const o = priceOf(s, p, t, above, way);
   if (o.short > 0) {
     bus.emit('toast', {
-      text: `אין לי מספיק כוח פנוי. צריך לעצור משהו אחר.`, kind: 'warn', icon: '⊘',
+      text: 'אין לי יד פנויה. צריך קודם לעצור משהו אחר.', kind: 'warn', icon: '⊘',
     });
     return false;
   }
+  // The job carries the action's own name, with the way after a dash, so the
+  // strip along the bottom and every line about it say what is being done —
+  // "להיכנס — בשקט מהצד" — rather than only how.
+  const what = t.textFor ? t.textFor(p) : t.text;
+  const label = way ? `${what} — ${way.text}` : what;
   s.jobs.push({
     id: `j${s.at}_${s.jobs.length}_${taskId}`,
-    taskId, placeId, verb: t.verb, text: o.text,
+    taskId, placeId, verb: t.verb, text: label,
     power: o.power, left: o.minutes, total: Math.max(1, o.minutes),
     forever: o.forever, noise: o.noise,
     look: way?.look ?? (t.lookFor ? t.lookFor(p) : t.look),
@@ -551,7 +558,7 @@ export function start(s: GameState, placeId: string, taskId: string, above = fal
     above: above || undefined,
   });
   s.power.used += o.power;
-  tell(s, 'me', `התחלתי: ${o.text} — ${p.name}.`, 0, p.id);
+  tell(s, 'me', `התחלתי ${what} ${at(p.name)}${way ? ` — ${way.text}` : ''}.`, 0, p.id);
   bus.emit('sfx', 'step');
   bus.emit('changed', undefined);
   return true;
@@ -618,7 +625,8 @@ export function runJobs(s: GameState, mins: number, noisy: (p: Place, n: number,
         wentWrong(s, p);
       } else if (how === 'clean') {
         heard = Math.floor(j.noise * 0.35);
-        tell(s, 'me', `${j.text} — ויצא חלק לגמרי. אף אחד לא ידע שהייתי שם.`, 1, p.id);
+        const what = t.textFor ? t.textFor(p) : t.text;
+        tell(s, 'me', `הצלחתי ${what} ${at(p.name)} ${w?.text ?? ''}, ויצא חלק לגמרי — אף אחד לא ידע שהייתי שם.`, 1, p.id);
         bus.emit('toast', { text: 'יצא חלק — כמעט בלי רעש', kind: 'good', icon: '◇' });
       }
     }

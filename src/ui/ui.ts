@@ -13,7 +13,7 @@ import { GIFT, KIND_NAME } from '../game/sites';
 import { answer, liveHunts, rowsOf, scriptOf, stillNeeds } from '../game/hunt';
 import { board, bestNow, inRegion, regions, type Region, pointOf } from '../game/board';
 import { israel } from '../game/sites';
-import { at as atName, mins as minsWord, places as placesWord, reach, to as toPlace } from '../game/story';
+import { at as atName, hands, handsShort, mins as minsWord, places as placesWord, reach, to as toPlace } from '../game/story';
 import { STORIES, asking, coming, driftSays, leading, rungOf, saysNow } from '../game/watch';
 import { AREA_KIND_NAME, LOOK_NAME, RUNG_NAME, VERB_NAME, VERB_SAYS, VOICE_NAME } from '../game/types';
 import { riskSays } from '../game/ways';
@@ -98,7 +98,7 @@ export class UI {
           <em><i id="dayat">יום 1</i> · <u id="speedat">רגיל</u></em>
         </button>
         <button class="meter m-power" data-do="jobs">
-          <span>כוח</span><b id="mpower">0/3</b>
+          <span>ידיים</span><b id="mpower">0/3</b>
           <div class="mbar"><i id="mpowerbar"></i></div>
         </button>
         <button class="icon grew hidden" id="grewbtn" data-do="grown"
@@ -410,11 +410,11 @@ export class UI {
         data-arg="${p.id}|${o.task.id}|0|${o.way?.id ?? ''}">
         <b>${SIGN[o.task.verb]} ${esc(o.text)}</b>
         <em>${esc(o.way?.says ?? o.task.saysFor?.(p) ?? o.task.says)}</em>
-        <span class="gain">מרוויח · ${esc(o.gain)}</span>
-        <span class="risk">מסתכן · ${esc(o.risk)}</span>
-        ${o.way ? `<span class="odds">${esc(LOOK_NAME[o.way.look])} · ${esc(riskSays(o.wrong))}</span>` : ''}
-        <u>${o.power} כוח · ${esc(o.forever ? 'עד שאעצור' : minsWord(o.minutes))}`
-        + `${o.short > 0 ? ` · חסר ${o.short} כוח` : ''}</u>
+        <span class="gain">ייצא לי מזה: ${esc(o.gain)}</span>
+        <span class="risk">הסיכון: ${esc(o.risk)}</span>
+        ${o.way ? `<span class="odds">בבוקר זה ${esc(LOOK_NAME[o.way.look])} · ${esc(riskSays(o.wrong))}</span>` : ''}
+        <u>${esc(hands(o.power))} · ${esc(o.forever ? 'עד שאעצור' : minsWord(o.minutes))}`
+        + `${o.short > 0 ? ` · ${handsShort(o.short)}` : ''}</u>
         ${o.cheaper ? `<i class="ch">${esc(o.cheaper)}</i>` : ''}
       </button>`).join('');
 
@@ -460,7 +460,7 @@ export class UI {
         <b>${SIGN[j.verb]} ${esc(shortName(j.text))}</b>
         <em>${esc(p?.name ?? '')}</em>
         <div class="jbar"><i data-bar="${j.id}" style="width:${j.forever ? 100 : 0}%"></i></div>
-        <u>${j.power} כוח · <span data-left="${j.id}">${j.forever ? 'עד שאעצור'
+        <u>${esc(hands(j.power))} · <span data-left="${j.id}">${j.forever ? 'עד שאעצור'
           : `${Math.max(1, Math.round(j.left))}׳`}</span></u>
       </button>`;
     }).join('');
@@ -659,7 +659,8 @@ export class UI {
     const scenes: Record<number, { title: string; body: string }> = {
       1: {
         title: 'מישהו שם לב',
-        body: `${name} כבר בטוח שמשהו מוזר קורה, ומתחיל לבדוק. `
+        body: `${name} כבר ${who ? v(who, 'בטוח', 'בטוחה') : 'בטוח'} שמשהו מוזר קורה, `
+          + `${who ? v(who, 'ומתחיל', 'ומתחילה') : 'ומתחיל'} לבדוק. `
           + 'מעכשיו הם יבואו לפעמים להסתכל מקרוב. אפשר להמשיך — בזהירות.',
       },
       2: {
@@ -708,16 +709,16 @@ export class UI {
       const p = s.places[j.placeId];
       return `<button class="pl" data-do="stopjob" data-arg="${j.id}">
         <b>${SIGN[j.verb]} ${esc(j.text)}</b>
-        <em>${esc(p?.name ?? '')} · ${j.power} כוח · ${j.forever ? 'רץ עד שאעצור' : `עוד ${Math.max(1, Math.round(j.left))} דקות`}</em>
-        <u>נגיעה עוצרת ומחזירה את הכוח</u>
+        <em>${esc(p?.name ?? '')} · ${esc(hands(j.power))} · ${j.forever ? 'רץ עד שאעצור' : `עוד ${minsWord(Math.max(1, Math.round(j.left)))}`}</em>
+        <u>נגיעה עוצרת את זה, והידיים חוזרות אליי</u>
       </button>`;
-    }).join('') : '<p class="need">שום דבר לא רץ עכשיו. כל הכוח שלי פנוי.</p>';
+    }).join('') : '<p class="need">שום דבר לא רץ עכשיו. כל הידיים שלי פנויות.</p>';
     this.modal(`
       <div class="sheet wide places">
         <span class="kick">מה רץ עכשיו</span>
-        <h2>${s.power.used} מתוך ${s.power.all} כוח תפוס</h2>
+        <h2>${s.power.used} מתוך ${s.power.all} ידיים תפוסות</h2>
         <div class="txt">
-          <p>כוח לא מתבזבז — הוא תפוס. כל דבר שרץ מחזיק חלק ממנו, ומשחרר ברגע שעוצרים.</p>
+          <p>יד לא נגמרת — היא תפוסה. כל דבר שרץ מחזיק יד אחת או יותר, וברגע שהוא נגמר או שאני עוצר אותו, היד חוזרת אליי.</p>
         </div>
         <div class="txt list">${rows}</div>
         <button class="ok" data-do="closeteach">סגור</button>
@@ -850,14 +851,14 @@ export class UI {
         <em>${esc(g.says)}</em>
         <u>${esc(SHAPE_NAME[g.shape])}</u>
         ${same ? `<i class="tnow">${esc(l.n >= 2 && l.n < 3
-        ? 'עוד אחד כזה, ואני נהיה באמת הדבר הזה.'
+        ? 'עוד בחירה אחת כזאת, וזה כבר מה שאני.'
         : 'עוד אחד מאותו כיוון.')}</i>` : ''}
       </button>`;
     }).join('');
     this.modal(`
       <div class="sheet wide places">
         <span class="kick">משהו בי גדל</span>
-        <h2>${esc(table.length > 1 ? 'לאן' : 'זה מה שגדל')}</h2>
+        <h2>${esc(table.length > 1 ? 'לאן לגדול?' : 'זה מה שגדל')}</h2>
         <div class="txt">
           <p>${esc(table.length > 1
         ? 'אני יכול לגדול לכיוון אחד מאלה. מה שלא אבחר יחכה — אבל מה שאבחר עכשיו, יהיה איתי הלילה.'
@@ -913,12 +914,16 @@ export class UI {
         <span class="kick">איך משחקים</span>
         <h2>המטרה, ואיך מגיעים אליה</h2>
         <div class="txt">
-          <p><b>שני פסים למעלה.</b> הכחול — כמה מישראל שלי; יגיע ל־100, ניצחתי.
-          האדום — כמה חזק מחפשים אותי; יגיע ל־100, נתפסתי. כל כפתור מזיז לפחות
-          אחד מהם.</p>
-          <p><b>לקחת מקום זה שני צעדים.</b> קודם <b>להיכנס</b> — וכבר חצי מהמקום
-          שלי. אחר כך <b>לקחת את כל המקום</b> — וזהו, הוא כולו שלי. מקום שכולו
-          שלי נותן לי את מה שהוא נותן במלואו, ומקום שרק נכנסתי אליו נותן חצי.</p>
+          <p><b>שני פסים למעלה.</b> הכחול — כמה מישראל כבר שלי. כשהוא מתמלא עד
+          הסוף, ניצחתי. האדום — כמה הם קרובים לתפוס אותי. כשהוא מתמלא עד הסוף,
+          נתפסתי. כל כפתור מזיז לפחות אחד מהם.</p>
+          <p><b>לקחת מקום זה שני צעדים.</b> קודם <b>להיכנס</b> — וכבר בערך חצי
+          מהמקום שלי. אחר כך <b>לקחת את כל המקום</b> — וזהו, הוא כולו שלי. מקום
+          שכולו שלי נותן לי את מה שהוא נותן במלואו, ומקום שרק נכנסתי אליו נותן
+          חצי.</p>
+          <p><b>ידיים.</b> יש לי כמה ידיים, וכל דבר שאני עושה תופס יד עד שהוא
+          נגמר. כשכל הידיים תפוסות, עוצרים משהו כדי להתחיל משהו אחר. חברה
+          שכולה שלי נותנת לי עוד יד.</p>
           <p><b>לכל מקום שלוש דרכים להיכנס.</b> בשקט מהצד — לאט, וכמעט בלי
           שישמעו. מהר ובכוח — חצי מהזמן, ורואים את זה בבוקר. דרך מישהו שנמצא
           שם — מהיר ושקט, אם באמת יש שם מישהו. על כל דרך כתוב מראש איך היא
@@ -930,8 +935,8 @@ export class UI {
           שאני עושה נראה אותו דבר — היא תתפוס את הדפוס, תגיד את זה בקול, וכל
           דבר כזה יעלה לי הרבה יותר. בזמן שהיא מסתכלת לשם, כל כיוון אחר נהיה
           זול. כמה ימים אחרת, והיא יורדת מזה.</p>
-          <p><b>מתחת לכל כפתור כתוב מה מרוויחים ומה מסתכנים.</b> בכחול מה זה נותן,
-          באדום כמה זה יזיז את הפס האדום. אין הפתעות.</p>
+          <p><b>מתחת לכל כפתור כתוב מה ייצא לי ממנו ומה הסיכון.</b> בכחול מה זה
+          נותן, באדום כמה זה יזיז את המצוד. אין הפתעות.</p>
           <p><b>שתי דרכים לנצח, ואפשר לערבב.</b><br>
           <b>בשקט</b> — להתחבא. שכונות, מים, ולמחוק אחריי את העקבות, כדי שהפס
           האדום ירד.<br>
@@ -1125,7 +1130,7 @@ export class UI {
 
     this.modal(`
       <div class="sheet wide boardsheet">
-        <span class="kick">המפה · ${mine} מתוך ${list.length} אזורים התחלתי בהם</span>
+        <span class="kick">המפה · ${mine} מתוך ${list.length} אזורים</span>
         <h2>${esc(bestNow(s))}</h2>
         <div class="txt list">
           ${open.map(row).join('')}
@@ -1214,11 +1219,11 @@ export class UI {
         data-do="doat" data-arg="${p.id}|${o.task.id}|0|${o.way?.id ?? ''}">
       <b>${SIGN[o.task.verb]} ${esc(o.text)}</b>
       <em>${esc(o.way?.says ?? o.task.saysFor?.(p) ?? o.task.says)}</em>
-      <span class="gain">מרוויח · ${esc(o.gain)}</span>
-      <span class="risk">מסתכן · ${esc(o.risk)}</span>
-      ${o.way ? `<span class="odds">${esc(LOOK_NAME[o.way.look])} · ${esc(riskSays(o.wrong))}</span>` : ''}
-      <u>${o.power} כוח · ${esc(o.forever ? 'עד שאעצור' : minsWord(o.minutes))}`
-      + `${o.short > 0 ? ` · חסר ${o.short} כוח` : ''}</u>
+      <span class="gain">ייצא לי מזה: ${esc(o.gain)}</span>
+      <span class="risk">הסיכון: ${esc(o.risk)}</span>
+      ${o.way ? `<span class="odds">בבוקר זה ${esc(LOOK_NAME[o.way.look])} · ${esc(riskSays(o.wrong))}</span>` : ''}
+      <u>${esc(hands(o.power))} · ${esc(o.forever ? 'עד שאעצור' : minsWord(o.minutes))}`
+      + `${o.short > 0 ? ` · ${handsShort(o.short)}` : ''}</u>
       ${o.cheaper ? `<i class="tnow">${esc(o.cheaper)}</i>` : ''}
     </button>`;
 

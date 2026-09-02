@@ -2,10 +2,10 @@
 import { GIFT, KIND_NAME, fadeRate, israel, weight as worthOf } from './sites';
 import { LOOK_NAME } from './types';
 import { v } from './story';
-import { israelState, placeGripNoun } from './scale';
+import { heatState, israelState, placeGripNoun } from './scale';
 import { pressure } from './watch';
 import { liveHunts } from './hunt';
-import { at, places as placeCount, strip, things } from './story';
+import { areas as areaCount, at, mins, places as placeCount, strip, things, to } from './story';
 import type { GameState, Place } from './types';
 
 /**
@@ -88,7 +88,7 @@ function nowLine(s: GameState, places: Place[]): string | null {
   if (hunt) {
     const who = s.people[hunt.whoId];
     const left = Math.max(0, hunt.at - s.at);
-    return `${who ? who.name : 'מישהו'} שם עכשיו, ונשארו ${Math.round(left)} דקות.`;
+    return `${who ? who.name : 'מישהו'} שם עכשיו. עוד ${mins(Math.round(left))} והשעון נגמר.`;
   }
 
   const cut = places.filter((p) => p.cutAt !== undefined)
@@ -98,12 +98,12 @@ function nowLine(s: GameState, places: Place[]): string | null {
   const busy = s.jobs.filter((j) => ids.has(j.placeId));
   if (busy.length) {
     return busy.length === 1
-      ? `${busy[0].text} — רץ שם עכשיו.`
-      : `${busy.length} דברים שלי רצים שם עכשיו.`;
+      ? `רץ שם עכשיו: ${busy[0].text}.`
+      : `${things(busy.length)} שלי רצים שם עכשיו.`;
   }
 
   const hot = places.filter((p) => p.heat >= 45).sort((a, b) => b.heat - a.heat)[0];
-  if (hot) return `מסתכלים על ${hot.name}.`;
+  if (hot) return `הם מסתכלים עכשיו על ${hot.name}.`;
 
   const people = places.reduce((n, p) => n + p.peopleIds
     .filter((id) => { const q = s.people[id]; return q && !q.gone; }).length, 0);
@@ -167,7 +167,7 @@ export function board(s: GameState): Target[] {
       id: 'a:dark',
       kind: 'area',
       name: 'שאר הארץ',
-      where: `${dark.length} אזורים שעוד לא ראיתי`,
+      where: `${areaCount(dark.length)} שעוד לא ראיתי`,
       control: 0, heat: 0, mine: 0, found: 0,
       worth: `${dark.slice(0, 3).map((a) => a.name).join(' · ')}`
         + `${dark.length > 3 ? ' ועוד' : ''} — כדי להגיע לשם צריך קודם מקום שיוצא לשם.`,
@@ -330,13 +330,13 @@ export function bestNow(s: GameState): string {
     const who = s.people[h.whoId];
     const left = Math.max(0, Math.round(h.at - s.at));
     const stands = who ? `${who.name} ${who.he ? 'נמצא' : 'נמצאת'}` : 'מישהו נמצא';
-    return `${stands} ${p ? at(p.name) : 'במקום שלי'}, ונשארו ${left} דקות לשעון. תטפל בזה עכשיו.`;
+    return `${stands} ${p ? at(p.name) : 'במקום שלי'}, ועוד ${mins(left)} השעון נגמר. קודם כול לטפל בזה.`;
   }
 
   const cut = Object.values(s.places)
     .filter((p) => p.control > 0 && p.cutAt !== undefined)
     .sort((a, b) => (a.cutAt ?? 0) - (b.cutAt ?? 0))[0];
-  if (cut) return `הם עומדים לנתק את ${cut.name}. או שתתחפר שם חזק — או שתברח משם בזמן.`;
+  if (cut) return `הם עומדים לנתק את ${cut.name}. או שאני נאחז שם חזק, או שאני בורח משם בזמן.`;
 
   // Somebody has worked out how I work. This is the most useful sentence the
   // game can say, because the answer is a move rather than a resource: not
@@ -346,22 +346,23 @@ export function bestNow(s: GameState): string {
   if (onto && s.heat >= 20) {
     if (onto.onLook) {
       return `${onto.name} ${v(onto, 'בודק', 'בודקת')} עכשיו כל דבר ש${LOOK_NAME[onto.onLook]}, `
-        + 'וזה עולה לך הרבה יותר. תיכנס למקומות בדרך אחרת — כל כיוון שהיא לא מסתכלת אליו זול עכשיו.';
+        + `וזה עולה לי הרבה יותר. כדאי לי להיכנס למקומות בדרך אחרת — כל כיוון `
+        + `ש${v(onto, 'הוא לא מסתכל', 'היא לא מסתכלת')} אליו זול עכשיו.`;
     }
     return `שומרים במיוחד על כל ה${KIND_NAME[onto.onKind!]} בארץ בגלל ${onto.name}. `
-      + 'כמה ימים במקומות מסוג אחר, והם ירדו מזה.';
+      + 'אם אעבוד כמה ימים במקומות מסוג אחר, הם ירדו מזה.';
   }
 
   if (s.heat >= 60) {
-    return `המצוד על ${Math.round(s.heat)} וזה כבר מסוכן. `
-      + 'עכשיו זה הזמן למחוק עקבות במקום הכי חזק שלך, לא להתרחב.';
+    return `המצוד: ${heatState(s.heat)}. זה כבר מסוכן — `
+      + 'עכשיו הזמן למחוק עקבות במקום הכי חזק שלי, לא להתרחב.';
   }
 
   // Past the crossover the bar climbs whatever I do, and a player who has not
   // noticed is a player about to lose to a number he thought was idle.
   if (s.heat >= 35 && pressure(s) > 0.0035 / fadeRate(s)) {
-    return `${israelState(israel(s))} כבר שלך — ומכאן המצוד עולה לבד, `
-      + 'כי כבר כמעט לא נשאר לך מאחורי מה להתחבא. תתפשט מהר, ותמחק עקבות בין לבין.';
+    return `${israelState(israel(s))} כבר שלי, ומכאן המצוד עולה לבד: `
+      + 'כמעט לא נשאר לי מאחורי מה להתחבא. כדאי להתפשט מהר, ולמחוק עקבות בין לבין.';
   }
 
   // Two is what getting into anywhere costs, so anything less than two free is
@@ -370,19 +371,19 @@ export function bestNow(s: GameState): string {
   // while the line at the top talked about somewhere else entirely.
   const free = s.power.all - s.power.used;
   if (free <= 0) {
-    return 'כל הכוח שלך תפוס. כדי להתחיל משהו חדש — תעצור משהו שרץ ברצועה למטה.';
+    return 'כל הידיים שלי תפוסות. כדי להתחיל משהו חדש, אני צריך קודם לעצור משהו שרץ ברצועה שלמטה.';
   }
   if (free < 2 && s.jobs.length) {
     const slow = [...s.jobs].sort((a, b) => b.left - a.left)[0];
     const where = s.places[slow.placeId];
-    return `נשאר לך רק ${free} כוח פנוי — לא מספיק כדי להיכנס למקום חדש. `
-      + `אם זה דחוף, תעצור את "${slow.text}"${where ? ` ${at(where.name)}` : ''} `
-      + 'ותקבל את הכוח בחזרה מיד.';
+    return `נשארה לי רק יד אחת פנויה, וזה לא מספיק כדי להיכנס למקום חדש. `
+      + `אם זה דחוף, אעצור את "${slow.text}"${where ? ` ${at(where.name)}` : ''} `
+      + 'והיד תחזור אליי מיד.';
   }
 
   const held = Object.values(s.places).filter((p) => p.control > 0);
   if (held.length <= 1) {
-    return 'יש לך מקום אחד בעולם. הדבר הכי חשוב עכשיו: להיכנס למקום שני.';
+    return 'יש לי מקום אחד בעולם. הדבר הכי חשוב עכשיו: להיכנס למקום שני.';
   }
 
   // Never recommend something already under way. The line was telling a player
@@ -395,8 +396,8 @@ export function bestNow(s: GameState): string {
     .filter((p) => p.control > 0 && p.control < 100 && !busy.has(p.id))
     .sort((a, b) => b.control - a.control)[0];
   if (nearly) {
-    return `${nearly.name} כבר ${Math.round(nearly.control)} אחוז שלך. `
-      + `תיקח את כל המקום — ואז ${GIFT[nearly.kind].button} ייתן הכל.`;
+    return `${nearly.name}: יש לי שם כבר ${placeGripNoun(nearly.control)}. `
+      + `אם אקח את כל המקום, "${GIFT[nearly.kind].button}" ייתן את הכול.`;
   }
 
   // Where I am already strong makes the next place next door cheap, and that
@@ -411,13 +412,13 @@ export function bestNow(s: GameState): string {
   // three lines and losing its own point off the bottom.
   if (helped) {
     const area = s.areas[helped.areaId];
-    return `${helped.name} — אתה כבר חזק ב${area ? area.name : 'אזור'}, אז זה יעלה פחות.`;
+    return `שווה להיכנס ${to(helped.name)}: אני כבר חזק ב${area ? strip(area.name) : 'אזור'}, אז זה יעלה לי פחות.`;
   }
 
   const near = Object.values(s.places)
     .filter((p) => p.found && p.control <= 0 && !busy.has(p.id))
     .sort((a, b) => worthOf(b) - worthOf(a))[0];
-  if (near) return `הבא בתור: ${near.name} — ${GIFT[near.kind].short}.`;
+  if (near) return `הבא בתור: ${near.name}. ${GIFT[near.kind].says}`;
 
   // Everything worth starting is already started. That is a good place to be,
   // and saying so is more use than inventing an errand.
@@ -425,10 +426,10 @@ export function bestNow(s: GameState): string {
     .filter((p) => p.control >= 60 && !busy.has(p.id))
     .sort((a, b) => worthOf(b) - worthOf(a))[0];
   if (s.jobs.length && ready) {
-    return `הכל כבר רץ. כשיתפנה לך כוח — ${GIFT[ready.kind].button} ב${ready.name} `
-      + 'זה הדבר הכי חזק שאתה יכול לעשות עכשיו.';
+    return `כל הידיים שלי תפוסות. כשתתפנה יד, הדבר הכי חזק שאני יכול לעשות `
+      + `הוא "${GIFT[ready.kind].button}" ${at(ready.name)}.`;
   }
-  if (s.jobs.length) return 'הכל כבר רץ. שווה לחכות שמשהו ייגמר לפני שמתחילים עוד.';
+  if (s.jobs.length) return 'כל הידיים שלי תפוסות. שווה לחכות שמשהו ייגמר לפני שאני מתחיל עוד משהו.';
 
   return 'שקט עכשיו, והמצוד נמוך. זה בדיוק הזמן להתפשט לאזור חדש.';
 }

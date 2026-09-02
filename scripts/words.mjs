@@ -93,12 +93,27 @@ if (bad) {
 // one of those turned out to be `scale.ts` not being called somewhere. The one
 // place a "%" is allowed on a Hebrew line is a CSS bar-fill, which always
 // carries the word "width:" right next to it; nothing else does.
+//
+// And the word is no better than the sign: "נשארתי שם עם 43 אחוז" is the same
+// number wearing a Hebrew coat. A line that spells "אחוז" next to a value it
+// is filling in from code is the tell; a sentence that only *says* the word,
+// with no number in it, is somebody talking and is left alone.
+const PERCENT_WORD = /\$\{[^}]*\}[^$]{0,12}אחוז|אחוז[^$]{0,12}\$\{/;
+for (const [sample, want] of [['נשארתי עם ${Math.round(p.control)} אחוז', true],
+  ['אחוז ${n} ממנו', true], ['מדברים באחוזים', false], ['יש לי ${x} דקות', false]]) {
+  if (PERCENT_WORD.test(sample) !== want) {
+    console.error(`✗ הבדיקה עצמה שבורה: "${sample}" היה אמור ${want ? 'להיתפס' : 'לעבור'}.`);
+    process.exit(1);
+  }
+}
 let percents = 0;
 for (const file of files) {
   readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
     const t = line.trim();
     if (t.startsWith('//') || t.startsWith('*') || t.startsWith('/*')) return;
-    if (!HEB.test(line) || !line.includes('%') || line.includes('width:')) return;
+    if (!HEB.test(line)) return;
+    const sign = line.includes('%') && !line.includes('width:');
+    if (!sign && !PERCENT_WORD.test(line)) return;
     console.log(`${file}:${i + 1}  ${t.slice(0, 96)}`);
     percents += 1;
   });

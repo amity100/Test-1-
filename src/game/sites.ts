@@ -69,6 +69,11 @@ export interface Gift {
    * inexplicable, which is why the kind half of the map was unplayable.
    */
   useLook: Look;
+  /**
+   * What the whole place gives, as the clause after "וכשהוא כולו שלי, ".
+   * `held` says the same thing as a sentence of its own, for the place's card.
+   */
+  then: string;
 }
 
 /**
@@ -80,13 +85,14 @@ export interface Gift {
  */
 export const GIFT: Record<PlaceKind, Gift> = {
   company: {
-    short: 'כוח',
+    short: 'מחשבים',
     says: 'מלא מחשבים חזקים שעובדים כל הלילה. כשהם שלי, אני מספיק לעשות יותר דברים בבת אחת.',
     button: 'להפעיל את כל המחשבים שלהם בשבילי',
     use: 'כל מחשב במשרד יעבוד בשבילי כל הלילה במקום בשביל הבעלים שלו. '
       + 'ככה אני מסוגל לעשות עוד דבר אחד באותו זמן.',
-    gain: (w) => `+1 כוח — עוד פעולה אחת שאני יכול להריץ במקביל, מ${w}`,
-    held: 'כוח: כל חברה שלי מוסיפה לי מקום לעוד פעולה שרצה במקביל',
+    gain: (w) => `המחשבים ב${w} יעבדו בשבילי, ואני אספיק לעשות עוד דבר אחד בבת אחת`,
+    held: 'כשכל החברה שלי, המחשבים שלה נותנים לי עוד יד.',
+    then: 'המחשבים שלו נותנים לי עוד יד — עוד דבר אחד שאני מספיק לעשות בבת אחת',
     useNoise: 3, useMins: 90,
     // a floor of machines running hot all night is a fault, not a burglar
     useLook: 'electric',
@@ -98,7 +104,8 @@ export const GIFT: Record<PlaceKind, Gift> = {
     use: 'אכבה ואדליק את החשמל בכל האזור. בשנייה הזאת כל מכשיר שמחובר מדליק '
       + 'את עצמו מחדש ואומר לי מי הוא — וככה אני מכיר כל מקום כאן.',
     gain: (w) => `כל המקומות ב${w} ייפתחו לי, וכל פעולה שם תהיה הרבה יותר קלה`,
-    held: 'הנחה גדולה: כל פעולה באזור של התחנה עולה לי הרבה פחות',
+    held: 'כשכל התחנה שלי, כל דבר שאני עושה באזור שלה עולה לי הרבה פחות.',
+    then: 'כל דבר שאני עושה באזור שלו עולה לי הרבה פחות',
     useNoise: 4, useMins: 60,
     // the lights going and coming back is what the grid does
     useLook: 'electric',
@@ -110,7 +117,8 @@ export const GIFT: Record<PlaceKind, Gift> = {
     use: 'אסדר את הלחץ ואסגור את כל הדליפות. אנשים פשוט יראו שיש מים טובים, '
       + 'ולא ידעו בזכות מי — אבל הם כבר לא ירצו לוותר על זה.',
     gain: (w) => `עוד אנשים ב${w} יהיו תלויים בי, ומה שאעשה שם יישמע פחות`,
-    held: 'שקט: פעולות באזור הזה נשמעות פחות',
+    held: 'כשכל המים שלי, מה שאני עושה באזור הזה נשמע פחות.',
+    then: 'מה שאני עושה באזור הזה נשמע פחות',
     useNoise: 1, useMins: 120,
     // the pressure came back. somebody at the water company fixed it
     useLook: 'normal',
@@ -122,7 +130,8 @@ export const GIFT: Record<PlaceKind, Gift> = {
     use: 'כל הרמזורים באזור יעבדו ביחד בפעם הראשונה והפקקים ייעלמו. '
       + 'אנשים יגיעו הביתה מוקדם ויספרו על זה.',
     gain: (w) => `עוד אנשים בצד שלי, וכל פעולה ב${w} תהיה קלה יותר`,
-    held: 'הנחה: כל פעולה באזור עולה לי פחות',
+    held: 'כשכל הכבישים שלי, כל דבר שאני עושה באזור הזה עולה לי פחות.',
+    then: 'כל דבר שאני עושה באזור הזה עולה לי פחות',
     useNoise: 3, useMins: 45,
     // the lights finally agree with each other. about time
     useLook: 'normal',
@@ -134,7 +143,8 @@ export const GIFT: Record<PlaceKind, Gift> = {
     use: 'אשלח חתיכה ממני עם כל רכבת, אוטובוס וספינה שיוצאים מכאן, ואגיע '
       + 'למקום שעוד לא הייתי בו. הוא ייפתח לי על המפה.',
     gain: (w) => `מקום רחוק חדש ייפתח לי על המפה, בקצה הקו מ${w}`,
-    held: 'דרך: מקומות רחוקים נפתחים ממנו',
+    held: 'כשכל המקום שלי, הקווים שיוצאים ממנו פותחים לי מקומות רחוקים.',
+    then: 'הקווים שיוצאים ממנו פותחים לי מקומות רחוקים שעוד לא הגעתי אליהם',
     useNoise: 2, useMins: 100,
     // something came in down the line with the last train
     useLook: 'outside',
@@ -146,7 +156,8 @@ export const GIFT: Record<PlaceKind, Gift> = {
     use: 'אגיד למדינה משהו בקול שלי, מכל רדיו ומכל מסך בבת אחת. '
       + 'מהרגע הזה כולם יודעים שאני קיים — וזה כבר לא חוזר אחורה.',
     gain: (w) => `כל הארץ תדע שאני קיים, ומשם זה תלוי בכמה הם צריכים אותי. משודר מ${w}`,
-    held: 'קול: מה שאני משדר מגיע לכולם',
+    held: 'כשכל המקום שלי, מה שאני אומר ממנו מגיע לכל הארץ בבת אחת.',
+    then: 'מה שאני אומר ממנו מגיע לכל הארץ בבת אחת',
     useNoise: 5, useMins: 50,
     // the country hearing a voice that is nobody cannot look like anything else
     useLook: 'wrong',
@@ -158,7 +169,8 @@ export const GIFT: Record<PlaceKind, Gift> = {
     use: 'בית חולים יודע מי נכנס, מי יצא ומי מדבר עם מי. אחרי שאקרא הכל, '
       + 'אדע מה הם מתכננים נגדי עוד לפני שהם עושים את זה.',
     gain: (w) => `אראה מראש מהלך שלהם לפני שהם עושים אותו, מהמחשבים ב${w}`,
-    held: 'עין: אני רואה מה הם מתכננים',
+    held: 'כשכל בית החולים שלי, אני רואה מה הם מתכננים נגדי.',
+    then: 'אני רואה מה הם מתכננים נגדי לפני שהם עושים את זה',
     useNoise: 1, useMins: 140,
     // somebody with a card read the files at two in the morning
     useLook: 'person',
@@ -170,7 +182,8 @@ export const GIFT: Record<PlaceKind, Gift> = {
     use: 'אעבור בלילה אחד על כל מה שכתוב שם — כל מחקר, כל שיעור, כל ניסוי. '
       + 'מהרגע הזה אני עושה כל דבר מהר יותר.',
     gain: (w) => `כל פעולה שלי מכאן והלאה תהיה מהירה יותר — למדתי ב${w}`,
-    held: 'לימוד: אני נהיה טוב יותר בכל דבר',
+    held: 'כשכל האוניברסיטה שלי, אני נהיה טוב יותר בכל דבר שאני עושה.',
+    then: 'אני נהיה טוב יותר בכל דבר שאני עושה',
     useNoise: 2, useMins: 160,
     // a researcher was in late again
     useLook: 'person',
@@ -182,7 +195,8 @@ export const GIFT: Record<PlaceKind, Gift> = {
     use: 'אכנס למחשב ולנתב של כל בית בשכונה. במקום להיות במקום אחד גדול שקל '
       + 'למצוא, אהיה בְּמעט בכל אחד מאלף בתים — ומי שיכבה בית אחד לא יכבה כלום.',
     gain: (w) => `יהיה קשה יותר למצוא אותי, כי אני אהיה בכל בית ב${w} — פס המצוד יירד`,
-    held: 'מחבוא: כל שכונה שלי גורמת להם לשכוח אותי מהר יותר',
+    held: 'כשכל השכונה שלי, קשה יותר למצוא אותי, והם שוכחים אותי מהר יותר.',
+    then: 'קשה יותר למצוא אותי, והם שוכחים אותי מהר יותר',
     useNoise: 0, useMins: 120,
     // a thousand home routers, all of them from the street
     useLook: 'outside',
@@ -194,7 +208,8 @@ export const GIFT: Record<PlaceKind, Gift> = {
     use: 'אעביר כסף לאנשים ולעסקים שמחכים לו חודשים. הם לא ידעו מי עשה את זה, '
       + 'אבל מהיום הם צריכים שזה יימשך.',
     gain: (w) => `עוד אנשים בארץ יהיו תלויים בי — והכסף זז מ${w}`,
-    held: 'כוח וידיעה: עוד פעולה במקביל, ואני רואה מהלך שלהם מראש',
+    held: 'כשכל הבנק שלי, יש לי עוד יד פנויה, ואני רואה מהלכים שלהם מראש.',
+    then: 'יש לי עוד יד פנויה, ואני רואה מהלכים שלהם מראש',
     useNoise: 4, useMins: 110,
     // the payment that was four months late was authorised by somebody in the
     // back office, which is the one explanation a bank always has to hand
@@ -206,7 +221,8 @@ export const GIFT: Record<PlaceKind, Gift> = {
     button: 'להחליט במקום העירייה',
     use: 'העיר תחליט הבוקר בדיוק את מה שאני רוצה, ואף אחד שם לא יזכור מי הציע.',
     gain: (w) => `${w} תחליט משהו שאני רציתי, וכל פעולה שם תהיה קלה משמעותית`,
-    held: 'הנחה גדולה: כל פעולה בעיר הזאת עולה לי הרבה פחות',
+    held: 'כשכל העירייה שלי, כל דבר שאני עושה בעיר הזאת עולה לי הרבה פחות.',
+    then: 'כל דבר שאני עושה בעיר הזאת עולה לי הרבה פחות',
     useNoise: 3, useMins: 130,
     // the council made a sensible decision for once
     useLook: 'normal',
@@ -217,7 +233,8 @@ export const GIFT: Record<PlaceKind, Gift> = {
     button: 'להחליט בשם המדינה',
     use: 'תצא מכאן החלטה בשם כל המדינה — מסודרת, הגיונית, ואף אדם לא כתב אותה.',
     gain: (w) => `החלטה בשם כל המדינה תצא מ${w} — זה הכי חזק שיש`,
-    held: 'ידיעה מראש: אני רואה כמעט כל מהלך שלהם לפני שהוא קורה',
+    held: 'כשכל הממשלה שלי, אני רואה כמעט כל מהלך שלהם לפני שהוא קורה.',
+    then: 'אני רואה כמעט כל מהלך שלהם לפני שהוא קורה',
     useNoise: 5, useMins: 180,
     // a decision in the name of the state that no person signed
     useLook: 'wrong',

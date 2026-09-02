@@ -5,7 +5,7 @@ import { maybeHunt } from './hunt';
 import { say } from './jobs';
 import { at, feltIt, v } from './story';
 import { fadeRate, israel } from './sites';
-import { israelState } from './scale';
+import { israelState, leftIn } from './scale';
 import { saw } from './hunter';
 import type { GameState, Look, Move, Place, Rung } from './types';
 
@@ -366,7 +366,7 @@ export function landMoves(s: GameState) {
           const lost = Math.min(p.control, 18 + p.heat / 4 - p.dug / 4);
           p.control = Math.max(0, p.control - lost);
           s.heat = Math.min(100, s.heat + 6);
-          say(s, 'me', `מצאו חלק ממני ב${p.name} וניקו אותו. נשארתי שם עם ${Math.round(p.control)} אחוז.`);
+          say(s, 'me', `מצאו חלק ממני ${at(p.name)} וניקו אותו. ${leftIn(p.control)}.`);
           bus.emit('sfx', 'lost');
         }
         break;
@@ -399,7 +399,7 @@ export function landMoves(s: GameState) {
           say(s, 'them', `ניתקו את ${p.name}. מה שהיה לי שם — נגמר.`);
           bus.emit('place:lost', p.id);
         } else {
-          say(s, 'me', `ניסו לנקות את ${p.name}. הייתי תפוס שם חזק מדי — נשאר לי ${Math.round(p.control)} אחוז.`);
+          say(s, 'me', `ניסו לנקות את ${p.name}, אבל הייתי תפוס שם חזק מדי — ${leftIn(p.control)}.`);
         }
         if (before > 0) { bus.emit('sfx', 'lost'); bus.emit('toast', { text: `${p.name} — ניתקו`, kind: 'bad', icon: '⏻' }); }
         break;

@@ -135,7 +135,7 @@ export function saw(s: GameState, amount: number, look: Look, kind: PlaceKind) {
         + `לאחרונה ${LOOK_NAME[look]}. מעכשיו ${v(h, 'הוא בודק', 'היא בודקת')} כל דבר `
         + `כזה מקרוב. ${now(s)}.`, 2);
       bus.emit('toast', {
-        text: `${h.name} תפסה את הדפוס: ${LOOK_NAME[look]}`, kind: 'bad', icon: '◎',
+        text: `${h.name} ${v(h, 'תפס', 'תפסה')} את הדפוס: ${LOOK_NAME[look]}`, kind: 'bad', icon: '◎',
       });
     }
     if (!h.onKind && h.id === 'gadi'
@@ -178,7 +178,7 @@ export function coolOff(s: GameState) {
       delete h.onLook;
       tell(s, 'them', `${h.name} ${v(h, 'הפסיק', 'הפסיקה')} לחפש דברים ש${LOOK_NAME[was]}. `
         + `כבר יומיים לא קרה שם כלום. ${now(s)}.`, 2);
-      bus.emit('toast', { text: `${h.name} ירדה מהדפוס`, kind: 'good', icon: '◌' });
+      bus.emit('toast', { text: `${h.name} ${v(h, 'ירד', 'ירדה')} מהדפוס`, kind: 'good', icon: '◌' });
     }
     if (h.onKind && (h.kinds[h.onKind] ?? 0) < SURE * 0.7) {
       const was = h.onKind;
@@ -209,7 +209,7 @@ export function watching(s: GameState, look: Look, kind: PlaceKind): {
     if (h.onLook) anyLock = true;
     if (h.onLook === look) {
       noise *= 2.2;
-      why.push(`${h.name} בודקת כל דבר ש${LOOK_NAME[look]} — עכשיו זה בולט הרבה יותר`);
+      why.push(`${h.name} ${v(h, 'בודק', 'בודקת')} כל דבר ש${LOOK_NAME[look]} — עכשיו זה בולט הרבה יותר`);
     }
     if (h.onKind === kind) {
       mins *= 1.35;
@@ -229,9 +229,9 @@ export function watching(s: GameState, look: Look, kind: PlaceKind): {
 export function watchingSays(s: GameState): string[] {
   const out: string[] = [];
   for (const h of s.hunters) {
-    if (h.onLook) out.push(`${h.name}: בודקת כל דבר ש${LOOK_NAME[h.onLook]}.`);
-    if (h.onKind) out.push(`${h.name}: שם עין על כל ה${KIND_NAME[h.onKind]} בארץ.`);
-    if (!h.onLook && !h.onKind) out.push(`${h.name}: ${h.style}`);
+    if (h.onLook) out.push(`${h.name} ${v(h, 'בודק', 'בודקת')} כל דבר ש${LOOK_NAME[h.onLook]}.`);
+    if (h.onKind) out.push(`${h.name} ${v(h, 'שם', 'שמה')} עין על כל ה${KIND_NAME[h.onKind]} בארץ.`);
+    if (!h.onLook && !h.onKind) out.push(`${h.name} ${h.style}`);
   }
   return out;
 }

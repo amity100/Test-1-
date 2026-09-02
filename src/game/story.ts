@@ -1,4 +1,5 @@
 import { bus } from './bus';
+import { leftIn, placeGripNoun } from './scale';
 import { israel as israelNow } from './sites';
 import type { GameState, Person, Place, Voice } from './types';
 
@@ -140,14 +141,12 @@ export function afterJob(s: GameState, p: Place, was: Snap, label: string) {
   let head: string;
   if (grip >= 1) {
     head = was.control <= 0
-      ? `חדרתי ${to(p.name)}. יש לי שם אחיזה ראשונה`
+      ? `נכנסתי ${to(p.name)}. יש לי שם כבר ${placeGripNoun(p.control)}`
       : p.control >= 100
         ? `${p.name} כולו שלי עכשיו`
-        // A digit glued straight onto a lamed reads as a typo, and in a
-        // right-to-left line it drags its neighbours around with it.
-        : `${p.name} — מ־${Math.round(was.control)} אחוז ל־${Math.round(p.control)}`;
+        : `התחזקתי ${at(p.name)} — עכשיו יש לי שם ${placeGripNoun(p.control)}`;
   } else if (grip <= -1) {
-    head = `איבדתי אחיזה ${at(p.name)} — נשארתי עם ${Math.round(p.control)} אחוז`;
+    head = `איבדתי אחיזה ${at(p.name)} — ${leftIn(p.control)}`;
   } else if (quiet >= 4) {
     head = `מחקתי אחריי ${at(p.name)}. הם כבר פחות מסתכלים לשם`;
   } else if (eyes >= 3) {
@@ -157,7 +156,7 @@ export function afterJob(s: GameState, p: Place, was: Snap, label: string) {
   } else if (deeper >= 3) {
     head = `נאחזתי ${at(p.name)} עמוק יותר`;
   } else if (stronger >= 1) {
-    head = `יש לי עכשיו כוח לעוד משהו במקביל`;
+    head = 'יש לי עכשיו עוד יד פנויה — עוד דבר אחד שאני מספיק לעשות בבת אחת';
   } else if (learned >= 1) {
     head = 'למדתי משהו חדש שיעזור לי בהמשך';
   } else {
@@ -170,7 +169,7 @@ export function afterJob(s: GameState, p: Place, was: Snap, label: string) {
   // At most one more clause, and only if it says something the headline did not.
   const tail: string[] = [];
   if (grip >= 1 && deeper >= 3) tail.push('לעקור אותי מכאן ייקח להם הרבה יותר');
-  else if (grip >= 1 && stronger >= 1) tail.push('ויש לי עכשיו כוח לעוד משהו במקביל');
+  else if (grip >= 1 && stronger >= 1) tail.push('ויש לי עכשיו עוד יד פנויה');
   else if (grip >= 1 && eyes >= 3 && p.seen >= 60) tail.push('אני כבר מכיר את המקום מבפנים');
   else if (learned >= 1 && grip < 1) tail.push('למדתי שם משהו שיעזור לי בהמשך');
 
@@ -483,4 +482,33 @@ export function places(n: number): string {
   if (n === 1) return 'מקום אחד';
   if (n >= 2 && n <= 10) return `${COUNT[n]} מקומות`;
   return `${n} מקומות`;
+}
+
+/** "אזור אחד" · "שני אזורים" · "12 אזורים" */
+export function areas(n: number): string {
+  if (n === 1) return 'אזור אחד';
+  if (n >= 2 && n <= 10) return `${COUNT[n]} אזורים`;
+  return `${n} אזורים`;
+}
+
+/**
+ * Hands: how many things I can do at once.
+ *
+ * The resource used to be called "כוח" and written "2 כוח", which is a
+ * game's word, not a person's. "אין לי ידיים" is what a person says when
+ * they cannot take on one more thing, and it needs no explaining. יד is
+ * feminine, so the numbers bend the other way from דברים.
+ */
+const FEM = ['', 'אחת', 'שתי', 'שלוש', 'ארבע', 'חמש', 'שש', 'שבע', 'שמונה', 'תשע', 'עשר'];
+
+/** "יד אחת" · "שתי ידיים" · "שלוש ידיים" · "12 ידיים" */
+export function hands(n: number): string {
+  if (n === 1) return 'יד אחת';
+  if (n >= 2 && n <= 10) return `${FEM[n]} ידיים`;
+  return `${n} ידיים`;
+}
+
+/** "חסרה לי יד אחת" · "חסרות לי שתי ידיים" */
+export function handsShort(n: number): string {
+  return n === 1 ? 'חסרה לי יד אחת' : `חסרות לי ${hands(n)}`;
 }

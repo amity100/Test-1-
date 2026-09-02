@@ -129,7 +129,7 @@ for (const [W, H] of [[320, 640], [360, 740], [390, 844], [430, 932]]) {
 
   // And every row says its price, so one tap is never a surprise.
   const priced = await p.evaluate(() => Array.from(document.querySelectorAll('#pick .op'))
-    .every((el) => /כוח/.test(el.querySelector('u')?.textContent || '')));
+    .every((el) => /יד/.test(el.querySelector('u')?.textContent || '')));
   ok(priced, `${W}×${H} · לכל שורה כתוב מה היא עולה`);
 
   // Everything along the top opens something and closes again.

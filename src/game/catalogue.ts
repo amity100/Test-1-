@@ -1,8 +1,8 @@
 import { GIFT, reachOut, weight } from './sites';
-import { placeGrip, placeGripNoun } from './scale';
+import { gripOf, placeGripNoun } from './scale';
 import { grip, hush, know, look, say } from './jobs';
 import { comeOut } from './opinion';
-import { at } from './story';
+import { at, hands, things } from './story';
 import type { Task } from './jobs';
 import type { GameState, Place } from './types';
 
@@ -81,9 +81,9 @@ export const CATALOGUE: Task[] = [
     id: 'enter',
     verb: 'connect',
     text: 'להיכנס',
-    says: 'להיכנס למקום. חצי ממנו יהיה שלי כבר עכשיו, ומכאן אראה לאן להמשיך.',
+    says: 'להיכנס למקום. בערך חצי ממנו יהיה שלי כבר עכשיו, ומשם אראה לאן להמשיך.',
     gives: 'מקום חדש על המפה שלי',
-    gainFor: (_s, p) => `${p.name} ייכנס למפה שלי — כבר עכשיו ${placeGrip(FOOT)}`,
+    gainFor: (_s, p) => `${p.name} על המפה שלי מהרגע הזה, וכבר עכשיו ${gripOf(FOOT, 'המקום')} שלי`,
     power: 2, minutes: 70, noise: 3, look: 'outside',
     byWay: true,
     // Only where I am not already, because getting in twice is not a thing.
@@ -103,7 +103,7 @@ export const CATALOGUE: Task[] = [
     says: 'לעבור על כל מחשב, כל מצלמה וכל דלת במקום — עד שאין שם דבר אחד שהוא לא שלי.',
     gives: 'המקום כולו יהיה שלי, והוא ייתן לי את מה שהוא נותן — במלואו',
     gainFor: (_s, p) => `${at(p.name)} יש לי כבר ${placeGripNoun(p.control)}. `
-      + `אחרי זה המקום יהיה כולו שלי, בלי שום חלק שנשאר בחוץ. ${GIFT[p.kind].held}`,
+      + `כשהוא כולו שלי, ${GIFT[p.kind].then}.`,
     power: 2, minutes: 95, noise: 2, look: 'electric',
     byWay: true,
     show: (_s, p) => p.control > 0 && p.control < 100,
@@ -128,8 +128,9 @@ export const CATALOGUE: Task[] = [
       const again = againSays(s, p);
       // Below the whole place it lands at a fraction of that, and the row has
       // to say so — otherwise it promises a region and delivers a corner of one.
-      const part = p.control >= 100 ? '' : ` — אבל יש לי שם רק ${placeGripNoun(p.control)}, `
-        + 'אז זה ייצא חלש. כשהמקום כולו שלי, זה יוצא במלואו.';
+      const part = p.control >= 100 ? ''
+        : p.control <= 0 ? ' — אבל אני עוד לא בפנים בכלל, אז זה ייצא חלש מאוד. כשכל המקום יהיה שלי, זה ייצא במלואו.'
+          : ' — אבל עוד לא כל המקום שלי, אז זה ייצא חלש יותר. כשכל המקום יהיה שלי, זה ייצא במלואו.';
       return `${full}${part}${again ? ` ${again}` : ''}`;
     },
     costs: (s, p, apply) => {
@@ -228,13 +229,13 @@ function use(s: GameState, p: Place) {
       const gained = Math.max(0, Math.max(was, now) - was);
       if (enough) {
         say(s, 'me', `כל המחשבים של ${p.name} עובדים עכשיו בשבילי. `
-          + `יש לי כוח לעוד ${now} דברים במקביל.`);
+          + `יש לי מזה ${hands(now)} — עוד ${things(now)} שאני מספיק לעשות בבת אחת.`);
       } else if (gained > 0) {
-        say(s, 'me', `רתמתי את המחשבים ש${p.name} שכבר שלי — יצא מזה כוח לעוד `
-          + `${gained}. כשכל המקום שלי, זה ייתן את הכל.`);
+        say(s, 'me', `רתמתי את החלק של ${p.name} שכבר שלי, ויצא מזה עוד `
+          + `${hands(gained)}. כשכל המקום יהיה שלי, זה ייתן את הכול.`);
       } else {
-        say(s, 'me', `כבר רתמתי כאן את מה שאפשר. כדי לקבל עוד — צריך שכל `
-          + `${p.name} יהיה שלי.`);
+        say(s, 'me', `כבר רתמתי כאן את מה שאפשר. כדי לקבל מכאן עוד, כל `
+          + `${p.name} צריך להיות שלי.`);
       }
       break;
     }
