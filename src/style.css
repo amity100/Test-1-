@@ -1301,18 +1301,24 @@ body.is-mobile .objectives ul li { min-height: 46px; }
   background: var(--panel); border: 1px solid var(--line); border-radius: 11px;
   direction: rtl;
 }
+/* Two rows, not three columns: the label used to be a number and fit beside
+   the bar; now it is a phrase ("כמעט שום דבר"), and a phrase beside a bar
+   wrapped into a stack of single words. The words sit above the bar, and the
+   bar gets the whole width. */
 .race .lane {
-  flex: 1; display: grid; grid-template-columns: auto 1fr auto;
-  align-items: center; gap: 6px; min-width: 0; min-height: 40px;
+  flex: 1; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto;
+  align-items: center; column-gap: 6px; row-gap: 4px; min-width: 0; min-height: 40px;
   background: none; border: 0; padding: 0; cursor: pointer;
   color: var(--txt); font-family: var(--sans); direction: rtl; text-align: right;
 }
 .race .lane span {
-  font-size: 10px; letter-spacing: .3px; color: var(--muted); white-space: nowrap;
+  grid-area: 1 / 1; font-size: 10px; letter-spacing: .3px; color: var(--muted); white-space: nowrap;
 }
 .race .lane b {
-  font-family: var(--mono); font-size: 12.5px; min-width: 36px; text-align: left;
+  grid-area: 1 / 2; font-family: var(--sans); font-weight: 700; font-size: 11.5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; justify-self: start;
 }
+.race .lane .rbar { grid-area: 2 / 1 / 3 / 3; }
 .race .lane.me b { color: var(--cy); }
 .race .lane.them b { color: var(--red); }
 .race .rbar {

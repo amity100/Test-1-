@@ -5,7 +5,7 @@ import { bus } from '../game/bus';
 import {
   DAY, TEACH, dayOf, minuteOfDay, now, save, shape, tick,
 } from '../game/game';
-import { SPEEDS, SPEED_NAME, clock as clockAt, crowd, hourSays, seenAt } from '../game/clock';
+import { SPEEDS, SPEED_NAME, WOKE, clock as clockAt, crowd, hourSays, seenAt } from '../game/clock';
 import { ABOVE_SAYS, Offer, offersAt, start, stop, wideOffersAt } from '../game/jobs';
 import { GROWTHS, SHAPE_NAME, SHAPE_SAYS, lean, onTable, take } from '../game/grow';
 import { comeOut, saysOpinion } from '../game/opinion';
@@ -1019,7 +1019,7 @@ export class UI {
     const rows = s.log.slice(0, 70).map((l) => `<div class="ln v-${l.who}${l.weight ? ` w${l.weight}` : ''}">
         <span class="vc">${esc(VOICE_NAME[l.who])}</span>
         <b>${esc(l.text)}</b>
-        <em>${esc(clockAt(l.at))}</em>
+        <em>${esc(`יום ${Math.floor((WOKE + l.at) / DAY) + 1} · ${clockAt(WOKE + l.at)}`)}</em>
       </div>`).join('');
     this.modal(`
       <div class="sheet wide feedsheet">

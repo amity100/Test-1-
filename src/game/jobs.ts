@@ -2,7 +2,7 @@ import { bus } from './bus';
 import { CATALOGUE, waysInto } from './catalogue';
 import { crowd, minuteOfDay, now } from './clock';
 import { discount, poolFrom } from './sites';
-import { afterJob, at, snap, tell, v } from './story';
+import { afterJob, at, snap, tell, to, v } from './story';
 import { riseSays } from './watch';
 import { WAYS, howItWent, riskAt, riskSays, wayOf, type Way } from './ways';
 import { watching } from './hunter';
@@ -558,7 +558,7 @@ export function start(s: GameState, placeId: string, taskId: string, above = fal
     above: above || undefined,
   });
   s.power.used += o.power;
-  tell(s, 'me', `התחלתי ${what} ${at(p.name)}${way ? ` — ${way.text}` : ''}.`, 0, p.id);
+  tell(s, 'me', `התחלתי ${what} ${t.verb === 'connect' ? to(p.name) : at(p.name)}${way ? ` — ${way.text}` : ''}.`, 0, p.id);
   bus.emit('sfx', 'step');
   bus.emit('changed', undefined);
   return true;
@@ -626,7 +626,7 @@ export function runJobs(s: GameState, mins: number, noisy: (p: Place, n: number,
       } else if (how === 'clean') {
         heard = Math.floor(j.noise * 0.35);
         const what = t.textFor ? t.textFor(p) : t.text;
-        tell(s, 'me', `הצלחתי ${what} ${at(p.name)} ${w?.text ?? ''}, ויצא חלק לגמרי — אף אחד לא ידע שהייתי שם.`, 1, p.id);
+        tell(s, 'me', `הצלחתי ${what} ${t.verb === 'connect' ? to(p.name) : at(p.name)}${w ? ` ${w.text}` : ''}, ויצא חלק לגמרי — אף אחד לא ידע שהייתי שם.`, 1, p.id);
         bus.emit('toast', { text: 'יצא חלק — כמעט בלי רעש', kind: 'good', icon: '◇' });
       }
     }
