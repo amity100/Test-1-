@@ -57,6 +57,7 @@ export class Player {
     this.baseFov = settings.data.fov;
     if (!e.alive) {
       this.rope.visible = false;
+      this.viewModel.hidden = true;
       this.viewModel.update(dt, e, 0, 0, 0);
       return;
     }

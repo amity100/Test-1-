@@ -70,7 +70,7 @@ export class HeightFogEffect extends Effect {
         ['uSunColor', new THREE.Uniform(options.sunColor ?? new THREE.Color(1.05, 0.88, 0.66))],
         ['uDensity', new THREE.Uniform(options.density ?? 0.0008)],
         ['uHeightDensity', new THREE.Uniform(options.heightDensity ?? 0.0022)],
-        ['uHeightFalloff', new THREE.Uniform(options.heightFalloff ?? 0.1)],
+        ['uHeightFalloff', new THREE.Uniform(options.heightFalloff ?? 0.16)],
         ['uFogBase', new THREE.Uniform(options.fogBase ?? -3)],
         ['uMaxOpacity', new THREE.Uniform(0.7)],
       ]),

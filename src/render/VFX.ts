@@ -343,7 +343,7 @@ export class VFX {
       const d = dir.clone().add(new THREE.Vector3(this.rng.range(-0.3, 0.3), this.rng.range(-0.3, 0.3), this.rng.range(-0.3, 0.3)));
       this.sparkPool.spawn(pos.x, pos.y, pos.z, d.x * 6, d.y * 6, d.z * 6, 0.06, 0.25 * scale, 0.05, color.r * 4, color.g * 4, color.b * 4, 1, 0, 0);
     }
-    this.sparkPool.spawn(pos.x, pos.y, pos.z, dir.x, dir.y, dir.z, 0.05, 0.5 * scale, 0.1, 6, 4.5, 2.5, 1, 0, 0);
+    this.sparkPool.spawn(pos.x, pos.y, pos.z, dir.x, dir.y, dir.z, 0.05, 0.32 * scale, 0.08, 6, 4.5, 2.5, 1, 0, 0);
     this.puff(pos, dir, 1, 0.7, 0.25 * scale);
     const l = this.lightFor();
     if (l) {
@@ -390,6 +390,38 @@ export class VFX {
     mesh.position.copy(pos);
     this.group.add(mesh);
     this.shocks.push({ mesh, life: 0.45, max: 0.45, radius: radius * 1.6 });
+  }
+
+  /** Burst of coloured sparks and smoke when a character is eliminated. */
+  deathBurst(pos: THREE.Vector3, color: THREE.Color): void {
+    for (let i = 0; i < 40; i++) {
+      const d = new THREE.Vector3(this.rng.range(-1, 1), this.rng.range(-0.2, 1), this.rng.range(-1, 1)).normalize();
+      const sp = this.rng.range(2, 9);
+      this.sparkPool.spawn(pos.x, pos.y, pos.z, d.x * sp, d.y * sp + 2, d.z * sp, this.rng.range(0.4, 1.1), this.rng.range(0.05, 0.14), 0.01, color.r * 3.5, color.g * 3.5, color.b * 3.5, 1, 9, 2.2);
+    }
+    this.puff(pos, new THREE.Vector3(0, 1, 0), 8, 0.3, 0.7);
+    this.debrisBurst(pos, new THREE.Vector3(0, 1, 0), 8, new THREE.Color(0.2, 0.22, 0.26));
+    const l = this.lightFor();
+    if (l) {
+      l.position.copy(pos);
+      l.color.copy(color);
+      l.distance = 10;
+      this.flashes.push({ light: l, life: 0.3, max: 0.3, intensity: 30 });
+      l.intensity = 30;
+    }
+  }
+
+  private ambientAcc = 0;
+  /** Drifting dust motes around the camera. */
+  ambient(camPos: THREE.Vector3, dt: number): void {
+    this.ambientAcc += dt * 14;
+    while (this.ambientAcc >= 1) {
+      this.ambientAcc -= 1;
+      const x = camPos.x + this.rng.range(-9, 9);
+      const y = camPos.y + this.rng.range(-3, 5);
+      const z = camPos.z + this.rng.range(-9, 9);
+      this.sparkPool.spawn(x, y, z, this.rng.range(-0.25, 0.25), this.rng.range(-0.1, 0.15), this.rng.range(-0.25, 0.25), this.rng.range(2.5, 5), 0.03, 0.02, 0.9, 0.85, 0.7, 0.35, -0.02, 0.2);
+    }
   }
 
   spawnBeam(from: THREE.Vector3, to: THREE.Vector3): void {

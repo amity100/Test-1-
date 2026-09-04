@@ -12,6 +12,7 @@
   --font: 'Rubik', 'Heebo', 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body {
   margin: 0;
   padding: 0;
@@ -340,7 +341,7 @@ html, body {
 .bbar { height: 5px; width: 130px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
 .bbar .fill { height: 100%; background: linear-gradient(90deg, var(--accent), #7c3aed); }
 .bbar .fill.full { background: var(--danger); }
-.b-status { font-size: 13px; font-weight: 700; padding: 6px 12px; border-radius: 20px; white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+.b-status { font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 14px; white-space: normal; min-width: 120px; max-width: 200px; text-align: center; line-height: 1.2; flex: 0 1 auto; }
 .b-status.ok { background: rgba(57, 255, 20, 0.15); color: var(--ok); border: 1px solid rgba(57, 255, 20, 0.4); }
 .b-status.bad { background: rgba(255, 51, 85, 0.15); color: #ff8fa3; border: 1px solid rgba(255, 51, 85, 0.5); }
 .b-rail { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px; backdrop-filter: blur(10px); }
@@ -370,7 +371,7 @@ html, body {
 .bp-list { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow: auto; }
 .bp-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.05); }
 .bp-item .bp-name { flex: 1; font-size: 13px; }
-.b-hint { position: absolute; bottom: 118px; left: 50%; transform: translateX(-50%); font-size: 12px; color: rgba(255, 255, 255, 0.7); text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8); white-space: nowrap; }
+.b-hint { font-size: 11px; color: rgba(255, 255, 255, 0.6); white-space: normal; text-align: center; max-width: 70vw; pointer-events: none; padding-top: 2px; border-top: 1px solid var(--line); }
 .b-toast { position: absolute; top: 96px; left: 50%; transform: translateX(-50%); background: rgba(255, 51, 85, 0.85); color: #fff; padding: 8px 16px; border-radius: 10px; font-weight: 700; }
 @media (max-width: 900px) {
   .b-drawer { width: 180px; }

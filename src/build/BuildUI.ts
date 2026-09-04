@@ -56,7 +56,7 @@ export class BuildUI {
     this.hint = el('div', 'b-hint');
     this.toast = el('div', 'b-toast');
     this.toast.hidden = true;
-    this.root.append(this.topbar, this.rail, this.palette, this.drawer, this.bpPanel, this.hint, this.toast);
+    this.root.append(this.topbar, this.rail, this.palette, this.drawer, this.bpPanel, this.toast);
     for (const panel of [this.topbar, this.rail, this.palette, this.drawer, this.bpPanel]) {
       panel.addEventListener('mouseenter', () => (this.build.uiHover = true));
       panel.addEventListener('mouseleave', () => (this.build.uiHover = false));
@@ -169,7 +169,7 @@ export class BuildUI {
       });
       cols.appendChild(b);
     }
-    this.palette.append(mats, cols);
+    this.palette.append(mats, cols, this.hint);
   }
 
   private renderDrawer(): void {

@@ -73,6 +73,7 @@ export class Game {
   private summaryShown = false;
   private footAcc = 0;
   private lastDefenderAlarm = 0;
+  private lastCaptureTick = -1;
   private uiRoot: HTMLElement;
 
   constructor(readonly app: App) {
@@ -104,6 +105,7 @@ export class Game {
     });
     this.wireCombat();
     this.app.input.onLockChange = (locked) => {
+      if (locked && this.screens.name === 'click') this.screens.hideAll();
       if (!locked && !this.app.input.fallbackLook && this.mode === 'battle' && !this.paused && !this.screens.visible) this.pause();
     };
     window.addEventListener('pointerdown', () => audio.init(), { once: true });
@@ -293,6 +295,8 @@ export class Game {
         for (const b of this.bots) b.newRound();
         for (const e of this.entities) this.scoreAtRoundStart.set(e.id, e.score.total);
         this.cinematicAngle = this.rng.range(0, Math.PI * 2);
+        // Each fortress gets its own light: the sun swings around and climbs/dips per round.
+        this.app.sky.setSun(16 + ((match.roundIndex * 7) % 22), 110 + match.roundIndex * 55 + this.rng.range(-10, 10));
         this.hud.show();
         audio.play('roundStart');
         audio.music('battle');
@@ -411,7 +415,7 @@ export class Game {
   }
 
   pause(): void {
-    if (this.mode !== 'battle') return;
+    if (this.mode !== 'battle' && this.mode !== 'build') return;
     this.paused = true;
     this.app.input.exitPointerLock();
     this.screens.showPause();
@@ -420,7 +424,10 @@ export class Game {
   resume(): void {
     this.paused = false;
     this.screens.hideAll();
-    this.requestPlayControl();
+    if (this.mode !== 'battle') return;
+    // The Resume click is a user gesture, so we can lock the pointer directly.
+    this.app.input.requestPointerLock();
+    if (!this.app.input.looking) this.screens.showClickToPlay(this.app.input.fallbackLook);
   }
 
   quitToMenu(): void {
@@ -513,7 +520,7 @@ export class Game {
       if (victim === this.player) this.killedBy = killer?.name ?? '';
       const brain = this.bots.find((b) => b.entity === victim);
       brain?.reset();
-      this.vfx.explosion(victim.center, 1.2);
+      this.vfx.deathBurst(victim.center, new THREE.Color(victim.colorHex));
     });
     c.events.on('explosion', ({ pos, radius }) => {
       this.vfx.explosion(pos, radius);
@@ -529,13 +536,13 @@ export class Game {
     this.time += dt;
     const input = this.app.input;
     const match = this.match;
-    if (match) match.update(dt, this.time);
+    if (match && !this.paused) match.update(dt, this.time);
 
     // Global keys
     if (input.wasPressedRaw('Escape')) {
-      if (this.mode === 'battle') {
+      if (this.mode === 'battle' || this.mode === 'build') {
         if (this.paused) this.resume();
-        else this.pause();
+        else if (!this.screens.visible || this.screens.name === 'click') this.pause();
       } else if (this.mode === 'summary' && match) {
         match.skipSummary();
       }
@@ -547,7 +554,7 @@ export class Game {
         this.menuCamera(dt);
         break;
       case 'build':
-        this.build?.update(dt);
+        if (!this.paused) this.build?.update(dt);
         this.buildUI?.update(dt, match?.buildTimeLeft ?? null);
         this.cameraFocus.copy(this.app.gr.camera.position);
         break;
@@ -564,8 +571,10 @@ export class Game {
         if (this.mode === 'summary' && match) this.screens.updateSummaryCountdown(RULES.summaryTime - match.phaseTimer);
         break;
     }
+    if (this.simOnly) return this.cameraFocus;
     for (const fm of this.flags.values()) fm.update(dt);
     this.focus.update(dt, this.time);
+    if (this.mode !== 'menu') this.vfx.ambient(this.app.gr.camera.position, dt);
     this.vfx.update(dt);
     this.syncProjectiles();
     audio.setListener(this.app.gr.camera.position, new THREE.Vector3(1, 0, 0).applyQuaternion(this.app.gr.camera.quaternion));
@@ -610,9 +619,11 @@ export class Game {
   private introUpdate(dt: number): void {
     const match = this.match!;
     const plot = this.app.plots[match.targetPlotIndex];
-    this.cinematicCamera(dt, plot);
-    this.updateCharacters(dt);
-    this.hud.update(this.hudState(), dt);
+    if (!this.simOnly) {
+      this.cinematicCamera(dt, plot);
+      this.updateCharacters(dt);
+      this.hud.update(this.hudState(), dt);
+    }
     const input = this.app.input;
     // Loadout choice
     const keys = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'];
@@ -654,6 +665,10 @@ export class Game {
       // Bots
       for (const b of this.bots) b.update(simDt, this.time);
       this.combat.updateProjectiles(simDt, this.time);
+      // Slow health regeneration after a few seconds without damage
+      for (const e of this.entities) {
+        if (e.alive && e.hp < e.maxHp && this.time - e.lastDamageTime > e.regenDelay) e.hp = Math.min(e.maxHp, e.hp + 7 * simDt);
+      }
       // Footsteps
       const p = this.player;
       if (p.alive && p.grounded) {
@@ -673,6 +688,14 @@ export class Game {
           audio.play('footstep', { pos: e.pos, volume: 0.7, pitch: 0.85 + Math.random() * 0.2 });
         }
       }
+      // Capture ticks for the local attacker
+      if (p.role === 'attacker' && p.captureProgress > 0.05) {
+        const tick = Math.floor(p.captureProgress * 3);
+        if (tick !== this.lastCaptureTick) {
+          this.lastCaptureTick = tick;
+          audio.play('captureTick', { volume: 0.6, pitch: 1 + tick * 0.12 });
+        }
+      } else this.lastCaptureTick = -1;
       // Defender alarm
       if (p.role === 'defender') {
         const threat = Math.max(0, ...this.entities.filter((e) => e !== p).map((e) => e.captureProgress));
@@ -682,6 +705,7 @@ export class Game {
         }
       }
     }
+    if (this.simOnly) return;
     this.updateCharacters(dt);
     // Camera when dead: orbit the body
     if (!this.player.alive) this.deathCamera(dt);
@@ -816,8 +840,8 @@ export class Game {
   }
 
   // ---------------- debug helpers (smoke tests) ----------------
-  debugQuickMatch(botCount = 3, difficulty: 'easy' | 'normal' | 'hard' | 'nightmare' = 'normal'): void {
-    this.startMatch({ playerName: 'Tester', botCount, difficulty, buildTime: 0, roundTime: 240, style: 'medieval' });
+  debugQuickMatch(botCount = 3, difficulty: 'easy' | 'normal' | 'hard' | 'nightmare' = 'normal', roundTime = 240): void {
+    this.startMatch({ playerName: 'Tester', botCount, difficulty, buildTime: 0, roundTime, style: 'medieval' });
   }
   debugSkipBuild(): void {
     this.build?.autoBuild(7);
@@ -829,10 +853,68 @@ export class Game {
   /** Advances the simulation without rendering (headless tests). */
   debugAdvance(seconds: number, step = 1 / 60): void {
     const n = Math.max(1, Math.round(seconds / step));
-    for (let i = 0; i < n; i++) {
-      this.update(step);
-      this.app.input.endFrame();
+    this.simOnly = true;
+    try {
+      for (let i = 0; i < n; i++) {
+        this.update(step);
+        this.app.input.endFrame();
+      }
+    } finally {
+      this.simOnly = false;
     }
+  }
+  /** When true, per-frame presentation work (HUD, meshes, VFX) is skipped. */
+  simOnly = false;
+  debugAudioTest(): string[] {
+    audio.init();
+    const names = ['pistol', 'smg', 'rifle', 'shotgun', 'sniper', 'rocket', 'explosion', 'hit', 'hurt', 'kill', 'headshot', 'reload', 'empty', 'footstep', 'jump', 'land', 'grapple', 'grappleMiss', 'ricochet', 'bounce', 'captureTick', 'captureDone', 'alarm', 'roundStart', 'roundEnd', 'countdown', 'uiClick', 'uiHover', 'place', 'erase', 'pickup', 'switch', 'spawn', 'victory'] as const;
+    const failed: string[] = [];
+    for (const n of names) {
+      try {
+        audio.play(n, { pos: new THREE.Vector3(5, 12, 5) });
+      } catch (err) {
+        failed.push(`${n}: ${String(err)}`);
+      }
+    }
+    for (const m of ['menu', 'build', 'battle', 'podium', 'off'] as const) {
+      try {
+        audio.music(m);
+      } catch (err) {
+        failed.push(`music ${m}: ${String(err)}`);
+      }
+    }
+    return failed;
+  }
+  debugKillPlayer(): void {
+    this.combat.applyDamage(this.player, 999, null, this.time, false, this.player.center);
+  }
+  /** Exercises the build tools programmatically. */
+  debugBuildTest(): Record<string, unknown> {
+    const b = this.build;
+    if (!b) return { error: 'not in build mode' };
+    const p = b.plot;
+    b.setTool('block');
+    b.placeBlock({ x: p.cx, y: PLOT_Y, z: p.cz - 8 });
+    b.fillBox({ x: p.cx - 5, y: PLOT_Y, z: p.cz - 5 }, { x: p.cx + 5, y: PLOT_Y + 4, z: p.cz + 5 }, false);
+    b.setPrefab('tower');
+    b.stampPrefab({ x: p.cx + 12, y: PLOT_Y, z: p.cz + 12 });
+    b.setPrefab('stairs');
+    b.stampPrefab({ x: p.cx - 12, y: PLOT_Y, z: p.cz + 12 });
+    b.paintBlock({ x: p.cx - 5, y: PLOT_Y, z: p.cz - 5 });
+    b.eraseBlock({ x: p.cx - 5, y: PLOT_Y + 1, z: p.cz - 5 });
+    b.placeFlag({ x: p.cx, y: PLOT_Y + 1, z: p.cz + 1 });
+    b.placeSpawn({ x: p.cx + 1, y: PLOT_Y + 1, z: p.cz + 1 });
+    const sealed = b.validateNow();
+    b.eraseBlock({ x: p.cx - 5, y: PLOT_Y + 1, z: p.cz });
+    b.eraseBlock({ x: p.cx - 5, y: PLOT_Y + 2, z: p.cz });
+    const open = b.validateNow();
+    b.undo();
+    b.redo();
+    b.saveBlueprint('smoke-test');
+    const loaded = b.loadBlueprint('smoke-test');
+    const after = b.validateNow();
+    b.deleteBlueprint('smoke-test');
+    return { used: b.state.used, sealed: sealed.reason, open: open.reason, loaded, after: after.reason, flag: b.state.flag, spawn: b.state.spawn };
   }
   debugState(): Record<string, unknown> {
     return { mode: this.mode, phase: this.match?.phase, round: this.match?.roundIndex, alive: this.player.alive, pos: this.player.pos.toArray(), hp: this.player.hp, entities: this.entities.map((e) => ({ name: e.name, alive: e.alive, role: e.role, pos: e.pos.toArray().map((v) => Math.round(v * 10) / 10), hp: Math.round(e.hp), score: e.score.total })) };

@@ -280,7 +280,8 @@ export class BotBrain {
     const d = tmp2.copy(point).sub(eye);
     const len = d.length();
     if (len < 0.01) return true;
-    const hit = this.ctx.world.raycast(eye.x, eye.y, eye.z, d.x, d.y, d.z, len);
+    // Voxels and terrain block sight (entities do not).
+    const hit = this.ctx.combat.raycast(eye, d, len, null, false);
     return !hit;
   }
 
@@ -456,7 +457,8 @@ export class BotBrain {
     if (!this.path || goalMoved || this.repathTimer <= 0) {
       this.path = nav.findPath(e.pos, goal);
       this.pathIndex = 0;
-      this.repathTimer = this.path ? 1.5 + this.rng.range(0, 1) : 0.6;
+      // Stagger repaths so several bots do not search on the same frame.
+      this.repathTimer = this.path ? 1.5 + this.rng.range(0, 1.2) : 1.2 + this.rng.range(0, 1);
       if (!this.path) {
         // Head straight there as a fallback.
         const d = tmp.copy(goal).sub(e.pos).setY(0);

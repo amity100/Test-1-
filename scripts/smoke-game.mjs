@@ -37,6 +37,9 @@ await shot('01-menu');
 await page.evaluate(() => window.__fk.game().debugQuickMatch(3, 'normal'));
 await page.waitForTimeout(2500);
 await shot('02-build');
+console.log('buildTest', JSON.stringify(await page.evaluate(() => window.__fk.game().debugBuildTest())));
+await page.waitForTimeout(800);
+await shot('02b-build-edited');
 await page.evaluate(() => window.__fk.game().debugSkipBuild());
 await page.waitForTimeout(1500);
 await shot('03-intro');
@@ -66,16 +69,27 @@ await adv(40);
 await page.waitForTimeout(500);
 await shot('07-battle4');
 await state();
-// Run the rest of the round quickly to reach the summary / next round
-for (let i = 0; i < 12; i++) {
+// Kill the player and verify respawn
+await page.evaluate(() => window.__fk.game().debugKillPlayer());
+await adv(1);
+await page.waitForTimeout(400);
+await shot('07b-dead');
+await adv(6);
+console.log('after death', JSON.stringify((await page.evaluate(() => window.__fk.game().debugState())).alive));
+// Run all rounds quickly to reach the podium
+let lastMode = '';
+let shots = 0;
+for (let i = 0; i < 80; i++) {
   await adv(20);
   const st = await page.evaluate(() => window.__fk.game().debugState());
-  console.log(i, st.mode, st.phase, 'round', st.round, 'alive', st.entities.filter((e) => e.alive).length, 'scores', st.entities.map((e) => e.score).join(','));
-  if (st.mode === 'summary' || st.mode === 'podium') {
+  if (st.mode !== lastMode || i % 6 === 0) console.log(i, st.mode, st.phase, 'round', st.round, 'alive', st.entities.filter((e) => e.alive).length, 'scores', st.entities.map((e) => e.score).join(','));
+  if (st.mode !== lastMode && (st.mode === 'summary' || st.mode === 'podium' || (st.mode === 'battle' && shots < 4))) {
     await page.waitForTimeout(400);
-    await shot(`08-${st.mode}`);
-    break;
+    await shot(`08-${String(i).padStart(2, '0')}-${st.mode}`);
+    shots++;
   }
+  lastMode = st.mode;
+  if (st.mode === 'podium') break;
 }
 await browser.close();
 console.log(errors.length ? `DONE with ${errors.length} errors` : 'DONE clean');

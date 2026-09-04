@@ -12,7 +12,7 @@ import { makePlots, PLOT_Y, type Plot } from '../world/Layout';
 import { Random } from './Random';
 import { Input } from './Input';
 import { settings } from './Settings';
-import { setLang } from './i18n';
+import { setLang, t } from './i18n';
 import { Mat, encodeBlock } from '../world/Voxel';
 import { clamp } from './MathUtil';
 import { Game } from './Game';
@@ -55,7 +55,7 @@ export class App {
   async init(): Promise<void> {
     settings.load();
     setLang(settings.data.language);
-    this.setLoading(0.05, 'Initialising renderer');
+    this.setLoading(0.05, t('loading'));
     await nextFrame();
     this.gr = new GameRenderer(this.canvas);
     this.input = new Input(this.canvas);
@@ -87,14 +87,14 @@ export class App {
     window.addEventListener('resize', () => this.gr.resize());
     this.gr.resize();
 
-    this.setLoading(0.15, 'Painting materials');
+    this.setLoading(0.15, t('loadingTextures'));
     await nextFrame();
     const textures = generateVoxelTextures(256, 7);
     const maxAniso = this.gr.renderer.capabilities.getMaxAnisotropy();
     for (const tex of [textures.albedo, textures.normal, textures.orm]) tex.anisotropy = Math.min(this.gr.profile.anisotropy, maxAniso);
     this.materials = createVoxelMaterials(textures);
 
-    this.setLoading(0.45, 'Raising the island');
+    this.setLoading(0.45, t('loadingWorld'));
     await nextFrame();
     this.plots = makePlots(8);
     this.terrain = new Terrain(this.plots, 11);
@@ -102,13 +102,13 @@ export class App {
     this.water = new WaterSurface(this.terrain);
     scene.add(this.water.mesh);
 
-    this.setLoading(0.65, 'Planting forests');
+    this.setLoading(0.65, t('loadingFoliage'));
     await nextFrame();
     this.foliage = new Foliage(this.terrain, new Random(99));
     if (!this.gr.flags.has('nofoliage')) this.foliage.build(this.gr.profile);
     scene.add(this.foliage.group);
 
-    this.setLoading(0.8, 'Laying foundations');
+    this.setLoading(0.8, t('loadingWorld'));
     await nextFrame();
     this.chunks = new ChunkRenderer(this.world, this.materials);
     scene.add(this.chunks.group);
@@ -117,7 +117,7 @@ export class App {
     this.game = new Game(this);
     this.game.init();
 
-    this.setLoading(1, 'Ready');
+    this.setLoading(1, t('ready'));
     await nextFrame();
     document.getElementById('loading')?.classList.add('hidden');
     this.ready = true;

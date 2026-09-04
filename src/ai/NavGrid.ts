@@ -202,7 +202,7 @@ export class NavGrid {
   }
 
   /** A* path between two world positions. Returns waypoints at cell centres. */
-  findPath(from: THREE.Vector3, to: THREE.Vector3, maxExpansions = 20000): THREE.Vector3[] | null {
+  findPath(from: THREE.Vector3, to: THREE.Vector3, maxExpansions = 9000): THREE.Vector3[] | null {
     const s = this.snap(from, 3);
     const g = this.snap(to, 4);
     if (!s || !g) return null;

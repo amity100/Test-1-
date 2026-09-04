@@ -80,7 +80,7 @@ export class HUD {
   private banner: HTMLElement;
   private bannerTitle: HTMLElement;
   private bannerSub: HTMLElement;
-  private bannerTimer = 0;
+  private bannerUntil = 0;
   private dmg: HTMLElement;
   private death: HTMLElement;
   private deathText: HTMLElement;
@@ -301,11 +301,11 @@ export class HUD {
       this.prompt.hidden = false;
       this.set('prompt', this.prompt, s.prompt);
     } else this.prompt.hidden = true;
-    // Banner
-    if (this.bannerTimer > 0) {
-      this.bannerTimer -= dt;
-      if (this.bannerTimer <= 0) this.banner.hidden = true;
-      else this.banner.style.opacity = String(Math.min(1, this.bannerTimer / 0.5));
+    // Banner (wall-clock based so it also expires while the sim is stepped without rendering)
+    if (!this.banner.hidden) {
+      const left = (this.bannerUntil - performance.now()) / 1000;
+      if (left <= 0) this.banner.hidden = true;
+      else this.banner.style.opacity = String(Math.min(1, left / 0.5));
     }
     this.drawMinimap(s.minimap);
   }
@@ -397,7 +397,7 @@ export class HUD {
     this.bannerSub.textContent = sub;
     this.banner.hidden = false;
     this.banner.style.opacity = '1';
-    this.bannerTimer = seconds;
+    this.bannerUntil = performance.now() + seconds * 1000;
     this.banner.classList.remove('pop');
     void this.banner.offsetWidth;
     this.banner.classList.add('pop');
