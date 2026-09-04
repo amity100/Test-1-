@@ -40,23 +40,39 @@ GitHub Pages). Single-file build for artifact hosting: `npm run build:artifact` 
 WASD move · Space jump · Shift sprint · C crouch/slide · Mouse aim and fire · Right mouse aim down
 sights · 1-3 / wheel weapons · R reload · G grenade · Q grapple hook · Tab scoreboard · Esc pause.
 
-Build mode: left click place, right click remove, R rotate prefab, wheel prefab size, WASD move the
-camera, Q/E down/up, right-drag look, Tab prefab browser.
+Build mode is hotbar driven: `1-9` pick a slot (rendered block icons), `B` block, `V` box, `L` line,
+`N` wall, `K` stairs, `P` paint, `X` erase, `F` flag, `G` spawn, `C` prefab, `[` `]` cycle shapes
+(cube, slab, stairs, slope, pillar, fence), `R` rotate, `T` layer lock (build on one height with a grid
+guide), `Z`/`Shift+Z` undo/redo, `M` mirror, hold the mouse button to draw runs of blocks, `Tab` the
+material / prefab / template sheet. Right click removes, wheel changes prefab size, WASD + Q/E move
+the camera, right-drag looks.
 
-**Phones and tablets** get on-screen controls: a movement stick on the left, look by dragging on the
-right, tap to fire, and dedicated buttons for jump, crouch, aim, reload, grenade, grapple and weapon
-swap. In the build phase: tap to place, long-press to remove, drag to orbit, pinch to zoom, two-finger
-drag to pan, and a bottom sheet with tools, materials, prefabs and templates. Landscape is
-recommended.
+**Phones and tablets** get a layout modelled on today's popular mobile shooters: a movement stick on
+the left (push far to sprint), look by dragging anywhere on the right, twin fire buttons, and only
+the essentials as buttons (jump, crouch, aim, reload, swap, grenade, grapple in a compact cluster).
+Auto fire and aim assist are on by default for touch and can be tuned in Settings together with
+button size and opacity. In the build phase: tap to place, long-press to remove, drag to orbit,
+pinch to zoom, two-finger drag to pan, a hotbar with thumbnails, a rotate/undo/redo/layer strip, and
+a bottom sheet with materials, prefabs and templates. Landscape is recommended.
 
 ## Tech
 
 TypeScript, Vite, three.js, pmndrs/postprocessing, N8AO. Custom voxel engine (chunked storage,
-greedy meshing with baked vertex AO, DataArrayTexture PBR materials with per-block variation and
-bevelled edges), heightmap island with paths, a central monument and ruins, distant horizon islands,
-height fog, colour grading/sharpen pass, procedural Web Audio. Bots navigate the whole island: a
-fine voxel grid around each fortress stitched to a coarse terrain grid, with hearing, damage
-reaction, cover, peeking and defender repositioning.
+greedy meshing with baked vertex AO, six block shapes with shape-aware collision, DataArrayTexture
+PBR materials with per-block variation and bevelled edges), heightmap island with a detail-mapped
+ground, paths, a central monument and ruins, distant horizon islands, height fog, colour
+grading/sharpen pass, procedural Web Audio.
+
+All models are generated at load time from parametric parts merged per material: skinned operators
+(plate carrier, pouches, helmet with glowing visor, pads, boots, camouflage and team-tinted armour
+with emissive accents) on a seven-bone skeleton; weapons with receivers, rails, optics, magazines,
+stocks, muzzle devices and lights, plus gloved first-person hands that wrap the grips; trees with
+lathe trunks, tapered branches and leaf-card canopies, ragged conifers, bushes, noise-displaced
+mossy boulders and flower cards, all instanced. Procedural PBR tiles (fabric, camo, armour,
+gunmetal, polymer, wood, bark, rock, soil) supply albedo, normal and roughness maps.
+
+Bots navigate the whole island: a fine voxel grid around each fortress stitched to a coarse terrain
+grid, with hearing, damage reaction, cover, peeking and defender repositioning.
 
 Quality tiers (low/medium/high/ultra) are picked from the GPU and can be forced with
 `?debug=low|medium|high|ultra`.

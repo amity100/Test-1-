@@ -11,7 +11,7 @@ export class WaterSurface {
   constructor(terrain: Terrain) {
     const extent = 6000;
     const inner = WORLD_HALF;
-    const seg = 300;
+    const seg = 200;
     const geo = new THREE.PlaneGeometry(extent, extent, seg, seg);
     geo.rotateX(-Math.PI / 2);
     const pos = geo.attributes.position as THREE.BufferAttribute;

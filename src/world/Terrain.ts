@@ -3,6 +3,7 @@ import { Noise } from '../core/Noise';
 import { hash2 } from '../core/Random';
 import { clamp, lerp, smoothstep } from '../core/MathUtil';
 import { WORLD_HALF, ISLAND_RADIUS, PLOT_Y, PLAZA_Y, RING_ROAD_RADIUS, PLOT_RING_RADIUS, type Plot, plotDistance } from './Layout';
+import { groundMaps } from '../render/DetailTextures';
 
 const GRASS_A = new THREE.Color('#5f9e3a');
 const GRASS_B = new THREE.Color('#3f7f2e');
@@ -168,10 +169,14 @@ export class Terrain {
       colors[idx * 3 + 2] = c.b;
     }
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    // World-space UVs for the ground detail tile (one repeat every 2 m).
+    const uv = geo.attributes.uv as THREE.BufferAttribute;
+    for (let idx = 0; idx < pos.count; idx++) uv.setXY(idx, pos.getX(idx) * 0.5, pos.getZ(idx) * 0.5);
     geo.computeVertexNormals();
     geo.computeBoundingSphere();
 
-    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.94, metalness: 0 });
+    const ground = groundMaps();
+    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, map: ground.map, normalMap: ground.normalMap, normalScale: new THREE.Vector2(0.55, 0.55), roughnessMap: ground.roughnessMap });
     mat.onBeforeCompile = (shader) => {
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;')
@@ -198,7 +203,7 @@ export class Terrain {
             diffuseColor.rgb *= detail;
           }`,
         )
-        .replace('#include <roughnessmap_fragment>', `float roughnessFactor = roughness - 0.15 * tNoise(vWPos.xz * 3.0);`);
+;
     };
     const mesh = new THREE.Mesh(geo, mat);
     mesh.receiveShadow = true;
