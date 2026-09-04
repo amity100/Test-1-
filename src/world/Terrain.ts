@@ -129,7 +129,7 @@ export class Terrain {
       // Base grass mix: darker in valleys, brighter meadows on the high ground
       c.copy(GRASS_A).lerp(GRASS_B, macro).lerp(GRASS_C, micro * 0.35);
       const meadow = smoothstep(9, 15, h) * (this.noise.fbm2(x * 0.05 + 9, z * 0.05, 2) * 0.5 + 0.5);
-      c.lerp(MEADOW, meadow * 0.55);
+      c.lerp(MEADOW, meadow * 0.38);
       // Dirt/rock on slopes
       const rockW = smoothstep(0.25, 0.55, slope);
       const dirtW = smoothstep(0.12, 0.3, slope) * (1 - rockW);

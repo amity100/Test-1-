@@ -43,18 +43,20 @@ console.log('tap target', JSON.stringify(target));
 await touch('touchStart', [{ x: target.x, y: target.y }]);
 await page.waitForTimeout(60);
 await touch('touchEnd', []);
-await page.waitForTimeout(600);
-let used = await page.evaluate(() => window.__fk.game().build.state.used);
+// Step one simulation frame deterministically (the headless renderer can take >1 s per frame).
+let used = await page.evaluate(() => { const g = window.__fk.game(); g.debugAdvance(1 / 60); return g.build.state.used; });
 console.log('after tap used', used);
 // Place button (centre reticle)
 const placeBtn = await page.$('.tb-build .tb.place');
 const bb = await placeBtn.boundingBox();
+// Move the cursor cell first so the button places somewhere new (orbit a little).
+await drag(600, 250, 640, 250, 6);
 await touch('touchStart', [{ x: bb.x + bb.width / 2, y: bb.y + bb.height / 2 }]);
 await page.waitForTimeout(60);
 await touch('touchEnd', []);
-await page.waitForTimeout(500);
-used = await page.evaluate(() => window.__fk.game().build.state.used);
-console.log('after PLACE used', used);
+const before = used;
+used = await page.evaluate(() => { const g = window.__fk.game(); g.debugAdvance(1 / 60); return g.build.state.used; });
+console.log('after PLACE used', used, used > before ? 'OK' : 'FAIL');
 // Orbit drag on the right side
 await drag(600, 250, 700, 260, 10);
 await page.waitForTimeout(400);
@@ -73,6 +75,8 @@ await page.evaluate(() => window.__fk.game().debugSkipIntro());
 await page.waitForTimeout(800);
 await page.screenshot({ path: path.join(outDir, 'm5-battle.png') });
 // Joystick drag forward on the left + fire button
+// Attackers now start inside their own fortress: move to open ground so the stick test is not blocked by a wall.
+await page.evaluate(() => { const g = window.__fk.game(); const p = g.app.plots[0]; const x = p.cx, z = p.cz + 36; g.player.pos.set(x, g.app.terrain.heightAt(x, z) + 0.1, z); g.player.vel.set(0, 0, 0); g.player.yaw = Math.PI; });
 const p0 = await page.evaluate(() => window.__fk.game().player.pos.toArray());
 await touch('touchStart', [{ x: 150, y: 300 }]);
 await touch('touchMove', [{ x: 150, y: 240 }]);

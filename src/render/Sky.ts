@@ -158,18 +158,19 @@ export class SkySystem {
       return seed / 4294967296;
     };
     const specs: [number, number, number, number][] = [];
-    for (let i = 0; i < 11; i++) {
-      const a = (i / 11) * Math.PI * 2 + rnd() * 0.4;
-      const d = 520 + rnd() * 420;
-      specs.push([a, d, 50 + rnd() * 110, 70 + rnd() * 120]);
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2 + rnd() * 0.35;
+      const d = 700 + rnd() * 700;
+      // Low, wide profiles read as distant coastlines rather than boulders.
+      specs.push([a, d, 22 + rnd() * 48, 120 + rnd() * 220]);
     }
     for (const [a, d, h, r] of specs) {
       const g = new THREE.Group();
       // Rounded, overlapping hills rather than sharp cones; jittered vertices break the symmetry.
-      const peaks = 3 + Math.floor(rnd() * 4);
+      const peaks = 4 + Math.floor(rnd() * 5);
       for (let k = 0; k < peaks; k++) {
-        const pr = r * (0.35 + rnd() * 0.5);
-        const ph = h * (0.35 + rnd() * 0.65) * (k === 0 ? 1 : 0.7);
+        const pr = r * (0.25 + rnd() * 0.45);
+        const ph = h * (0.4 + rnd() * 0.6) * (k === 0 ? 1 : 0.75);
         const geo = new THREE.SphereGeometry(1, 9, 6, 0, Math.PI * 2, 0, Math.PI / 2);
         const pos = geo.attributes.position as THREE.BufferAttribute;
         for (let i = 0; i < pos.count; i++) {
@@ -235,7 +236,7 @@ export class SkySystem {
     const noon = new THREE.Color(1.0, 0.97, 0.92);
     this.sun.color.copy(warm).lerp(noon, smoothstep(0, 0.6, e));
     this.sun.intensity = lerp(1.2, 2.4, smoothstep(0, 0.5, e));
-    this.hemi.intensity = lerp(0.2, 0.32, e);
+    this.hemi.intensity = lerp(0.28, 0.44, e);
     this.hemi.color.set(0x9ecbff).lerp(new THREE.Color(0xffc9a0), 1 - smoothstep(0, 0.4, e));
     (this.cloudUniforms.uSunDir.value as THREE.Vector3).copy(this.sunDir);
     (this.cloudUniforms.uSunColor.value as THREE.Color).copy(new THREE.Color(1.0, 0.98, 0.94)).lerp(new THREE.Color(1.0, 0.7, 0.45), 1 - smoothstep(0, 0.45, e));
@@ -256,7 +257,7 @@ export class SkySystem {
     const old = this.envTarget;
     this.envTarget = this.pmrem.fromScene(this.envScene, 0, 0.1, 1000);
     this.scene.environment = this.envTarget.texture;
-    this.scene.environmentIntensity = 0.6;
+    this.scene.environmentIntensity = 0.75;
     if (old) old.dispose();
     this.lastEnvSun.copy(this.sunDir);
   }

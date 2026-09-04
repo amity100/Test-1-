@@ -25,6 +25,8 @@ interface Pointer {
   role: 'move' | 'look' | 'orbit' | 'pinch';
   longTimer: number;
   longFired: boolean;
+  /** Event timestamp of the pointerdown (hardware time, unaffected by a stalled frame). */
+  downStamp: number;
 }
 
 /** On-screen controls for phones and tablets: floating joystick, look area, action buttons. */
@@ -221,7 +223,7 @@ export class TouchControls {
       this.pinchDist = Math.hypot(other.x - e.clientX, other.y - e.clientY);
       this.pinchMid = { x: (other.x + e.clientX) / 2, y: (other.y + e.clientY) / 2 };
     }
-    const p: Pointer = { id: e.pointerId, startX: e.clientX, startY: e.clientY, x: e.clientX, y: e.clientY, startTime: performance.now(), moved: 0, role, longTimer: 0, longFired: false };
+    const p: Pointer = { id: e.pointerId, startX: e.clientX, startY: e.clientY, x: e.clientX, y: e.clientY, startTime: performance.now(), moved: 0, role, longTimer: 0, longFired: false, downStamp: e.timeStamp };
     this.pointers.set(e.pointerId, p);
     if (role === 'orbit') {
       // Long press (finger held still) removes the block under the finger in build mode.
@@ -303,6 +305,14 @@ export class TouchControls {
       v.sprint = false;
     } else if (p.role === 'look' || p.role === 'orbit') {
       if (p.longTimer) window.clearTimeout(p.longTimer);
+      // A stalled frame can let the long-press timer run before a quick release is processed.
+      // If the finger actually lifted quickly and the long press has not been consumed yet, undo it.
+      if (p.longFired && e.timeStamp - p.downStamp < 420 && (v.longPress || v.secondary)) {
+        v.secondary = false;
+        v.longPress = false;
+        v.tapped = false;
+        p.longFired = false;
+      }
       // Slow frames delay pointer events, so taps are judged by movement only.
       if (p.moved < 14 && !p.longFired) {
         if (this.mode === 'battle') {
