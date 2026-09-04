@@ -1,1 +1,27 @@
-{"scripts":{"dev":"vite --host 0.0.0.0","build":"tsc && vite build","preview":"vite preview --host 0.0.0.0"},"dependencies":{"@dimforge/rapier3d-compat":"^0.14.0","three":"^0.169.0","typescript":"^5.6.3","vite":"^5.4.11"},"devDependencies":{"@types/three":"^0.184.1"}}
+{
+  "name": "flagkeep",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "FLAGKEEP - build your fortress, hide your flag, storm the others. A 3D web shooter.",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build",
+    "build:artifact": "vite build --config vite.artifact.config.ts && node scripts/make-artifact.mjs",
+    "preview": "vite preview --host 0.0.0.0",
+    "typecheck": "tsc --noEmit",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "dependencies": {
+    "n8ao": "^2.0.1",
+    "postprocessing": "^6.39.4",
+    "three": "0.184.0"
+  },
+  "devDependencies": {
+    "@types/three": "0.184.1",
+    "playwright-core": "^1.62.1",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "vite-plugin-singlefile": "^2.3.3"
+  }
+}

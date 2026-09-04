@@ -3,10 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>Puppet Brawl</title>
+    <meta name="theme-color" content="#0b1220" />
+    <title>FLAGKEEP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700;900&display=swap" rel="stylesheet" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230b1220'/%3E%3Cpath d='M18 12h6v40h-6z' fill='%23e8e6e1'/%3E%3Cpath d='M24 14h24l-8 8 8 8H24z' fill='%2300e5ff'/%3E%3C/svg%3E" />
   </head>
   <body>
-    <div id="app"><div class="boot">Loading Puppet Brawl…</div></div>
+    <canvas id="game"></canvas>
+    <div id="ui"></div>
+    <div id="loading">
+      <div class="logo">FLAG<span>KEEP</span></div>
+      <div class="bar"><div class="fill" id="loading-fill"></div></div>
+      <div class="status" id="loading-status">Loading</div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
