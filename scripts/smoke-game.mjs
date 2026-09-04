@@ -34,7 +34,7 @@ const shot = async (name) => {
 const state = async () => console.log(JSON.stringify(await page.evaluate(() => window.__fk.game().debugState())));
 await page.waitForTimeout(1500);
 await shot('01-menu');
-await page.evaluate(() => window.__fk.game().debugQuickMatch(3, 'normal'));
+await page.evaluate((rt) => window.__fk.game().debugQuickMatch(3, 'normal', rt), Number(process.env.ROUND_TIME || 240));
 await page.waitForTimeout(2500);
 await shot('02-build');
 console.log('buildTest', JSON.stringify(await page.evaluate(() => window.__fk.game().debugBuildTest())));

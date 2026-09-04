@@ -19,7 +19,14 @@ export class ViewModel {
   private landDip = 0;
   private pendingId: ModelId | null = null;
   private lastAccent = new THREE.Color();
-  hidden = false;
+  private hiddenFlag = false;
+  get hidden(): boolean {
+    return this.hiddenFlag;
+  }
+  set hidden(v: boolean) {
+    this.hiddenFlag = v;
+    if (v) this.root.visible = false;
+  }
 
   constructor(private camera: THREE.Camera, private accent: THREE.Color) {
     this.root.name = 'viewmodel';
@@ -90,7 +97,7 @@ export class ViewModel {
       this.root.visible = false;
       return;
     }
-    this.root.visible = !this.hidden;
+    this.root.visible = !this.hiddenFlag;
     const hip = this.model.userData.hip as THREE.Vector3;
     const ads = this.model.userData.ads as THREE.Vector3;
     const pos = new THREE.Vector3().copy(hip).lerp(ads, e.ads);
