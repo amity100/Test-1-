@@ -118,14 +118,132 @@ export const PALETTE_LINEAR: Float32Array = (() => {
   return arr;
 })();
 
-export function encodeBlock(mat: number, color: number): number {
-  return ((color & 0xff) << 8) | (mat & 0xff);
+/**
+ * Block value layout (16 bits): material 0..4 (32 kinds), palette colour 5..11 (128 colours),
+ * shape 12..15 (16 shapes). Shapes give fortresses stairs, slabs, ramps, columns and railings.
+ */
+export function encodeBlock(mat: number, color: number, shape = 0): number {
+  return (mat & 31) | ((color & 127) << 5) | ((shape & 15) << 12);
 }
 export function blockMat(v: number): number {
-  return v & 0xff;
+  return v & 31;
 }
 export function blockColor(v: number): number {
-  return (v >> 8) & 0xff;
+  return (v >> 5) & 127;
+}
+export function blockShape(v: number): number {
+  return (v >> 12) & 15;
+}
+export function withShape(v: number, shape: number): number {
+  return (v & 0x0fff) | ((shape & 15) << 12);
+}
+
+/** Shape ids. Stairs and slopes carry a facing (the direction you climb) in 4 consecutive ids. */
+export const Shape = {
+  CUBE: 0,
+  SLAB: 1,
+  SLAB_TOP: 2,
+  STAIRS: 3, // 3..6 facing +X, +Z, -X, -Z
+  SLOPE: 7, // 7..10
+  PILLAR: 11,
+  FENCE: 12,
+} as const;
+
+export type ShapeKind = 'cube' | 'slab' | 'slabTop' | 'stairs' | 'slope' | 'pillar' | 'fence';
+export const SHAPE_KINDS: ShapeKind[] = ['cube', 'slab', 'slabTop', 'stairs', 'slope', 'pillar', 'fence'];
+/** Facing directions for rotation 0..3: +X, +Z, -X, -Z (matches prefab rotation steps). */
+export const SHAPE_DIRS: [number, number][] = [
+  [1, 0],
+  [0, 1],
+  [-1, 0],
+  [0, -1],
+];
+
+export function shapeKind(shape: number): ShapeKind {
+  if (shape === 0) return 'cube';
+  if (shape === Shape.SLAB) return 'slab';
+  if (shape === Shape.SLAB_TOP) return 'slabTop';
+  if (shape >= Shape.STAIRS && shape < Shape.STAIRS + 4) return 'stairs';
+  if (shape >= Shape.SLOPE && shape < Shape.SLOPE + 4) return 'slope';
+  if (shape === Shape.PILLAR) return 'pillar';
+  if (shape === Shape.FENCE) return 'fence';
+  return 'cube';
+}
+
+export function shapeRot(shape: number): number {
+  if (shape >= Shape.STAIRS && shape < Shape.STAIRS + 4) return shape - Shape.STAIRS;
+  if (shape >= Shape.SLOPE && shape < Shape.SLOPE + 4) return shape - Shape.SLOPE;
+  return 0;
+}
+
+export function makeShape(kind: ShapeKind, rot = 0): number {
+  const r = ((rot % 4) + 4) % 4;
+  switch (kind) {
+    case 'cube': return Shape.CUBE;
+    case 'slab': return Shape.SLAB;
+    case 'slabTop': return Shape.SLAB_TOP;
+    case 'stairs': return Shape.STAIRS + r;
+    case 'slope': return Shape.SLOPE + r;
+    case 'pillar': return Shape.PILLAR;
+    case 'fence': return Shape.FENCE;
+  }
+}
+
+/** Rotates a shape's facing by 90° steps (same sense as prefab rotation). */
+export function rotateShape(shape: number, steps: number): number {
+  const kind = shapeKind(shape);
+  if (kind !== 'stairs' && kind !== 'slope') return shape;
+  return makeShape(kind, shapeRot(shape) + steps);
+}
+
+/** 0..1 progress along the facing direction inside a cell (0 = low front, 1 = high back). */
+function alongFacing(rot: number, lx: number, lz: number): number {
+  const [dx, dz] = SHAPE_DIRS[rot];
+  if (dx > 0) return lx;
+  if (dx < 0) return 1 - lx;
+  if (dz > 0) return lz;
+  return 1 - lz;
+}
+
+/** Height (0..1) of the shape's walkable surface at cell-local coordinates. */
+export function shapeTopAt(shape: number, lx: number, lz: number): number {
+  const kind = shapeKind(shape);
+  switch (kind) {
+    case 'slab': return 0.5;
+    case 'stairs': return alongFacing(shapeRot(shape), lx, lz) >= 0.5 ? 1 : 0.5;
+    case 'slope': return Math.min(1, Math.max(0, alongFacing(shapeRot(shape), lx, lz)));
+    default: return 1;
+  }
+}
+
+/** Collision boxes (cell-local, [x0,y0,z0,x1,y1,z1]). Slopes are handled by ramp logic and return steps. */
+export function shapeBoxes(shape: number): number[][] {
+  const kind = shapeKind(shape);
+  const r = shapeRot(shape);
+  const [dx, dz] = SHAPE_DIRS[r];
+  switch (kind) {
+    case 'slab': return [[0, 0, 0, 1, 0.5, 1]];
+    case 'slabTop': return [[0, 0.5, 0, 1, 1, 1]];
+    case 'stairs': {
+      const back = dx > 0 ? [0.5, 0.5, 0, 1, 1, 1] : dx < 0 ? [0, 0.5, 0, 0.5, 1, 1] : dz > 0 ? [0, 0.5, 0.5, 1, 1, 1] : [0, 0.5, 0, 1, 1, 0.5];
+      return [[0, 0, 0, 1, 0.5, 1], back];
+    }
+    case 'slope': {
+      // Four quarter steps rising along the facing direction.
+      const out: number[][] = [];
+      for (let i = 0; i < 4; i++) {
+        const a = i / 4;
+        const b = (i + 1) / 4;
+        const h = b;
+        if (dx > 0) out.push([a, 0, 0, b, h, 1]);
+        else if (dx < 0) out.push([1 - b, 0, 0, 1 - a, h, 1]);
+        else if (dz > 0) out.push([0, 0, a, 1, h, b]);
+        else out.push([0, 0, 1 - b, 1, h, 1 - a]);
+      }
+      return out;
+    }
+    default: return [[0, 0, 0, 1, 1, 1]];
+  }
 }
 
 export const CHUNK_SIZE = 16;

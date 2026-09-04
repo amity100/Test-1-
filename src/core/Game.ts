@@ -250,7 +250,7 @@ export class Game {
       {
         ready: () => this.finishBuild(false),
         autoBuild: (arch) => this.build?.autoBuild(this.rng.int(1, 1e9), arch),
-        thumb: (m, c) => thumbs.block(m, c),
+        thumb: (m, c, sh) => thumbs.block(m, c, sh ?? 0),
         prefabThumb: (id, size, style) => thumbs.prefab(id, size, style),
       },
       IS_TOUCH || window.innerWidth < 900,

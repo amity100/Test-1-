@@ -42,7 +42,8 @@ export class CharacterController {
   constructor(private world: VoxelWorld, private terrain: Terrain) {}
 
   private collides(x: number, y: number, z: number, r: number, h: number): boolean {
-    return this.world.boxIntersectsSolid(x - r, y, z - r, x + r, y + h, z + r);
+    // Ramps never block: the ramp pass below lifts the character onto their surface instead.
+    return this.world.boxIntersectsSolid(x - r, y, z - r, x + r, y + h, z + r, true);
   }
 
   /** True when the entity's box fits at the given feet position. */
@@ -163,6 +164,16 @@ export class CharacterController {
       if (e.vel.y < 0) e.vel.y = 0;
       grounded = true;
     }
+    // Ramp floor: slopes are walked like terrain.
+    if (!e.grapplePoint || e.vel.y <= 0) {
+      const ramp = world.rampHeightAt(e.pos.x, e.pos.z, e.pos.y);
+      if (ramp !== null && e.pos.y <= ramp + 0.001) {
+        if (e.vel.y < -12) e.landImpact = Math.min(1, -e.vel.y / 40);
+        e.pos.y = ramp + 0.001;
+        if (e.vel.y < 0) e.vel.y = 0;
+        grounded = true;
+      }
+    }
     // Voxel floor check (small probe below the feet).
     if (!grounded && e.vel.y <= 0.01) {
       if (this.collides(e.pos.x, e.pos.y - 0.06, e.pos.z, e.radius * 0.98, 0.05)) grounded = true;
@@ -238,9 +249,12 @@ export class CharacterController {
     // Find the top of the obstacle ahead within reach.
     const baseY = Math.floor(e.pos.y + 0.01);
     let ledge = -1;
+    const ax = Math.floor(aheadX);
+    const az = Math.floor(aheadZ);
     for (let y = baseY + Math.ceil(PHYS.mantleMaxHeight); y >= baseY; y--) {
-      if (this.world.isSolid(Math.floor(aheadX), y, Math.floor(aheadZ))) {
-        ledge = y + 1;
+      if (this.world.isSolid(ax, y, az)) {
+        // Shaped blocks (slabs, stairs) have lower tops: step onto their actual surface.
+        ledge = this.world.surfaceTop(ax, y, az, aheadX - ax, aheadZ - az);
         break;
       }
     }

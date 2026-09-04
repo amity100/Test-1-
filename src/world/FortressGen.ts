@@ -1,6 +1,7 @@
 import type { VoxelWorld } from './VoxelWorld';
 import { PLOT_Y, PLOT_MAX_HEIGHT, type Plot } from './Layout';
 import { STYLES, type StyleId, type BlockRole } from './Styles';
+import { Shape, makeShape, withShape } from './Voxel';
 import { PREFABS, rotateBlocks } from './Prefabs';
 import { Random } from '../core/Random';
 import { bestHidingCells, checkReachability, type Cell, reachableFromOutside } from './Reachability';
@@ -24,9 +25,30 @@ class Painter {
   inPlot(x: number, y: number, z: number): boolean {
     return x >= this.plot.minX && x <= this.plot.maxX && z >= this.plot.minZ && z <= this.plot.maxZ && y >= PLOT_Y && y < PLOT_Y + PLOT_MAX_HEIGHT;
   }
-  set(x: number, y: number, z: number, role: BlockRole | 'air'): void {
+  set(x: number, y: number, z: number, role: BlockRole | 'air', shape?: number): void {
     if (!this.inPlot(x, y, z)) return;
-    this.world.set(x, y, z, role === 'air' ? 0 : this.v(role));
+    const sh = shape ?? (role === 'pillar' ? Shape.PILLAR : 0);
+    this.world.set(x, y, z, role === 'air' ? 0 : withShape(this.v(role), sh));
+  }
+  /** One pyramid-roof layer: sloped edge tiles facing inward, cube corners and a solid core. */
+  roofLayer(x0: number, y: number, z0: number, x1: number, z1: number, role: BlockRole = 'roof'): void {
+    const lx = Math.min(x0, x1);
+    const hx = Math.max(x0, x1);
+    const lz = Math.min(z0, z1);
+    const hz = Math.max(z0, z1);
+    for (let x = lx; x <= hx; x++)
+      for (let z = lz; z <= hz; z++) {
+        const ex = x === lx || x === hx;
+        const ez = z === lz || z === hz;
+        let shape = 0;
+        if (hx - lx >= 2 && hz - lz >= 2 && (ex !== ez)) {
+          if (x === hx) shape = makeShape('slope', 2);
+          else if (x === lx) shape = makeShape('slope', 0);
+          else if (z === hz) shape = makeShape('slope', 3);
+          else shape = makeShape('slope', 1);
+        }
+        this.set(x, y, z, role, shape);
+      }
   }
   box(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, role: BlockRole | 'air'): void {
     for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x++)
@@ -39,14 +61,14 @@ class Painter {
       for (let y = y0; y <= y1; y++)
         for (let z = z0; z <= z1; z++) {
           const edge = x === x0 || x === x1 || z === z0 || z === z1;
-          if (edge) this.set(x, y, z, role);
+          if (edge) this.set(x, y, z, role, 0);
           else if (y === y0 && floor) this.set(x, y, z, floor);
           else if (y === y1 && ceiling) this.set(x, y, z, ceiling);
         }
   }
   prefab(id: keyof typeof PREFABS, size: number, rot: number, x: number, y: number, z: number): void {
     const blocks = rotateBlocks(PREFABS[id].build(size), rot);
-    for (const b of blocks) this.set(x + b.x, y + b.y, z + b.z, b.role);
+    for (const b of blocks) this.set(x + b.x, y + b.y, z + b.z, b.role, b.shape);
   }
   door(x: number, y: number, z: number, axis: 'x' | 'z', width = 1, height = 3): void {
     for (let h = 0; h < height; h++) {
@@ -64,7 +86,8 @@ class Painter {
       for (let w = -Math.floor(width / 2); w <= Math.floor(width / 2); w++) {
         const sx = x + dx * i + (dz !== 0 ? w : 0);
         const sz = z + dz * i + (dx !== 0 ? w : 0);
-        for (let yy = y; yy <= y + i; yy++) this.set(sx, yy, sz, yy === y + i ? 'stairs' : 'wallAlt');
+        const rot = dx > 0 ? 0 : dx < 0 ? 2 : dz > 0 ? 1 : 3;
+        for (let yy = y; yy <= y + i; yy++) this.set(sx, yy, sz, yy === y + i ? 'stairs' : 'wallAlt', yy === y + i ? makeShape('stairs', rot) : 0);
         // Head room above the step.
         this.set(sx, y + i + 1, sz, 'air');
         this.set(sx, y + i + 2, sz, 'air');
@@ -176,7 +199,7 @@ function castle(p: Painter, plot: Plot, rng: Random): void {
   }
   // Roof
   const roofH = Math.min(kw, 5);
-  for (let i = 0; i <= roofH; i++) p.box(kx - kw + i, y0 + kh + i, kz - kw + i, kx + kw - i, y0 + kh + i, kz + kw - i, 'roof');
+  for (let i = 0; i <= roofH; i++) p.roofLayer(kx - kw + i, y0 + kh + i, kz - kw + i, kx + kw - i, kz + kw - i);
   p.set(kx, y0 + kh + roofH + 1, kz, 'light');
   p.door(kx, y0, kz - kw, 'x', 1, 3);
   p.windows(kx - kw, kz - kw, kx + kw, kz + kw, y0 + 2);
@@ -415,7 +438,7 @@ function tower(p: Painter, plot: Plot, rng: Random): void {
       if (d <= R + 2.3 && d > R + 1.4 && (x + z) % 2 === 0) p.set(cx + x, y0 + H + 1, cz + z, 'trim');
     }
   // Spire
-  for (let i = 0; i < 4; i++) p.box(cx - 2 + i, y0 + H + 1 + i, cz - 2 + i, cx + 2 - i, y0 + H + 1 + i, cz + 2 - i, 'roof');
+  for (let i = 0; i < 4; i++) p.roofLayer(cx - 2 + i, y0 + H + 1 + i, cz - 2 + i, cx + 2 - i, cz + 2 - i);
   p.set(cx, y0 + H + 2, cz, 'air');
   p.set(cx, y0 + H + 1, cz, 'air');
   p.set(cx, y0 + H + 3, cz, 'light');

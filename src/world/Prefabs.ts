@@ -1,4 +1,5 @@
 import type { BlockRole } from './Styles';
+import { Shape, makeShape, rotateShape } from './Voxel';
 
 export type PrefabId =
   | 'wall'
@@ -44,6 +45,8 @@ export interface PrefabBlock {
   y: number;
   z: number;
   role: BlockRole | 'air';
+  /** Block shape id (see Voxel.Shape); 0 = cube. Columns default to the pillar shape. */
+  shape: number;
 }
 
 export interface PrefabDef {
@@ -54,7 +57,7 @@ export interface PrefabDef {
   build(size: number): PrefabBlock[];
 }
 
-type Builder = (put: (x: number, y: number, z: number, role: BlockRole | 'air') => void, size: number) => void;
+type Builder = (put: (x: number, y: number, z: number, role: BlockRole | 'air', shape?: number) => void, size: number) => void;
 
 function make(id: PrefabId, nameKey: string, sizes: number, fn: Builder): PrefabDef {
   return {
@@ -64,13 +67,14 @@ function make(id: PrefabId, nameKey: string, sizes: number, fn: Builder): Prefab
     build(size: number): PrefabBlock[] {
       const out: PrefabBlock[] = [];
       const seen = new Map<string, number>();
-      fn((x, y, z, role) => {
+      fn((x, y, z, role, shape) => {
         const key = `${x},${y},${z}`;
         const idx = seen.get(key);
-        if (idx !== undefined) out[idx] = { x, y, z, role };
+        const sh = shape ?? (role === 'pillar' ? Shape.PILLAR : 0);
+        if (idx !== undefined) out[idx] = { x, y, z, role, shape: sh };
         else {
           seen.set(key, out.length);
-          out.push({ x, y, z, role });
+          out.push({ x, y, z, role, shape: sh });
         }
       }, Math.max(0, Math.min(sizes - 1, size)));
       return out;
@@ -241,7 +245,7 @@ export const PREFABS = {
     const half = Math.floor(W / 2);
     for (let i = 0; i < N; i++) {
       for (let x = -half; x < W - half; x++) {
-        for (let y = 0; y <= i; y++) put(x, y, -i, y === i ? 'stairs' : 'wallAlt');
+        for (let y = 0; y <= i; y++) put(x, y, -i, y === i ? 'stairs' : 'wallAlt', y === i ? makeShape('stairs', 3) : 0);
       }
     }
   }),
@@ -255,10 +259,14 @@ export const PREFABS = {
         const a = ang + k * 0.35;
         const x = Math.round(Math.cos(a) * R);
         const z = Math.round(Math.sin(a) * R);
-        put(x, y, z, 'stairs');
+        // Treads face along the climb direction (tangent of the spiral).
+        const tx = -Math.sin(a);
+        const tz = Math.cos(a);
+        const rot = Math.abs(tx) > Math.abs(tz) ? (tx > 0 ? 0 : 2) : tz > 0 ? 1 : 3;
+        put(x, y, z, 'stairs', makeShape('stairs', rot));
         const x2 = Math.round(Math.cos(a) * (R - 1));
         const z2 = Math.round(Math.sin(a) * (R - 1));
-        if (x2 !== 0 || z2 !== 0) put(x2, y, z2, 'stairs');
+        if (x2 !== 0 || z2 !== 0) put(x2, y, z2, 'stairs', makeShape('stairs', rot));
       }
       ang += 0.7;
     }
@@ -276,7 +284,7 @@ export const PREFABS = {
     for (let x = -hw; x <= hw; x++) {
       const y = hw - Math.abs(x);
       for (let z = -hd; z <= hd; z++) {
-        put(x, y, z, 'roof');
+        put(x, y, z, 'roof', x < 0 ? makeShape('slope', 0) : x > 0 ? makeShape('slope', 2) : 0);
         if (y > 0 && Math.abs(z) === hd) for (let yy = 0; yy < y; yy++) put(x, yy, z, 'wallAlt');
       }
     }
@@ -327,7 +335,15 @@ export const PREFABS = {
       for (let x = -r; x <= r; x++) {
         for (let z = -r; z <= r; z++) {
           const edge = Math.abs(x) === r || Math.abs(z) === r;
-          if (edge || y === half) put(x, y, z, y === half ? 'accent' : 'wall');
+          if (!edge && y !== half) continue;
+          let shape = 0;
+          if (y < half && r > 0 && !(Math.abs(x) === r && Math.abs(z) === r)) {
+            if (x === r) shape = makeShape('slope', 2);
+            else if (x === -r) shape = makeShape('slope', 0);
+            else if (z === r) shape = makeShape('slope', 3);
+            else if (z === -r) shape = makeShape('slope', 1);
+          }
+          put(x, y, z, y === half ? 'accent' : 'wall', shape);
         }
       }
     }
@@ -455,7 +471,7 @@ Object.assign(PREFABS, {
     for (let x = -half; x <= half; x++)
       for (let z = 0; z < D; z++) {
         put(x, 0, z, 'floor');
-        if (z === D - 1 || Math.abs(x) === half) put(x, 1, z, 'trim');
+        if (z === D - 1 || Math.abs(x) === half) put(x, 1, z, 'trim', Shape.FENCE);
       }
     for (let x = -half; x <= half; x++) put(x, -1, 0, 'accent');
   }),
@@ -483,9 +499,9 @@ Object.assign(PREFABS, {
     const half = Math.floor(W / 2);
     for (let i = 0; i < N; i++) {
       for (let x = -half; x < W - half; x++) {
-        for (let y = 0; y <= i; y++) put(x, y, -i, y === i ? 'stairs' : 'wallAlt');
-        // Side rails
-        if (x === -half || x === W - half - 1) put(x, i + 1, -i, 'trim');
+        for (let y = 0; y <= i; y++) put(x, y, -i, y === i ? 'stairs' : 'wallAlt', y === i ? makeShape('slope', 3) : 0);
+        // Side railings
+        if (x === -half || x === W - half - 1) put(x, i + 1, -i, 'trim', Shape.FENCE);
       }
     }
   }),
@@ -532,8 +548,8 @@ Object.assign(PREFABS, {
       for (let z = -r; z <= r; z++) {
         const d = Math.sqrt(x * x + z * z);
         if (d <= R + 0.3) put(x, 0, z, 'trim');
-        if (d <= R + 0.3 && d > R - 0.9) put(x, 1, z, 'trim');
-        else if (d <= R - 0.9) put(x, 1, z, 'glass');
+        if (d <= R + 0.3 && d > R - 0.9) put(x, 1, z, 'trim', Shape.SLAB);
+        else if (d <= R - 0.9) put(x, 1, z, 'glass', Shape.SLAB);
       }
     put(0, 1, 0, 'pillar');
     put(0, 2, 0, 'pillar');
@@ -585,7 +601,7 @@ Object.assign(PREFABS, {
     for (let x = -2; x <= 2; x++)
       for (let z = -2; z <= 2; z++) {
         put(x, H, z, 'floor');
-        if (Math.abs(x) === 2 || Math.abs(z) === 2) put(x, H + 1, z, 'trim');
+        if (Math.abs(x) === 2 || Math.abs(z) === 2) put(x, H + 1, z, 'trim', Shape.FENCE);
         if (Math.abs(x) <= 1 && Math.abs(z) <= 1) put(x, H + 4, z, 'roof');
       }
     for (const [x, z] of [[-2, -2], [2, -2], [-2, 2], [2, 2]]) for (let y = H + 1; y < H + 4; y++) put(x, y, z, 'pillar');
@@ -607,7 +623,7 @@ export function rotateBlocks(blocks: PrefabBlock[], rot: number): PrefabBlock[] 
       x = nx;
       z = nz;
     }
-    return { x, y: b.y, z, role: b.role };
+    return { x, y: b.y, z, role: b.role, shape: rotateShape(b.shape, r) };
   });
 }
 

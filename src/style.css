@@ -716,3 +716,9 @@ body { background: radial-gradient(1200px 800px at 50% 30%, #16283a 0%, #0f1923 
   .buildui.compact .b-strip { bottom: 62px; gap: 4px; padding: 4px; }
   .buildui.compact .b-strip .tool { width: 36px; height: 36px; }
 }
+
+.b-context .shapes { display: flex; gap: 3px; }
+.b-context .shape { width: 34px; height: 34px; padding: 0; border-radius: 8px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.05); cursor: pointer; overflow: hidden; }
+.b-context .shape img { width: 100%; height: 100%; display: block; pointer-events: none; }
+.b-context .shape.active { border-color: var(--accent); background: rgba(0, 229, 255, 0.16); box-shadow: 0 0 0 1px rgba(0, 229, 255, 0.5); }
+.buildui.compact .b-context .shape { width: 28px; height: 28px; }

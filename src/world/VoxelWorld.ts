@@ -1,4 +1,4 @@
-import { CHUNK_SIZE, CHUNK_SHIFT, CHUNK_MASK, Mat, blockMat, isSolid } from './Voxel';
+import { CHUNK_SIZE, CHUNK_SHIFT, CHUNK_MASK, Mat, blockMat, blockShape, isSolid, shapeBoxes, shapeKind, shapeTopAt } from './Voxel';
 
 export interface RayHit {
   /** Block coordinates of the hit voxel. */
@@ -114,8 +114,12 @@ export class VoxelWorld {
     return n;
   }
 
-  /** True when any solid voxel overlaps the AABB (exclusive max). */
-  boxIntersectsSolid(minX: number, minY: number, minZ: number, maxX: number, maxY: number, maxZ: number): boolean {
+  /**
+   * True when any solid voxel overlaps the AABB (exclusive max). Shaped blocks (slabs, stairs,
+   * columns) collide with their sub-boxes; slopes are ramps and are skipped when `ignoreRamps` is
+   * set so characters can be raised onto them by `rampHeightAt` instead of being blocked.
+   */
+  boxIntersectsSolid(minX: number, minY: number, minZ: number, maxX: number, maxY: number, maxZ: number, ignoreRamps = false): boolean {
     const x0 = Math.floor(minX);
     const y0 = Math.floor(minY);
     const z0 = Math.floor(minZ);
@@ -125,11 +129,47 @@ export class VoxelWorld {
     for (let x = x0; x <= x1; x++) {
       for (let y = y0; y <= y1; y++) {
         for (let z = z0; z <= z1; z++) {
-          if (this.get(x, y, z) !== 0) return true;
+          const v = this.get(x, y, z);
+          if (v === 0) continue;
+          const sh = blockShape(v);
+          if (sh === 0) return true;
+          const kind = shapeKind(sh);
+          if (kind === 'slope' && ignoreRamps) continue;
+          for (const b of shapeBoxes(sh)) {
+            if (x + b[0] < maxX && x + b[3] > minX && y + b[1] < maxY && y + b[4] > minY && z + b[2] < maxZ && z + b[5] > minZ) return true;
+          }
         }
       }
     }
     return false;
+  }
+
+  /**
+   * Surface height of a ramp under a point, if the feet are on or slightly below it.
+   * Returns null when the column holds no slope near the feet.
+   */
+  rampHeightAt(x: number, z: number, feetY: number): number | null {
+    const cx = Math.floor(x);
+    const cz = Math.floor(z);
+    const lx = x - cx;
+    const lz = z - cz;
+    let best: number | null = null;
+    for (let cy = Math.floor(feetY + 0.5); cy >= Math.floor(feetY - 0.6); cy--) {
+      const v = this.get(cx, cy, cz);
+      if (v === 0) continue;
+      const sh = blockShape(v);
+      if (shapeKind(sh) !== 'slope') continue;
+      const h = cy + shapeTopAt(sh, lx, lz);
+      if (h >= feetY - 0.06 && h <= feetY + 0.75 && (best === null || h > best)) best = h;
+    }
+    return best;
+  }
+
+  /** Top surface height of the block in a cell at local coordinates (1 for cubes). */
+  surfaceTop(x: number, y: number, z: number, lx: number, lz: number): number {
+    const v = this.get(x, y, z);
+    if (v === 0) return y;
+    return y + shapeTopAt(blockShape(v), lx, lz);
   }
 
   /** Amanatides–Woo DDA voxel raycast. Direction need not be normalised. */

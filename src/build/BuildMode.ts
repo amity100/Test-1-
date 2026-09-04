@@ -4,7 +4,8 @@ import type { VoxelWorld } from '../world/VoxelWorld';
 import type { Terrain } from '../world/Terrain';
 import type { Input } from '../core/Input';
 import { PLOT_Y, PLOT_MAX_HEIGHT, type Plot } from '../world/Layout';
-import { Mat, encodeBlock, blockMat, blockColor, PALETTE } from '../world/Voxel';
+import { Mat, encodeBlock, blockMat, blockColor, blockShape, withShape, makeShape, SHAPE_KINDS, PALETTE, type ShapeKind } from '../world/Voxel';
+import { buildBlockMesh } from '../world/ChunkMesher';
 import { STYLES, type StyleId, type BlockRole } from '../world/Styles';
 import { PREFABS, rotateBlocks, prefabCost, type PrefabId, type PrefabBlock } from '../world/Prefabs';
 import { checkReachability, type Cell, type ReachResult } from '../world/Reachability';
@@ -16,7 +17,7 @@ import { clamp, damp } from '../core/MathUtil';
 export type Tool = 'block' | 'box' | 'line' | 'wall' | 'stairs' | 'prefab' | 'paint' | 'erase' | 'flag' | 'spawn';
 
 /** A quick-select slot: a block kind (material + colour) or a prefab. */
-export type HotbarSlot = { kind: 'block'; mat: Mat; color: number } | { kind: 'prefab'; id: PrefabId } | null;
+export type HotbarSlot = { kind: 'block'; mat: Mat; color: number; shape?: ShapeKind } | { kind: 'prefab'; id: PrefabId } | null;
 export const HOTBAR_SIZE = 9;
 /** Tools that need two clicks (start and end). */
 export const TWO_POINT_TOOLS: Tool[] = ['box', 'line', 'wall', 'stairs'];
@@ -46,6 +47,8 @@ export interface BuildState {
   hotIndex: number;
   /** Height of walls drawn with the wall tool. */
   wallHeight: number;
+  /** Shape of placed blocks (cube, slab, stairs, slope, column, railing); rot gives the facing. */
+  shapeKind: ShapeKind;
 }
 
 interface Edit {
@@ -74,7 +77,7 @@ export interface Blueprint {
   savedAt: number;
 }
 
-const BP_KEY = 'flagkeep.blueprints.v1';
+const BP_KEY = 'flagkeep.blueprints.v2';
 export const BUILD_BUDGET = 3000;
 
 /** Build-phase editor: orbit camera, block tools, prefabs, mirror, undo/redo, validation, blueprints. */
@@ -99,6 +102,8 @@ export class BuildMode {
   private layerGrid: THREE.GridHelper;
   private drawKey = '';
   private popMesh: THREE.InstancedMesh;
+  private shapeGhost: THREE.Mesh;
+  private shapeGhostValue = -1;
   private pops: { x: number; y: number; z: number; t: number; color: THREE.Color }[] = [];
   private group = new THREE.Group();
   private validateTimer = 0;
@@ -141,6 +146,7 @@ export class BuildMode {
       hotbar: [],
       hotIndex: 0,
       wallHeight: 4,
+      shapeKind: 'cube',
     };
     this.resetHotbar();
     this.focus.set(plot.cx, PLOT_Y + 4, plot.cz);
@@ -148,6 +154,8 @@ export class BuildMode {
     this.ghost = new THREE.Mesh(new THREE.BoxGeometry(1.02, 1.02, 1.02), new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.35, depthWrite: false }));
     this.ghost.visible = false;
     this.ghost.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1.03, 1.03, 1.03)), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false })));
+    this.shapeGhost = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide }));
+    this.shapeGhost.visible = false;
     // Placement pops: freshly placed blocks appear with a quick scale-in while the chunk remeshes.
     this.popMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.9, depthWrite: false }), 64);
     this.popMesh.count = 0;
@@ -174,7 +182,7 @@ export class BuildMode {
     lgm.opacity = 0.28;
     lgm.depthWrite = false;
     this.layerGrid.visible = false;
-    this.group.add(this.ghost, this.ghostBox, this.prefabGhost, this.flagMarker.group, this.spawnMarker, this.plotFrame, this.layerGrid, this.popMesh);
+    this.group.add(this.ghost, this.ghostBox, this.prefabGhost, this.flagMarker.group, this.spawnMarker, this.plotFrame, this.layerGrid, this.popMesh, this.shapeGhost);
     this.group.visible = false;
     scene.add(this.group);
     this.recount();
@@ -206,14 +214,25 @@ export class BuildMode {
   setMaterial(m: Mat): void {
     this.state.mat = m;
     if (this.state.tool === 'prefab') this.state.tool = 'block';
-    this.state.hotbar[this.state.hotIndex] = { kind: 'block', mat: m, color: this.state.color };
+    this.state.hotbar[this.state.hotIndex] = { kind: 'block', mat: m, color: this.state.color, shape: this.state.shapeKind };
     this.emitChange();
   }
   setColor(c: number): void {
     this.state.color = c;
     const slot = this.state.hotbar[this.state.hotIndex];
-    if (!slot || slot.kind === 'block') this.state.hotbar[this.state.hotIndex] = { kind: 'block', mat: this.state.mat, color: c };
+    if (!slot || slot.kind === 'block') this.state.hotbar[this.state.hotIndex] = { kind: 'block', mat: this.state.mat, color: c, shape: this.state.shapeKind };
     this.emitChange();
+  }
+  setShapeKind(k: ShapeKind): void {
+    this.state.shapeKind = k;
+    if (this.state.tool === 'prefab' || this.state.tool === 'erase' || this.state.tool === 'paint') this.state.tool = 'block';
+    const slot = this.state.hotbar[this.state.hotIndex];
+    if (!slot || slot.kind === 'block') this.state.hotbar[this.state.hotIndex] = { kind: 'block', mat: this.state.mat, color: this.state.color, shape: k };
+    this.emitChange();
+  }
+  cycleShape(dir = 1): void {
+    const i = SHAPE_KINDS.indexOf(this.state.shapeKind);
+    this.setShapeKind(SHAPE_KINDS[(i + dir + SHAPE_KINDS.length) % SHAPE_KINDS.length]);
   }
   setPrefab(id: PrefabId): void {
     this.state.prefab = id;
@@ -244,6 +263,7 @@ export class BuildMode {
     if (slot.kind === 'block') {
       st.mat = slot.mat;
       st.color = slot.color;
+      st.shapeKind = slot.shape ?? 'cube';
       if (st.tool === 'prefab') st.tool = 'block';
     } else {
       st.prefab = slot.id;
@@ -314,7 +334,7 @@ export class BuildMode {
   }
 
   private get currentValue(): number {
-    return encodeBlock(this.state.mat, this.state.color);
+    return encodeBlock(this.state.mat, this.state.color, makeShape(this.state.shapeKind, this.state.rot));
   }
 
   inPlot(x: number, y: number, z: number): boolean {
@@ -431,7 +451,7 @@ export class BuildMode {
     const before = this.world.get(cell.x, cell.y, cell.z);
     if (before === 0) return;
     const edits: Edit[] = [];
-    this.collect([{ ...cell, value: this.currentValue }], edits, new Set(), { n: 1e9 });
+    this.collect([{ ...cell, value: withShape(this.currentValue, blockShape(before)) }], edits, new Set(), { n: 1e9 });
     if (edits.length) {
       this.applyEdits(edits, this.state.flag, this.state.spawn);
       this.events.emit('placed', { count: edits.length });
@@ -555,7 +575,7 @@ export class BuildMode {
   stampPrefab(anchor: Cell): void {
     const blocks = this.prefabBlocks();
     const cells = blocks
-      .map((b) => ({ x: anchor.x + b.x, y: anchor.y + b.y, z: anchor.z + b.z, value: b.role === 'air' ? 0 : this.roleValue(b.role) }))
+      .map((b) => ({ x: anchor.x + b.x, y: anchor.y + b.y, z: anchor.z + b.z, value: b.role === 'air' ? 0 : withShape(this.roleValue(b.role), b.shape) }))
       .filter((c) => !this.blockedByMarker(c) || c.value === 0);
     const edits: Edit[] = [];
     const cost = prefabCost(blocks);
@@ -825,6 +845,7 @@ export class BuildMode {
     if (input.wasPressed('BracketRight')) this.setPrefabSize(this.state.prefabSize + 1);
     if (input.wasPressed('BracketLeft')) this.setPrefabSize(this.state.prefabSize - 1);
     if (input.wasPressed('KeyT')) this.toggleLayerLock();
+    if (input.wasPressed('KeyZ') && !(input.isDown('ControlLeft') || input.isDown('MetaLeft'))) this.cycleShape(input.isDown('ShiftLeft') ? -1 : 1);
     if (input.wasPressed('Escape') && st.boxStart) {
       st.boxStart = null;
       this.emitChange();
@@ -834,6 +855,7 @@ export class BuildMode {
     this.ghost.visible = false;
     this.ghostBox.visible = false;
     this.prefabGhost.visible = false;
+    this.shapeGhost.visible = false;
     const cell = st.tool === 'erase' || st.tool === 'paint' ? this.cursorHitBlock : this.cursorCell;
     const uiHover = input.cursorY > window.innerHeight - 190 || input.cursorX < 250 && st.tool === 'prefab';
     void uiHover;
@@ -841,9 +863,30 @@ export class BuildMode {
       const valid = this.inPlot(cell.x, cell.y, cell.z);
       const col = (this.ghost.material as THREE.MeshBasicMaterial).color;
       if (st.tool === 'block' || st.tool === 'erase' || st.tool === 'paint' || st.tool === 'flag' || st.tool === 'spawn' || (TWO_POINT_TOOLS.includes(st.tool) && !st.boxStart)) {
-        this.ghost.visible = true;
-        this.ghost.position.set(cell.x + 0.5, cell.y + 0.5, cell.z + 0.5);
-        col.set(st.tool === 'erase' ? 0xff3355 : !valid ? 0xff3355 : st.tool === 'paint' ? 0xffb300 : st.tool === 'flag' ? 0xffb300 : st.tool === 'spawn' ? 0x39ff14 : PALETTE[st.color]);
+        const shaped = st.shapeKind !== 'cube' && valid && (st.tool === 'block' || TWO_POINT_TOOLS.includes(st.tool));
+        if (shaped) {
+          // Preview the actual shape (stairs, slope, column...) with its facing.
+          const value = this.currentValue;
+          if (value !== this.shapeGhostValue) {
+            this.shapeGhostValue = value;
+            const data = buildBlockMesh(value);
+            const geo = new THREE.BufferGeometry();
+            if (data) {
+              geo.setAttribute('position', new THREE.BufferAttribute(data.positions, 3));
+              geo.setAttribute('normal', new THREE.BufferAttribute(data.normals, 3));
+              geo.setIndex(new THREE.BufferAttribute(data.indices, 1));
+            }
+            this.shapeGhost.geometry.dispose();
+            this.shapeGhost.geometry = geo;
+          }
+          this.shapeGhost.visible = true;
+          this.shapeGhost.position.set(cell.x, cell.y, cell.z);
+          (this.shapeGhost.material as THREE.MeshBasicMaterial).color.set(PALETTE[st.color]);
+        } else {
+          this.ghost.visible = true;
+          this.ghost.position.set(cell.x + 0.5, cell.y + 0.5, cell.z + 0.5);
+          col.set(st.tool === 'erase' ? 0xff3355 : !valid ? 0xff3355 : st.tool === 'paint' ? 0xffb300 : st.tool === 'flag' ? 0xffb300 : st.tool === 'spawn' ? 0x39ff14 : PALETTE[st.color]);
+        }
       }
       if (st.tool === 'box' && st.boxStart) {
         this.ghostBox.visible = true;

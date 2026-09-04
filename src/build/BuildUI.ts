@@ -2,7 +2,7 @@ import { el, btn, esc } from '../ui/dom';
 import { t } from '../core/i18n';
 import { HOTBAR_SIZE, TWO_POINT_TOOLS, type BuildMode, type Tool } from './BuildMode';
 import { STYLES, type StyleId } from '../world/Styles';
-import { PALETTE, MATERIALS, type Mat } from '../world/Voxel';
+import { PALETTE, MATERIALS, SHAPE_KINDS, makeShape, type Mat, type ShapeKind } from '../world/Voxel';
 import { PREFAB_IDS, PREFABS, type PrefabId } from '../world/Prefabs';
 import { ARCHETYPES, type Archetype } from '../world/FortressGen';
 import { formatTime } from '../core/MathUtil';
@@ -23,6 +23,7 @@ const TOOL_ICONS: Record<Tool, string> = {
 const TOOL_KEYS: Record<Tool, string> = { block: 'toolBlock', box: 'toolBox', line: 'toolLine', wall: 'toolWall', stairs: 'toolStairs', prefab: 'toolPrefab', paint: 'toolPaint', erase: 'toolErase', flag: 'toolFlag', spawn: 'toolSpawn' };
 const TOOL_HOTKEY: Record<Tool, string> = { block: 'B', box: 'V', line: 'L', wall: 'N', stairs: 'K', prefab: 'P', paint: 'C', erase: 'X', flag: 'F', spawn: 'G' };
 const TOOLS: Tool[] = ['block', 'box', 'line', 'wall', 'stairs', 'prefab', 'paint', 'erase', 'flag', 'spawn'];
+const SHAPE_KEYS: Record<ShapeKind, string> = { cube: 'shCube', slab: 'shSlab', slabTop: 'shSlabTop', stairs: 'shStairs', slope: 'shSlope', pillar: 'shPillar', fence: 'shFence' };
 const ARCH_KEYS: Record<Archetype, string> = { castle: 'aCastle', palace: 'aPalace', villa: 'aVilla', bunker: 'aBunker', tower: 'aTower', temple: 'aTemple' };
 const MAT_KEYS: Record<string, string> = {
   stoneBrick: 'Stone brick', smoothStone: 'Smooth stone', marble: 'Marble', woodPlanks: 'Planks', woodLog: 'Log', metalPanel: 'Metal panel', brushedMetal: 'Brushed metal',
@@ -36,8 +37,8 @@ const MAT_KEYS_HE: Record<string, string> = {
 export interface BuildUICallbacks {
   ready(): void;
   autoBuild(archetype?: Archetype): void;
-  /** Rendered icon (data URL) of a block kind. */
-  thumb(mat: Mat, color: number): string;
+  /** Rendered icon (data URL) of a block kind (shape id optional). */
+  thumb(mat: Mat, color: number, shape?: number): string;
   /** Rendered icon (data URL) of a prefab. */
   prefabThumb(id: PrefabId, size: number, style: StyleId): string;
 }
@@ -222,7 +223,7 @@ export class BuildUI {
   // ---------- hotbar ----------
   private renderHotbar(): void {
     const st = this.build.state;
-    const key = st.hotbar.map((s) => (s ? (s.kind === 'block' ? `b${s.mat}:${s.color}` : `p${s.id}:${st.prefabSize}`) : '-')).join('|') + `#${st.hotIndex}#${st.style}`;
+    const key = st.hotbar.map((s) => (s ? (s.kind === 'block' ? `b${s.mat}:${s.color}:${s.shape ?? 'cube'}` : `p${s.id}:${st.prefabSize}`) : '-')).join('|') + `#${st.hotIndex}#${st.style}`;
     if (key === this.hotbarKey) return;
     this.hotbarKey = key;
     this.hotbar.innerHTML = '';
@@ -232,7 +233,7 @@ export class BuildUI {
       if (slot) {
         const img = el('img');
         img.draggable = false;
-        img.src = slot.kind === 'block' ? this.cb.thumb(slot.mat, slot.color) : this.cb.prefabThumb(slot.id, Math.min(st.prefabSize, PREFABS[slot.id].sizes - 1), st.style);
+        img.src = slot.kind === 'block' ? this.cb.thumb(slot.mat, slot.color, makeShape(slot.shape ?? 'cube', 0)) : this.cb.prefabThumb(slot.id, Math.min(st.prefabSize, PREFABS[slot.id].sizes - 1), st.style);
         img.alt = slot.kind === 'block' ? this.matName(slot.mat) : t(PREFABS[slot.id].nameKey);
         b.appendChild(img);
         b.title = img.alt;
@@ -264,7 +265,7 @@ export class BuildUI {
   // ---------- context strip ----------
   private renderContext(): void {
     const st = this.build.state;
-    const key = `${st.tool}|${st.mat}|${st.color}|${st.prefab}|${st.prefabSize}|${st.rot}|${st.wallHeight}|${st.layerLock}|${st.layerY}|${st.boxStart ? 1 : 0}|${st.hollow}|${st.mirror}`;
+    const key = `${st.tool}|${st.mat}|${st.color}|${st.prefab}|${st.prefabSize}|${st.rot}|${st.wallHeight}|${st.layerLock}|${st.layerY}|${st.boxStart ? 1 : 0}|${st.hollow}|${st.mirror}|${st.shapeKind}`;
     if (key === this.contextKey) return;
     this.contextKey = key;
     const c = this.context;
@@ -287,6 +288,25 @@ export class BuildUI {
       const sw = el('span', 'csw');
       sw.style.background = PALETTE[st.color];
       c.append(sw, chip(this.matName(st.mat)));
+    }
+    if (st.tool === 'block' || (twoPoint && st.tool !== 'box')) {
+      // Shape picker with rendered icons; R rotates stairs and slopes.
+      const shapes = el('div', 'shapes');
+      for (const k of SHAPE_KINDS) {
+        const b = el('button', `shape ${st.shapeKind === k ? 'active' : ''}`);
+        const img = el('img');
+        img.draggable = false;
+        img.src = this.cb.thumb(st.mat, st.color, makeShape(k, st.rot));
+        b.appendChild(img);
+        b.title = t(SHAPE_KEYS[k]);
+        b.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.build.setShapeKind(k);
+        });
+        shapes.appendChild(b);
+      }
+      c.append(shapes);
+      if (st.shapeKind === 'stairs' || st.shapeKind === 'slope') c.append(btn('↻', 'small', () => this.build.rotate()));
     }
     if (st.tool === 'prefab') {
       const def = PREFABS[st.prefab];

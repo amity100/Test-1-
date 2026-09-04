@@ -1,52 +1,25 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { VoxelMaterials } from './VoxelMaterial';
-import { PALETTE, PALETTE_LINEAR, blockColor, isTransparent, type Mat } from '../world/Voxel';
+import { PALETTE, blockColor, encodeBlock, isTransparent, type Mat } from '../world/Voxel';
+import { buildBlockMesh } from '../world/ChunkMesher';
 import { PREFABS, type PrefabId } from '../world/Prefabs';
 import { STYLES, type StyleId, type BlockRole } from '../world/Styles';
 
 const SIZE = 96;
 
-/** Cube geometry (0..1) carrying the voxel material's per-vertex attributes for one block kind. */
-function blockGeometry(mat: number, color: number): THREE.BufferGeometry {
-  const faces: { c: number[][]; n: number[]; uv: [number, number] }[] = [
-    { c: [[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]], n: [1, 0, 0], uv: [2, 1] },
-    { c: [[0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 1, 0]], n: [-1, 0, 0], uv: [2, 1] },
-    { c: [[0, 1, 0], [0, 1, 1], [1, 1, 1], [1, 1, 0]], n: [0, 1, 0], uv: [0, 2] },
-    { c: [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]], n: [0, -1, 0], uv: [0, 2] },
-    { c: [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]], n: [0, 0, 1], uv: [0, 1] },
-    { c: [[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]], n: [0, 0, -1], uv: [0, 1] },
-  ];
-  const pos: number[] = [];
-  const nor: number[] = [];
-  const uvs: number[] = [];
-  const tint: number[] = [];
-  const mats: number[] = [];
-  const aos: number[] = [];
-  const idx: number[] = [];
-  const r = PALETTE_LINEAR[color * 3];
-  const g = PALETTE_LINEAR[color * 3 + 1];
-  const b = PALETTE_LINEAR[color * 3 + 2];
-  for (const f of faces) {
-    const base = pos.length / 3;
-    for (const c of f.c) {
-      pos.push(c[0], c[1], c[2]);
-      nor.push(f.n[0], f.n[1], f.n[2]);
-      uvs.push(c[f.uv[0]], c[f.uv[1]]);
-      tint.push(r, g, b);
-      mats.push(mat);
-      aos.push(1);
-    }
-    idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
-  }
+/** Geometry (0..1 cell) carrying the voxel material's per-vertex attributes for one block kind. */
+function blockGeometry(mat: number, color: number, shape: number): THREE.BufferGeometry | null {
+  const data = buildBlockMesh(encodeBlock(mat, color, shape));
+  if (!data) return null;
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
-  geo.setAttribute('aUv', new THREE.Float32BufferAttribute(uvs, 2));
-  geo.setAttribute('aTint', new THREE.Float32BufferAttribute(tint, 3));
-  geo.setAttribute('aMat', new THREE.Float32BufferAttribute(mats, 1));
-  geo.setAttribute('aAo', new THREE.Float32BufferAttribute(aos, 1));
-  geo.setIndex(idx);
+  geo.setAttribute('position', new THREE.BufferAttribute(data.positions, 3));
+  geo.setAttribute('normal', new THREE.BufferAttribute(data.normals, 3));
+  geo.setAttribute('aUv', new THREE.BufferAttribute(data.uvs, 2));
+  geo.setAttribute('aTint', new THREE.BufferAttribute(data.tints, 3));
+  geo.setAttribute('aMat', new THREE.BufferAttribute(data.mats, 1));
+  geo.setAttribute('aAo', new THREE.BufferAttribute(data.aos, 1));
+  geo.setIndex(new THREE.BufferAttribute(data.indices, 1));
   return geo;
 }
 
@@ -116,12 +89,13 @@ export class BlockThumbs {
     return this.canvas.toDataURL('image/png');
   }
 
-  /** Icon of a single block of the given material and palette colour. */
-  block(mat: Mat, color: number): string {
-    const key = `b${mat}:${color}`;
+  /** Icon of a single block of the given material, palette colour and shape. */
+  block(mat: Mat, color: number, shape = 0): string {
+    const key = `b${mat}:${color}:${shape}`;
     const hit = this.cache.get(key);
     if (hit) return hit;
-    const geo = blockGeometry(mat, color);
+    const geo = blockGeometry(mat, color, shape);
+    if (!geo) return '';
     const mesh = new THREE.Mesh(geo, isTransparent(mat) ? this.materials.transparent : this.materials.opaque);
     const url = this.snapshot(mesh, new THREE.Vector3(0.5, 0.5, 0.5), 0.92);
     geo.dispose();
