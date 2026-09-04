@@ -13,7 +13,13 @@ import { Random } from '../core/Random';
 import { Emitter } from '../core/Events';
 import { clamp, damp } from '../core/MathUtil';
 
-export type Tool = 'block' | 'box' | 'prefab' | 'paint' | 'erase' | 'flag' | 'spawn';
+export type Tool = 'block' | 'box' | 'line' | 'wall' | 'stairs' | 'prefab' | 'paint' | 'erase' | 'flag' | 'spawn';
+
+/** A quick-select slot: a block kind (material + colour) or a prefab. */
+export type HotbarSlot = { kind: 'block'; mat: Mat; color: number } | { kind: 'prefab'; id: PrefabId } | null;
+export const HOTBAR_SIZE = 9;
+/** Tools that need two clicks (start and end). */
+export const TWO_POINT_TOOLS: Tool[] = ['box', 'line', 'wall', 'stairs'];
 
 export interface BuildState {
   tool: Tool;
@@ -33,6 +39,13 @@ export interface BuildState {
   boxStart: Cell | null;
   canUndo: boolean;
   canRedo: boolean;
+  /** Build on a fixed height plane instead of surfaces. */
+  layerLock: boolean;
+  layerY: number;
+  hotbar: HotbarSlot[];
+  hotIndex: number;
+  /** Height of walls drawn with the wall tool. */
+  wallHeight: number;
 }
 
 interface Edit {
@@ -66,7 +79,7 @@ export const BUILD_BUDGET = 3000;
 
 /** Build-phase editor: orbit camera, block tools, prefabs, mirror, undo/redo, validation, blueprints. */
 export class BuildMode {
-  readonly events = new Emitter<{ change: Record<string, never>; placed: { count: number }; erased: { count: number }; invalid: { key: string } }>();
+  readonly events = new Emitter<{ change: Record<string, never>; placed: { count: number }; erased: { count: number }; invalid: { key: string }; placedCells: { cells: Cell[] } }>();
   readonly state: BuildState;
   private undoStack: Action[] = [];
   private redoStack: Action[] = [];
@@ -83,6 +96,10 @@ export class BuildMode {
   private flagMarker: FlagMesh;
   private spawnMarker: THREE.Mesh;
   private plotFrame: THREE.LineSegments;
+  private layerGrid: THREE.GridHelper;
+  private drawKey = '';
+  private popMesh: THREE.InstancedMesh;
+  private pops: { x: number; y: number; z: number; t: number; color: THREE.Color }[] = [];
   private group = new THREE.Group();
   private validateTimer = 0;
   private dirtyValidate = true;
@@ -119,11 +136,22 @@ export class BuildMode {
       boxStart: null,
       canUndo: false,
       canRedo: false,
+      layerLock: false,
+      layerY: PLOT_Y,
+      hotbar: [],
+      hotIndex: 0,
+      wallHeight: 4,
     };
+    this.resetHotbar();
     this.focus.set(plot.cx, PLOT_Y + 4, plot.cz);
     // Ghost block
     this.ghost = new THREE.Mesh(new THREE.BoxGeometry(1.02, 1.02, 1.02), new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.35, depthWrite: false }));
     this.ghost.visible = false;
+    this.ghost.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1.03, 1.03, 1.03)), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false })));
+    // Placement pops: freshly placed blocks appear with a quick scale-in while the chunk remeshes.
+    this.popMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.9, depthWrite: false }), 64);
+    this.popMesh.count = 0;
+    this.popMesh.frustumCulled = false;
     this.ghostBox = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xffb300, transparent: true, opacity: 0.25, depthWrite: false, side: THREE.DoubleSide }));
     this.ghostBox.visible = false;
     this.prefabGhost = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.35, depthWrite: false }), 4000);
@@ -140,7 +168,13 @@ export class BuildMode {
     const frameGeo = new THREE.BoxGeometry(box.max.x - box.min.x, box.max.y - box.min.y, box.max.z - box.min.z);
     this.plotFrame = new THREE.LineSegments(new THREE.EdgesGeometry(frameGeo), new THREE.LineBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.35 }));
     this.plotFrame.position.copy(box.getCenter(new THREE.Vector3()));
-    this.group.add(this.ghost, this.ghostBox, this.prefabGhost, this.flagMarker.group, this.spawnMarker, this.plotFrame);
+    this.layerGrid = new THREE.GridHelper(plot.maxX - plot.minX + 1, plot.maxX - plot.minX + 1, 0x00e5ff, 0x00e5ff);
+    const lgm = this.layerGrid.material as THREE.LineBasicMaterial;
+    lgm.transparent = true;
+    lgm.opacity = 0.28;
+    lgm.depthWrite = false;
+    this.layerGrid.visible = false;
+    this.group.add(this.ghost, this.ghostBox, this.prefabGhost, this.flagMarker.group, this.spawnMarker, this.plotFrame, this.layerGrid, this.popMesh);
     this.group.visible = false;
     scene.add(this.group);
     this.recount();
@@ -171,16 +205,69 @@ export class BuildMode {
   }
   setMaterial(m: Mat): void {
     this.state.mat = m;
+    if (this.state.tool === 'prefab') this.state.tool = 'block';
+    this.state.hotbar[this.state.hotIndex] = { kind: 'block', mat: m, color: this.state.color };
     this.emitChange();
   }
   setColor(c: number): void {
     this.state.color = c;
+    const slot = this.state.hotbar[this.state.hotIndex];
+    if (!slot || slot.kind === 'block') this.state.hotbar[this.state.hotIndex] = { kind: 'block', mat: this.state.mat, color: c };
     this.emitChange();
   }
   setPrefab(id: PrefabId): void {
     this.state.prefab = id;
     this.state.prefabSize = Math.min(this.state.prefabSize, PREFABS[id].sizes - 1);
     this.state.tool = 'prefab';
+    this.state.hotbar[this.state.hotIndex] = { kind: 'prefab', id };
+    this.emitChange();
+  }
+  setWallHeight(h: number): void {
+    this.state.wallHeight = clamp(Math.round(h), 1, 12);
+    this.emitChange();
+  }
+
+  // ---------- hotbar ----------
+  /** Default quick slots from the style palette: the main roles plus a stairs prefab. */
+  resetHotbar(): void {
+    const s = STYLES[this.state.style];
+    const block = (v: number): HotbarSlot => ({ kind: 'block', mat: blockMat(v) as Mat, color: blockColor(v) });
+    this.state.hotbar = [block(s.roles.wall), block(s.roles.wallAlt), block(s.roles.trim), block(s.roles.floor), block(s.roles.roof), block(s.roles.accent), block(s.roles.glass), block(s.roles.light), { kind: 'prefab', id: 'stairs' }];
+    while (this.state.hotbar.length < HOTBAR_SIZE) this.state.hotbar.push(null);
+    this.state.hotIndex = 0;
+    this.applySlot(this.state.hotbar[0]);
+  }
+
+  private applySlot(slot: HotbarSlot): void {
+    const st = this.state;
+    if (!slot) return;
+    if (slot.kind === 'block') {
+      st.mat = slot.mat;
+      st.color = slot.color;
+      if (st.tool === 'prefab') st.tool = 'block';
+    } else {
+      st.prefab = slot.id;
+      st.prefabSize = Math.min(st.prefabSize, PREFABS[slot.id].sizes - 1);
+      st.tool = 'prefab';
+    }
+  }
+
+  selectHotbar(i: number): void {
+    const st = this.state;
+    st.hotIndex = clamp(i, 0, HOTBAR_SIZE - 1);
+    st.boxStart = null;
+    this.applySlot(st.hotbar[st.hotIndex]);
+    this.emitChange();
+  }
+
+  cycleHotbar(dir: number): void {
+    this.selectHotbar((this.state.hotIndex + dir + HOTBAR_SIZE) % HOTBAR_SIZE);
+  }
+
+  /** Puts a slot into the selected hotbar position (or clears it). */
+  assignHotbar(slot: HotbarSlot): void {
+    this.state.hotbar[this.state.hotIndex] = slot;
+    this.applySlot(slot);
     this.emitChange();
   }
   setPrefabSize(n: number): void {
@@ -199,8 +286,24 @@ export class BuildMode {
     this.state.hollow = !this.state.hollow;
     this.emitChange();
   }
+  toggleLayerLock(): void {
+    const st = this.state;
+    st.layerLock = !st.layerLock;
+    if (st.layerLock) st.layerY = this.cursorCell ? clamp(this.cursorCell.y, PLOT_Y, PLOT_Y + PLOT_MAX_HEIGHT - 1) : PLOT_Y;
+    this.emitChange();
+  }
+  setLayer(y: number): void {
+    this.state.layerY = clamp(y, PLOT_Y, PLOT_Y + PLOT_MAX_HEIGHT - 1);
+    this.emitChange();
+  }
+  /** Moves the locked layer up/down, or the camera focus height when the layer is free. */
+  nudge(dir: number): void {
+    if (this.state.layerLock) this.setLayer(this.state.layerY + dir);
+    else this.focus.y = clamp(this.focus.y + dir * 3, PLOT_Y + 1, PLOT_Y + PLOT_MAX_HEIGHT + 10);
+  }
   setStyle(s: StyleId): void {
     this.state.style = s;
+    this.resetHotbar();
     this.emitChange();
   }
 
@@ -228,7 +331,19 @@ export class BuildMode {
   private applyEdits(edits: Edit[], flagAfter: Cell | null, spawnAfter: Cell | null): void {
     if (edits.length === 0 && flagAfter === this.state.flag && spawnAfter === this.state.spawn) return;
     const action: Action = { edits, flagBefore: this.state.flag, flagAfter, spawnBefore: this.state.spawn, spawnAfter };
-    for (const ed of edits) this.world.set(ed.x, ed.y, ed.z, ed.after);
+    const placed: Cell[] = [];
+    for (const ed of edits) {
+      this.world.set(ed.x, ed.y, ed.z, ed.after);
+      if (ed.after !== 0 && placed.length < 40) placed.push({ x: ed.x, y: ed.y, z: ed.z });
+    }
+    if (placed.length) {
+      for (const c of placed) {
+        if (this.pops.length >= 64) break;
+        const v = this.world.get(c.x, c.y, c.z);
+        this.pops.push({ x: c.x, y: c.y, z: c.z, t: 0, color: new THREE.Color(PALETTE[blockColor(v)] ?? '#ffffff') });
+      }
+      this.events.emit('placedCells', { cells: placed.slice(0, 12) });
+    }
     this.state.flag = flagAfter;
     this.state.spawn = spawnAfter;
     this.undoStack.push(action);
@@ -347,6 +462,63 @@ export class BuildMode {
     }
     this.applyEdits(edits, erase ? this.fixMarker(this.state.flag, edits) : this.state.flag, erase ? this.fixMarker(this.state.spawn, edits) : this.state.spawn);
     this.events.emit(erase ? 'erased' : 'placed', { count: edits.length });
+  }
+
+  /** Cells of a straight run between two cells (3D DDA). */
+  private lineCells(a: Cell, b: Cell): Cell[] {
+    const steps = Math.max(Math.abs(b.x - a.x), Math.abs(b.y - a.y), Math.abs(b.z - a.z));
+    const out: Cell[] = [];
+    for (let i = 0; i <= steps; i++) {
+      const t = steps === 0 ? 0 : i / steps;
+      out.push({ x: Math.round(a.x + (b.x - a.x) * t), y: Math.round(a.y + (b.y - a.y) * t), z: Math.round(a.z + (b.z - a.z) * t) });
+    }
+    return out;
+  }
+
+  /** Cells produced by a two-point tool between its anchor and the cursor. */
+  shapeCells(tool: Tool, a: Cell, b: Cell): Cell[] {
+    if (tool === 'line') return this.lineCells(a, b);
+    if (tool === 'wall') {
+      const base = this.lineCells(a, { x: b.x, y: a.y, z: b.z });
+      const out: Cell[] = [];
+      for (const c of base) for (let y = 0; y < this.state.wallHeight; y++) out.push({ x: c.x, y: a.y + y, z: c.z });
+      return out;
+    }
+    if (tool === 'stairs') {
+      // Solid staircase rising one block per step from the anchor towards the cursor.
+      const dx = b.x - a.x;
+      const dz = b.z - a.z;
+      const alongX = Math.abs(dx) >= Math.abs(dz);
+      const n = Math.max(Math.abs(alongX ? dx : dz), 1);
+      const sx = alongX ? Math.sign(dx) || 1 : 0;
+      const sz = alongX ? 0 : Math.sign(dz) || 1;
+      const width = Math.max(1, Math.min(4, Math.abs(alongX ? dz : dx) + 1));
+      const out: Cell[] = [];
+      for (let i = 0; i <= n; i++) {
+        for (let w = 0; w < width; w++) {
+          const wx = alongX ? a.x + sx * i : a.x + (Math.sign(dx) || 1) * w;
+          const wz = alongX ? a.z + (Math.sign(dz) || 1) * w : a.z + sz * i;
+          for (let y = 0; y <= i; y++) out.push({ x: wx, y: a.y + y, z: wz });
+        }
+      }
+      return out;
+    }
+    return [];
+  }
+
+  /** Applies a two-point shape (line / wall / stairs) with the current block. */
+  fillShape(tool: Tool, a: Cell, b: Cell): void {
+    const cells = this.shapeCells(tool, a, b)
+      .filter((c) => !this.blockedByMarker(c))
+      .map((c) => ({ ...c, value: this.currentValue }));
+    const edits: Edit[] = [];
+    this.collect(cells, edits, new Set(), { n: this.budgetLeft() });
+    if (edits.length === 0) {
+      if (this.budgetLeft() <= 0) this.events.emit('invalid', { key: 'budgetExceeded' });
+      return;
+    }
+    this.applyEdits(edits, this.state.flag, this.state.spawn);
+    this.events.emit('placed', { count: edits.length });
   }
 
   private blockedByMarker(c: Cell): boolean {
@@ -555,9 +727,10 @@ export class BuildMode {
       this.focus.y += v.panY * k;
     }
     if (v.heightDir !== 0) this.focus.y += v.heightDir * 14 * dt;
-    if (!input.isDown('ShiftLeft') && input.wheel !== 0 && this.state.tool !== 'prefab') this.orbitDist = clamp(this.orbitDist * (1 + input.wheel * 0.12), 8, 110);
-    if (input.wheel !== 0 && this.state.tool === 'prefab' && !input.isDown('ShiftLeft')) this.setPrefabSize(this.state.prefabSize - Math.sign(input.wheel));
-    if (input.wheel !== 0 && input.isDown('ShiftLeft')) this.orbitDist = clamp(this.orbitDist * (1 + input.wheel * 0.12), 8, 110);
+    if (input.wheel !== 0) {
+      if (input.isDown('ShiftLeft') || input.isDown('ShiftRight')) this.cycleHotbar(Math.sign(input.wheel));
+      else this.orbitDist = clamp(this.orbitDist * (1 + input.wheel * 0.12), 8, 110);
+    }
     const speed = (input.isDown('ShiftLeft') ? 40 : 20) * dt;
     const fwd = new THREE.Vector3(-Math.sin(this.orbitYaw), 0, -Math.cos(this.orbitYaw));
     const right = new THREE.Vector3(Math.cos(this.orbitYaw), 0, -Math.sin(this.orbitYaw));
@@ -600,9 +773,23 @@ export class BuildMode {
     this.raycaster.setFromCamera(ndc, this.camera);
     const o = this.raycaster.ray.origin;
     const d = this.raycaster.ray.direction;
-    const hit = this.world.raycast(o.x, o.y, o.z, d.x, d.y, d.z, 200);
     this.cursorCell = null;
     this.cursorHitBlock = null;
+    if (this.state.layerLock) {
+      // Fixed height: pick the cell of the locked layer under the cursor.
+      const ly = this.state.layerY;
+      const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -(ly + 0.5));
+      const ph = new THREE.Vector3();
+      if (this.raycaster.ray.intersectPlane(plane, ph)) {
+        const cx = Math.floor(ph.x);
+        const cz = Math.floor(ph.z);
+        this.cursorCell = { x: cx, y: ly, z: cz };
+        this.cursorNormal.set(0, 1, 0);
+        this.cursorHitBlock = this.world.get(cx, ly, cz) !== 0 ? { x: cx, y: ly, z: cz } : null;
+      }
+      return;
+    }
+    const hit = this.world.raycast(o.x, o.y, o.z, d.x, d.y, d.z, 200);
     // Floor plane fallback
     const planeHit = new THREE.Vector3();
     const planeT = this.raycaster.ray.intersectPlane(this.floorPlane, planeHit) ? planeHit.distanceTo(o) : Infinity;
@@ -632,13 +819,12 @@ export class BuildMode {
       else this.undo();
     }
     if (input.wasPressed('KeyY') && (input.isDown('ControlLeft') || input.isDown('MetaLeft'))) this.redo();
-    if (input.wasPressed('Digit1')) this.setTool('block');
-    if (input.wasPressed('Digit2')) this.setTool('box');
-    if (input.wasPressed('Digit3')) this.setTool('prefab');
-    if (input.wasPressed('Digit4')) this.setTool('paint');
-    if (input.wasPressed('Digit5')) this.setTool('erase');
-    if (input.wasPressed('Digit6')) this.setTool('flag');
-    if (input.wasPressed('Digit7')) this.setTool('spawn');
+    for (let i = 1; i <= 9; i++) if (input.wasPressed(`Digit${i}`)) this.selectHotbar(i - 1);
+    const toolKeys: [string, Tool][] = [['KeyB', 'block'], ['KeyV', 'box'], ['KeyL', 'line'], ['KeyN', 'wall'], ['KeyK', 'stairs'], ['KeyP', 'prefab'], ['KeyC', 'paint'], ['KeyX', 'erase'], ['KeyF', 'flag'], ['KeyG', 'spawn']];
+    for (const [key, tool] of toolKeys) if (input.wasPressed(key)) this.setTool(tool);
+    if (input.wasPressed('BracketRight')) this.setPrefabSize(this.state.prefabSize + 1);
+    if (input.wasPressed('BracketLeft')) this.setPrefabSize(this.state.prefabSize - 1);
+    if (input.wasPressed('KeyT')) this.toggleLayerLock();
     if (input.wasPressed('Escape') && st.boxStart) {
       st.boxStart = null;
       this.emitChange();
@@ -654,7 +840,7 @@ export class BuildMode {
     if (cell) {
       const valid = this.inPlot(cell.x, cell.y, cell.z);
       const col = (this.ghost.material as THREE.MeshBasicMaterial).color;
-      if (st.tool === 'block' || st.tool === 'erase' || st.tool === 'paint' || st.tool === 'flag' || st.tool === 'spawn' || (st.tool === 'box' && !st.boxStart)) {
+      if (st.tool === 'block' || st.tool === 'erase' || st.tool === 'paint' || st.tool === 'flag' || st.tool === 'spawn' || (TWO_POINT_TOOLS.includes(st.tool) && !st.boxStart)) {
         this.ghost.visible = true;
         this.ghost.position.set(cell.x + 0.5, cell.y + 0.5, cell.z + 0.5);
         col.set(st.tool === 'erase' ? 0xff3355 : !valid ? 0xff3355 : st.tool === 'paint' ? 0xffb300 : st.tool === 'flag' ? 0xffb300 : st.tool === 'spawn' ? 0x39ff14 : PALETTE[st.color]);
@@ -681,6 +867,20 @@ export class BuildMode {
         this.prefabGhost.visible = n > 0;
         (this.prefabGhost.material as THREE.MeshBasicMaterial).color.set(valid ? 0x00e5ff : 0xff3355);
       }
+      if ((st.tool === 'line' || st.tool === 'wall' || st.tool === 'stairs') && st.boxStart) {
+        const cells = this.shapeCells(st.tool, st.boxStart, cell);
+        const m = new THREE.Matrix4();
+        let n = 0;
+        for (const c of cells) {
+          if (n >= 4000) break;
+          m.makeTranslation(c.x + 0.5, c.y + 0.5, c.z + 0.5);
+          this.prefabGhost.setMatrixAt(n++, m);
+        }
+        this.prefabGhost.count = n;
+        this.prefabGhost.instanceMatrix.needsUpdate = true;
+        this.prefabGhost.visible = n > 0;
+        (this.prefabGhost.material as THREE.MeshBasicMaterial).color.set(PALETTE[st.color]);
+      }
     }
     // Markers
     if (st.flag) {
@@ -692,12 +892,56 @@ export class BuildMode {
       this.spawnMarker.visible = true;
       this.spawnMarker.position.set(st.spawn.x + 0.5, st.spawn.y + 0.05, st.spawn.z + 0.5);
     } else this.spawnMarker.visible = false;
+    // Placement pops
+    if (this.pops.length) {
+      const m = new THREE.Matrix4();
+      let n = 0;
+      for (let i = this.pops.length - 1; i >= 0; i--) {
+        const pp = this.pops[i];
+        pp.t += dt;
+        if (pp.t > 0.22) {
+          this.pops.splice(i, 1);
+          continue;
+        }
+        const k = pp.t / 0.22;
+        const sc = 1.28 - 0.28 * k;
+        m.makeScale(sc, sc, sc).setPosition(pp.x + 0.5, pp.y + 0.5, pp.z + 0.5);
+        this.popMesh.setMatrixAt(n, m);
+        this.popMesh.setColorAt(n, pp.color);
+        n++;
+      }
+      this.popMesh.count = n;
+      this.popMesh.instanceMatrix.needsUpdate = true;
+      if (this.popMesh.instanceColor) this.popMesh.instanceColor.needsUpdate = true;
+      this.popMesh.visible = n > 0;
+    } else this.popMesh.visible = false;
+    this.layerGrid.visible = st.layerLock;
+    if (st.layerLock) this.layerGrid.position.set(this.plot.cx, st.layerY + 0.02, this.plot.cz);
 
     // Clicks (ignore when the cursor is over UI: UI elements stop propagation, so we check a flag set by BuildUI)
     if (!this.uiHover) {
       const v = input.virtual;
-      if ((input.buttonPressed(0) || v.primary || (input.isTouch && v.tapped && !v.longPress)) && cell) this.primary(cell);
-      if (v.secondary && this.cursorHitBlock) this.eraseBlock(this.cursorHitBlock);
+      const drawTool = st.tool === 'block' || st.tool === 'erase' || st.tool === 'paint';
+      const holdPlace = drawTool && (input.buttonDown(0) || v.primaryHeld);
+      const holdErase = drawTool && v.secondaryHeld;
+      const key = cell ? `${cell.x},${cell.y},${cell.z}` : '';
+      if ((input.buttonPressed(0) || v.primary || (input.isTouch && v.tapped && !v.longPress)) && cell) {
+        this.primary(cell);
+        this.drawKey = key;
+      } else if (holdPlace && cell && key !== this.drawKey) {
+        // Dragging (or holding ＋ while turning) lays a continuous run of blocks.
+        this.primary(cell);
+        this.drawKey = key;
+      }
+      const hitKey = this.cursorHitBlock ? `${this.cursorHitBlock.x},${this.cursorHitBlock.y},${this.cursorHitBlock.z}` : '';
+      if (v.secondary && this.cursorHitBlock) {
+        this.eraseBlock(this.cursorHitBlock);
+        this.drawKey = hitKey;
+      } else if (holdErase && this.cursorHitBlock && hitKey !== this.drawKey) {
+        this.eraseBlock(this.cursorHitBlock);
+        this.drawKey = hitKey;
+      }
+      if (!holdPlace && !holdErase) this.drawKey = '';
       if (input.buttonPressed(2) && this.cursorHitBlock && st.tool !== 'box' && !input.isDown('ShiftLeft')) {
         // Right click erases (unless used for camera drag: only when not moving)
         this.rightClickCell = { ...this.cursorHitBlock };
@@ -750,6 +994,18 @@ export class BuildMode {
           this.emitChange();
         } else {
           this.fillBox(st.boxStart, cell, this.input.isDown('AltLeft'));
+          st.boxStart = null;
+          this.emitChange();
+        }
+        break;
+      case 'line':
+      case 'wall':
+      case 'stairs':
+        if (!st.boxStart) {
+          st.boxStart = { ...cell };
+          this.emitChange();
+        } else {
+          this.fillShape(st.tool, st.boxStart, cell);
           st.boxStart = null;
           this.emitChange();
         }

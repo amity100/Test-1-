@@ -9,6 +9,7 @@ import { WEAPONS, type WeaponId } from '../sim/Weapons';
 import { WeaponLogic } from '../sim/WeaponLogic';
 import { BotBrain, PROFILES, BOT_NAMES } from '../ai/BotBrain';
 import { NavSystem } from '../ai/NavSystem';
+import { BlockThumbs } from '../render/BlockThumbs';
 import { CharacterMesh } from '../render/CharacterMesh';
 import { ViewModel } from '../render/ViewModel';
 import { VFX } from '../render/VFX';
@@ -50,6 +51,7 @@ export class Game {
   combat: Combat;
   match: Match | null = null;
   nav: NavSystem | null = null;
+  private thumbs: BlockThumbs | null = null;
   private exitOk = new Map<number, boolean>();
   chars = new Map<number, CharacterMesh>();
   flags = new Map<number, FlagMesh>();
@@ -117,8 +119,16 @@ export class Game {
         tools: () => this.buildUI?.toggleSheet(),
         rotate: () => this.build?.rotate(),
         undo: () => this.build?.undo(),
+        redo: () => this.build?.redo(),
+        layer: () => {
+          this.build?.toggleLayerLock();
+          this.touch.setLayerLock(!!this.build?.state.layerLock);
+        },
+        nudge: (d) => this.build?.nudge(d),
       },
     });
+    this.touch.applyStyle(settings.data.touchScale, settings.data.touchOpacity);
+    this.touch.setAutoFire(settings.data.autoFire);
     this.touch.bindWeaponSlots(this.hud.root);
     this.rotateHint = document.createElement('div');
     this.rotateHint.className = 'rotate-hint';
@@ -164,6 +174,8 @@ export class Game {
       this.app.sky.setShadowRadius(this.app.gr.profile.shadowRadius);
     }
     audio.setVolumes(settings.data.volume, settings.data.music);
+    this.touch.applyStyle(settings.data.touchScale, settings.data.touchOpacity);
+    this.touch.setAutoFire(settings.data.autoFire);
   }
 
   private onLanguageChanged(): void {
@@ -230,8 +242,23 @@ export class Game {
     match.events.on('buildTimeUp', () => this.finishBuild(true));
     // Build phase
     this.build = new BuildMode(this.app.world, this.app.terrain, plots[0], cfg.style, this.app.input, this.app.gr.camera, this.app.gr.scene);
-    this.buildUI = new BuildUI(this.uiRoot, this.build, { ready: () => this.finishBuild(false), autoBuild: (arch) => this.build?.autoBuild(this.rng.int(1, 1e9), arch) }, IS_TOUCH || window.innerWidth < 900);
+    if (!this.thumbs) this.thumbs = new BlockThumbs(this.app.gr.renderer, this.app.materials, this.app.gr.scene.environment);
+    const thumbs = this.thumbs;
+    this.buildUI = new BuildUI(
+      this.uiRoot,
+      this.build,
+      {
+        ready: () => this.finishBuild(false),
+        autoBuild: (arch) => this.build?.autoBuild(this.rng.int(1, 1e9), arch),
+        thumb: (m, c) => thumbs.block(m, c),
+        prefabThumb: (id, size, style) => thumbs.prefab(id, size, style),
+      },
+      IS_TOUCH || window.innerWidth < 900,
+    );
     this.build.events.on('placed', () => audio.play('place', { pitch: 0.9 + Math.random() * 0.2 }));
+    this.build.events.on('placedCells', ({ cells }) => {
+      for (const c of cells) this.vfx.puff(new THREE.Vector3(c.x + 0.5, c.y + 0.65, c.z + 0.5), new THREE.Vector3(0, 1, 0), 3, 0.8, 0.22);
+    });
     this.build.events.on('erased', () => audio.play('erase'));
     this.build.enter();
     this.buildUI.show();
@@ -707,6 +734,7 @@ export class Game {
     const input = this.app.input;
     if (!this.local) {
       this.local = new Player(this.player, input, this.controller, this.combat, this.viewModel, this.app.gr.camera, this.app.gr.scene);
+      this.local.entities = () => this.entities;
       this.local.events.on('grenade', () => audio.play('switch', { volume: 0.5 }));
       this.local.events.on('grapple', ({ point }) => audio.play(point ? 'grapple' : 'grappleMiss'));
       this.local.events.on('reload', () => audio.play('reload'));

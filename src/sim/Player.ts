@@ -7,7 +7,7 @@ import type { ViewModel } from '../render/ViewModel';
 import { WeaponLogic } from './WeaponLogic';
 import { GRAPPLE, GRENADE, WEAPONS } from './Weapons';
 import { settings } from '../core/Settings';
-import { clamp, damp } from '../core/MathUtil';
+import { clamp, damp, wrapAngle } from '../core/MathUtil';
 import { Emitter } from '../core/Events';
 
 export interface PlayerEvents extends Record<string, unknown> {
@@ -30,6 +30,12 @@ export class Player {
   private ropeGeo: THREE.BufferGeometry;
   private baseFov = 80;
   enabled = true;
+  /** All entities (for touch aim assist and auto fire); set by the game. */
+  entities: () => Entity[] = () => [];
+  private autoFireTimer = 0;
+  private autoRearm = 0;
+  private assistTarget: Entity | null = null;
+  private assistAngle = Infinity;
 
   constructor(
     readonly entity: Entity,
@@ -64,15 +70,24 @@ export class Player {
     const looking = input.looking && this.enabled;
     const lookDX = this.enabled ? input.lookDX() : 0;
     const lookDY = this.enabled ? input.lookDY() : 0;
+    // Touch helpers: find an enemy near the crosshair for aim assist / auto fire.
+    const touch = input.isTouch && this.enabled;
+    const assistOn = touch && settings.data.aimAssist;
+    if (touch && (settings.data.aimAssist || settings.data.autoFire)) this.findAssistTarget(9);
+    else this.assistTarget = null;
+    const nearTarget = this.assistTarget !== null && this.assistAngle < THREE.MathUtils.degToRad(4.5);
     // Look
     if (looking || lookDX !== 0 || lookDY !== 0) {
       const w = e.weapon;
       const zoom = w ? THREE.MathUtils.lerp(1, WEAPONS[w.id].adsZoom, e.ads) : 1;
       const touchScale = input.isTouch ? 1.6 : 1;
-      const sens = 0.0022 * settings.data.sensitivity * zoom * touchScale;
+      // Friction: the camera slows down while the crosshair rests on an enemy.
+      const friction = assistOn && nearTarget ? 0.5 : 1;
+      const sens = 0.0022 * settings.data.sensitivity * zoom * touchScale * friction;
       e.yaw -= lookDX * sens;
       e.pitch = clamp(e.pitch - lookDY * sens * (settings.data.invertY ? -1 : 1), -1.5, 1.5);
     }
+    if (assistOn && this.assistTarget && this.assistAngle < THREE.MathUtils.degToRad(6)) this.magnetism(dt, lookDX !== 0 || lookDY !== 0);
     // Movement input
     const mv: MoveInput = {
       strafe: this.enabled ? input.moveX() : 0,
@@ -102,7 +117,8 @@ export class Player {
       e.wantsAds = input.adsHeld() && !e.sliding;
       if (input.reloadPressed() && WeaponLogic.startReload(e)) this.events.emit('reload', { entity: e });
       if (input.fireReleased()) e.triggerReleased = true;
-      if (input.fireHeld()) {
+      const autoNow = this.updateAutoFire(dt, touch && settings.data.autoFire);
+      if (input.fireHeld() || autoNow) {
         if (WeaponLogic.tryFire(e, this.combat, now)) {
           this.viewModel.kick(e.weapon!.id);
           this.addShake(WEAPONS[e.weapon!.id].kick * 0.6);
@@ -168,6 +184,64 @@ export class Player {
     } else this.rope.visible = false;
 
     this.viewModel.update(dt, e, lookDX, lookDY, WeaponLogic.reloadProgress(e));
+  }
+
+  /** Nearest visible enemy inside a cone around the crosshair (touch aim assist / auto fire). */
+  private findAssistTarget(maxDeg: number): void {
+    this.assistTarget = null;
+    this.assistAngle = Infinity;
+    const e = this.entity;
+    const eye = e.eyePos;
+    const fwd = e.forward(new THREE.Vector3());
+    const cosMax = Math.cos(THREE.MathUtils.degToRad(maxDeg));
+    const to = new THREE.Vector3();
+    for (const o of this.entities()) {
+      if (o === e || !o.alive) continue;
+      to.set(o.pos.x, o.pos.y + o.height * 0.6, o.pos.z).sub(eye);
+      const dist = to.length();
+      if (dist < 1 || dist > 80) continue;
+      to.divideScalar(dist);
+      const cos = to.dot(fwd);
+      if (cos < cosMax) continue;
+      const ang = Math.acos(Math.min(1, cos));
+      if (ang >= this.assistAngle) continue;
+      if (this.combat.raycast(eye, to, dist - 0.4, e, false)) continue;
+      this.assistTarget = o;
+      this.assistAngle = ang;
+    }
+  }
+
+  /** Gently steers the view towards the assist target while the player is aiming or moving. */
+  private magnetism(dt: number, activeLook: boolean): void {
+    const e = this.entity;
+    const o = this.assistTarget!;
+    const speed = Math.hypot(e.vel.x, e.vel.z);
+    if (!activeLook && speed < 1 && o.vel.lengthSq() < 0.5) return;
+    const eye = e.eyePos;
+    const d = new THREE.Vector3(o.pos.x, o.pos.y + o.height * 0.6, o.pos.z).sub(eye);
+    const targetYaw = Math.atan2(-d.x, -d.z);
+    const targetPitch = Math.atan2(d.y, Math.hypot(d.x, d.z));
+    const k = Math.min(1, dt * 4) * 0.4;
+    e.yaw += wrapAngle(targetYaw - e.yaw) * k;
+    e.pitch = clamp(e.pitch + (targetPitch - e.pitch) * k, -1.5, 1.5);
+  }
+
+  /** Auto fire: holds the trigger while the crosshair sits on an enemy; semi-autos re-arm periodically. */
+  private updateAutoFire(dt: number, enabled: boolean): boolean {
+    const e = this.entity;
+    const w = e.weapon;
+    const onTarget = enabled && !!w && !e.reloading && this.assistTarget !== null && this.assistAngle < THREE.MathUtils.degToRad(2.4);
+    if (onTarget) this.autoFireTimer += dt;
+    else this.autoFireTimer = Math.max(0, this.autoFireTimer - dt * 3);
+    const firing = onTarget && this.autoFireTimer > 0.08;
+    if (firing && w && !WEAPONS[w.id].auto) {
+      this.autoRearm -= dt;
+      if (this.autoRearm <= 0) {
+        e.triggerReleased = true;
+        this.autoRearm = 0.55;
+      }
+    } else this.autoRearm = 0;
+    return firing;
   }
 
   private tryGrapple(): void {

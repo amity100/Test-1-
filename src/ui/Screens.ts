@@ -270,6 +270,13 @@ export class Screens {
     toggles.appendChild(this.toggle(t('invertY'), d.invertY, (v) => { d.invertY = v; settings.save(); }));
     toggles.appendChild(this.toggle(t('showFps'), d.showFps, (v) => { d.showFps = v; settings.save(); }));
     stack.appendChild(toggles);
+    stack.appendChild(el('div', 'muted section', t('touchSection')));
+    const touchRow = el('div', 'row');
+    touchRow.appendChild(this.toggle(t('autoFire'), d.autoFire, (v) => { d.autoFire = v; settings.save(); this.cb.settingsChanged(); }));
+    touchRow.appendChild(this.toggle(t('aimAssist'), d.aimAssist, (v) => { d.aimAssist = v; settings.save(); }));
+    stack.appendChild(touchRow);
+    stack.appendChild(field(t('touchScale'), slider(0.75, 1.4, 0.05, d.touchScale, (v) => { d.touchScale = v; settings.save(); this.cb.settingsChanged(); }, (v) => `${Math.round(v * 100)}%`)));
+    stack.appendChild(field(t('touchOpacity'), slider(0.3, 1, 0.05, d.touchOpacity, (v) => { d.touchOpacity = v; settings.save(); this.cb.settingsChanged(); }, (v) => `${Math.round(v * 100)}%`)));
     stack.appendChild(
       field(
         t('language'),

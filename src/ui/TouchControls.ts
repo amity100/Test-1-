@@ -11,6 +11,9 @@ export interface TouchCallbacks {
     tools(): void;
     rotate(): void;
     undo(): void;
+    redo(): void;
+    layer(): void;
+    nudge(dir: number): void;
   };
 }
 
@@ -29,7 +32,33 @@ interface Pointer {
   downStamp: number;
 }
 
-/** On-screen controls for phones and tablets: floating joystick, look area, action buttons. */
+const svg = (body: string, vb = '0 0 24 24'): string => `<svg viewBox="${vb}" aria-hidden="true">${body}</svg>`;
+/** Crisp vector glyphs for the on-screen buttons (stroke inherits the button colour). */
+const ICON = {
+  fire: svg('<circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none"/><path d="M12 1.5v4M12 18.5v4M1.5 12h4M18.5 12h4"/>'),
+  jump: svg('<path d="M12 20V5"/><path d="M6 11l6-6 6 6"/><path d="M5 21h14"/>'),
+  crouch: svg('<circle cx="12" cy="5" r="2" fill="currentColor" stroke="none"/><path d="M8 12l4-3 4 3v4h-3v4"/><path d="M5 21h6"/>'),
+  ads: svg('<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>'),
+  reload: svg('<path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 3.5V9h-5.5"/>'),
+  grenade: svg('<circle cx="12" cy="14" r="6.5"/><rect x="9.5" y="2.5" width="5" height="4.5" rx="1"/><path d="M14.5 4h4"/><path d="M9.5 13.5a2.5 2.5 0 0 1 2.5-2.5"/>'),
+  grapple: svg('<path d="M12 2v9"/><path d="M12 11c0 4.5-3.2 6.5-6 6.5M12 11c0 4.5 3.2 6.5 6 6.5"/><path d="M6 17.5L4 21M18 17.5L20 21"/><circle cx="12" cy="4.5" r="2"/>'),
+  pause: svg('<rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"/><rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"/>'),
+  place: svg('<path d="M12 4v16M4 12h16"/>'),
+  remove: svg('<path d="M5 12h14"/>'),
+  rotate: svg('<path d="M4 12a8 8 0 1 0 2.6-5.9"/><path d="M4 3.5V9h5.5"/>'),
+  undo: svg('<path d="M9 14L4 9l5-5"/><path d="M4 9h9a6 6 0 0 1 0 12h-3"/>'),
+  redo: svg('<path d="M15 14l5-5-5-5"/><path d="M20 9h-9a6 6 0 0 0 0 12h3"/>'),
+  layer: svg('<path d="M12 3l9 4.5-9 4.5-9-4.5L12 3z"/><path d="M3 12l9 4.5 9-4.5"/><path d="M3 16.5L12 21l9-4.5"/>'),
+  up: svg('<path d="M6 15l6-6 6 6"/>'),
+  down: svg('<path d="M6 9l6 6 6-6"/>'),
+  tools: svg('<path d="M4 6h16M4 12h16M4 18h16"/>'),
+};
+
+/**
+ * On-screen controls for phones and tablets, laid out the way popular mobile shooters do it:
+ * a floating stick on the left, drag-to-aim on the right, a large fire button under the right
+ * thumb with jump/crouch in the corner, and the rarer actions tucked along the edge.
+ */
 export class TouchControls {
   readonly root: HTMLElement;
   private mode: TouchMode = 'none';
@@ -45,12 +74,14 @@ export class TouchControls {
   private pinchMid = { x: 0, y: 0 };
   private crouchOn = false;
   private adsOn = false;
-  private sprintLatched = false;
   private fireBtn!: HTMLElement;
+  private fireBadge!: HTMLElement;
   private crouchBtn!: HTMLElement;
   private adsBtn!: HTMLElement;
+  private layerBtn!: HTMLElement;
   private reticle: HTMLElement;
   private hint: HTMLElement;
+  private repeatTimer = 0;
 
   constructor(parent: HTMLElement, private input: Input, private cb: TouchCallbacks) {
     this.root = el('div', 'touch-ui');
@@ -84,20 +115,42 @@ export class TouchControls {
     }
   }
 
-  private button(parent: HTMLElement, cls: string, label: string, opts: { down?: () => void; up?: () => void; tap?: () => void }): HTMLElement {
-    const b = el('div', `tb ${cls}`, label);
+  /** Size multiplier and idle opacity of the on-screen controls (from settings). */
+  applyStyle(scale: number, opacity: number): void {
+    this.root.style.setProperty('--ts', String(scale));
+    this.root.style.setProperty('--to', String(opacity));
+  }
+
+  /** Shows the AUTO badge on the fire button when automatic fire is active. */
+  setAutoFire(on: boolean): void {
+    this.fireBadge.hidden = !on;
+  }
+
+  private button(parent: HTMLElement, cls: string, icon: string, opts: { down?: () => void; up?: () => void; tap?: () => void; repeat?: () => void }): HTMLElement {
+    const b = el('div', `tb ${cls}`, icon);
     b.setAttribute('data-ui', '1');
+    let repeatHandle = 0;
     b.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       e.stopPropagation();
       (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
       b.classList.add('down');
       opts.down?.();
+      if (opts.repeat) {
+        // Hold to repeat (after a short delay), e.g. layer up/down.
+        repeatHandle = window.setTimeout(() => {
+          repeatHandle = window.setInterval(() => opts.repeat?.(), 160);
+        }, 380);
+      }
     });
     const release = (e: Event): void => {
       e.preventDefault();
       e.stopPropagation();
-      if ((window as unknown as { __touchDebug?: boolean }).__touchDebug) console.log(`[touch] button ${cls} ${e.type} down=${b.classList.contains('down')}`);
+      if (repeatHandle) {
+        window.clearTimeout(repeatHandle);
+        window.clearInterval(repeatHandle);
+        repeatHandle = 0;
+      }
       if (!b.classList.contains('down')) return;
       b.classList.remove('down');
       opts.up?.();
@@ -113,27 +166,20 @@ export class TouchControls {
   private buildBattleButtons(): void {
     const v = this.input.virtual;
     const g = this.battleButtons;
-    this.fireBtn = this.button(g, 'fire', '◉', {
-      down: () => {
-        v.fire = true;
-        v.firePressed = true;
-      },
-      up: () => {
-        v.fire = false;
-        v.fireReleased = true;
-      },
-    });
-    this.button(g, 'fire fire-left', '◉', {
-      down: () => {
-        v.fire = true;
-        v.firePressed = true;
-      },
-      up: () => {
-        v.fire = false;
-        v.fireReleased = true;
-      },
-    });
-    this.button(g, 'jump', '⤒', {
+    const fireDown = (): void => {
+      v.fire = true;
+      v.firePressed = true;
+    };
+    const fireUp = (): void => {
+      v.fire = false;
+      v.fireReleased = true;
+    };
+    this.fireBtn = this.button(g, 'fire', ICON.fire, { down: fireDown, up: fireUp });
+    this.fireBadge = el('span', 'badge', 'AUTO');
+    this.fireBadge.hidden = true;
+    this.fireBtn.appendChild(this.fireBadge);
+    this.button(g, 'fire fire-left', ICON.fire, { down: fireDown, up: fireUp });
+    this.button(g, 'jump', ICON.jump, {
       down: () => {
         v.jump = true;
         v.jumpHeld = true;
@@ -142,41 +188,64 @@ export class TouchControls {
         v.jumpHeld = false;
       },
     });
-    this.crouchBtn = this.button(g, 'crouch', '⤓', {
+    this.crouchBtn = this.button(g, 'crouch', ICON.crouch, {
       tap: () => {
         this.crouchOn = !this.crouchOn;
         v.crouch = this.crouchOn;
         this.crouchBtn.classList.toggle('on', this.crouchOn);
       },
     });
-    this.adsBtn = this.button(g, 'ads', '◎', {
+    this.adsBtn = this.button(g, 'ads', ICON.ads, {
       tap: () => {
         this.adsOn = !this.adsOn;
         v.ads = this.adsOn;
         this.adsBtn.classList.toggle('on', this.adsOn);
       },
     });
-    this.button(g, 'reload', '↻', { tap: () => (v.reload = true) });
-    this.button(g, 'grenade', '●', { tap: () => (v.grenade = true) });
-    this.button(g, 'grapple', '⟟', {
+    this.button(g, 'reload', ICON.reload, { tap: () => (v.reload = true) });
+    this.button(g, 'grenade', ICON.grenade, { tap: () => (v.grenade = true) });
+    this.button(g, 'grapple', ICON.grapple, {
       down: () => (v.grapple = true),
       up: () => (v.grappleReleased = true),
     });
-    this.button(g, 'swap', '⇄', { tap: () => (v.weaponSwitch = 100) });
-    this.button(g, 'pause', '❚❚', { tap: () => this.cb.pause() });
+    this.button(g, 'pause', ICON.pause, { tap: () => this.cb.pause() });
   }
 
   private buildBuildButtons(): void {
     const v = this.input.virtual;
     const g = this.buildButtons;
-    this.button(g, 'place', '＋', { tap: () => (v.primary = true) });
-    this.button(g, 'remove', '－', { tap: () => (v.secondary = true) });
-    this.button(g, 'rotate', '↻', { tap: () => this.cb.build.rotate() });
-    this.button(g, 'undo', '↶', { tap: () => this.cb.build.undo() });
-    this.button(g, 'up', '▲', { down: () => (v.heightDir = 1), up: () => (v.heightDir = 0) });
-    this.button(g, 'down', '▼', { down: () => (v.heightDir = -1), up: () => (v.heightDir = 0) });
-    this.button(g, 'tools', '☰', { tap: () => this.cb.build.tools() });
-    this.button(g, 'pause', '❚❚', { tap: () => this.cb.pause() });
+    // Hold ＋ to keep placing while the view turns (draw lines); tap places once.
+    this.button(g, 'place', ICON.place, {
+      down: () => {
+        v.primary = true;
+        v.primaryHeld = true;
+      },
+      up: () => {
+        v.primaryHeld = false;
+      },
+    });
+    this.button(g, 'remove', ICON.remove, {
+      down: () => {
+        v.secondary = true;
+        v.secondaryHeld = true;
+      },
+      up: () => {
+        v.secondaryHeld = false;
+      },
+    });
+    this.button(g, 'rotate', ICON.rotate, { tap: () => this.cb.build.rotate() });
+    this.button(g, 'undo', ICON.undo, { tap: () => this.cb.build.undo() });
+    this.button(g, 'redo', ICON.redo, { tap: () => this.cb.build.redo() });
+    this.layerBtn = this.button(g, 'layer', ICON.layer, { tap: () => this.cb.build.layer() });
+    this.button(g, 'up', ICON.up, { tap: () => this.cb.build.nudge(1), repeat: () => this.cb.build.nudge(1) });
+    this.button(g, 'down', ICON.down, { tap: () => this.cb.build.nudge(-1), repeat: () => this.cb.build.nudge(-1) });
+    this.button(g, 'tools', ICON.tools, { tap: () => this.cb.build.tools() });
+    this.button(g, 'pause', ICON.pause, { tap: () => this.cb.pause() });
+  }
+
+  /** Reflects the build layer-lock state on its button. */
+  setLayerLock(on: boolean): void {
+    this.layerBtn.classList.toggle('on', on);
   }
 
   setMode(mode: TouchMode): void {
@@ -187,7 +256,7 @@ export class TouchControls {
     this.buildButtons.hidden = mode !== 'build';
     this.reticle.hidden = mode !== 'build';
     this.hint.hidden = mode !== 'build';
-    this.hint.textContent = t('touchBuildHint');
+    this.hint.textContent = t('tapHoldHint');
     this.root.classList.toggle('build', mode === 'build');
     this.pointers.clear();
     this.movePointer = null;
@@ -198,6 +267,8 @@ export class TouchControls {
     v.fire = false;
     v.jumpHeld = false;
     v.heightDir = 0;
+    v.primaryHeld = false;
+    v.secondaryHeld = false;
     this.crouchOn = false;
     this.adsOn = false;
     v.crouch = false;
@@ -207,7 +278,6 @@ export class TouchControls {
   }
 
   private onPointerDown = (e: PointerEvent): void => {
-    if ((window as unknown as { __touchDebug?: boolean }).__touchDebug) console.log(`[touch] down id=${e.pointerId} type=${e.pointerType} mode=${this.mode} n=${this.pointers.size}`);
     if (e.pointerType === 'mouse' && this.mode !== 'build') return;
     e.preventDefault();
     const zone = e.currentTarget as HTMLElement;
@@ -244,6 +314,7 @@ export class TouchControls {
       this.stickBase.style.left = `${e.clientX}px`;
       this.stickBase.style.top = `${e.clientY}px`;
       this.stickKnob.style.transform = 'translate(0px, 0px)';
+      this.stickBase.classList.remove('sprint');
     }
   };
 
@@ -261,7 +332,7 @@ export class TouchControls {
     p.y = e.clientY;
     const v = this.input.virtual;
     if (p.role === 'move') {
-      const R = 60;
+      const R = 58;
       let ox = p.x - p.startX;
       let oy = p.y - p.startY;
       const len = Math.hypot(ox, oy);
@@ -273,7 +344,9 @@ export class TouchControls {
       v.moveX = ox / R;
       v.moveY = -oy / R;
       const mag = Math.min(1, len / R);
-      v.sprint = mag > 0.92;
+      // Push the stick to its rim (mostly forward) to sprint.
+      v.sprint = mag > 0.9 && v.moveY > 0.35;
+      this.stickBase.classList.toggle('sprint', v.sprint);
     } else if (p.role === 'look' || p.role === 'orbit') {
       v.lookDX += dx;
       v.lookDY += dy;
@@ -293,7 +366,6 @@ export class TouchControls {
 
   private onPointerUp = (e: PointerEvent): void => {
     const p = this.pointers.get(e.pointerId);
-    if ((window as unknown as { __touchDebug?: boolean }).__touchDebug) console.log(`[touch] ${e.type} id=${e.pointerId} known=${!!p} role=${p?.role} mode=${this.mode} n=${this.pointers.size}`);
     if (!p) return;
     this.pointers.delete(e.pointerId);
     const v = this.input.virtual;
@@ -313,21 +385,11 @@ export class TouchControls {
         v.tapped = false;
         p.longFired = false;
       }
-      // Slow frames delay pointer events, so taps are judged by movement only.
-      if (p.moved < 14 && !p.longFired) {
-        if (this.mode === 'battle') {
-          // Tap on the look side fires one shot.
-          v.firePressed = true;
-          v.fire = true;
-          window.setTimeout(() => {
-            v.fire = false;
-            v.fireReleased = true;
-          }, 60);
-        } else if (this.mode === 'build') {
-          v.tapped = true;
-          v.tapX = p.x;
-          v.tapY = p.y;
-        }
+      // In build mode a quick tap places at the finger; in battle, taps only look around.
+      if (p.moved < 14 && !p.longFired && this.mode === 'build') {
+        v.tapped = true;
+        v.tapX = p.x;
+        v.tapY = p.y;
       }
     } else if (p.role === 'pinch') {
       // Remaining finger goes back to orbit.

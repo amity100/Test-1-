@@ -21,6 +21,9 @@ export interface VirtualState {
   weaponSwitch: number;
   primary: boolean;
   secondary: boolean;
+  /** Build buttons held down (continuous placing / erasing while the view turns). */
+  primaryHeld: boolean;
+  secondaryHeld: boolean;
   zoom: number;
   panX: number;
   panY: number;
@@ -37,7 +40,7 @@ function freshVirtual(): VirtualState {
     fire: false, firePressed: false, fireReleased: false,
     jump: false, jumpHeld: false, sprint: false, crouch: false, ads: false,
     reload: false, grenade: false, grapple: false, grappleReleased: false, interact: false,
-    weaponSwitch: -1, primary: false, secondary: false, zoom: 0, panX: 0, panY: 0,
+    weaponSwitch: -1, primary: false, secondary: false, primaryHeld: false, secondaryHeld: false, zoom: 0, panX: 0, panY: 0,
     tapped: false, tapX: 0, tapY: 0, longPress: false, heightDir: 0,
   };
 }

@@ -11,6 +11,14 @@ export interface SettingsData {
   invertY: boolean;
   showFps: boolean;
   playerName: string;
+  /** Touch: fire automatically while the crosshair rests on an enemy. */
+  autoFire: boolean;
+  /** Touch: slow the camera and gently follow enemies near the crosshair. */
+  aimAssist: boolean;
+  /** Touch: on-screen control size multiplier. */
+  touchScale: number;
+  /** Touch: on-screen control opacity. */
+  touchOpacity: number;
 }
 
 const KEY = 'flagkeep.settings.v1';
@@ -25,6 +33,10 @@ const DEFAULTS: SettingsData = {
   invertY: false,
   showFps: false,
   playerName: '',
+  autoFire: true,
+  aimAssist: true,
+  touchScale: 1,
+  touchOpacity: 0.7,
 };
 
 export class Settings {
