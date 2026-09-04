@@ -62,22 +62,25 @@ export class Player {
       return;
     }
     const looking = input.looking && this.enabled;
+    const lookDX = this.enabled ? input.lookDX() : 0;
+    const lookDY = this.enabled ? input.lookDY() : 0;
     // Look
-    if (looking) {
+    if (looking || lookDX !== 0 || lookDY !== 0) {
       const w = e.weapon;
       const zoom = w ? THREE.MathUtils.lerp(1, WEAPONS[w.id].adsZoom, e.ads) : 1;
-      const sens = 0.0022 * settings.data.sensitivity * zoom;
-      e.yaw -= input.mouseDX * sens;
-      e.pitch = clamp(e.pitch - input.mouseDY * sens * (settings.data.invertY ? -1 : 1), -1.5, 1.5);
+      const touchScale = input.isTouch ? 1.6 : 1;
+      const sens = 0.0022 * settings.data.sensitivity * zoom * touchScale;
+      e.yaw -= lookDX * sens;
+      e.pitch = clamp(e.pitch - lookDY * sens * (settings.data.invertY ? -1 : 1), -1.5, 1.5);
     }
     // Movement input
     const mv: MoveInput = {
-      strafe: this.enabled ? input.axisX() : 0,
-      forward: this.enabled ? input.axisY() : 0,
-      jump: this.enabled && input.wasPressed('Space'),
-      jumpHeld: this.enabled && input.isDown('Space'),
-      sprint: this.enabled && (input.isDown('ShiftLeft') || input.isDown('ShiftRight')),
-      crouch: this.enabled && (input.isDown('KeyC') || input.isDown('ControlLeft')),
+      strafe: this.enabled ? input.moveX() : 0,
+      forward: this.enabled ? input.moveY() : 0,
+      jump: this.enabled && input.jumpPressed(),
+      jumpHeld: this.enabled && input.jumpHeld(),
+      sprint: this.enabled && input.sprintHeld(),
+      crouch: this.enabled && input.crouchHeld(),
     };
     const wasGrounded = e.grounded;
     this.controller.step(e, mv, dt);
@@ -91,32 +94,32 @@ export class Player {
     WeaponLogic.update(e, dt);
     if (this.enabled) {
       let switchTo = -1;
-      if (input.wasPressed('Digit1')) switchTo = 0;
-      if (input.wasPressed('Digit2')) switchTo = 1;
-      if (input.wasPressed('Digit3')) switchTo = 2;
-      if (input.wheel !== 0 && e.weapons.length > 1) switchTo = (e.weaponIndex + (input.wheel > 0 ? 1 : -1) + e.weapons.length) % e.weapons.length;
+      const req = input.weaponSwitch();
+      if (req >= 0 && req < 3) switchTo = req;
+      else if (req === 100 && e.weapons.length > 1) switchTo = (e.weaponIndex + 1) % e.weapons.length;
+      else if (req === 101 && e.weapons.length > 1) switchTo = (e.weaponIndex - 1 + e.weapons.length) % e.weapons.length;
       if (switchTo >= 0 && WeaponLogic.switchWeapon(e, switchTo)) this.events.emit('weaponSwitch', { index: switchTo });
-      e.wantsAds = input.buttonDown(2) && !e.sliding;
-      if (input.wasPressed('KeyR') && WeaponLogic.startReload(e)) this.events.emit('reload', { entity: e });
-      if (input.buttonReleased(0)) e.triggerReleased = true;
-      if (input.buttonDown(0)) {
+      e.wantsAds = input.adsHeld() && !e.sliding;
+      if (input.reloadPressed() && WeaponLogic.startReload(e)) this.events.emit('reload', { entity: e });
+      if (input.fireReleased()) e.triggerReleased = true;
+      if (input.fireHeld()) {
         if (WeaponLogic.tryFire(e, this.combat, now)) {
           this.viewModel.kick(e.weapon!.id);
           this.addShake(WEAPONS[e.weapon!.id].kick * 0.6);
         }
       }
-      if (input.wasPressed('KeyG') && e.grenades > 0 && e.grenadeCooldown <= 0 && !e.reloading) {
+      if (input.grenadePressed() && e.grenades > 0 && e.grenadeCooldown <= 0 && !e.reloading) {
         e.grenades--;
         e.grenadeCooldown = 0.8;
         this.combat.throwGrenade(e, now);
         this.events.emit('grenade', { entity: e });
       }
-      if (input.wasPressed('KeyQ')) this.tryGrapple();
-      if (e.grapplePoint && (input.wasReleased('KeyQ') || input.wasPressed('Space'))) {
+      if (input.grapplePressed()) this.tryGrapple();
+      if (e.grapplePoint && (input.grappleReleased() || input.jumpPressed())) {
         e.grapplePoint = null;
         e.vel.y = Math.max(e.vel.y, 3);
       }
-      if (input.wasPressed('KeyE')) this.events.emit('interact', { entity: e });
+      if (input.interactPressed()) this.events.emit('interact', { entity: e });
     } else {
       e.wantsAds = false;
     }
@@ -164,7 +167,7 @@ export class Player {
       this.rope.visible = true;
     } else this.rope.visible = false;
 
-    this.viewModel.update(dt, e, looking ? input.mouseDX : 0, looking ? input.mouseDY : 0, WeaponLogic.reloadProgress(e));
+    this.viewModel.update(dt, e, lookDX, lookDY, WeaponLogic.reloadProgress(e));
   }
 
   private tryGrapple(): void {

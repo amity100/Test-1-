@@ -7,7 +7,7 @@ import { Mat, encodeBlock, blockMat, blockColor, PALETTE } from '../world/Voxel'
 import { STYLES, type StyleId, type BlockRole } from '../world/Styles';
 import { PREFABS, rotateBlocks, prefabCost, type PrefabId, type PrefabBlock } from '../world/Prefabs';
 import { checkReachability, type Cell, type ReachResult } from '../world/Reachability';
-import { generateFortress } from '../world/FortressGen';
+import { generateFortress, type Archetype } from '../world/FortressGen';
 import { Random } from '../core/Random';
 import { Emitter } from '../core/Events';
 import { clamp, damp } from '../core/MathUtil';
@@ -429,10 +429,10 @@ export class BuildMode {
   }
 
   /** Generates a fortress for the player (records as one undoable action). */
-  autoBuild(seed = Date.now()): void {
+  autoBuild(seed = Date.now(), archetype?: Archetype): void {
     const p = this.plot;
     const before = this.world.copyBox(p.minX, PLOT_Y, p.minZ, p.maxX, PLOT_Y + PLOT_MAX_HEIGHT, p.maxZ);
-    const res = generateFortress(this.world, p, this.state.style, new Random(seed >>> 0));
+    const res = generateFortress(this.world, p, this.state.style, new Random(seed >>> 0), archetype);
     const after = this.world.copyBox(p.minX, PLOT_Y, p.minZ, p.maxX, PLOT_Y + PLOT_MAX_HEIGHT, p.maxZ);
     const edits: Edit[] = [];
     const sx = p.maxX - p.minX + 1;
@@ -541,11 +541,24 @@ export class BuildMode {
   // ---------- camera + cursor ----------
   private updateCamera(dt: number): void {
     const input = this.input;
+    const v = input.virtual;
     const rotating = input.buttonDown(2) || input.buttonDown(1);
     if (rotating) {
       this.orbitYaw -= input.mouseDX * 0.005;
       this.orbitPitch = clamp(this.orbitPitch - input.mouseDY * 0.005, -1.45, -0.05);
     }
+    if (input.isTouch && (v.lookDX !== 0 || v.lookDY !== 0)) {
+      this.orbitYaw -= v.lookDX * 0.006;
+      this.orbitPitch = clamp(this.orbitPitch - v.lookDY * 0.006, -1.45, -0.05);
+    }
+    if (v.zoom !== 0) this.orbitDist = clamp(this.orbitDist * (1 + v.zoom * 0.6), 8, 110);
+    if (v.panX !== 0 || v.panY !== 0) {
+      const rightV = new THREE.Vector3(Math.cos(this.orbitYaw), 0, -Math.sin(this.orbitYaw));
+      const k = this.orbitDist * 0.0016;
+      this.focus.addScaledVector(rightV, -v.panX * k);
+      this.focus.y += v.panY * k;
+    }
+    if (v.heightDir !== 0) this.focus.y += v.heightDir * 14 * dt;
     if (!input.isDown('ShiftLeft') && input.wheel !== 0 && this.state.tool !== 'prefab') this.orbitDist = clamp(this.orbitDist * (1 + input.wheel * 0.12), 8, 110);
     if (input.wheel !== 0 && this.state.tool === 'prefab' && !input.isDown('ShiftLeft')) this.setPrefabSize(this.state.prefabSize - Math.sign(input.wheel));
     if (input.wheel !== 0 && input.isDown('ShiftLeft')) this.orbitDist = clamp(this.orbitDist * (1 + input.wheel * 0.12), 8, 110);
@@ -576,7 +589,18 @@ export class BuildMode {
     const input = this.input;
     const w = window.innerWidth;
     const h = window.innerHeight;
-    const ndc = new THREE.Vector2((input.cursorX / w) * 2 - 1, -(input.cursorY / h) * 2 + 1);
+    let sx = input.cursorX;
+    let sy = input.cursorY;
+    if (input.isTouch) {
+      if (input.virtual.tapped) {
+        sx = input.virtual.tapX;
+        sy = input.virtual.tapY;
+      } else {
+        sx = w / 2;
+        sy = h / 2;
+      }
+    }
+    const ndc = new THREE.Vector2((sx / w) * 2 - 1, -(sy / h) * 2 + 1);
     this.raycaster.setFromCamera(ndc, this.camera);
     const o = this.raycaster.ray.origin;
     const d = this.raycaster.ray.direction;
@@ -674,7 +698,9 @@ export class BuildMode {
 
     // Clicks (ignore when the cursor is over UI: UI elements stop propagation, so we check a flag set by BuildUI)
     if (!this.uiHover) {
-      if (input.buttonPressed(0) && cell) this.primary(cell);
+      const v = input.virtual;
+      if ((input.buttonPressed(0) || v.primary || (input.isTouch && v.tapped && !v.longPress)) && cell) this.primary(cell);
+      if (v.secondary && this.cursorHitBlock) this.eraseBlock(this.cursorHitBlock);
       if (input.buttonPressed(2) && this.cursorHitBlock && st.tool !== 'box' && !input.isDown('ShiftLeft')) {
         // Right click erases (unless used for camera drag: only when not moving)
         this.rightClickCell = { ...this.cursorHitBlock };

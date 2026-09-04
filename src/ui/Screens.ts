@@ -92,6 +92,7 @@ export class Screens {
     this.hideAll();
     this.current = name;
     const screen = el('div', `screen ${dim ? 'dim' : ''}`);
+    screen.setAttribute('data-ui', '1');
     screen.appendChild(panel);
     this.root.appendChild(screen);
     this.container = screen;
@@ -366,8 +367,10 @@ export class Screens {
 
   showClickToPlay(fallback: boolean): void {
     const p = el('div', 'clickplay');
-    p.innerHTML = `<div class="big">${esc(t('clickToPlay'))}</div>${fallback ? `<div class="muted">${esc(t('fallbackLook'))}</div>` : ''}`;
+    const touch = navigator.maxTouchPoints > 0 && window.matchMedia('(pointer: coarse)').matches;
+    p.innerHTML = `<div class="big">${esc(t(touch ? 'tapToPlay' : 'clickToPlay'))}</div>${fallback && !touch ? `<div class="muted">${esc(t('fallbackLook'))}</div>` : ''}`;
     const screen = el('div', 'screen');
+    screen.setAttribute('data-ui', '1');
     screen.appendChild(p);
     screen.addEventListener('click', () => this.cb.clickToPlay());
     this.hideAll();

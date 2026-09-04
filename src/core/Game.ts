@@ -19,6 +19,8 @@ import { HUD, type HudState, type ScoreRow } from '../ui/HUD';
 import { Screens, type SummaryRow, type PodiumRow } from '../ui/Screens';
 import { BuildMode } from '../build/BuildMode';
 import { BuildUI } from '../build/BuildUI';
+import { TouchControls } from '../ui/TouchControls';
+import { IS_TOUCH } from './Input';
 import { generateFortress } from '../world/FortressGen';
 import { STYLE_IDS, type StyleId } from '../world/Styles';
 import { PLOT_Y, PLOT_MAX_HEIGHT, ATTACK_SPAWN_RADIUS, ZONE_RADIUS, PLAYABLE_RADIUS, type Plot } from '../world/Layout';
@@ -57,6 +59,8 @@ export class Game {
   screens: Screens;
   build: BuildMode | null = null;
   buildUI: BuildUI | null = null;
+  touch: TouchControls;
+  private rotateHint: HTMLElement;
   private projectileMeshes = new Map<number, THREE.Object3D>();
   private rocketModel: THREE.Group;
   private grenadeModel: THREE.Group;
@@ -103,6 +107,23 @@ export class Game {
         audio.play(k === 'click' ? 'uiClick' : 'uiHover');
       },
     });
+    this.touch = new TouchControls(this.uiRoot, app.input, {
+      pause: () => (this.paused ? this.resume() : this.pause()),
+      weaponSlot: (i) => {
+        if (this.mode === 'battle' && WeaponLogic.switchWeapon(this.player, i)) audio.play('switch');
+      },
+      build: {
+        tools: () => this.buildUI?.toggleSheet(),
+        rotate: () => this.build?.rotate(),
+        undo: () => this.build?.undo(),
+      },
+    });
+    this.touch.bindWeaponSlots(this.hud.root);
+    this.rotateHint = document.createElement('div');
+    this.rotateHint.className = 'rotate-hint';
+    this.rotateHint.textContent = t('rotateDevice');
+    this.rotateHint.hidden = true;
+    this.uiRoot.appendChild(this.rotateHint);
     this.wireCombat();
     this.app.input.onLockChange = (locked) => {
       if (locked && this.screens.name === 'click') this.screens.hideAll();
@@ -211,12 +232,13 @@ export class Game {
     match.events.on('buildTimeUp', () => this.finishBuild(true));
     // Build phase
     this.build = new BuildMode(this.app.world, this.app.terrain, plots[0], cfg.style, this.app.input, this.app.gr.camera, this.app.gr.scene);
-    this.buildUI = new BuildUI(this.uiRoot, this.build, { ready: () => this.finishBuild(false), autoBuild: () => this.build?.autoBuild(this.rng.int(1, 1e9)) });
+    this.buildUI = new BuildUI(this.uiRoot, this.build, { ready: () => this.finishBuild(false), autoBuild: (arch) => this.build?.autoBuild(this.rng.int(1, 1e9), arch) }, IS_TOUCH || window.innerWidth < 900);
     this.build.events.on('placed', () => audio.play('place', { pitch: 0.9 + Math.random() * 0.2 }));
     this.build.events.on('erased', () => audio.play('erase'));
     this.build.enter();
     this.buildUI.show();
     this.mode = 'build';
+    this.setTouchMode();
     match.startBuild();
     audio.music('build');
     this.app.gr.camera.position.set(plots[0].cx + 30, PLOT_Y + 30, plots[0].cz + 40);
@@ -277,11 +299,24 @@ export class Game {
     this.match.finishBuild();
   }
 
+  /** Shows the on-screen controls that match the current mode (touch devices only). */
+  private setTouchMode(): void {
+    if (!IS_TOUCH) {
+      this.touch.setMode('none');
+      this.rotateHint.hidden = true;
+      return;
+    }
+    const m = this.mode === 'battle' ? 'battle' : this.mode === 'build' ? 'build' : 'none';
+    this.touch.setMode(m);
+    this.rotateHint.hidden = m === 'none';
+  }
+
   private onPhase(phase: string): void {
     const match = this.match!;
     switch (phase) {
       case 'roundIntro': {
         this.mode = 'intro';
+        this.setTouchMode();
         this.screens.hideAll();
         this.app.input.exitPointerLock();
         this.introBannerShown = false;
@@ -306,6 +341,7 @@ export class Game {
       }
       case 'round': {
         this.mode = 'battle';
+        this.setTouchMode();
         this.hud.show();
         const def = match.defender!;
         this.hud.showBanner(this.player === def ? t('defendFortress') : t('attackFortress', { name: def.name }), t('round', { n: match.roundIndex + 1, total: match.roundOrder.length }), 3.5);
@@ -314,6 +350,7 @@ export class Game {
       }
       case 'roundEnd': {
         this.mode = 'summary';
+        this.setTouchMode();
         this.app.input.exitPointerLock();
         this.hud.hide();
         this.viewModel.hidden = true;
@@ -329,6 +366,7 @@ export class Game {
       }
       case 'podium': {
         this.mode = 'podium';
+        this.setTouchMode();
         this.app.input.exitPointerLock();
         this.hud.hide();
         this.focus.hide();
@@ -399,6 +437,10 @@ export class Game {
 
   private requestPlayControl(): void {
     const input = this.app.input;
+    if (IS_TOUCH) {
+      this.screens.hideAll();
+      return;
+    }
     if (input.looking) {
       this.screens.hideAll();
       return;
@@ -435,6 +477,7 @@ export class Game {
     this.showcaseIsland();
     this.screens.showMenu();
     this.mode = 'menu';
+    this.setTouchMode();
     this.paused = false;
     this.app.input.exitPointerLock();
     audio.music('menu');

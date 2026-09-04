@@ -99,6 +99,7 @@ export class HUD {
   constructor(parent: HTMLElement) {
     this.root = el('div', 'hud');
     this.root.hidden = true;
+    this.root.setAttribute('data-game', '1');
     parent.appendChild(this.root);
 
     // Crosshair
@@ -208,6 +209,7 @@ export class HUD {
     this.root.appendChild(this.minimap);
 
     this.scoreboard = el('div', 'scoreboard');
+    this.scoreboard.setAttribute('data-ui', '1');
     this.scoreboard.hidden = true;
     this.root.appendChild(this.scoreboard);
     this.pops = el('div', 'pops');
