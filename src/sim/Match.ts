@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Emitter } from '../core/Events';
-import type { Entity } from './Entities';
+import type { Entity, Role } from './Entities';
 import type { StyleId } from '../world/Styles';
 import type { Cell } from '../world/Reachability';
 import { Random } from '../core/Random';
@@ -25,8 +25,8 @@ export interface FlagInfo {
 }
 
 export interface SpawnResolver {
-  attackerSpawn(plotIndex: number, slot: number, total: number): THREE.Vector3;
-  defenderSpawn(plotIndex: number): THREE.Vector3;
+  /** Where an entity appears for the current round: defenders inside the contested fortress, attackers at their own. */
+  spawnFor(entity: Entity, role: Role, targetPlotIndex: number): THREE.Vector3;
 }
 
 export type ScoreReason = 'capture' | 'hold' | 'kill' | 'killDefender' | 'defense';
@@ -137,13 +137,10 @@ export class Match {
 
   private beginRound(now: number): void {
     this.roundTimer = this.config.roundTime;
-    let slot = 0;
-    const attackers = this.entities.filter((e) => e !== this.defender);
     for (const e of this.entities) {
       e.reset();
       e.deadSince = -1;
-      if (e === this.defender) e.pos.copy(this.resolver.defenderSpawn(this.targetPlotIndex));
-      else e.pos.copy(this.resolver.attackerSpawn(this.targetPlotIndex, slot++, attackers.length));
+      e.pos.copy(this.resolver.spawnFor(e, e.role, this.targetPlotIndex));
       // Face the target fortress.
       const flag = this.currentFlag;
       if (flag) {
@@ -233,11 +230,7 @@ export class Match {
       if (!e.alive && e.respawnAt > 0 && now >= e.respawnAt) {
         e.reset();
         e.respawnAt = 0;
-        if (e === defender) e.pos.copy(this.resolver.defenderSpawn(this.targetPlotIndex));
-        else {
-          const slot = this.entities.indexOf(e);
-          e.pos.copy(this.resolver.attackerSpawn(this.targetPlotIndex, slot, this.entities.length));
-        }
+        e.pos.copy(this.resolver.spawnFor(e, e.role, this.targetPlotIndex));
         if (flag) {
           e.yaw = Math.atan2(-(flag.pos.x - e.pos.x), -(flag.pos.z - e.pos.z));
           e.pitch = 0;

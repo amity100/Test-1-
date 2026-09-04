@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { App } from './App';
-import { Entity } from '../sim/Entities';
+import { Entity, type Role } from '../sim/Entities';
 import { CharacterController } from '../sim/CharacterController';
 import { Combat } from '../sim/Combat';
 import { Player } from '../sim/Player';
@@ -8,7 +8,7 @@ import { Match, type MatchConfig, RULES } from '../sim/Match';
 import { WEAPONS, type WeaponId } from '../sim/Weapons';
 import { WeaponLogic } from '../sim/WeaponLogic';
 import { BotBrain, PROFILES, BOT_NAMES } from '../ai/BotBrain';
-import { NavGrid } from '../ai/NavGrid';
+import { NavSystem } from '../ai/NavSystem';
 import { CharacterMesh } from '../render/CharacterMesh';
 import { ViewModel } from '../render/ViewModel';
 import { VFX } from '../render/VFX';
@@ -23,7 +23,7 @@ import { TouchControls } from '../ui/TouchControls';
 import { IS_TOUCH } from './Input';
 import { generateFortress } from '../world/FortressGen';
 import { STYLE_IDS, type StyleId } from '../world/Styles';
-import { PLOT_Y, PLOT_MAX_HEIGHT, ATTACK_SPAWN_RADIUS, ZONE_RADIUS, PLAYABLE_RADIUS, type Plot } from '../world/Layout';
+import { PLOT_Y, PLOT_MAX_HEIGHT, PLOT_HALF, ZONE_RADIUS, PLAYABLE_RADIUS, type Plot } from '../world/Layout';
 import { blockColor, PALETTE } from '../world/Voxel';
 import { STYLES } from '../world/Styles';
 import { Random } from './Random';
@@ -49,7 +49,8 @@ export class Game {
   controller: CharacterController;
   combat: Combat;
   match: Match | null = null;
-  nav: NavGrid | null = null;
+  nav: NavSystem | null = null;
+  private exitOk = new Map<number, boolean>();
   chars = new Map<number, CharacterMesh>();
   flags = new Map<number, FlagMesh>();
   focus = new FocusZone();
@@ -197,10 +198,7 @@ export class Game {
     }
     // Clear all plots, generate bot fortresses
     for (const p of plots) this.app.world.clearBox(p.minX, PLOT_Y, p.minZ, p.maxX, PLOT_Y + PLOT_MAX_HEIGHT + 2, p.maxZ);
-    const match = new Match(cfg, {
-      attackerSpawn: (plotIndex, slot, total) => this.attackerSpawn(plotIndex, slot, total),
-      defenderSpawn: (plotIndex) => this.defenderSpawn(plotIndex),
-    });
+    const match = new Match(cfg, { spawnFor: (e, role, target) => this.spawnFor(e, role, target) });
     this.match = match;
     match.setEntities(this.entities);
     this.paintGround(plots[0], cfg.style);
@@ -286,6 +284,13 @@ export class Game {
     this.build.exit();
     this.buildUI?.hide();
     this.app.chunks.flush();
+    // The world is final for the rest of the match: build navigation for every fortress now.
+    this.nav = new NavSystem(this.app.world, this.app.terrain, this.app.plots);
+    this.exitOk.clear();
+    const t0 = performance.now();
+    this.nav.prepare(this.entities.length);
+    const navMs = performance.now() - t0;
+    if (navMs > 400) console.warn(`navigation build took ${navMs.toFixed(0)}ms`);
     if (timeUp) this.hud.showBanner(t('buildTimeUp'), '', 3);
     // Flags
     for (const [plotIndex, info] of this.match.flags) {
@@ -323,7 +328,6 @@ export class Game {
         this.endBannerShown = false;
         this.summaryShown = false;
         const plot = this.app.plots[match.targetPlotIndex];
-        this.buildNav(plot);
         for (const [idx, fm] of this.flags) fm.group.visible = idx === match.targetPlotIndex;
         const color = new THREE.Color(match.defender!.colorHex);
         this.focus.show(new THREE.Vector3(plot.cx, PLOT_Y, plot.cz), color);
@@ -382,14 +386,6 @@ export class Game {
     }
   }
 
-  private buildNav(plot: Plot): void {
-    const m = 40;
-    this.nav = new NavGrid(this.app.world, this.app.terrain, { minX: plot.minX - m, maxX: plot.maxX + m, minZ: plot.minZ - m, maxZ: plot.maxZ + m, minY: PLOT_Y - 8, maxY: PLOT_Y + PLOT_MAX_HEIGHT + 2 });
-    const t0 = performance.now();
-    this.nav.build();
-    if (performance.now() - t0 > 250) console.warn(`nav build took ${(performance.now() - t0).toFixed(0)}ms for ${this.nav.nodeCount} nodes`);
-  }
-
   private onSpawn(e: Entity): void {
     if (e.isBot) {
       const brain = this.bots.find((b) => b.entity === e);
@@ -406,13 +402,39 @@ export class Game {
     audio.play('spawn', { pos: e.pos, volume: 0.6 });
   }
 
-  private attackerSpawn(plotIndex: number, slot: number, total: number): THREE.Vector3 {
+  /**
+   * Defenders appear at the spawn point chosen for the contested fortress; attackers appear at
+   * their own fortress and run over. A fortress whose spawn cannot reach open ground (a pit, a
+   * sealed room) falls back to its doorstep on the side facing the target.
+   */
+  private spawnFor(e: Entity, role: Role, targetPlotIndex: number): THREE.Vector3 {
+    const plotIndex = role === 'defender' ? targetPlotIndex : e.plotIndex;
     const plot = this.app.plots[plotIndex];
-    const base = Math.atan2(plot.cz, plot.cx) + Math.PI; // side facing the island centre
-    const spread = Math.PI * 1.3;
-    const a = base - spread / 2 + (spread * (slot + 0.5)) / Math.max(1, total) + this.rng.range(-0.08, 0.08);
-    for (let attempt = 0; attempt < 8; attempt++) {
-      const r = ATTACK_SPAWN_RADIUS + attempt * 2;
+    const spawn = this.match?.spawns.get(plotIndex);
+    if (role === 'defender') {
+      if (spawn) return spawn.clone();
+      const f = this.match?.flags.get(plotIndex);
+      if (f) return f.pos.clone().add(new THREE.Vector3(0.5, 0, 0));
+      return new THREE.Vector3(plot.cx, PLOT_Y, plot.cz);
+    }
+    if (spawn && this.nav) {
+      let ok = this.exitOk.get(plotIndex);
+      if (ok === undefined) {
+        ok = this.nav.canExit(plotIndex, spawn);
+        this.exitOk.set(plotIndex, ok);
+        if (!ok) console.warn(`fortress ${plotIndex}: spawn cannot reach open ground, using the doorstep`);
+      }
+      if (ok) return spawn.clone();
+    } else if (spawn) return spawn.clone();
+    return this.doorstep(plot, this.app.plots[targetPlotIndex] ?? plot);
+  }
+
+  /** A clear terrain cell just outside a plot on the side facing `toward`. */
+  private doorstep(plot: Plot, toward: Plot): THREE.Vector3 {
+    const base = Math.atan2(toward.cz - plot.cz, toward.cx - plot.cx);
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const a = base + (attempt % 2 === 0 ? 1 : -1) * Math.ceil(attempt / 2) * 0.35;
+      const r = PLOT_HALF + 5 + Math.floor(attempt / 4) * 2;
       let x = plot.cx + Math.cos(a) * r;
       let z = plot.cz + Math.sin(a) * r;
       const rr = Math.sqrt(x * x + z * z);
@@ -423,16 +445,7 @@ export class Game {
       const y = this.app.terrain.heightAt(x, z);
       if (y > 1.0 && !this.app.world.boxIntersectsSolid(x - 0.4, y, z - 0.4, x + 0.4, y + 2, z + 0.4)) return new THREE.Vector3(x, y + 0.05, z);
     }
-    return new THREE.Vector3(plot.cx + Math.cos(a) * ATTACK_SPAWN_RADIUS, PLOT_Y + 1, plot.cz + Math.sin(a) * ATTACK_SPAWN_RADIUS);
-  }
-
-  private defenderSpawn(plotIndex: number): THREE.Vector3 {
-    const s = this.match?.spawns.get(plotIndex);
-    if (s) return s.clone();
-    const f = this.match?.flags.get(plotIndex);
-    if (f) return f.pos.clone().add(new THREE.Vector3(0.5, 0, 0));
-    const p = this.app.plots[plotIndex];
-    return new THREE.Vector3(p.cx, PLOT_Y, p.cz);
+    return new THREE.Vector3(plot.cx + Math.cos(base) * (PLOT_HALF + 5), PLOT_Y + 1, plot.cz + Math.sin(base) * (PLOT_HALF + 5));
   }
 
   private requestPlayControl(): void {
@@ -960,7 +973,30 @@ export class Game {
     return { used: b.state.used, sealed: sealed.reason, open: open.reason, loaded, after: after.reason, flag: b.state.flag, spawn: b.state.spawn };
   }
   debugState(): Record<string, unknown> {
-    return { mode: this.mode, phase: this.match?.phase, round: this.match?.roundIndex, alive: this.player.alive, pos: this.player.pos.toArray(), hp: this.player.hp, entities: this.entities.map((e) => ({ name: e.name, alive: e.alive, role: e.role, pos: e.pos.toArray().map((v) => Math.round(v * 10) / 10), hp: Math.round(e.hp), score: e.score.total })) };
+    const target = this.match?.targetPlotIndex ?? -1;
+    const tp = target >= 0 ? this.app.plots[target] : null;
+    return {
+      mode: this.mode,
+      phase: this.match?.phase,
+      round: this.match?.roundIndex,
+      target,
+      alive: this.player.alive,
+      pos: this.player.pos.toArray(),
+      hp: this.player.hp,
+      entities: this.entities.map((e) => ({
+        name: e.name,
+        alive: e.alive,
+        role: e.role,
+        plot: e.plotIndex,
+        pos: e.pos.toArray().map((v) => Math.round(v * 10) / 10),
+        distToTarget: tp ? Math.round(Math.hypot(e.pos.x - tp.cx, e.pos.z - tp.cz)) : -1,
+        hp: Math.round(e.hp),
+        score: e.score.total,
+        captures: e.score.captures,
+        kills: e.score.kills,
+        state: this.bots.find((b) => b.entity === e)?.state ?? 'human',
+      })),
+    };
   }
 }
 

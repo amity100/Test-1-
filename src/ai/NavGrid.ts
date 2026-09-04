@@ -10,6 +10,8 @@ export interface NavRegion {
   maxZ: number;
   minY: number;
   maxY: number;
+  /** Optional box that can contain placed blocks; outside it only the terrain surface is scanned. */
+  dense?: { minX: number; maxX: number; minZ: number; maxZ: number };
 }
 
 interface Node {
@@ -108,14 +110,25 @@ export class NavGrid {
     const r = this.region;
     this.nodes = [];
     this.index.clear();
+    const d = r.dense;
     for (let x = r.minX; x <= r.maxX; x++) {
       for (let z = r.minZ; z <= r.maxZ; z++) {
         const tf = this.floorAt(x, z);
+        if (d && (x < d.minX || x > d.maxX || z < d.minZ || z > d.maxZ)) {
+          // Open terrain: the surface cell is the only candidate.
+          if (tf >= r.minY && tf <= r.maxY && this.standable(x, tf, z)) this.addNode(x, tf, z);
+          continue;
+        }
         for (let y = Math.max(r.minY, tf); y <= r.maxY; y++) {
           if (this.standable(x, y, z)) this.addNode(x, y, z);
         }
       }
     }
+  }
+
+  contains(x: number, z: number): boolean {
+    const r = this.region;
+    return x >= r.minX && x <= r.maxX + 1 && z >= r.minZ && z <= r.maxZ + 1;
   }
 
   private addNode(x: number, y: number, z: number): number {

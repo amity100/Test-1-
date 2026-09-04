@@ -3,6 +3,7 @@ import type { Entity } from '../sim/Entities';
 import type { Combat } from '../sim/Combat';
 import type { CharacterController, MoveInput } from '../sim/CharacterController';
 import type { NavGrid } from './NavGrid';
+import type { NavSystem } from './NavSystem';
 import type { Plot } from '../world/Layout';
 import type { VoxelWorld } from '../world/VoxelWorld';
 import { WeaponLogic } from '../sim/WeaponLogic';
@@ -39,7 +40,7 @@ export interface BotContext {
   combat: Combat;
   controller: CharacterController;
   entities: () => Entity[];
-  nav: () => NavGrid | null;
+  nav: () => NavSystem | null;
   targetPlot: () => Plot | null;
   flagPos: () => THREE.Vector3 | null;
   defender: () => Entity | null;
@@ -405,7 +406,7 @@ export class BotBrain {
     }
   }
 
-  private combatMove(input: MoveInput, threat: Entity, dt: number, nav: NavGrid | null): void {
+  private combatMove(input: MoveInput, threat: Entity, dt: number, nav: NavSystem | null): void {
     const e = this.entity;
     const w = e.weapon;
     const def = w ? WEAPONS[w.id] : WEAPONS.rifle;
@@ -446,7 +447,7 @@ export class BotBrain {
     input.sprint = sprint && input.forward > 0.5;
   }
 
-  private followPath(goal: THREE.Vector3, input: MoveInput, nav: NavGrid | null, dt: number): void {
+  private followPath(goal: THREE.Vector3, input: MoveInput, nav: NavSystem | null, dt: number): void {
     const e = this.entity;
     if (!nav) {
       const d = tmp.copy(goal).sub(e.pos).setY(0);
@@ -455,7 +456,7 @@ export class BotBrain {
     }
     const goalMoved = this.path && this.path.length > 0 && this.path[this.path.length - 1].distanceTo(goal) > 2.5;
     if (!this.path || goalMoved || this.repathTimer <= 0) {
-      this.path = nav.findPath(e.pos, goal);
+      this.path = nav.findRoute(e.pos, goal);
       this.pathIndex = 0;
       // Stagger repaths so several bots do not search on the same frame.
       this.repathTimer = this.path ? 1.5 + this.rng.range(0, 1.2) : 1.2 + this.rng.range(0, 1);
@@ -472,7 +473,7 @@ export class BotBrain {
       const dx = wp.x - e.pos.x;
       const dz = wp.z - e.pos.z;
       const dy = wp.y - e.pos.y;
-      if (dx * dx + dz * dz < 0.36 && Math.abs(dy) < 1.2) this.pathIndex++;
+      if (dx * dx + dz * dz < 0.55 && Math.abs(dy) < 1.6) this.pathIndex++;
       else break;
     }
     const wp = this.path[this.pathIndex];
@@ -491,10 +492,11 @@ export class BotBrain {
     void dt;
   }
 
-  private pickSearchTarget(nav: NavGrid | null): THREE.Vector3 | null {
+  private pickSearchTarget(navSys: NavSystem | null): THREE.Vector3 | null {
     const plot = this.ctx.targetPlot();
     if (!plot) return null;
     const e = this.entity;
+    const nav: NavGrid | null = navSys ? navSys.gridFor(plot.index) : null;
     if (!nav) return new THREE.Vector3(plot.cx + this.rng.range(-12, 12), e.pos.y, plot.cz + this.rng.range(-12, 12));
     // Prefer unvisited, enclosed cells; smarter bots weigh depth more.
     const cands = nav.nodesWhere((n) => n.x >= plot.minX && n.x <= plot.maxX && n.z >= plot.minZ && n.z <= plot.maxZ);
@@ -519,7 +521,9 @@ export class BotBrain {
     return best;
   }
 
-  private pickHideSpot(nav: NavGrid | null, flag: THREE.Vector3): THREE.Vector3 {
+  private pickHideSpot(navSys: NavSystem | null, flag: THREE.Vector3): THREE.Vector3 {
+    const plot = this.ctx.targetPlot();
+    const nav: NavGrid | null = navSys && plot ? navSys.gridFor(plot.index) : null;
     if (!nav) return flag.clone();
     const cands = nav.nodesWhere((n) => {
       const dx = n.x + 0.5 - flag.x;
