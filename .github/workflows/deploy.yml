@@ -1,7 +1,5 @@
 name: Deploy FLAGKEEP to GitHub Pages
 
-# Builds the static site and publishes it to the gh-pages branch, which this repository's
-# GitHub Pages site already serves from.
 on:
   push:
     branches: [main, 'claude/**']
@@ -11,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: pages
+  group: pages-deploy
   cancel-in-progress: true
 
 jobs:
@@ -25,8 +23,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - run: touch dist/.nojekyll
-      - name: Publish to gh-pages
+      - name: Publish dist to the gh-pages branch (the repository's Pages source)
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}

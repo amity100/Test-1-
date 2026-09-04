@@ -20,8 +20,8 @@ for (let i = 0; i < 40; i++) {
   await page.evaluate(() => window.__fk.game().debugAdvance(4));
   const d = await dom();
   console.log(i, JSON.stringify(d));
-  if (d.mode === 'summary' && !fs.existsSync(path.join(outDir, 'summary.png'))) { await page.waitForTimeout(500); await page.screenshot({ path: path.join(outDir, 'summary.png') }); }
-  if (d.mode === 'podium') { await page.waitForTimeout(500); await page.screenshot({ path: path.join(outDir, 'podium.png') }); break; }
+  if (d.mode === 'summary' && !fs.existsSync(path.join(outDir, 'summary.png'))) { await page.waitForTimeout(2500); await page.screenshot({ path: path.join(outDir, 'summary.png') }); }
+  if (d.mode === 'podium') { await page.waitForTimeout(3000); await page.screenshot({ path: path.join(outDir, 'podium.png') }); break; }
 }
 await browser.close();
 console.log('DONE');
