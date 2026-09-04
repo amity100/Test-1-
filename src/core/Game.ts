@@ -94,8 +94,8 @@ export class Game {
     app.gr.scene.add(app.gr.camera);
     app.gr.scene.add(this.focus.group);
     app.gr.scene.add(this.vfx.group);
-    this.rocketModel = buildWeaponModel('rocket', new THREE.Color('#ffb300'));
-    this.grenadeModel = buildWeaponModel('grenade', new THREE.Color('#39ff14'));
+    this.rocketModel = buildWeaponModel('rocketShell', new THREE.Color('#ffb300'), false, 'high');
+    this.grenadeModel = buildWeaponModel('grenade', new THREE.Color('#39ff14'), false, 'high');
     this.hud = new HUD(this.uiRoot);
     this.screens = new Screens(this.uiRoot, {
       start: (cfg) => this.startMatch(cfg),
@@ -750,7 +750,7 @@ export class Game {
         /* death handled via events */
       }
       // Bots
-      for (const b of this.bots) b.update(simDt, this.time);
+      if (!this.debugFreezeBots) for (const b of this.bots) b.update(simDt, this.time);
       this.combat.updateProjectiles(simDt, this.time);
       // Slow health regeneration after a few seconds without damage
       for (const e of this.entities) {
@@ -852,9 +852,6 @@ export class Game {
       let m = this.projectileMeshes.get(p.id);
       if (!m) {
         m = (p.kind === 'rocket' ? this.rocketModel : this.grenadeModel).clone();
-        if (p.kind === 'rocket') {
-          m.scale.setScalar(0.55);
-        }
         this.app.gr.scene.add(m);
         this.projectileMeshes.set(p.id, m);
       }
@@ -995,6 +992,72 @@ export class Game {
   }
   /** When true, per-frame presentation work (HUD, meshes, VFX) is skipped. */
   simOnly = false;
+  /** When true, bot brains are not updated (model showcase screenshots). */
+  debugFreezeBots = false;
+  /**
+   * Lines the bots up in front of the player with different weapons and freezes them, and equips the
+   * player with `weapon`, so characters and guns can be reviewed up close.
+   */
+  debugShowcase(weapon: WeaponId = 'rifle', distance = 4.5, pitch = 0, openGround = false): Record<string, unknown> {
+    const p = this.player;
+    if (openGround) {
+      // Plaza in front of the monument: flat, lit, no walls.
+      const x = 0;
+      const z = 27;
+      p.pos.set(x, this.app.terrain.heightAt(x, z) + 0.05, z);
+      p.vel.set(0, 0, 0);
+      p.yaw = 0;
+      p.alive = true;
+      p.hp = p.maxHp;
+    }
+    const ids: WeaponId[] = ['rifle', 'smg', 'shotgun', 'sniper', 'rocket', 'pistol'];
+    const fwd = p.forwardFlat();
+    const right = p.right();
+    const bots = this.entities.filter((e) => e !== p);
+    bots.forEach((e, i) => {
+      const t = bots.length > 1 ? i / (bots.length - 1) - 0.5 : 0;
+      const pos = p.pos.clone().addScaledVector(fwd, distance + Math.abs(t) * 1.5).addScaledVector(right, t * 3.2);
+      pos.y = Math.max(this.app.terrain.heightAt(pos.x, pos.z), p.pos.y - 0.5);
+      e.pos.copy(pos);
+      e.vel.set(0, 0, 0);
+      e.alive = true;
+      e.hp = e.maxHp;
+      e.yaw = Math.atan2(-(p.pos.x - pos.x), -(p.pos.z - pos.z));
+      e.pitch = 0;
+      e.crouching = false;
+      e.setLoadout(ids[i % ids.length]);
+    });
+    this.debugFreezeBots = true;
+    p.setLoadout(weapon);
+    this.local.viewModel.show(weapon, true);
+    p.pitch = pitch;
+    return { bots: bots.map((e) => ({ name: e.name, weapon: e.weapon?.id, pos: e.pos.toArray().map((v) => Math.round(v * 10) / 10) })) };
+  }
+  /** Sets the player's aim-down-sights amount directly (viewmodel screenshots). */
+  debugAds(amount: number): void {
+    this.player.ads = amount;
+    this.local.debugAdsHold = amount > 0.5 ? true : null;
+  }
+  /** Triangle counts of the first-person weapon and one character (perf review). */
+  debugModelStats(): Record<string, unknown> {
+    const tally = (root: THREE.Object3D): Record<string, number> => {
+      const out: Record<string, number> = {};
+      root.traverse((o) => {
+        if (o instanceof THREE.Mesh) {
+          const g = o.geometry as THREE.BufferGeometry;
+          out[o.name || 'mesh'] = (out[o.name || 'mesh'] ?? 0) + Math.round(g.index ? g.index.count / 3 : g.attributes.position.count / 3);
+        }
+      });
+      out.total = Object.values(out).reduce((a, b) => a + b, 0);
+      return out;
+    };
+    let viewmodel: Record<string, number> = {};
+    this.app.gr.camera.traverse((o) => {
+      if (o.name.startsWith('weapon-')) viewmodel = tally(o);
+    });
+    const first = this.chars.values().next().value as CharacterMesh | undefined;
+    return { viewmodel, character: first ? tally(first.root) : null, drawCallsHint: this.app.gr.renderer.info.render.calls };
+  }
   debugAudioTest(): string[] {
     audio.init();
     const names = ['pistol', 'smg', 'rifle', 'shotgun', 'sniper', 'rocket', 'explosion', 'hit', 'hurt', 'kill', 'headshot', 'reload', 'empty', 'footstep', 'jump', 'land', 'grapple', 'grappleMiss', 'ricochet', 'bounce', 'captureTick', 'captureDone', 'alarm', 'roundStart', 'roundEnd', 'countdown', 'uiClick', 'uiHover', 'place', 'erase', 'pickup', 'switch', 'spawn', 'victory'] as const;

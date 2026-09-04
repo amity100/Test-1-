@@ -53,6 +53,9 @@ export class Player {
     scene.add(this.rope);
   }
 
+  /** Debug override for aim-down-sights (screenshots). */
+  debugAdsHold: boolean | null = null;
+
   addShake(amount: number): void {
     this.shake = Math.min(1, this.shake + amount);
   }
@@ -114,7 +117,7 @@ export class Player {
       else if (req === 100 && e.weapons.length > 1) switchTo = (e.weaponIndex + 1) % e.weapons.length;
       else if (req === 101 && e.weapons.length > 1) switchTo = (e.weaponIndex - 1 + e.weapons.length) % e.weapons.length;
       if (switchTo >= 0 && WeaponLogic.switchWeapon(e, switchTo)) this.events.emit('weaponSwitch', { index: switchTo });
-      e.wantsAds = input.adsHeld() && !e.sliding;
+      e.wantsAds = this.debugAdsHold ?? (input.adsHeld() && !e.sliding);
       if (input.reloadPressed() && WeaponLogic.startReload(e)) this.events.emit('reload', { entity: e });
       if (input.fireReleased()) e.triggerReleased = true;
       const autoNow = this.updateAutoFire(dt, touch && settings.data.autoFire);
