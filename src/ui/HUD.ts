@@ -39,6 +39,8 @@ export interface HudState {
   fps: number | null;
   prompt: string;
   minimap: HudMinimap;
+  /** Screen-space objective marker (attackers: the contested fortress). */
+  objective: { sx: number; sy: number; dist: number; onScreen: boolean; angle: number; label: string } | null;
 }
 
 export interface ScoreRow {
@@ -92,6 +94,10 @@ export class HUD {
   private mctx: CanvasRenderingContext2D;
   private scoreboard: HTMLElement;
   private pops: HTMLElement;
+  private objective: HTMLElement;
+  private objDist: HTMLElement;
+  private objLabel: HTMLElement;
+  private objArrow: HTMLElement;
   private last: Partial<Record<string, string | number | boolean>> = {};
   private hitTimer = 0;
   private dmgTimer = 0;
@@ -214,6 +220,15 @@ export class HUD {
     this.root.appendChild(this.scoreboard);
     this.pops = el('div', 'pops');
     this.root.appendChild(this.pops);
+
+    // Objective marker
+    this.objective = el('div', 'objective');
+    this.objective.innerHTML = `<div class="o-arrow"></div><div class="o-diamond"></div><div class="o-label"></div><div class="o-dist"></div>`;
+    this.objArrow = this.objective.querySelector('.o-arrow') as HTMLElement;
+    this.objLabel = this.objective.querySelector('.o-label') as HTMLElement;
+    this.objDist = this.objective.querySelector('.o-dist') as HTMLElement;
+    this.objective.hidden = true;
+    this.root.appendChild(this.objective);
   }
 
   show(): void {
@@ -310,6 +325,16 @@ export class HUD {
       else this.banner.style.opacity = String(Math.min(1, left / 0.5));
     }
     this.drawMinimap(s.minimap);
+    // Objective marker
+    const o = s.objective;
+    if (o && s.alive) {
+      this.objective.hidden = false;
+      this.objective.style.transform = `translate(${o.sx.toFixed(0)}px, ${o.sy.toFixed(0)}px)`;
+      this.objective.classList.toggle('off', !o.onScreen);
+      this.objArrow.style.transform = `rotate(${o.angle.toFixed(1)}rad)`;
+      this.set('odist', this.objDist, `${Math.round(o.dist)} m`);
+      this.set('olabel', this.objLabel, o.label);
+    } else this.objective.hidden = true;
   }
 
   private drawMinimap(m: HudMinimap): void {

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Noise } from '../core/Noise';
 import { hash2 } from '../core/Random';
 import { clamp, lerp, smoothstep } from '../core/MathUtil';
-import { WORLD_HALF, ISLAND_RADIUS, PLOT_Y, type Plot, plotDistance } from './Layout';
+import { WORLD_HALF, ISLAND_RADIUS, PLOT_Y, PLAZA_Y, RING_ROAD_RADIUS, PLOT_RING_RADIUS, type Plot, plotDistance } from './Layout';
 
 const GRASS_A = new THREE.Color('#5f9e3a');
 const GRASS_B = new THREE.Color('#3f7f2e');
@@ -12,6 +12,9 @@ const ROCK = new THREE.Color('#7d7a74');
 const SAND = new THREE.Color('#dcc78f');
 const PLAZA = new THREE.Color('#9a958c');
 const PLAZA_DARK = new THREE.Color('#7c776f');
+const PATH = new THREE.Color('#a8926c');
+const PATH_DARK = new THREE.Color('#8a7455');
+const MEADOW = new THREE.Color('#7fae3c');
 
 /** Heightmap island with flattened plots. Heights are sampled at 1 m spacing. */
 export class Terrain {
@@ -39,6 +42,8 @@ export class Terrain {
     const detail = n.fbm2(x * 0.06, z * 0.06, 3) * 0.9;
     const centre = smoothstep(60, 0, r) * 4;
     let h = -4 + coast * (7 + hills + ridge * 0.6 + centre) + detail;
+    // Flatten the central plaza for the monument.
+    if (r < 22) h = lerp(h, PLAZA_Y - 0.02, 1 - smoothstep(14, 22, r));
     // Flatten plots with a soft blend ring.
     for (const p of this.plots) {
       const d = plotDistance(p, x, z);
@@ -81,6 +86,25 @@ export class Terrain {
     return 1 - n.y;
   }
 
+  /** 0..1 strength of the packed-dirt paths (radials from each fortress, ring road, plaza). */
+  pathWeight(x: number, z: number): number {
+    const r = Math.sqrt(x * x + z * z);
+    let w = 0;
+    for (const p of this.plots) {
+      const dx = Math.cos(p.angle);
+      const dz = Math.sin(p.angle);
+      const t = x * dx + z * dz;
+      if (t < RING_ROAD_RADIUS - 2 || t > PLOT_RING_RADIUS - 14) continue;
+      const perp = Math.abs(-dz * x + dx * z);
+      const wobble = this.noise.noise2(t * 0.07, p.index * 3.1) * 1.4;
+      w = Math.max(w, 1 - smoothstep(1.3, 3.1 + wobble, perp));
+    }
+    const ringWobble = this.noise.noise2(x * 0.05, z * 0.05) * 1.0;
+    w = Math.max(w, 1 - smoothstep(1.2, 2.8 + ringWobble, Math.abs(r - RING_ROAD_RADIUS)));
+    w = Math.max(w, 1 - smoothstep(12, 15, r));
+    return w;
+  }
+
   isPlotInterior(x: number, z: number): boolean {
     for (const p of this.plots) if (plotDistance(p, x, z) <= 0) return true;
     return false;
@@ -102,8 +126,10 @@ export class Terrain {
       const slope = this.slopeAt(x, z);
       const macro = this.noise.fbm2(x * 0.03, z * 0.03, 3) * 0.5 + 0.5;
       const micro = hash2(Math.round(x), Math.round(z), 5);
-      // Base grass mix
+      // Base grass mix: darker in valleys, brighter meadows on the high ground
       c.copy(GRASS_A).lerp(GRASS_B, macro).lerp(GRASS_C, micro * 0.35);
+      const meadow = smoothstep(9, 15, h) * (this.noise.fbm2(x * 0.05 + 9, z * 0.05, 2) * 0.5 + 0.5);
+      c.lerp(MEADOW, meadow * 0.55);
       // Dirt/rock on slopes
       const rockW = smoothstep(0.25, 0.55, slope);
       const dirtW = smoothstep(0.12, 0.3, slope) * (1 - rockW);
@@ -127,6 +153,16 @@ export class Terrain {
         c.lerp(tmp, plaza * 0.9);
       }
       if (plotEdge) c.copy(PLAZA_DARK);
+      // Packed-dirt paths and the central plaza
+      const pw = this.pathWeight(x, z);
+      if (pw > 0.01) {
+        const r = Math.sqrt(x * x + z * z);
+        if (r < 15.5) {
+          const checker = ((Math.floor(x / 2) + Math.floor(z / 2)) & 1) === 0 ? PLAZA : PLAZA_DARK;
+          tmp.copy(checker).lerp(ROCK, micro * 0.15);
+        } else tmp.copy(PATH).lerp(PATH_DARK, micro * 0.6);
+        c.lerp(tmp, pw * 0.92);
+      }
       colors[idx * 3] = c.r;
       colors[idx * 3 + 1] = c.g;
       colors[idx * 3 + 2] = c.b;

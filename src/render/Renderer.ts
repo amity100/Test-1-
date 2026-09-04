@@ -20,6 +20,7 @@ import {
 import { N8AOPostPass } from 'n8ao';
 import type { Quality } from '../core/Settings';
 import { HeightFogEffect } from './HeightFogEffect';
+import { GradeEffect } from './GradeEffect';
 import type { SkySystem } from './Sky';
 
 export interface QualityProfile {
@@ -31,16 +32,18 @@ export interface QualityProfile {
   shadowRadius: number;
   godRays: boolean;
   chromatic: boolean;
+  grade: boolean;
+  softShadows: boolean;
   grass: number;
   trees: number;
   anisotropy: number;
 }
 
 export const QUALITY_PROFILES: Record<Quality, QualityProfile> = {
-  low: { pixelRatio: 1, ao: false, aoMode: 'Performance', aoHalfRes: true, shadowMap: 1024, shadowRadius: 70, godRays: false, chromatic: false, grass: 6000, trees: 90, anisotropy: 2 },
-  medium: { pixelRatio: 1.25, ao: true, aoMode: 'Low', aoHalfRes: true, shadowMap: 2048, shadowRadius: 80, godRays: false, chromatic: false, grass: 16000, trees: 140, anisotropy: 4 },
-  high: { pixelRatio: 1.5, ao: true, aoMode: 'Medium', aoHalfRes: false, shadowMap: 4096, shadowRadius: 90, godRays: true, chromatic: false, grass: 32000, trees: 180, anisotropy: 8 },
-  ultra: { pixelRatio: 2, ao: true, aoMode: 'High', aoHalfRes: false, shadowMap: 4096, shadowRadius: 95, godRays: true, chromatic: true, grass: 50000, trees: 220, anisotropy: 16 },
+  low: { pixelRatio: 1, ao: false, aoMode: 'Performance', aoHalfRes: true, shadowMap: 1024, shadowRadius: 70, godRays: false, chromatic: false, grade: false, softShadows: false, grass: 6000, trees: 90, anisotropy: 2 },
+  medium: { pixelRatio: 1.25, ao: true, aoMode: 'Low', aoHalfRes: true, shadowMap: 2048, shadowRadius: 80, godRays: false, chromatic: false, grade: true, softShadows: true, grass: 16000, trees: 140, anisotropy: 4 },
+  high: { pixelRatio: 1.5, ao: true, aoMode: 'Medium', aoHalfRes: false, shadowMap: 4096, shadowRadius: 90, godRays: true, chromatic: false, grade: true, softShadows: true, grass: 32000, trees: 180, anisotropy: 8 },
+  ultra: { pixelRatio: 2, ao: true, aoMode: 'High', aoHalfRes: false, shadowMap: 4096, shadowRadius: 95, godRays: true, chromatic: true, grade: true, softShadows: true, grass: 50000, trees: 220, anisotropy: 16 },
 };
 
 /** WebGL renderer + post-processing chain with quality tiers. */
@@ -152,8 +155,8 @@ export class GameRenderer {
     }
     if (!this.flags.has('nofog')) effects.push(this.fog);
     if (!this.flags.has('nobloom')) effects.push(this.bloom);
-    effects.push(new HueSaturationEffect({ saturation: 0.1 }));
-    effects.push(new BrightnessContrastEffect({ brightness: -0.02, contrast: 0.08 }));
+    effects.push(new HueSaturationEffect({ saturation: 0.14 }));
+    effects.push(new BrightnessContrastEffect({ brightness: -0.015, contrast: 0.1 }));
     effects.push(new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC }));
     if (profile.chromatic) {
       effects.push(new ChromaticAberrationEffect({ offset: new THREE.Vector2(0.0008, 0.0008), radialModulation: true, modulationOffset: 0.35 }));
@@ -162,6 +165,13 @@ export class GameRenderer {
     const mainPass = new EffectPass(camera, ...effects);
     composer.addPass(mainPass);
     this.passes.push(mainPass);
+
+    if (profile.grade && !this.flags.has('nograde')) {
+      // Runs after tone mapping so the sharpen kernel sees display-referred colours.
+      const grade = new EffectPass(camera, new GradeEffect({ sharpen: profile.pixelRatio >= 1.5 ? 0.5 : 0.35, toneStrength: 0.55, lift: 0.02 }));
+      composer.addPass(grade);
+      this.passes.push(grade);
+    }
 
     const smaa = new SMAAEffect({ preset: SMAAPreset.HIGH, edgeDetectionMode: EdgeDetectionMode.COLOR });
     const smaaPass = new EffectPass(camera, smaa);

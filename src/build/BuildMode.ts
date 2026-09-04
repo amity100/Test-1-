@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { FlagMesh } from '../render/FlagMesh';
 import type { VoxelWorld } from '../world/VoxelWorld';
 import type { Terrain } from '../world/Terrain';
 import type { Input } from '../core/Input';
@@ -79,7 +80,7 @@ export class BuildMode {
   private ghost: THREE.Mesh;
   private ghostBox: THREE.Mesh;
   private prefabGhost: THREE.InstancedMesh;
-  private flagMarker: THREE.Group;
+  private flagMarker: FlagMesh;
   private spawnMarker: THREE.Mesh;
   private plotFrame: THREE.LineSegments;
   private group = new THREE.Group();
@@ -130,13 +131,8 @@ export class BuildMode {
     this.prefabGhost.visible = false;
     this.prefabGhost.frustumCulled = false;
     // Flag marker
-    this.flagMarker = new THREE.Group();
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.4, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
-    pole.position.y = 1.2;
-    const cloth = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.7, 0.05), new THREE.MeshBasicMaterial({ color: 0xffb300 }));
-    cloth.position.set(0.6, 2.0, 0);
-    this.flagMarker.add(pole, cloth);
-    this.flagMarker.visible = false;
+    this.flagMarker = new FlagMesh(new THREE.Color(0x00e5ff));
+    this.flagMarker.group.visible = false;
     this.spawnMarker = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.1, 24), new THREE.MeshBasicMaterial({ color: 0x39ff14, transparent: true, opacity: 0.8 }));
     this.spawnMarker.visible = false;
     // Plot frame
@@ -144,7 +140,7 @@ export class BuildMode {
     const frameGeo = new THREE.BoxGeometry(box.max.x - box.min.x, box.max.y - box.min.y, box.max.z - box.min.z);
     this.plotFrame = new THREE.LineSegments(new THREE.EdgesGeometry(frameGeo), new THREE.LineBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.35 }));
     this.plotFrame.position.copy(box.getCenter(new THREE.Vector3()));
-    this.group.add(this.ghost, this.ghostBox, this.prefabGhost, this.flagMarker, this.spawnMarker, this.plotFrame);
+    this.group.add(this.ghost, this.ghostBox, this.prefabGhost, this.flagMarker.group, this.spawnMarker, this.plotFrame);
     this.group.visible = false;
     scene.add(this.group);
     this.recount();
@@ -688,9 +684,10 @@ export class BuildMode {
     }
     // Markers
     if (st.flag) {
-      this.flagMarker.visible = true;
-      this.flagMarker.position.set(st.flag.x + 0.5, st.flag.y, st.flag.z + 0.5);
-    } else this.flagMarker.visible = false;
+      this.flagMarker.group.visible = true;
+      this.flagMarker.group.position.set(st.flag.x + 0.5, st.flag.y, st.flag.z + 0.5);
+      this.flagMarker.update(dt, this.camera.position);
+    } else this.flagMarker.group.visible = false;
     if (st.spawn) {
       this.spawnMarker.visible = true;
       this.spawnMarker.position.set(st.spawn.x + 0.5, st.spawn.y + 0.05, st.spawn.z + 0.5);

@@ -43,6 +43,7 @@ export class Foliage {
   }
 
   private canPlace(x: number, z: number, minH: number, maxSlope: number, plotMargin: number): boolean {
+    if (this.terrain.pathWeight(x, z) > 0.35) return false;
     if (Math.abs(x) > WORLD_HALF - 3 || Math.abs(z) > WORLD_HALF - 3) return false;
     const h = this.terrain.heightAt(x, z);
     if (h < minH) return false;

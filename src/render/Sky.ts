@@ -66,6 +66,8 @@ export class SkySystem {
   readonly hemi: THREE.HemisphereLight;
   readonly sunDisc: THREE.Mesh;
   readonly clouds: THREE.Mesh;
+  /** Distant island silhouettes that give the horizon depth. */
+  readonly horizon = new THREE.Group();
   readonly sunDir = new THREE.Vector3(0.3, 0.5, 0.2).normalize();
   private envScene = new THREE.Scene();
   private pmrem: THREE.PMREMGenerator;
@@ -134,6 +136,9 @@ export class SkySystem {
     this.clouds.renderOrder = -1;
     scene.add(this.clouds);
 
+    this.buildHorizon();
+    scene.add(this.horizon);
+
     this.pmrem = new THREE.PMREMGenerator(renderer);
     this.pmrem.compileEquirectangularShader();
     const envSky = new Sky();
@@ -141,6 +146,51 @@ export class SkySystem {
     patchSky(envSky, 0.5, 5);
     this.envScene.add(envSky);
     this.applySun(true);
+  }
+
+  /** Low-poly islands far out at sea; the height fog turns them into layered silhouettes. */
+  private buildHorizon(): void {
+    const mat = new THREE.MeshStandardMaterial({ color: 0x3d6b6e, roughness: 1, metalness: 0, flatShading: true });
+    const rockMat = new THREE.MeshStandardMaterial({ color: 0x4f5f66, roughness: 1, metalness: 0, flatShading: true });
+    let seed = 17;
+    const rnd = (): number => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 4294967296;
+    };
+    const specs: [number, number, number, number][] = [];
+    for (let i = 0; i < 11; i++) {
+      const a = (i / 11) * Math.PI * 2 + rnd() * 0.4;
+      const d = 520 + rnd() * 420;
+      specs.push([a, d, 50 + rnd() * 110, 70 + rnd() * 120]);
+    }
+    for (const [a, d, h, r] of specs) {
+      const g = new THREE.Group();
+      // Rounded, overlapping hills rather than sharp cones; jittered vertices break the symmetry.
+      const peaks = 3 + Math.floor(rnd() * 4);
+      for (let k = 0; k < peaks; k++) {
+        const pr = r * (0.35 + rnd() * 0.5);
+        const ph = h * (0.35 + rnd() * 0.65) * (k === 0 ? 1 : 0.7);
+        const geo = new THREE.SphereGeometry(1, 9, 6, 0, Math.PI * 2, 0, Math.PI / 2);
+        const pos = geo.attributes.position as THREE.BufferAttribute;
+        for (let i = 0; i < pos.count; i++) {
+          const jx = 1 + (rnd() - 0.5) * 0.35;
+          const jz = 1 + (rnd() - 0.5) * 0.35;
+          pos.setXYZ(i, pos.getX(i) * jx, pos.getY(i), pos.getZ(i) * jz);
+        }
+        geo.computeVertexNormals();
+        const hill = new THREE.Mesh(geo, k % 2 === 0 ? mat : rockMat);
+        hill.position.set((rnd() - 0.5) * r * 1.1, -4, (rnd() - 0.5) * r * 1.1);
+        hill.scale.set(pr, ph, pr * (0.75 + rnd() * 0.5));
+        hill.rotation.y = rnd() * Math.PI;
+        g.add(hill);
+      }
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.95, r * 1.15, 8, 12), rockMat);
+      base.position.y = -4;
+      g.add(base);
+      g.position.set(Math.cos(a) * d, 0, Math.sin(a) * d);
+      this.horizon.add(g);
+    }
+    this.horizon.name = 'horizon';
   }
 
   setShadowRadius(r: number): void {

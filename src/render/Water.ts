@@ -9,9 +9,9 @@ export class WaterSurface {
   private uniforms = { uTime: { value: 0 } };
 
   constructor(terrain: Terrain) {
-    const extent = 900;
+    const extent = 2400;
     const inner = WORLD_HALF;
-    const seg = 180;
+    const seg = 240;
     const geo = new THREE.PlaneGeometry(extent, extent, seg, seg);
     geo.rotateX(-Math.PI / 2);
     const pos = geo.attributes.position as THREE.BufferAttribute;

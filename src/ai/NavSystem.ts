@@ -67,7 +67,7 @@ export class IslandGrid {
   private cost: Uint16Array;
   private height: Float32Array;
 
-  constructor(private terrain: Terrain, plots: Plot[]) {
+  constructor(private terrain: Terrain, plots: Plot[], world?: VoxelWorld) {
     this.n = Math.ceil((WORLD_HALF * 2) / CELL) + 1;
     this.cost = new Uint16Array(this.n * this.n);
     this.height = new Float32Array(this.n * this.n);
@@ -88,6 +88,21 @@ export class IslandGrid {
           }
         }
         if (blocked) continue;
+        if (world) {
+          // Landmarks (monument, ruins) are solid: block cells with blocks at walking height.
+          const gy = Math.floor(h + 0.02);
+          outer: for (let dx = -1; dx <= 1; dx++) {
+            for (let dz = -1; dz <= 1; dz++) {
+              for (let dy = 0; dy <= 1; dy++) {
+                if (world.get(Math.floor(x) + dx, gy + dy, Math.floor(z) + dz) !== 0) {
+                  blocked = true;
+                  break outer;
+                }
+              }
+            }
+          }
+          if (blocked) continue;
+        }
         const slope = terrain.slopeAt(x, z);
         this.cost[idx] = Math.round(100 * (1 + slope * 4 + (h < 1.8 ? 1.5 : 0)));
       }
@@ -246,7 +261,7 @@ export class NavSystem {
     private terrain: Terrain,
     readonly plots: Plot[],
   ) {
-    this.island = new IslandGrid(terrain, plots);
+    this.island = new IslandGrid(terrain, plots, world);
   }
 
   /** Builds every fortress grid up front (call once the world is final). */

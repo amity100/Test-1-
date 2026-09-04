@@ -12,6 +12,10 @@ export const MAX_PLAYERS = 8;
 export const ATTACK_SPAWN_RADIUS = 34;
 export const ZONE_RADIUS = 46;
 export const PLAYABLE_RADIUS = 126;
+/** Height of the flattened central plaza (monument base). */
+export const PLAZA_Y = 15;
+/** Radius of the ring road that links the fortress paths. */
+export const RING_ROAD_RADIUS = 34;
 
 export interface Plot {
   index: number;

@@ -16,9 +16,28 @@ export type PrefabId =
   | 'battlement'
   | 'bridge'
   | 'gate'
-  | 'pyramid';
+  | 'pyramid'
+  | 'house'
+  | 'keep'
+  | 'gazebo'
+  | 'balcony'
+  | 'buttress'
+  | 'spire'
+  | 'ramp'
+  | 'tunnel'
+  | 'curvedWall'
+  | 'hedge'
+  | 'fountain'
+  | 'hall'
+  | 'maze'
+  | 'watchtower';
 
-export const PREFAB_IDS: PrefabId[] = ['wall', 'door', 'window', 'tower', 'roundTower', 'gate', 'arch', 'stairs', 'spiral', 'floor', 'roof', 'dome', 'column', 'battlement', 'bridge', 'pyramid'];
+export const PREFAB_IDS: PrefabId[] = [
+  'wall', 'door', 'window', 'curvedWall', 'hedge', 'battlement', 'buttress',
+  'tower', 'roundTower', 'watchtower', 'spire', 'gate', 'arch', 'column',
+  'stairs', 'spiral', 'ramp', 'bridge', 'balcony', 'floor', 'roof', 'dome',
+  'house', 'keep', 'hall', 'gazebo', 'tunnel', 'maze', 'fountain', 'pyramid',
+];
 
 export interface PrefabBlock {
   x: number;
@@ -61,7 +80,7 @@ function make(id: PrefabId, nameKey: string, sizes: number, fn: Builder): Prefab
 
 const pick = <T>(arr: T[], i: number): T => arr[Math.min(arr.length - 1, i)];
 
-export const PREFABS: Record<PrefabId, PrefabDef> = {
+export const PREFABS = {
   wall: make('wall', 'pWall', 3, (put, s) => {
     const L = pick([6, 10, 16], s);
     const H = pick([4, 6, 8], s);
@@ -319,7 +338,262 @@ export const PREFABS: Record<PrefabId, PrefabDef> = {
     }
     for (let x = -1; x <= 1; x++) for (let z = -1; z <= 1; z++) for (let y = 0; y < 3; y++) put(x, y, z, 'air');
   }),
-};
+} as Record<PrefabId, PrefabDef>;
+
+
+// ---------------- v2 prefabs ----------------
+Object.assign(PREFABS, {
+  house: make('house', 'pHouse', 3, (put, s) => {
+    const W = pick([5, 7, 9], s);
+    const D = pick([5, 7, 9], s);
+    const H = pick([3, 4, 5], s);
+    const hw = Math.floor(W / 2);
+    const hd = Math.floor(D / 2);
+    for (let x = -hw; x <= hw; x++) {
+      for (let z = -hd; z <= hd; z++) {
+        const edge = Math.abs(x) === hw || Math.abs(z) === hd;
+        for (let y = 0; y < H; y++) {
+          if (edge) put(x, y, z, y === 0 ? 'wallAlt' : 'wall');
+          else if (y === 0) put(x, y, z, 'floor');
+        }
+      }
+    }
+    // Door on -Z, windows on the sides
+    put(0, 0, -hd, 'air');
+    put(0, 1, -hd, 'air');
+    put(0, 2, -hd, 'trim');
+    for (let y = 1; y < H - 1; y++) {
+      if (W >= 7) {
+        put(hw, y, 0, 'glass');
+        put(-hw, y, 0, 'glass');
+      }
+      put(2, y, hd, 'glass');
+      put(-2, y, hd, 'glass');
+    }
+    // Pitched roof along X
+    for (let x = -hw - 1; x <= hw + 1; x++) {
+      const yy = H + (hw + 1 - Math.abs(x));
+      for (let z = -hd - 1; z <= hd + 1; z++) {
+        put(x, yy, z, 'roof');
+        if (Math.abs(z) === hd + 1 || Math.abs(z) === hd) {
+          // gable fill
+          for (let y2 = H; y2 < yy; y2++) if (Math.abs(x) <= hw && Math.abs(z) === hd) put(x, y2, z, 'wallAlt');
+        }
+      }
+    }
+    put(0, H + hw + 1, 0, 'light');
+  }),
+  keep: make('keep', 'pKeep', 2, (put, s) => {
+    const W = pick([9, 13], s);
+    const H = pick([9, 12], s);
+    const half = Math.floor(W / 2);
+    const mid = Math.floor(H / 2);
+    for (let x = -half; x <= half; x++) {
+      for (let z = -half; z <= half; z++) {
+        const edge = Math.abs(x) === half || Math.abs(z) === half;
+        for (let y = 0; y < H; y++) {
+          if (edge) put(x, y, z, y === mid ? 'trim' : 'wall');
+          else if (y === 0 || y === mid || y === H - 1) put(x, y, z, 'floor');
+        }
+        if (edge) {
+          const corner = Math.abs(x) === half && Math.abs(z) === half;
+          if (corner) for (let y = H; y < H + 3; y++) put(x, y, z, 'wall');
+          else if ((x + z + half * 2) % 2 === 0) put(x, H, z, 'trim');
+        }
+      }
+    }
+    // Gate on -Z and stairs between floors along the +X inner wall
+    for (let dx = -1; dx <= 1; dx++) for (let y = 0; y < 3; y++) put(dx, y, -half, 'air');
+    put(0, 3, -half, 'trim');
+    let sy = 0;
+    for (let z = -half + 2; z <= half - 2 && sy < mid; z++, sy++) {
+      put(half - 1, sy, z, 'stairs');
+      put(half - 1, mid, z, 'air');
+    }
+    let sy2 = mid;
+    for (let z = half - 2; z >= -half + 2 && sy2 < H - 1; z--, sy2++) {
+      put(-half + 1, sy2, z, 'stairs');
+      put(-half + 1, H - 1, z, 'air');
+    }
+    // Windows
+    for (let y = 2; y < H - 1; y += 3) {
+      put(half, y, 0, 'glass');
+      put(-half, y, 0, 'glass');
+      put(0, y, half, 'glass');
+    }
+    put(0, H, 0, 'light');
+  }),
+  gazebo: make('gazebo', 'pGazebo', 2, (put, s) => {
+    const R = pick([2.5, 3.5], s);
+    const r = Math.ceil(R);
+    const H = pick([4, 5], s);
+    for (let x = -r; x <= r; x++)
+      for (let z = -r; z <= r; z++) {
+        const d = Math.sqrt(x * x + z * z);
+        if (d <= R + 0.3) put(x, 0, z, 'floor');
+      }
+    const n = 6;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const x = Math.round(Math.cos(a) * R);
+      const z = Math.round(Math.sin(a) * R);
+      for (let y = 1; y < H; y++) put(x, y, z, 'pillar');
+    }
+    for (let x = -r - 1; x <= r + 1; x++)
+      for (let z = -r - 1; z <= r + 1; z++) {
+        const d = Math.sqrt(x * x + z * z);
+        if (d <= R + 1.2) put(x, H, z, 'roof');
+        if (d <= R - 0.8) put(x, H + 1, z, 'roof');
+      }
+    put(0, H + 2, 0, 'accent');
+    put(0, H - 1, 0, 'light');
+  }),
+  balcony: make('balcony', 'pBalcony', 3, (put, s) => {
+    const L = pick([3, 5, 7], s);
+    const half = Math.floor(L / 2);
+    const D = pick([2, 3, 3], s);
+    for (let x = -half; x <= half; x++)
+      for (let z = 0; z < D; z++) {
+        put(x, 0, z, 'floor');
+        if (z === D - 1 || Math.abs(x) === half) put(x, 1, z, 'trim');
+      }
+    for (let x = -half; x <= half; x++) put(x, -1, 0, 'accent');
+  }),
+  buttress: make('buttress', 'pButtress', 3, (put, s) => {
+    const H = pick([4, 6, 8], s);
+    for (let y = 0; y < H; y++) {
+      const reach = Math.max(0, Math.round(((H - 1 - y) / (H - 1)) * (H / 2)));
+      for (let z = 0; z <= reach; z++) put(0, y, -z, z === reach ? 'stairs' : 'wallAlt');
+    }
+    put(0, H, 0, 'trim');
+  }),
+  spire: make('spire', 'pSpire', 3, (put, s) => {
+    const H = pick([8, 12, 16], s);
+    const base = pick([1, 2, 2], s);
+    for (let y = 0; y < H; y++) {
+      const r = Math.max(0, Math.round(base * (1 - y / H)));
+      for (let x = -r; x <= r; x++) for (let z = -r; z <= r; z++) put(x, y, z, y % 3 === 2 ? 'wallAlt' : 'wall');
+    }
+    put(0, H, 0, 'accent');
+    put(0, H + 1, 0, 'light');
+  }),
+  ramp: make('ramp', 'pRamp', 3, (put, s) => {
+    const W = pick([2, 3, 4], s);
+    const N = pick([4, 6, 9], s);
+    const half = Math.floor(W / 2);
+    for (let i = 0; i < N; i++) {
+      for (let x = -half; x < W - half; x++) {
+        for (let y = 0; y <= i; y++) put(x, y, -i, y === i ? 'stairs' : 'wallAlt');
+        // Side rails
+        if (x === -half || x === W - half - 1) put(x, i + 1, -i, 'trim');
+      }
+    }
+  }),
+  tunnel: make('tunnel', 'pTunnel', 3, (put, s) => {
+    const L = pick([5, 8, 12], s);
+    const W = pick([3, 3, 5], s);
+    const H = pick([3, 4, 4], s);
+    const hw = Math.floor(W / 2);
+    for (let z = 0; z < L; z++) {
+      for (let x = -hw; x <= hw; x++) {
+        put(x, 0, z, 'floor');
+        for (let y = 1; y <= H; y++) {
+          if (Math.abs(x) === hw) put(x, y, z, y === H ? 'trim' : z % 3 === 1 ? 'wallAlt' : 'wall');
+          else if (y === H) put(x, y, z, 'roof');
+          else put(x, y, z, 'air');
+        }
+      }
+      if (z % 4 === 2) put(0, H - 1, z, 'light');
+    }
+  }),
+  curvedWall: make('curvedWall', 'pCurvedWall', 3, (put, s) => {
+    const R = pick([4, 6, 9], s);
+    const H = pick([4, 5, 7], s);
+    const steps = Math.ceil(R * Math.PI * 0.5) * 2;
+    for (let i = 0; i <= steps; i++) {
+      const a = (i / steps) * (Math.PI / 2);
+      const x = Math.round(Math.cos(a) * R) - R;
+      const z = Math.round(Math.sin(a) * R);
+      for (let y = 0; y < H; y++) put(x, y, z, y === H - 1 ? 'trim' : 'wall');
+      if (i % 2 === 0) put(x, H, z, 'trim');
+    }
+  }),
+  hedge: make('hedge', 'pHedge', 3, (put, s) => {
+    const L = pick([4, 7, 10], s);
+    const half = Math.floor(L / 2);
+    const H = pick([1, 2, 2], s);
+    for (let x = -half; x < L - half; x++) for (let y = 0; y < H; y++) put(x, y, 0, 'accent');
+    if (L >= 7) for (let z = 1; z <= 2; z++) for (let y = 0; y < H; y++) { put(-half, y, z, 'accent'); put(L - half - 1, y, z, 'accent'); }
+  }),
+  fountain: make('fountain', 'pFountain', 2, (put, s) => {
+    const R = pick([2.5, 3.5], s);
+    const r = Math.ceil(R);
+    for (let x = -r; x <= r; x++)
+      for (let z = -r; z <= r; z++) {
+        const d = Math.sqrt(x * x + z * z);
+        if (d <= R + 0.3) put(x, 0, z, 'trim');
+        if (d <= R + 0.3 && d > R - 0.9) put(x, 1, z, 'trim');
+        else if (d <= R - 0.9) put(x, 1, z, 'glass');
+      }
+    put(0, 1, 0, 'pillar');
+    put(0, 2, 0, 'pillar');
+    put(0, 3, 0, 'light');
+  }),
+  hall: make('hall', 'pHall', 2, (put, s) => {
+    const W = pick([7, 9], s);
+    const L = pick([9, 13], s);
+    const H = pick([5, 6], s);
+    const hw = Math.floor(W / 2);
+    const hl = Math.floor(L / 2);
+    for (let x = -hw; x <= hw; x++)
+      for (let z = -hl; z <= hl; z++) {
+        put(x, 0, z, 'floor');
+        const colRow = Math.abs(x) === hw - 1 && (z + hl) % 3 === 0;
+        if (colRow) for (let y = 1; y < H; y++) put(x, y, z, 'pillar');
+        if (Math.abs(x) === hw || Math.abs(z) === hl) {
+          for (let y = 1; y < H; y++) {
+            const win = y >= 2 && y < H - 1 && (z + hl) % 3 === 1 && Math.abs(x) === hw;
+            const door = Math.abs(z) === hl && Math.abs(x) <= 1 && y <= 2;
+            if (door) put(x, y, z, 'air');
+            else put(x, y, z, win ? 'glass' : 'wall');
+          }
+        }
+        put(x, H, z, 'roof');
+        if ((x + z) % 4 === 0 && Math.abs(x) < hw - 1 && Math.abs(z) < hl) put(x, H - 1, z, 'light');
+      }
+    for (let x = -hw; x <= hw; x++) { put(x, H + 1, -hl, 'trim'); put(x, H + 1, hl, 'trim'); }
+  }),
+  maze: make('maze', 'pMaze', 2, (put, s) => {
+    const N = pick([7, 11], s);
+    const half = Math.floor(N / 2);
+    const H = 3;
+    // Deterministic maze: walls on even rows with gaps shifting each row.
+    for (let x = -half; x <= half; x++)
+      for (let z = -half; z <= half; z++) {
+        put(x, 0, z, 'floor');
+        const gx = ((z + half) * 3 + 1) % N - half;
+        const wallRow = (z + half) % 2 === 1 && x !== gx && x !== gx + 1;
+        const border = Math.abs(x) === half || Math.abs(z) === half;
+        const gate = border && ((z === -half && Math.abs(x) <= 0) || (z === half && x === half - 1));
+        if ((wallRow || border) && !gate) for (let y = 1; y <= H; y++) put(x, y, z, y === H ? 'trim' : 'wallAlt');
+      }
+  }),
+  watchtower: make('watchtower', 'pWatchtower', 2, (put, s) => {
+    const H = pick([7, 10], s);
+    // Four stilts, a platform with railing and a small roof
+    for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) for (let y = 0; y < H; y++) put(x, y, z, 'pillar');
+    for (let x = -2; x <= 2; x++)
+      for (let z = -2; z <= 2; z++) {
+        put(x, H, z, 'floor');
+        if (Math.abs(x) === 2 || Math.abs(z) === 2) put(x, H + 1, z, 'trim');
+        if (Math.abs(x) <= 1 && Math.abs(z) <= 1) put(x, H + 4, z, 'roof');
+      }
+    for (const [x, z] of [[-2, -2], [2, -2], [-2, 2], [2, 2]]) for (let y = H + 1; y < H + 4; y++) put(x, y, z, 'pillar');
+    // Ladder-like stairs up one stilt
+    for (let y = 0; y < H; y++) put(y % 2 === 0 ? 0 : -1, y, -2, 'stairs');
+    put(0, H + 3, 0, 'light');
+  }),
+} as Record<PrefabId, PrefabDef>);
 
 /** Rotates local prefab coordinates by 90° steps around the Y axis. */
 export function rotateBlocks(blocks: PrefabBlock[], rot: number): PrefabBlock[] {

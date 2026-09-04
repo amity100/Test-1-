@@ -16,6 +16,7 @@ import { setLang, t } from './i18n';
 import { Mat, encodeBlock } from '../world/Voxel';
 import { clamp } from './MathUtil';
 import { Game } from './Game';
+import { buildDecor } from '../world/Decor';
 
 const nextFrame = (): Promise<void> => new Promise((r) => requestAnimationFrame(() => r()));
 
@@ -60,7 +61,7 @@ export class App {
     this.gr = new GameRenderer(this.canvas);
     this.input = new Input(this.canvas);
     let quality = settings.resolveQuality(this.gr.gpuName);
-    if (this.gr.flags.has('low')) quality = 'low';
+    for (const q of ['low', 'medium', 'high', 'ultra'] as const) if (this.gr.flags.has(q)) quality = q;
     const scene = this.gr.scene;
     this.sky = new SkySystem(this.gr.renderer, scene);
     const flags = this.gr.flags;
@@ -113,6 +114,7 @@ export class App {
     this.chunks = new ChunkRenderer(this.world, this.materials);
     scene.add(this.chunks.group);
     this.placePlotFloors();
+    buildDecor(this.world, this.terrain, this.plots, new Random(4242));
     this.chunks.flush();
     this.game = new Game(this);
     this.game.init();

@@ -512,7 +512,10 @@ export class Game {
       cm.dispose();
     }
     this.chars.clear();
-    for (const fm of this.flags.values()) this.app.gr.scene.remove(fm.group);
+    for (const fm of this.flags.values()) {
+      this.app.gr.scene.remove(fm.group);
+      fm.dispose();
+    }
     this.flags.clear();
     for (const m of this.projectileMeshes.values()) this.app.gr.scene.remove(m);
     this.projectileMeshes.clear();
@@ -628,7 +631,7 @@ export class Game {
         break;
     }
     if (this.simOnly) return this.cameraFocus;
-    for (const fm of this.flags.values()) fm.update(dt);
+    for (const fm of this.flags.values()) if (fm.group.visible) fm.update(dt, this.app.gr.camera.position);
     this.focus.update(dt, this.time);
     if (this.mode !== 'menu') this.vfx.ambient(this.app.gr.camera.position, dt);
     this.vfx.update(dt);
@@ -857,7 +860,9 @@ export class Game {
     let flagThreat = 0;
     if (p.role === 'defender') for (const e of this.entities) if (e !== p) flagThreat = Math.max(flagThreat, e.captureProgress / RULES.captureTime);
     const spread = w ? THREE.MathUtils.lerp(WEAPONS[w.id].spread, WEAPONS[w.id].adsSpread, p.ads) * 6 + Math.min(20, Math.sqrt(p.vel.x * p.vel.x + p.vel.z * p.vel.z) * 1.2) : 4;
+    const objective = this.objectiveMarker();
     return {
+      objective,
       hp: p.hp,
       maxHp: p.maxHp,
       weaponName: w ? t(WEAPONS[w.id].nameKey) : '',
@@ -893,6 +898,47 @@ export class Game {
         others,
       },
     };
+  }
+
+  /** Screen-space marker guiding attackers to the contested fortress (hidden once inside it). */
+  private objectiveMarker(): HudState['objective'] {
+    const match = this.match;
+    if (!match || match.targetPlotIndex < 0 || this.player.role !== 'attacker' || this.mode !== 'battle') return null;
+    const plot = this.app.plots[match.targetPlotIndex];
+    const p = this.player.pos;
+    const dist = Math.hypot(p.x - plot.cx, p.z - plot.cz);
+    if (dist < 26) return null;
+    const cam = this.app.gr.camera;
+    const world = new THREE.Vector3(plot.cx, PLOT_Y + 14, plot.cz);
+    const view = world.clone().applyMatrix4(cam.matrixWorldInverse);
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const margin = 56;
+    let sx: number;
+    let sy: number;
+    let onScreen = false;
+    if (view.z < -0.1) {
+      const ndc = world.clone().project(cam);
+      sx = (ndc.x * 0.5 + 0.5) * w;
+      sy = (1 - (ndc.y * 0.5 + 0.5)) * h;
+      onScreen = sx > margin && sx < w - margin && sy > margin && sy < h - margin;
+    } else {
+      sx = w / 2 + Math.sign(view.x || 1) * w;
+      sy = h / 2;
+    }
+    let angle = 0;
+    if (!onScreen) {
+      // Clamp to the screen edge along the direction from the centre.
+      const dx = sx - w / 2;
+      const dy = sy - h / 2;
+      angle = Math.atan2(dy, dx);
+      const kx = Math.abs(dx) > 1e-3 ? (w / 2 - margin) / Math.abs(dx) : Infinity;
+      const ky = Math.abs(dy) > 1e-3 ? (h / 2 - margin) / Math.abs(dy) : Infinity;
+      const k = Math.min(kx, ky, 1);
+      sx = w / 2 + dx * k;
+      sy = h / 2 + dy * k;
+    }
+    return { sx, sy, dist, onScreen, angle, label: match.defender ? match.defender.name : '' };
   }
 
   // ---------------- debug helpers (smoke tests) ----------------
