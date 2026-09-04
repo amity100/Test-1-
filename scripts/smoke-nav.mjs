@@ -72,4 +72,5 @@ const totalCaptures = st.entities.reduce((a, e) => a + e.captures, 0);
 console.log('final', st.mode, 'captures', totalCaptures, 'scores', st.entities.map((e) => `${e.name}=${e.score}`).join(' '));
 await browser.close();
 console.log(errors.length ? `DONE with ${errors.length} errors` : 'DONE clean');
-process.exit(bad || progressed < Math.ceil(attackers * 0.6) ? 1 : 0);
+// Bots fight, die and respawn at home along the way, so distance alone is noisy: require correct spawns and captures.
+process.exit(bad || totalCaptures === 0 ? 1 : 0);

@@ -71,8 +71,11 @@ const tmp2 = new THREE.Vector3();
 export class BotBrain {
   state: State = 'idle';
   private path: THREE.Vector3[] | null = null;
+  private pathGoal: THREE.Vector3 | null = null;
   private pathIndex = 0;
   private repathTimer = 0;
+  /** Minimum spacing between route searches; partial routes must not trigger a search per frame. */
+  private routeCooldown = 0;
   private perceiveTimer = 0;
   private mem: Memory = { target: null, lastSeenPos: new THREE.Vector3(), lastSeenTime: -100, visible: false };
   private reactionTimer = 0;
@@ -119,6 +122,8 @@ export class BotBrain {
   reset(): void {
     this.state = 'idle';
     this.path = null;
+    this.pathGoal = null;
+    this.routeCooldown = 0;
     this.mem.target = null;
     this.mem.visible = false;
     this.searchTarget = null;
@@ -149,6 +154,7 @@ export class BotBrain {
     this.perceive(dt, now);
     this.reactToDamage(now);
     this.repathTimer -= dt;
+    this.routeCooldown -= dt;
     this.jumpCooldown -= dt;
     this.crouchTimer -= dt;
     this.coverCooldown -= dt;
@@ -217,6 +223,7 @@ export class BotBrain {
           this.searchTarget = this.pickSearchTarget(nav);
           this.repathTimer = 0;
           this.path = null;
+          this.pathGoal = null;
         }
         goal = this.searchTarget;
         sprint = this.rng.chance(0.3);
@@ -235,6 +242,7 @@ export class BotBrain {
           this.hideSpot = this.pickHideSpot(nav, flag);
           this.hideTimer = 22 + this.rng.range(0, 25) * (1.5 - this.profile.searchSkill);
           this.path = null;
+          this.pathGoal = null;
         }
         goal = this.hideSpot;
         if (goal && e.pos.distanceTo(goal) < 1.2) {
@@ -341,6 +349,7 @@ export class BotBrain {
       else this.stuckTimer = 0;
       if (this.stuckTimer > 1.2) {
         this.path = null;
+        this.pathGoal = null;
         this.repathTimer = 0;
         this.stuckTimer = 0;
         this.searchTarget = null;
@@ -588,18 +597,20 @@ export class BotBrain {
       if (d.lengthSq() > 1) this.moveDirection(input, d.normalize(), true);
       return;
     }
-    const goalMoved = this.path && this.path.length > 0 && this.path[this.path.length - 1].distanceTo(goal) > 2.5;
-    if (!this.path || goalMoved || this.repathTimer <= 0) {
+    const goalMoved = this.pathGoal !== null && this.pathGoal.distanceTo(goal) > 2.5;
+    if ((!this.path || goalMoved || this.repathTimer <= 0) && this.routeCooldown <= 0) {
       this.path = nav.findRoute(e.pos, goal);
+      this.pathGoal = goal.clone();
       this.pathIndex = 0;
+      this.routeCooldown = 0.5 + this.rng.range(0, 0.3);
       // Stagger repaths so several bots do not search on the same frame.
       this.repathTimer = this.path ? 1.5 + this.rng.range(0, 1.2) : 1.2 + this.rng.range(0, 1);
-      if (!this.path) {
-        // Head straight there as a fallback.
-        const d = tmp.copy(goal).sub(e.pos).setY(0);
-        if (d.lengthSq() > 1) this.moveDirection(input, d.normalize(), true);
-        return;
-      }
+    }
+    if (!this.path) {
+      // Head straight there as a fallback.
+      const d = tmp.copy(goal).sub(e.pos).setY(0);
+      if (d.lengthSq() > 1) this.moveDirection(input, d.normalize(), true);
+      return;
     }
     // Advance waypoints
     while (this.pathIndex < this.path.length - 1) {

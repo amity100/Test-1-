@@ -66,11 +66,18 @@ export class IslandGrid {
   /** 0 = blocked, otherwise traversal cost multiplier * 100. */
   private cost: Uint16Array;
   private height: Float32Array;
+  // Search buffers reused across calls to avoid per-search garbage.
+  private gScore: Float32Array;
+  private came: Int32Array;
+  private closed: Uint8Array;
 
   constructor(private terrain: Terrain, plots: Plot[], world?: VoxelWorld) {
     this.n = Math.ceil((WORLD_HALF * 2) / CELL) + 1;
     this.cost = new Uint16Array(this.n * this.n);
     this.height = new Float32Array(this.n * this.n);
+    this.gScore = new Float32Array(this.n * this.n);
+    this.came = new Int32Array(this.n * this.n);
+    this.closed = new Uint8Array(this.n * this.n);
     const limit = PLAYABLE_RADIUS - 2;
     for (let j = 0; j < this.n; j++) {
       for (let i = 0; i < this.n; i++) {
@@ -178,9 +185,9 @@ export class IslandGrid {
     const n = this.n;
     const si = s[1] * n + s[0];
     const gi = g[1] * n + g[0];
-    const gScore = new Float32Array(n * n).fill(Infinity);
-    const came = new Int32Array(n * n).fill(-1);
-    const closed = new Uint8Array(n * n);
+    const gScore = this.gScore.fill(Infinity);
+    const came = this.came.fill(-1);
+    const closed = this.closed.fill(0);
     const heap = new IslandHeap();
     const h = (idx: number): number => {
       const i = idx % n;
