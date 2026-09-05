@@ -158,7 +158,7 @@ export function meshesFrom<K>(geos: Map<K, THREE.BufferGeometry>, parent: THREE.
 }
 
 /** Creates skinned meshes (one per key) bound to a shared skeleton. Bones must already be in the scene graph with rest transforms. */
-export function skinnedMeshesFrom<K>(geos: Map<K, THREE.BufferGeometry>, parent: THREE.Object3D, skeleton: THREE.Skeleton, materialFor: (key: K) => THREE.Material, shadows = true): THREE.SkinnedMesh[] {
+export function skinnedMeshesFrom<K>(geos: Map<K, THREE.BufferGeometry>, parent: THREE.Object3D, skeleton: THREE.Skeleton, materialFor: (key: K) => THREE.Material, shadows = true, bindMatrix?: THREE.Matrix4): THREE.SkinnedMesh[] {
   const out: THREE.SkinnedMesh[] = [];
   parent.updateMatrixWorld(true);
   for (const [key, geo] of geos) {
@@ -169,7 +169,9 @@ export function skinnedMeshesFrom<K>(geos: Map<K, THREE.BufferGeometry>, parent:
     mesh.name = String(key);
     parent.add(mesh);
     mesh.updateMatrixWorld(true);
-    mesh.bind(skeleton, mesh.matrixWorld);
+    // Geometry is authored in model space around the rest pose, so the bind matrix is the identity
+    // unless the caller says otherwise (binding while the character is already placed in the world).
+    mesh.bind(skeleton, bindMatrix ?? mesh.matrixWorld);
     out.push(mesh);
   }
   return out;

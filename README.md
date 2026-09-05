@@ -78,8 +78,12 @@ ground, paths, a central monument and ruins, distant horizon islands, height fog
 grading/sharpen pass, procedural Web Audio.
 
 All models are generated at load time from parametric parts merged per material: skinned operators
-(plate carrier, pouches, helmet with glowing visor, pads, boots, camouflage and team-tinted armour
-with emissive accents) on a seven-bone skeleton; weapons with receivers, rails, optics, magazines,
+(plate carrier, pouches, pads, boots, camouflage and team-tinted armour with emissive accents) on a
+seven-bone skeleton, dressed by an outfit layer driven by the gadget kit: five head types (wraparound
+tech visor, classic visor, dark full-face plate with slanted lenses, hood with a HUD monocle, goggles
+with a respirator), gadget gear (line launcher and cable coil, exo leg braces with an energy cell,
+heavy plates with chest charges and a demo satchel, forearm hookshot with a rope coil, drill gauntlet
+with a shovel) and six camo palettes with small flair so no two operators look alike; weapons with receivers, rails, optics, magazines,
 stocks, muzzle devices and lights, plus gloved first-person hands that wrap the grips; trees with
 lathe trunks, tapered branches and leaf-card canopies, ragged conifers, bushes, noise-displaced
 mossy boulders and flower cards, all instanced. Procedural PBR tiles (fabric, camo, armour,

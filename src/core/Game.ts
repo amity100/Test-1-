@@ -19,6 +19,7 @@ import { buildWeaponModel } from '../render/WeaponModels';
 import { HUD, type HudState, type ScoreRow } from '../ui/HUD';
 import { GadgetSystem, GADGETS, GADGET_IDS, KIT_SIZE, type GadgetId } from '../sim/Gadgets';
 import { GadgetMeshes } from '../render/GadgetMeshes';
+import { outfitFor } from '../render/Outfits';
 import { Screens, type SummaryRow, type PodiumRow } from '../ui/Screens';
 import { composeCard } from '../ui/FortressCard';
 import { BuildMode } from '../build/BuildMode';
@@ -457,6 +458,9 @@ export class Game {
     } else {
       e.setLoadout(this.playerPrimary);
       if (initial) e.setKit(this.playerKit);
+    }
+    if (initial) this.chars.get(e.id)?.setOutfit(outfitFor(e.gadgets, this.entities.indexOf(e) + e.colorIndex));
+    if (!e.isBot) {
       this.touch.setGadgetIcons(e.gadgets.map((id) => GADGETS[id].icon));
       this.viewModel.show(e.weapon ? e.weapon.id : null, true);
       this.viewModel.hidden = false;
@@ -1285,6 +1289,8 @@ export class Game {
       e.pitch = 0;
       e.crouching = false;
       e.setLoadout(ids[i % ids.length]);
+      e.setKit([GADGET_IDS[i % GADGET_IDS.length], GADGET_IDS[(i + 2) % GADGET_IDS.length]]);
+      this.chars.get(e.id)?.setOutfit(outfitFor(e.gadgets, i));
     });
     this.debugFreezeBots = true;
     p.setLoadout(weapon);

@@ -3,33 +3,13 @@ import type { Entity } from '../sim/Entities';
 import { buildWeaponModel, OPERATOR_CAMO } from './WeaponModels';
 import type { WeaponId } from '../sim/Weapons';
 import { clamp, damp } from '../core/MathUtil';
-import { PartBuilder, PRIM, rbox, lathe, skinnedMeshesFrom } from './PartBuilder';
+import { PartBuilder, rbox, lathe, skinnedMeshesFrom } from './PartBuilder';
 import { armorMaps, camoMaps, gunmetalMaps, rubberMaps } from './DetailTextures';
-
-type MatKey = 'fabric' | 'armor' | 'nylon' | 'pad' | 'metal' | 'accent' | 'visor' | 'lens';
-
-/** Bone indices. */
-const HIPS = 0;
-const TORSO = 1;
-const HEAD = 2;
-const THIGH_L = 3;
-const SHIN_L = 4;
-const THIGH_R = 5;
-const SHIN_R = 6;
-
-/** Rest-pose bone origins in model space (root at the feet). */
-const REST = {
-  hips: new THREE.Vector3(0, 0.95, 0),
-  torso: new THREE.Vector3(0, 1.06, 0),
-  head: new THREE.Vector3(0, 1.68, 0),
-  thighL: new THREE.Vector3(-0.13, 0.87, 0),
-  shinL: new THREE.Vector3(-0.13, 0.45, 0),
-  thighR: new THREE.Vector3(0.13, 0.87, 0),
-  shinR: new THREE.Vector3(0.13, 0.45, 0),
-};
+import { type MatKey, HIPS, TORSO, HEAD, THIGH_L, SHIN_L, THIGH_R, SHIN_R, REST, ARM_L, ARM_R, partHelpers } from './CharacterRig';
+import { buildGear, outfitFor, outfitKey, CAMOS, PLATE_TINT, type Outfit } from './Outfits';
 
 const WEAPON_HOLDER = new THREE.Vector3(0.12, 0.34, -0.1);
-const HALF_PI = Math.PI / 2;
+const IDENTITY = new THREE.Matrix4();
 
 let bodyGeos: Map<MatKey, THREE.BufferGeometry> | null = null;
 
@@ -56,31 +36,7 @@ function nameTexture(name: string, color: string): THREE.CanvasTexture {
 function buildBody(): Map<MatKey, THREE.BufferGeometry> {
   if (bodyGeos) return bodyGeos;
   const pb = new PartBuilder<MatKey>({ uvDensity: 3, skinned: true });
-  const box = (k: MatKey, w: number, h: number, d: number, x: number, y: number, z: number, rx = 0, ry = 0, rz = 0): void => {
-    pb.part(PRIM.box, k, x, y, z, rx, ry, rz, w, h, d);
-  };
-  const rb = (k: MatKey, w: number, h: number, d: number, r: number, x: number, y: number, z: number, rx = 0, ry = 0, rz = 0, seg = Math.max(w, h, d) > 0.12 ? 2 : 1): void => {
-    const g = rbox(w, h, d, r, seg);
-    pb.part(g, k, x, y, z, rx, ry, rz);
-    g.dispose();
-  };
-  const sph = (k: MatKey, r: number, x: number, y: number, z: number, sx = 1, sy = 1, sz = 1): void => {
-    pb.part(PRIM.sphere, k, x, y, z, 0, 0, 0, r * 2 * sx, r * 2 * sy, r * 2 * sz);
-  };
-  const cylY = (k: MatKey, r: number, len: number, x: number, y: number, z: number, rTop = r): void => {
-    const g = new THREE.CylinderGeometry(rTop, r, 1, 14);
-    pb.part(g, k, x, y, z, 0, 0, 0, 1, len, 1);
-    g.dispose();
-  };
-  const cylX = (k: MatKey, r: number, len: number, x: number, y: number, z: number): void => {
-    pb.part(PRIM.cyl12, k, x, y, z, 0, 0, -HALF_PI, r * 2, len, r * 2);
-  };
-  const ring = (k: MatKey, R: number, r: number, x: number, y: number, z: number, sz = 1): void => {
-    const g = new THREE.TorusGeometry(R, r, 6, 18);
-    pb.part(g, k, x, y, z, HALF_PI, 0, 0, 1, sz, 1);
-    g.dispose();
-  };
-  const v = (x: number, y: number, z: number): THREE.Vector3 => new THREE.Vector3(x, y, z);
+  const { box, rb, sph, cylY, ring, v } = partHelpers(pb);
 
   // ---------------------------------------------------------------- hips
   pb.bone(HIPS);
@@ -160,46 +116,14 @@ function buildBody(): Map<MatKey, THREE.BufferGeometry> {
     // Wrist strap.
     pb.capsule('nylon', wrist.clone().addScaledVector(basisZ, -0.01), wrist.clone().addScaledVector(basisZ, 0.01), 0.06, undefined, 12);
   };
-  const tw = (x: number, y: number, z: number): THREE.Vector3 => v(T.x + x, T.y + y, T.z + z);
-  arm(tw(0.29, 0.47, 0), tw(0.33, 0.2, 0.03), tw(0.17, 0.31, -0.12), v(0, 1, 0), v(1, 0, 0), v(-0.2, 0.05, -1).normalize());
-  arm(tw(-0.29, 0.47, 0), tw(-0.25, 0.2, -0.2), tw(0.02, 0.35, -0.44), v(0, 0, -1), v(0, -1, 0), v(1, 0, 0));
+  arm(ARM_R.shoulder, ARM_R.elbow, ARM_R.wrist, v(0, 1, 0), v(1, 0, 0), v(-0.2, 0.05, -1).normalize());
+  arm(ARM_L.shoulder, ARM_L.elbow, ARM_L.wrist, v(0, 0, -1), v(0, -1, 0), v(1, 0, 0));
 
   // ---------------------------------------------------------------- head
   pb.bone(HEAD);
   const D = REST.head;
-  // Balaclava head; helmet shell (lathe) sits above the brow so the visor stays visible.
+  // Balaclava head; helmets, masks and visors are outfit gear (see Outfits.ts).
   sph('nylon', 0.1, D.x, D.y + 0.12, D.z, 1, 1.12, 1.05);
-  const shell = lathe([[0, 0.15], [0.05, 0.148], [0.085, 0.135], [0.108, 0.105], [0.118, 0.07], [0.122, 0.03], [0.122, 0.0], [0.118, -0.012], [0.112, -0.012], [0.114, 0.03], [0.11, 0.07], [0.1, 0.105], [0.078, 0.13], [0.04, 0.14], [0, 0.142]], 20);
-  pb.part(shell, 'armor', D.x, D.y + 0.16, D.z + 0.005, 0, 0, 0, 1, 1, 1.1);
-  shell.dispose();
-  ring('pad', 0.122, 0.011, D.x, D.y + 0.153, D.z + 0.005, 1.1);
-  for (const sx of [-1, 1]) {
-    // Side rails, ear cups and cup mounts.
-    rb('pad', 0.02, 0.03, 0.15, 0.006, D.x + sx * 0.121, D.y + 0.2, D.z, 0, 0, 0, 1);
-    cylX('pad', 0.036, 0.03, D.x + sx * 0.104, D.y + 0.115, D.z + 0.01);
-    cylX('metal', 0.018, 0.008, D.x + sx * 0.121, D.y + 0.115, D.z + 0.01);
-    box('accent', 0.004, 0.008, 0.045, D.x + sx * 0.127, D.y + 0.21, D.z - 0.02);
-  }
-  // NVG shroud and mount on the brow, strobe at the rear.
-  box('armor', 0.08, 0.05, 0.012, D.x, D.y + 0.235, D.z - 0.118, -0.35);
-  box('metal', 0.045, 0.04, 0.03, D.x, D.y + 0.225, D.z - 0.13, -0.3);
-  box('accent', 0.026, 0.007, 0.004, D.x, D.y + 0.212, D.z - 0.146, -0.3);
-  box('accent', 0.03, 0.012, 0.012, D.x, D.y + 0.24, D.z + 0.125, 0.4);
-  // Boom mic from the right ear cup.
-  pb.capsule('metal', v(D.x + 0.108, D.y + 0.1, D.z - 0.02), v(D.x + 0.05, D.y + 0.055, D.z - 0.12), 0.005, undefined, 6, 2);
-  sph('pad', 0.014, D.x + 0.05, D.y + 0.055, D.z - 0.12);
-  // Visor: a glowing band of a sphere facing -Z, framed above and below.
-  const visor = new THREE.SphereGeometry(0.108, 18, 6, Math.PI * 1.13, Math.PI * 0.74, Math.PI * 0.42, Math.PI * 0.16);
-  pb.part(visor, 'visor', D.x, D.y + 0.135, D.z + 0.005, 0, 0, 0, 1, 1, 1.02);
-  visor.dispose();
-  const visorFrame = new THREE.SphereGeometry(0.111, 18, 4, Math.PI * 1.1, Math.PI * 0.8, Math.PI * 0.39, Math.PI * 0.05);
-  pb.part(visorFrame, 'pad', D.x, D.y + 0.135, D.z + 0.005, 0, 0, 0, 1, 1, 1.02);
-  visorFrame.dispose();
-  // Mandible guard with vent slits.
-  const mask = new THREE.SphereGeometry(0.106, 18, 6, Math.PI * 1.12, Math.PI * 0.76, Math.PI * 0.6, Math.PI * 0.22);
-  pb.part(mask, 'pad', D.x, D.y + 0.135, D.z + 0.005, 0, 0, 0, 1, 1, 1.02);
-  mask.dispose();
-  for (let i = -1; i <= 1; i++) box('metal', 0.036, 0.004, 0.006, D.x + i * 0.028, D.y + 0.075 - Math.abs(i) * 0.008, D.z - 0.098 + Math.abs(i) * 0.012, 0.35, i * 0.35, 0);
 
   // ---------------------------------------------------------------- legs
   for (const [thighBone, shinBone, TH, SH, sx] of [
@@ -251,6 +175,8 @@ export class CharacterMesh {
   private shinR = new THREE.Bone();
   private skeleton: THREE.Skeleton;
   private meshes: THREE.SkinnedMesh[];
+  private gearMeshes: THREE.SkinnedMesh[] = [];
+  private outfitId = '';
   private weaponHolder = new THREE.Group();
   private weaponModel: THREE.Group | null = null;
   private weaponId: WeaponId | null = null;
@@ -278,6 +204,7 @@ export class CharacterMesh {
       accent: new THREE.MeshStandardMaterial({ color: accent.clone().multiplyScalar(0.5), emissive: accent, emissiveIntensity: 1.8, roughness: 0.4, metalness: 0.3 }),
       visor: new THREE.MeshStandardMaterial({ color: 0x0a0f18, emissive: accent, emissiveIntensity: 2.4, roughness: 0.12, metalness: 0.7 }),
       lens: new THREE.MeshStandardMaterial({ color: 0x0a1624, metalness: 1, roughness: 0.05 }),
+      warn: new THREE.MeshStandardMaterial({ color: 0x3a0008, emissive: 0xff2030, emissiveIntensity: 2.2, roughness: 0.4, metalness: 0.2 }),
     };
     this.flashMats = [this.mats.fabric, this.mats.armor, this.mats.nylon, this.mats.pad];
     this.opacityMats = Object.values(this.mats);
@@ -300,6 +227,7 @@ export class CharacterMesh {
     this.root.updateMatrixWorld(true);
     this.skeleton = new THREE.Skeleton([this.hips, this.torso, this.head, this.thighL, this.shinL, this.thighR, this.shinR]);
     this.meshes = skinnedMeshesFrom(buildBody(), this.root, this.skeleton, (k) => this.mats[k]);
+    this.setOutfit(outfitFor(['zipline', 'breach'], 0));
 
     // Name tag
     const spriteMat = new THREE.SpriteMaterial({ map: nameTexture(name, tagColor), transparent: true, depthTest: true, depthWrite: false });
@@ -308,6 +236,22 @@ export class CharacterMesh {
     this.tag.position.y = 2.25;
     this.root.add(this.tag);
     this.root.name = `char-${name}`;
+  }
+
+  /** Swaps head gear, gadget equipment and camo palette. Gear geometry is cached per outfit key. */
+  setOutfit(o: Outfit): void {
+    const id = `${outfitKey(o)}|${o.camo}`;
+    if (id === this.outfitId) return;
+    this.outfitId = id;
+    const camo = camoMaps(o.camo, CAMOS[o.camo]);
+    const f = this.mats.fabric;
+    f.map = camo.map;
+    f.normalMap = camo.normalMap;
+    f.roughnessMap = camo.roughnessMap;
+    f.needsUpdate = true;
+    this.mats.armor.color.set(PLATE_TINT[o.camo]).lerp(this.accent, 0.3);
+    for (const m of this.gearMeshes) this.root.remove(m);
+    this.gearMeshes = skinnedMeshesFrom(buildGear(o), this.root, this.skeleton, (k) => this.mats[k], true, IDENTITY);
   }
 
   setWeapon(id: WeaponId | null): void {
@@ -424,5 +368,6 @@ export class CharacterMesh {
     (this.tag.material as THREE.SpriteMaterial).dispose();
     this.skeleton.dispose();
     for (const m of this.meshes) this.root.remove(m);
+    for (const m of this.gearMeshes) this.root.remove(m);
   }
 }
