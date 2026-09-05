@@ -1,10 +1,12 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { VoxelMaterials } from './VoxelMaterial';
-import { PALETTE, blockColor, encodeBlock, isTransparent, type Mat } from '../world/Voxel';
+import { PALETTE, blockColor, blockMat, encodeBlock, isTransparent, type Mat } from '../world/Voxel';
 import { buildBlockMesh } from '../world/ChunkMesher';
 import { PREFABS, type PrefabId } from '../world/Prefabs';
 import { STYLES, type StyleId, type BlockRole } from '../world/Styles';
+import { pieceCells, type PieceType } from '../build/Pieces';
+import { PLOT_Y } from '../world/Layout';
 
 const SIZE = 96;
 
@@ -140,6 +142,38 @@ export class BlockThumbs {
       merged.dispose();
     }
     for (const p of parts) p.dispose();
+    this.cache.set(key, url);
+    return url;
+  }
+
+  /** Icon of a modular piece (wall, floor, ramp, roof) in the chosen block, with the real voxel material. */
+  piece(type: PieceType, style: StyleId, mat: Mat, color: number): string {
+    const key = `pc${type}:${style}:${mat}:${color}`;
+    const hit = this.cache.get(key);
+    if (hit) return hit;
+    const roofV = STYLES[style].roles.roof;
+    const fakePlot = { minX: 0, minZ: 0 } as unknown as import('../world/Layout').Plot;
+    const cells = pieceCells(fakePlot, { type, i: 0, j: 0, k: 0, rot: 0 });
+    const parts: THREE.BufferGeometry[] = [];
+    const box = new THREE.Box3();
+    for (const c of cells) {
+      const g = c.roof ? blockGeometry(blockMat(roofV), blockColor(roofV), c.shape) : blockGeometry(mat, color, c.shape);
+      if (!g) continue;
+      g.translate(c.x, c.y - PLOT_Y, c.z);
+      parts.push(g);
+      box.expandByPoint(new THREE.Vector3(c.x, c.y - PLOT_Y, c.z));
+      box.expandByPoint(new THREE.Vector3(c.x + 1, c.y - PLOT_Y + 1, c.z + 1));
+    }
+    let url = '';
+    if (parts.length) {
+      const merged = mergeGeometries(parts, false);
+      const mesh = new THREE.Mesh(merged, this.materials.opaque);
+      const center = box.getCenter(new THREE.Vector3());
+      const radius = box.getSize(new THREE.Vector3()).length() * 0.5;
+      url = this.snapshot(mesh, center, radius);
+      merged.dispose();
+    }
+    for (const g of parts) g.dispose();
     this.cache.set(key, url);
     return url;
   }

@@ -722,3 +722,17 @@ body { background: radial-gradient(1200px 800px at 50% 30%, #16283a 0%, #0f1923 
 .b-context .shape img { width: 100%; height: 100%; display: block; pointer-events: none; }
 .b-context .shape.active { border-color: var(--accent); background: rgba(0, 229, 255, 0.16); box-shadow: 0 0 0 1px rgba(0, 229, 255, 0.5); }
 .buildui.compact .b-context .shape { width: 28px; height: 28px; }
+
+/* v4: modular pieces, edit presets, draw tool */
+.b-context .presets { display: flex; gap: 4px; flex-wrap: wrap; max-width: 60vw; }
+.b-context .presets .btn.small { padding: 4px 8px; font-size: 11px; }
+.hs.pc:after { content: ''; position: absolute; right: 4px; bottom: 4px; width: 8px; height: 8px; border-radius: 2px; background: var(--accent); box-shadow: 0 0 6px rgba(0, 229, 255, 0.7); }
+.buildui.compact .b-hint { position: absolute; left: 50%; bottom: calc(112px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); font-size: 11px; color: rgba(255, 255, 255, 0.75); background: rgba(0, 0, 0, 0.35); padding: 3px 10px; border-radius: 8px; white-space: nowrap; max-width: 90vw; overflow: hidden; text-overflow: ellipsis; pointer-events: none; border: 0; }
+.buildui.compact .b-context .presets { max-width: 70vw; }
+.buildui.compact .b-context .seg button { padding: 4px 8px; font-size: 11px; }
+
+/* v4: fortress card modal */
+.panel.card { text-align: center; max-width: min(960px, 94vw); }
+.panel.card .card-img { display: block; width: 100%; max-width: 880px; margin: 8px auto 6px; border: 1px solid var(--line); box-shadow: 0 16px 50px rgba(0, 0, 0, 0.55); }
+.panel.card .row { justify-content: center; }
+.panel.card a.btn { text-decoration: none; }

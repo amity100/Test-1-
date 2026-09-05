@@ -18,6 +18,7 @@ import { FocusZone } from '../render/FocusZone';
 import { buildWeaponModel } from '../render/WeaponModels';
 import { HUD, type HudState, type ScoreRow } from '../ui/HUD';
 import { Screens, type SummaryRow, type PodiumRow } from '../ui/Screens';
+import { composeCard } from '../ui/FortressCard';
 import { BuildMode } from '../build/BuildMode';
 import { BuildUI } from '../build/BuildUI';
 import { TouchControls } from '../ui/TouchControls';
@@ -109,6 +110,7 @@ export class Game {
         audio.init();
         audio.play(k === 'click' ? 'uiClick' : 'uiHover');
       },
+      card: () => void this.showFortressCard(),
     });
     this.touch = new TouchControls(this.uiRoot, app.input, {
       pause: () => (this.paused ? this.resume() : this.pause()),
@@ -252,6 +254,8 @@ export class Game {
         autoBuild: (arch) => this.build?.autoBuild(this.rng.int(1, 1e9), arch),
         thumb: (m, c, sh) => thumbs.block(m, c, sh ?? 0),
         prefabThumb: (id, size, style) => thumbs.prefab(id, size, style),
+        pieceThumb: (p, style, m, c) => thumbs.piece(p, style, m, c),
+        card: () => void this.showFortressCard(),
       },
       IS_TOUCH || window.innerWidth < 900,
     );
@@ -260,6 +264,7 @@ export class Game {
       for (const c of cells) this.vfx.puff(new THREE.Vector3(c.x + 0.5, c.y + 0.65, c.z + 0.5), new THREE.Vector3(0, 1, 0), 3, 0.8, 0.22);
     });
     this.build.events.on('erased', () => audio.play('erase'));
+    this.build.events.on('change', () => this.touch.setBuildDraw(this.build?.state.tool === 'draw' && !this.build.state.editing));
     this.build.enter();
     this.buildUI.show();
     this.mode = 'build';
@@ -706,11 +711,35 @@ export class Game {
     }
   }
 
+  /** Round-opening flyby: swoop from high and far down to a low orbit over the fortress about to be stormed. */
+  private flybyCamera(dt: number, plot: Plot, progress: number): void {
+    const cam = this.app.gr.camera;
+    const k = progress < 0 ? 0 : progress > 1 ? 1 : progress;
+    const ease = k * k * (3 - 2 * k);
+    const a = this.flybyAngle + ease * 2.1;
+    const r = 110 - ease * 66;
+    const h = PLOT_Y + 62 - ease * 42;
+    const cx = plot.cx;
+    const cz = plot.cz;
+    cam.position.set(cx + Math.cos(a) * r, h + Math.sin(this.time * 0.8) * 0.6, cz + Math.sin(a) * r);
+    cam.lookAt(cx, PLOT_Y + 6 + (1 - ease) * 4, cz);
+    cam.updateMatrixWorld();
+    this.cameraFocus.set(cx, PLOT_Y + 7, cz);
+    const fov = 72 - ease * 16;
+    if (Math.abs(cam.fov - fov) > 0.05) {
+      cam.fov = fov;
+      cam.updateProjectionMatrix();
+    }
+    void dt;
+  }
+  private flybyAngle = 0;
+
   private introUpdate(dt: number): void {
     const match = this.match!;
     const plot = this.app.plots[match.targetPlotIndex];
     if (!this.simOnly) {
-      this.cinematicCamera(dt, plot);
+      if (match.phaseTimer < 0.05) this.flybyAngle = Math.atan2(this.player.pos.z - plot.cz, this.player.pos.x - plot.cx) - 0.6;
+      this.flybyCamera(dt, plot, match.phaseTimer / RULES.introTime);
       this.updateCharacters(dt);
       this.hud.update(this.hudState(), dt);
     }
@@ -970,6 +999,78 @@ export class Game {
     return { sx, sy, dist, onScreen, angle, label: match.defender ? match.defender.name : '' };
   }
 
+  // ---------------- fortress card ----------------
+  /** Renders the player's fortress from a three-quarter aerial view through the full post-processing chain. */
+  private captureFortress(plot: Plot): string {
+    const gr = this.app.gr;
+    const cam = gr.camera;
+    const savedPos = cam.position.clone();
+    const savedQuat = cam.quaternion.clone();
+    const savedFov = cam.fov;
+    // Highest storey in use decides the framing.
+    let top = PLOT_Y;
+    for (let y = PLOT_Y + PLOT_MAX_HEIGHT - 1; y >= PLOT_Y; y--) {
+      if (this.app.world.countBlocksInBox(plot.minX, y, plot.minZ, plot.maxX, y, plot.maxZ) > 0) {
+        top = y + 1;
+        break;
+      }
+    }
+    const h = Math.max(4, top - PLOT_Y);
+    const dist = 30 + h * 1.15;
+    cam.position.set(plot.cx + dist * 0.72, PLOT_Y + 10 + h * 0.85, plot.cz + dist * 0.72);
+    cam.lookAt(plot.cx, PLOT_Y + h * 0.4, plot.cz);
+    cam.fov = 48;
+    cam.updateProjectionMatrix();
+    cam.updateMatrixWorld();
+    const hidden: THREE.Object3D[] = [];
+    const hide = (o: THREE.Object3D | null | undefined): void => {
+      if (o && o.visible) {
+        o.visible = false;
+        hidden.push(o);
+      }
+    };
+    hide(this.build?.visuals);
+    hide(this.viewModel.root);
+    gr.composer.render(1 / 60);
+    const url = gr.renderer.domElement.toDataURL('image/jpeg', 0.92);
+    for (const o of hidden) o.visible = true;
+    cam.position.copy(savedPos);
+    cam.quaternion.copy(savedQuat);
+    cam.fov = savedFov;
+    cam.updateProjectionMatrix();
+    cam.updateMatrixWorld();
+    return url;
+  }
+
+  /** Composes and shows the shareable card of the player's fortress. */
+  async showFortressCard(): Promise<void> {
+    const plot = this.app.plots[0];
+    const shot = this.captureFortress(plot);
+    const blocks = this.app.world.countBlocksInBox(plot.minX, PLOT_Y, plot.minZ, plot.maxX, PLOT_Y + PLOT_MAX_HEIGHT, plot.maxZ);
+    const standings = this.match?.standings() ?? [];
+    const place = standings.indexOf(this.player);
+    const finished = this.mode === 'podium';
+    const styleId = this.match?.config.style ?? 'medieval';
+    const { dataUrl, blob } = await composeCard(shot, {
+      name: this.player.name,
+      colorHex: this.player.colorHex,
+      styleName: t(STYLES[styleId].nameKey),
+      blocks,
+      score: finished ? this.player.score.total : undefined,
+      captures: finished ? this.player.score.captures : undefined,
+      place: finished && place >= 0 ? place + 1 : undefined,
+      players: finished ? standings.length : undefined,
+      labels: { fortressOf: t('fortressOf'), blocks: t('blocks'), score: t('score'), captures: t('captures'), place: t('place'), tagline: t('tagline'), style: t('style') },
+      rtl: document.documentElement.dir === 'rtl',
+    });
+    const wasScreen = this.screens.name;
+    this.screens.showCard(dataUrl, blob, () => {
+      // Back to the podium (with its rows) or straight back into the game.
+      if (wasScreen === 'podium') this.screens.refreshPodium();
+      else this.screens.hideAll();
+    });
+  }
+
   // ---------------- debug helpers (smoke tests) ----------------
   debugQuickMatch(botCount = 3, difficulty: 'easy' | 'normal' | 'hard' | 'nightmare' = 'normal', roundTime = 240): void {
     this.startMatch({ playerName: 'Tester', botCount, difficulty, buildTime: 0, roundTime, style: 'medieval' });
@@ -1084,6 +1185,47 @@ export class Game {
   }
   debugKillPlayer(): void {
     this.combat.applyDamage(this.player, 999, null, this.time, false, this.player.center);
+  }
+  /** Exercises modular pieces, edit presets and the draw tool programmatically. */
+  debugPiecesTest(): Record<string, unknown> {
+    const b = this.build;
+    if (!b) return { error: 'not in build mode' };
+    const before = b.state.used;
+    b.setTool('piece');
+    const wall = b.placePiece({ type: 'wall', i: 3, j: 3, k: 0, rot: 0 });
+    const wall2 = b.placePiece({ type: 'wall', i: 3, j: 3, k: 0, rot: 1 });
+    const floor = b.placePiece({ type: 'floor', i: 3, j: 3, k: 1, rot: 0 });
+    const ramp = b.placePiece({ type: 'ramp', i: 4, j: 3, k: 0, rot: 0 });
+    const roof = b.placePiece({ type: 'roof', i: 3, j: 3, k: 2, rot: 0 });
+    const afterPieces = b.state.used;
+    const wallKey = 'wall:3,3,0:0';
+    b.state.editing = wallKey;
+    b.applyPreset('door');
+    const afterDoor = b.state.used;
+    const rec = b.pieces.get(wallKey);
+    b.toggleEditCell(0);
+    const afterToggle = b.state.used;
+    b.state.editing = null;
+    b.undo();
+    b.undo();
+    const afterUndo = b.state.used;
+    b.redo();
+    b.redo();
+    const afterRedo = b.state.used;
+    // Draw a closed outline and put a plate inside.
+    const p = b.plot;
+    const y = PLOT_Y;
+    const path: { x: number; z: number }[] = [];
+    for (let x = 0; x <= 8; x++) path.push({ x: p.minX + 28 + x, z: p.minZ + 28 });
+    for (let z = 0; z <= 6; z++) path.push({ x: p.minX + 36, z: p.minZ + 28 + z });
+    for (let x = 8; x >= 0; x--) path.push({ x: p.minX + 28 + x, z: p.minZ + 34 });
+    for (let z = 6; z >= 0; z--) path.push({ x: p.minX + 28, z: p.minZ + 28 + z });
+    const drawn = b.debugStroke(path, y);
+    const plate = b.debugStroke([{ x: p.minX + 32, z: p.minZ + 31 }], y);
+    const circle: { x: number; z: number }[] = [];
+    for (let a = 0; a < Math.PI * 2; a += 0.15) circle.push({ x: Math.round(p.minX + 10 + Math.cos(a) * 4), z: Math.round(p.minZ + 30 + Math.sin(a) * 4) });
+    const tower = b.debugStroke(circle, y);
+    return { before, wall, wall2, floor, ramp, roof, afterPieces, afterDoor, doorOpen: rec?.open.filter(Boolean).length, afterToggle, afterUndo, afterRedo, drawn, plate, tower, used: b.state.used, pieces: b.pieces.size };
   }
   /** Exercises the build tools programmatically. */
   debugBuildTest(): Record<string, unknown> {

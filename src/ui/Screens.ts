@@ -14,6 +14,8 @@ export interface ScreenCallbacks {
   languageChanged(): void;
   clickToPlay(): void;
   uiSound(kind: 'click' | 'hover'): void;
+  /** Builds and shows the shareable fortress card. */
+  card(): void;
 }
 
 export interface SummaryRow {
@@ -40,7 +42,7 @@ export interface PodiumRow {
   isYou: boolean;
 }
 
-type ScreenName = 'none' | 'menu' | 'setup' | 'settings' | 'howto' | 'pause' | 'summary' | 'podium' | 'click';
+type ScreenName = 'none' | 'menu' | 'setup' | 'settings' | 'howto' | 'pause' | 'summary' | 'podium' | 'click' | 'card';
 
 const SETUP_KEY = 'flagkeep.setup.v1';
 
@@ -367,9 +369,44 @@ export class Screens {
     p.appendChild(table);
     const row = el('div', 'row');
     row.style.marginTop = '18px';
-    row.append(btn(t('playAgain'), 'primary', () => this.cb.playAgain()), btn(t('quitToMenu'), '', () => this.cb.quit()));
+    row.append(btn(t('playAgain'), 'primary', () => this.cb.playAgain()), btn(`📸 ${esc(t('card'))}`, '', () => this.cb.card()), btn(t('quitToMenu'), '', () => this.cb.quit()));
     p.appendChild(row);
     this.mount('podium', p);
+  }
+
+  refreshPodium(): void {
+    if (this.lastPodium) this.showPodium(this.lastPodium);
+  }
+
+  /** Modal with the rendered fortress card: share (when supported), download, close. */
+  showCard(dataUrl: string, blob: Blob | null, onClose: () => void): void {
+    const p = el('div', 'panel card');
+    p.innerHTML = `<h2>${esc(t('myFortress'))}</h2>`;
+    const img = el('img', 'card-img');
+    img.src = dataUrl;
+    img.alt = t('card');
+    p.appendChild(img);
+    p.appendChild(el('div', 'muted small-note', esc(t('cardHint'))));
+    const row = el('div', 'row');
+    row.style.marginTop = '14px';
+    const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
+    const file = blob ? new File([blob], 'flagkeep-fortress.png', { type: 'image/png' }) : null;
+    if (file && typeof nav.share === 'function' && (!nav.canShare || nav.canShare({ files: [file] }))) {
+      row.appendChild(
+        btn(`⤴ ${esc(t('shareCard'))}`, 'primary', () => {
+          nav.share({ files: [file], title: 'FLAGKEEP', text: t('tagline') }).catch(() => undefined);
+        }),
+      );
+    }
+    const a = document.createElement('a');
+    a.className = 'btn';
+    a.href = dataUrl;
+    a.download = 'flagkeep-fortress.png';
+    a.textContent = `⬇ ${t('download')}`;
+    row.appendChild(a);
+    row.appendChild(btn(t('close'), '', onClose));
+    p.appendChild(row);
+    this.mount('card', p);
   }
 
   showClickToPlay(fallback: boolean): void {

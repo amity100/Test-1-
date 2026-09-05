@@ -1,6 +1,7 @@
 import { el, btn, esc } from '../ui/dom';
 import { t } from '../core/i18n';
 import { HOTBAR_SIZE, TWO_POINT_TOOLS, type BuildMode, type Tool } from './BuildMode';
+import { PIECE_TYPES, WALL_PRESET_IDS, FLOOR_PRESET_IDS, type PieceType } from './Pieces';
 import { STYLES, type StyleId } from '../world/Styles';
 import { PALETTE, MATERIALS, SHAPE_KINDS, makeShape, type Mat, type ShapeKind } from '../world/Voxel';
 import { PREFAB_IDS, PREFABS, type PrefabId } from '../world/Prefabs';
@@ -9,6 +10,8 @@ import { formatTime } from '../core/MathUtil';
 
 const svg = (body: string): string => `<svg viewBox="0 0 24 24" aria-hidden="true">${body}</svg>`;
 const TOOL_ICONS: Record<Tool, string> = {
+  piece: svg('<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><path d="M13 21l8-8v8z"/>'),
+  draw: svg('<path d="M4 20c4-9 6-12 9-13 2-1 4 1 3 3-1 3-5 5-8 10"/><path d="M14 4l3 3"/><path d="M4 20l2-5"/>'),
   block: svg('<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/>'),
   box: svg('<rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M4 9h16M9 4v16" stroke-dasharray="2 2"/>'),
   line: svg('<path d="M4 20L20 4"/><rect x="2.5" y="17.5" width="4" height="4"/><rect x="17.5" y="2.5" width="4" height="4"/>'),
@@ -20,9 +23,11 @@ const TOOL_ICONS: Record<Tool, string> = {
   flag: svg('<path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/>'),
   spawn: svg('<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"/><path d="M12 4v3M12 17v3M4 12h3M17 12h3"/>'),
 };
-const TOOL_KEYS: Record<Tool, string> = { block: 'toolBlock', box: 'toolBox', line: 'toolLine', wall: 'toolWall', stairs: 'toolStairs', prefab: 'toolPrefab', paint: 'toolPaint', erase: 'toolErase', flag: 'toolFlag', spawn: 'toolSpawn' };
-const TOOL_HOTKEY: Record<Tool, string> = { block: 'B', box: 'V', line: 'L', wall: 'N', stairs: 'K', prefab: 'P', paint: 'C', erase: 'X', flag: 'F', spawn: 'G' };
-const TOOLS: Tool[] = ['block', 'box', 'line', 'wall', 'stairs', 'prefab', 'paint', 'erase', 'flag', 'spawn'];
+const TOOL_KEYS: Record<Tool, string> = { piece: 'toolPiece', draw: 'toolDraw', block: 'toolBlock', box: 'toolBox', line: 'toolLine', wall: 'toolWall', stairs: 'toolStairs', prefab: 'toolPrefab', paint: 'toolPaint', erase: 'toolErase', flag: 'toolFlag', spawn: 'toolSpawn' };
+const TOOL_HOTKEY: Record<Tool, string> = { piece: 'H', draw: 'J', block: 'B', box: 'V', line: 'L', wall: 'N', stairs: 'K', prefab: 'P', paint: 'C', erase: 'X', flag: 'F', spawn: 'G' };
+const TOOLS: Tool[] = ['piece', 'draw', 'block', 'box', 'line', 'wall', 'stairs', 'prefab', 'paint', 'erase', 'flag', 'spawn'];
+const PIECE_KEYS: Record<PieceType, string> = { wall: 'pcWall', floor: 'pcFloor', ramp: 'pcRamp', roof: 'pcRoof' };
+const PRESET_KEYS: Record<string, string> = { full: 'prFull', door: 'prDoor', gate: 'prGate', window: 'prWindow', slit: 'prSlit', half: 'prHalf', arch: 'prArch', crenel: 'prCrenel', pillars: 'prPillars', hatch: 'prHatch', hole: 'prHole', ring: 'prRing', bridge: 'prBridge' };
 const SHAPE_KEYS: Record<ShapeKind, string> = { cube: 'shCube', slab: 'shSlab', slabTop: 'shSlabTop', stairs: 'shStairs', slope: 'shSlope', pillar: 'shPillar', fence: 'shFence' };
 const ARCH_KEYS: Record<Archetype, string> = { castle: 'aCastle', palace: 'aPalace', villa: 'aVilla', bunker: 'aBunker', tower: 'aTower', temple: 'aTemple' };
 const MAT_KEYS: Record<string, string> = {
@@ -41,6 +46,10 @@ export interface BuildUICallbacks {
   thumb(mat: Mat, color: number, shape?: number): string;
   /** Rendered icon (data URL) of a prefab. */
   prefabThumb(id: PrefabId, size: number, style: StyleId): string;
+  /** Rendered icon (data URL) of a modular piece in the given block. */
+  pieceThumb(type: PieceType, style: StyleId, mat: Mat, color: number): string;
+  /** Renders the shareable fortress card. */
+  card(): void;
 }
 
 type SheetTab = 'materials' | 'prefabs' | 'templates';
@@ -166,12 +175,13 @@ export class BuildUI {
     budgetWrap.appendChild(bar);
     const actions = el('div', 'row');
     if (this.compact) {
-      actions.append(btn(t('templates'), 'small', () => this.toggleSheet('templates')), btn(t('ready'), 'primary', () => this.cb.ready()));
+      actions.append(btn(t('templates'), 'small', () => this.toggleSheet('templates')), btn('📸', 'small', () => this.cb.card()), btn(t('ready'), 'primary', () => this.cb.ready()));
       this.topbar.append(this.timerEl, budgetWrap, this.statusEl, actions);
     } else {
       actions.append(
         btn(t('templates'), 'small', () => this.toggleSheet('templates')),
         btn(t('autoBuild'), 'small', () => this.cb.autoBuild()),
+        btn(`📸 ${esc(t('card'))}`, 'small', () => this.cb.card()),
         btn(t('ready'), 'primary', () => this.cb.ready()),
       );
       this.topbar.append(title, this.timerEl, budgetWrap, this.statusEl, actions);
@@ -183,8 +193,8 @@ export class BuildUI {
     this.strip.hidden = !this.compact;
     if (this.compact) this.renderStrip();
     else this.renderRail();
-    this.hint.textContent = this.compact ? '' : t('buildHint');
     this.hint.hidden = this.compact;
+    this.updateHint();
     this.hotbarKey = '';
     this.contextKey = '';
     if (!this.sheet.hidden) this.renderSheet();
@@ -223,18 +233,18 @@ export class BuildUI {
   // ---------- hotbar ----------
   private renderHotbar(): void {
     const st = this.build.state;
-    const key = st.hotbar.map((s) => (s ? (s.kind === 'block' ? `b${s.mat}:${s.color}:${s.shape ?? 'cube'}` : `p${s.id}:${st.prefabSize}`) : '-')).join('|') + `#${st.hotIndex}#${st.style}`;
+    const key = st.hotbar.map((s) => (s ? (s.kind === 'block' ? `b${s.mat}:${s.color}:${s.shape ?? 'cube'}` : s.kind === 'piece' ? `c${s.piece}:${st.mat}:${st.color}` : `p${s.id}:${st.prefabSize}`) : '-')).join('|') + `#${st.hotIndex}#${st.style}`;
     if (key === this.hotbarKey) return;
     this.hotbarKey = key;
     this.hotbar.innerHTML = '';
     for (let i = 0; i < HOTBAR_SIZE; i++) {
       const slot = st.hotbar[i];
-      const b = el('button', `hs ${i === st.hotIndex ? 'active' : ''} ${slot ? (slot.kind === 'prefab' ? 'pf' : '') : 'empty'}`);
+      const b = el('button', `hs ${i === st.hotIndex ? 'active' : ''} ${slot ? (slot.kind === 'prefab' ? 'pf' : slot.kind === 'piece' ? 'pc' : '') : 'empty'}`);
       if (slot) {
         const img = el('img');
         img.draggable = false;
-        img.src = slot.kind === 'block' ? this.cb.thumb(slot.mat, slot.color, makeShape(slot.shape ?? 'cube', 0)) : this.cb.prefabThumb(slot.id, Math.min(st.prefabSize, PREFABS[slot.id].sizes - 1), st.style);
-        img.alt = slot.kind === 'block' ? this.matName(slot.mat) : t(PREFABS[slot.id].nameKey);
+        img.src = slot.kind === 'block' ? this.cb.thumb(slot.mat, slot.color, makeShape(slot.shape ?? 'cube', 0)) : slot.kind === 'piece' ? this.cb.pieceThumb(slot.piece, st.style, st.mat, st.color) : this.cb.prefabThumb(slot.id, Math.min(st.prefabSize, PREFABS[slot.id].sizes - 1), st.style);
+        img.alt = slot.kind === 'block' ? this.matName(slot.mat) : slot.kind === 'piece' ? t(PIECE_KEYS[slot.piece]) : t(PREFABS[slot.id].nameKey);
         b.appendChild(img);
         b.title = img.alt;
       } else b.appendChild(el('span', 'plus', '+'));
@@ -243,7 +253,7 @@ export class BuildUI {
         e.stopPropagation();
         if (i === st.hotIndex || !slot) {
           this.build.selectHotbar(i);
-          this.toggleSheet(slot && slot.kind === 'prefab' ? 'prefabs' : 'materials');
+          if (!slot || slot.kind !== 'piece') this.toggleSheet(slot && slot.kind === 'prefab' ? 'prefabs' : 'materials');
         } else this.build.selectHotbar(i);
       });
       b.addEventListener('contextmenu', (e) => {
@@ -265,7 +275,8 @@ export class BuildUI {
   // ---------- context strip ----------
   private renderContext(): void {
     const st = this.build.state;
-    const key = `${st.tool}|${st.mat}|${st.color}|${st.prefab}|${st.prefabSize}|${st.rot}|${st.wallHeight}|${st.layerLock}|${st.layerY}|${st.boxStart ? 1 : 0}|${st.hollow}|${st.mirror}|${st.shapeKind}`;
+    const editing = this.build.editingPiece;
+    const key = `${st.tool}|${st.mat}|${st.color}|${st.prefab}|${st.prefabSize}|${st.rot}|${st.wallHeight}|${st.layerLock}|${st.layerY}|${st.boxStart ? 1 : 0}|${st.hollow}|${st.mirror}|${st.shapeKind}|${st.pieceType}|${st.pieceRot}|${st.editing}|${editing ? editing.open.map((o) => (o ? 1 : 0)).join('') : ''}`;
     if (key === this.contextKey) return;
     this.contextKey = key;
     const c = this.context;
@@ -284,6 +295,29 @@ export class BuildUI {
       return wrap;
     };
     const twoPoint = TWO_POINT_TOOLS.includes(st.tool);
+    if (st.tool === 'piece' && editing) {
+      c.append(chip(`${t('edit')} · ${t(PIECE_KEYS[editing.type])}`, 'strong'));
+      const ids = editing.type === 'wall' ? WALL_PRESET_IDS : FLOOR_PRESET_IDS;
+      const presets = el('div', 'presets');
+      for (const id of ids) presets.appendChild(btn(t(PRESET_KEYS[id] ?? id), 'small', () => this.build.applyPreset(id)));
+      c.append(presets, btn(`✓ ${esc(t('editDone'))}`, 'small primary', () => this.build.toggleEdit()));
+      c.hidden = false;
+      return;
+    }
+    if (st.tool === 'piece' || st.tool === 'draw') {
+      const sw = el('span', 'csw');
+      sw.style.background = PALETTE[st.color];
+      c.append(sw, chip(this.matName(st.mat)));
+    }
+    if (st.tool === 'piece') {
+      c.append(seg(PIECE_TYPES.map((p) => ({ label: t(PIECE_KEYS[p]), active: st.pieceType === p, onClick: () => this.build.setPieceType(p) }))));
+      c.append(btn('↻', 'small', () => this.build.rotate()));
+      c.append(btn(`✎ ${esc(t('edit'))}${this.compact ? '' : ' <span class="hk">E</span>'}`, 'small', () => this.build.toggleEdit()));
+    }
+    if (st.tool === 'draw') {
+      c.append(chip(t('toolDraw'), 'strong'));
+      c.append(btn('−', 'small', () => this.build.setWallHeight(st.wallHeight - 1)), chip(`${st.wallHeight}`), btn('+', 'small', () => this.build.setWallHeight(st.wallHeight + 1)));
+    }
     if (st.tool === 'block' || st.tool === 'paint' || twoPoint) {
       const sw = el('span', 'csw');
       sw.style.background = PALETTE[st.color];
@@ -472,9 +506,21 @@ export class BuildUI {
     this.sheet.appendChild(body);
   }
 
+  private hintKey = '';
+  private updateHint(): void {
+    const st = this.build.state;
+    const key = st.editing ? 'editHint' : st.tool === 'piece' ? 'pieceHint' : st.tool === 'draw' ? 'drawHint' : 'buildHint';
+    if (key === this.hintKey) return;
+    this.hintKey = key;
+    this.hint.textContent = t(key);
+    // Phones get the short, tool-specific hints only.
+    this.hint.hidden = this.compact && key === 'buildHint';
+  }
+
   /** Cheap refresh of dynamic bits (active states, budget, status, hotbar, context). */
   refresh(): void {
     const st = this.build.state;
+    this.updateHint();
     this.budgetEl.textContent = `${st.used} / ${st.budget}`;
     this.budgetFill.style.width = `${Math.min(100, (st.used / st.budget) * 100)}%`;
     this.budgetFill.classList.toggle('full', st.used >= st.budget);

@@ -13,11 +13,12 @@ import { generateFortress, type Archetype } from '../world/FortressGen';
 import { Random } from '../core/Random';
 import { Emitter } from '../core/Events';
 import { clamp, damp } from '../core/MathUtil';
+import { PIECE_TYPES, pieceCells, pieceKey, snapPiece, presetToOpen, editGrid, editCellBox, moduleOrigin, MODULE, STOREY, type PieceType, type PiecePlacement, type PieceRecord } from './Pieces';
 
-export type Tool = 'block' | 'box' | 'line' | 'wall' | 'stairs' | 'prefab' | 'paint' | 'erase' | 'flag' | 'spawn';
+export type Tool = 'piece' | 'draw' | 'block' | 'box' | 'line' | 'wall' | 'stairs' | 'prefab' | 'paint' | 'erase' | 'flag' | 'spawn';
 
 /** A quick-select slot: a block kind (material + colour) or a prefab. */
-export type HotbarSlot = { kind: 'block'; mat: Mat; color: number; shape?: ShapeKind } | { kind: 'prefab'; id: PrefabId } | null;
+export type HotbarSlot = { kind: 'block'; mat: Mat; color: number; shape?: ShapeKind } | { kind: 'prefab'; id: PrefabId } | { kind: 'piece'; piece: PieceType } | null;
 export const HOTBAR_SIZE = 9;
 /** Tools that need two clicks (start and end). */
 export const TWO_POINT_TOOLS: Tool[] = ['box', 'line', 'wall', 'stairs'];
@@ -49,6 +50,19 @@ export interface BuildState {
   wallHeight: number;
   /** Shape of placed blocks (cube, slab, stairs, slope, column, railing); rot gives the facing. */
   shapeKind: ShapeKind;
+  /** Modular piece being placed and an optional manual facing (null = automatic). */
+  pieceType: PieceType;
+  pieceRot: number | null;
+  /** Key of the wall/floor piece whose cells are being edited, if any. */
+  editing: string | null;
+  /** Cells drawn so far with the draw tool (for the UI hint). */
+  strokeLength: number;
+}
+
+interface PieceChange {
+  key: string;
+  before: PieceRecord | null;
+  after: PieceRecord | null;
 }
 
 interface Edit {
@@ -61,6 +75,7 @@ interface Edit {
 
 interface Action {
   edits: Edit[];
+  pieces: PieceChange[];
   flagBefore: Cell | null;
   flagAfter: Cell | null;
   spawnBefore: Cell | null;
@@ -110,6 +125,16 @@ export class BuildMode {
   private dirtyValidate = true;
   private raycaster = new THREE.Raycaster();
   private floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -PLOT_Y);
+  /** Exact point hit by the cursor ray (block face or ground), for piece snapping. */
+  private cursorPoint = new THREE.Vector3();
+  /** Modular pieces placed by the player, and which piece owns each block. */
+  readonly pieces = new Map<string, PieceRecord>();
+  private cellOwner = new Map<string, string>();
+  private editTiles: THREE.InstancedMesh;
+  private pieceSnap: PiecePlacement | null = null;
+  private stroke: Cell[] | null = null;
+  private strokeY = PLOT_Y;
+  private strokeSet = new Set<string>();
   active = false;
 
   constructor(
@@ -147,6 +172,10 @@ export class BuildMode {
       hotIndex: 0,
       wallHeight: 4,
       shapeKind: 'cube',
+      pieceType: 'wall',
+      pieceRot: null,
+      editing: null,
+      strokeLength: 0,
     };
     this.resetHotbar();
     this.focus.set(plot.cx, PLOT_Y + 4, plot.cz);
@@ -182,10 +211,19 @@ export class BuildMode {
     lgm.opacity = 0.28;
     lgm.depthWrite = false;
     this.layerGrid.visible = false;
-    this.group.add(this.ghost, this.ghostBox, this.prefabGhost, this.flagMarker.group, this.spawnMarker, this.plotFrame, this.layerGrid, this.popMesh, this.shapeGhost);
+    this.editTiles = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.4, depthWrite: false, side: THREE.DoubleSide }), 32);
+    this.editTiles.count = 0;
+    this.editTiles.visible = false;
+    this.editTiles.frustumCulled = false;
+    this.group.add(this.ghost, this.ghostBox, this.prefabGhost, this.flagMarker.group, this.spawnMarker, this.plotFrame, this.layerGrid, this.popMesh, this.shapeGhost, this.editTiles);
     this.group.visible = false;
     scene.add(this.group);
     this.recount();
+  }
+
+  /** Editor overlays (ghosts, frame, grid) so they can be hidden for screenshots. */
+  get visuals(): THREE.Group {
+    return this.group;
   }
 
   enter(): void {
@@ -206,7 +244,22 @@ export class BuildMode {
   }
 
   // ---------- state setters ----------
+  setPieceType(p: PieceType): void {
+    this.state.pieceType = p;
+    this.state.pieceRot = null;
+    this.state.editing = null;
+    if (this.state.tool !== 'piece') this.state.tool = 'piece';
+    this.emitChange();
+  }
+
+  cyclePieceType(dir = 1): void {
+    const i = PIECE_TYPES.indexOf(this.state.pieceType);
+    this.setPieceType(PIECE_TYPES[(i + dir + PIECE_TYPES.length) % PIECE_TYPES.length]);
+  }
+
   setTool(t: Tool): void {
+    if (t !== 'piece') this.state.editing = null;
+    if (t !== 'draw') this.cancelStroke();
     this.state.tool = t;
     this.state.boxStart = null;
     this.emitChange();
@@ -251,7 +304,8 @@ export class BuildMode {
   resetHotbar(): void {
     const s = STYLES[this.state.style];
     const block = (v: number): HotbarSlot => ({ kind: 'block', mat: blockMat(v) as Mat, color: blockColor(v) });
-    this.state.hotbar = [block(s.roles.wall), block(s.roles.wallAlt), block(s.roles.trim), block(s.roles.floor), block(s.roles.roof), block(s.roles.accent), block(s.roles.glass), block(s.roles.light), { kind: 'prefab', id: 'stairs' }];
+    const piece = (p: PieceType): HotbarSlot => ({ kind: 'piece', piece: p });
+    this.state.hotbar = [piece('wall'), piece('floor'), piece('ramp'), piece('roof'), block(s.roles.wall), block(s.roles.wallAlt), block(s.roles.floor), block(s.roles.glass), { kind: 'prefab', id: 'stairs' }];
     while (this.state.hotbar.length < HOTBAR_SIZE) this.state.hotbar.push(null);
     this.state.hotIndex = 0;
     this.applySlot(this.state.hotbar[0]);
@@ -264,7 +318,12 @@ export class BuildMode {
       st.mat = slot.mat;
       st.color = slot.color;
       st.shapeKind = slot.shape ?? 'cube';
-      if (st.tool === 'prefab') st.tool = 'block';
+      if (st.tool === 'prefab' || st.tool === 'piece') st.tool = 'block';
+      st.editing = null;
+    } else if (slot.kind === 'piece') {
+      st.pieceType = slot.piece;
+      st.tool = 'piece';
+      st.editing = null;
     } else {
       st.prefab = slot.id;
       st.prefabSize = Math.min(st.prefabSize, PREFABS[slot.id].sizes - 1);
@@ -295,7 +354,10 @@ export class BuildMode {
     this.emitChange();
   }
   rotate(): void {
-    this.state.rot = (this.state.rot + 1) % 4;
+    if (this.state.tool === 'piece') {
+      const cur = this.state.pieceRot ?? this.pieceSnap?.rot ?? 0;
+      this.state.pieceRot = (cur + 1) % 4;
+    } else this.state.rot = (this.state.rot + 1) % 4;
     this.emitChange();
   }
   toggleMirror(): void {
@@ -348,14 +410,16 @@ export class BuildMode {
   }
 
   // ---------- editing primitives ----------
-  private applyEdits(edits: Edit[], flagAfter: Cell | null, spawnAfter: Cell | null): void {
-    if (edits.length === 0 && flagAfter === this.state.flag && spawnAfter === this.state.spawn) return;
-    const action: Action = { edits, flagBefore: this.state.flag, flagAfter, spawnBefore: this.state.spawn, spawnAfter };
+  private applyEdits(edits: Edit[], flagAfter: Cell | null, spawnAfter: Cell | null, pieces: PieceChange[] = []): void {
+    if (edits.length === 0 && pieces.length === 0 && flagAfter === this.state.flag && spawnAfter === this.state.spawn) return;
+    const action: Action = { edits, pieces, flagBefore: this.state.flag, flagAfter, spawnBefore: this.state.spawn, spawnAfter };
     const placed: Cell[] = [];
     for (const ed of edits) {
       this.world.set(ed.x, ed.y, ed.z, ed.after);
       if (ed.after !== 0 && placed.length < 40) placed.push({ x: ed.x, y: ed.y, z: ed.z });
     }
+    this.syncPiecesAfterEdits(edits, action);
+    for (const c of action.pieces) this.applyPieceChange(c, true);
     if (placed.length) {
       for (const c of placed) {
         if (this.pops.length >= 64) break;
@@ -378,8 +442,10 @@ export class BuildMode {
     const a = this.undoStack.pop();
     if (!a) return;
     for (const ed of a.edits) this.world.set(ed.x, ed.y, ed.z, ed.before);
+    for (let i = a.pieces.length - 1; i >= 0; i--) this.applyPieceChange(a.pieces[i], false);
     this.state.flag = a.flagBefore;
     this.state.spawn = a.spawnBefore;
+    this.state.editing = null;
     this.redoStack.push(a);
     this.recount();
     this.dirtyValidate = true;
@@ -390,8 +456,10 @@ export class BuildMode {
     const a = this.redoStack.pop();
     if (!a) return;
     for (const ed of a.edits) this.world.set(ed.x, ed.y, ed.z, ed.after);
+    for (const c of a.pieces) this.applyPieceChange(c, true);
     this.state.flag = a.flagAfter;
     this.state.spawn = a.spawnAfter;
+    this.state.editing = null;
     this.undoStack.push(a);
     this.recount();
     this.dirtyValidate = true;
@@ -533,6 +601,390 @@ export class BuildMode {
       .map((c) => ({ ...c, value: this.currentValue }));
     const edits: Edit[] = [];
     this.collect(cells, edits, new Set(), { n: this.budgetLeft() });
+    if (edits.length === 0) {
+      if (this.budgetLeft() <= 0) this.events.emit('invalid', { key: 'budgetExceeded' });
+      return;
+    }
+    this.applyEdits(edits, this.state.flag, this.state.spawn);
+    this.events.emit('placed', { count: edits.length });
+  }
+
+  // ---------- modular pieces ----------
+  private static cellKey(x: number, y: number, z: number): string {
+    return `${x},${y},${z}`;
+  }
+
+  /** Applies (or reverts) a piece record change, keeping the cell ownership map in sync. */
+  private applyPieceChange(c: PieceChange, forward: boolean): void {
+    const rec = forward ? c.after : c.before;
+    for (const [k, owner] of Array.from(this.cellOwner)) if (owner === c.key) this.cellOwner.delete(k);
+    if (rec) {
+      this.pieces.set(c.key, rec);
+      for (const cell of pieceCells(this.plot, rec, rec.open)) this.cellOwner.set(BuildMode.cellKey(cell.x, cell.y, cell.z), c.key);
+    } else this.pieces.delete(c.key);
+  }
+
+  /** Blocks of a piece erased by other tools open the matching edit cells (or drop the piece when nothing is left). */
+  private syncPiecesAfterEdits(edits: Edit[], action: Action): void {
+    const erased = new Set<string>();
+    for (const ed of edits) if (ed.after === 0) erased.add(BuildMode.cellKey(ed.x, ed.y, ed.z));
+    if (erased.size === 0) return;
+    // Pieces can share corner cells, so every record is checked against the erased set.
+    for (const [key, rec] of this.pieces) {
+      if (action.pieces.some((c) => c.key === key)) continue;
+      const grid = editGrid(rec.type);
+      const cells = pieceCells(this.plot, rec, rec.open);
+      let hit = false;
+      const open = rec.open.slice();
+      for (const cell of cells) {
+        if (!erased.has(BuildMode.cellKey(cell.x, cell.y, cell.z))) continue;
+        hit = true;
+        if (cell.edit >= 0) open[cell.edit] = true;
+      }
+      if (!hit) continue;
+      if (!grid) {
+        // Ramps and roofs are not editable: erasing part of one frees the whole piece key.
+        action.pieces.push({ key, before: rec, after: null });
+        continue;
+      }
+      // Cells that are already air (shared with another erased piece) count as open too.
+      for (const cell of cells) if (cell.edit >= 0 && this.world.get(cell.x, cell.y, cell.z) === 0) open[cell.edit] = true;
+      const allOpen = open.every((o) => o);
+      action.pieces.push({ key, before: rec, after: allOpen ? null : { ...rec, open } });
+    }
+  }
+
+  /** Piece under the cursor block, if that block belongs to one. */
+  pieceAt(cell: Cell | null): PieceRecord | null {
+    if (!cell) return null;
+    const key = this.cellOwner.get(BuildMode.cellKey(cell.x, cell.y, cell.z));
+    return key ? this.pieces.get(key) ?? null : null;
+  }
+
+  /** Snaps the current cursor to a placement of the selected piece type. */
+  private snapUnderCursor(): PiecePlacement | null {
+    if (!this.cursorCell) return null;
+    const fwd = { x: -Math.sin(this.orbitYaw), z: -Math.cos(this.orbitYaw) };
+    return snapPiece(this.plot, this.state.pieceType, this.cursorPoint, this.cursorNormal, fwd, this.state.pieceRot);
+  }
+
+  /** Cost of placing the piece: new blocks it would add (existing blocks are kept). */
+  private pieceNewCells(p: PiecePlacement): { x: number; y: number; z: number; value: number }[] {
+    const st = this.state;
+    const base = encodeBlock(st.mat, st.color, 0);
+    const roofVal = this.roleValue('roof');
+    const out: { x: number; y: number; z: number; value: number }[] = [];
+    for (const c of pieceCells(this.plot, p)) {
+      if (!this.inPlot(c.x, c.y, c.z) || this.blockedByMarker(c)) continue;
+      if (this.world.get(c.x, c.y, c.z) !== 0) continue;
+      out.push({ x: c.x, y: c.y, z: c.z, value: withShape(c.roof ? roofVal : base, c.shape) });
+    }
+    return out;
+  }
+
+  /** Places a modular piece; returns true when blocks were added. */
+  placePiece(p: PiecePlacement): boolean {
+    const key = pieceKey(p);
+    const st = this.state;
+    const list = this.pieceNewCells(p);
+    if (list.length === 0) return false;
+    if (list.length > this.budgetLeft()) {
+      this.events.emit('invalid', { key: 'budgetExceeded' });
+      return false;
+    }
+    const edits: Edit[] = [];
+    this.collect(list, edits, new Set(), { n: this.budgetLeft() });
+    if (edits.length === 0) return false;
+    const grid = editGrid(p.type);
+    const existing = this.pieces.get(key) ?? null;
+    const rec: PieceRecord = { ...p, key, value: encodeBlock(st.mat, st.color, 0), open: grid ? new Array(grid.cols * grid.rows).fill(false) : [] };
+    this.applyEdits(edits, st.flag, st.spawn, [{ key, before: existing, after: rec }]);
+    this.events.emit('placed', { count: edits.length });
+    return true;
+  }
+
+  /** Enters edit mode for the piece under the cursor (walls and floors), or leaves it. */
+  toggleEdit(): void {
+    const st = this.state;
+    if (st.editing) {
+      st.editing = null;
+      this.emitChange();
+      return;
+    }
+    const rec = this.pieceAt(this.cursorHitBlock);
+    if (!rec || !editGrid(rec.type)) {
+      this.events.emit('invalid', { key: 'notEditable' });
+      return;
+    }
+    st.tool = 'piece';
+    st.editing = rec.key;
+    this.emitChange();
+  }
+
+  get editingPiece(): PieceRecord | null {
+    return this.state.editing ? this.pieces.get(this.state.editing) ?? null : null;
+  }
+
+  /** Edit-grid index under the cursor ray for the piece being edited (-1 when none). */
+  private editHitIndex(rec: PieceRecord): number {
+    const o = moduleOrigin(this.plot, rec.i, rec.j, rec.k);
+    const ray = this.raycaster.ray;
+    const hit = new THREE.Vector3();
+    if (rec.type === 'floor') {
+      const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -(o.y + 0.5));
+      if (!ray.intersectPlane(plane, hit)) return -1;
+      const lx = Math.floor(hit.x - o.x);
+      const lz = Math.floor(hit.z - o.z);
+      if (lx < 0 || lx >= MODULE || lz < 0 || lz >= MODULE) return -1;
+      return lz * MODULE + lx;
+    }
+    const alongX = rec.rot === 0 || rec.rot === 2;
+    const plane = alongX ? new THREE.Plane(new THREE.Vector3(0, 0, 1), -(o.z + (rec.rot === 0 ? 0.5 : MODULE - 0.5))) : new THREE.Plane(new THREE.Vector3(1, 0, 0), -(o.x + (rec.rot === 1 ? MODULE - 0.5 : 0.5)));
+    if (!ray.intersectPlane(plane, hit)) return -1;
+    const ly = Math.floor(hit.y - o.y);
+    if (ly < 0 || ly >= STOREY) return -1;
+    let c = 0;
+    if (rec.rot === 0) c = Math.floor(hit.x - o.x);
+    else if (rec.rot === 1) c = Math.floor(hit.z - o.z);
+    else if (rec.rot === 2) c = MODULE - 1 - Math.floor(hit.x - o.x);
+    else c = MODULE - 1 - Math.floor(hit.z - o.z);
+    if (c < 0 || c >= MODULE) return -1;
+    return (STOREY - 1 - ly) * MODULE + c;
+  }
+
+  private applyOpen(rec: PieceRecord, open: boolean[]): void {
+    const full = pieceCells(this.plot, rec);
+    const cells: { x: number; y: number; z: number; value: number }[] = [];
+    for (const c of full) {
+      if (c.edit < 0) continue;
+      const wasOpen = rec.open[c.edit];
+      const nowOpen = open[c.edit];
+      if (wasOpen === nowOpen) continue;
+      if (nowOpen) cells.push({ x: c.x, y: c.y, z: c.z, value: 0 });
+      else if (!this.blockedByMarker(c)) cells.push({ x: c.x, y: c.y, z: c.z, value: withShape(rec.value, c.shape) });
+    }
+    const edits: Edit[] = [];
+    this.collect(cells, edits, new Set(), { n: this.budgetLeft() });
+    const after: PieceRecord = { ...rec, open };
+    if (edits.length === 0 && cells.some((c) => c.value !== 0)) {
+      this.events.emit('invalid', { key: 'budgetExceeded' });
+      return;
+    }
+    this.applyEdits(edits, this.fixMarker(this.state.flag, edits), this.fixMarker(this.state.spawn, edits), [{ key: rec.key, before: rec, after }]);
+    this.state.editing = rec.key;
+    this.events.emit(edits.some((e) => e.after !== 0) ? 'placed' : 'erased', { count: edits.length });
+  }
+
+  /** Toggles one cell of the piece being edited. */
+  toggleEditCell(e: number): void {
+    const rec = this.editingPiece;
+    if (!rec || e < 0 || e >= rec.open.length) return;
+    const open = rec.open.slice();
+    open[e] = !open[e];
+    this.applyOpen(rec, open);
+  }
+
+  /** Applies a named preset (door, window, arch...) to the piece being edited. */
+  applyPreset(id: string): void {
+    const rec = this.editingPiece;
+    if (!rec) return;
+    const open = presetToOpen(rec.type, id);
+    if (open) this.applyOpen(rec, open);
+  }
+
+  // ---------- draw-to-build ----------
+  /** Last draw-tool outcome (debug/test aid). */
+  debugLast = '';
+
+  private beginStroke(y: number): void {
+    this.debugLast = `begin:${y}`;
+    this.stroke = [];
+    this.strokeSet.clear();
+    this.strokeY = y;
+    this.state.strokeLength = 0;
+  }
+
+  private extendStroke(x: number, z: number): void {
+    if (!this.stroke) return;
+    const last = this.stroke[this.stroke.length - 1];
+    if (last && last.x === x && last.z === z) return;
+    const cells = last ? this.lineCells(last, { x, y: this.strokeY, z }) : [{ x, y: this.strokeY, z }];
+    for (const c of cells) {
+      const k = `${c.x},${c.z}`;
+      if (this.strokeSet.has(k) && !(last && c.x === last.x && c.z === last.z)) {
+        if (this.stroke.length && this.stroke[this.stroke.length - 1].x === c.x && this.stroke[this.stroke.length - 1].z === c.z) continue;
+      }
+      this.strokeSet.add(k);
+      this.stroke.push({ x: c.x, y: this.strokeY, z: c.z });
+    }
+    this.state.strokeLength = this.stroke.length;
+  }
+
+  cancelStroke(): void {
+    this.stroke = null;
+    this.strokeSet.clear();
+    this.state.strokeLength = 0;
+  }
+
+  /** Simplifies a polyline (Douglas-Peucker) so freehand strokes become clean straight runs. */
+  private simplify(points: Cell[], tol: number): Cell[] {
+    if (points.length <= 2) return points;
+    const a = points[0];
+    const b = points[points.length - 1];
+    let maxD = -1;
+    let idx = -1;
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    const len = Math.hypot(dx, dz);
+    for (let i = 1; i < points.length - 1; i++) {
+      const p = points[i];
+      // Degenerate segment (closed loop): deviation is the distance from the shared endpoint.
+      const d = len < 1e-6 ? Math.hypot(p.x - a.x, p.z - a.z) : Math.abs(dx * (a.z - p.z) - (a.x - p.x) * dz) / len;
+      if (d > maxD) {
+        maxD = d;
+        idx = i;
+      }
+    }
+    if (maxD > tol) {
+      const left = this.simplify(points.slice(0, idx + 1), tol);
+      const right = this.simplify(points.slice(idx), tol);
+      return left.slice(0, -1).concat(right);
+    }
+    return [a, b];
+  }
+
+  /** Cells covered by the finished stroke: a circle for round strokes, straight runs otherwise. */
+  private outlineCells(stroke: Cell[]): { cells: Cell[]; closed: boolean } {
+    const first = stroke[0];
+    const last = stroke[stroke.length - 1];
+    const closed = stroke.length >= 8 && Math.hypot(last.x - first.x, last.z - first.z) <= 2.5;
+    let cx = 0;
+    let cz = 0;
+    for (const c of stroke) {
+      cx += c.x;
+      cz += c.z;
+    }
+    cx /= stroke.length;
+    cz /= stroke.length;
+    if (closed && stroke.length >= 10) {
+      let mean = 0;
+      for (const c of stroke) mean += Math.hypot(c.x + 0.5 - cx, c.z + 0.5 - cz);
+      mean /= stroke.length;
+      let varr = 0;
+      for (const c of stroke) varr += (Math.hypot(c.x + 0.5 - cx, c.z + 0.5 - cz) - mean) ** 2;
+      const sd = Math.sqrt(varr / stroke.length);
+      if (mean >= 2.2 && sd / mean < 0.17) {
+        // Round tower: midpoint circle.
+        const r = Math.round(mean);
+        const ox = Math.round(cx - 0.5);
+        const oz = Math.round(cz - 0.5);
+        const set = new Map<string, Cell>();
+        for (let a = 0; a < Math.PI * 2; a += 0.5 / r) {
+          const x = ox + Math.round(Math.cos(a) * r);
+          const z = oz + Math.round(Math.sin(a) * r);
+          set.set(`${x},${z}`, { x, y: this.strokeY, z });
+        }
+        return { cells: Array.from(set.values()), closed: true };
+      }
+    }
+    const pts = this.simplify(stroke, 1.25);
+    if (closed) pts.push(first);
+    const set = new Map<string, Cell>();
+    for (let i = 0; i + 1 < pts.length; i++) for (const c of this.lineCells(pts[i], pts[i + 1])) set.set(`${c.x},${c.z}`, { x: c.x, y: this.strokeY, z: c.z });
+    if (pts.length === 1) set.set(`${pts[0].x},${pts[0].z}`, pts[0]);
+    return { cells: Array.from(set.values()), closed };
+  }
+
+  /** Wall columns rising from the outline cells (preview and final). */
+  private strokeWallCells(outline: Cell[]): Cell[] {
+    const out: Cell[] = [];
+    for (const c of outline) for (let y = 0; y < this.state.wallHeight; y++) out.push({ x: c.x, y: this.strokeY + y, z: c.z });
+    return out;
+  }
+
+  /** Fills the enclosed room around `cell` at the stroke height with a floor/roof plate. */
+  private plateFill(cell: Cell): void {
+    const y = this.strokeY;
+    const p = this.plot;
+    const solidHere = (x: number, z: number): boolean => this.world.get(x, y, z) !== 0 || (y - 1 >= PLOT_Y && this.world.get(x, y - 1, z) !== 0);
+    if (solidHere(cell.x, cell.z)) {
+      this.debugLast = `plate:solid@${cell.x},${y},${cell.z}`;
+      this.events.emit('invalid', { key: 'notEnclosed' });
+      return;
+    }
+    const seen = new Set<string>();
+    const queue: Cell[] = [{ x: cell.x, y, z: cell.z }];
+    const region: Cell[] = [];
+    seen.add(`${cell.x},${cell.z}`);
+    let leaked = false;
+    while (queue.length) {
+      const c = queue.pop()!;
+      region.push(c);
+      if (region.length > 700) {
+        leaked = true;
+        break;
+      }
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = c.x + dx;
+        const nz = c.z + dz;
+        const k = `${nx},${nz}`;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        if (nx < p.minX || nx > p.maxX || nz < p.minZ || nz > p.maxZ) {
+          leaked = true;
+          continue;
+        }
+        if (solidHere(nx, nz)) continue;
+        queue.push({ x: nx, y, z: nz });
+      }
+    }
+    if (leaked) {
+      this.debugLast = `plate:leak@${cell.x},${y},${cell.z} region=${region.length}`;
+      this.events.emit('invalid', { key: 'notEnclosed' });
+      return;
+    }
+    const value = encodeBlock(this.state.mat, this.state.color, 0);
+    const cells = region.filter((c) => !this.blockedByMarker(c)).map((c) => ({ ...c, value }));
+    const edits: Edit[] = [];
+    this.collect(cells, edits, new Set(), { n: this.budgetLeft() });
+    if (edits.length === 0) {
+      this.debugLast = 'plate:noedits';
+      if (this.budgetLeft() <= 0) this.events.emit('invalid', { key: 'budgetExceeded' });
+      return;
+    }
+    this.debugLast = `plate:ok:${edits.length}`;
+    this.applyEdits(edits, this.state.flag, this.state.spawn);
+    this.events.emit('placed', { count: edits.length });
+  }
+
+  /** Test hook: runs a stroke through the draw tool and returns blocks added. */
+  debugStroke(points: { x: number; z: number }[], y: number): number {
+    const before = this.state.used;
+    this.beginStroke(y);
+    for (const pt of points) this.extendStroke(pt.x, pt.z);
+    this.finishStroke();
+    return this.state.used - before;
+  }
+
+  private finishStroke(): void {
+    const stroke = this.stroke;
+    this.stroke = null;
+    this.strokeSet.clear();
+    this.state.strokeLength = 0;
+    if (!stroke || stroke.length === 0) {
+      this.debugLast = 'finish:empty';
+      return;
+    }
+    if (stroke.length <= 2) {
+      this.plateFill(stroke[0]);
+      return;
+    }
+    const { cells } = this.outlineCells(stroke);
+    const walls = this.strokeWallCells(cells)
+      .filter((c) => !this.blockedByMarker(c))
+      .map((c) => ({ ...c, value: encodeBlock(this.state.mat, this.state.color, 0) }));
+    const edits: Edit[] = [];
+    this.collect(walls, edits, new Set(), { n: this.budgetLeft() });
     if (edits.length === 0) {
       if (this.budgetLeft() <= 0) this.events.emit('invalid', { key: 'budgetExceeded' });
       return;
@@ -755,7 +1207,7 @@ export class BuildMode {
     const fwd = new THREE.Vector3(-Math.sin(this.orbitYaw), 0, -Math.cos(this.orbitYaw));
     const right = new THREE.Vector3(Math.cos(this.orbitYaw), 0, -Math.sin(this.orbitYaw));
     this.focus.addScaledVector(fwd, input.axisY() * speed).addScaledVector(right, input.axisX() * speed);
-    if (input.isDown('KeyE') || input.isDown('Space')) this.focus.y += speed;
+    if (input.isDown('Space')) this.focus.y += speed;
     if (input.isDown('KeyQ') || input.isDown('ControlLeft')) this.focus.y -= speed;
     const p = this.plot;
     this.focus.x = clamp(this.focus.x, p.minX - 20, p.maxX + 20);
@@ -781,7 +1233,10 @@ export class BuildMode {
     let sx = input.cursorX;
     let sy = input.cursorY;
     if (input.isTouch) {
-      if (input.virtual.tapped) {
+      if (input.virtual.strokeActive || input.virtual.strokeEnd) {
+        sx = input.virtual.strokeX;
+        sy = input.virtual.strokeY;
+      } else if (input.virtual.tapped) {
         sx = input.virtual.tapX;
         sy = input.virtual.tapY;
       } else {
@@ -795,6 +1250,17 @@ export class BuildMode {
     const d = this.raycaster.ray.direction;
     this.cursorCell = null;
     this.cursorHitBlock = null;
+    if (this.stroke) {
+      // Drawing: stay on the stroke's plane whatever is under the cursor.
+      const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -(this.strokeY + 0.5));
+      const ph = new THREE.Vector3();
+      if (this.raycaster.ray.intersectPlane(plane, ph)) {
+        this.cursorCell = { x: Math.floor(ph.x), y: this.strokeY, z: Math.floor(ph.z) };
+        this.cursorNormal.set(0, 1, 0);
+        this.cursorPoint.copy(ph);
+      }
+      return;
+    }
     if (this.state.layerLock) {
       // Fixed height: pick the cell of the locked layer under the cursor.
       const ly = this.state.layerY;
@@ -805,6 +1271,7 @@ export class BuildMode {
         const cz = Math.floor(ph.z);
         this.cursorCell = { x: cx, y: ly, z: cz };
         this.cursorNormal.set(0, 1, 0);
+        this.cursorPoint.set(ph.x, ly, ph.z);
         this.cursorHitBlock = this.world.get(cx, ly, cz) !== 0 ? { x: cx, y: ly, z: cz } : null;
       }
       return;
@@ -817,17 +1284,24 @@ export class BuildMode {
       this.cursorHitBlock = { x: hit.x, y: hit.y, z: hit.z };
       this.cursorNormal.set(hit.nx, hit.ny, hit.nz);
       this.cursorCell = { x: hit.x + hit.nx, y: hit.y + hit.ny, z: hit.z + hit.nz };
+      this.cursorPoint.set(hit.px, hit.py, hit.pz);
     } else if (planeT < Infinity) {
       const cx = Math.floor(planeHit.x);
       const cz = Math.floor(planeHit.z);
       this.cursorCell = { x: cx, y: PLOT_Y, z: cz };
       this.cursorNormal.set(0, 1, 0);
+      this.cursorPoint.copy(planeHit);
     }
   }
 
   update(dt: number): void {
     if (!this.active) return;
     const input = this.input;
+    if (!input.isTouch) {
+      // Re-derive UI hover from the element under the pointer: panels re-render under the cursor and can miss mouseleave.
+      const elUnder = document.elementFromPoint(input.cursorX, input.cursorY);
+      this.uiHover = !!elUnder && !!elUnder.closest('[data-ui]');
+    }
     this.updateCamera(dt);
     this.updateCursor();
     const st = this.state;
@@ -840,16 +1314,27 @@ export class BuildMode {
     }
     if (input.wasPressed('KeyY') && (input.isDown('ControlLeft') || input.isDown('MetaLeft'))) this.redo();
     for (let i = 1; i <= 9; i++) if (input.wasPressed(`Digit${i}`)) this.selectHotbar(i - 1);
-    const toolKeys: [string, Tool][] = [['KeyB', 'block'], ['KeyV', 'box'], ['KeyL', 'line'], ['KeyN', 'wall'], ['KeyK', 'stairs'], ['KeyP', 'prefab'], ['KeyC', 'paint'], ['KeyX', 'erase'], ['KeyF', 'flag'], ['KeyG', 'spawn']];
+    const toolKeys: [string, Tool][] = [['KeyH', 'piece'], ['KeyJ', 'draw'], ['KeyB', 'block'], ['KeyV', 'box'], ['KeyL', 'line'], ['KeyN', 'wall'], ['KeyK', 'stairs'], ['KeyP', 'prefab'], ['KeyC', 'paint'], ['KeyX', 'erase'], ['KeyF', 'flag'], ['KeyG', 'spawn']];
     for (const [key, tool] of toolKeys) if (input.wasPressed(key)) this.setTool(tool);
-    if (input.wasPressed('BracketRight')) this.setPrefabSize(this.state.prefabSize + 1);
-    if (input.wasPressed('BracketLeft')) this.setPrefabSize(this.state.prefabSize - 1);
+    if (input.wasPressed('KeyE')) this.toggleEdit();
+    if (input.wasPressed('BracketRight')) {
+      if (st.tool === 'piece') this.cyclePieceType(1);
+      else this.setPrefabSize(this.state.prefabSize + 1);
+    }
+    if (input.wasPressed('BracketLeft')) {
+      if (st.tool === 'piece') this.cyclePieceType(-1);
+      else this.setPrefabSize(this.state.prefabSize - 1);
+    }
     if (input.wasPressed('KeyT')) this.toggleLayerLock();
     if (input.wasPressed('KeyZ') && !(input.isDown('ControlLeft') || input.isDown('MetaLeft'))) this.cycleShape(input.isDown('ShiftLeft') ? -1 : 1);
-    if (input.wasPressed('Escape') && st.boxStart) {
+    if (input.wasPressed('Escape') && (st.boxStart || st.editing || this.stroke)) {
       st.boxStart = null;
+      st.editing = null;
+      this.cancelStroke();
       this.emitChange();
     }
+    const modular = st.tool === 'piece' || st.tool === 'draw';
+    this.editTiles.visible = false;
 
     // Ghost visuals
     this.ghost.visible = false;
@@ -857,9 +1342,7 @@ export class BuildMode {
     this.prefabGhost.visible = false;
     this.shapeGhost.visible = false;
     const cell = st.tool === 'erase' || st.tool === 'paint' ? this.cursorHitBlock : this.cursorCell;
-    const uiHover = input.cursorY > window.innerHeight - 190 || input.cursorX < 250 && st.tool === 'prefab';
-    void uiHover;
-    if (cell) {
+    if (cell && !modular) {
       const valid = this.inPlot(cell.x, cell.y, cell.z);
       const col = (this.ghost.material as THREE.MeshBasicMaterial).color;
       if (st.tool === 'block' || st.tool === 'erase' || st.tool === 'paint' || st.tool === 'flag' || st.tool === 'spawn' || (TWO_POINT_TOOLS.includes(st.tool) && !st.boxStart)) {
@@ -961,8 +1444,9 @@ export class BuildMode {
     this.layerGrid.visible = st.layerLock;
     if (st.layerLock) this.layerGrid.position.set(this.plot.cx, st.layerY + 0.02, this.plot.cz);
 
+    if (modular) this.updateModular(cell);
     // Clicks (ignore when the cursor is over UI: UI elements stop propagation, so we check a flag set by BuildUI)
-    if (!this.uiHover) {
+    if (!this.uiHover && !modular) {
       const v = input.virtual;
       const drawTool = st.tool === 'block' || st.tool === 'erase' || st.tool === 'paint';
       const holdPlace = drawTool && (input.buttonDown(0) || v.primaryHeld);
@@ -1006,7 +1490,126 @@ export class BuildMode {
     }
   }
 
+  /** Ghosts and input for the piece and draw tools. */
+  private updateModular(cell: Cell | null): void {
+    const st = this.state;
+    const input = this.input;
+    const v = input.virtual;
+    const pressed = input.buttonPressed(0) || v.primary || (input.isTouch && v.tapped && !v.longPress);
+    const held = input.buttonDown(0) || v.primaryHeld;
+    const ghostMat = this.prefabGhost.material as THREE.MeshBasicMaterial;
+    const showCells = (cells: { x: number; y: number; z: number }[], color: THREE.ColorRepresentation): void => {
+      const m = new THREE.Matrix4();
+      let n = 0;
+      for (const c of cells) {
+        if (n >= 4000) break;
+        m.makeTranslation(c.x + 0.5, c.y + 0.5, c.z + 0.5);
+        this.prefabGhost.setMatrixAt(n++, m);
+      }
+      this.prefabGhost.count = n;
+      this.prefabGhost.instanceMatrix.needsUpdate = true;
+      this.prefabGhost.visible = n > 0;
+      ghostMat.color.set(color);
+    };
+    if (st.tool === 'piece') {
+      const editing = this.editingPiece;
+      if (editing) {
+        // Edit tiles: solid cells faint, open cells highlighted; tap to toggle.
+        const grid = editGrid(editing.type)!;
+        const m = new THREE.Matrix4();
+        const col = new THREE.Color();
+        let n = 0;
+        for (let e = 0; e < grid.cols * grid.rows && n < 32; e++) {
+          const b = editCellBox(this.plot, editing, e);
+          m.makeScale(b.sx, b.sy, b.sz).setPosition(b.cx, b.cy, b.cz);
+          this.editTiles.setMatrixAt(n, m);
+          col.set(editing.open[e] ? 0xffb300 : 0x00e5ff);
+          this.editTiles.setColorAt(n, col);
+          n++;
+        }
+        this.editTiles.count = n;
+        this.editTiles.instanceMatrix.needsUpdate = true;
+        if (this.editTiles.instanceColor) this.editTiles.instanceColor.needsUpdate = true;
+        this.editTiles.visible = n > 0;
+        if (!this.uiHover && pressed) {
+          const e = this.editHitIndex(editing);
+          if (e >= 0) this.toggleEditCell(e);
+          else if (input.buttonPressed(0) || v.tapped) {
+            // Clicking away from the piece leaves edit mode.
+            st.editing = null;
+            this.emitChange();
+          }
+        }
+        return;
+      }
+      const snap = this.snapUnderCursor();
+      this.pieceSnap = snap;
+      if (snap) {
+        const cells = pieceCells(this.plot, snap);
+        const fresh = this.pieceNewCells(snap);
+        const affordable = fresh.length > 0 && fresh.length <= this.budgetLeft();
+        showCells(cells, affordable ? PALETTE[st.color] : 0xff3355);
+      }
+      if (this.uiHover) return;
+      const key = snap ? pieceKey(snap) : '';
+      if (pressed) {
+        this.turboStamp = performance.now();
+        this.turboX = input.cursorX;
+        this.turboY = input.cursorY;
+      }
+      // Turbo: holding the button keeps snapping pieces, once the aim has actually moved on.
+      const moved = input.isTouch ? performance.now() - this.turboStamp > 260 : Math.abs(input.cursorX - this.turboX) + Math.abs(input.cursorY - this.turboY) > 8;
+      if (snap && (pressed || (held && moved && key !== this.drawKey))) {
+        this.placePiece(snap);
+        this.drawKey = key;
+        if (!pressed) {
+          this.turboX = input.cursorX;
+          this.turboY = input.cursorY;
+          this.turboStamp = performance.now();
+        }
+      }
+      if (!held) this.drawKey = '';
+      // Right click (or long press) removes the block under the cursor, as with other tools.
+      if (v.secondary && this.cursorHitBlock) this.eraseBlock(this.cursorHitBlock);
+      if (input.buttonPressed(2) && this.cursorHitBlock && !input.isDown('ShiftLeft')) {
+        this.rightClickCell = { ...this.cursorHitBlock };
+        this.rightClickMoved = 0;
+      }
+      if (input.buttonDown(2)) this.rightClickMoved += Math.abs(input.mouseDX) + Math.abs(input.mouseDY);
+      if (input.buttonReleased(2) && this.rightClickCell && this.rightClickMoved < 6) {
+        this.eraseBlock(this.rightClickCell);
+        this.rightClickCell = null;
+      }
+      return;
+    }
+    // Draw tool: press starts a stroke on the surface (or layer) under the cursor, drag extends it, release builds.
+    const start = input.buttonPressed(0) || v.strokeStart || v.primary;
+    const active = input.buttonDown(0) || v.strokeActive || v.primaryHeld;
+    const end = input.buttonReleased(0) || v.strokeEnd || (input.isTouch && v.tapped && !v.longPress && !this.stroke);
+    if (!this.stroke && !this.uiHover && (start || (input.isTouch && v.tapped && !v.longPress)) && cell) {
+      this.beginStroke(cell.y);
+      this.extendStroke(cell.x, cell.z);
+      if (!active && !v.strokeActive) {
+        // A tap without a drag: fill a plate.
+        this.finishStroke();
+        return;
+      }
+    } else if (this.stroke && cell && active) this.extendStroke(cell.x, cell.z);
+    if (this.stroke) {
+      const { cells } = this.outlineCells(this.stroke);
+      showCells(this.stroke.length <= 2 ? [] : this.strokeWallCells(cells), PALETTE[st.color]);
+      if (end) this.finishStroke();
+      else if (!active && !input.isTouch) this.finishStroke();
+    } else if (cell && !this.uiHover) {
+      // Idle: show the target cell.
+      showCells([cell], PALETTE[st.color]);
+    }
+  }
+
   uiHover = false;
+  private turboStamp = 0;
+  private turboX = 0;
+  private turboY = 0;
   private rightClickCell: Cell | null = null;
   private rightClickMoved = 0;
 

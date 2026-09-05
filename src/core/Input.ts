@@ -32,6 +32,12 @@ export interface VirtualState {
   tapY: number;
   longPress: boolean;
   heightDir: number;
+  /** One-finger drawing stroke (build draw tool): screen position and edges. */
+  strokeActive: boolean;
+  strokeStart: boolean;
+  strokeEnd: boolean;
+  strokeX: number;
+  strokeY: number;
 }
 
 function freshVirtual(): VirtualState {
@@ -42,6 +48,7 @@ function freshVirtual(): VirtualState {
     reload: false, grenade: false, grapple: false, grappleReleased: false, interact: false,
     weaponSwitch: -1, primary: false, secondary: false, primaryHeld: false, secondaryHeld: false, zoom: 0, panX: 0, panY: 0,
     tapped: false, tapX: 0, tapY: 0, longPress: false, heightDir: 0,
+    strokeActive: false, strokeStart: false, strokeEnd: false, strokeX: 0, strokeY: 0,
   };
 }
 
@@ -329,6 +336,8 @@ export class Input {
     v.weaponSwitch = -1;
     v.primary = false;
     v.secondary = false;
+    v.strokeStart = false;
+    v.strokeEnd = false;
     v.zoom = 0;
     v.panX = 0;
     v.panY = 0;

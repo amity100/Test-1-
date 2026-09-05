@@ -25,7 +25,7 @@ interface Pointer {
   y: number;
   startTime: number;
   moved: number;
-  role: 'move' | 'look' | 'orbit' | 'pinch';
+  role: 'move' | 'look' | 'orbit' | 'pinch' | 'draw';
   longTimer: number;
   longFired: boolean;
   /** Event timestamp of the pointerdown (hardware time, unaffected by a stalled frame). */
@@ -283,11 +283,17 @@ export class TouchControls {
     const zone = e.currentTarget as HTMLElement;
     zone.setPointerCapture?.(e.pointerId);
     const isMove = zone === this.moveZone && this.mode === 'battle';
-    let role: Pointer['role'] = isMove ? 'move' : this.mode === 'build' ? 'orbit' : 'look';
+    let role: Pointer['role'] = isMove ? 'move' : this.mode === 'build' ? (this.buildDraw ? 'draw' : 'orbit') : 'look';
     // Second finger in build mode starts a pinch.
     if (this.mode === 'build' && this.pointers.size === 1) {
       role = 'pinch';
       const other = this.pointers.values().next().value as Pointer;
+      if (other.role === 'draw') {
+        // A second finger turns a stroke into a camera gesture: finish what was drawn so far.
+        const v = this.input.virtual;
+        v.strokeEnd = true;
+        v.strokeActive = false;
+      }
       other.role = 'pinch';
       if (other.longTimer) window.clearTimeout(other.longTimer);
       this.pinchDist = Math.hypot(other.x - e.clientX, other.y - e.clientY);
@@ -295,6 +301,13 @@ export class TouchControls {
     }
     const p: Pointer = { id: e.pointerId, startX: e.clientX, startY: e.clientY, x: e.clientX, y: e.clientY, startTime: performance.now(), moved: 0, role, longTimer: 0, longFired: false, downStamp: e.timeStamp };
     this.pointers.set(e.pointerId, p);
+    if (role === 'draw') {
+      const v = this.input.virtual;
+      v.strokeStart = true;
+      v.strokeActive = true;
+      v.strokeX = e.clientX;
+      v.strokeY = e.clientY;
+    }
     if (role === 'orbit') {
       // Long press (finger held still) removes the block under the finger in build mode.
       p.longTimer = window.setTimeout(() => {
@@ -350,6 +363,9 @@ export class TouchControls {
     } else if (p.role === 'look' || p.role === 'orbit') {
       v.lookDX += dx;
       v.lookDY += dy;
+    } else if (p.role === 'draw') {
+      v.strokeX = p.x;
+      v.strokeY = p.y;
     } else if (p.role === 'pinch') {
       const pts = Array.from(this.pointers.values()).filter((q) => q.role === 'pinch');
       if (pts.length === 2) {
@@ -391,12 +407,28 @@ export class TouchControls {
         v.tapX = p.x;
         v.tapY = p.y;
       }
+    } else if (p.role === 'draw') {
+      v.strokeEnd = true;
+      v.strokeActive = false;
+      v.strokeX = p.x;
+      v.strokeY = p.y;
     } else if (p.role === 'pinch') {
       // Remaining finger goes back to orbit.
       for (const q of this.pointers.values()) if (q.role === 'pinch') q.role = 'orbit';
       this.pinchDist = 0;
     }
   };
+
+  /** While the draw tool is active a single finger draws instead of orbiting (two fingers still orbit/zoom). */
+  setBuildDraw(on: boolean): void {
+    this.buildDraw = on;
+    if (!on) {
+      const v = this.input.virtual;
+      if (v.strokeActive) v.strokeEnd = true;
+      v.strokeActive = false;
+    }
+  }
+  private buildDraw = false;
 
   /** Lets the HUD weapon slots switch weapons on touch. */
   bindWeaponSlots(container: HTMLElement): void {
