@@ -17,6 +17,8 @@ import { FlagMesh } from '../render/FlagMesh';
 import { FocusZone } from '../render/FocusZone';
 import { buildWeaponModel } from '../render/WeaponModels';
 import { HUD, type HudState, type ScoreRow } from '../ui/HUD';
+import { GadgetSystem, GADGETS, GADGET_IDS, KIT_SIZE, type GadgetId } from '../sim/Gadgets';
+import { GadgetMeshes } from '../render/GadgetMeshes';
 import { Screens, type SummaryRow, type PodiumRow } from '../ui/Screens';
 import { composeCard } from '../ui/FortressCard';
 import { BuildMode } from '../build/BuildMode';
@@ -38,6 +40,15 @@ type Mode = 'menu' | 'build' | 'intro' | 'battle' | 'summary' | 'podium';
 
 const PLAYER_COLORS = ['#00e5ff', '#ff2bd6', '#ffb300', '#39ff14', '#ff3355', '#a78bfa', '#ff8c42', '#7aa7ff'];
 const PRIMARY_CHOICES: WeaponId[] = ['rifle', 'smg', 'shotgun', 'sniper', 'rocket'];
+const GADGET_KEY_LABELS = ['Q', 'F'];
+
+/** Keeps a stored kit valid: known ids, no duplicates, exactly KIT_SIZE entries. */
+function sanitizeKit(ids: unknown): GadgetId[] {
+  const out: GadgetId[] = [];
+  if (Array.isArray(ids)) for (const id of ids) if ((GADGET_IDS as string[]).includes(id) && !out.includes(id as GadgetId)) out.push(id as GadgetId);
+  for (const id of ['zipline', 'breach', 'grapple'] as GadgetId[]) if (out.length < KIT_SIZE && !out.includes(id)) out.push(id);
+  return out.slice(0, KIT_SIZE);
+}
 
 /** Wires simulation, rendering and UI together and runs the match flow. */
 export class Game {
@@ -50,6 +61,11 @@ export class Game {
   bots: BotBrain[] = [];
   controller: CharacterController;
   combat: Combat;
+  gadgets: GadgetSystem;
+  private gadgetMeshes: GadgetMeshes;
+  private playerKit: GadgetId[];
+  private promptText = '';
+  private promptUntil = 0;
   match: Match | null = null;
   nav: NavSystem | null = null;
   private thumbs: BlockThumbs | null = null;
@@ -88,6 +104,12 @@ export class Game {
     this.uiRoot = document.getElementById('ui')!;
     this.controller = new CharacterController(app.world, app.terrain);
     this.combat = new Combat(app.world, app.terrain, () => this.entities);
+    this.gadgets = new GadgetSystem(app.world, app.terrain, this.combat, app.plots, () => this.entities);
+    this.controller.gadgets = this.gadgets;
+    this.gadgetMeshes = new GadgetMeshes(this.gadgets, () => this.entities);
+    app.gr.scene.add(this.gadgetMeshes.group);
+    this.playerPrimary = (PRIMARY_CHOICES as string[]).includes(settings.data.primary) ? (settings.data.primary as WeaponId) : 'rifle';
+    this.playerKit = sanitizeKit(settings.data.kit);
     this.player = new Entity();
     this.player.name = settings.data.playerName || 'You';
     this.player.colorHex = PLAYER_COLORS[0];
@@ -138,6 +160,7 @@ export class Game {
     this.rotateHint.hidden = true;
     this.uiRoot.appendChild(this.rotateHint);
     this.wireCombat();
+    this.wireGadgets();
     this.app.input.onLockChange = (locked) => {
       if (locked && this.screens.name === 'click') this.screens.hideAll();
       if (!locked && !this.app.input.fallbackLook && this.mode === 'battle' && !this.paused && !this.screens.visible) this.pause();
@@ -237,7 +260,7 @@ export class Game {
     this.viewModel.setAccent(new THREE.Color(this.player.colorHex));
     // Match events
     match.events.on('phase', ({ phase }) => this.onPhase(phase));
-    match.events.on('spawn', ({ entity }) => this.onSpawn(entity));
+    match.events.on('spawn', ({ entity, initial }) => this.onSpawn(entity, initial));
     match.events.on('score', ({ entity, delta, reason }) => {
       if (entity === this.player && reason !== 'defense') this.hud.scorePop(`+${delta}`);
     });
@@ -377,6 +400,9 @@ export class Game {
         audio.music('battle');
         this.vfx.clear();
         this.combat.clearProjectiles();
+        this.gadgets.reset();
+        this.gadgetMeshes.clear();
+        this.showLoadout();
         break;
       }
       case 'round': {
@@ -422,13 +448,16 @@ export class Game {
     }
   }
 
-  private onSpawn(e: Entity): void {
+  private onSpawn(e: Entity, initial = true): void {
     if (e.isBot) {
       const brain = this.bots.find((b) => b.entity === e);
       brain?.reset();
       e.setLoadout(brain?.preferredWeapon ?? 'rifle');
+      if (initial) e.setKit(this.randomKit());
     } else {
       e.setLoadout(this.playerPrimary);
+      if (initial) e.setKit(this.playerKit);
+      this.touch.setGadgetIcons(e.gadgets.map((id) => GADGETS[id].icon));
       this.viewModel.show(e.weapon ? e.weapon.id : null, true);
       this.viewModel.hidden = false;
       this.killedBy = '';
@@ -436,6 +465,40 @@ export class Game {
     const cm = this.chars.get(e.id);
     if (cm) cm.setWeapon(e.weapon?.id ?? null);
     audio.play('spawn', { pos: e.pos, volume: 0.6 });
+  }
+
+  /** Two distinct gadgets for a bot. */
+  private randomKit(): GadgetId[] {
+    const pool = GADGET_IDS.slice();
+    const out: GadgetId[] = [];
+    while (out.length < KIT_SIZE && pool.length) out.push(pool.splice(this.rng.int(0, pool.length - 1), 1)[0]);
+    return out;
+  }
+
+  /** Round-intro loadout picker (weapon + two gadgets); choices persist in settings. */
+  private showLoadout(): void {
+    const match = this.match!;
+    const def = match.defender!;
+    this.screens.showLoadout({
+      title: this.player === def ? t('defendFortress') : t('targetLabel', { name: def.name }),
+      weapons: PRIMARY_CHOICES.map((w) => ({ id: w, name: t(WEAPONS[w].nameKey) })),
+      weapon: this.playerPrimary,
+      gadgets: GADGET_IDS.map((id) => ({ id, name: t(GADGETS[id].nameKey), desc: t(GADGETS[id].descKey), icon: GADGETS[id].icon })),
+      kit: this.playerKit,
+      kitSize: KIT_SIZE,
+      onWeapon: (id) => {
+        this.playerPrimary = id as WeaponId;
+        settings.data.primary = id;
+        settings.save();
+        audio.play('switch');
+      },
+      onKit: (ids) => {
+        this.playerKit = sanitizeKit(ids.length >= KIT_SIZE ? ids : ids.concat(this.playerKit.filter((k) => !ids.includes(k))));
+        settings.data.kit = this.playerKit.slice();
+        settings.save();
+      },
+      onReady: () => this.screens.hideAll(),
+    });
   }
 
   /**
@@ -557,6 +620,8 @@ export class Game {
     this.projectileMeshes.clear();
     this.focus.hide();
     this.vfx.clear();
+    this.gadgets.reset();
+    this.gadgetMeshes.clear();
     this.combat.clearProjectiles();
     this.hud.hide();
     this.viewModel.hidden = true;
@@ -568,6 +633,55 @@ export class Game {
   }
 
   // ---------------- combat wiring ----------------
+  /** Gadget events → sound, particles, navigation invalidation and HUD hints. */
+  private wireGadgets(): void {
+    const g = this.gadgets.events;
+    const up = new THREE.Vector3(0, 1, 0);
+    const dirt = new THREE.Color(0x6b5236);
+    const dust = new THREE.Color(0x9a948c);
+    g.on('zipline', ({ line }) => {
+      audio.play('grapple', { pos: line.a });
+      this.vfx.sparks(line.b, up, 8, new THREE.Color(0x9ad7ff), 5);
+    });
+    g.on('zipRide', ({ entity, start }) => {
+      if (start) audio.play('switch', { pos: entity.pos, pitch: 0.8 });
+      else audio.play('land', { pos: entity.pos, volume: 0.4 });
+    });
+    g.on('jumppad', ({ pad }) => audio.play('place', { pos: pad.pos, pitch: 0.8 }));
+    g.on('launch', ({ entity, pad }) => {
+      audio.play('jump', { pos: pad.pos, pitch: 0.6, volume: 0.9 });
+      this.vfx.sparks(pad.pos.clone().setY(pad.pos.y + 0.2), up, 12, new THREE.Color(0x00e5ff), 7);
+      if (entity === this.player) this.local?.addShake(0.25);
+    });
+    g.on('breachThrow', ({ entity }) => audio.play('switch', { pos: entity.pos, pitch: 1.2, volume: 0.6 }));
+    g.on('breachStick', ({ charge }) => audio.play('bounce', { pos: charge.pos }));
+    g.on('breachBlast', ({ pos, cells }) => {
+      if (cells > 0) this.vfx.debrisBurst(pos, up, Math.min(48, 10 + cells * 3), dust);
+    });
+    g.on('grapple', ({ entity, point }) => audio.play(point ? 'grapple' : 'grappleMiss', { pos: entity.pos }));
+    g.on('burrow', ({ entity, down, pos }) => {
+      audio.play(down ? 'erase' : 'place', { pos, pitch: down ? 0.6 : 0.7 });
+      this.vfx.debrisBurst(pos, up, down ? 26 : 34, dirt);
+      if (entity === this.player) this.local?.addShake(0.35);
+    });
+    g.on('dig', ({ pos }) => {
+      audio.play('erase', { pos, pitch: 0.75 });
+      this.vfx.debrisBurst(pos, up, 16, dust);
+    });
+    g.on('mound', ({ pos }) => this.vfx.debrisBurst(pos, up, 3, dirt));
+    g.on('deny', ({ entity, key }) => {
+      if (entity !== this.player) return;
+      this.promptText = t(key);
+      this.promptUntil = this.time + 1.4;
+      audio.play('empty', { volume: 0.5 });
+    });
+    g.on('blocksChanged', ({ plotIndex }) => {
+      this.nav?.invalidatePlot(plotIndex);
+      this.exitOk.delete(plotIndex);
+      this.app.chunks.flush();
+    });
+  }
+
   private wireCombat(): void {
     const c = this.combat;
     c.events.on('shot', ({ shooter, origin, end, weapon }) => {
@@ -671,6 +785,7 @@ export class Game {
     this.focus.update(dt, this.time);
     if (this.mode !== 'menu') this.vfx.ambient(this.app.gr.camera.position, dt);
     this.vfx.update(dt);
+    this.gadgetMeshes.update(dt, this.time);
     this.syncProjectiles();
     audio.setListener(this.app.gr.camera.position, new THREE.Vector3(1, 0, 0).applyQuaternion(this.app.gr.camera.quaternion));
     return this.cameraFocus;
@@ -743,22 +858,12 @@ export class Game {
       this.updateCharacters(dt);
       this.hud.update(this.hudState(), dt);
     }
-    const input = this.app.input;
-    // Loadout choice
-    const keys = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'];
-    keys.forEach((k, i) => {
-      if (input.wasPressedRaw(k)) {
-        this.playerPrimary = PRIMARY_CHOICES[i];
-        audio.play('switch');
-        this.introBannerShown = false;
-      }
-    });
+    this.screens.updateLoadoutCountdown(RULES.introTime - match.phaseTimer);
     if (!this.introBannerShown) {
       this.introBannerShown = true;
       const def = match.defender!;
       const title = this.player === def ? t('defendFortress') : t('targetLabel', { name: def.name });
-      const choices = PRIMARY_CHOICES.map((w, i) => `${i + 1}·${t(WEAPONS[w].nameKey)}${w === this.playerPrimary ? ' ✔' : ''}`).join('   ');
-      this.hud.showBanner(title, `${t('intro')} — ${choices}`, RULES.introTime);
+      this.hud.showBanner(title, t('intro'), 2.6);
     }
   }
 
@@ -766,10 +871,9 @@ export class Game {
     const match = this.match!;
     const input = this.app.input;
     if (!this.local) {
-      this.local = new Player(this.player, input, this.controller, this.combat, this.viewModel, this.app.gr.camera, this.app.gr.scene);
+      this.local = new Player(this.player, input, this.controller, this.combat, this.gadgets, this.viewModel, this.app.gr.camera, this.app.gr.scene);
       this.local.entities = () => this.entities;
       this.local.events.on('grenade', () => audio.play('switch', { volume: 0.5 }));
-      this.local.events.on('grapple', ({ point }) => audio.play(point ? 'grapple' : 'grappleMiss'));
       this.local.events.on('reload', () => audio.play('reload'));
       this.local.events.on('weaponSwitch', () => audio.play('switch'));
     }
@@ -784,6 +888,7 @@ export class Game {
       }
       // Bots
       if (!this.debugFreezeBots) for (const b of this.bots) b.update(simDt, this.time);
+      this.gadgets.update(simDt, this.time);
       this.combat.updateProjectiles(simDt, this.time);
       // Slow health regeneration after a few seconds without damage
       for (const e of this.entities) {
@@ -852,6 +957,13 @@ export class Game {
       this.hud.showScoreboard(null);
     }
     this.hud.update(this.hudState(), dt);
+    if (IS_TOUCH) {
+      const p = this.player;
+      p.gadgets.forEach((id, i) => {
+        const unlimited = GADGETS[id].charges === Infinity;
+        this.touch.setGadgetState(i, p.gadgetCooldown[i] <= 0 && (unlimited || p.gadgetCharges[i] > 0), unlimited ? -1 : p.gadgetCharges[i]);
+      });
+    }
   }
 
   private deathCamera(dt: number): void {
@@ -872,7 +984,7 @@ export class Game {
       const cm = this.chars.get(e.id);
       if (!cm) continue;
       const firstPerson = e === this.player && this.mode === 'battle' && e.alive;
-      cm.visible = !firstPerson && this.mode !== 'build';
+      cm.visible = !firstPerson && this.mode !== 'build' && !e.burrowed;
       cm.setWeapon(e.weapon?.id ?? null);
       cm.update(dt, e, camPos, this.time);
     }
@@ -929,7 +1041,16 @@ export class Game {
       reloading: p.reloading,
       weapons: p.weapons.map((s, i) => ({ name: t(WEAPONS[s.id].nameKey), ammo: s.ammo, active: i === p.weaponIndex })),
       grenades: p.grenades,
-      grappleCd: clamp(p.grappleCooldown / 2.5, 0, 1),
+      gadgets: p.gadgets.map((id, i) => ({
+        icon: GADGETS[id].icon,
+        key: GADGET_KEY_LABELS[i] ?? String(i + 1),
+        name: t(GADGETS[id].nameKey),
+        charges: GADGETS[id].charges === Infinity ? -1 : p.gadgetCharges[i],
+        cooldown: GADGETS[id].cooldown > 0 ? clamp(p.gadgetCooldown[i] / GADGETS[id].cooldown, 0, 1) : 0,
+        active: (id === 'grapple' && !!p.grapplePoint) || (id === 'zipline' && !!p.zipRide) || (id === 'burrow' && p.burrowed),
+      })),
+      burrow: p.gadgets.includes('burrow') || p.burrowed ? { energy: p.burrowEnergy / 100, blind: p.burrowed && this.app.world.isSolid(Math.floor(p.pos.x), Math.floor(this.app.gr.camera.position.y), Math.floor(p.pos.z)), amount: this.local ? this.local.burrowAmount : p.burrowed ? 1 : 0 } : null,
+      dig: p.digTarget && p.digProgress > 0 ? clamp(p.digProgress, 0, 1) : -1,
       timeLeft: match.phase === 'roundIntro' ? match.config.roundTime : match.timeLeft,
       round: match.roundIndex + 1,
       totalRounds: match.roundOrder.length,
@@ -946,7 +1067,7 @@ export class Game {
       sniperScope: !!w && w.id === 'sniper' && p.ads > 0.85,
       spread,
       fps: settings.data.showFps ? this.app.fps : null,
-      prompt: '',
+      prompt: this.time < this.promptUntil ? this.promptText : p.burrowed ? t('surfaceHint') : '',
       minimap: {
         self: { x: p.pos.x, z: p.pos.z, yaw: p.yaw },
         target: match.targetPlotIndex >= 0 ? { x: this.app.plots[match.targetPlotIndex].cx, z: this.app.plots[match.targetPlotIndex].cz } : null,
@@ -1078,6 +1199,39 @@ export class Game {
   debugSkipBuild(): void {
     this.build?.autoBuild(7);
     this.finishBuild(false);
+  }
+  /** Equips the local player with a kit (tests). */
+  debugSetKit(ids: GadgetId[]): void {
+    this.playerKit = sanitizeKit(ids);
+    this.player.setKit(this.playerKit);
+    this.touch.setGadgetIcons(this.player.gadgets.map((id) => GADGETS[id].icon));
+  }
+  /** Simulates the gadget button of a slot through the virtual input channel (tests): consumed by the next update. */
+  debugGadget(slot: number, action: 'press' | 'hold' | 'release'): void {
+    const v = this.app.input.virtual;
+    if (action === 'press') v.gadget[slot] = true;
+    v.gadgetHeld[slot] = action !== 'release';
+    if (action === 'release') v.gadgetReleased[slot] = true;
+  }
+  /** Snapshot of gadget state (tests). */
+  debugGadgetState(): Record<string, unknown> {
+    const p = this.player;
+    return {
+      kit: p.gadgets.slice(),
+      charges: p.gadgetCharges.slice(),
+      cooldown: p.gadgetCooldown.map((c) => Math.round(c * 100) / 100),
+      ziplines: this.gadgets.ziplines.length,
+      pads: this.gadgets.pads.length,
+      chargesLive: this.gadgets.charges.length,
+      zipRide: !!p.zipRide,
+      grapple: !!p.grapplePoint,
+      latched: p.grappleLatched,
+      burrowed: p.burrowed,
+      energy: Math.round(p.burrowEnergy),
+      pos: p.pos.toArray().map((v) => Math.round(v * 100) / 100),
+      vel: p.vel.toArray().map((v) => Math.round(v * 100) / 100),
+      grounded: p.grounded,
+    };
   }
   debugSkipIntro(): void {
     if (this.match && this.match.phase === 'roundIntro') this.match.update(RULES.introTime + 0.1, this.time);

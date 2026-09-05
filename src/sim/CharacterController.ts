@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { VoxelWorld } from '../world/VoxelWorld';
 import type { Terrain } from '../world/Terrain';
 import type { Entity } from './Entities';
-import { GRAPPLE } from './Weapons';
+import { BURROW, SWING, type GadgetSystem } from './Gadgets';
 import { clamp, damp } from '../core/MathUtil';
 import { PLAYABLE_RADIUS } from '../world/Layout';
 
@@ -39,6 +39,9 @@ const desired = new THREE.Vector3();
 
 /** Kinematic AABB character vs voxels + terrain heightfield. Shared by players and bots. */
 export class CharacterController {
+  /** Gadget simulation (zipline rides, burrowing, rope release); set by the game. */
+  gadgets: GadgetSystem | null = null;
+
   constructor(private world: VoxelWorld, private terrain: Terrain) {}
 
   private collides(x: number, y: number, z: number, r: number, h: number): boolean {
@@ -56,6 +59,14 @@ export class CharacterController {
     if (!e.alive) return;
     const world = this.world;
     e.wasGrounded = e.grounded;
+    if (e.burrowed) {
+      this.stepBurrowed(e, input, dt);
+      return;
+    }
+    if (e.zipRide) {
+      this.stepZip(e, input, dt);
+      return;
+    }
 
     // Crouch / slide state.
     if (e.sliding) {
@@ -77,25 +88,24 @@ export class CharacterController {
     }
     if (e.sliding) e.crouching = true;
 
-    // Grapple: pulls towards the anchor and ignores gravity.
+    // Swing grapple: a real rope. Gravity keeps acting, the rope only stops you moving away from the
+    // anchor; holding the gadget reels you in and latches (hangs) near the anchor.
     if (e.grapplePoint) {
       e.grappleTime += dt;
-      const to = tmp.copy(e.grapplePoint).sub(e.pos).sub(new THREE.Vector3(0, e.eyeHeight * 0.8, 0));
-      const dist = to.length();
-      if (dist < GRAPPLE.detachDistance || e.grappleTime > GRAPPLE.maxTime) {
-        e.grapplePoint = null;
-        e.vel.multiplyScalar(0.55);
-        if (e.vel.y < 4) e.vel.y = 4;
+      if (e.grappleTime > SWING.maxTime) {
+        if (this.gadgets) this.gadgets.releaseGrapple(e);
+        else e.grapplePoint = null;
+      }
+    }
+    if (e.grapplePoint) {
+      if (e.grappleLatched) {
+        e.vel.set(0, 0, 0);
       } else {
-        to.normalize();
-        const target = to.multiplyScalar(GRAPPLE.pullSpeed);
-        // Add a little steering from input.
+        if (e.grappleReel && input.forward >= -0.2) e.ropeLength = Math.max(SWING.minLen, e.ropeLength - SWING.reel * dt);
+        e.vel.y -= PHYS.gravity * dt;
         const fwd = e.forwardFlat(new THREE.Vector3());
         const right = e.right(new THREE.Vector3());
-        target.addScaledVector(fwd, input.forward * 3).addScaledVector(right, input.strafe * 3);
-        e.vel.x = damp(e.vel.x, target.x, 9, dt);
-        e.vel.y = damp(e.vel.y, target.y, 9, dt);
-        e.vel.z = damp(e.vel.z, target.z, 9, dt);
+        e.vel.addScaledVector(fwd, input.forward * 5 * dt).addScaledVector(right, input.strafe * 5 * dt);
       }
     }
 
@@ -154,6 +164,7 @@ export class CharacterController {
       hitWall = this.moveAxis(e, 2, e.vel.z * sdt) || hitWall;
       this.moveAxis(e, 1, e.vel.y * sdt);
     }
+    if (e.grapplePoint && !e.grappleLatched) this.applyRope(e, dt);
 
     // Terrain floor.
     const th = this.terrain.heightAt(e.pos.x, e.pos.z);
@@ -201,6 +212,85 @@ export class CharacterController {
       e.vel.set(0, 0, 0);
     }
     void world;
+  }
+
+  /** Rope constraint after integration: no outward radial motion beyond the rope length, reel pulls inward. */
+  private applyRope(e: Entity, dt: number): void {
+    const anchor = e.grapplePoint!;
+    const chest = tmp.set(e.pos.x, e.pos.y + 1.4, e.pos.z);
+    const n = chest.clone().sub(anchor);
+    const dist = n.length();
+    if (dist < 1e-4) return;
+    n.divideScalar(dist);
+    // Latch (hang) once reeled in, or when the rope is fully wound but geometry keeps us off the anchor.
+    if (e.grappleReel && (dist <= SWING.latchDist || (e.ropeLength <= SWING.minLen + 0.01 && dist < 3.5 && e.vel.lengthSq() < 4))) {
+      e.grappleLatched = true;
+      e.vel.set(0, 0, 0);
+      return;
+    }
+    if (dist > e.ropeLength) {
+      const radial = e.vel.dot(n);
+      if (radial > 0) e.vel.addScaledVector(n, -radial);
+      const corr = e.ropeLength - dist;
+      const nx = e.pos.x + n.x * corr;
+      const ny = e.pos.y + n.y * corr;
+      const nz = e.pos.z + n.z * corr;
+      if (!this.collides(nx, ny, nz, e.radius, e.height)) e.pos.set(nx, ny, nz);
+      else if (!this.collides(e.pos.x, ny, e.pos.z, e.radius, e.height)) e.pos.y = ny;
+    }
+    if (e.grappleReel) {
+      const inward = -e.vel.dot(n);
+      if (inward < SWING.reel) e.vel.addScaledVector(n, -(SWING.reel - inward) * Math.min(1, dt * 8));
+    }
+  }
+
+  /** Underground: glide beneath the surface ignoring blocks; the drill system handles energy and surfacing. */
+  private stepBurrowed(e: Entity, input: MoveInput, dt: number): void {
+    const fwd = e.forwardFlat(new THREE.Vector3());
+    const right = e.right(new THREE.Vector3());
+    desired.set(0, 0, 0).addScaledVector(fwd, input.forward).addScaledVector(right, input.strafe);
+    if (desired.lengthSq() > 1) desired.normalize();
+    desired.multiplyScalar(BURROW.speed);
+    e.vel.x = damp(e.vel.x, desired.x, 10, dt);
+    e.vel.z = damp(e.vel.z, desired.z, 10, dt);
+    e.vel.y = 0;
+    e.pos.x += e.vel.x * dt;
+    e.pos.z += e.vel.z * dt;
+    const surface = this.gadgets ? this.gadgets.surfaceYAt(e.pos.x, e.pos.z) : this.terrain.heightAt(e.pos.x, e.pos.z);
+    e.pos.y = surface - BURROW.depth;
+    e.grounded = true;
+    e.crouching = false;
+    e.sliding = false;
+    e.coyoteTimer = 0;
+    e.jumpBuffered = false;
+    const rr = Math.hypot(e.pos.x, e.pos.z);
+    if (rr > PLAYABLE_RADIUS - 2) {
+      const k = (PLAYABLE_RADIUS - 2) / rr;
+      e.pos.x *= k;
+      e.pos.z *= k;
+    }
+  }
+
+  /** Riding a zipline: follow the cable, drop off when it ends, jump or when something is in the way. */
+  private stepZip(e: Entity, input: MoveInput, dt: number): void {
+    const g = this.gadgets;
+    if (!g) {
+      e.zipRide = null;
+      return;
+    }
+    const next = g.zipStep(e, dt, input.jump);
+    e.grounded = false;
+    if (!next) return;
+    const th = this.terrain.heightAt(next.pos.x, next.pos.z);
+    if (next.pos.y < th - 0.2 || this.collides(next.pos.x, next.pos.y + 0.1, next.pos.z, e.radius * 0.85, e.height * 0.85)) {
+      g.detachZip(e, false);
+      return;
+    }
+    e.vel.copy(next.pos).sub(e.pos).divideScalar(Math.max(dt, 1e-4));
+    e.pos.copy(next.pos);
+    e.crouching = false;
+    e.sliding = false;
+    if (next.end) g.detachZip(e, true);
   }
 
   /** Moves along one axis and resolves voxel collisions. Returns true if blocked. */

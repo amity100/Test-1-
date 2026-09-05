@@ -11,6 +11,17 @@ export interface HudMinimap {
   others: { x: number; z: number; color: string }[];
 }
 
+export interface HudGadget {
+  icon: string;
+  key: string;
+  name: string;
+  /** Remaining uses; -1 = unlimited. */
+  charges: number;
+  /** Remaining cooldown fraction 0..1. */
+  cooldown: number;
+  active: boolean;
+}
+
 export interface HudState {
   hp: number;
   maxHp: number;
@@ -20,7 +31,11 @@ export interface HudState {
   reloading: boolean;
   weapons: { name: string; ammo: number; active: boolean }[];
   grenades: number;
-  grappleCd: number;
+  gadgets: HudGadget[];
+  /** Underground presentation: energy 0..1, blind when the periscope is buried in a block, amount = blend. */
+  burrow: { energy: number; blind: boolean; amount: number } | null;
+  /** Drill progress 0..1 while drilling a block, -1 otherwise. */
+  dig: number;
   timeLeft: number;
   round: number;
   totalRounds: number;
@@ -68,7 +83,14 @@ export class HUD {
   private weaponName: HTMLElement;
   private slots: HTMLElement;
   private grenadesEl: HTMLElement;
-  private grappleFill: HTMLElement;
+  private gadgetsEl: HTMLElement;
+  private gadgetSlots: { root: HTMLElement; cd: HTMLElement; count: HTMLElement; key: string }[] = [];
+  private veil: HTMLElement;
+  private veilEnergy: HTMLElement;
+  private veilLabel: HTMLElement;
+  private digEl: HTMLElement;
+  private digFill: HTMLElement;
+  private digText: HTMLElement;
   private timer: HTMLElement;
   private roundLabel: HTMLElement;
   private targetLabel: HTMLElement;
@@ -130,12 +152,24 @@ export class HUD {
     this.hpText = el('div', 'hptext', '100');
     const gear = el('div', 'gear');
     this.grenadesEl = el('div', 'grenades');
-    const grapple = el('div', 'grapple');
-    grapple.innerHTML = `<span class="lbl">Q</span><div class="gbar"><div class="fill"></div></div>`;
-    this.grappleFill = grapple.querySelector('.fill') as HTMLElement;
-    gear.append(this.grenadesEl, grapple);
+    this.gadgetsEl = el('div', 'gadgets');
+    gear.append(this.grenadesEl, this.gadgetsEl);
     this.hpWrap.append(this.hpText, hpBar, gear);
     this.root.appendChild(this.hpWrap);
+
+    // Underground veil (burrow drill) and drilling progress
+    this.veil = el('div', 'burrow-veil');
+    this.veil.innerHTML = `<div class="dirt"></div><div class="energy"><span class="lbl"></span><div class="ebar"><div class="fill"></div></div></div>`;
+    this.veilEnergy = this.veil.querySelector('.ebar .fill') as HTMLElement;
+    this.veilLabel = this.veil.querySelector('.energy .lbl') as HTMLElement;
+    this.veil.hidden = true;
+    this.root.appendChild(this.veil);
+    this.digEl = el('div', 'dig');
+    this.digEl.innerHTML = `<div class="dbar"><div class="fill"></div></div><div class="dtxt"></div>`;
+    this.digFill = this.digEl.querySelector('.fill') as HTMLElement;
+    this.digText = this.digEl.querySelector('.dtxt') as HTMLElement;
+    this.digEl.hidden = true;
+    this.root.appendChild(this.digEl);
 
     // Weapon
     const wpn = el('div', 'weapon');
@@ -239,6 +273,33 @@ export class HUD {
     this.scoreboard.hidden = true;
   }
 
+  /** Two kit slots: icon, key, name, charges and a cooldown line. */
+  private syncGadgets(list: HudGadget[]): void {
+    const sig = list.map((g) => g.icon + g.name + g.key).join('|');
+    if (this.last.gsig !== sig) {
+      this.last.gsig = sig;
+      this.gadgetsEl.innerHTML = '';
+      this.gadgetSlots = list.map((g) => {
+        const root = el('div', 'gslot');
+        root.innerHTML = `<span class="lbl">${esc(g.key)}</span><span class="gi">${g.icon}</span><span class="gname">${esc(g.name)}</span><span class="n"></span><div class="cd"><div class="fill"></div></div>`;
+        this.gadgetsEl.appendChild(root);
+        return { root, cd: root.querySelector('.cd .fill') as HTMLElement, count: root.querySelector('.n') as HTMLElement, key: '' };
+      });
+    }
+    list.forEach((g, i) => {
+      const slot = this.gadgetSlots[i];
+      if (!slot) return;
+      const k = `${g.charges}|${g.active}`;
+      if (slot.key !== k) {
+        slot.key = k;
+        slot.count.textContent = g.charges < 0 ? '∞' : String(g.charges);
+        slot.root.classList.toggle('active', g.active);
+        slot.root.classList.toggle('empty', g.charges === 0);
+      }
+      slot.cd.style.width = `${(1 - g.cooldown) * 100}%`;
+    });
+  }
+
   private set(key: string, elem: HTMLElement, value: string | number): void {
     if (this.last[key] === value) return;
     this.last[key] = value;
@@ -264,7 +325,20 @@ export class HUD {
       this.last.grenades = s.grenades;
       this.grenadesEl.innerHTML = `<span class="lbl">G</span>` + Array.from({ length: 4 }, (_, i) => `<span class="gr ${i < s.grenades ? 'on' : ''}"></span>`).join('');
     }
-    this.grappleFill.style.width = `${(1 - s.grappleCd) * 100}%`;
+    this.syncGadgets(s.gadgets);
+    // Burrow veil + drill progress
+    if (s.burrow && s.burrow.amount > 0.02) {
+      this.veil.hidden = false;
+      this.veil.style.opacity = String(Math.min(1, s.burrow.amount));
+      this.veil.classList.toggle('blind', s.burrow.blind);
+      this.veilEnergy.style.width = `${Math.max(0, Math.min(1, s.burrow.energy)) * 100}%`;
+      this.set('veilLabel', this.veilLabel, `${t('underground')} · ${t('energy')} ${Math.round(s.burrow.energy * 100)}%`);
+    } else this.veil.hidden = true;
+    if (s.dig >= 0) {
+      this.digEl.hidden = false;
+      this.digFill.style.width = `${Math.min(1, s.dig) * 100}%`;
+      this.set('digText', this.digText, t('drilling'));
+    } else this.digEl.hidden = true;
     this.set('timer', this.timer, formatTime(s.timeLeft));
     this.timer.classList.toggle('urgent', s.timeLeft < 30);
     this.set('round', this.roundLabel, t('round', { n: s.round, total: s.totalRounds }));

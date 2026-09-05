@@ -53,7 +53,7 @@ export class Combat {
     }
     if (hitEntities) {
       for (const e of this.getEntities()) {
-        if (e === ignore || !e.alive) continue;
+        if (e === ignore || !e.alive || e.burrowed) continue;
         const r = this.entityHit(e, origin, d, best ? best.dist : maxDist);
         if (r && (!best || r.dist < best.dist)) best = r;
       }
@@ -233,7 +233,7 @@ export class Combat {
 
   explode(pos: THREE.Vector3, radius: number, damage: number, owner: Entity | null, now: number): void {
     for (const e of this.getEntities()) {
-      if (!e.alive) continue;
+      if (!e.alive || e.burrowed) continue;
       const c = e.center;
       const dist = c.distanceTo(pos);
       if (dist > radius + e.radius) continue;

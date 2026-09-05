@@ -19,6 +19,9 @@ export interface SettingsData {
   touchScale: number;
   /** Touch: on-screen control opacity. */
   touchOpacity: number;
+  /** Last chosen primary weapon and gadget kit (round loadout). */
+  primary: string;
+  kit: string[];
 }
 
 const KEY = 'flagkeep.settings.v1';
@@ -37,6 +40,8 @@ const DEFAULTS: SettingsData = {
   aimAssist: true,
   touchScale: 1,
   touchOpacity: 0.7,
+  primary: 'rifle',
+  kit: ['zipline', 'breach'],
 };
 
 export class Settings {

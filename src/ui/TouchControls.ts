@@ -204,11 +204,54 @@ export class TouchControls {
     });
     this.button(g, 'reload', ICON.reload, { tap: () => (v.reload = true) });
     this.button(g, 'grenade', ICON.grenade, { tap: () => (v.grenade = true) });
-    this.button(g, 'grapple', ICON.grapple, {
-      down: () => (v.grapple = true),
-      up: () => (v.grappleReleased = true),
-    });
+    for (let i = 0; i < 2; i++) {
+      const b = this.button(g, `gadget g${i}`, ICON.grapple, {
+        down: () => {
+          v.gadget[i] = true;
+          v.gadgetHeld[i] = true;
+        },
+        up: () => {
+          v.gadgetHeld[i] = false;
+          v.gadgetReleased[i] = true;
+        },
+      });
+      const count = el('span', 'count', '');
+      count.hidden = true;
+      b.appendChild(count);
+      this.gadgetBtns.push(b);
+      this.gadgetCounts.push(count);
+    }
     this.button(g, 'pause', ICON.pause, { tap: () => this.cb.pause() });
+  }
+  private gadgetBtns: HTMLElement[] = [];
+  private gadgetCounts: HTMLElement[] = [];
+
+  /** Shows the equipped kit on the two gadget buttons. */
+  setGadgetIcons(icons: string[]): void {
+    for (let i = 0; i < this.gadgetBtns.length; i++) {
+      const b = this.gadgetBtns[i];
+      const icon = icons[i] ?? '';
+      if (b.dataset.icon === icon) continue;
+      b.dataset.icon = icon;
+      const count = this.gadgetCounts[i];
+      b.innerHTML = icon;
+      b.appendChild(count);
+      b.hidden = !icon;
+    }
+  }
+
+  /** Reflects charges and cooldown on a gadget button (charges < 0 = unlimited). */
+  setGadgetState(i: number, ready: boolean, charges: number): void {
+    const b = this.gadgetBtns[i];
+    if (!b) return;
+    b.classList.toggle('off', !ready);
+    const c = this.gadgetCounts[i];
+    if (charges < 0) c.hidden = true;
+    else {
+      c.hidden = false;
+      const txt = String(charges);
+      if (c.textContent !== txt) c.textContent = txt;
+    }
   }
 
   private buildBuildButtons(): void {

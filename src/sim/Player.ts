@@ -5,14 +5,14 @@ import type { CharacterController, MoveInput } from './CharacterController';
 import type { Combat } from './Combat';
 import type { ViewModel } from '../render/ViewModel';
 import { WeaponLogic } from './WeaponLogic';
-import { GRAPPLE, GRENADE, WEAPONS } from './Weapons';
+import { GRENADE, WEAPONS } from './Weapons';
+import { KIT_SIZE, type GadgetSystem } from './Gadgets';
 import { settings } from '../core/Settings';
 import { clamp, damp, wrapAngle } from '../core/MathUtil';
 import { Emitter } from '../core/Events';
 
 export interface PlayerEvents extends Record<string, unknown> {
   grenade: { entity: Entity };
-  grapple: { entity: Entity; point: THREE.Vector3 | null };
   weaponSwitch: { index: number };
   reload: { entity: Entity };
   interact: { entity: Entity };
@@ -29,6 +29,7 @@ export class Player {
   private rope: THREE.Line;
   private ropeGeo: THREE.BufferGeometry;
   private baseFov = 80;
+  private burrowBlend = 0;
   enabled = true;
   /** All entities (for touch aim assist and auto fire); set by the game. */
   entities: () => Entity[] = () => [];
@@ -42,6 +43,7 @@ export class Player {
     private input: Input,
     private controller: CharacterController,
     private combat: Combat,
+    private gadgets: GadgetSystem,
     readonly viewModel: ViewModel,
     private camera: THREE.PerspectiveCamera,
     scene: THREE.Scene,
@@ -60,6 +62,11 @@ export class Player {
     this.shake = Math.min(1, this.shake + amount);
   }
 
+  /** 0..1 how far the camera has sunk into "underground" presentation. */
+  get burrowAmount(): number {
+    return this.burrowBlend;
+  }
+
   update(dt: number, now: number): void {
     const e = this.entity;
     const input = this.input;
@@ -75,8 +82,8 @@ export class Player {
     const lookDY = this.enabled ? input.lookDY() : 0;
     // Touch helpers: find an enemy near the crosshair for aim assist / auto fire.
     const touch = input.isTouch && this.enabled;
-    const assistOn = touch && settings.data.aimAssist;
-    if (touch && (settings.data.aimAssist || settings.data.autoFire)) this.findAssistTarget(9);
+    const assistOn = touch && settings.data.aimAssist && !e.burrowed;
+    if (touch && (settings.data.aimAssist || settings.data.autoFire) && !e.burrowed) this.findAssistTarget(9);
     else this.assistTarget = null;
     const nearTarget = this.assistTarget !== null && this.assistAngle < THREE.MathUtils.degToRad(4.5);
     // Look
@@ -91,6 +98,11 @@ export class Player {
       e.pitch = clamp(e.pitch - lookDY * sens * (settings.data.invertY ? -1 : 1), -1.5, 1.5);
     }
     if (assistOn && this.assistTarget && this.assistAngle < THREE.MathUtils.degToRad(6)) this.magnetism(dt, lookDX !== 0 || lookDY !== 0);
+    // Gadgets (before movement so a new state applies this frame).
+    if (this.enabled) {
+      for (let i = 0; i < KIT_SIZE; i++) this.gadgets.input(e, i, input.gadgetPressed(i), input.gadgetHeld(i), input.gadgetReleased(i), now);
+      if (e.grapplePoint && input.jumpPressed()) this.gadgets.releaseGrapple(e);
+    } else if (e.grappleReel) e.grappleReel = false;
     // Movement input
     const mv: MoveInput = {
       strafe: this.enabled ? input.moveX() : 0,
@@ -108,9 +120,10 @@ export class Player {
       e.landImpact = 0;
     }
 
-    // Weapons
+    // Weapons (holstered underground and while hanging from a zipline)
     WeaponLogic.update(e, dt);
-    if (this.enabled) {
+    const armed = this.enabled && !e.burrowed && !e.zipRide;
+    if (armed) {
       let switchTo = -1;
       const req = input.weaponSwitch();
       if (req >= 0 && req < 3) switchTo = req;
@@ -133,26 +146,28 @@ export class Player {
         this.combat.throwGrenade(e, now);
         this.events.emit('grenade', { entity: e });
       }
-      if (input.grapplePressed()) this.tryGrapple();
-      if (e.grapplePoint && (input.grappleReleased() || input.jumpPressed())) {
-        e.grapplePoint = null;
-        e.vel.y = Math.max(e.vel.y, 3);
-      }
       if (input.interactPressed()) this.events.emit('interact', { entity: e });
     } else {
       e.wantsAds = false;
+      if (input.fireReleased()) e.triggerReleased = true;
     }
     this.viewModel.show(e.weapon ? e.weapon.id : null);
-    this.viewModel.hidden = !!e.weapon && e.weapon.id === 'sniper' && e.ads > 0.85;
+    this.viewModel.hidden = (!!e.weapon && e.weapon.id === 'sniper' && e.ads > 0.85) || e.burrowed || !!e.zipRide;
 
     // Camera
     const speed = Math.sqrt(e.vel.x * e.vel.x + e.vel.z * e.vel.z);
-    if (e.grounded && speed > 0.5) this.bobPhase += dt * (6 + speed * 0.9);
-    const bob = clamp(speed / 8, 0, 1) * (e.grounded ? 1 : 0) * (1 - e.ads * 0.7);
+    if (e.grounded && speed > 0.5 && !e.burrowed) this.bobPhase += dt * (6 + speed * 0.9);
+    const bob = clamp(speed / 8, 0, 1) * (e.grounded && !e.burrowed ? 1 : 0) * (1 - e.ads * 0.7);
     this.camDip = damp(this.camDip, 0, 9, dt);
     this.shake = damp(this.shake, 0, 6, dt);
     this.shakeVec.set((Math.random() - 0.5) * this.shake, (Math.random() - 0.5) * this.shake, 0).multiplyScalar(0.06);
     const eye = e.eyePos;
+    this.burrowBlend = damp(this.burrowBlend, e.burrowed ? 1 : 0, 10, dt);
+    if (e.burrowed) {
+      // Periscope: eyes just above the ground so the tunnel can be steered, with a low rumble.
+      const surface = this.gadgets.surfaceYAt(e.pos.x, e.pos.z);
+      eye.y = surface + 0.32 + Math.sin(now * 23) * 0.012;
+    }
     eye.y += Math.abs(Math.sin(this.bobPhase)) * 0.045 * bob - this.camDip;
     const right = e.right(new THREE.Vector3());
     eye.addScaledVector(right, Math.sin(this.bobPhase) * 0.02 * bob);
@@ -162,13 +177,17 @@ export class Player {
     this.camera.rotation.set(0, 0, 0);
     this.camera.rotateY(yaw);
     this.camera.rotateX(pitch);
-    this.camera.rotateZ(e.sliding ? -0.06 : -this.shakeVec.x * 0.5);
+    let roll = e.sliding ? -0.06 : -this.shakeVec.x * 0.5;
+    if (e.zipRide) roll += Math.sin(now * 3) * 0.02;
+    this.camera.rotateZ(roll);
     // FOV
     const w = e.weapon;
     let fovTarget = this.baseFov;
     if (w) fovTarget *= THREE.MathUtils.lerp(1, WEAPONS[w.id].adsZoom, e.ads);
     if (speed > 6.5 && e.ads < 0.2) fovTarget += 4;
-    if (e.grapplePoint) fovTarget += 6;
+    if (e.grapplePoint && !e.grappleLatched) fovTarget += 6;
+    if (e.zipRide) fovTarget += 5;
+    if (e.burrowed) fovTarget -= 8;
     this.fovCurrent = damp(this.fovCurrent, fovTarget, 12, dt);
     if (Math.abs(this.camera.fov - this.fovCurrent) > 0.01) {
       this.camera.fov = this.fovCurrent;
@@ -199,7 +218,7 @@ export class Player {
     const cosMax = Math.cos(THREE.MathUtils.degToRad(maxDeg));
     const to = new THREE.Vector3();
     for (const o of this.entities()) {
-      if (o === e || !o.alive) continue;
+      if (o === e || !o.alive || o.burrowed) continue;
       to.set(o.pos.x, o.pos.y + o.height * 0.6, o.pos.z).sub(eye);
       const dist = to.length();
       if (dist < 1 || dist > 80) continue;
@@ -245,24 +264,6 @@ export class Player {
       }
     } else this.autoRearm = 0;
     return firing;
-  }
-
-  private tryGrapple(): void {
-    const e = this.entity;
-    if (e.grappleCooldown > 0 || e.grapplePoint) return;
-    const origin = e.eyePos;
-    const dir = e.forward(new THREE.Vector3());
-    const hit = this.combat.raycast(origin, dir, GRAPPLE.range, e, false);
-    if (hit) {
-      e.grapplePoint = hit.point.clone();
-      e.grappleTime = 0;
-      e.grappleCooldown = GRAPPLE.cooldown;
-      e.sliding = false;
-      this.events.emit('grapple', { entity: e, point: e.grapplePoint });
-    } else {
-      e.grappleCooldown = 0.4;
-      this.events.emit('grapple', { entity: e, point: null });
-    }
   }
 
   get grenadeCount(): number {

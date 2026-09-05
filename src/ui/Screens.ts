@@ -42,7 +42,26 @@ export interface PodiumRow {
   isYou: boolean;
 }
 
-type ScreenName = 'none' | 'menu' | 'setup' | 'settings' | 'howto' | 'pause' | 'summary' | 'podium' | 'click' | 'card';
+type ScreenName = 'none' | 'menu' | 'setup' | 'settings' | 'howto' | 'pause' | 'summary' | 'podium' | 'click' | 'card' | 'loadout';
+
+export interface LoadoutOption {
+  id: string;
+  name: string;
+  desc?: string;
+  icon?: string;
+}
+
+export interface LoadoutData {
+  title: string;
+  weapons: LoadoutOption[];
+  weapon: string;
+  gadgets: LoadoutOption[];
+  kit: string[];
+  kitSize: number;
+  onWeapon(id: string): void;
+  onKit(ids: string[]): void;
+  onReady(): void;
+}
 
 const SETUP_KEY = 'flagkeep.setup.v1';
 
@@ -56,6 +75,8 @@ export class Screens {
   private lastSummary: SummaryData | null = null;
   private lastPodium: PodiumRow[] | null = null;
   private nextInEl: HTMLElement | null = null;
+  private lastLoadout: LoadoutData | null = null;
+  private loadoutCount: HTMLElement | null = null;
 
   constructor(parent: HTMLElement, private cb: ScreenCallbacks) {
     this.root = el('div', 'screens');
@@ -109,6 +130,7 @@ export class Screens {
       case 'pause': this.showPause(); break;
       case 'summary': if (this.lastSummary) this.showRoundSummary(this.lastSummary, 0); break;
       case 'podium': if (this.lastPodium) this.showPodium(this.lastPodium); break;
+      case 'loadout': if (this.lastLoadout) this.showLoadout(this.lastLoadout); break;
       default: break;
     }
   }
@@ -310,7 +332,7 @@ export class Screens {
     const p = el('div', 'panel howto');
     p.innerHTML =
       `<h2>${esc(t('htpTitle'))}</h2><ol class="htp">` +
-      ['htp1', 'htp2', 'htp3', 'htp4', 'htp5'].map((k) => `<li>${esc(t(k))}</li>`).join('') +
+      ['htp1', 'htp2', 'htp3', 'htp4', 'htp5', 'htp6'].map((k) => `<li>${esc(t(k))}</li>`).join('') +
       `</ol><h3>${esc(t('controls'))}</h3><ul class="ctrls">` +
       ['ctrlMove', 'ctrlJump', 'ctrlShoot', 'ctrlWeapons', 'ctrlMisc'].map((k) => `<li>${esc(t(k))}</li>`).join('') +
       `</ul>`;
@@ -376,6 +398,76 @@ export class Screens {
 
   refreshPodium(): void {
     if (this.lastPodium) this.showPodium(this.lastPodium);
+  }
+
+  /** Round-intro loadout: primary weapon and two of the five gadgets. Sits at the bottom so the flyby stays visible. */
+  showLoadout(data: LoadoutData): void {
+    this.lastLoadout = data;
+    const p = el('div', 'panel loadout');
+    const head = el('div', 'lo-head');
+    head.appendChild(el('div', 'lo-title', `${data.title} · ${t('loadout')}`));
+    this.loadoutCount = el('div', 'lo-count', '');
+    head.appendChild(this.loadoutCount);
+    p.appendChild(head);
+    p.appendChild(el('div', 'lo-sec', t('pickWeapon')));
+    const wrow = el('div', 'lo-weapons');
+    let weapon = data.weapon;
+    const chips: HTMLElement[] = [];
+    for (const w of data.weapons) {
+      const c = document.createElement('button');
+      c.className = `lo-chip ${w.id === weapon ? 'sel' : ''}`;
+      c.textContent = w.name;
+      c.addEventListener('click', () => {
+        weapon = w.id;
+        for (let i = 0; i < chips.length; i++) chips[i].classList.toggle('sel', data.weapons[i].id === weapon);
+        data.onWeapon(weapon);
+      });
+      chips.push(c);
+      wrow.appendChild(c);
+    }
+    p.appendChild(wrow);
+    p.appendChild(el('div', 'lo-sec', t('pickKit', { n: data.kitSize })));
+    const grid = el('div', 'lo-gadgets');
+    const kit = data.kit.slice(0, data.kitSize);
+    const cards: HTMLElement[] = [];
+    const keys = ['Q', 'F'];
+    const paint = (): void => {
+      data.gadgets.forEach((g, i) => {
+        const idx = kit.indexOf(g.id);
+        cards[i].classList.toggle('sel', idx >= 0);
+        const slot = cards[i].querySelector('.slot') as HTMLElement;
+        slot.hidden = idx < 0;
+        slot.textContent = keys[idx] ?? String(idx + 1);
+      });
+    };
+    for (const g of data.gadgets) {
+      const c = document.createElement('button');
+      c.className = 'lo-card';
+      c.innerHTML = `<span class="slot" hidden></span>${g.icon ?? ''}<span class="nm">${esc(g.name)}</span><span class="ds">${esc(g.desc ?? '')}</span>`;
+      c.addEventListener('click', () => {
+        const at = kit.indexOf(g.id);
+        if (at >= 0) kit.splice(at, 1);
+        else {
+          kit.push(g.id);
+          while (kit.length > data.kitSize) kit.shift();
+        }
+        paint();
+        data.onKit(kit.slice());
+      });
+      cards.push(c);
+      grid.appendChild(c);
+    }
+    paint();
+    p.appendChild(grid);
+    const foot = el('div', 'lo-foot');
+    foot.appendChild(btn(`✔ ${t('kitReady')}`, 'primary', () => data.onReady()));
+    p.appendChild(foot);
+    this.mount('loadout', p, false);
+    this.container?.classList.add('bottom');
+  }
+
+  updateLoadoutCountdown(seconds: number): void {
+    if (this.loadoutCount && this.current === 'loadout') this.loadoutCount.textContent = t('startsIn', { n: Math.max(0, Math.ceil(seconds)) });
   }
 
   /** Modal with the rendered fortress card: share (when supported), download, close. */

@@ -453,9 +453,19 @@ html, body {
   .vitals { left: calc(16px + env(safe-area-inset-left, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); width: 150px; }
   .vitals .hptext { font-size: 28px; }
   .vitals .hpbar { margin: 4px 0 6px; height: 6px; }
+  .gear { gap: 8px; flex-wrap: wrap; row-gap: 4px; }
   .gear .lbl { font-size: 10px; }
-  .grapple .gbar { width: 46px; }
+  .gslot { min-width: 0; padding: 2px 6px 3px 5px; gap: 4px; }
+  .gslot .gname { display: none; }
+  .gslot .n { font-size: 12px; }
   .weapon { right: calc(254px + env(safe-area-inset-right, 0px)); bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
+  /* Touch buttons sit on the right whatever the text direction, so the HUD keeps its LTR places on phones. */
+  [dir='rtl'] .vitals { left: calc(16px + env(safe-area-inset-left, 0px)); right: auto; }
+  [dir='rtl'] .weapon { right: calc(254px + env(safe-area-inset-right, 0px)); left: auto; text-align: end; }
+  [dir='rtl'] .weapon .slots { justify-content: flex-end; }
+  [dir='rtl'] .minimap { left: calc(12px + env(safe-area-inset-left, 0px)); right: auto; }
+  [dir='rtl'] .score { right: calc(58px + env(safe-area-inset-right, 0px)); left: auto; }
+  [dir='rtl'] .feed { right: calc(12px + env(safe-area-inset-right, 0px)); left: auto; align-items: flex-end; }
   .weapon .wname { font-size: 11px; }
   .weapon .ammo .mag { font-size: 30px; }
   .weapon .ammo .reserve { font-size: 13px; }
@@ -736,3 +746,73 @@ body { background: radial-gradient(1200px 800px at 50% 30%, #16283a 0%, #0f1923 
 .panel.card .card-img { display: block; width: 100%; max-width: 880px; margin: 8px auto 6px; border: 1px solid var(--line); box-shadow: 0 16px 50px rgba(0, 0, 0, 0.55); }
 .panel.card .row { justify-content: center; }
 .panel.card a.btn { text-decoration: none; }
+
+/* v4: gadget kit — HUD slots, burrow veil, drill progress */
+.gadgets { display: flex; gap: 8px; }
+.gslot { position: relative; display: flex; align-items: center; gap: 5px; padding: 3px 8px 4px 6px; background: rgba(8, 14, 22, 0.55); border: 1px solid var(--line); clip-path: var(--chamfer-sm); min-width: 96px; }
+.gslot .lbl { margin-inline-end: 0; }
+.gslot .gi { display: flex; }
+.gslot .gi svg { width: 18px; height: 18px; fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; display: block; }
+.gslot .gname { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #c7d0da; white-space: nowrap; }
+.gslot .n { font-weight: 700; font-size: 13px; margin-inline-start: auto; color: #fff; }
+.gslot .cd { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: rgba(0, 0, 0, 0.5); }
+.gslot .cd .fill { height: 100%; background: var(--accent); transition: width 0.08s linear; }
+.gslot.empty { opacity: 0.45; }
+.gslot.active { border-color: var(--accent); box-shadow: 0 0 10px rgba(0, 229, 255, 0.35); }
+.burrow-veil { position: absolute; inset: 0; pointer-events: none; }
+.burrow-veil .dirt { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 55%, rgba(40, 28, 16, 0) 0, rgba(40, 28, 16, 0) 26%, rgba(28, 19, 10, 0.86) 60%, rgba(14, 9, 5, 0.98) 100%); }
+.burrow-veil.blind .dirt { background: radial-gradient(ellipse at 50% 50%, rgba(56, 40, 24, 0.92) 0, rgba(14, 9, 5, 1) 68%); }
+.burrow-veil .energy { position: absolute; left: 50%; bottom: 24%; transform: translateX(-50%); width: 260px; text-align: center; }
+.burrow-veil .energy .lbl { display: inline-block; font-family: var(--display); font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase; color: #ffd36a; background: none; padding: 0; margin: 0; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9); }
+.burrow-veil .ebar { height: 8px; margin-top: 6px; background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255, 211, 106, 0.45); clip-path: polygon(3px 0, 100% 0, 100% calc(100% - 3px), calc(100% - 3px) 100%, 0 100%, 0 3px); }
+.burrow-veil .ebar .fill { height: 100%; background: linear-gradient(90deg, #ff8c42, #ffd36a); transition: width 0.1s linear; }
+.dig { position: absolute; left: 50%; top: 56%; transform: translateX(-50%); width: 150px; text-align: center; }
+.dig .dbar { height: 6px; background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255, 255, 255, 0.28); }
+.dig .dbar .fill { height: 100%; background: var(--accent2); }
+.dig .dtxt { font-family: var(--display); font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; margin-top: 4px; color: #fff; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8); }
+
+/* v4: touch gadget buttons */
+.tb-battle .tb.gadget { color: var(--accent); width: calc(48px * var(--ts)); height: calc(48px * var(--ts)); }
+.tb-battle .tb.gadget.g0 { right: calc(188px + var(--sr)); bottom: calc(112px + var(--sb)); }
+.tb-battle .tb.gadget.g1 { right: calc(188px + var(--sr)); bottom: calc(174px + var(--sb)); }
+.tb-battle .tb.gadget.off { opacity: calc(var(--to) * 0.45); }
+.tb-battle .tb.gadget .count { position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px; border-radius: 8px; background: var(--accent); color: #041018; font: 700 10px/16px var(--display); text-align: center; padding: 0 4px; pointer-events: none; }
+
+/* v4: round loadout picker */
+.screen.bottom { display: flex; align-items: flex-end; justify-content: center; padding-bottom: max(16px, env(safe-area-inset-bottom, 0px)); }
+.panel.loadout { width: min(900px, 96vw); max-width: none; padding: 14px 18px 12px; background: rgba(8, 14, 22, 0.8); text-align: start; }
+.loadout .lo-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.loadout .lo-title { font-family: var(--display); font-weight: 700; font-size: 19px; letter-spacing: 0.1em; text-transform: uppercase; }
+.loadout .lo-count { font-family: var(--display); font-weight: 700; color: var(--accent); letter-spacing: 0.08em; white-space: nowrap; }
+.loadout .lo-sec { font-family: var(--display); font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted); margin: 10px 0 6px; }
+.loadout .lo-weapons { display: flex; gap: 6px; flex-wrap: wrap; }
+.loadout .lo-chip { padding: 6px 12px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.05); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; clip-path: var(--chamfer-sm); border-radius: 0; }
+.loadout .lo-chip.sel { border-color: var(--accent); background: rgba(0, 229, 255, 0.16); box-shadow: inset 0 -2px 0 var(--accent); }
+.loadout .lo-gadgets { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.loadout .lo-card { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 6px 8px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.04); color: var(--text); font: inherit; cursor: pointer; text-align: center; clip-path: var(--chamfer-sm); border-radius: 0; transition: transform 0.1s, border-color 0.1s; }
+.loadout .lo-card:hover { transform: translateY(-2px); border-color: rgba(255, 255, 255, 0.4); }
+.loadout .lo-card svg { width: 34px; height: 34px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; color: #c7d0da; }
+.loadout .lo-card .nm { font-family: var(--display); font-weight: 700; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; }
+.loadout .lo-card .ds { font-size: 11px; color: var(--muted); line-height: 1.3; }
+.loadout .lo-card.sel { border-color: var(--accent); background: rgba(0, 229, 255, 0.14); box-shadow: 0 0 0 1px rgba(0, 229, 255, 0.5), 0 0 18px rgba(0, 229, 255, 0.25); }
+.loadout .lo-card.sel svg { color: var(--accent); }
+.loadout .lo-card .slot { position: absolute; top: 0; inset-inline-start: 0; font: 700 10px/1 var(--display); color: #041018; background: var(--accent); padding: 3px 6px; }
+.loadout .lo-foot { display: flex; justify-content: flex-end; margin-top: 10px; }
+@media (max-width: 720px) {
+  .panel.loadout { padding: 8px 10px; }
+  .loadout .lo-title { font-size: 13px; }
+  .loadout .lo-sec { margin: 6px 0 4px; font-size: 10px; }
+  .loadout .lo-gadgets { gap: 4px; }
+  .loadout .lo-card { padding: 8px 2px 6px; gap: 2px; }
+  .loadout .lo-card .ds { display: none; }
+  .loadout .lo-card svg { width: 24px; height: 24px; }
+  .loadout .lo-card .nm { font-size: 9px; letter-spacing: 0.04em; }
+  .loadout .lo-chip { padding: 4px 8px; font-size: 11px; }
+  .loadout .lo-foot { margin-top: 6px; }
+}
+@media (max-height: 460px) {
+  .loadout .lo-card .ds { display: none; }
+  .loadout .lo-card { padding: 6px 2px 4px; }
+  .loadout .lo-card svg { width: 22px; height: 22px; }
+  .loadout .lo-foot .btn { padding: 4px 12px; }
+}

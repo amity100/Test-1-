@@ -1,5 +1,14 @@
 import * as THREE from 'three';
 import { WEAPONS, GRENADE, type WeaponId } from './Weapons';
+import { GADGETS, KIT_SIZE, type GadgetId } from './Gadgets';
+import type { Cell } from '../world/Reachability';
+
+export interface ZipRide {
+  id: number;
+  t: number;
+  dir: number;
+  speed: number;
+}
 
 export interface WeaponSlot {
   id: WeaponId;
@@ -76,6 +85,22 @@ export class Entity {
   grappleCooldown = 0;
   grapplePoint: THREE.Vector3 | null = null;
   grappleTime = 0;
+  /** Gadget kit chosen for the round (two slots) with per-slot charges and cooldowns. */
+  gadgets: GadgetId[] = ['zipline', 'breach'];
+  gadgetCharges: number[] = [GADGETS.zipline.charges, GADGETS.breach.charges];
+  gadgetCooldown: number[] = [0, 0];
+  zipRide: ZipRide | null = null;
+  /** Swing grapple: reel in while held, latch (hang) when close to the anchor. */
+  grappleReel = false;
+  grappleLatched = false;
+  ropeLength = 0;
+  /** Burrow drill: tunnelling under the surface with an energy budget. */
+  burrowed = false;
+  burrowEnergy = 100;
+  burrowSurfaceY = 0;
+  digTarget: Cell | null = null;
+  digProgress = 0;
+  moundTimer = 0;
   /** Accumulated view recoil (degrees) that decays. */
   recoilPitch = 0;
   recoilYaw = 0;
@@ -138,6 +163,21 @@ export class Entity {
     return this.weapons.length - 1;
   }
 
+  /** Equips a kit and refills its charges. */
+  setKit(ids: GadgetId[]): void {
+    const kit = ids.slice(0, KIT_SIZE);
+    this.gadgets = kit;
+    this.gadgetCharges = kit.map((id) => GADGETS[id].charges);
+    this.gadgetCooldown = kit.map(() => 0);
+    this.zipRide = null;
+    this.grappleReel = false;
+    this.grappleLatched = false;
+    this.burrowed = false;
+    this.burrowEnergy = 100;
+    this.digTarget = null;
+    this.digProgress = 0;
+  }
+
   setLoadout(primary: WeaponId, secondary: WeaponId = 'pistol'): void {
     this.weapons = [];
     this.giveWeapon(primary);
@@ -156,6 +196,13 @@ export class Entity {
     this.sliding = false;
     this.grapplePoint = null;
     this.grappleCooldown = 0;
+    this.grappleReel = false;
+    this.grappleLatched = false;
+    this.zipRide = null;
+    this.burrowed = false;
+    this.digTarget = null;
+    this.digProgress = 0;
+    for (let i = 0; i < this.gadgetCooldown.length; i++) this.gadgetCooldown[i] = 0;
     this.reloading = false;
     this.fireCooldown = 0;
     this.ads = 0;

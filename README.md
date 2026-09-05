@@ -38,7 +38,20 @@ GitHub Pages). Single-file build for artifact hosting: `npm run build:artifact` 
 ## Controls
 
 WASD move · Space jump · Shift sprint · C crouch/slide · Mouse aim and fire · Right mouse aim down
-sights · 1-3 / wheel weapons · R reload · G grenade · Q grapple hook · Tab scoreboard · Esc pause.
+sights · 1-3 / wheel weapons · R reload · G grenade · Q / F gadgets · Tab scoreboard · Esc pause.
+
+**Gadget kit.** Before every round you pick a primary weapon and two of five gadgets (the choice is
+remembered): a **zipline** cable that anyone can ride both ways, a **jump pad** that launches whoever
+steps on it, a sticky **breach charge** that blows a hole through fortress walls, a **swing hook**
+(real pendulum rope: hold to reel in, let go to fly, jump at the top to vault the ledge) and the
+**burrow drill** that tunnels under the ground, surfaces inside the fortress and drills through
+blocks while you hold the button. Bots carry random kits too.
+
+**Fast building.** The hotbar starts with snap-to-grid pieces (wall, floor, ramp, roof) that lock to
+a 5 m module grid so a full fortress takes minutes; `E` edits a placed wall or floor into doors,
+windows, arches or hatches from a tile grid; the **draw** tool turns a stroke on the ground into
+walls or filled plates (circles are detected). The classic block tools stay for detailing. At match
+end a shareable fortress card renders your build, and every round opens with a short camera flyby.
 
 Build mode is hotbar driven: `1-9` pick a slot (rendered block icons), `B` block, `V` box, `L` line,
 `N` wall, `K` stairs, `P` paint, `X` erase, `F` flag, `G` spawn, `C` prefab, `[` `]` cycle shapes
@@ -49,7 +62,8 @@ the camera, right-drag looks.
 
 **Phones and tablets** get a layout modelled on today's popular mobile shooters: a movement stick on
 the left (push far to sprint), look by dragging anywhere on the right, twin fire buttons, and only
-the essentials as buttons (jump, crouch, aim, reload, swap, grenade, grapple in a compact cluster).
+the essentials as buttons (jump, crouch, aim, reload, swap, grenade and the two gadget slots in a
+compact cluster).
 Auto fire and aim assist are on by default for touch and can be tuned in Settings together with
 button size and opacity. In the build phase: tap to place, long-press to remove, drag to orbit,
 pinch to zoom, two-finger drag to pan, a hotbar with thumbnails, a rotate/undo/redo/layer strip, and

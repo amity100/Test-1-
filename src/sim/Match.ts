@@ -55,7 +55,7 @@ export const RULES = {
   captureHeight: 2.4,
   respawnAttacker: 5,
   respawnDefender: 12,
-  introTime: 5,
+  introTime: 7,
   summaryTime: 7,
 };
 

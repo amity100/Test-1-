@@ -385,7 +385,7 @@ export class BotBrain {
     let best: Entity | null = null;
     let bestScore = Infinity;
     for (const o of this.ctx.entities()) {
-      if (o === e || !o.alive) continue;
+      if (o === e || !o.alive || o.burrowed) continue;
       const d = tmp.copy(o.pos).setY(o.pos.y + 1.2).sub(eye);
       const dist = d.length();
       // Hearing: recent gunfire within range (louder weapons carry further).
@@ -421,7 +421,7 @@ export class BotBrain {
       this.mem.lastSeenTime = now;
     } else {
       this.mem.visible = false;
-      if (this.mem.target && (!this.mem.target.alive || now - this.mem.lastSeenTime > this.profile.memory)) this.mem.target = null;
+      if (this.mem.target && (!this.mem.target.alive || this.mem.target.burrowed || now - this.mem.lastSeenTime > this.profile.memory)) this.mem.target = null;
     }
   }
 

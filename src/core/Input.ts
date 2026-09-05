@@ -14,8 +14,10 @@ export interface VirtualState {
   ads: boolean;
   reload: boolean;
   grenade: boolean;
-  grapple: boolean;
-  grappleReleased: boolean;
+  /** Gadget kit slots (two): edge flags plus held state. */
+  gadget: boolean[];
+  gadgetHeld: boolean[];
+  gadgetReleased: boolean[];
   interact: boolean;
   /** -1 none, 0..2 slot, 100 next weapon. */
   weaponSwitch: number;
@@ -45,12 +47,14 @@ function freshVirtual(): VirtualState {
     moveX: 0, moveY: 0, lookDX: 0, lookDY: 0,
     fire: false, firePressed: false, fireReleased: false,
     jump: false, jumpHeld: false, sprint: false, crouch: false, ads: false,
-    reload: false, grenade: false, grapple: false, grappleReleased: false, interact: false,
+    reload: false, grenade: false, gadget: [false, false], gadgetHeld: [false, false], gadgetReleased: [false, false], interact: false,
     weaponSwitch: -1, primary: false, secondary: false, primaryHeld: false, secondaryHeld: false, zoom: 0, panX: 0, panY: 0,
     tapped: false, tapX: 0, tapY: 0, longPress: false, heightDir: 0,
     strokeActive: false, strokeStart: false, strokeEnd: false, strokeX: 0, strokeY: 0,
   };
 }
+
+const GADGET_KEYS = ['KeyQ', 'KeyF'];
 
 /** True on phones/tablets (coarse pointer with touch points). */
 export const IS_TOUCH: boolean =
@@ -294,11 +298,15 @@ export class Input {
   grenadePressed(): boolean {
     return this.enabled && (this.pressed.has('KeyG') || this.virtual.grenade);
   }
-  grapplePressed(): boolean {
-    return this.enabled && (this.pressed.has('KeyQ') || this.virtual.grapple);
+  /** Gadget slots: Q is slot 0, F is slot 1 (touch: the two gadget buttons). */
+  gadgetPressed(i: number): boolean {
+    return this.enabled && (this.pressed.has(GADGET_KEYS[i]) || this.virtual.gadget[i]);
   }
-  grappleReleased(): boolean {
-    return this.enabled && (this.released.has('KeyQ') || this.virtual.grappleReleased);
+  gadgetHeld(i: number): boolean {
+    return this.enabled && (this.down.has(GADGET_KEYS[i]) || this.virtual.gadgetHeld[i]);
+  }
+  gadgetReleased(i: number): boolean {
+    return this.enabled && (this.released.has(GADGET_KEYS[i]) || this.virtual.gadgetReleased[i]);
   }
   interactPressed(): boolean {
     return this.enabled && (this.pressed.has('KeyE') || this.virtual.interact);
@@ -330,8 +338,8 @@ export class Input {
     v.jump = false;
     v.reload = false;
     v.grenade = false;
-    v.grapple = false;
-    v.grappleReleased = false;
+    v.gadget[0] = v.gadget[1] = false;
+    v.gadgetReleased[0] = v.gadgetReleased[1] = false;
     v.interact = false;
     v.weaponSwitch = -1;
     v.primary = false;

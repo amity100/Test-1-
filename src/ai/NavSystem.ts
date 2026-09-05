@@ -276,6 +276,11 @@ export class NavSystem {
     for (let i = 0; i < Math.min(count, this.plots.length); i++) this.gridFor(i);
   }
 
+  /** Drops a fortress grid after its blocks changed (breach charges, drilling); it is rebuilt lazily. */
+  invalidatePlot(plotIndex: number): void {
+    this.grids.delete(plotIndex);
+  }
+
   gridFor(plotIndex: number): NavGrid {
     let g = this.grids.get(plotIndex);
     if (!g) {
