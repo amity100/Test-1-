@@ -324,6 +324,10 @@ export class Game {
       const owner = this.entities.find((e) => e.plotIndex === plotIndex);
       const fm = new FlagMesh(new THREE.Color(owner?.colorHex ?? '#ffffff'));
       fm.group.position.copy(info.pos);
+      // Low rooms: shrink the banner so it is not buried in the ceiling.
+      let free = 0;
+      while (free < 6 && this.app.world.get(info.cell.x, info.cell.y + free, info.cell.z) === 0) free++;
+      fm.fit(Math.max(1, free));
       fm.group.visible = false;
       this.app.gr.scene.add(fm.group);
       this.flags.set(plotIndex, fm);
@@ -658,7 +662,7 @@ export class Game {
         break;
     }
     if (this.simOnly) return this.cameraFocus;
-    for (const fm of this.flags.values()) if (fm.group.visible) fm.update(dt, this.app.gr.camera.position);
+    for (const fm of this.flags.values()) if (fm.group.visible) fm.update(dt, this.app.gr.camera.position, this.player.role === 'attacker' && this.mode === 'battle');
     this.focus.update(dt, this.time);
     if (this.mode !== 'menu') this.vfx.ambient(this.app.gr.camera.position, dt);
     this.vfx.update(dt);

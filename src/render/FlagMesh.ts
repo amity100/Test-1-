@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { smoothstep } from '../core/MathUtil';
+import { clamp, smoothstep } from '../core/MathUtil';
 
 /** Painted banner texture: owner colour, dark diagonal band, emblem and fabric weave. */
 function bannerTexture(color: THREE.Color): THREE.CanvasTexture {
@@ -109,6 +109,11 @@ export class FlagMesh {
   private ring: THREE.Mesh;
   private sparks: THREE.Points;
   private sparkSeed: Float32Array;
+  private ghost: THREE.Group;
+  private ghostMat: THREE.MeshBasicMaterial;
+  private ghostBackMat: THREE.MeshBasicMaterial;
+  private beaconBase = 0;
+  private fitScale = 1;
   private time = 0;
   private near = 0;
   color: THREE.Color;
@@ -203,6 +208,34 @@ export class FlagMesh {
     this.beacon.position.y = 30;
     this.beacon.visible = false;
     this.group.add(this.beacon);
+
+    // Through-wall hologram of the flag, shown to attackers closing in on the fortress.
+    this.ghostMat = new THREE.MeshBasicMaterial({ color: color.clone().lerp(new THREE.Color(1, 1, 1), 0.45), transparent: true, opacity: 0, depthTest: false, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
+    this.ghost = new THREE.Group();
+    const gPole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 3.0, 8), this.ghostMat);
+    gPole.position.y = 1.7;
+    const gBanner = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.0), this.ghostMat);
+    gBanner.position.set(0.85, 2.4, 0);
+    const gBase = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.04, 6, 32), this.ghostMat);
+    gBase.rotation.x = Math.PI / 2;
+    gBase.position.y = 0.17;
+    for (const m of [gPole, gBanner, gBase]) {
+      m.renderOrder = 1000;
+      m.frustumCulled = false;
+    }
+    // Dark backing drawn first so the hologram stays legible over bright or same-coloured walls.
+    this.ghostBackMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0, depthTest: false, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
+    const bPole = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.13, 3.12, 8), this.ghostBackMat);
+    bPole.position.y = 1.7;
+    const bBanner = new THREE.Mesh(new THREE.PlaneGeometry(1.66, 1.16), this.ghostBackMat);
+    bBanner.position.set(0.85, 2.4, -0.001);
+    for (const m of [bPole, bBanner]) {
+      m.renderOrder = 999;
+      m.frustumCulled = false;
+    }
+    this.ghost.add(bPole, bBanner, gPole, gBanner, gBase);
+    this.ghost.visible = false;
+    this.group.add(this.ghost);
     this.group.name = 'flag';
   }
 
@@ -221,25 +254,69 @@ export class FlagMesh {
     (this.sparks.material as THREE.PointsMaterial).color.copy(c);
     (this.ring.material as THREE.MeshStandardMaterial).color.copy(c);
     (this.ring.material as THREE.MeshStandardMaterial).emissive.copy(c);
+    this.ghostMat.color.copy(c).lerp(new THREE.Color(1, 1, 1), 0.45);
+  }
+
+  /**
+   * Scales the flag so the banner fits under a low ceiling (`freeHeight` metres of air above the base).
+   * The beacon and hologram keep their world size so they stay readable.
+   */
+  fit(freeHeight: number): void {
+    const s = clamp((freeHeight - 0.12) / 3.4, 0.5, 1);
+    this.fitScale = s;
+    this.group.scale.setScalar(s);
+    this.beacon.scale.setScalar(1 / s);
+    this.beacon.position.y = 30 / s;
+    const ghostWorld = Math.max(s, 0.75);
+    this.ghost.scale.setScalar(ghostWorld / s);
   }
 
   /** Beacon visibility 0..1 (used when a captured flag or reveal is shown). */
   setBeacon(strength: number): void {
+    this.beaconBase = strength;
     (this.beacon.material as THREE.MeshBasicMaterial).opacity = strength * 0.35;
     this.beacon.visible = strength > 0.01;
   }
 
-  update(dt: number, viewer?: THREE.Vector3): void {
+  /**
+   * @param viewer camera position (proximity glow)
+   * @param reveal true for attackers: a beacon marks the fortress from afar and a hologram shows the
+   *   flag through walls while closing in, so a well-hidden flag is a challenge to reach, not to find.
+   */
+  update(dt: number, viewer?: THREE.Vector3, reveal = false): void {
     this.time += dt;
     const t = this.time;
     // Proximity: brighten from 20 m in, fully lit within 5 m.
     let target = 0;
+    let d = 1e9;
     if (viewer) {
-      const d = viewer.distanceTo(this.group.position);
+      d = viewer.distanceTo(this.group.position);
       target = smoothstep(20, 5, d);
     }
     this.near += (target - this.near) * Math.min(1, dt * 4);
     const near = this.near;
+
+    // Turn the banner broadside to the viewer so it never hides edge-on in a narrow corridor.
+    if (viewer && d < 80) {
+      const want = Math.atan2(viewer.x - this.group.position.x, viewer.z - this.group.position.z);
+      let diff = want - this.group.rotation.y;
+      diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+      if (diff > Math.PI / 2) diff -= Math.PI;
+      else if (diff < -Math.PI / 2) diff += Math.PI;
+      this.group.rotation.y += diff * Math.min(1, dt * 2.5);
+    }
+
+    // Reveal aids for attackers.
+    const holo = reveal && viewer ? smoothstep(7, 14, d) * (1 - smoothstep(40, 60, d)) : 0;
+    const holoOpacity = holo * (0.55 + Math.sin(t * 3.5) * 0.08);
+    this.ghostMat.opacity += (holoOpacity - this.ghostMat.opacity) * Math.min(1, dt * 5);
+    this.ghostBackMat.opacity = this.ghostMat.opacity * 0.8;
+    this.ghost.visible = this.ghostMat.opacity > 0.01;
+    const farBeacon = reveal && viewer ? 0.6 * smoothstep(12, 30, d) : 0;
+    const beacon = Math.max(this.beaconBase, farBeacon);
+    const bm = this.beacon.material as THREE.MeshBasicMaterial;
+    bm.opacity += (beacon * 0.35 - bm.opacity) * Math.min(1, dt * 3);
+    this.beacon.visible = bm.opacity > 0.004;
 
     // Cloth: wind wave growing towards the free edge, plus a gentle flutter.
     const pos = this.clothGeo.attributes.position as THREE.BufferAttribute;
