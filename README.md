@@ -47,6 +47,19 @@ steps on it, a sticky **breach charge** that blows a hole through fortress walls
 **burrow drill** that tunnels under the ground, surfaces inside the fortress and drills through
 blocks while you hold the button. Bots carry random kits too.
 
+**Command table.** The build phase opens on a fixed-angle plan view of your plot with the storeys
+above the current one cut away, and you paint the fortress with brushes instead of placing blocks:
+drag along the grid for a **wall** (corners included), tap for a **tower** (door, firing slits,
+spiral steps and a parapet), drag a rectangle for a **bunker** (a door facing the attackers, floors
+and a roof) or a **maze**, tap a wall with **openings** to pick a slit, window, door, gate, arch or
+crenels, tap for **stairs** or **cover**, and tap to plant the **flag**. A storey selector moves the
+whole table up a floor, the view rotates in 90° steps, a long press removes a piece, every brush
+stroke is a single undo step, and a red ribbon shows the route the bots will take from the doorstep
+to your flag with its length in metres, so you can see at once how much of a walk you are forcing on
+them. One finger paints and two fingers pan and zoom on a phone; on a desktop the mouse paints,
+right-drag pans, the wheel zooms, `Q`/`E` rotate, `1-6` pick the storey and `Ctrl+Z` undoes. The
+**3D** button switches to the free build view below (and back); the choice is remembered.
+
 **Fast building.** The hotbar starts with snap-to-grid pieces (wall, floor, ramp, roof) that lock to
 a 5 m module grid so a full fortress takes minutes; `E` edits a placed wall or floor into doors,
 windows, arches or hatches from a tile grid; the **draw** tool turns a stroke on the ground into
@@ -65,9 +78,10 @@ the left (push far to sprint), look by dragging anywhere on the right, twin fire
 the essentials as buttons (jump, crouch, aim, reload, swap, grenade and the two gadget slots in a
 compact cluster).
 Auto fire and aim assist are on by default for touch and can be tuned in Settings together with
-button size and opacity. In the build phase: tap to place, long-press to remove, drag to orbit,
-pinch to zoom, two-finger drag to pan, a hotbar with thumbnails, a rotate/undo/redo/layer strip, and
-a bottom sheet with materials, prefabs and templates. Landscape is recommended.
+button size and opacity. The build phase uses the command table (brush bar at the bottom, storey and
+camera buttons on the side) and, in the free 3D view: tap to place, long-press to remove, drag to
+orbit, pinch to zoom, two-finger drag to pan, a hotbar with thumbnails, a rotate/undo/redo/layer
+strip, and a bottom sheet with materials, prefabs and templates. Landscape is recommended.
 
 ## Tech
 

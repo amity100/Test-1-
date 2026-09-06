@@ -38,8 +38,15 @@ export interface VirtualState {
   strokeActive: boolean;
   strokeStart: boolean;
   strokeEnd: boolean;
+  /** The stroke was aborted (a second finger turned it into a camera gesture). */
+  strokeCancel: boolean;
   strokeX: number;
   strokeY: number;
+  /** How long the finger was down when the stroke ended (hardware event time, ms) and how far it travelled. */
+  strokeHeldMs: number;
+  strokeMoved: number;
+  /** The finger has been held still long enough for a long press (feedback tick; the action is decided on release). */
+  strokeLongTick: boolean;
 }
 
 function freshVirtual(): VirtualState {
@@ -50,7 +57,7 @@ function freshVirtual(): VirtualState {
     reload: false, grenade: false, gadget: [false, false], gadgetHeld: [false, false], gadgetReleased: [false, false], interact: false,
     weaponSwitch: -1, primary: false, secondary: false, primaryHeld: false, secondaryHeld: false, zoom: 0, panX: 0, panY: 0,
     tapped: false, tapX: 0, tapY: 0, longPress: false, heightDir: 0,
-    strokeActive: false, strokeStart: false, strokeEnd: false, strokeX: 0, strokeY: 0,
+    strokeActive: false, strokeStart: false, strokeEnd: false, strokeCancel: false, strokeX: 0, strokeY: 0, strokeHeldMs: 0, strokeMoved: 0, strokeLongTick: false,
   };
 }
 
@@ -74,6 +81,8 @@ export class Input {
   private buttonsDown = new Set<number>();
   private buttonsPressed = new Set<number>();
   private buttonsReleased = new Set<number>();
+  private buttonDownStamp = new Map<number, number>();
+  private buttonHeld = new Map<number, number>();
   mouseDX = 0;
   mouseDY = 0;
   wheel = 0;
@@ -133,14 +142,24 @@ export class Input {
     if (!this.isGameTarget(e.target)) return;
     this.buttonsDown.add(e.button);
     this.buttonsPressed.add(e.button);
+    this.buttonDownStamp.set(e.button, e.timeStamp);
     if (this.fallbackLook) this.fallbackActive = true;
   };
 
   private onMouseUp = (e: MouseEvent): void => {
     if (this.isTouch) return;
-    if (this.buttonsDown.has(e.button)) this.buttonsReleased.add(e.button);
+    if (this.buttonsDown.has(e.button)) {
+      this.buttonsReleased.add(e.button);
+      this.buttonHeld.set(e.button, e.timeStamp - (this.buttonDownStamp.get(e.button) ?? e.timeStamp));
+    }
     this.buttonsDown.delete(e.button);
   };
+
+  /** How long a mouse button has been (or was, at release) held, from hardware event timestamps (ms). */
+  buttonHeldMs(b: number): number {
+    if (this.buttonsDown.has(b)) return performance.now() - (this.buttonDownStamp.get(b) ?? performance.now());
+    return this.buttonHeld.get(b) ?? 0;
+  }
 
   private onMouseMove = (e: MouseEvent): void => {
     const rect = this.target.getBoundingClientRect();
@@ -346,6 +365,7 @@ export class Input {
     v.secondary = false;
     v.strokeStart = false;
     v.strokeEnd = false;
+    v.strokeCancel = false;
     v.zoom = 0;
     v.panX = 0;
     v.panY = 0;

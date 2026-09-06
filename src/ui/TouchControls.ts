@@ -2,7 +2,7 @@ import { el } from './dom';
 import type { Input } from '../core/Input';
 import { t } from '../core/i18n';
 
-export type TouchMode = 'none' | 'battle' | 'build';
+export type TouchMode = 'none' | 'battle' | 'build' | 'table';
 
 export interface TouchCallbacks {
   pause(): void;
@@ -311,7 +311,9 @@ export class TouchControls {
     this.reticle.hidden = mode !== 'build';
     this.hint.hidden = mode !== 'build';
     this.hint.textContent = t('tapHoldHint');
-    this.root.classList.toggle('build', mode === 'build');
+    // The command table (plan view) uses the whole screen as one drawing surface like build mode.
+    this.root.classList.toggle('build', mode === 'build' || mode === 'table');
+    this.root.classList.toggle('table', mode === 'table');
     this.pointers.clear();
     this.movePointer = null;
     this.stickBase.hidden = true;
@@ -337,15 +339,17 @@ export class TouchControls {
     const zone = e.currentTarget as HTMLElement;
     zone.setPointerCapture?.(e.pointerId);
     const isMove = zone === this.moveZone && this.mode === 'battle';
-    let role: Pointer['role'] = isMove ? 'move' : this.mode === 'build' ? (this.buildDraw ? 'draw' : 'orbit') : 'look';
+    const buildLike = this.mode === 'build' || this.mode === 'table';
+    let role: Pointer['role'] = isMove ? 'move' : this.mode === 'table' ? 'draw' : this.mode === 'build' ? (this.buildDraw ? 'draw' : 'orbit') : 'look';
     // Second finger in build mode starts a pinch.
-    if (this.mode === 'build' && this.pointers.size === 1) {
+    if (buildLike && this.pointers.size === 1) {
       role = 'pinch';
       const other = this.pointers.values().next().value as Pointer;
       if (other.role === 'draw') {
-        // A second finger turns a stroke into a camera gesture: finish what was drawn so far.
+        // A second finger turns a stroke into a camera gesture: finish what was drawn so far (the table cancels it).
         const v = this.input.virtual;
         v.strokeEnd = true;
+        v.strokeCancel = true;
         v.strokeActive = false;
       }
       other.role = 'pinch';
@@ -361,6 +365,18 @@ export class TouchControls {
       v.strokeActive = true;
       v.strokeX = e.clientX;
       v.strokeY = e.clientY;
+      v.strokeHeldMs = 0;
+      v.strokeMoved = 0;
+      v.strokeLongTick = false;
+      if (this.mode === 'table') {
+        // Held still: haptic tick so the player knows the release will erase (decided from event timestamps).
+        p.longTimer = window.setTimeout(() => {
+          if (this.pointers.get(p.id) !== p || p.moved >= 14 || p.role !== 'draw') return;
+          p.longFired = true;
+          this.input.virtual.strokeLongTick = true;
+          vibrate(12);
+        }, LONG_PRESS_MS);
+      }
     }
     if (role === 'orbit') {
       // A finger held still marks a long press (haptic tick); the erase itself is decided on release from
@@ -456,10 +472,13 @@ export class TouchControls {
         }
       }
     } else if (p.role === 'draw') {
+      if (p.longTimer) window.clearTimeout(p.longTimer);
       v.strokeEnd = true;
       v.strokeActive = false;
       v.strokeX = p.x;
       v.strokeY = p.y;
+      v.strokeHeldMs = e.timeStamp - p.downStamp;
+      v.strokeMoved = p.moved;
     } else if (p.role === 'pinch') {
       // Remaining finger goes back to orbit.
       for (const q of this.pointers.values()) if (q.role === 'pinch') q.role = 'orbit';

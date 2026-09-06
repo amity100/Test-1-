@@ -50,6 +50,8 @@ export interface BuildUICallbacks {
   pieceThumb(type: PieceType, style: StyleId, mat: Mat, color: number): string;
   /** Renders the shareable fortress card. */
   card(): void;
+  /** Switches between the command table and the free 3D build view. */
+  toggleView(): void;
 }
 
 type SheetTab = 'materials' | 'prefabs' | 'templates';
@@ -78,6 +80,8 @@ export class BuildUI {
   private unsub: (() => void) | null = null;
   private hotbarKey = '';
   private contextKey = '';
+
+  private table = false;
 
   constructor(parent: HTMLElement, private build: BuildMode, private cb: BuildUICallbacks, readonly compact: boolean) {
     this.root = el('div', `buildui ${compact ? 'compact' : ''}`);
@@ -140,6 +144,15 @@ export class BuildUI {
     this.build.uiHover = false;
   }
 
+  /** Command-table mode: the free-view tool strips are hidden and the top bar offers the view toggle. */
+  setTable(on: boolean): void {
+    if (this.table === on) return;
+    this.table = on;
+    this.root.classList.toggle('table', on);
+    this.sheet.hidden = true;
+    this.render();
+  }
+
   showToast(text: string): void {
     this.toast.textContent = text;
     this.toast.hidden = false;
@@ -179,13 +192,16 @@ export class BuildUI {
     bar.appendChild(this.budgetFill);
     budgetWrap.appendChild(bar);
     const actions = el('div', 'row');
+    const viewBtn = btn(this.table ? t('tbViewFree') : t('tbViewTable'), 'small view-toggle', () => this.cb.toggleView());
     if (this.compact) {
-      actions.append(btn(t('templates'), 'small', () => this.toggleSheet('templates')), btn('📸', 'small', () => this.cb.card()), btn(t('ready'), 'primary', () => this.cb.ready()));
+      if (this.table) actions.append(viewBtn, btn(t('ready'), 'primary', () => this.cb.ready()));
+      else actions.append(btn(t('templates'), 'small', () => this.toggleSheet('templates')), viewBtn, btn('📸', 'small', () => this.cb.card()), btn(t('ready'), 'primary', () => this.cb.ready()));
       this.topbar.append(this.timerEl, budgetWrap, this.statusEl, actions);
     } else {
       actions.append(
         btn(t('templates'), 'small', () => this.toggleSheet('templates')),
         btn(t('autoBuild'), 'small', () => this.cb.autoBuild()),
+        viewBtn,
         btn(`📸 ${esc(t('card'))}`, 'small', () => this.cb.card()),
         btn(t('ready'), 'primary', () => this.cb.ready()),
       );
@@ -198,7 +214,7 @@ export class BuildUI {
     this.strip.hidden = !this.compact;
     if (this.compact) this.renderStrip();
     else this.renderRail();
-    this.hint.hidden = this.compact;
+    this.hint.hidden = this.compact || this.table;
     this.updateHint();
     this.hotbarKey = '';
     this.contextKey = '';
@@ -519,7 +535,7 @@ export class BuildUI {
     this.hintKey = key;
     this.hint.textContent = t(key);
     // Phones get the short, tool-specific hints only.
-    this.hint.hidden = this.compact && key === 'buildHint';
+    this.hint.hidden = this.table || (this.compact && key === 'buildHint');
   }
 
   /** Cheap refresh of dynamic bits (active states, budget, status, hotbar, context). */

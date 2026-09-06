@@ -22,6 +22,8 @@ export interface SettingsData {
   /** Last chosen primary weapon and gadget kit (round loadout). */
   primary: string;
   kit: string[];
+  /** Build phase view: the command table (plan view) or the free 3D editor. */
+  buildView: 'table' | 'free';
 }
 
 const KEY = 'flagkeep.settings.v1';
@@ -42,6 +44,7 @@ const DEFAULTS: SettingsData = {
   touchOpacity: 0.7,
   primary: 'rifle',
   kit: ['zipline', 'breach'],
+  buildView: 'table',
 };
 
 export class Settings {

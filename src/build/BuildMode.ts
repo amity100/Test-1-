@@ -130,6 +130,9 @@ export class BuildMode {
   /** Modular pieces placed by the player, and which piece owns each block. */
   readonly pieces = new Map<string, PieceRecord>();
   private cellOwner = new Map<string, string>();
+  /** Plan-view (command table) mode: camera and pointer input are handled elsewhere; only overlays and validation run here. */
+  external = false;
+  private batch: Action | null = null;
   private editTiles: THREE.InstancedMesh;
   private pieceSnap: PiecePlacement | null = null;
   private stroke: Cell[] | null = null;
@@ -231,6 +234,16 @@ export class BuildMode {
     this.group.visible = true;
     this.input.exitPointerLock();
     this.recount();
+    this.dirtyValidate = true;
+  }
+
+  /** Resumes the free orbit view looking at the point the command table was centred on. */
+  enterFreeFrom(point: THREE.Vector3): void {
+    const p = this.plot;
+    this.focus.set(clamp(point.x, p.minX - 20, p.maxX + 20), clamp(point.y + 3, PLOT_Y + 1, PLOT_Y + PLOT_MAX_HEIGHT + 10), clamp(point.z, p.minZ - 20, p.maxZ + 20));
+    this.orbitYaw = 0.6;
+    this.orbitPitch = -0.7;
+    this.orbitDist = 46;
     this.dirtyValidate = true;
   }
 
@@ -430,12 +443,100 @@ export class BuildMode {
     }
     this.state.flag = flagAfter;
     this.state.spawn = spawnAfter;
-    this.undoStack.push(action);
-    if (this.undoStack.length > 300) this.undoStack.shift();
-    this.redoStack.length = 0;
+    if (this.batch) {
+      // Composite operations (a whole tower, a bunker) undo as one step.
+      this.batch.edits.push(...edits);
+      this.batch.pieces.push(...action.pieces);
+      this.batch.flagAfter = flagAfter;
+      this.batch.spawnAfter = spawnAfter;
+    } else {
+      this.undoStack.push(action);
+      if (this.undoStack.length > 300) this.undoStack.shift();
+      this.redoStack.length = 0;
+    }
     this.recount();
     this.dirtyValidate = true;
     this.emitChange();
+  }
+
+  /** Groups every edit until endBatch() into a single undo step. */
+  beginBatch(): void {
+    if (!this.batch) this.batch = { edits: [], pieces: [], flagBefore: this.state.flag, flagAfter: this.state.flag, spawnBefore: this.state.spawn, spawnAfter: this.state.spawn };
+  }
+
+  endBatch(): void {
+    const b = this.batch;
+    this.batch = null;
+    if (!b) return;
+    if (b.edits.length === 0 && b.pieces.length === 0 && b.flagAfter === b.flagBefore && b.spawnAfter === b.spawnBefore) return;
+    this.undoStack.push(b);
+    if (this.undoStack.length > 300) this.undoStack.shift();
+    this.redoStack.length = 0;
+    this.emitChange();
+  }
+
+  /** Block value of the selected material and colour (cube shape). */
+  get blockValue(): number {
+    return this.currentValue;
+  }
+
+  /** Block value the current style uses for a role (roof, ground...). */
+  styleValue(role: BlockRole): number {
+    return this.roleValue(role);
+  }
+
+  get budgetRemaining(): number {
+    return this.budgetLeft();
+  }
+
+  /** Places raw blocks (mirror-aware, budget-checked) as one edit. */
+  placeCells(cells: { x: number; y: number; z: number; value: number }[]): number {
+    const edits: Edit[] = [];
+    this.collect(cells.filter((c) => !this.blockedByMarker(c)), edits, new Set(), { n: this.budgetLeft() });
+    if (edits.length === 0) return 0;
+    this.applyEdits(edits, this.state.flag, this.state.spawn);
+    this.events.emit('placed', { count: edits.length });
+    return edits.length;
+  }
+
+  /** Erases raw blocks as one edit (piece records are kept in sync). */
+  eraseCells(cells: Cell[]): number {
+    const edits: Edit[] = [];
+    this.collect(cells.map((c) => ({ x: c.x, y: c.y, z: c.z, value: 0 })), edits, new Set(), { n: this.budgetLeft() });
+    if (edits.length === 0) return 0;
+    this.applyEdits(edits, this.fixMarker(this.state.flag, edits), this.fixMarker(this.state.spawn, edits));
+    this.events.emit('erased', { count: edits.length });
+    return edits.length;
+  }
+
+  /** Removes a whole piece (cells shared with other pieces are kept). */
+  removePiece(key: string): boolean {
+    const rec = this.pieces.get(key);
+    if (!rec) return false;
+    const others = new Set<string>();
+    for (const [k, r] of this.pieces) {
+      if (k === key) continue;
+      for (const c of pieceCells(this.plot, r, r.open)) others.add(BuildMode.cellKey(c.x, c.y, c.z));
+    }
+    const cells: { x: number; y: number; z: number; value: number }[] = [];
+    for (const c of pieceCells(this.plot, rec, rec.open)) {
+      if (others.has(BuildMode.cellKey(c.x, c.y, c.z))) continue;
+      if (this.world.get(c.x, c.y, c.z) === 0) continue;
+      cells.push({ x: c.x, y: c.y, z: c.z, value: 0 });
+    }
+    const edits: Edit[] = [];
+    this.collect(cells, edits, new Set(), { n: this.budgetLeft() });
+    this.applyEdits(edits, this.fixMarker(this.state.flag, edits), this.fixMarker(this.state.spawn, edits), [{ key, before: rec, after: null }]);
+    this.events.emit('erased', { count: edits.length });
+    return true;
+  }
+
+  /** Sets the open cells of a wall/floor piece (doors, windows, slits, hatches) by key. */
+  setPieceOpen(key: string, open: boolean[]): boolean {
+    const rec = this.pieces.get(key);
+    if (!rec || open.length !== rec.open.length) return false;
+    this.applyOpen(rec, open);
+    return true;
   }
 
   undo(): void {
@@ -669,12 +770,12 @@ export class BuildMode {
   }
 
   /** Cost of placing the piece: new blocks it would add (existing blocks are kept). */
-  private pieceNewCells(p: PiecePlacement): { x: number; y: number; z: number; value: number }[] {
+  private pieceNewCells(p: PiecePlacement, open?: boolean[]): { x: number; y: number; z: number; value: number }[] {
     const st = this.state;
     const base = encodeBlock(st.mat, st.color, 0);
     const roofVal = this.roleValue('roof');
     const out: { x: number; y: number; z: number; value: number }[] = [];
-    for (const c of pieceCells(this.plot, p)) {
+    for (const c of pieceCells(this.plot, p, open)) {
       if (!this.inPlot(c.x, c.y, c.z) || this.blockedByMarker(c)) continue;
       if (this.world.get(c.x, c.y, c.z) !== 0) continue;
       out.push({ x: c.x, y: c.y, z: c.z, value: withShape(c.roof ? roofVal : base, c.shape) });
@@ -682,11 +783,13 @@ export class BuildMode {
     return out;
   }
 
-  /** Places a modular piece; returns true when blocks were added. */
-  placePiece(p: PiecePlacement): boolean {
+  /** Places a modular piece (optionally with open cells such as a door); returns true when blocks were added. */
+  placePiece(p: PiecePlacement, open?: boolean[]): boolean {
     const key = pieceKey(p);
     const st = this.state;
-    const list = this.pieceNewCells(p);
+    const grid = editGrid(p.type);
+    const mask = grid ? (open && open.length === grid.cols * grid.rows ? open.slice() : new Array<boolean>(grid.cols * grid.rows).fill(false)) : [];
+    const list = this.pieceNewCells(p, mask);
     if (list.length === 0) return false;
     if (list.length > this.budgetLeft()) {
       this.events.emit('invalid', { key: 'budgetExceeded' });
@@ -695,9 +798,8 @@ export class BuildMode {
     const edits: Edit[] = [];
     this.collect(list, edits, new Set(), { n: this.budgetLeft() });
     if (edits.length === 0) return false;
-    const grid = editGrid(p.type);
     const existing = this.pieces.get(key) ?? null;
-    const rec: PieceRecord = { ...p, key, value: encodeBlock(st.mat, st.color, 0), open: grid ? new Array(grid.cols * grid.rows).fill(false) : [] };
+    const rec: PieceRecord = { ...p, key, value: encodeBlock(st.mat, st.color, 0), open: mask };
     this.applyEdits(edits, st.flag, st.spawn, [{ key, before: existing, after: rec }]);
     this.events.emit('placed', { count: edits.length });
     return true;
@@ -771,7 +873,7 @@ export class BuildMode {
       return;
     }
     this.applyEdits(edits, this.fixMarker(this.state.flag, edits), this.fixMarker(this.state.spawn, edits), [{ key: rec.key, before: rec, after }]);
-    this.state.editing = rec.key;
+    if (!this.external) this.state.editing = rec.key;
     this.events.emit(edits.some((e) => e.after !== 0) ? 'placed' : 'erased', { count: edits.length });
   }
 
@@ -1296,6 +1398,16 @@ export class BuildMode {
 
   update(dt: number): void {
     if (!this.active) return;
+    if (this.external) {
+      this.ghost.visible = false;
+      this.ghostBox.visible = false;
+      this.prefabGhost.visible = false;
+      this.shapeGhost.visible = false;
+      this.editTiles.visible = false;
+      this.layerGrid.visible = false;
+      this.updateOverlays(dt);
+      return;
+    }
     const input = this.input;
     if (!input.isTouch) {
       // Re-derive UI hover from the element under the pointer: panels re-render under the cursor and can miss mouseleave.
@@ -1412,39 +1524,6 @@ export class BuildMode {
         (this.prefabGhost.material as THREE.MeshBasicMaterial).color.set(PALETTE[st.color]);
       }
     }
-    // Markers
-    if (st.flag) {
-      this.flagMarker.group.visible = true;
-      this.flagMarker.group.position.set(st.flag.x + 0.5, st.flag.y, st.flag.z + 0.5);
-      this.flagMarker.update(dt, this.camera.position);
-    } else this.flagMarker.group.visible = false;
-    if (st.spawn) {
-      this.spawnMarker.visible = true;
-      this.spawnMarker.position.set(st.spawn.x + 0.5, st.spawn.y + 0.05, st.spawn.z + 0.5);
-    } else this.spawnMarker.visible = false;
-    // Placement pops
-    if (this.pops.length) {
-      const m = new THREE.Matrix4();
-      let n = 0;
-      for (let i = this.pops.length - 1; i >= 0; i--) {
-        const pp = this.pops[i];
-        pp.t += dt;
-        if (pp.t > 0.22) {
-          this.pops.splice(i, 1);
-          continue;
-        }
-        const k = pp.t / 0.22;
-        const sc = 1.28 - 0.28 * k;
-        m.makeScale(sc, sc, sc).setPosition(pp.x + 0.5, pp.y + 0.5, pp.z + 0.5);
-        this.popMesh.setMatrixAt(n, m);
-        this.popMesh.setColorAt(n, pp.color);
-        n++;
-      }
-      this.popMesh.count = n;
-      this.popMesh.instanceMatrix.needsUpdate = true;
-      if (this.popMesh.instanceColor) this.popMesh.instanceColor.needsUpdate = true;
-      this.popMesh.visible = n > 0;
-    } else this.popMesh.visible = false;
     this.layerGrid.visible = st.layerLock;
     if (st.layerLock) this.layerGrid.position.set(this.plot.cx, st.layerY + 0.02, this.plot.cz);
 
@@ -1484,6 +1563,45 @@ export class BuildMode {
         this.rightClickCell = null;
       }
     }
+    this.updateOverlays(dt);
+  }
+
+  /** Markers, placement pops and debounced validation (also the whole update in plan-view mode). */
+  private updateOverlays(dt: number): void {
+    const st = this.state;
+    // Markers
+    if (st.flag) {
+      this.flagMarker.group.visible = true;
+      this.flagMarker.group.position.set(st.flag.x + 0.5, st.flag.y, st.flag.z + 0.5);
+      this.flagMarker.update(dt, this.camera.position);
+    } else this.flagMarker.group.visible = false;
+    if (st.spawn) {
+      this.spawnMarker.visible = true;
+      this.spawnMarker.position.set(st.spawn.x + 0.5, st.spawn.y + 0.05, st.spawn.z + 0.5);
+    } else this.spawnMarker.visible = false;
+    // Placement pops
+    if (this.pops.length) {
+      const m = new THREE.Matrix4();
+      let n = 0;
+      for (let i = this.pops.length - 1; i >= 0; i--) {
+        const pp = this.pops[i];
+        pp.t += dt;
+        if (pp.t > 0.22) {
+          this.pops.splice(i, 1);
+          continue;
+        }
+        const k = pp.t / 0.22;
+        const sc = 1.28 - 0.28 * k;
+        m.makeScale(sc, sc, sc).setPosition(pp.x + 0.5, pp.y + 0.5, pp.z + 0.5);
+        this.popMesh.setMatrixAt(n, m);
+        this.popMesh.setColorAt(n, pp.color);
+        n++;
+      }
+      this.popMesh.count = n;
+      this.popMesh.instanceMatrix.needsUpdate = true;
+      if (this.popMesh.instanceColor) this.popMesh.instanceColor.needsUpdate = true;
+      this.popMesh.visible = n > 0;
+    } else this.popMesh.visible = false;
     // Debounced validation
     if (this.dirtyValidate) {
       this.validateTimer += dt;
@@ -1492,7 +1610,7 @@ export class BuildMode {
         this.validateNow();
       }
     }
-  }
+    }
 
   /** Ghosts and input for the piece and draw tools. */
   private updateModular(cell: Cell | null): void {

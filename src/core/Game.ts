@@ -24,6 +24,8 @@ import { Screens, type SummaryRow, type PodiumRow } from '../ui/Screens';
 import { composeCard } from '../ui/FortressCard';
 import { BuildMode } from '../build/BuildMode';
 import { BuildUI } from '../build/BuildUI';
+import { CommandTable } from '../build/Table';
+import { TableUI } from '../build/TableUI';
 import { TouchControls, vibrate } from '../ui/TouchControls';
 import { IS_TOUCH } from './Input';
 import { generateFortress } from '../world/FortressGen';
@@ -80,6 +82,10 @@ export class Game {
   screens: Screens;
   build: BuildMode | null = null;
   buildUI: BuildUI | null = null;
+  table: CommandTable | null = null;
+  tableUI: TableUI | null = null;
+  /** Whether the command table (plan view) is the active build view. */
+  tableActive = false;
   touch: TouchControls;
   private rotateHint: HTMLElement;
   private projectileMeshes = new Map<number, THREE.Object3D>();
@@ -206,6 +212,7 @@ export class Game {
 
   private onLanguageChanged(): void {
     if (this.buildUI) this.buildUI.render();
+    if (this.tableUI) this.tableUI.refresh();
   }
 
   // ---------------- match flow ----------------
@@ -280,6 +287,19 @@ export class Game {
         prefabThumb: (id, size, style) => thumbs.prefab(id, size, style),
         pieceThumb: (p, style, m, c) => thumbs.piece(p, style, m, c),
         card: () => void this.showFortressCard(),
+        toggleView: () => this.setBuildView(this.tableActive ? 'free' : 'table'),
+      },
+      IS_TOUCH || window.innerWidth < 900,
+    );
+    this.table = new CommandTable(this.build, this.app.world, this.app.terrain, plots[0], this.app.plots, this.app.input, this.app.gr.camera, this.app.gr.scene, this.app.materials, this.app.gr.renderer);
+    this.tableUI = new TableUI(
+      this.uiRoot,
+      this.table,
+      this.build,
+      {
+        toggleView: () => this.setBuildView('free'),
+        more: () => this.buildUI?.toggleSheet('templates'),
+        pause: () => (this.paused ? this.resume() : this.pause()),
       },
       IS_TOUCH || window.innerWidth < 900,
     );
@@ -298,10 +318,36 @@ export class Game {
     this.build.enter();
     this.buildUI.show();
     this.mode = 'build';
+    this.app.gr.camera.position.set(plots[0].cx + 30, PLOT_Y + 30, plots[0].cz + 40);
+    this.tableActive = false;
+    this.setBuildView(settings.data.buildView);
     this.setTouchMode();
     match.startBuild();
     audio.music('build');
-    this.app.gr.camera.position.set(plots[0].cx + 30, PLOT_Y + 30, plots[0].cz + 40);
+  }
+
+  /** Switches the build phase between the command table (plan view) and the free 3D view. */
+  setBuildView(view: 'table' | 'free'): void {
+    if (!this.build || !this.table || !this.buildUI || !this.tableUI || this.mode !== 'build') return;
+    const on = view === 'table';
+    if (on === this.tableActive) return;
+    this.tableActive = on;
+    if (on) {
+      this.build.state.editing = null;
+      this.table.enter();
+      this.tableUI.show();
+    } else {
+      this.table.exit();
+      this.tableUI.hide();
+      this.build.enterFreeFrom(this.table.pan);
+    }
+    this.buildUI.setTable(on);
+    this.touch.setBuildDraw(!on && this.build.state.tool === 'draw' && !this.build.state.editing);
+    if (settings.data.buildView !== view) {
+      settings.data.buildView = view;
+      settings.save();
+    }
+    this.setTouchMode();
   }
 
   /** Ground layer of a plot takes the style's ground block. */
@@ -343,6 +389,9 @@ export class Game {
     const spawn = this.build.state.spawn ?? flag;
     this.match.setFlag(0, flag);
     this.match.setSpawn(0, spawn);
+    this.table?.exit();
+    this.tableUI?.hide();
+    this.tableActive = false;
     this.build.exit();
     this.buildUI?.hide();
     this.app.chunks.flush();
@@ -377,7 +426,7 @@ export class Game {
       this.rotateHint.hidden = true;
       return;
     }
-    const m = this.mode === 'battle' ? 'battle' : this.mode === 'build' ? 'build' : 'none';
+    const m = this.mode === 'battle' ? 'battle' : this.mode === 'build' ? (this.tableActive ? 'table' : 'build') : 'none';
     this.touch.setMode(m);
     this.rotateHint.hidden = m === 'none';
   }
@@ -611,6 +660,12 @@ export class Game {
   }
 
   private cleanupMatch(): void {
+    this.table?.dispose();
+    this.table = null;
+    this.tableUI?.hide();
+    this.tableUI?.root.remove();
+    this.tableUI = null;
+    this.tableActive = false;
     this.build?.dispose();
     this.build = null;
     this.buildUI?.hide();
@@ -773,8 +828,12 @@ export class Game {
         this.menuCamera(dt);
         break;
       case 'build':
-        if (!this.paused) this.build?.update(dt);
+        if (!this.paused) {
+          if (this.tableActive) this.table?.update(dt);
+          this.build?.update(dt);
+        }
         this.buildUI?.update(dt, match?.buildTimeLeft ?? null);
+        if (this.tableActive) this.tableUI?.update(dt);
         this.cameraFocus.copy(this.app.gr.camera.position);
         break;
       case 'intro':
@@ -1161,9 +1220,13 @@ export class Game {
       }
     };
     hide(this.build?.visuals);
+    hide(this.table?.visuals);
     hide(this.viewModel.root);
+    const cutaway = this.tableActive;
+    if (cutaway) this.table?.setCutaway(false);
     gr.composer.render(1 / 60);
     const url = gr.renderer.domElement.toDataURL('image/jpeg', 0.92);
+    if (cutaway) this.table?.setCutaway(true);
     for (const o of hidden) o.visible = true;
     cam.position.copy(savedPos);
     cam.quaternion.copy(savedQuat);
