@@ -157,7 +157,7 @@ export class Game {
     this.touch.bindWeaponSlots(this.hud.root);
     this.rotateHint = document.createElement('div');
     this.rotateHint.className = 'rotate-hint';
-    this.rotateHint.textContent = t('rotateDevice');
+    this.rotateHint.innerHTML = `<span>${t('rotateDevice')}</span>`;
     this.rotateHint.hidden = true;
     this.uiRoot.appendChild(this.rotateHint);
     this.wireCombat();

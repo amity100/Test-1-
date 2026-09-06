@@ -154,7 +154,9 @@ export class TouchControls {
       if (!b.classList.contains('down')) return;
       b.classList.remove('down');
       opts.up?.();
-      opts.tap?.();
+      // The browser still dispatches a click after this pointerup; defer UI-changing taps so that click
+      // lands on this button and not on whatever the tap just revealed underneath.
+      if (opts.tap) window.setTimeout(opts.tap, 0);
     };
     b.addEventListener('pointerup', release);
     b.addEventListener('pointercancel', release);

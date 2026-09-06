@@ -41,7 +41,7 @@ html, body {
   pointer-events: none;
   z-index: 10;
 }
-#ui > .screens { pointer-events: none; }
+#ui > .screens { position: absolute; inset: 0; pointer-events: none; z-index: 9; }
 .screens .screen { pointer-events: auto; }
 #loading {
   position: fixed;
@@ -245,7 +245,7 @@ html, body {
 .ptable tr.you td, .scoreboard tr.you td { background: rgba(0, 229, 255, 0.1); }
 
 /* ---------- HUD ---------- */
-.hud { position: absolute; inset: 0; pointer-events: none; font-variant-numeric: tabular-nums; }
+.hud { position: absolute; inset: 0; pointer-events: none; font-variant-numeric: tabular-nums; z-index: 6; }
 .hud > * { pointer-events: none; }
 .crosshair { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
 .crosshair .tick { position: absolute; left: 0; top: 0; width: 2px; height: 8px; background: #fff; box-shadow: 0 0 4px rgba(0, 0, 0, 0.9); border-radius: 1px; }
@@ -330,7 +330,7 @@ html, body {
 @keyframes popUp { from { transform: translateY(0); opacity: 1; } to { transform: translateY(-60px); opacity: 0; } }
 
 /* ---------- Build UI ---------- */
-.buildui { position: absolute; inset: 0; pointer-events: none; }
+.buildui { position: absolute; inset: 0; pointer-events: none; z-index: 7; }
 .buildui > * { pointer-events: auto; }
 .b-top { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px 16px; backdrop-filter: blur(10px); white-space: nowrap; flex-wrap: nowrap; max-width: 96vw; }
 .b-top .row { flex-wrap: nowrap; gap: 8px; }
@@ -423,7 +423,10 @@ html, body {
 .build-reticle { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; border: 2px solid rgba(255, 255, 255, 0.85); border-radius: 4px; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35); pointer-events: none; }
 .build-reticle::after { content: ''; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; background: var(--accent); border-radius: 50%; }
 .touch-hint { position: absolute; left: 50%; bottom: calc(104px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); font-size: 11px; color: rgba(255, 255, 255, 0.7); background: rgba(0, 0, 0, 0.35); padding: 4px 10px; border-radius: 8px; pointer-events: none; white-space: nowrap; }
-.rotate-hint { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: var(--panel-strong); border: 1px solid var(--line); padding: 14px 20px; border-radius: 14px; font-size: 15px; text-align: center; max-width: 80vw; pointer-events: none; z-index: 60; }
+.rotate-hint { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 24px; background: rgba(8, 14, 22, 0.88); font-family: var(--display); font-weight: 700; font-size: 20px; letter-spacing: 0.08em; text-transform: uppercase; pointer-events: auto; z-index: 60; }
+.rotate-hint::before { content: '📱'; display: block; font-size: 44px; margin-bottom: 12px; animation: rotateHint 1.6s ease-in-out infinite; }
+.rotate-hint > span { display: block; max-width: 80vw; }
+@keyframes rotateHint { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-90deg); } }
 @media (orientation: landscape) { .rotate-hint { display: none; } }
 @media (pointer: fine) { .rotate-hint { display: none; } }
 
@@ -700,7 +703,7 @@ body { background: radial-gradient(1200px 800px at 50% 30%, #16283a 0%, #0f1923 
 .b-rail .tool .hk { margin-inline-start: auto; font: 600 10px/1 var(--display); color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 2px 4px; }
 .b-rail .tool.active .hk { color: var(--accent); border-color: var(--accent); }
 .b-strip { position: absolute; left: 12px; bottom: 84px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 6px; background: var(--panel-strong); border: 1px solid var(--line); border-radius: 12px; }
-[dir='rtl'] .b-strip { left: auto; right: 12px; }
+[dir='rtl'] .buildui:not(.compact) .b-strip { left: auto; right: 12px; }
 .b-strip .tool { width: 42px; height: 42px; padding: 0; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
 .b-strip .tool .ico { display: flex; }
 .mat-grid, .pf-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 8px; }
@@ -815,4 +818,9 @@ body { background: radial-gradient(1200px 800px at 50% 30%, #16283a 0%, #0f1923 
   .loadout .lo-card { padding: 6px 2px 4px; }
   .loadout .lo-card svg { width: 22px; height: 22px; }
   .loadout .lo-foot .btn { padding: 4px 12px; }
+}
+
+/* Short landscape phones: keep the panel's action row (Start, Back) pinned while the rest scrolls. */
+@media (max-height: 520px) {
+  .panel > .row:last-child { position: sticky; bottom: -12px; margin: 8px -16px -12px; padding: 10px 16px 12px; background: linear-gradient(180deg, rgba(8, 14, 22, 0), rgba(8, 14, 22, 0.96) 35%); z-index: 1; }
 }
