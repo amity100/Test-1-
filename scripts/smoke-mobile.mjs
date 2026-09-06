@@ -31,46 +31,44 @@ await page.touchscreen.tap(pb.x + pb.width / 2, pb.y + pb.height / 2);
 await page.waitForTimeout(500);
 await page.screenshot({ path: path.join(outDir, 'm2-setup.png') });
 await page.evaluate(() => window.__fk.game().debugQuickMatch(2, 'easy', 60));
-// These checks exercise the free 3D build view; the match opens on the command table by default.
-await page.waitForFunction(() => window.__fk.game().tableActive, { timeout: 60000 });
-await page.evaluate(() => window.__fk.game().setBuildView('free'));
 await page.waitForTimeout(2500);
 await page.screenshot({ path: path.join(outDir, 'm3-build.png') });
-// Tap on the plot centre to place a block
-const target = await page.evaluate(() => {
-  const g = window.__fk.game(); const b = g.build; const p = b.plot; const cam = g.app.gr.camera;
-  const v = new (Object.getPrototypeOf(cam.position).constructor)(p.cx + 0.5, 12.0, p.cz + 0.5); v.project(cam);
-  return { x: ((v.x + 1) / 2) * window.innerWidth, y: ((1 - v.y) / 2) * window.innerHeight };
-});
+// Block builder with real touch: tap the plot centre to grow a room, tap its roof to stack, hold to remove.
+// Taps carry planned hardware timestamps so a stalled headless frame cannot turn a tap into a long press.
+const stamped = (type, pts, ts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts.map((p, i) => ({ x: p.x, y: p.y, id: i })), timestamp: ts });
+const tapAt = async (x, y, holdMs = 60) => { const t0 = Date.now() / 1000; await stamped('touchStart', [{ x, y }], t0); await page.waitForTimeout(holdMs); await stamped('touchEnd', [], t0 + holdMs / 1000); await page.waitForTimeout(250); };
+const screenOf = (x, y, z) => page.evaluate(([x, y, z]) => { const cam = window.__fk.app.gr.camera; const v = new (Object.getPrototypeOf(cam.position).constructor)(x, y, z); v.project(cam); return { x: ((v.x + 1) / 2) * innerWidth, y: ((1 - v.y) / 2) * innerHeight }; }, [x, y, z]);
+const bst = () => page.evaluate(() => { const g = window.__fk.game(); g.debugAdvance(1 / 60); const b = g.builder; return { blocks: b.blocks, height: b.plan.height(), last: b.debugLast }; });
+const plot = await page.evaluate(() => { const p = window.__fk.game().builder.plot; return { cx: p.cx, cz: p.cz }; });
+let target = await screenOf(plot.cx + 0.5, 12, plot.cz + 0.5);
 console.log('tap target', JSON.stringify(target));
-await touch('touchStart', [{ x: target.x, y: target.y }]);
-await page.waitForTimeout(60);
-await touch('touchEnd', []);
-// Step one simulation frame deterministically (the headless renderer can take >1 s per frame).
-let used = await page.evaluate(() => { const g = window.__fk.game(); g.debugAdvance(1 / 60); return g.build.state.used; });
-console.log('after tap used', used);
-// Place button (centre reticle)
-const placeBtn = await page.$('.tb-build .tb.place');
-const bb = await placeBtn.boundingBox();
-// Move the cursor cell first so the button places somewhere new (orbit a little).
-await drag(600, 250, 640, 250, 6);
-await touch('touchStart', [{ x: bb.x + bb.width / 2, y: bb.y + bb.height / 2 }]);
-await page.waitForTimeout(60);
-await touch('touchEnd', []);
-const before = used;
-used = await page.evaluate(() => { const g = window.__fk.game(); g.debugAdvance(1 / 60); return g.build.state.used; });
-console.log('after PLACE used', used, used > before ? 'OK' : 'FAIL');
-// Orbit drag on the right side
+await tapAt(target.x, target.y);
+let st = await bst();
+console.log('after ground tap', JSON.stringify(st), st.blocks === 1 ? 'OK' : 'FAIL');
+target = await screenOf(plot.cx + 0.5, 12 + 4.6, plot.cz + 0.5);
+await tapAt(target.x, target.y);
+st = await bst();
+console.log('after roof tap', JSON.stringify(st), st.blocks === 2 ? 'OK' : 'FAIL');
+// Palette swatch then a third room on the ground.
+const sw = await page.$('.bld-swatch[data-tone="3"]');
+const sb = await sw.boundingBox();
+await tapAt(sb.x + sb.width / 2, sb.y + sb.height / 2);
+target = await screenOf(plot.cx - 4.5, 12, plot.cz + 0.5);
+await tapAt(target.x, target.y);
+st = await bst();
+console.log('after swatch + tap', JSON.stringify(st), st.blocks === 3 && st.last.endsWith(':3') ? 'OK' : 'FAIL');
+// Long press removes.
+target = await screenOf(plot.cx - 4.5, 12 + 2, plot.cz + 3.2);
+await tapAt(target.x, target.y, 750);
+st = await bst();
+console.log('after long press', JSON.stringify(st), st.blocks === 2 ? 'OK' : 'FAIL');
+// Orbit drag.
+const yaw0 = await page.evaluate(() => window.__fk.game().builder.debugState().yaw);
 await drag(600, 250, 700, 260, 10);
-await page.waitForTimeout(400);
-// Open the tools sheet
-const tools = await page.$('.tb-build .tb.tools');
-const tb = await tools.boundingBox();
-await touch('touchStart', [{ x: tb.x + tb.width / 2, y: tb.y + tb.height / 2 }]);
-await page.waitForTimeout(60);
-await touch('touchEnd', []);
-await page.waitForTimeout(500);
-await page.screenshot({ path: path.join(outDir, 'm4-build-sheet.png') });
+await page.waitForTimeout(300);
+const yaw1 = await page.evaluate(() => window.__fk.game().builder.debugState().yaw);
+console.log('orbit yaw delta', (yaw1 - yaw0).toFixed(2), Math.abs(yaw1 - yaw0) > 0.15 ? 'OK' : 'FAIL');
+await page.screenshot({ path: path.join(outDir, 'm4-build-blocks.png') });
 // Battle
 await page.evaluate(() => window.__fk.game().debugSkipBuild());
 await page.waitForTimeout(600);

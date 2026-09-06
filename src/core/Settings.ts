@@ -22,8 +22,6 @@ export interface SettingsData {
   /** Last chosen primary weapon and gadget kit (round loadout). */
   primary: string;
   kit: string[];
-  /** Build phase view: the command table (plan view) or the free 3D editor. */
-  buildView: 'table' | 'free';
 }
 
 const KEY = 'flagkeep.settings.v1';
@@ -32,7 +30,7 @@ const DEFAULTS: SettingsData = {
   quality: 'auto',
   language: (typeof navigator !== 'undefined' && navigator.language?.toLowerCase().startsWith('he')) ? 'he' : 'en',
   sensitivity: 1.0,
-  fov: 80,
+  fov: 72,
   volume: 0.8,
   music: 0.5,
   invertY: false,
@@ -44,7 +42,6 @@ const DEFAULTS: SettingsData = {
   touchOpacity: 0.7,
   primary: 'rifle',
   kit: ['zipline', 'breach'],
-  buildView: 'table',
 };
 
 export class Settings {
@@ -54,7 +51,14 @@ export class Settings {
   load(): void {
     try {
       const raw = localStorage.getItem(KEY);
-      if (raw) this.data = { ...DEFAULTS, ...JSON.parse(raw) };
+      if (raw) {
+        const stored = JSON.parse(raw) as Partial<SettingsData> & { v?: number };
+        // v2: the old 80° vertical default was a fisheye; keep custom values, replace the old default.
+        if (stored.v === undefined) {
+          if (stored.fov === 80) stored.fov = 72;
+        }
+        this.data = { ...DEFAULTS, ...stored };
+      }
     } catch {
       /* storage unavailable */
     }
@@ -62,7 +66,7 @@ export class Settings {
 
   save(): void {
     try {
-      localStorage.setItem(KEY, JSON.stringify(this.data));
+      localStorage.setItem(KEY, JSON.stringify({ ...this.data, v: 2 }));
     } catch {
       /* ignore */
     }

@@ -12,49 +12,33 @@ page.on('console', (m) => { if (m.type() === 'error' && !m.text().includes('ERR_
 await page.goto(url, { waitUntil: 'domcontentloaded' });
 await page.waitForFunction(() => window.__fk && (window.__fk.ready || window.__fk.error), { timeout: 240000 });
 await page.evaluate(() => window.__fk.game().debugQuickMatch(2, 'easy', 60));
-// These checks exercise the free 3D build view; the match opens on the command table by default.
-await page.waitForFunction(() => window.__fk.game().tableActive, { timeout: 60000 });
-await page.evaluate(() => window.__fk.game().setBuildView('free'));
 await page.waitForTimeout(2500);
-// Project a cell in the plot centre to screen space.
-const target = await page.evaluate(() => {
-  const g = window.__fk.game();
-  const b = g.build;
-  const p = b.plot;
-  const cam = g.app.gr.camera;
-  const v = new (Object.getPrototypeOf(cam.position).constructor)(p.cx + 0.5, 12.0, p.cz + 0.5);
-  v.project(cam);
-  return { x: ((v.x + 1) / 2) * window.innerWidth, y: ((1 - v.y) / 2) * window.innerHeight, used: b.state.used, tool: b.state.tool, enabled: g.app.input.enabled, hover: b.uiHover };
-});
-console.log('target', JSON.stringify(target));
+// The block builder: click the plot centre to grow a room, click its roof to stack, right-click to remove.
+const screenOf = (x, y, z) => page.evaluate(([x, y, z]) => { const cam = window.__fk.app.gr.camera; const v = new (Object.getPrototypeOf(cam.position).constructor)(x, y, z); v.project(cam); return { x: ((v.x + 1) / 2) * innerWidth, y: ((1 - v.y) / 2) * innerHeight }; }, [x, y, z]);
+const plot = await page.evaluate(() => { const p = window.__fk.game().builder.plot; return { cx: p.cx, cz: p.cz }; });
+const bst = () => page.evaluate(() => { const b = window.__fk.game().builder; return { blocks: b.blocks, height: b.plan.height(), last: b.debugLast, voxels: b.result?.blocks ?? 0 }; });
+let target = await screenOf(plot.cx + 0.5, 12, plot.cz + 0.5);
 await page.mouse.move(target.x, target.y);
-await page.waitForTimeout(300);
-await page.mouse.move(target.x + 1, target.y + 1);
-await page.waitForTimeout(300);
-const cursor = await page.evaluate(() => { const b = window.__fk.game().build; return { cell: b.cursorCell, hit: b.cursorHitBlock, cx: window.__fk.game().app.input.cursorX, cy: window.__fk.game().app.input.cursorY }; });
-console.log('cursor', JSON.stringify(cursor));
-await page.mouse.down(); await page.waitForTimeout(150); await page.mouse.up();
-await page.waitForTimeout(600);
-let st = await page.evaluate(() => { const b = window.__fk.game().build; return { used: b.state.used, canUndo: b.state.canUndo }; });
-console.log('after click', JSON.stringify(st));
-// Click a few more times slightly offset (stacking)
-for (let i = 0; i < 3; i++) { await page.mouse.click(target.x, target.y - i * 6); await page.waitForTimeout(400); }
-st = await page.evaluate(() => ({ used: window.__fk.game().build.state.used }));
-console.log('after 3 more clicks', JSON.stringify(st));
+await page.waitForTimeout(200);
+await page.mouse.down(); await page.waitForTimeout(80); await page.mouse.up();
+await page.waitForTimeout(500);
+let st = await bst();
+console.log('after ground click', JSON.stringify(st), st.blocks === 1 ? 'OK' : 'FAIL');
+target = await screenOf(plot.cx + 0.5, 12 + 4.6, plot.cz + 0.5);
+await page.mouse.move(target.x, target.y);
+await page.waitForTimeout(200);
+await page.mouse.down(); await page.waitForTimeout(80); await page.mouse.up();
+await page.waitForTimeout(500);
+st = await bst();
+console.log('after roof click', JSON.stringify(st), st.blocks === 2 && st.height === 2 ? 'OK' : 'FAIL');
 await page.screenshot({ path: path.join(outDir, 'build-mouse.png') });
-// Right click to erase
+target = await screenOf(plot.cx + 0.5, 12 + 6.2, plot.cz + 3.2);
+await page.mouse.move(target.x, target.y);
+await page.waitForTimeout(200);
 await page.mouse.click(target.x, target.y, { button: 'right' });
 await page.waitForTimeout(500);
-st = await page.evaluate(() => ({ used: window.__fk.game().build.state.used }));
-console.log('after right click', JSON.stringify(st));
-// Try the UI: click the Prefab tool button then the plot
-const btn = await page.$('button.tool[data-tool="prefab"]');
-if (btn) { await btn.click(); await page.waitForTimeout(300); }
-console.log('tool now', await page.evaluate(() => window.__fk.game().build.state.tool));
-await page.mouse.click(target.x + 120, target.y - 40);
-await page.waitForTimeout(600);
-st = await page.evaluate(() => ({ used: window.__fk.game().build.state.used }));
-console.log('after prefab click', JSON.stringify(st));
+st = await bst();
+console.log('after right click', JSON.stringify(st), st.blocks === 1 ? 'OK' : 'FAIL');
 await page.screenshot({ path: path.join(outDir, 'build-mouse2.png') });
 // Battle: skip build, skip intro, click to play, fire with the mouse on the HUD overlay
 await page.evaluate(() => window.__fk.game().debugSkipBuild());

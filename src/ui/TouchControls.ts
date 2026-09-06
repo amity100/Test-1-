@@ -2,19 +2,11 @@ import { el } from './dom';
 import type { Input } from '../core/Input';
 import { t } from '../core/i18n';
 
-export type TouchMode = 'none' | 'battle' | 'build' | 'table';
+export type TouchMode = 'none' | 'battle' | 'build';
 
 export interface TouchCallbacks {
   pause(): void;
   weaponSlot(i: number): void;
-  build: {
-    tools(): void;
-    rotate(): void;
-    undo(): void;
-    redo(): void;
-    layer(): void;
-    nudge(dir: number): void;
-  };
 }
 
 interface Pointer {
@@ -25,7 +17,7 @@ interface Pointer {
   y: number;
   startTime: number;
   moved: number;
-  role: 'move' | 'look' | 'orbit' | 'pinch' | 'draw';
+  role: 'move' | 'look' | 'orbit' | 'pinch';
   longTimer: number;
   longFired: boolean;
   /** Event timestamp of the pointerdown (hardware time, unaffected by a stalled frame). */
@@ -52,15 +44,6 @@ const ICON = {
   grenade: svg('<circle cx="12" cy="14" r="6.5"/><rect x="9.5" y="2.5" width="5" height="4.5" rx="1"/><path d="M14.5 4h4"/><path d="M9.5 13.5a2.5 2.5 0 0 1 2.5-2.5"/>'),
   grapple: svg('<path d="M12 2v9"/><path d="M12 11c0 4.5-3.2 6.5-6 6.5M12 11c0 4.5 3.2 6.5 6 6.5"/><path d="M6 17.5L4 21M18 17.5L20 21"/><circle cx="12" cy="4.5" r="2"/>'),
   pause: svg('<rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"/><rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"/>'),
-  place: svg('<path d="M12 4v16M4 12h16"/>'),
-  remove: svg('<path d="M5 12h14"/>'),
-  rotate: svg('<path d="M4 12a8 8 0 1 0 2.6-5.9"/><path d="M4 3.5V9h5.5"/>'),
-  undo: svg('<path d="M9 14L4 9l5-5"/><path d="M4 9h9a6 6 0 0 1 0 12h-3"/>'),
-  redo: svg('<path d="M15 14l5-5-5-5"/><path d="M20 9h-9a6 6 0 0 0 0 12h3"/>'),
-  layer: svg('<path d="M12 3l9 4.5-9 4.5-9-4.5L12 3z"/><path d="M3 12l9 4.5 9-4.5"/><path d="M3 16.5L12 21l9-4.5"/>'),
-  up: svg('<path d="M6 15l6-6 6 6"/>'),
-  down: svg('<path d="M6 9l6 6 6-6"/>'),
-  tools: svg('<path d="M4 6h16M4 12h16M4 18h16"/>'),
 };
 
 /**
@@ -76,7 +59,6 @@ export class TouchControls {
   private stickBase: HTMLElement;
   private stickKnob: HTMLElement;
   private battleButtons: HTMLElement;
-  private buildButtons: HTMLElement;
   private pointers = new Map<number, Pointer>();
   private movePointer: Pointer | null = null;
   private pinchDist = 0;
@@ -87,9 +69,6 @@ export class TouchControls {
   private fireBadge!: HTMLElement;
   private crouchBtn!: HTMLElement;
   private adsBtn!: HTMLElement;
-  private layerBtn!: HTMLElement;
-  private reticle: HTMLElement;
-  private hint: HTMLElement;
   private repeatTimer = 0;
 
   constructor(parent: HTMLElement, private input: Input, private cb: TouchCallbacks) {
@@ -104,17 +83,10 @@ export class TouchControls {
     this.stickKnob = el('div', 'stick-knob');
     this.stickBase.appendChild(this.stickKnob);
     this.stickBase.hidden = true;
-    this.reticle = el('div', 'build-reticle');
-    this.reticle.hidden = true;
-    this.hint = el('div', 'touch-hint');
-    this.hint.hidden = true;
     this.battleButtons = el('div', 'tb-group tb-battle');
     this.battleButtons.setAttribute('data-ui', '1');
-    this.buildButtons = el('div', 'tb-group tb-build');
-    this.buildButtons.setAttribute('data-ui', '1');
-    this.root.append(this.moveZone, this.lookZone, this.stickBase, this.reticle, this.hint, this.battleButtons, this.buildButtons);
+    this.root.append(this.moveZone, this.lookZone, this.stickBase, this.battleButtons);
     this.buildBattleButtons();
-    this.buildBuildButtons();
     for (const zone of [this.moveZone, this.lookZone]) {
       zone.addEventListener('pointerdown', this.onPointerDown);
       zone.addEventListener('pointermove', this.onPointerMove);
@@ -265,55 +237,13 @@ export class TouchControls {
     }
   }
 
-  private buildBuildButtons(): void {
-    const v = this.input.virtual;
-    const g = this.buildButtons;
-    // Hold ＋ to keep placing while the view turns (draw lines); tap places once.
-    this.button(g, 'place', ICON.place, {
-      down: () => {
-        v.primary = true;
-        v.primaryHeld = true;
-      },
-      up: () => {
-        v.primaryHeld = false;
-      },
-    });
-    this.button(g, 'remove', ICON.remove, {
-      down: () => {
-        v.secondary = true;
-        v.secondaryHeld = true;
-      },
-      up: () => {
-        v.secondaryHeld = false;
-      },
-    });
-    this.button(g, 'rotate', ICON.rotate, { tap: () => this.cb.build.rotate() });
-    this.button(g, 'undo', ICON.undo, { tap: () => this.cb.build.undo() });
-    this.button(g, 'redo', ICON.redo, { tap: () => this.cb.build.redo() });
-    this.layerBtn = this.button(g, 'layer', ICON.layer, { tap: () => this.cb.build.layer() });
-    this.button(g, 'up', ICON.up, { tap: () => this.cb.build.nudge(1), repeat: () => this.cb.build.nudge(1) });
-    this.button(g, 'down', ICON.down, { tap: () => this.cb.build.nudge(-1), repeat: () => this.cb.build.nudge(-1) });
-    this.button(g, 'tools', ICON.tools, { tap: () => this.cb.build.tools() });
-    this.button(g, 'pause', ICON.pause, { tap: () => this.cb.pause() });
-  }
-
-  /** Reflects the build layer-lock state on its button. */
-  setLayerLock(on: boolean): void {
-    this.layerBtn.classList.toggle('on', on);
-  }
-
   setMode(mode: TouchMode): void {
     if (mode === this.mode) return;
     this.mode = mode;
     this.root.hidden = mode === 'none';
     this.battleButtons.hidden = mode !== 'battle';
-    this.buildButtons.hidden = mode !== 'build';
-    this.reticle.hidden = mode !== 'build';
-    this.hint.hidden = mode !== 'build';
-    this.hint.textContent = t('tapHoldHint');
-    // The command table (plan view) uses the whole screen as one drawing surface like build mode.
-    this.root.classList.toggle('build', mode === 'build' || mode === 'table');
-    this.root.classList.toggle('table', mode === 'table');
+    // Build mode uses the whole screen as one orbit-and-tap surface.
+    this.root.classList.toggle('build', mode === 'build');
     this.pointers.clear();
     this.movePointer = null;
     this.stickBase.hidden = true;
@@ -339,19 +269,12 @@ export class TouchControls {
     const zone = e.currentTarget as HTMLElement;
     zone.setPointerCapture?.(e.pointerId);
     const isMove = zone === this.moveZone && this.mode === 'battle';
-    const buildLike = this.mode === 'build' || this.mode === 'table';
-    let role: Pointer['role'] = isMove ? 'move' : this.mode === 'table' ? 'draw' : this.mode === 'build' ? (this.buildDraw ? 'draw' : 'orbit') : 'look';
+    const buildLike = this.mode === 'build';
+    let role: Pointer['role'] = isMove ? 'move' : this.mode === 'build' ? 'orbit' : 'look';
     // Second finger in build mode starts a pinch.
     if (buildLike && this.pointers.size === 1) {
       role = 'pinch';
       const other = this.pointers.values().next().value as Pointer;
-      if (other.role === 'draw') {
-        // A second finger turns a stroke into a camera gesture: finish what was drawn so far (the table cancels it).
-        const v = this.input.virtual;
-        v.strokeEnd = true;
-        v.strokeCancel = true;
-        v.strokeActive = false;
-      }
       other.role = 'pinch';
       if (other.longTimer) window.clearTimeout(other.longTimer);
       this.pinchDist = Math.hypot(other.x - e.clientX, other.y - e.clientY);
@@ -359,25 +282,6 @@ export class TouchControls {
     }
     const p: Pointer = { id: e.pointerId, startX: e.clientX, startY: e.clientY, x: e.clientX, y: e.clientY, startTime: performance.now(), moved: 0, role, longTimer: 0, longFired: false, downStamp: e.timeStamp };
     this.pointers.set(e.pointerId, p);
-    if (role === 'draw') {
-      const v = this.input.virtual;
-      v.strokeStart = true;
-      v.strokeActive = true;
-      v.strokeX = e.clientX;
-      v.strokeY = e.clientY;
-      v.strokeHeldMs = 0;
-      v.strokeMoved = 0;
-      v.strokeLongTick = false;
-      if (this.mode === 'table') {
-        // Held still: haptic tick so the player knows the release will erase (decided from event timestamps).
-        p.longTimer = window.setTimeout(() => {
-          if (this.pointers.get(p.id) !== p || p.moved >= 14 || p.role !== 'draw') return;
-          p.longFired = true;
-          this.input.virtual.strokeLongTick = true;
-          vibrate(12);
-        }, LONG_PRESS_MS);
-      }
-    }
     if (role === 'orbit') {
       // A finger held still marks a long press (haptic tick); the erase itself is decided on release from
       // the event timestamps, so a stalled frame can never turn a quick tap into a removal or lose it.
@@ -429,20 +333,6 @@ export class TouchControls {
     } else if (p.role === 'look' || p.role === 'orbit') {
       v.lookDX += dx;
       v.lookDY += dy;
-    } else if (p.role === 'draw') {
-      v.strokeX = p.x;
-      v.strokeY = p.y;
-    } else if (p.role === 'pinch') {
-      const pts = Array.from(this.pointers.values()).filter((q) => q.role === 'pinch');
-      if (pts.length === 2) {
-        const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
-        if (this.pinchDist > 0) v.zoom += (this.pinchDist - d) / 120;
-        this.pinchDist = d;
-        const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
-        v.panX += mid.x - this.pinchMid.x;
-        v.panY += mid.y - this.pinchMid.y;
-        this.pinchMid = mid;
-      }
     }
   };
 
@@ -471,14 +361,6 @@ export class TouchControls {
           v.longPress = true;
         }
       }
-    } else if (p.role === 'draw') {
-      if (p.longTimer) window.clearTimeout(p.longTimer);
-      v.strokeEnd = true;
-      v.strokeActive = false;
-      v.strokeX = p.x;
-      v.strokeY = p.y;
-      v.strokeHeldMs = e.timeStamp - p.downStamp;
-      v.strokeMoved = p.moved;
     } else if (p.role === 'pinch') {
       // Remaining finger goes back to orbit.
       for (const q of this.pointers.values()) if (q.role === 'pinch') q.role = 'orbit';
@@ -486,16 +368,6 @@ export class TouchControls {
     }
   };
 
-  /** While the draw tool is active a single finger draws instead of orbiting (two fingers still orbit/zoom). */
-  setBuildDraw(on: boolean): void {
-    this.buildDraw = on;
-    if (!on) {
-      const v = this.input.virtual;
-      if (v.strokeActive) v.strokeEnd = true;
-      v.strokeActive = false;
-    }
-  }
-  private buildDraw = false;
 
   /** Lets the HUD weapon slots switch weapons on touch. */
   bindWeaponSlots(container: HTMLElement): void {

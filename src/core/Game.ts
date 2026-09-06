@@ -9,7 +9,6 @@ import { WEAPONS, type WeaponId } from '../sim/Weapons';
 import { WeaponLogic } from '../sim/WeaponLogic';
 import { BotBrain, PROFILES, BOT_NAMES } from '../ai/BotBrain';
 import { NavSystem } from '../ai/NavSystem';
-import { BlockThumbs } from '../render/BlockThumbs';
 import { CharacterMesh } from '../render/CharacterMesh';
 import { ViewModel } from '../render/ViewModel';
 import { VFX } from '../render/VFX';
@@ -22,10 +21,8 @@ import { GadgetMeshes } from '../render/GadgetMeshes';
 import { outfitFor } from '../render/Outfits';
 import { Screens, type SummaryRow, type PodiumRow } from '../ui/Screens';
 import { composeCard } from '../ui/FortressCard';
-import { BuildMode } from '../build/BuildMode';
-import { BuildUI } from '../build/BuildUI';
-import { CommandTable } from '../build/Table';
-import { TableUI } from '../build/TableUI';
+import { Builder } from '../build/Builder';
+import { BuilderUI } from '../build/BuilderUI';
 import { TouchControls, vibrate } from '../ui/TouchControls';
 import { IS_TOUCH } from './Input';
 import { generateFortress } from '../world/FortressGen';
@@ -72,7 +69,6 @@ export class Game {
   private promptUntil = 0;
   match: Match | null = null;
   nav: NavSystem | null = null;
-  private thumbs: BlockThumbs | null = null;
   private exitOk = new Map<number, boolean>();
   chars = new Map<number, CharacterMesh>();
   flags = new Map<number, FlagMesh>();
@@ -81,12 +77,8 @@ export class Game {
   viewModel: ViewModel;
   hud: HUD;
   screens: Screens;
-  build: BuildMode | null = null;
-  buildUI: BuildUI | null = null;
-  table: CommandTable | null = null;
-  tableUI: TableUI | null = null;
-  /** Whether the command table (plan view) is the active build view. */
-  tableActive = false;
+  builder: Builder | null = null;
+  builderUI: BuilderUI | null = null;
   private lastUpdateCheck = -Infinity;
   touch: TouchControls;
   private rotateHint: HTMLElement;
@@ -148,17 +140,6 @@ export class Game {
       weaponSlot: (i) => {
         if (this.mode === 'battle' && WeaponLogic.switchWeapon(this.player, i)) audio.play('switch');
       },
-      build: {
-        tools: () => this.buildUI?.toggleSheet(),
-        rotate: () => this.build?.rotate(),
-        undo: () => this.build?.undo(),
-        redo: () => this.build?.redo(),
-        layer: () => {
-          this.build?.toggleLayerLock();
-          this.touch.setLayerLock(!!this.build?.state.layerLock);
-        },
-        nudge: (d) => this.build?.nudge(d),
-      },
     });
     this.touch.applyStyle(settings.data.touchScale, settings.data.touchOpacity);
     this.touch.setAutoFire(settings.data.autoFire);
@@ -213,8 +194,7 @@ export class Game {
   }
 
   private onLanguageChanged(): void {
-    if (this.buildUI) this.buildUI.render();
-    if (this.tableUI) this.tableUI.refresh();
+    if (this.builderUI) this.builderUI.render();
   }
 
   // ---------------- match flow ----------------
@@ -275,82 +255,35 @@ export class Game {
       if (entity === this.player && reason !== 'defense') this.hud.scorePop(`+${delta}`);
     });
     match.events.on('buildTimeUp', () => this.finishBuild(true));
-    // Build phase
-    this.build = new BuildMode(this.app.world, this.app.terrain, plots[0], cfg.style, this.app.input, this.app.gr.camera, this.app.gr.scene);
-    if (!this.thumbs) this.thumbs = new BlockThumbs(this.app.gr.renderer, this.app.materials, this.app.gr.scene.environment);
-    const thumbs = this.thumbs;
-    this.buildUI = new BuildUI(
+    // Build phase: the block builder.
+    this.builder = new Builder(this.app.world, this.app.terrain, plots[0], cfg.style, this.app.input, this.app.gr.camera, this.app.gr.scene);
+    this.builderUI = new BuilderUI(
       this.uiRoot,
-      this.build,
+      this.builder,
       {
         ready: () => this.finishBuild(false),
-        autoBuild: (arch) => this.build?.autoBuild(this.rng.int(1, 1e9), arch),
-        thumb: (m, c, sh) => thumbs.block(m, c, sh ?? 0),
-        prefabThumb: (id, size, style) => thumbs.prefab(id, size, style),
-        pieceThumb: (p, style, m, c) => thumbs.piece(p, style, m, c),
         card: () => void this.showFortressCard(),
-        toggleView: () => this.setBuildView(this.tableActive ? 'free' : 'table'),
-      },
-      IS_TOUCH || window.innerWidth < 900,
-    );
-    this.table = new CommandTable(this.build, this.app.world, this.app.terrain, plots[0], this.app.plots, this.app.input, this.app.gr.camera, this.app.gr.scene, this.app.materials, this.app.gr.renderer);
-    this.tableUI = new TableUI(
-      this.uiRoot,
-      this.table,
-      this.build,
-      {
-        toggleView: () => this.setBuildView('free'),
-        more: () => this.buildUI?.toggleSheet('templates'),
         pause: () => (this.paused ? this.resume() : this.pause()),
       },
       IS_TOUCH || window.innerWidth < 900,
     );
-    this.build.events.on('placed', () => {
+    this.builder.events.on('placed', () => {
       audio.play('place', { pitch: 0.9 + Math.random() * 0.2 });
       if (IS_TOUCH) vibrate(8);
     });
-    this.build.events.on('placedCells', ({ cells }) => {
+    this.builder.events.on('placedCells', ({ cells }) => {
       for (const c of cells) this.vfx.puff(new THREE.Vector3(c.x + 0.5, c.y + 0.65, c.z + 0.5), new THREE.Vector3(0, 1, 0), 3, 0.8, 0.22);
     });
-    this.build.events.on('erased', () => {
+    this.builder.events.on('removed', () => {
       audio.play('erase');
       if (IS_TOUCH) vibrate(16);
     });
-    this.build.events.on('change', () => this.touch.setBuildDraw(this.build?.state.tool === 'draw' && !this.build.state.editing));
-    this.build.enter();
-    this.buildUI.show();
+    this.builder.enter();
+    this.builderUI.show();
     this.mode = 'build';
-    this.app.gr.camera.position.set(plots[0].cx + 30, PLOT_Y + 30, plots[0].cz + 40);
-    this.tableActive = false;
-    // Phones always open on the command table; the desktop remembers the last choice.
-    this.setBuildView(IS_TOUCH ? 'table' : settings.data.buildView);
     this.setTouchMode();
     match.startBuild();
     audio.music('build');
-  }
-
-  /** Switches the build phase between the command table (plan view) and the free 3D view. */
-  setBuildView(view: 'table' | 'free'): void {
-    if (!this.build || !this.table || !this.buildUI || !this.tableUI || this.mode !== 'build') return;
-    const on = view === 'table';
-    if (on === this.tableActive) return;
-    this.tableActive = on;
-    if (on) {
-      this.build.state.editing = null;
-      this.table.enter();
-      this.tableUI.show();
-    } else {
-      this.table.exit();
-      this.tableUI.hide();
-      this.build.enterFreeFrom(this.table.pan);
-    }
-    this.buildUI.setTable(on);
-    this.touch.setBuildDraw(!on && this.build.state.tool === 'draw' && !this.build.state.editing);
-    if (!IS_TOUCH && settings.data.buildView !== view) {
-      settings.data.buildView = view;
-      settings.save();
-    }
-    this.setTouchMode();
   }
 
   /** Ground layer of a plot takes the style's ground block. */
@@ -379,24 +312,21 @@ export class Game {
   }
 
   finishBuild(timeUp: boolean): void {
-    if (!this.match || !this.build || this.mode !== 'build') return;
+    if (!this.match || !this.builder || this.mode !== 'build') return;
     const plot = this.app.plots[0];
-    const used = this.app.world.countBlocksInBox(plot.minX, PLOT_Y, plot.minZ, plot.maxX, PLOT_Y + PLOT_MAX_HEIGHT, plot.maxZ);
-    if (used < 40) this.build.autoBuild(this.rng.int(1, 1e9));
-    this.build.validateNow();
-    if (!this.build.state.reach.ok) {
-      this.build.ensureMarkers(this.rng);
-      if (this.build.state.flag) this.hud.showBanner(t('placeFlagAuto'), '', 4);
+    // An empty or tiny plot gets a generated fortress so every round has an arena.
+    if (this.builder.blocks < 6) this.builder.autoBuild(this.rng.int(1, 1e9));
+    this.builder.validateNow();
+    if (!this.builder.reach.ok) {
+      this.builder.ensureMarkers(this.rng);
+      if (this.builder.flag) this.hud.showBanner(t('placeFlagAuto'), '', 4);
     }
-    const flag = this.build.state.flag ?? { x: plot.cx, y: PLOT_Y, z: plot.cz };
-    const spawn = this.build.state.spawn ?? flag;
+    const flag = this.builder.flag ?? { x: plot.cx, y: PLOT_Y, z: plot.cz };
+    const spawn = this.builder.spawn ?? flag;
     this.match.setFlag(0, flag);
     this.match.setSpawn(0, spawn);
-    this.table?.exit();
-    this.tableUI?.hide();
-    this.tableActive = false;
-    this.build.exit();
-    this.buildUI?.hide();
+    this.builder.exit();
+    this.builderUI?.hide();
     this.app.chunks.flush();
     // The world is final for the rest of the match: build navigation for every fortress now.
     this.nav = new NavSystem(this.app.world, this.app.terrain, this.app.plots);
@@ -429,7 +359,7 @@ export class Game {
       this.rotateHint.hidden = true;
       return;
     }
-    const m = this.mode === 'battle' ? 'battle' : this.mode === 'build' ? (this.tableActive ? 'table' : 'build') : 'none';
+    const m = this.mode === 'battle' ? 'battle' : this.mode === 'build' ? 'build' : 'none';
     this.touch.setMode(m);
     this.rotateHint.hidden = m === 'none';
   }
@@ -663,17 +593,11 @@ export class Game {
   }
 
   private cleanupMatch(): void {
-    this.table?.dispose();
-    this.table = null;
-    this.tableUI?.hide();
-    this.tableUI?.root.remove();
-    this.tableUI = null;
-    this.tableActive = false;
-    this.build?.dispose();
-    this.build = null;
-    this.buildUI?.hide();
-    this.buildUI?.root.remove();
-    this.buildUI = null;
+    this.builder?.dispose();
+    this.builder = null;
+    this.builderUI?.hide();
+    this.builderUI?.root.remove();
+    this.builderUI = null;
     for (const cm of this.chars.values()) {
       this.app.gr.scene.remove(cm.root);
       cm.dispose();
@@ -835,12 +759,8 @@ export class Game {
         }
         break;
       case 'build':
-        if (!this.paused) {
-          if (this.tableActive) this.table?.update(dt);
-          this.build?.update(dt);
-        }
-        this.buildUI?.update(dt, match?.buildTimeLeft ?? null);
-        if (this.tableActive) this.tableUI?.update(dt);
+        if (!this.paused) this.builder?.update(dt);
+        this.builderUI?.update(dt, match?.buildTimeLeft ?? null);
         this.cameraFocus.copy(this.app.gr.camera.position);
         break;
       case 'intro':
@@ -1238,14 +1158,10 @@ export class Game {
         hidden.push(o);
       }
     };
-    hide(this.build?.visuals);
-    hide(this.table?.visuals);
+    hide(this.builder?.visuals);
     hide(this.viewModel.root);
-    const cutaway = this.tableActive;
-    if (cutaway) this.table?.setCutaway(false);
     gr.composer.render(1 / 60);
     const url = gr.renderer.domElement.toDataURL('image/jpeg', 0.92);
-    if (cutaway) this.table?.setCutaway(true);
     for (const o of hidden) o.visible = true;
     cam.position.copy(savedPos);
     cam.quaternion.copy(savedQuat);
@@ -1289,7 +1205,7 @@ export class Game {
     this.startMatch({ playerName: 'Tester', botCount, difficulty, buildTime: 0, roundTime, style: 'medieval' });
   }
   debugSkipBuild(): void {
-    this.build?.autoBuild(7);
+    this.builder?.autoBuild(7);
     this.finishBuild(false);
   }
   /** Equips the local player with a kit (tests). */
@@ -1434,74 +1350,26 @@ export class Game {
   debugKillPlayer(): void {
     this.combat.applyDamage(this.player, 999, null, this.time, false, this.player.center);
   }
-  /** Exercises modular pieces, edit presets and the draw tool programmatically. */
-  debugPiecesTest(): Record<string, unknown> {
-    const b = this.build;
+  /** Exercises the block builder programmatically: grow, stack, recolour, remove, undo, flag. */
+  debugBuilderTest(): Record<string, unknown> {
+    const b = this.builder;
     if (!b) return { error: 'not in build mode' };
-    const before = b.state.used;
-    b.setTool('piece');
-    const wall = b.placePiece({ type: 'wall', i: 3, j: 3, k: 0, rot: 0 });
-    const wall2 = b.placePiece({ type: 'wall', i: 3, j: 3, k: 0, rot: 1 });
-    const floor = b.placePiece({ type: 'floor', i: 3, j: 3, k: 1, rot: 0 });
-    const ramp = b.placePiece({ type: 'ramp', i: 4, j: 3, k: 0, rot: 0 });
-    const roof = b.placePiece({ type: 'roof', i: 3, j: 3, k: 2, rot: 0 });
-    const afterPieces = b.state.used;
-    const wallKey = 'wall:3,3,0:0';
-    b.state.editing = wallKey;
-    b.applyPreset('door');
-    const afterDoor = b.state.used;
-    const rec = b.pieces.get(wallKey);
-    b.toggleEditCell(0);
-    const afterToggle = b.state.used;
-    b.state.editing = null;
+    const before = b.blocks;
+    const a1 = b.addBlock(3, 3, 0, 0);
+    const a2 = b.addBlock(4, 3, 0, 1);
+    const a3 = b.addBlock(3, 3, 1, 0);
+    const a4 = b.addBlock(4, 4, 1, 3); // overhang with nothing below
+    const voxels = b.result?.blocks ?? 0;
+    const painted = b.paintBlock(4, 3, 0, 2);
+    const removed = b.removeBlock(4, 4, 1);
+    const afterRemove = b.blocks;
     b.undo();
-    b.undo();
-    const afterUndo = b.state.used;
+    const afterUndo = b.blocks;
     b.redo();
-    b.redo();
-    const afterRedo = b.state.used;
-    // Draw a closed outline and put a plate inside.
-    const p = b.plot;
-    const y = PLOT_Y;
-    const path: { x: number; z: number }[] = [];
-    for (let x = 0; x <= 8; x++) path.push({ x: p.minX + 28 + x, z: p.minZ + 28 });
-    for (let z = 0; z <= 6; z++) path.push({ x: p.minX + 36, z: p.minZ + 28 + z });
-    for (let x = 8; x >= 0; x--) path.push({ x: p.minX + 28 + x, z: p.minZ + 34 });
-    for (let z = 6; z >= 0; z--) path.push({ x: p.minX + 28, z: p.minZ + 28 + z });
-    const drawn = b.debugStroke(path, y);
-    const plate = b.debugStroke([{ x: p.minX + 32, z: p.minZ + 31 }], y);
-    const circle: { x: number; z: number }[] = [];
-    for (let a = 0; a < Math.PI * 2; a += 0.15) circle.push({ x: Math.round(p.minX + 10 + Math.cos(a) * 4), z: Math.round(p.minZ + 30 + Math.sin(a) * 4) });
-    const tower = b.debugStroke(circle, y);
-    return { before, wall, wall2, floor, ramp, roof, afterPieces, afterDoor, doorOpen: rec?.open.filter(Boolean).length, afterToggle, afterUndo, afterRedo, drawn, plate, tower, used: b.state.used, pieces: b.pieces.size };
-  }
-  /** Exercises the build tools programmatically. */
-  debugBuildTest(): Record<string, unknown> {
-    const b = this.build;
-    if (!b) return { error: 'not in build mode' };
-    const p = b.plot;
-    b.setTool('block');
-    b.placeBlock({ x: p.cx, y: PLOT_Y, z: p.cz - 8 });
-    b.fillBox({ x: p.cx - 5, y: PLOT_Y, z: p.cz - 5 }, { x: p.cx + 5, y: PLOT_Y + 4, z: p.cz + 5 }, false);
-    b.setPrefab('tower');
-    b.stampPrefab({ x: p.cx + 12, y: PLOT_Y, z: p.cz + 12 });
-    b.setPrefab('stairs');
-    b.stampPrefab({ x: p.cx - 12, y: PLOT_Y, z: p.cz + 12 });
-    b.paintBlock({ x: p.cx - 5, y: PLOT_Y, z: p.cz - 5 });
-    b.eraseBlock({ x: p.cx - 5, y: PLOT_Y + 1, z: p.cz - 5 });
-    b.placeFlag({ x: p.cx, y: PLOT_Y + 1, z: p.cz + 1 });
-    b.placeSpawn({ x: p.cx + 1, y: PLOT_Y + 1, z: p.cz + 1 });
-    const sealed = b.validateNow();
-    b.eraseBlock({ x: p.cx - 5, y: PLOT_Y + 1, z: p.cz });
-    b.eraseBlock({ x: p.cx - 5, y: PLOT_Y + 2, z: p.cz });
-    const open = b.validateNow();
-    b.undo();
-    b.redo();
-    b.saveBlueprint('smoke-test');
-    const loaded = b.loadBlueprint('smoke-test');
-    const after = b.validateNow();
-    b.deleteBlueprint('smoke-test');
-    return { used: b.state.used, sealed: sealed.reason, open: open.reason, loaded, after: after.reason, flag: b.state.flag, spawn: b.state.spawn };
+    const afterRedo = b.blocks;
+    const flag = b.placeFlagIn(3, 3, 1);
+    const reach = b.validateNow();
+    return { before, a1, a2, a3, a4, voxels, painted, removed, afterRemove, afterUndo, afterRedo, flag, flagCell: b.flag, reach, rooms: b.result?.rooms.length, entrances: b.result?.entrances.length };
   }
   debugState(): Record<string, unknown> {
     const target = this.match?.targetPlotIndex ?? -1;

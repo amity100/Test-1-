@@ -34,19 +34,6 @@ export interface VirtualState {
   tapY: number;
   longPress: boolean;
   heightDir: number;
-  /** One-finger drawing stroke (build draw tool): screen position and edges. */
-  strokeActive: boolean;
-  strokeStart: boolean;
-  strokeEnd: boolean;
-  /** The stroke was aborted (a second finger turned it into a camera gesture). */
-  strokeCancel: boolean;
-  strokeX: number;
-  strokeY: number;
-  /** How long the finger was down when the stroke ended (hardware event time, ms) and how far it travelled. */
-  strokeHeldMs: number;
-  strokeMoved: number;
-  /** The finger has been held still long enough for a long press (feedback tick; the action is decided on release). */
-  strokeLongTick: boolean;
 }
 
 function freshVirtual(): VirtualState {
@@ -57,7 +44,6 @@ function freshVirtual(): VirtualState {
     reload: false, grenade: false, gadget: [false, false], gadgetHeld: [false, false], gadgetReleased: [false, false], interact: false,
     weaponSwitch: -1, primary: false, secondary: false, primaryHeld: false, secondaryHeld: false, zoom: 0, panX: 0, panY: 0,
     tapped: false, tapX: 0, tapY: 0, longPress: false, heightDir: 0,
-    strokeActive: false, strokeStart: false, strokeEnd: false, strokeCancel: false, strokeX: 0, strokeY: 0, strokeHeldMs: 0, strokeMoved: 0, strokeLongTick: false,
   };
 }
 
@@ -91,9 +77,12 @@ export class Input {
   cursorX = 0;
   cursorY = 0;
   pointerLocked = false;
-  /** True when pointer lock is not available and we look with raw mouse deltas instead. */
+  /** True when pointer lock is not available here (denied by the embedding page) and we look with raw mouse deltas instead. */
   fallbackLook = false;
   fallbackActive = false;
+  private lockErrors = 0;
+  private lockRequestedAt = 0;
+  private lockedAt = -Infinity;
   /** When false, game input is ignored (menus open). */
   enabled = true;
   onLockChange: ((locked: boolean) => void) | null = null;
@@ -170,11 +159,12 @@ export class Input {
     this.cursorX = e.clientX - rect.left;
     this.cursorY = e.clientY - rect.top;
     if (this.pointerLocked || (this.fallbackLook && this.fallbackActive)) {
-      // Clamp absurd deltas some browsers emit on lock transitions.
-      const dx = Math.max(-200, Math.min(200, e.movementX));
-      const dy = Math.max(-200, Math.min(200, e.movementY));
-      this.mouseDX += dx;
-      this.mouseDY += dy;
+      // Raw deltas, uncapped: a fast flick on a high-DPI mouse arrives as one large coalesced event and
+      // must turn the view all the way. Only the bogus jump some browsers emit right after locking is dropped.
+      if (performance.now() - this.lockedAt < 40) return;
+      if (Math.abs(e.movementX) > 4000 || Math.abs(e.movementY) > 4000) return;
+      this.mouseDX += e.movementX;
+      this.mouseDY += e.movementY;
     }
   };
 
@@ -187,30 +177,55 @@ export class Input {
   private onPointerLockChange = (): void => {
     this.pointerLocked = document.pointerLockElement === this.target;
     this.lockRequested = false;
+    if (this.pointerLocked) {
+      this.lockErrors = 0;
+      this.lockedAt = performance.now();
+      this.fallbackLook = false;
+    }
     this.onLockChange?.(this.pointerLocked);
   };
 
   private onPointerLockError = (): void => {
     this.lockRequested = false;
-    this.fallbackLook = true;
-    this.fallbackActive = true;
-    // We still have look control through raw mouse deltas.
-    this.onLockChange?.(true);
+    this.lockErrors++;
+    // One failed request is normal (a lock asked for too soon after Escape). Only when the page can
+    // never lock the pointer, as inside an embedding frame without permission, do we switch to
+    // the raw-delta fallback for good.
+    if (this.lockErrors >= 3 || this.lockDenied()) {
+      this.fallbackLook = true;
+      this.fallbackActive = true;
+      this.onLockChange?.(true);
+    }
   };
+
+  /** True when the embedding page's permission policy forbids pointer lock. */
+  private lockDenied(): boolean {
+    try {
+      const fp = (document as Document & { featurePolicy?: { allowsFeature(name: string): boolean } }).featurePolicy;
+      if (fp && !fp.allowsFeature('pointer-lock')) return true;
+    } catch {
+      /* not supported: assume allowed */
+    }
+    return false;
+  }
 
   requestPointerLock(): void {
     if (this.isTouch) {
       this.onLockChange?.(true);
       return;
     }
-    if (this.pointerLocked || this.lockRequested) return;
-    if (this.fallbackLook) {
+    if (this.pointerLocked) return;
+    // A request that never answered (no change, no error) must not block the next one.
+    if (this.lockRequested && performance.now() - this.lockRequestedAt < 1000) return;
+    if (this.fallbackLook || this.lockDenied()) {
+      this.fallbackLook = true;
       this.fallbackActive = true;
       this.onLockChange?.(true);
       return;
     }
     try {
       this.lockRequested = true;
+      this.lockRequestedAt = performance.now();
       const p = (this.target as HTMLElement & { requestPointerLock(opts?: { unadjustedMovement?: boolean }): Promise<void> | void }).requestPointerLock({ unadjustedMovement: true });
       if (p && typeof (p as Promise<void>).catch === 'function') {
         (p as Promise<void>).catch(() => {
@@ -372,9 +387,6 @@ export class Input {
     v.weaponSwitch = -1;
     v.primary = false;
     v.secondary = false;
-    v.strokeStart = false;
-    v.strokeEnd = false;
-    v.strokeCancel = false;
     v.zoom = 0;
     v.panX = 0;
     v.panY = 0;

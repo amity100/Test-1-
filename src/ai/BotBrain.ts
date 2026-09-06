@@ -30,13 +30,19 @@ export interface BotProfile {
   coverSkill: number;
   /** Hearing range for gunfire in metres. */
   hearing: number;
+  /** How fast a bot notices someone in view (awareness per second at close range, centred). */
+  noticeSpeed: number;
+  /** Seconds for the first shots' aim offset to settle onto the target. */
+  aimSettle: number;
+  /** Seconds the aim trails a moving target. */
+  trackLag: number;
 }
 
 export const PROFILES: Record<Difficulty, BotProfile> = {
-  easy: { reaction: 0.75, aimError: 6.5, aimSmooth: 4, viewDist: 45, fovDeg: 110, burst: [0.15, 0.4], pause: [0.5, 1.1], memory: 2, knowsFlagAfter: Infinity, searchSkill: 0.3, strafeSkill: 0.2, grenadeChance: 0.05, retreatHp: 20, coverSkill: 0.2, hearing: 22 },
-  normal: { reaction: 0.42, aimError: 3.6, aimSmooth: 7, viewDist: 70, fovDeg: 130, burst: [0.25, 0.7], pause: [0.3, 0.7], memory: 3, knowsFlagAfter: 150, searchSkill: 0.6, strafeSkill: 0.5, grenadeChance: 0.15, retreatHp: 30, coverSkill: 0.5, hearing: 34 },
-  hard: { reaction: 0.25, aimError: 2.0, aimSmooth: 10, viewDist: 95, fovDeg: 150, burst: [0.4, 1.0], pause: [0.15, 0.4], memory: 4.5, knowsFlagAfter: 90, searchSkill: 0.85, strafeSkill: 0.8, grenadeChance: 0.3, retreatHp: 35, coverSkill: 0.8, hearing: 46 },
-  nightmare: { reaction: 0.14, aimError: 1.0, aimSmooth: 14, viewDist: 130, fovDeg: 170, burst: [0.6, 1.4], pause: [0.08, 0.25], memory: 6, knowsFlagAfter: 45, searchSkill: 1.0, strafeSkill: 1.0, grenadeChance: 0.45, retreatHp: 40, coverSkill: 1.0, hearing: 60 },
+  easy: { reaction: 0.75, aimError: 6.5, aimSmooth: 4, viewDist: 45, fovDeg: 110, burst: [0.15, 0.4], pause: [0.5, 1.1], memory: 2, knowsFlagAfter: Infinity, searchSkill: 0.3, strafeSkill: 0.2, grenadeChance: 0.05, retreatHp: 20, coverSkill: 0.2, hearing: 22, noticeSpeed: 2.2, aimSettle: 1.0, trackLag: 0.3 },
+  normal: { reaction: 0.42, aimError: 3.6, aimSmooth: 7, viewDist: 70, fovDeg: 130, burst: [0.25, 0.7], pause: [0.3, 0.7], memory: 3, knowsFlagAfter: 150, searchSkill: 0.6, strafeSkill: 0.5, grenadeChance: 0.15, retreatHp: 30, coverSkill: 0.5, hearing: 34, noticeSpeed: 3.2, aimSettle: 0.7, trackLag: 0.2 },
+  hard: { reaction: 0.25, aimError: 2.0, aimSmooth: 10, viewDist: 95, fovDeg: 150, burst: [0.4, 1.0], pause: [0.15, 0.4], memory: 4.5, knowsFlagAfter: 90, searchSkill: 0.85, strafeSkill: 0.8, grenadeChance: 0.3, retreatHp: 35, coverSkill: 0.8, hearing: 46, noticeSpeed: 4.6, aimSettle: 0.45, trackLag: 0.12 },
+  nightmare: { reaction: 0.14, aimError: 1.0, aimSmooth: 14, viewDist: 130, fovDeg: 170, burst: [0.6, 1.4], pause: [0.08, 0.25], memory: 6, knowsFlagAfter: 45, searchSkill: 1.0, strafeSkill: 1.0, grenadeChance: 0.45, retreatHp: 40, coverSkill: 1.0, hearing: 60, noticeSpeed: 6.5, aimSettle: 0.3, trackLag: 0.07 },
 };
 
 export interface BotContext {
@@ -106,6 +112,16 @@ export class BotBrain {
   private peekTimer = 0;
   private lookScanPhase = 0;
   private targetStill = 0;
+  // Human-like perception and aim: awareness builds up before a target registers, the first shots
+  // start off target and settle, the aim trails movement, and getting hit flinches the aim.
+  private notice = new Map<number, number>();
+  private acqYaw = 0;
+  private acqPitch = 0;
+  private acqT = 10;
+  private aimPoint = new THREE.Vector3();
+  private aimInit = false;
+  private flinchTimer = 0;
+  private hitTimes: number[] = [];
 
   constructor(readonly entity: Entity, private ctx: BotContext, readonly profile: BotProfile, seed: number) {
     this.rng = new Random(seed);
@@ -139,6 +155,11 @@ export class BotBrain {
     this.coverCooldown = 0;
     this.suspicion = null;
     this.lastReactedDamage = -100;
+    this.notice.clear();
+    this.aimInit = false;
+    this.acqT = 10;
+    this.flinchTimer = 0;
+    this.hitTimes.length = 0;
   }
 
   newRound(): void {
@@ -159,6 +180,8 @@ export class BotBrain {
     this.crouchTimer -= dt;
     this.coverCooldown -= dt;
     this.hideTimer -= dt;
+    this.flinchTimer -= dt;
+    this.acqT += dt;
 
     const isDefender = e.role === 'defender';
     const flag = this.ctx.flagPos();
@@ -410,19 +433,60 @@ export class BotBrain {
         best = o;
       }
     }
-    if (best) {
-      if (this.mem.target !== best) {
+    // Awareness of everyone else fades when they are out of view.
+    for (const [id, v] of this.notice) {
+      if (best && id === best.id) continue;
+      const nv = v - 0.12 * 1.5;
+      if (nv <= 0) this.notice.delete(id);
+      else this.notice.set(id, nv);
+    }
+    if (best && this.mem.target !== best) {
+      // A new face in view registers only once awareness has built up: slower in the periphery, at
+      // range and for a still figure; instant for someone shooting or right next to the bot.
+      const d = tmp.copy(best.pos).setY(best.pos.y + 1.2).sub(eye);
+      const dist = d.length();
+      const cos = d.dot(fwd) / Math.max(0.01, dist);
+      const angFrac = clamp(Math.acos(clamp(cos, -1, 1)) / ((this.profile.fovDeg * 0.5 * Math.PI) / 180), 0, 1);
+      const distFrac = clamp(dist / this.profile.viewDist, 0, 1);
+      const moving = best.vel.length() > 1.5 ? 1.6 : 1;
+      const firing = now - best.lastShotTime < 0.4 ? 5 : 1;
+      let gain = this.profile.noticeSpeed * (1 - 0.6 * angFrac) * (1 - 0.55 * distFrac) * moving * firing;
+      if (dist < 4 || best.captureProgress > 0.05) gain = 100;
+      const meter = (this.notice.get(best.id) ?? 0) + gain * 0.12;
+      if (meter < 1) {
+        this.notice.set(best.id, meter);
+        // Keep whatever the bot already tracks until the newcomer registers.
+        if (this.mem.target && this.mem.target.alive && this.canSee(tmp.copy(this.mem.target.pos).setY(this.mem.target.pos.y + 1.3))) {
+          this.mem.visible = true;
+          this.mem.lastSeenPos.copy(this.mem.target.pos);
+          this.mem.lastSeenTime = now;
+        } else this.mem.visible = false;
+        best = null;
+      } else {
+        this.notice.delete(best.id);
         this.mem.target = best;
         this.reactionTimer = this.profile.reaction * this.rng.range(0.7, 1.3);
         this.targetStill = 0;
+        this.beginAcquisition();
       }
+    }
+    if (best) {
       this.mem.visible = true;
       this.mem.lastSeenPos.copy(best.pos);
       this.mem.lastSeenTime = now;
-    } else {
+    } else if (!this.mem.visible || !this.mem.target) {
       this.mem.visible = false;
       if (this.mem.target && (!this.mem.target.alive || this.mem.target.burrowed || now - this.mem.lastSeenTime > this.profile.memory)) this.mem.target = null;
     }
+  }
+
+  /** The first sight of a target: the aim starts a few degrees off and converges over aimSettle seconds. */
+  private beginAcquisition(): void {
+    const spread = (0.16 - this.profile.searchSkill * 0.08) * this.rng.range(0.6, 1.4);
+    this.acqYaw = this.rng.sign() * spread;
+    this.acqPitch = this.rng.range(-0.5, 0.5) * spread;
+    this.acqT = 0;
+    this.aimInit = false;
   }
 
   /** Getting shot from an unseen attacker: remember roughly where it came from and turn. */
@@ -430,6 +494,19 @@ export class BotBrain {
     const e = this.entity;
     if (e.lastDamageTime <= this.lastReactedDamage || now - e.lastDamageTime > 0.3) return;
     this.lastReactedDamage = e.lastDamageTime;
+    // Flinch: the aim jerks and the trigger pauses for a moment; sustained fire drives the bot to cover.
+    this.flinchTimer = 0.14 + (1 - this.profile.coverSkill) * 0.16;
+    this.hitTimes.push(now);
+    while (this.hitTimes.length && now - this.hitTimes[0] > 1.5) this.hitTimes.shift();
+    if (this.hitTimes.length >= 3 && this.coverCooldown <= 0 && this.state !== 'cover' && this.rng.chance(0.5 + this.profile.coverSkill * 0.5)) {
+      const cs = this.pickCover(this.ctx.nav(), this.mem.target?.pos ?? e.pos);
+      if (cs) {
+        this.coverSpot = cs;
+        this.state = 'cover';
+        this.coverTimer = 1.2 + this.rng.range(0, 1.2);
+        this.hitTimes.length = 0;
+      }
+    }
     if (e.lastAttackerId < 0) return;
     const attacker = this.ctx.entities().find((o) => o.id === e.lastAttackerId);
     if (!attacker || !attacker.alive || attacker === e) return;
@@ -442,6 +519,7 @@ export class BotBrain {
     this.reactionTimer = this.profile.reaction * 0.5;
     this.suspicion = this.mem.lastSeenPos.clone();
     this.suspicionTime = now;
+    this.beginAcquisition();
     // Far, unseen shooter while exposed: break line of sight.
     if (attacker.pos.distanceTo(e.pos) > 22 && this.coverCooldown <= 0 && this.rng.chance(this.profile.coverSkill)) {
       const nav = this.ctx.nav();
@@ -456,21 +534,29 @@ export class BotBrain {
   private aimAt(target: Entity, dt: number, now: number): void {
     const e = this.entity;
     const eye = e.eyePos;
-    const aimPos = this.mem.visible ? tmp.copy(target.pos).setY(target.pos.y + target.height * 0.62) : tmp.copy(this.mem.lastSeenPos).setY(this.mem.lastSeenPos.y + 1.2);
+    const rawAim = this.mem.visible ? tmp.copy(target.pos).setY(target.pos.y + target.height * 0.62) : tmp.copy(this.mem.lastSeenPos).setY(this.mem.lastSeenPos.y + 1.2);
     // Lead slightly for moving targets
-    if (this.mem.visible) aimPos.addScaledVector(target.vel, 0.08 * this.profile.searchSkill);
-    const d = aimPos.sub(eye);
+    if (this.mem.visible) rawAim.addScaledVector(target.vel, 0.08 * this.profile.searchSkill);
+    // The aim trails the target the way a hand does, overshooting when they change direction.
+    if (!this.aimInit) {
+      this.aimPoint.copy(rawAim);
+      this.aimInit = true;
+    } else this.aimPoint.lerp(rawAim, 1 - Math.exp(-dt / Math.max(0.03, this.profile.trackLag)));
+    const d = this.aimPoint.clone().sub(eye);
     const dist = d.length();
     // Accuracy settles on a still target and degrades while the bot itself runs.
     const tv = target.vel.length();
     this.targetStill = tv < 1 ? Math.min(2, this.targetStill + dt) : Math.max(0, this.targetStill - dt * 2);
     const selfMove = Math.min(1, Math.sqrt(e.vel.x * e.vel.x + e.vel.z * e.vel.z) / 8);
-    const err = ((this.profile.aimError * Math.PI) / 180) * (1 - this.targetStill * 0.2) * (1 + selfMove * 0.6) * (e.ads > 0.5 ? 0.75 : 1);
+    const flinch = this.flinchTimer > 0 ? 2.4 : 1;
+    const err = ((this.profile.aimError * Math.PI) / 180) * (1 - this.targetStill * 0.2) * (1 + selfMove * 0.6) * (e.ads > 0.5 ? 0.75 : 1) * flinch;
     const wobble = Math.sin(now * 3.1 + e.id) * err * 0.6 + Math.sin(now * 7.3 + e.id * 2) * err * 0.4;
     const wobble2 = Math.cos(now * 2.7 + e.id) * err * 0.5;
     const moveErr = Math.min(1, tv / 8) * err * 0.5;
-    this.desiredYaw = Math.atan2(-d.x, -d.z) + wobble + moveErr * Math.sin(now * 5);
-    this.desiredPitch = clamp(Math.atan2(d.y, Math.sqrt(d.x * d.x + d.z * d.z)) + wobble2, -1.3, 1.3);
+    // First shots start off target and settle.
+    const acq = Math.exp(-this.acqT / Math.max(0.05, this.profile.aimSettle));
+    this.desiredYaw = Math.atan2(-d.x, -d.z) + wobble + moveErr * Math.sin(now * 5) + this.acqYaw * acq;
+    this.desiredPitch = clamp(Math.atan2(d.y, Math.sqrt(d.x * d.x + d.z * d.z)) + wobble2 + this.acqPitch * acq, -1.3, 1.3);
     // ADS at range
     e.wantsAds = dist > 18 && !e.sliding;
     this.pickWeaponFor(dist);
@@ -500,7 +586,14 @@ export class BotBrain {
     this.reactionTimer -= dt;
     if (this.reactionTimer > 0 || !this.mem.visible) {
       e.triggerReleased = true;
+      // Out of sight: top up the magazine.
+      const w0 = e.weapon;
+      if (w0 && !e.reloading && w0.reserve > 0 && w0.ammo < WEAPONS[w0.id].magSize * 0.4 && this.rng.chance(dt * 2)) WeaponLogic.startReload(e);
       this.maybeGrenade(target, dt, now);
+      return;
+    }
+    if (this.flinchTimer > 0 || Math.exp(-this.acqT / Math.max(0.05, this.profile.aimSettle)) > 0.5) {
+      e.triggerReleased = true;
       return;
     }
     // Only fire when roughly on target.
@@ -511,7 +604,8 @@ export class BotBrain {
     if (this.burstTimer <= 0) {
       this.firing = !this.firing;
       const [a, b] = this.firing ? this.profile.burst : this.profile.pause;
-      this.burstTimer = this.rng.range(a, b);
+      // Longer breaks between bursts at range: real players re-aim instead of spraying.
+      this.burstTimer = this.rng.range(a, b) * (!this.firing && dist > 28 ? 1.6 : 1);
     }
     const w = e.weapon;
     if (!w) return;

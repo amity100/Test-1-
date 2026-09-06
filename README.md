@@ -39,6 +39,8 @@ GitHub Pages). Single-file build for artifact hosting: `npm run build:artifact` 
 
 WASD move · Space jump · Shift sprint · C crouch/slide · Mouse aim and fire · Right mouse aim down
 sights · 1-3 / wheel weapons · R reload · G grenade · Q / F gadgets · Tab scoreboard · Esc pause.
+Mouse look uses pointer lock with raw, uncapped deltas, so a fast flick turns all the way; if the
+page cannot lock the pointer, the outer band of the window keeps turning the view.
 
 **Gadget kit.** Before every round you pick a primary weapon and two of five gadgets (the choice is
 remembered): a **zipline** cable that anyone can ride both ways, a **jump pad** that launches whoever
@@ -47,41 +49,32 @@ steps on it, a sticky **breach charge** that blows a hole through fortress walls
 **burrow drill** that tunnels under the ground, surfaces inside the fortress and drills through
 blocks while you hold the button. Bots carry random kits too.
 
-**Command table.** The build phase opens on a fixed-angle plan view of your plot with the storeys
-above the current one cut away, and you paint the fortress with brushes instead of placing blocks:
-drag along the grid for a **wall** (corners included), tap for a **tower** (door, firing slits,
-spiral steps and a parapet), drag a rectangle for a **bunker** (a door facing the attackers, floors
-and a roof) or a **maze**, tap a wall with **openings** to pick a slit, window, door, gate, arch or
-crenels, tap for **stairs** or **cover**, and tap to plant the **flag**. A storey selector moves the
-whole table up a floor, the view rotates in 90° steps, a long press removes a piece, every brush
-stroke is a single undo step, and a red ribbon shows the route the bots will take from the doorstep
-to your flag with its length in metres, so you can see at once how much of a walk you are forcing on
-them. One finger paints and two fingers pan and zoom on a phone; on a desktop the mouse paints,
-right-drag pans, the wheel zooms, `Q`/`E` rotate, `1-6` pick the storey and `Ctrl+Z` undoes. The
-**3D** button switches to the free build view below (and back); the choice is remembered.
-
-**Fast building.** The hotbar starts with snap-to-grid pieces (wall, floor, ramp, roof) that lock to
-a 5 m module grid so a full fortress takes minutes; `E` edits a placed wall or floor into doors,
-windows, arches or hatches from a tile grid; the **draw** tool turns a stroke on the ground into
-walls or filled plates (circles are detected). The classic block tools stay for detailing. At match
-end a shareable fortress card renders your build, and every round opens with a short camera flyby.
-
-Build mode is hotbar driven: `1-9` pick a slot (rendered block icons), `B` block, `V` box, `L` line,
-`N` wall, `K` stairs, `P` paint, `X` erase, `F` flag, `G` spawn, `C` prefab, `[` `]` cycle shapes
-(cube, slab, stairs, slope, pillar, fence), `R` rotate, `T` layer lock (build on one height with a grid
-guide), `Z`/`Shift+Z` undo/redo, `M` mirror, hold the mouse button to draw runs of blocks, `Tab` the
-material / prefab / template sheet. Right click removes, wheel changes prefab size, WASD + Q/E move
-the camera, right-drag looks.
+**Building, Townscaper style.** The build phase is a plan of room blocks on a 5 m grid: tap the ground
+to grow a room, tap a wall or a roof to add one beside or on top of it, hold (or right-click) to take
+one away, and pick one of eight tones for the next block. The **Architect** turns that coarse plan
+into finished, playable architecture after every tap: exterior walls with slits, windows or curtain
+glass, gates and doors on the ground floor (always at least two entrances, facing the attackers),
+doorways between rooms of different tones (same-tone rooms merge into halls with cover crates),
+stairs between storeys with stairwell holes, roof terraces with crenels or railings and roof
+access, pitched roofs for the roof tone, balconies on the front, arcades under overhanging rooms,
+string courses, quoins and lamps, all in the match style. Every room is guaranteed reachable, so
+whatever you build is an arena. The flag goes into any room with a tap; a "surprise castle" button
+generates a full fortress you can then edit, and the opponents' fortresses come from the same
+generator (keeps, citadels, palaces, bastions, temples and spires). One finger orbits and two
+fingers pan and zoom on a phone; the mouse drags to orbit, the wheel zooms, `1-8` pick tones, `X`
+toggles the eraser, `G` the flag, `Z` undoes. At match end a shareable fortress card renders your
+build, and every round opens with a short camera flyby.
 
 **Phones and tablets** get a layout modelled on today's popular mobile shooters: a movement stick on
 the left (push far to sprint), look by dragging anywhere on the right, twin fire buttons, and only
 the essentials as buttons (jump, crouch, aim, reload, swap, grenade and the two gadget slots in a
-compact cluster).
-Auto fire and aim assist are on by default for touch and can be tuned in Settings together with
-button size and opacity. The build phase uses the command table (brush bar at the bottom, storey and
-camera buttons on the side) and, in the free 3D view: tap to place, long-press to remove, drag to
-orbit, pinch to zoom, two-finger drag to pan, a hotbar with thumbnails, a rotate/undo/redo/layer
-strip, and a bottom sheet with materials, prefabs and templates. Landscape is recommended.
+compact cluster). Auto fire and aim assist are on by default for touch and can be tuned in Settings
+together with button size and opacity. Building on a phone is the same tap-a-block flow with the
+palette along the bottom. Landscape is recommended.
+
+**Bots** notice you the way people do (slower in the periphery, at range or when you stand still,
+instantly when you shoot), their first shots start off target and settle, their aim trails your
+movement, they flinch and break for cover under fire, reload out of sight and fire in bursts.
 
 ## Tech
 

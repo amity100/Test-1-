@@ -78,8 +78,17 @@ export class Player {
       return;
     }
     const looking = input.looking && this.enabled;
-    const lookDX = this.enabled ? input.lookDX() : 0;
-    const lookDY = this.enabled ? input.lookDY() : 0;
+    let lookDX = this.enabled ? input.lookDX() : 0;
+    let lookDY = this.enabled ? input.lookDY() : 0;
+    // Without pointer lock the cursor stops at the window edge, so the outer band of the window
+    // keeps turning the view (edge turn) and looking around stays possible.
+    if (looking && input.fallbackLook && !input.isTouch) {
+      const nx = (input.cursorX / window.innerWidth) * 2 - 1;
+      const ny = (input.cursorY / window.innerHeight) * 2 - 1;
+      const band = (v: number): number => (Math.abs(v) > 0.72 ? Math.sign(v) * ((Math.abs(v) - 0.72) / 0.28) : 0);
+      lookDX += band(nx) * 900 * dt;
+      lookDY += band(ny) * 500 * dt;
+    }
     // Touch helpers: find an enemy near the crosshair for aim assist / auto fire.
     const touch = input.isTouch && this.enabled;
     const assistOn = touch && settings.data.aimAssist && !e.burrowed;
@@ -93,7 +102,8 @@ export class Player {
       const touchScale = input.isTouch ? 1.6 : 1;
       // Friction: the camera slows down while the crosshair rests on an enemy.
       const friction = assistOn && nearTarget ? 0.5 : 1;
-      const sens = 0.0022 * settings.data.sensitivity * zoom * touchScale * friction;
+      // 0.0011 rad per raw count at sensitivity 1 ≈ 0.063°/count: a 360° turn in roughly 20 cm on an 800 DPI mouse.
+      const sens = 0.0011 * settings.data.sensitivity * zoom * touchScale * friction;
       e.yaw -= lookDX * sens;
       e.pitch = clamp(e.pitch - lookDY * sens * (settings.data.invertY ? -1 : 1), -1.5, 1.5);
     }
