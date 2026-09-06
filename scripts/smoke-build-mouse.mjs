@@ -12,6 +12,9 @@ page.on('console', (m) => { if (m.type() === 'error' && !m.text().includes('ERR_
 await page.goto(url, { waitUntil: 'domcontentloaded' });
 await page.waitForFunction(() => window.__fk && (window.__fk.ready || window.__fk.error), { timeout: 240000 });
 await page.evaluate(() => window.__fk.game().debugQuickMatch(2, 'easy', 60));
+// These checks exercise the free 3D build view; the match opens on the command table by default.
+await page.waitForFunction(() => window.__fk.game().tableActive, { timeout: 60000 });
+await page.evaluate(() => window.__fk.game().setBuildView('free'));
 await page.waitForTimeout(2500);
 // Project a cell in the plot centre to screen space.
 const target = await page.evaluate(() => {

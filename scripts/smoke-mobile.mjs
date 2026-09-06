@@ -31,6 +31,9 @@ await page.touchscreen.tap(pb.x + pb.width / 2, pb.y + pb.height / 2);
 await page.waitForTimeout(500);
 await page.screenshot({ path: path.join(outDir, 'm2-setup.png') });
 await page.evaluate(() => window.__fk.game().debugQuickMatch(2, 'easy', 60));
+// These checks exercise the free 3D build view; the match opens on the command table by default.
+await page.waitForFunction(() => window.__fk.game().tableActive, { timeout: 60000 });
+await page.evaluate(() => window.__fk.game().setBuildView('free'));
 await page.waitForTimeout(2500);
 await page.screenshot({ path: path.join(outDir, 'm3-build.png') });
 // Tap on the plot centre to place a block
