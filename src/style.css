@@ -679,7 +679,7 @@ body { background: radial-gradient(1200px 800px at 50% 30%, #16283a 0%, #0f1923 
 .bld-bar-track { height: 5px; width: 120px; background: rgba(255, 255, 255, 0.12); }
 .bld-bar-track .fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--coral)); }
 .bld-bar-track .fill.full { background: var(--danger); }
-.bld-status { font-size: 12px; font-weight: 700; padding: 6px 12px; clip-path: var(--chamfer-sm); letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
+.bld-status { font-size: 12px; font-weight: 700; padding: 6px 12px; clip-path: var(--chamfer-sm); letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; width: 190px; overflow: hidden; text-overflow: ellipsis; text-align: center; box-sizing: border-box; }
 .bld-status.ok { background: rgba(57, 255, 20, 0.15); color: var(--ok); border: 1px solid rgba(57, 255, 20, 0.4); }
 .bld-status.bad { background: rgba(255, 51, 85, 0.15); color: #ff8fa3; border: 1px solid rgba(255, 51, 85, 0.5); }
 .bld-actions { display: flex; gap: 6px; align-items: center; }
@@ -707,7 +707,7 @@ body { background: radial-gradient(1200px 800px at 50% 30%, #16283a 0%, #0f1923 
 .bldui.compact .bld-timer { font-size: 20px; min-width: 48px; }
 .bldui.compact .bld-roomswrap { min-width: 84px; }
 .bldui.compact .bld-bar-track { width: 84px; }
-.bldui.compact .bld-status { font-size: 11px; padding: 4px 8px; }
+.bldui.compact .bld-status { font-size: 11px; padding: 4px 8px; width: 118px; }
 .bldui.compact .bld-btn { height: 36px; min-width: 36px; }
 .bldui.compact .bld-actions .btn.primary { padding: 8px 14px; font-size: 14px; }
 .bldui.compact .bld-swatch { width: 40px; height: 40px; }
