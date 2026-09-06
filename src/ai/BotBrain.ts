@@ -440,6 +440,7 @@ export class BotBrain {
       if (nv <= 0) this.notice.delete(id);
       else this.notice.set(id, nv);
     }
+    let keepOld = false;
     if (best && this.mem.target !== best) {
       // A new face in view registers only once awareness has built up: slower in the periphery, at
       // range and for a still figure; instant for someone shooting or right next to the bot.
@@ -461,6 +462,7 @@ export class BotBrain {
           this.mem.lastSeenPos.copy(this.mem.target.pos);
           this.mem.lastSeenTime = now;
         } else this.mem.visible = false;
+        keepOld = true;
         best = null;
       } else {
         this.notice.delete(best.id);
@@ -474,7 +476,8 @@ export class BotBrain {
       this.mem.visible = true;
       this.mem.lastSeenPos.copy(best.pos);
       this.mem.lastSeenTime = now;
-    } else if (!this.mem.visible || !this.mem.target) {
+    } else if (!keepOld) {
+      // Nobody in sight: the current target is remembered for a while, then forgotten.
       this.mem.visible = false;
       if (this.mem.target && (!this.mem.target.alive || this.mem.target.burrowed || now - this.mem.lastSeenTime > this.profile.memory)) this.mem.target = null;
     }

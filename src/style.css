@@ -356,6 +356,14 @@ html, body {
 .tb-battle .tb.grenade { right: calc(30px + var(--sr)); bottom: calc(222px + var(--sb)); width: calc(50px * var(--ts)); height: calc(50px * var(--ts)); color: #ffd36a; }
 .tb-battle .tb.grapple { right: calc(36px + var(--sr)); bottom: calc(284px + var(--sb)); width: calc(46px * var(--ts)); height: calc(46px * var(--ts)); color: var(--accent); }
 .tb.pause { top: calc(8px + var(--st)); right: calc(10px + var(--sr)); width: 40px; height: 40px; border-radius: 10px; opacity: calc(var(--to) * 0.9); }
+/* Portrait phones: ask for landscape. */
+.rotate-hint { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 24px; background: rgba(8, 14, 22, 0.88); font-family: var(--display); font-weight: 700; font-size: 20px; letter-spacing: 0.08em; text-transform: uppercase; pointer-events: auto; z-index: 60; }
+.rotate-hint::before { content: '📱'; display: block; font-size: 44px; margin-bottom: 12px; animation: rotateHint 1.6s ease-in-out infinite; }
+.rotate-hint > span { display: block; max-width: 80vw; }
+@keyframes rotateHint { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-90deg); } }
+@media (orientation: landscape) { .rotate-hint { display: none; } }
+@media (pointer: fine) { .rotate-hint { display: none; } }
+
 /* ---------- Small screens ---------- */
 @media (max-width: 900px), (pointer: coarse) {
   .vitals { left: calc(16px + env(safe-area-inset-left, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); width: 150px; }

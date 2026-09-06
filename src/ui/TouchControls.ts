@@ -333,6 +333,17 @@ export class TouchControls {
     } else if (p.role === 'look' || p.role === 'orbit') {
       v.lookDX += dx;
       v.lookDY += dy;
+    } else if (p.role === 'pinch') {
+      const pts = Array.from(this.pointers.values()).filter((q) => q.role === 'pinch');
+      if (pts.length === 2) {
+        const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+        if (this.pinchDist > 0) v.zoom += (this.pinchDist - d) / 120;
+        this.pinchDist = d;
+        const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+        v.panX += mid.x - this.pinchMid.x;
+        v.panY += mid.y - this.pinchMid.y;
+        this.pinchMid = mid;
+      }
     }
   };
 
