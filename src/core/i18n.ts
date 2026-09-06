@@ -5,6 +5,8 @@ type Dict = Record<string, string>;
 const en: Dict = {
   title: 'FLAGKEEP',
   tagline: 'Build. Hide. Storm.',
+  versionTag: 'Command table',
+  updateAvailable: 'A newer version is ready · tap to reload',
   loading: 'Loading',
   loadingTextures: 'Painting materials',
   loadingWorld: 'Raising the island',
@@ -308,6 +310,8 @@ const en: Dict = {
 const he: Dict = {
   title: 'FLAGKEEP',
   tagline: 'בנה. הסתר. הסתער.',
+  versionTag: 'שולחן הפיקוד',
+  updateAvailable: 'יש גרסה חדשה · הקישו לרענון',
   loading: 'טוען',
   loadingTextures: 'מצייר חומרים',
   loadingWorld: 'מרים את האי',

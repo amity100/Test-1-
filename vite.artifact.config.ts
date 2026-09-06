@@ -5,6 +5,7 @@ import { viteSingleFile } from 'vite-plugin-singlefile';
 export default defineConfig({
   base: './',
   resolve: { dedupe: ['three'] },
+  define: { __BUILD_ID__: JSON.stringify(new Date().toISOString()) },
   plugins: [viteSingleFile({ removeViteModuleLoader: true })],
   build: {
     target: 'es2022',

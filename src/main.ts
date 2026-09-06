@@ -1,15 +1,16 @@
 import './style.css';
 import { App } from './core/App';
+import { BUILD_ID } from './core/Version';
 
 declare global {
   interface Window {
-    __fk: { app: App; ready: boolean; debugView: (name: string) => void; error?: string; game: () => import('./core/Game').Game };
+    __fk: { app: App; ready: boolean; buildId: string; debugView: (name: string) => void; error?: string; game: () => import('./core/Game').Game };
   }
 }
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const app = new App(canvas);
-window.__fk = { app, ready: false, debugView: (n) => app.debugView(n), game: () => app.game };
+window.__fk = { app, ready: false, buildId: BUILD_ID, debugView: (n) => app.debugView(n), game: () => app.game };
 app
   .init()
   .then(() => {

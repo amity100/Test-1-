@@ -1,5 +1,6 @@
 import { el, btn, esc, segmented, field, slider } from './dom';
 import { t, setLang, getLang } from '../core/i18n';
+import { VERSION } from '../core/Version';
 import { settings, type Quality, type Language } from '../core/Settings';
 import { STYLE_IDS, STYLES, type StyleId } from '../world/Styles';
 import type { MatchConfig, Difficulty } from '../sim/Match';
@@ -72,6 +73,7 @@ export class Screens {
   private container: HTMLElement | null = null;
   private setup: MatchConfig;
   private settingsBack: 'menu' | 'pause' = 'menu';
+  private updateReady = false;
   private lastSummary: SummaryData | null = null;
   private lastPodium: PodiumRow[] | null = null;
   private nextInEl: HTMLElement | null = null;
@@ -135,9 +137,16 @@ export class Screens {
     }
   }
 
+  /** Shows the reload pill on the menu once a newer deploy has been detected. */
+  showUpdateAvailable(): void {
+    this.updateReady = true;
+    const pill = this.root.querySelector<HTMLElement>('.panel.menu .update-pill');
+    if (pill) pill.hidden = false;
+  }
+
   showMenu(): void {
     const p = el('div', 'panel menu');
-    p.innerHTML = `<h1>FLAG<span>KEEP</span></h1><div class="tagline">${esc(t('tagline'))}</div>`;
+    p.innerHTML = `<h1>FLAG<span>KEEP</span></h1><div class="tagline">${esc(t('tagline'))}</div><div class="ver">v${VERSION} · ${esc(t('versionTag'))}</div>`;
     const stack = el('div', 'stack');
     stack.append(
       btn(t('play'), 'primary', () => this.showSetup()),
@@ -157,7 +166,9 @@ export class Screens {
         this.refresh();
       }),
     );
-    p.append(stack, langRow);
+    const pill = btn(t('updateAvailable'), 'small update-pill', () => location.reload());
+    pill.hidden = !this.updateReady;
+    p.append(stack, langRow, pill);
     this.mount('menu', p, false);
   }
 

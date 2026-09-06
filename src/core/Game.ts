@@ -35,6 +35,7 @@ import { blockColor, PALETTE } from '../world/Voxel';
 import { STYLES } from '../world/Styles';
 import { Random } from './Random';
 import { settings } from './Settings';
+import { BUILD_ID } from './Version';
 import { t } from './i18n';
 import { audio } from '../audio/AudioEngine';
 import { clamp, formatTime, damp } from './MathUtil';
@@ -86,6 +87,7 @@ export class Game {
   tableUI: TableUI | null = null;
   /** Whether the command table (plan view) is the active build view. */
   tableActive = false;
+  private lastUpdateCheck = -Infinity;
   touch: TouchControls;
   private rotateHint: HTMLElement;
   private projectileMeshes = new Map<number, THREE.Object3D>();
@@ -320,7 +322,8 @@ export class Game {
     this.mode = 'build';
     this.app.gr.camera.position.set(plots[0].cx + 30, PLOT_Y + 30, plots[0].cz + 40);
     this.tableActive = false;
-    this.setBuildView(settings.data.buildView);
+    // Phones always open on the command table; the desktop remembers the last choice.
+    this.setBuildView(IS_TOUCH ? 'table' : settings.data.buildView);
     this.setTouchMode();
     match.startBuild();
     audio.music('build');
@@ -343,7 +346,7 @@ export class Game {
     }
     this.buildUI.setTable(on);
     this.touch.setBuildDraw(!on && this.build.state.tool === 'draw' && !this.build.state.editing);
-    if (settings.data.buildView !== view) {
+    if (!IS_TOUCH && settings.data.buildView !== view) {
       settings.data.buildView = view;
       settings.save();
     }
@@ -826,6 +829,10 @@ export class Game {
     switch (this.mode) {
       case 'menu':
         this.menuCamera(dt);
+        if (this.time - this.lastUpdateCheck > 60) {
+          this.lastUpdateCheck = this.time;
+          void this.checkForUpdate();
+        }
         break;
       case 'build':
         if (!this.paused) {
@@ -863,6 +870,18 @@ export class Game {
   private winnerPlot(): Plot {
     const w = this.match?.standings()[0];
     return this.app.plots[w?.plotIndex ?? 0];
+  }
+
+  /** Compares the deployed build stamp with the one in memory so a tab left open learns about a newer version. */
+  private async checkForUpdate(): Promise<void> {
+    try {
+      const res = await fetch(`version.json?t=${Date.now()}`, { cache: 'no-store' });
+      if (!res.ok) return;
+      const info = (await res.json()) as { buildId?: string };
+      if (info.buildId && BUILD_ID !== 'dev' && info.buildId !== BUILD_ID) this.screens.showUpdateAvailable();
+    } catch {
+      // Offline, or the single-file build: nothing to compare against.
+    }
   }
 
   private menuCamera(dt: number): void {

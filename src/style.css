@@ -889,3 +889,7 @@ body { background: radial-gradient(1200px 800px at 50% 30%, #16283a 0%, #0f1923 
   .tableui.compact .tbl-storey .num { font-size: 19px; }
 }
 .b-top .btn.view-toggle { padding: 8px 10px; font-size: 12px; }
+
+/* Menu: release stamp and the reload pill for stale tabs. */
+.panel.menu .ver { font-family: var(--display); font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); margin: -16px 0 18px; }
+.panel.menu .update-pill { width: 100%; margin-top: 12px; background: rgba(0, 229, 255, 0.16); border-color: var(--accent); color: #fff; }
