@@ -1301,6 +1301,10 @@ export class BuildMode {
       // Re-derive UI hover from the element under the pointer: panels re-render under the cursor and can miss mouseleave.
       const elUnder = document.elementFromPoint(input.cursorX, input.cursorY);
       this.uiHover = !!elUnder && !!elUnder.closest('[data-ui]');
+    } else if (input.virtual.tapped) {
+      // Touch: a tap counts as UI only when the finger actually landed on a panel.
+      const elUnder = document.elementFromPoint(input.virtual.tapX, input.virtual.tapY);
+      this.uiHover = !!elUnder && !!elUnder.closest('[data-ui]');
     }
     this.updateCamera(dt);
     this.updateCursor();

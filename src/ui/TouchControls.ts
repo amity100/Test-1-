@@ -33,6 +33,15 @@ interface Pointer {
 }
 
 const svg = (body: string, vb = '0 0 24 24'): string => `<svg viewBox="${vb}" aria-hidden="true">${body}</svg>`;
+const LONG_PRESS_MS = 480;
+/** Short haptic tick where supported (Android Chrome); silently ignored elsewhere. */
+export function vibrate(ms: number): void {
+  try {
+    navigator.vibrate?.(ms);
+  } catch {
+    /* unsupported */
+  }
+}
 /** Crisp vector glyphs for the on-screen buttons (stroke inherits the button colour). */
 const ICON = {
   fire: svg('<circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none"/><path d="M12 1.5v4M12 18.5v4M1.5 12h4M18.5 12h4"/>'),
@@ -354,17 +363,13 @@ export class TouchControls {
       v.strokeY = e.clientY;
     }
     if (role === 'orbit') {
-      // Long press (finger held still) removes the block under the finger in build mode.
+      // A finger held still marks a long press (haptic tick); the erase itself is decided on release from
+      // the event timestamps, so a stalled frame can never turn a quick tap into a removal or lose it.
       p.longTimer = window.setTimeout(() => {
         if (this.pointers.get(p.id) !== p || p.moved >= 14 || p.role !== 'orbit') return;
         p.longFired = true;
-        const v = this.input.virtual;
-        v.tapped = true;
-        v.tapX = p.x;
-        v.tapY = p.y;
-        v.secondary = true;
-        v.longPress = true;
-      }, 520);
+        vibrate(12);
+      }, LONG_PRESS_MS);
     }
     if (role === 'move') {
       this.movePointer = p;
@@ -438,19 +443,17 @@ export class TouchControls {
       v.sprint = false;
     } else if (p.role === 'look' || p.role === 'orbit') {
       if (p.longTimer) window.clearTimeout(p.longTimer);
-      // A stalled frame can let the long-press timer run before a quick release is processed.
-      // If the finger actually lifted quickly and the long press has not been consumed yet, undo it.
-      if (p.longFired && e.timeStamp - p.downStamp < 420 && (v.longPress || v.secondary)) {
-        v.secondary = false;
-        v.longPress = false;
-        v.tapped = false;
-        p.longFired = false;
-      }
-      // In build mode a quick tap places at the finger; in battle, taps only look around.
-      if (p.moved < 14 && !p.longFired && this.mode === 'build') {
+      // Build mode: a still finger is a tap (place at the finger) or, when held long enough, a long press
+      // (remove the block under the finger). Hardware timestamps decide, not frame timing.
+      if (p.moved < 14 && this.mode === 'build') {
+        const held = e.timeStamp - p.downStamp;
         v.tapped = true;
         v.tapX = p.x;
         v.tapY = p.y;
+        if (held >= LONG_PRESS_MS) {
+          v.secondary = true;
+          v.longPress = true;
+        }
       }
     } else if (p.role === 'draw') {
       v.strokeEnd = true;

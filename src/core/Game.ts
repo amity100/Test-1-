@@ -24,7 +24,7 @@ import { Screens, type SummaryRow, type PodiumRow } from '../ui/Screens';
 import { composeCard } from '../ui/FortressCard';
 import { BuildMode } from '../build/BuildMode';
 import { BuildUI } from '../build/BuildUI';
-import { TouchControls } from '../ui/TouchControls';
+import { TouchControls, vibrate } from '../ui/TouchControls';
 import { IS_TOUCH } from './Input';
 import { generateFortress } from '../world/FortressGen';
 import { STYLE_IDS, type StyleId } from '../world/Styles';
@@ -283,11 +283,17 @@ export class Game {
       },
       IS_TOUCH || window.innerWidth < 900,
     );
-    this.build.events.on('placed', () => audio.play('place', { pitch: 0.9 + Math.random() * 0.2 }));
+    this.build.events.on('placed', () => {
+      audio.play('place', { pitch: 0.9 + Math.random() * 0.2 });
+      if (IS_TOUCH) vibrate(8);
+    });
     this.build.events.on('placedCells', ({ cells }) => {
       for (const c of cells) this.vfx.puff(new THREE.Vector3(c.x + 0.5, c.y + 0.65, c.z + 0.5), new THREE.Vector3(0, 1, 0), 3, 0.8, 0.22);
     });
-    this.build.events.on('erased', () => audio.play('erase'));
+    this.build.events.on('erased', () => {
+      audio.play('erase');
+      if (IS_TOUCH) vibrate(16);
+    });
     this.build.events.on('change', () => this.touch.setBuildDraw(this.build?.state.tool === 'draw' && !this.build.state.editing));
     this.build.enter();
     this.buildUI.show();

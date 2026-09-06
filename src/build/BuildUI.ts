@@ -100,8 +100,13 @@ export class BuildUI {
     this.root.append(this.topbar, this.rail, this.strip, this.context, this.hotbar, this.hint, this.sheet, this.toast);
     for (const panel of [this.topbar, this.rail, this.strip, this.hotbar, this.context, this.sheet]) {
       panel.setAttribute('data-ui', '1');
-      panel.addEventListener('mouseenter', () => (this.build.uiHover = true));
-      panel.addEventListener('mouseleave', () => (this.build.uiHover = false));
+      // Hover only means something for a mouse: touch taps synthesise mouseenter without a matching leave.
+      panel.addEventListener('pointerenter', (e) => {
+        if (e.pointerType === 'mouse') this.build.uiHover = true;
+      });
+      panel.addEventListener('pointerleave', (e) => {
+        if (e.pointerType === 'mouse') this.build.uiHover = false;
+      });
       panel.addEventListener('pointerdown', () => (this.build.uiHover = true));
       panel.addEventListener('pointerup', () => window.setTimeout(() => (this.build.uiHover = false), 50));
     }
