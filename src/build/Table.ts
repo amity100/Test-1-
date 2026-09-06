@@ -720,8 +720,9 @@ export class CommandTable {
       const v = input.virtual;
       return { down: v.strokeStart, held: v.strokeActive, up: v.strokeEnd && !v.strokeCancel, cancel: v.strokeCancel, x: v.strokeX, y: v.strokeY, heldMs: v.strokeHeldMs, longTick: v.strokeLongTick };
     }
-    const heldMs = this.gesture ? input.buttonHeldMs(0) : 0;
-    return { down: input.buttonPressed(0), held: input.buttonDown(0), up: input.buttonReleased(0), cancel: false, x: input.cursorX, y: input.cursorY, heldMs, longTick: heldMs >= LONG_PRESS_MS };
+    // Read the hold time even before the gesture exists: a slow frame can deliver press and release together.
+    const heldMs = input.buttonHeldMs(0);
+    return { down: input.buttonPressed(0), held: input.buttonDown(0), up: input.buttonReleased(0), cancel: false, x: input.cursorX, y: input.cursorY, heldMs, longTick: input.buttonDown(0) && heldMs >= LONG_PRESS_MS };
   }
 
   private handleGestures(dt: number): void {
