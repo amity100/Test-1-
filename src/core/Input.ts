@@ -78,6 +78,7 @@ export class Input {
   private down = new Set<string>();
   private pressed = new Set<string>();
   private released = new Set<string>();
+  private pressedMods = new Map<string, { ctrl: boolean; shift: boolean; alt: boolean }>();
   private buttonsDown = new Set<number>();
   private buttonsPressed = new Set<number>();
   private buttonsReleased = new Set<number>();
@@ -127,7 +128,10 @@ export class Input {
 
   private onKeyDown = (e: KeyboardEvent): void => {
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-    if (!this.down.has(e.code)) this.pressed.add(e.code);
+    if (!this.down.has(e.code)) {
+      this.pressed.add(e.code);
+      this.pressedMods.set(e.code, { ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey, alt: e.altKey });
+    }
     this.down.add(e.code);
     if (['Space', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyQ'].includes(e.code) && this.enabled) e.preventDefault();
   };
@@ -240,6 +244,10 @@ export class Input {
   wasPressed(code: string): boolean {
     return this.enabled && this.pressed.has(code);
   }
+  /** Modifier flags captured by the key's own event, so a modifier released before the frame still counts. */
+  modsOf(code: string): { ctrl: boolean; shift: boolean; alt: boolean } | null {
+    return this.pressedMods.get(code) ?? null;
+  }
   wasReleased(code: string): boolean {
     return this.enabled && this.released.has(code);
   }
@@ -343,6 +351,7 @@ export class Input {
 
   endFrame(): void {
     this.pressed.clear();
+    this.pressedMods.clear();
     this.released.clear();
     this.buttonsPressed.clear();
     this.buttonsReleased.clear();

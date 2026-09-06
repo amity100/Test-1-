@@ -752,11 +752,12 @@ export class CommandTable {
       if (input.wasPressed('KeyQ')) this.rotate(-1);
       if (input.wasPressed('KeyE') || input.wasPressed('KeyR')) this.rotate(1);
       for (let i = 1; i <= TABLE_LEVELS; i++) if (input.wasPressed(`Digit${i}`)) this.setLevel(i - 1);
-      if (input.wasPressed('KeyZ') && (input.isDown('ControlLeft') || input.isDown('MetaLeft'))) {
-        if (input.isDown('ShiftLeft')) this.build.redo();
+      // Z / Ctrl+Z undo, Shift+Z / Ctrl+Shift+Z / Y redo (modifiers read from the key's own event).
+      if (input.wasPressed('KeyZ')) {
+        if (input.modsOf('KeyZ')?.shift) this.build.redo();
         else this.build.undo();
       }
-      if (input.wasPressed('KeyY') && (input.isDown('ControlLeft') || input.isDown('MetaLeft'))) this.build.redo();
+      if (input.wasPressed('KeyY')) this.build.redo();
       if (input.wasPressed('Escape')) {
         this.gesture = null;
         this.events.emit('picker', null);
