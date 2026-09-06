@@ -666,7 +666,11 @@ export class CommandTable {
       this.build.events.emit('invalid', { key: 'flagBlocked' });
       return false;
     }
+    // The flag also seeds the defender's spawn when none was set, so the table never nags for one.
+    this.build.beginBatch();
     this.build.placeFlag(cell);
+    if (!this.build.state.spawn) this.build.placeSpawn(cell);
+    this.build.endBatch();
     this.debugLast = 'flag';
     return true;
   }
