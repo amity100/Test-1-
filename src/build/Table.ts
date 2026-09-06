@@ -78,6 +78,7 @@ export class CommandTable {
   private dotPhase = 0;
   private clipPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
   private gesture: Gesture | null = null;
+  private rightDrag: { x: number; y: number } | null = null;
   private raycaster = new THREE.Raycaster();
   private nav: NavSystem | null = null;
   private pathDirty = true;
@@ -727,7 +728,13 @@ export class CommandTable {
     if (v.zoom !== 0) this.zoom = clamp(this.zoom * (1 + v.zoom * 0.6), 0.45, 2.6);
     if (v.panX !== 0 || v.panY !== 0) this.panBy(v.panX, v.panY);
     if (input.wheel !== 0) this.zoom = clamp(this.zoom * (1 + input.wheel * 0.12), 0.45, 2.6);
-    if (!input.isTouch && input.buttonDown(2)) this.panBy(input.mouseDX, input.mouseDY);
+    if (!input.isTouch) {
+      // Right drag pans: cursor deltas, since movement deltas only flow under pointer lock.
+      if (input.buttonDown(2)) {
+        if (this.rightDrag) this.panBy(input.cursorX - this.rightDrag.x, input.cursorY - this.rightDrag.y);
+        this.rightDrag = { x: input.cursorX, y: input.cursorY };
+      } else this.rightDrag = null;
+    }
     if (!input.isTouch) {
       const speed = 22 * dt * this.zoom;
       const ax = input.axisX();
