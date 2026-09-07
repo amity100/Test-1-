@@ -187,7 +187,9 @@ export class Game {
 
   private applySettings(): void {
     const q = this.app.forcedQuality ?? settings.resolveQuality(this.app.gr.gpuName);
-    if (q !== this.app.gr.quality) {
+    const safe = settings.mobileSafe || this.app.gr.flags.has('mobile');
+    if (q !== this.app.gr.quality || safe !== this.app.gr.mobileSafe) {
+      this.app.gr.mobileSafe = safe;
       this.app.gr.setQuality(q);
       this.app.sky.setShadowMapSize(this.app.gr.profile.shadowMap);
       this.app.sky.setShadowRadius(this.app.gr.profile.shadowRadius);

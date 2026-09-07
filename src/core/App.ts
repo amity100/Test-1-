@@ -85,6 +85,7 @@ export class App {
     if (flags.has('nohemi')) this.sky.hemi.visible = false;
     if (flags.has('nosun')) this.sky.sun.visible = false;
     this.gr.attachSky(this.sky);
+    this.gr.mobileSafe = settings.mobileSafe || flags.has('mobile');
     this.gr.setQuality(quality);
     this.sky.setShadowMapSize(this.gr.profile.shadowMap);
     this.sky.setShadowRadius(this.gr.profile.shadowRadius);
@@ -129,6 +130,19 @@ export class App {
     this.ready = true;
     this.last = performance.now();
     requestAnimationFrame(this.loop);
+    if (flags.has('info')) this.showDiagnostics();
+  }
+
+  /** ?debug=info: GPU, tier and capability readout in the corner, refreshed once a second. */
+  private showDiagnostics(): void {
+    const pre = document.createElement('pre');
+    pre.style.cssText = 'position:fixed;left:6px;top:6px;z-index:9999;margin:0;padding:6px 8px;font:11px/1.35 monospace;color:#dff;background:rgba(0,0,0,.65);border-radius:6px;pointer-events:none;white-space:pre-wrap;max-width:60vw;direction:ltr;text-align:left';
+    document.body.appendChild(pre);
+    const refresh = (): void => {
+      pre.textContent = `${this.gr.diagnostics()}\nfps: ${this.fps.toFixed(0)}  ua: ${navigator.userAgent.slice(0, 90)}`;
+    };
+    refresh();
+    setInterval(refresh, 1000);
   }
 
   private placePlotFloors(): void {

@@ -50,6 +50,13 @@ const DEFAULTS: SettingsData = {
 export class Settings {
   data: SettingsData = { ...DEFAULTS };
   resolvedQuality: Quality = 'high';
+  /** A phone or tablet GPU (or a mobile browser hiding its GPU): fragile post-processing stays off. */
+  mobileGpu = false;
+
+  /** Screen-space passes that misbehave on some phone GPUs are skipped unless a tier was chosen by hand. */
+  get mobileSafe(): boolean {
+    return this.mobileGpu && this.data.quality === 'auto';
+  }
 
   load(): void {
     try {
@@ -77,14 +84,18 @@ export class Settings {
 
   /** Picks a quality tier from GPU hints when quality is 'auto'. */
   resolveQuality(gpuName: string): Quality {
+    const g = gpuName.toLowerCase();
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+    const software = /swiftshader|llvmpipe|software/.test(g);
+    const mobileGpu = /mali|adreno|powervr|apple gpu|apple a\d|xclipse|immortalis|vivante|videocore/.test(g);
+    this.mobileGpu = mobileGpu || (!software && /android|iphone|ipad|ipod|mobile/i.test(ua));
     if (this.data.quality !== 'auto') {
       this.resolvedQuality = this.data.quality;
       return this.resolvedQuality;
     }
-    const g = gpuName.toLowerCase();
     let q: Quality = 'high';
-    if (/swiftshader|llvmpipe|software/.test(g)) q = 'low';
-    else if (/mali|adreno|powervr|apple gpu|apple a\d/.test(g)) q = 'medium';
+    if (software) q = 'low';
+    else if (this.mobileGpu) q = 'medium';
     else if (/intel/.test(g) && !/arc/.test(g)) q = 'medium';
     else if (/nvidia|geforce|rtx|radeon|amd|arc/.test(g)) q = 'high';
     const cores = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency ?? 4 : 4;

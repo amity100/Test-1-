@@ -63,6 +63,12 @@ export class GameRenderer {
   private sky: SkySystem | null = null;
   gpuName = 'unknown';
   readonly flags = new Set<string>();
+  /** Skip screen-space passes known to misbehave on some phone GPUs (set from Settings.mobileSafe). */
+  mobileSafe = false;
+  /** Frame buffers use half floats when the GPU can render to them, 8-bit otherwise. */
+  readonly halfFloatBuffers: boolean;
+  readonly shaderErrors: string[] = [];
+  private degradePending = false;
 
   constructor(readonly canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({
@@ -92,8 +98,21 @@ export class GameRenderer {
     } catch {
       /* ignore */
     }
+    // Rendering into half-float targets needs a colour-buffer-float extension; without it (older phone
+    // GPUs) the whole post chain would come out black or scrambled, so fall back to 8-bit buffers.
+    const gl = this.renderer.getContext();
+    const floatOk = !!(gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float'));
+    this.halfFloatBuffers = floatOk && !this.flags.has('byte');
+    // A shader that fails to compile on this GPU would leave its pass rendering garbage: drop the
+    // fragile passes instead (AO first, then the whole post chain), see render().
+    this.renderer.debug.onShaderError = (ctx, program, vs, fs) => {
+      const log = [ctx.getProgramInfoLog(program), ctx.getShaderInfoLog(vs), ctx.getShaderInfoLog(fs)].filter(Boolean).join(' | ');
+      this.shaderErrors.push(log.slice(0, 300));
+      console.error('[flagkeep] shader failed on this GPU, simplifying rendering:', log);
+      this.degradePending = true;
+    };
     this.camera = new THREE.PerspectiveCamera(80, 1, 0.08, 4000);
-    this.composer = new EffectComposer(this.renderer, { frameBufferType: THREE.HalfFloatType, multisampling: 0 });
+    this.composer = new EffectComposer(this.renderer, { frameBufferType: this.halfFloatBuffers ? THREE.HalfFloatType : THREE.UnsignedByteType, multisampling: 0 });
     this.fog = new HeightFogEffect(this.camera);
     this.bloom = new BloomEffect({ intensity: 0.55, luminanceThreshold: 0.92, luminanceSmoothing: 0.2, mipmapBlur: true, radius: 0.7 });
     this.vignette = new VignetteEffect({ offset: 0.28, darkness: 0.55 });
@@ -124,7 +143,9 @@ export class GameRenderer {
     this.passes.push(renderPass);
 
     const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
-    if (profile.ao && !this.flags.has('noao')) {
+    // Screen-space AO stays off on phone GPUs unless a tier was picked by hand: the voxel meshes carry
+    // baked vertex occlusion, and the half-resolution depth path has shown artefacts on some drivers.
+    if (profile.ao && !this.flags.has('noao') && !this.mobileSafe) {
       const ao = new N8AOPostPass(scene, camera, Math.max(2, size.x), Math.max(2, size.y));
       ao.configuration.aoRadius = 2.2;
       ao.configuration.distanceFalloff = 0.9;
@@ -193,7 +214,34 @@ export class GameRenderer {
     this.composer.setSize(w, h);
   }
 
+  /** One line per fact for the ?debug=info overlay and bug reports. */
+  diagnostics(): string {
+    const gl = this.renderer.getContext();
+    const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
+    const ext = (n: string) => (gl.getExtension(n) ? 'yes' : 'no');
+    return [
+      `gpu: ${this.gpuName}`,
+      `tier: ${this.quality}${this.mobileSafe ? ' (mobile-safe, no SSAO)' : ''}  ao: ${this.n8ao ? 'on' : 'off'}  post: ${this.flags.has('nopost') ? 'off' : 'on'}`,
+      `buffers: ${this.halfFloatBuffers ? 'half float' : '8-bit'}  size: ${size.x}x${size.y}  dpr: ${window.devicePixelRatio}`,
+      `ext float: ${ext('EXT_color_buffer_float')}  half: ${ext('EXT_color_buffer_half_float')}  float linear: ${ext('OES_texture_float_linear')}`,
+      `max texture: ${gl.getParameter(gl.MAX_TEXTURE_SIZE)}  shader errors: ${this.shaderErrors.length}`,
+      ...this.shaderErrors.map((e) => `  ${e}`),
+    ].join('\n');
+  }
+
+  /** After a shader failure: first without AO, then without the post chain altogether. */
+  private degrade(): void {
+    this.degradePending = false;
+    if (this.n8ao) {
+      this.flags.add('noao');
+      this.rebuildPasses();
+    } else if (!this.flags.has('nopost')) {
+      this.flags.add('nopost');
+    }
+  }
+
   render(dt: number): void {
+    if (this.degradePending) this.degrade();
     if (this.flags.has('nopost')) {
       this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
       this.renderer.render(this.scene, this.camera);

@@ -109,7 +109,10 @@ per-block variation and bevelled edges), frustum-culled grass tiles and skinned 
 horizon and flag metalwork, shadow maps that refresh every other frame when a device drops below
 50 fps, heightmap island with a detail-mapped
 ground, paths, a central monument and ruins, distant horizon islands, height fog, colour
-grading/sharpen pass, procedural Web Audio.
+grading/sharpen pass, procedural Web Audio. On phone GPUs the automatic tier leaves screen-space AO
+off (the baked vertex occlusion stays), frame buffers drop to 8-bit when the GPU cannot render to
+half floats, and a shader that fails to compile drops the fragile passes instead of drawing
+garbage; `?debug=info` shows the GPU readout and `?debug=noao`, `nopost`, `byte` isolate passes.
 
 All models are generated at load time from parametric parts merged per material: skinned operators
 (plate carrier, pouches, pads, boots, camouflage and team-tinted armour with emissive accents) on a
