@@ -114,6 +114,7 @@ export class FlagMesh {
   private ghostMat: THREE.MeshBasicMaterial;
   private ghostBackMat: THREE.MeshBasicMaterial;
   private beaconBase = 0;
+  private alert = false;
   private fitScale = 1;
   private time = 0;
   private near = 0;
@@ -264,6 +265,18 @@ export class FlagMesh {
     this.ghost.scale.setScalar(ghostWorld / s);
   }
 
+  /** Alarm: the flag's light turns red and beats while an enemy is taking it. */
+  setAlert(on: boolean): void {
+    if (on === this.alert) return;
+    this.alert = on;
+    const c = on ? new THREE.Color(0xff3548) : this.color;
+    this.glow.color.copy(c);
+    (this.halo.material as THREE.SpriteMaterial).color.copy(c);
+    (this.shaft.material as THREE.MeshBasicMaterial).color.copy(c);
+    (this.sparks.material as THREE.PointsMaterial).color.copy(c);
+    (this.ring.material as THREE.MeshStandardMaterial).emissive.copy(c);
+  }
+
   /** Beacon visibility 0..1 (used when a captured flag or reveal is shown). */
   setBeacon(strength: number): void {
     this.beaconBase = strength;
@@ -328,7 +341,7 @@ export class FlagMesh {
     this.clothGeo.computeVertexNormals();
 
     // Lights and glow ramp
-    this.glow.intensity = 4.5 + near * 11 + Math.sin(t * 3) * 0.8;
+    this.glow.intensity = (4.5 + near * 11 + Math.sin(t * 3) * 0.8) * (this.alert ? 1.3 + 0.9 * Math.abs(Math.sin(t * 7)) : 1);
     this.glow.distance = 8 + near * 6;
     this.clothMat.emissiveIntensity = 0.35 + near * 0.9;
     (this.halo.material as THREE.SpriteMaterial).opacity = 0.16 + near * 0.34 + Math.sin(t * 2.2) * 0.03;

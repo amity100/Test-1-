@@ -16,7 +16,7 @@ export interface HitResult {
 }
 
 export interface CombatEvents extends Record<string, unknown> {
-  damage: { target: Entity; attacker: Entity | null; amount: number; headshot: boolean; point: THREE.Vector3 };
+  damage: { target: Entity; attacker: Entity | null; amount: number; headshot: boolean; point: THREE.Vector3; armored: boolean };
   kill: { victim: Entity; killer: Entity | null; headshot: boolean };
   shot: { shooter: Entity; origin: THREE.Vector3; end: THREE.Vector3; weapon: WeaponDef; hit: HitResult | null };
   impact: { point: THREE.Vector3; normal: THREE.Vector3; blockValue: number; onEntity: boolean };
@@ -219,16 +219,25 @@ export class Combat {
     if (!target.alive) return;
     if (target.protectedUntil > now && attacker !== target) return;
     if (attacker && attacker !== target && !this.friendlyFire && attacker.role === target.role && attacker.role === 'attacker') return;
-    target.hp -= amount;
+    // Armour plates (streak reward) soak damage before health.
+    let absorbed = 0;
+    if (target.armor > 0) {
+      absorbed = Math.min(target.armor, amount);
+      target.armor -= absorbed;
+    }
+    target.hp -= amount - absorbed;
     target.lastDamageTime = now;
     if (attacker && attacker !== target) target.lastAttackerId = attacker.id;
-    this.events.emit('damage', { target, attacker, amount, headshot, point });
+    this.events.emit('damage', { target, attacker, amount, headshot, point, armored: absorbed > 0 });
     if (target.hp <= 0) {
       target.hp = 0;
       target.alive = false;
       target.deadSince = now;
       target.grapplePoint = null;
       target.score.deaths++;
+      target.streak = 0;
+      target.multiKill = 0;
+      target.armor = 0;
       const killer = attacker && attacker !== target ? attacker : null;
       this.events.emit('kill', { victim: target, killer, headshot });
     }

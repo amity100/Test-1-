@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { App } from './App';
-import { Entity, type Role } from '../sim/Entities';
+import { Entity, type Role, emptyScore } from '../sim/Entities';
 import { CharacterController } from '../sim/CharacterController';
 import { Combat } from '../sim/Combat';
 import { Player } from '../sim/Player';
@@ -97,8 +97,16 @@ export class Game {
   private endBannerShown = false;
   private summaryShown = false;
   private footAcc = 0;
-  private lastDefenderAlarm = 0;
   private lastCaptureTick = -1;
+  /** Whoever is taking the flag while the alarm sounds. */
+  private alarmEntity: Entity | null = null;
+  private lastSiren = 0;
+  /** Sim time scale for hit-stops and slow motion; camera and HUD keep real time. */
+  private timeScale = 1;
+  private slowmoUntil = 0;
+  private slowmoScale = 1;
+  /** Who killed the local player (death cam looks at them). */
+  private killerEntity: Entity | null = null;
   private uiRoot: HTMLElement;
 
   constructor(readonly app: App) {
@@ -217,7 +225,7 @@ export class Game {
     this.player.name = cfg.playerName || t('you');
     this.player.plotIndex = 0;
     this.player.colorHex = PLAYER_COLORS[0];
-    this.player.score = { total: 0, defenseSeconds: 0, holdBonuses: 0, captures: 0, kills: 0, killsAsDefender: 0, deaths: 0 };
+    this.player.score = emptyScore();
     this.entities.push(this.player);
     const names = new Random(Date.now() >>> 1).shuffle([...BOT_NAMES]);
     this.bots = [];
@@ -258,8 +266,12 @@ export class Game {
     match.events.on('phase', ({ phase }) => this.onPhase(phase));
     match.events.on('spawn', ({ entity, initial }) => this.onSpawn(entity, initial));
     match.events.on('score', ({ entity, delta, reason }) => {
-      if (entity === this.player && reason !== 'defense') this.hud.scorePop(`+${delta}`);
+      if (entity !== this.player || reason === 'defense') return;
+      if (reason === 'holdMinute') this.hud.scorePop(`+${delta} · ${t('heldMinute', { m: entity.score.holdMinutes })}`);
+      else this.hud.scorePop(`+${delta}`);
     });
+    match.events.on('alarm', ({ entity, on }) => this.onAlarm(on ? entity : null));
+    match.events.on('overtime', () => this.onOvertime());
     match.events.on('buildTimeUp', () => this.finishBuild(true));
     // Build phase: the block builder.
     this.builder = new Builder(this.app.world, this.app.terrain, plots[0], cfg.style, this.app.input, this.app.gr.camera, this.app.gr.scene);
@@ -382,7 +394,14 @@ export class Game {
         this.endBannerShown = false;
         this.summaryShown = false;
         const plot = this.app.plots[match.targetPlotIndex];
-        for (const [idx, fm] of this.flags) fm.group.visible = idx === match.targetPlotIndex;
+        for (const [idx, fm] of this.flags) {
+          fm.group.visible = idx === match.targetPlotIndex;
+          fm.setAlert(false);
+        }
+        this.alarmEntity = null;
+        this.killerEntity = null;
+        this.focus.setAlert(false);
+        audio.setIntensity(0);
         const color = new THREE.Color(match.defender!.colorHex);
         this.focus.show(new THREE.Vector3(plot.cx, PLOT_Y, plot.cz), color);
         for (const b of this.bots) b.newRound();
@@ -744,7 +763,11 @@ export class Game {
         if (pd) pd.kill = true;
         else this.pendingDmg.set(victim.id, { amount: 0, point: victim.center, headshot, kill: true });
       }
-      if (victim === this.player) this.killedBy = killer?.name ?? '';
+      if (killer && killer !== victim) this.onKillRewards(killer, victim);
+      if (victim === this.player) {
+        this.killerEntity = killer && killer !== victim ? killer : null;
+        this.killedBy = killer ? `${killer.name} · ${Math.round(killer.pos.distanceTo(victim.pos))} m` : '';
+      }
       const brain = this.bots.find((b) => b.entity === victim);
       brain?.reset();
       this.vfx.deathBurst(victim.center, new THREE.Color(victim.colorHex));
@@ -913,7 +936,8 @@ export class Game {
       this.local.events.on('weaponSwitch', () => audio.play('switch'));
     }
     this.local.enabled = !this.paused && !this.screens.visible;
-    const simDt = this.paused ? 0 : dt;
+    this.timeScale = this.time < this.slowmoUntil ? this.slowmoScale : 1;
+    const simDt = this.paused ? 0 : dt * this.timeScale;
     if (simDt > 0) {
       // Player
       const wasAlive = this.player.alive;
@@ -928,6 +952,7 @@ export class Game {
       // Slow health regeneration after a few seconds without damage
       for (const e of this.entities) {
         if (e.alive && e.hp < e.maxHp && this.time - e.lastDamageTime > e.regenDelay) e.hp = Math.min(e.maxHp, e.hp + 10 * simDt);
+        e.overdrive = e.overdriveUntil > this.time;
       }
       // Footsteps
       const p = this.player;
@@ -956,13 +981,10 @@ export class Game {
           audio.play('captureTick', { volume: 0.6, pitch: 1 + tick * 0.12 });
         }
       } else this.lastCaptureTick = -1;
-      // Defender alarm
-      if (p.role === 'defender') {
-        const threat = Math.max(0, ...this.entities.filter((e) => e !== p).map((e) => e.captureProgress));
-        if (threat > 0.1 && this.time - this.lastDefenderAlarm > 1.5) {
-          this.lastDefenderAlarm = this.time;
-          audio.play('alarm', { volume: 0.5 });
-        }
+      // The siren keeps wailing for everyone but the capturer while the flag is being taken.
+      if (this.alarmEntity && this.alarmEntity !== p && this.time - this.lastSiren > 1.7) {
+        this.lastSiren = this.time;
+        audio.play('siren', { volume: 0.45 });
       }
     }
     if (this.simOnly) return;
@@ -1006,6 +1028,18 @@ export class Game {
   private deathCamera(dt: number): void {
     const cam = this.app.gr.camera;
     const p = this.player;
+    // First moment after death: look at whoever did it, then orbit the body.
+    const k = this.killerEntity;
+    if (k && k.alive && k !== p && p.deadSince >= 0 && this.time - p.deadSince < 1.8) {
+      const eye = new THREE.Vector3(p.pos.x, p.pos.y + 1.5, p.pos.z);
+      cam.position.lerp(eye, Math.min(1, dt * 8));
+      const q = cam.quaternion.clone();
+      cam.lookAt(k.pos.x, k.pos.y + 1.3, k.pos.z);
+      const want = cam.quaternion.clone();
+      cam.quaternion.copy(q).slerp(want, Math.min(1, dt * 5));
+      cam.updateMatrixWorld();
+      return;
+    }
     this.cinematicAngle += dt * 0.6;
     const target = new THREE.Vector3(p.pos.x + Math.cos(this.cinematicAngle) * 5, p.pos.y + 4.5, p.pos.z + Math.sin(this.cinematicAngle) * 5);
     // Avoid burying the camera in blocks: raise until clear.
@@ -1088,7 +1122,18 @@ export class Game {
         if (dist > 1 && this.combat.raycast(eye, to, dist - 0.4, p, false)) continue;
         markers.push({ sx: sc.sx, sy: sc.sy, name: e.name, color: e.colorHex, dist: d, kind: threat ? 'threat' : 'near' });
       }
-      markers.sort((a, b) => (a.kind === 'threat' ? 0 : 1) - (b.kind === 'threat' ? 0 : 1) || a.dist - b.dist);
+      // The capturer is called out to everyone else, through walls.
+      const cap = this.alarmEntity;
+      if (cap && cap !== p && cap.alive) this.pushMarker(markers, cap, 'capture');
+      // Radar pulse (streak reward): every enemy for a few seconds.
+      if (p.radarUntil > this.time) for (const e of this.entities) if (e !== p && e.alive && e !== cap) this.pushMarker(markers, e, 'radar');
+      // Comeback: last place always knows where the leader is.
+      if (standings.length >= 3 && standings[standings.length - 1] === p) {
+        const lead = standings[0];
+        if (lead !== p && lead.alive && lead !== cap) this.pushMarker(markers, lead, 'leader');
+      }
+      const order: Record<HudMarker['kind'], number> = { capture: 0, threat: 1, leader: 2, radar: 3, near: 4 };
+      markers.sort((a, b) => order[a.kind] - order[b.kind] || a.dist - b.dist);
     }
     const grenadeWarnings: HudState['grenadeWarnings'] = [];
     if (p.alive) {
@@ -1131,6 +1176,10 @@ export class Game {
       targetName: def?.name ?? '',
       capture: { progress: clamp(p.captureProgress / RULES.captureTime, 0, 1), contested: !!(def && def.alive && flag && def.pos.distanceTo(flag.pos) < RULES.captureRadius && p.captureProgress > 0), active: p.role === 'attacker' && p.captureProgress > 0.01 },
       flagThreat,
+      armor: p.armor,
+      streak: p.streak,
+      overtime: match.overtime,
+      alarm: this.alarmEntity && this.alarmEntity !== p && match.phase === 'round' ? (p.role === 'defender' ? 'defender' : 'attacker') : 'none',
       score: p.score.total,
       rank: standings.indexOf(p) + 1,
       players: this.entities.length,
@@ -1153,6 +1202,86 @@ export class Game {
   }
 
   /** Screen-space marker guiding attackers to the contested fortress (hidden once inside it). */
+  /** Marker shown through walls (no line-of-sight test); replaces a plain sighting of the same entity. */
+  private pushMarker(markers: HudMarker[], e: Entity, kind: HudMarker['kind']): void {
+    const p = this.player;
+    const d = e.pos.distanceTo(p.pos);
+    const sc = this.toScreen(new THREE.Vector3(e.pos.x, e.pos.y + e.height + 0.35, e.pos.z), 40);
+    const existing = markers.find((m) => m.name === e.name);
+    if (existing) {
+      existing.kind = kind;
+      return;
+    }
+    markers.push({ sx: sc.sx, sy: sc.sy, name: e.name, color: e.colorHex, dist: d, kind });
+  }
+
+  /** Alarm: siren, red fortress and flag, banner for everyone but the capturer. */
+  private onAlarm(entity: Entity | null): void {
+    this.alarmEntity = entity;
+    const match = this.match;
+    if (!match) return;
+    this.flags.get(match.targetPlotIndex)?.setAlert(!!entity);
+    this.focus.setAlert(!!entity);
+    if (!entity) return;
+    this.lastSiren = this.time;
+    if (entity === this.player) return;
+    audio.play('siren', { volume: 0.7 });
+    if (this.player.role === 'defender') this.hud.showBanner(t('alarmDefender'), t('alarmStop', { name: entity.name }), 2.5);
+    else this.hud.showBanner(t('alarmAttacker', { name: entity.name }), t('alarmRace'), 2.5);
+  }
+
+  /** The clock ran out mid-capture: no respawns, faster music, until the flag falls or is cleared. */
+  private onOvertime(): void {
+    this.hud.showBanner(t('overtime'), t('overtimeSub'), 3.5);
+    audio.play('overtime');
+    audio.setIntensity(1);
+  }
+
+  /** Brief slow motion for the sim (kills, denied captures); the camera and HUD keep real time. */
+  private slowmo(scale: number, seconds: number): void {
+    this.slowmoScale = scale;
+    this.slowmoUntil = this.time + seconds;
+  }
+
+  /** Streaks, multi-kills and the clutch of stopping a capture. Rewards apply to bots too. */
+  private onKillRewards(killer: Entity, victim: Entity): void {
+    const now = this.time;
+    killer.streak++;
+    killer.multiKill = now - killer.lastKillTime < 4 ? killer.multiKill + 1 : 1;
+    killer.lastKillTime = now;
+    const local = killer === this.player;
+    const denied = victim.captureProgress > 0.12;
+    if (local) {
+      this.local?.addShake(0.35);
+      this.slowmo(denied ? 0.3 : 0.2, denied ? 0.8 : 0.07);
+      if (denied) {
+        this.hud.announce(t('captureDenied'), '', 'clutch', 1.8);
+        audio.play('clutch');
+      } else if (killer.multiKill >= 2) {
+        const m = killer.multiKill;
+        this.hud.announce(t(m === 2 ? 'doubleKill' : m === 3 ? 'tripleKill' : m === 4 ? 'quadKill' : 'rampage'), '', 'multi', 1.5);
+        audio.play('announce', { pitch: 1 + Math.min(4, m - 2) * 0.12, volume: 0.9 });
+      }
+    }
+    let reward: 'rewardArmor' | 'rewardRadar' | 'rewardOverdrive' | null = null;
+    if (killer.streak === 3) {
+      killer.armor = 50;
+      reward = 'rewardArmor';
+    } else if (killer.streak === 5) {
+      killer.radarUntil = now + 4;
+      reward = 'rewardRadar';
+    } else if (killer.streak === 7) {
+      killer.overdriveUntil = now + 10;
+      reward = 'rewardOverdrive';
+    }
+    if (reward && local) {
+      window.setTimeout(() => {
+        this.hud.announce(t(reward!), t(`${reward}Sub`), 'streak', 2.2);
+        audio.play('streak');
+      }, denied || killer.multiKill >= 2 ? 1400 : 300);
+    }
+  }
+
   private objectiveMarker(): HudState['objective'] {
     const match = this.match;
     if (!match || match.targetPlotIndex < 0 || this.player.role !== 'attacker' || this.mode !== 'battle') return null;

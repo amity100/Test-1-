@@ -62,6 +62,14 @@ export interface HudState {
   markers: HudMarker[];
   /** Live grenades near the player. */
   grenadeWarnings: { sx: number; sy: number; onScreen: boolean; angle: number; dist: number }[];
+  /** Armour points (streak reward) shown as a blue bar under health. */
+  armor: number;
+  /** Kills since the last death. */
+  streak: number;
+  /** The clock ran out mid-capture: the timer reads OVERTIME. */
+  overtime: boolean;
+  /** Someone is taking the flag: red pulse for the defender, amber for rival attackers. */
+  alarm: 'none' | 'defender' | 'attacker';
 }
 
 export interface HudMarker {
@@ -70,8 +78,8 @@ export interface HudMarker {
   name: string;
   color: string;
   dist: number;
-  /** threat = damaged you within the last seconds. */
-  kind: 'threat' | 'near';
+  /** threat = damaged you within the last seconds; capture = taking the flag; leader = comeback target; radar = streak reveal. */
+  kind: 'threat' | 'near' | 'capture' | 'leader' | 'radar';
 }
 
 export interface ScoreRow {
@@ -93,6 +101,14 @@ export class HUD {
   private hitMark: HTMLElement;
   private hpFill: HTMLElement;
   private hpText: HTMLElement;
+  private armorBar: HTMLElement;
+  private armorFill: HTMLElement;
+  private streakEl: HTMLElement;
+  private alarmVeil: HTMLElement;
+  private announceEl: HTMLElement;
+  private announceTitle: HTMLElement;
+  private announceSub: HTMLElement;
+  private announceUntil = 0;
   private hpWrap: HTMLElement;
   private ammoText: HTMLElement;
   private reserveText: HTMLElement;
@@ -143,7 +159,7 @@ export class HUD {
   private arcs: { el: HTMLElement; t: number }[] = [];
   private nums: HTMLElement;
   private markerLayer: HTMLElement;
-  private markerPool: { root: HTMLElement; name: HTMLElement; dist: HTMLElement }[] = [];
+  private markerPool: { root: HTMLElement; name: HTMLElement; dist: HTMLElement; tag: HTMLElement }[] = [];
   private grenadeLayer: HTMLElement;
   private grenadePool: HTMLElement[] = [];
 
@@ -177,7 +193,13 @@ export class HUD {
     this.grenadesEl = el('div', 'grenades');
     this.gadgetsEl = el('div', 'gadgets');
     gear.append(this.grenadesEl, this.gadgetsEl);
-    this.hpWrap.append(this.hpText, hpBar, gear);
+    this.armorBar = el('div', 'armorbar');
+    this.armorFill = el('div', 'fill');
+    this.armorBar.appendChild(this.armorFill);
+    this.armorBar.hidden = true;
+    this.streakEl = el('div', 'streak');
+    this.streakEl.hidden = true;
+    this.hpWrap.append(this.hpText, hpBar, this.armorBar, gear, this.streakEl);
     this.root.appendChild(this.hpWrap);
 
     // Underground veil (burrow drill) and drilling progress
@@ -229,6 +251,17 @@ export class HUD {
     this.threat = el('div', 'threat');
     this.threat.hidden = true;
     this.root.appendChild(this.threat);
+    // Alarm pulse round the screen edge while the flag is being taken.
+    this.alarmVeil = el('div', 'alarm-veil');
+    this.alarmVeil.hidden = true;
+    this.root.appendChild(this.alarmVeil);
+    // Announcer (multi-kills, streak rewards, denied captures): louder and shorter than the banner.
+    this.announceEl = el('div', 'announce');
+    this.announceTitle = el('div', 'a-title');
+    this.announceSub = el('div', 'a-sub');
+    this.announceEl.append(this.announceTitle, this.announceSub);
+    this.announceEl.hidden = true;
+    this.root.appendChild(this.announceEl);
 
     // Kill feed
     this.feed = el('div', 'feed');
@@ -260,10 +293,10 @@ export class HUD {
     this.markerLayer = el('div', 'markers');
     for (let i = 0; i < 8; i++) {
       const root = el('div', 'marker');
-      root.innerHTML = `<div class="m-chev"></div><div class="m-name"></div><div class="m-dist"></div>`;
+      root.innerHTML = `<div class="m-chev"></div><div class="m-name"></div><div class="m-dist"></div><div class="m-tag"></div>`;
       root.hidden = true;
       this.markerLayer.appendChild(root);
-      this.markerPool.push({ root, name: root.querySelector('.m-name') as HTMLElement, dist: root.querySelector('.m-dist') as HTMLElement });
+      this.markerPool.push({ root, name: root.querySelector('.m-name') as HTMLElement, dist: root.querySelector('.m-dist') as HTMLElement, tag: root.querySelector('.m-tag') as HTMLElement });
     }
     this.root.appendChild(this.markerLayer);
     this.grenadeLayer = el('div', 'gwarns');
@@ -393,8 +426,27 @@ export class HUD {
       this.digFill.style.width = `${Math.min(1, s.dig) * 100}%`;
       this.set('digText', this.digText, t('drilling'));
     } else this.digEl.hidden = true;
-    this.set('timer', this.timer, formatTime(s.timeLeft));
-    this.timer.classList.toggle('urgent', s.timeLeft < 30);
+    this.set('timer', this.timer, s.overtime ? t('overtime') : formatTime(s.timeLeft));
+    this.timer.classList.toggle('urgent', s.timeLeft < 30 && !s.overtime);
+    this.timer.classList.toggle('overtime', s.overtime);
+    // Armour and streak
+    if (s.armor > 0) {
+      this.armorBar.hidden = false;
+      this.armorFill.style.width = `${Math.min(1, s.armor / 50) * 100}%`;
+    } else this.armorBar.hidden = true;
+    if (s.streak >= 2 && s.alive) {
+      this.streakEl.hidden = false;
+      this.set('streak', this.streakEl, `🔥 ${s.streak} ${t('streakLabel')}`);
+    } else this.streakEl.hidden = true;
+    if (s.alarm !== 'none' && s.alive) {
+      this.alarmVeil.hidden = false;
+      this.alarmVeil.classList.toggle('att', s.alarm === 'attacker');
+    } else this.alarmVeil.hidden = true;
+    if (!this.announceEl.hidden) {
+      const left = (this.announceUntil - performance.now()) / 1000;
+      if (left <= 0) this.announceEl.hidden = true;
+      else this.announceEl.style.opacity = String(Math.min(1, left / 0.35));
+    }
     this.set('round', this.roundLabel, t('round', { n: s.round, total: s.totalRounds }));
     this.set('target', this.targetLabel, s.role === 'defender' ? t('defendFortress') : t('attackFortress', { name: s.targetName }));
     this.set('role', this.roleBadge, s.role === 'defender' ? t('defender') : t('attacker'));
@@ -561,9 +613,12 @@ export class HUD {
       slot.root.style.transform = `translate(${m.sx.toFixed(0)}px, ${m.sy.toFixed(0)}px)`;
       slot.root.style.setProperty('--mc', m.color);
       slot.root.classList.toggle('threat', m.kind === 'threat');
+      if (slot.root.dataset.kind !== m.kind) slot.root.dataset.kind = m.kind;
       if (slot.name.textContent !== m.name) slot.name.textContent = m.name;
       const d = `${Math.round(m.dist)} m`;
       if (slot.dist.textContent !== d) slot.dist.textContent = d;
+      const tag = m.kind === 'capture' ? t('capturingTag') : m.kind === 'leader' ? t('leaderTag') : m.kind === 'radar' ? t('radarTag') : '';
+      if (slot.tag.textContent !== tag) slot.tag.textContent = tag;
     }
   }
 
@@ -613,6 +668,20 @@ export class HUD {
     while (this.feed.children.length > 6) this.feed.lastChild?.remove();
     window.setTimeout(() => item.classList.add('fade'), 4500);
     window.setTimeout(() => item.remove(), 5500);
+  }
+
+  /** Announcer line: multi-kills (gold), streak rewards (cyan) and denied captures (red). */
+  announce(title: string, sub: string, kind: 'multi' | 'streak' | 'clutch', seconds = 1.6): void {
+    this.announceTitle.textContent = title;
+    this.announceSub.textContent = sub;
+    this.announceEl.className = `announce ${kind}`;
+    this.announceEl.hidden = false;
+    this.announceEl.style.opacity = '1';
+    this.announceUntil = performance.now() + seconds * 1000;
+    void this.announceEl.offsetWidth;
+    this.announceTitle.style.animation = 'none';
+    void this.announceTitle.offsetWidth;
+    this.announceTitle.style.animation = '';
   }
 
   showBanner(title: string, sub = '', seconds = 3): void {

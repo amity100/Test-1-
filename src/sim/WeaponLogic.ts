@@ -57,7 +57,7 @@ export const WeaponLogic = {
     if (w.ammo <= 0 && w.reserve > 0) {
       // Auto reload after the shot cycle.
       e.reloading = true;
-      e.reloadTimer = def.reloadTime + 0.15;
+      e.reloadTimer = (def.reloadTime + 0.15) * (e.overdrive ? 0.5 : 1);
     }
     return true;
   },
@@ -68,7 +68,7 @@ export const WeaponLogic = {
     const def = WEAPONS[w.id];
     if (w.ammo >= def.magSize || w.reserve <= 0) return false;
     e.reloading = true;
-    e.reloadTimer = def.reloadTime;
+    e.reloadTimer = def.reloadTime * (e.overdrive ? 0.5 : 1);
     e.wantsAds = false;
     return true;
   },
@@ -85,6 +85,6 @@ export const WeaponLogic = {
     const w = e.weapon;
     if (!w || !e.reloading) return 0;
     const def = WEAPONS[w.id];
-    return 1 - e.reloadTimer / def.reloadTime;
+    return 1 - e.reloadTimer / (def.reloadTime * (e.overdrive ? 0.5 : 1));
   },
 };

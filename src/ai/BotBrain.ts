@@ -196,6 +196,8 @@ export class BotBrain {
     const elapsed = this.ctx.roundTime();
     if (!isDefender && !this.knowsFlag && elapsed > this.profile.knowsFlagAfter) this.knowsFlag = true;
     if (!isDefender && flag && !this.knowsFlag && e.pos.distanceTo(flag) < 14 && this.canSee(flag.clone().add(new THREE.Vector3(0, 1.2, 0)))) this.knowsFlag = true;
+    // The siren gives the flag away to everyone on the island.
+    if (!isDefender && !this.knowsFlag && this.ctx.anyCaptureProgress() > 0.05) this.knowsFlag = true;
 
     // ---- State selection ----
     const threat = this.mem.target && (this.mem.visible || now - this.mem.lastSeenTime < this.profile.memory) ? this.mem.target : null;
@@ -437,11 +439,15 @@ export class BotBrain {
       if (dist > this.profile.viewDist) continue;
       const cos = d.dot(fwd) / dist;
       const ang = Math.acos(clamp(cos, -1, 1)) * (180 / Math.PI);
-      // Outside the field of view a figure goes unseen unless it is right beside the bot or shooting close by.
-      if (ang > this.profile.fovDeg * 0.5 && dist > 3) {
-        if (!(now - o.lastShotTime < 0.3 && dist < 30)) continue;
+      // A radar pulse (streak reward) shows everyone nearby through walls.
+      const radar = e.radarUntil > now && dist < 45;
+      if (!radar) {
+        // Outside the field of view a figure goes unseen unless it is right beside the bot or shooting close by.
+        if (ang > this.profile.fovDeg * 0.5 && dist > 3) {
+          if (!(now - o.lastShotTime < 0.3 && dist < 30)) continue;
+        }
+        if (!this.canSee(tmp.copy(o.pos).setY(o.pos.y + 1.3))) continue;
       }
-      if (!this.canSee(tmp.copy(o.pos).setY(o.pos.y + 1.3))) continue;
       const score = dist * (o.role === 'defender' && e.role === 'attacker' ? 0.6 : 1) + (this.mem.target === o ? -10 : 0) + (o.captureProgress > 0.05 ? -25 : 0);
       if (score < bestScore) {
         bestScore = score;
@@ -472,7 +478,7 @@ export class BotBrain {
       const near = dist < 5 ? 4 : 1;
       const seen = this.exposure(best);
       let gain = this.profile.noticeSpeed * this.focus * (1 - 0.75 * angFrac) * (1 - 0.7 * distFrac) * (0.25 + 0.75 * seen) * motion * firing * near;
-      if (best.captureProgress > 0.05) gain = 100;
+      if (best.captureProgress > 0.05 || e.radarUntil > now) gain = 100;
       const meter = (this.notice.get(best.id) ?? 0) + gain * 0.12;
       if (meter < 1) {
         this.notice.set(best.id, meter);

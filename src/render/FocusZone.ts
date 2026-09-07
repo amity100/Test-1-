@@ -52,6 +52,8 @@ export class FocusZone {
   private domeUniforms = { uColor: { value: new THREE.Color(0x00e5ff) }, uTime: { value: 0 }, uStrength: { value: 1 } };
   private strength = 0;
   private target = 0;
+  private baseColor = new THREE.Color(0x00e5ff);
+  private alert = false;
 
   constructor() {
     const beamGeo = new THREE.CylinderGeometry(3.5, 5, 240, 24, 1, true);
@@ -78,8 +80,20 @@ export class FocusZone {
     this.group.name = 'focusZone';
   }
 
+  /** Alarm: the whole zone beats red while the flag is being taken. */
+  setAlert(on: boolean): void {
+    if (on === this.alert) return;
+    this.alert = on;
+    const c = on ? new THREE.Color(0xff3548) : this.baseColor;
+    this.uniforms.uColor.value.copy(c);
+    this.domeUniforms.uColor.value.copy(c);
+    (this.ring.material as THREE.MeshBasicMaterial).color.copy(c);
+  }
+
   show(center: THREE.Vector3, color: THREE.Color): void {
     this.group.position.copy(center);
+    this.baseColor.copy(color);
+    this.alert = false;
     this.uniforms.uColor.value.copy(color);
     this.domeUniforms.uColor.value.copy(color);
     (this.ring.material as THREE.MeshBasicMaterial).color.copy(color);
@@ -99,9 +113,10 @@ export class FocusZone {
     }
     this.uniforms.uTime.value = time;
     this.domeUniforms.uTime.value = time;
-    this.uniforms.uStrength.value = this.strength * (0.8 + 0.2 * Math.sin(time * 2));
-    this.domeUniforms.uStrength.value = this.strength;
-    (this.ring.material as THREE.MeshBasicMaterial).opacity = this.strength * (0.6 + 0.3 * Math.sin(time * 3));
+    const beat = this.alert ? 0.7 + 0.5 * Math.abs(Math.sin(time * 6)) : 1;
+    this.uniforms.uStrength.value = this.strength * (0.8 + 0.2 * Math.sin(time * 2)) * beat;
+    this.domeUniforms.uStrength.value = this.strength * beat;
+    (this.ring.material as THREE.MeshBasicMaterial).opacity = this.strength * (0.6 + 0.3 * Math.sin(time * (this.alert ? 9 : 3)));
     this.beam.rotation.y = time * 0.2;
   }
 }

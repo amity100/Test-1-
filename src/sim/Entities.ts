@@ -26,10 +26,12 @@ export interface ScoreSheet {
   kills: number;
   killsAsDefender: number;
   deaths: number;
+  /** Full minutes the flag stayed safe while defending (comeback bonus). */
+  holdMinutes: number;
 }
 
 export function emptyScore(): ScoreSheet {
-  return { total: 0, defenseSeconds: 0, holdBonuses: 0, captures: 0, kills: 0, killsAsDefender: 0, deaths: 0 };
+  return { total: 0, defenseSeconds: 0, holdBonuses: 0, captures: 0, kills: 0, killsAsDefender: 0, deaths: 0, holdMinutes: 0 };
 }
 
 let nextEntityId = 1;
@@ -74,6 +76,19 @@ export class Entity {
   regenDelay = 5;
   /** Invulnerable until this time (spawn shield after a respawn). */
   protectedUntil = 0;
+  /** Kills since the last death; rewards unlock at 3, 5 and 7. */
+  streak = 0;
+  /** Kills inside the 4 s multi-kill window. */
+  multiKill = 0;
+  lastKillTime = -100;
+  /** Armour absorbs damage before health (streak reward). */
+  armor = 0;
+  /** Enemies show through walls until this time (streak reward). */
+  radarUntil = 0;
+  /** Faster movement and reloads until this time (streak reward). */
+  overdriveUntil = 0;
+  /** Set every frame by the game from overdriveUntil. */
+  overdrive = false;
 
   weapons: WeaponSlot[] = [];
   weaponIndex = 0;
@@ -215,6 +230,12 @@ export class Entity {
     this.captureProgress = 0;
     this.lastDamageTime = -100;
     this.lastAttackerId = -1;
+    this.streak = 0;
+    this.multiKill = 0;
+    this.armor = 0;
+    this.radarUntil = 0;
+    this.overdriveUntil = 0;
+    this.overdrive = false;
   }
 }
 

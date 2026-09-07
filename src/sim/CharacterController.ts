@@ -118,6 +118,7 @@ export class CharacterController {
     if (e.crouching) speed = PHYS.crouchSpeed;
     else if (input.sprint && input.forward > 0.2 && e.ads < 0.3) speed = PHYS.sprintSpeed;
     if (e.ads > 0.3) speed *= PHYS.adsSpeedMult;
+    if (e.overdrive) speed *= 1.25;
     desired.multiplyScalar(speed);
 
     if (!e.grapplePoint) {

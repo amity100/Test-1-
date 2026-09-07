@@ -5,6 +5,7 @@ export type SfxName =
   | 'explosion' | 'hit' | 'hurt' | 'kill' | 'headshot' | 'reload' | 'empty'
   | 'footstep' | 'jump' | 'land' | 'grapple' | 'grappleMiss' | 'ricochet' | 'bounce'
   | 'captureTick' | 'captureDone' | 'alarm' | 'roundStart' | 'roundEnd' | 'countdown'
+  | 'siren' | 'overtime' | 'announce' | 'streak' | 'clutch'
   | 'uiClick' | 'uiHover' | 'place' | 'erase' | 'pickup' | 'switch' | 'spawn' | 'victory';
 
 export interface PlayOpts {
@@ -27,6 +28,9 @@ export class AudioEngine {
   private listenerPos = new THREE.Vector3();
   private listenerRight = new THREE.Vector3(1, 0, 0);
   private musicState: MusicState = 'off';
+  private musicLp: BiquadFilterNode | null = null;
+  private musicStep: (() => void) | null = null;
+  private intensity = 0;
   private musicNodes: AudioNode[] = [];
   private musicTimer: number | null = null;
   private lastStep = 0;
@@ -310,6 +314,42 @@ export class AudioEngine {
         this.tone(o, t + 0.28, 0.25, 0.5, 'square', 520, 520);
         break;
       }
+      case 'siren': {
+        // Two rising wails, like an air-raid siren, while someone is taking the flag.
+        const o = this.out(vol * 0.45, 0, 0.35);
+        this.tone(o, t, 0.7, 0.5, 'sawtooth', 420, 760, 0.05);
+        this.tone(o, t + 0.75, 0.7, 0.5, 'sawtooth', 420, 760, 0.05);
+        break;
+      }
+      case 'overtime': {
+        const o = this.out(vol * 0.8, 0, 0.5);
+        this.tone(o, t, 1.2, 0.7, 'sawtooth', 65, 55, 0.02);
+        this.tone(o, t, 0.6, 0.5, 'square', 130, 130, 0.02);
+        this.noiseBurst(o, t, 0.8, 0.6, 'lowpass', 900, 0.6, 150);
+        this.tone(o, t + 0.5, 0.9, 0.5, 'square', 196, 196, 0.02);
+        break;
+      }
+      case 'announce': {
+        // Multi-kill stinger; the pitch option climbs with the count.
+        const o = this.out(vol * 0.6, 0, 0.35);
+        this.tone(o, t, 0.1, 0.6, 'square', 880 * pitch, 880 * pitch);
+        this.tone(o, t + 0.09, 0.1, 0.6, 'square', 1108 * pitch, 1108 * pitch);
+        this.tone(o, t + 0.18, 0.28, 0.7, 'square', 1318 * pitch, 1318 * pitch, 0.01);
+        this.noiseBurst(o, t, 0.12, 0.3, 'highpass', 4000, 1);
+        break;
+      }
+      case 'streak': {
+        const o = this.out(vol * 0.6, 0, 0.4);
+        for (let i = 0; i < 5; i++) this.tone(o, t + i * 0.06, 0.25, 0.5, 'triangle', [523, 659, 784, 1046, 1318][i], [523, 659, 784, 1046, 1318][i], 0.01);
+        break;
+      }
+      case 'clutch': {
+        const o = this.out(vol * 0.8, 0, 0.5);
+        this.noiseBurst(o, t, 0.5, 0.7, 'lowpass', 700, 0.8, 120);
+        this.tone(o, t, 0.9, 0.7, 'sine', 90, 45);
+        this.tone(o, t + 0.15, 0.5, 0.5, 'sawtooth', 220, 440, 0.03);
+        break;
+      }
       case 'roundStart': {
         const o = this.out(vol * 0.7, 0, 0.5);
         this.tone(o, t, 0.5, 0.6, 'sawtooth', 110, 110, 0.05);
@@ -394,7 +434,38 @@ export class AudioEngine {
     this.startMusic(state);
   }
 
+  /** Battle drive: 0 = normal, 1 = overtime (faster beat, extra tom, brighter pad). */
+  setIntensity(level: number): void {
+    if (level === this.intensity) return;
+    this.intensity = level;
+    if (this.musicState === 'battle' && this.ctx) {
+      this.musicLp?.frequency.setTargetAtTime(level > 0 ? 1600 : 900, this.ctx.currentTime, 0.4);
+      this.startBeat();
+    }
+  }
+
+  private startBeat(): void {
+    const ctx = this.ctx!;
+    if (this.musicTimer !== null) window.clearInterval(this.musicTimer);
+    let beat = 0;
+    const ms = this.intensity > 0 ? 330 : 500;
+    this.musicTimer = window.setInterval(() => {
+      const t = ctx.currentTime;
+      const g = ctx.createGain();
+      g.gain.value = 0.5;
+      g.connect(this.musicGain);
+      // kick
+      if (beat % 2 === 0) this.tone(g, t, 0.18, 0.7, 'sine', 120, 40);
+      // hat
+      this.noiseBurst(g, t + (beat % 2 ? 0.0 : 0.25), 0.04, 0.12, 'highpass', 6000, 1);
+      if (this.intensity > 0 && beat % 4 === 3) this.tone(g, t, 0.12, 0.5, 'triangle', 220, 160);
+      if (beat % 8 === 7) this.musicStep?.();
+      beat++;
+    }, ms);
+  }
+
   private stopMusic(): void {
+    this.musicStep = null;
     if (this.musicTimer !== null) {
       window.clearInterval(this.musicTimer);
       this.musicTimer = null;
@@ -421,6 +492,7 @@ export class AudioEngine {
     pad.connect(lp);
     lp.connect(this.musicGain);
     lp.connect(this.reverb);
+    this.musicLp = lp;
     const chords: number[][] = state === 'battle' ? [[55, 82.4, 110, 164.8], [58.3, 87.3, 116.5, 174.6], [49, 73.4, 98, 146.8], [61.7, 92.5, 123.5, 185]] : [[65.4, 98, 130.8, 196], [58.3, 87.3, 116.5, 174.6], [73.4, 110, 146.8, 220], [61.7, 92.5, 123.5, 185]];
     const oscs: OscillatorNode[] = [];
     for (let i = 0; i < 4; i++) {
@@ -445,21 +517,10 @@ export class AudioEngine {
       const t = ctx.currentTime;
       oscs.forEach((o, idx) => o.frequency.setTargetAtTime(chords[chord][Math.floor(idx / 2)], t, 0.6));
     };
-    // Battle: add a pulse
+    // Battle: add a pulse (tempo follows the intensity, see setIntensity)
     if (state === 'battle') {
-      let beat = 0;
-      this.musicTimer = window.setInterval(() => {
-        const t = ctx.currentTime;
-        const g = ctx.createGain();
-        g.gain.value = 0.5;
-        g.connect(this.musicGain);
-        // kick
-        if (beat % 2 === 0) this.tone(g, t, 0.18, 0.7, 'sine', 120, 40);
-        // hat
-        this.noiseBurst(g, t + (beat % 2 ? 0.0 : 0.25), 0.04, 0.12, 'highpass', 6000, 1);
-        if (beat % 8 === 7) step();
-        beat++;
-      }, 500);
+      this.musicStep = step;
+      this.startBeat();
     } else {
       this.musicTimer = window.setInterval(step, state === 'menu' ? 6000 : 5000);
     }

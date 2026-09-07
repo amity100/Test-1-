@@ -29,7 +29,7 @@ export interface SpawnResolver {
   spawnFor(entity: Entity, role: Role, targetPlotIndex: number): THREE.Vector3;
 }
 
-export type ScoreReason = 'capture' | 'hold' | 'kill' | 'killDefender' | 'defense';
+export type ScoreReason = 'capture' | 'hold' | 'kill' | 'killDefender' | 'defense' | 'holdMinute';
 
 export interface MatchEvents extends Record<string, unknown> {
   phase: { phase: Phase; prev: Phase };
@@ -39,6 +39,10 @@ export interface MatchEvents extends Record<string, unknown> {
   spawn: { entity: Entity; initial: boolean };
   captureProgress: { entity: Entity; progress: number; contested: boolean };
   buildTimeUp: Record<string, never>;
+  /** Someone started (on) or stopped (off) taking the flag; entity is the capturer while on. */
+  alarm: { entity: Entity | null; on: boolean };
+  /** The clock ran out mid-capture: the round continues without respawns until it is decided. */
+  overtime: Record<string, never>;
 }
 
 export const SCORE = {
@@ -47,6 +51,8 @@ export const SCORE = {
   capture: 50,
   kill: 5,
   killAsDefender: 8,
+  /** Every full minute the flag stays safe pays the defender (a comeback for a losing defender). */
+  holdMinute: 15,
 };
 
 export const RULES = {
@@ -57,6 +63,10 @@ export const RULES = {
   respawnDefender: 12,
   introTime: 7,
   summaryTime: 7,
+  /** Longest overtime before the fortress is simply held. */
+  overtimeMax: 25,
+  /** Capture progress (seconds) that trips the alarm. */
+  alarmAt: 0.05,
 };
 
 /** Match rules and phase machine. Rendering/UI subscribe to its events. */
@@ -74,6 +84,10 @@ export class Match {
   defender: Entity | null = null;
   targetPlotIndex = -1;
   lastRound: MatchEvents['roundEnd'] | null = null;
+  /** Whoever is taking the flag right now (alarm on), or null. */
+  alarmEntity: Entity | null = null;
+  overtime = false;
+  private overtimeTimer = 0;
   private rng: Random;
   private captureAccum = new Map<number, number>();
 
@@ -132,6 +146,9 @@ export class Match {
       e.captureProgress = 0;
     }
     this.captureAccum.clear();
+    this.alarmEntity = null;
+    this.overtime = false;
+    this.overtimeTimer = 0;
     this.setPhase('roundIntro');
   }
 
@@ -180,7 +197,13 @@ export class Match {
 
   recompute(e: Entity): void {
     const s = e.score;
-    s.total = Math.floor(s.defenseSeconds / 10) * SCORE.defensePer10s + s.holdBonuses * SCORE.hold + s.captures * SCORE.capture + (s.kills - s.killsAsDefender) * SCORE.kill + s.killsAsDefender * SCORE.killAsDefender;
+    s.total =
+      Math.floor(s.defenseSeconds / 10) * SCORE.defensePer10s +
+      s.holdBonuses * SCORE.hold +
+      s.holdMinutes * SCORE.holdMinute +
+      s.captures * SCORE.capture +
+      (s.kills - s.killsAsDefender) * SCORE.kill +
+      s.killsAsDefender * SCORE.killAsDefender;
   }
 
   standings(): Entity[] {
@@ -225,8 +248,14 @@ export class Match {
       this.recompute(defender);
       this.events.emit('score', { entity: defender, delta: SCORE.defensePer10s * (afterTicks - beforeTicks), reason: 'defense' });
     }
-    // Respawns
-    for (const e of this.entities) {
+    const minutes = Math.floor(defender.score.defenseSeconds / 60);
+    if (minutes > defender.score.holdMinutes) {
+      defender.score.holdMinutes = minutes;
+      this.recompute(defender);
+      this.events.emit('score', { entity: defender, delta: SCORE.holdMinute, reason: 'holdMinute' });
+    }
+    // Respawns (none during overtime: the round is decided by whoever is still standing)
+    if (!this.overtime) for (const e of this.entities) {
       if (!e.alive && e.respawnAt > 0 && now >= e.respawnAt) {
         e.reset();
         e.respawnAt = 0;
@@ -258,8 +287,39 @@ export class Match {
         this.endRound('captured', captured);
         return;
       }
+      this.updateAlarm(defender);
     }
-    if (this.roundTimer <= 0) this.endRound('timeout', null);
+    if (this.roundTimer <= 0) {
+      this.roundTimer = 0;
+      const contest = this.entities.some((e) => e !== defender && e.alive && e.captureProgress > 0);
+      if (!this.overtime) {
+        if (contest) {
+          this.overtime = true;
+          this.overtimeTimer = 0;
+          this.events.emit('overtime', {});
+        } else this.endRound('timeout', null);
+      } else {
+        this.overtimeTimer += dt;
+        if (!contest || this.overtimeTimer > RULES.overtimeMax) this.endRound('timeout', null);
+      }
+    }
+  }
+
+  /** The alarm follows whoever is furthest into taking the flag, and stops when nobody is. */
+  private updateAlarm(defender: Entity): void {
+    let best: Entity | null = null;
+    for (const e of this.entities) {
+      if (e === defender || !e.alive || e.captureProgress < RULES.alarmAt) continue;
+      if (!best || e.captureProgress > best.captureProgress) best = e;
+    }
+    if (best === this.alarmEntity) return;
+    if (best) {
+      this.alarmEntity = best;
+      this.events.emit('alarm', { entity: best, on: true });
+    } else {
+      this.alarmEntity = null;
+      this.events.emit('alarm', { entity: null, on: false });
+    }
   }
 
   private nearFlag(e: Entity, flag: FlagInfo): boolean {
@@ -281,6 +341,11 @@ export class Match {
       this.events.emit('score', { entity: defender, delta: SCORE.hold, reason: 'hold' });
     }
     for (const e of this.entities) e.captureProgress = 0;
+    if (this.alarmEntity) {
+      this.alarmEntity = null;
+      this.events.emit('alarm', { entity: null, on: false });
+    }
+    this.overtime = false;
     const payload: MatchEvents['roundEnd'] = { reason, defender, capturer, plotIndex: this.targetPlotIndex, round: this.roundIndex + 1, total: this.roundOrder.length };
     this.lastRound = payload;
     this.setPhase('roundEnd');
