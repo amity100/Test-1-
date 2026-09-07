@@ -38,7 +38,7 @@ export class Combat {
   constructor(private world: VoxelWorld, private terrain: Terrain, private getEntities: () => Entity[]) {}
 
   /** Ray vs world (voxels + terrain) and entities. */
-  raycast(origin: THREE.Vector3, dir: THREE.Vector3, maxDist: number, ignore: Entity | null, hitEntities = true): HitResult | null {
+  raycast(origin: THREE.Vector3, dir: THREE.Vector3, maxDist: number, ignore: Entity | null, hitEntities = true, lenient = false): HitResult | null {
     const d = tmpDir.copy(dir).normalize();
     let best: HitResult | null = null;
     const vh = this.world.raycast(origin.x, origin.y, origin.z, d.x, d.y, d.z, maxDist);
@@ -54,7 +54,7 @@ export class Combat {
     if (hitEntities) {
       for (const e of this.getEntities()) {
         if (e === ignore || !e.alive || e.burrowed) continue;
-        const r = this.entityHit(e, origin, d, best ? best.dist : maxDist);
+        const r = this.entityHit(e, origin, d, best ? best.dist : maxDist, lenient);
         if (r && (!best || r.dist < best.dist)) best = r;
       }
     }
@@ -89,12 +89,14 @@ export class Combat {
     return null;
   }
 
-  private entityHit(e: Entity, origin: THREE.Vector3, d: THREE.Vector3, maxDist: number): HitResult | null {
-    // Head sphere first.
+  private entityHit(e: Entity, origin: THREE.Vector3, d: THREE.Vector3, maxDist: number, lenient = false): HitResult | null {
+    // Head sphere first. Lenient hit boxes (the human player's shots) are a little larger, the way
+    // casual shooters quietly forgive near misses.
+    const headR = lenient ? HEAD_RADIUS * 1.35 : HEAD_RADIUS;
     const headC = tmpV.set(e.pos.x, e.pos.y + e.eyeHeight + 0.04, e.pos.z);
     const oc = origin.clone().sub(headC);
     const b = oc.dot(d);
-    const c = oc.dot(oc) - HEAD_RADIUS * HEAD_RADIUS;
+    const c = oc.dot(oc) - headR * headR;
     const disc = b * b - c;
     let headT = Infinity;
     if (disc >= 0) {
@@ -102,7 +104,7 @@ export class Combat {
       if (t >= 0 && t <= maxDist) headT = t;
     }
     // Body box.
-    const r = e.radius;
+    const r = lenient ? e.radius * 1.25 : e.radius;
     const minX = e.pos.x - r;
     const maxX = e.pos.x + r;
     const minY = e.pos.y;
@@ -180,7 +182,7 @@ export class Combat {
         const up = new THREE.Vector3().crossVectors(right, dir).normalize();
         dir.addScaledVector(right, Math.cos(a) * Math.tan(rr)).addScaledVector(up, Math.sin(a) * Math.tan(rr)).normalize();
       }
-      const hit = this.raycast(origin, dir, def.range, shooter);
+      const hit = this.raycast(origin, dir, def.range, shooter, true, !shooter.isBot);
       const end = hit ? hit.point.clone() : origin.clone().addScaledVector(dir, def.range);
       if (hit) {
         if (hit.entity) {

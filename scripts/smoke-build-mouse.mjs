@@ -18,6 +18,7 @@ const screenOf = (x, y, z) => page.evaluate(([x, y, z]) => { const cam = window.
 const plot = await page.evaluate(() => { const p = window.__fk.game().builder.plot; return { cx: p.cx, cz: p.cz }; });
 const frames = async (n) => page.evaluate((n) => new Promise((res) => { let i = 0; const tick = () => (++i >= n ? res() : requestAnimationFrame(tick)); requestAnimationFrame(tick); }), n);
 const bst = () => page.evaluate(() => { const b = window.__fk.game().builder; return { blocks: b.blocks, height: b.plan.height(), last: b.debugLast, voxels: b.result?.blocks ?? 0 }; });
+// Cells are 8 m: the plot centre (cx+0.5) lies in cell (2,2), whose corner post stands at minX+16.
 let target = await screenOf(plot.cx + 0.5, 12, plot.cz + 0.5);
 await page.mouse.move(target.x, target.y);
 await frames(2);
@@ -26,7 +27,7 @@ await frames(3);
 let st = await bst();
 console.log('after ground click', JSON.stringify(st), st.blocks === 1 ? 'OK' : 'FAIL');
 // Aim at the roof's corner post (never a stairwell hole): its top face stacks a storey.
-target = await screenOf(plot.cx - 20 + 20 + 0.5, 12 + 6.0, plot.cz - 20 + 20 + 0.5);
+target = await screenOf(plot.cx - 20 + 16 + 0.5, 12 + 6.0, plot.cz - 20 + 16 + 0.5);
 await page.mouse.move(target.x, target.y);
 await frames(2);
 await page.mouse.down(); await page.waitForTimeout(80); await page.mouse.up();
@@ -35,7 +36,7 @@ st = await bst();
 console.log('after roof click', JSON.stringify(st), st.blocks === 2 && st.height === 2 ? 'OK' : 'FAIL');
 await page.screenshot({ path: path.join(outDir, 'build-mouse.png') });
 // Right-click the upper storey's roof corner post: removes the stacked room again.
-target = await screenOf(plot.cx + 0.5, 12 + 10.0, plot.cz + 0.5);
+target = await screenOf(plot.cx - 20 + 16 + 0.5, 12 + 10.0, plot.cz - 20 + 16 + 0.5);
 await page.mouse.move(target.x, target.y);
 await frames(2);
 await page.mouse.click(target.x, target.y, { button: 'right' });

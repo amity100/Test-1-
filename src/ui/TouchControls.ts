@@ -217,10 +217,29 @@ export class TouchControls {
       if (b.dataset.icon === icon) continue;
       b.dataset.icon = icon;
       const count = this.gadgetCounts[i];
+      const badge = b.querySelector('.gbadge');
       b.innerHTML = icon;
       b.appendChild(count);
+      if (badge) b.appendChild(badge);
       b.hidden = !icon;
     }
+  }
+
+  /** Big pulsing label on a gadget button (e.g. UP while underground); null hides it. */
+  setGadgetBadge(i: number, text: string | null): void {
+    const b = this.gadgetBtns[i];
+    if (!b) return;
+    let badge = b.querySelector('.gbadge') as HTMLElement | null;
+    if (!text) {
+      if (badge) badge.hidden = true;
+      return;
+    }
+    if (!badge) {
+      badge = el('span', 'gbadge');
+      b.appendChild(badge);
+    }
+    badge.hidden = false;
+    if (badge.textContent !== text) badge.textContent = text;
   }
 
   /** Reflects charges and cooldown on a gadget button (charges < 0 = unlimited). */

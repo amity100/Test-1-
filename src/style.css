@@ -740,3 +740,7 @@ body { background: radial-gradient(1200px 800px at 50% 30%, #16283a 0%, #0f1923 
 .gwarn .g-label { position: absolute; top: 16px; font-family: var(--display); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; color: #ffd54a; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.95); white-space: nowrap; transform: translateX(-50%); }
 .gwarn .g-arrow { position: absolute; width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 14px solid rgba(255, 179, 0, 0.95); transform-origin: 50% 40px; display: none; }
 .gwarn.off .g-arrow { display: block; }
+.tb .gbadge { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); font: 700 10px/1 var(--display); letter-spacing: 0.14em; color: #1a1200; background: var(--accent2); padding: 3px 7px; border-radius: 6px; animation: pulse 0.7s infinite; pointer-events: none; white-space: nowrap; }
+.tb-battle .tb.gadget.on { border-color: var(--accent2); background: rgba(255, 179, 0, 0.35); opacity: 1; }
+.burrow-veil .energy .lbl { font-size: 15px; }
+.burrow-veil .under { position: absolute; left: 50%; top: 18%; transform: translateX(-50%); font-family: var(--display); font-weight: 700; font-size: 26px; letter-spacing: 0.24em; text-transform: uppercase; color: #ffd36a; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.9); animation: pulse 1.4s infinite; white-space: nowrap; }

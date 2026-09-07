@@ -61,6 +61,8 @@ export class Entity {
   coyoteTimer = 0;
   mantleTimer = 0;
   landImpact = 0;
+  /** Height gained by automatic step-ups not yet absorbed by the camera. */
+  stepSmooth = 0;
 
   hp = 100;
   maxHp = 100;

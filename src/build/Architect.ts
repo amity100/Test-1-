@@ -23,19 +23,25 @@ import type { Cell } from '../world/Reachability';
  * floor and roof can be walked to, and the ground floor always has entrances.
  */
 
-/** Room block footprint in metres. */
-export const CELL = 5;
+/** Room block footprint in metres (interiors are CELL-2 wide: six metres of fighting room). */
+export const CELL = 8;
 /** Storey height in rows (slab + three clear rows). */
 export const STOREY_H = 4;
 /** Cells per plot side (40 m plot). */
-export const GRID = 8;
+export const GRID = 5;
 export const MAX_STOREYS = 8;
 /** Rows of the voxel field above the plot floor (the highest parapet or spire fits). */
 export const FIELD_H = MAX_STOREYS * STOREY_H + 4;
 export const PLOT_W = GRID * CELL;
 export const TONES = 8;
 /** How many room blocks a fortress may hold. */
-export const MAX_BLOCKS = 64;
+export const MAX_BLOCKS = 48;
+/** Middle column of a face; interiors span columns 1..CELL-2. */
+const MID = CELL >> 1;
+/** First of the three stair-run columns (centred on the face). */
+const RUN0 = MID - 1;
+/** Layers of a pitched roof, each inset by one from the last. */
+const ROOF_LAYERS = (CELL - 2) >> 1;
 /** Tone whose exterior walls become open colonnades. */
 export const COLONNADE_TONE = 5;
 /** Tone that gets a pitched roof. */
@@ -198,7 +204,12 @@ interface Derived {
 
 const CASTLE_STYLES: StyleId[] = ['medieval', 'gothic', 'desert'];
 /** Interior roof cells in order of preference for the terrace spot (centre first). */
-const ROOF_SPOT_PREFS: [number, number][] = [[2, 2], [2, 1], [1, 2], [3, 2], [2, 3], [1, 1], [3, 1], [1, 3], [3, 3]];
+const ROOF_SPOT_PREFS: [number, number][] = (() => {
+  const out: [number, number][] = [];
+  for (let lz = 1; lz < CELL - 1; lz++) for (let lx = 1; lx < CELL - 1; lx++) out.push([lx, lz]);
+  const c = (CELL - 1) / 2;
+  return out.sort((a, b) => Math.hypot(a[0] - c, a[1] - c) - Math.hypot(b[0] - c, b[1] - c));
+})();
 const TECH_STYLES: StyleId[] = ['modern', 'neon'];
 
 function hash(a: number, b: number, c: number, d = 0): number {
@@ -385,7 +396,7 @@ export class Architect {
           return plan.has(i, j, k - 1) && !stairs.has(Plan.index(i, j, k - 1));
         });
         if (candidates.length === 0) continue;
-        const want = 1 + Math.floor((cells.length - 1) / 5);
+        const want = 1 + Math.floor((cells.length - 1) / 4);
         for (const idx of this.pickSpread(candidates, want, k)) planStair(idx - GRID * GRID, 'up');
       }
     }
@@ -395,7 +406,7 @@ export class Architect {
       for (const tops of this.terraces(plan, k)) {
         const cands = tops.filter((idx) => !stairs.has(idx));
         if (cands.length === 0) continue;
-        const want = 1 + Math.floor((cands.length - 1) / 6);
+        const want = 1 + Math.floor((cands.length - 1) / 5);
         for (const idx of this.pickSpread(cands, want, k + 100)) planStair(idx, 'roof');
       }
     }
@@ -466,7 +477,7 @@ export class Architect {
           continue;
         }
         if (face.door) {
-          const [fx, fy, fz] = this.faceCell(x0, y0, z0, s, 2, 1);
+          const [fx, fy, fz] = this.faceCell(x0, y0, z0, s, MID, 1);
           const court = D.court.has(key);
           if (k === 0) {
             // Doors onto a closed courtyard are interior; everything else at ground level is a way in.
@@ -514,9 +525,9 @@ export class Architect {
           }
           // The terrace spot must be real floor: never over the roof stair's hole or under a mast.
           const runCells = new Set(stair ? stair.run.map(([rx, rz]) => `${rx},${rz}`) : []);
-          const spot = ROOF_SPOT_PREFS.find(([lx, lz]) => !runCells.has(`${x0 + lx},${z0 + lz}`) && !(crown && !this.castle && lx === 2 && lz === 2)) ?? [2, 2];
+          const spot = ROOF_SPOT_PREFS.find(([lx, lz]) => !runCells.has(`${x0 + lx},${z0 + lz}`) && !(crown && !this.castle && lx === MID && lz === MID)) ?? [MID, MID];
           roofSpots.push(this.world(x0 + spot[0], roofY + 1, z0 + spot[1]));
-          if (this.tech && !stair && !crown && hash(i, j, k, 7) % 3 === 0) F.set(x0 + 3, roofY + 1, z0 + 1, withShape(this.roles.pillar, 0));
+          if (this.tech && !stair && !crown && hash(i, j, k, 7) % 3 === 0) F.set(x0 + CELL - 3, roofY + 1, z0 + 1, withShape(this.roles.pillar, 0));
         }
       }
 
@@ -529,8 +540,8 @@ export class Architect {
 
       // Cover crates in wide halls (never over a stairwell or on a stair).
       if (!stair && !stairs.has(Plan.index(i, j, k - 1)) && this.inWideHall(plan, i, j, k) && hash(i, j, k, 3) % 3 === 0) {
-        const cx = hash(i, j, k, 4) % 2 === 0 ? 1 : 3;
-        const cz = hash(i, j, k, 5) % 2 === 0 ? 1 : 3;
+        const cx = hash(i, j, k, 4) % 2 === 0 ? 1 : CELL - 2;
+        const cz = hash(i, j, k, 5) % 2 === 0 ? 1 : CELL - 2;
         F.set(x0 + cx, y0 + 1, z0 + cz, this.roles.floor);
         F.set(x0 + cx, y0 + 1, z0 + cz + (cz === 1 ? 1 : -1), this.roles.floor);
       }
@@ -618,7 +629,7 @@ export class Architect {
         }
       }
     stairCands.sort((a, b) => b.score - a.score);
-    const wantOuter = count >= 24 ? 2 : count >= 2 ? 1 : 0;
+    const wantOuter = count >= 16 ? 2 : count >= 2 ? 1 : 0;
     for (const c of stairCands) {
       if (D.outerStairs.length >= wantOuter) break;
       if (D.outerStairs.some((o) => (o.i === c.i && o.j === c.j) || (o.cell[0] === c.n[0] && o.cell[1] === c.n[1]))) continue;
@@ -647,7 +658,7 @@ export class Architect {
         }
       }
       faces.sort((a, b) => b.score - a.score);
-      const want = cells.length >= 10 ? 3 : 2;
+      const want = cells.length >= 6 ? 3 : 2;
       const chosen: typeof faces = [];
       for (const f of faces) {
         if (chosen.length >= want) break;
@@ -783,13 +794,13 @@ export class Architect {
       // the low end to the high end in that direction.
       const dir = s - 4;
       for (let n = 0; n < 3; n++) {
-        const t = dir === 0 || dir === 1 ? 1 + n : 3 - n;
-        run.push(dir === 0 || dir === 2 ? [x0 + t, z0 + 2] : [x0 + 2, z0 + t]);
+        const t = dir === 0 || dir === 1 ? RUN0 + n : RUN0 + 2 - n;
+        run.push(dir === 0 || dir === 2 ? [x0 + t, z0 + MID] : [x0 + MID, z0 + t]);
       }
       return run;
     }
     const [dx, dz] = SIDES[s];
-    for (let c = 1; c <= 3; c++) {
+    for (let c = RUN0; c < RUN0 + 3; c++) {
       const [fx, , fz] = this.faceCell(x0, 0, z0, s, c, 0);
       run.push([fx - dx, fz - dz]);
     }
@@ -856,28 +867,37 @@ export class Architect {
     const idx = Plan.index(i, j, k);
     if (D.blind.has(faceKey(idx, s))) return null;
     if (this.isColonnade(plan, i, j, k, s, tone)) return { ...base, colonnade: true, rail: exterior && k >= 1 };
+    // Openings are laid out around the middle of the face: gates and doorways four columns wide with
+    // an arched top, windows two columns in from the corners.
+    const gate: number[] = [MID - 2, MID - 1, MID, MID + 1];
+    const arch: [number, number][] = [[MID - 1, 3], [MID, 3]];
+    const win: number[] = [2, CELL - 3];
     if (door) {
-      if (exterior) return { ...base, cols: [1, 2, 3], rows: [1, 2], extra: [[2, 3]], door: true, frame: true };
-      return { ...base, cols: [1, 2], rows: [1, 2, 3] };
+      if (exterior) return { ...base, cols: gate, rows: [1, 2], extra: arch, door: true, frame: true };
+      return { ...base, cols: gate, rows: [1, 2], extra: arch };
     }
-    if (!exterior) return { ...base, cols: [1, 2], rows: [1, 2, 3] };
+    if (!exterior) return { ...base, cols: [MID - 1, MID], rows: [1, 2, 3] };
     const [dx, dz] = SIDES[s];
     const ni = i + dx;
     const nj = j + dz;
     const freeOutside = Plan.inside(ni, nj, k) && !plan.has(ni, nj, k) && !plan.has(ni, nj, k - 1) && !D.deck.has(Plan.index(ni, nj, k)) && !(k === 1 && D.reserved.has(Plan.index(ni, nj, 0)));
     if (!noBalcony && k >= 1 && s === this.frontSide && freeOutside && hash(i, j, k, 9) % 2 === 0) {
-      return { ...base, cols: [2], rows: [1, 2], balcony: true };
+      return { ...base, cols: [MID - 1, MID, MID + 1], rows: [1, 2], balcony: true };
     }
-    if (tone === 4 || this.tech) return { ...base, cols: [2], rows: [2, 3], glassCols: [1, 3] };
-    if (k === 0) return { ...base, cols: [1, 3], rows: [2] };
-    if (this.castle) return { ...base, cols: [1, 3], rows: [2, 3] };
-    return { ...base, cols: [1, 3], rows: [2, 3], extra: [[2, 3]] };
+    if (tone === 4 || this.tech) {
+      const glassCols: number[] = [];
+      for (let c = 1; c < CELL - 1; c++) if (c !== MID - 1 && c !== MID) glassCols.push(c);
+      return { ...base, cols: [MID - 1, MID], rows: [2, 3], glassCols };
+    }
+    if (k === 0) return { ...base, cols: win, rows: [2] };
+    if (this.castle) return { ...base, cols: win, rows: [2, 3] };
+    return { ...base, cols: win, rows: [2, 3], extra: arch };
   }
 
   /** Two-deep terrace outside the wall with a railing, entered through the single door of the face. */
   private balcony(F: Field, x0: number, y0: number, z0: number, s: number): void {
     const [dx, dz] = SIDES[s];
-    for (let c = 1; c <= 3; c++) {
+    for (let c = MID - 1; c <= MID + 1; c++) {
       const [fx, , fz] = this.faceCell(x0, y0, z0, s, c, 0);
       for (let d = 1; d <= 2; d++) {
         const bx = fx + dx * d;
@@ -920,8 +940,8 @@ export class Architect {
       for (const [lx, lz] of [[0, 0], [CELL - 1, 0], [0, CELL - 1], [CELL - 1, CELL - 1]] as [number, number][]) F.fill(x0 + lx, roofY + 2, z0 + lz, wall);
       return;
     }
-    for (let y = roofY + 1; y <= roofY + 3; y++) F.fill(x0 + 2, y, z0 + 2, withShape(this.roles.pillar, Shape.PILLAR));
-    F.fill(x0 + 2, roofY + 4, z0 + 2, this.roles.light);
+    for (let y = roofY + 1; y <= roofY + 3; y++) F.fill(x0 + MID, y, z0 + MID, withShape(this.roles.pillar, Shape.PILLAR));
+    F.fill(x0 + MID, roofY + 4, z0 + MID, this.roles.light);
   }
 
   private pitchedRoof(F: Field, plan: Plan, i: number, j: number, k: number): void {
@@ -932,7 +952,7 @@ export class Architect {
       const [dx, dz] = SIDES[s];
       return plan.has(i + dx, j + dz, k) && !plan.has(i + dx, j + dz, k + 1) && plan.tone(i + dx, j + dz, k) === ROOF_TONE;
     };
-    for (let layer = 1; layer <= 2; layer++) {
+    for (let layer = 1; layer <= ROOF_LAYERS; layer++) {
       const y = base + layer;
       const zLo = shared(0) ? 0 : layer;
       const zHi = shared(2) ? CELL - 1 : CELL - 1 - layer;
@@ -951,7 +971,7 @@ export class Architect {
         }
     }
     const alone = !shared(0) && !shared(1) && !shared(2) && !shared(3);
-    if (alone) F.set(x0 + 2, base + 3, z0 + 2, withShape(this.roles.trim, Shape.PILLAR));
+    if (alone) F.set(x0 + MID, base + ROOF_LAYERS + 1, z0 + MID, withShape(this.roles.trim, Shape.PILLAR));
     // Chimney on one shoulder of the roof.
     if (hash(i, j, k, 11) % 2 === 0) {
       const cx = x0 + (hash(i, j, k, 12) % 2 === 0 ? 1 : CELL - 2);
@@ -1007,7 +1027,7 @@ export class Architect {
       // Clear the crossing height above the deck (a second bridge or a balcony may not block it).
       for (let ly = 2; ly < STOREY_H; ly++) for (let lz = 1; lz < CELL - 1; lz++) for (let lx = 1; lx < CELL - 1; lx++) F.set(x0 + lx, y0 + ly, z0 + lz, 0);
       this.undercroft(F, x0, y0, z0, [(b.side + 1) % 4, (b.side + 3) % 4]);
-      out.push(this.world(x0 + 2, y0 + 1, z0 + 2));
+      out.push(this.world(x0 + MID, y0 + 1, z0 + MID));
     }
     return out;
   }
@@ -1022,14 +1042,14 @@ export class Architect {
       F.fill(x0 + lx, 2, z0 + lz, this.roles.light);
     }
     if (this.tech) {
-      for (const [lx, lz] of [[1, 1], [3, 1], [1, 3], [3, 3]] as [number, number][]) F.fill(x0 + lx, 0, z0 + lz, withShape(this.roles.floor, Shape.SLAB));
-      for (let y = 0; y <= 2; y++) F.fill(x0 + 2, y, z0 + 2, y === 2 ? this.roles.light : withShape(this.roles.pillar, 0));
+      for (const [lx, lz] of [[MID - 1, MID - 1], [MID + 1, MID - 1], [MID - 1, MID + 1], [MID + 1, MID + 1]] as [number, number][]) F.fill(x0 + lx, 0, z0 + lz, withShape(this.roles.floor, Shape.SLAB));
+      for (let y = 0; y <= 2; y++) F.fill(x0 + MID, y, z0 + MID, y === 2 ? this.roles.light : withShape(this.roles.pillar, 0));
       return;
     }
-    for (let lz = 1; lz <= 3; lz++) for (let lx = 1; lx <= 3; lx++) if (lx !== 2 || lz !== 2) F.fill(x0 + lx, 0, z0 + lz, withShape(this.roles.trim, Shape.SLAB));
-    F.fill(x0 + 2, 0, z0 + 2, this.roles.wallAlt);
-    F.fill(x0 + 2, 1, z0 + 2, withShape(this.roles.pillar, Shape.PILLAR));
-    F.fill(x0 + 2, 2, z0 + 2, this.roles.light);
+    for (let lz = MID - 1; lz <= MID + 1; lz++) for (let lx = MID - 1; lx <= MID + 1; lx++) if (lx !== MID || lz !== MID) F.fill(x0 + lx, 0, z0 + lz, withShape(this.roles.trim, Shape.SLAB));
+    F.fill(x0 + MID, 0, z0 + MID, this.roles.wallAlt);
+    F.fill(x0 + MID, 1, z0 + MID, withShape(this.roles.pillar, Shape.PILLAR));
+    F.fill(x0 + MID, 2, z0 + MID, this.roles.light);
   }
 
   /** A broad five-step flight in the cell in front of a facade, climbing to the first-floor door. */
@@ -1039,16 +1059,18 @@ export class Architect {
     const bz0 = st.j * CELL;
     const rot = (st.side + 1) % 4; // climbing towards the block
     const stepBlock = withShape(this.roles.stairs, makeShape('stairs', rot));
-    for (let t = 0; t < CELL; t++) {
+    // Five steps (one per row of the storey) three columns wide, flanked by low walls, in the part of
+    // the cell nearest the facade; the rest of the cell stays open ground in front of the flight.
+    for (let t = 0; t <= STOREY_H; t++) {
       const y = STOREY_H - t;
-      for (let c = 0; c < CELL; c++) {
+      for (let c = MID - 2; c <= MID + 2; c++) {
         const [fx, , fz] = this.faceCell(bx0, 0, bz0, st.side, c, 0);
         const cx = fx + dx * (t + 1);
         const cz = fz + dz * (t + 1);
-        const rail = c === 0 || c === CELL - 1;
+        const rail = c === MID - 2 || c === MID + 2;
         for (let yy = 0; yy < y; yy++) F.set(cx, yy, cz, rail ? this.wallValue(0) : this.roles.wallAlt);
         F.set(cx, y, cz, rail ? this.wallValue(0) : stepBlock);
-        if (rail && t === CELL - 1) F.set(cx, y + 1, cz, this.roles.light); // lamps at the foot of the flight
+        if (rail && t === STOREY_H) F.set(cx, y + 1, cz, this.roles.light); // lamps at the foot of the flight
       }
     }
   }

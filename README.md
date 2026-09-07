@@ -39,6 +39,10 @@ GitHub Pages). Single-file build for artifact hosting: `npm run build:artifact` 
 
 WASD move · Space jump · Shift sprint · C crouch/slide · Mouse aim and fire · Right mouse aim down
 sights · 1-3 / wheel weapons · R reload · G grenade · Q / F gadgets · Tab scoreboard · Esc pause.
+Stairs, slabs and one-metre ledges are climbed by simply walking into them. Aim assist (on by
+default, off in Settings) slows the view over an enemy, follows one near the crosshair, snaps onto
+the nearest enemy when the sights come up and forgives near misses a little; on touch it also fires
+for you.
 Mouse look uses pointer lock with raw, uncapped deltas, so a fast flick turns all the way; if the
 page cannot lock the pointer, the outer band of the window keeps turning the view.
 
@@ -49,7 +53,8 @@ steps on it, a sticky **breach charge** that blows a hole through fortress walls
 **burrow drill** that tunnels under the ground, surfaces inside the fortress and drills through
 blocks while you hold the button. Bots carry random kits too.
 
-**Building.** The build phase is a plan of room blocks on a 5 m grid: tap the ground to grow a room,
+**Building.** The build phase is a plan of room blocks on an 8 m grid (six-metre interiors, wide
+enough to fight in; same-tone neighbours merge into bigger halls): tap the ground to grow a room,
 tap a wall or a roof to add one beside or on top of it, hold (or right-click) to take one away, and
 pick one of eight tones for the next block. The **Architect** turns that coarse plan into finished,
 playable architecture after every tap: exterior walls with slits, windows or curtain glass, gates
@@ -80,9 +85,13 @@ compact cluster). Auto fire and aim assist are on by default for touch and can b
 together with button size and opacity. Building on a phone is the same tap-a-block flow with the
 palette along the bottom. Landscape is recommended.
 
-**Bots** notice you the way people do (slower in the periphery, at range or when you stand still,
-instantly when you shoot), their first shots start off target and settle, their aim trails your
-movement, they flinch and break for cover under fire, reload out of sight and fire in bursts.
+**Bots** notice you the way people do: awareness builds up over a second or more depending on
+where you are in their field of view, how far and how exposed you are (head, chest and knees are
+checked separately), whether you stand still, walk or sprint, and how attentive the bot happens to
+be right now (its attention drifts every few seconds), so a still figure half hidden at the edge of
+vision can go unseen while someone sprinting across the middle of the view, or firing, registers
+almost at once. Their first shots start off target and settle, their aim trails your movement, they
+flinch and break for cover under fire, reload out of sight and fire in bursts.
 
 **Combat feedback.** Floating damage numbers at the hit point (gold for headshots, red for kills),
 a red arc around the crosshair pointing at whoever just hit you, a crosshair that turns red on a

@@ -3,7 +3,7 @@ import { PLOT_Y, type Plot } from './Layout';
 import type { StyleId } from './Styles';
 import { Random } from '../core/Random';
 import { bestHidingCells, checkReachability, type Cell } from './Reachability';
-import { Architect, Plan, GRID, MAX_STOREYS, applyField, type Tone } from '../build/Architect';
+import { Architect, Plan, GRID, MAX_STOREYS, MAX_BLOCKS, applyField, type Tone } from '../build/Architect';
 
 /**
  * Fortress plans for the bots (and the player's "surprise me" button): coarse room-block layouts
@@ -78,144 +78,117 @@ function tonesFor(style: StyleId): { main: Tone; alt: Tone; tower: Tone; top: To
 }
 
 function keep(s: Sketch, rng: Random, t: ReturnType<typeof tonesFor>): void {
-  // Central keep 2x2 or 3x3, three to four storeys, towers on the diagonals joined by curtain walls.
+  // Central keep 2x2 or 3x3, three to four storeys, towers on the four corners of the plot joined by
+  // curtain walls with a gate gap, open galleries at storey two and a second tower bridging to the keep.
   const size = rng.next() < 0.5 ? 2 : 3;
-  const i0 = size === 2 ? 3 : 2;
-  const j0 = i0;
+  const i0 = 1;
+  const j0 = 1;
   const storeys = rng.int(3, 4);
   for (let k = 0; k < storeys; k++) s.box(i0, j0, i0 + size - 1, j0 + size - 1, k, k === storeys - 1 && rng.next() < 0.5 ? t.top : k % 2 === 0 ? t.main : t.alt);
-  const ring = size === 2 ? [1, 6] : [0, 7];
   const towerH = rng.int(4, 6);
-  for (const ti of ring) for (const tj of ring) s.column(ti, tj, towerH, t.tower, t.top);
-  // Curtain walls along the ring, one or two storeys, with a gap somewhere for a gate courtyard.
+  for (const ti of [0, GRID - 1]) for (const tj of [0, GRID - 1]) s.column(ti, tj, towerH, t.tower, t.top);
+  // Curtain walls along the edges, one or two storeys, with a gap somewhere for a gate courtyard.
   const wallH = rng.int(1, 2);
   const gapSide = rng.int(0, 3);
   for (let k = 0; k < wallH; k++) {
-    const a = ring[0];
-    const b = ring[1];
+    const a = 0;
+    const b = GRID - 1;
     if (gapSide !== 0) s.line(a + 1, a, b - 1, a, k, t.alt);
     if (gapSide !== 1) s.line(b, a + 1, b, b - 1, k, t.alt);
     if (gapSide !== 2) s.line(a + 1, b, b - 1, b, k, t.alt);
     if (gapSide !== 3) s.line(a, a + 1, a, b - 1, k, t.alt);
   }
-  // Open galleries from the keep towards two curtain walls at storey 2 (arcades below them).
+  // Open galleries over the curtain walls at storey two (arcades below when the wall is one storey).
   const bk = Math.min(2, storeys - 1);
-  const mid = i0 + Math.floor(size / 2);
-  if (rng.next() < 0.8) s.line(mid, j0 - 1, mid, ring[0] + 1, bk, t.gallery);
-  if (rng.next() < 0.8) s.line(i0 + size, mid, ring[1] - 1, mid, bk, t.gallery);
-  // A second keep tower that bridges to the keep: same tone across a one-cell gap.
-  if (rng.next() < 0.7) {
-    const bi = i0 + size + 1;
-    const bj = j0;
-    s.column(bi, bj, storeys, t.main, t.main);
-    for (let k = 1; k < storeys; k++) s.plan.set(i0 + size - 1, bj, k, t.main);
-  }
-  // Overhanging balcony rooms on the keep front.
-  if (rng.next() < 0.6) s.put(i0 - 1, j0 + size - 1, 1, t.alt);
+  if (rng.next() < 0.8) s.put(i0, 0, bk, t.gallery);
+  if (rng.next() < 0.8) s.put(GRID - 1, j0 + size - 1, bk, t.gallery);
+  // A tower in the keep's tone one cell away from it: the gap turns into bridges.
+  if (size === 2 && rng.next() < 0.8) s.column(i0 + 3, j0, storeys, t.main, t.main);
+  // Overhanging balcony room on the keep front.
+  if (rng.next() < 0.6) s.put(i0 + size, j0 + size - 1, 1, t.alt);
 }
 
 function citadel(s: Sketch, rng: Random, t: ReturnType<typeof tonesFor>): void {
-  // Stepped hi-tech massing: wide base, a slimmer block above, a slab tower, one detached glass tower
-  // joined by bridges high up. Some blocks overhang the base for arcades.
-  const i0 = rng.int(1, 2);
-  const j0 = rng.int(1, 2);
-  s.box(i0, j0, i0 + 3, j0 + 3, 0, t.base);
-  s.box(i0 + 1, j0, i0 + 3, j0 + 2, 1, t.main);
-  s.box(i0 + 2, j0 + 1, i0 + 3, j0 + 2, 2, t.top);
-  s.box(i0 + 2, j0 + 1, i0 + 3, j0 + 1, 3, t.top);
-  s.put(i0 + 3, j0 + 1, 4, t.top);
-  // Overhangs.
-  s.put(i0 + 4, j0 + 2, 1, t.main);
-  s.put(i0, j0 + 4, 1, t.alt);
-  // Detached glass tower two cells away: bridges span the gap on storeys 3 and 4.
-  const ti = Math.min(GRID - 1, i0 + 5);
-  s.column(ti, j0 + 1, 5, t.top, t.top);
-  // Ground gallery linking the base to the tower's foot, and low pavilions for cover.
-  s.put(i0 + 4, j0 + 1, 0, t.gallery);
-  if (rng.next() < 0.7) s.put(i0 - 1, j0 + 1, 0, t.alt);
-  if (rng.next() < 0.7) s.put(i0 + 1, j0 - 1, 0, t.alt);
+  // Stepped hi-tech massing: a wide base, slimmer blocks above, a slab tower, one detached glass tower
+  // joined by bridges on two storeys, a ground gallery and low pavilions for cover.
+  const i0 = 0;
+  const j0 = rng.int(0, 1);
+  s.box(i0, j0, i0 + 2, j0 + 2, 0, t.base);
+  s.box(i0 + 1, j0, i0 + 2, j0 + 1, 1, t.main);
+  s.box(i0 + 2, j0, i0 + 2, j0 + 1, 2, t.top);
+  s.put(i0 + 2, j0, 3, t.top);
+  // Overhang for an arcade.
+  s.put(i0 + 3, j0 + 1, 1, t.main);
+  // Detached glass tower two cells from the slab: bridges span the gap on storeys two and three.
+  s.column(i0 + 4, j0, 4, t.top, t.top);
+  s.put(i0 + 3, j0, 0, t.gallery);
+  if (rng.next() < 0.7) s.put(i0, j0 + 3, 0, t.alt);
+  if (rng.next() < 0.7) s.put(i0 + 3, j0 + 3, 0, t.alt);
+  if (rng.next() < 0.5) s.put(i0 + 4, j0 + 2, 0, t.alt);
 }
 
 function palace(s: Sketch, rng: Random, t: ReturnType<typeof tonesFor>): void {
-  // Symmetric front: two wings with pitched roofs, a taller central hall, towers at the wing ends,
-  // a rear gallery on the first floor and a twin forecourt framed by pavilions.
-  const j0 = 3;
-  const i0 = 1;
-  const i1 = 6;
-  // Wings (ground + roofed first floor).
-  s.box(i0, j0, i1, j0 + 1, 0, t.main);
-  for (let i = i0; i <= i1; i++) if (i < 3 || i > 4) s.put(i, j0, 1, t.top);
-  // Central hall three storeys wide two.
-  for (let k = 0; k < 3; k++) s.box(3, j0, 4, j0 + 1, k, k === 2 ? t.top : t.alt);
-  // Rear gallery.
-  s.line(i0, j0 + 2, i1, j0 + 2, 0, t.alt);
-  s.line(i0 + 1, j0 + 2, i1 - 1, j0 + 2, 1, t.gallery);
-  // End towers.
-  s.column(i0, j0 + 2, 4, t.tower, t.top);
-  s.column(i1, j0 + 2, 4, t.tower, t.top);
-  // Forecourt: pavilions frame two courtyard cells in front of the hall.
-  s.put(2, j0 - 1, 0, t.alt);
-  s.put(3, j0 - 2, 0, t.alt);
-  s.put(5, j0 - 1, 0, t.alt);
-  s.put(4, j0 - 2, 0, t.alt);
-  if (rng.next() < 0.5) s.put(3, j0 + 1, 3, t.tower);
+  // Symmetric front: a wing with pitched roofs, a taller central hall, towers at the rear corners,
+  // a first-floor rear gallery and a forecourt framed by two pavilions.
+  const j0 = 2;
+  s.box(0, j0, GRID - 1, j0, 0, t.main);
+  for (const i of [0, 1, 3, 4]) s.put(i, j0, 1, t.top);
+  for (let k = 0; k < 3; k++) s.box(2, j0, 2, j0 + 1, k, k === 2 ? t.top : t.alt);
+  s.line(0, j0 + 1, GRID - 1, j0 + 1, 0, t.alt);
+  s.line(1, j0 + 1, GRID - 2, j0 + 1, 1, t.gallery);
+  s.column(0, j0 + 2, 4, t.tower, t.top);
+  s.column(GRID - 1, j0 + 2, 4, t.tower, t.top);
+  s.line(1, j0 + 2, GRID - 2, j0 + 2, 0, t.alt);
+  // Forecourt: pavilions either side of the entrance cell.
+  s.put(1, j0 - 1, 0, t.alt);
+  s.put(3, j0 - 1, 0, t.alt);
+  if (rng.next() < 0.5) s.put(2, j0 + 1, 3, t.tower);
 }
 
 function bastion(s: Sketch, rng: Random, t: ReturnType<typeof tonesFor>): void {
-  // Sprawling low complex: an L of rooms around a courtyard, a partial first floor with overhangs,
-  // a watchtower.
-  const i0 = rng.int(1, 2);
-  const j0 = rng.int(1, 2);
-  s.box(i0, j0, i0 + 4, j0 + 1, 0, t.base);
-  s.box(i0, j0 + 2, i0 + 1, j0 + 4, 0, t.base);
-  s.box(i0 + 1, j0, i0 + 3, j0, 1, t.main);
-  s.put(i0, j0 + 3, 1, t.main);
-  s.put(i0 + 2, j0 + 2, 1, t.alt); // overhang into the courtyard
-  s.put(i0 + 2, j0 + 2, 0, t.alt);
-  s.put(i0 + 3, j0 + 3, 0, t.alt); // closes the courtyard cell (i0+2, j0+3) on three sides
-  s.column(i0 + 4, j0 + 3, 4, t.tower, t.top);
-  s.put(i0 + 4, j0 + 2, 0, t.alt);
-  s.put(i0 + 4, j0 + 1, 1, t.alt);
-  if (rng.next() < 0.5) s.put(i0 + 5, j0, 0, t.main);
-  if (rng.next() < 0.5) s.put(i0 - 1, j0 + 4, 0, t.main);
+  // Sprawling low complex: an L of rooms around a courtyard, a partial first floor, a watchtower.
+  s.box(0, 0, 3, 1, 0, t.base);
+  s.box(0, 2, 1, 4, 0, t.base);
+  s.box(1, 0, 2, 0, 1, t.main);
+  s.put(0, 3, 1, t.main);
+  s.put(2, 3, 0, t.alt); // closes the courtyard cell (2,2) on three sides
+  s.put(2, 2, 1, t.alt); // overhang into the courtyard
+  s.column(4, 3, 4, t.tower, t.top);
+  s.put(4, 2, 0, t.alt);
+  if (rng.next() < 0.5) s.put(4, 0, 0, t.main);
+  if (rng.next() < 0.5) s.put(3, 4, 0, t.main);
 }
 
 function temple(s: Sketch, rng: Random, t: ReturnType<typeof tonesFor>): void {
   // Terraced platform: a hypostyle colonnade base, a stacked centre, corner pylons, galleries.
-  const i0 = 2;
-  const j0 = 2;
-  s.box(i0, j0, i0 + 3, j0 + 3, 0, t.gallery);
-  s.box(i0 + 1, j0 + 1, i0 + 2, j0 + 2, 1, t.main);
-  s.box(i0 + 1, j0 + 1, i0 + 2, j0 + 2, 2, t.alt);
-  s.put(i0 + 1, j0 + 1, 3, t.top);
-  s.put(i0 + 2, j0 + 2, 3, t.top);
-  for (const [pi, pj] of [[i0 - 1, j0 - 1], [i0 + 4, j0 - 1], [i0 - 1, j0 + 4], [i0 + 4, j0 + 4]]) s.column(pi, pj, 3, t.tower, t.top);
-  s.line(i0, j0 - 1, i0 + 3, j0 - 1, 1, t.gallery);
-  s.line(i0 - 1, j0, i0 - 1, j0 + 3, 1, t.gallery);
-  if (rng.next() < 0.6) s.put(i0 + 4, j0 + 1, 0, t.alt);
+  s.box(1, 1, 3, 3, 0, t.gallery);
+  s.put(2, 2, 1, t.main);
+  s.put(2, 2, 2, t.alt);
+  s.put(2, 2, 3, t.top);
+  for (const [pi, pj] of [[0, 0], [GRID - 1, 0], [0, GRID - 1], [GRID - 1, GRID - 1]]) s.column(pi, pj, 3, t.tower, t.top);
+  s.line(1, 0, 3, 0, 1, t.gallery);
+  s.line(0, 1, 0, 3, 1, t.gallery);
+  if (rng.next() < 0.6) s.put(4, 2, 0, t.alt);
+  if (rng.next() < 0.6) s.put(2, 4, 0, t.alt);
 }
 
 function spire(s: Sketch, rng: Random, t: ReturnType<typeof tonesFor>): void {
-  // A single tall tower over a cloister ring, two flanking turrets and high galleries.
-  const i0 = 3;
-  const j0 = 3;
+  // A single tall tower inside a cloister ring, two flanking turrets and high galleries.
   const h = rng.int(5, 6);
-  for (let k = 0; k < h; k++) s.box(i0, j0, i0 + 1, j0 + 1, k, k === h - 1 ? t.top : k % 2 ? t.alt : t.main);
-  // Cloister ring at ground level with gaps.
-  for (let i = 1; i <= 6; i++) {
-    if (i !== 3) s.put(i, 1, 0, t.gallery);
-    if (i !== 4) s.put(i, 6, 0, t.gallery);
+  for (let k = 0; k < h; k++) s.put(2, 2, k, k === h - 1 ? t.top : k % 2 ? t.alt : t.main);
+  for (let i = 0; i < GRID; i++) {
+    if (i !== 2) s.put(i, 0, 0, t.gallery);
+    if (i !== 2) s.put(i, GRID - 1, 0, t.gallery);
   }
-  for (let j = 2; j <= 5; j++) {
-    if (j !== 4) s.put(1, j, 0, t.gallery);
-    if (j !== 3) s.put(6, j, 0, t.gallery);
+  for (let j = 1; j < GRID - 1; j++) {
+    s.put(0, j, 0, t.gallery);
+    s.put(GRID - 1, j, 0, t.gallery);
   }
-  s.column(1, 1, 4, t.tower, t.top);
-  s.column(6, 6, 4, t.tower, t.top);
-  s.line(2, 1, i0 - 1, 1, 2, t.gallery);
-  s.line(i0, 2, i0, 2, 2, t.gallery);
-  if (rng.next() < 0.7) s.line(6, 5, 6, j0 + 2, 2, t.gallery);
-  s.put(i0 + 1, j0 + 2, 2, t.gallery);
+  s.column(0, 0, 4, t.tower, t.top);
+  s.column(GRID - 1, GRID - 1, 4, t.tower, t.top);
+  s.put(2, 1, 2, t.gallery);
+  s.put(1, 2, 2, t.gallery);
+  if (rng.next() < 0.7) s.put(3, 2, 2, t.gallery);
 }
 
 const BUILDERS: Record<Archetype, (s: Sketch, rng: Random, t: ReturnType<typeof tonesFor>) => void> = { keep, citadel, palace, bastion, temple, spire };
@@ -253,7 +226,7 @@ function dropFloating(plan: Plan): void {
 }
 
 /** Builds a bot fortress on its plot and returns flag and spawn cells. */
-export function generateFortress(world: VoxelWorld, plot: Plot, style: StyleId, rng: Random, archetype?: Archetype, limit = 64): FortressResult {
+export function generateFortress(world: VoxelWorld, plot: Plot, style: StyleId, rng: Random, archetype?: Archetype, limit = MAX_BLOCKS): FortressResult {
   const arch = archetype ?? rng.pick(archetypesFor(style));
   const plan = planFortress(rng, style, limit, arch);
   const architect = new Architect(plot, style);

@@ -293,34 +293,48 @@ export class CharacterController {
     if (next.end) g.detachZip(e, true);
   }
 
+  /**
+   * Walking into a step no taller than a metre (stair halves, slabs, single blocks) lifts the
+   * character onto it, every frame and without a jump, so flights of stairs are climbed by simply
+   * walking. The lift is recorded so the camera can smooth it out.
+   */
+  private stepUp(e: Entity): boolean {
+    if (!(e.grounded || e.wasGrounded) || e.sliding) return false;
+    const p = e.pos;
+    // Crouched characters still take half steps (stair treads), not whole blocks.
+    for (const rise of e.crouching ? [0.5] : [0.5, 1.0]) {
+      const ny = p.y + rise + 0.002;
+      if (this.collides(p.x, ny, p.z, e.radius, e.height)) continue;
+      // Something to stand on at the new height (not a hole behind a lip).
+      if (!this.collides(p.x, ny - 0.06, p.z, e.radius * 0.98, 0.05)) continue;
+      e.stepSmooth += rise;
+      p.y = ny;
+      e.grounded = true;
+      return true;
+    }
+    return false;
+  }
+
   /** Moves along one axis and resolves voxel collisions. Returns true if blocked. */
   private moveAxis(e: Entity, axis: 0 | 1 | 2, delta: number): boolean {
     if (delta === 0) return false;
     const p = e.pos;
     const r = e.radius;
     const h = e.height;
-    const eps = 0.001;
     if (axis === 0) p.x += delta;
     else if (axis === 1) p.y += delta;
     else p.z += delta;
     if (!this.collides(p.x, p.y, p.z, r, h)) return false;
-    // Push back to the voxel boundary.
-    if (axis === 0) {
-      p.x = delta > 0 ? Math.floor(p.x + r) - r - eps : Math.ceil(p.x - r) + r + eps;
-      e.vel.x = 0;
-    } else if (axis === 1) {
-      if (delta > 0) {
-        p.y = Math.floor(p.y + h) - h - eps;
-        e.vel.y = 0;
-      } else {
-        p.y = Math.ceil(p.y) + eps;
+    if (axis !== 1 && this.stepUp(e)) return false;
+    this.resolveAxis(e, axis, delta);
+    if (axis === 0) e.vel.x = 0;
+    else if (axis === 2) e.vel.z = 0;
+    else {
+      if (delta < 0) {
         if (e.vel.y < -12) e.landImpact = Math.min(1, -e.vel.y / 40);
-        e.vel.y = 0;
         e.grounded = true;
       }
-    } else {
-      p.z = delta > 0 ? Math.floor(p.z + r) - r - eps : Math.ceil(p.z - r) + r + eps;
-      e.vel.z = 0;
+      e.vel.y = 0;
     }
     // If still colliding (corner cases), nudge upwards slightly.
     if (this.collides(p.x, p.y, p.z, r, h)) {
@@ -330,6 +344,44 @@ export class CharacterController {
       }
     }
     return true;
+  }
+
+  /**
+   * Pushes the character back along the axis it just moved on until it no longer overlaps a block.
+   * The contact is found by bisecting between the free start and the blocked end of the move, so
+   * shaped blocks (stair halves, slabs, top slabs) resolve to their real faces instead of snapping
+   * to whole-metre voxel boundaries, which used to leave characters floating above stair treads.
+   */
+  private resolveAxis(e: Entity, axis: 0 | 1 | 2, delta: number): void {
+    const p = e.pos;
+    const r = e.radius;
+    const h = e.height;
+    const eps = 0.001;
+    const end = axis === 0 ? p.x : axis === 1 ? p.y : p.z;
+    const start = end - delta;
+    const set = (v: number) => {
+      if (axis === 0) p.x = v;
+      else if (axis === 1) p.y = v;
+      else p.z = v;
+    };
+    set(start);
+    if (this.collides(p.x, p.y, p.z, r, h)) {
+      // Already overlapping before the move (block placed on us, spawn inside geometry): fall back
+      // to the voxel boundary in the direction we came from.
+      if (axis === 0) p.x = delta > 0 ? Math.floor(end + r) - r - eps : Math.ceil(end - r) + r + eps;
+      else if (axis === 1) p.y = delta > 0 ? Math.floor(end + h) - h - eps : Math.ceil(end) + eps;
+      else p.z = delta > 0 ? Math.floor(end + r) - r - eps : Math.ceil(end - r) + r + eps;
+      return;
+    }
+    let lo = start;
+    let hi = end;
+    for (let i = 0; i < 10; i++) {
+      const mid = (lo + hi) * 0.5;
+      set(mid);
+      if (this.collides(p.x, p.y, p.z, r, h)) hi = mid;
+      else lo = mid;
+    }
+    set(lo);
   }
 
   private tryMantle(e: Entity, dir: THREE.Vector3): void {

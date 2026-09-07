@@ -319,7 +319,7 @@ export class Game {
     if (!this.match || !this.builder || this.mode !== 'build') return;
     const plot = this.app.plots[0];
     // An empty or tiny plot gets a generated fortress so every round has an arena.
-    if (this.builder.blocks < 6) this.builder.autoBuild(this.rng.int(1, 1e9));
+    if (this.builder.blocks < 4) this.builder.autoBuild(this.rng.int(1, 1e9));
     this.builder.validateNow();
     if (!this.builder.reach.ok) {
       this.builder.ensureMarkers(this.rng);
@@ -661,7 +661,11 @@ export class Game {
     g.on('burrow', ({ entity, down, pos }) => {
       audio.play(down ? 'erase' : 'place', { pos, pitch: down ? 0.6 : 0.7 });
       this.vfx.debrisBurst(pos, up, down ? 26 : 34, dirt);
-      if (entity === this.player) this.local?.addShake(0.35);
+      if (entity === this.player) {
+        this.local?.addShake(0.35);
+        // Going under is a big state change: say so, and say how to get back up.
+        if (down) this.hud.showBanner(t('burrowBanner'), this.surfaceInstruction(), 3.2);
+      }
     });
     g.on('dig', ({ pos }) => {
       audio.play('erase', { pos, pitch: 0.75 });
@@ -992,6 +996,7 @@ export class Game {
       p.gadgets.forEach((id, i) => {
         const unlimited = GADGETS[id].charges === Infinity;
         this.touch.setGadgetState(i, p.gadgetCooldown[i] <= 0 && (unlimited || p.gadgetCharges[i] > 0), unlimited ? -1 : p.gadgetCharges[i]);
+        this.touch.setGadgetBadge(i, p.gadgets[i] === 'burrow' && p.burrowed ? t('surfaceBadge') : null);
       });
     }
   }
@@ -1133,7 +1138,7 @@ export class Game {
       sniperScope: !!w && w.id === 'sniper' && p.ads > 0.85,
       spread,
       fps: settings.data.showFps ? this.app.fps : null,
-      prompt: this.time < this.promptUntil ? this.promptText : p.protectedUntil > this.time ? t('spawnShield') : p.burrowed ? t('surfaceHint') : '',
+      prompt: this.time < this.promptUntil ? this.promptText : p.protectedUntil > this.time ? t('spawnShield') : p.burrowed ? this.surfaceInstruction() : '',
       minimap: {
         self: { x: p.pos.x, z: p.pos.z, yaw: p.yaw },
         target: match.targetPlotIndex >= 0 ? { x: this.app.plots[match.targetPlotIndex].cx, z: this.app.plots[match.targetPlotIndex].cz } : null,
@@ -1188,6 +1193,13 @@ export class Game {
       sy = h / 2 + dy * k;
     }
     return { sx, sy, onScreen, angle };
+  }
+
+  /** How to get back above ground with the burrow drill, for the input in use. */
+  private surfaceInstruction(): string {
+    if (this.app.input.isTouch) return t('surfaceTouch');
+    const slot = this.player.gadgets.indexOf('burrow');
+    return t('surfaceKey', { key: GADGET_KEY_LABELS[Math.max(0, slot)] ?? 'Q' });
   }
 
   /** Bearing of a world position relative to the view direction (0 = ahead, clockwise positive). */

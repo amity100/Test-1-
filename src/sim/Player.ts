@@ -39,6 +39,10 @@ export class Player {
   private assistAngle = Infinity;
   /** Seconds of steady forward movement; sprint kicks in by itself after a moment. */
   private forwardHeld = 0;
+  /** Aim-down-sights snap in progress (seconds left) and the target it locks onto. */
+  private snapT = 0;
+  private snapTarget: Entity | null = null;
+  private wasAds = false;
 
   constructor(
     readonly entity: Entity,
@@ -91,25 +95,39 @@ export class Player {
       lookDX += band(nx) * 900 * dt;
       lookDY += band(ny) * 500 * dt;
     }
-    // Touch helpers: find an enemy near the crosshair for aim assist / auto fire.
+    // Aim assist (the way mobile shooters do it, milder with a mouse): the camera slows down over an
+    // enemy, gently follows one near the crosshair, and aiming down sights snaps onto the nearest
+    // enemy in a cone. Touch also gets auto fire.
     const touch = input.isTouch && this.enabled;
-    const assistOn = touch && settings.data.aimAssist && !e.burrowed;
-    if (touch && (settings.data.aimAssist || settings.data.autoFire) && !e.burrowed) this.findAssistTarget(9);
+    const assistOn = this.enabled && settings.data.aimAssist && !e.burrowed;
+    if ((assistOn || (touch && settings.data.autoFire)) && !e.burrowed) this.findAssistTarget(12);
     else this.assistTarget = null;
-    const nearTarget = this.assistTarget !== null && this.assistAngle < THREE.MathUtils.degToRad(4.5);
+    const strength = input.isTouch ? 1 : 0.6;
+    const nearTarget = this.assistTarget !== null && this.assistAngle < THREE.MathUtils.degToRad(6);
     // Look
     if (looking || lookDX !== 0 || lookDY !== 0) {
       const w = e.weapon;
       const zoom = w ? THREE.MathUtils.lerp(1, WEAPONS[w.id].adsZoom, e.ads) : 1;
       const touchScale = input.isTouch ? 1.6 : 1;
       // Friction: the camera slows down while the crosshair rests on an enemy.
-      const friction = assistOn && nearTarget ? 0.5 : 1;
+      const friction = assistOn && nearTarget ? 1 - 0.5 * strength : 1;
       // 0.0011 rad per raw count at sensitivity 1 ≈ 0.063°/count: a 360° turn in roughly 20 cm on an 800 DPI mouse.
       const sens = 0.0011 * settings.data.sensitivity * zoom * touchScale * friction;
       e.yaw -= lookDX * sens;
       e.pitch = clamp(e.pitch - lookDY * sens * (settings.data.invertY ? -1 : 1), -1.5, 1.5);
     }
-    if (assistOn && this.assistTarget && this.assistAngle < THREE.MathUtils.degToRad(6)) this.magnetism(dt, lookDX !== 0 || lookDY !== 0);
+    if (assistOn && this.assistTarget && this.assistAngle < THREE.MathUtils.degToRad(8)) this.magnetism(dt, lookDX !== 0 || lookDY !== 0, 0.7 * strength);
+    // ADS snap: the moment the sights come up, lock onto an enemy within the cone over a short blend.
+    const adsNow = this.enabled && (this.debugAdsHold ?? input.adsHeld());
+    if (assistOn && adsNow && !this.wasAds && this.assistTarget && this.assistAngle < THREE.MathUtils.degToRad(12)) {
+      this.snapT = 0.16;
+      this.snapTarget = this.assistTarget;
+    }
+    this.wasAds = adsNow;
+    if (this.snapT > 0 && this.snapTarget && this.snapTarget.alive && adsNow) {
+      this.snapT -= dt;
+      this.steerTo(this.snapTarget, Math.min(1, dt * 22));
+    } else this.snapT = 0;
     // Gadgets (before movement so a new state applies this frame).
     if (this.enabled) {
       for (let i = 0; i < KIT_SIZE; i++) this.gadgets.input(e, i, input.gadgetPressed(i), input.gadgetHeld(i), input.gadgetReleased(i), now);
@@ -184,7 +202,8 @@ export class Player {
       const surface = this.gadgets.surfaceYAt(e.pos.x, e.pos.z);
       eye.y = surface + 0.32 + Math.sin(now * 23) * 0.012;
     }
-    eye.y += Math.abs(Math.sin(this.bobPhase)) * 0.045 * bob - this.camDip;
+    e.stepSmooth = damp(e.stepSmooth, 0, 16, dt);
+    eye.y += Math.abs(Math.sin(this.bobPhase)) * 0.045 * bob - this.camDip - e.stepSmooth;
     const right = e.right(new THREE.Vector3());
     eye.addScaledVector(right, Math.sin(this.bobPhase) * 0.02 * bob);
     this.camera.position.copy(eye);
@@ -250,16 +269,21 @@ export class Player {
   }
 
   /** Gently steers the view towards the assist target while the player is aiming or moving. */
-  private magnetism(dt: number, activeLook: boolean): void {
+  private magnetism(dt: number, activeLook: boolean, amount: number): void {
     const e = this.entity;
     const o = this.assistTarget!;
     const speed = Math.hypot(e.vel.x, e.vel.z);
     if (!activeLook && speed < 1 && o.vel.lengthSq() < 0.5) return;
+    this.steerTo(o, Math.min(1, dt * 4) * amount);
+  }
+
+  /** Turns the view a fraction of the way towards an entity's chest. */
+  private steerTo(o: Entity, k: number): void {
+    const e = this.entity;
     const eye = e.eyePos;
     const d = new THREE.Vector3(o.pos.x, o.pos.y + o.height * 0.6, o.pos.z).sub(eye);
     const targetYaw = Math.atan2(-d.x, -d.z);
     const targetPitch = Math.atan2(d.y, Math.hypot(d.x, d.z));
-    const k = Math.min(1, dt * 4) * 0.4;
     e.yaw += wrapAngle(targetYaw - e.yaw) * k;
     e.pitch = clamp(e.pitch + (targetPitch - e.pitch) * k, -1.5, 1.5);
   }

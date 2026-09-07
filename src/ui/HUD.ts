@@ -182,7 +182,8 @@ export class HUD {
 
     // Underground veil (burrow drill) and drilling progress
     this.veil = el('div', 'burrow-veil');
-    this.veil.innerHTML = `<div class="dirt"></div><div class="energy"><span class="lbl"></span><div class="ebar"><div class="fill"></div></div></div>`;
+    this.veil.innerHTML = `<div class="dirt"></div><div class="under"></div><div class="energy"><span class="lbl"></span><div class="ebar"><div class="fill"></div></div></div>`;
+    (this.veil.querySelector('.under') as HTMLElement).textContent = t('burrowBanner');
     this.veilEnergy = this.veil.querySelector('.ebar .fill') as HTMLElement;
     this.veilLabel = this.veil.querySelector('.energy .lbl') as HTMLElement;
     this.veil.hidden = true;

@@ -30,7 +30,7 @@ export interface BotProfile {
   coverSkill: number;
   /** Hearing range for gunfire in metres. */
   hearing: number;
-  /** How fast a bot notices someone in view (awareness per second at close range, centred). */
+  /** Awareness gained per second for a walking, fully exposed figure twenty metres ahead. */
   noticeSpeed: number;
   /** Seconds for the first shots' aim offset to settle onto the target. */
   aimSettle: number;
@@ -39,10 +39,10 @@ export interface BotProfile {
 }
 
 export const PROFILES: Record<Difficulty, BotProfile> = {
-  easy: { reaction: 0.75, aimError: 6.5, aimSmooth: 4, viewDist: 45, fovDeg: 110, burst: [0.15, 0.4], pause: [0.5, 1.1], memory: 2, knowsFlagAfter: Infinity, searchSkill: 0.3, strafeSkill: 0.2, grenadeChance: 0.05, retreatHp: 20, coverSkill: 0.2, hearing: 22, noticeSpeed: 2.2, aimSettle: 1.0, trackLag: 0.3 },
-  normal: { reaction: 0.42, aimError: 3.6, aimSmooth: 7, viewDist: 70, fovDeg: 130, burst: [0.25, 0.7], pause: [0.3, 0.7], memory: 3, knowsFlagAfter: 150, searchSkill: 0.6, strafeSkill: 0.5, grenadeChance: 0.15, retreatHp: 30, coverSkill: 0.5, hearing: 34, noticeSpeed: 3.2, aimSettle: 0.7, trackLag: 0.2 },
-  hard: { reaction: 0.25, aimError: 2.0, aimSmooth: 10, viewDist: 95, fovDeg: 150, burst: [0.4, 1.0], pause: [0.15, 0.4], memory: 4.5, knowsFlagAfter: 90, searchSkill: 0.85, strafeSkill: 0.8, grenadeChance: 0.3, retreatHp: 35, coverSkill: 0.8, hearing: 46, noticeSpeed: 4.6, aimSettle: 0.45, trackLag: 0.12 },
-  nightmare: { reaction: 0.14, aimError: 1.0, aimSmooth: 14, viewDist: 130, fovDeg: 170, burst: [0.6, 1.4], pause: [0.08, 0.25], memory: 6, knowsFlagAfter: 45, searchSkill: 1.0, strafeSkill: 1.0, grenadeChance: 0.45, retreatHp: 40, coverSkill: 1.0, hearing: 60, noticeSpeed: 6.5, aimSettle: 0.3, trackLag: 0.07 },
+  easy: { reaction: 0.75, aimError: 6.5, aimSmooth: 4, viewDist: 45, fovDeg: 100, burst: [0.15, 0.4], pause: [0.5, 1.1], memory: 2, knowsFlagAfter: Infinity, searchSkill: 0.3, strafeSkill: 0.2, grenadeChance: 0.05, retreatHp: 20, coverSkill: 0.2, hearing: 22, noticeSpeed: 0.55, aimSettle: 1.0, trackLag: 0.3 },
+  normal: { reaction: 0.42, aimError: 3.6, aimSmooth: 7, viewDist: 70, fovDeg: 120, burst: [0.25, 0.7], pause: [0.3, 0.7], memory: 3, knowsFlagAfter: 150, searchSkill: 0.6, strafeSkill: 0.5, grenadeChance: 0.15, retreatHp: 30, coverSkill: 0.5, hearing: 34, noticeSpeed: 0.9, aimSettle: 0.7, trackLag: 0.2 },
+  hard: { reaction: 0.25, aimError: 2.0, aimSmooth: 10, viewDist: 95, fovDeg: 140, burst: [0.4, 1.0], pause: [0.15, 0.4], memory: 4.5, knowsFlagAfter: 90, searchSkill: 0.85, strafeSkill: 0.8, grenadeChance: 0.3, retreatHp: 35, coverSkill: 0.8, hearing: 46, noticeSpeed: 1.4, aimSettle: 0.45, trackLag: 0.12 },
+  nightmare: { reaction: 0.14, aimError: 1.0, aimSmooth: 14, viewDist: 130, fovDeg: 160, burst: [0.6, 1.4], pause: [0.08, 0.25], memory: 6, knowsFlagAfter: 45, searchSkill: 1.0, strafeSkill: 1.0, grenadeChance: 0.45, retreatHp: 40, coverSkill: 1.0, hearing: 60, noticeSpeed: 2.2, aimSettle: 0.3, trackLag: 0.07 },
 };
 
 export interface BotContext {
@@ -115,6 +115,9 @@ export class BotBrain {
   // Human-like perception and aim: awareness builds up before a target registers, the first shots
   // start off target and settle, the aim trails movement, and getting hit flinches the aim.
   private notice = new Map<number, number>();
+  /** Attention: how carefully the bot is scanning right now (drifts every few seconds, like a person). */
+  private focus = 1;
+  private focusTimer = 0;
   private acqYaw = 0;
   private acqPitch = 0;
   private acqT = 10;
@@ -172,6 +175,11 @@ export class BotBrain {
     const e = this.entity;
     if (!e.alive) return;
     const nav = this.ctx.nav();
+    this.focusTimer -= dt;
+    if (this.focusTimer <= 0) {
+      this.focus = this.rng.range(0.5, 1.3);
+      this.focusTimer = this.rng.range(2, 5);
+    }
     this.perceive(dt, now);
     this.reactToDamage(now);
     this.repathTimer -= dt;
@@ -397,6 +405,13 @@ export class BotBrain {
     return !hit;
   }
 
+  /** How much of a figure is in plain sight: head, chest and knees each checked for line of sight (0..1). */
+  private exposure(o: Entity): number {
+    let seen = 0;
+    for (const h of [o.height - 0.15, o.height * 0.55, 0.45]) if (this.canSee(tmp.copy(o.pos).setY(o.pos.y + h))) seen++;
+    return seen / 3;
+  }
+
   /** Sight and hearing. Hearing does not need line of sight; it produces a suspicion point. */
   private perceive(dt: number, now: number): void {
     this.perceiveTimer -= dt;
@@ -422,8 +437,8 @@ export class BotBrain {
       if (dist > this.profile.viewDist) continue;
       const cos = d.dot(fwd) / dist;
       const ang = Math.acos(clamp(cos, -1, 1)) * (180 / Math.PI);
-      // Peripheral awareness grows when close; always notice within 4 m or when they just fired nearby.
-      if (ang > this.profile.fovDeg * 0.5 && dist > 4) {
+      // Outside the field of view a figure goes unseen unless it is right beside the bot or shooting close by.
+      if (ang > this.profile.fovDeg * 0.5 && dist > 3) {
         if (!(now - o.lastShotTime < 0.3 && dist < 30)) continue;
       }
       if (!this.canSee(tmp.copy(o.pos).setY(o.pos.y + 1.3))) continue;
@@ -436,7 +451,7 @@ export class BotBrain {
     // Awareness of everyone else fades when they are out of view.
     for (const [id, v] of this.notice) {
       if (best && id === best.id) continue;
-      const nv = v - 0.12 * 1.5;
+      const nv = v - 0.12 * 0.6;
       if (nv <= 0) this.notice.delete(id);
       else this.notice.set(id, nv);
     }
@@ -449,10 +464,15 @@ export class BotBrain {
       const cos = d.dot(fwd) / Math.max(0.01, dist);
       const angFrac = clamp(Math.acos(clamp(cos, -1, 1)) / ((this.profile.fovDeg * 0.5 * Math.PI) / 180), 0, 1);
       const distFrac = clamp(dist / this.profile.viewDist, 0, 1);
-      const moving = best.vel.length() > 1.5 ? 1.6 : 1;
-      const firing = now - best.lastShotTime < 0.4 ? 5 : 1;
-      let gain = this.profile.noticeSpeed * (1 - 0.6 * angFrac) * (1 - 0.55 * distFrac) * moving * firing;
-      if (dist < 4 || best.captureProgress > 0.05) gain = 100;
+      // Like a person: a still figure half hidden at the edge of vision can go unnoticed for a long
+      // while; someone sprinting across the middle of the view, or firing, registers almost at once.
+      const speed = best.vel.length();
+      const motion = speed < 0.4 ? 0.45 : speed > 6.5 ? 1.5 : 1;
+      const firing = now - best.lastShotTime < 0.4 ? 6 : 1;
+      const near = dist < 5 ? 4 : 1;
+      const seen = this.exposure(best);
+      let gain = this.profile.noticeSpeed * this.focus * (1 - 0.75 * angFrac) * (1 - 0.7 * distFrac) * (0.25 + 0.75 * seen) * motion * firing * near;
+      if (best.captureProgress > 0.05) gain = 100;
       const meter = (this.notice.get(best.id) ?? 0) + gain * 0.12;
       if (meter < 1) {
         this.notice.set(best.id, meter);
@@ -479,7 +499,10 @@ export class BotBrain {
     } else if (!keepOld) {
       // Nobody in sight: the current target is remembered for a while, then forgotten.
       this.mem.visible = false;
-      if (this.mem.target && (!this.mem.target.alive || this.mem.target.burrowed || now - this.mem.lastSeenTime > this.profile.memory)) this.mem.target = null;
+      if (this.mem.target && (!this.mem.target.alive || this.mem.target.burrowed || now - this.mem.lastSeenTime > this.profile.memory)) {
+        if (this.mem.target.alive) this.notice.set(this.mem.target.id, 0.6); // knows roughly who is about
+        this.mem.target = null;
+      }
     }
   }
 
