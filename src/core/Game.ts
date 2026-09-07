@@ -15,7 +15,7 @@ import { VFX } from '../render/VFX';
 import { FlagMesh } from '../render/FlagMesh';
 import { FocusZone } from '../render/FocusZone';
 import { buildWeaponModel } from '../render/WeaponModels';
-import { HUD, type HudState, type ScoreRow } from '../ui/HUD';
+import { HUD, type HudMarker, type HudState, type ScoreRow } from '../ui/HUD';
 import { GadgetSystem, GADGETS, GADGET_IDS, KIT_SIZE, type GadgetId } from '../sim/Gadgets';
 import { GadgetMeshes } from '../render/GadgetMeshes';
 import { outfitFor } from '../render/Outfits';
@@ -169,6 +169,10 @@ export class Game {
   }
 
   private lastConfig: MatchConfig | null = null;
+  /** Enemies that hurt the player recently (entity id → time the marker expires). */
+  private threatUntil = new Map<number, number>();
+  /** Damage dealt this frame per target, shown as one floating number. */
+  private pendingDmg = new Map<number, { amount: number; point: THREE.Vector3; headshot: boolean; kill: boolean }>();
 
   /** Populates all plots with random fortresses for the menu backdrop. */
   private showcaseIsland(): void {
@@ -182,7 +186,7 @@ export class Game {
   }
 
   private applySettings(): void {
-    const q = settings.resolveQuality(this.app.gr.gpuName);
+    const q = this.app.forcedQuality ?? settings.resolveQuality(this.app.gr.gpuName);
     if (q !== this.app.gr.quality) {
       this.app.gr.setQuality(q);
       this.app.sky.setShadowMapSize(this.app.gr.profile.shadowMap);
@@ -438,6 +442,7 @@ export class Game {
   }
 
   private onSpawn(e: Entity, initial = true): void {
+    if (!initial) e.protectedUntil = this.time + 2.5;
     if (e.isBot) {
       const brain = this.bots.find((b) => b.entity === e);
       brain?.reset();
@@ -593,6 +598,8 @@ export class Game {
   }
 
   private cleanupMatch(): void {
+    this.threatUntil.clear();
+    this.pendingDmg.clear();
     this.builder?.dispose();
     this.builder = null;
     this.builderUI?.hide();
@@ -696,18 +703,28 @@ export class Game {
       this.vfx.impact(point, normal, tint, onEntity);
       if (!onEntity && Math.random() < 0.25) audio.play('ricochet', { pos: point, volume: 0.5, pitch: 0.8 + Math.random() * 0.4 });
     });
-    c.events.on('damage', ({ target, attacker, amount, headshot }) => {
+    c.events.on('damage', ({ target, attacker, amount, headshot, point }) => {
       const cm = this.chars.get(target.id);
       cm?.hitFlash();
       if (attacker === this.player && target !== this.player) {
         this.hud.hitMarker(false, headshot);
         audio.play(headshot ? 'headshot' : 'hit', { volume: 0.7 });
+        const pd = this.pendingDmg.get(target.id);
+        if (pd) {
+          pd.amount += amount;
+          pd.headshot = pd.headshot || headshot;
+          pd.point.copy(point);
+        } else this.pendingDmg.set(target.id, { amount, point: point.clone(), headshot, kill: false });
       }
       if (target === this.player) {
         this.hud.damage();
         this.local?.addShake(Math.min(0.6, amount / 60));
         audio.play('hurt', { volume: 0.8 });
         if (attacker) this.killedBy = attacker.name;
+        if (attacker && attacker !== this.player) {
+          this.threatUntil.set(attacker.id, this.time + 3.5);
+          this.hud.damageFrom(this.screenAngleTo(attacker.pos));
+        }
       }
     });
     c.events.on('kill', ({ victim, killer, headshot }) => {
@@ -717,6 +734,9 @@ export class Game {
         this.hud.hitMarker(true);
         this.hud.showBanner(t('youEliminated', { name: victim.name }), '', 1.5);
         audio.play('kill');
+        const pd = this.pendingDmg.get(victim.id);
+        if (pd) pd.kill = true;
+        else this.pendingDmg.set(victim.id, { amount: 0, point: victim.center, headshot, kill: true });
       }
       if (victim === this.player) this.killedBy = killer?.name ?? '';
       const brain = this.bots.find((b) => b.entity === victim);
@@ -864,6 +884,7 @@ export class Game {
       if (match.phaseTimer < 0.05) this.flybyAngle = Math.atan2(this.player.pos.z - plot.cz, this.player.pos.x - plot.cx) - 0.6;
       this.flybyCamera(dt, plot, match.phaseTimer / RULES.introTime);
       this.updateCharacters(dt);
+      this.flushDamageNumbers();
       this.hud.update(this.hudState(), dt);
     }
     this.screens.updateLoadoutCountdown(RULES.introTime - match.phaseTimer);
@@ -900,7 +921,7 @@ export class Game {
       this.combat.updateProjectiles(simDt, this.time);
       // Slow health regeneration after a few seconds without damage
       for (const e of this.entities) {
-        if (e.alive && e.hp < e.maxHp && this.time - e.lastDamageTime > e.regenDelay) e.hp = Math.min(e.maxHp, e.hp + 7 * simDt);
+        if (e.alive && e.hp < e.maxHp && this.time - e.lastDamageTime > e.regenDelay) e.hp = Math.min(e.maxHp, e.hp + 10 * simDt);
       }
       // Footsteps
       const p = this.player;
@@ -964,6 +985,7 @@ export class Game {
       this.lastHudRows = null;
       this.hud.showScoreboard(null);
     }
+    this.flushDamageNumbers();
     this.hud.update(this.hudState(), dt);
     if (IS_TOUCH) {
       const p = this.player;
@@ -1039,8 +1061,44 @@ export class Game {
     if (p.role === 'defender') for (const e of this.entities) if (e !== p) flagThreat = Math.max(flagThreat, e.captureProgress / RULES.captureTime);
     const spread = w ? THREE.MathUtils.lerp(WEAPONS[w.id].spread, WEAPONS[w.id].adsSpread, p.ads) * 6 + Math.min(20, Math.sqrt(p.vel.x * p.vel.x + p.vel.z * p.vel.z) * 1.2) : 4;
     const objective = this.objectiveMarker();
+    // Crosshair colour: is a living enemy under the reticle?
+    const eye = p.eyePos;
+    const look = p.alive ? this.combat.raycast(eye, p.forward(new THREE.Vector3()), 160, p, true) : null;
+    const onEnemy = !!(look && look.entity && look.entity.alive && look.entity !== p);
+    // Markers: whoever hurt you lately, plus enemies close by in plain sight.
+    const markers: HudMarker[] = [];
+    if (p.alive) {
+      for (const e of this.entities) {
+        if (e === p || !e.alive || e.burrowed) continue;
+        const d = e.pos.distanceTo(p.pos);
+        const threat = (this.threatUntil.get(e.id) ?? 0) > this.time;
+        if (d > 70 || (!threat && d > 24)) continue;
+        const sc = this.toScreen(new THREE.Vector3(e.pos.x, e.pos.y + e.height + 0.35, e.pos.z), 40);
+        if (!sc.onScreen) continue;
+        const to = new THREE.Vector3(e.pos.x, e.pos.y + e.height * 0.6, e.pos.z).sub(eye);
+        const dist = to.length();
+        to.divideScalar(Math.max(dist, 1e-3));
+        if (dist > 1 && this.combat.raycast(eye, to, dist - 0.4, p, false)) continue;
+        markers.push({ sx: sc.sx, sy: sc.sy, name: e.name, color: e.colorHex, dist: d, kind: threat ? 'threat' : 'near' });
+      }
+      markers.sort((a, b) => (a.kind === 'threat' ? 0 : 1) - (b.kind === 'threat' ? 0 : 1) || a.dist - b.dist);
+    }
+    const grenadeWarnings: HudState['grenadeWarnings'] = [];
+    if (p.alive) {
+      for (const pr of this.combat.projectiles) {
+        if (pr.dead || pr.kind !== 'grenade') continue;
+        const d = pr.pos.distanceTo(p.pos);
+        if (d > 9) continue;
+        const sc = this.toScreen(pr.pos, 56);
+        grenadeWarnings.push({ sx: sc.sx, sy: sc.sy, onScreen: sc.onScreen, angle: sc.angle, dist: d });
+        if (grenadeWarnings.length >= 4) break;
+      }
+    }
     return {
       objective,
+      onEnemy,
+      markers,
+      grenadeWarnings,
       hp: p.hp,
       maxHp: p.maxHp,
       weaponName: w ? t(WEAPONS[w.id].nameKey) : '',
@@ -1075,7 +1133,7 @@ export class Game {
       sniperScope: !!w && w.id === 'sniper' && p.ads > 0.85,
       spread,
       fps: settings.data.showFps ? this.app.fps : null,
-      prompt: this.time < this.promptUntil ? this.promptText : p.burrowed ? t('surfaceHint') : '',
+      prompt: this.time < this.promptUntil ? this.promptText : p.protectedUntil > this.time ? t('spawnShield') : p.burrowed ? t('surfaceHint') : '',
       minimap: {
         self: { x: p.pos.x, z: p.pos.z, yaw: p.yaw },
         target: match.targetPlotIndex >= 0 ? { x: this.app.plots[match.targetPlotIndex].cx, z: this.app.plots[match.targetPlotIndex].cz } : null,
@@ -1095,12 +1153,16 @@ export class Game {
     const p = this.player.pos;
     const dist = Math.hypot(p.x - plot.cx, p.z - plot.cz);
     if (dist < 26) return null;
+    const sc = this.toScreen(new THREE.Vector3(plot.cx, PLOT_Y + 14, plot.cz), 56);
+    return { sx: sc.sx, sy: sc.sy, dist, onScreen: sc.onScreen, angle: sc.angle, label: match.defender ? match.defender.name : '' };
+  }
+
+  /** Projects a world point to the screen; off-screen points are clamped to the edge with a pointing angle. */
+  private toScreen(world: THREE.Vector3, margin: number): { sx: number; sy: number; onScreen: boolean; angle: number } {
     const cam = this.app.gr.camera;
-    const world = new THREE.Vector3(plot.cx, PLOT_Y + 14, plot.cz);
     const view = world.clone().applyMatrix4(cam.matrixWorldInverse);
     const w = window.innerWidth;
     const h = window.innerHeight;
-    const margin = 56;
     let sx: number;
     let sy: number;
     let onScreen = false;
@@ -1125,7 +1187,29 @@ export class Game {
       sx = w / 2 + dx * k;
       sy = h / 2 + dy * k;
     }
-    return { sx, sy, dist, onScreen, angle, label: match.defender ? match.defender.name : '' };
+    return { sx, sy, onScreen, angle };
+  }
+
+  /** Bearing of a world position relative to the view direction (0 = ahead, clockwise positive). */
+  private screenAngleTo(pos: THREE.Vector3): number {
+    const p = this.player;
+    const dx = pos.x - p.pos.x;
+    const dz = pos.z - p.pos.z;
+    const fx = -Math.sin(p.yaw);
+    const fz = -Math.cos(p.yaw);
+    const rx = Math.cos(p.yaw);
+    const rz = -Math.sin(p.yaw);
+    return Math.atan2(dx * rx + dz * rz, dx * fx + dz * fz);
+  }
+
+  /** Shows the damage dealt this frame as floating numbers at the hit points. */
+  private flushDamageNumbers(): void {
+    if (this.pendingDmg.size === 0) return;
+    for (const pd of this.pendingDmg.values()) {
+      const sc = this.toScreen(pd.point, 0);
+      if (sc.onScreen || (sc.sx > 0 && sc.sx < window.innerWidth && sc.sy > 0 && sc.sy < window.innerHeight)) this.hud.damageNumber(sc.sx, sc.sy, pd.amount, pd.headshot, pd.kill);
+    }
+    this.pendingDmg.clear();
   }
 
   // ---------------- fortress card ----------------

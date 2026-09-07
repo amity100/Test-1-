@@ -7,7 +7,7 @@ import { PLOT_Y, PLOT_MAX_HEIGHT } from '../world/Layout';
 import type { StyleId } from '../world/Styles';
 import { PALETTE, blockColor } from '../world/Voxel';
 import { checkReachability, bestHidingCells, reachableFromOutside, type Cell, type ReachResult } from '../world/Reachability';
-import { Architect, Plan, CELL, STOREY_H, GRID, MAX_STOREYS, MAX_BLOCKS, SIDES, applyField, type ArchitectResult, type Tone } from './Architect';
+import { Architect, Plan, CELL, STOREY_H, GRID, MAX_STOREYS, MAX_BLOCKS, SIDES, applyField, floatingComponents, type ArchitectResult, type Tone } from './Architect';
 import { planFortress, type Archetype } from '../world/FortressGen';
 import { FlagMesh } from '../render/FlagMesh';
 import { Random } from '../core/Random';
@@ -43,7 +43,7 @@ const TAP_PX = 12;
 const LONG_PRESS_MS = 480;
 
 /**
- * Townscaper-style fortress editor: tap a spot to grow a room block there, tap a block's face to add
+ * Tap-to-grow fortress editor: tap a spot to grow a room block there, tap a block's face to add
  * a neighbour, long press (or right click) to remove, pick a tone from the palette. The Architect
  * turns the coarse plan into finished architecture after every edit. One finger orbits, two fingers
  * pan and zoom; the mouse drags to orbit, wheel zooms and middle-drag pans.
@@ -244,6 +244,14 @@ export class Builder {
 
   removeBlock(i: number, j: number, k: number): boolean {
     if (!this.plan.has(i, j, k)) return false;
+    // Rooms above must keep something to stand on (a hanging room could never get stairs).
+    const trial = this.plan.clone();
+    trial.set(i, j, k, null);
+    if (floatingComponents(trial).length > 0) {
+      this.events.emit('invalid', { key: 'unsupported' });
+      this.debugLast = `unsupported:${i},${j},${k}`;
+      return false;
+    }
     const before = this.snapshot();
     this.plan.set(i, j, k, null);
     this.commit(before);
@@ -487,7 +495,10 @@ export class Builder {
     const dy = cy - this.lastCursor.y;
     this.lastCursor = { x: cx, y: cy };
     for (const b of [0, 1, 2]) {
-      if (input.buttonPressed(b) && !this.uiHover && !this.press) this.press = { x: cx, y: cy, moved: 0, button: b, at: performance.now() };
+      if (input.buttonPressed(b) && !this.uiHover && !this.press) {
+        const at = input.buttonDownAt(b);
+        this.press = { x: at.x, y: at.y, moved: 0, button: b, at: performance.now() };
+      }
     }
     if (this.press) {
       this.press.moved += Math.abs(dx) + Math.abs(dy);
@@ -501,10 +512,14 @@ export class Builder {
       if (input.buttonReleased(this.press.button)) {
         const p = this.press;
         this.press = null;
-        if (p.moved < TAP_PX) {
+        // Tap or drag is decided from where the button went down and came up (hardware events), so a
+        // slow frame between the two can never turn a click into an orbit.
+        const up = input.buttonUpAt(p.button);
+        const travel = Math.hypot(up.x - p.x, up.y - p.y);
+        if (travel < TAP_PX) {
           const held = input.buttonHeldMs(p.button);
-          if (p.button === 2 || held >= LONG_PRESS_MS) this.longPressAt(cx, cy);
-          else if (p.button === 0) this.tapAt(cx, cy);
+          if (p.button === 2 || held >= LONG_PRESS_MS) this.longPressAt(up.x, up.y);
+          else if (p.button === 0) this.tapAt(up.x, up.y);
         }
       }
     }

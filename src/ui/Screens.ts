@@ -304,6 +304,7 @@ export class Screens {
     const toggles = el('div', 'row');
     toggles.appendChild(this.toggle(t('invertY'), d.invertY, (v) => { d.invertY = v; settings.save(); }));
     toggles.appendChild(this.toggle(t('showFps'), d.showFps, (v) => { d.showFps = v; settings.save(); }));
+    toggles.appendChild(this.toggle(t('autoSprint'), d.autoSprint, (v) => { d.autoSprint = v; settings.save(); }));
     stack.appendChild(toggles);
     stack.appendChild(el('div', 'muted section', t('touchSection')));
     const touchRow = el('div', 'row');

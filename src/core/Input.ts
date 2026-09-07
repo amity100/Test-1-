@@ -69,6 +69,8 @@ export class Input {
   private buttonsPressed = new Set<number>();
   private buttonsReleased = new Set<number>();
   private buttonDownStamp = new Map<number, number>();
+  private buttonDownPos = new Map<number, { x: number; y: number }>();
+  private buttonUpPos = new Map<number, { x: number; y: number }>();
   private buttonHeld = new Map<number, number>();
   mouseDX = 0;
   mouseDY = 0;
@@ -136,6 +138,8 @@ export class Input {
     this.buttonsDown.add(e.button);
     this.buttonsPressed.add(e.button);
     this.buttonDownStamp.set(e.button, e.timeStamp);
+    const rect = this.target.getBoundingClientRect();
+    this.buttonDownPos.set(e.button, { x: e.clientX - rect.left, y: e.clientY - rect.top });
     if (this.fallbackLook) this.fallbackActive = true;
   };
 
@@ -144,9 +148,19 @@ export class Input {
     if (this.buttonsDown.has(e.button)) {
       this.buttonsReleased.add(e.button);
       this.buttonHeld.set(e.button, e.timeStamp - (this.buttonDownStamp.get(e.button) ?? e.timeStamp));
+      const rect = this.target.getBoundingClientRect();
+      this.buttonUpPos.set(e.button, { x: e.clientX - rect.left, y: e.clientY - rect.top });
     }
     this.buttonsDown.delete(e.button);
   };
+
+  /** Cursor position (canvas space) where a button went down / came up, from the events themselves. */
+  buttonDownAt(b: number): { x: number; y: number } {
+    return this.buttonDownPos.get(b) ?? { x: this.cursorX, y: this.cursorY };
+  }
+  buttonUpAt(b: number): { x: number; y: number } {
+    return this.buttonUpPos.get(b) ?? { x: this.cursorX, y: this.cursorY };
+  }
 
   /** How long a mouse button has been (or was, at release) held, from hardware event timestamps (ms). */
   buttonHeldMs(b: number): number {

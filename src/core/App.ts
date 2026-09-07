@@ -11,7 +11,7 @@ import { createVoxelMaterials, type VoxelMaterials } from '../render/VoxelMateri
 import { makePlots, PLOT_Y, type Plot } from '../world/Layout';
 import { Random } from './Random';
 import { Input } from './Input';
-import { settings } from './Settings';
+import { settings, type Quality } from './Settings';
 import { setLang, t } from './i18n';
 import { Mat, encodeBlock } from '../world/Voxel';
 import { clamp } from './MathUtil';
@@ -43,6 +43,10 @@ export class App {
   fps = 0;
   private fpsAcc = 0;
   private fpsN = 0;
+  private frameNo = 0;
+  private rawDt = 1 / 60;
+  /** Quality tier pinned by a ?debug= flag (tests and screenshots), overriding the settings. */
+  forcedQuality: Quality | null = null;
 
   constructor(readonly canvas: HTMLCanvasElement) {}
 
@@ -61,7 +65,7 @@ export class App {
     this.gr = new GameRenderer(this.canvas);
     this.input = new Input(this.canvas);
     let quality = settings.resolveQuality(this.gr.gpuName);
-    for (const q of ['low', 'medium', 'high', 'ultra'] as const) if (this.gr.flags.has(q)) quality = q;
+    for (const q of ['low', 'medium', 'high', 'ultra'] as const) if (this.gr.flags.has(q)) quality = this.forcedQuality = q;
     const scene = this.gr.scene;
     this.sky = new SkySystem(this.gr.renderer, scene);
     const flags = this.gr.flags;
@@ -143,9 +147,11 @@ export class App {
   }
 
   private loop = (now: number): void => {
-    const dt = Math.min(0.05, (now - this.last) / 1000);
+    const raw = (now - this.last) / 1000;
+    const dt = Math.min(0.05, raw);
     this.last = now;
     this.time += dt;
+    this.rawDt = raw;
     this.update(dt);
     requestAnimationFrame(this.loop);
   };
@@ -180,10 +186,19 @@ export class App {
     this.gr.fog.setSun(this.sky.sunDir, this.sky.sun.color.clone().multiplyScalar(1.05));
     this.water.update(this.time);
     this.foliage.update(this.time);
-    this.chunks.update(6);
+    this.chunks.update(9);
+    // When the device cannot hold 50 fps the shadow map refreshes every other frame: at that rate
+    // the half-frame lag of a moving shadow is invisible and its render cost halves.
+    this.frameNo++;
+    const sm = this.gr.renderer.shadowMap;
+    if (this.fps > 0 && this.fps < 50 && !this.gr.flags.has('noadapt')) {
+      sm.autoUpdate = false;
+      sm.needsUpdate = (this.frameNo & 1) === 0;
+    } else if (!sm.autoUpdate) sm.autoUpdate = true;
     this.gr.render(dt);
     input.endFrame();
-    this.fpsAcc += dt;
+    // Frame rate from real frame times (the simulation step is clamped, the counter must not be).
+    this.fpsAcc += Math.min(1, this.rawDt);
     this.fpsN++;
     if (this.fpsAcc >= 0.5) {
       this.fps = this.fpsN / this.fpsAcc;

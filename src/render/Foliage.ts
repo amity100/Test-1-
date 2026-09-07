@@ -204,9 +204,11 @@ export class Foliage {
       // Flat-ish lighting: push normals up so grass does not look like dark cards.
       shader.vertexShader = shader.vertexShader.replace('#include <beginnormal_vertex>', 'vec3 objectNormal = vec3(0.0, 1.0, 0.0);');
     };
-    const mesh = new THREE.InstancedMesh(geo, mat, count);
-    mesh.castShadow = false;
-    mesh.receiveShadow = true;
+    // Blades are bucketed into a grid of tiles, each its own instanced mesh, so the ones behind the
+    // camera are frustum-culled instead of animated and rasterised every frame.
+    const TILES = 4;
+    const tileSize = (WORLD_HALF * 2) / TILES;
+    const tiles: { m: number[]; c: number[]; n: number }[] = Array.from({ length: TILES * TILES }, () => ({ m: [], c: [], n: 0 }));
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const s = new THREE.Vector3();
@@ -227,18 +229,33 @@ export class Foliage {
       q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.rng.range(0, Math.PI * 2));
       s.set(sc, sc * this.rng.range(0.8, 1.2), sc);
       m.compose(p, q, s);
-      mesh.setMatrixAt(placed, m);
       // Per-clump tint: yellower on dry high ground, bluer in damp valleys.
       col.setHSL(0.26 + (density - 0.5) * 0.08 + this.rng.range(-0.02, 0.02), 0.6, 0.5 + this.rng.range(-0.06, 0.06));
-      mesh.setColorAt(placed, col);
+      const tx = Math.min(TILES - 1, Math.max(0, Math.floor((x + WORLD_HALF) / tileSize)));
+      const tz = Math.min(TILES - 1, Math.max(0, Math.floor((z + WORLD_HALF) / tileSize)));
+      const tile = tiles[tz * TILES + tx];
+      for (let e = 0; e < 16; e++) tile.m.push(m.elements[e]);
+      tile.c.push(col.r, col.g, col.b);
+      tile.n++;
       placed++;
     }
-    mesh.count = placed;
-    mesh.instanceMatrix.needsUpdate = true;
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-    mesh.frustumCulled = false;
-    mesh.name = 'grass';
-    this.group.add(mesh);
+    for (const tile of tiles) {
+      if (tile.n === 0) continue;
+      const mesh = new THREE.InstancedMesh(geo, mat, tile.n);
+      mesh.castShadow = false;
+      mesh.receiveShadow = true;
+      for (let i = 0; i < tile.n; i++) {
+        mesh.setMatrixAt(i, m.fromArray(tile.m, i * 16));
+        mesh.setColorAt(i, col.setRGB(tile.c[i * 3], tile.c[i * 3 + 1], tile.c[i * 3 + 2]));
+      }
+      mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      mesh.computeBoundingSphere();
+      if (mesh.boundingSphere) mesh.boundingSphere.radius += 1.5; // wind sway margin
+      mesh.frustumCulled = true;
+      mesh.name = 'grass';
+      this.group.add(mesh);
+    }
   }
 
   /** Broadleaf tree: lathe trunk with root flare, tapered branches and twigs, leaf-card clusters at the tips. */

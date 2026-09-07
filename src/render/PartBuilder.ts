@@ -165,7 +165,10 @@ export function skinnedMeshesFrom<K>(geos: Map<K, THREE.BufferGeometry>, parent:
     const mesh = new THREE.SkinnedMesh(geo, materialFor(key));
     mesh.castShadow = shadows;
     mesh.receiveShadow = shadows;
-    mesh.frustumCulled = false;
+    // A generous fixed sphere around the rest pose lets characters behind the camera be culled
+    // without three.js re-skinning every vertex to measure them.
+    mesh.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 1.0, 0), 2.2);
+    mesh.frustumCulled = true;
     mesh.name = String(key);
     parent.add(mesh);
     mesh.updateMatrixWorld(true);

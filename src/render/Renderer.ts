@@ -133,6 +133,9 @@ export class GameRenderer {
       ao.configuration.screenSpaceRadius = false;
       ao.setQualityMode(profile.aoMode);
       ao.configuration.halfRes = profile.aoHalfRes;
+      // The transparency-aware mode re-renders every transparent object twice and walks the whole
+      // scene three times per frame; with our water and glass the result is indistinguishable.
+      ao.configuration.transparencyAware = false;
       composer.addPass(ao);
       this.passes.push(ao);
       this.n8ao = ao;

@@ -22,7 +22,12 @@ const ICON = {
   glass: svg('<path d="M6 3h12v18H6z"/><path d="M9 6l6 9M9 12l4 6"/>'),
   roof: svg('<path d="M3 13L12 4l9 9"/><path d="M6 11v9h12v-9"/>'),
   frame: svg('<path d="M4 12h16M12 4v16"/>'),
+  pillar: svg('<path d="M4 4h16M4 20h16"/><path d="M8 4v16M16 4v16"/><path d="M12 7v10"/>'),
 };
+const TIPS = ['tipBridge', 'tipTerrace', 'tipColonnade', 'tipCourt', 'tipStairs', 'tipTowers'];
+/** Seconds each tip stays up, and how long tips keep rotating before the hint retires. */
+const TIP_SECONDS = 9;
+const TIPS_TOTAL_SECONDS = 110;
 const TONE_KEYS = ['toneStone', 'toneAlt', 'toneLight', 'toneAccent', 'toneGlass', 'toneDark', 'toneWood', 'toneRoof'];
 
 /**
@@ -46,6 +51,8 @@ export class BuilderUI {
   private toolBtns = new Map<BuilderTool, HTMLButtonElement>();
   private toastTimer = 0;
   private hintTimer = 0;
+  private tipTimer = 0;
+  private tipIndex = -1;
   private edits = 0;
   private unsub: (() => void)[] = [];
 
@@ -112,6 +119,7 @@ export class BuilderUI {
       b.style.setProperty('--sw', swatches[tone]);
       b.title = t(TONE_KEYS[tone]);
       if (tone === 4) b.innerHTML = `<span class="ico">${ICON.glass}</span>`;
+      else if (tone === 5) b.innerHTML = `<span class="ico">${ICON.pillar}</span>`;
       else if (tone === 7) b.innerHTML = `<span class="ico">${ICON.roof}</span>`;
       b.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -138,6 +146,8 @@ export class BuilderUI {
   show(): void {
     this.root.hidden = false;
     this.hintTimer = 0;
+    this.tipTimer = 0;
+    this.tipIndex = -1;
     this.edits = 0;
     this.hint.hidden = false;
     this.render();
@@ -157,9 +167,19 @@ export class BuilderUI {
     this.builder.uiHover = false;
   }
 
+  /** After a few edits the basic hint gives way to the rotating mechanic tips. */
   private countEdit(): void {
     this.edits++;
-    if (this.edits >= 4) this.hint.hidden = true;
+    if (this.edits >= 4 && this.tipIndex < 0) this.nextTip();
+  }
+
+  private nextTip(): void {
+    this.tipIndex = (this.tipIndex + 1) % TIPS.length;
+    this.tipTimer = 0;
+    this.hint.textContent = t(TIPS[this.tipIndex]);
+    this.hint.classList.remove('pop');
+    void this.hint.offsetWidth;
+    this.hint.classList.add('pop');
   }
 
   showToast(text: string): void {
@@ -178,7 +198,12 @@ export class BuilderUI {
     }
     if (!this.hint.hidden) {
       this.hintTimer += dt;
-      if (this.hintTimer > 25) this.hint.hidden = true;
+      if (this.tipIndex < 0 && this.hintTimer > 25) this.nextTip();
+      if (this.tipIndex >= 0) {
+        this.tipTimer += dt;
+        if (this.tipTimer > TIP_SECONDS) this.nextTip();
+      }
+      if (this.hintTimer > TIPS_TOTAL_SECONDS) this.hint.hidden = true;
     }
   }
 

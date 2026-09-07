@@ -56,6 +56,22 @@ export interface HudState {
   minimap: HudMinimap;
   /** Screen-space objective marker (attackers: the contested fortress). */
   objective: { sx: number; sy: number; dist: number; onScreen: boolean; angle: number; label: string } | null;
+  /** The crosshair rests on a living enemy. */
+  onEnemy: boolean;
+  /** Enemies worth pointing out: whoever shot you recently, and anyone close in plain sight. */
+  markers: HudMarker[];
+  /** Live grenades near the player. */
+  grenadeWarnings: { sx: number; sy: number; onScreen: boolean; angle: number; dist: number }[];
+}
+
+export interface HudMarker {
+  sx: number;
+  sy: number;
+  name: string;
+  color: string;
+  dist: number;
+  /** threat = damaged you within the last seconds. */
+  kind: 'threat' | 'near';
 }
 
 export interface ScoreRow {
@@ -123,6 +139,13 @@ export class HUD {
   private last: Partial<Record<string, string | number | boolean>> = {};
   private hitTimer = 0;
   private dmgTimer = 0;
+  private dmgDir: HTMLElement;
+  private arcs: { el: HTMLElement; t: number }[] = [];
+  private nums: HTMLElement;
+  private markerLayer: HTMLElement;
+  private markerPool: { root: HTMLElement; name: HTMLElement; dist: HTMLElement }[] = [];
+  private grenadeLayer: HTMLElement;
+  private grenadePool: HTMLElement[] = [];
 
   constructor(parent: HTMLElement) {
     this.root = el('div', 'hud');
@@ -221,6 +244,36 @@ export class HUD {
     // Damage overlay & death
     this.dmg = el('div', 'dmg');
     this.root.appendChild(this.dmg);
+    // Damage direction arcs around the crosshair (pooled) and floating damage numbers.
+    this.dmgDir = el('div', 'dmgdir');
+    for (let i = 0; i < 6; i++) {
+      const a = el('div', 'dmgarc');
+      a.hidden = true;
+      this.dmgDir.appendChild(a);
+      this.arcs.push({ el: a, t: 0 });
+    }
+    this.root.appendChild(this.dmgDir);
+    this.nums = el('div', 'dmgnums');
+    this.root.appendChild(this.nums);
+    // Enemy markers and grenade warnings (pooled, positioned in screen space).
+    this.markerLayer = el('div', 'markers');
+    for (let i = 0; i < 8; i++) {
+      const root = el('div', 'marker');
+      root.innerHTML = `<div class="m-chev"></div><div class="m-name"></div><div class="m-dist"></div>`;
+      root.hidden = true;
+      this.markerLayer.appendChild(root);
+      this.markerPool.push({ root, name: root.querySelector('.m-name') as HTMLElement, dist: root.querySelector('.m-dist') as HTMLElement });
+    }
+    this.root.appendChild(this.markerLayer);
+    this.grenadeLayer = el('div', 'gwarns');
+    for (let i = 0; i < 4; i++) {
+      const g = el('div', 'gwarn');
+      g.innerHTML = `<div class="g-arrow"></div><div class="g-icon">!</div><div class="g-label"></div>`;
+      g.hidden = true;
+      this.grenadeLayer.appendChild(g);
+      this.grenadePool.push(g);
+    }
+    this.root.appendChild(this.grenadeLayer);
     this.death = el('div', 'death');
     this.deathText = el('div', 'dtext');
     this.deathTimer = el('div', 'dtimer');
@@ -362,6 +415,7 @@ export class HUD {
     } else this.threat.hidden = true;
 
     // Crosshair
+    this.cross.classList.toggle('enemy', s.onEnemy);
     const gap = 6 + s.spread;
     this.crossTicks[0].style.transform = `translate(-50%, ${-gap - 8}px)`;
     this.crossTicks[1].style.transform = `translate(-50%, ${gap}px)`;
@@ -371,6 +425,13 @@ export class HUD {
     if (this.hitTimer > 0) {
       this.hitTimer -= dt;
       this.hitMark.style.opacity = String(Math.max(0, this.hitTimer / 0.18));
+    }
+    // Damage direction arcs fade out over a second.
+    for (const a of this.arcs) {
+      if (a.el.hidden) continue;
+      a.t -= dt;
+      if (a.t <= 0) a.el.hidden = true;
+      else a.el.style.opacity = String(Math.min(1, a.t / 0.7));
     }
     // Damage flash
     if (this.dmgTimer > 0) {
@@ -399,6 +460,8 @@ export class HUD {
       else this.banner.style.opacity = String(Math.min(1, left / 0.5));
     }
     this.drawMinimap(s.minimap);
+    this.syncMarkers(s.markers);
+    this.syncGrenades(s.grenadeWarnings);
     // Objective marker
     const o = s.objective;
     if (o && s.alive) {
@@ -483,6 +546,64 @@ export class HUD {
     ctx.strokeStyle = 'rgba(255,255,255,0.25)';
     ctx.lineWidth = 2;
     ctx.stroke();
+  }
+
+  private syncMarkers(list: HudMarker[]): void {
+    for (let i = 0; i < this.markerPool.length; i++) {
+      const slot = this.markerPool[i];
+      const m = list[i];
+      if (!m) {
+        slot.root.hidden = true;
+        continue;
+      }
+      slot.root.hidden = false;
+      slot.root.style.transform = `translate(${m.sx.toFixed(0)}px, ${m.sy.toFixed(0)}px)`;
+      slot.root.style.setProperty('--mc', m.color);
+      slot.root.classList.toggle('threat', m.kind === 'threat');
+      if (slot.name.textContent !== m.name) slot.name.textContent = m.name;
+      const d = `${Math.round(m.dist)} m`;
+      if (slot.dist.textContent !== d) slot.dist.textContent = d;
+    }
+  }
+
+  private syncGrenades(list: HudState['grenadeWarnings']): void {
+    for (let i = 0; i < this.grenadePool.length; i++) {
+      const g = this.grenadePool[i];
+      const w = list[i];
+      if (!w) {
+        g.hidden = true;
+        continue;
+      }
+      g.hidden = false;
+      g.style.transform = `translate(${w.sx.toFixed(0)}px, ${w.sy.toFixed(0)}px)`;
+      g.classList.toggle('off', !w.onScreen);
+      (g.firstElementChild as HTMLElement).style.transform = `rotate(${w.angle.toFixed(2)}rad)`;
+      const label = g.lastElementChild as HTMLElement;
+      const txt = `${t('grenadeWarn')} ${Math.round(w.dist)} m`;
+      if (label.textContent !== txt) label.textContent = txt;
+    }
+  }
+
+  /** Red arc around the crosshair pointing at whoever just hit you (0 = ahead, clockwise). */
+  damageFrom(screenAngle: number): void {
+    let slot = this.arcs.find((a) => a.el.hidden) ?? this.arcs.reduce((m, a) => (a.t < m.t ? a : m), this.arcs[0]);
+    slot.el.hidden = false;
+    slot.t = 1.1;
+    slot.el.style.opacity = '1';
+    slot.el.style.transform = `rotate(${screenAngle.toFixed(3)}rad)`;
+  }
+
+  /** Floating number at the hit position: white for body hits, gold for headshots, red for kills. */
+  damageNumber(sx: number, sy: number, amount: number, headshot: boolean, kill: boolean): void {
+    const n = el('div', `dnum ${kill ? 'kill' : headshot ? 'head' : ''}`, String(Math.round(amount)));
+    n.style.left = `${sx.toFixed(0)}px`;
+    n.style.top = `${sy.toFixed(0)}px`;
+    n.style.setProperty('--dx', `${((Math.random() - 0.5) * 36).toFixed(0)}px`);
+    this.nums.appendChild(n);
+    while (this.nums.children.length > 14) this.nums.firstChild?.remove();
+    // Gone when its animation ends (frame-rate independent), with a safety net.
+    n.addEventListener('animationend', () => n.remove(), { once: true });
+    window.setTimeout(() => n.remove(), 3000);
   }
 
   killFeed(html: string): void {

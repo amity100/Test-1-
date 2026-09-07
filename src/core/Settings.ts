@@ -15,6 +15,8 @@ export interface SettingsData {
   autoFire: boolean;
   /** Touch: slow the camera and gently follow enemies near the crosshair. */
   aimAssist: boolean;
+  /** Keep running after a moment of forward movement (no sprint key needed). */
+  autoSprint: boolean;
   /** Touch: on-screen control size multiplier. */
   touchScale: number;
   /** Touch: on-screen control opacity. */
@@ -38,6 +40,7 @@ const DEFAULTS: SettingsData = {
   playerName: '',
   autoFire: true,
   aimAssist: true,
+  autoSprint: true,
   touchScale: 1,
   touchOpacity: 0.7,
   primary: 'rifle',

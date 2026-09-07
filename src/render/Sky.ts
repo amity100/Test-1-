@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { clamp, lerp, smoothstep } from '../core/MathUtil';
 
 /** Adds exposure + clamp to the Preetham sky so the HDR sun cannot blow out buffers or PMREM. */
@@ -190,6 +191,26 @@ export class SkySystem {
       g.add(base);
       g.position.set(Math.cos(a) * d, 0, Math.sin(a) * d);
       this.horizon.add(g);
+    }
+    // Bake the hills into one mesh per material: two draw calls instead of a hundred.
+    this.horizon.updateMatrixWorld(true);
+    const byMat = new Map<THREE.Material, THREE.BufferGeometry[]>();
+    this.horizon.traverse((o) => {
+      if (!(o instanceof THREE.Mesh)) return;
+      const geo = o.geometry.clone().applyMatrix4(o.matrixWorld);
+      geo.deleteAttribute('uv');
+      const list = byMat.get(o.material as THREE.Material) ?? [];
+      list.push(geo);
+      byMat.set(o.material as THREE.Material, list);
+    });
+    this.horizon.clear();
+    for (const [material, geos] of byMat) {
+      const merged = mergeGeometries(geos, false);
+      for (const g of geos) g.dispose();
+      if (!merged) continue;
+      const mesh = new THREE.Mesh(merged, material);
+      mesh.matrixAutoUpdate = false;
+      this.horizon.add(mesh);
     }
     this.horizon.name = 'horizon';
   }

@@ -69,7 +69,9 @@ export class Entity {
   respawnAt = 0;
   lastDamageTime = -100;
   lastAttackerId = -1;
-  regenDelay = 6;
+  regenDelay = 5;
+  /** Invulnerable until this time (spawn shield after a respawn). */
+  protectedUntil = 0;
 
   weapons: WeaponSlot[] = [];
   weaponIndex = 0;

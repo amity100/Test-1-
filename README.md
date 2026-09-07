@@ -49,21 +49,29 @@ steps on it, a sticky **breach charge** that blows a hole through fortress walls
 **burrow drill** that tunnels under the ground, surfaces inside the fortress and drills through
 blocks while you hold the button. Bots carry random kits too.
 
-**Building, Townscaper style.** The build phase is a plan of room blocks on a 5 m grid: tap the ground
-to grow a room, tap a wall or a roof to add one beside or on top of it, hold (or right-click) to take
-one away, and pick one of eight tones for the next block. The **Architect** turns that coarse plan
-into finished, playable architecture after every tap: exterior walls with slits, windows or curtain
-glass, gates and doors on the ground floor (always at least two entrances, facing the attackers),
-doorways between rooms of different tones (same-tone rooms merge into halls with cover crates),
-stairs between storeys with stairwell holes, roof terraces with crenels or railings and roof
-access, pitched roofs for the roof tone, balconies on the front, arcades under overhanging rooms,
-string courses, quoins and lamps, all in the match style. Every room is guaranteed reachable, so
-whatever you build is an arena. The flag goes into any room with a tap; a "surprise castle" button
-generates a full fortress you can then edit, and the opponents' fortresses come from the same
-generator (keeps, citadels, palaces, bastions, temples and spires). One finger orbits and two
-fingers pan and zoom on a phone; the mouse drags to orbit, the wheel zooms, `1-8` pick tones, `X`
-toggles the eraser, `G` the flag, `Z` undoes. At match end a shareable fortress card renders your
-build, and every round opens with a short camera flyby.
+**Building.** The build phase is a plan of room blocks on a 5 m grid: tap the ground to grow a room,
+tap a wall or a roof to add one beside or on top of it, hold (or right-click) to take one away, and
+pick one of eight tones for the next block. The **Architect** turns that coarse plan into finished,
+playable architecture after every tap: exterior walls with slits, windows or curtain glass, gates
+and doors on the ground floor (always at least two entrances, facing the attackers), doorways
+between rooms of different tones (same-tone rooms merge into halls with cover crates), stairs
+between storeys with stairwell holes, roof terraces with crenels or railings and roof access,
+pitched roofs with chimneys for the roof tone, balconies on the front, arcades under overhanging
+rooms, string courses, quoins and lamps, all in the match style. Configurations unlock more: two
+rooms of the same tone facing each other across a gap get a **bridge** with railings and arches
+underneath; a room beside a lower roof opens a **terrace door** onto it; a ground cell enclosed on
+three or four sides becomes a **courtyard** with paving, a fountain or pylon, lamp posts and doors;
+the dark tone builds open **colonnades** and loggias; a two-storey facade on the approach side earns
+a broad **outdoor stair** to a first-floor door; free-standing towers get **crowns** (machicolations
+and merlons, or an antenna with a beacon). Every floor, terrace and bridge is guaranteed walkable
+from the ground (stairs are planned so no stair ever blocks another, and a block that holds up rooms
+above it cannot be erased), so whatever you build is an arena you can climb without gadgets. The flag
+goes into any room with a tap; a "surprise castle" button generates a full fortress you can then
+edit, and the opponents' fortresses come from the same generator (keeps, citadels, palaces,
+bastions, temples and spires, now with bridges, cloisters, courtyards and hypostyle halls). One
+finger orbits and two fingers pan and zoom on a phone; the mouse drags to orbit, the wheel zooms,
+`1-8` pick tones, `X` toggles the eraser, `G` the flag, `Z` undoes. At match end a shareable fortress
+card renders your build, and every round opens with a short camera flyby.
 
 **Phones and tablets** get a layout modelled on today's popular mobile shooters: a movement stick on
 the left (push far to sprint), look by dragging anywhere on the right, twin fire buttons, and only
@@ -76,11 +84,21 @@ palette along the bottom. Landscape is recommended.
 instantly when you shoot), their first shots start off target and settle, their aim trails your
 movement, they flinch and break for cover under fire, reload out of sight and fire in bursts.
 
+**Combat feedback.** Floating damage numbers at the hit point (gold for headshots, red for kills),
+a red arc around the crosshair pointing at whoever just hit you, a crosshair that turns red on a
+living enemy, name markers over enemies who shot you recently or stand close in plain sight, a
+warning over live grenades near you, a short spawn shield after respawning, faster health
+regeneration, and auto sprint (a moment of forward movement breaks into a run; aiming or crouching
+walks again) that can be switched off in Settings.
+
 ## Tech
 
 TypeScript, Vite, three.js, pmndrs/postprocessing, N8AO. Custom voxel engine (chunked storage,
-greedy meshing with baked vertex AO, six block shapes with shape-aware collision, DataArrayTexture
-PBR materials with per-block variation and bevelled edges), heightmap island with a detail-mapped
+greedy meshing with baked vertex AO, 16 m chunks concatenated into 64 m region meshes so a fortress
+is two draw calls, six block shapes with shape-aware collision, DataArrayTexture PBR materials with
+per-block variation and bevelled edges), frustum-culled grass tiles and skinned characters, baked
+horizon and flag metalwork, shadow maps that refresh every other frame when a device drops below
+50 fps, heightmap island with a detail-mapped
 ground, paths, a central monument and ruins, distant horizon islands, height fog, colour
 grading/sharpen pass, procedural Web Audio.
 

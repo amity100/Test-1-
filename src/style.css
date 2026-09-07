@@ -702,6 +702,8 @@ body { background: radial-gradient(1200px 800px at 50% 30%, #16283a 0%, #0f1923 
 .bld-bar .bld-btn.tool { width: 54px; height: 46px; padding: 0; flex-direction: column; gap: 1px; }
 .bld-bar .bld-btn.tool .lb { font-size: 9px; }
 .bld-hint { position: absolute; left: 50%; bottom: calc(84px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 6px 14px; background: rgba(8, 14, 22, 0.72); border: 1px solid var(--line); clip-path: var(--chamfer-sm); font-family: var(--font); font-size: 12px; color: #dbe3ec; white-space: nowrap; max-width: 94vw; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.bld-hint.pop { animation: hintPop 0.35s ease-out; }
+@keyframes hintPop { from { opacity: 0; transform: translate(-50%, 6px); } to { opacity: 1; transform: translate(-50%, 0); } }
 .bld-toast { position: absolute; top: 90px; left: 50%; transform: translateX(-50%); background: rgba(255, 51, 85, 0.85); color: #fff; padding: 8px 16px; font-weight: 700; clip-path: var(--chamfer-sm); }
 .bldui.compact .bld-top { top: calc(8px + env(safe-area-inset-top, 0px)); gap: 10px; padding: 5px 10px; }
 .bldui.compact .bld-timer { font-size: 20px; min-width: 48px; }
@@ -715,3 +717,26 @@ body { background: radial-gradient(1200px 800px at 50% 30%, #16283a 0%, #0f1923 
 .bldui.compact .bld-bar .bld-btn.tool { width: 44px; height: 40px; }
 .bldui.compact .bld-hint { bottom: calc(66px + env(safe-area-inset-bottom, 0px)); font-size: 11px; }
 @media (max-height: 460px) { .bldui.compact .bld-swatch { width: 36px; height: 36px; } }
+
+/* v7 combat feedback */
+.crosshair.enemy .tick, .crosshair.enemy .dot { background: var(--danger); box-shadow: 0 0 6px rgba(255, 51, 85, 0.9); }
+.dmgdir { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; }
+.dmgarc { position: absolute; left: -70px; top: -70px; width: 140px; height: 140px; border-radius: 50%; border: 14px solid transparent; border-top-color: rgba(255, 51, 85, 0.85); box-sizing: border-box; filter: drop-shadow(0 0 6px rgba(255, 51, 85, 0.7)); transition: opacity 0.08s linear; }
+.dmgnums { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.dnum { position: absolute; transform: translate(-50%, -50%); font-family: var(--display); font-weight: 900; font-size: 20px; color: #fff; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9), 0 0 10px rgba(0, 0, 0, 0.6); animation: dnumRise 0.9s ease-out forwards; will-change: transform, opacity; }
+.dnum.head { color: #ffd54a; font-size: 24px; }
+.dnum.kill { color: var(--danger); font-size: 28px; }
+@keyframes dnumRise { 0% { opacity: 0; transform: translate(-50%, -50%) scale(0.6); } 12% { opacity: 1; transform: translate(-50%, -60%) scale(1.15); } 100% { opacity: 0; transform: translate(calc(-50% + var(--dx, 0px)), -150%) scale(0.95); } }
+.markers, .gwarns { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; }
+.marker { position: absolute; left: 0; top: 0; display: flex; flex-direction: column; align-items: center; transform: translate(0, 0); }
+.marker .m-chev { width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 9px solid var(--mc, #fff); filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.9)); }
+.marker .m-name { margin-top: 2px; font-family: var(--display); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--mc, #fff); text-shadow: 0 1px 4px rgba(0, 0, 0, 0.95); white-space: nowrap; transform: translateY(-60px); }
+.marker .m-dist { font-size: 10px; color: #dbe3ec; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.95); transform: translateY(-60px); }
+.marker .m-chev { transform: translateY(-60px); }
+.marker.threat .m-chev { border-top-color: var(--danger); border-top-width: 12px; border-left-width: 8px; border-right-width: 8px; animation: pulse 0.6s infinite; }
+.marker.threat .m-name { color: var(--danger); }
+.gwarn { position: absolute; left: 0; top: 0; display: flex; flex-direction: column; align-items: center; }
+.gwarn .g-icon { width: 26px; height: 26px; border-radius: 50%; background: rgba(255, 179, 0, 0.9); color: #1a1200; font-family: var(--display); font-weight: 900; font-size: 18px; line-height: 26px; text-align: center; box-shadow: 0 0 14px rgba(255, 179, 0, 0.8); animation: pulse 0.5s infinite; transform: translate(-50%, -50%); position: absolute; }
+.gwarn .g-label { position: absolute; top: 16px; font-family: var(--display); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; color: #ffd54a; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.95); white-space: nowrap; transform: translateX(-50%); }
+.gwarn .g-arrow { position: absolute; width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 14px solid rgba(255, 179, 0, 0.95); transform-origin: 50% 40px; display: none; }
+.gwarn.off .g-arrow { display: block; }

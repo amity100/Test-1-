@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { clamp, smoothstep } from '../core/MathUtil';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 /** Painted banner texture: owner colour, dark diagonal band, emblem and fabric weave. */
 function bannerTexture(color: THREE.Color): THREE.CanvasTexture {
@@ -125,35 +126,27 @@ export class FlagMesh {
     const dark = new THREE.MeshStandardMaterial({ color: 0x23282f, metalness: 0.7, roughness: 0.45 });
     const gold = new THREE.MeshStandardMaterial({ color: 0xffd36a, metalness: 1, roughness: 0.22, emissive: 0x6a4a10, emissiveIntensity: 0.4 });
 
-    // Plinth
-    const plinth = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.55, 0.16, 6), dark);
-    plinth.position.y = 0.08;
+    // Static metalwork (plinth, step, pole, finial, crossbar) baked into one mesh per material.
+    const darkGeo = new THREE.CylinderGeometry(0.46, 0.55, 0.16, 6).translate(0, 0.08, 0);
+    const stepGeo = new THREE.CylinderGeometry(0.3, 0.36, 0.12, 6).translate(0, 0.22, 0);
+    const poleGeo = new THREE.CylinderGeometry(0.045, 0.06, 2.75, 12).translate(0, 0.28 + 2.75 / 2, 0);
+    const crossGeo = new THREE.CylinderGeometry(0.025, 0.025, 1.75, 8).rotateZ(Math.PI / 2).translate(0.82, 2.92, 0);
+    const knobGeo = new THREE.SphereGeometry(0.09, 14, 12).translate(0, 3.06, 0);
+    const spikeGeo = new THREE.ConeGeometry(0.05, 0.28, 10).translate(0, 3.26, 0);
+    const metalGeo = mergeGeometries([stepGeo, poleGeo, crossGeo], false)!;
+    const goldGeo = mergeGeometries([knobGeo, spikeGeo], false)!;
+    for (const g of [stepGeo, poleGeo, crossGeo, knobGeo, spikeGeo]) g.dispose();
+    const plinth = new THREE.Mesh(darkGeo, dark);
     plinth.castShadow = true;
     plinth.receiveShadow = true;
-    this.group.add(plinth);
-    const step = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.36, 0.12, 6), metal);
-    step.position.y = 0.22;
-    this.group.add(step);
+    const metalwork = new THREE.Mesh(metalGeo, metal);
+    metalwork.castShadow = true;
+    const finial = new THREE.Mesh(goldGeo, gold);
+    this.group.add(plinth, metalwork, finial);
     this.ring = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.03, 8, 40), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 2.2, roughness: 0.4 }));
     this.ring.rotation.x = Math.PI / 2;
     this.ring.position.y = 0.17;
     this.group.add(this.ring);
-
-    // Pole + finial
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.06, 2.75, 12), metal);
-    pole.position.y = 0.28 + 2.75 / 2;
-    pole.castShadow = true;
-    this.group.add(pole);
-    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.09, 14, 12), gold);
-    knob.position.y = 3.06;
-    this.group.add(knob);
-    const spike = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.28, 10), gold);
-    spike.position.y = 3.26;
-    this.group.add(spike);
-    const crossbar = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1.75, 8), metal);
-    crossbar.rotation.z = Math.PI / 2;
-    crossbar.position.set(0.82, 2.92, 0);
-    this.group.add(crossbar);
 
     // Cloth hanging from the crossbar
     this.clothGeo = new THREE.PlaneGeometry(1.6, 1.05, 24, 14);

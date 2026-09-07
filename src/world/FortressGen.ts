@@ -9,7 +9,7 @@ import { Architect, Plan, GRID, MAX_STOREYS, applyField, type Tone } from '../bu
  * Fortress plans for the bots (and the player's "surprise me" button): coarse room-block layouts
  * in the Architect's language, so the opponents' castles are built with exactly the same
  * vocabulary the player gets. Each archetype is an arena first: several entrances, a tall core,
- * roof terraces, bridges with arcades underneath, and rooms that connect on every storey.
+ * roof terraces, bridges, colonnades, courtyards and rooms that connect on every storey.
  */
 export type Archetype = 'keep' | 'citadel' | 'palace' | 'bastion' | 'temple' | 'spire';
 export const ARCHETYPES: Archetype[] = ['keep', 'citadel', 'palace', 'bastion', 'temple', 'spire'];
@@ -69,12 +69,12 @@ class Sketch {
   }
 }
 
-/** Tone roles per style family so the same archetype dresses differently. */
-function tonesFor(style: StyleId): { main: Tone; alt: Tone; tower: Tone; top: Tone; bridge: Tone; base: Tone } {
-  if (TECH.includes(style)) return { main: 0, alt: 1, tower: 4, top: 4, bridge: 5, base: 5 };
-  if (style === 'candy') return { main: 0, alt: 1, tower: 3, top: 7, bridge: 2, base: 1 };
-  if (style === 'desert') return { main: 0, alt: 1, tower: 2, top: 7, bridge: 2, base: 1 };
-  return { main: 0, alt: 1, tower: 1, top: 7, bridge: 2, base: 5 };
+/** Tone roles per style family so the same archetype dresses differently. Tone 5 is the open colonnade. */
+function tonesFor(style: StyleId): { main: Tone; alt: Tone; tower: Tone; top: Tone; gallery: Tone; base: Tone } {
+  if (TECH.includes(style)) return { main: 0, alt: 1, tower: 4, top: 4, gallery: 5, base: 1 };
+  if (style === 'candy') return { main: 0, alt: 1, tower: 3, top: 7, gallery: 5, base: 1 };
+  if (style === 'desert') return { main: 0, alt: 1, tower: 2, top: 7, gallery: 5, base: 1 };
+  return { main: 0, alt: 1, tower: 1, top: 7, gallery: 5, base: 1 };
 }
 
 function keep(s: Sketch, rng: Random, t: ReturnType<typeof tonesFor>): void {
@@ -98,43 +98,47 @@ function keep(s: Sketch, rng: Random, t: ReturnType<typeof tonesFor>): void {
     if (gapSide !== 2) s.line(a + 1, b, b - 1, b, k, t.alt);
     if (gapSide !== 3) s.line(a, a + 1, a, b - 1, k, t.alt);
   }
-  // Sky bridges from the keep to two towers at storey 2 (arcades below).
+  // Open galleries from the keep towards two curtain walls at storey 2 (arcades below them).
   const bk = Math.min(2, storeys - 1);
   const mid = i0 + Math.floor(size / 2);
-  if (rng.next() < 0.8) s.line(mid, j0 - 1, mid, ring[0] + 1, bk, t.bridge);
-  if (rng.next() < 0.8) s.line(i0 + size, mid, ring[1] - 1, mid, bk, t.bridge);
+  if (rng.next() < 0.8) s.line(mid, j0 - 1, mid, ring[0] + 1, bk, t.gallery);
+  if (rng.next() < 0.8) s.line(i0 + size, mid, ring[1] - 1, mid, bk, t.gallery);
+  // A second keep tower that bridges to the keep: same tone across a one-cell gap.
+  if (rng.next() < 0.7) {
+    const bi = i0 + size + 1;
+    const bj = j0;
+    s.column(bi, bj, storeys, t.main, t.main);
+    for (let k = 1; k < storeys; k++) s.plan.set(i0 + size - 1, bj, k, t.main);
+  }
   // Overhanging balcony rooms on the keep front.
   if (rng.next() < 0.6) s.put(i0 - 1, j0 + size - 1, 1, t.alt);
 }
 
 function citadel(s: Sketch, rng: Random, t: ReturnType<typeof tonesFor>): void {
-  // Stepped hi-tech massing: wide glassy base, a slimmer block above, a slab tower, one detached
-  // service tower joined by a sky bridge. Some blocks overhang the base for arcades.
+  // Stepped hi-tech massing: wide base, a slimmer block above, a slab tower, one detached glass tower
+  // joined by bridges high up. Some blocks overhang the base for arcades.
   const i0 = rng.int(1, 2);
   const j0 = rng.int(1, 2);
   s.box(i0, j0, i0 + 3, j0 + 3, 0, t.base);
   s.box(i0 + 1, j0, i0 + 3, j0 + 2, 1, t.main);
   s.box(i0 + 2, j0 + 1, i0 + 3, j0 + 2, 2, t.top);
   s.box(i0 + 2, j0 + 1, i0 + 3, j0 + 1, 3, t.top);
-  s.put(i0 + 3, j0 + 1, 4, t.tower);
+  s.put(i0 + 3, j0 + 1, 4, t.top);
   // Overhangs.
-  s.put(i0 + 4, j0 + 1, 1, t.main);
   s.put(i0 + 4, j0 + 2, 1, t.main);
   s.put(i0, j0 + 4, 1, t.alt);
-  // Detached tower and bridge.
+  // Detached glass tower two cells away: bridges span the gap on storeys 3 and 4.
   const ti = Math.min(GRID - 1, i0 + 5);
-  const tj = Math.min(GRID - 1, j0 + 4);
-  s.column(ti, tj, 4, t.tower, t.tower);
-  s.line(i0 + 4, j0 + 3, ti, j0 + 3, 2, t.bridge);
-  s.put(ti, tj - 1, 2, t.bridge);
-  // Low pavilions around for cover.
+  s.column(ti, j0 + 1, 5, t.top, t.top);
+  // Ground gallery linking the base to the tower's foot, and low pavilions for cover.
+  s.put(i0 + 4, j0 + 1, 0, t.gallery);
   if (rng.next() < 0.7) s.put(i0 - 1, j0 + 1, 0, t.alt);
   if (rng.next() < 0.7) s.put(i0 + 1, j0 - 1, 0, t.alt);
 }
 
 function palace(s: Sketch, rng: Random, t: ReturnType<typeof tonesFor>): void {
   // Symmetric front: two wings with pitched roofs, a taller central hall, towers at the wing ends,
-  // and a rear gallery on the first floor.
+  // a rear gallery on the first floor and a twin forecourt framed by pavilions.
   const j0 = 3;
   const i0 = 1;
   const i1 = 6;
@@ -145,18 +149,21 @@ function palace(s: Sketch, rng: Random, t: ReturnType<typeof tonesFor>): void {
   for (let k = 0; k < 3; k++) s.box(3, j0, 4, j0 + 1, k, k === 2 ? t.top : t.alt);
   // Rear gallery.
   s.line(i0, j0 + 2, i1, j0 + 2, 0, t.alt);
-  s.line(i0 + 1, j0 + 2, i1 - 1, j0 + 2, 1, t.bridge);
+  s.line(i0 + 1, j0 + 2, i1 - 1, j0 + 2, 1, t.gallery);
   // End towers.
   s.column(i0, j0 + 2, 4, t.tower, t.top);
   s.column(i1, j0 + 2, 4, t.tower, t.top);
-  // Forecourt pavilions.
-  if (rng.next() < 0.6) s.put(2, j0 - 2, 0, t.alt);
-  if (rng.next() < 0.6) s.put(5, j0 - 2, 0, t.alt);
-  s.put(3, j0 + 1, 3, t.tower);
+  // Forecourt: pavilions frame two courtyard cells in front of the hall.
+  s.put(2, j0 - 1, 0, t.alt);
+  s.put(3, j0 - 2, 0, t.alt);
+  s.put(5, j0 - 1, 0, t.alt);
+  s.put(4, j0 - 2, 0, t.alt);
+  if (rng.next() < 0.5) s.put(3, j0 + 1, 3, t.tower);
 }
 
 function bastion(s: Sketch, rng: Random, t: ReturnType<typeof tonesFor>): void {
-  // Sprawling low complex: an L of rooms, a partial first floor with overhangs, a watchtower.
+  // Sprawling low complex: an L of rooms around a courtyard, a partial first floor with overhangs,
+  // a watchtower.
   const i0 = rng.int(1, 2);
   const j0 = rng.int(1, 2);
   s.box(i0, j0, i0 + 4, j0 + 1, 0, t.base);
@@ -165,49 +172,50 @@ function bastion(s: Sketch, rng: Random, t: ReturnType<typeof tonesFor>): void {
   s.put(i0, j0 + 3, 1, t.main);
   s.put(i0 + 2, j0 + 2, 1, t.alt); // overhang into the courtyard
   s.put(i0 + 2, j0 + 2, 0, t.alt);
+  s.put(i0 + 3, j0 + 3, 0, t.alt); // closes the courtyard cell (i0+2, j0+3) on three sides
   s.column(i0 + 4, j0 + 3, 4, t.tower, t.top);
-  s.line(i0 + 4, j0 + 2, i0 + 4, j0 + 2, 0, t.alt);
+  s.put(i0 + 4, j0 + 2, 0, t.alt);
   s.put(i0 + 4, j0 + 1, 1, t.alt);
   if (rng.next() < 0.5) s.put(i0 + 5, j0, 0, t.main);
   if (rng.next() < 0.5) s.put(i0 - 1, j0 + 4, 0, t.main);
 }
 
 function temple(s: Sketch, rng: Random, t: ReturnType<typeof tonesFor>): void {
-  // Terraced platform: a broad base, a stacked centre, corner pylons, a colonnade bridge.
+  // Terraced platform: a hypostyle colonnade base, a stacked centre, corner pylons, galleries.
   const i0 = 2;
   const j0 = 2;
-  s.box(i0, j0, i0 + 3, j0 + 3, 0, t.base);
+  s.box(i0, j0, i0 + 3, j0 + 3, 0, t.gallery);
   s.box(i0 + 1, j0 + 1, i0 + 2, j0 + 2, 1, t.main);
   s.box(i0 + 1, j0 + 1, i0 + 2, j0 + 2, 2, t.alt);
   s.put(i0 + 1, j0 + 1, 3, t.top);
   s.put(i0 + 2, j0 + 2, 3, t.top);
   for (const [pi, pj] of [[i0 - 1, j0 - 1], [i0 + 4, j0 - 1], [i0 - 1, j0 + 4], [i0 + 4, j0 + 4]]) s.column(pi, pj, 3, t.tower, t.top);
-  s.line(i0, j0 - 1, i0 + 3, j0 - 1, 1, t.bridge);
-  s.line(i0 - 1, j0, i0 - 1, j0 + 3, 1, t.bridge);
+  s.line(i0, j0 - 1, i0 + 3, j0 - 1, 1, t.gallery);
+  s.line(i0 - 1, j0, i0 - 1, j0 + 3, 1, t.gallery);
   if (rng.next() < 0.6) s.put(i0 + 4, j0 + 1, 0, t.alt);
 }
 
 function spire(s: Sketch, rng: Random, t: ReturnType<typeof tonesFor>): void {
-  // A single tall tower over a courtyard ring, two flanking turrets and a high bridge.
+  // A single tall tower over a cloister ring, two flanking turrets and high galleries.
   const i0 = 3;
   const j0 = 3;
   const h = rng.int(5, 6);
   for (let k = 0; k < h; k++) s.box(i0, j0, i0 + 1, j0 + 1, k, k === h - 1 ? t.top : k % 2 ? t.alt : t.main);
-  // Ring courtyard at ground level with gaps.
+  // Cloister ring at ground level with gaps.
   for (let i = 1; i <= 6; i++) {
-    if (i !== 3) s.put(i, 1, 0, t.base);
-    if (i !== 4) s.put(i, 6, 0, t.base);
+    if (i !== 3) s.put(i, 1, 0, t.gallery);
+    if (i !== 4) s.put(i, 6, 0, t.gallery);
   }
   for (let j = 2; j <= 5; j++) {
-    if (j !== 4) s.put(1, j, 0, t.base);
-    if (j !== 3) s.put(6, j, 0, t.base);
+    if (j !== 4) s.put(1, j, 0, t.gallery);
+    if (j !== 3) s.put(6, j, 0, t.gallery);
   }
   s.column(1, 1, 4, t.tower, t.top);
   s.column(6, 6, 4, t.tower, t.top);
-  s.line(2, 1, i0 - 1, 1, 2, t.bridge);
-  s.line(i0, 2, i0, 2, 2, t.bridge);
-  if (rng.next() < 0.7) s.line(6, 5, 6, j0 + 2, 2, t.bridge);
-  s.put(i0 + 1, j0 + 2, 2, t.bridge);
+  s.line(2, 1, i0 - 1, 1, 2, t.gallery);
+  s.line(i0, 2, i0, 2, 2, t.gallery);
+  if (rng.next() < 0.7) s.line(6, 5, 6, j0 + 2, 2, t.gallery);
+  s.put(i0 + 1, j0 + 2, 2, t.gallery);
 }
 
 const BUILDERS: Record<Archetype, (s: Sketch, rng: Random, t: ReturnType<typeof tonesFor>) => void> = { keep, citadel, palace, bastion, temple, spire };

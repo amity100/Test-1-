@@ -37,6 +37,8 @@ export class Player {
   private autoRearm = 0;
   private assistTarget: Entity | null = null;
   private assistAngle = Infinity;
+  /** Seconds of steady forward movement; sprint kicks in by itself after a moment. */
+  private forwardHeld = 0;
 
   constructor(
     readonly entity: Entity,
@@ -113,13 +115,17 @@ export class Player {
       for (let i = 0; i < KIT_SIZE; i++) this.gadgets.input(e, i, input.gadgetPressed(i), input.gadgetHeld(i), input.gadgetReleased(i), now);
       if (e.grapplePoint && input.jumpPressed()) this.gadgets.releaseGrapple(e);
     } else if (e.grappleReel) e.grappleReel = false;
-    // Movement input
+    // Movement input. With auto sprint a moment of forward movement breaks into a run (as in most
+    // modern shooters), so nobody has to hold a sprint key; aiming or crouching walks again.
+    const fwdIn = this.enabled ? input.moveY() : 0;
+    if (settings.data.autoSprint && fwdIn > 0.6 && !input.crouchHeld() && e.ads < 0.3 && !e.zipRide) this.forwardHeld += dt;
+    else this.forwardHeld = 0;
     const mv: MoveInput = {
       strafe: this.enabled ? input.moveX() : 0,
-      forward: this.enabled ? input.moveY() : 0,
+      forward: fwdIn,
       jump: this.enabled && input.jumpPressed(),
       jumpHeld: this.enabled && input.jumpHeld(),
-      sprint: this.enabled && input.sprintHeld(),
+      sprint: this.enabled && (input.sprintHeld() || this.forwardHeld > 0.4),
       crouch: this.enabled && input.crouchHeld(),
     };
     const wasGrounded = e.grounded;

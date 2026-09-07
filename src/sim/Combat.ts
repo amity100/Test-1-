@@ -215,6 +215,7 @@ export class Combat {
 
   applyDamage(target: Entity, amount: number, attacker: Entity | null, now: number, headshot: boolean, point: THREE.Vector3): void {
     if (!target.alive) return;
+    if (target.protectedUntil > now && attacker !== target) return;
     if (attacker && attacker !== target && !this.friendlyFire && attacker.role === target.role && attacker.role === 'attacker') return;
     target.hp -= amount;
     target.lastDamageTime = now;
