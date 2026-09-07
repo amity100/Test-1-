@@ -46,6 +46,8 @@ export class CharacterController {
   traps: TrapSystem | null = null;
   /** The entity being moved (so gates know whom to let through). */
   private mover: Entity | null = null;
+  /** Set by the game: shatters a glass block, true when one broke (sprinting bodies go through glass). */
+  breakGlass: ((x: number, y: number, z: number) => boolean) | null = null;
 
   constructor(private world: VoxelWorld, private terrain: Terrain) {}
 
@@ -334,6 +336,15 @@ export class CharacterController {
     else p.z += delta;
     if (!this.collides(p.x, p.y, p.z, r, h)) return false;
     if (axis !== 1 && this.stepUp(e)) return false;
+    // Fast enough and it is only glass: crash through it.
+    if (axis !== 1 && this.breakGlass && Math.hypot(e.vel.x, e.vel.z) > 5.5) {
+      const sign = delta > 0 ? 1 : -1;
+      let broke = false;
+      const cols: [number, number][] = axis === 0 ? [[Math.floor(p.x + sign * (r + 0.02)), Math.floor(p.z - r + 0.02)], [Math.floor(p.x + sign * (r + 0.02)), Math.floor(p.z + r - 0.02)]] : [[Math.floor(p.x - r + 0.02), Math.floor(p.z + sign * (r + 0.02))], [Math.floor(p.x + r - 0.02), Math.floor(p.z + sign * (r + 0.02))]];
+      // Every block row the body spans (feet may stand below a pane's bottom edge on terrain).
+      for (const [bx, bz] of cols) for (let by = Math.floor(p.y + 0.001); by <= Math.floor(p.y + h - 0.001); by++) if (this.breakGlass(bx, by, bz)) broke = true;
+      if (broke && !this.collides(p.x, p.y, p.z, r, h)) return false;
+    }
     this.resolveAxis(e, axis, delta);
     if (axis === 0) e.vel.x = 0;
     else if (axis === 2) e.vel.z = 0;

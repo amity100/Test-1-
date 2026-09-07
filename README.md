@@ -122,6 +122,17 @@ sees everything and never triggers their own traps; trap kills count for the def
 fortresses come with traps too, and bots shoot gates that bar their way. Everything re-arms at the
 start of each round.
 
+**Round events.** About once a minute, announced with a three-second countdown, the round throws
+a surprise: a **blackout** (roofed rooms go dark and the lamps die for twelve seconds; bots see
+worse too), a **wall breach** (a 3x3 piece of the contested fortress's outer wall comes down, a new
+way in until the round ends), a **supply drop** (a crate of armour, grenades and ammo falls onto a
+roof of the fortress, first come first served) or **fog** (a short view for eighteen seconds). Never
+in the last stretch of a round or during overtime.
+
+**Close quarters.** A knife (V, or the knife button on touch) lunges forward and cuts for 60, or a
+lot more from behind (bots draw it too when you get too close). Glass shatters: bullets and blasts
+break panes, and a sprinting body crashes straight through a window. Weapon swaps are near instant.
+
 **Combat feedback.** Floating damage numbers at the hit point (gold for headshots, red for kills),
 a red arc around the crosshair pointing at whoever just hit you, a crosshair that turns red on a
 living enemy, name markers over enemies who shot you recently or stand close in plain sight, a

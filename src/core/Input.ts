@@ -14,6 +14,8 @@ export interface VirtualState {
   ads: boolean;
   reload: boolean;
   grenade: boolean;
+  /** Knife lunge (touch button). */
+  melee: boolean;
   /** Gadget kit slots (two): edge flags plus held state. */
   gadget: boolean[];
   gadgetHeld: boolean[];
@@ -41,7 +43,7 @@ function freshVirtual(): VirtualState {
     moveX: 0, moveY: 0, lookDX: 0, lookDY: 0,
     fire: false, firePressed: false, fireReleased: false,
     jump: false, jumpHeld: false, sprint: false, crouch: false, ads: false,
-    reload: false, grenade: false, gadget: [false, false], gadgetHeld: [false, false], gadgetReleased: [false, false], interact: false,
+    reload: false, grenade: false, melee: false, gadget: [false, false], gadgetHeld: [false, false], gadgetReleased: [false, false], interact: false,
     weaponSwitch: -1, primary: false, secondary: false, primaryHeld: false, secondaryHeld: false, zoom: 0, panX: 0, panY: 0,
     tapped: false, tapX: 0, tapY: 0, longPress: false, heightDir: 0,
   };
@@ -351,6 +353,9 @@ export class Input {
   reloadPressed(): boolean {
     return this.enabled && (this.pressed.has('KeyR') || this.virtual.reload);
   }
+  meleePressed(): boolean {
+    return this.enabled && (this.pressed.has('KeyV') || this.virtual.melee);
+  }
   grenadePressed(): boolean {
     return this.enabled && (this.pressed.has('KeyG') || this.virtual.grenade);
   }
@@ -394,6 +399,7 @@ export class Input {
     v.fireReleased = false;
     v.jump = false;
     v.reload = false;
+    v.melee = false;
     v.grenade = false;
     v.gadget[0] = v.gadget[1] = false;
     v.gadgetReleased[0] = v.gadgetReleased[1] = false;

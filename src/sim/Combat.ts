@@ -5,6 +5,7 @@ import { Entity, Projectile } from './Entities';
 import { WEAPONS, GRENADE, damageAtDistance, type WeaponDef } from './Weapons';
 import { Emitter } from '../core/Events';
 import { Random } from '../core/Random';
+import { isTransparent, blockMat } from '../world/Voxel';
 
 export interface HitResult {
   entity: Entity | null;
@@ -30,7 +31,13 @@ export interface CombatEvents extends Record<string, unknown> {
   impact: { point: THREE.Vector3; normal: THREE.Vector3; blockValue: number; onEntity: boolean };
   explosion: { pos: THREE.Vector3; radius: number; owner: Entity | null };
   projectileBounce: { pos: THREE.Vector3 };
+  /** A knife swing; target null when it hit nothing. */
+  melee: { attacker: Entity; target: Entity | null; point: THREE.Vector3; backstab: boolean };
+  /** A glass block shattered. */
+  glass: { x: number; y: number; z: number };
 }
+
+export const MELEE = { range: 2.4, damage: 60, backstab: 1.7, cone: 0.72, lunge: 6.5, windup: 0.13, cooldown: 0.75 };
 
 const HEAD_RADIUS = 0.2;
 const tmpDir = new THREE.Vector3();
@@ -222,6 +229,11 @@ export class Combat {
           if (hit.headshot) dmg *= def.headshotMult;
           this.applyDamage(hit.entity, dmg, shooter, now, hit.headshot, hit.point);
         } else if (hit.solid) hit.solid.hit(damageAtDistance(def, hit.dist), shooter);
+        else if (hit.blockValue && isTransparent(blockMat(hit.blockValue))) {
+          // Glass shatters instead of stopping the shot.
+          const b = hit.point.clone().addScaledVector(hit.normal, -0.02);
+          this.breakGlass(Math.floor(b.x), Math.floor(b.y), Math.floor(b.z));
+        }
         this.events.emit('impact', { point: hit.point, normal: hit.normal, blockValue: hit.blockValue, onEntity: !!hit.entity });
       }
       this.events.emit('shot', { shooter, origin, end, weapon: def, hit });
@@ -275,7 +287,50 @@ export class Combat {
     }
   }
 
+  /** Knife: the nearest enemy inside a short cone in front; from behind it cuts deeper. */
+  melee(attacker: Entity, now: number): Entity | null {
+    const eye = attacker.eyePos;
+    const fwd = attacker.forward(new THREE.Vector3());
+    let best: Entity | null = null;
+    let bestD = MELEE.range;
+    for (const e of this.getEntities()) {
+      if (e === attacker || !e.alive || e.burrowed) continue;
+      if (!this.friendlyFire && attacker.role === e.role && attacker.role === 'attacker') continue;
+      const to = e.center.sub(eye);
+      const d = to.length();
+      if (d > bestD + e.radius) continue;
+      if (to.divideScalar(Math.max(d, 1e-3)).dot(fwd) < MELEE.cone) continue;
+      if (this.world.raycast(eye.x, eye.y, eye.z, to.x, to.y, to.z, Math.max(0, d - e.radius))) continue;
+      bestD = d;
+      best = e;
+    }
+    const point = best ? best.center : eye.clone().addScaledVector(fwd, 1.2);
+    let backstab = false;
+    if (best) {
+      const facing = best.forwardFlat(new THREE.Vector3());
+      const toTarget = tmpV.copy(best.pos).sub(attacker.pos).setY(0).normalize();
+      backstab = facing.dot(toTarget) > 0.45;
+      this.applyDamage(best, MELEE.damage * (backstab ? MELEE.backstab : 1), attacker, now, false, point);
+    }
+    this.events.emit('melee', { attacker, target: best, point, backstab });
+    return best;
+  }
+
+  /** Shatters a glass block (bullets, blasts and running bodies). Returns true when one broke. */
+  breakGlass(x: number, y: number, z: number): boolean {
+    const v = this.world.get(x, y, z);
+    if (v === 0 || !isTransparent(blockMat(v))) return false;
+    this.world.set(x, y, z, 0);
+    this.events.emit('glass', { x, y, z });
+    return true;
+  }
+
   explode(pos: THREE.Vector3, radius: number, damage: number, owner: Entity | null, now: number): void {
+    // Blasts blow out nearby glass.
+    const gr = Math.max(1, Math.floor(radius * 0.8));
+    for (let x = Math.floor(pos.x) - gr; x <= Math.floor(pos.x) + gr; x++)
+      for (let y = Math.floor(pos.y) - gr; y <= Math.floor(pos.y) + gr; y++)
+        for (let z = Math.floor(pos.z) - gr; z <= Math.floor(pos.z) + gr; z++) if (Math.hypot(x + 0.5 - pos.x, y + 0.5 - pos.y, z + 0.5 - pos.z) <= radius * 0.8) this.breakGlass(x, y, z);
     for (const e of this.getEntities()) {
       if (!e.alive || e.burrowed) continue;
       const c = e.center;

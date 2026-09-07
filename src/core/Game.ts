@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { App } from './App';
 import { Entity, type Role, emptyScore } from '../sim/Entities';
 import { TrapSystem, type TrapKind } from '../sim/Traps';
+import { RoundEvents, type EventKind } from '../sim/RoundEvents';
 import type { Cell } from '../world/Reachability';
 import { TrapMeshes } from '../render/TrapMeshes';
 import { CharacterController } from '../sim/CharacterController';
@@ -112,6 +113,13 @@ export class Game {
   private killerEntity: Entity | null = null;
   readonly traps: TrapSystem;
   private trapMeshes: TrapMeshes;
+  readonly roundEvents: RoundEvents;
+  /** Roof spots per fortress (supply drops). */
+  private plotSpots = new Map<number, Cell[]>();
+  private supplyMesh: THREE.Group | null = null;
+  private indoorTarget = { ambient: 0.55, lamps: 1 };
+  private fogCur = { d: 0.0008, h: 0.0022 };
+  private fogTarget = { d: 0.0008, h: 0.0022 };
   private uiRoot: HTMLElement;
 
   constructor(readonly app: App) {
@@ -122,9 +130,18 @@ export class Game {
     this.controller.gadgets = this.gadgets;
     this.traps = new TrapSystem(app.world, this.combat, () => this.entities, app.plots);
     this.controller.traps = this.traps;
+    this.controller.breakGlass = (x, y, z) => this.combat.breakGlass(x, y, z);
     this.combat.solids = () => this.traps.solids();
     this.trapMeshes = new TrapMeshes(this.traps, (pi) => this.entities.find((e) => e.plotIndex === pi)?.colorHex ?? '#ffffff');
     app.gr.scene.add(this.trapMeshes.group);
+    this.roundEvents = new RoundEvents(app.world, {
+      entities: () => this.entities,
+      targetPlot: () => (this.match && this.match.targetPlotIndex >= 0 ? this.app.plots[this.match.targetPlotIndex] : null),
+      roofSpots: (pi) => this.plotSpots.get(pi) ?? [],
+      timeLeft: () => this.match?.timeLeft ?? 0,
+      live: () => !!this.match && this.match.phase === 'round' && !this.match.overtime,
+    });
+    this.wireRoundEvents();
     this.traps.events.on('trigger', ({ trap, entity }) => {
       const pos = new THREE.Vector3(trap.cell.x + 0.5, trap.cell.y + 0.2, trap.cell.z + 0.5);
       const up = new THREE.Vector3(0, 1, 0);
@@ -286,6 +303,7 @@ export class Game {
       const res = generateFortress(this.app.world, plots[e.plotIndex], style, this.rng.fork());
       match.setFlag(e.plotIndex, res.flag);
       match.setSpawn(e.plotIndex, res.spawn);
+      this.plotSpots.set(e.plotIndex, res.roofSpots);
       this.seedTraps(e.plotIndex, res);
       const brain = new BotBrain(e, this.botContext(), PROFILES[cfg.difficulty], this.rng.int(1, 1e9));
       this.bots.push(brain);
@@ -367,7 +385,95 @@ export class Game {
         return m;
       },
       traps: this.traps,
+      visibility: () => this.roundEvents.visibility(),
     };
+  }
+
+  /** Round surprises: countdown banners, then the effect with its own look and sound. */
+  private wireRoundEvents(): void {
+    const names: Record<EventKind, string> = { blackout: 'eventBlackout', breach: 'eventBreach', supply: 'eventSupply', fog: 'eventFog' };
+    const ev = this.roundEvents.events;
+    ev.on('warn', ({ kind, seconds }) => {
+      audio.play('countdown', { volume: 0.7, pitch: seconds === 1 ? 1.3 : 1 });
+      this.hud.showBanner(t('eventIn', { name: t(names[kind]), n: seconds }), '', 1.1);
+    });
+    ev.on('start', ({ kind, pos }) => {
+      this.hud.announce(t(names[kind]), t(`${names[kind]}Sub`), kind === 'supply' ? 'streak' : 'clutch', 2.4);
+      switch (kind) {
+        case 'blackout':
+          this.indoorTarget = { ambient: 0.05, lamps: 0.04 };
+          audio.play('overtime', { volume: 0.6, pitch: 0.8 });
+          break;
+        case 'fog':
+          this.fogTarget = { d: 0.028, h: 0.02 };
+          audio.play('overtime', { volume: 0.4, pitch: 1.1 });
+          break;
+        case 'supply':
+          audio.play('spawn', { volume: 0.8, pitch: 0.7 });
+          break;
+        case 'breach':
+          if (pos) {
+            this.vfx.explosion(pos, 3.2);
+            this.vfx.debrisBurst(pos, new THREE.Vector3(0, 1, 0), 30, new THREE.Color(0x8a8a8a));
+            audio.play('explosion', { pos, volume: 1 });
+            const d = pos.distanceTo(this.app.gr.camera.position);
+            this.local?.addShake(clamp(1 - d / 40, 0, 1));
+          }
+          break;
+      }
+    });
+    ev.on('end', ({ kind }) => {
+      if (kind === 'blackout') this.indoorTarget = { ambient: 0.55, lamps: 1 };
+      if (kind === 'fog') this.fogTarget = { d: 0.0008, h: 0.0022 };
+    });
+    ev.on('breach', () => {
+      const pi = this.match?.targetPlotIndex ?? -1;
+      if (pi >= 0) this.nav?.invalidatePlot(pi);
+      this.app.chunks.flush();
+    });
+    ev.on('supplyTaken', ({ entity, pos }) => {
+      audio.play('streak', { pos, volume: 0.8 });
+      this.vfx.sparks(pos, new THREE.Vector3(0, 1, 0), 24, new THREE.Color(0x9ad7ff), 6);
+      if (entity === this.player) this.hud.announce(t('supplyTaken'), t('supplyTakenSub'), 'streak', 2);
+    });
+  }
+
+  /** Eases the indoor light and fog towards the current event targets and keeps the crate in place. */
+  private updateEventVisuals(dt: number): void {
+    const mats = this.app.materials;
+    const k = Math.min(1, dt * 3);
+    const cur = mats.indoor;
+    if (Math.abs(cur.ambient - this.indoorTarget.ambient) > 0.002 || Math.abs(cur.lamps - this.indoorTarget.lamps) > 0.002) {
+      mats.setIndoor(cur.ambient + (this.indoorTarget.ambient - cur.ambient) * k, cur.lamps + (this.indoorTarget.lamps - cur.lamps) * k);
+    }
+    if (Math.abs(this.fogCur.d - this.fogTarget.d) > 1e-5 || Math.abs(this.fogCur.h - this.fogTarget.h) > 1e-5) {
+      this.fogCur.d += (this.fogTarget.d - this.fogCur.d) * Math.min(1, dt * 1.5);
+      this.fogCur.h += (this.fogTarget.h - this.fogCur.h) * Math.min(1, dt * 1.5);
+      this.app.gr.fog.setDensity(this.fogCur.d, this.fogCur.h);
+    }
+    const s = this.roundEvents.supply;
+    if (s && !s.taken) {
+      if (!this.supplyMesh) {
+        const g = new THREE.Group();
+        const crate = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.7, 0.9), new THREE.MeshStandardMaterial({ color: 0x3b4a2f, metalness: 0.3, roughness: 0.7 }));
+        crate.position.y = 0.35;
+        crate.castShadow = true;
+        g.add(crate);
+        const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.94, 0.12, 0.94), new THREE.MeshStandardMaterial({ color: 0xffb300, emissive: 0xffb300, emissiveIntensity: 0.8 }));
+        stripe.position.y = 0.5;
+        g.add(stripe);
+        const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.6, 40, 12, 1, true), new THREE.MeshBasicMaterial({ color: 0xffd36a, transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
+        beam.position.y = 20;
+        g.add(beam);
+        this.app.gr.scene.add(g);
+        this.supplyMesh = g;
+      }
+      this.supplyMesh.position.set(s.pos.x, s.pos.y + this.roundEvents.supplyHeight(), s.pos.z);
+      this.supplyMesh.rotation.y += dt * 0.8;
+    } else if (this.supplyMesh) {
+      this.app.gr.scene.remove(this.supplyMesh);
+      this.supplyMesh = null;
+    }
   }
 
   /** Bot fortresses come with traps too: a mine by a doorway, spikes on the way in, a turret in the flag hall, maybe a trapdoor. */
@@ -399,6 +505,7 @@ export class Game {
     const spawn = this.builder.spawn ?? flag;
     this.match.setFlag(0, flag);
     this.match.setSpawn(0, spawn);
+    this.plotSpots.set(0, this.builder.result?.roofSpots ?? []);
     this.builder.exit();
     this.builderUI?.hide();
     this.app.chunks.flush();
@@ -473,6 +580,9 @@ export class Game {
         this.gadgets.reset();
         this.gadgetMeshes.clear();
         this.traps.resetRound();
+        this.roundEvents.endRound();
+        this.indoorTarget = { ambient: 0.55, lamps: 1 };
+        this.fogTarget = { d: 0.0008, h: 0.0022 };
         this.showLoadout();
         break;
       }
@@ -480,12 +590,16 @@ export class Game {
         this.mode = 'battle';
         this.setTouchMode();
         this.hud.show();
+        this.roundEvents.startRound(this.rng.int(1, 1e9));
         const def = match.defender!;
         this.hud.showBanner(this.player === def ? t('defendFortress') : t('attackFortress', { name: def.name }), t('round', { n: match.roundIndex + 1, total: match.roundOrder.length }), 3.5);
         this.requestPlayControl();
         break;
       }
       case 'roundEnd': {
+        this.roundEvents.endRound();
+        this.indoorTarget = { ambient: 0.55, lamps: 1 };
+        this.fogTarget = { d: 0.0008, h: 0.0022 };
         this.mode = 'summary';
         this.setTouchMode();
         this.app.input.exitPointerLock();
@@ -701,6 +815,8 @@ export class Game {
     this.gadgetMeshes.clear();
     this.traps.clear();
     this.trapMeshes.clear();
+    this.roundEvents.endRound();
+    this.plotSpots.clear();
     this.combat.clearProjectiles();
     this.hud.hide();
     this.viewModel.hidden = true;
@@ -838,6 +954,18 @@ export class Game {
       this.local?.addShake(clamp(1 - d / 30, 0, 1) * 0.9);
     });
     c.events.on('projectileBounce', ({ pos }) => audio.play('bounce', { pos, volume: 0.6 }));
+    c.events.on('melee', ({ attacker, target, point, backstab }) => {
+      audio.play(target ? 'hit' : 'switch', { pos: attacker === this.player ? undefined : point, pitch: target ? (backstab ? 0.5 : 0.7) : 1.6, volume: 0.9 });
+      if (target) this.vfx.sparks(point, new THREE.Vector3(0, 1, 0), backstab ? 22 : 12, new THREE.Color(0xff5566), 5);
+      if (attacker === this.player && target && backstab) this.hud.announce(t('backstab'), '', 'clutch', 1.1);
+    });
+    c.events.on('glass', ({ x, y, z }) => {
+      const pos = new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5);
+      this.vfx.sparks(pos, new THREE.Vector3(0, 1, 0), 26, new THREE.Color(0xbfefff), 7);
+      audio.play('ricochet', { pos, volume: 0.8, pitch: 1.7 });
+      for (const p of this.app.plots) if (x >= p.minX && x <= p.maxX && z >= p.minZ && z <= p.maxZ) this.nav?.invalidatePlot(p.index);
+      this.app.chunks.flush();
+    });
   }
 
   // ---------------- per-frame ----------------
@@ -891,6 +1019,7 @@ export class Game {
     this.vfx.update(dt);
     this.gadgetMeshes.update(dt, this.time);
     this.trapMeshes.update(dt, this.time, this.player.plotIndex);
+    this.updateEventVisuals(dt);
     this.syncProjectiles();
     audio.setListener(this.app.gr.camera.position, new THREE.Vector3(1, 0, 0).applyQuaternion(this.app.gr.camera.quaternion));
     return this.cameraFocus;
@@ -1009,6 +1138,7 @@ export class Game {
       if (!this.debugFreezeBots) for (const b of this.bots) b.update(simDt, this.time);
       this.gadgets.update(simDt, this.time);
       this.traps.update(simDt, this.time);
+      this.roundEvents.update(simDt, this.time);
       this.combat.updateProjectiles(simDt, this.time);
       // Slow health regeneration after a few seconds without damage
       for (const e of this.entities) {

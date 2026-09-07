@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Entity } from './Entities';
 import type { Input } from '../core/Input';
 import type { CharacterController, MoveInput } from './CharacterController';
-import type { Combat } from './Combat';
+import { MELEE, type Combat } from './Combat';
 import type { ViewModel } from '../render/ViewModel';
 import { WeaponLogic } from './WeaponLogic';
 import { GRENADE, WEAPONS } from './Weapons';
@@ -13,6 +13,7 @@ import { Emitter } from '../core/Events';
 
 export interface PlayerEvents extends Record<string, unknown> {
   grenade: { entity: Entity };
+  melee: { entity: Entity };
   weaponSwitch: { index: number };
   reload: { entity: Entity };
   interact: { entity: Entity };
@@ -157,6 +158,10 @@ export class Player {
     // Weapons (holstered underground and while hanging from a zipline)
     WeaponLogic.update(e, dt);
     const armed = this.enabled && !e.burrowed && !e.zipRide;
+    if (e.meleeTimer > 0) {
+      e.meleeTimer -= dt;
+      if (e.meleeTimer <= 0) this.combat.melee(e, now);
+    }
     if (armed) {
       let switchTo = -1;
       const req = input.weaponSwitch();
@@ -173,6 +178,18 @@ export class Player {
           this.viewModel.kick(e.weapon!.id);
           this.addShake(WEAPONS[e.weapon!.id].kick * 0.6);
         }
+      }
+      if (input.meleePressed() && e.meleeCooldown <= 0 && !e.burrowed && !e.zipRide) {
+        // Knife: a short lunge forward, the blade lands a moment later.
+        e.meleeCooldown = MELEE.cooldown;
+        e.meleeTimer = MELEE.windup;
+        const fwd = e.forwardFlat(new THREE.Vector3());
+        e.vel.x += fwd.x * MELEE.lunge;
+        e.vel.z += fwd.z * MELEE.lunge;
+        e.reloading = false;
+        this.viewModel.kick(e.weapon?.id ?? 'pistol');
+        this.addShake(0.25);
+        this.events.emit('melee', { entity: e });
       }
       if (input.grenadePressed() && e.grenades > 0 && e.grenadeCooldown <= 0 && !e.reloading) {
         e.grenades--;

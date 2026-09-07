@@ -23,6 +23,8 @@ export interface FortressResult {
   entrances: Cell[];
   floors: Cell[];
   heroFloors: Cell[];
+  /** Roof terrace and bridge deck spots (supply drops land on one). */
+  roofSpots: Cell[];
 }
 
 const TECH: StyleId[] = ['modern', 'neon'];
@@ -269,7 +271,7 @@ export function generateFortress(world: VoxelWorld, plot: Plot, style: StyleId, 
   if (spots.length) spawn = { ...rng.pick(spots) };
   const heroCells = new Set(res.hero?.cells ?? []);
   const heroFloors = res.rooms.filter((r) => heroCells.has(Plan.index(r.i, r.j, r.k))).flatMap((r) => r.floor);
-  return { flag, spawn, blocks: res.blocks, archetype: arch, entrances: res.entrances, floors: res.rooms.flatMap((r) => r.floor), heroFloors };
+  return { flag, spawn, blocks: res.blocks, archetype: arch, entrances: res.entrances, floors: res.rooms.flatMap((r) => r.floor), heroFloors, roofSpots: res.roofSpots };
 }
 
 export { MAX_STOREYS };

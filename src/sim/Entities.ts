@@ -89,6 +89,9 @@ export class Entity {
   overdriveUntil = 0;
   /** Set every frame by the game from overdriveUntil. */
   overdrive = false;
+  /** Knife: lunge in progress (seconds until the blade lands) and cooldown. */
+  meleeTimer = 0;
+  meleeCooldown = 0;
 
   weapons: WeaponSlot[] = [];
   weaponIndex = 0;

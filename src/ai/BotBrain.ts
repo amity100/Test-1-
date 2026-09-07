@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Entity } from '../sim/Entities';
 import type { TrapSystem } from '../sim/Traps';
-import type { Combat } from '../sim/Combat';
+import { MELEE, type Combat } from '../sim/Combat';
 import type { CharacterController, MoveInput } from '../sim/CharacterController';
 import type { NavGrid } from './NavGrid';
 import type { NavSystem } from './NavSystem';
@@ -58,6 +58,8 @@ export interface BotContext {
   roundTime: () => number;
   anyCaptureProgress: () => number;
   traps: TrapSystem;
+  /** 1 normally; fog and blackouts shorten everyone's sight. */
+  visibility: () => number;
 }
 
 type State = 'idle' | 'approach' | 'search' | 'engage' | 'capture' | 'hide' | 'return' | 'retreat' | 'cover' | 'investigate';
@@ -454,7 +456,7 @@ export class BotBrain {
           this.suspicionTime = now;
         }
       }
-      if (dist > this.profile.viewDist) continue;
+      if (dist > this.profile.viewDist * this.ctx.visibility()) continue;
       const cos = d.dot(fwd) / dist;
       const ang = Math.acos(clamp(cos, -1, 1)) * (180 / Math.PI);
       // A radar pulse (streak reward) shows everyone nearby through walls.
@@ -495,7 +497,7 @@ export class BotBrain {
       const firing = now - best.lastShotTime < 0.4 ? 6 : 1;
       const near = dist < 5 ? 4 : 1;
       const seen = this.exposure(best);
-      let gain = this.profile.noticeSpeed * this.focus * (1 - 0.75 * angFrac) * (1 - 0.7 * distFrac) * (0.25 + 0.75 * seen) * motion * firing * near;
+      let gain = this.profile.noticeSpeed * this.focus * (1 - 0.75 * angFrac) * (1 - 0.7 * distFrac) * (0.25 + 0.75 * seen) * motion * firing * near * this.ctx.visibility();
       if (best.captureProgress > 0.05 || e.radarUntil > now) gain = 100;
       const meter = (this.notice.get(best.id) ?? 0) + gain * 0.12;
       if (meter < 1) {
@@ -634,6 +636,20 @@ export class BotBrain {
   private handleFire(target: Entity, dt: number, now: number): void {
     const e = this.entity;
     this.reactionTimer -= dt;
+    if (e.meleeTimer > 0) {
+      e.meleeTimer -= dt;
+      if (e.meleeTimer <= 0) this.ctx.combat.melee(e, now);
+    }
+    // Point blank: the knife is faster than aiming.
+    if (this.mem.visible && e.meleeCooldown <= 0 && e.meleeTimer <= 0 && target.pos.distanceTo(e.pos) < 1.9) {
+      e.meleeCooldown = MELEE.cooldown + this.rng.range(0.1, 0.5);
+      e.meleeTimer = MELEE.windup;
+      const fwd = e.forwardFlat(new THREE.Vector3());
+      e.vel.x += fwd.x * MELEE.lunge * 0.6;
+      e.vel.z += fwd.z * MELEE.lunge * 0.6;
+      e.triggerReleased = true;
+      return;
+    }
     if (this.reactionTimer > 0 || !this.mem.visible) {
       e.triggerReleased = true;
       // Out of sight: top up the magazine.

@@ -44,6 +44,7 @@ const ICON = {
   grenade: svg('<circle cx="12" cy="14" r="6.5"/><rect x="9.5" y="2.5" width="5" height="4.5" rx="1"/><path d="M14.5 4h4"/><path d="M9.5 13.5a2.5 2.5 0 0 1 2.5-2.5"/>'),
   grapple: svg('<path d="M12 2v9"/><path d="M12 11c0 4.5-3.2 6.5-6 6.5M12 11c0 4.5 3.2 6.5 6 6.5"/><path d="M6 17.5L4 21M18 17.5L20 21"/><circle cx="12" cy="4.5" r="2"/>'),
   pause: svg('<rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"/><rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"/>'),
+  knife: svg('<path d="M4 20l9-9"/><path d="M13 11l7-7-2 6-4 4z" fill="currentColor"/><path d="M10 14l-2 2"/>'),
 };
 
 /**
@@ -187,6 +188,7 @@ export class TouchControls {
     });
     this.button(g, 'reload', ICON.reload, { tap: () => (v.reload = true) });
     this.button(g, 'grenade', ICON.grenade, { tap: () => (v.grenade = true) });
+    this.button(g, 'knife', ICON.knife, { tap: () => (v.melee = true) });
     for (let i = 0; i < 2; i++) {
       const b = this.button(g, `gadget g${i}`, ICON.grapple, {
         down: () => {

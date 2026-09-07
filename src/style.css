@@ -789,3 +789,6 @@ body { background: radial-gradient(1200px 800px at 50% 30%, #16283a 0%, #0f1923 
 .bldui.compact .bld-sub .bld-btn.kind { width: 46px; height: 40px; }
 .bldui.compact .bld-sub .slots { font-size: 10px; padding: 0 4px; }
 .bldui.compact.trap .bld-hint { bottom: calc(112px + env(safe-area-inset-bottom, 0px)); }
+
+/* ---- v9: knife button ---- */
+.tb-battle .tb.knife { right: calc(196px + var(--sr)); bottom: calc(110px + var(--sb)); width: calc(50px * var(--ts)); height: calc(50px * var(--ts)); color: #ffd36a; }

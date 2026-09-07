@@ -7,6 +7,7 @@ export const WeaponLogic = {
   update(e: Entity, dt: number): void {
     if (e.fireCooldown > 0) e.fireCooldown -= dt;
     if (e.grenadeCooldown > 0) e.grenadeCooldown -= dt;
+    if (e.meleeCooldown > 0) e.meleeCooldown -= dt;
     if (e.grappleCooldown > 0) e.grappleCooldown -= dt;
     const w = e.weapon;
     if (e.reloading && w) {
@@ -77,7 +78,7 @@ export const WeaponLogic = {
     if (index < 0 || index >= e.weapons.length || index === e.weaponIndex) return false;
     e.weaponIndex = index;
     e.reloading = false;
-    e.fireCooldown = Math.max(e.fireCooldown, 0.25);
+    e.fireCooldown = Math.max(e.fireCooldown, 0.12);
     return true;
   },
 
