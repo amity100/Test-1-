@@ -3,6 +3,7 @@ import type { VoxelWorld } from '../world/VoxelWorld';
 import type { Terrain } from '../world/Terrain';
 import type { Entity } from './Entities';
 import { BURROW, SWING, type GadgetSystem } from './Gadgets';
+import type { TrapSystem } from './Traps';
 import { clamp, damp } from '../core/MathUtil';
 import { PLAYABLE_RADIUS } from '../world/Layout';
 
@@ -41,12 +42,17 @@ const desired = new THREE.Vector3();
 export class CharacterController {
   /** Gadget simulation (zipline rides, burrowing, rope release); set by the game. */
   gadgets: GadgetSystem | null = null;
+  /** Traps: closed gates are walls for everyone but their builder. */
+  traps: TrapSystem | null = null;
+  /** The entity being moved (so gates know whom to let through). */
+  private mover: Entity | null = null;
 
   constructor(private world: VoxelWorld, private terrain: Terrain) {}
 
   private collides(x: number, y: number, z: number, r: number, h: number): boolean {
     // Ramps never block: the ramp pass below lifts the character onto their surface instead.
-    return this.world.boxIntersectsSolid(x - r, y, z - r, x + r, y + h, z + r, true);
+    if (this.world.boxIntersectsSolid(x - r, y, z - r, x + r, y + h, z + r, true)) return true;
+    return !!this.traps && this.traps.blocksBox(this.mover, x - r, y, z - r, x + r, y + h, z + r);
   }
 
   /** True when the entity's box fits at the given feet position. */
@@ -58,6 +64,7 @@ export class CharacterController {
   step(e: Entity, input: MoveInput, dt: number): void {
     if (!e.alive) return;
     const world = this.world;
+    this.mover = e;
     e.wasGrounded = e.grounded;
     if (e.burrowed) {
       this.stepBurrowed(e, input, dt);

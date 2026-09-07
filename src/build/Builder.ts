@@ -7,14 +7,15 @@ import { PLOT_Y, PLOT_MAX_HEIGHT } from '../world/Layout';
 import type { StyleId } from '../world/Styles';
 import { PALETTE, blockColor } from '../world/Voxel';
 import { checkReachability, bestHidingCells, reachableFromOutside, type Cell, type ReachResult } from '../world/Reachability';
-import { Architect, Plan, CELL, STOREY_H, GRID, MAX_STOREYS, MAX_BLOCKS, SIDES, applyField, floatingComponents, type ArchitectResult, type Tone } from './Architect';
+import { Architect, Plan, CELL, STOREY_H, GRID, MAX_STOREYS, MAX_BLOCKS, SIDES, applyField, floatingComponents, type ArchitectResult, type Tone, heroOrder } from './Architect';
 import { planFortress, type Archetype } from '../world/FortressGen';
 import { FlagMesh } from '../render/FlagMesh';
 import { Random } from '../core/Random';
 import { Emitter } from '../core/Events';
+import type { TrapKind, TrapSystem } from '../sim/Traps';
 import { clamp, damp } from '../core/MathUtil';
 
-export type BuilderTool = 'build' | 'erase' | 'flag';
+export type BuilderTool = 'build' | 'erase' | 'flag' | 'trap';
 
 export interface BuilderEvents extends Record<string, unknown> {
   change: Record<string, never>;
@@ -23,12 +24,15 @@ export interface BuilderEvents extends Record<string, unknown> {
   invalid: { key: string };
   /** Cells that turned solid this edit (for dust puffs). */
   placedCells: { cells: Cell[] };
+  trapPlaced: { kind: TrapKind };
+  trapRemoved: { kind: TrapKind };
 }
 
 interface Snapshot {
   cells: Uint8Array;
   flag: Cell | null;
   spawn: Cell | null;
+  hero?: number;
 }
 
 /** A cell face the pointer is aiming at, resolved to what a tap would do. */
@@ -54,6 +58,9 @@ export class Builder {
   readonly architect: Architect;
   tone: Tone = 0;
   tool: BuilderTool = 'build';
+  /** Defender traps (set by the game); the kind the trap tool places. */
+  traps: TrapSystem | null = null;
+  trapKind: TrapKind = 'spikes';
   flag: Cell | null = null;
   spawn: Cell | null = null;
   reach: ReachResult = { ok: false, reason: 'noFlag' };
@@ -192,13 +199,25 @@ export class Builder {
     this.events.emit('change', {});
   }
 
+  setTrapKind(k: TrapKind): void {
+    this.trapKind = k;
+    if (this.tool !== 'trap') this.setTool('trap');
+    this.events.emit('change', {});
+  }
+
+  /** Trap slots used on this plot. */
+  get trapSlots(): number {
+    return this.traps ? this.traps.slotsUsed(this.plot.index) : 0;
+  }
+
   // ------------------------------------------------------------------ editing
   private snapshot(): Snapshot {
-    return { cells: new Uint8Array(this.plan.cells), flag: this.flag, spawn: this.spawn };
+    return { cells: new Uint8Array(this.plan.cells), flag: this.flag, spawn: this.spawn, hero: this.plan.hero };
   }
 
   private restore(s: Snapshot): void {
     this.plan.cells.set(s.cells);
+    this.plan.hero = s.hero ?? -1;
     this.flag = s.flag;
     this.spawn = s.spawn;
     this.regenerate();
@@ -276,6 +295,7 @@ export class Builder {
     if (this.plan.count() === 0 && !this.flag) return;
     const before = this.snapshot();
     this.plan.cells.fill(0);
+    this.plan.hero = -1;
     this.flag = null;
     this.spawn = null;
     this.commit(before);
@@ -288,6 +308,7 @@ export class Builder {
     const rng = new Random(seed);
     const plan = planFortress(rng, this.style, MAX_BLOCKS, archetype);
     this.plan.cells.set(plan.cells);
+    this.plan.hero = -1;
     this.flag = null;
     this.spawn = null;
     this.commit(before);
@@ -298,23 +319,35 @@ export class Builder {
 
   /** Places the flag inside a room block; the spawn follows when unset. */
   placeFlagIn(i: number, j: number, k: number): boolean {
-    const room = this.result?.rooms.find((r) => r.i === i && r.j === j && r.k === k);
+    let room = this.result?.rooms.find((r) => r.i === i && r.j === j && r.k === k);
     if (!room || room.floor.length === 0) {
       this.events.emit('invalid', { key: 'flagBlocked' });
       return false;
     }
-    const cx = this.plot.minX + i * CELL + 2;
-    const cz = this.plot.minZ + j * CELL + 2;
-    let best = room.floor[0];
-    let bestD = Infinity;
-    for (const c of room.floor) {
-      const d = Math.abs(c.x - cx) + Math.abs(c.z - cz);
-      if (d < bestD) {
-        bestD = d;
-        best = c;
+    const before = this.snapshot();
+    // The flag room becomes the hero hall: podium in the middle, gallery ring above when covered.
+    const idx = Plan.index(i, j, k);
+    if (this.plan.hero !== idx) {
+      this.plan.hero = idx;
+      this.regenerate();
+      room = this.result?.rooms.find((r) => r.i === i && r.j === j && r.k === k) ?? room;
+    }
+    const spot = this.result?.hero?.spot ?? null;
+    let best: Cell;
+    if (spot && this.freeCell(spot)) best = spot;
+    else {
+      const cx = this.plot.minX + i * CELL + 2;
+      const cz = this.plot.minZ + j * CELL + 2;
+      best = room.floor[0];
+      let bestD = Infinity;
+      for (const c of room.floor) {
+        const d = Math.abs(c.x - cx) + Math.abs(c.z - cz);
+        if (d < bestD) {
+          bestD = d;
+          best = c;
+        }
       }
     }
-    const before = this.snapshot();
     this.flag = { ...best };
     if (!this.spawn || !this.freeCell(this.spawn)) this.spawn = { ...best };
     this.commit(before);
@@ -333,6 +366,7 @@ export class Builder {
     const res = this.architect.generate(this.plan);
     const changed = applyField(this.world, this.plot, res.field);
     this.result = res;
+    this.traps?.validate(this.plot.index);
     // Markers survive only while their cell is still free floor.
     if (this.flag && !this.freeCell(this.flag)) this.flag = null;
     if (this.spawn && !this.freeCell(this.spawn)) this.spawn = null;
@@ -363,14 +397,22 @@ export class Builder {
   ensureMarkers(rng: Random): void {
     this.validateNow();
     if (this.flag && this.reach.ok) return;
-    // Prefer the deepest generated room; fall back to the reachability heuristic.
-    const rooms = (this.result?.rooms ?? []).filter((r) => r.floor.length > 0).sort((a, b) => b.depth - a.depth);
+    // Prefer the deepest generated room (made the hero hall, flag on its podium); fall back to the
+    // reachability heuristic.
+    const rooms = heroOrder(this.plan, (this.result?.rooms ?? []).filter((r) => r.floor.length > 0));
     for (const r of rooms.slice(0, 6)) {
-      const c = r.floor[Math.floor(r.floor.length / 2)];
+      this.plan.hero = Plan.index(r.i, r.j, r.k);
+      this.regenerate();
+      const room = this.result?.rooms.find((rr) => rr.i === r.i && rr.j === r.j && rr.k === r.k);
+      const spot = this.result?.hero?.spot ?? null;
+      const c = spot && this.freeCell(spot) ? spot : room && room.floor.length ? room.floor[Math.floor(room.floor.length / 2)] : null;
+      if (!c) continue;
       this.flag = { ...c };
       this.spawn = { ...c };
       if (this.validateNow().ok) return;
     }
+    this.plan.hero = -1;
+    this.regenerate();
     const cands = bestHidingCells(this.world, this.plot, 8);
     const flag = cands.length ? rng.pick(cands) : { x: this.plot.cx, y: PLOT_Y, z: this.plot.cz };
     this.flag = flag;
@@ -453,7 +495,47 @@ export class Builder {
         if (a.hit) return this.placeFlagIn(a.hit[0], a.hit[1], a.hit[2]);
         this.events.emit('invalid', { key: 'flagNeedsRoom' });
         return false;
+      case 'trap': {
+        const cell = this.pickFloor(sx, sy);
+        if (!cell || !this.traps) {
+          this.events.emit('invalid', { key: 'trapNeedsFloor' });
+          return false;
+        }
+        const existing = this.traps.at(cell);
+        if (existing) {
+          this.traps.remove(existing);
+          this.events.emit('trapRemoved', { kind: existing.kind });
+          this.events.emit('change', {});
+          return true;
+        }
+        if (this.flag && cell.x === this.flag.x && cell.z === this.flag.z && cell.y === this.flag.y) {
+          this.events.emit('invalid', { key: 'trapTaken' });
+          return false;
+        }
+        const r = this.traps.place(this.trapKind, cell, this.plot.index);
+        if (typeof r === 'string') {
+          this.events.emit('invalid', { key: r });
+          return false;
+        }
+        this.events.emit('trapPlaced', { kind: r.kind });
+        this.events.emit('change', {});
+        this.debugLast = `trap:${r.kind}`;
+        return true;
+      }
     }
+  }
+
+  /** The free floor cell under the cursor (a room floor inside the plot): where traps go. */
+  pickFloor(sx: number, sy: number): Cell | null {
+    const ndc = new THREE.Vector2((sx / window.innerWidth) * 2 - 1, -(sy / window.innerHeight) * 2 + 1);
+    this.raycaster.setFromCamera(ndc, this.camera);
+    const ray = this.raycaster.ray;
+    const hit = this.world.raycast(ray.origin.x, ray.origin.y, ray.origin.z, ray.direction.x, ray.direction.y, ray.direction.z, 260);
+    if (!hit || hit.ny < 0.5) return null;
+    const c: Cell = { x: hit.x, y: hit.y + 1, z: hit.z };
+    if (c.x < this.plot.minX || c.x > this.plot.maxX || c.z < this.plot.minZ || c.z > this.plot.maxZ || c.y <= PLOT_Y) return null;
+    if (this.world.get(c.x, c.y, c.z) !== 0 || this.world.get(c.x, c.y + 1, c.z) !== 0) return null;
+    return c;
   }
 
   longPressAt(sx: number, sy: number): boolean {
@@ -543,6 +625,7 @@ export class Builder {
     for (let t = 1; t <= 8; t++) if (input.wasPressed(`Digit${t}`)) this.setTone((t - 1) as Tone);
     if (input.wasPressed('KeyX')) this.setTool(this.tool === 'erase' ? 'build' : 'erase');
     if (input.wasPressed('KeyG')) this.setTool(this.tool === 'flag' ? 'build' : 'flag');
+    if (input.wasPressed('KeyT')) this.setTool(this.tool === 'trap' ? 'build' : 'trap');
   }
 
   private panBy(dx: number, dy: number): void {
@@ -571,7 +654,20 @@ export class Builder {
   private updateOverlays(dt: number): void {
     // Hover ghost (mouse only; touch acts on tap).
     this.ghost.visible = false;
-    if (!this.input.isTouch && !this.uiHover) {
+    if (!this.input.isTouch && !this.uiHover && this.tool === 'trap') {
+      // Trap tool: a thin pad on the floor cell under the cursor, green when it can go there.
+      const c = this.pickFloor(this.input.cursorX, this.input.cursorY);
+      if (c && this.traps) {
+        const w = this.trapKind === 'trapdoor' ? 2 : 1;
+        const ok = this.traps.at(c) !== null || this.traps.canPlace(this.trapKind, c, this.plot.index) === null;
+        this.ghost.visible = true;
+        this.ghost.scale.set(w / (CELL - 0.1), 0.24 / (STOREY_H - 0.1), w / (CELL - 0.1));
+        this.ghost.position.set(c.x + w / 2, c.y + 0.12, c.z + w / 2);
+        (this.ghost.material as THREE.MeshBasicMaterial).color.setHex(ok ? 0x39ff14 : 0xff4655);
+        (this.ghostEdges.material as THREE.LineBasicMaterial).color.setHex(ok ? 0x39ff14 : 0xff4655);
+      }
+    } else if (!this.input.isTouch && !this.uiHover) {
+      this.ghost.scale.set(1, 1, 1);
       const a = this.aim(this.input.cursorX, this.input.cursorY);
       const mat = this.ghost.material as THREE.MeshBasicMaterial;
       const target = this.tool === 'build' ? a.add : a.hit;
@@ -636,6 +732,7 @@ export class Builder {
       tool: this.tool,
       flag: this.flag,
       spawn: this.spawn,
+      traps: this.traps ? this.traps.traps.filter((tr) => tr.plotIndex === this.plot.index).map((tr) => tr.kind) : [],
       reach: this.reach,
       voxels: this.result?.blocks ?? 0,
       rooms: this.result?.rooms.length ?? 0,

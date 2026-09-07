@@ -52,8 +52,11 @@ export type Tone = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 /** Plan cells hold 0 (empty) or tone + 1. */
 export class Plan {
   readonly cells: Uint8Array;
-  constructor(cells?: Uint8Array) {
+  /** Plan index of the flag room: its hall gets a podium and, with rooms above, a railed gallery ring. */
+  hero = -1;
+  constructor(cells?: Uint8Array, hero = -1) {
     this.cells = cells ? new Uint8Array(cells) : new Uint8Array(GRID * GRID * MAX_STOREYS);
+    this.hero = hero;
   }
   static index(i: number, j: number, k: number): number {
     return (k * GRID + j) * GRID + i;
@@ -80,7 +83,7 @@ export class Plan {
     return n;
   }
   clone(): Plan {
-    return new Plan(this.cells);
+    return new Plan(this.cells, this.hero);
   }
   equals(o: Plan): boolean {
     for (let i = 0; i < this.cells.length; i++) if (this.cells[i] !== o.cells[i]) return false;
@@ -158,6 +161,10 @@ export interface ArchitectResult {
   terraceDoors: number;
   /** Free-standing towers that received a crown. */
   crowns: number;
+  /** The flag hall (podium, gallery ring), when the plan names a flag room. */
+  hero: HeroInfo | null;
+  /** Ceiling openings that drop from one room into the one below (world cells of the hole). */
+  dropHoles: Cell[];
 }
 
 interface Face {
@@ -183,6 +190,32 @@ interface StairPlan {
   /** Local (x,z) of the three steps, in climbing order. */
   run: [number, number][];
   kind: 'up' | 'roof';
+}
+
+/** The flag hall as planned before carving (local field coordinates). */
+interface HeroPlan {
+  k: number;
+  cells: Set<number>;
+  /** Floor cells that stairs need (runs and approaches on both storeys). */
+  keep: Set<string>;
+  /** Centre of the podium, or null when nothing fits. */
+  podium: [number, number] | null;
+  /** Half-width of the podium footprint including its steps (2 in halls, 1 in single rooms). */
+  radius: number;
+  /** Upper-floor cells opened into the hall (double height). */
+  voids: Set<string>;
+  ring: boolean;
+  /** Walkable interior of the hall (no outer walls, no corner posts), field coordinates. */
+  interior(X: number, Z: number): boolean;
+}
+
+export interface HeroInfo {
+  /** Plan indices of the hall's cells. */
+  cells: number[];
+  /** Flag spot on top of the podium (world), or null when the hall is too cramped for one. */
+  spot: Cell | null;
+  /** True when the storey above was opened into a gallery ring around a double-height centre. */
+  ring: boolean;
 }
 
 /** Everything derived from the plan before carving (doors and reservations). */
@@ -411,6 +444,13 @@ export class Architect {
       }
     }
 
+    // ---- Hero hall (the flag room and its same-tone hall): planned before carving so cover, drop
+    // holes and the gallery ring respect each other.
+    const hero = this.heroPlan(plan, stairs);
+    /** Drop holes per ceiling level (field "X,Z"), so nothing is built on or under them. */
+    const holesAt = new Map<number, Set<string>>();
+    const dropHoles: Cell[] = [];
+
     // ---- Carve every block.
     const holes: [number, number, number][] = [];
     const entrances: Cell[] = [];
@@ -538,12 +578,40 @@ export class Architect {
         this.undercroft(F, x0, y0, z0, open);
       }
 
-      // Cover crates in wide halls (never over a stairwell or on a stair).
-      if (!stair && !stairs.has(Plan.index(i, j, k - 1)) && this.inWideHall(plan, i, j, k) && hash(i, j, k, 3) % 3 === 0) {
-        const cx = hash(i, j, k, 4) % 2 === 0 ? 1 : CELL - 2;
-        const cz = hash(i, j, k, 5) % 2 === 0 ? 1 : CELL - 2;
-        F.set(x0 + cx, y0 + 1, z0 + cz, this.roles.floor);
-        F.set(x0 + cx, y0 + 1, z0 + cz + (cz === 1 ? 1 : -1), this.roles.floor);
+      // Drop hole: a 1x2 opening in this room's ceiling from the room above, so every stacked room
+      // has a vertical way in (falling is quick, the stair is the way back). Kept clear of stairs
+      // on both storeys and of the hero hall.
+      const ceilingHoles: [number, number][] = [];
+      if (above && !(hero && hero.cells.has(Plan.index(i, j, k + 1)))) {
+        const keepHere = new Set([...this.stairKeep(stair), ...this.stairKeep(stairs.get(Plan.index(i, j, k + 1)) ?? null)]);
+        const corners: [number, number][][] = [
+          [[1, 1], [2, 1]],
+          [[CELL - 3, 1], [CELL - 2, 1]],
+          [[1, CELL - 2], [2, CELL - 2]],
+          [[CELL - 3, CELL - 2], [CELL - 2, CELL - 2]],
+        ];
+        const start = hash(i, j, k, 11) % 4;
+        for (let n = 0; n < 4 && ceilingHoles.length === 0; n++) {
+          const cand = corners[(start + n) % 4].map(([lx, lz]) => [x0 + lx, z0 + lz] as [number, number]);
+          if (cand.some(([X, Z]) => keepHere.has(`${X},${Z}`))) continue;
+          ceilingHoles.push(...cand);
+        }
+        for (const [X, Z] of ceilingHoles) {
+          holes.push([X, y0 + STOREY_H, Z]);
+          dropHoles.push(this.world(X, y0 + STOREY_H, Z));
+          let set = holesAt.get(y0 + STOREY_H);
+          if (!set) holesAt.set(y0 + STOREY_H, (set = new Set()));
+          set.add(`${X},${Z}`);
+        }
+      }
+
+      // Cover: columns in wide halls, a low wall or crates elsewhere. Never on stairs or their
+      // approaches, on or under a drop hole, in the hero hall (it gets a podium) or on its gallery.
+      if (!(hero && hero.cells.has(idx)) && !(hero && hero.ring && hero.cells.has(Plan.index(i, j, k - 1)))) {
+        const blocked = new Set<string>([...this.stairKeep(stair), ...this.stairKeep(stairs.get(Plan.index(i, j, k - 1)) ?? null)]);
+        for (const c of holesAt.get(y0) ?? []) blocked.add(c);
+        for (const [X, Z] of ceilingHoles) blocked.add(`${X},${Z}`);
+        this.furnish(F, plan, i, j, k, blocked);
       }
 
       let enclosure = 0;
@@ -566,6 +634,48 @@ export class Architect {
     }
     for (const st of D.outerStairs) this.outerStair(F, st);
 
+    // ---- Hero hall: a 3x3 podium with a ring of steps and four columns; above it, the gallery ring
+    // around a double-height centre, railed except where stairs arrive.
+    let heroSpot: Cell | null = null;
+    if (hero) {
+      const y0 = hero.k * STOREY_H;
+      if (hero.podium) {
+        const [cx, cz] = hero.podium;
+        const R = hero.radius;
+        for (let dx = -R; dx <= R; dx++)
+          for (let dz = -R; dz <= R; dz++) {
+            const step = Math.max(Math.abs(dx), Math.abs(dz)) === R;
+            F.set(cx + dx, y0 + 1, cz + dz, step ? withShape(this.roles.trim, Shape.SLAB) : this.roles.accent);
+            for (let ly = 2; ly < STOREY_H; ly++) F.set(cx + dx, y0 + ly, cz + dz, 0);
+          }
+        for (const [dx, dz] of R >= 2 ? [[-3, -3], [3, -3], [-3, 3], [3, 3]] : []) {
+          const X = cx + dx;
+          const Z = cz + dz;
+          if (!hero.interior(X, Z) || hero.keep.has(`${X},${Z}`) || F.get(X, y0, Z) === 0) continue;
+          for (let ly = 1; ly < STOREY_H; ly++) F.set(X, y0 + ly, Z, withShape(this.roles.pillar, Shape.PILLAR));
+        }
+        heroSpot = this.world(cx, y0 + 2, cz);
+      }
+      if (hero.ring) {
+        const y1 = y0 + STOREY_H;
+        for (const key of hero.voids) {
+          const [X, Z] = key.split(',').map(Number);
+          F.set(X, y1, Z, 0);
+          F.set(X, y1 + 1, Z, 0);
+        }
+        for (const key of hero.voids) {
+          const [X, Z] = key.split(',').map(Number);
+          for (const [dx, dz] of SIDES) {
+            const nx = X + dx;
+            const nz = Z + dz;
+            const nk = `${nx},${nz}`;
+            if (hero.voids.has(nk) || hero.keep.has(nk) || F.get(nx, y1, nz) === 0) continue;
+            if (F.get(nx, y1 + 1, nz) === 0) F.set(nx, y1 + 1, nz, withShape(this.roles.trim, Shape.FENCE));
+          }
+        }
+      }
+    }
+
     // ---- Stairwell holes, then room floors.
     for (const [x, y, z] of holes) F.set(x, y, z, 0);
     const rooms: RoomInfo[] = roomBase.map((r) => {
@@ -586,7 +696,21 @@ export class Architect {
       const [i, j, k] = Plan.coords(idx);
       return { i, j, k, side: st.side, kind: st.kind };
     });
-    return { field: F.data, blocks, rooms, entrances, roofSpots, stairs: stairList, bridges, courts, outerStairs: D.outerStairs, terraceDoors: D.terrace.size, crowns };
+    return {
+      field: F.data,
+      blocks,
+      rooms,
+      entrances,
+      roofSpots,
+      stairs: stairList,
+      bridges,
+      courts,
+      outerStairs: D.outerStairs,
+      terraceDoors: D.terrace.size,
+      crowns,
+      hero: hero ? { cells: [...hero.cells], spot: heroSpot, ring: hero.ring } : null,
+      dropHoles,
+    };
   }
 
   // ------------------------------------------------------------------ derivation
@@ -876,7 +1000,8 @@ export class Architect {
       if (exterior) return { ...base, cols: gate, rows: [1, 2], extra: arch, door: true, frame: true };
       return { ...base, cols: gate, rows: [1, 2], extra: arch };
     }
-    if (!exterior) return { ...base, cols: [MID - 1, MID], rows: [1, 2, 3] };
+    // Interior faces: a doorway plus a shooting slot at chest height on either side of it.
+    if (!exterior) return { ...base, cols: [MID - 1, MID], rows: [1, 2, 3], extra: [[1, 2], [CELL - 2, 2]] };
     const [dx, dz] = SIDES[s];
     const ni = i + dx;
     const nj = j + dz;
@@ -889,7 +1014,8 @@ export class Architect {
       for (let c = 1; c < CELL - 1; c++) if (c !== MID - 1 && c !== MID) glassCols.push(c);
       return { ...base, cols: [MID - 1, MID], rows: [2, 3], glassCols };
     }
-    if (k === 0) return { ...base, cols: win, rows: [2] };
+    // Ground windows are two rows tall: a jump and a mantle gets you in, so every room has flanks.
+    if (k === 0) return { ...base, cols: win, rows: [2, 3] };
     if (this.castle) return { ...base, cols: win, rows: [2, 3] };
     return { ...base, cols: win, rows: [2, 3], extra: arch };
   }
@@ -1075,12 +1201,200 @@ export class Architect {
     }
   }
 
+  /** Field cells a stair needs kept as floor and free: its three steps and the cells beside them. */
+  private stairKeep(st: StairPlan | null): Set<string> {
+    const out = new Set<string>();
+    if (!st) return out;
+    for (let n = 0; n < 3; n++) {
+      const [sx, sz] = st.run[n];
+      out.add(`${sx},${sz}`);
+      for (const [dx, dz] of SIDES) out.add(`${sx + dx},${sz + dz}`);
+    }
+    return out;
+  }
+
+  /** Interior cover for a room: two columns in wide halls, otherwise a knee-high wall or crates. */
+  private furnish(F: Field, plan: Plan, i: number, j: number, k: number, blocked: Set<string>): void {
+    const x0 = i * CELL;
+    const z0 = j * CELL;
+    const y0 = k * STOREY_H;
+    // Two cells in from every wall keeps doorways and windows clear.
+    const free = (lx: number, lz: number): boolean =>
+      lx >= 2 && lx <= CELL - 3 && lz >= 2 && lz <= CELL - 3 && !blocked.has(`${x0 + lx},${z0 + lz}`) && F.get(x0 + lx, y0, z0 + lz) !== 0 && F.get(x0 + lx, y0 + 1, z0 + lz) === 0;
+    if (this.inWideHall(plan, i, j, k)) {
+      // A diagonal pair of columns: something to peek around, no dead corners.
+      const pair: [number, number][] = hash(i, j, k, 4) % 2 === 0 ? [[2, 2], [CELL - 3, CELL - 3]] : [[2, CELL - 3], [CELL - 3, 2]];
+      for (const [lx, lz] of pair) if (free(lx, lz)) for (let ly = 1; ly < STOREY_H; ly++) F.set(x0 + lx, y0 + ly, z0 + lz, withShape(this.roles.pillar, Shape.PILLAR));
+      return;
+    }
+    const roll = hash(i, j, k, 3) % 10;
+    if (roll < 4) {
+      // Knee-high wall across the middle third of the room.
+      const lz = hash(i, j, k, 5) % 2 === 0 ? 2 : CELL - 3;
+      const cells: [number, number][] = [[MID - 1, lz], [MID, lz], [MID + 1, lz]];
+      if (cells.every(([lx, lz2]) => free(lx, lz2))) for (const [lx, lz2] of cells) F.set(x0 + lx, y0 + 1, z0 + lz2, this.roles.wallAlt);
+    } else if (roll < 7) {
+      // Crates towards a corner.
+      const lx = hash(i, j, k, 4) % 2 === 0 ? 2 : CELL - 3;
+      const lz = hash(i, j, k, 5) % 2 === 0 ? 2 : CELL - 3;
+      const lz2 = lz === 2 ? 3 : CELL - 4;
+      if (free(lx, lz) && free(lx, lz2)) {
+        F.set(x0 + lx, y0 + 1, z0 + lz, this.roles.floor);
+        F.set(x0 + lx, y0 + 1, z0 + lz2, this.roles.floor);
+      }
+    }
+  }
+
+  /**
+   * The flag hall: the flag room's same-tone hall, a podium spot at its centre, and, when every
+   * cell of the hall has a room above, the cells of that upper floor to open into a gallery ring.
+   */
+  private heroPlan(plan: Plan, stairs: Map<number, StairPlan>): HeroPlan | null {
+    if (plan.hero < 0) return null;
+    const [hi, hj, hk] = Plan.coords(plan.hero);
+    if (!plan.has(hi, hj, hk)) return null;
+    const tone = plan.tone(hi, hj, hk);
+    const cells = new Set<number>([plan.hero]);
+    const stack = [plan.hero];
+    while (stack.length) {
+      const idx = stack.pop()!;
+      const [ci, cj] = Plan.coords(idx);
+      for (const [dx, dz] of SIDES) {
+        const ni = ci + dx;
+        const nj = cj + dz;
+        if (!plan.has(ni, nj, hk) || plan.tone(ni, nj, hk) !== tone) continue;
+        const n = Plan.index(ni, nj, hk);
+        if (!cells.has(n)) {
+          cells.add(n);
+          stack.push(n);
+        }
+      }
+    }
+    const inHero = (X: number, Z: number): boolean => {
+      if (X < 0 || Z < 0) return false;
+      const i = Math.floor(X / CELL);
+      const j = Math.floor(Z / CELL);
+      return i < GRID && j < GRID && cells.has(Plan.index(i, j, hk));
+    };
+    const interior = (X: number, Z: number): boolean => {
+      if (!inHero(X, Z)) return false;
+      const lx = X % CELL;
+      const lz = Z % CELL;
+      if (lx === 0 && !inHero(X - 1, Z)) return false;
+      if (lx === CELL - 1 && !inHero(X + 1, Z)) return false;
+      if (lz === 0 && !inHero(X, Z - 1)) return false;
+      if (lz === CELL - 1 && !inHero(X, Z + 1)) return false;
+      // Corner posts of merged cells stay as columns.
+      if ((lx === 0 || lx === CELL - 1) && (lz === 0 || lz === CELL - 1)) return false;
+      return true;
+    };
+    // Stairs arriving from below leave holes in this floor and need their exits; this storey's and
+    // the gallery's stairs need their runs and approaches.
+    const keep = new Set<string>();
+    for (const idx of cells) {
+      const [i, j] = Plan.coords(idx);
+      for (const kk of [hk - 1, hk, hk + 1]) if (kk >= 0) for (const c of this.stairKeep(stairs.get(Plan.index(i, j, kk)) ?? null)) keep.add(c);
+    }
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minZ = Infinity;
+    let maxZ = -Infinity;
+    for (const idx of cells) {
+      const [i, j] = Plan.coords(idx);
+      minX = Math.min(minX, i * CELL);
+      maxX = Math.max(maxX, i * CELL + CELL - 1);
+      minZ = Math.min(minZ, j * CELL);
+      maxZ = Math.max(maxZ, j * CELL + CELL - 1);
+    }
+    const cx0 = Math.floor((minX + maxX) / 2);
+    const cz0 = Math.floor((minZ + maxZ) / 2);
+    // A 3x3 podium with a ring of steps in a hall, a single raised block with steps in one room.
+    const radius = cells.size >= 2 ? 2 : 1;
+    let podium: [number, number] | null = null;
+    // Nearest spot to the centre whose whole footprint is free floor (in a 2x2 hall the centre is a
+    // column, so the podium settles beside it).
+    const offsets: [number, number][] = [];
+    for (let ox = -7; ox <= 7; ox++) for (let oz = -7; oz <= 7; oz++) offsets.push([ox, oz]);
+    offsets.sort((a, b) => Math.hypot(a[0], a[1]) - Math.hypot(b[0], b[1]));
+    for (const [ox, oz] of offsets) {
+      const cx = cx0 + ox;
+      const cz = cz0 + oz;
+      let ok = true;
+      for (let dx = -radius; dx <= radius && ok; dx++) for (let dz = -radius; dz <= radius; dz++) if (!interior(cx + dx, cz + dz) || keep.has(`${cx + dx},${cz + dz}`)) { ok = false; break; }
+      if (ok) {
+        podium = [cx, cz];
+        break;
+      }
+    }
+    const covered = cells.size >= 2 && [...cells].every((idx) => { const [i, j] = Plan.coords(idx); return plan.has(i, j, hk + 1); });
+    const voids = new Set<string>();
+    if (covered) {
+      const edge = (X: number, Z: number): boolean => {
+        if (!inHero(X, Z)) return true;
+        const lx = X % CELL;
+        const lz = Z % CELL;
+        return (lx === 0 && !inHero(X - 1, Z)) || (lx === CELL - 1 && !inHero(X + 1, Z)) || (lz === 0 && !inHero(X, Z - 1)) || (lz === CELL - 1 && !inHero(X, Z + 1));
+      };
+      for (const idx of cells) {
+        const [i, j] = Plan.coords(idx);
+        for (let lz = 0; lz < CELL; lz++)
+          for (let lx = 0; lx < CELL; lx++) {
+            const X = i * CELL + lx;
+            const Z = j * CELL + lz;
+            if (!interior(X, Z) || keep.has(`${X},${Z}`)) continue;
+            // Two blocks of walkway along every outer wall of the hall.
+            let near = false;
+            for (let dx = -2; dx <= 2 && !near; dx++) for (let dz = -2; dz <= 2; dz++) if (edge(X + dx, Z + dz)) { near = true; break; }
+            if (!near) voids.add(`${X},${Z}`);
+          }
+      }
+    }
+    return { k: hk, cells, keep, podium, radius, voids, ring: covered && voids.size > 0, interior };
+  }
+
   private inWideHall(plan: Plan, i: number, j: number, k: number): boolean {
     const tone = plan.tone(i, j, k);
     let same = 0;
     for (const [dx, dz] of SIDES) if (plan.has(i + dx, j + dz, k) && plan.tone(i + dx, j + dz, k) === tone) same++;
     return same >= 2;
   }
+}
+
+/**
+ * Size of the same-tone hall a room belongs to and whether every cell of it has a room above (the
+ * two things that make a great flag hall: space to fight in and a gallery ring over it).
+ */
+export function hallInfo(plan: Plan, i: number, j: number, k: number): { cells: number; covered: boolean } {
+  if (!plan.has(i, j, k)) return { cells: 0, covered: false };
+  const tone = plan.tone(i, j, k);
+  const seen = new Set<number>([Plan.index(i, j, k)]);
+  const stack = [Plan.index(i, j, k)];
+  let covered = true;
+  while (stack.length) {
+    const idx = stack.pop()!;
+    const [ci, cj] = Plan.coords(idx);
+    if (!plan.has(ci, cj, k + 1)) covered = false;
+    for (const [dx, dz] of SIDES) {
+      const ni = ci + dx;
+      const nj = cj + dz;
+      if (!plan.has(ni, nj, k) || plan.tone(ni, nj, k) !== tone) continue;
+      const n = Plan.index(ni, nj, k);
+      if (!seen.has(n)) {
+        seen.add(n);
+        stack.push(n);
+      }
+    }
+  }
+  return { cells: seen.size, covered: covered && seen.size >= 2 };
+}
+
+/** Rooms in the order a flag should try them: covered halls first, then big halls, then buried rooms. */
+export function heroOrder<T extends { i: number; j: number; k: number; depth: number }>(plan: Plan, rooms: T[]): T[] {
+  const score = (r: T): number => {
+    const h = hallInfo(plan, r.i, r.j, r.k);
+    return (h.covered ? 40 : 0) + Math.min(4, h.cells) * 6 + r.depth;
+  };
+  return [...rooms].sort((a, b) => score(b) - score(a));
 }
 
 /** Applies a generated field to the world inside the plot, returning the cells that changed. */

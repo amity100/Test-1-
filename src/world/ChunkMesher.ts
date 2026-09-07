@@ -12,6 +12,8 @@ export interface MeshData {
   tints: Float32Array;
   mats: Float32Array;
   aos: Float32Array;
+  /** Per vertex: (indoor 0/1, lamp light 0..1) baked from roof cover and nearby lamp blocks. */
+  lits: Float32Array;
   indices: Uint32Array;
   quadCount: number;
 }
@@ -28,8 +30,12 @@ class MeshBuilder {
   tints: number[] = [];
   mats: number[] = [];
   aos: number[] = [];
+  lits: number[] = [];
   indices: number[] = [];
   quadCount = 0;
+  /** Lighting of the faces being emitted: indoor flag and lamp level (set before each add). */
+  indoor = 0;
+  lamp = 0;
 
   addQuad(
     corners: number[][], // 4 corners [x,y,z], in order c0,c1,c2,c3 (CCW for +normal)
@@ -49,6 +55,7 @@ class MeshBuilder {
       this.tints.push(tintR, tintG, tintB);
       this.mats.push(mat);
       this.aos.push(AO_CURVE[ao[i]]);
+      this.lits.push(this.indoor, this.lamp);
     }
     // Choose the diagonal that keeps AO interpolation smooth.
     const diag02 = ao[0] + ao[2] > ao[1] + ao[3];
@@ -88,6 +95,7 @@ class MeshBuilder {
       this.tints.push(tintR, tintG, tintB);
       this.mats.push(mat);
       this.aos.push(aoOrd[k]);
+      this.lits.push(this.indoor, this.lamp);
     }
     for (let k = 1; k + 1 < order.length; k++) this.indices.push(base, base + k, base + k + 1);
     this.quadCount++;
@@ -102,6 +110,7 @@ class MeshBuilder {
       tints: new Float32Array(this.tints),
       mats: new Float32Array(this.mats),
       aos: new Float32Array(this.aos),
+      lits: new Float32Array(this.lits),
       indices: new Uint32Array(this.indices),
       quadCount: this.quadCount,
     };
@@ -112,6 +121,7 @@ const pad = new Uint16Array(P * P * P);
 const maskVal = new Int32Array(N * N);
 const maskDir = new Int8Array(N * N);
 const maskAo = new Int32Array(N * N);
+const maskLit = new Uint8Array(N * N);
 
 function pidx(x: number, y: number, z: number): number {
   return ((x + 1) * P + (y + 1)) * P + (z + 1);
@@ -134,6 +144,57 @@ function vertexAO(s1: boolean, s2: boolean, c: boolean): number {
 }
 
 /** Greedy-meshes one chunk into opaque and transparent geometry data (world-space positions). */
+/** Materials that throw a warm pool of light on nearby blocks (baked per vertex). */
+const LAMP_MATS = new Set<number>([Mat.LAMP, Mat.CRYSTAL, Mat.NEON]);
+const LAMP_REACH = 3;
+const ROOF_SCAN = 14;
+
+/**
+ * Indoor/lamp lookup for one chunk mesh: a cell is indoor when a block roofs it within a few
+ * metres, and lit by the nearest lamp within reach. Both are cheap column scans, cached per
+ * padded column so a chunk costs a few thousand block reads.
+ */
+class LightProbe {
+  private roof = new Int16Array((N + 2) * (N + 2)).fill(-32768);
+  private lamps: number[][] = [];
+  constructor(private world: VoxelWorld, private ox: number, private oy: number, private oz: number) {
+    const r = LAMP_REACH;
+    for (let x = -r; x < N + r; x++)
+      for (let y = -r; y < N + r; y++)
+        for (let z = -r; z < N + r; z++) {
+          const v = world.get(ox + x, oy + y, oz + z);
+          if (v !== 0 && LAMP_MATS.has(blockMat(v))) this.lamps.push([x, y, z]);
+        }
+  }
+  /** Highest solid block above the padded column (local y), or a sentinel when open to the sky. */
+  private roofAt(lx: number, lz: number): number {
+    const i = (lx + 1) * (N + 2) + (lz + 1);
+    let top = this.roof[i];
+    if (top !== -32768) return top;
+    top = -30000;
+    for (let y = N + ROOF_SCAN; y >= -1; y--) {
+      const v = this.world.get(this.ox + lx, this.oy + y, this.oz + lz);
+      if (v !== 0 && blockShape(v) === 0 && !isTransparent(blockMat(v))) {
+        top = y;
+        break;
+      }
+    }
+    this.roof[i] = top;
+    return top;
+  }
+  /** Packed (indoor | lampLevel << 1) for the air cell at local coordinates. */
+  at(lx: number, ly: number, lz: number): number {
+    const indoor = this.roofAt(lx, lz) > ly ? 1 : 0;
+    let best = LAMP_REACH + 1;
+    for (const [x, y, z] of this.lamps) {
+      const d = Math.max(Math.abs(x - lx), Math.abs(y - ly), Math.abs(z - lz));
+      if (d < best) best = d;
+    }
+    const lamp = best > LAMP_REACH ? 0 : best <= 1 ? 3 : best === 2 ? 2 : 1;
+    return indoor | (lamp << 1);
+  }
+}
+
 export function meshChunk(world: VoxelWorld, cx: number, cy: number, cz: number): ChunkMeshResult {
   const ox = cx * N;
   const oy = cy * N;
@@ -154,6 +215,7 @@ export function meshChunk(world: VoxelWorld, cx: number, cy: number, cz: number)
   const x = [0, 0, 0];
   const q = [0, 0, 0];
   const nb = [0, 0, 0];
+  const light = new LightProbe(world, ox, oy, oz);
 
   for (let d = 0; d < 3; d++) {
     const u = (d + 1) % 3;
@@ -184,11 +246,13 @@ export function meshChunk(world: VoxelWorld, cx: number, cy: number, cz: number)
             // Beyond-layer cell is b (x + q).
             nb[0] = x[0] + q[0]; nb[1] = x[1] + q[1]; nb[2] = x[2] + q[2];
             maskAo[n] = computeAO(nb, u, v);
+            maskLit[n] = light.at(nb[0], nb[1], nb[2]);
           } else if (faceB) {
             maskVal[n] = b;
             maskDir[n] = -1;
             nb[0] = x[0]; nb[1] = x[1]; nb[2] = x[2];
             maskAo[n] = computeAO(nb, u, v);
+            maskLit[n] = light.at(nb[0], nb[1], nb[2]);
           } else {
             maskVal[n] = 0;
           }
@@ -207,13 +271,14 @@ export function meshChunk(world: VoxelWorld, cx: number, cy: number, cz: number)
           }
           const dir = maskDir[n];
           const ao = maskAo[n];
+          const lit = maskLit[n];
           let w = 1;
-          while (i + w < N && maskVal[n + w] === val && maskDir[n + w] === dir && maskAo[n + w] === ao) w++;
+          while (i + w < N && maskVal[n + w] === val && maskDir[n + w] === dir && maskAo[n + w] === ao && maskLit[n + w] === lit) w++;
           let h = 1;
           outer: for (; j + h < N; h++) {
             for (let k = 0; k < w; k++) {
               const m = n + h * N + k;
-              if (maskVal[m] !== val || maskDir[m] !== dir || maskAo[m] !== ao) break outer;
+              if (maskVal[m] !== val || maskDir[m] !== dir || maskAo[m] !== ao || maskLit[m] !== lit) break outer;
             }
           }
           // Emit quad.
@@ -234,6 +299,8 @@ export function meshChunk(world: VoxelWorld, cx: number, cy: number, cz: number)
           const mat = blockMat(val);
           const col = blockColor(val) * 3;
           const builder = isTransparent(mat) ? transparent : opaque;
+          builder.indoor = lit & 1;
+          builder.lamp = (lit >> 1) / 3;
           builder.addQuad(
             [c0, c1, c2, c3],
             q[0] * dir, q[1] * dir, q[2] * dir,
@@ -262,6 +329,9 @@ export function meshChunk(world: VoxelWorld, cx: number, cy: number, cz: number)
           const v = pad[pidx(lx, ly, lz)];
           if (v === 0 || blockShape(v) === 0) continue;
           const builder = isTransparent(blockMat(v)) ? transparent : opaque;
+          const lit = light.at(lx, ly + 1, lz);
+          builder.indoor = lit & 1;
+          builder.lamp = (lit >> 1) / 3;
           emitShape(
             builder,
             ox + lx, oy + ly, oz + lz,

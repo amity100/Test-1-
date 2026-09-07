@@ -3,6 +3,7 @@ import { t } from '../core/i18n';
 import { formatTime } from '../core/MathUtil';
 import type { Builder, BuilderTool } from './Builder';
 import type { Tone } from './Architect';
+import { TRAP_KINDS, TRAP_SLOTS, TRAP_COST, type TrapKind } from '../sim/Traps';
 
 export interface BuilderUICallbacks {
   ready(): void;
@@ -23,8 +24,15 @@ const ICON = {
   roof: svg('<path d="M3 13L12 4l9 9"/><path d="M6 11v9h12v-9"/>'),
   frame: svg('<path d="M4 12h16M12 4v16"/>'),
   pillar: svg('<path d="M4 4h16M4 20h16"/><path d="M8 4v16M16 4v16"/><path d="M12 7v10"/>'),
+  trap: svg('<path d="M4 20h16"/><path d="M6 20l2-8 2 8M11 20l2-10 2 10M16 20l1.5-6 1.5 6"/>'),
+  spikes: svg('<path d="M4 20h16"/><path d="M6 20l2-8 2 8M11 20l2-10 2 10M16 20l1.5-6 1.5 6"/>'),
+  trapdoor: svg('<rect x="4" y="10" width="16" height="6"/><path d="M4 13h16"/><path d="M12 10V4"/><path d="M9 7l3-3 3 3"/>'),
+  mine: svg('<circle cx="12" cy="14" r="5"/><path d="M12 9V6M8.5 10.5l-2-2M15.5 10.5l2-2M4 20h16"/>'),
+  turret: svg('<rect x="6" y="14" width="12" height="5"/><path d="M12 14V9"/><path d="M8 9h8"/><path d="M12 9l7-3"/>'),
+  gate: svg('<path d="M5 4v16M19 4v16M9 4v16M15 4v16"/><path d="M5 8h14M5 16h14"/>'),
 };
-const TIPS = ['tipBridge', 'tipTerrace', 'tipColonnade', 'tipCourt', 'tipStairs', 'tipTowers'];
+const TRAP_KEYS: Record<TrapKind, string> = { spikes: 'trapSpikes', trapdoor: 'trapTrapdoor', mine: 'trapMine', turret: 'trapTurret', gate: 'trapGate' };
+const TIPS = ['tipBridge', 'tipTraps', 'tipTerrace', 'tipColonnade', 'tipCourt', 'tipStairs', 'tipTowers'];
 /** Seconds each tip stays up, and how long tips keep rotating before the hint retires. */
 const TIP_SECONDS = 9;
 const TIPS_TOTAL_SECONDS = 110;
@@ -39,6 +47,9 @@ export class BuilderUI {
   readonly root: HTMLElement;
   private top: HTMLElement;
   private bar: HTMLElement;
+  private sub: HTMLElement;
+  private slotsEl!: HTMLElement;
+  private kindBtns = new Map<TrapKind, HTMLButtonElement>();
   private hint: HTMLElement;
   private toast: HTMLElement;
   private timerEl!: HTMLElement;
@@ -62,10 +73,12 @@ export class BuilderUI {
     parent.appendChild(this.root);
     this.top = el('div', 'bld-top');
     this.bar = el('div', 'bld-bar');
+    this.sub = el('div', 'bld-sub');
+    this.sub.hidden = true;
     this.hint = el('div', 'bld-hint');
     this.toast = el('div', 'bld-toast');
     this.toast.hidden = true;
-    for (const panel of [this.top, this.bar]) {
+    for (const panel of [this.top, this.bar, this.sub]) {
       panel.setAttribute('data-ui', '1');
       panel.addEventListener('pointerenter', (e) => {
         if (e.pointerType === 'mouse') this.builder.uiHover = true;
@@ -74,7 +87,7 @@ export class BuilderUI {
         if (e.pointerType === 'mouse') this.builder.uiHover = false;
       });
     }
-    this.root.append(this.top, this.bar, this.hint, this.toast);
+    this.root.append(this.top, this.bar, this.sub, this.hint, this.toast);
     this.render();
   }
 
@@ -134,6 +147,20 @@ export class BuilderUI {
     this.toolBtns.clear();
     this.toolBtns.set('erase', this.iconBtn(this.bar, 'tool erase', ICON.erase, t('bldEraser'), () => this.toggleTool('erase')));
     this.toolBtns.set('flag', this.iconBtn(this.bar, 'tool flag', ICON.flag, t('bldFlag'), () => this.toggleTool('flag')));
+    this.toolBtns.set('trap', this.iconBtn(this.bar, 'tool trap', ICON.trap, t('bldTrap'), () => this.toggleTool('trap')));
+    // Trap kinds (shown while the trap tool is active) with the slot counter.
+    this.sub.innerHTML = '';
+    this.kindBtns.clear();
+    for (const kind of TRAP_KINDS) {
+      const b = this.iconBtn(this.sub, `kind ${kind}`, ICON[kind], t(TRAP_KEYS[kind]), () => {
+        this.builder.setTrapKind(kind);
+        this.refresh();
+      });
+      if (TRAP_COST[kind] > 1) b.appendChild(el('span', 'cost', `×${TRAP_COST[kind]}`));
+      this.kindBtns.set(kind, b);
+    }
+    this.slotsEl = el('div', 'slots');
+    this.sub.appendChild(this.slotsEl);
     this.hint.textContent = t(this.compact ? 'bldHintTouch' : 'bldHintMouse');
     this.refresh();
   }
@@ -224,5 +251,19 @@ export class BuilderUI {
     this.redoBtn.classList.toggle('off', !b.canRedo);
     this.swatchBtns.forEach((s, i) => s.classList.toggle('active', b.tool === 'build' && b.tone === i));
     for (const [tool, el2] of this.toolBtns) el2.classList.toggle('active', b.tool === tool);
+    // Trap sub-bar.
+    const trapTool = b.tool === 'trap';
+    this.sub.hidden = !trapTool;
+    this.root.classList.toggle('trap', trapTool);
+    if (trapTool) {
+      const used = b.trapSlots;
+      for (const [kind, el3] of this.kindBtns) {
+        el3.classList.toggle('active', b.trapKind === kind);
+        el3.classList.toggle('off', used + TRAP_COST[kind] > TRAP_SLOTS);
+      }
+      const txt = t('trapSlots', { n: used, total: TRAP_SLOTS });
+      if (this.slotsEl.textContent !== txt) this.slotsEl.textContent = txt;
+      if (this.tipIndex < 0) this.hint.textContent = t('bldHintTrap');
+    } else if (this.tipIndex < 0 && !this.hint.hidden) this.hint.textContent = t(this.compact ? 'bldHintTouch' : 'bldHintMouse');
   }
 }

@@ -6,6 +6,13 @@ export interface VoxelMaterials {
   opaque: THREE.MeshStandardMaterial;
   transparent: THREE.MeshStandardMaterial;
   setNormalScale(v: number): void;
+  /**
+   * Indoor light: how much sky/ambient light reaches roofed cells (1 = as outdoors, 0 = pitch
+   * black) and how strong the warm pools around lamp blocks are (0 turns the lamps off).
+   */
+  setIndoor(ambient: number, lamps: number): void;
+  /** Current indoor settings (for events that fade them). */
+  readonly indoor: { ambient: number; lamps: number };
 }
 
 /** Width of the darkened/bevelled band along block edges, per texture kind. */
@@ -43,6 +50,8 @@ export function createVoxelMaterials(tex: VoxelTextureSet): VoxelMaterials {
     uORM: { value: tex.orm },
     uNormalScale: { value: 1.0 },
     uBevel: { value: Array.from(bevel) },
+    uIndoorAmbient: { value: 0.55 },
+    uLampPower: { value: 1.0 },
   };
 
   const make = (transparent: boolean): THREE.MeshStandardMaterial => {
@@ -56,7 +65,7 @@ export function createVoxelMaterials(tex: VoxelTextureSet): VoxelMaterials {
       side: THREE.FrontSide,
       envMapIntensity: 1.0,
     });
-    mat.customProgramCacheKey = () => (transparent ? 'voxel-transparent-v2' : 'voxel-opaque-v2');
+    mat.customProgramCacheKey = () => (transparent ? 'voxel-transparent-v3' : 'voxel-opaque-v3');
     mat.onBeforeCompile = (shader) => {
       Object.assign(shader.uniforms, uniforms);
       shader.vertexShader = shader.vertexShader
@@ -67,9 +76,11 @@ export function createVoxelMaterials(tex: VoxelTextureSet): VoxelMaterials {
           attribute float aAo;
           attribute vec3 aTint;
           attribute vec2 aUv;
+          attribute vec2 aLit;
           varying vec2 vUvB;
           varying float vMat;
           varying float vAo;
+          varying vec2 vLit;
           varying vec3 vTint;
           varying vec3 vWNormal;
           varying vec3 vWPos;`,
@@ -80,6 +91,7 @@ export function createVoxelMaterials(tex: VoxelTextureSet): VoxelMaterials {
           vUvB = aUv;
           vMat = aMat;
           vAo = aAo;
+          vLit = aLit;
           vTint = aTint;
           vWNormal = normal;
           vWPos = (modelMatrix * vec4(position, 1.0)).xyz;`,
@@ -93,9 +105,12 @@ export function createVoxelMaterials(tex: VoxelTextureSet): VoxelMaterials {
           uniform highp sampler2DArray uORM;
           uniform float uNormalScale;
           uniform float uBevel[${MAT_COUNT}];
+          uniform float uIndoorAmbient;
+          uniform float uLampPower;
           varying vec2 vUvB;
           varying float vMat;
           varying float vAo;
+          varying vec2 vLit;
           varying vec3 vTint;
           varying vec3 vWNormal;
           varying vec3 vWPos;`,
@@ -152,7 +167,10 @@ export function createVoxelMaterials(tex: VoxelTextureSet): VoxelMaterials {
         .replace(
           '#include <aomap_fragment>',
           `float ambientOcclusion = vAo;
-          reflectedLight.indirectDiffuse *= ambientOcclusion;
+          // Roofed cells get less sky light; lamps throw warm pools back onto nearby blocks.
+          float indoorScale = mix(1.0, uIndoorAmbient, vLit.x);
+          reflectedLight.indirectDiffuse *= ambientOcclusion * indoorScale;
+          reflectedLight.indirectDiffuse += diffuseColor.rgb * vec3(1.0, 0.72, 0.42) * vLit.y * vLit.y * 0.9 * uLampPower * ambientOcclusion;
           #if defined( USE_ENVMAP ) && defined( STANDARD )
             float dotNV = saturate( dot( geometryNormal, geometryViewDir ) );
             reflectedLight.indirectSpecular *= computeSpecularOcclusion( dotNV, ambientOcclusion, material.roughness );
@@ -164,11 +182,19 @@ export function createVoxelMaterials(tex: VoxelTextureSet): VoxelMaterials {
 
   const opaque = make(false);
   const transparent = make(true);
+  const indoor = { ambient: 0.55, lamps: 1 };
   return {
     opaque,
     transparent,
+    indoor,
     setNormalScale(v: number) {
       uniforms.uNormalScale.value = v;
+    },
+    setIndoor(ambient: number, lamps: number) {
+      indoor.ambient = ambient;
+      indoor.lamps = lamps;
+      uniforms.uIndoorAmbient.value = ambient;
+      uniforms.uLampPower.value = lamps;
     },
   };
 }

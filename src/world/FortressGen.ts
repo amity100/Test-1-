@@ -3,7 +3,7 @@ import { PLOT_Y, type Plot } from './Layout';
 import type { StyleId } from './Styles';
 import { Random } from '../core/Random';
 import { bestHidingCells, checkReachability, type Cell } from './Reachability';
-import { Architect, Plan, GRID, MAX_STOREYS, MAX_BLOCKS, applyField, type Tone } from '../build/Architect';
+import { Architect, Plan, GRID, MAX_STOREYS, MAX_BLOCKS, applyField, type Tone, heroOrder } from '../build/Architect';
 
 /**
  * Fortress plans for the bots (and the player's "surprise me" button): coarse room-block layouts
@@ -19,6 +19,10 @@ export interface FortressResult {
   spawn: Cell;
   blocks: number;
   archetype: Archetype;
+  /** Doorway thresholds, every free room floor cell, and the flag hall's floor (for seeding traps). */
+  entrances: Cell[];
+  floors: Cell[];
+  heroFloors: Cell[];
 }
 
 const TECH: StyleId[] = ['modern', 'neon'];
@@ -230,15 +234,26 @@ export function generateFortress(world: VoxelWorld, plot: Plot, style: StyleId, 
   const arch = archetype ?? rng.pick(archetypesFor(style));
   const plan = planFortress(rng, style, limit, arch);
   const architect = new Architect(plot, style);
-  const res = architect.generate(plan);
+  let res = architect.generate(plan);
   applyField(world, plot, res.field);
   // Flag: the most buried room whose floor is reachable from outside; spawn nearby on another floor.
-  const rooms = res.rooms.filter((r) => r.floor.length > 0).sort((a, b) => b.depth - a.depth);
+  let rooms = heroOrder(plan, res.rooms.filter((r) => r.floor.length > 0));
   let flag: Cell | null = null;
   for (const r of rooms) {
     const c = r.floor[Math.floor(r.floor.length / 2)];
     if (checkReachability(world, plot, c, c).ok) {
-      flag = { ...c };
+      // Make that room the hero hall (podium, gallery ring) and put the flag on the podium.
+      plan.hero = Plan.index(r.i, r.j, r.k);
+      res = architect.generate(plan);
+      applyField(world, plot, res.field);
+      rooms = heroOrder(plan, res.rooms.filter((rr) => rr.floor.length > 0));
+      const spot = res.hero?.spot ?? null;
+      if (spot && checkReachability(world, plot, spot, spot).ok) flag = { ...spot };
+      else {
+        const room = res.rooms.find((rr) => rr.i === r.i && rr.j === r.j && rr.k === r.k);
+        const c2 = room && room.floor.length ? room.floor[Math.floor(room.floor.length / 2)] : c;
+        if (checkReachability(world, plot, c2, c2).ok) flag = { ...c2 };
+      }
       break;
     }
   }
@@ -252,7 +267,9 @@ export function generateFortress(world: VoxelWorld, plot: Plot, style: StyleId, 
     return d >= 3 && d <= 14 && world.get(c.x, c.y, c.z) === 0 && world.get(c.x, c.y + 1, c.z) === 0;
   });
   if (spots.length) spawn = { ...rng.pick(spots) };
-  return { flag, spawn, blocks: res.blocks, archetype: arch };
+  const heroCells = new Set(res.hero?.cells ?? []);
+  const heroFloors = res.rooms.filter((r) => heroCells.has(Plan.index(r.i, r.j, r.k))).flatMap((r) => r.floor);
+  return { flag, spawn, blocks: res.blocks, archetype: arch, entrances: res.entrances, floors: res.rooms.flatMap((r) => r.floor), heroFloors };
 }
 
 export { MAX_STOREYS };

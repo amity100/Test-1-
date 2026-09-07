@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Entity } from '../sim/Entities';
+import type { TrapSystem } from '../sim/Traps';
 import type { Combat } from '../sim/Combat';
 import type { CharacterController, MoveInput } from '../sim/CharacterController';
 import type { NavGrid } from './NavGrid';
@@ -56,6 +57,7 @@ export interface BotContext {
   defender: () => Entity | null;
   roundTime: () => number;
   anyCaptureProgress: () => number;
+  traps: TrapSystem;
 }
 
 type State = 'idle' | 'approach' | 'search' | 'engage' | 'capture' | 'hide' | 'return' | 'retreat' | 'cover' | 'investigate';
@@ -366,6 +368,22 @@ export class BotBrain {
       const w = e.weapon;
       if (w && !e.reloading && w.ammo < WEAPONS[w.id].magSize * 0.4 && w.reserve > 0) WeaponLogic.startReload(e);
       e.wantsAds = false;
+    }
+
+    // A gate barring the way (only its builder can pass) is shot open.
+    const gate = e.role === 'attacker' ? this.ctx.traps.gateAhead(e) : null;
+    if (gate) {
+      const d = gate.clone().sub(e.eyePos);
+      this.desiredYaw = Math.atan2(-d.x, -d.z);
+      this.desiredPitch = clamp(Math.atan2(d.y, Math.hypot(d.x, d.z)), -1.2, 1.2);
+      const w = e.weapon;
+      if (w && !e.reloading) {
+        if (w.ammo <= 0 && w.reserve > 0) WeaponLogic.startReload(e);
+        else {
+          e.triggerReleased = true;
+          WeaponLogic.tryFire(e, this.ctx.combat, now, 1);
+        }
+      }
     }
 
     // Smooth turning

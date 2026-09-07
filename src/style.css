@@ -775,3 +775,17 @@ body { background: radial-gradient(1200px 800px at 50% 30%, #16283a 0%, #0f1923 
   .vitals .streak { font-size: 11px; margin-top: 3px; padding: 1px 6px; }
   .vitals .armorbar { margin: -3px 0 5px; height: 4px; }
 }
+
+/* ---- v9: trap tool ---- */
+.bld-sub { position: absolute; left: 50%; bottom: calc(80px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: flex; gap: 6px; align-items: center; padding: 6px 8px; background: rgba(8, 14, 22, 0.78); border: 1px solid var(--line); clip-path: var(--chamfer); }
+.bld-sub .bld-btn.kind { width: 60px; height: 48px; padding: 0; flex-direction: column; gap: 1px; position: relative; }
+.bld-sub .bld-btn.kind .lb { font-size: 9px; }
+.bld-sub .bld-btn.kind .cost { position: absolute; top: 2px; right: 4px; font: 700 9px/1 var(--display); color: var(--accent2); }
+.bld-sub .bld-btn.kind.active { color: #041018; background: var(--accent2); border-color: var(--accent2); }
+.bld-sub .slots { font-family: var(--display); font-weight: 700; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #dbe3ec; padding: 0 8px; white-space: nowrap; }
+.bldui.trap .bld-hint { bottom: calc(146px + env(safe-area-inset-bottom, 0px)); }
+.bld-btn.tool.trap.active { background: var(--accent2); color: #1a1200; border-color: var(--accent2); }
+.bldui.compact .bld-sub { bottom: calc(60px + env(safe-area-inset-bottom, 0px)); gap: 4px; padding: 4px 6px; }
+.bldui.compact .bld-sub .bld-btn.kind { width: 46px; height: 40px; }
+.bldui.compact .bld-sub .slots { font-size: 10px; padding: 0 4px; }
+.bldui.compact.trap .bld-hint { bottom: calc(112px + env(safe-area-inset-bottom, 0px)); }

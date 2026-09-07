@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import type { App } from './App';
 import { Entity, type Role, emptyScore } from '../sim/Entities';
+import { TrapSystem, type TrapKind } from '../sim/Traps';
+import type { Cell } from '../world/Reachability';
+import { TrapMeshes } from '../render/TrapMeshes';
 import { CharacterController } from '../sim/CharacterController';
 import { Combat } from '../sim/Combat';
 import { Player } from '../sim/Player';
@@ -25,7 +28,7 @@ import { Builder } from '../build/Builder';
 import { BuilderUI } from '../build/BuilderUI';
 import { TouchControls, vibrate } from '../ui/TouchControls';
 import { IS_TOUCH } from './Input';
-import { generateFortress } from '../world/FortressGen';
+import { generateFortress, type FortressResult } from '../world/FortressGen';
 import { STYLE_IDS, type StyleId } from '../world/Styles';
 import { PLOT_Y, PLOT_MAX_HEIGHT, PLOT_HALF, ZONE_RADIUS, PLAYABLE_RADIUS, type Plot } from '../world/Layout';
 import { blockColor, PALETTE } from '../world/Voxel';
@@ -107,6 +110,8 @@ export class Game {
   private slowmoScale = 1;
   /** Who killed the local player (death cam looks at them). */
   private killerEntity: Entity | null = null;
+  readonly traps: TrapSystem;
+  private trapMeshes: TrapMeshes;
   private uiRoot: HTMLElement;
 
   constructor(readonly app: App) {
@@ -115,6 +120,36 @@ export class Game {
     this.combat = new Combat(app.world, app.terrain, () => this.entities);
     this.gadgets = new GadgetSystem(app.world, app.terrain, this.combat, app.plots, () => this.entities);
     this.controller.gadgets = this.gadgets;
+    this.traps = new TrapSystem(app.world, this.combat, () => this.entities, app.plots);
+    this.controller.traps = this.traps;
+    this.combat.solids = () => this.traps.solids();
+    this.trapMeshes = new TrapMeshes(this.traps, (pi) => this.entities.find((e) => e.plotIndex === pi)?.colorHex ?? '#ffffff');
+    app.gr.scene.add(this.trapMeshes.group);
+    this.traps.events.on('trigger', ({ trap, entity }) => {
+      const pos = new THREE.Vector3(trap.cell.x + 0.5, trap.cell.y + 0.2, trap.cell.z + 0.5);
+      const up = new THREE.Vector3(0, 1, 0);
+      if (trap.kind === 'spikes') {
+        audio.play('hit', { pos, pitch: 0.55, volume: 0.9 });
+        this.vfx.sparks(pos, up, 14, new THREE.Color(0xdddddd), 5);
+      } else if (trap.kind === 'trapdoor') {
+        audio.play('erase', { pos, pitch: 0.55 });
+        this.vfx.puff(pos, up, 10, 0.45, 0.5);
+      }
+      if (entity === this.player) {
+        this.hud.announce(t(trap.kind === 'spikes' ? 'trapHitSpikes' : trap.kind === 'trapdoor' ? 'trapHitTrapdoor' : 'trapHitMine'), '', 'clutch', 1.2);
+        this.local?.addShake(0.5);
+      }
+    });
+    this.traps.events.on('turretShot', ({ from, to }) => {
+      this.vfx.tracer(from, to, new THREE.Color(0.4, 0.9, 1), 0.025);
+      audio.play('smg', { pos: from, volume: 0.35, pitch: 1.3 });
+    });
+    this.traps.events.on('destroyed', ({ trap }) => {
+      const pos = new THREE.Vector3(trap.cell.x + 0.5, trap.cell.y + 0.8, trap.cell.z + 0.5);
+      this.vfx.debrisBurst(pos, new THREE.Vector3(0, 1, 0), 16, new THREE.Color(0x777777));
+      audio.play('explosion', { pos, volume: 0.4, pitch: 1.6 });
+      if (trap.kind === 'gate' && trap.plotIndex === this.player.plotIndex) this.hud.showBanner(t('gateBroken'), '', 1.6);
+    });
     this.gadgetMeshes = new GadgetMeshes(this.gadgets, () => this.entities);
     app.gr.scene.add(this.gadgetMeshes.group);
     this.playerPrimary = (PRIMARY_CHOICES as string[]).includes(settings.data.primary) ? (settings.data.primary as WeaponId) : 'rifle';
@@ -238,6 +273,7 @@ export class Game {
       this.entities.push(e);
     }
     // Clear all plots, generate bot fortresses
+    this.traps.clear();
     for (const p of plots) this.app.world.clearBox(p.minX, PLOT_Y, p.minZ, p.maxX, PLOT_Y + PLOT_MAX_HEIGHT + 2, p.maxZ);
     const match = new Match(cfg, { spawnFor: (e, role, target) => this.spawnFor(e, role, target) });
     this.match = match;
@@ -250,6 +286,7 @@ export class Game {
       const res = generateFortress(this.app.world, plots[e.plotIndex], style, this.rng.fork());
       match.setFlag(e.plotIndex, res.flag);
       match.setSpawn(e.plotIndex, res.spawn);
+      this.seedTraps(e.plotIndex, res);
       const brain = new BotBrain(e, this.botContext(), PROFILES[cfg.difficulty], this.rng.int(1, 1e9));
       this.bots.push(brain);
     }
@@ -275,6 +312,7 @@ export class Game {
     match.events.on('buildTimeUp', () => this.finishBuild(true));
     // Build phase: the block builder.
     this.builder = new Builder(this.app.world, this.app.terrain, plots[0], cfg.style, this.app.input, this.app.gr.camera, this.app.gr.scene);
+    this.builder.traps = this.traps;
     this.builderUI = new BuilderUI(
       this.uiRoot,
       this.builder,
@@ -296,6 +334,8 @@ export class Game {
       audio.play('erase');
       if (IS_TOUCH) vibrate(16);
     });
+    this.builder.events.on('trapPlaced', () => audio.play('place', { pitch: 1.25 }));
+    this.builder.events.on('trapRemoved', () => audio.play('erase', { pitch: 1.2 }));
     this.builder.enter();
     this.builderUI.show();
     this.mode = 'build';
@@ -326,7 +366,23 @@ export class Game {
         for (const e of this.entities) if (e.role === 'attacker') m = Math.max(m, e.captureProgress / RULES.captureTime);
         return m;
       },
+      traps: this.traps,
     };
+  }
+
+  /** Bot fortresses come with traps too: a mine by a doorway, spikes on the way in, a turret in the flag hall, maybe a trapdoor. */
+  private seedTraps(plotIndex: number, res: FortressResult): void {
+    const flag = res.flag;
+    const near = (c: Cell, d: number): boolean => Math.abs(c.x - flag.x) + Math.abs(c.z - flag.z) <= d;
+    const notFlag = (c: Cell): boolean => !(c.x === flag.x && c.z === flag.z && c.y === flag.y);
+    const tryPlace = (kind: TrapKind, cands: Cell[]): void => {
+      for (const c of this.rng.shuffle(cands.filter(notFlag)).slice(0, 16)) if (typeof this.traps.place(kind, c, plotIndex) !== 'string') return;
+    };
+    tryPlace('mine', res.entrances);
+    tryPlace('spikes', res.floors.filter((c) => near(c, 10) && !near(c, 2)));
+    if (this.rng.chance(0.6)) tryPlace('gate', res.entrances);
+    tryPlace('turret', res.heroFloors.filter((c) => !near(c, 3)));
+    tryPlace('trapdoor', res.floors.filter((c) => c.y >= PLOT_Y + 5));
   }
 
   finishBuild(timeUp: boolean): void {
@@ -416,6 +472,7 @@ export class Game {
         this.combat.clearProjectiles();
         this.gadgets.reset();
         this.gadgetMeshes.clear();
+        this.traps.resetRound();
         this.showLoadout();
         break;
       }
@@ -642,6 +699,8 @@ export class Game {
     this.vfx.clear();
     this.gadgets.reset();
     this.gadgetMeshes.clear();
+    this.traps.clear();
+    this.trapMeshes.clear();
     this.combat.clearProjectiles();
     this.hud.hide();
     this.viewModel.hidden = true;
@@ -831,6 +890,7 @@ export class Game {
     if (this.mode !== 'menu') this.vfx.ambient(this.app.gr.camera.position, dt);
     this.vfx.update(dt);
     this.gadgetMeshes.update(dt, this.time);
+    this.trapMeshes.update(dt, this.time, this.player.plotIndex);
     this.syncProjectiles();
     audio.setListener(this.app.gr.camera.position, new THREE.Vector3(1, 0, 0).applyQuaternion(this.app.gr.camera.quaternion));
     return this.cameraFocus;
@@ -948,6 +1008,7 @@ export class Game {
       // Bots
       if (!this.debugFreezeBots) for (const b of this.bots) b.update(simDt, this.time);
       this.gadgets.update(simDt, this.time);
+      this.traps.update(simDt, this.time);
       this.combat.updateProjectiles(simDt, this.time);
       // Slow health regeneration after a few seconds without damage
       for (const e of this.entities) {

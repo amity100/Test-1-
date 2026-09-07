@@ -13,6 +13,14 @@ export interface HitResult {
   dist: number;
   headshot: boolean;
   blockValue: number;
+  /** A dynamic solid (turret, gate) that stopped the shot. */
+  solid?: Solid;
+}
+
+/** Something besides voxels and characters that bullets can hit: turrets and gates. */
+export interface Solid {
+  box: THREE.Box3;
+  hit(amount: number, attacker: Entity | null): void;
 }
 
 export interface CombatEvents extends Record<string, unknown> {
@@ -38,12 +46,36 @@ export class Combat {
   constructor(private world: VoxelWorld, private terrain: Terrain, private getEntities: () => Entity[]) {}
 
   /** Ray vs world (voxels + terrain) and entities. */
+  /** Dynamic solids supplied by other systems (traps). */
+  solids: (() => Solid[]) | null = null;
+
   raycast(origin: THREE.Vector3, dir: THREE.Vector3, maxDist: number, ignore: Entity | null, hitEntities = true, lenient = false): HitResult | null {
     const d = tmpDir.copy(dir).normalize();
     let best: HitResult | null = null;
     const vh = this.world.raycast(origin.x, origin.y, origin.z, d.x, d.y, d.z, maxDist);
     if (vh) {
       best = { entity: null, point: new THREE.Vector3(vh.px, vh.py, vh.pz), normal: new THREE.Vector3(vh.nx, vh.ny, vh.nz), dist: vh.dist, headshot: false, blockValue: this.world.get(vh.x, vh.y, vh.z) };
+    }
+    if (this.solids) {
+      const ray = new THREE.Ray(origin, d);
+      for (const s of this.solids()) {
+        const p = ray.intersectBox(s.box, tmpV);
+        if (!p) continue;
+        const dist = p.distanceTo(origin);
+        if (dist > maxDist || (best && dist >= best.dist)) continue;
+        // Normal from the box face closest to the hit point.
+        const n = new THREE.Vector3();
+        const c = s.box.getCenter(new THREE.Vector3());
+        const h = s.box.getSize(new THREE.Vector3()).multiplyScalar(0.5);
+        const rel = p.clone().sub(c);
+        const fx = Math.abs(rel.x) / h.x;
+        const fy = Math.abs(rel.y) / h.y;
+        const fz = Math.abs(rel.z) / h.z;
+        if (fx >= fy && fx >= fz) n.set(Math.sign(rel.x) || 1, 0, 0);
+        else if (fy >= fz) n.set(0, Math.sign(rel.y) || 1, 0);
+        else n.set(0, 0, Math.sign(rel.z) || 1);
+        best = { entity: null, point: p.clone(), normal: n, dist, headshot: false, blockValue: 0, solid: s };
+      }
     }
     // Terrain: march coarse steps then refine.
     const th = this.terrainHit(origin, d, best ? best.dist : maxDist);
@@ -189,7 +221,7 @@ export class Combat {
           let dmg = damageAtDistance(def, hit.dist);
           if (hit.headshot) dmg *= def.headshotMult;
           this.applyDamage(hit.entity, dmg, shooter, now, hit.headshot, hit.point);
-        }
+        } else if (hit.solid) hit.solid.hit(damageAtDistance(def, hit.dist), shooter);
         this.events.emit('impact', { point: hit.point, normal: hit.normal, blockValue: hit.blockValue, onEntity: !!hit.entity });
       }
       this.events.emit('shot', { shooter, origin, end, weapon: def, hit });

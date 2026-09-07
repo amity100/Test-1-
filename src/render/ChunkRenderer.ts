@@ -132,6 +132,7 @@ export class ChunkRenderer {
     const tints = new Float32Array(verts * 3);
     const mats = new Float32Array(verts);
     const aos = new Float32Array(verts);
+    const lits = new Float32Array(verts * 2);
     const indices = new Uint32Array(idx);
     let v = 0;
     let n = 0;
@@ -142,6 +143,7 @@ export class ChunkRenderer {
       tints.set(p.tints, v * 3);
       mats.set(p.mats, v);
       aos.set(p.aos, v);
+      lits.set(p.lits, v * 2);
       for (let i = 0; i < p.indices.length; i++) indices[n + i] = p.indices[i] + v;
       v += p.positions.length / 3;
       n += p.indices.length;
@@ -153,6 +155,7 @@ export class ChunkRenderer {
     geo.setAttribute('aTint', new THREE.BufferAttribute(tints, 3));
     geo.setAttribute('aMat', new THREE.BufferAttribute(mats, 1));
     geo.setAttribute('aAo', new THREE.BufferAttribute(aos, 1));
+    geo.setAttribute('aLit', new THREE.BufferAttribute(lits, 2));
     geo.setIndex(new THREE.BufferAttribute(indices, 1));
     geo.computeBoundingBox();
     geo.computeBoundingSphere();
