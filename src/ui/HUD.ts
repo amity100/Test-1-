@@ -64,6 +64,8 @@ export interface HudState {
   grenadeWarnings: { sx: number; sy: number; onScreen: boolean; angle: number; dist: number }[];
   /** Armour points (streak reward) shown as a blue bar under health. */
   armor: number;
+  /** On fire (flame vent): orange edges. */
+  burning: boolean;
   /** Kills since the last death. */
   streak: number;
   /** The clock ran out mid-capture: the timer reads OVERTIME. */
@@ -105,6 +107,7 @@ export class HUD {
   private armorFill: HTMLElement;
   private streakEl: HTMLElement;
   private alarmVeil: HTMLElement;
+  private burnVeil: HTMLElement;
   private announceEl: HTMLElement;
   private announceTitle: HTMLElement;
   private announceSub: HTMLElement;
@@ -255,6 +258,9 @@ export class HUD {
     this.alarmVeil = el('div', 'alarm-veil');
     this.alarmVeil.hidden = true;
     this.root.appendChild(this.alarmVeil);
+    this.burnVeil = el('div', 'burn-veil');
+    this.burnVeil.hidden = true;
+    this.root.appendChild(this.burnVeil);
     // Announcer (multi-kills, streak rewards, denied captures): louder and shorter than the banner.
     this.announceEl = el('div', 'announce');
     this.announceTitle = el('div', 'a-title');
@@ -442,6 +448,7 @@ export class HUD {
       this.alarmVeil.hidden = false;
       this.alarmVeil.classList.toggle('att', s.alarm === 'attacker');
     } else this.alarmVeil.hidden = true;
+    this.burnVeil.hidden = !(s.burning && s.alive);
     if (!this.announceEl.hidden) {
       const left = (this.announceUntil - performance.now()) / 1000;
       if (left <= 0) this.announceEl.hidden = true;

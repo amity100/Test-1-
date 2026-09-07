@@ -28,7 +28,12 @@ GitHub Pages). Single-file build for artifact hosting: `npm run build:artifact` 
 2. **Hide the flag.** The flag must remain reachable: a flood fill from outside the plot (walking,
    jumping, mantling, dropping, or grappling onto exposed ledges) has to reach it. Fully sealed
    rooms are rejected.
-3. **Rounds** (4 minutes each, one per fortress). The owner waits inside at their chosen spawn;
+3. **Trap walk** (75 s, or unlimited when the build was). Press Ready and you appear inside your
+   finished fortress in first person. Walk to the spots attackers must pass, aim at the floor and
+   set a trap (click, or the PLACE button on a phone); aim at one of yours to take it back. An
+   on-screen card explains the walk, a picker along the bottom shows the ten trap kinds with what
+   each does, and a label under the crosshair says what a press would do right now.
+4. **Rounds** (4 minutes each, one per fortress). The owner waits inside at their chosen spawn;
    every attacker starts at their own fortress and runs across the island (an objective marker
    points the way). Attackers fight each other too. Standing three seconds next to the flag
    captures it and ends the round. When time runs out the defender earns a hold bonus.
@@ -36,7 +41,7 @@ GitHub Pages). Single-file build for artifact hosting: `npm run build:artifact` 
    everyone else gets a marker on the capturer through the walls (attacker bots also learn where
    the flag is from the siren). If the clock runs out mid-capture the round goes into
    **overtime**: no respawns until the flag falls or the capturer is cleared (25 s at most).
-4. **Scoring**: 1 point per 10 s of defense, 40 for holding to the end, 15 for every full minute
+5. **Scoring**: 1 point per 10 s of defense, 40 for holding to the end, 15 for every full minute
    the flag stays safe, 50 per capture, 5 per kill (8 as the defender). The podium sorts by total
    score. Whoever is last always sees where the leader is. **Kill streaks** pay out for everyone,
    bots included: three kills in a row give an armour plate (soaks 50 damage before health), five a
@@ -90,12 +95,18 @@ finger orbits and two fingers pan and zoom on a phone; the mouse drags to orbit,
 `1-8` pick tones, `X` toggles the eraser, `G` the flag, `Z` undoes. At match end a shareable fortress
 card renders your build, and every round opens with a short camera flyby.
 
-**Phones and tablets** get a layout modelled on today's popular mobile shooters: a movement stick on
-the left (push far to sprint), look by dragging anywhere on the right, twin fire buttons, and only
-the essentials as buttons (jump, crouch, aim, reload, swap, grenade and the two gadget slots in a
-compact cluster). Auto fire and aim assist are on by default for touch and can be tuned in Settings
-together with button size and opacity. Building on a phone is the same tap-a-block flow with the
-palette along the bottom. Landscape is recommended.
+**Phones and tablets** get a layout modelled on today's popular mobile shooters: a floating movement
+stick on the left (push far to sprint; the stick follows a thumb that drifts past its rim), look by
+dragging anywhere else, and a big fire button under the right thumb with aim, jump and crouch on an
+arc around it, knife and reload a little further in, grenade and the two gadgets up the edge, plus a
+second fire button above the stick. A finger sliding on a held fire or aim button keeps turning the
+view, so you aim while shooting. Touch look is brisk (a swipe across the screen turns about half a
+circle), speeds up on fast flicks, slows while aiming down sights and is lightly smoothed against
+uneven touch samples; look speed, aim speed and the flick boost are sliders in Settings. **Customize
+the buttons** (Settings) opens an editor where every battle button is dragged into place and resized,
+with a left-handed mirror preset; the layout is saved on the device. Auto fire and aim assist are on
+by default for touch. Building on a phone is the same tap-a-block flow with the palette along the
+bottom. Landscape is recommended.
 
 **Bots** notice you the way people do: awareness builds up over a second or more depending on
 where you are in their field of view, how far and how exposed you are (head, chest and knees are
@@ -113,14 +124,20 @@ gallery and the drops between them. Bot fortresses pick a covered hall for their
 way. Indoors is darker than outdoors (roofed cells get less sky light, baked per vertex) and lamp
 blocks throw warm pools onto nearby walls, so doorways and lit rooms read from a distance.
 
-**Traps.** The build phase also gives five trap slots (T, or the trap tool): **spikes** and a
-**trapdoor** (upper floors only, drops the intruder into the room below) hide in the floor until
-someone steps on them, a **mine** waits by a doorway, a **turret** (two slots) tracks and fires at
-anyone in its room, and a **gate** spans a doorway and lets only its builder through until it is
-shot open. Attackers see turrets and gates but not the hidden kinds until they fire; the builder
-sees everything and never triggers their own traps; trap kills count for the defender. Bot
-fortresses come with traps too, and bots shoot gates that bar their way. Everything re-arms at the
-start of each round.
+**Traps.** Eight trap slots per fortress, set on the trap walk (and still available from the trap
+tool during the build). Hidden in the floor until they fire: **spikes** (stab and slow), a **flame
+vent** (a column of fire for a few seconds; whoever it touches keeps burning after they run out), a
+**spring pad** (flings the intruder up and onward, and into the ceiling when there is one), a
+**mine** (blast) and a **trapdoor** (upper floors only, drops them into the room below). In plain
+sight and dodged with timing: a **saw rail** (two slots; a blade runs back and forth along a line of
+floor, jump over it), a **swinging blade** (two slots; hangs in a doorway and swings across it, time
+it or crouch under it), a **crusher** (two slots; a block under a ceiling three to five blocks up
+that clicks, then slams onto whoever is beneath), a **turret** (two slots) that tracks and fires at
+anyone in its room and can be shot to pieces, and a **gate** that spans a doorway and lets only its
+builder through until it is shot open. Attackers see the mechanical kinds but not the hidden ones
+until they fire; the builder sees everything and never triggers their own traps; trap kills count
+for the defender. Bot fortresses come with a mixed roster too, and bots shoot gates that bar their
+way. Everything re-arms at the start of each round.
 
 **Round events.** About once a minute, announced with a three-second countdown, the round throws
 a surprise: a **blackout** (roofed rooms go dark and the lamps die for twelve seconds; bots see
@@ -179,6 +196,7 @@ Quality tiers (low/medium/high/ultra) are picked from the GPU and can be forced 
 
 `node scripts/smoke.mjs <url>`, `node scripts/smoke-game.mjs <url>`, `node scripts/smoke-nav.mjs <url>`
 (spawns and cross-island navigation), `node scripts/smoke-build-mouse.mjs <url>` (mouse building and
-firing) and `node scripts/smoke-mobile.mjs <url>` (touch emulation) drive the game in headless
+firing) and `node scripts/smoke-mobile.mjs <url>` (touch emulation; the trap walk, touch look and
+the button editor are exercised there and in the probe scripts) drive the game in headless
 Chromium (Playwright) and save screenshots. Test against `npm run build && npm run preview` so dev
 server reloads do not interrupt the runs.

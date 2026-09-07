@@ -6,7 +6,7 @@ import type { Cell } from '../world/Reachability';
 import { Random } from '../core/Random';
 
 export type Difficulty = 'easy' | 'normal' | 'hard' | 'nightmare';
-export type Phase = 'lobby' | 'build' | 'roundIntro' | 'round' | 'roundEnd' | 'podium';
+export type Phase = 'lobby' | 'build' | 'fortify' | 'roundIntro' | 'round' | 'roundEnd' | 'podium';
 
 export interface MatchConfig {
   playerName: string;
@@ -39,6 +39,8 @@ export interface MatchEvents extends Record<string, unknown> {
   spawn: { entity: Entity; initial: boolean };
   captureProgress: { entity: Entity; progress: number; contested: boolean };
   buildTimeUp: Record<string, never>;
+  /** The trap-setting walk ran out of time. */
+  fortifyTimeUp: Record<string, never>;
   /** Someone started (on) or stopped (off) taking the flag; entity is the capturer while on. */
   alarm: { entity: Entity | null; on: boolean };
   /** The clock ran out mid-capture: the round continues without respawns until it is decided. */
@@ -67,6 +69,8 @@ export const RULES = {
   overtimeMax: 25,
   /** Capture progress (seconds) that trips the alarm. */
   alarmAt: 0.05,
+  /** Seconds to walk the fortress and set traps after the build (unlimited when the build was). */
+  fortifyTime: 75,
 };
 
 /** Match rules and phase machine. Rendering/UI subscribe to its events. */
@@ -80,6 +84,7 @@ export class Match {
   roundIndex = -1;
   roundTimer = 0;
   buildTimer = 0;
+  fortifyTimer = 0;
   phaseTimer = 0;
   defender: Entity | null = null;
   targetPlotIndex = -1;
@@ -123,8 +128,19 @@ export class Match {
     return this.config.buildTime > 0 ? Math.max(0, this.buildTimer) : null;
   }
 
-  /** Ends the build phase and schedules rounds (one per entity, shuffled). */
+  /** Ends the build phase: the builder walks their fortress and sets traps before the rounds start. */
   finishBuild(): void {
+    this.fortifyTimer = this.config.buildTime > 0 ? RULES.fortifyTime : 0;
+    this.setPhase('fortify');
+  }
+
+  get fortifyTimeLeft(): number | null {
+    return this.config.buildTime > 0 ? Math.max(0, this.fortifyTimer) : null;
+  }
+
+  /** Ends the trap walk and schedules rounds (one per entity, shuffled). */
+  finishFortify(): void {
+    if (this.phase !== 'fortify') return;
     this.roundOrder = this.rng.shuffle(this.entities.map((_, i) => i));
     this.roundIndex = -1;
     this.nextRound();
@@ -219,6 +235,15 @@ export class Match {
           if (this.buildTimer <= 0) {
             this.buildTimer = 0;
             this.events.emit('buildTimeUp', {});
+          }
+        }
+        break;
+      case 'fortify':
+        if (this.config.buildTime > 0) {
+          this.fortifyTimer -= dt;
+          if (this.fortifyTimer <= 0) {
+            this.fortifyTimer = 0;
+            this.events.emit('fortifyTimeUp', {});
           }
         }
         break;

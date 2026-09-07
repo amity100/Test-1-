@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import type { App } from './App';
 import { Entity, type Role, emptyScore } from '../sim/Entities';
-import { TrapSystem, type TrapKind } from '../sim/Traps';
+import { TrapSystem, TRAP_SLOTS, TRAP_COST, type TrapKind, type TrapFx } from '../sim/Traps';
+import { TRAP_HIT_KEY } from '../ui/TrapIcons';
 import { RoundEvents, type EventKind } from '../sim/RoundEvents';
 import type { Cell } from '../world/Reachability';
 import { TrapMeshes } from '../render/TrapMeshes';
@@ -27,6 +28,8 @@ import { Screens, type SummaryRow, type PodiumRow } from '../ui/Screens';
 import { composeCard } from '../ui/FortressCard';
 import { Builder } from '../build/Builder';
 import { BuilderUI } from '../build/BuilderUI';
+import { Fortify } from '../build/Fortify';
+import { FortifyUI } from '../build/FortifyUI';
 import { TouchControls, vibrate } from '../ui/TouchControls';
 import { IS_TOUCH } from './Input';
 import { generateFortress, type FortressResult } from '../world/FortressGen';
@@ -41,7 +44,7 @@ import { t } from './i18n';
 import { audio } from '../audio/AudioEngine';
 import { clamp, formatTime, damp } from './MathUtil';
 
-type Mode = 'menu' | 'build' | 'intro' | 'battle' | 'summary' | 'podium';
+type Mode = 'menu' | 'build' | 'fortify' | 'intro' | 'battle' | 'summary' | 'podium';
 
 const PLAYER_COLORS = ['#00e5ff', '#ff2bd6', '#ffb300', '#39ff14', '#ff3355', '#a78bfa', '#ff8c42', '#7aa7ff'];
 const PRIMARY_CHOICES: WeaponId[] = ['rifle', 'smg', 'shotgun', 'sniper', 'rocket'];
@@ -83,6 +86,9 @@ export class Game {
   screens: Screens;
   builder: Builder | null = null;
   builderUI: BuilderUI | null = null;
+  /** The trap walk after the build (first person inside the player's fortress). */
+  fortify: Fortify | null = null;
+  fortifyUI: FortifyUI | null = null;
   private lastUpdateCheck = -Infinity;
   touch: TouchControls;
   private rotateHint: HTMLElement;
@@ -142,21 +148,8 @@ export class Game {
       live: () => !!this.match && this.match.phase === 'round' && !this.match.overtime,
     });
     this.wireRoundEvents();
-    this.traps.events.on('trigger', ({ trap, entity }) => {
-      const pos = new THREE.Vector3(trap.cell.x + 0.5, trap.cell.y + 0.2, trap.cell.z + 0.5);
-      const up = new THREE.Vector3(0, 1, 0);
-      if (trap.kind === 'spikes') {
-        audio.play('hit', { pos, pitch: 0.55, volume: 0.9 });
-        this.vfx.sparks(pos, up, 14, new THREE.Color(0xdddddd), 5);
-      } else if (trap.kind === 'trapdoor') {
-        audio.play('erase', { pos, pitch: 0.55 });
-        this.vfx.puff(pos, up, 10, 0.45, 0.5);
-      }
-      if (entity === this.player) {
-        this.hud.announce(t(trap.kind === 'spikes' ? 'trapHitSpikes' : trap.kind === 'trapdoor' ? 'trapHitTrapdoor' : 'trapHitMine'), '', 'clutch', 1.2);
-        this.local?.addShake(0.5);
-      }
-    });
+    this.traps.events.on('trigger', ({ trap, entity }) => this.onTrapTrigger(trap.kind, trap.plotIndex, this.traps.centre(trap), entity));
+    this.traps.events.on('fx', ({ kind, pos, entity }) => this.onTrapFx(kind, pos, entity));
     this.traps.events.on('turretShot', ({ from, to }) => {
       this.vfx.tracer(from, to, new THREE.Color(0.4, 0.9, 1), 0.025);
       audio.play('smg', { pos: from, volume: 0.35, pitch: 1.3 });
@@ -194,6 +187,7 @@ export class Game {
         audio.play(k === 'click' ? 'uiClick' : 'uiHover');
       },
       card: () => void this.showFortressCard(),
+      editControls: () => this.editControls(),
     });
     this.touch = new TouchControls(this.uiRoot, app.input, {
       pause: () => (this.paused ? this.resume() : this.pause()),
@@ -213,7 +207,7 @@ export class Game {
     this.wireGadgets();
     this.app.input.onLockChange = (locked) => {
       if (locked && this.screens.name === 'click') this.screens.hideAll();
-      if (!locked && !this.app.input.fallbackLook && this.mode === 'battle' && !this.paused && !this.screens.visible) this.pause();
+      if (!locked && !this.app.input.fallbackLook && (this.mode === 'battle' || this.mode === 'fortify') && !this.paused && !this.screens.visible) this.pause();
     };
     window.addEventListener('pointerdown', () => audio.init(), { once: true });
     window.addEventListener('keydown', () => audio.init(), { once: true });
@@ -257,10 +251,28 @@ export class Game {
     audio.setVolumes(settings.data.volume, settings.data.music);
     this.touch.applyStyle(settings.data.touchScale, settings.data.touchOpacity);
     this.touch.setAutoFire(settings.data.autoFire);
+    this.touch.setLayout(settings.data.touchLayout);
   }
 
   private onLanguageChanged(): void {
     if (this.builderUI) this.builderUI.render();
+    if (this.fortifyUI) this.fortifyUI.render();
+    this.touch.refreshLabels();
+  }
+
+  /** Opens the on-screen control editor (phones); returns to the settings screen when done. */
+  private editControls(): void {
+    this.screens.hideAll();
+    // Only the buttons on screen while editing: the walk/build panels and the HUD step aside.
+    const hidden: HTMLElement[] = [];
+    for (const r of [this.fortifyUI?.root, this.builderUI?.root, this.hud.root]) if (r && !r.hidden) {
+      r.hidden = true;
+      hidden.push(r);
+    }
+    this.touch.editLayout(() => {
+      for (const r of hidden) r.hidden = false;
+      this.screens.reopenSettings();
+    });
   }
 
   // ---------------- match flow ----------------
@@ -328,6 +340,7 @@ export class Game {
     match.events.on('alarm', ({ entity, on }) => this.onAlarm(on ? entity : null));
     match.events.on('overtime', () => this.onOvertime());
     match.events.on('buildTimeUp', () => this.finishBuild(true));
+    match.events.on('fortifyTimeUp', () => this.finishFortify(true));
     // Build phase: the block builder.
     this.builder = new Builder(this.app.world, this.app.terrain, plots[0], cfg.style, this.app.input, this.app.gr.camera, this.app.gr.scene);
     this.builder.traps = this.traps;
@@ -388,6 +401,105 @@ export class Game {
       visibility: () => this.roundEvents.visibility(),
     };
   }
+
+  /** A trap got somebody: its own sound and burst, a banner when it was you. */
+  private onTrapTrigger(kind: TrapKind, plotIndex: number, pos: THREE.Vector3, entity: Entity): void {
+    const up = new THREE.Vector3(0, 1, 0);
+    const hit = entity.center;
+    switch (kind) {
+      case 'spikes':
+        audio.play('hit', { pos, pitch: 0.55, volume: 0.9 });
+        this.vfx.sparks(pos, up, 14, new THREE.Color(0xdddddd), 5);
+        break;
+      case 'trapdoor':
+        audio.play('erase', { pos, pitch: 0.55 });
+        this.vfx.puff(pos, up, 10, 0.45, 0.5);
+        break;
+      case 'flame':
+        audio.play('rocket', { pos, pitch: 0.6, volume: 0.8 });
+        this.vfx.sparks(pos, up, 30, new THREE.Color(0xff8a2a), 6);
+        break;
+      case 'launcher':
+        audio.play('jump', { pos, pitch: 0.5, volume: 1 });
+        audio.play('bounce', { pos, pitch: 0.7 });
+        this.vfx.puff(pos, up, 8, 0.7, 0.35);
+        break;
+      case 'saw':
+        audio.play('ricochet', { pos: hit, pitch: 0.6, volume: 1 });
+        audio.play('hurt', { pos: hit, volume: 0.6 });
+        this.vfx.sparks(hit, up, 22, new THREE.Color(0xff5566), 6);
+        break;
+      case 'pendulum':
+        audio.play('hit', { pos: hit, pitch: 0.5, volume: 1 });
+        this.vfx.sparks(hit, up, 22, new THREE.Color(0xff5566), 6);
+        break;
+      case 'crusher':
+        this.vfx.sparks(hit, up, 18, new THREE.Color(0xff5566), 5);
+        break;
+      default:
+        break;
+    }
+    if (entity === this.player) {
+      this.hud.announce(t(TRAP_HIT_KEY[kind]), '', 'clutch', 1.2);
+      this.local?.addShake(kind === 'crusher' ? 0.9 : 0.5);
+    } else if (plotIndex === this.player.plotIndex && kind !== 'turret') {
+      // Your trap caught someone: a short pop so you know it worked.
+      this.hud.scorePop(`${t(TRAP_HIT_KEY[kind])} · ${entity.name}`);
+    }
+  }
+
+  /** Mechanical trap cues everyone hears: the blade whoosh, the crusher's click and slam, the pad's spring. */
+  private onTrapFx(kind: TrapFx, pos: THREE.Vector3, entity: Entity | null): void {
+    const cam = this.app.gr.camera.position;
+    const d = pos.distanceTo(cam);
+    const up = new THREE.Vector3(0, 1, 0);
+    switch (kind) {
+      case 'swing':
+        if (d < 28) audio.play('grappleMiss', { pos, pitch: 0.55, volume: 0.35 });
+        break;
+      case 'warn':
+        audio.play('countdown', { pos, pitch: 0.5, volume: 0.9 });
+        break;
+      case 'slam':
+        audio.play('land', { pos, pitch: 0.4, volume: 1 });
+        audio.play('explosion', { pos, pitch: 1.4, volume: 0.35 });
+        this.vfx.debrisBurst(pos, up, 22, new THREE.Color(0x8a8a8a));
+        this.local?.addShake(clamp(1 - d / 22, 0, 1) * 0.8);
+        break;
+      case 'launch':
+        break;
+      case 'ceiling':
+        audio.play('land', { pos, pitch: 0.7, volume: 0.9 });
+        this.vfx.puff(pos, new THREE.Vector3(0, -1, 0), 8, 0.6, 0.4);
+        if (entity === this.player) {
+          this.local?.addShake(0.7);
+          this.hud.announce(t('trapHitCeiling'), '', 'clutch', 1);
+        }
+        break;
+      case 'flameEnd':
+        break;
+    }
+  }
+
+  /** Flame vents pour out particles while they burn. */
+  private trapParticles(dt: number): void {
+    this.flameAcc += dt;
+    if (this.flameAcc < 0.05) return;
+    this.flameAcc = 0;
+    const cam = this.app.gr.camera.position;
+    const up = new THREE.Vector3(0, 1, 0);
+    for (const tr of this.traps.traps) {
+      if (tr.kind !== 'flame' || tr.state !== 'triggered') continue;
+      const c = this.traps.centre(tr);
+      if (c.distanceTo(cam) > 45) continue;
+      c.x += (Math.random() - 0.5) * 0.8;
+      c.z += (Math.random() - 0.5) * 0.8;
+      c.y += 0.3 + Math.random() * 1.2;
+      this.vfx.sparks(c, up, 2, new THREE.Color(0xff9a3a), 3);
+      if (Math.random() < 0.3) this.vfx.puff(c.clone().setY(c.y + 1.2), up, 1, 0.25, 0.5);
+    }
+  }
+  private flameAcc = 0;
 
   /** Round surprises: countdown banners, then the effect with its own look and sound. */
   private wireRoundEvents(): void {
@@ -476,19 +588,30 @@ export class Game {
     }
   }
 
-  /** Bot fortresses come with traps too: a mine by a doorway, spikes on the way in, a turret in the flag hall, maybe a trapdoor. */
+  /**
+   * Bot fortresses come with traps too: something at an entrance, a turret in the flag hall, and a
+   * mixed handful of the rest wherever they fit, until the slots run out.
+   */
   private seedTraps(plotIndex: number, res: FortressResult): void {
     const flag = res.flag;
     const near = (c: Cell, d: number): boolean => Math.abs(c.x - flag.x) + Math.abs(c.z - flag.z) <= d;
     const notFlag = (c: Cell): boolean => !(c.x === flag.x && c.z === flag.z && c.y === flag.y);
-    const tryPlace = (kind: TrapKind, cands: Cell[]): void => {
-      for (const c of this.rng.shuffle(cands.filter(notFlag)).slice(0, 16)) if (typeof this.traps.place(kind, c, plotIndex) !== 'string') return;
+    const tryPlace = (kind: TrapKind, cands: Cell[]): boolean => {
+      if (this.traps.slotsUsed(plotIndex) + TRAP_COST[kind] > TRAP_SLOTS) return false;
+      for (const c of this.rng.shuffle(cands.filter(notFlag)).slice(0, 24)) if (typeof this.traps.place(kind, c, plotIndex) !== 'string') return true;
+      return false;
     };
-    tryPlace('mine', res.entrances);
-    tryPlace('spikes', res.floors.filter((c) => near(c, 10) && !near(c, 2)));
-    if (this.rng.chance(0.6)) tryPlace('gate', res.entrances);
+    const floors = res.floors;
+    const inner = floors.filter((c) => near(c, 10) && !near(c, 2));
+    const upper = floors.filter((c) => c.y >= PLOT_Y + 5);
+    tryPlace(this.rng.pick(['mine', 'flame', 'gate', 'pendulum'] as TrapKind[]), res.entrances);
     tryPlace('turret', res.heroFloors.filter((c) => !near(c, 3)));
-    tryPlace('trapdoor', res.floors.filter((c) => c.y >= PLOT_Y + 5));
+    const pool = this.rng.shuffle(['spikes', 'flame', 'launcher', 'saw', 'crusher', 'trapdoor', 'mine', 'pendulum', 'gate'] as TrapKind[]);
+    for (const kind of pool) {
+      if (this.traps.slotsUsed(plotIndex) >= TRAP_SLOTS) break;
+      const cands = kind === 'trapdoor' ? upper : kind === 'gate' || kind === 'pendulum' ? res.entrances : kind === 'mine' ? inner.concat(res.entrances) : inner;
+      tryPlace(kind, cands);
+    }
   }
 
   finishBuild(timeUp: boolean): void {
@@ -533,6 +656,107 @@ export class Game {
     this.match.finishBuild();
   }
 
+  /**
+   * The trap walk: the builder appears inside their finished fortress in first person and sets traps
+   * where attackers will have to pass. Weapons stay holstered; a click or the PLACE button sets the
+   * selected trap on the floor under the crosshair, aiming at one of their traps takes it back.
+   */
+  private enterFortify(): void {
+    const match = this.match!;
+    this.mode = 'fortify';
+    this.screens.hideAll();
+    this.hud.hide();
+    const plot = this.app.plots[0];
+    const p = this.player;
+    p.reset();
+    p.role = 'defender';
+    p.setLoadout(this.playerPrimary);
+    const spawn = match.spawns.get(0) ?? new THREE.Vector3(plot.cx, PLOT_Y + 0.02, plot.cz);
+    p.pos.copy(spawn);
+    p.vel.set(0, 0, 0);
+    const flag = match.flags.get(0);
+    if (flag) {
+      p.yaw = Math.atan2(-(flag.pos.x - p.pos.x), -(flag.pos.z - p.pos.z));
+      p.pitch = -0.12;
+    }
+    this.flags.get(0)?.group.visible === false && (this.flags.get(0)!.group.visible = true);
+    this.ensureLocal();
+    this.local.toolMode = true;
+    this.viewModel.hidden = true;
+    this.fortify = new Fortify(this.app.world, this.traps, plot, this.app.input, this.app.gr.camera, this.app.gr.scene);
+    this.fortifyUI = new FortifyUI(
+      this.uiRoot,
+      this.fortify,
+      {
+        ready: () => this.finishFortify(false),
+        pause: () => (this.paused ? this.resume() : this.pause()),
+      },
+      IS_TOUCH || window.innerWidth < 900,
+      IS_TOUCH,
+    );
+    this.fortify.events.on('placed', () => {
+      audio.play('place', { pitch: 1.25 });
+      if (IS_TOUCH) vibrate(10);
+    });
+    this.fortify.events.on('removed', () => audio.play('erase', { pitch: 1.2 }));
+    this.fortify.events.on('invalid', () => audio.play('empty', { volume: 0.5 }));
+    this.fortify.enter();
+    this.fortifyUI.show();
+    this.setTouchMode();
+    // The camera jumps to the builder's eyes right away (no frame of the build camera).
+    this.local.update(0, this.time);
+    audio.play('spawn', { volume: 0.6 });
+    if (!IS_TOUCH) {
+      // Ready was a click, so the pointer can be locked straight away; otherwise ask for a click.
+      this.app.input.requestPointerLock();
+      window.setTimeout(() => {
+        if (this.mode === 'fortify' && !this.app.input.looking && !this.screens.visible && !this.paused) this.screens.showClickToPlay(this.app.input.fallbackLook);
+      }, 400);
+    }
+  }
+
+  /** Ends the trap walk (Ready, or time up) and starts the rounds. */
+  finishFortify(timeUp = false): void {
+    if (!this.match || this.mode !== 'fortify') return;
+    this.exitFortify();
+    if (timeUp) this.hud.showBanner(t('fortifyTimeUp'), '', 3);
+    this.match.finishFortify();
+  }
+
+  private exitFortify(): void {
+    this.fortify?.dispose();
+    this.fortify = null;
+    this.fortifyUI?.hide();
+    this.fortifyUI?.root.remove();
+    this.fortifyUI = null;
+    if (this.local) this.local.toolMode = false;
+  }
+
+  private fortifyUpdate(dt: number): void {
+    const match = this.match!;
+    this.ensureLocal();
+    this.local.enabled = !this.paused && !this.screens.visible;
+    if (!this.paused) {
+      this.local.update(dt, this.time);
+      // Mechanical traps run so the builder sees blades swing and saws roll; owners are never hurt.
+      this.traps.update(dt, this.time);
+      this.fortify?.update(dt);
+    }
+    if (this.simOnly) return;
+    this.updateCharacters(dt);
+    this.cameraFocus.copy(this.app.gr.camera.position);
+    this.fortifyUI?.update(dt, match.fortifyTimeLeft);
+  }
+
+  private ensureLocal(): void {
+    if (this.local) return;
+    this.local = new Player(this.player, this.app.input, this.controller, this.combat, this.gadgets, this.viewModel, this.app.gr.camera, this.app.gr.scene);
+    this.local.entities = () => this.entities;
+    this.local.events.on('grenade', () => audio.play('switch', { volume: 0.5 }));
+    this.local.events.on('reload', () => audio.play('reload'));
+    this.local.events.on('weaponSwitch', () => audio.play('switch'));
+  }
+
   /** Shows the on-screen controls that match the current mode (touch devices only). */
   private setTouchMode(): void {
     if (!IS_TOUCH) {
@@ -540,7 +764,7 @@ export class Game {
       this.rotateHint.hidden = true;
       return;
     }
-    const m = this.mode === 'battle' ? 'battle' : this.mode === 'build' ? 'build' : 'none';
+    const m = this.mode === 'battle' ? 'battle' : this.mode === 'build' ? 'build' : this.mode === 'fortify' ? 'fortify' : 'none';
     this.touch.setMode(m);
     this.rotateHint.hidden = m === 'none';
   }
@@ -548,6 +772,9 @@ export class Game {
   private onPhase(phase: string): void {
     const match = this.match!;
     switch (phase) {
+      case 'fortify':
+        this.enterFortify();
+        break;
       case 'roundIntro': {
         this.mode = 'intro';
         this.setTouchMode();
@@ -758,7 +985,7 @@ export class Game {
   }
 
   pause(): void {
-    if (this.mode !== 'battle' && this.mode !== 'build') return;
+    if (this.mode !== 'battle' && this.mode !== 'build' && this.mode !== 'fortify') return;
     this.paused = true;
     this.app.input.exitPointerLock();
     this.screens.showPause();
@@ -767,7 +994,7 @@ export class Game {
   resume(): void {
     this.paused = false;
     this.screens.hideAll();
-    if (this.mode !== 'battle') return;
+    if (this.mode !== 'battle' && this.mode !== 'fortify') return;
     // The Resume click is a user gesture, so we can lock the pointer directly.
     this.app.input.requestPointerLock();
     if (!this.app.input.looking) this.screens.showClickToPlay(this.app.input.fallbackLook);
@@ -797,6 +1024,7 @@ export class Game {
     this.builderUI?.hide();
     this.builderUI?.root.remove();
     this.builderUI = null;
+    this.exitFortify();
     for (const cm of this.chars.values()) {
       this.app.gr.scene.remove(cm.root);
       cm.dispose();
@@ -977,7 +1205,7 @@ export class Game {
 
     // Global keys
     if (input.wasPressedRaw('Escape')) {
-      if (this.mode === 'battle' || this.mode === 'build') {
+      if (this.mode === 'battle' || this.mode === 'build' || this.mode === 'fortify') {
         if (this.paused) this.resume();
         else if (!this.screens.visible || this.screens.name === 'click') this.pause();
       } else if (this.mode === 'summary' && match) {
@@ -999,6 +1227,9 @@ export class Game {
         this.builderUI?.update(dt, match?.buildTimeLeft ?? null);
         this.cameraFocus.copy(this.app.gr.camera.position);
         break;
+      case 'fortify':
+        this.fortifyUpdate(dt);
+        break;
       case 'intro':
         this.introUpdate(dt);
         break;
@@ -1019,6 +1250,7 @@ export class Game {
     this.vfx.update(dt);
     this.gadgetMeshes.update(dt, this.time);
     this.trapMeshes.update(dt, this.time, this.player.plotIndex);
+    this.trapParticles(dt);
     this.updateEventVisuals(dt);
     this.syncProjectiles();
     audio.setListener(this.app.gr.camera.position, new THREE.Vector3(1, 0, 0).applyQuaternion(this.app.gr.camera.quaternion));
@@ -1117,13 +1349,7 @@ export class Game {
   private battleUpdate(dt: number): void {
     const match = this.match!;
     const input = this.app.input;
-    if (!this.local) {
-      this.local = new Player(this.player, input, this.controller, this.combat, this.gadgets, this.viewModel, this.app.gr.camera, this.app.gr.scene);
-      this.local.entities = () => this.entities;
-      this.local.events.on('grenade', () => audio.play('switch', { volume: 0.5 }));
-      this.local.events.on('reload', () => audio.play('reload'));
-      this.local.events.on('weaponSwitch', () => audio.play('switch'));
-    }
+    this.ensureLocal();
     this.local.enabled = !this.paused && !this.screens.visible;
     this.timeScale = this.time < this.slowmoUntil ? this.slowmoScale : 1;
     const simDt = this.paused ? 0 : dt * this.timeScale;
@@ -1245,8 +1471,8 @@ export class Game {
     for (const e of this.entities) {
       const cm = this.chars.get(e.id);
       if (!cm) continue;
-      const firstPerson = e === this.player && this.mode === 'battle' && e.alive;
-      cm.visible = !firstPerson && this.mode !== 'build' && !e.burrowed;
+      const firstPerson = e === this.player && (this.mode === 'battle' || this.mode === 'fortify') && e.alive;
+      cm.visible = !firstPerson && this.mode !== 'build' && this.mode !== 'fortify' && !e.burrowed;
       cm.setWeapon(e.weapon?.id ?? null);
       cm.update(dt, e, camPos, this.time);
     }
@@ -1368,6 +1594,7 @@ export class Game {
       capture: { progress: clamp(p.captureProgress / RULES.captureTime, 0, 1), contested: !!(def && def.alive && flag && def.pos.distanceTo(flag.pos) < RULES.captureRadius && p.captureProgress > 0), active: p.role === 'attacker' && p.captureProgress > 0.01 },
       flagThreat,
       armor: p.armor,
+      burning: p.burnUntil > this.time,
       streak: p.streak,
       overtime: match.overtime,
       alarm: this.alarmEntity && this.alarmEntity !== p && match.phase === 'round' ? (p.role === 'defender' ? 'defender' : 'attacker') : 'none',
@@ -1625,6 +1852,7 @@ export class Game {
   debugSkipBuild(): void {
     this.builder?.autoBuild(7);
     this.finishBuild(false);
+    this.finishFortify(false);
   }
   /** Equips the local player with a kit (tests). */
   debugSetKit(ids: GadgetId[]): void {
@@ -1795,6 +2023,7 @@ export class Game {
     return {
       mode: this.mode,
       phase: this.match?.phase,
+      fortify: this.fortify ? { kind: this.fortify.kind, slots: this.fortify.slots, aim: this.fortify.aim.cell, reason: this.fortify.aim.reason, existing: this.fortify.aim.existing?.kind ?? null, cells: this.fortify.aim.cells.length } : null,
       round: this.match?.roundIndex,
       target,
       alive: this.player.alive,

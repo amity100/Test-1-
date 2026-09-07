@@ -32,6 +32,11 @@ export class Player {
   private baseFov = 80;
   private burrowBlend = 0;
   enabled = true;
+  /** Tool mode (trap walk): move and look only; weapons, gadgets and aim assist are off and the gun is holstered. */
+  toolMode = false;
+  /** Touch look smoothing carry (radians not yet applied). */
+  private lookCarryX = 0;
+  private lookCarryY = 0;
   /** All entities (for touch aim assist and auto fire); set by the game. */
   entities: () => Entity[] = () => [];
   private autoFireTimer = 0;
@@ -99,23 +104,46 @@ export class Player {
     // Aim assist (the way mobile shooters do it, milder with a mouse): the camera slows down over an
     // enemy, gently follows one near the crosshair, and aiming down sights snaps onto the nearest
     // enemy in a cone. Touch also gets auto fire.
-    const touch = input.isTouch && this.enabled;
-    const assistOn = this.enabled && settings.data.aimAssist && !e.burrowed;
+    const touch = input.isTouch && this.enabled && !this.toolMode;
+    const assistOn = this.enabled && settings.data.aimAssist && !e.burrowed && !this.toolMode;
     if ((assistOn || (touch && settings.data.autoFire)) && !e.burrowed) this.findAssistTarget(12);
     else this.assistTarget = null;
     const strength = input.isTouch ? 1 : 0.6;
     const nearTarget = this.assistTarget !== null && this.assistAngle < THREE.MathUtils.degToRad(6);
     // Look
-    if (looking || lookDX !== 0 || lookDY !== 0) {
+    if (looking || lookDX !== 0 || lookDY !== 0 || this.lookCarryX !== 0 || this.lookCarryY !== 0) {
       const w = e.weapon;
       const zoom = w ? THREE.MathUtils.lerp(1, WEAPONS[w.id].adsZoom, e.ads) : 1;
-      const touchScale = input.isTouch ? 1.6 : 1;
       // Friction: the camera slows down while the crosshair rests on an enemy.
       const friction = assistOn && nearTarget ? 1 - 0.5 * strength : 1;
-      // 0.0011 rad per raw count at sensitivity 1 ≈ 0.063°/count: a 360° turn in roughly 20 cm on an 800 DPI mouse.
-      const sens = 0.0011 * settings.data.sensitivity * zoom * touchScale * friction;
-      e.yaw -= lookDX * sens;
-      e.pitch = clamp(e.pitch - lookDY * sens * (settings.data.invertY ? -1 : 1), -1.5, 1.5);
+      const invert = settings.data.invertY ? -1 : 1;
+      if (input.isTouch) {
+        // Touch look the way popular mobile shooters feel: a brisk base speed (a swipe across the screen
+        // turns about half a circle), extra speed the faster the finger moves so a flick turns all the way
+        // round while slow drags stay precise, a lower speed while aiming down sights, and light
+        // frame-rate-independent smoothing so uneven touch samples never stutter the view.
+        const px = Math.hypot(lookDX, lookDY);
+        const speed = px / Math.max(dt, 1 / 240);
+        const boost = 1 + clamp((speed - 600) / 2400, 0, 1) * settings.data.touchAccel;
+        const adsK = e.ads > 0.5 ? settings.data.touchAdsSens : 1;
+        const sens = 0.0036 * settings.data.touchSens * boost * adsK * zoom * friction;
+        this.lookCarryX += lookDX * sens;
+        this.lookCarryY += lookDY * sens * 0.9 * invert;
+        const k = dt > 0 ? 1 - Math.exp(-dt * 40) : 1;
+        const ax = this.lookCarryX * k;
+        const ay = this.lookCarryY * k;
+        this.lookCarryX -= ax;
+        this.lookCarryY -= ay;
+        if (Math.abs(this.lookCarryX) < 1e-5) this.lookCarryX = 0;
+        if (Math.abs(this.lookCarryY) < 1e-5) this.lookCarryY = 0;
+        e.yaw -= ax;
+        e.pitch = clamp(e.pitch - ay, -1.5, 1.5);
+      } else {
+        // 0.0011 rad per raw count at sensitivity 1 ≈ 0.063°/count: a 360° turn in roughly 20 cm on an 800 DPI mouse.
+        const sens = 0.0011 * settings.data.sensitivity * zoom * friction;
+        e.yaw -= lookDX * sens;
+        e.pitch = clamp(e.pitch - lookDY * sens * invert, -1.5, 1.5);
+      }
     }
     if (assistOn && this.assistTarget && this.assistAngle < THREE.MathUtils.degToRad(8)) this.magnetism(dt, lookDX !== 0 || lookDY !== 0, 0.7 * strength);
     // ADS snap: the moment the sights come up, lock onto an enemy within the cone over a short blend.
@@ -130,7 +158,7 @@ export class Player {
       this.steerTo(this.snapTarget, Math.min(1, dt * 22));
     } else this.snapT = 0;
     // Gadgets (before movement so a new state applies this frame).
-    if (this.enabled) {
+    if (this.enabled && !this.toolMode) {
       for (let i = 0; i < KIT_SIZE; i++) this.gadgets.input(e, i, input.gadgetPressed(i), input.gadgetHeld(i), input.gadgetReleased(i), now);
       if (e.grapplePoint && input.jumpPressed()) this.gadgets.releaseGrapple(e);
     } else if (e.grappleReel) e.grappleReel = false;
@@ -157,7 +185,7 @@ export class Player {
 
     // Weapons (holstered underground and while hanging from a zipline)
     WeaponLogic.update(e, dt);
-    const armed = this.enabled && !e.burrowed && !e.zipRide;
+    const armed = this.enabled && !e.burrowed && !e.zipRide && !this.toolMode;
     if (e.meleeTimer > 0) {
       e.meleeTimer -= dt;
       if (e.meleeTimer <= 0) this.combat.melee(e, now);
@@ -203,7 +231,7 @@ export class Player {
       if (input.fireReleased()) e.triggerReleased = true;
     }
     this.viewModel.show(e.weapon ? e.weapon.id : null);
-    this.viewModel.hidden = (!!e.weapon && e.weapon.id === 'sniper' && e.ads > 0.85) || e.burrowed || !!e.zipRide;
+    this.viewModel.hidden = (!!e.weapon && e.weapon.id === 'sniper' && e.ads > 0.85) || e.burrowed || !!e.zipRide || this.toolMode;
 
     // Camera
     const speed = Math.sqrt(e.vel.x * e.vel.x + e.vel.z * e.vel.z);

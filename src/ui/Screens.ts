@@ -17,6 +17,8 @@ export interface ScreenCallbacks {
   uiSound(kind: 'click' | 'hover'): void;
   /** Builds and shows the shareable fortress card. */
   card(): void;
+  /** Opens the on-screen control layout editor (touch). */
+  editControls(): void;
 }
 
 export interface SummaryRow {
@@ -312,8 +314,12 @@ export class Screens {
     touchRow.appendChild(this.toggle(t('autoFire'), d.autoFire, (v) => { d.autoFire = v; settings.save(); this.cb.settingsChanged(); }));
 
     stack.appendChild(touchRow);
+    stack.appendChild(field(t('touchSens'), slider(0.3, 2.5, 0.05, d.touchSens, (v) => { d.touchSens = v; settings.save(); }, (v) => v.toFixed(2))));
+    stack.appendChild(field(t('touchAdsSens'), slider(0.4, 1.5, 0.05, d.touchAdsSens, (v) => { d.touchAdsSens = v; settings.save(); }, (v) => v.toFixed(2))));
+    stack.appendChild(field(t('touchAccel'), slider(0, 1.5, 0.05, d.touchAccel, (v) => { d.touchAccel = v; settings.save(); }, (v) => `${Math.round(v * 100)}%`)));
     stack.appendChild(field(t('touchScale'), slider(0.75, 1.4, 0.05, d.touchScale, (v) => { d.touchScale = v; settings.save(); this.cb.settingsChanged(); }, (v) => `${Math.round(v * 100)}%`)));
     stack.appendChild(field(t('touchOpacity'), slider(0.3, 1, 0.05, d.touchOpacity, (v) => { d.touchOpacity = v; settings.save(); this.cb.settingsChanged(); }, (v) => `${Math.round(v * 100)}%`)));
+    if (navigator.maxTouchPoints > 0) stack.appendChild(btn(t('customizeControls'), 'active', () => this.cb.editControls()));
     stack.appendChild(
       field(
         t('language'),
@@ -351,6 +357,11 @@ export class Screens {
       `</ul>`;
     p.appendChild(btn(t('back'), '', () => this.showMenu()));
     this.mount('howto', p);
+  }
+
+  /** Back to the settings screen it came from (after the control editor). */
+  reopenSettings(): void {
+    this.showSettings(this.settingsBack);
   }
 
   showPause(): void {

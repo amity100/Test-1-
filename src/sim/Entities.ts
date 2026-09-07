@@ -92,6 +92,10 @@ export class Entity {
   /** Knife: lunge in progress (seconds until the blade lands) and cooldown. */
   meleeTimer = 0;
   meleeCooldown = 0;
+  /** On fire until this time (flame vent); damage ticks credited to burnBy. */
+  burnUntil = 0;
+  burnTick = 0;
+  burnBy: Entity | null = null;
 
   weapons: WeaponSlot[] = [];
   weaponIndex = 0;
@@ -239,6 +243,9 @@ export class Entity {
     this.radarUntil = 0;
     this.overdriveUntil = 0;
     this.overdrive = false;
+    this.burnUntil = 0;
+    this.burnTick = 0;
+    this.burnBy = null;
   }
 }
 

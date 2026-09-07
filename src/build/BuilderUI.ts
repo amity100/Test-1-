@@ -4,6 +4,7 @@ import { formatTime } from '../core/MathUtil';
 import type { Builder, BuilderTool } from './Builder';
 import type { Tone } from './Architect';
 import { TRAP_KINDS, TRAP_SLOTS, TRAP_COST, type TrapKind } from '../sim/Traps';
+import { TRAP_ICON, TRAP_NAME_KEY } from '../ui/TrapIcons';
 
 export interface BuilderUICallbacks {
   ready(): void;
@@ -25,13 +26,7 @@ const ICON = {
   frame: svg('<path d="M4 12h16M12 4v16"/>'),
   pillar: svg('<path d="M4 4h16M4 20h16"/><path d="M8 4v16M16 4v16"/><path d="M12 7v10"/>'),
   trap: svg('<path d="M4 20h16"/><path d="M6 20l2-8 2 8M11 20l2-10 2 10M16 20l1.5-6 1.5 6"/>'),
-  spikes: svg('<path d="M4 20h16"/><path d="M6 20l2-8 2 8M11 20l2-10 2 10M16 20l1.5-6 1.5 6"/>'),
-  trapdoor: svg('<rect x="4" y="10" width="16" height="6"/><path d="M4 13h16"/><path d="M12 10V4"/><path d="M9 7l3-3 3 3"/>'),
-  mine: svg('<circle cx="12" cy="14" r="5"/><path d="M12 9V6M8.5 10.5l-2-2M15.5 10.5l2-2M4 20h16"/>'),
-  turret: svg('<rect x="6" y="14" width="12" height="5"/><path d="M12 14V9"/><path d="M8 9h8"/><path d="M12 9l7-3"/>'),
-  gate: svg('<path d="M5 4v16M19 4v16M9 4v16M15 4v16"/><path d="M5 8h14M5 16h14"/>'),
 };
-const TRAP_KEYS: Record<TrapKind, string> = { spikes: 'trapSpikes', trapdoor: 'trapTrapdoor', mine: 'trapMine', turret: 'trapTurret', gate: 'trapGate' };
 const TIPS = ['tipBridge', 'tipTraps', 'tipTerrace', 'tipColonnade', 'tipCourt', 'tipStairs', 'tipTowers'];
 /** Seconds each tip stays up, and how long tips keep rotating before the hint retires. */
 const TIP_SECONDS = 9;
@@ -152,7 +147,7 @@ export class BuilderUI {
     this.sub.innerHTML = '';
     this.kindBtns.clear();
     for (const kind of TRAP_KINDS) {
-      const b = this.iconBtn(this.sub, `kind ${kind}`, ICON[kind], t(TRAP_KEYS[kind]), () => {
+      const b = this.iconBtn(this.sub, `kind ${kind}`, TRAP_ICON[kind], t(TRAP_NAME_KEY[kind]), () => {
         this.builder.setTrapKind(kind);
         this.refresh();
       });

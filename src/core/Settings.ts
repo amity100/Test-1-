@@ -1,4 +1,12 @@
 export type Quality = 'low' | 'medium' | 'high' | 'ultra';
+
+/** An on-screen button's centre as a fraction of the viewport, and its size multiplier. */
+export interface ButtonPlace {
+  x: number;
+  y: number;
+  s: number;
+}
+export type TouchLayout = Record<string, ButtonPlace>;
 export type Language = 'he' | 'en';
 
 export interface SettingsData {
@@ -21,6 +29,12 @@ export interface SettingsData {
   touchScale: number;
   /** Touch: on-screen control opacity. */
   touchOpacity: number;
+  /** Touch look: base speed, extra speed for fast swipes (0..1.5), speed while aiming down sights. */
+  touchSens: number;
+  touchAccel: number;
+  touchAdsSens: number;
+  /** Touch: where each on-screen button sits (fractions of the screen) and its size; missing = default. */
+  touchLayout: TouchLayout;
   /** Last chosen primary weapon and gadget kit (round loadout). */
   primary: string;
   kit: string[];
@@ -43,6 +57,10 @@ const DEFAULTS: SettingsData = {
   autoSprint: true,
   touchScale: 1,
   touchOpacity: 0.7,
+  touchSens: 1,
+  touchAccel: 0.7,
+  touchAdsSens: 0.85,
+  touchLayout: {},
   primary: 'rifle',
   kit: ['zipline', 'breach'],
 };
