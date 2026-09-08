@@ -83,6 +83,8 @@ export interface Trap {
   /** Gate/blade: 0 = the wall runs along x, 2 = along z. Saw: the axis the rail runs along. */
   axis: 0 | 2;
   state: 'armed' | 'triggered' | 'dead';
+  /** When it died; a spent trap is cleared away a little later and frees its slots for a new one. */
+  deadAt?: number;
   timer: number;
   hp: number;
   /** Seen by everyone. Hidden kinds stay invisible to attackers until they fire. */
@@ -491,8 +493,13 @@ export class TrapSystem {
   update(dt: number, now: number): void {
     const entities = this.entities();
     this.updateBurning(entities, dt, now);
+    const spent: Trap[] = [];
     for (const t of this.traps) {
-      if (t.state === 'dead') continue;
+      if (t.state === 'dead') {
+        if (t.deadAt === undefined) t.deadAt = now;
+        else if (now - t.deadAt > 8) spent.push(t);
+        continue;
+      }
       const owner = this.owner(t);
       switch (t.kind) {
         case 'spikes':
@@ -526,6 +533,7 @@ export class TrapSystem {
           break;
       }
     }
+    for (const t of spent) this.remove(t);
   }
 
   /** Burning bodies keep taking damage for a few seconds after leaving the fire (credited to the vent's owner). */

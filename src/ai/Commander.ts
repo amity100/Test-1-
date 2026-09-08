@@ -179,9 +179,13 @@ export class TeamCommander implements BotCommander {
     const posts = this.host.posts(team);
     const flagPosts = posts.filter((p) => p.flag);
     const otherPosts = posts.filter((p) => !p.flag);
-    // Engine crews come out of the garrison: the nearest free defender to each live engine.
+    // Engine crews come out of the garrison: the nearest free defender to each live engine, but at
+    // least half the garrison (one at least) keeps its post, or an engine-happy commander would leave
+    // the flag hall empty.
     const crews = new Set<Entity>();
+    const maxCrews = Math.max(0, home.length - Math.max(1, Math.ceil(home.length / 2)));
     for (const eng of this.host.engines(team)) {
+      if (crews.size >= maxCrews) break;
       let pick: Entity | null = null;
       let bd = Infinity;
       for (const b of home) {

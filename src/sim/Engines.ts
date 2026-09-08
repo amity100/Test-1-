@@ -17,6 +17,8 @@ export const ENGINE = {
   ballista: { cost: 20, hp: 220, range: 62, interval: 2.4, damage: 70, speed: 75, turn: 2.6, height: 1.3 },
   catapult: { cost: 35, hp: 320, range: 95, minRange: 16, interval: 11, speed: 30, turn: 1.1, height: 1.6, splash: 3.8, damage: 100, breakRadius: 1.7 },
   crewRange: 3.4,
+  /** Radians of scatter (peak to peak) on a bot crew's bolts. */
+  crewScatter: 0.07,
   gravityStone: 9.8,
   gravityBolt: 3.5,
 };
@@ -233,7 +235,16 @@ export class EngineSystem {
     const step = def.turn * dt;
     e.yaw += clamp(dy, -step, step);
     e.pitch += clamp(wantPitch - e.pitch, -step, step);
-    if (e.fireTimer <= 0 && Math.abs(dy) < 0.08) this.fire(e, crew, now);
+    if (e.fireTimer <= 0 && Math.abs(dy) < 0.08) {
+      // A bot crew scatters a little; a human at the controls does not.
+      const yaw0 = e.yaw;
+      const pitch0 = e.pitch;
+      e.yaw += (Math.random() - 0.5) * ENGINE.crewScatter;
+      e.pitch += (Math.random() - 0.5) * ENGINE.crewScatter;
+      this.fire(e, crew, now);
+      e.yaw = yaw0;
+      e.pitch = pitch0;
+    }
   }
 
   private autoCatapult(e: Engine, crew: Entity, ents: Entity[], dt: number, now: number): void {

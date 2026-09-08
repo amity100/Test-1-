@@ -30,6 +30,7 @@ import { RepairSystem } from '../sim/Repair';
 import { EngineSystem, ENGINE, type Engine, type EngineKind } from '../sim/Engines';
 import { EngineMeshes } from '../render/EngineMeshes';
 import { BannerMeshes } from '../render/BannerMeshes';
+import { Works } from '../ai/Works';
 import { WAR } from '../sim/War';
 import { GadgetMeshes } from '../render/GadgetMeshes';
 import { outfitFor } from '../render/Outfits';
@@ -164,6 +165,8 @@ export class Game {
   private teamSpawns: THREE.Vector3[][] = [[], []];
   /** Fortress War: the trap plan the team's bots follow during the walk. */
   private teamOrders: TrapOrder[] | null = null;
+  /** The enemy commander's battle works (engines and traps paid from its purse). */
+  private works: Works | null = null;
   /** Where the player respawns: -1 the fortress, else an owned capture point. */
   private spawnChoice = -1;
   private teamStyles: StyleId[] = ['medieval', 'gothic'];
@@ -486,6 +489,8 @@ export class Game {
       }
       this.buildOutposts(match);
     }
+    const enemyTrapOrders = this.trapOrders(res1.flag, res1.floors, res1.entrances, res1.heroFloors);
+    this.works = new Works(1, { war, plot: plots[this.teamPlots[1]], enemyPlot: plots[this.teamPlots[0]], entities: () => this.entities, roofSpots: () => this.plotSpots.get(this.teamPlots[1]) ?? [], trapOrders: () => enemyTrapOrders, engines: this.engines, traps: this.traps, siege }, this.rng.int(1, 1e9), Works.ambitionFor(cfg.difficulty));
     const host = {
       war,
       entities: () => this.entities,
@@ -494,8 +499,8 @@ export class Game {
       enemyPlot: (team: number) => plots[this.teamPlots[1 - team]],
       posts: (team: number) => this.teamPosts[team],
       human: (team: number) => (team === 0 ? this.player : null),
-      pendingOrders: (team: number) => (team === 0 ? this.builder?.orders.length ?? 0 : 0),
-      buildSite: (e: Entity) => (e.team === 0 ? this.teamBuild?.siteFor(e) ?? null : null),
+      pendingOrders: (team: number) => (team === 0 ? this.builder?.orders.length ?? 0 : this.works?.pending ?? 0),
+      buildSite: (e: Entity) => (e.team === 0 ? this.teamBuild?.siteFor(e) ?? null : this.works?.siteFor(e) ?? null),
       engines: (team: number) => this.engines.engines.filter((e) => e.team === team && !e.dead).map((e) => ({ id: e.id, pos: e.pos })),
       engineSpot: (id: number) => {
         const e = this.engines.byId(id);
@@ -1681,6 +1686,7 @@ export class Game {
     this.leaveEngine();
     this.engines.clear();
     this.banners.clear();
+    this.works = null;
     this.threatUntil.clear();
     this.pendingDmg.clear();
     this.builder?.dispose();
@@ -2109,6 +2115,7 @@ export class Game {
       if (match.war) {
         this.engines.update(simDt, this.time);
         this.updateManning(simDt);
+        this.works?.update(simDt);
       }
       this.roundEvents.update(simDt, this.time);
       this.combat.updateProjectiles(simDt, this.time);
