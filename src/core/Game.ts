@@ -15,7 +15,7 @@ import { WeaponLogic } from '../sim/WeaponLogic';
 import { BotBrain, PROFILES, BOT_NAMES } from '../ai/BotBrain';
 import { WarBrain } from '../ai/WarBrain';
 import { TeamCommander, type Post } from '../ai/Commander';
-import { TeamBuild, type TrapOrder, BOT_TRAPS } from '../build/TeamBuild';
+import { TeamBuild, type TrapOrder, BOT_SLOTS } from '../build/TeamBuild';
 import { Plan, MAX_BLOCKS, CELL, STOREY_H } from '../build/Architect';
 import { NavSystem } from '../ai/NavSystem';
 import { CharacterMesh } from '../render/CharacterMesh';
@@ -429,8 +429,8 @@ export class Game {
     war.setFlag(1, new THREE.Vector3(res1.flag.x + 0.5, res1.flag.y, res1.flag.z + 0.5));
     this.teamSpawns[1] = this.spawnSpots(res1.floors, res1.flag);
     this.teamPosts[1] = this.postsFor(1, res1.roofSpots, res1.entrances, res1.heroFloors, res1.flag);
-    this.traps.setSlots(WAR_PLOTS[1], BOT_TRAPS * size);
-    this.traps.setSlots(WAR_PLOTS[0], BOT_TRAPS * (size - 1) + 4);
+    this.traps.setSlots(WAR_PLOTS[1], BOT_SLOTS * size);
+    this.traps.setSlots(WAR_PLOTS[0], BOT_SLOTS * (size - 1) + 4);
     this.seedTraps(WAR_PLOTS[1], res1, this.entities.filter((e) => e.team === 1));
     // Ruins on the flanks: cover between the fortresses.
     for (const p of plots) {
@@ -1033,7 +1033,7 @@ export class Game {
       // Mechanical traps run so the builder sees blades swing and saws roll; owners are never hurt.
       this.traps.update(dt, this.time);
       this.fortify?.update(dt);
-      if (match.war && this.teamBuild && this.teamOrders) this.teamBuild.updateFortify(dt, this.traps, WAR_PLOTS[0], this.teamOrders);
+      if (match.war && this.teamBuild && this.teamOrders) this.teamBuild.updateFortify(dt, this.traps, WAR_PLOTS[0], this.teamOrders, this.fortify?.personal ?? 4);
     }
     if (this.simOnly) return;
     this.updateCharacters(dt);

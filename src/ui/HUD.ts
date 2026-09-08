@@ -499,11 +499,11 @@ export class HUD {
       this.set('round', this.roundLabel, t('fortressWar'));
       // The war bar sits right under the timer, so the objective line moves into it (see syncWar).
       this.targetLabel.hidden = true;
-      this.set('role', this.roleBadge, s.war.team === 0 ? t('teamCyan') : t('teamCoral'));
-      this.roleBadge.classList.toggle('def', s.war.team === 0);
+      this.roleBadge.hidden = true;
     } else {
       this.set('round', this.roundLabel, t('round', { n: s.round, total: s.totalRounds }));
       this.targetLabel.hidden = false;
+      this.roleBadge.hidden = false;
       this.set('target', this.targetLabel, s.role === 'defender' ? t('defendFortress') : t('attackFortress', { name: s.targetName }));
       this.set('role', this.roleBadge, s.role === 'defender' ? t('defender') : t('attacker'));
       this.roleBadge.classList.toggle('def', s.role === 'defender');

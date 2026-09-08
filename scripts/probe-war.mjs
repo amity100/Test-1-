@@ -27,7 +27,7 @@ const start = await page.evaluate(() => {
 });
 console.log('start', JSON.stringify(start));
 check('war match starts: 6 v 6, war state, stronghold + traps on the enemy plot, ruins, fortified builder', start.n === 12 && start.teams[0] === 6 && start.teams[1] === 6 && start.war && start.enemyBlocks > 2000 && start.enemyTraps >= 8 && start.ruins > 100 && start.fortified, `setup ${start.ms.toFixed(0)} ms`);
-check('trap slots scale with the team', start.slots[0] === 2 * 5 + 4 && start.slots[1] === 12, start.slots.join(','));
+check('trap slots scale with the team', start.slots[0] === 3 * 5 + 4 && start.slots[1] === 18, start.slots.join(','));
 // Team build: advance 20 s; bots should have laid rooms; the reserve keeps 12 blocks free.
 const build = await page.evaluate(() => {
   const g = window.__fk.game(); const b = g.builder;
@@ -54,13 +54,14 @@ await page.screenshot({ path: 'scratch/v11-build.png' });
 const fort = await page.evaluate(() => {
   const g = window.__fk.game();
   g.finishBuild(false);
-  const st0 = { mode: g.mode, flag: g.match.war.flags[0] ? [g.match.war.flags[0].pos.x, g.match.war.flags[0].pos.y, g.match.war.flags[0].pos.z] : null, spawns: g.entities.length, personal: g.fortify.personal, owner: g.fortify.ownerId === g.player.id };
+  const canBefore = g.traps.slotsFor(0) - g.traps.slotsUsed(0);
+  const st0 = { canBefore, mode: g.mode, flag: g.match.war.flags[0] ? [g.match.war.flags[0].pos.x, g.match.war.flags[0].pos.y, g.match.war.flags[0].pos.z] : null, spawns: g.entities.length, personal: g.fortify.personal, owner: g.fortify.ownerId === g.player.id };
   g.debugAdvance(25, 1 / 20);
   const mine = g.traps.traps.filter((t) => t.plotIndex === 0);
-  return { ...st0, botTraps: mine.filter((t) => t.ownerId !== g.player.id).length, owners: new Set(mine.map((t) => t.ownerId)).size, slotsUsed: g.traps.slotsUsed(0), keepTop: g.builder.flag ? g.builder.flag.y : -1 };
+  return { ...st0, playerFree: g.traps.slotsFor(0) - g.traps.slotsUsed(0), canPlace: g.fortify.affordable('spikes') && g.traps.slotsUsed(0) + 1 <= g.traps.slotsFor(0), botTraps: mine.filter((t) => t.ownerId !== g.player.id).length, owners: new Set(mine.map((t) => t.ownerId)).size, slotsUsed: g.traps.slotsUsed(0), keepTop: g.builder.flag ? g.builder.flag.y : -1 };
 });
 console.log('fortify', JSON.stringify(fort));
-check('the walk starts inside our fortress with personal slots; bots set their traps in their quarters', fort.mode === 'fortify' && fort.personal === 4 && fort.owner && fort.botTraps >= 6 && fort.owners >= 3, JSON.stringify(fort));
+check('the walk starts inside our fortress with personal slots; bots set their traps in their quarters', fort.mode === 'fortify' && fort.personal === 4 && fort.owner && fort.botTraps >= 6 && fort.owners >= 3 && fort.playerFree >= 4 && fort.canPlace, JSON.stringify(fort));
 check('the flag sits high in the keep', fort.flag && fort.flag[1] >= 12 + 16, `flag y ${fort.flag && fort.flag[1]}`);
 // Into battle.
 const battle0 = await page.evaluate(() => {

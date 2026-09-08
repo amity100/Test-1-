@@ -872,6 +872,14 @@ body { background: radial-gradient(1200px 800px at 50% 30%, #16283a 0%, #0f1923 
   .spawnbox { margin-top: 6px; flex-direction: row; flex-wrap: wrap; justify-content: center; }
   .spawnbox .sb-title { width: 100%; font-size: 10px; }
   .spawnbox .sb-opt { min-width: 0; padding: 5px 10px; font-size: 12px; }
+  /* Phone war HUD diet: tickets and rings only, no title or supplies line, quiet ally markers, a short feed,
+     and no gadget pills (the touch buttons carry the counts). */
+  .warbar .wsupplies { display: none; }
+  .topbar:has(.warbar:not([hidden])) .round { display: none; }
+  .marker[data-kind="ally"] .m-tag, .marker[data-kind="ally"] .m-dist { display: none; }
+  .marker[data-kind="ally"] .m-name { font-size: 9px; opacity: 0.85; }
+  .feed .item:nth-child(n + 4) { display: none; }
+  .gear .gadgets { display: none; }
 }
 
 /* v11: Fortress War result */

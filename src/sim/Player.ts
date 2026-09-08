@@ -126,7 +126,7 @@ export class Player {
         const speed = px / Math.max(dt, 1 / 240);
         const boost = 1 + clamp((speed - 600) / 2400, 0, 1) * settings.data.touchAccel;
         const adsK = e.ads > 0.5 ? settings.data.touchAdsSens : 1;
-        const sens = 0.0036 * settings.data.touchSens * boost * adsK * zoom * friction;
+        const sens = 0.0048 * settings.data.touchSens * boost * adsK * zoom * friction;
         this.lookCarryX += lookDX * sens;
         this.lookCarryY += lookDY * sens * 0.9 * invert;
         const k = dt > 0 ? 1 - Math.exp(-dt * 40) : 1;

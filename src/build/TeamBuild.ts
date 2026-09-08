@@ -5,7 +5,7 @@ import type { Entity } from '../sim/Entities';
 import type { Plot } from '../world/Layout';
 import type { StyleId } from '../world/Styles';
 import type { Random } from '../core/Random';
-import type { TrapSystem, TrapKind } from '../sim/Traps';
+import { TRAP_COST, type TrapSystem, type TrapKind } from '../sim/Traps';
 
 /** One trap to set: the kind and where it may go, in priority order (the same plan a seeded fortress follows). */
 export interface TrapOrder {
@@ -18,8 +18,9 @@ import type { Cell } from '../world/Reachability';
 /** Blocks kept free for the human until this many seconds into the build. */
 const RESERVE = 12;
 const RESERVE_UNTIL = 60;
-/** Trap slots each bot fills during the walk. */
+/** Traps each bot sets during the walk, and the slot budget (trap cost units) it may spend on them. */
 export const BOT_TRAPS = 2;
+export const BOT_SLOTS = 3;
 
 interface Worker {
   bot: Entity;
@@ -159,14 +160,18 @@ export class TeamBuild {
    * seeded fortress gets (a door trap first, a turret in the flag hall, then the mixed pool): the first
    * open order with a spot in the bot's own quarter, or the first open order anywhere.
    */
-  updateFortify(dt: number, traps: TrapSystem, plotIndex: number, orders: TrapOrder[]): void {
+  updateFortify(dt: number, traps: TrapSystem, plotIndex: number, orders: TrapOrder[], reserve: number): void {
     for (const w of this.workers) {
       if (w.trapsLeft <= 0) continue;
       w.trapTimer -= dt;
       if (w.trapTimer > 0) continue;
       w.trapTimer = this.rng.range(0.9, 1.6);
       const inSector = (c: Cell): boolean => TeamBuild.sectorOf(Math.floor((c.x - this.plot.minX) / CELL), Math.floor((c.z - this.plot.minZ) / CELL)) === w.sector;
-      const open = orders.filter((o) => !o.done && o.cands.length);
+      // The human's personal slots stay free, and every bot has its own slot budget, so a bot can never
+      // spend what the human still has coming.
+      const spent = traps.slotsUsedBy(plotIndex, w.bot.id);
+      const fits = (o: TrapOrder): boolean => spent + TRAP_COST[o.kind] <= BOT_SLOTS && traps.slotsUsed(plotIndex) + TRAP_COST[o.kind] <= traps.slotsFor(plotIndex) - reserve;
+      const open = orders.filter((o) => !o.done && o.cands.length && fits(o));
       if (!open.length) {
         w.trapsLeft = 0;
         continue;
