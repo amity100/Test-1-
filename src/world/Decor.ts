@@ -10,9 +10,9 @@ const STONE = encodeBlock(Mat.SMOOTH_STONE, 41);
 const OLD_STONE = encodeBlock(Mat.STONE_BRICK, 40);
 const DARK = encodeBlock(Mat.SMOOTH_STONE, 49);
 const GOLD = encodeBlock(Mat.GOLD, 26);
-const LAMP = encodeBlock(Mat.LAMP, 53);
+const LAMP = encodeBlock(Mat.LAMP, 8);
 const COBBLE = encodeBlock(Mat.COBBLE, 41);
-const CRYSTAL = encodeBlock(Mat.CRYSTAL, 53);
+const CRYSTAL = encodeBlock(Mat.LAMP, 65);
 
 function box(world: VoxelWorld, x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, v: number): void {
   for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x++)
@@ -20,7 +20,7 @@ function box(world: VoxelWorld, x0: number, y0: number, z0: number, x1: number, 
       for (let z = Math.min(z0, z1); z <= Math.max(z0, z1); z++) world.set(x, y, z, v);
 }
 
-/** Central monument: stepped marble plinth, tapered obelisk with a gold cap and lit corner pillars. */
+/** Central monument: stepped marble plinth, tapered stone obelisk with gilt bands and a lantern cap, torch pillars on the corners. */
 function monument(world: VoxelWorld): void {
   const y0 = PLAZA_Y;
   box(world, -5, y0, -5, 5, y0, 5, MARBLE);

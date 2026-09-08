@@ -210,6 +210,64 @@ export function rubberMaps(): DetailMaps {
   });
 }
 
+/** Quilted gambeson: diamond stitching over padded cloth, two tones of one dye blended by wear. */
+export function quiltMaps(name: string, tones: [[number, number, number], [number, number, number]]): DetailMaps {
+  return build(`quilt-${name}`, 256, (x, y) => {
+    const period = 22;
+    const u = ((x + y) % period) / period;
+    const v = ((x - y + 4096) % period) / period;
+    const seam = Math.min(u, 1 - u, v, 1 - v) * period; // pixels to the nearest stitch line
+    const puff = Math.min(1, seam / 5);
+    const stitch = seam < 1.2 ? 0.72 : 1;
+    const n = fbm(x, y, 30, 7, 3);
+    const weave = ((x >> 1) + (y >> 1)) % 2 === 0 ? 1 : 0.94;
+    const t = Math.min(1, Math.max(0, (n - 0.35) / 0.3));
+    const a = tones[0];
+    const b = tones[1];
+    const k = (0.82 + puff * 0.18) * stitch * weave;
+    return { r: (a[0] * (1 - t) + b[0] * t) * k, g: (a[1] * (1 - t) + b[1] * t) * k, b: (a[2] * (1 - t) + b[2] * t) * k, h: puff * 0.8 + n * 0.2, rough: 0.9 - puff * 0.05 };
+  });
+}
+
+/** Riveted mail: offset rows of rings, each a bright rim over a dark hollow. Grey; the material tints it. */
+export function mailMaps(): DetailMaps {
+  return build('mail', 128, (x, y) => {
+    const cell = 8;
+    const row = Math.floor(y / (cell * 0.75));
+    const ox = row % 2 === 0 ? 0 : cell / 2;
+    const cx = Math.floor((x + ox) / cell) * cell - ox + cell / 2;
+    const cy = row * cell * 0.75 + cell * 0.4;
+    const d = Math.hypot(x - cx, y - cy);
+    const ring = Math.max(0, 1 - Math.abs(d - 3.1) / 1.3);
+    const hollow = d < 2.2 ? 0.55 : 1;
+    const n = fbm(x, y, 20, 17, 2);
+    const v = (0.72 + ring * 0.4) * hollow * (0.92 + n * 0.16);
+    return { r: v, g: v, b: v, h: ring, rough: 0.55 - ring * 0.2 };
+  });
+}
+
+/** Oiled leather: fine grain, creases and lighter worn patches. */
+export function leatherMaps(): DetailMaps {
+  return build('leather', 256, (x, y) => {
+    const grain = fbm(x * 2, y * 2, 12, 31, 3);
+    const crease = Math.max(0, fbm(x, y * 3, 40, 37, 3) - 0.6) * 2.5;
+    const wear = Math.max(0, fbm(x, y, 70, 43, 3) - 0.55) * 1.6;
+    const v = 0.88 + (grain - 0.5) * 0.16 - crease * 0.3 + wear * 0.35;
+    return { r: v, g: v * 0.97, b: v * 0.93, h: grain * 0.5 - crease * 0.5, rough: 0.78 + crease * 0.1 - wear * 0.25 };
+  });
+}
+
+/** Plate steel: soft hammer dents under a brushed sheen, smudges a little duller. */
+export function steelMaps(): DetailMaps {
+  return build('steel', 256, (x, y) => {
+    const dent = fbm(x, y, 26, 53, 3);
+    const brush = fbm(x * 0.3, y * 5, 24, 59, 2);
+    const smudge = Math.max(0, fbm(x, y, 80, 61, 3) - 0.55) * 1.5;
+    const v = 0.9 + (dent - 0.5) * 0.1 + (brush - 0.5) * 0.06 - smudge * 0.12;
+    return { r: v, g: v, b: v * 1.02, h: dent * 0.8 + brush * 0.2, rough: 0.3 + smudge * 0.35 + (dent - 0.5) * 0.1 };
+  });
+}
+
 /** Tree bark: vertical fissures over warped ridges. Brown tint is baked in; use a light material colour. */
 export function barkMaps(): DetailMaps {
   return build('bark', 256, (x, y) => {

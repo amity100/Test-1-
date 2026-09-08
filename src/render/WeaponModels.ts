@@ -1,15 +1,9 @@
 import * as THREE from 'three';
 import type { WeaponId } from '../sim/Weapons';
 import { PartBuilder, PRIM, rbox, frustum, lathe, meshesFrom } from './PartBuilder';
-import { armorMaps, camoMaps, fabricMaps, gunmetalMaps, polymerMaps, rubberMaps, woodMaps } from './DetailTextures';
+import { armorMaps, quiltMaps, fabricMaps, gunmetalMaps, polymerMaps, rubberMaps, woodMaps } from './DetailTextures';
 
 /** Uniform camouflage tones shared with the character model. */
-export const OPERATOR_CAMO: Array<[number, number, number]> = [
-  [0.17, 0.19, 0.16],
-  [0.24, 0.27, 0.22],
-  [0.31, 0.33, 0.29],
-];
-
 export type ModelId = WeaponId | 'grenade' | 'rocketShell' | 'stone' | 'bolt';
 export type WeaponDetail = 'high' | 'low';
 
@@ -46,7 +40,7 @@ function mats(accent: THREE.Color): Record<MatKey, THREE.Material> {
   const fm = fabricMaps();
   const wm = woodMaps();
   const rm = rubberMaps();
-  const cm = camoMaps('operator', OPERATOR_CAMO);
+  const cm = quiltMaps('sleeve', [[0.66, 0.6, 0.48], [0.46, 0.4, 0.3]]);
   m = {
     metal: std({ color: 0x5c626c, metalness: 0.9, roughness: 1, map: gm.map, normalMap: gm.normalMap, normalScale: new THREE.Vector2(0.7, 0.7), roughnessMap: gm.roughnessMap }),
     dark: std({ color: 0x262a30, metalness: 0.45, roughness: 1, map: am.map, normalMap: am.normalMap, normalScale: new THREE.Vector2(0.45, 0.45), roughnessMap: am.roughnessMap }),

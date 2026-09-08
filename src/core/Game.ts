@@ -1531,7 +1531,7 @@ export class Game {
       e.setLoadout(this.playerPrimary);
       if (initial) e.setKit(this.playerKit);
     }
-    if (initial) this.chars.get(e.id)?.setOutfit(outfitFor(e.gadgets, this.entities.indexOf(e) + e.colorIndex));
+    if (initial) this.chars.get(e.id)?.setOutfit(outfitFor(e.gadgets, this.entities.indexOf(e) + e.colorIndex, this.match?.war ? e.team : -1));
     if (!e.isBot) {
       this.touch.setGadgetIcons(e.gadgets.map((id) => GADGETS[id].icon));
       this.viewModel.show(e.weapon ? e.weapon.id : null, true);
@@ -2764,13 +2764,17 @@ export class Game {
       e.crouching = false;
       e.setLoadout(ids[i % ids.length]);
       e.setKit([GADGET_IDS[i % GADGET_IDS.length], GADGET_IDS[(i + 2) % GADGET_IDS.length]]);
-      this.chars.get(e.id)?.setOutfit(outfitFor(e.gadgets, i));
+      this.chars.get(e.id)?.setOutfit(outfitFor(e.gadgets, i, i % 2));
     });
     this.debugFreezeBots = true;
     p.setLoadout(weapon);
     this.local.viewModel.show(weapon, true);
     p.pitch = pitch;
     return { bots: bots.map((e) => ({ name: e.name, weapon: e.weapon?.id, pos: e.pos.toArray().map((v) => Math.round(v * 10) / 10) })) };
+  }
+  /** An outfit for an entity's kit with a given seed and team device (character screenshots). */
+  debugOutfit(e: Entity, seed: number, team: number): ReturnType<typeof outfitFor> {
+    return outfitFor(e.gadgets, seed, team);
   }
   /** Sets the player's aim-down-sights amount directly (viewmodel screenshots). */
   debugAds(amount: number): void {

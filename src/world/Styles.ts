@@ -45,7 +45,7 @@ export const STYLES: Record<StyleId, StyleDef> = {
     id: 'gothic', nameKey: 'sGothic', accentHex: '#6b21a8',
     roles: {
       wall: encodeBlock(Mat.STONE_BRICK, 20), wallAlt: encodeBlock(Mat.SMOOTH_STONE, 21), trim: encodeBlock(Mat.SMOOTH_STONE, 29), floor: encodeBlock(Mat.COBBLE, 22),
-      roof: encodeBlock(Mat.ROOF_TILES, 22), accent: encodeBlock(Mat.GOLD, 26), glass: encodeBlock(Mat.GLASS, 23), light: encodeBlock(Mat.CRYSTAL, 28),
+      roof: encodeBlock(Mat.ROOF_TILES, 22), accent: encodeBlock(Mat.GOLD, 26), glass: encodeBlock(Mat.GLASS, 23), light: encodeBlock(Mat.LAMP, 8),
       pillar: encodeBlock(Mat.SMOOTH_STONE, 25), stairs: encodeBlock(Mat.STONE_BRICK, 21), ground: encodeBlock(Mat.COBBLE, 20), door: encodeBlock(Mat.WOOD_PLANKS, 7),
     },
     colors: [...range(20, 29), ...neutrals],

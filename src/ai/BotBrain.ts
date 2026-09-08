@@ -1004,4 +1004,4 @@ export class BotBrain {
   }
 }
 
-export const BOT_NAMES = ['Nova', 'Blaze', 'Kestrel', 'Onyx', 'Vex', 'Rook', 'Sable', 'Zephyr', 'Ember', 'Quill', 'Talon', 'Mira', 'Juno', 'Kai', 'Lyra', 'Orion', 'Piper', 'Rhea', 'Sol', 'Tamsin', 'Ulla', 'Vale', 'Wren', 'Zara'];
+export const BOT_NAMES = ['Aldric', 'Berta', 'Cedric', 'Dagny', 'Edda', 'Falk', 'Godric', 'Hild', 'Isolde', 'Jorund', 'Kettil', 'Leofric', 'Maud', 'Nils', 'Oswin', 'Piers', 'Rowena', 'Sigrun', 'Tancred', 'Ulf', 'Vidar', 'Wyn', 'Ysolt', 'Ragna'];
