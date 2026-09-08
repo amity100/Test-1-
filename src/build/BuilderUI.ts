@@ -334,8 +334,13 @@ export class BuilderUI {
   refresh(): void {
     const b = this.builder;
     if (this.command && this.suppliesEl) {
-      const txt = `${t('supplies')} ${this.command.supplies()} · ${t('orderCost', { n: 5 })}${b.orders.length ? ` · ${t('ordersPending', { n: b.orders.length })}` : ''}`;
-      if (this.suppliesEl.textContent !== txt) this.suppliesEl.textContent = txt;
+      const txt = `${t('supplies')} ${this.command.supplies()}`;
+      const note = `${t('orderCost', { n: 5 })}${b.orders.length ? ` · ${t('ordersPending', { n: b.orders.length })}` : ''}`;
+      const key = `${txt}|${note}`;
+      if (this.suppliesEl.dataset.key !== key) {
+        this.suppliesEl.dataset.key = key;
+        this.suppliesEl.innerHTML = `${esc(txt)} <span class="note">· ${esc(note)}</span>`;
+      }
       if (this.crewEls) {
         this.crewEls.build.textContent = String(this.command.build);
         this.crewEls.defend.textContent = String(this.command.defend);

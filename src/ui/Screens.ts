@@ -286,7 +286,7 @@ export class Screens {
         ),
       ),
     );
-    grid.appendChild(field(t('roundTime'), el('div', 'muted', war ? t('minutes', { n: 12 }) : t('minutes', { n: 4 }))));
+    grid.appendChild(field(t('roundTime'), el('div', 'muted', t('minutes', { n: mode === 'siege' ? 8 : war ? 12 : 4 }))));
     p.appendChild(grid);
     // Style picker
     const styles = el('div', 'styles');

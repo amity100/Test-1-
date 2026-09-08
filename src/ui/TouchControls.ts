@@ -56,6 +56,7 @@ const ICON = {
   pause: svg('<rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"/><rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"/>'),
   knife: svg('<path d="M4 20l9-9"/><path d="M13 11l7-7-2 6-4 4z" fill="currentColor"/><path d="M10 14l-2 2"/>'),
   map: svg('<path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/><path d="M6 10h2M16 12h2"/>'),
+  interact: svg('<path d="M8 12V6.5a1.5 1.5 0 0 1 3 0V11"/><path d="M11 10.5V4.5a1.5 1.5 0 0 1 3 0V11"/><path d="M14 10.5V6a1.5 1.5 0 0 1 3 0v6"/><path d="M17 12v-.5a1.5 1.5 0 0 1 3 0V16a6 6 0 0 1-6 6h-1.5a6 6 0 0 1-5-2.7L4.6 15a1.6 1.6 0 0 1 2.6-1.8L8 14.5"/>'),
   place: svg('<path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 20h16"/><path d="M6 17h12"/>'),
 };
 
@@ -77,6 +78,7 @@ export const DEFAULT_LAYOUT: TouchLayout = {
   gadget0: { x: 0.933, y: 0.19, s: 1 },
   gadget1: { x: 0.863, y: 0.25, s: 1 },
   map: { x: 0.24, y: 0.1, s: 0.85 },
+  interact: { x: 0.64, y: 0.6, s: 0.95 },
 };
 /** Fortify walk: the PLACE button takes the fire spot; jump and crouch keep clear of the trap picker. */
 const FORTIFY_LAYOUT: TouchLayout = {
@@ -84,7 +86,7 @@ const FORTIFY_LAYOUT: TouchLayout = {
   fjump: { x: 0.86, y: 0.86, s: 1 },
   fcrouch: { x: 0.93, y: 0.33, s: 1 },
 };
-const BASE_SIZE: Record<string, number> = { fire: 92, fireLeft: 68, jump: 66, crouch: 58, ads: 54, knife: 50, reload: 50, grenade: 50, gadget0: 48, gadget1: 48, map: 48, place: 92, fjump: 66, fcrouch: 56 };
+const BASE_SIZE: Record<string, number> = { fire: 92, fireLeft: 68, jump: 66, crouch: 58, ads: 54, knife: 50, reload: 50, grenade: 50, gadget0: 48, gadget1: 48, map: 48, interact: 52, place: 92, fjump: 66, fcrouch: 56 };
 /** Buttons the player may move and resize. */
 export const EDITABLE = Object.keys(DEFAULT_LAYOUT);
 
@@ -124,10 +126,16 @@ export class TouchControls {
   private placed = new Map<string, HTMLElement[]>();
   private layout: TouchLayout = { ...DEFAULT_LAYOUT };
   private mapBtn!: HTMLElement;
+  private interactBtn!: HTMLElement;
 
   /** Shows the command-map button (team modes only). */
   setMapButton(on: boolean): void {
     this.mapBtn.hidden = !on;
+  }
+
+  /** Shows the hand button that mans or leaves a siege engine (only when one is within reach). */
+  setInteractButton(on: boolean): void {
+    this.interactBtn.hidden = !on;
   }
   private scale = 1;
   // Layout editor.
@@ -316,6 +324,8 @@ export class TouchControls {
     this.button(g, 'knife', 'knife', ICON.knife, { tap: () => (v.melee = true) });
     this.mapBtn = this.button(g, 'map', 'map', ICON.map, { tap: () => (v.map = true) });
     this.mapBtn.hidden = true;
+    this.interactBtn = this.button(g, 'interact', 'interact', ICON.interact, { tap: () => (v.interact = true) });
+    this.interactBtn.hidden = true;
     this.button(g, 'reload', 'reload', ICON.reload, { tap: () => (v.reload = true) });
     this.button(g, 'grenade', 'grenade', ICON.grenade, { tap: () => (v.grenade = true) });
     for (let i = 0; i < 2; i++) {

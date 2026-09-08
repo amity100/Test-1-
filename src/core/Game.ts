@@ -476,19 +476,17 @@ export class Game {
     this.traps.setSlots(this.teamPlots[0], BOT_SLOTS * (size - 1) + 4 + (siege ? 8 : 0));
     this.seedTraps(this.teamPlots[1], res1, this.entities.filter((e) => e.team === 1));
     this.hangBanners(1, res1.heroFloors, res1.entrances);
+    // Ruins on the unused plots: cover between the fortresses, and scenery around a siege.
+    for (const p of plots) {
+      if (p.index === this.teamPlots[0] || p.index === this.teamPlots[1]) continue;
+      const st = this.rng.pick(siege ? PERIOD_STYLES : STYLE_IDS);
+      this.paintGround(p, st);
+      generateRuins(this.app.world, p, st, this.rng.fork());
+    }
     if (siege) {
       this.placeCourtyards(match);
       this.seedEngines(1, res1.roofSpots);
-    } else {
-      // Ruins on the flanks: cover between the fortresses.
-      for (const p of plots) {
-        if (p.index === this.teamPlots[0] || p.index === this.teamPlots[1]) continue;
-        const st = this.rng.pick(STYLE_IDS);
-        this.paintGround(p, st);
-        generateRuins(this.app.world, p, st, this.rng.fork());
-      }
-      this.buildOutposts(match);
-    }
+    } else this.buildOutposts(match);
     const enemyTrapOrders = this.trapOrders(res1.flag, res1.floors, res1.entrances, res1.heroFloors);
     this.works = new Works(1, { war, plot: plots[this.teamPlots[1]], enemyPlot: plots[this.teamPlots[0]], entities: () => this.entities, roofSpots: () => this.plotSpots.get(this.teamPlots[1]) ?? [], trapOrders: () => enemyTrapOrders, engines: this.engines, traps: this.traps, siege }, this.rng.int(1, 1e9), Works.ambitionFor(cfg.difficulty));
     const host = {
@@ -2316,6 +2314,7 @@ export class Game {
     const spread = w ? THREE.MathUtils.lerp(WEAPONS[w.id].spread, WEAPONS[w.id].adsSpread, p.ads) * 6 + Math.min(20, Math.sqrt(p.vel.x * p.vel.x + p.vel.z * p.vel.z) * 1.2) : 4;
     const objective = this.objectiveMarker();
     const nearEngine = war && p.alive && !this.manning && !this.commandView ? this.engines.near(p.pos, my, 2.6) : null;
+    this.touch.setInteractButton(!!war && p.alive && !this.commandView && (this.manning !== null || nearEngine !== null));
     // Crosshair colour: is a living enemy under the reticle?
     const eye = p.eyePos;
     const look = p.alive ? this.combat.raycast(eye, p.forward(new THREE.Vector3()), 160, p, true) : null;
@@ -2434,7 +2433,7 @@ export class Game {
       sniperScope: !!w && w.id === 'sniper' && p.ads > 0.85,
       spread,
       fps: settings.data.showFps ? this.app.fps : null,
-      prompt: this.time < this.promptUntil ? this.promptText : this.manning ? t('leaveEngine', { name: t(this.manning.kind === 'ballista' ? 'engineBallista' : 'engineCatapult') }) : nearEngine ? t('manEngine', { name: t(nearEngine.kind === 'ballista' ? 'engineBallista' : 'engineCatapult') }) : p.protectedUntil > this.time ? t('spawnShield') : p.burrowed ? this.surfaceInstruction() : war && p.alive && this.time < this.commandHintUntil && plotContains(this.app.plots[this.teamPlots[my]], p.pos.x, p.pos.z) ? t(IS_TOUCH ? 'commandHintTouch' : 'commandHint') : '',
+      prompt: this.time < this.promptUntil ? this.promptText : this.manning ? t(IS_TOUCH ? 'leaveEngineTouch' : 'leaveEngine', { name: t(this.manning.kind === 'ballista' ? 'engineBallista' : 'engineCatapult') }) : nearEngine ? t(IS_TOUCH ? 'manEngineTouch' : 'manEngine', { name: t(nearEngine.kind === 'ballista' ? 'engineBallista' : 'engineCatapult') }) : p.protectedUntil > this.time ? t('spawnShield') : p.burrowed ? this.surfaceInstruction() : war && p.alive && this.time < this.commandHintUntil && plotContains(this.app.plots[this.teamPlots[my]], p.pos.x, p.pos.z) ? t(IS_TOUCH ? 'commandHintTouch' : 'commandHint') : '',
       minimap: {
         self: { x: p.pos.x, z: p.pos.z, yaw: p.yaw },
         target: match.targetPlotIndex >= 0 ? { x: this.app.plots[match.targetPlotIndex].cx, z: this.app.plots[match.targetPlotIndex].cz } : null,
