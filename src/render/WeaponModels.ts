@@ -13,7 +13,7 @@ export const OPERATOR_CAMO: Array<[number, number, number]> = [
 export type ModelId = WeaponId | 'grenade' | 'rocketShell';
 export type WeaponDetail = 'high' | 'low';
 
-type MatKey = 'metal' | 'dark' | 'polymer' | 'rubber' | 'accent' | 'wood' | 'lens' | 'glove' | 'pad' | 'sleeve' | 'light' | 'brass' | 'shell' | 'skin';
+type MatKey = 'metal' | 'dark' | 'polymer' | 'rubber' | 'accent' | 'wood' | 'lens' | 'glove' | 'pad' | 'sleeve' | 'light' | 'brass' | 'shell' | 'skin' | 'iron' | 'steel' | 'rope' | 'clay';
 
 interface Ctx {
   pb: PartBuilder<MatKey>;
@@ -54,6 +54,10 @@ function mats(accent: THREE.Color): Record<MatKey, THREE.Material> {
     rubber: std({ color: 0x0e0f11, metalness: 0, roughness: 1, map: rm.map, normalMap: rm.normalMap, normalScale: new THREE.Vector2(0.4, 0.4), roughnessMap: rm.roughnessMap }),
     accent: std({ color: accent.clone().multiplyScalar(0.55), emissive: accent, emissiveIntensity: 1.1, metalness: 0.3, roughness: 0.35 }),
     wood: std({ color: 0x8a5a30, metalness: 0, roughness: 1, map: wm.map, normalMap: wm.normalMap, normalScale: new THREE.Vector2(0.5, 0.5), roughnessMap: wm.roughnessMap }),
+    iron: std({ color: 0x3a3d42, metalness: 0.75, roughness: 0.9, map: gm.map, normalMap: gm.normalMap, normalScale: new THREE.Vector2(0.8, 0.8), roughnessMap: gm.roughnessMap }),
+    steel: std({ color: 0x9aa3ad, metalness: 0.95, roughness: 0.35, map: gm.map, normalMap: gm.normalMap, normalScale: new THREE.Vector2(0.4, 0.4) }),
+    rope: std({ color: 0x9c8a5c, metalness: 0, roughness: 1, map: fm.map, normalMap: fm.normalMap, normalScale: new THREE.Vector2(0.9, 0.9), roughnessMap: fm.roughnessMap }),
+    clay: std({ color: 0xa2603a, metalness: 0, roughness: 0.95, map: am.map, normalMap: am.normalMap, normalScale: new THREE.Vector2(0.5, 0.5) }),
     lens: std({ color: 0x1b2f42, metalness: 0.95, roughness: 0.04, emissive: new THREE.Color(0.02, 0.08, 0.13), emissiveIntensity: 1, transparent: true, opacity: 0.62, depthWrite: false }),
     glove: std({ color: 0x2b2e34, metalness: 0.05, roughness: 1, map: fm.map, normalMap: fm.normalMap, normalScale: new THREE.Vector2(0.8, 0.8), roughnessMap: fm.roughnessMap }),
     pad: std({ color: 0x15171a, metalness: 0.2, roughness: 1, map: am.map, normalMap: am.normalMap, normalScale: new THREE.Vector2(0.5, 0.5), roughnessMap: am.roughnessMap }),
@@ -441,287 +445,175 @@ function supportHandLeft(c: Ctx, x: number, bottomY: number, z: number, halfW = 
 // ---------------------------------------------------------------------------------------------
 // Weapons
 
-function pistol(c: Ctx): WeaponData {
-  const slideY = 0.086;
-  // Polymer frame with accessory rail and beavertail.
-  rb(c, 'polymer', 0.036, 0.034, 0.185, 0.006, 0, 0.058, -0.085);
-  rail(c, 0.02, 0.041, 0, -0.1, -0.165);
-  // Slide with front/rear serrations and a lightening cut.
-  rb(c, 'metal', 0.034, 0.036, 0.205, 0.006, 0, slideY, -0.1);
-  serrations(c, 0.0175, slideY, -0.012, 6, 0.028);
-  serrations(c, 0.0175, slideY, -0.16, 4, 0.028);
-  box(c, 'rubber', 0.02, 0.003, 0.05, 0, slideY + 0.017, -0.16);
-  // Ejection port and extractor.
-  box(c, 'rubber', 0.003, 0.015, 0.03, 0.017, slideY + 0.004, -0.11);
-  box(c, 'dark', 0.003, 0.006, 0.012, 0.0175, slideY + 0.006, -0.085);
-  // Barrel & compensator.
-  cylZ(c, 'metal', 0.0085, 0.03, 0, slideY, -0.205);
-  compensator(c, slideY, -0.235, 0.028, 0.017);
-  // Controls: slide stop, takedown lever, mag release.
-  box(c, 'metal', 0.004, 0.006, 0.03, -0.02, 0.066, -0.06);
-  box(c, 'metal', 0.004, 0.005, 0.014, -0.02, 0.05, -0.1);
-  box(c, 'dark', 0.004, 0.008, 0.008, -0.019, 0.02, -0.02);
-  // Trigger & guard.
-  trigger(c, 0, 0.04, -0.05, 0.05);
-  // Grip and magazine baseplate.
-  pistolGrip(c, 0, -0.03, 0.02, 0.24, 0.115, 0.033, 0.055);
-  box(c, 'dark', 0.036, 0.01, 0.062, 0, -0.087, 0.006, 0.24);
-  // Under-barrel light.
-  flashlight(c, 0, 0.032, -0.135, 0.011, 0.055);
-  // Iron sights: rear notch and front post with team dot.
-  box(c, 'metal', 0.024, 0.012, 0.012, 0, slideY + 0.022, -0.012);
-  box(c, 'rubber', 0.006, 0.008, 0.004, 0, slideY + 0.026, -0.007);
-  box(c, 'metal', 0.006, 0.012, 0.01, 0, slideY + 0.022, -0.19);
-  box(c, 'accent', 0.003, 0.003, 0.002, 0, slideY + 0.025, -0.196);
-  // Slide-mounted red dot.
-  const sightY = redDot(c, 0, slideY + 0.018, -0.05, 0.85);
-  if (c.hands) {
-    gripHandRight(c, 0, -0.03, 0.02, 0.24, 0.0165);
-    gripHandLeft(c, 0, -0.045, 0.01, 0.24, 0.0165 + 0.025);
-  }
-  return { muzzle: new THREE.Vector3(0, slideY, -0.245), hip: new THREE.Vector3(0.24, -0.25, -0.42), ads: new THREE.Vector3(0, -sightY, -0.34) };
+/** Wooden stock running along -Z: a straight forestock and a dropped butt with a brass plate. */
+function woodStock(c: Ctx, y: number, zFront: number, zBack: number, w: number, h: number, buttDrop = 0.05): void {
+  rb(c, 'wood', w, h, zBack - zFront, 0.008, 0, y, (zFront + zBack) / 2);
+  rb(c, 'wood', w + 0.006, h + 0.06, 0.2, 0.012, 0, y - buttDrop, zBack + 0.08, 0.18);
+  box(c, 'brass', w + 0.008, h + 0.07, 0.012, 0, y - buttDrop - 0.012, zBack + 0.185, 0.18);
 }
 
-function smg(c: Ctx): WeaponData {
-  const boreY = 0.09;
-  const topY = 0.117;
-  // Polymer receiver, tapered front and stock hinge.
-  rb(c, 'polymer', 0.05, 0.075, 0.32, 0.01, 0, 0.08, -0.16);
-  rb(c, 'polymer', 0.044, 0.06, 0.1, 0.008, 0, 0.085, -0.35);
-  box(c, 'accent', 0.002, 0.005, 0.2, 0.026, 0.05, -0.16);
-  box(c, 'accent', 0.002, 0.005, 0.2, -0.026, 0.05, -0.16);
-  rail(c, 0.021, topY + 0.01, 0, 0.0, -0.39);
-  mlok(c, 0.025, 0.085, 0.03, -0.25, -0.39);
-  receiverFurniture(c, 0.025, topY, -0.2);
-  // Barrel, suppressor.
-  cylZ(c, 'metal', 0.011, 0.06, 0, boreY, -0.42);
-  suppressor(c, boreY, -0.55, 0.13, 0.019);
-  // Magazine in front of the grip, magwell flare.
-  rb(c, 'dark', 0.038, 0.03, 0.065, 0.005, 0, 0.03, -0.2);
-  magazine(c, 0, 0.03, -0.2, 0.03, 0.17, 0.055, 0.1, 3);
-  // Grip, trigger, angled foregrip.
-  pistolGrip(c, 0, -0.02, 0.012, 0.3);
-  trigger(c, 0, 0.04, -0.06, 0.05);
-  rb(c, 'polymer', 0.03, 0.05, 0.045, 0.008, 0, 0.03, -0.31, -0.55);
-  // Folding stock: twin struts and buttpad.
-  box(c, 'metal', 0.006, 0.014, 0.2, 0.016, 0.085, 0.1);
-  box(c, 'metal', 0.006, 0.014, 0.2, -0.016, 0.085, 0.1);
-  rb(c, 'rubber', 0.04, 0.09, 0.02, 0.005, 0, 0.065, 0.205);
-  rb(c, 'polymer', 0.036, 0.02, 0.04, 0.005, 0, 0.09, 0.0);
-  // Red dot.
-  const sightY = redDot(c, 0, topY + 0.01, -0.09, 1);
-  flashlight(c, 0.036, 0.1, -0.33, 0.011, 0.06);
-  if (c.hands) {
-    gripHandRight(c, 0, -0.02, 0.012, 0.3, 0.017);
-    supportHandLeft(c, 0, 0.0425, -0.26, 0.025);
+/** Steel prod (the bow of a crossbow) across the front, curving back at the tips, with the string drawn to the nut. */
+function prod(c: Ctx, y: number, zFront: number, tipX: number, zNut: number, thick: number): void {
+  const n = 5;
+  for (let i = -n; i <= n; i++) {
+    if (i === 0) continue;
+    const t0 = (i - Math.sign(i) * 0.5) / n;
+    const x = t0 * tipX;
+    const sag = 0.28 * tipX * t0 * t0;
+    box(c, 'steel', (tipX / n) * 1.06, thick, 0.02 - Math.abs(t0) * 0.006, x, y, zFront + sag, 0, -Math.atan((0.56 * tipX * t0) / tipX), 0);
   }
-  return { muzzle: new THREE.Vector3(0, boreY, -0.56), hip: new THREE.Vector3(0.26, -0.27, -0.46), ads: new THREE.Vector3(0, -sightY, -0.4) };
+  box(c, 'iron', 0.05, thick + 0.012, 0.03, 0, y, zFront + 0.004);
+  for (const sx of [-1, 1]) c.pb.capsule('rope', new THREE.Vector3(sx * tipX, y, zFront + 0.28 * tipX), new THREE.Vector3(0, y + 0.012, zNut), 0.0035, undefined, 6, 2);
+  cylX(c, 'brass', 0.012, 0.03, 0, y + 0.01, zNut);
 }
 
-function rifle(c: Ctx): WeaponData {
+/** A bolt lying in the groove: shaft, iron head and two feathers in the team colour. */
+function bolt(c: Ctx, y: number, zHead: number, len: number): void {
+  cylZ(c, 'wood', 0.005, len, 0, y, zHead + len / 2);
+  cylZ(c, 'iron', 0.007, 0.04, 0, y, zHead - 0.01, 0.001);
+  box(c, 'accent', 0.002, 0.02, 0.05, 0.006, y + 0.006, zHead + len - 0.03, 0, 0, 0.6);
+  box(c, 'accent', 0.002, 0.02, 0.05, -0.006, y + 0.006, zHead + len - 0.03, 0, 0, -0.6);
+}
+
+/** Flintlock: a brace pistol with a walnut stock, brass lock plate and a sharply dropped grip. */
+function flintlock(c: Ctx): WeaponData {
+  const boreY = 0.085;
+  rb(c, 'wood', 0.036, 0.034, 0.24, 0.006, 0, boreY - 0.03, -0.12);
+  rb(c, 'wood', 0.038, 0.13, 0.05, 0.012, 0, -0.03, 0.035, 0.42);
+  sphere(c, 'brass', 0.024, 0, -0.095, 0.075);
+  cylZ(c, 'iron', 0.012, 0.28, 0, boreY, -0.16, 0.011, 8);
+  box(c, 'brass', 0.004, 0.008, 0.008, 0, boreY + 0.014, -0.28);
+  box(c, 'brass', 0.004, 0.032, 0.075, 0.021, boreY - 0.01, -0.01);
+  box(c, 'iron', 0.006, 0.05, 0.01, 0.024, boreY + 0.02, 0.012, -0.5);
+  box(c, 'iron', 0.006, 0.012, 0.03, 0.024, boreY + 0.012, -0.03);
+  box(c, 'iron', 0.008, 0.008, 0.02, 0.026, boreY - 0.002, -0.02);
+  cylZ(c, 'brass', 0.003, 0.22, 0, boreY - 0.05, -0.15);
+  box(c, 'iron', 0.02, 0.01, 0.01, 0, boreY + 0.016, 0.0);
+  trigger(c, 0, 0.03, -0.01, 0.05);
+  if (c.hands) {
+    gripHandRight(c, 0, -0.03, 0.035, 0.42, 0.019);
+    gripHandLeft(c, 0, -0.045, 0.025, 0.42, 0.019 + 0.025);
+  }
+  return { muzzle: new THREE.Vector3(0, boreY, -0.3), hip: new THREE.Vector3(0.24, -0.25, -0.42), ads: new THREE.Vector3(0, -(boreY + 0.022), -0.34) };
+}
+
+/** Repeating crossbow: a short tiller with a wooden magazine box on top and a lever to span it. */
+function repeater(c: Ctx): WeaponData {
+  const railY = 0.09;
+  woodStock(c, 0.07, -0.34, 0.1, 0.04, 0.046, 0.03);
+  rb(c, 'wood', 0.05, 0.07, 0.2, 0.006, 0, railY + 0.045, -0.2);
+  box(c, 'iron', 0.052, 0.004, 0.2, 0, railY + 0.082, -0.2);
+  box(c, 'wood', 0.018, 0.02, 0.26, 0.032, railY + 0.02, 0.0, 0.35);
+  cylX(c, 'brass', 0.008, 0.06, 0, railY + 0.03, -0.1);
+  prod(c, railY - 0.005, -0.33, 0.22, -0.1, 0.01);
+  ringZ(c, 'iron', 0.026, 0.004, 0, railY - 0.035, -0.36);
+  bolt(c, railY + 0.008, -0.31, 0.2);
+  trigger(c, 0, 0.03, -0.04, 0.05);
+  pistolGrip(c, 0, -0.02, 0.05, 0.3, 0.1, 0.032, 0.05);
+  if (c.hands) {
+    gripHandRight(c, 0, -0.02, 0.05, 0.3, 0.017);
+    supportHandLeft(c, 0, 0.045, -0.22, 0.024);
+  }
+  return { muzzle: new THREE.Vector3(0, railY + 0.01, -0.35), hip: new THREE.Vector3(0.26, -0.27, -0.46), ads: new THREE.Vector3(0, -(railY + 0.09), -0.4) };
+}
+
+/** Crossbow: a long tiller with a steel prod, stirrup, nut and one bolt in the groove. */
+function crossbow(c: Ctx): WeaponData {
+  const railY = 0.1;
+  woodStock(c, 0.075, -0.45, 0.12, 0.042, 0.05, 0.04);
+  box(c, 'wood', 0.02, 0.008, 0.5, 0, railY + 0.002, -0.2);
+  prod(c, railY - 0.01, -0.44, 0.3, -0.06, 0.012);
+  ringZ(c, 'iron', 0.03, 0.005, 0, railY - 0.04, -0.47);
+  bolt(c, railY + 0.012, -0.42, 0.32);
+  trigger(c, 0, 0.03, -0.03, 0.06);
+  box(c, 'iron', 0.02, 0.012, 0.01, 0, railY + 0.026, 0.02);
+  if (c.hands) {
+    gripHandRight(c, 0, -0.02, 0.06, 0.35, 0.02);
+    supportHandLeft(c, 0, 0.05, -0.3, 0.024);
+  }
+  return { muzzle: new THREE.Vector3(0, railY + 0.012, -0.45), hip: new THREE.Vector3(0.27, -0.27, -0.5), ads: new THREE.Vector3(0, -(railY + 0.03), -0.42) };
+}
+
+/** Hand cannon: a stout flared iron barrel with reinforcing rings, strapped to a wooden haft, a coal at the touch hole. */
+function handcannon(c: Ctx): WeaponData {
   const boreY = 0.1;
-  const topY = 0.13;
-  // Lower receiver, magwell, upper receiver.
-  rb(c, 'dark', 0.05, 0.06, 0.2, 0.008, 0, 0.04, -0.1);
-  rb(c, 'dark', 0.046, 0.07, 0.05, 0.006, 0, 0.02, -0.19, 0.1);
-  rb(c, 'dark', 0.052, 0.06, 0.2, 0.008, 0, 0.098, -0.15);
-  receiverFurniture(c, 0.026, topY - 0.005, -0.16);
-  screws(c, [[0.026, 0.045, -0.02], [0.026, 0.03, -0.17], [-0.026, 0.045, -0.02]]);
-  // Handguard with M-LOK slots, barrel nut, gas block and barrel.
-  rb(c, 'dark', 0.05, 0.06, 0.3, 0.012, 0, 0.098, -0.4);
-  mlok(c, 0.025, 0.098, 0.03, -0.26, -0.54, 2);
-  cylZ(c, 'metal', 0.028, 0.02, 0, 0.098, -0.255);
-  cylZ(c, 'metal', 0.009, 0.16, 0, boreY, -0.62, 0.0085);
-  box(c, 'dark', 0.018, 0.02, 0.02, 0, boreY + 0.008, -0.6);
-  compensator(c, boreY, -0.76, 0.06, 0.014);
-  // Full-length top rail.
-  rail(c, 0.021, topY, 0, -0.05, -0.55);
-  // Buffer tube & stock.
-  carbineStock(c, 0.098, -0.05, 0.32);
-  // Grip, trigger, magazine.
-  pistolGrip(c, 0, -0.02, 0.0, 0.32);
-  trigger(c, 0, 0.012, -0.05, 0.055);
-  magazine(c, 0, 0.0, -0.19, 0.028, 0.19, 0.068, 0.2, 3);
-  // Optic, front sight, light and angled foregrip.
-  const sightY = redDot(c, 0, topY, -0.14, 1.1);
-  box(c, 'metal', 0.006, 0.014, 0.008, 0, topY + 0.012, -0.5);
-  box(c, 'accent', 0.003, 0.003, 0.002, 0, topY + 0.016, -0.505);
-  flashlight(c, 0.037, 0.112, -0.44, 0.012, 0.08);
-  rb(c, 'polymer', 0.03, 0.05, 0.045, 0.008, 0, 0.05, -0.45, -0.6);
-  box(c, 'accent', 0.002, 0.004, 0.22, 0.026, 0.072, -0.4);
-  box(c, 'accent', 0.002, 0.004, 0.22, -0.026, 0.072, -0.4);
+  cylZ(c, 'iron', 0.03, 0.42, 0, boreY, -0.26, 0.038, 10);
+  for (const z of [-0.12, -0.25, -0.38]) ringZ(c, 'iron', 0.034, 0.006, 0, boreY, z);
+  cylZ(c, 'rubber', 0.026, 0.004, 0, boreY, -0.472);
+  rb(c, 'wood', 0.046, 0.05, 0.5, 0.01, 0, boreY - 0.05, 0.0);
+  rb(c, 'wood', 0.05, 0.1, 0.16, 0.012, 0, boreY - 0.09, 0.28, 0.2);
+  for (const z of [-0.2, -0.04]) box(c, 'brass', 0.05, 0.062, 0.012, 0, boreY - 0.02, z);
+  sphere(c, 'accent', 0.006, 0, boreY + 0.03, -0.05);
+  for (let i = 0; i < 4; i++) ringZ(c, 'rope', 0.03, 0.003, 0, boreY - 0.05, 0.1 + i * 0.012);
+  trigger(c, 0, 0.03, 0.02, 0.05);
   if (c.hands) {
-    gripHandRight(c, 0, -0.02, 0.0, 0.32, 0.017);
-    supportHandLeft(c, 0, 0.068, -0.39, 0.025);
+    gripHandRight(c, 0, -0.02, 0.08, 0.3, 0.02);
+    supportHandLeft(c, 0, 0.045, -0.15, 0.026);
   }
-  return { muzzle: new THREE.Vector3(0, boreY, -0.77), hip: new THREE.Vector3(0.27, -0.27, -0.5), ads: new THREE.Vector3(0, -sightY, -0.42) };
+  return { muzzle: new THREE.Vector3(0, boreY, -0.48), hip: new THREE.Vector3(0.27, -0.28, -0.48), ads: new THREE.Vector3(0, -(boreY + 0.04), -0.4) };
 }
 
-function shotgun(c: Ctx): WeaponData {
-  const barrelY = 0.11;
-  const tubeY = 0.062;
-  // Receiver with loading & ejection ports.
-  rb(c, 'metal', 0.05, 0.082, 0.24, 0.008, 0, 0.07, -0.1);
-  box(c, 'rubber', 0.003, 0.02, 0.05, 0.025, 0.08, -0.12);
-  box(c, 'rubber', 0.02, 0.003, 0.05, 0, 0.03, -0.14);
-  rail(c, 0.021, 0.125, 0, 0.0, -0.2);
-  // Barrel, magazine tube, clamp and heat shield.
-  cylZ(c, 'metal', 0.012, 0.6, 0, barrelY, -0.52);
-  cylZ(c, 'metal', 0.012, 0.5, 0, tubeY, -0.47);
-  box(c, 'metal', 0.03, 0.06, 0.02, 0, (barrelY + tubeY) / 2, -0.7);
-  cylZ(c, 'dark', 0.012, 0.03, 0, tubeY, -0.73, 0.01);
-  const hs = new THREE.CylinderGeometry(0.02, 0.02, 0.3, c.hi ? 12 : 8, 1, true, Math.PI, Math.PI);
-  c.pb.part(hs, 'dark', 0, barrelY, -0.38, -HALF_PI, 0, 0);
-  hs.dispose();
-  if (c.hi) for (let i = 0; i < 6; i++) box(c, 'rubber', 0.006, 0.003, 0.014, 0.0, barrelY + 0.02, -0.26 - i * 0.045);
-  // Pump forend with ribs and action bars.
-  rb(c, 'polymer', 0.046, 0.058, 0.2, 0.01, 0, tubeY, -0.5);
-  if (c.hi) for (let i = 0; i < 7; i++) box(c, 'rubber', 0.048, 0.06, 0.003, 0, tubeY, -0.42 - i * 0.026);
-  box(c, 'metal', 0.004, 0.01, 0.2, 0.02, 0.07, -0.3);
-  box(c, 'metal', 0.004, 0.01, 0.2, -0.02, 0.07, -0.3);
-  box(c, 'accent', 0.002, 0.005, 0.12, 0.024, tubeY - 0.015, -0.5);
-  box(c, 'accent', 0.002, 0.005, 0.12, -0.024, tubeY - 0.015, -0.5);
-  // Sights: brass bead and ghost ring.
-  sphere(c, 'brass', 0.0045, 0, barrelY + 0.016, -0.81);
-  box(c, 'metal', 0.006, 0.01, 0.01, 0, barrelY + 0.008, -0.81);
-  ringZ(c, 'metal', 0.011, 0.002, 0, 0.14, -0.03);
-  box(c, 'metal', 0.006, 0.014, 0.008, 0, 0.128, -0.03);
-  const sightY = 0.14;
-  // Stock with pistol grip, cheek pad and buttpad.
-  pistolGrip(c, 0, -0.025, 0.03, 0.35);
-  trigger(c, 0, 0.03, -0.02, 0.05);
-  rb(c, 'polymer', 0.04, 0.09, 0.22, 0.012, 0, 0.055, 0.15);
-  rb(c, 'rubber', 0.034, 0.03, 0.12, 0.006, 0, 0.11, 0.16);
-  rb(c, 'rubber', 0.044, 0.11, 0.02, 0.005, 0, 0.05, 0.265);
-  // Side saddle with shells (left side).
-  box(c, 'dark', 0.012, 0.075, 0.13, -0.031, 0.07, -0.1);
-  for (let i = 0; i < 4; i++) {
-    const z = -0.045 - i * 0.032;
-    cylY(c, 'shell', 0.009, 0.05, -0.037, 0.078, z, 0.009, 10);
-    cylY(c, 'brass', 0.0095, 0.012, -0.037, 0.047, z, 0.0095, 10);
-  }
+/** Arquebus: a long octagonal barrel on a heavy stock, a serpentine matchlock with a smouldering cord. */
+function arquebus(c: Ctx): WeaponData {
+  const boreY = 0.1;
+  woodStock(c, 0.07, -0.72, 0.16, 0.042, 0.06, 0.06);
+  cylZ(c, 'iron', 0.015, 1.0, 0, boreY, -0.4, 0.013, 8);
+  for (const z of [-0.2, -0.45, -0.7]) ringZ(c, 'brass', 0.017, 0.003, 0, boreY, z);
+  sphere(c, 'brass', 0.004, 0, boreY + 0.018, -0.88);
+  box(c, 'iron', 0.02, 0.012, 0.01, 0, boreY + 0.02, -0.02);
+  box(c, 'brass', 0.004, 0.03, 0.1, 0.022, boreY - 0.012, 0.0);
+  box(c, 'iron', 0.006, 0.07, 0.01, 0.026, boreY + 0.02, 0.03, 0.35);
+  box(c, 'iron', 0.006, 0.01, 0.05, 0.026, boreY + 0.05, 0.0);
+  c.pb.capsule('rope', new THREE.Vector3(0.028, boreY + 0.055, -0.01), new THREE.Vector3(0.05, boreY - 0.06, 0.12), 0.003, undefined, 6, 2);
+  box(c, 'accent', 0.006, 0.006, 0.006, 0.028, boreY + 0.058, -0.012);
+  box(c, 'iron', 0.01, 0.006, 0.02, 0.026, boreY + 0.002, -0.03);
+  cylZ(c, 'brass', 0.003, 0.9, 0, boreY - 0.045, -0.38);
+  trigger(c, 0, 0.025, -0.02, 0.06);
   if (c.hands) {
-    gripHandRight(c, 0, -0.025, 0.03, 0.35, 0.017);
-    supportHandLeft(c, 0, tubeY - 0.029, -0.5, 0.023);
+    gripHandRight(c, 0, -0.02, 0.1, 0.3, 0.02);
+    supportHandLeft(c, 0, 0.04, -0.5, 0.024);
   }
-  return { muzzle: new THREE.Vector3(0, barrelY, -0.83), hip: new THREE.Vector3(0.27, -0.28, -0.48), ads: new THREE.Vector3(0, -sightY, -0.4) };
+  return { muzzle: new THREE.Vector3(0, boreY, -0.9), hip: new THREE.Vector3(0.27, -0.28, -0.55), ads: new THREE.Vector3(0, -(boreY + 0.022), -0.35) };
 }
 
-function sniper(c: Ctx): WeaponData {
-  const boreY = 0.095;
-  const railY = 0.13;
-  // Chassis, forend with M-LOK, barrel and suppressor.
-  rb(c, 'dark', 0.05, 0.07, 0.5, 0.008, 0, 0.065, -0.1);
-  rb(c, 'dark', 0.046, 0.06, 0.32, 0.01, 0, 0.07, -0.5);
-  mlok(c, 0.023, 0.07, 0.03, -0.36, -0.64, 2);
-  rail(c, 0.021, railY, 0, 0.0, -0.35);
-  cylZ(c, 'metal', 0.013, 0.36, 0, boreY, -0.83, 0.011);
-  suppressor(c, boreY, -1.16, 0.18, 0.024);
-  box(c, 'accent', 0.002, 0.005, 0.3, 0.026, 0.045, -0.1);
-  box(c, 'accent', 0.002, 0.005, 0.3, -0.026, 0.045, -0.1);
-  // Bolt: body, handle, knob; ejection port.
-  cylZ(c, 'metal', 0.011, 0.11, 0, 0.1, 0.0);
-  cylX(c, 'metal', 0.006, 0.06, 0.045, 0.095, -0.02);
-  sphere(c, 'polymer', 0.013, 0.078, 0.085, -0.02);
-  box(c, 'rubber', 0.003, 0.018, 0.06, 0.025, 0.09, -0.1);
-  // Scope.
-  const sightY = scope(c, 0, railY, -0.32, 0.04, 0.017);
-  // Magazine, grip, trigger.
-  magazine(c, 0, 0.03, -0.17, 0.03, 0.1, 0.06, 0.08, 2);
-  pistolGrip(c, 0, -0.02, 0.0, 0.3);
-  trigger(c, 0, 0.03, -0.05, 0.05);
-  // Adjustable stock, cheek riser, buttpad, monopod.
-  rb(c, 'dark', 0.04, 0.11, 0.2, 0.008, 0, 0.05, 0.27);
-  rb(c, 'polymer', 0.034, 0.03, 0.12, 0.006, 0, 0.12, 0.26);
-  rb(c, 'rubber', 0.044, 0.125, 0.02, 0.005, 0, 0.05, 0.38);
-  cylY(c, 'metal', 0.005, 0.06, 0, -0.03, 0.33);
-  box(c, 'rubber', 0.02, 0.008, 0.02, 0, -0.062, 0.33);
-  screws(c, [[0.021, 0.08, 0.2], [0.021, 0.02, 0.2], [0.021, 0.05, 0.34]]);
-  // Bipod (folded forward) with rubber feet.
-  box(c, 'metal', 0.03, 0.02, 0.03, 0, 0.032, -0.6);
-  for (const sx of [-1, 1]) {
-    c.pb.capsule('metal', new THREE.Vector3(sx * 0.014, 0.03, -0.6), new THREE.Vector3(sx * 0.05, -0.12, -0.63), 0.005, undefined, 8, 2);
-    box(c, 'rubber', 0.014, 0.014, 0.014, sx * 0.05, -0.125, -0.63);
-  }
+/** Hand mortar: a short bell-mouthed bronze barrel on a musket stock, a bomb with a lit fuse in its mouth. */
+function mortar(c: Ctx): WeaponData {
+  const boreY = 0.12;
+  cylZ(c, 'brass', 0.05, 0.3, 0, boreY, -0.22, 0.066, 12);
+  ringZ(c, 'brass', 0.056, 0.008, 0, boreY, -0.1);
+  cylZ(c, 'rubber', 0.05, 0.004, 0, boreY, -0.372);
+  sphere(c, 'iron', 0.044, 0, boreY, -0.33);
+  c.pb.capsule('rope', new THREE.Vector3(0, boreY + 0.04, -0.33), new THREE.Vector3(0.01, boreY + 0.09, -0.36), 0.004, undefined, 6, 2);
+  box(c, 'accent', 0.008, 0.008, 0.008, 0.01, boreY + 0.095, -0.365);
+  woodStock(c, 0.06, -0.3, 0.14, 0.05, 0.07, 0.07);
+  trigger(c, 0, 0.02, -0.06, 0.06);
+  box(c, 'brass', 0.004, 0.03, 0.08, 0.026, boreY - 0.03, -0.02);
   if (c.hands) {
-    gripHandRight(c, 0, -0.02, 0.0, 0.3, 0.017);
-    supportHandLeft(c, 0, 0.04, -0.5, 0.023);
+    gripHandRight(c, 0, -0.01, 0.1, 0.3, 0.02);
+    supportHandLeft(c, 0, 0.03, -0.2, 0.026);
   }
-  return { muzzle: new THREE.Vector3(0, boreY, -1.17), hip: new THREE.Vector3(0.27, -0.28, -0.55), ads: new THREE.Vector3(0, -sightY, -0.35) };
+  return { muzzle: new THREE.Vector3(0, boreY, -0.38), hip: new THREE.Vector3(0.24, -0.3, -0.45), ads: new THREE.Vector3(0, -(boreY + 0.07), -0.4) };
 }
 
-function rocket(c: Ctx): WeaponData {
-  const y = 0.12;
-  // Launch tube with front flare and rear venturi, bands and rings.
-  cylZ(c, 'dark', 0.06, 0.9, 0, y, -0.3);
-  cylZ(c, 'metal', 0.06, 0.1, 0, y, -0.8, 0.078);
-  cylZ(c, 'metal', 0.06, 0.12, 0, y, 0.21, 0.058);
-  cylZ(c, 'metal', 0.082, 0.02, 0, y, 0.28, 0.084);
-  for (const z of [-0.6, -0.05, 0.1]) ringZ(c, 'metal', 0.062, 0.006, 0, y, z);
-  for (const z of [-0.42, -0.18]) ringZ(c, 'accent', 0.062, 0.004, 0, y, z);
-  box(c, 'rubber', 0.13, 0.02, 0.04, 0, y, -0.68);
-  // Inner bore darkening and loaded warhead tip.
-  cylZ(c, 'rubber', 0.052, 0.004, 0, y, -0.85);
-  cylZ(c, 'dark', 0.045, 0.1, 0, y, -0.9, 0.02);
-  cylZ(c, 'accent', 0.02, 0.02, 0, y, -0.955, 0.008);
-  // Trigger housing, grips and shoulder rest.
-  rb(c, 'dark', 0.045, 0.07, 0.16, 0.008, 0, 0.045, -0.12);
-  pistolGrip(c, 0, -0.01, -0.09, 0.3);
-  trigger(c, 0, 0.02, -0.15, 0.05);
-  rb(c, 'polymer', 0.032, 0.09, 0.04, 0.008, 0, 0.02, -0.4, -0.15);
-  rb(c, 'rubber', 0.05, 0.03, 0.16, 0.008, 0, 0.05, 0.05);
-  // Optical sight unit offset to the left, with accent power light.
-  box(c, 'dark', 0.03, 0.03, 0.12, -0.055, 0.2, -0.22);
-  box(c, 'dark', 0.036, 0.07, 0.11, -0.055, 0.245, -0.22);
-  cylZ(c, 'lens', 0.014, 0.004, -0.055, 0.245, -0.277);
-  cylZ(c, 'lens', 0.011, 0.004, -0.055, 0.245, -0.163);
-  box(c, 'accent', 0.006, 0.006, 0.006, -0.055, 0.283, -0.22);
-  box(c, 'metal', 0.02, 0.02, 0.04, -0.04, 0.17, -0.22);
-  // Carry handle & sling loops.
-  box(c, 'dark', 0.02, 0.012, 0.16, 0, 0.19, 0.0);
-  box(c, 'dark', 0.02, 0.02, 0.012, 0, 0.18, -0.08);
-  box(c, 'dark', 0.02, 0.02, 0.012, 0, 0.18, 0.08);
-  screws(c, [[0.06, 0.12, -0.4], [0.06, 0.12, 0.0], [-0.06, 0.12, -0.4]]);
-  if (c.hands) {
-    gripHandRight(c, 0, -0.01, -0.09, 0.3, 0.017);
-    gripHandLeft(c, 0, 0.02, -0.4, -0.15, 0.016);
-  }
-  return { muzzle: new THREE.Vector3(0, y, -0.96), hip: new THREE.Vector3(0.24, -0.3, -0.45), ads: new THREE.Vector3(0.055, -0.245, -0.4) };
+/** The mortar's bomb in flight: an iron ball with a brass band and a sparking fuse. */
+function bomb(c: Ctx): WeaponData {
+  sphere(c, 'iron', 0.06, 0, 0, 0);
+  ringZ(c, 'brass', 0.06, 0.005, 0, 0, 0);
+  c.pb.capsule('rope', new THREE.Vector3(0, 0.055, 0), new THREE.Vector3(0.02, 0.11, 0.01), 0.005, undefined, 6, 2);
+  sphere(c, 'accent', 0.012, 0.02, 0.115, 0.01);
+  return { muzzle: new THREE.Vector3(0, 0, -0.06), hip: new THREE.Vector3(0.24, -0.3, -0.45), ads: new THREE.Vector3(0, -0.2, -0.4) };
 }
 
-function rocketShell(c: Ctx): WeaponData {
-  // Flying rocket: nose, body, fins and glowing motor. Forward is -Z.
-  cylZ(c, 'dark', 0.045, 0.22, 0, 0, -0.03);
-  cylZ(c, 'metal', 0.045, 0.12, 0, 0, -0.2, 0.012);
-  cylZ(c, 'accent', 0.012, 0.03, 0, 0, -0.27, 0.004);
-  cylZ(c, 'metal', 0.035, 0.06, 0, 0, 0.11, 0.045);
-  cylZ(c, 'accent', 0.028, 0.01, 0, 0, 0.145);
-  for (let i = 0; i < 4; i++) {
-    const a = (i / 4) * Math.PI * 2;
-    box(c, 'metal', 0.004, 0.05, 0.1, Math.cos(a) * 0.06, Math.sin(a) * 0.06, 0.08, 0, 0, a);
-  }
-  ringZ(c, 'accent', 0.046, 0.003, 0, 0, -0.1);
-  return { muzzle: new THREE.Vector3(0, 0, -0.28), hip: new THREE.Vector3(0.24, -0.3, -0.45), ads: new THREE.Vector3(0, -0.2, -0.4) };
-}
-
-function grenade(c: Ctx): WeaponData {
-  // Fragmentation body with grooves, fuze head, pull ring and safety lever.
-  const body = lathe([[0, -0.06], [0.03, -0.058], [0.05, -0.04], [0.056, -0.012], [0.056, 0.012], [0.05, 0.036], [0.034, 0.05], [0.022, 0.055], [0.022, 0.07]], c.hi ? 18 : 12);
-  c.pb.part(body, 'dark', 0, 0, 0);
+/** Fire pot: a clay pot of pitch with a rope sling and a burning rag stuffed in its neck. */
+function firepot(c: Ctx): WeaponData {
+  const body = lathe([[0, -0.06], [0.03, -0.058], [0.052, -0.035], [0.058, 0.0], [0.05, 0.03], [0.03, 0.045], [0.026, 0.06], [0.032, 0.07], [0.024, 0.072], [0, 0.072]], c.hi ? 18 : 12);
+  c.pb.part(body, 'clay', 0, 0, 0);
   body.dispose();
-  for (let i = 0; i < 3; i++) {
-    const g = new THREE.TorusGeometry(0.0565, 0.004, 6, c.hi ? 20 : 12);
-    c.pb.part(g, 'rubber', 0, -0.026 + i * 0.024, 0, HALF_PI, 0, 0);
-    g.dispose();
-  }
-  if (c.hi) for (let i = 0; i < 8; i++) box(c, 'rubber', 0.004, 0.08, 0.004, Math.cos((i / 8) * Math.PI * 2) * 0.0555, 0, Math.sin((i / 8) * Math.PI * 2) * 0.0555, 0, -(i / 8) * Math.PI * 2, 0);
-  cylY(c, 'metal', 0.02, 0.025, 0, 0.08, 0);
-  box(c, 'metal', 0.012, 0.055, 0.008, 0.024, 0.045, 0, 0, 0, -0.35);
-  const ring = new THREE.TorusGeometry(0.012, 0.0025, 5, 14);
-  c.pb.part(ring, 'metal', 0.028, 0.09, 0, 0, 0, HALF_PI);
-  ring.dispose();
-  box(c, 'accent', 0.012, 0.006, 0.006, -0.018, 0.078, 0);
-  cylY(c, 'accent', 0.021, 0.004, 0, 0.0, 0);
+  const sling = new THREE.TorusGeometry(0.055, 0.004, 6, c.hi ? 20 : 12);
+  c.pb.part(sling, 'rope', 0, -0.01, 0, HALF_PI, 0, 0);
+  sling.dispose();
+  c.pb.capsule('rope', new THREE.Vector3(0, 0.06, 0), new THREE.Vector3(0.015, 0.12, 0.01), 0.008, undefined, 8, 2);
+  sphere(c, 'accent', 0.018, 0.02, 0.135, 0.012);
   if (c.hands) {
     const pos = new THREE.Vector3(0.05, -0.02, 0.0);
     const frame = frameFrom(pos, new THREE.Vector3(0, 1, 0), new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, -1));
@@ -730,7 +622,7 @@ function grenade(c: Ctx): WeaponData {
   return { muzzle: new THREE.Vector3(0, 0, -0.1), hip: new THREE.Vector3(0.24, -0.26, -0.4), ads: new THREE.Vector3(0.2, -0.22, -0.4) };
 }
 
-const BUILDERS: Record<ModelId, (c: Ctx) => WeaponData> = { pistol, smg, rifle, shotgun, sniper, rocket, rocketShell, grenade };
+const BUILDERS: Record<ModelId, (c: Ctx) => WeaponData> = { pistol: flintlock, smg: repeater, rifle: crossbow, shotgun: handcannon, sniper: arquebus, rocket: mortar, rocketShell: bomb, grenade: firepot };
 
 /**
  * Builds a detailed PBR weapon model. Forward is -Z, the grip is near the origin.

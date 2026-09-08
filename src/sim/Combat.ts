@@ -328,7 +328,7 @@ export class Combat {
     return true;
   }
 
-  explode(pos: THREE.Vector3, radius: number, damage: number, owner: Entity | null, now: number): void {
+  explode(pos: THREE.Vector3, radius: number, damage: number, owner: Entity | null, now: number, burn = 0): void {
     // Blasts blow out nearby glass.
     const gr = Math.max(1, Math.floor(radius * 0.8));
     for (let x = Math.floor(pos.x) - gr; x <= Math.floor(pos.x) + gr; x++)
@@ -353,6 +353,10 @@ export class Combat {
       push.y += 5 * falloff;
       e.vel.add(push);
       this.applyDamage(e, dmg, owner, now, false, c);
+      if (burn > 0 && e.alive) {
+        e.burnUntil = Math.max(e.burnUntil, now + burn);
+        e.burnBy = owner;
+      }
     }
     this.events.emit('explosion', { pos: pos.clone(), radius, owner });
   }
@@ -369,7 +373,7 @@ export class Combat {
       const owner = ents.find((e) => e.id === p.ownerId) ?? null;
       // Fuse.
       if (p.kind === 'grenade' && p.age >= p.fuse) {
-        this.explode(p.pos, GRENADE.splashRadius, GRENADE.splashDamage, owner, now);
+        this.explode(p.pos, GRENADE.splashRadius, GRENADE.splashDamage, owner, now, GRENADE.burn);
         p.dead = true;
         continue;
       }

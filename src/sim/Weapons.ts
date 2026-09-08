@@ -42,50 +42,63 @@ export interface WeaponDef {
   sound: 'pistol' | 'smg' | 'rifle' | 'shotgun' | 'sniper' | 'rocket';
 }
 
+/**
+ * The arsenal of a gunpowder-era siege: slow, heavy shots that make walls, cover and traps matter.
+ * The ids keep their old names so kits, bots and the loadout screen need no changes.
+ */
 export const WEAPONS: Record<WeaponId, WeaponDef> = {
+  /** Flintlock: a brace of pistols, two hard shots then a slow reload. */
   pistol: {
-    id: 'pistol', nameKey: 'wPistol', damage: 26, headshotMult: 2.0, rpm: 380, auto: false, magSize: 12, reserveStart: 72, maxReserve: 120,
-    reloadTime: 1.2, spread: 1.2, adsSpread: 0.35, pellets: 1, range: 160, recoil: 1.6, recoilYaw: 0.4, kick: 0.06, adsZoom: 0.85, adsTime: 0.12,
-    tracer: true, falloffStart: 25, falloffEnd: 70, falloffMin: 0.6, idealRange: [4, 30], sound: 'pistol',
+    id: 'pistol', nameKey: 'wPistol', damage: 42, headshotMult: 2.0, rpm: 55, auto: false, magSize: 2, reserveStart: 20, maxReserve: 36,
+    reloadTime: 1.9, spread: 1.4, adsSpread: 0.5, pellets: 1, range: 90, recoil: 3.2, recoilYaw: 0.8, kick: 0.12, adsZoom: 0.85, adsTime: 0.14,
+    tracer: false, falloffStart: 14, falloffEnd: 40, falloffMin: 0.5, idealRange: [3, 18], sound: 'pistol',
   },
+  /** Repeating crossbow: a magazine of light bolts, fast and forgiving up close. */
   smg: {
-    id: 'smg', nameKey: 'wSmg', damage: 15, headshotMult: 1.6, rpm: 880, auto: true, magSize: 32, reserveStart: 128, maxReserve: 224,
-    reloadTime: 1.7, spread: 2.6, adsSpread: 1.1, pellets: 1, range: 120, recoil: 0.7, recoilYaw: 0.5, kick: 0.04, adsZoom: 0.85, adsTime: 0.12,
-    tracer: true, falloffStart: 15, falloffEnd: 45, falloffMin: 0.5, idealRange: [3, 20], sound: 'smg',
+    id: 'smg', nameKey: 'wSmg', damage: 17, headshotMult: 1.6, rpm: 300, auto: true, magSize: 10, reserveStart: 60, maxReserve: 100,
+    reloadTime: 1.7, spread: 2.4, adsSpread: 1.0, pellets: 1, range: 90, recoil: 0.5, recoilYaw: 0.4, kick: 0.03, adsZoom: 0.88, adsTime: 0.12,
+    tracer: true, falloffStart: 12, falloffEnd: 36, falloffMin: 0.5, idealRange: [3, 18], sound: 'smg',
   },
+  /** Crossbow: the line weapon, one precise bolt at a time. */
   rifle: {
-    id: 'rifle', nameKey: 'wRifle', damage: 23, headshotMult: 1.8, rpm: 620, auto: true, magSize: 30, reserveStart: 120, maxReserve: 210,
-    reloadTime: 2.0, spread: 1.6, adsSpread: 0.45, pellets: 1, range: 220, recoil: 1.0, recoilYaw: 0.35, kick: 0.05, adsZoom: 0.72, adsTime: 0.16,
-    tracer: true, falloffStart: 35, falloffEnd: 90, falloffMin: 0.65, idealRange: [8, 45], sound: 'rifle',
+    id: 'rifle', nameKey: 'wRifle', damage: 50, headshotMult: 2.0, rpm: 70, auto: false, magSize: 4, reserveStart: 28, maxReserve: 48,
+    reloadTime: 2.2, spread: 0.8, adsSpread: 0.15, pellets: 1, range: 160, recoil: 1.2, recoilYaw: 0.3, kick: 0.06, adsZoom: 0.72, adsTime: 0.16,
+    tracer: true, falloffStart: 30, falloffEnd: 80, falloffMin: 0.6, idealRange: [8, 40], sound: 'rifle',
   },
+  /** Hand cannon: a cloud of shot at the doorway. */
   shotgun: {
-    id: 'shotgun', nameKey: 'wShotgun', damage: 11, headshotMult: 1.5, rpm: 75, auto: false, magSize: 6, reserveStart: 30, maxReserve: 48,
-    reloadTime: 2.4, spread: 6.5, adsSpread: 4.5, pellets: 9, range: 60, recoil: 4.5, recoilYaw: 1.2, kick: 0.16, adsZoom: 0.9, adsTime: 0.14,
-    tracer: false, falloffStart: 6, falloffEnd: 22, falloffMin: 0.25, idealRange: [1, 10], sound: 'shotgun',
+    id: 'shotgun', nameKey: 'wShotgun', damage: 13, headshotMult: 1.5, rpm: 32, auto: false, magSize: 2, reserveStart: 14, maxReserve: 24,
+    reloadTime: 2.8, spread: 7, adsSpread: 5, pellets: 9, range: 45, recoil: 6, recoilYaw: 1.5, kick: 0.2, adsZoom: 0.9, adsTime: 0.14,
+    tracer: false, falloffStart: 5, falloffEnd: 20, falloffMin: 0.25, idealRange: [1, 9], sound: 'shotgun',
   },
+  /** Arquebus: one ball that drops a man from the far wall, then a long reload. */
   sniper: {
-    id: 'sniper', nameKey: 'wSniper', damage: 88, headshotMult: 2.2, rpm: 45, auto: false, magSize: 5, reserveStart: 25, maxReserve: 40,
-    reloadTime: 2.8, spread: 3.0, adsSpread: 0.05, pellets: 1, range: 500, recoil: 5.0, recoilYaw: 1.0, kick: 0.22, adsZoom: 0.28, adsTime: 0.28,
-    tracer: true, falloffStart: 200, falloffEnd: 400, falloffMin: 0.8, idealRange: [25, 120], sound: 'sniper',
+    id: 'sniper', nameKey: 'wSniper', damage: 96, headshotMult: 2.2, rpm: 28, auto: false, magSize: 1, reserveStart: 14, maxReserve: 24,
+    reloadTime: 3.0, spread: 2.5, adsSpread: 0.12, pellets: 1, range: 400, recoil: 5.5, recoilYaw: 1.2, kick: 0.24, adsZoom: 0.55, adsTime: 0.26,
+    tracer: true, falloffStart: 150, falloffEnd: 320, falloffMin: 0.8, idealRange: [20, 100], sound: 'sniper',
   },
+  /** Hand mortar: lobs a bomb in an arc over the wall. */
   rocket: {
-    id: 'rocket', nameKey: 'wRocket', damage: 30, headshotMult: 1.0, rpm: 40, auto: false, magSize: 1, reserveStart: 4, maxReserve: 8,
-    reloadTime: 2.6, spread: 0.3, adsSpread: 0.2, pellets: 1, range: 300, recoil: 3.5, recoilYaw: 0.8, kick: 0.25, adsZoom: 0.8, adsTime: 0.18,
-    projectile: { speed: 38, gravity: 3.5, splashRadius: 4.2, splashDamage: 115, lifetime: 6 },
-    tracer: false, falloffStart: 1000, falloffEnd: 2000, falloffMin: 1, idealRange: [10, 50], sound: 'rocket',
+    id: 'rocket', nameKey: 'wRocket', damage: 30, headshotMult: 1.0, rpm: 30, auto: false, magSize: 1, reserveStart: 4, maxReserve: 8,
+    reloadTime: 3.0, spread: 0.5, adsSpread: 0.3, pellets: 1, range: 200, recoil: 4, recoilYaw: 1, kick: 0.28, adsZoom: 0.8, adsTime: 0.18,
+    projectile: { speed: 30, gravity: 9, splashRadius: 4.2, splashDamage: 115, lifetime: 6 },
+    tracer: false, falloffStart: 1000, falloffEnd: 2000, falloffMin: 1, idealRange: [12, 45], sound: 'rocket',
   },
 };
 
 export const WEAPON_IDS: WeaponId[] = ['pistol', 'smg', 'rifle', 'shotgun', 'sniper', 'rocket'];
 export const PRIMARY_IDS: WeaponId[] = ['smg', 'rifle', 'shotgun', 'sniper', 'rocket'];
 
+/** Fire pot: a clay pot of pitch that shatters, burns whoever it splashes and keeps them burning. */
 export const GRENADE = {
-  fuse: 2.6,
-  speed: 17,
-  gravity: 22,
-  bounce: 0.45,
-  splashRadius: 4.6,
-  splashDamage: 110,
+  fuse: 1.8,
+  speed: 16,
+  gravity: 20,
+  bounce: 0.15,
+  splashRadius: 3.8,
+  splashDamage: 55,
+  /** Seconds the splashed keep burning. */
+  burn: 3.5,
   startCount: 2,
   maxCount: 4,
 };

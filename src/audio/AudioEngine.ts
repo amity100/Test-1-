@@ -175,40 +175,47 @@ export class AudioEngine {
     const vol = (opts.volume ?? 1) * sp.gain;
     switch (name) {
       case 'pistol': {
-        const o = this.out(vol * 0.55, sp.pan, 0.35);
-        this.noiseBurst(o, t, 0.12, 1.0, 'bandpass', 1800 * pitch, 0.7, 500);
-        this.tone(o, t, 0.08, 0.6, 'square', 220 * pitch, 60);
+        // Flintlock: a sharp crack with a low black-powder thump behind it.
+        const o = this.out(vol * 0.62, sp.pan, 0.4);
+        this.noiseBurst(o, t, 0.2, 1.0, 'bandpass', 1400 * pitch, 0.6, 260);
+        this.tone(o, t, 0.16, 0.7, 'square', 120 * pitch, 45);
         break;
       }
       case 'smg': {
-        const o = this.out(vol * 0.42, sp.pan, 0.3);
-        this.noiseBurst(o, t, 0.08, 1.0, 'bandpass', 2400 * pitch, 0.8, 700);
-        this.tone(o, t, 0.05, 0.5, 'square', 300 * pitch, 90);
+        // Repeating crossbow: a quick twang and the clack of the lever.
+        const o = this.out(vol * 0.4, sp.pan, 0.25);
+        this.tone(o, t, 0.07, 0.6, 'triangle', 420 * pitch, 170);
+        this.noiseBurst(o, t, 0.03, 0.6, 'highpass', 2600 * pitch, 0.8);
         break;
       }
       case 'rifle': {
-        const o = this.out(vol * 0.55, sp.pan, 0.4);
-        this.noiseBurst(o, t, 0.13, 1.0, 'bandpass', 1500 * pitch, 0.6, 400);
-        this.tone(o, t, 0.09, 0.7, 'sawtooth', 180 * pitch, 50);
+        // Crossbow: the string's thunk and a short twang.
+        const o = this.out(vol * 0.52, sp.pan, 0.35);
+        this.noiseBurst(o, t, 0.06, 0.9, 'lowpass', 900 * pitch, 0.7);
+        this.tone(o, t, 0.13, 0.7, 'triangle', 260 * pitch, 110);
         break;
       }
       case 'shotgun': {
-        const o = this.out(vol * 0.8, sp.pan, 0.5);
-        this.noiseBurst(o, t, 0.28, 1.0, 'lowpass', 2500 * pitch, 0.5, 300);
-        this.tone(o, t, 0.18, 0.9, 'sawtooth', 120 * pitch, 35);
+        // Hand cannon: a big loose boom.
+        const o = this.out(vol * 0.85, sp.pan, 0.55);
+        this.noiseBurst(o, t, 0.45, 1.0, 'lowpass', 700 * pitch, 0.5, 120);
+        this.tone(o, t, 0.3, 0.9, 'sawtooth', 70 * pitch, 28);
         break;
       }
       case 'sniper': {
-        const o = this.out(vol * 0.85, sp.pan, 0.6);
-        this.noiseBurst(o, t, 0.35, 1.0, 'bandpass', 1200 * pitch, 0.5, 200);
-        this.tone(o, t, 0.25, 0.8, 'sawtooth', 140 * pitch, 30);
-        this.tone(o, t + 0.02, 0.4, 0.2, 'sine', 900 * pitch, 400);
+        // Arquebus: a boom that cracks, with a long ring.
+        const o = this.out(vol * 0.9, sp.pan, 0.6);
+        this.noiseBurst(o, t, 0.4, 1.0, 'bandpass', 800 * pitch, 0.5, 160);
+        this.tone(o, t, 0.3, 0.8, 'sawtooth', 90 * pitch, 30);
+        this.tone(o, t + 0.03, 0.5, 0.18, 'sine', 620 * pitch, 300);
         break;
       }
       case 'rocket': {
-        const o = this.out(vol * 0.7, sp.pan, 0.5);
-        this.noiseBurst(o, t, 0.5, 0.9, 'lowpass', 900 * pitch, 0.7, 2500);
-        this.tone(o, t, 0.3, 0.5, 'sawtooth', 90 * pitch, 160);
+        // Hand mortar: a deep thump and a whistle of the bomb leaving.
+        const o = this.out(vol * 0.75, sp.pan, 0.5);
+        this.noiseBurst(o, t, 0.5, 0.9, 'lowpass', 420 * pitch, 0.7, 90);
+        this.tone(o, t, 0.35, 0.5, 'sawtooth', 60 * pitch, 38);
+        this.tone(o, t + 0.05, 0.4, 0.12, 'sine', 700 * pitch, 1400);
         break;
       }
       case 'explosion': {
