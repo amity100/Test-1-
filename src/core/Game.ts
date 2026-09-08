@@ -643,6 +643,7 @@ export class Game {
     this.builder.bounds = { minX: Math.min(home.minX, enemy.minX), maxX: Math.max(home.maxX, enemy.maxX), minZ: Math.min(home.minZ, enemy.minZ), maxZ: Math.max(home.maxZ, enemy.maxZ) };
     this.builder.setTool('build');
     this.builder.enter();
+    if (this.screens.name === 'click') this.screens.hideAll();
     const bots = this.entities.filter((e) => e.isBot && e.team === 0).length;
     const cmd = this.commanders[0];
     if (cmd && !cmd.manpower) {
@@ -684,6 +685,7 @@ export class Game {
       this.viewModel.hidden = !this.player.alive;
       if (this.local) this.local.cameraEnabled = true;
       this.app.input.requestPointerLock();
+      if (!this.app.input.looking && !IS_TOUCH) this.screens.showClickToPlay(this.app.input.fallbackLook);
     }
     this.setTouchMode();
   }

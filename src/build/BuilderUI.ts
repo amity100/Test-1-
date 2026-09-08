@@ -159,6 +159,7 @@ export class BuilderUI {
     }
     actions.appendChild(btn(t(this.command ? 'backToBattle' : 'ready'), 'primary bld-ready', () => this.cb.ready()));
     this.statusEl.hidden = !!this.command;
+    rooms.hidden = !!this.command;
     if (this.command) {
       // Supplies and the crew split: how many build, defend and attack.
       const c = this.command;
