@@ -16,6 +16,8 @@ export interface HudMinimap {
 /** Fortress War overlay: tickets, capture points, supplies and the respawn choice while dead. */
 export interface HudWar {
   team: number;
+  /** Siege: tickets are flag lives (three each). */
+  siege: boolean;
   /** Ours first, theirs second. */
   tickets: [number, number];
   colors: [string, string];
@@ -496,7 +498,7 @@ export class HUD {
       else this.announceEl.style.opacity = String(Math.min(1, left / 0.35));
     }
     if (s.war) {
-      this.set('round', this.roundLabel, t('fortressWar'));
+      this.set('round', this.roundLabel, t(s.war.siege ? 'siegeTitle' : 'fortressWar'));
       // The war bar sits right under the timer, so the objective line moves into it (see syncWar).
       this.targetLabel.hidden = true;
       this.roleBadge.hidden = true;
@@ -592,8 +594,11 @@ export class HUD {
       return;
     }
     this.warBar.hidden = false;
-    this.set('wours', this.warOurs, w.tickets[0]);
-    this.set('wtheirs', this.warTheirs, w.tickets[1]);
+    const pips = (n: number): string => (w.siege ? '\u25A0'.repeat(Math.max(0, n)) + '\u25A1'.repeat(Math.max(0, 3 - n)) : String(n));
+    this.set('wours', this.warOurs, pips(w.tickets[0]));
+    this.set('wtheirs', this.warTheirs, pips(w.tickets[1]));
+    this.warOurs.classList.toggle('lives', w.siege);
+    this.warTheirs.classList.toggle('lives', w.siege);
     this.warOurs.style.color = w.colors[0];
     this.warTheirs.style.color = w.colors[1];
     if (this.warPointEls.length !== w.outposts.length) {
@@ -619,7 +624,7 @@ export class HUD {
       p.ring.style.strokeDashoffset = `${c * (1 - o.progress)}`;
       p.ring.style.stroke = o.capturing ?? 'transparent';
     });
-    this.set('wsup', this.warSupplies, `${w.flagDown[1] ? t('theirFlagDown') : w.flagDown[0] ? t('ourFlagDown') : t('warObjective')}  ·  ${t('supplies')} ${w.supplies}`);
+    this.set('wsup', this.warSupplies, `${w.flagDown[1] ? t('theirFlagDown') : w.flagDown[0] ? t('ourFlagDown') : t(w.siege ? 'siegeObjective' : 'warObjective')}  ·  ${t('supplies')} ${w.supplies}`);
   }
 
   private syncSpawnChoices(list: HudWar['spawnChoices']): void {

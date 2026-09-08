@@ -8,7 +8,7 @@ import { VoxelWorld } from '../world/VoxelWorld';
 import { ChunkRenderer } from '../render/ChunkRenderer';
 import { generateVoxelTextures } from '../render/Textures';
 import { createVoxelMaterials, type VoxelMaterials } from '../render/VoxelMaterial';
-import { makePlots, PLOT_Y, type Plot } from '../world/Layout';
+import { makePlots, makeSiegePlots, PLOT_Y, type Plot } from '../world/Layout';
 import { Random } from './Random';
 import { Input } from './Input';
 import { settings, type Quality } from './Settings';
@@ -102,7 +102,7 @@ export class App {
 
     this.setLoading(0.45, t('loadingWorld'));
     await nextFrame();
-    this.plots = makePlots(8);
+    this.plots = [...makePlots(8), ...makeSiegePlots()];
     this.terrain = new Terrain(this.plots, 11);
     scene.add(this.terrain.buildMesh());
     this.water = new WaterSurface(this.terrain);

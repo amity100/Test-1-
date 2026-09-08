@@ -1,7 +1,7 @@
 import type { VoxelWorld } from './VoxelWorld';
 import type { Terrain } from './Terrain';
 import { Mat, encodeBlock } from './Voxel';
-import { PLAZA_Y, type Plot } from './Layout';
+import { PLAZA_Y, type Plot, plotDistance } from './Layout';
 import type { Random } from '../core/Random';
 
 const MARBLE = encodeBlock(Mat.MARBLE, 30);
@@ -113,12 +113,14 @@ export function buildDecor(world: VoxelWorld, terrain: Terrain, plots: Plot[], r
     const a = -Math.PI / 2 + i * step + step / 2;
     // Ruins on the inner meadow between two fortresses
     const rr = 56 + rng.range(-3, 3);
-    ruin(world, terrain, Math.round(Math.cos(a) * rr), Math.round(Math.sin(a) * rr), rng);
+    const rx = Math.round(Math.cos(a) * rr);
+    const rz = Math.round(Math.sin(a) * rr);
+    // Keep the meadow ruins off the siege castles' plots and their blend rings.
+    if (plots.every((p) => plotDistance(p, rx, rz) > 14 || p.index < 8)) ruin(world, terrain, rx, rz, rng);
     // Coastal standing stones
     const mr = 121;
     const mx = Math.round(Math.cos(a + rng.range(-0.06, 0.06)) * mr);
     const mz = Math.round(Math.sin(a + rng.range(-0.06, 0.06)) * mr);
     if (terrain.heightAt(mx, mz) > 1.2) menhir(world, terrain, mx, mz, rng);
   }
-  void plots;
 }

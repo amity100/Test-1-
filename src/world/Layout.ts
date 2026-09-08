@@ -19,6 +19,10 @@ export const RING_ROAD_RADIUS = 34;
 
 /** Fortress War: the two team fortresses sit on opposite plots of the ring (north and south). */
 export const WAR_PLOTS: [number, number] = [0, 4];
+/** Siege: two castles face each other across the plaza, west and east (plot indices past the ring). */
+export const SIEGE_PLOTS: [number, number] = [MAX_PLAYERS, MAX_PLAYERS + 1];
+/** Centre-to-centre distance of the siege castles: a 32 m plaza between their walls. */
+export const SIEGE_DISTANCE = 72;
 /** Capture points across the middle of the island: west and east on the ring road, the monument in the centre. */
 export const OUTPOSTS: { label: string; x: number; z: number }[] = [
   { label: 'A', x: -RING_ROAD_RADIUS, z: 0 },
@@ -64,6 +68,15 @@ export function makePlots(count: number): Plot[] {
     });
   }
   return plots;
+}
+
+/** The two siege castles, appended after the ring so every mode keeps its plot indices. */
+export function makeSiegePlots(): Plot[] {
+  return [-1, 1].map((side, i) => {
+    const cx = (side * SIEGE_DISTANCE) / 2;
+    const cz = 0;
+    return { index: MAX_PLAYERS + i, cx, cz, minX: cx - PLOT_HALF, minZ: cz - PLOT_HALF, maxX: cx + PLOT_HALF - 1, maxZ: cz + PLOT_HALF - 1, angle: side < 0 ? Math.PI : 0 };
+  });
 }
 
 export function plotContains(p: Plot, x: number, z: number): boolean {

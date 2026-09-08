@@ -40,6 +40,21 @@ export const WAR = {
   repairRange: 4.5,
 };
 
+/**
+ * Siege rules: two castles face each other across the plaza. Each flag has three lives; taking it costs
+ * a life, and a team out of lives stops respawning and fights its last stand. Each castle has one
+ * courtyard zone: whoever holds it draws supplies from it and may respawn there.
+ */
+export const SIEGE = {
+  lives: 3,
+  respawn: 3,
+  roundTime: 480,
+  captureTime: 8,
+  flagLockout: 15,
+  courtyardRadius: 6.5,
+  courtyardTime: 8,
+};
+
 export interface Outpost {
   index: number;
   label: string;
@@ -67,20 +82,42 @@ export interface WarEvents {
 
 /** Live state of a Fortress War match (owned by Match, read by the game, HUD and bots). */
 export class WarState {
-  readonly tickets = [WAR.tickets, WAR.tickets];
+  /** Tickets in a war; flag lives in a siege. */
+  readonly tickets: number[];
+  /** Deaths per team (siege tie-break). */
+  readonly casualties = [0, 0];
   readonly supplies = [WAR.suppliesStart, WAR.suppliesStart];
   readonly flags: (WarFlag | null)[] = [null, null];
   /** Seconds of enemy capture on team T's flag, its lockout after a loot, and who is on it. */
   readonly capture = [0, 0];
   readonly lockout = [0, 0];
   readonly capturer: (Entity | null)[] = [null, null];
-  readonly outposts: Outpost[] = OUTPOSTS.map((o, i) => ({ index: i, label: o.label, pos: new THREE.Vector3(o.x, 0, o.z), owner: -1, team: -1, progress: 0, contested: false }));
+  readonly outposts: Outpost[];
   ended = false;
   winner = -1;
   private drainTimer = 0;
   private supplyTimer = 0;
 
-  constructor(private events: WarEvents) {}
+  constructor(
+    private events: WarEvents,
+    readonly siege = false,
+  ) {
+    this.tickets = siege ? [SIEGE.lives, SIEGE.lives] : [WAR.tickets, WAR.tickets];
+    // A siege has one courtyard per castle, owned by its own team at the start; the game places them.
+    this.outposts = siege
+      ? [0, 1].map((i) => ({ index: i, label: i === 0 ? 'A' : 'B', pos: new THREE.Vector3(), owner: i, team: -1, progress: 0, contested: false }))
+      : OUTPOSTS.map((o, i) => ({ index: i, label: o.label, pos: new THREE.Vector3(o.x, 0, o.z), owner: -1, team: -1, progress: 0, contested: false }));
+  }
+
+  /** Seconds on a flag that complete a capture. */
+  get captureTime(): number {
+    return this.siege ? SIEGE.captureTime : WAR.captureTime;
+  }
+
+  /** A team out of flag lives stops respawning. */
+  noRespawn(team: number): boolean {
+    return this.siege && this.tickets[team] <= 0;
+  }
 
   setFlag(team: number, pos: THREE.Vector3): void {
     this.flags[team] = { team, pos: pos.clone() };
@@ -88,6 +125,10 @@ export class WarState {
 
   setOutpostHeight(index: number, y: number): void {
     this.outposts[index].pos.y = y;
+  }
+
+  setOutpostPos(index: number, x: number, y: number, z: number): void {
+    this.outposts[index].pos.set(x, y, z);
   }
 
   enemyFlag(team: number): WarFlag | null {
@@ -112,7 +153,8 @@ export class WarState {
   nearOutpost(e: Entity, o: Outpost): boolean {
     const dx = e.pos.x - o.pos.x;
     const dz = e.pos.z - o.pos.z;
-    return dx * dx + dz * dz <= WAR.outpostRadius * WAR.outpostRadius && Math.abs(e.pos.y - o.pos.y) < 5;
+    const r = this.siege ? SIEGE.courtyardRadius : WAR.outpostRadius;
+    return dx * dx + dz * dz <= r * r && Math.abs(e.pos.y - o.pos.y) < 5;
   }
 
   /** How many points each team holds. */
@@ -125,6 +167,8 @@ export class WarState {
   onKill(victim: Entity, killer: Entity | null): void {
     if (this.ended || victim.team < 0) return;
     if (killer && killer.team >= 0 && killer.team !== victim.team) this.supplies[killer.team] += WAR.suppliesKill;
+    this.casualties[victim.team]++;
+    if (this.siege) return;
     this.tickets[victim.team] = Math.max(0, this.tickets[victim.team] - WAR.killCost);
     this.events.tickets(victim.team, this.tickets[victim.team], -WAR.killCost, 'kill');
     this.checkEnd();
@@ -134,9 +178,9 @@ export class WarState {
     if (this.ended) return;
     for (const team of [0, 1]) this.updateFlag(team, dt, entities);
     for (const o of this.outposts) this.updateOutpost(o, dt, entities);
-    // Holding more points than the enemy bleeds their tickets.
+    // Holding more points than the enemy bleeds their tickets (a war; a siege bleeds lives at the flag only).
     this.drainTimer += dt;
-    if (this.drainTimer >= WAR.drainEvery) {
+    if (!this.siege && this.drainTimer >= WAR.drainEvery) {
       this.drainTimer = 0;
       const a = this.owned(0);
       const b = this.owned(1);
@@ -152,6 +196,8 @@ export class WarState {
       this.supplyTimer = 0;
       for (const team of [0, 1]) this.supplies[team] += this.owned(team) * WAR.suppliesOutpost;
     }
+    // Siege: a team out of lives ends when its last soldier falls.
+    if (this.siege) for (const team of [0, 1]) if (this.tickets[team] <= 0 && !entities.some((e) => e.team === team && e.alive)) this.finishWith(1 - team);
     this.checkEnd();
   }
 
@@ -170,7 +216,7 @@ export class WarState {
       if (e.team === team) defenderNear = true;
       else attackers.push(e);
     }
-    if (attackers.length && !defenderNear) this.capture[team] = Math.min(WAR.captureTime, this.capture[team] + dt);
+    if (attackers.length && !defenderNear) this.capture[team] = Math.min(this.captureTime, this.capture[team] + dt);
     else if (!attackers.length) this.capture[team] = Math.max(0, this.capture[team] - dt * 1.5);
     for (const e of entities) if (e.team === 1 - team) e.captureProgress = attackers.includes(e) ? this.capture[team] : 0;
     // The alarm follows whoever is on the flag.
@@ -184,16 +230,17 @@ export class WarState {
       this.capturer[team] = null;
       this.events.alarm(team, false, null);
     }
-    if (this.capture[team] >= WAR.captureTime) {
+    if (this.capture[team] >= this.captureTime) {
       this.capture[team] = 0;
-      this.lockout[team] = WAR.flagLockout;
-      this.tickets[team] = Math.max(0, this.tickets[team] - WAR.captureCost);
+      this.lockout[team] = this.siege ? SIEGE.flagLockout : WAR.flagLockout;
+      const cost = this.siege ? 1 : WAR.captureCost;
+      this.tickets[team] = Math.max(0, this.tickets[team] - cost);
       if (this.capturer[team]) {
         this.capturer[team] = null;
         this.events.alarm(team, false, null);
       }
       for (const e of entities) if (e.team === 1 - team) e.captureProgress = 0;
-      this.events.tickets(team, this.tickets[team], -WAR.captureCost, 'capture');
+      this.events.tickets(team, this.tickets[team], -cost, 'capture');
       this.events.captured(team, attackers);
     }
   }
@@ -233,7 +280,7 @@ export class WarState {
     }
     // More boots take it faster, with diminishing returns.
     const speed = 1 + Math.min(2, present.length - 1) * 0.35;
-    o.progress += (dt / WAR.outpostTime) * speed;
+    o.progress += (dt / (this.siege ? SIEGE.courtyardTime : WAR.outpostTime)) * speed;
     if (o.progress >= 1) {
       const prev = o.owner;
       o.owner = team;
@@ -244,15 +291,24 @@ export class WarState {
   }
 
   private checkEnd(): void {
-    if (this.ended) return;
+    if (this.ended || this.siege) return;
     if (this.tickets[0] <= 0 || this.tickets[1] <= 0) this.finish();
+  }
+
+  private finishWith(winner: number): void {
+    if (this.ended) return;
+    this.ended = true;
+    this.winner = winner;
+    this.events.end(winner);
   }
 
   /** Ends the war: the team with tickets left wins; equal pools are a draw. */
   finish(): void {
     if (this.ended) return;
     this.ended = true;
-    this.winner = this.tickets[0] === this.tickets[1] ? -1 : this.tickets[0] > this.tickets[1] ? 0 : 1;
+    if (this.tickets[0] !== this.tickets[1]) this.winner = this.tickets[0] > this.tickets[1] ? 0 : 1;
+    else if (this.siege && this.casualties[0] !== this.casualties[1]) this.winner = this.casualties[0] < this.casualties[1] ? 0 : 1;
+    else this.winner = -1;
     this.events.end(this.winner);
   }
 

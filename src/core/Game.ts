@@ -40,7 +40,7 @@ import { TouchControls, vibrate } from '../ui/TouchControls';
 import { IS_TOUCH } from './Input';
 import { generateFortress, generateRuins, type FortressResult } from '../world/FortressGen';
 import { STYLE_IDS, type StyleId } from '../world/Styles';
-import { PLOT_Y, PLOT_MAX_HEIGHT, PLOT_HALF, ZONE_RADIUS, PLAYABLE_RADIUS, WAR_PLOTS, OUTPOSTS, type Plot } from '../world/Layout';
+import { PLOT_Y, PLOT_MAX_HEIGHT, PLOT_HALF, ZONE_RADIUS, PLAYABLE_RADIUS, WAR_PLOTS, SIEGE_PLOTS, OUTPOSTS, type Plot } from '../world/Layout';
 import { blockColor, PALETTE } from '../world/Voxel';
 import { STYLES } from '../world/Styles';
 import { Random } from './Random';
@@ -141,6 +141,8 @@ export class Game {
   private teamBuild: TeamBuild | null = null;
   commanders: TeamCommander[] = [];
   private teamPosts: Post[][] = [[], []];
+  /** The two team fortress plots of this match (the ring's north and south in a war, the plaza pair in a siege). */
+  private teamPlots: [number, number] = WAR_PLOTS;
   private teamSpawns: THREE.Vector3[][] = [[], []];
   /** Fortress War: the trap plan the team's bots follow during the walk. */
   private teamOrders: TrapOrder[] | null = null;
@@ -305,12 +307,13 @@ export class Game {
     this.screens.hideAll();
     this.cleanupMatch();
     const plots = this.app.plots;
-    const war = cfg.mode === 'war';
+    const war = cfg.mode === 'war' || cfg.mode === 'siege';
+    this.teamPlots = cfg.mode === 'siege' ? SIEGE_PLOTS : WAR_PLOTS;
     this.entities = [];
     this.bots = [];
     this.commanders = [];
     this.player.name = cfg.playerName || t('you');
-    this.player.plotIndex = 0;
+    this.player.plotIndex = war ? this.teamPlots[0] : 0;
     this.player.colorHex = war ? TEAM_COLORS[0] : PLAYER_COLORS[0];
     this.player.team = war ? 0 : -1;
     this.player.squad = war ? 0 : -1;
@@ -349,7 +352,7 @@ export class Game {
     this.viewModel.setAccent(new THREE.Color(this.player.colorHex));
     this.wireMatch(match);
     // Build phase: the block builder (stronghold rules in a war), with the team's bots building alongside.
-    this.builder = new Builder(this.app.world, this.app.terrain, plots[0], cfg.style, this.app.input, this.app.gr.camera, this.app.gr.scene, war);
+    this.builder = new Builder(this.app.world, this.app.terrain, plots[this.player.plotIndex], cfg.style, this.app.input, this.app.gr.camera, this.app.gr.scene, war);
     this.builder.traps = this.traps;
     this.builderUI = new BuilderUI(
       this.uiRoot,
@@ -376,7 +379,7 @@ export class Game {
     this.builder.events.on('trapPlaced', () => audio.play('place', { pitch: 1.25 }));
     this.builder.events.on('trapRemoved', () => audio.play('erase', { pitch: 1.2 }));
     if (war) {
-      this.teamBuild = new TeamBuild(this.builder, this.entities.filter((e) => e.isBot && e.team === 0), cfg.style, this.rng.fork(), plots[0]);
+      this.teamBuild = new TeamBuild(this.builder, this.entities.filter((e) => e.isBot && e.team === 0), cfg.style, this.rng.fork(), plots[this.player.plotIndex]);
       this.teamBuild.active = true;
     }
     this.builder.enter();
@@ -413,44 +416,60 @@ export class Game {
    */
   private setupWar(cfg: MatchConfig, match: Match, bot: (team: number, plotIndex: number, squad: number, color: string) => Entity): void {
     const plots = this.app.plots;
+    const siege = cfg.mode === 'siege';
     const size = clamp(cfg.teamSize ?? 8, 2, 12);
     // Squads of three. The human leads squad 0 with two bots; the rest form squads of their own.
-    for (let n = 1; n < size; n++) bot(0, WAR_PLOTS[0], n <= 2 ? 0 : 1 + Math.floor((n - 3) / 3), TEAM_COLORS[0]);
-    for (let n = 0; n < size; n++) bot(1, WAR_PLOTS[1], Math.floor(n / 3), TEAM_COLORS[1]);
+    for (let n = 1; n < size; n++) bot(0, this.teamPlots[0], n <= 2 ? 0 : 1 + Math.floor((n - 3) / 3), TEAM_COLORS[0]);
+    for (let n = 0; n < size; n++) bot(1, this.teamPlots[1], Math.floor(n / 3), TEAM_COLORS[1]);
     const [style0, style1] = this.teamStyles;
-    this.paintGround(plots[WAR_PLOTS[0]], style0);
-    this.paintGround(plots[WAR_PLOTS[1]], style1);
+    this.paintGround(plots[this.teamPlots[0]], style0);
+    this.paintGround(plots[this.teamPlots[1]], style1);
     const war = match.war!;
     // The enemy stronghold, finished and trapped by its whole team.
-    const res1 = generateFortress(this.app.world, plots[WAR_PLOTS[1]], style1, this.rng.fork(), 'stronghold', MAX_BLOCKS, true);
-    match.setFlag(WAR_PLOTS[1], res1.flag);
-    match.setSpawn(WAR_PLOTS[1], res1.spawn);
-    this.plotSpots.set(WAR_PLOTS[1], res1.roofSpots);
+    const res1 = generateFortress(this.app.world, plots[this.teamPlots[1]], style1, this.rng.fork(), 'stronghold', MAX_BLOCKS, true);
+    match.setFlag(this.teamPlots[1], res1.flag);
+    match.setSpawn(this.teamPlots[1], res1.spawn);
+    this.plotSpots.set(this.teamPlots[1], res1.roofSpots);
     war.setFlag(1, new THREE.Vector3(res1.flag.x + 0.5, res1.flag.y, res1.flag.z + 0.5));
     this.teamSpawns[1] = this.spawnSpots(res1.floors, res1.flag);
     this.teamPosts[1] = this.postsFor(1, res1.roofSpots, res1.entrances, res1.heroFloors, res1.flag);
-    this.traps.setSlots(WAR_PLOTS[1], BOT_SLOTS * size);
-    this.traps.setSlots(WAR_PLOTS[0], BOT_SLOTS * (size - 1) + 4);
-    this.seedTraps(WAR_PLOTS[1], res1, this.entities.filter((e) => e.team === 1));
-    // Ruins on the flanks: cover between the fortresses.
-    for (const p of plots) {
-      if (p.index === WAR_PLOTS[0] || p.index === WAR_PLOTS[1]) continue;
-      const st = this.rng.pick(STYLE_IDS);
-      this.paintGround(p, st);
-      generateRuins(this.app.world, p, st, this.rng.fork());
+    this.traps.setSlots(this.teamPlots[1], BOT_SLOTS * size);
+    this.traps.setSlots(this.teamPlots[0], BOT_SLOTS * (size - 1) + 4);
+    this.seedTraps(this.teamPlots[1], res1, this.entities.filter((e) => e.team === 1));
+    if (siege) this.placeCourtyards(match);
+    else {
+      // Ruins on the flanks: cover between the fortresses.
+      for (const p of plots) {
+        if (p.index === this.teamPlots[0] || p.index === this.teamPlots[1]) continue;
+        const st = this.rng.pick(STYLE_IDS);
+        this.paintGround(p, st);
+        generateRuins(this.app.world, p, st, this.rng.fork());
+      }
+      this.buildOutposts(match);
     }
-    this.buildOutposts(match);
     const host = {
       war,
       entities: () => this.entities,
       traps: this.traps,
-      teamPlot: (team: number) => plots[WAR_PLOTS[team]],
-      enemyPlot: (team: number) => plots[WAR_PLOTS[1 - team]],
+      teamPlot: (team: number) => plots[this.teamPlots[team]],
+      enemyPlot: (team: number) => plots[this.teamPlots[1 - team]],
       posts: (team: number) => this.teamPosts[team],
       human: (team: number) => (team === 0 ? this.player : null),
     };
     this.commanders = [new TeamCommander(0, host), new TeamCommander(1, host)];
     for (const e of this.entities) if (e.isBot) this.bots.push(new WarBrain(e, this.botContext(), PROFILES[cfg.difficulty], this.rng.int(1, 1e9)));
+  }
+
+  /** Siege: each castle's courtyard zone sits between its gate and its keep, on the side facing the enemy. */
+  private placeCourtyards(match: Match): void {
+    const war = match.war!;
+    for (const team of [0, 1]) {
+      const plot = this.app.plots[this.teamPlots[team]];
+      const enemy = this.app.plots[this.teamPlots[1 - team]];
+      const dx = Math.sign(enemy.cx - plot.cx);
+      const dz = Math.sign(enemy.cz - plot.cz);
+      war.setOutpostPos(team, plot.cx + dx * 10 + 0.5, PLOT_Y, plot.cz + dz * 10 + 0.5);
+    }
   }
 
   /** Low cover walls around each capture point with a lit pole in the middle (the monument is the centre point). */
@@ -483,7 +502,7 @@ export class Game {
 
   /** Defensive posts: flag guards in the hall, wall walks and tower tops facing the enemy, and a spot inside every entrance. */
   private postsFor(team: number, roofSpots: Cell[], entrances: Cell[], heroFloors: Cell[], flag: Cell): Post[] {
-    const enemy = this.app.plots[WAR_PLOTS[1 - team]];
+    const enemy = this.app.plots[this.teamPlots[1 - team]];
     const toEnemy = (p: THREE.Vector3): THREE.Vector3 => new THREE.Vector3(enemy.cx - p.x, 0, enemy.cz - p.z).normalize();
     const posts: Post[] = [];
     const flagV = new THREE.Vector3(flag.x + 0.5, flag.y, flag.z + 0.5);
@@ -495,7 +514,7 @@ export class Game {
       const pos = new THREE.Vector3(c.x + 0.5, c.y, c.z + 0.5);
       posts.push({ pos, facing: toEnemy(pos), flag: false });
     }
-    const plot = this.app.plots[WAR_PLOTS[team]];
+    const plot = this.app.plots[this.teamPlots[team]];
     for (const c of entrances) {
       const inward = new THREE.Vector3(plot.cx - (c.x + 0.5), 0, plot.cz - (c.z + 0.5)).normalize();
       const pos = new THREE.Vector3(c.x + 0.5 + inward.x * 2.5, c.y, c.z + 0.5 + inward.z * 2.5);
@@ -531,7 +550,7 @@ export class Game {
 
   private onWarAlarm(team: number, on: boolean, capturer: Entity | null): void {
     const my = this.player.team;
-    this.flags.get(WAR_PLOTS[team])?.setAlert(on);
+    this.flags.get(this.teamPlots[team])?.setAlert(on);
     if (team === my) this.focus.setAlert(on);
     // The siren and the through-walls marker follow whoever is on a flag (ours or theirs).
     this.alarmEntity = on ? capturer : null;
@@ -549,16 +568,30 @@ export class Game {
   private onWarCaptured(team: number, by: Entity[]): void {
     const my = this.player.team;
     const ours = team === my;
-    this.flags.get(WAR_PLOTS[team])?.setBeacon(1);
+    this.flags.get(this.teamPlots[team])?.setBeacon(1);
     audio.play(ours ? 'roundEnd' : 'captureDone');
-    this.hud.announce(ours ? t('flagLootedOurs') : t('flagLootedTheirs'), `-${40} ${t('tickets')}`, ours ? 'clutch' : 'streak', 2.6);
+    const war = this.match!.war!;
+    this.hud.announce(ours ? t('flagLootedOurs') : t('flagLootedTheirs'), war.siege ? t('livesLeft', { n: war.tickets[team] }) : `-${40} ${t('tickets')}`, ours ? 'clutch' : 'streak', 2.6);
     this.slowmo(0.35, 0.7);
     if (by.includes(this.player)) audio.play('streak');
   }
 
   private onWarOutpost(index: number, owner: number, prev: number): void {
     const my = this.player.team;
-    const label = this.match?.war?.outposts[index].label ?? '';
+    const war = this.match!.war!;
+    const label = war.outposts[index].label ?? '';
+    if (war.siege) {
+      // Courtyards: ours taken by them, or theirs taken by us (and back).
+      const theirs = index !== my;
+      if (owner === my) {
+        audio.play('streak', { volume: 0.7 });
+        this.hud.showBanner(t(theirs ? 'yardTakenTheirs' : 'yardRetaken'), theirs ? t('yardForwardCamp') : '', 2);
+      } else {
+        audio.play(prev === my ? 'hurt' : 'countdown', { volume: 0.6, pitch: 0.7 });
+        this.hud.showBanner(t(theirs ? 'yardLostTheirs' : 'yardLostOurs'), theirs ? '' : t('yardEnemyCamp'), 2);
+      }
+      return;
+    }
     if (owner === my) {
       audio.play('streak', { volume: 0.7 });
       this.hud.showBanner(t('pointTaken', { label }), '', 1.8);
@@ -597,7 +630,7 @@ export class Game {
     else {
       const task = this.commanders[team]?.taskFor(e);
       if (task && task.kind !== 'defend' && task.kind !== 'escort') {
-        const home = this.teamSpawns[team][0] ?? new THREE.Vector3(this.app.plots[WAR_PLOTS[team]].cx, PLOT_Y, this.app.plots[WAR_PLOTS[team]].cz);
+        const home = this.teamSpawns[team][0] ?? new THREE.Vector3(this.app.plots[this.teamPlots[team]].cx, PLOT_Y, this.app.plots[this.teamPlots[team]].cz);
         let bestD = task.target.distanceTo(home);
         for (const o of war.outposts) {
           if (o.owner !== team) continue;
@@ -614,7 +647,7 @@ export class Game {
       for (let i = 0; i < 16; i++) {
         const a = this.rng.range(0, Math.PI * 2);
         // The centre point is the monument: appear on the plaza around it.
-        const r = (outpost === 1 ? 7 : 3) + this.rng.range(0, 4);
+        const r = war.siege ? 1.5 + this.rng.range(0, 3.5) : (outpost === 1 ? 7 : 3) + this.rng.range(0, 4);
         const x = o.pos.x + Math.cos(a) * r;
         const z = o.pos.z + Math.sin(a) * r;
         const y = this.app.terrain.heightAt(x, z) + 0.05;
@@ -629,9 +662,9 @@ export class Game {
       }
       return spots[0].clone();
     }
-    const sp = this.match!.spawns.get(WAR_PLOTS[team]);
+    const sp = this.match!.spawns.get(this.teamPlots[team]);
     if (sp) return sp.clone();
-    const p = this.app.plots[WAR_PLOTS[team]];
+    const p = this.app.plots[this.teamPlots[team]];
     return new THREE.Vector3(p.cx, PLOT_Y, p.cz);
   }
 
@@ -885,7 +918,7 @@ export class Game {
 
   finishBuild(timeUp: boolean): void {
     if (!this.match || !this.builder || this.mode !== 'build') return;
-    const plot = this.app.plots[0];
+    const plot = this.app.plots[this.player.plotIndex];
     // An empty or tiny plot gets a generated fortress so every round has an arena.
     if (this.builder.blocks < 4) this.builder.autoBuild(this.rng.int(1, 1e9), this.match.war ? 'stronghold' : undefined);
     if (this.teamBuild) {
@@ -904,9 +937,9 @@ export class Game {
     }
     const flag = this.builder.flag ?? { x: plot.cx, y: PLOT_Y, z: plot.cz };
     const spawn = this.builder.spawn ?? flag;
-    this.match.setFlag(0, flag);
-    this.match.setSpawn(0, spawn);
-    this.plotSpots.set(0, this.builder.result?.roofSpots ?? []);
+    this.match.setFlag(plot.index, flag);
+    this.match.setSpawn(plot.index, spawn);
+    this.plotSpots.set(plot.index, this.builder.result?.roofSpots ?? []);
     if (this.match.war) {
       this.match.war.setFlag(0, new THREE.Vector3(flag.x + 0.5, flag.y, flag.z + 0.5));
       const res = this.builder.result;
@@ -954,7 +987,7 @@ export class Game {
     this.mode = 'fortify';
     this.screens.hideAll();
     this.hud.hide();
-    const plot = this.app.plots[0];
+    const plot = this.app.plots[this.player.plotIndex];
     const p = this.player;
     p.reset();
     p.role = 'defender';
@@ -1033,7 +1066,7 @@ export class Game {
       // Mechanical traps run so the builder sees blades swing and saws roll; owners are never hurt.
       this.traps.update(dt, this.time);
       this.fortify?.update(dt);
-      if (match.war && this.teamBuild && this.teamOrders) this.teamBuild.updateFortify(dt, this.traps, WAR_PLOTS[0], this.teamOrders, this.fortify?.personal ?? 4);
+      if (match.war && this.teamBuild && this.teamOrders) this.teamBuild.updateFortify(dt, this.traps, this.teamPlots[0], this.teamOrders, this.fortify?.personal ?? 4);
     }
     if (this.simOnly) return;
     this.updateCharacters(dt);
@@ -1076,7 +1109,7 @@ export class Game {
         this.introBannerShown = false;
         this.endBannerShown = false;
         this.summaryShown = false;
-        const plot = match.war ? this.app.plots[WAR_PLOTS[1]] : this.app.plots[match.targetPlotIndex];
+        const plot = match.war ? this.app.plots[this.teamPlots[1]] : this.app.plots[match.targetPlotIndex];
         for (const [idx, fm] of this.flags) {
           fm.group.visible = match.war ? true : idx === match.targetPlotIndex;
           fm.setAlert(false);
@@ -1112,7 +1145,7 @@ export class Game {
         this.mode = 'battle';
         this.setTouchMode();
         this.hud.show();
-        if (match.war) this.hud.showBanner(t('warStart'), t('warStartSub'), 4);
+        if (match.war) this.hud.showBanner(t(match.war.siege ? 'siegeStart' : 'warStart'), t(match.war.siege ? 'siegeStartSub' : 'warStartSub'), 4);
         else {
           this.roundEvents.startRound(this.rng.int(1, 1e9));
           const def = match.defender!;
@@ -1136,7 +1169,7 @@ export class Game {
           const my = this.player.team;
           const title = war.winner === my ? t('victory') : war.winner < 0 ? t('draw') : t('defeat');
           const rows: SummaryRow[] = match.standings().map((e) => ({ name: e.name, color: e.colorHex, delta: `${e.score.kills} ${t('killsShort')} · ${e.score.captures} ${t('lootsShort')}`, total: e.score.total, isYou: e === this.player }));
-          this.screens.showRoundSummary({ title, sub: `${t('tickets')} ${war.tickets[my]} : ${war.tickets[1 - my]}`, rows }, RULES.summaryTime);
+          this.screens.showRoundSummary({ title, sub: `${t(war.siege ? 'lives' : 'tickets')} ${war.tickets[my]} : ${war.tickets[1 - my]}`, rows }, RULES.summaryTime);
           break;
         }
         audio.play(r.reason === 'captured' ? 'captureDone' : 'roundEnd');
@@ -1212,7 +1245,7 @@ export class Game {
     const match = this.match!;
     const def = match.defender ?? this.player;
     this.screens.showLoadout({
-      title: match.war ? t('fortressWar') : this.player === def ? t('defendFortress') : t('targetLabel', { name: def.name }),
+      title: match.war ? t(match.war.siege ? 'siegeTitle' : 'fortressWar') : this.player === def ? t('defendFortress') : t('targetLabel', { name: def.name }),
       weapons: PRIMARY_CHOICES.map((w) => ({ id: w, name: t(WEAPONS[w].nameKey) })),
       weapon: this.playerPrimary,
       gadgets: GADGET_IDS.map((id) => ({ id, name: t(GADGETS[id].nameKey), desc: t(GADGETS[id].descKey), icon: GADGETS[id].icon })),
@@ -1566,7 +1599,7 @@ export class Game {
         }
         this.builderUI?.update(dt, match?.buildTimeLeft ?? null);
         if (this.teamBuild && this.builderUI && !this.simOnly) {
-          const plot = this.app.plots[0];
+          const plot = this.app.plots[this.player.plotIndex];
           this.builderUI.setCursors(
             this.teamBuild.cursors().map((c) => {
               const sc = this.toScreen(new THREE.Vector3(plot.minX + c.i * CELL + CELL / 2, PLOT_Y + c.k * STOREY_H + STOREY_H * 0.6, plot.minZ + c.j * CELL + CELL / 2), 20);
@@ -1587,7 +1620,7 @@ export class Game {
         break;
       case 'summary':
       case 'podium':
-        this.cinematicCamera(dt, this.mode === 'podium' ? this.winnerPlot() : this.app.plots[match?.war ? WAR_PLOTS[match.war.winner === 1 ? 1 : 0] : Math.max(0, match?.lastRound?.plotIndex ?? 0)]);
+        this.cinematicCamera(dt, this.mode === 'podium' ? this.winnerPlot() : this.app.plots[match?.war ? this.teamPlots[match.war.winner === 1 ? 1 : 0] : Math.max(0, match?.lastRound?.plotIndex ?? 0)]);
         this.updateCharacters(dt);
         if (this.mode === 'summary' && match) this.screens.updateSummaryCountdown(RULES.summaryTime - match.phaseTimer);
         break;
@@ -1678,7 +1711,7 @@ export class Game {
 
   private introUpdate(dt: number): void {
     const match = this.match!;
-    const plot = this.app.plots[match.war ? WAR_PLOTS[0] : match.targetPlotIndex];
+    const plot = this.app.plots[match.war ? this.teamPlots[0] : match.targetPlotIndex];
     if (!this.simOnly) {
       if (match.phaseTimer < 0.05) this.flybyAngle = Math.atan2(this.player.pos.z - plot.cz, this.player.pos.x - plot.cx) - 0.6;
       this.flybyCamera(dt, plot, match.phaseTimer / RULES.introTime);
@@ -1690,8 +1723,8 @@ export class Game {
     if (!this.introBannerShown) {
       this.introBannerShown = true;
       const def = match.defender;
-      const title = match.war ? t('fortressWar') : this.player === def ? t('defendFortress') : t('targetLabel', { name: def?.name ?? '' });
-      this.hud.showBanner(title, match.war ? t('warIntro') : t('intro'), 2.6);
+      const title = match.war ? t(match.war.siege ? 'siegeTitle' : 'fortressWar') : this.player === def ? t('defendFortress') : t('targetLabel', { name: def?.name ?? '' });
+      this.hud.showBanner(title, match.war ? t(match.war.siege ? 'siegeIntro' : 'warIntro') : t('intro'), 2.6);
     }
   }
 
@@ -1871,7 +1904,7 @@ export class Game {
   private playerRepair(dt: number): void {
     const war = this.match!.war!;
     const p = this.player;
-    const plot = WAR_PLOTS[p.team];
+    const plot = this.teamPlots[p.team];
     if (this.repair.near(p.pos, WAR.repairRange, plot).length === 0) {
       this.repairTimer = 0;
       return;
@@ -2014,6 +2047,7 @@ export class Game {
       war: war
         ? {
             team: my,
+            siege: war.siege,
             tickets: [war.tickets[my], war.tickets[1 - my]],
             colors: [TEAM_COLORS[my], TEAM_COLORS[1 - my]],
             outposts: war.outposts.map((o) => ({ label: o.label, owner: o.owner < 0 ? null : TEAM_COLORS[o.owner], mine: o.owner === my, progress: o.progress, capturing: o.team < 0 ? null : TEAM_COLORS[o.team], contested: o.contested })),
@@ -2021,7 +2055,7 @@ export class Game {
             flagDown: [war.flagDown(my), war.flagDown(1 - my)],
             spawnChoices: p.alive
               ? null
-              : [{ label: t('spawnFortress'), key: '1', selected: this.spawnChoice < 0, enabled: true }].concat(war.outposts.map((o) => ({ label: t('spawnPoint', { label: o.label }), key: String(o.index + 2), selected: this.spawnChoice === o.index, enabled: o.owner === my }))),
+              : [{ label: t('spawnFortress'), key: '1', selected: this.spawnChoice < 0, enabled: true }].concat(war.outposts.map((o) => ({ label: war.siege ? t(o.index === my ? 'spawnYardOurs' : 'spawnYardTheirs') : t('spawnPoint', { label: o.label }), key: String(o.index + 2), selected: this.spawnChoice === o.index, enabled: o.owner === my }))),
           }
         : null,
       score: p.score.total,
@@ -2040,7 +2074,7 @@ export class Game {
         zoneRadius: ZONE_RADIUS,
         flag: p.role === 'defender' && flag ? { x: flag.pos.x, z: flag.pos.z } : null,
         plots: war
-          ? WAR_PLOTS.map((pi, team) => ({ x: this.app.plots[pi].cx, z: this.app.plots[pi].cz, active: false, color: TEAM_COLORS[team] }))
+          ? this.teamPlots.map((pi, team) => ({ x: this.app.plots[pi].cx, z: this.app.plots[pi].cz, active: false, color: TEAM_COLORS[team] }))
           : this.app.plots.slice(0, this.entities.length).map((pl) => ({ x: pl.cx, z: pl.cz, active: pl.index === match.targetPlotIndex, color: this.entities.find((e) => e.plotIndex === pl.index)?.colorHex ?? '#888' })),
         points: war ? war.outposts.map((o) => ({ x: o.pos.x, z: o.pos.z, label: o.label, color: o.owner < 0 ? null : TEAM_COLORS[o.owner], progress: o.progress, progressColor: o.team < 0 ? null : TEAM_COLORS[o.team] })) : [],
         others,
@@ -2133,7 +2167,7 @@ export class Game {
     const match = this.match;
     if (!match || this.player.role !== 'attacker' || this.mode !== 'battle') return null;
     if (!match.war && match.targetPlotIndex < 0) return null;
-    const plot = match.war ? this.app.plots[WAR_PLOTS[1 - this.player.team]] : this.app.plots[match.targetPlotIndex];
+    const plot = match.war ? this.app.plots[this.teamPlots[1 - this.player.team]] : this.app.plots[match.targetPlotIndex];
     const p = this.player.pos;
     const dist = Math.hypot(p.x - plot.cx, p.z - plot.cz);
     if (dist < 26) return null;
@@ -2248,7 +2282,7 @@ export class Game {
 
   /** Composes and shows the shareable card of the player's fortress. */
   async showFortressCard(): Promise<void> {
-    const plot = this.app.plots[0];
+    const plot = this.app.plots[this.player.plotIndex];
     const shot = this.captureFortress(plot);
     const blocks = this.app.world.countBlocksInBox(plot.minX, PLOT_Y, plot.minZ, plot.maxX, PLOT_Y + PLOT_MAX_HEIGHT, plot.maxZ);
     const standings = this.match?.standings() ?? [];

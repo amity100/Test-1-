@@ -105,7 +105,7 @@ export class Screens {
   constructor(parent: HTMLElement, private cb: ScreenCallbacks) {
     this.root = el('div', 'screens');
     parent.appendChild(this.root);
-    this.setup = { playerName: settings.data.playerName, botCount: 5, difficulty: 'normal', buildTime: 90, roundTime: 240, style: 'medieval', mode: 'war', teamSize: 8 };
+    this.setup = { playerName: settings.data.playerName, botCount: 5, difficulty: 'normal', buildTime: 90, roundTime: 240, style: 'medieval', mode: 'siege', teamSize: 8 };
     try {
       const raw = localStorage.getItem(SETUP_KEY);
       if (raw) this.setup = { ...this.setup, ...JSON.parse(raw) };
@@ -207,16 +207,18 @@ export class Screens {
       this.setup.playerName = name.value;
     });
     grid.appendChild(field(t('yourName'), name));
-    const war = (this.setup.mode ?? 'war') === 'war';
+    const mode = this.setup.mode ?? 'siege';
+    const war = mode !== 'classic';
     grid.appendChild(
       field(
         t('gameMode'),
         segmented<GameMode>(
           [
+            { value: 'siege', label: t('modeSiege') },
             { value: 'war', label: t('modeWar') },
             { value: 'classic', label: t('modeClassic') },
           ],
-          this.setup.mode ?? 'war',
+          mode,
           (v) => {
             this.setup.mode = v;
             this.showSetup();
@@ -323,7 +325,8 @@ export class Screens {
         } catch {
           /* ignore */
         }
-        this.cb.start({ ...this.setup, roundTime: (this.setup.mode ?? 'war') === 'war' ? 720 : 240 });
+        const m = this.setup.mode ?? 'siege';
+        this.cb.start({ ...this.setup, roundTime: m === 'siege' ? 480 : m === 'war' ? 720 : 240 });
       }),
     );
     p.appendChild(row);
