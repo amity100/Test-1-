@@ -6,7 +6,7 @@ import type { Plot } from '../world/Layout';
 import type { BotCommander } from './BotBrain';
 import { packCell } from '../world/Reachability';
 
-export type TaskKind = 'defend' | 'outpost' | 'assault' | 'escort' | 'build';
+export type TaskKind = 'defend' | 'outpost' | 'assault' | 'escort' | 'build' | 'engine';
 
 export interface Task {
   kind: TaskKind;
@@ -15,6 +15,8 @@ export interface Task {
   outpost: number;
   /** Where to look once there (defensive posts face the approach). */
   facing: THREE.Vector3 | null;
+  /** Siege engine to crew (engine tasks). */
+  engine?: number;
 }
 
 /** A defensive spot with the direction it watches. */
@@ -38,6 +40,9 @@ export interface CommanderHost {
   pendingOrders(team: number): number;
   /** Where a bot on build duty should stand (its order's site), or null. */
   buildSite(e: Entity): THREE.Vector3 | null;
+  /** The team's live siege engines (id and base position) and where a crew stands for one. */
+  engines(team: number): { id: number; pos: THREE.Vector3 }[];
+  engineSpot(id: number): THREE.Vector3 | null;
 }
 
 const tmp = new THREE.Vector3();
@@ -174,7 +179,26 @@ export class TeamCommander implements BotCommander {
     const posts = this.host.posts(team);
     const flagPosts = posts.filter((p) => p.flag);
     const otherPosts = posts.filter((p) => !p.flag);
+    // Engine crews come out of the garrison: the nearest free defender to each live engine.
+    const crews = new Set<Entity>();
+    for (const eng of this.host.engines(team)) {
+      let pick: Entity | null = null;
+      let bd = Infinity;
+      for (const b of home) {
+        if (crews.has(b)) continue;
+        const d = b.pos.distanceTo(eng.pos);
+        if (d < bd) {
+          bd = d;
+          pick = b;
+        }
+      }
+      if (!pick) break;
+      crews.add(pick);
+      const keep = this.tasks.get(pick.id);
+      next.set(pick.id, keep && keep.kind === 'engine' && keep.engine === eng.id ? keep : { kind: 'engine', target: eng.pos.clone(), outpost: -1, facing: null, engine: eng.id });
+    }
     home.forEach((e, i) => {
+      if (crews.has(e)) return;
       const keep = this.tasks.get(e.id);
       if (keep && keep.kind === 'defend') {
         next.set(e.id, keep);
@@ -242,14 +266,16 @@ export class TeamCommander implements BotCommander {
     let a = 0;
     let es = 0;
     let bd = 0;
+    let en = 0;
     for (const t of next.values()) {
       if (t.kind === 'defend') d++;
       else if (t.kind === 'outpost') o++;
       else if (t.kind === 'assault') a++;
       else if (t.kind === 'build') bd++;
+      else if (t.kind === 'engine') en++;
       else es++;
     }
-    this.summary = `defend ${d} · points ${o} · assault ${a} · escort ${es} · build ${bd}`;
+    this.summary = `defend ${d} · points ${o} · assault ${a} · escort ${es} · build ${bd} · engines ${en}`;
     for (const e of bots) e.task = next.get(e.id)?.kind ?? '';
   }
 }

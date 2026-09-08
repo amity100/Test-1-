@@ -102,7 +102,10 @@ export class TeamBuild {
     for (const w of this.workers) {
       if (battle) {
         // Only the bots on build duty work, and only when they have reached the site.
-        if (!w.bot.alive || (this.onDuty && !this.onDuty(w.bot))) continue;
+        if (!w.bot.alive || (this.onDuty && !this.onDuty(w.bot))) {
+          w.next = null; // a dead or reassigned builder lets go of its order
+          continue;
+        }
         if (!w.next || !this.builder.hasOrder(...w.next)) w.next = this.pickOrder(w);
         if (!w.next) continue;
         const site = this.siteOf(w.next);
@@ -151,7 +154,7 @@ export class TeamBuild {
 
   /** The nearest open order to a worker that no other worker has taken, lowest storeys first. */
   private pickOrder(w: Worker): [number, number, number] | null {
-    const taken = new Set(this.workers.filter((o) => o !== w && o.next).map((o) => o.next!.join(',')));
+    const taken = new Set(this.workers.filter((o) => o !== w && o.next && o.bot.alive && (!this.onDuty || this.onDuty(o.bot))).map((o) => o.next!.join(',')));
     let best: [number, number, number] | null = null;
     let bestScore = Infinity;
     for (const o of this.builder.orders) {

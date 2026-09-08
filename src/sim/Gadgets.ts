@@ -136,6 +136,26 @@ export class GadgetSystem {
     this.touched.add(pi);
     return true;
   }
+  /** Carves fortress blocks within a radius (breach charges, catapult stones); returns how many went. */
+  private carve(centre: THREE.Vector3, r: number): number {
+    let cells = 0;
+    for (let x = Math.floor(centre.x - r); x <= Math.floor(centre.x + r); x++)
+      for (let y = Math.floor(centre.y - r); y <= Math.floor(centre.y + r); y++)
+        for (let z = Math.floor(centre.z - r); z <= Math.floor(centre.z + r); z++) {
+          const d = Math.hypot(x + 0.5 - centre.x, y + 0.5 - centre.y, z + 0.5 - centre.z);
+          if (d > r) continue;
+          if (this.breakBlock(x, y, z)) cells++;
+        }
+    return cells;
+  }
+
+  /** A blast from outside the gadget system (a catapult stone): carve and refresh right away. */
+  blast(centre: THREE.Vector3, r: number): number {
+    const cells = this.carve(centre, r);
+    this.flushTouched();
+    return cells;
+  }
+
   private touched = new Set<number>();
   private flushTouched(): void {
     for (const pi of this.touched) this.events.emit('blocksChanged', { plotIndex: pi });
@@ -377,15 +397,7 @@ export class GadgetSystem {
       if (c.fuse > 0) continue;
       // Blast: carve fortress blocks around the impact point and hurt anyone nearby.
       const centre = c.pos.clone().addScaledVector(c.normal, -0.45);
-      let cells = 0;
-      const r = BREACH.radius;
-      for (let x = Math.floor(centre.x - r); x <= Math.floor(centre.x + r); x++)
-        for (let y = Math.floor(centre.y - r); y <= Math.floor(centre.y + r); y++)
-          for (let z = Math.floor(centre.z - r); z <= Math.floor(centre.z + r); z++) {
-            const d = Math.hypot(x + 0.5 - centre.x, y + 0.5 - centre.y, z + 0.5 - centre.z);
-            if (d > r) continue;
-            if (this.breakBlock(x, y, z)) cells++;
-          }
+      const cells = this.carve(centre, BREACH.radius);
       const owner = this.entities().find((e) => e.id === c.owner) ?? null;
       this.combat.explode(c.pos.clone().addScaledVector(c.normal, 0.3), BREACH.blastRadius, BREACH.damage, owner, now);
       this.events.emit('breachBlast', { pos: c.pos.clone(), cells });

@@ -4,6 +4,7 @@ import { formatTime } from '../core/MathUtil';
 import type { Builder, BuilderTool } from './Builder';
 import type { Tone } from './Architect';
 import { TRAP_KINDS, TRAP_SLOTS, TRAP_COST, type TrapKind } from '../sim/Traps';
+import { ENGINE, ENGINE_KINDS, type EngineKind } from '../sim/Engines';
 import { TRAP_ICON, TRAP_NAME_KEY } from '../ui/TrapIcons';
 
 export interface BuilderUICallbacks {
@@ -20,6 +21,9 @@ const ICON = {
   flag: svg('<path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/>'),
   dice: svg('<rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8" cy="8" r="1.4" fill="currentColor"/><circle cx="16" cy="8" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="8" cy="16" r="1.4" fill="currentColor"/><circle cx="16" cy="16" r="1.4" fill="currentColor"/>'),
   pause: svg('<rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"/><rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"/>'),
+  engine: svg('<path d="M3 20h18"/><path d="M6 20l3-9h6l3 9"/><path d="M9 11l-2-6h10l-2 6"/><circle cx="12" cy="5" r="1.5"/>'),
+  ballista: svg('<path d="M12 20V8"/><path d="M4 9c3-3 13-3 16 0"/><path d="M4 9l8 4 8-4"/><path d="M12 4v4"/><path d="M7 20h10"/>'),
+  catapult: svg('<path d="M3 19h18"/><path d="M6 19l2-6h8l2 6"/><path d="M8 13L18 5"/><circle cx="19" cy="4" r="2"/><path d="M6 16h3"/>'),
   ping: svg('<path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2.2" fill="currentColor" stroke="none"/>'),
   camera: svg('<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.2"/>'),
   glass: svg('<path d="M6 3h12v18H6z"/><path d="M9 6l6 9M9 12l4 6"/>'),
@@ -44,6 +48,8 @@ export class BuilderUI {
   private top: HTMLElement;
   private bar: HTMLElement;
   private sub: HTMLElement;
+  private subEngines: HTMLElement;
+  private engineBtns = new Map<EngineKind, HTMLButtonElement>();
   private slotsEl!: HTMLElement;
   private kindBtns = new Map<TrapKind, HTMLButtonElement>();
   private hint: HTMLElement;
@@ -75,6 +81,8 @@ export class BuilderUI {
     this.top = el('div', 'bld-top');
     this.bar = el('div', 'bld-bar');
     this.sub = el('div', 'bld-sub');
+    this.subEngines = el('div', 'bld-sub engines');
+    this.subEngines.hidden = true;
     this.sub.hidden = true;
     this.hint = el('div', 'bld-hint');
     this.toast = el('div', 'bld-toast');
@@ -88,7 +96,7 @@ export class BuilderUI {
         if (e.pointerType === 'mouse') this.builder.uiHover = false;
       });
     }
-    this.root.append(this.cursorLayer, this.top, this.bar, this.sub, this.hint, this.toast);
+    this.root.append(this.cursorLayer, this.top, this.bar, this.sub, this.subEngines, this.hint, this.toast);
     this.render();
   }
 
@@ -223,6 +231,7 @@ export class BuilderUI {
     this.toolBtns.set('flag', this.iconBtn(this.bar, 'tool flag', ICON.flag, t('bldFlag'), () => this.toggleTool('flag')));
     this.toolBtns.set('trap', this.iconBtn(this.bar, 'tool trap', ICON.trap, t('bldTrap'), () => this.toggleTool('trap')));
     if (this.team) this.toolBtns.set('ping', this.iconBtn(this.bar, 'tool ping', ICON.ping, t('bldPing'), () => this.toggleTool('ping')));
+    if (this.command) this.toolBtns.set('engine', this.iconBtn(this.bar, 'tool engine', ICON.engine, t('bldEngines'), () => this.toggleTool('engine')));
     // Trap kinds (shown while the trap tool is active) with the slot counter.
     this.sub.innerHTML = '';
     this.kindBtns.clear();
@@ -236,6 +245,19 @@ export class BuilderUI {
     }
     this.slotsEl = el('div', 'slots');
     this.sub.appendChild(this.slotsEl);
+    // Engine kinds (command map only), with their supply costs.
+    this.subEngines.innerHTML = '';
+    this.engineBtns.clear();
+    if (this.command) {
+      for (const kind of ENGINE_KINDS) {
+        const b = this.iconBtn(this.subEngines, `kind ${kind}`, kind === 'ballista' ? ICON.ballista : ICON.catapult, t(kind === 'ballista' ? 'engineBallista' : 'engineCatapult'), () => {
+          this.builder.setEngineKind(kind);
+          this.refresh();
+        });
+        b.appendChild(el('span', 'cost', `${ENGINE[kind].cost}`));
+        this.engineBtns.set(kind, b);
+      }
+    }
     this.hint.textContent = t(this.command ? 'bldHintCommand' : this.team ? 'bldHintTeam' : this.compact ? 'bldHintTouch' : 'bldHintMouse');
     this.refresh();
   }
@@ -338,7 +360,10 @@ export class BuilderUI {
     // Trap sub-bar.
     const trapTool = b.tool === 'trap';
     this.sub.hidden = !trapTool;
-    this.root.classList.toggle('trap', trapTool);
+    const engineTool = b.tool === 'engine';
+    this.subEngines.hidden = !engineTool;
+    for (const [kind, el4] of this.engineBtns) el4.classList.toggle('active', b.engineKind === kind);
+    this.root.classList.toggle('trap', trapTool || engineTool);
     if (trapTool) {
       const used = b.trapSlots;
       for (const [kind, el3] of this.kindBtns) {
@@ -348,6 +373,8 @@ export class BuilderUI {
       const txt = t('trapSlots', { n: used, total: TRAP_SLOTS });
       if (this.slotsEl.textContent !== txt) this.slotsEl.textContent = txt;
       if (this.tipIndex < 0) this.hint.textContent = t('bldHintTrap');
+    } else if (engineTool) {
+      if (this.tipIndex < 0) this.hint.textContent = t('bldHintEngine');
     } else if (b.tool === 'ping') this.hint.textContent = t('bldHintPing');
     else if (this.tipIndex < 0 && !this.hint.hidden) this.hint.textContent = t(this.command ? 'bldHintCommand' : this.team ? 'bldHintTeam' : this.compact ? 'bldHintTouch' : 'bldHintMouse');
   }

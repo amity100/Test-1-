@@ -802,6 +802,7 @@ body { background: radial-gradient(1200px 800px at 50% 30%, #16283a 0%, #0f1923 
 .bld-sub { position: absolute; left: 50%; bottom: calc(80px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: flex; gap: 6px; align-items: center; padding: 6px 8px; background: rgba(8, 14, 22, 0.78); border: 1px solid var(--line); clip-path: var(--chamfer); }
 .bld-sub .bld-btn.kind { width: 60px; height: 48px; padding: 0; flex-direction: column; gap: 1px; position: relative; }
 .bld-sub .bld-btn.kind .lb { font-size: 9px; }
+.bld-sub.engines .bld-btn.kind { width: 78px; }
 .bld-sub .bld-btn.kind .cost { position: absolute; top: 2px; right: 4px; font: 700 9px/1 var(--display); color: var(--accent2); }
 .bld-sub .bld-btn.kind.active { color: #041018; background: var(--accent2); border-color: var(--accent2); }
 .bld-sub .slots { font-family: var(--display); font-weight: 700; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #dbe3ec; padding: 0 8px; white-space: nowrap; }

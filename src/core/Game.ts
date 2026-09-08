@@ -27,6 +27,8 @@ import { buildWeaponModel } from '../render/WeaponModels';
 import { HUD, type HudMarker, type HudState, type ScoreRow } from '../ui/HUD';
 import { GadgetSystem, GADGETS, GADGET_IDS, KIT_SIZE, type GadgetId } from '../sim/Gadgets';
 import { RepairSystem } from '../sim/Repair';
+import { EngineSystem, ENGINE, type Engine, type EngineKind } from '../sim/Engines';
+import { EngineMeshes } from '../render/EngineMeshes';
 import { WAR } from '../sim/War';
 import { GadgetMeshes } from '../render/GadgetMeshes';
 import { outfitFor } from '../render/Outfits';
@@ -105,6 +107,14 @@ export class Game {
   private projectileMeshes = new Map<number, THREE.Object3D>();
   private rocketModel: THREE.Group;
   private grenadeModel: THREE.Group;
+  private stoneModel: THREE.Group;
+  private boltModel: THREE.Group;
+  /** Siege engines: ballistae and catapults on the walls, crewed by bots or manned by the player. */
+  readonly engines: EngineSystem;
+  private engineMeshes: EngineMeshes;
+  private manning: Engine | null = null;
+  /** Where the player's body stands while manning (fixed when they take the controls). */
+  private manSpot = new THREE.Vector3();
   private cinematicAngle = 0;
   private cameraFocus = new THREE.Vector3(0, 20, 0);
   private scoreAtRoundStart = new Map<number, number>();
@@ -166,9 +176,17 @@ export class Game {
     this.traps = new TrapSystem(app.world, this.combat, () => this.entities, app.plots);
     this.controller.traps = this.traps;
     this.controller.breakGlass = (x, y, z) => this.combat.breakGlass(x, y, z);
-    this.combat.solids = () => this.traps.solids();
+    this.engines = new EngineSystem(app.world, this.combat, () => this.entities, app.plots);
+    this.combat.solids = () => [...this.traps.solids(), ...this.engines.solids()];
+    this.combat.onStoneImpact = (pos) => {
+      const cells = this.gadgets.blast(pos, ENGINE.catapult.breakRadius);
+      this.vfx.debrisBurst(pos, new THREE.Vector3(0, 1, 0), Math.min(40, 12 + cells * 3), new THREE.Color(0x8a8378));
+      audio.play('explosion', { pos, volume: 0.9, pitch: 0.7 });
+    };
+    this.engineMeshes = new EngineMeshes(this.engines, (team) => TEAM_COLORS[team] ?? '#ffffff');
     this.trapMeshes = new TrapMeshes(this.traps, (pi) => this.entities.find((e) => e.plotIndex === pi)?.colorHex ?? '#ffffff');
     app.gr.scene.add(this.trapMeshes.group);
+    app.gr.scene.add(this.engineMeshes.group);
     this.roundEvents = new RoundEvents(app.world, {
       entities: () => this.entities,
       targetPlot: () => (this.match && this.match.targetPlotIndex >= 0 ? this.app.plots[this.match.targetPlotIndex] : null),
@@ -202,6 +220,8 @@ export class Game {
     app.gr.scene.add(this.vfx.group);
     this.rocketModel = buildWeaponModel('rocketShell', new THREE.Color('#ffb300'), false, 'high');
     this.grenadeModel = buildWeaponModel('grenade', new THREE.Color('#39ff14'), false, 'high');
+    this.stoneModel = buildWeaponModel('stone', new THREE.Color('#888888'), false, 'low');
+    this.boltModel = buildWeaponModel('bolt', new THREE.Color('#ffb300'), false, 'low');
     this.hud = new HUD(this.uiRoot);
     this.hud.onSpawnChoice = (i) => this.setSpawnChoice(i);
     this.screens = new Screens(this.uiRoot, {
@@ -235,6 +255,7 @@ export class Game {
     this.uiRoot.appendChild(this.rotateHint);
     this.wireCombat();
     this.wireGadgets();
+    this.wireEngines();
     this.app.input.onLockChange = (locked) => {
       if (locked && this.screens.name === 'click') this.screens.hideAll();
       if (!locked && !this.app.input.fallbackLook && (this.mode === 'battle' || this.mode === 'fortify') && !this.paused && !this.screens.visible && !this.commandView) this.pause();
@@ -391,6 +412,7 @@ export class Game {
       this.teamBuild.pay = () => this.match?.war?.spend(0, Game.ORDER_COST) ?? false;
       this.teamBuild.onDuty = (bot) => bot.task === 'build';
       this.builder.costCheck = (_kind, cost) => this.match?.war?.spend(0, cost * 4) ?? false;
+      this.builder.placeEngine = (kind, cell) => this.orderEngine(kind, cell);
     }
     this.builder.enter();
     this.builderUI.show();
@@ -446,6 +468,7 @@ export class Game {
     this.traps.setSlots(this.teamPlots[1], BOT_SLOTS * size + (siege ? 8 : 0));
     this.traps.setSlots(this.teamPlots[0], BOT_SLOTS * (size - 1) + 4 + (siege ? 8 : 0));
     this.seedTraps(this.teamPlots[1], res1, this.entities.filter((e) => e.team === 1));
+    if (siege) this.seedEngines(1, res1.roofSpots);
     if (siege) this.placeCourtyards(match);
     else {
       // Ruins on the flanks: cover between the fortresses.
@@ -467,6 +490,11 @@ export class Game {
       human: (team: number) => (team === 0 ? this.player : null),
       pendingOrders: (team: number) => (team === 0 ? this.builder?.orders.length ?? 0 : 0),
       buildSite: (e: Entity) => (e.team === 0 ? this.teamBuild?.siteFor(e) ?? null : null),
+      engines: (team: number) => this.engines.engines.filter((e) => e.team === team && !e.dead).map((e) => ({ id: e.id, pos: e.pos })),
+      engineSpot: (id: number) => {
+        const e = this.engines.byId(id);
+        return e && !e.dead ? this.engines.crewSpot(e) : null;
+      },
     };
     this.commanders = [new TeamCommander(0, host), new TeamCommander(1, host)];
     for (const e of this.entities) if (e.isBot) this.bots.push(new WarBrain(e, this.botContext(), PROFILES[cfg.difficulty], this.rng.int(1, 1e9)));
@@ -688,6 +716,97 @@ export class Game {
       if (!this.app.input.looking && !IS_TOUCH) this.screens.showClickToPlay(this.app.input.fallbackLook);
     }
     this.setTouchMode();
+  }
+
+  /** Command map: an engine on a floor cell of our castle, paid in supplies. Returns an error key or null. */
+  private orderEngine(kind: EngineKind, cell: Cell): string | null {
+    const war = this.match?.war;
+    if (!war) return 'engineOutside';
+    const cost = ENGINE[kind].cost;
+    const err = this.engines.canPlace(kind, cell, this.teamPlots[0]);
+    if (err) return err;
+    if (!war.spend(0, cost)) return 'noSupplies';
+    const enemy = this.app.plots[this.teamPlots[1]];
+    const yaw = Math.atan2(-(enemy.cx - (cell.x + 0.5)), -(enemy.cz - (cell.z + 0.5)));
+    const r = this.engines.place(kind, cell, 0, this.teamPlots[0], yaw);
+    if (typeof r === 'string') {
+      war.supplies[0] += cost;
+      return r;
+    }
+    audio.play('place', { pitch: 0.7 });
+    return null;
+  }
+
+  /** A siege starts with a ballista on a roof and a catapult in the courtyard for each side. */
+  private seedEngines(team: number, roofSpots: Cell[]): void {
+    const war = this.match?.war;
+    if (!war) return;
+    const plotIndex = this.teamPlots[team];
+    const enemy = this.app.plots[this.teamPlots[1 - team]];
+    const yawTo = (x: number, z: number): number => Math.atan2(-(enemy.cx - x), -(enemy.cz - z));
+    // Roof spot nearest the enemy for the ballista.
+    const spots = [...roofSpots].sort((a, b) => Math.hypot(a.x - enemy.cx, a.z - enemy.cz) - Math.hypot(b.x - enemy.cx, b.z - enemy.cz));
+    for (const c of spots.slice(0, 12)) {
+      if (typeof this.engines.place('ballista', c, team, plotIndex, yawTo(c.x + 0.5, c.z + 0.5)) !== 'string') break;
+    }
+    const yard = war.outposts[team]?.pos;
+    const tries: Cell[] = [];
+    if (yard) for (const [dx, dz] of [[0, 0], [2, 0], [-2, 0], [0, 2], [0, -2], [3, 3], [-3, -3]]) tries.push({ x: Math.floor(yard.x + dx), y: PLOT_Y + 1, z: Math.floor(yard.z + dz) });
+    // Under a roof the stones would hit the ceiling: then a roof spot with open sky.
+    tries.push(...spots);
+    for (const c of tries) {
+      if (typeof this.engines.place('catapult', c, team, plotIndex, yawTo(c.x + 0.5, c.z + 0.5)) !== 'string') break;
+    }
+  }
+
+  /** E by one of our engines: take the controls (the trigger fires it); E again to step off. */
+  toggleManning(): void {
+    if (this.manning) {
+      this.leaveEngine();
+      return;
+    }
+    const p = this.player;
+    if (!this.match?.war || !p.alive || this.commandView) return;
+    const e = this.engines.near(p.pos, p.team, 2.6);
+    if (!e) return;
+    this.manning = e;
+    e.manned = true;
+    e.crewId = p.id;
+    p.manning = e.id;
+    p.vel.set(0, 0, 0);
+    this.manSpot.copy(this.engines.crewSpot(e));
+    // The engine swings to where the player already looks.
+    e.yaw = p.yaw;
+    e.pitch = p.pitch;
+    if (this.local) this.local.blockFire = true;
+    audio.play('switch', { volume: 0.6 });
+  }
+
+  leaveEngine(): void {
+    const e = this.manning;
+    if (!e) return;
+    this.manning = null;
+    e.manned = false;
+    if (e.crewId === this.player.id) e.crewId = -1;
+    this.player.manning = -1;
+    if (this.local) this.local.blockFire = false;
+  }
+
+  /** While manned: the body stays at the controls, the look aims the engine, the trigger fires it. */
+  private updateManning(dt: number): void {
+    void dt;
+    const input = this.app.input;
+    const p = this.player;
+    if (input.interactPressed() && p.alive && !this.commandView) this.toggleManning();
+    const e = this.manning;
+    if (!e) return;
+    if (!p.alive || e.dead || this.commandView) {
+      this.leaveEngine();
+      return;
+    }
+    p.pos.copy(this.manSpot);
+    p.vel.set(0, 0, 0);
+    if (input.fireHeld() && e.fireTimer <= 0) this.engines.fire(e, p, this.time);
   }
 
   /** Where the player wants to reappear: -1 the fortress, else an owned capture point (keys 1-4 while dead). */
@@ -1030,6 +1149,7 @@ export class Game {
       const heroCells = new Set(res?.hero?.cells ?? []);
       const heroFloors = res ? res.rooms.filter((r) => heroCells.has(Plan.index(r.i, r.j, r.k))).flatMap((r) => r.floor) : [];
       this.teamSpawns[0] = this.spawnSpots(floors, flag);
+      if (this.match.war.siege) this.seedEngines(0, res?.roofSpots ?? []);
       this.teamPosts[0] = this.postsFor(0, res?.roofSpots ?? [], res?.entrances ?? [], heroFloors, flag);
       this.teamOrders = this.trapOrders(flag, floors, res?.entrances ?? [], heroFloors);
     }
@@ -1455,6 +1575,8 @@ export class Game {
   }
 
   private cleanupMatch(): void {
+    this.leaveEngine();
+    this.engines.clear();
     this.threatUntil.clear();
     this.pendingDmg.clear();
     this.builder?.dispose();
@@ -1506,6 +1628,27 @@ export class Game {
 
   // ---------------- combat wiring ----------------
   /** Gadget events → sound, particles, navigation invalidation and HUD hints. */
+  private wireEngines(): void {
+    this.engines.events.on('fire', ({ engine, from, dir }) => {
+      if (engine.kind === 'ballista') {
+        audio.play('rifle', { pos: from, volume: 0.9, pitch: 0.55 });
+        this.vfx.puff(from.clone().addScaledVector(dir, 1), dir, 4, 0.6, 0.3);
+      } else {
+        audio.play('rocket', { pos: from, volume: 0.8, pitch: 0.45 });
+        this.vfx.puff(from, new THREE.Vector3(0, 1, 0), 6, 0.9, 0.5);
+        if (this.player.alive && this.player.pos.distanceTo(from) < 12) this.local?.addShake(0.25);
+      }
+    });
+    this.engines.events.on('destroyed', ({ engine }) => {
+      const pos = engine.pos.clone().add(new THREE.Vector3(0, 1, 0));
+      this.vfx.debrisBurst(pos, new THREE.Vector3(0, 1, 0), 30, new THREE.Color(0x6b4a2a));
+      audio.play('explosion', { pos, volume: 0.6, pitch: 1.2 });
+      if (this.manning === engine) this.leaveEngine();
+      const mine = engine.team === this.player.team;
+      this.hud.showBanner(t(mine ? 'engineDestroyed' : 'engineDestroyedTheirs'), '', 1.8);
+    });
+  }
+
   private wireGadgets(): void {
     const g = this.gadgets.events;
     const up = new THREE.Vector3(0, 1, 0);
@@ -1726,6 +1869,7 @@ export class Game {
     this.vfx.update(dt);
     this.gadgetMeshes.update(dt, this.time);
     this.trapMeshes.update(dt, this.time, this.player.plotIndex);
+    this.engineMeshes.update(dt);
     this.trapParticles(dt);
     this.updateEventVisuals(dt);
     this.syncProjectiles();
@@ -1857,6 +2001,10 @@ export class Game {
       }
       this.gadgets.update(simDt, this.time);
       this.traps.update(simDt, this.time);
+      if (match.war) {
+        this.engines.update(simDt, this.time);
+        this.updateManning(simDt);
+      }
       this.roundEvents.update(simDt, this.time);
       this.combat.updateProjectiles(simDt, this.time);
       // Slow health regeneration after a few seconds without damage
@@ -1981,12 +2129,12 @@ export class Game {
       live.add(p.id);
       let m = this.projectileMeshes.get(p.id);
       if (!m) {
-        m = (p.kind === 'rocket' ? this.rocketModel : this.grenadeModel).clone();
+        m = (p.kind === 'rocket' ? this.rocketModel : p.kind === 'stone' ? this.stoneModel : p.kind === 'bolt' ? this.boltModel : this.grenadeModel).clone();
         this.app.gr.scene.add(m);
         this.projectileMeshes.set(p.id, m);
       }
       m.position.copy(p.pos);
-      if (p.kind === 'rocket') {
+      if (p.kind === 'rocket' || p.kind === 'bolt') {
         m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), p.vel.clone().normalize());
         this.vfx.puff(p.pos, p.vel.clone().normalize().negate(), 1, 0.75, 0.35);
       } else {
@@ -2055,6 +2203,7 @@ export class Game {
     else if (p.role === 'defender') for (const e of this.entities) if (e !== p) flagThreat = Math.max(flagThreat, e.captureProgress / RULES.captureTime);
     const spread = w ? THREE.MathUtils.lerp(WEAPONS[w.id].spread, WEAPONS[w.id].adsSpread, p.ads) * 6 + Math.min(20, Math.sqrt(p.vel.x * p.vel.x + p.vel.z * p.vel.z) * 1.2) : 4;
     const objective = this.objectiveMarker();
+    const nearEngine = war && p.alive && !this.manning && !this.commandView ? this.engines.near(p.pos, my, 2.6) : null;
     // Crosshair colour: is a living enemy under the reticle?
     const eye = p.eyePos;
     const look = p.alive ? this.combat.raycast(eye, p.forward(new THREE.Vector3()), 160, p, true) : null;
@@ -2173,7 +2322,7 @@ export class Game {
       sniperScope: !!w && w.id === 'sniper' && p.ads > 0.85,
       spread,
       fps: settings.data.showFps ? this.app.fps : null,
-      prompt: this.time < this.promptUntil ? this.promptText : p.protectedUntil > this.time ? t('spawnShield') : p.burrowed ? this.surfaceInstruction() : war && p.alive && this.time < this.commandHintUntil && plotContains(this.app.plots[this.teamPlots[my]], p.pos.x, p.pos.z) ? t(IS_TOUCH ? 'commandHintTouch' : 'commandHint') : '',
+      prompt: this.time < this.promptUntil ? this.promptText : this.manning ? t('leaveEngine', { name: t(this.manning.kind === 'ballista' ? 'engineBallista' : 'engineCatapult') }) : nearEngine ? t('manEngine', { name: t(nearEngine.kind === 'ballista' ? 'engineBallista' : 'engineCatapult') }) : p.protectedUntil > this.time ? t('spawnShield') : p.burrowed ? this.surfaceInstruction() : war && p.alive && this.time < this.commandHintUntil && plotContains(this.app.plots[this.teamPlots[my]], p.pos.x, p.pos.z) ? t(IS_TOUCH ? 'commandHintTouch' : 'commandHint') : '',
       minimap: {
         self: { x: p.pos.x, z: p.pos.z, yaw: p.yaw },
         target: match.targetPlotIndex >= 0 ? { x: this.app.plots[match.targetPlotIndex].cx, z: this.app.plots[match.targetPlotIndex].cz } : null,

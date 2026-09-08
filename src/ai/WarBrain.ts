@@ -161,6 +161,20 @@ export class WarBrain extends BotBrain {
         this.maybeBreach(dt, now, flag.pos);
         break;
       }
+      case 'engine': {
+        // Crew an engine: stand at its controls facing the enemy; the engine does the shooting.
+        const spot = (task.engine !== undefined ? cmd.host.engineSpot(task.engine) : null) ?? task.target;
+        const d = Math.hypot(e.pos.x - spot.x, e.pos.z - spot.z);
+        if (d > 1.1) {
+          this.state = 'approach';
+          goal = new THREE.Vector3(spot.x, spot.y, spot.z);
+          sprint = d > 10;
+        } else {
+          const enemy = cmd.host.enemyPlot(e.team);
+          this.hold(dt, now, tmp.set(enemy.cx - e.pos.x, 0, enemy.cz - e.pos.z).normalize().clone());
+        }
+        break;
+      }
       case 'build': {
         // On build duty: walk to the ordered room and work there; without a site, stand guard like a defender.
         const site = cmd.host.buildSite(e);

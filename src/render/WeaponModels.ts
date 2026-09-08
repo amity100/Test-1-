@@ -10,7 +10,7 @@ export const OPERATOR_CAMO: Array<[number, number, number]> = [
   [0.31, 0.33, 0.29],
 ];
 
-export type ModelId = WeaponId | 'grenade' | 'rocketShell';
+export type ModelId = WeaponId | 'grenade' | 'rocketShell' | 'stone' | 'bolt';
 export type WeaponDetail = 'high' | 'low';
 
 type MatKey = 'metal' | 'dark' | 'polymer' | 'rubber' | 'accent' | 'wood' | 'lens' | 'glove' | 'pad' | 'sleeve' | 'light' | 'brass' | 'shell' | 'skin' | 'iron' | 'steel' | 'rope' | 'clay';
@@ -622,7 +622,26 @@ function firepot(c: Ctx): WeaponData {
   return { muzzle: new THREE.Vector3(0, 0, -0.1), hip: new THREE.Vector3(0.24, -0.26, -0.4), ads: new THREE.Vector3(0.2, -0.22, -0.4) };
 }
 
-const BUILDERS: Record<ModelId, (c: Ctx) => WeaponData> = { pistol: flintlock, smg: repeater, rifle: crossbow, shotgun: handcannon, sniper: arquebus, rocket: mortar, rocketShell: bomb, grenade: firepot };
+/** A catapult stone in flight: a rough boulder. */
+function stone(c: Ctx): WeaponData {
+  sphere(c, 'iron', 0.3, 0, 0, 0);
+  box(c, 'iron', 0.34, 0.34, 0.34, 0, 0, 0, 0.5, 0.4, 0.3);
+  box(c, 'iron', 0.3, 0.3, 0.3, 0.06, -0.04, 0.04, 1.1, 0.7, 0.2);
+  return { muzzle: new THREE.Vector3(0, 0, -0.3), hip: new THREE.Vector3(0.24, -0.3, -0.45), ads: new THREE.Vector3(0, -0.2, -0.4) };
+}
+
+/** A ballista bolt in flight: a metre of ash with an iron head and leather vanes. Forward is -Z. */
+function boltShell(c: Ctx): WeaponData {
+  cylZ(c, 'wood', 0.02, 1.1, 0, 0, 0.05);
+  cylZ(c, 'iron', 0.032, 0.22, 0, 0, -0.6, 0.004);
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2;
+    box(c, 'rubber', 0.006, 0.09, 0.22, Math.cos(a) * 0.05, Math.sin(a) * 0.05, 0.45, 0, 0, a);
+  }
+  return { muzzle: new THREE.Vector3(0, 0, -0.7), hip: new THREE.Vector3(0.24, -0.3, -0.45), ads: new THREE.Vector3(0, -0.2, -0.4) };
+}
+
+const BUILDERS: Record<ModelId, (c: Ctx) => WeaponData> = { pistol: flintlock, smg: repeater, rifle: crossbow, shotgun: handcannon, sniper: arquebus, rocket: mortar, rocketShell: bomb, grenade: firepot, stone, bolt: boltShell };
 
 /**
  * Builds a detailed PBR weapon model. Forward is -Z, the grip is near the origin.

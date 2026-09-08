@@ -4,6 +4,7 @@ import type { Terrain } from '../world/Terrain';
 import type { Input } from '../core/Input';
 import type { Plot } from '../world/Layout';
 import { TRAP_COST } from '../sim/Traps';
+import type { EngineKind } from '../sim/Engines';
 import { PLOT_Y, PLOT_MAX_HEIGHT } from '../world/Layout';
 import type { StyleId } from '../world/Styles';
 import { PALETTE, blockColor } from '../world/Voxel';
@@ -16,7 +17,7 @@ import { Emitter } from '../core/Events';
 import type { TrapKind, TrapSystem } from '../sim/Traps';
 import { clamp, damp } from '../core/MathUtil';
 
-export type BuilderTool = 'build' | 'erase' | 'flag' | 'trap' | 'ping';
+export type BuilderTool = 'build' | 'erase' | 'flag' | 'trap' | 'ping' | 'engine';
 
 export interface BuilderEvents extends Record<string, unknown> {
   change: Record<string, never>;
@@ -93,6 +94,14 @@ export class Builder {
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number } | null = null;
   /** Pays for a trap set from the command map; false refuses the placement. */
   costCheck: ((kind: 'trap', cost: number) => boolean) | null = null;
+  /** Command map: sets a siege engine on a floor cell (returns an error key, or null when placed). */
+  placeEngine: ((kind: EngineKind, cell: Cell) => string | null) | null = null;
+  engineKind: EngineKind = 'ballista';
+
+  setEngineKind(k: EngineKind): void {
+    this.engineKind = k;
+    this.events.emit('change', {});
+  }
   private raycaster = new THREE.Raycaster();
   private active = false;
   private dirtyValidate = true;
@@ -581,6 +590,21 @@ export class Builder {
         this.debugLast = `ping:${col[0]},${col[1]}`;
         return true;
       }
+      case 'engine': {
+        const cell = this.pickFloor(sx, sy);
+        if (!cell || !this.placeEngine) {
+          this.events.emit('invalid', { key: 'engineNeedsFloor' });
+          return false;
+        }
+        const err = this.placeEngine(this.engineKind, cell);
+        if (err) {
+          this.events.emit('invalid', { key: err });
+          return false;
+        }
+        this.events.emit('change', {});
+        this.debugLast = `engine:${this.engineKind}`;
+        return true;
+      }
       case 'trap': {
         const cell = this.pickFloor(sx, sy);
         if (!cell || !this.traps) {
@@ -744,7 +768,17 @@ export class Builder {
   private updateOverlays(dt: number): void {
     // Hover ghost (mouse only; touch acts on tap).
     this.ghost.visible = false;
-    if (!this.input.isTouch && !this.uiHover && this.tool === 'trap') {
+    if (!this.input.isTouch && !this.uiHover && this.tool === 'engine') {
+      // Engine tool: a wide pad where the engine would stand.
+      const c = this.pickFloor(this.input.cursorX, this.input.cursorY);
+      if (c) {
+        this.ghost.visible = true;
+        this.ghost.scale.set(2.2 / (CELL - 0.1), 0.24 / (STOREY_H - 0.1), 2.2 / (CELL - 0.1));
+        this.ghost.position.set(c.x + 0.5, c.y + 0.12, c.z + 0.5);
+        (this.ghost.material as THREE.MeshBasicMaterial).color.setHex(0xffb300);
+        (this.ghostEdges.material as THREE.LineBasicMaterial).color.setHex(0xffb300);
+      }
+    } else if (!this.input.isTouch && !this.uiHover && this.tool === 'trap') {
       // Trap tool: a thin pad on the floor cell under the cursor, green when it can go there.
       const c = this.pickFloor(this.input.cursorX, this.input.cursorY);
       if (c && this.traps) {
