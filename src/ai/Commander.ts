@@ -6,7 +6,7 @@ import type { Plot } from '../world/Layout';
 import type { BotCommander } from './BotBrain';
 import { packCell } from '../world/Reachability';
 
-export type TaskKind = 'defend' | 'outpost' | 'assault' | 'escort';
+export type TaskKind = 'defend' | 'outpost' | 'assault' | 'escort' | 'build';
 
 export interface Task {
   kind: TaskKind;
@@ -34,6 +34,10 @@ export interface CommanderHost {
   posts(team: number): Post[];
   /** The human on this team, if any. */
   human(team: number): Entity | null;
+  /** Rooms the team's commander has ordered and nobody has built yet. */
+  pendingOrders(team: number): number;
+  /** Where a bot on build duty should stand (its order's site), or null. */
+  buildSite(e: Entity): THREE.Vector3 | null;
 }
 
 const tmp = new THREE.Vector3();
@@ -48,6 +52,8 @@ export class TeamCommander implements BotCommander {
   readonly spotted = new Map<number, { pos: THREE.Vector3; time: number }>();
   private tasks = new Map<number, Task>();
   private timer = 0;
+  /** The human commander's crew split (null = automatic). Attackers are whoever is left. */
+  manpower: { build: number; defend: number } | null = null;
   private avoid = new Set<number>();
   private avoidTimer = 0;
   private rallies: THREE.Vector3[] = [];
@@ -155,8 +161,13 @@ export class TeamCommander implements BotCommander {
     // too late, and its own attack is the answer to theirs.
     const homeDist = (e: Entity): number => (e.alive ? e.pos.distanceTo(flag) : 0);
     const byHome = [...bots].sort((a, b) => homeDist(a) - homeDist(b));
+    if (this.manpower) defenders = Math.min(n, Math.max(this.manpower.defend, alarm ? defenders : 0, war.flagDown(team) ? defenders : 0));
     const home = byHome.filter((e) => homeDist(e) < 70).slice(0, defenders);
     const homeSet = new Set(home);
+    // Build duty: the commander's builders, nearest to home, but only while there is something ordered.
+    const wantBuild = this.host.pendingOrders(team) > 0 ? Math.min(this.manpower ? this.manpower.build : Math.min(2, Math.floor(n / 4)), Math.max(0, n - defenders)) : 0;
+    const builders = byHome.filter((e) => !homeSet.has(e) && homeDist(e) < 70).slice(0, wantBuild);
+    for (const e of builders) homeSet.add(e);
     const away = byHome.filter((e) => !homeSet.has(e));
     const next = new Map<number, Task>();
     // Posts: flag guards first, then the rest of the posts spread out.
@@ -173,6 +184,10 @@ export class TeamCommander implements BotCommander {
       const post = pool.length ? pool[(i + e.id) % pool.length] : null;
       next.set(e.id, { kind: 'defend', target: post ? post.pos.clone() : flag.clone(), outpost: -1, facing: post ? post.facing.clone() : null });
     });
+    for (const e of builders) {
+      const keep = this.tasks.get(e.id);
+      next.set(e.id, keep && keep.kind === 'build' ? keep : { kind: 'build', target: flag.clone(), outpost: -1, facing: null });
+    }
     // The human's squad escorts the human, unless the fortress is in danger.
     const human = this.host.human(team);
     const squads = new Map<number, Entity[]>();
@@ -226,13 +241,15 @@ export class TeamCommander implements BotCommander {
     let o = 0;
     let a = 0;
     let es = 0;
+    let bd = 0;
     for (const t of next.values()) {
       if (t.kind === 'defend') d++;
       else if (t.kind === 'outpost') o++;
       else if (t.kind === 'assault') a++;
+      else if (t.kind === 'build') bd++;
       else es++;
     }
-    this.summary = `defend ${d} · points ${o} · assault ${a} · escort ${es}`;
+    this.summary = `defend ${d} · points ${o} · assault ${a} · escort ${es} · build ${bd}`;
     for (const e of bots) e.task = next.get(e.id)?.kind ?? '';
   }
 }

@@ -40,7 +40,7 @@ import { TouchControls, vibrate } from '../ui/TouchControls';
 import { IS_TOUCH } from './Input';
 import { generateFortress, generateRuins, type FortressResult } from '../world/FortressGen';
 import { STYLE_IDS, type StyleId } from '../world/Styles';
-import { PLOT_Y, PLOT_MAX_HEIGHT, PLOT_HALF, ZONE_RADIUS, PLAYABLE_RADIUS, WAR_PLOTS, SIEGE_PLOTS, OUTPOSTS, type Plot } from '../world/Layout';
+import { PLOT_Y, PLOT_MAX_HEIGHT, PLOT_HALF, ZONE_RADIUS, PLAYABLE_RADIUS, WAR_PLOTS, SIEGE_PLOTS, OUTPOSTS, plotContains, type Plot } from '../world/Layout';
 import { blockColor, PALETTE } from '../world/Voxel';
 import { STYLES } from '../world/Styles';
 import { Random } from './Random';
@@ -143,6 +143,12 @@ export class Game {
   private teamPosts: Post[][] = [[], []];
   /** The two team fortress plots of this match (the ring's north and south in a war, the plaza pair in a siege). */
   private teamPlots: [number, number] = WAR_PLOTS;
+  /** Battle command map: the builder camera and tools over the live fight, the body left where it stands. */
+  commandView = false;
+  private commandHintUntil = 0;
+  private crew = { build: 0, defend: 0 };
+  /** Supplies one ordered room costs the team. */
+  static readonly ORDER_COST = 5;
   private teamSpawns: THREE.Vector3[][] = [[], []];
   /** Fortress War: the trap plan the team's bots follow during the walk. */
   private teamOrders: TrapOrder[] | null = null;
@@ -231,7 +237,7 @@ export class Game {
     this.wireGadgets();
     this.app.input.onLockChange = (locked) => {
       if (locked && this.screens.name === 'click') this.screens.hideAll();
-      if (!locked && !this.app.input.fallbackLook && (this.mode === 'battle' || this.mode === 'fortify') && !this.paused && !this.screens.visible) this.pause();
+      if (!locked && !this.app.input.fallbackLook && (this.mode === 'battle' || this.mode === 'fortify') && !this.paused && !this.screens.visible && !this.commandView) this.pause();
     };
     window.addEventListener('pointerdown', () => audio.init(), { once: true });
     window.addEventListener('keydown', () => audio.init(), { once: true });
@@ -314,6 +320,7 @@ export class Game {
     this.commanders = [];
     this.player.name = cfg.playerName || t('you');
     this.player.plotIndex = war ? this.teamPlots[0] : 0;
+    this.touch.setMapButton(war);
     this.player.colorHex = war ? TEAM_COLORS[0] : PLAYER_COLORS[0];
     this.player.team = war ? 0 : -1;
     this.player.squad = war ? 0 : -1;
@@ -358,7 +365,7 @@ export class Game {
       this.uiRoot,
       this.builder,
       {
-        ready: () => this.finishBuild(false),
+        ready: () => (this.commandView ? this.exitCommand() : this.finishBuild(false)),
         card: () => void this.showFortressCard(),
         pause: () => (this.paused ? this.resume() : this.pause()),
       },
@@ -381,6 +388,9 @@ export class Game {
     if (war) {
       this.teamBuild = new TeamBuild(this.builder, this.entities.filter((e) => e.isBot && e.team === 0), cfg.style, this.rng.fork(), plots[this.player.plotIndex]);
       this.teamBuild.active = true;
+      this.teamBuild.pay = () => this.match?.war?.spend(0, Game.ORDER_COST) ?? false;
+      this.teamBuild.onDuty = (bot) => bot.task === 'build';
+      this.builder.costCheck = (_kind, cost) => this.match?.war?.spend(0, cost * 4) ?? false;
     }
     this.builder.enter();
     this.builderUI.show();
@@ -433,8 +443,8 @@ export class Game {
     war.setFlag(1, new THREE.Vector3(res1.flag.x + 0.5, res1.flag.y, res1.flag.z + 0.5));
     this.teamSpawns[1] = this.spawnSpots(res1.floors, res1.flag);
     this.teamPosts[1] = this.postsFor(1, res1.roofSpots, res1.entrances, res1.heroFloors, res1.flag);
-    this.traps.setSlots(this.teamPlots[1], BOT_SLOTS * size);
-    this.traps.setSlots(this.teamPlots[0], BOT_SLOTS * (size - 1) + 4);
+    this.traps.setSlots(this.teamPlots[1], BOT_SLOTS * size + (siege ? 8 : 0));
+    this.traps.setSlots(this.teamPlots[0], BOT_SLOTS * (size - 1) + 4 + (siege ? 8 : 0));
     this.seedTraps(this.teamPlots[1], res1, this.entities.filter((e) => e.team === 1));
     if (siege) this.placeCourtyards(match);
     else {
@@ -455,6 +465,8 @@ export class Game {
       enemyPlot: (team: number) => plots[this.teamPlots[1 - team]],
       posts: (team: number) => this.teamPosts[team],
       human: (team: number) => (team === 0 ? this.player : null),
+      pendingOrders: (team: number) => (team === 0 ? this.builder?.orders.length ?? 0 : 0),
+      buildSite: (e: Entity) => (e.team === 0 ? this.teamBuild?.siteFor(e) ?? null : null),
     };
     this.commanders = [new TeamCommander(0, host), new TeamCommander(1, host)];
     for (const e of this.entities) if (e.isBot) this.bots.push(new WarBrain(e, this.botContext(), PROFILES[cfg.difficulty], this.rng.int(1, 1e9)));
@@ -605,6 +617,75 @@ export class Game {
     const my = this.player.team;
     audio.play(winner === my ? 'victory' : 'roundEnd');
     this.hud.announce(winner === my ? t('victory') : winner < 0 ? t('draw') : t('defeat'), '', winner === my ? 'streak' : 'clutch', 3);
+  }
+
+  /**
+   * The command map: from inside your own walls, the builder camera and tools over the live battle.
+   * Taps order rooms the crew raises for supplies, traps cost supplies, and the crew split says how
+   * many build, defend and attack. The body stays where it is and can be shot, which closes the map.
+   */
+  toggleCommand(): void {
+    if (this.commandView) {
+      this.exitCommand();
+      return;
+    }
+    const match = this.match;
+    if (!match?.war || this.mode !== 'battle' || !this.player.alive || !this.builder || !this.builderUI) return;
+    const home = this.app.plots[this.teamPlots[0]];
+    if (!plotContains(home, this.player.pos.x, this.player.pos.z)) {
+      this.showPrompt(t('commandInside'), 1.6);
+      audio.play('countdown', { volume: 0.4, pitch: 0.7 });
+      return;
+    }
+    const enemy = this.app.plots[this.teamPlots[1]];
+    this.commandView = true;
+    this.builder.command = true;
+    this.builder.bounds = { minX: Math.min(home.minX, enemy.minX), maxX: Math.max(home.maxX, enemy.maxX), minZ: Math.min(home.minZ, enemy.minZ), maxZ: Math.max(home.maxZ, enemy.maxZ) };
+    this.builder.setTool('build');
+    this.builder.enter();
+    const bots = this.entities.filter((e) => e.isBot && e.team === 0).length;
+    const cmd = this.commanders[0];
+    if (cmd && !cmd.manpower) {
+      // Start the split from what the commander is doing right now.
+      let d = 0;
+      let b = 0;
+      for (const e of this.entities) if (e.isBot && e.team === 0) e.task === 'defend' ? d++ : e.task === 'build' ? b++ : 0;
+      this.crew = { build: b, defend: d };
+    }
+    this.builderUI.setCommand({
+      total: bots,
+      build: this.crew.build,
+      defend: this.crew.defend,
+      supplies: () => match.war?.supplies[0] ?? 0,
+      onChange: (build, defend) => {
+        this.crew = { build, defend };
+        if (this.commanders[0]) this.commanders[0].manpower = { build, defend };
+      },
+    });
+    this.builderUI.show();
+    this.hud.hide();
+    this.viewModel.hidden = true;
+    this.setTouchMode();
+    audio.play('uiClick', { volume: 0.5 });
+  }
+
+  exitCommand(): void {
+    if (!this.commandView) return;
+    this.commandView = false;
+    if (this.builder) {
+      this.builder.command = false;
+      this.builder.bounds = null;
+      this.builder.exit();
+    }
+    this.builderUI?.setCommand(null);
+    this.builderUI?.hide();
+    if (this.mode === 'battle') {
+      this.hud.show();
+      this.viewModel.hidden = !this.player.alive;
+      if (this.local) this.local.cameraEnabled = true;
+      this.app.input.requestPointerLock();
+    }
+    this.setTouchMode();
   }
 
   /** Where the player wants to reappear: -1 the fortress, else an owned capture point (keys 1-4 while dead). */
@@ -1085,6 +1166,10 @@ export class Game {
 
   /** Shows the on-screen controls that match the current mode (touch devices only). */
   private setTouchMode(): void {
+    if (this.commandView) {
+      this.touch.setMode('build');
+      return;
+    }
     if (!IS_TOUCH) {
       this.touch.setMode('none');
       this.rotateHint.hidden = true;
@@ -1211,6 +1296,7 @@ export class Game {
 
   private onSpawn(e: Entity, initial = true): void {
     if (!initial) e.protectedUntil = this.time + 2.5;
+    if (e === this.player && this.match?.war) this.commandHintUntil = this.time + 7;
     if (e.isBot) {
       const brain = this.bots.find((b) => b.entity === e);
       brain?.reset();
@@ -1408,6 +1494,8 @@ export class Game {
     this.teamPosts = [[], []];
     this.teamSpawns = [[], []];
     this.teamOrders = null;
+    this.commandView = false;
+    this.crew = { build: 0, defend: 0 };
     this.spawnChoice = -1;
     this.player.team = -1;
     this.player.squad = -1;
@@ -1515,6 +1603,10 @@ export class Game {
         } else this.pendingDmg.set(target.id, { amount, point: point.clone(), headshot, kill: false });
       }
       if (target === this.player) {
+        if (this.commandView) {
+          this.exitCommand();
+          this.hud.showBanner(t('commandHit'), t('commandHitSub'), 1.6);
+        }
         this.hud.damage();
         this.local?.addShake(Math.min(0.6, amount / 60));
         audio.play('hurt', { volume: 0.8 });
@@ -1732,7 +1824,10 @@ export class Game {
     const match = this.match!;
     const input = this.app.input;
     this.ensureLocal();
-    this.local.enabled = !this.paused && !this.screens.visible;
+    if (match.war && !this.paused && !this.screens.visible && (input.wasPressedRaw('KeyM') || input.virtual.map)) this.toggleCommand();
+    if (this.commandView && (!this.player.alive || this.mode !== 'battle')) this.exitCommand();
+    this.local.enabled = !this.paused && !this.screens.visible && !this.commandView;
+    this.local.cameraEnabled = !this.commandView;
     this.timeScale = this.time < this.slowmoUntil ? this.slowmoScale : 1;
     const simDt = this.paused ? 0 : dt * this.timeScale;
     if (simDt > 0) {
@@ -1753,6 +1848,11 @@ export class Game {
       }
       if (match.war && this.player.alive) this.playerRepair(simDt);
       else this.repairTimer = 0;
+      // The crew raises ordered rooms while the fight goes on (whoever is on build duty).
+      if (match.war && this.teamBuild) {
+        this.teamBuild.active = true;
+        this.teamBuild.update(simDt, true);
+      }
       this.gadgets.update(simDt, this.time);
       this.traps.update(simDt, this.time);
       this.roundEvents.update(simDt, this.time);
@@ -1795,10 +1895,14 @@ export class Game {
         audio.play('siren', { volume: 0.45 });
       }
     }
+    if (this.commandView && this.builder && this.builderUI) {
+      this.builder.update(dt);
+      this.builderUI.update(dt, match.timeLeft);
+    }
     if (this.simOnly) return;
     this.updateCharacters(dt);
     // Camera when dead: orbit the body
-    if (!this.player.alive) this.deathCamera(dt);
+    if (!this.player.alive && !this.commandView) this.deathCamera(dt);
     this.cameraFocus.copy(this.app.gr.camera.position);
     // Scoreboard
     if (input.isDown('Tab')) {
@@ -2067,7 +2171,7 @@ export class Game {
       sniperScope: !!w && w.id === 'sniper' && p.ads > 0.85,
       spread,
       fps: settings.data.showFps ? this.app.fps : null,
-      prompt: this.time < this.promptUntil ? this.promptText : p.protectedUntil > this.time ? t('spawnShield') : p.burrowed ? this.surfaceInstruction() : '',
+      prompt: this.time < this.promptUntil ? this.promptText : p.protectedUntil > this.time ? t('spawnShield') : p.burrowed ? this.surfaceInstruction() : war && p.alive && this.time < this.commandHintUntil && plotContains(this.app.plots[this.teamPlots[my]], p.pos.x, p.pos.z) ? t(IS_TOUCH ? 'commandHintTouch' : 'commandHint') : '',
       minimap: {
         self: { x: p.pos.x, z: p.pos.z, yaw: p.yaw },
         target: match.targetPlotIndex >= 0 ? { x: this.app.plots[match.targetPlotIndex].cx, z: this.app.plots[match.targetPlotIndex].cz } : null,

@@ -713,6 +713,20 @@ body { background: radial-gradient(1200px 800px at 50% 30%, #16283a 0%, #0f1923 
 .bld-hint.pop { animation: hintPop 0.35s ease-out; }
 @keyframes hintPop { from { opacity: 0; transform: translate(-50%, 6px); } to { opacity: 1; transform: translate(-50%, 0); } }
 .bld-toast { position: absolute; top: 90px; left: 50%; transform: translateX(-50%); background: rgba(255, 51, 85, 0.85); color: #fff; padding: 8px 16px; font-weight: 700; clip-path: var(--chamfer-sm); }
+.bldui.command .bld-hint { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+.bld-supplies { font-family: var(--display); font-weight: 700; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent2); white-space: nowrap; }
+.bld-crew { display: flex; align-items: center; gap: 8px; padding: 2px 8px; border: 1px solid var(--line); clip-path: var(--chamfer-sm); background: rgba(8, 14, 22, 0.6); }
+.bld-crew .crew-title { font-family: var(--display); font-weight: 700; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
+.bld-crew .crew-row { display: flex; align-items: center; gap: 4px; }
+.bld-crew .crew-row .lbl { font-family: var(--display); font-weight: 600; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #dbe3ec; }
+.bld-crew .crew-row .val { font-family: var(--display); font-weight: 700; font-size: 15px; min-width: 16px; text-align: center; color: #fff; }
+.bld-crew .crew-btn { width: 24px; height: 24px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.08); color: #fff; font: 700 15px/1 var(--display); cursor: pointer; clip-path: var(--chamfer-sm); padding: 0; }
+.bld-crew .crew-btn:active { background: rgba(0, 229, 255, 0.35); }
+.bldui.compact .bld-crew { gap: 5px; padding: 1px 5px; }
+.bldui.compact .bld-crew .crew-row .lbl { font-size: 9px; }
+.bldui.compact .bld-crew .crew-btn { width: 22px; height: 22px; }
+.bldui.compact .bld-supplies { font-size: 10px; }
+.tb.map { color: #ffd36a; }
 .bldui.compact .bld-top { top: calc(8px + env(safe-area-inset-top, 0px)); gap: 10px; padding: 5px 10px; }
 .bldui.compact .bld-timer { font-size: 20px; min-width: 48px; }
 .bldui.compact .bld-roomswrap { min-width: 84px; }

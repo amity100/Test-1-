@@ -70,7 +70,7 @@ export interface BotContext {
   visibility: () => number;
 }
 
-export type State = 'idle' | 'approach' | 'search' | 'engage' | 'capture' | 'hide' | 'return' | 'retreat' | 'cover' | 'investigate' | 'hold' | 'rally';
+export type State = 'idle' | 'approach' | 'search' | 'engage' | 'capture' | 'hide' | 'return' | 'retreat' | 'cover' | 'investigate' | 'hold' | 'rally' | 'build';
 
 /** What a war brain needs from its team: sightings, known traps and the task it has been given. */
 export interface BotCommander {

@@ -161,6 +161,22 @@ export class WarBrain extends BotBrain {
         this.maybeBreach(dt, now, flag.pos);
         break;
       }
+      case 'build': {
+        // On build duty: walk to the ordered room and work there; without a site, stand guard like a defender.
+        const site = cmd.host.buildSite(e);
+        const target = site ?? task.target;
+        const d = Math.hypot(e.pos.x - target.x, e.pos.z - target.z);
+        if (d > 5) {
+          this.state = 'approach';
+          goal = new THREE.Vector3(target.x, target.y, target.z);
+          sprint = d > 12;
+        } else {
+          this.state = 'build';
+          this.clearPath();
+          this.face(tmp.set(target.x - e.pos.x, 0, target.z - e.pos.z), Math.sin(now * 1.3 + this.holdPhase) * 0.3);
+        }
+        break;
+      }
       case 'escort': {
         const human = cmd.host.human(e.team);
         if (!human || !human.alive) {

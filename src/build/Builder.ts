@@ -3,6 +3,7 @@ import type { VoxelWorld } from '../world/VoxelWorld';
 import type { Terrain } from '../world/Terrain';
 import type { Input } from '../core/Input';
 import type { Plot } from '../world/Layout';
+import { TRAP_COST } from '../sim/Traps';
 import { PLOT_Y, PLOT_MAX_HEIGHT } from '../world/Layout';
 import type { StyleId } from '../world/Styles';
 import { PALETTE, blockColor } from '../world/Voxel';
@@ -81,6 +82,17 @@ export class Builder {
   private gridHelper: THREE.GridHelper;
   private popMesh: THREE.InstancedMesh;
   private pops: { x: number; y: number; z: number; t: number; color: THREE.Color }[] = [];
+  /**
+   * Battle commander mode: taps order rooms (amber ghosts the crew builds while the fight goes on)
+   * instead of placing them, the camera may roam over both castles, and traps cost supplies.
+   */
+  command = false;
+  readonly orders: { i: number; j: number; k: number; tone: Tone }[] = [];
+  private orderMesh: THREE.InstancedMesh;
+  /** Camera focus limits when roaming beyond the plot (world x/z). */
+  bounds: { minX: number; maxX: number; minZ: number; maxZ: number } | null = null;
+  /** Pays for a trap set from the command map; false refuses the placement. */
+  costCheck: ((kind: 'trap', cost: number) => boolean) | null = null;
   private raycaster = new THREE.Raycaster();
   private active = false;
   private dirtyValidate = true;
@@ -127,7 +139,10 @@ export class Builder {
     this.popMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.9, depthWrite: false }), 96);
     this.popMesh.count = 0;
     this.popMesh.frustumCulled = false;
-    this.group.add(this.ghost, this.flagMarker.group, this.spawnMarker, this.plotFrame, this.gridHelper, this.popMesh);
+    this.orderMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(CELL - 0.3, STOREY_H - 0.3, CELL - 0.3), new THREE.MeshBasicMaterial({ color: 0xffb300, transparent: true, opacity: 0.26, depthWrite: false }), 48);
+    this.orderMesh.count = 0;
+    this.orderMesh.frustumCulled = false;
+    this.group.add(this.ghost, this.flagMarker.group, this.spawnMarker, this.plotFrame, this.gridHelper, this.popMesh, this.orderMesh);
     this.group.visible = false;
     scene.add(this.group);
   }
@@ -260,6 +275,46 @@ export class Builder {
     this.regenerate();
     this.events.emit('placed', { i, j, k, by });
     this.debugLast = `add:${i},${j},${k}:${tone}`;
+    return true;
+  }
+
+  /** Orders a room for the crew to build during the battle: supported, unplanned, within the budget. */
+  addOrder(i: number, j: number, k: number, tone: Tone = this.tone): boolean {
+    if (!Plan.inside(i, j, k) || this.plan.has(i, j, k) || this.hasOrder(i, j, k)) return false;
+    if (this.plan.count() + this.orders.length >= MAX_BLOCKS) {
+      this.events.emit('invalid', { key: 'budgetFull' });
+      return false;
+    }
+    if (k > 0 && !this.plan.has(i, j, k - 1) && !this.hasOrder(i, j, k - 1)) {
+      this.events.emit('invalid', { key: 'unsupported' });
+      return false;
+    }
+    this.orders.push({ i, j, k, tone });
+    this.events.emit('change', {});
+    this.debugLast = `order:${i},${j},${k}`;
+    return true;
+  }
+
+  hasOrder(i: number, j: number, k: number): boolean {
+    return this.orders.some((o) => o.i === i && o.j === j && o.k === k);
+  }
+
+  /** Removes one order (the crew just built it). */
+  cancelOrderOnly(i: number, j: number, k: number): void {
+    const at = this.orders.findIndex((o) => o.i === i && o.j === j && o.k === k);
+    if (at >= 0) this.orders.splice(at, 1);
+  }
+
+  cancelOrder(i: number, j: number, k: number): boolean {
+    const at = this.orders.findIndex((o) => o.i === i && o.j === j && o.k === k);
+    if (at < 0) return false;
+    // Anything ordered on top of it goes too.
+    this.orders.splice(at, 1);
+    for (let n = this.orders.length - 1; n >= 0; n--) {
+      const o = this.orders[n];
+      if (o.i === i && o.j === j && o.k > k) this.orders.splice(n, 1);
+    }
+    this.events.emit('change', {});
     return true;
   }
 
@@ -504,10 +559,15 @@ export class Builder {
     this.lastAim = a;
     switch (this.tool) {
       case 'build':
+        if (this.command) {
+          if (a.add) return this.addOrder(a.add[0], a.add[1], a.add[2]);
+          return false;
+        }
         if (a.add) return this.addBlock(a.add[0], a.add[1], a.add[2]);
         if (a.hit) return this.paintBlock(a.hit[0], a.hit[1], a.hit[2]);
         return false;
       case 'erase':
+        if (this.command && a.add && this.hasOrder(a.add[0], a.add[1], a.add[2])) return this.cancelOrder(a.add[0], a.add[1], a.add[2]);
         if (a.hit) return this.removeBlock(a.hit[0], a.hit[1], a.hit[2]);
         return false;
       case 'flag':
@@ -536,6 +596,10 @@ export class Builder {
         }
         if (this.flag && cell.x === this.flag.x && cell.z === this.flag.z && cell.y === this.flag.y) {
           this.events.emit('invalid', { key: 'trapTaken' });
+          return false;
+        }
+        if (this.traps.canPlace(this.trapKind, cell, this.plot.index) === null && this.costCheck && !this.costCheck('trap', TRAP_COST[this.trapKind])) {
+          this.events.emit('invalid', { key: 'noSupplies' });
           return false;
         }
         const r = this.traps.place(this.trapKind, cell, this.plot.index);
@@ -662,7 +726,7 @@ export class Builder {
   }
 
   private updateCamera(dt: number): void {
-    const p = this.plot;
+    const p = this.bounds ?? this.plot;
     this.focus.x = clamp(this.focus.x, p.minX - 6, p.maxX + 7);
     this.focus.z = clamp(this.focus.z, p.minZ - 6, p.maxZ + 7);
     this.focus.y = clamp(this.focus.y, PLOT_Y + 2, PLOT_Y + PLOT_MAX_HEIGHT);
@@ -700,7 +764,7 @@ export class Builder {
       if (target) {
         this.ghost.visible = true;
         this.ghost.position.set(this.plot.minX + target[0] * CELL + CELL / 2, PLOT_Y + target[2] * STOREY_H + STOREY_H / 2, this.plot.minZ + target[1] * CELL + CELL / 2);
-        const hex = this.tool === 'erase' ? 0xff4655 : this.tool === 'flag' ? 0xffb300 : 0x00e5ff;
+        const hex = this.tool === 'erase' ? 0xff4655 : this.tool === 'flag' || this.command ? 0xffb300 : 0x00e5ff;
         mat.color.setHex(hex);
         (this.ghostEdges.material as THREE.LineBasicMaterial).color.setHex(this.tool === 'build' ? 0xffffff : hex);
       }
@@ -715,6 +779,19 @@ export class Builder {
       this.spawnMarker.visible = true;
       this.spawnMarker.position.set(this.spawn.x + 0.5, this.spawn.y + 0.05, this.spawn.z + 0.5);
     } else this.spawnMarker.visible = false;
+    // Pending orders: amber ghosts of the rooms the crew is about to raise.
+    if (this.orders.length) {
+      const m = new THREE.Matrix4();
+      const n = Math.min(this.orders.length, 48);
+      for (let q = 0; q < n; q++) {
+        const o = this.orders[q];
+        m.identity().setPosition(this.plot.minX + o.i * CELL + CELL / 2, PLOT_Y + o.k * STOREY_H + STOREY_H / 2, this.plot.minZ + o.j * CELL + CELL / 2);
+        this.orderMesh.setMatrixAt(q, m);
+      }
+      this.orderMesh.count = n;
+      this.orderMesh.instanceMatrix.needsUpdate = true;
+      this.orderMesh.visible = true;
+    } else this.orderMesh.visible = false;
     // Pops.
     if (this.pops.length) {
       const m = new THREE.Matrix4();
@@ -769,6 +846,8 @@ export class Builder {
       dist: +this.orbitDist.toFixed(1),
       focus: this.focus.toArray().map((v) => +v.toFixed(1)),
       undo: this.undoStack.length,
+      orders: this.orders.length,
+      command: this.command,
       aim: this.lastAim,
     };
   }

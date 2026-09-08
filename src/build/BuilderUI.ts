@@ -126,6 +126,17 @@ export class BuilderUI {
     return b;
   }
 
+  /** Battle command map: the crew split and the supplies, and READY becomes BACK TO THE FIGHT. */
+  private command: { total: number; build: number; defend: number; supplies: () => number; onChange: (build: number, defend: number) => void } | null = null;
+  private suppliesEl: HTMLElement | null = null;
+  private crewEls: { build: HTMLElement; defend: HTMLElement; attack: HTMLElement } | null = null;
+
+  setCommand(c: BuilderUI['command']): void {
+    this.command = c;
+    this.root.classList.toggle('command', !!c);
+    if (!this.root.hidden) this.render();
+  }
+
   render(): void {
     this.top.innerHTML = '';
     this.bar.innerHTML = '';
@@ -142,10 +153,49 @@ export class BuilderUI {
     const actions = el('div', 'bld-actions');
     this.undoBtn = this.iconBtn(actions, 'small undo', ICON.undo, '', () => this.builder.undo());
     this.redoBtn = this.iconBtn(actions, 'small redo', ICON.redo, '', () => this.builder.redo());
-    this.iconBtn(actions, 'small random', ICON.dice, this.compact ? '' : t('bldRandom'), () => this.builder.autoBuild());
-    this.iconBtn(actions, 'small card', ICON.camera, '', () => this.cb.card());
-    actions.appendChild(btn(t('ready'), 'primary bld-ready', () => this.cb.ready()));
-    this.top.append(this.timerEl, rooms, this.statusEl, actions);
+    if (!this.command) {
+      this.iconBtn(actions, 'small random', ICON.dice, this.compact ? '' : t('bldRandom'), () => this.builder.autoBuild());
+      this.iconBtn(actions, 'small card', ICON.camera, '', () => this.cb.card());
+    }
+    actions.appendChild(btn(t(this.command ? 'backToBattle' : 'ready'), 'primary bld-ready', () => this.cb.ready()));
+    this.statusEl.hidden = !!this.command;
+    if (this.command) {
+      // Supplies and the crew split: how many build, defend and attack.
+      const c = this.command;
+      this.suppliesEl = el('div', 'bld-supplies');
+      const crew = el('div', 'bld-crew');
+      const row = (key: string, get: () => number, set: ((v: number) => void) | null): HTMLElement => {
+        const r = el('div', 'crew-row');
+        const val = el('span', 'val', String(get()));
+        r.append(el('span', 'lbl', t(key)));
+        if (set) {
+          const minus = el('button', 'crew-btn', '−');
+          const plus = el('button', 'crew-btn', '+');
+          minus.addEventListener('click', (e) => { e.stopPropagation(); set(get() - 1); });
+          plus.addEventListener('click', (e) => { e.stopPropagation(); set(get() + 1); });
+          r.append(minus, val, plus);
+        } else r.append(val);
+        return r;
+      };
+      const apply = (build: number, defend: number): void => {
+        build = Math.max(0, Math.min(c.total, build));
+        defend = Math.max(0, Math.min(c.total - build, defend));
+        c.build = build;
+        c.defend = defend;
+        c.onChange(build, defend);
+        this.refresh();
+      };
+      const rb = row('crewBuild', () => c.build, (v) => apply(v, c.defend));
+      const rd = row('crewDefend', () => c.defend, (v) => apply(c.build, v));
+      const ra = row('crewAttack', () => c.total - c.build - c.defend, null);
+      this.crewEls = { build: rb.querySelector('.val') as HTMLElement, defend: rd.querySelector('.val') as HTMLElement, attack: ra.querySelector('.val') as HTMLElement };
+      crew.append(el('span', 'crew-title', t('crew')), rb, rd, ra);
+      this.top.append(this.timerEl, rooms, this.suppliesEl, crew, actions);
+    } else {
+      this.suppliesEl = null;
+      this.crewEls = null;
+      this.top.append(this.timerEl, rooms, this.statusEl, actions);
+    }
     // Palette.
     const swatches = this.builder.swatches();
     this.swatchBtns = [];
@@ -185,7 +235,7 @@ export class BuilderUI {
     }
     this.slotsEl = el('div', 'slots');
     this.sub.appendChild(this.slotsEl);
-    this.hint.textContent = t(this.team ? 'bldHintTeam' : this.compact ? 'bldHintTouch' : 'bldHintMouse');
+    this.hint.textContent = t(this.command ? 'bldHintCommand' : this.team ? 'bldHintTeam' : this.compact ? 'bldHintTouch' : 'bldHintMouse');
     this.refresh();
   }
 
@@ -260,7 +310,16 @@ export class BuilderUI {
 
   refresh(): void {
     const b = this.builder;
-    this.roomsEl.textContent = `${b.blocks} / ${b.budget}`;
+    if (this.command && this.suppliesEl) {
+      const txt = `${t('supplies')} ${this.command.supplies()} · ${t('orderCost', { n: 5 })}${b.orders.length ? ` · ${t('ordersPending', { n: b.orders.length })}` : ''}`;
+      if (this.suppliesEl.textContent !== txt) this.suppliesEl.textContent = txt;
+      if (this.crewEls) {
+        this.crewEls.build.textContent = String(this.command.build);
+        this.crewEls.defend.textContent = String(this.command.defend);
+        this.crewEls.attack.textContent = String(this.command.total - this.command.build - this.command.defend);
+      }
+    }
+    this.roomsEl.textContent = this.command ? `${b.blocks + b.orders.length} / ${b.budget}` : `${b.blocks} / ${b.budget}`;
     this.roomsFill.style.width = `${Math.min(100, (100 * b.blocks) / b.budget)}%`;
     this.roomsFill.classList.toggle('full', b.blocks >= b.budget);
     let statusKey = 'flagOk';
@@ -289,6 +348,6 @@ export class BuilderUI {
       if (this.slotsEl.textContent !== txt) this.slotsEl.textContent = txt;
       if (this.tipIndex < 0) this.hint.textContent = t('bldHintTrap');
     } else if (b.tool === 'ping') this.hint.textContent = t('bldHintPing');
-    else if (this.tipIndex < 0 && !this.hint.hidden) this.hint.textContent = t(this.team ? 'bldHintTeam' : this.compact ? 'bldHintTouch' : 'bldHintMouse');
+    else if (this.tipIndex < 0 && !this.hint.hidden) this.hint.textContent = t(this.command ? 'bldHintCommand' : this.team ? 'bldHintTeam' : this.compact ? 'bldHintTouch' : 'bldHintMouse');
   }
 }
