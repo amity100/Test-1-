@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Noise } from '../core/Noise';
 import { hash2 } from '../core/Random';
 import { clamp, lerp, smoothstep } from '../core/MathUtil';
-import { WORLD_HALF, ISLAND_RADIUS, PLOT_Y, PLAZA_Y, RING_ROAD_RADIUS, PLOT_RING_RADIUS, type Plot, plotDistance } from './Layout';
+import { WORLD_HALF, ISLAND_RADIUS, PLOT_Y, PLAZA_Y, RING_ROAD_RADIUS, PLOT_RING_RADIUS, OUTPOSTS, OUTPOST_PAD, type Plot, plotDistance } from './Layout';
 import { groundMaps } from '../render/DetailTextures';
 
 const GRASS_A = new THREE.Color('#5f9e3a');
@@ -24,9 +24,13 @@ export class Terrain {
   readonly noise: Noise;
   mesh!: THREE.Mesh;
 
+  /** Pad height under each outpost: the untouched terrain there, rounded to a block. */
+  readonly outpostY: number[] = [];
+
   constructor(readonly plots: Plot[], seed = 1) {
     this.noise = new Noise(seed);
     this.heights = new Float32Array(this.size * this.size);
+    for (const o of OUTPOSTS) this.outpostY.push(Math.round(this.computeHeight(o.x, o.z, false)));
     for (let j = 0; j < this.size; j++) {
       for (let i = 0; i < this.size; i++) {
         this.heights[j * this.size + i] = this.computeHeight(i - WORLD_HALF, j - WORLD_HALF);
@@ -34,7 +38,7 @@ export class Terrain {
     }
   }
 
-  private computeHeight(x: number, z: number): number {
+  private computeHeight(x: number, z: number, pads = true): number {
     const r = Math.sqrt(x * x + z * z);
     const n = this.noise;
     const coast = 1 - smoothstep(ISLAND_RADIUS - 40, ISLAND_RADIUS, r + n.fbm2(x * 0.02, z * 0.02, 3) * 12);
@@ -54,6 +58,12 @@ export class Terrain {
         h = lerp(h, target, w);
       }
     }
+    // Flat pads under the capture points, blended into the slopes around them.
+    if (pads)
+      OUTPOSTS.forEach((o, i) => {
+        const d = Math.hypot(x - o.x, z - o.z);
+        if (d < OUTPOST_PAD + 6) h = lerp(h, this.outpostY[i] - 0.02, 1 - smoothstep(OUTPOST_PAD, OUTPOST_PAD + 6, d));
+      });
     return h;
   }
 

@@ -1,8 +1,10 @@
 import * as THREE from 'three';
+import type { RepairSystem } from '../sim/Repair';
 import type { Entity } from '../sim/Entities';
 import type { TrapSystem } from '../sim/Traps';
 import { MELEE, type Combat } from '../sim/Combat';
 import type { CharacterController, MoveInput } from '../sim/CharacterController';
+import type { GadgetSystem } from '../sim/Gadgets';
 import type { NavGrid } from './NavGrid';
 import type { NavSystem } from './NavSystem';
 import type { Plot } from '../world/Layout';
@@ -48,6 +50,12 @@ export const PROFILES: Record<Difficulty, BotProfile> = {
 
 export interface BotContext {
   world: VoxelWorld;
+  /** Fortress War: the team's shared knowledge and orders (null in the classic rotation). */
+  commander?: (team: number) => BotCommander | null;
+  /** Gadget kit (bots throw breach charges at walls in a war). */
+  gadgets?: GadgetSystem;
+  /** Fortress War: holes in the walls that defenders put back. */
+  repair?: RepairSystem;
   combat: Combat;
   controller: CharacterController;
   entities: () => Entity[];
@@ -62,7 +70,20 @@ export interface BotContext {
   visibility: () => number;
 }
 
-type State = 'idle' | 'approach' | 'search' | 'engage' | 'capture' | 'hide' | 'return' | 'retreat' | 'cover' | 'investigate';
+export type State = 'idle' | 'approach' | 'search' | 'engage' | 'capture' | 'hide' | 'return' | 'retreat' | 'cover' | 'investigate' | 'hold' | 'rally';
+
+/** What a war brain needs from its team: sightings, known traps and the task it has been given. */
+export interface BotCommander {
+  report(seen: Entity, now: number): void;
+  avoidCells(): Set<number> | null;
+}
+
+/** Where to go this frame (null = stay), and how. */
+export interface Intent {
+  goal: THREE.Vector3 | null;
+  sprint: boolean;
+  crouch: boolean;
+}
 
 interface Memory {
   target: Entity | null;
@@ -96,14 +117,14 @@ export class BotBrain {
   private searchTarget: THREE.Vector3 | null = null;
   private visitedCells = new Set<number>();
   private knowsFlag = false;
-  private stuckTimer = 0;
+  protected stuckTimer = 0;
   private lastPos = new THREE.Vector3();
   private jumpCooldown = 0;
   private hideSpot: THREE.Vector3 | null = null;
   private hideTimer = 0;
   private crouchTimer = 0;
-  private desiredYaw = 0;
-  private desiredPitch = 0;
+  protected desiredYaw = 0;
+  protected desiredPitch = 0;
   private rng: Random;
   private preferred: WeaponId;
   // Tactical memory
@@ -130,7 +151,7 @@ export class BotBrain {
   private flinchTimer = 0;
   private hitTimes: number[] = [];
 
-  constructor(readonly entity: Entity, private ctx: BotContext, readonly profile: BotProfile, seed: number) {
+  constructor(readonly entity: Entity, protected ctx: BotContext, readonly profile: BotProfile, seed: number) {
     this.rng = new Random(seed);
     this.preferred = this.rng.pick(['rifle', 'smg', 'shotgun', 'sniper', 'rifle', 'rocket'] as WeaponId[]);
     this.desiredYaw = entity.yaw;
@@ -139,6 +160,47 @@ export class BotBrain {
 
   get preferredWeapon(): WeaponId {
     return this.preferred;
+  }
+
+  /** Everyone is a rival in the classic rotation; in a war only the other team. */
+  protected isEnemy(o: Entity): boolean {
+    const e = this.entity;
+    if (o === e) return false;
+    return e.team < 0 || o.team < 0 || o.team !== e.team;
+  }
+
+  /** The current threat (visible or remembered), for subclasses. */
+  protected get threat(): Entity | null {
+    return this.mem.target && (this.mem.visible || performance.now() / 1000 - this.mem.lastSeenTime < this.profile.memory) ? this.mem.target : null;
+  }
+  protected get rand(): Random {
+    return this.rng;
+  }
+  protected get lastSeen(): THREE.Vector3 {
+    return this.mem.lastSeenPos;
+  }
+  protected get seesTarget(): boolean {
+    return this.mem.visible;
+  }
+  protected clearPath(): void {
+    this.path = null;
+    this.pathGoal = null;
+    this.repathTimer = 0;
+  }
+  protected get pathLength(): number {
+    return this.path ? this.path.length : 0;
+  }
+  protected get hadRoute(): boolean {
+    return this.path !== null;
+  }
+  protected lookAt(point: THREE.Vector3): void {
+    const d = tmp.copy(point).sub(this.entity.pos);
+    if (d.lengthSq() < 0.05) return;
+    this.desiredYaw = Math.atan2(-d.x, -d.z);
+    this.desiredPitch = clamp(Math.atan2(d.y, Math.hypot(d.x, d.z)), -1, 1);
+  }
+  protected nearestCover(threatPos: THREE.Vector3): THREE.Vector3 | null {
+    return this.pickCover(this.ctx.nav(), threatPos);
   }
 
   /** Called at round start / respawn. */
@@ -195,6 +257,126 @@ export class BotBrain {
     this.flinchTimer -= dt;
     this.acqT += dt;
 
+    const threat = this.mem.target && (this.mem.visible || now - this.mem.lastSeenTime < this.profile.memory) ? this.mem.target : null;
+    const intent = this.decide(dt, now, threat, nav);
+    let goal = intent.goal;
+    const sprint = intent.sprint;
+    const crouch = intent.crouch;
+    // Never linger in the water: head back towards the fortress.
+    if (e.pos.y < 0.6 && this.state !== 'approach') {
+      this.state = 'approach';
+      const plot = this.ctx.targetPlot();
+      if (plot) goal = new THREE.Vector3(plot.cx, e.pos.y, plot.cz);
+    }
+
+    const input: MoveInput = { strafe: 0, forward: 0, jump: false, jumpHeld: false, sprint, crouch };
+
+    if (this.state === 'engage' && threat) {
+      this.combatMove(input, threat, dt, nav);
+    } else if (this.state === 'retreat' && threat) {
+      // Move away from the threat while facing it.
+      const away = tmp.copy(e.pos).sub(threat.pos).setY(0).normalize();
+      this.moveDirection(input, away, false);
+      this.aimAt(threat, dt, now);
+    } else if (this.state === 'cover' && goal) {
+      const d = e.pos.distanceTo(goal);
+      if (d > 0.9) this.followPath(goal, input, nav, dt);
+      else {
+        // In cover: crouch, reload, count down, then peek.
+        this.coverTimer -= dt;
+        input.crouch = this.coverTimer > 0.6;
+        input.sprint = false;
+        const w = e.weapon;
+        if (w && !e.reloading && w.ammo < WEAPONS[w.id].magSize && w.reserve > 0) WeaponLogic.startReload(e);
+        if (threat) {
+          const d2 = tmp.copy(threat.pos).sub(e.pos);
+          this.desiredYaw = Math.atan2(-d2.x, -d2.z);
+          this.desiredPitch = 0;
+        }
+      }
+    } else if (goal) {
+      this.followPath(goal, input, nav, dt);
+    }
+
+    // ---- Aim / fire ----
+    const canShoot = this.state !== 'cover' || this.coverTimer < 0.6;
+    if (threat && canShoot && (this.state === 'engage' || this.state === 'return' || this.state === 'retreat' || this.state === 'cover' || this.mem.visible)) {
+      this.aimAt(threat, dt, now);
+      this.handleFire(threat, dt, now);
+    } else {
+      this.firing = false;
+      e.triggerReleased = true;
+      if (this.suspicion && now - this.suspicionTime < 1.6 && !this.path) {
+        // Heard something: face it.
+        const d = tmp.copy(this.suspicion).sub(e.pos);
+        if (d.lengthSq() > 1) {
+          this.desiredYaw = Math.atan2(-d.x, -d.z);
+          this.desiredPitch = clamp(Math.atan2(d.y, Math.sqrt(d.x * d.x + d.z * d.z)), -0.5, 0.5);
+        }
+      } else if (this.path && this.path[this.pathIndex]) {
+        // Look where we walk, with a natural glance around while travelling.
+        const wp = this.path[Math.min(this.path.length - 1, this.pathIndex + 1)];
+        const d = tmp.copy(wp).sub(e.pos);
+        const glance = this.state === 'approach' ? Math.sin(now * 0.9 + this.lookScanPhase) * 0.35 : 0;
+        if (d.lengthSq() > 0.2) this.desiredYaw = Math.atan2(-d.x, -d.z) + glance;
+        this.desiredPitch = clamp(Math.atan2(d.y, Math.sqrt(d.x * d.x + d.z * d.z)) * 0.5, -0.6, 0.6);
+      }
+      // Reload when safe
+      const w = e.weapon;
+      if (w && !e.reloading && w.ammo < WEAPONS[w.id].magSize * 0.4 && w.reserve > 0) WeaponLogic.startReload(e);
+      e.wantsAds = false;
+    }
+
+    // A gate barring the way (only its builder can pass) is shot open.
+    const gate = e.role === 'attacker' || e.team >= 0 ? this.ctx.traps.gateAhead(e) : null;
+    if (gate) {
+      const d = gate.clone().sub(e.eyePos);
+      this.desiredYaw = Math.atan2(-d.x, -d.z);
+      this.desiredPitch = clamp(Math.atan2(d.y, Math.hypot(d.x, d.z)), -1.2, 1.2);
+      const w = e.weapon;
+      if (w && !e.reloading) {
+        if (w.ammo <= 0 && w.reserve > 0) WeaponLogic.startReload(e);
+        else {
+          e.triggerReleased = true;
+          WeaponLogic.tryFire(e, this.ctx.combat, now, 1);
+        }
+      }
+    }
+
+    // Smooth turning
+    const turn = this.profile.aimSmooth;
+    e.yaw = dampAngle(e.yaw, this.desiredYaw, turn, dt);
+    e.pitch = clamp(e.pitch + (this.desiredPitch - e.pitch) * Math.min(1, dt * turn), -1.4, 1.4);
+
+    WeaponLogic.update(e, dt);
+    this.ctx.controller.step(e, input, dt);
+
+    // Stuck detection
+    if (goal && e.grounded) {
+      if (e.pos.distanceToSquared(this.lastPos) < 0.01) this.stuckTimer += dt;
+      else this.stuckTimer = 0;
+      if (this.stuckTimer > 1.2) {
+        this.path = null;
+        this.pathGoal = null;
+        this.repathTimer = 0;
+        this.stuckTimer = 0;
+        this.searchTarget = null;
+        this.hideSpot = null;
+        this.coverSpot = null;
+        if (this.state === 'cover') this.state = 'engage';
+        e.vel.y = 8;
+        e.grounded = false;
+      }
+    }
+    this.lastPos.copy(e.pos);
+  }
+
+  /**
+   * Picks the state and the movement goal for this frame (classic rotation: attacker or defender of
+   * one flag). War brains override this with their team's orders. Cover and retreat are shared.
+   */
+  protected decide(dt: number, now: number, threat: Entity | null, nav: NavSystem | null): Intent {
+    const e = this.entity;
     const isDefender = e.role === 'defender';
     const flag = this.ctx.flagPos();
     const elapsed = this.ctx.roundTime();
@@ -204,7 +386,6 @@ export class BotBrain {
     if (!isDefender && !this.knowsFlag && this.ctx.anyCaptureProgress() > 0.05) this.knowsFlag = true;
 
     // ---- State selection ----
-    const threat = this.mem.target && (this.mem.visible || now - this.mem.lastSeenTime < this.profile.memory) ? this.mem.target : null;
     const hurt = e.hp < this.profile.retreatHp * 1.6;
     if (this.state === 'cover') {
       // Stay until the timer runs out, healed up a bit, or the threat is gone.
@@ -244,10 +425,6 @@ export class BotBrain {
     let goal: THREE.Vector3 | null = null;
     let sprint = false;
     let crouch = false;
-    // Never linger in the water: head back towards the fortress.
-    if (e.pos.y < 0.6 && this.state !== 'approach') {
-      this.state = 'approach';
-    }
     switch (this.state) {
       case 'approach': {
         const plot = this.ctx.targetPlot();
@@ -314,106 +491,31 @@ export class BotBrain {
         goal = flag;
     }
 
-    const input: MoveInput = { strafe: 0, forward: 0, jump: false, jumpHeld: false, sprint, crouch };
+    return { goal, sprint, crouch };
+  }
 
-    if (this.state === 'engage' && threat) {
-      this.combatMove(input, threat, dt, nav);
-    } else if (this.state === 'retreat' && threat) {
-      // Move away from the threat while facing it.
-      const away = tmp.copy(e.pos).sub(threat.pos).setY(0).normalize();
-      this.moveDirection(input, away, false);
-      this.aimAt(threat, dt, now);
-    } else if (this.state === 'cover' && goal) {
-      const d = e.pos.distanceTo(goal);
-      if (d > 0.9) this.followPath(goal, input, nav, dt);
-      else {
-        // In cover: crouch, reload, count down, then peek.
-        this.coverTimer -= dt;
-        input.crouch = this.coverTimer > 0.6;
-        input.sprint = false;
-        const w = e.weapon;
-        if (w && !e.reloading && w.ammo < WEAPONS[w.id].magSize && w.reserve > 0) WeaponLogic.startReload(e);
-        if (threat) {
-          const d2 = tmp.copy(threat.pos).sub(e.pos);
-          this.desiredYaw = Math.atan2(-d2.x, -d2.z);
-          this.desiredPitch = 0;
-        }
-      }
-    } else if (goal) {
-      this.followPath(goal, input, nav, dt);
-    }
-
-    // ---- Aim / fire ----
-    const canShoot = this.state !== 'cover' || this.coverTimer < 0.6;
-    if (threat && canShoot && (this.state === 'engage' || this.state === 'return' || this.state === 'retreat' || this.state === 'cover' || this.mem.visible)) {
-      this.aimAt(threat, dt, now);
-      this.handleFire(threat, dt, now);
-    } else {
-      this.firing = false;
-      e.triggerReleased = true;
-      if (this.suspicion && now - this.suspicionTime < 1.6 && !this.path) {
-        // Heard something: face it.
-        const d = tmp.copy(this.suspicion).sub(e.pos);
-        if (d.lengthSq() > 1) {
-          this.desiredYaw = Math.atan2(-d.x, -d.z);
-          this.desiredPitch = clamp(Math.atan2(d.y, Math.sqrt(d.x * d.x + d.z * d.z)), -0.5, 0.5);
-        }
-      } else if (this.path && this.path[this.pathIndex]) {
-        // Look where we walk, with a natural glance around while travelling.
-        const wp = this.path[Math.min(this.path.length - 1, this.pathIndex + 1)];
-        const d = tmp.copy(wp).sub(e.pos);
-        const glance = this.state === 'approach' ? Math.sin(now * 0.9 + this.lookScanPhase) * 0.35 : 0;
-        if (d.lengthSq() > 0.2) this.desiredYaw = Math.atan2(-d.x, -d.z) + glance;
-        this.desiredPitch = clamp(Math.atan2(d.y, Math.sqrt(d.x * d.x + d.z * d.z)) * 0.5, -0.6, 0.6);
-      }
-      // Reload when safe
-      const w = e.weapon;
-      if (w && !e.reloading && w.ammo < WEAPONS[w.id].magSize * 0.4 && w.reserve > 0) WeaponLogic.startReload(e);
-      e.wantsAds = false;
-    }
-
-    // A gate barring the way (only its builder can pass) is shot open.
-    const gate = e.role === 'attacker' ? this.ctx.traps.gateAhead(e) : null;
-    if (gate) {
-      const d = gate.clone().sub(e.eyePos);
-      this.desiredYaw = Math.atan2(-d.x, -d.z);
-      this.desiredPitch = clamp(Math.atan2(d.y, Math.hypot(d.x, d.z)), -1.2, 1.2);
-      const w = e.weapon;
-      if (w && !e.reloading) {
-        if (w.ammo <= 0 && w.reserve > 0) WeaponLogic.startReload(e);
-        else {
-          e.triggerReleased = true;
-          WeaponLogic.tryFire(e, this.ctx.combat, now, 1);
-        }
-      }
-    }
-
-    // Smooth turning
-    const turn = this.profile.aimSmooth;
-    e.yaw = dampAngle(e.yaw, this.desiredYaw, turn, dt);
-    e.pitch = clamp(e.pitch + (this.desiredPitch - e.pitch) * Math.min(1, dt * turn), -1.4, 1.4);
-
-    WeaponLogic.update(e, dt);
-    this.ctx.controller.step(e, input, dt);
-
-    // Stuck detection
-    if (goal && e.grounded) {
-      if (e.pos.distanceToSquared(this.lastPos) < 0.01) this.stuckTimer += dt;
-      else this.stuckTimer = 0;
-      if (this.stuckTimer > 1.2) {
-        this.path = null;
-        this.pathGoal = null;
-        this.repathTimer = 0;
-        this.stuckTimer = 0;
-        this.searchTarget = null;
-        this.hideSpot = null;
+  /** Shared: duck into cover when hurt under fire, come back out when healed or the threat is gone. */
+  protected coverLogic(dt: number, threat: Entity | null, nav: NavSystem | null): void {
+    const e = this.entity;
+    const hurt = e.hp < this.profile.retreatHp * 1.6;
+    if (this.state === 'cover') {
+      if (this.coverTimer <= 0 || !threat || (e.hp > 70 && this.coverTimer < 1)) {
+        this.state = threat ? 'engage' : 'idle';
         this.coverSpot = null;
-        if (this.state === 'cover') this.state = 'engage';
-        e.vel.y = 8;
-        e.grounded = false;
+        this.coverCooldown = 4 + this.rng.range(0, 3);
       }
+    } else if (threat && hurt && this.coverCooldown <= 0 && this.rng.chance(this.profile.coverSkill * dt * 3)) {
+      this.coverSpot = this.pickCover(nav, threat.pos);
+      if (this.coverSpot) {
+        this.state = 'cover';
+        this.coverTimer = 1.6 + this.rng.range(0, 2.2) * (1.2 - this.profile.coverSkill * 0.5);
+      } else this.state = 'retreat';
     }
-    this.lastPos.copy(e.pos);
+    if (this.state === 'retreat' && (e.hp > 60 || !threat)) this.state = 'idle';
+  }
+
+  protected get coverGoal(): THREE.Vector3 | null {
+    return this.coverSpot;
   }
 
   private canSee(point: THREE.Vector3): boolean {
@@ -445,7 +547,7 @@ export class BotBrain {
     let best: Entity | null = null;
     let bestScore = Infinity;
     for (const o of this.ctx.entities()) {
-      if (o === e || !o.alive || o.burrowed) continue;
+      if (o === e || !o.alive || o.burrowed || !this.isEnemy(o)) continue;
       const d = tmp.copy(o.pos).setY(o.pos.y + 1.2).sub(eye);
       const dist = d.length();
       // Hearing: recent gunfire within range (louder weapons carry further).
@@ -468,7 +570,7 @@ export class BotBrain {
         }
         if (!this.canSee(tmp.copy(o.pos).setY(o.pos.y + 1.3))) continue;
       }
-      const score = dist * (o.role === 'defender' && e.role === 'attacker' ? 0.6 : 1) + (this.mem.target === o ? -10 : 0) + (o.captureProgress > 0.05 ? -25 : 0);
+      const score = dist * (o.role === 'defender' && e.role === 'attacker' && e.team < 0 ? 0.6 : 1) + (this.mem.target === o ? -10 : 0) + (o.captureProgress > 0.05 ? -25 : 0);
       if (score < bestScore) {
         bestScore = score;
         best = o;
@@ -522,6 +624,7 @@ export class BotBrain {
       this.mem.visible = true;
       this.mem.lastSeenPos.copy(best.pos);
       this.mem.lastSeenTime = now;
+      this.ctx.commander?.(e.team)?.report(best, now);
     } else if (!keepOld) {
       // Nobody in sight: the current target is remembered for a while, then forgotten.
       this.mem.visible = false;
@@ -697,7 +800,7 @@ export class BotBrain {
     const dist = e.pos.distanceTo(this.mem.visible ? target.pos : this.mem.lastSeenPos);
     if (dist < 8 || dist > 24) return;
     const flag = this.ctx.flagPos();
-    const campingFlag = e.role === 'attacker' && flag && target.role === 'defender' && target.pos.distanceTo(flag) < 5;
+    const campingFlag = (e.team >= 0 || e.role === 'attacker') && flag && target.pos.distanceTo(flag) < 5;
     const p = this.profile.grenadeChance * dt * (this.mem.visible ? (campingFlag ? 1.2 : 0.35) : 1);
     if (!this.rng.chance(p)) return;
     e.grenades--;
@@ -759,7 +862,7 @@ export class BotBrain {
     }
     const goalMoved = this.pathGoal !== null && this.pathGoal.distanceTo(goal) > 2.5;
     if ((!this.path || goalMoved || this.repathTimer <= 0) && this.routeCooldown <= 0) {
-      this.path = nav.findRoute(e.pos, goal);
+      this.path = nav.findRoute(e.pos, goal, this.ctx.commander?.(e.team)?.avoidCells() ?? null);
       this.pathGoal = goal.clone();
       this.pathIndex = 0;
       this.routeCooldown = 0.5 + this.rng.range(0, 0.3);
@@ -901,4 +1004,4 @@ export class BotBrain {
   }
 }
 
-export const BOT_NAMES = ['Nova', 'Blaze', 'Kestrel', 'Onyx', 'Vex', 'Rook', 'Sable', 'Zephyr', 'Ember', 'Quill', 'Talon', 'Mira'];
+export const BOT_NAMES = ['Nova', 'Blaze', 'Kestrel', 'Onyx', 'Vex', 'Rook', 'Sable', 'Zephyr', 'Ember', 'Quill', 'Talon', 'Mira', 'Juno', 'Kai', 'Lyra', 'Orion', 'Piper', 'Rhea', 'Sol', 'Tamsin', 'Ulla', 'Vale', 'Wren', 'Zara'];

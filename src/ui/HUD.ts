@@ -9,6 +9,20 @@ export interface HudMinimap {
   flag: { x: number; z: number } | null;
   plots: { x: number; z: number; active: boolean; color: string }[];
   others: { x: number; z: number; color: string }[];
+  /** War capture points: owner colour (null = neutral) and the capture ring of whoever is taking it. */
+  points?: { x: number; z: number; label: string; color: string | null; progress: number; progressColor: string | null }[];
+}
+
+/** Fortress War overlay: tickets, capture points, supplies and the respawn choice while dead. */
+export interface HudWar {
+  team: number;
+  /** Ours first, theirs second. */
+  tickets: [number, number];
+  colors: [string, string];
+  outposts: { label: string; owner: string | null; mine: boolean; progress: number; capturing: string | null; contested: boolean }[];
+  supplies: number;
+  flagDown: [boolean, boolean];
+  spawnChoices: { label: string; key: string; selected: boolean; enabled: boolean }[] | null;
 }
 
 export interface HudGadget {
@@ -72,6 +86,8 @@ export interface HudState {
   overtime: boolean;
   /** Someone is taking the flag: red pulse for the defender, amber for rival attackers. */
   alarm: 'none' | 'defender' | 'attacker';
+  /** Fortress War state (null in the classic rotation). */
+  war: HudWar | null;
 }
 
 export interface HudMarker {
@@ -80,8 +96,8 @@ export interface HudMarker {
   name: string;
   color: string;
   dist: number;
-  /** threat = damaged you within the last seconds; capture = taking the flag; leader = comeback target; radar = streak reveal. */
-  kind: 'threat' | 'near' | 'capture' | 'leader' | 'radar';
+  /** threat = damaged you within the last seconds; capture = taking the flag; leader = comeback target; radar = streak reveal; ally = squadmate. */
+  kind: 'threat' | 'near' | 'capture' | 'leader' | 'radar' | 'ally';
 }
 
 export interface ScoreRow {
@@ -165,6 +181,17 @@ export class HUD {
   private markerPool: { root: HTMLElement; name: HTMLElement; dist: HTMLElement; tag: HTMLElement }[] = [];
   private grenadeLayer: HTMLElement;
   private grenadePool: HTMLElement[] = [];
+  private warBar: HTMLElement;
+  private topbar: HTMLElement;
+  private warOurs: HTMLElement;
+  private warTheirs: HTMLElement;
+  private warPoints: HTMLElement;
+  private warPointEls: { root: HTMLElement; ring: SVGCircleElement; key: string }[] = [];
+  private warSupplies: HTMLElement;
+  private spawnBox: HTMLElement;
+  private spawnKey = '';
+  /** Called with -1 for the fortress or a capture point index when the player picks a respawn. */
+  onSpawnChoice: ((i: number) => void) | null = null;
 
   constructor(parent: HTMLElement) {
     this.root = el('div', 'hud');
@@ -233,6 +260,7 @@ export class HUD {
 
     // Top centre
     const top = el('div', 'topbar');
+    this.topbar = top;
     this.roundLabel = el('div', 'round');
     this.timer = el('div', 'timer', '4:00');
     this.targetLabel = el('div', 'target');
@@ -317,9 +345,22 @@ export class HUD {
     this.death = el('div', 'death');
     this.deathText = el('div', 'dtext');
     this.deathTimer = el('div', 'dtimer');
-    this.death.append(this.deathText, this.deathTimer);
+    this.spawnBox = el('div', 'spawnbox');
+    this.spawnBox.setAttribute('data-ui', '1');
+    this.spawnBox.hidden = true;
+    this.death.append(this.deathText, this.deathTimer, this.spawnBox);
     this.death.hidden = true;
     this.root.appendChild(this.death);
+    // Fortress War bar: tickets either side, the three points in the middle, the objective and supplies
+    // below. It lives inside the topbar, right under the timer, so it can never overlap it.
+    this.warBar = el('div', 'warbar');
+    this.warOurs = el('div', 'wt ours');
+    this.warTheirs = el('div', 'wt theirs');
+    this.warPoints = el('div', 'wpoints');
+    this.warSupplies = el('div', 'wsupplies');
+    this.warBar.append(this.warOurs, this.warPoints, this.warTheirs, this.warSupplies);
+    this.warBar.hidden = true;
+    this.topbar.insertBefore(this.warBar, this.roleBadge);
 
     // Scope
     this.scope = el('div', 'scope');
@@ -454,10 +495,19 @@ export class HUD {
       if (left <= 0) this.announceEl.hidden = true;
       else this.announceEl.style.opacity = String(Math.min(1, left / 0.35));
     }
-    this.set('round', this.roundLabel, t('round', { n: s.round, total: s.totalRounds }));
-    this.set('target', this.targetLabel, s.role === 'defender' ? t('defendFortress') : t('attackFortress', { name: s.targetName }));
-    this.set('role', this.roleBadge, s.role === 'defender' ? t('defender') : t('attacker'));
-    this.roleBadge.classList.toggle('def', s.role === 'defender');
+    if (s.war) {
+      this.set('round', this.roundLabel, t('fortressWar'));
+      // The war bar sits right under the timer, so the objective line moves into it (see syncWar).
+      this.targetLabel.hidden = true;
+      this.set('role', this.roleBadge, s.war.team === 0 ? t('teamCyan') : t('teamCoral'));
+      this.roleBadge.classList.toggle('def', s.war.team === 0);
+    } else {
+      this.set('round', this.roundLabel, t('round', { n: s.round, total: s.totalRounds }));
+      this.targetLabel.hidden = false;
+      this.set('target', this.targetLabel, s.role === 'defender' ? t('defendFortress') : t('attackFortress', { name: s.targetName }));
+      this.set('role', this.roleBadge, s.role === 'defender' ? t('defender') : t('attacker'));
+      this.roleBadge.classList.toggle('def', s.role === 'defender');
+    }
     this.set('score', this.scoreEl, `${t('score')} ${s.score}  ·  #${s.rank}/${s.players}`);
 
     // Capture ring
@@ -503,7 +553,9 @@ export class HUD {
       this.death.hidden = false;
       this.set('dtext', this.deathText, s.killedBy ? t('eliminatedBy', { name: s.killedBy }) : '');
       this.set('dtimer', this.deathTimer, t('respawnIn', { n: Math.ceil(s.respawnIn) }));
+      this.syncSpawnChoices(s.war?.spawnChoices ?? null);
     } else this.death.hidden = true;
+    this.syncWar(s.war);
     this.scope.hidden = !s.sniperScope;
     if (s.fps !== null) {
       this.fpsEl.hidden = false;
@@ -532,6 +584,64 @@ export class HUD {
       this.set('odist', this.objDist, `${Math.round(o.dist)} m`);
       this.set('olabel', this.objLabel, o.label);
     } else this.objective.hidden = true;
+  }
+
+  private syncWar(w: HudWar | null): void {
+    if (!w) {
+      this.warBar.hidden = true;
+      return;
+    }
+    this.warBar.hidden = false;
+    this.set('wours', this.warOurs, w.tickets[0]);
+    this.set('wtheirs', this.warTheirs, w.tickets[1]);
+    this.warOurs.style.color = w.colors[0];
+    this.warTheirs.style.color = w.colors[1];
+    if (this.warPointEls.length !== w.outposts.length) {
+      this.warPoints.innerHTML = '';
+      this.warPointEls = w.outposts.map((o) => {
+        const root = el('div', 'wpoint');
+        root.innerHTML = `<svg viewBox="0 0 40 40"><circle class="bg" cx="20" cy="20" r="16"/><circle class="fg" cx="20" cy="20" r="16"/></svg><span class="lb">${esc(o.label)}</span>`;
+        this.warPoints.appendChild(root);
+        return { root, ring: root.querySelector('.fg') as SVGCircleElement, key: '' };
+      });
+    }
+    w.outposts.forEach((o, i) => {
+      const p = this.warPointEls[i];
+      const key = `${o.owner}|${o.mine}|${o.progress.toFixed(2)}|${o.capturing}|${o.contested}`;
+      if (p.key === key) return;
+      p.key = key;
+      p.root.style.setProperty('--own', o.owner ?? 'rgba(255,255,255,0.18)');
+      p.root.classList.toggle('mine', o.mine);
+      p.root.classList.toggle('theirs', !!o.owner && !o.mine);
+      p.root.classList.toggle('contested', o.contested);
+      const c = 2 * Math.PI * 16;
+      p.ring.style.strokeDasharray = `${c}`;
+      p.ring.style.strokeDashoffset = `${c * (1 - o.progress)}`;
+      p.ring.style.stroke = o.capturing ?? 'transparent';
+    });
+    this.set('wsup', this.warSupplies, `${w.flagDown[1] ? t('theirFlagDown') : w.flagDown[0] ? t('ourFlagDown') : t('warObjective')}  ·  ${t('supplies')} ${w.supplies}`);
+  }
+
+  private syncSpawnChoices(list: HudWar['spawnChoices']): void {
+    if (!list) {
+      this.spawnBox.hidden = true;
+      this.spawnKey = '';
+      return;
+    }
+    this.spawnBox.hidden = false;
+    const key = list.map((c) => `${c.label}${c.selected}${c.enabled}`).join('|');
+    if (key === this.spawnKey) return;
+    this.spawnKey = key;
+    this.spawnBox.innerHTML = `<div class="sb-title">${esc(t('chooseSpawn'))}</div>`;
+    list.forEach((c, i) => {
+      const b = el('button', `sb-opt ${c.selected ? 'sel' : ''} ${c.enabled ? '' : 'off'}`);
+      b.innerHTML = `<span class="k">${esc(c.key)}</span>${esc(c.label)}`;
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (c.enabled) this.onSpawnChoice?.(i - 1);
+      });
+      this.spawnBox.appendChild(b);
+    });
   }
 
   private drawMinimap(m: HudMinimap): void {
@@ -569,6 +679,27 @@ export class HUD {
       ctx.strokeStyle = 'rgba(0, 229, 255, 0.9)';
       ctx.lineWidth = 2;
       ctx.stroke();
+    }
+    // War capture points: a ring in the owner's colour, filling with the taker's.
+    for (const pt of m.points ?? []) {
+      const px = toX(pt.x);
+      const py = toY(pt.z);
+      ctx.beginPath();
+      ctx.arc(px, py, 6, 0, Math.PI * 2);
+      ctx.fillStyle = pt.color ?? 'rgba(255,255,255,0.25)';
+      ctx.fill();
+      if (pt.progress > 0 && pt.progressColor) {
+        ctx.beginPath();
+        ctx.arc(px, py, 8, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pt.progress);
+        ctx.strokeStyle = pt.progressColor;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#fff';
+      ctx.font = '700 9px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(pt.label, px, py + 0.5);
     }
     // Flag
     if (m.flag) {
@@ -624,7 +755,7 @@ export class HUD {
       if (slot.name.textContent !== m.name) slot.name.textContent = m.name;
       const d = `${Math.round(m.dist)} m`;
       if (slot.dist.textContent !== d) slot.dist.textContent = d;
-      const tag = m.kind === 'capture' ? t('capturingTag') : m.kind === 'leader' ? t('leaderTag') : m.kind === 'radar' ? t('radarTag') : '';
+      const tag = m.kind === 'capture' ? t('capturingTag') : m.kind === 'leader' ? t('leaderTag') : m.kind === 'radar' ? t('radarTag') : m.kind === 'ally' ? t('squadTag') : '';
       if (slot.tag.textContent !== tag) slot.tag.textContent = tag;
     }
   }

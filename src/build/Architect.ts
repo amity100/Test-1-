@@ -333,13 +333,13 @@ export class Architect {
   constructor(
     private plot: Plot,
     readonly style: StyleId,
+    /** Fortress War: a stronghold that is hard to get into (few doors, arrow slits, no outdoor stairs or balconies). */
+    readonly fortified = false,
   ) {
     this.castle = CASTLE_STYLES.includes(style);
     this.tech = TECH_STYLES.includes(style);
     this.roles = STYLES[style].roles;
-    const fx = -plot.cx;
-    const fz = -plot.cz;
-    this.frontSide = Math.abs(fx) > Math.abs(fz) ? (fx > 0 ? 1 : 3) : fz > 0 ? 2 : 0;
+    this.frontSide = frontSideOf(plot);
   }
 
   /** Wall block value for a tone. */
@@ -644,7 +644,7 @@ export class Architect {
         const R = hero.radius;
         for (let dx = -R; dx <= R; dx++)
           for (let dz = -R; dz <= R; dz++) {
-            const step = Math.max(Math.abs(dx), Math.abs(dz)) === R;
+            const step = R > 0 && Math.max(Math.abs(dx), Math.abs(dz)) === R;
             F.set(cx + dx, y0 + 1, cz + dz, step ? withShape(this.roles.trim, Shape.SLAB) : this.roles.accent);
             for (let ly = 2; ly < STOREY_H; ly++) F.set(cx + dx, y0 + ly, cz + dz, 0);
           }
@@ -753,7 +753,7 @@ export class Architect {
         }
       }
     stairCands.sort((a, b) => b.score - a.score);
-    const wantOuter = count >= 16 ? 2 : count >= 2 ? 1 : 0;
+    const wantOuter = this.fortified ? 0 : count >= 16 ? 2 : count >= 2 ? 1 : 0;
     for (const c of stairCands) {
       if (D.outerStairs.length >= wantOuter) break;
       if (D.outerStairs.some((o) => (o.i === c.i && o.j === c.j) || (o.cell[0] === c.n[0] && o.cell[1] === c.n[1]))) continue;
@@ -782,15 +782,41 @@ export class Architect {
         }
       }
       faces.sort((a, b) => b.score - a.score);
-      const want = cells.length >= 6 ? 3 : 2;
       const chosen: typeof faces = [];
-      for (const f of faces) {
-        if (chosen.length >= want) break;
-        if (chosen.some((c) => c.idx === f.idx)) continue;
-        // The second door goes on another side when any other side is available.
-        if (chosen.length >= 1 && chosen.every((c) => c.side === f.side) && faces.some((g) => g.side !== f.side && !chosen.some((c) => c.idx === g.idx))) continue;
-        chosen.push(f);
-      }
+      const pickFrom = (pool: typeof faces, want: number): void => {
+        for (const f of pool) {
+          if (chosen.length >= want) break;
+          if (chosen.some((c) => c.idx === f.idx)) continue;
+          // The second door goes on another side when any other side is available.
+          if (chosen.length >= 1 && chosen.every((c) => c.side === f.side) && pool.some((g) => g.side !== f.side && !chosen.some((c) => c.idx === g.idx))) continue;
+          chosen.push(f);
+        }
+      };
+      if (this.fortified) {
+        // A stronghold: one gate towards the front and one postern on another side, both straight
+        // onto the field when the walls reach the plot edge; then a door or two towards the ground
+        // inside the walls (the courtyard) so the walls connect to whatever stands in there.
+        const onField = (f: (typeof faces)[number]): boolean => {
+          const [fi, fj] = Plan.coords(f.idx);
+          const [dx, dz] = SIDES[f.side];
+          return !Plan.inside(fi + dx, fj + dz, 0);
+        };
+        const outward = faces.filter(onField);
+        pickFrom(outward.length ? outward : faces, 2);
+        if (outward.length) {
+          const inner = faces.filter((f) => !onField(f) && !chosen.some((c) => c.idx === f.idx));
+          const n0 = chosen.length;
+          const wantInner = inner.length >= 6 ? 2 : inner.length ? 1 : 0;
+          for (const f of inner) {
+            if (chosen.length >= n0 + wantInner) break;
+            const [fi, fj] = Plan.coords(f.idx);
+            // Spread the inner doors: not on a cell that already has one, not next to the other inner door.
+            if (chosen.some((c) => c.idx === f.idx)) continue;
+            if (chosen.slice(n0).some((c) => Math.abs(Plan.coords(c.idx)[0] - fi) + Math.abs(Plan.coords(c.idx)[1] - fj) < 2)) continue;
+            chosen.push(f);
+          }
+        }
+      } else pickFrom(faces, cells.length >= 6 ? 3 : 2);
       for (const f of chosen) addDoor(f.idx, f.side);
     }
 
@@ -1006,9 +1032,11 @@ export class Architect {
     const ni = i + dx;
     const nj = j + dz;
     const freeOutside = Plan.inside(ni, nj, k) && !plan.has(ni, nj, k) && !plan.has(ni, nj, k - 1) && !D.deck.has(Plan.index(ni, nj, k)) && !(k === 1 && D.reserved.has(Plan.index(ni, nj, 0)));
-    if (!noBalcony && k >= 1 && s === this.frontSide && freeOutside && hash(i, j, k, 9) % 2 === 0) {
+    if (!noBalcony && !this.fortified && k >= 1 && s === this.frontSide && freeOutside && hash(i, j, k, 9) % 2 === 0) {
       return { ...base, cols: [MID - 1, MID, MID + 1], rows: [1, 2], balcony: true };
     }
+    // Stronghold ground floors get arrow slits: head-high, one row, nothing to climb through.
+    if (this.fortified && k === 0) return { ...base, cols: [2, MID, CELL - 3], rows: [3] };
     if (tone === 4 || this.tech) {
       const glassCols: number[] = [];
       for (let c = 1; c < CELL - 1; c++) if (c !== MID - 1 && c !== MID) glassCols.push(c);
@@ -1046,7 +1074,7 @@ export class Architect {
       for (let c = 0; c < CELL; c++) {
         const [fx, , fz] = this.faceCell(x0, 0, z0, s, c, 0);
         const corner = c === 0 || c === CELL - 1;
-        const v = this.castle ? (corner || c % 2 === 0 ? wall : 0) : corner ? this.roles.trim : withShape(this.roles.trim, Shape.FENCE);
+        const v = this.castle || this.fortified ? (corner || c % 2 === 0 ? wall : 0) : corner ? this.roles.trim : withShape(this.roles.trim, Shape.FENCE);
         F.fill(fx, y, fz, v);
       }
     }
@@ -1309,23 +1337,29 @@ export class Architect {
     const cx0 = Math.floor((minX + maxX) / 2);
     const cz0 = Math.floor((minZ + maxZ) / 2);
     // A 3x3 podium with a ring of steps in a hall, a single raised block with steps in one room.
-    const radius = cells.size >= 2 ? 2 : 1;
+    const radius0 = cells.size >= 2 ? 2 : 1;
     let podium: [number, number] | null = null;
     // Nearest spot to the centre whose whole footprint is free floor (in a 2x2 hall the centre is a
-    // column, so the podium settles beside it).
+    // column, so the podium settles beside it). A room hemmed in by stairs on two sides still gets
+    // a flag: the footprint shrinks to a single raised block.
     const offsets: [number, number][] = [];
     for (let ox = -7; ox <= 7; ox++) for (let oz = -7; oz <= 7; oz++) offsets.push([ox, oz]);
     offsets.sort((a, b) => Math.hypot(a[0], a[1]) - Math.hypot(b[0], b[1]));
-    for (const [ox, oz] of offsets) {
-      const cx = cx0 + ox;
-      const cz = cz0 + oz;
-      let ok = true;
-      for (let dx = -radius; dx <= radius && ok; dx++) for (let dz = -radius; dz <= radius; dz++) if (!interior(cx + dx, cz + dz) || keep.has(`${cx + dx},${cz + dz}`)) { ok = false; break; }
-      if (ok) {
-        podium = [cx, cz];
-        break;
+    let radius = radius0;
+    for (; radius >= 0 && !podium; radius--) {
+      for (const [ox, oz] of offsets) {
+        const cx = cx0 + ox;
+        const cz = cz0 + oz;
+        let ok = true;
+        for (let dx = -radius; dx <= radius && ok; dx++) for (let dz = -radius; dz <= radius; dz++) if (!interior(cx + dx, cz + dz) || keep.has(`${cx + dx},${cz + dz}`)) { ok = false; break; }
+        if (ok) {
+          podium = [cx, cz];
+          break;
+        }
       }
+      if (podium) break;
     }
+    if (!podium) radius = radius0;
     const covered = cells.size >= 2 && [...cells].every((idx) => { const [i, j] = Plan.coords(idx); return plan.has(i, j, hk + 1); });
     const voids = new Set<string>();
     if (covered) {
@@ -1364,6 +1398,13 @@ export class Architect {
  * Size of the same-tone hall a room belongs to and whether every cell of it has a room above (the
  * two things that make a great flag hall: space to fight in and a gallery ring over it).
  */
+/** Side of a plot that faces the island centre (0 -Z, 1 +X, 2 +Z, 3 -X): gates go there. */
+export function frontSideOf(plot: Plot): number {
+  const fx = -plot.cx;
+  const fz = -plot.cz;
+  return Math.abs(fx) > Math.abs(fz) ? (fx > 0 ? 1 : 3) : fz > 0 ? 2 : 0;
+}
+
 export function hallInfo(plan: Plan, i: number, j: number, k: number): { cells: number; covered: boolean } {
   if (!plan.has(i, j, k)) return { cells: 0, covered: false };
   const tone = plan.tone(i, j, k);

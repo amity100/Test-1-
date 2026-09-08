@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { App } from './App';
 import { Entity, type Role, emptyScore } from '../sim/Entities';
-import { TrapSystem, TRAP_SLOTS, TRAP_COST, type TrapKind, type TrapFx } from '../sim/Traps';
+import { TrapSystem, TRAP_COST, type TrapKind, type TrapFx } from '../sim/Traps';
 import { TRAP_HIT_KEY } from '../ui/TrapIcons';
 import { RoundEvents, type EventKind } from '../sim/RoundEvents';
 import type { Cell } from '../world/Reachability';
@@ -13,6 +13,10 @@ import { Match, type MatchConfig, RULES } from '../sim/Match';
 import { WEAPONS, type WeaponId } from '../sim/Weapons';
 import { WeaponLogic } from '../sim/WeaponLogic';
 import { BotBrain, PROFILES, BOT_NAMES } from '../ai/BotBrain';
+import { WarBrain } from '../ai/WarBrain';
+import { TeamCommander, type Post } from '../ai/Commander';
+import { TeamBuild, type TrapOrder, BOT_TRAPS } from '../build/TeamBuild';
+import { Plan, MAX_BLOCKS, CELL, STOREY_H } from '../build/Architect';
 import { NavSystem } from '../ai/NavSystem';
 import { CharacterMesh } from '../render/CharacterMesh';
 import { ViewModel } from '../render/ViewModel';
@@ -22,9 +26,11 @@ import { FocusZone } from '../render/FocusZone';
 import { buildWeaponModel } from '../render/WeaponModels';
 import { HUD, type HudMarker, type HudState, type ScoreRow } from '../ui/HUD';
 import { GadgetSystem, GADGETS, GADGET_IDS, KIT_SIZE, type GadgetId } from '../sim/Gadgets';
+import { RepairSystem } from '../sim/Repair';
+import { WAR } from '../sim/War';
 import { GadgetMeshes } from '../render/GadgetMeshes';
 import { outfitFor } from '../render/Outfits';
-import { Screens, type SummaryRow, type PodiumRow } from '../ui/Screens';
+import { Screens, type SummaryRow, type PodiumRow, type WarPodiumRow } from '../ui/Screens';
 import { composeCard } from '../ui/FortressCard';
 import { Builder } from '../build/Builder';
 import { BuilderUI } from '../build/BuilderUI';
@@ -32,9 +38,9 @@ import { Fortify } from '../build/Fortify';
 import { FortifyUI } from '../build/FortifyUI';
 import { TouchControls, vibrate } from '../ui/TouchControls';
 import { IS_TOUCH } from './Input';
-import { generateFortress, type FortressResult } from '../world/FortressGen';
+import { generateFortress, generateRuins, type FortressResult } from '../world/FortressGen';
 import { STYLE_IDS, type StyleId } from '../world/Styles';
-import { PLOT_Y, PLOT_MAX_HEIGHT, PLOT_HALF, ZONE_RADIUS, PLAYABLE_RADIUS, type Plot } from '../world/Layout';
+import { PLOT_Y, PLOT_MAX_HEIGHT, PLOT_HALF, ZONE_RADIUS, PLAYABLE_RADIUS, WAR_PLOTS, OUTPOSTS, type Plot } from '../world/Layout';
 import { blockColor, PALETTE } from '../world/Voxel';
 import { STYLES } from '../world/Styles';
 import { Random } from './Random';
@@ -47,6 +53,8 @@ import { clamp, formatTime, damp } from './MathUtil';
 type Mode = 'menu' | 'build' | 'fortify' | 'intro' | 'battle' | 'summary' | 'podium';
 
 const PLAYER_COLORS = ['#00e5ff', '#ff2bd6', '#ffb300', '#39ff14', '#ff3355', '#a78bfa', '#ff8c42', '#7aa7ff'];
+/** Fortress War team colours: cyan and coral. */
+export const TEAM_COLORS = ['#00e5ff', '#ff4655'];
 const PRIMARY_CHOICES: WeaponId[] = ['rifle', 'smg', 'shotgun', 'sniper', 'rocket'];
 const GADGET_KEY_LABELS = ['Q', 'F'];
 
@@ -70,6 +78,8 @@ export class Game {
   controller: CharacterController;
   combat: Combat;
   gadgets: GadgetSystem;
+  /** Fortress War: holes blown in the walls and the crews closing them. */
+  readonly repair: RepairSystem;
   private gadgetMeshes: GadgetMeshes;
   private playerKit: GadgetId[];
   private promptText = '';
@@ -127,12 +137,23 @@ export class Game {
   private fogCur = { d: 0.0008, h: 0.0022 };
   private fogTarget = { d: 0.0008, h: 0.0022 };
   private uiRoot: HTMLElement;
+  // Fortress War
+  private teamBuild: TeamBuild | null = null;
+  commanders: TeamCommander[] = [];
+  private teamPosts: Post[][] = [[], []];
+  private teamSpawns: THREE.Vector3[][] = [[], []];
+  /** Fortress War: the trap plan the team's bots follow during the walk. */
+  private teamOrders: TrapOrder[] | null = null;
+  /** Where the player respawns: -1 the fortress, else an owned capture point. */
+  private spawnChoice = -1;
+  private teamStyles: StyleId[] = ['medieval', 'gothic'];
 
   constructor(readonly app: App) {
     this.uiRoot = document.getElementById('ui')!;
     this.controller = new CharacterController(app.world, app.terrain);
     this.combat = new Combat(app.world, app.terrain, () => this.entities);
-    this.gadgets = new GadgetSystem(app.world, app.terrain, this.combat, app.plots, () => this.entities);
+    this.repair = new RepairSystem(app.world);
+    this.gadgets = new GadgetSystem(app.world, app.terrain, this.combat, app.plots, () => this.entities, this.repair);
     this.controller.gadgets = this.gadgets;
     this.traps = new TrapSystem(app.world, this.combat, () => this.entities, app.plots);
     this.controller.traps = this.traps;
@@ -174,6 +195,7 @@ export class Game {
     this.rocketModel = buildWeaponModel('rocketShell', new THREE.Color('#ffb300'), false, 'high');
     this.grenadeModel = buildWeaponModel('grenade', new THREE.Color('#39ff14'), false, 'high');
     this.hud = new HUD(this.uiRoot);
+    this.hud.onSpawnChoice = (i) => this.setSpawnChoice(i);
     this.screens = new Screens(this.uiRoot, {
       start: (cfg) => this.startMatch(cfg),
       resume: () => this.resume(),
@@ -283,43 +305,39 @@ export class Game {
     this.screens.hideAll();
     this.cleanupMatch();
     const plots = this.app.plots;
-    const count = clamp(cfg.botCount + 1, 2, plots.length);
-    // Entities
+    const war = cfg.mode === 'war';
     this.entities = [];
+    this.bots = [];
+    this.commanders = [];
     this.player.name = cfg.playerName || t('you');
     this.player.plotIndex = 0;
-    this.player.colorHex = PLAYER_COLORS[0];
+    this.player.colorHex = war ? TEAM_COLORS[0] : PLAYER_COLORS[0];
+    this.player.team = war ? 0 : -1;
+    this.player.squad = war ? 0 : -1;
     this.player.score = emptyScore();
     this.entities.push(this.player);
     const names = new Random(Date.now() >>> 1).shuffle([...BOT_NAMES]);
-    this.bots = [];
-    for (let i = 1; i < count; i++) {
+    let nameIdx = 0;
+    const bot = (team: number, plotIndex: number, squad: number, color: string): Entity => {
       const e = new Entity();
       e.isBot = true;
-      e.name = names[i - 1];
-      e.plotIndex = i;
-      e.colorHex = PLAYER_COLORS[i % PLAYER_COLORS.length];
+      e.name = names[nameIdx++ % names.length];
+      e.plotIndex = plotIndex;
+      e.team = team;
+      e.squad = squad;
+      e.colorHex = color;
       this.entities.push(e);
-    }
-    // Clear all plots, generate bot fortresses
+      return e;
+    };
+    // Clear all plots.
     this.traps.clear();
     for (const p of plots) this.app.world.clearBox(p.minX, PLOT_Y, p.minZ, p.maxX, PLOT_Y + PLOT_MAX_HEIGHT + 2, p.maxZ);
     const match = new Match(cfg, { spawnFor: (e, role, target) => this.spawnFor(e, role, target) });
     this.match = match;
+    this.teamStyles = [cfg.style, this.rng.pick(STYLE_IDS.filter((st) => st !== cfg.style))];
+    if (war) this.setupWar(cfg, match, bot);
+    else this.setupClassic(cfg, match, bot);
     match.setEntities(this.entities);
-    this.paintGround(plots[0], cfg.style);
-    for (const e of this.entities) {
-      if (!e.isBot) continue;
-      const style = this.rng.pick(STYLE_IDS);
-      this.paintGround(plots[e.plotIndex], style);
-      const res = generateFortress(this.app.world, plots[e.plotIndex], style, this.rng.fork());
-      match.setFlag(e.plotIndex, res.flag);
-      match.setSpawn(e.plotIndex, res.spawn);
-      this.plotSpots.set(e.plotIndex, res.roofSpots);
-      this.seedTraps(e.plotIndex, res);
-      const brain = new BotBrain(e, this.botContext(), PROFILES[cfg.difficulty], this.rng.int(1, 1e9));
-      this.bots.push(brain);
-    }
     this.app.chunks.flush();
     // Character meshes
     for (const e of this.entities) {
@@ -329,20 +347,9 @@ export class Game {
       this.chars.set(e.id, cm);
     }
     this.viewModel.setAccent(new THREE.Color(this.player.colorHex));
-    // Match events
-    match.events.on('phase', ({ phase }) => this.onPhase(phase));
-    match.events.on('spawn', ({ entity, initial }) => this.onSpawn(entity, initial));
-    match.events.on('score', ({ entity, delta, reason }) => {
-      if (entity !== this.player || reason === 'defense') return;
-      if (reason === 'holdMinute') this.hud.scorePop(`+${delta} · ${t('heldMinute', { m: entity.score.holdMinutes })}`);
-      else this.hud.scorePop(`+${delta}`);
-    });
-    match.events.on('alarm', ({ entity, on }) => this.onAlarm(on ? entity : null));
-    match.events.on('overtime', () => this.onOvertime());
-    match.events.on('buildTimeUp', () => this.finishBuild(true));
-    match.events.on('fortifyTimeUp', () => this.finishFortify(true));
-    // Build phase: the block builder.
-    this.builder = new Builder(this.app.world, this.app.terrain, plots[0], cfg.style, this.app.input, this.app.gr.camera, this.app.gr.scene);
+    this.wireMatch(match);
+    // Build phase: the block builder (stronghold rules in a war), with the team's bots building alongside.
+    this.builder = new Builder(this.app.world, this.app.terrain, plots[0], cfg.style, this.app.input, this.app.gr.camera, this.app.gr.scene, war);
     this.builder.traps = this.traps;
     this.builderUI = new BuilderUI(
       this.uiRoot,
@@ -353,10 +360,11 @@ export class Game {
         pause: () => (this.paused ? this.resume() : this.pause()),
       },
       IS_TOUCH || window.innerWidth < 900,
+      war,
     );
-    this.builder.events.on('placed', () => {
-      audio.play('place', { pitch: 0.9 + Math.random() * 0.2 });
-      if (IS_TOUCH) vibrate(8);
+    this.builder.events.on('placed', ({ by }) => {
+      audio.play('place', { pitch: 0.9 + Math.random() * 0.2, volume: by >= 0 ? 0.45 : 1 });
+      if (IS_TOUCH && by < 0) vibrate(8);
     });
     this.builder.events.on('placedCells', ({ cells }) => {
       for (const c of cells) this.vfx.puff(new THREE.Vector3(c.x + 0.5, c.y + 0.65, c.z + 0.5), new THREE.Vector3(0, 1, 0), 3, 0.8, 0.22);
@@ -367,12 +375,264 @@ export class Game {
     });
     this.builder.events.on('trapPlaced', () => audio.play('place', { pitch: 1.25 }));
     this.builder.events.on('trapRemoved', () => audio.play('erase', { pitch: 1.2 }));
+    if (war) {
+      this.teamBuild = new TeamBuild(this.builder, this.entities.filter((e) => e.isBot && e.team === 0), cfg.style, this.rng.fork(), plots[0]);
+      this.teamBuild.active = true;
+    }
     this.builder.enter();
     this.builderUI.show();
     this.mode = 'build';
     this.setTouchMode();
     match.startBuild();
     audio.music('build');
+  }
+
+  /** Classic rotation: one fortress per opponent, generated now; the player builds their own. */
+  private setupClassic(cfg: MatchConfig, match: Match, bot: (team: number, plotIndex: number, squad: number, color: string) => Entity): void {
+    const plots = this.app.plots;
+    const count = clamp(cfg.botCount + 1, 2, plots.length);
+    for (let i = 1; i < count; i++) bot(-1, i, -1, PLAYER_COLORS[i % PLAYER_COLORS.length]);
+    this.paintGround(plots[0], cfg.style);
+    for (const e of this.entities) {
+      if (!e.isBot) continue;
+      const style = this.rng.pick(STYLE_IDS);
+      this.paintGround(plots[e.plotIndex], style);
+      const res = generateFortress(this.app.world, plots[e.plotIndex], style, this.rng.fork());
+      match.setFlag(e.plotIndex, res.flag);
+      match.setSpawn(e.plotIndex, res.spawn);
+      this.plotSpots.set(e.plotIndex, res.roofSpots);
+      this.seedTraps(e.plotIndex, res);
+      this.bots.push(new BotBrain(e, this.botContext(), PROFILES[cfg.difficulty], this.rng.int(1, 1e9)));
+    }
+  }
+
+  /**
+   * Fortress War: two teams on opposite plots. The enemy stronghold is generated and trapped now, ruins
+   * fill the other plots for cover, three capture points stand across the middle, and every bot gets a
+   * war brain under a team commander.
+   */
+  private setupWar(cfg: MatchConfig, match: Match, bot: (team: number, plotIndex: number, squad: number, color: string) => Entity): void {
+    const plots = this.app.plots;
+    const size = clamp(cfg.teamSize ?? 8, 2, 12);
+    // Squads of three. The human leads squad 0 with two bots; the rest form squads of their own.
+    for (let n = 1; n < size; n++) bot(0, WAR_PLOTS[0], n <= 2 ? 0 : 1 + Math.floor((n - 3) / 3), TEAM_COLORS[0]);
+    for (let n = 0; n < size; n++) bot(1, WAR_PLOTS[1], Math.floor(n / 3), TEAM_COLORS[1]);
+    const [style0, style1] = this.teamStyles;
+    this.paintGround(plots[WAR_PLOTS[0]], style0);
+    this.paintGround(plots[WAR_PLOTS[1]], style1);
+    const war = match.war!;
+    // The enemy stronghold, finished and trapped by its whole team.
+    const res1 = generateFortress(this.app.world, plots[WAR_PLOTS[1]], style1, this.rng.fork(), 'stronghold', MAX_BLOCKS, true);
+    match.setFlag(WAR_PLOTS[1], res1.flag);
+    match.setSpawn(WAR_PLOTS[1], res1.spawn);
+    this.plotSpots.set(WAR_PLOTS[1], res1.roofSpots);
+    war.setFlag(1, new THREE.Vector3(res1.flag.x + 0.5, res1.flag.y, res1.flag.z + 0.5));
+    this.teamSpawns[1] = this.spawnSpots(res1.floors, res1.flag);
+    this.teamPosts[1] = this.postsFor(1, res1.roofSpots, res1.entrances, res1.heroFloors, res1.flag);
+    this.traps.setSlots(WAR_PLOTS[1], BOT_TRAPS * size);
+    this.traps.setSlots(WAR_PLOTS[0], BOT_TRAPS * (size - 1) + 4);
+    this.seedTraps(WAR_PLOTS[1], res1, this.entities.filter((e) => e.team === 1));
+    // Ruins on the flanks: cover between the fortresses.
+    for (const p of plots) {
+      if (p.index === WAR_PLOTS[0] || p.index === WAR_PLOTS[1]) continue;
+      const st = this.rng.pick(STYLE_IDS);
+      this.paintGround(p, st);
+      generateRuins(this.app.world, p, st, this.rng.fork());
+    }
+    this.buildOutposts(match);
+    const host = {
+      war,
+      entities: () => this.entities,
+      traps: this.traps,
+      teamPlot: (team: number) => plots[WAR_PLOTS[team]],
+      enemyPlot: (team: number) => plots[WAR_PLOTS[1 - team]],
+      posts: (team: number) => this.teamPosts[team],
+      human: (team: number) => (team === 0 ? this.player : null),
+    };
+    this.commanders = [new TeamCommander(0, host), new TeamCommander(1, host)];
+    for (const e of this.entities) if (e.isBot) this.bots.push(new WarBrain(e, this.botContext(), PROFILES[cfg.difficulty], this.rng.int(1, 1e9)));
+  }
+
+  /** Low cover walls around each capture point with a lit pole in the middle (the monument is the centre point). */
+  private buildOutposts(match: Match): void {
+    const roles = STYLES.medieval.roles;
+    const W = this.app.world;
+    OUTPOSTS.forEach((o, i) => {
+      const y = this.app.terrain.outpostY[i];
+      match.war!.setOutpostHeight(i, y);
+      if (i === 1) return;
+      for (let d = -1; d <= 1; d++) {
+        W.set(o.x + d, y, o.z - 4, roles.wall);
+        W.set(o.x + d, y, o.z + 4, roles.wall);
+        W.set(o.x - 4, y, o.z + d, roles.wall);
+        W.set(o.x + 4, y, o.z + d, roles.wall);
+      }
+      for (let h = 0; h < 4; h++) W.set(o.x, y + h, o.z, roles.pillar);
+      W.set(o.x, y + 4, o.z, roles.light);
+    });
+  }
+
+  /** Respawn spots inside a fortress: room floor a few metres from the flag, spread out. */
+  private spawnSpots(floors: Cell[], flag: Cell): THREE.Vector3[] {
+    const cands = floors.filter((c) => {
+      const d = Math.abs(c.x - flag.x) + Math.abs(c.z - flag.z);
+      return d >= 3 && d <= 18 && this.app.world.get(c.x, c.y, c.z) === 0 && this.app.world.get(c.x, c.y + 1, c.z) === 0;
+    });
+    return this.rng.shuffle(cands).slice(0, 10).map((c) => new THREE.Vector3(c.x + 0.5, c.y + 0.02, c.z + 0.5));
+  }
+
+  /** Defensive posts: flag guards in the hall, wall walks and tower tops facing the enemy, and a spot inside every entrance. */
+  private postsFor(team: number, roofSpots: Cell[], entrances: Cell[], heroFloors: Cell[], flag: Cell): Post[] {
+    const enemy = this.app.plots[WAR_PLOTS[1 - team]];
+    const toEnemy = (p: THREE.Vector3): THREE.Vector3 => new THREE.Vector3(enemy.cx - p.x, 0, enemy.cz - p.z).normalize();
+    const posts: Post[] = [];
+    const flagV = new THREE.Vector3(flag.x + 0.5, flag.y, flag.z + 0.5);
+    for (const c of this.rng.shuffle(heroFloors.filter((c) => Math.abs(c.x - flag.x) + Math.abs(c.z - flag.z) >= 2)).slice(0, 4)) {
+      const pos = new THREE.Vector3(c.x + 0.5, c.y, c.z + 0.5);
+      posts.push({ pos, facing: flagV.clone().sub(pos).setY(0).normalize(), flag: true });
+    }
+    for (const c of roofSpots) {
+      const pos = new THREE.Vector3(c.x + 0.5, c.y, c.z + 0.5);
+      posts.push({ pos, facing: toEnemy(pos), flag: false });
+    }
+    const plot = this.app.plots[WAR_PLOTS[team]];
+    for (const c of entrances) {
+      const inward = new THREE.Vector3(plot.cx - (c.x + 0.5), 0, plot.cz - (c.z + 0.5)).normalize();
+      const pos = new THREE.Vector3(c.x + 0.5 + inward.x * 2.5, c.y, c.z + 0.5 + inward.z * 2.5);
+      posts.push({ pos, facing: inward.clone().negate(), flag: false });
+    }
+    // Front-facing posts first: the enemy comes from there.
+    posts.sort((a, b) => (a.flag === b.flag ? a.pos.distanceTo(new THREE.Vector3(enemy.cx, a.pos.y, enemy.cz)) - b.pos.distanceTo(new THREE.Vector3(enemy.cx, b.pos.y, enemy.cz)) : a.flag ? -1 : 1));
+    return posts;
+  }
+
+  /** Match events → game reactions (shared by both modes). */
+  private wireMatch(match: Match): void {
+    match.events.on('phase', ({ phase }) => this.onPhase(phase));
+    match.events.on('spawn', ({ entity, initial }) => this.onSpawn(entity, initial));
+    match.events.on('score', ({ entity, delta, reason }) => {
+      if (entity !== this.player || reason === 'defense') return;
+      if (reason === 'holdMinute') this.hud.scorePop(`+${delta} · ${t('heldMinute', { m: entity.score.holdMinutes })}`);
+      else if (reason === 'outpost') this.hud.scorePop(`+${delta} · ${t('pointTakenPop')}`);
+      else if (reason === 'flagDefense') this.hud.scorePop(`+${delta} · ${t('flagDefensePop')}`);
+      else this.hud.scorePop(`+${delta}`);
+    });
+    match.events.on('alarm', ({ entity, on }) => this.onAlarm(on ? entity : null));
+    match.events.on('overtime', () => this.onOvertime());
+    match.events.on('buildTimeUp', () => this.finishBuild(true));
+    match.events.on('fortifyTimeUp', () => this.finishFortify(true));
+    if (match.war) {
+      match.events.on('warAlarm', ({ team, on, capturer }) => this.onWarAlarm(team, on, capturer));
+      match.events.on('warCaptured', ({ team, by }) => this.onWarCaptured(team, by));
+      match.events.on('warOutpost', ({ index, owner, prev }) => this.onWarOutpost(index, owner, prev));
+      match.events.on('warEnd', ({ winner }) => this.onWarEnd(winner));
+    }
+  }
+
+  private onWarAlarm(team: number, on: boolean, capturer: Entity | null): void {
+    const my = this.player.team;
+    this.flags.get(WAR_PLOTS[team])?.setAlert(on);
+    if (team === my) this.focus.setAlert(on);
+    // The siren and the through-walls marker follow whoever is on a flag (ours or theirs).
+    this.alarmEntity = on ? capturer : null;
+    if (!on || !capturer) return;
+    this.lastSiren = this.time;
+    if (team === my) {
+      audio.play('siren', { volume: 0.7 });
+      this.hud.showBanner(t('warAlarmOurs'), t('alarmStop', { name: capturer.name }), 2.5);
+    } else if (capturer !== this.player) {
+      audio.play('siren', { volume: 0.35, pitch: 1.2 });
+      this.hud.showBanner(t('warAlarmTheirs', { name: capturer.name }), t('warCoverThem'), 2.2);
+    }
+  }
+
+  private onWarCaptured(team: number, by: Entity[]): void {
+    const my = this.player.team;
+    const ours = team === my;
+    this.flags.get(WAR_PLOTS[team])?.setBeacon(1);
+    audio.play(ours ? 'roundEnd' : 'captureDone');
+    this.hud.announce(ours ? t('flagLootedOurs') : t('flagLootedTheirs'), `-${40} ${t('tickets')}`, ours ? 'clutch' : 'streak', 2.6);
+    this.slowmo(0.35, 0.7);
+    if (by.includes(this.player)) audio.play('streak');
+  }
+
+  private onWarOutpost(index: number, owner: number, prev: number): void {
+    const my = this.player.team;
+    const label = this.match?.war?.outposts[index].label ?? '';
+    if (owner === my) {
+      audio.play('streak', { volume: 0.7 });
+      this.hud.showBanner(t('pointTaken', { label }), '', 1.8);
+    } else {
+      audio.play(prev === my ? 'hurt' : 'countdown', { volume: 0.6, pitch: 0.7 });
+      this.hud.showBanner(prev === my ? t('pointLost', { label }) : t('pointEnemy', { label }), '', 1.8);
+    }
+  }
+
+  private onWarEnd(winner: number): void {
+    const my = this.player.team;
+    audio.play(winner === my ? 'victory' : 'roundEnd');
+    this.hud.announce(winner === my ? t('victory') : winner < 0 ? t('draw') : t('defeat'), '', winner === my ? 'streak' : 'clutch', 3);
+  }
+
+  /** Where the player wants to reappear: -1 the fortress, else an owned capture point (keys 1-4 while dead). */
+  setSpawnChoice(i: number): void {
+    this.spawnChoice = i;
+  }
+
+  private warSpawn(e: Entity): THREE.Vector3 {
+    const war = this.match!.war!;
+    const team = e.team;
+    // Our flag just looted: everyone who did not pick a point appears at the flag posts, so the garrison
+    // can throw the raiders out of the hall before the flag returns. (Not during the capture itself:
+    // spawning into the hall mid-capture made a loot impossible.)
+    if (war.flagDown(team) && (e.isBot || this.spawnChoice < 0)) {
+      const posts = this.teamPosts[team].filter((p) => p.flag);
+      for (let i = 0; i < 8 && posts.length; i++) {
+        const p = posts[this.rng.int(0, posts.length - 1)];
+        if (!this.entities.some((o) => o !== e && o.alive && o.pos.distanceTo(p.pos) < 1)) return p.pos.clone();
+      }
+    }
+    let outpost = -1;
+    if (!e.isBot) outpost = this.spawnChoice >= 0 && war.outposts[this.spawnChoice]?.owner === team ? this.spawnChoice : -1;
+    else {
+      const task = this.commanders[team]?.taskFor(e);
+      if (task && task.kind !== 'defend' && task.kind !== 'escort') {
+        const home = this.teamSpawns[team][0] ?? new THREE.Vector3(this.app.plots[WAR_PLOTS[team]].cx, PLOT_Y, this.app.plots[WAR_PLOTS[team]].cz);
+        let bestD = task.target.distanceTo(home);
+        for (const o of war.outposts) {
+          if (o.owner !== team) continue;
+          const d = o.pos.distanceTo(task.target);
+          if (d < bestD) {
+            bestD = d;
+            outpost = o.index;
+          }
+        }
+      }
+    }
+    if (outpost >= 0) {
+      const o = war.outposts[outpost];
+      for (let i = 0; i < 16; i++) {
+        const a = this.rng.range(0, Math.PI * 2);
+        // The centre point is the monument: appear on the plaza around it.
+        const r = (outpost === 1 ? 7 : 3) + this.rng.range(0, 4);
+        const x = o.pos.x + Math.cos(a) * r;
+        const z = o.pos.z + Math.sin(a) * r;
+        const y = this.app.terrain.heightAt(x, z) + 0.05;
+        if (!this.app.world.boxIntersectsSolid(x - 0.35, y, z - 0.35, x + 0.35, y + 1.9, z + 0.35)) return new THREE.Vector3(x, y, z);
+      }
+    }
+    const spots = this.teamSpawns[team];
+    if (spots.length) {
+      for (let i = 0; i < 6; i++) {
+        const sp = spots[this.rng.int(0, spots.length - 1)];
+        if (!this.entities.some((o) => o !== e && o.alive && o.pos.distanceTo(sp) < 1)) return sp.clone();
+      }
+      return spots[0].clone();
+    }
+    const sp = this.match!.spawns.get(WAR_PLOTS[team]);
+    if (sp) return sp.clone();
+    const p = this.app.plots[WAR_PLOTS[team]];
+    return new THREE.Vector3(p.cx, PLOT_Y, p.cz);
   }
 
   /** Ground layer of a plot takes the style's ground block. */
@@ -394,11 +654,14 @@ export class Game {
       roundTime: () => (this.match ? this.match.config.roundTime - this.match.timeLeft : 0),
       anyCaptureProgress: () => {
         let m = 0;
-        for (const e of this.entities) if (e.role === 'attacker') m = Math.max(m, e.captureProgress / RULES.captureTime);
+        for (const e of this.entities) if (e.role === 'attacker') m = Math.max(m, e.captureProgress / (this.match?.captureTime ?? RULES.captureTime));
         return m;
       },
       traps: this.traps,
       visibility: () => this.roundEvents.visibility(),
+      commander: (team: number) => this.commanders[team] ?? null,
+      gadgets: this.gadgets,
+      repair: this.repair,
     };
   }
 
@@ -592,25 +855,31 @@ export class Game {
    * Bot fortresses come with traps too: something at an entrance, a turret in the flag hall, and a
    * mixed handful of the rest wherever they fit, until the slots run out.
    */
-  private seedTraps(plotIndex: number, res: FortressResult): void {
-    const flag = res.flag;
+  /**
+   * The trap plan for a fortress, in priority order: something nasty at a door, a turret in the flag
+   * hall, then the mixed pool over the inner floors (mines also at doors, trapdoors on upper floors).
+   * Seeded fortresses place it at once; the team's bots follow it during the walk.
+   */
+  private trapOrders(flag: Cell, floors: Cell[], entrances: Cell[], heroFloors: Cell[]): TrapOrder[] {
     const near = (c: Cell, d: number): boolean => Math.abs(c.x - flag.x) + Math.abs(c.z - flag.z) <= d;
     const notFlag = (c: Cell): boolean => !(c.x === flag.x && c.z === flag.z && c.y === flag.y);
-    const tryPlace = (kind: TrapKind, cands: Cell[]): boolean => {
-      if (this.traps.slotsUsed(plotIndex) + TRAP_COST[kind] > TRAP_SLOTS) return false;
-      for (const c of this.rng.shuffle(cands.filter(notFlag)).slice(0, 24)) if (typeof this.traps.place(kind, c, plotIndex) !== 'string') return true;
-      return false;
-    };
-    const floors = res.floors;
-    const inner = floors.filter((c) => near(c, 10) && !near(c, 2));
-    const upper = floors.filter((c) => c.y >= PLOT_Y + 5);
-    tryPlace(this.rng.pick(['mine', 'flame', 'gate', 'pendulum'] as TrapKind[]), res.entrances);
-    tryPlace('turret', res.heroFloors.filter((c) => !near(c, 3)));
+    const inner = floors.filter((c) => near(c, 10) && !near(c, 2) && notFlag(c));
+    const upper = floors.filter((c) => c.y >= PLOT_Y + 5 && notFlag(c));
+    const doors = entrances.filter(notFlag);
+    const orders: TrapOrder[] = [];
+    orders.push({ kind: this.rng.pick(['mine', 'flame', 'gate', 'pendulum'] as TrapKind[]), cands: doors });
+    orders.push({ kind: 'turret', cands: heroFloors.filter((c) => !near(c, 3) && notFlag(c)) });
     const pool = this.rng.shuffle(['spikes', 'flame', 'launcher', 'saw', 'crusher', 'trapdoor', 'mine', 'pendulum', 'gate'] as TrapKind[]);
-    for (const kind of pool) {
-      if (this.traps.slotsUsed(plotIndex) >= TRAP_SLOTS) break;
-      const cands = kind === 'trapdoor' ? upper : kind === 'gate' || kind === 'pendulum' ? res.entrances : kind === 'mine' ? inner.concat(res.entrances) : inner;
-      tryPlace(kind, cands);
+    for (let round = 0; round < 3; round++) for (const kind of pool) orders.push({ kind, cands: kind === 'trapdoor' ? upper : kind === 'gate' || kind === 'pendulum' ? doors : kind === 'mine' ? inner.concat(doors) : inner });
+    return orders;
+  }
+
+  private seedTraps(plotIndex: number, res: FortressResult, owners: Entity[] = []): void {
+    let ownerIdx = 0;
+    for (const o of this.trapOrders(res.flag, res.floors, res.entrances, res.heroFloors)) {
+      if (this.traps.slotsUsed(plotIndex) + TRAP_COST[o.kind] > this.traps.slotsFor(plotIndex)) continue;
+      const owner = owners.length ? owners[ownerIdx++ % owners.length].id : -1;
+      for (const c of this.rng.shuffle(o.cands).slice(0, 24)) if (typeof this.traps.place(o.kind, c, plotIndex, owner) !== 'string') break;
     }
   }
 
@@ -618,7 +887,16 @@ export class Game {
     if (!this.match || !this.builder || this.mode !== 'build') return;
     const plot = this.app.plots[0];
     // An empty or tiny plot gets a generated fortress so every round has an arena.
-    if (this.builder.blocks < 4) this.builder.autoBuild(this.rng.int(1, 1e9));
+    if (this.builder.blocks < 4) this.builder.autoBuild(this.rng.int(1, 1e9), this.match.war ? 'stronghold' : undefined);
+    if (this.teamBuild) {
+      this.teamBuild.active = false;
+      if (this.teamBuild.finishAll() > 0) this.hud.showBanner(t('teamFinished'), '', 3);
+    }
+    // War: the flag defaults to the top of the keep when the commander left it unplaced.
+    if (this.match.war && !this.builder.flag) {
+      const keepTop = this.builder.result?.rooms.filter((r) => r.i === 2 && r.j === 2 && r.floor.length > 0).sort((x, y) => y.k - x.k)[0];
+      if (keepTop) this.builder.placeFlagIn(keepTop.i, keepTop.j, keepTop.k);
+    }
     this.builder.validateNow();
     if (!this.builder.reach.ok) {
       this.builder.ensureMarkers(this.rng);
@@ -629,6 +907,16 @@ export class Game {
     this.match.setFlag(0, flag);
     this.match.setSpawn(0, spawn);
     this.plotSpots.set(0, this.builder.result?.roofSpots ?? []);
+    if (this.match.war) {
+      this.match.war.setFlag(0, new THREE.Vector3(flag.x + 0.5, flag.y, flag.z + 0.5));
+      const res = this.builder.result;
+      const floors = res ? res.rooms.flatMap((r) => r.floor) : [];
+      const heroCells = new Set(res?.hero?.cells ?? []);
+      const heroFloors = res ? res.rooms.filter((r) => heroCells.has(Plan.index(r.i, r.j, r.k))).flatMap((r) => r.floor) : [];
+      this.teamSpawns[0] = this.spawnSpots(floors, flag);
+      this.teamPosts[0] = this.postsFor(0, res?.roofSpots ?? [], res?.entrances ?? [], heroFloors, flag);
+      this.teamOrders = this.trapOrders(flag, floors, res?.entrances ?? [], heroFloors);
+    }
     this.builder.exit();
     this.builderUI?.hide();
     this.app.chunks.flush();
@@ -636,7 +924,7 @@ export class Game {
     this.nav = new NavSystem(this.app.world, this.app.terrain, this.app.plots);
     this.exitOk.clear();
     const t0 = performance.now();
-    this.nav.prepare(this.entities.length);
+    this.nav.prepare(this.match.war ? this.app.plots.length : this.entities.length);
     const navMs = performance.now() - t0;
     if (navMs > 400) console.warn(`navigation build took ${navMs.toFixed(0)}ms`);
     if (timeUp) this.hud.showBanner(t('buildTimeUp'), '', 3);
@@ -684,6 +972,10 @@ export class Game {
     this.local.toolMode = true;
     this.viewModel.hidden = true;
     this.fortify = new Fortify(this.app.world, this.traps, plot, this.app.input, this.app.gr.camera, this.app.gr.scene);
+    if (match.war) {
+      this.fortify.ownerId = this.player.id;
+      this.fortify.personal = 4;
+    }
     this.fortifyUI = new FortifyUI(
       this.uiRoot,
       this.fortify,
@@ -741,6 +1033,7 @@ export class Game {
       // Mechanical traps run so the builder sees blades swing and saws roll; owners are never hurt.
       this.traps.update(dt, this.time);
       this.fortify?.update(dt);
+      if (match.war && this.teamBuild && this.teamOrders) this.teamBuild.updateFortify(dt, this.traps, WAR_PLOTS[0], this.teamOrders);
     }
     if (this.simOnly) return;
     this.updateCharacters(dt);
@@ -783,16 +1076,17 @@ export class Game {
         this.introBannerShown = false;
         this.endBannerShown = false;
         this.summaryShown = false;
-        const plot = this.app.plots[match.targetPlotIndex];
+        const plot = match.war ? this.app.plots[WAR_PLOTS[1]] : this.app.plots[match.targetPlotIndex];
         for (const [idx, fm] of this.flags) {
-          fm.group.visible = idx === match.targetPlotIndex;
+          fm.group.visible = match.war ? true : idx === match.targetPlotIndex;
           fm.setAlert(false);
+          fm.setBeacon(0);
         }
         this.alarmEntity = null;
         this.killerEntity = null;
         this.focus.setAlert(false);
         audio.setIntensity(0);
-        const color = new THREE.Color(match.defender!.colorHex);
+        const color = new THREE.Color(match.war ? TEAM_COLORS[1] : match.defender!.colorHex);
         this.focus.show(new THREE.Vector3(plot.cx, PLOT_Y, plot.cz), color);
         for (const b of this.bots) b.newRound();
         for (const e of this.entities) this.scoreAtRoundStart.set(e.id, e.score.total);
@@ -805,6 +1099,7 @@ export class Game {
         this.vfx.clear();
         this.combat.clearProjectiles();
         this.gadgets.reset();
+        this.repair.reset();
         this.gadgetMeshes.clear();
         this.traps.resetRound();
         this.roundEvents.endRound();
@@ -817,9 +1112,12 @@ export class Game {
         this.mode = 'battle';
         this.setTouchMode();
         this.hud.show();
-        this.roundEvents.startRound(this.rng.int(1, 1e9));
-        const def = match.defender!;
-        this.hud.showBanner(this.player === def ? t('defendFortress') : t('attackFortress', { name: def.name }), t('round', { n: match.roundIndex + 1, total: match.roundOrder.length }), 3.5);
+        if (match.war) this.hud.showBanner(t('warStart'), t('warStartSub'), 4);
+        else {
+          this.roundEvents.startRound(this.rng.int(1, 1e9));
+          const def = match.defender!;
+          this.hud.showBanner(this.player === def ? t('defendFortress') : t('attackFortress', { name: def.name }), t('round', { n: match.roundIndex + 1, total: match.roundOrder.length }), 3.5);
+        }
         this.requestPlayControl();
         break;
       }
@@ -833,6 +1131,14 @@ export class Game {
         this.hud.hide();
         this.viewModel.hidden = true;
         const r = match.lastRound!;
+        if (match.war) {
+          const war = match.war;
+          const my = this.player.team;
+          const title = war.winner === my ? t('victory') : war.winner < 0 ? t('draw') : t('defeat');
+          const rows: SummaryRow[] = match.standings().map((e) => ({ name: e.name, color: e.colorHex, delta: `${e.score.kills} ${t('killsShort')} · ${e.score.captures} ${t('lootsShort')}`, total: e.score.total, isYou: e === this.player }));
+          this.screens.showRoundSummary({ title, sub: `${t('tickets')} ${war.tickets[my]} : ${war.tickets[1 - my]}`, rows }, RULES.summaryTime);
+          break;
+        }
         audio.play(r.reason === 'captured' ? 'captureDone' : 'roundEnd');
         const title = r.reason === 'captured' ? t('flagCaptured', { name: r.capturer?.name ?? '', owner: r.defender.name }) : t('fortressHeld', { owner: r.defender.name });
         const rows: SummaryRow[] = match
@@ -849,6 +1155,16 @@ export class Game {
         this.hud.hide();
         this.focus.hide();
         this.viewModel.hidden = true;
+        if (match.war) {
+          const war = match.war;
+          const my = this.player.team;
+          const title = war.winner === my ? t('victory') : war.winner < 0 ? t('draw') : t('defeat');
+          const row = (e: Entity): WarPodiumRow => ({ name: e.name, color: e.colorHex, kills: e.score.kills, loots: e.score.captures, outposts: e.score.outposts, score: e.score.total, isYou: e === this.player });
+          this.screens.showWarPodium({ title, tickets: [war.tickets[my], war.tickets[1 - my]], colors: [TEAM_COLORS[my], TEAM_COLORS[1 - my]], teams: [match.teamStandings(my).map(row), match.teamStandings(1 - my).map(row)], mvp: match.standings()[0]?.name ?? '' });
+          audio.music('podium');
+          audio.play(war.winner === my ? 'victory' : 'roundEnd');
+          break;
+        }
         const rows: PodiumRow[] = match.standings().map((e) => ({ name: e.name, score: e.score.total, captures: e.score.captures, kills: e.score.kills, defense: formatTime(e.score.defenseSeconds), color: e.colorHex, isYou: e === this.player }));
         this.screens.showPodium(rows);
         audio.music('podium');
@@ -894,9 +1210,9 @@ export class Game {
   /** Round-intro loadout picker (weapon + two gadgets); choices persist in settings. */
   private showLoadout(): void {
     const match = this.match!;
-    const def = match.defender!;
+    const def = match.defender ?? this.player;
     this.screens.showLoadout({
-      title: this.player === def ? t('defendFortress') : t('targetLabel', { name: def.name }),
+      title: match.war ? t('fortressWar') : this.player === def ? t('defendFortress') : t('targetLabel', { name: def.name }),
       weapons: PRIMARY_CHOICES.map((w) => ({ id: w, name: t(WEAPONS[w].nameKey) })),
       weapon: this.playerPrimary,
       gadgets: GADGET_IDS.map((id) => ({ id, name: t(GADGETS[id].nameKey), desc: t(GADGETS[id].descKey), icon: GADGETS[id].icon })),
@@ -923,6 +1239,7 @@ export class Game {
    * sealed room) falls back to its doorstep on the side facing the target.
    */
   private spawnFor(e: Entity, role: Role, targetPlotIndex: number): THREE.Vector3 {
+    if (this.match?.war) return this.warSpawn(e);
     const plotIndex = role === 'defender' ? targetPlotIndex : e.plotIndex;
     const plot = this.app.plots[plotIndex];
     const spawn = this.match?.spawns.get(plotIndex);
@@ -1040,6 +1357,7 @@ export class Game {
     this.focus.hide();
     this.vfx.clear();
     this.gadgets.reset();
+    this.repair.reset();
     this.gadgetMeshes.clear();
     this.traps.clear();
     this.trapMeshes.clear();
@@ -1052,6 +1370,14 @@ export class Game {
     this.nav = null;
     this.bots = [];
     this.entities = [];
+    this.teamBuild = null;
+    this.commanders = [];
+    this.teamPosts = [[], []];
+    this.teamSpawns = [[], []];
+    this.teamOrders = null;
+    this.spawnChoice = -1;
+    this.player.team = -1;
+    this.player.squad = -1;
     this.player.reset();
   }
 
@@ -1107,6 +1433,17 @@ export class Game {
       this.exitOk.delete(plotIndex);
       this.app.chunks.flush();
     });
+    // Repairs change the world the same way a blast does, in reverse.
+    this.repair.onChanged = (plotIndex) => {
+      this.nav?.invalidatePlot(plotIndex);
+      this.exitOk.delete(plotIndex);
+      this.app.chunks.flush();
+    };
+    this.repair.onRepaired = (pos, cells) => {
+      this.vfx.debrisBurst(pos, new THREE.Vector3(0, 1, 0), Math.min(30, 6 + cells * 2), new THREE.Color(0xd8c48a));
+      audio.play('place', { pos, volume: 0.9, pitch: 0.8 });
+    };
+    this.repair.occupied = (x, y, z) => this.entities.some((e) => e.alive && Math.abs(e.pos.x - (x + 0.5)) < 0.95 && Math.abs(e.pos.z - (z + 0.5)) < 0.95 && e.pos.y < y + 1 && e.pos.y + 1.9 > y);
   }
 
   private wireCombat(): void {
@@ -1223,8 +1560,20 @@ export class Game {
         }
         break;
       case 'build':
-        if (!this.paused) this.builder?.update(dt);
+        if (!this.paused) {
+          this.builder?.update(dt);
+          this.teamBuild?.update(dt);
+        }
         this.builderUI?.update(dt, match?.buildTimeLeft ?? null);
+        if (this.teamBuild && this.builderUI && !this.simOnly) {
+          const plot = this.app.plots[0];
+          this.builderUI.setCursors(
+            this.teamBuild.cursors().map((c) => {
+              const sc = this.toScreen(new THREE.Vector3(plot.minX + c.i * CELL + CELL / 2, PLOT_Y + c.k * STOREY_H + STOREY_H * 0.6, plot.minZ + c.j * CELL + CELL / 2), 20);
+              return { name: c.bot.name, color: c.bot.colorHex, sx: sc.sx, sy: sc.sy, visible: sc.onScreen };
+            }),
+          );
+        }
         this.cameraFocus.copy(this.app.gr.camera.position);
         break;
       case 'fortify':
@@ -1238,7 +1587,7 @@ export class Game {
         break;
       case 'summary':
       case 'podium':
-        this.cinematicCamera(dt, this.mode === 'podium' ? this.winnerPlot() : this.app.plots[match?.lastRound?.plotIndex ?? 0]);
+        this.cinematicCamera(dt, this.mode === 'podium' ? this.winnerPlot() : this.app.plots[match?.war ? WAR_PLOTS[match.war.winner === 1 ? 1 : 0] : Math.max(0, match?.lastRound?.plotIndex ?? 0)]);
         this.updateCharacters(dt);
         if (this.mode === 'summary' && match) this.screens.updateSummaryCountdown(RULES.summaryTime - match.phaseTimer);
         break;
@@ -1329,7 +1678,7 @@ export class Game {
 
   private introUpdate(dt: number): void {
     const match = this.match!;
-    const plot = this.app.plots[match.targetPlotIndex];
+    const plot = this.app.plots[match.war ? WAR_PLOTS[0] : match.targetPlotIndex];
     if (!this.simOnly) {
       if (match.phaseTimer < 0.05) this.flybyAngle = Math.atan2(this.player.pos.z - plot.cz, this.player.pos.x - plot.cx) - 0.6;
       this.flybyCamera(dt, plot, match.phaseTimer / RULES.introTime);
@@ -1340,9 +1689,9 @@ export class Game {
     this.screens.updateLoadoutCountdown(RULES.introTime - match.phaseTimer);
     if (!this.introBannerShown) {
       this.introBannerShown = true;
-      const def = match.defender!;
-      const title = this.player === def ? t('defendFortress') : t('targetLabel', { name: def.name });
-      this.hud.showBanner(title, t('intro'), 2.6);
+      const def = match.defender;
+      const title = match.war ? t('fortressWar') : this.player === def ? t('defendFortress') : t('targetLabel', { name: def?.name ?? '' });
+      this.hud.showBanner(title, match.war ? t('warIntro') : t('intro'), 2.6);
     }
   }
 
@@ -1360,8 +1709,17 @@ export class Game {
       if (wasAlive && !this.player.alive) {
         /* death handled via events */
       }
-      // Bots
-      if (!this.debugFreezeBots) for (const b of this.bots) b.update(simDt, this.time);
+      // Bots (war: the commanders hand out tasks first)
+      if (!this.debugFreezeBots) {
+        for (const c of this.commanders) c.update(simDt, this.time);
+        for (const b of this.bots) b.update(simDt, this.time);
+      }
+      if (match.war && !this.player.alive) {
+        if (input.wasPressed('Digit1')) this.spawnChoice = -1;
+        for (let i = 0; i < 3; i++) if (input.wasPressed(`Digit${i + 2}`)) this.spawnChoice = i;
+      }
+      if (match.war && this.player.alive) this.playerRepair(simDt);
+      else this.repairTimer = 0;
       this.gadgets.update(simDt, this.time);
       this.traps.update(simDt, this.time);
       this.roundEvents.update(simDt, this.time);
@@ -1505,6 +1863,42 @@ export class Game {
     }
   }
 
+  private repairTimer = 0;
+  /**
+   * Live repair for the human: standing by a hole a blast left in our own walls closes it after a few
+   * seconds and costs supplies. Nothing to press; walking away cancels.
+   */
+  private playerRepair(dt: number): void {
+    const war = this.match!.war!;
+    const p = this.player;
+    const plot = WAR_PLOTS[p.team];
+    if (this.repair.near(p.pos, WAR.repairRange, plot).length === 0) {
+      this.repairTimer = 0;
+      return;
+    }
+    if (war.supplies[p.team] < WAR.repairCost) {
+      this.repairTimer = 0;
+      this.showPrompt(t('noSupplies'), 0.2);
+      return;
+    }
+    this.repairTimer += dt;
+    if (this.repairTimer < WAR.repairTime) {
+      this.showPrompt(t('repairing', { pct: Math.round((100 * this.repairTimer) / WAR.repairTime) }), 0.2);
+      return;
+    }
+    this.repairTimer = 0;
+    const n = this.repair.repair(p.pos, WAR.repairRange + 1, WAR.repairCells, plot);
+    if (n > 0) {
+      war.spend(p.team, WAR.repairCost);
+      this.showPrompt(t('repaired', { n, cost: WAR.repairCost }), 1.8);
+    }
+  }
+
+  private showPrompt(text: string, seconds: number): void {
+    this.promptText = text;
+    this.promptUntil = this.time + seconds;
+  }
+
   private hudState(): HudState {
     const match = this.match!;
     const p = this.player;
@@ -1512,11 +1906,14 @@ export class Game {
     const def = match.defender;
     const flag = match.currentFlag;
     const standings = match.standings();
+    const war = match.war;
+    const my = p.team;
     const others = this.entities
-      .filter((e) => e !== p && e.alive && e.pos.distanceTo(p.pos) < 14)
+      .filter((e) => e !== p && e.alive && ((war && e.team === my) || e.pos.distanceTo(p.pos) < 14))
       .map((e) => ({ x: e.pos.x, z: e.pos.z, color: e.colorHex }));
     let flagThreat = 0;
-    if (p.role === 'defender') for (const e of this.entities) if (e !== p) flagThreat = Math.max(flagThreat, e.captureProgress / RULES.captureTime);
+    if (war) flagThreat = war.capture[my] / match.captureTime;
+    else if (p.role === 'defender') for (const e of this.entities) if (e !== p) flagThreat = Math.max(flagThreat, e.captureProgress / RULES.captureTime);
     const spread = w ? THREE.MathUtils.lerp(WEAPONS[w.id].spread, WEAPONS[w.id].adsSpread, p.ads) * 6 + Math.min(20, Math.sqrt(p.vel.x * p.vel.x + p.vel.z * p.vel.z) * 1.2) : 4;
     const objective = this.objectiveMarker();
     // Crosshair colour: is a living enemy under the reticle?
@@ -1541,7 +1938,9 @@ export class Game {
       }
       // The capturer is called out to everyone else, through walls.
       const cap = this.alarmEntity;
-      if (cap && cap !== p && cap.alive) this.pushMarker(markers, cap, 'capture');
+      if (cap && cap !== p && cap.alive) this.pushMarker(markers, cap, cap.team >= 0 && cap.team === my ? 'ally' : 'capture');
+      // War: squadmates are always marked so the squad stays together.
+      if (war) for (const e of this.entities) if (e !== p && e.alive && e.team === my && e.squad === p.squad && e !== cap && e.pos.distanceTo(p.pos) < 70) this.pushMarker(markers, e, 'ally');
       // Radar pulse (streak reward): every enemy for a few seconds.
       if (p.radarUntil > this.time) for (const e of this.entities) if (e !== p && e.alive && e !== cap) this.pushMarker(markers, e, 'radar');
       // Comeback: last place always knows where the leader is.
@@ -1549,7 +1948,7 @@ export class Game {
         const lead = standings[0];
         if (lead !== p && lead.alive && lead !== cap) this.pushMarker(markers, lead, 'leader');
       }
-      const order: Record<HudMarker['kind'], number> = { capture: 0, threat: 1, leader: 2, radar: 3, near: 4 };
+      const order: Record<HudMarker['kind'], number> = { capture: 0, threat: 1, leader: 2, radar: 3, near: 4, ally: 5 };
       markers.sort((a, b) => order[a.kind] - order[b.kind] || a.dist - b.dist);
     }
     const grenadeWarnings: HudState['grenadeWarnings'] = [];
@@ -1591,13 +1990,40 @@ export class Game {
       totalRounds: match.roundOrder.length,
       role: p.role,
       targetName: def?.name ?? '',
-      capture: { progress: clamp(p.captureProgress / RULES.captureTime, 0, 1), contested: !!(def && def.alive && flag && def.pos.distanceTo(flag.pos) < RULES.captureRadius && p.captureProgress > 0), active: p.role === 'attacker' && p.captureProgress > 0.01 },
+      capture: {
+        progress: clamp(p.captureProgress / match.captureTime, 0, 1),
+        contested: war ? p.captureProgress > 0 && this.entities.some((o) => o.alive && o.team === 1 - my && war.nearFlag(o, 1 - my)) : !!(def && def.alive && flag && def.pos.distanceTo(flag.pos) < RULES.captureRadius && p.captureProgress > 0),
+        active: p.role === 'attacker' && p.captureProgress > 0.01,
+      },
       flagThreat,
       armor: p.armor,
       burning: p.burnUntil > this.time,
       streak: p.streak,
       overtime: match.overtime,
-      alarm: this.alarmEntity && this.alarmEntity !== p && match.phase === 'round' ? (p.role === 'defender' ? 'defender' : 'attacker') : 'none',
+      alarm: war
+        ? war.capturer[my] && match.phase === 'round'
+          ? 'defender'
+          : war.capturer[1 - my] && war.capturer[1 - my] !== p && match.phase === 'round'
+            ? 'attacker'
+            : 'none'
+        : this.alarmEntity && this.alarmEntity !== p && match.phase === 'round'
+          ? p.role === 'defender'
+            ? 'defender'
+            : 'attacker'
+          : 'none',
+      war: war
+        ? {
+            team: my,
+            tickets: [war.tickets[my], war.tickets[1 - my]],
+            colors: [TEAM_COLORS[my], TEAM_COLORS[1 - my]],
+            outposts: war.outposts.map((o) => ({ label: o.label, owner: o.owner < 0 ? null : TEAM_COLORS[o.owner], mine: o.owner === my, progress: o.progress, capturing: o.team < 0 ? null : TEAM_COLORS[o.team], contested: o.contested })),
+            supplies: war.supplies[my],
+            flagDown: [war.flagDown(my), war.flagDown(1 - my)],
+            spawnChoices: p.alive
+              ? null
+              : [{ label: t('spawnFortress'), key: '1', selected: this.spawnChoice < 0, enabled: true }].concat(war.outposts.map((o) => ({ label: t('spawnPoint', { label: o.label }), key: String(o.index + 2), selected: this.spawnChoice === o.index, enabled: o.owner === my }))),
+          }
+        : null,
       score: p.score.total,
       rank: standings.indexOf(p) + 1,
       players: this.entities.length,
@@ -1613,7 +2039,10 @@ export class Game {
         target: match.targetPlotIndex >= 0 ? { x: this.app.plots[match.targetPlotIndex].cx, z: this.app.plots[match.targetPlotIndex].cz } : null,
         zoneRadius: ZONE_RADIUS,
         flag: p.role === 'defender' && flag ? { x: flag.pos.x, z: flag.pos.z } : null,
-        plots: this.app.plots.slice(0, this.entities.length).map((pl) => ({ x: pl.cx, z: pl.cz, active: pl.index === match.targetPlotIndex, color: this.entities.find((e) => e.plotIndex === pl.index)?.colorHex ?? '#888' })),
+        plots: war
+          ? WAR_PLOTS.map((pi, team) => ({ x: this.app.plots[pi].cx, z: this.app.plots[pi].cz, active: false, color: TEAM_COLORS[team] }))
+          : this.app.plots.slice(0, this.entities.length).map((pl) => ({ x: pl.cx, z: pl.cz, active: pl.index === match.targetPlotIndex, color: this.entities.find((e) => e.plotIndex === pl.index)?.colorHex ?? '#888' })),
+        points: war ? war.outposts.map((o) => ({ x: o.pos.x, z: o.pos.z, label: o.label, color: o.owner < 0 ? null : TEAM_COLORS[o.owner], progress: o.progress, progressColor: o.team < 0 ? null : TEAM_COLORS[o.team] })) : [],
         others,
       },
     };
@@ -1702,13 +2131,14 @@ export class Game {
 
   private objectiveMarker(): HudState['objective'] {
     const match = this.match;
-    if (!match || match.targetPlotIndex < 0 || this.player.role !== 'attacker' || this.mode !== 'battle') return null;
-    const plot = this.app.plots[match.targetPlotIndex];
+    if (!match || this.player.role !== 'attacker' || this.mode !== 'battle') return null;
+    if (!match.war && match.targetPlotIndex < 0) return null;
+    const plot = match.war ? this.app.plots[WAR_PLOTS[1 - this.player.team]] : this.app.plots[match.targetPlotIndex];
     const p = this.player.pos;
     const dist = Math.hypot(p.x - plot.cx, p.z - plot.cz);
     if (dist < 26) return null;
     const sc = this.toScreen(new THREE.Vector3(plot.cx, PLOT_Y + 14, plot.cz), 56);
-    return { sx: sc.sx, sy: sc.sy, dist, onScreen: sc.onScreen, angle: sc.angle, label: match.defender ? match.defender.name : '' };
+    return { sx: sc.sx, sy: sc.sy, dist, onScreen: sc.onScreen, angle: sc.angle, label: match.war ? t('enemyFlag') : match.defender ? match.defender.name : '' };
   }
 
   /** Projects a world point to the screen; off-screen points are clamped to the edge with a pointing angle. */
@@ -2023,6 +2453,9 @@ export class Game {
     return {
       mode: this.mode,
       phase: this.match?.phase,
+      war: this.match?.war
+        ? { tickets: this.match.war.tickets.slice(), outposts: this.match.war.outposts.map((o) => `${o.label}:${o.owner}:${o.progress.toFixed(2)}`), capture: this.match.war.capture.map((c) => Math.round(c * 10) / 10), ended: this.match.war.ended, winner: this.match.war.winner, commanders: this.commanders.map((c) => c.summary), supplies: this.match.war.supplies.slice() }
+        : null,
       fortify: this.fortify ? { kind: this.fortify.kind, slots: this.fortify.slots, aim: this.fortify.aim.cell, reason: this.fortify.aim.reason, existing: this.fortify.aim.existing?.kind ?? null, cells: this.fortify.aim.cells.length } : null,
       round: this.match?.roundIndex,
       target,
@@ -2040,6 +2473,8 @@ export class Game {
         score: e.score.total,
         captures: e.score.captures,
         kills: e.score.kills,
+        team: e.team,
+        task: e.task,
         state: this.bots.find((b) => b.entity === e)?.state ?? 'human',
       })),
     };

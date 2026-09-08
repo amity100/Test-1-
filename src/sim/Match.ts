@@ -4,13 +4,20 @@ import type { Entity, Role } from './Entities';
 import type { StyleId } from '../world/Styles';
 import type { Cell } from '../world/Reachability';
 import { Random } from '../core/Random';
+import { WarState, WAR } from './War';
 
 export type Difficulty = 'easy' | 'normal' | 'hard' | 'nightmare';
 export type Phase = 'lobby' | 'build' | 'fortify' | 'roundIntro' | 'round' | 'roundEnd' | 'podium';
 
+export type GameMode = 'classic' | 'war';
+
 export interface MatchConfig {
   playerName: string;
+  /** Classic: opponents. War: filled in from teamSize. */
   botCount: number;
+  /** Fortress War: two teams of this many (bots fill the rest). Classic when absent. */
+  mode?: GameMode;
+  teamSize?: number;
   difficulty: Difficulty;
   /** Seconds; 0 = unlimited. */
   buildTime: number;
@@ -29,7 +36,7 @@ export interface SpawnResolver {
   spawnFor(entity: Entity, role: Role, targetPlotIndex: number): THREE.Vector3;
 }
 
-export type ScoreReason = 'capture' | 'hold' | 'kill' | 'killDefender' | 'defense' | 'holdMinute';
+export type ScoreReason = 'capture' | 'hold' | 'kill' | 'killDefender' | 'defense' | 'holdMinute' | 'outpost' | 'flagDefense';
 
 export interface MatchEvents extends Record<string, unknown> {
   phase: { phase: Phase; prev: Phase };
@@ -45,6 +52,12 @@ export interface MatchEvents extends Record<string, unknown> {
   alarm: { entity: Entity | null; on: boolean };
   /** The clock ran out mid-capture: the round continues without respawns until it is decided. */
   overtime: Record<string, never>;
+  // Fortress War
+  warAlarm: { team: number; on: boolean; capturer: Entity | null };
+  warCaptured: { team: number; by: Entity[] };
+  warOutpost: { index: number; owner: number; prev: number; by: Entity[] };
+  warTickets: { team: number; tickets: number; delta: number; reason: 'kill' | 'capture' | 'drain' };
+  warEnd: { winner: number };
 }
 
 export const SCORE = {
@@ -55,6 +68,9 @@ export const SCORE = {
   killAsDefender: 8,
   /** Every full minute the flag stays safe pays the defender (a comeback for a losing defender). */
   holdMinute: 15,
+  /** War: taking a capture point, and killing an enemy who is on your flag. */
+  outpost: 15,
+  flagDefense: 10,
 };
 
 export const RULES = {
@@ -95,9 +111,30 @@ export class Match {
   private overtimeTimer = 0;
   private rng: Random;
   private captureAccum = new Map<number, number>();
+  /** Fortress War state (null in the classic rotation). */
+  readonly war: WarState | null;
 
   constructor(readonly config: MatchConfig, private resolver: SpawnResolver, seed = Date.now()) {
     this.rng = new Random(seed >>> 0);
+    this.war =
+      config.mode === 'war'
+        ? new WarState({
+            alarm: (team, on, capturer) => this.events.emit('warAlarm', { team, on, capturer }),
+            captured: (team, by) => this.onWarCaptured(team, by),
+            outpost: (index, owner, prev, by) => this.onWarOutpost(index, owner, prev, by),
+            tickets: (team, tickets, delta, reason) => this.events.emit('warTickets', { team, tickets, delta, reason }),
+            end: (winner) => this.events.emit('warEnd', { winner }),
+          })
+        : null;
+  }
+
+  get isWar(): boolean {
+    return this.war !== null;
+  }
+
+  /** Seconds on the flag that complete a capture in this mode. */
+  get captureTime(): number {
+    return this.war ? WAR.captureTime : RULES.captureTime;
   }
 
   setEntities(list: Entity[]): void {
@@ -138,10 +175,10 @@ export class Match {
     return this.config.buildTime > 0 ? Math.max(0, this.fortifyTimer) : null;
   }
 
-  /** Ends the trap walk and schedules rounds (one per entity, shuffled). */
+  /** Ends the trap walk and schedules rounds (one per entity, shuffled; a single battle in war). */
   finishFortify(): void {
     if (this.phase !== 'fortify') return;
-    this.roundOrder = this.rng.shuffle(this.entities.map((_, i) => i));
+    this.roundOrder = this.war ? [0] : this.rng.shuffle(this.entities.map((_, i) => i));
     this.roundIndex = -1;
     this.nextRound();
   }
@@ -152,6 +189,19 @@ export class Match {
       this.defender = null;
       this.targetPlotIndex = -1;
       this.setPhase('podium');
+      return;
+    }
+    if (this.war) {
+      // One long battle: everyone attacks and defends at once.
+      this.defender = null;
+      this.targetPlotIndex = -1;
+      for (const e of this.entities) {
+        e.role = 'attacker';
+        e.captureProgress = 0;
+      }
+      this.alarmEntity = null;
+      this.overtime = false;
+      this.setPhase('roundIntro');
       return;
     }
     const defender = this.entities[this.roundOrder[this.roundIndex]];
@@ -175,7 +225,7 @@ export class Match {
       e.deadSince = -1;
       e.pos.copy(this.resolver.spawnFor(e, e.role, this.targetPlotIndex));
       // Face the target fortress.
-      const flag = this.currentFlag;
+      const flag = this.war ? this.war.enemyFlag(e.team) : this.currentFlag;
       if (flag) {
         const dx = flag.pos.x - e.pos.x;
         const dz = flag.pos.z - e.pos.z;
@@ -186,7 +236,7 @@ export class Match {
     }
     void now;
     this.setPhase('round');
-    this.events.emit('roundStart', { round: this.roundIndex + 1, total: this.roundOrder.length, defender: this.defender!, plotIndex: this.targetPlotIndex });
+    this.events.emit('roundStart', { round: this.roundIndex + 1, total: this.roundOrder.length, defender: this.defender ?? this.entities[0], plotIndex: this.targetPlotIndex });
   }
 
   get currentFlag(): FlagInfo | null {
@@ -202,13 +252,37 @@ export class Match {
     if (this.phase !== 'round') return;
     if (killer && killer !== victim) {
       killer.score.kills++;
-      const asDefender = killer.role === 'defender';
+      // War: a kill on someone standing on your own flag is a flag defence (worth more).
+      const asDefender = this.war ? victim.captureProgress > 0.05 : killer.role === 'defender';
       if (asDefender) killer.score.killsAsDefender++;
-      const delta = asDefender ? SCORE.killAsDefender : SCORE.kill;
+      const delta = asDefender ? (this.war ? SCORE.kill + SCORE.flagDefense : SCORE.killAsDefender) : SCORE.kill;
       this.recompute(killer);
-      this.events.emit('score', { entity: killer, delta, reason: asDefender ? 'killDefender' : 'kill' });
+      this.events.emit('score', { entity: killer, delta, reason: asDefender ? (this.war ? 'flagDefense' : 'killDefender') : 'kill' });
+    }
+    if (this.war) {
+      this.war.onKill(victim, killer);
+      victim.respawnAt = now + (this.war && (this.war.capturer[victim.team] || this.war.flagDown(victim.team)) ? WAR.respawnAlarm : WAR.respawn);
+      return;
     }
     victim.respawnAt = now + (victim.role === 'defender' ? RULES.respawnDefender : RULES.respawnAttacker);
+  }
+
+  private onWarCaptured(team: number, by: Entity[]): void {
+    for (const e of by) {
+      e.score.captures++;
+      this.recompute(e);
+      this.events.emit('score', { entity: e, delta: SCORE.capture, reason: 'capture' });
+    }
+    this.events.emit('warCaptured', { team, by });
+  }
+
+  private onWarOutpost(index: number, owner: number, prev: number, by: Entity[]): void {
+    for (const e of by) {
+      e.score.outposts++;
+      this.recompute(e);
+      this.events.emit('score', { entity: e, delta: SCORE.outpost, reason: 'outpost' });
+    }
+    this.events.emit('warOutpost', { index, owner, prev, by });
   }
 
   recompute(e: Entity): void {
@@ -218,12 +292,18 @@ export class Match {
       s.holdBonuses * SCORE.hold +
       s.holdMinutes * SCORE.holdMinute +
       s.captures * SCORE.capture +
+      s.outposts * SCORE.outpost +
       (s.kills - s.killsAsDefender) * SCORE.kill +
-      s.killsAsDefender * SCORE.killAsDefender;
+      s.killsAsDefender * (this.war ? SCORE.kill + SCORE.flagDefense : SCORE.killAsDefender);
   }
 
   standings(): Entity[] {
     return [...this.entities].sort((a, b) => b.score.total - a.score.total || b.score.captures - a.score.captures || b.score.kills - a.score.kills);
+  }
+
+  /** War: teammates of one side, best first. */
+  teamStandings(team: number): Entity[] {
+    return this.standings().filter((e) => e.team === team);
   }
 
   update(dt: number, now: number): void {
@@ -262,6 +342,10 @@ export class Match {
   }
 
   private updateRound(dt: number, now: number): void {
+    if (this.war) {
+      this.updateWar(dt, now);
+      return;
+    }
     const defender = this.defender!;
     const flag = this.currentFlag;
     this.roundTimer -= dt;
@@ -327,6 +411,37 @@ export class Match {
         this.overtimeTimer += dt;
         if (!contest || this.overtimeTimer > RULES.overtimeMax) this.endRound('timeout', null);
       }
+    }
+  }
+
+  /** Fortress War tick: respawns, capture zones, tickets; the battle ends on tickets or the clock. */
+  private updateWar(dt: number, now: number): void {
+    const war = this.war!;
+    this.roundTimer -= dt;
+    for (const e of this.entities) {
+      if (!e.alive && e.respawnAt > 0 && now >= e.respawnAt) {
+        e.reset();
+        e.respawnAt = 0;
+        e.pos.copy(this.resolver.spawnFor(e, e.role, this.targetPlotIndex));
+        const flag = war.enemyFlag(e.team);
+        if (flag) {
+          e.yaw = Math.atan2(-(flag.pos.x - e.pos.x), -(flag.pos.z - e.pos.z));
+          e.pitch = 0;
+        }
+        this.events.emit('spawn', { entity: e, initial: false });
+      }
+    }
+    war.update(dt, this.entities);
+    if (this.roundTimer <= 0) {
+      this.roundTimer = 0;
+      war.finish();
+    }
+    if (war.ended) {
+      for (const e of this.entities) e.captureProgress = 0;
+      const payload: MatchEvents['roundEnd'] = { reason: 'timeout', defender: this.entities[0], capturer: null, plotIndex: -1, round: 1, total: 1 };
+      this.lastRound = payload;
+      this.setPhase('roundEnd');
+      this.events.emit('roundEnd', payload);
     }
   }
 

@@ -15,11 +15,11 @@ import { Emitter } from '../core/Events';
 import type { TrapKind, TrapSystem } from '../sim/Traps';
 import { clamp, damp } from '../core/MathUtil';
 
-export type BuilderTool = 'build' | 'erase' | 'flag' | 'trap';
+export type BuilderTool = 'build' | 'erase' | 'flag' | 'trap' | 'ping';
 
 export interface BuilderEvents extends Record<string, unknown> {
   change: Record<string, never>;
-  placed: { i: number; j: number; k: number };
+  placed: { i: number; j: number; k: number; by: number };
   removed: { i: number; j: number; k: number };
   invalid: { key: string };
   /** Cells that turned solid this edit (for dust puffs). */
@@ -100,8 +100,10 @@ export class Builder {
     private input: Input,
     private camera: THREE.PerspectiveCamera,
     private scene: THREE.Scene,
+    /** Fortress War: stronghold rules (few doors, arrow slits). */
+    readonly fortified = false,
   ) {
-    this.architect = new Architect(plot, style);
+    this.architect = new Architect(plot, style, fortified);
     this.focus.set(plot.cx + 0.5, PLOT_Y + 6, plot.cz + 0.5);
     const ghostGeo = new THREE.BoxGeometry(CELL - 0.1, STOREY_H - 0.1, CELL - 0.1);
     this.ghost = new THREE.Mesh(ghostGeo, new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.22, depthWrite: false }));
@@ -246,18 +248,35 @@ export class Builder {
   }
 
   /** Adds a block at a plan cell with the current tone. */
-  addBlock(i: number, j: number, k: number, tone: Tone = this.tone): boolean {
+  addBlock(i: number, j: number, k: number, tone: Tone = this.tone, by = -1): boolean {
     if (!Plan.inside(i, j, k) || this.plan.has(i, j, k)) return false;
     if (this.plan.count() >= MAX_BLOCKS) {
-      this.events.emit('invalid', { key: 'budgetFull' });
+      if (by < 0) this.events.emit('invalid', { key: 'budgetFull' });
       return false;
     }
     const before = this.snapshot();
     this.plan.set(i, j, k, tone);
-    this.commit(before);
+    if (by < 0) this.commit(before);
     this.regenerate();
-    this.events.emit('placed', { i, j, k });
+    this.events.emit('placed', { i, j, k, by });
     this.debugLast = `add:${i},${j},${k}:${tone}`;
+    return true;
+  }
+
+  /** Commander pings: columns teammates should build next ("a tower here"). */
+  readonly pings: { i: number; j: number }[] = [];
+
+  togglePing(i: number, j: number): boolean {
+    const at = this.pings.findIndex((p) => p.i === i && p.j === j);
+    if (at >= 0) {
+      this.pings.splice(at, 1);
+      this.events.emit('change', {});
+      return false;
+    }
+    if (!Plan.inside(i, j, 0)) return false;
+    this.pings.push({ i, j });
+    if (this.pings.length > 6) this.pings.shift();
+    this.events.emit('change', {});
     return true;
   }
 
@@ -495,6 +514,13 @@ export class Builder {
         if (a.hit) return this.placeFlagIn(a.hit[0], a.hit[1], a.hit[2]);
         this.events.emit('invalid', { key: 'flagNeedsRoom' });
         return false;
+      case 'ping': {
+        const col = a.hit ?? a.add;
+        if (!col) return false;
+        this.togglePing(col[0], col[1]);
+        this.debugLast = `ping:${col[0]},${col[1]}`;
+        return true;
+      }
       case 'trap': {
         const cell = this.pickFloor(sx, sy);
         if (!cell || !this.traps) {

@@ -3,7 +3,7 @@ import { t, setLang, getLang } from '../core/i18n';
 import { VERSION } from '../core/Version';
 import { settings, type Quality, type Language } from '../core/Settings';
 import { STYLE_IDS, STYLES, type StyleId } from '../world/Styles';
-import type { MatchConfig, Difficulty } from '../sim/Match';
+import type { MatchConfig, Difficulty, GameMode } from '../sim/Match';
 import { PALETTE } from '../world/Voxel';
 
 export interface ScreenCallbacks {
@@ -33,6 +33,25 @@ export interface SummaryData {
   title: string;
   sub: string;
   rows: SummaryRow[];
+}
+
+export interface WarPodiumRow {
+  name: string;
+  color: string;
+  kills: number;
+  loots: number;
+  outposts: number;
+  score: number;
+  isYou: boolean;
+}
+
+export interface WarPodiumData {
+  title: string;
+  tickets: [number, number];
+  colors: [string, string];
+  /** Our team first, then theirs. */
+  teams: [WarPodiumRow[], WarPodiumRow[]];
+  mvp: string;
 }
 
 export interface PodiumRow {
@@ -78,6 +97,7 @@ export class Screens {
   private updateReady = false;
   private lastSummary: SummaryData | null = null;
   private lastPodium: PodiumRow[] | null = null;
+  private lastWarPodium: WarPodiumData | null = null;
   private nextInEl: HTMLElement | null = null;
   private lastLoadout: LoadoutData | null = null;
   private loadoutCount: HTMLElement | null = null;
@@ -85,7 +105,7 @@ export class Screens {
   constructor(parent: HTMLElement, private cb: ScreenCallbacks) {
     this.root = el('div', 'screens');
     parent.appendChild(this.root);
-    this.setup = { playerName: settings.data.playerName, botCount: 5, difficulty: 'normal', buildTime: 300, roundTime: 240, style: 'medieval' };
+    this.setup = { playerName: settings.data.playerName, botCount: 5, difficulty: 'normal', buildTime: 90, roundTime: 240, style: 'medieval', mode: 'war', teamSize: 8 };
     try {
       const raw = localStorage.getItem(SETUP_KEY);
       if (raw) this.setup = { ...this.setup, ...JSON.parse(raw) };
@@ -133,7 +153,7 @@ export class Screens {
       case 'howto': this.showHowTo(); break;
       case 'pause': this.showPause(); break;
       case 'summary': if (this.lastSummary) this.showRoundSummary(this.lastSummary, 0); break;
-      case 'podium': if (this.lastPodium) this.showPodium(this.lastPodium); break;
+      case 'podium': if (this.lastWarPodium) this.showWarPodium(this.lastWarPodium); else if (this.lastPodium) this.showPodium(this.lastPodium); break;
       case 'loadout': if (this.lastLoadout) this.showLoadout(this.lastLoadout); break;
       default: break;
     }
@@ -187,16 +207,46 @@ export class Screens {
       this.setup.playerName = name.value;
     });
     grid.appendChild(field(t('yourName'), name));
+    const war = (this.setup.mode ?? 'war') === 'war';
     grid.appendChild(
       field(
-        t('bots'),
-        segmented(
-          [1, 2, 3, 4, 5, 6, 7].map((n) => ({ value: n, label: String(n) })),
-          this.setup.botCount,
-          (v) => (this.setup.botCount = v),
+        t('gameMode'),
+        segmented<GameMode>(
+          [
+            { value: 'war', label: t('modeWar') },
+            { value: 'classic', label: t('modeClassic') },
+          ],
+          this.setup.mode ?? 'war',
+          (v) => {
+            this.setup.mode = v;
+            this.showSetup();
+          },
         ),
       ),
     );
+    if (war) {
+      grid.appendChild(
+        field(
+          t('teamSize'),
+          segmented(
+            [4, 6, 8, 12].map((n) => ({ value: n, label: `${n} v ${n}` })),
+            this.setup.teamSize ?? 8,
+            (v) => (this.setup.teamSize = v),
+          ),
+        ),
+      );
+    } else {
+      grid.appendChild(
+        field(
+          t('bots'),
+          segmented(
+            [1, 2, 3, 4, 5, 6, 7].map((n) => ({ value: n, label: String(n) })),
+            this.setup.botCount,
+            (v) => (this.setup.botCount = v),
+          ),
+        ),
+      );
+    }
     grid.appendChild(
       field(
         t('difficulty'),
@@ -216,18 +266,25 @@ export class Screens {
       field(
         t('buildTime'),
         segmented(
-          [
-            { value: 180, label: t('minutes', { n: 3 }) },
-            { value: 300, label: t('minutes', { n: 5 }) },
-            { value: 480, label: t('minutes', { n: 8 }) },
-            { value: 0, label: t('unlimited') },
-          ],
+          war
+            ? [
+                { value: 90, label: t('seconds', { n: 90 }) },
+                { value: 180, label: t('minutes', { n: 3 }) },
+                { value: 300, label: t('minutes', { n: 5 }) },
+                { value: 0, label: t('unlimited') },
+              ]
+            : [
+                { value: 180, label: t('minutes', { n: 3 }) },
+                { value: 300, label: t('minutes', { n: 5 }) },
+                { value: 480, label: t('minutes', { n: 8 }) },
+                { value: 0, label: t('unlimited') },
+              ],
           this.setup.buildTime,
           (v) => (this.setup.buildTime = v),
         ),
       ),
     );
-    grid.appendChild(field(t('roundTime'), el('div', 'muted', t('minutes', { n: 4 }))));
+    grid.appendChild(field(t('roundTime'), el('div', 'muted', war ? t('minutes', { n: 12 }) : t('minutes', { n: 4 }))));
     p.appendChild(grid);
     // Style picker
     const styles = el('div', 'styles');
@@ -266,7 +323,7 @@ export class Screens {
         } catch {
           /* ignore */
         }
-        this.cb.start({ ...this.setup });
+        this.cb.start({ ...this.setup, roundTime: (this.setup.mode ?? 'war') === 'war' ? 720 : 240 });
       }),
     );
     p.appendChild(row);
@@ -399,6 +456,7 @@ export class Screens {
 
   showPodium(rows: PodiumRow[]): void {
     this.lastPodium = rows;
+    this.lastWarPodium = null;
     const p = el('div', 'panel podium');
     const winner = rows[0];
     p.innerHTML = `<h2>${esc(t('podium'))}</h2><div class="winner"><span class="crown">👑</span> ${esc(t('winner'))}: <b style="color:${winner?.color}">${esc(winner?.name ?? '')}</b></div>`;
@@ -420,8 +478,43 @@ export class Screens {
     this.mount('podium', p);
   }
 
+  /** Fortress War result: the outcome, the ticket score, the MVP, and both rosters side by side. */
+  showWarPodium(data: WarPodiumData): void {
+    this.lastWarPodium = data;
+    this.lastPodium = null;
+    const p = el('div', 'panel podium war');
+    p.innerHTML =
+      `<div class="stitle">${esc(data.title)}</div>` +
+      `<div class="ssub">${esc(t('tickets'))} <b style="color:${data.colors[0]}">${data.tickets[0]}</b> : <b style="color:${data.colors[1]}">${data.tickets[1]}</b>` +
+      `<span class="mvp">${esc(t('mvp'))} <b>${esc(data.mvp)}</b></span></div>`;
+    const cols = el('div', 'wteams');
+    data.teams.forEach((rows, i) => {
+      const col = el('div', 'wteam');
+      col.innerHTML = `<h3 style="color:${data.colors[i]}">${esc(i === 0 ? t('ourTeam') : t('enemyTeam'))}</h3>`;
+      const table = el('table', 'ptable');
+      table.innerHTML =
+        `<thead><tr><th></th><th>${esc(t('killsShort'))}</th><th>${esc(t('lootsShort'))}</th><th>${esc(t('outpostsShort'))}</th><th>${esc(t('score'))}</th></tr></thead><tbody>` +
+        rows
+          .map(
+            (r) =>
+              `<tr class="${r.isYou ? 'you' : ''}"><td><span class="sw" style="background:${r.color}"></span>${esc(r.name)}</td><td class="num">${r.kills}</td><td class="num">${r.loots}</td><td class="num">${r.outposts}</td><td class="num">${r.score}</td></tr>`,
+          )
+          .join('') +
+        '</tbody>';
+      col.appendChild(table);
+      cols.appendChild(col);
+    });
+    p.appendChild(cols);
+    const row = el('div', 'row');
+    row.style.marginTop = '18px';
+    row.append(btn(t('playAgain'), 'primary', () => this.cb.playAgain()), btn(`📸 ${esc(t('card'))}`, '', () => this.cb.card()), btn(t('quitToMenu'), '', () => this.cb.quit()));
+    p.appendChild(row);
+    this.mount('podium', p);
+  }
+
   refreshPodium(): void {
-    if (this.lastPodium) this.showPodium(this.lastPodium);
+    if (this.lastWarPodium) this.showWarPodium(this.lastWarPodium);
+    else if (this.lastPodium) this.showPodium(this.lastPodium);
   }
 
   /** Round-intro loadout: primary weapon and two of the five gadgets. Sits at the bottom so the flyby stays visible. */

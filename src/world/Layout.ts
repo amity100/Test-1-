@@ -17,6 +17,18 @@ export const PLAZA_Y = 15;
 /** Radius of the ring road that links the fortress paths. */
 export const RING_ROAD_RADIUS = 34;
 
+/** Fortress War: the two team fortresses sit on opposite plots of the ring (north and south). */
+export const WAR_PLOTS: [number, number] = [0, 4];
+/** Capture points across the middle of the island: west and east on the ring road, the monument in the centre. */
+export const OUTPOSTS: { label: string; x: number; z: number }[] = [
+  { label: 'A', x: -RING_ROAD_RADIUS, z: 0 },
+  { label: 'B', x: 0, z: 0 },
+  { label: 'C', x: RING_ROAD_RADIUS, z: 0 },
+];
+export const OUTPOST_RADIUS = 6.5;
+/** Flattened pad around each outpost (metres). */
+export const OUTPOST_PAD = 9;
+
 export interface Plot {
   index: number;
   /** Centre in world units. */

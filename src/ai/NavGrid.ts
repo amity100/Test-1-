@@ -214,8 +214,8 @@ export class NavGrid {
     return best;
   }
 
-  /** A* path between two world positions. Returns waypoints at cell centres. */
-  findPath(from: THREE.Vector3, to: THREE.Vector3, maxExpansions = 9000): THREE.Vector3[] | null {
+  /** A* path between two world positions. Returns waypoints at cell centres. `avoid` holds packed feet cells (known traps) that cost extra to cross. */
+  findPath(from: THREE.Vector3, to: THREE.Vector3, maxExpansions = 9000, avoid: Set<number> | null = null): THREE.Vector3[] | null {
     const s = this.snap(from, 3);
     const g = this.snap(to, 4);
     if (!s || !g) return null;
@@ -245,9 +245,10 @@ export class NavGrid {
       if (cur === gi) return this.reconstruct(came, cur);
       const node = this.nodes[cur];
       this.forNeighbors(node.x, node.y, node.z, (nx, ny, nz, cost) => {
-        const ni = this.index.get(packCell(nx, ny, nz));
+        const key = packCell(nx, ny, nz);
+        const ni = this.index.get(key);
         if (ni === undefined || closed[ni]) return;
-        const ng = gScore[cur] + cost;
+        const ng = gScore[cur] + cost + (avoid && avoid.has(key) ? 40 : 0);
         if (ng < gScore[ni]) {
           gScore[ni] = ng;
           came[ni] = cur;

@@ -368,11 +368,11 @@ export class NavSystem {
     return this.reaches(this.gridFor(plotIndex), pos, portal) !== null;
   }
 
-  /** Composite route between any two points on the island (waypoints at cell centres). */
-  findRoute(from: THREE.Vector3, to: THREE.Vector3): THREE.Vector3[] | null {
+  /** Composite route between any two points on the island (waypoints at cell centres). `avoid`: packed feet cells that cost extra (known traps). */
+  findRoute(from: THREE.Vector3, to: THREE.Vector3, avoid: Set<number> | null = null): THREE.Vector3[] | null {
     const a = this.regionOf(from);
     const b = this.regionOf(to);
-    if (a >= 0 && a === b) return this.gridFor(a).findPath(from, to);
+    if (a >= 0 && a === b) return this.gridFor(a).findPath(from, to, 9000, avoid);
     const route: THREE.Vector3[] = [];
     let cursor = from;
     let ok = true;
@@ -400,7 +400,7 @@ export class NavSystem {
       ok = false;
     }
     if (b >= 0 && entry) {
-      const leg = this.gridFor(b).findPath(entry, to);
+      const leg = this.gridFor(b).findPath(entry, to, 9000, avoid);
       if (leg) route.push(...leg);
       else {
         route.push(to.clone());

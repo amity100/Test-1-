@@ -104,6 +104,8 @@ export interface Trap {
   lastHit: Map<number, number>;
   /** Delayed effects (a launched body meeting the ceiling). */
   queue: { id: number; at: number }[];
+  /** Entity that set the trap (kill credit); -1 for seeded traps (credit goes to any owner of the plot). */
+  ownerId: number;
 }
 
 export type TrapReason = 'trapNoSlots' | 'trapNeedsFloor' | 'trapNeedsUpper' | 'gateNeedsDoorway' | 'trapNeedsDoorway' | 'trapNeedsCeiling' | 'sawNeedsRun' | 'trapTaken';
@@ -132,6 +134,8 @@ const tmp = new THREE.Vector3();
 export class TrapSystem {
   readonly events = new Emitter<TrapEvents>();
   readonly traps: Trap[] = [];
+  /** Slot budget per plot (a team fortress gets slots for every builder). */
+  private slotLimits = new Map<number, number>();
 
   constructor(
     private world: VoxelWorld,
@@ -141,6 +145,19 @@ export class TrapSystem {
   ) {}
 
   // ------------------------------------------------------------------ placement
+  setSlots(plotIndex: number, slots: number): void {
+    this.slotLimits.set(plotIndex, slots);
+  }
+  slotsFor(plotIndex: number): number {
+    return this.slotLimits.get(plotIndex) ?? TRAP_SLOTS;
+  }
+  /** Slots used by one builder on a plot. */
+  slotsUsedBy(plotIndex: number, ownerId: number): number {
+    let n = 0;
+    for (const t of this.traps) if (t.plotIndex === plotIndex && t.ownerId === ownerId) n += TRAP_COST[t.kind];
+    return n;
+  }
+
   slotsUsed(plotIndex: number): number {
     let n = 0;
     for (const t of this.traps) if (t.plotIndex === plotIndex) n += TRAP_COST[t.kind];
@@ -222,7 +239,7 @@ export class TrapSystem {
 
   /** Why a trap cannot go on this cell, or null when it can. */
   canPlace(kind: TrapKind, cell: Cell, plotIndex: number): TrapReason | null {
-    if (this.slotsUsed(plotIndex) + TRAP_COST[kind] > TRAP_SLOTS) return 'trapNoSlots';
+    if (this.slotsUsed(plotIndex) + TRAP_COST[kind] > this.slotsFor(plotIndex)) return 'trapNoSlots';
     if (!this.inPlot(cell, plotIndex) || cell.y <= PLOT_Y) return 'trapNeedsFloor';
     const L = this.layout(kind, cell, plotIndex);
     if (typeof L === 'string') return L;
@@ -275,7 +292,7 @@ export class TrapSystem {
     return null;
   }
 
-  place(kind: TrapKind, cell: Cell, plotIndex: number): Trap | TrapReason {
+  place(kind: TrapKind, cell: Cell, plotIndex: number, ownerId = -1): Trap | TrapReason {
     const why = this.canPlace(kind, cell, plotIndex);
     if (why) return why;
     const L = this.layout(kind, cell, plotIndex) as Layout;
@@ -300,6 +317,7 @@ export class TrapSystem {
       span: L.span,
       lastHit: new Map(),
       queue: [],
+      ownerId,
     };
     this.traps.push(t);
     this.events.emit('change', {});
@@ -361,9 +379,17 @@ export class TrapSystem {
   }
 
   // ------------------------------------------------------------------ queries used by physics and combat
+  /** Who gets the credit: the builder who set it, else anyone of the plot's team. */
   private owner(t: Trap): Entity | null {
-    for (const e of this.entities()) if (e.plotIndex === t.plotIndex) return e;
+    const list = this.entities();
+    if (t.ownerId >= 0) for (const e of list) if (e.id === t.ownerId) return e;
+    for (const e of list) if (e.plotIndex === t.plotIndex) return e;
     return null;
+  }
+
+  /** The whole team that built the fortress is immune to its traps. */
+  private immune(e: Entity, t: Trap): boolean {
+    return e.plotIndex === t.plotIndex;
   }
 
   /** A closed gate is a wall for everyone but its builder. */
@@ -399,8 +425,7 @@ export class TrapSystem {
       out.push({
         box,
         hit: (amount, attacker) => {
-          const own = this.owner(t);
-          if (attacker && own && attacker === own) return; // builders cannot break their own defences by accident
+          if (attacker && attacker.plotIndex === t.plotIndex) return; // builders cannot break their own defences by accident
           t.hp -= amount;
           if (t.hp <= 0) {
             t.state = 'dead';
@@ -539,7 +564,7 @@ export class TrapSystem {
       // A column of fire: everyone in it burns, and keeps burning for a while after.
       t.timer -= dt;
       for (const e of entities) {
-        if (!e.alive || e.burrowed || (owner && e === owner)) continue;
+        if (!e.alive || e.burrowed || this.immune(e, t)) continue;
         const dx = e.pos.x - c.x;
         const dz = e.pos.z - c.z;
         const dy = e.pos.y - c.y;
@@ -655,7 +680,7 @@ export class TrapSystem {
 
   private updateMine(t: Trap, entities: Entity[], owner: Entity | null, now: number): void {
     for (const e of entities) {
-      if (!e.alive || e.burrowed || (owner && e === owner)) continue;
+      if (!e.alive || e.burrowed || this.immune(e, t)) continue;
       const dx = e.pos.x - (t.cell.x + 0.5);
       const dz = e.pos.z - (t.cell.z + 0.5);
       const dy = e.pos.y - t.cell.y;
@@ -681,7 +706,7 @@ export class TrapSystem {
     }
     const p = this.sawPos(t, tmp);
     for (const e of entities) {
-      if (!e.alive || e.burrowed || (owner && e === owner) || e.zipRide) continue;
+      if (!e.alive || e.burrowed || this.immune(e, t) || e.zipRide) continue;
       if ((t.lastHit.get(e.id) ?? -1) > now) continue;
       // Jumping clears it: feet above the blade's top are safe.
       if (e.pos.y > t.cell.y + 0.75 || e.pos.y < t.cell.y - 0.5) continue;
@@ -712,7 +737,7 @@ export class TrapSystem {
     const along = t.axis === 0 ? 'x' : 'z';
     const swingDir = Math.sign(Math.cos(phase)) || 1;
     for (const e of entities) {
-      if (!e.alive || e.burrowed || (owner && e === owner) || e.zipRide) continue;
+      if (!e.alive || e.burrowed || this.immune(e, t) || e.zipRide) continue;
       if ((t.lastHit.get(e.id) ?? -1) > now) continue;
       // The blade's lower half, sampled at three points, against the body's box.
       let hit = false;
@@ -739,7 +764,7 @@ export class TrapSystem {
 
   private updateCrusher(t: Trap, entities: Entity[], owner: Entity | null, dt: number, now: number): void {
     const inFootprint = (e: Entity, top: number): boolean => {
-      if (!e.alive || e.burrowed || (owner && e === owner)) return false;
+      if (!e.alive || e.burrowed || this.immune(e, t)) return false;
       const dy = e.pos.y - t.cell.y;
       if (dy < -0.1 || dy > top) return false;
       return e.pos.x >= t.cell.x - 0.15 && e.pos.x <= t.cell.x + 2.15 && e.pos.z >= t.cell.z - 0.15 && e.pos.z <= t.cell.z + 2.15;
@@ -806,7 +831,7 @@ export class TrapSystem {
     let target: Entity | null = null;
     let bestD = TRAP.turretRange;
     for (const e of entities) {
-      if (!e.alive || e.burrowed || (owner && e === owner) || e.protectedUntil > now) continue;
+      if (!e.alive || e.burrowed || this.immune(e, t) || e.protectedUntil > now) continue;
       const c = e.center;
       const d = c.distanceTo(head);
       if (d >= bestD) continue;
@@ -846,7 +871,8 @@ export class TrapSystem {
 
   /** Feet inside the trap's footprint at floor level; owners never trigger their own traps. */
   private stepsOn(e: Entity, t: Trap, owner: Entity | null, w: number): boolean {
-    if (!e.alive || e.burrowed || (owner && e === owner) || e.zipRide) return false;
+    void owner;
+    if (!e.alive || e.burrowed || this.immune(e, t) || e.zipRide) return false;
     const dy = e.pos.y - t.cell.y;
     if (dy < -0.1 || dy > 0.35) return false;
     return e.pos.x >= t.cell.x - 0.1 && e.pos.x <= t.cell.x + w + 0.1 && e.pos.z >= t.cell.z - 0.1 && e.pos.z <= t.cell.z + w + 0.1;

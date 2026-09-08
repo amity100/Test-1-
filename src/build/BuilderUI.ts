@@ -20,6 +20,7 @@ const ICON = {
   flag: svg('<path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/>'),
   dice: svg('<rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8" cy="8" r="1.4" fill="currentColor"/><circle cx="16" cy="8" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="8" cy="16" r="1.4" fill="currentColor"/><circle cx="16" cy="16" r="1.4" fill="currentColor"/>'),
   pause: svg('<rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"/><rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"/>'),
+  ping: svg('<path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2.2" fill="currentColor" stroke="none"/>'),
   camera: svg('<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.2"/>'),
   glass: svg('<path d="M6 3h12v18H6z"/><path d="M9 6l6 9M9 12l4 6"/>'),
   roof: svg('<path d="M3 13L12 4l9 9"/><path d="M6 11v9h12v-9"/>'),
@@ -62,8 +63,13 @@ export class BuilderUI {
   private edits = 0;
   private unsub: (() => void)[] = [];
 
-  constructor(parent: HTMLElement, private builder: Builder, private cb: BuilderUICallbacks, readonly compact: boolean) {
-    this.root = el('div', `bldui ${compact ? 'compact' : ''}`);
+  /** Teammates' next cells (war builds), projected to the screen. */
+  private cursorLayer: HTMLElement;
+  private cursorEls: HTMLElement[] = [];
+
+  constructor(parent: HTMLElement, private builder: Builder, private cb: BuilderUICallbacks, readonly compact: boolean, readonly team = false) {
+    this.root = el('div', `bldui ${compact ? 'compact' : ''} ${team ? 'team' : ''}`);
+    this.cursorLayer = el('div', 'bld-cursors');
     this.root.hidden = true;
     parent.appendChild(this.root);
     this.top = el('div', 'bld-top');
@@ -82,8 +88,30 @@ export class BuilderUI {
         if (e.pointerType === 'mouse') this.builder.uiHover = false;
       });
     }
-    this.root.append(this.top, this.bar, this.sub, this.hint, this.toast);
+    this.root.append(this.cursorLayer, this.top, this.bar, this.sub, this.hint, this.toast);
     this.render();
+  }
+
+  /** Where each teammate is about to build: a small tag over the cell. */
+  setCursors(list: { name: string; color: string; sx: number; sy: number; visible: boolean }[]): void {
+    while (this.cursorEls.length < list.length) {
+      const e = el('div', 'bld-cursor');
+      e.innerHTML = '<span class="dot"></span><span class="nm"></span>';
+      this.cursorLayer.appendChild(e);
+      this.cursorEls.push(e);
+    }
+    this.cursorEls.forEach((e, i) => {
+      const c = list[i];
+      if (!c || !c.visible) {
+        e.hidden = true;
+        return;
+      }
+      e.hidden = false;
+      e.style.transform = `translate(${c.sx.toFixed(0)}px, ${c.sy.toFixed(0)}px)`;
+      e.style.setProperty('--c', c.color);
+      const nm = e.querySelector('.nm') as HTMLElement;
+      if (nm.textContent !== c.name) nm.textContent = c.name;
+    });
   }
 
   private iconBtn(parent: HTMLElement, cls: string, icon: string, label: string, onTap: () => void): HTMLButtonElement {
@@ -143,6 +171,7 @@ export class BuilderUI {
     this.toolBtns.set('erase', this.iconBtn(this.bar, 'tool erase', ICON.erase, t('bldEraser'), () => this.toggleTool('erase')));
     this.toolBtns.set('flag', this.iconBtn(this.bar, 'tool flag', ICON.flag, t('bldFlag'), () => this.toggleTool('flag')));
     this.toolBtns.set('trap', this.iconBtn(this.bar, 'tool trap', ICON.trap, t('bldTrap'), () => this.toggleTool('trap')));
+    if (this.team) this.toolBtns.set('ping', this.iconBtn(this.bar, 'tool ping', ICON.ping, t('bldPing'), () => this.toggleTool('ping')));
     // Trap kinds (shown while the trap tool is active) with the slot counter.
     this.sub.innerHTML = '';
     this.kindBtns.clear();
@@ -156,7 +185,7 @@ export class BuilderUI {
     }
     this.slotsEl = el('div', 'slots');
     this.sub.appendChild(this.slotsEl);
-    this.hint.textContent = t(this.compact ? 'bldHintTouch' : 'bldHintMouse');
+    this.hint.textContent = t(this.team ? 'bldHintTeam' : this.compact ? 'bldHintTouch' : 'bldHintMouse');
     this.refresh();
   }
 
@@ -259,6 +288,7 @@ export class BuilderUI {
       const txt = t('trapSlots', { n: used, total: TRAP_SLOTS });
       if (this.slotsEl.textContent !== txt) this.slotsEl.textContent = txt;
       if (this.tipIndex < 0) this.hint.textContent = t('bldHintTrap');
-    } else if (this.tipIndex < 0 && !this.hint.hidden) this.hint.textContent = t(this.compact ? 'bldHintTouch' : 'bldHintMouse');
+    } else if (b.tool === 'ping') this.hint.textContent = t('bldHintPing');
+    else if (this.tipIndex < 0 && !this.hint.hidden) this.hint.textContent = t(this.team ? 'bldHintTeam' : this.compact ? 'bldHintTouch' : 'bldHintMouse');
   }
 }

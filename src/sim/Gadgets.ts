@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { RepairSystem } from './Repair';
 import type { VoxelWorld } from '../world/VoxelWorld';
 import type { Terrain } from '../world/Terrain';
 import type { Combat } from './Combat';
@@ -104,6 +105,8 @@ export class GadgetSystem {
     private combat: Combat,
     private plots: Plot[],
     private entities: () => Entity[],
+    /** Fortress War: remembers what a blast took out so the team can put it back. */
+    private repair: RepairSystem | null = null,
   ) {}
 
   /** Clears deployables between rounds. */
@@ -126,8 +129,10 @@ export class GadgetSystem {
     if (y < PLOT_Y || y >= PLOT_Y + PLOT_MAX_HEIGHT) return false;
     const pi = this.plotAt(x, z);
     if (pi < 0) return false;
-    if (this.world.get(x, y, z) === 0) return false;
+    const v = this.world.get(x, y, z);
+    if (v === 0) return false;
     this.world.set(x, y, z, 0);
+    this.repair?.record(x, y, z, v, pi);
     this.touched.add(pi);
     return true;
   }

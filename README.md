@@ -1,9 +1,12 @@
 # FLAGKEEP
 
-**Build. Hide. Storm.** A 3D web shooter where every player first builds a fortress from a budget of
-blocks, hides a flag inside it, and then the match rotates a spotlight over each fortress: its owner
-defends while everyone else storms in, fights each other, and tries to stand on the flag for three
-seconds.
+**Build. Hide. Storm.** A 3D web shooter about fortresses. In **Fortress War** (the default) two
+teams each raise a stronghold together, then fight a Battlefield-style war across the island: hold
+the three capture points, loot the enemy flag from deep inside their keep, and run the other side
+out of tickets. Single player already plays like the multiplayer will: your five teammates are bots
+who build with you, take your pings, hold posts, take points, breach walls and repair them. The
+classic **rotation** (everyone builds their own fortress, then each one is stormed in turn) is still
+there in the setup screen.
 
 Runs entirely in the browser (WebGL 2). No accounts, no downloads, no external assets: every texture,
 model and sound is generated procedurally at load time.
@@ -18,6 +21,39 @@ GitHub Pages). Single-file build for artifact hosting: `npm run build:artifact` 
 `artifact/flagkeep.html`).
 
 ## How a match works
+
+### Fortress War
+
+1. **Team build** (90 s, 3 or 5 minutes, or unlimited). Your team's plot is split into four
+   quarters and every bot lays the stronghold plan for its quarter, one room every couple of
+   seconds, so the castle rises around whatever you place yourself. Twelve blocks stay reserved for
+   you for the first minute. The **ping** tool marks a column ("a tower here") and the nearest
+   builder does it next. Press Ready early and the crew finishes the walls at once. The stronghold
+   is built to be stormed: a ring wall with one gate and one postern onto the field, corner towers,
+   an inner courtyard with its own doors, arrow slits instead of climbable windows, no outdoor
+   stairs or balconies, merlons on every parapet and a five-storey keep with the flag hall at the
+   top. The enemy team gets a stronghold of its own, and the empty plots carry ruins for cover.
+2. **Trap walk.** You appear inside the fortress with four personal trap slots; each bot sets two
+   traps in its own quarter at the same time. Traps hurt only the other team.
+3. **War** (12 minutes). 150 tickets a side. A kill costs one ticket. Three capture points across
+   the middle of the island (A by the west road, B at the monument, C by the east road): ten seconds
+   alone on a point takes it, and every five seconds the side holding fewer points loses a ticket
+   per point of difference. Looting the enemy flag (eight seconds in their flag hall with no
+   defender there) costs them forty tickets and drops the flag for twenty seconds. First side out of
+   tickets loses; at the bell the higher pool wins. When you die you choose where to respawn: the
+   fortress or any point your team holds (keys 1-4, or tap).
+4. **Supplies and repair.** Kills and held points earn supplies. Breach charges blow real holes in
+   the walls; standing by a hole in your own fortress for a few seconds puts the blocks back for
+   five supplies, and defender bots do the same on their own.
+5. **The team AI.** Each side has a commander that hands out tasks every second and a half: a
+   garrison at the flag posts and doorways (bigger under alarm, nearly everyone when the flag has
+   just been looted, and the whole team respawns at the flag posts while it is down), squads of
+   three on the points, and always one squad on the assault, rallying outside the enemy walls and
+   going in together. Bots share sightings, remember every trap they have seen and route around it,
+   blow a wall when the way to the flag is barred, hold angles at their posts and escort you when
+   you push out. Team results, tickets and the MVP close the match.
+
+### Classic rotation
 
 1. **Build phase** (3, 5, 8 minutes or unlimited). Place blocks, box-fill, stamp 30 prefabs
    (walls, curved walls, hedges, towers, watchtowers, spires, gates, arches, stairs, ramps, bridges,
@@ -199,4 +235,9 @@ Quality tiers (low/medium/high/ultra) are picked from the GPU and can be forced 
 firing) and `node scripts/smoke-mobile.mjs <url>` (touch emulation; the trap walk, touch look and
 the button editor are exercised there and in the probe scripts) drive the game in headless
 Chromium (Playwright) and save screenshots. Test against `npm run build && npm run preview` so dev
-server reloads do not interrupt the runs.
+server reloads do not interrupt the runs. Fortress War has its own probes: `node scripts/probe-war.mjs <url>`
+(team build, pings, the trap walk, the war, respawn choice, repair, the team podium),
+`node scripts/probe-war-phone.mjs <url>` (the same on a touch phone) and
+`node scripts/probe-war-balance.mjs <url>` (five minutes of bots against bots, watching tickets,
+points, loots, repairs and the commanders' task counts; `IDLE_ENEMY=1` parks one enemy bot too, for a
+fair comparison with the idle human; `SEEDS=1,2` picks the runs).

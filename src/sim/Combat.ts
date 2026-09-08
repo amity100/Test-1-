@@ -263,6 +263,7 @@ export class Combat {
     if (!target.alive) return;
     if (target.protectedUntil > now && attacker !== target) return;
     if (attacker && attacker !== target && !this.friendlyFire && attacker.role === target.role && attacker.role === 'attacker') return;
+    if (attacker && attacker !== target && attacker.team >= 0 && attacker.team === target.team) return;
     // Armour plates (streak reward) soak damage before health.
     let absorbed = 0;
     if (target.armor > 0) {
@@ -296,6 +297,8 @@ export class Combat {
     for (const e of this.getEntities()) {
       if (e === attacker || !e.alive || e.burrowed) continue;
       if (!this.friendlyFire && attacker.role === e.role && attacker.role === 'attacker') continue;
+      if (attacker.team >= 0 && attacker.team === e.team) continue;
+      if (attacker.team >= 0 && attacker.team === e.team) continue;
       const to = e.center.sub(eye);
       const d = to.length();
       if (d > bestD + e.radius) continue;

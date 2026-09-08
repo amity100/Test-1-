@@ -28,10 +28,12 @@ export interface ScoreSheet {
   deaths: number;
   /** Full minutes the flag stayed safe while defending (comeback bonus). */
   holdMinutes: number;
+  /** War: capture points taken. */
+  outposts: number;
 }
 
 export function emptyScore(): ScoreSheet {
-  return { total: 0, defenseSeconds: 0, holdBonuses: 0, captures: 0, kills: 0, killsAsDefender: 0, deaths: 0, holdMinutes: 0 };
+  return { total: 0, defenseSeconds: 0, holdBonuses: 0, captures: 0, kills: 0, killsAsDefender: 0, deaths: 0, holdMinutes: 0, outposts: 0 };
 }
 
 let nextEntityId = 1;
@@ -46,6 +48,13 @@ export class Entity {
   colorHex = '#00e5ff';
   plotIndex = -1;
   role: Role = 'none';
+  /** Fortress War: 0 or 1; -1 in the classic free-for-all (everyone for themselves). */
+  team = -1;
+  squad = -1;
+  /** Short label of what a bot is doing right now (scoreboard, debugging). */
+  task = '';
+  /** Fortress War score sheet extras. */
+  assists = 0;
 
   pos = new THREE.Vector3();
   vel = new THREE.Vector3();

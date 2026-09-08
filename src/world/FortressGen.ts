@@ -3,7 +3,7 @@ import { PLOT_Y, type Plot } from './Layout';
 import type { StyleId } from './Styles';
 import { Random } from '../core/Random';
 import { bestHidingCells, checkReachability, type Cell } from './Reachability';
-import { Architect, Plan, GRID, MAX_STOREYS, MAX_BLOCKS, applyField, type Tone, heroOrder } from '../build/Architect';
+import { Architect, Plan, GRID, MAX_STOREYS, MAX_BLOCKS, applyField, frontSideOf, type Tone, heroOrder } from '../build/Architect';
 
 /**
  * Fortress plans for the bots (and the player's "surprise me" button): coarse room-block layouts
@@ -11,8 +11,8 @@ import { Architect, Plan, GRID, MAX_STOREYS, MAX_BLOCKS, applyField, type Tone, 
  * vocabulary the player gets. Each archetype is an arena first: several entrances, a tall core,
  * roof terraces, bridges, colonnades, courtyards and rooms that connect on every storey.
  */
-export type Archetype = 'keep' | 'citadel' | 'palace' | 'bastion' | 'temple' | 'spire';
-export const ARCHETYPES: Archetype[] = ['keep', 'citadel', 'palace', 'bastion', 'temple', 'spire'];
+export type Archetype = 'keep' | 'citadel' | 'palace' | 'bastion' | 'temple' | 'spire' | 'stronghold';
+export const ARCHETYPES: Archetype[] = ['keep', 'citadel', 'palace', 'bastion', 'temple', 'spire', 'stronghold'];
 
 export interface FortressResult {
   flag: Cell;
@@ -197,13 +197,43 @@ function spire(s: Sketch, rng: Random, t: ReturnType<typeof tonesFor>): void {
   if (rng.next() < 0.7) s.put(3, 2, 2, t.gallery);
 }
 
-const BUILDERS: Record<Archetype, (s: Sketch, rng: Random, t: ReturnType<typeof tonesFor>) => void> = { keep, citadel, palace, bastion, temple, spire };
+/**
+ * Fortress War stronghold: a curtain wall of rooms all the way round (their roofs are the wall walk),
+ * towers on the four corners, a two-storey gatehouse on the front, a covered colonnade from the gate
+ * to the keep, and the keep itself: a five-storey tower in the middle with the flag hall at the top,
+ * one stair per storey. About thirty blocks, so a team has the rest of the budget to add to it.
+ */
+function stronghold(s: Sketch, rng: Random, t: ReturnType<typeof tonesFor>, front: number): void {
+  const B = GRID - 1;
+  for (let i = 0; i <= B; i++) {
+    s.put(i, 0, 0, t.alt);
+    s.put(i, B, 0, t.alt);
+  }
+  for (let j = 1; j < B; j++) {
+    s.put(0, j, 0, t.alt);
+    s.put(B, j, 0, t.alt);
+  }
+  for (const [ti, tj] of [[0, 0], [B, 0], [0, B], [B, B]]) s.column(ti, tj, 3, t.tower, t.top);
+  const gate: [number, number] = front === 0 ? [2, 0] : front === 2 ? [2, B] : front === 1 ? [B, 2] : [0, 2];
+  s.put(gate[0], gate[1], 1, t.main);
+  s.column(2, 2, 5, t.main, t.top);
+  const mid: [number, number] = [Math.round((gate[0] + 2) / 2), Math.round((gate[1] + 2) / 2)];
+  s.put(mid[0], mid[1], 0, t.gallery);
+  // The back wall sometimes rises a storey for a second gallery over the rear.
+  if (rng.next() < 0.5) {
+    const back: [number, number] = front === 0 ? [2, B] : front === 2 ? [2, 0] : front === 1 ? [0, 2] : [B, 2];
+    s.put(back[0], back[1], 1, t.alt);
+  }
+}
+
+type Builder = (s: Sketch, rng: Random, t: ReturnType<typeof tonesFor>, front: number) => void;
+const BUILDERS: Record<Archetype, Builder> = { keep, citadel, palace, bastion, temple, spire, stronghold };
 
 /** A fortress plan in the Architect's block language, connected and under budget. */
-export function planFortress(rng: Random, style: StyleId, limit: number, archetype?: Archetype): Plan {
+export function planFortress(rng: Random, style: StyleId, limit: number, archetype?: Archetype, front = 0): Plan {
   const arch = archetype ?? rng.pick(archetypesFor(style));
   const s = new Sketch(rng, limit);
-  BUILDERS[arch](s, rng, tonesFor(style));
+  BUILDERS[arch](s, rng, tonesFor(style), front);
   dropFloating(s.plan);
   return s.plan;
 }
@@ -232,14 +262,19 @@ function dropFloating(plan: Plan): void {
 }
 
 /** Builds a bot fortress on its plot and returns flag and spawn cells. */
-export function generateFortress(world: VoxelWorld, plot: Plot, style: StyleId, rng: Random, archetype?: Archetype, limit = MAX_BLOCKS): FortressResult {
+export function generateFortress(world: VoxelWorld, plot: Plot, style: StyleId, rng: Random, archetype?: Archetype, limit = MAX_BLOCKS, fortified = false): FortressResult {
   const arch = archetype ?? rng.pick(archetypesFor(style));
-  const plan = planFortress(rng, style, limit, arch);
-  const architect = new Architect(plot, style);
+  const plan = planFortress(rng, style, limit, arch, frontSideOf(plot));
+  const architect = new Architect(plot, style, fortified);
   let res = architect.generate(plan);
   applyField(world, plot, res.field);
   // Flag: the most buried room whose floor is reachable from outside; spawn nearby on another floor.
+  // A stronghold keeps its flag at the top of the keep, one stair per storey between it and the gate.
   let rooms = heroOrder(plan, res.rooms.filter((r) => r.floor.length > 0));
+  if (arch === 'stronghold') {
+    const keepTop = res.rooms.filter((r) => r.i === 2 && r.j === 2 && r.floor.length > 0).sort((a, b) => b.k - a.k)[0];
+    if (keepTop) rooms = [keepTop, ...rooms.filter((r) => r !== keepTop)];
+  }
   let flag: Cell | null = null;
   for (const r of rooms) {
     const c = r.floor[Math.floor(r.floor.length / 2)];
@@ -272,6 +307,11 @@ export function generateFortress(world: VoxelWorld, plot: Plot, style: StyleId, 
   const heroCells = new Set(res.hero?.cells ?? []);
   const heroFloors = res.rooms.filter((r) => heroCells.has(Plan.index(r.i, r.j, r.k))).flatMap((r) => r.floor);
   return { flag, spawn, blocks: res.blocks, archetype: arch, entrances: res.entrances, floors: res.rooms.flatMap((r) => r.floor), heroFloors, roofSpots: res.roofSpots };
+}
+
+/** A small neutral structure for cover on an unused plot (Fortress War flanks): a few rooms, one taller. */
+export function generateRuins(world: VoxelWorld, plot: Plot, style: StyleId, rng: Random): FortressResult {
+  return generateFortress(world, plot, style, rng, rng.pick(['bastion', 'keep', 'temple', 'palace'] as Archetype[]), rng.int(8, 12));
 }
 
 export { MAX_STOREYS };

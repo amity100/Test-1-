@@ -41,6 +41,9 @@ export class Fortify {
   active = false;
   /** Traps set during this walk (the instruction card retires after the first). */
   placements = 0;
+  /** Team walks: who is placing and how many slots are theirs (the plot total is shared with teammates). */
+  ownerId = -1;
+  personal = TRAP_SLOTS;
   private ghost: THREE.InstancedMesh;
   private ghostMat: THREE.MeshBasicMaterial;
   private matrix = new THREE.Matrix4();
@@ -81,12 +84,12 @@ export class Fortify {
     this.ghostMat.dispose();
   }
 
-  /** Slots used on the builder's plot. */
+  /** Slots used: the builder's own when placing for a team, else everything on the plot. */
   get slots(): number {
-    return this.traps.slotsUsed(this.plot.index);
+    return this.ownerId >= 0 ? this.traps.slotsUsedBy(this.plot.index, this.ownerId) : this.traps.slotsUsed(this.plot.index);
   }
   get slotsTotal(): number {
-    return TRAP_SLOTS;
+    return this.ownerId >= 0 ? this.personal : this.traps.slotsFor(this.plot.index);
   }
   /** The builder's traps, for the picker to show what is already set. */
   get mine(): Trap[] {
@@ -106,7 +109,7 @@ export class Fortify {
 
   /** True when the selected kind still fits the slot budget. */
   affordable(kind: TrapKind = this.kind): boolean {
-    return this.slots + TRAP_COST[kind] <= TRAP_SLOTS;
+    return this.slots + TRAP_COST[kind] <= this.slotsTotal;
   }
 
   update(dt: number): void {
@@ -163,7 +166,7 @@ export class Fortify {
     }
     const c: Cell = { x: cx, y: cy, z: cz };
     const existing = this.traps.at(c);
-    if (existing && existing.plotIndex === this.plot.index) {
+    if (existing && existing.plotIndex === this.plot.index && (this.ownerId < 0 || existing.ownerId === this.ownerId || existing.ownerId < 0)) {
       a.existing = existing;
       a.cell = c;
       a.cells = existing.cells;
@@ -191,7 +194,11 @@ export class Fortify {
 
   place(): boolean {
     if (!this.aim.cell) return false;
-    const r = this.traps.place(this.kind, this.aim.cell, this.plot.index);
+    if (!this.affordable()) {
+      this.events.emit('invalid', { key: 'trapNoSlots' });
+      return false;
+    }
+    const r = this.traps.place(this.kind, this.aim.cell, this.plot.index, this.ownerId);
     if (typeof r === 'string') {
       this.events.emit('invalid', { key: r });
       return false;
