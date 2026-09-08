@@ -97,7 +97,7 @@ export class EngineSystem {
   canPlace(kind: EngineKind, cell: Cell, plotIndex: number): string | null {
     const plot = this.plots[plotIndex];
     if (!plot || cell.x < plot.minX || cell.x > plot.maxX || cell.z < plot.minZ || cell.z > plot.maxZ) return 'engineOutside';
-    if (cell.y <= PLOT_Y || this.world.get(cell.x, cell.y - 1, cell.z) === 0) return 'engineNeedsFloor';
+    if (cell.y < PLOT_Y || this.world.get(cell.x, cell.y - 1, cell.z) === 0) return 'engineNeedsFloor';
     for (let dy = 0; dy < 3; dy++) if (this.world.get(cell.x, cell.y + dy, cell.z) !== 0) return 'engineNeedsRoom';
     // A catapult lobs its stones high: nothing may hang over it.
     if (kind === 'catapult') for (let dy = 3; dy < 9; dy++) if (this.world.get(cell.x, cell.y + dy, cell.z) !== 0) return 'engineNeedsSky';

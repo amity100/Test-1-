@@ -2,7 +2,7 @@ import { el, btn, esc, segmented, field, slider } from './dom';
 import { t, setLang, getLang } from '../core/i18n';
 import { VERSION } from '../core/Version';
 import { settings, type Quality, type Language } from '../core/Settings';
-import { STYLE_IDS, STYLES, type StyleId } from '../world/Styles';
+import { STYLE_IDS, STYLES, PERIOD_STYLES, type StyleId } from '../world/Styles';
 import type { MatchConfig, Difficulty, GameMode } from '../sim/Match';
 import { PALETTE } from '../world/Voxel';
 
@@ -290,9 +290,11 @@ export class Screens {
     p.appendChild(grid);
     // Style picker
     const styles = el('div', 'styles');
+    const styleIds = mode === 'siege' ? PERIOD_STYLES : STYLE_IDS;
+    if (!styleIds.includes(this.setup.style)) this.setup.style = 'medieval';
     const render = (): void => {
       styles.innerHTML = '';
-      for (const id of STYLE_IDS) {
+      for (const id of styleIds) {
         const s = STYLES[id];
         const card = el('button', `style-card ${this.setup.style === id ? 'active' : ''}`);
         const sw = el('div', 'swatches');

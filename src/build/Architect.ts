@@ -504,6 +504,7 @@ export class Architect {
               if (open) v = 0;
               else if (face && face.glassCols.includes(c)) v = this.roles.glass;
               else if (face && face.frame && (c === face.cols[0] - 1 || c === face.cols[face.cols.length - 1] + 1) && ly <= Math.max(...face.rows) + 1) v = this.roles.trim;
+              else if (this.fortified && k === 0 && face && face.door && ly === 3 && (c === face.cols[0] - 2 || c === face.cols[face.cols.length - 1] + 2)) v = this.roles.light; // torches flanking the gate
               else if (exterior && tone === 0 && (c === 0 || c === CELL - 1)) v = this.roles.wallAlt; // quoins
             }
             F.set(...this.faceCell(x0, y0, z0, s, c, ly), v);

@@ -591,7 +591,7 @@ export class Builder {
         return true;
       }
       case 'engine': {
-        const cell = this.pickFloor(sx, sy);
+        const cell = this.pickFloor(sx, sy, true);
         if (!cell || !this.placeEngine) {
           this.events.emit('invalid', { key: 'engineNeedsFloor' });
           return false;
@@ -639,15 +639,15 @@ export class Builder {
     }
   }
 
-  /** The free floor cell under the cursor (a room floor inside the plot): where traps go. */
-  pickFloor(sx: number, sy: number): Cell | null {
+  /** The free floor cell under the cursor (a room floor inside the plot, or the open ground too): where traps and engines go. */
+  pickFloor(sx: number, sy: number, ground = false): Cell | null {
     const ndc = new THREE.Vector2((sx / window.innerWidth) * 2 - 1, -(sy / window.innerHeight) * 2 + 1);
     this.raycaster.setFromCamera(ndc, this.camera);
     const ray = this.raycaster.ray;
     const hit = this.world.raycast(ray.origin.x, ray.origin.y, ray.origin.z, ray.direction.x, ray.direction.y, ray.direction.z, 260);
     if (!hit || hit.ny < 0.5) return null;
     const c: Cell = { x: hit.x, y: hit.y + 1, z: hit.z };
-    if (c.x < this.plot.minX || c.x > this.plot.maxX || c.z < this.plot.minZ || c.z > this.plot.maxZ || c.y <= PLOT_Y) return null;
+    if (c.x < this.plot.minX || c.x > this.plot.maxX || c.z < this.plot.minZ || c.z > this.plot.maxZ || c.y < PLOT_Y || (c.y === PLOT_Y && !ground)) return null;
     if (this.world.get(c.x, c.y, c.z) !== 0 || this.world.get(c.x, c.y + 1, c.z) !== 0) return null;
     return c;
   }
@@ -770,7 +770,7 @@ export class Builder {
     this.ghost.visible = false;
     if (!this.input.isTouch && !this.uiHover && this.tool === 'engine') {
       // Engine tool: a wide pad where the engine would stand.
-      const c = this.pickFloor(this.input.cursorX, this.input.cursorY);
+      const c = this.pickFloor(this.input.cursorX, this.input.cursorY, true);
       if (c) {
         this.ghost.visible = true;
         this.ghost.scale.set(2.2 / (CELL - 0.1), 0.24 / (STOREY_H - 0.1), 2.2 / (CELL - 0.1));

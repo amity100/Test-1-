@@ -2,6 +2,8 @@ import { Mat, encodeBlock } from './Voxel';
 
 export type StyleId = 'candy' | 'gothic' | 'modern' | 'medieval' | 'neon' | 'desert';
 export const STYLE_IDS: StyleId[] = ['candy', 'gothic', 'modern', 'medieval', 'neon', 'desert'];
+/** Styles that fit the siege era (stone, timber and sandstone castles). */
+export const PERIOD_STYLES: StyleId[] = ['medieval', 'gothic', 'desert'];
 
 export type BlockRole = 'wall' | 'wallAlt' | 'trim' | 'floor' | 'roof' | 'accent' | 'glass' | 'light' | 'pillar' | 'stairs' | 'ground' | 'door';
 

@@ -16,7 +16,7 @@ import { BotBrain, PROFILES, BOT_NAMES } from '../ai/BotBrain';
 import { WarBrain } from '../ai/WarBrain';
 import { TeamCommander, type Post } from '../ai/Commander';
 import { TeamBuild, type TrapOrder, BOT_SLOTS } from '../build/TeamBuild';
-import { Plan, MAX_BLOCKS, CELL, STOREY_H } from '../build/Architect';
+import { Plan, MAX_BLOCKS, CELL, STOREY_H, GRID, SIDES } from '../build/Architect';
 import { NavSystem } from '../ai/NavSystem';
 import { CharacterMesh } from '../render/CharacterMesh';
 import { ViewModel } from '../render/ViewModel';
@@ -29,6 +29,7 @@ import { GadgetSystem, GADGETS, GADGET_IDS, KIT_SIZE, type GadgetId } from '../s
 import { RepairSystem } from '../sim/Repair';
 import { EngineSystem, ENGINE, type Engine, type EngineKind } from '../sim/Engines';
 import { EngineMeshes } from '../render/EngineMeshes';
+import { BannerMeshes } from '../render/BannerMeshes';
 import { WAR } from '../sim/War';
 import { GadgetMeshes } from '../render/GadgetMeshes';
 import { outfitFor } from '../render/Outfits';
@@ -41,7 +42,7 @@ import { FortifyUI } from '../build/FortifyUI';
 import { TouchControls, vibrate } from '../ui/TouchControls';
 import { IS_TOUCH } from './Input';
 import { generateFortress, generateRuins, type FortressResult } from '../world/FortressGen';
-import { STYLE_IDS, type StyleId } from '../world/Styles';
+import { STYLE_IDS, PERIOD_STYLES, type StyleId } from '../world/Styles';
 import { PLOT_Y, PLOT_MAX_HEIGHT, PLOT_HALF, ZONE_RADIUS, PLAYABLE_RADIUS, WAR_PLOTS, SIEGE_PLOTS, OUTPOSTS, plotContains, type Plot } from '../world/Layout';
 import { blockColor, PALETTE } from '../world/Voxel';
 import { STYLES } from '../world/Styles';
@@ -112,6 +113,7 @@ export class Game {
   /** Siege engines: ballistae and catapults on the walls, crewed by bots or manned by the player. */
   readonly engines: EngineSystem;
   private engineMeshes: EngineMeshes;
+  readonly banners = new BannerMeshes();
   private manning: Engine | null = null;
   /** Where the player's body stands while manning (fixed when they take the controls). */
   private manSpot = new THREE.Vector3();
@@ -184,6 +186,7 @@ export class Game {
       audio.play('explosion', { pos, volume: 0.9, pitch: 0.7 });
     };
     this.engineMeshes = new EngineMeshes(this.engines, (team) => TEAM_COLORS[team] ?? '#ffffff');
+    app.gr.scene.add(this.banners.group);
     this.trapMeshes = new TrapMeshes(this.traps, (pi) => this.entities.find((e) => e.plotIndex === pi)?.colorHex ?? '#ffffff');
     app.gr.scene.add(this.trapMeshes.group);
     app.gr.scene.add(this.engineMeshes.group);
@@ -365,7 +368,8 @@ export class Game {
     for (const p of plots) this.app.world.clearBox(p.minX, PLOT_Y, p.minZ, p.maxX, PLOT_Y + PLOT_MAX_HEIGHT + 2, p.maxZ);
     const match = new Match(cfg, { spawnFor: (e, role, target) => this.spawnFor(e, role, target) });
     this.match = match;
-    this.teamStyles = [cfg.style, this.rng.pick(STYLE_IDS.filter((st) => st !== cfg.style))];
+    const stylePool = cfg.mode === 'siege' ? PERIOD_STYLES : STYLE_IDS;
+    this.teamStyles = [cfg.style, this.rng.pick(stylePool.filter((st) => st !== cfg.style))];
     if (war) this.setupWar(cfg, match, bot);
     else this.setupClassic(cfg, match, bot);
     match.setEntities(this.entities);
@@ -458,7 +462,7 @@ export class Game {
     this.paintGround(plots[this.teamPlots[1]], style1);
     const war = match.war!;
     // The enemy stronghold, finished and trapped by its whole team.
-    const res1 = generateFortress(this.app.world, plots[this.teamPlots[1]], style1, this.rng.fork(), 'stronghold', MAX_BLOCKS, true);
+    const res1 = generateFortress(this.app.world, plots[this.teamPlots[1]], style1, this.rng.fork(), siege ? 'castle' : 'stronghold', MAX_BLOCKS, true);
     match.setFlag(this.teamPlots[1], res1.flag);
     match.setSpawn(this.teamPlots[1], res1.spawn);
     this.plotSpots.set(this.teamPlots[1], res1.roofSpots);
@@ -468,9 +472,11 @@ export class Game {
     this.traps.setSlots(this.teamPlots[1], BOT_SLOTS * size + (siege ? 8 : 0));
     this.traps.setSlots(this.teamPlots[0], BOT_SLOTS * (size - 1) + 4 + (siege ? 8 : 0));
     this.seedTraps(this.teamPlots[1], res1, this.entities.filter((e) => e.team === 1));
-    if (siege) this.seedEngines(1, res1.roofSpots);
-    if (siege) this.placeCourtyards(match);
-    else {
+    this.hangBanners(1, res1.heroFloors, res1.entrances);
+    if (siege) {
+      this.placeCourtyards(match);
+      this.seedEngines(1, res1.roofSpots);
+    } else {
       // Ruins on the flanks: cover between the fortresses.
       for (const p of plots) {
         if (p.index === this.teamPlots[0] || p.index === this.teamPlots[1]) continue;
@@ -500,16 +506,103 @@ export class Game {
     for (const e of this.entities) if (e.isBot) this.bots.push(new WarBrain(e, this.botContext(), PROFILES[cfg.difficulty], this.rng.int(1, 1e9)));
   }
 
-  /** Siege: each castle's courtyard zone sits between its gate and its keep, on the side facing the enemy. */
+  /** The light block of a style (torches, lamps): for probes and the fortress card. */
+  styleLight(style: StyleId): number {
+    return STYLES[style].roles.light;
+  }
+
+  /** Siege: each castle's courtyard zone is its open yard (see yardFor); set again once the castle is finished. */
   private placeCourtyards(match: Match): void {
     const war = match.war!;
     for (const team of [0, 1]) {
-      const plot = this.app.plots[this.teamPlots[team]];
-      const enemy = this.app.plots[this.teamPlots[1 - team]];
-      const dx = Math.sign(enemy.cx - plot.cx);
-      const dz = Math.sign(enemy.cz - plot.cz);
-      war.setOutpostPos(team, plot.cx + dx * 10 + 0.5, PLOT_Y, plot.cz + dz * 10 + 0.5);
+      const y = this.yardFor(team);
+      war.setOutpostPos(team, y.x, y.y, y.z);
     }
+  }
+
+  /**
+   * The yard of a castle: the open ground cell inside the walls nearest the enemy, with sky above it
+   * (so the catapult can stand there and the spawn is not under a roof). A castle without an inner
+   * open cell gets the nearest open cell of the plot, and a solid plot the old spot between the
+   * gate and the keep.
+   */
+  private yardFor(team: number): THREE.Vector3 {
+    const plot = this.app.plots[this.teamPlots[team]];
+    const enemy = this.app.plots[this.teamPlots[1 - team]];
+    const W = this.app.world;
+    const open = (x: number, z: number): boolean => {
+      if (W.get(x, PLOT_Y - 1, z) === 0) return false; // the painted pad
+      for (let y = PLOT_Y; y <= PLOT_Y + 10; y++) if (W.get(x, y, z) !== 0) return false;
+      return true;
+    };
+    let best: THREE.Vector3 | null = null;
+    let bestScore = Infinity;
+    for (let i = 0; i < GRID; i++)
+      for (let j = 0; j < GRID; j++) {
+        const x0 = plot.minX + i * CELL;
+        const z0 = plot.minZ + j * CELL;
+        // Most of the cell has to be open sky (a fountain in the middle is fine).
+        let clear = 0;
+        for (const [lx, lz] of [[2, 2], [5, 2], [2, 5], [5, 5], [4, 4], [1, 4], [4, 1], [6, 4], [4, 6]]) if (open(x0 + lx, z0 + lz)) clear++;
+        if (clear < 6) continue;
+        const inner = i > 0 && i < GRID - 1 && j > 0 && j < GRID - 1;
+        const d = Math.hypot(x0 + CELL / 2 - enemy.cx, z0 + CELL / 2 - enemy.cz);
+        const score = (inner ? 0 : 1000) + d;
+        if (score < bestScore) {
+          bestScore = score;
+          best = new THREE.Vector3(x0 + CELL / 2 + 0.5, PLOT_Y, z0 + CELL / 2 + 0.5);
+        }
+      }
+    if (best) return best;
+    const dx = Math.sign(enemy.cx - plot.cx);
+    const dz = Math.sign(enemy.cz - plot.cz);
+    return new THREE.Vector3(plot.cx + dx * 10 + 0.5, PLOT_Y, plot.cz + dz * 10 + 0.5);
+  }
+
+  /**
+   * Heraldic banners on a castle: a pair either side of the window on every free face of the flag
+   * hall's storey, and one either side of the storey above each gate.
+   */
+  private hangBanners(team: number, heroFloors: Cell[], entrances: Cell[]): void {
+    const plot = this.app.plots[this.teamPlots[team]];
+    const W = this.app.world;
+    const color = TEAM_COLORS[team] ?? '#ffffff';
+    const MID = CELL >> 1;
+    const cellOf = (c: Cell): [number, number, number] => [Math.floor((c.x - plot.minX) / CELL), Math.floor((c.z - plot.minZ) / CELL), Math.max(0, Math.floor((c.y - PLOT_Y - 1) / STOREY_H))];
+    const hang = (i: number, j: number, k: number, s: number): void => {
+      if (i < 0 || j < 0 || i >= GRID || j >= GRID) return;
+      const [dx, dz] = SIDES[s];
+      const x0 = plot.minX + i * CELL;
+      const z0 = plot.minZ + j * CELL;
+      const y = PLOT_Y + k * STOREY_H + 2;
+      for (const off of [1, CELL - 2]) {
+        const fx = dx === 1 ? x0 + CELL - 1 : dx === -1 ? x0 : x0 + off;
+        const fz = dz === 1 ? z0 + CELL - 1 : dz === -1 ? z0 : z0 + off;
+        // A wall here with air outside: hang the rod just under the roof line.
+        if (W.get(fx, y, fz) === 0 || W.get(fx + dx, y, fz + dz) !== 0 || W.get(fx + dx, y - 1, fz + dz) !== 0) continue;
+        this.banners.add(new THREE.Vector3(fx + 0.5 + dx * 0.6, PLOT_Y + k * STOREY_H + STOREY_H - 0.35, fz + 0.5 + dz * 0.6), dx, dz, color, team);
+      }
+    };
+    const seen = new Set<string>();
+    for (const c of heroFloors) {
+      const [i, j, k] = cellOf(c);
+      const key = `${i},${j},${k}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      for (let s = 0; s < 4; s++) hang(i, j, k, s);
+    }
+    for (const e of entrances) {
+      const [i, j] = cellOf(e);
+      const lx = e.x - (plot.minX + i * CELL);
+      const lz = e.z - (plot.minZ + j * CELL);
+      const s = lz === 0 ? 0 : lx === CELL - 1 ? 1 : lz === CELL - 1 ? 2 : lx === 0 ? 3 : -1;
+      if (s < 0) continue;
+      const key = `gate${i},${j},${s}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      hang(i, j, 1, s);
+    }
+    void MID;
   }
 
   /** Low cover walls around each capture point with a lit pole in the middle (the monument is the centre point). */
@@ -751,7 +844,13 @@ export class Game {
     }
     const yard = war.outposts[team]?.pos;
     const tries: Cell[] = [];
-    if (yard) for (const [dx, dz] of [[0, 0], [2, 0], [-2, 0], [0, 2], [0, -2], [3, 3], [-3, -3]]) tries.push({ x: Math.floor(yard.x + dx), y: PLOT_Y + 1, z: Math.floor(yard.z + dz) });
+    const W = this.app.world;
+    if (yard)
+      for (const [dx, dz] of [[0, 0], [2, 0], [-2, 0], [0, 2], [0, -2], [3, 3], [-3, -3]]) {
+        const x = Math.floor(yard.x + dx);
+        const z = Math.floor(yard.z + dz);
+        tries.push({ x, y: W.get(x, PLOT_Y, z) !== 0 ? PLOT_Y + 1 : PLOT_Y, z });
+      }
     // Under a roof the stones would hit the ceiling: then a roof spot with open sky.
     tries.push(...spots);
     for (const c of tries) {
@@ -1122,7 +1221,7 @@ export class Game {
     if (!this.match || !this.builder || this.mode !== 'build') return;
     const plot = this.app.plots[this.player.plotIndex];
     // An empty or tiny plot gets a generated fortress so every round has an arena.
-    if (this.builder.blocks < 4) this.builder.autoBuild(this.rng.int(1, 1e9), this.match.war ? 'stronghold' : undefined);
+    if (this.builder.blocks < 4) this.builder.autoBuild(this.rng.int(1, 1e9), this.match.war ? (this.match.war.siege ? 'castle' : 'stronghold') : undefined);
     if (this.teamBuild) {
       this.teamBuild.active = false;
       if (this.teamBuild.finishAll() > 0) this.hud.showBanner(t('teamFinished'), '', 3);
@@ -1149,7 +1248,11 @@ export class Game {
       const heroCells = new Set(res?.hero?.cells ?? []);
       const heroFloors = res ? res.rooms.filter((r) => heroCells.has(Plan.index(r.i, r.j, r.k))).flatMap((r) => r.floor) : [];
       this.teamSpawns[0] = this.spawnSpots(floors, flag);
-      if (this.match.war.siege) this.seedEngines(0, res?.roofSpots ?? []);
+      this.hangBanners(0, heroFloors, res?.entrances ?? []);
+      if (this.match.war.siege) {
+        this.placeCourtyards(this.match);
+        this.seedEngines(0, res?.roofSpots ?? []);
+      }
       this.teamPosts[0] = this.postsFor(0, res?.roofSpots ?? [], res?.entrances ?? [], heroFloors, flag);
       this.teamOrders = this.trapOrders(flag, floors, res?.entrances ?? [], heroFloors);
     }
@@ -1577,6 +1680,7 @@ export class Game {
   private cleanupMatch(): void {
     this.leaveEngine();
     this.engines.clear();
+    this.banners.clear();
     this.threatUntil.clear();
     this.pendingDmg.clear();
     this.builder?.dispose();
@@ -1870,6 +1974,7 @@ export class Game {
     this.gadgetMeshes.update(dt, this.time);
     this.trapMeshes.update(dt, this.time, this.player.plotIndex);
     this.engineMeshes.update(dt);
+    this.banners.update(dt);
     this.trapParticles(dt);
     this.updateEventVisuals(dt);
     this.syncProjectiles();
