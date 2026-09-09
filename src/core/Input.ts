@@ -21,8 +21,6 @@ export interface VirtualState {
   gadgetHeld: boolean[];
   gadgetReleased: boolean[];
   interact: boolean;
-  /** Battle: open or close the command map. */
-  map: boolean;
   /** -1 none, 0..2 slot, 100 next weapon. */
   weaponSwitch: number;
   primary: boolean;
@@ -45,7 +43,7 @@ function freshVirtual(): VirtualState {
     moveX: 0, moveY: 0, lookDX: 0, lookDY: 0,
     fire: false, firePressed: false, fireReleased: false,
     jump: false, jumpHeld: false, sprint: false, crouch: false, ads: false,
-    reload: false, grenade: false, melee: false, gadget: [false, false], gadgetHeld: [false, false], gadgetReleased: [false, false], interact: false, map: false,
+    reload: false, grenade: false, melee: false, gadget: [false, false], gadgetHeld: [false, false], gadgetReleased: [false, false], interact: false,
     weaponSwitch: -1, primary: false, secondary: false, primaryHeld: false, secondaryHeld: false, zoom: 0, panX: 0, panY: 0,
     tapped: false, tapX: 0, tapY: 0, longPress: false, heightDir: 0,
   };
@@ -406,7 +404,6 @@ export class Input {
     v.gadget[0] = v.gadget[1] = false;
     v.gadgetReleased[0] = v.gadgetReleased[1] = false;
     v.interact = false;
-    v.map = false;
     v.weaponSwitch = -1;
     v.primary = false;
     v.secondary = false;

@@ -2,8 +2,6 @@ import { Mat, encodeBlock } from './Voxel';
 
 export type StyleId = 'candy' | 'gothic' | 'modern' | 'medieval' | 'neon' | 'desert';
 export const STYLE_IDS: StyleId[] = ['candy', 'gothic', 'modern', 'medieval', 'neon', 'desert'];
-/** Styles that fit the siege era (stone, timber and sandstone castles). */
-export const PERIOD_STYLES: StyleId[] = ['medieval', 'gothic', 'desert'];
 
 export type BlockRole = 'wall' | 'wallAlt' | 'trim' | 'floor' | 'roof' | 'accent' | 'glass' | 'light' | 'pillar' | 'stairs' | 'ground' | 'door';
 
@@ -45,7 +43,7 @@ export const STYLES: Record<StyleId, StyleDef> = {
     id: 'gothic', nameKey: 'sGothic', accentHex: '#6b21a8',
     roles: {
       wall: encodeBlock(Mat.STONE_BRICK, 20), wallAlt: encodeBlock(Mat.SMOOTH_STONE, 21), trim: encodeBlock(Mat.SMOOTH_STONE, 29), floor: encodeBlock(Mat.COBBLE, 22),
-      roof: encodeBlock(Mat.ROOF_TILES, 22), accent: encodeBlock(Mat.GOLD, 26), glass: encodeBlock(Mat.GLASS, 23), light: encodeBlock(Mat.LAMP, 8),
+      roof: encodeBlock(Mat.ROOF_TILES, 22), accent: encodeBlock(Mat.GOLD, 26), glass: encodeBlock(Mat.GLASS, 23), light: encodeBlock(Mat.CRYSTAL, 28),
       pillar: encodeBlock(Mat.SMOOTH_STONE, 25), stairs: encodeBlock(Mat.STONE_BRICK, 21), ground: encodeBlock(Mat.COBBLE, 20), door: encodeBlock(Mat.WOOD_PLANKS, 7),
     },
     colors: [...range(20, 29), ...neutrals],

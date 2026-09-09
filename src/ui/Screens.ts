@@ -2,7 +2,7 @@ import { el, btn, esc, segmented, field, slider } from './dom';
 import { t, setLang, getLang } from '../core/i18n';
 import { VERSION } from '../core/Version';
 import { settings, type Quality, type Language } from '../core/Settings';
-import { STYLE_IDS, STYLES, PERIOD_STYLES, type StyleId } from '../world/Styles';
+import { STYLE_IDS, STYLES, type StyleId } from '../world/Styles';
 import type { MatchConfig, Difficulty, GameMode } from '../sim/Match';
 import { PALETTE } from '../world/Voxel';
 
@@ -105,7 +105,7 @@ export class Screens {
   constructor(parent: HTMLElement, private cb: ScreenCallbacks) {
     this.root = el('div', 'screens');
     parent.appendChild(this.root);
-    this.setup = { playerName: settings.data.playerName, botCount: 5, difficulty: 'normal', buildTime: 90, roundTime: 240, style: 'medieval', mode: 'siege', teamSize: 8 };
+    this.setup = { playerName: settings.data.playerName, botCount: 5, difficulty: 'normal', buildTime: 90, roundTime: 240, style: 'medieval', mode: 'war', teamSize: 8 };
     try {
       const raw = localStorage.getItem(SETUP_KEY);
       if (raw) this.setup = { ...this.setup, ...JSON.parse(raw) };
@@ -207,18 +207,16 @@ export class Screens {
       this.setup.playerName = name.value;
     });
     grid.appendChild(field(t('yourName'), name));
-    const mode = this.setup.mode ?? 'siege';
-    const war = mode !== 'classic';
+    const war = (this.setup.mode ?? 'war') === 'war';
     grid.appendChild(
       field(
         t('gameMode'),
         segmented<GameMode>(
           [
-            { value: 'siege', label: t('modeSiege') },
             { value: 'war', label: t('modeWar') },
             { value: 'classic', label: t('modeClassic') },
           ],
-          mode,
+          this.setup.mode ?? 'war',
           (v) => {
             this.setup.mode = v;
             this.showSetup();
@@ -286,15 +284,13 @@ export class Screens {
         ),
       ),
     );
-    grid.appendChild(field(t('roundTime'), el('div', 'muted', t('minutes', { n: mode === 'siege' ? 8 : war ? 12 : 4 }))));
+    grid.appendChild(field(t('roundTime'), el('div', 'muted', war ? t('minutes', { n: 12 }) : t('minutes', { n: 4 }))));
     p.appendChild(grid);
     // Style picker
     const styles = el('div', 'styles');
-    const styleIds = mode === 'siege' ? PERIOD_STYLES : STYLE_IDS;
-    if (!styleIds.includes(this.setup.style)) this.setup.style = 'medieval';
     const render = (): void => {
       styles.innerHTML = '';
-      for (const id of styleIds) {
+      for (const id of STYLE_IDS) {
         const s = STYLES[id];
         const card = el('button', `style-card ${this.setup.style === id ? 'active' : ''}`);
         const sw = el('div', 'swatches');
@@ -327,8 +323,7 @@ export class Screens {
         } catch {
           /* ignore */
         }
-        const m = this.setup.mode ?? 'siege';
-        this.cb.start({ ...this.setup, roundTime: m === 'siege' ? 480 : m === 'war' ? 720 : 240 });
+        this.cb.start({ ...this.setup, roundTime: (this.setup.mode ?? 'war') === 'war' ? 720 : 240 });
       }),
     );
     p.appendChild(row);

@@ -1,8 +1,7 @@
 import * as THREE from 'three';
 import type { VoxelWorld } from '../world/VoxelWorld';
 import type { Terrain } from '../world/Terrain';
-import { Entity, Projectile, type ProjectileKind } from './Entities';
-import { ENGINE } from './Engines';
+import { Entity, Projectile } from './Entities';
 import { WEAPONS, GRENADE, damageAtDistance, type WeaponDef } from './Weapons';
 import { Emitter } from '../core/Events';
 import { Random } from '../core/Random';
@@ -56,8 +55,6 @@ export class Combat {
   /** Ray vs world (voxels + terrain) and entities. */
   /** Dynamic solids supplied by other systems (traps). */
   solids: (() => Solid[]) | null = null;
-  /** A catapult stone landed: the game breaks the wall around the point. */
-  onStoneImpact: ((pos: THREE.Vector3) => void) | null = null;
 
   raycast(origin: THREE.Vector3, dir: THREE.Vector3, maxDist: number, ignore: Entity | null, hitEntities = true, lenient = false): HitResult | null {
     const d = tmpDir.copy(dir).normalize();
@@ -253,7 +250,7 @@ export class Combat {
     void now;
   }
 
-  spawnProjectile(kind: ProjectileKind, owner: Entity, origin: THREE.Vector3, dir: THREE.Vector3, speed: number, fuse: number): Projectile {
+  spawnProjectile(kind: 'rocket' | 'grenade', owner: Entity, origin: THREE.Vector3, dir: THREE.Vector3, speed: number, fuse: number): Projectile {
     const p = new Projectile(kind, owner.id, fuse);
     p.pos.copy(origin);
     p.prev.copy(origin);
@@ -331,7 +328,7 @@ export class Combat {
     return true;
   }
 
-  explode(pos: THREE.Vector3, radius: number, damage: number, owner: Entity | null, now: number, burn = 0): void {
+  explode(pos: THREE.Vector3, radius: number, damage: number, owner: Entity | null, now: number): void {
     // Blasts blow out nearby glass.
     const gr = Math.max(1, Math.floor(radius * 0.8));
     for (let x = Math.floor(pos.x) - gr; x <= Math.floor(pos.x) + gr; x++)
@@ -356,10 +353,6 @@ export class Combat {
       push.y += 5 * falloff;
       e.vel.add(push);
       this.applyDamage(e, dmg, owner, now, false, c);
-      if (burn > 0 && e.alive) {
-        e.burnUntil = Math.max(e.burnUntil, now + burn);
-        e.burnBy = owner;
-      }
     }
     this.events.emit('explosion', { pos: pos.clone(), radius, owner });
   }
@@ -370,17 +363,17 @@ export class Combat {
       if (p.dead) continue;
       p.age += dt;
       p.prev.copy(p.pos);
-      const g = p.kind === 'rocket' ? WEAPONS.rocket.projectile!.gravity : p.kind === 'bolt' ? ENGINE.gravityBolt : p.kind === 'stone' ? ENGINE.gravityStone : GRENADE.gravity;
+      const g = p.kind === 'rocket' ? WEAPONS.rocket.projectile!.gravity : GRENADE.gravity;
       p.vel.y -= g * dt;
       p.pos.addScaledVector(p.vel, dt);
       const owner = ents.find((e) => e.id === p.ownerId) ?? null;
       // Fuse.
       if (p.kind === 'grenade' && p.age >= p.fuse) {
-        this.explode(p.pos, GRENADE.splashRadius, GRENADE.splashDamage, owner, now, GRENADE.burn);
+        this.explode(p.pos, GRENADE.splashRadius, GRENADE.splashDamage, owner, now);
         p.dead = true;
         continue;
       }
-      if ((p.kind === 'rocket' || p.kind === 'bolt' || p.kind === 'stone') && p.age >= p.fuse) {
+      if (p.kind === 'rocket' && p.age >= p.fuse) {
         p.dead = true;
         continue;
       }
@@ -389,22 +382,10 @@ export class Combat {
       const len = seg.length();
       if (len < 1e-6) continue;
       const dir = seg.clone().divideScalar(len);
-      const ignore = (p.kind === 'rocket' || p.kind === 'bolt' || p.kind === 'stone') && p.age < 0.15 ? owner : null;
+      const ignore = p.kind === 'rocket' && p.age < 0.15 ? owner : null;
       const hit = this.raycast(p.prev, dir, len + 0.15, ignore, true);
       if (hit) {
-        if (p.kind === 'bolt') {
-          // A ballista bolt: one heavy hit, then it is spent.
-          if (hit.entity) this.applyDamage(hit.entity, ENGINE.ballista.damage, owner, now, false, hit.point);
-          else if (hit.solid) hit.solid.hit(ENGINE.ballista.damage, owner);
-          this.events.emit('impact', { point: hit.point, normal: hit.normal, blockValue: hit.blockValue, onEntity: !!hit.entity });
-          p.dead = true;
-        } else if (p.kind === 'stone') {
-          // A catapult stone bursts and breaks the wall it lands on.
-          this.explode(hit.point.clone().addScaledVector(hit.normal, 0.3), ENGINE.catapult.splash, ENGINE.catapult.damage, owner, now);
-          if (!hit.entity) this.onStoneImpact?.(hit.point.clone());
-          this.events.emit('impact', { point: hit.point, normal: hit.normal, blockValue: hit.blockValue, onEntity: !!hit.entity });
-          p.dead = true;
-        } else if (p.kind === 'rocket') {
+        if (p.kind === 'rocket') {
           const def = WEAPONS.rocket.projectile!;
           if (hit.entity) this.applyDamage(hit.entity, WEAPONS.rocket.damage, owner, now, false, hit.point);
           this.explode(hit.point.clone().addScaledVector(hit.normal, 0.2), def.splashRadius, def.splashDamage, owner, now);
@@ -419,7 +400,6 @@ export class Combat {
           if (p.vel.length() > 2) this.events.emit('projectileBounce', { pos: p.pos.clone() });
           if (hit.entity && p.vel.length() > 3) p.vel.multiplyScalar(0.5);
         }
-        if (p.dead) continue;
       }
       // Terrain floor for grenades resting.
       const th = this.terrain.heightAt(p.pos.x, p.pos.z);
@@ -432,11 +412,7 @@ export class Combat {
           const def = WEAPONS.rocket.projectile!;
           this.explode(p.pos, def.splashRadius, def.splashDamage, owner, now);
           p.dead = true;
-        } else if (p.kind === 'stone') {
-          this.explode(p.pos, ENGINE.catapult.splash, ENGINE.catapult.damage, owner, now);
-          this.onStoneImpact?.(p.pos.clone());
-          p.dead = true;
-        } else if (p.kind === 'bolt') p.dead = true;
+        }
       }
     }
     // Compact.

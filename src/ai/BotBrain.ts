@@ -70,7 +70,7 @@ export interface BotContext {
   visibility: () => number;
 }
 
-export type State = 'idle' | 'approach' | 'search' | 'engage' | 'capture' | 'hide' | 'return' | 'retreat' | 'cover' | 'investigate' | 'hold' | 'rally' | 'build';
+export type State = 'idle' | 'approach' | 'search' | 'engage' | 'capture' | 'hide' | 'return' | 'retreat' | 'cover' | 'investigate' | 'hold' | 'rally';
 
 /** What a war brain needs from its team: sightings, known traps and the task it has been given. */
 export interface BotCommander {
@@ -1004,4 +1004,4 @@ export class BotBrain {
   }
 }
 
-export const BOT_NAMES = ['Aldric', 'Berta', 'Cedric', 'Dagny', 'Edda', 'Falk', 'Godric', 'Hild', 'Isolde', 'Jorund', 'Kettil', 'Leofric', 'Maud', 'Nils', 'Oswin', 'Piers', 'Rowena', 'Sigrun', 'Tancred', 'Ulf', 'Vidar', 'Wyn', 'Ysolt', 'Ragna'];
+export const BOT_NAMES = ['Nova', 'Blaze', 'Kestrel', 'Onyx', 'Vex', 'Rook', 'Sable', 'Zephyr', 'Ember', 'Quill', 'Talon', 'Mira', 'Juno', 'Kai', 'Lyra', 'Orion', 'Piper', 'Rhea', 'Sol', 'Tamsin', 'Ulla', 'Vale', 'Wren', 'Zara'];

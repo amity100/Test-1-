@@ -4,12 +4,12 @@ import type { Entity, Role } from './Entities';
 import type { StyleId } from '../world/Styles';
 import type { Cell } from '../world/Reachability';
 import { Random } from '../core/Random';
-import { WarState, WAR, SIEGE } from './War';
+import { WarState, WAR } from './War';
 
 export type Difficulty = 'easy' | 'normal' | 'hard' | 'nightmare';
 export type Phase = 'lobby' | 'build' | 'fortify' | 'roundIntro' | 'round' | 'roundEnd' | 'podium';
 
-export type GameMode = 'classic' | 'war' | 'siege';
+export type GameMode = 'classic' | 'war';
 
 export interface MatchConfig {
   playerName: string;
@@ -117,17 +117,14 @@ export class Match {
   constructor(readonly config: MatchConfig, private resolver: SpawnResolver, seed = Date.now()) {
     this.rng = new Random(seed >>> 0);
     this.war =
-      config.mode === 'war' || config.mode === 'siege'
-        ? new WarState(
-            {
+      config.mode === 'war'
+        ? new WarState({
             alarm: (team, on, capturer) => this.events.emit('warAlarm', { team, on, capturer }),
             captured: (team, by) => this.onWarCaptured(team, by),
             outpost: (index, owner, prev, by) => this.onWarOutpost(index, owner, prev, by),
             tickets: (team, tickets, delta, reason) => this.events.emit('warTickets', { team, tickets, delta, reason }),
             end: (winner) => this.events.emit('warEnd', { winner }),
-            },
-            config.mode === 'siege',
-          )
+          })
         : null;
   }
 
@@ -135,13 +132,9 @@ export class Match {
     return this.war !== null;
   }
 
-  get isSiege(): boolean {
-    return this.war?.siege ?? false;
-  }
-
   /** Seconds on the flag that complete a capture in this mode. */
   get captureTime(): number {
-    return this.war ? this.war.captureTime : RULES.captureTime;
+    return this.war ? WAR.captureTime : RULES.captureTime;
   }
 
   setEntities(list: Entity[]): void {
@@ -268,8 +261,7 @@ export class Match {
     }
     if (this.war) {
       this.war.onKill(victim, killer);
-      if (this.war.siege) victim.respawnAt = this.war.noRespawn(victim.team) ? -1 : now + SIEGE.respawn;
-      else victim.respawnAt = now + (this.war.capturer[victim.team] || this.war.flagDown(victim.team) ? WAR.respawnAlarm : WAR.respawn);
+      victim.respawnAt = now + (this.war && (this.war.capturer[victim.team] || this.war.flagDown(victim.team)) ? WAR.respawnAlarm : WAR.respawn);
       return;
     }
     victim.respawnAt = now + (victim.role === 'defender' ? RULES.respawnDefender : RULES.respawnAttacker);

@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import type { PartBuilder } from './PartBuilder';
 import { PRIM, rbox } from './PartBuilder';
 
-/** Material slots shared by the soldier's body and its outfit gear: quilted cloth, plate steel, leather, mail, iron fittings, the team-coloured tabard cloth, cream cloth (devices, rope), skin, wood and gilt. */
-export type MatKey = 'cloth' | 'steel' | 'leather' | 'mail' | 'iron' | 'tabard' | 'cream' | 'skin' | 'wood' | 'gold';
+/** Material slots shared by the operator body and its outfit gear. */
+export type MatKey = 'fabric' | 'armor' | 'nylon' | 'pad' | 'metal' | 'accent' | 'visor' | 'lens' | 'warn';
 
 /** Bone indices. */
 export const HIPS = 0;
@@ -15,7 +15,6 @@ export const THIGH_R = 5;
 export const SHIN_R = 6;
 
 /** Rest-pose bone origins in model space (root at the feet, facing -Z). */
-// The sleeve and the padded body are one gambeson; the arms stay rigid with the torso, posed around the weapon.
 export const REST = {
   hips: new THREE.Vector3(0, 0.95, 0),
   torso: new THREE.Vector3(0, 1.06, 0),

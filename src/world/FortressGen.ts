@@ -11,8 +11,8 @@ import { Architect, Plan, GRID, MAX_STOREYS, MAX_BLOCKS, applyField, frontSideOf
  * vocabulary the player gets. Each archetype is an arena first: several entrances, a tall core,
  * roof terraces, bridges, colonnades, courtyards and rooms that connect on every storey.
  */
-export type Archetype = 'keep' | 'citadel' | 'palace' | 'bastion' | 'temple' | 'spire' | 'stronghold' | 'castle';
-export const ARCHETYPES: Archetype[] = ['keep', 'citadel', 'palace', 'bastion', 'temple', 'spire', 'stronghold', 'castle'];
+export type Archetype = 'keep' | 'citadel' | 'palace' | 'bastion' | 'temple' | 'spire' | 'stronghold';
+export const ARCHETYPES: Archetype[] = ['keep', 'citadel', 'palace', 'bastion', 'temple', 'spire', 'stronghold'];
 
 export interface FortressResult {
   flag: Cell;
@@ -226,40 +226,8 @@ function stronghold(s: Sketch, rng: Random, t: ReturnType<typeof tonesFor>, fron
   }
 }
 
-/**
- * Siege castle: the same ring of wall rooms (their roofs are the wall walk with its merlons), built
- * to be looked at across a field and to soak up a siege. Two-storey towers on the corners, a
- * gatehouse two storeys high flanked by two towers of its own, a covered way from the gate to the
- * keep, the keep three storeys over the wall walk with the flag hall on top, and sometimes a great
- * hall behind it. The yard around the keep stays open so the catapult can stand in it. About
- * twenty-eight blocks, so the team has twenty to add.
- */
-function castle(s: Sketch, rng: Random, t: ReturnType<typeof tonesFor>, front: number): void {
-  const B = GRID - 1;
-  for (let i = 0; i <= B; i++) {
-    s.put(i, 0, 0, t.alt);
-    s.put(i, B, 0, t.alt);
-  }
-  for (let j = 1; j < B; j++) {
-    s.put(0, j, 0, t.alt);
-    s.put(B, j, 0, t.alt);
-  }
-  for (const [ti, tj] of [[0, 0], [B, 0], [0, B], [B, B]]) s.put(ti, tj, 1, t.top);
-  const gate: [number, number] = front === 0 ? [2, 0] : front === 2 ? [2, B] : front === 1 ? [B, 2] : [0, 2];
-  s.put(gate[0], gate[1], 1, t.main);
-  // Flanking towers either side of the gate, along the wall.
-  const along: [number, number] = front === 0 || front === 2 ? [1, 0] : [0, 1];
-  s.put(gate[0] - along[0], gate[1] - along[1], 1, t.tower);
-  s.put(gate[0] + along[0], gate[1] + along[1], 1, t.tower);
-  s.column(2, 2, 4, t.main, t.top);
-  const mid: [number, number] = [Math.round((gate[0] + 2) / 2), Math.round((gate[1] + 2) / 2)];
-  s.put(mid[0], mid[1], 0, t.gallery);
-  // A great hall behind the keep, away from the gate.
-  if (rng.next() < 0.6) s.put(2 + (2 - mid[0]), 2 + (2 - mid[1]), 0, t.main);
-}
-
 type Builder = (s: Sketch, rng: Random, t: ReturnType<typeof tonesFor>, front: number) => void;
-const BUILDERS: Record<Archetype, Builder> = { keep, citadel, palace, bastion, temple, spire, stronghold, castle };
+const BUILDERS: Record<Archetype, Builder> = { keep, citadel, palace, bastion, temple, spire, stronghold };
 
 /** A fortress plan in the Architect's block language, connected and under budget. */
 export function planFortress(rng: Random, style: StyleId, limit: number, archetype?: Archetype, front = 0): Plan {
@@ -303,7 +271,7 @@ export function generateFortress(world: VoxelWorld, plot: Plot, style: StyleId, 
   // Flag: the most buried room whose floor is reachable from outside; spawn nearby on another floor.
   // A stronghold keeps its flag at the top of the keep, one stair per storey between it and the gate.
   let rooms = heroOrder(plan, res.rooms.filter((r) => r.floor.length > 0));
-  if (arch === 'stronghold' || arch === 'castle') {
+  if (arch === 'stronghold') {
     const keepTop = res.rooms.filter((r) => r.i === 2 && r.j === 2 && r.floor.length > 0).sort((a, b) => b.k - a.k)[0];
     if (keepTop) rooms = [keepTop, ...rooms.filter((r) => r !== keepTop)];
   }

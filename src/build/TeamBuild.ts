@@ -1,7 +1,5 @@
-import * as THREE from 'three';
 import type { Builder } from './Builder';
-import { Plan, GRID, MAX_BLOCKS, CELL, STOREY_H, frontSideOf, type Tone } from './Architect';
-import { PLOT_Y } from '../world/Layout';
+import { Plan, GRID, MAX_BLOCKS, CELL, frontSideOf, type Tone } from './Architect';
 import { planFortress } from '../world/FortressGen';
 import type { Entity } from '../sim/Entities';
 import type { Plot } from '../world/Layout';
@@ -47,12 +45,6 @@ export class TeamBuild {
   private elapsed = 0;
   active = false;
   private towerTone: Tone;
-  /** Battle: pays for one ordered room (false when the team cannot afford it). */
-  pay: (() => boolean) | null = null;
-  /** Battle: which bots are on build duty right now. */
-  onDuty: ((bot: Entity) => boolean) | null = null;
-  /** How close a builder must stand to a battle order for work to count. */
-  static readonly SITE_RANGE = 14;
 
   constructor(
     private builder: Builder,
@@ -94,35 +86,12 @@ export class TeamBuild {
     return out;
   }
 
-  update(dt: number, battle = false): void {
+  update(dt: number): void {
     if (!this.active) return;
     this.elapsed += dt;
     const plan = this.builder.plan;
-    const reserved = !battle && this.elapsed < RESERVE_UNTIL ? RESERVE : 0;
+    const reserved = this.elapsed < RESERVE_UNTIL ? RESERVE : 0;
     for (const w of this.workers) {
-      if (battle) {
-        // Only the bots on build duty work, and only when they have reached the site.
-        if (!w.bot.alive || (this.onDuty && !this.onDuty(w.bot))) {
-          w.next = null; // a dead or reassigned builder lets go of its order
-          continue;
-        }
-        if (!w.next || !this.builder.hasOrder(...w.next)) w.next = this.pickOrder(w);
-        if (!w.next) continue;
-        const site = this.siteOf(w.next);
-        if (Math.hypot(site.x - w.bot.pos.x, site.z - w.bot.pos.z) > TeamBuild.SITE_RANGE) continue;
-        w.timer -= dt;
-        if (w.timer > 0) continue;
-        w.timer = 2.5 * this.rng.range(0.85, 1.15);
-        const [i, j, k] = w.next;
-        const order = this.builder.orders.find((o) => o.i === i && o.j === j && o.k === k);
-        if (!order) continue;
-        if (k > 0 && !plan.has(i, j, k - 1)) continue; // its support is still an order itself
-        if (this.pay && !this.pay()) continue;
-        this.builder.cancelOrderOnly(i, j, k);
-        this.builder.addBlock(i, j, k, order.tone, w.bot.id);
-        w.next = null;
-        continue;
-      }
       w.timer -= dt;
       if (!w.next) w.next = this.pick(w);
       if (w.timer > 0 || !w.next) continue;
@@ -136,38 +105,6 @@ export class TeamBuild {
       }
       w.next = null;
     }
-  }
-
-  /** Where a builder stands for a plan cell: the middle of its column at ground level (upper rooms have no floor yet). */
-  siteOf(c: [number, number, number]): THREE.Vector3 {
-    void STOREY_H;
-    return new THREE.Vector3(this.plot.minX + c[0] * CELL + CELL / 2, PLOT_Y, this.plot.minZ + c[1] * CELL + CELL / 2);
-  }
-
-  /** Where a bot on build duty should stand: its order's site, or null when nothing is ordered. */
-  siteFor(bot: Entity): THREE.Vector3 | null {
-    const w = this.workers.find((x) => x.bot === bot);
-    if (!w) return null;
-    if (!w.next || !this.builder.hasOrder(...w.next)) w.next = this.pickOrder(w);
-    return w.next ? this.siteOf(w.next) : null;
-  }
-
-  /** The nearest open order to a worker that no other worker has taken, lowest storeys first. */
-  private pickOrder(w: Worker): [number, number, number] | null {
-    const taken = new Set(this.workers.filter((o) => o !== w && o.next && o.bot.alive && (!this.onDuty || this.onDuty(o.bot))).map((o) => o.next!.join(',')));
-    let best: [number, number, number] | null = null;
-    let bestScore = Infinity;
-    for (const o of this.builder.orders) {
-      const key = `${o.i},${o.j},${o.k}`;
-      if (taken.has(key)) continue;
-      const site = this.siteOf([o.i, o.j, o.k]);
-      const score = o.k * 40 + Math.hypot(site.x - w.bot.pos.x, site.z - w.bot.pos.z);
-      if (score < bestScore) {
-        bestScore = score;
-        best = [o.i, o.j, o.k];
-      }
-    }
-    return best;
   }
 
   /** The next cell for a worker: a pinged column in reach first, then its own queue. */

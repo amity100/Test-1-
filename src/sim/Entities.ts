@@ -105,8 +105,6 @@ export class Entity {
   burnUntil = 0;
   burnTick = 0;
   burnBy: Entity | null = null;
-  /** Siege engine this entity is at the controls of (-1 none). */
-  manning = -1;
 
   weapons: WeaponSlot[] = [];
   weaponIndex = 0;
@@ -255,13 +253,12 @@ export class Entity {
     this.overdriveUntil = 0;
     this.overdrive = false;
     this.burnUntil = 0;
-    this.manning = -1;
     this.burnTick = 0;
     this.burnBy = null;
   }
 }
 
-export type ProjectileKind = 'rocket' | 'grenade' | 'bolt' | 'stone';
+export type ProjectileKind = 'rocket' | 'grenade';
 
 export class Projectile {
   readonly id = nextEntityId++;

@@ -712,27 +712,8 @@ body { background: radial-gradient(1200px 800px at 50% 30%, #16283a 0%, #0f1923 
 .bld-hint { position: absolute; left: 50%; bottom: calc(84px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 6px 14px; background: rgba(8, 14, 22, 0.72); border: 1px solid var(--line); clip-path: var(--chamfer-sm); font-family: var(--font); font-size: 12px; color: #dbe3ec; white-space: nowrap; max-width: 94vw; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
 .bld-hint.pop { animation: hintPop 0.35s ease-out; }
 @keyframes hintPop { from { opacity: 0; transform: translate(-50%, 6px); } to { opacity: 1; transform: translate(-50%, 0); } }
-.bld-toast { position: absolute; top: 90px; left: 50%; transform: translateX(-50%); background: rgba(255, 51, 85, 0.85); color: #fff; padding: 8px 16px; font-weight: 700; clip-path: var(--chamfer-sm);  pointer-events: none; }
-.bldui.command .bld-hint { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
-.bld-supplies { font-family: var(--display); font-weight: 700; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent2); white-space: nowrap; }
-.bld-crew { display: flex; align-items: center; gap: 8px; padding: 2px 8px; border: 1px solid var(--line); clip-path: var(--chamfer-sm); background: rgba(8, 14, 22, 0.6); }
-.bld-crew .crew-title { font-family: var(--display); font-weight: 700; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
-.bld-crew .crew-row { display: flex; align-items: center; gap: 4px; }
-.bld-crew .crew-row .lbl { font-family: var(--display); font-weight: 600; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #dbe3ec; }
-.bld-crew .crew-row .val { font-family: var(--display); font-weight: 700; font-size: 15px; min-width: 16px; text-align: center; color: #fff; }
-.bld-crew .crew-btn { width: 24px; height: 24px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.08); color: #fff; font: 700 15px/1 var(--display); cursor: pointer; clip-path: var(--chamfer-sm); padding: 0; }
-.bld-crew .crew-btn:active { background: rgba(0, 229, 255, 0.35); }
-.bldui.compact .bld-crew { gap: 5px; padding: 1px 5px; }
-.bldui.compact .bld-crew .crew-row .lbl { font-size: 9px; }
-.bldui.compact .bld-crew .crew-btn { width: 22px; height: 22px; }
-.bldui.compact .bld-supplies { font-size: 10px; }
-.tb.map { color: #ffd36a; }
-.tb.interact { color: #ffd36a; }
+.bld-toast { position: absolute; top: 90px; left: 50%; transform: translateX(-50%); background: rgba(255, 51, 85, 0.85); color: #fff; padding: 8px 16px; font-weight: 700; clip-path: var(--chamfer-sm); }
 .bldui.compact .bld-top { top: calc(8px + env(safe-area-inset-top, 0px)); gap: 10px; padding: 5px 10px; }
-.bldui.compact.command .bld-top { flex-wrap: wrap; justify-content: center; row-gap: 4px; max-width: 92vw; padding: 4px 8px; }
-.bldui.compact.command .bld-supplies .note { display: none; }
-.bldui.compact.command .bld-crew .crew-title { display: none; }
-.bldui.compact.command .bld-ready { padding: 6px 12px; font-size: 12px; }
 .bldui.compact .bld-timer { font-size: 20px; min-width: 48px; }
 .bldui.compact .bld-roomswrap { min-width: 84px; }
 .bldui.compact .bld-bar-track { width: 84px; }
@@ -807,7 +788,6 @@ body { background: radial-gradient(1200px 800px at 50% 30%, #16283a 0%, #0f1923 
 .bld-sub { position: absolute; left: 50%; bottom: calc(80px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: flex; gap: 6px; align-items: center; padding: 6px 8px; background: rgba(8, 14, 22, 0.78); border: 1px solid var(--line); clip-path: var(--chamfer); }
 .bld-sub .bld-btn.kind { width: 60px; height: 48px; padding: 0; flex-direction: column; gap: 1px; position: relative; }
 .bld-sub .bld-btn.kind .lb { font-size: 9px; }
-.bld-sub.engines .bld-btn.kind { width: 78px; }
 .bld-sub .bld-btn.kind .cost { position: absolute; top: 2px; right: 4px; font: 700 9px/1 var(--display); color: var(--accent2); }
 .bld-sub .bld-btn.kind.active { color: #041018; background: var(--accent2); border-color: var(--accent2); }
 .bld-sub .slots { font-family: var(--display); font-weight: 700; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #dbe3ec; padding: 0 8px; white-space: nowrap; }
@@ -857,7 +837,6 @@ body { background: radial-gradient(1200px 800px at 50% 30%, #16283a 0%, #0f1923 
 
 /* v11: Fortress War HUD */
 .warbar { margin: 4px 0 2px; display: grid; grid-template-columns: auto auto auto; grid-template-rows: auto auto; align-items: center; gap: 2px 14px; padding: 2px 6px 3px; font-family: var(--display); }
-.warbar .wt.lives { font-size: 18px; letter-spacing: 0.12em; }
 .warbar .wt { font-weight: 700; font-size: 26px; letter-spacing: 0.04em; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.7); min-width: 44px; text-align: center; }
 .warbar .wpoints { display: flex; gap: 6px; }
 .warbar .wpoint { position: relative; width: 34px; height: 34px; }

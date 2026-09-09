@@ -74,10 +74,6 @@ export class Player {
     this.shake = Math.min(1, this.shake + amount);
   }
 
-  /** False while the command map drives the camera (the body keeps simulating). */
-  cameraEnabled = true;
-  /** True while manning a siege engine: the trigger fires the engine, not the weapon. */
-  blockFire = false;
   /** 0..1 how far the camera has sunk into "underground" presentation. */
   get burrowAmount(): number {
     return this.burrowBlend;
@@ -205,7 +201,7 @@ export class Player {
       if (input.reloadPressed() && WeaponLogic.startReload(e)) this.events.emit('reload', { entity: e });
       if (input.fireReleased()) e.triggerReleased = true;
       const autoNow = this.updateAutoFire(dt, touch && settings.data.autoFire);
-      if ((input.fireHeld() || autoNow) && !this.blockFire) {
+      if (input.fireHeld() || autoNow) {
         if (WeaponLogic.tryFire(e, this.combat, now)) {
           this.viewModel.kick(e.weapon!.id);
           this.addShake(WEAPONS[e.weapon!.id].kick * 0.6);
@@ -255,7 +251,6 @@ export class Player {
     eye.y += Math.abs(Math.sin(this.bobPhase)) * 0.045 * bob - this.camDip - e.stepSmooth;
     const right = e.right(new THREE.Vector3());
     eye.addScaledVector(right, Math.sin(this.bobPhase) * 0.02 * bob);
-    if (!this.cameraEnabled) return;
     this.camera.position.copy(eye);
     const pitch = clamp(e.pitch + THREE.MathUtils.degToRad(e.recoilPitch) + this.shakeVec.y, -1.55, 1.55);
     const yaw = e.yaw + THREE.MathUtils.degToRad(e.recoilYaw) + this.shakeVec.x;

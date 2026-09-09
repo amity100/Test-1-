@@ -3,8 +3,6 @@ import type { VoxelWorld } from '../world/VoxelWorld';
 import type { Terrain } from '../world/Terrain';
 import type { Input } from '../core/Input';
 import type { Plot } from '../world/Layout';
-import { TRAP_COST } from '../sim/Traps';
-import type { EngineKind } from '../sim/Engines';
 import { PLOT_Y, PLOT_MAX_HEIGHT } from '../world/Layout';
 import type { StyleId } from '../world/Styles';
 import { PALETTE, blockColor } from '../world/Voxel';
@@ -17,7 +15,7 @@ import { Emitter } from '../core/Events';
 import type { TrapKind, TrapSystem } from '../sim/Traps';
 import { clamp, damp } from '../core/MathUtil';
 
-export type BuilderTool = 'build' | 'erase' | 'flag' | 'trap' | 'ping' | 'engine';
+export type BuilderTool = 'build' | 'erase' | 'flag' | 'trap' | 'ping';
 
 export interface BuilderEvents extends Record<string, unknown> {
   change: Record<string, never>;
@@ -83,25 +81,6 @@ export class Builder {
   private gridHelper: THREE.GridHelper;
   private popMesh: THREE.InstancedMesh;
   private pops: { x: number; y: number; z: number; t: number; color: THREE.Color }[] = [];
-  /**
-   * Battle commander mode: taps order rooms (amber ghosts the crew builds while the fight goes on)
-   * instead of placing them, the camera may roam over both castles, and traps cost supplies.
-   */
-  command = false;
-  readonly orders: { i: number; j: number; k: number; tone: Tone }[] = [];
-  private orderMesh: THREE.InstancedMesh;
-  /** Camera focus limits when roaming beyond the plot (world x/z). */
-  bounds: { minX: number; maxX: number; minZ: number; maxZ: number } | null = null;
-  /** Pays for a trap set from the command map; false refuses the placement. */
-  costCheck: ((kind: 'trap', cost: number) => boolean) | null = null;
-  /** Command map: sets a siege engine on a floor cell (returns an error key, or null when placed). */
-  placeEngine: ((kind: EngineKind, cell: Cell) => string | null) | null = null;
-  engineKind: EngineKind = 'ballista';
-
-  setEngineKind(k: EngineKind): void {
-    this.engineKind = k;
-    this.events.emit('change', {});
-  }
   private raycaster = new THREE.Raycaster();
   private active = false;
   private dirtyValidate = true;
@@ -148,10 +127,7 @@ export class Builder {
     this.popMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.9, depthWrite: false }), 96);
     this.popMesh.count = 0;
     this.popMesh.frustumCulled = false;
-    this.orderMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(CELL - 0.3, STOREY_H - 0.3, CELL - 0.3), new THREE.MeshBasicMaterial({ color: 0xffb300, transparent: true, opacity: 0.26, depthWrite: false }), 48);
-    this.orderMesh.count = 0;
-    this.orderMesh.frustumCulled = false;
-    this.group.add(this.ghost, this.flagMarker.group, this.spawnMarker, this.plotFrame, this.gridHelper, this.popMesh, this.orderMesh);
+    this.group.add(this.ghost, this.flagMarker.group, this.spawnMarker, this.plotFrame, this.gridHelper, this.popMesh);
     this.group.visible = false;
     scene.add(this.group);
   }
@@ -284,46 +260,6 @@ export class Builder {
     this.regenerate();
     this.events.emit('placed', { i, j, k, by });
     this.debugLast = `add:${i},${j},${k}:${tone}`;
-    return true;
-  }
-
-  /** Orders a room for the crew to build during the battle: supported, unplanned, within the budget. */
-  addOrder(i: number, j: number, k: number, tone: Tone = this.tone): boolean {
-    if (!Plan.inside(i, j, k) || this.plan.has(i, j, k) || this.hasOrder(i, j, k)) return false;
-    if (this.plan.count() + this.orders.length >= MAX_BLOCKS) {
-      this.events.emit('invalid', { key: 'budgetFull' });
-      return false;
-    }
-    if (k > 0 && !this.plan.has(i, j, k - 1) && !this.hasOrder(i, j, k - 1)) {
-      this.events.emit('invalid', { key: 'unsupported' });
-      return false;
-    }
-    this.orders.push({ i, j, k, tone });
-    this.events.emit('change', {});
-    this.debugLast = `order:${i},${j},${k}`;
-    return true;
-  }
-
-  hasOrder(i: number, j: number, k: number): boolean {
-    return this.orders.some((o) => o.i === i && o.j === j && o.k === k);
-  }
-
-  /** Removes one order (the crew just built it). */
-  cancelOrderOnly(i: number, j: number, k: number): void {
-    const at = this.orders.findIndex((o) => o.i === i && o.j === j && o.k === k);
-    if (at >= 0) this.orders.splice(at, 1);
-  }
-
-  cancelOrder(i: number, j: number, k: number): boolean {
-    const at = this.orders.findIndex((o) => o.i === i && o.j === j && o.k === k);
-    if (at < 0) return false;
-    // Anything ordered on top of it goes too.
-    this.orders.splice(at, 1);
-    for (let n = this.orders.length - 1; n >= 0; n--) {
-      const o = this.orders[n];
-      if (o.i === i && o.j === j && o.k > k) this.orders.splice(n, 1);
-    }
-    this.events.emit('change', {});
     return true;
   }
 
@@ -568,15 +504,10 @@ export class Builder {
     this.lastAim = a;
     switch (this.tool) {
       case 'build':
-        if (this.command) {
-          if (a.add) return this.addOrder(a.add[0], a.add[1], a.add[2]);
-          return false;
-        }
         if (a.add) return this.addBlock(a.add[0], a.add[1], a.add[2]);
         if (a.hit) return this.paintBlock(a.hit[0], a.hit[1], a.hit[2]);
         return false;
       case 'erase':
-        if (this.command && a.add && this.hasOrder(a.add[0], a.add[1], a.add[2])) return this.cancelOrder(a.add[0], a.add[1], a.add[2]);
         if (a.hit) return this.removeBlock(a.hit[0], a.hit[1], a.hit[2]);
         return false;
       case 'flag':
@@ -588,21 +519,6 @@ export class Builder {
         if (!col) return false;
         this.togglePing(col[0], col[1]);
         this.debugLast = `ping:${col[0]},${col[1]}`;
-        return true;
-      }
-      case 'engine': {
-        const cell = this.pickFloor(sx, sy, true);
-        if (!cell || !this.placeEngine) {
-          this.events.emit('invalid', { key: 'engineNeedsFloor' });
-          return false;
-        }
-        const err = this.placeEngine(this.engineKind, cell);
-        if (err) {
-          this.events.emit('invalid', { key: err });
-          return false;
-        }
-        this.events.emit('change', {});
-        this.debugLast = `engine:${this.engineKind}`;
         return true;
       }
       case 'trap': {
@@ -622,10 +538,6 @@ export class Builder {
           this.events.emit('invalid', { key: 'trapTaken' });
           return false;
         }
-        if (this.traps.canPlace(this.trapKind, cell, this.plot.index) === null && this.costCheck && !this.costCheck('trap', TRAP_COST[this.trapKind])) {
-          this.events.emit('invalid', { key: 'noSupplies' });
-          return false;
-        }
         const r = this.traps.place(this.trapKind, cell, this.plot.index);
         if (typeof r === 'string') {
           this.events.emit('invalid', { key: r });
@@ -639,15 +551,15 @@ export class Builder {
     }
   }
 
-  /** The free floor cell under the cursor (a room floor inside the plot, or the open ground too): where traps and engines go. */
-  pickFloor(sx: number, sy: number, ground = false): Cell | null {
+  /** The free floor cell under the cursor (a room floor inside the plot): where traps go. */
+  pickFloor(sx: number, sy: number): Cell | null {
     const ndc = new THREE.Vector2((sx / window.innerWidth) * 2 - 1, -(sy / window.innerHeight) * 2 + 1);
     this.raycaster.setFromCamera(ndc, this.camera);
     const ray = this.raycaster.ray;
     const hit = this.world.raycast(ray.origin.x, ray.origin.y, ray.origin.z, ray.direction.x, ray.direction.y, ray.direction.z, 260);
     if (!hit || hit.ny < 0.5) return null;
     const c: Cell = { x: hit.x, y: hit.y + 1, z: hit.z };
-    if (c.x < this.plot.minX || c.x > this.plot.maxX || c.z < this.plot.minZ || c.z > this.plot.maxZ || c.y < PLOT_Y || (c.y === PLOT_Y && !ground)) return null;
+    if (c.x < this.plot.minX || c.x > this.plot.maxX || c.z < this.plot.minZ || c.z > this.plot.maxZ || c.y <= PLOT_Y) return null;
     if (this.world.get(c.x, c.y, c.z) !== 0 || this.world.get(c.x, c.y + 1, c.z) !== 0) return null;
     return c;
   }
@@ -750,7 +662,7 @@ export class Builder {
   }
 
   private updateCamera(dt: number): void {
-    const p = this.bounds ?? this.plot;
+    const p = this.plot;
     this.focus.x = clamp(this.focus.x, p.minX - 6, p.maxX + 7);
     this.focus.z = clamp(this.focus.z, p.minZ - 6, p.maxZ + 7);
     this.focus.y = clamp(this.focus.y, PLOT_Y + 2, PLOT_Y + PLOT_MAX_HEIGHT);
@@ -768,17 +680,7 @@ export class Builder {
   private updateOverlays(dt: number): void {
     // Hover ghost (mouse only; touch acts on tap).
     this.ghost.visible = false;
-    if (!this.input.isTouch && !this.uiHover && this.tool === 'engine') {
-      // Engine tool: a wide pad where the engine would stand.
-      const c = this.pickFloor(this.input.cursorX, this.input.cursorY, true);
-      if (c) {
-        this.ghost.visible = true;
-        this.ghost.scale.set(2.2 / (CELL - 0.1), 0.24 / (STOREY_H - 0.1), 2.2 / (CELL - 0.1));
-        this.ghost.position.set(c.x + 0.5, c.y + 0.12, c.z + 0.5);
-        (this.ghost.material as THREE.MeshBasicMaterial).color.setHex(0xffb300);
-        (this.ghostEdges.material as THREE.LineBasicMaterial).color.setHex(0xffb300);
-      }
-    } else if (!this.input.isTouch && !this.uiHover && this.tool === 'trap') {
+    if (!this.input.isTouch && !this.uiHover && this.tool === 'trap') {
       // Trap tool: a thin pad on the floor cell under the cursor, green when it can go there.
       const c = this.pickFloor(this.input.cursorX, this.input.cursorY);
       if (c && this.traps) {
@@ -798,7 +700,7 @@ export class Builder {
       if (target) {
         this.ghost.visible = true;
         this.ghost.position.set(this.plot.minX + target[0] * CELL + CELL / 2, PLOT_Y + target[2] * STOREY_H + STOREY_H / 2, this.plot.minZ + target[1] * CELL + CELL / 2);
-        const hex = this.tool === 'erase' ? 0xff4655 : this.tool === 'flag' || this.command ? 0xffb300 : 0x00e5ff;
+        const hex = this.tool === 'erase' ? 0xff4655 : this.tool === 'flag' ? 0xffb300 : 0x00e5ff;
         mat.color.setHex(hex);
         (this.ghostEdges.material as THREE.LineBasicMaterial).color.setHex(this.tool === 'build' ? 0xffffff : hex);
       }
@@ -813,19 +715,6 @@ export class Builder {
       this.spawnMarker.visible = true;
       this.spawnMarker.position.set(this.spawn.x + 0.5, this.spawn.y + 0.05, this.spawn.z + 0.5);
     } else this.spawnMarker.visible = false;
-    // Pending orders: amber ghosts of the rooms the crew is about to raise.
-    if (this.orders.length) {
-      const m = new THREE.Matrix4();
-      const n = Math.min(this.orders.length, 48);
-      for (let q = 0; q < n; q++) {
-        const o = this.orders[q];
-        m.identity().setPosition(this.plot.minX + o.i * CELL + CELL / 2, PLOT_Y + o.k * STOREY_H + STOREY_H / 2, this.plot.minZ + o.j * CELL + CELL / 2);
-        this.orderMesh.setMatrixAt(q, m);
-      }
-      this.orderMesh.count = n;
-      this.orderMesh.instanceMatrix.needsUpdate = true;
-      this.orderMesh.visible = true;
-    } else this.orderMesh.visible = false;
     // Pops.
     if (this.pops.length) {
       const m = new THREE.Matrix4();
@@ -880,8 +769,6 @@ export class Builder {
       dist: +this.orbitDist.toFixed(1),
       focus: this.focus.toArray().map((v) => +v.toFixed(1)),
       undo: this.undoStack.length,
-      orders: this.orders.length,
-      command: this.command,
       aim: this.lastAim,
     };
   }

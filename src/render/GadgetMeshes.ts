@@ -2,12 +2,10 @@ import * as THREE from 'three';
 import type { GadgetSystem } from '../sim/Gadgets';
 import type { Entity } from '../sim/Entities';
 import { PRIM } from './PartBuilder';
-import { woodMaps } from './DetailTextures';
 
 /**
- * Renders deployed gadgets in the siege era: hemp rope lines with iron anchor weights, spring boards
- * (an oak platform on coil springs with an iron rim), powder kegs with a sparking slow-match, and
- * the dirt mound that follows a burrowing sapper.
+ * Renders deployed gadgets: zipline cables with anchor pucks, jump pads with a pulsing ring, stuck
+ * breach charges with a blinking arming LED, and the dirt mound that follows a burrowed player.
  */
 export class GadgetMeshes {
   readonly group = new THREE.Group();
@@ -16,16 +14,16 @@ export class GadgetMeshes {
   private charges = new Map<number, { root: THREE.Group; led: THREE.Mesh }>();
   private mounds = new Map<number, THREE.Mesh>();
 
-  private ropeMat = new THREE.MeshStandardMaterial({ color: 0x9c8a5c, metalness: 0, roughness: 1 });
-  private glowMat = new THREE.LineBasicMaterial({ color: 0xe8dcc0, transparent: true, opacity: 0.35 });
-  private ironMat = new THREE.MeshStandardMaterial({ color: 0x3a3d42, metalness: 0.8, roughness: 0.6 });
-  private woodMat: THREE.MeshStandardMaterial;
-  private burstMat = new THREE.MeshBasicMaterial({ color: 0xe8dcc0, transparent: true, opacity: 0.4, depthWrite: false, side: THREE.DoubleSide });
-  private emberMat = new THREE.MeshStandardMaterial({ color: 0x3a1a08, emissive: 0xff7a20, emissiveIntensity: 2 });
+  private cableMat = new THREE.MeshStandardMaterial({ color: 0x2b3038, metalness: 0.85, roughness: 0.35 });
+  private glowMat = new THREE.LineBasicMaterial({ color: 0x9ad7ff, transparent: true, opacity: 0.45 });
+  private anchorMat = new THREE.MeshStandardMaterial({ color: 0x14181e, metalness: 0.6, roughness: 0.5, emissive: 0x00e5ff, emissiveIntensity: 0.6 });
+  private padMat = new THREE.MeshStandardMaterial({ color: 0x1a1f27, metalness: 0.5, roughness: 0.6 });
+  private ringMat = new THREE.MeshStandardMaterial({ color: 0x00e5ff, emissive: 0x00e5ff, emissiveIntensity: 1.6, roughness: 0.4 });
+  private burstMat = new THREE.MeshBasicMaterial({ color: 0x8ff3ff, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide });
+  private chargeMat = new THREE.MeshStandardMaterial({ color: 0x3b3f2c, metalness: 0.3, roughness: 0.7 });
+  private ledMat = new THREE.MeshStandardMaterial({ color: 0xff2030, emissive: 0xff2030, emissiveIntensity: 2 });
   private moundMat = new THREE.MeshStandardMaterial({ color: 0x5a4632, roughness: 1, metalness: 0 });
   private ringGeo = new THREE.TorusGeometry(0.82, 0.06, 8, 32);
-  private springGeo = new THREE.TorusGeometry(0.16, 0.025, 6, 20);
-  private hoopGeo = new THREE.TorusGeometry(0.12, 0.012, 6, 20);
   private burstGeo = new THREE.CylinderGeometry(0.9, 0.7, 0.9, 24, 1, true);
 
   constructor(
@@ -33,8 +31,6 @@ export class GadgetMeshes {
     private entities: () => Entity[],
   ) {
     this.group.name = 'gadgets';
-    const wm = woodMaps();
-    this.woodMat = new THREE.MeshStandardMaterial({ color: 0x8a5a30, metalness: 0, roughness: 1, map: wm.map, normalMap: wm.normalMap, normalScale: new THREE.Vector2(0.5, 0.5), roughnessMap: wm.roughnessMap });
   }
 
   update(dt: number, time: number): void {
@@ -55,26 +51,20 @@ export class GadgetMeshes {
       const len = dir.length();
       const mid = line.a.clone().add(line.b).multiplyScalar(0.5);
       const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
-      const rope = new THREE.Mesh(PRIM.cyl8, this.ropeMat);
-      rope.position.copy(mid);
-      rope.quaternion.copy(q);
-      rope.scale.set(0.06, len, 0.06);
-      rope.castShadow = true;
-      g.add(rope);
+      const cable = new THREE.Mesh(PRIM.cyl8, this.cableMat);
+      cable.position.copy(mid);
+      cable.quaternion.copy(q);
+      cable.scale.set(0.06, len, 0.06);
+      cable.castShadow = true;
+      g.add(cable);
       const glow = new THREE.Line(new THREE.BufferGeometry().setFromPoints([line.a, line.b]), this.glowMat);
       glow.frustumCulled = false;
       g.add(glow);
-      // Iron anchor weights with a ring at either end.
       for (const p of [line.a, line.b]) {
-        const weight = new THREE.Mesh(PRIM.sphereLo, this.ironMat);
-        weight.position.copy(p);
-        weight.scale.setScalar(0.26);
-        g.add(weight);
-        const ring = new THREE.Mesh(this.hoopGeo, this.ironMat);
-        ring.position.copy(p);
-        ring.quaternion.copy(q);
-        ring.rotation.x += Math.PI / 2;
-        g.add(ring);
+        const puck = new THREE.Mesh(PRIM.sphereLo, this.anchorMat);
+        puck.position.copy(p);
+        puck.scale.setScalar(0.34);
+        g.add(puck);
       }
       this.group.add(g);
       this.zips.set(line.id, g);
@@ -97,30 +87,20 @@ export class GadgetMeshes {
       if (!m) {
         const root = new THREE.Group();
         root.position.copy(pad.pos);
-        // Oak platform on four coil springs, an iron rim around the deck.
-        const base = new THREE.Mesh(PRIM.cyl8, this.woodMat);
+        const base = new THREE.Mesh(PRIM.cyl, this.padMat);
         base.scale.set(2.2, 0.12, 2.2);
         base.position.y = 0.06;
         base.castShadow = true;
         base.receiveShadow = true;
         root.add(base);
-        for (const [sx, sz] of [[-0.55, -0.55], [0.55, -0.55], [-0.55, 0.55], [0.55, 0.55]]) {
-          for (let i = 0; i < 3; i++) {
-            const coil = new THREE.Mesh(this.springGeo, this.ironMat);
-            coil.rotation.x = Math.PI / 2;
-            coil.position.set(sx, 0.17 + i * 0.07, sz);
-            root.add(coil);
-          }
-        }
-        const deck = new THREE.Mesh(PRIM.cyl8, this.woodMat);
-        deck.scale.set(1.9, 0.1, 1.9);
-        deck.position.y = 0.42;
-        deck.castShadow = true;
-        root.add(deck);
-        const ring = new THREE.Mesh(this.ringGeo, this.ironMat);
+        const ring = new THREE.Mesh(this.ringGeo, this.ringMat);
         ring.rotation.x = Math.PI / 2;
-        ring.position.y = 0.47;
+        ring.position.y = 0.13;
         root.add(ring);
+        const chevron = new THREE.Mesh(PRIM.cone, this.ringMat);
+        chevron.scale.set(0.5, 0.5, 0.5);
+        chevron.position.y = 0.42;
+        root.add(chevron);
         const burst = new THREE.Mesh(this.burstGeo, this.burstMat);
         burst.position.y = 0.5;
         burst.visible = false;
@@ -129,14 +109,14 @@ export class GadgetMeshes {
         m = { root, burst, ring };
         this.pads.set(pad.id, m);
       }
-      const idle = 1 + Math.sin(time * 4 + pad.id) * 0.02;
+      const idle = 1 + Math.sin(time * 4 + pad.id) * 0.04;
       m.ring.scale.set(idle, idle, 1);
       if (pad.pulse < 0.45) {
         const k = pad.pulse / 0.45;
         m.burst.visible = true;
         m.burst.scale.set(1 + k * 0.8, 1 + k * 3.5, 1 + k * 0.8);
         m.burst.position.y = 0.5 + k * 1.6;
-        (m.burst.material as THREE.MeshBasicMaterial).opacity = 0.45 * (1 - k);
+        (m.burst.material as THREE.MeshBasicMaterial).opacity = 0.55 * (1 - k);
       } else m.burst.visible = false;
     }
     for (const [id, m] of this.pads) {
@@ -152,27 +132,19 @@ export class GadgetMeshes {
       live.add(c.id);
       let m = this.charges.get(c.id);
       if (!m) {
-        // A small powder keg with two hoops and a slow-match that sparks faster as the fuse runs out.
         const root = new THREE.Group();
-        const body = new THREE.Mesh(PRIM.cyl12, this.woodMat);
-        body.scale.set(0.24, 0.26, 0.24);
-        body.position.y = 0.13;
+        const body = new THREE.Mesh(PRIM.box, this.chargeMat);
+        body.scale.set(0.28, 0.12, 0.2);
+        body.position.y = 0.06;
         body.castShadow = true;
         root.add(body);
-        for (const y of [0.06, 0.2]) {
-          const hoop = new THREE.Mesh(this.hoopGeo, this.ironMat);
-          hoop.rotation.x = Math.PI / 2;
-          hoop.position.y = y;
-          root.add(hoop);
-        }
-        const cord = new THREE.Mesh(PRIM.cyl8, this.ropeMat);
-        cord.scale.set(0.02, 0.14, 0.02);
-        cord.position.set(0.04, 0.32, 0.03);
-        cord.rotation.z = -0.4;
-        root.add(cord);
-        const led = new THREE.Mesh(PRIM.sphereLo, this.emberMat.clone());
-        led.scale.setScalar(0.05);
-        led.position.set(0.07, 0.38, 0.03);
+        const strap = new THREE.Mesh(PRIM.box, this.cableMat);
+        strap.scale.set(0.3, 0.03, 0.06);
+        strap.position.y = 0.12;
+        root.add(strap);
+        const led = new THREE.Mesh(PRIM.sphereLo, this.ledMat.clone());
+        led.scale.setScalar(0.06);
+        led.position.set(0.09, 0.14, 0.05);
         root.add(led);
         this.group.add(root);
         m = { root, led };
@@ -184,8 +156,8 @@ export class GadgetMeshes {
         m.root.rotation.x += 0.25;
         m.root.rotation.z += 0.17;
       }
-      const spark = c.stuck ? (Math.sin(time * (10 + (1.5 - c.fuse) * 14)) > 0 ? 3 : 0.6) : 1.2;
-      (m.led.material as THREE.MeshStandardMaterial).emissiveIntensity = spark;
+      const blink = c.stuck ? (Math.sin(time * (10 + (1.5 - c.fuse) * 14)) > 0 ? 2.5 : 0.15) : 1;
+      (m.led.material as THREE.MeshStandardMaterial).emissiveIntensity = blink;
     }
     for (const [id, m] of this.charges) {
       if (live.has(id)) continue;

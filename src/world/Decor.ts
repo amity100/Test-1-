@@ -1,7 +1,7 @@
 import type { VoxelWorld } from './VoxelWorld';
 import type { Terrain } from './Terrain';
 import { Mat, encodeBlock } from './Voxel';
-import { PLAZA_Y, type Plot, plotDistance } from './Layout';
+import { PLAZA_Y, type Plot } from './Layout';
 import type { Random } from '../core/Random';
 
 const MARBLE = encodeBlock(Mat.MARBLE, 30);
@@ -10,9 +10,9 @@ const STONE = encodeBlock(Mat.SMOOTH_STONE, 41);
 const OLD_STONE = encodeBlock(Mat.STONE_BRICK, 40);
 const DARK = encodeBlock(Mat.SMOOTH_STONE, 49);
 const GOLD = encodeBlock(Mat.GOLD, 26);
-const LAMP = encodeBlock(Mat.LAMP, 8);
+const LAMP = encodeBlock(Mat.LAMP, 53);
 const COBBLE = encodeBlock(Mat.COBBLE, 41);
-const CRYSTAL = encodeBlock(Mat.LAMP, 65);
+const CRYSTAL = encodeBlock(Mat.CRYSTAL, 53);
 
 function box(world: VoxelWorld, x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, v: number): void {
   for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x++)
@@ -20,7 +20,7 @@ function box(world: VoxelWorld, x0: number, y0: number, z0: number, x1: number, 
       for (let z = Math.min(z0, z1); z <= Math.max(z0, z1); z++) world.set(x, y, z, v);
 }
 
-/** Central monument: stepped marble plinth, tapered stone obelisk with gilt bands and a lantern cap, torch pillars on the corners. */
+/** Central monument: stepped marble plinth, tapered obelisk with a gold cap and lit corner pillars. */
 function monument(world: VoxelWorld): void {
   const y0 = PLAZA_Y;
   box(world, -5, y0, -5, 5, y0, 5, MARBLE);
@@ -113,14 +113,12 @@ export function buildDecor(world: VoxelWorld, terrain: Terrain, plots: Plot[], r
     const a = -Math.PI / 2 + i * step + step / 2;
     // Ruins on the inner meadow between two fortresses
     const rr = 56 + rng.range(-3, 3);
-    const rx = Math.round(Math.cos(a) * rr);
-    const rz = Math.round(Math.sin(a) * rr);
-    // Keep the meadow ruins off the siege castles' plots and their blend rings.
-    if (plots.every((p) => plotDistance(p, rx, rz) > 14 || p.index < 8)) ruin(world, terrain, rx, rz, rng);
+    ruin(world, terrain, Math.round(Math.cos(a) * rr), Math.round(Math.sin(a) * rr), rng);
     // Coastal standing stones
     const mr = 121;
     const mx = Math.round(Math.cos(a + rng.range(-0.06, 0.06)) * mr);
     const mz = Math.round(Math.sin(a + rng.range(-0.06, 0.06)) * mr);
     if (terrain.heightAt(mx, mz) > 1.2) menhir(world, terrain, mx, mz, rng);
   }
+  void plots;
 }
