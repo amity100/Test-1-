@@ -5,11 +5,12 @@ import type { StyleId } from '../world/Styles';
 import type { Cell } from '../world/Reachability';
 import { Random } from '../core/Random';
 import { WarState, WAR } from './War';
+import { AscentState, ASCENT, SCORE_ASCENT, type AscentHooks } from './Ascent';
 
 export type Difficulty = 'easy' | 'normal' | 'hard' | 'nightmare';
 export type Phase = 'lobby' | 'build' | 'fortify' | 'roundIntro' | 'round' | 'roundEnd' | 'podium';
 
-export type GameMode = 'classic' | 'war';
+export type GameMode = 'classic' | 'war' | 'ascent';
 
 export interface MatchConfig {
   playerName: string;
@@ -18,6 +19,8 @@ export interface MatchConfig {
   /** Fortress War: two teams of this many (bots fill the rest). Classic when absent. */
   mode?: GameMode;
   teamSize?: number;
+  /** Sky Flag: everyone in the arena, the player included (bots fill the rest). */
+  playerCount?: number;
   difficulty: Difficulty;
   /** Seconds; 0 = unlimited. */
   buildTime: number;
@@ -34,6 +37,8 @@ export interface FlagInfo {
 export interface SpawnResolver {
   /** Where an entity appears for the current round: defenders inside the contested fortress, attackers at their own. */
   spawnFor(entity: Entity, role: Role, targetPlotIndex: number): THREE.Vector3;
+  /** Sky Flag: a spot above the water, or null when nothing is left to stand on (the player is out). */
+  ascentSpawn?(entity: Entity): THREE.Vector3 | null;
 }
 
 export type ScoreReason = 'capture' | 'hold' | 'kill' | 'killDefender' | 'defense' | 'holdMinute' | 'outpost' | 'flagDefense';
@@ -58,6 +63,8 @@ export interface MatchEvents extends Record<string, unknown> {
   warOutpost: { index: number; owner: number; prev: number; by: Entity[] };
   warTickets: { team: number; tickets: number; delta: number; reason: 'kill' | 'capture' | 'drain' };
   warEnd: { winner: number };
+  /** Sky Flag: someone is out for good (nothing left above the water to come back to). */
+  eliminated: { entity: Entity };
 }
 
 export const SCORE = {
@@ -72,6 +79,9 @@ export const SCORE = {
   outpost: 15,
   flagDefense: 10,
 };
+
+/** Sky Flag: seconds before a fallen player is back on the ground (or a tower). */
+export const ASCENT_RESPAWN = 5;
 
 export const RULES = {
   captureTime: 3,
@@ -113,9 +123,12 @@ export class Match {
   private captureAccum = new Map<number, number>();
   /** Fortress War state (null in the classic rotation). */
   readonly war: WarState | null;
+  /** Sky Flag state (null in the other modes). */
+  readonly ascent: AscentState | null;
 
-  constructor(readonly config: MatchConfig, private resolver: SpawnResolver, seed = Date.now()) {
+  constructor(readonly config: MatchConfig, private resolver: SpawnResolver, seed = Date.now(), ascent?: (hooks: AscentHooks) => AscentState, ascentHooks?: AscentHooks) {
     this.rng = new Random(seed >>> 0);
+    this.ascent = config.mode === 'ascent' && ascent && ascentHooks ? ascent(ascentHooks) : null;
     this.war =
       config.mode === 'war'
         ? new WarState({
@@ -130,6 +143,17 @@ export class Match {
 
   get isWar(): boolean {
     return this.war !== null;
+  }
+
+  get isAscent(): boolean {
+    return this.ascent !== null;
+  }
+
+  /** Sky Flag has no build: straight to the intro and the one long battle. */
+  startAscent(): void {
+    this.roundOrder = [0];
+    this.roundIndex = -1;
+    this.nextRound();
   }
 
   /** Seconds on the flag that complete a capture in this mode. */
@@ -191,13 +215,15 @@ export class Match {
       this.setPhase('podium');
       return;
     }
-    if (this.war) {
-      // One long battle: everyone attacks and defends at once.
+    if (this.war || this.ascent) {
+      // One long battle: everyone attacks and defends at once (Sky Flag: everyone for themselves).
       this.defender = null;
       this.targetPlotIndex = -1;
       for (const e of this.entities) {
-        e.role = 'attacker';
+        e.role = this.ascent ? 'none' : 'attacker';
         e.captureProgress = 0;
+        e.eliminated = false;
+        if (this.ascent) this.ascent.outfit(e);
       }
       this.alarmEntity = null;
       this.overtime = false;
@@ -224,8 +250,8 @@ export class Match {
       e.reset();
       e.deadSince = -1;
       e.pos.copy(this.resolver.spawnFor(e, e.role, this.targetPlotIndex));
-      // Face the target fortress.
-      const flag = this.war ? this.war.enemyFlag(e.team) : this.currentFlag;
+      // Face the target fortress (Sky Flag: the island centre, where the flag comes down).
+      const flag = this.war ? this.war.enemyFlag(e.team) : this.ascent ? { pos: this.ascent.flagPos } : this.currentFlag;
       if (flag) {
         const dx = flag.pos.x - e.pos.x;
         const dz = flag.pos.z - e.pos.z;
@@ -250,6 +276,12 @@ export class Match {
   /** Called by the game when an entity dies. Scores kills and schedules respawn. */
   onKill(victim: Entity, killer: Entity | null, now: number): void {
     if (this.phase !== 'round') return;
+    if (this.ascent) {
+      this.ascent.onKill(victim, killer);
+      if (killer && killer !== victim) this.events.emit('score', { entity: killer, delta: SCORE_ASCENT.kill, reason: 'kill' });
+      victim.respawnAt = now + ASCENT_RESPAWN;
+      return;
+    }
     if (killer && killer !== victim) {
       killer.score.kills++;
       // War: a kill on someone standing on your own flag is a flag defence (worth more).
@@ -286,6 +318,10 @@ export class Match {
   }
 
   recompute(e: Entity): void {
+    if (this.ascent) {
+      this.ascent.recompute(e);
+      return;
+    }
     const s = e.score;
     s.total =
       Math.floor(s.defenseSeconds / 10) * SCORE.defensePer10s +
@@ -298,6 +334,7 @@ export class Match {
   }
 
   standings(): Entity[] {
+    if (this.ascent) return [...this.entities].sort((a, b) => Number(b.score.won) - Number(a.score.won) || b.score.total - a.score.total || b.score.kills - a.score.kills || b.score.peakAltitude - a.score.peakAltitude);
     return [...this.entities].sort((a, b) => b.score.total - a.score.total || b.score.captures - a.score.captures || b.score.kills - a.score.kills);
   }
 
@@ -342,6 +379,10 @@ export class Match {
   }
 
   private updateRound(dt: number, now: number): void {
+    if (this.ascent) {
+      this.updateAscent(dt, now);
+      return;
+    }
     if (this.war) {
       this.updateWar(dt, now);
       return;
@@ -439,6 +480,44 @@ export class Match {
     if (war.ended) {
       for (const e of this.entities) e.captureProgress = 0;
       const payload: MatchEvents['roundEnd'] = { reason: 'timeout', defender: this.entities[0], capturer: null, plotIndex: -1, round: 1, total: 1 };
+      this.lastRound = payload;
+      this.setPhase('roundEnd');
+      this.events.emit('roundEnd', payload);
+    }
+  }
+
+  /**
+   * Sky Flag tick: respawns on the ground while it is dry and on the towers once the sea has taken
+   * it (or elimination when nothing is left), then the rules: bricks, falls, the sea, the mark, the flag.
+   */
+  private updateAscent(dt: number, now: number): void {
+    const ascent = this.ascent!;
+    this.roundTimer -= dt;
+    for (const e of this.entities) {
+      if (e.alive || e.eliminated || e.respawnAt <= 0 || now < e.respawnAt) continue;
+      const spot = this.resolver.ascentSpawn ? this.resolver.ascentSpawn(e) : this.resolver.spawnFor(e, e.role, -1);
+      if (!spot) {
+        e.eliminated = true;
+        e.respawnAt = 0;
+        this.events.emit('eliminated', { entity: e });
+        continue;
+      }
+      e.reset();
+      e.respawnAt = 0;
+      e.pos.copy(spot);
+      ascent.respawned(e);
+      const f = ascent.flagPos;
+      e.yaw = Math.atan2(-(f.x - e.pos.x), -(f.z - e.pos.z));
+      e.pitch = 0;
+      this.events.emit('spawn', { entity: e, initial: false });
+    }
+    ascent.update(dt, now, this.entities);
+    if (this.roundTimer <= 0 && !ascent.ended) {
+      this.roundTimer = 0;
+      ascent.timeUp(this.entities);
+    }
+    if (ascent.ended) {
+      const payload: MatchEvents['roundEnd'] = { reason: 'timeout', defender: this.entities[0], capturer: ascent.winner, plotIndex: -1, round: 1, total: 1 };
       this.lastRound = payload;
       this.setPhase('roundEnd');
       this.events.emit('roundEnd', payload);

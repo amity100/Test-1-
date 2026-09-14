@@ -25,6 +25,28 @@ export interface HudWar {
   spawnChoices: { label: string; key: string; selected: boolean; enabled: boolean }[] | null;
 }
 
+/** Sky Flag overlay: bricks, heights, the sea, the mark, the flag carrier, the pieces, the architect view. */
+export interface HudAscent {
+  bricks: number;
+  bricksMax: number;
+  altitude: number;
+  flagAltitude: number;
+  flagDist: number;
+  sea: { level: number; rising: boolean; boosted: boolean; inSeconds: number; gap: number };
+  marked: { name: string; color: string; you: boolean } | null;
+  holder: { name: string; color: string; you: boolean; progress: number } | null;
+  build: { kind: string; reason: string; pieces: { kind: string; name: string; cost: number; icon: string; active: boolean; affordable: boolean }[] } | null;
+  arch: { on: boolean; left: number; cooldown: number };
+  /** Everyone alive on the altitude strip. */
+  strip: { y: number; color: string; you: boolean; marked: boolean; flag: boolean }[];
+  stripFlag: number | null;
+  stripSea: number;
+  stripMax: number;
+  eliminated: boolean;
+  alive: number;
+  holdTime: number;
+}
+
 export interface HudGadget {
   icon: string;
   key: string;
@@ -88,6 +110,8 @@ export interface HudState {
   alarm: 'none' | 'defender' | 'attacker';
   /** Fortress War state (null in the classic rotation). */
   war: HudWar | null;
+  /** Sky Flag state (null in the other modes). */
+  ascent: HudAscent | null;
 }
 
 export interface HudMarker {
@@ -192,6 +216,29 @@ export class HUD {
   private spawnKey = '';
   /** Called with -1 for the fortress or a capture point index when the player picks a respawn. */
   onSpawnChoice: ((i: number) => void) | null = null;
+  // Sky Flag
+  private sky: HTMLElement;
+  private skyBricks: HTMLElement;
+  private skyBricksN: HTMLElement;
+  private skyAlt: HTMLElement;
+  private skyFlagLine: HTMLElement;
+  private skyStrip: HTMLCanvasElement;
+  private sctx: CanvasRenderingContext2D;
+  private skyMarked: HTMLElement;
+  private skyHold: HTMLElement;
+  private skyHoldFill: HTMLElement;
+  private skyHoldText: HTMLElement;
+  private skySea: HTMLElement;
+  private skyPieces: HTMLElement;
+  private skyPieceEls: { root: HTMLElement; kind: string }[] = [];
+  private skyHint: HTMLElement;
+  private skyArch: HTMLElement;
+  private skyArchRing: SVGCircleElement;
+  private skyArchText: HTMLElement;
+  private skyFrame: HTMLElement;
+  private skyOut: HTMLElement;
+  /** Touch: tapping a piece tile picks it. */
+  onPiece: ((kind: string) => void) | null = null;
 
   constructor(parent: HTMLElement) {
     this.root = el('div', 'hud');
@@ -397,6 +444,56 @@ export class HUD {
     this.objDist = this.objective.querySelector('.o-dist') as HTMLElement;
     this.objective.hidden = true;
     this.root.appendChild(this.objective);
+
+    // Sky Flag overlay.
+    this.sky = el('div', 'sky');
+    this.sky.hidden = true;
+    this.skyFrame = el('div', 'sky-frame');
+    this.skyFrame.hidden = true;
+    this.sky.appendChild(this.skyFrame);
+    this.skyBricks = el('div', 'sky-bricks');
+    this.skyBricksN = el('span', 'n', '0');
+    this.skyBricks.append(el('span', 'ico', '🧱'), this.skyBricksN, el('span', 'lbl', t('bricks')));
+    this.sky.appendChild(this.skyBricks);
+    const heights = el('div', 'sky-heights');
+    this.skyAlt = el('div', 'sky-alt', '▲ 0 m');
+    this.skyFlagLine = el('div', 'sky-flagline', '');
+    heights.append(this.skyAlt, this.skyFlagLine);
+    this.sky.appendChild(heights);
+    this.skyMarked = el('div', 'sky-marked');
+    this.skyMarked.hidden = true;
+    this.sky.appendChild(this.skyMarked);
+    this.skyHold = el('div', 'sky-hold');
+    this.skyHold.innerHTML = `<div class="htxt"></div><div class="hbar"><div class="fill"></div></div>`;
+    this.skyHoldFill = this.skyHold.querySelector('.fill') as HTMLElement;
+    this.skyHoldText = this.skyHold.querySelector('.htxt') as HTMLElement;
+    this.skyHold.hidden = true;
+    this.sky.appendChild(this.skyHold);
+    this.skySea = el('div', 'sky-sea');
+    this.skySea.hidden = true;
+    this.sky.appendChild(this.skySea);
+    this.skyStrip = el('canvas', 'sky-strip');
+    this.skyStrip.width = 72;
+    this.skyStrip.height = 720;
+    this.sctx = this.skyStrip.getContext('2d')!;
+    this.sky.appendChild(this.skyStrip);
+    this.skyPieces = el('div', 'sky-pieces');
+    this.skyPieces.setAttribute('data-ui', '1');
+    this.skyPieces.hidden = true;
+    this.sky.appendChild(this.skyPieces);
+    this.skyHint = el('div', 'sky-hint');
+    this.skyHint.hidden = true;
+    this.sky.appendChild(this.skyHint);
+    this.skyArch = el('div', 'sky-arch');
+    this.skyArch.innerHTML = `<svg viewBox="0 0 40 40"><circle class="bg" cx="20" cy="20" r="16"/><circle class="fg" cx="20" cy="20" r="16"/></svg><div class="atxt"></div>`;
+    this.skyArchRing = this.skyArch.querySelector('.fg') as SVGCircleElement;
+    this.skyArchText = this.skyArch.querySelector('.atxt') as HTMLElement;
+    this.skyArch.hidden = true;
+    this.sky.appendChild(this.skyArch);
+    this.skyOut = el('div', 'sky-out', '');
+    this.skyOut.hidden = true;
+    this.sky.appendChild(this.skyOut);
+    this.root.appendChild(this.sky);
   }
 
   show(): void {
@@ -500,6 +597,10 @@ export class HUD {
       // The war bar sits right under the timer, so the objective line moves into it (see syncWar).
       this.targetLabel.hidden = true;
       this.roleBadge.hidden = true;
+    } else if (s.ascent) {
+      this.set('round', this.roundLabel, `${t('skyFlag')} · ${s.ascent.alive}/${s.players}`);
+      this.targetLabel.hidden = true;
+      this.roleBadge.hidden = true;
     } else {
       this.set('round', this.roundLabel, t('round', { n: s.round, total: s.totalRounds }));
       this.targetLabel.hidden = false;
@@ -551,11 +652,13 @@ export class HUD {
     // Death
     if (!s.alive) {
       this.death.hidden = false;
-      this.set('dtext', this.deathText, s.killedBy ? t('eliminatedBy', { name: s.killedBy }) : '');
-      this.set('dtimer', this.deathTimer, t('respawnIn', { n: Math.ceil(s.respawnIn) }));
+      const out = !!s.ascent?.eliminated;
+      this.set('dtext', this.deathText, out ? t('spectating') : s.killedBy ? t('eliminatedBy', { name: s.killedBy }) : '');
+      this.set('dtimer', this.deathTimer, out ? t('eliminatedOut') : t('respawnIn', { n: Math.ceil(s.respawnIn) }));
       this.syncSpawnChoices(s.war?.spawnChoices ?? null);
     } else this.death.hidden = true;
     this.syncWar(s.war);
+    this.syncAscent(s);
     this.scope.hidden = !s.sniperScope;
     if (s.fps !== null) {
       this.fpsEl.hidden = false;
@@ -584,6 +687,179 @@ export class HUD {
       this.set('odist', this.objDist, `${Math.round(o.dist)} m`);
       this.set('olabel', this.objLabel, o.label);
     } else this.objective.hidden = true;
+  }
+
+  private syncAscent(s: HudState): void {
+    const a = s.ascent;
+    if (!a) {
+      if (!this.sky.hidden) this.sky.hidden = true;
+      return;
+    }
+    this.sky.hidden = false;
+    this.set('skyBricks', this.skyBricksN, a.bricks);
+    this.skyBricks.classList.toggle('low', a.bricks < 3);
+    this.skyBricks.classList.toggle('full', a.bricks >= a.bricksMax);
+    this.set('skyAlt', this.skyAlt, `▲ ${Math.round(a.altitude)} ${t('metres')}`);
+    this.set('skyFlag', this.skyFlagLine, `🚩 ${Math.round(a.flagAltitude)} ${t('metres')} · ${Math.round(a.flagDist)} ${t('metres')} ${t('away')}`);
+    // The mark.
+    if (a.marked) {
+      this.skyMarked.hidden = false;
+      this.set('skyMarked', this.skyMarked, a.marked.you ? `👑 ${t('youAreMarked')}` : `👑 ${a.marked.name} · ${t('markedTag')}`);
+      this.skyMarked.style.color = a.marked.you ? '#ffd36a' : a.marked.color;
+      this.skyMarked.classList.toggle('you', a.marked.you);
+    } else this.skyMarked.hidden = true;
+    this.skyFrame.hidden = !(a.marked?.you && s.alive);
+    // The carrier.
+    if (a.holder) {
+      this.skyHold.hidden = false;
+      const left = Math.ceil((1 - a.holder.progress) * a.holdTime);
+      this.skyHoldFill.style.width = `${(a.holder.progress * 100).toFixed(1)}%`;
+      this.skyHoldFill.style.background = a.holder.you ? '#ffd36a' : a.holder.color;
+      this.set('skyHoldText', this.skyHoldText, a.holder.you ? t('holdTheFlag', { n: left }) : t('holderHas', { name: a.holder.name, n: left }));
+      this.skyHold.classList.toggle('you', a.holder.you);
+    } else this.skyHold.hidden = true;
+    // The sea.
+    const sea = a.sea;
+    let seaText = '';
+    let seaCls = '';
+    if (!sea.rising) seaText = sea.inSeconds > 0 && sea.inSeconds < 120 ? `🌊 ${t('seaIn', { t: formatTime(sea.inSeconds) })}` : '';
+    else {
+      seaText = `🌊 ${t('seaBelow', { n: Math.max(0, Math.round(sea.gap)) })}${sea.boosted ? ` · ${t('seaSurging')}` : ''}`;
+      seaCls = sea.gap < 8 ? 'danger' : sea.gap < 20 ? 'warn' : '';
+    }
+    this.skySea.hidden = !seaText || !s.alive;
+    this.set('skySea', this.skySea, seaText);
+    if (this.last.seaCls !== seaCls) {
+      this.last.seaCls = seaCls;
+      this.skySea.className = `sky-sea ${seaCls}`;
+    }
+    // Pieces in hand.
+    const b = a.build;
+    if (b && s.alive) {
+      if (this.skyPieceEls.length === 0) {
+        for (const p of b.pieces) {
+          const tile = el('div', 'sky-piece');
+          tile.innerHTML = `<div class="pi">${p.icon}</div><div class="pn"></div><div class="pc"></div><div class="pk"></div>`;
+          tile.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.onPiece?.(p.kind);
+          });
+          this.skyPieces.appendChild(tile);
+          this.skyPieceEls.push({ root: tile, kind: p.kind });
+        }
+      }
+      this.skyPieces.hidden = false;
+      b.pieces.forEach((p, i) => {
+        const tile = this.skyPieceEls[i];
+        if (!tile) return;
+        tile.root.classList.toggle('active', p.active);
+        tile.root.classList.toggle('poor', !p.affordable);
+        const pn = tile.root.querySelector('.pn') as HTMLElement;
+        if (pn.textContent !== p.name) pn.textContent = p.name;
+        const pc = tile.root.querySelector('.pc') as HTMLElement;
+        const cost = `${p.cost} 🧱`;
+        if (pc.textContent !== cost) pc.textContent = cost;
+        const pk = tile.root.querySelector('.pk') as HTMLElement;
+        const key = String(i + 1);
+        if (pk.textContent !== key) pk.textContent = key;
+      });
+      this.skyHint.hidden = false;
+      const hint = b.reason === 'ok' ? t(a.arch.on ? 'archHint' : 'buildHint') : t(b.reason === 'bricks' ? 'needBricksShort' : b.reason === 'body' ? 'placeBody' : b.reason === 'blocked' ? 'placeBlocked' : b.reason === 'unanchored' ? 'placeUnanchored' : 'placeRange');
+      this.set('skyHint', this.skyHint, hint);
+      this.skyHint.classList.toggle('bad', b.reason !== 'ok');
+    } else {
+      this.skyPieces.hidden = true;
+      this.skyHint.hidden = true;
+    }
+    // Architect view ring: counting down while on, filling back up while cooling.
+    const arch = a.arch;
+    if ((arch.on || arch.cooldown > 0) && s.alive) {
+      this.skyArch.hidden = false;
+      const c = 2 * Math.PI * 16;
+      const frac = arch.on ? arch.left : 1 - arch.cooldown;
+      this.skyArchRing.style.strokeDasharray = `${c}`;
+      this.skyArchRing.style.strokeDashoffset = `${c * (1 - frac)}`;
+      this.skyArch.classList.toggle('on', arch.on);
+      this.set('skyArchText', this.skyArchText, arch.on ? t('archOn') : t('archCooling'));
+    } else this.skyArch.hidden = true;
+    this.skyOut.hidden = !a.eliminated;
+    if (a.eliminated) this.set('skyOut', this.skyOut, t('eliminatedOut'));
+    this.drawStrip(a);
+  }
+
+  /** The altitude strip: everyone alive as a dot at their height, the flag, and the sea filling from below. */
+  private drawStrip(a: HudAscent): void {
+    const ctx = this.sctx;
+    const W = this.skyStrip.width;
+    const H = this.skyStrip.height;
+    ctx.clearRect(0, 0, W, H);
+    const top = 16;
+    const bottom = H - 16;
+    const barX = W / 2 - 7;
+    const yPx = (y: number): number => bottom - Math.max(0, Math.min(1, y / a.stripMax)) * (bottom - top);
+    ctx.fillStyle = 'rgba(6, 12, 24, 0.6)';
+    ctx.beginPath();
+    ctx.roundRect(barX, top - 8, 14, bottom - top + 16, 7);
+    ctx.fill();
+    // Height ticks every 25 m.
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+    ctx.lineWidth = 1;
+    for (let h = 25; h < a.stripMax; h += 25) {
+      const y = yPx(h);
+      ctx.beginPath();
+      ctx.moveTo(barX, y);
+      ctx.lineTo(barX + 14, y);
+      ctx.stroke();
+    }
+    // The sea.
+    if (a.stripSea > 0.2) {
+      const sy = yPx(a.stripSea);
+      const grad = ctx.createLinearGradient(0, sy, 0, bottom + 8);
+      grad.addColorStop(0, 'rgba(120, 230, 240, 0.95)');
+      grad.addColorStop(1, 'rgba(10, 90, 110, 0.9)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.roundRect(barX, sy, 14, bottom + 8 - sy, 4);
+      ctx.fill();
+    }
+    // The flag.
+    if (a.stripFlag !== null) {
+      const fy = yPx(a.stripFlag);
+      ctx.fillStyle = '#ffd36a';
+      ctx.beginPath();
+      ctx.moveTo(barX + 16, fy - 8);
+      ctx.lineTo(barX + 30, fy - 3);
+      ctx.lineTo(barX + 16, fy + 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillRect(barX + 15, fy - 8, 2, 14);
+    }
+    // Players, the local one last so it draws on top.
+    const sorted = [...a.strip].sort((p, q) => Number(p.you) - Number(q.you));
+    for (const p of sorted) {
+      const y = yPx(p.y);
+      const x = W / 2;
+      const r = p.you ? 7 : 5;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = p.color;
+      ctx.fill();
+      if (p.you || p.marked) {
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = p.marked ? '#ffd36a' : '#ffffff';
+        ctx.stroke();
+      }
+      if (p.flag) {
+        ctx.fillStyle = '#ffd36a';
+        ctx.beginPath();
+        ctx.moveTo(x + 8, y - 9);
+        ctx.lineTo(x + 18, y - 5);
+        ctx.lineTo(x + 8, y - 1);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
   }
 
   private syncWar(w: HudWar | null): void {

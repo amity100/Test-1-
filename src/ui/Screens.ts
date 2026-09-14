@@ -54,6 +54,24 @@ export interface WarPodiumData {
   mvp: string;
 }
 
+export interface AscentPodiumRow {
+  name: string;
+  color: string;
+  kills: number;
+  bricks: number;
+  peak: number;
+  flag: number;
+  score: number;
+  isYou: boolean;
+  won: boolean;
+}
+
+export interface AscentPodiumData {
+  title: string;
+  winner: { name: string; color: string } | null;
+  rows: AscentPodiumRow[];
+}
+
 export interface PodiumRow {
   name: string;
   score: number;
@@ -98,6 +116,7 @@ export class Screens {
   private lastSummary: SummaryData | null = null;
   private lastPodium: PodiumRow[] | null = null;
   private lastWarPodium: WarPodiumData | null = null;
+  private lastAscentPodium: AscentPodiumData | null = null;
   private nextInEl: HTMLElement | null = null;
   private lastLoadout: LoadoutData | null = null;
   private loadoutCount: HTMLElement | null = null;
@@ -105,10 +124,15 @@ export class Screens {
   constructor(parent: HTMLElement, private cb: ScreenCallbacks) {
     this.root = el('div', 'screens');
     parent.appendChild(this.root);
-    this.setup = { playerName: settings.data.playerName, botCount: 5, difficulty: 'normal', buildTime: 90, roundTime: 240, style: 'medieval', mode: 'war', teamSize: 8 };
+    this.setup = { playerName: settings.data.playerName, botCount: 5, difficulty: 'normal', buildTime: 90, roundTime: 720, style: 'medieval', mode: 'ascent', teamSize: 8, playerCount: 12 };
     try {
       const raw = localStorage.getItem(SETUP_KEY);
-      if (raw) this.setup = { ...this.setup, ...JSON.parse(raw) };
+      if (raw) {
+        const saved = JSON.parse(raw) as Partial<MatchConfig> & { v13?: boolean };
+        // The first time this release runs, Sky Flag is the mode on offer whatever was saved before.
+        if (!saved.v13) saved.mode = 'ascent';
+        this.setup = { ...this.setup, ...saved };
+      }
     } catch {
       /* ignore */
     }
@@ -207,16 +231,19 @@ export class Screens {
       this.setup.playerName = name.value;
     });
     grid.appendChild(field(t('yourName'), name));
-    const war = (this.setup.mode ?? 'war') === 'war';
+    const mode = this.setup.mode ?? 'ascent';
+    const war = mode === 'war';
+    const ascent = mode === 'ascent';
     grid.appendChild(
       field(
         t('gameMode'),
         segmented<GameMode>(
           [
+            { value: 'ascent', label: t('modeAscent') },
             { value: 'war', label: t('modeWar') },
             { value: 'classic', label: t('modeClassic') },
           ],
-          this.setup.mode ?? 'war',
+          mode,
           (v) => {
             this.setup.mode = v;
             this.showSetup();
@@ -224,7 +251,18 @@ export class Screens {
         ),
       ),
     );
-    if (war) {
+    if (ascent) {
+      grid.appendChild(
+        field(
+          t('playersCount'),
+          segmented(
+            [8, 12, 16].map((n) => ({ value: n, label: String(n) })),
+            this.setup.playerCount ?? 12,
+            (v) => (this.setup.playerCount = v),
+          ),
+        ),
+      );
+    } else if (war) {
       grid.appendChild(
         field(
           t('teamSize'),
@@ -262,6 +300,21 @@ export class Screens {
         ),
       ),
     );
+    if (ascent) {
+      grid.appendChild(field(t('roundTime'), el('div', 'muted', t('minutes', { n: 12 }))));
+      p.appendChild(grid);
+      p.appendChild(el('div', 'ascent-blurb', esc(t('ascentBlurb'))));
+      const row0 = el('div', 'row');
+      row0.style.marginTop = '20px';
+      row0.style.justifyContent = 'space-between';
+      row0.append(
+        btn(t('back'), '', () => this.showMenu()),
+        btn(t('start'), 'primary', () => this.launch(720)),
+      );
+      p.appendChild(row0);
+      this.mount('setup', p);
+      return;
+    }
     grid.appendChild(
       field(
         t('buildTime'),
@@ -314,20 +367,23 @@ export class Screens {
     row.style.justifyContent = 'space-between';
     row.append(
       btn(t('back'), '', () => this.showMenu()),
-      btn(t('start'), 'primary', () => {
-        if (!this.setup.playerName.trim()) this.setup.playerName = t('namePlaceholder');
-        settings.data.playerName = this.setup.playerName;
-        settings.save();
-        try {
-          localStorage.setItem(SETUP_KEY, JSON.stringify(this.setup));
-        } catch {
-          /* ignore */
-        }
-        this.cb.start({ ...this.setup, roundTime: (this.setup.mode ?? 'war') === 'war' ? 720 : 240 });
-      }),
+      btn(t('start'), 'primary', () => this.launch((this.setup.mode ?? 'war') === 'war' ? 720 : 240)),
     );
     p.appendChild(row);
     this.mount('setup', p);
+  }
+
+  /** Saves the setup and starts the match with the given round length. */
+  private launch(roundTime: number): void {
+    if (!this.setup.playerName.trim()) this.setup.playerName = t('namePlaceholder');
+    settings.data.playerName = this.setup.playerName;
+    settings.save();
+    try {
+      localStorage.setItem(SETUP_KEY, JSON.stringify({ ...this.setup, v13: true }));
+    } catch {
+      /* ignore */
+    }
+    this.cb.start({ ...this.setup, roundTime });
   }
 
   showSettings(back: 'menu' | 'pause'): void {
@@ -407,10 +463,12 @@ export class Screens {
   showHowTo(): void {
     const p = el('div', 'panel howto');
     p.innerHTML =
-      `<h2>${esc(t('htpTitle'))}</h2><ol class="htp">` +
+      `<h2>${esc(t('htpTitle'))}</h2><h3>${esc(t('skyFlag'))}</h3><ol class="htp">` +
+      ['htpSky1', 'htpSky2', 'htpSky3', 'htpSky4', 'htpSky5', 'htpSky6'].map((k) => `<li>${esc(t(k))}</li>`).join('') +
+      `</ol><h3>${esc(t('modeWar'))} · ${esc(t('modeClassic'))}</h3><ol class="htp">` +
       ['htp1', 'htp2', 'htp3', 'htp4', 'htp5', 'htp6'].map((k) => `<li>${esc(t(k))}</li>`).join('') +
       `</ol><h3>${esc(t('controls'))}</h3><ul class="ctrls">` +
-      ['ctrlMove', 'ctrlJump', 'ctrlShoot', 'ctrlWeapons', 'ctrlMisc'].map((k) => `<li>${esc(t(k))}</li>`).join('') +
+      ['ctrlMove', 'ctrlJump', 'ctrlShoot', 'ctrlWeapons', 'ctrlBuild', 'ctrlMisc'].map((k) => `<li>${esc(t(k))}</li>`).join('') +
       `</ul>`;
     p.appendChild(btn(t('back'), '', () => this.showMenu()));
     this.mount('howto', p);
@@ -512,8 +570,36 @@ export class Screens {
     this.mount('podium', p);
   }
 
+  /** Sky Flag result: who took the flag, and everyone's kills, bricks, highest point and seconds with the flag. */
+  showAscentPodium(data: AscentPodiumData): void {
+    this.lastAscentPodium = data;
+    this.lastWarPodium = null;
+    this.lastPodium = null;
+    const p = el('div', 'panel podium ascent');
+    p.innerHTML =
+      `<div class="stitle">${esc(data.title)}</div>` +
+      (data.winner ? `<div class="winner"><span class="crown">🚩</span> ${esc(t('winner'))}: <b style="color:${data.winner.color}">${esc(data.winner.name)}</b></div>` : `<div class="winner muted">${esc(t('noWinner'))}</div>`);
+    const table = el('table', 'ptable');
+    table.innerHTML =
+      `<thead><tr><th>#</th><th></th><th>${esc(t('score'))}</th><th>${esc(t('killsShort'))}</th><th>${esc(t('bricksShort'))}</th><th>${esc(t('peakShort'))}</th><th>${esc(t('flagShort'))}</th></tr></thead><tbody>` +
+      data.rows
+        .map(
+          (r, i) =>
+            `<tr class="${r.isYou ? 'you' : ''} ${i < 3 ? `top${i + 1}` : ''}"><td>${i + 1}</td><td><span class="sw" style="background:${r.color}"></span>${esc(r.name)}${r.won ? ' 🚩' : ''}</td><td class="num">${r.score}</td><td class="num">${r.kills}</td><td class="num">${r.bricks}</td><td class="num">${r.peak} m</td><td class="num">${r.flag} s</td></tr>`,
+        )
+        .join('') +
+      '</tbody>';
+    p.appendChild(table);
+    const row = el('div', 'row');
+    row.style.marginTop = '18px';
+    row.append(btn(t('playAgain'), 'primary', () => this.cb.playAgain()), btn(t('quitToMenu'), '', () => this.cb.quit()));
+    p.appendChild(row);
+    this.mount('podium', p);
+  }
+
   refreshPodium(): void {
-    if (this.lastWarPodium) this.showWarPodium(this.lastWarPodium);
+    if (this.lastAscentPodium) this.showAscentPodium(this.lastAscentPodium);
+    else if (this.lastWarPodium) this.showWarPodium(this.lastWarPodium);
     else if (this.lastPodium) this.showPodium(this.lastPodium);
   }
 

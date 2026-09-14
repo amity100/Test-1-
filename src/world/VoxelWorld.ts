@@ -35,7 +35,8 @@ export class VoxelWorld {
   readonly chunks = new Map<number, Chunk>();
   readonly dirty = new Set<Chunk>();
   readonly minY = 0;
-  readonly maxY = 127;
+  /** Sky arenas climb a long way: sixteen chunks of headroom. */
+  readonly maxY = 255;
   version = 0;
 
   getChunk(cx: number, cy: number, cz: number, create = false): Chunk | undefined {
@@ -163,6 +164,22 @@ export class VoxelWorld {
       if (h >= feetY - 0.06 && h <= feetY + 0.75 && (best === null || h > best)) best = h;
     }
     return best;
+  }
+
+  /** Surface height of the highest slope block whose cell lies within [yMin, yMax] under a point, or null. */
+  rampSurfaceAt(x: number, z: number, yMin: number, yMax: number): number | null {
+    const cx = Math.floor(x);
+    const cz = Math.floor(z);
+    const lx = x - cx;
+    const lz = z - cz;
+    for (let cy = Math.floor(yMax); cy >= Math.floor(yMin); cy--) {
+      const v = this.get(cx, cy, cz);
+      if (v === 0) continue;
+      const sh = blockShape(v);
+      if (shapeKind(sh) !== 'slope') continue;
+      return cy + shapeTopAt(sh, lx, lz);
+    }
+    return null;
   }
 
   /** Top surface height of the block in a cell at local coordinates (1 for cubes). */

@@ -28,6 +28,10 @@ import { HUD, type HudMarker, type HudState, type ScoreRow } from '../ui/HUD';
 import { GadgetSystem, GADGETS, GADGET_IDS, KIT_SIZE, type GadgetId } from '../sim/Gadgets';
 import { RepairSystem } from '../sim/Repair';
 import { WAR } from '../sim/War';
+import { AscentState, ASCENT, type AscentHooks } from '../sim/Ascent';
+import { SkyBuilder, PIECES, PIECE_KINDS, type PieceKind, type AimResult } from '../build/SkyBuild';
+import { AscentBrain } from '../ai/AscentBrain';
+import { AscentMeshes } from '../render/AscentMeshes';
 import { GadgetMeshes } from '../render/GadgetMeshes';
 import { outfitFor } from '../render/Outfits';
 import { Screens, type SummaryRow, type PodiumRow, type WarPodiumRow } from '../ui/Screens';
@@ -40,8 +44,8 @@ import { TouchControls, vibrate } from '../ui/TouchControls';
 import { IS_TOUCH } from './Input';
 import { generateFortress, generateRuins, type FortressResult } from '../world/FortressGen';
 import { STYLE_IDS, type StyleId } from '../world/Styles';
-import { PLOT_Y, PLOT_MAX_HEIGHT, PLOT_HALF, ZONE_RADIUS, PLAYABLE_RADIUS, WAR_PLOTS, OUTPOSTS, type Plot } from '../world/Layout';
-import { blockColor, PALETTE } from '../world/Voxel';
+import { PLOT_Y, PLOT_MAX_HEIGHT, PLOT_HALF, PLAZA_Y, ZONE_RADIUS, PLAYABLE_RADIUS, WAR_PLOTS, OUTPOSTS, type Plot } from '../world/Layout';
+import { blockColor, PALETTE, SKY_PLAYER_PALETTE } from '../world/Voxel';
 import { STYLES } from '../world/Styles';
 import { Random } from './Random';
 import { settings } from './Settings';
@@ -53,8 +57,15 @@ import { clamp, formatTime, damp } from './MathUtil';
 type Mode = 'menu' | 'build' | 'fortify' | 'intro' | 'battle' | 'summary' | 'podium';
 
 const PLAYER_COLORS = ['#00e5ff', '#ff2bd6', '#ffb300', '#39ff14', '#ff3355', '#a78bfa', '#ff8c42', '#7aa7ff'];
+/** Sky Flag: twelve player colours, the same ones the glowing rims use. */
+const SKY_COLORS = PALETTE.slice(SKY_PLAYER_PALETTE, SKY_PLAYER_PALETTE + 12);
 /** Fortress War team colours: cyan and coral. */
 export const TEAM_COLORS = ['#00e5ff', '#ff4655'];
+/** Architect view: seconds it lasts and the wait before the next one. */
+const ARCH_TIME = 4;
+const ARCH_COOLDOWN = 6;
+/** A pseudo plot at the island centre for the cameras that expect one. */
+const CENTRE_PLOT: Plot = { index: -1, cx: 0, cz: 0, minX: -20, minZ: -20, maxX: 19, maxZ: 19, angle: 0 };
 const PRIMARY_CHOICES: WeaponId[] = ['rifle', 'smg', 'shotgun', 'sniper', 'rocket'];
 const GADGET_KEY_LABELS = ['Q', 'F'];
 
@@ -147,6 +158,21 @@ export class Game {
   /** Where the player respawns: -1 the fortress, else an owned capture point. */
   private spawnChoice = -1;
   private teamStyles: StyleId[] = ['medieval', 'gothic'];
+  // Sky Flag
+  sky: SkyBuilder | null = null;
+  private ascentMeshes: AscentMeshes | null = null;
+  /** The piece in hand while building (null = weapons out) and its rotation. */
+  buildKind: PieceKind | null = null;
+  buildRot = 0;
+  buildAim: AimResult | null = null;
+  private lastPlace = -10;
+  /** Architect view: a few seconds of looking down on the build from above the body. */
+  archOn = false;
+  private archTimer = 0;
+  private archCooldown = 0;
+  private archCursor = new THREE.Vector3();
+  private archCam = new THREE.Vector3();
+  private lastSeaWarn = -100;
 
   constructor(readonly app: App) {
     this.uiRoot = document.getElementById('ui')!;
@@ -196,6 +222,9 @@ export class Game {
     this.grenadeModel = buildWeaponModel('grenade', new THREE.Color('#39ff14'), false, 'high');
     this.hud = new HUD(this.uiRoot);
     this.hud.onSpawnChoice = (i) => this.setSpawnChoice(i);
+    this.hud.onPiece = (kind) => {
+      if (this.match?.ascent && (PIECE_KINDS as string[]).includes(kind)) this.toggleBuild(kind as PieceKind);
+    };
     this.screens = new Screens(this.uiRoot, {
       start: (cfg) => this.startMatch(cfg),
       resume: () => this.resume(),
@@ -306,15 +335,18 @@ export class Game {
     this.cleanupMatch();
     const plots = this.app.plots;
     const war = cfg.mode === 'war';
+    const ascent = cfg.mode === 'ascent';
     this.entities = [];
     this.bots = [];
     this.commanders = [];
     this.player.name = cfg.playerName || t('you');
     this.player.plotIndex = 0;
-    this.player.colorHex = war ? TEAM_COLORS[0] : PLAYER_COLORS[0];
+    this.player.colorHex = war ? TEAM_COLORS[0] : ascent ? SKY_COLORS[0] : PLAYER_COLORS[0];
+    this.player.colorIndex = ascent ? 0 : 53;
     this.player.team = war ? 0 : -1;
     this.player.squad = war ? 0 : -1;
     this.player.score = emptyScore();
+    this.player.eliminated = false;
     this.entities.push(this.player);
     const names = new Random(Date.now() >>> 1).shuffle([...BOT_NAMES]);
     let nameIdx = 0;
@@ -332,10 +364,17 @@ export class Game {
     // Clear all plots.
     this.traps.clear();
     for (const p of plots) this.app.world.clearBox(p.minX, PLOT_Y, p.minZ, p.maxX, PLOT_Y + PLOT_MAX_HEIGHT + 2, p.maxZ);
-    const match = new Match(cfg, { spawnFor: (e, role, target) => this.spawnFor(e, role, target) });
+    const match = new Match(
+      cfg,
+      { spawnFor: (e, role, target) => this.spawnFor(e, role, target), ascentSpawn: (e) => this.ascentSpawn(e, false) },
+      Date.now(),
+      (hooks) => new AscentState(this.app.world, this.app.terrain, hooks),
+      this.ascentHooks(),
+    );
     this.match = match;
     this.teamStyles = [cfg.style, this.rng.pick(STYLE_IDS.filter((st) => st !== cfg.style))];
-    if (war) this.setupWar(cfg, match, bot);
+    if (ascent) this.setupAscent(cfg, bot);
+    else if (war) this.setupWar(cfg, match, bot);
     else this.setupClassic(cfg, match, bot);
     match.setEntities(this.entities);
     this.app.chunks.flush();
@@ -348,6 +387,11 @@ export class Game {
     }
     this.viewModel.setAccent(new THREE.Color(this.player.colorHex));
     this.wireMatch(match);
+    if (ascent) {
+      // No build phase: everyone drops onto the island and the flag starts down.
+      match.startAscent();
+      return;
+    }
     // Build phase: the block builder (stronghold rules in a war), with the team's bots building alongside.
     this.builder = new Builder(this.app.world, this.app.terrain, plots[0], cfg.style, this.app.input, this.app.gr.camera, this.app.gr.scene, war);
     this.builder.traps = this.traps;
@@ -451,6 +495,106 @@ export class Game {
     };
     this.commanders = [new TeamCommander(0, host), new TeamCommander(1, host)];
     for (const e of this.entities) if (e.isBot) this.bots.push(new WarBrain(e, this.botContext(), PROFILES[cfg.difficulty], this.rng.int(1, 1e9)));
+  }
+
+  /**
+   * Sky Flag: twelve for themselves on a bare island. Bricks, the flag, the mark and the sea live in
+   * the match's AscentState; the pieces go through one SkyBuilder that humans and bots share.
+   */
+  private setupAscent(cfg: MatchConfig, bot: (team: number, plotIndex: number, squad: number, color: string) => Entity): void {
+    const n = clamp(cfg.playerCount ?? ASCENT.players, 2, 16);
+    for (let i = 1; i < n; i++) {
+      const e = bot(-1, -1, -1, SKY_COLORS[i % 12]);
+      e.colorIndex = i % 12;
+    }
+    const sky = new SkyBuilder(this.app.world, this.app.terrain, () => this.entities);
+    this.sky = sky;
+    sky.events.on('placed', ({ kind, owner, centre }) => {
+      const mine = owner === this.player;
+      audio.play('place', { pos: mine ? undefined : centre, pitch: kind === 'arena' ? 0.7 : kind === 'parapet' ? 1.2 : 0.95, volume: mine ? 0.9 : 0.6 });
+      this.vfx.puff(centre, new THREE.Vector3(0, 1, 0), kind === 'arena' ? 14 : 6, 0.85, 0.35);
+      this.vfx.sparks(centre, new THREE.Vector3(0, 1, 0), 10, new THREE.Color(owner.colorHex), 4);
+      this.app.chunks.flush();
+      if (mine && IS_TOUCH) vibrate(8);
+    });
+    this.combat.knockback = ASCENT.knockback;
+    for (const e of this.entities) if (e.isBot) this.bots.push(new AscentBrain(e, this.botContext(), PROFILES[cfg.difficulty], this.rng.int(1, 1e9), sky, () => this.match?.ascent ?? null));
+    this.ascentMeshes = new AscentMeshes(this.app.gr.scene, this.app.world, this.app.terrain);
+    this.buildKind = null;
+    this.buildRot = 0;
+    this.archOn = false;
+    this.archCooldown = 0;
+  }
+
+  /** The game's side of the Sky Flag rules: sounds, banners, particles, damage from falls and the sea. */
+  private ascentHooks(): AscentHooks {
+    const up = new THREE.Vector3(0, 1, 0);
+    return {
+      damage: (e, amount, reason) => {
+        this.combat.applyDamage(e, amount, null, this.time, false, e.center);
+        if (e !== this.player) return;
+        if (reason === 'fall') {
+          this.local?.addShake(Math.min(0.9, amount / 50));
+          this.hud.damage();
+          audio.play('land', { volume: 1 });
+          if (amount >= 12) this.hud.showBanner(t('hardLanding', { n: Math.round(amount) }), '', 1.2);
+        }
+      },
+      marked: (next, prev) => {
+        this.ascentMeshes?.setMarked(next);
+        if (next === this.player) {
+          this.hud.announce(t('youAreMarked'), t('youAreMarkedSub'), 'streak', 2.6);
+          audio.play('streak');
+        } else if (next) {
+          this.hud.killFeed(`👑 <b style="color:${next.colorHex}">${esc(next.name)}</b> ${esc(t('isMarked'))}`);
+          if (prev === this.player) audio.play('empty', { volume: 0.6 });
+          else audio.play('announce', { pitch: 0.8, volume: 0.5 });
+        }
+      },
+      pickup: (e, count, pos) => {
+        if (e === this.player) {
+          audio.play('pickup', { volume: 0.9, pitch: 1 + Math.min(0.4, count * 0.02) });
+          this.hud.scorePop(`+${count} ${t('bricksShort')}`);
+          if (IS_TOUCH) vibrate(6);
+        } else audio.play('pickup', { pos, volume: 0.5 });
+        this.vfx.sparks(pos, up, 14, new THREE.Color(e.colorHex), 5);
+      },
+      flag: (kind, e) => {
+        const name = e?.name ?? '';
+        switch (kind) {
+          case 'taken':
+            audio.play(e === this.player ? 'captureDone' : 'alarm', { volume: 0.9 });
+            if (e === this.player) this.hud.showBanner(t('flagYours'), t('flagHoldSub', { n: ASCENT.holdTime }), 3.2);
+            else this.hud.showBanner(t('flagTakenBy', { name }), t('flagTakenSub'), 3.2);
+            this.hud.killFeed(`🚩 <b style="color:${e?.colorHex ?? '#fff'}">${esc(name)}</b> ${esc(t('hasTheFlag'))}`);
+            audio.setIntensity(1);
+            break;
+          case 'dropped':
+            audio.play('roundEnd', { volume: 0.5, pitch: 1.3 });
+            this.hud.killFeed(`🚩 ${esc(t('flagDropped', { name }))}`);
+            audio.setIntensity(0);
+            break;
+          case 'won':
+            break;
+          case 'lost':
+            break;
+        }
+      },
+      sea: (kind) => {
+        if (kind === 'start') {
+          this.hud.showBanner(t('seaRises'), t('seaRisesSub'), 4);
+          audio.play('overtime', { volume: 0.8, pitch: 0.6 });
+        } else {
+          this.hud.showBanner(t('seaFaster'), t('seaFasterSub'), 3.5);
+          audio.play('siren', { volume: 0.7, pitch: 0.55 });
+        }
+        this.local?.addShake(0.5);
+      },
+      end: (winner, reason) => {
+        void reason;
+        audio.play(winner === this.player ? 'victory' : 'roundEnd');
+      },
+    };
   }
 
   /** Low cover walls around each capture point with a lit pole in the middle (the monument is the centre point). */
@@ -644,6 +788,7 @@ export class Game {
   private botContext() {
     return {
       world: this.app.world,
+      terrain: this.app.terrain,
       combat: this.combat,
       controller: this.controller,
       entities: () => this.entities,
@@ -1059,6 +1204,7 @@ export class Game {
     }
     const m = this.mode === 'battle' ? 'battle' : this.mode === 'build' ? 'build' : this.mode === 'fortify' ? 'fortify' : 'none';
     this.touch.setMode(m);
+    this.touch.setAscent(!!this.match?.ascent && m === 'battle');
     this.rotateHint.hidden = m === 'none';
   }
 
@@ -1076,7 +1222,7 @@ export class Game {
         this.introBannerShown = false;
         this.endBannerShown = false;
         this.summaryShown = false;
-        const plot = match.war ? this.app.plots[WAR_PLOTS[1]] : this.app.plots[match.targetPlotIndex];
+        const plot = match.ascent ? CENTRE_PLOT : match.war ? this.app.plots[WAR_PLOTS[1]] : this.app.plots[match.targetPlotIndex];
         for (const [idx, fm] of this.flags) {
           fm.group.visible = match.war ? true : idx === match.targetPlotIndex;
           fm.setAlert(false);
@@ -1086,13 +1232,20 @@ export class Game {
         this.killerEntity = null;
         this.focus.setAlert(false);
         audio.setIntensity(0);
-        const color = new THREE.Color(match.war ? TEAM_COLORS[1] : match.defender!.colorHex);
-        this.focus.show(new THREE.Vector3(plot.cx, PLOT_Y, plot.cz), color);
+        if (match.ascent) this.focus.hide();
+        else {
+          const color = new THREE.Color(match.war ? TEAM_COLORS[1] : match.defender!.colorHex);
+          this.focus.show(new THREE.Vector3(plot.cx, PLOT_Y, plot.cz), color);
+        }
         for (const b of this.bots) b.newRound();
         for (const e of this.entities) this.scoreAtRoundStart.set(e.id, e.score.total);
         this.cinematicAngle = this.rng.range(0, Math.PI * 2);
         // Each fortress gets its own light: the sun swings around and climbs/dips per round.
-        this.app.sky.setSun(16 + ((match.roundIndex * 7) % 22), 110 + match.roundIndex * 55 + this.rng.range(-10, 10));
+        if (match.ascent) {
+          // Sky Flag: a golden evening that sinks toward the horizon over the twelve minutes.
+          this.app.sky.setSun(15, 205);
+          this.app.sky.timeSpeed = -8 / ASCENT.roundTime;
+        } else this.app.sky.setSun(16 + ((match.roundIndex * 7) % 22), 110 + match.roundIndex * 55 + this.rng.range(-10, 10));
         this.hud.show();
         audio.play('roundStart');
         audio.music('battle');
@@ -1112,7 +1265,8 @@ export class Game {
         this.mode = 'battle';
         this.setTouchMode();
         this.hud.show();
-        if (match.war) this.hud.showBanner(t('warStart'), t('warStartSub'), 4);
+        if (match.ascent) this.hud.showBanner(t('ascentStart'), t('ascentStartSub'), 4);
+        else if (match.war) this.hud.showBanner(t('warStart'), t('warStartSub'), 4);
         else {
           this.roundEvents.startRound(this.rng.int(1, 1e9));
           const def = match.defender!;
@@ -1131,6 +1285,16 @@ export class Game {
         this.hud.hide();
         this.viewModel.hidden = true;
         const r = match.lastRound!;
+        if (match.ascent) {
+          const asc = match.ascent;
+          const w = asc.winner;
+          this.exitBuild();
+          this.exitArch();
+          const title = w === this.player ? t('victory') : w ? t('flagWonBy', { name: w.name }) : t('seaTookAll');
+          const rows: SummaryRow[] = match.standings().map((e) => ({ name: e.name, color: e.colorHex, delta: `${e.score.kills} ${t('killsShort')} · ${Math.round(e.score.peakAltitude)} ${t('metres')}`, total: e.score.total, isYou: e === this.player }));
+          this.screens.showRoundSummary({ title, sub: w ? t('flagHeldFor', { n: ASCENT.holdTime }) : t('ascentOver'), rows }, RULES.summaryTime);
+          break;
+        }
         if (match.war) {
           const war = match.war;
           const my = this.player.team;
@@ -1155,6 +1319,17 @@ export class Game {
         this.hud.hide();
         this.focus.hide();
         this.viewModel.hidden = true;
+        if (match.ascent) {
+          const w = match.ascent.winner;
+          this.screens.showAscentPodium({
+            title: w === this.player ? t('victory') : w ? t('flagWonBy', { name: w.name }) : t('seaTookAll'),
+            winner: w ? { name: w.name, color: w.colorHex } : null,
+            rows: match.standings().map((e) => ({ name: e.name, color: e.colorHex, kills: e.score.kills, bricks: e.score.bricks, peak: Math.round(e.score.peakAltitude), flag: Math.round(e.score.flagSeconds), score: e.score.total, isYou: e === this.player, won: e.score.won })),
+          });
+          audio.music('podium');
+          audio.play(w === this.player ? 'victory' : 'roundEnd');
+          break;
+        }
         if (match.war) {
           const war = match.war;
           const my = this.player.team;
@@ -1212,7 +1387,7 @@ export class Game {
     const match = this.match!;
     const def = match.defender ?? this.player;
     this.screens.showLoadout({
-      title: match.war ? t('fortressWar') : this.player === def ? t('defendFortress') : t('targetLabel', { name: def.name }),
+      title: match.ascent ? t('skyFlag') : match.war ? t('fortressWar') : this.player === def ? t('defendFortress') : t('targetLabel', { name: def.name }),
       weapons: PRIMARY_CHOICES.map((w) => ({ id: w, name: t(WEAPONS[w].nameKey) })),
       weapon: this.playerPrimary,
       gadgets: GADGET_IDS.map((id) => ({ id, name: t(GADGETS[id].nameKey), desc: t(GADGETS[id].descKey), icon: GADGETS[id].icon })),
@@ -1239,6 +1414,7 @@ export class Game {
    * sealed room) falls back to its doorstep on the side facing the target.
    */
   private spawnFor(e: Entity, role: Role, targetPlotIndex: number): THREE.Vector3 {
+    if (this.match?.ascent) return this.ascentSpawn(e, true) ?? new THREE.Vector3(0, PLAZA_Y + 0.5, 0);
     if (this.match?.war) return this.warSpawn(e);
     const plotIndex = role === 'defender' ? targetPlotIndex : e.plotIndex;
     const plot = this.app.plots[plotIndex];
@@ -1259,6 +1435,63 @@ export class Game {
       if (ok) return spawn.clone();
     } else if (spawn) return spawn.clone();
     return this.doorstep(plot, this.app.plots[targetPlotIndex] ?? plot);
+  }
+
+  /**
+   * Sky Flag spawns: a ring of spots around the island while the ground is dry (the first drop spreads
+   * everyone evenly; later the spot farthest from the living), then deck tops above the water once the
+   * sea has taken the island. Null when nothing dry is left: that player is out.
+   */
+  private ascentSpawn(e: Entity, initial: boolean): THREE.Vector3 | null {
+    const asc = this.match?.ascent;
+    if (!asc) return null;
+    const sea = asc.seaLevel;
+    const terrain = this.app.terrain;
+    const world = this.app.world;
+    const index = this.entities.indexOf(e);
+    const n = Math.max(1, this.entities.length);
+    const cands: THREE.Vector3[] = [];
+    const clear = (x: number, y: number, z: number): boolean => !world.boxIntersectsSolid(x - 0.4, y + 0.05, z - 0.4, x + 0.4, y + 2, z + 0.4);
+    if (initial) {
+      const a = (index / n) * Math.PI * 2 + 0.3;
+      for (let attempt = 0; attempt < 12; attempt++) {
+        const r = 46 + attempt * 4;
+        const aa = a + (attempt % 2 ? 0.12 : -0.12) * Math.ceil(attempt / 2);
+        const x = Math.cos(aa) * r;
+        const z = Math.sin(aa) * r;
+        const h = terrain.heightAt(x, z);
+        if (h > 1.2 && clear(x, h, z)) return new THREE.Vector3(x, h + 0.05, z);
+      }
+      return new THREE.Vector3(Math.cos(a) * 30, terrain.heightAt(Math.cos(a) * 30, Math.sin(a) * 30) + 0.1, Math.sin(a) * 30);
+    }
+    for (let k = 0; k < 28; k++) {
+      const a = (k / 28) * Math.PI * 2 + e.id * 0.37;
+      const r = 26 + ((k * 5) % 4) * 12;
+      const x = Math.cos(a) * r;
+      const z = Math.sin(a) * r;
+      const h = terrain.heightAt(x, z);
+      if (h > 1.2 && h > sea + 2 && clear(x, h, z)) cands.push(new THREE.Vector3(x, h + 0.05, z));
+    }
+    // Decks already built are spawn spots too: a second wind halfway up the pack rather than back on the beach.
+    if (this.sky) for (const s of this.sky.standableSpots(sea + 3)) if (clear(s.x, s.y, s.z)) cands.push(s);
+    if (cands.length === 0) return null;
+    const living = this.entities.filter((o) => o !== e && o.alive).map((o) => o.pos.y).sort((a, b) => a - b);
+    const median = living.length ? living[Math.floor(living.length / 2)] : 0;
+    const wantY = Math.max(sea + 6, median * 0.5);
+    // The spot the living are farthest from, near the height we want, with a little chance in it.
+    let best: THREE.Vector3 | null = null;
+    let bestScore = -Infinity;
+    for (const c of cands) {
+      let nearest = Infinity;
+      for (const o of this.entities) if (o !== e && o.alive) nearest = Math.min(nearest, o.pos.distanceTo(c));
+      if (nearest < 6) continue;
+      const score = Math.min(nearest, 60) * 0.6 + this.rng.range(0, 10) - Math.abs(c.y - wantY) * 0.8;
+      if (score > bestScore) {
+        bestScore = score;
+        best = c;
+      }
+    }
+    return best ?? cands[0];
   }
 
   /** A clear terrain cell just outside a plot on the side facing `toward`. */
@@ -1371,6 +1604,27 @@ export class Game {
     this.bots = [];
     this.entities = [];
     this.teamBuild = null;
+    // Sky Flag: every piece built during the match comes down, the sea goes home, the light resets.
+    if (this.sky) {
+      this.sky.clear();
+      this.sky = null;
+      this.app.chunks.flush();
+    }
+    this.ascentMeshes?.dispose();
+    this.ascentMeshes = null;
+    this.buildKind = null;
+    this.buildAim = null;
+    this.archOn = false;
+    this.combat.knockback = 0;
+    this.app.water.setLevel(0, 0);
+    this.app.sky.timeSpeed = 0;
+    this.app.gr.fog.setCloudBand(0, 0, 0);
+    this.app.gr.fog.setUnderwater(0);
+    this.touch.setAscent(false);
+    if (this.local) {
+      this.local.toolMode = false;
+      this.local.enabled = true;
+    }
     this.commanders = [];
     this.teamPosts = [[], []];
     this.teamSpawns = [[], []];
@@ -1504,9 +1758,14 @@ export class Game {
         else this.pendingDmg.set(victim.id, { amount: 0, point: victim.center, headshot, kill: true });
       }
       if (killer && killer !== victim) this.onKillRewards(killer, victim);
+      if (!killer && this.match?.ascent) this.hud.killFeed(`${victim.drowning ? '🌊' : '⬇'} <b style="color:${victim.colorHex}">${esc(victim.name)}</b>`);
       if (victim === this.player) {
         this.killerEntity = killer && killer !== victim ? killer : null;
-        this.killedBy = killer ? `${killer.name} · ${Math.round(killer.pos.distanceTo(victim.pos))} m` : '';
+        this.killedBy = killer ? `${killer.name} · ${Math.round(killer.pos.distanceTo(victim.pos))} m` : this.match?.ascent ? t(victim.drowning ? 'takenBySea' : 'fellToDeath') : '';
+        if (this.match?.ascent) {
+          this.exitBuild();
+          this.exitArch();
+        }
       }
       const brain = this.bots.find((b) => b.entity === victim);
       brain?.reset();
@@ -1587,7 +1846,10 @@ export class Game {
         break;
       case 'summary':
       case 'podium':
-        this.cinematicCamera(dt, this.mode === 'podium' ? this.winnerPlot() : this.app.plots[match?.war ? WAR_PLOTS[match.war.winner === 1 ? 1 : 0] : Math.max(0, match?.lastRound?.plotIndex ?? 0)]);
+        if (match?.ascent) {
+          this.ascentCinematic(dt, match.ascent);
+          this.ascentVisuals(dt);
+        } else this.cinematicCamera(dt, this.mode === 'podium' ? this.winnerPlot() : this.app.plots[match?.war ? WAR_PLOTS[match.war.winner === 1 ? 1 : 0] : Math.max(0, match?.lastRound?.plotIndex ?? 0)]);
         this.updateCharacters(dt);
         if (this.mode === 'summary' && match) this.screens.updateSummaryCountdown(RULES.summaryTime - match.phaseTimer);
         break;
@@ -1608,7 +1870,27 @@ export class Game {
 
   private winnerPlot(): Plot {
     const w = this.match?.standings()[0];
-    return this.app.plots[w?.plotIndex ?? 0];
+    if (!w || w.plotIndex < 0) return CENTRE_PLOT;
+    return this.app.plots[w.plotIndex] ?? CENTRE_PLOT;
+  }
+
+  /** Sky Flag finale: a slow orbit around the flag (which rests on the winner's tower) high enough to show the whole skyline. */
+  private ascentCinematic(dt: number, asc: AscentState): void {
+    this.cinematicAngle += dt * 0.18;
+    const cam = this.app.gr.camera;
+    const anchor = asc.winner && asc.winner.alive ? asc.winner.pos : asc.flagPos;
+    const ax = anchor.x;
+    const az = anchor.z;
+    const ay = Math.max(anchor.y, asc.seaLevel + 6);
+    const r = 46;
+    cam.position.set(ax + Math.cos(this.cinematicAngle) * r, ay + 16 + Math.sin(this.cinematicAngle * 0.5) * 3, az + Math.sin(this.cinematicAngle) * r);
+    cam.lookAt(ax, ay - 2, az);
+    cam.updateMatrixWorld();
+    this.cameraFocus.set(ax, ay - 2, az);
+    if (Math.abs(cam.fov - 62) > 0.1) {
+      cam.fov = damp(cam.fov, 62, 4, dt);
+      cam.updateProjectionMatrix();
+    }
   }
 
   /** Compares the deployed build stamp with the one in memory so a tab left open learns about a newer version. */
@@ -1678,20 +1960,21 @@ export class Game {
 
   private introUpdate(dt: number): void {
     const match = this.match!;
-    const plot = this.app.plots[match.war ? WAR_PLOTS[0] : match.targetPlotIndex];
+    const plot = match.ascent ? CENTRE_PLOT : this.app.plots[match.war ? WAR_PLOTS[0] : match.targetPlotIndex];
     if (!this.simOnly) {
       if (match.phaseTimer < 0.05) this.flybyAngle = Math.atan2(this.player.pos.z - plot.cz, this.player.pos.x - plot.cx) - 0.6;
       this.flybyCamera(dt, plot, match.phaseTimer / RULES.introTime);
       this.updateCharacters(dt);
       this.flushDamageNumbers();
       this.hud.update(this.hudState(), dt);
+      if (match.ascent) this.ascentVisuals(dt);
     }
     this.screens.updateLoadoutCountdown(RULES.introTime - match.phaseTimer);
     if (!this.introBannerShown) {
       this.introBannerShown = true;
       const def = match.defender;
-      const title = match.war ? t('fortressWar') : this.player === def ? t('defendFortress') : t('targetLabel', { name: def?.name ?? '' });
-      this.hud.showBanner(title, match.war ? t('warIntro') : t('intro'), 2.6);
+      const title = match.ascent ? t('skyFlag') : match.war ? t('fortressWar') : this.player === def ? t('defendFortress') : t('targetLabel', { name: def?.name ?? '' });
+      this.hud.showBanner(title, match.ascent ? t('ascentIntro') : match.war ? t('warIntro') : t('intro'), 2.6);
     }
   }
 
@@ -1699,12 +1982,14 @@ export class Game {
     const match = this.match!;
     const input = this.app.input;
     this.ensureLocal();
-    this.local.enabled = !this.paused && !this.screens.visible;
+    this.local.enabled = !this.paused && !this.screens.visible && !this.archOn;
+    this.local.toolMode = this.buildKind !== null || this.archOn;
     this.timeScale = this.time < this.slowmoUntil ? this.slowmoScale : 1;
     const simDt = this.paused ? 0 : dt * this.timeScale;
     if (simDt > 0) {
       // Player
       const wasAlive = this.player.alive;
+      if (match.ascent) this.ascentInput(simDt);
       this.local.update(simDt, this.time);
       if (wasAlive && !this.player.alive) {
         /* death handled via events */
@@ -1766,6 +2051,8 @@ export class Game {
     this.updateCharacters(dt);
     // Camera when dead: orbit the body
     if (!this.player.alive) this.deathCamera(dt);
+    else if (this.archOn) this.archCamera(dt);
+    if (match.ascent) this.ascentVisuals(dt);
     this.cameraFocus.copy(this.app.gr.camera.position);
     // Scoreboard
     if (input.isDown('Tab')) {
@@ -1792,11 +2079,165 @@ export class Game {
     this.hud.update(this.hudState(), dt);
     if (IS_TOUCH) {
       const p = this.player;
+      if (match.ascent) this.touch.setPlacing(this.buildKind !== null && p.alive);
       p.gadgets.forEach((id, i) => {
         const unlimited = GADGETS[id].charges === Infinity;
         this.touch.setGadgetState(i, p.gadgetCooldown[i] <= 0 && (unlimited || p.gadgetCharges[i] > 0), unlimited ? -1 : p.gadgetCharges[i]);
         this.touch.setGadgetBadge(i, p.gadgets[i] === 'burrow' && p.burrowed ? t('surfaceBadge') : null);
       });
+    }
+  }
+
+  // ---------------- Sky Flag: building, the architect view, visuals ----------------
+  /** B (or the touch button) puts the pieces in hand; weapons come back with the next press. */
+  toggleBuild(kind: PieceKind | null = null): void {
+    if (this.buildKind && !kind) this.exitBuild();
+    else {
+      this.buildKind = kind ?? this.buildKind ?? 'ramp';
+      audio.play('switch', { volume: 0.6, pitch: 1.2 });
+    }
+  }
+
+  private exitBuild(): void {
+    if (!this.buildKind) return;
+    this.buildKind = null;
+    this.buildAim = null;
+  }
+
+  enterArch(): void {
+    if (this.archOn || this.archCooldown > 0 || !this.player.alive) return;
+    this.archOn = true;
+    this.archTimer = ARCH_TIME;
+    if (!this.buildKind) this.buildKind = 'platform';
+    const p = this.player;
+    this.archCursor.copy(p.pos).addScaledVector(p.forwardFlat(new THREE.Vector3()), 4);
+    this.archCam.copy(this.app.gr.camera.position);
+    this.touch.setArchTaps(true);
+    audio.play('switch', { volume: 0.6, pitch: 0.8 });
+  }
+
+  exitArch(): void {
+    if (!this.archOn) return;
+    this.archOn = false;
+    this.archCooldown = ARCH_COOLDOWN;
+    this.touch.setArchTaps(false);
+  }
+
+  /** Build controls: pieces, rotation, the architect view and placing (first person or from above). */
+  private ascentInput(dt: number): void {
+    const input = this.app.input;
+    const p = this.player;
+    const asc = this.match!.ascent!;
+    const sky = this.sky!;
+    const v = input.virtual;
+    this.archCooldown = Math.max(0, this.archCooldown - dt);
+    if (this.archOn) {
+      this.archTimer -= dt;
+      if (this.archTimer <= 0 || !p.alive) this.exitArch();
+    }
+    if (!p.alive || this.screens.visible) {
+      v.build = v.piece = v.arch = false;
+      return;
+    }
+    if (input.wasPressed('KeyB') || v.build) this.toggleBuild();
+    if (input.wasPressed('KeyX') || v.arch) {
+      if (this.archOn) this.exitArch();
+      else this.enterArch();
+    }
+    // Leaving the build for a weapon.
+    if (this.buildKind && !this.archOn) {
+      if (input.wasPressed('Digit1') && this.buildKind === PIECE_KINDS[0]) {
+        /* same piece, stay */
+      }
+    }
+    if (this.buildKind) {
+      for (let i = 0; i < PIECE_KINDS.length; i++) if (input.wasPressed(`Digit${i + 1}`)) this.buildKind = PIECE_KINDS[i];
+      if (input.wheel > 0 || v.piece) this.buildKind = PIECE_KINDS[(PIECE_KINDS.indexOf(this.buildKind) + 1) % PIECE_KINDS.length];
+      else if (input.wheel < 0) this.buildKind = PIECE_KINDS[(PIECE_KINDS.indexOf(this.buildKind) + PIECE_KINDS.length - 1) % PIECE_KINDS.length];
+      if (input.wasPressed('KeyR') || input.buttonPressed(2)) this.buildRot = (this.buildRot + 1) % 4;
+    }
+    v.build = v.piece = v.arch = false;
+    if (!this.buildKind) {
+      this.buildAim = null;
+      return;
+    }
+    // Where the piece would go: along the view, or from the architect camera through its cursor.
+    let eye = p.eyePos;
+    let dir = p.forward(new THREE.Vector3());
+    let tapPlace = false;
+    if (this.archOn) {
+      const cam = this.app.gr.camera;
+      // Mouse and finger drags move the cursor over the ground plane; a still tap places at the finger.
+      const sens = 0.03;
+      const dx = (input.looking ? input.mouseDX : 0) + v.lookDX;
+      const dy = (input.looking ? input.mouseDY : 0) + v.lookDY;
+      const right = p.right(new THREE.Vector3());
+      const fwd = p.forwardFlat(new THREE.Vector3());
+      this.archCursor.addScaledVector(right, dx * sens).addScaledVector(fwd, -dy * sens);
+      const far = this.archCursor.clone().sub(p.pos).setY(0);
+      if (far.length() > 14) this.archCursor.copy(p.pos).addScaledVector(far.normalize(), 14);
+      this.archCursor.y = p.pos.y;
+      if (v.tapped) {
+        const ndc = new THREE.Vector3((v.tapX / window.innerWidth) * 2 - 1, -(v.tapY / window.innerHeight) * 2 + 1, 0.5).unproject(cam);
+        eye = cam.position.clone();
+        dir = ndc.sub(cam.position).normalize();
+        tapPlace = true;
+        v.tapped = false;
+      } else {
+        eye = cam.position.clone();
+        dir = this.archCursor.clone().sub(cam.position).normalize();
+      }
+    }
+    this.buildAim = sky.aim(this.buildKind, eye, dir, p.pos, p.yaw, this.buildRot, p, p.bricks);
+    const aim = this.buildAim;
+    const pressed = input.firePressed() || tapPlace;
+    const held = input.fireHeld() && this.time - this.lastPlace > 0.32;
+    if (!pressed && !held) return;
+    if (aim.stamp && aim.reason === 'ok') {
+      if (!asc.spend(p, aim.cost)) return;
+      sky.place(aim.stamp, p);
+      this.lastPlace = this.time;
+      this.buildAim = sky.aim(this.buildKind, eye, dir, p.pos, p.yaw, this.buildRot, p, p.bricks);
+    } else if (pressed) {
+      this.showPrompt(t(aim.reason === 'bricks' ? 'needBricks' : aim.reason === 'body' ? 'placeBody' : aim.reason === 'blocked' ? 'placeBlocked' : aim.reason === 'unanchored' ? 'placeUnanchored' : 'placeRange', { n: aim.cost }), 1.2);
+      audio.play('empty', { volume: 0.5 });
+    }
+  }
+
+  /** The architect view: the camera climbs above and behind the body and looks down at the cursor. */
+  private archCamera(dt: number): void {
+    const cam = this.app.gr.camera;
+    const p = this.player;
+    const back = p.forwardFlat(new THREE.Vector3()).multiplyScalar(-7);
+    const want = new THREE.Vector3(p.pos.x + back.x, p.pos.y + 15, p.pos.z + back.z);
+    // Never inside a block: rise until clear.
+    for (let i = 0; i < 8 && this.app.world.boxIntersectsSolid(want.x - 0.4, want.y - 0.4, want.z - 0.4, want.x + 0.4, want.y + 0.4, want.z + 0.4); i++) want.y += 1.5;
+    this.archCam.lerp(want, Math.min(1, dt * 7));
+    cam.position.copy(this.archCam);
+    const look = this.archCursor.clone().lerp(p.pos, 0.35);
+    cam.lookAt(look.x, look.y, look.z);
+    cam.updateMatrixWorld();
+  }
+
+  /** Per-frame presentation for Sky Flag: the sea, the flag, the mark, the bricks, the ghost piece, the sky. */
+  private ascentVisuals(dt: number): void {
+    const asc = this.match?.ascent;
+    if (!asc || !this.ascentMeshes) return;
+    const cam = this.app.gr.camera;
+    this.app.water.setLevel(asc.seaLevel, asc.seaRising ? asc.seaSpeed : 0);
+    this.ascentMeshes.update(dt, this.time, asc, this.entities, this.player, this.buildAim, cam.position);
+    // Under the surface everything goes teal and near; in the cloud band, white and blind.
+    const under = cam.position.y < asc.seaLevel ? 1 : 0;
+    this.app.gr.fog.setUnderwater(under);
+    this.app.gr.fog.setCloudBand(84, 11, 0.12);
+    // The rising sea shakes the ground under whoever is close to it.
+    if (asc.seaRising && this.player.alive) {
+      const gap = this.player.pos.y - asc.seaLevel;
+      if (gap < 12) this.local?.addShake(Math.min(0.25, (12 - gap) * 0.02) * dt * 6);
+      if (gap < 6 && this.time - this.lastSeaWarn > 4) {
+        this.lastSeaWarn = this.time;
+        audio.play('siren', { volume: 0.35, pitch: 0.5 });
+      }
     }
   }
 
@@ -1944,9 +2385,15 @@ export class Game {
       // Radar pulse (streak reward): every enemy for a few seconds.
       if (p.radarUntil > this.time) for (const e of this.entities) if (e !== p && e.alive && e !== cap) this.pushMarker(markers, e, 'radar');
       // Comeback: last place always knows where the leader is.
-      if (standings.length >= 3 && standings[standings.length - 1] === p) {
+      if (standings.length >= 3 && standings[standings.length - 1] === p && !match.ascent) {
         const lead = standings[0];
         if (lead !== p && lead.alive && lead !== cap) this.pushMarker(markers, lead, 'leader');
+      }
+      // Sky Flag: the marked leader and the flag carrier are called out to everyone, through everything.
+      const asc = match.ascent;
+      if (asc) {
+        if (asc.marked && asc.marked !== p && asc.marked.alive) this.pushMarker(markers, asc.marked, 'leader');
+        if (asc.holder && asc.holder !== p && asc.holder.alive) this.pushMarker(markers, asc.holder, 'capture');
       }
       const order: Record<HudMarker['kind'], number> = { capture: 0, threat: 1, leader: 2, radar: 3, near: 4, ally: 5 };
       markers.sort((a, b) => order[a.kind] - order[b.kind] || a.dist - b.dist);
@@ -1962,11 +2409,13 @@ export class Game {
         if (grenadeWarnings.length >= 4) break;
       }
     }
+    const ascent = match.ascent ? this.ascentHud(match.ascent, p) : null;
     return {
-      objective,
+      objective: ascent ? this.flagMarker(match.ascent!) : objective,
       onEnemy,
       markers,
       grenadeWarnings,
+      ascent,
       hp: p.hp,
       maxHp: p.maxHp,
       weaponName: w ? t(WEAPONS[w.id].nameKey) : '',
@@ -2038,14 +2487,57 @@ export class Game {
         self: { x: p.pos.x, z: p.pos.z, yaw: p.yaw },
         target: match.targetPlotIndex >= 0 ? { x: this.app.plots[match.targetPlotIndex].cx, z: this.app.plots[match.targetPlotIndex].cz } : null,
         zoneRadius: ZONE_RADIUS,
-        flag: p.role === 'defender' && flag ? { x: flag.pos.x, z: flag.pos.z } : null,
+        flag: match.ascent ? { x: match.ascent.flagPos.x, z: match.ascent.flagPos.z } : p.role === 'defender' && flag ? { x: flag.pos.x, z: flag.pos.z } : null,
         plots: war
           ? WAR_PLOTS.map((pi, team) => ({ x: this.app.plots[pi].cx, z: this.app.plots[pi].cz, active: false, color: TEAM_COLORS[team] }))
-          : this.app.plots.slice(0, this.entities.length).map((pl) => ({ x: pl.cx, z: pl.cz, active: pl.index === match.targetPlotIndex, color: this.entities.find((e) => e.plotIndex === pl.index)?.colorHex ?? '#888' })),
+          : match.ascent
+            ? []
+            : this.app.plots.slice(0, this.entities.length).map((pl) => ({ x: pl.cx, z: pl.cz, active: pl.index === match.targetPlotIndex, color: this.entities.find((e) => e.plotIndex === pl.index)?.colorHex ?? '#888' })),
         points: war ? war.outposts.map((o) => ({ x: o.pos.x, z: o.pos.z, label: o.label, color: o.owner < 0 ? null : TEAM_COLORS[o.owner], progress: o.progress, progressColor: o.team < 0 ? null : TEAM_COLORS[o.team] })) : [],
-        others,
+        others: match.ascent ? this.entities.filter((e) => e !== p && e.alive).map((e) => ({ x: e.pos.x, z: e.pos.z, color: e.colorHex })) : others,
       },
     };
+  }
+
+  /** Sky Flag HUD block: bricks, altitudes, the sea, the mark, the flag, the pieces, the architect view. */
+  private ascentHud(asc: AscentState, p: Entity): NonNullable<HudState['ascent']> {
+    const ground = this.app.terrain.heightAt(p.pos.x, p.pos.z);
+    const build = this.buildKind
+      ? {
+          kind: this.buildKind,
+          reason: this.buildAim?.reason ?? 'range',
+          pieces: PIECE_KINDS.map((k) => ({ kind: k, name: t(PIECES[k].nameKey), cost: PIECES[k].cost, icon: PIECES[k].icon, active: k === this.buildKind, affordable: p.bricks >= PIECES[k].cost })),
+        }
+      : null;
+    return {
+      bricks: p.bricks,
+      bricksMax: ASCENT.bricksMax,
+      altitude: Math.max(0, p.pos.y - ground),
+      flagAltitude: Math.max(0, asc.flagPos.y - this.app.terrain.heightAt(asc.flagPos.x, asc.flagPos.z)),
+      flagDist: Math.hypot(asc.flagPos.x - p.pos.x, asc.flagPos.z - p.pos.z),
+      sea: { level: asc.seaLevel, rising: asc.seaRising, boosted: asc.seaSpeed > ASCENT.seaSpeed * 1.5, inSeconds: asc.seaIn, gap: p.pos.y - asc.seaLevel },
+      marked: asc.marked ? { name: asc.marked.name, color: asc.marked.colorHex, you: asc.marked === p } : null,
+      holder: asc.holder && asc.holder.alive ? { name: asc.holder.name, color: asc.holder.colorHex, you: asc.holder === p, progress: clamp(asc.holdTimer / ASCENT.holdTime, 0, 1) } : null,
+      build,
+      arch: { on: this.archOn, left: this.archOn ? this.archTimer / ARCH_TIME : 0, cooldown: this.archCooldown / ARCH_COOLDOWN },
+      strip: this.entities.filter((e) => e.alive).map((e) => ({ y: e.pos.y, color: e.colorHex, you: e === p, marked: e === asc.marked, flag: e === asc.holder })),
+      stripFlag: asc.flagHeld ? null : asc.flagPos.y,
+      stripSea: asc.seaLevel,
+      stripMax: ASCENT.flagStartY + 8,
+      eliminated: p.eliminated,
+      alive: this.entities.filter((e) => !e.eliminated).length,
+      holdTime: ASCENT.holdTime,
+    };
+  }
+
+  /** The flag as a screen marker with its height and distance, for everyone but its carrier. */
+  private flagMarker(asc: AscentState): HudState['objective'] {
+    if (this.mode !== 'battle' || !this.player.alive || asc.holder === this.player) return null;
+    const pos = asc.flagPos;
+    const sc = this.toScreen(new THREE.Vector3(pos.x, pos.y + 1.5, pos.z), 60);
+    const dist = pos.distanceTo(this.player.pos);
+    const up = Math.round(pos.y - this.player.pos.y);
+    return { sx: sc.sx, sy: sc.sy, dist, onScreen: sc.onScreen, angle: sc.angle, label: `${t('theFlag')} ${up > 0 ? `▲${up}` : up < 0 ? `▼${-up}` : ''}` };
   }
 
   /** Screen-space marker guiding attackers to the contested fortress (hidden once inside it). */
@@ -2278,6 +2770,47 @@ export class Game {
   // ---------------- debug helpers (smoke tests) ----------------
   debugQuickMatch(botCount = 3, difficulty: 'easy' | 'normal' | 'hard' | 'nightmare' = 'normal', roundTime = 240): void {
     this.startMatch({ playerName: 'Tester', botCount, difficulty, buildTime: 0, roundTime, style: 'medieval' });
+  }
+  /** Sky Flag snapshot (tests). */
+  debugAscent(): Record<string, unknown> {
+    const asc = this.match?.ascent;
+    if (!asc) return { error: 'not a sky flag match' };
+    return {
+      phase: this.match?.phase,
+      elapsed: Math.round(asc.elapsed),
+      flag: asc.flagPos.toArray().map((v) => Math.round(v * 10) / 10),
+      holder: asc.holder?.name ?? null,
+      holdTimer: Math.round(asc.holdTimer * 10) / 10,
+      marked: asc.marked?.name ?? null,
+      sea: Math.round(asc.seaLevel * 100) / 100,
+      seaRising: asc.seaRising,
+      seaSpeed: asc.seaSpeed,
+      drops: asc.drops.length,
+      ended: asc.ended,
+      winner: asc.winner?.name ?? null,
+      placedBlocks: this.sky?.placed.size ?? 0,
+      floors: this.sky?.floors.size ?? 0,
+      pieces: this.sky ? Object.fromEntries(Array.from(this.sky.count.entries()).map(([id, n]) => [this.entities.find((e) => e.id === id)?.name ?? id, n])) : {},
+      build: this.buildKind,
+      aim: this.buildAim ? { reason: this.buildAim.reason, cells: this.buildAim.stamp?.cells.length ?? 0 } : null,
+      arch: this.archOn,
+      archCooldown: Math.round(this.archCooldown * 10) / 10,
+      player: { bricks: this.player.bricks, y: Math.round(this.player.pos.y * 10) / 10, alive: this.player.alive, eliminated: this.player.eliminated, score: this.player.score.total },
+      entities: this.entities.map((e) => ({ name: e.name, alive: e.alive, y: Math.round(e.pos.y * 10) / 10, bricks: e.bricks, kills: e.score.kills, peak: Math.round(e.score.peakAltitude), eliminated: e.eliminated, state: this.bots.find((b) => b.entity === e)?.state ?? 'human', task: e.task })),
+    };
+  }
+  /** Puts a piece in the player's hand (tests). */
+  debugBuild(kind: PieceKind | null): void {
+    if (kind) this.toggleBuild(kind);
+    else this.exitBuild();
+  }
+  /** Places the piece in hand where it is aimed (tests): returns the reason. */
+  debugPlace(): string {
+    if (!this.sky || !this.buildKind || !this.match?.ascent) return 'no build';
+    const p = this.player;
+    const aim = this.sky.aim(this.buildKind, p.eyePos, p.forward(new THREE.Vector3()), p.pos, p.yaw, this.buildRot, p, p.bricks);
+    if (aim.stamp && aim.reason === 'ok' && this.match.ascent.spend(p, aim.cost)) this.sky.place(aim.stamp, p);
+    return aim.reason;
   }
   debugSkipBuild(): void {
     this.builder?.autoBuild(7);

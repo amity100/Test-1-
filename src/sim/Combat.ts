@@ -49,6 +49,8 @@ export class Combat {
   readonly projectiles: Projectile[] = [];
   private rng = new Random(1234);
   friendlyFire = true;
+  /** Bullet knockback in m/s per hit (0 outside Sky Flag). */
+  knockback = 0;
 
   constructor(private world: VoxelWorld, private terrain: Terrain, private getEntities: () => Entity[]) {}
 
@@ -227,6 +229,12 @@ export class Combat {
         if (hit.entity) {
           let dmg = damageAtDistance(def, hit.dist);
           if (hit.headshot) dmg *= def.headshotMult;
+          // Sky Flag: every hit shoves; on a ledge that is the point.
+          if (this.knockback > 0 && hit.entity.alive && hit.entity.protectedUntil <= now && !hit.entity.zipRide) {
+            const k = this.knockback / Math.sqrt(def.pellets);
+            hit.entity.vel.addScaledVector(dir, k);
+            hit.entity.vel.y += k * 0.12;
+          }
           this.applyDamage(hit.entity, dmg, shooter, now, hit.headshot, hit.point);
         } else if (hit.solid) hit.solid.hit(damageAtDistance(def, hit.dist), shooter);
         else if (hit.blockValue && isTransparent(blockMat(hit.blockValue))) {

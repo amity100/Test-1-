@@ -30,10 +30,15 @@ export interface ScoreSheet {
   holdMinutes: number;
   /** War: capture points taken. */
   outposts: number;
+  /** Sky Flag: bricks picked up, the highest point reached, seconds with the flag, and the win. */
+  bricks: number;
+  peakAltitude: number;
+  flagSeconds: number;
+  won: boolean;
 }
 
 export function emptyScore(): ScoreSheet {
-  return { total: 0, defenseSeconds: 0, holdBonuses: 0, captures: 0, kills: 0, killsAsDefender: 0, deaths: 0, holdMinutes: 0, outposts: 0 };
+  return { total: 0, defenseSeconds: 0, holdBonuses: 0, captures: 0, kills: 0, killsAsDefender: 0, deaths: 0, holdMinutes: 0, outposts: 0, bricks: 0, peakAltitude: 0, flagSeconds: 0, won: false };
 }
 
 let nextEntityId = 1;
@@ -55,6 +60,10 @@ export class Entity {
   task = '';
   /** Fortress War score sheet extras. */
   assists = 0;
+  /** Sky Flag: bricks carried (the building material), under the sea right now, out of the match for good. */
+  bricks = 0;
+  drowning = false;
+  eliminated = false;
 
   pos = new THREE.Vector3();
   vel = new THREE.Vector3();

@@ -1,12 +1,19 @@
 # FLAGKEEP
 
-**Build. Hide. Storm.** A 3D web shooter about fortresses. In **Fortress War** (the default) two
-teams each raise a stronghold together, then fight a Battlefield-style war across the island: hold
-the three capture points, loot the enemy flag from deep inside their keep, and run the other side
-out of tickets. Single player already plays like the multiplayer will: your five teammates are bots
-who build with you, take your pings, hold posts, take points, breach walls and repair them. The
-classic **rotation** (everyone builds their own fortress, then each one is stormed in turn) is still
-there in the setup screen.
+**Build up. Hold the sky.** A 3D web shooter about building into the sky. In **Sky Flag** (the
+default) twelve players share one island, everyone for themselves. A golden flag drifts down from
+the clouds toward whoever stands highest; you get there by throwing up marble combat arenas in real
+time (ramps, decks, bridges, parapets and round arenas) from the bricks in your hand. Bricks trickle
+in slowly and pour out of anyone you kill. The highest player wears a crown and a beam of light that
+everyone can see, and is worth a bounty of bricks. Past the halfway point a tsunami rises from
+below and swallows the island floor; the moment the flag is first taken it rises three times as
+fast. Hold the flag for twenty seconds and the match is yours; otherwise, when time or the water
+runs out, the last one standing highest wins. The eleven others are bots that build switchback
+towers, hunt the leader, dive for dropped bricks and flee the water.
+
+**Fortress War** (two teams, a stronghold each, three capture points, tickets) and the classic
+**rotation** (everyone builds a fortress, then each one is stormed in turn) are still there in the
+setup screen.
 
 Runs entirely in the browser (WebGL 2). No accounts, no downloads, no external assets: every texture,
 model and sound is generated procedurally at load time.
@@ -21,6 +28,39 @@ GitHub Pages). Single-file build for artifact hosting: `npm run build:artifact` 
 `artifact/flagkeep.html`).
 
 ## How a match works
+
+### Sky Flag
+
+1. **Twelve on one island, twelve minutes.** Everyone spawns spread around the shore with fifteen
+   bricks. One brick trickles in every seven seconds (up to 48 in hand); a kill drops most of the
+   victim's bricks (at least six) as a cluster that hovers over the spot for ten seconds and then
+   plunges, and whoever walks through it takes them. The marked leader drops a bounty of twelve
+   more.
+2. **Building.** `B` takes a piece in hand (the fire button becomes PLACE on a phone); `1`-`5` or the
+   wheel pick the piece, `R` turns it, click places it, and holding the button places a run of
+   them. Five pieces: a **ramp** (3 bricks: three wide, four up, with a landing), a **deck**
+   (4: a five-by-five platform with lamp posts at the corners), a **bridge** (3: eight metres of
+   gold-railed walkway), a **parapet** (1: chest-high cover with merlons) and an **arena** (8: a
+   round eleven-metre fighting floor). Pieces are ivory marble with gold and a strip of your own
+   colour, need something to anchor to, may not cut through anyone's body, and grow support columns
+   to the ground when they are near it. A green ghost means it fits, amber that you cannot afford it,
+   red says why not.
+3. **The architect view** (`X`, or EYE on a phone) lifts the camera fifteen metres up for four
+   seconds so you can lay pieces onto the ground plane by cursor or a still finger, then drops you
+   back; your body stays exposed the whole time, and it cools down for six seconds.
+4. **The flag** starts 160 m up and descends at 0.16 m/s, drifting sideways toward the marked
+   leader (or the island centre). Standing within three metres of it takes it; the holder must
+   survive twenty seconds. Killing the holder drops the flag right there. The **marked** player is
+   whoever stands highest, at least six metres above the ground and four metres above the next;
+   they carry a crown and an eighty-metre beam.
+5. **The sea** starts rising at 6:20 (0.12 m/s) and three times faster after the first grab; being
+   under it drowns you in about two and a half seconds. Falls hurt from 15 m/s and kill from 44 m/s
+   of landing speed. Whoever dies respawns after five seconds on a free deck halfway up the pack
+   (or the shore); once nothing dry is left, they are out. A grab held for twenty seconds, the water
+   reaching the flag, time running out, or one player left ends the match; the winner is the holder,
+   else the highest.
+6. **Scoring**: 5 per kill, 1 per brick collected, 2 per five metres of peak altitude, 3 per second
+   of holding the flag, 150 for the win. The podium sorts by win, then score, kills and peak height.
 
 ### Fortress War
 
@@ -88,6 +128,9 @@ GitHub Pages). Single-file build for artifact hosting: `npm run build:artifact` 
 
 WASD move · Space jump · Shift sprint · C crouch/slide · Mouse aim and fire · Right mouse aim down
 sights · 1-3 / wheel weapons · R reload · G grenade · Q / F gadgets · Tab scoreboard · Esc pause.
+Sky Flag: B build (then 1-5 / wheel pick the piece, R turns it, click or hold places) · X architect
+view; on a phone BUILD, PIECE and EYE buttons sit beside the fire cluster and a still finger in the
+architect view places at the finger.
 Stairs, slabs and one-metre ledges are climbed by simply walking into them. Aim assist (on by
 default, off in Settings) slows the view over an enemy, follows one near the crosshair, snaps onto
 the nearest enemy when the sights come up and forgives near misses a little; on touch it also fires
@@ -222,6 +265,13 @@ lathe trunks, tapered branches and leaf-card canopies, ragged conifers, bushes, 
 mossy boulders and flower cards, all instanced. Procedural PBR tiles (fabric, camo, armour,
 gunmetal, polymer, wood, bark, rock, soil) supply albedo, normal and roughness maps.
 
+Sky Flag adds a voxel world 255 blocks tall, ramps walked by a slope-surface lift in the character
+controller, a rules core (`src/sim/Ascent.ts`), the piece builder with anchoring and body checks
+(`src/build/SkyBuild.ts`), bots that build switchback towers and hold their decks
+(`src/ai/AscentBrain.ts`), a rising sea with swell, deep colour and crest foam, a cloud band and
+underwater murk in the height fog, and the flag, marked beam, brick clusters and placement ghosts
+(`src/render/AscentMeshes.ts`).
+
 Bots navigate the whole island: a fine voxel grid around each fortress stitched to a coarse terrain
 grid, with hearing, damage reaction, cover, peeking and defender repositioning.
 
@@ -235,7 +285,11 @@ Quality tiers (low/medium/high/ultra) are picked from the GPU and can be forced 
 firing) and `node scripts/smoke-mobile.mjs <url>` (touch emulation; the trap walk, touch look and
 the button editor are exercised there and in the probe scripts) drive the game in headless
 Chromium (Playwright) and save screenshots. Test against `npm run build && npm run preview` so dev
-server reloads do not interrupt the runs. Fortress War has its own probes: `node scripts/probe-war.mjs <url>`
+server reloads do not interrupt the runs. Sky Flag has `node scripts/probe-ascent.mjs` (a whole match through the debug API: start,
+spawns, ramp and deck placement, ninety seconds of bots building and climbing, the mark, kill drops
+and pickup, fall damage, the rising sea and drowning, the grab and the surge, holding to win, the
+podium) and `node scripts/probe-ascent-phone.mjs` (the same buttons and HUD on a touch phone).
+Fortress War has its own probes: `node scripts/probe-war.mjs <url>`
 (team build, pings, the trap walk, the war, respawn choice, repair, the team podium),
 `node scripts/probe-war-phone.mjs <url>` (the same on a touch phone) and
 `node scripts/probe-war-balance.mjs <url>` (five minutes of bots against bots, watching tickets,

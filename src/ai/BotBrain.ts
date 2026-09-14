@@ -9,6 +9,7 @@ import type { NavGrid } from './NavGrid';
 import type { NavSystem } from './NavSystem';
 import type { Plot } from '../world/Layout';
 import type { VoxelWorld } from '../world/VoxelWorld';
+import type { Terrain } from '../world/Terrain';
 import { WeaponLogic } from '../sim/WeaponLogic';
 import { WEAPONS, type WeaponId } from '../sim/Weapons';
 import type { Difficulty } from '../sim/Match';
@@ -50,6 +51,8 @@ export const PROFILES: Record<Difficulty, BotProfile> = {
 
 export interface BotContext {
   world: VoxelWorld;
+  /** The island's ground (Sky Flag bots read it to see gaps ahead). */
+  terrain?: Terrain;
   /** Fortress War: the team's shared knowledge and orders (null in the classic rotation). */
   commander?: (team: number) => BotCommander | null;
   /** Gadget kit (bots throw breach charges at walls in a war). */

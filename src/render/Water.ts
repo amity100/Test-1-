@@ -6,7 +6,11 @@ import { smoothstep } from '../core/MathUtil';
 /** Animated water plane with shoreline foam, using the standard PBR lighting path. */
 export class WaterSurface {
   readonly mesh: THREE.Mesh;
-  private uniforms = { uTime: { value: 0 } };
+  private uniforms = { uTime: { value: 0 }, uStorm: { value: 0 }, uLevel: { value: 0 } };
+  /** Sky Flag: the sea's level and how fast it climbs (drives the swell, the foam and the colour). */
+  level = 0;
+  private storm = 0;
+  private stormTarget = 0;
 
   constructor(terrain: Terrain) {
     const extent = 6000;
@@ -39,6 +43,8 @@ export class WaterSurface {
     const uniforms = this.uniforms;
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.uTime = uniforms.uTime;
+      shader.uniforms.uStorm = uniforms.uStorm;
+      shader.uniforms.uLevel = uniforms.uLevel;
       shader.vertexShader = shader.vertexShader
         .replace(
           '#include <common>',
@@ -46,15 +52,20 @@ export class WaterSurface {
           attribute float aShore;
           varying float vShore;
           varying vec3 vWPos;
-          uniform float uTime;`,
+          uniform float uTime;
+          uniform float uStorm;
+          uniform float uLevel;`,
         )
         .replace(
           '#include <begin_vertex>',
           `vec3 transformed = vec3(position);
           {
             float t = uTime;
+            float shoreK = uLevel > 0.5 ? 1.0 : (1.0 - aShore * 0.6);
             float w = sin(position.x * 0.12 + t * 0.9) * 0.18 + sin(position.z * 0.09 - t * 0.7) * 0.15 + sin((position.x + position.z) * 0.05 + t * 0.5) * 0.12;
-            transformed.y += w * (1.0 - aShore * 0.6);
+            // The rising sea heaves: long swells that grow with the storm.
+            float swell = sin(position.x * 0.035 + t * 1.1) * sin(position.z * 0.042 - t * 0.8) * 2.6 + sin((position.x - position.z) * 0.02 + t * 1.7) * 1.4;
+            transformed.y += w * shoreK + swell * uStorm;
           }
           vShore = aShore;
           vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`,
@@ -66,6 +77,8 @@ export class WaterSurface {
           varying float vShore;
           varying vec3 vWPos;
           uniform float uTime;
+          uniform float uStorm;
+          uniform float uLevel;
           float wHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
           float wNoise(vec2 p) {
             vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -94,13 +107,20 @@ export class WaterSurface {
           `#include <color_fragment>
           {
             vec3 shallow = vec3(0.16, 0.62, 0.62);
-            float sh = smoothstep(0.2, 1.0, vShore);
+            float shoreW = uLevel > 0.5 ? 0.0 : vShore;
+            float sh = smoothstep(0.2, 1.0, shoreW);
             diffuseColor.rgb = mix(diffuseColor.rgb, shallow, sh * 0.8);
             float band = wNoise(vWPos.xz * 0.8 + vec2(uTime * 0.25, -uTime * 0.18));
             float band2 = wNoise(vWPos.xz * 2.5 - vec2(uTime * 0.4, uTime * 0.3));
-            float foamMask = smoothstep(0.55, 0.95, vShore) * smoothstep(0.35, 0.75, band * 0.6 + band2 * 0.4 + vShore * 0.25);
+            float foamMask = smoothstep(0.55, 0.95, shoreW) * smoothstep(0.35, 0.75, band * 0.6 + band2 * 0.4 + shoreW * 0.25);
+            // Storm: the water darkens to a deep teal and streaks of foam ride every crest.
+            vec3 deep = vec3(0.02, 0.18, 0.22);
+            diffuseColor.rgb = mix(diffuseColor.rgb, deep, uStorm * 0.85);
+            float crest = wNoise(vWPos.xz * 0.45 + vec2(uTime * 0.9, uTime * 0.6)) * 0.6 + wNoise(vWPos.xz * 1.6 - vec2(uTime * 1.3, uTime * 0.4)) * 0.4;
+            float stormFoam = smoothstep(0.62, 0.9, crest) * uStorm;
+            foamMask = max(foamMask, stormFoam);
             diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.95, 0.98, 1.0), foamMask);
-            diffuseColor.a = mix(diffuseColor.a, 1.0, foamMask * 0.8);
+            diffuseColor.a = mix(diffuseColor.a, 1.0, max(foamMask * 0.8, uStorm * 0.6));
           }`,
         )
         .replace('#include <roughnessmap_fragment>', `float roughnessFactor = roughness + smoothstep(0.55, 0.95, vShore) * 0.5;`);
@@ -114,5 +134,15 @@ export class WaterSurface {
 
   update(time: number): void {
     this.uniforms.uTime.value = time;
+    this.storm += (this.stormTarget - this.storm) * 0.02;
+    this.uniforms.uStorm.value = this.storm;
+    this.uniforms.uLevel.value = this.level;
+    this.mesh.position.y = WATER_LEVEL + this.level;
+  }
+
+  /** Sky Flag: the sea stands `level` metres above normal and climbs at `speed` m/s (0 = calm). */
+  setLevel(level: number, speed: number): void {
+    this.level = level;
+    this.stormTarget = speed <= 0 ? 0 : Math.min(1, 0.45 + speed * 1.6);
   }
 }

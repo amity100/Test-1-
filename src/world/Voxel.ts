@@ -102,7 +102,18 @@ export const PALETTE: string[] = [
   '#0b0f1a', '#141b2e', '#1e2a44', '#00e5ff', '#ff2bd6', '#7c3aed', '#39ff14', '#ffb300', '#f8fafc', '#ff3355',
   // desert
   '#d8b27a', '#c48b52', '#a6673c', '#efd9b0', '#2aa198', '#e0a850', '#7a4b2b', '#f2e8d5', '#b9412e', '#4a6f5a',
+  // Sky Flag: twelve player colours (70..81), then the sky arena stone: ivory floor, pillar ivory, gold, bronze
+  '#00e5ff', '#ff2bd6', '#ffb300', '#39ff14', '#ff3355', '#a78bfa', '#ff8c42', '#7aa7ff', '#ffe94d', '#2bffb0', '#ff7ab8', '#f0f0f0',
+  '#efe6d2', '#e2d7bf', '#ffd36a', '#6b4a2a',
+  // Deep versions of the twelve (86..97): the coloured stone of deck borders
+  '#0a6d7a', '#7a1466', '#7a5600', '#1b7a0a', '#7a1a2a', '#4c3f7a', '#7a4320', '#3a507a', '#7a6f25', '#157a55', '#7a3b58', '#6a6a6a',
 ];
+
+/** Palette index of the first Sky Flag player colour; the twelve run consecutively. */
+export const SKY_PLAYER_PALETTE = 70;
+/** Palette index of the first deep player colour (same order). */
+export const SKY_DEEP_PALETTE = 86;
+export const SKY_PALETTE = { floor: 82, pillar: 83, gold: 84, bronze: 85 };
 
 export const PALETTE_COUNT = PALETTE.length;
 

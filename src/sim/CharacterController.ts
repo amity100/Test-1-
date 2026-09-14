@@ -118,6 +118,22 @@ export class CharacterController {
       }
     }
 
+    // Embedded in a block (a piece grew around the feet, a hop landed inside a ramp's solid core):
+    // climb out onto the top of whatever holds the feet, if there is room above it.
+    if (this.world.boxIntersectsSolid(e.pos.x - e.radius, e.pos.y + 0.05, e.pos.z - e.radius, e.pos.x + e.radius, e.pos.y + 0.6, e.pos.z + e.radius, true)) {
+      for (let y = Math.floor(e.pos.y + 0.6); y >= Math.floor(e.pos.y); y--) {
+        const top = y + 1.002;
+        if (!this.world.boxIntersectsSolid(e.pos.x - e.radius, y, e.pos.z - e.radius, e.pos.x + e.radius, y + 1, e.pos.z + e.radius, true)) continue;
+        if (!this.collides(e.pos.x, top, e.pos.z, e.radius, e.height)) {
+          e.stepSmooth += top - e.pos.y;
+          e.pos.y = top;
+          e.vel.y = Math.max(0, e.vel.y);
+          e.grounded = true;
+        }
+        break;
+      }
+    }
+
     // Horizontal movement.
     const fwd = e.forwardFlat(new THREE.Vector3());
     const right = e.right(new THREE.Vector3());
@@ -311,14 +327,32 @@ export class CharacterController {
   private stepUp(e: Entity): boolean {
     if (!(e.grounded || e.wasGrounded) || e.sliding) return false;
     const p = e.pos;
+    // Walking into the foot of a ramp (or the solid wedge under the next slope block) lifts the
+    // character onto the ramp's surface, so a solid-backed ramp climbs as smoothly as a hollow one.
+    const ramp = this.world.rampSurfaceAt(p.x, p.z, p.y - 0.1, p.y + 1.1);
+    if (ramp !== null && ramp > p.y - 0.1 && ramp <= p.y + 1.05 && !this.collides(p.x, ramp + 0.002, p.z, e.radius, e.height)) {
+      e.stepSmooth += Math.max(0, ramp + 0.002 - p.y);
+      p.y = ramp + 0.002;
+      e.grounded = true;
+      return true;
+    }
     // Crouched characters still take half steps (stair treads), not whole blocks.
     for (const rise of e.crouching ? [0.5] : [0.5, 1.0]) {
       const ny = p.y + rise + 0.002;
       if (this.collides(p.x, ny, p.z, e.radius, e.height)) continue;
+      // Settle onto the top of whatever blocked us: the lowest free height between here and the
+      // raised box, so a step taken from halfway up a ramp lands on the block, not floating above it.
+      let lo = p.y;
+      let hi = ny;
+      for (let i = 0; i < 9; i++) {
+        const mid = (lo + hi) * 0.5;
+        if (this.collides(p.x, mid, p.z, e.radius, e.height)) lo = mid;
+        else hi = mid;
+      }
       // Something to stand on at the new height (not a hole behind a lip).
-      if (!this.collides(p.x, ny - 0.06, p.z, e.radius * 0.98, 0.05)) continue;
-      e.stepSmooth += rise;
-      p.y = ny;
+      if (!this.collides(p.x, hi - 0.06, p.z, e.radius * 0.98, 0.05)) continue;
+      e.stepSmooth += hi - p.y;
+      p.y = hi + 0.001;
       e.grounded = true;
       return true;
     }
