@@ -23,7 +23,7 @@ interface Region {
  */
 const REGION_CHUNKS = 2;
 /** Regions rebuilt per frame at most; the rest wait for the next frame. */
-const MERGES_PER_FRAME = 2;
+const MERGES_PER_FRAME = 1;
 
 function regionKey(cx: number, cy: number, cz: number): number {
   const rx = Math.floor(cx / REGION_CHUNKS) + 512;
@@ -80,7 +80,9 @@ export class ChunkRenderer {
         if (performance.now() - start > budgetMs) break;
       }
     }
-    this.mergeDirtyRegions(world, MERGES_PER_FRAME);
+    // A region rebuild is the other big bill of the frame, so it waits for a frame that has budget
+    // left — unless the queue has drained, when one region per frame is the pace regardless.
+    if (world.dirty.size === 0 || performance.now() - start < budgetMs) this.mergeDirtyRegions(world, MERGES_PER_FRAME);
     return world.dirty.size > 0 || this.pendingMerges > 0;
   }
 
