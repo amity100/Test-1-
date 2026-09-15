@@ -51,6 +51,7 @@ function crystal(color: number): number {
   return encodeBlock(Mat.CRYSTAL, SKY_DEEP_PALETTE + (((color - SKY_PLAYER_PALETTE) % 12) + 12) % 12);
 }
 const SLAB = makeShape('slab');
+const SLAB_TOP = makeShape('slabTop');
 const FENCE = makeShape('fence');
 const PILLAR = makeShape('pillar');
 
@@ -262,7 +263,7 @@ export class SkyArchitect {
       if (!openSide[a] || !openSide[b]) continue;
       e.set(x0 + lx, y + 1, z0 + lz, S.frame);
       e.set(x0 + lx, y + 2, z0 + lz, S.frame);
-      e.set(x0 + lx, y + 3, z0 + lz, crystal(c.color));
+      e.set(x0 + lx, y + 3, z0 + lz, withShape(neon(c.color), FENCE));
     }
     // A summit — a deck on top of a hall with nothing above — carries a light mast on every other cell.
     const below = this.plan.below(c.i, c.j, c.y);
@@ -408,7 +409,7 @@ export class SkyArchitect {
           if (t === 0 || t === CELL - 1) v = S.frame;
           else if (h === 5) {
             // The beam row: frame, with a metal lintel and a lit sign over the portal.
-            v = doors[s] && t === 4 ? crystal(c.color) : S.frame;
+            v = doors[s] && t >= PORTAL_FROM && t <= PORTAL_TO ? withShape(neon(c.color), SLAB_TOP) : S.frame;
           } else if (doors[s]) {
             if (t >= PORTAL_FROM && t <= PORTAL_TO) v = AIR;
             else if (t === PORTAL_FROM - 1 || t === PORTAL_TO + 1) v = S.frame;
@@ -525,8 +526,8 @@ export class SkyArchitect {
       put(lx, 1, y + 1, railV);
       put(lx, 6, y + 1, railV);
       if (end) {
-        put(lx, 1, y + 2, crystal(c.color));
-        put(lx, 6, y + 2, crystal(c.color));
+        put(lx, 1, y + 2, withShape(neon(c.color), FENCE));
+        put(lx, 6, y + 2, withShape(neon(c.color), FENCE));
       }
       // Edge beams under the deck and the girder arch: deepest in the middle, tapering to the ends.
       put(lx, 1, y - 1, S.frame);
@@ -587,7 +588,7 @@ export class SkyArchitect {
         const px = Math.floor(cx + Math.cos(rad) * (R - 1) + nx * side * 2.8);
         const pz = Math.floor(cz + Math.sin(rad) * (R - 1) + nz * side * 2.8);
         for (let h = 1; h <= 5; h++) e.set(px, y + h, pz, S.frame);
-        e.set(px, y + 6, pz, crystal(c.color));
+        e.set(px, y + 6, pz, withShape(neon(c.color), FENCE));
       }
     }
     // Four light masts on the diagonals, tall and thin, lit at the top.
