@@ -431,7 +431,7 @@ const en: Dict = {
   htpSky3: 'Bricks come from the fallen: a kill drops a cluster that hovers for ten seconds, then plunges. A slow trickle keeps everyone building.',
   htpSky4: 'The highest player is marked: a beam everyone can see, a bigger bounty, faster bricks. The flag drifts toward them.',
   htpSky5: 'Halfway through, the sea rises to swallow the island; once someone touches the flag it surges three times faster. Under water you drown; a long fall hurts.',
-  htpSky6: 'Hold the flag for 20 seconds to win. Press X for a few seconds of architect view from above your body, which stays exposed.',
+  htpSky6: 'Hold the flag for 20 seconds to win. X arms a set piece — a hall for cover, a bridge across a gap, a stadium to fight in — and B places it where its ghost shows.',
   ctrlBuild: 'B (hold): build your path · X: set piece · R: turn · C: finish',
 };
 
@@ -824,7 +824,7 @@ const he: Dict = {
   htpSky3: 'לבנים מגיעות מהנופלים: הריגה מפילה צרור שמרחף עשר שניות ואז צונח. טפטוף איטי משאיר את כולם בונים.',
   htpSky4: 'השחקן הכי גבוה מסומן: קרן אור שכולם רואים, פרס גדול יותר, לבנים מהר יותר. הדגל נמשך אליו.',
   htpSky5: 'באמצע המשחק הים עולה ובולע את האי; ברגע שמישהו נוגע בדגל הוא מאיץ פי שלושה. מתחת למים טובעים; נפילה ארוכה כואבת.',
-  htpSky6: 'מחזיקים את הדגל 20 שניות כדי לנצח. X נותן כמה שניות של מבט אדריכל מעל הגוף שלך, שנשאר חשוף.',
+  htpSky6: 'מחזיקים את הדגל 20 שניות כדי לנצח. X בוחר חלק מיוחד — אולם למחסה, גשר מעל פער, אצטדיון להילחם בו — ו-B מניח אותו איפה שרוח־הרפאים מראה.',
   ctrlBuild: 'B (להחזיק): בונה את הדרך שלך · X: חלק מיוחד · R: סיבוב · C: גימור',
   fpsLabel: 'FPS',
   no: 'לא',
