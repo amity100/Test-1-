@@ -2258,7 +2258,7 @@ export class Game {
     // Under the surface everything goes teal and near; in the cloud band, white and blind.
     const under = cam.position.y < asc.seaLevel ? 1 : 0;
     this.app.gr.fog.setUnderwater(under);
-    this.app.gr.fog.setCloudBand(84, 11, 0.12);
+    this.app.gr.fog.setCloudBand(155, 14, 0.1);
     // The rising sea shakes the ground under whoever is close to it.
     if (asc.seaRising && this.player.alive) {
       const gap = this.player.pos.y - asc.seaLevel;
