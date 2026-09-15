@@ -88,6 +88,8 @@ export class SkyBuilder {
   readonly count = new Map<number, number>();
 
   private owner = new Map<number, number>();
+  /** Island blocks a module cut through, so the hillside can be put back afterwards. */
+  private carved = new Map<number, number>();
   private cellBlocks = new Map<number, number[]>();
 
   constructor(
@@ -128,8 +130,11 @@ export class SkyBuilder {
     const [pi, pj] = cellOf(feet.x, feet.z);
     i = Math.max(pi - 3, Math.min(pi + 3, i));
     j = Math.max(pj - 3, Math.min(pj + 3, j));
-    // A tower or ramp under your own feet would bury you: push it one cell along the view.
-    if ((kind === 'tower' || kind === 'ramp') && i === pi && j === pj && this.plan.get(i, j, y)?.kind === 'tower') {
+    // Aiming at your own floor (or at the parapet around it) means the cell in front, not the one
+    // under your boots: only a tower may grow out of the deck you are standing on.
+    const here = this.plan.get(i, j, y);
+    const ownFloor = i === pi && j === pj && !!here;
+    if (ownFloor && !(kind === 'tower' && here.kind === 'deck')) {
       i += DIRS[dir][0];
       j += DIRS[dir][1];
     }
@@ -351,12 +356,16 @@ export class SkyBuilder {
     for (const [pos, v] of next) {
       keys.push(pos);
       if (v === 0) {
-        // A carved opening: only clear what this structure put there.
-        if (this.owner.has(pos)) {
-          this.setPos(pos, 0);
-          this.owner.delete(pos);
-          this.placed.delete(pos);
+        // A room carved out of whatever was there: the island's own blocks are remembered so the
+        // hillside comes back when the match ends.
+        const [cx, cy, cz] = posOf(pos);
+        const cur = this.world.get(cx, cy, cz);
+        if (cur !== 0) {
+          if (!this.owner.has(pos) && !this.carved.has(pos)) this.carved.set(pos, cur);
+          this.world.set(cx, cy, cz, 0);
         }
+        this.owner.set(pos, key);
+        this.placed.delete(pos);
         continue;
       }
       const [x, y, z] = posOf(pos);
@@ -440,6 +449,8 @@ export class SkyBuilder {
 
   clear(): void {
     for (const pos of this.placed) this.setPos(pos, 0);
+    for (const [pos, v] of this.carved) this.setPos(pos, v);
+    this.carved.clear();
     this.placed.clear();
     this.owner.clear();
     this.cellBlocks.clear();

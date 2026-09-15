@@ -89,5 +89,30 @@ await frames(10);
 const pod = await rect('.panel.podium');
 check('the Sky Flag podium shows on the phone and fits the screen', !!pod && pod.h > 100 && pod.y + pod.h <= 402, JSON.stringify(pod));
 await page.screenshot({ path: 'scratch/phone-sky/s4-podium.png' });
+// Look speed and settling: a swipe across the screen must turn the view a long way, and the view
+// must stop the moment the finger lifts.
+const swipe = await page.evaluate(async () => {
+  const g = window.__fk.game();
+  // A fresh match: the one above ended on the podium, where looking around is off.
+  g.startMatch({ playerName: 'Phone', botCount: 0, difficulty: 'normal', buildTime: 0, roundTime: 720, style: 'medieval', mode: 'ascent', playerCount: 2 });
+  g.debugSkipIntro();
+  g.screens.hideAll();
+  g.debugAdvance(0.3, 1 / 20);
+  g.local.enabled = true;
+  const p = g.player;
+  p.alive = true; p.hp = 100; p.ads = 0;
+  const y0 = p.yaw;
+  const v = g.app.input.virtual;
+  for (let i = 0; i < 6; i++) { v.lookDX += 50; g.update(1 / 60); g.app.input.endFrame(); }
+  const turned = Math.abs(((p.yaw - y0 + Math.PI) % (2 * Math.PI)) - Math.PI) * 180 / Math.PI;
+  const y1 = p.yaw;
+  for (let i = 0; i < 10; i++) { g.update(1 / 60); g.app.input.endFrame(); }
+  const drift = Math.abs(p.yaw - y1) * 180 / Math.PI;
+  return { turned: +turned.toFixed(1), drift: +drift.toFixed(2) };
+});
+console.log('swipe', JSON.stringify(swipe));
+check('a swipe across the screen turns the view a long way', swipe.turned >= 95, `${swipe.turned}° for 300 px`);
+check('the view stops the moment the finger lifts', swipe.drift < 0.2, `${swipe.drift}° of drift`);
+
 console.log(`\n${pass} passed, ${fail} failed, errors: ${errors.length}`);
 await browser.close();

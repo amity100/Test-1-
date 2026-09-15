@@ -587,8 +587,22 @@ export class TouchControls {
       v.sprint = mag > 0.9 && v.moveY > 0.35;
       this.stickBase.classList.toggle('sprint', v.sprint);
     } else if (p.role === 'look' || p.role === 'orbit') {
-      v.lookDX += dx;
-      v.lookDY += dy;
+      // Every sample the browser coalesced into this event counts, so a fast swipe keeps all of its
+      // movement instead of only the last step of it.
+      const parts = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : null;
+      if (parts && parts.length > 1) {
+        let px = p.x - dx;
+        let py = p.y - dy;
+        for (const q of parts) {
+          v.lookDX += q.clientX - px;
+          v.lookDY += q.clientY - py;
+          px = q.clientX;
+          py = q.clientY;
+        }
+      } else {
+        v.lookDX += dx;
+        v.lookDY += dy;
+      }
     } else if (p.role === 'pinch') {
       const pts = Array.from(this.pointers.values()).filter((q) => q.role === 'pinch');
       if (pts.length === 2) {

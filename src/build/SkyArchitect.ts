@@ -96,6 +96,9 @@ export class SkyArchitect {
   /** Every block of one cell. Neighbours are read from the plan, so a cell knows its own edges. */
   generate(c: SkyCell): Map<number, number> {
     const e = new Emit();
+    // A building cuts into the hill it stands against: clear the room before dressing it, so a door
+    // never opens into earth and a hall is always a hall.
+    if (c.kind !== 'arenaPart') this.carve(e, c);
     switch (c.kind) {
       case 'deck':
         this.deck(e, c);
@@ -117,6 +120,30 @@ export class SkyArchitect {
         break;
     }
     return e.blocks;
+  }
+
+  /** Empties the space a module occupies, so terrain never fills its rooms. */
+  private carve(e: Emit, c: SkyCell): void {
+    const x0 = cellX(c.i);
+    const z0 = cellZ(c.j);
+    const y = c.y;
+    if (c.kind === 'arena') {
+      const cx = x0 + CELL / 2;
+      const cz = z0 + CELL / 2;
+      for (let x = Math.floor(cx - 12); x <= Math.ceil(cx + 12); x++)
+        for (let z = Math.floor(cz - 12); z <= Math.ceil(cz + 12); z++) {
+          if (Math.hypot(x + 0.5 - cx, z + 0.5 - cz) > 12) continue;
+          for (let h = 1; h <= 4; h++) e.clear(x, y + h, z);
+        }
+      return;
+    }
+    for (let lx = 0; lx < CELL; lx++) for (let lz = 0; lz < CELL; lz++) for (let h = 1; h <= 5; h++) e.clear(x0 + lx, y + h, z0 + lz);
+    // A step of apron outside the walls, so a doorway cut into a hillside is still a doorway.
+    for (let lx = -1; lx <= CELL; lx++)
+      for (let lz = -1; lz <= CELL; lz++) {
+        if (lx >= 0 && lx < CELL && lz >= 0 && lz < CELL) continue;
+        for (let h = 1; h <= 4; h++) e.clear(x0 + lx, y + h, z0 + lz);
+      }
   }
 
   // ---- shared helpers -------------------------------------------------------
@@ -312,8 +339,8 @@ export class SkyArchitect {
       const localSide = (s - r + 4) % 4;
       for (let t = 0; t < CELL; t++) {
         for (let h = 1; h <= 5; h++) {
-          const inDoor = doors[s] && t >= ARCH_FROM && t <= ARCH_TO && h <= 3;
-          const corbel = doors[s] && t >= ARCH_FROM && t <= ARCH_TO && h === 4;
+          const inDoor = doors[s] && t >= ARCH_FROM && t <= ARCH_TO && h <= 4;
+          const corbel = doors[s] && t >= ARCH_FROM && t <= ARCH_TO && h === 5;
           const slit = !doors[s] && (t === 2 || t === 5) && (h === 2 || h === 3);
           let lx: number;
           let lz: number;

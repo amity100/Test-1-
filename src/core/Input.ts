@@ -147,7 +147,10 @@ export class Input {
     this.buttonDownStamp.set(e.button, e.timeStamp);
     const rect = this.target.getBoundingClientRect();
     this.buttonDownPos.set(e.button, { x: e.clientX - rect.left, y: e.clientY - rect.top });
-    if (this.fallbackLook) this.fallbackActive = true;
+    if (this.fallbackLook) {
+      this.fallbackActive = true;
+      this.syncCursor();
+    }
   };
 
   private onMouseUp = (e: MouseEvent): void => {
@@ -203,8 +206,23 @@ export class Input {
       this.lockedAt = performance.now();
       this.fallbackLook = false;
     }
+    this.syncCursor();
     this.onLockChange?.(this.pointerLocked);
   };
+
+  /**
+   * The pointer is either captured or it is hidden: a visible arrow drifting away from the
+   * crosshair is what makes a browser shooter feel disconnected from the mouse.
+   */
+  syncCursor(): void {
+    const el = this.target as HTMLElement;
+    el.style.cursor = this.isTouch || !this.looking ? '' : 'none';
+  }
+
+  /** True when the view is being aimed without a real pointer lock (the capture hint watches this). */
+  get aimingUnlocked(): boolean {
+    return !this.isTouch && !this.pointerLocked && this.fallbackLook && this.fallbackActive;
+  }
 
   private onPointerLockError = (): void => {
     this.lockRequested = false;
@@ -241,6 +259,7 @@ export class Input {
     if (this.fallbackLook || this.lockDenied()) {
       this.fallbackLook = true;
       this.fallbackActive = true;
+      this.syncCursor();
       this.onLockChange?.(true);
       return;
     }
@@ -267,6 +286,7 @@ export class Input {
   exitPointerLock(): void {
     if (this.pointerLocked) document.exitPointerLock();
     this.fallbackActive = false;
+    this.syncCursor();
   }
 
   /** True when the game currently has look control. */

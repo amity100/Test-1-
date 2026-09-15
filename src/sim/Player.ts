@@ -95,11 +95,16 @@ export class Player {
     // Without pointer lock the cursor stops at the window edge, so the outer band of the window
     // keeps turning the view (edge turn) and looking around stays possible.
     if (looking && input.fallbackLook && !input.isTouch) {
+      // Raw mouse deltas still arrive without a lock, so aiming is one-to-one inside the window; the
+      // outer eighth keeps turning, so a spin is still possible when the cursor runs out of desk.
       const nx = (input.cursorX / window.innerWidth) * 2 - 1;
       const ny = (input.cursorY / window.innerHeight) * 2 - 1;
-      const band = (v: number): number => (Math.abs(v) > 0.72 ? Math.sign(v) * ((Math.abs(v) - 0.72) / 0.28) : 0);
-      lookDX += band(nx) * 900 * dt;
-      lookDY += band(ny) * 500 * dt;
+      const band = (v: number): number => {
+        const a = Math.abs(v);
+        return a > 0.86 ? Math.sign(v) * ((a - 0.86) / 0.14) ** 1.4 : 0;
+      };
+      lookDX += band(nx) * 2600 * dt;
+      lookDY += band(ny) * 1400 * dt;
     }
     // Aim assist (the way mobile shooters do it, milder with a mouse): the camera slows down over an
     // enemy, gently follows one near the crosshair, and aiming down sights snaps onto the nearest
@@ -118,26 +123,18 @@ export class Player {
       const friction = assistOn && nearTarget ? 1 - 0.5 * strength : 1;
       const invert = settings.data.invertY ? -1 : 1;
       if (input.isTouch) {
-        // Touch look the way popular mobile shooters feel: a brisk base speed (a swipe across the screen
-        // turns about half a circle), extra speed the faster the finger moves so a flick turns all the way
-        // round while slow drags stay precise, a lower speed while aiming down sights, and light
-        // frame-rate-independent smoothing so uneven touch samples never stutter the view.
+        // Touch look the way popular mobile shooters feel: a brisk base speed (a swipe across the
+        // screen turns about two hundred degrees), extra speed the faster the finger moves so a
+        // flick turns all the way round while slow drags stay precise, and a lower speed while
+        // aiming. The finger's own movement is the smoothing — nothing is held back a frame, which
+        // is what made the view feel like it was lagging behind the thumb.
         const px = Math.hypot(lookDX, lookDY);
         const speed = px / Math.max(dt, 1 / 240);
-        const boost = 1 + clamp((speed - 600) / 2400, 0, 1) * settings.data.touchAccel;
+        const boost = 1 + clamp((speed - 400) / 2000, 0, 1) * settings.data.touchAccel;
         const adsK = e.ads > 0.5 ? settings.data.touchAdsSens : 1;
-        const sens = 0.0048 * settings.data.touchSens * boost * adsK * zoom * friction;
-        this.lookCarryX += lookDX * sens;
-        this.lookCarryY += lookDY * sens * 0.9 * invert;
-        const k = dt > 0 ? 1 - Math.exp(-dt * 40) : 1;
-        const ax = this.lookCarryX * k;
-        const ay = this.lookCarryY * k;
-        this.lookCarryX -= ax;
-        this.lookCarryY -= ay;
-        if (Math.abs(this.lookCarryX) < 1e-5) this.lookCarryX = 0;
-        if (Math.abs(this.lookCarryY) < 1e-5) this.lookCarryY = 0;
-        e.yaw -= ax;
-        e.pitch = clamp(e.pitch - ay, -1.5, 1.5);
+        const sens = 0.0078 * settings.data.touchSens * boost * adsK * zoom * friction;
+        e.yaw -= lookDX * sens;
+        e.pitch = clamp(e.pitch - lookDY * sens * 0.9 * invert, -1.5, 1.5);
       } else {
         // 0.0011 rad per raw count at sensitivity 1 ≈ 0.063°/count: a 360° turn in roughly 20 cm on an 800 DPI mouse.
         const sens = 0.0011 * settings.data.sensitivity * zoom * friction;

@@ -105,14 +105,17 @@ export class ViewModel {
     // Sway from mouse (lagging).
     this.swayX = damp(this.swayX, clamp(-mouseDX * 0.0012, -0.05, 0.05), 10, dt);
     this.swayY = damp(this.swayY, clamp(mouseDY * 0.0012, -0.05, 0.05), 10, dt);
-    const swayScale = 1 - e.ads * 0.85;
+    // Aiming down the sights, the weapon stops moving at all: the optic has to sit on the crosshair,
+    // and any sway, bob or tilt left in it throws the sight off the middle of the screen.
+    const loose = 1 - e.ads;
+    const swayScale = loose;
     pos.x += this.swayX * swayScale;
     pos.y += this.swayY * swayScale;
 
     // Bob
     const speed = Math.sqrt(e.vel.x * e.vel.x + e.vel.z * e.vel.z);
     if (e.grounded && speed > 0.5) this.bobPhase += dt * (6 + speed * 0.9);
-    const bobAmp = clamp(speed / 8, 0, 1) * 0.012 * (1 - e.ads * 0.8) * (e.grounded ? 1 : 0.3);
+    const bobAmp = clamp(speed / 8, 0, 1) * 0.012 * loose * (e.grounded ? 1 : 0.3);
     pos.x += Math.sin(this.bobPhase) * bobAmp;
     pos.y += Math.abs(Math.cos(this.bobPhase)) * bobAmp * 0.8;
 
@@ -146,6 +149,10 @@ export class ViewModel {
     pos.z += sprint * 0.06;
 
     this.model.position.copy(pos);
-    this.model.rotation.set(-this.kickUp * 0.6 + reloadTilt - sprint * 0.3, sw * 0.5 + this.swayX * 4 + sprint * 0.5, -this.swayX * 2 + reloadTilt * 0.4);
+    this.model.rotation.set(
+      (-this.kickUp * 0.6 - sprint * 0.3) * loose + reloadTilt,
+      (sw * 0.5 + this.swayX * 4 + sprint * 0.5) * loose,
+      (-this.swayX * 2) * loose + reloadTilt * 0.4,
+    );
   }
 }

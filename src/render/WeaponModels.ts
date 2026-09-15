@@ -25,7 +25,8 @@ interface Ctx {
 interface WeaponData {
   muzzle: THREE.Vector3;
   hip: THREE.Vector3;
-  ads: THREE.Vector3;
+  /** Centre of the optic in model space: the ADS pose is solved so this lands on the crosshair. */
+  sight: THREE.Vector3;
 }
 
 const matCache = new Map<string, Record<MatKey, THREE.Material>>();
@@ -184,8 +185,8 @@ function trigger(c: Ctx, x: number, y: number, z: number, guardLen = 0.05): void
   box(c, 'metal', 0.005, 0.022, 0.004, x, y - 0.014, z + 0.005, 0.25);
 }
 
-/** Red dot sight: hooded housing, tinted lens, emissive dot. Returns sight-line height. */
-function redDot(c: Ctx, x: number, baseY: number, z: number, size = 1): number {
+/** Red dot sight: hooded housing, tinted lens, emissive dot. Returns the centre of its glass. */
+function redDot(c: Ctx, x: number, baseY: number, z: number, size = 1): THREE.Vector3 {
   const h = 0.03 * size;
   const w = 0.03 * size;
   const len = 0.05 * size;
@@ -204,11 +205,11 @@ function redDot(c: Ctx, x: number, baseY: number, z: number, size = 1): number {
   // Emissive dot & brightness dial.
   sphere(c, 'accent', 0.0025 * size, x, y + 0.001, z - len / 2 + 0.009);
   cylX(c, 'dark', 0.007 * size, 0.008, x + w / 2 + 0.004, y - 0.004, z + len * 0.05, 0.007 * size, 10);
-  return y;
+  return new THREE.Vector3(x, y, z);
 }
 
-/** Rifle scope with bells, turrets and rings mounted on a rail top at `railY`. Returns sight-line height. */
-function scope(c: Ctx, x: number, railY: number, zFront: number, zBack: number, tubeR = 0.016): number {
+/** Rifle scope with bells, turrets and rings mounted on a rail top at `railY`. Returns its eye point. */
+function scope(c: Ctx, x: number, railY: number, zFront: number, zBack: number, tubeR = 0.016): THREE.Vector3 {
   const y = railY + 0.04 + tubeR;
   const len = Math.abs(zBack - zFront);
   const zc = (zFront + zBack) / 2;
@@ -238,7 +239,8 @@ function scope(c: Ctx, x: number, railY: number, zFront: number, zBack: number, 
   // Magnification ring knurl & accent illumination dial.
   ringZ(c, 'metal', tubeR * 0.92, 0.003, x, y, zBack - len * 0.19);
   cylX(c, 'accent', 0.005, 0.004, x - tubeR - 0.017, y, tz, 0.005, 8);
-  return y;
+  // The eye sits behind the ocular: that is the point the ADS pose puts on the crosshair.
+  return new THREE.Vector3(x, y, zBack);
 }
 
 /** Stock: buffer tube, adjustable stock body, cheek riser, rubber buttpad and sling loop. */
@@ -474,12 +476,12 @@ function pistol(c: Ctx): WeaponData {
   box(c, 'metal', 0.006, 0.012, 0.01, 0, slideY + 0.022, -0.19);
   box(c, 'accent', 0.003, 0.003, 0.002, 0, slideY + 0.025, -0.196);
   // Slide-mounted red dot.
-  const sightY = redDot(c, 0, slideY + 0.018, -0.05, 0.85);
+  const sightPt = redDot(c, 0, slideY + 0.018, -0.05, 0.85);
   if (c.hands) {
     gripHandRight(c, 0, -0.03, 0.02, 0.24, 0.0165);
     gripHandLeft(c, 0, -0.045, 0.01, 0.24, 0.0165 + 0.025);
   }
-  return { muzzle: new THREE.Vector3(0, slideY, -0.245), hip: new THREE.Vector3(0.24, -0.25, -0.42), ads: new THREE.Vector3(0, -sightY, -0.34) };
+  return { muzzle: new THREE.Vector3(0, slideY, -0.245), hip: new THREE.Vector3(0.24, -0.25, -0.42), sight: sightPt };
 }
 
 function smg(c: Ctx): WeaponData {
@@ -509,13 +511,13 @@ function smg(c: Ctx): WeaponData {
   rb(c, 'rubber', 0.04, 0.09, 0.02, 0.005, 0, 0.065, 0.205);
   rb(c, 'polymer', 0.036, 0.02, 0.04, 0.005, 0, 0.09, 0.0);
   // Red dot.
-  const sightY = redDot(c, 0, topY + 0.01, -0.09, 1);
+  const sightPt = redDot(c, 0, topY + 0.01, -0.09, 1);
   flashlight(c, 0.036, 0.1, -0.33, 0.011, 0.06);
   if (c.hands) {
     gripHandRight(c, 0, -0.02, 0.012, 0.3, 0.017);
     supportHandLeft(c, 0, 0.0425, -0.26, 0.025);
   }
-  return { muzzle: new THREE.Vector3(0, boreY, -0.56), hip: new THREE.Vector3(0.26, -0.27, -0.46), ads: new THREE.Vector3(0, -sightY, -0.4) };
+  return { muzzle: new THREE.Vector3(0, boreY, -0.56), hip: new THREE.Vector3(0.26, -0.27, -0.46), sight: sightPt };
 }
 
 function rifle(c: Ctx): WeaponData {
@@ -543,7 +545,7 @@ function rifle(c: Ctx): WeaponData {
   trigger(c, 0, 0.012, -0.05, 0.055);
   magazine(c, 0, 0.0, -0.19, 0.028, 0.19, 0.068, 0.2, 3);
   // Optic, front sight, light and angled foregrip.
-  const sightY = redDot(c, 0, topY, -0.14, 1.1);
+  const sightPt = redDot(c, 0, topY, -0.14, 1.1);
   box(c, 'metal', 0.006, 0.014, 0.008, 0, topY + 0.012, -0.5);
   box(c, 'accent', 0.003, 0.003, 0.002, 0, topY + 0.016, -0.505);
   flashlight(c, 0.037, 0.112, -0.44, 0.012, 0.08);
@@ -554,7 +556,7 @@ function rifle(c: Ctx): WeaponData {
     gripHandRight(c, 0, -0.02, 0.0, 0.32, 0.017);
     supportHandLeft(c, 0, 0.068, -0.39, 0.025);
   }
-  return { muzzle: new THREE.Vector3(0, boreY, -0.77), hip: new THREE.Vector3(0.27, -0.27, -0.5), ads: new THREE.Vector3(0, -sightY, -0.42) };
+  return { muzzle: new THREE.Vector3(0, boreY, -0.77), hip: new THREE.Vector3(0.27, -0.27, -0.5), sight: sightPt };
 }
 
 function shotgun(c: Ctx): WeaponData {
@@ -586,7 +588,7 @@ function shotgun(c: Ctx): WeaponData {
   box(c, 'metal', 0.006, 0.01, 0.01, 0, barrelY + 0.008, -0.81);
   ringZ(c, 'metal', 0.011, 0.002, 0, 0.14, -0.03);
   box(c, 'metal', 0.006, 0.014, 0.008, 0, 0.128, -0.03);
-  const sightY = 0.14;
+  const sightPt = new THREE.Vector3(0, 0.14, -0.3);
   // Stock with pistol grip, cheek pad and buttpad.
   pistolGrip(c, 0, -0.025, 0.03, 0.35);
   trigger(c, 0, 0.03, -0.02, 0.05);
@@ -604,7 +606,7 @@ function shotgun(c: Ctx): WeaponData {
     gripHandRight(c, 0, -0.025, 0.03, 0.35, 0.017);
     supportHandLeft(c, 0, tubeY - 0.029, -0.5, 0.023);
   }
-  return { muzzle: new THREE.Vector3(0, barrelY, -0.83), hip: new THREE.Vector3(0.27, -0.28, -0.48), ads: new THREE.Vector3(0, -sightY, -0.4) };
+  return { muzzle: new THREE.Vector3(0, barrelY, -0.83), hip: new THREE.Vector3(0.27, -0.28, -0.48), sight: sightPt };
 }
 
 function sniper(c: Ctx): WeaponData {
@@ -625,7 +627,7 @@ function sniper(c: Ctx): WeaponData {
   sphere(c, 'polymer', 0.013, 0.078, 0.085, -0.02);
   box(c, 'rubber', 0.003, 0.018, 0.06, 0.025, 0.09, -0.1);
   // Scope.
-  const sightY = scope(c, 0, railY, -0.32, 0.04, 0.017);
+  const sightPt = scope(c, 0, railY, -0.32, 0.04, 0.017);
   // Magazine, grip, trigger.
   magazine(c, 0, 0.03, -0.17, 0.03, 0.1, 0.06, 0.08, 2);
   pistolGrip(c, 0, -0.02, 0.0, 0.3);
@@ -647,7 +649,7 @@ function sniper(c: Ctx): WeaponData {
     gripHandRight(c, 0, -0.02, 0.0, 0.3, 0.017);
     supportHandLeft(c, 0, 0.04, -0.5, 0.023);
   }
-  return { muzzle: new THREE.Vector3(0, boreY, -1.17), hip: new THREE.Vector3(0.27, -0.28, -0.55), ads: new THREE.Vector3(0, -sightY, -0.35) };
+  return { muzzle: new THREE.Vector3(0, boreY, -1.17), hip: new THREE.Vector3(0.27, -0.28, -0.55), sight: sightPt };
 }
 
 function rocket(c: Ctx): WeaponData {
@@ -686,7 +688,7 @@ function rocket(c: Ctx): WeaponData {
     gripHandRight(c, 0, -0.01, -0.09, 0.3, 0.017);
     gripHandLeft(c, 0, 0.02, -0.4, -0.15, 0.016);
   }
-  return { muzzle: new THREE.Vector3(0, y, -0.96), hip: new THREE.Vector3(0.24, -0.3, -0.45), ads: new THREE.Vector3(0.055, -0.245, -0.4) };
+  return { muzzle: new THREE.Vector3(0, y, -0.96), hip: new THREE.Vector3(0.24, -0.3, -0.45), sight: new THREE.Vector3(-0.055, 0.245, -0.1) };
 }
 
 function rocketShell(c: Ctx): WeaponData {
@@ -701,7 +703,7 @@ function rocketShell(c: Ctx): WeaponData {
     box(c, 'metal', 0.004, 0.05, 0.1, Math.cos(a) * 0.06, Math.sin(a) * 0.06, 0.08, 0, 0, a);
   }
   ringZ(c, 'accent', 0.046, 0.003, 0, 0, -0.1);
-  return { muzzle: new THREE.Vector3(0, 0, -0.28), hip: new THREE.Vector3(0.24, -0.3, -0.45), ads: new THREE.Vector3(0, -0.2, -0.4) };
+  return { muzzle: new THREE.Vector3(0, 0, -0.28), hip: new THREE.Vector3(0.24, -0.3, -0.45), sight: new THREE.Vector3(0, 0.2, -0.1) };
 }
 
 function grenade(c: Ctx): WeaponData {
@@ -727,7 +729,7 @@ function grenade(c: Ctx): WeaponData {
     const frame = frameFrom(pos, new THREE.Vector3(0, 1, 0), new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, -1));
     hand(c, 1, frame, { curl: HOLD_CURL, thumb: GRIP_THUMB, elbow: pos.clone().add(new THREE.Vector3(0.12, -0.3, 0.26)) });
   }
-  return { muzzle: new THREE.Vector3(0, 0, -0.1), hip: new THREE.Vector3(0.24, -0.26, -0.4), ads: new THREE.Vector3(0.2, -0.22, -0.4) };
+  return { muzzle: new THREE.Vector3(0, 0, -0.1), hip: new THREE.Vector3(0.24, -0.26, -0.4), sight: new THREE.Vector3(-0.2, 0.22, -0.1) };
 }
 
 const BUILDERS: Record<ModelId, (c: Ctx) => WeaponData> = { pistol, smg, rifle, shotgun, sniper, rocket, rocketShell, grenade };
@@ -755,7 +757,11 @@ export function buildWeaponModel(id: ModelId, accent: THREE.Color, withHands = f
   meshesFrom(geos, g, (k) => m[k], !withHands);
   g.userData.muzzle = data.muzzle.clone();
   g.userData.hip = data.hip.clone();
-  g.userData.ads = data.ads.clone();
+  // Aiming down the sights means exactly that: the model is offset so the optic's centre sits on
+  // the camera axis, a hand's length in front of the eye.
+  const dist = id === 'sniper' ? 0.42 : 0.32;
+  g.userData.sight = data.sight.clone();
+  g.userData.ads = new THREE.Vector3(-data.sight.x, -data.sight.y, -dist - data.sight.z);
   g.userData.shared = true;
   return g;
 }
