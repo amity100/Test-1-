@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { VoxelWorld } from '../world/VoxelWorld';
 import type { Terrain } from '../world/Terrain';
 import type { Entity } from '../sim/Entities';
-import { SKY_PLAYER_PALETTE } from '../world/Voxel';
+import { SKY_PALETTE, SKY_PLAYER_PALETTE } from '../world/Voxel';
 import { PLAYABLE_RADIUS } from '../world/Layout';
 import { Emitter } from '../core/Events';
 import { CELL, DIRS, STOREY, SkyPlan, cellKey, cellOf, cellX, cellZ, type SkyCell, type SkyKind } from './SkyPlan';
@@ -17,9 +17,13 @@ import { SkyArchitect, posOf } from './SkyArchitect';
  */
 export type PieceKind = 'tower' | 'deck' | 'ramp' | 'bridge' | 'arena';
 export const PIECE_KINDS: PieceKind[] = ['tower', 'deck', 'ramp', 'bridge', 'arena'];
+/** What a builder can have armed: the path (built ahead with one key) or one of the set pieces. */
+export type ArmedKind = PieceKind | 'path';
+/** The pieces offered on the bar, in order; the path is the default and what the bar returns to. */
+export const ARMED_KINDS: ArmedKind[] = ['path', 'tower', 'bridge', 'arena'];
 
 export interface PieceDef {
-  kind: PieceKind;
+  kind: ArmedKind;
   cost: number;
   nameKey: string;
   descKey: string;
@@ -35,6 +39,28 @@ export const PIECES: Record<PieceKind, PieceDef> = {
   bridge: { kind: 'bridge', cost: 2, nameKey: 'pieceBridge', descKey: 'pieceBridgeDesc', icon: svg('<path d="M2 14h20"/><path d="M2 14c4-6 16-6 20 0"/><path d="M6 14v4M12 14v4M18 14v4"/>') },
   arena: { kind: 'arena', cost: 10, nameKey: 'pieceArena', descKey: 'pieceArenaDesc', icon: svg('<ellipse cx="12" cy="12" rx="9" ry="4"/><ellipse cx="12" cy="12" rx="5" ry="2"/><path d="M4 12v5c0 2 4 3.5 8 3.5s8-1.5 8-3.5v-5"/>') },
 };
+
+/** The path piece: a stair when looking up, floor when looking ahead, always where your path ends. */
+export const PATH_PIECE: PieceDef = { kind: 'path', cost: 0, nameKey: 'piecePath', descKey: 'piecePathDesc', icon: svg('<path d="M3 20h5v-4h5v-4h5V8h3"/><path d="M17 4l4 4-4 4"/>') };
+export function pieceDef(kind: ArmedKind): PieceDef {
+  return kind === 'path' ? PATH_PIECE : PIECES[kind];
+}
+
+/** Where a builder's path currently ends: the next piece continues from here. */
+export interface PathHead {
+  i: number;
+  j: number;
+  y: number;
+  dir: number;
+  at: number;
+}
+
+/** A neutral sky island in the plan, for bots and the HUD. */
+export interface SkyIsland {
+  pos: THREE.Vector3;
+  y: number;
+  nameKey: string;
+}
 
 export type PlaceReason = 'ok' | 'bricks' | 'occupied' | 'unsupported' | 'full' | 'bounds';
 
@@ -66,6 +92,12 @@ export interface SkyBuildEvents extends Record<string, unknown> {
 const REACH = 40;
 /** Cells one island can hold before building stops. */
 const CELL_CAP = 1200;
+/** Looking up more than this (radians) makes the path climb; anything flatter extends the floor. */
+const CLIMB_PITCH = 0.12;
+/** A path restarts under the builder's feet once they are this far from its end. */
+const PATH_REACH = 20;
+/** The builder of the sky islands: nobody. */
+const NEUTRAL = { id: -1, colorIndex: 0, isBot: false } as unknown as Entity;
 
 /** Nearest of the four facings (0 +X, 1 +Z, 2 -X, 3 -Z) to a yaw. */
 export function quantizeYaw(yaw: number): number {
@@ -89,8 +121,12 @@ export class SkyBuilder {
 
   /** Which finish a builder builds in: bots take turns through the three, the player picks. */
   skinFor: (e: Entity) => number = (e) => (e.isBot ? e.colorIndex % 3 : 0);
+  /** The neutral sky islands placed at the start of the match. */
+  readonly islands: SkyIsland[] = [];
 
   private owner = new Map<number, number>();
+  /** Where each builder's path ends, by entity id. */
+  private heads = new Map<number, PathHead>();
   /** Island blocks a module cut through, so the hillside can be put back afterwards. */
   private carved = new Map<number, number>();
   private cellBlocks = new Map<number, number[]>();
@@ -144,6 +180,80 @@ export class SkyBuilder {
     return this.planAt(kind, i, j, y, dir, self, bricks);
   }
 
+  /**
+   * One-key building. The piece that continues the builder's path in the direction they face — a
+   * stair when they look up, floor when they look ahead — goes down where the path ends, so holding
+   * the key while walking lays a road into the sky. Turning, or wandering off, restarts the path
+   * under the builder's feet.
+   */
+  aimPath(self: Entity, feet: THREE.Vector3, yaw: number, pitch: number, now: number, bricks: number, rot = 0): AimResult {
+    const dir = (quantizeYaw(yaw) + rot) & 3;
+    return this.aimPathDir(self, feet, dir, pitch > CLIMB_PITCH, now, bricks);
+  }
+
+  /** The path piece for a facing and a choice of climbing or extending (bots choose both directly). */
+  aimPathDir(self: Entity, feet: THREE.Vector3, dir: number, climb: boolean, now: number, bricks: number): AimResult {
+    const [dx, dz] = DIRS[dir];
+    let head = this.heads.get(self.id) ?? null;
+    if (head) {
+      const hx = cellX(head.i) + CELL / 2;
+      const hz = cellZ(head.j) + CELL / 2;
+      const far = Math.hypot(hx - feet.x, hz - feet.z) > PATH_REACH || Math.abs(head.y + 1 - feet.y) > 9;
+      if (far || head.dir !== dir || now - head.at > 12) head = null;
+    }
+    if (!head) head = this.headUnder(feet, dir, now);
+    // Flat floor that is already there is walked over, so the piece lands on the first empty cell
+    // ahead; a stair or a hall in the way is where the path stops.
+    let i = head.i;
+    let j = head.j;
+    const y = head.y;
+    for (let n = 0; n < 3; n++) {
+      const c = this.plan.get(i + dx, j + dz, y);
+      if (!c || c.kind === 'ramp' || c.kind === 'tower') break;
+      i += dx;
+      j += dz;
+    }
+    const res = this.planAt(climb ? 'ramp' : 'deck', i + dx, j + dz, y, dir, self, bricks);
+    // A stair that cannot go there (something over its landing) still gives a floor to stand on.
+    if (climb && res.reason === 'occupied') {
+      const flat = this.planAt('deck', i + dx, j + dz, y, dir, self, bricks);
+      if (flat.reason === 'ok') return flat;
+    }
+    return res;
+  }
+
+  /** Where a path starts: the landing of the stair being climbed, else the floor under the feet. */
+  private headUnder(feet: THREE.Vector3, dir: number, now: number): PathHead {
+    const [i, j] = cellOf(feet.x, feet.z);
+    const foot = Math.round(feet.y) - 1;
+    const near = this.plan.nearestInColumn(i, j, foot, 7);
+    const cell = near === null ? undefined : this.plan.get(i, j, near);
+    if (cell && cell.kind === 'ramp' && foot >= cell.y) {
+      const [rx, rz] = DIRS[cell.dir];
+      return { i: cell.i + rx, j: cell.j + rz, y: cell.y + STOREY, dir, at: now };
+    }
+    return { i, j, y: this.floorAt(feet, feet.x, feet.z), dir, at: now };
+  }
+
+  /** Remembers where a builder's path now ends: the surface the module hands them. */
+  advanceHead(self: Entity, p: PlacePlan, now: number): void {
+    const [i, j] = cellOf(p.top.x, p.top.z);
+    this.heads.set(self.id, { i, j, y: Math.round(p.top.y) - 1, dir: p.dir, at: now });
+  }
+
+  /** Forgets a builder's path (they died, or the match ended). */
+  forgetHead(id: number): void {
+    this.heads.delete(id);
+  }
+
+  /** A sky island's module: nobody's, free, and allowed to hang in the air. */
+  placeNeutral(kind: PieceKind, i: number, j: number, y: number, dir: number): PlacePlan | null {
+    const res = this.planAt(kind, i, j, y, dir, NEUTRAL, 9999);
+    if (!res.plan || (res.reason !== 'ok' && res.reason !== 'unsupported')) return null;
+    this.place(res.plan, NEUTRAL, true);
+    return res.plan;
+  }
+
   /** The same from an entity's own eyes (bots). */
   aimFrom(kind: PieceKind, e: Entity, rot = 0): AimResult {
     return this.aim(kind, e.eyePos, e.forward(new THREE.Vector3()), e.pos, e.yaw, rot, e, e.bricks);
@@ -179,8 +289,9 @@ export class SkyBuilder {
   /** Works out the cells of a module and everything that could stop it. */
   private planAt(kind: PieceKind, i: number, j: number, y: number, dir: number, self: Entity, bricks: number): AimResult {
     const target = cellKey(i, j, y);
-    const color = this.colorIndex(self);
-    const skin = this.skinFor(self);
+    const neutral = self.id < 0;
+    const color = neutral ? SKY_PALETTE.gold : this.colorIndex(self);
+    const skin = neutral ? 0 : this.skinFor(self);
     const group = 0;
     const now = 0;
     const mk = (ci: number, cj: number, cy: number, k: SkyKind, cdir = dir, host?: number): SkyCell => ({
@@ -287,7 +398,7 @@ export class SkyBuilder {
   // ---- placing --------------------------------------------------------------
 
   /** Puts a planned module into the plan, regenerates every cell it changes, and returns its group. */
-  place(p: PlacePlan, owner: Entity): number {
+  place(p: PlacePlan, owner: Entity, silent = false): number {
     const group = this.plan.group();
     const lifted: Entity[] = [];
     for (const c of p.cells) {
@@ -323,7 +434,7 @@ export class SkyBuilder {
     let n = 0;
     for (const c of order) n += this.regenerate(c);
     this.count.set(owner.id, (this.count.get(owner.id) ?? 0) + 1);
-    this.events.emit('placed', { kind: p.kind, cells: n, owner, centre: p.centre.clone() });
+    if (!silent) this.events.emit('placed', { kind: p.kind, cells: n, owner, centre: p.centre.clone() });
     return group;
   }
 
@@ -462,5 +573,7 @@ export class SkyBuilder {
     this.cellBlocks.clear();
     this.plan.clear();
     this.count.clear();
+    this.heads.clear();
+    this.islands.length = 0;
   }
 }

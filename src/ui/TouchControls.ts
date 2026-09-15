@@ -78,18 +78,26 @@ export const DEFAULT_LAYOUT: TouchLayout = {
   grenade: { x: 0.935, y: 0.36, s: 1 },
   gadget0: { x: 0.933, y: 0.19, s: 1 },
   gadget1: { x: 0.863, y: 0.25, s: 1 },
-  // Sky Flag: build toggle, next piece and the architect view sit inside the right-hand arc.
-  build: { x: 0.66, y: 0.5, s: 1 },
-  piece: { x: 0.66, y: 0.66, s: 1 },
-  arch: { x: 0.745, y: 0.3, s: 1 },
+  // Sky Flag: the one build button, held to lay a path, sits where the knife is in the other modes.
+  build: { x: 0.736, y: 0.7, s: 1 },
 };
+/**
+ * Sky Flag trims the arc to what the mode needs — fire, jump, aim, reload and BUILD — and moves the
+ * two that remain out of BUILD's way. A place the player set by hand in the layout editor wins.
+ */
+const SKY_LAYOUT: TouchLayout = {
+  ads: { x: 0.83, y: 0.43, s: 1 },
+  reload: { x: 0.935, y: 0.36, s: 1 },
+};
+/** Buttons that leave the screen in Sky Flag, so the thumb has three things to find, not ten. */
+const SKY_HIDDEN = ['crouch', 'knife', 'grenade', 'fireLeft', 'gadget0', 'gadget1'];
 /** Fortify walk: the PLACE button takes the fire spot; jump and crouch keep clear of the trap picker. */
 const FORTIFY_LAYOUT: TouchLayout = {
   place: { x: 0.925, y: 0.6, s: 1 },
   fjump: { x: 0.86, y: 0.86, s: 1 },
   fcrouch: { x: 0.93, y: 0.33, s: 1 },
 };
-const BASE_SIZE: Record<string, number> = { fire: 92, fireLeft: 68, jump: 66, crouch: 58, ads: 54, knife: 50, reload: 50, grenade: 50, gadget0: 48, gadget1: 48, place: 92, fjump: 66, fcrouch: 56, build: 56, piece: 48, arch: 46 };
+const BASE_SIZE: Record<string, number> = { fire: 92, fireLeft: 68, jump: 66, crouch: 58, ads: 54, knife: 50, reload: 50, grenade: 50, gadget0: 48, gadget1: 48, place: 92, fjump: 66, fcrouch: 56, build: 74 };
 /** Buttons the player may move and resize. */
 export const EDITABLE = Object.keys(DEFAULT_LAYOUT);
 
@@ -127,10 +135,7 @@ export class TouchControls {
   private gadgetCounts: HTMLElement[] = [];
   /** Sky Flag buttons (shown only in that mode) and the PLACE badge on the fire button while building. */
   private skyBtns: HTMLElement[] = [];
-  private placeBadge!: HTMLElement;
   private ascent = false;
-  /** Architect view: a still finger on the look zone places a piece there. */
-  private archTaps = false;
   /** Every positioned button by layout id (jump/crouch exist in two groups). */
   private placed = new Map<string, HTMLElement[]>();
   private layout: TouchLayout = { ...DEFAULT_LAYOUT };
@@ -195,6 +200,7 @@ export class TouchControls {
 
   private placeOf(id: string): ButtonPlace {
     if (id === 'place') return this.layout.fire;
+    if (this.ascent && SKY_LAYOUT[id] && !settings.data.touchLayout[id]) return SKY_LAYOUT[id];
     return this.layout[id] ?? FORTIFY_LAYOUT[id] ?? DEFAULT_LAYOUT.fire;
   }
 
@@ -338,17 +344,19 @@ export class TouchControls {
       this.gadgetBtns.push(b);
       this.gadgetCounts.push(count);
     }
-    // Sky Flag: build toggle (fire becomes PLACE), next piece, and the architect view.
-    this.placeBadge = el('span', 'badge lbl place-lbl', t('touchPlace'));
-    this.placeBadge.hidden = true;
-    this.fireBtn.appendChild(this.placeBadge);
-    const build = this.button(g, 'build', 'skyb build', ICON.build, { tap: () => (v.build = true) });
+    // Sky Flag: one BUILD button. A press places the next piece of your path; holding it keeps
+    // placing while you walk, so a road climbs into the sky under your feet.
+    const build = this.button(g, 'build', 'skyb build', ICON.build, {
+      down: () => {
+        v.build = true;
+        v.buildHeld = true;
+      },
+      up: () => {
+        v.buildHeld = false;
+      },
+    });
     build.appendChild(el('span', 'badge lbl', t('touchBuild')));
-    const piece = this.button(g, 'piece', 'skyb piece', ICON.piece, { tap: () => (v.piece = true) });
-    piece.appendChild(el('span', 'badge lbl', t('touchPiece')));
-    const arch = this.button(g, 'arch', 'skyb arch', ICON.arch, { tap: () => (v.arch = true) });
-    arch.appendChild(el('span', 'badge lbl', t('touchArch')));
-    this.skyBtns.push(build, piece, arch);
+    this.skyBtns.push(build);
     for (const b of this.skyBtns) b.hidden = true;
     const pause = el('div', 'tb pause', ICON.pause);
     pause.setAttribute('data-ui', '1');
@@ -360,24 +368,17 @@ export class TouchControls {
     g.appendChild(pause);
   }
 
-  /** Shows the Sky Flag buttons (build, piece, architect view) beside the battle controls. */
+  /** Sky Flag: the BUILD button appears and the buttons the mode does not need leave the screen. */
   setAscent(on: boolean): void {
     this.ascent = on;
     for (const b of this.skyBtns) b.hidden = !on && !this.editing;
-    if (!on) this.setPlacing(false);
-  }
-
-  /** The fire button reads PLACE while a piece is in hand. */
-  setPlacing(on: boolean): void {
-    if (this.placeBadge.hidden === !on) return;
-    this.placeBadge.hidden = !on;
-    this.fireBtn.classList.toggle('place', on);
-    if (on) this.fireBadge.hidden = true;
-  }
-
-  /** In the architect view a still tap on the look zone places the piece at the finger. */
-  setArchTaps(on: boolean): void {
-    this.archTaps = on;
+    for (const id of SKY_HIDDEN) {
+      for (const b of this.placed.get(id) ?? []) {
+        // Gadget buttons stay hidden when there is no gadget in that slot anyway.
+        b.hidden = on ? !this.editing : id.startsWith('gadget') ? !b.dataset.icon : false;
+      }
+    }
+    this.applyLayout();
   }
 
   private buildFortifyButtons(): void {
@@ -417,12 +418,10 @@ export class TouchControls {
   refreshLabels(): void {
     const lbl = this.fortifyButtons.querySelector('.badge.lbl');
     if (lbl) lbl.textContent = t('fortifyPlace');
-    this.placeBadge.textContent = t('touchPlace');
-    const keys = ['touchBuild', 'touchPiece', 'touchArch'];
-    this.skyBtns.forEach((b, i) => {
+    for (const b of this.skyBtns) {
       const l = b.querySelector('.badge.lbl');
-      if (l) l.textContent = t(keys[i]);
-    });
+      if (l) l.textContent = t('touchBuild');
+    }
   }
 
   /** Shows the equipped kit on the two gadget buttons. */
@@ -632,7 +631,7 @@ export class TouchControls {
       if (p.longTimer) window.clearTimeout(p.longTimer);
       // Build mode: a still finger is a tap (place at the finger) or, when held long enough, a long press
       // (remove the block under the finger). Hardware timestamps decide, not frame timing.
-      if (p.moved < 14 && (this.mode === 'build' || this.archTaps)) {
+      if (p.moved < 14 && this.mode === 'build') {
         const held = e.timeStamp - p.downStamp;
         v.tapped = true;
         v.tapX = p.x;

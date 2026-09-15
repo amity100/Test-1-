@@ -1,6 +1,6 @@
-// v13 on a phone: Sky Flag through the touch UI. The BUILD / PIECE / EYE buttons, the PLACE badge on the
-// fire button, placing a ramp by tap, the architect view with a still-finger placement and its auto-exit,
-// the Sky Flag HUD fitting a phone screen, and the podium.
+// Sky Flag on a phone through the touch UI: one BUILD button and nothing the mode does not need, a
+// press that lays the path ahead, a hold that keeps laying it, set pieces from the bar, the Sky Flag
+// HUD fitting a phone screen, the podium, and the look speed.
 import { chromium, devices } from 'playwright-core';
 import fs from 'node:fs';
 fs.mkdirSync('scratch/phone-sky', { recursive: true });
@@ -22,56 +22,50 @@ const tapSel = async (sel) => { const r = await rect(sel); if (!r || r.hidden) r
 await page.evaluate(() => { const g = window.__fk.game(); g.startMatch({ playerName: 'Phone', botCount: 0, difficulty: 'normal', buildTime: 0, roundTime: 720, style: 'medieval', mode: 'ascent', playerCount: 12 }); g.debugSkipIntro(); g.debugAdvance(2, 1 / 20); });
 await frames(12);
 const btns = {};
-for (const id of ['build', 'piece', 'arch', 'fire']) btns[id] = await rect(`.touch [data-id=${id}], [data-id=${id}]`);
+for (const id of ['build', 'fire', 'jump', 'crouch', 'knife', 'grenade', 'gadget0', 'piece', 'arch']) btns[id] = await rect(`.touch [data-id=${id}], [data-id=${id}]`);
 console.log('buttons', JSON.stringify(btns));
-check('the phone battle screen shows BUILD, PIECE and EYE buttons beside the usual ones', ['build', 'piece', 'arch'].every((id) => btns[id] && !btns[id].hidden && btns[id].w > 24), Object.keys(btns).filter((k) => btns[k] && !btns[k].hidden).join(','));
+const shown = Object.keys(btns).filter((k) => btns[k] && !btns[k].hidden);
+check('the phone battle screen shows one BUILD button beside fire and jump, and nothing it does not need', shown.includes('build') && shown.includes('fire') && shown.includes('jump') && !shown.some((k) => ['crouch', 'knife', 'grenade', 'gadget0', 'piece', 'arch'].includes(k)), shown.join(','));
 await page.screenshot({ path: 'scratch/phone-sky/s1-battle.png' });
 
-// BUILD: a piece in hand, the PLACE badge on the fire button, the pieces bar in the HUD.
+// BUILD: one press lays the next piece of the path ahead — a stair when looking up — and pays for it.
+await page.evaluate(() => { const g = window.__fk.game(); const p = g.player; p.yaw = Math.atan2(p.pos.x, p.pos.z); p.pitch = 0.4; g.debugAdvance(0.3, 1 / 20); });
+const before = await page.evaluate(() => { const g = window.__fk.game(); return { placed: g.sky.placed.size, bricks: g.player.bricks, armed: g.armed, weapon: !!g.player.weapon }; });
 await tapSel('[data-id=build]');
-await page.evaluate(() => window.__fk.game().debugAdvance(0.3, 1 / 20));
-await frames(4);
-const inHand = await page.evaluate(() => { const g = window.__fk.game(); return { kind: g.buildKind, badge: (() => { const b = document.querySelector('.place-lbl'); return !!b && !b.hidden && b.getBoundingClientRect().width > 0; })(), pieces: !!document.querySelector('.sky-pieces') && document.querySelector('.sky-pieces').getBoundingClientRect().height > 0, reason: g.buildAim?.reason ?? null }; });
-check('tapping BUILD puts a piece in hand, shows PLACE on the fire button and the pieces bar', !!inHand.kind && inHand.badge && inHand.pieces, JSON.stringify(inHand));
-const firstKind = inHand.kind;
-await tapSel('[data-id=piece]');
-await page.evaluate(() => window.__fk.game().debugAdvance(0.2, 1 / 20));
-const nextKind = await page.evaluate(() => window.__fk.game().buildKind);
-check('tapping PIECE cycles to the next piece', !!nextKind && nextKind !== firstKind, `${firstKind} → ${nextKind}`);
-// Back to a ramp, face the open ground, place with the fire button.
-await page.evaluate(() => { const g = window.__fk.game(); g.debugBuild(null); g.debugBuild('ramp'); const p = g.player; p.yaw = Math.atan2(p.pos.x, p.pos.z); p.pitch = -0.15; g.debugAdvance(0.3, 1 / 20); });
-await frames(3);
-const before = await page.evaluate(() => { const g = window.__fk.game(); return { placed: g.sky.placed.size, bricks: g.player.bricks, reason: g.buildAim?.reason }; });
-await tapSel('[data-id=fire]');
 await page.evaluate(() => window.__fk.game().debugAdvance(0.4, 1 / 20));
-const after = await page.evaluate(() => { const g = window.__fk.game(); return { placed: g.sky.placed.size, bricks: g.player.bricks, kind: g.buildKind }; });
-// Holding the button chains modules, so one tap may land more than one: what matters is that the
-// tap builds and is paid for.
-check('the fire button places a module where aimed and pays for it', after.placed > before.placed && after.bricks <= before.bricks - 2, `${JSON.stringify(before)} → ${JSON.stringify(after)}`);
+await frames(4);
+const after = await page.evaluate(() => { const g = window.__fk.game(); const cells = [...g.sky.plan.cells.values()].filter((c) => c.owner === g.player.id); return { placed: g.sky.placed.size, bricks: g.player.bricks, armed: g.armed, kinds: cells.map((c) => c.kind).join('+'), bar: !!document.querySelector('.sky-pieces') && !document.querySelector('.sky-pieces').hidden, weapon: !!g.player.weapon }; });
+check('pressing BUILD lays a stair ahead (looking up), pays for it, keeps the weapon out and shows the piece bar', after.placed > before.placed && after.bricks <= before.bricks - 3 && after.kinds.includes('ramp') && after.armed === 'path' && after.bar && after.weapon, `${JSON.stringify(before)} → ${JSON.stringify(after)}`);
 await page.screenshot({ path: 'scratch/phone-sky/s2-build.png' });
 
-// EYE: the architect view for a few seconds; a still finger on the ground places; then it lets go by itself.
-// (A quarter turn first, so the ramp just placed is not in the way of the tap.)
-await page.evaluate(() => { const g = window.__fk.game(); g.player.yaw += Math.PI / 2; g.debugAdvance(0.2, 1 / 20); });
-await tapSel('[data-id=arch]');
-await page.evaluate(() => window.__fk.game().debugAdvance(0.3, 1 / 20));
-await frames(6);
-const arch = await page.evaluate(() => { const g = window.__fk.game(); const cam = g.app.gr.camera; return { on: g.archOn, camAbove: cam.position.y - g.player.pos.y, kind: g.buildKind, placed: g.sky.placed.size, bricks: g.player.bricks }; });
-check('tapping EYE lifts the camera into the architect view with the piece still in hand', arch.on && arch.camAbove > 8 && !!arch.kind, JSON.stringify(arch));
-await page.screenshot({ path: 'scratch/phone-sky/s3-arch.png' });
-const look = await rect('.tz-look');
-if (look) {
-  // A still tap on the look zone, a little ahead of the player on screen.
-  await page.touchscreen.tap(look.x + look.w * 0.5, look.y + look.h * 0.55);
-  await frames(3);
-  await page.evaluate(() => window.__fk.game().debugAdvance(0.4, 1 / 20));
-}
-const tapped = await page.evaluate(() => { const g = window.__fk.game(); return { placed: g.sky.placed.size, bricks: g.player.bricks, on: g.archOn, reason: g.buildAim?.reason }; });
-check('a still finger in the architect view places a piece there', tapped.placed > arch.placed && tapped.bricks < arch.bricks, JSON.stringify(tapped));
-await page.evaluate(() => window.__fk.game().debugAdvance(4.5, 1 / 20));
-await frames(4);
-const released = await page.evaluate(() => { const g = window.__fk.game(); return { on: g.archOn, cooldown: g.archCooldown, camAbove: g.app.gr.camera.position.y - g.player.pos.y }; });
-check('the architect view lets go by itself after a few seconds and cools down', !released.on && released.cooldown > 0 && released.camAbove < 4, JSON.stringify(released));
+// Holding BUILD keeps building: a runway of pieces grows ahead without another tap.
+const held = await page.evaluate(async () => {
+  const g = window.__fk.game();
+  const v = g.app.input.virtual;
+  const p = g.player; p.pitch = 0;
+  const placed0 = g.sky.plan.size;
+  v.buildHeld = true;
+  g.debugAdvance(1.2, 1 / 20);
+  v.buildHeld = false;
+  return { grew: g.sky.plan.size - placed0, bricks: p.bricks };
+});
+check('holding BUILD keeps laying floor ahead', held.grew >= 2, JSON.stringify(held));
+
+// A set piece from the bar: tap the hall tile, its ghost shows, BUILD places it and the path is back in hand.
+const hallTile = await rect('.sky-piece:nth-child(2)');
+check('the piece bar offers set pieces to tap', !!hallTile && !hallTile.hidden && hallTile.w > 20, JSON.stringify(hallTile));
+if (hallTile) await page.touchscreen.tap(hallTile.x + hallTile.w / 2, hallTile.y + hallTile.h / 2);
+await frames(3);
+// Face the open ground behind the runway just built, so the hall has a free cell to stand on.
+await page.evaluate(() => { const g = window.__fk.game(); g.player.bricks = 40; g.player.pitch = -0.1; g.player.yaw += Math.PI; g.debugAdvance(0.3, 1 / 20); });
+const armedHall = await page.evaluate(() => { const g = window.__fk.game(); return { armed: g.armed, ghost: g.buildAim?.plan?.cells.length ?? 0, reason: g.buildAim?.reason }; });
+check('tapping the hall tile arms it and shows its ghost', armedHall.armed === 'tower' && armedHall.ghost > 0, JSON.stringify(armedHall));
+const hallsBefore = await page.evaluate(() => [...window.__fk.game().sky.plan.cells.values()].filter((c) => c.kind === 'tower' && c.owner === window.__fk.game().player.id).length);
+await tapSel('[data-id=build]');
+await page.evaluate(() => window.__fk.game().debugAdvance(0.4, 1 / 20));
+const hallsAfter = await page.evaluate(() => { const g = window.__fk.game(); return { halls: [...g.sky.plan.cells.values()].filter((c) => c.kind === 'tower' && c.owner === g.player.id).length, armed: g.armed }; });
+check('BUILD places the armed hall and hands the path back', hallsAfter.halls > hallsBefore && hallsAfter.armed === 'path', JSON.stringify(hallsAfter));
+await page.screenshot({ path: 'scratch/phone-sky/s3-hall.png' });
 
 // The Sky Flag HUD fits the phone: the frame, the height strip, the timer, no overlap with the bricks readout.
 const sky = await rect('.sky');

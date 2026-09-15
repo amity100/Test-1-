@@ -5,7 +5,7 @@ import type { Entity } from '../sim/Entities';
 import type { AscentState } from '../sim/Ascent';
 import { ASCENT } from '../sim/Ascent';
 import { PIECES, quantizeYaw, type PieceKind, type SkyBuilder } from '../build/SkyBuild';
-import { CELL, DIRS, cellOf, cellX, cellZ, type SkyCell } from '../build/SkyPlan';
+import { CELL, DIRS, STOREY, cellKey, cellOf, cellX, cellZ, type SkyCell } from '../build/SkyPlan';
 import { PLAYABLE_RADIUS } from '../world/Layout';
 
 type Job = 'climb' | 'hunt' | 'loot' | 'flee' | 'hold' | 'fight' | 'cross';
@@ -38,6 +38,9 @@ export class AscentBrain extends BotBrain {
   private lastPlaced = 0;
   private think = 0;
   private lastIntent: Intent | null = null;
+  /** The island last stood on, and how long to hold it before building on. */
+  private lastIsland: THREE.Vector3 | null = null;
+  private holdUntil = 0;
   /** Last module tried and its verdict (diagnostics). */
   lastAimReason = '';
 
@@ -62,6 +65,9 @@ export class AscentBrain extends BotBrain {
     this.route = [];
     this.routeAt = 0;
     this.lastPlaced = this.nowSeen;
+    this.lastIsland = null;
+    this.holdUntil = 0;
+    this.sky.forgetHead(this.entity.id);
   }
 
   protected override decide(dt: number, now: number, threat: Entity | null, nav: NavSystem | null): Intent {
@@ -118,12 +124,13 @@ export class AscentBrain extends BotBrain {
         const spot = carrying ? this.higherGround(asc, 12) : null;
         goal = spot && spot.y > e.pos.y + 1 ? spot : null;
         if (!goal) this.scan(now);
-        if (!carrying && e.bricks >= PIECES.tower.cost) this.jobTimer = 0;
+        if (!carrying && e.bricks >= PIECES.ramp.cost && this.nowSeen > this.holdUntil) this.jobTimer = 0;
         break;
       }
       case 'hunt': {
         const prey = this.prey(asc);
-        if (prey) goal = prey.pos.clone();
+        // Up on a structure, only walk toward prey the floor actually leads to; otherwise it is a fall.
+        if (prey && (!aloft || this.floorLeadsTo(prey.pos))) goal = prey.pos.clone();
         else this.job = 'climb';
         break;
       }
@@ -192,11 +199,14 @@ export class AscentBrain extends BotBrain {
       const up = prey.pos.y - e.pos.y;
       const eager = prey === asc.holder ? 1.6 : 1;
       if (d < 30 * eager && Math.abs(up) < 8 && this.rand.chance(0.6 * this.profile.searchSkill + 0.3)) {
-        // Close and level: walk there, bridging the gap if there is one.
-        return e.bricks >= PIECES.bridge.cost ? 'cross' : 'hunt';
+        // Close and level: walk there when the floor leads there, else bridge the gap.
+        if (asc.altitude(e) <= 2.5 || this.floorLeadsTo(prey.pos)) return 'hunt';
+        if (e.bricks >= PIECES.bridge.cost) return 'cross';
       }
     }
-    if (e.bricks < PIECES.tower.cost && asc.altitude(e) > 2.5 && this.route.length === 0) return 'hold';
+    if (e.bricks < PIECES.ramp.cost && asc.altitude(e) > 2.5 && this.route.length === 0) return 'hold';
+    // Just arrived on an island: hold it for a while — that is where the others are coming.
+    if (this.nowSeen < this.holdUntil && this.route.length === 0) return 'hold';
     return 'climb';
   }
 
@@ -213,8 +223,9 @@ export class AscentBrain extends BotBrain {
       const dist = d.pos.distanceTo(e.pos);
       const dy = d.pos.y - e.pos.y;
       if (dist >= bestD || dy > 7 || dy < -14) continue;
-      // From a tower, only bricks on this floor are worth it; a long drop for them is not.
+      // From a structure, only bricks the floor leads to are worth it; a long drop for them is not.
       if (aloft && dy < -3 && dist > 7) continue;
+      if (aloft && dist > 4 && !this.floorLeadsTo(d.pos)) continue;
       let closer = 0;
       for (const o of others) if (o !== e && o.alive && o.pos.distanceTo(d.pos) < dist) closer++;
       if (closer >= 3) continue;
@@ -257,16 +268,22 @@ export class AscentBrain extends BotBrain {
       }
       if (this.route.length > 0) return this.route[this.routeAt].clone();
     }
-    // Nothing under way: build the next step up, and now and then widen the floor we are on.
-    if (this.buildCooldown <= 0 && e.bricks >= PIECES.tower.cost) {
-      if (e.bricks >= PIECES.tower.cost + PIECES.deck.cost * 2 && this.rand.chance(0.25) && this.widen(asc)) return null;
-      const dir = this.dirToward(asc.flagPos);
-      if (this.buildUp(asc, dir)) return this.route.length > 0 ? this.route[0].clone() : null;
-      // Boxed in: a deck to the side opens a cell the next tower can stand on.
-      if (e.bricks >= PIECES.tower.cost + PIECES.deck.cost && this.widen(asc)) return null;
-      // Still nowhere to build: walk along this floor to a deck with room beside it and try there.
-      const room = this.roomToBuild(asc);
-      if (room) return room;
+    // Standing on an island: hold it a while before building on — that is where everyone meets.
+    this.noteIsland();
+    if (!urgent && now < this.holdUntil) return null;
+    // Nothing under way: the next piece of the path toward the next island up (or the flag, from
+    // the top), and now and then a wider floor to fight on.
+    if (this.buildCooldown <= 0 && e.bricks >= PIECES.ramp.cost) {
+      const target = this.climbTarget(asc);
+      if (target) {
+        if (!urgent && e.bricks >= PIECES.ramp.cost + PIECES.deck.cost * 2 && this.rand.chance(0.12) && this.widen(asc)) return null;
+        if (this.buildPath(asc, target)) return this.route.length > 0 ? this.route[0].clone() : null;
+        // Boxed in: a deck to the side opens a cell the next stair can start from.
+        if (e.bricks >= PIECES.ramp.cost + PIECES.deck.cost && this.widen(asc)) return null;
+        // Still nowhere to build: walk along this floor to a deck with room beside it and try there.
+        const room = this.roomToBuild(asc);
+        if (room) return room;
+      }
     }
     const aloft = asc.altitude(e) > 2.5;
     if (urgent) {
@@ -282,7 +299,78 @@ export class AscentBrain extends BotBrain {
     return foot;
   }
 
-  /** Puts a stair tower (or a ramp where a tower will not fit) in front and remembers the way up it. */
+  /** Where the climb is heading: the nearest sky island above us, else the flag when it is higher. */
+  private climbTarget(asc: AscentState): THREE.Vector3 | null {
+    const e = this.entity;
+    let best: THREE.Vector3 | null = null;
+    let bestD = Infinity;
+    for (const isl of this.sky.islands) {
+      if (isl.pos.y < e.pos.y + 3 || isl.pos.y < asc.seaLevel + 4) continue;
+      const d = Math.hypot(isl.pos.x - e.pos.x, isl.pos.z - e.pos.z) + (isl.pos.y - e.pos.y) * 1.5;
+      if (d < bestD) {
+        bestD = d;
+        best = isl.pos;
+      }
+    }
+    if (best) return best;
+    // Above every island: hold the summit and fight for it until the flag is within reach above,
+    // rather than spiralling a lone stair a hundred metres into the clouds.
+    const up = asc.flagPos.y - e.pos.y;
+    if (up > 3 && up < 30 && !asc.flagHeld) return asc.flagPos;
+    return null;
+  }
+
+  /** Remembers arriving on an island and sets how long to hold it. */
+  private noteIsland(): void {
+    const e = this.entity;
+    for (const isl of this.sky.islands) {
+      if (Math.abs(isl.pos.y - e.pos.y) > 3 || Math.hypot(isl.pos.x - e.pos.x, isl.pos.z - e.pos.z) > 13) continue;
+      if (this.lastIsland !== isl.pos) {
+        this.lastIsland = isl.pos;
+        this.holdUntil = this.nowSeen + this.rand.range(6, 14);
+      }
+      return;
+    }
+  }
+
+  /**
+   * The next piece of the path toward a target: a stair while it is above us, floor once level with
+   * it, turned aside when we are right under it so the stair spirals instead of overshooting. The
+   * way up the new piece is remembered and walked.
+   */
+  private buildPath(asc: AscentState, target: THREE.Vector3): boolean {
+    const e = this.entity;
+    if (e.pos.x * e.pos.x + e.pos.z * e.pos.z > (PLAYABLE_RADIUS - 12) * (PLAYABLE_RADIUS - 12)) return false;
+    const flat = Math.hypot(target.x - e.pos.x, target.z - e.pos.z);
+    const up = target.y - e.pos.y;
+    let dir = this.dirToward(target);
+    if (flat < 12 && up > 4) dir = (dir + 1 + (e.id & 1) * 2) & 3;
+    const climb = up > 3;
+    const now = this.nowSeen;
+    const tries: [number, boolean][] = [
+      [dir, climb],
+      [(dir + 1) & 3, climb],
+      [(dir + 3) & 3, climb],
+      [dir, !climb],
+    ];
+    for (const [d, c] of tries) {
+      const aim = this.sky.aimPathDir(e, e.pos, d, c, now, e.bricks);
+      this.lastAimReason = `path:${aim.reason}`;
+      if (aim.reason !== 'ok' || !aim.plan) continue;
+      if (!asc.spend(e, aim.cost)) return false;
+      const cells = aim.plan.cells.slice();
+      this.sky.place(aim.plan, e);
+      this.sky.advanceHead(e, aim.plan, now);
+      this.startRoute(cells, aim.plan.top);
+      this.buildCooldown = 0.5 + this.rand.range(0, 0.3);
+      this.lastPlaced = now;
+      return true;
+    }
+    this.buildCooldown = 1.2;
+    return false;
+  }
+
+  /** Puts a stair tower in front (the high ground in a fight) and remembers the way up it. */
   private buildUp(asc: AscentState, dir: number): boolean {
     const e = this.entity;
     if (e.pos.x * e.pos.x + e.pos.z * e.pos.z > (PLAYABLE_RADIUS - 12) * (PLAYABLE_RADIUS - 12)) return false;
@@ -383,16 +471,62 @@ export class AscentBrain extends BotBrain {
     const my = Math.round(e.pos.y) - 1;
     let best: THREE.Vector3 | null = null;
     let bestD = 30;
+    const reach = this.reachableCells();
     for (const s of this.sky.plan.standing()) {
       if (Math.abs(s.cell.y - my) > 2 || s.y < asc.seaLevel + 1) continue;
       const d = Math.hypot(s.x - e.pos.x, s.z - e.pos.z);
       if (d > bestD || d < 3) continue;
+      if (reach && !reach.has(cellKey(s.cell.i, s.cell.j, s.cell.y))) continue;
       const free = DIRS.some(([dx, dz]) => !this.sky.plan.get(s.cell.i + dx, s.cell.j + dz, s.cell.y));
       if (!free) continue;
       bestD = d;
       best = new THREE.Vector3(s.x, s.y + 0.1, s.z);
     }
     return best;
+  }
+
+  /**
+   * The cells a walker can reach from the one under this bot without leaving the floor: along the
+   * same storey, up a stair to its landing, up a hall to its roof, and back down the same ways.
+   * Null when the bot is not standing on a cell (the ground leads everywhere).
+   */
+  private reachableCells(): Set<number> | null {
+    const start = this.sky.cellUnder(this.entity.pos);
+    if (!start) return null;
+    const plan = this.sky.plan;
+    const seen = new Set<number>([cellKey(start.i, start.j, start.y)]);
+    const queue: SkyCell[] = [start];
+    const push = (c: SkyCell | undefined): void => {
+      if (!c) return;
+      const k = cellKey(c.i, c.j, c.y);
+      if (seen.has(k)) return;
+      seen.add(k);
+      queue.push(c);
+    };
+    for (let head = 0; head < queue.length && queue.length < 120; head++) {
+      const c = queue[head];
+      for (const n of plan.sides(c.i, c.j, c.y)) push(n);
+      // A stair leads up to its landing; a hall leads up to its roof.
+      if (c.kind === 'ramp') push(plan.get(c.i + DIRS[c.dir][0], c.j + DIRS[c.dir][1], c.y + STOREY));
+      if (c.kind === 'tower') push(plan.above(c.i, c.j, c.y));
+      // And the other way: a landing leads down its stair, a roof down through its hall.
+      for (const [dx, dz] of DIRS) {
+        const below = plan.get(c.i + dx, c.j + dz, c.y - STOREY);
+        if (below && below.kind === 'ramp' && c.i === below.i + DIRS[below.dir][0] && c.j === below.j + DIRS[below.dir][1]) push(below);
+      }
+      const under = plan.below(c.i, c.j, c.y);
+      if (under && under.kind === 'tower') push(under);
+    }
+    return seen;
+  }
+
+  /** Whether the floor under this bot leads to a place without a jump into the air. */
+  private floorLeadsTo(pos: THREE.Vector3): boolean {
+    const reach = this.reachableCells();
+    if (!reach) return true;
+    const there = this.sky.cellUnder(pos);
+    if (!there) return false;
+    return reach.has(cellKey(there.i, there.j, there.y));
   }
 
   /** A spot on the ground beside the nearest structure, so a climb can start there. */
@@ -449,12 +583,14 @@ export class AscentBrain extends BotBrain {
     this.stuckHere += dt;
     if (this.stuckHere > 2.5) {
       this.stuckHere = 0;
-      // Inside a module, a hop only breaks the climb: drop the route and build a fresh way up.
+      // Inside a module, a hop only breaks the climb: drop the route and build a fresh way up. Up on
+      // a structure a hop clears the balustrade and ends in a fall, so it is for the ground only.
       const onRoute = this.route.length > 0;
       this.route = [];
       this.routeAt = 0;
       this.buildCooldown = 0.2;
-      if (!onRoute && e.grounded) {
+      const asc = this.ascent();
+      if (!onRoute && e.grounded && (!asc || asc.altitude(e) <= 2.5)) {
         e.vel.y = Math.max(e.vel.y, 7);
         e.grounded = false;
       }

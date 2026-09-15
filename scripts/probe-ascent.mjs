@@ -63,8 +63,14 @@ const build = await page.evaluate(() => {
   g.debugBuild('deck');
   const r2 = g.debugPlace();
   const afterDeck = { bricks: p.bricks, blocks: g.sky.placed.size, cells: g.sky.plan.size, modules: g.sky.count.get(p.id) ?? 0 };
+  // The path: looking up, one press lays a stair ahead with its landing; looking ahead, a floor.
+  p.pitch = 0.45;
+  g.debugBuild('path');
+  const r3 = g.debugPlace();
+  const mine = [...g.sky.plan.cells.values()].filter((c) => c.owner === p.id);
+  const pathRamp = mine.some((c) => c.kind === 'ramp');
   g.debugBuild(null);
-  return { before, r1, afterTower, climbed, roof, reached: at, wps: wps.length, r2, afterDeck };
+  return { before, r1, afterTower, climbed, roof, reached: at, wps: wps.length, r2, afterDeck, r3, pathRamp, islands: g.sky.islands.length };
 });
 console.log('build', JSON.stringify(build));
 check('battle phase, weapons out, the player alive', build.before.mode === 'battle' && build.before.phase === 'round' && build.before.alive, JSON.stringify({ ...build.before, spawnYs: undefined }));
@@ -72,6 +78,8 @@ check('everyone spawned on dry ground, spread around the island', build.before.s
 check('a stair tower goes down in front of the player and costs 4 bricks', build.r1 === 'ok' && build.afterTower.bricks === build.before.bricks - 4 && build.afterTower.blocks >= 200, `${build.r1} blocks ${build.afterTower.blocks}`);
 check('the tower can be walked from its door to its roof, six metres up', build.reached === build.wps && build.roof > -0.6, `climbed ${build.climbed.toFixed(2)} m, roof offset ${build.roof.toFixed(2)} m, ${build.reached}/${build.wps} waypoints`);
 check('a deck goes down where aimed and costs 2 bricks', build.r2 === 'ok' && build.afterDeck.bricks === build.afterTower.bricks - 2 && build.afterDeck.cells > build.afterTower.cells, `${build.r2} cells ${build.afterDeck.cells} modules ${build.afterDeck.modules}`);
+check('the path lays a stair ahead when looking up, with one key and the weapon still out', build.r3 === 'ok' && build.pathRamp, `${build.r3} ramp ${build.pathRamp}`);
+check('eight neutral sky islands hang over the island from the start', build.islands === 8, `${build.islands}`);
 await frames(10);
 await page.screenshot({ path: 'scratch/ascent/a1-build.png' });
 
@@ -114,8 +122,9 @@ check('walking into the cluster picks the bricks up', loot.after.pBricks > loot.
 const fall = await page.evaluate(() => {
   const g = window.__fk.game(); const p = g.player;
   p.hp = 100; p.alive = true;
-  const ground = g.app.terrain.heightAt(60, 20);
-  p.pos.set(60, ground + 30, 20); p.vel.set(0, 0, 0);
+  // A spot clear of the sky islands and the bots' paths, so the fall really is thirty metres.
+  const ground = g.app.terrain.heightAt(-50, 50);
+  p.pos.set(-50, ground + 30, 50); p.vel.set(0, 0, 0);
   g.debugAdvance(4, 1 / 30);
   return { hp: p.hp, y: p.pos.y, ground, alive: p.alive };
 });

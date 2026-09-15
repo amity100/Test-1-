@@ -776,6 +776,8 @@ body { background: radial-gradient(1200px 800px at 50% 30%, #16283a 0%, #0f1923 
 .marker[data-kind="leader"] .m-name, .marker[data-kind="leader"] .m-tag { color: #ffd54a; }
 .marker[data-kind="radar"] .m-chev { border-top-color: var(--accent); }
 .marker[data-kind="radar"] .m-name, .marker[data-kind="radar"] .m-tag { color: var(--accent); }
+.marker[data-kind="island"] .m-chev { border-top-color: #ffd36a; border-top-width: 11px; border-left-width: 7px; border-right-width: 7px; }
+.marker[data-kind="island"] .m-name, .marker[data-kind="island"] .m-tag, .marker[data-kind="island"] .m-dist { color: #ffd36a; }
 @media (max-width: 900px), (pointer: coarse) {
   .announce { top: 18%; }
   .announce .a-title { font-size: clamp(22px, 5vw, 40px); }

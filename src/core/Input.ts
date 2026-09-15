@@ -36,10 +36,9 @@ export interface VirtualState {
   tapY: number;
   longPress: boolean;
   heightDir: number;
-  /** Sky Flag touch buttons: build toggle, next piece, architect view (edge flags). */
+  /** Sky Flag BUILD button: pressed this frame (edge), and held (level, cleared on release). */
   build: boolean;
-  piece: boolean;
-  arch: boolean;
+  buildHeld: boolean;
 }
 
 function freshVirtual(): VirtualState {
@@ -50,7 +49,7 @@ function freshVirtual(): VirtualState {
     reload: false, grenade: false, melee: false, gadget: [false, false], gadgetHeld: [false, false], gadgetReleased: [false, false], interact: false,
     weaponSwitch: -1, primary: false, secondary: false, primaryHeld: false, secondaryHeld: false, zoom: 0, panX: 0, panY: 0,
     tapped: false, tapX: 0, tapY: 0, longPress: false, heightDir: 0,
-    build: false, piece: false, arch: false,
+    build: false, buildHeld: false,
   };
 }
 
@@ -438,8 +437,6 @@ export class Input {
     v.tapped = false;
     v.longPress = false;
     v.build = false;
-    v.piece = false;
-    v.arch = false;
   }
 
   clearAll(): void {

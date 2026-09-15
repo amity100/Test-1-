@@ -30,7 +30,8 @@ import { RepairSystem } from '../sim/Repair';
 import { WAR } from '../sim/War';
 import { AscentState, ASCENT, type AscentHooks } from '../sim/Ascent';
 import { perf } from './Perf';
-import { SkyBuilder, PIECES, PIECE_KINDS, type PieceKind, type AimResult } from '../build/SkyBuild';
+import { SkyBuilder, ARMED_KINDS, pieceDef, type ArmedKind, type PieceKind, type AimResult } from '../build/SkyBuild';
+import { spawnIslands } from '../build/SkyIslands';
 import { SKIN_IDS, SKIN_LIST, skinIndex } from '../build/SkySkins';
 import { AscentBrain } from '../ai/AscentBrain';
 import { AscentMeshes } from '../render/AscentMeshes';
@@ -64,8 +65,6 @@ const SKY_COLORS = PALETTE.slice(SKY_PLAYER_PALETTE, SKY_PLAYER_PALETTE + 12);
 /** Fortress War team colours: cyan and coral. */
 export const TEAM_COLORS = ['#00e5ff', '#ff4655'];
 /** Architect view: seconds it lasts and the wait before the next one. */
-const ARCH_TIME = 4;
-const ARCH_COOLDOWN = 6;
 /** A pseudo plot at the island centre for the cameras that expect one. */
 const CENTRE_PLOT: Plot = { index: -1, cx: 0, cz: 0, minX: -20, minZ: -20, maxX: 19, maxZ: 19, angle: 0 };
 const PRIMARY_CHOICES: WeaponId[] = ['rifle', 'smg', 'shotgun', 'sniper', 'rocket'];
@@ -163,22 +162,18 @@ export class Game {
   // Sky Flag
   sky: SkyBuilder | null = null;
   private ascentMeshes: AscentMeshes | null = null;
-  /** The piece in hand while building (null = weapons out) and its rotation. */
-  buildKind: PieceKind | null = null;
+  /** What B puts down: the path (default) or one of the set pieces from the bar; and its turn. */
+  armed: ArmedKind = 'path';
   buildRot = 0;
   buildAim: AimResult | null = null;
+  /** The piece bar shows until this time (any build key extends it). */
+  private barUntil = -10;
   /** Blocks the ghost draws, rebuilt only when the module or the cell it would land on changes. */
   private ghostCells: { x: number; y: number; z: number }[] = [];
   private ghostKey = '';
   /** The last module this player put down, for undo. */
   private lastGroup: { group: number; at: number; cost: number } | null = null;
   private lastPlace = -10;
-  /** Architect view: a few seconds of looking down on the build from above the body. */
-  archOn = false;
-  private archTimer = 0;
-  private archCooldown = 0;
-  private archCursor = new THREE.Vector3();
-  private archCam = new THREE.Vector3();
   private lastSeaWarn = -100;
 
   constructor(readonly app: App) {
@@ -231,7 +226,7 @@ export class Game {
     this.hud.onSpawnChoice = (i) => this.setSpawnChoice(i);
     this.hud.onSkin = (id) => this.setSkin(id);
     this.hud.onPiece = (kind) => {
-      if (this.match?.ascent && (PIECE_KINDS as string[]).includes(kind)) this.toggleBuild(kind as PieceKind);
+      if (this.match?.ascent && (ARMED_KINDS as string[]).includes(kind)) this.arm(kind as ArmedKind);
     };
     this.screens = new Screens(this.uiRoot, {
       start: (cfg) => this.startMatch(cfg),
@@ -519,6 +514,9 @@ export class Game {
     this.sky = sky;
     // Bots take turns through the three finishes; you build in the one you picked.
     sky.skinFor = (e) => (e.isBot ? e.colorIndex % SKIN_LIST.length : skinIndex(settings.data.skySkin));
+    // The neutral sky islands: the ladder everyone climbs, with bricks waiting on each step.
+    spawnIslands(sky, this.match?.ascent ?? null);
+    this.app.chunks.flush();
     sky.events.on('placed', ({ kind, owner, centre }) => {
       const mine = owner === this.player;
       audio.play('place', { pos: mine ? undefined : centre, pitch: kind === 'arena' ? 0.62 : kind === 'tower' ? 0.8 : 0.95, volume: mine ? 0.9 : 0.6 });
@@ -533,10 +531,10 @@ export class Game {
     this.combat.knockback = ASCENT.knockback;
     for (const e of this.entities) if (e.isBot) this.bots.push(new AscentBrain(e, this.botContext(), PROFILES[cfg.difficulty], this.rng.int(1, 1e9), sky, () => this.match?.ascent ?? null));
     this.ascentMeshes = new AscentMeshes(this.app.gr.scene, this.app.world, this.app.terrain);
-    this.buildKind = null;
+    this.armed = 'path';
     this.buildRot = 0;
-    this.archOn = false;
-    this.archCooldown = 0;
+    this.buildAim = null;
+    this.barUntil = -10;
   }
 
   /** The game's side of the Sky Flag rules: sounds, banners, particles, damage from falls and the sea. */
@@ -1301,8 +1299,7 @@ export class Game {
         if (match.ascent) {
           const asc = match.ascent;
           const w = asc.winner;
-          this.exitBuild();
-          this.exitArch();
+          this.disarm();
           const title = w === this.player ? t('victory') : w ? t('flagWonBy', { name: w.name }) : t('seaTookAll');
           const rows: SummaryRow[] = match.standings().map((e) => ({ name: e.name, color: e.colorHex, delta: `${e.score.kills} ${t('killsShort')} · ${Math.round(e.score.peakAltitude)} ${t('metres')}`, total: e.score.total, isYou: e === this.player }));
           this.screens.showRoundSummary({ title, sub: w ? t('flagHeldFor', { n: ASCENT.holdTime }) : t('ascentOver'), rows }, RULES.summaryTime);
@@ -1625,9 +1622,8 @@ export class Game {
     }
     this.ascentMeshes?.dispose();
     this.ascentMeshes = null;
-    this.buildKind = null;
+    this.armed = 'path';
     this.buildAim = null;
-    this.archOn = false;
     this.combat.knockback = 0;
     this.app.water.setLevel(0, 0);
     this.app.sky.timeSpeed = 0;
@@ -1775,10 +1771,7 @@ export class Game {
       if (victim === this.player) {
         this.killerEntity = killer && killer !== victim ? killer : null;
         this.killedBy = killer ? `${killer.name} · ${Math.round(killer.pos.distanceTo(victim.pos))} m` : this.match?.ascent ? t(victim.drowning ? 'takenBySea' : 'fellToDeath') : '';
-        if (this.match?.ascent) {
-          this.exitBuild();
-          this.exitArch();
-        }
+        if (this.match?.ascent) this.disarm();
       }
       const brain = this.bots.find((b) => b.entity === victim);
       brain?.reset();
@@ -1999,8 +1992,8 @@ export class Game {
     const match = this.match!;
     const input = this.app.input;
     this.ensureLocal();
-    this.local.enabled = !this.paused && !this.screens.visible && !this.archOn;
-    this.local.toolMode = this.buildKind !== null || this.archOn;
+    this.local.enabled = !this.paused && !this.screens.visible;
+    this.local.toolMode = false;
     this.timeScale = this.time < this.slowmoUntil ? this.slowmoScale : 1;
     const simDt = this.paused ? 0 : dt * this.timeScale;
     if (simDt > 0) {
@@ -2070,7 +2063,6 @@ export class Game {
     this.updateCharacters(dt);
     // Camera when dead: orbit the body
     if (!this.player.alive) this.deathCamera(dt);
-    else if (this.archOn) this.archCamera(dt);
     if (match.ascent) this.ascentVisuals(dt);
     this.cameraFocus.copy(this.app.gr.camera.position);
     // Scoreboard
@@ -2100,7 +2092,6 @@ export class Game {
     perf.add('hud', thud);
     if (IS_TOUCH) {
       const p = this.player;
-      if (match.ascent) this.touch.setPlacing(this.buildKind !== null && p.alive);
       p.gadgets.forEach((id, i) => {
         const unlimited = GADGETS[id].charges === Infinity;
         this.touch.setGadgetState(i, p.gadgetCooldown[i] <= 0 && (unlimited || p.gadgetCharges[i] > 0), unlimited ? -1 : p.gadgetCharges[i]);
@@ -2110,19 +2101,22 @@ export class Game {
   }
 
   // ---------------- Sky Flag: building, the architect view, visuals ----------------
-  /** B (or the touch button) puts the pieces in hand; weapons come back with the next press. */
-  toggleBuild(kind: PieceKind | null = null): void {
-    if (this.buildKind && !kind) this.exitBuild();
-    else {
-      this.buildKind = kind ?? this.buildKind ?? 'ramp';
-      audio.play('switch', { volume: 0.6, pitch: 1.2 });
-    }
+  /** Arms a piece: the path by default, or one of the set pieces from the bar (X cycles them). */
+  arm(kind: ArmedKind): void {
+    if (!this.match?.ascent) return;
+    this.armed = kind;
+    this.barUntil = this.time + 3;
+    this.ghostKey = '';
+    audio.play('switch', { volume: 0.5, pitch: kind === 'path' ? 1.1 : 1.25 });
   }
 
-  private exitBuild(): void {
-    if (!this.buildKind) return;
-    this.buildKind = null;
+  /** Back to the path with nothing shown (death, the end of the match). */
+  private disarm(): void {
+    this.armed = 'path';
     this.buildAim = null;
+    this.ghostCells = [];
+    this.ghostKey = '';
+    this.sky?.forgetHead(this.player.id);
   }
 
   /** Picks the finish new pieces are built in (C cycles it; the HUD chips pick one directly). */
@@ -2131,113 +2125,82 @@ export class Game {
     settings.data.skySkin = id;
     settings.save();
     this.ghostKey = '';
+    this.barUntil = this.time + 3;
     audio.play('switch', { volume: 0.5, pitch: 1.35 });
   }
 
-  enterArch(): void {
-    if (this.archOn || this.archCooldown > 0 || !this.player.alive) return;
-    this.archOn = true;
-    this.archTimer = ARCH_TIME;
-    if (!this.buildKind) this.buildKind = 'deck';
-    const p = this.player;
-    this.archCursor.copy(p.pos).addScaledVector(p.forwardFlat(new THREE.Vector3()), 4);
-    this.archCam.copy(this.app.gr.camera.position);
-    this.touch.setArchTaps(true);
-    audio.play('switch', { volume: 0.6, pitch: 0.8 });
-  }
-
-  exitArch(): void {
-    if (!this.archOn) return;
-    this.archOn = false;
-    this.archCooldown = ARCH_COOLDOWN;
-    this.touch.setArchTaps(false);
-  }
-
-  /** Build controls: pieces, rotation, the architect view and placing (first person or from above). */
+  /**
+   * Building, with the weapon never leaving your hands. B (BUILD on a phone) puts down the next
+   * piece of your path — a stair when you look up, floor when you look ahead — and held down it
+   * keeps placing as you walk, so a road climbs into the sky under your feet. X cycles the set
+   * pieces (hall, bridge, stadium): one of those shows its ghost until B places it, then the path
+   * is back in hand. R turns a piece, C picks the finish.
+   */
   private ascentInput(dt: number): void {
+    void dt;
     const input = this.app.input;
     const p = this.player;
-    const asc = this.match!.ascent!;
     const sky = this.sky!;
     const v = input.virtual;
-    this.archCooldown = Math.max(0, this.archCooldown - dt);
-    if (this.archOn) {
-      this.archTimer -= dt;
-      if (this.archTimer <= 0 || !p.alive) this.exitArch();
-    }
     if (!p.alive || this.screens.visible) {
-      v.build = v.piece = v.arch = false;
-      return;
-    }
-    if (input.wasPressed('KeyB') || v.build) this.toggleBuild();
-    if (input.wasPressed('KeyX') || v.arch) {
-      if (this.archOn) this.exitArch();
-      else this.enterArch();
-    }
-    // Leaving the build for a weapon.
-    if (this.buildKind && !this.archOn) {
-      if (input.wasPressed('Digit1') && this.buildKind === PIECE_KINDS[0]) {
-        /* same piece, stay */
-      }
-    }
-    if (this.buildKind) {
-      for (let i = 0; i < PIECE_KINDS.length; i++) if (input.wasPressed(`Digit${i + 1}`)) this.buildKind = PIECE_KINDS[i];
-      if (input.wheel > 0 || v.piece) this.buildKind = PIECE_KINDS[(PIECE_KINDS.indexOf(this.buildKind) + 1) % PIECE_KINDS.length];
-      else if (input.wheel < 0) this.buildKind = PIECE_KINDS[(PIECE_KINDS.indexOf(this.buildKind) + PIECE_KINDS.length - 1) % PIECE_KINDS.length];
-      if (input.wasPressed('KeyR') || input.buttonPressed(2)) this.buildRot = (this.buildRot + 1) % 4;
-      if (input.wasPressed('KeyC')) this.setSkin(SKIN_IDS[(skinIndex(settings.data.skySkin) + 1) % SKIN_IDS.length]);
-    }
-    v.build = v.piece = v.arch = false;
-    if (!this.buildKind) {
+      v.build = false;
       this.buildAim = null;
       this.ghostCells = [];
       this.ghostKey = '';
       return;
     }
-    // Where the piece would go: along the view, or from the architect camera through its cursor.
-    let eye = p.eyePos;
-    let dir = p.forward(new THREE.Vector3());
-    let tapPlace = false;
-    if (this.archOn) {
-      const cam = this.app.gr.camera;
-      // Mouse and finger drags move the cursor over the ground plane; a still tap places at the finger.
-      const sens = 0.03;
-      const dx = (input.looking ? input.mouseDX : 0) + v.lookDX;
-      const dy = (input.looking ? input.mouseDY : 0) + v.lookDY;
-      const right = p.right(new THREE.Vector3());
-      const fwd = p.forwardFlat(new THREE.Vector3());
-      this.archCursor.addScaledVector(right, dx * sens).addScaledVector(fwd, -dy * sens);
-      const far = this.archCursor.clone().sub(p.pos).setY(0);
-      if (far.length() > 14) this.archCursor.copy(p.pos).addScaledVector(far.normalize(), 14);
-      this.archCursor.y = p.pos.y;
-      if (v.tapped) {
-        const ndc = new THREE.Vector3((v.tapX / window.innerWidth) * 2 - 1, -(v.tapY / window.innerHeight) * 2 + 1, 0.5).unproject(cam);
-        eye = cam.position.clone();
-        dir = ndc.sub(cam.position).normalize();
-        tapPlace = true;
-        v.tapped = false;
-      } else {
-        eye = cam.position.clone();
-        dir = this.archCursor.clone().sub(cam.position).normalize();
-      }
+    if (input.wasPressed('KeyX')) this.arm(ARMED_KINDS[(ARMED_KINDS.indexOf(this.armed) + 1) % ARMED_KINDS.length]);
+    if (input.wasPressed('KeyR') || input.buttonPressed(2)) {
+      this.buildRot = (this.buildRot + 1) % 4;
+      this.barUntil = this.time + 3;
+      this.ghostKey = '';
     }
-    this.buildAim = sky.aim(this.buildKind, eye, dir, p.pos, p.yaw, this.buildRot, p, p.bricks);
+    if (input.wasPressed('KeyC')) this.setSkin(SKIN_IDS[(skinIndex(settings.data.skySkin) + 1) % SKIN_IDS.length]);
+    const pressed = input.wasPressed('KeyB') || v.build;
+    const held = input.isDown('KeyB') || v.buildHeld;
+    v.build = false;
+    if (pressed || held) this.barUntil = this.time + 3;
+    if (this.armed === 'path') {
+      if (!held && !pressed) {
+        this.buildAim = null;
+        if (this.ghostCells.length) {
+          this.ghostCells = [];
+          this.ghostKey = '';
+        }
+        return;
+      }
+      const aim = sky.aimPath(p, p.pos, p.yaw, p.pitch, this.time, p.bricks, this.buildRot);
+      this.buildAim = aim;
+      this.refreshGhost(sky);
+      if (pressed || this.time - this.lastPlace > 0.28) this.tryPlace(aim, pressed);
+      return;
+    }
+    // A set piece: its ghost shows where it will land until B puts it there.
+    const aim = sky.aim(this.armed, p.eyePos, p.forward(new THREE.Vector3()), p.pos, p.yaw, this.buildRot, p, p.bricks);
+    this.buildAim = aim;
     this.refreshGhost(sky);
-    const aim = this.buildAim;
-    const pressed = input.firePressed() || tapPlace;
-    const held = input.fireHeld() && this.time - this.lastPlace > 0.32;
-    if (!pressed && !held) return;
+    if (pressed && this.tryPlace(aim, true)) this.arm('path');
+  }
+
+  /** Pays for and places an aimed module; on a press that cannot go through, says why. */
+  private tryPlace(aim: AimResult, pressed: boolean): boolean {
+    const p = this.player;
+    const asc = this.match!.ascent!;
+    const sky = this.sky!;
     if (aim.plan && aim.reason === 'ok') {
-      if (!asc.spend(p, aim.cost)) return;
+      if (!asc.spend(p, aim.cost)) return false;
       const group = sky.place(aim.plan, p);
+      sky.advanceHead(p, aim.plan, this.time);
       this.lastPlace = this.time;
       this.lastGroup = { group, at: this.time, cost: aim.cost };
-      this.buildAim = sky.aim(this.buildKind, eye, dir, p.pos, p.yaw, this.buildRot, p, p.bricks);
-      this.refreshGhost(sky);
-    } else if (pressed) {
+      this.ghostKey = '';
+      return true;
+    }
+    if (pressed) {
       this.showPrompt(t(aim.reason === 'bricks' ? 'needBricks' : aim.reason === 'occupied' ? 'placeOccupied' : aim.reason === 'full' ? 'placeFull' : aim.reason === 'unsupported' ? 'placeUnsupported' : 'placeRange', { n: aim.cost }), 1.2);
       audio.play('empty', { volume: 0.5 });
     }
+    return false;
   }
 
   /** The ghost is the real masonry, so it is only regenerated when the module or its cell changes. */
@@ -2249,19 +2212,22 @@ export class Game {
     this.ghostCells = aim?.plan ? sky.previewCells(aim.plan) : [];
   }
 
-  /** The architect view: the camera climbs above and behind the body and looks down at the cursor. */
-  private archCamera(dt: number): void {
-    const cam = this.app.gr.camera;
+  /** The nearest sky island above the player: the next step of the way up. */
+  private nextIsland(): { pos: THREE.Vector3; nameKey: string } | null {
+    const sky = this.sky;
+    if (!sky) return null;
     const p = this.player;
-    const back = p.forwardFlat(new THREE.Vector3()).multiplyScalar(-7);
-    const want = new THREE.Vector3(p.pos.x + back.x, p.pos.y + 15, p.pos.z + back.z);
-    // Never inside a block: rise until clear.
-    for (let i = 0; i < 8 && this.app.world.boxIntersectsSolid(want.x - 0.4, want.y - 0.4, want.z - 0.4, want.x + 0.4, want.y + 0.4, want.z + 0.4); i++) want.y += 1.5;
-    this.archCam.lerp(want, Math.min(1, dt * 7));
-    cam.position.copy(this.archCam);
-    const look = this.archCursor.clone().lerp(p.pos, 0.35);
-    cam.lookAt(look.x, look.y, look.z);
-    cam.updateMatrixWorld();
+    let best: { pos: THREE.Vector3; nameKey: string } | null = null;
+    let bestD = Infinity;
+    for (const isl of sky.islands) {
+      if (isl.pos.y < p.pos.y + 3) continue;
+      const d = Math.hypot(isl.pos.x - p.pos.x, isl.pos.z - p.pos.z) + (isl.pos.y - p.pos.y) * 1.5;
+      if (d < bestD) {
+        bestD = d;
+        best = isl;
+      }
+    }
+    return best;
   }
 
   /** Per-frame presentation for Sky Flag: the sea, the flag, the mark, the bricks, the ghost piece, the sky. */
@@ -2443,8 +2409,14 @@ export class Game {
       if (asc) {
         if (asc.marked && asc.marked !== p && asc.marked.alive) this.pushMarker(markers, asc.marked, 'leader');
         if (asc.holder && asc.holder !== p && asc.holder.alive) this.pushMarker(markers, asc.holder, 'capture');
+        // The next sky island up: where the way leads, and where the others are heading too.
+        const isl = this.nextIsland();
+        if (isl) {
+          const sc = this.toScreen(new THREE.Vector3(isl.pos.x, isl.pos.y + 3, isl.pos.z), 40);
+          if (sc.onScreen) markers.push({ sx: sc.sx, sy: sc.sy, name: t(isl.nameKey), color: '#ffd36a', dist: isl.pos.distanceTo(p.pos), kind: 'island' });
+        }
       }
-      const order: Record<HudMarker['kind'], number> = { capture: 0, threat: 1, leader: 2, radar: 3, near: 4, ally: 5 };
+      const order: Record<HudMarker['kind'], number> = { capture: 0, threat: 1, leader: 2, radar: 3, near: 4, ally: 5, island: 6 };
       markers.sort((a, b) => order[a.kind] - order[b.kind] || a.dist - b.dist);
     }
     const grenadeWarnings: HudState['grenadeWarnings'] = [];
@@ -2551,14 +2523,17 @@ export class Game {
   /** Sky Flag HUD block: bricks, altitudes, the sea, the mark, the flag, the pieces, the architect view. */
   private ascentHud(asc: AscentState, p: Entity): NonNullable<HudState['ascent']> {
     const ground = this.app.terrain.heightAt(p.pos.x, p.pos.z);
-    const build = this.buildKind
-      ? {
-          kind: this.buildKind,
-          reason: this.buildAim?.reason ?? 'range',
-          pieces: PIECE_KINDS.map((k) => ({ kind: k, name: t(PIECES[k].nameKey), cost: PIECES[k].cost, icon: PIECES[k].icon, active: k === this.buildKind, affordable: p.bricks >= PIECES[k].cost })),
-          skins: SKIN_LIST.map((sk) => ({ id: sk.id, name: t(sk.nameKey), swatch: sk.swatch, active: sk.id === settings.data.skySkin })),
-        }
-      : null;
+    const build = {
+      kind: this.armed,
+      reason: this.buildAim?.reason ?? 'ok',
+      visible: this.time < this.barUntil || this.armed !== 'path',
+      hint: this.armed === 'path' ? t(IS_TOUCH ? 'buildHintTouch' : 'buildHint') : t(pieceDef(this.armed).descKey),
+      pieces: ARMED_KINDS.map((k) => {
+        const d = pieceDef(k);
+        return { kind: k, name: t(d.nameKey), cost: d.cost, icon: d.icon, active: k === this.armed, affordable: k === 'path' || p.bricks >= d.cost };
+      }),
+      skins: SKIN_LIST.map((sk) => ({ id: sk.id, name: t(sk.nameKey), swatch: sk.swatch, active: sk.id === settings.data.skySkin })),
+    };
     return {
       bricks: p.bricks,
       bricksMax: ASCENT.bricksMax,
@@ -2569,7 +2544,7 @@ export class Game {
       marked: asc.marked ? { name: asc.marked.name, color: asc.marked.colorHex, you: asc.marked === p } : null,
       holder: asc.holder && asc.holder.alive ? { name: asc.holder.name, color: asc.holder.colorHex, you: asc.holder === p, progress: clamp(asc.holdTimer / ASCENT.holdTime, 0, 1) } : null,
       build,
-      arch: { on: this.archOn, left: this.archOn ? this.archTimer / ARCH_TIME : 0, cooldown: this.archCooldown / ARCH_COOLDOWN },
+      arch: { on: false, left: 0, cooldown: 0 },
       strip: this.entities.filter((e) => e.alive).map((e) => ({ y: e.pos.y, color: e.colorHex, you: e === p, marked: e === asc.marked, flag: e === asc.holder })),
       stripFlag: asc.flagHeld ? null : asc.flagPos.y,
       stripSea: asc.seaLevel,
@@ -2841,25 +2816,30 @@ export class Game {
       placedBlocks: this.sky?.placed.size ?? 0,
       modules: this.sky?.moduleCount ?? 0,
       pieces: this.sky ? Object.fromEntries(Array.from(this.sky.count.entries()).map(([id, n]) => [this.entities.find((e) => e.id === id)?.name ?? id, n])) : {},
-      build: this.buildKind,
+      build: this.armed,
       aim: this.buildAim ? { reason: this.buildAim.reason, cells: this.buildAim.plan?.cells.length ?? 0 } : null,
-      arch: this.archOn,
-      archCooldown: Math.round(this.archCooldown * 10) / 10,
+      islands: this.sky?.islands.length ?? 0,
       player: { bricks: this.player.bricks, y: Math.round(this.player.pos.y * 10) / 10, alive: this.player.alive, eliminated: this.player.eliminated, score: this.player.score.total },
       entities: this.entities.map((e) => ({ name: e.name, alive: e.alive, y: Math.round(e.pos.y * 10) / 10, bricks: e.bricks, kills: e.score.kills, peak: Math.round(e.score.peakAltitude), eliminated: e.eliminated, state: this.bots.find((b) => b.entity === e)?.state ?? 'human', task: e.task })),
     };
   }
-  /** Puts a piece in the player's hand (tests). */
-  debugBuild(kind: PieceKind | null): void {
-    if (kind) this.toggleBuild(kind);
-    else this.exitBuild();
+  /** Arms a piece for the player (tests); null or 'path' is the path. */
+  debugBuild(kind: ArmedKind | null): void {
+    if (this.match?.ascent) this.arm(kind ?? 'path');
   }
-  /** Places the piece in hand where it is aimed (tests): returns the reason. */
+  /** Places the armed piece where it is aimed (tests): returns the reason. */
   debugPlace(): string {
-    if (!this.sky || !this.buildKind || !this.match?.ascent) return 'no build';
+    if (!this.sky || !this.match?.ascent) return 'no build';
     const p = this.player;
-    const aim = this.sky.aim(this.buildKind, p.eyePos, p.forward(new THREE.Vector3()), p.pos, p.yaw, this.buildRot, p, p.bricks);
-    if (aim.plan && aim.reason === 'ok' && this.match.ascent.spend(p, aim.cost)) this.sky.place(aim.plan, p);
+    const aim =
+      this.armed === 'path'
+        ? this.sky.aimPath(p, p.pos, p.yaw, p.pitch, this.time, p.bricks, this.buildRot)
+        : this.sky.aim(this.armed, p.eyePos, p.forward(new THREE.Vector3()), p.pos, p.yaw, this.buildRot, p, p.bricks);
+    this.buildAim = aim;
+    if (aim.plan && aim.reason === 'ok' && this.match.ascent.spend(p, aim.cost)) {
+      this.sky.place(aim.plan, p);
+      this.sky.advanceHead(p, aim.plan, this.time);
+    }
     return aim.reason;
   }
   debugSkipBuild(): void {

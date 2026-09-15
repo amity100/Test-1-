@@ -371,7 +371,8 @@ export class CharacterController {
     if (!this.collides(p.x, p.y, p.z, r, h)) return false;
     if (axis !== 1 && this.stepUp(e)) return false;
     // Fast enough and it is only glass: crash through it.
-    if (axis !== 1 && this.breakGlass && Math.hypot(e.vel.x, e.vel.z) > 5.5) {
+    // A sprinting body goes through glass — a player's choice; a bot on a balustrade would only fall.
+    if (axis !== 1 && this.breakGlass && !e.isBot && Math.hypot(e.vel.x, e.vel.z) > 5.5) {
       const sign = delta > 0 ? 1 : -1;
       let broke = false;
       const cols: [number, number][] = axis === 0 ? [[Math.floor(p.x + sign * (r + 0.02)), Math.floor(p.z - r + 0.02)], [Math.floor(p.x + sign * (r + 0.02)), Math.floor(p.z + r - 0.02)]] : [[Math.floor(p.x - r + 0.02), Math.floor(p.z + sign * (r + 0.02))], [Math.floor(p.x + r - 0.02), Math.floor(p.z + sign * (r + 0.02))]];

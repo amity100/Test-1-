@@ -38,6 +38,10 @@ export interface HudAscent {
   build: {
     kind: string;
     reason: string;
+    /** The bar shows for a few seconds after any build key, and while a set piece is armed. */
+    visible: boolean;
+    /** What the bar says when nothing is wrong: how to build, or what the armed piece is. */
+    hint: string;
     pieces: { kind: string; name: string; cost: number; icon: string; active: boolean; affordable: boolean }[];
     skins: { id: string; name: string; swatch: [string, string, string]; active: boolean }[];
   } | null;
@@ -125,8 +129,8 @@ export interface HudMarker {
   name: string;
   color: string;
   dist: number;
-  /** threat = damaged you within the last seconds; capture = taking the flag; leader = comeback target; radar = streak reveal; ally = squadmate. */
-  kind: 'threat' | 'near' | 'capture' | 'leader' | 'radar' | 'ally';
+  /** threat = damaged you within the last seconds; capture = taking the flag; leader = comeback target; radar = streak reveal; ally = squadmate; island = the next sky island up. */
+  kind: 'threat' | 'near' | 'capture' | 'leader' | 'radar' | 'ally' | 'island';
 }
 
 export interface ScoreRow {
@@ -745,9 +749,9 @@ export class HUD {
       this.last.seaCls = seaCls;
       this.skySea.className = `sky-sea ${seaCls}`;
     }
-    // Pieces in hand.
+    // The piece bar: the path and the set pieces, with the finish chips over it.
     const b = a.build;
-    if (b && s.alive) {
+    if (b && s.alive && b.visible) {
       if (this.skyPieceEls.length === 0) {
         for (const p of b.pieces) {
           const tile = el('div', 'sky-piece');
@@ -799,7 +803,10 @@ export class HUD {
         if (sn.textContent !== sk.name) sn.textContent = sk.name;
       });
       this.skyHint.hidden = false;
-      const hint = b.reason === 'ok' ? t(a.arch.on ? 'archHint' : 'buildHint') : t(b.reason === 'bricks' ? 'needBricksShort' : b.reason === 'body' ? 'placeBody' : b.reason === 'blocked' ? 'placeBlocked' : b.reason === 'unanchored' ? 'placeUnanchored' : 'placeRange');
+      const hint =
+        b.reason === 'ok'
+          ? b.hint
+          : t(b.reason === 'bricks' ? 'needBricksShort' : b.reason === 'occupied' ? 'placeOccupied' : b.reason === 'unsupported' ? 'placeUnsupported' : b.reason === 'full' ? 'placeFull' : 'placeRange');
       this.set('skyHint', this.skyHint, hint);
       this.skyHint.classList.toggle('bad', b.reason !== 'ok');
     } else {

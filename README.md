@@ -36,36 +36,35 @@ GitHub Pages). Single-file build for artifact hosting: `npm run build:artifact` 
    victim's bricks (at least six) as a cluster that hovers over the spot for ten seconds and then
    plunges, and whoever walks through it takes them. The marked leader drops a bounty of twelve
    more.
-2. **Building.** One tap puts down a whole module, snapped to the island's eight-metre grid at the
-   level you are standing on. `B` takes a module in hand (the fire button becomes PLACE on a phone);
-   `1`-`5` or the wheel pick it, `R` turns it, `C` changes the finish, click places it, holding places
-   a run. Five modules: a **hall** (4 bricks: a glass-walled storey with dark pilasters, a framed
-   portal with a lit sign in your colour on the side you came from, and a straight flight under a
-   lit ceiling up to its own roof terrace, six metres up), a **terrace** (2: eight metres of floor
-   inside a dark rim, glass balustrades between posts of light, a fascia beam under every edge), a
-   **stair** (3: a grand stair six wide between stringer walls with a glowing handrail, a passage
-   under it), a **bridge** (2 per cell: a glass-railed span on a girder arch that reaches until it
-   meets something, up to three cells) and a **stadium** (10: a round bowl twenty-three metres
-   across with a two-step tier, four framed gates, four light masts and a lit dais).
-
-   Every builder has a **finish**: Aurora (ivory cladding, graphite frames, gold), Obsidian
-   (charcoal panels, silver frames, smoked glass) or Ember (sand concrete, bronze frames, copper).
-   You pick yours with `C` or the chips over the piece bar; the bots take turns through all three,
-   so a shared citadel has the patchwork of a real skyline. Your colour is only ever light: the
-   posts on the balustrades, the handrails, the sign over your portals, the crystal in your keels.
+2. **Building, with the weapon never leaving your hands.** Hold `B` (BUILD on a phone) and a path
+   grows where you walk: look up and the next piece is a **stair** (3 bricks: six wide between
+   stringer walls with a glowing handrail, six metres up to its own landing), look ahead and it is a
+   **terrace** (2: eight metres of floor behind glass balustrades and posts of light). A press lays
+   one piece where your path ends; held down it keeps laying them as you climb, so a road climbs
+   into the sky under your feet. Turn and the path turns with you. `X` cycles the set pieces and
+   shows their ghost until `B` places one: a **hall** (4: a glass-walled storey with a portal and a
+   stair up to its own roof terrace), a **bridge** (2 per cell: a glass-railed span that reaches
+   until it meets something, up to three cells) and a **stadium** (10: a round bowl twenty-three
+   metres across with four gates, light masts and a lit dais). `R` turns a piece, `C` picks your
+   **finish** — Aurora (ivory, graphite, gold), Obsidian (charcoal, silver, smoked glass) or Ember
+   (sand, bronze, copper); the bots take turns through all three, so a shared citadel has the
+   patchwork of a real skyline. Your colour is only ever light: the posts on the balustrades, the
+   handrails, the strip over your portals, the crystal in your keels.
 
    Nothing has to be lined up by hand. An architect dresses every cell and its neighbours: floors
    get a rim and a fascia where they face out, edges that face out get balustrades, cells that touch
    merge into one hall with a portal instead of a wall, a floor with a hall under it gets a
    stairwell, a terrace on top of a stack gets a light mast, and everything hanging in the air
-   grows four pylons down to the hill or a stepped keel with a crystal in your colour glowing under
-   it. Modules cut their own rooms out of a hillside, so a portal never opens into earth. Every
-   pane of glass can be shot out or run through. A green ghost of the real masonry shows where it
-   will land; amber means you cannot afford it, red that something is already there or that there
-   is nothing to build from.
-3. **The architect view** (`X`, or EYE on a phone) lifts the camera fifteen metres up for four
-   seconds so you can lay modules onto the ground plane by cursor or a still finger, then drops you
-   back; your body stays exposed the whole time, and it cools down for six seconds.
+   grows four pylons down to the hill or a stepped keel with a crystal glowing under it. Every pane
+   of glass can be shot out or run through. A green ghost of the real masonry shows where a piece
+   will land; amber means you cannot afford it, red that something is already there.
+3. **The sky islands.** Eight neutral plazas hang over the island from the first second: four
+   thirty-six metres up over the shores, three sixty metres up closer in, and the summit
+   eighty-four metres up in the middle, under the flag's approach. Each is a three-by-three
+   terrace with a hall in the corner nearest the middle of the map and a cache of ten bricks in
+   the centre that comes back thirty seconds after it is taken. The way up runs through them and so
+   does everyone else's, which is where the fights are; a gold marker points to the next one up.
+   Respawns land on decks halfway up the pack, islands included.
 4. **The flag** starts 180 m up and descends at 0.2 m/s, drifting sideways toward the marked
    leader (or the island centre). Standing within three metres of it takes it; the holder must
    survive twenty seconds. Killing the holder drops the flag right there. The **marked** player is
@@ -146,9 +145,9 @@ GitHub Pages). Single-file build for artifact hosting: `npm run build:artifact` 
 
 WASD move · Space jump · Shift sprint · C crouch/slide · Mouse aim and fire · Right mouse aim down
 sights · 1-3 / wheel weapons · R reload · G grenade · Q / F gadgets · Tab scoreboard · Esc pause.
-Sky Flag: B build (then 1-5 / wheel pick the module, R turns it, C the finish, click or hold places) · X architect
-view; on a phone BUILD, PIECE and EYE buttons sit beside the fire cluster and a still finger in the
-architect view places at the finger.
+Sky Flag: hold B to build your path (look up for stairs, ahead for floor) · X set piece · R turn ·
+C finish. On a phone the arc is trimmed to FIRE, JUMP, aim, reload and one BUILD button (hold it to
+keep building); the piece bar appears while you build and a tap on a tile arms a set piece.
 The mouse is either captured or hidden: click once to capture it, and where a browser refuses to
 lock the pointer (inside an embedding frame, say) aiming still works one-to-one from raw movement,
 with the outer eighth of the window turning the view so a full spin is always possible. Aiming down
