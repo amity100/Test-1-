@@ -161,6 +161,8 @@ await page.screenshot({ path: 'scratch/ascent/a3-sea.png' });
 const flag = await page.evaluate(() => {
   const g = window.__fk.game(); const p = g.player; const asc = g.match.ascent;
   if (!p.alive) { p.alive = true; p.hp = 100; p.deadSince = -1; p.respawnAt = 0; }
+  // Five minutes in, a bot may already be holding the flag: this test is about the player's grab.
+  if (asc.holder && asc.holder !== p) asc.dropFlag(asc.holder);
   // A deck high up under the flag so the player has somewhere to stand.
   const fx = Math.floor(asc.flagPos.x), fz = Math.floor(asc.flagPos.z), fy = Math.floor(asc.flagPos.y) - 2;
   for (let x = fx - 3; x <= fx + 3; x++) for (let z = fz - 3; z <= fz + 3; z++) g.app.world.set(x, fy, z, 3 | (82 << 5));
@@ -170,7 +172,7 @@ const flag = await page.evaluate(() => {
   const taken = { holder: asc.holder?.name ?? null, speed: asc.seaSpeed, untouched: asc.untouched };
   g.debugAdvance(21, 1 / 20);
   const s = g.debugAscent();
-  return { speedBefore, taken, ended: s.ended, winner: s.winner, phase: s.phase, holdTimer: s.holdTimer, won: p.score.won, score: p.score.total };
+  return { speedBefore, taken, ended: s.ended, winner: s.winner, phase: s.phase, holdTimer: s.holdTimer, won: p.score.won, score: p.score.total, alive: p.alive, hp: p.hp, holder: asc.holder?.name ?? null, y: Math.round(p.pos.y), sea: Math.round(asc.seaLevel) };
 });
 console.log('flag', JSON.stringify(flag));
 check('standing under the flag takes it and the sea surges three times faster', flag.taken.holder === 'Sky' && flag.taken.speed > flag.speedBefore * 2, JSON.stringify(flag.taken));

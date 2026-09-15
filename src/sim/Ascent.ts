@@ -184,7 +184,8 @@ export class AscentState {
     if (wasMarked) this.setMarked(null);
   }
 
-  private dropFlag(from: Entity): void {
+  /** Takes the flag out of a holder's hands and leaves it where they stand (also used by probes). */
+  dropFlag(from: Entity): void {
     this.holder = null;
     this.holdTimer = 0;
     this.flagLock = ASCENT.flagRelock;
