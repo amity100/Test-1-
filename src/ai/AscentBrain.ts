@@ -38,8 +38,8 @@ export class AscentBrain extends BotBrain {
   private lastPlaced = 0;
   private think = 0;
   private lastIntent: Intent | null = null;
-  /** The island last stood on, and how long to hold it before building on. */
-  private lastIsland: THREE.Vector3 | null = null;
+  /** The height at which this bot last stopped to hold what it had built, and until when. */
+  private bestY = -1e9;
   private holdUntil = 0;
   /** Last module tried and its verdict (diagnostics). */
   lastAimReason = '';
@@ -65,9 +65,9 @@ export class AscentBrain extends BotBrain {
     this.route = [];
     this.routeAt = 0;
     this.lastPlaced = this.nowSeen;
-    this.lastIsland = null;
-    this.holdUntil = 0;
     this.sky.forgetHead(this.entity.id);
+    this.bestY = -1e9;
+    this.holdUntil = 0;
   }
 
   protected override decide(dt: number, now: number, threat: Entity | null, nav: NavSystem | null): Intent {
@@ -124,7 +124,7 @@ export class AscentBrain extends BotBrain {
         const spot = carrying ? this.higherGround(asc, 12) : null;
         goal = spot && spot.y > e.pos.y + 1 ? spot : null;
         if (!goal) this.scan(now);
-        if (!carrying && e.bricks >= PIECES.ramp.cost && this.nowSeen > this.holdUntil) this.jobTimer = 0;
+        if (!carrying && e.bricks >= PIECES.ramp.cost) this.jobTimer = 0;
         break;
       }
       case 'hunt': {
@@ -205,8 +205,6 @@ export class AscentBrain extends BotBrain {
       }
     }
     if (e.bricks < PIECES.ramp.cost && asc.altitude(e) > 2.5 && this.route.length === 0) return 'hold';
-    // Just arrived on an island: hold it for a while — that is where the others are coming.
-    if (this.nowSeen < this.holdUntil && this.route.length === 0) return 'hold';
     return 'climb';
   }
 
@@ -278,9 +276,6 @@ export class AscentBrain extends BotBrain {
       }
       if (this.route.length > 0) return this.route[this.routeAt].clone();
     }
-    // Standing on an island: hold it a while before building on — that is where everyone meets.
-    this.noteIsland();
-    if (!urgent && now < this.holdUntil) return null;
     // Nothing under way: the next piece of the path toward the next island up (or the flag, from
     // the top), and now and then a wider floor to fight on.
     if (this.buildCooldown <= 0 && e.bricks >= PIECES.ramp.cost) {
@@ -298,6 +293,17 @@ export class AscentBrain extends BotBrain {
         if (room) return room;
       }
     }
+    // Every dozen metres gained, stand a while on what was just built: watch the sky, shoot at
+    // whoever is climbing nearby, let the others catch up. A race straight into the clouds is over
+    // before anyone meets anyone.
+    if (!urgent && e.pos.y > this.bestY + 12) {
+      this.bestY = e.pos.y;
+      this.holdUntil = now + this.rand.range(4, 9);
+    }
+    if (!urgent && now < this.holdUntil && this.route.length === 0) {
+      this.scan(now);
+      return null;
+    }
     const aloft = asc.altitude(e) > 2.5;
     if (urgent) {
       // The water is at our heels: anything higher is worth the risk, and inland is uphill.
@@ -312,38 +318,34 @@ export class AscentBrain extends BotBrain {
     return foot;
   }
 
-  /** Where the climb is heading: the nearest sky island above us, else the flag when it is higher. */
+  /**
+   * Where the climb is heading. Close under the flag, the flag itself. Otherwise the highest floor
+   * anyone has built within reach: paths grow toward whatever already stands, which is both the
+   * cheapest way up and where everyone else is — so towers meet instead of standing alone. Only
+   * when nothing higher exists does a builder strike out for the flag's own column.
+   */
   private climbTarget(asc: AscentState): THREE.Vector3 | null {
     const e = this.entity;
-    let best: THREE.Vector3 | null = null;
-    let bestD = Infinity;
-    for (const isl of this.sky.islands) {
-      if (isl.pos.y < e.pos.y + 3 || isl.pos.y < asc.seaLevel + 4) continue;
-      const d = Math.hypot(isl.pos.x - e.pos.x, isl.pos.z - e.pos.z) + (isl.pos.y - e.pos.y) * 1.5;
-      if (d < bestD) {
-        bestD = d;
-        best = isl.pos;
-      }
-    }
-    if (best) return best;
-    // Above every island: hold the summit and fight for it until the flag is within reach above,
-    // rather than spiralling a lone stair a hundred metres into the clouds.
     const up = asc.flagPos.y - e.pos.y;
-    if (up > 3 && up < 30 && !asc.flagHeld) return asc.flagPos;
-    return null;
+    if (up > 3 && up < 26 && !asc.flagHeld) return asc.flagPos;
+    const prey = this.prey(asc);
+    if (prey && prey.pos.y > e.pos.y + 4 && prey.pos.distanceTo(e.pos) < 60) return prey.pos;
+    const high = this.higherGround(asc, 70);
+    if (high && high.y > e.pos.y + 3) return high;
+    // Already the highest thing standing: a lone stair into the clouds wins nothing and meets
+    // nobody. Once well clear of the pack, hold what is built and let them come; the flag is coming
+    // down anyway, and it comes down onto whoever is highest.
+    if (e.pos.y - this.packHeight() > 18) return null;
+    return up > 3 ? asc.flagPos : null;
   }
 
-  /** Remembers arriving on an island and sets how long to hold it. */
-  private noteIsland(): void {
-    const e = this.entity;
-    for (const isl of this.sky.islands) {
-      if (Math.abs(isl.pos.y - e.pos.y) > 3 || Math.hypot(isl.pos.x - e.pos.x, isl.pos.z - e.pos.z) > 13) continue;
-      if (this.lastIsland !== isl.pos) {
-        this.lastIsland = isl.pos;
-        this.holdUntil = this.nowSeen + this.rand.range(6, 14);
-      }
-      return;
-    }
+  /** The height the field is at: the middle of everyone else still alive. */
+  private packHeight(): number {
+    const ys: number[] = [];
+    for (const o of this.ctx.entities()) if (o !== this.entity && o.alive) ys.push(o.pos.y);
+    if (ys.length === 0) return this.entity.pos.y;
+    ys.sort((a, b) => a - b);
+    return ys[ys.length >> 1];
   }
 
   /**

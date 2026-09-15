@@ -31,8 +31,9 @@ GitHub Pages). Single-file build for artifact hosting: `npm run build:artifact` 
 
 ### Sky Flag
 
-1. **Twelve on one island, twelve minutes.** Everyone spawns spread around the shore with
-   twenty-four bricks. One brick trickles in every three seconds (up to 60 in hand); a kill drops most of the
+1. **Twelve on one island, twelve minutes.** Nothing is built when the round starts: twelve players
+   stand on the sand, and the whole city of the next twelve minutes is the one they build. Everyone
+   spawns spread around the shore with twenty-four bricks. One brick trickles in every three seconds (up to 60 in hand); a kill drops most of the
    victim's bricks (at least six) as a cluster that hovers over the spot for ten seconds and then
    plunges, and whoever walks through it takes them. The marked leader drops a bounty of twelve
    more.
@@ -51,32 +52,29 @@ GitHub Pages). Single-file build for artifact hosting: `npm run build:artifact` 
    patchwork of a real skyline. Your colour is only ever light: the posts on the balustrades, the
    handrails, the strip over your portals, the crystal in your keels.
 
-   Nothing has to be lined up by hand. An architect dresses every cell and its neighbours: floors
-   get a rim and a fascia where they face out, edges that face out get balustrades, cells that touch
-   merge into one hall with a portal instead of a wall, a floor with a hall under it gets a
-   stairwell, a terrace on top of a stack gets a light mast, and everything hanging in the air
-   grows four pylons down to the hill or a stepped keel with a crystal glowing under it. Every pane
-   of glass can be shot out or run through. A green ghost of the real masonry shows where a piece
-   will land; amber means you cannot afford it, red that something is already there.
-3. **The sky islands.** Eight neutral plazas hang over the island from the first second: four
-   thirty-six metres up over the shores, three sixty metres up closer in, and the summit
-   eighty-four metres up in the middle, under the flag's approach. Each is a three-by-three
-   terrace with a hall in the corner nearest the middle of the map and a cache of ten bricks in
-   the centre that comes back thirty seconds after it is taken. The way up runs through them and so
-   does everyone else's, which is where the fights are; a gold marker points to the next one up.
-   Respawns land on decks halfway up the pack, islands included.
-4. **The flag** starts 180 m up and descends at 0.2 m/s, drifting sideways toward the marked
+   Nothing has to be lined up by hand, and nothing anyone builds can wall you out. An architect
+   dresses every cell and its neighbours: floors get a rim and a fascia where they face out, edges
+   that face out get balustrades low enough to step over, cells that touch merge into one hall with
+   a portal instead of a wall, a floor with a hall under it gets a stairwell, **a floor built over a
+   stair opens for the head of the flight**, so a climb never ends in a ceiling, **every hall has
+   two facing portals** and is a way through rather than a dead end, a terrace on top of a stack
+   gets a light mast, and everything hanging in the air grows four pylons down to the hill or a
+   stepped keel with a crystal glowing under it. Every pane of glass can be shot out or run through.
+   So whatever anyone builds is a way up for everyone: paths cross, towers grow into one city, and
+   that is where the fighting happens. A green ghost of the real masonry shows where a piece will
+   land; amber means you cannot afford it, red that something is already there.
+3. **The flag** starts 180 m up and descends at 0.2 m/s, drifting sideways toward the marked
    leader (or the island centre). Standing within three metres of it takes it; the holder must
    survive twenty seconds. Killing the holder drops the flag right there. The **marked** player is
    whoever stands highest, at least six metres above the ground and four metres above the next;
    they carry a crown and an eighty-metre beam.
-5. **The sea** starts rising at 5:30 (0.12 m/s) and three times faster after the first grab; being
+4. **The sea** starts rising at 5:30 (0.12 m/s) and three times faster after the first grab; being
    under it drowns you in about two and a half seconds. Falls hurt from 15 m/s and kill from 44 m/s
    of landing speed. Whoever dies respawns after five seconds on a free deck halfway up the pack
    (or the shore); once nothing dry is left, they are out. A grab held for twenty seconds, the water
    reaching the flag, time running out, or one player left ends the match; the winner is the holder,
    else the highest.
-6. **Scoring**: 5 per kill, 1 per brick collected, 2 per five metres of peak altitude, 3 per second
+5. **Scoring**: 5 per kill, 1 per brick collected, 2 per five metres of peak altitude, 3 per second
    of holding the flag, 150 for the win. The podium sorts by win, then score, kills and peak height.
 
 ### Fortress War
@@ -296,6 +294,15 @@ rules core (`src/sim/Ascent.ts`), bots that build towers and walk the architect'
 (`src/ai/AscentBrain.ts`), a rising sea with swell, deep colour and crest foam, a cloud band and
 underwater murk in the height fog, and the flag, marked beam, brick clusters and placement ghosts
 (`src/render/AscentMeshes.ts`).
+
+The picture holds still. Fine detail — the bevel along every block edge, the per-block shade
+variation, the normal map — fades out as one pixel grows to cover more than a fraction of a block,
+and a surface too small to resolve is shaded as a rougher one. That is what stops a moving view from
+crawling with shimmer, and it makes distant pixels cheaper at the same time. Glass skips normal
+mapping altogether, and only the regions the sun's shadow camera actually covers are drawn into the
+shadow map — with a hundred regions in the sky that second pass had become the most expensive thing
+in the frame. The dynamic resolution never falls below 0.85 of native, because a soft picture reads
+as worse graphics than a slightly slower one.
 
 Performance is measured, not guessed: `?debug=perf` shows the millisecond cost of each subsystem,
 the GPU frame time where the driver exposes a timer query, draw calls and the render resolution.

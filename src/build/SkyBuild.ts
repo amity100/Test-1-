@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { VoxelWorld } from '../world/VoxelWorld';
 import type { Terrain } from '../world/Terrain';
 import type { Entity } from '../sim/Entities';
-import { SKY_PALETTE, SKY_PLAYER_PALETTE } from '../world/Voxel';
+import { SKY_PLAYER_PALETTE } from '../world/Voxel';
 import { PLAYABLE_RADIUS } from '../world/Layout';
 import { Emitter } from '../core/Events';
 import { CELL, DIRS, STOREY, SkyPlan, cellKey, cellOf, cellX, cellZ, type SkyCell, type SkyKind } from './SkyPlan';
@@ -55,13 +55,6 @@ export interface PathHead {
   at: number;
 }
 
-/** A neutral sky island in the plan, for bots and the HUD. */
-export interface SkyIsland {
-  pos: THREE.Vector3;
-  y: number;
-  nameKey: string;
-}
-
 export type PlaceReason = 'ok' | 'bricks' | 'occupied' | 'unsupported' | 'full' | 'bounds';
 
 export interface PlacePlan {
@@ -96,8 +89,7 @@ const CELL_CAP = 1200;
 const CLIMB_PITCH = 0.12;
 /** A path restarts under the builder's feet once they are this far from its end. */
 const PATH_REACH = 20;
-/** The builder of the sky islands: nobody. */
-const NEUTRAL = { id: -1, colorIndex: 0, isBot: false } as unknown as Entity;
+
 
 /** Nearest of the four facings (0 +X, 1 +Z, 2 -X, 3 -Z) to a yaw. */
 export function quantizeYaw(yaw: number): number {
@@ -121,9 +113,6 @@ export class SkyBuilder {
 
   /** Which finish a builder builds in: bots take turns through the three, the player picks. */
   skinFor: (e: Entity) => number = (e) => (e.isBot ? e.colorIndex % 3 : 0);
-  /** The neutral sky islands placed at the start of the match. */
-  readonly islands: SkyIsland[] = [];
-
   private owner = new Map<number, number>();
   /** Where each builder's path ends, by entity id. */
   private heads = new Map<number, PathHead>();
@@ -256,14 +245,6 @@ export class SkyBuilder {
     this.heads.delete(id);
   }
 
-  /** A sky island's module: nobody's, free, and allowed to hang in the air. */
-  placeNeutral(kind: PieceKind, i: number, j: number, y: number, dir: number): PlacePlan | null {
-    const res = this.planAt(kind, i, j, y, dir, NEUTRAL, 9999);
-    if (!res.plan || (res.reason !== 'ok' && res.reason !== 'unsupported')) return null;
-    this.place(res.plan, NEUTRAL, true);
-    return res.plan;
-  }
-
   /** The same from an entity's own eyes (bots). */
   aimFrom(kind: PieceKind, e: Entity, rot = 0): AimResult {
     return this.aim(kind, e.eyePos, e.forward(new THREE.Vector3()), e.pos, e.yaw, rot, e, e.bricks);
@@ -299,9 +280,8 @@ export class SkyBuilder {
   /** Works out the cells of a module and everything that could stop it. */
   private planAt(kind: PieceKind, i: number, j: number, y: number, dir: number, self: Entity, bricks: number): AimResult {
     const target = cellKey(i, j, y);
-    const neutral = self.id < 0;
-    const color = neutral ? SKY_PALETTE.gold : this.colorIndex(self);
-    const skin = neutral ? 0 : this.skinFor(self);
+    const color = this.colorIndex(self);
+    const skin = this.skinFor(self);
     const group = 0;
     const now = 0;
     const mk = (ci: number, cj: number, cy: number, k: SkyKind, cdir = dir, host?: number): SkyCell => ({
@@ -408,7 +388,7 @@ export class SkyBuilder {
   // ---- placing --------------------------------------------------------------
 
   /** Puts a planned module into the plan, regenerates every cell it changes, and returns its group. */
-  place(p: PlacePlan, owner: Entity, silent = false): number {
+  place(p: PlacePlan, owner: Entity): number {
     const group = this.plan.group();
     const lifted: Entity[] = [];
     for (const c of p.cells) {
@@ -444,7 +424,7 @@ export class SkyBuilder {
     let n = 0;
     for (const c of order) n += this.regenerate(c);
     this.count.set(owner.id, (this.count.get(owner.id) ?? 0) + 1);
-    if (!silent) this.events.emit('placed', { kind: p.kind, cells: n, owner, centre: p.centre.clone() });
+    this.events.emit('placed', { kind: p.kind, cells: n, owner, centre: p.centre.clone() });
     return group;
   }
 
@@ -584,6 +564,5 @@ export class SkyBuilder {
     this.plan.clear();
     this.count.clear();
     this.heads.clear();
-    this.islands.length = 0;
   }
 }

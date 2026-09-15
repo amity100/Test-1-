@@ -193,7 +193,7 @@ export class App {
     const best = sorted[Math.floor(sorted.length * 0.25)];
     this.frameWindow.length = 0;
     const mobile = settings.mobileSafe || this.gr.mobileSafe;
-    const wantMs = 1000 / (mobile ? 50 : 55);
+    const wantMs = 1000 / (mobile ? 50 : 52);
     if (typical * 1000 > wantMs) {
       this.gr.setResolutionScale(this.gr.resScale - 0.08);
       this.steadyFor = 0;

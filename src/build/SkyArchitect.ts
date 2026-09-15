@@ -115,6 +115,8 @@ const HOLE = { lx0: 3, lx1: 5, lz0: 3, lz1: 5 };
 /** The portal on a hall face: three blocks wide, four tall. */
 const PORTAL_FROM = 3;
 const PORTAL_TO = 5;
+/** First step of a flight whose head would be crushed by a floor one storey up. */
+const STAIR_HEAD_FROM = 5;
 
 export class SkyArchitect {
   constructor(
@@ -217,7 +219,11 @@ export class SkyArchitect {
     const tower = this.towerBelow(c);
     const hole = tower ? this.holeRect(tower) : null;
     const openSide = [0, 1, 2, 3].map((s) => this.open(c, s));
-    const inHole = (lx: number, lz: number): boolean => !!hole && lx >= hole.x0 && lx <= hole.x1 && lz >= hole.z0 && lz <= hole.z1;
+    // A stair below comes up through this floor: the head of its flight is left open, or the last
+    // steps would be swallowed by the slab and the climb would end in a ceiling.
+    const stairHead = this.stairHead(c);
+    const inHole = (lx: number, lz: number): boolean =>
+      (!!hole && lx >= hole.x0 && lx <= hole.x1 && lz >= hole.z0 && lz <= hole.z1) || stairHead.has(lx * CELL + lz);
     const variant = hash(c.i, c.j, c.y) % 3;
     for (let lx = 0; lx < CELL; lx++)
       for (let lz = 0; lz < CELL; lz++) {
@@ -237,6 +243,23 @@ export class SkyArchitect {
         }
         e.set(x0 + lx, y, z0 + lz, v);
       }
+  }
+
+  /**
+   * Cell-local positions this floor must leave open for a stair climbing under it. The last steps of
+   * a flight reach within a block of the floor above, so a slab over them is a ceiling on the head
+   * of whoever is climbing: those columns are cut away, and the stair arrives through the opening.
+   */
+  private stairHead(c: SkyCell): Set<number> {
+    const out = new Set<number>();
+    const below = this.plan.below(c.i, c.j, c.y);
+    if (!below || below.kind !== 'ramp') return out;
+    for (let lx = STAIR_HEAD_FROM; lx < CELL; lx++)
+      for (let lz = 1; lz <= CELL - 2; lz++) {
+        const [ax, az] = rotLocal(lx, lz, below.dir);
+        out.add(ax * CELL + az);
+      }
+    return out;
   }
 
   // ---- terrace --------------------------------------------------------------
@@ -395,9 +418,10 @@ export class SkyArchitect {
     const r = c.dir;
     const pen = new Pen(e, x0, z0, r);
     const put = (lx: number, lz: number, yy: number, v: number): void => pen.put(lx, lz, yy, v);
-    // The way in is the face the stair climbs away from — the side whoever built it stands on — and
-    // any side where a deck or stair already reaches the wall.
-    const doors = [0, 1, 2, 3].map((s) => s === (c.dir + 2) % 4 || !this.open(c, s) || this.rampAt(c, s));
+    // A hall is always a way through, never a dead end: the face the stair climbs away from — the
+    // side whoever built it stands on — and the face opposite it are both open, and so is any side
+    // where a deck or a stair already reaches the wall. The two remaining faces are the cover.
+    const doors = [0, 1, 2, 3].map((s) => s === (c.dir + 2) % 4 || s === c.dir || !this.open(c, s) || this.rampAt(c, s));
     // Two window rhythms: a band window across the face, or two tall slots.
     const tall = hash(c.i, c.j, c.y) % 2 === 1;
     for (let s = 0; s < 4; s++) {

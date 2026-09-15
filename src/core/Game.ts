@@ -31,7 +31,6 @@ import { WAR } from '../sim/War';
 import { AscentState, ASCENT, type AscentHooks } from '../sim/Ascent';
 import { perf } from './Perf';
 import { SkyBuilder, ARMED_KINDS, pieceDef, type ArmedKind, type PieceKind, type AimResult } from '../build/SkyBuild';
-import { spawnIslands } from '../build/SkyIslands';
 import { SKIN_IDS, SKIN_LIST, skinIndex } from '../build/SkySkins';
 import { AscentBrain } from '../ai/AscentBrain';
 import { AscentMeshes } from '../render/AscentMeshes';
@@ -514,9 +513,6 @@ export class Game {
     this.sky = sky;
     // Bots take turns through the three finishes; you build in the one you picked.
     sky.skinFor = (e) => (e.isBot ? e.colorIndex % SKIN_LIST.length : skinIndex(settings.data.skySkin));
-    // The neutral sky islands: the ladder everyone climbs, with bricks waiting on each step.
-    spawnIslands(sky, this.match?.ascent ?? null);
-    this.app.chunks.flush();
     sky.events.on('placed', ({ kind, owner, centre }) => {
       const mine = owner === this.player;
       audio.play('place', { pos: mine ? undefined : centre, pitch: kind === 'arena' ? 0.62 : kind === 'tower' ? 0.8 : 0.95, volume: mine ? 0.9 : 0.6 });
@@ -2212,24 +2208,6 @@ export class Game {
     this.ghostCells = aim?.plan ? sky.previewCells(aim.plan) : [];
   }
 
-  /** The nearest sky island above the player: the next step of the way up. */
-  private nextIsland(): { pos: THREE.Vector3; nameKey: string } | null {
-    const sky = this.sky;
-    if (!sky) return null;
-    const p = this.player;
-    let best: { pos: THREE.Vector3; nameKey: string } | null = null;
-    let bestD = Infinity;
-    for (const isl of sky.islands) {
-      if (isl.pos.y < p.pos.y + 3) continue;
-      const d = Math.hypot(isl.pos.x - p.pos.x, isl.pos.z - p.pos.z) + (isl.pos.y - p.pos.y) * 1.5;
-      if (d < bestD) {
-        bestD = d;
-        best = isl;
-      }
-    }
-    return best;
-  }
-
   /** Per-frame presentation for Sky Flag: the sea, the flag, the mark, the bricks, the ghost piece, the sky. */
   private ascentVisuals(dt: number): void {
     const tav = perf.now();
@@ -2409,14 +2387,8 @@ export class Game {
       if (asc) {
         if (asc.marked && asc.marked !== p && asc.marked.alive) this.pushMarker(markers, asc.marked, 'leader');
         if (asc.holder && asc.holder !== p && asc.holder.alive) this.pushMarker(markers, asc.holder, 'capture');
-        // The next sky island up: where the way leads, and where the others are heading too.
-        const isl = this.nextIsland();
-        if (isl) {
-          const sc = this.toScreen(new THREE.Vector3(isl.pos.x, isl.pos.y + 3, isl.pos.z), 40);
-          if (sc.onScreen) markers.push({ sx: sc.sx, sy: sc.sy, name: t(isl.nameKey), color: '#ffd36a', dist: isl.pos.distanceTo(p.pos), kind: 'island' });
-        }
       }
-      const order: Record<HudMarker['kind'], number> = { capture: 0, threat: 1, leader: 2, radar: 3, near: 4, ally: 5, island: 6 };
+      const order: Record<HudMarker['kind'], number> = { capture: 0, threat: 1, leader: 2, radar: 3, near: 4, ally: 5 };
       markers.sort((a, b) => order[a.kind] - order[b.kind] || a.dist - b.dist);
     }
     const grenadeWarnings: HudState['grenadeWarnings'] = [];
@@ -2818,7 +2790,6 @@ export class Game {
       pieces: this.sky ? Object.fromEntries(Array.from(this.sky.count.entries()).map(([id, n]) => [this.entities.find((e) => e.id === id)?.name ?? id, n])) : {},
       build: this.armed,
       aim: this.buildAim ? { reason: this.buildAim.reason, cells: this.buildAim.plan?.cells.length ?? 0 } : null,
-      islands: this.sky?.islands.length ?? 0,
       player: { bricks: this.player.bricks, y: Math.round(this.player.pos.y * 10) / 10, alive: this.player.alive, eliminated: this.player.eliminated, score: this.player.score.total },
       entities: this.entities.map((e) => ({ name: e.name, alive: e.alive, y: Math.round(e.pos.y * 10) / 10, bricks: e.bricks, kills: e.score.kills, peak: Math.round(e.score.peakAltitude), eliminated: e.eliminated, state: this.bots.find((b) => b.entity === e)?.state ?? 'human', task: e.task })),
     };

@@ -129,8 +129,8 @@ export interface HudMarker {
   name: string;
   color: string;
   dist: number;
-  /** threat = damaged you within the last seconds; capture = taking the flag; leader = comeback target; radar = streak reveal; ally = squadmate; island = the next sky island up. */
-  kind: 'threat' | 'near' | 'capture' | 'leader' | 'radar' | 'ally' | 'island';
+  /** threat = damaged you within the last seconds; capture = taking the flag; leader = comeback target; radar = streak reveal; ally = squadmate. */
+  kind: 'threat' | 'near' | 'capture' | 'leader' | 'radar' | 'ally';
 }
 
 export interface ScoreRow {

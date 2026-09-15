@@ -29,9 +29,6 @@ export const ASCENT = {
   markedBounty: 12,
   /** Seconds a dropped cluster hangs where its owner died before it plunges. */
   hoverTime: 10,
-  /** Bricks a sky island's cache holds, and the seconds before a taken cache is back. */
-  cacheBricks: 10,
-  cacheRespawn: 30,
   pickupRadius: 1.8,
   // The flag.
   flagStartY: 180,
@@ -85,8 +82,6 @@ export interface BrickDrop {
   falling: boolean;
   landed: boolean;
   dead: boolean;
-  /** A sky island's cache: hangs forever, and comes back a while after it is taken. */
-  cache?: boolean;
 }
 
 export interface AscentHooks {
@@ -100,15 +95,6 @@ export interface AscentHooks {
 }
 
 let nextDropId = 1;
-
-export interface BrickCache {
-  pos: THREE.Vector3;
-  count: number;
-  /** Match time at which the cache reappears (0 = now). */
-  respawnAt: number;
-  /** Id of the drop currently standing for it, or -1 while it is gone. */
-  dropId: number;
-}
 
 /** Live state of a Sky Flag match (owned by Match, read by the game, HUD and bots). */
 export class AscentState {
@@ -125,8 +111,6 @@ export class AscentState {
   /** Seconds since the battle started. */
   elapsed = 0;
   readonly drops: BrickDrop[] = [];
-  /** The islands' brick caches: where they hang, how much, and when a taken one is back. */
-  readonly caches: BrickCache[] = [];
   ended = false;
   winner: Entity | null = null;
   private trickle = 0;
@@ -229,7 +213,6 @@ export class AscentState {
     this.updateSea(dt, entities);
     this.updateMarked(dt, entities);
     this.updateFlag(dt, entities);
-    this.updateCaches();
     this.updateDrops(dt, entities);
     void now;
     // Peak altitude for the score sheet.
@@ -419,41 +402,11 @@ export class AscentState {
     }
   }
 
-  /** A brick cache on a sky island: a permanent pickup that returns a while after it is taken. */
-  addCache(pos: THREE.Vector3, count = ASCENT.cacheBricks, respawn = ASCENT.cacheRespawn): void {
-    void respawn;
-    this.caches.push({ pos: pos.clone(), count, respawnAt: 0, dropId: -1 });
-  }
-
-  /** Puts back any cache whose time has come. */
-  private updateCaches(): void {
-    for (const c of this.caches) {
-      if (c.dropId >= 0 || this.elapsed < c.respawnAt) continue;
-      const id = nextDropId++;
-      c.dropId = id;
-      this.drops.push({
-        id,
-        pos: c.pos.clone(),
-        vel: new THREE.Vector3(),
-        count: c.count,
-        hover: Infinity,
-        colorHex: '#ffd36a',
-        falling: false,
-        landed: false,
-        dead: false,
-        cache: true,
-      });
-    }
-  }
-
   /** Dropped bricks hover, then plunge until they land on something; the sea takes what reaches it. */
   private updateDrops(dt: number, entities: Entity[]): void {
     for (const d of this.drops) {
       if (d.dead) continue;
-      if (d.cache) {
-        // A cache bobs in place; when the sea reaches its island it is simply gone.
-        d.pos.y += Math.sin(this.elapsed * 2.4) * 0.15 * dt;
-      } else if (!d.falling) {
+      if (!d.falling) {
         d.hover -= dt;
         d.pos.y += Math.sin(d.hover * 2.4) * 0.15 * dt;
         if (d.hover <= 0) d.falling = true;
@@ -493,13 +446,6 @@ export class AscentState {
         e.score.bricks += take;
         this.recompute(e);
         d.dead = true;
-        if (d.cache) {
-          const c = this.caches.find((k) => k.dropId === d.id);
-          if (c) {
-            c.dropId = -1;
-            c.respawnAt = this.elapsed + ASCENT.cacheRespawn;
-          }
-        }
         this.hooks.pickup(e, take, d.pos);
         break;
       }

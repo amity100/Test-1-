@@ -45,7 +45,7 @@ export const QUALITY_PROFILES: Record<Quality, QualityProfile> = {
   medium: { pixelRatio: 1.15, ao: true, aoMode: 'Low', aoHalfRes: true, shadowMap: 2048, shadowRadius: 80, godRays: false, chromatic: false, grade: true, softShadows: true, grass: 16000, trees: 140, anisotropy: 4 },
   // High renders at the display's own density: supersampling a desktop monitor cost a quarter of
   // the frame for a sharpness the anti-aliasing already gives.
-  high: { pixelRatio: 1.0, ao: true, aoMode: 'Medium', aoHalfRes: true, shadowMap: 2048, shadowRadius: 80, godRays: true, chromatic: false, grade: true, softShadows: true, grass: 28000, trees: 180, anisotropy: 8 },
+  high: { pixelRatio: 1.0, ao: true, aoMode: 'Low', aoHalfRes: true, shadowMap: 2048, shadowRadius: 80, godRays: true, chromatic: false, grade: true, softShadows: true, grass: 28000, trees: 180, anisotropy: 8 },
   ultra: { pixelRatio: 1.5, ao: true, aoMode: 'High', aoHalfRes: true, shadowMap: 4096, shadowRadius: 90, godRays: true, chromatic: true, grade: true, softShadows: true, grass: 50000, trees: 220, anisotropy: 16 },
 };
 
@@ -212,7 +212,9 @@ export class GameRenderer {
    * chain — stays exactly as it was, so the look holds and only the sharpness gives a little.
    */
   setResolutionScale(k: number): void {
-    const next = Math.max(0.7, Math.min(1, k));
+    // Never below 0.85: the old floor of 0.7 was the blur people saw the moment the card slipped,
+    // and a soft picture reads as worse graphics than a slightly slower one.
+    const next = Math.max(0.85, Math.min(1, k));
     if (Math.abs(next - this.resScale) < 0.02) return;
     this.resScale = next;
     this.resize();
@@ -222,10 +224,11 @@ export class GameRenderer {
   resize(): void {
     const w = Math.max(1, window.innerWidth);
     const h = Math.max(1, window.innerHeight);
-    // Never render more than about three megapixels: a high-density display should not quietly cost
-    // four times the fill rate of a normal one.
+    // Never render more than about four and a half megapixels: a high-density display should not
+    // quietly cost four times the fill rate of a normal one, but an ordinary 1440p monitor must
+    // still get its own pixels rather than an upscale of fewer.
     const want = Math.min(window.devicePixelRatio || 1, this.profile.pixelRatio);
-    const cap = Math.sqrt(3_000_000 / Math.max(1, w * h));
+    const cap = Math.sqrt(4_500_000 / Math.max(1, w * h));
     const pr = Math.max(0.7, Math.min(want, cap) * this.resScale);
     this.renderer.setPixelRatio(pr);
     this.renderer.setSize(w, h, false);

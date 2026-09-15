@@ -39,6 +39,12 @@ const ATTRS: [string, number][] = [
 const REGION_CHUNKS = 2;
 /** Regions rebuilt per frame at most; the rest wait for the next frame. */
 const MERGES_PER_FRAME = 1;
+/**
+ * How far from the viewer a region still casts a shadow. The sun's shadow camera covers eighty
+ * metres around the player, so anything beyond this was drawn into the shadow map for nothing — and
+ * with a city of a hundred regions that second pass was the most expensive thing in the frame.
+ */
+const SHADOW_RANGE = 96;
 
 function regionKey(cx: number, cy: number, cz: number): number {
   const rx = Math.floor(cx / REGION_CHUNKS) + 512;
@@ -98,7 +104,24 @@ export class ChunkRenderer {
     // A region rebuild is the other big bill of the frame, so it waits for a frame that has budget
     // left — unless the queue has drained, when one region per frame is the pace regardless.
     if (world.dirty.size === 0 || performance.now() - start < budgetMs) this.mergeDirtyRegions(world, MERGES_PER_FRAME);
+    this.tuneShadows();
     return world.dirty.size > 0 || this.pendingMerges > 0;
+  }
+
+  /** Only the regions the sun's shadow camera actually covers are drawn into the shadow map. */
+  private tuneShadows(): void {
+    const size = REGION_CHUNKS * 16;
+    const half = size / 2;
+    const reach = SHADOW_RANGE + half;
+    for (const r of this.regions.values()) {
+      const m = r.opaque;
+      if (!m) continue;
+      const dx = r.rx * size + half - this.focus.x;
+      const dy = r.ry * size + half - this.focus.y;
+      const dz = r.rz * size + half - this.focus.z;
+      const near = dx * dx + dy * dy + dz * dz < reach * reach;
+      if (m.castShadow !== near) m.castShadow = near;
+    }
   }
 
   /** Remesh everything now (used after big edits / loads). */

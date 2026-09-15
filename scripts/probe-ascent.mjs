@@ -33,6 +33,7 @@ check('a Sky Flag match starts straight into the intro with 12 players, 12 colou
 const build = await page.evaluate(() => {
   const g = window.__fk.game();
   g.debugSkipIntro();
+  const startCells = g.sky.plan.size; // nothing may stand before anyone builds
   g.debugAdvance(0.5, 1 / 20);
   const p = g.player;
   const spawnYs = g.entities.map((e) => Math.round(e.pos.y));
@@ -70,7 +71,7 @@ const build = await page.evaluate(() => {
   const mine = [...g.sky.plan.cells.values()].filter((c) => c.owner === p.id);
   const pathRamp = mine.some((c) => c.kind === 'ramp');
   g.debugBuild(null);
-  return { before, r1, afterTower, climbed, roof, reached: at, wps: wps.length, r2, afterDeck, r3, pathRamp, islands: g.sky.islands.length };
+  return { before, r1, afterTower, climbed, roof, reached: at, wps: wps.length, r2, afterDeck, r3, pathRamp, startCells };
 });
 console.log('build', JSON.stringify(build));
 check('battle phase, weapons out, the player alive', build.before.mode === 'battle' && build.before.phase === 'round' && build.before.alive, JSON.stringify({ ...build.before, spawnYs: undefined }));
@@ -79,7 +80,7 @@ check('a stair tower goes down in front of the player and costs 4 bricks', build
 check('the tower can be walked from its door to its roof, six metres up', build.reached === build.wps && build.roof > -0.6, `climbed ${build.climbed.toFixed(2)} m, roof offset ${build.roof.toFixed(2)} m, ${build.reached}/${build.wps} waypoints`);
 check('a deck goes down where aimed and costs 2 bricks', build.r2 === 'ok' && build.afterDeck.bricks === build.afterTower.bricks - 2 && build.afterDeck.cells > build.afterTower.cells, `${build.r2} cells ${build.afterDeck.cells} modules ${build.afterDeck.modules}`);
 check('the path lays a stair ahead when looking up, with one key and the weapon still out', build.r3 === 'ok' && build.pathRamp, `${build.r3} ramp ${build.pathRamp}`);
-check('eight neutral sky islands hang over the island from the start', build.islands === 8, `${build.islands}`);
+check('the match starts with nothing built: the only cells are the ones just placed', build.startCells === 0, `${build.startCells} cells before building`);
 await frames(10);
 await page.screenshot({ path: 'scratch/ascent/a1-build.png' });
 

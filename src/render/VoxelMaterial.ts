@@ -65,7 +65,7 @@ export function createVoxelMaterials(tex: VoxelTextureSet): VoxelMaterials {
       side: THREE.FrontSide,
       envMapIntensity: 1.0,
     });
-    mat.customProgramCacheKey = () => (transparent ? 'voxel-transparent-v3' : 'voxel-opaque-v3');
+    mat.customProgramCacheKey = () => (transparent ? 'voxel-transparent-v4' : 'voxel-opaque-v4');
     mat.onBeforeCompile = (shader) => {
       Object.assign(shader.uniforms, uniforms);
       shader.vertexShader = shader.vertexShader
@@ -121,30 +121,41 @@ export function createVoxelMaterials(tex: VoxelTextureSet): VoxelMaterials {
           vec4 texelColor = texture(uAlbedo, vUvA);
           vec4 orm = texture(uORM, vUvA);
           vec3 wnrm = normalize(vWNormal);
+          // How much of a block one pixel covers. Close up a pixel is a fraction of a block and
+          // every edge and grain is worth drawing; far away one pixel spans whole blocks, and the
+          // same detail turns into the crawling shimmer that made a moving view look cheap. So the
+          // fine work fades out with distance instead of being sampled under it.
+          vec2 fw = fwidth(vUvB);
+          float texelSize = max(fw.x, fw.y);
+          float detail = 1.0 - smoothstep(0.10, 0.42, texelSize);
           // Per-block value variation so repeated blocks do not tile.
           vec3 cell = floor(vWPos - wnrm * 0.5 + vec3(0.001));
           float bh = fract(sin(dot(cell, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
-          float variation = 0.92 + 0.15 * bh;
+          float variation = mix(1.0, 0.92 + 0.15 * bh, detail);
           // Bevelled edges: a thin darker band along every block border.
           vec2 fuv = fract(vUvB);
           float ex = min(fuv.x, 1.0 - fuv.x);
           float ey = min(fuv.y, 1.0 - fuv.y);
           float bw = uBevel[int(vMat + 0.5)];
-          float bevelX = smoothstep(0.0, bw, ex);
-          float bevelY = smoothstep(0.0, bw, ey);
+          float bevelX = mix(1.0, smoothstep(0.0, bw, ex), detail);
+          float bevelY = mix(1.0, smoothstep(0.0, bw, ey), detail);
           float bevel = min(bevelX, bevelY);
           float bevelDark = mix(0.74, 1.0, bevel);
           // Faint top-light: upward faces slightly brighter, undersides darker.
           float faceLight = 1.0 + wnrm.y * 0.05;
           diffuseColor.rgb *= texelColor.rgb * vTint * variation * bevelDark * faceLight;`,
         )
-        .replace('#include <roughnessmap_fragment>', `float roughnessFactor = min(1.0, orm.r + (1.0 - bevel) * 0.3);`)
+        // Specular anti-aliasing: a surface too small to resolve is treated as rougher, so the
+        // highlight spreads instead of flickering between pixels as the view moves.
+        .replace('#include <roughnessmap_fragment>', `float roughnessFactor = min(1.0, mix(max(orm.r, 0.5), orm.r + (1.0 - bevel) * 0.3, detail));`)
         .replace('#include <metalnessmap_fragment>', `float metalnessFactor = orm.g;`)
         .replace(
           '#include <normal_fragment_maps>',
-          `{
+          transparent
+            ? ''
+            : `if (detail > 0.01) {
             vec3 mapN = texture(uNormal, vUvA).xyz * 2.0 - 1.0;
-            mapN.xy *= uNormalScale;
+            mapN.xy *= uNormalScale * detail;
             // Tilt the normal outwards at bevelled edges.
             float tx = (1.0 - bevelX) * (fuv.x < 0.5 ? -1.0 : 1.0);
             float ty = (1.0 - bevelY) * (fuv.y < 0.5 ? -1.0 : 1.0);
