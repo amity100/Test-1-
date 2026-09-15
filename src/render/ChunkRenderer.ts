@@ -10,11 +10,26 @@ interface ChunkData {
 
 interface Region {
   key: number;
+  /** Region grid coordinates (world metres = r * REGION_CHUNKS * 16). */
+  rx: number;
+  ry: number;
+  rz: number;
   chunks: Set<number>;
   opaque?: THREE.Mesh;
   transparent?: THREE.Mesh;
   dirty: boolean;
 }
+
+/** Vertex attributes of a voxel geometry and their item sizes. */
+const ATTRS: [string, number][] = [
+  ['position', 3],
+  ['normal', 3],
+  ['aUv', 2],
+  ['aTint', 3],
+  ['aMat', 1],
+  ['aAo', 1],
+  ['aLit', 2],
+];
 
 /**
  * Chunks per region side: 2 × 16 m = 32 m regions. A region is rebuilt whole whenever one of its
@@ -101,7 +116,14 @@ export class ChunkRenderer {
     const key = regionKey(chunk.cx, chunk.cy, chunk.cz);
     let r = this.regions.get(key);
     if (!r) {
-      r = { key, chunks: new Set(), dirty: false };
+      r = {
+        key,
+        rx: Math.floor(chunk.cx / REGION_CHUNKS),
+        ry: Math.floor(chunk.cy / REGION_CHUNKS),
+        rz: Math.floor(chunk.cz / REGION_CHUNKS),
+        chunks: new Set(),
+        dirty: false,
+      };
       this.regions.set(key, r);
     }
     return r;
@@ -151,29 +173,71 @@ export class ChunkRenderer {
         if (d.opaque) opaque.push(d.opaque);
         if (d.transparent) transparent.push(d.transparent);
       }
-      r.opaque = this.applyMesh(r.opaque, opaque, this.materials.opaque, true);
-      r.transparent = this.applyMesh(r.transparent, transparent, this.materials.transparent, false);
+      r.opaque = this.applyMesh(r.opaque, opaque, this.materials.opaque, true, r);
+      r.transparent = this.applyMesh(r.transparent, transparent, this.materials.transparent, false, r);
       if (!r.opaque && !r.transparent && r.chunks.size === 0) this.regions.delete(r.key);
     }
     this.pendingMerges = left;
   }
 
-  /** Concatenates chunk meshes into one indexed geometry. */
-  private concat(parts: MeshData[]): THREE.BufferGeometry {
+  /**
+   * Writes the chunk meshes of a region into its mesh. The geometry keeps its buffers between
+   * rebuilds and only grows when the region outgrows them, so a rebuild is a copy into memory that
+   * already exists and an upload of the part in use — no fresh multi-megabyte arrays for the
+   * garbage collector to chase every time a builder taps.
+   */
+  private applyMesh(existing: THREE.Mesh | undefined, parts: MeshData[], material: THREE.Material, shadows: boolean, r: Region): THREE.Mesh | undefined {
+    if (parts.length === 0) {
+      if (existing) {
+        this.group.remove(existing);
+        existing.geometry.dispose();
+      }
+      return undefined;
+    }
     let verts = 0;
     let idx = 0;
     for (const p of parts) {
       verts += p.positions.length / 3;
       idx += p.indices.length;
     }
-    const positions = new Float32Array(verts * 3);
-    const normals = new Float32Array(verts * 3);
-    const uvs = new Float32Array(verts * 2);
-    const tints = new Float32Array(verts * 3);
-    const mats = new Float32Array(verts);
-    const aos = new Float32Array(verts);
-    const lits = new Float32Array(verts * 2);
-    const indices = new Uint32Array(idx);
+    let mesh = existing;
+    let geo = mesh?.geometry;
+    const pos = geo?.getAttribute('position') as THREE.BufferAttribute | undefined;
+    const fits = !!geo && !!pos && pos.array.length >= verts * 3 && (geo.index?.array.length ?? 0) >= idx;
+    if (!geo || !fits) {
+      const cap = Math.ceil(verts * 1.25) + 64;
+      const icap = Math.ceil(idx * 1.25) + 96;
+      const ng = new THREE.BufferGeometry();
+      for (const [name, size] of ATTRS) {
+        const a = new THREE.BufferAttribute(new Float32Array(cap * size), size);
+        a.setUsage(THREE.DynamicDrawUsage);
+        ng.setAttribute(name, a);
+      }
+      const ix = new THREE.BufferAttribute(new Uint32Array(icap), 1);
+      ix.setUsage(THREE.DynamicDrawUsage);
+      ng.setIndex(ix);
+      if (mesh) {
+        mesh.geometry.dispose();
+        mesh.geometry = ng;
+      } else {
+        mesh = new THREE.Mesh(ng, material);
+        mesh.castShadow = shadows;
+        mesh.receiveShadow = true;
+        mesh.matrixAutoUpdate = false;
+        mesh.frustumCulled = true;
+        this.group.add(mesh);
+      }
+      geo = ng;
+    }
+    const attr = (name: string): THREE.BufferAttribute => geo!.getAttribute(name) as THREE.BufferAttribute;
+    const positions = attr('position').array as Float32Array;
+    const normals = attr('normal').array as Float32Array;
+    const uvs = attr('aUv').array as Float32Array;
+    const tints = attr('aTint').array as Float32Array;
+    const mats = attr('aMat').array as Float32Array;
+    const aos = attr('aAo').array as Float32Array;
+    const lits = attr('aLit').array as Float32Array;
+    const indices = geo.index!.array as Uint32Array;
     let v = 0;
     let n = 0;
     for (const p of parts) {
@@ -184,49 +248,28 @@ export class ChunkRenderer {
       mats.set(p.mats, v);
       aos.set(p.aos, v);
       lits.set(p.lits, v * 2);
-      for (let i = 0; i < p.indices.length; i++) indices[n + i] = p.indices[i] + v;
+      const pi = p.indices;
+      for (let i = 0; i < pi.length; i++) indices[n + i] = pi[i] + v;
       v += p.positions.length / 3;
-      n += p.indices.length;
+      n += pi.length;
     }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
-    geo.setAttribute('aUv', new THREE.BufferAttribute(uvs, 2));
-    geo.setAttribute('aTint', new THREE.BufferAttribute(tints, 3));
-    geo.setAttribute('aMat', new THREE.BufferAttribute(mats, 1));
-    geo.setAttribute('aAo', new THREE.BufferAttribute(aos, 1));
-    geo.setAttribute('aLit', new THREE.BufferAttribute(lits, 2));
-    geo.setIndex(new THREE.BufferAttribute(indices, 1));
-    // Bounds from the box: a region is a known block of space, no need to visit every vertex twice.
-    geo.computeBoundingBox();
-    const bb = geo.boundingBox!;
-    const sphere = new THREE.Sphere();
-    bb.getCenter(sphere.center);
-    sphere.radius = bb.min.distanceTo(bb.max) / 2;
-    geo.boundingSphere = sphere;
-    return geo;
-  }
-
-  private applyMesh(existing: THREE.Mesh | undefined, parts: MeshData[], material: THREE.Material, shadows: boolean): THREE.Mesh | undefined {
-    if (parts.length === 0) {
-      if (existing) {
-        this.group.remove(existing);
-        existing.geometry.dispose();
-      }
-      return undefined;
+    for (const [name, size] of ATTRS) {
+      const a = attr(name);
+      a.clearUpdateRanges();
+      a.addUpdateRange(0, v * size);
+      a.needsUpdate = true;
     }
-    const geo = this.concat(parts);
-    if (existing) {
-      existing.geometry.dispose();
-      existing.geometry = geo;
-      return existing;
-    }
-    const mesh = new THREE.Mesh(geo, material);
-    mesh.castShadow = shadows;
-    mesh.receiveShadow = true;
-    mesh.matrixAutoUpdate = false;
-    mesh.frustumCulled = true;
-    this.group.add(mesh);
+    const ix = geo.index!;
+    ix.clearUpdateRanges();
+    ix.addUpdateRange(0, n);
+    ix.needsUpdate = true;
+    geo.setDrawRange(0, n);
+    // Bounds are the region's own cube: exact enough for culling, and no pass over the vertices.
+    const size = REGION_CHUNKS * 16;
+    const min = new THREE.Vector3(r.rx * size, r.ry * size, r.rz * size);
+    const max = min.clone().addScalar(size);
+    geo.boundingBox = new THREE.Box3(min, max);
+    geo.boundingSphere = new THREE.Sphere(min.clone().add(max).multiplyScalar(0.5), (size * Math.sqrt(3)) / 2);
     return mesh;
   }
 

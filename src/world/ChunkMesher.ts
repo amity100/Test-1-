@@ -68,6 +68,20 @@ class U32 {
 }
 
 class MeshBuilder {
+  /** Empties the builder for the next chunk, keeping the capacity it has grown to. */
+  reset(): void {
+    this.positions.n = 0;
+    this.normals.n = 0;
+    this.uvs.n = 0;
+    this.tints.n = 0;
+    this.mats.n = 0;
+    this.aos.n = 0;
+    this.lits.n = 0;
+    this.indices.n = 0;
+    this.quadCount = 0;
+    this.indoor = 0;
+    this.lamp = 0;
+  }
   positions = new F32();
   normals = new F32();
   uvs = new F32();
@@ -168,6 +182,10 @@ class MeshBuilder {
     };
   }
 }
+
+/** The two builders every chunk is meshed into; their buffers live for the whole session. */
+const OPAQUE = new MeshBuilder();
+const TRANSPARENT = new MeshBuilder();
 
 const pad = new Uint16Array(P * P * P);
 const maskVal = new Int32Array(N * N);
@@ -312,8 +330,10 @@ export function meshChunk(world: VoxelWorld, cx: number, cy: number, cz: number)
       }
     }
   }
-  const opaque = new MeshBuilder();
-  const transparent = new MeshBuilder();
+  const opaque = OPAQUE;
+  const transparent = TRANSPARENT;
+  opaque.reset();
+  transparent.reset();
   const x = [0, 0, 0];
   const q = [0, 0, 0];
   const nb = [0, 0, 0];
