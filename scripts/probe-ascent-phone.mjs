@@ -42,7 +42,8 @@ await page.screenshot({ path: 'scratch/phone-sky/s2-build.png' });
 const held = await page.evaluate(async () => {
   const g = window.__fk.game();
   const v = g.app.input.virtual;
-  const p = g.player; p.pitch = 0;
+  // A quarter turn: the stair just built blocks the way ahead, so the runway grows to the side.
+  const p = g.player; p.pitch = 0; p.yaw += Math.PI / 2;
   const placed0 = g.sky.plan.size;
   v.buildHeld = true;
   g.debugAdvance(1.2, 1 / 20);

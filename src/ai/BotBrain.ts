@@ -367,11 +367,18 @@ export class BotBrain {
         this.hideSpot = null;
         this.coverSpot = null;
         if (this.state === 'cover') this.state = 'engage';
-        e.vel.y = 8;
-        e.grounded = false;
+        if (this.hopWhenStuck()) {
+          e.vel.y = 8;
+          e.grounded = false;
+        }
       }
     }
     this.lastPos.copy(e.pos);
+  }
+
+  /** Whether a stuck bot may hop to free itself (subclasses forbid it where a hop means a fall). */
+  protected hopWhenStuck(): boolean {
+    return true;
   }
 
   /**

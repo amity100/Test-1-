@@ -5,7 +5,7 @@ import type { Entity } from '../sim/Entities';
 import type { AscentState } from '../sim/Ascent';
 import { ASCENT } from '../sim/Ascent';
 import { PIECES, quantizeYaw, type PieceKind, type SkyBuilder } from '../build/SkyBuild';
-import { CELL, DIRS, STOREY, cellKey, cellOf, cellX, cellZ, type SkyCell } from '../build/SkyPlan';
+import { CELL, DIRS, cellOf, cellX, cellZ, type SkyCell } from '../build/SkyPlan';
 import { PLAYABLE_RADIUS } from '../world/Layout';
 
 type Job = 'climb' | 'hunt' | 'loot' | 'flee' | 'hold' | 'fight' | 'cross';
@@ -261,6 +261,16 @@ export class AscentBrain extends BotBrain {
         this.routeAt++;
         this.wpUntil = now + 3.5;
       }
+      // A waypoint a storey above us that we are not on a stair to: the route is stale (we fell, or
+      // it was laid from somewhere we no longer stand); walking at it would mean walking off an edge.
+      if (this.routeAt < this.route.length) {
+        const wp = this.route[this.routeAt];
+        const under = this.sky.cellUnder(e.pos);
+        if (wp.y - e.pos.y > 4 && (!under || under.kind !== 'ramp')) {
+          this.route = [];
+          this.routeAt = 0;
+        }
+      }
       if (this.routeAt >= this.route.length || now > this.routeUntil) {
         this.route = [];
         this.routeAt = 0;
@@ -278,6 +288,9 @@ export class AscentBrain extends BotBrain {
       if (target) {
         if (!urgent && e.bricks >= PIECES.ramp.cost + PIECES.deck.cost * 2 && this.rand.chance(0.12) && this.widen(asc)) return null;
         if (this.buildPath(asc, target)) return this.route.length > 0 ? this.route[0].clone() : null;
+        // The way ahead is already built: walk along it (or up someone else's stair) and go on from there.
+        const on = this.walkOn(this.dirToward(target));
+        if (on) return on;
         // Boxed in: a deck to the side opens a cell the next stair can start from.
         if (e.bricks >= PIECES.ramp.cost + PIECES.deck.cost && this.widen(asc)) return null;
         // Still nowhere to build: walk along this floor to a deck with room beside it and try there.
@@ -347,6 +360,8 @@ export class AscentBrain extends BotBrain {
     if (flat < 12 && up > 4) dir = (dir + 1 + (e.id & 1) * 2) & 3;
     const climb = up > 3;
     const now = this.nowSeen;
+    // A bot builds from under its own feet, never from a landing it has not climbed to yet.
+    this.sky.forgetHead(e.id);
     const tries: [number, boolean][] = [
       [dir, climb],
       [(dir + 1) & 3, climb],
@@ -368,6 +383,33 @@ export class AscentBrain extends BotBrain {
     }
     this.buildCooldown = 1.2;
     return false;
+  }
+
+  /**
+   * When nothing can be built ahead because something already stands there: the floor beside us
+   * to walk onto, or a stair pointing our way to climb — the way other people's structures become
+   * everyone's road.
+   */
+  private walkOn(dir: number): THREE.Vector3 | null {
+    const e = this.entity;
+    const here = this.sky.cellUnder(e.pos);
+    if (!here) return null;
+    for (const d of [dir, (dir + 1) & 3, (dir + 3) & 3]) {
+      const [dx, dz] = DIRS[d];
+      const next = this.sky.plan.get(here.i + dx, here.j + dz, here.y);
+      if (!next) continue;
+      if (next.kind === 'ramp' && next.dir === d) {
+        const pts = this.sky.arch.waypoints(next);
+        pts.push(cellCentre(next.i + dx, next.j + dz, next.y + 6));
+        this.route = pts;
+        this.routeAt = 0;
+        this.wpUntil = this.nowSeen + 3.5;
+        this.routeUntil = this.nowSeen + 3 + pts.length * 3.5;
+        return pts[0].clone();
+      }
+      if (next.kind === 'deck' || next.kind === 'bridge' || next.kind === 'arena') return cellCentre(next.i, next.j, next.y);
+    }
+    return null;
   }
 
   /** Puts a stair tower in front (the high ground in a fight) and remembers the way up it. */
@@ -418,7 +460,7 @@ export class AscentBrain extends BotBrain {
     const e = this.entity;
     if (this.route.length > 0) return this.climb(asc, false);
     const gap = Math.hypot(prey.pos.x - e.pos.x, prey.pos.z - e.pos.z);
-    if (gap < 9) return prey.pos.clone();
+    if (gap < 9 && (asc.altitude(e) <= 2.5 || this.floorLeadsTo(prey.pos))) return prey.pos.clone();
     if (this.buildCooldown <= 0 && e.bricks >= PIECES.bridge.cost) {
       const dir = this.dirToward(prey.pos);
       const [dx, dz] = DIRS[dir];
@@ -434,7 +476,8 @@ export class AscentBrain extends BotBrain {
       }
       this.buildCooldown = 1.2;
     }
-    return prey.pos.clone();
+    // No bridge and no floor between us: stand and shoot rather than walk into the gap.
+    return asc.altitude(e) <= 2.5 || this.floorLeadsTo(prey.pos) ? prey.pos.clone() : null;
   }
 
   /** The facing that points at a place. */
@@ -471,12 +514,12 @@ export class AscentBrain extends BotBrain {
     const my = Math.round(e.pos.y) - 1;
     let best: THREE.Vector3 | null = null;
     let bestD = 30;
-    const reach = this.reachableCells();
+    const aloft = asc.altitude(e) > 2.5;
     for (const s of this.sky.plan.standing()) {
       if (Math.abs(s.cell.y - my) > 2 || s.y < asc.seaLevel + 1) continue;
       const d = Math.hypot(s.x - e.pos.x, s.z - e.pos.z);
       if (d > bestD || d < 3) continue;
-      if (reach && !reach.has(cellKey(s.cell.i, s.cell.j, s.cell.y))) continue;
+      if (aloft && !this.floorLeadsTo(new THREE.Vector3(s.x, s.y, s.z))) continue;
       const free = DIRS.some(([dx, dz]) => !this.sky.plan.get(s.cell.i + dx, s.cell.j + dz, s.cell.y));
       if (!free) continue;
       bestD = d;
@@ -486,47 +529,32 @@ export class AscentBrain extends BotBrain {
   }
 
   /**
-   * The cells a walker can reach from the one under this bot without leaving the floor: along the
-   * same storey, up a stair to its landing, up a hall to its roof, and back down the same ways.
-   * Null when the bot is not standing on a cell (the ground leads everywhere).
+   * Whether a straight walk from here to a point stays on floor the whole way. Bots walk straight
+   * at their goals, so what matters is not whether the floor connects somewhere but whether it is
+   * under every step: a stair on the line may carry the walk a storey up or down, a floor must be
+   * about level, and any gap is a fall.
    */
-  private reachableCells(): Set<number> | null {
-    const start = this.sky.cellUnder(this.entity.pos);
-    if (!start) return null;
-    const plan = this.sky.plan;
-    const seen = new Set<number>([cellKey(start.i, start.j, start.y)]);
-    const queue: SkyCell[] = [start];
-    const push = (c: SkyCell | undefined): void => {
-      if (!c) return;
-      const k = cellKey(c.i, c.j, c.y);
-      if (seen.has(k)) return;
-      seen.add(k);
-      queue.push(c);
-    };
-    for (let head = 0; head < queue.length && queue.length < 120; head++) {
-      const c = queue[head];
-      for (const n of plan.sides(c.i, c.j, c.y)) push(n);
-      // A stair leads up to its landing; a hall leads up to its roof.
-      if (c.kind === 'ramp') push(plan.get(c.i + DIRS[c.dir][0], c.j + DIRS[c.dir][1], c.y + STOREY));
-      if (c.kind === 'tower') push(plan.above(c.i, c.j, c.y));
-      // And the other way: a landing leads down its stair, a roof down through its hall.
-      for (const [dx, dz] of DIRS) {
-        const below = plan.get(c.i + dx, c.j + dz, c.y - STOREY);
-        if (below && below.kind === 'ramp' && c.i === below.i + DIRS[below.dir][0] && c.j === below.j + DIRS[below.dir][1]) push(below);
-      }
-      const under = plan.below(c.i, c.j, c.y);
-      if (under && under.kind === 'tower') push(under);
+  private floorLeadsTo(to: THREE.Vector3): boolean {
+    const e = this.entity;
+    const from = e.pos;
+    const dx = to.x - from.x;
+    const dz = to.z - from.z;
+    const len = Math.hypot(dx, dz);
+    if (len < 1.5) return true;
+    const steps = Math.ceil(len);
+    let y = from.y;
+    for (let n = 1; n <= steps; n++) {
+      const f = n / steps;
+      const [i, j] = cellOf(from.x + dx * f, from.z + dz * f);
+      const near = this.sky.plan.nearestInColumn(i, j, Math.round(y) - 1, 7);
+      if (near === null) return false;
+      const c = this.sky.plan.get(i, j, near);
+      if (!c) return false;
+      if (c.kind === 'ramp') y = c.y + 4;
+      else if (Math.abs(c.y + 1 - y) > 1.5) return false;
+      else y = c.y + 1;
     }
-    return seen;
-  }
-
-  /** Whether the floor under this bot leads to a place without a jump into the air. */
-  private floorLeadsTo(pos: THREE.Vector3): boolean {
-    const reach = this.reachableCells();
-    if (!reach) return true;
-    const there = this.sky.cellUnder(pos);
-    if (!there) return false;
-    return reach.has(cellKey(there.i, there.j, there.y));
+    return true;
   }
 
   /** A spot on the ground beside the nearest structure, so a climb can start there. */
@@ -565,6 +593,12 @@ export class AscentBrain extends BotBrain {
   private scan(now: number): void {
     const e = this.entity;
     e.yaw += Math.sin(now * 0.45 + e.id) * 0.01;
+  }
+
+  /** Up on a structure a hop clears the balustrade and ends in a fall: only the ground allows it. */
+  protected override hopWhenStuck(): boolean {
+    const asc = this.ascent();
+    return !asc || asc.altitude(this.entity) <= 2.5;
   }
 
   /** Whether this bot wants height right now (used by the mark logic). */

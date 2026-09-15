@@ -198,7 +198,10 @@ export class SkyBuilder {
     if (head) {
       const hx = cellX(head.i) + CELL / 2;
       const hz = cellZ(head.j) + CELL / 2;
-      const far = Math.hypot(hx - feet.x, hz - feet.z) > PATH_REACH || Math.abs(head.y + 1 - feet.y) > 9;
+      // The path runs ahead along a floor, never up a storey the builder has not climbed yet: a
+      // stair placed from a landing you are still below is a stair you cannot see or reach.
+      const above = head.y + 1 - feet.y;
+      const far = Math.hypot(hx - feet.x, hz - feet.z) > PATH_REACH || above > 2.5 || above < -8;
       if (far || head.dir !== dir || now - head.at > 12) head = null;
     }
     if (!head) head = this.headUnder(feet, dir, now);
@@ -222,15 +225,22 @@ export class SkyBuilder {
     return res;
   }
 
-  /** Where a path starts: the landing of the stair being climbed, else the floor under the feet. */
+  /**
+   * Where a path starts: on a stair being climbed in its own direction, its landing; at the foot of
+   * a stair, or on one while facing another way, the stair's own floor level; else the floor under
+   * the feet.
+   */
   private headUnder(feet: THREE.Vector3, dir: number, now: number): PathHead {
     const [i, j] = cellOf(feet.x, feet.z);
     const foot = Math.round(feet.y) - 1;
     const near = this.plan.nearestInColumn(i, j, foot, 7);
     const cell = near === null ? undefined : this.plan.get(i, j, near);
-    if (cell && cell.kind === 'ramp' && foot >= cell.y) {
-      const [rx, rz] = DIRS[cell.dir];
-      return { i: cell.i + rx, j: cell.j + rz, y: cell.y + STOREY, dir, at: now };
+    if (cell && cell.kind === 'ramp') {
+      if (dir === cell.dir && foot >= cell.y + 1) {
+        const [rx, rz] = DIRS[cell.dir];
+        return { i: cell.i + rx, j: cell.j + rz, y: cell.y + STOREY, dir, at: now };
+      }
+      return { i: cell.i, j: cell.j, y: cell.y, dir, at: now };
     }
     return { i, j, y: this.floorAt(feet, feet.x, feet.z), dir, at: now };
   }
