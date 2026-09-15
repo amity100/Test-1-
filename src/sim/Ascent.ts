@@ -321,11 +321,25 @@ export class AscentState {
       return;
     }
     if (!cur) {
-      if (best.pos.y >= second + ASCENT.markedMargin * 0.5) this.setMarked(best);
+      // A clear leader is marked at once; on a crowded plaza where nobody stands out by height, the
+      // one who has been highest for a moment takes the mark, so the mark is never simply absent.
+      if (best.pos.y >= second + ASCENT.markedMargin * 0.5) {
+        this.setMarked(best);
+        this.markStreak = 0;
+        return;
+      }
+      if (best === this.markCandidate) this.markStreak++;
+      else {
+        this.markCandidate = best;
+        this.markStreak = 0;
+      }
+      if (this.markStreak >= 3) this.setMarked(best);
       return;
     }
     if (best !== cur && best.pos.y > cur.pos.y + ASCENT.markedMargin) this.setMarked(best);
   }
+  private markCandidate: Entity | null = null;
+  private markStreak = 0;
 
   private updateFlag(dt: number, entities: Entity[]): void {
     this.flagLock = Math.max(0, this.flagLock - dt);
