@@ -31,29 +31,37 @@ GitHub Pages). Single-file build for artifact hosting: `npm run build:artifact` 
 
 ### Sky Flag
 
-1. **Twelve on one island, twelve minutes.** Everyone spawns spread around the shore with fifteen
-   bricks. One brick trickles in every seven seconds (up to 48 in hand); a kill drops most of the
+1. **Twelve on one island, twelve minutes.** Everyone spawns spread around the shore with
+   twenty-four bricks. One brick trickles in every three seconds (up to 60 in hand); a kill drops most of the
    victim's bricks (at least six) as a cluster that hovers over the spot for ten seconds and then
    plunges, and whoever walks through it takes them. The marked leader drops a bounty of twelve
    more.
-2. **Building.** `B` takes a piece in hand (the fire button becomes PLACE on a phone); `1`-`5` or the
-   wheel pick the piece, `R` turns it, click places it, and holding the button places a run of
-   them. Five pieces: a **ramp** (3 bricks: three wide, four up, with a landing), a **deck**
-   (4: a five-by-five platform with lamp posts at the corners), a **bridge** (3: eight metres of
-   gold-railed walkway), a **parapet** (1: chest-high cover with merlons) and an **arena** (8: a
-   round eleven-metre fighting floor). Pieces are ivory marble with gold and a strip of your own
-   colour, need something to anchor to, may not cut through anyone's body, and grow support columns
-   to the ground when they are near it. A green ghost means it fits, amber that you cannot afford it,
-   red says why not.
+2. **Building.** One tap puts down a whole module, snapped to the island's eight-metre grid at the
+   level you are standing on. `B` takes a module in hand (the fire button becomes PLACE on a phone);
+   `1`-`5` or the wheel pick it, `R` turns it, click places it, holding places a run. Five modules:
+   a **tower** (4 bricks: a stair hall with arched doors at both ends, arrow slits, a banner in your
+   colour and a straight flight up to its own crenellated roof, six metres up), a **deck** (2: eight
+   metres of marble floor inside a parapet with lamp-topped corner posts), a **ramp** (3: a stair on
+   a vault to the floor above), a **bridge** (2 per cell: a railed span on arches that reaches until
+   it meets something, up to three cells) and an **arena** (10: a round court twenty-three metres
+   across with eight bastions, a colonnade and a raised dais).
+
+   Nothing has to be lined up by hand. An architect dresses every cell and its neighbours: floors
+   get a stone rim, edges that face out get parapets, cells that touch merge into one hall with no
+   wall between them, a floor with a tower under it gets a stairwell, and everything hanging in the
+   air grows a plinth down to the hill or a stepped keel with a crystal in your colour glowing under
+   it. Modules cut their own rooms out of a hillside, so a door never opens into earth. A green
+   ghost of the real masonry shows where it will land; amber means you cannot afford it, red that
+   something is already there or that there is nothing to build from.
 3. **The architect view** (`X`, or EYE on a phone) lifts the camera fifteen metres up for four
-   seconds so you can lay pieces onto the ground plane by cursor or a still finger, then drops you
+   seconds so you can lay modules onto the ground plane by cursor or a still finger, then drops you
    back; your body stays exposed the whole time, and it cools down for six seconds.
-4. **The flag** starts 160 m up and descends at 0.16 m/s, drifting sideways toward the marked
+4. **The flag** starts 180 m up and descends at 0.2 m/s, drifting sideways toward the marked
    leader (or the island centre). Standing within three metres of it takes it; the holder must
    survive twenty seconds. Killing the holder drops the flag right there. The **marked** player is
    whoever stands highest, at least six metres above the ground and four metres above the next;
    they carry a crown and an eighty-metre beam.
-5. **The sea** starts rising at 6:20 (0.12 m/s) and three times faster after the first grab; being
+5. **The sea** starts rising at 5:30 (0.12 m/s) and three times faster after the first grab; being
    under it drowns you in about two and a half seconds. Falls hurt from 15 m/s and kill from 44 m/s
    of landing speed. Whoever dies respawns after five seconds on a free deck halfway up the pack
    (or the shore); once nothing dry is left, they are out. A grab held for twenty seconds, the water
@@ -128,9 +136,14 @@ GitHub Pages). Single-file build for artifact hosting: `npm run build:artifact` 
 
 WASD move · Space jump · Shift sprint · C crouch/slide · Mouse aim and fire · Right mouse aim down
 sights · 1-3 / wheel weapons · R reload · G grenade · Q / F gadgets · Tab scoreboard · Esc pause.
-Sky Flag: B build (then 1-5 / wheel pick the piece, R turns it, click or hold places) · X architect
+Sky Flag: B build (then 1-5 / wheel pick the module, R turns it, click or hold places) · X architect
 view; on a phone BUILD, PIECE and EYE buttons sit beside the fire cluster and a still finger in the
 architect view places at the finger.
+The mouse is either captured or hidden: click once to capture it, and where a browser refuses to
+lock the pointer (inside an embedding frame, say) aiming still works one-to-one from raw movement,
+with the outer eighth of the window turning the view so a full spin is always possible. Aiming down
+the sights puts the weapon's own optic on the crosshair — the model is held still and the field of
+view narrows to the weapon (47° on the rifle, 20° through the sniper's scope).
 Stairs, slabs and one-metre ledges are climbed by simply walking into them. Aim assist (on by
 default, off in Settings) slows the view over an enemy, follows one near the crosshair, snaps onto
 the nearest enemy when the sights come up and forgives near misses a little; on touch it also fires
@@ -265,12 +278,24 @@ lathe trunks, tapered branches and leaf-card canopies, ragged conifers, bushes, 
 mossy boulders and flower cards, all instanced. Procedural PBR tiles (fabric, camo, armour,
 gunmetal, polymer, wood, bark, rock, soil) supply albedo, normal and roughness maps.
 
-Sky Flag adds a voxel world 255 blocks tall, ramps walked by a slope-surface lift in the character
-controller, a rules core (`src/sim/Ascent.ts`), the piece builder with anchoring and body checks
-(`src/build/SkyBuild.ts`), bots that build switchback towers and hold their decks
+Sky Flag adds a voxel world 255 blocks tall and a building system that works on a plan rather than
+on stamps: a sparse grid of eight-metre cells anchored to the ground each structure started on
+(`src/build/SkyPlan.ts`), an architect that turns one cell and its neighbours into finished masonry
+and publishes the waypoints a walker follows through it (`src/build/SkyArchitect.ts`), and a placer
+that diff-applies only the blocks that actually changed (`src/build/SkyBuild.ts`). Around it: the
+rules core (`src/sim/Ascent.ts`), bots that build towers and walk the architect's own way up them
 (`src/ai/AscentBrain.ts`), a rising sea with swell, deep colour and crest foam, a cloud band and
 underwater murk in the height fog, and the flag, marked beam, brick clusters and placement ghosts
 (`src/render/AscentMeshes.ts`).
+
+Performance is measured, not guessed: `?debug=perf` shows the millisecond cost of each subsystem,
+the GPU frame time where the driver exposes a timer query, draw calls and the render resolution.
+Each character is one skinned mesh with a draw group per material and a pose level of detail (every
+frame up close, every fourth past eighty metres); the scene keeps six lights rather than ten;
+ambient occlusion runs at half resolution with a bilateral upsample on every tier; the colour grade
+shares a pass with the rest of the post chain; god rays and bloom render at half resolution; the
+render target never exceeds about four megapixels; and a dynamic resolution scale between 0.7 and 1
+holds the frame rate without touching shadows, occlusion or the post chain.
 
 Bots navigate the whole island: a fine voxel grid around each fortress stitched to a coarse terrain
 grid, with hearing, damage reaction, cover, peeking and defender repositioning.
@@ -286,9 +311,13 @@ firing) and `node scripts/smoke-mobile.mjs <url>` (touch emulation; the trap wal
 the button editor are exercised there and in the probe scripts) drive the game in headless
 Chromium (Playwright) and save screenshots. Test against `npm run build && npm run preview` so dev
 server reloads do not interrupt the runs. Sky Flag has `node scripts/probe-ascent.mjs` (a whole match through the debug API: start,
-spawns, ramp and deck placement, ninety seconds of bots building and climbing, the mark, kill drops
-and pickup, fall damage, the rising sea and drowning, the grab and the surge, holding to win, the
-podium) and `node scripts/probe-ascent-phone.mjs` (the same buttons and HUD on a touch phone).
+spawns, a tower placed and walked from its door to its roof, a deck, ninety seconds of bots building
+and climbing, the mark, kill drops and pickup, fall damage, the rising sea and drowning, the grab
+and the surge, holding to win, the podium), `node scripts/probe-ascent-phone.mjs` (the same buttons
+and HUD on a touch phone, plus swipe speed and settling), `node scripts/probe-aim.mjs` (every
+weapon's optic on the crosshair at full aim, and aiming without a pointer lock) and
+`node scripts/probe-perf.mjs` (the frame budget of each subsystem, the scene's mesh and light
+counts, and draw calls).
 Fortress War has its own probes: `node scripts/probe-war.mjs <url>`
 (team build, pings, the trap walk, the war, respawn choice, repair, the team podium),
 `node scripts/probe-war-phone.mjs <url>` (the same on a touch phone) and

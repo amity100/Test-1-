@@ -36,6 +36,8 @@ export class AscentBrain extends BotBrain {
   private stuckHere = 0;
   private readonly progressPos = new THREE.Vector3(1e9, 0, 0);
   private lastPlaced = 0;
+  private think = 0;
+  private lastIntent: Intent | null = null;
   /** Last module tried and its verdict (diagnostics). */
   lastAimReason = '';
 
@@ -70,6 +72,13 @@ export class AscentBrain extends BotBrain {
     this.buildCooldown -= dt;
     this.jobTimer -= dt;
     this.watchProgress(dt);
+    // Far from anyone watching and not in a fight, thinking every other frame is indistinguishable
+    // and costs half as much with twelve of them on the island.
+    this.think++;
+    if (!threat && this.lastIntent && (this.think & 1) === 0) {
+      const far = this.ctx.entities().every((o) => o === e || !o.alive || o.isBot || o.pos.distanceToSquared(e.pos) > 3600);
+      if (far) return this.lastIntent;
+    }
     this.coverLogic(dt, threat, nav);
     // Up on a structure there is nowhere to fall back to: stand and shoot instead of running off.
     const aloft = asc.altitude(e) > 2.5;
@@ -149,7 +158,8 @@ export class AscentBrain extends BotBrain {
       if (this.route.length > 0) sprint = false;
       this.lookAt(goal);
     }
-    return { goal: this.goalPoint, sprint, crouch: false };
+    this.lastIntent = { goal: this.goalPoint, sprint, crouch: false };
+    return this.lastIntent;
   }
 
   // ---- what to do -----------------------------------------------------------

@@ -92,12 +92,14 @@ export class SkyPlan {
       else this.columns.set(col, [c.y]);
     }
     this.cells.set(key, c);
+    this.version++;
   }
   remove(i: number, j: number, y: number): SkyCell | undefined {
     const key = cellKey(i, j, y);
     const c = this.cells.get(key);
     if (!c) return undefined;
     this.cells.delete(key);
+    this.version++;
     const ys = this.columns.get(colKey(i, j));
     if (ys) {
       const at = ys.indexOf(y);
@@ -128,6 +130,8 @@ export class SkyPlan {
     this.cells.clear();
     this.columns.clear();
     this.nextGroup = 1;
+    this.version++;
+    this.standCache = null;
   }
 
   /** The four side neighbours on the same floor (undefined where there is nothing). */
@@ -195,14 +199,24 @@ export class SkyPlan {
     return out;
   }
 
-  /** Walkable top surfaces: the middle of every cell that can be stood on, highest first. */
+  /**
+   * Walkable top surfaces: the middle of every cell that can be stood on, highest first. Twelve bots
+   * ask for this several times a second, so the list is built once per change, not once per question.
+   */
   standing(): { x: number; y: number; z: number; cell: SkyCell }[] {
+    if (this.standCache && this.standAt === this.version) return this.standCache;
     const out: { x: number; y: number; z: number; cell: SkyCell }[] = [];
     for (const c of this.cells.values()) {
       if (c.kind === 'tower' || c.kind === 'ramp' || c.kind === 'arenaPart') continue;
       out.push({ x: cellX(c.i) + CELL / 2, y: c.y + 1, z: cellZ(c.j) + CELL / 2, cell: c });
     }
     out.sort((a, b) => b.y - a.y);
+    this.standCache = out;
+    this.standAt = this.version;
     return out;
   }
+  /** Bumped whenever a cell is added or removed, so cached views know to rebuild. */
+  version = 0;
+  private standCache: { x: number; y: number; z: number; cell: SkyCell }[] | null = null;
+  private standAt = -1;
 }

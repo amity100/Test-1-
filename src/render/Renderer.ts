@@ -42,9 +42,9 @@ export interface QualityProfile {
 
 export const QUALITY_PROFILES: Record<Quality, QualityProfile> = {
   low: { pixelRatio: 1, ao: false, aoMode: 'Performance', aoHalfRes: true, shadowMap: 1024, shadowRadius: 70, godRays: false, chromatic: false, grade: false, softShadows: false, grass: 6000, trees: 90, anisotropy: 2 },
-  medium: { pixelRatio: 1.25, ao: true, aoMode: 'Low', aoHalfRes: true, shadowMap: 2048, shadowRadius: 80, godRays: false, chromatic: false, grade: true, softShadows: true, grass: 16000, trees: 140, anisotropy: 4 },
-  high: { pixelRatio: 1.5, ao: true, aoMode: 'Medium', aoHalfRes: false, shadowMap: 4096, shadowRadius: 90, godRays: true, chromatic: false, grade: true, softShadows: true, grass: 32000, trees: 180, anisotropy: 8 },
-  ultra: { pixelRatio: 2, ao: true, aoMode: 'High', aoHalfRes: false, shadowMap: 4096, shadowRadius: 95, godRays: true, chromatic: true, grade: true, softShadows: true, grass: 50000, trees: 220, anisotropy: 16 },
+  medium: { pixelRatio: 1.15, ao: true, aoMode: 'Low', aoHalfRes: true, shadowMap: 2048, shadowRadius: 80, godRays: false, chromatic: false, grade: true, softShadows: true, grass: 16000, trees: 140, anisotropy: 4 },
+  high: { pixelRatio: 1.25, ao: true, aoMode: 'Medium', aoHalfRes: true, shadowMap: 2048, shadowRadius: 80, godRays: true, chromatic: false, grade: true, softShadows: true, grass: 32000, trees: 180, anisotropy: 8 },
+  ultra: { pixelRatio: 1.5, ao: true, aoMode: 'High', aoHalfRes: true, shadowMap: 4096, shadowRadius: 90, godRays: true, chromatic: true, grade: true, softShadows: true, grass: 50000, trees: 220, anisotropy: 16 },
 };
 
 /** WebGL renderer + post-processing chain with quality tiers. */
@@ -115,7 +115,7 @@ export class GameRenderer {
     this.camera = new THREE.PerspectiveCamera(80, 1, 0.08, 4000);
     this.composer = new EffectComposer(this.renderer, { frameBufferType: this.halfFloatBuffers ? THREE.HalfFloatType : THREE.UnsignedByteType, multisampling: 0 });
     this.fog = new HeightFogEffect(this.camera);
-    this.bloom = new BloomEffect({ intensity: 0.55, luminanceThreshold: 0.92, luminanceSmoothing: 0.2, mipmapBlur: true, radius: 0.7 });
+    this.bloom = new BloomEffect({ intensity: 0.55, luminanceThreshold: 0.92, luminanceSmoothing: 0.2, mipmapBlur: true, radius: 0.7, resolutionScale: 0.5 });
     this.vignette = new VignetteEffect({ offset: 0.28, darkness: 0.55 });
   }
 
@@ -165,6 +165,7 @@ export class GameRenderer {
 
     const effects: Effect[] = [];
     if (profile.godRays && this.sky && !this.flags.has('nogod')) {
+      // God rays are a blur by nature: half resolution and two thirds of the samples look the same.
       const gr = new GodRaysEffect(camera, this.sky.sunDisc, {
         height: 360,
         kernelSize: KernelSize.SMALL,
@@ -172,8 +173,9 @@ export class GameRenderer {
         decay: 0.9,
         weight: 0.28,
         exposure: 0.42,
-        samples: 48,
+        samples: 32,
         clampMax: 1.0,
+        resolutionScale: 0.5,
       });
       this.godRays = gr;
       effects.push(gr);
@@ -187,16 +189,14 @@ export class GameRenderer {
       effects.push(new ChromaticAberrationEffect({ offset: new THREE.Vector2(0.0008, 0.0008), radialModulation: true, modulationOffset: 0.35 }));
     }
     effects.push(this.vignette);
+    // The grade runs after tone mapping, but inside the same pass: the library keeps effect order
+    // within a pass, so this is one full-screen pass fewer for the same picture.
+    if (profile.grade && !this.flags.has('nograde')) {
+      effects.push(new GradeEffect({ sharpen: profile.pixelRatio >= 1.25 ? 0.5 : 0.35, toneStrength: 0.55, lift: 0.02 }));
+    }
     const mainPass = new EffectPass(camera, ...effects);
     composer.addPass(mainPass);
     this.passes.push(mainPass);
-
-    if (profile.grade && !this.flags.has('nograde')) {
-      // Runs after tone mapping so the sharpen kernel sees display-referred colours.
-      const grade = new EffectPass(camera, new GradeEffect({ sharpen: profile.pixelRatio >= 1.5 ? 0.5 : 0.35, toneStrength: 0.55, lift: 0.02 }));
-      composer.addPass(grade);
-      this.passes.push(grade);
-    }
 
     const smaa = new SMAAEffect({ preset: SMAAPreset.HIGH, edgeDetectionMode: EdgeDetectionMode.COLOR });
     const smaaPass = new EffectPass(camera, smaa);
@@ -204,10 +204,27 @@ export class GameRenderer {
     this.passes.push(smaaPass);
   }
 
+  /**
+   * Dynamic resolution: the picture is rendered a little smaller when the card cannot keep up and
+   * goes back to full as soon as it can. Everything else — shadows, ambient occlusion, the post
+   * chain — stays exactly as it was, so the look holds and only the sharpness gives a little.
+   */
+  setResolutionScale(k: number): void {
+    const next = Math.max(0.7, Math.min(1, k));
+    if (Math.abs(next - this.resScale) < 0.02) return;
+    this.resScale = next;
+    this.resize();
+  }
+  resScale = 1;
+
   resize(): void {
     const w = Math.max(1, window.innerWidth);
     const h = Math.max(1, window.innerHeight);
-    const pr = Math.min(window.devicePixelRatio || 1, this.profile.pixelRatio);
+    // Never render more than about four megapixels: a high-density display should not quietly cost
+    // four times the fill rate of a normal one.
+    const want = Math.min(window.devicePixelRatio || 1, this.profile.pixelRatio);
+    const cap = Math.sqrt(3_700_000 / Math.max(1, w * h));
+    const pr = Math.max(0.7, Math.min(want, cap) * this.resScale);
     this.renderer.setPixelRatio(pr);
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;

@@ -158,6 +158,36 @@ export function meshesFrom<K>(geos: Map<K, THREE.BufferGeometry>, parent: THREE.
 }
 
 /** Creates skinned meshes (one per key) bound to a shared skeleton. Bones must already be in the scene graph with rest transforms. */
+/**
+ * One skinned mesh for a whole character. The parts are merged into a single geometry with a draw
+ * group per material, so twelve operators cost twelve objects in the scene instead of a hundred and
+ * fifty: fewer matrices to update, fewer frustum tests, fewer draw calls and fewer shadow draws,
+ * with exactly the same pixels.
+ */
+export function mergedSkinnedFrom<K>(geos: Map<K, THREE.BufferGeometry>, parent: THREE.Object3D, skeleton: THREE.Skeleton, materialFor: (key: K) => THREE.Material, bindMatrix?: THREE.Matrix4): THREE.SkinnedMesh | null {
+  const keys: K[] = [];
+  const list: THREE.BufferGeometry[] = [];
+  for (const [key, geo] of geos) {
+    if (!geo.attributes.position || geo.attributes.position.count === 0) continue;
+    keys.push(key);
+    list.push(geo);
+  }
+  if (list.length === 0) return null;
+  const merged = mergeGeometries(list, true);
+  if (!merged) return null;
+  parent.updateMatrixWorld(true);
+  const mesh = new THREE.SkinnedMesh(merged, keys.map(materialFor));
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  mesh.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 1.0, 0), 2.2);
+  mesh.frustumCulled = true;
+  mesh.name = 'operator';
+  parent.add(mesh);
+  mesh.updateMatrixWorld(true);
+  mesh.bind(skeleton, bindMatrix ?? mesh.matrixWorld);
+  return mesh;
+}
+
 export function skinnedMeshesFrom<K>(geos: Map<K, THREE.BufferGeometry>, parent: THREE.Object3D, skeleton: THREE.Skeleton, materialFor: (key: K) => THREE.Material, shadows = true, bindMatrix?: THREE.Matrix4): THREE.SkinnedMesh[] {
   const out: THREE.SkinnedMesh[] = [];
   parent.updateMatrixWorld(true);

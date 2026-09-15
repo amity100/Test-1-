@@ -1,9 +1,10 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Entity } from '../sim/Entities';
 import { buildWeaponModel, OPERATOR_CAMO } from './WeaponModels';
 import type { WeaponId } from '../sim/Weapons';
 import { clamp, damp } from '../core/MathUtil';
-import { PartBuilder, rbox, lathe, skinnedMeshesFrom } from './PartBuilder';
+import { PartBuilder, rbox, lathe, mergedSkinnedFrom } from './PartBuilder';
 import { armorMaps, camoMaps, gunmetalMaps, rubberMaps } from './DetailTextures';
 import { type MatKey, HIPS, TORSO, HEAD, THIGH_L, SHIN_L, THIGH_R, SHIN_R, REST, ARM_L, ARM_R, partHelpers } from './CharacterRig';
 import { buildGear, outfitFor, outfitKey, CAMOS, PLATE_TINT, type Outfit } from './Outfits';
@@ -174,7 +175,9 @@ export class CharacterMesh {
   private shinL = new THREE.Bone();
   private shinR = new THREE.Bone();
   private skeleton: THREE.Skeleton;
-  private meshes: THREE.SkinnedMesh[];
+  private meshes: THREE.SkinnedMesh[] = [];
+  private poseAcc = 0;
+  private poseTick = 0;
   private gearMeshes: THREE.SkinnedMesh[] = [];
   private outfitId = '';
   private weaponHolder = new THREE.Group();
@@ -226,7 +229,6 @@ export class CharacterMesh {
     this.weaponHolder.rotation.y = -0.15;
     this.root.updateMatrixWorld(true);
     this.skeleton = new THREE.Skeleton([this.hips, this.torso, this.head, this.thighL, this.shinL, this.thighR, this.shinR]);
-    this.meshes = skinnedMeshesFrom(buildBody(), this.root, this.skeleton, (k) => this.mats[k]);
     this.setOutfit(outfitFor(['zipline', 'breach'], 0));
 
     // Name tag
@@ -250,8 +252,18 @@ export class CharacterMesh {
     f.roughnessMap = camo.roughnessMap;
     f.needsUpdate = true;
     this.mats.armor.color.set(PLATE_TINT[o.camo]).lerp(this.accent, 0.3);
-    for (const m of this.gearMeshes) this.root.remove(m);
-    this.gearMeshes = skinnedMeshesFrom(buildGear(o), this.root, this.skeleton, (k) => this.mats[k], true, IDENTITY);
+    // Body and gear are one mesh: swapping an outfit rebuilds it rather than adding another dozen.
+    for (const m of this.meshes) {
+      this.root.remove(m);
+      m.geometry.dispose();
+    }
+    const parts = new Map(buildBody());
+    for (const [k, geo] of buildGear(o)) {
+      const had = parts.get(k);
+      parts.set(k, had ? mergeGeometries([had, geo], false) ?? had : geo);
+    }
+    const mesh = mergedSkinnedFrom(parts, this.root, this.skeleton, (k) => this.mats[k], IDENTITY);
+    this.meshes = mesh ? [mesh] : [];
   }
 
   setWeapon(id: WeaponId | null): void {
@@ -310,6 +322,16 @@ export class CharacterMesh {
         m.opacity = 1;
       }
     }
+
+    // Pose level of detail: close up every frame, at forty metres every other one, past eighty every
+    // fourth. The body still moves and turns every frame; only the limbs are posed less often, which
+    // nobody can see at that distance.
+    this.poseAcc += dt;
+    const d2 = camPos.distanceToSquared(e.pos);
+    const every = d2 > 6400 ? 4 : d2 > 1600 ? 2 : 1;
+    if (every > 1 && this.poseTick++ % every !== 0) return;
+    dt = this.poseAcc;
+    this.poseAcc = 0;
 
     const speed = Math.sqrt(e.vel.x * e.vel.x + e.vel.z * e.vel.z);
     e.speedSmoothed = damp(e.speedSmoothed, speed, 10, dt);

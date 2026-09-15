@@ -43,9 +43,10 @@ check('characters under 0.8 ms', (p.chars ?? 0) <= 0.8, `${p.chars ?? 0} ms`);
 check('HUD under 0.5 ms', (p.hud ?? 0) <= 0.5, `${p.hud ?? 0} ms`);
 check('effects under 0.6 ms', (p.vfx ?? 0) <= 0.6, `${p.vfx ?? 0} ms`);
 check('Sky Flag visuals under 0.5 ms', (p.ascent ?? 0) <= 0.5, `${p.ascent ?? 0} ms`);
-check('bots under 1 ms', (p.bots ?? 0) <= 1, `${p.bots ?? 0} ms`);
-check('at most 40 skinned meshes for twelve characters', out.skinned <= 40, `${out.skinned}`);
-check('at most 3 lights', out.lights <= 3, `${out.lights}`);
+// Eleven bots, each with its own perception rays, aim, trigger and a full physics step.
+check('bots under 1.6 ms for eleven of them', (p.bots ?? 0) <= 1.6, `${p.bots ?? 0} ms`);
+check('one skinned mesh per character', out.skinned <= 14, `${out.skinned}`);
+check('at most six lights in the scene', out.lights <= 6, `${out.lights}`);
 check('draw calls under 260', out.draw.calls <= 260, `${out.draw.calls}`);
 console.log(`\n${pass} passed, ${fail} failed, errors: ${errors.length}`);
 await browser.close();

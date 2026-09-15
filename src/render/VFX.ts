@@ -247,7 +247,9 @@ export class VFX {
       this.group.add(m);
     }
 
-    for (let i = 0; i < 6; i++) {
+    // Every lit surface pays for each of these in its shader whether it is lit or not, so the pool
+    // is two: the nearest muzzle flashes light the world, the rest are the flash sprites alone.
+    for (let i = 0; i < 2; i++) {
       const l = new THREE.PointLight(0xffc070, 0, 14, 2);
       l.castShadow = false;
       this.lightPool.push(l);

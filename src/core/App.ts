@@ -164,7 +164,9 @@ export class App {
 
   private loop = (now: number): void => {
     const raw = (now - this.last) / 1000;
-    const dt = Math.min(0.05, raw);
+    // A long frame is caught up in two steps rather than being thrown away: below twenty frames a
+    // second the old single clamped step quietly ran the whole game in slow motion.
+    const dt = Math.min(0.1, raw);
     this.last = now;
     this.time += dt;
     this.rawDt = raw;
@@ -172,12 +174,26 @@ export class App {
     requestAnimationFrame(this.loop);
   };
 
+  /** Holds the frame rate by giving a little resolution away, and takes it back when the card can. */
+  private tuneResolution(): void {
+    if (this.gr.flags.has('noadapt') || this.freeFly) return;
+    this.resTimer -= this.rawDt;
+    if (this.resTimer > 0 || this.fps <= 0) return;
+    this.resTimer = 0.6;
+    const want = settings.mobileSafe || this.gr.mobileSafe ? 55 : 58;
+    if (this.fps < want - 6) this.gr.setResolutionScale(this.gr.resScale - 0.08);
+    else if (this.fps > want + 8) this.gr.setResolutionScale(this.gr.resScale + 0.05);
+  }
+  private resTimer = 1.5;
+
   private update(dt: number): void {
     const input = this.input;
     let focus: THREE.Vector3 = this.gr.camera.position;
     if (!this.freeFly) {
       const tg = perf.now();
-      focus = this.game.update(dt);
+      // Never integrate more than a twentieth of a second at once, or a body can pass through a wall.
+      const steps = dt > 0.05 ? 2 : 1;
+      for (let i = 0; i < steps; i++) focus = this.game.update(dt / steps);
       perf.add('game', tg);
     }
     if (this.freeFly) {
@@ -221,6 +237,7 @@ export class App {
     this.gr.render(dt);
     perf.add('submit', tr);
     input.endFrame();
+    this.tuneResolution();
     if (perf.on) {
       const ri = this.gr.renderer.info.render;
       const size = this.gr.renderer.getDrawingBufferSize(new THREE.Vector2());
