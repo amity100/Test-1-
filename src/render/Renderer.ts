@@ -18,6 +18,7 @@ import {
   type Effect,
 } from 'postprocessing';
 import { N8AOPostPass } from 'n8ao';
+import { perf } from '../core/Perf';
 import type { Quality } from '../core/Settings';
 import { HeightFogEffect } from './HeightFogEffect';
 import { GradeEffect } from './GradeEffect';
@@ -242,11 +243,53 @@ export class GameRenderer {
 
   render(dt: number): void {
     if (this.degradePending) this.degrade();
+    const q = perf.on ? this.beginGpuQuery() : null;
     if (this.flags.has('nopost')) {
       this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
       this.renderer.render(this.scene, this.camera);
+    } else {
+      this.composer.render(dt);
+    }
+    if (q) this.endGpuQuery(q);
+  }
+
+  // ---- GPU timing (EXT_disjoint_timer_query_webgl2, when the driver exposes it) ----
+  private timerExt: { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number } | null | undefined;
+  private pendingQuery: WebGLQuery | null = null;
+
+  private beginGpuQuery(): WebGLQuery | null {
+    const gl = this.renderer.getContext() as WebGL2RenderingContext;
+    if (this.timerExt === undefined) this.timerExt = gl.getExtension('EXT_disjoint_timer_query_webgl2') as never;
+    const ext = this.timerExt;
+    if (!ext || this.pendingQuery) {
+      this.pollGpuQuery();
+      return null;
+    }
+    const query = gl.createQuery();
+    if (!query) return null;
+    gl.beginQuery(ext.TIME_ELAPSED_EXT, query);
+    return query;
+  }
+
+  private endGpuQuery(query: WebGLQuery): void {
+    const gl = this.renderer.getContext() as WebGL2RenderingContext;
+    gl.endQuery((this.timerExt as { TIME_ELAPSED_EXT: number }).TIME_ELAPSED_EXT);
+    this.pendingQuery = query;
+  }
+
+  /** Reads back last frame's query without stalling: results arrive a frame or two late. */
+  private pollGpuQuery(): void {
+    const q = this.pendingQuery;
+    if (!q) return;
+    const gl = this.renderer.getContext() as WebGL2RenderingContext;
+    if (gl.getParameter((this.timerExt as { GPU_DISJOINT_EXT: number }).GPU_DISJOINT_EXT)) {
+      gl.deleteQuery(q);
+      this.pendingQuery = null;
       return;
     }
-    this.composer.render(dt);
+    if (!gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) return;
+    perf.gpuMs = gl.getQueryParameter(q, gl.QUERY_RESULT) / 1e6;
+    gl.deleteQuery(q);
+    this.pendingQuery = null;
   }
 }

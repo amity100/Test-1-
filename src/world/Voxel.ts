@@ -107,6 +107,8 @@ export const PALETTE: string[] = [
   '#efe6d2', '#e2d7bf', '#ffd36a', '#6b4a2a',
   // Deep versions of the twelve (86..97): the coloured stone of deck borders
   '#0a6d7a', '#7a1466', '#7a5600', '#1b7a0a', '#7a1a2a', '#4c3f7a', '#7a4320', '#3a507a', '#7a6f25', '#157a55', '#7a3b58', '#6a6a6a',
+  // Sky arena masonry (98, 99): warm ashlar for walls, and the darker band of string courses
+  '#d9d2c4', '#b9b0a0',
 ];
 
 /** Palette index of the first Sky Flag player colour; the twelve run consecutively. */
@@ -114,6 +116,8 @@ export const SKY_PLAYER_PALETTE = 70;
 /** Palette index of the first deep player colour (same order). */
 export const SKY_DEEP_PALETTE = 86;
 export const SKY_PALETTE = { floor: 82, pillar: 83, gold: 84, bronze: 85 };
+/** Ashlar of the sky arenas: walls, and the darker band of string courses and copings. */
+export const SKY_STONE = { wall: 98, band: 99 };
 
 export const PALETTE_COUNT = PALETTE.length;
 

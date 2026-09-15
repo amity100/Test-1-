@@ -142,7 +142,7 @@ export class AscentMeshes {
     this.group.add(this.crown);
     // Ghost piece.
     this.ghostMat = new THREE.MeshBasicMaterial({ color: 0x66ff99, transparent: true, opacity: 0.3, depthWrite: false });
-    this.ghost = new THREE.InstancedMesh(new THREE.BoxGeometry(0.98, 0.98, 0.98), this.ghostMat, 220);
+    this.ghost = new THREE.InstancedMesh(new THREE.BoxGeometry(0.98, 0.98, 0.98), this.ghostMat, 900);
     this.ghost.count = 0;
     this.ghost.frustumCulled = false;
     this.group.add(this.ghost);
@@ -162,7 +162,7 @@ export class AscentMeshes {
     this.crown.visible = !!e;
   }
 
-  update(dt: number, time: number, asc: AscentState, entities: Entity[], viewer: Entity, aim: AimResult | null, camPos: THREE.Vector3): void {
+  update(dt: number, time: number, asc: AscentState, entities: Entity[], viewer: Entity, aim: AimResult | null, ghost: { x: number; y: number; z: number }[], camPos: THREE.Vector3): void {
     // The flag glides rather than snaps (the sim moves it in steps when it changes hands).
     const target = asc.flagPos;
     const k = Math.min(1, dt * (asc.flagHeld ? 14 : 4));
@@ -201,7 +201,7 @@ export class AscentMeshes {
     }
 
     this.syncDrops(asc.drops, time);
-    this.syncGhost(aim);
+    this.syncGhost(aim, ghost);
     void entities;
   }
 
@@ -252,19 +252,17 @@ export class AscentMeshes {
     }
   }
 
-  private syncGhost(aim: AimResult | null): void {
-    const stamp = aim?.stamp ?? null;
-    if (!stamp) {
+  private syncGhost(aim: AimResult | null, cells: { x: number; y: number; z: number }[]): void {
+    if (!aim || cells.length === 0) {
       this.ghost.count = 0;
       this.ghostEdges.visible = false;
       this.ghost.visible = false;
       return;
     }
-    const ok = aim!.reason === 'ok';
-    this.ghostMat.color.set(ok ? 0x6dffb0 : aim!.reason === 'bricks' ? 0xffd36a : 0xff5a6a);
-    this.ghostMat.opacity = ok ? 0.28 : 0.22;
-    const cells = stamp.cells;
-    const n = Math.min(cells.length, 220);
+    const ok = aim.reason === 'ok';
+    this.ghostMat.color.set(ok ? 0x6dffb0 : aim.reason === 'bricks' ? 0xffd36a : 0xff5a6a);
+    this.ghostMat.opacity = ok ? 0.26 : 0.2;
+    const n = Math.min(cells.length, 900);
     this.ghost.count = n;
     this.ghost.visible = true;
     this.q.identity();

@@ -16,24 +16,24 @@ export const ASCENT = {
   players: 12,
   roundTime: 720,
   // Bricks: the only building material. A slow trickle keeps everyone building; kills pay big.
-  bricksStart: 15,
-  bricksMax: 48,
-  trickleEvery: 7,
-  trickleMarked: 7,
-  dropMin: 6,
+  bricksStart: 24,
+  bricksMax: 60,
+  trickleEvery: 3,
+  trickleMarked: 3,
+  dropMin: 8,
   /** Fraction of the victim's bricks that drop (the rest is lost with the fall). */
   dropShare: 0.75,
   /** Bricks a respawn starts with (never less). */
-  respawnBricks: 8,
+  respawnBricks: 12,
   /** Extra bricks the marked leader drops when killed. */
   markedBounty: 12,
   /** Seconds a dropped cluster hangs where its owner died before it plunges. */
   hoverTime: 10,
   pickupRadius: 1.8,
   // The flag.
-  flagStartY: 160,
-  /** m/s of descent (160 m down to about 45 m over the twelve minutes). */
-  flagFall: 0.16,
+  flagStartY: 180,
+  /** m/s of descent (180 m down to about 36 m over the twelve minutes). */
+  flagFall: 0.2,
   /** m/s the flag drifts sideways toward the marked leader (or the island centre). */
   flagDrift: 1.1,
   /** Keeps the flag over the island. */
@@ -48,7 +48,7 @@ export const ASCENT = {
   /** Metres above the ground before height counts for the mark. */
   markedMinHeight: 6,
   // The sea.
-  seaStartAt: 380,
+  seaStartAt: 330,
   seaSpeed: 0.12,
   seaBoost: 3,
   seaFloor: 0,

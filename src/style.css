@@ -980,3 +980,7 @@ body { background: radial-gradient(1200px 800px at 50% 30%, #16283a 0%, #0f1923 
   [dir='rtl'] .sky-arch { right: calc(60px + env(safe-area-inset-right, 0px)); left: auto; }
   .sky-out { font-size: 20px; }
 }
+
+/* v14: frame budget overlay (?debug=perf) */
+.perf-overlay { position: fixed; left: 8px; top: 8px; z-index: 90; margin: 0; padding: 6px 9px; font: 11px/1.45 ui-monospace, "SF Mono", Menlo, monospace; color: #9dffb0; background: rgba(4, 10, 16, 0.78); border: 1px solid rgba(157, 255, 176, 0.25); border-radius: 4px; white-space: pre; pointer-events: none; text-shadow: 0 1px 2px #000; }
+[dir="rtl"] .perf-overlay { left: auto; right: 8px; direction: ltr; text-align: left; }

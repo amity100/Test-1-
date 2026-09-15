@@ -17,6 +17,7 @@ import { Mat, encodeBlock } from '../world/Voxel';
 import { clamp } from './MathUtil';
 import { Game } from './Game';
 import { buildDecor } from '../world/Decor';
+import { perf } from './Perf';
 
 const nextFrame = (): Promise<void> => new Promise((r) => requestAnimationFrame(() => r()));
 
@@ -131,6 +132,7 @@ export class App {
     this.last = performance.now();
     requestAnimationFrame(this.loop);
     if (flags.has('info')) this.showDiagnostics();
+    perf.on = flags.has('perf');
   }
 
   /** ?debug=info: GPU, tier and capability readout in the corner, refreshed once a second. */
@@ -174,7 +176,9 @@ export class App {
     const input = this.input;
     let focus: THREE.Vector3 = this.gr.camera.position;
     if (!this.freeFly) {
+      const tg = perf.now();
       focus = this.game.update(dt);
+      perf.add('game', tg);
     }
     if (this.freeFly) {
       if (input.buttonPressed(0) && !input.looking) input.requestPointerLock();
@@ -196,11 +200,15 @@ export class App {
       this.gr.camera.rotateX(this.camPitch);
     }
     this.gr.camera.updateMatrixWorld();
+    const tsky = perf.now();
     this.sky.update(dt, this.time, focus);
     this.gr.fog.setSun(this.sky.sunDir, this.sky.sun.color.clone().multiplyScalar(1.05));
     this.water.update(this.time);
     this.foliage.update(this.time);
+    perf.add('sky', tsky);
+    const tch = perf.now();
     this.chunks.update(9);
+    perf.add('chunks', tch);
     // When the device cannot hold 50 fps the shadow map refreshes every other frame: at that rate
     // the half-frame lag of a moving shadow is invisible and its render cost halves.
     this.frameNo++;
@@ -209,8 +217,16 @@ export class App {
       sm.autoUpdate = false;
       sm.needsUpdate = (this.frameNo & 1) === 0;
     } else if (!sm.autoUpdate) sm.autoUpdate = true;
+    const tr = perf.now();
     this.gr.render(dt);
+    perf.add('submit', tr);
     input.endFrame();
+    if (perf.on) {
+      const ri = this.gr.renderer.info.render;
+      const size = this.gr.renderer.getDrawingBufferSize(new THREE.Vector2());
+      perf.addMs('frame', this.rawDt * 1000);
+      perf.tick(this.rawDt, () => `${this.gr.quality}  ${size.x}x${size.y}  calls ${ri.calls}  tris ${(ri.triangles / 1000).toFixed(0)}k`);
+    }
     // Frame rate from real frame times (the simulation step is clamped, the counter must not be).
     this.fpsAcc += Math.min(1, this.rawDt);
     this.fpsN++;
