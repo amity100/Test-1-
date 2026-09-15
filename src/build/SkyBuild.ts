@@ -89,6 +89,8 @@ const CELL_CAP = 1200;
 const CLIMB_PITCH = 0.12;
 /** A path restarts under the builder's feet once they are this far from its end. */
 const PATH_REACH = 20;
+/** How far a new floor may be nudged to line up with one already standing beside it. */
+const SNAP = 4;
 
 
 /** Nearest of the four facings (0 +X, 1 +Z, 2 -X, 3 -Z) to a yaw. */
@@ -277,8 +279,35 @@ export class SkyBuilder {
     return Math.max(1, Math.round(Math.min(g, feet.y)) - 1);
   }
 
+  /**
+   * The floor a new module actually lands on. Structures take their phase from the ground they
+   * started on, so two people who began a metre apart would grow grids a metre out of step and
+   * their buildings would cut through each other — floors an arm's length over stairs, walls
+   * through rooms, whole storeys you could not walk between. A module therefore snaps to a floor
+   * already standing in its own column or the ring around it, and separate towers grow into one
+   * building with floors that line up.
+   */
+  private snapFloor(i: number, j: number, y: number): number {
+    let best = y;
+    let bestD = SNAP + 1;
+    for (let di = -1; di <= 1; di++)
+      for (let dj = -1; dj <= 1; dj++) {
+        const near = this.plan.nearestInColumn(i + di, j + dj, y, SNAP);
+        // Down as far as the snap reaches, up only as far as a body can climb: a floor lifted to
+        // meet its neighbour must still be a floor the builder can step onto.
+        if (near === null || near > y + 2) continue;
+        const d = Math.abs(near - y);
+        if (d > 0 && d < bestD) {
+          bestD = d;
+          best = near;
+        }
+      }
+    return best;
+  }
+
   /** Works out the cells of a module and everything that could stop it. */
   private planAt(kind: PieceKind, i: number, j: number, y: number, dir: number, self: Entity, bricks: number): AimResult {
+    y = this.snapFloor(i, j, y);
     const target = cellKey(i, j, y);
     const color = this.colorIndex(self);
     const skin = this.skinFor(self);

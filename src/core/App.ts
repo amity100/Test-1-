@@ -21,6 +21,12 @@ import { perf } from './Perf';
 
 const nextFrame = (): Promise<void> => new Promise((r) => requestAnimationFrame(() => r()));
 
+/**
+ * The only three sizes the picture is ever rendered at. Every step in between was a rebuild of
+ * every render target for a sharpness nobody could see, and the black frame that came with it.
+ */
+const RES_STEPS = [1, 0.92, 0.85];
+
 /** Application root: owns rendering, world and the main loop. */
 export class App {
   gr!: GameRenderer;
@@ -91,6 +97,8 @@ export class App {
     this.sky.setShadowMapSize(this.gr.profile.shadowMap);
     this.sky.setShadowRadius(this.gr.profile.shadowRadius);
     this.sky.setSun(26, 140);
+    // Applied at once, never deferred: the camera has to match the window before anything is aimed
+    // through it or drawn into it.
     window.addEventListener('resize', () => this.gr.resize());
     this.gr.resize();
 
@@ -175,17 +183,18 @@ export class App {
   };
 
   /**
-   * Holds the frame rate by giving a little resolution away, and takes it back when the card can.
-   * The judge is the typical frame, not the average: one hitch (a remesh, a tab switch) must not
-   * cost sharpness for the rest of the match, and on a 60 Hz screen the rate can never exceed
+   * Holds the frame rate with two dials, in this order: first a little sharpness, and only once
+   * that is spent, a quality tier. The judge is the typical frame, not the average: one hitch (a
+   * remesh, a tab switch) must not cost anything, and on a 60 Hz screen the rate can never exceed
    * sixty, so recovery is earned by a steady run of full-speed frames rather than by a rate the
    * display would never report.
    */
-  private tuneResolution(): void {
+  private tuneQuality(): void {
     if (this.gr.flags.has('noadapt') || this.freeFly) return;
     // Ignore the odd long frame: sort a short window and read the frame at the 70th percentile.
     if (this.rawDt < 0.5) this.frameWindow.push(this.rawDt);
     this.resTimer -= this.rawDt;
+    this.sinceChange += this.rawDt;
     if (this.resTimer > 0 || this.frameWindow.length < 12) return;
     this.resTimer = 0.6;
     const sorted = this.frameWindow.slice().sort((a, b) => a - b);
@@ -194,21 +203,64 @@ export class App {
     this.frameWindow.length = 0;
     const mobile = settings.mobileSafe || this.gr.mobileSafe;
     const wantMs = 1000 / (mobile ? 50 : 52);
+    // Every change of size throws away the render targets and costs a frame, so nothing moves
+    // twice in a row without a couple of seconds in between.
+    const settled = this.sinceChange >= 2.5;
     if (typical * 1000 > wantMs) {
-      this.gr.setResolutionScale(this.gr.resScale - 0.08);
       this.steadyFor = 0;
+      this.slowFor += 0.6;
+      if (!settled) return;
+      if (this.resStep < RES_STEPS.length - 1) this.setResStep(this.resStep + 1);
+      // The smallest picture we are willing to render, and still short of the rate: the card is
+      // simply above its tier.
+      else if (this.slowFor >= 3) this.stepQualityDown();
     } else if (best * 1000 < 1000 / 59 + 0.3) {
       // Running at the display's own rate for a couple of seconds: try a step back up.
+      this.slowFor = 0;
       this.steadyFor += 0.6;
-      if (this.steadyFor >= 2 && this.gr.resScale < 1) {
-        this.gr.setResolutionScale(this.gr.resScale + 0.06);
+      if (this.steadyFor >= 2 && this.resStep > 0 && settled) {
+        this.setResStep(this.resStep - 1);
         this.steadyFor = 0;
       }
-    } else this.steadyFor = 0;
+    } else {
+      this.steadyFor = 0;
+      this.slowFor = 0;
+    }
   }
   private resTimer = 1.5;
   private frameWindow: number[] = [];
   private steadyFor = 0;
+  private slowFor = 0;
+  private sinceChange = 0;
+  private resStep = 0;
+
+  private setResStep(i: number): void {
+    const next = clamp(i, 0, RES_STEPS.length - 1);
+    if (next === this.resStep) return;
+    this.resStep = next;
+    this.gr.setResolutionScale(RES_STEPS[next]);
+    this.sinceChange = 0;
+  }
+
+  /**
+   * Drops one quality tier: god rays go first, then the screen-space occlusion and the soft
+   * shadows. Only ever downward, and never when a tier was chosen by hand — a picked tier is a
+   * decision, not a guess. The sharpness comes back with it, because the cheaper picture can
+   * afford it.
+   */
+  private stepQualityDown(): void {
+    if (this.forcedQuality || settings.data.quality !== 'auto') return;
+    const order: Quality[] = ['ultra', 'high', 'medium', 'low'];
+    const next = order[order.indexOf(this.gr.quality) + 1];
+    if (!next) return;
+    this.gr.setQuality(next);
+    this.sky.setShadowMapSize(this.gr.profile.shadowMap);
+    this.sky.setShadowRadius(this.gr.profile.shadowRadius);
+    this.resStep = 0;
+    this.gr.setResolutionScale(RES_STEPS[0]);
+    this.sinceChange = 0;
+    this.slowFor = 0;
+  }
 
   private update(dt: number): void {
     const input = this.input;
@@ -259,11 +311,13 @@ export class App {
       sm.autoUpdate = false;
       sm.needsUpdate = (this.frameNo & 1) === 0;
     } else if (!sm.autoUpdate) sm.autoUpdate = true;
+    // Judged, and any change of size made, before the picture is drawn: a canvas resized after the
+    // frame is composited once with nothing in it, which is the black flicker.
+    this.tuneQuality();
     const tr = perf.now();
     this.gr.render(dt);
     perf.add('submit', tr);
     input.endFrame();
-    this.tuneResolution();
     if (perf.on) {
       const ri = this.gr.renderer.info.render;
       const size = this.gr.renderer.getDrawingBufferSize(new THREE.Vector2());

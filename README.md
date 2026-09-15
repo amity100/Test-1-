@@ -60,6 +60,19 @@ GitHub Pages). Single-file build for artifact hosting: `npm run build:artifact` 
    two facing portals** and is a way through rather than a dead end, a terrace on top of a stack
    gets a light mast, and everything hanging in the air grows four pylons down to the hill or a
    stepped keel with a crystal glowing under it. Every pane of glass can be shot out or run through.
+
+   Four rules between them mean a finished citadel has no dead ends. **A floor with another floor
+   over it grows its own service stair** — five steps along one wall, a lit handrail, lamps in the
+   ceiling and an opening cut through the floor above — so a room is never somewhere you can only
+   leave by the way you came in. **A floor whose neighbour stands a storey higher grows a flight up
+   to it**, three wide and railed in light, which is both the way up and where people meet.
+   **The long side of a grand stair opens into a landing** wherever a floor stands against its foot,
+   instead of presenting six blocks of blank wall to somebody standing one step away. And **a new
+   floor snaps onto the floors already beside it**, so two people building side by side end up with
+   storeys that line up rather than two grids a metre out of step cutting through each other. A
+   walk-through of a finished three-minute match reaches **97–99 % of every cell in it** from the
+   beach. Each floor is also furnished to be fought on: a few chest-high pieces of cover, laid only
+   where the floor is solid and nothing else stands, low enough to shoot over and to climb.
    So whatever anyone builds is a way up for everyone: paths cross, towers grow into one city, and
    that is where the fighting happens. A green ghost of the real masonry shows where a piece will
    land; amber means you cannot afford it, red that something is already there.
@@ -311,9 +324,20 @@ frame up close, every fourth past eighty metres); the scene keeps six lights rat
 ambient occlusion runs at half resolution with a bilateral upsample on every tier; the colour grade
 shares a pass with the rest of the post chain; god rays and bloom render at half resolution; the
 high tier renders at the display's own density and the target never exceeds about three
-megapixels; and a dynamic resolution scale between 0.7 and 1 judges the typical frame rather than
-the average, so one hitch never costs sharpness for the rest of the match, and climbs back after a
-couple of seconds at the display's own rate.
+megapixels; and a dynamic resolution scale judges the typical frame rather than the average, so one
+hitch never costs sharpness for the rest of the match, and climbs back after a couple of seconds at
+the display's own rate.
+
+That scale moves between three fixed sizes (1, 0.92, 0.85 of native) and never twice inside two and
+a half seconds, because every change throws away and rebuilds every render target in the post chain.
+It is also applied **before** the frame is drawn rather than after it: a canvas resized after the
+picture has been composited is shown once with nothing in it, which is the black flicker. A window
+resize is never deferred, because the camera has to match the window before anything is aimed
+through it. And when the smallest picture still cannot hold the rate for three seconds running, the
+tier itself steps
+down — high to medium to low, god rays first, then the screen-space occlusion and the soft shadows —
+which is the only honest answer for a card that was never going to hold the tier it was guessed into.
+Never upward, and never at all when a tier was picked by hand in the settings.
 
 The voxel pipeline was rebuilt for a city that changes every second. A module used to remesh the
 whole world synchronously the moment it landed (a median 66 ms, up to 240 ms, every time any of

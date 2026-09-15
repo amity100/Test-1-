@@ -42,7 +42,9 @@ export interface QualityProfile {
 
 export const QUALITY_PROFILES: Record<Quality, QualityProfile> = {
   low: { pixelRatio: 1, ao: false, aoMode: 'Performance', aoHalfRes: true, shadowMap: 1024, shadowRadius: 70, godRays: false, chromatic: false, grade: false, softShadows: false, grass: 6000, trees: 90, anisotropy: 2 },
-  medium: { pixelRatio: 1.15, ao: true, aoMode: 'Low', aoHalfRes: true, shadowMap: 2048, shadowRadius: 80, godRays: false, chromatic: false, grade: true, softShadows: true, grass: 16000, trees: 140, anisotropy: 4 },
+  // Medium never supersamples: it is the tier a card is stepped down *to*, and 1.15 on a dense
+  // display would have handed it a third more pixels than the tier it was struggling with.
+  medium: { pixelRatio: 1, ao: true, aoMode: 'Low', aoHalfRes: true, shadowMap: 2048, shadowRadius: 80, godRays: false, chromatic: false, grade: true, softShadows: true, grass: 16000, trees: 140, anisotropy: 4 },
   // High renders at the display's own density: supersampling a desktop monitor cost a quarter of
   // the frame for a sharpness the anti-aliasing already gives.
   high: { pixelRatio: 1.0, ao: true, aoMode: 'Low', aoHalfRes: true, shadowMap: 2048, shadowRadius: 80, godRays: true, chromatic: false, grade: true, softShadows: true, grass: 28000, trees: 180, anisotropy: 8 },

@@ -77,6 +77,10 @@ export class Emit {
   box(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, v: number): void {
     for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) this.set(x, y, z, v);
   }
+  /** What this cell has put at a position so far: air both for untouched space and for a carved hole. */
+  at(x: number, y: number, z: number): number {
+    return this.blocks.get(posKey(x, y, z)) ?? AIR;
+  }
 }
 
 /** Writes cell-local positions (authored facing +X) into the world, turned to the cell's facing. */
@@ -115,8 +119,22 @@ const HOLE = { lx0: 3, lx1: 5, lz0: 3, lz1: 5 };
 /** The portal on a hall face: three blocks wide, four tall. */
 const PORTAL_FROM = 3;
 const PORTAL_TO = 5;
+/**
+ * How far up a grand flight its side wall opens when a floor stands beside its foot. Without this
+ * the two long sides of a stair are a six-block wall, and a neighbour a stride away from the first
+ * step has to walk the whole way round to use it.
+ */
+const STAIR_GATE_UNTIL = 3;
+
 /** First step of a flight whose head would be crushed by a floor one storey up. */
 const STAIR_HEAD_FROM = 5;
+/**
+ * The service stair every roofed floor gets: five steps along one side of the room, and the opening
+ * it comes up through in the floor above. Without it a floor with another floor over it is a room
+ * with no way out but the way you came in — the blocked structures people kept getting stuck in.
+ */
+const SERVICE = { lx0: 1, lx1: 5, lz0: 1, lz1: 3 };
+const SERVICE_HOLE = { lx0: 3, lx1: 5, lz0: 1, lz1: 3 };
 
 export class SkyArchitect {
   constructor(
@@ -134,7 +152,12 @@ export class SkyArchitect {
     switch (c.kind) {
       case 'deck':
         this.floor(e, c, S, true);
+        // A floor with sky over it is a terrace; with another floor over it, a room as well — one
+        // that can always be left upward.
         this.terrace(e, c, S);
+        if (this.needsService(c)) this.room(e, c, S);
+        this.link(e, c, S);
+        this.cover(e, c, S);
         this.under(e, c, S);
         break;
       case 'tower':
@@ -197,6 +220,29 @@ export class SkyArchitect {
     return !!back && back.kind === 'ramp' && back.dir === side;
   }
 
+  /**
+   * The side of this floor that carries a flight up to the floor a storey above it next door, or
+   * -1 when there is none. One per floor: a room with a staircase on every wall is a stairwell and
+   * not a place to stand, and the first matching side is enough to make the climb exist.
+   */
+  private linkSide(c: SkyCell): number {
+    if (c.kind !== 'deck' || this.plan.above(c.i, c.j, c.y)) return -1;
+    for (let s = 0; s < 4; s++) {
+      if (!this.open(c, s) || this.rampAt(c, s)) continue;
+      const [dx, dz] = DIRS[s];
+      const up = this.plan.get(c.i + dx, c.j + dz, c.y + STOREY);
+      if (up && up.kind === 'deck') return s;
+    }
+    return -1;
+  }
+
+  /** The other end of that flight: a floor a storey below sends a stair up to this edge. */
+  private linkFrom(c: SkyCell, side: number): boolean {
+    const [dx, dz] = DIRS[side];
+    const low = this.plan.get(c.i + dx, c.j + dz, c.y - STOREY);
+    return !!low && this.linkSide(low) === (side + 2) % 4;
+  }
+
   /** A bridge beside this cell on that side: the balustrade keeps its ends and opens in the middle. */
   private bridgeAt(c: SkyCell, side: number): boolean {
     const [dx, dz] = DIRS[side];
@@ -219,8 +265,9 @@ export class SkyArchitect {
     const tower = this.towerBelow(c);
     const hole = tower ? this.holeRect(tower) : null;
     const openSide = [0, 1, 2, 3].map((s) => this.open(c, s));
-    // A stair below comes up through this floor: the head of its flight is left open, or the last
-    // steps would be swallowed by the slab and the climb would end in a ceiling.
+    // A stair below comes up through this floor — the grand flight of a ramp, or the service stair
+    // of the room underneath. Either way its head is left open, or the last steps would be swallowed
+    // by the slab and the climb would end in a ceiling.
     const stairHead = this.stairHead(c);
     const inHole = (lx: number, lz: number): boolean =>
       (!!hole && lx >= hole.x0 && lx <= hole.x1 && lz >= hole.z0 && lz <= hole.z1) || stairHead.has(lx * CELL + lz);
@@ -253,13 +300,151 @@ export class SkyArchitect {
   private stairHead(c: SkyCell): Set<number> {
     const out = new Set<number>();
     const below = this.plan.below(c.i, c.j, c.y);
-    if (!below || below.kind !== 'ramp') return out;
-    for (let lx = STAIR_HEAD_FROM; lx < CELL; lx++)
-      for (let lz = 1; lz <= CELL - 2; lz++) {
-        const [ax, az] = rotLocal(lx, lz, below.dir);
-        out.add(ax * CELL + az);
-      }
+    if (!below) return out;
+    if (below.kind === 'ramp') {
+      for (let lx = STAIR_HEAD_FROM; lx < CELL; lx++)
+        for (let lz = 1; lz <= CELL - 2; lz++) {
+          const [ax, az] = rotLocal(lx, lz, below.dir);
+          out.add(ax * CELL + az);
+        }
+      return out;
+    }
+    if (this.needsService(below)) {
+      for (let lx = SERVICE_HOLE.lx0; lx <= SERVICE_HOLE.lx1; lx++)
+        for (let lz = SERVICE_HOLE.lz0; lz <= SERVICE_HOLE.lz1; lz++) {
+          const [ax, az] = rotLocal(lx, lz, below.dir);
+          out.add(ax * CELL + az);
+        }
+    }
     return out;
+  }
+
+  /** A floor with another floor over it and no stair of its own is a room that must grow one. */
+  private needsService(c: SkyCell): boolean {
+    if (c.kind !== 'deck') return false;
+    const up = this.plan.above(c.i, c.j, c.y);
+    return !!up && up.kind !== 'arena' && up.kind !== 'arenaPart';
+  }
+
+  /**
+   * The inside of a roofed floor: a stair up to the opening in the ceiling, a rail beside it, lamps
+   * overhead and a low wall to fight behind. A room you can leave upward, see in, and hold.
+   */
+  private room(e: Emit, c: SkyCell, S: Skin): void {
+    const x0 = cellX(c.i);
+    const z0 = cellZ(c.j);
+    const y = c.y;
+    const pen = new Pen(e, x0, z0, c.dir);
+    const put = (lx: number, lz: number, yy: number, v: number): void => pen.put(lx, lz, yy, v);
+    const step = withShape(S.floor, makeShape('stairs', c.dir));
+    for (let s = 0; s < 5; s++) {
+      const lx = SERVICE.lx0 + s;
+      const h = y + 1 + s;
+      for (let lz = SERVICE.lz0; lz <= SERVICE.lz1; lz++) {
+        put(lx, lz, h, step);
+        for (let f = y + 1; f < h; f++) put(lx, lz, f, S.panelAlt);
+      }
+      // The stringer on the open side of the flight, with a lit handrail along its top.
+      if (s > 0) {
+        for (let f = y + 1; f < h; f++) put(lx, SERVICE.lz1 + 1, f, f === h - 1 ? S.frame : S.panelAlt);
+        put(lx, SERVICE.lz1 + 1, h, withShape(neon(c.color), SLAB));
+      }
+    }
+    // Ceiling lights, so a room is somewhere you can fight rather than a dark box.
+    for (const [lx, lz] of [
+      [2, 6],
+      [5, 6],
+      [6, 3],
+    ] as [number, number][]) {
+      put(lx, lz, y + 5, S.lamp);
+    }
+    // A low wall across the far corner: cover for whoever holds the room.
+    put(6, 5, y + 1, S.panelAlt);
+    put(6, 6, y + 1, S.panelAlt);
+    put(6, 5, y + 2, withShape(S.frame, SLAB));
+    put(6, 6, y + 2, withShape(S.frame, SLAB));
+  }
+
+  /**
+   * The flight that joins a floor to the one a storey above it next door. Two floors a stride apart
+   * and six blocks up were a wall you could only look at; every one of them now carries a stair,
+   * three wide, railed in light and open on both sides — a way up, and somewhere to meet.
+   */
+  private link(e: Emit, c: SkyCell, S: Skin): void {
+    const side = this.linkSide(c);
+    if (side < 0) return;
+    const pen = new Pen(e, cellX(c.i), cellZ(c.j), side);
+    const put = (lx: number, lz: number, yy: number, v: number): void => pen.put(lx, lz, yy, v);
+    const y = c.y;
+    const step = withShape(S.floor, makeShape('stairs', side));
+    const rail = withShape(neon(c.color), SLAB);
+    for (let s = 0; s < STOREY; s++) {
+      const lx = 2 + s;
+      const h = y + 1 + s;
+      for (let lz = 3; lz <= 5; lz++) {
+        put(lx, lz, h, step);
+        for (let f = y + 1; f < h; f++) put(lx, lz, f, S.panelAlt);
+      }
+      // Handrails rather than stringer walls: the flight is seen through and fought around instead
+      // of becoming a second wall across the floor.
+      if (s > 0) {
+        for (const lz of [2, 6]) {
+          put(lx, lz, h, S.frame);
+          put(lx, lz, h + 1, rail);
+        }
+      }
+    }
+    // A light at the foot of the flight, so the way up is the brightest thing on the floor.
+    put(1, 2, y + 1, S.lamp);
+    put(1, 6, y + 1, S.lamp);
+  }
+
+  /**
+   * What turns a floor from a table into a place worth fighting on: a few chest-high pieces that
+   * break the sightline without closing it, each one low enough to shoot over and to climb. They
+   * go only where this cell has laid solid floor and nothing else stands, so a piece of cover can
+   * never land on a stairwell or across a flight. Three arrangements, so two floors side by side
+   * are not the same floor twice.
+   */
+  private cover(e: Emit, c: SkyCell, S: Skin): void {
+    const x0 = cellX(c.i);
+    const z0 = cellZ(c.j);
+    const y = c.y;
+    const variant = hash(c.i, c.y, c.j) % 3;
+    const spots: [number, number][] =
+      variant === 0
+        ? [
+            [2, 2],
+            [3, 2],
+            [2, 3],
+            [5, 5],
+            [5, 4],
+            [4, 5],
+          ]
+        : variant === 1
+          ? [
+              [3, 3],
+              [4, 3],
+              [3, 4],
+              [4, 4],
+            ]
+          : [
+              [2, 3],
+              [2, 4],
+              [3, 4],
+              [5, 4],
+              [5, 3],
+              [4, 3],
+            ];
+    for (const [lx, lz] of spots) {
+      const x = x0 + lx;
+      const z = z0 + lz;
+      if (!e.at(x, y, z) || e.at(x, y + 1, z) || e.at(x, y + 2, z)) continue;
+      e.set(x, y + 1, z, S.panelAlt);
+      // The island in the middle carries a post of light on one corner: enough to read the floor
+      // from across the sky, small enough that it is still cover and not a white box in the room.
+      e.set(x, y + 2, z, variant === 1 && lx === 3 && lz === 3 ? withShape(neon(c.color), FENCE) : withShape(S.frame, SLAB));
+    }
   }
 
   // ---- terrace --------------------------------------------------------------
@@ -272,7 +457,7 @@ export class SkyArchitect {
     const openSide = [0, 1, 2, 3].map((s) => this.open(c, s));
     for (let s = 0; s < 4; s++) {
       if (!openSide[s] && !this.bridgeAt(c, s)) continue;
-      const gap = this.rampAt(c, s) ? 6 : this.bridgeAt(c, s) ? 4 : 0;
+      const gap = this.rampAt(c, s) || this.linkFrom(c, s) ? 6 : this.bridgeAt(c, s) ? 4 : 0;
       this.balustrade(e, c, S, s, gap);
     }
     // Corner posts where two open edges meet: two of frame and a light on top.
@@ -290,7 +475,7 @@ export class SkyArchitect {
     }
     // A summit — a deck on top of a hall with nothing above — carries a light mast on every other cell.
     const below = this.plan.below(c.i, c.j, c.y);
-    if (below && !this.plan.above(c.i, c.j, c.y) && hash(c.i, c.j, c.y + 1) % 2 === 0) {
+    if (below && !this.plan.above(c.i, c.j, c.y) && this.linkSide(c) < 0 && hash(c.i, c.j, c.y + 1) % 2 === 0) {
       const tower = this.towerBelow(c);
       const hole = tower ? this.holeRect(tower) : null;
       const spots: [number, number, number, number][] = [
@@ -498,9 +683,21 @@ export class SkyArchitect {
     const r = c.dir;
     const pen = new Pen(e, x0, z0, r);
     const put = (lx: number, lz: number, yy: number, v: number): void => pen.put(lx, lz, yy, v);
-    for (let lx = 0; lx < CELL; lx++) for (let lz = 0; lz < CELL; lz++) put(lx, lz, y, lz === 0 || lz === CELL - 1 ? S.frame : S.floor);
+    const holes = this.stairHead(c);
+    for (let lx = 0; lx < CELL; lx++)
+      for (let lz = 0; lz < CELL; lz++) {
+        const [ax, az] = rotLocal(lx, lz, r);
+        // A stair climbing under this one comes up through the floor rather than into it.
+        if (holes.has(ax * CELL + az)) e.clear(x0 + ax, y, z0 + az);
+        else put(lx, lz, y, lz === 0 || lz === CELL - 1 ? S.frame : S.floor);
+      }
     const step = withShape(S.floor, makeShape('stairs', r));
     const rail = withShape(neon(c.color), SLAB);
+    // The two long sides of the flight, and whether a floor stands against each of them.
+    const stringers: [number, boolean][] = [
+      [0, !this.open(c, (r + 3) % 4)],
+      [CELL - 1, !this.open(c, (r + 1) % 4)],
+    ];
     for (let s = 0; s < 6; s++) {
       const lx = 2 + s;
       const h = y + 1 + s;
@@ -511,22 +708,23 @@ export class SkyArchitect {
           put(lx, lz, f, tunnel ? AIR : S.panelAlt);
         }
       }
-      // Stringer walls: cladding below, a frame beam at the top, and the light rail on it.
-      for (let f = y + 1; f < h; f++) {
-        put(lx, 0, f, S.panelAlt);
-        put(lx, CELL - 1, f, S.panelAlt);
+      // Stringer walls: cladding below, a frame beam at the top, and the light rail on it. Where a
+      // floor stands beside the foot of the flight the wall opens into a landing instead: the climb
+      // must never be a blank six-block wall to whoever is standing one step away from it.
+      for (const [lz, gated] of stringers) {
+        if (gated && lx <= STAIR_GATE_UNTIL) continue;
+        for (let f = y + 1; f < h; f++) put(lx, lz, f, S.panelAlt);
+        put(lx, lz, h, S.frame);
+        put(lx, lz, h + 1, rail);
       }
-      put(lx, 0, h, S.frame);
-      put(lx, CELL - 1, h, S.frame);
-      put(lx, 0, h + 1, rail);
-      put(lx, CELL - 1, h + 1, rail);
     }
     // The flat approach keeps the rail going, and the passage under the flight has a framed mouth.
-    for (let lx = 0; lx <= 1; lx++) {
-      put(lx, 0, y + 1, S.frame);
-      put(lx, CELL - 1, y + 1, S.frame);
-      put(lx, 0, y + 2, rail);
-      put(lx, CELL - 1, y + 2, rail);
+    for (const [lz, gated] of stringers) {
+      if (gated) continue;
+      for (let lx = 0; lx <= 1; lx++) {
+        put(lx, lz, y + 1, S.frame);
+        put(lx, lz, y + 2, rail);
+      }
     }
     for (let lz = 1; lz <= 6; lz++) put(CELL - 1, lz, y + 4, S.frame);
   }
@@ -541,8 +739,13 @@ export class SkyArchitect {
     const r = c.dir;
     const pen = new Pen(e, x0, z0, r);
     const put = (lx: number, lz: number, yy: number, v: number): void => pen.put(lx, lz, yy, v);
+    const holes = this.stairHead(c);
     for (let lx = 0; lx < CELL; lx++) {
-      for (let lz = 1; lz <= 6; lz++) put(lx, lz, y, lz === 1 || lz === 6 ? S.frame : lx % 4 === 0 && lz >= 3 && lz <= 4 ? S.inlay : S.floor);
+      for (let lz = 1; lz <= 6; lz++) {
+        const [ax, az] = rotLocal(lx, lz, r);
+        if (holes.has(ax * CELL + az)) e.clear(x0 + ax, y, z0 + az);
+        else put(lx, lz, y, lz === 1 || lz === 6 ? S.frame : lx % 4 === 0 && lz >= 3 && lz <= 4 ? S.inlay : S.floor);
+      }
       // Rails: posts at the ends, a light post every fourth block, glass between.
       const end = lx === 0 || lx === CELL - 1;
       const post = lx % 4 === 2;
@@ -573,10 +776,17 @@ export class SkyArchitect {
     const ground = this.terrain.heightAt(cx, cz);
     const floating = c.y - ground > STOREY;
     const carried = !!this.plan.below(c.i, c.j, c.y);
+    const holes = this.stairHead(c);
+    const x0 = cellX(c.i);
+    const z0 = cellZ(c.j);
     for (let x = Math.floor(cx - R); x <= Math.ceil(cx + R); x++)
       for (let z = Math.floor(cz - R); z <= Math.ceil(cz + R); z++) {
         const d = Math.hypot(x + 0.5 - cx, z + 0.5 - cz);
         if (d > R) continue;
+        if (holes.has((x - x0) * CELL + (z - z0))) {
+          e.clear(x, y, z);
+          continue;
+        }
         e.set(x, y, z, d > R - 1.5 ? S.frame : d > R - 2.5 ? S.inlay : S.floor);
         if (carried) continue;
         if (floating) {
@@ -662,7 +872,15 @@ export class SkyArchitect {
     } else if (c.kind === 'ramp') {
       out.push(at(0.5, 3.5, y + 1), at(4, 3.5, y + 4), at(7.5, 3.5, y + 7));
     } else {
-      out.push(new THREE.Vector3(x0 + CELL / 2, y + 1, z0 + CELL / 2));
+      const link = this.linkSide(c);
+      if (link >= 0) {
+        // A floor that carries a flight is routed through the flight: in at its foot, out at its
+        // head, because the centre of the floor is now the middle of a staircase.
+        const [fx, fz] = rotLocal(1, 4, link);
+        const [hx, hz] = rotLocal(CELL - 1, 4, link);
+        out.push(new THREE.Vector3(x0 + fx + 0.5, y + 1, z0 + fz + 0.5));
+        out.push(new THREE.Vector3(x0 + hx + 0.5, y + 1 + STOREY, z0 + hz + 0.5));
+      } else out.push(new THREE.Vector3(x0 + CELL / 2, y + 1, z0 + CELL / 2));
     }
     return out;
   }
