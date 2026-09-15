@@ -31,6 +31,7 @@ import { WAR } from '../sim/War';
 import { AscentState, ASCENT, type AscentHooks } from '../sim/Ascent';
 import { perf } from './Perf';
 import { SkyBuilder, PIECES, PIECE_KINDS, type PieceKind, type AimResult } from '../build/SkyBuild';
+import { SKIN_IDS, SKIN_LIST, skinIndex } from '../build/SkySkins';
 import { AscentBrain } from '../ai/AscentBrain';
 import { AscentMeshes } from '../render/AscentMeshes';
 import { GadgetMeshes } from '../render/GadgetMeshes';
@@ -228,6 +229,7 @@ export class Game {
     this.grenadeModel = buildWeaponModel('grenade', new THREE.Color('#39ff14'), false, 'high');
     this.hud = new HUD(this.uiRoot);
     this.hud.onSpawnChoice = (i) => this.setSpawnChoice(i);
+    this.hud.onSkin = (id) => this.setSkin(id);
     this.hud.onPiece = (kind) => {
       if (this.match?.ascent && (PIECE_KINDS as string[]).includes(kind)) this.toggleBuild(kind as PieceKind);
     };
@@ -515,12 +517,17 @@ export class Game {
     }
     const sky = new SkyBuilder(this.app.world, this.app.terrain, () => this.entities);
     this.sky = sky;
+    // Bots take turns through the three finishes; you build in the one you picked.
+    sky.skinFor = (e) => (e.isBot ? e.colorIndex % SKIN_LIST.length : skinIndex(settings.data.skySkin));
     sky.events.on('placed', ({ kind, owner, centre }) => {
       const mine = owner === this.player;
       audio.play('place', { pos: mine ? undefined : centre, pitch: kind === 'arena' ? 0.62 : kind === 'tower' ? 0.8 : 0.95, volume: mine ? 0.9 : 0.6 });
       this.vfx.puff(centre, new THREE.Vector3(0, 1, 0), kind === 'arena' ? 16 : kind === 'tower' ? 9 : 6, 0.9, 0.35);
       this.vfx.sparks(centre, new THREE.Vector3(0, 1, 0), 10, new THREE.Color(owner.colorHex), 4);
-      this.app.chunks.flush();
+      // The masonry appears over the next frames within the frame budget, nearest the viewer first;
+      // a whole-world remesh here cost a visible hitch every time any of twelve builders tapped.
+      // Your own piece gets a head start so it is standing before your hand comes down.
+      if (mine) this.app.chunks.update(8);
       if (mine && IS_TOUCH) vibrate(8);
     });
     this.combat.knockback = ASCENT.knockback;
@@ -2118,6 +2125,15 @@ export class Game {
     this.buildAim = null;
   }
 
+  /** Picks the finish new pieces are built in (C cycles it; the HUD chips pick one directly). */
+  setSkin(id: string): void {
+    if (!(SKIN_IDS as string[]).includes(id) || settings.data.skySkin === id) return;
+    settings.data.skySkin = id;
+    settings.save();
+    this.ghostKey = '';
+    audio.play('switch', { volume: 0.5, pitch: 1.35 });
+  }
+
   enterArch(): void {
     if (this.archOn || this.archCooldown > 0 || !this.player.alive) return;
     this.archOn = true;
@@ -2169,6 +2185,7 @@ export class Game {
       if (input.wheel > 0 || v.piece) this.buildKind = PIECE_KINDS[(PIECE_KINDS.indexOf(this.buildKind) + 1) % PIECE_KINDS.length];
       else if (input.wheel < 0) this.buildKind = PIECE_KINDS[(PIECE_KINDS.indexOf(this.buildKind) + PIECE_KINDS.length - 1) % PIECE_KINDS.length];
       if (input.wasPressed('KeyR') || input.buttonPressed(2)) this.buildRot = (this.buildRot + 1) % 4;
+      if (input.wasPressed('KeyC')) this.setSkin(SKIN_IDS[(skinIndex(settings.data.skySkin) + 1) % SKIN_IDS.length]);
     }
     v.build = v.piece = v.arch = false;
     if (!this.buildKind) {
@@ -2226,7 +2243,7 @@ export class Game {
   /** The ghost is the real masonry, so it is only regenerated when the module or its cell changes. */
   private refreshGhost(sky: SkyBuilder): void {
     const aim = this.buildAim;
-    const key = aim?.plan ? `${aim.plan.kind}|${aim.target}|${aim.plan.dir}|${aim.plan.cells.length}|${sky.moduleCount}` : '';
+    const key = aim?.plan ? `${aim.plan.kind}|${aim.target}|${aim.plan.dir}|${aim.plan.cells.length}|${sky.moduleCount}|${settings.data.skySkin}` : '';
     if (key === this.ghostKey) return;
     this.ghostKey = key;
     this.ghostCells = aim?.plan ? sky.previewCells(aim.plan) : [];
@@ -2539,6 +2556,7 @@ export class Game {
           kind: this.buildKind,
           reason: this.buildAim?.reason ?? 'range',
           pieces: PIECE_KINDS.map((k) => ({ kind: k, name: t(PIECES[k].nameKey), cost: PIECES[k].cost, icon: PIECES[k].icon, active: k === this.buildKind, affordable: p.bricks >= PIECES[k].cost })),
+          skins: SKIN_LIST.map((sk) => ({ id: sk.id, name: t(sk.nameKey), swatch: sk.swatch, active: sk.id === settings.data.skySkin })),
         }
       : null;
     return {

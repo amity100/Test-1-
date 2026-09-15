@@ -1,4 +1,4 @@
-import { CHUNK_SIZE, Mat, blockMat, blockColor, blockShape, PALETTE_LINEAR, isTransparent, shapeKind, shapeRot, SHAPE_DIRS } from './Voxel';
+import { CHUNK_SIZE, CHUNK_SHIFT, CHUNK_MASK, Mat, blockMat, blockColor, blockShape, PALETTE_LINEAR, isTransparent, shapeKind, shapeRot, SHAPE_DIRS } from './Voxel';
 import type { VoxelWorld } from './VoxelWorld';
 
 const N = CHUNK_SIZE;
@@ -23,15 +23,59 @@ export interface ChunkMeshResult {
   transparent: MeshData | null;
 }
 
+/** A typed array that grows by doubling: the mesher appends tens of thousands of floats per chunk. */
+class F32 {
+  buf = new Float32Array(4096);
+  n = 0;
+  push3(a: number, b: number, c: number): void {
+    if (this.n + 3 > this.buf.length) this.grow();
+    this.buf[this.n++] = a;
+    this.buf[this.n++] = b;
+    this.buf[this.n++] = c;
+  }
+  push2(a: number, b: number): void {
+    if (this.n + 2 > this.buf.length) this.grow();
+    this.buf[this.n++] = a;
+    this.buf[this.n++] = b;
+  }
+  push(a: number): void {
+    if (this.n + 1 > this.buf.length) this.grow();
+    this.buf[this.n++] = a;
+  }
+  private grow(): void {
+    const next = new Float32Array(this.buf.length * 2);
+    next.set(this.buf);
+    this.buf = next;
+  }
+  take(): Float32Array {
+    return this.buf.slice(0, this.n);
+  }
+}
+class U32 {
+  buf = new Uint32Array(4096);
+  n = 0;
+  push(a: number): void {
+    if (this.n + 1 > this.buf.length) {
+      const next = new Uint32Array(this.buf.length * 2);
+      next.set(this.buf);
+      this.buf = next;
+    }
+    this.buf[this.n++] = a;
+  }
+  take(): Uint32Array {
+    return this.buf.slice(0, this.n);
+  }
+}
+
 class MeshBuilder {
-  positions: number[] = [];
-  normals: number[] = [];
-  uvs: number[] = [];
-  tints: number[] = [];
-  mats: number[] = [];
-  aos: number[] = [];
-  lits: number[] = [];
-  indices: number[] = [];
+  positions = new F32();
+  normals = new F32();
+  uvs = new F32();
+  tints = new F32();
+  mats = new F32();
+  aos = new F32();
+  lits = new F32();
+  indices = new U32();
   quadCount = 0;
   /** Lighting of the faces being emitted: indoor flag and lamp level (set before each add). */
   indoor = 0;
@@ -46,30 +90,38 @@ class MeshBuilder {
     mat: number,
     flip: boolean,
   ): void {
-    const base = this.positions.length / 3;
+    const base = this.positions.n / 3;
     for (let i = 0; i < 4; i++) {
       const c = corners[i];
-      this.positions.push(c[0], c[1], c[2]);
-      this.normals.push(nx, ny, nz);
-      this.uvs.push(c[uvU], c[uvV]);
-      this.tints.push(tintR, tintG, tintB);
+      this.positions.push3(c[0], c[1], c[2]);
+      this.normals.push3(nx, ny, nz);
+      this.uvs.push2(c[uvU], c[uvV]);
+      this.tints.push3(tintR, tintG, tintB);
       this.mats.push(mat);
       this.aos.push(AO_CURVE[ao[i]]);
-      this.lits.push(this.indoor, this.lamp);
+      this.lits.push2(this.indoor, this.lamp);
     }
     // Choose the diagonal that keeps AO interpolation smooth.
     const diag02 = ao[0] + ao[2] > ao[1] + ao[3];
-    let tris: number[];
-    if (diag02) tris = [0, 1, 2, 0, 2, 3];
-    else tris = [1, 2, 3, 1, 3, 0];
-    if (flip) tris = [tris[0], tris[2], tris[1], tris[3], tris[5], tris[4]];
-    for (const t of tris) this.indices.push(base + t);
+    const idx = this.indices;
+    if (diag02) {
+      if (flip) {
+        idx.push(base); idx.push(base + 2); idx.push(base + 1); idx.push(base); idx.push(base + 3); idx.push(base + 2);
+      } else {
+        idx.push(base); idx.push(base + 1); idx.push(base + 2); idx.push(base); idx.push(base + 2); idx.push(base + 3);
+      }
+    } else if (flip) {
+      idx.push(base + 1); idx.push(base + 3); idx.push(base + 2); idx.push(base + 1); idx.push(base); idx.push(base + 3);
+    } else {
+      idx.push(base + 1); idx.push(base + 2); idx.push(base + 3); idx.push(base + 1); idx.push(base + 3); idx.push(base);
+    }
     this.quadCount++;
   }
 
   /** Convex polygon (3+ points) with explicit per-vertex AO (curve values); winding fixed to the normal. */
   addPolygon(pts: number[][], n: number[], uvU: number, uvV: number, ao: number[], tintR: number, tintG: number, tintB: number, mat: number): void {
-    if (pts.length < 3) return;
+    const count = pts.length;
+    if (count < 3) return;
     // Ensure counter-clockwise order relative to the normal.
     const ax = pts[1][0] - pts[0][0];
     const ay = pts[1][1] - pts[0][1];
@@ -80,38 +132,38 @@ class MeshBuilder {
     const cx = ay * bz - az * by;
     const cy = az * bx - ax * bz;
     const cz = ax * by - ay * bx;
-    let order = pts.map((_, i) => i);
-    let aoOrd = ao;
-    if (cx * n[0] + cy * n[1] + cz * n[2] < 0) {
-      order = order.reverse();
-      aoOrd = order.map((i) => ao[i]);
-    }
-    const base = this.positions.length / 3;
-    for (let k = 0; k < order.length; k++) {
-      const c = pts[order[k]];
-      this.positions.push(c[0], c[1], c[2]);
-      this.normals.push(n[0], n[1], n[2]);
-      this.uvs.push(c[uvU], c[uvV]);
-      this.tints.push(tintR, tintG, tintB);
+    const reverse = cx * n[0] + cy * n[1] + cz * n[2] < 0;
+    const base = this.positions.n / 3;
+    for (let k = 0; k < count; k++) {
+      const i = reverse ? count - 1 - k : k;
+      const c = pts[i];
+      this.positions.push3(c[0], c[1], c[2]);
+      this.normals.push3(n[0], n[1], n[2]);
+      this.uvs.push2(c[uvU], c[uvV]);
+      this.tints.push3(tintR, tintG, tintB);
       this.mats.push(mat);
-      this.aos.push(aoOrd[k]);
-      this.lits.push(this.indoor, this.lamp);
+      this.aos.push(ao[i]);
+      this.lits.push2(this.indoor, this.lamp);
     }
-    for (let k = 1; k + 1 < order.length; k++) this.indices.push(base, base + k, base + k + 1);
+    for (let k = 1; k + 1 < count; k++) {
+      this.indices.push(base);
+      this.indices.push(base + k);
+      this.indices.push(base + k + 1);
+    }
     this.quadCount++;
   }
 
   build(): MeshData | null {
     if (this.quadCount === 0) return null;
     return {
-      positions: new Float32Array(this.positions),
-      normals: new Float32Array(this.normals),
-      uvs: new Float32Array(this.uvs),
-      tints: new Float32Array(this.tints),
-      mats: new Float32Array(this.mats),
-      aos: new Float32Array(this.aos),
-      lits: new Float32Array(this.lits),
-      indices: new Uint32Array(this.indices),
+      positions: this.positions.take(),
+      normals: this.normals.take(),
+      uvs: this.uvs.take(),
+      tints: this.tints.take(),
+      mats: this.mats.take(),
+      aos: this.aos.take(),
+      lits: this.lits.take(),
+      indices: this.indices.take(),
       quadCount: this.quadCount,
     };
   }
@@ -148,22 +200,74 @@ function vertexAO(s1: boolean, s2: boolean, c: boolean): number {
 const LAMP_MATS = new Set<number>([Mat.LAMP, Mat.CRYSTAL, Mat.NEON]);
 const LAMP_REACH = 3;
 const ROOF_SCAN = 14;
+/** Chunks above the meshed one that the roof scan may look into. */
+const UP_CHUNKS = 2;
+
+/**
+ * Block reads around one chunk without a hash lookup per block: the chunk and its neighbours (one
+ * ring around, two chunks up for the roof scan) are fetched once, and every read after that is a
+ * few shifts into their arrays. Meshing a chunk reads its neighbourhood tens of thousands of times.
+ */
+class Neighbourhood {
+  private refs: (Uint16Array | null)[];
+  private static YS = UP_CHUNKS + 2;
+  constructor(world: VoxelWorld, private cx: number, private cy: number, private cz: number) {
+    const ys = Neighbourhood.YS;
+    this.refs = new Array(3 * ys * 3);
+    for (let ox = -1; ox <= 1; ox++)
+      for (let oy = -1; oy <= UP_CHUNKS; oy++)
+        for (let oz = -1; oz <= 1; oz++) {
+          const c = world.getChunk(cx + ox, cy + oy, cz + oz);
+          this.refs[((ox + 1) * ys + (oy + 1)) * 3 + (oz + 1)] = c && c.count > 0 ? c.data : null;
+        }
+  }
+  /** Block at chunk-local coordinates; lx, lz in [-16, 32), ly in [-16, 16 * (UP_CHUNKS + 1)). */
+  get(lx: number, ly: number, lz: number): number {
+    const ox = lx >> CHUNK_SHIFT;
+    const oy = ly >> CHUNK_SHIFT;
+    const oz = lz >> CHUNK_SHIFT;
+    const data = this.refs[((ox + 1) * Neighbourhood.YS + (oy + 1)) * 3 + (oz + 1)];
+    if (!data) return 0;
+    return data[((lx & CHUNK_MASK) << (CHUNK_SHIFT * 2)) | ((ly & CHUNK_MASK) << CHUNK_SHIFT) | (lz & CHUNK_MASK)];
+  }
+}
+
+const LP = N + 2 * LAMP_REACH;
+const lampField = new Uint8Array(LP * LP * LP);
 
 /**
  * Indoor/lamp lookup for one chunk mesh: a cell is indoor when a block roofs it within a few
- * metres, and lit by the nearest lamp within reach. Both are cheap column scans, cached per
- * padded column so a chunk costs a few thousand block reads.
+ * metres, and lit by the nearest lamp within reach. The roof is a cached column scan; the lamp
+ * distance is a small field stamped once per chunk, so a face costs two array reads.
  */
 class LightProbe {
   private roof = new Int16Array((N + 2) * (N + 2)).fill(-32768);
-  private lamps: number[][] = [];
-  constructor(private world: VoxelWorld, private ox: number, private oy: number, private oz: number) {
+  constructor(private nb: Neighbourhood) {
     const r = LAMP_REACH;
+    lampField.fill(r + 1);
     for (let x = -r; x < N + r; x++)
       for (let y = -r; y < N + r; y++)
         for (let z = -r; z < N + r; z++) {
-          const v = world.get(ox + x, oy + y, oz + z);
-          if (v !== 0 && LAMP_MATS.has(blockMat(v))) this.lamps.push([x, y, z]);
+          const v = nb.get(x, y, z);
+          if (v === 0 || !LAMP_MATS.has(blockMat(v))) continue;
+          // Stamp the Chebyshev distance around the lamp, keeping the nearest lamp at each cell.
+          for (let dx = -r; dx <= r; dx++) {
+            const ax = x + dx;
+            if (ax < -r || ax >= N + r) continue;
+            const adx = Math.abs(dx);
+            for (let dy = -r; dy <= r; dy++) {
+              const ay = y + dy;
+              if (ay < -r || ay >= N + r) continue;
+              const dxy = Math.max(adx, Math.abs(dy));
+              for (let dz = -r; dz <= r; dz++) {
+                const az = z + dz;
+                if (az < -r || az >= N + r) continue;
+                const d = Math.max(dxy, Math.abs(dz));
+                const i = ((ax + r) * LP + (ay + r)) * LP + (az + r);
+                if (d < lampField[i]) lampField[i] = d;
+              }
+            }
+          }
         }
   }
   /** Highest solid block above the padded column (local y), or a sentinel when open to the sky. */
@@ -173,7 +277,7 @@ class LightProbe {
     if (top !== -32768) return top;
     top = -30000;
     for (let y = N + ROOF_SCAN; y >= -1; y--) {
-      const v = this.world.get(this.ox + lx, this.oy + y, this.oz + lz);
+      const v = this.nb.get(lx, y, lz);
       if (v !== 0 && blockShape(v) === 0 && !isTransparent(blockMat(v))) {
         top = y;
         break;
@@ -185,11 +289,8 @@ class LightProbe {
   /** Packed (indoor | lampLevel << 1) for the air cell at local coordinates. */
   at(lx: number, ly: number, lz: number): number {
     const indoor = this.roofAt(lx, lz) > ly ? 1 : 0;
-    let best = LAMP_REACH + 1;
-    for (const [x, y, z] of this.lamps) {
-      const d = Math.max(Math.abs(x - lx), Math.abs(y - ly), Math.abs(z - lz));
-      if (d < best) best = d;
-    }
+    const r = LAMP_REACH;
+    const best = lampField[((lx + r) * LP + (ly + r)) * LP + (lz + r)];
     const lamp = best > LAMP_REACH ? 0 : best <= 1 ? 3 : best === 2 ? 2 : 1;
     return indoor | (lamp << 1);
   }
@@ -199,12 +300,13 @@ export function meshChunk(world: VoxelWorld, cx: number, cy: number, cz: number)
   const ox = cx * N;
   const oy = cy * N;
   const oz = cz * N;
+  const hood = new Neighbourhood(world, cx, cy, cz);
   // Fill padded buffer.
   let hasShapes = false;
   for (let x = -1; x <= N; x++) {
     for (let y = -1; y <= N; y++) {
       for (let z = -1; z <= N; z++) {
-        const v = world.get(ox + x, oy + y, oz + z);
+        const v = hood.get(x, y, z);
         pad[pidx(x, y, z)] = v;
         if (v !== 0 && blockShape(v) !== 0 && x >= 0 && y >= 0 && z >= 0 && x < N && y < N && z < N) hasShapes = true;
       }
@@ -215,7 +317,7 @@ export function meshChunk(world: VoxelWorld, cx: number, cy: number, cz: number)
   const x = [0, 0, 0];
   const q = [0, 0, 0];
   const nb = [0, 0, 0];
-  const light = new LightProbe(world, ox, oy, oz);
+  const light = new LightProbe(hood);
 
   for (let d = 0; d < 3; d++) {
     const u = (d + 1) % 3;
@@ -432,6 +534,26 @@ function rotateFaces(faces: Face[], r: number): Face[] {
   return faces.map((f) => ({ pts: f.pts.map(rp), n: rv(f.n), boundary: f.boundary ? rv(f.boundary) : undefined }));
 }
 
+const faceCache = new Map<number, Face[]>();
+
+/** Faces of a shaped block, built once per shape and railing-connection pattern. */
+function shapeFacesCached(shape: number, connects: (dx: number, dz: number) => boolean): Face[] {
+  let mask = 0;
+  if (shapeKind(shape) === 'fence') {
+    for (let i = 0; i < 4; i++) if (connects(SHAPE_DIRS[i][0], SHAPE_DIRS[i][1])) mask |= 1 << i;
+  }
+  const key = shape * 16 + mask;
+  let f = faceCache.get(key);
+  if (!f) {
+    f = shapeFaces(shape, (dx, dz) => {
+      for (let i = 0; i < 4; i++) if (SHAPE_DIRS[i][0] === dx && SHAPE_DIRS[i][1] === dz) return (mask & (1 << i)) !== 0;
+      return false;
+    });
+    faceCache.set(key, f);
+  }
+  return f;
+}
+
 function shapeFaces(shape: number, connects: (dx: number, dz: number) => boolean): Face[] {
   const kind = shapeKind(shape);
   const r = shapeRot(shape);
@@ -520,7 +642,7 @@ export function emitShape(
   const tr = PALETTE_LINEAR[col];
   const tg = PALETTE_LINEAR[col + 1];
   const tb = PALETTE_LINEAR[col + 2];
-  for (const face of shapeFaces(shape, connects)) {
+  for (const face of shapeFacesCached(shape, connects)) {
     if (face.boundary && occl(face.boundary[0], face.boundary[1], face.boundary[2])) continue;
     const n = face.n;
     const ax = Math.abs(n[0]);

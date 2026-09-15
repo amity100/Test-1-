@@ -35,7 +35,12 @@ export interface HudAscent {
   sea: { level: number; rising: boolean; boosted: boolean; inSeconds: number; gap: number };
   marked: { name: string; color: string; you: boolean } | null;
   holder: { name: string; color: string; you: boolean; progress: number } | null;
-  build: { kind: string; reason: string; pieces: { kind: string; name: string; cost: number; icon: string; active: boolean; affordable: boolean }[] } | null;
+  build: {
+    kind: string;
+    reason: string;
+    pieces: { kind: string; name: string; cost: number; icon: string; active: boolean; affordable: boolean }[];
+    skins: { id: string; name: string; swatch: [string, string, string]; active: boolean }[];
+  } | null;
   arch: { on: boolean; left: number; cooldown: number };
   /** Everyone alive on the altitude strip. */
   strip: { y: number; color: string; you: boolean; marked: boolean; flag: boolean }[];
@@ -239,6 +244,9 @@ export class HUD {
   private skyOut: HTMLElement;
   /** Touch: tapping a piece tile picks it. */
   onPiece: ((kind: string) => void) | null = null;
+  onSkin: ((id: string) => void) | null = null;
+  private skySkinEls: { root: HTMLElement; id: string }[] = [];
+  private skySkins!: HTMLElement;
 
   constructor(parent: HTMLElement) {
     this.root = el('div', 'hud');
@@ -481,6 +489,10 @@ export class HUD {
     this.skyPieces.setAttribute('data-ui', '1');
     this.skyPieces.hidden = true;
     this.sky.appendChild(this.skyPieces);
+    this.skySkins = el('div', 'sky-skins');
+    this.skySkins.setAttribute('data-ui', '1');
+    this.skySkins.hidden = true;
+    this.sky.appendChild(this.skySkins);
     this.skyHint = el('div', 'sky-hint');
     this.skyHint.hidden = true;
     this.sky.appendChild(this.skyHint);
@@ -764,12 +776,35 @@ export class HUD {
         const key = String(i + 1);
         if (pk.textContent !== key) pk.textContent = key;
       });
+      // The finish chips: one per skin, the active one lit.
+      if (this.skySkinEls.length === 0) {
+        for (const sk of b.skins) {
+          const chip = el('div', 'sky-skin');
+          chip.innerHTML = `<span class="sw"><i style="background:${sk.swatch[0]}"></i><i style="background:${sk.swatch[1]}"></i><i style="background:${sk.swatch[2]}"></i></span><span class="sn"></span>`;
+          chip.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.onSkin?.(sk.id);
+          });
+          this.skySkins.appendChild(chip);
+          this.skySkinEls.push({ root: chip, id: sk.id });
+        }
+      }
+      this.skySkins.hidden = false;
+      b.skins.forEach((sk, i) => {
+        const chip = this.skySkinEls[i];
+        if (!chip) return;
+        chip.root.classList.toggle('active', sk.active);
+        const sn = chip.root.querySelector('.sn') as HTMLElement;
+        if (sn.textContent !== sk.name) sn.textContent = sk.name;
+      });
       this.skyHint.hidden = false;
       const hint = b.reason === 'ok' ? t(a.arch.on ? 'archHint' : 'buildHint') : t(b.reason === 'bricks' ? 'needBricksShort' : b.reason === 'body' ? 'placeBody' : b.reason === 'blocked' ? 'placeBlocked' : b.reason === 'unanchored' ? 'placeUnanchored' : 'placeRange');
       this.set('skyHint', this.skyHint, hint);
       this.skyHint.classList.toggle('bad', b.reason !== 'ok');
     } else {
       this.skyPieces.hidden = true;
+      this.skySkins.hidden = true;
       this.skyHint.hidden = true;
     }
     // Architect view ring: counting down while on, filling back up while cooling.

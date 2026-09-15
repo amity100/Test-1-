@@ -16,8 +16,14 @@ interface Region {
   dirty: boolean;
 }
 
-/** Chunks per region side: 4 × 16 m = 64 m regions, about one fortress each. */
-const REGION_CHUNKS = 4;
+/**
+ * Chunks per region side: 2 × 16 m = 32 m regions. A region is rebuilt whole whenever one of its
+ * chunks changes, so with twelve builders adding modules all match long the regions have to be
+ * small enough that a rebuild is a couple of milliseconds, not a stutter.
+ */
+const REGION_CHUNKS = 2;
+/** Regions rebuilt per frame at most; the rest wait for the next frame. */
+const MERGES_PER_FRAME = 2;
 
 function regionKey(cx: number, cy: number, cz: number): number {
   const rx = Math.floor(cx / REGION_CHUNKS) + 512;
@@ -35,27 +41,47 @@ export class ChunkRenderer {
   readonly group = new THREE.Group();
   private data = new Map<number, ChunkData>();
   private regions = new Map<number, Region>();
+  /** Where the viewer is: dirty chunks nearest to it are meshed first. */
+  readonly focus = new THREE.Vector3();
+  private order: Chunk[] = [];
 
   constructor(private world: VoxelWorld, private materials: VoxelMaterials) {
     this.group.name = 'voxels';
   }
 
-  /** Remeshes dirty chunks and rebuilds their regions. Returns true when work remains. */
-  update(budgetMs = 6): boolean {
+  /**
+   * Remeshes dirty chunks within a time budget, nearest to the viewer first, then rebuilds a couple
+   * of their regions. Returns true when work remains. At least one chunk is meshed per call so the
+   * queue always drains.
+   */
+  update(budgetMs = 4): boolean {
     const start = performance.now();
     const world = this.world;
-    let more = false;
-    for (const chunk of world.dirty) {
-      this.rebuild(chunk);
-      world.dirty.delete(chunk);
-      chunk.dirty = false;
-      if (performance.now() - start > budgetMs) {
-        more = world.dirty.size > 0;
-        break;
+    if (world.dirty.size > 0) {
+      const fx = this.focus.x;
+      const fy = this.focus.y;
+      const fz = this.focus.z;
+      const order = this.order;
+      order.length = 0;
+      for (const c of world.dirty) order.push(c);
+      if (order.length > 1) {
+        const d = (c: Chunk): number => {
+          const dx = c.cx * 16 + 8 - fx;
+          const dy = c.cy * 16 + 8 - fy;
+          const dz = c.cz * 16 + 8 - fz;
+          return dx * dx + dy * dy + dz * dz;
+        };
+        order.sort((a, b) => d(a) - d(b));
+      }
+      for (const chunk of order) {
+        this.rebuild(chunk);
+        world.dirty.delete(chunk);
+        chunk.dirty = false;
+        if (performance.now() - start > budgetMs) break;
       }
     }
-    this.mergeDirtyRegions(world);
-    return more;
+    this.mergeDirtyRegions(world, MERGES_PER_FRAME);
+    return world.dirty.size > 0 || this.pendingMerges > 0;
   }
 
   /** Remesh everything now (used after big edits / loads). */
@@ -65,8 +91,9 @@ export class ChunkRenderer {
       chunk.dirty = false;
     }
     this.world.dirty.clear();
-    this.mergeDirtyRegions(this.world);
+    this.mergeDirtyRegions(this.world, Infinity);
   }
+  private pendingMerges = 0;
 
   private region(chunk: Chunk): Region {
     const key = regionKey(chunk.cx, chunk.cy, chunk.cz);
@@ -91,10 +118,16 @@ export class ChunkRenderer {
     r.chunks.add(chunk.key);
   }
 
-  /** Rebuilds dirty regions, skipping any whose chunks are still queued (one merge per edit, not per frame). */
-  private mergeDirtyRegions(world: VoxelWorld): void {
+  /** Rebuilds up to `limit` dirty regions, skipping any whose chunks are still queued (one merge per edit, not per frame). */
+  private mergeDirtyRegions(world: VoxelWorld, limit: number): void {
+    let merged = 0;
+    let left = 0;
     for (const r of this.regions.values()) {
       if (!r.dirty) continue;
+      if (merged >= limit) {
+        left++;
+        continue;
+      }
       let pending = false;
       for (const c of world.dirty) {
         if (regionKey(c.cx, c.cy, c.cz) === r.key) {
@@ -102,8 +135,12 @@ export class ChunkRenderer {
           break;
         }
       }
-      if (pending) continue;
+      if (pending) {
+        left++;
+        continue;
+      }
       r.dirty = false;
+      merged++;
       const opaque: MeshData[] = [];
       const transparent: MeshData[] = [];
       for (const ck of r.chunks) {
@@ -116,6 +153,7 @@ export class ChunkRenderer {
       r.transparent = this.applyMesh(r.transparent, transparent, this.materials.transparent, false);
       if (!r.opaque && !r.transparent && r.chunks.size === 0) this.regions.delete(r.key);
     }
+    this.pendingMerges = left;
   }
 
   /** Concatenates chunk meshes into one indexed geometry. */
@@ -157,8 +195,13 @@ export class ChunkRenderer {
     geo.setAttribute('aAo', new THREE.BufferAttribute(aos, 1));
     geo.setAttribute('aLit', new THREE.BufferAttribute(lits, 2));
     geo.setIndex(new THREE.BufferAttribute(indices, 1));
+    // Bounds from the box: a region is a known block of space, no need to visit every vertex twice.
     geo.computeBoundingBox();
-    geo.computeBoundingSphere();
+    const bb = geo.boundingBox!;
+    const sphere = new THREE.Sphere();
+    bb.getCenter(sphere.center);
+    sphere.radius = bb.min.distanceTo(bb.max) / 2;
+    geo.boundingSphere = sphere;
     return geo;
   }
 

@@ -1,15 +1,17 @@
 import * as THREE from 'three';
-import { Mat, encodeBlock, makeShape } from '../world/Voxel';
+import { Mat, SKY_DEEP_PALETTE, SKY_PLAYER_PALETTE, encodeBlock, makeShape, withShape } from '../world/Voxel';
 import type { Terrain } from '../world/Terrain';
 import { CELL, DIRS, STOREY, SkyPlan, cellX, cellZ, type SkyCell } from './SkyPlan';
-import { SKY_DEEP_PALETTE, SKY_PALETTE, SKY_PLAYER_PALETTE, SKY_STONE } from '../world/Voxel';
+import { skinAt, type Skin } from './SkySkins';
 
 /**
  * The sky architect. It takes one cell of the plan, looks at what stands around it, and returns the
- * finished masonry for it: marble floors inside a coloured rim, parapets with gold merlons and lamp
- * posts, stair towers with arched doors and arrow slits, ramps carried on vaults, railed bridges,
- * and round arenas with bastions, colonnades and a raised dais. Nothing is decorative only — every
- * floor is stood on, every arch is walked through, every parapet is fought over.
+ * finished building for it — in the language of a modern citadel in the clouds: light cladding
+ * drawn with dark frames, band windows of glass, floors that end in a deep fascia beam, glass
+ * balustrades between posts of light in the builder's colour, grand stairs with a glowing handrail,
+ * cable-deck bridges, stadium bowls with light masts, and under every floating floor a stepped keel
+ * with a crystal core. Nothing is decorative only — every floor is stood on, every portal is walked
+ * through, every balustrade is fought over, and every glass pane can be shot out.
  */
 
 /** Packs a block position into one integer key. */
@@ -39,29 +41,24 @@ export function rotLocal(lx: number, lz: number, r: number): [number, number] {
 }
 
 const AIR = 0;
-const FLOOR = encodeBlock(Mat.MARBLE, SKY_PALETTE.floor);
-const FLOOR_SLAB = encodeBlock(Mat.MARBLE, SKY_PALETTE.floor, makeShape('slab'));
-const WALL = encodeBlock(Mat.SMOOTH_STONE, SKY_STONE.wall);
-const BAND = encodeBlock(Mat.SMOOTH_STONE, SKY_STONE.band);
-const BAND_SLAB = encodeBlock(Mat.SMOOTH_STONE, SKY_STONE.band, makeShape('slab'));
-const PILLAR = encodeBlock(Mat.MARBLE, SKY_PALETTE.pillar, makeShape('pillar'));
-const COLUMN = encodeBlock(Mat.MARBLE, SKY_PALETTE.pillar);
-const GOLD = encodeBlock(Mat.GOLD, SKY_PALETTE.gold);
-const GOLD_SLAB = encodeBlock(Mat.GOLD, SKY_PALETTE.gold, makeShape('slab'));
-const GOLD_FENCE = encodeBlock(Mat.GOLD, SKY_PALETTE.gold, makeShape('fence'));
-const LAMP = encodeBlock(Mat.LAMP, SKY_PALETTE.gold, makeShape('fence'));
 
-function deep(color: number): number {
-  return encodeBlock(Mat.SMOOTH_STONE, SKY_DEEP_PALETTE + (((color - SKY_PLAYER_PALETTE) % 12) + 12) % 12);
-}
-function glow(color: number): number {
+/** A thin light in the builder's colour: a post or a rail, bright so it reads from afar. */
+function neon(color: number): number {
   return encodeBlock(Mat.CRYSTAL, color);
 }
-function stairs(rot: number): number {
-  return encodeBlock(Mat.MARBLE, SKY_PALETTE.floor, makeShape('stairs', rot));
+/** A solid block of light in the builder's colour, in the deep shade so a cube glows rather than glares. */
+function crystal(color: number): number {
+  return encodeBlock(Mat.CRYSTAL, SKY_DEEP_PALETTE + (((color - SKY_PLAYER_PALETTE) % 12) + 12) % 12);
 }
-function stoneStairs(rot: number): number {
-  return encodeBlock(Mat.SMOOTH_STONE, SKY_STONE.wall, makeShape('stairs', rot));
+const SLAB = makeShape('slab');
+const FENCE = makeShape('fence');
+const PILLAR = makeShape('pillar');
+
+/** Deterministic variation per cell, so two halls side by side are not twins. */
+function hash(a: number, b: number, c: number): number {
+  let h = (a * 73856093) ^ (b * 19349663) ^ (c * 83492791);
+  h = (h ^ (h >>> 13)) * 1274126177;
+  return (h ^ (h >>> 16)) >>> 0;
 }
 
 /** The blocks of one cell, collected before they go into the world. */
@@ -81,11 +78,42 @@ export class Emit {
   }
 }
 
+/** Writes cell-local positions (authored facing +X) into the world, turned to the cell's facing. */
+class Pen {
+  constructor(
+    private e: Emit,
+    private x0: number,
+    private z0: number,
+    private r: number,
+  ) {}
+  put(lx: number, lz: number, y: number, v: number): void {
+    const [ax, az] = rotLocal(lx, lz, this.r);
+    this.e.set(this.x0 + ax, y, this.z0 + az, v);
+  }
+  box(lx0: number, lz0: number, y0: number, lx1: number, lz1: number, y1: number, v: number): void {
+    for (let lx = lx0; lx <= lx1; lx++) for (let lz = lz0; lz <= lz1; lz++) for (let y = y0; y <= y1; y++) this.put(lx, lz, y, v);
+  }
+}
+
+/** Cell-local position of the t-th block along a side (0 +X, 1 +Z, 2 -X, 3 -Z). */
+function alongSide(side: number, t: number): [number, number] {
+  switch (side) {
+    case 0:
+      return [CELL - 1, t];
+    case 1:
+      return [t, CELL - 1];
+    case 2:
+      return [0, t];
+    default:
+      return [t, 0];
+  }
+}
+
 /** Where a stair tower needs its ceiling left open, in cell-local coordinates. */
 const HOLE = { lx0: 3, lx1: 5, lz0: 3, lz1: 5 };
-/** The arch opening on a tower or room face: three blocks wide, four tall. */
-const ARCH_FROM = 3;
-const ARCH_TO = 5;
+/** The portal on a hall face: three blocks wide, four tall. */
+const PORTAL_FROM = 3;
+const PORTAL_TO = 5;
 
 export class SkyArchitect {
   constructor(
@@ -96,25 +124,30 @@ export class SkyArchitect {
   /** Every block of one cell. Neighbours are read from the plan, so a cell knows its own edges. */
   generate(c: SkyCell): Map<number, number> {
     const e = new Emit();
-    // A building cuts into the hill it stands against: clear the room before dressing it, so a door
-    // never opens into earth and a hall is always a hall.
+    const S = skinAt(c.skin);
+    // A building cuts into the hill it stands against: clear the room before dressing it, so a
+    // portal never opens into earth and a hall is always a hall.
     if (c.kind !== 'arenaPart') this.carve(e, c);
     switch (c.kind) {
       case 'deck':
-        this.deck(e, c);
+        this.floor(e, c, S, true);
+        this.terrace(e, c, S);
+        this.under(e, c, S);
         break;
       case 'tower':
-        this.deck(e, c);
-        this.tower(e, c);
+        this.floor(e, c, S, false);
+        this.hall(e, c, S);
+        this.under(e, c, S);
         break;
       case 'ramp':
-        this.ramp(e, c);
+        this.stair(e, c, S);
+        this.under(e, c, S);
         break;
       case 'bridge':
-        this.bridge(e, c);
+        this.bridge(e, c, S);
         break;
       case 'arena':
-        this.arena(e, c);
+        this.stadium(e, c, S);
         break;
       case 'arenaPart':
         break;
@@ -138,7 +171,7 @@ export class SkyArchitect {
       return;
     }
     for (let lx = 0; lx < CELL; lx++) for (let lz = 0; lz < CELL; lz++) for (let h = 1; h <= 5; h++) e.clear(x0 + lx, y + h, z0 + lz);
-    // A step of apron outside the walls, so a doorway cut into a hillside is still a doorway.
+    // A step of apron outside the walls, so a portal cut into a hillside is still a portal.
     for (let lx = -1; lx <= CELL; lx++)
       for (let lz = -1; lz <= CELL; lz++) {
         if (lx >= 0 && lx < CELL && lz >= 0 && lz < CELL) continue;
@@ -154,113 +187,71 @@ export class SkyArchitect {
     return !this.plan.get(c.i + dx, c.j + dz, c.y);
   }
 
-  /** A ramp one storey down that climbs into this cell from `side` (its landing is our floor). */
+  /** A stair one storey down that climbs into this cell from `side` (its landing is our floor). */
   private rampAt(c: SkyCell, side: number): boolean {
     const [dx, dz] = DIRS[side];
     const back = this.plan.get(c.i - dx, c.j - dz, c.y - STOREY);
     return !!back && back.kind === 'ramp' && back.dir === side;
   }
 
-  /** A bridge beside this cell on that side: the parapet keeps its ends and opens in the middle. */
+  /** A bridge beside this cell on that side: the balustrade keeps its ends and opens in the middle. */
   private bridgeAt(c: SkyCell, side: number): boolean {
     const [dx, dz] = DIRS[side];
     return this.plan.get(c.i + dx, c.j + dz, c.y)?.kind === 'bridge';
   }
 
-  /** The tower below whose stair must come through this cell's floor. */
+  /** The hall below whose stair must come through this cell's floor. */
   private towerBelow(c: SkyCell): SkyCell | null {
     const b = this.plan.below(c.i, c.j, c.y);
     return b && b.kind === 'tower' ? b : null;
   }
 
-  /** How far the terrain is under a cell's floor slab (Infinity when it is out over the sea). */
-  private drop(c: SkyCell): number {
-    const h = this.terrain.heightAt(cellX(c.i) + CELL / 2, cellZ(c.j) + CELL / 2);
-    return c.y - h;
-  }
+  // ---- floor ----------------------------------------------------------------
 
-  // ---- deck -----------------------------------------------------------------
-
-  /** Floor, rim, parapets, corner posts and whatever carries the cell from below. */
-  private deck(e: Emit, c: SkyCell): void {
+  /** The slab: a light field inside a dark rim wherever the floor ends, with the stairwell left open. */
+  private floor(e: Emit, c: SkyCell, S: Skin, medallion: boolean): void {
     const x0 = cellX(c.i);
     const z0 = cellZ(c.j);
     const y = c.y;
-    const rim = BAND;
     const tower = this.towerBelow(c);
     const hole = tower ? this.holeRect(tower) : null;
     const openSide = [0, 1, 2, 3].map((s) => this.open(c, s));
+    const inHole = (lx: number, lz: number): boolean => !!hole && lx >= hole.x0 && lx <= hole.x1 && lz >= hole.z0 && lz <= hole.z1;
+    const variant = hash(c.i, c.j, c.y) % 3;
     for (let lx = 0; lx < CELL; lx++)
       for (let lz = 0; lz < CELL; lz++) {
-        if (hole && lx >= hole.x0 && lx <= hole.x1 && lz >= hole.z0 && lz <= hole.z1) {
+        if (inHole(lx, lz)) {
           e.clear(x0 + lx, y, z0 + lz);
           continue;
         }
-        // The rim runs along the edges that face out, in the builder's own deep colour.
         const edge =
           (lx === 0 && openSide[2]) || (lx === CELL - 1 && openSide[0]) || (lz === 0 && openSide[3]) || (lz === CELL - 1 && openSide[1]);
-        e.set(x0 + lx, y, z0 + lz, edge ? rim : FLOOR);
+        let v = edge ? S.frame : S.floor;
+        if (!edge && medallion) {
+          const mid = (lx === 3 || lx === 4) && (lz === 3 || lz === 4);
+          // Three floor patterns: a metal medallion, an inlaid cross, or a plain field with a corner mark.
+          if (variant === 0 && mid) v = S.inlay;
+          else if (variant === 1 && ((lx === 3 || lx === 4) !== (lz === 3 || lz === 4))) v = S.inlay;
+          else if (variant === 2 && (lx === 0 || lx === 7 || lz === 0 || lz === 7)) v = S.inlay;
+        }
+        e.set(x0 + lx, y, z0 + lz, v);
       }
-    // A gold lozenge in the middle of the floor, so an empty deck still reads as a room.
-    const inHole = (lx: number, lz: number): boolean => !!hole && lx >= hole.x0 && lx <= hole.x1 && lz >= hole.z0 && lz <= hole.z1;
-    if (c.kind === 'deck' && !inHole(3, 3) && !inHole(4, 4)) {
-      e.set(x0 + 3, y, z0 + 4, GOLD);
-      e.set(x0 + 4, y, z0 + 3, GOLD);
-      e.set(x0 + 3, y, z0 + 3, glow(c.color));
-      e.set(x0 + 4, y, z0 + 4, glow(c.color));
-    }
-    // Parapets: chest-high wall with merlons wherever the deck ends, minus the ways in.
-    if (c.kind === 'deck') {
-      for (let s = 0; s < 4; s++) {
-        if (!openSide[s] && !this.bridgeAt(c, s)) continue;
-        const gap = this.rampAt(c, s) ? 6 : this.bridgeAt(c, s) ? 4 : 0;
-        this.parapet(e, c, s, gap);
-      }
-      this.cornerPosts(e, c, openSide);
-    }
-    this.underneath(e, c);
   }
 
-  /** One edge of a deck: wall, merlons, and a centred gap where something arrives. */
-  private parapet(e: Emit, c: SkyCell, side: number, gap: number): void {
-    const x0 = cellX(c.i);
-    const z0 = cellZ(c.j);
-    const y = c.y + 1;
-    const wall = WALL;
-    const lo = (CELL - gap) / 2;
-    const hi = lo + gap - 1;
-    for (let t = 0; t < CELL; t++) {
-      if (gap > 0 && t >= lo && t <= hi) continue;
-      let lx: number;
-      let lz: number;
-      switch (side) {
-        case 0:
-          lx = CELL - 1;
-          lz = t;
-          break;
-        case 1:
-          lx = t;
-          lz = CELL - 1;
-          break;
-        case 2:
-          lx = 0;
-          lz = t;
-          break;
-        default:
-          lx = t;
-          lz = 0;
-      }
-      e.set(x0 + lx, y, z0 + lz, wall);
-      // Crenellation: a merlon every third block, gold only at the ends of a run.
-      if (t % 3 === 1) e.set(x0 + lx, y + 1, z0 + lz, t === 1 || t === CELL - 2 ? GOLD_SLAB : BAND_SLAB);
-    }
-  }
+  // ---- terrace --------------------------------------------------------------
 
-  /** Lamp-topped pillars where two open edges meet. */
-  private cornerPosts(e: Emit, c: SkyCell, openSide: boolean[]): void {
+  /** Glass balustrades between posts of light along every open edge, corner posts, and a mast on a summit. */
+  private terrace(e: Emit, c: SkyCell, S: Skin): void {
     const x0 = cellX(c.i);
     const z0 = cellZ(c.j);
-    const y = c.y + 1;
+    const y = c.y;
+    const openSide = [0, 1, 2, 3].map((s) => this.open(c, s));
+    for (let s = 0; s < 4; s++) {
+      if (!openSide[s] && !this.bridgeAt(c, s)) continue;
+      const gap = this.rampAt(c, s) ? 6 : this.bridgeAt(c, s) ? 4 : 0;
+      this.balustrade(e, c, S, s, gap);
+    }
+    // Corner posts where two open edges meet: two of frame and a light on top.
     const corners: [number, number, number, number][] = [
       [CELL - 1, CELL - 1, 0, 1],
       [0, CELL - 1, 2, 1],
@@ -269,42 +260,112 @@ export class SkyArchitect {
     ];
     for (const [lx, lz, a, b] of corners) {
       if (!openSide[a] || !openSide[b]) continue;
-      e.set(x0 + lx, y, z0 + lz, PILLAR);
-      e.set(x0 + lx, y + 1, z0 + lz, PILLAR);
-      e.set(x0 + lx, y + 2, z0 + lz, LAMP);
+      e.set(x0 + lx, y + 1, z0 + lz, S.frame);
+      e.set(x0 + lx, y + 2, z0 + lz, S.frame);
+      e.set(x0 + lx, y + 3, z0 + lz, crystal(c.color));
+    }
+    // A summit — a deck on top of a hall with nothing above — carries a light mast on every other cell.
+    const below = this.plan.below(c.i, c.j, c.y);
+    if (below && !this.plan.above(c.i, c.j, c.y) && hash(c.i, c.j, c.y + 1) % 2 === 0) {
+      const tower = this.towerBelow(c);
+      const hole = tower ? this.holeRect(tower) : null;
+      const spots: [number, number, number, number][] = [
+        [1, 1, 2, 3],
+        [CELL - 2, 1, 0, 3],
+        [1, CELL - 2, 2, 1],
+        [CELL - 2, CELL - 2, 0, 1],
+      ];
+      for (const [lx, lz, a, b] of spots) {
+        if (!openSide[a] || !openSide[b]) continue;
+        if (hole && lx >= hole.x0 - 1 && lx <= hole.x1 + 1 && lz >= hole.z0 - 1 && lz <= hole.z1 + 1) continue;
+        for (let h = 1; h <= 4; h++) e.set(x0 + lx, y + h, z0 + lz, withShape(S.steel, PILLAR));
+        e.set(x0 + lx, y + 5, z0 + lz, S.trim);
+        e.set(x0 + lx, y + 6, z0 + lz, S.lamp);
+        break;
+      }
     }
   }
 
-  /** The plinth or keel that makes a floating floor look carried rather than pasted into the air. */
-  private underneath(e: Emit, c: SkyCell): void {
-    if (this.plan.below(c.i, c.j, c.y)) return;
+  /** One edge of a terrace: glass panes, a post of light every third pane, and a gap where something arrives. */
+  private balustrade(e: Emit, c: SkyCell, S: Skin, side: number, gap: number): void {
+    const x0 = cellX(c.i);
+    const z0 = cellZ(c.j);
+    const y = c.y + 1;
+    const lo = (CELL - gap) / 2;
+    const hi = lo + gap - 1;
+    for (let t = 0; t < CELL; t++) {
+      if (gap > 0 && t >= lo && t <= hi) continue;
+      const [lx, lz] = alongSide(side, t);
+      let v: number;
+      if (t === 0 || t === CELL - 1) v = S.frame;
+      else if (t === 3 && gap === 0) v = withShape(neon(c.color), FENCE);
+      else v = S.glass;
+      // Beside a gap the pane becomes a post, so the opening reads as a gate.
+      if (gap > 0 && (t === lo - 1 || t === hi + 1)) v = S.frame;
+      e.set(x0 + lx, y, z0 + lz, v);
+    }
+  }
+
+  // ---- underneath -----------------------------------------------------------
+
+  /** Fascia, and the plinth or keel that makes a floating floor look carried rather than pasted into the air. */
+  private under(e: Emit, c: SkyCell, S: Skin): void {
     const x0 = cellX(c.i);
     const z0 = cellZ(c.j);
     const y = c.y;
+    const below = this.plan.below(c.i, c.j, c.y);
+    // The fascia: a full beam under every open edge, so a floor is never a sheet of paper.
+    if (!below) {
+      for (let s = 0; s < 4; s++) {
+        if (!this.open(c, s)) continue;
+        for (let t = 0; t < CELL; t++) {
+          const [lx, lz] = alongSide(s, t);
+          e.set(x0 + lx, y - 1, z0 + lz, S.frame);
+        }
+      }
+    }
+    if (below) return;
     const ground = this.terrain.heightAt(x0 + CELL / 2, z0 + CELL / 2);
     if (y - ground <= STOREY + 2 && ground > 0.5) {
-      // Near the ground: a masonry plinth with an arch through each face.
+      // Near the ground: four pylons to the earth, tied by beams, with the passage left open between them.
       const base = Math.max(1, Math.floor(ground));
-      for (let yy = y - 1; yy >= base; yy--)
-        for (let lx = 1; lx <= 6; lx++)
-          for (let lz = 1; lz <= 6; lz++) {
-            const ring = lx === 1 || lx === 6 || lz === 1 || lz === 6;
-            if (!ring && yy < y - 1) continue;
-            const arch = yy <= base + 2 && ((lx >= 3 && lx <= 4 && (lz === 1 || lz === 6)) || (lz >= 3 && lz <= 4 && (lx === 1 || lx === 6)));
-            if (arch) continue;
-            e.set(x0 + lx, yy, z0 + lz, yy === y - 1 ? BAND : WALL);
-          }
+      for (const [px, pz] of [
+        [0, 0],
+        [CELL - 2, 0],
+        [0, CELL - 2],
+        [CELL - 2, CELL - 2],
+      ] as [number, number][]) {
+        for (let yy = y - 2; yy >= base; yy--) e.box(x0 + px, yy, z0 + pz, x0 + px + 1, yy, z0 + pz + 1, S.frame);
+      }
+      if (y - 2 >= base) {
+        for (let t = 2; t <= CELL - 3; t++) {
+          e.set(x0 + t, y - 2, z0, S.steel);
+          e.set(x0 + t, y - 2, z0 + CELL - 1, S.steel);
+          e.set(x0, y - 2, z0 + t, S.steel);
+          e.set(x0 + CELL - 1, y - 2, z0 + t, S.steel);
+        }
+        e.box(x0 + 1, y - 2, z0 + 1, x0 + CELL - 2, y - 2, z0 + CELL - 2, S.panelAlt);
+      }
       return;
     }
-    // Out over the water: a stepped keel with a crystal heart in the builder's colour.
-    e.box(x0 + 1, y - 1, z0 + 1, x0 + 6, y - 1, z0 + 6, BAND);
-    e.box(x0 + 2, y - 2, z0 + 2, x0 + 5, y - 2, z0 + 5, WALL);
-    e.box(x0 + 3, y - 4, z0 + 3, x0 + 4, y - 3, z0 + 4, glow(c.color));
+    // Out over the water or high in the air: a stepped keel with a crystal heart in the builder's colour.
+    e.box(x0 + 1, y - 2, z0 + 1, x0 + 6, y - 2, z0 + 6, S.steel);
+    e.box(x0 + 2, y - 3, z0 + 2, x0 + 5, y - 3, z0 + 5, S.frame);
+    e.box(x0 + 3, y - 4, z0 + 3, x0 + 4, y - 4, z0 + 4, crystal(c.color));
+    // Fins on the diagonals, so the keel reads as engineered rather than melted.
+    for (const [fx, fz] of [
+      [0, 0],
+      [7, 0],
+      [0, 7],
+      [7, 7],
+    ] as [number, number][]) {
+      e.set(x0 + fx, y - 2, z0 + fz, withShape(S.steel, SLAB));
+    }
   }
 
-  // ---- tower ----------------------------------------------------------------
+  // ---- hall -----------------------------------------------------------------
 
-  /** Where this tower's stair must come through the floor above. */
+  /** Where this hall's stair must come through the floor above. */
   holeRect(c: SkyCell): { x0: number; x1: number; z0: number; z1: number } {
     const pts: [number, number][] = [];
     for (let lx = HOLE.lx0; lx <= HOLE.lx1; lx++) for (let lz = HOLE.lz0; lz <= HOLE.lz1; lz++) pts.push(rotLocal(lx, lz, c.dir));
@@ -321,246 +382,230 @@ export class SkyArchitect {
     return { x0, x1, z0, z1 };
   }
 
-  /** Walls with an arched door and arrow slits, and two flights of stairs to the floor above. */
-  private tower(e: Emit, c: SkyCell): void {
+  /**
+   * A storey of a tower: dark pilasters at the corners, a beam row under the next floor, band windows
+   * of glass between light spandrels, a framed portal with a lit sign on the side you came from and
+   * on any side a neighbour reaches, and inside one straight flight to the roof under a lit ceiling.
+   */
+  private hall(e: Emit, c: SkyCell, S: Skin): void {
     const x0 = cellX(c.i);
     const z0 = cellZ(c.j);
     const y = c.y;
     const r = c.dir;
-    const put = (lx: number, lz: number, yy: number, v: number): void => {
-      const [ax, az] = rotLocal(lx, lz, r);
-      e.set(x0 + ax, yy, z0 + az, v);
-    };
+    const pen = new Pen(e, x0, z0, r);
+    const put = (lx: number, lz: number, yy: number, v: number): void => pen.put(lx, lz, yy, v);
     // The way in is the face the stair climbs away from — the side whoever built it stands on — and
-    // any side where a deck already reaches the wall.
+    // any side where a deck or stair already reaches the wall.
     const doors = [0, 1, 2, 3].map((s) => s === (c.dir + 2) % 4 || !this.open(c, s) || this.rampAt(c, s));
-    // Walls. Authored per side in local terms, then rotated with the rest.
+    // Two window rhythms: a band window across the face, or two tall slots.
+    const tall = hash(c.i, c.j, c.y) % 2 === 1;
     for (let s = 0; s < 4; s++) {
       const localSide = (s - r + 4) % 4;
       for (let t = 0; t < CELL; t++) {
+        const [lx, lz] = alongSide(localSide, t);
         for (let h = 1; h <= 5; h++) {
-          const inDoor = doors[s] && t >= ARCH_FROM && t <= ARCH_TO && h <= 4;
-          const corbel = doors[s] && t >= ARCH_FROM && t <= ARCH_TO && h === 5;
-          const slit = !doors[s] && (t === 2 || t === 5) && (h === 2 || h === 3);
-          let lx: number;
-          let lz: number;
-          switch (localSide) {
-            case 0:
-              lx = CELL - 1;
-              lz = t;
-              break;
-            case 1:
-              lx = t;
-              lz = CELL - 1;
-              break;
-            case 2:
-              lx = 0;
-              lz = t;
-              break;
-            default:
-              lx = t;
-              lz = 0;
+          let v: number;
+          if (t === 0 || t === CELL - 1) v = S.frame;
+          else if (h === 5) {
+            // The beam row: frame, with a metal lintel and a lit sign over the portal.
+            v = doors[s] && t === 4 ? crystal(c.color) : S.frame;
+          } else if (doors[s]) {
+            if (t >= PORTAL_FROM && t <= PORTAL_TO) v = AIR;
+            else if (t === PORTAL_FROM - 1 || t === PORTAL_TO + 1) v = S.frame;
+            else v = h === 2 || h === 3 ? S.glass : S.panel;
+          } else if (tall) {
+            v = (t === 2 || t === 5) && h <= 4 ? S.glass : h === 4 ? S.panel : S.panel;
+            if ((t === 3 || t === 4) && h === 4) v = S.trim;
+          } else {
+            v = h === 2 || h === 3 ? (t === 1 || t === CELL - 2 ? S.panel : S.glass) : S.panel;
           }
-          if (inDoor || slit) {
-            put(lx, lz, y + h, AIR);
-            continue;
-          }
-          if (corbel && (t === ARCH_FROM || t === ARCH_TO)) {
-            put(lx, lz, y + h, BAND);
-            continue;
-          }
-          put(lx, lz, y + h, h === 4 ? BAND : WALL);
+          put(lx, lz, y + h, v);
         }
       }
     }
-    // Quoins: pillar stone up the four corners, so the tower has edges you can read.
-    for (const [lx, lz] of [
-      [0, 0],
-      [0, CELL - 1],
-      [CELL - 1, 0],
-      [CELL - 1, CELL - 1],
-    ] as [number, number][]) {
-      for (let h = 1; h <= 5; h++) put(lx, lz, y + h, h % 2 === 1 ? PILLAR : WALL);
-    }
-    // The banner of the builder: coloured cloth either side of the door, lit from a small crystal.
-    put(CELL - 1, 2, y + 2, deep(c.color));
-    put(CELL - 1, 2, y + 3, glow(c.color));
-    put(CELL - 1, 5, y + 2, deep(c.color));
-    put(CELL - 1, 5, y + 3, glow(c.color));
-    // One straight flight, three wide, climbing away from the door to the roof: six steps over six
-    // metres, carried on a vault, with a walkway either side of it at hall level.
-    // Five steps; the sixth rise is the floor slab of the deck above, which the flight meets flush.
-    const step = stairs(r);
+    // One straight flight, three wide, climbing away from the portal to the roof: five steps and the
+    // slab above as the sixth rise, carried on a solid stringer with a glowing handrail on top.
+    const step = withShape(S.floor, makeShape('stairs', r));
     for (let s = 0; s < 5; s++) {
       const lx = 1 + s;
       const h = y + 1 + s;
       for (let lz = 3; lz <= 5; lz++) {
         put(lx, lz, h, step);
-        for (let f = y + 1; f < h; f++) put(lx, lz, f, WALL);
+        for (let f = y + 1; f < h; f++) put(lx, lz, f, S.panelAlt);
       }
-      // The stringer that carries the flight, and a lamp at head height beside it.
-      put(lx, 2, h - 1, s === 0 ? AIR : BAND);
-      put(lx, 6, h - 1, s === 0 ? AIR : BAND);
+      if (s > 0) {
+        for (let f = y + 1; f < h; f++) {
+          put(lx, 2, f, f === h - 1 ? S.frame : S.panelAlt);
+          put(lx, 6, f, f === h - 1 ? S.frame : S.panelAlt);
+        }
+        put(lx, 2, h, withShape(neon(c.color), SLAB));
+        put(lx, 6, h, withShape(neon(c.color), SLAB));
+      }
     }
-    put(3, 1, y + 4, LAMP);
-    put(3, 6, y + 4, LAMP);
-    // A column in the free corners of the hall, and a low wall to fight behind.
+    // Ceiling lights along both side walls.
+    for (const [lx, lz] of [
+      [2, 1],
+      [5, 1],
+      [2, 6],
+      [5, 6],
+    ] as [number, number][]) {
+      put(lx, lz, y + 5, S.lamp);
+    }
+    // Columns in the free corners of the hall, and a low wall to fight behind.
     for (const [lx, lz] of [
       [1, 1],
       [1, 6],
     ] as [number, number][]) {
-      put(lx, lz, y + 1, COLUMN);
-      put(lx, lz, y + 2, COLUMN);
-      put(lx, lz, y + 3, COLUMN);
-      put(lx, lz, y + 4, GOLD_SLAB);
+      for (let h = 1; h <= 3; h++) put(lx, lz, y + h, withShape(S.steel, PILLAR));
+      put(lx, lz, y + 4, S.frame);
     }
-    put(6, 1, y + 1, deep(c.color));
-    put(6, 2, y + 1, deep(c.color));
+    put(6, 1, y + 1, S.panelAlt);
+    put(6, 2, y + 1, S.panelAlt);
   }
 
-  // ---- ramp -----------------------------------------------------------------
+  // ---- grand stair ----------------------------------------------------------
 
-  /** A stair run carried on a vault, from this storey's floor to the next one's. */
-  private ramp(e: Emit, c: SkyCell): void {
+  /** A stair six wide between two stringer walls with a glowing handrail, a passage under it. */
+  private stair(e: Emit, c: SkyCell, S: Skin): void {
     const x0 = cellX(c.i);
     const z0 = cellZ(c.j);
     const y = c.y;
     const r = c.dir;
-    const put = (lx: number, lz: number, yy: number, v: number): void => {
-      const [ax, az] = rotLocal(lx, lz, r);
-      e.set(x0 + ax, yy, z0 + az, v);
-    };
-    // Floor of the cell, with the builder's rim where it shows.
-    for (let lx = 0; lx < CELL; lx++) for (let lz = 0; lz < CELL; lz++) put(lx, lz, y, lz === 0 || lz === CELL - 1 ? BAND : FLOOR);
-    // Six steps across the cell, six wide, and the vault that carries them.
+    const pen = new Pen(e, x0, z0, r);
+    const put = (lx: number, lz: number, yy: number, v: number): void => pen.put(lx, lz, yy, v);
+    for (let lx = 0; lx < CELL; lx++) for (let lz = 0; lz < CELL; lz++) put(lx, lz, y, lz === 0 || lz === CELL - 1 ? S.frame : S.floor);
+    const step = withShape(S.floor, makeShape('stairs', r));
+    const rail = withShape(neon(c.color), SLAB);
     for (let s = 0; s < 6; s++) {
       const lx = 2 + s;
       const h = y + 1 + s;
       for (let lz = 1; lz <= 6; lz++) {
-        put(lx, lz, h, stairs(r));
-        // Masonry below the run, hollowed by a passage through the middle.
+        put(lx, lz, h, step);
         for (let f = y + 1; f < h; f++) {
           const tunnel = lz >= 2 && lz <= 5 && f <= y + 3 && lx >= 4;
-          put(lx, lz, f, tunnel ? AIR : WALL);
+          put(lx, lz, f, tunnel ? AIR : S.panelAlt);
         }
       }
-      // Rails either side: ashlar with a gold cap every third block.
-      put(lx, 0, h, WALL);
-      put(lx, CELL - 1, h, WALL);
-      if (s % 3 === 1) {
-        put(lx, 0, h + 1, GOLD_SLAB);
-        put(lx, CELL - 1, h + 1, GOLD_SLAB);
-      }
+      // Stringer walls: cladding below, a frame beam at the top, and the light rail on it.
       for (let f = y + 1; f < h; f++) {
-        put(lx, 0, f, WALL);
-        put(lx, CELL - 1, f, WALL);
+        put(lx, 0, f, S.panelAlt);
+        put(lx, CELL - 1, f, S.panelAlt);
       }
+      put(lx, 0, h, S.frame);
+      put(lx, CELL - 1, h, S.frame);
+      put(lx, 0, h + 1, rail);
+      put(lx, CELL - 1, h + 1, rail);
     }
-    // Rails along the flat approach too.
+    // The flat approach keeps the rail going, and the passage under the flight has a framed mouth.
     for (let lx = 0; lx <= 1; lx++) {
-      put(lx, 0, y + 1, WALL);
-      put(lx, CELL - 1, y + 1, WALL);
+      put(lx, 0, y + 1, S.frame);
+      put(lx, CELL - 1, y + 1, S.frame);
+      put(lx, 0, y + 2, rail);
+      put(lx, CELL - 1, y + 2, rail);
     }
-    put(0, 0, y + 2, GOLD_SLAB);
-    put(0, CELL - 1, y + 2, GOLD_SLAB);
-    this.underneath(e, c);
+    for (let lz = 1; lz <= 6; lz++) put(CELL - 1, lz, y + 4, S.frame);
   }
 
   // ---- bridge ---------------------------------------------------------------
 
-  /** A railed walkway on an arch, four wide down the middle of the cell. */
-  private bridge(e: Emit, c: SkyCell): void {
+  /** A six-wide deck with edge beams, glass rails between posts of light, and a girder arch underneath. */
+  private bridge(e: Emit, c: SkyCell, S: Skin): void {
     const x0 = cellX(c.i);
     const z0 = cellZ(c.j);
     const y = c.y;
     const r = c.dir;
-    const put = (lx: number, lz: number, yy: number, v: number): void => {
-      const [ax, az] = rotLocal(lx, lz, r);
-      e.set(x0 + ax, yy, z0 + az, v);
-    };
+    const pen = new Pen(e, x0, z0, r);
+    const put = (lx: number, lz: number, yy: number, v: number): void => pen.put(lx, lz, yy, v);
     for (let lx = 0; lx < CELL; lx++) {
-      for (let lz = 2; lz <= 5; lz++) put(lx, lz, y, lz === 2 || lz === 5 ? BAND : FLOOR);
-      if (lx % 3 === 1) put(lx, 3, y, glow(c.color));
-      // Rails, with a lamp post at each end of the span.
-      put(lx, 1, y + 1, GOLD_FENCE);
-      put(lx, 6, y + 1, GOLD_FENCE);
-      put(lx, 1, y, BAND);
-      put(lx, 6, y, BAND);
-      if (lx === 0 || lx === CELL - 1) {
-        put(lx, 1, y + 2, LAMP);
-        put(lx, 6, y + 2, LAMP);
+      for (let lz = 1; lz <= 6; lz++) put(lx, lz, y, lz === 1 || lz === 6 ? S.frame : lx % 4 === 0 && lz >= 3 && lz <= 4 ? S.inlay : S.floor);
+      // Rails: posts at the ends, a light post every fourth block, glass between.
+      const end = lx === 0 || lx === CELL - 1;
+      const post = lx % 4 === 2;
+      const railV = end ? S.frame : post ? withShape(neon(c.color), FENCE) : S.glass;
+      put(lx, 1, y + 1, railV);
+      put(lx, 6, y + 1, railV);
+      if (end) {
+        put(lx, 1, y + 2, crystal(c.color));
+        put(lx, 6, y + 2, crystal(c.color));
       }
-      // The arch under the span: deepest in the middle, tapering to the ends.
+      // Edge beams under the deck and the girder arch: deepest in the middle, tapering to the ends.
+      put(lx, 1, y - 1, S.frame);
+      put(lx, 6, y - 1, S.frame);
       const t = Math.abs(lx - 3.5) / 3.5;
       const depth = t < 0.35 ? 2 : t < 0.75 ? 1 : 0;
-      for (let d = 1; d <= depth; d++) for (let lz = 3; lz <= 4; lz++) put(lx, lz, y - d, d === depth ? BAND : WALL);
+      for (let d = 1; d <= depth; d++) for (let lz = 3; lz <= 4; lz++) put(lx, lz, y - d, d === depth ? S.frame : S.steel);
     }
   }
 
-  // ---- arena ----------------------------------------------------------------
+  // ---- stadium --------------------------------------------------------------
 
-  /** Three cells square: a round fighting floor with bastions, a colonnade and a raised dais. */
-  private arena(e: Emit, c: SkyCell): void {
+  /** Three cells square: a round court in a two-step bowl, four framed gates, light masts and a lit dais. */
+  private stadium(e: Emit, c: SkyCell, S: Skin): void {
     const cx = cellX(c.i) + CELL / 2;
     const cz = cellZ(c.j) + CELL / 2;
     const y = c.y;
     const R = 11.5;
-    const rim = BAND;
     const ground = this.terrain.heightAt(cx, cz);
     const floating = c.y - ground > STOREY;
+    const carried = !!this.plan.below(c.i, c.j, c.y);
     for (let x = Math.floor(cx - R); x <= Math.ceil(cx + R); x++)
       for (let z = Math.floor(cz - R); z <= Math.ceil(cz + R); z++) {
         const d = Math.hypot(x + 0.5 - cx, z + 0.5 - cz);
         if (d > R) continue;
-        e.set(x, y, z, d > R - 2 ? rim : FLOOR);
-        // A stepped keel under the whole disc, so it hangs like a lantern over the sea.
-        if (!this.plan.below(c.i, c.j, c.y)) {
-          if (floating) {
-            if (d < R - 3) e.set(x, y - 1, z, BAND);
-            if (d < R - 6) e.set(x, y - 2, z, WALL);
-            if (d < 2.5) {
-              e.set(x, y - 3, z, glow(c.color));
-              e.set(x, y - 4, z, glow(c.color));
-            }
-          } else if (d < R - 4) {
-            for (let yy = y - 1; yy > ground; yy--) e.set(x, yy, z, d > R - 7 ? WALL : yy > y - 3 ? WALL : AIR);
-          }
+        e.set(x, y, z, d > R - 1.5 ? S.frame : d > R - 2.5 ? S.inlay : S.floor);
+        if (carried) continue;
+        if (floating) {
+          // A stepped keel under the whole bowl with a ring of light and a crystal heart.
+          if (d < R - 1.5) e.set(x, y - 1, z, S.steel);
+          if (d < R - 4) e.set(x, y - 2, z, S.frame);
+          if (d < R - 6) e.set(x, y - 3, z, d >= R - 7 ? crystal(c.color) : S.steel);
+          if (d < 2.5) e.set(x, y - 4, z, crystal(c.color));
+        } else if (d < R - 3) {
+          for (let yy = y - 1; yy > ground; yy--) e.set(x, yy, z, d > R - 5 ? (yy === y - 1 ? S.frame : S.panel) : yy > y - 3 ? S.panelAlt : AIR);
         }
       }
-    // The ring: parapet with merlons, four ways in on the axes, eight bastions between them.
-    for (let a = 0; a < 360; a += 2) {
+    // The bowl: a two-wide tier at the rim, a glass parapet on top with posts of light, four gates on the axes.
+    const onAxis = (rad: number): boolean => Math.abs(Math.cos(rad)) > 0.982 || Math.abs(Math.sin(rad)) > 0.982;
+    for (let a = 0; a < 360; a += 1) {
       const rad = (a * Math.PI) / 180;
+      if (onAxis(rad)) continue;
+      for (const rr of [R - 0.5, R - 1.5]) {
+        const x = Math.floor(cx + Math.cos(rad) * rr);
+        const z = Math.floor(cz + Math.sin(rad) * rr);
+        e.set(x, y + 1, z, S.steel);
+      }
       const x = Math.floor(cx + Math.cos(rad) * (R - 0.5));
       const z = Math.floor(cz + Math.sin(rad) * (R - 0.5));
-      const onAxis = Math.abs(Math.cos(rad)) > 0.982 || Math.abs(Math.sin(rad)) > 0.982;
-      if (onAxis) continue;
-      e.set(x, y + 1, z, WALL);
-      if ((x + z) % 3 === 0) e.set(x, y + 2, z, BAND_SLAB);
+      e.set(x, y + 2, z, a % 30 === 15 ? withShape(neon(c.color), FENCE) : S.glass);
     }
-    for (let b = 0; b < 8; b++) {
-      const rad = ((b * 45 + 22.5) * Math.PI) / 180;
-      const bx = Math.round(cx + Math.cos(rad) * (R - 1.5)) - 1;
-      const bz = Math.round(cz + Math.sin(rad) * (R - 1.5)) - 1;
-      e.box(bx, y + 1, bz, bx + 1, y + 2, bz + 1, WALL);
-      e.set(bx, y + 3, bz, BAND_SLAB);
-      e.set(bx + 1, y + 3, bz + 1, BAND_SLAB);
-      e.set(bx + 1, y + 3, bz, LAMP);
+    // Gate pylons either side of each axis opening, with a metal cap.
+    for (let g = 0; g < 4; g++) {
+      const rad = (g * Math.PI) / 2;
+      const nx = -Math.sin(rad);
+      const nz = Math.cos(rad);
+      for (const side of [-1, 1]) {
+        const px = Math.floor(cx + Math.cos(rad) * (R - 1) + nx * side * 2.8);
+        const pz = Math.floor(cz + Math.sin(rad) * (R - 1) + nz * side * 2.8);
+        for (let h = 1; h <= 5; h++) e.set(px, y + h, pz, S.frame);
+        e.set(px, y + 6, pz, crystal(c.color));
+      }
     }
-    // Colonnade: eight columns with gold capitals, standing clear of the fighting floor.
-    for (let b = 0; b < 8; b++) {
-      const rad = ((b * 45) * Math.PI) / 180;
-      const px = Math.round(cx + Math.cos(rad) * 8) - 1;
-      const pz = Math.round(cz + Math.sin(rad) * 8) - 1;
-      for (let h = 1; h <= 5; h++) e.box(px, y + h, pz, px + 1, y + h, pz + 1, PILLAR);
-      e.box(px, y + 6, pz, px + 1, y + 6, pz + 1, GOLD_SLAB);
+    // Four light masts on the diagonals, tall and thin, lit at the top.
+    for (let m = 0; m < 4; m++) {
+      const rad = ((m * 90 + 45) * Math.PI) / 180;
+      const px = Math.floor(cx + Math.cos(rad) * (R - 4.5));
+      const pz = Math.floor(cz + Math.sin(rad) * (R - 4.5));
+      for (let h = 1; h <= 6; h++) e.set(px, y + h, pz, withShape(S.steel, PILLAR));
+      e.set(px, y + 7, pz, S.trim);
+      e.set(px, y + 8, pz, S.lamp);
     }
-    // The dais in the middle, with steps on the four axes.
+    // The dais in the middle: two steps, a ring of light and a metal heart, stairs on the four axes.
     for (let x = Math.floor(cx - 4); x <= Math.ceil(cx + 4); x++)
       for (let z = Math.floor(cz - 4); z <= Math.ceil(cz + 4); z++) {
         const d = Math.hypot(x + 0.5 - cx, z + 0.5 - cz);
         if (d <= 3.5) {
-          e.set(x, y + 1, z, d > 2.6 ? BAND : WALL);
-          e.set(x, y + 2, z, d < 1.2 ? GOLD : d > 3 ? BAND : FLOOR);
+          e.set(x, y + 1, z, d > 2.6 ? S.frame : S.steel);
+          e.set(x, y + 2, z, d < 1.2 ? S.trim : d > 3 ? S.frame : d > 2.2 ? crystal(c.color) : S.floor);
         }
       }
     for (let s = 0; s < 4; s++) {
@@ -568,7 +613,7 @@ export class SkyArchitect {
       for (let w = -1; w <= 0; w++) {
         const ox = dz === 0 ? 0 : w;
         const oz = dx === 0 ? 0 : w;
-        e.set(Math.floor(cx) + dx * 4 + ox, y + 1, Math.floor(cz) + dz * 4 + oz, stoneStairs((s + 2) % 4));
+        e.set(Math.floor(cx) + dx * 4 + ox, y + 1, Math.floor(cz) + dz * 4 + oz, withShape(S.panelAlt, makeShape('stairs', (s + 2) % 4)));
       }
     }
   }
@@ -586,9 +631,8 @@ export class SkyArchitect {
       return new THREE.Vector3(x0 + ax + 0.5, yy, z0 + az + 0.5);
     };
     if (c.kind === 'tower') {
-      // Into the hall, to the foot of the first flight, the landing, then up the second to the roof.
-      // In at the door, straight up the flight, out onto the roof. A stair is climbed from its low
-      // end, so the door and the first step are on the same line.
+      // In at the portal, straight up the flight, out onto the roof. A stair is climbed from its low
+      // end, so the portal and the first step are on the same line.
       out.push(at(0.5, 4, y + 1), at(3.5, 4, y + 4), at(6.5, 4, y + 7));
     } else if (c.kind === 'ramp') {
       out.push(at(0.5, 3.5, y + 1), at(4, 3.5, y + 4), at(7.5, 3.5, y + 7));

@@ -38,21 +38,31 @@ GitHub Pages). Single-file build for artifact hosting: `npm run build:artifact` 
    more.
 2. **Building.** One tap puts down a whole module, snapped to the island's eight-metre grid at the
    level you are standing on. `B` takes a module in hand (the fire button becomes PLACE on a phone);
-   `1`-`5` or the wheel pick it, `R` turns it, click places it, holding places a run. Five modules:
-   a **tower** (4 bricks: a stair hall with arched doors at both ends, arrow slits, a banner in your
-   colour and a straight flight up to its own crenellated roof, six metres up), a **deck** (2: eight
-   metres of marble floor inside a parapet with lamp-topped corner posts), a **ramp** (3: a stair on
-   a vault to the floor above), a **bridge** (2 per cell: a railed span on arches that reaches until
-   it meets something, up to three cells) and an **arena** (10: a round court twenty-three metres
-   across with eight bastions, a colonnade and a raised dais).
+   `1`-`5` or the wheel pick it, `R` turns it, `C` changes the finish, click places it, holding places
+   a run. Five modules: a **hall** (4 bricks: a glass-walled storey with dark pilasters, a framed
+   portal with a lit sign in your colour on the side you came from, and a straight flight under a
+   lit ceiling up to its own roof terrace, six metres up), a **terrace** (2: eight metres of floor
+   inside a dark rim, glass balustrades between posts of light, a fascia beam under every edge), a
+   **stair** (3: a grand stair six wide between stringer walls with a glowing handrail, a passage
+   under it), a **bridge** (2 per cell: a glass-railed span on a girder arch that reaches until it
+   meets something, up to three cells) and a **stadium** (10: a round bowl twenty-three metres
+   across with a two-step tier, four framed gates, four light masts and a lit dais).
+
+   Every builder has a **finish**: Aurora (ivory cladding, graphite frames, gold), Obsidian
+   (charcoal panels, silver frames, smoked glass) or Ember (sand concrete, bronze frames, copper).
+   You pick yours with `C` or the chips over the piece bar; the bots take turns through all three,
+   so a shared citadel has the patchwork of a real skyline. Your colour is only ever light: the
+   posts on the balustrades, the handrails, the sign over your portals, the crystal in your keels.
 
    Nothing has to be lined up by hand. An architect dresses every cell and its neighbours: floors
-   get a stone rim, edges that face out get parapets, cells that touch merge into one hall with no
-   wall between them, a floor with a tower under it gets a stairwell, and everything hanging in the
-   air grows a plinth down to the hill or a stepped keel with a crystal in your colour glowing under
-   it. Modules cut their own rooms out of a hillside, so a door never opens into earth. A green
-   ghost of the real masonry shows where it will land; amber means you cannot afford it, red that
-   something is already there or that there is nothing to build from.
+   get a rim and a fascia where they face out, edges that face out get balustrades, cells that touch
+   merge into one hall with a portal instead of a wall, a floor with a hall under it gets a
+   stairwell, a terrace on top of a stack gets a light mast, and everything hanging in the air
+   grows four pylons down to the hill or a stepped keel with a crystal in your colour glowing under
+   it. Modules cut their own rooms out of a hillside, so a portal never opens into earth. Every
+   pane of glass can be shot out or run through. A green ghost of the real masonry shows where it
+   will land; amber means you cannot afford it, red that something is already there or that there
+   is nothing to build from.
 3. **The architect view** (`X`, or EYE on a phone) lifts the camera fifteen metres up for four
    seconds so you can lay modules onto the ground plane by cursor or a still finger, then drops you
    back; your body stays exposed the whole time, and it cools down for six seconds.
@@ -136,7 +146,7 @@ GitHub Pages). Single-file build for artifact hosting: `npm run build:artifact` 
 
 WASD move · Space jump · Shift sprint · C crouch/slide · Mouse aim and fire · Right mouse aim down
 sights · 1-3 / wheel weapons · R reload · G grenade · Q / F gadgets · Tab scoreboard · Esc pause.
-Sky Flag: B build (then 1-5 / wheel pick the module, R turns it, click or hold places) · X architect
+Sky Flag: B build (then 1-5 / wheel pick the module, R turns it, C the finish, click or hold places) · X architect
 view; on a phone BUILD, PIECE and EYE buttons sit beside the fire cluster and a still finger in the
 architect view places at the finger.
 The mouse is either captured or hidden: click once to capture it, and where a browser refuses to
@@ -294,8 +304,19 @@ Each character is one skinned mesh with a draw group per material and a pose lev
 frame up close, every fourth past eighty metres); the scene keeps six lights rather than ten;
 ambient occlusion runs at half resolution with a bilateral upsample on every tier; the colour grade
 shares a pass with the rest of the post chain; god rays and bloom render at half resolution; the
-render target never exceeds about four megapixels; and a dynamic resolution scale between 0.7 and 1
-holds the frame rate without touching shadows, occlusion or the post chain.
+high tier renders at the display's own density and the target never exceeds about three
+megapixels; and a dynamic resolution scale between 0.7 and 1 judges the typical frame rather than
+the average, so one hitch never costs sharpness for the rest of the match, and climbs back after a
+couple of seconds at the display's own rate.
+
+The voxel pipeline was rebuilt for a city that changes every second. A module used to remesh the
+whole world synchronously the moment it landed (a median 66 ms, up to 240 ms, every time any of
+twelve builders tapped); now changed chunks are remeshed within a per-frame budget of a few
+milliseconds, nearest the camera first, and the 32 m regions they are batched into are rebuilt at
+most two per frame. The mesher itself reads its neighbourhood straight from the chunk arrays instead
+of a hash lookup per block, stamps a lamp-distance field once per chunk instead of scanning every
+lamp per face, caches the geometry of shaped blocks, and appends into growable typed arrays — about
+half the time per chunk.
 
 Bots navigate the whole island: a fine voxel grid around each fortress stitched to a coarse terrain
 grid, with hearing, damage reaction, cover, peeking and defender repositioning.

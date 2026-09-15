@@ -43,7 +43,9 @@ export interface QualityProfile {
 export const QUALITY_PROFILES: Record<Quality, QualityProfile> = {
   low: { pixelRatio: 1, ao: false, aoMode: 'Performance', aoHalfRes: true, shadowMap: 1024, shadowRadius: 70, godRays: false, chromatic: false, grade: false, softShadows: false, grass: 6000, trees: 90, anisotropy: 2 },
   medium: { pixelRatio: 1.15, ao: true, aoMode: 'Low', aoHalfRes: true, shadowMap: 2048, shadowRadius: 80, godRays: false, chromatic: false, grade: true, softShadows: true, grass: 16000, trees: 140, anisotropy: 4 },
-  high: { pixelRatio: 1.25, ao: true, aoMode: 'Medium', aoHalfRes: true, shadowMap: 2048, shadowRadius: 80, godRays: true, chromatic: false, grade: true, softShadows: true, grass: 32000, trees: 180, anisotropy: 8 },
+  // High renders at the display's own density: supersampling a desktop monitor cost a quarter of
+  // the frame for a sharpness the anti-aliasing already gives.
+  high: { pixelRatio: 1.0, ao: true, aoMode: 'Medium', aoHalfRes: true, shadowMap: 2048, shadowRadius: 80, godRays: true, chromatic: false, grade: true, softShadows: true, grass: 28000, trees: 180, anisotropy: 8 },
   ultra: { pixelRatio: 1.5, ao: true, aoMode: 'High', aoHalfRes: true, shadowMap: 4096, shadowRadius: 90, godRays: true, chromatic: true, grade: true, softShadows: true, grass: 50000, trees: 220, anisotropy: 16 },
 };
 
@@ -220,10 +222,10 @@ export class GameRenderer {
   resize(): void {
     const w = Math.max(1, window.innerWidth);
     const h = Math.max(1, window.innerHeight);
-    // Never render more than about four megapixels: a high-density display should not quietly cost
+    // Never render more than about three megapixels: a high-density display should not quietly cost
     // four times the fill rate of a normal one.
     const want = Math.min(window.devicePixelRatio || 1, this.profile.pixelRatio);
-    const cap = Math.sqrt(3_700_000 / Math.max(1, w * h));
+    const cap = Math.sqrt(3_000_000 / Math.max(1, w * h));
     const pr = Math.max(0.7, Math.min(want, cap) * this.resScale);
     this.renderer.setPixelRatio(pr);
     this.renderer.setSize(w, h, false);

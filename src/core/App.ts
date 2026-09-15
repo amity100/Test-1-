@@ -174,17 +174,41 @@ export class App {
     requestAnimationFrame(this.loop);
   };
 
-  /** Holds the frame rate by giving a little resolution away, and takes it back when the card can. */
+  /**
+   * Holds the frame rate by giving a little resolution away, and takes it back when the card can.
+   * The judge is the typical frame, not the average: one hitch (a remesh, a tab switch) must not
+   * cost sharpness for the rest of the match, and on a 60 Hz screen the rate can never exceed
+   * sixty, so recovery is earned by a steady run of full-speed frames rather than by a rate the
+   * display would never report.
+   */
   private tuneResolution(): void {
     if (this.gr.flags.has('noadapt') || this.freeFly) return;
+    // Ignore the odd long frame: sort a short window and read the frame at the 70th percentile.
+    if (this.rawDt < 0.5) this.frameWindow.push(this.rawDt);
     this.resTimer -= this.rawDt;
-    if (this.resTimer > 0 || this.fps <= 0) return;
+    if (this.resTimer > 0 || this.frameWindow.length < 12) return;
     this.resTimer = 0.6;
-    const want = settings.mobileSafe || this.gr.mobileSafe ? 55 : 58;
-    if (this.fps < want - 6) this.gr.setResolutionScale(this.gr.resScale - 0.08);
-    else if (this.fps > want + 8) this.gr.setResolutionScale(this.gr.resScale + 0.05);
+    const sorted = this.frameWindow.slice().sort((a, b) => a - b);
+    const typical = sorted[Math.floor(sorted.length * 0.7)];
+    const best = sorted[Math.floor(sorted.length * 0.25)];
+    this.frameWindow.length = 0;
+    const mobile = settings.mobileSafe || this.gr.mobileSafe;
+    const wantMs = 1000 / (mobile ? 50 : 55);
+    if (typical * 1000 > wantMs) {
+      this.gr.setResolutionScale(this.gr.resScale - 0.08);
+      this.steadyFor = 0;
+    } else if (best * 1000 < 1000 / 59 + 0.3) {
+      // Running at the display's own rate for a couple of seconds: try a step back up.
+      this.steadyFor += 0.6;
+      if (this.steadyFor >= 2 && this.gr.resScale < 1) {
+        this.gr.setResolutionScale(this.gr.resScale + 0.06);
+        this.steadyFor = 0;
+      }
+    } else this.steadyFor = 0;
   }
   private resTimer = 1.5;
+  private frameWindow: number[] = [];
+  private steadyFor = 0;
 
   private update(dt: number): void {
     const input = this.input;
@@ -223,7 +247,9 @@ export class App {
     this.foliage.update(this.time);
     perf.add('sky', tsky);
     const tch = perf.now();
-    this.chunks.update(9);
+    // Remesh what changed, nearest the camera first, inside a budget that shrinks when frames are long.
+    this.chunks.focus.copy(this.gr.camera.position);
+    this.chunks.update(this.fps > 0 && this.fps < 50 ? 2.5 : 4);
     perf.add('chunks', tch);
     // When the device cannot hold 50 fps the shadow map refreshes every other frame: at that rate
     // the half-frame lag of a moving shadow is invisible and its render cost halves.

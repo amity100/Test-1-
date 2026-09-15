@@ -109,6 +109,13 @@ export const PALETTE: string[] = [
   '#0a6d7a', '#7a1466', '#7a5600', '#1b7a0a', '#7a1a2a', '#4c3f7a', '#7a4320', '#3a507a', '#7a6f25', '#157a55', '#7a3b58', '#6a6a6a',
   // Sky arena masonry (98, 99): warm ashlar for walls, and the darker band of string courses
   '#d9d2c4', '#b9b0a0',
+  // Sky citadel skins (100..115). Aurora: ivory panel, cool light panel, graphite frame, gunmetal
+  // steel, cool glass, inlay grey. Obsidian: charcoal panel, slate panel, silver frame, smoked glass.
+  // Ember: sand panel, tan panel, dark bronze frame, warm glass, copper trim. Then pure white light.
+  '#f4f1ea', '#dfe3e6', '#23272e', '#454b54', '#cfe3ea', '#9aa3ab',
+  '#2a2d33', '#3a3e46', '#a7adb5', '#6f8fa8',
+  '#e6d8bc', '#cdbb96', '#4f3526', '#e6d3b0', '#d9a259',
+  '#fff6e8', '#ffe0b8',
 ];
 
 /** Palette index of the first Sky Flag player colour; the twelve run consecutively. */
@@ -118,6 +125,13 @@ export const SKY_DEEP_PALETTE = 86;
 export const SKY_PALETTE = { floor: 82, pillar: 83, gold: 84, bronze: 85 };
 /** Ashlar of the sky arenas: walls, and the darker band of string courses and copings. */
 export const SKY_STONE = { wall: 98, band: 99 };
+/** Palette indices of the sky citadel skins (see SkySkins.ts). */
+export const SKY_CITADEL = {
+  auroraPanel: 100, auroraAlt: 101, graphite: 102, gunmetal: 103, coolGlass: 104, inlay: 105,
+  charcoal: 106, slate: 107, silver: 108, smokedGlass: 109,
+  sand: 110, tan: 111, bronzeDark: 112, warmGlass: 113, copper: 114,
+  white: 115, warmLight: 116,
+};
 
 export const PALETTE_COUNT = PALETTE.length;
 

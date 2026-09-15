@@ -38,6 +38,8 @@ export interface SettingsData {
   /** Last chosen primary weapon and gadget kit (round loadout). */
   primary: string;
   kit: string[];
+  /** Sky Flag: the finish the player's structures are built in (see SkySkins). */
+  skySkin: string;
 }
 
 const KEY = 'flagkeep.settings.v1';
@@ -63,6 +65,7 @@ const DEFAULTS: SettingsData = {
   touchLayout: {},
   primary: 'rifle',
   kit: ['zipline', 'breach'],
+  skySkin: 'aurora',
 };
 
 export class Settings {

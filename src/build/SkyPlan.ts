@@ -28,6 +28,8 @@ export interface SkyCell {
   owner: number;
   /** Palette index of the builder's colour. */
   color: number;
+  /** Index of the finish the builder builds in (see SkySkins). */
+  skin: number;
   /** Facing 0 +X, 1 +Z, 2 -X, 3 -Z (ramps, towers, bridges). */
   dir: number;
   /** Cells placed by one tap share a group id, so a module is one thing to remove or refund. */

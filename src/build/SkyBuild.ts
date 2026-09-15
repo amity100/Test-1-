@@ -87,6 +87,9 @@ export class SkyBuilder {
   /** Modules placed, per builder id. */
   readonly count = new Map<number, number>();
 
+  /** Which finish a builder builds in: bots take turns through the three, the player picks. */
+  skinFor: (e: Entity) => number = (e) => (e.isBot ? e.colorIndex % 3 : 0);
+
   private owner = new Map<number, number>();
   /** Island blocks a module cut through, so the hillside can be put back afterwards. */
   private carved = new Map<number, number>();
@@ -177,6 +180,7 @@ export class SkyBuilder {
   private planAt(kind: PieceKind, i: number, j: number, y: number, dir: number, self: Entity, bricks: number): AimResult {
     const target = cellKey(i, j, y);
     const color = this.colorIndex(self);
+    const skin = this.skinFor(self);
     const group = 0;
     const now = 0;
     const mk = (ci: number, cj: number, cy: number, k: SkyKind, cdir = dir, host?: number): SkyCell => ({
@@ -186,6 +190,7 @@ export class SkyBuilder {
       kind: k,
       owner: self.id,
       color,
+      skin,
       dir: cdir,
       group,
       host,
@@ -290,9 +295,10 @@ export class SkyBuilder {
       c.placedAt = performance.now() / 1000;
       const prev = this.plan.get(c.i, c.j, c.y);
       if (prev && prev.kind === 'deck' && c.kind !== 'deck') {
-        // Growing a deck into a tower keeps whoever built the deck in the credits.
+        // Growing a deck into a tower keeps whoever built the deck in the credits, and its finish.
         c.color = prev.color;
         c.owner = prev.owner;
+        c.skin = prev.skin;
       }
       this.plan.set(c);
     }

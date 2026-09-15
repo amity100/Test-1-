@@ -933,6 +933,11 @@ body { background: radial-gradient(1200px 800px at 50% 30%, #16283a 0%, #0f1923 
 .sky-piece.active { border-color: #ffd36a; background: rgba(255, 211, 106, 0.16); color: #fff; box-shadow: 0 0 14px rgba(255, 211, 106, 0.3); transform: translateY(-3px); }
 .sky-piece.poor { opacity: 0.45; }
 .sky-piece.poor .pc { color: var(--danger); }
+.sky-skins { position: absolute; left: 50%; bottom: 128px; transform: translateX(-50%); display: flex; gap: 6px; pointer-events: auto; }
+.sky-skin { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border: 1px solid var(--line); background: rgba(8, 14, 22, 0.62); clip-path: var(--chamfer-sm); font-family: var(--display); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #b9c3cf; cursor: pointer; }
+.sky-skin .sw { display: flex; width: 27px; height: 12px; border: 1px solid rgba(255, 255, 255, 0.25); }
+.sky-skin .sw i { flex: 1; display: block; }
+.sky-skin.active { border-color: #ffd36a; color: #fff; background: rgba(255, 211, 106, 0.16); }
 .sky-hint { position: absolute; left: 50%; bottom: 118px; transform: translateX(-50%); padding: 5px 14px; background: rgba(8, 14, 22, 0.66); border: 1px solid var(--line); clip-path: var(--chamfer-sm); font-size: 12px; color: #dbe3ec; white-space: nowrap; max-width: 94vw; overflow: hidden; text-overflow: ellipsis; }
 .sky-hint.bad { color: #ff8fa3; border-color: rgba(255, 51, 85, 0.5); }
 .sky-arch { position: absolute; right: 90px; top: 70px; width: 54px; height: 54px; }
@@ -969,6 +974,9 @@ body { background: radial-gradient(1200px 800px at 50% 30%, #16283a 0%, #0f1923 
   .sky-strip { right: calc(150px + env(safe-area-inset-right, 0px)); width: 24px; height: 44vh; top: 48%; }
   [dir='rtl'] .sky-strip { right: calc(150px + env(safe-area-inset-right, 0px)); left: auto; }
   .sky-pieces { bottom: calc(6px + env(safe-area-inset-bottom, 0px)); left: 50%; gap: 4px; padding: 5px 6px; }
+  .sky-skins { bottom: calc(92px + env(safe-area-inset-bottom, 0px)); gap: 4px; }
+  .sky-skin { padding: 3px 6px; font-size: 9px; }
+  .sky-skin .sn { display: none; }
   .sky-piece { width: 52px; padding: 5px 2px 4px; }
   .sky-piece .pi svg { width: 20px; height: 20px; }
   .sky-piece .pn { font-size: 8px; }
