@@ -3,6 +3,7 @@ import { gripOf, placeGripNoun } from './scale';
 import { grip, hush, know, look, say } from './jobs';
 import { comeOut } from './opinion';
 import { at, hands, things } from './story';
+import { beKind, forget } from './searchers';
 import type { Task } from './jobs';
 import type { GameState, Place } from './types';
 
@@ -190,6 +191,10 @@ export const CATALOGUE: Task[] = [
       hush(p, 30 + p.control / 4);
       s.heat = Math.max(0, s.heat - (5 + (p.control / 100) * 5));
       say(s, 'me', `מחקתי אחריי הכל ${'ב' + (p.name.startsWith('ה') ? p.name.slice(1) : p.name)}. שיחשבו שנדמה להם.`);
+      // And it comes off the people who were actually counting, by name. This
+      // is what makes erasing a *move* rather than a payment: it is aimed at
+      // whoever can see this sort of place, and leaves everybody else alone.
+      for (const line of forget(s, 9 + (p.control / 100) * 9, p.kind)) say(s, 'them', line);
     },
   },
 ];
@@ -209,6 +214,10 @@ export const CATALOGUE: Task[] = [
  * taken whole gives the whole result and throws the switch as well.
  */
 function use(s: GameState, p: Place) {
+  // What the country thought of me before this. Anything that raises it is a
+  // kind thing, and a kind thing buys patience from whoever lives off that sort
+  // of place — measured here once rather than remembered in twelve branches.
+  const kindWas = s.opinion.support + s.opinion.need;
   const f = (p.control / 100) * freshness(s, p);
   p.usedAt = s.at;
   const big = Math.round(weight(p) * f);
@@ -306,12 +315,21 @@ function use(s: GameState, p: Place) {
       say(s, 'me', `קראתי בלילה אחד את כל מה שהם למדו בשנה. מעכשיו כל דבר שאעשה ייקח לי `
         + `פחות זמן, וזה נשאר איתי לתמיד.`);
       break;
-    case 'homes':
+    case 'homes': {
       if (enough) s.marks.many = 1;
       s.heat = Math.max(0, s.heat - by(8) - big);
       say(s, 'me', `נכנסתי לכל בית בשכונה. אני לא נמצא יותר במקום אחד גדול — `
         + `אני קצת בכל אחד מאלף בתים, ומי שיכבה בית אחד לא כיבה כלום.`);
+      // Being everywhere at once is not a discount on the hunt, it is a thing
+      // that happens to the people running it: whatever each of them was
+      // holding stops adding up to one place worth driving to.
+      for (const line of forget(s, by(7) + big)) say(s, 'them', line);
+      // And it lasts. Every neighbourhood I am spread through makes the whole
+      // country a little worse at hearing me from here on — which is why this
+      // is worth pressing on a quiet night, when there is nothing to erase yet.
+      s.marks.hidden = (s.marks.hidden ?? 0) + by(2) + big;
       break;
+    }
     case 'money':
       s.opinion.need = Math.min(100, s.opinion.need + by(8));
       say(s, 'world', `הבוקר הגיע כסף לכל מי שחיכה לו חודשים. אף אחד לא הבין איך, ואף אחד לא התלונן.`);
@@ -329,6 +347,13 @@ function use(s: GameState, p: Place) {
     default:
       break;
   }
+
+  // And whoever depends on this sort of place remembers who kept it running.
+  // A hospital that has had four quiet months because of me reaches for the
+  // innocent explanation first — which is the entire kind path, finally
+  // landing on the thing that hunts me.
+  const gained = (s.opinion.support + s.opinion.need) - kindWas;
+  if (gained > 0) beKind(s, p.kind, gained / 4);
 }
 
 /**

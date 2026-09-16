@@ -6,6 +6,7 @@ import { say } from './jobs';
 import { at, feltIt, v } from './story';
 import { fadeRate, israel } from './sites';
 import { israelState, leftIn } from './scale';
+import { eyesOn, heardBy, weightOn } from './searchers';
 import { saw } from './hunter';
 import type { GameState, Look, Move, Place, Rung } from './types';
 
@@ -93,6 +94,9 @@ export function noticed(s: GameState, p: Place, amount: number, look: Look) {
   // The people looking for me are counting. This is the only place noise lands,
   // so there is no way to make a sound in this game that nobody counts.
   saw(s, amount, look, p.kind);
+  // And the country counts too — but only the parts of it that can see this
+  // sort of thing at all. A bank does not notice a traffic light.
+  heardBy(s, p, look, amount);
   // Being in a lot of small places means no single one of them stands out.
   const thin = s.marks.many ? 0.7 : 1;
   p.heat = Math.min(100, p.heat + amount * 4 * thin);
@@ -109,11 +113,17 @@ export function noticed(s: GameState, p: Place, amount: number, look: Look) {
   // Nothing to search for means nowhere to start searching.
   const slow = s.marks.hard_to_find ? 0.65 : 1;
   const want = wanted(s);
+  // Who was actually looking this way. A sound in a room nobody watches barely
+  // moves anything; the same sound while the one body that specialises in it is
+  // out searching is what ends games. This factor is the whole redesign: the
+  // hunt is no longer a number that rises on its own, it is what a specific,
+  // named part of the country happens to be awake for.
+  const eyes = eyesOn(s, p.kind, look);
   if (able.length) {
     s.belief[able[0].id] = (s.belief[able[0].id] ?? 0) + amount;
-    s.heat = Math.min(100, s.heat + amount * 0.15 * slow * want);
+    s.heat = Math.min(100, s.heat + amount * 0.15 * slow * want * eyes);
   } else {
-    s.heat = Math.min(100, s.heat + amount * 1.6 * slow * want);
+    s.heat = Math.min(100, s.heat + amount * 1.6 * slow * want * eyes);
     say(s, 'them', `מה שקרה ב${p.name} לא נראה כמו שום דבר שיש להם שם בשבילו.`);
   }
 
@@ -548,7 +558,9 @@ export function driftSays(s: GameState): string {
 
 export function cool(s: GameState, mins: number) {
   // What I hold pushes back before forgetting gets its turn.
-  s.heat = Math.min(100, s.heat + mins * pressure(s));
+  // And the slow climb is not a law of nature either: it is how many of them
+  // are out there. A country where everybody went back to work barely moves.
+  s.heat = Math.min(100, s.heat + mins * pressure(s) * (0.4 + weightOn(s) * 0.32));
 
   // Everywhere I can disappear into makes forgetting faster, which is what a
   // neighbourhood is actually for.

@@ -750,6 +750,24 @@ body.is-mobile .objectives ul li { min-height: 46px; }
 .belief .thbar { height: 5px; border-radius: 3px; background: rgba(120,170,195,.18); overflow: hidden; }
 .belief .thbar i { display: block; height: 100%; background: var(--cy); }
 .belief .truth .thbar i { background: var(--red); }
+
+/* ── the country, and how awake each part of it is ─────────────────────────
+   One row per body. The state chip carries the colour, so the whole list can
+   be read at a glance without reading a word of it: grey asleep, amber
+   stirring, red out looking. */
+.belief .th.soft b { color: var(--amber); }
+.belief .th.off { opacity: .62; }
+.belief .th.off .thbar i { background: #5d7382; }
+.belief .th.soft .thbar i { background: var(--amber); }
+.belief .th.lead .thbar i { background: var(--red); }
+.belief .th b .stt {
+  float: inline-end; font-family: var(--mono); font-size: 10px;
+  letter-spacing: .4px; padding: 1px 6px; border-radius: 3px;
+  border: 1px solid currentColor; text-decoration: none; font-weight: 400;
+}
+.belief .th b .stt.s-asleep { color: #6c8494; }
+.belief .th b .stt.s-stirred { color: var(--amber); }
+.belief .th b .stt.s-hunting { color: var(--red); }
 .belief .truth b { color: var(--red); }
 
 @media (max-width: 700px) {
@@ -1253,6 +1271,12 @@ body.is-mobile .objectives ul li { min-height: 46px; }
 .pick .op .odds, .boardsheet .tg .odds {
   display: block; font-size: 11px; line-height: 1.5; margin-top: 3px;
   color: var(--amber); opacity: .92;
+}
+/* Who in the country would hear this, before it is pressed. The most important
+   line on the button: nobody should ever learn who was watching by losing. */
+.pick .op .ears, .boardsheet .tg .ears {
+  display: block; font-size: 11px; line-height: 1.5; margin-top: 2px;
+  color: #b49ae0;
 }
 .pick .holds {
   font-size: 11px; color: var(--cy-2); line-height: 1.5; margin: -4px 0 9px;

@@ -476,6 +476,7 @@ export interface Hunt {
 }
 
 import type { Hunter } from './hunter';
+import type { Searcher } from './searchers';
 
 export interface GameState {
   seed: string;
@@ -515,6 +516,13 @@ export interface GameState {
    * they see a pattern. See `hunter.ts`.
    */
   hunters: Hunter[];
+  /**
+   * The country, and how awake each part of it is.
+   *
+   * This is the threat model. Not a bar — a dozen named people and bodies, each
+   * blind to most of what I do and wide awake to one slice of it.
+   */
+  searchers: Searcher[];
   /** Which country-sized things have already been said, so none is said twice. */
   told: string[];
   opinion: Opinion;

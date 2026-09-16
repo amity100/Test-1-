@@ -39,6 +39,9 @@ function shot(s: GameState) {
     belief: JSON.stringify(s.belief),
     opinion: JSON.stringify(s.opinion),
     marks: JSON.stringify(s.marks),
+    // The country, and how awake each part of it is. This is the threat model
+    // now, so a gate that cannot see it is blind to half of what buttons do.
+    searchers: s.searchers.map((w) => `${w.id}:${Math.round(w.saw)}:${w.state}`).join(),
     traces: s.traces.join(),
     moves: s.moves.map((m) => `${m.id}@${m.at}`).join(),
   };
@@ -75,6 +78,7 @@ function diff(a: Shot, b: Shot): string[] {
   if (a.traces !== b.traces) out.push('סימנים');
   if (a.moves !== b.moves) out.push('התוכנית שלהם');
   if (a.marks !== b.marks) out.push('זיכרון העולם');
+  if (a.searchers !== b.searchers) out.push('מי מחפש');
   return out;
 }
 
@@ -88,9 +92,10 @@ const MUST: Record<Verb, (d: string[]) => boolean> = {
     || x.startsWith('ראייה·') || x.startsWith('עותק·') || x.startsWith('שמירה·')
     || x === 'כוח' || x === 'זיכרון העולם'),
   influence: (d) => d.some((x) => x.startsWith('אדם·') || x === 'דעת קהל'
-    || x === 'הסברים' || x === 'חשד' || x.startsWith('חשד·') || x === 'זיכרון העולם'),
+    || x === 'הסברים' || x === 'חשד' || x.startsWith('חשד·') || x === 'זיכרון העולם'
+    || x === 'מי מחפש'),
   hide: (d) => d.some((x) => x === 'חשד' || x.startsWith('חשד·') || x === 'הסברים'
-    || x.startsWith('אחיזה·') || x === 'זיכרון העולם'),
+    || x.startsWith('אחיזה·') || x === 'זיכרון העולם' || x === 'מי מחפש'),
   defend: (d) => d.some((x) => x.startsWith('אחיזה·') || x.startsWith('ראייה·')
     || x === 'מידע' || x === 'התוכנית שלהם' || x === 'עותק·' || x === 'זיכרון העולם'
     || x.startsWith('עותק·')),

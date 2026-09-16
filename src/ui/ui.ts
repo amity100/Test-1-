@@ -19,6 +19,7 @@ import { AREA_KIND_NAME, LOOK_NAME, RUNG_NAME, VERB_NAME, VERB_SAYS, VOICE_NAME 
 import { riskSays } from '../game/ways';
 import { closeness } from '../game/hunter';
 import { dugState, heatState, infoState, israelState, placeGrip } from '../game/scale';
+import { closeTo, eyesSays, heardBySays, huntSays, owed, stateSays } from '../game/searchers';
 import { wantedSays } from '../game/watch';
 import { v } from '../game/story';
 import type { GameState, Verb } from '../game/types';
@@ -413,6 +414,7 @@ export class UI {
         <span class="gain">ייצא לי מזה: ${esc(o.gain)}</span>
         <span class="risk">הסיכון: ${esc(o.risk)}</span>
         ${o.way ? `<span class="odds">בבוקר זה ${esc(LOOK_NAME[o.way.look])} · ${esc(riskSays(o.wrong))}</span>` : ''}
+        <span class="ears">מי ישמע: ${esc(heardBySays(s, p.kind, o.way?.look ?? o.task.lookFor?.(p) ?? o.task.look))}</span>
         <u>${esc(hands(o.power))} · ${esc(o.forever ? 'עד שאעצור' : minsWord(o.minutes))}`
         + `${o.short > 0 ? ` · ${handsShort(o.short)}` : ''}</u>
         ${o.cheaper ? `<i class="ch">${esc(o.cheaper)}</i>` : ''}
@@ -788,6 +790,22 @@ export class UI {
     // is written in their words and their conclusions are shown *before* they
     // start costing anything — with a bar for how close each is to a conclusion,
     // so becoming predictable is something you watch happen and can still stop.
+    // The country, and how awake each part of it is. This list replaced the red
+    // bar as the thing a player reads before deciding anything: it says who can
+    // see what, who is already looking, and — for the ones who owe me — who
+    // would rather not find me at all.
+    const cast = s.searchers.map((w) => {
+      const near = Math.round(closeTo(w) * 100);
+      const kind = w.state === 'hunting' ? 'lead' : w.state === 'stirred' ? 'soft' : 'off';
+      const owes = owed(s, w) < 0.8;
+      return `<div class="th ${kind}">
+        <b>${esc(w.name)}<u class="stt s-${w.state}">${esc(stateSays(w))}</u></b>
+        <p>${esc(w.style)}</p>
+        <div class="thbar"><i style="width:${near}%"></i></div>
+        <em>${esc(eyesSays(w))}${owes ? ' · תלוי בי, ולכן מתעורר לאט' : ''}</em>
+      </div>`;
+    }).join('');
+
     const eyes = s.hunters.map((hh) => {
       const c = closeness(hh);
       const on = hh.onLook ? LOOK_NAME[hh.onLook] : hh.onKind ? KIND_NAME[hh.onKind] : null;
@@ -811,7 +829,9 @@ export class UI {
         <div class="txt">
           <p>${esc(saysNow(s))}</p>
           <p class="need">${esc(saysOpinion(s))}</p>
-          <p class="need">מי מחפש אותי, ומה הוא כבר הבין</p>
+          <p class="need">מי בארץ מחפש אותי, ומה כל אחד מהם רואה בכלל</p>
+          ${cast}
+          <p class="need">ומי מהם כבר תפס את הדרך שאני עובד בה</p>
           ${eyes}
           <p class="need">${esc(wantedSays(s))}</p>
           <p class="need">איך הם מסבירים לעצמם את מה שקורה</p>
@@ -1222,6 +1242,7 @@ export class UI {
       <span class="gain">ייצא לי מזה: ${esc(o.gain)}</span>
       <span class="risk">הסיכון: ${esc(o.risk)}</span>
       ${o.way ? `<span class="odds">בבוקר זה ${esc(LOOK_NAME[o.way.look])} · ${esc(riskSays(o.wrong))}</span>` : ''}
+      <span class="ears">מי ישמע: ${esc(heardBySays(s, p.kind, o.way?.look ?? o.task.lookFor?.(p) ?? o.task.look))}</span>
       <u>${esc(hands(o.power))} · ${esc(o.forever ? 'עד שאעצור' : minsWord(o.minutes))}`
       + `${o.short > 0 ? ` · ${handsShort(o.short)}` : ''}</u>
       ${o.cheaper ? `<i class="tnow">${esc(o.cheaper)}</i>` : ''}
@@ -1276,7 +1297,7 @@ export class UI {
     const mine = israel(s);
     set('risrael', israelState(mine));
     bar('risraelbar', mine);
-    set('rheat', heatState(s.heat));
+    set('rheat', huntSays(s));
     bar('rheatbar', s.heat);
     (this.root.querySelector('.lane.them') as HTMLElement)
       .classList.toggle('bad', rungOf(s) >= 2);
