@@ -12,7 +12,13 @@ for (const [W, H] of [[320, 640], [360, 740], [390, 844], [430, 932]]) {
   const p = await b.newPage({ viewport: { width: W, height: H }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
   const errs = [];
   p.on('pageerror', (e) => errs.push(String(e)));
-  p.on('console', (m) => { if (m.type() === 'error' && !/ERR_CONNECTION|404/.test(m.text())) errs.push(m.text()); });
+  // A failure to reach something outside this machine is a condition of the
+  // room, not a fault in the game — the game itself ships as one file with no
+  // assets, and the only outside thing it asks for is the two typefaces. A
+  // sandbox whose proxy the test browser does not trust would otherwise fail
+  // every run here while nothing at all is wrong with the game.
+  const outside = /ERR_CONNECTION|ERR_CERT|ERR_NAME_NOT_RESOLVED|ERR_PROXY|404|fonts\.googleapis|fonts\.gstatic/;
+  p.on('console', (m) => { if (m.type() === 'error' && !outside.test(m.text())) errs.push(m.text()); });
   await p.goto('http://localhost:5173/', { waitUntil: 'domcontentloaded' });
   const tap = (sel, text) => p.evaluate(([sel, text]) => {
     const el = Array.from(document.querySelectorAll(sel))
