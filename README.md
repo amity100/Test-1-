@@ -61,18 +61,27 @@ GitHub Pages). Single-file build for artifact hosting: `npm run build:artifact` 
    gets a light mast, and everything hanging in the air grows four pylons down to the hill or a
    stepped keel with a crystal glowing under it. Every pane of glass can be shot out or run through.
 
-   Four rules between them mean a finished citadel has no dead ends. **A floor with another floor
-   over it grows its own service stair** — five steps along one wall, a lit handrail, lamps in the
-   ceiling and an opening cut through the floor above — so a room is never somewhere you can only
-   leave by the way you came in. **A floor whose neighbour stands a storey higher grows a flight up
-   to it**, three wide and railed in light, which is both the way up and where people meet.
-   **The long side of a grand stair opens into a landing** wherever a floor stands against its foot,
-   instead of presenting six blocks of blank wall to somebody standing one step away. And **a new
-   floor snaps onto the floors already beside it**, so two people building side by side end up with
-   storeys that line up rather than two grids a metre out of step cutting through each other. A
-   walk-through of a finished three-minute match reaches **97–99 % of every cell in it** from the
-   beach. Each floor is also furnished to be fought on: a few chest-high pieces of cover, laid only
-   where the floor is solid and nothing else stands, low enough to shoot over and to climb.
+   Stacked floors are built as a **switchback around a light well**. A floor with another floor
+   over it grows a service stair of single open steps, each on its own beam with nothing beneath,
+   a handrail of light beside it and a parapet where it meets the well — so from anywhere in the
+   room it reads as a stair, never as a wall (the old solid flight was exactly the wall people
+   stood in front of, unable to see the way up behind it). The stair takes a strip one block in
+   from a long edge, **chosen so it comes up where the floor above actually leaves room to stand**:
+   between a bridge's rails, on the flat approach before a ramp's first step, along the wall a
+   hall's flight climbs away from, or on a floor's free columns rather than into its own stair or
+   its flight to a neighbour. Successive floors take alternate strips, and every floor over a room
+   opens a four-by-four well beside the stair, so the room has light and a view of its way out, the
+   floor above has a view of the room, and a tall building is one space you can see through from
+   top to bottom. **A floor whose neighbour stands a storey higher grows a flight up to it**, three
+   wide, open underneath and railed in light. **The long side of a grand stair opens into a landing**
+   wherever a floor stands against its foot. Nothing but a floor or a bridge may be built directly
+   on a grand stair, whose top steps come up through whatever stands over it. And **a new floor
+   snaps onto the floors beside it**, but never upward further than a body can step. Measured with
+   the real body — 0.64 m wide, 1.8 m tall, stepping up 1.05 m and no more — a walk-through of a
+   finished three-minute match reaches **97 % of every cell from the beach**, and from **98 % of the
+   roofed floors** a way up exists without ever going down. Each floor is also furnished to be
+   fought on: five layouts of chest-high cover, two of them with full-height pillars to hold a
+   corner behind, laid only where the floor is solid and nothing else stands.
    So whatever anyone builds is a way up for everyone: paths cross, towers grow into one city, and
    that is where the fighting happens. A green ghost of the real masonry shows where a piece will
    land; amber means you cannot afford it, red that something is already there.

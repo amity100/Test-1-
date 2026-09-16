@@ -402,14 +402,17 @@ export class AscentBrain extends BotBrain {
       if (!next) continue;
       if (next.kind === 'ramp' && next.dir === d) {
         const pts = this.sky.arch.waypoints(next);
-        pts.push(cellCentre(next.i + dx, next.j + dz, next.y + 6));
+        // The landing's own first waypoint, because the middle of a floor over a room is its well.
+        const landing = this.sky.plan.get(next.i + dx, next.j + dz, next.y + 6);
+        pts.push(landing ? this.sky.arch.waypoints(landing)[0].clone() : cellCentre(next.i + dx, next.j + dz, next.y + 6));
         this.route = pts;
         this.routeAt = 0;
         this.wpUntil = this.nowSeen + 3.5;
         this.routeUntil = this.nowSeen + 3 + pts.length * 3.5;
         return pts[0].clone();
       }
-      if (next.kind === 'deck' || next.kind === 'bridge' || next.kind === 'arena') return cellCentre(next.i, next.j, next.y);
+      if (next.kind === 'deck') return this.sky.arch.waypoints(next)[0].clone();
+      if (next.kind === 'bridge' || next.kind === 'arena') return cellCentre(next.i, next.j, next.y);
     }
     return null;
   }

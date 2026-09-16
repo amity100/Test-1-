@@ -293,9 +293,9 @@ export class SkyBuilder {
     for (let di = -1; di <= 1; di++)
       for (let dj = -1; dj <= 1; dj++) {
         const near = this.plan.nearestInColumn(i + di, j + dj, y, SNAP);
-        // Down as far as the snap reaches, up only as far as a body can climb: a floor lifted to
-        // meet its neighbour must still be a floor the builder can step onto.
-        if (near === null || near > y + 2) continue;
+        // Down as far as the snap reaches, up by a single step at most: a floor lifted to meet its
+        // neighbour must still be a floor the builder walks onto, and two blocks is a wall to walk.
+        if (near === null || near > y + 1) continue;
         const d = Math.abs(near - y);
         if (d > 0 && d < bestD) {
           bestD = d;
@@ -391,6 +391,14 @@ export class SkyBuilder {
       const cz = cellZ(c.j) + CELL / 2;
       if (cx * cx + cz * cz > (PLAYABLE_RADIUS - 6) * (PLAYABLE_RADIUS - 6)) return { plan: null, reason: 'bounds', cost, target };
       if (c.y < 1 || c.y > 236) return { plan: null, reason: 'bounds', cost, target };
+      // A grand stair's top steps come up through whatever stands over it, so only a floor or a
+      // bridge may sit directly on one: another stair or a hall there would be a wall on its head.
+      const under = this.plan.get(c.i, c.j, c.y - STOREY);
+      if (under?.kind === 'ramp' && c.kind !== 'deck' && c.kind !== 'bridge') blocked = true;
+      // Nothing lands within three blocks of another floor in its own column: a room that low is
+      // no room, and a floor two blocks over the next is a step nobody can take.
+      const near = this.plan.nearestInColumn(c.i, c.j, c.y, 3);
+      if (near !== null && near !== c.y) blocked = true;
       const there = this.plan.get(c.i, c.j, c.y);
       if (!there) continue;
       // A deck can grow into a tower or an arena floor; anything else is taken.
