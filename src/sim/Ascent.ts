@@ -17,8 +17,11 @@ export const ASCENT = {
   roundTime: 720,
   // Bricks: the only building material. A slow trickle keeps everyone building; kills pay big.
   bricksStart: 24,
-  bricksMax: 60,
-  trickleEvery: 3,
+  // A bar you can fill by standing still is a bar nobody thinks about. Thirty is about five storeys
+  // of stair: enough to answer a fight or take a floor, never enough to build the whole way up, so
+  // the only real supply is what you take off the people you beat.
+  bricksMax: 30,
+  trickleEvery: 4,
   trickleMarked: 3,
   dropMin: 8,
   /** Fraction of the victim's bricks that drop (the rest is lost with the fall). */
@@ -31,16 +34,26 @@ export const ASCENT = {
   hoverTime: 10,
   pickupRadius: 1.8,
   // The flag.
-  flagStartY: 180,
-  /** m/s of descent (180 m down to about 36 m over the twelve minutes). */
-  flagFall: 0.2,
+  flagStartY: 90,
+  /** m/s of descent: it reaches its floor at about five and a half minutes, as the sky is closing. */
+  flagFall: 0.18,
+  /** The flag comes no lower than this, so it always hangs over the city rather than sitting in it. */
+  flagFloorY: 30,
   /** m/s the flag drifts sideways toward the marked leader (or the island centre). */
   flagDrift: 1.1,
   /** Keeps the flag over the island. */
   flagMaxRadius: 70,
   flagGrabRadius: 2.8,
   flagGrabHeight: 3.2,
-  holdTime: 20,
+  /**
+   * Seconds of holding the flag that win the round — counted up across the whole match, not in one
+   * unbroken run. A single twenty-second hold is either uncontested (and the round ends before it
+   * has begun) or impossible; counting the total makes every grab worth something and gives twelve
+   * minutes a shape: a dozen fights over one thing, with a leader everyone can see.
+   */
+  holdTime: 45,
+  /** Seconds of credit lost per second while the flag is somebody else's. */
+  holdDecay: 0.35,
   /** Seconds after a drop before the flag can be taken again. */
   flagRelock: 1.2,
   // The marked leader.
@@ -48,8 +61,23 @@ export const ASCENT = {
   /** Metres above the ground before height counts for the mark. */
   markedMinHeight: 6,
   // The sea.
-  seaStartAt: 330,
-  seaSpeed: 0.12,
+  /**
+   * The sea is the last word, not the loudest: it starts halfway through, after the sky has already
+   * pushed everybody together, and it climbs just fast enough to take the low ground by the end.
+   */
+  seaStartAt: 300,
+  /**
+   * The sky closes in. It starts three quarters of a minute in and takes five and a half to reach its last radius,
+   * which is about three towers wide: by then twelve people are in the same piece of air and the
+   * flag is hanging over it. Before this, a round could run its whole length with nobody meeting.
+   */
+  ringStartAt: 45,
+  ringSpan: 330,
+  ringFrom: 120,
+  ringTo: 28,
+  /** Health a second lost outside the ring, rising the further out you are. */
+  ringDps: 9,
+  seaSpeed: 0.09,
   seaBoost: 3,
   seaFloor: 0,
   drownDepth: 0.9,
@@ -86,7 +114,7 @@ export interface BrickDrop {
 
 export interface AscentHooks {
   /** Something hurt an entity outside a fight: the sea or a fall. */
-  damage(e: Entity, amount: number, reason: 'fall' | 'sea'): void;
+  damage(e: Entity, amount: number, reason: 'fall' | 'sea' | 'ring'): void;
   marked(next: Entity | null, prev: Entity | null): void;
   pickup(e: Entity, count: number, pos: THREE.Vector3): void;
   flag(kind: 'taken' | 'dropped' | 'won' | 'lost', e: Entity | null): void;
@@ -101,6 +129,10 @@ export class AscentState {
   readonly flagPos = new THREE.Vector3(0, ASCENT.flagStartY, 0);
   holder: Entity | null = null;
   holdTimer = 0;
+  /** Seconds of flag time each player has banked; the first to the target wins the round. */
+  readonly held = new Map<number, number>();
+  /** How wide the sky still is. Everything outside it is being closed off. */
+  ring = ASCENT.ringFrom;
   /** Nobody has touched the flag yet: the sea still creeps. */
   untouched = true;
   flagLock = 0;
@@ -212,6 +244,7 @@ export class AscentState {
     this.updateBricks(dt, entities);
     this.updateFalls(dt, entities);
     this.updateSea(dt, entities);
+    this.updateRing(dt, entities);
     this.updateMarked(dt, entities);
     this.updateFlag(dt, entities);
     this.updateDrops(dt, entities);
@@ -281,6 +314,21 @@ export class AscentState {
   }
 
   /** Whoever stands highest, well above the ground, is marked; a rival has to beat them by a margin. */
+  /**
+   * The sky closes in. Twelve players on a two-hundred-metre island never meet by accident, so the
+   * room they have shrinks: a wall of weather that hurts to stand in, drawing everybody into the
+   * same few towers by the end.
+   */
+  private updateRing(dt: number, entities: Entity[]): void {
+    const t = (this.elapsed - ASCENT.ringStartAt) / ASCENT.ringSpan;
+    this.ring = ASCENT.ringFrom + (ASCENT.ringTo - ASCENT.ringFrom) * Math.min(1, Math.max(0, t));
+    for (const e of entities) {
+      if (!e.alive) continue;
+      const r = Math.hypot(e.pos.x, e.pos.z);
+      if (r > this.ring) this.hooks.damage(e, ASCENT.ringDps * dt * Math.min(3, 1 + (r - this.ring) / 30), 'ring');
+    }
+  }
+
   private updateMarked(dt: number, entities: Entity[]): void {
     this.markTimer -= dt;
     if (this.markTimer > 0) return;
@@ -336,8 +384,17 @@ export class AscentState {
       this.flagPos.set(holder.pos.x, holder.pos.y + 2.6, holder.pos.z);
       this.holdTimer += dt;
       holder.score.flagSeconds += dt;
+      const banked = (this.held.get(holder.id) ?? 0) + dt;
+      this.held.set(holder.id, banked);
+      // Everyone else's credit bleeds away while somebody is holding it, so a long hold is worth
+      // taking off them and a lead is never safe.
+      for (const e of entities) {
+        if (e === holder) continue;
+        const had = this.held.get(e.id);
+        if (had) this.held.set(e.id, Math.max(0, had - ASCENT.holdDecay * dt));
+      }
       this.recompute(holder);
-      if (this.holdTimer >= ASCENT.holdTime) {
+      if (banked >= ASCENT.holdTime) {
         holder.score.won = true;
         this.recompute(holder);
         this.hooks.flag('won', holder);
@@ -356,11 +413,16 @@ export class AscentState {
       this.flagPos.z += (dz / d) * step;
     }
     const r = Math.hypot(this.flagPos.x, this.flagPos.z);
-    if (r > ASCENT.flagMaxRadius) {
-      this.flagPos.x *= ASCENT.flagMaxRadius / r;
-      this.flagPos.z *= ASCENT.flagMaxRadius / r;
+    // The flag stays inside the closing sky as well as over the island, so it is always somewhere
+    // everybody can still stand.
+    const reach = Math.min(ASCENT.flagMaxRadius, Math.max(20, this.ring - 10));
+    if (r > reach) {
+      this.flagPos.x *= reach / r;
+      this.flagPos.z *= reach / r;
     }
-    this.flagPos.y -= ASCENT.flagFall * dt;
+    // It comes down to its floor and hangs there: a prize that keeps sinking is a prize nobody has
+    // to climb for, and one that stays at a hundred and eighty is a prize nobody can reach.
+    this.flagPos.y = Math.max(ASCENT.flagFloorY, this.flagPos.y - ASCENT.flagFall * dt);
     // Never sink into a structure: stay above the highest block under it.
     const colX = Math.floor(this.flagPos.x);
     const colZ = Math.floor(this.flagPos.z);

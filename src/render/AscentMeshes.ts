@@ -68,6 +68,9 @@ export class AscentMeshes {
   private crown: THREE.Group;
   private marked: Entity | null = null;
   private drops = new Map<number, DropView>();
+  /** The closing sky: a wall of weather you can see from anywhere, and the reason people meet. */
+  private ring: THREE.Mesh;
+  private ringMat!: THREE.ShaderMaterial;
   private ghost: THREE.InstancedMesh;
   private ghostMat: THREE.MeshBasicMaterial;
   private ghostEdges: THREE.LineSegments;
@@ -146,6 +149,8 @@ export class AscentMeshes {
     this.ghost.count = 0;
     this.ghost.frustumCulled = false;
     this.group.add(this.ghost);
+    this.ring = this.makeRing();
+    this.group.add(this.ring);
     this.ghostEdges = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55 }));
     this.ghostEdges.frustumCulled = false;
     this.group.add(this.ghostEdges);
@@ -162,7 +167,38 @@ export class AscentMeshes {
     this.crown.visible = !!e;
   }
 
+  /** A cylinder of drifting light, open at the top, that shrinks as the round goes on. */
+  private makeRing(): THREE.Mesh {
+    const geo = new THREE.CylinderGeometry(1, 1, 1, 96, 1, true);
+    const mat = new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      uniforms: { uTime: { value: 0 }, uTint: { value: new THREE.Color('#8fd8ff') } },
+      vertexShader: `varying vec2 vUv; varying vec3 vW;
+        void main() { vUv = uv; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+      fragmentShader: `uniform float uTime; uniform vec3 uTint; varying vec2 vUv; varying vec3 vW;
+        float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5); }
+        void main() {
+          float bands = 0.45 + 0.55 * sin(vUv.x * 120.0 + uTime * 0.7 + vW.y * 0.08);
+          float drift = h(floor(vec2(vUv.x * 160.0, vW.y * 0.25 - uTime * 0.6)));
+          float top = smoothstep(1.0, 0.55, vUv.y);
+          float a = (0.10 + 0.16 * bands + 0.10 * drift) * top;
+          gl_FragColor = vec4(uTint * (0.8 + 0.6 * bands), a);
+        }`,
+    });
+    this.ringMat = mat;
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.renderOrder = 3;
+    mesh.frustumCulled = false;
+    return mesh;
+  }
+
   update(dt: number, time: number, asc: AscentState, entities: Entity[], viewer: Entity, aim: AimResult | null, ghost: { x: number; y: number; z: number }[], camPos: THREE.Vector3): void {
+    // The closing sky, drawn where the rules say it is.
+    this.ringMat.uniforms.uTime.value = time;
+    this.ring.position.set(0, 96, 0);
+    this.ring.scale.set(asc.ring, 260, asc.ring);
     // The flag glides rather than snaps (the sim moves it in steps when it changes hands).
     const target = asc.flagPos;
     const k = Math.min(1, dt * (asc.flagHeld ? 14 : 4));

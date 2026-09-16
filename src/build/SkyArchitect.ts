@@ -751,6 +751,10 @@ export class SkyArchitect {
       // Beside a gap the pane becomes a post, so the opening reads as a gate.
       if (gap > 0 && (t === lo - 1 || t === hi + 1)) v = S.frame;
       e.set(x0 + lx, y, z0 + lz, v);
+      // A second course of glass, because one was exactly the height a walking body steps over:
+      // people walked off their own balconies without ever deciding to. Two is a rail you have to
+      // mean to vault, and you can still see and shoot through it.
+      e.set(x0 + lx, y + 1, z0 + lz, t === 0 || t === CELL - 1 ? S.frame : S.glass);
     }
   }
 

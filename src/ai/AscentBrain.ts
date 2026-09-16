@@ -8,7 +8,7 @@ import { PIECES, quantizeYaw, type PieceKind, type SkyBuilder } from '../build/S
 import { CELL, DIRS, cellOf, cellX, cellZ, type SkyCell } from '../build/SkyPlan';
 import { PLAYABLE_RADIUS } from '../world/Layout';
 
-type Job = 'climb' | 'hunt' | 'loot' | 'flee' | 'hold' | 'fight' | 'cross';
+type Job = 'climb' | 'hunt' | 'loot' | 'flee' | 'hold' | 'fight' | 'cross' | 'inward';
 
 /**
  * A Sky Flag player. It shares the classic brain's eyes, aim and trigger, and adds its own idea of
@@ -95,10 +95,13 @@ export class AscentBrain extends BotBrain {
     const seaGap = e.pos.y - asc.seaLevel;
     const drowningSoon = asc.seaRising && seaGap < 8;
     const carrying = asc.holder === e;
-    const fighting = !!threat && (this.seesTarget || e.pos.distanceTo(this.lastSeen) < 18) && !drowningSoon && !carrying;
-    if (this.jobTimer <= 0 || drowningSoon || carrying || (!fighting && this.job === 'fight')) {
+    // The closing sky comes before everything, fights included: standing in it is a slow death and
+    // no ground is worth it.
+    const outside = Math.hypot(e.pos.x, e.pos.z) > asc.ring - 6;
+    const fighting = !!threat && (this.seesTarget || e.pos.distanceTo(this.lastSeen) < 18) && !drowningSoon && !outside && !carrying;
+    if (this.jobTimer <= 0 || drowningSoon || outside || carrying || (!fighting && this.job === 'fight')) {
       this.jobTimer = 0.6 + this.rand.range(0, 0.6);
-      this.job = this.pickJob(asc, drowningSoon, carrying);
+      this.job = this.pickJob(asc, drowningSoon, carrying, outside);
     }
     if (fighting) {
       this.job = 'fight';
@@ -118,6 +121,13 @@ export class AscentBrain extends BotBrain {
       case 'flee':
         goal = this.climb(asc, true);
         break;
+      case 'inward': {
+        // Back under the sky, by the shortest way in, and keep the height already won.
+        const r = Math.max(1, Math.hypot(e.pos.x, e.pos.z));
+        const want = Math.max(8, asc.ring - 16);
+        goal = new THREE.Vector3((e.pos.x / r) * want, e.pos.y, (e.pos.z / r) * want);
+        break;
+      }
       case 'hold': {
         this.state = 'hold';
         sprint = false;
@@ -178,9 +188,10 @@ export class AscentBrain extends BotBrain {
     return null;
   }
 
-  private pickJob(asc: AscentState, drowningSoon: boolean, carrying: boolean): Job {
+  private pickJob(asc: AscentState, drowningSoon: boolean, carrying: boolean, outside: boolean): Job {
     const e = this.entity;
     if (carrying) return 'hold';
+    if (outside) return 'inward';
     if (drowningSoon) return 'flee';
     const flagD = Math.hypot(asc.flagPos.x - e.pos.x, asc.flagPos.z - e.pos.z);
     const flagUp = asc.flagPos.y - e.pos.y;

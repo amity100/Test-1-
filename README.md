@@ -37,12 +37,17 @@ GitHub Pages). Single-file build for artifact hosting: `npm run build:artifact` 
    monument belong to the fortress modes; the terrain is cut for them when one of those matches
    starts and goes back to wild when it ends, so Sky Flag never sees them.) Twelve players
    stand on the sand, and the whole city of the next twelve minutes is the one they build. Everyone
-   spawns spread around the shore with twenty-four bricks. One brick trickles in every three seconds (up to 60 in hand); a kill drops most of the
+   spawns spread around the shore with twenty-four bricks. One brick trickles in every four seconds and the bar holds thirty — about five storeys of stair, never a whole climb — so the only real supply is what you take off the people you beat: a kill drops most of the
    victim's bricks (at least six) as a cluster that hovers over the spot for ten seconds and then
    plunges, and whoever walks through it takes them. The marked leader drops a bounty of twelve
    more.
-2. **Building, with the weapon never leaving your hands.** Hold `B` (BUILD on a phone) and a path
-   grows where you walk: look up and the next piece is a **stair** (3 bricks: six wide between
+2. **Building is how you move.** Hold `B` (BUILD on a phone) and a flight goes down in front of you
+   and **carries you to its landing** — one button, one storey, three bricks, about six metres every
+   four tenths of a second. The stair stays behind you as a way up for everyone else, which is how
+   the city gets built. The path never refuses: where the way on is taken it goes over it, round it,
+   or straight up out of the crowd from where you stand, and at the island's rim it turns back
+   inland instead of walking you into the sea. Falling with the button down puts a floor under you.
+   Looking ahead rather than up extends the floor instead of climbing: the next piece is a **stair** (3 bricks: six wide between
    stringer walls with a glowing handrail, six metres up to its own landing), look ahead and it is a
    **terrace** (2: eight metres of floor behind glass balustrades and posts of light). A press lays
    one piece where your path ends; held down it keeps laying them as you climb, so a road climbs
@@ -89,18 +94,25 @@ GitHub Pages). Single-file build for artifact hosting: `npm run build:artifact` 
    So whatever anyone builds is a way up for everyone: paths cross, towers grow into one city, and
    that is where the fighting happens. A green ghost of the real masonry shows where a piece will
    land; amber means you cannot afford it, red that something is already there.
-3. **The flag** starts 180 m up and descends at 0.2 m/s, drifting sideways toward the marked
-   leader (or the island centre). Standing within three metres of it takes it; the holder must
-   survive twenty seconds. Killing the holder drops the flag right there. The **marked** player is
-   whoever stands highest, at least six metres above the ground and four metres above the next;
-   they carry a crown and an eighty-metre beam.
-4. **The sea** starts rising at 5:30 (0.12 m/s) and three times faster after the first grab; being
+3. **The flag** starts 90 m up, comes down at 0.18 m/s to a floor of 30 m and hangs there, drifting
+   sideways toward the marked leader (or the island centre) and always staying inside the closing
+   sky. Standing within three metres of it takes it. Winning takes **forty-five seconds of flag
+   time banked across the whole round**, not one unbroken hold: every grab is worth something,
+   everyone else's credit bleeds away while somebody is carrying it, and a twelve-minute round
+   becomes a dozen fights over one thing with a leader everybody can see. Killing the holder drops
+   the flag right there. The **marked** player is whoever stands highest, at least six metres above
+   the ground and four metres above the next; they carry a crown and an eighty-metre beam.
+4. **The sky closes in.** Forty-five seconds into the round a wall of weather starts shrinking
+   from 120 m to 28 m over five and a half minutes; standing outside it costs nine health a second and more the further out
+   you are, and the flag and every respawn stay inside it. Twelve players on a two-hundred-metre
+   island never met by accident; now the last third of every round happens in one piece of air.
+5. **The sea** starts rising at 5:00 (0.09 m/s) and three times faster after the first grab; being
    under it drowns you in about two and a half seconds. Falls hurt from 15 m/s and kill from 44 m/s
    of landing speed. Whoever dies respawns after five seconds on a free deck halfway up the pack
    (or the shore); once nothing dry is left, they are out. A grab held for twenty seconds, the water
    reaching the flag, time running out, or one player left ends the match; the winner is the holder,
    else the highest.
-5. **Scoring**: 5 per kill, 1 per brick collected, 2 per five metres of peak altitude, 3 per second
+6. **Scoring**: 5 per kill, 1 per brick collected, 2 per five metres of peak altitude, 3 per second
    of holding the flag, 150 for the win. The podium sorts by win, then score, kills and peak height.
 
 ### Fortress War

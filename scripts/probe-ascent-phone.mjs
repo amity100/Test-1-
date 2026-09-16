@@ -30,12 +30,12 @@ await page.screenshot({ path: 'scratch/phone-sky/s1-battle.png' });
 
 // BUILD: one press lays the next piece of the path ahead — a stair when looking up — and pays for it.
 await page.evaluate(() => { const g = window.__fk.game(); const p = g.player; p.yaw = Math.atan2(p.pos.x, p.pos.z); p.pitch = 0.4; g.debugAdvance(0.3, 1 / 20); });
-const before = await page.evaluate(() => { const g = window.__fk.game(); return { placed: g.sky.placed.size, bricks: g.player.bricks, armed: g.armed, weapon: !!g.player.weapon }; });
+const before = await page.evaluate(() => { const g = window.__fk.game(); return { placed: g.sky.placed.size, bricks: g.player.bricks, armed: g.armed, weapon: !!g.player.weapon, y: +g.player.pos.y.toFixed(1) }; });
 await tapSel('[data-id=build]');
 await page.evaluate(() => window.__fk.game().debugAdvance(0.4, 1 / 20));
 await frames(4);
-const after = await page.evaluate(() => { const g = window.__fk.game(); const cells = [...g.sky.plan.cells.values()].filter((c) => c.owner === g.player.id); return { placed: g.sky.placed.size, bricks: g.player.bricks, armed: g.armed, kinds: cells.map((c) => c.kind).join('+'), bar: !!document.querySelector('.sky-pieces') && !document.querySelector('.sky-pieces').hidden, weapon: !!g.player.weapon }; });
-check('pressing BUILD lays a stair ahead (looking up), pays for it, keeps the weapon out and shows the piece bar', after.placed > before.placed && after.bricks <= before.bricks - 3 && after.kinds.includes('ramp') && after.armed === 'path' && after.bar && after.weapon, `${JSON.stringify(before)} → ${JSON.stringify(after)}`);
+const after = await page.evaluate(() => { const g = window.__fk.game(); const cells = [...g.sky.plan.cells.values()].filter((c) => c.owner === g.player.id); return { placed: g.sky.placed.size, bricks: g.player.bricks, armed: g.armed, kinds: cells.map((c) => c.kind).join('+'), bar: !!document.querySelector('.sky-pieces') && !document.querySelector('.sky-pieces').hidden, weapon: !!g.player.weapon, y: +g.player.pos.y.toFixed(1) }; });
+check('pressing BUILD lays a stair ahead (looking up), pays for it, carries you up it, keeps the weapon out and shows the piece bar', after.placed > before.placed && after.bricks < before.bricks && after.y > before.y + 3 && after.kinds.includes('ramp') && after.armed === 'path' && after.bar && after.weapon, `${JSON.stringify(before)} → ${JSON.stringify(after)}`);
 await page.screenshot({ path: 'scratch/phone-sky/s2-build.png' });
 
 // Holding BUILD keeps building: a runway of pieces grows ahead without another tap.
@@ -59,6 +59,15 @@ if (hallTile) await page.touchscreen.tap(hallTile.x + hallTile.w / 2, hallTile.y
 await frames(3);
 // Face the open ground behind the runway just built, so the hall has a free cell to stand on.
 await page.evaluate(() => { const g = window.__fk.game(); g.player.bricks = 40; g.player.pitch = -0.1; g.player.yaw += Math.PI; g.debugAdvance(0.3, 1 / 20); });
+await page.evaluate(() => {
+  // Back down onto clear ground: the climb has carried the player onto a landing, and a hall wants
+  // a place of its own rather than the cell they are standing in.
+  const g = window.__fk.game(); const p = g.player;
+  p.pos.set(-58, g.app.terrain.heightAt(-58, 44) + 0.1, 44); p.vel.set(0, 0, 0);
+  p.bricks = 30; p.pitch = 0; p.yaw = 0;
+  g.sky.forgetHead(p.id);
+  g.debugAdvance(0.4, 1 / 20);
+});
 const armedHall = await page.evaluate(() => { const g = window.__fk.game(); return { armed: g.armed, ghost: g.buildAim?.plan?.cells.length ?? 0, reason: g.buildAim?.reason }; });
 check('tapping the hall tile arms it and shows its ghost', armedHall.armed === 'tower' && armedHall.ghost > 0, JSON.stringify(armedHall));
 const hallsBefore = await page.evaluate(() => [...window.__fk.game().sky.plan.cells.values()].filter((c) => c.kind === 'tower' && c.owner === window.__fk.game().player.id).length);
@@ -78,9 +87,24 @@ const fits = (r) => !!r && !r.hidden && r.x >= -1 && r.y >= -1 && r.x + r.w <= 8
 check('the Sky Flag HUD (strip, bricks, timer) fits on the phone screen', fits(strip) && fits(bricks) && fits(timer), JSON.stringify({ strip: fits(strip), bricks: fits(bricks), timer: fits(timer) }));
 
 // Take the flag and hold it: VICTORY then the podium, which must fit.
-await page.evaluate(() => { const g = window.__fk.game(); const asc = g.match.ascent; const p = g.player; g.debugBuild(null); asc.flagPos.set(p.pos.x, p.pos.y + 1.5, p.pos.z); g.debugAdvance(0.5, 1 / 20); asc.holdTimer = 19.6; g.debugAdvance(1, 1 / 20); });
-const ended = await page.evaluate(() => { const g = window.__fk.game(); return { winner: g.match.ascent.winner?.name ?? null, phase: g.match.phase, mode: g.mode }; });
-check('holding the flag ends the match for the phone player', ended.winner === 'Phone' && ended.phase === 'roundEnd', JSON.stringify(ended));
+await page.evaluate(() => {
+  const g = window.__fk.game(); const asc = g.match.ascent; const p = g.player;
+  g.debugBuild(null);
+  if (!p.alive) { p.alive = true; p.hp = 100; p.deadSince = -1; p.respawnAt = 0; }
+  if (asc.holder && asc.holder !== p) asc.dropFlag(asc.holder);
+  asc.flagLock = 0;
+  // Go to the flag rather than moving the flag: a free flag is pushed up clear of whatever is in
+  // its column, so putting it on somebody standing on a tower puts it over the tower.
+  const fx = Math.floor(asc.flagPos.x), fz = Math.floor(asc.flagPos.z), fy = Math.floor(asc.flagPos.y) - 2;
+  for (let x = fx - 3; x <= fx + 3; x++) for (let z = fz - 3; z <= fz + 3; z++) g.app.world.set(x, fy, z, 3 | (82 << 5));
+  p.pos.set(fx + 0.5, fy + 1.02, fz + 0.5);
+  p.vel.set(0, 0, 0);
+  for (let n = 0; n < 6 && asc.holder !== p; n++) g.debugAdvance(0.4, 1 / 20);
+  asc.held.set(p.id, 44.6);
+  g.debugAdvance(1.5, 1 / 20);
+});
+const ended = await page.evaluate(() => { const g = window.__fk.game(); const a = g.match.ascent; const p = g.player; return { winner: a.winner?.name ?? null, phase: g.match.phase, mode: g.mode, holder: a.holder?.name ?? null, banked: Math.round(a.held.get(p.id) ?? -1), alive: p.alive, flagGap: +(a.flagPos.y - p.pos.y).toFixed(1) }; });
+check('banking enough flag time ends the match for the phone player', ended.winner === 'Phone' && ended.phase === 'roundEnd', JSON.stringify(ended));
 await page.evaluate(() => window.__fk.game().debugAdvance(9, 1 / 20));
 await frames(10);
 const pod = await rect('.panel.podium');

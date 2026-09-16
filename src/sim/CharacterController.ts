@@ -35,6 +35,16 @@ export const PHYS = {
   coyoteTime: 0.12,
 };
 
+/** How far a step bends the direction you asked for toward the way the flight runs. */
+const STAIR_GUIDE = 0.55;
+/** The way each stair rotation climbs, in the order the shape codes use. */
+const STAIR_AXIS: [number, number][] = [
+  [1, 0],
+  [0, 1],
+  [-1, 0],
+  [0, -1],
+];
+
 const tmp = new THREE.Vector3();
 const desired = new THREE.Vector3();
 
@@ -55,6 +65,27 @@ export class CharacterController {
     // Ramps never block: the ramp pass below lifts the character onto their surface instead.
     if (this.world.boxIntersectsSolid(x - r, y, z - r, x + r, y + h, z + r, true)) return true;
     return !!this.traps && this.traps.blocksBox(this.mover, x - r, y, z - r, x + r, y + h, z + r);
+  }
+
+  /**
+   * A flight of stairs guides whoever is on it. Walking onto a stair at an angle used to take you
+   * into its side wall or off its edge, because the grid runs on four directions and a view does
+   * not; on the steps, the direction you asked for is bent toward the way the flight runs. It does
+   * nothing when you are already facing along it, and it never turns you round: walking back down
+   * still walks back down.
+   */
+  private guideOnStairs(e: Entity, dir: THREE.Vector3): void {
+    if (!e.grounded || dir.lengthSq() < 0.04) return;
+    const block = this.world.get(Math.floor(e.pos.x), Math.floor(e.pos.y - 0.1), Math.floor(e.pos.z));
+    if (!block) return;
+    const shape = (block >> 12) & 15;
+    if (shape < 3 || shape > 6) return;
+    const [ax, az] = STAIR_AXIS[shape - 3];
+    const along = dir.x * ax + dir.z * az;
+    if (Math.abs(along) < 0.25) return;
+    const len = dir.length();
+    const sign = Math.sign(along);
+    dir.lerp(tmp.set(ax * sign * len, 0, az * sign * len), STAIR_GUIDE);
   }
 
   /** True when the entity's box fits at the given feet position. */
@@ -139,6 +170,7 @@ export class CharacterController {
     const right = e.right(new THREE.Vector3());
     desired.set(0, 0, 0).addScaledVector(fwd, input.forward).addScaledVector(right, input.strafe);
     if (desired.lengthSq() > 1) desired.normalize();
+    this.guideOnStairs(e, desired);
     let speed = PHYS.walkSpeed;
     if (e.crouching) speed = PHYS.crouchSpeed;
     else if (input.sprint && input.forward > 0.2 && e.ads < 0.3) speed = PHYS.sprintSpeed;

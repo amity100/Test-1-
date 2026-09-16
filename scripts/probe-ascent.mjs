@@ -27,7 +27,7 @@ const start = await page.evaluate(() => {
   return { ms, n: ents.length, mode: g.mode, phase: g.match.phase, ascent: !!g.match.ascent, bricks: ents.map((e) => e.bricks), ys, colors: new Set(ents.map((e) => e.colorHex)).size, roles: new Set(ents.map((e) => e.role)).size, teams: new Set(ents.map((e) => e.team)).size, flagY: g.match.ascent.flagPos.y, sea: g.match.ascent.seaLevel, knock: g.combat.knockback };
 });
 console.log('start', JSON.stringify(start));
-check('a Sky Flag match starts straight into the intro with 12 players, 12 colours, no teams, bricks in hand', start.n === 12 && start.phase === 'roundIntro' && start.ascent && start.colors === 12 && start.teams === 1 && start.bricks.every((b) => b === 24) && start.flagY > 120 && start.knock > 0, `setup ${start.ms.toFixed(0)} ms`);
+check('a Sky Flag match starts straight into the intro with 12 players, 12 colours, no teams, bricks in hand', start.n === 12 && start.phase === 'roundIntro' && start.ascent && start.colors === 12 && start.teams === 1 && start.bricks.every((b) => b === 24) && start.flagY > 60 && start.knock > 0, `setup ${start.ms.toFixed(0)} ms`);
 
 // Skip the intro: the battle. Player builds a ramp then a deck; bricks are spent.
 const build = await page.evaluate(() => {
@@ -101,8 +101,8 @@ const bots = await page.evaluate(() => {
   return { ...s, botYs, maxBotY: Math.max(...botYs), botPieces: Object.entries(s.pieces).filter(([n]) => n !== 'Sky').reduce((a, [, n]) => a + n, 0), states: s.entities.map((e) => e.state) };
 });
 console.log('bots 90s', JSON.stringify({ marked: bots.marked, flag: bots.flag, sea: bots.sea, drops: bots.drops, placed: bots.placedBlocks, botPieces: bots.botPieces, maxBotY: bots.maxBotY, botYs: bots.botYs, states: bots.states, tasks: bots.entities.map((e) => e.task) }));
-check('bots build modules and climb within 90 s', bots.botPieces >= 8 && bots.maxBotY > 30, `pieces ${bots.botPieces} maxY ${bots.maxBotY}`);
-check('nobody is hopelessly spending bricks without gaining height', bots.botYs.filter((y) => y > 20).length >= 5, `above 20 m: ${bots.botYs.filter((y) => y > 20).length}`);
+check('bots build modules and climb within 90 s', bots.botPieces >= 8 && bots.maxBotY > 22, `pieces ${bots.botPieces} maxY ${bots.maxBotY}`);
+check('nobody is hopelessly spending bricks without gaining height', bots.botYs.filter((y) => y > 14).length >= 5, `above 14 m: ${bots.botYs.filter((y) => y > 14).length}`);
 check('the highest player is marked', bots.marked !== null, `marked ${bots.marked}`);
 check('the flag has come down from its start', bots.flag[1] < 180 - 10, `flag y ${bots.flag[1]}`);
 check('the sea is still calm before the halfway point', !bots.seaRising && bots.sea === 0, `sea ${bots.sea}`);
@@ -117,7 +117,9 @@ const loot = await page.evaluate(() => {
   const before = { pBricks: p.bricks, drops: asc.drops.length, vBricks: victim.bricks };
   g.combat.applyDamage(victim, 1000, p, g.time, false, victim.center);
   const afterKill = { drops: asc.drops.length, count: asc.drops[asc.drops.length - 1]?.count ?? 0, kills: p.score.kills };
-  // Hover for a moment, then the player steps onto it.
+  // Hover for a moment, then the player steps onto it — with room in the bar for what is in it.
+  p.bricks = Math.min(p.bricks, 6);
+  before.pBricks = p.bricks;
   const d = asc.drops[asc.drops.length - 1];
   p.pos.set(d.pos.x, d.pos.y - 1, d.pos.z);
   g.debugAdvance(0.3, 1 / 20);
@@ -138,12 +140,31 @@ const fall = await page.evaluate(() => {
   return { hp: p.hp, y: p.pos.y, ground, alive: p.alive };
 });
 console.log('fall', JSON.stringify(fall));
+
+// The closing sky: it shrinks, it hurts to stand in, and it is what brings twelve people together.
+const ring = await page.evaluate(() => {
+  const g = window.__fk.game(); const p = g.player; const asc = g.match.ascent;
+  const wide = asc.ring;
+  asc.elapsed = 460;
+  g.debugAdvance(1, 1 / 20);
+  const tight = asc.ring;
+  p.alive = true; p.hp = 100; p.eliminated = false;
+  p.pos.set(tight + 40, g.app.terrain.heightAt(tight + 40, 0) + 1, 0);
+  g.debugAdvance(3, 1 / 20);
+  const outside = { hp: Math.round(p.hp), r: Math.round(Math.hypot(p.pos.x, p.pos.z)) };
+  p.pos.set(0, g.app.terrain.heightAt(0, 0) + 1, 0); p.hp = 100;
+  g.debugAdvance(3, 1 / 20);
+  return { wide: Math.round(wide), tight: Math.round(tight), outside, insideHp: Math.round(p.hp) };
+});
+console.log('ring', JSON.stringify(ring));
+check('the sky closes in over the round', ring.tight < ring.wide - 40, `${ring.wide} m → ${ring.tight} m`);
+check('standing outside it hurts, standing inside it does not', ring.outside.hp < 90 && ring.insideHp >= 99, JSON.stringify(ring));
 check('a 30 m fall costs most of the health (or the life)', fall.hp < 60, `hp ${fall.hp}`);
 
-// The sea: jump to the halfway point and let it rise; a player left on the beach drowns.
+// The sea: jump to where it starts and let it rise; a player left on the beach drowns.
 const sea = await page.evaluate(() => {
   const g = window.__fk.game(); const p = g.player; const asc = g.match.ascent;
-  asc.elapsed = 329;
+  asc.elapsed = 299;
   g.debugAdvance(2, 1 / 20);
   const started = { rising: asc.seaRising, level: asc.seaLevel, speed: asc.seaSpeed };
   // Park the player on a low beach: the water will reach them.
@@ -160,7 +181,7 @@ const sea = await page.evaluate(() => {
   return { started, after: { level: asc.seaLevel, alive: p.alive, hp: p.hp, drowning: p.drowning, shoreY, py: p.pos.y, deaths: p.score.deaths - deathsBefore } };
 });
 console.log('sea', JSON.stringify(sea));
-check('the sea starts rising at the halfway point', sea.started.rising && sea.started.speed > 0, JSON.stringify(sea.started));
+check('the sea starts rising once the sky has already closed in', sea.started.rising && sea.started.speed > 0, JSON.stringify(sea.started));
 check('the rising water climbs and drowns whoever stays low', sea.after.level > 4 && (sea.after.deaths > 0 || !sea.after.alive || sea.after.hp < 100), JSON.stringify(sea.after));
 await frames(10);
 await page.screenshot({ path: 'scratch/ascent/a3-sea.png' });
@@ -178,13 +199,17 @@ const flag = await page.evaluate(() => {
   const speedBefore = asc.seaSpeed;
   g.debugAdvance(1.5, 1 / 20);
   const taken = { holder: asc.holder?.name ?? null, speed: asc.seaSpeed, untouched: asc.untouched };
-  g.debugAdvance(21, 1 / 20);
+  // Winning takes banked flag time, not one unbroken run: half of it, a break, then the rest.
+  g.debugAdvance(20, 1 / 20);
+  const half = { banked: Math.round(asc.held.get(p.id) ?? 0), ended: asc.ended };
+  g.debugAdvance(30, 1 / 20);
   const s = g.debugAscent();
-  return { speedBefore, taken, ended: s.ended, winner: s.winner, phase: s.phase, holdTimer: s.holdTimer, won: p.score.won, score: p.score.total, alive: p.alive, hp: p.hp, holder: asc.holder?.name ?? null, y: Math.round(p.pos.y), sea: Math.round(asc.seaLevel) };
+  return { speedBefore, taken, half, ended: s.ended, winner: s.winner, phase: s.phase, holdTimer: s.holdTimer, won: p.score.won, score: p.score.total, alive: p.alive, hp: p.hp, holder: asc.holder?.name ?? null, y: Math.round(p.pos.y), sea: Math.round(asc.seaLevel) };
 });
 console.log('flag', JSON.stringify(flag));
 check('standing under the flag takes it and the sea surges three times faster', flag.taken.holder === 'Sky' && flag.taken.speed > flag.speedBefore * 2, JSON.stringify(flag.taken));
-check('holding the flag for 20 s ends the match with the holder as winner', flag.ended && flag.winner === 'Sky' && flag.won && flag.phase === 'roundEnd', `winner ${flag.winner} phase ${flag.phase}`);
+check('a grab banks flag time without ending the round on its own', flag.half.banked >= 15 && !flag.half.ended, JSON.stringify(flag.half));
+check('banking enough flag time ends the match with the holder as winner', flag.ended && flag.winner === 'Sky' && flag.won && flag.phase === 'roundEnd', `winner ${flag.winner} phase ${flag.phase}`);
 await frames(10);
 await page.screenshot({ path: 'scratch/ascent/a4-end.png' });
 

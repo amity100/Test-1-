@@ -75,6 +75,12 @@ export interface AimResult {
   cost: number;
   /** Cell the module starts at, so callers can tell when the target moved. */
   target: number;
+  /**
+   * The next piece is planned but the builder has not yet walked up the last one. The ghost shows
+   * where it will go; the brick is not spent until they get there. This is what makes a held button
+   * a climb rather than a staircase running away from the person on it.
+   */
+  waiting?: boolean;
 }
 
 export interface SkyBuildEvents extends Record<string, unknown> {
@@ -84,11 +90,24 @@ export interface SkyBuildEvents extends Record<string, unknown> {
 /** Longest reach of the aiming ray. */
 const REACH = 40;
 /** Cells one island can hold before building stops. */
-const CELL_CAP = 1200;
+/**
+ * How many modules the island can carry at once. A twelve-minute round with twelve builders who are
+ * never refused fills the old cap of twelve hundred with four minutes still to play, and everybody
+ * stood still for the rest of it.
+ */
+const CELL_CAP = 4000;
 /** Looking up more than this (radians) makes the path climb; anything flatter extends the floor. */
 const CLIMB_PITCH = 0.12;
 /** A path restarts under the builder's feet once they are this far from its end. */
 const PATH_REACH = 20;
+/**
+ * How long the end of a path stays yours after a piece lands there. The head is the top of the
+ * stair you have just built, so it is a storey over your head by definition: giving it up because
+ * of that was what turned the second press of BUILD into a permanent "something stands there".
+ */
+const PATH_HOLD = 5;
+/** Which refusal to show when nothing can be built: the one that tells the builder the most. */
+const REASON_RANK: Record<PlaceReason, number> = { bricks: 0, bounds: 1, full: 2, unsupported: 3, occupied: 4, ok: 5 };
 /** How far a new floor may be nudged to line up with one already standing beside it. */
 const SNAP = 4;
 
@@ -185,15 +204,22 @@ export class SkyBuilder {
   /** The path piece for a facing and a choice of climbing or extending (bots choose both directly). */
   aimPathDir(self: Entity, feet: THREE.Vector3, dir: number, climb: boolean, now: number, bricks: number): AimResult {
     const [dx, dz] = DIRS[dir];
+    let waiting = false;
     let head = this.heads.get(self.id) ?? null;
     if (head) {
       const hx = cellX(head.i) + CELL / 2;
       const hz = cellZ(head.j) + CELL / 2;
-      // The path runs ahead along a floor, never up a storey the builder has not climbed yet: a
-      // stair placed from a landing you are still below is a stair you cannot see or reach.
+      // The head is the top of the piece just laid, so it is normally a storey over the builder's
+      // head: it stays theirs while they climb it, and is given up only when they walk away from
+      // it, fall well below it, or leave it long enough to have changed their mind.
       const above = head.y + 1 - feet.y;
-      const far = Math.hypot(hx - feet.x, hz - feet.z) > PATH_REACH || above > 2.5 || above < -8;
+      const climbing = now - head.at < PATH_HOLD;
+      const far = Math.hypot(hx - feet.x, hz - feet.z) > PATH_REACH || above < -8 || (!climbing && above > 2.5);
       if (far || head.dir !== dir || now - head.at > 12) head = null;
+      // The next piece lands while the builder is still on their way up the last one, so there is
+      // always something in front of them when they step off it. Waiting until they arrive left a
+      // gap at the top of every flight, and people walked into it.
+      else waiting = above > 3.5;
     }
     if (!head) head = this.headUnder(feet, dir, now);
     // Flat floor that is already there is walked over, so the piece lands on the first empty cell
@@ -207,13 +233,59 @@ export class SkyBuilder {
       i += dx;
       j += dz;
     }
-    const res = this.planAt(climb ? 'ramp' : 'deck', i + dx, j + dz, y, dir, self, bricks);
-    // A stair that cannot go there (something over its landing) still gives a floor to stand on.
-    if (climb && res.reason === 'occupied') {
-      const flat = this.planAt('deck', i + dx, j + dz, y, dir, self, bricks);
-      if (flat.reason === 'ok') return flat;
-    }
-    return res;
+    const res = this.pathTry(climb, i, j, y, dir, self, bricks, feet);
+    return waiting ? { ...res, waiting: true } : res;
+  }
+
+  /**
+   * The path is a road-laying machine, not a gate: straight on if the way is clear, and otherwise
+   * over what is in the way, round it to either side, or one cell further on. It only refuses when
+   * every one of those is taken too — and then it says the most useful of the reasons it collected.
+   */
+  private pathTry(climb: boolean, i: number, j: number, y: number, dir: number, self: Entity, bricks: number, feet: THREE.Vector3): AimResult {
+    const [dx, dz] = DIRS[dir];
+    const [lx, lz] = DIRS[(dir + 1) & 3];
+    const [rx, rz] = DIRS[(dir + 3) & 3];
+    const spots: [number, number, number][] = [
+      [i + dx, j + dz, y],
+      [i + dx, j + dz, y + STOREY],
+      [i + lx, j + lz, y],
+      [i + rx, j + rz, y],
+      [i + dx * 2, j + dz * 2, y],
+      [i, j, y + STOREY],
+    ];
+    // Facing out to sea, the path turns back over the island instead of walking off it: the one
+    // place you must not be stranded is the rim, with the water coming up. Near the edge the turn
+    // is tried first, because out there most of the ways on are simply not there.
+    const hx = cellX(i) + CELL / 2;
+    const hz = cellZ(j) + CELL / 2;
+    const inward = Math.abs(hx) > Math.abs(hz) ? (hx > 0 ? 2 : 0) : hz > 0 ? 3 : 1;
+    const [ix, iz] = DIRS[inward];
+    const turn: [number, number, number][] = [
+      [i + ix, j + iz, y],
+      [i + ix, j + iz, y + STOREY],
+    ];
+    if (Math.hypot(hx, hz) > PLAYABLE_RADIUS * 0.7) spots.unshift(...turn);
+    else spots.push(...turn);
+    // And if every way on is taken, straight up out of the crowd from where the builder is standing:
+    // their own column first, storey by storey until there is sky, then the ring of cells around
+    // them. Somewhere this built up is exactly where being stuck on the floor gets you killed, so
+    // the button has to answer with something.
+    const [bi, bj] = cellOf(feet.x, feet.z);
+    const by = this.floorAt(feet, feet.x, feet.z);
+    for (let k = 1; k <= 8; k++) spots.push([bi, bj, by + STOREY * k]);
+    for (const [nx, nz] of DIRS) for (const k of [0, 1]) spots.push([bi + nx, bj + nz, by + STOREY * k]);
+    // A stair if you are looking up, a floor if you are looking ahead — and a floor anyway wherever
+    // a stair will not fit, because a floor to stand on is always better than a refusal.
+    const kinds: PieceKind[] = climb ? ['ramp', 'deck'] : ['deck'];
+    let best: AimResult | null = null;
+    for (const [ci, cj, cy] of spots)
+      for (const kind of kinds) {
+        const res = this.planAt(kind, ci, cj, cy, dir, self, bricks);
+        if (res.reason === 'ok') return res;
+        if (!best || REASON_RANK[res.reason] < REASON_RANK[best.reason]) best = res;
+      }
+    return best!;
   }
 
   /**
@@ -234,6 +306,30 @@ export class SkyBuilder {
       return { i: cell.i, j: cell.j, y: cell.y, dir, at: now };
     }
     return { i, j, y: this.floorAt(feet, feet.x, feet.z), dir, at: now };
+  }
+
+  /**
+   * A floor under someone who is falling. Holding BUILD on the way down catches you: the drop
+   * becomes a thing you can answer instead of the end of your climb.
+   */
+  aimCatch(self: Entity, feet: THREE.Vector3, dir: number, bricks: number): AimResult {
+    const [i, j] = cellOf(feet.x, feet.z);
+    // Far enough below to have somewhere to land on, near enough to arrive before the fall hurts.
+    for (const drop of [3, 5, 7]) {
+      const res = this.planAt('deck', i, j, Math.round(feet.y) - drop, dir, self, bricks, true);
+      if (res.reason === 'ok') return res;
+    }
+    return this.planAt('deck', i, j, Math.round(feet.y) - 3, dir, self, bricks, true);
+  }
+
+  /**
+   * The way into a module: the first place a body can stand on it. A stair whose foot you have to
+   * walk round the outside to find is a stair nobody uses, so the builder is set down at it.
+   */
+  entrance(p: PlacePlan): THREE.Vector3 | null {
+    const c = p.cells[0];
+    if (c.kind !== 'ramp' && c.kind !== 'tower') return null;
+    return this.arch.waypoints(c)[0]?.clone() ?? null;
   }
 
   /** Remembers where a builder's path now ends: the surface the module hands them. */
@@ -306,7 +402,7 @@ export class SkyBuilder {
   }
 
   /** Works out the cells of a module and everything that could stop it. */
-  private planAt(kind: PieceKind, i: number, j: number, y: number, dir: number, self: Entity, bricks: number): AimResult {
+  private planAt(kind: PieceKind, i: number, j: number, y: number, dir: number, self: Entity, bricks: number, rescue = false): AimResult {
     y = this.snapFloor(i, j, y);
     const target = cellKey(i, j, y);
     const color = this.colorIndex(self);
@@ -409,7 +505,9 @@ export class SkyBuilder {
     const centre = new THREE.Vector3(cellX(i) + CELL / 2, y + 1, cellZ(j) + CELL / 2);
     const made: PlacePlan = { kind, cells, cost, dir, centre, top };
     if (blocked) return { plan: made, reason: 'occupied', cost, target };
-    if (!this.supported(cells[0])) return { plan: made, reason: 'unsupported', cost, target };
+    // A floor thrown under yourself on the way down carries itself: asking it to lean on something
+    // would mean the one place you cannot build is the one place you need to.
+    if (!rescue && !this.supported(cells[0])) return { plan: made, reason: 'unsupported', cost, target };
     if (bricks < cost) return { plan: made, reason: 'bricks', cost, target };
     return { plan: made, reason: 'ok', cost, target };
   }

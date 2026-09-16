@@ -30,7 +30,8 @@ import { RepairSystem } from '../sim/Repair';
 import { WAR } from '../sim/War';
 import { AscentState, ASCENT, type AscentHooks } from '../sim/Ascent';
 import { perf } from './Perf';
-import { SkyBuilder, ARMED_KINDS, pieceDef, type ArmedKind, type PieceKind, type AimResult } from '../build/SkyBuild';
+import { SkyBuilder, ARMED_KINDS, pieceDef, type ArmedKind, type PieceKind, type AimResult, type PlacePlan } from '../build/SkyBuild';
+import { CELL as CELL_SKY, STOREY } from '../build/SkyPlan';
 import { SKIN_IDS, SKIN_LIST, skinIndex } from '../build/SkySkins';
 import { AscentBrain } from '../ai/AscentBrain';
 import { AscentMeshes } from '../render/AscentMeshes';
@@ -57,6 +58,23 @@ import { audio } from '../audio/AudioEngine';
 import { clamp, formatTime, damp } from './MathUtil';
 
 type Mode = 'menu' | 'build' | 'fortify' | 'intro' | 'battle' | 'summary' | 'podium';
+
+/**
+ * How often a held BUILD lays the next piece of a path. One storey every four tenths of a second is
+ * a climb you can see happening and still outrun a fight, and it prices a full bar of bricks at
+ * about a hundred and twenty metres of height.
+ */
+const PATH_CADENCE = 0.42;
+/** Places on a landing to set a rider down, middle first and then off to the sides of whatever stands there. */
+const RIDE_SPOTS: [number, number][] = [
+  [0, 0],
+  [2.5, 0],
+  [-2.5, 0],
+  [0, 2.5],
+  [0, -2.5],
+  [2.5, 2.5],
+  [-2.5, -2.5],
+];
 
 const PLAYER_COLORS = ['#00e5ff', '#ff2bd6', '#ffb300', '#39ff14', '#ff3355', '#a78bfa', '#ff8c42', '#7aa7ff'];
 /** Sky Flag: twelve player colours, the same ones the glowing rims use. */
@@ -1460,16 +1478,18 @@ export class Game {
       }
       return new THREE.Vector3(Math.cos(a) * 30, terrain.heightAt(Math.cos(a) * 30, Math.sin(a) * 30) + 0.1, Math.sin(a) * 30);
     }
+    // Never outside the closing sky: coming back to life in the weather is not coming back to life.
+    const ringIn = Math.max(14, asc.ring - 12);
     for (let k = 0; k < 28; k++) {
       const a = (k / 28) * Math.PI * 2 + e.id * 0.37;
-      const r = 26 + ((k * 5) % 4) * 12;
+      const r = Math.min(ringIn, 26 + ((k * 5) % 4) * 12);
       const x = Math.cos(a) * r;
       const z = Math.sin(a) * r;
       const h = terrain.heightAt(x, z);
       if (h > 1.2 && h > sea + 2 && clear(x, h, z)) cands.push(new THREE.Vector3(x, h + 0.05, z));
     }
     // Decks already built are spawn spots too: a second wind halfway up the pack rather than back on the beach.
-    if (this.sky) for (const s of this.sky.standableSpots(sea + 3)) if (clear(s.x, s.y, s.z)) cands.push(s);
+    if (this.sky) for (const s of this.sky.standableSpots(sea + 3)) if (Math.hypot(s.x, s.z) < ringIn && clear(s.x, s.y, s.z)) cands.push(s);
     if (cands.length === 0) return null;
     const living = this.entities.filter((o) => o !== e && o.alive).map((o) => o.pos.y).sort((a, b) => a - b);
     const median = living.length ? living[Math.floor(living.length / 2)] : 0;
@@ -2156,10 +2176,16 @@ export class Game {
         }
         return;
       }
-      const aim = sky.aimPath(p, p.pos, p.yaw, p.pitch, this.time, p.bricks, this.buildRot);
+      // Falling with the button down puts a floor under you rather than a stair ahead of you.
+      const falling = !p.grounded && p.vel.y < -2.5;
+      const aim = falling
+        ? sky.aimCatch(p, p.pos, this.buildRot, p.bricks)
+        : sky.aimPath(p, p.pos, p.yaw, p.pitch, this.time, p.bricks, this.buildRot);
       this.buildAim = aim;
       this.refreshGhost(sky);
-      if (pressed || this.time - this.lastPlace > 0.28) this.tryPlace(aim, pressed);
+      // Nothing is spent while the builder is still walking up the last piece: the ghost shows
+      // where the next one goes and the path waits for them.
+      if (!aim.waiting && (pressed || this.time - this.lastPlace > PATH_CADENCE)) this.tryPlace(aim, pressed);
       return;
     }
     // A set piece: its ghost shows where it will land until B puts it there.
@@ -2177,6 +2203,10 @@ export class Game {
     if (aim.plan && aim.reason === 'ok') {
       if (!asc.spend(p, aim.cost)) return false;
       const group = sky.place(aim.plan, p);
+      // Building is how you move here. A stair you have to find the foot of and walk up is a stair
+      // that loses you the fight; the flight you just laid carries you to its landing, and stays
+      // behind as a way up for everyone else. One button, one storey, three bricks.
+      this.rideUp(aim.plan);
       sky.advanceHead(p, aim.plan, this.time);
       this.lastPlace = this.time;
       this.lastGroup = { group, at: this.time, cost: aim.cost };
@@ -2188,6 +2218,35 @@ export class Game {
       audio.play('empty', { volume: 0.5 });
     }
     return false;
+  }
+
+  /**
+   * Carries the builder up the flight they have just made, if they were standing at the bottom of
+   * it and there is room at the top. Nothing moves anyone sideways into a fight or through a wall:
+   * the landing has to be a place the body fits.
+   */
+  private rideUp(plan: PlacePlan): void {
+    const p = this.player;
+    if (plan.kind !== 'ramp' && plan.kind !== 'tower') return;
+    const rise = plan.top.y - p.pos.y;
+    if (rise < 1 || rise > STOREY + 2) return;
+    if (Math.hypot(plan.centre.x - p.pos.x, plan.centre.z - p.pos.z) > CELL_SKY * 1.6) return;
+    // The middle of a landing is where its cover stands, so a few places on it are tried before
+    // giving up: a flight that sometimes does not carry you is worse than one that never does.
+    let spot: THREE.Vector3 | null = null;
+    for (const [ox, oz] of RIDE_SPOTS) {
+      const x = plan.top.x + ox;
+      const z = plan.top.z + oz;
+      if (!this.controller.fits(x, plan.top.y, z, p)) continue;
+      spot = new THREE.Vector3(x, plan.top.y, z);
+      break;
+    }
+    if (!spot) return;
+    p.pos.copy(spot);
+    p.vel.set(0, 0, 0);
+    p.grounded = true;
+    p.stepSmooth = Math.min(1.2, rise);
+    this.vfx.puff(spot.clone(), new THREE.Vector3(0, 1, 0), 6, 0.7, 0.25);
   }
 
   /** The ghost is the real masonry, so it is only regenerated when the module or its cell changes. */
@@ -2504,8 +2563,9 @@ export class Game {
       flagAltitude: Math.max(0, asc.flagPos.y - this.app.terrain.heightAt(asc.flagPos.x, asc.flagPos.z)),
       flagDist: Math.hypot(asc.flagPos.x - p.pos.x, asc.flagPos.z - p.pos.z),
       sea: { level: asc.seaLevel, rising: asc.seaRising, boosted: asc.seaSpeed > ASCENT.seaSpeed * 1.5, inSeconds: asc.seaIn, gap: p.pos.y - asc.seaLevel },
+      ringOut: Math.hypot(p.pos.x, p.pos.z) - asc.ring,
       marked: asc.marked ? { name: asc.marked.name, color: asc.marked.colorHex, you: asc.marked === p } : null,
-      holder: asc.holder && asc.holder.alive ? { name: asc.holder.name, color: asc.holder.colorHex, you: asc.holder === p, progress: clamp(asc.holdTimer / ASCENT.holdTime, 0, 1) } : null,
+      holder: asc.holder && asc.holder.alive ? { name: asc.holder.name, color: asc.holder.colorHex, you: asc.holder === p, progress: clamp((asc.held.get(asc.holder.id) ?? 0) / ASCENT.holdTime, 0, 1) } : null,
       build,
       arch: { on: false, left: 0, cooldown: 0 },
       strip: this.entities.filter((e) => e.alive).map((e) => ({ y: e.pos.y, color: e.colorHex, you: e === p, marked: e === asc.marked, flag: e === asc.holder })),

@@ -33,6 +33,8 @@ export interface HudAscent {
   flagAltitude: number;
   flagDist: number;
   sea: { level: number; rising: boolean; boosted: boolean; inSeconds: number; gap: number };
+  /** How far outside the closing sky you are, in metres; zero or less means you are safe inside it. */
+  ringOut: number;
   marked: { name: string; color: string; you: boolean } | null;
   holder: { name: string; color: string; you: boolean; progress: number } | null;
   build: {
@@ -717,10 +719,11 @@ export class HUD {
     this.skyBricks.classList.toggle('full', a.bricks >= a.bricksMax);
     this.set('skyAlt', this.skyAlt, `▲ ${Math.round(a.altitude)} ${t('metres')}`);
     this.set('skyFlag', this.skyFlagLine, `🚩 ${Math.round(a.flagAltitude)} ${t('metres')} · ${Math.round(a.flagDist)} ${t('metres')} ${t('away')}`);
-    // The mark.
-    if (a.marked) {
+    // The mark, and only when it is worth a line: your own crown always, somebody else's only while
+    // they are ahead of you. Three lines all saying the same name was most of the noise on screen.
+    if (a.marked && (a.marked.you || a.flagAltitude > 0)) {
       this.skyMarked.hidden = false;
-      this.set('skyMarked', this.skyMarked, a.marked.you ? `👑 ${t('youAreMarked')}` : `👑 ${a.marked.name} · ${t('markedTag')}`);
+      this.set('skyMarked', this.skyMarked, a.marked.you ? `👑 ${t('youAreMarked')}` : `👑 ${a.marked.name}`);
       this.skyMarked.style.color = a.marked.you ? '#ffd36a' : a.marked.color;
       this.skyMarked.classList.toggle('you', a.marked.you);
     } else this.skyMarked.hidden = true;
@@ -734,11 +737,18 @@ export class HUD {
       this.set('skyHoldText', this.skyHoldText, a.holder.you ? t('holdTheFlag', { n: left }) : t('holderHas', { name: a.holder.name, n: left }));
       this.skyHold.classList.toggle('you', a.holder.you);
     } else this.skyHold.hidden = true;
-    // The sea.
+    // One danger line, and it is whichever is about to kill you: the closing sky beats the sea,
+    // because it is already doing damage while the water is still below you.
     const sea = a.sea;
     let seaText = '';
     let seaCls = '';
-    if (!sea.rising) seaText = sea.inSeconds > 0 && sea.inSeconds < 120 ? `🌊 ${t('seaIn', { t: formatTime(sea.inSeconds) })}` : '';
+    if (a.ringOut > 0) {
+      seaText = `🌩 ${t('ringOutside', { n: Math.ceil(a.ringOut) })}`;
+      seaCls = 'danger';
+    } else if (a.ringOut > -22) {
+      seaText = `🌩 ${t('ringEdge', { n: Math.max(0, Math.round(-a.ringOut)) })}`;
+      seaCls = 'warn';
+    } else if (!sea.rising) seaText = sea.inSeconds > 0 && sea.inSeconds < 120 ? `🌊 ${t('seaIn', { t: formatTime(sea.inSeconds) })}` : '';
     else {
       seaText = `🌊 ${t('seaBelow', { n: Math.max(0, Math.round(sea.gap)) })}${sea.boosted ? ` · ${t('seaSurging')}` : ''}`;
       seaCls = sea.gap < 8 ? 'danger' : sea.gap < 20 ? 'warn' : '';
