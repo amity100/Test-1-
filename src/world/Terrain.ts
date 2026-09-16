@@ -17,7 +17,11 @@ const PATH = new THREE.Color('#a8926c');
 const PATH_DARK = new THREE.Color('#8a7455');
 const MEADOW = new THREE.Color('#7fae3c');
 
-/** Heightmap island with flattened plots. Heights are sampled at 1 m spacing. */
+/**
+ * Heightmap island. Heights are sampled at 1 m spacing. The flattened plots, the plaza under the
+ * monument and the roads between them are the furniture of the fortress modes: `civic` decides
+ * whether the island is cut for them or left as the wild hill Sky Flag starts on.
+ */
 export class Terrain {
   readonly size = WORLD_HALF * 2 + 1;
   readonly heights: Float32Array;
@@ -27,7 +31,11 @@ export class Terrain {
   /** Pad height under each outpost: the untouched terrain there, rounded to a block. */
   readonly outpostY: number[] = [];
 
-  constructor(readonly plots: Plot[], seed = 1) {
+  constructor(
+    readonly plots: Plot[],
+    seed = 1,
+    private civic = true,
+  ) {
     this.noise = new Noise(seed);
     this.heights = new Float32Array(this.size * this.size);
     for (const o of OUTPOSTS) this.outpostY.push(Math.round(this.computeHeight(o.x, o.z, false)));
@@ -47,6 +55,7 @@ export class Terrain {
     const detail = n.fbm2(x * 0.06, z * 0.06, 3) * 0.9;
     const centre = smoothstep(60, 0, r) * 4;
     let h = -4 + coast * (7 + hills + ridge * 0.6 + centre) + detail;
+    if (!this.civic) return h;
     // Flatten the central plaza for the monument.
     if (r < 22) h = lerp(h, PLAZA_Y - 0.02, 1 - smoothstep(14, 22, r));
     // Flatten plots with a soft blend ring.
@@ -99,6 +108,7 @@ export class Terrain {
 
   /** 0..1 strength of the packed-dirt paths (radials from each fortress, ring road, plaza). */
   pathWeight(x: number, z: number): number {
+    if (!this.civic) return 0;
     const r = Math.sqrt(x * x + z * z);
     let w = 0;
     for (const p of this.plots) {
@@ -117,16 +127,28 @@ export class Terrain {
   }
 
   isPlotInterior(x: number, z: number): boolean {
+    if (!this.civic) return false;
     for (const p of this.plots) if (plotDistance(p, x, z) <= 0) return true;
     return false;
   }
 
-  buildMesh(): THREE.Mesh {
-    const s = this.size;
-    const geo = new THREE.PlaneGeometry(s - 1, s - 1, s - 1, s - 1);
-    geo.rotateX(-Math.PI / 2);
+  /**
+   * Cuts the island the other way round and repaints it in place: every system holding this terrain
+   * keeps working, because it is the same object with new heights. Sky Flag asks for the wild
+   * island it starts on, a fortress match for the pads and roads its fortresses stand on.
+   */
+  reshape(civic: boolean): void {
+    if (civic === this.civic) return;
+    this.civic = civic;
+    for (let j = 0; j < this.size; j++)
+      for (let i = 0; i < this.size; i++) this.heights[j * this.size + i] = this.computeHeight(i - WORLD_HALF, j - WORLD_HALF);
+    if (this.mesh) this.paint(this.mesh.geometry as THREE.BufferGeometry);
+  }
+
+  /** Heights, colours, world-space detail UVs and normals for the ground mesh. */
+  private paint(geo: THREE.BufferGeometry): void {
     const pos = geo.attributes.position as THREE.BufferAttribute;
-    const colors = new Float32Array(pos.count * 3);
+    const colours = geo.attributes.color as THREE.BufferAttribute;
     const c = new THREE.Color();
     const tmp = new THREE.Color();
     for (let idx = 0; idx < pos.count; idx++) {
@@ -174,17 +196,24 @@ export class Terrain {
         } else tmp.copy(PATH).lerp(PATH_DARK, micro * 0.6);
         c.lerp(tmp, pw * 0.92);
       }
-      colors[idx * 3] = c.r;
-      colors[idx * 3 + 1] = c.g;
-      colors[idx * 3 + 2] = c.b;
+      colours.setXYZ(idx, c.r, c.g, c.b);
     }
-    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    colours.needsUpdate = true;
+    pos.needsUpdate = true;
     // World-space UVs for the ground detail tile (one repeat every 2 m).
     const uv = geo.attributes.uv as THREE.BufferAttribute;
     for (let idx = 0; idx < pos.count; idx++) uv.setXY(idx, pos.getX(idx) * 0.5, pos.getZ(idx) * 0.5);
+    uv.needsUpdate = true;
     geo.computeVertexNormals();
     geo.computeBoundingSphere();
+  }
 
+  buildMesh(): THREE.Mesh {
+    const s = this.size;
+    const geo = new THREE.PlaneGeometry(s - 1, s - 1, s - 1, s - 1);
+    geo.rotateX(-Math.PI / 2);
+    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count * 3), 3));
+    this.paint(geo);
     const ground = groundMaps();
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, map: ground.map, normalMap: ground.normalMap, normalScale: new THREE.Vector2(0.55, 0.55), roughnessMap: ground.roughnessMap });
     mat.onBeforeCompile = (shader) => {

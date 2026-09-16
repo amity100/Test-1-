@@ -31,7 +31,11 @@ GitHub Pages). Single-file build for artifact hosting: `npm run build:artifact` 
 
 ### Sky Flag
 
-1. **Twelve on one island, twelve minutes.** Nothing is built when the round starts: twelve players
+1. **Twelve on one island, twelve minutes.** Nothing is built when the round starts, and that now
+   goes for the island too: it is a wild hill of grass, trees, rock and beach, with no pads cut into
+   it, no plaza, no monument, no ruins and nothing standing anywhere on it. (The pads, roads and
+   monument belong to the fortress modes; the terrain is cut for them when one of those matches
+   starts and goes back to wild when it ends, so Sky Flag never sees them.) Twelve players
    stand on the sand, and the whole city of the next twelve minutes is the one they build. Everyone
    spawns spread around the shore with twenty-four bricks. One brick trickles in every three seconds (up to 60 in hand); a kill drops most of the
    victim's bricks (at least six) as a cluster that hovers over the spot for ten seconds and then

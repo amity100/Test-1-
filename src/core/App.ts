@@ -8,7 +8,7 @@ import { VoxelWorld } from '../world/VoxelWorld';
 import { ChunkRenderer } from '../render/ChunkRenderer';
 import { generateVoxelTextures } from '../render/Textures';
 import { createVoxelMaterials, type VoxelMaterials } from '../render/VoxelMaterial';
-import { makePlots, PLOT_Y, type Plot } from '../world/Layout';
+import { makePlots, PLOT_Y, PLOT_MAX_HEIGHT, type Plot } from '../world/Layout';
 import { Random } from './Random';
 import { Input } from './Input';
 import { settings, type Quality } from './Settings';
@@ -16,7 +16,7 @@ import { setLang, t } from './i18n';
 import { Mat, encodeBlock } from '../world/Voxel';
 import { clamp } from './MathUtil';
 import { Game } from './Game';
-import { buildDecor } from '../world/Decor';
+import { buildDecor, type DecorTarget } from '../world/Decor';
 import { perf } from './Perf';
 
 const nextFrame = (): Promise<void> => new Promise((r) => requestAnimationFrame(() => r()));
@@ -112,7 +112,10 @@ export class App {
     this.setLoading(0.45, t('loadingWorld'));
     await nextFrame();
     this.plots = makePlots(8);
-    this.terrain = new Terrain(this.plots, 11);
+    // The island comes up wild: no pads cut for fortresses, no plaza, no roads and nothing standing
+    // on it. A fortress match asks for its furniture when it starts; Sky Flag never does, because
+    // everything you see in the sky by the end of a round is something somebody built during it.
+    this.terrain = new Terrain(this.plots, 11, false);
     scene.add(this.terrain.buildMesh());
     this.water = new WaterSurface(this.terrain);
     scene.add(this.water.mesh);
@@ -127,8 +130,6 @@ export class App {
     await nextFrame();
     this.chunks = new ChunkRenderer(this.world, this.materials);
     scene.add(this.chunks.group);
-    this.placePlotFloors();
-    buildDecor(this.world, this.terrain, this.plots, new Random(4242));
     this.chunks.flush();
     this.game = new Game(this);
     this.game.init();
@@ -155,12 +156,43 @@ export class App {
     setInterval(refresh, 1000);
   }
 
-  private placePlotFloors(): void {
+  /**
+   * Dresses the island for the fortress modes — pads cut into the hill, paved plot floors, the
+   * monument, the ruins and the standing stones — or strips all of it back to a wild island for Sky
+   * Flag, which starts with nothing built anywhere. Every block laid is remembered so that taking
+   * the dressing off leaves the ground exactly as it was.
+   */
+  setIsland(civic: boolean): void {
+    if (civic === this.civicOn) return;
+    this.civicOn = civic;
+    for (let i = 0; i < this.civicBlocks.length; i += 3) this.world.set(this.civicBlocks[i], this.civicBlocks[i + 1], this.civicBlocks[i + 2], 0);
+    this.civicBlocks.length = 0;
+    // A plot keeps whatever a fortress match painted and built on it, which is not this island's to
+    // keep: going wild empties each pad from under its floor to above the tallest thing it can hold.
+    if (!civic) for (const p of this.plots) this.world.clearBox(p.minX, PLOT_Y - 3, p.minZ, p.maxX, PLOT_Y + PLOT_MAX_HEIGHT + 2, p.maxZ);
+    this.terrain.reshape(civic);
+    if (civic) {
+      const record: DecorTarget = {
+        set: (x, y, z, v) => {
+          this.civicBlocks.push(x, y, z);
+          return this.world.set(x, y, z, v);
+        },
+      };
+      this.placePlotFloors(record);
+      buildDecor(record, this.terrain, this.plots, new Random(4242));
+    }
+    if (!this.gr.flags.has('nofoliage')) this.foliage.build(this.gr.profile);
+    this.chunks.flush();
+  }
+  private civicOn = false;
+  private readonly civicBlocks: number[] = [];
+
+  private placePlotFloors(target: DecorTarget): void {
     const floorMats = [Mat.COBBLE, Mat.SMOOTH_STONE, Mat.MARBLE, Mat.STONE_BRICK, Mat.SANDSTONE, Mat.CONCRETE, Mat.METAL_PANEL, Mat.WOOD_PLANKS];
     const floorCols = [2, 41, 30, 21, 60, 31, 51, 6];
     for (const p of this.plots) {
       const v = encodeBlock(floorMats[p.index % floorMats.length], floorCols[p.index % floorCols.length]);
-      for (let x = p.minX; x <= p.maxX; x++) for (let z = p.minZ; z <= p.maxZ; z++) this.world.set(x, PLOT_Y - 1, z, v);
+      for (let x = p.minX; x <= p.maxX; x++) for (let z = p.minZ; z <= p.maxZ; z++) target.set(x, PLOT_Y - 1, z, v);
     }
   }
 
@@ -269,7 +301,13 @@ export class App {
       const tg = perf.now();
       // Never integrate more than a twentieth of a second at once, or a body can pass through a wall.
       const steps = dt > 0.05 ? 2 : 1;
-      for (let i = 0; i < steps; i++) focus = this.game.update(dt / steps);
+      for (let i = 0; i < steps; i++) {
+        focus = this.game.update(dt / steps);
+        // A press is one event and a mouse movement one movement, however many steps the frame is
+        // caught up in: without this the second half of a long frame saw the same tap again and
+        // built twice, and turned the view twice as far.
+        if (i === 0 && steps > 1) input.endFrame();
+      }
       perf.add('game', tg);
     }
     if (this.freeFly) {

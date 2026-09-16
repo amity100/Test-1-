@@ -1,4 +1,3 @@
-import type { VoxelWorld } from './VoxelWorld';
 import type { Terrain } from './Terrain';
 import { Mat, encodeBlock } from './Voxel';
 import { PLAZA_Y, type Plot } from './Layout';
@@ -14,14 +13,14 @@ const LAMP = encodeBlock(Mat.LAMP, 53);
 const COBBLE = encodeBlock(Mat.COBBLE, 41);
 const CRYSTAL = encodeBlock(Mat.CRYSTAL, 53);
 
-function box(world: VoxelWorld, x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, v: number): void {
+function box(world: DecorTarget, x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, v: number): void {
   for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x++)
     for (let y = Math.min(y0, y1); y <= Math.max(y0, y1); y++)
       for (let z = Math.min(z0, z1); z <= Math.max(z0, z1); z++) world.set(x, y, z, v);
 }
 
 /** Central monument: stepped marble plinth, tapered obelisk with a gold cap and lit corner pillars. */
-function monument(world: VoxelWorld): void {
+function monument(world: DecorTarget): void {
   const y0 = PLAZA_Y;
   box(world, -5, y0, -5, 5, y0, 5, MARBLE);
   box(world, -4, y0 + 1, -4, 4, y0 + 1, 4, MARBLE_WARM);
@@ -57,7 +56,7 @@ function monument(world: VoxelWorld): void {
 }
 
 /** A weathered ring of columns with a broken entablature and some rubble. */
-function ruin(world: VoxelWorld, terrain: Terrain, cx: number, cz: number, rng: Random): void {
+function ruin(world: DecorTarget, terrain: Terrain, cx: number, cz: number, rng: Random): void {
   const n = rng.int(5, 7);
   const R = rng.range(3.5, 5);
   const groundAt = (x: number, z: number): number => Math.floor(terrain.heightAt(x + 0.5, z + 0.5) + 0.02);
@@ -97,7 +96,7 @@ function ruin(world: VoxelWorld, terrain: Terrain, cx: number, cz: number, rng: 
 }
 
 /** A tall standing stone with a small crystal lamp, placed near the coast between fortresses. */
-function menhir(world: VoxelWorld, terrain: Terrain, x: number, z: number, rng: Random): void {
+function menhir(world: DecorTarget, terrain: Terrain, x: number, z: number, rng: Random): void {
   const g = Math.floor(terrain.heightAt(x + 0.5, z + 0.5) + 0.02);
   const h = rng.int(3, 5);
   box(world, x, g, z, x, g + h, z, OLD_STONE);
@@ -106,7 +105,15 @@ function menhir(world: VoxelWorld, terrain: Terrain, x: number, z: number, rng: 
 }
 
 /** Places landmarks on the open island: the centre monument, ruins between plots and coastal stones. */
-export function buildDecor(world: VoxelWorld, terrain: Terrain, plots: Plot[], rng: Random): void {
+/**
+ * The part of the world a decorator writes to. Taking the interface rather than the world itself
+ * lets the caller record what went in, so the dressing can come off again.
+ */
+export interface DecorTarget {
+  set(x: number, y: number, z: number, value: number): boolean;
+}
+
+export function buildDecor(world: DecorTarget, terrain: Terrain, plots: Plot[], rng: Random): void {
   monument(world);
   const step = (Math.PI * 2) / 8;
   for (let i = 0; i < 8; i++) {

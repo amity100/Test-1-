@@ -268,7 +268,6 @@ export class Game {
 
   /** Called once after the world exists. */
   init(): void {
-    this.showcaseIsland();
     this.screens.showMenu();
     this.mode = 'menu';
     this.cinematicAngle = 0;
@@ -280,17 +279,6 @@ export class Game {
   private threatUntil = new Map<number, number>();
   /** Damage dealt this frame per target, shown as one floating number. */
   private pendingDmg = new Map<number, { amount: number; point: THREE.Vector3; headshot: boolean; kill: boolean }>();
-
-  /** Populates all plots with random fortresses for the menu backdrop. */
-  private showcaseIsland(): void {
-    const rng = new Random(42);
-    for (const p of this.app.plots) {
-      const style = rng.pick(STYLE_IDS);
-      this.paintGround(p, style);
-      generateFortress(this.app.world, p, style, rng.fork());
-    }
-    this.app.chunks.flush();
-  }
 
   private applySettings(): void {
     const q = this.app.forcedQuality ?? settings.resolveQuality(this.app.gr.gpuName);
@@ -338,6 +326,8 @@ export class Game {
     const plots = this.app.plots;
     const war = cfg.mode === 'war';
     const ascent = cfg.mode === 'ascent';
+    // Sky Flag plays on a wild island; the fortress modes need their pads, plaza and roads cut.
+    this.app.setIsland(!ascent);
     this.entities = [];
     this.bots = [];
     this.commanders = [];
@@ -1558,7 +1548,8 @@ export class Game {
 
   quitToMenu(): void {
     this.cleanupMatch();
-    this.showcaseIsland();
+    // The island goes back to the wild one the menu opens on, whatever mode was just played on it.
+    this.app.setIsland(false);
     this.screens.showMenu();
     this.mode = 'menu';
     this.setTouchMode();
