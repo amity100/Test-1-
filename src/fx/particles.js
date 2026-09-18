@@ -155,14 +155,14 @@ export class FX {
     // Lights stay in the scene permanently (intensity 0 when idle) so the light count — and thus the
     // compiled shaders — never changes at runtime.
     this.flashes = [];
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 3; i++) {
       const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.flashTex, color: 0xffe0b0, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
       s.visible = false; s.scale.set(0.6, 0.6, 1); s.renderOrder = 20; scene.add(s);
       const l = new THREE.PointLight(0xffb060, 0, 9, 2); scene.add(l);
       this.flashes.push({ sprite: s, light: l, t: 0 });
     }
     this.explLightPool = [];
-    for (let i = 0; i < 2; i++) { const l = new THREE.PointLight(0xffa040, 0, 30, 2); scene.add(l); this.explLightPool.push(l); }
+    { const l = new THREE.PointLight(0xffa040, 0, 30, 2); scene.add(l); this.explLightPool.push(l); }
     this.explCursor = 0;
     this.flashCursor = 0;
 

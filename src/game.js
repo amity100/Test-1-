@@ -38,6 +38,10 @@ export class Game {
     this.checkpointData = null;
     this._enemyId = 0;
     this.heliDown = false;
+    // rendering-health watchdog
+    this.contextLost = false; this.frameMs = 16;
+    this._sinceCheck = 0; this._repairStep = 0; this._blackFrames = 0; this._pendingSample = false; this._checksLeft = 10;
+    this._slowTime = 0;
   }
 
   async init() {
@@ -87,6 +91,7 @@ export class Game {
     });
     this.input.on('lockerror', () => { if (this.state === 'playing') this.showClickToResume(); });
     this.input.on('softlook', () => { this.container.classList.add('softlook'); this.hud.toast(this.t('hud.softlook'), 6000); if (this.state === 'paused' && this.menus.current === 'click') this.resume(); });
+    this._bindContextEvents();
     this.state = 'menu';
     this.menus.show('main');
     this.menuOrbit = 0;
@@ -137,7 +142,7 @@ export class Game {
     const s = this.moon.shadow; s.mapSize.set(CONFIG.render.shadowMapSize, CONFIG.render.shadowMapSize);
     s.camera.near = 1; s.camera.far = 200; s.camera.left = s.camera.bottom = -45; s.camera.right = s.camera.top = 45; s.bias = -0.0008; s.normalBias = 0.03;
     this.scene.add(this.moon); this.scene.add(this.moon.target);
-    this.hemi = new THREE.HemisphereLight(0x223550, 0x0d0a08, 0.75); this.scene.add(this.hemi);
+    this.hemi = new THREE.HemisphereLight(0x2a3e5c, 0x100d0a, 0.95); this.scene.add(this.hemi);
     this.lightning = { t: 18 + Math.random() * 30, flash: 0 };
   }
 
@@ -211,6 +216,7 @@ export class Game {
     this.camera = this.player.camera; this.postfx.setCamera(this.camera);
     this.resize();
     this.hud.show(); this.menus.hide();
+    this._checksLeft = Math.max(this._checksLeft, 12); this._sinceCheck = 0;
     this.script.setPrimary('insert');
     this.hud.hint('move'); setTimeout(() => { if (this.state === 'playing') this.hud.hint('aim'); }, 9000);
     this.input.lock();
@@ -338,8 +344,10 @@ export class Game {
   // ---- settings ----
   applySettings(s) {
     const q = s.quality;
+    if (this.settings && this.settings.quality !== q) { this._repairStep = 0; this._blackFrames = 0; this._checksLeft = 12; this.postfx.enabled = true; this.renderer.toneMapping = THREE.ACESFilmicToneMapping; }
     const pr = Math.min(window.devicePixelRatio || 1, q === 'low' ? 1 : q === 'medium' ? 1.25 : q === 'high' ? 1.5 : CONFIG.render.maxPixelRatio);
     this.renderer.setPixelRatio(pr);
+    this.renderer.toneMappingExposure = CONFIG.render.exposure * (s.brightness ?? 1);
     this.renderer.shadowMap.enabled = q !== 'low';
     this.moon.shadow.mapSize.setScalar(q === 'ultra' ? 4096 : q === 'high' ? 2048 : 1024); if (this.moon.shadow.map) { this.moon.shadow.map.dispose(); this.moon.shadow.map = null; }
     for (const l of this.builder.lights.flood) { l.castShadow = l.castShadow && q !== 'low'; }
@@ -376,8 +384,18 @@ export class Game {
     requestAnimationFrame(this._loop);
     let realDt = Math.min(0.05, (now - this.lastFrame) / 1000); this.lastFrame = now;
     if (!(realDt > 0)) realDt = 0.016;
-    if (this.debugFrozen) return;
-    this._frame(realDt, true);
+    if (this.debugFrozen || this.contextLost) return;
+    try {
+      this._frame(realDt, true);
+    } catch (e) {
+      // A thrown frame must never leave the player staring at a black canvas in silence.
+      console.error('VANTAGE frame error:', e);
+      if (!this._frameErrors) this._frameErrors = 0;
+      if (++this._frameErrors === 3) this.showTrouble(this.t('trouble.frame'), e && e.message);
+    }
+    this.frameMs += (realDt * 1000 - this.frameMs) * 0.05;
+    if (this.state === 'playing') { this._watchdog(realDt); this._checkPerformance(realDt); }
+    else if (this.state === 'menu') this._watchdog(realDt);
   }
   _frame(realDt, render) {
     this.realTime += realDt;
@@ -389,8 +407,151 @@ export class Game {
     const ht = this.profile ? performance.now() : 0;
     this.hud.update(realDt);
     if (this.profile) this._prof('hud', ht);
-    if (render) this.postfx.render();
+    if (render) { this.postfx.render(); this._pendingSample = true; }
     this.input.endFrame();
+  }
+
+  // Sustained single-digit frame rates risk a driver reset, so step the quality down instead.
+  _checkPerformance(realDt) {
+    if (this._autoQualityDone || this.realTime < 4) return;
+    if (this.frameMs > 90) this._slowTime += realDt; else this._slowTime = Math.max(0, this._slowTime - realDt * 0.5);
+    if (this._slowTime < 4) return;
+    this._slowTime = 0;
+    const order = ['ultra', 'high', 'medium', 'low'];
+    const i = order.indexOf(this.settings.quality);
+    if (i >= 0 && i < order.length - 1) {
+      const next = order[i + 1];
+      this.menus.settings.quality = next; this.menus.saveSettings();
+      this.hud.toast(this.t('trouble.slow', { q: this.t('menu.quality.' + next) }), 5000);
+      this._repairStep = 0;
+    } else { this._autoQualityDone = true; this.postfx.enabled = false; }
+  }
+
+  // ---- black-screen / performance watchdog ----
+  // Some GPUs and drivers fail in ways that produce a perfectly black canvas with no error:
+  // a post-processing target the driver will not render to, a shadow map it cannot allocate,
+  // or a frame so heavy the driver resets. The watchdog notices and repairs it step by step.
+  _watchdog(realDt) {
+    // Sampling the drawing buffer stalls the GPU, so only check until rendering has proven healthy.
+    if (this._checksLeft <= 0 || this._repairStep > 3) return;
+    this._sinceCheck += realDt;
+    if (this._sinceCheck < 0.6) return;
+    this._sinceCheck = 0;
+    const lum = this._sampleCanvas();
+    if (lum === null) return;
+    this._checksLeft--;
+    // The darkest legitimate view in the game (staring straight up at the night sky) reads about 7;
+    // a renderer that is failing gives a clean 0 on every sample.
+    if (lum > 1) { this._blackFrames = 0; return; }
+    if (++this._blackFrames < 2) return;              // ignore a single frame (a fade, a load hitch)
+    this._blackFrames = 0; this._checksLeft = 12;     // give the repair a fresh window to prove itself
+    this._repair();
+  }
+  // Reads a handful of pixels straight out of the drawing buffer; returns the brightest channel.
+  _sampleCanvas() {
+    if (!this._pendingSample) return null;
+    this._pendingSample = false;
+    const gl = this.renderer.getContext();
+    if (!gl || gl.isContextLost()) return null;
+    const c = this.renderer.domElement, w = c.width, h = c.height;
+    if (!w || !h) return null;
+    try {
+      this.renderer.setRenderTarget(null);
+      const buf = this._sampleBuf || (this._sampleBuf = new Uint8Array(4));
+      let max = 0;
+      for (const [fx, fy] of [[0.5, 0.55], [0.3, 0.7], [0.7, 0.7], [0.5, 0.85], [0.15, 0.4], [0.85, 0.4]]) {
+        gl.readPixels(Math.min(w - 1, Math.floor(fx * w)), Math.min(h - 1, Math.floor(fy * h)), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+        max = Math.max(max, buf[0], buf[1], buf[2]);
+      }
+      return max;
+    } catch (e) { return null; }
+  }
+  // Escalating repair: drop post-processing, then shadows and resolution, then explain.
+  _repair() {
+    const step = ++this._repairStep;
+    if (step === 1 && this.postfx.enabled) {
+      this.postfx.enabled = false;
+      console.warn('VANTAGE: black frame detected — disabling post-processing');
+      this.hud.toast(this.t('trouble.postfx'), 5000);
+      return;
+    }
+    if (step <= 2) {
+      this.renderer.shadowMap.enabled = false;
+      this.renderer.setPixelRatio(1);
+      this.postfx.enabled = false;
+      this.resize();
+      console.warn('VANTAGE: black frame persists — disabling shadows and lowering resolution');
+      this.hud.toast(this.t('trouble.quality'), 5000);
+      return;
+    }
+    if (step === 3) {
+      this.renderer.toneMapping = THREE.NoToneMapping;
+      this.scene.traverse((o) => { if (o.isLight && o.isPointLight) o.visible = false; });
+      console.warn('VANTAGE: black frame persists — stripping tone mapping and point lights');
+      return;
+    }
+    this.showTrouble(this.t('trouble.black'), this.rendererInfo());
+  }
+  rendererInfo() {
+    try {
+      const gl = this.renderer.getContext();
+      const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+      return (dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)) + ' · ' + (this.settings ? this.settings.quality : '?');
+    } catch (e) { return 'unknown renderer'; }
+  }
+  showTrouble(text, detail) {
+    if (this._troubleEl) return;
+    const d = document.createElement('div'); d.className = 'trouble';
+    d.innerHTML = `<b>${text}</b>${detail ? `<span>${String(detail).slice(0, 160)}</span>` : ''}`;
+    const b = document.createElement('button'); b.textContent = this.t('trouble.dismiss');
+    b.onclick = () => { d.remove(); this._troubleEl = null; };
+    d.appendChild(b);
+    this.container.appendChild(d); this._troubleEl = d;
+  }
+
+  // ---- WebGL context loss ----
+  // A lost context is the classic permanent black screen. Keep the canvas, pause, and recover.
+  _bindContextEvents() {
+    const c = this.renderer.domElement;
+    c.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();               // without this the context is never restored
+      this.contextLost = true;
+      if (this.state === 'playing') this.pause(true);
+      console.warn('VANTAGE: WebGL context lost');
+      this.showTrouble(this.t('trouble.contextLost'), this.rendererInfo());
+    }, false);
+    c.addEventListener('webglcontextrestored', () => {
+      this.contextLost = false;
+      if (this._troubleEl) { this._troubleEl.remove(); this._troubleEl = null; }
+      // come back lighter so we do not immediately lose the context again
+      this.postfx.enabled = false;
+      this.renderer.shadowMap.enabled = false;
+      this.renderer.setPixelRatio(1);
+      this.resize();
+      this.lastFrame = performance.now(); this._checksLeft = 12; this._repairStep = 2;
+      console.warn('VANTAGE: WebGL context restored (running in reduced mode)');
+      this.hud.toast(this.t('trouble.restored'), 6000);
+    }, false);
+  }
+
+  // Only the lights nearest the camera stay active. The count is held constant so the shader
+  // programs never have to be recompiled mid-game, and weak GPUs are not asked to shade 28 lights.
+  _updateLightBudget() {
+    const pools = this._lightPools || (this._lightPools = [
+      { list: this.builder.lights.points, budget: 8 },
+      { list: this.builder.lights.flood.concat(this.builder.lights.spots), budget: 4 },
+    ]);
+    const cam = this.camera.position;
+    for (const { list, budget } of pools) {
+      if (list.length <= budget) { for (const l of list) l.visible = true; continue; }
+      for (const l of list) {
+        const d = Math.hypot(l.position.x - cam.x, l.position.y - cam.y, l.position.z - cam.z);
+        // shadow casters are pinned so the shadow count (and therefore the shaders) stay fixed
+        l._score = d - (l.intensity > 0 ? 400 : 0) - (l.castShadow ? 1e5 : 0);
+      }
+      list.sort((a, b) => a._score - b._score);
+      for (let i = 0; i < list.length; i++) list[i].visible = i < budget;
+    }
   }
   // Test/debug helper: advance the simulation without rendering (deterministic, fast).
   debugStep(seconds, step = 1 / 60) { const n = Math.round(seconds / step); for (let i = 0; i < n; i++) this._frame(step, false); }
@@ -403,6 +564,8 @@ export class Game {
     c.lookAt(0, 2, 2);
     this.fx.update(realDt, c); this.postfx.state.architect = 0.35; this.postfx.update(realDt, this.realTime);
     this._updateShadowFocus(new THREE.Vector3(0, 0, 0));
+    this._lightTimer = (this._lightTimer || 0) - realDt;
+    if (this._lightTimer <= 0) { this._lightTimer = 0.25; this._updateLightBudget(); }
     this.audio.setListener(c.position, c.getWorldDirection(_v), new THREE.Vector3(1, 0, 0));
   }
 
@@ -419,7 +582,7 @@ export class Game {
     if (P) { this._prof('player', t0); t0 = performance.now(); }
     this.architect.update(realDt, dt);
     if (P) { this._prof('architect', t0); t0 = performance.now(); }
-    this.hemi.intensity = 0.75 + this.architect.transition * 1.1;
+    this.hemi.intensity = 0.95 + this.architect.transition * 1.1;
     this.camera = this.mode === 'architect' ? this.architect.camera : this.player.camera;
     if (this.postfx.camera !== this.camera) this.postfx.setCamera(this.camera);
     // friendlies' view of enemies (for fog of war & squad targeting)
@@ -456,6 +619,8 @@ export class Game {
     // fx / post
     this.fx.update(dt, this.camera);
     this.postfx.update(realDt, this.realTime);
+    this._lightTimer = (this._lightTimer || 0) - realDt;
+    if (this._lightTimer <= 0) { this._lightTimer = 0.25; this._updateLightBudget(); }
     if (P) { this._prof('script+fx', t0); t0 = performance.now(); }
     this._updateShadowFocus(this.player.pos);
     // audio listener

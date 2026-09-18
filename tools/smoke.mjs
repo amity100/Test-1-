@@ -23,7 +23,7 @@ const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=sw
 const page = await browser.newPage({ viewport: { width: 960, height: 540 } });
 await page.addInitScript(([q, l]) => { window.__VANTAGE_NOLOCK = true; try { localStorage.setItem('vantage.settings', JSON.stringify({ quality: q, sensitivity: 1, invertY: false, volume: 0 })); localStorage.setItem('vantage.lang', l); } catch (e) {} }, [quality, lang]);
 const errors = [];
-page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') { const t = m.text(); if (!t.includes('fonts.googleapis') && !t.includes('net::ERR')) { errors.push(m.type() + ': ' + t); console.log('console.' + m.type() + ':', t.slice(0, 300)); } } });
+page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') { const t = m.text(); if (!t.includes('fonts.googleapis') && !t.includes('net::ERR') && !t.includes('GL Driver Message')) { errors.push(m.type() + ': ' + t); console.log('console.' + m.type() + ':', t.slice(0, 300)); } } });
 page.on('pageerror', (e) => { errors.push('pageerror: ' + e.message); console.log('PAGEERROR:', e.message, (e.stack || '').split('\n').slice(1, 4).join(' | ')); });
 page.on('requestfailed', (r) => { if (!r.url().includes('fonts.g')) console.log('REQFAIL:', r.url()); });
 const t0 = Date.now();

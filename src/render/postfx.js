@@ -75,7 +75,17 @@ export class PostFX {
     this.cfg = cfg;
     this.enabled = true;
     const size = renderer.getSize(new THREE.Vector2());
-    this.composer = new EffectComposer(renderer);
+    // EffectComposer and UnrealBloomPass render into half-float targets by default. Some drivers
+    // (older integrated GPUs, several mobile GPUs) cannot render to a float buffer: the framebuffer
+    // comes back incomplete and every pass draws nothing, i.e. a black screen. Fall back to 8-bit.
+    this.floatTargets = renderer.extensions.has('EXT_color_buffer_float') || renderer.extensions.has('EXT_color_buffer_half_float');
+    const pr = renderer.getPixelRatio();
+    const target = new THREE.WebGLRenderTarget(Math.max(1, size.x * pr), Math.max(1, size.y * pr), {
+      type: this.floatTargets ? THREE.HalfFloatType : THREE.UnsignedByteType,
+      minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat,
+    });
+    target.texture.name = 'PostFX.rt';
+    this.composer = new EffectComposer(renderer, target);
     this.renderPass = new RenderPass(scene, camera);
     this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), cfg.bloomStrength, cfg.bloomRadius, cfg.bloomThreshold);
     this.grade = new ShaderPass(GradeShader);
@@ -98,9 +108,11 @@ export class PostFX {
     this.grade.uniforms.uResolution.value.set(w * pr, h * pr);
   }
   setQuality(q) {
-    this.bloom.enabled = q !== 'low';
+    // bloom needs float targets to look right and to work at all on some drivers
+    this.bloom.enabled = q !== 'low' && this.floatTargets;
     this.smaa.enabled = q !== 'low';
     this.bloom.strength = q === 'ultra' ? this.cfg.bloomStrength * 1.15 : this.cfg.bloomStrength;
+    this.quality = q;
   }
 
   update(dt, time) {

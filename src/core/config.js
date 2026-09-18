@@ -166,7 +166,7 @@ export const CONFIG = {
     bloomStrength: 0.42,
     bloomRadius: 0.55,
     bloomThreshold: 0.86,
-    exposure: 1.05,
+    exposure: 1.18,
     rainCount: 6000,
     fogDensity: 0.016,
   },
