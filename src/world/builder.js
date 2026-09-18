@@ -8,6 +8,24 @@ import { ExplosiveBarrel } from '../entities/weapons.js';
 
 const _m4 = new THREE.Matrix4(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1, 1, 1), _q = new THREE.Quaternion();
 
+// A 20-foot shipping container: corrugated body, corner posts, rails, door end with lock bars.
+// `add(geo, matName, lx, ly, lz)` receives parts in container-local space (base at y=0, centred on x/z).
+export function containerParts(add, w = 6, h = 2.6, d = 2.45, matName = 'containerBlue') {
+  add(boxGeo(w - 0.2, h, d - 0.2), matName, 0, h / 2, 0);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) add(boxGeo(0.2, h + 0.02, 0.2), 'steelDark', sx * (w / 2 - 0.1), h / 2, sz * (d / 2 - 0.1));
+  for (const sz of [-1, 1]) { add(boxGeo(w, 0.14, 0.12), 'steelDark', 0, h - 0.07, sz * (d / 2 - 0.06)); add(boxGeo(w, 0.2, 0.12), 'steelDark', 0, 0.1, sz * (d / 2 - 0.06)); }
+  for (const sx of [-1, 1]) { add(boxGeo(0.12, 0.14, d), 'steelDark', sx * (w / 2 - 0.06), h - 0.07, 0); add(boxGeo(0.12, 0.2, d), 'steelDark', sx * (w / 2 - 0.06), 0.1, 0); }
+  // door end (+x): centre seam, four lock bars with handles, hinges
+  add(boxGeo(0.05, h - 0.3, 0.06), 'steelDark', w / 2 - 0.03, h / 2, 0);
+  for (const t of [-0.66, -0.3, 0.3, 0.66]) {
+    add(new THREE.CylinderGeometry(0.025, 0.025, h - 0.5, 8), 'gunmetal', w / 2 + 0.03, h / 2, t * d / 2);
+    add(boxGeo(0.05, 0.05, 0.26), 'gunmetal', w / 2 + 0.05, h * 0.42, t * d / 2 + (t < 0 ? 0.13 : -0.13));
+  }
+  for (const sz of [-1, 1]) for (const yy of [0.5, h - 0.5]) add(boxGeo(0.06, 0.16, 0.08), 'steelDark', w / 2 - 0.02, yy, sz * (d / 2 - 0.16));
+  // vent on the blind end
+  add(boxGeo(0.05, 0.22, 0.5), 'steelDark', -w / 2 - 0.01, h - 0.45, d / 4);
+}
+
 export class LevelBuilder {
   constructor(game) {
     this.game = game; this.scene = game.scene; this.world = game.world; this.mats = game.mats;
@@ -249,15 +267,177 @@ export class LevelBuilder {
   acUnit(x, y, z) { this.box(x, y, z, 1.4, 0.9, 1.4, 'steelDark', { material: 'metal', collide: false }); this._push('lightHousing', new THREE.CylinderGeometry(0.5, 0.5, 0.05, 20), x, y + 0.93, z); }
   pipe(x1, y1, z1, x2, y2, z2, r = 0.08) { const len = Math.hypot(x2 - x1, y2 - y1, z2 - z1); const g = new THREE.CylinderGeometry(r, r, len, 8); const dir = new THREE.Vector3(x2 - x1, y2 - y1, z2 - z1).normalize(); const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir); g.applyQuaternion(q); this._push('steelDark', g, (x1 + x2) / 2, (y1 + y2) / 2, (z1 + z2) / 2); }
 
+  // ---- larger set pieces ----
+  // Static container (bottom of a stack, or simply parked). Colour per material name.
+  containerStatic(x, z, yaw = 0, matName = 'containerBlue', y = 0) {
+    containerParts((geo, mat, lx, ly, lz) => { geo.translate(lx, ly, lz); this._push(mat, geo, x, y, z, yaw); }, 6, 2.6, 2.45, matName);
+    const c = new Collider({ x, y: y + 1.3, z, hx: 3, hy: 1.3, hz: 1.225, yaw, tag: 'static', material: 'metal' }); this.world.add(c); return c;
+  }
+  // Industrial staircase: treads, risers, stringers, handrails; walkable wedge collider (low end at local -z).
+  staircase(x, z, w, h, d, yaw, { rails = 'both' } = {}) {
+    const c = new Collider({ x, y: h / 2, z, hx: w / 2, hy: h / 2, hz: d / 2, yaw, wedge: true, tag: 'static', material: 'metal' }); this.world.add(c);
+    const n = Math.max(3, Math.round(h / 0.19)), stepD = d / n, stepH = h / n;
+    const local = (geo, mat, lx, ly, lz) => { geo.translate(lx, ly, lz); this._push(mat, geo, x, 0, z, yaw); };
+    for (let i = 0; i < n; i++) {
+      const lz = -d / 2 + (i + 0.5) * stepD;
+      local(boxGeo(w, 0.05, stepD + 0.03), 'steelDark', 0, (i + 1) * stepH - 0.025, lz);
+      local(boxGeo(w - 0.1, stepH, 0.04), 'steelDark', 0, (i + 0.5) * stepH, lz + stepD / 2 - 0.02);
+    }
+    const slopeLen = Math.hypot(h, d), ang = Math.atan2(h, d);
+    for (const sx of [-1, 1]) { const g = boxGeo(0.08, 0.3, slopeLen); g.rotateX(-ang); local(g, 'steelDark', sx * (w / 2 + 0.04), h / 2 - 0.12, 0); }
+    const sides = rails === 'both' ? [-1, 1] : rails === 'left' ? [-1] : rails === 'right' ? [1] : [];
+    for (const sx of sides) {
+      const g = boxGeo(0.05, 0.05, slopeLen); g.rotateX(-ang); local(g, 'steelYellow', sx * (w / 2 + 0.05), h / 2 + 1.0, 0);
+      for (let k = 0; k <= 3; k++) { const t = k / 3; local(boxGeo(0.05, 1.0, 0.05), 'steelDark', sx * (w / 2 + 0.05), t * h + 0.5, -d / 2 + t * d); }
+      const sc = new Collider({ x: x + Math.cos(yaw) * sx * (w / 2 + 0.06), y: h / 2 + 0.5, z: z - Math.sin(yaw) * sx * (w / 2 + 0.06), hx: 0.04, hy: h / 2 + 0.6, hz: d / 2, yaw, tag: 'static', material: 'metal', climbable: false });
+      sc.blocksVision = false; sc.blocksBullets = false; this.world.add(sc);
+    }
+    return c;
+  }
+  // Warehouse racking: uprights, three shelf levels, boxes on the shelves.
+  racking(x, z, yaw, bays = 3, { depth = 1.1, bayW = 2.7, levels = [0.05, 1.5, 3.0] } = {}) {
+    const len = bays * bayW;
+    const local = (geo, mat, lx, ly, lz) => { geo.translate(lx, ly, lz); this._push(mat, geo, x, 0, z, yaw); };
+    for (let i = 0; i <= bays; i++) for (const sz of [-1, 1]) local(boxGeo(0.08, 4.2, 0.08), 'steelBlue', -len / 2 + i * bayW, 2.1, sz * depth / 2);
+    for (const ly of levels) { local(boxGeo(len, 0.06, depth), 'steelDark', 0, ly, 0); for (let i = 0; i < bays; i++) { const lx = -len / 2 + (i + 0.5) * bayW; if (Math.random() < 0.8) local(boxGeo(1.0, 0.9, 0.9), 'wood', lx - 0.55, ly + 0.5, 0); if (Math.random() < 0.7) local(boxGeo(0.9, 0.7, 0.8), 'wood', lx + 0.65, ly + 0.4, 0.05); } }
+    const c = new Collider({ x, y: 2.1, z, hx: len / 2, hy: 2.1, hz: depth / 2, yaw, tag: 'static', material: 'metal', climbable: false }); this.world.add(c); return c;
+  }
+  forklift(x, z, yaw = 0) {
+    const local = (geo, mat, lx, ly, lz) => { geo.translate(lx, ly, lz); this._push(mat, geo, x, 0, z, yaw); };
+    local(boxGeo(1.1, 0.7, 1.9), 'steelYellow', 0, 0.55, -0.2);                // body
+    local(boxGeo(0.9, 0.5, 0.8), 'steelDark', 0, 1.15, -0.7);                  // counterweight/engine cover
+    local(boxGeo(0.6, 0.12, 0.6), 'plastic', 0, 0.95, 0.05);                   // seat
+    for (const sx of [-1, 1]) local(boxGeo(0.06, 1.3, 0.06), 'steelDark', sx * 0.5, 1.55, -0.55);   // cab posts rear
+    for (const sx of [-1, 1]) local(boxGeo(0.06, 1.3, 0.06), 'steelDark', sx * 0.5, 1.55, 0.45);    // cab posts front
+    local(boxGeo(1.15, 0.06, 1.1), 'steelDark', 0, 2.2, -0.05);                // roof
+    for (const sx of [-1, 1]) local(boxGeo(0.08, 2.4, 0.1), 'steelDark', sx * 0.35, 1.2, 1.05);     // mast
+    local(boxGeo(0.9, 0.08, 0.1), 'steelDark', 0, 2.35, 1.05);
+    for (const sx of [-1, 1]) local(boxGeo(0.12, 0.05, 1.1), 'gunmetal', sx * 0.3, 0.08, 1.65);    // forks
+    local(boxGeo(0.95, 0.5, 0.06), 'gunmetal', 0, 0.35, 1.12);                                     // carriage
+    for (const [lx, lz] of [[-0.55, 0.6], [0.55, 0.6], [-0.5, -0.7], [0.5, -0.7]]) { local(new THREE.CylinderGeometry(0.32, 0.32, 0.28, 14).rotateZ(Math.PI / 2), 'rubber', lx, 0.32, lz); }
+    const c = new Collider({ x, y: 1.1, z, hx: 0.65, hy: 1.1, hz: 1.35, yaw, tag: 'static', material: 'metal', climbable: false }); this.world.add(c); return c;
+  }
+  dumpster(x, z, yaw = 0) {
+    const local = (geo, mat, lx, ly, lz) => { geo.translate(lx, ly, lz); this._push(mat, geo, x, 0, z, yaw); };
+    local(boxGeo(2.0, 1.3, 1.2), 'containerGreen', 0, 0.75, 0);
+    const lid = boxGeo(2.04, 0.06, 1.26); lid.rotateX(-0.12); local(lid, 'steelDark', 0, 1.45, -0.05);
+    for (const sx of [-1, 1]) local(boxGeo(0.08, 0.12, 1.0), 'steelDark', sx * 0.95, 0.7, 0);
+    for (const [lx, lz] of [[-0.8, 0.45], [0.8, 0.45], [-0.8, -0.45], [0.8, -0.45]]) local(new THREE.CylinderGeometry(0.1, 0.1, 0.08, 10).rotateZ(Math.PI / 2), 'rubber', lx, 0.1, lz);
+    const c = new Collider({ x, y: 0.75, z, hx: 1.0, hy: 0.75, hz: 0.6, yaw, tag: 'static', material: 'metal' }); this.world.add(c); return c;
+  }
+  cableDrum(x, z, r = 0.65, yaw = 0) {
+    const local = (geo, mat, lx, ly, lz) => { geo.translate(lx, ly, lz); this._push(mat, geo, x, 0, z, yaw); };
+    for (const sx of [-1, 1]) local(new THREE.CylinderGeometry(r, r, 0.08, 20).rotateZ(Math.PI / 2), 'wood', sx * 0.45, r, 0);
+    local(new THREE.CylinderGeometry(r * 0.55, r * 0.55, 0.85, 16).rotateZ(Math.PI / 2), 'rubber', 0, r, 0);
+    const c = new Collider({ x, y: r, z, hx: 0.5, hy: r, hz: r * 0.9, yaw, tag: 'static', material: 'wood' }); this.world.add(c); return c;
+  }
+  tireStack(x, z, n = 4) {
+    for (let i = 0; i < n; i++) this._push('rubber', new THREE.TorusGeometry(0.42, 0.16, 8, 20).rotateX(Math.PI / 2), x + (i % 2) * 0.04, 0.17 + i * 0.32, z);
+    const c = new Collider({ x, y: n * 0.16, z, hx: 0.5, hy: n * 0.16, hz: 0.5, tag: 'static', material: 'concrete' }); this.world.add(c); return c;
+  }
+  gasCage(x, z, yaw = 0) {
+    const local = (geo, mat, lx, ly, lz) => { geo.translate(lx, ly, lz); this._push(mat, geo, x, 0, z, yaw); };
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) local(boxGeo(0.05, 2.0, 0.05), 'steelDark', sx * 0.7, 1.0, sz * 0.5);
+    for (const ly of [0.05, 1.0, 1.95]) { for (const sz of [-1, 1]) local(boxGeo(1.45, 0.04, 0.04), 'steelDark', 0, ly, sz * 0.5); for (const sx of [-1, 1]) local(boxGeo(0.04, 0.04, 1.05), 'steelDark', sx * 0.7, ly, 0); }
+    for (let i = 0; i < 4; i++) local(new THREE.CylinderGeometry(0.13, 0.13, 1.4, 10), i % 2 ? 'steelBlue' : 'steelDark', -0.45 + i * 0.3, 0.7, 0);
+    const c = new Collider({ x, y: 1.0, z, hx: 0.75, hy: 1.0, hz: 0.55, yaw, tag: 'static', material: 'metal', climbable: false }); c.blocksVision = false; this.world.add(c); return c;
+  }
+  bollard(x, z) { this.cylinder(x, 0, z, 0.14, 0.95, 'hazard', { material: 'metal', segs: 10 }); this._push('steelDark', new THREE.CylinderGeometry(0.14, 0.14, 0.12, 10), x, 0.7, z); }
+  sign(text, x, y, z, yaw, w = 1.6, h = 0.4, opts = {}) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), this.mats.sign(text, { w: 512, h: Math.round(512 * h / w), ...opts }));
+    m.position.set(x, y, z); m.rotation.y = yaw; this.root.add(m); return m;
+  }
+  roadLine(x1, z1, x2, z2, width = 0.15, matName = 'paintWhite', dash = 0) {
+    const len = Math.hypot(x2 - x1, z2 - z1); const yaw = Math.atan2(x2 - x1, z2 - z1);
+    if (!dash) { this._push(matName, new THREE.PlaneGeometry(width, len).rotateX(-Math.PI / 2), (x1 + x2) / 2, 0.012, (z1 + z2) / 2, yaw); return; }
+    const n = Math.floor(len / (dash * 2));
+    for (let i = 0; i < n; i++) { const t = (i * 2 + 0.5) * dash / len; this._push(matName, new THREE.PlaneGeometry(width, dash).rotateX(-Math.PI / 2), x1 + (x2 - x1) * t, 0.012, z1 + (z2 - z1) * t, yaw); }
+  }
+  drain(x, z) { this._push('grating', new THREE.PlaneGeometry(0.7, 0.7).rotateX(-Math.PI / 2), x, 0.014, z); this._push('steelDark', new THREE.PlaneGeometry(0.8, 0.8).rotateX(-Math.PI / 2), x, 0.013, z); }
+  stain(x, z, r = 1.2) { this._push('stain', new THREE.CircleGeometry(r, 18).rotateX(-Math.PI / 2), x, 0.011, z, Math.random() * 3); }
+  kerb(x1, z1, x2, z2) { const len = Math.hypot(x2 - x1, z2 - z1); const yaw = Math.atan2(x2 - x1, z2 - z1); this._push('concreteLight', boxGeo(0.25, 0.14, len), (x1 + x2) / 2, 0.07, (z1 + z2) / 2, yaw); }
+  blastWall(x1, z1, x2, z2, h = 1.2) { const len = Math.hypot(x2 - x1, z2 - z1); const yaw = Math.atan2(x2 - x1, z2 - z1); return this.box((x1 + x2) / 2, 0, (z1 + z2) / 2, 0.45, h, len, 'concreteDark', { yaw, material: 'concrete' }); }
+  apron(x, z, w, d, h = 0.3) { return this.box(x, 0, z, w, h, d, 'concreteLight', { material: 'concrete' }); }
+  canopy(x, z, w, d, h, yaw = 0) {
+    this.box(x, h, z, w, 0.18, d, 'corrugated', { yaw, material: 'metal', collide: false });
+    const cy = Math.cos(yaw), sy = Math.sin(yaw);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) { const lx = sx * (w / 2 - 0.3), lz = sz * (d / 2 - 0.3); this.cylinder(x + lx * cy + lz * sy, 0, z - lx * sy + lz * cy, 0.1, h, 'steelDark', { material: 'metal', segs: 8 }); }
+  }
+  boomGate(x, z, yaw = 0, len = 6) {
+    const local = (geo, mat, lx, ly, lz) => { geo.translate(lx, ly, lz); this._push(mat, geo, x, 0, z, yaw); };
+    local(boxGeo(0.5, 1.1, 0.5), 'steelDark', 0, 0.55, 0);
+    const arm = boxGeo(0.1, 0.1, len); arm.rotateX(-1.25); local(arm, 'hazard', 0, 1.0 + Math.sin(1.25) * len / 2, Math.cos(1.25) * len / 2);   // raised
+    const c = new Collider({ x, y: 0.55, z, hx: 0.25, hy: 0.55, hz: 0.25, yaw, tag: 'static', material: 'metal' }); this.world.add(c); return c;
+  }
+  mixer(x, z, yaw = 0) {
+    const local = (geo, mat, lx, ly, lz) => { geo.translate(lx, ly, lz); this._push(mat, geo, x, 0, z, yaw); };
+    local(boxGeo(1.4, 0.1, 0.9), 'steelYellow', 0, 0.5, 0);
+    for (const sx of [-1, 1]) local(new THREE.CylinderGeometry(0.3, 0.3, 0.14, 12).rotateZ(Math.PI / 2), 'rubber', sx * 0.6, 0.3, -0.3);
+    const drum = new THREE.SphereGeometry(0.55, 14, 10); drum.scale(1, 1.25, 1); drum.rotateZ(0.5); local(drum, 'orange', 0, 1.15, 0.05);
+    const c = new Collider({ x, y: 0.8, z, hx: 0.7, hy: 0.8, hz: 0.55, yaw, tag: 'static', material: 'metal' }); this.world.add(c); return c;
+  }
+  sandPile(x, z, r = 1.6) { const g = new THREE.SphereGeometry(r, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2); g.scale(1, 0.45, 1); this._push('dirt', g, x, 0, z); const c = new Collider({ x, y: 0.2, z, hx: r * 0.6, hy: 0.2, hz: r * 0.6, tag: 'static', material: 'concrete' }); this.world.add(c); }
+  windsock(x, z) {
+    this.cylinder(x, 0, z, 0.06, 5, 'steelDark', { material: 'metal', segs: 8 });
+    const cone = new THREE.ConeGeometry(0.22, 1.6, 12, 1, true); cone.rotateZ(Math.PI / 2); cone.rotateY(0.3); this._push('orange', cone, x + 0.9, 4.95, z + 0.25, 0, 0, 0);
+  }
+  panelRack(x, z, yaw = 0) {
+    const local = (geo, mat, lx, ly, lz) => { geo.translate(lx, ly, lz); this._push(mat, geo, x, 0, z, yaw); };
+    for (const sx of [-1.4, 0, 1.4]) { const p = boxGeo(0.1, 2.9, 0.1); p.rotateX(-0.22); local(p, 'steelBlue', sx, 1.4, -0.35); }
+    local(boxGeo(3.2, 0.1, 0.1), 'steelBlue', 0, 2.75, -0.65); local(boxGeo(3.2, 0.1, 0.6), 'steelBlue', 0, 0.05, -0.1);
+  }
+  // Guard booth: small hut with windows on three sides and an open doorway.
+  booth(x, z, yaw = 0) {
+    const cy = Math.cos(yaw), sy = Math.sin(yaw);
+    const at = (lx, lz) => [x + lx * cy + lz * sy, z - lx * sy + lz * cy];
+    let p;
+    p = at(0, -1.1); this.box(p[0], 0, p[1], 2.6, 1.0, 0.15, 'concreteLight', { yaw, material: 'concrete' });   // front sill
+    p = at(0, 1.1); this.box(p[0], 0, p[1], 2.6, 2.6, 0.15, 'concreteLight', { yaw, material: 'concrete' });    // back wall
+    p = at(-1.25, 0); this.box(p[0], 0, p[1], 0.15, 1.0, 2.2, 'concreteLight', { yaw, material: 'concrete' });  // left sill
+    p = at(1.25, 0.55); this.box(p[0], 0, p[1], 0.15, 2.6, 1.1, 'concreteLight', { yaw, material: 'concrete' }); // right wall with doorway at the front
+    for (const [lx, lz, w, ry] of [[0, -1.1, 2.6, 0], [-1.25, 0, 2.2, Math.PI / 2]]) { const [gx, gz] = at(lx, lz); const gm = new THREE.Mesh(new THREE.PlaneGeometry(w, 1.5), this.mats.get('glass')); gm.position.set(gx, 1.75, gz); gm.rotation.y = yaw + ry; this.root.add(gm); const c = new Collider({ x: gx, y: 1.75, z: gz, hx: ry ? 0.05 : w / 2, hy: 0.75, hz: ry ? w / 2 : 0.05, yaw, tag: 'static', material: 'metal', climbable: false }); c.blocksVision = false; c.blocksBullets = false; this.world.add(c); }
+    for (const sx of [-1.3, 1.3]) for (const sz of [-1.1, 1.1]) { const [px, pz] = at(sx, sz); this._push('steelDark', boxGeo(0.12, 2.7, 0.12), px, 1.35, pz, yaw); }
+    p = at(0, 0); this.box(p[0], 2.6, p[1], 3.0, 0.15, 2.7, 'steelDark', { yaw, material: 'metal', collide: false });
+    this.desk(...at(0.2, 0.6), yaw + Math.PI);
+    const l = this.lamp(p[0], 2.5, p[1], { kind: 'cool', intensity: 10, distance: 7, w: 0.5 });
+    return l;
+  }
+  // Watchtower with a sweeping searchlight (the light is returned; the game animates its target).
+  watchtower(x, z, yaw = 0, h = 6) {
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) { const lx = sx * 1.3, lz = sz * 1.3; this.cylinder(x + lx, 0, z + lz, 0.12, h, 'steelDark', { material: 'metal', segs: 8 }); }
+    for (const yy of [2, 4]) for (const sx of [-1, 1]) { this._push('steelDark', boxGeo(0.06, 0.06, 2.6), x + sx * 1.3, yy, z); this._push('steelDark', boxGeo(2.6, 0.06, 0.06), x, yy, z + sx * 1.3); }
+    this.box(x, h, z, 3.4, 0.2, 3.4, 'steelDark', { material: 'metal', climbable: false });
+    for (const sx of [-1, 1]) { this.railing(x - 1.7, z + sx * 1.7, x + 1.7, z + sx * 1.7, h + 0.2, 1.0); this.railing(x + sx * 1.7, z - 1.7, x + sx * 1.7, z + 1.7, h + 0.2, 1.0); }
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) this.cylinder(x + sx * 1.5, h + 0.2, z + sz * 1.5, 0.05, 2.4, 'steelDark', { material: 'metal', segs: 6, collide: false });
+    this.box(x, h + 2.6, z, 3.8, 0.12, 3.8, 'corrugated', { material: 'metal', collide: false });
+    // ladder (visual)
+    for (let i = 0; i < Math.floor(h / 0.3); i++) this._push('steelDark', boxGeo(0.5, 0.03, 0.03), x, 0.3 + i * 0.3, z - 1.55);
+    // searchlight head
+    const hx = x, hz = z + 1.4;
+    this._push('lightHousing', new THREE.CylinderGeometry(0.32, 0.36, 0.5, 14).rotateX(Math.PI / 2), hx, h + 1.3, hz);
+    const face = new THREE.Mesh(new THREE.CircleGeometry(0.3, 14), this.mats.get('emissiveWarm')); face.position.set(hx, h + 1.3, hz + 0.26); this.root.add(face);
+    const l = this.spot(hx, h + 1.3, hz, hx, 0, hz + 20, { intensity: 1600, angle: 0.22, penumbra: 0.4, shadow: false, distance: 70, color: 0xfff6dc, flood: true, decay: 1.4 });
+    l.userData.fixture = face; l.userData.baseIntensity = 1600;
+    l.userData.cone = this.lightCone(new THREE.Vector3(hx, h + 1.2, hz), new THREE.Vector3(hx, 0, hz + 20), { length: 30, radius: 3.5, opacity: 0.25 });
+    l.userData.head = face;
+    return l;
+  }
+  gateLeaf(x, z, yaw, w = 4, h = 2.6) {
+    const local = (geo, mat, lx, ly, lz) => { geo.translate(lx, ly, lz); this._push(mat, geo, x, 0, z, yaw); };
+    local(boxGeo(w, 0.08, 0.08), 'steelDark', 0, h - 0.04, 0); local(boxGeo(w, 0.08, 0.08), 'steelDark', 0, 0.3, 0);
+    for (let i = 0; i <= Math.round(w / 0.16); i++) local(boxGeo(0.03, h - 0.3, 0.03), 'steelDark', -w / 2 + i * 0.16, h / 2 + 0.1, 0);
+    const c = new Collider({ x, y: h / 2, z, hx: w / 2, hy: h / 2, hz: 0.06, yaw, tag: 'static', material: 'metal', climbable: false }); c.blocksVision = false; c.blocksBullets = false; this.world.add(c); return c;
+  }
+
   // ---- doors ----
-  door(x, z, yaw, { width = 1.3, height = 2.3, locked = false, auto = true, id = null, mat = 'steel', double = false } = {}) {
-    const d = new Door(this, x, z, yaw, { width, height, locked, auto, id, mat, double });
+  door(x, z, yaw, { width = 1.3, height = 2.3, locked = false, auto = true, id = null, mat = 'steel', double = false, y = 0 } = {}) {
+    const d = new Door(this, x, z, yaw, { width, height, locked, auto, id, mat, double, y });
     this.doors.push(d); return d;
   }
 
   // ---- movable modules ----
-  module(type, x, z, yaw = 0, id = null, y = null) {
-    const m = new Module(this, type, x, z, yaw, id, y); this.modules.push(m); return m;
+  module(type, x, z, yaw = 0, id = null, y = null, color = null) {
+    const m = new Module(this, type, x, z, yaw, id, y, color); this.modules.push(m); return m;
   }
 
   // ---- zones (triggers) ----
@@ -281,26 +461,27 @@ export class LevelBuilder {
 // ---------------- Door ----------------
 export class Door {
   constructor(b, x, z, yaw, o) {
-    this.b = b; this.x = x; this.z = z; this.yaw = yaw; this.width = o.width; this.height = o.height; this.locked = o.locked; this.auto = o.auto; this.id = o.id; this.double = o.double;
+    this.b = b; this.x = x; this.y = o.y || 0; this.z = z; this.yaw = yaw; this.width = o.width; this.height = o.height; this.locked = o.locked; this.auto = o.auto; this.id = o.id; this.double = o.double;
+    const y = this.y;
     this.open = 0; this.target = 0; this.state = 'closed';
     const mats = b.mats;
     // frame
     const fw = 0.12;
-    b.box(x + Math.cos(yaw) * (o.width / 2 + fw / 2), 0, z - Math.sin(yaw) * (o.width / 2 + fw / 2), fw, o.height + 0.1, 0.3, 'steelDark', { yaw, material: 'metal' });
-    b.box(x - Math.cos(yaw) * (o.width / 2 + fw / 2), 0, z + Math.sin(yaw) * (o.width / 2 + fw / 2), fw, o.height + 0.1, 0.3, 'steelDark', { yaw, material: 'metal' });
-    b.box(x, o.height, z, o.width + fw * 2, 0.12, 0.3, 'steelDark', { yaw, material: 'metal' });
+    b.box(x + Math.cos(yaw) * (o.width / 2 + fw / 2), y, z - Math.sin(yaw) * (o.width / 2 + fw / 2), fw, o.height + 0.1, 0.3, 'steelDark', { yaw, material: 'metal' });
+    b.box(x - Math.cos(yaw) * (o.width / 2 + fw / 2), y, z + Math.sin(yaw) * (o.width / 2 + fw / 2), fw, o.height + 0.1, 0.3, 'steelDark', { yaw, material: 'metal' });
+    b.box(x, y + o.height, z, o.width + fw * 2, 0.12, 0.3, 'steelDark', { yaw, material: 'metal' });
     // leaf (pivot at hinge side)
-    this.pivot = new THREE.Group(); this.pivot.position.set(x + Math.cos(yaw) * (o.width / 2), 0, z - Math.sin(yaw) * (o.width / 2)); this.pivot.rotation.y = yaw;
+    this.pivot = new THREE.Group(); this.pivot.position.set(x + Math.cos(yaw) * (o.width / 2), y, z - Math.sin(yaw) * (o.width / 2)); this.pivot.rotation.y = yaw;
     const leaf = new THREE.Mesh(boxGeo(o.width, o.height, 0.08), mats.get(o.mat)); leaf.position.set(-o.width / 2, o.height / 2, 0); leaf.castShadow = true; leaf.receiveShadow = true; this.pivot.add(leaf);
     const handle = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.2), mats.get('gunmetal')); handle.position.set(-o.width + 0.2, 1.05, 0.08); this.pivot.add(handle);
     this.lockLight = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 8), mats.get(o.locked ? 'emissiveRed' : 'emissiveGreen')); this.lockLight.position.set(-o.width + 0.2, 1.4, 0.06); this.pivot.add(this.lockLight);
     b.root.add(this.pivot);
     this.leaf = leaf;
-    this.collider = new Collider({ x, y: o.height / 2, z, hx: o.width / 2, hy: o.height / 2, hz: 0.05, yaw, tag: 'door', material: 'metal', owner: this, climbable: false });
+    this.collider = new Collider({ x, y: y + o.height / 2, z, hx: o.width / 2, hy: o.height / 2, hz: 0.05, yaw, tag: 'door', material: 'metal', owner: this, climbable: false });
     b.world.add(this.collider);
     this.navDirty = true;
   }
-  setLocked(v) { this.locked = v; this.lockLight.material = this.b.mats.get(v ? 'emissiveRed' : 'emissiveGreen'); }
+  setLocked(v) { if (this.locked !== v) this.navDirty = true; this.locked = v; this.lockLight.material = this.b.mats.get(v ? 'emissiveRed' : 'emissiveGreen'); }
   // called by game each frame with nearby characters
   update(dt, characters) {
     let want = false;
@@ -308,7 +489,7 @@ export class Door {
       for (const c of characters) {
         if (!c.alive) continue;
         const dx = c.pos.x - this.x, dz = c.pos.z - this.z;
-        if (dx * dx + dz * dz < 2.2 * 2.2 && Math.abs(c.pos.y - 0) < 1.5) { want = true; break; }
+        if (dx * dx + dz * dz < 2.2 * 2.2 && Math.abs(c.pos.y - this.y) < 1.5) { want = true; break; }
       }
     }
     this.target = want ? 1 : 0;
@@ -326,8 +507,8 @@ export class Door {
 
 // ---------------- Module (movable structure) ----------------
 export class Module {
-  constructor(b, type, x, z, yaw, id, y) {
-    this.b = b; this.game = b.game; this.type = type; this.cfg = MODULE_TYPES[type]; this.id = id || (type + '_' + Module._n++);
+  constructor(b, type, x, z, yaw, id, y, color = null) {
+    this.b = b; this.game = b.game; this.type = type; this.cfg = MODULE_TYPES[type]; this.id = id || (type + '_' + Module._n++); this.color = color;
     this.x = x; this.z = z; this.yaw = yaw; this.y = y ?? 0;
     this.group = new THREE.Group(); this.group.name = 'module_' + this.id;
     this.colliders = []; this.materials = [];
@@ -351,13 +532,32 @@ export class Module {
       if (!byMat.has(h.matName)) byMat.set(h.matName, []);
       byMat.get(h.matName).push(h.geo);
     }
+    this.outline = new THREE.Group(); this.outline.visible = false; this.group.add(this.outline);
     for (const [matName, geos] of byMat) {
       const mat = this.b.mats.get(matName).clone(); this.materials.push(mat);
       const merged = mergeGeometries(geos, false);
       const m = new THREE.Mesh(merged, mat); m.castShadow = true; m.receiveShadow = true; m.userData.module = this; this.group.add(m);
+      // halo for the Architect view: same shape, back faces, slightly inflated
+      const o = new THREE.Mesh(merged, Module.outlineMat()); o.scale.setScalar(1.03); o.position.y = -0.01; o.renderOrder = 4; this.outline.add(o);
+      this.outlineMeshes = (this.outlineMeshes || []).concat(o);
     }
     this._parts = null;
   }
+  static outlineMat() { return new THREE.MeshBasicMaterial({ color: 0x4fd6ff, side: THREE.BackSide, transparent: true, opacity: 0.55, depthWrite: false }); }
+  // 'reach' (cyan) | 'locked' (dim) | 'target' (white, pulsing) | null (hidden)
+  setOutline(mode, pulse = 0) {
+    if (!this.outline) return;
+    this.outline.visible = !!mode;
+    if (!mode) return;
+    for (const o of this.outlineMeshes) {
+      const m = o.material;
+      if (mode === 'target') { m.color.setHex(0xffffff); m.opacity = 0.55 + 0.35 * pulse; o.scale.setScalar(1.03 + 0.04 * pulse); }
+      else if (mode === 'locked') { m.color.setHex(0x8a949c); m.opacity = 0.22; o.scale.setScalar(1.025); }
+      else { m.color.setHex(0x4fd6ff); m.opacity = 0.5; o.scale.setScalar(1.03); }
+    }
+  }
+  // world-space centre (for labels)
+  get center() { return new THREE.Vector3(this.x, this.y + this.cfg.h / 2, this.z); }
   _collider(hx, hy, hz, ox = 0, oy = 0, oz = 0, extra = {}) {
     const c = new Collider({ x: 0, y: 0, z: 0, hx, hy, hz, tag: 'module', owner: this, material: this.cfg.wedge || this.type === 'catwalk' || this.type === 'panel' || this.type === 'container' ? 'metal' : 'concrete', ...extra });
     c.offset = new THREE.Vector3(ox, oy, oz); this.colliders.push(c); this.b.world.add(c); return c;
@@ -383,10 +583,8 @@ export class Module {
       }
       case 'container': {
         const cols = ['containerRed', 'containerBlue', 'containerGreen', 'containerGray'];
-        const col = cols[Module._n % cols.length];
-        this._mesh(boxGeo(w, h, d), col, 0, h / 2, 0);
-        for (const sx of [-1, 1]) for (const sz of [-1, 1]) this._mesh(boxGeo(0.16, h + 0.02, 0.16), 'steelDark', sx * (w / 2 - 0.08), h / 2, sz * (d / 2 - 0.08));
-        for (const sx of [-1, 1]) { this._mesh(boxGeo(0.06, h - 0.3, 0.06), 'steelDark', sx * (w / 2 + 0.02), h / 2, d / 4); this._mesh(boxGeo(0.06, h - 0.3, 0.06), 'steelDark', sx * (w / 2 + 0.02), h / 2, -d / 4); }
+        const col = this.color || cols[Module._n % cols.length];
+        containerParts((geo, mat, lx, ly, lz) => this._mesh(geo, mat, lx, ly, lz), w, h, d, col);
         this._collider(w / 2, h / 2, d / 2, 0, h / 2, 0);
         break;
       }

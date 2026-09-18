@@ -88,6 +88,22 @@ kbd { font-family: var(--font); background: rgba(255,255,255,0.1); border: 1px s
 .objmarker::before { content: ''; position: absolute; left: -9px; top: -9px; width: 18px; height: 18px; border: 2px solid var(--accent2); transform: rotate(45deg); box-shadow: 0 0 8px rgba(255,180,84,0.6); background: rgba(255,180,84,0.15); }
 .objmarker .dist { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); font-size: 12px; color: var(--accent2); white-space: nowrap; text-shadow: 0 0 4px #000; }
 .objmarker.offscreen { opacity: 0.6; }
+.wlabel.module { color: #bfeaff; border-bottom: 2px solid var(--accent); background: rgba(8,22,32,0.75); font-size: 12px; padding: 3px 9px; }
+.wlabel.module::before { content: '⤢ '; color: var(--accent); }
+.wlabel.module.locked { color: rgba(232,238,246,0.45); border-color: rgba(255,255,255,0.2); background: rgba(8,12,20,0.55); }
+.wlabel.module.locked::before { content: '🔒 '; font-size: 10px; }
+.wlabel.module.target { animation: pulse 0.9s infinite alternate; border-color: #fff; }
+.wlabel.zone { font-size: 13px; letter-spacing: 0.32em; text-transform: uppercase; color: rgba(191,234,255,0.85); background: none; padding: 0; transform: translate(-50%, -50%); text-shadow: 0 0 6px #000, 0 0 12px #000; pointer-events: none; }
+@keyframes pulse { from { box-shadow: 0 0 0 0 rgba(79,214,255,0.9); } to { box-shadow: 0 0 0 8px rgba(79,214,255,0); } }
+.intro { position: absolute; inset: 0; z-index: 60; display: grid; place-items: center; background: rgba(5,7,12,0.78); backdrop-filter: blur(4px); }
+.intro .card { max-width: 640px; width: 92vw; background: rgba(8,12,20,0.9); border: 1px solid rgba(79,214,255,0.4); border-radius: 8px; padding: 26px 30px; display: grid; gap: 14px; text-align: start; }
+.intro .ititle { font-size: 22px; letter-spacing: 0.3em; color: var(--accent); text-align: center; }
+.intro .row { display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 14px; font-size: 16px; font-weight: 500; }
+.intro .row kbd { justify-self: center; font-size: 15px; padding: 5px 10px; }
+.intro .row .swatch { width: 40px; height: 40px; justify-self: center; border: 2px solid var(--accent); box-shadow: 0 0 10px rgba(79,214,255,0.7); background: rgba(79,214,255,0.12); }
+.intro .skip { text-align: center; color: var(--dim); font-size: 13px; letter-spacing: 0.12em; margin-top: 4px; animation: blink 1.6s infinite; }
+@keyframes blink { 50% { opacity: 0.35; } }
+.hint.tut { border-color: var(--accent2); color: #fff0d0; font-size: 16px; }
 /* architect */
 .arch-panel { position: absolute; top: 22px; left: 50%; transform: translateX(-50%); width: 520px; text-align: center; display: none; }
 .hud.architect .arch-panel { display: block; }

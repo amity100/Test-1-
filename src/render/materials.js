@@ -161,6 +161,13 @@ export class MaterialLibrary {
     this.mats.cloth = new THREE.MeshStandardMaterial({ color: 0x4a4f3a, roughness: 0.95 });
     this.mats.dirt = new THREE.MeshStandardMaterial({ map: tex(concAlb, { srgb: true, repeat: 1 / 5, aniso: this.aniso }), color: 0x5b4f3f, roughness: 1, normalMap: tex(heightToNormal(n1, S, 2.0), { repeat: 1 / 5 }), normalScale: new THREE.Vector2(0.6, 0.6) });
 
+    this.mats.paintWhite = new THREE.MeshStandardMaterial({ color: 0xd8d8d2, roughness: 0.75, metalness: 0, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+    this.mats.paintYellow = new THREE.MeshStandardMaterial({ color: 0xd9b23a, roughness: 0.75, metalness: 0, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+    this.mats.stain = new THREE.MeshBasicMaterial({ color: 0x08090a, transparent: true, opacity: 0.45, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+    this.mats.orange = new THREE.MeshStandardMaterial({ color: 0xff6a1a, roughness: 0.9, metalness: 0, side: THREE.DoubleSide });
+    this.mats.steelBlue = this.mats.steel.clone(); this.mats.steelBlue.color.set(0x3a5f8a);
+    this.mats.concreteLight = this.mats.concrete.clone(); this.mats.concreteLight.color.set(0xd6d6d0);
+
     // Architect-mode ghost materials
     this.mats.ghostValid = new THREE.MeshBasicMaterial({ color: 0x4fd6ff, transparent: true, opacity: 0.35, depthWrite: false });
     this.mats.ghostInvalid = new THREE.MeshBasicMaterial({ color: 0xff4a3a, transparent: true, opacity: 0.35, depthWrite: false });
@@ -168,6 +175,19 @@ export class MaterialLibrary {
   }
 
   get(name) { return this.mats[name] || this.mats.concrete; }
+
+  // Painted sign: text rendered to a canvas, mapped on a plane. Cached per text/colour combination.
+  sign(text, { bg = '#1c1f24', fg = '#e8e6df', w = 512, h = 128, font = 'bold 72px Arial, sans-serif', border = '#c9a227' } = {}) {
+    const key = text + bg + fg + w + h;
+    this._signs ||= {};
+    if (this._signs[key]) return this._signs[key];
+    const c = document.createElement('canvas'); c.width = w; c.height = h; const ctx = c.getContext('2d');
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
+    if (border) { ctx.strokeStyle = border; ctx.lineWidth = 8; ctx.strokeRect(6, 6, w - 12, h - 12); }
+    ctx.fillStyle = fg; ctx.font = font; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, w / 2, h / 2 + 4);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = this.aniso;
+    return (this._signs[key] = new THREE.MeshStandardMaterial({ map: t, roughness: 0.6, metalness: 0.2 }));
+  }
 
   setEnvironment(envMap) {
     for (const k in this.mats) { const m = this.mats[k]; if (m.isMeshStandardMaterial) { m.envMap = envMap; m.needsUpdate = true; } }

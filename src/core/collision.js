@@ -33,10 +33,18 @@ export class Collider {
   get top() { return this.maxY; }
   get bottom() { return this.minY; }
   // world → local (2D)
-  toLocal(wx, wz) { const dx = wx - this.x, dz = wz - this.z; return [dx * this.cos + dz * this.sin, -dx * this.sin + dz * this.cos]; }
-  toWorld(lx, lz) { return [this.x + lx * this.cos - lz * this.sin, this.z + lx * this.sin + lz * this.cos]; }
+  // Same convention as a three.js mesh with rotation.y = yaw: local +x → (cos, -sin), local +z → (sin, cos).
+  toLocal(wx, wz) { const dx = wx - this.x, dz = wz - this.z; return [dx * this.cos - dz * this.sin, dx * this.sin + dz * this.cos]; }
+  toWorld(lx, lz) { return [this.x + lx * this.cos + lz * this.sin, this.z - lx * this.sin + lz * this.cos]; }
   // height of the top surface at a world position (wedge-aware). Assumes inside footprint.
   surfaceHeightAt(wx, wz) {
+    if (!this.wedge) return this.maxY;
+    const [, lz] = this.toLocal(wx, wz);
+    const t = THREE.MathUtils.clamp((lz + this.hz) / (2 * this.hz), 0, 1);
+    return this.minY + t * (2 * this.hy);
+  }
+  // top-surface height at the footprint point nearest to a world position (wedge-aware)
+  surfaceHeightNear(wx, wz) {
     if (!this.wedge) return this.maxY;
     const [, lz] = this.toLocal(wx, wz);
     const t = THREE.MathUtils.clamp((lz + this.hz) / (2 * this.hz), 0, 1);
@@ -170,7 +178,7 @@ export class CollisionWorld {
           if (d >= r) return;
           const push = r - d + 1e-4;
           const nx = (ox / d) * Math.sign(lx), nz = (oz / d) * Math.sign(lz);
-          const wx = nx * c.cos - nz * c.sin, wz = nx * c.sin + nz * c.cos;
+          const wx = nx * c.cos + nz * c.sin, wz = -nx * c.sin + nz * c.cos;
           pos.x += wx * push; pos.z += wz * push;
           res.hitWall = true; pushed = true;
           return;
@@ -178,7 +186,7 @@ export class CollisionWorld {
         let nx = 0, nz = 0;
         if (px < pz) nx = Math.sign(lx) || 1; else nz = Math.sign(lz) || 1;
         const push = (px < pz ? px : pz) + 1e-4;
-        const wx = nx * c.cos - nz * c.sin, wz = nx * c.sin + nz * c.cos;
+        const wx = nx * c.cos + nz * c.sin, wz = -nx * c.sin + nz * c.cos;
         pos.x += wx * push; pos.z += wz * push;
         // cancel velocity into the wall
         if (vel) { const vd = vel.x * wx + vel.z * wz; if (vd < 0) { vel.x -= wx * vd; vel.z -= wz * vd; } }
@@ -272,8 +280,8 @@ const _dir = new THREE.Vector3();
 function rayOBB(origin, dir, c, maxT) {
   // Transform into box local space (rotate about Y by -yaw)
   const ox = origin.x - c.x, oy = origin.y - c.y, oz = origin.z - c.z;
-  const lx = ox * c.cos + oz * c.sin, lz = -ox * c.sin + oz * c.cos;
-  const dx = dir.x * c.cos + dir.z * c.sin, dz = -dir.x * c.sin + dir.z * c.cos;
+  const lx = ox * c.cos - oz * c.sin, lz = ox * c.sin + oz * c.cos;
+  const dx = dir.x * c.cos - dir.z * c.sin, dz = dir.x * c.sin + dir.z * c.cos;
   const dy = dir.y;
   let tmin = 0, tmax = maxT, nAxis = -1, nSign = 0;
   const axes = [[lx, dx, c.hx], [oy, dy, c.hy], [lz, dz, c.hz]];
@@ -303,24 +311,24 @@ function rayOBB(origin, dir, c, maxT) {
       if (Math.abs(qx) > c.hx || Math.abs(qz) > c.hz) return null;
       t = tp;
       const nl = new THREE.Vector3(0, 1, -k).normalize();
-      const n = new THREE.Vector3(nl.x * c.cos - nl.z * c.sin, nl.y, nl.x * c.sin + nl.z * c.cos);
+      const n = new THREE.Vector3(nl.x * c.cos + nl.z * c.sin, nl.y, -nl.x * c.sin + nl.z * c.cos);
       return { t, point: new THREE.Vector3(origin.x + dir.x * t, origin.y + dir.y * t, origin.z + dir.z * t), normal: n, collider: c };
     }
   }
   let n;
   if (nAxis === 1) n = new THREE.Vector3(0, nSign, 0);
-  else if (nAxis === 0) n = new THREE.Vector3(nSign * c.cos, 0, nSign * c.sin);
-  else n = new THREE.Vector3(-nSign * c.sin, 0, nSign * c.cos);
+  else if (nAxis === 0) n = new THREE.Vector3(nSign * c.cos, 0, -nSign * c.sin);
+  else n = new THREE.Vector3(nSign * c.sin, 0, nSign * c.cos);
   return { t, point: new THREE.Vector3(origin.x + dir.x * t, origin.y + dir.y * t, origin.z + dir.z * t), normal: n, collider: c };
 }
 
 // Separating axis test between two yaw boxes in XZ (shrunk by `shrink`).
 export function obbOverlap2D(a, b, shrink = 0) {
-  const axes = [[a.cos, a.sin], [-a.sin, a.cos], [b.cos, b.sin], [-b.sin, b.cos]];
+  const axes = [[a.cos, -a.sin], [a.sin, a.cos], [b.cos, -b.sin], [b.sin, b.cos]];
   const ca = [a.x, a.z], cb = [b.x, b.z];
   for (const [ax, az] of axes) {
-    const ra = Math.abs(ax * a.cos + az * a.sin) * (a.hx + shrink) + Math.abs(-ax * a.sin + az * a.cos) * (a.hz + shrink);
-    const rb = Math.abs(ax * b.cos + az * b.sin) * (b.hx + shrink) + Math.abs(-ax * b.sin + az * b.cos) * (b.hz + shrink);
+    const ra = Math.abs(ax * a.cos - az * a.sin) * (a.hx + shrink) + Math.abs(ax * a.sin + az * a.cos) * (a.hz + shrink);
+    const rb = Math.abs(ax * b.cos - az * b.sin) * (b.hx + shrink) + Math.abs(ax * b.sin + az * b.cos) * (b.hz + shrink);
     const d = Math.abs((cb[0] - ca[0]) * ax + (cb[1] - ca[1]) * az);
     if (d > ra + rb) return false;
   }

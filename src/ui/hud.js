@@ -74,7 +74,27 @@ export class HUD {
   setObjective(main, opt) { this.objMain.textContent = main || ''; this.objOpt.textContent = opt || ''; this.objOpt.style.display = opt ? '' : 'none'; this.objBox.classList.add('pulse'); setTimeout(() => this.objBox.classList.remove('pulse'), 1200); }
   setTimer(sec) { if (sec == null) { this.timerBox.style.display = 'none'; return; } this.timerBox.style.display = ''; const m = Math.floor(sec / 60), s = Math.floor(sec % 60); this.timerBox.innerHTML = `<span class="label">${i18n.t('hud.extraction')}</span><span class="t">${m}:${s.toString().padStart(2, '0')}</span>`; }
   toast(text, ms = 2600) { const t = el('div', 'toast', this.toastRoot, text); requestAnimationFrame(() => t.classList.add('in')); setTimeout(() => { t.classList.remove('in'); setTimeout(() => t.remove(), 400); }, ms); }
-  hint(key) { const text = i18n.t('hint.' + key); this.hintEl.innerHTML = text; this.hintEl.classList.add('in'); this.hintTimer = 7 + text.length * 0.04; this.lastHint = key; }
+  hint(key) { if (this.tutKey) return; const text = i18n.t('hint.' + key); this.hintEl.innerHTML = text; this.hintEl.classList.remove('tut'); this.hintEl.classList.add('in'); this.hintTimer = 7 + text.length * 0.04; this.lastHint = key; }
+  // A tutorial prompt stays on screen until it is cleared (key = i18n key without the 'tut.' prefix, or null).
+  tutorial(key) {
+    this.tutKey = key;
+    if (!key) { this.hintEl.classList.remove('in', 'tut'); this.hintTimer = 0; return; }
+    this.hintEl.innerHTML = i18n.t('tut.' + key); this.hintEl.classList.add('in', 'tut'); this.hintTimer = 1e9;
+  }
+  // Opening card: three lines that explain the two roles; resolves on the first key or click.
+  showIntro(onDone) {
+    const t = i18n.t;
+    const o = el('div', 'intro', this.game.container);
+    o.innerHTML = `<div class="card"><div class="ititle">${t('intro.title')}</div>
+      <div class="row"><kbd>WASD</kbd><span>${t('intro.ground')}</span></div>
+      <div class="row"><kbd>TAB</kbd><span>${t('intro.architect')}</span></div>
+      <div class="row"><span class="swatch"></span><span>${t('intro.modules')}</span></div>
+      <div class="skip">${t('intro.skip')}</div></div>`;
+    const done = (e) => { if (e && e.type === 'keydown' && (e.code === 'Tab' || e.code === 'Escape')) e.preventDefault(); window.removeEventListener('keydown', done, true); o.removeEventListener('mousedown', done); o.remove(); onDone(); };
+    setTimeout(() => { window.addEventListener('keydown', done, true); o.addEventListener('mousedown', done); }, 400);
+    this.introEl = o;
+    return o;
+  }
   callout(kind, who) {
     const name = who ? i18n.t(who.name) : '';
     const n = kind === 'contact' ? 3 : 1;
@@ -174,12 +194,24 @@ export class HUD {
       const behind = _v.z > 1; const x = (_v.x * 0.5 + 0.5) * g.width, y = (-_v.y * 0.5 + 0.5) * g.height;
       const dist = cam.position.distanceTo(ch.pos);
       if (behind || x < 0 || x > g.width || y < 0 || y > g.height || (g.mode === 'ground' && dist > 45)) { e.style.display = 'none'; return; }
-      e.style.display = ''; e.style.transform = `translate(${x}px, ${y}px)`; e.style.opacity = Math.max(0.35, 1 - dist / 60);
+      e.style.display = ''; e.style.transform = `translate(${x}px, ${y}px)`; e.style.opacity = g.mode === 'architect' ? 1 : Math.max(0.35, 1 - dist / 60);
       e.textContent = text; e.className = 'wlabel ' + cls;
     };
     for (const s of g.squad) { if (s.dead) continue; place('s' + s.slot, s, i18n.t(s.name) + (s.downed ? ' · ' + i18n.t('hud.downed') : ''), s.downed ? 'squad downed' : 'squad'); }
     for (const h of g.hostages) { if (!h.alive) continue; place('h' + h.id, h, i18n.t(h.name), 'hostage'); }
-    if (g.mode === 'architect') for (const e of g.enemies) { if (e.alive && e.seenByFriendly) place('e' + e.id, e, e.state === 'combat' ? '!' : e.state === 'patrol' ? '' : '?', 'enemy'); }
+    if (g.mode === 'architect') {
+      for (const e of g.enemies) { if (e.alive && e.seenByFriendly) place('e' + e.id, e, e.state === 'combat' ? '!' : e.state === 'patrol' ? '' : '?', 'enemy'); }
+      // movable modules: name + cost; locked when out of reach; the tutorial target pulses
+      const a = g.architect;
+      for (const m of g.level.modules) {
+        if (a.dragging && m === a.selected) continue;
+        const ok = a._reachOK(m.x, m.z);
+        const proxy = { pos: m.center, currentHeight: m.cfg.h / 2 + 0.1 };
+        place('m' + m.id, proxy, ok ? `${i18n.t(m.cfg.label)} · ${m.cfg.cost}` : `${i18n.t(m.cfg.label)} · ${i18n.t('module.locked')}`, 'module' + (ok ? '' : ' locked') + (m === a.targetModule ? ' target' : ''));
+      }
+      // area names make the tactical map readable
+      for (const zl of g.level.zoneLabels || []) place('z' + zl.key, { pos: { x: zl.x, y: 0, z: zl.z }, currentHeight: 0 }, i18n.t(zl.key), 'zone');
+    }
     for (const [k, e] of this.labelEls) if (!seen.has(k)) e.style.display = 'none';
   }
 }

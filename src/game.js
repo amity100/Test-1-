@@ -212,16 +212,24 @@ export class Game {
     this.fx.clearDecals();
     this.time = 0; this.stats = { kills: 0, startTime: 0 };
     this.squadMode = 'follow';
-    this.state = 'playing'; this.mode = 'ground';
+    this.state = 'intro'; this.mode = 'ground';
     this.camera = this.player.camera; this.postfx.setCamera(this.camera);
     this.resize();
-    this.hud.show(); this.menus.hide();
+    this.hud.show(); this.menus.hide(); this.hud.tutorial(null);
     this._checksLeft = Math.max(this._checksLeft, 12); this._sinceCheck = 0;
     this.script.setPrimary('insert');
+    this.player.update(0, 0);
+    this.checkpoint('start');
+    this.hud.showIntro(() => this.beginPlay());
+  }
+  // Called when the opening card is dismissed (a user gesture, so the pointer can be locked here).
+  beginPlay() {
+    if (this.state !== 'intro') return;
+    if (this.hud.introEl) { this.hud.introEl.remove(); this.hud.introEl = null; }
+    this.state = 'playing';
+    this.lastFrame = performance.now();
     this.hud.hint('move'); setTimeout(() => { if (this.state === 'playing') this.hud.hint('aim'); }, 9000);
     this.input.lock();
-    this.checkpoint('start');
-    this.player.update(0, 0);
   }
   spawnEnemy(def) {
     const e = new Enemy(this, { position: new THREE.Vector3(def.x, def.y || 0, def.z), yaw: def.yaw, patrol: def.patrol, accuracy: def.accuracy, role: def.role, name: def.name, grenades: def.grenades });
@@ -240,6 +248,7 @@ export class Game {
   _resetLights() {
     const L = this.level; L.power = true;
     for (const l of L.floodlights) { l.intensity = l.userData.baseIntensity; if (l.userData.fixture) l.userData.fixture.material = this.mats.get('emissiveWarm'); if (l.userData.cone) l.userData.cone.visible = true; }
+    this.architect.clearSuggestion(); this.hud.tutorial(null);
     for (const l of L.roomLights) { l.intensity = l.userData.baseIntensity; if (l.userData.fixture) l.userData.fixture.material = this.mats.get(l.userData.kind === 'cool' ? 'emissiveCool' : 'emissiveWarm'); }
     for (const l of L.emergency) { l.intensity = 0; l.userData.fixture.material = this.mats.get('lightHousing'); }
     if (L.fuseLed) L.fuseLed.material = this.mats.get('emissiveGreen');
@@ -285,7 +294,7 @@ export class Game {
   onEnemyAlert(e, target) { if (target === this.player || target?.isSquad) { if (this.time - (this._lastAlertToast || -10) > 6) { this._lastAlertToast = this.time; this.hud.alert('hud.alert.spotted'); this.audio.ui('alert'); } } // radio to nearby guards
     setTimeout(() => { if (e.alive && e.state === 'combat') this.emitNoise(e.pos, CONFIG.enemy.alertRadioRange, e, 'radio'); }, CONFIG.enemy.alertRadioDelay * 1000 / Math.max(0.2, this.timeScale)); }
   onEnemySuspicious() { if (this.time - (this._lastSusToast || -10) > 8) { this._lastSusToast = this.time; this.hud.alert('hud.alert.suspicious', 1600); } }
-  onModulePlaced() { this.settleModules(); }
+  onModulePlaced(mod) { this.settleModules(); if (this.script && this.script.onModulePlaced) this.script.onModulePlaced(mod); }
   // Any module left hanging in the air after a change drops onto whatever is beneath it.
   settleModules() {
     for (let iter = 0; iter < 3; iter++) {
@@ -370,10 +379,11 @@ export class Game {
 
   _bindGlobalKeys() {
     this.input.on('keydown', (code, e) => {
+      if (this.state === 'intro') return;
       if (this.state === 'playing') {
         if (code === 'Escape') { if (this.architect.active && this.architect.dragging) return; this.pause(); return; }
         if (code === 'Tab') { e.preventDefault(); if (this.player.alive) this.architect.toggle(); }
-        if (code === 'KeyQ' && this.mode === 'ground') { this.squadMode = this.squadMode === 'follow' ? 'hold' : 'follow'; for (const s of this.squad) if (s.alive) { if (this.squadMode === 'hold') { s.setOrder('hold', { pos: s.pos }); s.order.yaw = s.yaw; } else s.setOrder('follow'); } this.hud.toast(this.t(this.squadMode === 'hold' ? 'hud.squadHold' : 'hud.squadFollow')); this.audio.ui('click'); if (!this.script.flags.hintSquad) { this.script.flags.hintSquad = true; } }
+        if (code === 'KeyQ' && this.mode === 'ground') { this.squadMode = this.squadMode === 'follow' ? 'hold' : 'follow'; for (const s of this.squad) if (s.alive) { if (this.squadMode === 'hold') { s.setOrder('hold', { pos: s.pos }); s.order.yaw = s.yaw; } else s.setOrder('follow'); } this.hud.toast(this.t(this.squadMode === 'hold' ? 'hud.squadHold' : 'hud.squadFollow')); this.audio.ui('click'); if (!this.script.flags.hintSquad) { this.script.flags.hintSquad = true; } if (this.script.onSquadOrder) this.script.onSquadOrder('hold'); }
       } else if (this.state === 'paused' && code === 'Escape') this.resume();
       else if (this.state === 'menu' && (code === 'Enter' || code === 'Space')) this.startMission();
     });
@@ -401,7 +411,7 @@ export class Game {
     this.realTime += realDt;
     if (this.state === 'menu') { this._updateMenu(realDt); }
     else if (this.state === 'playing') { this._updatePlaying(realDt); }
-    else if (this.state === 'end' || this.state === 'paused') { this.fx.update(0, this.camera); this.postfx.update(realDt, this.realTime); }
+    else if (this.state === 'end' || this.state === 'paused' || this.state === 'intro') { this.fx.update(0, this.camera); this.postfx.update(realDt, this.realTime); }
     this._updateEnvironment(realDt);
     this.audio.update(realDt, this.state === 'menu');
     const ht = this.profile ? performance.now() : 0;
@@ -621,6 +631,7 @@ export class Game {
     this.postfx.update(realDt, this.realTime);
     this._lightTimer = (this._lightTimer || 0) - realDt;
     if (this._lightTimer <= 0) { this._lightTimer = 0.25; this._updateLightBudget(); }
+    this._updateSearchlights(dt);
     if (P) { this._prof('script+fx', t0); t0 = performance.now(); }
     this._updateShadowFocus(this.player.pos);
     // audio listener
@@ -643,6 +654,21 @@ export class Game {
       if (p.alive) { const saveYaw = p.aimYaw; p.aimYaw = p.camYaw; seen = canSee(this, p, e, 130, 70); p.aimYaw = saveYaw; }
       if (!seen) for (const s of this.squad) { if (s.alive && canSee(this, s, e, CONFIG.squad.fovDeg, CONFIG.squad.visionRange)) { seen = true; break; } }
       e.seenByFriendly = seen;
+    }
+  }
+
+  // Tower searchlights sweep along their patrol path; perception uses the live cone, so a moved container casts a real shadow.
+  _updateSearchlights(dt) {
+    for (const sl of this.level.searchlights || []) {
+      const pts = sl.points; if (pts.length < 2) continue;
+      sl.t = (sl.t || 0) + dt * sl.speed;
+      const seg = Math.floor(sl.t) % (pts.length - 1), k = sl.t % 1;
+      const fwd = Math.floor(sl.t / (pts.length - 1)) % 2 === 0;
+      const i = fwd ? seg : pts.length - 2 - seg;
+      const a = pts[fwd ? i : i + 1], b = pts[fwd ? i + 1 : i];
+      const x = a[0] + (b[0] - a[0]) * k, z = a[1] + (b[1] - a[1]) * k;
+      sl.light.target.position.set(x, 0, z); sl.light.target.updateMatrixWorld();
+      if (sl.light.userData.cone) { const c = sl.light.userData.cone; const dir = new THREE.Vector3(x - c.position.x, -c.position.y, z - c.position.z).normalize(); c.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), dir); }
     }
   }
 

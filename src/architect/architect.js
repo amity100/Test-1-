@@ -29,6 +29,26 @@ export class Architect {
     this.stats = { placed: 0 };
     this.lastPlaceTime = -10;
     this.reachRings = [];
+    this.targetModule = null; this.suggestion = null; this.pulse = 0;
+    // footprint shown under a dragged module
+    this.footprint = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x4fd6ff, transparent: true, opacity: 0.28, depthWrite: false, side: THREE.DoubleSide }));
+    this.footprint.visible = false; this.footprint.renderOrder = 26; this.markers.add(this.footprint);
+  }
+
+  // Tutorial: a translucent copy of `mod` at the suggested transform, plus a pulsing outline on the module itself.
+  showSuggestion(mod, x, y, z, yaw) {
+    this.clearSuggestion();
+    const g = new THREE.Group();
+    for (const o of mod.outlineMeshes || []) { const m = new THREE.Mesh(o.geometry, new THREE.MeshBasicMaterial({ color: 0x4fd6ff, transparent: true, opacity: 0.3, depthWrite: false })); g.add(m); }
+    const edge = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.62, 48).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthWrite: false }));
+    edge.scale.setScalar(Math.max(mod.cfg.w, mod.cfg.d) * 0.95); edge.position.y = 0.06; g.add(edge);
+    g.position.set(x, y, z); g.rotation.y = yaw; g.renderOrder = 27;
+    this.markers.add(g); this.suggestion = { group: g, mod, x, y, z, yaw };
+    this.targetModule = mod;
+  }
+  clearSuggestion() {
+    if (this.suggestion) { this.markers.remove(this.suggestion.group); this.suggestion = null; }
+    if (this.targetModule) { this.targetModule.setOutline(null); this.targetModule = null; }
   }
 
   _buildMarkers() {
@@ -62,15 +82,16 @@ export class Architect {
     g.audio.architectEnter(); g.audio.setSlowMotion(true);
     g.hud.setArchitect(true);
     this._ensureReachRings();
-    g.hint('archDrag');
+    this._updateOutlines(0);
+    if (g.script && g.script.onArchitectEnter) g.script.onArchitectEnter();
   }
   exit() {
     if (!this.active) return;
     const g = this.game;
     if (this.dragging) this._cancelDrag();
     this.active = false; g.mode = 'ground';
-    this.markers.visible = false; this.selRing.visible = false;
-    for (const m of g.level.modules) m.setHighlight(null);
+    this.markers.visible = false; this.selRing.visible = false; this.footprint.visible = false;
+    for (const m of g.level.modules) { m.setHighlight(null); m.setOutline(null); }
     this._hideIntel();
     g.audio.architectExit(); g.audio.setSlowMotion(false);
     g.hud.setArchitect(false);
@@ -123,6 +144,8 @@ export class Architect {
     const b = g.world.bounds; this.focus.x = THREE.MathUtils.clamp(this.focus.x, b.minX + 10, b.maxX - 10); this.focus.z = THREE.MathUtils.clamp(this.focus.z, b.minZ + 10, b.maxZ - 10);
     if (inp.justPressed('KeyF')) this.focus.copy(g.player.pos);
     this._placeCamera();
+    this.pulse = 0.5 + 0.5 * Math.sin(g.realTime * 5);
+    this._updateOutlines(realDt);
     // picking
     this._updatePicking();
     // reach rings
@@ -132,6 +155,17 @@ export class Architect {
     // rotate selected
     if (inp.justPressed('KeyR') && this.dragging) { this.drag.yaw += Math.PI / 2; g.audio.ui('click'); }
     if (inp.justPressed('Escape') && this.dragging) this._cancelDrag();
+  }
+
+  // Every module shows a halo: cyan when it can be moved from here, dim when out of reach, white when it is the tutorial target.
+  _updateOutlines(realDt) {
+    const g = this.game;
+    for (const m of g.level.modules) {
+      if (this.dragging && m === this.selected) { m.setOutline(null); continue; }
+      if (m === this.targetModule) { m.setOutline('target', this.pulse); continue; }
+      m.setOutline(this._reachOK(m.x, m.z) ? 'reach' : 'locked');
+    }
+    if (this.suggestion) { const e = this.suggestion.group.children[this.suggestion.group.children.length - 1]; e.material.opacity = 0.5 + 0.5 * this.pulse; }
   }
 
   _placeCamera() {
@@ -205,6 +239,8 @@ export class Architect {
     mod.setHighlight(v.ok ? 'selected' : 'invalid');
     g.hud.setDragStatus(v.ok, v.reason, mod);
     this.selRing.visible = true; this.selRing.position.set(d.x, d.y + 0.05, d.z);
+    const fp = this.footprint; fp.visible = true; fp.position.set(d.x, d.y + 0.04, d.z); fp.rotation.y = d.yaw; fp.scale.set(mod.cfg.w + 0.4, 1, mod.cfg.d + 0.4);
+    fp.material.color.setHex(v.ok ? 0x4fd6ff : 0xff4a3a);
   }
 
   _supportHeight(mod, x, z, yaw) {
@@ -262,12 +298,12 @@ export class Architect {
       if (moved) g.audio.moduleInvalid();
     }
     mod.setHighlight(this.active ? 'selected' : null);
-    g.hud.setDragStatus(null);
+    g.hud.setDragStatus(null); this.footprint.visible = false;
   }
   _cancelDrag() {
     const d = this.drag, mod = this.selected; this.dragging = false;
     mod.setGhost(false); mod.group.position.set(d.origin.x, d.origin.y, d.origin.z); mod.group.rotation.y = d.origin.yaw; mod.setHighlight(null);
-    this.game.hud.setDragStatus(null);
+    this.game.hud.setDragStatus(null); this.footprint.visible = false;
   }
 
   // ---- orders ----
@@ -276,7 +312,7 @@ export class Architect {
     // enemy under cursor?
     let target = null, bestT = Infinity;
     for (const e of g.enemies) { if (!e.alive || !e.visible) continue; const h = rayCharacter(ray.origin, ray.direction, e.pos, e.radius + 0.4, e.currentHeight + 0.3, 400); if (h && h.t < bestT) { bestT = h.t; target = e; } }
-    if (target) { for (const s of g.squad) if (s.alive) s.setOrder('attack', { target }); g.hud.toast(g.t('order.attack')); g.audio.ui('click'); this._showOrderMarker(target.pos); return; }
+    if (target) { for (const s of g.squad) if (s.alive) s.setOrder('attack', { target }); g.hud.toast(g.t('order.attack')); g.audio.ui('click'); this._showOrderMarker(target.pos); g.script && g.script.onSquadOrder && g.script.onSquadOrder('attack'); return; }
     // hostage under cursor → escort
     for (const h of g.hostages) { if (!h.alive || h.state !== 'freed') continue; const hit = rayCharacter(ray.origin, ray.direction, h.pos, h.radius + 0.4, h.currentHeight + 0.3, 400); if (hit) { for (const s of g.squad) if (s.alive) s.setOrder('escort', { target: h }); g.hud.toast(g.t('order.escort')); g.audio.ui('click'); this._showOrderMarker(h.pos); return; } }
     // player → follow
@@ -294,6 +330,7 @@ export class Architect {
     for (const s of g.squad) { if (!s.alive) continue; const off = i++ === 0 ? -0.9 : 0.9; const pos = np.clone(); pos.x += Math.cos(this.orbit) * off; pos.z -= Math.sin(this.orbit) * off; s.setOrder('move', { pos }); s.order.yaw = Math.atan2(np.x - s.pos.x, np.z - s.pos.z); }
     g.squadMode = 'move';
     g.hud.toast(g.t('order.move')); g.audio.ui('click'); this._showOrderMarker(np);
+    g.script && g.script.onSquadOrder && g.script.onSquadOrder('move');
   }
   _showOrderMarker(pos) { const m = this.orderMarker; m.mesh.visible = true; m.t = 0; m.mesh.position.set(pos.x, pos.y + 0.06, pos.z); }
 
@@ -332,10 +369,10 @@ export class Architect {
 }
 
 function overlap2D(a, b) {
-  const axes = [[a.cos, a.sin], [-a.sin, a.cos], [b.cos, b.sin], [-b.sin, b.cos]];
+  const axes = [[a.cos, -a.sin], [a.sin, a.cos], [b.cos, -b.sin], [b.sin, b.cos]];
   for (const [ax, az] of axes) {
-    const ra = Math.abs(ax * a.cos + az * a.sin) * a.hx + Math.abs(-ax * a.sin + az * a.cos) * a.hz;
-    const rb = Math.abs(ax * b.cos + az * b.sin) * b.hx + Math.abs(-ax * b.sin + az * b.cos) * b.hz;
+    const ra = Math.abs(ax * a.cos - az * a.sin) * a.hx + Math.abs(ax * a.sin + az * a.cos) * a.hz;
+    const rb = Math.abs(ax * b.cos - az * b.sin) * b.hx + Math.abs(ax * b.sin + az * b.cos) * b.hz;
     const d = Math.abs((b.x - a.x) * ax + (b.z - a.z) * az);
     if (d > ra + rb - 0.05) return false;
   }

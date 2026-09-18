@@ -34,13 +34,19 @@ const evalG = (fn) => page.evaluate(fn);
 await page.goto('http://localhost:' + port + '/' + entry, { waitUntil: 'load', timeout: 180000 });
 try { await page.waitForFunction(() => window.__game && window.__game.state === 'menu', null, { timeout: 180000 }); } catch (e) { console.log('TIMEOUT waiting for menu'); await page.screenshot({ path: path.join(outDir, 'timeout.png') }); }
 await shot('01-menu');
-await page.evaluate(() => { window.__game.startMission(); window.__game.player.godMode = true; });
+await page.evaluate(() => { window.__game.startMission(); window.__game.beginPlay(); window.__game.player.godMode = true; });
 await step(0.5);
 // level validation: module overlaps and spawn walkability
 const val = await evalG(() => {
   const g = window.__game; const out = { overlaps: [], badSpawns: [] };
   for (const m of g.level.modules) { const c = m.mainCollider; const hit = g.world.boxOverlap(c.x, c.y, c.z, c.hx - 0.03, c.hy - 0.03, c.hz - 0.03, c.yaw, c, 0.05); if (hit) out.overlaps.push(m.id + ' vs ' + hit.tag + '@' + hit.x.toFixed(1) + ',' + hit.z.toFixed(1)); }
   for (const c of g.characters) { if (!g.nav.isWalkable(c.pos.x, c.pos.y, c.pos.z, 0.6)) out.badSpawns.push(c.name + '@' + c.pos.x + ',' + c.pos.z); }
+  // nav connectivity: the player spawn must reach every objective and the key rooms
+  const L = g.level; const from = g.player.pos.clone();
+  const goals = { breach: [-28.5, 0, -37], yard: [-28, 0, -23], dock: [-20, 0, 2], racks: [-34, 0, 4], mezz: [-40, 2.8, 19.5], officeA: [g.hostages[0].pos.x, g.hostages[0].pos.y, g.hostages[0].pos.z], power: [L.powerPos.x, 0, L.powerPos.z - 1.4], workshop: [36, 0, -24], cellDoor: [L.cellDoorPos.x, 0, L.cellDoorPos.z - 1.5], corridor: [24, 0, 24.5], cellB: [g.hostages[1].pos.x, 0, g.hostages[1].pos.z], exercise: [16, 0, 17], lz: [L.lz.x, 0, L.lz.z], deck: [31, 0.25 + 0, 18.5] };
+  const cd = L.cellDoor; cd.setLocked(false); g.nav.rebuildRegion(cd.collider.minX, cd.collider.minZ, cd.collider.maxX, cd.collider.maxZ); cd.navDirty = false; // the cell block opens later in the mission
+  out.paths = {}; for (const k in goals) { const gl = goals[k]; const p = g.nav.findPath(from, from.clone().set(gl[0], gl[1], gl[2]), { goalRadius: 1.5, maxExpand: 200000 }); const last = p && p[p.length - 1]; out.paths[k] = !p ? 'NONE' : (Math.hypot(last.x - gl[0], last.z - gl[2]) < 1.6 && Math.abs(last.y - gl[1]) < 0.7 ? p.length : 'PARTIAL@' + last.x.toFixed(1) + ',' + last.y.toFixed(1) + ',' + last.z.toFixed(1)); }
+  cd.setLocked(true); g.nav.rebuildRegion(cd.collider.minX, cd.collider.minZ, cd.collider.maxX, cd.collider.maxZ); cd.navDirty = false;
   return out;
 });
 console.log('VALIDATE', JSON.stringify(val));
@@ -66,20 +72,20 @@ await step(1.0);
 await shot('05-architect');
 const arch = await evalG(() => { const g = window.__game; const a = g.architect; return { mode: g.mode, active: a.active, energy: +a.energy.toFixed(1), cam: a.camera.position.toArray().map((v) => +v.toFixed(1)), timeScale: +g.timeScale.toFixed(2), modules: g.level.modules.length }; });
 console.log('ARCH', JSON.stringify(arch));
-// drag a module programmatically: move the breach barrier
+// drag a module programmatically: the guided first move (tutorial container to its suggested spot)
 const drag = await evalG(() => {
-  const g = window.__game, a = g.architect; const mod = g.level.modules.find((m) => m.id === 'bar_breach');
-  const before = { x: mod.x, z: mod.z };
-  a.selected = mod; a.dragging = true; mod.setGhost(true); a.drag.origin = { x: mod.x, y: mod.y, z: mod.z, yaw: mod.yaw }; a.drag.yaw = mod.yaw + Math.PI / 2; a.drag.offset.set(0, 0, 0);
-  a.drag.x = mod.x - 3; a.drag.z = mod.z - 3; a.drag.y = a._supportHeight(mod, a.drag.x, a.drag.z, a.drag.yaw);
+  const g = window.__game, a = g.architect; const T = g.level.tutorial; const mod = g.level.modules.find((m) => m.id === T.module);
+  const before = { x: mod.x, z: mod.z, tut: g.script.tutorial.step };
+  a.selected = mod; a.dragging = true; mod.setGhost(true); a.drag.origin = { x: mod.x, y: mod.y, z: mod.z, yaw: mod.yaw }; a.drag.yaw = T.target.yaw; a.drag.offset.set(0, 0, 0);
+  a.drag.x = T.target.x; a.drag.z = T.target.z; a.drag.y = a._supportHeight(mod, a.drag.x, a.drag.z, a.drag.yaw);
   const v = a._validate(mod, a.drag.x, a.drag.y, a.drag.z, a.drag.yaw); a.drag.valid = v.ok; a.drag.reason = v.reason;
   a._commitDrag();
-  return { before, after: { x: mod.x, z: mod.z, yaw: +mod.yaw.toFixed(2) }, valid: v.ok, reason: v.reason, energy: +a.energy.toFixed(1), navVersion: g.nav.version };
+  return { before, after: { x: mod.x, z: mod.z, yaw: +mod.yaw.toFixed(2), tut: g.script.tutorial.step }, valid: v.ok, reason: v.reason, energy: +a.energy.toFixed(1), navVersion: g.nav.version };
 });
 console.log('DRAG', JSON.stringify(drag));
 // stack test: put a crate on top of the container
 const stack = await evalG(() => {
-  const g = window.__game, a = g.architect; const c = g.level.modules.find((m) => m.id === 'cont_yard'); const cr = g.level.modules.find((m) => m.id === 'crate4');
+  const g = window.__game, a = g.architect; const c = g.level.modules.find((m) => m.id === 'cont_y1'); const cr = g.level.modules.find((m) => m.id === 'crate_d1');
   const y = a._supportHeight(cr, c.x, c.z, 0); const v = a._validate(cr, c.x, y, c.z, 0);
   return { supportY: +y.toFixed(2), valid: v.ok, reason: v.reason };
 });
@@ -96,7 +102,7 @@ await step(1.0);
 await shot('07-back');
 if (!quick) {
   // teleport near the warehouse yard for a combat screenshot
-  await page.evaluate(() => { const g = window.__game; g.player.pos.set(-8, 0, -22); g.player.camYaw = -0.6; g.player.vel.set(0, 0, 0); for (const s of g.squad) { s.pos.set(-6 + s.slot * 2, 0, -25); s.setOrder('follow'); } });
+  await page.evaluate(() => { const g = window.__game; g.player.pos.set(-14, 0, -24); g.player.camYaw = Math.PI / 2; g.player.vel.set(0, 0, 0); for (const s of g.squad) { s.pos.set(-16, 0, -26 + s.slot * 2); s.setOrder('follow'); } });
   await step(6);
   await shot('08-combat');
   const st = await evalG(() => { const g = window.__game; return { enemies: g.enemies.map((e) => ({ st: e.state, hp: Math.round(e.health), ph: e.coverPhase, alive: e.alive })).filter((e) => e.st !== 'patrol' || !e.alive), player: Math.round(g.player.health), squad: g.squad.map((s) => Math.round(s.health)), grenades: g.grenades.length, time: +g.time.toFixed(1), state: g.state, kills: g.stats.kills }; });
@@ -110,7 +116,7 @@ if (!quick) {
   const h = await evalG(() => { const g = window.__game; return { hostA: g.hostages[0].state, obj: g.script.objectives, cp: g.checkpointData && g.checkpointData.id, hostPos: g.hostages[0].pos.toArray().map((v) => +v.toFixed(1)) }; });
   console.log('HOSTAGE', JSON.stringify(h));
   // power cut via the fuse box
-  await page.evaluate(() => { const g = window.__game; g.player.pos.set(19, 0, -8.6); g.player.vel.set(0, 0, 0); g.player.camYaw = 0; });
+  await page.evaluate(() => { const g = window.__game; g.player.pos.set(17, 0, -8.6); g.player.vel.set(0, 0, 0); g.player.camYaw = 0; });
   await step(0.2); await key('KeyE', true); await step(2.2); await key('KeyE', false); await step(0.3);
   const pw = await evalG(() => { const g = window.__game; return { power: g.level.power, dark: g.isDark(), cellLocked: g.level.cellDoor.locked, flood: g.level.floodlights.map((l) => l.intensity), obj: g.script.objectives.power, lit: g.isLit(g.player.pos) }; });
   console.log('POWER', JSON.stringify(pw));
@@ -122,10 +128,10 @@ if (!quick) {
   await step(3.6);
   const gr2 = await evalG(() => { const g = window.__game; return { grenades: g.grenades.length, sparks: g.fx.sparks.high, decals: g.fx.decalMesh.count }; });
   console.log('GRENADE', JSON.stringify({ gr1, gr2 }));
-  // vault over a barrier: stand in front of the static barrier at (8,-2) facing +z... use the module barrier at bar_yard1 (-10,-24)
-  await page.evaluate(() => { const g = window.__game; g.player.pos.set(-10, 0, -25.2); g.player.vel.set(0, 0, 0); g.player.camYaw = 0; g.player.camPitch = 0; });
+  // vault over the road barrier bar_r1 at (8,-19): stand south of it facing +z
+  await page.evaluate(() => { const g = window.__game; g.player.pos.set(8, 0, -20.3); g.player.vel.set(0, 0, 0); g.player.camYaw = 0; g.player.camPitch = 0; });
   await step(0.3); await key('Space', true); await step(0.05); await key('Space', false); await step(1.2);
-  const vt = await evalG(() => { const g = window.__game; return { pos: g.player.pos.toArray().map((v) => +v.toFixed(2)), vaulted: g.player.pos.z > -24 }; });
+  const vt = await evalG(() => { const g = window.__game; return { pos: g.player.pos.toArray().map((v) => +v.toFixed(2)), vaulted: g.player.pos.z > -18.4 }; });
   console.log('VAULT', JSON.stringify(vt));
   // enemy grenade arc check: throw at a point 14m away and see where it explodes
   const eg = await evalG(() => { const g = window.__game; const e = g.enemies.find((x) => x.alive); if (!e) return null; e.pos.set(20, 0, 5); const target = g.player.pos.clone().set(20, 0, 19); e.grenades = 1; const ok = e.throwGrenadeAt(target); const gr = g.grenades[g.grenades.length - 1]; return { ok, vel: gr && gr.vel.toArray().map((v) => +v.toFixed(2)) }; }).catch((err) => 'ERR ' + err.message);

@@ -65,6 +65,7 @@ export class NavGrid {
       const near = [];
       w.query(x - AGENT_MARGIN, z - AGENT_MARGIN, x + AGENT_MARGIN, z + AGENT_MARGIN, (c) => {
         if (!c.blocksMovement) return;
+        if (c.tag === 'door' && c.owner && !c.owner.locked) return; // unlocked doors open for whoever walks up: passable when planning
         near.push(c);
         if (c.climbable && c.containsXZ(x, z, 0)) cands.push([c.surfaceHeightAt(x, z), c]);
       });
@@ -73,15 +74,20 @@ export class NavGrid {
       for (let i = 0; i < cands.length && n < MAX_LAYERS; i++) {
         const [h, src] = cands[i];
         if (n > 0 && Math.abs(h - this.heights[idx * MAX_LAYERS + n - 1]) < 0.05) continue;
-        let blocked = false, wall = false;
+        let blocked = false, wall = false, superseded = false;
         for (let k = 0; k < near.length; k++) {
           const c = near[k];
-          if (c === src && c.wedge) continue;
+          if (c === src) continue;
           if (c.maxY <= h + this.step + 0.01 || c.minY >= h + AGENT_H) continue;
-          if (c.wedge && c.containsXZ(x, z, 0) && c.surfaceHeightAt(x, z) <= h + this.step + 0.01) continue;
+          if (c.wedge) {
+            // A ramp is walkable ground: where it covers the cell its own surface replaces this candidate
+            // (no phantom floor under the low end), and its low edge never blocks the cell in front of it.
+            const sh = c.surfaceHeightNear(x, z);
+            if (sh <= h + this.step + 0.01) { if (c.climbable && sh >= h - 0.05 && c.containsXZ(x, z, 0)) { superseded = true; break; } continue; }
+          }
           if (c.containsXZ(x, z, AGENT_MARGIN)) { blocked = true; break; }
         }
-        if (blocked) continue;
+        if (blocked || superseded) continue;
         // near-wall flag (for path cost): any blocker within 0.75m
         for (let k = 0; k < near.length && !wall; k++) {
           const c = near[k];

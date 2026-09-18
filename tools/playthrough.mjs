@@ -27,19 +27,20 @@ const status = () => ev(() => { const g = window.__game; return { state: g.state
 
 await page.goto(`http://localhost:${port}/index.html`, { waitUntil: 'load', timeout: 180000 });
 await page.waitForFunction(() => window.__game && window.__game.state === 'menu', null, { timeout: 180000 });
-await ev(() => { window.__game.startMission(); window.__game.player.godMode = true; for (const h of window.__game.hostages) h.godMode = true; for (const s of window.__game.squad) s.godMode = true; });
+await ev(() => { window.__game.startMission(); window.__game.beginPlay(); window.__game.player.godMode = true; for (const h of window.__game.hostages) h.godMode = true; for (const s of window.__game.squad) s.godMode = true; });
 await step(0.5);
 console.log('START', JSON.stringify(await status()));
 
 // 1) insert
-await teleport(0, 0, -37, 0); await step(1);
+await teleport(-28.5, 0, -37, 0); await step(1);
 console.log('INSERT', JSON.stringify(await status()));
 // 2) hostage A (mezzanine office)
-await teleport(-18.4, 2.8, 16.2, Math.PI / 2); await step(0.3); await key('KeyE', true); await step(2.2); await key('KeyE', false); await step(1);
+const ha = await ev(() => window.__game.hostages[0].pos.toArray());
+await teleport(ha[0] - 1.4, ha[1], ha[2], Math.PI / 2); await step(0.3); await key('KeyE', true); await step(2.2); await key('KeyE', false); await step(1);
 console.log('HOSTAGE-A', JSON.stringify(await status()));
 await shot('01-hostageA');
 // 3) power
-await teleport(19, 0, -8.6, 0); await step(0.3); await key('KeyE', true); await step(2.2); await key('KeyE', false); await step(1);
+await teleport(17, 0, -8.6, 0); await step(0.3); await key('KeyE', true); await step(2.2); await key('KeyE', false); await step(1);
 console.log('POWER', JSON.stringify(await status()));
 // 4) hostage B (cell block, cell 4 at x=32..)
 const hb = await ev(() => { const h = window.__game.hostages[1]; return h.pos.toArray(); });
