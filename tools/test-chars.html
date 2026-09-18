@@ -1,0 +1,47 @@
+<!doctype html><html><body style="margin:0;background:#000">
+<script type="importmap">{"imports":{"three":"../vendor/three/three.module.js","three/addons/":"../vendor/three/addons/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+window.__VANTAGE_ASSET_BASE = '../assets/';
+const { Assets } = await import('../src/core/assets.js');
+const { MaterialLibrary } = await import('../src/render/materials.js');
+const { CollisionWorld } = await import('../src/core/collision.js');
+const { Character, POSES } = await import('../src/entities/character.js');
+const { FX } = await import('../src/fx/particles.js');
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(1280, 720); r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFSoftShadowMap; r.toneMapping = THREE.ACESFilmicToneMapping; document.body.appendChild(r.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x30343a);
+const cam = new THREE.PerspectiveCamera(35, 1280 / 720, 0.1, 100);
+const view = new URLSearchParams(location.search).get('view') || 'front';
+if (view === 'front') { cam.position.set(0, 1.5, 9); cam.lookAt(0, 0.9, 0); }
+else if (view === 'side') { cam.position.set(9, 1.5, 0); cam.lookAt(0, 0.9, 0); }
+else if (view === 'iso') { cam.position.set(6, 5, 7); cam.lookAt(0, 0.7, 0); }
+scene.add(new THREE.HemisphereLight(0xdde6ff, 0x333333, 1.0));
+const d = new THREE.DirectionalLight(0xffffff, 2.5); d.position.set(3, 8, 5); d.castShadow = true; d.shadow.mapSize.set(2048, 2048); d.shadow.camera.left = d.shadow.camera.bottom = -8; d.shadow.camera.right = d.shadow.camera.top = 8; scene.add(d);
+const g = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshStandardMaterial({ color: 0x666a70 })); g.rotation.x = -Math.PI / 2; g.receiveShadow = true; scene.add(g);
+const grid = new THREE.GridHelper(20, 20, 0x444444, 0x444444); grid.position.y = 0.005; scene.add(grid);
+const world = new CollisionWorld({ minX: -40, maxX: 40, minZ: -40, maxZ: 40 });
+const mats = new MaterialLibrary(r, '../assets/');
+const assets = new Assets(r); await assets.load();
+const audio = new Proxy({}, { get: () => () => {} });
+const game = { scene, world, nav: null, mats, assets, audio, characters: [], time: 0 };
+game.fx = new FX(scene, world, audio);
+const mk = (o) => { const c = new Character(game, o); game.characters.push(c); return c; };
+const specs = [
+  { x: -4.8, label: 'aim right/up', f: (c) => { c.aimYaw = c.yaw + 0.5; c.aimPitch = 0.25; } },
+  { x: -2.4, label: 'run', f: (c) => { c.moveIntent.set(0, 0, -5.5); c.aimYaw = c.yaw; } },
+  { x: 0, label: 'crouch', f: (c) => { c.crouchTarget = 1; } },
+  { x: 2.4, label: 'hostage kneel', faction: 'hostage', rifle: false, f: (c) => { c.kneel = 1; } },
+  { x: 4.8, label: 'dead', faction: 'enemy', f: (c) => { c.applyDamage(500, { dir: new THREE.Vector3(0, 0, 1) }); } },
+];
+const chars = [];
+for (const s of specs) { const c = mk({ faction: s.faction || 'squad', position: new THREE.Vector3(s.x, 0, 0), yaw: Math.PI, rifle: s.rifle }); s.f(c); chars.push(c); }
+// simulate
+for (let i = 0; i < 90; i++) { game.time += 1 / 60; for (const c of chars) c.update(1 / 60); }
+// run character: reset position so it stays in frame
+chars[1].pos.set(-2.4, 0, 0);
+chars[1].update(1 / 60);
+game.fx.update(1 / 60, cam);
+r.render(scene, cam);
+window.__info = { heights: chars.map(c => +c.currentHeight.toFixed(2)), rifle: chars[0].rifle.position.toArray().map(v => +v.toFixed(2)), chest: chars[0].bones.mixamorigSpine2.getWorldPosition(new THREE.Vector3()).toArray().map(v => +v.toFixed(2)), rh: chars[0].bones.mixamorigRightHand.getWorldPosition(new THREE.Vector3()).toArray().map(v => +v.toFixed(2)), lh: chars[0].bones.mixamorigLeftHand.getWorldPosition(new THREE.Vector3()).toArray().map(v => +v.toFixed(2)), muzzle: chars[0].muzzlePos(new THREE.Vector3()).toArray().map(v => +v.toFixed(2)) };
+window.__done = true;
+</script></body></html>

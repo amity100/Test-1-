@@ -1,0 +1,51 @@
+<!doctype html><html><body style="margin:0;background:#000">
+<script type="importmap">{"imports":{"three":"../vendor/three/three.module.js","three/addons/":"../vendor/three/addons/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { clone as skClone } from 'three/addons/utils/SkeletonUtils.js';
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(1280, 720); r.shadowMap.enabled = true; r.toneMapping = THREE.ACESFilmicToneMapping; document.body.appendChild(r.domElement);
+const s = new THREE.Scene(); s.background = new THREE.Color(0x30343a);
+const c = new THREE.PerspectiveCamera(40, 1280 / 720, 0.1, 100); c.position.set(0, 1.4, -6.5); c.lookAt(0, 0.9, 0);
+s.add(new THREE.HemisphereLight(0xffffff, 0x333333, 1.2));
+const d = new THREE.DirectionalLight(0xffffff, 2.5); d.position.set(3, 6, -4); d.castShadow = true; s.add(d);
+const g = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), new THREE.MeshStandardMaterial({ color: 0x666a70 })); g.rotation.x = -Math.PI / 2; g.receiveShadow = true; s.add(g);
+const poses = await (await fetch('../assets/anim/poses.json')).json();
+new GLTFLoader().load('../assets/models/soldier.glb', (gltf) => {
+  const info = {};
+  const box = new THREE.Box3().setFromObject(gltf.scene); info.size = box.getSize(new THREE.Vector3()).toArray().map(v => +v.toFixed(3)); info.min = box.min.toArray().map(v => +v.toFixed(3));
+  const bones = []; gltf.scene.traverse(o => { if (o.isBone) bones.push(o.name); }); info.boneCount = bones.length; info.bones = bones.slice(0, 12);
+  const variants = [['Idle', null, -3.2], ['Idle', 'sneak_pose', -1.1], ['Idle', 'sad_pose', 1.1], ['TPose', null, 3.2]];
+  for (const [clipName, poseName, x] of variants) {
+    const m = skClone(gltf.scene); m.traverse(o => { if (o.isMesh || o.isSkinnedMesh) { o.castShadow = true; } });
+    m.position.x = x; s.add(m);
+    const mixer = new THREE.AnimationMixer(m); const clip = gltf.animations.find(a => a.name === clipName); mixer.clipAction(clip).play(); mixer.update(0.4);
+    if (poseName) {
+      const pose = poses[poseName];
+      for (const bn in pose.tracks) {
+        const b = m.getObjectByName(bn); if (!b) continue;
+        const tr = pose.tracks[bn];
+        if (tr.rotation) { const v = tr.rotation.v[tr.rotation.v.length - 1]; b.quaternion.set(v[0], v[1], v[2], v[3]); }
+        if (tr.translation && bn === 'mixamorigHips') { const v = tr.translation.v[tr.translation.v.length - 1]; const v0 = tr.translation.v[0]; b.position.y += (v[1] - v0[1]) ; b.position.z += (v[2] - v0[2]); }
+      }
+    }
+    m.updateMatrixWorld(true);
+    if (!poseName && clipName === 'Idle') {
+      // print axes of some bones in world space
+      const ax = {};
+      for (const bn of ['mixamorigHips', 'mixamorigSpine', 'mixamorigSpine1', 'mixamorigSpine2', 'mixamorigRightArm', 'mixamorigRightForeArm', 'mixamorigRightHand', 'mixamorigLeftArm', 'mixamorigHead']) {
+        const b = m.getObjectByName(bn); if (!b) continue;
+        const q = b.getWorldQuaternion(new THREE.Quaternion());
+        const X = new THREE.Vector3(1, 0, 0).applyQuaternion(q), Y = new THREE.Vector3(0, 1, 0).applyQuaternion(q), Z = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
+        const p = b.getWorldPosition(new THREE.Vector3());
+        ax[bn] = { pos: p.toArray().map(v => +v.toFixed(2)), X: X.toArray().map(v => +v.toFixed(2)), Y: Y.toArray().map(v => +v.toFixed(2)), Z: Z.toArray().map(v => +v.toFixed(2)), localPos: b.position.toArray().map(v => +v.toFixed(3)), localScale: b.scale.toArray().map(v=>+v.toFixed(3)) };
+      }
+      info.axes = ax;
+      info.hipsParentScale = m.getObjectByName('mixamorigHips').parent.scale.toArray();
+      info.rootScale = m.scale.toArray();
+      const ch = m.getObjectByName('Character'); info.characterScale = ch ? ch.scale.toArray() : null;
+    }
+  }
+  r.render(s, c); window.__info = info; window.__done = true;
+}, undefined, (e) => { window.__err = String(e); });
+</script></body></html>
