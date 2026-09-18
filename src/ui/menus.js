@@ -14,7 +14,7 @@ export class Menus {
   }
 
   loadSettings() {
-    const d = { quality: 'high', sensitivity: 1.0, invertY: false, volume: 0.8 };
+    const d = { quality: 'high', sensitivity: 1.0, invertY: false, volume: 0.8, difficulty: 'normal' };
     try { const s = JSON.parse(localStorage.getItem('vantage.settings') || '{}'); return { ...d, ...s }; } catch (e) { return d; }
   }
   saveSettings() { try { localStorage.setItem('vantage.settings', JSON.stringify(this.settings)); } catch (e) { /* ignore */ } this.game.applySettings(this.settings); }
@@ -62,6 +62,7 @@ export class Menus {
     const form = el('div', 'form', st); this.form = form;
     const row = (key) => { const r = el('div', 'row', form); el('span', 'rl', r, t(key)).dataset.key = key; return r; };
     { const r = row('menu.quality'); const sel = el('select', '', r); for (const q of ['low', 'medium', 'high', 'ultra']) { const o = el('option', '', sel, t('menu.quality.' + q)); o.value = q; o.dataset.key = 'menu.quality.' + q; } sel.value = this.settings.quality; sel.onchange = () => { this.settings.quality = sel.value; this.saveSettings(); }; }
+    { const r = row('menu.difficulty'); const sel = el('select', '', r); for (const q of ['easy', 'normal', 'hard']) { const o = el('option', '', sel, t('menu.difficulty.' + q)); o.value = q; o.dataset.key = 'menu.difficulty.' + q; } sel.value = this.settings.difficulty; sel.onchange = () => { this.settings.difficulty = sel.value; this.saveSettings(); }; }
     { const r = row('menu.sensitivity'); const inp = el('input', '', r); inp.type = 'range'; inp.min = 0.3; inp.max = 2.5; inp.step = 0.05; inp.value = this.settings.sensitivity; inp.oninput = () => { this.settings.sensitivity = +inp.value; this.saveSettings(); }; }
     { const r = row('menu.volume'); const inp = el('input', '', r); inp.type = 'range'; inp.min = 0; inp.max = 1; inp.step = 0.05; inp.value = this.settings.volume; inp.oninput = () => { this.settings.volume = +inp.value; this.saveSettings(); }; }
     { const r = row('menu.invertY'); const inp = el('input', '', r); inp.type = 'checkbox'; inp.checked = this.settings.invertY; inp.onchange = () => { this.settings.invertY = inp.checked; this.saveSettings(); }; }

@@ -148,6 +148,7 @@ export class AICharacter extends Character {
     // hit chance model
     const moving = Math.hypot(target.vel.x, target.vel.z) > 2.5;
     let p = accuracy * (1 / (1 + dist / CONFIG.enemy.accuracyFalloff)) * (moving ? 0.7 : 1) * (target.crouch > 0.5 ? 0.75 : 1);
+    if (this.isEnemy && this.game.difficulty) p *= this.game.difficulty.accuracy;
     if (Math.random() > p) {
       // deliberate miss: spread mostly around the target
       const s = this.gunCfg.spread * (2 + Math.random() * 3);

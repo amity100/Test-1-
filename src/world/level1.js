@@ -244,7 +244,7 @@ export class Level1Script {
     const g = this.game, L = this.level;
     if (!this.flags.power) return;
     this.flags.power = false; L.power = false;
-    for (const l of L.floodlights) { l.intensity = 0; if (l.userData.fixture) l.userData.fixture.material = g.mats.get('lightHousing'); }
+    for (const l of L.floodlights) { l.intensity = 0; if (l.userData.fixture) l.userData.fixture.material = g.mats.get('lightHousing'); if (l.userData.cone) l.userData.cone.visible = false; }
     for (const l of L.roomLights) { l.intensity = 0; if (l.userData.fixture) l.userData.fixture.material = g.mats.get('lightHousing'); }
     for (const l of L.emergency) { l.intensity = 12; l.userData.fixture.material = g.mats.get('emissiveRed'); }
     if (L.fuseLed) L.fuseLed.material = g.mats.get('emissiveRed');
@@ -380,7 +380,7 @@ export class Level1Script {
     this.objectives = { ...s.objectives }; this.primary = s.primary; this.flags = { ...s.flags, failed: false, complete: false };
     this.holdTime = s.holdTime; this.waveCount = s.waveCount; this.nextWave = s.nextWave;
     if (this.heli) { this.game.scene.remove(this.heli.grp); this.heli = null; }
-    if (!this.flags.power) { const L = this.level, g = this.game; L.power = false; for (const l of L.floodlights) l.intensity = 0; for (const l of L.roomLights) l.intensity = 0; for (const l of L.emergency) l.intensity = 12; }
+    if (!this.flags.power) { const L = this.level, g = this.game; L.power = false; for (const l of L.floodlights) { l.intensity = 0; if (l.userData.cone) l.userData.cone.visible = false; if (l.userData.fixture) l.userData.fixture.material = g.mats.get('lightHousing'); } for (const l of L.roomLights) { l.intensity = 0; if (l.userData.fixture) l.userData.fixture.material = g.mats.get('lightHousing'); } for (const l of L.emergency) { l.intensity = 12; l.userData.fixture.material = g.mats.get('emissiveRed'); } if (L.fuseLed) L.fuseLed.material = g.mats.get('emissiveRed'); }
     this.level.cellDoor.setLocked(!this.flags.cellUnlocked);
     for (const it of this.level.interactables) if (it.id === 'power') it.enabled = this.flags.power;
     this.setPrimary(this.primary);

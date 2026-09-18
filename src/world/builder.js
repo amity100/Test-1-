@@ -97,7 +97,7 @@ export class LevelBuilder {
     const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.06, 0.14), this.mats.get(mat)); m.position.set(x, y, z); this.root.add(m);
     this._push('lightHousing', new THREE.BoxGeometry(w + 0.08, 0.05, 0.2), x, y + 0.05, z);
     const l = this.point(x, y - 0.15, z, { color, intensity, distance });
-    l.userData.fixture = m; this.emissives.push({ mesh: m, light: l });
+    l.userData.fixture = m; l.userData.kind = kind; this.emissives.push({ mesh: m, light: l });
     return l;
   }
 
@@ -137,6 +137,27 @@ export class LevelBuilder {
     this.cylinder(x + Math.cos(yaw) * 0.7, 1.3, z - Math.sin(yaw) * 0.7, 0.08, 0.5, 'steelDark', { collide: false });
     const led = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 8), this.mats.get('emissiveGreen')); led.position.set(x, 1.1, z + 0.56); this.root.add(led);
   }
+  // soft additive cone that suggests light scattering in the rain
+  lightCone(from, to, { length = 16, radius = 5.5, color = 0xffe0b0, opacity = 0.2 } = {}) {
+    if (!LevelBuilder._coneMat) {
+      LevelBuilder._coneMat = new THREE.ShaderMaterial({
+        uniforms: { uColor: { value: new THREE.Color(color) }, uOpacity: { value: opacity } },
+        vertexShader: `varying float vT; varying float vR; varying float vF; void main(){ vT = uv.y; vR = uv.x; vec4 mv = modelViewMatrix * vec4(position,1.0); vec3 n = normalize(normalMatrix * normal); vF = abs(dot(n, normalize(-mv.xyz))); gl_Position = projectionMatrix * mv; }`,
+        fragmentShader: `uniform vec3 uColor; uniform float uOpacity; varying float vT; varying float vR; varying float vF; void main(){ float a = (1.0 - vT) * (1.0 - vT); a *= 0.55 + 0.45 * sin(vR * 6.2831 * 3.0 + vT * 4.0) * 0.2; a *= pow(vF, 1.6); gl_FragColor = vec4(uColor, a * uOpacity); }`,
+        transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+      });
+    }
+    const geo = new THREE.CylinderGeometry(0.25, radius, length, 24, 1, true);
+    geo.translate(0, -length / 2, 0);
+    const mesh = new THREE.Mesh(geo, LevelBuilder._coneMat.clone());
+    mesh.material.uniforms.uColor.value.set(color); mesh.material.uniforms.uOpacity.value = opacity;
+    mesh.position.copy(from);
+    const dir = new THREE.Vector3().subVectors(to, from).normalize();
+    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), dir);
+    mesh.renderOrder = 6; mesh.frustumCulled = true;
+    this.root.add(mesh);
+    return mesh;
+  }
   lightPole(x, z, targetX, targetZ, { height = 7, shadow = false, intensity = 900, color = 0xfff1d6, flood = true } = {}) {
     this.cylinder(x, 0, z, 0.12, height, 'steelDark', { material: 'metal', segs: 10 });
     const yaw = Math.atan2(targetX - x, targetZ - z);
@@ -145,23 +166,36 @@ export class LevelBuilder {
     const face = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.55), this.mats.get('emissiveWarm')); face.position.set(hx, height - 0.24, hz); face.rotation.set(-Math.PI / 2 + 0.6, yaw, 0, 'YXZ'); this.root.add(face);
     const l = this.spot(hx, height - 0.2, hz, targetX, 0, targetZ, { intensity, angle: 0.62, penumbra: 0.55, shadow, distance: 55, color, flood });
     l.userData.fixture = face; this.emissives.push({ mesh: face, light: l });
+    l.userData.cone = this.lightCone(new THREE.Vector3(hx, height - 0.3, hz), new THREE.Vector3(targetX, 0, targetZ), { length: Math.hypot(targetX - hx, targetZ - hz, height) * 0.95, radius: 6 });
     return l;
   }
   truck(x, z, yaw = 0) {
     const cy = Math.cos(yaw), sy = Math.sin(yaw);
     const at = (lx, lz) => [x + lx * cy + lz * sy, z - lx * sy + lz * cy];
-    // cab
-    let [cx, cz] = at(0, 2.6); this.box(cx, 0.5, cz, 2.3, 2.0, 2.2, 'containerGreen', { yaw, material: 'metal' });
-    [cx, cz] = at(0, 3.9); this.box(cx, 0.5, cz, 2.3, 1.1, 0.6, 'containerGreen', { yaw, material: 'metal', collide: false });
-    // windshield
-    const ws = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 0.8), this.mats.get('glass')); [cx, cz] = at(0, 3.62); ws.position.set(cx, 1.95, cz); ws.rotation.set(-0.35, yaw, 0, 'YXZ'); this.root.add(ws);
-    // bed with canvas
-    [cx, cz] = at(0, -1.2); this.box(cx, 0.5, cz, 2.4, 0.5, 5.2, 'steelDark', { yaw, material: 'metal' });
-    this.box(cx, 1.0, cz, 2.4, 1.9, 5.0, 'cloth', { yaw, material: 'concrete' });
-    // wheels
-    for (const [lx, lz] of [[-1.05, 2.4], [1.05, 2.4], [-1.05, -0.4], [1.05, -0.4], [-1.05, -2.2], [1.05, -2.2]]) { const [wx, wz] = at(lx, lz); this._push('rubber', new THREE.CylinderGeometry(0.5, 0.5, 0.35, 16).rotateZ(Math.PI / 2), wx, 0.5, wz, yaw); }
-    // headlights
-    for (const lx of [-0.8, 0.8]) { const [hx, hz] = at(lx, 4.2); const hl = new THREE.Mesh(new THREE.CircleGeometry(0.12, 12), this.mats.get('emissiveWarm')); hl.position.set(hx, 1.0, hz); hl.rotation.y = yaw; this.root.add(hl); }
+    let cx, cz;
+    // chassis + cab (hood, cabin, windows, bumper, mirrors)
+    [cx, cz] = at(0, 3.55); this.box(cx, 0.55, cz, 2.2, 0.95, 1.5, 'containerGreen', { yaw, material: 'metal' });           // hood
+    [cx, cz] = at(0, 2.35); this.box(cx, 0.55, cz, 2.3, 2.05, 1.9, 'containerGreen', { yaw, material: 'metal' });           // cabin
+    [cx, cz] = at(0, 4.35); this.box(cx, 0.35, cz, 2.3, 0.35, 0.25, 'steelDark', { yaw, material: 'metal', collide: false }); // bumper
+    [cx, cz] = at(0, 3.35); this.box(cx, 1.5, cz, 2.0, 0.08, 0.5, 'steelDark', { yaw, material: 'metal', collide: false });  // hood lip
+    for (const sx of [-1, 1]) { [cx, cz] = at(sx * 1.3, 2.9); this._push('steelDark', new THREE.BoxGeometry(0.08, 0.3, 0.2), cx, 1.9, cz, yaw); [cx, cz] = at(sx * 1.2, 2.9); this._push('steelDark', new THREE.BoxGeometry(0.2, 0.04, 0.04), cx, 1.85, cz, yaw); }
+    const glassMat = this.mats.get('glass');
+    const ws = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 0.75), glassMat); [cx, cz] = at(0, 3.31); ws.position.set(cx, 2.05, cz); ws.rotation.set(-0.3, yaw, 0, 'YXZ'); this.root.add(ws);
+    for (const sx of [-1, 1]) { const sw = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.7), glassMat); [cx, cz] = at(sx * 1.16, 2.3); sw.position.set(cx, 2.05, cz); sw.rotation.y = yaw + sx * Math.PI / 2; this.root.add(sw); }
+    // flatbed with canvas cover and hoops
+    [cx, cz] = at(0, -1.2); this.box(cx, 0.55, cz, 2.4, 0.45, 5.2, 'steelDark', { yaw, material: 'metal' });
+    this.box(cx, 1.0, cz, 2.35, 0.5, 5.0, 'containerGreen', { yaw, material: 'metal', collide: false });
+    this.box(cx, 1.5, cz, 2.4, 1.5, 4.9, 'cloth', { yaw, material: 'concrete' });
+    for (let i = 0; i < 4; i++) { [cx, cz] = at(0, -3.4 + i * 1.5); this._push('steelDark', new THREE.TorusGeometry(1.2, 0.03, 6, 16, Math.PI), cx, 1.55, cz, yaw); }
+    // wheels with hubs and arches
+    for (const [lx, lz] of [[-1.05, 3.1], [1.05, 3.1], [-1.05, -0.6], [1.05, -0.6], [-1.05, -2.2], [1.05, -2.2]]) {
+      const [wx, wz] = at(lx, lz);
+      this._push('rubber', new THREE.CylinderGeometry(0.52, 0.52, 0.36, 18).rotateZ(Math.PI / 2), wx, 0.52, wz, yaw);
+      this._push('steelDark', new THREE.CylinderGeometry(0.3, 0.3, 0.38, 12).rotateZ(Math.PI / 2), wx, 0.52, wz, yaw);
+    }
+    // lights
+    for (const lx of [-0.8, 0.8]) { const [hx, hz] = at(lx, 4.31); const hl = new THREE.Mesh(new THREE.CircleGeometry(0.13, 12), this.mats.get('emissiveWarm')); hl.position.set(hx, 0.95, hz); hl.rotation.y = yaw; this.root.add(hl); }
+    for (const lx of [-1.0, 1.0]) { const [hx, hz] = at(lx, -3.82); const tl = new THREE.Mesh(new THREE.CircleGeometry(0.08, 10), this.mats.get('emissiveRed')); tl.position.set(hx, 0.8, hz); tl.rotation.y = yaw + Math.PI; this.root.add(tl); }
   }
   desk(x, z, yaw = 0) { this.box(x, 0.68, z, 1.6, 0.06, 0.8, 'steelDark', { yaw, material: 'metal', collide: false }); this.box(x, 0, z, 1.5, 0.7, 0.7, 'plastic', { yaw, material: 'metal' }); }
   locker(x, z, yaw = 0) { this.box(x, 0, z, 0.9, 2.0, 0.5, 'steelDark', { yaw, material: 'metal' }); }

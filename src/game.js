@@ -202,7 +202,7 @@ export class Game {
     sp.squad.forEach((s, i) => { const m = new Squadmate(this, { position: new THREE.Vector3(s.x, 0, s.z), yaw: s.yaw, name: s.name, slot: i }); this.squad.push(m); this.characters.push(m); });
     for (const h of sp.hostages) { const m = new Hostage(this, { position: new THREE.Vector3(h.x, h.y || 0, h.z), yaw: h.yaw, name: h.name, id: h.id }); this.hostages.push(m); this.characters.push(m); }
     for (const e of sp.enemies) this.spawnEnemy(e);
-    this.architect.energy = CONFIG.architect.energyMax;
+    this.architect.energy = CONFIG.architect.energyMax; this.architect.stats.placed = 0;
     this.architect.enemyIntel.clear();
     this.fx.clearDecals();
     this.time = 0; this.stats = { kills: 0, startTime: 0 };
@@ -233,8 +233,8 @@ export class Game {
   }
   _resetLights() {
     const L = this.level; L.power = true;
-    for (const l of L.floodlights) { l.intensity = l.userData.baseIntensity; if (l.userData.fixture) l.userData.fixture.material = this.mats.get('emissiveWarm'); }
-    for (const l of L.roomLights) { l.intensity = l.userData.baseIntensity; if (l.userData.fixture) l.userData.fixture.material = this.mats.get(l.userData.fixture.material === this.mats.get('lightHousing') ? 'emissiveWarm' : 'emissiveWarm'); }
+    for (const l of L.floodlights) { l.intensity = l.userData.baseIntensity; if (l.userData.fixture) l.userData.fixture.material = this.mats.get('emissiveWarm'); if (l.userData.cone) l.userData.cone.visible = true; }
+    for (const l of L.roomLights) { l.intensity = l.userData.baseIntensity; if (l.userData.fixture) l.userData.fixture.material = this.mats.get(l.userData.kind === 'cool' ? 'emissiveCool' : 'emissiveWarm'); }
     for (const l of L.emergency) { l.intensity = 0; l.userData.fixture.material = this.mats.get('lightHousing'); }
     if (L.fuseLed) L.fuseLed.material = this.mats.get('emissiveGreen');
   }
@@ -347,6 +347,8 @@ export class Game {
     if (this.fx.rain) this.fx.rain.visible = q !== 'low';
     if (this.player) { this.player.sensitivity = CONFIG.camera.sensitivity * s.sensitivity; this.player.invertY = s.invertY; }
     this.settings = s;
+    const d = s.difficulty || 'normal';
+    this.difficulty = { accuracy: d === 'easy' ? 0.7 : d === 'hard' ? 1.25 : 1, damage: d === 'easy' ? 0.65 : d === 'hard' ? 1.3 : 1 };
     this.audio.setVolume(s.volume);
     this.resize();
   }
