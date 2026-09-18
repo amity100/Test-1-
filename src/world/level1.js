@@ -222,6 +222,7 @@ export function buildLevel1(game, b) {
   });
   L.cellDoor = cellDoor;
   L.mezzanine = MZ;
+  L.explosives = b.explosives || [];
   return L;
 }
 
@@ -282,6 +283,15 @@ export class Level1Script {
     }
   }
 
+  // world position of the current primary objective (for the HUD marker)
+  objectiveMarker() {
+    const g = this.game, L = this.level, p = this.primary;
+    if (p === 'insert') return { x: 0, y: 0, z: -38 };
+    if (p === 'hostage1') { const h = g.hostages.find((x) => x.id === 'A'); return h && h.alive ? h.pos : null; }
+    if (p === 'hostage2') { const h = g.hostages.find((x) => x.id === 'B'); if (!h || !h.alive) return null; return this.flags.cellUnlocked ? h.pos : { x: 12, y: 0, z: 21 }; }
+    if (p === 'extract' || p === 'hold') return { x: -26, y: 0, z: 40 };
+    return null;
+  }
   complete(id) { this.objectives[id] = 'done'; this.game.hud.toast(this.game.t('obj.' + id) + ' ✓'); this.game.audio.ui('objective'); }
   setPrimary(id) { this.primary = id; if (this.objectives[id] === 'pending') this.objectives[id] = 'active'; this.game.hud.setObjective(this.game.t('obj.' + id), this.objectives.power === 'optional' ? this.game.t('obj.power') : null); }
 

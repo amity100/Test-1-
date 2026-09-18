@@ -103,15 +103,15 @@ export class Architect {
     const inp = g.input;
     // virtual cursor
     const W = g.width, H = g.height;
-    this.cursor.x = THREE.MathUtils.clamp(this.cursor.x + inp.mouse.dx / W, 0, 1);
-    this.cursor.y = THREE.MathUtils.clamp(this.cursor.y + inp.mouse.dy / H, 0, 1);
+    if (inp.softLook) { this.cursor.x = THREE.MathUtils.clamp(inp.mouse.x / W, 0, 1); this.cursor.y = THREE.MathUtils.clamp(inp.mouse.y / H, 0, 1); }
+    else { this.cursor.x = THREE.MathUtils.clamp(this.cursor.x + inp.mouse.dx / W, 0, 1); this.cursor.y = THREE.MathUtils.clamp(this.cursor.y + inp.mouse.dy / H, 0, 1); }
     // camera controls
     const pan = A.panSpeed * realDt * (this.zoom / 28);
     const fx = Math.sin(this.orbit), fz = Math.cos(this.orbit), rx = Math.cos(this.orbit), rz = -Math.sin(this.orbit);
     const mz = inp.axis('KeyS', 'KeyW'), mx = inp.axis('KeyA', 'KeyD');
     this.focus.x += (fx * mz + rx * mx) * pan; this.focus.z += (fz * mz + rz * mx) * pan;
-    // edge pan with cursor
-    const edge = 0.02;
+    // edge pan with cursor (not in soft-look mode, where the cursor sits at the edge to turn)
+    const edge = inp.softLook ? -1 : 0.02;
     if (this.cursor.x < edge) { this.focus.x -= rx * pan; this.focus.z -= rz * pan; }
     if (this.cursor.x > 1 - edge) { this.focus.x += rx * pan; this.focus.z += rz * pan; }
     if (this.cursor.y < edge) { this.focus.x += fx * pan; this.focus.z += fz * pan; }

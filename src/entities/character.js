@@ -160,7 +160,7 @@ export class Character {
 
   // ---- Damage ----
   applyDamage(amount, info = {}) {
-    if (!this.alive) return;
+    if (!this.alive || this.godMode) return;
     this.health -= amount;
     this.lastDamageTime = this.game.time;
     if (info.from) this.lastAttacker = info.from;

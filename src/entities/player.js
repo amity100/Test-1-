@@ -53,10 +53,11 @@ export class Player extends Character {
     if (!this.alive) { super.update(dt); this._updateCamera(realDt); return; }
 
     // look
-    if (controlled && inp.locked) {
+    if (controlled && inp.looking) {
       const sens = this.sensitivity * (this.aiming > 0.5 ? 0.6 : 1);
       this.camYaw -= inp.mouse.dx * sens;
       this.camPitch -= inp.mouse.dy * sens * (this.invertY ? -1 : 1);
+      if (inp.softLook) { const [ex, ey] = inp.edgeTurn(); this.camYaw -= ex * 2.4 * realDt; this.camPitch -= ey * 1.2 * realDt; }
       this.camPitch = THREE.MathUtils.clamp(this.camPitch, -1.15, 1.1);
     }
     // recoil spring (applies to camera)

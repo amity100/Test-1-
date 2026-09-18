@@ -51,6 +51,8 @@ export class HUD {
     this.cursor = el('div', 'vcursor', r);
     this.labels = el('div', 'labels', r);
     this.labelEls = new Map();
+    this.objMarker = el('div', 'objmarker', r); this.objMarkerDist = el('span', 'dist', this.objMarker, '');
+    this.objMarker.style.display = 'none';
     this.toasts = []; this.hintTimer = 0; this.hitT = 0;
     this.archOn = false; this.energyAnim = 100;
     this.lastHint = null;
@@ -75,8 +77,8 @@ export class HUD {
   hint(key) { const text = i18n.t('hint.' + key); this.hintEl.innerHTML = text; this.hintEl.classList.add('in'); this.hintTimer = 7 + text.length * 0.04; this.lastHint = key; }
   callout(kind, who) {
     const name = who ? i18n.t(who.name) : '';
-    const lines = { contact: ['Contact! Hostiles ahead!', 'Tangos spotted, engaging!', 'Got eyes on them!'], enemyGrenade: ['GRENADE!'], downed: ["I'm hit! I'm down!"], revive: ['Back in the fight. Thanks.'] };
-    const arr = lines[kind] || [kind]; const txt = arr[Math.floor(Math.random() * arr.length)];
+    const n = kind === 'contact' ? 3 : 1;
+    const txt = i18n.t('callout.' + kind + (n > 1 ? 1 + Math.floor(Math.random() * n) : ''));
     const c = el('div', 'callout' + (kind === 'enemyGrenade' ? ' danger' : ''), this.calloutRoot, (name ? `<b>${name}:</b> ` : '') + txt);
     setTimeout(() => { c.classList.add('out'); setTimeout(() => c.remove(), 500); }, 3200);
   }
@@ -144,6 +146,22 @@ export class HUD {
       this.cursor.className = 'vcursor' + (a.dragging ? ' drag' : a.hover ? ' hover' : '');
     }
     this._updateLabels();
+    this._updateObjectiveMarker();
+  }
+
+  _updateObjectiveMarker() {
+    const g = this.game, cam = g.camera, m = this.objMarker;
+    const target = g.script ? g.script.objectiveMarker() : null;
+    if (!target || g.mode === 'architect') { m.style.display = 'none'; return; }
+    _v.set(target.x, target.y + 1.6, target.z).project(cam);
+    const behind = _v.z > 1;
+    let x = (_v.x * 0.5 + 0.5) * g.width, y = (-_v.y * 0.5 + 0.5) * g.height;
+    if (behind) { x = g.width - x; y = g.height - 30; }
+    const pad = 40; x = Math.max(pad, Math.min(g.width - pad, x)); y = Math.max(pad, Math.min(g.height - pad, y));
+    m.style.display = ''; m.style.transform = `translate(${x}px, ${y}px)`;
+    const d = Math.hypot(target.x - g.player.pos.x, target.z - g.player.pos.z);
+    this.objMarkerDist.textContent = Math.round(d) + ' m';
+    m.classList.toggle('offscreen', behind || x === pad || x === g.width - pad || y === pad || y === g.height - pad);
   }
 
   _updateLabels() {

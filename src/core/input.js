@@ -10,6 +10,8 @@ export class Input {
     this.mouseUps = [];
     this.locked = false;
     this.wantLock = false;
+    this.softLook = false;        // fallback: mouse deltas without pointer lock (sandboxed iframes)
+    this.lockFailures = 0; this._attempt = 0; this._failedAttempt = -1;
     this.enabled = true;
     this.listeners = {};
 
@@ -28,7 +30,7 @@ export class Input {
     window.addEventListener('blur', () => { this.keys.clear(); this.mouse.left = this.mouse.right = this.mouse.middle = false; this.mouse.buttons = 0; });
 
     document.addEventListener('mousemove', (e) => {
-      if (this.locked) { this.mouse.dx += e.movementX; this.mouse.dy += e.movementY; }
+      if (this.locked || this.softLook) { this.mouse.dx += e.movementX; this.mouse.dy += e.movementY; }
       this.mouse.x = e.clientX; this.mouse.y = e.clientY;
     });
     document.addEventListener('mousedown', (e) => {
@@ -52,26 +54,66 @@ export class Input {
     document.addEventListener('wheel', (e) => { this.mouse.wheel += Math.sign(e.deltaY); }, { passive: true });
     document.addEventListener('contextmenu', (e) => { if (e.target === canvas) e.preventDefault(); });
     document.addEventListener('pointerlockchange', () => {
+      const was = this.locked;
       this.locked = document.pointerLockElement === canvas;
+      if (this.locked) { clearTimeout(this._lockTimer); this.lockFailures = 0; }
+      else if (was) this._lastUnlock = performance.now();
       this.emit('lockchange', this.locked);
     });
-    document.addEventListener('pointerlockerror', () => { this.locked = false; this.emit('lockerror'); });
+    document.addEventListener('pointerlockerror', () => { this.locked = false; if (this._attempt > 0) { const a = this._attempt; const unadjustedRetryPending = false; if (!unadjustedRetryPending) this._attemptFailed(a); } });
   }
 
   on(name, fn) { (this.listeners[name] ||= []).push(fn); }
   emit(name, ...args) { for (const fn of this.listeners[name] || []) fn(...args); }
 
+  // True when mouse deltas should drive the camera (real pointer lock or the soft fallback).
+  get looking() { return this.locked || this.softLook; }
+
   lock() {
     this.wantLock = true;
     if (typeof window !== 'undefined' && window.__VANTAGE_NOLOCK) { if (!this.locked) { this.locked = true; this.emit('lockchange', true); } return; }
-    try {
-      const p = this.canvas.requestPointerLock({ unadjustedMovement: true });
-      if (p && p.catch) p.catch(() => { try { this.canvas.requestPointerLock(); } catch (e) { /* ignore */ } });
-    } catch (e) {
-      try { this.canvas.requestPointerLock(); } catch (e2) { /* ignore */ }
-    }
+    if (this.softLook) { this.emit('lockchange', true); return; }
+    if (this.locked) return;
+    if (!this.canvas.requestPointerLock) { this._attemptFailed(); return; }
+    // Chrome refuses a new lock for ~1.25s after the user pressed Esc; wait that out (still inside the gesture window)
+    const wait = Math.max(0, 1300 - (performance.now() - (this._lastUnlock || -1e9)));
+    clearTimeout(this._pendingLock);
+    this._pendingLock = setTimeout(() => this._requestLock(true), wait);
   }
-  unlock() { this.wantLock = false; if (typeof window !== 'undefined' && window.__VANTAGE_NOLOCK) { if (this.locked) { this.locked = false; this.emit('lockchange', false); } return; } if (document.pointerLockElement) document.exitPointerLock(); }
+  _requestLock(unadjusted) {
+    if (this.locked || this.softLook) return;
+    const attempt = ++this._attempt;
+    const onReject = () => { if (this._attempt !== attempt || this.locked) return; if (unadjusted) this._requestLock(false); else this._attemptFailed(attempt); };
+    try {
+      const p = unadjusted ? this.canvas.requestPointerLock({ unadjustedMovement: true }) : this.canvas.requestPointerLock();
+      if (p && p.catch) p.catch(onReject);
+    } catch (e) { onReject(); return; }
+    clearTimeout(this._lockTimer);
+    this._lockTimer = setTimeout(() => { if (!this.locked && this._attempt === attempt) this._attemptFailed(attempt); }, 1200);
+  }
+  _attemptFailed(attempt) {
+    if (attempt !== undefined && attempt === this._failedAttempt) return; // already counted (event + rejection)
+    this._failedAttempt = attempt;
+    this.lockFailures++;
+    if (this.lockFailures >= 2 && !this.softLook) { this.softLook = true; this.emit('softlook'); this.emit('lockchange', true); }
+    else this.emit('lockerror');
+  }
+  unlock() {
+    this.wantLock = false; clearTimeout(this._lockTimer); clearTimeout(this._pendingLock);
+    if (typeof window !== 'undefined' && window.__VANTAGE_NOLOCK) { if (this.locked) { this.locked = false; this.emit('lockchange', false); } return; }
+    if (this.softLook) { this.emit('lockchange', false); return; }
+    this._lastUnlock = performance.now();
+    if (document.pointerLockElement) document.exitPointerLock();
+  }
+  // -1..1 horizontal / vertical edge push of the visible cursor (soft-look turning aid)
+  edgeTurn() {
+    if (!this.softLook) return [0, 0];
+    const w = window.innerWidth, h = window.innerHeight, m = 0.14;
+    const x = this.mouse.x / w, y = this.mouse.y / h;
+    const ex = x > 1 - m ? (x - (1 - m)) / m : x < m ? -(m - x) / m : 0;
+    const ey = y > 1 - m ? (y - (1 - m)) / m : y < m ? -(m - y) / m : 0;
+    return [Math.max(-1, Math.min(1, ex)), Math.max(-1, Math.min(1, ey))];
+  }
 
   down(code) { return this.keys.has(code); }
   justPressed(code) { return this.pressed.has(code); }

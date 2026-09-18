@@ -80,6 +80,9 @@ const EN = {
   'hud.alert.lost': 'Contact lost — they are searching',
   'hud.alert.suspicious': 'A guard heard something',
   'hud.keyFound': 'Officer down — cell block key recovered',
+  'hud.rounds': 'rounds',
+  'hud.grenade': 'grenade',
+  'hud.softlook': 'Pointer lock is not available here: move the mouse to look, push it to the screen edge to keep turning.',
 
   'obj.insert': 'Reach the compound perimeter',
   'obj.hostage1': 'Locate and free the first prisoner (warehouse office)',
@@ -136,6 +139,13 @@ const EN = {
   'order.attack': 'Focus fire',
   'order.follow': 'Follow me',
   'order.escort': 'Escort',
+
+  'callout.contact1': 'Contact! Hostiles ahead!',
+  'callout.contact2': 'Tangos spotted, engaging!',
+  'callout.contact3': 'Got eyes on them!',
+  'callout.enemyGrenade': 'GRENADE!',
+  'callout.downed': "I'm hit! I'm down!",
+  'callout.revive': 'Back in the fight. Thanks.',
 };
 
 const HE = {
@@ -219,6 +229,9 @@ const HE = {
   'hud.alert.lost': 'איבדו קשר עין — הם מחפשים',
   'hud.alert.suspicious': 'שומר שמע משהו',
   'hud.keyFound': 'הקצין חוסל — מפתח אגף התאים נמצא',
+  'hud.rounds': 'כדורים',
+  'hud.grenade': 'רימון',
+  'hud.softlook': 'נעילת סמן לא זמינה כאן: הזז את העכבר כדי להסתכל, ודחוף אותו לקצה המסך כדי להמשיך להסתובב.',
 
   'obj.insert': 'הגע לגדר המתחם',
   'obj.hostage1': 'אתר ושחרר את השבוי הראשון (משרד המחסן)',
@@ -275,6 +288,13 @@ const HE = {
   'order.attack': 'רכז אש',
   'order.follow': 'עקוב אחריי',
   'order.escort': 'לווה',
+
+  'callout.contact1': 'מגע! אויב מלפנים!',
+  'callout.contact2': 'זיהיתי אויבים, פותח באש!',
+  'callout.contact3': 'יש לי קשר עין!',
+  'callout.enemyGrenade': 'רימון!',
+  'callout.downed': 'נפגעתי! אני על הרצפה!',
+  'callout.revive': 'חזרתי לקרב. תודה.',
 };
 
 const TABLES = { en: EN, he: HE };

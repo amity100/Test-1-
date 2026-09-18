@@ -81,8 +81,12 @@ export class Game {
     window.addEventListener('resize', () => this.resize());
     this.resize();
     this._bindGlobalKeys();
-    this.input.on('lockchange', (locked) => { if (locked) this.hadLock = true; else if (this.state === 'playing') { if (this.hadLock) this.pause(true); else this.showClickToResume(); } });
+    this.input.on('lockchange', (locked) => {
+      if (locked) { this.hadLock = true; if (this.state === 'paused' && this.menus.current === 'click') this.resume(); }
+      else if (this.state === 'playing') { if (this.hadLock) this.pause(true); else this.showClickToResume(); }
+    });
     this.input.on('lockerror', () => { if (this.state === 'playing') this.showClickToResume(); });
+    this.input.on('softlook', () => { this.container.classList.add('softlook'); this.hud.toast(this.t('hud.softlook'), 6000); if (this.state === 'paused' && this.menus.current === 'click') this.resume(); });
     this.state = 'menu';
     this.menus.show('main');
     this.menuOrbit = 0;
@@ -186,6 +190,7 @@ export class Game {
     // reset modules to their original placement
     for (const m of L.modules) { if (m.origin) m.setTransform(m.origin.x, m.origin.y, m.origin.z, m.origin.yaw); else m.origin = { x: m.x, y: m.y, z: m.z, yaw: m.yaw }; }
     this.script = new Level1Script(this, L);
+    for (const b of L.explosives) b.reset();
     this._resetLights();
     L.cellDoor.setLocked(true);
     for (const it of L.interactables) it.enabled = true;
@@ -274,7 +279,19 @@ export class Game {
   onEnemyAlert(e, target) { if (target === this.player || target?.isSquad) { if (this.time - (this._lastAlertToast || -10) > 6) { this._lastAlertToast = this.time; this.hud.alert('hud.alert.spotted'); this.audio.ui('alert'); } } // radio to nearby guards
     setTimeout(() => { if (e.alive && e.state === 'combat') this.emitNoise(e.pos, CONFIG.enemy.alertRadioRange, e, 'radio'); }, CONFIG.enemy.alertRadioDelay * 1000 / Math.max(0.2, this.timeScale)); }
   onEnemySuspicious() { if (this.time - (this._lastSusToast || -10) > 8) { this._lastSusToast = this.time; this.hud.alert('hud.alert.suspicious', 1600); } }
-  onModulePlaced() { this.architect.stats.placed; }
+  onModulePlaced() { this.settleModules(); }
+  // Any module left hanging in the air after a change drops onto whatever is beneath it.
+  settleModules() {
+    for (let iter = 0; iter < 3; iter++) {
+      let moved = false;
+      for (const m of this.level.modules) {
+        if (m.y <= this.world.groundY + 0.01) continue;
+        const support = this.architect._supportHeight(m, m.x, m.z, m.yaw);
+        if (support < m.y - 0.05) { m.setTransform(m.x, support, m.z, m.yaw); this.audio.modulePlace(m.group.position, m.cfg.mass >= 3); this.fx.moduleLand(m.mainCollider); moved = true; }
+      }
+      if (!moved) break;
+    }
+  }
   onExplosion(pos) { this.emitNoise(pos, 60, null, 'explosion'); this.postfx.state.flash = 0.6; if (this.player) this.player.shake = Math.min(1, this.player.shake + Math.max(0, 1 - pos.distanceTo(this.player.pos) / 20)); }
 
   emitNoise(pos, radius, source, kind) { for (const e of this.enemies) e.hear(pos, radius, source, kind); }
@@ -288,6 +305,7 @@ export class Game {
       enemies: this.enemies.map((e) => e.snapshot()), enemyDefs: this.enemies.map((e) => ({ patrol: e.patrol.map((p) => [p.x, p.z]), role: e.role, accuracy: e.accuracy, name: e.name })),
       modules: this.level.modules.map((m) => ({ x: m.x, y: m.y, z: m.z, yaw: m.yaw })),
       architect: this.architect.snapshot(), script: this.script.snapshot(), stats: { ...this.stats },
+      explosives: this.level.explosives.map((b) => b.alive),
     };
     if (id !== 'start') { this.hud.toast(this.t('hud.checkpoint')); this.audio.ui('checkpoint'); }
   }
@@ -306,6 +324,7 @@ export class Game {
     this.hostages.forEach((h, i) => h.restore(d.hostages[i]));
     for (const g of this.grenades) if (g.alive) this.scene.remove(g.mesh); this.grenades = [];
     this.architect.restore(d.architect);
+    d.explosives.forEach((alive, i) => { const b = this.level.explosives[i]; if (alive) b.reset(); else if (b.alive) { b.alive = false; b.mesh.visible = false; this.world.remove(b.collider); } });
     this._resetLights();
     this.script.restore(d.script);
     this.stats = { ...d.stats }; this.time = d.time;
@@ -414,6 +433,19 @@ export class Game {
     for (const d of this.level.doors) { d.update(dt, this.characters); if (d.navDirty) { d.navDirty = false; navDirty = true; this.nav.rebuildRegion(d.collider.minX, d.collider.minZ, d.collider.maxX, d.collider.maxZ); } }
     // grenades
     for (let i = this.grenades.length - 1; i >= 0; i--) { const g = this.grenades[i]; g.update(dt); if (!g.alive) this.grenades.splice(i, 1); }
+    // explosive props
+    for (const b of this.level.explosives) b.update(dt);
+    // loot: walking over a fallen guard's rifle restocks ammo
+    if (this.player.alive) for (const e of this.enemies) {
+      if (e.alive || e.looted || !e._rifleDropped) continue;
+      if (e.rifle.position.distanceToSquared(this.player.pos) < 1.6 * 1.6) {
+        e.looted = true; e.rifle.visible = false;
+        const g = this.player.gun; const add = Math.min(60, g.cfg.reserve * 2 - g.reserve); g.reserve += add;
+        let msg = '+' + add + ' ' + this.t('hud.rounds');
+        if (this.player.grenades < 3 && Math.random() < 0.35) { this.player.grenades++; msg += ' · +1 ' + this.t('hud.grenade'); }
+        this.hud.toast(msg, 1800); this.audio.ui('click');
+      }
+    }
     // zones
     for (const id in this.level.zones) { const z = this.level.zones[id]; const inside = z.contains(this.player.pos); if (inside && !z.wasInside) { z.wasInside = true; this.script.onZoneEnter(id); } else if (!inside) z.wasInside = false; }
     if (P) { this._prof('doors+grenades+zones', t0); t0 = performance.now(); }
@@ -431,6 +463,8 @@ export class Game {
     let tension = 0; for (const e of this.enemies) if (e.alive) { if (e.state === 'combat') tension = 1; else if (e.state !== 'patrol') tension = Math.max(tension, 0.45); }
     if (this.script.objectives.hold === 'active') tension = 1;
     this.audio.setTension(tension);
+    if (tension >= 1) this._wasInCombat = true;
+    else if (this._wasInCombat && tension < 0.5) { this._wasInCombat = false; if (!this.script.flags.hintSquad) { this.script.flags.hintSquad = true; this.hint('squad'); } else if (!this.script.flags.hintVault) { this.script.flags.hintVault = true; this.hint('vault'); } }
     if (this.mode === 'ground' && !this.input.locked && this.input.wantLock) { /* waiting for lock */ }
   }
 

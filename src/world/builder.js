@@ -4,6 +4,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Collider } from '../core/collision.js';
 import { boxGeo, wedgeGeo } from '../render/materials.js';
 import { MODULE_TYPES } from '../core/config.js';
+import { ExplosiveBarrel } from '../entities/weapons.js';
 
 const _m4 = new THREE.Matrix4(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1, 1, 1), _q = new THREE.Quaternion();
 
@@ -102,9 +103,23 @@ export class LevelBuilder {
 
   // ---- props ----
   barrel(x, z, matName = 'containerRed', y = 0) {
+    // red barrels are explosive (own mesh so they can vanish); others are batched decoration
+    if (matName === 'containerRed') {
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.88, 14), this.mats.get(matName)); body.position.y = 0.44; body.castShadow = true; body.receiveShadow = true; g.add(body);
+      for (const yy of [0.2, 0.68]) { const r = new THREE.Mesh(new THREE.TorusGeometry(0.305, 0.02, 6, 18), this.mats.get('steelDark')); r.rotation.x = Math.PI / 2; r.position.y = yy; g.add(r); }
+      const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.02, 14), this.mats.get('steelDark')); lid.position.y = 0.89; g.add(lid);
+      const stripe = new THREE.Mesh(new THREE.CylinderGeometry(0.302, 0.302, 0.08, 14, 1, true), this.mats.get('hazard')); stripe.position.y = 0.44; g.add(stripe);
+      g.position.set(x, y, z); this.root.add(g);
+      const c = new Collider({ x, y: y + 0.44, z, hx: 0.26, hy: 0.44, hz: 0.26, tag: 'static', material: 'metal' }); this.world.add(c);
+      const b = new ExplosiveBarrel(this.game, g, c, new THREE.Vector3(x, y + 0.44, z));
+      (this.explosives ||= []).push(b);
+      return b;
+    }
     this.cylinder(x, y, z, 0.3, 0.88, matName, { material: 'metal', segs: 14 });
     for (const yy of [0.2, 0.68]) this._push('steelDark', new THREE.TorusGeometry(0.305, 0.02, 6, 18).rotateX(Math.PI / 2), x, y + yy, z);
     this._push('steelDark', new THREE.CylinderGeometry(0.28, 0.28, 0.02, 14), x, y + 0.89, z);
+    return null;
   }
   pallet(x, z, yaw = 0, y = 0) { this._push('wood', boxGeo(1.2, 0.14, 1.0), x, y + 0.07, z, yaw); }
   sandbags(x, z, yaw = 0, len = 2.4) {

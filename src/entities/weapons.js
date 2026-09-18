@@ -142,22 +142,48 @@ export class Grenade {
   }
   explode() {
     this.alive = false;
-    const game = this.game; const gcfg = CONFIG.weapons.grenade;
-    game.scene.remove(this.mesh);
-    game.fx.explosion(this.pos);
-    game.audio.explosion(this.pos);
-    const center = this.pos.clone().add(new THREE.Vector3(0, 0.4, 0));
-    for (const ch of game.characters) {
-      if (!ch.alive) continue;
-      const chest = ch.pos.clone().add(new THREE.Vector3(0, ch.currentHeight * 0.6, 0));
-      const d = chest.distanceTo(center);
-      if (d > gcfg.radius) continue;
-      let k = 1 - d / gcfg.radius; k = k * k * 0.7 + k * 0.3;
-      const los = game.world.lineOfSight(center, chest, (c) => c.blocksBullets);
-      if (!los) k *= 0.18;
-      const dmg = gcfg.damage * k;
-      if (dmg > 1) ch.applyDamage(dmg, { from: this.owner, dir: chest.clone().sub(center).normalize(), part: 'body', explosive: true });
-    }
-    game.onExplosion && game.onExplosion(this.pos, this.owner);
+    this.game.scene.remove(this.mesh);
+    explodeAt(this.game, this.pos, this.owner, CONFIG.weapons.grenade.radius, CONFIG.weapons.grenade.damage);
   }
+}
+
+// Area damage with line-of-sight falloff; also triggers nearby explosive props.
+export function explodeAt(game, pos, owner, radius, damage) {
+  game.fx.explosion(pos);
+  game.audio.explosion(pos);
+  const center = pos.clone().add(new THREE.Vector3(0, 0.4, 0));
+  for (const ch of game.characters) {
+    if (!ch.alive) continue;
+    const chest = ch.pos.clone().add(new THREE.Vector3(0, ch.currentHeight * 0.6, 0));
+    const d = chest.distanceTo(center);
+    if (d > radius) continue;
+    let k = 1 - d / radius; k = k * k * 0.7 + k * 0.3;
+    const los = game.world.lineOfSight(center, chest, (c) => c.blocksBullets);
+    if (!los) k *= 0.18;
+    const dmg = damage * k;
+    if (dmg > 1) ch.applyDamage(dmg, { from: owner, dir: chest.clone().sub(center).normalize(), part: 'body', explosive: true });
+  }
+  for (const b of game.level.explosives || []) { if (b.alive && b.pos.distanceTo(center) < radius * 0.8) b.ignite(0.15 + Math.random() * 0.3, owner); }
+  game.onExplosion && game.onExplosion(pos, owner);
+}
+
+// Explosive fuel barrel: three rifle hits or any explosion nearby sets it off.
+export class ExplosiveBarrel {
+  constructor(game, mesh, collider, pos) {
+    this.game = game; this.mesh = mesh; this.collider = collider; this.pos = pos.clone(); this.hp = 3; this.alive = true; this.fuse = -1; this.owner = null;
+    collider.owner = this;
+  }
+  onBulletHit(hit, shooter) { if (!this.alive) return; this.hp--; this.game.fx.sparks.spawn(hit.point.x, hit.point.y, hit.point.z, 0, 1, 0, 0.3, 0.3, 1, 0.6, 0.2); if (this.hp <= 0) this.ignite(0.05, shooter); }
+  ignite(delay, owner) { if (!this.alive || this.fuse >= 0) return; this.fuse = delay; this.owner = owner; }
+  update(dt) {
+    if (!this.alive || this.fuse < 0) return;
+    this.fuse -= dt;
+    if (this.fuse <= 0) {
+      this.alive = false; this.fuse = -1;
+      this.mesh.visible = false; this.game.world.remove(this.collider);
+      this.game.nav.rebuildRegion(this.collider.minX, this.collider.minZ, this.collider.maxX, this.collider.maxZ);
+      explodeAt(this.game, this.pos, this.owner, 5.5, 110);
+    }
+  }
+  reset() { if (!this.alive) { this.alive = true; this.hp = 3; this.fuse = -1; this.mesh.visible = true; this.game.world.add(this.collider); this.game.nav.rebuildRegion(this.collider.minX, this.collider.minZ, this.collider.maxX, this.collider.maxZ); } }
 }
