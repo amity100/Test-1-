@@ -1,7 +1,7 @@
 // End-to-end smoke test in headless Chromium: loads the game, starts the mission, drives the player
 // with deterministic simulation steps, toggles the Architect view, and captures screenshots + console errors.
 // usage: node tools/smoke.mjs [outDir] [--quick] [--entry=index.html] [--quality=low]
-import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+const { chromium } = await import('/opt/node22/lib/node_modules/playwright/index.mjs').catch(() => import('playwright')); // global install or local devDependency
 import http from 'http'; import fs from 'fs'; import path from 'path';
 
 const outDir = process.argv[2] || 'smoke-out';

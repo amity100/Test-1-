@@ -1,6 +1,6 @@
 // Headless screenshot / smoke harness. Serves the repo root and captures a page.
 // usage: node tools/shot.mjs <urlPath> <out.png> [--w 1280] [--h 720] [--wait 3000] [--eval "js"] [--evalfile file.js] [--timeout 60000]
-import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+const { chromium } = await import('/opt/node22/lib/node_modules/playwright/index.mjs').catch(() => import('playwright')); // global install or local devDependency
 import http from 'http'; import fs from 'fs'; import path from 'path';
 
 const args = process.argv.slice(2);

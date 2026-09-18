@@ -68,7 +68,7 @@ vendor/three          three.js r160 (module build + the addons used)
 ```
 
 Build the single-file version: `npm run build` → `dist/VANTAGE.html`.
-Run the automated smoke test (headless Chromium via Playwright): `node tools/smoke.mjs out/`.
+Run the automated tests (headless Chromium via Playwright; `npm i -D playwright && npx playwright install chromium` first if it is not installed globally): `node tools/smoke.mjs out/` and `node tools/playthrough.mjs out/`.
 
 ## Credits
 

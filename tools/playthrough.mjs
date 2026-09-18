@@ -1,7 +1,7 @@
 // Scripted end-to-end playthrough of Mission 01 in headless Chromium: walks the mission script through
 // every objective (both prisoners, power, extraction, hold phase with waves, helicopter, mission complete).
 // usage: node tools/playthrough.mjs [outDir] [--port=8130]
-import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+const { chromium } = await import('/opt/node22/lib/node_modules/playwright/index.mjs').catch(() => import('playwright')); // global install or local devDependency
 import http from 'http'; import fs from 'fs'; import path from 'path';
 
 const outDir = process.argv[2] || 'playthrough-out';
