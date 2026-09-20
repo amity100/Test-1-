@@ -8,7 +8,7 @@ import { buildRifle } from '../entities/weapons.js';
 export const LEVEL1_BOUNDS = { minX: -70, maxX: 70, minZ: -70, maxZ: 70 };
 
 export function buildLevel1(game, b) {
-  const L = { modules: b.modules, doors: b.doors, zones: b.zones, interactables: [], spawns: { enemies: [], hostages: [] }, power: true, floodlights: [], roomLights: [], emergency: [], searchlights: [], zoneLabels: [], name: 'Blacksite Delta' };
+  const L = { modules: b.modules, doors: b.doors, zones: b.zones, interactables: [], spawns: { enemies: [], hostages: [] }, power: true, floodlights: [], roomLights: [], emergency: [], searchlights: [], zoneLabels: [], roofs: [], name: 'Blacksite Delta' };
   const PI = Math.PI;
 
   // ================= GROUND =================
@@ -73,9 +73,11 @@ export function buildLevel1(game, b) {
   b.door(WX0 + 24, WZ0, 0, { width: 1.3, height: 2.3, id: 'wh_south' });
   b.wall(WX0, WZ0, WX0, WZ1, WH, 0.35, 'corrugated', { material: 'metal' });
   b.wallWithOpenings(WX0, WZ1, WX1, WZ1, WH, 0.35, 'corrugated', [{ at: 8, w: 3, h: 1.4, sill: 5.2 }, { at: 22, w: 3, h: 1.4, sill: 5.2 }], { material: 'metal' });
-  b.box(-31, WH, 7, 30.4, 0.3, 30.4, 'steelDark', { material: 'metal', climbable: false });
-  b.box(-31, WH + 0.3, WZ1, 30.4, 0.5, 0.3, 'steelDark', { material: 'metal', collide: false }); b.box(-31, WH + 0.3, WZ0, 30.4, 0.5, 0.3, 'steelDark', { material: 'metal', collide: false });
-  b.acUnit(-26, WH + 0.3, 2); b.acUnit(-36, WH + 0.3, 12); b.pipe(-16.2, 6.5, -6, -16.2, 6.5, 20, 0.12);
+  L.roofs.push(b.roof(-31, WH, 7, 30.4, 0.3, 30.4, 'steelDark', { material: 'metal', deco: () => {
+    b.box(-31, WH + 0.3, WZ1, 30.4, 0.5, 0.3, 'steelDark', { material: 'metal', collide: false }); b.box(-31, WH + 0.3, WZ0, 30.4, 0.5, 0.3, 'steelDark', { material: 'metal', collide: false });
+    b.acUnit(-26, WH + 0.3, 2); b.acUnit(-36, WH + 0.3, 12);
+  } }).mesh);
+  b.pipe(-16.2, 6.5, -6, -16.2, 6.5, 20, 0.12);
   b.canopy(-12.8, 3, 6, 15, 5.3, 0);
   b.sign('WAREHOUSE 2', -15.8, 6.4, 3, PI / 2, 5.5, 0.8, { bg: '#1f2a33', fg: '#dfe7ee' });
   b.sign('DOCK A', -15.8, 4.9, -2, PI / 2, 1.6, 0.4, { bg: '#c9a227', fg: '#1a1a1a', border: null });
@@ -117,8 +119,7 @@ export function buildLevel1(game, b) {
   b.wallWithOpenings(GX0, GZ1, GX1, GZ1, GH, 0.3, 'brick', [{ at: 5, w: 1.6, h: 1.1, sill: 1.1 }], { material: 'concrete' });
   b.wall(GX1, GZ0, GX1, GZ1, GH, 0.3, 'brick', { material: 'concrete' });
   b.wall(GX0, GZ0, GX1, GZ0, GH, 0.3, 'brick', { material: 'concrete' });
-  b.box(17, GH, -10, 10.4, 0.3, 8.4, 'concreteDark', { material: 'concrete', climbable: false });
-  b.acUnit(19, GH + 0.3, -9);
+  L.roofs.push(b.roof(17, GH, -10, 10.4, 0.3, 8.4, 'concreteDark', { material: 'concrete', deco: () => b.acUnit(19, GH + 0.3, -9) }).mesh);
   for (const [gx, gz, ry] of [[12, -12.7, PI / 2], [12, -7.3, PI / 2], [17, -6, 0]]) { const g = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.1), b.mats.get('glass')); g.position.set(gx, 1.65, gz); g.rotation.y = ry; b.root.add(g); }
   b.desk(19.5, -11.5, PI / 2); b.locker(20.5, -7, 0); b.locker(19.5, -7, 0); b.table(15, -8, 0);
   L.roomLights.push(b.lamp(17, GH - 0.1, -10, { intensity: 22, distance: 12, kind: 'cool' }));
@@ -165,8 +166,7 @@ export function buildLevel1(game, b) {
   b.wall(CX1, CZ0, CX1, CZ1, CH, 0.35, 'brickDark', { material: 'concrete' });
   b.wallWithOpenings(CX0, CZ1, CX1, CZ1, CH, 0.35, 'brickDark', [{ at: 16, w: 1.5, h: 2.4 }], { material: 'concrete' });
   b.door(CX0 + 16, CZ1, 0, { width: 1.3, height: 2.3, id: 'cell_north' });
-  b.box(24, CH, 31, 32.4, 0.3, 18.4, 'concreteDark', { material: 'concrete', climbable: false });
-  b.acUnit(30, CH + 0.3, 30); b.acUnit(18, CH + 0.3, 34);
+  L.roofs.push(b.roof(24, CH, 31, 32.4, 0.3, 18.4, 'concreteDark', { material: 'concrete' }).mesh);
   b.wallWithOpenings(CX0, 27, CX1, 27, CH, 0.25, 'concrete', [{ at: 3, w: 1.2, h: 2.2 }, { at: 9, w: 1.2, h: 2.2 }, { at: 15, w: 1.2, h: 2.2 }, { at: 21, w: 1.3, h: 2.3 }, { at: 27, w: 1.2, h: 2.2 }], { material: 'concrete' });
   for (let i = 1; i <= 5; i++) b.wall(CX0 + i * 6, 27, CX0 + i * 6, CZ1, CH, 0.25, 'concrete', { material: 'concrete' });
   for (const cx of [11, 17, 23, 35]) b.cage(cx, 27.1, 1.2, 0.1, 2.2, { gap: 0.2 });
@@ -260,7 +260,7 @@ export class Level1Script {
     this.game = game; this.level = level;
     this.objectives = { insert: 'active', hostage1: 'pending', hostage2: 'pending', power: 'optional', extract: 'pending', hold: 'pending' };
     this.primary = 'insert';
-    this.flags = { power: true, cellUnlocked: false, lzReached: false, holdStarted: false, complete: false, hintArmory: false, hintHostage: false, hintBody: false, hintQuick: false, hintFocus: false, hintCell: false, waves: 0 };
+    this.flags = { power: true, cellUnlocked: false, lzReached: false, holdStarted: false, complete: false, hintArmory: false, hintHostage: false, hintBody: false, hintQuick: false, hintFocus: false, hintCell: false, hintStranded: false, waves: 0 };
     this.tutorial = { step: 'wait', t: 0, reporter: null };   // wait → map → place → through → knife → witness → done → finished
     this.holdTime = 0; this.holdDuration = 20; this.nextWave = 0; this.waveCount = 0;
     this.heli = null; this.heliT = 0;
@@ -359,6 +359,17 @@ export class Level1Script {
   }
 
   update(dt) {
+    // a freed prisoner left behind (you gated away and closed the gateway): tell the player how to fetch him
+    if (!this.flags.hintStranded) {
+      const g = this.game, far = g.hostages.find((h) => h.alive && h.state === 'freed' && h.pos.distanceTo(g.player.pos) > 18);
+      this._strandedT = far && !g.portals.active ? (this._strandedT || 0) + dt : 0;
+      if (this._strandedT > 5) {
+        // stranded only when he has no walking route to you (a partial path ends short of you)
+        const path = g.nav.findPath(far.pos, g.player.pos);
+        if (!path || path[path.length - 1].distanceTo(g.player.pos) > 4) { this.flags.hintStranded = true; g.hint('stranded'); }
+        else this._strandedT = -10;
+      }
+    }
     const g = this.game, L = this.level;
     this.time += dt;
     const tut = this.tutorial; tut.t += dt;

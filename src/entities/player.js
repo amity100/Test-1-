@@ -115,10 +115,10 @@ export class Player extends Character {
 
     let mx = 0, mz = 0, wantSprint = false, wantAim = false, wantFire = false, leftEdge = false;
     if (controlled) {
-      mx = inp.axis('KeyA', 'KeyD'); mz = inp.axis('KeyS', 'KeyW');
-      wantSprint = inp.down('ShiftLeft') || inp.down('ShiftRight');
-      wantAim = inp.mouse.right; wantFire = inp.mouse.left;
-      leftEdge = inp.mouse.left && !this._leftWas;
+      [mx, mz] = inp.move();
+      wantSprint = inp.sprint;
+      wantAim = inp.mouse.right && !inp.touch; wantFire = inp.mouse.left;
+      leftEdge = (inp.mouse.left && !this._leftWas) || inp.tapFire;
       if (inp.justPressed('ControlLeft') || inp.justPressed('KeyZ')) this.crouchToggle = !this.crouchToggle;
       if (inp.justPressed('KeyR')) this._reload();
       if (inp.justPressed('KeyG')) this._throwGrenade();
@@ -142,7 +142,7 @@ export class Player extends Character {
     else {
       const fx = Math.sin(this.camYaw), fz = Math.cos(this.camYaw);
       const rx = Math.cos(this.camYaw), rz = -Math.sin(this.camYaw);
-      let dx = fx * mz + rx * mx, dz = fz * mz + rz * mx;
+      let dx = fx * mz - rx * mx, dz = fz * mz - rz * mx;   // D / stick-right = screen right (world -right)
       const len = Math.hypot(dx, dz); if (len > 1) { dx /= len; dz /= len; }
       let speed = this.sprinting ? P.runSpeed : P.walkSpeed;
       if (this.crouch > 0.5) speed = P.crouchSpeed;
@@ -164,7 +164,7 @@ export class Player extends Character {
       const trigger = this.gun.cfg.semi ? leftEdge : wantFire;
       if (trigger) this._tryFire(dt, leftEdge);
     }
-    if (controlled && inp.mouse.left && this.gun.mag === 0 && this.gun.reloading <= 0 && this.gun.reserve > 0 && !this.carrying) this._reload();
+    if (controlled && (inp.mouse.left || inp.tapFire) && this.gun.mag === 0 && this.gun.reloading <= 0 && this.gun.reserve > 0 && !this.carrying) this._reload();
     if (this.knifeT > 0) this.knifeT -= realDt;
 
     if (g.time - this.lastDamageTime > P.healthRegenDelay && this.health < this.maxHealth) this.health = Math.min(this.maxHealth, this.health + P.healthRegenRate * dt);

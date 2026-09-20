@@ -111,7 +111,7 @@ export class Enemy extends AICharacter {
       const via = canSeeVia(game, this, t, this.state === 'combat' ? 200 : E.fovDeg, range);
       if (!via) continue;
       const dd = via.direct ? d : via.dist;
-      let score = dd + (t.isHostage ? 15 : 0) + (t.crouch > 0.5 ? 4 : 0);
+      let score = dd + (t.isHostage ? 30 : 0) + (t.crouch > 0.5 ? 4 : 0);   // the operator first; prisoners only when he is out of sight
       if (score < bestD) { bestD = score; best = { target: t, image: via.direct ? t.pos : via.image, end: via.direct ? null : via.end }; }
     }
     return best;

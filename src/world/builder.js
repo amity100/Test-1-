@@ -37,6 +37,10 @@ export class LevelBuilder {
 
   // ---- primitives ----
   _push(matName, geo, x, y, z, yaw = 0, pitch = 0, roll = 0) {
+    if (this.pushTarget) {
+      const m = new THREE.Mesh(geo, this.mats.get(matName)); m.position.set(x, y, z); m.rotation.set(pitch, yaw, roll, 'YXZ');
+      m.castShadow = true; m.receiveShadow = true; this.pushTarget.add(m); return;
+    }
     _e.set(pitch, yaw, roll, 'YXZ'); _q.setFromEuler(_e); _p.set(x, y, z);
     _m4.compose(_p, _q, _s); geo.applyMatrix4(_m4);
     if (!this.batches.has(matName)) this.batches.set(matName, []);
@@ -50,6 +54,18 @@ export class LevelBuilder {
       this.world.add(c); return c;
     }
     return null;
+  }
+  // A roof slab as its own mesh (not batched) so the tactical map can lift it and show the rooms underneath.
+  // Returns { mesh: Group, collider }. Anything built inside `deco()` (parapets, AC units) goes into the same group.
+  roof(x, y, z, w, h, d, matName, { yaw = 0, material = 'concrete', deco = null } = {}) {
+    const group = new THREE.Group(); group.name = 'roof';
+    const slab = new THREE.Mesh(boxGeo(w, h, d), this.mats.get(matName));
+    slab.position.set(x, y + h / 2, z); slab.rotation.y = yaw; slab.castShadow = true; slab.receiveShadow = true; group.add(slab);
+    this.root.add(group);
+    const c = new Collider({ x, y: y + h / 2, z, hx: w / 2, hy: h / 2, hz: d / 2, yaw, tag: 'roof', material, climbable: false });
+    this.world.add(c);
+    if (deco) { this.pushTarget = group; try { deco(); } finally { this.pushTarget = null; } }
+    return { mesh: group, collider: c };
   }
   wedge(x, y, z, w, h, d, matName, { yaw = 0, material = 'metal', collide = true } = {}) {
     const g = wedgeGeo(w, h, d); this._push(matName, g, x, y, z, yaw);

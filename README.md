@@ -18,7 +18,9 @@ npm start          # http://localhost:8080
 
 or `python3 -m http.server 8080` in the repository folder, then open `http://localhost:8080/`.
 
-Requirements: WebGL 2, a mouse (pointer lock), and a GPU. The graphics quality preset can be lowered in Settings.
+Requirements: WebGL 2 and a GPU. On a desktop you play with mouse and keyboard (pointer lock); on a phone or tablet the game switches to touch controls by itself (`?touch=1` / `?touch=0` in the URL forces either). The graphics quality preset can be lowered in Settings; phones default to *medium*.
+
+**On a phone:** open `dist/VANTAGE.html` (or the hosted page) in Chrome or Safari, turn the phone sideways and tap the screen. The game asks for fullscreen and landscape. A portrait layout also works but the map and the view are smaller.
 
 ## Controls
 
@@ -44,13 +46,26 @@ Requirements: WebGL 2, a mouse (pointer lock), and a GPU. The graphics quality p
 | Pan, orbit, zoom | `W A S D` or screen edges, `Q` `E` or middle mouse, wheel |
 | Recentre on yourself | `F` |
 
+| Touch (phone / tablet) | |
+|---|---|
+| Move / sprint | Left half of the screen: floating stick; push it all the way to sprint |
+| Look | Drag anywhere on the right half |
+| Fire | `FIRE` button, or a quick tap on the right half |
+| Knife takedown / interact / grenade / reload | `KNIFE` / `ACTION` / `NADE` / `RELOAD` buttons (they appear when they apply) |
+| Switch weapon / crouch | `SWAP` / `CROUCH` |
+| Quick gateway to what you look at / close it | `GATE` / `CLOSE` |
+| Tactical map | `MAP` (top right); `BACK` returns to the ground |
+| On the map: place a gateway | Tap a spot to preview it, tap it again (or `OPEN`) to open it |
+| On the map: pan / zoom | Drag with one finger / pinch |
+| Pause | `II` (top right) |
+
 ## The two rules
 
 **Gateways are real openings.** One pair at a time. Both ends can be seen through, shot through and heard through, and anyone can walk through either way, guards included. A gateway into the armory gives you a carbine, but a guard who looks through it sees the armory. Opening a new pair closes the old one. There is no limit on how many you open; what limits you is the second rule.
 
 **The witness chain.** A guard who sees a kill, a body, you, or an open gateway keys his radio: a red ring over his head and a line in the top-right panel count down (3.5 s for a kill or a sighting, 4.5 s for a body, 5 s for a gateway or shots heard). Killing him before it ends cuts the chain. If a report completes the alarm goes up: every guard hunts you, two guards post themselves on each prisoner, and reinforcements come through the gates. You can still win, loudly.
 
-Time slows to 15% while the map is open and to 30% for a moment after every crossing; each kill inside that window extends it, so a fast chain stays slow. Bodies can be carried and thrown through a gateway where nobody will find them. Running is heard at 9 m, the suppressed pistol at 8 m, the M4 at 45 m.
+The map lifts the roofs, so you can see inside the buildings and place a gateway in any room. Time slows to 15% while the map is open and to 30% for a moment after every crossing; each kill inside that window extends it, so a fast chain stays slow. Bodies can be carried and thrown through a gateway where nobody will find them. Running is heard at 9 m, the suppressed pistol at 8 m, the M4 at 45 m.
 
 The end screen ranks the run: **Ghost** (no report ever went out), **Operative**, or **Loud**.
 

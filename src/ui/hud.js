@@ -12,7 +12,7 @@ export class HUD {
     this.root = el('div', 'hud', root);
     const r = this.root;
     this.crosshair = el('div', 'crosshair', r); for (let i = 0; i < 4; i++) el('i', 'ch' + i, this.crosshair); el('b', 'dot', this.crosshair);
-    this.knifeEl = el('div', 'knife', r, ''); 
+    this.knifeEl = el('div', 'knife-prompt', r, '');
     this.hitmarker = el('div', 'hitmarker', r); for (let i = 0; i < 4; i++) el('i', '', this.hitmarker);
     this.dmgRoot = el('div', 'dmg-root', r);
     // top-left objective
@@ -49,7 +49,7 @@ export class HUD {
     // map
     this.mapPanel = el('div', 'map-panel', r);
     el('div', 'map-title', this.mapPanel, i18n.t('hud.map'));
-    this.mapHint = el('div', 'map-hint', this.mapPanel, i18n.t('hud.mapHint'));
+    this.mapHint = el('div', 'map-hint', this.mapPanel, this.tt('hud.mapHint'));
     this.portalStatus = el('div', 'portal-status', r, '');
     this.cursor = el('div', 'vcursor', r);
     this.labels = el('div', 'labels', r);
@@ -63,6 +63,8 @@ export class HUD {
     this.hide();
   }
 
+  // touch-aware string: the .touch variant when the game runs on touch controls
+  tt(key, vars) { const k = this.game.isTouch && i18n.has(key + '.touch') ? key + '.touch' : key; return i18n.t(k, vars); }
   relabel() {
     this.objBox.querySelector('.label').textContent = i18n.t('hud.objective');
     this.statusBox.querySelector('.hp .label').textContent = i18n.t('hud.health');
@@ -70,7 +72,7 @@ export class HUD {
     this.alarmChip.textContent = i18n.t('hud.alarmOn');
     this.witnessBox.querySelector('.wtitle').textContent = i18n.t('hud.witness');
     this.mapPanel.querySelector('.map-title').textContent = i18n.t('hud.map');
-    this.mapHint.textContent = i18n.t('hud.mapHint');
+    this.mapHint.textContent = this.tt('hud.mapHint');
     if (this.game.script) this.game.script.setPrimary(this.game.script.primary);
   }
   show() { this.root.style.display = ''; }
@@ -79,25 +81,26 @@ export class HUD {
   setObjective(main, opt) { this.objMain.textContent = main || ''; this.objOpt.textContent = opt || ''; this.objOpt.style.display = opt ? '' : 'none'; this.objBox.classList.add('pulse'); setTimeout(() => this.objBox.classList.remove('pulse'), 1200); }
   setTimer(sec) { if (sec == null) { this.timerBox.style.display = 'none'; return; } this.timerBox.style.display = ''; const m = Math.floor(sec / 60), s = Math.floor(sec % 60); this.timerBox.innerHTML = `<span class="label">${i18n.t('hud.extraction') === 'hud.extraction' ? i18n.t('obj.hold') : i18n.t('hud.extraction')}</span><span class="t">${m}:${s.toString().padStart(2, '0')}</span>`; }
   toast(text, ms = 2600) { const t = el('div', 'toast', this.toastRoot, text); requestAnimationFrame(() => t.classList.add('in')); setTimeout(() => { t.classList.remove('in'); setTimeout(() => t.remove(), 400); }, ms); }
-  hint(key) { if (this.tutKey) return; const text = i18n.t('hint.' + key); this.hintEl.innerHTML = text; this.hintEl.classList.remove('tut'); this.hintEl.classList.add('in'); this.hintTimer = 7 + text.length * 0.04; this.lastHint = key; }
+  hint(key) { if (this.tutKey) return; const text = this.tt('hint.' + key); this.hintEl.innerHTML = text; this.hintEl.classList.remove('tut'); this.hintEl.classList.add('in'); this.hintTimer = 7 + text.length * 0.04; this.lastHint = key; }
   // A tutorial prompt stays on screen until it is cleared.
   tutorial(key) {
     this.tutKey = key;
     if (!key) { this.hintEl.classList.remove('in', 'tut'); this.hintTimer = 0; return; }
-    this.hintEl.innerHTML = i18n.t('tut.' + key); this.hintEl.classList.add('in', 'tut'); this.hintTimer = 1e9;
+    this.hintEl.innerHTML = this.tt('tut.' + key); this.hintEl.classList.add('in', 'tut'); this.hintTimer = 1e9;
   }
   // Opening card: the four verbs; resolves on the first key or click.
   showIntro(onDone) {
-    const t = i18n.t;
+    const t = (k) => this.tt(k);
+    const touch = this.game.isTouch;
     const o = el('div', 'intro', this.game.container);
     o.innerHTML = `<div class="card"><div class="ititle">${t('intro.title')}</div>
-      <div class="row"><kbd>WASD</kbd><span>${t('intro.move')}</span></div>
-      <div class="row"><kbd>TAB</kbd><span>${t('intro.map')}</span></div>
-      <div class="row"><kbd>F</kbd><span>${t('intro.knife')}</span></div>
+      <div class="row"><kbd>${touch ? '✥' : 'WASD'}</kbd><span>${t('intro.move')}</span></div>
+      <div class="row"><kbd>${touch ? i18n.t('touch.map') : 'TAB'}</kbd><span>${t('intro.map')}</span></div>
+      <div class="row"><kbd>${touch ? i18n.t('touch.knife') : 'F'}</kbd><span>${t('intro.knife')}</span></div>
       <div class="row"><span class="ringswatch"><i></i></span><span>${t('intro.witness')}</span></div>
       <div class="skip">${t('intro.skip')}</div></div>`;
-    const done = (e) => { if (e && e.type === 'keydown' && (e.code === 'Tab' || e.code === 'Escape')) e.preventDefault(); window.removeEventListener('keydown', done, true); o.removeEventListener('mousedown', done); o.remove(); onDone(); };
-    setTimeout(() => { window.addEventListener('keydown', done, true); o.addEventListener('mousedown', done); }, 400);
+    const done = (e) => { if (e && e.type === 'keydown' && (e.code === 'Tab' || e.code === 'Escape')) e.preventDefault(); if (e && e.type === 'pointerdown') e.preventDefault(); window.removeEventListener('keydown', done, true); o.removeEventListener('pointerdown', done); o.remove(); onDone(); };
+    setTimeout(() => { window.addEventListener('keydown', done, true); o.addEventListener('pointerdown', done); }, 400);
     this.introEl = o;
     return o;
   }
@@ -128,7 +131,7 @@ export class HUD {
     this.crosshair.style.opacity = g.mode === 'ground' && p.alive && !p.sprinting && !p.carrying ? 1 : 0;
     if (this.hitT > 0) { this.hitT -= realDt; if (this.hitT <= 0) this.hitmarker.className = 'hitmarker'; }
     // knife prompt
-    const kt = p.knifeTarget && g.mode === 'ground' && p.alive;
+    const kt = p.knifeTarget && g.mode === 'ground' && p.alive && !g.isTouch;
     this.knifeEl.style.display = kt ? '' : 'none';
     if (kt) { const silent = p.knifeTarget.state !== 'combat'; this.knifeEl.innerHTML = `<kbd>F</kbd> ${i18n.t('hud.knife')}`; this.knifeEl.classList.toggle('loud', !silent); }
     // health / focus / alarm
@@ -143,20 +146,20 @@ export class HUD {
     this.magEl.classList.toggle('low', p.gun.mag <= 3);
     this.reloadEl.textContent = p.gun.reloading > 0 ? i18n.t('hud.reload') + '…' : (p.gun.mag === 0 ? i18n.t('hud.empty') : '');
     this.grenEl.innerHTML = p.grenades > 0 ? '●'.repeat(p.grenades) : '';
-    this.carryEl.textContent = p.carrying ? i18n.t('hud.carrying') : '';
+    this.carryEl.textContent = p.carrying ? this.tt('hud.carrying') : '';
     // compass
     const deg = THREE.MathUtils.euclideanModulo(-p.camYaw * 180 / Math.PI, 360);
     this.compassStrip.style.transform = `translateX(${-(deg * 2 + 720 - this.compass.clientWidth / 2)}px)`;
     // interaction prompt
     const it = p.interact;
-    if (it.target && g.mode === 'ground' && !p.carrying) { this.prompt.style.display = ''; this.promptText.textContent = i18n.t(it.target.prompt); this.promptRing.style.setProperty('--p', (it.progress * 360) + 'deg'); }
+    if (it.target && g.mode === 'ground' && !p.carrying) { this.prompt.style.display = ''; this.promptText.textContent = this.tt(it.target.prompt); this.promptRing.style.setProperty('--p', (it.progress * 360) + 'deg'); }
     else this.prompt.style.display = 'none';
     if (this.hintTimer > 0) { this.hintTimer -= realDt; if (this.hintTimer <= 0) this.hintEl.classList.remove('in'); }
     // radio panel
     this._updateWitnesses();
     // gateway status
     const ps = g.portals;
-    this.portalStatus.textContent = ps.state === 'open' ? i18n.t('hud.portal.open') : ps.state === 'opening' ? i18n.t('hud.portal.opening') : i18n.t('hud.portal.closed');
+    this.portalStatus.textContent = ps.state === 'open' ? this.tt('hud.portal.open') : ps.state === 'opening' ? i18n.t('hud.portal.opening') : this.tt('hud.portal.closed');
     this.portalStatus.classList.toggle('on', ps.active);
     // map cursor
     if (this.mapOn) {
@@ -227,8 +230,10 @@ export class HUD {
       const ps = g.portals;
       if (ps.active) { place('pa', ps.a.pos, 2.6, 'A', 'portal'); place('pb', ps.b.pos, 2.6, 'B', 'portal'); }
       for (const zl of g.level.zoneLabels || []) place('z' + zl.key, { x: zl.x, y: 0, z: zl.z }, 0, i18n.t(zl.key), 'zone');
-      const s = g.tacmap.suggestion;
-      if (s) place('tut', { x: s.x, y: s.y, z: s.z }, 2.8, i18n.t('tut.here'), 'tut');
+      const s = g.tacmap.suggestion, pv = g.tacmap.preview;
+      const nearSugg = s && pv && Math.hypot(pv.x - s.x, pv.z - s.z) < 2.5;
+      if (s && !nearSugg) place('tut', { x: s.x, y: s.y, z: s.z }, 2.8, this.tt('tut.here'), 'tut');
+      if (pv && g.isTouch) place('pv', { x: pv.x, y: pv.y, z: pv.z }, 3.1, i18n.t('touch.tapAgain'), 'tut preview');
     }
     for (const [k, e] of this.labelEls) if (!seen.has(k)) e.style.display = 'none';
   }

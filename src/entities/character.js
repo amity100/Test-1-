@@ -166,6 +166,7 @@ export class Character {
   applyDamage(amount, info = {}) {
     if (!this.alive || this.godMode) return;
     if (info.from && info.from.isEnemy && !this.isEnemy && this.game.difficulty) amount *= this.game.difficulty.damage;
+    if (this.isHostage && info.from && info.from.isEnemy) amount *= 0.5;   // the site wants its prisoners alive: guards shoot to wound
     this.health -= amount;
     this.lastDamageTime = this.game.time;
     if (info.from) this.lastAttacker = info.from;

@@ -3,3 +3,7 @@ dist/*.map
 .DS_Store
 .env
 dist/artifact.html
+smoke-out/
+playthrough-out/
+mobile-out/
+selfplay-out/

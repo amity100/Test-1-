@@ -141,10 +141,25 @@ export class PortalSystem {
         // you must be able to step through: the far side of the plane needs room too
         const bx = x + fx * 0.55, bz = z + fz * 0.55;
         if (!g.nav.isWalkable(bx, gy, bz, 0.6) || !g.world.cylinderFree(bx, bz, 0.34, gy + 0.3, gy + 2.0)) continue;
+        if (!this._reachable(player, bx, gy, bz)) continue;
         return { x, y: gy, z, yaw: yaw + Math.PI };
       }
     }
     return null;
+  }
+  // Can you walk from where you stand to (x, y, z)? Nothing solid (wall, bars, crate, closed door) in between.
+  _reachable(player, x, y, z) {
+    const g = this.game;
+    _v.set(x, y, z);
+    if (!g.nav.lineWalkable(player.pos, _v)) return false;
+    const dx = x - player.pos.x, dz = z - player.pos.z; const len = Math.hypot(dx, dz);
+    if (len < 1e-3) return true;
+    _v2.set(dx / len, 0, dz / len);
+    for (const h of [0.45, 1.1, 1.8]) {
+      _v3.set(player.pos.x, player.pos.y + h, player.pos.z);
+      if (g.world.raycast(_v3, _v2, len, (c) => c.blocksMovement)) return false;
+    }
+    return true;
   }
   // Snap a world point to walkable ground and pick the exit direction: towards a nearby guard if there is one,
   // otherwise the direction with the longest clear run.
@@ -172,6 +187,9 @@ export class PortalSystem {
       let run = 0;
       for (let s = 0.5; s <= 4; s += 0.5) { if (!nav.isWalkable(best.x + fx * s, y, best.z + fz * s, 0.6)) break; run = s; }
       if (run < 0.9) continue;
+      // and nothing solid right in front of the opening at body height (a shelf face, a crate): you step out into open floor
+      _v.set(best.x, y + 1.2, best.z); _v2.set(fx, 0, fz);
+      if (g.world.raycast(_v, _v2, 1.4, (c) => c.blocksMovement)) continue;
       let score = run;
       if (guard) { const dx = guard.pos.x - best.x, dz = guard.pos.z - best.z; const l = Math.hypot(dx, dz) || 1; score += 6 * ((dx * fx + dz * fz) / l); }
       else if (opts.hintYaw !== undefined) score += 2 * Math.cos(a - opts.hintYaw);

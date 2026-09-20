@@ -21,9 +21,19 @@ export class TacMap {
     this.markers = new THREE.Group(); this.markers.visible = false; game.scene.add(this.markers);
     this.hoverPoint = null; this.hoverOK = false; this.hoverPlacement = null;
     this.suggestion = null;
+    this.touch = false; this.preview = null; this.pendingTap = null;
     this._buildMarkers();
     this.pulse = 0;
   }
+  // ---- touch gestures ----
+  tapAt(nx, ny) { this.pendingTap = { nx, ny }; }
+  confirm() { if (this.preview) this._place(this.preview.point); }
+  panScreen(dx, dy) {
+    const g = this.game; const k = this.zoom / g.height * 1.35;
+    const fx = Math.sin(this.orbit), fz = Math.cos(this.orbit), rx = Math.cos(this.orbit), rz = -Math.sin(this.orbit);
+    this.focus.x += (rx * dx + fx * dy) * k; this.focus.z += (rz * dx + fz * dy) * k;
+  }
+  setZoom(z) { this.zoom = THREE.MathUtils.clamp(z, M.minZoom, M.maxZoom); }
   // Tutorial: a pulsing ring where the first gateway should go.
   suggest(p) {
     this.clearSuggestion();
@@ -62,11 +72,13 @@ export class TacMap {
     if (this.active) return;
     const g = this.game;
     this.active = true; g.mode = 'map';
+    this.zoom = M.defaultZoom * (g.height > g.width ? 1.35 : 1);
     this.focus.copy(g.player.pos);
     if (this.suggestion) { this.focus.x = (g.player.pos.x + this.suggestion.x) / 2; this.focus.z = (g.player.pos.z + this.suggestion.z) / 2; }
     this.orbit = g.player.camYaw;   // camera behind you: the way you face is up
     this.cursor.set(0.5, 0.5);
     this.markers.visible = true;
+    for (const m of g.level.roofs || []) m.visible = false;   // look into the rooms
     // the map reads better with less haze
     this._fog = g.scene.fog.density; g.scene.fog.density = 0.004;
     g.audio.mapEnter(); g.audio.setSlowMotion(true);
@@ -77,7 +89,8 @@ export class TacMap {
     if (!this.active) return;
     const g = this.game;
     this.active = false; g.mode = 'ground';
-    this.markers.visible = false; this.ghost.group.visible = false;
+    this.markers.visible = false; this.ghost.group.visible = false; this.preview = null; this.pendingTap = null;
+    for (const m of g.level.roofs || []) m.visible = true;
     if (this._fog !== undefined) { g.scene.fog.density = this._fog; this._fog = undefined; }
     this._hideIntel();
     g.audio.mapExit(); g.audio.setSlowMotion(g.focus > 0);
@@ -97,22 +110,23 @@ export class TacMap {
     if (!this.active) return;
     const inp = g.input;
     const W = g.width, H = g.height;
-    if (inp.softLook) { this.cursor.x = THREE.MathUtils.clamp(inp.mouse.x / W, 0, 1); this.cursor.y = THREE.MathUtils.clamp(inp.mouse.y / H, 0, 1); }
+    if (this.touch) { if (this.pendingTap) { this.cursor.set(this.pendingTap.nx, this.pendingTap.ny); } }
+    else if (inp.softLook) { this.cursor.x = THREE.MathUtils.clamp(inp.mouse.x / W, 0, 1); this.cursor.y = THREE.MathUtils.clamp(inp.mouse.y / H, 0, 1); }
     else { this.cursor.x = THREE.MathUtils.clamp(this.cursor.x + inp.mouse.dx / W, 0, 1); this.cursor.y = THREE.MathUtils.clamp(this.cursor.y + inp.mouse.dy / H, 0, 1); }
     // camera controls
     const pan = M.panSpeed * realDt * (this.zoom / 30);
     const fx = Math.sin(this.orbit), fz = Math.cos(this.orbit), rx = Math.cos(this.orbit), rz = -Math.sin(this.orbit);
     const mz = inp.axis('KeyS', 'KeyW'), mx = inp.axis('KeyA', 'KeyD');
-    this.focus.x += (fx * mz + rx * mx) * pan; this.focus.z += (fz * mz + rz * mx) * pan;
-    const edge = inp.softLook ? -1 : 0.02;
-    if (this.cursor.x < edge) { this.focus.x -= rx * pan; this.focus.z -= rz * pan; }
-    if (this.cursor.x > 1 - edge) { this.focus.x += rx * pan; this.focus.z += rz * pan; }
+    this.focus.x += (fx * mz - rx * mx) * pan; this.focus.z += (fz * mz - rz * mx) * pan;
+    const edge = inp.softLook || this.touch ? -1 : 0.02;
+    if (this.cursor.x < edge) { this.focus.x += rx * pan; this.focus.z += rz * pan; }
+    if (this.cursor.x > 1 - edge) { this.focus.x -= rx * pan; this.focus.z -= rz * pan; }
     if (this.cursor.y < edge) { this.focus.x += fx * pan; this.focus.z += fz * pan; }
     if (this.cursor.y > 1 - edge) { this.focus.x -= fx * pan; this.focus.z -= fz * pan; }
     if (inp.down('KeyQ')) this.orbit += realDt * 1.6;
     if (inp.down('KeyE')) this.orbit -= realDt * 1.6;
-    if (inp.mouse.middle) this.orbit -= inp.mouse.dx * 0.004;
-    this.zoom = THREE.MathUtils.clamp(this.zoom + inp.mouse.wheel * 2.5, M.minZoom, M.maxZoom);
+    if (inp.mouse.middle && !this.touch) this.orbit -= inp.mouse.dx * 0.004;
+    if (!this.touch) this.zoom = THREE.MathUtils.clamp(this.zoom + inp.mouse.wheel * 2.5, M.minZoom, M.maxZoom);
     const b = g.world.bounds; this.focus.x = THREE.MathUtils.clamp(this.focus.x, b.minX + 10, b.maxX - 10); this.focus.z = THREE.MathUtils.clamp(this.focus.z, b.minZ + 10, b.maxZ - 10);
     if (inp.justPressed('KeyF')) this.focus.copy(g.player.pos);
     this._placeCamera();
@@ -137,7 +151,7 @@ export class TacMap {
   // world point under the cursor: the highest walkable surface hit, else the ground plane
   groundPoint(ray) {
     const g = this.game;
-    const wh = g.world.raycast(ray.origin, ray.direction, 400, (c) => c.blocksMovement && c.tag !== 'door');
+    const wh = g.world.raycast(ray.origin, ray.direction, 400, (c) => c.blocksMovement && c.tag !== 'door' && c.tag !== 'roof');
     if (wh && wh.normal.y > 0.5) return wh.point.clone();
     _plane.set(new THREE.Vector3(0, 1, 0), -g.world.groundY);
     const gp = ray.intersectPlane(_plane, _v);
@@ -160,6 +174,17 @@ export class TacMap {
       gh.ring.material.color.setHex(col); gh.frame.material.color.setHex(ok ? 0x8af0ff : 0xff6a5a);
       gh.ring.scale.setScalar(1 + 0.12 * this.pulse);
     } else gh.group.visible = false;
+    if (this.touch) {
+      // tap once to preview, tap again near it (or OPEN) to open
+      if (this.pendingTap && p) {
+        if (this.preview && Math.hypot(this.preview.point.x - p.x, this.preview.point.z - p.z) < 2.0) this._place(this.preview.point);
+        else if (this.hoverPlacement) { this.preview = { point: p.clone(), x: this.hoverPlacement.x, y: this.hoverPlacement.y, z: this.hoverPlacement.z }; g.audio.ui('hover'); }
+        else { this.preview = null; g.audio.moduleInvalid(); }
+      }
+      this.pendingTap = null;
+      if (!this.hoverPlacement) gh.group.visible = false;
+      return;
+    }
     for (const c of inp.clicks) {
       if (c.button === 0 && p) this._place(p);
       else if (c.button === 2) { if (g.portals.active) { g.portals.close(); g.hud.toast(g.t('portal.closed')); } }
@@ -168,6 +193,7 @@ export class TacMap {
   _place(p) {
     const g = this.game;
     const res = g.openPortalAt(p);
+    this.preview = null;
     if (res.ok) { if (M.closeOnPlace) this.exit(); }
     else { g.hud.toast(res.reason); g.audio.moduleInvalid(); }
   }

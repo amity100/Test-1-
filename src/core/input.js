@@ -14,6 +14,11 @@ export class Input {
     this.lockFailures = 0; this._attempt = 0; this._failedAttempt = -1;
     this.enabled = true;
     this.listeners = {};
+    // touch controls (phones): an analog stick, drag-to-look deltas and one-frame taps come from TouchControls
+    this.touch = false;
+    this.touchMove = { x: 0, y: 0 };
+    this.touchSprint = false;
+    this.tapFire = false;
 
     window.addEventListener('keydown', (e) => {
       if (e.repeat) return;
@@ -30,10 +35,12 @@ export class Input {
     window.addEventListener('blur', () => { this.keys.clear(); this.mouse.left = this.mouse.right = this.mouse.middle = false; this.mouse.buttons = 0; });
 
     document.addEventListener('mousemove', (e) => {
+      if (this.touch) return;
       if (this.locked || this.softLook) { this.mouse.dx += e.movementX; this.mouse.dy += e.movementY; }
       this.mouse.x = e.clientX; this.mouse.y = e.clientY;
     });
     document.addEventListener('mousedown', (e) => {
+      if (this.touch) return;   // phones: synthetic mouse events would double every tap
       if (e.target !== canvas && !canvas.contains(e.target)) return;
       this.mouse.buttons = e.buttons;
       if (e.button === 0) this.mouse.left = true;
@@ -44,6 +51,7 @@ export class Input {
       if (this.wantLock && !this.locked) this.lock();
     });
     document.addEventListener('mouseup', (e) => {
+      if (this.touch) return;
       this.mouse.buttons = e.buttons;
       if (e.button === 0) this.mouse.left = false;
       if (e.button === 1) this.mouse.middle = false;
@@ -66,12 +74,20 @@ export class Input {
   on(name, fn) { (this.listeners[name] ||= []).push(fn); }
   emit(name, ...args) { for (const fn of this.listeners[name] || []) fn(...args); }
 
-  // True when mouse deltas should drive the camera (real pointer lock or the soft fallback).
-  get looking() { return this.locked || this.softLook; }
+  // True when mouse deltas should drive the camera (real pointer lock, the soft fallback, or touch).
+  get looking() { return this.locked || this.softLook || this.touch; }
+  // Movement axes: keys plus the touch stick. Returns [strafe, forward] in -1..1.
+  move() {
+    let mx = this.axis('KeyA', 'KeyD'), mz = this.axis('KeyS', 'KeyW');
+    if (this.touch) { mx += this.touchMove.x; mz += this.touchMove.y; }
+    const l = Math.hypot(mx, mz); if (l > 1) { mx /= l; mz /= l; }
+    return [mx, mz];
+  }
+  get sprint() { return this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || this.touchSprint; }
 
   lock() {
     this.wantLock = true;
-    if (typeof window !== 'undefined' && window.__VANTAGE_NOLOCK) { if (!this.locked) { this.locked = true; this.emit('lockchange', true); } return; }
+    if ((typeof window !== 'undefined' && window.__VANTAGE_NOLOCK) || this.touch) { if (!this.locked) { this.locked = true; this.emit('lockchange', true); } return; }
     if (this.softLook) { this.emit('lockchange', true); return; }
     if (this.locked) return;
     if (!this.canvas.requestPointerLock) { this._attemptFailed(); return; }
@@ -100,7 +116,7 @@ export class Input {
   }
   unlock() {
     this.wantLock = false; clearTimeout(this._lockTimer); clearTimeout(this._pendingLock);
-    if (typeof window !== 'undefined' && window.__VANTAGE_NOLOCK) { if (this.locked) { this.locked = false; this.emit('lockchange', false); } return; }
+    if ((typeof window !== 'undefined' && window.__VANTAGE_NOLOCK) || this.touch) { if (this.locked) { this.locked = false; this.emit('lockchange', false); } return; }
     if (this.softLook) { this.emit('lockchange', false); return; }
     this._lastUnlock = performance.now();
     if (document.pointerLockElement) document.exitPointerLock();
@@ -126,5 +142,6 @@ export class Input {
     this.released.clear();
     this.mouse.dx = 0; this.mouse.dy = 0; this.mouse.wheel = 0;
     this.clicks.length = 0; this.mouseUps.length = 0;
+    this.tapFire = false;
   }
 }

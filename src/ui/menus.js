@@ -14,7 +14,7 @@ export class Menus {
   }
 
   loadSettings() {
-    const d = { quality: 'high', sensitivity: 1.0, invertY: false, volume: 0.8, difficulty: 'normal', brightness: 1.0 };
+    const d = { quality: this.game.isTouch ? 'medium' : 'high', sensitivity: 1.0, invertY: false, volume: 0.8, difficulty: 'normal', brightness: 1.0 };
     try { const s = JSON.parse(localStorage.getItem('vantage.settings') || '{}'); return { ...d, ...s }; } catch (e) { return d; }
   }
   saveSettings() { try { localStorage.setItem('vantage.settings', JSON.stringify(this.settings)); } catch (e) { /* ignore */ } this.game.applySettings(this.settings); }
@@ -88,7 +88,7 @@ export class Menus {
     const t = i18n.t;
     this.root.querySelectorAll('[data-key]').forEach((e) => { e.textContent = t(e.dataset.key); });
     this.subtitle.textContent = t('subtitle'); this.missionTitle.textContent = t('menu.mission1'); this.briefing.textContent = t('menu.briefing'); this.credits.textContent = t('end.credits');
-    this.pauseTitle.textContent = t('menu.paused'); this.loadText.textContent = t('menu.loading'); this.clickText.textContent = t('menu.clickToStart');
+    this.pauseTitle.textContent = t('menu.paused'); this.loadText.textContent = t('menu.loading'); this.clickText.textContent = this.game.isTouch ? t('menu.clickToStart.touch') : t('menu.clickToStart');
     if (this.langSel) this.langSel.value = i18n.lang;
     const rows = [
       ['controls.ground', null],

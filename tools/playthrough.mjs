@@ -4,7 +4,7 @@
 const { chromium } = await import('/opt/node22/lib/node_modules/playwright/index.mjs').catch(() => import('playwright'));
 import http from 'http'; import fs from 'fs'; import path from 'path';
 
-const outDir = process.argv[2] || 'playthrough-out';
+const outDir = process.argv.slice(2).find((a) => !a.startsWith('--')) || 'playthrough-out';
 const port = +(process.argv.find((a) => a.startsWith('--port='))?.slice(7) || 8130);
 fs.mkdirSync(outDir, { recursive: true });
 const root = process.cwd();

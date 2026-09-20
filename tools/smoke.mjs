@@ -4,7 +4,7 @@
 const { chromium } = await import('/opt/node22/lib/node_modules/playwright/index.mjs').catch(() => import('playwright'));
 import http from 'http'; import fs from 'fs'; import path from 'path';
 
-const outDir = process.argv[2] || 'smoke-out';
+const outDir = process.argv.slice(2).find((a) => !a.startsWith('--')) || 'smoke-out';
 const quick = process.argv.includes('--quick');
 const entry = process.argv.find((a) => a.startsWith('--entry='))?.slice(8) || 'index.html';
 const quality = process.argv.find((a) => a.startsWith('--quality='))?.slice(10) || 'low';
@@ -121,16 +121,21 @@ if (!quick) {
     ps.state = 'open'; ps._anim(1);
     const a = ps.a, b = ps.b;
     g.player.pos.set(a.pos.x + a.n.x * 2.5, a.pos.y, a.pos.z + a.n.z * 2.5); g.player.vel.set(0, 0, 0); g.player.camYaw = a.yaw + Math.PI;
-    const e = g.enemies[4]; e.pos.set(b.pos.x + b.n.x * 2.5, b.pos.y, b.pos.z + b.n.z * 2.5); e.yaw = e.aimYaw = b.yaw + Math.PI; e.state = 'patrol'; e.stop(); e.suspicion = 0; e.perceptionTimer = 0; e.report.active = false;
+    // the guard stands where the exit line is clear (the far end may face clutter, depending on where the patrols are)
+    const o = b.pos.clone(); o.y += 1.2; o.addScaledVector(b.n, 0.05); const dn = b.n.clone(); dn.y = 0; dn.normalize();
+    let spotS = 1.2; for (const s of [2.5, 2.0, 1.6, 1.2]) { const w = g.world.raycast(o, dn, s + 0.4, (c) => c.blocksBullets); if (!w && g.nav.isWalkable(b.pos.x + dn.x * s, b.pos.y, b.pos.z + dn.z * s, 0.6)) { spotS = s; break; } }
+    window.__spotS = spotS;
+    const e = g.enemies[4]; e.pos.set(b.pos.x + b.n.x * spotS, b.pos.y, b.pos.z + b.n.z * spotS); e.yaw = e.aimYaw = b.yaw + Math.PI; e.state = 'patrol'; e.stop(); e.suspicion = 0; e.perceptionTimer = 0; e.report.active = false;
     const via = e.perceive();
-    return { ok: true, sees: !!via, viaPortal: !!(via && via.end), image: via && via.image.toArray().map((v) => +v.toFixed(1)), eyeToPlayer: +e.pos.distanceTo(g.player.pos).toFixed(1) };
+    return { ok: true, spotS, sees: !!via, viaPortal: !!(via && via.end), image: via && via.image.toArray().map((v) => +v.toFixed(1)), eyeToPlayer: +e.pos.distanceTo(g.player.pos).toFixed(1) };
   });
   console.log('LOS', JSON.stringify(los));
   check('guard sees through the gateway', los.ok && los.sees && los.viaPortal, los);
   // fire the player's pistol at the guard's image through the near end
-  await page.evaluate(() => { const g = window.__game, ps = g.portals; const e = g.enemies[4]; g.player.aiming = 1; g.player.update(0, 0); for (let i = 0; i < 4 && e.health >= 100; i++) { const img = ps.imageOf(e.pos, ps.a); img.y += 1.1; g.player.aimPoint.copy(img); g.player.gun.cooldown = 0; g.player.gun.spread = 0; g.player._tryFire(0, true); } });
+  await page.evaluate(() => { const g = window.__game, ps = g.portals; const e = g.enemies[4]; const b = ps.b, spotS = window.__spotS || 2.5; e.pos.set(b.pos.x + b.n.x * spotS, b.pos.y, b.pos.z + b.n.z * spotS); e.stop(); e.vel.set(0, 0, 0); g.player.aiming = 1; g.player.update(0, 0); for (let i = 0; i < 4 && e.health >= 100; i++) { const img = ps.imageOf(e.pos, ps.a); img.y += 1.1; g.player.aimPoint.copy(img); g.player.update(0, 0); g.player.aimPoint.copy(img); g.player.gun.cooldown = 0; g.player.gun.spread = 0; g.player.gun.recoil = 0; const mz = g.player.pos.clone(); g.player.muzzlePos(mz); const d = img.clone().sub(mz).normalize(); const wh = g.world.raycast(mz, d, 100, (c) => c.blocksBullets); const gt = ps.rayThrough(mz, d, wh ? wh.t : 100); window.__shotDiag = (window.__shotDiag || []); window.__shotDiag.push({ muzzle: mz.toArray().map((v) => +v.toFixed(2)), img: img.toArray().map((v) => +v.toFixed(2)), worldHit: wh ? [+wh.t.toFixed(2), wh.collider.tag, wh.collider.material] : null, gate: gt ? { t: +gt.t.toFixed(2), exit: gt.exitOrigin.toArray().map((v) => +v.toFixed(2)), exitDir: gt.exitDir.toArray().map((v) => +v.toFixed(2)) } : null, enemy: e.pos.toArray().map((v) => +v.toFixed(2)), enemyH: +e.currentHeight.toFixed(2), enemyR: e.radius, inChars: g.characters.indexOf(e), noCollide: !!e.noCollide, alive: e.alive, exitWorldHit: gt ? (() => { const w2 = g.world.raycast(gt.exitOrigin, gt.exitDir, 10, (c) => c.blocksBullets); return w2 ? [+w2.t.toFixed(2), w2.collider.tag, w2.collider.material, [+w2.collider.x.toFixed(1), +w2.collider.y.toFixed(1), +w2.collider.z.toFixed(1), +w2.collider.hx.toFixed(2), +w2.collider.hy.toFixed(2), +w2.collider.hz.toFixed(2)]] : null; })() : null, axisMiss: gt ? (() => { const ox = gt.exitOrigin.x - e.pos.x, oz = gt.exitOrigin.z - e.pos.z, dx = gt.exitDir.x, dz = gt.exitDir.z; const a = dx * dx + dz * dz; const tt = -(ox * dx + oz * dz) / a; const cx = ox + dx * tt, cz = oz + dz * tt; return [+Math.hypot(cx, cz).toFixed(2), +tt.toFixed(2)]; })() : null }); g.player._tryFire(0, true); } });
+  console.log('SHOT-DIAG', JSON.stringify(await page.evaluate(() => window.__shotDiag)));
   await step(0.1);
-  const hit = await evalG(() => { const g = window.__game; const e = g.enemies[4]; return { health: Math.round(e.health), hits: g.player.accuracyHits, state: e.state }; });
+  const hit = await evalG(() => { const g = window.__game, ps = g.portals; const e = g.enemies[4]; const cam = g.camera.position; const img = ps.imageOf(e.pos, ps.a); img.y += 1.1; const dir = img.clone().sub(cam).normalize(); const wh = g.world.raycast(cam, dir, 60, (c) => c.blocksBullets); const gate = ps.rayThrough(cam, dir, wh ? wh.t : 60); return { health: Math.round(e.health), hits: g.player.accuracyHits, shots: g.player.accuracyShots, state: e.state, mag: g.player.gun.mag, carrying: !!g.player.carrying, weapon: g.player.weapon, a: ps.a.pos.toArray().map((v) => +v.toFixed(1)), b: ps.b.pos.toArray().map((v) => +v.toFixed(1)), player: g.player.pos.toArray().map((v) => +v.toFixed(1)), cam: cam.toArray().map((v) => +v.toFixed(1)), enemy: e.pos.toArray().map((v) => +v.toFixed(1)), worldHit: wh ? [+wh.t.toFixed(1), wh.collider.tag, wh.collider.material] : null, gate: gate ? +gate.t.toFixed(1) : null, camToA: +cam.distanceTo(ps.a.pos).toFixed(1) }; });
   console.log('SHOT-THROUGH', JSON.stringify(hit));
   check('bullet passes through the gateway', hit.health < 100, hit);
   // carry and throw a body through the gateway

@@ -21,9 +21,23 @@ import { separateCharacters } from './entities/character.js';
 import { canSeeVia, canSeePoint } from './entities/ai.js';
 import { HUD } from './ui/hud.js';
 import { Menus } from './ui/menus.js';
+import { TouchControls } from './ui/touch.js';
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3();
 const F = CONFIG.focus;
+
+// Phones and tablets get touch controls; ?touch=1 / ?touch=0 (or window.__VANTAGE_TOUCH) overrides.
+function detectTouch() {
+  try {
+    const q = new URLSearchParams(location.search).get('touch');
+    if (q === '1') return true; if (q === '0') return false;
+    if (typeof window.__VANTAGE_TOUCH === 'boolean') return window.__VANTAGE_TOUCH;
+    const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    const mobileUA = /Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(navigator.userAgent);
+    const touchPts = navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
+    return (coarse && touchPts) || (mobileUA && touchPts);
+  } catch (e) { return false; }
+}
 
 export class Game {
   constructor(container) {
@@ -39,6 +53,7 @@ export class Game {
     this._enemyId = 0;
     this.heliDown = false;
     this.focus = 0; this.alarm = false; this.alarmTime = -100;
+    this.isTouch = detectTouch();
     // rendering-health watchdog
     this.contextLost = false; this.frameMs = 16;
     this._sinceCheck = 0; this._repairStep = 0; this._blackFrames = 0; this._pendingSample = false; this._checksLeft = 10;
@@ -61,6 +76,7 @@ export class Game {
     renderer.domElement.id = 'game';
     this.container.appendChild(renderer.domElement);
     this.input = new Input(renderer.domElement);
+    this.input.touch = this.isTouch;
     this.audio = new AudioEngine();
     this.menus = new Menus(this, this.container);
     this.menus.show('loading');
@@ -79,7 +95,8 @@ export class Game {
     this.menuCamera = new THREE.PerspectiveCamera(50, 1, 0.5, 500);
     this.camera = this.menuCamera;
     this.postfx = new PostFX(renderer, this.scene, this.camera, CONFIG.render);
-    this.tacmap = new TacMap(this);
+    this.tacmap = new TacMap(this); this.tacmap.touch = this.isTouch;
+    if (this.isTouch) { this.touch = new TouchControls(this, this.container); this.container.classList.add('touch-mode'); }
     this._buildLevel();
     this.portals = new PortalSystem(this);
     this.menus.setLoading(1);
@@ -94,6 +111,7 @@ export class Game {
     this.input.on('lockerror', () => { if (this.state === 'playing') this.showClickToResume(); });
     this.input.on('softlook', () => { this.container.classList.add('softlook'); this.hud.toast(this.t('hud.softlook'), 6000); if (this.state === 'paused' && this.menus.current === 'click') this.resume(); });
     this._bindContextEvents();
+    document.addEventListener('visibilitychange', () => { if (document.hidden && this.state === 'playing') this.pause(true); else if (!document.hidden) this.audio.resume(); });
     this.state = 'menu';
     this.menus.show('main');
     this.menuOrbit = 0;
@@ -220,10 +238,21 @@ export class Game {
   beginPlay() {
     if (this.state !== 'intro') return;
     if (this.hud.introEl) { this.hud.introEl.remove(); this.hud.introEl = null; }
+    this.audio.start(); this.audio.resume();
+    if (this.isTouch) this._enterFullscreen();
     this.state = 'playing';
     this.lastFrame = performance.now();
     this.hud.hint('move'); setTimeout(() => { if (this.state === 'playing' && !this.hud.tutKey) this.hud.hint('aim'); }, 9000);
     this.input.lock();
+  }
+  // Phones: play full-screen and sideways when the browser allows it (must be called from a tap).
+  _enterFullscreen() {
+    try {
+      const c = document.documentElement;
+      const req = c.requestFullscreen || c.webkitRequestFullscreen;
+      if (req && !document.fullscreenElement) { const p = req.call(c); if (p && p.catch) p.catch(() => {}); }
+      if (screen.orientation && screen.orientation.lock) { const p = screen.orientation.lock('landscape'); if (p && p.catch) p.catch(() => {}); }
+    } catch (e) { /* not available */ }
   }
   spawnEnemy(def) {
     const e = new Enemy(this, { position: new THREE.Vector3(def.x, def.y || 0, def.z), yaw: def.yaw, patrol: def.patrol, accuracy: def.accuracy, role: def.role, name: def.name, grenades: def.grenades, zone: def.zone });
@@ -260,6 +289,7 @@ export class Game {
   pause(fromLock = false) {
     if (this.state !== 'playing') return;
     this.state = 'paused'; this.menus.show('pause'); this.input.unlock(); this.audio.setSlowMotion(true);
+    if (this.touch) this.touch.setVisibleButtons(false);
   }
   showClickToResume() { if (this.state !== 'playing') return; this.state = 'paused'; this.menus.show('click'); this.audio.setSlowMotion(true); }
   resume() { if (this.state !== 'paused') return; this.state = 'playing'; this.menus.hide(); this.audio.setSlowMotion(this.mode === 'map' || this.focus > 0); this.input.lock(); this.lastFrame = performance.now(); }
@@ -268,12 +298,14 @@ export class Game {
   missionComplete() {
     if (this.state !== 'playing') return;
     this.state = 'end'; this.audio.ui('win'); this.input.unlock(); this.audio.setSlowMotion(true);
+    if (this.touch) this.touch.setVisibleButtons(false);
     if (this.tacmap.active) this.tacmap.exit();
     this.hud.hide(); this.menus.showEnd(true, null, this._endStats());
   }
   missionFailed(reason) {
     if (this.state !== 'playing') return;
     this.state = 'end'; this.audio.ui('fail'); this.audio.setSlowMotion(true);
+    if (this.touch) this.touch.setVisibleButtons(false);
     if (this.tacmap.active) this.tacmap.exit();
     setTimeout(() => { this.input.unlock(); this.hud.hide(); this.menus.showEnd(false, reason, this._endStats()); }, 1800);
   }
@@ -404,12 +436,13 @@ export class Game {
   applySettings(s) {
     const q = s.quality;
     if (this.settings && this.settings.quality !== q) { this._repairStep = 0; this._blackFrames = 0; this._checksLeft = 12; this.postfx.enabled = true; this.renderer.toneMapping = THREE.ACESFilmicToneMapping; }
-    const pr = Math.min(window.devicePixelRatio || 1, q === 'low' ? 1 : q === 'medium' ? 1.25 : q === 'high' ? 1.5 : CONFIG.render.maxPixelRatio);
+    const caps = this.isTouch ? { low: 1, medium: 1.2, high: 1.5, ultra: 2 } : { low: 1, medium: 1.25, high: 1.5, ultra: CONFIG.render.maxPixelRatio };
+    const pr = Math.min(window.devicePixelRatio || 1, caps[q] || 1.5);
     this.renderer.setPixelRatio(pr);
     this.renderer.toneMappingExposure = CONFIG.render.exposure * (s.brightness ?? 1);
     this.renderer.shadowMap.enabled = q !== 'low';
     this.moon.shadow.mapSize.setScalar(q === 'ultra' ? 4096 : q === 'high' ? 2048 : 1024); if (this.moon.shadow.map) { this.moon.shadow.map.dispose(); this.moon.shadow.map = null; }
-    for (const l of this.builder.lights.flood) { l.castShadow = l.castShadow && q !== 'low'; }
+    for (const l of this.builder.lights.flood) { l.castShadow = l.castShadow && q !== 'low' && !(this.isTouch && q === 'medium'); }
     this.postfx.setQuality(q);
     if (this.fx.rain) this.fx.rain.visible = q !== 'low';
     if (this.player) { this.player.sensitivity = CONFIG.camera.sensitivity * s.sensitivity; this.player.invertY = s.invertY; }
@@ -459,6 +492,7 @@ export class Game {
   }
   _frame(realDt, render) {
     this.realTime += realDt;
+    if (this.touch && this.state !== 'playing') this.touch.setVisibleButtons(false);
     if (this.state === 'menu') { this._updateMenu(realDt); }
     else if (this.state === 'playing') { this._updatePlaying(realDt); }
     else if (this.state === 'end' || this.state === 'paused' || this.state === 'intro') { this.fx.update(0, this.camera); this.postfx.update(realDt, this.realTime); if (this.portals) this.portals.update(0, realDt * 0.0001); }
@@ -478,7 +512,7 @@ export class Game {
 
   _checkPerformance(realDt) {
     if (this._autoQualityDone || this.realTime < 4) return;
-    if (this.frameMs > 90) this._slowTime += realDt; else this._slowTime = Math.max(0, this._slowTime - realDt * 0.5);
+    if (this.frameMs > (this.isTouch ? 48 : 90)) this._slowTime += realDt; else this._slowTime = Math.max(0, this._slowTime - realDt * 0.5);
     if (this._slowTime < 4) return;
     this._slowTime = 0;
     const order = ['ultra', 'high', 'medium', 'low'];
@@ -588,6 +622,7 @@ export class Game {
   _prof(name, t0) { if (!this.profile) return; this.profile[name] = (this.profile[name] || 0) + (performance.now() - t0); }
   _updatePlaying(realDt) {
     const P = this.profile; let t0 = P ? performance.now() : 0;
+    if (this.touch) this.touch.update(realDt);
     // clocks: the map freezes the world almost still; focus slows the world while you keep most of your speed
     if (this.focus > 0) { this.focus -= realDt; if (this.focus <= 0) { this.focus = 0; if (this.mode === 'ground') this.audio.setSlowMotion(false); } }
     const focused = this.focus > 0 && this.mode === 'ground';
@@ -615,12 +650,15 @@ export class Game {
     for (const d of this.level.doors) { d.update(dt, this.characters); if (d.navDirty) { d.navDirty = false; this.nav.rebuildRegion(d.collider.minX, d.collider.minZ, d.collider.maxX, d.collider.maxZ); } }
     for (let i = this.grenades.length - 1; i >= 0; i--) { const g = this.grenades[i]; g.update(dt); if (!g.alive) this.grenades.splice(i, 1); }
     for (const b of this.level.explosives) b.update(dt);
-    // a fallen guard's rifle restocks the carbine
-    if (this.player.alive && this.player.hasRifle) for (const e of this.enemies) {
-      if (e.alive || e.looted || !e._rifleDropped) continue;
+    // a fallen guard's kit restocks you: pistol rounds always, carbine rounds once you carry the M4
+    if (this.player.alive) for (const e of this.enemies) {
+      if (e.alive || e.looted || !e._rifleDropped || e.carriedBy) continue;
       if (e.rifle.position.distanceToSquared(this.player.pos) < 1.6 * 1.6) {
         e.looted = true; e.rifle.visible = false;
-        const g = this.player.weapons.rifle; const add = Math.min(30, g.cfg.reserve * 2 - g.reserve); if (add > 0) { g.reserve += add; this.hud.toast('+' + add + ' ' + this.t('hud.rounds'), 1500); this.audio.ui('click'); }
+        const parts = [];
+        const pg = this.player.weapons.pistol; const addP = Math.min(12, pg.cfg.reserve * 2 - pg.reserve); if (addP > 0) { pg.reserve += addP; parts.push('+' + addP); }
+        const rg = this.player.weapons.rifle; if (rg) { const addR = Math.min(30, rg.cfg.reserve * 2 - rg.reserve); if (addR > 0) { rg.reserve += addR; parts.push('+' + addR + ' M4'); } }
+        if (parts.length) { this.hud.toast(parts.join(' · ') + ' ' + this.t('hud.rounds'), 1500); this.audio.ui('click'); }
       }
     }
     for (const id in this.level.zones) { const z = this.level.zones[id]; const inside = z.contains(this.player.pos); if (inside && !z.wasInside) { z.wasInside = true; this.script.onZoneEnter(id); } else if (!inside) z.wasInside = false; }
