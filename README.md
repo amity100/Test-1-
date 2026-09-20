@@ -1,8 +1,8 @@
 # VANTAGE — Mission 01: Blacksite Delta
 
-A single-player tactical shooter where you are two things at once: an **operator on the ground** fighting alongside your fireteam, and an **architect above the battlefield** who can pick up the compound's structures (barriers, steel panels, shipping containers, ramps, stairs, catwalks, crates) and rebuild the fight in slow motion.
+A single-player stealth-action prototype. You are one operator with a **gateway generator**: open a portal to almost any room, step through, and be gone before anyone understands what happened. Every guard who sees a kill, a body, you, or an open gateway keys his radio and starts a countdown. Cut him off before the report goes out, or the whole site goes to alarm.
 
-Two operators of Fireteam Halcyon are held in a black-site detention compound. Insert with your squad, find both prisoners, and bring them to the extraction pad. The site was built to keep people in — rebuild it to get them out.
+Two of ours are held in a black-site detention compound. Get in, free both prisoners, bring them to the helipad.
 
 ## Play
 
@@ -24,33 +24,35 @@ Requirements: WebGL 2, a mouse (pointer lock), and a GPU. The graphics quality p
 
 | On the ground | |
 |---|---|
-| Move / sprint / crouch | `W A S D` / `Shift` / `C` |
+| Move / sprint / crouch | `W A S D` / `Shift` / `Ctrl` or `Z` |
 | Jump, vault over low cover | `Space` |
-| Fire / aim | Left mouse / right mouse |
+| Fire (suppressed pistol; M4 once you have it) / aim | Left mouse / right mouse |
+| Knife takedown | `F` |
+| Switch weapon | `1` `2` / wheel |
 | Reload / grenade | `R` / `G` |
-| Interact (free prisoner, revive, cut power) | hold `E` |
-| Squad: follow me / hold position | `Q` |
-| **Architect view** | `Tab` |
+| Interact (free a prisoner, take the M4, pick up a body) | hold `E` |
+| Drop / throw the carried body | `E` / left mouse |
+| Gateway to the spot under the crosshair | `Q` |
+| Close the gateway | `C` |
+| **Tactical map** | `Tab` |
 | Pause | `Esc` |
 
-| Architect view (time runs at 12%) | |
+| Tactical map (time runs at 15%) | |
 |---|---|
-| Select and drag a module | Left mouse |
-| Rotate the module | `R` |
-| Order the squad: move here / focus fire / escort / follow | Right mouse on ground / enemy / prisoner / yourself |
+| Open a gateway at the cursor (the near end opens in front of you) | Left mouse |
+| Close the gateway | Right mouse |
 | Pan, orbit, zoom | `W A S D` or screen edges, `Q` `E` or middle mouse, wheel |
 | Recentre on yourself | `F` |
 
-## The rules that make it deep
+## The two rules
 
-- **Reach.** A module can only be moved while a squad member is within 20 m of it. Push forward to unlock more of the site.
-- **Structural charge.** Every placement costs charge (crates 8 … containers 38). Charge refills slowly and jumps when you complete objectives.
-- **Support and physics.** Pieces drop onto whatever is beneath them, stack (crate on container, ramp against a mezzanine), and cannot be placed through people or walls. Elevated pieces need most of their footprint supported.
-- **Noise.** Moving a module is loud. Guards within 16 m come to investigate.
-- **Light.** Guards see 34 m into floodlit ground but only 13 m into darkness. A container dropped between a floodlight and your route casts a real shadow for their perception. Cutting the power at the guard house darkens the whole site (and unlocks the electronic cell-block door).
-- **Cover that thinks.** Guards seek cover relative to where they last saw you, peek and hide, flank when suppressed, throw grenades when you hide too long, and radio each other. Move the wall they are hiding behind and their cover is gone.
-- **Intel.** In the Architect view you only see enemies your team can currently see; the rest are shown as last-known ghosts with their vision cones.
-- **Several ways in.** The cell block can be opened by cutting the power, by taking the key from the officer in the warehouse, or by pulling the steel panel out of its west wall.
+**Gateways are real openings.** One pair at a time. Both ends can be seen through, shot through and heard through, and anyone can walk through either way, guards included. A gateway into the armory gives you a carbine, but a guard who looks through it sees the armory. Opening a new pair closes the old one. There is no limit on how many you open; what limits you is the second rule.
+
+**The witness chain.** A guard who sees a kill, a body, you, or an open gateway keys his radio: a red ring over his head and a line in the top-right panel count down (3.5 s for a kill or a sighting, 4.5 s for a body, 5 s for a gateway or shots heard). Killing him before it ends cuts the chain. If a report completes the alarm goes up: every guard hunts you, two guards post themselves on each prisoner, and reinforcements come through the gates. You can still win, loudly.
+
+Time slows to 15% while the map is open and to 30% for a moment after every crossing; each kill inside that window extends it, so a fast chain stays slow. Bodies can be carried and thrown through a gateway where nobody will find them. Running is heard at 9 m, the suppressed pistol at 8 m, the M4 at 45 m.
+
+The end screen ranks the run: **Ghost** (no report ever went out), **Operative**, or **Loud**.
 
 ## Project layout
 
@@ -58,20 +60,15 @@ Requirements: WebGL 2, a mouse (pointer lock), and a GPU. The graphics quality p
 index.html            dev entry (ES modules, no build step)
 src/core              config, i18n (EN/HE), input, procedural audio, collision world, layered nav grid, assets
 src/render            procedural PBR materials, post-processing (bloom, grade, SMAA)
-src/entities          character (skinned model, IK limbs, poses), player, enemy AI, squad AI, hostages, weapons
-src/architect         Architect view: slow-motion camera, module placement rules, orders, fog of war
-src/world             level builder (merged static geometry, doors, movable modules) and Mission 01
-src/fx                particles, tracers, decals, rain, explosions
-src/ui                HUD and menus
-tools/                build (single-file bundle), headless smoke test with screenshots
-vendor/three          three.js r160 (module build + the addons used)
+src/portal            the gateway pair: transforms, render-through views, crossings, sight/sound/bullets through
+src/map               the tactical map (slow-motion view from above, gateway placement, fog-of-war intel)
+src/entities          characters (skinned Mixamo soldier, IK posing), operator, guards (witness chain), prisoners, weapons
+src/world             level builder (merged static geometry, doors, props) and Mission 01 + its script
+src/ui                HUD, menus
+tools/build.mjs       builds dist/VANTAGE.html (single file) and dist/artifact.html
+tools/smoke.mjs       headless Chromium smoke test (level validation, gateways, witnesses, knife, bodies, alarm)
+tools/playthrough.mjs headless scripted playthrough of the whole mission
+tools/probe.mjs       headless query / screenshot helper
 ```
 
-Build the single-file version: `npm run build` → `dist/VANTAGE.html`.
-Run the automated tests (headless Chromium via Playwright; `npm i -D playwright && npx playwright install chromium` first if it is not installed globally): `node tools/smoke.mjs out/` and `node tools/playthrough.mjs out/`.
-
-## Credits
-
-- Engine: [three.js](https://threejs.org) (MIT).
-- Soldier model: "Vanguard" by T. Choonyung via Mixamo, as distributed with the three.js examples; textures and the night HDRI also from the three.js examples.
-- Everything else (level, materials, AI, audio synthesis, UI) is original code in this repository.
+Soldier model: Mixamo Vanguard (three.js examples). Everything else (textures, audio, geometry) is generated at runtime.

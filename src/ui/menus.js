@@ -92,9 +92,9 @@ export class Menus {
     if (this.langSel) this.langSel.value = i18n.lang;
     const rows = [
       ['controls.ground', null],
-      ['controls.move', 'W A S D'], ['controls.sprint', 'Shift'], ['controls.crouch', 'C'], ['controls.jump', 'Space'], ['controls.fire', 'LMB'], ['controls.aim', 'RMB'], ['controls.reload', 'R'], ['controls.grenade', 'G'], ['controls.interact', 'E'], ['controls.squadToggle', 'Q'], ['controls.architect', 'Tab'], ['controls.pause', 'Esc'],
-      ['controls.architectSection', null],
-      ['controls.arch.select', 'LMB'], ['controls.arch.rotate', 'R'], ['controls.arch.order', 'RMB'], ['controls.arch.pan', 'W A S D / edges'], ['controls.arch.orbit', 'Q / E / MMB'], ['controls.arch.zoom', 'Wheel'], ['controls.arch.cancel', 'Esc'],
+      ['controls.move', 'W A S D'], ['controls.sprint', 'Shift'], ['controls.crouch', 'Ctrl / Z'], ['controls.jump', 'Space'], ['controls.fire', 'LMB'], ['controls.aim', 'RMB'], ['controls.reload', 'R'], ['controls.knife', 'F'], ['controls.weapon', '1 / 2 / Wheel'], ['controls.grenade', 'G'], ['controls.interact', 'E'], ['controls.throw', 'LMB'], ['controls.quickPortal', 'Q'], ['controls.closePortal', 'C'], ['controls.map', 'Tab'], ['controls.pause', 'Esc'],
+      ['controls.mapSection', null],
+      ['controls.map.place', 'LMB'], ['controls.map.close', 'RMB'], ['controls.map.pan', 'W A S D / edges'], ['controls.map.orbit', 'Q / E / MMB'], ['controls.map.zoom', 'Wheel'], ['controls.map.center', 'F'], ['controls.map.back', 'Tab'],
     ];
     this.controlsBody.innerHTML = rows.map(([k, v]) => v === null ? `<div class="chead">${t(k)}</div>` : `<div class="crow"><span>${t(k)}</span><kbd>${v}</kbd></div>`).join('');
   }
@@ -106,7 +106,8 @@ export class Menus {
     this.endTitle.textContent = t(win ? 'end.win' : 'end.lose');
     this.endSub.textContent = win ? '' : t(reason === 'hostage' ? 'end.lose.hostage' : 'end.lose.player');
     const m = Math.floor(stats.time / 60), s = Math.floor(stats.time % 60);
-    this.endStats.innerHTML = [[t('end.time'), `${m}:${s.toString().padStart(2, '0')}`], [t('end.kills'), stats.kills], [t('end.accuracy'), Math.round(stats.accuracy * 100) + '%'], [t('end.modules'), stats.modules], [t('end.hostages'), `${stats.hostages}/2`]].map(([k, v]) => `<div class="srow"><span>${k}</span><b>${v}</b></div>`).join('');
+    const rows = [[t('end.time'), `${m}:${s.toString().padStart(2, '0')}`], [t('end.kills'), stats.kills], [t('end.knife'), stats.knife], [t('end.portals'), stats.portals], [t('end.reports'), stats.reports], [t('end.hostages'), `${stats.hostages}/2`]].map(([k, v]) => `<div class="srow"><span>${k}</span><b>${v}</b></div>`).join('');
+    this.endStats.innerHTML = (win ? `<div class="rank ${stats.rank}"><span>${t('end.rank')}</span><b>${t('end.rank.' + stats.rank)}</b><span>${t('end.rank.desc.' + stats.rank)}</span></div>` : '') + rows;
     this.endRetry.style.display = win ? 'none' : '';
     this.screens.end.classList.toggle('win', win);
     this.show('end');

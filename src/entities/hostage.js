@@ -39,6 +39,7 @@ export class Hostage extends AICharacter {
     if (this.state === 'extracted') { this.stop(); this.crouchTarget = 1; super.update(dt); return; }
     this.panic = Math.max(0, this.panic - dt);
     const leader = game.player;
+    this.noPortals = leader.pos.distanceTo(this.pos) < 12;   // only take a gateway when the operator is genuinely far
     // are enemies close and fighting?
     let threat = null, td = Infinity;
     for (const e of game.enemies) { if (!e.alive || e.state !== 'combat') continue; const d = e.pos.distanceTo(this.pos); if (d < 30 && d < td) { td = d; threat = e; } }
@@ -63,6 +64,8 @@ export class Hostage extends AICharacter {
     this.aimYaw = this.yaw;
     super.update(dt);
   }
+
+  onPortalTraversal(sys, from, to, dy) { super.onPortalTraversal(sys, from, to, dy); this.hidePos = null; }
 
   _behind(leader) {
     const fx = Math.sin(leader.yaw), fz = Math.cos(leader.yaw);

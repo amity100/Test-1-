@@ -1,12 +1,13 @@
-// Shared AI building blocks: perception, path following, cover search, aimed fire.
+// Shared AI building blocks: perception (direct or through a gateway), path following (with gateway
+// shortcuts), cover search, aimed fire.
 import * as THREE from 'three';
 import { Character } from './character.js';
 import { CONFIG } from '../core/config.js';
 import { Gun, fireBullet, Grenade } from './weapons.js';
 
-const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _d = new THREE.Vector3(), _eye = new THREE.Vector3();
+const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _d = new THREE.Vector3(), _eye = new THREE.Vector3(), _img = new THREE.Vector3();
 
-// Can `observer` see `target`? Checks range, field of view and line of sight (chest or head).
+// Can `observer` see `target` directly? Checks range, field of view and line of sight (chest or head).
 export function canSee(game, observer, target, fovDeg, range) {
   if (!target.alive && !target.downed) return false;
   _d.subVectors(target.pos, observer.pos); _d.y = 0;
@@ -24,6 +25,42 @@ export function canSee(game, observer, target, fovDeg, range) {
   return game.world.lineOfSight(_eye, _b);
 }
 
+// Direct sight, or sight through the open gateway. Returns null, { direct: true } or { end, image } where
+// `image` is where the target appears to be (in front of the gateway end the observer looks into).
+export function canSeeVia(game, observer, target, fovDeg, range) {
+  if (canSee(game, observer, target, fovDeg, range)) return { direct: true };
+  const ps = game.portals;
+  if (!ps || !ps.open) return null;
+  if (!target.alive && !target.downed) return null;
+  observer.headPos(_eye);
+  target.chestPos(_a);
+  const via = ps.seeThrough(_eye, _a, range);
+  if (!via) return null;
+  // field of view towards the gateway end
+  _d.subVectors(via.image, observer.pos); _d.y = 0; const dist = _d.length();
+  if (dist > 1.5) { const fx = Math.sin(observer.aimYaw), fz = Math.cos(observer.aimYaw); if ((_d.x * fx + _d.z * fz) / dist < Math.cos((fovDeg * Math.PI / 180) / 2)) return null; }
+  return { end: via.end, image: via.image.clone().sub(_a).add(target.pos), dist };
+}
+
+// Can a point be seen from the observer's eyes (a body on the floor, an open gateway)?
+export function canSeePoint(game, observer, point, fovDeg, range, viaPortal = true) {
+  _d.subVectors(point, observer.pos); _d.y = 0;
+  const dist = _d.length();
+  observer.headPos(_eye);
+  if (dist <= range) {
+    let inFov = dist < 1.5;
+    if (!inFov) { const fx = Math.sin(observer.aimYaw), fz = Math.cos(observer.aimYaw); inFov = (_d.x * fx + _d.z * fz) / dist >= Math.cos((fovDeg * Math.PI / 180) / 2); }
+    if (inFov && game.world.lineOfSight(_eye, point)) return { direct: true };
+  }
+  if (!viaPortal) return null;
+  const ps = game.portals; if (!ps || !ps.open) return null;
+  const via = ps.seeThrough(_eye, point, range);
+  if (!via) return null;
+  _d.subVectors(via.image, observer.pos); _d.y = 0; const d2 = _d.length();
+  if (d2 > 1.5) { const fx = Math.sin(observer.aimYaw), fz = Math.cos(observer.aimYaw); if ((_d.x * fx + _d.z * fz) / d2 < Math.cos((fovDeg * Math.PI / 180) / 2)) return null; }
+  return { end: via.end, image: via.image };
+}
+
 export function hasLOS(game, from, target) {
   from.headPos(_eye); target.chestPos(_a);
   if (game.world.lineOfSight(_eye, _a)) return true;
@@ -32,6 +69,12 @@ export function hasLOS(game, from, target) {
 
 export const wrapAngle = (a) => THREE.MathUtils.euclideanModulo(a + Math.PI, Math.PI * 2) - Math.PI;
 export const lerpAngle = (a, b, t) => a + wrapAngle(b - a) * t;
+
+function pathLength(from, path) {
+  let l = 0, px = from.x, pz = from.z;
+  for (const p of path) { l += Math.hypot(p.x - px, p.z - pz); px = p.x; pz = p.z; }
+  return l;
+}
 
 // Sample candidate positions around `self` and pick the best cover against `threatPos`.
 export function findCover(game, self, threatPos, { radius = 12, minDist = 0, maxDist = 60, anchor = null, anchorRadius = 8, preferRange = null, avoid = [] } = {}) {
@@ -50,16 +93,14 @@ export function findCover(game, self, threatPos, { radius = 12, minDist = 0, max
       if (anchor && Math.hypot(x - anchor.x, z - anchor.z) > anchorRadius) continue;
       const dt = Math.hypot(x - threatPos.x, z - threatPos.z);
       if (dt < minDist || dt > maxDist) continue;
-      // hidden at crouch height?
       _a.set(x, y + 0.95, z);
       const hiddenLow = !world.lineOfSight(_a, tc);
       if (!hiddenLow) continue;
       _a.set(x, y + 1.55, z);
       const visibleStanding = world.lineOfSight(_a, tc);
-      // corner peek: step sideways relative to threat direction
       let peek = visibleStanding;
       if (!peek) {
-        const dx = (threatPos.x - x) / dt, dz = (threatPos.z - z) / dt; // toward threat
+        const dx = (threatPos.x - x) / dt, dz = (threatPos.z - z) / dt;
         for (const s of [-0.8, 0.8]) { _a.set(x - dz * s, y + 1.5, z + dx * s); if (nav.isWalkable(_a.x, y, _a.z, 0.8) && world.lineOfSight(_a, tc)) { peek = true; break; } }
       }
       if (!peek) continue;
@@ -85,7 +126,9 @@ export class AICharacter extends Character {
     this.lookYaw = this.yaw; this.turnRate = 6;
     this.stuckTime = 0; this._lastPos = this.pos.clone();
     this.target = null;
+    this.aimOverride = null;           // world point to shoot at instead of the target (its image through a gateway)
     this.grenadeCooldown = 8 + Math.random() * 6;
+    this.viaPortal = null; this.portalGoal = null; this.portalSpeed = 0;
   }
 
   // ---- movement ----
@@ -96,12 +139,39 @@ export class AICharacter extends Character {
     const stale = this.game.time - this.pathTime > 1.5 || this.pathNavVersion !== nav.version;
     if (force || !this.path || far || stale) {
       this.pathGoal.copy(goal); this.pathTime = this.game.time; this.pathNavVersion = nav.version;
-      this.path = nav.findPath(this.pos, goal); this.pathIdx = 0;
+      this.viaPortal = null; this.portalGoal = null;
+      let path = nav.findPath(this.pos, goal);
+      // gateway shortcut: if walking through the open pair is clearly shorter (or the only way), head for it
+      const ps = this.game.portals;
+      if (ps && ps.open && !this.noPortals) {
+        const direct = path ? pathLength(this.pos, path) + (path[path.length - 1].distanceTo(goal) > 2 ? 40 : 0) : Infinity;
+        let bestEnd = null, bestLen = direct > 10 ? direct * 0.75 : 0;
+        for (const end of ps.ends) {
+          const other = ps.other(end);
+          const l = this.pos.distanceTo(end.pos) + other.pos.distanceTo(goal) + 3;
+          if (l < bestLen) { bestLen = l; bestEnd = end; }
+        }
+        if (bestEnd) {
+          const s = bestEnd.side(this.pos) >= 0 ? 1 : -1;
+          const approach = new THREE.Vector3(bestEnd.pos.x + bestEnd.n.x * s * 1.0, bestEnd.pos.y, bestEnd.pos.z + bestEnd.n.z * s * 1.0);
+          const p2 = nav.findPath(this.pos, approach);
+          if (p2) { path = p2; path.push(new THREE.Vector3(bestEnd.pos.x - bestEnd.n.x * s * 0.7, bestEnd.pos.y, bestEnd.pos.z - bestEnd.n.z * s * 0.7)); this.viaPortal = bestEnd; this.portalGoal = goal.clone(); this.portalSpeed = speed; }
+        }
+      }
+      this.path = path; this.pathIdx = 0;
       if (!this.path) { this.path = [goal.clone()]; }
     }
     this.arrived = false;
   }
-  stop() { this.path = null; this.desiredSpeed = 0; this.moveIntent.set(0, 0, 0); this.arrived = true; }
+  stop() { this.path = null; this.desiredSpeed = 0; this.moveIntent.set(0, 0, 0); this.arrived = true; this.viaPortal = null; }
+
+  onPortalTraversal(sys, from, to, dy) {
+    this.lookYaw += dy; this.scanYaw = (this.scanYaw ?? this.yaw) + dy; this.homeYaw = (this.homeYaw ?? this.yaw) + dy;
+    this._lastPos.copy(this.pos); this.stuckTime = 0;
+    const goal = this.portalGoal; const sp = this.portalSpeed || this.desiredSpeed || 2.4;
+    this.path = null; this.viaPortal = null; this.pathTime = -10;
+    if (goal) { this.portalGoal = null; this.noPortals = true; this.moveTo(goal, sp, true); this.noPortals = false; }
+  }
 
   followPath(dt) {
     if (!this.path || this.pathIdx >= this.path.length) { this.moveIntent.set(0, 0, 0); this.arrived = true; return; }
@@ -116,13 +186,13 @@ export class AICharacter extends Character {
     }
     _d.multiplyScalar(1 / dist);
     let sp = this.desiredSpeed;
-    if (last && dist < 1.2) sp = Math.max(1.0, sp * dist / 1.2);
+    if (last && dist < 1.2 && !this.viaPortal) sp = Math.max(1.0, sp * dist / 1.2);
     this.moveIntent.set(_d.x * sp, 0, _d.z * sp);
     this.lookYaw = Math.atan2(_d.x, _d.z);
     // stuck detection
     if (this.pos.distanceToSquared(this._lastPos) < 0.0004 * dt * 60) this.stuckTime += dt; else this.stuckTime = 0;
     this._lastPos.copy(this.pos);
-    if (this.stuckTime > 0.8) { this.stuckTime = 0; this.pathTime = -10; this.moveTo(this.pathGoal, this.desiredSpeed, true); }
+    if (this.stuckTime > 0.8) { this.stuckTime = 0; this.pathTime = -10; this.moveTo(this.viaPortal ? this.portalGoal : this.pathGoal, this.desiredSpeed, true); }
   }
 
   faceTowards(yaw, dt, rate = this.turnRate) { this.yaw = lerpAngle(this.yaw, yaw, Math.min(1, rate * dt)); }
@@ -141,16 +211,14 @@ export class AICharacter extends Character {
       const [a, b] = this.gunCfg.burst; this.burstLeft = a + Math.floor(Math.random() * (b - a + 1));
     }
     if (!this.gun.canFire) return false;
-    // aim: chest of target
-    target.chestPos(_a);
+    // aim: chest of target (or its image through the gateway)
+    if (this.aimOverride) _a.set(this.aimOverride.x, this.aimOverride.y + target.currentHeight * 0.62, this.aimOverride.z); else target.chestPos(_a);
     this.muzzlePos(_eye);
     _d.subVectors(_a, _eye); const dist = _d.length(); _d.multiplyScalar(1 / dist);
-    // hit chance model
     const moving = Math.hypot(target.vel.x, target.vel.z) > 2.5;
     let p = accuracy * (1 / (1 + dist / CONFIG.enemy.accuracyFalloff)) * (moving ? 0.7 : 1) * (target.crouch > 0.5 ? 0.75 : 1);
     if (this.isEnemy && this.game.difficulty) p *= this.game.difficulty.accuracy;
     if (Math.random() > p) {
-      // deliberate miss: spread mostly around the target
       const s = this.gunCfg.spread * (2 + Math.random() * 3);
       _d.x += (Math.random() - 0.5) * s * 2; _d.y += (Math.random() - 0.5) * s * 2; _d.z += (Math.random() - 0.5) * s * 2; _d.normalize();
     } else {
@@ -173,7 +241,6 @@ export class AICharacter extends Character {
     _eye.copy(this.pos); _eye.y += 1.5;
     _d.subVectors(targetPos, _eye); const dist = Math.hypot(_d.x, _d.z);
     if (dist < 1) return false;
-    // 45° lob: v^2 = g*d / sin(2θ) with drop compensation
     const dy = targetPos.y - _eye.y;
     const v2 = (CONFIG.gravity * dist * dist) / (dist - dy + 1e-3);
     if (v2 <= 0) return false;

@@ -14,7 +14,7 @@ const server = http.createServer((req, res) => { const p = decodeURIComponent(re
 await new Promise((r) => server.listen(port, r));
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: W, height: H } });
-await page.addInitScript((q) => { window.__VANTAGE_NOLOCK = true; try { localStorage.setItem('vantage.settings', JSON.stringify({ quality: q, sensitivity: 1, invertY: false, volume: 0 })); localStorage.setItem('vantage.lang', 'en'); } catch (e) {} }, opt('quality', 'high'));
+await page.addInitScript(([q, l]) => { window.__VANTAGE_NOLOCK = true; try { localStorage.setItem('vantage.settings', JSON.stringify({ quality: q, sensitivity: 1, invertY: false, volume: 0 })); localStorage.setItem('vantage.lang', l); } catch (e) {} }, [opt('quality', 'high'), opt('lang', 'en')]);
 page.on('console', (m) => { if (m.type() === 'error') { const t = m.text(); if (!t.includes('fonts.g') && !t.includes('net::ERR') && !t.includes('GL Driver')) console.log('console.error:', t.slice(0, 300)); } });
 page.on('pageerror', (e) => console.log('PAGEERROR:', e.message, (e.stack || '').split('\n').slice(1, 3).join(' | ')));
 await page.goto(`http://localhost:${port}/index.html`, { waitUntil: 'load', timeout: 180000 });
@@ -27,14 +27,14 @@ if (src.trim()) {
 if (shotPath) {
   await page.evaluate(([cam, look, mode]) => {
     const g = window.__game;
-    if (mode === 'architect' && !g.architect.active) g.input.emit('keydown', 'Tab', { preventDefault() {} });
+    if (mode === 'map' && !g.tacmap.active) g.input.emit('keydown', 'Tab', { preventDefault() {} });
     g.debugStep(0.2);
-    const c = g.architect.active ? g.architect.camera : g.camera;
-    if (cam) { const [x, y, z] = cam.split(',').map(Number); c.position.set(x, y, z); if (g.architect.active) { g.architect.camPos && g.architect.camPos.set(x, y, z); } }
+    const c = g.tacmap.active ? g.tacmap.camera : g.camera;
+    if (cam) { const [x, y, z] = cam.split(',').map(Number); c.position.set(x, y, z); if (g.tacmap.active) { 0; } }
     if (look) { const [x, y, z] = look.split(',').map(Number); c.lookAt(x, y, z); }
-    if (cam && !g.architect.active) { const [x, y, z] = cam.split(',').map(Number); g.player.pos.set(x, y - 1.6, z); if (look) { const [lx, ly, lz] = look.split(',').map(Number); g.player.camYaw = Math.atan2(lx - x, lz - z); g.player.camPitch = Math.atan2(ly - y, Math.hypot(lx - x, lz - z)); } g.player.update(0, 0); }
+    if (cam && !g.tacmap.active) { const [x, y, z] = cam.split(',').map(Number); g.player.pos.set(x, y - 1.6, z); if (look) { const [lx, ly, lz] = look.split(',').map(Number); g.player.camYaw = Math.atan2(lx - x, lz - z); g.player.camPitch = Math.atan2(ly - y, Math.hypot(lx - x, lz - z)); } g.player.update(0, 0); }
     g.debugFrozen = true; g.debugRender();
-    if (cam && g.architect.active) { const [x, y, z] = cam.split(',').map(Number); c.position.set(x, y, z); if (look) { const [lx, ly, lz] = look.split(',').map(Number); c.lookAt(lx, ly, lz); } g.debugRender(); }
+    if (cam && g.tacmap.active) { const [x, y, z] = cam.split(',').map(Number); c.position.set(x, y, z); if (look) { const [lx, ly, lz] = look.split(',').map(Number); c.lookAt(lx, ly, lz); } g.debugRender(); }
   }, [cam, look, mode]);
   await page.screenshot({ path: shotPath, timeout: 120000 });
   console.log('saved', shotPath);

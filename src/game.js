@@ -1,4 +1,4 @@
-// Game orchestrator: renderer, scene, main loop, mode/state machine, events, checkpoints.
+// Game orchestrator: renderer, scene, main loop, mode/state machine, gateways, the witness chain, checkpoints.
 import * as THREE from 'three';
 import { CONFIG } from './core/config.js';
 import { i18n } from './core/i18n.js';
@@ -13,40 +13,41 @@ import { FX } from './fx/particles.js';
 import { LevelBuilder } from './world/builder.js';
 import { buildLevel1, Level1Script, LEVEL1_BOUNDS } from './world/level1.js';
 import { Player } from './entities/player.js';
-import { Squadmate } from './entities/squadmate.js';
 import { Enemy } from './entities/enemy.js';
 import { Hostage } from './entities/hostage.js';
-import { Architect } from './architect/architect.js';
+import { TacMap } from './map/tacmap.js';
+import { PortalSystem } from './portal/portal.js';
 import { separateCharacters } from './entities/character.js';
-import { canSee } from './entities/ai.js';
+import { canSeeVia, canSeePoint } from './entities/ai.js';
 import { HUD } from './ui/hud.js';
 import { Menus } from './ui/menus.js';
 
-const _v = new THREE.Vector3();
+const _v = new THREE.Vector3(), _v2 = new THREE.Vector3();
+const F = CONFIG.focus;
 
 export class Game {
   constructor(container) {
     this.container = container;
-    this.state = 'loading';     // loading | menu | playing | paused | end
-    this.mode = 'ground';       // ground | architect
+    this.state = 'loading';     // loading | menu | intro | playing | paused | end
+    this.mode = 'ground';       // ground | map
     this.time = 0; this.realTime = 0; this.timeScale = 1; this.timeScaleTarget = 1;
-    this.characters = []; this.enemies = []; this.squad = []; this.hostages = []; this.grenades = [];
-    this.squadMode = 'follow';
+    this.characters = []; this.enemies = []; this.hostages = []; this.grenades = [];
     this.width = 1; this.height = 1;
     this.t = i18n.t;
-    this.stats = { kills: 0, startTime: 0 };
+    this.stats = this._freshStats();
     this.checkpointData = null;
     this._enemyId = 0;
     this.heliDown = false;
+    this.focus = 0; this.alarm = false; this.alarmTime = -100;
     // rendering-health watchdog
     this.contextLost = false; this.frameMs = 16;
     this._sinceCheck = 0; this._repairStep = 0; this._blackFrames = 0; this._pendingSample = false; this._checksLeft = 10;
     this._slowTime = 0;
   }
+  _freshStats() { return { kills: 0, knifeKills: 0, portals: 0, reports: 0, witnesses: 0, loudShots: 0, alarmKills: 0, startTime: 0 }; }
 
   async init() {
     i18n.set(i18n.detect());
-    // renderer
     let renderer;
     try {
       renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', stencil: false });
@@ -54,6 +55,7 @@ export class Game {
     if (!renderer.capabilities.isWebGL2) { this.fatal(i18n.t('menu.webglError')); throw new Error('WebGL2 required'); }
     this.renderer = renderer;
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.autoUpdate = false;   // shadows are refreshed once per frame, shared by the gateway views
     renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = CONFIG.render.exposure;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.domElement.id = 'game';
@@ -63,7 +65,6 @@ export class Game {
     this.menus = new Menus(this, this.container);
     this.menus.show('loading');
     this.hud = new HUD(this, this.container);
-    // scene
     this.scene = new THREE.Scene();
     this.scene.fog = new THREE.FogExp2(0x0a0f1a, CONFIG.render.fogDensity);
     this._buildSky();
@@ -78,8 +79,9 @@ export class Game {
     this.menuCamera = new THREE.PerspectiveCamera(50, 1, 0.5, 500);
     this.camera = this.menuCamera;
     this.postfx = new PostFX(renderer, this.scene, this.camera, CONFIG.render);
-    this.architect = new Architect(this);
+    this.tacmap = new TacMap(this);
     this._buildLevel();
+    this.portals = new PortalSystem(this);
     this.menus.setLoading(1);
     this.applySettings(this.menus.settings);
     window.addEventListener('resize', () => this.resize());
@@ -98,7 +100,6 @@ export class Game {
     this._loop = this._loop.bind(this);
     this.lastFrame = performance.now();
     requestAnimationFrame(this._loop);
-    // expose for automation / debugging
     window.__game = this;
   }
 
@@ -117,16 +118,13 @@ export class Game {
           float h = clamp(vDir.y, -0.1, 1.0);
           vec3 horizon = vec3(0.10, 0.13, 0.20); vec3 zenith = vec3(0.015, 0.02, 0.045);
           vec3 col = mix(horizon, zenith, pow(h, 0.55));
-          // moon
           vec3 moonDir = normalize(vec3(-0.35, 0.55, 0.45));
           float m = dot(vDir, moonDir);
           col += vec3(0.55, 0.62, 0.8) * (smoothstep(0.9985, 0.9995, m) * 1.6 + pow(max(0.0, m), 40.0) * 0.12);
-          // clouds
           vec2 uv = vDir.xz / (vDir.y + 0.25);
           float c = noise(uv * 2.0 + uTime * 0.01) * 0.6 + noise(uv * 5.0 - uTime * 0.02) * 0.3;
           c = smoothstep(0.45, 0.85, c) * smoothstep(0.0, 0.25, vDir.y);
           col = mix(col, vec3(0.12, 0.14, 0.19), c * 0.7);
-          // stars
           float s = step(0.9985, hash(floor(vDir * 300.0))) * smoothstep(0.1, 0.5, vDir.y) * (1.0 - c);
           col += s * 0.35;
           col += uFlash * vec3(0.9, 0.95, 1.0);
@@ -158,15 +156,14 @@ export class Game {
   interactables() {
     const list = [...this.level.interactables];
     for (const h of this.hostages) if (h.alive && h.state === 'captive') list.push({ id: 'free_' + h.id, pos: h.pos, radius: 2.2, holdTime: CONFIG.player.interactTime, enabled: true, prompt: 'hud.interact.free', onUse: () => h.free() });
-    for (const s of this.squad) if (s.downed) list.push({ id: 'revive_' + s.slot, pos: s.pos, radius: 2.2, holdTime: CONFIG.squad.reviveTime, enabled: true, prompt: 'hud.interact.revive', onUse: () => { s.reviveByPlayer(); this.hud.callout('revive', s); } });
+    if (this.player && !this.player.carrying) for (const e of this.enemies) if (!e.alive && !e.carriedBy && !e.thrown && e.deathT > 0.8) list.push({ id: 'body_' + e.id, pos: e.pos, radius: 2.0, holdTime: 0.6, enabled: true, prompt: 'hud.interact.body', onUse: () => this.player.carry(e) });
     return list;
   }
   hostilesOf(faction) {
-    if (faction === 'enemy') { const out = []; if (this.player.alive) out.push(this.player); for (const s of this.squad) if (s.alive) out.push(s); for (const h of this.hostages) if (h.alive && h.state === 'freed') out.push(h); return out; }
+    if (faction === 'enemy') { const out = []; if (this.player && this.player.alive) out.push(this.player); for (const h of this.hostages) if (h.alive && h.state === 'freed') out.push(h); return out; }
     return this.enemies.filter((e) => e.alive);
   }
   isDark() { return this.level && !this.level.power; }
-  // Is a world position inside a powered floodlight cone (with a clear line from the lamp)?
   isLitCached(ch) {
     if (ch._litTime !== undefined && this.time - ch._litTime < 0.15) return ch._lit;
     ch._litTime = this.time; ch._lit = this.isLit(ch.pos); return ch._lit;
@@ -186,32 +183,30 @@ export class Game {
     }
     return false;
   }
+  // guards currently on the radio, soonest first
+  witnesses() { return this.enemies.filter((e) => e.alive && e.report.active).sort((a, b) => a.report.t - b.report.t); }
 
   // ---- mission lifecycle ----
   startMission() {
     this.audio.start();
     this._clearEntities();
     const L = this.level;
-    // reset modules to their original placement
     for (const m of L.modules) { if (m.origin) m.setTransform(m.origin.x, m.origin.y, m.origin.z, m.origin.yaw); else m.origin = { x: m.x, y: m.y, z: m.z, yaw: m.yaw }; }
     this.script = new Level1Script(this, L);
     for (const b of L.explosives) b.reset();
     this._resetLights();
     L.cellDoor.setLocked(true);
     for (const it of L.interactables) it.enabled = true;
-    // spawn
     const sp = L.spawns;
     this.player = new Player(this, { position: new THREE.Vector3(sp.player.x, 0, sp.player.z), yaw: sp.player.yaw });
     this.player.camYaw = sp.player.yaw;
     this.characters.push(this.player);
-    sp.squad.forEach((s, i) => { const m = new Squadmate(this, { position: new THREE.Vector3(s.x, 0, s.z), yaw: s.yaw, name: s.name, slot: i }); this.squad.push(m); this.characters.push(m); });
     for (const h of sp.hostages) { const m = new Hostage(this, { position: new THREE.Vector3(h.x, h.y || 0, h.z), yaw: h.yaw, name: h.name, id: h.id }); this.hostages.push(m); this.characters.push(m); }
     for (const e of sp.enemies) this.spawnEnemy(e);
-    this.architect.energy = CONFIG.architect.energyMax; this.architect.stats.placed = 0;
-    this.architect.enemyIntel.clear();
+    this.portals.reset(); this.tacmap.reset();
     this.fx.clearDecals();
-    this.time = 0; this.stats = { kills: 0, startTime: 0 };
-    this.squadMode = 'follow';
+    this.time = 0; this.stats = this._freshStats();
+    this.focus = 0; this.alarm = false; this.alarmTime = -100;
     this.state = 'intro'; this.mode = 'ground';
     this.camera = this.player.camera; this.postfx.setCamera(this.camera);
     this.resize();
@@ -222,17 +217,16 @@ export class Game {
     this.checkpoint('start');
     this.hud.showIntro(() => this.beginPlay());
   }
-  // Called when the opening card is dismissed (a user gesture, so the pointer can be locked here).
   beginPlay() {
     if (this.state !== 'intro') return;
     if (this.hud.introEl) { this.hud.introEl.remove(); this.hud.introEl = null; }
     this.state = 'playing';
     this.lastFrame = performance.now();
-    this.hud.hint('move'); setTimeout(() => { if (this.state === 'playing') this.hud.hint('aim'); }, 9000);
+    this.hud.hint('move'); setTimeout(() => { if (this.state === 'playing' && !this.hud.tutKey) this.hud.hint('aim'); }, 9000);
     this.input.lock();
   }
   spawnEnemy(def) {
-    const e = new Enemy(this, { position: new THREE.Vector3(def.x, def.y || 0, def.z), yaw: def.yaw, patrol: def.patrol, accuracy: def.accuracy, role: def.role, name: def.name, grenades: def.grenades });
+    const e = new Enemy(this, { position: new THREE.Vector3(def.x, def.y || 0, def.z), yaw: def.yaw, patrol: def.patrol, accuracy: def.accuracy, role: def.role, name: def.name, grenades: def.grenades, zone: def.zone });
     e.id = this._enemyId++;
     e.aimYaw = e.yaw; e.scanYaw = e.yaw; e.homeYaw = e.yaw;
     this.enemies.push(e); this.characters.push(e);
@@ -241,14 +235,14 @@ export class Game {
   _clearEntities() {
     for (const c of this.characters) c.dispose();
     for (const g of this.grenades) if (g.alive) this.scene.remove(g.mesh);
-    this.characters = []; this.enemies = []; this.squad = []; this.hostages = []; this.grenades = [];
+    this.characters = []; this.enemies = []; this.hostages = []; this.grenades = [];
     if (this.script && this.script.heli) { this.scene.remove(this.script.heli.grp); }
     this.heliDown = false;
   }
   _resetLights() {
     const L = this.level; L.power = true;
     for (const l of L.floodlights) { l.intensity = l.userData.baseIntensity; if (l.userData.fixture) l.userData.fixture.material = this.mats.get('emissiveWarm'); if (l.userData.cone) l.userData.cone.visible = true; }
-    this.architect.clearSuggestion(); this.hud.tutorial(null);
+    this.hud.tutorial(null);
     for (const l of L.roomLights) { l.intensity = l.userData.baseIntensity; if (l.userData.fixture) l.userData.fixture.material = this.mats.get(l.userData.kind === 'cool' ? 'emissiveCool' : 'emissiveWarm'); }
     for (const l of L.emergency) { l.intensity = 0; l.userData.fixture.material = this.mats.get('lightHousing'); }
     if (L.fuseLed) L.fuseLed.material = this.mats.get('emissiveGreen');
@@ -256,9 +250,10 @@ export class Game {
 
   quitToMenu() {
     this._clearEntities();
-    this.state = 'menu'; this.mode = 'ground'; this.architect.active = false; this.architect.markers.visible = false;
-    this.postfx.state.architect = 0; this.audio.setSlowMotion(false); this.timeScaleTarget = 1; this.timeScale = 1;
-    this.hud.hide(); this.hud.setArchitect(false); this.menus.show('main'); this.input.unlock();
+    this.portals.reset();
+    this.state = 'menu'; this.mode = 'ground'; this.tacmap.active = false; this.tacmap.markers.visible = false;
+    this.postfx.state.architect = 0; this.audio.setSlowMotion(false); this.timeScaleTarget = 1; this.timeScale = 1; this.focus = 0;
+    this.hud.hide(); this.hud.setMap(false); this.menus.show('main'); this.input.unlock();
     this.camera = this.menuCamera; this.postfx.setCamera(this.camera);
     this.player = null;
   }
@@ -267,59 +262,117 @@ export class Game {
     this.state = 'paused'; this.menus.show('pause'); this.input.unlock(); this.audio.setSlowMotion(true);
   }
   showClickToResume() { if (this.state !== 'playing') return; this.state = 'paused'; this.menus.show('click'); this.audio.setSlowMotion(true); }
-  resume() { if (this.state !== 'paused') return; this.state = 'playing'; this.menus.hide(); this.audio.setSlowMotion(this.mode === 'architect'); this.input.lock(); this.lastFrame = performance.now(); }
+  resume() { if (this.state !== 'paused') return; this.state = 'playing'; this.menus.hide(); this.audio.setSlowMotion(this.mode === 'map' || this.focus > 0); this.input.lock(); this.lastFrame = performance.now(); }
   resumeFromClick() { this.resume(); }
 
   missionComplete() {
     if (this.state !== 'playing') return;
     this.state = 'end'; this.audio.ui('win'); this.input.unlock(); this.audio.setSlowMotion(true);
-    if (this.architect.active) this.architect.exit();
+    if (this.tacmap.active) this.tacmap.exit();
     this.hud.hide(); this.menus.showEnd(true, null, this._endStats());
   }
   missionFailed(reason) {
     if (this.state !== 'playing') return;
     this.state = 'end'; this.audio.ui('fail'); this.audio.setSlowMotion(true);
-    if (this.architect.active) this.architect.exit();
+    if (this.tacmap.active) this.tacmap.exit();
     setTimeout(() => { this.input.unlock(); this.hud.hide(); this.menus.showEnd(false, reason, this._endStats()); }, 1800);
   }
-  _endStats() { return { time: this.time, kills: this.stats.kills, accuracy: this.player ? this.player.accuracy : 0, modules: this.architect.stats.placed, hostages: this.hostages.filter((h) => h.alive && h.state === 'extracted').length }; }
+  rank() {
+    const s = this.stats;
+    if (s.reports === 0) return 'ghost';
+    if (s.loudShots > 20 || s.alarmKills >= 8) return 'loud';
+    return 'operative';
+  }
+  _endStats() { const s = this.stats; return { time: this.time, kills: s.kills, knife: s.knifeKills, portals: s.portals, reports: s.reports, hostages: this.hostages.filter((h) => h.alive && h.state === 'extracted').length, rank: this.rank() }; }
 
+  // ---- events ----
   onPlayerDeath() { this.missionFailed('player'); }
   onCharacterDeath(ch, info) {
-    if (ch.isEnemy) { if (info.from && (info.from.isPlayer || info.from.isSquad)) this.stats.kills++; this.script && this.script.onEnemyDeath(ch); }
-  }
-  onSquadDowned(s) { this.hud.callout('downed', s); this.hud.hint('revive'); }
-  onSquadDead() { /* mission continues */ }
-  onHostageFreed(h) { this.script && this.script.onHostageFreed(h); this.audio.ui('objective'); }
-  onEnemyAlert(e, target) { if (target === this.player || target?.isSquad) { if (this.time - (this._lastAlertToast || -10) > 6) { this._lastAlertToast = this.time; this.hud.alert('hud.alert.spotted'); this.audio.ui('alert'); } } // radio to nearby guards
-    setTimeout(() => { if (e.alive && e.state === 'combat') this.emitNoise(e.pos, CONFIG.enemy.alertRadioRange, e, 'radio'); }, CONFIG.enemy.alertRadioDelay * 1000 / Math.max(0.2, this.timeScale)); }
-  onEnemySuspicious() { if (this.time - (this._lastSusToast || -10) > 8) { this._lastSusToast = this.time; this.hud.alert('hud.alert.suspicious', 1600); } }
-  onModulePlaced(mod) { this.settleModules(); if (this.script && this.script.onModulePlaced) this.script.onModulePlaced(mod); }
-  // Any module left hanging in the air after a change drops onto whatever is beneath it.
-  settleModules() {
-    for (let iter = 0; iter < 3; iter++) {
-      let moved = false;
-      for (const m of this.level.modules) {
-        if (m.y <= this.world.groundY + 0.01) continue;
-        const support = this.architect._supportHeight(m, m.x, m.z, m.yaw);
-        if (support < m.y - 0.05) { m.setTransform(m.x, support, m.z, m.yaw); this.audio.modulePlace(m.group.position, m.cfg.mass >= 3); this.fx.moduleLand(m.mainCollider); moved = true; }
-      }
-      if (!moved) break;
+    if (!ch.isEnemy) return;
+    const byPlayer = info.from && info.from.isPlayer;
+    if (byPlayer) { this.stats.kills++; if (this.alarm) this.stats.alarmKills++; if (this.focus > 0 && this.mode === 'ground') this.addFocus(F.perKill); }
+    const wasReporting = ch.report.active; ch.report.active = false;
+    if (wasReporting) { this.hud.toast(this.t('hud.reportCut'), 1600); this.audio.ui('objective'); }
+    if (info.knife && info.silent) this.stats.silentKills = (this.stats.silentKills || 0) + 1;
+    // everyone who watched it happen keys his radio
+    _v.set(ch.pos.x, ch.pos.y + 1.0, ch.pos.z);
+    for (const e of this.enemies) {
+      if (e === ch || !e.alive) continue;
+      const seen = canSeePoint(this, e, _v, CONFIG.enemy.fovDeg, e.visionRange() * 0.9);
+      if (!seen) continue;
+      e.seenBodies.add(ch);
+      e.witnessed('kill', ch.pos);
+      if (e.state !== 'combat') { e.state = 'search'; e.investigate = (seen.image || ch.pos).clone(); e.lastKnown.copy(e.investigate); e.searchUntil = this.time + CONFIG.enemy.searchTime; e.alertLevel = Math.max(e.alertLevel, 1); }
     }
+    this.script && this.script.onEnemyDeath(ch, info);
   }
+  onHostageFreed(h) { this.script && this.script.onHostageFreed(h); this.audio.ui('objective'); }
+  onEnemyAlert(e, target) {
+    if (target === this.player) { if (this.time - (this._lastAlertToast || -10) > 6) { this._lastAlertToast = this.time; this.hud.alert('hud.alert.spotted'); this.audio.ui('alert'); } }
+    // shouting to the guards nearby
+    setTimeout(() => { if (e.alive && e.state === 'combat') this.emitNoise(e.pos, 22, e, 'radio'); }, CONFIG.enemy.alertRadioDelay * 1000 / Math.max(0.2, this.timeScale));
+  }
+  onEnemySuspicious() { if (this.time - (this._lastSusToast || -10) > 8) { this._lastSusToast = this.time; this.hud.alert('hud.alert.suspicious', 1600); } }
+  onEnemyWitness(e, reason) {
+    this.stats.witnesses++;
+    this.audio.radioStart(e.pos);
+    if (this.time - (this._lastWitnessToast || -10) > 4) { this._lastWitnessToast = this.time; this.hud.alert('hud.alert.witness', 2200); }
+    this.hud.callout('radio' + (reason === 'body' ? 2 : reason === 'portal' ? 3 : reason === 'gunshot' ? 4 : 1), null);
+    this.script && this.script.onWitness && this.script.onWitness(e, reason);
+  }
+  raiseAlarm(e, reason, pos) {
+    if (this.alarm) return;
+    this.alarm = true; this.alarmTime = this.time; this.stats.reports++;
+    this.audio.alarm(); this.hud.alert('hud.alert.alarm', 3600); this.hud.hint('alarm');
+    const p = pos ? pos.clone() : e.pos.clone();
+    for (const g of this.enemies) if (g.alive) g.onAlarm(p);
+    // two guards to each captive prisoner
+    for (const h of this.hostages) {
+      if (!h.alive || h.state !== 'captive') continue;
+      const near = this.enemies.filter((g) => g.alive && g !== e && !g.post).sort((a, b) => a.pos.distanceTo(h.pos) - b.pos.distanceTo(h.pos)).slice(0, 2);
+      near.forEach((g, i) => { const a = h.yaw + Math.PI + (i ? 0.9 : -0.9); g.assignPost(new THREE.Vector3(h.pos.x + Math.sin(a) * 2.2, h.pos.y, h.pos.z + Math.cos(a) * 2.2), a + Math.PI); });
+    }
+    this.script && this.script.onAlarm && this.script.onAlarm(p, reason);
+  }
+  onPortalNoticed(e, end) { if (this.time - (this._lastPortalHint || -30) > 25) { this._lastPortalHint = this.time; this.hud.hint('portalSeen'); } }
+  onPortalOpened(sys) { this.stats.portals++; this.script && this.script.onPortalOpened && this.script.onPortalOpened(sys); }
+  onPortalTraversal(c, from, to) { if (c.isPlayer) { this.script && this.script.onPortalTraversal && this.script.onPortalTraversal(c); } }
+  onBodyLanded(b) { /* hook for scripts */ }
   onExplosion(pos) { this.emitNoise(pos, 60, null, 'explosion'); this.postfx.state.flash = 0.6; if (this.player) this.player.shake = Math.min(1, this.player.shake + Math.max(0, 1 - pos.distanceTo(this.player.pos) / 20)); }
 
-  emitNoise(pos, radius, source, kind) { for (const e of this.enemies) e.hear(pos, radius, source, kind); }
+  emitNoise(pos, radius, source, kind) {
+    for (const e of this.enemies) e.hear(pos, radius, source, kind);
+    const m = this.portals && this.portals.mirrorNoise(pos, radius);
+    if (m && m.radius > 0.5) for (const e of this.enemies) e.hear(m.pos, m.radius, source, kind);
+  }
   hint(key) { this.hud.hint(key); }
+
+  // ---- gateways / focus ----
+  openPortalAt(point, opts = {}) {
+    const res = this.portals.openFromPlayer(point, opts);
+    if (res.ok) { this.audio.ui('click'); }
+    return res;
+  }
+  quickPortal() {
+    const p = this.player; if (!p || !p.alive || this.mode !== 'ground') return;
+    const cam = p.camera; cam.getWorldDirection(_v);
+    const hit = this.world.raycast(cam.position, _v, 45, (c) => c.blocksMovement && c.tag !== 'door');
+    let point;
+    if (hit) { point = hit.point.clone(); if (hit.normal.y < 0.5) point.addScaledVector(hit.normal, 0.9); else point.addScaledVector(_v2.set(_v.x, 0, _v.z).normalize(), 0.3); }
+    else { const t = _v.y < -0.02 ? -cam.position.y / _v.y : 30; point = cam.position.clone().addScaledVector(_v, Math.min(30, t)); point.y = Math.max(0, point.y); }
+    const res = this.openPortalAt(point, { hintYaw: p.camYaw, radius: 3.5 });
+    if (!res.ok) { this.hud.toast(res.reason); this.audio.moduleInvalid(); }
+  }
+  closePortal() { if (this.portals.active) { this.portals.close(); } }
+  addFocus(sec) { this.focus = Math.min(F.max, this.focus + sec); if (this.mode === 'ground') this.audio.setSlowMotion(true); }
 
   // ---- checkpoints ----
   checkpoint(id) {
     this.checkpointData = {
       id, time: this.time,
-      player: this.player.snapshot(), squad: this.squad.map((s) => s.snapshot()), hostages: this.hostages.map((h) => h.snapshot()),
-      enemies: this.enemies.map((e) => e.snapshot()), enemyDefs: this.enemies.map((e) => ({ patrol: e.patrol.map((p) => [p.x, p.z]), role: e.role, accuracy: e.accuracy, name: e.name })),
-      modules: this.level.modules.map((m) => ({ x: m.x, y: m.y, z: m.z, yaw: m.yaw })),
-      architect: this.architect.snapshot(), script: this.script.snapshot(), stats: { ...this.stats },
+      player: this.player.snapshot(), hostages: this.hostages.map((h) => h.snapshot()),
+      enemies: this.enemies.map((e) => e.snapshot()), enemyDefs: this.enemies.map((e) => ({ patrol: e.patrol.map((p) => [p.x, p.z]), role: e.role, accuracy: e.accuracy, name: e.name, zone: e.zoneName })),
+      portals: this.portals.snapshot(), script: this.script.snapshot(), stats: { ...this.stats }, alarm: this.alarm, alarmTime: this.alarmTime,
       explosives: this.level.explosives.map((b) => b.alive),
     };
     if (id !== 'start') { this.hud.toast(this.t('hud.checkpoint')); this.audio.ui('checkpoint'); }
@@ -327,23 +380,20 @@ export class Game {
   restoreCheckpoint() {
     const d = this.checkpointData; if (!d) { this.startMission(); return; }
     this.audio.start();
-    if (this.architect.active) this.architect.exit();
-    // modules
-    this.level.modules.forEach((m, i) => { const s = d.modules[i]; m.setTransform(s.x, s.y, s.z, s.yaw); });
-    // enemies: rebuild the list to match the snapshot
+    if (this.tacmap.active) this.tacmap.exit();
     for (const e of this.enemies) { e.dispose(); const i = this.characters.indexOf(e); if (i >= 0) this.characters.splice(i, 1); }
     this.enemies = [];
-    d.enemies.forEach((s, i) => { const def = d.enemyDefs[i]; const e = this.spawnEnemy({ x: s.pos[0], y: s.pos[1], z: s.pos[2], yaw: s.yaw, patrol: def.patrol, role: def.role, accuracy: def.accuracy, name: def.name, grenades: s.grenades }); e.restore(s); });
+    this.alarm = d.alarm; this.alarmTime = d.alarmTime;
+    d.enemies.forEach((s, i) => { const def = d.enemyDefs[i]; const e = this.spawnEnemy({ x: s.pos[0], y: s.pos[1], z: s.pos[2], yaw: s.yaw, patrol: def.patrol, role: def.role, accuracy: def.accuracy, name: def.name, grenades: s.grenades, zone: def.zone }); e.restore(s); });
     this.player.restore(d.player);
-    this.squad.forEach((s, i) => s.restore(d.squad[i]));
     this.hostages.forEach((h, i) => h.restore(d.hostages[i]));
     for (const g of this.grenades) if (g.alive) this.scene.remove(g.mesh); this.grenades = [];
-    this.architect.restore(d.architect);
+    this.portals.restore(d.portals); this.tacmap.reset();
     d.explosives.forEach((alive, i) => { const b = this.level.explosives[i]; if (alive) b.reset(); else if (b.alive) { b.alive = false; b.mesh.visible = false; this.world.remove(b.collider); } });
     this._resetLights();
     this.script.restore(d.script);
-    this.stats = { ...d.stats }; this.time = d.time;
-    this.state = 'playing'; this.mode = 'ground'; this.squadMode = 'follow';
+    this.stats = { ...d.stats }; this.time = d.time; this.focus = 0;
+    this.state = 'playing'; this.mode = 'ground';
     this.camera = this.player.camera; this.postfx.setCamera(this.camera);
     this.postfx.state.damage = 0; this.postfx.state.architect = 0; this.audio.setSlowMotion(false); this.timeScale = 1; this.timeScaleTarget = 1;
     this.hud.show(); this.menus.hide(); this.input.lock();
@@ -373,7 +423,7 @@ export class Game {
     const w = this.container.clientWidth || window.innerWidth, h = this.container.clientHeight || window.innerHeight;
     this.width = w; this.height = h;
     this.renderer.setSize(w, h, false);
-    for (const c of [this.menuCamera, this.architect && this.architect.camera, this.player && this.player.camera]) if (c) { c.aspect = w / h; c.updateProjectionMatrix(); }
+    for (const c of [this.menuCamera, this.tacmap && this.tacmap.camera, this.player && this.player.camera]) if (c) { c.aspect = w / h; c.updateProjectionMatrix(); }
     this.postfx.setSize(w, h);
   }
 
@@ -381,9 +431,10 @@ export class Game {
     this.input.on('keydown', (code, e) => {
       if (this.state === 'intro') return;
       if (this.state === 'playing') {
-        if (code === 'Escape') { if (this.architect.active && this.architect.dragging) return; this.pause(); return; }
-        if (code === 'Tab') { e.preventDefault(); if (this.player.alive) this.architect.toggle(); }
-        if (code === 'KeyQ' && this.mode === 'ground') { this.squadMode = this.squadMode === 'follow' ? 'hold' : 'follow'; for (const s of this.squad) if (s.alive) { if (this.squadMode === 'hold') { s.setOrder('hold', { pos: s.pos }); s.order.yaw = s.yaw; } else s.setOrder('follow'); } this.hud.toast(this.t(this.squadMode === 'hold' ? 'hud.squadHold' : 'hud.squadFollow')); this.audio.ui('click'); if (!this.script.flags.hintSquad) { this.script.flags.hintSquad = true; } if (this.script.onSquadOrder) this.script.onSquadOrder('hold'); }
+        if (code === 'Escape') { this.pause(); return; }
+        if (code === 'Tab') { e.preventDefault(); if (this.player.alive) this.tacmap.toggle(); }
+        if (code === 'KeyQ' && this.mode === 'ground') this.quickPortal();
+        if (code === 'KeyC') { if (this.portals.active) { this.closePortal(); this.hud.toast(this.t('portal.closed'), 1200); } }
       } else if (this.state === 'paused' && code === 'Escape') this.resume();
       else if (this.state === 'menu' && (code === 'Enter' || code === 'Space')) this.startMission();
     });
@@ -398,7 +449,6 @@ export class Game {
     try {
       this._frame(realDt, true);
     } catch (e) {
-      // A thrown frame must never leave the player staring at a black canvas in silence.
       console.error('VANTAGE frame error:', e);
       if (!this._frameErrors) this._frameErrors = 0;
       if (++this._frameErrors === 3) this.showTrouble(this.t('trouble.frame'), e && e.message);
@@ -411,17 +461,21 @@ export class Game {
     this.realTime += realDt;
     if (this.state === 'menu') { this._updateMenu(realDt); }
     else if (this.state === 'playing') { this._updatePlaying(realDt); }
-    else if (this.state === 'end' || this.state === 'paused' || this.state === 'intro') { this.fx.update(0, this.camera); this.postfx.update(realDt, this.realTime); }
+    else if (this.state === 'end' || this.state === 'paused' || this.state === 'intro') { this.fx.update(0, this.camera); this.postfx.update(realDt, this.realTime); if (this.portals) this.portals.update(0, realDt * 0.0001); }
     this._updateEnvironment(realDt);
     this.audio.update(realDt, this.state === 'menu');
     const ht = this.profile ? performance.now() : 0;
     this.hud.update(realDt);
     if (this.profile) this._prof('hud', ht);
-    if (render) { this.postfx.render(); this._pendingSample = true; }
+    if (render) { this._render(); this._pendingSample = true; }
     this.input.endFrame();
   }
+  _render() {
+    this.renderer.shadowMap.needsUpdate = true;
+    if (this.portals) this.portals.render(this.renderer, this.scene, this.camera);
+    this.postfx.render();
+  }
 
-  // Sustained single-digit frame rates risk a driver reset, so step the quality down instead.
   _checkPerformance(realDt) {
     if (this._autoQualityDone || this.realTime < 4) return;
     if (this.frameMs > 90) this._slowTime += realDt; else this._slowTime = Math.max(0, this._slowTime - realDt * 0.5);
@@ -438,11 +492,7 @@ export class Game {
   }
 
   // ---- black-screen / performance watchdog ----
-  // Some GPUs and drivers fail in ways that produce a perfectly black canvas with no error:
-  // a post-processing target the driver will not render to, a shadow map it cannot allocate,
-  // or a frame so heavy the driver resets. The watchdog notices and repairs it step by step.
   _watchdog(realDt) {
-    // Sampling the drawing buffer stalls the GPU, so only check until rendering has proven healthy.
     if (this._checksLeft <= 0 || this._repairStep > 3) return;
     this._sinceCheck += realDt;
     if (this._sinceCheck < 0.6) return;
@@ -450,14 +500,11 @@ export class Game {
     const lum = this._sampleCanvas();
     if (lum === null) return;
     this._checksLeft--;
-    // The darkest legitimate view in the game (staring straight up at the night sky) reads about 7;
-    // a renderer that is failing gives a clean 0 on every sample.
     if (lum > 1) { this._blackFrames = 0; return; }
-    if (++this._blackFrames < 2) return;              // ignore a single frame (a fade, a load hitch)
-    this._blackFrames = 0; this._checksLeft = 12;     // give the repair a fresh window to prove itself
+    if (++this._blackFrames < 2) return;
+    this._blackFrames = 0; this._checksLeft = 12;
     this._repair();
   }
-  // Reads a handful of pixels straight out of the drawing buffer; returns the brightest channel.
   _sampleCanvas() {
     if (!this._pendingSample) return null;
     this._pendingSample = false;
@@ -476,30 +523,11 @@ export class Game {
       return max;
     } catch (e) { return null; }
   }
-  // Escalating repair: drop post-processing, then shadows and resolution, then explain.
   _repair() {
     const step = ++this._repairStep;
-    if (step === 1 && this.postfx.enabled) {
-      this.postfx.enabled = false;
-      console.warn('VANTAGE: black frame detected — disabling post-processing');
-      this.hud.toast(this.t('trouble.postfx'), 5000);
-      return;
-    }
-    if (step <= 2) {
-      this.renderer.shadowMap.enabled = false;
-      this.renderer.setPixelRatio(1);
-      this.postfx.enabled = false;
-      this.resize();
-      console.warn('VANTAGE: black frame persists — disabling shadows and lowering resolution');
-      this.hud.toast(this.t('trouble.quality'), 5000);
-      return;
-    }
-    if (step === 3) {
-      this.renderer.toneMapping = THREE.NoToneMapping;
-      this.scene.traverse((o) => { if (o.isLight && o.isPointLight) o.visible = false; });
-      console.warn('VANTAGE: black frame persists — stripping tone mapping and point lights');
-      return;
-    }
+    if (step === 1 && this.postfx.enabled) { this.postfx.enabled = false; console.warn('VANTAGE: black frame detected — disabling post-processing'); this.hud.toast(this.t('trouble.postfx'), 5000); return; }
+    if (step <= 2) { this.renderer.shadowMap.enabled = false; this.renderer.setPixelRatio(1); this.postfx.enabled = false; this.resize(); console.warn('VANTAGE: black frame persists — disabling shadows and lowering resolution'); this.hud.toast(this.t('trouble.quality'), 5000); return; }
+    if (step === 3) { this.renderer.toneMapping = THREE.NoToneMapping; this.scene.traverse((o) => { if (o.isLight && o.isPointLight) o.visible = false; }); console.warn('VANTAGE: black frame persists — stripping tone mapping and point lights'); return; }
     this.showTrouble(this.t('trouble.black'), this.rendererInfo());
   }
   rendererInfo() {
@@ -518,34 +546,13 @@ export class Game {
     d.appendChild(b);
     this.container.appendChild(d); this._troubleEl = d;
   }
-
-  // ---- WebGL context loss ----
-  // A lost context is the classic permanent black screen. Keep the canvas, pause, and recover.
   _bindContextEvents() {
     const c = this.renderer.domElement;
-    c.addEventListener('webglcontextlost', (e) => {
-      e.preventDefault();               // without this the context is never restored
-      this.contextLost = true;
-      if (this.state === 'playing') this.pause(true);
-      console.warn('VANTAGE: WebGL context lost');
-      this.showTrouble(this.t('trouble.contextLost'), this.rendererInfo());
-    }, false);
-    c.addEventListener('webglcontextrestored', () => {
-      this.contextLost = false;
-      if (this._troubleEl) { this._troubleEl.remove(); this._troubleEl = null; }
-      // come back lighter so we do not immediately lose the context again
-      this.postfx.enabled = false;
-      this.renderer.shadowMap.enabled = false;
-      this.renderer.setPixelRatio(1);
-      this.resize();
-      this.lastFrame = performance.now(); this._checksLeft = 12; this._repairStep = 2;
-      console.warn('VANTAGE: WebGL context restored (running in reduced mode)');
-      this.hud.toast(this.t('trouble.restored'), 6000);
-    }, false);
+    c.addEventListener('webglcontextlost', (e) => { e.preventDefault(); this.contextLost = true; if (this.state === 'playing') this.pause(true); console.warn('VANTAGE: WebGL context lost'); this.showTrouble(this.t('trouble.contextLost'), this.rendererInfo()); }, false);
+    c.addEventListener('webglcontextrestored', () => { this.contextLost = false; if (this._troubleEl) { this._troubleEl.remove(); this._troubleEl = null; } this.postfx.enabled = false; this.renderer.shadowMap.enabled = false; this.renderer.setPixelRatio(1); this.resize(); this.lastFrame = performance.now(); this._checksLeft = 12; this._repairStep = 2; console.warn('VANTAGE: WebGL context restored (running in reduced mode)'); this.hud.toast(this.t('trouble.restored'), 6000); }, false);
   }
 
-  // Only the lights nearest the camera stay active. The count is held constant so the shader
-  // programs never have to be recompiled mid-game, and weak GPUs are not asked to shade 28 lights.
+  // Only the lights nearest the camera stay active; the count is held constant so shaders never recompile mid-game.
   _updateLightBudget() {
     const pools = this._lightPools || (this._lightPools = [
       { list: this.builder.lights.points, budget: 8 },
@@ -556,16 +563,15 @@ export class Game {
       if (list.length <= budget) { for (const l of list) l.visible = true; continue; }
       for (const l of list) {
         const d = Math.hypot(l.position.x - cam.x, l.position.y - cam.y, l.position.z - cam.z);
-        // shadow casters are pinned so the shadow count (and therefore the shaders) stay fixed
         l._score = d - (l.intensity > 0 ? 400 : 0) - (l.castShadow ? 1e5 : 0);
       }
       list.sort((a, b) => a._score - b._score);
       for (let i = 0; i < list.length; i++) list[i].visible = i < budget;
     }
   }
-  // Test/debug helper: advance the simulation without rendering (deterministic, fast).
+  // Test/debug helpers: advance the simulation without rendering (deterministic, fast).
   debugStep(seconds, step = 1 / 60) { const n = Math.round(seconds / step); for (let i = 0; i < n; i++) this._frame(step, false); }
-  debugRender() { this.postfx.render(); }
+  debugRender() { this._render(); }
 
   _updateMenu(realDt) {
     this.menuOrbit += realDt * 0.05;
@@ -582,51 +588,44 @@ export class Game {
   _prof(name, t0) { if (!this.profile) return; this.profile[name] = (this.profile[name] || 0) + (performance.now() - t0); }
   _updatePlaying(realDt) {
     const P = this.profile; let t0 = P ? performance.now() : 0;
-    // time scale (slow motion in architect view)
-    this.timeScaleTarget = this.mode === 'architect' ? CONFIG.architectTimeScale : 1;
-    this.timeScale += (this.timeScaleTarget - this.timeScale) * Math.min(1, realDt * 6);
+    // clocks: the map freezes the world almost still; focus slows the world while you keep most of your speed
+    if (this.focus > 0) { this.focus -= realDt; if (this.focus <= 0) { this.focus = 0; if (this.mode === 'ground') this.audio.setSlowMotion(false); } }
+    const focused = this.focus > 0 && this.mode === 'ground';
+    this.timeScaleTarget = this.mode === 'map' ? CONFIG.mapTimeScale : focused ? F.worldScale : 1;
+    this.timeScale += (this.timeScaleTarget - this.timeScale) * Math.min(1, realDt * 8);
     const dt = realDt * this.timeScale;
+    const playerDt = this.mode === 'map' ? dt : realDt * Math.max(this.timeScale, focused ? F.playerScale : 0);
     this.time += dt; this.dt = dt;
-    // player first (camera), then architect (uses player position)
-    this.player.update(dt, realDt);
+    this.player.update(playerDt, realDt);
     if (P) { this._prof('player', t0); t0 = performance.now(); }
-    this.architect.update(realDt, dt);
-    if (P) { this._prof('architect', t0); t0 = performance.now(); }
-    this.hemi.intensity = 0.95 + this.architect.transition * 1.1;
-    this.camera = this.mode === 'architect' ? this.architect.camera : this.player.camera;
+    this.tacmap.update(realDt, dt);
+    if (P) { this._prof('map', t0); t0 = performance.now(); }
+    this.hemi.intensity = 0.95 + this.tacmap.transition * 1.9;
+    this.camera = this.mode === 'map' ? this.tacmap.camera : this.player.camera;
     if (this.postfx.camera !== this.camera) this.postfx.setCamera(this.camera);
-    // friendlies' view of enemies (for fog of war & squad targeting)
     this._visTimer = (this._visTimer || 0) - dt;
     if (this._visTimer <= 0) { this._visTimer = 0.1; this._updateVisibility(); }
     if (P) { this._prof('visibility', t0); t0 = performance.now(); }
-    // AI
-    for (const c of this.characters) if (!c.isPlayer) { const ct = P ? performance.now() : 0; c.update(dt); if (P) this._prof(c.isEnemy ? 'enemies' : c.isSquad ? 'squad' : 'hostages', ct); }
+    for (const c of this.characters) if (!c.isPlayer) { const ct = P ? performance.now() : 0; c.update(dt); if (P) this._prof(c.isEnemy ? 'enemies' : 'hostages', ct); }
     if (P) t0 = performance.now();
     separateCharacters(this.characters, dt);
+    // gateways: crossings, animation, hum
+    this.portals.update(dt, realDt);
     // doors
-    let navDirty = false;
-    for (const d of this.level.doors) { d.update(dt, this.characters); if (d.navDirty) { d.navDirty = false; navDirty = true; this.nav.rebuildRegion(d.collider.minX, d.collider.minZ, d.collider.maxX, d.collider.maxZ); } }
-    // grenades
+    for (const d of this.level.doors) { d.update(dt, this.characters); if (d.navDirty) { d.navDirty = false; this.nav.rebuildRegion(d.collider.minX, d.collider.minZ, d.collider.maxX, d.collider.maxZ); } }
     for (let i = this.grenades.length - 1; i >= 0; i--) { const g = this.grenades[i]; g.update(dt); if (!g.alive) this.grenades.splice(i, 1); }
-    // explosive props
     for (const b of this.level.explosives) b.update(dt);
-    // loot: walking over a fallen guard's rifle restocks ammo
-    if (this.player.alive) for (const e of this.enemies) {
+    // a fallen guard's rifle restocks the carbine
+    if (this.player.alive && this.player.hasRifle) for (const e of this.enemies) {
       if (e.alive || e.looted || !e._rifleDropped) continue;
       if (e.rifle.position.distanceToSquared(this.player.pos) < 1.6 * 1.6) {
         e.looted = true; e.rifle.visible = false;
-        const g = this.player.gun; const add = Math.min(60, g.cfg.reserve * 2 - g.reserve); g.reserve += add;
-        let msg = '+' + add + ' ' + this.t('hud.rounds');
-        if (this.player.grenades < 3 && Math.random() < 0.35) { this.player.grenades++; msg += ' · +1 ' + this.t('hud.grenade'); }
-        this.hud.toast(msg, 1800); this.audio.ui('click');
+        const g = this.player.weapons.rifle; const add = Math.min(30, g.cfg.reserve * 2 - g.reserve); if (add > 0) { g.reserve += add; this.hud.toast('+' + add + ' ' + this.t('hud.rounds'), 1500); this.audio.ui('click'); }
       }
     }
-    // zones
     for (const id in this.level.zones) { const z = this.level.zones[id]; const inside = z.contains(this.player.pos); if (inside && !z.wasInside) { z.wasInside = true; this.script.onZoneEnter(id); } else if (!inside) z.wasInside = false; }
     if (P) { this._prof('doors+grenades+zones', t0); t0 = performance.now(); }
-    // script
     this.script.update(dt);
-    // fx / post
     this.fx.update(dt, this.camera);
     this.postfx.update(realDt, this.realTime);
     this._lightTimer = (this._lightTimer || 0) - realDt;
@@ -634,16 +633,13 @@ export class Game {
     this._updateSearchlights(dt);
     if (P) { this._prof('script+fx', t0); t0 = performance.now(); }
     this._updateShadowFocus(this.player.pos);
-    // audio listener
     const cam = this.camera; cam.getWorldDirection(_v);
     this.audio.setListener(cam.position, _v, new THREE.Vector3().crossVectors(_v, new THREE.Vector3(0, 1, 0)).normalize());
     // music tension
-    let tension = 0; for (const e of this.enemies) if (e.alive) { if (e.state === 'combat') tension = 1; else if (e.state !== 'patrol') tension = Math.max(tension, 0.45); }
-    if (this.script.objectives.hold === 'active') tension = 1;
+    let tension = this.alarm && this.time - this.alarmTime < 40 ? 1 : 0;
+    for (const e of this.enemies) if (e.alive) { if (e.state === 'combat') tension = 1; else if (e.report.active) tension = Math.max(tension, 0.75); else if (e.state !== 'patrol' && e.state !== 'post') tension = Math.max(tension, 0.4); }
+    if (this.script.objectives.hold === 'active') tension = Math.max(tension, 0.7);
     this.audio.setTension(tension);
-    if (tension >= 1) this._wasInCombat = true;
-    else if (this._wasInCombat && tension < 0.5) { this._wasInCombat = false; if (!this.script.flags.hintSquad) { this.script.flags.hintSquad = true; this.hint('squad'); } else if (!this.script.flags.hintVault) { this.script.flags.hintVault = true; this.hint('vault'); } }
-    if (this.mode === 'ground' && !this.input.locked && this.input.wantLock) { /* waiting for lock */ }
   }
 
   _updateVisibility() {
@@ -651,13 +647,11 @@ export class Game {
     for (const e of this.enemies) {
       if (!e.alive) { e.seenByFriendly = false; continue; }
       let seen = false;
-      if (p.alive) { const saveYaw = p.aimYaw; p.aimYaw = p.camYaw; seen = canSee(this, p, e, 130, 70); p.aimYaw = saveYaw; }
-      if (!seen) for (const s of this.squad) { if (s.alive && canSee(this, s, e, CONFIG.squad.fovDeg, CONFIG.squad.visionRange)) { seen = true; break; } }
+      if (p.alive) { const saveYaw = p.aimYaw; p.aimYaw = p.camYaw; seen = !!canSeeVia(this, p, e, 130, 70); p.aimYaw = saveYaw; }
       e.seenByFriendly = seen;
     }
   }
 
-  // Tower searchlights sweep along their patrol path; perception uses the live cone, so a moved container casts a real shadow.
   _updateSearchlights(dt) {
     for (const sl of this.level.searchlights || []) {
       const pts = sl.points; if (pts.length < 2) continue;
@@ -673,14 +667,12 @@ export class Game {
   }
 
   _updateShadowFocus(center) {
-    // keep the moon's shadow frustum centred on the action
     const m = this.moon;
     m.position.set(center.x - 35, 55, center.z + 45); m.target.position.set(center.x, 0, center.z); m.target.updateMatrixWorld();
   }
 
   _updateEnvironment(realDt) {
     this.sky.material.uniforms.uTime.value = this.realTime;
-    // lightning
     const L = this.lightning; L.t -= realDt;
     if (L.t <= 0) { L.t = 20 + Math.random() * 40; L.flash = 1; this.postfx.state.flash = Math.max(this.postfx.state.flash, 0.35); setTimeout(() => { if (this.audio.ctx) { this.audio._noise(this.audio.ambBus, { dur: 1.6, filter: 'lowpass', freq: 220, freqEnd: 60, gain: 0.9, attack: 0.05, decay: 0.7 }); } }, 600 + Math.random() * 800); }
     if (L.flash > 0) { L.flash = Math.max(0, L.flash - realDt * 4); this.moon.intensity = 1.35 + L.flash * 6; this.sky.material.uniforms.uFlash.value = L.flash * 0.25; }

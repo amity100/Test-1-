@@ -252,6 +252,13 @@ export class FX {
     for (let i = 0; i < amount; i++) this.smoke.spawn(point.x + (Math.random() - 0.5) * 0.6, point.y + 0.05, point.z + (Math.random() - 0.5) * 0.6, (Math.random() - 0.5) * 1.5, 0.4 + Math.random() * 0.8, (Math.random() - 0.5) * 1.5, 1.2 + Math.random(), 0.5, color[0], color[1], color[2], { drag: 2, grow: 2.5, alpha: 0.4 });
   }
 
+  // sparks and a soft flash where a gateway opens, closes, or something passes through it
+  portalBurst(pos, scale = 1) {
+    const n = Math.round(26 * scale);
+    for (let i = 0; i < n; i++) { const a = Math.random() * 6.28, e = (Math.random() - 0.5) * 2.4, s = 1.5 + Math.random() * 4 * scale; this.sparks.spawn(pos.x, pos.y + (Math.random() - 0.5) * 1.6 * scale, pos.z, Math.cos(a) * s, e, Math.sin(a) * s, 0.35 + Math.random() * 0.4, 0.06 + Math.random() * 0.05, 0.55, 0.9, 1, { grav: 2, drag: 2.5 }); }
+    for (let i = 0; i < 4 * scale; i++) this.smoke.spawn(pos.x, pos.y, pos.z, (Math.random() - 0.5) * 0.8, 0.3, (Math.random() - 0.5) * 0.8, 0.8, 0.8, 0.45, 0.75, 0.95, { drag: 2, grow: 2, alpha: 0.35 });
+  }
+
   moduleLand(box) {
     // dust ring around the footprint of a placed module
     const n = 14;

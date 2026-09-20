@@ -1,7 +1,7 @@
-// End-to-end smoke test in headless Chromium: loads the game, starts the mission, drives the player
-// with deterministic simulation steps, toggles the Architect view, and captures screenshots + console errors.
-// usage: node tools/smoke.mjs [outDir] [--quick] [--entry=index.html] [--quality=low]
-const { chromium } = await import('/opt/node22/lib/node_modules/playwright/index.mjs').catch(() => import('playwright')); // global install or local devDependency
+// End-to-end smoke test in headless Chromium: loads the game, validates the level, and exercises the
+// gateway / witness / knife / body mechanics with deterministic simulation steps. Captures screenshots + console errors.
+// usage: node tools/smoke.mjs [outDir] [--quick] [--entry=index.html] [--quality=low] [--port=8124]
+const { chromium } = await import('/opt/node22/lib/node_modules/playwright/index.mjs').catch(() => import('playwright'));
 import http from 'http'; import fs from 'fs'; import path from 'path';
 
 const outDir = process.argv[2] || 'smoke-out';
@@ -30,126 +30,136 @@ const t0 = Date.now();
 const shot = async (name) => { await page.evaluate(() => { const g = window.__game; g.debugFrozen = true; g.debugRender(); }); await page.screenshot({ path: path.join(outDir, name + '.png'), timeout: 120000 }); await page.evaluate(() => { window.__game.debugFrozen = false; }); console.log('shot', name, ((Date.now() - t0) / 1000).toFixed(1) + 's'); };
 const step = (sec) => page.evaluate((s) => window.__game.debugStep(s), sec);
 const key = (code, down) => page.evaluate(([c, d]) => { const g = window.__game; if (d) { g.input.keys.add(c); g.input.pressed.add(c); } else { g.input.keys.delete(c); g.input.released.add(c); } }, [code, down]);
+const tap = async (code) => { await key(code, true); await step(1 / 60); await key(code, false); };
 const evalG = (fn) => page.evaluate(fn);
+const check = (name, ok, detail) => { console.log((ok ? 'PASS ' : 'FAIL ') + name, detail !== undefined ? JSON.stringify(detail) : ''); if (!ok) errors.push('check failed: ' + name); };
 await page.goto('http://localhost:' + port + '/' + entry, { waitUntil: 'load', timeout: 180000 });
 try { await page.waitForFunction(() => window.__game && window.__game.state === 'menu', null, { timeout: 180000 }); } catch (e) { console.log('TIMEOUT waiting for menu'); await page.screenshot({ path: path.join(outDir, 'timeout.png') }); }
 await shot('01-menu');
-await page.evaluate(() => { window.__game.startMission(); window.__game.beginPlay(); window.__game.player.godMode = true; });
+await page.evaluate(() => { const g = window.__game; g.startMission(); g.beginPlay(); g.player.godMode = true; for (const h of g.hostages) h.godMode = true; });
 await step(0.5);
-// level validation: module overlaps and spawn walkability
+// level validation: static overlaps, spawn walkability, nav connectivity to every objective
 const val = await evalG(() => {
-  const g = window.__game; const out = { overlaps: [], badSpawns: [] };
-  for (const m of g.level.modules) { const c = m.mainCollider; const hit = g.world.boxOverlap(c.x, c.y, c.z, c.hx - 0.03, c.hy - 0.03, c.hz - 0.03, c.yaw, c, 0.05); if (hit) out.overlaps.push(m.id + ' vs ' + hit.tag + '@' + hit.x.toFixed(1) + ',' + hit.z.toFixed(1)); }
+  const g = window.__game; const out = { badSpawns: [] };
   for (const c of g.characters) { if (!g.nav.isWalkable(c.pos.x, c.pos.y, c.pos.z, 0.6)) out.badSpawns.push(c.name + '@' + c.pos.x + ',' + c.pos.z); }
-  // nav connectivity: the player spawn must reach every objective and the key rooms
   const L = g.level; const from = g.player.pos.clone();
-  const goals = { breach: [-28.5, 0, -37], yard: [-28, 0, -23], dock: [-20, 0, 2], racks: [-34, 0, 4], mezz: [-40, 2.8, 19.5], officeA: [g.hostages[0].pos.x, g.hostages[0].pos.y, g.hostages[0].pos.z], power: [L.powerPos.x, 0, L.powerPos.z - 1.4], workshop: [36, 0, -24], cellDoor: [L.cellDoorPos.x, 0, L.cellDoorPos.z - 1.5], corridor: [24, 0, 24.5], cellB: [g.hostages[1].pos.x, 0, g.hostages[1].pos.z], exercise: [16, 0, 17], lz: [L.lz.x, 0, L.lz.z], deck: [31, 0.25 + 0, 18.5] };
-  const cd = L.cellDoor; cd.setLocked(false); g.nav.rebuildRegion(cd.collider.minX, cd.collider.minZ, cd.collider.maxX, cd.collider.maxZ); cd.navDirty = false; // the cell block opens later in the mission
+  const goals = { breach: [-28.5, 0, -37], yard: [-28, 0, -23], tutSpot: [L.tutorial.portalPoint.x, 0, L.tutorial.portalPoint.z], dock: [-20, 0, 2], racks: [-34, 0, 4], mezz: [-40, 2.8, 19.5], officeA: [g.hostages[0].pos.x, g.hostages[0].pos.y, g.hostages[0].pos.z], power: [L.powerPos.x, 0, L.powerPos.z - 1.4], armory: [L.armoryPos.x, 0, L.armoryPos.z], cellDoor: [L.cellDoorPos.x, 0, L.cellDoorPos.z - 1.5], corridor: [24, 0, 24.5], cellB: [g.hostages[1].pos.x, 0, g.hostages[1].pos.z], exercise: [16, 0, 17], lz: [L.lz.x, 0, L.lz.z] };
+  const cd = L.cellDoor; cd.setLocked(false); g.nav.rebuildRegion(cd.collider.minX, cd.collider.minZ, cd.collider.maxX, cd.collider.maxZ); cd.navDirty = false;
   out.paths = {}; for (const k in goals) { const gl = goals[k]; const p = g.nav.findPath(from, from.clone().set(gl[0], gl[1], gl[2]), { goalRadius: 1.5, maxExpand: 200000 }); const last = p && p[p.length - 1]; out.paths[k] = !p ? 'NONE' : (Math.hypot(last.x - gl[0], last.z - gl[2]) < 1.6 && Math.abs(last.y - gl[1]) < 0.7 ? p.length : 'PARTIAL@' + last.x.toFixed(1) + ',' + last.y.toFixed(1) + ',' + last.z.toFixed(1)); }
   cd.setLocked(true); g.nav.rebuildRegion(cd.collider.minX, cd.collider.minZ, cd.collider.maxX, cd.collider.maxZ); cd.navDirty = false;
   return out;
 });
 console.log('VALIDATE', JSON.stringify(val));
+check('spawns walkable', val.badSpawns.length === 0, val.badSpawns);
+check('nav connected', Object.values(val.paths).every((v) => typeof v === 'number'), val.paths);
 await shot('02-start');
-const info = await evalG(() => { const g = window.__game; return { state: g.state, locked: g.input.locked, chars: g.characters.length, enemies: g.enemies.length, navCells: g.nav.count.reduce((a, b) => a + (b > 0 ? 1 : 0), 0), colliders: g.world.colliders.length, player: g.player.pos.toArray().map((v) => +v.toFixed(2)) }; });
+const info = await evalG(() => { const g = window.__game; return { state: g.state, mode: g.mode, chars: g.characters.length, enemies: g.enemies.length, navCells: g.nav.count.reduce((a, b) => a + (b > 0 ? 1 : 0), 0), colliders: g.world.colliders.length, player: g.player.pos.toArray().map((v) => +v.toFixed(2)), weapon: g.player.weapon }; });
 console.log('INFO', JSON.stringify(info));
-// sprint forward for 4 seconds of game time
-await key('KeyW', true); await key('ShiftLeft', true); await step(4); await key('ShiftLeft', false); await key('KeyW', false); await step(0.3);
-const p1 = await evalG(() => window.__game.player.pos.toArray().map((v) => +v.toFixed(2)));
-console.log('WALKED to', JSON.stringify(p1));
-await shot('03-walk');
-// look right/up and fire a burst
-await page.evaluate(() => { const g = window.__game; g.player.camYaw += 0.5; g.player.camPitch = -0.1; g.input.mouse.left = true; });
-await step(0.4);
-await page.evaluate(() => { window.__game.input.mouse.left = false; });
-await step(0.05);
-await shot('04-fire');
-const gun = await evalG(() => { const g = window.__game; return { mag: g.player.gun.mag, shots: g.player.accuracyShots, tracers: g.fx.tracers.length }; });
-console.log('GUN', JSON.stringify(gun));
-// architect view
-await key('Tab', true); await page.evaluate(() => window.__game.input.emit('keydown', 'Tab', { preventDefault() {} })); await key('Tab', false);
-await step(1.0);
-await shot('05-architect');
-const arch = await evalG(() => { const g = window.__game; const a = g.architect; return { mode: g.mode, active: a.active, energy: +a.energy.toFixed(1), cam: a.camera.position.toArray().map((v) => +v.toFixed(1)), timeScale: +g.timeScale.toFixed(2), modules: g.level.modules.length }; });
-console.log('ARCH', JSON.stringify(arch));
-// drag a module programmatically: the guided first move (tutorial container to its suggested spot)
-const drag = await evalG(() => {
-  const g = window.__game, a = g.architect; const T = g.level.tutorial; const mod = g.level.modules.find((m) => m.id === T.module);
-  const before = { x: mod.x, z: mod.z, tut: g.script.tutorial.step };
-  a.selected = mod; a.dragging = true; mod.setGhost(true); a.drag.origin = { x: mod.x, y: mod.y, z: mod.z, yaw: mod.yaw }; a.drag.yaw = T.target.yaw; a.drag.offset.set(0, 0, 0);
-  a.drag.x = T.target.x; a.drag.z = T.target.z; a.drag.y = a._supportHeight(mod, a.drag.x, a.drag.z, a.drag.yaw);
-  const v = a._validate(mod, a.drag.x, a.drag.y, a.drag.z, a.drag.yaw); a.drag.valid = v.ok; a.drag.reason = v.reason;
-  a._commitDrag();
-  return { before, after: { x: mod.x, z: mod.z, yaw: +mod.yaw.toFixed(2), tut: g.script.tutorial.step }, valid: v.ok, reason: v.reason, energy: +a.energy.toFixed(1), navVersion: g.nav.version };
-});
-console.log('DRAG', JSON.stringify(drag));
-// stack test: put a crate on top of the container
-const stack = await evalG(() => {
-  const g = window.__game, a = g.architect; const c = g.level.modules.find((m) => m.id === 'cont_y1'); const cr = g.level.modules.find((m) => m.id === 'crate_d1');
-  const y = a._supportHeight(cr, c.x, c.z, 0); const v = a._validate(cr, c.x, y, c.z, 0);
-  return { supportY: +y.toFixed(2), valid: v.ok, reason: v.reason };
-});
-console.log('STACK', JSON.stringify(stack));
-// right-click order on the ground in front of the player
-await page.evaluate(() => { const g = window.__game, a = g.architect; a.cursor.set(0.5, 0.22); g.input.clicks.push({ button: 2, x: 0, y: 0 }); });
-await step(0.1);
-const order = await evalG(() => { const g = window.__game; return g.squad.map((s) => ({ order: s.order.type, pos: s.order.pos && s.order.pos.toArray().map((v) => +v.toFixed(1)) })); });
-console.log('ORDER', JSON.stringify(order));
-await step(0.5);
-await shot('06-architect-drag');
+// walk to the breach (tutorial → map step)
+await key('KeyW', true); await key('ShiftLeft', true); await step(2.2); await key('ShiftLeft', false); await key('KeyW', false); await step(0.3);
+const p1 = await evalG(() => { const g = window.__game; return { pos: g.player.pos.toArray().map((v) => +v.toFixed(2)), tut: g.script.tutorial.step, insert: g.script.objectives.insert }; });
+console.log('WALKED', JSON.stringify(p1));
+check('insert reached', p1.insert === 'done' && p1.tut === 'map', p1);
+await shot('03-breach');
+// suppressed pistol: one click = one shot, quiet
+await page.evaluate(() => { const g = window.__game; g.player.camYaw = 0; g.player.camPitch = 0; g.input.mouse.left = true; g.input.clicks.push({ button: 0, x: 0, y: 0 }); });
+await step(0.05); await page.evaluate(() => { window.__game.input.mouse.left = false; }); await step(0.3);
+const gun = await evalG(() => { const g = window.__game; return { mag: g.player.gun.mag, shots: g.player.accuracyShots, suspicious: g.enemies.filter((e) => e.state !== 'patrol').length }; });
+console.log('PISTOL', JSON.stringify(gun));
+check('semi-auto single shot', gun.shots === 1 && gun.mag === 11, gun);
+// tactical map + gateway to the tutorial spot
 await page.evaluate(() => window.__game.input.emit('keydown', 'Tab', { preventDefault() {} }));
-await step(1.0);
-await shot('07-back');
+await step(0.5);
+const mapState = await evalG(() => { const g = window.__game; return { mode: g.mode, timeScale: +g.timeScale.toFixed(2), tut: g.script.tutorial.step, suggestion: !!g.tacmap.suggestion }; });
+console.log('MAP', JSON.stringify(mapState));
+check('map slows time', mapState.mode === 'map' && mapState.timeScale < 0.4 && mapState.tut === 'place', mapState);
+await shot('04-map');
+const open = await evalG(() => { const g = window.__game; const t = g.level.tutorial.portalPoint; const res = g.openPortalAt(g.player.pos.clone().set(t.x, t.y, t.z)); if (res.ok && g.tacmap.active) g.tacmap.exit(); const ps = g.portals; return { ok: res.ok, reason: res.reason, state: ps.state, a: ps.a.pos.toArray().map((v) => +v.toFixed(1)), b: ps.b.pos.toArray().map((v) => +v.toFixed(1)), bYaw: +ps.b.yaw.toFixed(2), tut: g.script.tutorial.step, mode: g.mode }; });
+console.log('PORTAL', JSON.stringify(open));
+check('gateway opened', open.ok && open.tut === 'through' && open.mode === 'ground', open);
+await step(0.6);
+await shot('05-portal');
+// walk through the near end
+const cross = await evalG(() => { const g = window.__game, a = g.portals.a; g.player.pos.set(a.pos.x + a.n.x * 1.0, a.pos.y, a.pos.z + a.n.z * 1.0); g.player.vel.set(0, 0, 0); g.player.camYaw = a.yaw + Math.PI; g.player._camInit = false; return { start: g.player.pos.toArray().map((v) => +v.toFixed(2)) }; });
+await key('KeyW', true); await step(0.8); await key('KeyW', false); await step(0.2);
+const after = await evalG(() => { const g = window.__game, b = g.portals.b; return { pos: g.player.pos.toArray().map((v) => +v.toFixed(2)), distB: +g.player.pos.distanceTo(b.pos).toFixed(2), traversals: g.portals.stats.traversals, focus: +g.focus.toFixed(2), tut: g.script.tutorial.step, timeScale: +g.timeScale.toFixed(2) }; });
+console.log('CROSSED', JSON.stringify({ ...cross, ...after }));
+check('player crossed the gateway', after.traversals >= 1 && after.distB < 4, after);
+check('focus slow-motion after crossing', after.focus > 0 && after.timeScale < 0.9, after);
+await shot('06-arrived');
+// knife the forklift guard from behind
+const knife = await evalG(() => { const g = window.__game; const t = g.enemies[g.level.tutorial.target]; const fx = Math.sin(t.yaw), fz = Math.cos(t.yaw); g.player.pos.set(t.pos.x - fx * 1.1, t.pos.y, t.pos.z - fz * 1.1); g.player.vel.set(0, 0, 0); g.player.camYaw = t.yaw; g.player._updateKnifeTarget(); return { target: !!g.player.knifeTarget, name: t.name, state: t.state }; });
+console.log('KNIFE-SETUP', JSON.stringify(knife));
+await tap('KeyF'); await step(0.5);
+const k2 = await evalG(() => { const g = window.__game; const t = g.enemies[g.level.tutorial.target]; return { alive: t.alive, kills: g.stats.kills, knife: g.stats.knifeKills, witnesses: g.witnesses().map((e) => ({ name: e.name, reason: e.report.reason, t: +e.report.t.toFixed(1) })), tut: g.script.tutorial.step }; });
+console.log('KNIFE', JSON.stringify(k2));
+check('knife takedown', !k2.alive && k2.knife === 1, k2);
+await shot('07-knife');
+// force a witness: place the yard patrol where he sees the body, then kill him before he reports
+const w1 = await evalG(() => { const g = window.__game; const w = g.enemies[g.level.tutorial.witness]; const body = g.enemies[g.level.tutorial.target]; w.report.active = false; w.seenBodies.clear(); w.suspicion = 0; w.alertLevel = 0; w.target = null; w.pos.set(body.pos.x - 6, 0, body.pos.z + 1); w.yaw = w.aimYaw = Math.atan2(body.pos.x - w.pos.x, body.pos.z - w.pos.z); w.state = 'patrol'; w.stop(); w.perceptionTimer = 0; return { w: w.pos.toArray().map((v) => +v.toFixed(1)) }; });
+await step(0.4);
+const w2 = await evalG(() => { const g = window.__game; const w = g.enemies[g.level.tutorial.witness]; return { report: w.report.active, reason: w.report.reason, t: +w.report.t.toFixed(2), state: w.state, panel: g.hud.witnessBox.classList.contains('on'), tut: g.script.tutorial.step }; });
+console.log('WITNESS', JSON.stringify(w2));
+check('body discovery starts a report', w2.report && w2.reason === 'body', w2);
+await step(1.5);
+const w3 = await evalG(() => { const g = window.__game; const w = g.enemies[g.level.tutorial.witness]; const before = +w.report.t.toFixed(2); w.applyDamage(1000, { from: g.player, dir: g.player.forward(), part: 'head', point: w.pos.clone() }); return { before, alive: w.alive, alarm: g.alarm, reports: g.stats.reports, tut: g.script.tutorial.step }; });
+console.log('CUT', JSON.stringify(w3));
+check('report cut by killing the reporter', !w3.alive && !w3.alarm && w3.reports === 0 && w3.before > 0 && w3.before < 4.5, w3);
+// a report that completes raises the alarm and posts guards on the prisoners
+const al = await evalG(() => { const g = window.__game; const e = g.enemies[0]; e.witnessed('contact', g.player.pos); return { active: e.report.active, t: +e.report.t.toFixed(1) }; });
+await step(4.0);
+const al2 = await evalG(() => { const g = window.__game; return { alarm: g.alarm, reports: g.stats.reports, posts: g.enemies.filter((e) => e.alive && e.post).length, searching: g.enemies.filter((e) => e.alive && (e.state === 'search' || e.state === 'post' || e.state === 'combat')).length, total: g.enemies.filter((e) => e.alive).length }; });
+console.log('ALARM', JSON.stringify({ ...al, ...al2 }));
+check('alarm raised after the countdown', al2.alarm && al2.reports === 1 && al2.posts >= 2, al2);
+await shot('08-alarm');
 if (!quick) {
-  // teleport near the warehouse yard for a combat screenshot
-  await page.evaluate(() => { const g = window.__game; g.player.pos.set(-14, 0, -24); g.player.camYaw = Math.PI / 2; g.player.vel.set(0, 0, 0); for (const s of g.squad) { s.pos.set(-16, 0, -26 + s.slot * 2); s.setOrder('follow'); } });
-  await step(6);
-  await shot('08-combat');
-  const st = await evalG(() => { const g = window.__game; return { enemies: g.enemies.map((e) => ({ st: e.state, hp: Math.round(e.health), ph: e.coverPhase, alive: e.alive })).filter((e) => e.st !== 'patrol' || !e.alive), player: Math.round(g.player.health), squad: g.squad.map((s) => Math.round(s.health)), grenades: g.grenades.length, time: +g.time.toFixed(1), state: g.state, kills: g.stats.kills }; });
-  console.log('STATE', JSON.stringify(st));
-  await page.evaluate(() => window.__game.input.emit('keydown', 'Tab', { preventDefault() {} })); await step(0.8); await shot('09-architect-combat'); await page.evaluate(() => window.__game.input.emit('keydown', 'Tab', { preventDefault() {} })); await step(0.3);
-  // teleport into the warehouse office near hostage A and free it
-  await page.evaluate(() => { const g = window.__game; const h = g.hostages[0]; g.player.pos.set(h.pos.x - 1.4, h.pos.y, h.pos.z); g.player.vel.set(0, 0, 0); g.player.camYaw = Math.PI / 2; g.player.health = 100; });
-  await step(0.2);
-  await key('KeyE', true); await step(2.0); await key('KeyE', false); await step(1.5);
-  await shot('10-hostage');
-  const h = await evalG(() => { const g = window.__game; return { hostA: g.hostages[0].state, obj: g.script.objectives, cp: g.checkpointData && g.checkpointData.id, hostPos: g.hostages[0].pos.toArray().map((v) => +v.toFixed(1)) }; });
-  console.log('HOSTAGE', JSON.stringify(h));
-  // power cut via the fuse box
-  await page.evaluate(() => { const g = window.__game; g.player.pos.set(17, 0, -8.6); g.player.vel.set(0, 0, 0); g.player.camYaw = 0; });
-  await step(0.2); await key('KeyE', true); await step(2.2); await key('KeyE', false); await step(0.3);
-  const pw = await evalG(() => { const g = window.__game; return { power: g.level.power, dark: g.isDark(), cellLocked: g.level.cellDoor.locked, flood: g.level.floodlights.map((l) => l.intensity), obj: g.script.objectives.power, lit: g.isLit(g.player.pos) }; });
-  console.log('POWER', JSON.stringify(pw));
-  await shot('10b-dark');
-  // grenade throw
-  await page.evaluate(() => { const g = window.__game; g.player.pos.set(0, 0, -20); g.player.vel.set(0, 0, 0); g.player.camYaw = 0; g.player.camPitch = 0.3; });
-  await step(0.2); await key('KeyG', true); await step(0.05); await key('KeyG', false);
-  const gr1 = await evalG(() => { const g = window.__game; return { grenades: g.grenades.length, left: g.player.grenades }; });
-  await step(3.6);
-  const gr2 = await evalG(() => { const g = window.__game; return { grenades: g.grenades.length, sparks: g.fx.sparks.high, decals: g.fx.decalMesh.count }; });
-  console.log('GRENADE', JSON.stringify({ gr1, gr2 }));
-  // vault over the road barrier bar_r1 at (8,-19): stand south of it facing +z
-  await page.evaluate(() => { const g = window.__game; g.player.pos.set(8, 0, -20.3); g.player.vel.set(0, 0, 0); g.player.camYaw = 0; g.player.camPitch = 0; });
-  await step(0.3); await key('Space', true); await step(0.05); await key('Space', false); await step(1.2);
-  const vt = await evalG(() => { const g = window.__game; return { pos: g.player.pos.toArray().map((v) => +v.toFixed(2)), vaulted: g.player.pos.z > -18.4 }; });
-  console.log('VAULT', JSON.stringify(vt));
-  // enemy grenade arc check: throw at a point 14m away and see where it explodes
-  const eg = await evalG(() => { const g = window.__game; const e = g.enemies.find((x) => x.alive); if (!e) return null; e.pos.set(20, 0, 5); const target = g.player.pos.clone().set(20, 0, 19); e.grenades = 1; const ok = e.throwGrenadeAt(target); const gr = g.grenades[g.grenades.length - 1]; return { ok, vel: gr && gr.vel.toArray().map((v) => +v.toFixed(2)) }; }).catch((err) => 'ERR ' + err.message);
-  console.log('ENEMY-GRENADE', JSON.stringify(eg));
-  // long simulation for stability: 20s of game time with combat around (profiled)
-  await page.evaluate(() => { const g = window.__game; g.profile = {}; g.nav.searches = 0; g.nav.expandedTotal = 0; });
+  // sight and bullets through the gateway: a guard in front of the far end sees the player standing behind the near end
+  const los = await evalG(() => {
+    const g = window.__game, ps = g.portals; g.alarm = false;
+    const res = g.openPortalAt(g.player.pos.clone().set(-30, 0, 10)); // far end inside the warehouse
+    if (!res.ok) return { ok: false, reason: res.reason };
+    ps.state = 'open'; ps._anim(1);
+    const a = ps.a, b = ps.b;
+    g.player.pos.set(a.pos.x + a.n.x * 2.5, a.pos.y, a.pos.z + a.n.z * 2.5); g.player.vel.set(0, 0, 0); g.player.camYaw = a.yaw + Math.PI;
+    const e = g.enemies[4]; e.pos.set(b.pos.x + b.n.x * 2.5, b.pos.y, b.pos.z + b.n.z * 2.5); e.yaw = e.aimYaw = b.yaw + Math.PI; e.state = 'patrol'; e.stop(); e.suspicion = 0; e.perceptionTimer = 0; e.report.active = false;
+    const via = e.perceive();
+    return { ok: true, sees: !!via, viaPortal: !!(via && via.end), image: via && via.image.toArray().map((v) => +v.toFixed(1)), eyeToPlayer: +e.pos.distanceTo(g.player.pos).toFixed(1) };
+  });
+  console.log('LOS', JSON.stringify(los));
+  check('guard sees through the gateway', los.ok && los.sees && los.viaPortal, los);
+  // fire the player's pistol at the guard's image through the near end
+  await page.evaluate(() => { const g = window.__game, ps = g.portals; const e = g.enemies[4]; g.player.aiming = 1; g.player.update(0, 0); for (let i = 0; i < 4 && e.health >= 100; i++) { const img = ps.imageOf(e.pos, ps.a); img.y += 1.1; g.player.aimPoint.copy(img); g.player.gun.cooldown = 0; g.player.gun.spread = 0; g.player._tryFire(0, true); } });
+  await step(0.1);
+  const hit = await evalG(() => { const g = window.__game; const e = g.enemies[4]; return { health: Math.round(e.health), hits: g.player.accuracyHits, state: e.state }; });
+  console.log('SHOT-THROUGH', JSON.stringify(hit));
+  check('bullet passes through the gateway', hit.health < 100, hit);
+  // carry and throw a body through the gateway
+  const body = await evalG(() => { const g = window.__game, ps = g.portals; const corpse = g.enemies[g.level.tutorial.target]; corpse.pos.copy(g.player.pos); corpse.pos.x += 0.8; g.player.carry(corpse); return { carrying: !!g.player.carrying }; });
+  await step(0.3);
+  const thrown = await evalG(() => { const g = window.__game, ps = g.portals; const a = ps.a; g.player.pos.set(a.pos.x + a.n.x * 1.6, a.pos.y, a.pos.z + a.n.z * 1.6); g.player.camYaw = a.yaw + Math.PI; g.player.camPitch = 0.1; g.player.drop(true); return { thrown: !!g.enemies[g.level.tutorial.target].thrown }; });
+  await step(2.0);
+  const landed = await evalG(() => { const g = window.__game, ps = g.portals; const c = g.enemies[g.level.tutorial.target]; return { thrown: !!c.thrown, distB: +c.pos.distanceTo(ps.b.pos).toFixed(1), distA: +c.pos.distanceTo(ps.a.pos).toFixed(1), y: +c.pos.y.toFixed(2) }; });
+  console.log('BODY', JSON.stringify({ ...body, ...thrown, ...landed }));
+  check('body thrown through the gateway', body.carrying && thrown.thrown && !landed.thrown && landed.distB < landed.distA, landed);
+  // guards path through gateways: a guard far from the player reaches him through the pair
+  const chase = await evalG(() => { const g = window.__game, ps = g.portals; const e = g.enemies[5]; e.pos.set(ps.b.pos.x + ps.b.n.x * 5, 0, ps.b.pos.z + ps.b.n.z * 5); e.stop(); e.noPortals = false; e.moveTo(g.player.pos.clone(), 5, true); return { via: !!e.viaPortal, pathLen: e.path ? e.path.length : 0 }; });
+  console.log('CHASE-SETUP', JSON.stringify(chase));
+  check('guard plans a route through the gateway', chase.via, chase);
+  await shot('09-through');
+  // stability: 20 s of simulation with the alarm up, profiled
+  await page.evaluate(() => { const g = window.__game; g.alarm = true; g.profile = {}; g.nav.searches = 0; g.nav.expandedTotal = 0; g.raiseAlarm(g.enemies[8], 'contact', g.player.pos.clone()); });
   const before = Date.now();
   await step(20);
   console.log('SIM 20s took', ((Date.now() - before) / 1000).toFixed(1) + 's');
   const prof = await evalG(() => { const g = window.__game; const p = {}; for (const k in g.profile) p[k] = +(g.profile[k] / 1200).toFixed(3); g.profile = null; return { msPerStep: p, navSearches: g.nav.searches, navExpanded: g.nav.expandedTotal }; });
   console.log('PROFILE', JSON.stringify(prof));
-  const st2 = await evalG(() => { const g = window.__game; return { state: g.state, player: Math.round(g.player.health), alive: g.enemies.filter((e) => e.alive).length, hostA: g.hostages[0].state, hostAlive: g.hostages[0].alive, squad: g.squad.map((s) => [Math.round(s.health), s.downed]), grenades: g.grenades.length }; });
+  const st2 = await evalG(() => { const g = window.__game; return { state: g.state, player: Math.round(g.player.health), alive: g.enemies.filter((e) => e.alive).length, hostA: g.hostages[0].state, hostAlive: g.hostages[0].alive, grenades: g.grenades.length, traversals: g.portals.stats.traversals }; });
   console.log('STATE2', JSON.stringify(st2));
-  await shot('11-after');
-  // restore checkpoint
-  await page.evaluate(() => window.__game.restoreCheckpoint()); await step(0.5); await shot('12-restored');
-  const r = await evalG(() => { const g = window.__game; return { state: g.state, player: g.player.pos.toArray().map((v) => +v.toFixed(1)), hostA: g.hostages[0].state, enemies: g.enemies.length }; });
+  await shot('10-after');
+  await page.evaluate(() => window.__game.restoreCheckpoint()); await step(0.5); await shot('11-restored');
+  const r = await evalG(() => { const g = window.__game; return { state: g.state, player: g.player.pos.toArray().map((v) => +v.toFixed(1)), enemies: g.enemies.length, alarm: g.alarm, portals: g.portals.state }; });
   console.log('RESTORED', JSON.stringify(r));
+  check('checkpoint restored', r.state === 'playing' && !r.alarm, r);
 }
 const perf = await evalG(() => { const g = window.__game; g.renderer.info.autoReset = false; g.renderer.info.reset(); g.debugRender(); const r = g.renderer.info; g.renderer.info.autoReset = true; return { calls: r.render.calls, tris: r.render.triangles, geoms: r.memory.geometries, tex: r.memory.textures, programs: r.programs.length }; });
 console.log('PERF', JSON.stringify(perf));

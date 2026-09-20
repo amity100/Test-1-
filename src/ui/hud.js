@@ -1,6 +1,7 @@
 // In-game HUD: DOM overlay driven by game state each frame.
 import * as THREE from 'three';
 import { i18n } from '../core/i18n.js';
+import { CONFIG } from '../core/config.js';
 
 const el = (tag, cls, parent, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; if (parent) parent.appendChild(e); return e; };
 const _v = new THREE.Vector3();
@@ -10,8 +11,8 @@ export class HUD {
     this.game = game;
     this.root = el('div', 'hud', root);
     const r = this.root;
-    // crosshair
     this.crosshair = el('div', 'crosshair', r); for (let i = 0; i < 4; i++) el('i', 'ch' + i, this.crosshair); el('b', 'dot', this.crosshair);
+    this.knifeEl = el('div', 'knife', r, ''); 
     this.hitmarker = el('div', 'hitmarker', r); for (let i = 0; i < 4; i++) el('i', '', this.hitmarker);
     this.dmgRoot = el('div', 'dmg-root', r);
     // top-left objective
@@ -24,37 +25,39 @@ export class HUD {
     this.compass = el('div', 'compass', r); this.compassStrip = el('div', 'strip', this.compass);
     const marks = []; for (let i = -1; i <= 1; i++) for (const [deg, label] of [[0, 'N'], [45, ''], [90, 'E'], [135, ''], [180, 'S'], [225, ''], [270, 'W'], [315, '']]) marks.push(`<span style="left:${(i * 360 + deg) * 2 + 720}px" class="${label ? 'major' : ''}">${label || '·'}</span>`);
     this.compassStrip.innerHTML = marks.join('');
-    // bottom-left: health + squad
+    // bottom-left: health + focus + alarm
     this.statusBox = el('div', 'panel status', r);
     const hp = el('div', 'hp', this.statusBox); el('span', 'label', hp, i18n.t('hud.health')); this.hpBar = el('div', 'bar', hp); this.hpFill = el('i', '', this.hpBar);
-    this.squadBox = el('div', 'squad', this.statusBox);
-    this.squadRows = [];
-    // bottom-right: ammo
+    const fo = el('div', 'focus', this.statusBox); el('span', 'label', fo, i18n.t('hud.focus')); this.focusBar = el('div', 'bar', fo); this.focusFill = el('i', '', this.focusBar);
+    this.alarmChip = el('div', 'alarm-chip', this.statusBox, i18n.t('hud.alarmOn'));
+    // bottom-right: weapon
     this.ammoBox = el('div', 'panel ammo', r);
-    this.weaponName = el('div', 'wname', this.ammoBox, 'M4');
-    const am = el('div', 'counts', this.ammoBox); this.magEl = el('span', 'mag', am, '30'); el('span', 'sep', am, '/'); this.resEl = el('span', 'res', am, '180');
+    this.weaponName = el('div', 'wname', this.ammoBox, '');
+    const am = el('div', 'counts', this.ammoBox); this.magEl = el('span', 'mag', am, '12'); el('span', 'sep', am, '/'); this.resEl = el('span', 'res', am, '72');
     this.reloadEl = el('div', 'reload', this.ammoBox, ''); this.grenEl = el('div', 'grenades', this.ammoBox, '');
-    this.squadModeEl = el('div', 'squadmode', this.ammoBox, '');
+    this.carryEl = el('div', 'carry', this.ammoBox, '');
     // center: interaction + hints
     this.prompt = el('div', 'prompt', r); this.promptRing = el('div', 'ring', this.prompt); this.promptText = el('span', '', this.prompt, '');
     this.hintEl = el('div', 'hint', r, '');
     this.toastRoot = el('div', 'toasts', r);
     this.calloutRoot = el('div', 'callouts', r);
     this.alertEl = el('div', 'alert', r, '');
-    // architect
-    this.archPanel = el('div', 'arch-panel', r);
-    el('div', 'arch-title', this.archPanel, i18n.t('hud.architect'));
-    const en = el('div', 'energy', this.archPanel); el('span', 'label', en, i18n.t('hud.energy')); this.energyBar = el('div', 'bar', en); this.energyFill = el('i', '', this.energyBar); this.energyNum = el('span', 'num', en, '100');
-    this.archHint = el('div', 'arch-hint', this.archPanel, i18n.t('hud.architectHint'));
-    this.tooltip = el('div', 'tooltip', r);
-    this.dragStatus = el('div', 'drag-status', r);
+    // top-right: who is on the radio
+    this.witnessBox = el('div', 'witness-panel', r);
+    el('div', 'wtitle', this.witnessBox, i18n.t('hud.witness'));
+    this.witnessRows = el('div', 'wrows', this.witnessBox);
+    // map
+    this.mapPanel = el('div', 'map-panel', r);
+    el('div', 'map-title', this.mapPanel, i18n.t('hud.map'));
+    this.mapHint = el('div', 'map-hint', this.mapPanel, i18n.t('hud.mapHint'));
+    this.portalStatus = el('div', 'portal-status', r, '');
     this.cursor = el('div', 'vcursor', r);
     this.labels = el('div', 'labels', r);
     this.labelEls = new Map();
     this.objMarker = el('div', 'objmarker', r); this.objMarkerDist = el('span', 'dist', this.objMarker, '');
     this.objMarker.style.display = 'none';
     this.toasts = []; this.hintTimer = 0; this.hitT = 0;
-    this.archOn = false; this.energyAnim = 100;
+    this.mapOn = false; this.focusAnim = 0;
     this.lastHint = null;
     i18n.onChange(() => this.relabel());
     this.hide();
@@ -62,33 +65,36 @@ export class HUD {
 
   relabel() {
     this.objBox.querySelector('.label').textContent = i18n.t('hud.objective');
-    this.statusBox.querySelector('.label').textContent = i18n.t('hud.health');
-    this.archPanel.querySelector('.arch-title').textContent = i18n.t('hud.architect');
-    this.archPanel.querySelector('.energy .label').textContent = i18n.t('hud.energy');
-    this.archHint.textContent = i18n.t('hud.architectHint');
+    this.statusBox.querySelector('.hp .label').textContent = i18n.t('hud.health');
+    this.statusBox.querySelector('.focus .label').textContent = i18n.t('hud.focus');
+    this.alarmChip.textContent = i18n.t('hud.alarmOn');
+    this.witnessBox.querySelector('.wtitle').textContent = i18n.t('hud.witness');
+    this.mapPanel.querySelector('.map-title').textContent = i18n.t('hud.map');
+    this.mapHint.textContent = i18n.t('hud.mapHint');
     if (this.game.script) this.game.script.setPrimary(this.game.script.primary);
   }
   show() { this.root.style.display = ''; }
   hide() { this.root.style.display = 'none'; }
 
   setObjective(main, opt) { this.objMain.textContent = main || ''; this.objOpt.textContent = opt || ''; this.objOpt.style.display = opt ? '' : 'none'; this.objBox.classList.add('pulse'); setTimeout(() => this.objBox.classList.remove('pulse'), 1200); }
-  setTimer(sec) { if (sec == null) { this.timerBox.style.display = 'none'; return; } this.timerBox.style.display = ''; const m = Math.floor(sec / 60), s = Math.floor(sec % 60); this.timerBox.innerHTML = `<span class="label">${i18n.t('hud.extraction')}</span><span class="t">${m}:${s.toString().padStart(2, '0')}</span>`; }
+  setTimer(sec) { if (sec == null) { this.timerBox.style.display = 'none'; return; } this.timerBox.style.display = ''; const m = Math.floor(sec / 60), s = Math.floor(sec % 60); this.timerBox.innerHTML = `<span class="label">${i18n.t('hud.extraction') === 'hud.extraction' ? i18n.t('obj.hold') : i18n.t('hud.extraction')}</span><span class="t">${m}:${s.toString().padStart(2, '0')}</span>`; }
   toast(text, ms = 2600) { const t = el('div', 'toast', this.toastRoot, text); requestAnimationFrame(() => t.classList.add('in')); setTimeout(() => { t.classList.remove('in'); setTimeout(() => t.remove(), 400); }, ms); }
   hint(key) { if (this.tutKey) return; const text = i18n.t('hint.' + key); this.hintEl.innerHTML = text; this.hintEl.classList.remove('tut'); this.hintEl.classList.add('in'); this.hintTimer = 7 + text.length * 0.04; this.lastHint = key; }
-  // A tutorial prompt stays on screen until it is cleared (key = i18n key without the 'tut.' prefix, or null).
+  // A tutorial prompt stays on screen until it is cleared.
   tutorial(key) {
     this.tutKey = key;
     if (!key) { this.hintEl.classList.remove('in', 'tut'); this.hintTimer = 0; return; }
     this.hintEl.innerHTML = i18n.t('tut.' + key); this.hintEl.classList.add('in', 'tut'); this.hintTimer = 1e9;
   }
-  // Opening card: three lines that explain the two roles; resolves on the first key or click.
+  // Opening card: the four verbs; resolves on the first key or click.
   showIntro(onDone) {
     const t = i18n.t;
     const o = el('div', 'intro', this.game.container);
     o.innerHTML = `<div class="card"><div class="ititle">${t('intro.title')}</div>
-      <div class="row"><kbd>WASD</kbd><span>${t('intro.ground')}</span></div>
-      <div class="row"><kbd>TAB</kbd><span>${t('intro.architect')}</span></div>
-      <div class="row"><span class="swatch"></span><span>${t('intro.modules')}</span></div>
+      <div class="row"><kbd>WASD</kbd><span>${t('intro.move')}</span></div>
+      <div class="row"><kbd>TAB</kbd><span>${t('intro.map')}</span></div>
+      <div class="row"><kbd>F</kbd><span>${t('intro.knife')}</span></div>
+      <div class="row"><span class="ringswatch"><i></i></span><span>${t('intro.witness')}</span></div>
       <div class="skip">${t('intro.skip')}</div></div>`;
     const done = (e) => { if (e && e.type === 'keydown' && (e.code === 'Tab' || e.code === 'Escape')) e.preventDefault(); window.removeEventListener('keydown', done, true); o.removeEventListener('mousedown', done); o.remove(); onDone(); };
     setTimeout(() => { window.addEventListener('keydown', done, true); o.addEventListener('mousedown', done); }, 400);
@@ -97,82 +103,91 @@ export class HUD {
   }
   callout(kind, who) {
     const name = who ? i18n.t(who.name) : '';
-    const n = kind === 'contact' ? 3 : 1;
-    const txt = i18n.t('callout.' + kind + (n > 1 ? 1 + Math.floor(Math.random() * n) : ''));
-    const c = el('div', 'callout' + (kind === 'enemyGrenade' ? ' danger' : ''), this.calloutRoot, (name ? `<b>${name}:</b> ` : '') + txt);
-    setTimeout(() => { c.classList.add('out'); setTimeout(() => c.remove(), 500); }, 3200);
+    const txt = i18n.t('callout.' + kind);
+    const c = el('div', 'callout' + (kind === 'enemyGrenade' ? ' danger' : kind.startsWith('radio') ? ' radio' : ''), this.calloutRoot, (name ? `<b>${name}:</b> ` : '') + txt);
+    setTimeout(() => { c.classList.add('out'); setTimeout(() => c.remove(), 500); }, 3600);
   }
   alert(key, ms = 2200) { this.alertEl.textContent = i18n.t(key); this.alertEl.classList.add('in'); clearTimeout(this._alertT); this._alertT = setTimeout(() => this.alertEl.classList.remove('in'), ms); }
   hitMarker(head, kill) { this.hitmarker.className = 'hitmarker show' + (kill ? ' kill' : '') + (head ? ' head' : ''); this.hitT = 0.25; }
-  flash(kind) { /* reserved for weapon switch feedback */ }
+  flash(kind) { if (kind === 'weapon') { this.ammoBox.classList.add('pulse'); setTimeout(() => this.ammoBox.classList.remove('pulse'), 400); } }
   damageFrom(point, player) {
     if (!point) return;
     const dx = point.x - player.pos.x, dz = point.z - player.pos.z;
-    const ang = Math.atan2(dx, dz) - player.camYaw; // relative to camera
+    const ang = Math.atan2(dx, dz) - player.camYaw;
     const d = el('div', 'dmg', this.dmgRoot); d.style.transform = `rotate(${-ang}rad)`;
     setTimeout(() => d.remove(), 900);
   }
-  setArchitect(on) { this.archOn = on; this.root.classList.toggle('architect', on); }
-  setModuleTooltip(mod, reachOK, energyOK) {
-    if (!mod) { this.tooltip.style.display = 'none'; return; }
-    this.tooltip.style.display = '';
-    const cost = mod.cfg.cost;
-    this.tooltip.innerHTML = `<b>${i18n.t(mod.cfg.label)}</b><span class="${energyOK ? '' : 'bad'}">${i18n.t('module.cost')}: ${cost}</span>${reachOK ? '' : `<span class="bad">${i18n.t('hud.invalid.reach')}</span>`}`;
-  }
-  setDragStatus(ok, reason, mod) {
-    if (ok === null || ok === undefined) { this.dragStatus.style.display = 'none'; return; }
-    this.dragStatus.style.display = ''; this.dragStatus.className = 'drag-status ' + (ok ? 'ok' : 'bad');
-    this.dragStatus.textContent = ok ? `${i18n.t(mod.cfg.label)} · −${mod.cfg.cost}` : reason;
-  }
+  setMap(on) { this.mapOn = on; this.root.classList.toggle('map', on); }
 
   // ---- per frame ----
   update(realDt) {
     const g = this.game, p = g.player;
     if (!p) return;
-    // crosshair spread
     const spread = (p.aiming > 0.5 ? 6 : 14) + p.gun.spread * 400 + Math.min(1, Math.hypot(p.vel.x, p.vel.z) / 6) * 10;
     this.crosshair.style.setProperty('--sp', spread + 'px');
-    this.crosshair.style.opacity = g.mode === 'ground' && p.alive && !p.sprinting ? 1 : 0;
+    this.crosshair.style.opacity = g.mode === 'ground' && p.alive && !p.sprinting && !p.carrying ? 1 : 0;
     if (this.hitT > 0) { this.hitT -= realDt; if (this.hitT <= 0) this.hitmarker.className = 'hitmarker'; }
-    // health
+    // knife prompt
+    const kt = p.knifeTarget && g.mode === 'ground' && p.alive;
+    this.knifeEl.style.display = kt ? '' : 'none';
+    if (kt) { const silent = p.knifeTarget.state !== 'combat'; this.knifeEl.innerHTML = `<kbd>F</kbd> ${i18n.t('hud.knife')}`; this.knifeEl.classList.toggle('loud', !silent); }
+    // health / focus / alarm
     const hp = Math.max(0, p.health / p.maxHealth);
     this.hpFill.style.width = (hp * 100).toFixed(1) + '%'; this.hpBar.classList.toggle('low', hp < 0.35);
-    // ammo
+    this.focusAnim += (g.focus / CONFIG.focus.max - this.focusAnim) * Math.min(1, realDt * 12);
+    this.focusFill.style.width = (this.focusAnim * 100).toFixed(1) + '%'; this.focusBar.parentElement.classList.toggle('on', g.focus > 0);
+    this.alarmChip.style.display = g.alarm ? '' : 'none';
+    // weapon
+    this.weaponName.textContent = i18n.t(p.gun.cfg.name) + (p.hasRifle ? '  ·  1 / 2' : '');
     this.magEl.textContent = p.gun.mag; this.resEl.textContent = p.gun.reserve === Infinity ? '∞' : p.gun.reserve;
-    this.magEl.classList.toggle('low', p.gun.mag <= 6);
+    this.magEl.classList.toggle('low', p.gun.mag <= 3);
     this.reloadEl.textContent = p.gun.reloading > 0 ? i18n.t('hud.reload') + '…' : (p.gun.mag === 0 ? i18n.t('hud.empty') : '');
-    this.grenEl.innerHTML = '●'.repeat(p.grenades) + '<span class="dim">' + '○'.repeat(Math.max(0, 3 - p.grenades)) + '</span>';
-    this.squadModeEl.textContent = i18n.t(g.squadMode === 'hold' ? 'hud.squadHold' : g.squadMode === 'move' ? 'hud.squadMove' : 'hud.squadFollow');
-    // squad rows
-    const squad = g.squad;
-    while (this.squadRows.length < squad.length) { const row = el('div', 'srow', this.squadBox); const n = el('span', 'name', row); const bar = el('div', 'bar', row); const fill = el('i', '', bar); const st = el('span', 'st', row); this.squadRows.push({ row, n, fill, st, bar }); }
-    squad.forEach((s, i) => { const r = this.squadRows[i]; r.n.textContent = i18n.t(s.name); r.fill.style.width = (Math.max(0, s.health / s.maxHealth) * 100).toFixed(0) + '%'; r.row.classList.toggle('downed', s.downed); r.row.classList.toggle('dead', s.dead); r.st.textContent = s.downed ? i18n.t('hud.downed') + ' ' + Math.ceil(s.downTimer) : s.dead ? '✕' : ''; });
+    this.grenEl.innerHTML = p.grenades > 0 ? '●'.repeat(p.grenades) : '';
+    this.carryEl.textContent = p.carrying ? i18n.t('hud.carrying') : '';
     // compass
     const deg = THREE.MathUtils.euclideanModulo(-p.camYaw * 180 / Math.PI, 360);
     this.compassStrip.style.transform = `translateX(${-(deg * 2 + 720 - this.compass.clientWidth / 2)}px)`;
     // interaction prompt
     const it = p.interact;
-    if (it.target && g.mode === 'ground') { this.prompt.style.display = ''; this.promptText.textContent = i18n.t(it.target.prompt); this.promptRing.style.setProperty('--p', (it.progress * 360) + 'deg'); }
+    if (it.target && g.mode === 'ground' && !p.carrying) { this.prompt.style.display = ''; this.promptText.textContent = i18n.t(it.target.prompt); this.promptRing.style.setProperty('--p', (it.progress * 360) + 'deg'); }
     else this.prompt.style.display = 'none';
-    // hint timeout
     if (this.hintTimer > 0) { this.hintTimer -= realDt; if (this.hintTimer <= 0) this.hintEl.classList.remove('in'); }
-    // architect
-    if (this.archOn) {
-      const a = g.architect;
-      this.energyAnim += (a.energy - this.energyAnim) * Math.min(1, realDt * 10);
-      this.energyFill.style.width = (this.energyAnim / 100 * 100).toFixed(1) + '%'; this.energyNum.textContent = Math.floor(a.energy);
-      this.cursor.style.transform = `translate(${a.cursor.x * g.width}px, ${a.cursor.y * g.height}px)`;
-      this.tooltip.style.transform = `translate(${a.cursor.x * g.width + 18}px, ${a.cursor.y * g.height + 18}px)`;
-      this.cursor.className = 'vcursor' + (a.dragging ? ' drag' : a.hover ? ' hover' : '');
+    // radio panel
+    this._updateWitnesses();
+    // gateway status
+    const ps = g.portals;
+    this.portalStatus.textContent = ps.state === 'open' ? i18n.t('hud.portal.open') : ps.state === 'opening' ? i18n.t('hud.portal.opening') : i18n.t('hud.portal.closed');
+    this.portalStatus.classList.toggle('on', ps.active);
+    // map cursor
+    if (this.mapOn) {
+      const m = g.tacmap;
+      this.cursor.style.transform = `translate(${m.cursor.x * g.width}px, ${m.cursor.y * g.height}px)`;
+      this.cursor.className = 'vcursor' + (m.hoverPlacement ? (m.hoverOK ? ' ok' : ' bad') : '');
     }
     this._updateLabels();
     this._updateObjectiveMarker();
   }
 
+  _updateWitnesses() {
+    const g = this.game;
+    const list = g.witnesses();
+    this.witnessBox.classList.toggle('on', list.length > 0);
+    const rows = this.witnessRows;
+    while (rows.children.length < list.length) { const row = el('div', 'wrow', rows); el('span', 'who', row); const bar = el('div', 'bar', row); el('i', '', bar); el('span', 't', row); }
+    while (rows.children.length > list.length) rows.lastChild.remove();
+    list.forEach((e, i) => {
+      const row = rows.children[i]; const k = e.report.t / e.report.total;
+      row.querySelector('.who').textContent = `${i18n.t(e.name)}${e.zoneName ? ' · ' + i18n.t(e.zoneName) : ''} — ${i18n.t('hud.witness.' + e.report.reason)}`;
+      row.querySelector('.bar i').style.width = (k * 100).toFixed(1) + '%';
+      row.querySelector('.t').textContent = e.report.t.toFixed(1);
+      row.classList.toggle('urgent', e.report.t < 1.3);
+    });
+  }
+
   _updateObjectiveMarker() {
     const g = this.game, cam = g.camera, m = this.objMarker;
     const target = g.script ? g.script.objectiveMarker() : null;
-    if (!target || g.mode === 'architect') { m.style.display = 'none'; return; }
+    if (!target || g.mode === 'map') { m.style.display = 'none'; return; }
     _v.set(target.x, target.y + 1.6, target.z).project(cam);
     const behind = _v.z > 1;
     let x = (_v.x * 0.5 + 0.5) * g.width, y = (-_v.y * 0.5 + 0.5) * g.height;
@@ -187,30 +202,33 @@ export class HUD {
   _updateLabels() {
     const g = this.game, cam = g.camera;
     const seen = new Set();
-    const place = (key, ch, text, cls) => {
+    const place = (key, pos, height, html, cls, maxDist = 45) => {
       let e = this.labelEls.get(key); if (!e) { e = el('div', 'wlabel ' + cls, this.labels); this.labelEls.set(key, e); }
       seen.add(key);
-      _v.set(ch.pos.x, ch.pos.y + ch.currentHeight + 0.35, ch.pos.z).project(cam);
+      _v.set(pos.x, pos.y + height, pos.z).project(cam);
       const behind = _v.z > 1; const x = (_v.x * 0.5 + 0.5) * g.width, y = (-_v.y * 0.5 + 0.5) * g.height;
-      const dist = cam.position.distanceTo(ch.pos);
-      if (behind || x < 0 || x > g.width || y < 0 || y > g.height || (g.mode === 'ground' && dist > 45)) { e.style.display = 'none'; return; }
-      e.style.display = ''; e.style.transform = `translate(${x}px, ${y}px)`; e.style.opacity = g.mode === 'architect' ? 1 : Math.max(0.35, 1 - dist / 60);
-      e.textContent = text; e.className = 'wlabel ' + cls;
+      const dist = cam.position.distanceTo(pos);
+      if (behind || x < -40 || x > g.width + 40 || y < -40 || y > g.height + 40 || (g.mode === 'ground' && dist > maxDist)) { e.style.display = 'none'; return e; }
+      e.style.display = ''; e.style.transform = `translate(${x}px, ${y}px)`; e.style.opacity = g.mode === 'map' ? 1 : Math.max(0.4, 1 - dist / 70);
+      if (e.innerHTML !== html) e.innerHTML = html; e.className = 'wlabel ' + cls;
+      return e;
     };
-    for (const s of g.squad) { if (s.dead) continue; place('s' + s.slot, s, i18n.t(s.name) + (s.downed ? ' · ' + i18n.t('hud.downed') : ''), s.downed ? 'squad downed' : 'squad'); }
-    for (const h of g.hostages) { if (!h.alive) continue; place('h' + h.id, h, i18n.t(h.name), 'hostage'); }
-    if (g.mode === 'architect') {
-      for (const e of g.enemies) { if (e.alive && e.seenByFriendly) place('e' + e.id, e, e.state === 'combat' ? '!' : e.state === 'patrol' ? '' : '?', 'enemy'); }
-      // movable modules: name + cost; locked when out of reach; the tutorial target pulses
-      const a = g.architect;
-      for (const m of g.level.modules) {
-        if (a.dragging && m === a.selected) continue;
-        const ok = a._reachOK(m.x, m.z);
-        const proxy = { pos: m.center, currentHeight: m.cfg.h / 2 + 0.1 };
-        place('m' + m.id, proxy, ok ? `${i18n.t(m.cfg.label)} · ${m.cfg.cost}` : `${i18n.t(m.cfg.label)} · ${i18n.t('module.locked')}`, 'module' + (ok ? '' : ' locked') + (m === a.targetModule ? ' target' : ''));
-      }
-      // area names make the tactical map readable
-      for (const zl of g.level.zoneLabels || []) place('z' + zl.key, { pos: { x: zl.x, y: 0, z: zl.z }, currentHeight: 0 }, i18n.t(zl.key), 'zone');
+    const map = g.mode === 'map';
+    for (const h of g.hostages) { if (!h.alive) continue; place('h' + h.id, h.pos, h.currentHeight + 0.35, i18n.t(h.name), 'hostage'); }
+    // guards on the radio: always shown, the ring is the countdown
+    for (const e of g.enemies) {
+      if (!e.alive) { if (map) place('b' + e.id, e.pos, 0.6, '✕', 'body'); continue; }
+      if (e.report.active) {
+        const k = e.report.t / e.report.total;
+        place('r' + e.id, e.pos, e.currentHeight + 0.5, `<div class="ring" style="--p:${(k * 360).toFixed(1)}deg"><span>${Math.ceil(e.report.t)}</span></div><small>${i18n.t('hud.witness.' + e.report.reason)}</small>`, 'wring' + (e.report.t < 1.3 ? ' urgent' : ''), 200);
+      } else if (map && (e.seenByFriendly || e.state === 'combat')) place('e' + e.id, e.pos, e.currentHeight + 0.35, e.state === 'combat' ? '!' : e.state === 'patrol' || e.state === 'post' ? '' : '?', 'enemy');
+    }
+    if (map) {
+      const ps = g.portals;
+      if (ps.active) { place('pa', ps.a.pos, 2.6, 'A', 'portal'); place('pb', ps.b.pos, 2.6, 'B', 'portal'); }
+      for (const zl of g.level.zoneLabels || []) place('z' + zl.key, { x: zl.x, y: 0, z: zl.z }, 0, i18n.t(zl.key), 'zone');
+      const s = g.tacmap.suggestion;
+      if (s) place('tut', { x: s.x, y: s.y, z: s.z }, 2.8, i18n.t('tut.here'), 'tut');
     }
     for (const [k, e] of this.labelEls) if (!seen.has(k)) e.style.display = 'none';
   }

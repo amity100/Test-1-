@@ -128,11 +128,15 @@ export class Character {
     this.weights = { idle: 1, walk: 0, run: 0 };
     this.group.position.copy(this.pos); this.group.rotation.y = this.yaw;
     this.game.scene.add(this.group);
-    if (this.hasRifle) {
-      this.rifle = buildRifle(this.game.mats, opts.rifleVariant || 'm4');
-      this.game.scene.add(this.rifle);
-      this.muzzle = this.rifle.userData.muzzle;
-    }
+    if (this.hasRifle) this.setWeaponMesh(buildRifle(this.game.mats, opts.rifleVariant || 'm4'));
+  }
+
+  // The held weapon: any group with userData.muzzle (and optional grip / foregrip / offset overrides).
+  setWeaponMesh(group) {
+    if (this.rifle && this.rifle !== group) { this.rifle.visible = false; }
+    if (group && !group.parent) this.game.scene.add(group);
+    this.rifle = group;
+    if (group) { group.visible = this.visible; this.muzzle = group.userData.muzzle; }
   }
 
 
@@ -239,8 +243,27 @@ export class Character {
     } else if (this.deathT >= 0) {
       this.deathT += dt;
       if (animate && this.deathT < 3) this.mixer.update(animDt * 0.2);
-      this.vel.set(0, 0, 0);
-      const g = world.groundAt(this.pos.x, this.pos.z, this.pos.y + 0.5).y; if (this.pos.y > g) this.pos.y = Math.max(g, this.pos.y - 8 * dt);
+      if (this.carriedBy) {
+        // slung in front of the carrier
+        const c = this.carriedBy; const fx = Math.sin(c.yaw), fz = Math.cos(c.yaw);
+        this.pos.set(c.pos.x + fx * 0.75, c.pos.y + 0.55, c.pos.z + fz * 0.75); this.yaw = c.yaw + Math.PI / 2; this.vel.set(0, 0, 0);
+      } else if (this.thrown) {
+        const th = this.thrown; th.prev.copy(this.pos);
+        this.vel.y -= CONFIG.gravity * dt;
+        const step = this.vel.length() * dt;
+        if (step > 1e-5) {
+          _v.copy(this.vel).normalize();
+          const hit = world.raycast(this.pos, _v, step + 0.3, (c) => c.blocksMovement);
+          if (hit) { this.pos.copy(hit.point).addScaledVector(hit.normal, 0.3); const vn = this.vel.dot(hit.normal); this.vel.addScaledVector(hit.normal, -vn * 1.2); this.vel.multiplyScalar(0.5); }
+          else this.pos.addScaledVector(this.vel, dt);
+        }
+        if (this.game.portals) this.game.portals.traverseSegment(th.prev, this.pos, this.vel);
+        const g = world.groundAt(this.pos.x, this.pos.z, this.pos.y + 0.3).y;
+        if (this.pos.y <= g + 0.02) { this.pos.y = g; this.vel.set(0, 0, 0); this.thrown = null; this.game.audio.bodyDrop(this.pos); this.game.onBodyLanded && this.game.onBodyLanded(this); }
+      } else {
+        this.vel.set(0, 0, 0);
+        const g = world.groundAt(this.pos.x, this.pos.z, this.pos.y + 0.5).y; if (this.pos.y > g) this.pos.y = Math.max(g, this.pos.y - 8 * dt);
+      }
     }
     // transforms
     this.group.position.copy(this.pos); this.group.rotation.y = this.yaw;
@@ -317,7 +340,8 @@ export class Character {
     if (this.rifle && kneelW < 0.5) {
       this._placeRifle();
       this.rifle.updateMatrixWorld(true);
-      this.rifle.localToWorld(T.rh.copy(RIFLE_GRIP)); this.rifle.localToWorld(T.lh.copy(RIFLE_FOREGRIP));
+      const ud = this.rifle.userData;
+      this.rifle.localToWorld(T.rh.copy(ud.grip || RIFLE_GRIP)); this.rifle.localToWorld(T.lh.copy(ud.foregrip || RIFLE_FOREGRIP));
       const L = this.limbs;
       L.rArm.u.getWorldPosition(_v); T.pole.copy(_v).addScaledVector(right, 0.35).addScaledVector(fwd, -0.3).add(_v2.set(0, -0.9, 0));
       solveLimb(L.rArm.u, L.rArm.l, L.rArm.e, L.rArm.L1, L.rArm.L2, T.rh, T.pole);
@@ -343,6 +367,7 @@ export class Character {
       if (!this._rifleDropped) { this._rifleDropped = true; const r = this.rifle; r.position.set(this.pos.x + Math.sin(this.yaw + 0.9) * 0.6, this.game.world.groundAt(this.pos.x, this.pos.z, this.pos.y + 0.5).y + 0.04, this.pos.z + Math.cos(this.yaw + 0.9) * 0.6); r.rotation.set(0, this.yaw + 0.4, Math.PI / 2); }
       return;
     }
+    if (!this.alive) return;
     const chest = this.bones.mixamorigSpine2;
     if (!chest) return;
     chest.getWorldPosition(_v);
@@ -351,7 +376,8 @@ export class Character {
     const fwd = _v2.set(Math.sin(ay) * cp, sp, Math.cos(ay) * cp);
     const right = _v3.set(Math.cos(ay), 0, -Math.sin(ay));
     const up = _v4.crossVectors(fwd, right).normalize();
-    _v.addScaledVector(right, RIFLE_OFFSET.right).addScaledVector(fwd, RIFLE_OFFSET.fwd).addScaledVector(up, RIFLE_OFFSET.up);
+    const off = this.rifle.userData.offset || RIFLE_OFFSET;
+    _v.addScaledVector(right, off.right).addScaledVector(fwd, off.fwd).addScaledVector(up, off.up);
     this.rifle.position.copy(_v);
     _m.lookAt(_v5.copy(_v).add(fwd), _v, up);
     this.rifle.quaternion.setFromRotationMatrix(_m);
@@ -364,6 +390,7 @@ export class Character {
   dispose() {
     this.game.scene.remove(this.group);
     if (this.rifle) this.game.scene.remove(this.rifle);
+    for (const w of this.weaponMeshes || []) this.game.scene.remove(w);
   }
 }
 const _axisR = new THREE.Vector3(), _axisF = new THREE.Vector3(), _m = new THREE.Matrix4(), _v3 = new THREE.Vector3(), _v4 = new THREE.Vector3(), _v5 = new THREE.Vector3();

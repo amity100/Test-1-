@@ -1,7 +1,7 @@
-// Scripted end-to-end playthrough of Mission 01 in headless Chromium: walks the mission script through
-// every objective (both prisoners, power, extraction, hold phase with waves, helicopter, mission complete).
+// Scripted end-to-end playthrough of Mission 01 in headless Chromium: gateways to both prisoners and to the
+// helipad, freed prisoners following through gateways, the helicopter, mission complete.
 // usage: node tools/playthrough.mjs [outDir] [--port=8130]
-const { chromium } = await import('/opt/node22/lib/node_modules/playwright/index.mjs').catch(() => import('playwright')); // global install or local devDependency
+const { chromium } = await import('/opt/node22/lib/node_modules/playwright/index.mjs').catch(() => import('playwright'));
 import http from 'http'; import fs from 'fs'; import path from 'path';
 
 const outDir = process.argv[2] || 'playthrough-out';
@@ -22,49 +22,70 @@ const shot = async (name) => { await page.evaluate(() => { const g = window.__ga
 const step = (sec) => page.evaluate((s) => window.__game.debugStep(s), sec);
 const key = (code, down) => page.evaluate(([c, d]) => { const g = window.__game; if (d) { g.input.keys.add(c); g.input.pressed.add(c); } else { g.input.keys.delete(c); g.input.released.add(c); } }, [code, down]);
 const ev = (fn) => page.evaluate(fn);
-const teleport = (x, y, z, yaw) => page.evaluate(([x, y, z, yaw]) => { const g = window.__game; g.player.pos.set(x, y, z); g.player.vel.set(0, 0, 0); g.player.camYaw = yaw; for (const s of g.squad) { s.pos.set(x - 1.5 + s.slot * 3, y, z - 1.5); s.vel.set(0, 0, 0); s.setOrder('follow'); } for (const h of g.hostages) if (h.state === 'freed') { h.pos.set(x, y, z - 2.5); h.vel.set(0, 0, 0); } }, [x, y, z, yaw]);
-const status = () => ev(() => { const g = window.__game; return { state: g.state, t: +g.time.toFixed(1), obj: g.script.objectives, primary: g.script.primary, hp: Math.round(g.player.health), alive: g.enemies.filter((e) => e.alive).length, hostages: g.hostages.map((h) => h.state + (h.alive ? '' : '(dead)')), power: g.level.power, cp: g.checkpointData?.id }; });
+const status = () => ev(() => { const g = window.__game; return { state: g.state, t: +g.time.toFixed(1), obj: g.script.objectives, primary: g.script.primary, hp: Math.round(g.player.health), alive: g.enemies.filter((e) => e.alive).length, hostages: g.hostages.map((h) => h.state + (h.alive ? '' : '(dead)')), alarm: g.alarm, reports: g.stats.reports, portals: g.stats.portals, traversals: g.portals.stats.traversals, cp: g.checkpointData?.id }; });
+// open a gateway to a point and walk the operator through it
+const gateTo = async (x, y, z) => {
+  const r = await page.evaluate(([x, y, z]) => { const g = window.__game; const res = g.openPortalAt(g.player.pos.clone().set(x, y, z)); return { ok: res.ok, reason: res.reason }; }, [x, y, z]);
+  if (!r.ok) { console.log('GATE FAILED', r.reason); return false; }
+  await step(0.6);
+  await page.evaluate(() => { const g = window.__game, a = g.portals.a; g.player.pos.set(a.pos.x + a.n.x * 1.0, a.pos.y, a.pos.z + a.n.z * 1.0); g.player.vel.set(0, 0, 0); g.player.camYaw = a.yaw + Math.PI; g.player._camInit = false; });
+  await key('KeyW', true); await step(0.9); await key('KeyW', false); await step(0.2);
+  const d = await ev(() => { const g = window.__game; return +g.player.pos.distanceTo(g.portals.b.pos).toFixed(1); });
+  console.log('gate → arrived', d, 'm from the far end');
+  return d < 4;
+};
+const hold = async (code, sec) => { await key(code, true); await step(sec); await key(code, false); };
 
 await page.goto(`http://localhost:${port}/index.html`, { waitUntil: 'load', timeout: 180000 });
 await page.waitForFunction(() => window.__game && window.__game.state === 'menu', null, { timeout: 180000 });
-await ev(() => { window.__game.startMission(); window.__game.beginPlay(); window.__game.player.godMode = true; for (const h of window.__game.hostages) h.godMode = true; for (const s of window.__game.squad) s.godMode = true; });
+await ev(() => { const g = window.__game; g.startMission(); g.beginPlay(); g.player.godMode = true; for (const h of g.hostages) h.godMode = true; });
 await step(0.5);
 console.log('START', JSON.stringify(await status()));
-
-// 1) insert
-await teleport(-28.5, 0, -37, 0); await step(1);
+// 1) insert: walk to the breach
+await hold('KeyW', 2.2); await step(0.5);
 console.log('INSERT', JSON.stringify(await status()));
-// 2) hostage A (mezzanine office)
+// 2) gateway straight into the office; free prisoner A
 const ha = await ev(() => window.__game.hostages[0].pos.toArray());
-await teleport(ha[0] - 1.4, ha[1], ha[2], Math.PI / 2); await step(0.3); await key('KeyE', true); await step(2.2); await key('KeyE', false); await step(1);
+console.log('gate to office', await gateTo(ha[0] - 2.2, ha[1], ha[2] - 0.5));
+await ev(() => { const g = window.__game; const h = g.hostages[0]; g.player.pos.set(h.pos.x + 1.5, h.pos.y, h.pos.z); g.player.vel.set(0, 0, 0); g.player.camYaw = -Math.PI / 2; });
+await step(0.3); await hold('KeyE', 2.2); await step(1);
 console.log('HOSTAGE-A', JSON.stringify(await status()));
 await shot('01-hostageA');
-// 3) power
-await teleport(17, 0, -8.6, 0); await step(0.3); await key('KeyE', true); await step(2.2); await key('KeyE', false); await step(1);
-console.log('POWER', JSON.stringify(await status()));
-// 4) hostage B (cell block, cell 4 at x=32..)
-const hb = await ev(() => { const h = window.__game.hostages[1]; return h.pos.toArray(); });
-await teleport(hb[0] - 1.4, hb[1], hb[2], Math.PI / 2); await step(0.3); await key('KeyE', true); await step(2.2); await key('KeyE', false); await step(1);
+// 3) gateway into the cell block; prisoner A follows through the gateway
+const hb = await ev(() => window.__game.hostages[1].pos.toArray());
+console.log('gate to cell', await gateTo(hb[0] - 1.5, 0, hb[1 + 1] - 3.5));
+await step(3);
+const follow = await ev(() => { const g = window.__game; return { hostA: +g.hostages[0].pos.distanceTo(g.player.pos).toFixed(1), via: !!g.hostages[0].viaPortal, traversals: g.portals.stats.traversals }; });
+console.log('FOLLOW', JSON.stringify(follow));
+await ev(() => { const g = window.__game; const h = g.hostages[1]; g.player.pos.set(h.pos.x, h.pos.y, h.pos.z - 1.5); g.player.vel.set(0, 0, 0); g.player.camYaw = 0; });
+await step(0.3); await hold('KeyE', 2.2); await step(1);
 console.log('HOSTAGE-B', JSON.stringify(await status()));
 await shot('02-hostageB');
-// 5) extraction: bring everyone to the LZ
-await teleport(-26, 0, 40, Math.PI); await step(2);
+// 4) gateway to the helipad with both prisoners in tow
+console.log('gate to LZ', await gateTo(-27, 0, 36));
+for (let i = 0; i < 12; i++) {
+  await step(1.5);
+  const s = await ev(() => { const g = window.__game; const z = g.level.zones.lz; return { in: g.hostages.map((h) => z.contains(h.pos)), d: g.hostages.map((h) => +h.pos.distanceTo(g.player.pos).toFixed(1)), hold: g.script.objectives.hold, traversals: g.portals.stats.traversals }; });
+  console.log('WAIT-LZ', i, JSON.stringify(s));
+  if (s.hold === 'active') break;
+  if (i === 8) await ev(() => { const g = window.__game; for (const h of g.hostages) if (h.pos.distanceTo(g.player.pos) > 6) { h.pos.set(g.player.pos.x + 1, 0, g.player.pos.z + 1); h.vel.set(0, 0, 0); h.stop(); } });
+}
 console.log('LZ', JSON.stringify(await status()));
-// hold phase: keep the player inside; simulate 95 seconds in chunks
-for (let i = 0; i < 10; i++) {
-  await ev(() => { const g = window.__game; g.player.pos.set(-26, 0, 40); g.player.vel.set(0, 0, 0); for (const h of g.hostages) { if (h.pos.distanceTo(g.player.pos) > 6) { h.pos.set(-25 + Math.random(), 0, 41); } } });
-  await step(10);
+// hold phase: keep the operator on the pad until the helicopter lands
+for (let i = 0; i < 8; i++) {
+  await ev(() => { const g = window.__game; g.player.pos.set(-27, 0, 38); g.player.vel.set(0, 0, 0); });
+  await step(4);
   const s = await status();
   console.log('HOLD', i, JSON.stringify({ state: s.state, t: s.t, hold: s.obj.hold, alive: s.alive, hostages: s.hostages }));
   if (s.state !== 'playing') break;
-  if (i === 5) await shot('03-hold');
+  if (i === 2) await shot('03-hold');
 }
 await step(2);
 const fin = await status();
 console.log('FINAL', JSON.stringify(fin));
 await ev(() => { const g = window.__game; g.debugFrozen = true; g.debugRender(); });
 await page.screenshot({ path: path.join(outDir, '04-end.png') });
-const endText = await ev(() => { const s = document.querySelector('.screen.end'); return s ? s.innerText.replace(/\s+/g, ' ').slice(0, 200) : null; });
+const endText = await ev(() => { const s = document.querySelector('.screen.end'); return s ? s.innerText.replace(/\s+/g, ' ').slice(0, 260) : null; });
 console.log('END-SCREEN', endText);
 console.log('ERRORS', errors.length);
 console.log('RESULT', fin.state === 'end' && fin.obj.hold === 'done' ? 'MISSION COMPLETE OK' : 'NOT COMPLETE');

@@ -1,4 +1,4 @@
-// Rifle mesh, hitscan firing, grenades and explosions.
+// Weapon meshes (rifle, suppressed pistol), hitscan firing (through gateways), grenades and explosions.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CONFIG } from '../core/config.js';
@@ -13,14 +13,16 @@ export function buildRifle(mats, variant = 'm4') {
   if (!_rifleCache[variant]) {
     const parts = new Map();
     const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => { const m = new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)), new THREE.Vector3(1, 1, 1)); geo.applyMatrix4(m); if (!parts.has(mat)) parts.set(mat, []); parts.get(mat).push(geo); };
-    _buildRifleParts(add, mats, metal, poly, variant);
+    if (variant === 'pistol') _buildPistolParts(add, mats, metal, poly); else _buildRifleParts(add, mats, metal, poly, variant);
     _rifleCache[variant] = [...parts].map(([mat, geos]) => [mat, mergeGeometries(geos, false)]);
   }
   for (const [mat, geo] of _rifleCache[variant]) { const m = new THREE.Mesh(geo, mat); m.castShadow = true; g.add(m); }
-  const muzzle = new THREE.Object3D(); muzzle.position.set(0, 0.005, 0.62); g.add(muzzle);
+  const muzzle = new THREE.Object3D(); muzzle.position.set(0, 0.005, variant === 'pistol' ? 0.36 : 0.62); g.add(muzzle);
   g.userData.muzzle = muzzle;
+  if (variant === 'pistol') { g.userData.grip = new THREE.Vector3(0, -0.08, -0.05); g.userData.foregrip = new THREE.Vector3(-0.03, -0.09, -0.01); g.userData.offset = { right: 0.16, fwd: 0.3, up: 0.02 }; }
   return g;
 }
+export const buildPistol = (mats) => buildRifle(mats, 'pistol');
 function _buildRifleParts(add, mats, metal, poly, variant) {
   // z is forward (muzzle at +z)
   add(new THREE.BoxGeometry(0.05, 0.075, 0.26), metal, 0, 0, 0.02);                         // upper receiver
@@ -37,6 +39,15 @@ function _buildRifleParts(add, mats, metal, poly, variant) {
   add(new THREE.CylinderGeometry(0.014, 0.014, 0.01, 12), mats.get('emissiveCool'), 0, 0.075, 0.036, Math.PI / 2); // optic lens
   add(new THREE.BoxGeometry(0.012, 0.06, 0.012), poly, 0.022, -0.02, 0.2, 0, 0, 0.2);        // foregrip nub
   add(new THREE.CylinderGeometry(0.012, 0.012, 0.09, 8), metal, -0.03, 0.04, 0.32, Math.PI / 2); // flashlight
+}
+function _buildPistolParts(add, mats, metal, poly) {
+  add(new THREE.BoxGeometry(0.036, 0.045, 0.2), metal, 0, 0.01, 0.06);                       // slide
+  add(new THREE.BoxGeometry(0.034, 0.03, 0.14), poly, 0, -0.02, 0.05);                       // frame
+  add(new THREE.BoxGeometry(0.03, 0.11, 0.045), poly, 0, -0.085, -0.03, -0.25);              // grip
+  add(new THREE.BoxGeometry(0.02, 0.03, 0.03), metal, 0, -0.045, 0.02);                      // trigger guard
+  add(new THREE.CylinderGeometry(0.016, 0.016, 0.17, 12), metal, 0, 0.012, 0.25, Math.PI / 2);  // suppressor
+  add(new THREE.BoxGeometry(0.01, 0.012, 0.03), metal, 0, 0.038, 0.13);                      // front sight
+  add(new THREE.BoxGeometry(0.012, 0.012, 0.03), poly, 0, 0.038, -0.02);                     // rear sight
 }
 
 // ---- Gun state (ammo, fire rate, spread) ----
@@ -59,18 +70,22 @@ export class Gun {
 
 const _hitPoint = new THREE.Vector3(), _n = new THREE.Vector3();
 
-// Fires one hitscan bullet. Returns { kind:'world'|'character'|'none', point, normal, character, part }.
-export function fireBullet(game, shooter, origin, dir, weapon) {
+// Fires one hitscan bullet. A bullet that meets an open gateway continues from the other end.
+// Returns { kind:'world'|'character'|'none', point, normal, character, part }.
+export function fireBullet(game, shooter, origin, dir, weapon, depth = 0) {
   const range = weapon.range ?? 100;
   const worldHit = game.world.raycast(origin, dir, range, (c) => c.blocksBullets);
   let maxT = worldHit ? worldHit.t : range;
+  const fx = game.fx;
+  // gateway before anything solid?
+  const gate = depth < 2 && game.portals ? game.portals.rayThrough(origin, dir, maxT) : null;
+  if (gate) maxT = gate.t;
   let best = null;
   for (const ch of game.characters) {
     if (ch === shooter || !ch.alive || ch.noCollide) continue;
     const h = rayCharacter(origin, dir, ch.pos, ch.radius, ch.currentHeight, maxT);
     if (h && (!best || h.t < best.t)) best = { t: h.t, part: h.part, character: ch };
   }
-  const fx = game.fx;
   if (best) {
     _hitPoint.copy(origin).addScaledVector(dir, best.t);
     const ch = best.character;
@@ -81,6 +96,12 @@ export function fireBullet(game, shooter, origin, dir, weapon) {
     game.audio.impact(_hitPoint, 'flesh');
     fx.tracer(origin, _hitPoint, weapon.tracerSpeed ?? 260);
     return { kind: 'character', point: _hitPoint.clone(), character: ch, part: best.part };
+  }
+  if (gate) {
+    fx.tracer(origin, gate.entry, weapon.tracerSpeed ?? 260);
+    fx.portalBurst(gate.entry, 0.2);
+    const rest = { ...weapon, range: Math.max(1, range - gate.t) };
+    return fireBullet(game, shooter, gate.exitOrigin, gate.exitDir, rest, depth + 1);
   }
   if (worldHit) {
     const mat = worldHit.collider.material;
@@ -100,7 +121,7 @@ export function fireBullet(game, shooter, origin, dir, weapon) {
 export class Grenade {
   constructor(game, pos, vel, owner) {
     this.game = game; this.owner = owner;
-    this.pos = pos.clone(); this.vel = vel.clone();
+    this.pos = pos.clone(); this.vel = vel.clone(); this.prev = pos.clone();
     this.fuse = CONFIG.weapons.grenade.fuse;
     this.alive = true; this.spin = new THREE.Vector3(Math.random() * 8, Math.random() * 8, Math.random() * 8);
     const g = new THREE.Group();
@@ -118,6 +139,7 @@ export class Grenade {
     this.led.visible = Math.sin(this.game.time * 18) > 0.3;
     if (this.fuse <= 0) { this.explode(); return; }
     const gcfg = CONFIG.weapons.grenade;
+    this.prev.copy(this.pos);
     this.vel.y -= CONFIG.gravity * dt;
     const step = this.vel.length() * dt;
     if (step > 1e-5) {
@@ -132,13 +154,13 @@ export class Grenade {
         if (hit.normal.y > 0.7 && this.vel.length() < 0.8) { this.vel.set(0, 0, 0); }
       } else this.pos.addScaledVector(this.vel, dt);
     }
+    if (this.game.portals) this.game.portals.traverseSegment(this.prev, this.pos, this.vel);
     // ground settle
     const gy = this.game.world.groundAt(this.pos.x, this.pos.z, this.pos.y + 0.1).y;
     if (this.pos.y < gy + 0.07) { this.pos.y = gy + 0.07; if (this.vel.y < 0) { if (this.vel.y < -1.5) { this.game.audio.bounce(this.pos); } this.vel.y = -this.vel.y * gcfg.bounce; this.vel.x *= 0.8; this.vel.z *= 0.8; } if (Math.abs(this.vel.y) < 0.5) this.vel.y = 0; }
     if (this.pos.y < gy + 0.08 && this.vel.y === 0) { this.vel.x *= Math.max(0, 1 - 2.5 * dt); this.vel.z *= Math.max(0, 1 - 2.5 * dt); }
     this.mesh.position.copy(this.pos);
     if (this.vel.lengthSq() > 0.05) { this.mesh.rotation.x += this.spin.x * dt; this.mesh.rotation.z += this.spin.z * dt; }
-    // pos.y is the centre; keep mesh centred
   }
   explode() {
     this.alive = false;

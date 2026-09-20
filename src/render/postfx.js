@@ -54,9 +54,9 @@ const GradeShader = {
       float edge = smoothstep(0.12, 0.5, r2);
       col = mix(col, vec3(0.7, 0.03, 0.02) * (0.5 + col), uDamage * edge * 0.9);
       col = mix(col, vec3(0.45, 0.02, 0.02) * (0.4 + col), uLowHealth * edge * (0.55 + 0.25 * sin(uTime * 6.0)));
-      // vignette
-      float vig = 1.0 - smoothstep(0.25, 1.15, r2 * 2.2) * uVignette;
-      col *= vig;
+      // vignette (lifted on the map, which also gets a brightness boost so the site reads from above)
+      float vig = 1.0 - smoothstep(0.25, 1.15, r2 * 2.2) * uVignette * (1.0 - 0.6 * uArchitect);
+      col *= vig * (1.0 + 0.45 * uArchitect);
       // grain (subtle, in linear space)
       float g = hash(uv * uResolution.xy * 0.5 + fract(uTime) * 100.0) - 0.5;
       col += g * 0.012 * (1.0 + uArchitect);

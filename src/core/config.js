@@ -1,6 +1,6 @@
 // Central tuning table. Everything gameplay-related that a designer would want to tweak lives here.
 export const CONFIG = {
-  version: '0.1.0',
+  version: '0.2.0',
 
   // World / physics
   gravity: 22,
@@ -9,15 +9,48 @@ export const CONFIG = {
   fixedDt: 1 / 60,
   maxSubSteps: 4,
 
-  // Time
-  architectTimeScale: 0.12,
-  hitStopScale: 0.35,
+  // Time: the world slows while the map is open and briefly after every gateway crossing.
+  mapTimeScale: 0.15,
+  focus: {
+    worldScale: 0.3,         // world clock while focused
+    playerScale: 0.8,        // the operator's own clock while focused (so you outrun the world)
+    onTraversal: 1.5,        // seconds of focus granted by stepping through a gateway
+    perKill: 1.5,            // each kill inside the window extends it
+    max: 5,
+  },
+
+  // Gateways
+  portal: {
+    width: 1.7,
+    height: 2.4,
+    openTime: 0.5,
+    closeTime: 0.3,
+    nearDistance: 1.7,       // the near end opens this far in front of you
+    reopenDelay: 0.6,        // generator recharge between openings
+    humRadius: 2.5,          // guards this close hear the opening / hum
+    sightRange: 26,          // guards this far can notice an open gateway
+    suspicionTime: 4,        // seconds of looking at it before they call it in
+    reportTime: 5,
+    viewScale: 0.6,          // render scale of the view through a gateway
+    viewDistance: 45,
+  },
+
+  // Witness chain
+  witness: {
+    reportTime: 3.5,         // saw a kill or you
+    bodyReportTime: 4.5,     // found a body
+    gunshotReportTime: 5,    // heard an unsuppressed shot
+    bodySightRange: 22,
+    alarmSearchTime: 60,     // how long the hunt lasts after the last contact
+    reinforcements: 4,
+  },
 
   // Player
   player: {
-    walkSpeed: 3.2,
-    runSpeed: 6.2,
-    crouchSpeed: 1.8,
+    walkSpeed: 3.4,
+    runSpeed: 6.4,
+    crouchSpeed: 1.9,
+    carrySpeedMul: 0.6,
     aimSpeedMul: 0.7,
     accel: 28,
     friction: 18,
@@ -28,8 +61,8 @@ export const CONFIG = {
     eyeHeight: 1.62,
     maxHealth: 100,
     healthRegenDelay: 6,
-    healthRegenRate: 12,
-    grenades: 3,
+    healthRegenRate: 14,
+    grenades: 0,
     interactTime: 1.4,
   },
 
@@ -46,13 +79,35 @@ export const CONFIG = {
 
   // Weapons
   weapons: {
+    pistol: {
+      id: 'pistol',
+      name: 'hud.weapon.pistol',
+      damage: 45,
+      headMul: 2.6,
+      rpm: 330,
+      semi: true,
+      magSize: 12,
+      reserve: 72,
+      reloadTime: 1.5,
+      spreadHip: 0.018,
+      spreadAim: 0.005,
+      spreadMove: 0.02,
+      spreadPerShot: 0.012,
+      spreadRecover: 0.16,
+      recoil: 0.011,
+      range: 60,
+      tracerSpeed: 220,
+      noise: 8,              // radius in which guards hear it
+      quiet: true,
+    },
     rifle: {
-      name: 'M4 Carbine',
+      id: 'rifle',
+      name: 'hud.weapon.rifle',
       damage: 26,
       headMul: 2.4,
       rpm: 650,
       magSize: 30,
-      reserve: 180,
+      reserve: 150,
       reloadTime: 2.1,
       spreadHip: 0.035,
       spreadAim: 0.008,
@@ -62,6 +117,14 @@ export const CONFIG = {
       recoil: 0.018,
       range: 120,
       tracerSpeed: 260,
+      noise: 45,
+      quiet: false,
+    },
+    knife: {
+      range: 1.9,            // reach from the operator's centre
+      arcDeg: 80,            // the guard must be roughly in front
+      alertDamage: 55,       // a guard already fighting you takes this instead of an instant kill
+      noise: 3,
     },
     enemyRifle: {
       name: 'AK-103',
@@ -74,18 +137,6 @@ export const CONFIG = {
       range: 90,
       burst: [2, 5],
       burstPause: [0.5, 1.3],
-    },
-    squadRifle: {
-      name: 'HK416',
-      damage: 22,
-      headMul: 2.0,
-      rpm: 560,
-      magSize: 30,
-      reloadTime: 2.2,
-      spread: 0.03,
-      range: 100,
-      burst: [3, 6],
-      burstPause: [0.35, 0.9],
     },
     grenade: {
       fuse: 3.2,
@@ -125,37 +176,22 @@ export const CONFIG = {
     accuracyFalloff: 22,   // meters at which accuracy halves
   },
 
-  squad: {
-    maxHealth: 120,
-    downedTime: 40,
-    reviveTime: 3,
-    walkSpeed: 3.4,
-    runSpeed: 5.8,
-    followDistance: 3.2,
-    visionRange: 40,
-    fovDeg: 160,
-  },
-
   hostage: {
     maxHealth: 110,
-    walkSpeed: 2.6,
-    runSpeed: 4.6,
+    walkSpeed: 2.8,
+    runSpeed: 4.8,
     followDistance: 2.4,
   },
 
-  // Architect
-  architect: {
-    energyMax: 100,
-    energyRegen: 3.5,          // per real-time second while NOT in architect mode
-    energyRegenInArchitect: 1.0,
-    reachRadius: 20,           // must be within this of a squad member / player
-    cameraHeight: 26,
-    cameraTilt: 58,            // degrees below horizon
-    minZoom: 12,
-    maxZoom: 46,
-    panSpeed: 22,
-    enemyMemory: 4,            // seconds a spotted enemy stays on the map
-    moduleNoiseRadius: 16,
+  // Tactical map camera
+  map: {
+    cameraTilt: 62,            // degrees below horizon
+    minZoom: 14,
+    maxZoom: 72,
+    defaultZoom: 42,
+    panSpeed: 26,
+    enemyMemory: 5,            // seconds a spotted enemy stays on the map
+    closeOnPlace: true,        // leave the map as soon as a gateway is placed
   },
 
   // Rendering
@@ -172,6 +208,7 @@ export const CONFIG = {
   },
 };
 
+// Static structure kits (containers, ramps, decks…) used by the level builder.
 export const MODULE_TYPES = {
   barrier:   { cost: 12, w: 2.0,  h: 1.05, d: 0.5,  mass: 1, cover: 'low',  climb: true,  label: 'module.barrier' },
   panel:     { cost: 22, w: 3.0,  h: 2.6,  d: 0.25, mass: 2, cover: 'high', climb: false, label: 'module.panel' },

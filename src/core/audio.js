@@ -126,10 +126,58 @@ export class AudioEngine {
     } else if (kind === 'ak') {
       this._noise(o.node, { dur: 0.1, filter: 'lowpass', freq: far ? 700 : 2600, freqEnd: 200, gain: 1.2, decay: far ? 0.16 : 0.07 });
       this._tone(o.node, { freq: 120, freqEnd: 40, type: 'triangle', dur: 0.12, gain: 1.0, decay: 0.07 });
+    } else if (kind === 'pistol') {
+      // suppressed: a short mechanical "thwip" with almost no low end
+      this._noise(o.node, { dur: 0.05, filter: 'bandpass', freq: 1500, q: 1.4, gain: 0.45, decay: 0.035 });
+      this._tone(o.node, { freq: 420, freqEnd: 180, type: 'triangle', dur: 0.05, gain: 0.18, decay: 0.04 });
+      this._noise(o.node, { dur: 0.03, filter: 'highpass', freq: 4000, gain: 0.15, decay: 0.02, delay: 0.04 });
     } else {
       this._noise(o.node, { dur: 0.07, filter: 'bandpass', freq: 1800, gain: 0.8, decay: 0.05 });
       this._tone(o.node, { freq: 200, freqEnd: 60, dur: 0.07, gain: 0.7, decay: 0.05 });
     }
+  }
+
+  knife(pos, kill = true) {
+    const o = this._out(pos, 18, 2); if (!o) return;
+    this._noise(o.node, { dur: 0.12, filter: 'bandpass', freq: 2600, freqEnd: 900, q: 0.8, gain: 0.35, attack: 0.01, decay: 0.06 });
+    this._noise(o.node, { dur: 0.08, filter: 'lowpass', freq: 500, gain: kill ? 0.7 : 0.4, decay: 0.06, delay: 0.1 });
+    if (kill) this._tone(o.node, { freq: 90, freqEnd: 50, type: 'sine', dur: 0.15, gain: 0.35, decay: 0.1, delay: 0.1 });
+  }
+  bodyDrop(pos) {
+    const o = this._out(pos, 20, 2); if (!o) return;
+    this._noise(o.node, { dur: 0.12, filter: 'lowpass', freq: 400, gain: 0.5, decay: 0.08 });
+  }
+  // gateway: a rising shimmer on open, a collapse on close, a whoosh on passing through
+  portalOpen(pos) {
+    const o = this._out(pos, 50, 5); if (!o) return;
+    this._noise(o.node, { dur: 0.5, filter: 'bandpass', freq: 400, freqEnd: 3200, q: 2, gain: 0.5, attack: 0.03, decay: 0.25 });
+    this._tone(o.node, { freq: 110, freqEnd: 440, type: 'sine', dur: 0.45, gain: 0.25, attack: 0.02, decay: 0.3 });
+    this._tone(o.node, { freq: 1320, type: 'sine', dur: 0.3, gain: 0.08, decay: 0.4, delay: 0.25 });
+  }
+  portalClose(pos) {
+    const o = this._out(pos, 50, 5); if (!o) return;
+    this._noise(o.node, { dur: 0.3, filter: 'bandpass', freq: 2800, freqEnd: 300, q: 2, gain: 0.4, attack: 0.01, decay: 0.15 });
+    this._tone(o.node, { freq: 440, freqEnd: 90, type: 'sine', dur: 0.3, gain: 0.22, decay: 0.15 });
+  }
+  portalPass(pos) {
+    const o = this._out(pos, 30, 3); if (!o) return;
+    this._noise(o.node, { dur: 0.25, filter: 'lowpass', freq: 3000, freqEnd: 300, gain: 0.5, attack: 0.02, decay: 0.12 });
+    this._tone(o.node, { freq: 660, freqEnd: 220, type: 'sine', dur: 0.2, gain: 0.15, decay: 0.12 });
+  }
+  // radio: the click when a guard keys his set, ticks while the countdown runs, and the alarm itself
+  radioStart(pos) {
+    const o = this._out(pos, 60, 6); if (!o) return;
+    this._noise(o.node, { dur: 0.08, filter: 'bandpass', freq: 1800, q: 3, gain: 0.5, decay: 0.05 });
+    this._tone(o.node, { freq: 1500, type: 'square', dur: 0.04, gain: 0.08, decay: 0.03, delay: 0.09 });
+    this._noise(o.node, { dur: 0.6, filter: 'bandpass', freq: 1100, q: 1.5, gain: 0.12, attack: 0.05, decay: 0.2, delay: 0.15 });
+  }
+  radioTick(pos, urgent = false) {
+    const o = this._out(pos, 60, 6); if (!o) return;
+    this._tone(o.node, { freq: urgent ? 1900 : 1300, type: 'square', dur: 0.03, gain: urgent ? 0.14 : 0.07, decay: 0.03 });
+  }
+  alarm() {
+    if (!this.ctx) return;
+    for (let i = 0; i < 3; i++) { this._tone(this.sfxBus, { freq: 620, freqEnd: 520, type: 'sawtooth', dur: 0.35, gain: 0.12, decay: 0.15, delay: i * 0.45 }); this._tone(this.sfxBus, { freq: 930, type: 'square', dur: 0.12, gain: 0.05, decay: 0.08, delay: i * 0.45 + 0.2 }); }
   }
 
   impact(pos, material = 'concrete') {
@@ -200,6 +248,8 @@ export class AudioEngine {
   moduleGrab() { if (!this.ctx) return; this._tone(this.sfxBus, { freq: 520, freqEnd: 780, type: 'sine', dur: 0.08, gain: 0.12, decay: 0.05 }); }
   moduleInvalid() { if (!this.ctx) return; this._tone(this.sfxBus, { freq: 220, freqEnd: 160, type: 'square', dur: 0.12, gain: 0.08, decay: 0.06 }); }
 
+  mapEnter() { this.architectEnter(); }
+  mapExit() { this.architectExit(); }
   architectEnter() {
     if (!this.ctx) return;
     this._noise(this.sfxBus, { dur: 0.5, filter: 'lowpass', freq: 3000, freqEnd: 200, gain: 0.5, attack: 0.01, decay: 0.2 });
