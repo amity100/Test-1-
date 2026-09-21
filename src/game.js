@@ -69,7 +69,7 @@ export class Game {
     } catch (e) { this.fatal(i18n.t('menu.webglError')); throw e; }
     if (!renderer.capabilities.isWebGL2) { this.fatal(i18n.t('menu.webglError')); throw new Error('WebGL2 required'); }
     this.renderer = renderer;
-    renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.enabled = true; renderer.shadowMap.type = this.isTouch ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;   // the soft filter is ~3x the shadow cost per pixel
     renderer.shadowMap.autoUpdate = false;   // shadows are refreshed once per frame, shared by the gateway views
     renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = CONFIG.render.exposure;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -91,10 +91,10 @@ export class Game {
     if (this.assets.envMap) { this.scene.environment = this.assets.envMap; this.mats.setEnvironment(this.assets.envMap); }
     this.world = new CollisionWorld(LEVEL1_BOUNDS);
     this.fx = new FX(this.scene, this.world, this.audio);
-    this.fx.createRain(CONFIG.render.rainCount);
+    this.fx.createRain(this.isTouch ? Math.round(CONFIG.render.rainCount * 0.45) : CONFIG.render.rainCount);
     this.menuCamera = new THREE.PerspectiveCamera(50, 1, 0.5, 500);
     this.camera = this.menuCamera;
-    this.postfx = new PostFX(renderer, this.scene, this.camera, CONFIG.render);
+    this.postfx = new PostFX(renderer, this.scene, this.camera, CONFIG.render, { mobile: this.isTouch });
     this.tacmap = new TacMap(this); this.tacmap.touch = this.isTouch;
     if (this.isTouch) { this.touch = new TouchControls(this, this.container); this.container.classList.add('touch-mode'); }
     this._buildLevel();
@@ -156,7 +156,8 @@ export class Game {
     this.moon = new THREE.DirectionalLight(0x8fa8d8, 1.35);
     this.moon.position.set(-35, 55, 45); this.moon.castShadow = true;
     const s = this.moon.shadow; s.mapSize.set(CONFIG.render.shadowMapSize, CONFIG.render.shadowMapSize);
-    s.camera.near = 1; s.camera.far = 200; s.camera.left = s.camera.bottom = -45; s.camera.right = s.camera.top = 45; s.bias = -0.0008; s.normalBias = 0.03;
+    const R = this.isTouch ? 32 : 45;
+    s.camera.near = 1; s.camera.far = 200; s.camera.left = s.camera.bottom = -R; s.camera.right = s.camera.top = R; s.bias = -0.0008; s.normalBias = 0.03;
     this.scene.add(this.moon); this.scene.add(this.moon.target);
     this.hemi = new THREE.HemisphereLight(0x2a3e5c, 0x100d0a, 0.95); this.scene.add(this.hemi);
     this.lightning = { t: 18 + Math.random() * 30, flash: 0 };
@@ -235,7 +236,17 @@ export class Game {
     this.checkpoint('start');
     this.hud.showIntro(() => this.beginPlay());
   }
+  // Compile every material the mission can show before the first frame: a gateway opening or the first blood
+  // spray must not stall on shader compilation (a visible hitch on phones).
+  _warmShaders() {
+    const r = this.renderer, ps = this.portals;
+    const shown = [];
+    if (ps) for (const e of ps.ends) { if (!e.group.visible) { e.group.visible = true; shown.push(e.group); } }
+    try { r.compile(this.scene, this.camera); } catch (err) { /* compile is best-effort */ }
+    for (const grp of shown) grp.visible = false;
+  }
   beginPlay() {
+    this._warmShaders();
     if (this.state !== 'intro') return;
     if (this.hud.introEl) { this.hud.introEl.remove(); this.hud.introEl = null; }
     this.audio.start(); this.audio.resume();
@@ -459,7 +470,8 @@ export class Game {
     const q = s.quality;
     if (this.settings && this.settings.quality !== q) { this._repairStep = 0; this._blackFrames = 0; this._checksLeft = 12; this.postfx.enabled = true; this.renderer.toneMapping = THREE.ACESFilmicToneMapping; }
     const caps = this.isTouch ? { low: 1, medium: 1.2, high: 1.5, ultra: 2 } : { low: 1, medium: 1.25, high: 1.5, ultra: CONFIG.render.maxPixelRatio };
-    const pr = Math.min(window.devicePixelRatio || 1, caps[q] || 1.5);
+    let pr = Math.min(window.devicePixelRatio || 1, caps[q] || 1.5);
+    if (this.isTouch) { const w = this.container.clientWidth || window.innerWidth, h = this.container.clientHeight || window.innerHeight; pr = Math.min(pr, Math.sqrt(1.15e6 / Math.max(1, w * h))); }
     this.renderer.setPixelRatio(pr);
     this.renderer.toneMappingExposure = CONFIG.render.exposure * (s.brightness ?? 1);
     this.renderer.shadowMap.enabled = q !== 'low';
@@ -527,7 +539,8 @@ export class Game {
     this.input.endFrame();
   }
   _render() {
-    this.renderer.shadowMap.needsUpdate = true;
+    this._renderFrame = (this._renderFrame || 0) + 1;
+    this.renderer.shadowMap.needsUpdate = !this.isTouch || (this._renderFrame & 1) === 0;
     if (this.portals) this.portals.render(this.renderer, this.scene, this.camera);
     this.postfx.render();
   }
@@ -611,8 +624,8 @@ export class Game {
   // Only the lights nearest the camera stay active; the count is held constant so shaders never recompile mid-game.
   _updateLightBudget() {
     const pools = this._lightPools || (this._lightPools = [
-      { list: this.builder.lights.points, budget: 8 },
-      { list: this.builder.lights.flood.concat(this.builder.lights.spots), budget: 4 },
+      { list: this.builder.lights.points, budget: this.isTouch ? 5 : 8 },
+      { list: this.builder.lights.flood.concat(this.builder.lights.spots), budget: this.isTouch ? 3 : 4 },
     ]);
     const cam = this.camera.position;
     for (const { list, budget } of pools) {

@@ -67,13 +67,41 @@ const GradeShader = {
   `,
 };
 
+// One-pass FXAA (the classic 5-tap luma edge blend): cheap enough for phones, kills most of the stair-stepping.
+const FXAAShader = {
+  uniforms: { tDiffuse: { value: null }, uInvRes: { value: new THREE.Vector2(1 / 1280, 1 / 720) } },
+  vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `
+    uniform sampler2D tDiffuse; uniform vec2 uInvRes; varying vec2 vUv;
+    float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
+    void main() {
+      vec3 rgbM = texture2D(tDiffuse, vUv).rgb;
+      vec3 rgbNW = texture2D(tDiffuse, vUv + vec2(-1.0, -1.0) * uInvRes).rgb;
+      vec3 rgbNE = texture2D(tDiffuse, vUv + vec2(1.0, -1.0) * uInvRes).rgb;
+      vec3 rgbSW = texture2D(tDiffuse, vUv + vec2(-1.0, 1.0) * uInvRes).rgb;
+      vec3 rgbSE = texture2D(tDiffuse, vUv + vec2(1.0, 1.0) * uInvRes).rgb;
+      float lM = luma(rgbM), lNW = luma(rgbNW), lNE = luma(rgbNE), lSW = luma(rgbSW), lSE = luma(rgbSE);
+      float lMin = min(lM, min(min(lNW, lNE), min(lSW, lSE)));
+      float lMax = max(lM, max(max(lNW, lNE), max(lSW, lSE)));
+      vec2 dir = vec2(-((lNW + lNE) - (lSW + lSE)), ((lNW + lSW) - (lNE + lSE)));
+      float dirReduce = max((lNW + lNE + lSW + lSE) * 0.03125, 0.0078125);
+      float rcpDirMin = 1.0 / (min(abs(dir.x), abs(dir.y)) + dirReduce);
+      dir = clamp(dir * rcpDirMin, vec2(-8.0), vec2(8.0)) * uInvRes;
+      vec3 rgbA = 0.5 * (texture2D(tDiffuse, vUv + dir * (1.0 / 3.0 - 0.5)).rgb + texture2D(tDiffuse, vUv + dir * (2.0 / 3.0 - 0.5)).rgb);
+      vec3 rgbB = rgbA * 0.5 + 0.25 * (texture2D(tDiffuse, vUv + dir * -0.5).rgb + texture2D(tDiffuse, vUv + dir * 0.5).rgb);
+      float lB = luma(rgbB);
+      gl_FragColor = vec4((lB < lMin || lB > lMax) ? rgbA : rgbB, 1.0);
+    }`,
+};
+
 export class PostFX {
-  constructor(renderer, scene, camera, cfg) {
+  constructor(renderer, scene, camera, cfg, { mobile = false } = {}) {
     this.renderer = renderer;
     this.scene = scene;
     this.camera = camera;
     this.cfg = cfg;
     this.enabled = true;
+    this.mobile = mobile;
     const size = renderer.getSize(new THREE.Vector2());
     // EffectComposer and UnrealBloomPass render into half-float targets by default. Some drivers
     // (older integrated GPUs, several mobile GPUs) cannot render to a float buffer: the framebuffer
@@ -88,14 +116,18 @@ export class PostFX {
     this.composer = new EffectComposer(renderer, target);
     this.renderPass = new RenderPass(scene, camera);
     this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), cfg.bloomStrength, cfg.bloomRadius, cfg.bloomThreshold);
+    // phones: the bloom blurs run at half size (a quarter of the pixels; the glow is soft anyway)
+    if (mobile) { const bs = this.bloom.setSize.bind(this.bloom); this.bloom.setSize = (w, h) => bs(Math.max(2, Math.round(w * 0.5)), Math.max(2, Math.round(h * 0.5))); }
     this.grade = new ShaderPass(GradeShader);
     this.output = new OutputPass();
     this.smaa = new SMAAPass(size.x * renderer.getPixelRatio(), size.y * renderer.getPixelRatio());
+    this.fxaa = new ShaderPass(FXAAShader);
     this.composer.addPass(this.renderPass);
     this.composer.addPass(this.bloom);
     this.composer.addPass(this.grade);
     this.composer.addPass(this.output);
     this.composer.addPass(this.smaa);
+    this.composer.addPass(this.fxaa);
     this.state = { damage: 0, aberration: 0, architect: 0, flash: 0, lowHealth: 0 };
     this.setSize(size.x, size.y);
   }
@@ -106,11 +138,14 @@ export class PostFX {
     const pr = this.renderer.getPixelRatio();
     this.smaa.setSize(w * pr, h * pr);
     this.grade.uniforms.uResolution.value.set(w * pr, h * pr);
+    this.fxaa.uniforms.uInvRes.value.set(1 / Math.max(1, w * pr), 1 / Math.max(1, h * pr));
   }
   setQuality(q) {
     // bloom needs float targets to look right and to work at all on some drivers
     this.bloom.enabled = q !== 'low' && this.floatTargets;
-    this.smaa.enabled = q !== 'low';
+    // anti-aliasing: SMAA (three passes) on desktops, one FXAA pass on phones
+    this.smaa.enabled = q !== 'low' && !this.mobile;
+    this.fxaa.enabled = q !== 'low' && this.mobile;
     this.bloom.strength = q === 'ultra' ? this.cfg.bloomStrength * 1.15 : this.cfg.bloomStrength;
     this.quality = q;
   }

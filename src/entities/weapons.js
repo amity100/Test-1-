@@ -5,18 +5,27 @@ import { CONFIG } from '../core/config.js';
 import { rayCharacter } from '../core/collision.js';
 
 // ---- Procedural rifle (a compact carbine) ----
+let _weaponMat = null;
 const _rifleCache = {};
 export function buildRifle(mats, variant = 'm4') {
   const g = new THREE.Group();
   const metal = mats.get('gunmetal'), poly = mats.get('gunPolymer');
   // geometry is built once per variant and merged per material (3 draw calls per rifle)
+  // geometry is built once per variant; every part carries its material's colour as a vertex colour, so a weapon
+  // is a single mesh with one shared material (one draw call per weapon instead of three or four)
   if (!_rifleCache[variant]) {
-    const parts = new Map();
-    const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => { const m = new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)), new THREE.Vector3(1, 1, 1)); geo.applyMatrix4(m); if (!parts.has(mat)) parts.set(mat, []); parts.get(mat).push(geo); };
+    const geos = [];
+    const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => {
+      const m = new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)), new THREE.Vector3(1, 1, 1)); geo.applyMatrix4(m);
+      const c = mat.emissive && mat.emissiveIntensity > 0.5 ? new THREE.Color(0x9fe8ff) : mat.color; const n = geo.attributes.position.count; const col = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
+      geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); if (geo.attributes.uv) geo.deleteAttribute('uv'); geos.push(geo);
+    };
     if (variant === 'pistol') _buildPistolParts(add, mats, metal, poly); else _buildRifleParts(add, mats, metal, poly, variant);
-    _rifleCache[variant] = [...parts].map(([mat, geos]) => [mat, mergeGeometries(geos, false)]);
+    _rifleCache[variant] = mergeGeometries(geos, false);
+    if (!_weaponMat) _weaponMat = new THREE.MeshStandardMaterial({ vertexColors: true, color: 0xffffff, metalness: 0.5, roughness: 0.55 });
   }
-  for (const [mat, geo] of _rifleCache[variant]) { const m = new THREE.Mesh(geo, mat); m.castShadow = true; g.add(m); }
+  { const m = new THREE.Mesh(_rifleCache[variant], _weaponMat); m.castShadow = true; g.add(m); }
   const muzzle = new THREE.Object3D(); muzzle.position.set(0, 0.005, variant === 'pistol' ? 0.36 : 0.62); g.add(muzzle);
   g.userData.muzzle = muzzle;
   if (variant === 'pistol') { g.userData.grip = new THREE.Vector3(0, -0.08, -0.05); g.userData.foregrip = new THREE.Vector3(-0.03, -0.09, -0.01); g.userData.offset = { right: 0.16, fwd: 0.3, up: 0.02 }; }

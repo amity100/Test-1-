@@ -161,7 +161,8 @@ export class NavGrid {
     const start = this.nearestNode(a, 2.5), goal = this.nearestNode(b, opts.goalRadius ?? 3);
     if (start < 0 || goal < 0) return null;
     if (start === goal) return [this.nodePos(goal)];
-    const maxExpand = opts.maxExpand ?? 24000;
+    const maxExpand = opts.maxExpand ?? 14000;
+    this.lastSearchCapped = false;
     const stamp = ++this.stamp;
     const closed = this.closed, g = this.gScore, came = this.came, H = this.heights, cols = this.cols, rows = this.rows;
     const gi = (goal / MAX_LAYERS) | 0, gx = gi % cols, gz = (gi / cols) | 0, gy = H[goal];
@@ -175,7 +176,7 @@ export class NavGrid {
       if (closed[cur] === stamp) continue;
       closed[cur] = stamp;
       if (cur === goal) { bestNode = goal; break; }
-      if (++expanded > maxExpand) break;
+      if (++expanded > maxExpand) { this.lastSearchCapped = true; break; }
       this.expandedTotal = (this.expandedTotal || 0) + 1;
       const idx = (cur / MAX_LAYERS) | 0, h = H[cur];
       const hv = heur(idx, h); if (hv < bestH) { bestH = hv; bestNode = cur; }

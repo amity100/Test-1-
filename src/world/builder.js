@@ -43,8 +43,10 @@ export class LevelBuilder {
     }
     _e.set(pitch, yaw, roll, 'YXZ'); _q.setFromEuler(_e); _p.set(x, y, z);
     _m4.compose(_p, _q, _s); geo.applyMatrix4(_m4);
-    if (!this.batches.has(matName)) this.batches.set(matName, []);
-    this.batches.get(matName).push(geo);
+    // one batch per material per 40 m region: a merged mesh that spans the level can never be culled
+    const key = matName + '|' + Math.floor(x / 40) + '|' + Math.floor(z / 40);
+    if (!this.batches.has(key)) this.batches.set(key, []);
+    this.batches.get(key).push(geo);
   }
   box(x, y, z, w, h, d, matName, { yaw = 0, collide = true, tag = 'static', material = 'concrete', vision = true, bullets = true, climbable = true, movement = true } = {}) {
     this._push(matName, boxGeo(w, h, d), x, y + h / 2, z, yaw);
@@ -461,12 +463,13 @@ export class LevelBuilder {
 
   // ---- finalize: merge batches into meshes ----
   finalize() {
-    for (const [matName, geos] of this.batches) {
+    for (const [key, geos] of this.batches) {
       if (!geos.length) continue;
       const merged = mergeGeometries(geos, false);
       if (!merged) continue;
+      const matName = key.split('|')[0];
       const mat = this.mats.get(matName);
-      const mesh = new THREE.Mesh(merged, mat); mesh.castShadow = true; mesh.receiveShadow = true; mesh.name = 'batch_' + matName;
+      const mesh = new THREE.Mesh(merged, mat); mesh.castShadow = true; mesh.receiveShadow = true; mesh.name = 'batch_' + key;
       this.root.add(mesh);
       for (const g of geos) g.dispose();
     }

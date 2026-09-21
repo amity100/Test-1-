@@ -14,7 +14,7 @@ const server = http.createServer((req, res) => { const p = decodeURIComponent(re
 await new Promise((r) => server.listen(port, r));
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: W, height: H } });
-await page.addInitScript(([q, l]) => { window.__VANTAGE_NOLOCK = true; try { localStorage.setItem('vantage.settings', JSON.stringify({ quality: q, sensitivity: 1, invertY: false, volume: 0 })); localStorage.setItem('vantage.lang', l); } catch (e) {} }, [opt('quality', 'high'), opt('lang', 'en')]);
+await page.addInitScript(([q, l, touch]) => { window.__VANTAGE_NOLOCK = true; if (touch) window.__VANTAGE_TOUCH = true; try { localStorage.setItem('vantage.settings', JSON.stringify({ quality: q, sensitivity: 1, invertY: false, volume: 0 })); localStorage.setItem('vantage.lang', l); } catch (e) {} }, [opt('quality', 'high'), opt('lang', 'en'), argv.includes('--touch')]);
 page.on('console', (m) => { if (m.type() === 'error') { const t = m.text(); if (!t.includes('fonts.g') && !t.includes('net::ERR') && !t.includes('GL Driver')) console.log('console.error:', t.slice(0, 300)); } });
 page.on('pageerror', (e) => console.log('PAGEERROR:', e.message, (e.stack || '').split('\n').slice(1, 3).join(' | ')));
 await page.goto(`http://localhost:${port}/index.html`, { waitUntil: 'load', timeout: 180000 });

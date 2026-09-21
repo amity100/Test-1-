@@ -115,8 +115,14 @@ export class Character {
     this.group.add(this.model);
     const fm = (opts.look && assets.factionMaterials[opts.look]) || assets.factionMaterials[this.faction] || assets.factionMaterials.enemy;
     this.model.traverse((o) => {
-      if (o.isMesh || o.isSkinnedMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; o.material = o.name === 'vanguard_visor' ? fm.visor : fm.body; o.userData.character = this; }
+      if (o.isMesh || o.isSkinnedMesh) {
+        o.castShadow = true; o.receiveShadow = true; o.material = o.name === 'vanguard_visor' ? fm.visor : fm.body; o.userData.character = this;
+        // cull off-screen bodies: a generous sphere around the bind pose covers every animation frame
+        if (o.isSkinnedMesh) { o.computeBoundingSphere(); o.boundingSphere.radius *= 1.7; o.frustumCulled = true; }
+        else o.frustumCulled = true;
+      }
     });
+    this._castShadow = true;
     this.bones = {};
     this.model.traverse((o) => { if (o.isBone) this.bones[o.name] = o; });
     this.base = _templateBase;
@@ -207,6 +213,9 @@ export class Character {
     const cam = this.game.camera;
     const dist = cam ? Math.hypot(cam.position.x - this.pos.x, cam.position.z - this.pos.z) : 0;
     this.lodSkip = this.isPlayer ? 1 : dist < 28 ? 1 : dist < 55 ? 2 : 4;
+    // shadows only from bodies near the camera (the shadow pass re-skins every caster)
+    const cs = this.isPlayer || dist < 26;
+    if (cs !== this._castShadow) { this._castShadow = cs; this.model.traverse((o) => { if (o.isMesh || o.isSkinnedMesh) o.castShadow = cs; }); if (this.rifle) this.rifle.traverse((o) => { if (o.isMesh) o.castShadow = cs; }); }
     this._lodFrame = (this._lodFrame || 0) + 1;
     const animate = (this._lodFrame % this.lodSkip) === 0;
     const animDt = dt * this.lodSkip;

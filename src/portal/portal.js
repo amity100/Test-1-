@@ -6,7 +6,7 @@ import { CONFIG } from '../core/config.js';
 const P = CONFIG.portal;
 const UP = new THREE.Vector3(0, 1, 0);
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _q = new THREE.Quaternion(), _m = new THREE.Matrix4();
-const _plane = new THREE.Plane(), _clip = new THREE.Vector4(), _qq = new THREE.Vector4(), _frustum = new THREE.Frustum(), _sphere = new THREE.Sphere();
+const _plane = new THREE.Plane(), _clip = new THREE.Vector4(), _qq = new THREE.Vector4(), _frustum = new THREE.Frustum(), _sphere = new THREE.Sphere(), _size = new THREE.Vector2();
 
 const VIEW_VS = /* glsl */`
   varying vec2 vUv;
@@ -410,8 +410,10 @@ export class PortalSystem {
   render(renderer, scene, camera) {
     if (this.state === 'closed') return;
     const g = this.game;
-    const size = renderer.getDrawingBufferSize(new THREE.Vector2());
-    const scale = g.settings && g.settings.quality === 'low' ? 0.4 : P.viewScale;
+    const size = renderer.getDrawingBufferSize(_size);
+    const low = g.settings && g.settings.quality === 'low';
+    const scale = g.isTouch ? (low ? 0.28 : 0.38) : (low ? 0.4 : P.viewScale);
+    this._viewFrame = (this._viewFrame || 0) + 1;
     const w = Math.max(64, Math.floor(size.x * scale)), h = Math.max(64, Math.floor(size.y * scale));
     _m.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); _frustum.setFromProjectionMatrix(_m);
     for (const end of this.ends) end.viewMat.uniforms.uRes.value.set(size.x, size.y);
@@ -420,9 +422,11 @@ export class PortalSystem {
       const other = this.other(end);
       _sphere.set(end.center, 1.6);
       const dist = camera.position.distanceTo(end.center);
-      end.visibleNow = this.state !== 'closing' && dist < P.viewDistance && _frustum.intersectsSphere(_sphere) && g.mode === 'ground';
-      end.viewMat.uniforms.uHasView.value = end.visibleNow ? 1 : 0;
+      end.visibleNow = this.state !== 'closing' && dist < (g.isTouch ? 32 : P.viewDistance) && _frustum.intersectsSphere(_sphere) && g.mode === 'ground';
+      end.viewMat.uniforms.uHasView.value = end.visibleNow && end.target ? 1 : 0;
       if (!end.visibleNow) continue;
+      // phones: one view refreshed per frame (each end at 30 Hz), unless only one end is on screen
+      if (g.isTouch && this.ends[0].visibleNow && this.ends[1].visibleNow && ((this._viewFrame + end.index) & 1)) { end.viewMat.uniforms.uHasView.value = end.target ? 1 : 0; continue; }
       end.ensureTarget(renderer, w, h);
       // virtual camera = main camera carried through the portal
       const vc = end.camera;

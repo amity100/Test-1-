@@ -137,10 +137,13 @@ export class AICharacter extends Character {
     const nav = this.game.nav;
     const far = this.pathGoal.distanceTo(goal) > 1.0;
     const stale = this.game.time - this.pathTime > 1.5 || this.pathNavVersion !== nav.version;
+    const now = this.game.time;
+    if (!force && this.path && stale && !far && this._capUntil > now && this.pathNavVersion === nav.version) { this.arrived = false; return; }   // still unreachable: keep the partial path
     if (force || !this.path || far || stale) {
-      this.pathGoal.copy(goal); this.pathTime = this.game.time; this.pathNavVersion = nav.version;
+      this.pathGoal.copy(goal); this.pathTime = now; this.pathNavVersion = nav.version;
       this.viaPortal = null; this.portalGoal = null;
       let path = nav.findPath(this.pos, goal);
+      this._capUntil = nav.lastSearchCapped ? now + 4 : 0;
       // gateway shortcut: if walking through the open pair is clearly shorter (or the only way), head for it
       const ps = this.game.portals;
       if (ps && ps.open && !this.noPortals) {
