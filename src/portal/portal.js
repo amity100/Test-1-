@@ -432,7 +432,8 @@ export class PortalSystem {
     const g = this.game;
     const size = renderer.getDrawingBufferSize(_size);
     const low = g.settings && g.settings.quality === 'low';
-    const scale = g.isTouch ? (low ? 0.28 : 0.38) : (low ? 0.4 : P.viewScale);
+    const q = g.settings ? g.settings.quality : 'high';
+    const scale = g.isTouch ? (low ? 0.28 : q === 'medium' ? 0.38 : 0.5) : (low ? 0.4 : P.viewScale);
     this._viewFrame = (this._viewFrame || 0) + 1;
     const w = Math.max(64, Math.floor(size.x * scale)), h = Math.max(64, Math.floor(size.y * scale));
     _m.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); _frustum.setFromProjectionMatrix(_m);

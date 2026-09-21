@@ -171,11 +171,19 @@ export class Enemy extends AICharacter {
         this.throughPortal = seen.end; this.aimOverride = seen.end ? seen.image.clone() : null;
         if (this.state === 'combat') { this.target = seen.target; this.lastKnown.copy(seen.image); this.lastSeenTime = game.time; }
         else {
+          // making you out takes time: half a second at arm's length, six seconds far off; a shape at the edge of his eye,
+          // in the dark, crouched and still is a fraction of that
           const d = this.pos.distanceTo(seen.image);
-          const moving = Math.hypot(seen.target.vel.x, seen.target.vel.z) > 2.5;
-          this.suspicion += 0.12 * (d < 6 ? 3 : d < 14 ? 1.5 : 0.8) * (moving ? 1.6 : 1) * (this.alertLevel > 0 ? 1.8 : 1) * (game.alarm ? 2.2 : 1) / E.reactionTime;
+          const t = seen.target, speed = Math.hypot(t.vel.x, t.vel.z);
+          const base = d < 4 ? 2.0 : d < 8 ? 1.0 : d < 14 ? 0.5 : d < 22 ? 0.28 : 0.16;
+          const off = Math.abs(wrapAngle(Math.atan2(seen.image.x - this.pos.x, seen.image.z - this.pos.z) - this.yaw));
+          const facing = off < 0.52 ? 1 : off < 0.96 ? 0.6 : 0.3;
+          const lit = game.isLitCached(t) ? 1 : 0.55;
+          const crouch = t.crouch > 0.5 ? 0.55 : 1;
+          const motion = speed > 4 ? 1.6 : speed > 1.2 ? 1.15 : 1;
+          this.suspicion += 0.12 * base * facing * lit * crouch * motion * (this.alertLevel > 0 ? 1.6 : 1) * (game.alarm ? 2.2 : 1) / E.reactionTime;
           this.lastKnown.copy(seen.image);
-          if (this.state === 'patrol' || this.state === 'post') { this.state = 'suspicious'; this.investigate = seen.image.clone(); this.investigateTime = 0; this.alertLevel = Math.max(this.alertLevel, 1); }
+          if (this.state === 'patrol' || this.state === 'post') { this.state = 'suspicious'; this.investigate = seen.image.clone(); this.investigateTime = 0; this.alertLevel = Math.max(this.alertLevel, 1); game.onEnemySuspicious && game.onEnemySuspicious(this, 'sight'); }
           if (this.suspicion >= 1) { this.enterCombat(seen.target); this.lastKnown.copy(seen.image); }
         }
       } else {
@@ -214,7 +222,7 @@ export class Enemy extends AICharacter {
       } else if (this.pos.distanceTo(wp) < 0.6) { this.stop(); }
     } else {
       this.scanTimer -= dt;
-      if (this.scanTimer <= 0) { this.scanTimer = 2.5 + Math.random() * 4; this.scanYaw = this.homeYaw + (Math.random() - 0.5) * 1.8; }
+      if (this.scanTimer <= 0) { this.scanTimer = 4 + Math.random() * 5; this.scanYaw = this.homeYaw + (Math.random() - 0.5) * 1.1; }
       if (this.pos.distanceTo(this.homePos) > 1.0 && this.arrived) this.moveTo(this.homePos, E.walkSpeed);
     }
   }
@@ -223,7 +231,7 @@ export class Enemy extends AICharacter {
     this.crouchTarget = 0;
     const d = this.pos.distanceTo(this.post.pos);
     if (d > 1.0) { if (this.arrived) this.moveTo(this.post.pos, E.runSpeed); }
-    else { this.stop(); this.scanTimer -= dt; if (this.scanTimer <= 0) { this.scanTimer = 2 + Math.random() * 3; this.scanYaw = this.post.yaw + (Math.random() - 0.5) * 2.0; } }
+    else { this.stop(); this.scanTimer -= dt; if (this.scanTimer <= 0) { this.scanTimer = 3 + Math.random() * 4; this.scanYaw = this.post.yaw + (Math.random() - 0.5) * 1.4; } }
   }
 
   _suspicious(dt) {

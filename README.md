@@ -18,9 +18,9 @@ npm start          # http://localhost:8080
 
 or `python3 -m http.server 8080` in the repository folder, then open `http://localhost:8080/`.
 
-Requirements: WebGL 2 and a GPU. On a desktop you play with mouse and keyboard (pointer lock); on a phone or tablet the game switches to touch controls by itself (`?touch=1` / `?touch=0` in the URL forces either). The graphics quality preset can be lowered in Settings; phones default to *medium*.
+Requirements: WebGL 2 and a GPU. On a desktop you play with mouse and keyboard (pointer lock); on a phone or tablet the game switches to touch controls by itself (`?touch=1` / `?touch=0` in the URL forces either). The graphics quality preset can be changed in Settings.
 
-**On a phone:** open `dist/VANTAGE.html` (or the hosted page) in Chrome or Safari, turn the phone sideways and tap the screen. The game asks for fullscreen and landscape. A portrait layout also works but the map and the view are smaller.
+**On a phone:** open `dist/VANTAGE.html` (or the hosted page) in Chrome or Safari, turn the phone sideways and tap the screen. The game asks for fullscreen and landscape. A portrait layout also works but the map and the view are smaller. Quality defaults to *high* (near-native resolution, sharp anti-aliasing); if frames run slow for a few seconds the game steps down a level by itself and says so.
 
 ## Controls
 
@@ -65,6 +65,10 @@ Requirements: WebGL 2 and a GPU. On a desktop you play with mouse and keyboard (
 A ring under your crosshair shows where `Q` (phone: `GATE`) would open a gateway, with its distance: aim nearer or farther to place it, press, and walk through when you choose. Aim at a guard instead and cyan brackets mark him as locked: `X` (phone: `BEHIND`) opens the gateway **behind his back** and takes you straight through it, coming out a step behind him with the knife ready. Kill him next to the open gateway and his body slides through it, out of sight. Every kill inside the slow-motion window extends it, waives the generator's recharge and adds a link to the **chain** counter. A guard who is on the radio can be locked from anywhere, even off screen: `X` puts you behind him before the ring closes.
 
 Guards use gateways too. One who spots an open gateway from close by walks up to it and steps through; one who sees you through it comes through after you. A flash at the other end and a warning tell you it is about to happen.
+
+## Being seen
+
+Guards take time to make you out, and the time depends on everything: half a second at arm's length, two seconds at 10 m, six seconds far off; a third of that rate at the edge of their eye, about half in the dark, half again when you are crouched, more when you run. In the dark they see 12 m; under a floodlight 28 m, which is what the control room's floodlight switch is for. A guard who glimpses you turns and walks over to look ("a guard is looking your way"); only a guard who has made you out keys his radio. Posted guards look around slowly, so a back stays a back for a few seconds at a time.
 
 ## The guards
 

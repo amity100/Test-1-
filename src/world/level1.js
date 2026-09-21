@@ -215,8 +215,8 @@ export function buildLevel1(game, b) {
     { x: -36, z: -24, yaw: PI / 2, patrol: [[-36, -24], [-22, -24], [-22, -15]], zone: 'zone.yard' },    // yard patrol: the tutorial witness
     { x: -22, z: -21, yaw: -PI / 2, patrol: [], zone: 'zone.yard' },                                     // by the forklift: the tutorial kill
     // the pair: they face each other across the warehouse floor, so whoever you take first, the other sees it
-    { x: -20, z: 2, yaw: -PI / 2, patrol: [], zone: 'zone.warehouse' },                                  // warehouse doors, looking in
-    { x: -33, z: 2, yaw: PI / 2, patrol: [], zone: 'zone.warehouse' },                                   // by the racks, looking at the doors
+    { x: -20, z: 2, yaw: PI / 2, patrol: [], zone: 'zone.warehouse' },                                   // warehouse doors, watching the doors: his back is to the floor
+    { x: -33, z: 2, yaw: PI / 2, patrol: [], zone: 'zone.warehouse' },                                   // by the racks, watching the doors man's back
     // the office trio: the gunner watches the walkway and the office door; a patroller walks it; the officer holds the key
     { x: -41, z: 19.5, y: MZ, yaw: PI / 2, patrol: [], accuracy: 0.95, zone: 'zone.warehouse' },         // mezzanine gunner, looking east along the walkway
     { x: -20.6, z: 18.4, y: MZ, yaw: PI / 2, patrol: [], role: 'officer', name: 'officer', grenades: 2, zone: 'zone.warehouse' }, // office
@@ -232,7 +232,7 @@ export function buildLevel1(game, b) {
     { x: 16, z: 17, yaw: PI, patrol: [[12, 15], [20, 19]], zone: 'zone.exercise' },                      // exercise yard
     { x: -30, z: 36, yaw: PI, patrol: [[-30, 36], [-18, 44], [-36, 46]], zone: 'zone.lz' },              // helipad sentry
     { x: -32, z: 19.5, y: MZ, yaw: PI / 2, patrol: [[-36, 19.5], [-25.5, 19.5]], zone: 'zone.warehouse' }, // walkway patroller
-    { x: 37, z: 24.5, yaw: -PI / 2, patrol: [], role: 'heavy', name: 'heavy', look: 'heavy', maxHealth: 160, armor: true, accuracy: 0.9, zone: 'zone.cells' }, // east end: armoured
+    { x: 37, z: 24.5, yaw: -1.27, patrol: [], role: 'heavy', name: 'heavy', look: 'heavy', maxHealth: 160, armor: true, accuracy: 0.9, zone: 'zone.cells' }, // east end: armoured, watching the prisoner's door
   ];
   L.reinforcements = { north: { x: 0, z: 55 }, east: { x: 52, z: -8 }, south: { x: 0, z: -42 } };
   L.lz = { x: -27, y: 0.3, z: 39 };

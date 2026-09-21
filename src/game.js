@@ -363,7 +363,7 @@ export class Game {
     // shouting to the guards nearby
     setTimeout(() => { if (e.alive && e.state === 'combat') this.emitNoise(e.pos, 22, e, 'radio'); }, CONFIG.enemy.alertRadioDelay * 1000 / Math.max(0.2, this.timeScale));
   }
-  onEnemySuspicious() { if (this.time - (this._lastSusToast || -10) > 8) { this._lastSusToast = this.time; this.hud.alert('hud.alert.suspicious', 1600); } }
+  onEnemySuspicious(e, reason) { if (this.time - (this._lastSusToast || -10) > 6) { this._lastSusToast = this.time; this.hud.alert(reason === 'sight' ? 'hud.alert.glimpse' : 'hud.alert.suspicious', 1600); } }
   onEnemyWitness(e, reason) {
     this.stats.witnesses++;
     this.audio.radioStart(e.pos);
@@ -495,13 +495,14 @@ export class Game {
   applySettings(s) {
     const q = s.quality;
     if (this.settings && this.settings.quality !== q) { this._repairStep = 0; this._blackFrames = 0; this._checksLeft = 12; this.postfx.enabled = true; this.renderer.toneMapping = THREE.ACESFilmicToneMapping; }
-    const caps = this.isTouch ? { low: 1, medium: 1.2, high: 1.5, ultra: 2 } : { low: 1, medium: 1.25, high: 1.5, ultra: CONFIG.render.maxPixelRatio };
+    const caps = this.isTouch ? { low: 1, medium: 2, high: 2.6, ultra: 3 } : { low: 1, medium: 1.25, high: 1.5, ultra: CONFIG.render.maxPixelRatio };
     let pr = Math.min(window.devicePixelRatio || 1, caps[q] || 1.5);
-    if (this.isTouch) { const w = this.container.clientWidth || window.innerWidth, h = this.container.clientHeight || window.innerHeight; pr = Math.min(pr, Math.sqrt(1.15e6 / Math.max(1, w * h))); }
+    // phones: a pixel budget per quality (a 1080p-class picture on medium, near native on high)
+    if (this.isTouch) { const budget = { low: 0.6e6, medium: 1.3e6, high: 2.1e6, ultra: 3.2e6 }[q] || 1.3e6; const w = this.container.clientWidth || window.innerWidth, h = this.container.clientHeight || window.innerHeight; pr = Math.min(pr, Math.sqrt(budget / Math.max(1, w * h))); }
     this.renderer.setPixelRatio(pr);
     this.renderer.toneMappingExposure = CONFIG.render.exposure * (s.brightness ?? 1);
     this.renderer.shadowMap.enabled = q !== 'low';
-    this.moon.shadow.mapSize.setScalar(q === 'ultra' ? 4096 : q === 'high' ? 2048 : 1024); if (this.moon.shadow.map) { this.moon.shadow.map.dispose(); this.moon.shadow.map = null; }
+    this.moon.shadow.mapSize.setScalar(q === 'ultra' ? (this.isTouch ? 2048 : 4096) : q === 'high' ? 2048 : 1024); if (this.moon.shadow.map) { this.moon.shadow.map.dispose(); this.moon.shadow.map = null; }
     for (const l of this.builder.lights.flood) { l.castShadow = l.castShadow && q !== 'low' && !(this.isTouch && q === 'medium'); }
     this.postfx.setQuality(q);
     if (this.fx.rain) this.fx.rain.visible = q !== 'low';
@@ -574,7 +575,7 @@ export class Game {
 
   _checkPerformance(realDt) {
     if (this._autoQualityDone || this.realTime < 4) return;
-    if (this.frameMs > (this.isTouch ? 48 : 90)) this._slowTime += realDt; else this._slowTime = Math.max(0, this._slowTime - realDt * 0.5);
+    if (this.frameMs > (this.isTouch ? 42 : 90)) this._slowTime += realDt; else this._slowTime = Math.max(0, this._slowTime - realDt * 0.5);
     if (this._slowTime < 4) return;
     this._slowTime = 0;
     const order = ['ultra', 'high', 'medium', 'low'];

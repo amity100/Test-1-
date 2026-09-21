@@ -150,13 +150,13 @@ export const CONFIG = {
   // Enemy AI
   enemy: {
     maxHealth: 100,
-    visionRange: 34,        // target standing in light
-    visionRangeDark: 13,    // target in darkness
-    fovDeg: 115,
+    visionRange: 28,        // target standing in floodlight
+    visionRangeDark: 12,    // target in darkness
+    fovDeg: 100,
     hearGunshot: 45,
     hearFootsteps: 9,
     hearModule: 16,
-    reactionTime: 1.1,
+    reactionTime: 1.0,      // global divisor on how fast a guard makes you out
     memoryTime: 6,
     searchTime: 12,
     walkSpeed: 2.4,

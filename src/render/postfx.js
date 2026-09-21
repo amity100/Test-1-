@@ -86,7 +86,7 @@ const FXAAShader = {
       vec2 dir = vec2(-((lNW + lNE) - (lSW + lSE)), ((lNW + lSW) - (lNE + lSE)));
       float dirReduce = max((lNW + lNE + lSW + lSE) * 0.03125, 0.0078125);
       float rcpDirMin = 1.0 / (min(abs(dir.x), abs(dir.y)) + dirReduce);
-      dir = clamp(dir * rcpDirMin, vec2(-8.0), vec2(8.0)) * uInvRes;
+      dir = clamp(dir * rcpDirMin, vec2(-5.0), vec2(5.0)) * uInvRes;
       vec3 rgbA = 0.5 * (texture2D(tDiffuse, vUv + dir * (1.0 / 3.0 - 0.5)).rgb + texture2D(tDiffuse, vUv + dir * (2.0 / 3.0 - 0.5)).rgb);
       vec3 rgbB = rgbA * 0.5 + 0.25 * (texture2D(tDiffuse, vUv + dir * -0.5).rgb + texture2D(tDiffuse, vUv + dir * 0.5).rgb);
       float lB = luma(rgbB);
@@ -143,9 +143,9 @@ export class PostFX {
   setQuality(q) {
     // bloom needs float targets to look right and to work at all on some drivers
     this.bloom.enabled = q !== 'low' && this.floatTargets;
-    // anti-aliasing: SMAA (three passes) on desktops, one FXAA pass on phones
-    this.smaa.enabled = q !== 'low' && !this.mobile;
-    this.fxaa.enabled = q !== 'low' && this.mobile;
+    // anti-aliasing: SMAA (three passes, sharp) on desktops and on phones at high quality; one FXAA pass on phones at medium
+    this.smaa.enabled = q !== 'low' && (!this.mobile || q === 'high' || q === 'ultra');
+    this.fxaa.enabled = q === 'medium' && this.mobile;
     this.bloom.strength = q === 'ultra' ? this.cfg.bloomStrength * 1.15 : this.cfg.bloomStrength;
     this.quality = q;
   }

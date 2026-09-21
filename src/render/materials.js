@@ -48,7 +48,7 @@ function grayCanvas(data, size, lo = 0, hi = 255) {
   return c;
 }
 
-function tex(c, { srgb = false, repeat = 1, aniso = 8 } = {}) {
+function tex(c, { srgb = false, repeat = 1, aniso = 16 } = {}) {
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.repeat.set(repeat, repeat);
@@ -61,7 +61,7 @@ export class MaterialLibrary {
   constructor(renderer, assetBase = './assets/') {
     this.renderer = renderer;
     this.base = assetBase;
-    this.aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    this.aniso = Math.min(16, renderer.capabilities.getMaxAnisotropy());
     this.mats = {};
     this.loader = new THREE.TextureLoader();
     this._build();

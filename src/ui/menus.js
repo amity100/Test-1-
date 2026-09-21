@@ -14,7 +14,7 @@ export class Menus {
   }
 
   loadSettings() {
-    const d = { quality: this.game.isTouch ? 'medium' : 'high', sensitivity: 1.0, invertY: false, volume: 0.8, difficulty: 'normal', brightness: 1.0 };
+    const d = { quality: 'high', sensitivity: 1.0, invertY: false, volume: 0.8, difficulty: 'normal', brightness: 1.0 };
     try { const s = JSON.parse(localStorage.getItem('vantage.settings') || '{}'); return { ...d, ...s }; } catch (e) { return d; }
   }
   saveSettings() { try { localStorage.setItem('vantage.settings', JSON.stringify(this.settings)); } catch (e) { /* ignore */ } this.game.applySettings(this.settings); }
