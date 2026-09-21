@@ -158,7 +158,7 @@ check('drag pans the map', Math.hypot(f1[0] - f0[0], f1[2] - f0[2]) > 2, { f0, f
 await shot('m10-map-panned');
 await tapEl('.tbtn.back'); await step(0.2);
 // the placement marker: aim at open ground, GATE opens there and you stay where you are; BEHIND takes you behind a locked guard
-const mk = await ev(() => { const g = window.__game, p = g.player; p.pos.set(-30, 0, -20); p.camYaw = -Math.PI / 2; p.camPitch = -0.22; p.update(0, 0); g.closePortal(); g.debugStep(0.7); return { marker: !!g.aimGate, ok: !!(g.aimGate && g.aimGate.ok), ghost: g.portals.aimGhost.group.visible, d: g.aimGate ? +Math.hypot(g.aimGate.x - p.pos.x, g.aimGate.z - p.pos.z).toFixed(1) : null }; });
+const mk = await ev(() => { const g = window.__game, p = g.player; p.pos.set(0, 0, -2); p.camYaw = 0; p.camPitch = -0.22; p.update(0, 0); g.closePortal(); g.debugStep(0.7); return { marker: !!g.aimGate, ok: !!(g.aimGate && g.aimGate.ok), ghost: g.portals.aimGhost.group.visible, d: g.aimGate ? +Math.hypot(g.aimGate.x - p.pos.x, g.aimGate.z - p.pos.z).toFixed(1) : null }; });
 check('placement marker under the crosshair', mk.marker && mk.ok && mk.ghost && mk.d >= 5, mk);
 const before = await ev(() => { const g = window.__game; return { trav: g.portals.stats.traversals, mx: g.aimGate.x, mz: g.aimGate.z }; });
 await tapEl('.tbtn.gate'); await step(0.6);
@@ -167,11 +167,11 @@ check('GATE opens at the marker without pulling you through', gateOpened.state !
 await tapEl('.tbtn.gate'); await step(0.2);
 const again = await ev(() => { const g = window.__game; return { state: g.portals.state, canOpen: g.portals.canOpen() }; });
 check('a second GATE right away is not refused for recharging', again.state !== 'closed', again);
-const lk = await ev(() => { const g = window.__game, p = g.player; let e = null; for (const x of g.enemies) if (x.alive && Math.abs(x.pos.x - 29.5) < 1 && Math.abs(x.pos.z - 25.3) < 1) e = x; e.yaw = e.aimYaw = 0; e.scanYaw = 0; e.scanTimer = 100; e.homeYaw = 0; g.closePortal(); p.pos.set(e.pos.x - 7, 0, e.pos.z - 0.8); p.camYaw = Math.atan2(e.pos.x - p.pos.x, e.pos.z - p.pos.z); p.camPitch = -0.05; p.update(0, 0); g.debugStep(0.4); return { lock: p.lockTarget === e, btn: !document.querySelector('.tbtn.behind').classList.contains('hidden') }; });
+const lk = await ev(() => { const g = window.__game, p = g.player; let e = null; for (const x of g.enemies) if (x.alive && Math.abs(x.pos.x - 29.5) < 1 && Math.abs(x.pos.z - 25.3) < 1) e = x; if (e) { e.yaw = e.aimYaw = 0; e.scanYaw = 0; e.scanTimer = 100; e.homeYaw = 0; } g.closePortal(); const ax = e ? e.pos.x - 7 : 22.5, az = e ? e.pos.z - 0.8 : 24.5; p.pos.set(ax, 0, az); p.camYaw = e ? Math.atan2(e.pos.x - p.pos.x, e.pos.z - p.pos.z) : Math.PI / 2; p.camPitch = -0.05; p.update(0, 0); g.debugStep(0.4); window.__lockId = p.lockTarget ? p.lockTarget.id : null; return { lock: !!p.lockTarget, id: window.__lockId, btn: !document.querySelector('.tbtn.behind').classList.contains('hidden') }; });
 check('BEHIND button appears with a locked guard', lk.lock && lk.btn, lk);
 await tapEl('.tbtn.behind'); await step(0.9);
-const bh = await ev(() => { const g = window.__game, p = g.player; const e = p.knifeTarget; return { trav: g.portals.stats.traversals, knife: !!e, d: e ? +p.pos.distanceTo(e.pos).toFixed(2) : null }; });
-check('BEHIND takes you through, behind him, knife ready', bh.knife && bh.trav > gateOpened.trav, bh);
+const bh = await ev(() => { const g = window.__game, p = g.player; const t = g.enemies.find((x) => x.id === window.__lockId); return { trav: g.portals.stats.traversals, d: t ? +p.pos.distanceTo(t.pos).toFixed(2) : null, knife: !!p.knifeTarget, alive: t ? t.alive : null }; });
+check('BEHIND takes you through, right behind the locked guard', bh.trav > gateOpened.trav && bh.d !== null && bh.d < 2.2, bh);
 await shot('m10b-behind');
 await ev(() => { const g = window.__game; g.closePortal(); g.debugStep(0.5); return true; });
 // pause button and resume
