@@ -110,7 +110,11 @@ await page.evaluate((loud) => {
       const path = g.nav.findPath(p.pos, goal, { goalRadius: 2 });
       const wp = path && path.length ? path[0] : goal;
       const far = dist > (mode === 'hunt' ? 12 : 28) || !path || (path.length && path[path.length - 1].distanceTo(goal) > 3 && !g.portals.active);
-      if (far && bot.gateCooldown <= 0 && mode !== 'fight') {
+      if (mode === 'hunt' && p.lockTarget === rep && bot.gateCooldown <= 0) {
+        inp.emit('keydown', 'KeyQ', { preventDefault() {} }); g.debugStep(0.05);
+        const ok = g.portals.active; bot.say(`lock-gate → reporter ${ok ? 'ok' : 'failed: ' + (bot.lastToast || '?')}`);
+        bot.gateCooldown = ok ? 3 : 1.5; bot.travBefore = g.portals.stats.traversals; bot.crossing = ok ? 0 : null;
+      } else if (far && bot.gateCooldown <= 0 && mode !== 'fight') {
         const dir = goal.clone().sub(p.pos); dir.y = 0; dir.normalize();
         gateTo(mode === 'hunt' ? rep.pos.clone().add(V(-Math.sin(rep.yaw) * 2.6, 0, -Math.cos(rep.yaw) * 2.6)) : approachSpot(goal, dir));
       }

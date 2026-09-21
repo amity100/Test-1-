@@ -126,13 +126,14 @@ export class PortalSystem {
 
   // ---- placement ----
   // Spot in front of the player for the near end; the opening faces the player.
-  nearPlacement(player) {
+  nearPlacement(player, opts = {}) {
     const g = this.game;
+    const dists = opts.distances || [P.nearDistance, 1.3, 1.0];
     // straight ahead first, then swung to either side, then behind: the opening always faces you
     for (const off of [0, 0.45, -0.45, 0.9, -0.9, 1.5, -1.5, Math.PI]) {
       const yaw = player.camYaw + off;
       const fx = Math.sin(yaw), fz = Math.cos(yaw);
-      for (const d of [P.nearDistance, 1.3, 1.0]) {
+      for (const d of dists) {
         const x = player.pos.x + fx * d, z = player.pos.z + fz * d;
         const gy = g.world.groundAt(x, z, player.pos.y + 0.5, 0.3).y;
         if (Math.abs(gy - player.pos.y) > 0.5) continue;
@@ -199,7 +200,42 @@ export class PortalSystem {
     return { x: best.x, y, z: best.z, yaw, guard };
   }
 
-  canOpen() { return this.game.time - this.lastOpen >= P.reopenDelay; }
+  // the generator recharges between openings, except inside a focus window: a chain never waits
+  // The spot behind a guard's back, the opening facing his back: you come out of it looking at him.
+  behindPlacement(e) {
+    const g = this.game, nav = g.nav;
+    for (const [dist, off] of [[1.6, 0], [1.6, 0.45], [1.6, -0.45], [1.3, 0], [2.0, 0], [1.3, 0.7], [1.3, -0.7], [2.0, 0.6], [2.0, -0.6], [1.6, 1.0], [1.6, -1.0]]) {
+      const a = e.yaw + Math.PI + off;
+      const x = e.pos.x + Math.sin(a) * dist, z = e.pos.z + Math.cos(a) * dist;
+      const gy = g.world.groundAt(x, z, e.pos.y + 0.5, 0.3).y;
+      if (Math.abs(gy - e.pos.y) > 0.5) continue;
+      if (!nav.isWalkable(x, gy, z, 0.6)) continue;
+      if (!g.world.cylinderFree(x, z, 0.4, gy + 0.3, gy + 2.2)) continue;
+      // the step from the opening to his back must be clear
+      _v2.set(e.pos.x - x, 0, e.pos.z - z); const l = _v2.length(); _v2.divideScalar(l);
+      let blocked = false;
+      for (const h of [0.5, 1.2]) { _v.set(x, gy + h, z); if (g.world.raycast(_v, _v2, Math.max(0.2, l - 0.3), (c) => c.blocksMovement)) { blocked = true; break; } }
+      if (blocked) continue;
+      // and room behind the plane for the frame
+      if (!g.world.cylinderFree(x - _v2.x * 0.5, z - _v2.z * 0.5, 0.3, gy + 0.3, gy + 2.2)) continue;
+      return { x, y: gy, z, yaw: Math.atan2(e.pos.x - x, e.pos.z - z), guard: e };
+    }
+    return null;
+  }
+  // Open the pair so that stepping through puts you right behind `e`. Returns { ok, reason, near, far }.
+  openBehind(e) {
+    const g = this.game, t = g.t;
+    if (!this.canOpen()) return { ok: false, reason: t('portal.cooldown') };
+    const far = this.behindPlacement(e);
+    if (!far) return { ok: false, reason: t('portal.noRoomBehind') };
+    const near = this.nearPlacement(g.player, { distances: [1.0, 1.3, 1.7] });
+    if (!near) return { ok: false, reason: t('portal.noRoomNear') };
+    if (Math.hypot(far.x - near.x, far.z - near.z) < 2.2 && Math.abs(far.y - near.y) < 1) return { ok: false, reason: t('portal.tooClose') };
+    this.openPair(near, far);
+    return { ok: true, near, far };
+  }
+
+  canOpen() { return this.game.focus > 0 || this.game.time - this.lastOpen >= P.reopenDelay; }
 
   // Open a pair: A in front of the player, B at the requested point. Returns { ok, reason }.
   openFromPlayer(point, opts = {}) {
@@ -247,7 +283,7 @@ export class PortalSystem {
     // hum: a quiet loop while open, audible to guards within a few metres
     this.humT -= dt;
     if (this.state === 'open' && this.humT <= 0) { this.humT = 2.5; for (const e of this.ends) g.emitNoise(e.pos, P.humRadius * 0.6, g.player, 'portalHum'); }
-    if (this.state === 'open') this._traverseAll();
+    if (this.state === 'open' || (this.state === 'opening' && this.t >= 0.15)) this._traverseAll();
     else for (const c of g.characters) this._remember(c);
   }
   _anim(k) {
@@ -306,7 +342,7 @@ export class PortalSystem {
 
   // Teleport a free-flying object (grenade / thrown body) if its motion segment crosses an end. Returns true if it did.
   traverseSegment(prev, pos, vel) {
-    if (this.state !== 'open') return false;
+    if (!(this.state === 'open' || (this.state === 'opening' && this.t >= 0.15))) return false;
     for (const end of this.ends) {
       const sp = end.side(prev), sc = end.side(pos);
       if ((sp > 0) === (sc > 0) || Math.abs(sp) > 3 || Math.abs(sc) > 3) continue;

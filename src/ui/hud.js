@@ -42,6 +42,7 @@ export class HUD {
     this.toastRoot = el('div', 'toasts', r);
     this.calloutRoot = el('div', 'callouts', r);
     this.alertEl = el('div', 'alert', r, '');
+    this.chainEl = el('div', 'chain', r, '');
     // top-right: who is on the radio
     this.witnessBox = el('div', 'witness-panel', r);
     el('div', 'wtitle', this.witnessBox, i18n.t('hud.witness'));
@@ -111,6 +112,11 @@ export class HUD {
     setTimeout(() => { c.classList.add('out'); setTimeout(() => c.remove(), 500); }, 3600);
   }
   alert(key, ms = 2200) { this.alertEl.textContent = i18n.t(key); this.alertEl.classList.add('in'); clearTimeout(this._alertT); this._alertT = setTimeout(() => this.alertEl.classList.remove('in'), ms); }
+  chain(n) {
+    if (n < 2) { this.chainEl.classList.remove('on'); return; }
+    this.chainEl.innerHTML = `<b>×${n}</b><span>${i18n.t('hud.chain')}</span>`;
+    this.chainEl.classList.add('on'); this.chainEl.classList.remove('pop'); void this.chainEl.offsetWidth; this.chainEl.classList.add('pop');
+  }
   hitMarker(head, kill) { this.hitmarker.className = 'hitmarker show' + (kill ? ' kill' : '') + (head ? ' head' : ''); this.hitT = 0.25; }
   flash(kind) { if (kind === 'weapon') { this.ammoBox.classList.add('pulse'); setTimeout(() => this.ammoBox.classList.remove('pulse'), 400); } }
   damageFrom(point, player) {
@@ -129,11 +135,12 @@ export class HUD {
     const spread = (p.aiming > 0.5 ? 6 : 14) + p.gun.spread * 400 + Math.min(1, Math.hypot(p.vel.x, p.vel.z) / 6) * 10;
     this.crosshair.style.setProperty('--sp', spread + 'px');
     this.crosshair.style.opacity = g.mode === 'ground' && p.alive && !p.sprinting && !p.carrying ? 1 : 0;
+    this.crosshair.classList.toggle('locked', !!p.lockTarget);
     if (this.hitT > 0) { this.hitT -= realDt; if (this.hitT <= 0) this.hitmarker.className = 'hitmarker'; }
     // knife prompt
     const kt = p.knifeTarget && g.mode === 'ground' && p.alive && !g.isTouch;
     this.knifeEl.style.display = kt ? '' : 'none';
-    if (kt) { const silent = p.knifeTarget.state !== 'combat'; this.knifeEl.innerHTML = `<kbd>F</kbd> ${i18n.t('hud.knife')}`; this.knifeEl.classList.toggle('loud', !silent); }
+    if (kt) { const silent = p.knifeTarget.state !== 'combat' && !p.knifeTarget.armor; this.knifeEl.innerHTML = `<kbd>F</kbd> ${i18n.t(p.knifeTarget.armor ? 'hud.knifeArmored' : 'hud.knife')}`; this.knifeEl.classList.toggle('loud', !silent); }
     // health / focus / alarm
     const hp = Math.max(0, p.health / p.maxHealth);
     this.hpFill.style.width = (hp * 100).toFixed(1) + '%'; this.hpBar.classList.toggle('low', hp < 0.35);
@@ -216,14 +223,17 @@ export class HUD {
       if (e.innerHTML !== html) e.innerHTML = html; e.className = 'wlabel ' + cls;
       return e;
     };
-    const map = g.mode === 'map';
+    const map = g.mode === 'map', p = g.player;
     for (const h of g.hostages) { if (!h.alive) continue; place('h' + h.id, h.pos, h.currentHeight + 0.35, i18n.t(h.name), 'hostage'); }
+    // the guard a gateway would open behind
+    if (!map && p.alive && p.lockTarget) { const t = p.lockTarget; place('lock', t.pos, t.currentHeight * 0.62, `<i></i><i></i><i></i><i></i><small>${this.tt(t.armor ? 'hud.lockArmored' : 'hud.lock')}</small>`, 'lock' + (t.report.active || t.armor ? ' hot' : ''), 60); }
     // guards on the radio: always shown, the ring is the countdown
     for (const e of g.enemies) {
       if (!e.alive) { if (map) place('b' + e.id, e.pos, 0.6, '✕', 'body'); continue; }
       if (e.report.active) {
         const k = e.report.t / e.report.total;
-        place('r' + e.id, e.pos, e.currentHeight + 0.5, `<div class="ring" style="--p:${(k * 360).toFixed(1)}deg"><span>${Math.ceil(e.report.t)}</span></div><small>${i18n.t('hud.witness.' + e.report.reason)}</small>`, 'wring' + (e.report.t < 1.3 ? ' urgent' : ''), 200);
+        const go = !map && e === p.lockTarget ? `<b class="go">${this.tt('hud.lockGo')}</b>` : '';
+        place('r' + e.id, e.pos, e.currentHeight + 0.5, `<div class="ring" style="--p:${(k * 360).toFixed(1)}deg"><span>${Math.ceil(e.report.t)}</span></div><small>${i18n.t('hud.witness.' + e.report.reason)}</small>${go}`, 'wring' + (e.report.t < 1.3 ? ' urgent' : ''), 200);
       } else if (map && (e.seenByFriendly || e.state === 'combat')) place('e' + e.id, e.pos, e.currentHeight + 0.35, e.state === 'combat' ? '!' : e.state === 'patrol' || e.state === 'post' ? '' : '?', 'enemy');
     }
     if (map) {

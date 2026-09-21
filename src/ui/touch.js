@@ -149,7 +149,8 @@ export class TouchControls {
     show('fire', !map); show('knife', !map && !!p.knifeTarget && !p.carrying); show('gate', !map); show('close', g.portals.active);
     show('action', !map && (!!p.interact.target || !!p.carrying)); show('map', !map); show('back', map); show('open', map && !!g.tacmap.preview);
     show('crouch', !map); show('weapon', !map && p.hasRifle); show('reload', !map && p.gun.mag < p.gun.cfg.magSize && p.gun.reserve > 0); show('grenade', !map && p.grenades > 0); show('pause', true);
-    this.buttons.knife.classList.toggle('loud', !!p.knifeTarget && p.knifeTarget.state === 'combat');
+    this.buttons.knife.classList.toggle('loud', !!p.knifeTarget && (p.knifeTarget.state === 'combat' || p.knifeTarget.armor));
+    this.buttons.gate.classList.toggle('locked', !!p.lockTarget);
     this.buttons.crouch.classList.toggle('on', p.crouchToggle);
     if (p.carrying) this.buttons.action.querySelector('span').textContent = i18n.t('touch.action'); 
     this.actionRing.style.setProperty('--p', (p.interact.progress * 360) + 'deg');

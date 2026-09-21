@@ -36,6 +36,7 @@ if (shotPath) {
     g.debugFrozen = true; g.debugRender();
     if (cam && g.tacmap.active) { const [x, y, z] = cam.split(',').map(Number); c.position.set(x, y, z); if (look) { const [lx, ly, lz] = look.split(',').map(Number); c.lookAt(lx, ly, lz); } g.debugRender(); }
   }, [cam, look, mode]);
+  const waitMs = +opt('wait', 0); if (waitMs > 0) await page.waitForTimeout(waitMs);
   await page.screenshot({ path: shotPath, timeout: 120000 });
   console.log('saved', shotPath);
 }

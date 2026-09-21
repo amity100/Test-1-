@@ -62,6 +62,7 @@ export class Assets {
       player: mk(0xffffff, null, 0, 0x9ad6ff, 0x2a8cff),
       squad: mk(0xe8ecd8, null, 0, 0x9ad6ff, 0x2a8cff),
       enemy: mk(0x8a8a90, null, 0, 0xff6a4a, 0xff2a10),
+      heavy: mk(0x2a2c33, null, 0, 0xff3a2a, 0xff1a05),
       hostage: mk(0xd9c8b0, null, 0, 0x555555, 0x000000),
     };
   }

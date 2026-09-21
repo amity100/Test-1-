@@ -52,14 +52,14 @@ export class Game {
     this.checkpointData = null;
     this._enemyId = 0;
     this.heliDown = false;
-    this.focus = 0; this.alarm = false; this.alarmTime = -100;
+    this.focus = 0; this.chain = 0; this.alarm = false; this.alarmTime = -100;
     this.isTouch = detectTouch();
     // rendering-health watchdog
     this.contextLost = false; this.frameMs = 16;
     this._sinceCheck = 0; this._repairStep = 0; this._blackFrames = 0; this._pendingSample = false; this._checksLeft = 10;
     this._slowTime = 0;
   }
-  _freshStats() { return { kills: 0, knifeKills: 0, portals: 0, reports: 0, witnesses: 0, loudShots: 0, alarmKills: 0, startTime: 0 }; }
+  _freshStats() { return { kills: 0, knifeKills: 0, portals: 0, reports: 0, witnesses: 0, loudShots: 0, alarmKills: 0, startTime: 0, longestChain: 0, bodiesHidden: 0, locks: 0 }; }
 
   async init() {
     i18n.set(i18n.detect());
@@ -224,7 +224,7 @@ export class Game {
     this.portals.reset(); this.tacmap.reset();
     this.fx.clearDecals();
     this.time = 0; this.stats = this._freshStats();
-    this.focus = 0; this.alarm = false; this.alarmTime = -100;
+    this.focus = 0; this.chain = 0; this.alarm = false; this.alarmTime = -100;
     this.state = 'intro'; this.mode = 'ground';
     this.camera = this.player.camera; this.postfx.setCamera(this.camera);
     this.resize();
@@ -255,7 +255,7 @@ export class Game {
     } catch (e) { /* not available */ }
   }
   spawnEnemy(def) {
-    const e = new Enemy(this, { position: new THREE.Vector3(def.x, def.y || 0, def.z), yaw: def.yaw, patrol: def.patrol, accuracy: def.accuracy, role: def.role, name: def.name, grenades: def.grenades, zone: def.zone });
+    const e = new Enemy(this, { position: new THREE.Vector3(def.x, def.y || 0, def.z), yaw: def.yaw, patrol: def.patrol, accuracy: def.accuracy, role: def.role, name: def.name, grenades: def.grenades, zone: def.zone, look: def.look, armor: def.armor, ...(def.maxHealth ? { maxHealth: def.maxHealth } : {}) });
     e.id = this._enemyId++;
     e.aimYaw = e.yaw; e.scanYaw = e.yaw; e.homeYaw = e.yaw;
     this.enemies.push(e); this.characters.push(e);
@@ -315,14 +315,22 @@ export class Game {
     if (s.loudShots > 20 || s.alarmKills >= 8) return 'loud';
     return 'operative';
   }
-  _endStats() { const s = this.stats; return { time: this.time, kills: s.kills, knife: s.knifeKills, portals: s.portals, reports: s.reports, hostages: this.hostages.filter((h) => h.alive && h.state === 'extracted').length, rank: this.rank() }; }
+  _endStats() { const s = this.stats; return { time: this.time, kills: s.kills, knife: s.knifeKills, portals: s.portals, reports: s.reports, chain: s.longestChain || 0, hidden: s.bodiesHidden || 0, hostages: this.hostages.filter((h) => h.alive && h.state === 'extracted').length, rank: this.rank() }; }
 
   // ---- events ----
   onPlayerDeath() { this.missionFailed('player'); }
   onCharacterDeath(ch, info) {
     if (!ch.isEnemy) return;
     const byPlayer = info.from && info.from.isPlayer;
-    if (byPlayer) { this.stats.kills++; if (this.alarm) this.stats.alarmKills++; if (this.focus > 0 && this.mode === 'ground') this.addFocus(F.perKill); }
+    if (byPlayer) {
+      this.stats.kills++; if (this.alarm) this.stats.alarmKills++;
+      // a kill inside the focus window extends it and grows the chain
+      if (this.focus > 0 && this.mode === 'ground') {
+        this.addFocus(F.perKill);
+        this.chain++; this.stats.longestChain = Math.max(this.stats.longestChain || 0, this.chain);
+        if (this.chain >= 2) { this.hud.chain(this.chain); this.audio.chain(this.chain); }
+      }
+    }
     const wasReporting = ch.report.active; ch.report.active = false;
     if (wasReporting) { this.hud.toast(this.t('hud.reportCut'), 1600); this.audio.ui('objective'); }
     if (info.knife && info.silent) this.stats.silentKills = (this.stats.silentKills || 0) + 1;
@@ -366,6 +374,13 @@ export class Game {
     }
     this.script && this.script.onAlarm && this.script.onAlarm(p, reason);
   }
+  // a guard is about to step through your gateway: a flash at the end he will come out of, and a warning
+  onGuardAtGateway(e, end) {
+    const other = this.portals.other(end);
+    this.fx.portalBurst(other.center.clone(), 0.8); this.audio.portalClose(other.center.clone());
+    this.hud.alert('hud.alert.gateGuard', 2000); this.audio.ui('alert');
+    this.stats.gateIntrusions = (this.stats.gateIntrusions || 0) + 1;
+  }
   onPortalNoticed(e, end) { if (this.time - (this._lastPortalHint || -30) > 25) { this._lastPortalHint = this.time; this.hud.hint('portalSeen'); } }
   onPortalOpened(sys) { this.stats.portals++; this.script && this.script.onPortalOpened && this.script.onPortalOpened(sys); }
   onPortalTraversal(c, from, to) { if (c.isPlayer) { this.script && this.script.onPortalTraversal && this.script.onPortalTraversal(c); } }
@@ -387,6 +402,13 @@ export class Game {
   }
   quickPortal() {
     const p = this.player; if (!p || !p.alive || this.mode !== 'ground') return;
+    if (p.lockTarget) {
+      // the gateway opens behind the locked guard and you go straight through
+      const res = this.portals.openBehind(p.lockTarget);
+      if (res.ok) { this.audio.ui('click'); p.startDash(res.near); this.stats.locks = (this.stats.locks || 0) + 1; this.script && this.script.onLockGate && this.script.onLockGate(p.lockTarget); }
+      else { this.hud.toast(res.reason); this.audio.moduleInvalid(); }
+      return;
+    }
     const cam = p.camera; cam.getWorldDirection(_v);
     const hit = this.world.raycast(cam.position, _v, 45, (c) => c.blocksMovement && c.tag !== 'door');
     let point;
@@ -624,7 +646,7 @@ export class Game {
     const P = this.profile; let t0 = P ? performance.now() : 0;
     if (this.touch) this.touch.update(realDt);
     // clocks: the map freezes the world almost still; focus slows the world while you keep most of your speed
-    if (this.focus > 0) { this.focus -= realDt; if (this.focus <= 0) { this.focus = 0; if (this.mode === 'ground') this.audio.setSlowMotion(false); } }
+    if (this.focus > 0) { this.focus -= realDt; if (this.focus <= 0) { this.focus = 0; this.chain = 0; this.hud.chain(0); if (this.mode === 'ground') this.audio.setSlowMotion(false); } }
     const focused = this.focus > 0 && this.mode === 'ground';
     this.timeScaleTarget = this.mode === 'map' ? CONFIG.mapTimeScale : focused ? F.worldScale : 1;
     this.timeScale += (this.timeScaleTarget - this.timeScale) * Math.min(1, realDt * 8);
@@ -687,6 +709,7 @@ export class Game {
       let seen = false;
       if (p.alive) { const saveYaw = p.aimYaw; p.aimYaw = p.camYaw; seen = !!canSeeVia(this, p, e, 130, 70); p.aimYaw = saveYaw; }
       e.seenByFriendly = seen;
+      if (seen) e.lastSeenT = this.time;
     }
   }
 

@@ -34,7 +34,7 @@ Requirements: WebGL 2 and a GPU. On a desktop you play with mouse and keyboard (
 | Reload / grenade | `R` / `G` |
 | Interact (free a prisoner, take the M4, pick up a body) | hold `E` |
 | Drop / throw the carried body | `E` / left mouse |
-| Gateway to the spot under the crosshair | `Q` |
+| Gateway behind the guard you are locked on (or at the crosshair) | `Q` |
 | Close the gateway | `C` |
 | **Tactical map** | `Tab` |
 | Pause | `Esc` |
@@ -53,11 +53,21 @@ Requirements: WebGL 2 and a GPU. On a desktop you play with mouse and keyboard (
 | Fire | `FIRE` button, or a quick tap on the right half |
 | Knife takedown / interact / grenade / reload | `KNIFE` / `ACTION` / `NADE` / `RELOAD` buttons (they appear when they apply) |
 | Switch weapon / crouch | `SWAP` / `CROUCH` |
-| Quick gateway to what you look at / close it | `GATE` / `CLOSE` |
+| Gateway behind the locked guard (or at the crosshair) / close it | `GATE` / `CLOSE` |
 | Tactical map | `MAP` (top right); `BACK` returns to the ground |
 | On the map: place a gateway | Tap a spot to preview it, tap it again (or `OPEN`) to open it |
 | On the map: pan / zoom | Drag with one finger / pinch |
 | Pause | `II` (top right) |
+
+## The loop
+
+Aim at a guard and press `Q` (phone: `GATE`). Cyan brackets mark the guard you are locked on; the gateway opens **behind his back** and you go straight through it, coming out a step behind him with the knife ready. Kill him next to the open gateway and his body slides through it, out of sight. Every kill inside the slow-motion window extends it, waives the generator's recharge and adds a link to the **chain** counter. A guard who is on the radio can be locked from anywhere, even off screen: `Q` puts you behind him before the ring closes.
+
+Guards use gateways too. One who spots an open gateway from close by walks up to it and steps through; one who sees you through it comes through after you. A flash at the other end and a warning tell you it is about to happen.
+
+## The guards
+
+They stand in groups that watch each other, and the groups get harder along the way: a lone guard by the forklift, then two men facing each other across the warehouse floor, then the office trio on the mezzanine (a gunner watching the walkway, a patroller, the officer with the cell key), then the cell block: two men facing each other down a 26 m corridor, a patroller between them, one at the prisoner's door. The man at the east end wears armour: the knife only wounds him, so it is two pistol rounds to the head from behind, or something louder.
 
 ## The two rules
 

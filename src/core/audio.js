@@ -245,6 +245,13 @@ export class AudioEngine {
     if (heavy) this._tone(o.node, { freq: 420, freqEnd: 300, type: 'triangle', dur: 0.2, gain: 0.15, decay: 0.15, delay: 0.05 });
   }
 
+  // one link of a kill chain: the pitch climbs with the count
+  chain(n) {
+    if (!this.ctx) return;
+    const f = 440 * Math.pow(2, Math.min(n, 9) / 6);
+    this._tone(this.sfxBus, { freq: f, freqEnd: f * 1.25, type: 'triangle', dur: 0.16, gain: 0.16, decay: 0.12 });
+    this._tone(this.sfxBus, { freq: f * 2, type: 'sine', dur: 0.1, gain: 0.06, decay: 0.08, delay: 0.05 });
+  }
   moduleGrab() { if (!this.ctx) return; this._tone(this.sfxBus, { freq: 520, freqEnd: 780, type: 'sine', dur: 0.08, gain: 0.12, decay: 0.05 }); }
   moduleInvalid() { if (!this.ctx) return; this._tone(this.sfxBus, { freq: 220, freqEnd: 160, type: 'square', dur: 0.12, gain: 0.08, decay: 0.06 }); }
 

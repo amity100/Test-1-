@@ -214,19 +214,25 @@ export function buildLevel1(game, b) {
     { x: -2, z: -30, yaw: PI, patrol: [[-2.5, -31], [2.5, -31], [0, -24]], zone: 'zone.gate' },          // gate patrol
     { x: -36, z: -24, yaw: PI / 2, patrol: [[-36, -24], [-22, -24], [-22, -15]], zone: 'zone.yard' },    // yard patrol: the tutorial witness
     { x: -22, z: -21, yaw: -PI / 2, patrol: [], zone: 'zone.yard' },                                     // by the forklift: the tutorial kill
-    { x: -20, z: 2, yaw: PI / 2, patrol: [], zone: 'zone.warehouse' },                                   // warehouse doors
-    { x: -34, z: -4.5, yaw: 0, patrol: [[-34, -5.5], [-34, 12], [-26, 5]], zone: 'zone.warehouse' },     // racks
-    { x: -41, z: 19.5, y: MZ, yaw: PI, patrol: [], accuracy: 0.95, zone: 'zone.warehouse' },             // mezzanine gunner
+    // the pair: they face each other across the warehouse floor, so whoever you take first, the other sees it
+    { x: -20, z: 2, yaw: -PI / 2, patrol: [], zone: 'zone.warehouse' },                                  // warehouse doors, looking in
+    { x: -33, z: 2, yaw: PI / 2, patrol: [], zone: 'zone.warehouse' },                                   // by the racks, looking at the doors
+    // the office trio: the gunner watches the walkway and the office door; a patroller walks it; the officer holds the key
+    { x: -41, z: 19.5, y: MZ, yaw: PI / 2, patrol: [], accuracy: 0.95, zone: 'zone.warehouse' },         // mezzanine gunner, looking east along the walkway
     { x: -20.6, z: 18.4, y: MZ, yaw: PI / 2, patrol: [], role: 'officer', name: 'officer', grenades: 2, zone: 'zone.warehouse' }, // office
     { x: 17, z: -10, yaw: -PI / 2, patrol: [], zone: 'zone.guard' },                                     // control room
     { x: 10, z: -10, yaw: PI, patrol: [[10, -10], [10, -18]], zone: 'zone.guard' },
     { x: 36, z: -26, yaw: -PI / 2, patrol: [], zone: 'zone.armory' },                                    // armory
     { x: 0, z: -14, yaw: 0, patrol: [[0, -14], [0, 10], [6, 20]], zone: 'zone.gate' },                   // road patrol
-    { x: 14, z: 24.5, yaw: PI / 2, patrol: [[14, 24.5], [36, 24.5]], zone: 'zone.cells' },               // cell corridor
+    // the cell block four: the two men at the ends of the corridor face each other down its length, a patroller walks it,
+    // one stands at the prisoner's cell; the man at the east end wears armour
+    { x: 15, z: 24.5, yaw: PI / 2, patrol: [[15, 24.5], [33, 24.5]], zone: 'zone.cells' },               // cell corridor patrol
     { x: 29.5, z: 24.5, yaw: 0, patrol: [], zone: 'zone.cells' },                                        // outside the prisoner's cell
-    { x: 12.5, z: 25, yaw: PI, patrol: [], zone: 'zone.cells' },                                         // inside the main door
+    { x: 11, z: 24.5, yaw: PI / 2, patrol: [], zone: 'zone.cells' },                                     // inside the main door, looking down the corridor
     { x: 16, z: 17, yaw: PI, patrol: [[12, 15], [20, 19]], zone: 'zone.exercise' },                      // exercise yard
     { x: -30, z: 36, yaw: PI, patrol: [[-30, 36], [-18, 44], [-36, 46]], zone: 'zone.lz' },              // helipad sentry
+    { x: -32, z: 19.5, y: MZ, yaw: PI / 2, patrol: [[-36, 19.5], [-25.5, 19.5]], zone: 'zone.warehouse' }, // walkway patroller
+    { x: 37, z: 24.5, yaw: -PI / 2, patrol: [], role: 'heavy', name: 'heavy', look: 'heavy', maxHealth: 160, armor: true, accuracy: 0.9, zone: 'zone.cells' }, // east end: armoured
   ];
   L.reinforcements = { north: { x: 0, z: 55 }, east: { x: 52, z: -8 }, south: { x: 0, z: -42 } };
   L.lz = { x: -27, y: 0.3, z: 39 };
@@ -260,7 +266,7 @@ export class Level1Script {
     this.game = game; this.level = level;
     this.objectives = { insert: 'active', hostage1: 'pending', hostage2: 'pending', power: 'optional', extract: 'pending', hold: 'pending' };
     this.primary = 'insert';
-    this.flags = { power: true, cellUnlocked: false, lzReached: false, holdStarted: false, complete: false, hintArmory: false, hintHostage: false, hintBody: false, hintQuick: false, hintFocus: false, hintCell: false, hintStranded: false, waves: 0 };
+    this.flags = { power: true, cellUnlocked: false, lzReached: false, holdStarted: false, complete: false, hintArmory: false, hintHostage: false, hintBody: false, hintQuick: false, hintFocus: false, hintCell: false, hintStranded: false, hintLock: false, hintReporter: false, hintPair: false, hintHeavy: false, waves: 0 };
     this.tutorial = { step: 'wait', t: 0, reporter: null };   // wait → map → place → through → knife → witness → done → finished
     this.holdTime = 0; this.holdDuration = 20; this.nextWave = 0; this.waveCount = 0;
     this.heli = null; this.heliT = 0;
@@ -320,6 +326,7 @@ export class Level1Script {
     const g = this.game;
     if (id === 'insert' && this.objectives.insert === 'active') { this.complete('insert'); this.setPrimary('hostage1'); g.checkpoint('insert'); if (this.tutorial.step === 'wait') this._tutorialStep('map'); }
     if (id === 'armory' && !this.flags.hintArmory) { this.flags.hintArmory = true; g.hint('armory'); }
+    if (id === 'warehouse' && !this.flags.hintPair && this.tutorial.step === 'finished') { this.flags.hintPair = true; g.hint('pair'); }
     if (id === 'cellDoor' && !this.flags.cellUnlocked && !this.flags.hintCell) { this.flags.hintCell = true; g.hint('cellLocked'); }
     if (id === 'lz' && this.objectives.extract === 'active' && !this.flags.lzReached) { this.flags.lzReached = true; }
   }
@@ -373,6 +380,12 @@ export class Level1Script {
     const g = this.game, L = this.level;
     this.time += dt;
     const tut = this.tutorial; tut.t += dt;
+    // the lock: taught the first time a guard can be locked after the tutorial, and again when a reporter can be
+    if (tut.step === 'finished' && g.player.lockTarget) {
+      if (!this.flags.hintLock) { this.flags.hintLock = true; g.hint('lock'); }
+      else if (!this.flags.hintReporter && g.player.lockTarget.report.active) { this.flags.hintReporter = true; g.hint('reporter'); }
+      else if (!this.flags.hintHeavy && g.player.lockTarget.armor) { this.flags.hintHeavy = true; g.hint('heavy'); }
+    }
     if (tut.step === 'done') { if (tut.awaitWitness > 0) tut.awaitWitness -= dt; if (tut.t > 7 && !(tut.awaitWitness > 0)) this._tutorialStep('finished'); }
     if (tut.step === 'witness' && (!tut.reporter || !tut.reporter.alive || !tut.reporter.report.active)) { if (g.alarm) this._tutorialStep('finished'); else this._tutorialStep('done'); }
     if (tut.step === 'knife' && tut.t > 40) this._tutorialStep('finished');

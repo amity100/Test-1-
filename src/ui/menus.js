@@ -106,7 +106,7 @@ export class Menus {
     this.endTitle.textContent = t(win ? 'end.win' : 'end.lose');
     this.endSub.textContent = win ? '' : t(reason === 'hostage' ? 'end.lose.hostage' : 'end.lose.player');
     const m = Math.floor(stats.time / 60), s = Math.floor(stats.time % 60);
-    const rows = [[t('end.time'), `${m}:${s.toString().padStart(2, '0')}`], [t('end.kills'), stats.kills], [t('end.knife'), stats.knife], [t('end.portals'), stats.portals], [t('end.reports'), stats.reports], [t('end.hostages'), `${stats.hostages}/2`]].map(([k, v]) => `<div class="srow"><span>${k}</span><b>${v}</b></div>`).join('');
+    const rows = [[t('end.time'), `${m}:${s.toString().padStart(2, '0')}`], [t('end.kills'), stats.kills], [t('end.knife'), stats.knife], [t('end.chain'), stats.chain], [t('end.portals'), stats.portals], [t('end.reports'), stats.reports], [t('end.hostages'), `${stats.hostages}/2`]].map(([k, v]) => `<div class="srow"><span>${k}</span><b>${v}</b></div>`).join('');
     this.endStats.innerHTML = (win ? `<div class="rank ${stats.rank}"><span>${t('end.rank')}</span><b>${t('end.rank.' + stats.rank)}</b><span>${t('end.rank.desc.' + stats.rank)}</span></div>` : '') + rows;
     this.endRetry.style.display = win ? 'none' : '';
     this.screens.end.classList.toggle('win', win);

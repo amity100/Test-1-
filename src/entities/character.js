@@ -113,7 +113,7 @@ export class Character {
     this.model = skClone(tmpl.scene);
     this.model.rotation.y = Math.PI;
     this.group.add(this.model);
-    const fm = assets.factionMaterials[this.faction] || assets.factionMaterials.enemy;
+    const fm = (opts.look && assets.factionMaterials[opts.look]) || assets.factionMaterials[this.faction] || assets.factionMaterials.enemy;
     this.model.traverse((o) => {
       if (o.isMesh || o.isSkinnedMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; o.material = o.name === 'vanguard_visor' ? fm.visor : fm.body; o.userData.character = this; }
     });

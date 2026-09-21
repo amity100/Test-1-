@@ -299,3 +299,24 @@ kbd { font-family: var(--font); background: rgba(255,255,255,0.1); border: 1px s
   .prompt { bottom: 396px; }
   .touch .tz { height: 62%; }
 }
+
+/* ---------- target lock, kill chain ---------- */
+.wlabel.lock { background: none; padding: 0; width: 0; height: 0; display: block; overflow: visible; }
+.wlabel.lock i { position: absolute; width: 13px; height: 13px; border: 2px solid var(--accent); box-shadow: 0 0 6px rgba(79,214,255,0.6); animation: lockin 0.22s ease-out; }
+.wlabel.lock i:nth-child(1) { left: -24px; top: -28px; border-right: 0; border-bottom: 0; }
+.wlabel.lock i:nth-child(2) { left: 11px; top: -28px; border-left: 0; border-bottom: 0; }
+.wlabel.lock i:nth-child(3) { left: -24px; top: 15px; border-right: 0; border-top: 0; }
+.wlabel.lock i:nth-child(4) { left: 11px; top: 15px; border-left: 0; border-top: 0; }
+.wlabel.lock small { position: absolute; left: 0; top: 32px; transform: translateX(-50%); white-space: nowrap; font-size: 11px; letter-spacing: 0.2em; color: #dff4ff; text-shadow: 0 0 6px #000; }
+.wlabel.lock.hot i { border-color: var(--danger); box-shadow: 0 0 8px rgba(255,74,58,0.7); } .wlabel.lock.hot small { color: #ffb0a0; }
+@keyframes lockin { from { transform: scale(2); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.crosshair.locked i, .crosshair.locked .dot { background: var(--accent); box-shadow: 0 0 6px rgba(79,214,255,0.8); }
+.wlabel.wring .go { display: inline-block; margin-top: 3px; font-size: 11px; letter-spacing: 0.2em; color: #0b1018; background: var(--accent); border-radius: 3px; padding: 1px 7px; font-weight: 700; }
+.chain { position: absolute; left: 50%; top: 26%; transform: translateX(-50%); text-align: center; opacity: 0; transition: opacity 0.25s; pointer-events: none; }
+.chain.on { opacity: 1; }
+.chain b { display: block; font-size: 46px; line-height: 1; color: var(--accent); text-shadow: 0 0 18px rgba(79,214,255,0.7); }
+.chain span { font-size: 11px; letter-spacing: 0.4em; text-transform: uppercase; color: rgba(159,220,255,0.85); }
+.chain.pop b { animation: chainpop 0.35s ease-out; }
+@keyframes chainpop { from { transform: scale(1.8); opacity: 0.2; } to { transform: scale(1); opacity: 1; } }
+.tbtn.gate.locked { border-color: var(--accent); background: rgba(79,214,255,0.4); box-shadow: 0 0 18px rgba(79,214,255,0.7); animation: pulse 0.7s infinite alternate; }
+@media (max-width: 920px), (max-height: 520px) { .chain { top: 30%; } .chain b { font-size: 34px; } }

@@ -28,12 +28,13 @@ export class Enemy extends AICharacter {
     this.accuracy = opts.accuracy ?? E.accuracyBase;
     this.canBeDowned = false;
     this.name = opts.name || 'guard';
+    this.armor = !!opts.armor;      // the knife only wounds him
     this.zoneName = opts.zone || null;
     this.suppressed = 0;
     // witness chain
     this.report = { active: false, t: 0, total: 0, reason: null, pos: new THREE.Vector3() };
     this.seenBodies = new Set();
-    this.portalLook = 0;
+    this.portalLook = 0; this.lookingEnd = null; this.crossingGate = null;
     this.throughPortal = null;
     this.post = null;              // alarm duty: stand guard somewhere
   }
@@ -142,12 +143,13 @@ export class Enemy extends AICharacter {
         if (!seen) continue;
         looking = true;
         if (this.state === 'patrol' || this.state === 'post') { this.state = 'suspicious'; this.investigateTime = 0; this.alertLevel = Math.max(this.alertLevel, 1); game.onEnemySuspicious && game.onEnemySuspicious(this); game.onPortalNoticed && game.onPortalNoticed(this, end); }
-        if (this.state === 'suspicious') { const s = end.side(this.pos) >= 0 ? 1 : -1; this.investigate = new THREE.Vector3(end.pos.x + end.n.x * s * 2.2, end.pos.y, end.pos.z + end.n.z * s * 2.2); }
+        if (this.state === 'suspicious') { const s = end.side(this.pos) >= 0 ? 1 : -1; this.investigate = new THREE.Vector3(end.pos.x + end.n.x * s * 2.2, end.pos.y, end.pos.z + end.n.z * s * 2.2); this.investigateEnd = end; }
         break;
       }
     }
     if (looking) { this.portalLook += 0.12; if (this.portalLook >= PT.suspicionTime) { this.portalLook = 0; this.witnessed('portal', this.investigate || this.pos); } }
     else this.portalLook = Math.max(0, this.portalLook - 0.12);
+    this.lookingEnd = looking ? this.investigateEnd || null : null;
   }
 
   update(dt) {
@@ -227,14 +229,42 @@ export class Enemy extends AICharacter {
   _suspicious(dt) {
     this.investigateTime += dt;
     if (!this.investigate) { this.state = 'patrol'; return; }
+    const game = this.game, ps = game.portals;
+    // an open gateway he has been staring at from up close: he goes through to see what is on the other side
+    if (this.crossingGate) {
+      const c = this.crossingGate; c.t += dt;
+      if (!ps.active) { this.crossingGate = null; this._calmDown(); return; }
+      if (c.t >= 0.6 && !c.moving) { c.moving = true; const s = c.end.side(this.pos) >= 0 ? 1 : -1; this.noPortals = true; this.moveTo(new THREE.Vector3(c.end.pos.x - c.end.n.x * s * 1.2, c.end.pos.y, c.end.pos.z - c.end.n.z * s * 1.2), E.walkSpeed); this.noPortals = false; }
+      else if (!c.moving) { this.stop(); this.scanYaw = Math.atan2(c.end.pos.x - this.pos.x, c.end.pos.z - this.pos.z); }
+      if (c.t > 6) { this.crossingGate = null; this._calmDown(); }
+      return;
+    }
+    if (this.lookingEnd && ps.active && this.portalLook >= 1.2 && !this.report.active && this.pos.distanceTo(this.lookingEnd.pos) < 4.2) {
+      this.crossingGate = { end: this.lookingEnd, t: 0, moving: false };
+      game.onGuardAtGateway && game.onGuardAtGateway(this, this.lookingEnd);
+      return;
+    }
     const d = this.pos.distanceTo(this.investigate);
     if (d > 2.0 && this.investigateTime > 0.8) this.moveTo(this.investigate, E.walkSpeed);
     else if (d <= 2.0) { this.stop(); this.scanYaw = Math.atan2(this.investigate.x - this.pos.x, this.investigate.z - this.pos.z) + Math.sin(this.investigateTime * 1.5) * 0.8; }
     else { this.scanYaw = Math.atan2(this.investigate.x - this.pos.x, this.investigate.z - this.pos.z); }
     if (this.investigateTime > 9 && !this.report.active) { this._calmDown(); }
   }
+  // through the gateway: he comes out searching the other side
+  onPortalTraversal(sys, from, to, dy) {
+    super.onPortalTraversal(sys, from, to, dy);
+    // what he saw through the opening is real on this side: the image maps back to the true position
+    if (this.state === 'combat' || this.state === 'search') { sys.transformPoint(this.lastKnown, from, to, this.lastKnown); if (this.investigate) sys.transformPoint(this.investigate, from, to, this.investigate); }
+    this.throughPortal = null; this.aimOverride = null; this.charge = null; this.cover = null; this.coverPhase = 'advance'; this.phaseTime = 0;
+    if (this.crossingGate) {
+      this.crossingGate = null; this.investigateEnd = null; this.lookingEnd = null; this.portalLook = 0;
+      const fx = Math.sin(this.yaw), fz = Math.cos(this.yaw);
+      this.state = 'search'; this.investigate = new THREE.Vector3(this.pos.x + fx * 4, this.pos.y, this.pos.z + fz * 4); this.lastKnown.copy(this.investigate);
+      this.searchUntil = this.game.time + E.searchTime; this.alertLevel = Math.max(this.alertLevel, 1);
+    }
+  }
   _calmDown() {
-    this.investigate = null; this.suspicion = 0; this.portalLook = 0;
+    this.investigate = null; this.suspicion = 0; this.portalLook = 0; this.crossingGate = null; this.investigateEnd = null;
     if (this.game.alarm) this.alertLevel = 1; else this.alertLevel = 0;
     if (this.post) { this.state = 'post'; this.moveTo(this.post.pos, E.walkSpeed, true); }
     else { this.state = 'patrol'; this.moveTo(this.patrol[0] || this.homePos, E.walkSpeed, true); }
@@ -250,6 +280,20 @@ export class Enemy extends AICharacter {
     this.phaseTime += dt;
     this.grenadeCooldown -= dt;
     if (los) this.hiddenSince = 0; else this.hiddenSince += dt;
+    // the target is on the other side of a gateway: from close by he goes through it, firing as he comes
+    if (this.throughPortal && game.portals.active) {
+      const end = this.throughPortal;
+      if (!this.charge || this.charge.end !== end) this.charge = { end, t: 0, told: false };
+      this.charge.t += dt;
+      if (this.pos.distanceTo(end.pos) < 9 && this.charge.t > 0.4) {
+        if (!this.charge.told) { this.charge.told = true; game.onGuardAtGateway && game.onGuardAtGateway(this, end); }
+        const s = end.side(this.pos) >= 0 ? 1 : -1;
+        this.noPortals = true; this.moveTo(_v.set(end.pos.x - end.n.x * s * 1.0, end.pos.y, end.pos.z - end.n.z * s * 1.0), E.runSpeed); this.noPortals = false;
+        this.crouchTarget = 0; this.cover = null;
+        if (los) this.updateFire(dt, t, this.accuracy * 0.5);
+        return;
+      }
+    } else this.charge = null;
     if (sinceSeen > E.memoryTime) { this.state = 'search'; this.searchUntil = game.time + (game.alarm ? W.alarmSearchTime : E.searchTime); this.investigate = this.lastKnown.clone(); this.cover = null; this.crouchTarget = 0; this.aimOverride = null; return; }
     if (this.grenades > 0 && this.grenadeCooldown <= 0 && this.hiddenSince > E.hiddenBeforeGrenade && dist > E.grenadeMinRange && dist < E.grenadeMaxRange && sinceSeen < 4 && !this.throughPortal) {
       if (this.throwGrenadeAt(this.lastKnown)) { this.grenades--; this.grenadeCooldown = E.grenadeCooldown; this.hiddenSince = 0; game.hud && game.hud.callout && game.hud.callout('enemyGrenade'); }

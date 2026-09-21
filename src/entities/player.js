@@ -40,6 +40,7 @@ export class Player extends Character {
     this.stats = { kills: 0 };
     this.accuracyShots = 0; this.accuracyHits = 0;
     this.carrying = null; this.knifeTarget = null; this.knifeT = 0; this.lunge = null;
+    this.lockTarget = null; this.dash = null;
     this._leftWas = false;
   }
 
@@ -73,7 +74,56 @@ export class Player extends Character {
     this.camYaw += dy;
     sys.transformPoint(this.camPos, from, to, this.camPos);
     this.vault = null; this.aimYaw = this.camYaw;
+    if (this.dash) { const d = this.dash; sys.transformDir(d.dir, from, to, d.dir); d.t = Math.max(d.t, d.dur - 0.06); d.crossed = true; }
     this.game.addFocus(CONFIG.focus.onTraversal);
+  }
+  // ---- gateway lock: the hop through the near end the moment it opens ----
+  startDash(near) {
+    const dx = near.x - this.pos.x, dz = near.z - this.pos.z; const l = Math.hypot(dx, dz) || 1;
+    this.dash = { dir: new THREE.Vector3(dx / l, 0, dz / l), t: 0, dur: 0.45, crossed: false };
+    this.crouchToggle = false; this.aimTarget = 0; this.vault = null; this.lunge = null;
+  }
+  _updateDash(dt) {
+    const d = this.dash; d.t += dt;
+    this.moveIntent.set(d.dir.x * 5.5, 0, d.dir.z * 5.5); this.accel = 80;
+    this.yaw = lerpA(this.yaw, Math.atan2(d.dir.x, d.dir.z), Math.min(1, dt * 20));
+    if (d.t >= d.dur) { this.dash = null; this.moveIntent.set(0, 0, 0); }
+  }
+  // The guard a gateway would open behind: the known guard nearest the crosshair; a guard on the radio is always offered.
+  _updateLock() {
+    const g = this.game;
+    if (this.carrying || g.mode !== 'ground' || !this.alive) { this.lockTarget = null; return; }
+    const cam = this.camera, aspect = g.width / g.height; let best = null, bestScore = Infinity;
+    for (const e of g.enemies) {
+      if (!e.alive) continue;
+      const d = Math.hypot(e.pos.x - this.pos.x, e.pos.z - this.pos.z);
+      if (d < 2.4 || d > 45) continue;
+      const known = e.seenByFriendly || g.time - (e.lastSeenT ?? -100) < 4 || e.report.active || e.state === 'combat';
+      if (!known) continue;
+      e.chestPos(_v); _v.project(cam);
+      const r = _v.z > 1 ? 9 : Math.hypot(_v.x * aspect, _v.y);   // distance from the crosshair, in screen heights
+      let score = r;
+      if (e.report.active) score = Math.min(r, 0.3) + e.report.t * 0.01;   // the most urgent report first, on screen or not
+      else if (r > 0.36) continue;
+      if (score < bestScore) { bestScore = score; best = e; }
+    }
+    this.lockTarget = best;
+  }
+  // A guard dropped next to an open gateway slides through it: no body, no witness.
+  _bodyThroughGateway(t) {
+    const ps = this.game.portals; if (!ps.active || ps.state === 'closing') return false;
+    let end = null, bd = 2.6;
+    for (const e of ps.ends) { const d = Math.hypot(e.pos.x - t.pos.x, e.pos.z - t.pos.z); if (d < bd && Math.abs(e.pos.y - t.pos.y) < 1) { bd = d; end = e; } }
+    if (!end) return false;
+    const c = end.center; const dx = c.x - t.pos.x, dz = c.z - t.pos.z; const l = Math.hypot(dx, dz) || 1;
+    // the slide must be clear at body height (a table between him and the opening keeps the body where it fell)
+    _v.set(t.pos.x, t.pos.y + 0.55, t.pos.z); _v2.set(dx / l, 0, dz / l);
+    if (this.game.world.raycast(_v, _v2, Math.max(0.2, l - 0.2), (c) => c.blocksMovement)) return false;
+    t.pos.y += 0.55;
+    const hs = l / 0.22;   // reaches the plane in ~0.2 s of world time, before gravity brings it down
+    t.vel.set(dx / l * hs, 2.6, dz / l * hs); t.thrown = { prev: t.pos.clone() };
+    this.game.stats.bodiesHidden = (this.game.stats.bodiesHidden || 0) + 1;
+    return true;
   }
 
   // ---- bodies ----
@@ -139,6 +189,7 @@ export class Player extends Character {
 
     if (this.vault) this._updateVault(dt);
     else if (this.lunge) this._updateLunge(dt);
+    else if (this.dash) this._updateDash(dt);
     else {
       const fx = Math.sin(this.camYaw), fz = Math.cos(this.camYaw);
       const rx = Math.cos(this.camYaw), rz = -Math.sin(this.camYaw);
@@ -171,6 +222,7 @@ export class Player extends Character {
     g.postfx.state.lowHealth = this.health < 35 ? (1 - this.health / 35) : 0;
 
     this._updateKnifeTarget();
+    this._updateLock();
     this._updateInteract(dt, controlled && inp.down('KeyE') && !this.carrying);
 
     super.update(dt);
@@ -236,13 +288,13 @@ export class Player extends Character {
     this.lunge = { to: new THREE.Vector3(t.pos.x - _dir.x * 0.65, t.pos.y, t.pos.z - _dir.z * 0.65), t: 0, dur: 0.16 };
     this.knifeT = 0.6; this.lastShotTime = g.time;
     this.yaw = Math.atan2(_dir.x, _dir.z); this.camYaw = lerpA(this.camYaw, this.yaw, 0.5);
-    t.applyDamage(silent ? 1000 : K.alertDamage, { from: this, dir: _dir.clone(), part: 'body', knife: true, silent });
+    t.applyDamage(silent && !t.armor ? 1000 : K.alertDamage, { from: this, dir: _dir.clone(), part: 'body', knife: true, silent });
     g.fx.bloodHit(_v.set(t.pos.x, t.pos.y + 1.2, t.pos.z), _dir);
     g.audio.knife(t.pos, silent);
     g.emitNoise(t.pos, K.noise, this, 'knife');
     this.shake = Math.min(1, this.shake + 0.15);
     g.hud && g.hud.hitMarker(false, !t.alive);
-    if (!t.alive) g.stats.knifeKills++;
+    if (!t.alive) { g.stats.knifeKills++; this._bodyThroughGateway(t); }
     g.script && g.script.onKnife && g.script.onKnife(t, silent);
   }
   _updateLunge(dt) {
@@ -371,7 +423,7 @@ export class Player extends Character {
     this.grenades = s.grenades;
     this.alive = true; this.dead = false; this.deathT = -1; this._rifleDropped = false;
     this.model.quaternion.identity(); this.model.rotation.y = Math.PI; this.model.position.set(0, 0, 0);
-    this.vel.set(0, 0, 0); this.moveIntent.set(0, 0, 0); this.vault = null; this.lunge = null; this._camInit = false; this.crouchToggle = false; this.knifeT = 0;
+    this.vel.set(0, 0, 0); this.moveIntent.set(0, 0, 0); this.vault = null; this.lunge = null; this.dash = null; this.lockTarget = null; this._camInit = false; this.crouchToggle = false; this.knifeT = 0;
   }
 }
 
