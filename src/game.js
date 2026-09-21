@@ -451,7 +451,7 @@ export class Game {
     const p = this.player; if (!p || !p.alive || this.mode !== 'ground') return;
     if (!p.lockTarget) { this.hud.toast(this.t('portal.noLock')); this.audio.moduleInvalid(); return; }
     const res = this.portals.openBehind(p.lockTarget);
-    if (res.ok) { this.audio.ui('click'); p.startDash(res.near); this.stats.locks = (this.stats.locks || 0) + 1; this.script && this.script.onLockGate && this.script.onLockGate(p.lockTarget); }
+    if (res.ok) { this.audio.ui('click'); p.startDash(res.near, p.lockTarget); this.stats.locks = (this.stats.locks || 0) + 1; this.script && this.script.onLockGate && this.script.onLockGate(p.lockTarget); }
     else { this.hud.toast(res.reason); this.audio.moduleInvalid(); }
   }
   closePortal() { if (this.portals.active) { this.portals.close(); } }

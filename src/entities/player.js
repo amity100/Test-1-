@@ -78,13 +78,19 @@ export class Player extends Character {
     this.game.addFocus(CONFIG.focus.onTraversal);
   }
   // ---- gateway lock: the hop through the near end the moment it opens ----
-  startDash(near) {
+  startDash(near, target = null) {
     const dx = near.x - this.pos.x, dz = near.z - this.pos.z; const l = Math.hypot(dx, dz) || 1;
-    this.dash = { dir: new THREE.Vector3(dx / l, 0, dz / l), t: 0, dur: 0.45, crossed: false };
+    this.dash = { dir: new THREE.Vector3(dx / l, 0, dz / l), t: 0, dur: 0.45, crossed: false, target, extra: 0 };
     this.crouchToggle = false; this.aimTarget = 0; this.vault = null; this.lunge = null;
   }
   _updateDash(dt) {
     const d = this.dash; d.t += dt;
+    if (d.crossed && d.target && d.target.alive) {
+      // through: close the last step onto his back (he may have moved since the gateway opened)
+      const tx = d.target.pos.x - this.pos.x, tz = d.target.pos.z - this.pos.z; const dist = Math.hypot(tx, tz);
+      if (dist > 1.05 && d.extra < 0.6) { d.dir.set(tx / dist, 0, tz / dist); d.extra += dt; d.dur = d.t + 0.05; }
+      else if (dist <= 1.05) { this.dash = null; this.moveIntent.set(0, 0, 0); this.camYaw = lerpA(this.camYaw, Math.atan2(tx, tz), 0.5); return; }
+    }
     this.moveIntent.set(d.dir.x * 5.5, 0, d.dir.z * 5.5); this.accel = 80;
     this.yaw = lerpA(this.yaw, Math.atan2(d.dir.x, d.dir.z), Math.min(1, dt * 20));
     if (d.t >= d.dur) { this.dash = null; this.moveIntent.set(0, 0, 0); }
