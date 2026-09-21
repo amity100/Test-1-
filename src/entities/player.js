@@ -102,7 +102,7 @@ export class Player extends Character {
       if (!known) continue;
       e.chestPos(_v); _v.project(cam);
       const r = _v.z > 1 ? 9 : Math.hypot(_v.x * aspect, _v.y);   // distance from the crosshair, in screen heights
-      let score = r;
+      let score = r + d * 0.012;
       if (e.report.active) score = Math.min(r, 0.3) + e.report.t * 0.01;   // the most urgent report first, on screen or not
       else if (r > 0.36) continue;
       if (score < bestScore) { bestScore = score; best = e; }

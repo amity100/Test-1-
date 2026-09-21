@@ -10,6 +10,7 @@ export class HUD {
   constructor(game, root) {
     this.game = game;
     this.root = el('div', 'hud', root);
+    if (game.isTouch) this.root.classList.add('touch');
     const r = this.root;
     this.crosshair = el('div', 'crosshair', r); for (let i = 0; i < 4; i++) el('i', 'ch' + i, this.crosshair); el('b', 'dot', this.crosshair);
     this.knifeEl = el('div', 'knife-prompt', r, '');
@@ -218,13 +219,17 @@ export class HUD {
       _v.set(pos.x, pos.y + height, pos.z).project(cam);
       const behind = _v.z > 1; const x = (_v.x * 0.5 + 0.5) * g.width, y = (-_v.y * 0.5 + 0.5) * g.height;
       const dist = cam.position.distanceTo(pos);
-      if (behind || x < -40 || x > g.width + 40 || y < -40 || y > g.height + 40 || (g.mode === 'ground' && dist > maxDist)) { e.style.display = 'none'; return e; }
+      // on phones the right-hand strip belongs to the buttons: a label drifting under them is hidden, not fought over
+      const underButtons = g.isTouch && g.mode === 'ground' && x > g.width - 150 && y > g.height * 0.2;
+      if (behind || underButtons || x < -40 || x > g.width + 40 || y < -40 || y > g.height + 40 || (g.mode === 'ground' && dist > maxDist)) { e.style.display = 'none'; return e; }
       e.style.display = ''; e.style.transform = `translate(${x}px, ${y}px)`; e.style.opacity = g.mode === 'map' ? 1 : Math.max(0.4, 1 - dist / 70);
       if (e.innerHTML !== html) e.innerHTML = html; e.className = 'wlabel ' + cls;
       return e;
     };
     const map = g.mode === 'map', p = g.player;
     for (const h of g.hostages) { if (!h.alive) continue; place('h' + h.id, h.pos, h.currentHeight + 0.35, i18n.t(h.name), 'hostage'); }
+    // the marker under the crosshair: how far the gateway would open
+    if (!map && p.alive && g.aimGate) { const a = g.aimGate; const d = Math.hypot(a.x - p.pos.x, a.z - p.pos.z); place('aim', a, 2.55, `${Math.round(d)} m`, 'aim' + (a.ok ? '' : ' bad'), 60); }
     // the guard a gateway would open behind
     if (!map && p.alive && p.lockTarget) { const t = p.lockTarget; place('lock', t.pos, t.currentHeight * 0.62, `<i></i><i></i><i></i><i></i><small>${this.tt(t.armor ? 'hud.lockArmored' : 'hud.lock')}</small>`, 'lock' + (t.report.active || t.armor ? ' hot' : ''), 60); }
     // guards on the radio: always shown, the ring is the countdown

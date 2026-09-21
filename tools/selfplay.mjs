@@ -111,7 +111,7 @@ await page.evaluate((loud) => {
       const wp = path && path.length ? path[0] : goal;
       const far = dist > (mode === 'hunt' ? 12 : 28) || !path || (path.length && path[path.length - 1].distanceTo(goal) > 3 && !g.portals.active);
       if (mode === 'hunt' && p.lockTarget === rep && bot.gateCooldown <= 0) {
-        inp.emit('keydown', 'KeyQ', { preventDefault() {} }); g.debugStep(0.05);
+        inp.emit('keydown', 'KeyX', { preventDefault() {} }); g.debugStep(0.05);
         const ok = g.portals.active; bot.say(`lock-gate → reporter ${ok ? 'ok' : 'failed: ' + (bot.lastToast || '?')}`);
         bot.gateCooldown = ok ? 3 : 1.5; bot.travBefore = g.portals.stats.traversals; bot.crossing = ok ? 0 : null;
       } else if (far && bot.gateCooldown <= 0 && mode !== 'fight') {

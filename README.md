@@ -34,7 +34,8 @@ Requirements: WebGL 2 and a GPU. On a desktop you play with mouse and keyboard (
 | Reload / grenade | `R` / `G` |
 | Interact (free a prisoner, take the M4, pick up a body) | hold `E` |
 | Drop / throw the carried body | `E` / left mouse |
-| Gateway behind the guard you are locked on (or at the crosshair) | `Q` |
+| Gateway at the marker under the crosshair | `Q` |
+| Gateway behind the locked guard, and straight through it | `X` |
 | Close the gateway | `C` |
 | **Tactical map** | `Tab` |
 | Pause | `Esc` |
@@ -50,10 +51,10 @@ Requirements: WebGL 2 and a GPU. On a desktop you play with mouse and keyboard (
 |---|---|
 | Move / sprint | Left half of the screen: floating stick; push it all the way to sprint |
 | Look | Drag anywhere on the right half |
-| Fire | `FIRE` button, or a quick tap on the right half |
+| Fire | `FIRE` button |
 | Knife takedown / interact / grenade / reload | `KNIFE` / `ACTION` / `NADE` / `RELOAD` buttons (they appear when they apply) |
 | Switch weapon / crouch | `SWAP` / `CROUCH` |
-| Gateway behind the locked guard (or at the crosshair) / close it | `GATE` / `CLOSE` |
+| Gateway at the marker / behind the locked guard / close it | `GATE` / `BEHIND` / `CLOSE` |
 | Tactical map | `MAP` (top right); `BACK` returns to the ground |
 | On the map: place a gateway | Tap a spot to preview it, tap it again (or `OPEN`) to open it |
 | On the map: pan / zoom | Drag with one finger / pinch |
@@ -61,7 +62,7 @@ Requirements: WebGL 2 and a GPU. On a desktop you play with mouse and keyboard (
 
 ## The loop
 
-Aim at a guard and press `Q` (phone: `GATE`). Cyan brackets mark the guard you are locked on; the gateway opens **behind his back** and you go straight through it, coming out a step behind him with the knife ready. Kill him next to the open gateway and his body slides through it, out of sight. Every kill inside the slow-motion window extends it, waives the generator's recharge and adds a link to the **chain** counter. A guard who is on the radio can be locked from anywhere, even off screen: `Q` puts you behind him before the ring closes.
+A ring under your crosshair shows where `Q` (phone: `GATE`) would open a gateway, with its distance: aim nearer or farther to place it, press, and walk through when you choose. Aim at a guard instead and cyan brackets mark him as locked: `X` (phone: `BEHIND`) opens the gateway **behind his back** and takes you straight through it, coming out a step behind him with the knife ready. Kill him next to the open gateway and his body slides through it, out of sight. Every kill inside the slow-motion window extends it, waives the generator's recharge and adds a link to the **chain** counter. A guard who is on the radio can be locked from anywhere, even off screen: `X` puts you behind him before the ring closes.
 
 Guards use gateways too. One who spots an open gateway from close by walks up to it and steps through; one who sees you through it comes through after you. A flash at the other end and a warning tell you it is about to happen.
 

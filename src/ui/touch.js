@@ -18,6 +18,7 @@ export class TouchControls {
     btn('fire', 'fire', i18n.t('touch.fire'));
     btn('knife', 'knife', i18n.t('touch.knife'));
     btn('gate', 'gate', i18n.t('touch.gate'));
+    btn('behind', 'behind', i18n.t('touch.behind'));
     btn('close', 'close', i18n.t('touch.close'));
     btn('action', 'action', i18n.t('touch.action'));
     btn('map', 'map', i18n.t('touch.map'));
@@ -78,7 +79,7 @@ export class TouchControls {
       const quick = performance.now() - p.t0 < TAP_MS && !p.moved;
       if (p.kind === 'button') this._release(p.btn);
       else if (p.kind === 'stick') this._stickEnd();
-      else if (p.kind === 'look') { if (quick) this.queue.push('tapFire'); }
+      else if (p.kind === 'look') { /* a tap on the look half only looks; FIRE fires */ }
       else if (p.kind === 'map') { if (quick && !this.pinch) this.game.tacmap.tapAt(p.x / window.innerWidth, p.y / window.innerHeight); if (this.pointers.size < 2) this.pinch = null; }
     };
     r.addEventListener('pointerdown', down);
@@ -110,6 +111,7 @@ export class TouchControls {
       case 'fire': inp.mouse.left = true; inp.clicks.push({ button: 0, x: e.clientX, y: e.clientY }); this.queue.push('tapFire'); break;
       case 'knife': this.queue.push('KeyF'); break;
       case 'gate': this.queue.push('tab:KeyQ'); break;
+      case 'behind': this.queue.push('tab:KeyX'); break;
       case 'close': this.queue.push('tab:KeyC'); break;
       case 'action': inp.keys.add('KeyE'); this.queue.push('KeyE'); break;
       case 'map': case 'back': this.queue.push('tab:Tab'); break;
@@ -146,11 +148,11 @@ export class TouchControls {
     if (!playing) return;
     const map = g.mode === 'map';
     const show = (id, on) => { this.buttons[id].classList.toggle('hidden', !on); };
-    show('fire', !map); show('knife', !map && !!p.knifeTarget && !p.carrying); show('gate', !map); show('close', g.portals.active);
+    show('fire', !map); show('knife', !map && !!p.knifeTarget && !p.carrying); show('gate', !map); show('behind', !map && !!p.lockTarget && !p.carrying); show('close', g.portals.active);
     show('action', !map && (!!p.interact.target || !!p.carrying)); show('map', !map); show('back', map); show('open', map && !!g.tacmap.preview);
     show('crouch', !map); show('weapon', !map && p.hasRifle); show('reload', !map && p.gun.mag < p.gun.cfg.magSize && p.gun.reserve > 0); show('grenade', !map && p.grenades > 0); show('pause', true);
     this.buttons.knife.classList.toggle('loud', !!p.knifeTarget && (p.knifeTarget.state === 'combat' || p.knifeTarget.armor));
-    this.buttons.gate.classList.toggle('locked', !!p.lockTarget);
+    this.buttons.behind.classList.toggle('hot', !!p.lockTarget && (p.lockTarget.report.active || p.lockTarget.armor));
     this.buttons.crouch.classList.toggle('on', p.crouchToggle);
     if (p.carrying) this.buttons.action.querySelector('span').textContent = i18n.t('touch.action'); 
     this.actionRing.style.setProperty('--p', (p.interact.progress * 360) + 'deg');

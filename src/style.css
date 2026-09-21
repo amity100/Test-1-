@@ -318,5 +318,17 @@ kbd { font-family: var(--font); background: rgba(255,255,255,0.1); border: 1px s
 .chain span { font-size: 11px; letter-spacing: 0.4em; text-transform: uppercase; color: rgba(159,220,255,0.85); }
 .chain.pop b { animation: chainpop 0.35s ease-out; }
 @keyframes chainpop { from { transform: scale(1.8); opacity: 0.2; } to { transform: scale(1); opacity: 1; } }
-.tbtn.gate.locked { border-color: var(--accent); background: rgba(79,214,255,0.4); box-shadow: 0 0 18px rgba(79,214,255,0.7); animation: pulse 0.7s infinite alternate; }
+.tbtn.behind { right: 40px; bottom: 222px; border-color: var(--accent); background: rgba(79,214,255,0.32); box-shadow: 0 0 16px rgba(79,214,255,0.6); animation: pulse 0.8s infinite alternate; font-size: 10px; }
+.tbtn.behind.hot { border-color: var(--danger); background: rgba(255,74,58,0.3); box-shadow: 0 0 16px rgba(255,74,58,0.6); }
+.wlabel.aim { background: none; padding: 0; font-size: 12px; letter-spacing: 0.12em; color: #9fe8ff; text-shadow: 0 0 6px #000; transform: translate(-50%, -100%); }
+.wlabel.aim.bad { color: #ffb0a0; }
 @media (max-width: 920px), (max-height: 520px) { .chain { top: 30%; } .chain b { font-size: 34px; } }
+
+/* touch HUD: texts sit low and small, clear of the crosshair and the button columns */
+.hud.touch .hint { bottom: 96px; max-width: min(62vw, 520px); font-size: 12px; padding: 6px 10px; transform: translate(-50%, 10px); }
+.hud.touch .hint.in { transform: translate(-50%, 0); }
+.hud.touch .toasts { top: 64px; }
+.hud.touch .portal-status { top: 8px; bottom: auto; font-size: 9px; letter-spacing: 0.2em; }
+.hud.touch .alert { top: 20%; font-size: 16px; }
+.hud.touch .callouts { right: auto; left: 12px; top: 128px; justify-items: start; font-size: 12px; }
+.hud.touch .callout { border-right: 0; border-left: 3px solid var(--accent); }

@@ -98,7 +98,8 @@ export class PortalSystem {
     this.game = game;
     this.ends = [new PortalEnd(this, 0), new PortalEnd(this, 1)];
     this.state = 'closed';   // closed | opening | open | closing
-    this.t = 0; this.openedAt = -100; this.lastOpen = -100;
+    this.t = 0; this.openedAt = -100; this.lastOpen = -100; this.lastOpenReal = -100;
+    this._buildAimGhost();
     this.stats = { opened: 0, traversals: 0 };
     this.humT = 0;
     this._prevPositions = new WeakMap();
@@ -124,11 +125,29 @@ export class PortalSystem {
   // world position of `p` (near `other(end)`) as it appears when looking through `end`
   imageOf(p, end, out = new THREE.Vector3()) { return this.transformPoint(p, this.other(end), end, out); }
 
+  // ---- the marker under the crosshair (ground mode): ring, oval and exit arrow where the far end would open ----
+  _buildAimGhost() {
+    const g = new THREE.Group(); g.visible = false; g.renderOrder = 30;
+    const mk = (color, opacity) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending });
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.72, 0.92, 40).rotateX(-Math.PI / 2), mk(0x4fd6ff, 0.85)); ring.position.y = 0.04; g.add(ring);
+    const frame = new THREE.Mesh(new THREE.TorusGeometry(1, 0.035, 8, 48), mk(0x8af0ff, 0.55)); frame.scale.set(P.width / 2, P.height / 2, 1); frame.position.y = P.height / 2; g.add(frame);
+    const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.6, 3).rotateX(Math.PI / 2), mk(0xffffff, 0.8)); arrow.position.set(0, 0.06, 1.15); g.add(arrow);
+    this.game.scene.add(g);
+    this.aimGhost = { group: g, ring, frame, arrow, pulse: 0 };
+  }
+  showAimGhost(placement, ok = true) {
+    const gh = this.aimGhost; if (!gh) return;
+    if (!placement) { gh.group.visible = false; return; }
+    gh.group.visible = true; gh.group.position.set(placement.x, placement.y, placement.z); gh.group.rotation.y = placement.yaw;
+    const col = ok ? 0x4fd6ff : 0xff4a3a; gh.ring.material.color.setHex(col); gh.frame.material.color.setHex(ok ? 0x8af0ff : 0xff6a5a);
+    gh.pulse += 0.08; gh.ring.scale.setScalar(1 + 0.06 * Math.sin(gh.pulse));
+  }
+
   // ---- placement ----
   // Spot in front of the player for the near end; the opening faces the player.
   nearPlacement(player, opts = {}) {
     const g = this.game;
-    const dists = opts.distances || [P.nearDistance, 1.3, 1.0];
+    const dists = opts.distances || [2.0, P.nearDistance, 1.3, 1.0];
     // straight ahead first, then swung to either side, then behind: the opening always faces you
     for (const off of [0, 0.45, -0.45, 0.9, -0.9, 1.5, -1.5, Math.PI]) {
       const yaw = player.camYaw + off;
@@ -235,7 +254,7 @@ export class PortalSystem {
     return { ok: true, near, far };
   }
 
-  canOpen() { return this.game.focus > 0 || this.game.time - this.lastOpen >= P.reopenDelay; }
+  canOpen() { return this.game.focus > 0 || this.game.realTime - this.lastOpenReal >= P.reopenDelay; }
 
   // Open a pair: A in front of the player, B at the requested point. Returns { ok, reason }.
   openFromPlayer(point, opts = {}) {
@@ -245,7 +264,7 @@ export class PortalSystem {
     if (!near) return { ok: false, reason: t('portal.noRoomNear') };
     const far = this.farPlacement(point, { hintYaw: Math.atan2(point.x - g.player.pos.x, point.z - g.player.pos.z), ...opts });
     if (!far) return { ok: false, reason: t('portal.noRoomFar') };
-    if (Math.hypot(far.x - near.x, far.z - near.z) < 3 && Math.abs(far.y - near.y) < 1) return { ok: false, reason: t('portal.tooClose') };
+    if (Math.hypot(far.x - near.x, far.z - near.z) < 2.5 && Math.abs(far.y - near.y) < 1) return { ok: false, reason: t('portal.tooClose') };
     this.openPair(near, far);
     return { ok: true, far };
   }
@@ -255,7 +274,7 @@ export class PortalSystem {
     this.ends[0].set(near.x, near.y, near.z, near.yaw);
     this.ends[1].set(far.x, far.y, far.z, far.yaw);
     for (const e of this.ends) { e.group.visible = true; e.viewMat.uniforms.uOpen.value = 0; e.frame.scale.set(0.05, 0.05, 1); e.light.intensity = 0; }
-    this.state = 'opening'; this.t = 0; this.lastOpen = g.time; this.openedAt = g.time; this.stats.opened++;
+    this.state = 'opening'; this.t = 0; this.lastOpen = g.time; this.lastOpenReal = g.realTime; this.openedAt = g.time; this.stats.opened++;
     this._prevPositions = new WeakMap();
     g.audio.portalOpen(this.ends[0].center.clone()); g.audio.portalOpen(this.ends[1].center.clone());
     for (const e of this.ends) { g.fx.portalBurst(e.center.clone(), 1); g.emitNoise(e.pos, P.humRadius, g.player, 'portal'); }
@@ -304,6 +323,7 @@ export class PortalSystem {
       let prev = this._prevPositions.get(c);
       if (!prev) { this._remember(c); continue; }
       if (c._portalImmune > 0) { c._portalImmune -= 1; this._remember(c); continue; }
+      if (this.state !== 'open' && !(c.isPlayer && c.dash)) { this._remember(c); continue; }
       if (prev.distanceToSquared(c.pos) > 2.5 * 2.5) { this._remember(c); continue; }
       if (!c.isPlayer && c.moveIntent.lengthSq() < 0.05) { this._remember(c); continue; }   // shoved, not walking: no crossing
       let crossed = false;
@@ -456,6 +476,6 @@ export class PortalSystem {
   }
 
   snapshot() { return this.active ? { a: [this.a.pos.x, this.a.pos.y, this.a.pos.z, this.a.yaw], b: [this.b.pos.x, this.b.pos.y, this.b.pos.z, this.b.yaw] } : null; }
-  restore(s) { this._finishClose(); if (s) { const [ax, ay, az, ayaw] = s.a, [bx, by, bz, byaw] = s.b; this.openPair({ x: ax, y: ay, z: az, yaw: ayaw }, { x: bx, y: by, z: bz, yaw: byaw }); } }
-  reset() { this._finishClose(); this.stats = { opened: 0, traversals: 0 }; this.lastOpen = -100; }
+  restore(s) { this._finishClose(); this.lastOpenReal = -100; this.lastOpen = -100; if (s) { const [ax, ay, az, ayaw] = s.a, [bx, by, bz, byaw] = s.b; this.openPair({ x: ax, y: ay, z: az, yaw: ayaw }, { x: bx, y: by, z: bz, yaw: byaw }); }  this.lastOpenReal = -100; this.lastOpen = -100; }
+  reset() { this._finishClose(); this.stats = { opened: 0, traversals: 0 }; this.lastOpen = -100; this.lastOpenReal = -100; this.showAimGhost(null); }
 }

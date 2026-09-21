@@ -92,7 +92,7 @@ export class Menus {
     if (this.langSel) this.langSel.value = i18n.lang;
     const rows = [
       ['controls.ground', null],
-      ['controls.move', 'W A S D'], ['controls.sprint', 'Shift'], ['controls.crouch', 'Ctrl / Z'], ['controls.jump', 'Space'], ['controls.fire', 'LMB'], ['controls.aim', 'RMB'], ['controls.reload', 'R'], ['controls.knife', 'F'], ['controls.weapon', '1 / 2 / Wheel'], ['controls.grenade', 'G'], ['controls.interact', 'E'], ['controls.throw', 'LMB'], ['controls.quickPortal', 'Q'], ['controls.closePortal', 'C'], ['controls.map', 'Tab'], ['controls.pause', 'Esc'],
+      ['controls.move', 'W A S D'], ['controls.sprint', 'Shift'], ['controls.crouch', 'Ctrl / Z'], ['controls.jump', 'Space'], ['controls.fire', 'LMB'], ['controls.aim', 'RMB'], ['controls.reload', 'R'], ['controls.knife', 'F'], ['controls.weapon', '1 / 2 / Wheel'], ['controls.grenade', 'G'], ['controls.interact', 'E'], ['controls.throw', 'LMB'], ['controls.quickPortal', 'Q'], ['controls.lockGate', 'X'], ['controls.closePortal', 'C'], ['controls.map', 'Tab'], ['controls.pause', 'Esc'],
       ['controls.mapSection', null],
       ['controls.map.place', 'LMB'], ['controls.map.close', 'RMB'], ['controls.map.pan', 'W A S D / edges'], ['controls.map.orbit', 'Q / E / MMB'], ['controls.map.zoom', 'Wheel'], ['controls.map.center', 'F'], ['controls.map.back', 'Tab'],
     ];

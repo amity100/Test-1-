@@ -1,5 +1,5 @@
 // Phone play-test in headless Chromium with touch emulation: real touch gestures through CDP drive the
-// stick, look/tap-fire, the buttons and the map flow; screenshots in landscape or portrait; a fuzz phase.
+// stick, look, the buttons, the marker and the map flow; screenshots in landscape or portrait; a fuzz phase.
 // usage: node tools/mobile.mjs [outDir] [--port=8140] [--portrait] [--lang=he] [--quality=low]
 const { chromium } = await import('/opt/node22/lib/node_modules/playwright/index.mjs').catch(() => import('playwright'));
 import http from 'http'; import fs from 'fs'; import path from 'path';
@@ -72,11 +72,14 @@ await drag(W * 0.75, H * 0.55, W * 0.55, H * 0.55, 8); await step(0.1);
 const yaw1 = await ev(() => window.__game.player.camYaw);
 console.log('LOOK', JSON.stringify({ yaw0: +yaw0.toFixed(2), yaw1: +yaw1.toFixed(2) }));
 check('drag turns the camera', Math.abs(yaw1 - yaw0) > 0.3, { yaw0, yaw1 });
-// tap-fire on the right half
+// a tap on the look half only looks; the FIRE button fires
 await tap(W * 0.7, H * 0.5); await step(0.2);
+const notFired = await ev(() => ({ mag: window.__game.player.gun.mag, shots: window.__game.player.accuracyShots }));
+check('a tap on the look half does not fire', notFired.shots === 0 && notFired.mag === 12, notFired);
+await tapEl('.tbtn.fire'); await step(0.2);
 const fired = await ev(() => ({ mag: window.__game.player.gun.mag, shots: window.__game.player.accuracyShots }));
-console.log('TAPFIRE', JSON.stringify(fired));
-check('tap fires one shot', fired.shots === 1 && fired.mag === 11, fired);
+console.log('FIRE', JSON.stringify(fired));
+check('FIRE fires one shot', fired.shots === 1 && fired.mag === 11, fired);
 // walk to the breach so the tutorial reaches the map step
 await ev(() => { const g = window.__game; g.player.camYaw = 0; });
 await touchStart([[sx, sy, 1]]); await touchMove([[sx, sy - 60, 1]]); await step(2.0); await touchEnd(); await step(0.2);
@@ -154,6 +157,23 @@ check('pinch zooms the map', Math.abs(z1 - z0) > 1, { z0, z1 });
 check('drag pans the map', Math.hypot(f1[0] - f0[0], f1[2] - f0[2]) > 2, { f0, f1 });
 await shot('m10-map-panned');
 await tapEl('.tbtn.back'); await step(0.2);
+// the placement marker: aim at open ground, GATE opens there and you stay where you are; BEHIND takes you behind a locked guard
+const mk = await ev(() => { const g = window.__game, p = g.player; p.pos.set(-30, 0, -20); p.camYaw = -Math.PI / 2; p.camPitch = -0.22; p.update(0, 0); g.closePortal(); g.debugStep(0.7); return { marker: !!g.aimGate, ok: !!(g.aimGate && g.aimGate.ok), ghost: g.portals.aimGhost.group.visible, d: g.aimGate ? +Math.hypot(g.aimGate.x - p.pos.x, g.aimGate.z - p.pos.z).toFixed(1) : null }; });
+check('placement marker under the crosshair', mk.marker && mk.ok && mk.ghost && mk.d >= 5, mk);
+const before = await ev(() => { const g = window.__game; return { trav: g.portals.stats.traversals, mx: g.aimGate.x, mz: g.aimGate.z }; });
+await tapEl('.tbtn.gate'); await step(0.6);
+const gateOpened = await ev(() => { const g = window.__game, p = g.player; return { state: g.portals.state, trav: g.portals.stats.traversals, dash: !!p.dash, farX: +g.portals.b.pos.x.toFixed(1), farZ: +g.portals.b.pos.z.toFixed(1) }; });
+check('GATE opens at the marker without pulling you through', gateOpened.state !== 'closed' && gateOpened.trav === before.trav && !gateOpened.dash && Math.hypot(gateOpened.farX - before.mx, gateOpened.farZ - before.mz) < 1.5, { before, gateOpened });
+await tapEl('.tbtn.gate'); await step(0.2);
+const again = await ev(() => { const g = window.__game; return { state: g.portals.state, canOpen: g.portals.canOpen() }; });
+check('a second GATE right away is not refused for recharging', again.state !== 'closed', again);
+const lk = await ev(() => { const g = window.__game, p = g.player; let e = null; for (const x of g.enemies) if (x.alive && Math.abs(x.pos.x - 29.5) < 1 && Math.abs(x.pos.z - 25.3) < 1) e = x; e.yaw = e.aimYaw = 0; e.scanYaw = 0; e.scanTimer = 100; e.homeYaw = 0; g.closePortal(); p.pos.set(e.pos.x - 7, 0, e.pos.z - 0.8); p.camYaw = Math.atan2(e.pos.x - p.pos.x, e.pos.z - p.pos.z); p.camPitch = -0.05; p.update(0, 0); g.debugStep(0.4); return { lock: p.lockTarget === e, btn: !document.querySelector('.tbtn.behind').classList.contains('hidden') }; });
+check('BEHIND button appears with a locked guard', lk.lock && lk.btn, lk);
+await tapEl('.tbtn.behind'); await step(0.9);
+const bh = await ev(() => { const g = window.__game, p = g.player; const e = p.knifeTarget; return { trav: g.portals.stats.traversals, knife: !!e, d: e ? +p.pos.distanceTo(e.pos).toFixed(2) : null }; });
+check('BEHIND takes you through, behind him, knife ready', bh.knife && bh.trav > gateOpened.trav, bh);
+await shot('m10b-behind');
+await ev(() => { const g = window.__game; g.closePortal(); g.debugStep(0.5); return true; });
 // pause button and resume
 await tapEl('.tbtn.pause'); await wait(100);
 const paused = await ev(() => ({ state: window.__game.state, menu: window.__game.menus.current }));

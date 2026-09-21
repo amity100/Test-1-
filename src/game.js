@@ -411,22 +411,48 @@ export class Game {
     if (res.ok) { this.audio.ui('click'); }
     return res;
   }
-  quickPortal() {
-    const p = this.player; if (!p || !p.alive || this.mode !== 'ground') return;
-    if (p.lockTarget) {
-      // the gateway opens behind the locked guard and you go straight through
-      const res = this.portals.openBehind(p.lockTarget);
-      if (res.ok) { this.audio.ui('click'); p.startDash(res.near); this.stats.locks = (this.stats.locks || 0) + 1; this.script && this.script.onLockGate && this.script.onLockGate(p.lockTarget); }
-      else { this.hud.toast(res.reason); this.audio.moduleInvalid(); }
-      return;
-    }
-    const cam = p.camera; cam.getWorldDirection(_v);
-    const hit = this.world.raycast(cam.position, _v, 45, (c) => c.blocksMovement && c.tag !== 'door');
+  // Where Q / GATE would open the far end right now: the point under the crosshair (a wall: a step in front of it;
+  // the sky: 26 m out), snapped to standing room. This is the marker the player sees, so what you see is what opens.
+  aimPlacement() {
+    const p = this.player; const cam = p.camera; cam.getWorldDirection(_v);
+    const hit = this.world.raycast(cam.position, _v, 40, (c) => c.blocksMovement && c.tag !== 'door');
     let point;
     if (hit) { point = hit.point.clone(); if (hit.normal.y < 0.5) point.addScaledVector(hit.normal, 0.9); else point.addScaledVector(_v2.set(_v.x, 0, _v.z).normalize(), 0.3); }
-    else { const t = _v.y < -0.02 ? -cam.position.y / _v.y : 30; point = cam.position.clone().addScaledVector(_v, Math.min(30, t)); point.y = Math.max(0, point.y); }
+    else { const t = _v.y < -0.02 ? -cam.position.y / _v.y : 26; point = cam.position.clone().addScaledVector(_v, Math.min(26, t)); point.y = Math.max(0, point.y); }
+    const dx = point.x - p.pos.x, dz = point.z - p.pos.z, dist = Math.hypot(dx, dz);
+    if (dist < 5) return { point: dist < 3 ? null : point, far: null, reason: 'portal.tooClose' };
+    const far = this.portals.farPlacement(point, { hintYaw: p.camYaw, radius: 3.5 });
+    return { point, far };
+  }
+  _updateAimGhost() {
+    const p = this.player;
+    const show = this.mode === 'ground' && this.state === 'playing' && p && p.alive && !p.carrying && !p.dash;
+    if (!show) { this.aimGate = null; this.portals.showAimGhost(null); return; }
+    this._aimTick = (this._aimTick || 0) + 1;
+    if (this._aimTick & 1) return;   // 30 Hz is plenty for a marker
+    const { point, far } = this.aimPlacement();
+    let ok = !!far && this.portals.canOpen();
+    if (ok) { const near = this.portals.nearPlacement(p); ok = !!near && !(Math.hypot(far.x - near.x, far.z - near.z) < 2.5 && Math.abs(far.y - near.y) < 1); }
+    const shown = far || (point ? { x: point.x, y: point.y, z: point.z, yaw: p.camYaw } : null);
+    this.aimGate = shown ? { x: shown.x, y: shown.y, z: shown.z, yaw: shown.yaw, ok, point: far ? point : null } : null;
+    this.portals.showAimGhost(this.aimGate, ok);
+  }
+  // Q / GATE: the far end opens at the marker, the near end a couple of steps ahead. You walk through when you choose.
+  quickPortal() {
+    const p = this.player; if (!p || !p.alive || this.mode !== 'ground') return;
+    const marker = this.aimGate && this.aimGate.point ? { point: this.aimGate.point, far: true } : this.aimPlacement();
+    const { point, far, reason } = marker;
+    if (!far || !point) { this.hud.toast(this.t(reason || 'portal.noRoomFar')); this.audio.moduleInvalid(); return; }
     const res = this.openPortalAt(point, { hintYaw: p.camYaw, radius: 3.5 });
     if (!res.ok) { this.hud.toast(res.reason); this.audio.moduleInvalid(); }
+  }
+  // X / BEHIND: the gateway opens behind the locked guard and you go straight through it.
+  lockGate() {
+    const p = this.player; if (!p || !p.alive || this.mode !== 'ground') return;
+    if (!p.lockTarget) { this.hud.toast(this.t('portal.noLock')); this.audio.moduleInvalid(); return; }
+    const res = this.portals.openBehind(p.lockTarget);
+    if (res.ok) { this.audio.ui('click'); p.startDash(res.near); this.stats.locks = (this.stats.locks || 0) + 1; this.script && this.script.onLockGate && this.script.onLockGate(p.lockTarget); }
+    else { this.hud.toast(res.reason); this.audio.moduleInvalid(); }
   }
   closePortal() { if (this.portals.active) { this.portals.close(); } }
   addFocus(sec) { this.focus = Math.min(F.max, this.focus + sec); if (this.mode === 'ground') this.audio.setSlowMotion(true); }
@@ -501,6 +527,7 @@ export class Game {
         if (code === 'Escape') { this.pause(); return; }
         if (code === 'Tab') { e.preventDefault(); if (this.player.alive) this.tacmap.toggle(); }
         if (code === 'KeyQ' && this.mode === 'ground') this.quickPortal();
+        if (code === 'KeyX' && this.mode === 'ground') this.lockGate();
         if (code === 'KeyC') { if (this.portals.active) { this.closePortal(); this.hud.toast(this.t('portal.closed'), 1200); } }
       } else if (this.state === 'paused' && code === 'Escape') this.resume();
       else if (this.state === 'menu' && (code === 'Enter' || code === 'Space')) this.startMission();
@@ -667,6 +694,7 @@ export class Game {
     const playerDt = this.mode === 'map' ? dt : realDt * Math.max(this.timeScale, focused ? F.playerScale : 0);
     this.time += dt; this.dt = dt;
     this.player.update(playerDt, realDt);
+    this._updateAimGhost();
     if (P) { this._prof('player', t0); t0 = performance.now(); }
     this.tacmap.update(realDt, dt);
     if (P) { this._prof('map', t0); t0 = performance.now(); }
