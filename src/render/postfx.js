@@ -24,16 +24,16 @@ const BrightShader = {
     uniform sampler2D tScene; uniform vec2 uTexel; uniform float uThreshold, uKnee;
     varying vec2 vUv;
 
-  // The scene buffer is half-float, which tops out at 65504. One over-bright specular — a floodlight on glass, a
-  // muzzle flash close up — stores as Inf, and from there the maths falls apart: the bright pass below divides Inf
-  // by Inf, the blur spreads the NaN over a block of the small buffer, and the tone map turns the whole block into
-  // a rectangle of pure black sitting on top of the picture. Every read of the scene goes through this.
-  vec3 safeHDR(vec3 v) { return all(equal(v, v)) ? min(v, vec3(300.0)) : vec3(0.0); }
+  // What may enter the bloom, and nothing more. A punctual light on a smooth surface has no upper bound — the
+  // scene buffer here reaches 17000 on a few pixels of wet metal — and the blur then spreads that energy over a
+  // quarter of the screen. Eight pixels become a band. A lamp still blooms hard at this ceiling; a specular
+  // singularity no longer whites out the picture. NaN (from an Inf that got there first) is dropped outright.
+  vec3 bloomIn(vec3 v) { return all(equal(v, v)) ? min(v, vec3(26.0)) : vec3(0.0); }
     void main() {
-      vec3 c = safeHDR(texture2D(tScene, vUv + vec2(-1.0, -1.0) * uTexel).rgb)
-             + safeHDR(texture2D(tScene, vUv + vec2( 1.0, -1.0) * uTexel).rgb)
-             + safeHDR(texture2D(tScene, vUv + vec2(-1.0,  1.0) * uTexel).rgb)
-             + safeHDR(texture2D(tScene, vUv + vec2( 1.0,  1.0) * uTexel).rgb);
+      vec3 c = bloomIn(texture2D(tScene, vUv + vec2(-1.0, -1.0) * uTexel).rgb)
+             + bloomIn(texture2D(tScene, vUv + vec2( 1.0, -1.0) * uTexel).rgb)
+             + bloomIn(texture2D(tScene, vUv + vec2(-1.0,  1.0) * uTexel).rgb)
+             + bloomIn(texture2D(tScene, vUv + vec2( 1.0,  1.0) * uTexel).rgb);
       c *= 0.25;
       float b = max(c.r, max(c.g, c.b));
       float soft = clamp(b - uThreshold + uKnee, 0.0, 2.0 * uKnee);
@@ -90,9 +90,9 @@ const FinalShader = {
 
     float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
     // The scene buffer is half-float and tops out at 65504, so one over-bright specular stores as Inf. Left alone
-    // it poisons everything downstream — Inf/(1+Inf) is NaN, and a NaN reaching the tone map comes out as a black
-    // rectangle over the picture. Every read of the scene goes through this.
-    vec3 safeHDR(vec3 v) { return all(equal(v, v)) ? min(v, vec3(300.0)) : vec3(0.0); }
+    // it poisons everything downstream — Inf/(1+Inf) is NaN, and a NaN reaching the tone map comes out as black.
+    // The ceiling is far above where the tone map saturates, so clamping here costs the picture nothing.
+    vec3 safeHDR(vec3 v) { return all(equal(v, v)) ? min(v, vec3(48.0)) : vec3(0.0); }
     // luma of a cheaply tone-mapped sample: edges are found on what the eye will see, not on raw HDR
     float edgeLuma(vec3 c) { c = c / (1.0 + c); return dot(c, vec3(0.299, 0.587, 0.114)); }
 

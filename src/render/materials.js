@@ -154,10 +154,18 @@ export class MaterialLibrary {
       return new THREE.MeshStandardMaterial({ map: t, alphaMap: t, transparent: true, alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.5, metalness: 0.8, color: 0xffffff });
     })();
     this.mats.lightHousing = new THREE.MeshStandardMaterial({ color: 0x3a3d40, roughness: 0.5, metalness: 0.8 });
-    this.mats.emissiveWarm = new THREE.MeshStandardMaterial({ color: 0xffe2b0, emissive: 0xffd28a, emissiveIntensity: 6, roughness: 0.3 });
-    this.mats.emissiveCool = new THREE.MeshStandardMaterial({ color: 0xd8ecff, emissive: 0xbfe0ff, emissiveIntensity: 5, roughness: 0.3 });
-    this.mats.emissiveRed = new THREE.MeshStandardMaterial({ color: 0xff4040, emissive: 0xff2020, emissiveIntensity: 4, roughness: 0.4 });
-    this.mats.emissiveGreen = new THREE.MeshStandardMaterial({ color: 0x60ff80, emissive: 0x30ff60, emissiveIntensity: 4, roughness: 0.4 });
+    // The lamp faces are light sources, so they are unlit: a shaded panel sitting 4cm from its own 900-candela
+    // spotlight picks up an irradiance of ninety thousand (the distance falloff bottoms out at 100x), the bloom
+    // spreads that over a quarter of the screen, and eight pixels of lamp become a band across the picture.
+    // These emit a fixed HDR colour instead — bright enough to bloom hard, bounded by construction.
+    // The values are in linear light and deliberately far above 1: that is what gives a lamp its halo through the
+    // bloom. They sit just under the ceiling the bloom accepts, so the glow is as strong as it can be without a
+    // single fixture being able to wash out the frame.
+    const panel = (r, gr, b) => { const m = new THREE.MeshBasicMaterial(); m.color.setRGB(r, gr, b, THREE.LinearSRGBColorSpace); return m; };
+    this.mats.emissiveWarm = panel(22.0, 14.2, 5.7);
+    this.mats.emissiveCool = panel(11.5, 16.4, 22.0);
+    this.mats.emissiveRed = panel(18.0, 1.6, 1.6);
+    this.mats.emissiveGreen = panel(1.8, 18.0, 3.4);
     this.mats.cloth = new THREE.MeshStandardMaterial({ color: 0x4a4f3a, roughness: 0.95 });
     this.mats.dirt = new THREE.MeshStandardMaterial({ map: tex(concAlb, { srgb: true, repeat: 1 / 5, aniso: this.aniso }), color: 0x5b4f3f, roughness: 1, normalMap: tex(heightToNormal(n1, S, 2.0), { repeat: 1 / 5 }), normalScale: new THREE.Vector2(0.6, 0.6) });
 
