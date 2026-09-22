@@ -20,7 +20,7 @@ or `python3 -m http.server 8080` in the repository folder, then open `http://loc
 
 Requirements: WebGL 2 and a GPU. On a desktop you play with mouse and keyboard (pointer lock); on a phone or tablet the game switches to touch controls by itself (`?touch=1` / `?touch=0` in the URL forces either). The graphics quality preset can be changed in Settings.
 
-**On a phone:** open `dist/VANTAGE.html` (or the hosted page) in Chrome or Safari, turn the phone sideways and tap the screen. The game asks for fullscreen and landscape. A portrait layout also works but the map and the view are smaller. Quality defaults to *high* (near-native resolution, sharp anti-aliasing); if frames run slow for a few seconds the game steps down a level by itself and says so.
+**On a phone:** open `dist/VANTAGE.html` (or the hosted page) in Chrome or Safari, turn the phone sideways and tap the screen. The game asks for fullscreen and landscape. A portrait layout also works but the map and the view are smaller. Quality defaults to *high*, and the renderer keeps itself smooth on its own: the scene buffer scales between 55% and 100% of the canvas from one second to the next, following the frame rate, while the HUD and the final image stay at full resolution. If a phone still cannot hold it at the smallest scale, the quality preset steps down a level and says so.
 
 ## Controls
 
@@ -83,6 +83,12 @@ They stand in groups that watch each other, and the groups get harder along the 
 The map lifts the roofs, so you can see inside the buildings and place a gateway in any room. Time slows to 15% while the map is open and to 30% for a moment after every crossing; each kill inside that window extends it, so a fast chain stays slow. Bodies can be carried and thrown through a gateway where nobody will find them. Running is heard at 9 m, the suppressed pistol at 8 m, the M4 at 45 m.
 
 The end screen ranks the run: **Ghost** (no report ever went out), **Operative**, or **Loud**.
+
+## How it renders
+
+One pass does the post-processing. The scene goes into an HDR buffer, a two-level bloom is built from it at a quarter and an eighth of the width, and a single full-resolution pass adds the bloom, grades, anti-aliases, tone maps and encodes. Every full-screen pass reads and writes the whole framebuffer, which on a phone is pure memory bandwidth, so the count is what matters: this is one pass where the usual chain is five, plus ten blur passes inside a standard bloom.
+
+The rest follows the same rule — a draw call costs more than a triangle. The whole static level is about 31 thousand triangles, so it merges into one mesh per material rather than into regions that could be culled; bodies past 55 m and visors past 22 m are not drawn; each weapon is a single mesh with vertex colours; a floodlight's volumetric cone goes dark with the light. On phones the renderer also uses fewer dynamic lights per pixel, a cheaper shadow filter refreshed every other frame, and gateway views at a fraction of the scene resolution, one end per frame.
 
 ## Project layout
 

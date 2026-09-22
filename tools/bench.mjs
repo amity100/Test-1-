@@ -29,7 +29,7 @@ const res = await page.evaluate(async (frames) => {
   const V = (x, y, z) => p.pos.clone().set(x, y, z);
   const open = g.openPortalAt(V(-20, 0, -14)); g.debugStep(0.6);
   const r = g.renderer, info = r.info; info.autoReset = false;
-  const sample = (fn) => { info.reset(); const t0 = performance.now(); fn(); const ms = performance.now() - t0; return { ms: +ms.toFixed(2), calls: info.render.calls, tris: info.render.triangles }; };
+  const sample = (fn) => { info.reset(); const t0 = performance.now(); fn(); r.getContext().finish(); const ms = performance.now() - t0; return { ms: +ms.toFixed(2), calls: info.render.calls, tris: info.render.triangles }; };
   // warm up
   for (let i = 0; i < 5; i++) { g.debugStep(1 / 60); g._render(); }
   const out = { quality: g.settings.quality, touch: g.isTouch, pixelRatio: r.getPixelRatio(), portal: open.ok, programs: info.programs.length };
@@ -49,6 +49,7 @@ const res = await page.evaluate(async (frames) => {
   out.perFrame.postMsApprox = +(out.perFrame.fullRenderMs - out.perFrame.portalViewsMs - out.perFrame.sceneMs).toFixed(2);
   // JS profile of the update
   g.profile = {}; for (let i = 0; i < 60; i++) g._frame(1 / 60, false); out.updateProfile = Object.fromEntries(Object.entries(g.profile).map(([k, v]) => [k, +(v / 60).toFixed(2)])); g.profile = null;
+  out.renderScale = g.postfx.renderScale; out.sceneBuffer = [g.postfx.sceneW, g.postfx.sceneH];
   out.characters = g.characters.length; out.lightsVisible = g.scene.children.filter((o) => o.isLight && o.visible).length;
   out.programsAfter = info.programs.length;
   return out;

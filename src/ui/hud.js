@@ -4,6 +4,12 @@ import { i18n } from '../core/i18n.js';
 import { CONFIG } from '../core/config.js';
 
 const el = (tag, cls, parent, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; if (parent) parent.appendChild(e); return e; };
+// Writing the same value back into the DOM every frame still costs a style recalculation, and on a phone that is
+// milliseconds. These only touch the element when the value changed.
+const txt = (e, v) => { if (e._t !== v) { e._t = v; e.textContent = v; } };
+const html = (e, v) => { if (e._h !== v) { e._h = v; e.innerHTML = v; } };
+const sty = (e, k, v) => { const c = e._s || (e._s = {}); if (c[k] !== v) { c[k] = v; e.style[k] = v; } };
+const prop = (e, k, v) => { const c = e._p || (e._p = {}); if (c[k] !== v) { c[k] = v; e.style.setProperty(k, v); } };
 const _v = new THREE.Vector3();
 
 export class HUD {
@@ -133,47 +139,49 @@ export class HUD {
   update(realDt) {
     const g = this.game, p = g.player;
     if (!p) return;
-    const spread = (p.aiming > 0.5 ? 6 : 14) + p.gun.spread * 400 + Math.min(1, Math.hypot(p.vel.x, p.vel.z) / 6) * 10;
-    this.crosshair.style.setProperty('--sp', spread + 'px');
-    this.crosshair.style.opacity = g.mode === 'ground' && p.alive && !p.sprinting && !p.carrying ? 1 : 0;
+    const spread = Math.round((p.aiming > 0.5 ? 6 : 14) + p.gun.spread * 400 + Math.min(1, Math.hypot(p.vel.x, p.vel.z) / 6) * 10);
+    prop(this.crosshair, '--sp', spread + 'px');
+    sty(this.crosshair, 'opacity', g.mode === 'ground' && p.alive && !p.sprinting && !p.carrying ? '1' : '0');
     this.crosshair.classList.toggle('locked', !!p.lockTarget);
     if (this.hitT > 0) { this.hitT -= realDt; if (this.hitT <= 0) this.hitmarker.className = 'hitmarker'; }
     // knife prompt
     const kt = p.knifeTarget && g.mode === 'ground' && p.alive && !g.isTouch;
-    this.knifeEl.style.display = kt ? '' : 'none';
-    if (kt) { const silent = p.knifeTarget.state !== 'combat' && !p.knifeTarget.armor; this.knifeEl.innerHTML = `<kbd>F</kbd> ${i18n.t(p.knifeTarget.armor ? 'hud.knifeArmored' : 'hud.knife')}`; this.knifeEl.classList.toggle('loud', !silent); }
+    sty(this.knifeEl, 'display', kt ? '' : 'none');
+    if (kt) { const silent = p.knifeTarget.state !== 'combat' && !p.knifeTarget.armor; html(this.knifeEl, `<kbd>F</kbd> ${i18n.t(p.knifeTarget.armor ? 'hud.knifeArmored' : 'hud.knife')}`); this.knifeEl.classList.toggle('loud', !silent); }
     // health / focus / alarm
     const hp = Math.max(0, p.health / p.maxHealth);
-    this.hpFill.style.width = (hp * 100).toFixed(1) + '%'; this.hpBar.classList.toggle('low', hp < 0.35);
+    sty(this.hpFill, 'width', (hp * 100).toFixed(1) + '%'); this.hpBar.classList.toggle('low', hp < 0.35);
     this.focusAnim += (g.focus / CONFIG.focus.max - this.focusAnim) * Math.min(1, realDt * 12);
-    this.focusFill.style.width = (this.focusAnim * 100).toFixed(1) + '%'; this.focusBar.parentElement.classList.toggle('on', g.focus > 0);
-    this.alarmChip.style.display = g.alarm ? '' : 'none';
+    sty(this.focusFill, 'width', (this.focusAnim * 100).toFixed(1) + '%'); this.focusBar.parentElement.classList.toggle('on', g.focus > 0);
+    sty(this.alarmChip, 'display', g.alarm ? '' : 'none');
     // weapon
-    this.weaponName.textContent = i18n.t(p.gun.cfg.name) + (p.hasRifle ? '  ·  1 / 2' : '');
-    this.magEl.textContent = p.gun.mag; this.resEl.textContent = p.gun.reserve === Infinity ? '∞' : p.gun.reserve;
+    txt(this.weaponName, i18n.t(p.gun.cfg.name) + (p.hasRifle ? '  ·  1 / 2' : ''));
+    txt(this.magEl, String(p.gun.mag)); txt(this.resEl, p.gun.reserve === Infinity ? '∞' : String(p.gun.reserve));
     this.magEl.classList.toggle('low', p.gun.mag <= 3);
-    this.reloadEl.textContent = p.gun.reloading > 0 ? i18n.t('hud.reload') + '…' : (p.gun.mag === 0 ? i18n.t('hud.empty') : '');
-    this.grenEl.innerHTML = p.grenades > 0 ? '●'.repeat(p.grenades) : '';
-    this.carryEl.textContent = p.carrying ? this.tt('hud.carrying') : '';
+    txt(this.reloadEl, p.gun.reloading > 0 ? i18n.t('hud.reload') + '…' : (p.gun.mag === 0 ? i18n.t('hud.empty') : ''));
+    html(this.grenEl, p.grenades > 0 ? '●'.repeat(p.grenades) : '');
+    txt(this.carryEl, p.carrying ? this.tt('hud.carrying') : '');
     // compass
     const deg = THREE.MathUtils.euclideanModulo(-p.camYaw * 180 / Math.PI, 360);
-    this.compassStrip.style.transform = `translateX(${-(deg * 2 + 720 - this.compass.clientWidth / 2)}px)`;
+    this._compassW = this._compassW || this.compass.clientWidth;
+    sty(this.compassStrip, 'transform', `translateX(${(-(deg * 2 + 720 - this._compassW / 2)).toFixed(1)}px)`);
     // interaction prompt
     const it = p.interact;
-    if (it.target && g.mode === 'ground' && !p.carrying) { this.prompt.style.display = ''; this.promptText.textContent = this.tt(it.target.prompt); this.promptRing.style.setProperty('--p', (it.progress * 360) + 'deg'); }
-    else this.prompt.style.display = 'none';
+    if (it.target && g.mode === 'ground' && !p.carrying) { sty(this.prompt, 'display', ''); txt(this.promptText, this.tt(it.target.prompt)); prop(this.promptRing, '--p', Math.round(it.progress * 360) + 'deg'); }
+    else sty(this.prompt, 'display', 'none');
     if (this.hintTimer > 0) { this.hintTimer -= realDt; if (this.hintTimer <= 0) this.hintEl.classList.remove('in'); }
     // radio panel
     this._updateWitnesses();
     // gateway status
     const ps = g.portals;
-    this.portalStatus.textContent = ps.state === 'open' ? this.tt('hud.portal.open') : ps.state === 'opening' ? i18n.t('hud.portal.opening') : this.tt('hud.portal.closed');
+    txt(this.portalStatus, ps.state === 'open' ? this.tt('hud.portal.open') : ps.state === 'opening' ? i18n.t('hud.portal.opening') : this.tt('hud.portal.closed'));
     this.portalStatus.classList.toggle('on', ps.active);
     // map cursor
     if (this.mapOn) {
       const m = g.tacmap;
-      this.cursor.style.transform = `translate(${m.cursor.x * g.width}px, ${m.cursor.y * g.height}px)`;
-      this.cursor.className = 'vcursor' + (m.hoverPlacement ? (m.hoverOK ? ' ok' : ' bad') : '');
+      sty(this.cursor, 'transform', `translate(${(m.cursor.x * g.width).toFixed(0)}px, ${(m.cursor.y * g.height).toFixed(0)}px)`);
+      const cc = 'vcursor' + (m.hoverPlacement ? (m.hoverOK ? ' ok' : ' bad') : '');
+      if (this.cursor.className !== cc) this.cursor.className = cc;
     }
     this._updateLabels();
     this._updateObjectiveMarker();
@@ -188,9 +196,9 @@ export class HUD {
     while (rows.children.length > list.length) rows.lastChild.remove();
     list.forEach((e, i) => {
       const row = rows.children[i]; const k = e.report.t / e.report.total;
-      row.querySelector('.who').textContent = `${i18n.t(e.name)}${e.zoneName ? ' · ' + i18n.t(e.zoneName) : ''} — ${i18n.t('hud.witness.' + e.report.reason)}`;
-      row.querySelector('.bar i').style.width = (k * 100).toFixed(1) + '%';
-      row.querySelector('.t').textContent = e.report.t.toFixed(1);
+      txt(row.querySelector('.who'), `${i18n.t(e.name)}${e.zoneName ? ' · ' + i18n.t(e.zoneName) : ''} — ${i18n.t('hud.witness.' + e.report.reason)}`);
+      sty(row.querySelector('.bar i'), 'width', (k * 100).toFixed(1) + '%');
+      txt(row.querySelector('.t'), e.report.t.toFixed(1));
       row.classList.toggle('urgent', e.report.t < 1.3);
     });
   }
@@ -198,22 +206,22 @@ export class HUD {
   _updateObjectiveMarker() {
     const g = this.game, cam = g.camera, m = this.objMarker;
     const target = g.script ? g.script.objectiveMarker() : null;
-    if (!target || g.mode === 'map') { m.style.display = 'none'; return; }
+    if (!target || g.mode === 'map') { sty(m, 'display', 'none'); return; }
     _v.set(target.x, target.y + 1.6, target.z).project(cam);
     const behind = _v.z > 1;
     let x = (_v.x * 0.5 + 0.5) * g.width, y = (-_v.y * 0.5 + 0.5) * g.height;
     if (behind) { x = g.width - x; y = g.height - 30; }
     const pad = 40; x = Math.max(pad, Math.min(g.width - pad, x)); y = Math.max(pad, Math.min(g.height - pad, y));
-    m.style.display = ''; m.style.transform = `translate(${x}px, ${y}px)`;
+    sty(m, 'display', ''); sty(m, 'transform', `translate(${x.toFixed(0)}px, ${y.toFixed(0)}px)`);
     const d = Math.hypot(target.x - g.player.pos.x, target.z - g.player.pos.z);
-    this.objMarkerDist.textContent = Math.round(d) + ' m';
+    txt(this.objMarkerDist, Math.round(d) + ' m');
     m.classList.toggle('offscreen', behind || x === pad || x === g.width - pad || y === pad || y === g.height - pad);
   }
 
   _updateLabels() {
     const g = this.game, cam = g.camera;
     const seen = new Set();
-    const place = (key, pos, height, html, cls, maxDist = 45) => {
+    const place = (key, pos, height, markup, cls, maxDist = 45) => {
       let e = this.labelEls.get(key); if (!e) { e = el('div', 'wlabel ' + cls, this.labels); this.labelEls.set(key, e); }
       seen.add(key);
       _v.set(pos.x, pos.y + height, pos.z).project(cam);
@@ -221,9 +229,11 @@ export class HUD {
       const dist = cam.position.distanceTo(pos);
       // on phones the right-hand strip belongs to the buttons: a label drifting under them is hidden, not fought over
       const underButtons = g.isTouch && g.mode === 'ground' && x > g.width - 150 && y > g.height * 0.2;
-      if (behind || underButtons || x < -40 || x > g.width + 40 || y < -40 || y > g.height + 40 || (g.mode === 'ground' && dist > maxDist)) { e.style.display = 'none'; return e; }
-      e.style.display = ''; e.style.transform = `translate(${x}px, ${y}px)`; e.style.opacity = g.mode === 'map' ? 1 : Math.max(0.4, 1 - dist / 70);
-      if (e.innerHTML !== html) e.innerHTML = html; e.className = 'wlabel ' + cls;
+      if (behind || underButtons || x < -40 || x > g.width + 40 || y < -40 || y > g.height + 40 || (g.mode === 'ground' && dist > maxDist)) { sty(e, 'display', 'none'); return e; }
+      sty(e, 'display', ''); sty(e, 'transform', `translate(${x.toFixed(0)}px, ${y.toFixed(0)}px)`);
+      sty(e, 'opacity', (g.mode === 'map' ? 1 : Math.max(0.4, 1 - dist / 70)).toFixed(2));
+      if (e.innerHTML !== markup) e.innerHTML = markup;
+      if (e.className !== 'wlabel ' + cls) e.className = 'wlabel ' + cls;
       return e;
     };
     const map = g.mode === 'map', p = g.player;
@@ -250,6 +260,6 @@ export class HUD {
       if (s && !nearSugg) place('tut', { x: s.x, y: s.y, z: s.z }, 2.8, this.tt('tut.here'), 'tut');
       if (pv && g.isTouch) place('pv', { x: pv.x, y: pv.y, z: pv.z }, 3.1, i18n.t('touch.tapAgain'), 'tut preview');
     }
-    for (const [k, e] of this.labelEls) if (!seen.has(k)) e.style.display = 'none';
+    for (const [k, e] of this.labelEls) if (!seen.has(k)) sty(e, 'display', 'none');
   }
 }

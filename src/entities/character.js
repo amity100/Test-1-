@@ -120,6 +120,7 @@ export class Character {
         // cull off-screen bodies: a generous sphere around the bind pose covers every animation frame
         if (o.isSkinnedMesh) { o.computeBoundingSphere(); o.boundingSphere.radius *= 1.7; o.frustumCulled = true; }
         else o.frustumCulled = true;
+        if (o.name === 'vanguard_visor') this.visor = o;
       }
     });
     this._castShadow = true;
@@ -216,6 +217,10 @@ export class Character {
     // shadows only from bodies near the camera (the shadow pass re-skins every caster)
     const cs = this.isPlayer || dist < 26;
     if (cs !== this._castShadow) { this._castShadow = cs; this.model.traverse((o) => { if (o.isMesh || o.isSkinnedMesh) o.castShadow = cs; }); if (this.rifle) this.rifle.traverse((o) => { if (o.isMesh) o.castShadow = cs; }); }
+    // and a body past 55 m is a few pixels: not worth three draw calls
+    const far = !this.isPlayer && dist > 55 && this.game.mode === 'ground';
+    if (far !== this._farHidden) { this._farHidden = far; this.group.visible = this.visible && !far; if (this.rifle) this.rifle.visible = this.visible && !far && !this.carriedBy; }
+    if (this.visor) { const v = dist < 22; if (v !== this.visor.visible) this.visor.visible = v; }
     this._lodFrame = (this._lodFrame || 0) + 1;
     const animate = (this._lodFrame % this.lodSkip) === 0;
     const animDt = dt * this.lodSkip;
@@ -395,7 +400,7 @@ export class Character {
     this.rifle.visible = this.visible;
   }
 
-  setVisible(v) { this.visible = v; this.group.visible = v; if (this.rifle) this.rifle.visible = v; }
+  setVisible(v) { this.visible = v; this.group.visible = v && !this._farHidden; if (this.rifle) this.rifle.visible = this.group.visible && !this.carriedBy; }
 
   dispose() {
     this.game.scene.remove(this.group);

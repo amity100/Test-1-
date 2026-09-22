@@ -43,10 +43,11 @@ export class LevelBuilder {
     }
     _e.set(pitch, yaw, roll, 'YXZ'); _q.setFromEuler(_e); _p.set(x, y, z);
     _m4.compose(_p, _q, _s); geo.applyMatrix4(_m4);
-    // one batch per material per 40 m region: a merged mesh that spans the level can never be culled
-    const key = matName + '|' + Math.floor(x / 40) + '|' + Math.floor(z / 40);
-    if (!this.batches.has(key)) this.batches.set(key, []);
-    this.batches.get(key).push(geo);
+    // One merged mesh per material. The static level is about 31k triangles in total, so splitting it into regions
+    // to win frustum culling costs far more in draw calls than it saves in vertex work — on a phone a draw call is
+    // the expensive thing, not a triangle.
+    if (!this.batches.has(matName)) this.batches.set(matName, []);
+    this.batches.get(matName).push(geo);
   }
   box(x, y, z, w, h, d, matName, { yaw = 0, collide = true, tag = 'static', material = 'concrete', vision = true, bullets = true, climbable = true, movement = true } = {}) {
     this._push(matName, boxGeo(w, h, d), x, y + h / 2, z, yaw);
@@ -467,7 +468,7 @@ export class LevelBuilder {
       if (!geos.length) continue;
       const merged = mergeGeometries(geos, false);
       if (!merged) continue;
-      const matName = key.split('|')[0];
+      const matName = key;
       const mat = this.mats.get(matName);
       const mesh = new THREE.Mesh(merged, mat); mesh.castShadow = true; mesh.receiveShadow = true; mesh.name = 'batch_' + key;
       this.root.add(mesh);

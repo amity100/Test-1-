@@ -23,7 +23,7 @@ import { HUD } from './ui/hud.js';
 import { Menus } from './ui/menus.js';
 import { TouchControls } from './ui/touch.js';
 
-const _v = new THREE.Vector3(), _v2 = new THREE.Vector3();
+const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _down = new THREE.Vector3(0, -1, 0);
 const F = CONFIG.focus;
 
 // Phones and tablets get touch controls; ?touch=1 / ?touch=0 (or window.__VANTAGE_TOUCH) overrides.
@@ -45,6 +45,7 @@ export class Game {
     this.state = 'loading';     // loading | menu | intro | playing | paused | end
     this.mode = 'ground';       // ground | map
     this.time = 0; this.realTime = 0; this.timeScale = 1; this.timeScaleTarget = 1;
+    this.workMs = 8; this.renderScale = 1; this._rsCeiling = 1; this._rsHoldUp = 0;
     this.characters = []; this.enemies = []; this.hostages = []; this.grenades = [];
     this.width = 1; this.height = 1;
     this.t = i18n.t;
@@ -91,7 +92,7 @@ export class Game {
     if (this.assets.envMap) { this.scene.environment = this.assets.envMap; this.mats.setEnvironment(this.assets.envMap); }
     this.world = new CollisionWorld(LEVEL1_BOUNDS);
     this.fx = new FX(this.scene, this.world, this.audio);
-    this.fx.createRain(this.isTouch ? Math.round(CONFIG.render.rainCount * 0.45) : CONFIG.render.rainCount);
+    this.fx.createRain(this.isTouch ? Math.round(CONFIG.render.rainCount * 0.3) : CONFIG.render.rainCount);
     this.menuCamera = new THREE.PerspectiveCamera(50, 1, 0.5, 500);
     this.camera = this.menuCamera;
     this.postfx = new PostFX(renderer, this.scene, this.camera, CONFIG.render, { mobile: this.isTouch });
@@ -515,6 +516,7 @@ export class Game {
   }
   resize() {
     const w = this.container.clientWidth || window.innerWidth, h = this.container.clientHeight || window.innerHeight;
+    if (this.hud) this.hud._compassW = 0;
     this.width = w; this.height = h;
     this.renderer.setSize(w, h, false);
     for (const c of [this.menuCamera, this.tacmap && this.tacmap.camera, this.player && this.player.camera]) if (c) { c.aspect = w / h; c.updateProjectionMatrix(); }
@@ -541,15 +543,17 @@ export class Game {
     let realDt = Math.min(0.05, (now - this.lastFrame) / 1000); this.lastFrame = now;
     if (!(realDt > 0)) realDt = 0.016;
     if (this.debugFrozen || this.contextLost) return;
+    const _w0 = performance.now();
     try {
       this._frame(realDt, true);
+      this.workMs += (performance.now() - _w0 - this.workMs) * 0.06;
     } catch (e) {
       console.error('VANTAGE frame error:', e);
       if (!this._frameErrors) this._frameErrors = 0;
       if (++this._frameErrors === 3) this.showTrouble(this.t('trouble.frame'), e && e.message);
     }
     this.frameMs += (realDt * 1000 - this.frameMs) * 0.05;
-    if (this.state === 'playing') { this._watchdog(realDt); this._checkPerformance(realDt); }
+    if (this.state === 'playing') { this._watchdog(realDt); this._updateRenderScale(realDt); this._checkPerformance(realDt); }
     else if (this.state === 'menu') this._watchdog(realDt);
   }
   _frame(realDt, render) {
@@ -566,6 +570,29 @@ export class Game {
     if (render) { this._render(); this._pendingSample = true; }
     this.input.endFrame();
   }
+  // Dynamic resolution: the scene buffer follows what the device can actually sustain, so the picture stays as
+  // sharp as the phone affords without dropping frames. The canvas (and the DOM HUD) stay at full resolution.
+  _updateRenderScale(realDt) {
+    const fx = this.postfx;
+    if (!fx || !fx.enabled || this.state !== 'playing') return;
+    this._rsTimer = (this._rsTimer || 0) + realDt;
+    if (this._rsTimer < 0.8) return;
+    this._rsTimer = 0;
+    if (this.realTime < 2.5) return;                       // let the first frames settle
+    const smooth = this.isTouch ? 19 : 17.5;               // frame interval that still reads as smooth
+    const headroom = this.isTouch ? 9 : 7;                 // main-thread work that leaves room to spare
+    let s = fx.renderScale;
+    if (this.frameMs > smooth * 1.3) s -= 0.12;
+    else if (this.frameMs > smooth * 1.08) s -= 0.06;
+    else if (this.frameMs < smooth && this.workMs < headroom) {
+      if (this._rsHoldUp > 0) { this._rsHoldUp--; return; }
+      s = Math.min(s + 0.05, this._rsCeiling || 1);
+      this._rsHoldUp = 2;                                  // step up slowly, drop quickly
+    } else return;
+    if (s < fx.renderScale) { this._rsCeiling = Math.max(0.55, fx.renderScale - 0.05); this._rsHoldUp = 4; }
+    if (fx.setRenderScale(s)) this.renderScale = fx.renderScale;
+  }
+
   _render() {
     this._renderFrame = (this._renderFrame || 0) + 1;
     this.renderer.shadowMap.needsUpdate = !this.isTouch || (this._renderFrame & 1) === 0;
@@ -575,7 +602,8 @@ export class Game {
 
   _checkPerformance(realDt) {
     if (this._autoQualityDone || this.realTime < 4) return;
-    if (this.frameMs > (this.isTouch ? 42 : 90)) this._slowTime += realDt; else this._slowTime = Math.max(0, this._slowTime - realDt * 0.5);
+    const atFloor = !this.postfx || !this.postfx.enabled || this.postfx.renderScale <= 0.56;
+    if (atFloor && this.frameMs > (this.isTouch ? 30 : 90)) this._slowTime += realDt; else this._slowTime = Math.max(0, this._slowTime - realDt * 0.5);
     if (this._slowTime < 4) return;
     this._slowTime = 0;
     const order = ['ultra', 'high', 'medium', 'low'];
@@ -652,8 +680,8 @@ export class Game {
   // Only the lights nearest the camera stay active; the count is held constant so shaders never recompile mid-game.
   _updateLightBudget() {
     const pools = this._lightPools || (this._lightPools = [
-      { list: this.builder.lights.points, budget: this.isTouch ? 5 : 8 },
-      { list: this.builder.lights.flood.concat(this.builder.lights.spots), budget: this.isTouch ? 3 : 4 },
+      { list: this.builder.lights.points, budget: this.isTouch ? 3 : 8 },
+      { list: this.builder.lights.flood.concat(this.builder.lights.spots), budget: this.isTouch ? 2 : 4 },
     ]);
     const cam = this.camera.position;
     for (const { list, budget } of pools) {
@@ -663,7 +691,12 @@ export class Game {
         l._score = d - (l.intensity > 0 ? 400 : 0) - (l.castShadow ? 1e5 : 0);
       }
       list.sort((a, b) => a._score - b._score);
-      for (let i = 0; i < list.length; i++) list[i].visible = i < budget;
+      // a light's volumetric cone is a big additive mesh: it goes dark with the light that casts it
+      for (let i = 0; i < list.length; i++) {
+        const on = i < budget; list[i].visible = on;
+        const cone = list[i].userData && list[i].userData.cone;
+        if (cone) cone.visible = on && list[i].intensity > 0;
+      }
     }
   }
   // Test/debug helpers: advance the simulation without rendering (deterministic, fast).
@@ -765,7 +798,8 @@ export class Game {
       const a = pts[fwd ? i : i + 1], b = pts[fwd ? i + 1 : i];
       const x = a[0] + (b[0] - a[0]) * k, z = a[1] + (b[1] - a[1]) * k;
       sl.light.target.position.set(x, 0, z); sl.light.target.updateMatrixWorld();
-      if (sl.light.userData.cone) { const c = sl.light.userData.cone; const dir = new THREE.Vector3(x - c.position.x, -c.position.y, z - c.position.z).normalize(); c.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), dir); }
+      const c = sl.light.userData.cone;
+      if (c && c.visible) { _v.set(x - c.position.x, -c.position.y, z - c.position.z).normalize(); c.quaternion.setFromUnitVectors(_down, _v); }
     }
   }
 

@@ -1,15 +1,71 @@
-// Post-processing chain: bloom → grade (vignette, damage, architect tint, grain) → output → SMAA.
+// Post-processing: the scene renders into one HDR buffer, a small two-level bloom is built from it, and a single
+// full-resolution pass does everything else — bloom add, colour grade, anti-aliasing, tone mapping and sRGB.
+//
+// Why one pass: every full-screen pass reads and writes the whole framebuffer, which on a phone is pure memory
+// bandwidth and the thing that actually costs frames. The old chain ran five of them after the scene (bloom's
+// bright pass, grade, output, and SMAA's three), plus ten blur passes inside UnrealBloomPass. This runs one, and
+// the bloom blurs happen at a quarter and an eighth of the width.
+//
+// The scene buffer can also be rendered smaller than the canvas (dynamic resolution): the final pass upsamples it
+// while the HUD, which is DOM, stays crisp. That keeps the picture as sharp as the device can afford.
 import * as THREE from 'three';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 
-const GradeShader = {
+const QUAD_VS = /* glsl */`
+  varying vec2 vUv;
+  void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+`;
+
+// bright pass: four taps of the scene, soft-knee threshold, written at quarter size
+const BrightShader = {
+  uniforms: { tScene: { value: null }, uTexel: { value: new THREE.Vector2() }, uThreshold: { value: 0.86 }, uKnee: { value: 0.3 } },
+  vertexShader: QUAD_VS,
+  fragmentShader: /* glsl */`
+    uniform sampler2D tScene; uniform vec2 uTexel; uniform float uThreshold, uKnee;
+    varying vec2 vUv;
+    void main() {
+      vec3 c = texture2D(tScene, vUv + vec2(-1.0, -1.0) * uTexel).rgb
+             + texture2D(tScene, vUv + vec2( 1.0, -1.0) * uTexel).rgb
+             + texture2D(tScene, vUv + vec2(-1.0,  1.0) * uTexel).rgb
+             + texture2D(tScene, vUv + vec2( 1.0,  1.0) * uTexel).rgb;
+      c *= 0.25;
+      float b = max(c.r, max(c.g, c.b));
+      float soft = clamp(b - uThreshold + uKnee, 0.0, 2.0 * uKnee);
+      soft = soft * soft / (4.0 * uKnee + 0.0001);
+      float w = max(soft, b - uThreshold) / max(b, 0.0001);
+      gl_FragColor = vec4(c * w, 1.0);
+    }
+  `,
+};
+
+// separable gaussian, nine taps folded into five by linear sampling
+const BlurShader = {
+  uniforms: { tSrc: { value: null }, uDir: { value: new THREE.Vector2() } },
+  vertexShader: QUAD_VS,
+  fragmentShader: /* glsl */`
+    uniform sampler2D tSrc; uniform vec2 uDir;
+    varying vec2 vUv;
+    void main() {
+      vec3 c = texture2D(tSrc, vUv).rgb * 0.2270270270;
+      c += texture2D(tSrc, vUv + uDir * 1.3846153846).rgb * 0.3162162162;
+      c += texture2D(tSrc, vUv - uDir * 1.3846153846).rgb * 0.3162162162;
+      c += texture2D(tSrc, vUv + uDir * 3.2307692308).rgb * 0.0702702703;
+      c += texture2D(tSrc, vUv - uDir * 3.2307692308).rgb * 0.0702702703;
+      gl_FragColor = vec4(c, 1.0);
+    }
+  `,
+};
+
+// the one full-resolution pass: anti-alias the scene, add bloom, grade, tone map, encode
+const FinalShader = {
   uniforms: {
-    tDiffuse: { value: null },
+    tScene: { value: null },
+    tBloomA: { value: null },
+    tBloomB: { value: null },
+    uInvRes: { value: new THREE.Vector2(1 / 1280, 1 / 720) },
+    uResolution: { value: new THREE.Vector2(1280, 720) },
+    uBloom: { value: 0.42 },
+    uExposure: { value: 1.18 },
     uTime: { value: 0 },
     uVignette: { value: 0.55 },
     uAberration: { value: 0 },
@@ -17,33 +73,72 @@ const GradeShader = {
     uArchitect: { value: 0 },
     uFlash: { value: 0 },
     uLowHealth: { value: 0 },
-    uResolution: { value: new THREE.Vector2(1, 1) },
   },
-  vertexShader: /* glsl */`
-    varying vec2 vUv;
-    void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
-  `,
+  vertexShader: QUAD_VS,
   fragmentShader: /* glsl */`
-    uniform sampler2D tDiffuse;
-    uniform float uTime, uVignette, uAberration, uDamage, uArchitect, uFlash, uLowHealth;
-    uniform vec2 uResolution;
+    uniform sampler2D tScene, tBloomA, tBloomB;
+    uniform vec2 uInvRes, uResolution;
+    uniform float uBloom, uExposure, uTime, uVignette, uAberration, uDamage, uArchitect, uFlash, uLowHealth;
     varying vec2 vUv;
+
     float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+    // luma of a cheaply tone-mapped sample: edges are found on what the eye will see, not on raw HDR
+    float edgeLuma(vec3 c) { c = c / (1.0 + c); return dot(c, vec3(0.299, 0.587, 0.114)); }
+
+    vec3 sceneAA(vec2 uv) {
+      vec3 m = texture2D(tScene, uv).rgb;
+      #ifdef USE_FXAA
+        vec3 nw = texture2D(tScene, uv + vec2(-1.0, -1.0) * uInvRes).rgb;
+        vec3 ne = texture2D(tScene, uv + vec2( 1.0, -1.0) * uInvRes).rgb;
+        vec3 sw = texture2D(tScene, uv + vec2(-1.0,  1.0) * uInvRes).rgb;
+        vec3 se = texture2D(tScene, uv + vec2( 1.0,  1.0) * uInvRes).rgb;
+        float lM = edgeLuma(m), lNW = edgeLuma(nw), lNE = edgeLuma(ne), lSW = edgeLuma(sw), lSE = edgeLuma(se);
+        float lMin = min(lM, min(min(lNW, lNE), min(lSW, lSE)));
+        float lMax = max(lM, max(max(lNW, lNE), max(lSW, lSE)));
+        if (lMax - lMin < max(0.035, lMax * 0.15)) return m;   // flat enough: leave it alone
+        vec2 dir = vec2(-((lNW + lNE) - (lSW + lSE)), ((lNW + lSW) - (lNE + lSE)));
+        float reduce = max((lNW + lNE + lSW + lSE) * 0.03125, 0.0078125);
+        float rcp = 1.0 / (min(abs(dir.x), abs(dir.y)) + reduce);
+        dir = clamp(dir * rcp, vec2(-5.0), vec2(5.0)) * uInvRes;
+        vec3 a = 0.5 * (texture2D(tScene, uv + dir * (1.0 / 3.0 - 0.5)).rgb + texture2D(tScene, uv + dir * (2.0 / 3.0 - 0.5)).rgb);
+        vec3 b = a * 0.5 + 0.25 * (texture2D(tScene, uv + dir * -0.5).rgb + texture2D(tScene, uv + dir * 0.5).rgb);
+        float lB = edgeLuma(b);
+        return (lB < lMin || lB > lMax) ? a : b;
+      #else
+        return m;
+      #endif
+    }
+
+    // ACES filmic, the same fit three.js uses, so the picture matches the non-post fallback
+    vec3 acesFilmic(vec3 color) {
+      const mat3 inMat = mat3(0.59719, 0.07600, 0.02840, 0.35458, 0.90834, 0.13383, 0.04823, 0.01566, 0.83777);
+      const mat3 outMat = mat3(1.60475, -0.10208, -0.00327, -0.53108, 1.10813, -0.07276, -0.07367, -0.00605, 1.07602);
+      color *= uExposure / 0.6;
+      color = inMat * color;
+      vec3 a = color * (color + 0.0245786) - 0.000090537;
+      vec3 b = color * (0.983729 * color + 0.432951) + 0.238081;
+      color = outMat * (a / b);
+      return clamp(color, 0.0, 1.0);
+    }
+    vec3 toSRGB(vec3 c) {
+      return mix(pow(c, vec3(0.41666)) * 1.055 - 0.055, c * 12.92, vec3(lessThanEqual(c, vec3(0.0031308))));
+    }
+
     void main() {
       vec2 uv = vUv;
-      vec2 c = uv - 0.5;
-      float r2 = dot(c, c);
+      vec2 cc = uv - 0.5;
+      float r2 = dot(cc, cc);
+      vec3 col = sceneAA(uv);
+      // chromatic aberration (damage, map): two extra taps, only when it is actually on
       float ab = uAberration + uDamage * 0.01 + uArchitect * 0.004;
-      vec3 col;
       if (ab > 0.0001) {
-        vec2 off = c * ab * (1.0 + r2 * 4.0);
-        col.r = texture2D(tDiffuse, uv + off).r;
-        col.g = texture2D(tDiffuse, uv).g;
-        col.b = texture2D(tDiffuse, uv - off).b;
-      } else {
-        col = texture2D(tDiffuse, uv).rgb;
+        vec2 off = cc * ab * (1.0 + r2 * 4.0);
+        col.r = texture2D(tScene, uv + off).r;
+        col.b = texture2D(tScene, uv - off).b;
       }
-      // architect view: cool desaturated blueprint tint + faint scanlines
+      // bloom: a quarter-size and an eighth-size level, both bilinear-upsampled for free
+      col += (texture2D(tBloomA, uv).rgb * 0.62 + texture2D(tBloomB, uv).rgb * 0.38) * uBloom;
+      // map view: cool blueprint tint and faint scanlines
       if (uArchitect > 0.001) {
         float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
         vec3 tinted = mix(col, vec3(lum) * vec3(0.72, 0.88, 1.15), 0.55);
@@ -54,44 +149,15 @@ const GradeShader = {
       float edge = smoothstep(0.12, 0.5, r2);
       col = mix(col, vec3(0.7, 0.03, 0.02) * (0.5 + col), uDamage * edge * 0.9);
       col = mix(col, vec3(0.45, 0.02, 0.02) * (0.4 + col), uLowHealth * edge * (0.55 + 0.25 * sin(uTime * 6.0)));
-      // vignette (lifted on the map, which also gets a brightness boost so the site reads from above)
+      // vignette (lifted on the map, which also gets a brightness boost)
       float vig = 1.0 - smoothstep(0.25, 1.15, r2 * 2.2) * uVignette * (1.0 - 0.6 * uArchitect);
       col *= vig * (1.0 + 0.45 * uArchitect);
-      // grain (subtle, in linear space)
-      float g = hash(uv * uResolution.xy * 0.5 + fract(uTime) * 100.0) - 0.5;
-      col += g * 0.012 * (1.0 + uArchitect);
-      // flash (explosion / lightning)
+      // grain, then the flash of an explosion or lightning
+      col += (hash(uv * uResolution.xy * 0.5 + fract(uTime) * 100.0) - 0.5) * 0.012 * (1.0 + uArchitect);
       col += uFlash * vec3(1.0, 0.98, 0.9);
-      gl_FragColor = vec4(col, 1.0);
+      gl_FragColor = vec4(toSRGB(acesFilmic(max(col, 0.0))), 1.0);
     }
   `,
-};
-
-// One-pass FXAA (the classic 5-tap luma edge blend): cheap enough for phones, kills most of the stair-stepping.
-const FXAAShader = {
-  uniforms: { tDiffuse: { value: null }, uInvRes: { value: new THREE.Vector2(1 / 1280, 1 / 720) } },
-  vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-  fragmentShader: `
-    uniform sampler2D tDiffuse; uniform vec2 uInvRes; varying vec2 vUv;
-    float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
-    void main() {
-      vec3 rgbM = texture2D(tDiffuse, vUv).rgb;
-      vec3 rgbNW = texture2D(tDiffuse, vUv + vec2(-1.0, -1.0) * uInvRes).rgb;
-      vec3 rgbNE = texture2D(tDiffuse, vUv + vec2(1.0, -1.0) * uInvRes).rgb;
-      vec3 rgbSW = texture2D(tDiffuse, vUv + vec2(-1.0, 1.0) * uInvRes).rgb;
-      vec3 rgbSE = texture2D(tDiffuse, vUv + vec2(1.0, 1.0) * uInvRes).rgb;
-      float lM = luma(rgbM), lNW = luma(rgbNW), lNE = luma(rgbNE), lSW = luma(rgbSW), lSE = luma(rgbSE);
-      float lMin = min(lM, min(min(lNW, lNE), min(lSW, lSE)));
-      float lMax = max(lM, max(max(lNW, lNE), max(lSW, lSE)));
-      vec2 dir = vec2(-((lNW + lNE) - (lSW + lSE)), ((lNW + lSW) - (lNE + lSE)));
-      float dirReduce = max((lNW + lNE + lSW + lSE) * 0.03125, 0.0078125);
-      float rcpDirMin = 1.0 / (min(abs(dir.x), abs(dir.y)) + dirReduce);
-      dir = clamp(dir * rcpDirMin, vec2(-5.0), vec2(5.0)) * uInvRes;
-      vec3 rgbA = 0.5 * (texture2D(tDiffuse, vUv + dir * (1.0 / 3.0 - 0.5)).rgb + texture2D(tDiffuse, vUv + dir * (2.0 / 3.0 - 0.5)).rgb);
-      vec3 rgbB = rgbA * 0.5 + 0.25 * (texture2D(tDiffuse, vUv + dir * -0.5).rgb + texture2D(tDiffuse, vUv + dir * 0.5).rgb);
-      float lB = luma(rgbB);
-      gl_FragColor = vec4((lB < lMin || lB > lMax) ? rgbA : rgbB, 1.0);
-    }`,
 };
 
 export class PostFX {
@@ -102,52 +168,93 @@ export class PostFX {
     this.cfg = cfg;
     this.enabled = true;
     this.mobile = mobile;
-    const size = renderer.getSize(new THREE.Vector2());
-    // EffectComposer and UnrealBloomPass render into half-float targets by default. Some drivers
-    // (older integrated GPUs, several mobile GPUs) cannot render to a float buffer: the framebuffer
-    // comes back incomplete and every pass draws nothing, i.e. a black screen. Fall back to 8-bit.
+    this.quality = 'high';
+    this.bloomOn = true;
+    this.renderScale = 1;          // dynamic resolution: the scene buffer as a fraction of the canvas
+    this._targetScale = 1;
+    // Some drivers (older integrated GPUs, several mobile GPUs) cannot render to a float buffer: the framebuffer
+    // comes back incomplete and every pass draws nothing, i.e. a black screen. Fall back to 8-bit there.
     this.floatTargets = renderer.extensions.has('EXT_color_buffer_float') || renderer.extensions.has('EXT_color_buffer_half_float');
-    const pr = renderer.getPixelRatio();
-    const target = new THREE.WebGLRenderTarget(Math.max(1, size.x * pr), Math.max(1, size.y * pr), {
-      type: this.floatTargets ? THREE.HalfFloatType : THREE.UnsignedByteType,
-      minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat,
-    });
-    target.texture.name = 'PostFX.rt';
-    this.composer = new EffectComposer(renderer, target);
-    this.renderPass = new RenderPass(scene, camera);
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), cfg.bloomStrength, cfg.bloomRadius, cfg.bloomThreshold);
-    // phones: the bloom blurs run at half size (a quarter of the pixels; the glow is soft anyway)
-    if (mobile) { const bs = this.bloom.setSize.bind(this.bloom); this.bloom.setSize = (w, h) => bs(Math.max(2, Math.round(w * 0.5)), Math.max(2, Math.round(h * 0.5))); }
-    this.grade = new ShaderPass(GradeShader);
-    this.output = new OutputPass();
-    this.smaa = new SMAAPass(size.x * renderer.getPixelRatio(), size.y * renderer.getPixelRatio());
-    this.fxaa = new ShaderPass(FXAAShader);
-    this.composer.addPass(this.renderPass);
-    this.composer.addPass(this.bloom);
-    this.composer.addPass(this.grade);
-    this.composer.addPass(this.output);
-    this.composer.addPass(this.smaa);
-    this.composer.addPass(this.fxaa);
+    this._type = this.floatTargets ? THREE.HalfFloatType : THREE.UnsignedByteType;
+
+    this.bright = new THREE.ShaderMaterial({ ...BrightShader, uniforms: THREE.UniformsUtils.clone(BrightShader.uniforms) });
+    this.blur = new THREE.ShaderMaterial({ ...BlurShader, uniforms: THREE.UniformsUtils.clone(BlurShader.uniforms) });
+    this.final = new THREE.ShaderMaterial({ ...FinalShader, uniforms: THREE.UniformsUtils.clone(FinalShader.uniforms), defines: { USE_FXAA: '' } });
+    this.quad = new FullScreenQuad(this.final);
+
+    this.rtScene = null; this.rtA = null; this.rtB = null; this.rtC = null; this.rtD = null;
     this.state = { damage: 0, aberration: 0, architect: 0, flash: 0, lowHealth: 0 };
+    // compatibility shims: the anti-aliasing is inside the final pass now
+    this.smaa = { enabled: false };
+    this.fxaa = { enabled: true };
+
+    const size = renderer.getSize(new THREE.Vector2());
     this.setSize(size.x, size.y);
   }
 
-  setCamera(camera) { this.camera = camera; this.renderPass.camera = camera; }
-  setSize(w, h) {
-    this.composer.setSize(w, h);
-    const pr = this.renderer.getPixelRatio();
-    this.smaa.setSize(w * pr, h * pr);
-    this.grade.uniforms.uResolution.value.set(w * pr, h * pr);
-    this.fxaa.uniforms.uInvRes.value.set(1 / Math.max(1, w * pr), 1 / Math.max(1, h * pr));
+  setCamera(camera) { this.camera = camera; }
+
+  _makeTarget(w, h, depth = false) {
+    const t = new THREE.WebGLRenderTarget(Math.max(1, w), Math.max(1, h), {
+      type: this._type, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
+      format: THREE.RGBAFormat, depthBuffer: depth, stencilBuffer: false,
+    });
+    t.texture.generateMipmaps = false;
+    return t;
   }
+
+  setSize(w, h) {
+    this.cssW = w; this.cssH = h;
+    const pr = this.renderer.getPixelRatio();
+    this.bufW = Math.max(1, Math.round(w * pr));
+    this.bufH = Math.max(1, Math.round(h * pr));
+    this.final.uniforms.uResolution.value.set(this.bufW, this.bufH);
+    this._allocate();
+  }
+
+  // Dynamic resolution: the scene renders at `scale` of the canvas, the final pass upsamples it.
+  setRenderScale(scale) {
+    const s = THREE.MathUtils.clamp(scale, 0.5, 1);
+    if (Math.abs(s - this.renderScale) < 0.02) return false;
+    this.renderScale = s;
+    this._allocate();
+    this._applyAA();
+    return true;
+  }
+  _applyAA() {
+    const want = this.quality !== 'low' && this.renderScale > 0.84;
+    const has = 'USE_FXAA' in this.final.defines;
+    if (want === has) return;
+    if (want) this.final.defines.USE_FXAA = ''; else delete this.final.defines.USE_FXAA;
+    this.final.needsUpdate = true;
+    this.fxaa.enabled = want;
+  }
+
+  _allocate() {
+    const sw = Math.max(16, Math.round(this.bufW * this.renderScale));
+    const sh = Math.max(16, Math.round(this.bufH * this.renderScale));
+    if (this.rtScene && this.rtScene.width === sw && this.rtScene.height === sh) return;
+    for (const t of [this.rtScene, this.rtA, this.rtB, this.rtC, this.rtD]) if (t) t.dispose();
+    this.sceneW = sw; this.sceneH = sh;
+    this.rtScene = this._makeTarget(sw, sh, true);           // the scene needs depth; the bloom buffers do not
+    const w4 = Math.max(8, sw >> 2), h4 = Math.max(8, sh >> 2);
+    const w8 = Math.max(4, sw >> 3), h8 = Math.max(4, sh >> 3);
+    this.rtA = this._makeTarget(w4, h4);
+    this.rtB = this._makeTarget(w4, h4);
+    this.rtC = this._makeTarget(w8, h8);
+    this.rtD = this._makeTarget(w8, h8);
+    this.final.uniforms.uInvRes.value.set(1 / sw, 1 / sh);
+    this.bright.uniforms.uTexel.value.set(1 / sw, 1 / sh);
+  }
+
   setQuality(q) {
-    // bloom needs float targets to look right and to work at all on some drivers
-    this.bloom.enabled = q !== 'low' && this.floatTargets;
-    // anti-aliasing: SMAA (three passes, sharp) on desktops and on phones at high quality; one FXAA pass on phones at medium
-    this.smaa.enabled = q !== 'low' && (!this.mobile || q === 'high' || q === 'ultra');
-    this.fxaa.enabled = q === 'medium' && this.mobile;
-    this.bloom.strength = q === 'ultra' ? this.cfg.bloomStrength * 1.15 : this.cfg.bloomStrength;
     this.quality = q;
+    const bloomOn = q !== 'low' && this.floatTargets;
+    this.bloomOn = bloomOn;
+    this.final.uniforms.uBloom.value = bloomOn ? this.cfg.bloomStrength * (q === 'ultra' ? 1.15 : 1) : 0;
+    this.bright.uniforms.uThreshold.value = this.cfg.bloomThreshold;
+    this.smaa.enabled = false;
+    this._applyAA();
   }
 
   update(dt, time) {
@@ -155,12 +262,46 @@ export class PostFX {
     s.damage = Math.max(0, s.damage - dt * 1.6);
     s.flash = Math.max(0, s.flash - dt * 4);
     s.aberration = Math.max(0, s.aberration - dt * 0.08);
-    const u = this.grade.uniforms;
+    const u = this.final.uniforms;
     u.uTime.value = time; u.uDamage.value = s.damage; u.uFlash.value = s.flash; u.uAberration.value = s.aberration;
     u.uArchitect.value = s.architect; u.uLowHealth.value = s.lowHealth;
+    u.uExposure.value = this.renderer.toneMappingExposure;
+  }
+
+  _pass(material, target) {
+    this.quad.material = material;
+    this.renderer.setRenderTarget(target);
+    this.quad.render(this.renderer);
   }
 
   render() {
-    if (this.enabled) this.composer.render(); else this.renderer.render(this.scene, this.camera);
+    const r = this.renderer;
+    if (!this.enabled) { r.setRenderTarget(null); r.render(this.scene, this.camera); return; }
+    // 1. the scene, into an HDR buffer (tone mapping is not applied when rendering into a target)
+    r.setRenderTarget(this.rtScene);
+    r.clear();
+    r.render(this.scene, this.camera);
+    // 2. bloom: bright pass at a quarter, blurred there and again at an eighth
+    if (this.bloomOn) {
+      this.bright.uniforms.tScene.value = this.rtScene.texture;
+      this._pass(this.bright, this.rtA);
+      const u = this.blur.uniforms;
+      u.tSrc.value = this.rtA.texture; u.uDir.value.set(1 / this.rtA.width, 0); this._pass(this.blur, this.rtB);
+      u.tSrc.value = this.rtB.texture; u.uDir.value.set(0, 1 / this.rtA.height); this._pass(this.blur, this.rtA);
+      u.tSrc.value = this.rtA.texture; u.uDir.value.set(2 / this.rtA.width, 0); this._pass(this.blur, this.rtC);
+      u.tSrc.value = this.rtC.texture; u.uDir.value.set(0, 2 / this.rtC.height); this._pass(this.blur, this.rtD);
+    }
+    // 3. one full-resolution pass for everything else
+    // the bloom textures stay bound even when bloom is off (uBloom is 0 then), so the shader needs no branch
+    const f = this.final.uniforms;
+    f.tScene.value = this.rtScene.texture;
+    f.tBloomA.value = this.rtA.texture;
+    f.tBloomB.value = this.rtD.texture;
+    this._pass(this.final, null);
+  }
+
+  dispose() {
+    for (const t of [this.rtScene, this.rtA, this.rtB, this.rtC, this.rtD]) if (t) t.dispose();
+    this.quad.dispose(); this.bright.dispose(); this.blur.dispose(); this.final.dispose();
   }
 }
