@@ -204,13 +204,7 @@ export const CONFIG = {
     bloomThreshold: 0.86,
     exposure: 1.18,
     rainCount: 6000,
-    fogDensity: 0.013,
-    // linear-space colour the distance fades into: a little under the sky's own horizon, so far geometry reads as
-    // night haze rather than a black silhouette
-    fogColor: [0.055, 0.070, 0.108],
-    // linear-space floor added just before tone mapping. Nothing in the picture is allowed to reach pure black:
-    // the darkest corner lands around 20/255, which reads as deep shadow instead of a hole.
-    nightFloor: [0.013, 0.017, 0.027],
+    fogDensity: 0.016,
   },
 };
 

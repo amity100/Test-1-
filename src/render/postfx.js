@@ -68,7 +68,6 @@ const FinalShader = {
     uExposure: { value: 1.18 },
     uTime: { value: 0 },
     uVignette: { value: 0.55 },
-    uFloor: { value: new THREE.Vector3(0, 0, 0) },
     uAberration: { value: 0 },
     uDamage: { value: 0 },
     uArchitect: { value: 0 },
@@ -80,7 +79,6 @@ const FinalShader = {
     uniform sampler2D tScene, tBloomA, tBloomB;
     uniform vec2 uInvRes, uResolution;
     uniform float uBloom, uExposure, uTime, uVignette, uAberration, uDamage, uArchitect, uFlash, uLowHealth;
-    uniform vec3 uFloor;
     varying vec2 vUv;
 
     float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
@@ -154,10 +152,6 @@ const FinalShader = {
       // vignette (lifted on the map, which also gets a brightness boost)
       float vig = 1.0 - smoothstep(0.25, 1.15, r2 * 2.2) * uVignette * (1.0 - 0.6 * uArchitect);
       col *= vig * (1.0 + 0.45 * uArchitect);
-      // A night sky is never pure black and neither is this picture. The floor goes on after the vignette, so the
-      // darkest corner still carries a little blue instead of collapsing to zero and reading as a hole cut in the
-      // scene, and before the grain, which then dithers across it.
-      col = max(col, uFloor);
       // grain, then the flash of an explosion or lightning
       col += (hash(uv * uResolution.xy * 0.5 + fract(uTime) * 100.0) - 0.5) * 0.012 * (1.0 + uArchitect);
       col += uFlash * vec3(1.0, 0.98, 0.9);
@@ -193,9 +187,6 @@ export class PostFX {
     // compatibility shims: the anti-aliasing is inside the final pass now
     this.smaa = { enabled: false };
     this.fxaa = { enabled: true };
-
-    const nf = cfg.nightFloor || [0, 0, 0];
-    this.final.uniforms.uFloor.value.set(nf[0], nf[1], nf[2]);
 
     const size = renderer.getSize(new THREE.Vector2());
     this.setSize(size.x, size.y);
