@@ -23,16 +23,23 @@ const BrightShader = {
   fragmentShader: /* glsl */`
     uniform sampler2D tScene; uniform vec2 uTexel; uniform float uThreshold, uKnee;
     varying vec2 vUv;
+
+  // The scene buffer is half-float, which tops out at 65504. One over-bright specular — a floodlight on glass, a
+  // muzzle flash close up — stores as Inf, and from there the maths falls apart: the bright pass below divides Inf
+  // by Inf, the blur spreads the NaN over a block of the small buffer, and the tone map turns the whole block into
+  // a rectangle of pure black sitting on top of the picture. Every read of the scene goes through this.
+  vec3 safeHDR(vec3 v) { return all(equal(v, v)) ? min(v, vec3(300.0)) : vec3(0.0); }
     void main() {
-      vec3 c = texture2D(tScene, vUv + vec2(-1.0, -1.0) * uTexel).rgb
-             + texture2D(tScene, vUv + vec2( 1.0, -1.0) * uTexel).rgb
-             + texture2D(tScene, vUv + vec2(-1.0,  1.0) * uTexel).rgb
-             + texture2D(tScene, vUv + vec2( 1.0,  1.0) * uTexel).rgb;
+      vec3 c = safeHDR(texture2D(tScene, vUv + vec2(-1.0, -1.0) * uTexel).rgb)
+             + safeHDR(texture2D(tScene, vUv + vec2( 1.0, -1.0) * uTexel).rgb)
+             + safeHDR(texture2D(tScene, vUv + vec2(-1.0,  1.0) * uTexel).rgb)
+             + safeHDR(texture2D(tScene, vUv + vec2( 1.0,  1.0) * uTexel).rgb);
       c *= 0.25;
       float b = max(c.r, max(c.g, c.b));
       float soft = clamp(b - uThreshold + uKnee, 0.0, 2.0 * uKnee);
       soft = soft * soft / (4.0 * uKnee + 0.0001);
-      float w = max(soft, b - uThreshold) / max(b, 0.0001);
+      // b is finite now, so this can no longer be Inf over Inf
+      float w = b > 0.0001 ? max(soft, b - uThreshold) / b : 0.0;
       gl_FragColor = vec4(c * w, 1.0);
     }
   `,
@@ -82,16 +89,20 @@ const FinalShader = {
     varying vec2 vUv;
 
     float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+    // The scene buffer is half-float and tops out at 65504, so one over-bright specular stores as Inf. Left alone
+    // it poisons everything downstream — Inf/(1+Inf) is NaN, and a NaN reaching the tone map comes out as a black
+    // rectangle over the picture. Every read of the scene goes through this.
+    vec3 safeHDR(vec3 v) { return all(equal(v, v)) ? min(v, vec3(300.0)) : vec3(0.0); }
     // luma of a cheaply tone-mapped sample: edges are found on what the eye will see, not on raw HDR
     float edgeLuma(vec3 c) { c = c / (1.0 + c); return dot(c, vec3(0.299, 0.587, 0.114)); }
 
     vec3 sceneAA(vec2 uv) {
-      vec3 m = texture2D(tScene, uv).rgb;
+      vec3 m = safeHDR(texture2D(tScene, uv).rgb);
       #ifdef USE_FXAA
-        vec3 nw = texture2D(tScene, uv + vec2(-1.0, -1.0) * uInvRes).rgb;
-        vec3 ne = texture2D(tScene, uv + vec2( 1.0, -1.0) * uInvRes).rgb;
-        vec3 sw = texture2D(tScene, uv + vec2(-1.0,  1.0) * uInvRes).rgb;
-        vec3 se = texture2D(tScene, uv + vec2( 1.0,  1.0) * uInvRes).rgb;
+        vec3 nw = safeHDR(texture2D(tScene, uv + vec2(-1.0, -1.0) * uInvRes).rgb);
+        vec3 ne = safeHDR(texture2D(tScene, uv + vec2( 1.0, -1.0) * uInvRes).rgb);
+        vec3 sw = safeHDR(texture2D(tScene, uv + vec2(-1.0,  1.0) * uInvRes).rgb);
+        vec3 se = safeHDR(texture2D(tScene, uv + vec2( 1.0,  1.0) * uInvRes).rgb);
         float lM = edgeLuma(m), lNW = edgeLuma(nw), lNE = edgeLuma(ne), lSW = edgeLuma(sw), lSE = edgeLuma(se);
         float lMin = min(lM, min(min(lNW, lNE), min(lSW, lSE)));
         float lMax = max(lM, max(max(lNW, lNE), max(lSW, lSE)));
@@ -100,8 +111,8 @@ const FinalShader = {
         float reduce = max((lNW + lNE + lSW + lSE) * 0.03125, 0.0078125);
         float rcp = 1.0 / (min(abs(dir.x), abs(dir.y)) + reduce);
         dir = clamp(dir * rcp, vec2(-5.0), vec2(5.0)) * uInvRes;
-        vec3 a = 0.5 * (texture2D(tScene, uv + dir * (1.0 / 3.0 - 0.5)).rgb + texture2D(tScene, uv + dir * (2.0 / 3.0 - 0.5)).rgb);
-        vec3 b = a * 0.5 + 0.25 * (texture2D(tScene, uv + dir * -0.5).rgb + texture2D(tScene, uv + dir * 0.5).rgb);
+        vec3 a = 0.5 * (safeHDR(texture2D(tScene, uv + dir * (1.0 / 3.0 - 0.5)).rgb) + safeHDR(texture2D(tScene, uv + dir * (2.0 / 3.0 - 0.5)).rgb));
+        vec3 b = a * 0.5 + 0.25 * (safeHDR(texture2D(tScene, uv + dir * -0.5).rgb) + safeHDR(texture2D(tScene, uv + dir * 0.5).rgb));
         float lB = edgeLuma(b);
         return (lB < lMin || lB > lMax) ? a : b;
       #else
@@ -133,11 +144,11 @@ const FinalShader = {
       float ab = uAberration + uDamage * 0.01 + uArchitect * 0.004;
       if (ab > 0.0001) {
         vec2 off = cc * ab * (1.0 + r2 * 4.0);
-        col.r = texture2D(tScene, uv + off).r;
-        col.b = texture2D(tScene, uv - off).b;
+        col.r = safeHDR(texture2D(tScene, uv + off).rgb).r;
+        col.b = safeHDR(texture2D(tScene, uv - off).rgb).b;
       }
       // bloom: a quarter-size and an eighth-size level, both bilinear-upsampled for free
-      col += (texture2D(tBloomA, uv).rgb * 0.62 + texture2D(tBloomB, uv).rgb * 0.38) * uBloom;
+      col += (safeHDR(texture2D(tBloomA, uv).rgb) * 0.62 + safeHDR(texture2D(tBloomB, uv).rgb) * 0.38) * uBloom;
       // map view: cool blueprint tint and faint scanlines
       if (uArchitect > 0.001) {
         float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
@@ -155,7 +166,8 @@ const FinalShader = {
       // grain, then the flash of an explosion or lightning
       col += (hash(uv * uResolution.xy * 0.5 + fract(uTime) * 100.0) - 0.5) * 0.012 * (1.0 + uArchitect);
       col += uFlash * vec3(1.0, 0.98, 0.9);
-      gl_FragColor = vec4(toSRGB(acesFilmic(max(col, 0.0))), 1.0);
+      // last line of defence: whatever else went wrong, a NaN must not reach the tone map
+      gl_FragColor = vec4(toSRGB(acesFilmic(max(safeHDR(col), 0.0))), 1.0);
     }
   `,
 };
