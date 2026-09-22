@@ -66,7 +66,17 @@ export class Game {
     i18n.set(i18n.detect());
     let renderer;
     try {
-      renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', stencil: false });
+      // The context is created here rather than by three.js, which always asks for alpha: true. Both attributes
+      // below are what stopped the black rectangles on phones:
+      //   alpha: false — an opaque canvas. The browser composites it without blending, so it never has to hold a
+      //     transparent-black copy of it, and "not drawn yet" stops being a state the compositor can show.
+      //   preserveDrawingBuffer: true — otherwise the browser may empty the buffer after each composite. A
+      //     composite that races the next frame then reads nothing; with it, it reads the previous frame. It also
+      //     makes the black-screen watchdog's readPixels see the frame that was actually on screen.
+      const canvas = document.createElement('canvas');
+      const attrs = { alpha: false, depth: true, stencil: false, antialias: false, premultipliedAlpha: true, preserveDrawingBuffer: true, powerPreference: 'high-performance', failIfMajorPerformanceCaveat: false };
+      const context = canvas.getContext('webgl2', attrs) || undefined;
+      renderer = new THREE.WebGLRenderer({ canvas, context, ...attrs });
     } catch (e) { this.fatal(i18n.t('menu.webglError')); throw e; }
     if (!renderer.capabilities.isWebGL2) { this.fatal(i18n.t('menu.webglError')); throw new Error('WebGL2 required'); }
     this.renderer = renderer;
@@ -641,12 +651,14 @@ export class Game {
     if (!w || !h) return null;
     try {
       this.renderer.setRenderTarget(null);
-      const buf = this._sampleBuf || (this._sampleBuf = new Uint8Array(4));
+      // one readPixels, not six: every call stalls the GPU until the frame has finished, and one full-width row
+      // costs the same single stall while covering far more of the picture than six scattered pixels did
+      const y = Math.floor(h * 0.62);
+      if (!this._sampleBuf || this._sampleBuf.length < w * 4) this._sampleBuf = new Uint8Array(w * 4);
+      const buf = this._sampleBuf;
+      gl.readPixels(0, y, w, 1, gl.RGBA, gl.UNSIGNED_BYTE, buf);
       let max = 0;
-      for (const [fx, fy] of [[0.5, 0.55], [0.3, 0.7], [0.7, 0.7], [0.5, 0.85], [0.15, 0.4], [0.85, 0.4]]) {
-        gl.readPixels(Math.min(w - 1, Math.floor(fx * w)), Math.min(h - 1, Math.floor(fy * h)), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, buf);
-        max = Math.max(max, buf[0], buf[1], buf[2]);
-      }
+      for (let i = 0, n = w * 4; i < n; i += 4) { if (buf[i] > max) max = buf[i]; if (buf[i + 1] > max) max = buf[i + 1]; if (buf[i + 2] > max) max = buf[i + 2]; }
       return max;
     } catch (e) { return null; }
   }

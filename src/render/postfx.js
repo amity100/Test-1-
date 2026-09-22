@@ -283,6 +283,12 @@ export class PostFX {
   render() {
     const r = this.renderer;
     if (!this.enabled) { r.setRenderTarget(null); r.render(this.scene, this.camera); return; }
+    // Nothing here may clear the canvas. Every pass below writes a full-screen quad over its whole target, and the
+    // last one covers the canvas completely, so a clear would only blank the framebuffer for the moment between the
+    // clear and the draw — which is exactly the window a phone's compositor can read, and exactly how the black
+    // rectangles got on screen. (EffectComposer used to do this for us; the fused pass has to do it itself.)
+    const autoClear = r.autoClear;
+    r.autoClear = false;
     // 1. the scene, into an HDR buffer (tone mapping is not applied when rendering into a target)
     r.setRenderTarget(this.rtScene);
     r.clear();
@@ -304,6 +310,7 @@ export class PostFX {
     f.tBloomA.value = this.rtA.texture;
     f.tBloomB.value = this.rtD.texture;
     this._pass(this.final, null);
+    r.autoClear = autoClear;
   }
 
   dispose() {

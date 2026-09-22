@@ -11,6 +11,9 @@ export class Input {
     this.locked = false;
     this.wantLock = false;
     this.softLook = false;        // fallback: mouse deltas without pointer lock (sandboxed iframes)
+    // true when the page is embedded (the artifact viewer, an <iframe> anywhere): pointer lock and fullscreen are
+    // the embedder's to grant, and a cross-origin parent makes reading window.top throw, which counts as embedded
+    this.embedded = (() => { try { return window.self !== window.top; } catch (e) { return true; } })();
     this.lockFailures = 0; this._attempt = 0; this._failedAttempt = -1;
     this.enabled = true;
     this.listeners = {};
@@ -111,7 +114,10 @@ export class Input {
     if (attempt !== undefined && attempt === this._failedAttempt) return; // already counted (event + rejection)
     this._failedAttempt = attempt;
     this.lockFailures++;
-    if (this.lockFailures >= 2 && !this.softLook) { this.softLook = true; this.emit('softlook'); this.emit('lockchange', true); }
+    // On a normal page a single failure is usually Chrome refusing a lock too soon after Esc, so we retry once.
+    // Inside a frame there is nothing to retry: an embedder that does not grant pointer lock never will, and
+    // retrying only bounced the player between "click to play" and the same refusal. Go straight to soft look.
+    if ((this.lockFailures >= 2 || this.embedded) && !this.softLook) { this.softLook = true; this.emit('softlook'); this.emit('lockchange', true); }
     else this.emit('lockerror');
   }
   unlock() {

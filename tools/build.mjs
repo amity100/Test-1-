@@ -58,8 +58,12 @@ fs.mkdirSync(path.join(root, 'dist'), { recursive: true });
 fs.writeFileSync(path.join(root, 'dist/VANTAGE.html'), html);
 console.log('dist/VANTAGE.html', (html.length / 1024 / 1024).toFixed(2) + ' MB', '(js ' + (js.length / 1024).toFixed(0) + ' KB)');
 
-// Artifact variant: the hosting page supplies the document skeleton, so only head content + body content.
-const artifact = `<title>VANTAGE</title>
+// Artifact variant: the hosting page supplies the document skeleton, so only head content + body content. The
+// charset and viewport are declared anyway: without them a host that leaves them out renders the text as
+// windows-1252 (✓ and ◇ come out as mojibake) and lets the phone zoom the canvas.
+const artifact = `<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>VANTAGE</title>
 <meta name="description" content="A single-player tactical shooter: fight on the ground with your squad and rebuild the battlefield from above." />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Heebo:wght@400;600;800&display=swap" rel="stylesheet">

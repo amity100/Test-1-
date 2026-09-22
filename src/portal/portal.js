@@ -441,7 +441,12 @@ export class PortalSystem {
     this._viewFrame = (this._viewFrame || 0) + 1;
     const w = Math.max(64, Math.floor(size.x * scale)), h = Math.max(64, Math.floor(size.y * scale));
     _m.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); _frustum.setFromProjectionMatrix(_m);
-    for (const end of this.ends) end.viewMat.uniforms.uRes.value.set(size.x, size.y);
+    // the view is sampled in screen space, so uRes must be the buffer the scene is actually drawn into — with
+    // dynamic resolution that is the post-processing scene buffer, not the canvas
+    const fx = g.postfx;
+    const vw = fx && fx.enabled && fx.sceneW ? fx.sceneW : size.x;
+    const vh = fx && fx.enabled && fx.sceneH ? fx.sceneH : size.y;
+    for (const end of this.ends) end.viewMat.uniforms.uRes.value.set(vw, vh);
     const savedTarget = renderer.getRenderTarget();
     for (const end of this.ends) {
       const other = this.other(end);
