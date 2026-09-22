@@ -22,6 +22,32 @@ function saveSettings(s: Settings) {
   } catch {}
 }
 
+/**
+ * Resolves a binary asset to a loadable URL. Prefers the raw file; when the
+ * host can't serve that type, falls back to a base64 JSON pack of it.
+ */
+async function assetUrl(dir: string, name: string, magic: string, onProgress?: (p: number) => void): Promise<string> {
+  try {
+    const r = await fetch(dir + name);
+    if (r.ok) {
+      const buf = await r.arrayBuffer();
+      const head = new TextDecoder().decode(new Uint8Array(buf, 0, Math.min(4, buf.byteLength)));
+      if (head.startsWith(magic)) {
+        onProgress?.(1);
+        return URL.createObjectURL(new Blob([buf]));
+      }
+    }
+  } catch {}
+  const r = await fetch(dir + name + '.json');
+  if (!r.ok) throw new Error(`Missing asset ${name}`);
+  const j = await r.json();
+  const bin = atob(j.data);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  onProgress?.(1);
+  return URL.createObjectURL(new Blob([bytes]));
+}
+
 async function boot() {
   const app = document.getElementById('app')!;
   app.innerHTML = '';
@@ -46,9 +72,13 @@ async function boot() {
   }
 
   const base = import.meta.env.BASE_URL || './';
+  const [soldierUrl, hdrUrl] = await Promise.all([
+    assetUrl(`${base}assets/`, 'Soldier.glb', 'glTF', (p) => menu.showLoading(p * 0.7)),
+    assetUrl(`${base}assets/`, 'moonless_golf_1k.hdr', '#?').catch(() => null),
+  ]);
   const [asset, env] = await Promise.all([
-    loadCharacterAsset(`${base}assets/Soldier.glb`, (p) => menu.showLoading(p * 0.8)),
-    new HDRLoader().loadAsync(`${base}assets/moonless_golf_1k.hdr`).catch(() => null),
+    loadCharacterAsset(soldierUrl, (p) => menu.showLoading(0.7 + p * 0.1)),
+    hdrUrl ? new HDRLoader().loadAsync(hdrUrl).catch(() => null) : Promise.resolve(null),
   ]);
   menu.showLoading(0.85);
   let envMap: THREE.Texture | null = null;

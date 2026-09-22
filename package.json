@@ -7,7 +7,8 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:artifact": "npm run build && node scripts/pack-assets.mjs"
   },
   "dependencies": {
     "three": "^0.186.0"
