@@ -13,7 +13,8 @@ const MIME = { '.html': 'text/html', '.js': 'application/javascript', '.glb': 'm
 const server = http.createServer((req, res) => { const p = decodeURIComponent(req.url.split('?')[0]); const f = path.join(root, p); if (!fs.existsSync(f) || fs.statSync(f).isDirectory()) { res.writeHead(404); res.end(); return; } res.writeHead(200, { 'Content-Type': MIME[path.extname(f)] || 'application/octet-stream' }); fs.createReadStream(f).pipe(res); });
 await new Promise((r) => server.listen(port, r));
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
-const page = await browser.newPage({ viewport: { width: W, height: H } });
+const DPR = +opt('dpr', 1);
+const page = await browser.newPage({ viewport: { width: W, height: H }, deviceScaleFactor: DPR, hasTouch: argv.includes('--touch'), isMobile: argv.includes('--touch') });
 await page.addInitScript(([q, l, touch]) => { window.__VANTAGE_NOLOCK = true; if (touch) window.__VANTAGE_TOUCH = true; try { localStorage.setItem('vantage.settings', JSON.stringify({ quality: q, sensitivity: 1, invertY: false, volume: 0 })); localStorage.setItem('vantage.lang', l); } catch (e) {} }, [opt('quality', 'high'), opt('lang', 'en'), argv.includes('--touch')]);
 page.on('console', (m) => { if (m.type() === 'error') { const t = m.text(); if (!t.includes('fonts.g') && !t.includes('net::ERR') && !t.includes('GL Driver')) console.log('console.error:', t.slice(0, 300)); } });
 page.on('pageerror', (e) => console.log('PAGEERROR:', e.message, (e.stack || '').split('\n').slice(1, 3).join(' | ')));

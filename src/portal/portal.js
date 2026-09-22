@@ -288,7 +288,11 @@ export class PortalSystem {
     for (const e of this.ends) g.fx.portalBurst(e.center.clone(), 0.5);
     g.onPortalClosed && g.onPortalClosed(this);
   }
-  _finishClose() { this.state = 'closed'; for (const e of this.ends) { e.group.visible = false; e.light.intensity = 0; e.visibleNow = false; } }
+  _finishClose() {
+    this.state = 'closed';
+    // the two view buffers are a good slice of GPU memory: a closed gateway gives them back
+    for (const e of this.ends) { e.group.visible = false; e.light.intensity = 0; e.visibleNow = false; if (e.target) { e.target.dispose(); e.target = null; e.viewMat.uniforms.tView.value = null; e.viewMat.uniforms.uHasView.value = 0; } }
+  }
 
   // ---- per frame ----
   update(dt, realDt) {
@@ -472,6 +476,7 @@ export class PortalSystem {
       renderer.setRenderTarget(end.target); renderer.clear();
       renderer.render(scene, vc);
       for (const e2 of this.ends) e2.view.visible = true;
+      end.viewMat.uniforms.uHasView.value = 1;
     }
     renderer.setRenderTarget(savedTarget);
   }

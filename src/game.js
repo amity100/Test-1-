@@ -496,14 +496,16 @@ export class Game {
   applySettings(s) {
     const q = s.quality;
     if (this.settings && this.settings.quality !== q) { this._repairStep = 0; this._blackFrames = 0; this._checksLeft = 12; this.postfx.enabled = true; this.renderer.toneMapping = THREE.ACESFilmicToneMapping; }
-    const caps = this.isTouch ? { low: 1, medium: 2, high: 2.6, ultra: 3 } : { low: 1, medium: 1.25, high: 1.5, ultra: CONFIG.render.maxPixelRatio };
+    const caps = this.isTouch ? { low: 1.2, medium: 1.8, high: 2.4, ultra: 3 } : { low: 1, medium: 1.25, high: 1.5, ultra: CONFIG.render.maxPixelRatio };
     let pr = Math.min(window.devicePixelRatio || 1, caps[q] || 1.5);
-    // phones: a pixel budget per quality (a 1080p-class picture on medium, near native on high)
-    if (this.isTouch) { const budget = { low: 0.6e6, medium: 1.3e6, high: 2.1e6, ultra: 3.2e6 }[q] || 1.3e6; const w = this.container.clientWidth || window.innerWidth, h = this.container.clientHeight || window.innerHeight; pr = Math.min(pr, Math.sqrt(budget / Math.max(1, w * h))); }
+    // Phones get a pixel budget per quality. It is deliberately well under the screen's own resolution: the canvas
+    // and the half-float scene buffer are the two biggest things in GPU memory, and a WebView that runs short of it
+    // composites black tiles instead of the picture. 1.25 MP on a 360 pt wide screen is still about 2x oversampled.
+    if (this.isTouch) { const budget = { low: 0.45e6, medium: 0.85e6, high: 1.25e6, ultra: 1.8e6 }[q] || 0.85e6; const w = this.container.clientWidth || window.innerWidth, h = this.container.clientHeight || window.innerHeight; pr = Math.min(pr, Math.sqrt(budget / Math.max(1, w * h))); }
     this.renderer.setPixelRatio(pr);
     this.renderer.toneMappingExposure = CONFIG.render.exposure * (s.brightness ?? 1);
     this.renderer.shadowMap.enabled = q !== 'low';
-    this.moon.shadow.mapSize.setScalar(q === 'ultra' ? (this.isTouch ? 2048 : 4096) : q === 'high' ? 2048 : 1024); if (this.moon.shadow.map) { this.moon.shadow.map.dispose(); this.moon.shadow.map = null; }
+    this.moon.shadow.mapSize.setScalar(this.isTouch ? (q === 'ultra' ? 2048 : 1024) : q === 'ultra' ? 4096 : q === 'high' ? 2048 : 1024); if (this.moon.shadow.map) { this.moon.shadow.map.dispose(); this.moon.shadow.map = null; }
     for (const l of this.builder.lights.flood) { l.castShadow = l.castShadow && q !== 'low' && !(this.isTouch && q === 'medium'); }
     this.postfx.setQuality(q);
     if (this.fx.rain) this.fx.rain.visible = q !== 'low';

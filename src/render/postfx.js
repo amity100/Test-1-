@@ -214,8 +214,11 @@ export class PostFX {
 
   // Dynamic resolution: the scene renders at `scale` of the canvas, the final pass upsamples it.
   setRenderScale(scale) {
-    const s = THREE.MathUtils.clamp(scale, 0.5, 1);
-    if (Math.abs(s - this.renderScale) < 0.02) return false;
+    // fixed steps: reallocating render targets is the expensive part, so there are five sizes, not a continuum
+    const steps = [0.55, 0.65, 0.75, 0.85, 1];
+    let s = steps[0];
+    for (const v of steps) if (scale >= v - 0.001) s = v;
+    if (s === this.renderScale) return false;
     this.renderScale = s;
     this._allocate();
     this._applyAA();
@@ -230,15 +233,16 @@ export class PostFX {
     this.fxaa.enabled = want;
   }
 
-  _allocate() {
+  _allocate(force = false) {
     const sw = Math.max(16, Math.round(this.bufW * this.renderScale));
     const sh = Math.max(16, Math.round(this.bufH * this.renderScale));
-    if (this.rtScene && this.rtScene.width === sw && this.rtScene.height === sh) return;
+    if (!force && this.rtScene && this.rtScene.width === sw && this.rtScene.height === sh) return;
     for (const t of [this.rtScene, this.rtA, this.rtB, this.rtC, this.rtD]) if (t) t.dispose();
     this.sceneW = sw; this.sceneH = sh;
     this.rtScene = this._makeTarget(sw, sh, true);           // the scene needs depth; the bloom buffers do not
-    const w4 = Math.max(8, sw >> 2), h4 = Math.max(8, sh >> 2);
-    const w8 = Math.max(4, sw >> 3), h8 = Math.max(4, sh >> 3);
+    // with bloom off the four small buffers are never read: keep them at one pixel rather than at a quarter screen
+    const w4 = this.bloomOn ? Math.max(8, sw >> 2) : 1, h4 = this.bloomOn ? Math.max(8, sh >> 2) : 1;
+    const w8 = this.bloomOn ? Math.max(4, sw >> 3) : 1, h8 = this.bloomOn ? Math.max(4, sh >> 3) : 1;
     this.rtA = this._makeTarget(w4, h4);
     this.rtB = this._makeTarget(w4, h4);
     this.rtC = this._makeTarget(w8, h8);
@@ -248,9 +252,11 @@ export class PostFX {
   }
 
   setQuality(q) {
+    const was = this.bloomOn;
     this.quality = q;
     const bloomOn = q !== 'low' && this.floatTargets;
     this.bloomOn = bloomOn;
+    if (was !== bloomOn) this._allocate(true);
     this.final.uniforms.uBloom.value = bloomOn ? this.cfg.bloomStrength * (q === 'ultra' ? 1.15 : 1) : 0;
     this.bright.uniforms.uThreshold.value = this.cfg.bloomThreshold;
     this.smaa.enabled = false;
