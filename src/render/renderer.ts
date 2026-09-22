@@ -53,7 +53,7 @@ const GradeShader = {
       col += uTint * uFlash * 0.35 * (1.0 - r2 * 2.0);
       // film grain
       float g = hash(uv * uRes + fract(uTime) * 100.0) - 0.5;
-      col += g * 0.035 * (1.0 - lum * 0.5);
+      col += g * 0.022 * (1.0 - lum * 0.5);
       gl_FragColor = vec4(max(col, 0.0), 1.0);
     }
   `,

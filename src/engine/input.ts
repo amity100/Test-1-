@@ -19,6 +19,9 @@ export class Input {
   private released = new Set<Action>();
   private keys = new Set<string>();
   pointerLocked = false;
+  /** Pointer lock unavailable (e.g. sandboxed iframe): read raw mouse deltas instead. */
+  freeMouse = false;
+  active = false;
   lastDevice: 'kbm' | 'pad' | 'touch' = 'kbm';
   sensitivity = 1;
   invertY = false;
@@ -52,7 +55,7 @@ export class Input {
       for (const a of [...this.held]) this.up(a);
     });
     canvas.addEventListener('mousedown', (e) => {
-      if (!this.pointerLocked) return;
+      if (!this.pointerLocked && !(this.freeMouse && this.active)) return;
       this.lastDevice = 'kbm';
       if (e.button === 2) this.down('aim');
       if (e.button === 0) this.down('open');
@@ -65,14 +68,17 @@ export class Input {
     });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     window.addEventListener('mousemove', (e) => {
-      if (!this.pointerLocked || !this.enabled) return;
+      if (!(this.pointerLocked || (this.freeMouse && this.active)) || !this.enabled) return;
       this.lookX += e.movementX * FEEL.lookSensitivity * this.sensitivity;
       this.lookY += e.movementY * FEEL.lookSensitivity * this.sensitivity * (this.invertY ? -1 : 1);
     });
     window.addEventListener('wheel', (e) => {
-      if (!this.pointerLocked) return;
+      if (!this.pointerLocked && !(this.freeMouse && this.active)) return;
       this.wheel += Math.sign(e.deltaY) * -1;
     }, { passive: true });
+    document.addEventListener('pointerlockerror', () => {
+      this.freeMouse = true;
+    });
     document.addEventListener('pointerlockchange', () => {
       this.pointerLocked = document.pointerLockElement === canvas;
       if (!this.pointerLocked) for (const a of [...this.held]) this.up(a);
@@ -81,8 +87,25 @@ export class Input {
 
   requestLock() {
     if (this.lastDevice === 'touch') return;
-    const p = (this.canvas as any).requestPointerLock?.({ unadjustedMovement: true });
-    if (p && p.catch) p.catch(() => (this.canvas as any).requestPointerLock?.());
+    const el = this.canvas as any;
+    if (!el.requestPointerLock) {
+      this.freeMouse = true;
+      return;
+    }
+    try {
+      const p = el.requestPointerLock({ unadjustedMovement: true });
+      if (p && p.catch)
+        p.catch(() => {
+          try {
+            const p2 = el.requestPointerLock();
+            if (p2 && p2.catch) p2.catch(() => (this.freeMouse = true));
+          } catch {
+            this.freeMouse = true;
+          }
+        });
+    } catch {
+      this.freeMouse = true;
+    }
   }
 
   down(a: Action) {

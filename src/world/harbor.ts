@@ -441,7 +441,7 @@ export function buildHarbor(envMap: THREE.Texture | null, mobile: boolean): Leve
   const SODIUM = 0xffa650, COOL = 0xbfd8ff, WARM = 0xffd4a0;
   const pole = (x: number, z: number, h = 7.5, color = SODIUM, range = 17, angle = 0.8, intensity = 1) => {
     lamps.push({ pos: V(x, h, z), dir: V(0, -1, 0), color, range, angle, intensity, kind: 'pole' });
-    world.add(V(x - 0.15, 0, z - 0.15), V(x + 0.15, h, z + 0.15), { tag: 'pole' });
+    world.add(V(x - 0.15, 0, z - 0.15), V(x + 0.15, h, z + 0.15), { tag: 'pole', seeThrough: true, noPortal: true });
     mb.box('metal', V(x - 0.1, 0, z - 0.1), V(x + 0.1, h + 0.2, z + 0.1), 0x3a3d40, 2);
     mb.box('metal', V(x - 0.35, h + 0.05, z - 0.2), V(x + 0.35, h + 0.3, z + 0.2), 0x2a2c2e, 2);
   };

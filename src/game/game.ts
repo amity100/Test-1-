@@ -265,6 +265,7 @@ export class Game {
   start() {
     this.audio.unlock();
     this.mode = 'playing';
+    this.input.active = true;
     this.hud.show(true);
     this.touch?.show(true);
     this.startT = performance.now();
@@ -293,6 +294,7 @@ export class Game {
     this.guards.globalAlarm = 0;
     this.damage = 0;
     this.mode = 'playing';
+    this.input.active = true;
     this.hud.show(true);
     this.touch?.show(true);
     this.input.requestLock();
@@ -301,6 +303,7 @@ export class Game {
   pause() {
     if (this.mode !== 'playing') return;
     this.mode = 'paused';
+    this.input.active = false;
     this.touch?.show(false);
     this.onPause();
   }
@@ -308,12 +311,14 @@ export class Game {
   resume() {
     if (this.mode !== 'paused') return;
     this.mode = 'playing';
+    this.input.active = true;
     this.touch?.show(true);
     this.input.requestLock();
   }
 
   quitToMenu() {
     this.mode = 'menu';
+    this.input.active = false;
     this.hud.show(false);
     this.touch?.show(false);
     this.resetMission();
@@ -322,6 +327,7 @@ export class Game {
 
   private end(win: boolean) {
     this.mode = 'ended';
+    this.input.active = false;
     this.hud.show(false);
     this.touch?.show(false);
     document.exitPointerLock?.();

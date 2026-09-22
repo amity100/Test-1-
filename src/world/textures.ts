@@ -151,7 +151,7 @@ export function corrugated(size = 512): SurfaceSet {
   const cc = col.getContext('2d')!, rc = rough.getContext('2d')!;
   const ci = cc.createImageData(size, size), ri = rc.createImageData(size, size);
   const h = new Float32Array(size * size);
-  const ribs = 16;
+  const ribs = 10;
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const i = y * size + x;
@@ -160,12 +160,15 @@ export function corrugated(size = 512): SurfaceSet {
       // trapezoidal rib profile
       const profile = THREE.MathUtils.clamp(Math.abs(f - 0.5) * 4 - 0.6, 0, 1);
       h[i] = profile;
-      const streak = drip[(Math.floor(y / 2) * size + x) % (size * size)];
-      const rusty = THREE.MathUtils.smoothstep(rust[i] + streak * 0.2, 0.62, 0.8);
-      const v = 200 - rusty * 90 - profile * 18 - streak * 30;
-      ci.data[i * 4] = v + rusty * 40;
-      ci.data[i * 4 + 1] = v - rusty * 10;
-      ci.data[i * 4 + 2] = v - rusty * 40;
+      // vertical drip streaks: sample the noise stretched along y
+      const sy = Math.floor(y * 0.12) * size + x;
+      const streak = drip[sy % (size * size)] * THREE.MathUtils.smoothstep(y / size, 0.0, 0.9);
+      const rusty = THREE.MathUtils.smoothstep(rust[i] * 0.8 + streak * 0.35, 0.7, 0.92);
+      const grime = rust[i] * 0.35 + streak * 0.25;
+      const v = 205 - rusty * 55 - profile * 26 - grime * 45;
+      ci.data[i * 4] = v + rusty * 22;
+      ci.data[i * 4 + 1] = v - rusty * 6;
+      ci.data[i * 4 + 2] = v - rusty * 24;
       ci.data[i * 4 + 3] = 255;
       const r = 0.45 + rusty * 0.45 + streak * 0.1;
       ri.data[i * 4] = ri.data[i * 4 + 1] = ri.data[i * 4 + 2] = r * 255;

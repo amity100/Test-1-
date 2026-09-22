@@ -219,7 +219,7 @@ export class Player {
 
   private tryMantle(world: CollisionWorld) {
     const f = this.forward(_v);
-    for (const d of [0.55, 0.8]) {
+    for (const d of [0.5, 0.75, 1.0, 1.2]) {
       const px = this.pos.x + f.x * d, pz = this.pos.z + f.z * d;
       const top = world.groundAt(px, pz, 0.18, this.pos.y + FEEL.mantleMax);
       if (!(top > this.pos.y + 0.55)) continue;

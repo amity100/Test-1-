@@ -37,15 +37,14 @@ export class TouchControls {
         <button class="t-btn t-action" data-a="interact"><span>F</span></button>
         <button class="t-btn t-rift" data-a="rift"><i class="rift-ico"></i><span>${t('rift')}</span></button>
         <button class="t-btn t-anchor" data-a="anchor"><span>⚓</span></button>
-        <button class="t-btn t-jump" data-a="jump"><span>⤒</span></button>
-        <button class="t-btn t-crouch" data-a="crouch"><span>⤓</span></button>
+        <button class="t-btn t-jump" data-a="jump"><span class="ico">⤒</span><small>${t('jump')}</small></button>
+        <button class="t-btn t-crouch" data-a="crouch"><span class="ico">⤓</span><small>${t('crouch')}</small></button>
         <button class="t-btn t-close" data-a="close"><span>✕</span></button>
       </div>
       <div class="t-aim">
         <button class="t-btn t-open" data-a="open"><span>${t('open')}</span></button>
         <button class="t-btn t-cancel" data-a="cancel"><span>${t('cancel')}</span></button>
-        <button class="t-btn t-rot" data-a="rotL"><span>⟲</span></button>
-        <button class="t-btn t-rot" data-a="rotR"><span>⟳</span></button>
+        <div class="t-rots"><button class="t-btn t-rot" data-a="rotL"><span>⟲</span></button><button class="t-btn t-rot" data-a="rotR"><span>⟳</span></button></div>
         <div class="t-dist"><div class="t-dist-label">${t('distance')}</div><div class="t-dist-track"><i></i></div></div>
       </div>`;
     root.appendChild(this.el);

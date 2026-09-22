@@ -183,9 +183,7 @@ input[type=range] { pointer-events: auto; accent-color: var(--rift); width: 100%
 .touch.aiming .t-cluster .t-action, .touch.aiming .t-cluster .t-jump, .touch.aiming .t-cluster .t-crouch, .touch.aiming .t-cluster .t-close, .touch.aiming .t-cluster .t-anchor { opacity: .25; }
 .t-open { right: max(118px, calc(env(safe-area-inset-right) + 100px)); bottom: max(118px, calc(env(safe-area-inset-bottom) + 100px)); width: 96px; height: 96px; background: rgba(255,140,31,.85) !important; color: #140a02 !important; border: none !important; font-size: 15px !important; box-shadow: 0 0 28px var(--rift-glow); }
 .t-cancel { left: max(18px, env(safe-area-inset-left)); top: max(70px, calc(env(safe-area-inset-top) + 60px)); width: 76px; height: 40px; border-radius: 20px !important; font-size: 11px !important; }
-.t-rot:nth-of-type(3) { right: max(230px, calc(env(safe-area-inset-right) + 212px)); bottom: max(150px, calc(env(safe-area-inset-bottom) + 132px)); width: 50px; height: 50px; font-size: 20px; }
-.t-rot:nth-of-type(4) { right: max(230px, calc(env(safe-area-inset-right) + 212px)); bottom: max(90px, calc(env(safe-area-inset-bottom) + 72px)); width: 50px; height: 50px; font-size: 20px; }
-.t-dist { position: absolute; right: max(14px, env(safe-area-inset-right)); top: 22%; height: 34%; width: 52px; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
+.t-dist { position: absolute; right: max(14px, env(safe-area-inset-right)); top: 30%; height: 30%; width: 52px; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
 .t-dist-label { font-size: 10px; letter-spacing: .2em; color: var(--rift); }
 .t-dist-track { flex: 1; width: 44px; border-radius: 22px; border: 1.5px solid rgba(255,140,31,.6); background: repeating-linear-gradient(180deg, rgba(255,140,31,.25) 0 2px, transparent 2px 14px); pointer-events: auto; touch-action: none; }
 .is-touch .hud-bottom { bottom: max(14px, env(safe-area-inset-bottom)); left: 36%; gap: 16px; }
@@ -198,4 +196,30 @@ input[type=range] { pointer-events: auto; accent-color: var(--rift); width: 100%
 @media (orientation: portrait) {
   .is-touch .ui::after { content: '⟳  Rotate your device for the best experience'; position: absolute; left: 50%; top: 45%; transform: translateX(-50%); background: var(--panel); padding: 10px 14px; font-size: 13px; letter-spacing: .1em; white-space: nowrap; }
   html[lang='he'] .is-touch .ui::after { content: '⟳  סובב את המכשיר לחוויה הטובה ביותר'; }
+}
+
+.t-rots { position: absolute; left: 50%; bottom: max(64px, calc(env(safe-area-inset-bottom) + 50px)); transform: translateX(-50%); display: flex; gap: 14px; pointer-events: none; }
+.t-rots .t-btn { position: relative; width: 50px; height: 50px; font-size: 20px; }
+.t-btn .ico { font-size: 18px; line-height: 1; }
+.t-btn small { display: block; font-size: 8px; letter-spacing: .08em; opacity: .8; margin-top: 2px; }
+.t-jump, .t-crouch { flex-direction: column; }
+.is-touch .hud.aiming .hud-obj, .is-touch .hud.aiming .objmarker { opacity: 0; }
+.is-touch .hud-scry { inset-inline-end: auto; inset-inline-start: max(18px, env(safe-area-inset-left)); top: max(96px, calc(env(safe-area-inset-top) + 86px)); width: min(190px, 26vw); }
+.is-touch .t-cancel { top: max(14px, env(safe-area-inset-top)); }
+.is-touch .hud-aiminfo { left: calc(50% + 28px); }
+.is-touch .hud-aiminfo .dist { font-size: 18px; }
+@media (max-height: 520px) {
+  .menu.on { gap: 12px; justify-content: flex-start; }
+  .menu.main { padding-top: max(14px, env(safe-area-inset-top)); }
+  .logo h1 { font-size: 38px; }
+  .logo .ring { width: 26px; }
+  .brand p { margin-top: 4px; font-size: 10px; }
+  .mission-card h2 { font-size: 18px; margin: 2px 0 4px; }
+  .mission-card p { font-size: 12px; line-height: 1.4; max-width: 440px; }
+  .btns { flex-direction: row; flex-wrap: wrap; min-width: 0; max-width: 94vw; }
+  .btns button { padding: 10px 16px; font-size: 12px; }
+  .title { font-size: 26px; }
+  .stats b { font-size: 18px; }
+  .stats div { padding: 6px; }
+  .ctl-grid div { padding: 6px 10px; font-size: 12px; }
 }

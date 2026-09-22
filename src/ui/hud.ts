@@ -133,6 +133,7 @@ export class HUD {
     this.aimInfo.style.opacity = String(s.aiming);
     this.scry.style.opacity = String(s.aiming > 0.9 ? 1 : 0);
     this.anchorEl.classList.toggle('set', s.anchor);
+    this.el.classList.toggle('aiming', s.aiming > 0.5);
     const r = this.scry.getBoundingClientRect();
     this.scryRect = { x: r.left, y: r.top, w: r.width, h: r.height };
   }
