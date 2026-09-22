@@ -93,7 +93,11 @@ export class Game {
     this.menus.show('loading');
     this.hud = new HUD(this, this.container);
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.FogExp2(0x0a0f1a, CONFIG.render.fogDensity);
+    // Distance dissolves into the fog colour, so it has to sit near the sky's own brightness. At 0x0a0f1a it
+    // tone-mapped to about (2,3,7) out of 255 — anything far enough away turned into a black hole in the picture
+    // instead of haze, which is what read on a phone as "black rectangles". These are linear values, set directly.
+    this.scene.fog = new THREE.FogExp2(0x000000, CONFIG.render.fogDensity);
+    this.scene.fog.color.setRGB(CONFIG.render.fogColor[0], CONFIG.render.fogColor[1], CONFIG.render.fogColor[2]);
     this._buildSky();
     this._buildLights();
     this.mats = new MaterialLibrary(renderer);
@@ -170,7 +174,10 @@ export class Game {
     const R = this.isTouch ? 32 : 45;
     s.camera.near = 1; s.camera.far = 200; s.camera.left = s.camera.bottom = -R; s.camera.right = s.camera.top = R; s.bias = -0.0008; s.normalBias = 0.03;
     this.scene.add(this.moon); this.scene.add(this.moon.target);
-    this.hemi = new THREE.HemisphereLight(0x2a3e5c, 0x100d0a, 0.95); this.scene.add(this.hemi);
+    // The sky fill is what lights everything the moon and the floodlights miss. The ground half used to be almost
+    // black (0x100d0a), so a surface turned away from every light landed on zero and read as a hole cut in the
+    // scene. A real night still bounces some light up off the ground; this is that.
+    this.hemi = new THREE.HemisphereLight(0x33496b, 0x1b2130, 1.15); this.scene.add(this.hemi);
     this.lightning = { t: 18 + Math.random() * 30, flash: 0 };
   }
 
