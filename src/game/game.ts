@@ -694,7 +694,9 @@ export class Game {
       sound: (kind, at) => {
         if (kind === 'roar') this.audio.roar(at);
         else if (kind === 'clang') this.audio.shieldClang(at);
-        else if (kind === 'thud') this.audio.impact(at, 8);
+        else if (kind === 'thud') this.audio.impact(at, 6);
+        else if (kind === 'step') this.audio.footstep(at, 0.5, false);
+        else if (kind === 'shout') this.audio.shout(at);
       },
       bossRift: (_e, a, b) => {
         if (!a || !b) {
@@ -1111,7 +1113,7 @@ export class Game {
     }
     this.time += dt;
     this.stats.time += realDt;
-    this.audio.setSlowmo(1 - this.timeScale);
+    this.audio.setSlowmo(THREE.MathUtils.clamp((1 - this.timeScale) / 0.7, 0, 1));
 
     // ----- respawn -----
     if (this.respawnT >= 0) {
