@@ -322,6 +322,8 @@ const EN: Record<string, string> = {
   'ctl.vision': 'Rift vision',
   'ctl.clip': 'Save a clip',
   'ctl.photo': 'Photo mode',
+  'photo.hint.pad': 'Sticks: look / move · D-pad ←/→: zoom · RT: snap · D-pad ↑: exit',
+  'menu.photo': 'Photo mode',
   'ctl.pause': 'Pause',
   'key.mouse': 'Mouse',
   'key.rmb': 'RMB (hold)',
@@ -591,6 +593,8 @@ const HE: Record<string, string> = {
   'toast.clipSaved': 'הקליפ נשמר',
   'toast.clipFailed': 'לא הצלחנו לשמור את הקליפ',
   'toast.photoSaved': 'התמונה נשמרה',
+  'photo.hint.pad': 'סטיקים: להסתכל / לזוז · D-pad ←/→: זום · RT: צילום · D-pad ↑: יציאה',
+  'menu.photo': 'מצב צילום',
   'toast.challenge': 'אתגר הושלם',
   'toast.zoneClear': 'האזור נוקה',
 

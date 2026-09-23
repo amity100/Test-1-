@@ -714,3 +714,22 @@ html[dir='rtl'] .cp-btns button { letter-spacing: .02em; font-size: 14px; }
   .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .end-row { flex-direction: column; }
 }
+
+/* ---- photo mode ---- */
+.photo-ui { position: absolute; inset: 0; z-index: 22; display: none; pointer-events: none; }
+.photo-ui.on { display: block; }
+.photo-ui.touch { pointer-events: auto; touch-action: none; }
+.photo-ui button { pointer-events: auto; font: inherit; color: #fff; cursor: pointer; }
+.ph-top { position: absolute; top: calc(var(--st, 0px) + 16px); left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; text-shadow: var(--shadow); max-width: calc(100vw - 32px); }
+.ph-top b { font-size: 13px; letter-spacing: .3em; font-weight: 800; }
+.ph-top span { font-size: 12px; opacity: .8; }
+.ph-btns { position: absolute; left: 50%; bottom: calc(var(--sb, 0px) + 22px); transform: translateX(-50%); display: flex; align-items: center; gap: 18px; }
+.ph-btns .ph-in, .ph-btns .ph-out { width: 52px; height: 52px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .6); background: rgba(10, 14, 20, .45); font-size: 26px; line-height: 1; }
+.ph-snap { width: 78px; height: 78px; border-radius: 50%; border: 3px solid #fff; background: rgba(255, 255, 255, .12); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+.ph-snap i { width: 30px; height: 30px; border-radius: 50%; background: #fff; box-shadow: 0 0 18px rgba(255, 255, 255, .6); }
+.ph-snap span { font-size: 9px; letter-spacing: .2em; font-weight: 800; }
+.ph-exit { position: absolute; top: calc(var(--st, 0px) + 14px); right: calc(var(--sr, 0px) + 16px); padding: 8px 14px; border-radius: 20px; border: 1.5px solid rgba(255, 255, 255, .55); background: rgba(10, 14, 20, .45); font-size: 12px; letter-spacing: .15em; font-weight: 700; }
+html[dir='rtl'] .ph-exit { right: auto; left: calc(var(--sl, 0px) + 16px); }
+.photo-ui:not(.touch) .ph-in, .photo-ui:not(.touch) .ph-out { display: none; }
+.photo-ui.flash::after { content: ''; position: absolute; inset: 0; background: #fff; animation: phFlash .35s ease-out forwards; pointer-events: none; }
+@keyframes phFlash { from { opacity: .85; } to { opacity: 0; } }

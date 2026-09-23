@@ -54,7 +54,8 @@ import { Hazards, type HazardHooks } from './hazards';
 import { ZoneManager, type EncounterState, type LiftState } from './zones';
 import { FxKit } from './fxkit';
 import { HUD } from '../ui/hud';
-import { addStrings, setDevice, t } from '../ui/i18n';
+import { addStrings, getLang, setDevice, t } from '../ui/i18n';
+import { PhotoUI } from '../ui/photoui';
 import type { RunStats } from '../ui/menu';
 import { StyleSystem } from '../meta/style';
 import { ReplayPlayer, ReplayRecorder } from '../meta/replay';
@@ -159,6 +160,9 @@ export class Game {
   enemies!: EnemySystem;
   props!: PropSystem;
   hazards!: Hazards;
+  private photoUi: PhotoUI;
+  /** Gamepad Start while paused (main hides the menu and resumes). */
+  onResumeKey: () => void = () => {};
   fx: FxKit;
   player!: Player;
   lamps: LampSystem | null = null;
@@ -225,6 +229,7 @@ export class Game {
     this.input.sensitivity = settings.sensitivity;
     this.input.invertY = settings.invertY;
     this.hud = new HUD(uiRoot);
+    this.photoUi = new PhotoUI(uiRoot, this.input);
     this.hud.show(false);
     this.hud.onClip = () => this.startReplay();
     if (IS_TOUCH) {
@@ -628,7 +633,7 @@ export class Game {
     const done = this.challenges.push(e as GameEvent, awards, this.style.state);
     for (const id of done) {
       this.stats.challenges++;
-      this.hud.toast(`${t('toast.challenge')}: ${t(`challenge.${id}.title`)}`, 'good');
+      this.hud.toast(`${t('toast.challenge')}: ${this.challenges.text(id, getLang()).title}`, 'good');
       this.audio.ui('objective');
     }
   }
@@ -1253,6 +1258,7 @@ export class Game {
       default:
         this.updateAmbient(realDt * 0.3);
         this.render(realDt);
+        if (this.mode === 'paused' && this.input.lastDevice === 'pad' && this.input.wasPressed('pause')) this.onResumeKey();
     }
     this.input.endFrame();
   }
@@ -1369,7 +1375,8 @@ export class Game {
       moveY: this.respawnT >= 0 ? 0 : inp.moveY,
       camYaw: this.rig.yaw,
       jump: inp.wasPressed('jump'),
-      sprint: inp.isHeld('sprint') || (IS_TOUCH && Math.hypot(inp.moveX, inp.moveY) > 0.95),
+      // the touch stick sprints when pushed to its rim (only when it's the stick moving you)
+      sprint: inp.isHeld('sprint') || (inp.lastDevice === 'touch' && Math.hypot(inp.moveX, inp.moveY) > 0.95),
       crouch: this.crouchToggle(),
       shove: inp.wasPressed('shove'),
     };
@@ -2306,11 +2313,20 @@ export class Game {
     else done(null);
   }
 
+  /** Pause menu → photo mode. */
+  photoFromPause() {
+    if (this.mode !== 'paused') return;
+    this.mode = 'playing';
+    this.enterPhoto();
+  }
+
   private enterPhoto() {
     if (this.mode !== 'playing') return;
     this.mode = 'photo';
     this.hud.show(false);
     this.touch?.show(false);
+    this.photoUi.show(true);
+    this.input.active = true;
     this.photo.enter(this.camera, this.player.body.pos.clone().setY(this.player.body.pos.y + 1));
     this.audio.ui('click');
   }
@@ -2319,10 +2335,11 @@ export class Game {
     const look = this.input.consumeLook();
     const wheel = this.input.consumeWheel();
     // (a wheel notch is ~15% closer; the photo camera reads zoom as a rate)
-    this.photo.update(realDt, { lookX: look.x, lookY: -look.y, moveX: this.input.moveX, moveY: this.input.moveY, zoom: wheel * 6 });
+    this.photo.update(realDt, { lookX: look.x, lookY: -look.y, moveX: this.input.moveX, moveY: this.input.moveY, zoom: (wheel + this.photoUi.consumePinch()) * 6 + this.photoUi.zoom * 1.2 });
     this.updateAmbient(0);
     this.render(realDt);
-    if (this.input.wasPressed('place') || this.input.wasPressed('gate') || this.input.wasPressed('action')) {
+    if (this.photoUi.consumeSnap() || this.input.wasPressed('place') || this.input.wasPressed('gate') || this.input.wasPressed('action')) {
+      this.photoUi.flash();
       this.audio.ui('shutter');
       void this.photo.capture(this.renderer.renderer.domElement, () => this.render(0)).then((blob) => {
         if (blob)
@@ -2333,8 +2350,10 @@ export class Game {
           });
       });
     }
-    if (this.input.wasPressed('photo') || this.input.wasPressed('pause')) {
+    if (this.photoUi.consumeExit() || this.input.wasPressed('photo') || this.input.wasPressed('pause')) {
       this.photo.exit();
+      this.photoUi.show(false);
+      this.input.consumeLook();
       this.mode = 'playing';
       this.hud.show(true);
       this.touch?.show(true);

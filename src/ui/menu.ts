@@ -45,7 +45,7 @@ const LOGO = `<span class="rings"><i class="rg ex"></i><i class="rg en"></i></sp
 
 type Go =
   | 'start' | 'cont' | 'zones' | 'challenges' | 'controls' | 'openSettings' | 'resume' | 'retry' | 'restart'
-  | 'quit' | 'goBack' | 'en' | 'he';
+  | 'quit' | 'goBack' | 'en' | 'he' | 'photo';
 
 /** Title, pause, zones, challenges, settings, controls, end screens and the clip panel. */
 export class Menu {
@@ -57,6 +57,8 @@ export class Menu {
   /** CHALLENGES pressed. Default shows `challengeItems`; set it to refresh the list and call showChallenges(items). */
   onChallenges: () => void = () => this.showChallenges(this.challengeItems);
   onResume = () => {};
+  /** Pause menu → photo mode. */
+  onPhoto = () => {};
   onRestart = () => {};
   onRetry = () => {};
   onQuit = () => {};
@@ -122,6 +124,9 @@ export class Menu {
       case 'retry': return this.retry();
       case 'restart': return this.restart();
       case 'quit': return this.quit();
+      case 'photo':
+        this.hide();
+        return this.onPhoto();
       case 'goBack': return this.goBack();
       case 'en': return this.lang('en');
       case 'he': return this.lang('he');
@@ -214,6 +219,7 @@ export class Menu {
             <button type="button" data-go="retry"><span>${esc(t('menu.retry'))}</span></button>
             <button type="button" data-go="restart"><span>${esc(t('menu.restart'))}</span></button>
             <button type="button" data-go="challenges"><span>${esc(t('menu.challenges'))}</span></button>
+            <button type="button" data-go="photo"><span>${esc(t('menu.photo'))}</span></button>
             <button type="button" data-go="controls"><span>${esc(t('menu.controls'))}</span></button>
             <button type="button" data-go="openSettings"><span>${esc(t('menu.settings'))}</span></button>
             <button type="button" data-go="quit"><span>${esc(t('menu.quit'))}</span></button>

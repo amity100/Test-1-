@@ -3,7 +3,7 @@ import { defaultQuality, IS_TOUCH, QualityName } from './config';
 import { Game, Settings } from './game/game';
 import { loadAnimLibrary, parseCharacterAsset } from './game/characters';
 import { Menu } from './ui/menu';
-import { t } from './ui/i18n';
+import { getLang, t } from './ui/i18n';
 import type { ZoneId } from './core/contracts';
 
 function loadSettings(): Settings {
@@ -105,10 +105,11 @@ async function boot() {
     game.start();
   };
   m.onChallenges = () => {
-    const items = game.challenges.list().map((c: any) => ({
+    const lang = getLang();
+    const items = [game.challenges.daily(), ...game.challenges.list()].map((c: any) => ({
       id: c.id,
-      title: t(`challenge.${c.id}.title`),
-      desc: t(`challenge.${c.id}.desc`),
+      title: game.challenges.text(c.id, lang).title,
+      desc: game.challenges.text(c.id, lang).desc,
       done: game.challenges.completed().has(c.id),
       progress: (() => {
         const p = game.challenges.progress(c.id) as any;
@@ -118,6 +119,12 @@ async function boot() {
     m.showChallenges?.(items);
   };
   menu.onResume = () => game.resume();
+  menu.onPhoto = () => game.photoFromPause();
+  // gamepad Start while paused resumes (the menu itself is pointer / touch driven)
+  game.onResumeKey = () => {
+    menu.hide();
+    game.resume();
+  };
   menu.onRestart = () => {
     game.newRun();
     game.start();

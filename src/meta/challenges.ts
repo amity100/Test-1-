@@ -335,6 +335,12 @@ export class ChallengeSystem {
     return def;
   }
 
+  /** Localized title + description of any challenge id (zone or daily). */
+  text(id: string, lang: MetaLang = 'en'): { title: string; desc: string } {
+    const def = this.defOf(id);
+    return def ? formatChallenge(def, lang) : { title: id, desc: '' };
+  }
+
   private defOf(id: string): ChallengeDef | null {
     for (const d of CHALLENGES) if (d.id === id) return d;
     if (id.startsWith('daily.')) {

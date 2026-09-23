@@ -106,8 +106,8 @@ const en: Record<string, string> = {
   'photo.exit': 'BACK',
   'photo.fov': 'FOV',
   'photo.roll': 'TILT',
-  'photo.hint': 'Drag to orbit · WASD to pan · wheel to zoom · Q/E tilt',
-  'photo.hint.touch': 'Drag to orbit · pinch to zoom · stick to pan',
+  'photo.hint': 'Mouse to look · WASD to move · wheel to zoom · click to snap · P to leave',
+  'photo.hint.touch': 'Drag to look · pinch or +/− to zoom',
   'photo.saved': 'Photo saved',
 };
 
@@ -214,8 +214,8 @@ const he: Record<string, string> = {
   'photo.exit': 'חזרה',
   'photo.fov': 'זווית',
   'photo.roll': 'הטיה',
-  'photo.hint': 'גררו לסיבוב · WASD להזזה · גלגלת לזום · Q/E להטיה',
-  'photo.hint.touch': 'גררו לסיבוב · צביטה לזום · ג׳ויסטיק להזזה',
+  'photo.hint': 'עכבר להסתכל · WASD לזוז · גלגלת לזום · קליק לצילום · P ליציאה',
+  'photo.hint.touch': 'גררו כדי להסתכל · צביטה או +/− לזום',
   'photo.saved': 'התמונה נשמרה',
 };
 
