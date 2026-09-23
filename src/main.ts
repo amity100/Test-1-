@@ -1,10 +1,10 @@
 import './ui/style.css';
-import * as THREE from 'three';
-import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { defaultQuality, IS_TOUCH, QualityName } from './config';
 import { Game, Settings } from './game/game';
-import { parseCharacterAsset } from './game/characters';
+import { loadAnimLibrary, parseCharacterAsset } from './game/characters';
 import { Menu } from './ui/menu';
+import { t } from './ui/i18n';
+import type { ZoneId } from './core/contracts';
 
 function loadSettings(): Settings {
   const d: Settings = { quality: defaultQuality(), sensitivity: 1, invertY: false, slowmo: true };
@@ -45,22 +45,6 @@ async function assetBytes(dir: string, name: string, magic: string): Promise<Arr
   return bytes.buffer;
 }
 
-function hdrTexture(buf: ArrayBuffer): THREE.DataTexture | null {
-  try {
-    const d = new HDRLoader().parse(buf) as any;
-    const tex = new THREE.DataTexture(d.data, d.width, d.height, THREE.RGBAFormat, d.type);
-    tex.colorSpace = THREE.LinearSRGBColorSpace;
-    tex.minFilter = tex.magFilter = THREE.LinearFilter;
-    tex.generateMipmaps = false;
-    tex.flipY = true;
-    tex.mapping = THREE.EquirectangularReflectionMapping;
-    tex.needsUpdate = true;
-    return tex;
-  } catch {
-    return null;
-  }
-}
-
 async function boot() {
   const app = document.getElementById('app')!;
   app.innerHTML = '';
@@ -85,43 +69,77 @@ async function boot() {
   }
 
   const base = import.meta.env.BASE_URL || './';
-  const [soldierBuf, hdrBuf] = await Promise.all([
+  const [soldierBuf, animsJson] = await Promise.all([
     assetBytes(`${base}assets/`, 'Soldier.glb', 'glTF'),
-    assetBytes(`${base}assets/`, 'moonless_golf_1k.hdr', '#?').catch(() => null),
+    fetch(`${base}assets/anims.json`).then((r) => {
+      if (!r.ok) throw new Error('Missing asset anims.json');
+      return r.json();
+    }),
   ]);
-  menu.showLoading(0.7);
+  menu.showLoading(0.6);
   const asset = await parseCharacterAsset(soldierBuf);
-  const env = hdrBuf ? hdrTexture(hdrBuf) : null;
-  menu.showLoading(0.85);
-  let envMap: THREE.Texture | null = null;
-  if (env) {
-    const pm = new THREE.PMREMGenerator(game.renderer.renderer);
-    envMap = pm.fromEquirectangular(env).texture;
-    env.dispose();
-    pm.dispose();
-  }
+  const anims = loadAnimLibrary(animsJson, asset);
+  menu.showLoading(0.8);
   await new Promise((r) => setTimeout(r, 30));
-  await game.load(asset, envMap);
+  await game.load(asset, anims);
   menu.showLoading(1);
 
+  const m = menu as any;
   menu.onStart = () => {
-    game.resetMission();
+    game.newRun();
     game.start();
+  };
+  m.onContinue = () => {
+    game.startAtZone((Game.savedZone() ?? 'pier') as ZoneId);
+    game.start();
+  };
+  m.onZone = (z: ZoneId) => {
+    game.startAtZone(z);
+    game.start();
+  };
+  m.savedZone = () => Game.savedZone();
+  m.onChallenges = () => {
+    const items = game.challenges.list().map((c: any) => ({
+      id: c.id,
+      title: t(`challenge.${c.id}.title`),
+      desc: t(`challenge.${c.id}.desc`),
+      done: game.challenges.completed().has(c.id),
+      progress: (() => {
+        const p = game.challenges.progress(c.id) as any;
+        return p && typeof p === 'object' && 'value' in p ? `${p.value}/${p.target}` : undefined;
+      })(),
+    }));
+    m.showChallenges?.(items);
   };
   menu.onResume = () => game.resume();
   menu.onRestart = () => {
-    game.resetMission();
+    game.newRun();
     game.start();
   };
   menu.onRetry = () => game.retryFromCheckpoint();
   menu.onQuit = () => game.quitToMenu();
-  menu.onSettings = (s) => {
+  menu.onSettings = (s: Settings) => {
     game.applySettings(s);
     saveSettings(s);
   };
   menu.onLanguage = () => game.refreshObjectives();
   game.onPause = () => menu.showPause();
-  game.onEnd = (win, stats, rating) => menu.showEnd(win, stats, rating);
+  game.onEnd = (win, stats, rank) => (menu as any).showEnd(win, stats, rank);
+  game.onClip = (blob, share, close) => {
+    if (!m.showClip) {
+      close();
+      return;
+    }
+    m.showClip({
+      saving: false,
+      previewUrl: blob ? URL.createObjectURL(blob) : undefined,
+      onShare: share,
+      onClose: () => {
+        menu.hide();
+        close();
+      },
+    });
+  };
 
   document.addEventListener('pointerlockchange', () => {
     if (!document.pointerLockElement && game.mode === 'playing' && game.input.lastDevice === 'kbm') game.pause();
@@ -129,7 +147,6 @@ async function boot() {
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && game.mode === 'playing') game.pause();
   });
-  // clicking the view while playing re-captures the mouse
   canvas.addEventListener('click', () => {
     if (game.mode === 'playing' && !game.input.pointerLocked) game.input.requestLock();
   });

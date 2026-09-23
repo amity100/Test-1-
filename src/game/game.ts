@@ -1,23 +1,65 @@
 import * as THREE from 'three';
 import { FEEL, IS_TOUCH, QualityName } from '../config';
+import {
+  LAW,
+  type ActorHit,
+  type ActorSnap,
+  type DeathContext,
+  type DynBody,
+  type EnemyContext,
+  type EnemyHooks,
+  type EnemyKind,
+  type EnemyView,
+  type EntranceContext,
+  type ExitAim,
+  type GameEvent,
+  type HitInfo,
+  type ImpactInfo,
+  type KillEvent,
+  type PhysicsEvents,
+  type Projectile,
+  type ProjectileHooks,
+  type ProjSnap,
+  type ReplayHost,
+  type RiftEnd,
+  type ScreenMarker,
+  type Snapshot,
+  type SpawnDef,
+  type Team,
+  type Threat,
+  type TowerLevel,
+  type TrapTarget,
+  type TrickAward,
+  type V3,
+  type ZoneId,
+} from '../core/contracts';
 import { Input } from '../engine/input';
 import { TouchControls } from '../engine/touch';
 import { Audio } from '../engine/audio';
 import { Renderer } from '../render/renderer';
-import { createBeam, createSky, LampSystem, Rain } from '../render/fx';
-import { buildHarbor, LevelData } from '../world/harbor';
-import { NavGrid } from '../world/nav';
-import { radial } from '../world/textures';
+import { createSky, createSkyline, LampSystem } from '../render/fx';
+import { buildTower } from '../world/tower';
 import { CameraRig } from './camera';
-import { Character, CharacterAsset } from './characters';
-import { Body, Guard, GuardSystem } from './guards';
-import { Player } from './player';
-import { KillMove, Placement, Portal, RiftPair, RiftSystem } from './portals';
+import { Character, type AnimLibrary, type CharacterAsset, type Look } from './characters';
+import { Player, type PlayerEvents, type PlayerInput } from './player';
+import { RiftSystem } from './portals';
+import { orientFrame } from './portalMath';
+import { Physics } from '../sim/physics';
+import { Projectiles } from '../sim/projectiles';
+import { EnemySystem } from '../actors/enemies';
+import { PropSystem, type Prop } from './props';
+import { ZoneManager, type EncounterState, type LiftState } from './zones';
+import { FxKit } from './fxkit';
 import { HUD } from '../ui/hud';
-import { t } from '../ui/i18n';
-import { frameNormal, orientFrame, RiftFrame } from './portalMath';
-
-const frameNormalOf = (f: RiftFrame) => frameNormal(f, new THREE.Vector3());
+import { addStrings, setDevice, t } from '../ui/i18n';
+import type { RunStats } from '../ui/menu';
+import { StyleSystem } from '../meta/style';
+import { ReplayPlayer, ReplayRecorder } from '../meta/replay';
+import { ClipExporter } from '../meta/clip';
+import { PhotoMode } from '../meta/photo';
+import { ChallengeSystem } from '../meta/challenges';
+import { META_STRINGS } from '../meta/strings';
+import { LEAD_STRINGS } from './strings';
 
 export interface Settings {
   quality: QualityName;
@@ -26,81 +68,144 @@ export interface Settings {
   slowmo: boolean;
 }
 
-export interface MissionStats {
-  bestChain?: number;
-  moves?: number;
-  time: number;
-  detections: number;
-  kills: number;
-  bodiesFound: number;
-  rifts: number;
+export type { RunStats };
+
+type Mode = 'menu' | 'playing' | 'paused' | 'replay' | 'photo' | 'ended';
+
+/** Who/what applied the damage that may kill, read by the enemy `died` hook. */
+interface KillCtx {
+  projectile?: Projectile | null;
+  impactor?: DynBody | null;
+  byPlayer?: boolean;
+  playerFling?: boolean;
+  byProp?: boolean;
+  byBarrel?: boolean;
 }
 
-type Mode = 'menu' | 'playing' | 'paused' | 'ended';
-
 const _v = new THREE.Vector3();
+const _v2 = new THREE.Vector3();
+const _v3 = new THREE.Vector3();
+const UP = new THREE.Vector3(0, 1, 0);
+const COL_EXIT = new THREE.Color(0.25, 1.6, 2.2);
+const COL_ENTRANCE = new THREE.Color(2.4, 1.2, 0.3);
+const COL_CHARGED = new THREE.Color(0.3, 1.6, 2.4);
+const COL_SPARK = new THREE.Color(2.6, 1.6, 0.7);
+
+const LOOKS: Record<EnemyKind, Look> = {
+  rifleman: 'rifleman',
+  grenadier: 'grenadier',
+  warden: 'warden',
+  brute: 'brute',
+  sniper: 'sniper',
+  jammer: 'jammer',
+  turret: 'rifleman',
+  boss: 'boss',
+};
+
+/** Distance along segment a→b (0..1) where it passes within r of a vertical cylinder, or -1. */
+function segCylinder(a: V3, b: V3, base: V3, r: number, h: number): number {
+  const dx = b.x - a.x, dz = b.z - a.z;
+  const fx = a.x - base.x, fz = a.z - base.z;
+  const A = dx * dx + dz * dz;
+  let t: number;
+  if (A < 1e-9) t = 0;
+  else t = THREE.MathUtils.clamp(-(fx * dx + fz * dz) / A, 0, 1);
+  // closest XZ approach; refine to the entry point
+  const cx = fx + dx * t, cz = fz + dz * t;
+  const d2 = cx * cx + cz * cz;
+  if (d2 > r * r) return -1;
+  if (A > 1e-9) {
+    const back = Math.sqrt(Math.max(0, r * r - d2) / A);
+    t = Math.max(0, t - back);
+  }
+  const y = a.y + (b.y - a.y) * t;
+  if (y < base.y - 0.05 || y > base.y + h + 0.05) {
+    // vertical segments: check whole span overlap
+    const lo = Math.min(a.y, b.y), hi = Math.max(a.y, b.y);
+    if (hi < base.y || lo > base.y + h) return -1;
+  }
+  return t;
+}
 
 export class Game {
   scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(FEEL.fov, 1, 0.08, 1200);
+  camera = new THREE.PerspectiveCamera(FEEL.fov, 1, 0.08, 2400);
   renderer: Renderer;
   input: Input;
   touch: TouchControls | null = null;
   audio = new Audio();
   hud: HUD;
-  level!: LevelData;
-  nav!: NavGrid;
-  rift!: RiftSystem;
-  guards!: GuardSystem;
-  player!: Player;
   rig: CameraRig;
-  lamps!: LampSystem;
-  rain!: Rain;
-  sky: THREE.Mesh;
-  moon: THREE.DirectionalLight;
+  settings: Settings;
   mode: Mode = 'menu';
   time = 0;
   timeScale = 1;
-  cineT = 0;
-  damage = 0;
-  flash = 0;
-  anchorHold = -1;
-  anchorFired = false;
-  playerLight = 0;
-  stats: MissionStats = { time: 0, detections: 0, kills: 0, bodiesFound: 0, rifts: 0 };
-  obj = { manifest: false, keycard: false, generator: false, door: false, extracted: false };
-  checkpoint = { pos: new THREE.Vector3(), yaw: 0 };
-  hintsSeen = new Set<string>();
-  private scryCam = new THREE.PerspectiveCamera(60, 1.6, 0.1, 400);
+
+  level!: TowerLevel;
+  zones!: ZoneManager;
+  physics!: Physics;
+  rifts!: RiftSystem;
+  projectiles!: Projectiles;
+  enemies!: EnemySystem;
+  props!: PropSystem;
+  fx: FxKit;
+  player!: Player;
+  lamps: LampSystem | null = null;
+  style = new StyleSystem();
+  challenges = new ChallengeSystem();
+  recorder = new ReplayRecorder(15, 30);
+  replay!: ReplayPlayer;
+  exporter = new ClipExporter();
+  photo = new PhotoMode();
+
+  sky: THREE.Mesh;
+  sun: THREE.DirectionalLight;
+  hemi: THREE.HemisphereLight;
+  private skyline: THREE.Object3D | null = null;
+
+  hp: number = LAW.player.hp;
+  private lastHurtT = -99;
+  private respawnT = -1;
+  private hitstop = 0;
+  private slowT = 0;
+  private slowScale = 1;
+  private aimT = 0;
+  private lastAim: ExitAim | null = null;
+  private carried: { body: DynBody; prop: Prop | null } | null = null;
+  private shoveT = 0;
+  private shoveDir = new THREE.Vector3();
+  private shoved = new Set<number>();
+  private playerFling = false;
+  private airStartT = -1;
+  private airCrossings = 0;
+  private catchWindow = { t: -1, count: 0 };
+  private tricksFrame: TrickAward[] = [];
+  private telegraphs: { kind: 'laser' | 'beam' | 'arc' | 'charge'; from: THREE.Vector3; to: THREE.Vector3; t: number }[] = [];
+  private telegraphLines: THREE.LineSegments;
+  private arcLine: THREE.Line;
+  private killCtx: KillCtx | null = null;
+  private clipOfferT = 0;
+  private clipFrom = 0;
+  private visionOn = false;
   private helpers: THREE.Object3D[] = [];
-  private muzzle: THREE.PointLight;
-  private tracer: THREE.Line;
-  private tracerT = 0;
-  private objMarker: HTMLDivElement;
-  private lastAlarm = 0;
-  private startT = 0;
-  onEnd: (win: boolean, stats: MissionStats, rating: string) => void = () => {};
-  onPause: () => void = () => {};
-  settings: Settings;
-  private menuT = 0;
   private asset!: CharacterAsset;
-  private envMap: THREE.Texture | null = null;
-  private searchlights: { guard: Guard; spot: THREE.SpotLight; beam: THREE.Mesh; pool: THREE.Mesh }[] = [];
-  /** A strike/drop in flight. */
-  private strike: { guard: Guard; move: KillMove; pair: RiftPair | null; t: number; passed: boolean; homing: number } | null = null;
-  /** Kill chain: real seconds left in the current beat, links so far, the moves used. */
-  chainT = 0;
-  chain = 0;
-  chainTrail: string[] = [];
-  bestChain = 0;
-  movesUsed = new Set<string>();
-  private noFallDamageT = 0;
-  private nearUnarmed: Guard | null = null;
-  silentPods = 0;
-  podCount = 6;
-  private lasers!: THREE.LineSegments;
-  private hintWall = false;
-  private hintPlaza = false;
+  private anims!: AnimLibrary;
+  private hintsSeen = new Set<string>();
+  private liveSnap: Snapshot | null = null;
+  private replayProj: THREE.InstancedMesh;
+  private replayBeams: THREE.LineSegments;
+  private bossDead = false;
+  private victoryT = -1;
+  private tricksSeen = new Set<string>();
+  private lastDevice = '';
+  private menuT = 0;
+  private zoneStartT = 0;
+
+  stats: RunStats = { time: 0, kills: 0, bestCombo: 0, styleTotal: 0, tricks: 0, deaths: 0, challenges: 0 };
+  onPause: () => void = () => {};
+  onEnd: (win: boolean, stats: RunStats, rank: string) => void = () => {};
+  /** Clip ready (blob may be null when recording isn't supported: replay only). */
+  onClip: (blob: Blob | null, share: () => void, close: () => void) => void = (_b, _s, close) => close();
 
   constructor(private canvas: HTMLCanvasElement, private uiRoot: HTMLElement, settings: Settings) {
     this.settings = settings;
@@ -110,126 +215,154 @@ export class Game {
     this.input.invertY = settings.invertY;
     this.hud = new HUD(uiRoot);
     this.hud.show(false);
+    this.hud.onClip = () => this.startReplay();
     if (IS_TOUCH) {
       this.touch = new TouchControls(this.input, uiRoot);
       this.touch.show(false);
       this.input.lastDevice = 'touch';
     }
+    for (const lang of ['en', 'he'] as const) {
+      addStrings(lang, (META_STRINGS as any)[lang] ?? {});
+      addStrings(lang, LEAD_STRINGS[lang]);
+    }
     this.rig = new CameraRig(this.camera);
+
+    // golden hour
     this.sky = createSky();
     this.scene.add(this.sky);
-    this.scene.fog = new THREE.FogExp2(new THREE.Color().setRGB(0.21, 0.16, 0.17, THREE.LinearSRGBColorSpace), 0.0062);
+    this.scene.fog = new THREE.FogExp2(new THREE.Color().setRGB(0.62, 0.5, 0.42, THREE.LinearSRGBColorSpace), 0.0024);
     this.scene.background = new THREE.Color(0x000000);
-    const hemi = new THREE.HemisphereLight(0xa3b6dc, 0x4a3d33, 1.35);
-    this.scene.add(hemi);
-    // low evening sun (the field keeps its old name)
-    this.moon = new THREE.DirectionalLight(0xffb880, 2.6);
-    this.moon.castShadow = true;
-    this.moon.shadow.bias = -0.0004;
-    this.moon.shadow.normalBias = 0.03;
-    const sc = this.moon.shadow.camera;
-    sc.left = -42; sc.right = 42; sc.top = 42; sc.bottom = -42; sc.near = 1; sc.far = 220;
-    this.scene.add(this.moon, this.moon.target);
-    this.muzzle = new THREE.PointLight(0xffc070, 0, 10, 2);
-    this.scene.add(this.muzzle);
-    this.tracer = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, 1)]), new THREE.LineBasicMaterial({ color: new THREE.Color(4, 3, 1.5), transparent: true }));
-    this.tracer.visible = false;
-    this.tracer.frustumCulled = false;
-    this.scene.add(this.tracer);
-    // red aim lasers: every shot is telegraphed
+    this.hemi = new THREE.HemisphereLight(0xbfd2f0, 0x6b5238, 1.25);
+    this.scene.add(this.hemi);
+    this.sun = new THREE.DirectionalLight(0xffc38a, 3.1);
+    this.sun.castShadow = true;
+    this.sun.shadow.bias = -0.0004;
+    this.sun.shadow.normalBias = 0.03;
+    const sc = this.sun.shadow.camera;
+    sc.left = -38; sc.right = 38; sc.top = 38; sc.bottom = -38; sc.near = 1; sc.far = 260;
+    this.scene.add(this.sun, this.sun.target);
+
+    this.fx = new FxKit(this.renderer.renderer.getPixelRatio());
+    this.scene.add(this.fx.group);
+
+    // telegraph visuals (lasers, beam charge, grenade arcs)
     const lg = new THREE.BufferGeometry();
-    lg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(16 * 6), 3));
-    this.lasers = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: new THREE.Color(5, 0.3, 0.2), transparent: true, opacity: 0.85 }));
-    this.lasers.frustumCulled = false;
-    this.scene.add(this.lasers);
-    this.objMarker = document.createElement('div');
-    this.objMarker.className = 'objmarker';
-    this.objMarker.innerHTML = '<i></i><span></span>';
-    this.hud.el.appendChild(this.objMarker);
+    lg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(48 * 6), 3).setUsage(THREE.DynamicDrawUsage));
+    lg.setAttribute('color', new THREE.BufferAttribute(new Float32Array(48 * 6), 3).setUsage(THREE.DynamicDrawUsage));
+    this.telegraphLines = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending }));
+    this.telegraphLines.frustumCulled = false;
+    this.scene.add(this.telegraphLines);
+    const ag = new THREE.BufferGeometry();
+    ag.setAttribute('position', new THREE.BufferAttribute(new Float32Array(64 * 3), 3).setUsage(THREE.DynamicDrawUsage));
+    this.arcLine = new THREE.Line(ag, new THREE.LineDashedMaterial({ color: new THREE.Color(3, 1.2, 0.4), dashSize: 0.35, gapSize: 0.25, transparent: true, opacity: 0.9, depthWrite: false }));
+    this.arcLine.frustumCulled = false;
+    this.arcLine.visible = false;
+    this.scene.add(this.arcLine);
+
+    // replay-only projectile visuals
+    this.replayProj = new THREE.InstancedMesh(new THREE.BoxGeometry(0.07, 0.07, 0.7), new THREE.MeshBasicMaterial({ color: 0xffffff }), 64);
+    this.replayProj.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(64 * 3), 3);
+    this.replayProj.visible = false;
+    this.replayProj.frustumCulled = false;
+    this.scene.add(this.replayProj);
+    const rb = new THREE.BufferGeometry();
+    rb.setAttribute('position', new THREE.BufferAttribute(new Float32Array(16 * 6), 3));
+    this.replayBeams = new THREE.LineSegments(rb, new THREE.LineBasicMaterial({ color: new THREE.Color(3, 0.4, 0.3) }));
+    this.replayBeams.visible = false;
+    this.replayBeams.frustumCulled = false;
+    this.scene.add(this.replayBeams);
   }
 
-  async load(asset: CharacterAsset, envMap: THREE.Texture | null) {
+  // ------------------------------------------------------------------
+  // Loading
+  // ------------------------------------------------------------------
+
+  async load(asset: CharacterAsset, anims: AnimLibrary) {
     this.asset = asset;
-    this.envMap = envMap;
-    this.scene.environment = envMap;
-    this.scene.environmentIntensity = 0.9;
-    const mobile = IS_TOUCH;
-    this.level = buildHarbor(envMap, mobile);
-    this.scene.add(this.level.root);
-    this.nav = new NavGrid(this.level.world, this.level.navBounds);
-    const preset = this.renderer.preset;
-    this.lamps = new LampSystem(this.level.lamps, preset.lampLights, !mobile && preset.shadowMap >= 2048);
-    this.scene.add(this.lamps.group);
-    this.rain = new Rain(Math.round(preset.rainDrops * 0.3));
-    this.scene.add(this.rain.mesh);
-    this.moon.shadow.mapSize.set(preset.shadowMap, preset.shadowMap);
-
-    this.rift = new RiftSystem(
-      {
-        world: this.level.world,
-        snapTargets: () =>
-          this.guards.guards
-            .filter((g) => g.alive)
-            .map((g) => ({ id: g.def.id, pos: g.pos, forward: g.forward(), aware: g.aware, heavy: g.def.kind === 'heavy', strikeable: g.strikeable, startled: g.state === 'startled' })),
-        witnessesOf: (id) => {
-          const g = this.guardById(id);
-          return g ? this.guards.witnessesOf(g).length : 0;
-        },
-        exposureAt: (p) => this.guards.exposureAt(p, this.lightAt(p, false)),
-        lightAt: (p) => this.lightAt(p, false),
-        inhibited: (p) => this.level.inhibitor.active && p.distanceTo(this.level.inhibitor.center) < this.level.inhibitor.radius,
-      },
-      this.scene,
-      this.renderer.renderer,
-      preset.portalScale,
-      mobile ? 2 : 4,
-    );
-    this.rift.maxViews = preset.portalViews;
-    (this.sky.material as THREE.ShaderMaterial).uniforms.uMoonDir.value.copy(this.level.sunDir);
-    const holo = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.2, 1.6, 1.4), transparent: true, opacity: 0.28, depthWrite: false, blending: THREE.AdditiveBlending });
-    const ghostChar = new Character(asset, 'hologram', holo);
-    ghostChar.update(0, 0);
-    this.rift.ghostFigure = ghostChar.root;
-    ghostChar.root.visible = false;
-    this.rift.group.add(ghostChar.root);
-
-    this.guards = new GuardSystem(this.level.world, this.nav, {
-      bark: (g, key) => {
-        if (g.pos.distanceTo(this.player.pos) < 30) this.hud.subtitle(`${g.name}: ${t(key)}`, 2.6);
-      },
-      shoot: (g, hit, target) => this.guardShot(g, hit, target),
-      alarmRaised: () => {},
-      bodyDiscovered: () => {
-        this.stats.bodiesFound++;
-        this.audio.sting('found');
-      },
-      becameSuspicious: () => this.audio.sting('suspicious'),
-      becameAlert: () => {
-        if (this.time - this.lastAlarm > 20) this.stats.detections++;
-        this.lastAlarm = this.time;
-        this.audio.sting('alert');
-      },
-    });
-    this.guards.radioCheck = (g) => {
-      const body = this.guards.bodies.find((b) => b.guard === g);
-      const at = body ? body.pos : g.pos;
-      this.audio.radio(at);
-      if (at.distanceTo(this.player.pos) < 25) this.hud.subtitle(`RADIO: ${t('radioCheck', { name: g.name })}`, 3.5);
-    };
-    this.scene.add(this.guards.group);
-    this.level.guards.forEach((def, i) => {
-      const c = new Character(asset, def.kind === 'heavy' || def.kind === 'sniper' ? 'heavy' : def.kind === 'officer' ? 'officer' : 'guard');
-      this.guards.add(new Guard(def, c, i));
-    });
-
-    const heroChar = new Character(asset, 'hero');
-    this.player = new Player(heroChar);
-    this.scene.add(heroChar.root);
-    this.helpers = [this.rift.ghost, this.rift.ghostRing, this.rift.ghostArrow, this.rift.beam, ghostChar.root, ...this.guards.guards.map((g) => g.fan)];
-
-    // Pre-compile every shader variant (including clipped rift views) so the
-    // first rift never hitches.
+    this.anims = anims;
     const r = this.renderer.renderer;
+    // image-based light from the sky itself (warm, matches the sun)
+    const envScene = new THREE.Scene();
+    const envSky = createSky();
+    envScene.add(envSky);
+    const pm = new THREE.PMREMGenerator(r);
+    const envMap = pm.fromScene(envScene, 0.02).texture;
+    pm.dispose();
+    this.scene.environment = envMap;
+    this.scene.environmentIntensity = 0.85;
+
+    const mobile = IS_TOUCH;
+    this.level = buildTower(envMap, mobile);
+    this.scene.add(this.level.root);
+    this.skyline = createSkyline();
+    this.scene.add(this.skyline);
+    const sunU = (this.sky.material as THREE.ShaderMaterial).uniforms.uSunDir;
+    if (sunU) sunU.value.copy(this.level.sunDir);
+    const envU = (envSky.material as THREE.ShaderMaterial).uniforms.uSunDir;
+    if (envU) envU.value.copy(this.level.sunDir);
+    const preset = this.renderer.preset;
+    this.sun.shadow.mapSize.set(preset.shadowMap, preset.shadowMap);
+    if (this.level.lamps.length) {
+      this.lamps = new LampSystem(this.level.lamps, Math.min(preset.lampLights, 4), false);
+      this.scene.add(this.lamps.group);
+    }
+
+    this.zones = new ZoneManager(this.level);
+    const world = this.level.world;
+    this.rifts = new RiftSystem(this.scene, r, world, {
+      portalScale: preset.portalScale,
+      lightCount: mobile ? 2 : 4,
+      maxViews: preset.portalViews,
+      outcomeAt: (x, z) => {
+        const zone = this.zones.zoneAt(_v3.set(x, 0, z)) ?? this.zones.current;
+        return zone.sea ? 'splash' : 'void';
+      },
+    });
+    this.physics = new Physics(world, this.rifts, {
+      seaY: this.level.seaY,
+      isSea: (p) => (this.zones.zoneAt(p) ?? this.zones.current).sea,
+      killYAt: (p) => {
+        const z = this.zones.zoneAt(p);
+        return z ? z.killY : this.level.seaY - 30;
+      },
+    });
+    this.projectiles = new Projectiles(world, this.rifts, this.physics, this.projectileHooks());
+    this.scene.add(this.projectiles.group);
+    this.enemies = new EnemySystem(this.physics, this.enemyHooks(), (kind) => new Character(asset, anims, LOOKS[kind]));
+    this.scene.add(this.enemies.group);
+    for (const z of this.level.zones) this.enemies.setNav(z.id, z.nav, world);
+    if (this.level.bossArena) (this.enemies as any).setBossArena?.(this.level.bossArena.center, this.level.bossArena.radius, this.level.bossArena.blinkPoints);
+    for (const g of this.level.gates) this.rifts.addGate(g.id, g.inFrame, g.outFrame);
+    this.props = new PropSystem(this.physics, this.level);
+    this.scene.add(this.props.group);
+
+    // player
+    const heroChar = new Character(asset, anims, 'hero');
+    const body = this.physics.createBody('player', { pos: this.zones.current.playerStart.clone(), radius: FEEL.playerRadius, height: FEEL.playerHeight, team: 'player', simulate: true });
+    body.userData.manual = true;
+    this.player = new Player(heroChar, body);
+    this.scene.add(heroChar.root);
+
+    // rift hologram
+    const holo = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.2, 1.6, 1.4), transparent: true, opacity: 0.28, depthWrite: false, blending: THREE.AdditiveBlending });
+    const ghost = new Character(asset, anims, 'hologram', holo);
+    ghost.root.visible = false;
+    this.rifts.ghostFigure = ghost.root;
+    this.rifts.group.add(ghost.root);
+    this.rifts.events.opened = (end, which) => {
+      this.audio.riftOpen(end.position, which === 'boss' ? 'gate' : which);
+      this.fx.riftBurst(end.position, end.normal, which === 'exit' ? COL_EXIT : COL_ENTRANCE);
+    };
+    this.rifts.events.closed = (end) => this.audio.riftClose(end.position);
+    this.helpers = [];
+    this.rifts.group.traverse((o) => {
+      if (o.userData.helper) this.helpers.push(o);
+    });
+    this.helpers.push(ghost.root, this.telegraphLines, this.arcLine);
+
+    this.replay = new ReplayPlayer(this.replayHost());
+
+    // pre-compile every shader variant (incl. clipped rift views) so nothing hitches mid-fight
     r.compile(this.scene, this.camera);
     const tmp = new THREE.WebGLRenderTarget(16, 16, { type: THREE.HalfFloatType });
     r.setRenderTarget(tmp);
@@ -238,7 +371,7 @@ export class Game {
     r.clippingPlanes = [];
     r.setRenderTarget(null);
     tmp.dispose();
-    this.resetMission();
+    this.newRun();
   }
 
   applySettings(s: Settings) {
@@ -248,823 +381,654 @@ export class Game {
     this.input.invertY = s.invertY;
     if (qualityChanged) {
       this.renderer.applyQuality(s.quality);
-      this.rift?.setPortalScale(this.renderer.preset.portalScale);
-      if (this.rift) this.rift.maxViews = this.renderer.preset.portalViews;
+      this.rifts?.setPortalScale(this.renderer.preset.portalScale);
+      if (this.rifts) this.rifts.maxViews = this.renderer.preset.portalViews;
+      this.fx.setPixelRatio(this.renderer.renderer.getPixelRatio());
     }
   }
 
   // ------------------------------------------------------------------
-  // Mission flow
+  // Run flow
   // ------------------------------------------------------------------
 
-  resetMission() {
-    this.runId++;
-    const L = this.level;
-    this.rift.reset();
-    for (const b of this.guards.bodies) b.char.root.removeFromParent();
-    this.guards.bodies = [];
-    this.guards.group.clear();
-    const defs = L.guards;
-    const old = this.guards.guards;
-    this.guards.guards = [];
-    old.forEach((g) => g.char.dispose());
-    defs.forEach((def, i) => {
-      const c = new Character(this.asset, def.kind === 'heavy' || def.kind === 'sniper' ? 'heavy' : def.kind === 'officer' ? 'officer' : 'guard');
-      this.guards.add(new Guard(def, c, i));
-    });
-    this.helpers = this.helpers.filter((h) => !(h as any).isMesh || !(h as THREE.Mesh).geometry.getAttribute('alpha'));
-    this.helpers.push(...this.guards.guards.map((g) => g.fan));
-    this.buildSearchlights();
-    this.hintWall = false;
-    this.hintPlaza = false;
-    this.player.teleport(L.playerStart, L.playerYaw);
-    this.player.health = FEEL.maxHealth;
-    this.player.carrying = null;
-    this.player.crouched = false;
-    this.rig.yaw = L.playerYaw;
-    this.rig.pitch = -0.15;
-    this.rig.snapTo(this.player.pos);
-    this.obj = { manifest: false, keycard: false, generator: false, door: false, extracted: false };
-    L.inhibitor.active = false;
-    this.strike = null;
-    this.chainT = 0;
-    this.chain = 0;
-    this.bestChain = 0;
-    this.chainTrail = [];
-    this.movesUsed.clear();
-    this.silentPods = 0;
-    this.podCount = new Set(L.guards.filter((d) => d.squad).map((d) => d.squad)).size;
-    this.hud.setChain(0, []);
-    ((L.doorMesh.userData.reader as THREE.Mesh).material as THREE.MeshBasicMaterial).color.setRGB(4, 0.3, 0.3);
-    this.nav.rebuild();
-    this.stats = { time: 0, detections: 0, kills: 0, bodiesFound: 0, rifts: 0 };
-    this.checkpoint = { pos: L.playerStart.clone(), yaw: L.playerYaw };
+  /** Fresh run from the pier. */
+  newRun() {
+    this.startAtZone('pier');
+    this.stats = { time: 0, kills: 0, bestCombo: 0, styleTotal: 0, tricks: 0, deaths: 0, challenges: 0 };
+    this.tricksSeen.clear();
+    this.style.reset();
+  }
+
+  /** Continue / zone select: earlier zones count as done. */
+  startAtZone(id: ZoneId) {
+    this.enemies.clear();
+    this.projectiles.clear();
+    this.props.clear();
+    this.rifts.reset();
+    this.fx.clear();
+    this.recorder.clear();
+    this.zones.startAt(id);
+    for (const g of this.level.gates) this.rifts.setGateOpen(g.id, false);
+    this.props.spawnZone(id);
+    const cp = this.zones.checkpoint;
+    this.respawnPlayer(cp.pos, cp.yaw);
+    this.bossDead = false;
+    this.victoryT = -1;
     this.hintsSeen.clear();
-    this.hud.clearIcons();
-    this.damage = 0;
-    this.time = 0;
-    this.lastAlarm = -100;
-    this.refreshObjectives();
+    this.zoneStartT = this.time;
+    this.style.reset();
+    this.hud.clearHint();
   }
 
-  /** Searchlight towers: a real spot light plus a volumetric beam that follow the sniper's gaze. */
-  private buildSearchlights() {
-    for (const s of this.searchlights) {
-      s.spot.removeFromParent();
-      s.spot.target.removeFromParent();
-      s.beam.removeFromParent();
-      s.pool.removeFromParent();
-    }
-    this.searchlights = [];
-    for (const g of this.guards.guards) {
-      if (!g.def.sweep) continue;
-      const spot = new THREE.SpotLight(0xf2f6ff, 0, 90, g.def.fov ?? 0.26, 0.35, 1.1);
-      const beam = createBeam(0xdfe8ff, 48, (g.def.fov ?? 0.26) * 0.9);
-      // the lit ellipse on the ground: exactly what the sniper is watching
-      const pool = new THREE.Mesh(
-        new THREE.CircleGeometry(1, 40),
-        new THREE.MeshBasicMaterial({ map: radial(128, 'rgba(255,255,255,1)', 'rgba(255,255,255,0)'), color: new THREE.Color(1.3, 1.35, 1.4), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -4 }),
-      );
-      pool.rotation.order = 'YXZ';
-      pool.renderOrder = 12;
-      this.scene.add(spot, spot.target, beam, pool);
-      this.searchlights.push({ guard: g, spot, beam, pool });
-    }
-  }
-
-  private updateSearchlights() {
-    for (const s of this.searchlights) {
-      const g = s.guard;
-      const on = g.alive;
-      s.beam.visible = on;
-      s.pool.visible = on;
-      s.spot.intensity = on ? 420 : 0;
-      if (!on) continue;
-      const eye = g.eye(new THREE.Vector3()).add(new THREE.Vector3(0, 0.3, 0));
-      const f = g.forward();
-      const pitch = 0.45;
-      const dir = new THREE.Vector3(f.x * Math.cos(pitch), -Math.sin(pitch), f.z * Math.cos(pitch));
-      s.spot.position.copy(eye).addScaledVector(f, 0.4);
-      s.spot.target.position.copy(eye).addScaledVector(dir, 30);
-      s.beam.position.copy(s.spot.position);
-      s.beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), dir);
-      const col = g.state === 'alert' ? [1.0, 0.35, 0.3] : g.suspicion > 0.3 ? [1.0, 0.85, 0.5] : [0.87, 0.91, 1.0];
-      (s.beam.material as THREE.ShaderMaterial).uniforms.uColor.value.setRGB(col[0], col[1], col[2]);
-      s.spot.color.setRGB(col[0], col[1], col[2]);
-      const hit = this.level.world.raycast(s.spot.position, dir, 80);
-      if (hit) {
-        const dist = hit.distance;
-        const r = Math.tan((g.def.fov ?? 0.26) * 0.9) * dist;
-        s.pool.position.copy(hit.point).addScaledVector(hit.normal, 0.04);
-        s.pool.rotation.set(-Math.PI / 2, g.yaw, 0);
-        s.pool.scale.set(r, r / Math.max(0.3, Math.sin(pitch)), 1);
-        (s.pool.material as THREE.MeshBasicMaterial).color.setRGB(col[0] * 0.9, col[1] * 0.9, col[2] * 0.9);
-      } else s.pool.visible = false;
-    }
+  private respawnPlayer(pos: V3, yaw: number) {
+    this.player.teleport(pos.clone(), yaw);
+    this.player.body.charge = 0;
+    this.hp = LAW.player.hp;
+    this.carried = null;
+    this.rig.yaw = yaw;
+    this.rig.pitch = -0.12;
+    this.rig.snapTo(this.player.body.pos);
+    this.playerFling = false;
+    this.airStartT = -1;
+    this.player.char.revive();
   }
 
   start() {
+    this.mode = 'playing';
+    this.hud.show(true);
+    this.touch?.show(true);
     this.audio.unlock();
-    this.mode = 'playing';
     this.input.active = true;
-    this.hud.show(true);
-    this.touch?.show(true);
-    this.startT = performance.now();
     this.input.requestLock();
-    setTimeout(() => this.hint('move', t('hintMove'), 8), 1200);
-    setTimeout(() => this.hint('aim', this.deviceText('hintAimKbm', 'hintAimPad', 'hintAimTouch'), 9), 7800);
-  }
-
-  retryFromCheckpoint() {
-    this.runId++;
-    this.rift.reset();
-    this.player.teleport(this.checkpoint.pos, this.checkpoint.yaw);
-    this.player.health = FEEL.maxHealth;
-    if (this.player.carrying) this.dropBody(false);
-    this.rig.yaw = this.checkpoint.yaw;
-    for (const g of this.guards.guards) {
-      if (!g.alive) continue;
-      g.state = 'patrol';
-      g.suspicion = 0;
-      g.alertLevel = 0;
-      g.pos.copy(g.def.route[0]);
-      g.path = [];
-      g.routeIdx = 0;
-      g.waitT = 0;
-      g.investigateBody = null;
-      g.startleT = 0;
-      g.stunT = 0;
-      g.frozenT = 0;
+    const z = this.zones.current;
+    this.hud.zoneTitle(t(z.nameKey), t(z.subKey));
+    this.audio.sting('zone');
+    if (z.id === 'pier' && !this.hintsSeen.has('rules')) {
+      this.hintsSeen.add('rules');
+      this.hint('rules', `<b>${t('rule.1')}</b><br>${t('rule.2')}<br>${t('rule.3')}`, 9);
     }
-    this.strike = null;
-    this.chainT = 0;
-    this.hud.setChain(0, []);
-    this.guards.globalAlarm = 0;
-    this.damage = 0;
-    this.mode = 'playing';
-    this.input.active = true;
-    this.hud.show(true);
-    this.touch?.show(true);
-    this.input.requestLock();
   }
 
   pause() {
     if (this.mode !== 'playing') return;
     this.mode = 'paused';
-    this.input.active = false;
     this.touch?.show(false);
+    this.input.active = false;
+    if (document.pointerLockElement) document.exitPointerLock();
     this.onPause();
   }
 
   resume() {
-    if (this.mode !== 'paused') return;
     this.mode = 'playing';
-    this.input.active = true;
     this.touch?.show(true);
+    this.input.active = true;
     this.input.requestLock();
+  }
+
+  retryFromCheckpoint() {
+    this.respawn(false);
+    this.resume();
   }
 
   quitToMenu() {
     this.mode = 'menu';
-    this.input.active = false;
     this.hud.show(false);
     this.touch?.show(false);
-    this.resetMission();
-    document.exitPointerLock?.();
-  }
-
-  /** Delayed failure that a quick retry can't inherit. */
-  private runId = 0;
-  private endLater(win: boolean, ms: number) {
-    const run = this.runId;
-    setTimeout(() => {
-      if (run === this.runId) this.end(win);
-    }, ms);
-  }
-
-  private end(win: boolean) {
-    this.mode = 'ended';
     this.input.active = false;
-    this.hud.show(false);
-    this.touch?.show(false);
-    document.exitPointerLock?.();
-    this.stats.time = this.time;
-    this.stats.rifts = this.rift.riftsOpened;
-    const s = this.stats;
-    s.bestChain = this.bestChain;
-    s.moves = this.movesUsed.size;
-    const rating = !win ? '' : s.detections === 0 && s.bodiesFound === 0 ? t('ghost') : s.detections === 0 ? t('shadow') : s.detections <= 1 ? t('assassin') : t('blunt');
-    this.onEnd(win, { ...s }, rating);
-  }
-
-  private deviceText(kbm: any, pad: any, touch: any) {
-    const d = this.input.lastDevice;
-    return t(d === 'touch' ? touch : d === 'pad' ? pad : kbm);
-  }
-
-  private hint(key: string, html: string, dur = 7) {
-    if (this.hintsSeen.has(key)) return;
-    this.hintsSeen.add(key);
-    this.hud.showHint(key, html, dur);
+    if (document.pointerLockElement) document.exitPointerLock();
   }
 
   refreshObjectives() {
-    this.hud.setObjectives([
-      { text: t('objManifest'), done: this.obj.manifest },
-      { text: t('objExtract'), done: this.obj.extracted },
-      { text: t('objPods', { n: String(this.silentPods), m: String(this.podCount) }), done: this.silentPods >= this.podCount, optional: true },
-    ]);
+    this.updateObjective(true);
+  }
+
+  /** Death / fell out: back to the checkpoint, uncleared fights reset. */
+  private respawn(died: boolean) {
+    if (died) this.stats.deaths++;
+    this.enemies.clear();
+    this.projectiles.clear();
+    this.rifts.reset();
+    for (const g of this.level.gates) this.rifts.setGateOpen(g.id, false);
+    this.zones.resetUncleared();
+    const cp = this.zones.checkpoint;
+    this.respawnPlayer(cp.pos, cp.yaw);
+    this.respawnT = -1;
+    this.timeScale = 1;
+    this.push({ type: 'death', t: this.time });
+  }
+
+  private saveProgress() {
+    try {
+      const prev = JSON.parse(localStorage.getItem('threshold.progress') || '{}');
+      const order: ZoneId[] = ['pier', 'yard', 'skeleton', 'lab', 'crown'];
+      const best = order.indexOf(prev.furthest) >= order.indexOf(this.zones.furthest) ? prev.furthest : this.zones.furthest;
+      localStorage.setItem('threshold.progress', JSON.stringify({ furthest: best }));
+    } catch {}
+  }
+
+  static savedZone(): ZoneId | null {
+    try {
+      const p = JSON.parse(localStorage.getItem('threshold.progress') || '{}');
+      return p.furthest ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private hint(key: string, html: string, dur = 7) {
+    if (this.hintsSeen.has('h:' + key)) return;
+    this.hintsSeen.add('h:' + key);
+    this.hud.hint(key, html, dur);
   }
 
   // ------------------------------------------------------------------
-  // Light
+  // Events → style / challenges
   // ------------------------------------------------------------------
 
-  /** 0..1 illumination at a point from lamps, rifts and moonlight. */
-  lightAt(p: THREE.Vector3, precise = true) {
-    // dusk: open ground is readable; shade from walls and stacks still hides you
-    let L = 0.26;
-    if (!this.level.world.raycast(p, this.level.sunDir, 160, { sight: true })) L += 0.3;
-    for (const l of this.level.lamps) {
-      const d = l.pos.distanceTo(p);
-      if (d > l.range) continue;
-      _v.subVectors(p, l.pos).normalize();
-      const cos = _v.dot(l.dir);
-      const cone = THREE.MathUtils.smoothstep(cos, Math.cos(l.angle), Math.cos(l.angle * 0.55));
-      if (cone <= 0) continue;
-      const atten = Math.pow(1 - d / l.range, 1.3) * l.intensity;
-      const c = cone * atten * 1.35;
-      if (c < 0.02) continue;
-      if (precise || c > 0.05) {
-        const from = l.pos.clone().addScaledVector(l.dir, 0.3);
-        if (!this.level.world.lineOfSight(from, p)) continue;
+  private push(e: GameEvent) {
+    const awards = this.style.push(e);
+    for (const a of awards) {
+      this.hud.popTrick(a);
+      this.audio.trick(this.style.state.rank, a.points);
+      this.tricksFrame.push(a);
+      if (!this.tricksSeen.has(a.id)) {
+        this.tricksSeen.add(a.id);
+        this.stats.tricks = this.tricksSeen.size;
       }
-      L += c;
-    }
-    return Math.min(1, L);
-  }
-
-  // ------------------------------------------------------------------
-  // Actions
-  // ------------------------------------------------------------------
-
-  guardById(id: string | null) {
-    return id ? this.guards.guards.find((g) => g.def.id === id) ?? null : null;
-  }
-
-  private tryOpenRift(pl: Placement) {
-    if (pl.invalid) {
-      this.audio.ui('deny');
-      navigator.vibrate?.(40);
-      return;
-    }
-    const target = this.guardById(pl.targetId);
-    if (pl.move && target) {
-      this.launchStrike(pl, target);
-      return;
-    }
-    const near = this.rift.solveNear(this.player.pos, this.rig.yaw);
-    const far = { frame: pl.frame, kind: pl.kind, host: pl.host };
-    if (!near) {
-      // no room in front: blink straight through
-      this.instantPass(pl.exitFeet, pl.exitYaw);
-      this.rift.riftsOpened++;
-      this.audio.riftOpen(pl.frame.position);
-      return;
-    }
-    const pair = this.rift.openPair(near, far, 'rift');
-    this.audio.riftOpen(pair.a.position);
-    this.audio.riftOpen(pair.b.position);
-    navigator.vibrate?.(20);
-  }
-
-  /**
-   * STRIKE / DROP: the rift opens instantly, the player dashes through it and
-   * the kill resolves on the far side. The target is held still meanwhile.
-   */
-  private launchStrike(pl: Placement, g: Guard) {
-    const move = pl.move!;
-    g.frozenT = 1.6;
-    this.audio.riftOpen(pl.frame.position);
-    navigator.vibrate?.(20);
-    const near = this.rift.solveNear(this.player.pos, this.rig.yaw);
-    this.strike = { guard: g, move, pair: null, t: 0, passed: false, homing: 1 };
-    if (!near) {
-      // no room to step: fold straight through
-      this.instantPass(pl.exitFeet, pl.exitYaw);
-      this.onRiftExit();
-      return;
-    }
-    const pair = this.rift.openPair(near, { frame: pl.frame, kind: pl.kind, host: pl.host }, 'strike');
-    pair.targetId = g.def.id;
-    pair.move = move;
-    this.strike.pair = pair;
-    this.rift.riftsOpened++;
-    const through = near.frame.position.clone().addScaledVector(frameNormalOf(near.frame), -1.3);
-    through.y = this.player.pos.y;
-    this.player.autoWalk = { target: through, t: 1.2, speed: FEEL.strikeDash };
-  }
-
-  /** Called whenever the player comes out of a rift (walked or folded). */
-  private onRiftExit() {
-    const s = this.strike;
-    if (!s) return;
-    s.passed = true;
-    if (s.move === 'strike') {
-      const g = s.guard;
-      if (g.alive && g.pos.distanceTo(this.player.pos) < 3.2) this.killGuard(g, 'strike');
-      this.strike = null;
-    }
-    // DROP resolves in the air (see updateStrike)
-  }
-
-  /** A pod is cleared silently when every member is down and none raised an alarm. */
-  private checkPods() {
-    const pods = new Map<string, Guard[]>();
-    for (const g of this.guards.guards) if (g.def.squad) pods.set(g.def.squad, [...(pods.get(g.def.squad) ?? []), g]);
-    let silent = 0;
-    for (const [, members] of pods) if (members.every((m) => !m.alive) && !members.some((m) => m.raisedAlarm)) silent++;
-    if (silent !== this.silentPods) {
-      this.silentPods = silent;
-      this.podCount = pods.size;
-      this.refreshObjectives();
-      this.hud.flashToast(t('podSilenced'), 1.8, 'good');
-    }
-  }
-
-  private updateLasers() {
-    const pos = this.lasers.geometry.getAttribute('position') as THREE.BufferAttribute;
-    let n = 0;
-    const target = this.player.chest();
-    for (const g of this.guards.guards) {
-      if (!g.aimWarn || n >= 16) continue;
-      const from = g.eye(new THREE.Vector3()).addScaledVector(g.forward(), 0.5).add(new THREE.Vector3(0, -0.25, 0));
-      pos.setXYZ(n * 2, from.x, from.y, from.z);
-      pos.setXYZ(n * 2 + 1, target.x, target.y, target.z);
-      n++;
-    }
-    this.lasers.geometry.setDrawRange(0, n * 2);
-    pos.needsUpdate = true;
-    this.lasers.visible = n > 0;
-  }
-
-  private updateStrike(realDt: number) {
-    const s = this.strike;
-    if (!s) return;
-    s.t += realDt;
-    const p = this.player;
-    const g = s.guard;
-    if (!g.alive) {
-      this.strike = null;
-      return;
-    }
-    if (s.move === 'drop' && s.passed) {
-      // falling onto him: steer a little, land the blow before touching down
-      const dx = g.pos.x - p.pos.x, dz = g.pos.z - p.pos.z;
-      const hd = Math.hypot(dx, dz);
-      if (hd > 0.05 && s.homing > 0) {
-        const step = Math.min(hd, 6 * realDt, s.homing);
-        p.pos.x += (dx / hd) * step;
-        p.pos.z += (dz / hd) * step;
-        s.homing -= step;
+      if (a.points >= 300) {
+        this.slowT = Math.max(this.slowT, 0.35);
+        this.slowScale = 0.35;
+        this.rig.kick = Math.max(this.rig.kick, 1);
       }
-      if (hd < 1.3 && p.pos.y - g.pos.y < 2.2) {
-        this.noFallDamageT = 1;
-        p.vel.y = Math.max(p.vel.y, -3);
-        this.killGuard(g, 'drop');
-        this.strike = null;
+    }
+    const done = this.challenges.push(e, awards, this.style.state);
+    for (const id of done) {
+      this.stats.challenges++;
+      this.hud.toast(`${t('toast.challenge')}: ${t(`challenge.${id}.title`)}`, 'good');
+      this.audio.ui('objective');
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Hooks: projectiles
+  // ------------------------------------------------------------------
+
+  private projectileHooks(): ProjectileHooks {
+    return {
+      hitTest: (a, b, radius, p) => this.projectileHitTest(a, b, radius, p),
+      onHitActor: (p, hit) => this.projectileHitActor(p, hit),
+      onHitWorld: (p, hit) => {
+        this.fx.sparks(hit.point, hit.normal, p.charged ? COL_CHARGED : COL_SPARK, p.kind === 'beam' ? 4 : 10);
+        if (p.kind === 'bolt') this.audio.boltImpact(hit.point, p.charged);
+      },
+      onExplode: (p, at) => this.explode(at, LAW.grenade.radius, LAW.grenade.damage, { charged: p.charged, barrel: false, projectile: p }),
+      onCross: (p, from, to) => {
+        this.fx.riftBurst(to.position, to.normal, COL_CHARGED);
+        this.push({ type: 'cross', t: this.time, who: p.kind === 'grenade' ? 'grenade' : p.kind === 'beam' ? 'beam' : 'bolt', speed: p.vel.length(), loops: p.loops, fromKind: from.kind, toKind: to.kind });
+        if (from.owner === 'player' && p.team === 'kessler' && p.crossings === 1) {
+          if (this.time - this.catchWindow.t > 0.6) this.catchWindow = { t: this.time, count: 0 };
+          this.catchWindow.count++;
+          this.audio.riftCatch(from.position);
+        }
+      },
+    };
+  }
+
+  private projectileHitTest(a: V3, b: V3, radius: number, p: Projectile): ActorHit | null {
+    let best = 2;
+    let key = '';
+    const base = _v2;
+    // the player: only uncharged Kessler fire can hurt you (you're attuned to your own rift)
+    if (!p.charged && p.team === 'kessler' && this.hp > 0) {
+      const tt = segCylinder(a, b, this.player.body.pos, FEEL.playerRadius + radius, this.player.body.height);
+      if (tt >= 0 && tt < best) {
+        best = tt;
+        key = 'player';
+      }
+    }
+    // Kessler actors: IFF-locked rounds pass through them until they cross a rift
+    if (p.charged) {
+      for (const e of this.enemies.list) {
+        if (!e.alive) continue;
+        if (!this.zones.active.has(e.def.zone)) continue;
+        base.copy(e.pos);
+        const tt = segCylinder(a, b, base, e.radius + radius, e.height);
+        if (tt >= 0 && tt < best) {
+          best = tt;
+          key = `enemy:${e.id}`;
+        }
+      }
+    }
+    for (const pr of this.props.items) {
+      if (!pr.alive || pr.body.userData.manual) continue;
+      if (p.body && p.body === pr.body) continue;
+      const tt = segCylinder(a, b, pr.body.pos, pr.body.radius + radius, pr.body.height);
+      if (tt >= 0 && tt < best) {
+        best = tt;
+        key = pr.key;
+      }
+    }
+    if (!key) return null;
+    const point = new THREE.Vector3().lerpVectors(a, b, best);
+    const normal = new THREE.Vector3().subVectors(a, b).normalize();
+    return { key, point, normal };
+  }
+
+  private projectileHitActor(p: Projectile, hit: ActorHit): 'stop' | 'pass' {
+    if (hit.key === 'player') {
+      const dmg = p.kind === 'beam' ? LAW.beam.damage : LAW.bolt.damageToPlayer;
+      this.hurtPlayer(dmg, hit.point);
+      return p.kind === 'beam' ? 'pass' : 'stop';
+    }
+    if (hit.key.startsWith('enemy:')) {
+      const e = this.enemies.byKey(hit.key);
+      if (!e) return 'pass';
+      const dir = _v.copy(p.vel).normalize();
+      const info: HitInfo = {
+        source: p.kind === 'beam' ? 'beam' : p.kind === 'grenade' ? 'grenade' : 'bolt',
+        amount: p.kind === 'beam' ? LAW.beam.damage * 2 : LAW.bolt.damageCharged,
+        charged: true,
+        speed: p.vel.length(),
+        dir: dir.clone(),
+        from: hit.point.clone().addScaledVector(dir, -1.5),
+        team: 'player',
+        instigator: p.owner,
+        crossings: p.crossings,
+        loops: p.loops,
+        exitEndId: p.lastEndId,
+      };
+      const res = this.withKill({ projectile: p }, () => this.enemies.hit(e, info));
+      if (res === 'blocked') {
+        this.fx.sparks(hit.point, hit.normal, COL_SPARK, 16);
+        this.audio.shieldClang(hit.point);
+      } else this.fx.sparks(hit.point, hit.normal, COL_CHARGED, 12);
+      return p.kind === 'beam' ? 'pass' : 'stop';
+    }
+    const pr = this.props.byKey(hit.key);
+    if (pr) {
+      if (pr.def.explosive && (p.charged || p.kind === 'beam')) this.explodeProp(pr, { projectile: p });
+      else this.fx.sparks(hit.point, hit.normal, COL_SPARK, 8);
+      return 'stop';
+    }
+    return 'pass';
+  }
+
+  // ------------------------------------------------------------------
+  // Hooks: enemies
+  // ------------------------------------------------------------------
+
+  private enemyHooks(): EnemyHooks {
+    return {
+      fireBolt: (e, from, dir) => {
+        this.projectiles.fireBolt(from, dir, 'kessler', e.id);
+        this.audio.boltFire(from);
+      },
+      throwGrenade: (e, from, vel) => {
+        this.projectiles.throwGrenade(from, vel, 'kessler', e.id, LAW.grenade.fuse);
+      },
+      fireBeam: (e, from, dir) => {
+        this.projectiles.fireBeam(from, dir, 'kessler', e.id, LAW.beam.duration, LAW.beam.damage);
+        this.audio.beamFire(from);
+      },
+      telegraph: (_e, kind, from, to, t01) => {
+        if (this.telegraphs.length < 24) this.telegraphs.push({ kind, from: from.clone(), to: to.clone(), t: t01 });
+        if (kind === 'laser' && t01 < 0.05) this.audio.laserLock(from);
+        if (kind === 'beam' && t01 < 0.05) this.audio.beamCharge(from);
+      },
+      bark: (e, key) => {
+        if (e.pos.distanceTo(this.player.body.pos) < 32) this.hud.toast(t(key));
+      },
+      becameAware: () => {
+        this.audio.sting('alert');
+      },
+      died: (e, ctx) => this.onEnemyDied(e, ctx),
+      knocked: (e, info) => {
+        this.push({ type: 'knock', t: this.time, enemyId: e.id, cause: info.source, impactorId: this.killCtx?.impactor ? this.enemies.enemyOfBody(this.killCtx.impactor)?.id ?? null : null, at: e.pos.clone() });
+        this.fx.dust(e.pos, 0.6);
+      },
+      melee: (_e, dmg, push) => {
+        this.hurtPlayer(dmg, this.player.body.pos);
+        this.player.body.vel.add(push);
+        this.player.body.onGround = false;
+      },
+      sound: (kind, at) => {
+        if (kind === 'roar') this.audio.roar(at);
+        else if (kind === 'clang') this.audio.shieldClang(at);
+        else if (kind === 'thud') this.audio.impact(at, 8);
+      },
+      bossRift: (_e, a, b) => {
+        if (!a || !b) {
+          this.rifts.setBossPair(null, null);
+          return;
+        }
+        const n = _v.subVectors(b, a).setY(0).normalize();
+        const fa = { position: a.clone().setY(a.y + FEEL.portalHeight / 2), quaternion: orientFrame(n.clone().negate(), UP), width: FEEL.portalWidth, height: FEEL.portalHeight, kind: 'stand' as const };
+        const fb = { position: b.clone().setY(b.y + FEEL.portalHeight / 2), quaternion: orientFrame(n.clone(), UP), width: FEEL.portalWidth, height: FEEL.portalHeight, kind: 'stand' as const };
+        this.rifts.setBossPair(fa, fb);
+      },
+      summon: (_e, defs) => {
+        for (const d of defs) {
+          const v = this.enemies.spawn(d);
+          const enc = this.zones.encounters.find((x) => x.zone === d.zone && x.def.lesson === 'boss');
+          enc?.enemyIds.push(v.id);
+        }
+      },
+    };
+  }
+
+  private withKill<T>(ctx: KillCtx, fn: () => T): T {
+    const prev = this.killCtx;
+    this.killCtx = ctx;
+    try {
+      return fn();
+    } finally {
+      this.killCtx = prev;
+    }
+  }
+
+  private onEnemyDied(e: EnemyView, ctx: DeathContext) {
+    const kc = this.killCtx ?? {};
+    const p = kc.projectile ?? null;
+    const imp = kc.impactor ?? null;
+    const impEnemy = imp ? this.enemies.enemyOfBody(imp) : null;
+    const shooter = p && typeof p.owner === 'number' ? this.enemies.get(p.owner) : null;
+    const ev: KillEvent = {
+      type: 'kill',
+      t: this.time,
+      enemyId: e.id,
+      enemyKind: e.kind,
+      cause: ctx.cause,
+      charged: ctx.info.charged,
+      speed: ctx.info.speed ?? 0,
+      fallHeight: ctx.fallHeight,
+      killerCrossings: p ? p.crossings : imp ? imp.crossings : ctx.info.crossings ?? 0,
+      killerLoops: p ? p.loops : imp ? imp.loops : ctx.info.loops ?? 0,
+      victimCrossings: ctx.crossings,
+      ownShot: !!p && p.owner === e.id,
+      shotBy: p && typeof p.owner === 'number' && p.owner !== e.id ? p.owner : null,
+      projectileKind: p ? p.kind : null,
+      turretShot: shooter?.kind === 'turret',
+      shotAge: p ? this.time - p.firedAt : 0,
+      unaware: ctx.unaware,
+      witnessed: ctx.witnessed,
+      viaTrapdoor: ctx.viaTrapdoor,
+      matador: ctx.matador,
+      byBody: !!imp && (imp.kind === 'enemy' || imp.kind === 'corpse') && imp !== e.body,
+      byProp: !!kc.byProp,
+      byBarrel: !!kc.byBarrel,
+      byPlayer: !!kc.byPlayer,
+      playerFling: !!kc.playerFling,
+      playerAirborne: this.player.airborne,
+      impactorId: impEnemy && impEnemy.id !== e.id ? impEnemy.id : null,
+      at: ctx.at.clone(),
+    };
+    this.stats.kills++;
+    this.push(ev);
+    this.fx.embers(ctx.at, 16);
+    this.hp = Math.min(LAW.player.hp, this.hp + LAW.player.killHeal);
+    this.hitstop = Math.max(this.hitstop, 0.05);
+    this.rig.kick = Math.max(this.rig.kick, 0.6);
+    const cleared = this.zones.checkClears((id) => this.enemies.get(id)?.alive ?? false);
+    for (const c of cleared) this.onEncounterCleared(c);
+    if (e.kind === 'boss') this.onBossDown();
+  }
+
+  private onEncounterCleared(c: EncounterState) {
+    if (c.def.requireClear) this.hud.toast(t('toast.zoneClear'), 'good');
+    const cp = c.def.checkpoint;
+    if (cp) this.zones.setCheckpoint(cp.pos, cp.yaw, c.zone);
+    else if (this.player.body.onGround) this.zones.setCheckpoint(this.player.body.pos, this.player.yaw, c.zone);
+    this.hud.toast(t('toast.checkpoint'));
+    // last kill of a fight: cinematic beat
+    this.slowT = Math.max(this.slowT, 1.1);
+    this.slowScale = 0.25;
+    this.push({ type: 'checkpoint', t: this.time });
+    this.updateObjective(true);
+  }
+
+  private onBossDown() {
+    this.bossDead = true;
+    this.audio.sting('victory');
+    this.hud.setObjective(t('obj.escape'));
+    this.hint('leap', t('hint.leap'), 9);
+    this.rifts.setBossPair(null, null);
+  }
+
+  // ------------------------------------------------------------------
+  // Physics events: crossings, impacts, touches, water, void
+  // ------------------------------------------------------------------
+
+  private physEv: PhysicsEvents = {
+    crossed: (b, from, to, speed) => {
+      this.fx.riftBurst(to.position, to.normal, from.owner === 'gate' ? COL_ENTRANCE : COL_EXIT);
+      this.audio.riftPass(to.position, speed);
+      if (b.kind === 'player') {
+        this.airCrossings++;
+        this.playerFling = (from.kind === 'floor' || from.kind === 'air') && Math.abs(to.normal.y) < 0.5;
+        this.push({ type: 'cross', t: this.time, who: 'player', speed, loops: b.loops, fromKind: from.kind, toKind: to.kind });
         return;
       }
-      if (p.onGround && p.lastPassT > 0.2) this.strike = null;
-    }
-    if (s.t > 2.5) {
-      // something went wrong (blocked dash): let him go
-      g.frozenT = 0;
-      this.strike = null;
-    }
-  }
+      const e = this.enemies.enemyOfBody(b);
+      if (e && e.alive) this.enemies.onCrossed(e, from, to, speed);
+      this.push({ type: 'cross', t: this.time, who: b.kind, speed, loops: b.loops, fromKind: from.kind, toKind: to.kind });
+    },
+    impact: (b, info) => this.onImpact(b, info),
+    touch: (a, b, rel) => this.onTouch(a, b, rel),
+    splash: (b) => this.onSplash(b),
+    fellOut: (b) => this.onFellOut(b),
+  };
 
-  /**
-   * Every kill goes through here: stats, loot, witnesses and the chain beat.
-   */
-  killGuard(g: Guard, verb: 'strike' | 'drop' | 'takedown' | 'pull' | 'hurl') {
-    const p = this.player;
-    if (verb !== 'hurl') {
-      p.yaw = Math.atan2(g.pos.x - p.pos.x, g.pos.z - p.pos.z);
-      p.lungeT = 0.45;
-    }
-    this.cineT = 0.22;
-    this.rig.shake = verb === 'drop' ? 0.9 : 0.6;
-    this.audio.takedown(g.pos);
-    navigator.vibrate?.([10, 30, 40]);
-    const at = g.pos.clone();
-    const body = this.guards.kill(g);
-    body.yaw = g.yaw;
-    this.stats.kills++;
-    this.movesUsed.add(verb);
-    this.loot(g);
-    this.guards.noise(at, verb === 'drop' ? 3 : 2.2, 0.3);
-    // witnesses: anyone who saw it has a moment before raising his squad
-    const time = this.settings.slowmo ? FEEL.witnessTime : FEEL.witnessTimeNoSlow;
-    const seen = this.guards.witness(at, time * (this.input.lastDevice === 'touch' ? 1.25 : 1));
-    if (seen.length) this.hint('witness', t('hintWitness'), 6);
-    // chain beat
-    this.chain = this.chainT > 0 ? this.chain + 1 : 1;
-    if (this.chain === 1) this.chainTrail = [];
-    this.chainTrail.push(verb);
-    this.bestChain = Math.max(this.bestChain, this.chain);
-    this.chainT = Math.max(FEEL.chainMin, FEEL.chainBase - FEEL.chainStep * (this.chain - 1));
-    this.hud.setChain(this.chain, this.chainTrail.map((v) => t(('move_' + v) as any)));
-    this.checkPods();
-    if (g.def.boss) {
-      this.obj.manifest = true;
-      this.refreshObjectives();
-      this.hud.flashToast(t('manifestTaken'), 3.5, 'good');
-      this.audio.ui('objective');
-      this.checkpoint = { pos: p.pos.clone(), yaw: p.yaw };
-    }
-    this.hint('body', t('hintBody'), 6);
-  }
-
-  private instantPass(feet: THREE.Vector3, yaw: number) {
-    const dy = yaw - this.player.yaw;
-    this.player.teleport(feet.clone(), yaw);
-    this.player.lastPassT = 0;
-    this.player.onGround = false;
-    this.rig.rotateBy(dy);
-    this.rig.pivot.y = feet.y + FEEL.camHeight;
-    this.flash = 1;
-    this.audio.whoosh();
-  }
-
-  private handleAnchor(realDt: number) {
-    const inp = this.input;
-    if (inp.wasPressed('anchor')) {
-      this.anchorHold = 0;
-      this.anchorFired = false;
-    }
-    if (this.anchorHold >= 0 && inp.isHeld('anchor')) {
-      this.anchorHold += realDt;
-      if (!this.anchorFired && this.anchorHold > FEEL.anchorHoldTime) {
-        this.anchorFired = true;
-        this.setAnchor();
+  private onImpact(b: DynBody, info: ImpactInfo) {
+    if (b.kind === 'player') return; // the player controller reports its own landings
+    const e = this.enemies.enemyOfBody(b);
+    if (e && e.alive) {
+      const res = this.withKill({ impactor: b }, () => this.enemies.onImpact(e, info));
+      if (res === 'killed' || res === 'knocked') {
+        this.fx.dust(info.point, 1.2);
+        this.audio.impact(info.point, info.speed);
+        this.rig.shake = Math.max(this.rig.shake, Math.min(0.6, info.speed / 40));
       }
+      return;
     }
-    if (inp.wasReleased('anchor') && this.anchorHold >= 0) {
-      if (!this.anchorFired) this.callAnchor();
-      this.anchorHold = -1;
+    const pr = this.props.byBody(b);
+    if (pr && pr.alive) {
+      if (info.speed > 6) {
+        this.fx.dust(info.point, Math.min(2, info.speed / 10));
+        this.audio.impact(info.point, info.speed);
+      }
+      if (pr.def.explosive && info.charged && info.speed >= LAW.knockSpeed) this.explodeProp(pr, { byProp: true });
+      return;
+    }
+    if (b.kind === 'corpse' && info.speed > 6) {
+      this.fx.dust(info.point, 0.8);
+      this.audio.impact(info.point, info.speed);
     }
   }
 
-  private setAnchor() {
-    const pl = this.rift.placement;
-    if (this.rift.aiming && pl && !pl.invalid) {
-      this.rift.anchor = { frame: pl.frame, kind: pl.kind, host: pl.host, exitFeet: pl.exitFeet.clone(), exitYaw: pl.exitYaw };
-    } else {
-      const f = this.player.forward();
-      const base = this.player.pos.clone().addScaledVector(f, -0.55);
-      const fr = this.rift.standingFrame(base.x, this.player.pos.y, base.z, f);
-      this.rift.anchor = { frame: { ...fr, width: FEEL.portalWidth, height: FEEL.portalHeight }, kind: 'stand', host: null, exitFeet: this.player.pos.clone(), exitYaw: this.player.yaw };
-    }
-    this.audio.ui('confirm');
-    navigator.vibrate?.(30);
-    this.hud.flashToast(t('anchorSet'), 1.6, 'good');
-    this.hint('anchorTip', t('anchorHint'), 6);
-  }
-
-  private callAnchor() {
-    const a = this.rift.anchor;
-    if (!a) {
-      this.hud.flashToast(this.input.lastDevice === 'touch' ? t('noAnchorTouch') : t('noAnchor'), 2.2, 'warn');
-      this.audio.ui('deny');
-      return;
-    }
-    if (this.rift.charges < 1) {
-      this.hud.flashToast(t('noCharge'), 1.6, 'warn');
-      this.audio.ui('deny');
-      return;
-    }
-    const inh = this.level.inhibitor;
-    if (inh.active && (this.player.pos.distanceTo(inh.center) < inh.radius || a.exitFeet.distanceTo(inh.center) < inh.radius)) {
-      this.hud.flashToast(t('inhibited'), 1.6, 'warn');
-      this.audio.ui('deny');
-      return;
-    }
-    if (a.exitFeet.distanceTo(this.player.pos) < 3) return;
-    this.rift.charges -= 1;
-    const near = this.rift.solveNear(this.player.pos, this.rig.yaw);
-    if (!near) {
-      this.instantPass(a.exitFeet, a.exitYaw);
-      return;
-    }
-    const pair = this.rift.openPair(near, { frame: a.frame, kind: a.kind, host: a.host }, 'anchor');
-    this.audio.riftOpen(pair.a.position, true);
-    navigator.vibrate?.(20);
-  }
-
-  /** Decide what F does right now. */
-  private contextAction(): { label: string; run: () => void } | null {
-    const p = this.player;
-    const fwd = p.forward();
-    if (p.carrying) return { label: t('throw'), run: () => this.throwBody() };
-
-    // snatch: guard waiting at the far end of a rift we're standing at
-    for (const r of this.rift.openPortals()) {
-      if (!r.isOpen || !r.linked.isOpen) continue;
-      const toRift = _v.subVectors(r.position, p.pos).setY(0);
-      const d = toRift.length();
-      if (d > FEEL.snatchRange + 0.6) continue;
-      if (_v.subVectors(p.pos, r.position).dot(r.normal) < 0) continue; // must be on the front side
-      const far = r.linked;
-      const pair = this.rift.pairOf(r);
-      if (!pair || pair.kind === 'strike') continue;
-      for (const g of this.guards.guards) {
-        if (!g.alive || g.state === 'alert' || g.def.kind === 'heavy' || g.def.kind === 'sniper') continue;
-        // a trap, not a turret: the rift can't have been aimed at him
-        if (pair.targetId === g.def.id) continue;
-        const gd = _v.subVectors(g.pos, far.position);
-        const front = gd.dot(far.normal);
-        const lateral = Math.hypot(gd.x - far.normal.x * front, gd.z - far.normal.z * front);
-        if (front > -0.2 && front < 1.6 && lateral < 1.0 && Math.abs(g.pos.y - (far.position.y - far.height / 2)) < 1.2) {
-          return { label: t('snatch'), run: () => this.snatch(g, r) };
+  /** Something rift-charged and fast hits something: the core kill law. */
+  private onTouch(a: DynBody, b: DynBody, rel: number) {
+    for (const [imp, vic] of [[a, b], [b, a]] as [DynBody, DynBody][]) {
+      if (imp.charge <= 0 || rel < LAW.knockSpeed) continue;
+      if (imp.kind === 'grenade') continue;
+      const v = this.enemies.enemyOfBody(vic);
+      if (v && v.alive && vic !== imp) {
+        const kc: KillCtx = imp.kind === 'player'
+          ? { byPlayer: true, playerFling: this.playerFling, impactor: null }
+          : imp.kind === 'prop'
+            ? { byProp: true, impactor: imp }
+            : { impactor: imp };
+        this.impactEnemy(v, rel, imp, kc);
+        if (imp.kind === 'player') {
+          // punch through, keep some momentum for the next target
+          imp.vel.multiplyScalar(0.3);
+          this.hitstop = Math.max(this.hitstop, 0.08);
+          this.rig.shake = Math.max(this.rig.shake, 0.5);
         }
-      }
-    }
-
-    // takedown: only with the rift's edge (just came through) or on a stunned guard
-    let best: Guard | null = null, bd = FEEL.takedownRange;
-    const edge = p.lastPassT < FEEL.edgeTime;
-    this.nearUnarmed = null;
-    for (const g of this.guards.guards) {
-      if (!g.alive || (g.state === 'alert' && g.stunT <= 0)) continue;
-      if (!edge && g.stunT <= 0) {
-        if (g.pos.distanceTo(p.pos) < FEEL.takedownRange && Math.abs(g.pos.y - p.pos.y) < 1) this.nearUnarmed = g;
         continue;
       }
-      const d = g.pos.distanceTo(p.pos);
-      if (d > bd || Math.abs(g.pos.y - p.pos.y) > 1) continue;
-      const to = _v.subVectors(g.pos, p.pos).setY(0).normalize();
-      if (to.dot(fwd) < 0.2 && d > 1.0) continue;
-      if (g.def.kind === 'heavy' && g.stunT <= 0) continue; // armoured: drop on him, or stun him first
-      bd = d;
-      best = g;
+      const pr = this.props.byBody(vic);
+      if (pr && pr.alive && pr.def.explosive) this.explodeProp(pr, { byProp: imp.kind === 'prop', byPlayer: imp.kind === 'player', impactor: imp });
     }
-    if (best) {
-      const g = best;
-      return { label: t('takedown'), run: () => this.takedown(g) };
+  }
+
+  private impactEnemy(v: EnemyView, speed: number, imp: DynBody, kc: KillCtx) {
+    const lethal = v.armored ? LAW.armorSpeed : LAW.killSpeed;
+    const info: HitInfo = {
+      source: 'impact',
+      amount: speed >= lethal ? 9999 : speed >= LAW.knockSpeed ? 25 : 0,
+      charged: true,
+      speed,
+      dir: imp.vel.clone().normalize(),
+      from: imp.pos.clone(),
+      team: 'player',
+      instigator: 'player',
+      crossings: imp.crossings,
+      loops: imp.loops,
+      exitEndId: imp.lastEnd ? imp.lastEnd.id : null,
+    };
+    if (info.amount <= 0) return;
+    const res = this.withKill(kc, () => this.enemies.hit(v, info));
+    if (res === 'knocked' || res === 'hurt') this.enemies.stagger(v, 1.6, _v.copy(imp.vel).setY(0).multiplyScalar(0.25));
+    this.fx.dust(v.pos, 1);
+    this.audio.impact(v.pos, speed);
+  }
+
+  private onSplash(b: DynBody) {
+    this.fx.splash(b.pos, b.kind === 'prop' ? 1.4 : 1);
+    this.audio.splash(b.pos, 1);
+    if (b.kind === 'player') {
+      if (this.bossDead) this.victory();
+      else this.fallDeath('respawn.void');
+      return;
     }
-    // bodies
-    for (const b of this.guards.bodies) {
-      if (b.state !== 'lying') continue;
-      const center = this.bodyCenter(b, new THREE.Vector3());
-      if (center.distanceTo(p.pos) < 1.7 && Math.abs(b.pos.y - p.pos.y) < 1) return { label: t('grab'), run: () => this.grabBody(b) };
+    const e = this.enemies.enemyOfBody(b);
+    if (e && e.alive) {
+      this.withKill({ impactor: b }, () => this.enemies.onSplash(e));
+      return;
     }
-    const L = this.level;
-    // keycard elevator at the control tower base
-    const reader = (L.doorMesh.userData.reader as THREE.Mesh).position;
-    if (p.pos.y < 1 && p.pos.distanceTo(_v.set(reader.x, p.pos.y, reader.z)) < 2.2) {
-      if (this.obj.keycard) {
-        return {
-          label: t('useKeycard'),
-          run: () => {
-            this.obj.door = true;
-            ((L.doorMesh.userData.reader as THREE.Mesh).material as THREE.MeshBasicMaterial).color.setRGB(0.3, 4, 0.5);
-            this.audio.ui('confirm');
-            this.flash = 0.6;
-            const dy = 0 - this.player.yaw;
-            this.player.teleport(L.elevatorTop.clone(), 0);
-            this.rig.rotateBy(dy);
-            this.rig.pivot.y = L.elevatorTop.y + FEEL.camHeight;
-            this.hud.flashToast(t('doorOpened'), 2.2, 'good');
-          },
+    const pr = this.props.byBody(b);
+    if (pr) this.props.remove(pr);
+    else if (b.kind === 'corpse') b.enabled = false;
+  }
+
+  private onFellOut(b: DynBody) {
+    if (b.kind === 'player') {
+      if (this.bossDead) this.victory();
+      else this.fallDeath('respawn.void');
+      return;
+    }
+    const e = this.enemies.enemyOfBody(b);
+    if (e && e.alive) {
+      this.withKill({ impactor: b }, () => this.enemies.onFellOut(e));
+      return;
+    }
+    const pr = this.props.byBody(b);
+    if (pr) this.props.remove(pr);
+    else b.enabled = false;
+  }
+
+  private fallDeath(key: string) {
+    if (this.respawnT >= 0) return;
+    this.hud.toast(t(key), 'warn');
+    this.hp = Math.max(1, this.hp - 30);
+    this.respawnT = 0.7;
+    this.stats.deaths++;
+  }
+
+  // ------------------------------------------------------------------
+  // Explosions
+  // ------------------------------------------------------------------
+
+  private explodeProp(pr: Prop, kc: KillCtx) {
+    if (!pr.alive || pr.fuse >= 0) return;
+    pr.fuse = 0; // explode this frame (chains get a short delay)
+    const at = pr.body.pos.clone().setY(pr.body.pos.y + pr.body.height * 0.5);
+    this.props.remove(pr);
+    this.explode(at, LAW.barrel.radius, LAW.barrel.damage, { charged: true, barrel: true, kc });
+  }
+
+  private explode(at: V3, radius: number, damage: number, o: { charged: boolean; barrel: boolean; projectile?: Projectile; kc?: KillCtx }) {
+    this.fx.explosion(at, o.barrel ? 1.2 : 0.9);
+    this.audio.explosion(at, o.barrel ? 1.2 : 0.9);
+    this.rig.shake = Math.max(this.rig.shake, THREE.MathUtils.clamp(1 - at.distanceTo(this.player.body.pos) / 30, 0, 0.8));
+    this.push({ type: 'explode', t: this.time, at: at.clone() });
+    // the player: barrels hurt everyone; grenades hurt you only while IFF-locked (uncharged)
+    const pd = at.distanceTo(_v.copy(this.player.body.pos).setY(this.player.body.pos.y + 1));
+    if (pd < radius && (o.barrel || !o.charged)) {
+      const k = 1 - pd / radius;
+      this.hurtPlayer(damage * k * (o.barrel ? LAW.barrel.playerScale : 1), at);
+      this.player.body.vel.addScaledVector(_v2.subVectors(this.player.body.pos, at).setY(0.6).normalize(), 9 * k);
+    }
+    // Kessler: only charged blasts (a grenade that went through your rift) or neutral barrels
+    if (o.charged || o.barrel) {
+      for (const e of this.enemies.list) {
+        if (!e.alive || !this.zones.active.has(e.def.zone)) continue;
+        const d = at.distanceTo(e.chest(_v));
+        if (d > radius) continue;
+        const k = 1 - d / radius;
+        const info: HitInfo = {
+          source: 'explosion',
+          amount: damage * (0.35 + k),
+          charged: true,
+          from: at.clone(),
+          dir: _v2.subVectors(e.pos, at).normalize().clone(),
+          team: o.barrel ? 'neutral' : 'player',
+          instigator: o.projectile ? o.projectile.owner : 'player',
+          crossings: o.projectile?.crossings ?? 0,
+          loops: o.projectile?.loops ?? 0,
         };
-      }
-      return { label: t('locked'), run: () => this.audio.ui('deny') };
-    }
-    // the same elevator, riding back down from the deck
-    if (Math.abs(p.pos.y - L.elevatorTop.y) < 1 && p.pos.distanceTo(L.elevatorTop) < 2.2) {
-      return {
-        label: t('rideDown'),
-        run: () => {
-          this.audio.ui('confirm');
-          this.flash = 0.6;
-          const dy = Math.PI - this.player.yaw;
-          this.player.teleport(new THREE.Vector3(24, 0, 52.4), Math.PI);
-          this.rig.rotateBy(dy);
-          this.rig.pivot.y = FEEL.camHeight;
-        },
-      };
-    }
-    // extraction
-    if (this.obj.manifest && p.pos.distanceTo(L.extraction) < 3.2) {
-      return {
-        label: t('extract'),
-        run: () => {
-          this.obj.extracted = true;
-          this.refreshObjectives();
-          this.audio.ui('objective');
-          this.end(true);
-        },
-      };
-    }
-    // step into a rift we're facing (handy on touch)
-    for (const r of this.rift.openPortals()) {
-      if (!r.isOpen || r.kind === 'ceiling') continue;
-      const to = _v.subVectors(r.position, p.pos).setY(0);
-      const d = to.length();
-      if (d < 3.2 && d > 0.3 && to.normalize().dot(fwd) > 0.6 && _v.subVectors(p.pos, r.position).dot(r.normal) > 0) {
-        const target = r.position.clone().addScaledVector(r.normal, -1.0);
-        return { label: t('enterRift'), run: () => (this.player.autoWalk = { target, t: 1.6 }) };
+        const kc: KillCtx = o.projectile ? { projectile: o.projectile } : { ...(o.kc ?? {}), byBarrel: o.barrel };
+        const res = this.withKill(kc, () => this.enemies.hit(e, info));
+        if (res !== 'killed' && res !== 'blocked' && k > 0.35) this.enemies.stagger(e, 1.4, _v2.subVectors(e.pos, at).setY(0).normalize().multiplyScalar(4 * k));
       }
     }
-    return null;
-  }
-
-  private takedown(g: Guard) {
-    this.killGuard(g, 'takedown');
-  }
-
-  private snatch(g: Guard, near: Portal) {
-    const p = this.player;
-    const far = near.linked;
-    this.flash = 0.5;
-    this.audio.whoosh(0.25);
-    const at = g.pos.clone();
-    this.killGuard(g, 'pull');
-    const body = this.guards.bodies.find((b) => b.guard === g)!;
-    // pulled through to our side, lands at our feet
-    const drop = p.pos.clone().addScaledVector(p.forward(), 0.9);
-    const gy = this.level.world.groundAt(drop.x, drop.z, 0.2, p.pos.y + 0.5);
-    body.pos.set(drop.x, gy > -5 ? gy : p.pos.y, drop.z);
-    body.yaw = p.yaw + Math.PI;
-    g.pos.copy(body.pos);
-    this.rift.markPassed(far, 'body');
-    void at;
-  }
-
-  private loot(g: Guard) {
-    if (g.hasKeycard) {
-      g.hasKeycard = false;
-      this.obj.keycard = true;
-      this.refreshObjectives();
-      setTimeout(() => {
-        this.hud.flashToast(t('keycardTaken'), 2.2, 'good');
-        this.audio.ui('pickup');
-      }, 500);
-    }
-  }
-
-  private bodyCenter(b: Body, out: THREE.Vector3) {
-    // lying bodies extend backwards from the feet pivot
-    return out.set(b.pos.x - Math.sin(b.yaw) * 0.9, b.pos.y, b.pos.z - Math.cos(b.yaw) * 0.9);
-  }
-
-  private grabBody(b: Body) {
-    b.state = 'carried';
-    this.player.carrying = b;
-    this.player.crouched = false;
-    this.audio.bodyDrop(this.player.pos, 0.3);
-  }
-
-  private throwBody() {
-    const b = this.player.carrying as Body;
-    if (!b) return;
-    this.player.carrying = null;
-    b.state = 'flying';
-    const f = this.player.forward();
-    const pitch = this.rift.aiming ? Math.max(-0.2, this.rig.pitch) : 0.12;
-    this.player.chest(b.pos).addScaledVector(f, 0.5);
-    b.vel.set(f.x * 7.5 * Math.cos(pitch), 2.6 + Math.sin(pitch) * 6, f.z * 7.5 * Math.cos(pitch));
-    b.riftT = -1;
-    // a rift right in front: throw it straight in
-    for (const r of this.rift.openPortals()) {
-      if (!r.isOpen) continue;
-      const to = r.position.clone().sub(b.pos);
-      if (to.length() > 3.5 || to.clone().setY(0).normalize().dot(f) < 0.5 || r.normal.dot(to) > 0) continue;
-      b.vel.copy(to.setLength(9.5));
-      b.vel.y += 1.2;
-      break;
-    }
-    b.yaw = this.player.yaw;
-    this.audio.whoosh(0.2);
-  }
-
-  private dropBody(sound = true) {
-    const b = this.player.carrying as Body;
-    if (!b) return;
-    this.player.carrying = null;
-    b.state = 'lying';
-    b.pos.copy(this.player.pos);
-    if (sound) this.audio.bodyDrop(b.pos, 0.5);
-  }
-
-  private updateBodies(dt: number) {
-    const w = this.level.world;
-    for (const b of this.guards.bodies) {
-      const root = b.char.root;
-      if (b.state === 'carried') {
-        const p = this.player;
-        const f = p.forward();
-        const left = new THREE.Vector3(Math.cos(p.yaw), 0, -Math.sin(p.yaw));
-        root.position.copy(p.pos).add(new THREE.Vector3(0, p.height * 0.78, 0)).addScaledVector(left, 0.95).addScaledVector(f, -0.05);
-        root.rotation.set(0, p.yaw, 0);
-        root.rotateZ(Math.PI / 2 - 0.15);
-        b.pos.copy(p.pos);
-      } else if (b.state === 'flying') {
-        const prev = b.pos.clone();
-        b.vel.y -= FEEL.gravity * dt;
-        b.pos.addScaledVector(b.vel, dt);
-        const portal = this.rift.findCrossing(prev, b.pos, 0.25);
-        if (portal) {
-          const np = this.rift.transform(portal, b.pos);
-          const nv = this.rift.transformDir(portal, b.vel);
-          b.pos.copy(np).addScaledVector(portal.linked.normal, 0.3);
-          b.vel.copy(nv);
-          // out of an upright rift a body flies like a thrown sack, not a dropped one
-          if (Math.abs(portal.linked.normal.y) < 0.5) b.vel.y = Math.max(b.vel.y, 2.6);
-          const fwd = this.rift.transformDir(portal, new THREE.Vector3(Math.sin(b.yaw), 0, Math.cos(b.yaw)));
-          b.yaw = Math.atan2(fwd.x, fwd.z);
-          this.rift.markPassed(portal, 'body');
-          b.riftT = this.time;
-        }
-        // HURL: fresh out of a rift and fast, it knocks a guard down
-        if (b.riftT > -1 && this.time - b.riftT < 1.5 && b.vel.length() > FEEL.hurlSpeed) {
-          for (const g of this.guards.guards) {
-            if (!g.alive || g === b.guard) continue;
-            const dx = g.pos.x - b.pos.x, dz = g.pos.z - b.pos.z;
-            if (Math.hypot(dx, dz) > 1.2 || b.pos.y < g.pos.y - 0.2 || b.pos.y > g.pos.y + 2.1) continue;
-            if (g.def.kind === 'heavy' || g.def.kind === 'sniper') {
-              g.stunT = 2.2;
-              g.frozenT = 0;
-              this.audio.bodyDrop(g.pos, 1);
-              this.hud.flashToast(t('stunned'), 1.6, 'good');
-            } else this.killGuard(g, 'hurl');
-            b.vel.multiplyScalar(0.15);
-            b.riftT = -1;
-            break;
-          }
-        }
-        const pushed = w.resolveCircle(b.pos, 0.3, b.pos.y, b.pos.y + 0.5, 0.25, (c) => this.rift.hostPassable(c, b.pos, 0.3));
-        if (pushed) { b.vel.x *= -0.2; b.vel.z *= -0.2; }
-        const g = w.groundAt(b.pos.x, b.pos.z, 0.25, b.pos.y + 0.3);
-        if (b.pos.y < -1.3) {
-          // into the sea: gone for good
-          this.audio.bodyDrop(b.pos, 0.6);
-          b.state = 'lying';
-          b.discovered = true;
-          root.removeFromParent();
-          b.pos.set(0, -100, 0);
-          continue;
-        }
-        if (g > -5 && b.pos.y <= g + 0.05 && b.vel.y <= 0) {
-          b.pos.y = g;
-          b.state = 'lying';
-          b.vel.set(0, 0, 0);
-          // feet pivot sits a body-length forward of the landing spot
-          b.pos.x += Math.sin(b.yaw) * 0.9;
-          b.pos.z += Math.cos(b.yaw) * 0.9;
-          this.audio.bodyDrop(b.pos);
-          this.guards.noise(b.pos, 6, 0.35);
-          b.guard.pos.copy(b.pos);
-          b.guard.deadT = 1;
-        }
-        root.position.copy(b.pos);
-        root.rotation.set(0, b.yaw, 0);
-        root.rotateX(-Math.PI / 2);
+    // push loose things, chain barrels
+    for (const pr of this.props.items) {
+      if (!pr.alive) continue;
+      const d = at.distanceTo(pr.body.pos);
+      if (d > radius * 1.2) continue;
+      if (pr.def.explosive) {
+        pr.fuse = pr.fuse < 0 ? 0.12 + Math.random() * 0.1 : pr.fuse;
+        continue;
       }
+      if (pr.hanging) continue;
+      const k = 1 - d / (radius * 1.2);
+      pr.body.vel.addScaledVector(_v2.subVectors(pr.body.pos, at).setY(0.8).normalize(), 10 * k);
+      pr.body.onGround = false;
+    }
+    for (const b of this.physics.bodies) {
+      if (b.kind !== 'corpse' || !b.enabled) continue;
+      const d = at.distanceTo(b.pos);
+      if (d > radius) continue;
+      const k = 1 - d / radius;
+      b.vel.addScaledVector(_v2.subVectors(b.pos, at).setY(0.9).normalize(), 12 * k);
+      b.onGround = false;
     }
   }
 
-  private guardShot(g: Guard, hit: boolean, target: THREE.Vector3) {
-    const from = g.eye(new THREE.Vector3()).addScaledVector(g.forward(), 0.5).add(new THREE.Vector3(0, -0.25, 0));
-    this.audio.gunshot(from);
-    this.muzzle.position.copy(from);
-    this.muzzle.intensity = 40;
-    const to = target.clone();
-    if (!hit) to.add(new THREE.Vector3((Math.random() - 0.5) * 2, (Math.random() - 0.3) * 1.5, (Math.random() - 0.5) * 2));
-    (this.tracer.geometry as THREE.BufferGeometry).setFromPoints([from, to]);
-    this.tracer.visible = true;
-    this.tracerT = 0.06;
-    if (hit) {
-      this.player.health -= FEEL.guardDamage;
-      this.player.hurtT = 0.3;
-      this.damage = 1;
-      this.rig.shake = 0.7;
-      this.audio.hurt();
-      navigator.vibrate?.(80);
-      if (this.player.health <= 0) {
-        this.player.health = 0;
-        this.endLater(false, 700);
-        this.mode = 'ended';
-      }
+  private hurtPlayer(amount: number, from: V3) {
+    if (amount <= 0 || this.hp <= 0 || this.respawnT >= 0) return;
+    this.hp -= amount;
+    this.lastHurtT = this.time;
+    this.hud.damageFlash(Math.min(1, amount / 40));
+    this.audio.hurt();
+    this.rig.shake = Math.max(this.rig.shake, 0.45);
+    navigator.vibrate?.(40);
+    this.push({ type: 'hurt', t: this.time, amount });
+    void from;
+    if (this.hp <= 0) {
+      this.hp = 0;
+      this.respawnT = 1.1;
+      this.player.char.die('shot');
+      this.slowT = 1.1;
+      this.slowScale = 0.3;
     }
   }
 
   // ------------------------------------------------------------------
-  // Frame
+  // Per-frame
   // ------------------------------------------------------------------
 
-  /** Advance the simulation without rendering (automated tests). */
   debugStep(dt: number, n = 1) {
     for (let i = 0; i < n; i++) {
       this.input.poll(dt);
@@ -1075,310 +1039,1026 @@ export class Game {
 
   frame(realDt: number) {
     this.input.poll(realDt);
-    if (this.mode === 'playing') this.update(realDt);
-    else if (this.mode === 'menu') this.updateMenu(realDt);
-    else if (this.mode === 'ended') this.updateAmbient(realDt * 0.3);
-    this.render(realDt);
-    this.input.endFrame();
-  }
-
-  private updateMenu(dt: number) {
-    this.menuT += dt;
-    // slow cinematic drift across the yard toward the cranes
-    const k = (Math.sin(this.menuT * 0.03) + 1) / 2;
-    this.camera.position.set(-70 + k * 70, 26 + Math.sin(this.menuT * 0.07) * 2, -62 + k * 4);
-    this.camera.lookAt(-18 + k * 36, 6, 24);
-    this.camera.fov = 52;
-    this.camera.updateProjectionMatrix();
-    this.updateAmbient(dt);
-    for (const g of this.guards.guards) {
-      g.char.root.position.copy(g.pos);
+    if (this.lastDevice !== this.input.lastDevice) {
+      this.lastDevice = this.input.lastDevice;
+      setDevice(this.input.lastDevice);
     }
-    this.guards.update(dt, { chest: new THREE.Vector3(0, -100, 0), feet: new THREE.Vector3(0, -100, 0), light: 0, crouched: true, speed: 0, alive: false }, [], this.time);
+    switch (this.mode) {
+      case 'playing':
+        this.update(realDt);
+        this.render(realDt);
+        break;
+      case 'replay':
+        this.updateReplay(realDt);
+        break;
+      case 'photo':
+        this.updatePhoto(realDt);
+        break;
+      case 'menu':
+        this.updateMenu(realDt);
+        this.render(realDt);
+        break;
+      default:
+        this.updateAmbient(realDt * 0.3);
+        this.render(realDt);
+    }
+    this.input.endFrame();
   }
 
   private updateAmbient(dt: number) {
     this.time += dt;
-    this.lamps.update(this.time, this.mode === 'menu' ? this.camera.position : this.player.pos);
-    this.rain.update(this.time, this.camera.position);
-    (this.sky.material as THREE.ShaderMaterial).uniforms.uTime.value = this.time;
-    this.sky.position.copy(this.camera.position);
     for (const f of this.level.animated) f(this.time);
-    this.updateSearchlights();
-    const focus = this.mode === 'menu' ? new THREE.Vector3(-10, 0, 0) : this.player.pos;
-    this.moon.position.copy(focus).addScaledVector(this.level.sunDir, 110);
-    this.moon.target.position.copy(focus);
+    (this.sky.material as THREE.ShaderMaterial).uniforms.uTime && ((this.sky.material as THREE.ShaderMaterial).uniforms.uTime.value = this.time);
+    this.sky.position.copy(this.camera.position);
+    if (this.skyline) this.skyline.position.set(this.camera.position.x * 0.9, 0, this.camera.position.z * 0.9);
+    const focus = this.mode === 'menu' ? _v.set(0, 20, 30) : this.player.body.pos;
+    this.sun.position.copy(focus).addScaledVector(this.level.sunDir, 140);
+    this.sun.target.position.copy(focus);
+    this.lamps?.update(this.time, focus);
+  }
+
+  private updateMenu(dt: number) {
+    this.menuT += dt;
+    const a = this.menuT * 0.05;
+    const c = _v.set(0, 0, 40);
+    this.camera.position.set(c.x + Math.sin(a) * 95, 30 + Math.sin(this.menuT * 0.09) * 12, c.z + Math.cos(a) * 95);
+    this.camera.lookAt(c.x, 45, c.z);
+    this.camera.fov = 50;
+    this.camera.updateProjectionMatrix();
+    this.updateAmbient(dt);
+    this.fx.update(dt);
   }
 
   private update(realDt: number) {
     const inp = this.input;
     const p = this.player;
-    if (inp.wasPressed('pause')) {
-      this.pause();
-      return;
+    const body = p.body;
+
+    // ----- time -----
+    let ts = 1;
+    const aiming = inp.isHeld('aim') && this.respawnT < 0;
+    if (aiming && this.settings.slowmo) ts = FEEL.focusTimeScale;
+    if (this.slowT > 0) {
+      this.slowT -= realDt;
+      ts = Math.min(ts, this.slowScale);
+    }
+    if (this.respawnT >= 0) ts = Math.min(ts, 0.35);
+    this.timeScale = THREE.MathUtils.damp(this.timeScale, ts, 12, realDt);
+    let dt = realDt * this.timeScale;
+    if (this.hitstop > 0) {
+      this.hitstop -= realDt;
+      dt *= 0.08;
+    }
+    this.time += dt;
+    this.stats.time += realDt;
+    this.audio.setSlowmo(1 - this.timeScale);
+
+    // ----- respawn -----
+    if (this.respawnT >= 0) {
+      this.respawnT -= realDt;
+      if (this.respawnT < 0) this.respawn(true);
     }
 
-    // ---- look ----
+    // ----- look -----
     const look = inp.consumeLook();
     this.rig.look(look.x, look.y);
 
-    // ---- aim state ----
-    const wantAim = inp.isHeld('aim') && !p.isMantling();
-    if (wantAim && !this.rift.aiming) {
-      this.rift.distanceOverride = null;
-      this.rift.rotation = 0;
-      this.audio.ui('click');
-      this.hint('open', this.deviceText('hintOpenKbm', 'hintOpenPad', 'hintOpenTouch'), 9);
-    }
-    if (!wantAim && this.rift.aiming) {
-      this.rift.placement = null;
-    }
-    this.rift.aiming = wantAim;
-
-    // ---- time scale ----
-    let ts = 1;
-    if (wantAim && this.settings.slowmo && this.rift.focus > 0) {
-      ts = FEEL.focusTimeScale;
-      this.rift.focus = Math.max(0, this.rift.focus - realDt);
-    }
-    if (this.cineT > 0) {
-      this.cineT -= realDt;
-      ts = Math.min(ts, 0.3);
-    }
-    // the chain beat: a breath after each kill to line up the next one
-    this.rift.strikeOnly = !!(this.strike && this.strike.pair && !this.strike.passed);
-    this.guards.holdStartle = !!this.strike;
-    if (this.chainT > 0) {
-      // the beat waits while a kill move is in flight
-      if (!this.strike) this.chainT = Math.max(0, this.chainT - realDt);
-      if (this.settings.slowmo) ts = Math.min(ts, FEEL.chainTimeScale);
-      if (this.chainT === 0) this.hud.setChain(0, []);
-    }
-    // never slow the dash itself to a crawl
-    if (this.strike && !this.strike.passed) ts = Math.max(ts, 0.6);
-    this.noFallDamageT = Math.max(0, this.noFallDamageT - realDt);
-    this.timeScale = THREE.MathUtils.damp(this.timeScale, ts, 14, realDt);
-    const dt = realDt * this.timeScale;
-    this.audio.setFocus(wantAim ? 0.6 : this.cineT > 0 ? 0.4 : 0);
-
-    // ---- aim adjustments ----
-    const wheel = inp.consumeWheel();
-    if (wantAim) {
-      if (wheel) {
-        const base = this.rift.distanceOverride ?? (this.rift.placement ? Math.max(FEEL.riftMinDistance, this.rift.placement.distance) : 8);
-        this.rift.distanceOverride = THREE.MathUtils.clamp(base + wheel * FEEL.wheelStep, FEEL.riftMinDistance + 0.4, FEEL.riftRange);
+    // ----- rifts: aim / place / gate / close -----
+    this.rifts.aiming = aiming;
+    p.aim = THREE.MathUtils.damp(p.aim, aiming ? 1 : 0, 12, realDt);
+    let aim: ExitAim | null = null;
+    const targets = this.trapTargets();
+    if (aiming) {
+      const wheel = inp.consumeWheel();
+      if (wheel) this.rifts.airDistance = THREE.MathUtils.clamp((this.rifts.airDistance ?? 12) + wheel * 1.5, 3, LAW.riftRange);
+      if (inp.wasPressed('flip')) {
+        this.rifts.orientation = this.rifts.orientation === 'auto' ? 'hatch' : this.rifts.orientation === 'hatch' ? 'door' : 'auto';
         this.audio.ui('click');
       }
-      const pl0 = this.rift.placement;
-      if (inp.wasPressed('rotL') || inp.wasPressed('rotR')) {
-        if (pl0 && pl0.canSwap) {
-          this.rift.preferDrop = !this.rift.preferDrop;
-          this.audio.ui('click');
-        } else if (inp.wasPressed('rotL')) this.rift.rotation += FEEL.rotateStep;
-        else this.rift.rotation -= FEEL.rotateStep;
-      }
-    }
-
-    if (inp.wasPressed('crouch')) p.crouched = !p.crouched && !p.carrying;
-    this.touch?.setCrouched(p.crouched);
-
-    // ---- player ----
-    p.update(dt, { x: inp.moveX, y: inp.moveY }, this.rig.yaw, inp.wasPressed('jump'), inp.isHeld('sprint'), wantAim, this.level.world, this.rift, {
-      footstep: (pos, loud, radius) => {
-        this.audio.footstep(pos, loud);
-        if (radius > 2) this.guards.noise(pos, radius, loud * 0.35);
-      },
-      landed: (pos, impact) => {
-        const force = Math.min(1, impact / 14);
-        // long drops hurt: ~5m stings, ~9m cripples, a rooftop is fatal
-        if (impact > 13.5 && this.noFallDamageT <= 0) {
-          p.health -= (impact - 13.5) * 9.5;
-          this.damage = 1;
-          this.audio.hurt();
-          navigator.vibrate?.(60);
-          if (p.health <= 0) {
-            p.health = 0;
-            this.endLater(false, 500);
-            this.mode = 'ended';
-          }
-        }
-        this.audio.bodyDrop(pos, force * 0.5);
-        this.guards.noise(pos, 4 + force * 8, 0.3 + force * 0.4);
-        this.rig.shake = Math.max(this.rig.shake, force * 0.5);
-      },
-      passed: (portal, dyaw) => {
-        this.rig.rotateBy(dyaw);
-        this.rig.pivot.y = p.pos.y + FEEL.camHeight;
-        this.flash = 0.8;
-        this.audio.whoosh();
-        navigator.vibrate?.(15);
-        const pair = this.rift.pairOf(portal);
-        if (this.strike && pair && pair === this.strike.pair) this.onRiftExit();
-        else if (this.strike && !this.strike.pair) this.onRiftExit();
-      },
-      fellInWater: () => {
-        this.audio.bodyDrop(p.pos, 0.8);
-        p.teleport(p.lastSafe.clone());
-        p.health -= 20;
-        this.damage = 0.6;
-        if (p.health <= 0) this.end(false);
-      },
-    });
-    // bodies don't overlap: keep the player out of living guards
-    for (const g of this.guards.guards) {
-      if (!g.alive || Math.abs(g.pos.y - p.pos.y) > 1.5) continue;
-      const dx = p.pos.x - g.pos.x, dz = p.pos.z - g.pos.z;
-      const d = Math.hypot(dx, dz);
-      const min = 0.72;
-      if (d < min && d > 1e-4) {
-        p.pos.x = g.pos.x + (dx / d) * min;
-        p.pos.z = g.pos.z + (dz / d) * min;
-      }
-    }
-    if (p.lungeT > 0) {
-      p.lungeT = Math.max(0, p.lungeT - realDt);
-      p.char.lunge = Math.sin((1 - p.lungeT / 0.5) * Math.PI);
-    } else p.char.lunge = 0;
-    p.char.aimArm = THREE.MathUtils.damp(p.char.aimArm, wantAim ? 1 : 0, 12, realDt);
-
-    // ---- placement ----
-    if (wantAim) {
       const ray = this.rig.aimRay();
-      const pl = this.rift.solve(ray.origin, ray.dir, p.eye(), p.pos, inp.isHeld('freeAim'), inp.lastDevice === 'touch');
-      this.rift.placement = pl;
-      const lockG = pl.targetId ? this.guardById(pl.targetId) : null;
-      this.hud.setPlacement(pl, lockG && pl.move ? this.guards.witnessesOf(lockG).length : 0);
-      const hand = p.pos.clone().add(new THREE.Vector3(0, p.height * 0.72, 0)).addScaledVector(p.forward(), 0.45).addScaledVector(new THREE.Vector3(Math.cos(p.yaw), 0, -Math.sin(p.yaw)), 0.25);
-      this.rift.updatePreview(pl, hand, this.camera);
-      if (inp.wasPressed('open')) {
-        this.tryOpenRift(pl);
-        if (!pl.invalid && !pl.move && this.touch) this.touch.syncAim(false);
+      aim = this.rifts.aimExit(ray.origin, ray.dir, p.eye(_v), body.pos, IS_TOUCH, targets);
+      this.lastAim = aim;
+      if (inp.wasPressed('place')) {
+        if (aim.valid && this.rifts.placeExit(aim)) {
+          this.audio.ui('confirm');
+          navigator.vibrate?.(15);
+          this.hint('gate', t('hint.gateAfterExit'), 6);
+        } else {
+          this.audio.ui('deny');
+          if (aim.reason) this.hud.toast(t(aim.reason), 'warn');
+        }
       }
-      // situational hints on the lock
-      const locked = this.guardById(pl.targetId);
-      if (locked && pl.move === 'strike') this.hint('strike', this.deviceText('hintStrikeKbm', 'hintStrikePad', 'hintStrikeTouch'), 7);
-      if (locked && locked.def.kind === 'heavy') this.hint('heavy', t('hintHeavy'), 7);
     } else {
-      this.rift.updatePreview(null, p.pos, this.camera);
-      this.hud.setPlacement(null);
+      inp.consumeWheel();
+      this.rifts.airDistance = null;
+      this.lastAim = null;
+      if (inp.wasPressed('gate')) this.openGate(targets);
+    }
+    if (inp.wasPressed('close')) this.closeRifts();
+    this.hud.setAim(
+      aim
+        ? { valid: aim.valid, reason: aim.reason, kind: aim.kind, distance: aim.distance, outcome: aim.outcome, dropBelow: aim.dropBelow, orientation: this.rifts.orientation }
+        : null,
+    );
+    this.rifts.updatePreview(aim && aim.valid !== undefined ? aim : null, this.handPos(), this.camera);
+    if (!aiming) this.hud.setGateHint(this.gatePreview(targets));
+    else this.hud.setGateHint(null);
+    this.hud.setRiftState({ exit: this.rifts.hasExit(), entrance: this.rifts.hasEntrance(), aiming, orientation: this.rifts.orientation });
+    this.touch?.setAiming(aiming);
+
+    // ----- player -----
+    const pin: PlayerInput = {
+      moveX: this.respawnT >= 0 ? 0 : inp.moveX,
+      moveY: this.respawnT >= 0 ? 0 : inp.moveY,
+      camYaw: this.rig.yaw,
+      jump: inp.wasPressed('jump'),
+      sprint: inp.isHeld('sprint') || (IS_TOUCH && Math.hypot(inp.moveX, inp.moveY) > 0.95),
+      crouch: this.crouchToggle(),
+      shove: inp.wasPressed('shove'),
+    };
+    const wasAir = p.airborne;
+    p.update(dt, pin, this.level.world, this.physics, this.physEv, this.playerEvents(), this.time);
+    this.updateAirtime(wasAir);
+    this.keepPlayerOutOfEnemies();
+    this.updateShove(dt);
+    this.updateCarry();
+
+    // ----- world simulation -----
+    this.physics.step(dt, this.physEv, this.time);
+    this.telegraphs.length = 0;
+    const ectx: EnemyContext = {
+      time: this.time,
+      player: { pos: body.pos, chest: p.chest(_v3.clone()), vel: body.vel, alive: this.hp > 0, airborne: p.airborne, crouched: p.crouched, noise: this.noise },
+      world: this.level.world,
+      rifts: this.rifts,
+      physics: this.physics,
+      activeZones: this.zones.active,
+    };
+    this.enemies.update(dt, ectx);
+    this.noise.length = 0;
+    this.rifts.setBlockers(this.enemies.blockers());
+    this.rifts.update(dt, realDt, this.time);
+    this.projectiles.update(dt, this.time);
+    this.props.update(dt);
+    this.updatePropFuses(dt);
+    this.updateCatchWindow();
+
+    // ----- zones, encounters, lifts -----
+    const zu = this.zones.update(body.pos);
+    if (zu.entered) this.onZoneEntered(zu.entered.id);
+    for (const e of zu.triggered) this.triggerEncounter(e);
+    this.updateLifts(dt);
+    this.updateGates(dt);
+    if (this.bossDead && this.victoryT < 0 && body.pos.y < (this.level.bossArena?.y ?? 90) - 30) this.victory();
+    if (this.victoryT >= 0) {
+      this.victoryT -= realDt;
+      if (this.victoryT < 0) this.finishRun();
     }
 
-    if (inp.wasPressed('close')) this.rift.closeAll();
-
-    // ---- interaction ----
+    // ----- context action -----
     const act = this.contextAction();
-    const key = inp.lastDevice === 'pad' ? 'X' : inp.lastDevice === 'touch' ? null : 'F';
-    this.hud.setPrompt(key, act?.label ?? null);
-    this.touch?.setAction(act?.label ?? null);
-    if (act && inp.wasPressed('interact')) act.run();
-    if (!act && inp.wasPressed('interact') && this.nearUnarmed && !p.carrying) this.hud.flashToast(t('noWeapon'), 2.2, 'warn');
-    if (p.carrying && this.rift.openPortals().some((r) => r.position.distanceTo(p.pos) < 6)) this.hint('hurl', t('hintHurl'), 6);
-    if (!act && inp.wasPressed('interact') && p.carrying) this.dropBody();
+    this.hud.setPrompt(act ? act.label : null);
+    this.touch?.setAction(act ? act.label : null);
+    if (act && inp.wasPressed('action')) act.run();
 
-    // arena hints: the wall, then the searchlight plaza
-    if (!this.hintWall && p.pos.z > -45 && p.pos.z < -10.5 && p.pos.y < 1) {
-      this.hintWall = true;
-      this.hud.showHint('wall', t('hintWall'), 9);
+    // ----- meta -----
+    if (inp.wasPressed('vision')) {
+      this.visionOn = !this.visionOn;
+      this.hud.setVision(this.visionOn);
     }
-    if (!this.hintPlaza && p.pos.z > -9 && p.pos.y < 13) {
-      this.hintPlaza = true;
-      this.hud.showHint('plaza', t('hintPlaza'), 9);
+    const banked = this.style.update(realDt, p.airborne);
+    if (banked && banked.banked > 0) {
+      this.hud.comboBanked(banked.banked, this.style.state.rank);
+      this.audio.comboBank(banked.banked);
+      this.stats.bestCombo = Math.max(this.stats.bestCombo, banked.banked);
+      this.stats.styleTotal = this.style.state.total;
+      const rankIdx = ['D', 'C', 'B', 'A', 'S', 'SS', 'SSS'].indexOf(this.style.state.rank);
+      if ((banked.banked >= 1500 || rankIdx >= 3) && this.exporterOk()) {
+        this.clipOfferT = 6;
+        this.clipFrom = Math.max(this.time - 14, (this.style.state.chain[0]?.t ?? this.time) - 3);
+        this.hud.offerClip(true);
+        this.touch?.offerClip(true);
+      }
     }
-    // snatch hint
-    if (act && act.label === t('snatch')) this.hint('snatch', t('hintSnatch'), 6);
+    if (this.clipOfferT > 0) {
+      this.clipOfferT -= realDt;
+      if (this.clipOfferT <= 0) {
+        this.hud.offerClip(false);
+        this.touch?.offerClip(false);
+      }
+    }
+    if (inp.wasPressed('clip')) this.startReplay();
+    if (inp.wasPressed('photo')) this.enterPhoto();
+    if (inp.wasPressed('pause')) this.pause();
 
-    // ---- world ----
-    this.updateStrike(realDt);
-    this.updateBodies(dt);
-    this.playerLight = this.lightAt(p.chest(), true);
-    const perception = { chest: p.chest(), feet: p.pos.clone(), light: this.playerLight, crouched: p.crouched, speed: Math.hypot(p.vel.x, p.vel.z), alive: p.health > 0 };
-    const openRifts = this.rift.openPortals().filter((r) => r.open > 0.5);
-    this.guards.viewer.copy(p.pos);
-    const res = this.guards.update(dt, perception, openRifts, this.time, realDt);
-    this.updateLasers();
-    this.audio.setIntensity(res.tension, res.alarm, realDt);
-    this.rift.update(dt, realDt, this.time, this.audio);
-    this.rig.update(realDt, p.pos, p.crouchT, wantAim, this.level.world);
-    this.guards.setFanVisibility(THREE.MathUtils.damp(this.guards.fansVisible, wantAim || inp.isHeld('tactical') ? 1 : 0, 10, realDt));
-    this.updateAmbient(dt);
+    // ----- health -----
+    if (this.hp > 0 && this.time - this.lastHurtT > LAW.player.regenDelay) this.hp = Math.min(LAW.player.hp, this.hp + LAW.player.regenRate * dt);
+    this.hud.setHealth(this.hp, LAW.player.hp);
+    this.hud.setStyle(this.style.state);
+    (this.hud as any).setPlayerCharged?.(body.charge > 0);
+
+    // ----- camera, fx, audio -----
+    const speed = body.vel.length();
+    this.rig.speed = THREE.MathUtils.damp(this.rig.speed, body.charge > 0 ? THREE.MathUtils.clamp((speed - 8) / 22, 0, 1) : 0, 6, realDt);
+    this.rig.update(realDt, body.pos, p.crouched ? 1 : 0, aiming, this.level.world);
+    if (body.charge > 0 && speed > 8) this.fx.streak(_v.copy(body.pos).setY(body.pos.y + 1), body.vel, COL_CHARGED);
+    for (const b of this.physics.bodies) if (b.kind !== 'player' && b.enabled && b.charge > 0 && b.vel.lengthSq() > 64) this.fx.streak(_v.copy(b.pos).setY(b.pos.y + b.height * 0.5), b.vel, COL_ENTRANCE);
+    this.fx.setHome(body.pos);
+    this.fx.update(dt);
+    this.drawTelegraphs();
+    this.updateMarkers();
+    this.updateObjective(false);
+    this.hud.update(realDt);
     this.audio.updateListener(this.camera);
-
-    // ---- effects ----
-    this.damage = Math.max(0, this.damage - realDt * 1.5);
-    this.flash = Math.max(0, this.flash - realDt * 2.5);
-    if (this.tracerT > 0 && (this.tracerT -= realDt) <= 0) this.tracer.visible = false;
-    this.muzzle.intensity = Math.max(0, this.muzzle.intensity - realDt * 600);
-    if (!this.guards.guards.some((g) => g.state === 'alert') && p.health > 0 && p.health < FEEL.maxHealth) p.health = Math.min(FEEL.maxHealth, p.health + realDt * 4);
-    const grade = this.renderer.grade.uniforms;
-    grade.uFocus.value = this.rig.aim * (this.settings.slowmo ? 1 : 0.5);
-    grade.uDamage.value = this.damage * 0.8 + (p.health < 35 ? 0.25 : 0);
-    grade.uFlash.value = this.flash;
-    grade.uAlert.value = res.alarm * 0.6;
-
-    // ---- HUD ----
-    this.hud.update(realDt, { focus: this.rift.focus, light: this.playerLight, health: p.health, aiming: this.rig.aim, chainT: this.chainT, chainMax: Math.max(FEEL.chainMin, FEEL.chainBase - FEEL.chainStep * Math.max(0, this.chain - 1)) });
-    const lockedG = this.rift.aiming ? this.guardById(this.rift.placement?.targetId ?? null) : null;
-    this.hud.setWitnesses(lockedG ? this.guards.witnessesOf(lockedG) : []);
-    this.hud.updateGuardIcons(this.guards.guards, this.camera, this.renderer.width, this.renderer.height);
-    this.updateObjectiveMarker();
-    this.stats.time = this.time;
+    const combat = this.enemies.list.some((e) => e.alive && e.state === 'combat' && this.zones.active.has(e.def.zone)) ? 1 : 0;
+    this.audio.setIntensity(combat ? 0.8 : 0.2, combat, realDt);
+    this.audio.setAltitude(body.pos.y);
+    this.audio.wind(body.charge > 0 ? speed : speed * 0.3);
+    if (body.charge > 0 && body.loops >= 2) this.audio.loopWhoosh(speed);
+    this.updateAmbient(0);
+    this.recorder.record(this.capture());
+    this.tricksFrame.length = 0;
   }
 
-  private updateObjectiveMarker() {
-    const L = this.level;
-    let target: THREE.Vector3 | null = null;
-    const boss = this.guards.guards.find((g) => g.def.boss && g.alive);
-    if (!this.obj.manifest) target = boss ? boss.pos.clone().add(new THREE.Vector3(0, 2.4, 0)) : L.manifest.clone().add(new THREE.Vector3(0, 0.9, 0));
-    else if (!this.obj.extracted) target = L.extraction.clone().add(new THREE.Vector3(0, 1.6, 0));
-    if (!target || this.rig.aim > 0.5) {
-      this.objMarker.style.display = 'none';
+  private noise: { at: V3; radius: number }[] = [];
+
+  private crouchState = false;
+  private crouchToggle() {
+    if (this.input.wasPressed('crouch')) this.crouchState = !this.crouchState;
+    if (this.input.wasPressed('jump') || this.input.isHeld('sprint')) this.crouchState = false;
+    this.touch?.setCrouched(this.crouchState);
+    return this.crouchState;
+  }
+
+  private playerEvents(): PlayerEvents {
+    return {
+      footstep: (pos, loud, radius) => {
+        this.audio.footstep(pos, loud, this.player.body.groundCollider?.tag === 'steel');
+        if (radius > 2) this.noise.push({ at: pos.clone(), radius });
+      },
+      jumped: (pos) => this.audio.jump(pos),
+      landed: (pos, speed, charged) => this.onPlayerLanded(pos, speed, charged),
+      fallDamage: (amount) => this.hurtPlayer(amount, this.player.body.pos),
+      shoved: (_from, dir) => {
+        this.shoveT = 0.3;
+        this.shoveDir.copy(dir);
+        this.shoved.clear();
+        this.audio.shove(this.player.body.pos);
+      },
+      crossed: (_from, _to, yawDelta) => {
+        this.rig.rotateBy(yawDelta);
+        this.rig.kick = Math.max(this.rig.kick, 0.8);
+        this.renderer.grade.uniforms.uFlash.value = 1;
+      },
+    };
+  }
+
+  private onPlayerLanded(pos: V3, speed: number, charged: boolean) {
+    this.audio.land(pos, speed);
+    if (speed > 9) this.fx.dust(pos, Math.min(2, speed / 12));
+    if (charged && speed >= LAW.cometSpeed) {
+      // COMET: shockwave knocks everyone nearby down
+      this.fx.ring(pos, LAW.cometRadius * 2.2, 0.55, COL_CHARGED);
+      this.rig.shake = Math.max(this.rig.shake, 0.9);
+      this.hitstop = Math.max(this.hitstop, 0.1);
+      for (const e of this.enemies.list) {
+        if (!e.alive || e.pos.distanceTo(pos) > LAW.cometRadius) continue;
+        const info: HitInfo = { source: 'impact', amount: 20, charged: true, speed: LAW.knockSpeed, from: pos.clone(), dir: _v.subVectors(e.pos, pos).normalize().clone(), team: 'player', instigator: 'player' };
+        const res = this.withKill({ byPlayer: true, playerFling: this.playerFling }, () => this.enemies.hit(e, info));
+        if (res !== 'killed') this.enemies.stagger(e, 2.2, _v2.subVectors(e.pos, pos).setY(0).normalize().multiplyScalar(3));
+      }
+    }
+    this.playerFling = false;
+  }
+
+  private updateAirtime(wasAir: boolean) {
+    const air = this.player.airborne;
+    if (air && !wasAir) {
+      this.airStartT = this.time;
+      this.airCrossings = 0;
+      this.push({ type: 'air', t: this.time, phase: 'start', seconds: 0, crossings: 0 });
+    } else if (!air && wasAir && this.airStartT >= 0) {
+      const secs = this.time - this.airStartT;
+      this.push({ type: 'air', t: this.time, phase: 'end', seconds: secs, crossings: this.airCrossings });
+      (this.hud as any).setAirtime?.(null);
+      this.airStartT = -1;
+    }
+    if (air && this.airStartT >= 0 && this.airCrossings > 0) (this.hud as any).setAirtime?.(this.time - this.airStartT);
+  }
+
+  private keepPlayerOutOfEnemies() {
+    const b = this.player.body;
+    for (const e of this.enemies.list) {
+      if (!e.alive || e.state === 'launched' || Math.abs(e.pos.y - b.pos.y) > 1.5) continue;
+      const dx = b.pos.x - e.pos.x, dz = b.pos.z - e.pos.z;
+      const d = Math.hypot(dx, dz);
+      const min = e.radius + FEEL.playerRadius;
+      if (d < min && d > 1e-4) {
+        b.pos.x = e.pos.x + (dx / d) * min;
+        b.pos.z = e.pos.z + (dz / d) * min;
+      }
+    }
+  }
+
+  /** SHOVE: the dash staggers whatever it touches (0 damage, sets up rift kills). */
+  private updateShove(dt: number) {
+    if (this.shoveT <= 0) return;
+    this.shoveT -= dt;
+    const b = this.player.body;
+    for (const e of this.enemies.list) {
+      if (!e.alive || this.shoved.has(e.id)) continue;
+      if (e.pos.distanceTo(b.pos) > e.radius + 1.0 || Math.abs(e.pos.y - b.pos.y) > 1.4) continue;
+      this.shoved.add(e.id);
+      this.enemies.stagger(e, LAW.shove.stagger, _v.copy(this.shoveDir).setY(0).normalize().multiplyScalar(4));
+      this.fx.dust(e.pos, 0.5);
+      this.audio.impact(e.pos, 6);
+    }
+    for (const pr of this.props.items) {
+      if (!pr.alive || pr.hanging || pr.body.userData.manual) continue;
+      if (pr.body.pos.distanceTo(b.pos) > pr.body.radius + 1.0) continue;
+      pr.body.vel.addScaledVector(_v.copy(this.shoveDir).setY(0.2).normalize(), 7);
+      pr.body.onGround = false;
+      pr.touched = true;
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Rift verbs
+  // ------------------------------------------------------------------
+
+  private handPos() {
+    const b = this.player.body;
+    const f = this.player.forward(_v2);
+    return _v.set(b.pos.x + f.x * 0.35 - f.z * 0.25, b.pos.y + 1.35, b.pos.z + f.z * 0.35 + f.x * 0.25).clone();
+  }
+
+  private trapTargets(): TrapTarget[] {
+    const out = this.enemies.trapTargets().filter((tt) => {
+      const e = this.enemies.byKey(tt.key);
+      return !e || this.zones.active.has(e.def.zone);
+    });
+    return this.props.trapTargets(out);
+  }
+
+  private threats(): Threat[] {
+    const out = this.enemies.threats().slice();
+    const pp = this.player.body.pos;
+    for (const pr of this.projectiles.list) {
+      if (pr.kind !== 'grenade' || !pr.alive || pr.charged) continue;
+      if (pr.pos.distanceTo(pp) < 6) out.push({ kind: 'grenade', from: pr.pos.clone(), eta: Math.max(0, LAW.grenade.fuse - pr.age) });
+    }
+    return out;
+  }
+
+  private entranceCtx(targets: TrapTarget[]): EntranceContext {
+    const ray = this.rig.aimRay();
+    return {
+      playerFeet: this.player.body.pos,
+      playerVel: this.player.body.vel,
+      playerYaw: this.rig.yaw,
+      airborne: this.player.airborne,
+      camPos: ray.origin,
+      camDir: ray.dir,
+      threats: this.threats(),
+      targets,
+    };
+  }
+
+  private openGate(targets: TrapTarget[]) {
+    // hanging cargo: a hole opens right under it and the cable snaps
+    const hang = this.hangingUnderCrosshair();
+    if (hang && this.rifts.hasExit()) {
+      const ok = (this.rifts as any).openEntranceAt?.(
+        { position: hang.body.pos.clone().setY(hang.body.pos.y - 1.2), quaternion: orientFrame(UP, new THREE.Vector3(0, 0, 1)), width: LAW.floorEndSize, height: LAW.floorEndSize },
+        'air',
+      );
+      if (ok !== false) {
+        this.props.release(hang);
+        this.audio.ui('confirm');
+        return;
+      }
+    }
+    const res = this.rifts.openEntrance(this.entranceCtx(targets));
+    if (!res.ok) {
+      this.audio.ui('deny');
+      if (res.reason) this.hud.toast(t(res.reason), 'warn');
       return;
     }
-    const v = target.clone().project(this.camera);
-    const w = this.renderer.width, h = this.renderer.height;
-    let x = (v.x * 0.5 + 0.5) * w, y = (-v.y * 0.5 + 0.5) * h;
-    if (v.z > 1) { x = w - x; y = h - 60; }
-    x = THREE.MathUtils.clamp(x, 40, w - 40);
-    y = THREE.MathUtils.clamp(y, 70, h - 90);
-    this.objMarker.style.display = '';
-    this.objMarker.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
-    this.objMarker.querySelector('span')!.textContent = `${Math.round(target.distanceTo(this.player.pos))}m`;
+    navigator.vibrate?.(12);
+    if (res.mode === 'trapdoor' && res.targetKey) {
+      const e = this.enemies.byKey(res.targetKey);
+      if (e) this.enemies.launch(e);
+      const pr = this.props.byKey(res.targetKey);
+      if (pr) {
+        pr.touched = true;
+        if (pr.hanging) this.props.release(pr);
+        pr.body.onGround = false;
+      }
+    }
+    if (res.mode === 'catch') this.hint('catch', t('hint.returnToSender'), 6);
   }
+
+  private hangingUnderCrosshair(): Prop | null {
+    const ray = this.rig.aimRay();
+    let best: Prop | null = null, bd = 2.2;
+    for (const pr of this.props.items) {
+      if (!pr.alive || !pr.hanging) continue;
+      const c = _v.copy(pr.body.pos).setY(pr.body.pos.y + pr.body.height * 0.5);
+      const toC = _v2.subVectors(c, ray.origin);
+      const along = toC.dot(ray.dir);
+      if (along < 0 || along > LAW.trapdoorRange + 10) continue;
+      const d = toC.addScaledVector(ray.dir, -along).length();
+      if (d < bd) {
+        bd = d;
+        best = pr;
+      }
+    }
+    return best;
+  }
+
+  /** What GATE would do right now (HUD hint). */
+  private gatePreview(targets: TrapTarget[]) {
+    if (!this.rifts.hasExit()) return { mode: null, reason: 'gate.noExit', targetKey: null };
+    const b = this.player.body;
+    if (this.player.airborne && b.vel.y < -3) return { mode: 'air' as const, reason: null, targetKey: null };
+    if (this.threats().length) return { mode: 'catch' as const, reason: null, targetKey: null };
+    if (this.hangingUnderCrosshair()) return { mode: 'trapdoor' as const, reason: null, targetKey: null };
+    const ray = this.rig.aimRay();
+    let best: TrapTarget | null = null, bd = 1.8;
+    for (const tt of targets) {
+      const toT = _v.subVectors(tt.pos, ray.origin);
+      const along = toT.dot(ray.dir);
+      if (along < 0 || along > LAW.trapdoorRange) continue;
+      const d = toT.addScaledVector(ray.dir, -along).length();
+      if (d < bd) {
+        bd = d;
+        best = tt;
+      }
+    }
+    if (best) return best.canFall ? { mode: 'trapdoor' as const, reason: null, targetKey: best.key } : { mode: 'trapdoor' as const, reason: 'gate.steady', targetKey: best.key };
+    return { mode: 'door' as const, reason: null, targetKey: null };
+  }
+
+  private closeRifts() {
+    if (!this.rifts.hasEntrance() && !this.rifts.hasExit()) return;
+    const straddlers: { key: string; center: V3; radius: number }[] = [];
+    for (const e of this.enemies.list) {
+      if (!e.alive) continue;
+      straddlers.push({ key: e.id !== undefined ? `enemy:${e.id}` : '', center: e.chest(new THREE.Vector3()), radius: e.radius });
+    }
+    for (const pr of this.props.items) {
+      if (!pr.alive) continue;
+      straddlers.push({ key: pr.key, center: pr.body.pos.clone().setY(pr.body.pos.y + pr.body.height * 0.5), radius: pr.body.radius });
+    }
+    const victims = this.rifts.close(straddlers);
+    this.audio.ui('click');
+    for (const v of victims) {
+      this.fx.seam(v.at, _v.subVectors(this.camera.position, v.at).normalize(), 1.6);
+      this.audio.shear(v.at);
+      this.push({ type: 'shear', t: this.time, at: v.at.clone() });
+      const e = this.enemies.byKey(v.key);
+      if (e && e.alive) {
+        const info: HitInfo = { source: 'shear', amount: e.kind === 'boss' ? 150 : 9999, charged: true, team: 'player', instigator: 'player', from: v.at.clone() };
+        this.withKill({ byPlayer: true }, () => this.enemies.hit(e, info));
+        continue;
+      }
+      const pr = this.props.byKey(v.key);
+      if (pr) {
+        if (pr.def.explosive) this.explodeProp(pr, { byPlayer: true });
+        else if (pr.hanging) this.props.release(pr);
+        else this.props.remove(pr);
+      }
+    }
+    if (victims.length) {
+      this.hitstop = Math.max(this.hitstop, 0.12);
+      this.rig.shake = Math.max(this.rig.shake, 0.6);
+    }
+  }
+
+  private updateCatchWindow() {
+    if (this.catchWindow.t >= 0 && this.time - this.catchWindow.t > 0.6) {
+      if (this.catchWindow.count > 0) this.push({ type: 'catch', t: this.time, count: this.catchWindow.count });
+      this.catchWindow = { t: -1, count: 0 };
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Context action: finish / hijack / lift / grab / throw
+  // ------------------------------------------------------------------
+
+  private contextAction(): { label: string; run: () => void } | null {
+    const p = this.player;
+    const b = p.body;
+    if (this.respawnT >= 0) return null;
+    if (this.carried) return { label: t('prompt.throw'), run: () => this.throwCarried() };
+    const f = p.forward(_v2);
+    // FINISH: the blade only ends what a rift broke
+    for (const e of this.enemies.list) {
+      if (!e.alive || (e.state !== 'downed' && e.state !== 'stunned')) continue;
+      const d = e.pos.distanceTo(b.pos);
+      if (d > LAW.finishRange + e.radius || Math.abs(e.pos.y - b.pos.y) > 1.2) continue;
+      return { label: t('prompt.finish'), run: () => this.finish(e) };
+    }
+    // HIJACK a Kessler gate
+    for (const g of this.level.gates) {
+      if (g.panel.distanceTo(b.pos) > 2.2) continue;
+      return {
+        label: t('prompt.hijack'),
+        run: () => {
+          if (!this.rifts.hasExit()) {
+            this.hud.toast(t('gate.noExit'), 'warn');
+            this.audio.ui('deny');
+            return;
+          }
+          if (this.rifts.hijackGate(g.id)) {
+            this.audio.hijack(g.panel);
+            this.hud.toast(t('toast.hijack'), 'good');
+            this.push({ type: 'hijack', t: this.time, at: g.panel.clone() });
+          }
+        },
+      };
+    }
+    // LIFT
+    const lift = this.zones.liftAt(b.pos);
+    if (lift && !lift.moving && lift.t < 0.5 && this.zones.liftReady(lift)) return { label: t('prompt.lift'), run: () => this.startLift(lift) };
+    // GRAB a body or a light prop
+    let best: DynBody | null = null, bd = 1.9;
+    for (const q of this.physics.bodies) {
+      if (!q.enabled || q.userData.manual) continue;
+      const light = q.kind === 'corpse' || (q.kind === 'prop' && (() => {
+        const pr = this.props.byBody(q);
+        return !!pr && !pr.hanging && (pr.def.kind === 'barrel' || pr.def.kind === 'crate');
+      })());
+      if (!light) continue;
+      const d = _v.subVectors(q.pos, b.pos);
+      if (Math.abs(d.y) > 1.2) continue;
+      d.y = 0;
+      const dist = d.length();
+      if (dist > bd || (dist > 0.6 && d.normalize().dot(f) < 0.2)) continue;
+      bd = dist;
+      best = q;
+    }
+    if (best) {
+      const q = best;
+      return { label: t('prompt.grab'), run: () => this.grab(q) };
+    }
+    return null;
+  }
+
+  private finish(e: EnemyView) {
+    this.player.char.play('strike', { fade: 0.05, speed: 1.3 });
+    this.player.yaw = Math.atan2(e.pos.x - this.player.body.pos.x, e.pos.z - this.player.body.pos.z);
+    this.hitstop = 0.14;
+    this.rig.kick = 1;
+    this.audio.bladeFinish(e.pos);
+    const info: HitInfo = { source: 'blade', amount: 9999, charged: false, team: 'player', instigator: 'player', from: this.player.body.pos.clone() };
+    this.withKill({ byPlayer: true }, () => this.enemies.hit(e, info));
+    this.fx.sparks(e.chest(_v), null, COL_SPARK, 18);
+  }
+
+  private grab(q: DynBody) {
+    q.userData.manual = true;
+    q.simulate = true;
+    q.vel.set(0, 0, 0);
+    this.carried = { body: q, prop: this.props.byBody(q) };
+    this.player.carrying = q;
+    this.player.char.play('pickUp', { fade: 0.1, speed: 1.6 });
+    this.audio.ui('pickup');
+  }
+
+  private updateCarry() {
+    const c = this.carried;
+    if (!c) return;
+    if (!c.body.enabled) {
+      this.carried = null;
+      this.player.carrying = null;
+      return;
+    }
+    const b = this.player.body;
+    const f = this.player.forward(_v);
+    c.body.pos.set(b.pos.x + f.x * 0.75, b.pos.y + 0.55, b.pos.z + f.z * 0.75);
+    c.body.vel.copy(b.vel);
+    c.body.quat.setFromAxisAngle(UP, this.player.yaw);
+  }
+
+  private throwCarried() {
+    const c = this.carried;
+    if (!c) return;
+    const b = this.player.body;
+    const q = c.body;
+    q.userData.manual = false;
+    q.simulate = true;
+    q.onGround = false;
+    const f = this.player.forward(_v);
+    const dir = _v2.copy(f).setY(0.3).normalize();
+    // an open entrance right in front: throw straight into it
+    const ends = this.rifts.playerEnds();
+    if (ends.entrance && ends.entrance.isOpen) {
+      const to = _v3.subVectors(ends.entrance.position, q.pos);
+      if (to.length() < 5 && to.clone().setY(0).normalize().dot(f) > 0.4) dir.copy(to.normalize());
+    }
+    q.vel.copy(dir).multiplyScalar(10).add(_v.copy(b.vel).multiplyScalar(0.5));
+    q.spin.set((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 6);
+    this.carried = null;
+    this.player.carrying = null;
+    this.player.char.play('push', { fade: 0.05, speed: 1.4 });
+    this.audio.shove(b.pos);
+  }
+
+  private updatePropFuses(dt: number) {
+    for (const pr of this.props.items) {
+      if (!pr.alive || pr.fuse < 0) continue;
+      pr.fuse -= dt;
+      if (pr.fuse <= 0) {
+        pr.fuse = -1;
+        this.explodeProp(pr, { byBarrel: true });
+      }
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Zones, encounters, lifts, gates
+  // ------------------------------------------------------------------
+
+  private onZoneEntered(id: ZoneId) {
+    const z = this.zones.zone(id);
+    this.props.spawnZone(id);
+    this.hud.zoneTitle(t(z.nameKey), t(z.subKey));
+    this.audio.sting(id === 'crown' ? 'boss' : 'zone');
+    this.push({ type: 'zone', t: this.time, zone: id });
+    this.saveProgress();
+    this.updateObjective(true);
+  }
+
+  private triggerEncounter(e: EncounterState) {
+    for (const def of e.def.spawns) {
+      const v = this.enemies.spawn(def);
+      e.enemyIds.push(v.id);
+    }
+    if (e.def.lesson) {
+      const key = `hint.${e.def.lesson}`;
+      this.hint(key, t(key), 9);
+    }
+    if (e.def.lesson === 'hijack') for (const g of this.level.gates) if (g.zone === e.zone) this.rifts.setGateOpen(g.id, true);
+    if (e.def.spawns.length === 0) {
+      // lessons without enemies clear on sight
+      e.cleared = true;
+    }
+  }
+
+  private gateWaveT = new Map<string, { wave: number; t: number }>();
+  private updateGates(dt: number) {
+    for (const g of this.level.gates) {
+      if (!this.zones.active.has(g.zone)) continue;
+      const enc = this.zones.encounters.find((x) => x.zone === g.zone && x.def.lesson === 'hijack');
+      if (!enc || !enc.triggered || enc.cleared) continue;
+      let s = this.gateWaveT.get(g.id);
+      if (!s) {
+        s = { wave: 0, t: 4 };
+        this.gateWaveT.set(g.id, s);
+      }
+      if (s.wave >= g.waves.length) continue;
+      s.t -= dt;
+      if (s.t > 0) continue;
+      // reinforcements step through the gate (or through your exit if you hijacked it)
+      const inEnd = this.rifts.gateEnds(g.id).in;
+      if (!inEnd) continue;
+      const wave = g.waves[s.wave++];
+      s.t = 9;
+      wave.forEach((def, i) => {
+        const spawnPos = inEnd.position.clone().addScaledVector(inEnd.normal, 1.6 + i * 0.8).setY(inEnd.position.y - inEnd.height / 2 + 0.02);
+        const d: SpawnDef = { ...def, pos: spawnPos, state: 'combat' };
+        const v = this.enemies.spawn(d);
+        enc.enemyIds.push(v.id);
+        this.enemies.launch(v, inEnd.normal.clone().multiplyScalar(-3.5).setY(0.5));
+      });
+    }
+  }
+
+  private liftCarry: { lift: LiftState; last: THREE.Vector3 } | null = null;
+  private startLift(l: LiftState) {
+    l.moving = true;
+    l.dir = 1;
+    this.audio.lift(l.def.mesh.position, true);
+  }
+
+  private updateLifts(dt: number) {
+    for (const l of this.zones.lifts) {
+      if (!l.moving) continue;
+      const len = l.def.from.distanceTo(l.def.to);
+      l.t = Math.min(1, l.t + (dt * 3.2) / Math.max(1, len));
+      const k = l.t * l.t * (3 - 2 * l.t);
+      const target = _v.copy(l.base).add(_v2.subVectors(l.def.to, l.def.from).multiplyScalar(k));
+      const delta = _v3.subVectors(target, l.def.mesh.position);
+      const onIt = this.zones.liftAt(this.player.body.pos) === l;
+      l.def.mesh.position.copy(target);
+      (this.level.world as any).moveCollider?.(l.def.collider, delta.x, delta.y, delta.z);
+      if (onIt) {
+        this.player.body.pos.add(delta);
+        this.player.body.vel.y = Math.max(0, this.player.body.vel.y);
+      }
+      if (l.t >= 1) {
+        l.moving = false;
+        this.audio.lift(l.def.mesh.position, false);
+      }
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // HUD helpers
+  // ------------------------------------------------------------------
+
+  private lastObjKey = '';
+  private updateObjective(force: boolean) {
+    const o = this.zones.objective();
+    const key = this.bossDead ? 'obj.escape' : o.key;
+    if (!force && key === this.lastObjKey) return;
+    this.lastObjKey = key;
+    this.hud.setObjective(t(key), t(this.zones.current.nameKey));
+  }
+
+  private markerList: ScreenMarker[] = [];
+  private updateMarkers() {
+    const list = this.markerList;
+    list.length = 0;
+    const w = this.renderer.width, h = this.renderer.height;
+    const project = (p: V3, kind: ScreenMarker['kind'], label?: string) => {
+      const v = _v.copy(p).project(this.camera);
+      const behind = v.z > 1;
+      let x = (v.x * 0.5 + 0.5) * w, y = (1 - (v.y * 0.5 + 0.5)) * h;
+      if (behind) {
+        x = w - x;
+        y = h - y;
+      }
+      const on = !behind && x > 30 && x < w - 30 && y > 30 && y < h - 30;
+      const angle = Math.atan2(y - h / 2, x - w / 2);
+      list.push({ x: THREE.MathUtils.clamp(x, 40, w - 40), y: THREE.MathUtils.clamp(y, 60, h - 60), onScreen: on, angle, kind, label });
+    };
+    for (const th of this.telegraphs) if (th.kind === 'laser' || th.kind === 'beam' || th.kind === 'charge') project(th.from, 'threat');
+    if (this.visionOn) {
+      for (const e of this.enemies.list) if (e.alive && this.zones.active.has(e.def.zone)) project(_v2.copy(e.pos).setY(e.pos.y + e.height + 0.3), 'target', e.state);
+      for (const g of this.level.gates) if (this.zones.active.has(g.zone)) project(g.panel, 'gate');
+    }
+    const o = this.zones.objective();
+    if (o.target && !this.bossDead) project(o.target, 'objective', `${Math.round(o.target.distanceTo(this.player.body.pos))}m`);
+    this.hud.setMarkers(list);
+  }
+
+  private drawTelegraphs() {
+    const pos = this.telegraphLines.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const col = this.telegraphLines.geometry.getAttribute('color') as THREE.BufferAttribute;
+    let n = 0;
+    let arc: (typeof this.telegraphs)[number] | null = null;
+    for (const th of this.telegraphs) {
+      if (th.kind === 'arc') {
+        arc = th;
+        continue;
+      }
+      if (n >= 48) break;
+      const k = th.kind === 'beam' ? 1 + th.t * 3 : 2.5;
+      pos.setXYZ(n * 2, th.from.x, th.from.y, th.from.z);
+      pos.setXYZ(n * 2 + 1, th.to.x, th.to.y, th.to.z);
+      const pulse = th.kind === 'laser' ? 0.6 + 0.4 * Math.sin(this.time * 40) : 1;
+      col.setXYZ(n * 2, k * pulse, 0.12, 0.08);
+      col.setXYZ(n * 2 + 1, k * pulse, 0.12, 0.08);
+      n++;
+    }
+    this.telegraphLines.geometry.setDrawRange(0, n * 2);
+    pos.needsUpdate = true;
+    col.needsUpdate = true;
+    // grenade arc preview
+    if (arc) {
+      const ap = this.arcLine.geometry.getAttribute('position') as THREE.BufferAttribute;
+      const from = arc.from, to = arc.to;
+      const T = 1.0;
+      const vx = (to.x - from.x) / T, vz = (to.z - from.z) / T, vy = (to.y - from.y + 0.5 * LAW.gravity * T * T) / T;
+      for (let i = 0; i < 64; i++) {
+        const s = (i / 63) * T;
+        ap.setXYZ(i, from.x + vx * s, from.y + vy * s - 0.5 * LAW.gravity * s * s, from.z + vz * s);
+      }
+      ap.needsUpdate = true;
+      this.arcLine.computeLineDistances();
+      this.arcLine.visible = true;
+    } else this.arcLine.visible = false;
+  }
+
+  // ------------------------------------------------------------------
+  // Replay, clips, photo
+  // ------------------------------------------------------------------
+
+  private exporterOk() {
+    return this.recorder.frames().length > 30;
+  }
+
+  /** Snapshot of everything visible (for the replay ring buffer). */
+  private capture(): Snapshot {
+    const b = this.player.body;
+    const cam = this.camera;
+    const actors: ActorSnap[] = [{ key: 'player', pos: [b.pos.x, b.pos.y, b.pos.z], yaw: this.player.yaw, pose: this.player.char.getPose(), visible: this.player.char.root.visible }];
+    for (const a of this.enemies.snapshot()) actors.push(a);
+    const projs: ProjSnap[] = [];
+    for (const pr of this.projectiles.list) {
+      if (!pr.alive) continue;
+      const s: ProjSnap = { kind: pr.kind, pos: [pr.pos.x, pr.pos.y, pr.pos.z], charged: pr.charged };
+      if (pr.kind === 'beam') s.to = pr.segments.map((sg) => [sg.to.x, sg.to.y, sg.to.z] as [number, number, number]);
+      projs.push(s);
+    }
+    return {
+      t: this.time,
+      cam: { pos: [cam.position.x, cam.position.y, cam.position.z], quat: [cam.quaternion.x, cam.quaternion.y, cam.quaternion.z, cam.quaternion.w], fov: cam.fov },
+      actors,
+      rifts: this.rifts.snapshot(),
+      projs,
+      props: this.props.snapshot(),
+      tricks: this.tricksFrame.slice(),
+      timeScale: this.timeScale,
+      focus: [b.pos.x, b.pos.y, b.pos.z],
+    };
+  }
+
+  private applySnap(s: Snapshot) {
+    const cam = this.camera;
+    cam.position.set(s.cam.pos[0], s.cam.pos[1], s.cam.pos[2]);
+    cam.quaternion.set(s.cam.quat[0], s.cam.quat[1], s.cam.quat[2], s.cam.quat[3]);
+    if (Math.abs(cam.fov - s.cam.fov) > 0.01) {
+      cam.fov = s.cam.fov;
+      cam.updateProjectionMatrix();
+    }
+    cam.updateMatrixWorld();
+    const enemySnaps: ActorSnap[] = [];
+    for (const a of s.actors) {
+      if (a.key === 'player') {
+        const root = this.player.char.root;
+        root.position.set(a.pos[0], a.pos[1], a.pos[2]);
+        root.rotation.y = a.yaw;
+        root.visible = a.visible;
+        this.player.char.setPose(a.pose);
+      } else enemySnaps.push(a);
+    }
+    this.enemies.applySnapshot(enemySnaps);
+    this.rifts.applySnapshot(s.rifts);
+    this.props.applySnapshot(s.props);
+    // projectiles
+    const m = new THREE.Matrix4();
+    let n = 0;
+    const bp = this.replayBeams.geometry.getAttribute('position') as THREE.BufferAttribute;
+    let bn = 0;
+    for (const p of s.projs) {
+      if (p.kind === 'beam' && p.to) {
+        let prev = p.pos;
+        for (const q of p.to) {
+          if (bn >= 16) break;
+          bp.setXYZ(bn * 2, prev[0], prev[1], prev[2]);
+          bp.setXYZ(bn * 2 + 1, q[0], q[1], q[2]);
+          prev = q;
+          bn++;
+        }
+        continue;
+      }
+      if (n >= 64) continue;
+      m.makeTranslation(p.pos[0], p.pos[1], p.pos[2]);
+      this.replayProj.setMatrixAt(n, m);
+      this.replayProj.setColorAt(n, p.charged ? COL_CHARGED : COL_SPARK);
+      n++;
+    }
+    this.replayProj.count = n;
+    this.replayProj.instanceMatrix.needsUpdate = true;
+    if (this.replayProj.instanceColor) this.replayProj.instanceColor.needsUpdate = true;
+    this.replayBeams.geometry.setDrawRange(0, bn * 2);
+    bp.needsUpdate = true;
+  }
+
+  private replayHost(): ReplayHost {
+    return {
+      camera: this.camera,
+      canvas: this.renderer.renderer.domElement,
+      apply: (s) => this.applySnap(s),
+      render: () => this.render(0),
+      beginReplay: () => {
+        this.liveSnap = this.capture();
+        this.projectiles.group.visible = false;
+        this.replayProj.visible = true;
+        this.replayBeams.visible = true;
+        this.hud.show(false);
+        this.touch?.show(false);
+      },
+      endReplay: () => {
+        if (this.liveSnap) this.applySnap(this.liveSnap);
+        this.liveSnap = null;
+        this.projectiles.group.visible = true;
+        this.replayProj.visible = false;
+        this.replayBeams.visible = false;
+      },
+      lineOfSight: (a, b) => this.level.world.lineOfSight(a, b),
+    };
+  }
+
+  startReplay() {
+    if (this.mode !== 'playing') return;
+    const now = this.time;
+    const from = this.clipOfferT > 0 ? this.clipFrom : now - 10;
+    const frames = this.recorder.frames(from, now);
+    if (frames.length < 10) return;
+    this.hud.offerClip(false);
+    this.touch?.offerClip(false);
+    this.clipOfferT = 0;
+    this.mode = 'replay';
+    this.audio.ui('clip');
+    const record = this.exporter.supported();
+    this.replay.play(frames, { cinematic: true, overlay: record });
+    if (record) this.exporter.begin(this.renderer.renderer.domElement, this.replay.overlayCanvas);
+  }
+
+  private updateReplay(realDt: number) {
+    this.updateAmbient(realDt);
+    this.fx.update(realDt);
+    const still = this.replay.update(realDt);
+    if (this.exporter.recording) this.exporter.frame();
+    if (still && !this.input.wasPressed('pause')) return;
+    this.replay.stop();
+    this.mode = 'paused';
+    const done = (blob: Blob | null) => {
+      this.onClip(
+        blob,
+        () => {
+          if (blob) void this.exporter.share(blob, 'threshold-clip').then((r) => this.hud.toast(t(r === 'failed' ? 'toast.clipFailed' : 'toast.clipSaved'), r === 'failed' ? 'warn' : 'good'));
+        },
+        () => {
+          this.hud.show(true);
+          this.resume();
+        },
+      );
+    };
+    if (this.exporter.recording) void this.exporter.end().then(done);
+    else done(null);
+  }
+
+  private enterPhoto() {
+    if (this.mode !== 'playing') return;
+    this.mode = 'photo';
+    this.hud.show(false);
+    this.touch?.show(false);
+    this.photo.enter(this.camera, this.player.body.pos.clone().setY(this.player.body.pos.y + 1));
+    this.audio.ui('click');
+  }
+
+  private updatePhoto(realDt: number) {
+    const look = this.input.consumeLook();
+    const wheel = this.input.consumeWheel();
+    this.photo.update(realDt, { lookX: look.x, lookY: look.y, moveX: this.input.moveX, moveY: this.input.moveY, zoom: wheel });
+    this.updateAmbient(0);
+    this.render(realDt);
+    if (this.input.wasPressed('place') || this.input.wasPressed('gate') || this.input.wasPressed('action')) {
+      this.audio.ui('shutter');
+      void this.photo.capture(this.renderer.renderer.domElement, () => this.render(0)).then((blob) => {
+        if (blob) void this.exporter.share(blob, 'threshold-photo').then(() => this.hud.toast(t('toast.photoSaved'), 'good'));
+      });
+    }
+    if (this.input.wasPressed('photo') || this.input.wasPressed('pause')) {
+      this.photo.exit();
+      this.mode = 'playing';
+      this.hud.show(true);
+      this.touch?.show(true);
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // End
+  // ------------------------------------------------------------------
+
+  private victory() {
+    if (this.victoryT >= 0) return;
+    this.victoryT = 2.2;
+    this.slowT = 2.2;
+    this.slowScale = 0.3;
+    this.audio.sting('victory');
+  }
+
+  private finishRun() {
+    this.mode = 'ended';
+    this.hud.show(false);
+    this.touch?.show(false);
+    this.input.active = false;
+    if (document.pointerLockElement) document.exitPointerLock();
+    this.stats.bestCombo = Math.max(this.stats.bestCombo, this.style.state.bestCombo);
+    this.stats.styleTotal = this.style.state.total;
+    this.onEnd(true, this.stats, this.style.state.rank);
+  }
+
+  // ------------------------------------------------------------------
+  // Render
+  // ------------------------------------------------------------------
 
   private render(realDt: number) {
     const r = this.renderer.renderer;
     r.shadowMap.autoUpdate = false;
     r.shadowMap.needsUpdate = true;
-    if (this.mode !== 'menu') {
-      this.rift.renderViews(this.camera, this.renderer.width, this.renderer.height, this.helpers);
-    }
+    if (this.mode !== 'menu') this.rifts.renderViews(this.camera, this.renderer.width, this.renderer.height, this.helpers);
+    this.renderer.grade.uniforms.uFocus.value = this.rifts.aiming ? 1 : 0;
+    this.renderer.grade.uniforms.uFlash.value = Math.max(0, this.renderer.grade.uniforms.uFlash.value - realDt * 3);
+    this.renderer.grade.uniforms.uDamage.value = this.mode === 'playing' ? THREE.MathUtils.clamp(1 - this.hp / 45, 0, 1) * 0.6 : 0;
     this.renderer.render(realDt);
-    // live rift-view window while aiming
-    const pl = this.rift.placement;
-    if (this.mode === 'playing' && this.rift.aiming && pl && this.renderer.preset.scryWindow && this.rig.aim > 0.9) {
-      const rect = this.hud.scryRect;
-      if (rect.w > 10) {
-        const H = this.renderer.height;
-        this.scryCam.aspect = rect.w / rect.h;
-        this.scryCam.position.copy(pl.exitFeet).add(new THREE.Vector3(0, 1.6, 0));
-        this.scryCam.rotation.set(0, 0, 0);
-        this.scryCam.lookAt(this.scryCam.position.clone().add(new THREE.Vector3(Math.sin(pl.exitYaw), -0.12, Math.cos(pl.exitYaw))));
-        this.scryCam.updateProjectionMatrix();
-        const vis = this.helpers.map((o) => o.visible);
-        this.helpers.forEach((o) => (o.visible = false));
-        const pc = this.player.char.root.visible;
-        r.setScissorTest(true);
-        r.setViewport(rect.x, H - rect.y - rect.h, rect.w, rect.h);
-        r.setScissor(rect.x, H - rect.y - rect.h, rect.w, rect.h);
-        r.autoClear = false;
-        r.clearDepth();
-        r.render(this.scene, this.scryCam);
-        r.autoClear = true;
-        r.setScissorTest(false);
-        r.setViewport(0, 0, this.renderer.width, H);
-        this.helpers.forEach((o, i) => (o.visible = vis[i]));
-        this.player.char.root.visible = pc;
-      }
-    }
   }
 }
+
+export type { Team };

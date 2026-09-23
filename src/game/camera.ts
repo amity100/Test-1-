@@ -10,6 +10,10 @@ export class CameraRig {
   pitch = -0.12;
   aim = 0;
   shake = 0;
+  /** Extra FOV / distance while flying fast out of rifts (0..1). */
+  speed = 0;
+  /** One-shot FOV punch (kills, launches). */
+  kick = 0;
   private dist = FEEL.camDistance;
   pivot = new THREE.Vector3();
   constructor(public camera: THREE.PerspectiveCamera) {}
@@ -41,7 +45,7 @@ export class CameraRig {
       const ph = world.raycast(this.pivot, fl, peek + 0.3);
       this.pivot.addScaledVector(fl, ph ? Math.max(0, ph.distance - 0.3) : peek);
     }
-    const wantDist = THREE.MathUtils.lerp(FEEL.camDistance, FEEL.aimDistance, this.aim);
+    const wantDist = THREE.MathUtils.lerp(FEEL.camDistance, FEEL.aimDistance, this.aim) + this.speed * 1.3;
     const shoulder = THREE.MathUtils.lerp(FEEL.camShoulder, FEEL.aimShoulder, this.aim);
     const fwd = this.forward(new THREE.Vector3());
     const right = new THREE.Vector3(-Math.cos(this.yaw), 0, Math.sin(this.yaw));
@@ -65,7 +69,8 @@ export class CameraRig {
       this.camera.rotation.x += (Math.random() - 0.5) * s;
       this.camera.rotation.y += (Math.random() - 0.5) * s;
     }
-    const fov = THREE.MathUtils.lerp(FEEL.fov, FEEL.aimFov, this.aim);
+    this.kick = Math.max(0, this.kick - dt * 3);
+    const fov = THREE.MathUtils.lerp(FEEL.fov, FEEL.aimFov, this.aim) + this.speed * 16 + this.kick * 6;
     if (Math.abs(this.camera.fov - fov) > 0.01) {
       this.camera.fov = fov;
       this.camera.updateProjectionMatrix();
