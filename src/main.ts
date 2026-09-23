@@ -85,6 +85,13 @@ async function boot() {
   menu.showLoading(1);
 
   const m = menu as any;
+  const ORDER: ZoneId[] = ['pier', 'yard', 'skeleton', 'lab', 'crown'];
+  const refreshProgress = () => {
+    const saved = Game.savedZone();
+    const idx = saved ? ORDER.indexOf(saved) : 0;
+    menu.setProgress({ continueZone: saved && idx > 0 ? saved : null, unlocked: ORDER.slice(0, Math.max(1, idx + 1)) });
+  };
+  refreshProgress();
   menu.onStart = () => {
     game.newRun();
     game.start();
@@ -97,7 +104,6 @@ async function boot() {
     game.startAtZone(z);
     game.start();
   };
-  m.savedZone = () => Game.savedZone();
   m.onChallenges = () => {
     const items = game.challenges.list().map((c: any) => ({
       id: c.id,
@@ -117,7 +123,10 @@ async function boot() {
     game.start();
   };
   menu.onRetry = () => game.retryFromCheckpoint();
-  menu.onQuit = () => game.quitToMenu();
+  menu.onQuit = () => {
+    game.quitToMenu();
+    refreshProgress();
+  };
   menu.onSettings = (s: Settings) => {
     game.applySettings(s);
     saveSettings(s);

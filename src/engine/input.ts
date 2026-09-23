@@ -62,8 +62,6 @@ export class Input {
     ShiftLeft: 'sprint',
     ShiftRight: 'sprint',
     KeyC: 'crouch',
-    ControlLeft: 'crouch',
-    ControlRight: 'crouch',
     KeyV: 'shove',
     KeyE: 'flip',
     KeyX: 'close',
