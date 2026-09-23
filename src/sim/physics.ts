@@ -151,7 +151,14 @@ export class Physics implements PhysicsAPI {
     if (body.live) {
       if (!b.onGround) floor = CHARGE_FLOOR;
       else if (!b.simulate) body.live = false; // a walking body just plainly decays
-      else if (b.kind !== 'player') {
+      else if (b.kind === 'player') {
+        // rift slide: charged while it still skids at knock speed
+        if (Math.hypot(b.vel.x, b.vel.z) >= LAW.knockSpeed) floor = CHARGE_FLOOR;
+        else {
+          body.live = false;
+          b.charge = 0;
+        }
+      } else {
         if (speed < 1) {
           body.restT += dt;
           if (body.restT >= 0.3) {
@@ -298,7 +305,8 @@ export class Physics implements PhysicsAPI {
         b.landedSinceCross = true;
         b.crossings = 0;
         b.loops = 0;
-        if (b.kind === 'player') {
+        if (b.kind === 'player' && !(b.charge > 0 && Math.hypot(b.vel.x, b.vel.z) >= LAW.knockSpeed)) {
+          // (a charged landing this fast turns into a rift slide: the charge rides the skid)
           b.charge = 0;
           b.live = false;
         }

@@ -1498,7 +1498,7 @@ export class EnemySystem implements EnemyAPI, Brain {
     this.witnesses.length = 0;
   }
 
-  /** Alive, perceiving allies with LOS to him within 25 m. */
+  /** Alive, perceiving allies with LOS to him within 25 m (less for a fight not reached yet). */
   private findWitnesses(e: Enemy) {
     const out = this.witnesses;
     out.length = 0;
@@ -1511,7 +1511,9 @@ export class EnemySystem implements EnemyAPI, Brain {
       if (o === e || !o.alive || !o.active || o.kind === 'turret') continue;
       if (o.state === 'downed' || o.state === 'stunned' || o.state === 'launched') continue;
       if (o.pos.distanceToSquared(e.pos) > r2) continue;
-      if (seesPoint(o, _w, AI.witnessRange, w)) out.push(o);
+      // a fight you haven't reached yet notices less (sightScale), as with seeing you
+      const range = AI.witnessRange * (o.mode === 'combat' ? 1 : o.sightScale);
+      if (seesPoint(o, _w, range, w)) out.push(o);
     }
     return out.length;
   }

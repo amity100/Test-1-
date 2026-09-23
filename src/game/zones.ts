@@ -5,6 +5,8 @@ export interface EncounterState {
   def: EncounterDef;
   zone: ZoneId;
   triggered: boolean;
+  /** The player reached the fight itself (its lesson hint shows, its enemies are fully alert). */
+  engaged: boolean;
   /** Enemy ids spawned for it. */
   enemyIds: number[];
   cleared: boolean;
@@ -21,6 +23,10 @@ export interface LiftState {
 }
 
 const ORDER: ZoneId[] = ['pier', 'yard', 'skeleton', 'lab', 'crown'];
+/** Encounters spawn this far (m) from their trigger box... */
+const SPAWN_AHEAD = 22;
+/** ...and engage (hint, full alertness) this close. */
+const ENGAGE_AHEAD = 3;
 const _p = new THREE.Vector3();
 
 /**
@@ -39,7 +45,7 @@ export class ZoneManager {
   constructor(public level: TowerLevel) {
     this.current = level.zones[0];
     for (const z of level.zones) {
-      for (const e of z.encounters) this.encounters.push({ def: e, zone: z.id, triggered: false, enemyIds: [], cleared: false });
+      for (const e of z.encounters) this.encounters.push({ def: e, zone: z.id, triggered: false, engaged: false, enemyIds: [], cleared: false });
       if (z.exit) this.lifts.push({ def: z.exit, zone: z.id, t: 0, moving: false, dir: 1, base: z.exit.mesh.position.clone() });
     }
     this.setCheckpoint(this.current.playerStart, this.current.startYaw, this.current.id);
@@ -80,8 +86,8 @@ export class ZoneManager {
     }
   }
 
-  /** Returns a zone change, and encounters the player just walked into. */
-  update(playerPos: V3): { entered: ZoneDef | null; triggered: EncounterState[] } {
+  /** Returns a zone change, encounters about to start (spawn them) and ones the player just reached. */
+  update(playerPos: V3): { entered: ZoneDef | null; triggered: EncounterState[]; engaged: EncounterState[] } {
     let entered: ZoneDef | null = null;
     const z = this.zoneAt(playerPos);
     if (z && z.id !== this.current.id) {
@@ -94,18 +100,22 @@ export class ZoneManager {
       entered = z;
     }
     const triggered: EncounterState[] = [];
+    const engaged: EncounterState[] = [];
     for (const e of this.encounters) {
-      if (e.triggered || e.zone !== this.current.id) continue;
-      // spawn a little before the trigger so enemies are already in place when you see them
+      if (e.engaged || e.zone !== this.current.id) continue;
       _p.copy(playerPos);
-      const box = e.def.trigger;
-      const d = box.distanceToPoint(_p);
-      if (d < 22) {
+      const d = e.def.trigger.distanceToPoint(_p);
+      // spawn well before the trigger so enemies are already in place when you see them
+      if (!e.triggered && d < SPAWN_AHEAD) {
         e.triggered = true;
         triggered.push(e);
       }
+      if (e.triggered && d < ENGAGE_AHEAD) {
+        e.engaged = true;
+        engaged.push(e);
+      }
     }
-    return { entered, triggered };
+    return { entered, triggered, engaged };
   }
 
   encounterOfEnemy(id: number) {
@@ -158,6 +168,7 @@ export class ZoneManager {
     for (const e of this.encounters) {
       if (e.cleared) continue;
       e.triggered = false;
+      e.engaged = false;
       e.enemyIds = [];
     }
   }
@@ -165,6 +176,7 @@ export class ZoneManager {
   resetAll() {
     for (const e of this.encounters) {
       e.triggered = false;
+      e.engaged = false;
       e.cleared = false;
       e.enemyIds = [];
     }
@@ -185,6 +197,7 @@ export class ZoneManager {
     const idx = this.index(id);
     for (const e of this.encounters) if (this.index(e.zone) < idx) {
       e.triggered = true;
+      e.engaged = true;
       e.cleared = true;
     }
     for (const l of this.lifts) if (this.index(l.zone) < idx) l.t = 1;

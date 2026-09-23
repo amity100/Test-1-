@@ -754,8 +754,8 @@ export class RiftSystem implements RiftAPI {
       if (py < t.pos.y + 0.3) continue; // passes under him
       // no legal hatch over him from here (air ends can't be above your feet): aim at what's behind
       if (t.pos.y + t.height + (t.steady ? LAW.enemyClearance + 0.05 : 0.6) > feet.y + LAW.airAboveFeetMax + 1e-3) continue;
-      // a wall right behind him wins unless the ray is on his body
-      if (hit && Math.abs(hit.normal.y) < 0.3 && hit.distance - tt < 2 && d > t.radius + 0.25) continue;
+      // aiming at a wall past him means the wall, unless the ray is on his body
+      if (hit && Math.abs(hit.normal.y) < 0.3 && (d > t.radius + 0.25 || py > t.pos.y + t.height + 0.3)) continue;
       if (!this.world.lineOfSight(eye, _a.set(t.pos.x, t.pos.y + t.height, t.pos.z))) continue;
       best = t;
       bestD = d;

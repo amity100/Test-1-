@@ -163,7 +163,7 @@ describe('physics through rifts', () => {
     expect(b.pos.y).toBeCloseTo(0, 5);
   });
 
-  it('charge: player loses it on landing, props keep it until they rest', () => {
+  it('charge: player loses it on landing (unless it skids: rift slide), props keep it until they rest', () => {
     const world = makeWorld();
     const rifts = makeRifts(world);
     rifts.addGate('t', frame(V(0, 0.01, 0), V(0, 1, 0), 'floor'), frame(V(20, 3, 0), V(1, 0, 0), 'air'));
@@ -189,7 +189,18 @@ describe('physics through rifts', () => {
     run(phys, ev2, 3, 10, 1 / 60, () => ev2.log.impacts.some((i) => i.b === pl && i.e.surface === 'ground'));
     const pland = ev2.log.impacts.find((i) => i.b === pl && i.e.surface === 'ground')!;
     expect(pland.e.charged).toBe(true);
+    // it came out skidding at 12 m/s: a rift slide keeps the charge while it's at knock speed
+    expect(pl.charge).toBeGreaterThan(0);
+    pl.vel.set(2, 0, 0);
+    run(phys, ev2, 0.1, 20);
     expect(pl.charge).toBe(0);
+    // a plain charged landing (straight down) loses it at once
+    const pl2 = phys.createBody('player', { pos: V(-6, 3, 0), radius: 0.34, height: 1.8 });
+    (pl2 as any).live = true;
+    pl2.charge = 1;
+    const ev3 = recorder();
+    run(phys, ev3, 2, 30, 1 / 60, () => ev3.log.impacts.some((i) => i.b === pl2 && i.e.surface === 'ground'));
+    expect(pl2.charge).toBe(0);
   });
 
   it('sea splash and void fall-out fire once', () => {

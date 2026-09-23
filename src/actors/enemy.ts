@@ -109,6 +109,8 @@ export class Enemy implements EnemyView {
   lobT = 0;
   meleeCd = 0;
   bursts = 0;
+  /** Unaware sight multiplier: the game keeps it low until the player reaches his fight. */
+  sightScale = 1;
   readonly muzzle = new THREE.Vector3();
   readonly aimPt = new THREE.Vector3();
   readonly lobVel = new THREE.Vector3();

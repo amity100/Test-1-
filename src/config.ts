@@ -97,6 +97,9 @@ export const FEEL = {
   floorPopSpeed: 6.5, // minimum speed out of an up-facing end (so slow things clear the hole)
   floorPopNudge: 2.2, // ...plus a sideways nudge so they land beside it
   chargedAirControl: 0.08, // flying out of a rift: momentum is honest
+  slideDecel: 9, // m/s^2: a charged landing skids (rift slide) instead of stopping dead
+  slideSteer: 1.5, // how fast input bends a slide (1/s)
+  unengagedSight: 0.6, // enemies of a fight you haven't reached yet see this much of their calm range
   returnAssistRange: 45, // bolts out of a rift bend onto Kessler within this range...
   returnAssistCone: 0.978, // ...within ~12 deg of their path (cos)
   returnAssistSender: 0.77, // ...or ~40 deg when it's the man who fired it (Return to Sender)

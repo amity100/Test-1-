@@ -42,6 +42,8 @@ export class Player {
   yaw = 0;
   crouched = false;
   sprinting = false;
+  /** Skidding out of a charged landing (rift slide). */
+  sliding = false;
   shoveCooldown = 0;
   /** The game manages carry / throw; carrying only slows movement here. */
   carrying: DynBody | null = null;
@@ -209,6 +211,23 @@ export class Player {
       const s = this.shoveT > 0 ? SHOVE_SPEED : want;
       b.vel.x = this.shoveDir.x * s;
       b.vel.z = this.shoveDir.z * s;
+    } else if (b.onGround && b.charge > 0 && Math.hypot(b.vel.x, b.vel.z) > FEEL.sprintSpeed) {
+      // rift slide: momentum skids off instead of stopping dead; a little steering
+      const hs0 = Math.hypot(b.vel.x, b.vel.z);
+      const hs1 = Math.max(0, hs0 - FEEL.slideDecel * dt);
+      let ux = b.vel.x / hs0, uz = b.vel.z / hs0;
+      if (want > 0) {
+        const k = Math.min(1, FEEL.slideSteer * dt);
+        ux += (dirX - ux) * k;
+        uz += (dirZ - uz) * k;
+        const ul = Math.hypot(ux, uz) || 1;
+        ux /= ul;
+        uz /= ul;
+      }
+      b.vel.x = ux * hs1;
+      b.vel.z = uz * hs1;
+      if (!this.sliding) this.char.play('roll', { fade: 0.06 });
+      this.sliding = true;
     } else if (b.onGround) {
       const a = 1 - Math.exp(-FEEL.accel * dt);
       b.vel.x += (tx - b.vel.x) * a;
@@ -223,6 +242,8 @@ export class Player {
         b.vel.z += dirZ * add;
       }
     }
+
+    if (this.sliding && !(b.onGround && b.charge > 0 && Math.hypot(b.vel.x, b.vel.z) > FEEL.sprintSpeed)) this.sliding = false;
 
     // --- facing ---
     const hs = Math.hypot(b.vel.x, b.vel.z);

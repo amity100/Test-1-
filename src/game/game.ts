@@ -881,8 +881,10 @@ export class Game {
   /** Something rift-charged and fast hits something: the core kill law. */
   private onTouch(a: DynBody, b: DynBody, rel: number) {
     for (const [imp, vic] of [[a, b], [b, a]] as [DynBody, DynBody][]) {
-      if (imp.charge <= 0 || rel < LAW.knockSpeed) continue;
-      if (imp.kind === 'grenade') continue;
+      if (imp.charge <= 0 || imp.kind === 'grenade') continue;
+      // a charged player hits with his whole speed, even at a glance (shoulder first)
+      const speed = imp.kind === 'player' ? Math.max(rel, imp.vel.length()) : rel;
+      if (speed < LAW.knockSpeed) continue;
       const v = this.enemies.enemyOfBody(vic);
       if (v && v.alive && vic !== imp) {
         const kc: KillCtx = imp.kind === 'player'
@@ -890,10 +892,10 @@ export class Game {
           : imp.kind === 'prop'
             ? { byProp: true, impactor: imp }
             : { impactor: imp };
-        this.impactEnemy(v, rel, imp, kc);
+        this.impactEnemy(v, speed, imp, kc);
         if (imp.kind === 'player') {
           // punch through, keep some momentum for the next target
-          imp.vel.multiplyScalar(0.3);
+          imp.vel.multiplyScalar(0.65);
           this.hitstop = Math.max(this.hitstop, 0.08);
           this.rig.shake = Math.max(this.rig.shake, 0.5);
         }
@@ -1212,6 +1214,7 @@ export class Game {
     const wasAir = p.airborne;
     p.update(dt, pin, this.level.world, this.physics, this.physEv, this.playerEvents(), this.time);
     this.updateAirtime(wasAir);
+    if (this.playerFling && !p.airborne && p.body.charge <= 0) this.playerFling = false;
     this.keepPlayerOutOfEnemies();
     this.updateShove(dt);
     this.updateCarry();
@@ -1240,6 +1243,7 @@ export class Game {
     const zu = this.zones.update(body.pos);
     if (zu.entered) this.onZoneEntered(zu.entered.id);
     for (const e of zu.triggered) this.triggerEncounter(e);
+    for (const e of zu.engaged) this.engageEncounter(e);
     this.updateLifts(dt);
     this.updateGates(dt);
     if (this.bossDead && this.victoryT < 0 && body.pos.y < (this.level.bossArena?.y ?? 90) - 30) this.victory();
@@ -1362,7 +1366,9 @@ export class Game {
         if (res === 'hurt' || res === 'blocked') this.enemies.stagger(e, 2.2, _v2.subVectors(e.pos, pos).setY(0).normalize().multiplyScalar(3));
       }
     }
-    this.playerFling = false;
+    // a charged landing this fast is a rift slide: the fling goes on along the ground
+    const v = this.player.body.vel;
+    if (!(charged && Math.hypot(v.x, v.z) >= LAW.knockSpeed)) this.playerFling = false;
   }
 
   private updateAirtime(wasAir: boolean) {
@@ -1382,6 +1388,8 @@ export class Game {
 
   private keepPlayerOutOfEnemies() {
     const b = this.player.body;
+    // a charged player rams through: physics' touch event resolves it (knock / kill)
+    if (b.charge > 0 && b.vel.lengthSq() >= LAW.knockSpeed * LAW.knockSpeed) return;
     for (const e of this.enemies.list) {
       if (!e.alive || e.state === 'launched' || Math.abs(e.pos.y - b.pos.y) > 1.5) continue;
       const dx = b.pos.x - e.pos.x, dz = b.pos.z - e.pos.z;
@@ -1734,16 +1742,25 @@ export class Game {
   private triggerEncounter(e: EncounterState) {
     for (const def of e.def.spawns) {
       const v = this.enemies.spawn(def);
+      // not expecting you yet: a fight you haven't reached doesn't wake from the one next door
+      if (!e.engaged) v.sightScale = FEEL.unengagedSight;
       e.enemyIds.push(v.id);
-    }
-    if (e.def.lesson) {
-      const key = `hint.${e.def.lesson}`;
-      this.hint(key, t(key), 9);
     }
     if (e.def.lesson === 'hijack') for (const g of this.level.gates) if (g.zone === e.zone) this.rifts.setGateOpen(g.id, true);
     if (e.def.spawns.length === 0) {
       // lessons without enemies clear on sight
       e.cleared = true;
+    }
+  }
+
+  private engageEncounter(e: EncounterState) {
+    for (const id of e.enemyIds) {
+      const v = this.enemies.get(id);
+      if (v) v.sightScale = 1;
+    }
+    if (e.def.lesson && !e.cleared) {
+      const key = `hint.${e.def.lesson}`;
+      this.hint(key, t(key), 9);
     }
   }
 

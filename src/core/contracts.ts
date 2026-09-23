@@ -470,6 +470,8 @@ export interface EnemyView {
   readonly radius: number;
   readonly height: number;
   readonly body: DynBody | null;
+  /** Unaware sight multiplier (1 = normal). */
+  sightScale: number;
   chest(out?: V3): V3;
   forward(out?: V3): V3;
 }
