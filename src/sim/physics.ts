@@ -8,7 +8,8 @@ import { frameUp, passRotation } from '../game/portalMath';
 export interface PhysicsOptions {
   seaY: number;
   isSea: (p: V3) => boolean;
-  killYAt: (p: V3) => number;
+  /** Below this a body is lost (fellOut). Gets the body too (its peakY says which floor it fell from). */
+  killYAt: (p: V3, b?: DynBody) => number;
 }
 
 const DEFAULT_BOUNCE: Record<BodyKind, number> = { player: 0, enemy: 0, corpse: 0, prop: 0.15, grenade: LAW.grenade.bounce };
@@ -84,7 +85,7 @@ function samePair(a: RiftEnd, b: RiftEnd) {
  */
 export class Physics implements PhysicsAPI {
   readonly bodies: DynBody[] = [];
-  killYAt: (p: V3) => number;
+  killYAt: (p: V3, b?: DynBody) => number;
   private touchT = new Map<number, number>();
   private work: DynBody[] = [];
   // resolveCircle skip callback, bound once (the body being solved is stashed here)
@@ -191,7 +192,7 @@ export class Physics implements PhysicsAPI {
         ev.splash(b);
       }
     } else if (b.pos.y >= o.seaY) body.wet = false;
-    if (b.pos.y < this.killYAt(b.pos)) {
+    if (b.pos.y < this.killYAt(b.pos, b)) {
       if (!body.gone) {
         body.gone = true;
         ev.fellOut(b);

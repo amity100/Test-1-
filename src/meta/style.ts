@@ -168,6 +168,7 @@ export class StyleSystem implements StyleAPI {
       case 'air': this.onAir(e, out); break;
       case 'hurt': if (e.amount > 0) this.dropRank(); break;
       case 'hijack': this.award('hijack', e.t, out, { at: e.at }); break;
+      case 'matador': this.award('matador', e.t, out, { at: e.at }); break;
       case 'death': this.bail(); break;
       default: break; // catch, shear (scored per victim by the kill), explode, zone, checkpoint
     }
@@ -259,7 +260,8 @@ export class StyleSystem implements StyleAPI {
     const proj = e.projectileKind;
 
     // Projectiles.
-    if (e.ownShot) {
+    // (his own grenade is POSTAGE, his own beam FIRING LINE: RETURN TO SENDER is for bolts)
+    if (e.ownShot && (proj === 'bolt' || proj === null)) {
       this.award('returnToSender', t, out, { at });
       if (e.shotAge <= T.mirrorAge) this.award('mirror', t, out, { at });
     } else if (e.shotBy !== null && e.shotBy !== e.enemyId && !e.turretShot && (proj === 'bolt' || proj === null)) {
@@ -286,7 +288,6 @@ export class StyleSystem implements StyleAPI {
     // Rift moves.
     if (e.cause === 'shear') this.award('guillotine', t, out, { at });
     if (e.cause === 'blade') this.award('finisher', t, out, { at });
-    if (e.matador) this.award('matador', t, out, { at });
     if (e.viaTrapdoor) this.award('trapdoor', t, out, { at });
     const afterRift = e.victimCrossings > 0 || e.viaTrapdoor || e.matador || e.charged;
     if (e.cause === 'water' && afterRift) this.award('splashdown', t, out, { at });
@@ -331,7 +332,8 @@ export class StyleSystem implements StyleAPI {
 
   private onCross(e: CrossEvent, out: TrickAward[]): void {
     const T = STYLE_TUNING;
-    const who = e.who;
+    // the player's run is 'player' (airtime ends it); other things loop separately
+    const who = e.who === 'player' || e.id === undefined ? e.who : `${e.who}:${e.id}`;
     let run = this.loops.get(who);
     if (run && (e.loops <= run.loops || e.t - run.lastT > T.loopTimeout)) {
       this.finishLoop(run, e.t, out);

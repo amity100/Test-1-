@@ -85,6 +85,9 @@ export const AI = {
     summonEvery: 15,
     lobEvery: 5,
     shearDamage: 150,
+    /** Most one impact / fall can take off him (crush: the roof load). */
+    impactCap: 200,
+    crushCap: 300,
     bladeDamage: 150,
     returnDelay: 0.35,
   },

@@ -732,11 +732,21 @@ export interface KillEvent {
 }
 
 export interface KnockEvent { type: 'knock'; t: number; enemyId: number; cause: DamageSource; impactorId: number | null; at: V3 }
-export interface CrossEvent { type: 'cross'; t: number; who: BodyKind | 'bolt' | 'beam'; speed: number; loops: number; fromKind: RiftEndKind; toKind: RiftEndKind }
+export interface CrossEvent {
+  type: 'cross';
+  t: number;
+  who: BodyKind | 'bolt' | 'beam';
+  /** Which body / projectile (loop runs are per thing); absent = one per kind. */
+  id?: number;
+  speed: number;
+  loops: number;
+  fromKind: RiftEndKind;
+  toKind: RiftEndKind;
+}
 export interface CatchEvent { type: 'catch'; t: number; count: number }
 export interface AirEvent { type: 'air'; t: number; phase: 'start' | 'end'; seconds: number; crossings: number }
 export interface HurtEvent { type: 'hurt'; t: number; amount: number }
-export interface SimpleEvent { type: 'hijack' | 'shear' | 'explode' | 'zone' | 'death' | 'checkpoint'; t: number; at?: V3; zone?: ZoneId }
+export interface SimpleEvent { type: 'hijack' | 'matador' | 'shear' | 'explode' | 'zone' | 'death' | 'checkpoint'; t: number; at?: V3; zone?: ZoneId }
 
 export type GameEvent = KillEvent | KnockEvent | CrossEvent | CatchEvent | AirEvent | HurtEvent | SimpleEvent;
 

@@ -40,6 +40,7 @@ import { Audio } from '../engine/audio';
 import { Renderer } from '../render/renderer';
 import { createSky, createSkyEnvMap, createSkyline, LampSystem } from '../render/fx';
 import { buildTower, type TowerBuild } from '../world/tower';
+import { TOWER } from '../world/tower/layout';
 import { CameraRig } from './camera';
 import { Character, type AnimLibrary, type CharacterAsset, type Look } from './characters';
 import { Player, type PlayerEvents, type PlayerInput } from './player';
@@ -81,11 +82,16 @@ interface KillCtx {
   playerFling?: boolean;
   byProp?: boolean;
   byBarrel?: boolean;
+  /** COMET shockwave: the landing speed (the hit itself is a knock). */
+  comet?: number;
+  /** Loops of the thing that went off (a looped barrel: CANNONBALL). */
+  loops?: number;
 }
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
+const _v4 = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
 const COL_EXIT = new THREE.Color(0.25, 1.6, 2.2);
 const COL_ENTRANCE = new THREE.Color(2.4, 1.2, 0.3);
@@ -323,9 +329,9 @@ export class Game {
     this.physics = new Physics(world, this.rifts, {
       seaY: this.level.seaY,
       isSea: (p) => this.level.isSea(p),
-      // stacked zones: a body falling off a floor lands on the one below (the yard / the sea);
-      // only far outside the tower is it lost
-      killYAt: () => this.level.seaY - 30,
+      // off a floor's edge (outside the tower) past its zone's killY is the void; inside the
+      // footprint floors are stacked, so a body lands on the one below
+      killYAt: (p, b) => this.killYAt(p, b),
     });
     this.projectiles = new Projectiles(world, this.rifts, this.physics, this.projectileHooks());
     this.scene.add(this.projectiles.group);
@@ -640,7 +646,7 @@ export class Game {
         if (p.kind === 'bolt') this.steerReturned(p);
         else if (p.kind === 'grenade') this.steerCaughtGrenade(p);
         this.fx.riftBurst(to.position, to.normal, COL_CHARGED);
-        this.push({ type: 'cross', t: this.time, who: p.kind === 'grenade' ? 'grenade' : p.kind === 'beam' ? 'beam' : 'bolt', speed: p.vel.length(), loops: p.loops, fromKind: from.kind, toKind: to.kind });
+        this.push({ type: 'cross', t: this.time, who: p.kind === 'grenade' ? 'grenade' : p.kind === 'beam' ? 'beam' : 'bolt', id: 1e6 + p.id, speed: p.vel.length(), loops: p.loops, fromKind: from.kind, toKind: to.kind });
         if (from.owner === 'player' && p.team === 'kessler' && p.crossings === 1) {
           if (this.time - this.catchWindow.t > 0.6) this.catchWindow = { t: this.time, count: 0 };
           this.catchWindow.count++;
@@ -717,6 +723,16 @@ export class Game {
     v.set((dx / d) * hs, (dy + 0.5 * G * t * t) / t, (dz / d) * hs);
   }
 
+  private killYAt(p: V3, b?: DynBody) {
+    const lost = this.level.seaY - 30;
+    if (p.x > TOWER.x0 - 0.5 && p.x < TOWER.x1 + 0.5 && p.z > TOWER.z0 - 0.5 && p.z < TOWER.z1 + 0.5) return lost;
+    // the zone of the floor it fell from
+    const y = Math.max(p.y, b ? b.peakY : p.y);
+    const z = this.zones ? this.zones.zoneAt(_v4.set(p.x, y, p.z)) : null;
+    // (sea-level zones: the water takes it, see onSplash)
+    return z && !z.sea ? Math.max(lost, z.killY) : lost;
+  }
+
   private projectileHitTest(a: V3, b: V3, radius: number, p: Projectile): ActorHit | null {
     let best = 2;
     let key = '';
@@ -788,7 +804,7 @@ export class Game {
     }
     const pr = this.props.byKey(hit.key);
     if (pr) {
-      if (pr.def.explosive && (p.charged || p.kind === 'beam')) this.explodeProp(pr, { projectile: p });
+      if (pr.def.explosive && (p.charged || p.kind === 'beam')) this.explodeProp(pr, {});
       else this.fx.sparks(hit.point, hit.normal, COL_SPARK, 8);
       return 'stop';
     }
@@ -825,7 +841,7 @@ export class Game {
       },
       died: (e, ctx) => this.onEnemyDied(e, ctx),
       knocked: (e, info) => {
-        this.push({ type: 'knock', t: this.time, enemyId: e.id, cause: info.source, impactorId: this.killCtx?.impactor ? this.enemies.enemyOfBody(this.killCtx.impactor)?.id ?? null : null, at: e.pos.clone() });
+        this.push({ type: 'knock', t: this.time, enemyId: e.id, cause: info.source, impactorId: this.impactorKey(this.killCtx?.impactor ?? null, e.id), at: e.pos.clone() });
         this.fx.dust(e.pos, 0.6);
       },
       melee: (_e, dmg, push) => {
@@ -860,6 +876,14 @@ export class Game {
     };
   }
 
+  /** Style key of what hit him: an enemy/corpse id, or a prop as a negative key (BOWLING / HEADS UP). */
+  private impactorKey(imp: DynBody | null, victimId: number): number | null {
+    if (!imp) return null;
+    const ie = this.enemies.enemyOfBody(imp);
+    if (ie) return ie.id !== victimId ? ie.id : null;
+    return imp.kind === 'prop' ? -(imp.id + 1) : null;
+  }
+
   private withKill<T>(ctx: KillCtx, fn: () => T): T {
     const prev = this.killCtx;
     this.killCtx = ctx;
@@ -883,10 +907,10 @@ export class Game {
       enemyKind: e.kind,
       cause: ctx.cause,
       charged: ctx.info.charged,
-      speed: ctx.info.speed ?? 0,
+      speed: Math.max(ctx.info.speed ?? 0, kc.comet ?? 0),
       fallHeight: ctx.fallHeight,
       killerCrossings: p ? p.crossings : imp ? imp.crossings : ctx.info.crossings ?? 0,
-      killerLoops: p ? p.loops : imp ? imp.loops : ctx.info.loops ?? 0,
+      killerLoops: p ? p.loops : imp ? imp.loops : Math.max(ctx.info.loops ?? 0, kc.loops ?? 0),
       victimCrossings: ctx.crossings,
       ownShot: !!p && p.owner === e.id,
       shotBy: p && typeof p.owner === 'number' && p.owner !== e.id ? p.owner : null,
@@ -903,7 +927,7 @@ export class Game {
       byPlayer: !!kc.byPlayer,
       playerFling: !!kc.playerFling,
       playerAirborne: this.player.airborne,
-      impactorId: impEnemy && impEnemy.id !== e.id ? impEnemy.id : null,
+      impactorId: this.impactorKey(imp, e.id),
       at: ctx.at.clone(),
     };
     this.stats.kills++;
@@ -953,8 +977,13 @@ export class Game {
         return;
       }
       const e = this.enemies.enemyOfBody(b);
-      if (e && e.alive) this.enemies.onCrossed(e, from, to, speed);
-      this.push({ type: 'cross', t: this.time, who: b.kind, speed, loops: b.loops, fromKind: from.kind, toKind: to.kind });
+      if (e && e.alive) {
+        // MATADOR is the move itself: his charge into your entrance
+        if (e.kind === 'brute' && e.state === 'charge' && from.owner === 'player') this.push({ type: 'matador', t: this.time, at: e.pos.clone() });
+        this.enemies.onCrossed(e, from, to, speed);
+      }
+      // (a grenade's crossing is reported by its projectile)
+      if (b.kind !== 'grenade') this.push({ type: 'cross', t: this.time, who: b.kind, id: b.id, speed, loops: b.loops, fromKind: from.kind, toKind: to.kind });
     },
     impact: (b, info) => this.onImpact(b, info),
     touch: (a, b, rel) => this.onTouch(a, b, rel),
@@ -1073,12 +1102,11 @@ export class Game {
     else b.enabled = false;
   }
 
+  /** Lost to the sea / the void: back to the checkpoint shortly (respawn counts the death). */
   private fallDeath(key: string) {
     if (this.respawnT >= 0) return;
     this.hud.toast(t(key), 'warn');
-    this.hp = Math.max(1, this.hp - 30);
     this.respawnT = 0.7;
-    this.stats.deaths++;
   }
 
   // ------------------------------------------------------------------
@@ -1089,8 +1117,9 @@ export class Game {
     if (!pr.alive || pr.fuse >= 0) return;
     pr.fuse = 0; // explode this frame (chains get a short delay)
     const at = pr.body.pos.clone().setY(pr.body.pos.y + pr.body.height * 0.5);
+    const loops = pr.body.loops;
     this.props.remove(pr);
-    this.explode(at, LAW.barrel.radius, LAW.barrel.damage, { charged: true, barrel: true, kc });
+    this.explode(at, LAW.barrel.radius, LAW.barrel.damage, { charged: true, barrel: true, kc: { ...kc, loops: Math.max(kc.loops ?? 0, loops) } });
   }
 
   private explode(at: V3, radius: number, damage: number, o: { charged: boolean; barrel: boolean; projectile?: Projectile; kc?: KillCtx }) {
@@ -1121,9 +1150,10 @@ export class Game {
           team: o.barrel ? 'neutral' : 'player',
           instigator: o.projectile ? o.projectile.owner : 'player',
           crossings: o.projectile?.crossings ?? 0,
-          loops: o.projectile?.loops ?? 0,
+          loops: o.projectile?.loops ?? o.kc?.loops ?? 0,
         };
-        const kc: KillCtx = o.projectile ? { projectile: o.projectile } : { ...(o.kc ?? {}), byBarrel: o.barrel };
+        // a barrel's blast is BOOM whatever lit it (not the bolt/beam that did)
+        const kc: KillCtx = o.projectile ? { projectile: o.projectile } : { ...(o.kc ?? {}), projectile: null, byBarrel: o.barrel };
         const res = this.withKill(kc, () => this.enemies.hit(e, info));
         if (res === 'hurt' && k > 0.35) this.enemies.stagger(e, 1.4, _v2.subVectors(e.pos, at).setY(0).normalize().multiplyScalar(4 * k));
       }
@@ -1477,7 +1507,7 @@ export class Game {
       for (const e of this.enemies.list) {
         if (!e.alive || e.pos.distanceTo(pos) > LAW.cometRadius) continue;
         const info: HitInfo = { source: 'impact', amount: 20, charged: true, speed: LAW.knockSpeed, from: pos.clone(), dir: _v.subVectors(e.pos, pos).normalize().clone(), team: 'player', instigator: 'player' };
-        const res = this.withKill({ byPlayer: true, playerFling: this.playerFling }, () => this.enemies.hit(e, info));
+        const res = this.withKill({ byPlayer: true, playerFling: this.playerFling, comet: speed }, () => this.enemies.hit(e, info));
         if (res === 'hurt' || res === 'blocked') this.enemies.stagger(e, 2.2, _v2.subVectors(e.pos, pos).setY(0).normalize().multiplyScalar(3));
       }
     }
@@ -1928,13 +1958,18 @@ export class Game {
       q.t -= dt;
       if (q.t > 0) continue;
       this.gateQueue.splice(i, 1);
-      const inEnd = this.rifts.gateEnds(q.gate).in;
-      if (!inEnd || q.enc.cleared) continue;
-      // just in front of the in-end, hopping into it
-      const spawnPos = inEnd.position.clone().addScaledVector(inEnd.normal, 0.55).setY(inEnd.position.y - inEnd.height / 2 + 0.02);
+      const ends = this.rifts.gateEnds(q.gate);
+      if (!ends.in || q.enc.cleared) continue;
+      // hijacked but you have no exit right now: the gate has nowhere to send them, so they
+      // step out of its arena end on foot (never stranded in the staging room)
+      const stranded = this.rifts.isHijacked(q.gate) && !this.rifts.hasExit();
+      const end = stranded && ends.out ? ends.out : ends.in;
+      const off = stranded ? 0.9 : 0.55;
+      const spawnPos = end.position.clone().addScaledVector(end.normal, off).setY(end.position.y - end.height / 2 + 0.02);
       const v = this.enemies.spawn({ ...q.def, pos: spawnPos, state: 'combat' });
       q.enc.enemyIds.push(v.id);
-      this.enemies.launch(v, inEnd.normal.clone().multiplyScalar(-4.5).setY(2.2));
+      // just in front of the in-end, hopping into it
+      if (!stranded) this.enemies.launch(v, end.normal.clone().multiplyScalar(-4.5).setY(2.2));
     }
   }
 

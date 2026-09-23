@@ -1338,7 +1338,8 @@ export class EnemySystem implements EnemyAPI, Brain {
     let stun = false;
     if (src === 'impact' || src === 'fall' || src === 'crush') {
       const s = info.speed ?? 0;
-      amount = Math.max(amount, s * 10);
+      // a big hit, never a one-shot (the game sends 9999 for a lethal impact on anyone else)
+      amount = Math.min(Math.max(amount, s * 10), src === 'crush' ? B.crushCap : B.impactCap);
       stun = s >= LAW.armorSpeed || src === 'crush';
     }
     if (this.damage(e, amount, info)) return 'killed';

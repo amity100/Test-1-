@@ -102,9 +102,15 @@ describe('trick detection', () => {
     expect(one({ cause: 'impact', fallHeight: 20 })).toEqual([]);
   });
 
-  it('MATADOR', () => {
-    expect(one({ matador: true, enemyKind: 'brute', cause: 'impact' })).toEqual(['matador']);
-    expect(one({ matador: true, enemyKind: 'brute', cause: 'water', victimCrossings: 1 })).toEqual(['matador', 'splashdown']);
+  it('MATADOR: the charge into your entrance is the trick; what kills him scores on its own', () => {
+    expect(ids(new StyleSystem().push({ type: 'matador', t: 0, at: new THREE.Vector3() }))).toEqual(['matador']);
+    expect(one({ matador: true, enemyKind: 'brute', cause: 'impact' })).toEqual([]);
+    expect(one({ matador: true, enemyKind: 'brute', cause: 'water', victimCrossings: 1 })).toEqual(['splashdown']);
+  });
+
+  it('RETURN TO SENDER is for bolts (his own beam is FIRING LINE only)', () => {
+    expect(one({ ownShot: true, projectileKind: 'beam', charged: true, cause: 'beam', shotAge: 0.1 })).toEqual(['firingLine']);
+    expect(one({ ownShot: true, projectileKind: 'bolt', charged: true, cause: 'bolt', shotAge: 1 })).toEqual(['returnToSender']);
   });
 
   it('HEADS UP: killed by a launched body', () => {
