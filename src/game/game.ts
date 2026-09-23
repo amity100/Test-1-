@@ -57,7 +57,7 @@ import { HUD } from '../ui/hud';
 import { addStrings, getLang, setDevice, t } from '../ui/i18n';
 import { PhotoUI } from '../ui/photoui';
 import { StrikeBar } from '../ui/strikebar';
-import { Strikes, type StrikeId } from './strikes';
+import { STRIKE, Strikes, type StrikeId } from './strikes';
 import type { RunStats } from '../ui/menu';
 import { StyleSystem } from '../meta/style';
 import { ReplayPlayer, ReplayRecorder } from '../meta/replay';
@@ -650,7 +650,7 @@ export class Game {
         pt = this.strikeTargetPt;
       }
     }
-    this.strikeBar.update({ mirror: this.strikes.cooling('mirror'), geyser: this.strikes.cooling('geyser'), drop: this.strikes.cooling('drop') }, pt);
+    this.strikeBar.update({ mirror: this.strikes.cooling('mirror'), geyser: this.strikes.cooling('geyser'), drop: this.strikes.cooling('drop') }, pt, this.strikes.charges, STRIKE.maxCharges);
   }
 
   /** Hints take turns (each gets a few seconds) and wait for the zone title card. */
@@ -1026,6 +1026,8 @@ export class Game {
       strike: this.strikeOf(e.id),
       at: ctx.at.clone(),
     };
+    // your own rift work (not a STRIKE) recharges the strikes
+    if (!ev.strike) this.strikes.refund(1);
     this.stats.kills++;
     this.push(ev);
     this.fx.embers(ctx.at, 16);

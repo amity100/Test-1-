@@ -25,6 +25,8 @@ export class StrikeBar {
   private btns: Record<string, HTMLButtonElement> = {};
   private last: Record<string, string> = {};
   private shown = true;
+  private pips: HTMLDivElement;
+  private pipKey = '';
 
   constructor(root: HTMLElement, private input: Input) {
     this.el = document.createElement('div');
@@ -52,6 +54,9 @@ export class StrikeBar {
       this.el.appendChild(b);
       this.btns[id] = b;
     }
+    this.pips = document.createElement('div');
+    this.pips.className = 'sk-pips';
+    this.el.appendChild(this.pips);
     root.appendChild(this.el);
     this.reticle = document.createElement('div');
     this.reticle.className = 'sk-reticle';
@@ -68,7 +73,7 @@ export class StrikeBar {
       (b.querySelector('.sk-name') as HTMLElement).textContent = t(`strike.${id}`);
       (b.querySelector('kbd') as HTMLElement).textContent = dev === 'pad' ? PAD[id] : KEYS[id];
     }
-    this.el.classList.toggle('touch', dev === 'touch');
+    this.el.classList.toggle('sk-touch', dev === 'touch');
   }
 
   show(v: boolean) {
@@ -82,9 +87,25 @@ export class StrikeBar {
    * cooling: 0 ready .. 1 just used, per strike. target: screen point of the
    * lock-on (null = none in reach).
    */
-  update(cooling: Record<string, number>, target: { x: number; y: number } | null) {
+  update(cooling: Record<string, number>, target: { x: number; y: number } | null, charges = 3, max = 3) {
+    const pk = `${Math.floor(charges)}|${Math.round((charges % 1) * 10)}|${max}`;
+    if (pk !== this.pipKey) {
+      const was = parseInt(this.pipKey.split('|')[0] || String(max), 10);
+      this.pipKey = pk;
+      let html = '';
+      for (let i = 0; i < max; i++) {
+        const f = Math.max(0, Math.min(1, charges - i));
+        html += `<i class="${f >= 1 ? 'full' : ''}" style="--f:${f.toFixed(2)}"></i>`;
+      }
+      this.pips.innerHTML = html;
+      if (Math.floor(charges) > was) {
+        this.pips.classList.remove('gain');
+        void this.pips.offsetWidth;
+        this.pips.classList.add('gain');
+      }
+    }
     const dev = getDevice();
-    if (this.el.classList.contains('touch') !== (dev === 'touch')) this.labels();
+    if (this.el.classList.contains('sk-touch') !== (dev === 'touch')) this.labels();
     for (const id in this.btns) {
       const c = Math.max(0, Math.min(1, cooling[id] ?? 0));
       const key = `${c > 0 ? Math.ceil(c * 20) : 0}|${target ? 1 : 0}`;

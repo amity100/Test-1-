@@ -15,7 +15,9 @@ import type { CollisionWorld } from '../world/collision';
  *  3 DROP    the floor opens under him and he comes out high up: over the
  *            water or off the edge if there's one near, else out of the sky.
  *
- * Each has its own cooldown. The free rift pair stays yours for everything else.
+ * They run on rift charge (3): one each, slowly regained, and every kill your
+ * own free rift work makes gives one back, so the two feed each other. The
+ * free rift pair stays yours for everything else.
  */
 export type StrikeId = 'mirror' | 'geyser' | 'drop';
 export const STRIKES: StrikeId[] = ['mirror', 'geyser', 'drop'];
@@ -25,7 +27,11 @@ export const STRIKE = {
   range: 32,
   /** Cone around the aim (radians) for picking the target. */
   cone: 0.42,
-  cooldown: { mirror: 5, geyser: 6, drop: 7 } as Record<StrikeId, number>,
+  /** Short lockout per strike after use (s). */
+  cooldown: { mirror: 1.5, geyser: 1.5, drop: 1.5 } as Record<StrikeId, number>,
+  /** Rift charge: a strike costs one; they come back slowly, and a kill your own rift work made refunds one. */
+  maxCharges: 3,
+  regen: 9,
   mirrorLife: 3.2,
   mirrorAside: 3.2,
   geyserSpeed: 21,
@@ -67,6 +73,8 @@ const _c = new THREE.Vector3();
 
 export class Strikes {
   readonly cd: Record<StrikeId, number> = { mirror: 0, geyser: 0, drop: 0 };
+  /** 0..maxCharges (fractional: the next one filling up). */
+  charges: number = STRIKE.maxCharges;
   /** The MIRROR in play: its exit keeps beside him, facing him. */
   private mirrorOn: { id: number; t: EnemyView; side: THREE.Vector3; life: number; pos: THREE.Vector3 } | null = null;
 
@@ -74,11 +82,18 @@ export class Strikes {
 
   reset() {
     for (const k of STRIKES) this.cd[k] = 0;
+    this.charges = STRIKE.maxCharges;
     this.mirrorOn = null;
+  }
+
+  /** A kill your freeform rift work made: one charge back. */
+  refund(n = 1) {
+    this.charges = Math.min(STRIKE.maxCharges, this.charges + n);
   }
 
   update(dt: number) {
     for (const k of STRIKES) this.cd[k] = Math.max(0, this.cd[k] - dt);
+    this.charges = Math.min(STRIKE.maxCharges, this.charges + dt / STRIKE.regen);
     const m = this.mirrorOn;
     if (m) {
       m.life -= dt;
@@ -98,9 +113,10 @@ export class Strikes {
     }
   }
 
-  /** 0 = ready, 1 = just used. */
+  /** 0 = ready, 1 = just used (or no charge: how far the next one is from full). */
   cooling(id: StrikeId) {
-    return this.cd[id] / STRIKE.cooldown[id];
+    const lock = this.cd[id] / STRIKE.cooldown[id];
+    return this.charges >= 1 ? lock : Math.max(lock, 1 - (this.charges % 1));
   }
 
   /** The enemy a strike would hit now: closest to the crosshair, in range and in sight. */
@@ -133,12 +149,16 @@ export class Strikes {
 
   fire(id: StrikeId): StrikeResult {
     if (this.cd[id] > 0) return { ok: false, reason: 'strike.cooldown' };
+    if (this.charges < 1) return { ok: false, reason: 'strike.noCharge' };
     const t = this.target();
     if (!t) return { ok: false, reason: 'strike.noTarget' };
     // turrets are bolted down, and Voss only goes when he's stunned or down
     if (id !== 'mirror' && (t.kind === 'turret' || (t.kind === 'boss' && t.state !== 'stunned' && t.state !== 'downed'))) return { ok: false, reason: 'strike.anchored', target: t };
     const r = id === 'mirror' ? this.mirror(t) : id === 'geyser' ? this.geyser(t) : this.drop(t);
-    if (r.ok) this.cd[id] = STRIKE.cooldown[id];
+    if (r.ok) {
+      this.cd[id] = STRIKE.cooldown[id];
+      this.charges -= 1;
+    }
     return r;
   }
 
