@@ -414,6 +414,7 @@ export class Game {
     this.fx.clear();
     this.recorder.clear();
     this.zones.startAt(id);
+    for (const l of this.zones.lifts) this.syncLift(l);
     this.gateWaveT.clear();
     this.gateQueue.length = 0;
     this.challenges.setZone(id);
@@ -433,10 +434,29 @@ export class Game {
   }
 
   private respawnPlayer(pos: V3, yaw: number) {
+    // let go of whatever was carried
+    const c = this.carried;
+    if (c) {
+      c.body.userData.manual = false;
+      c.body.userData.carried = false;
+      c.body.enabled = !c.prop || c.prop.alive;
+    }
+    this.carried = null;
+    this.player.carrying = null;
     this.player.teleport(pos.clone(), yaw);
     this.player.body.charge = 0;
     this.hp = LAW.player.hp;
-    this.carried = null;
+    // transient timers from the life that ended
+    this.respawnT = -1;
+    this.slowT = 0;
+    this.hitstop = 0;
+    this.timeScale = 1;
+    this.shoveT = 0;
+    this.crouchState = false;
+    this.clipOfferT = 0;
+    this.hud.offerClip(false);
+    this.touch?.offerClip(false);
+    (this.hud as any).setAirtime?.(null);
     this.rig.yaw = yaw;
     this.rig.pitch = -0.12;
     this.rig.snapTo(this.player.body.pos);
@@ -472,9 +492,14 @@ export class Game {
 
   resume() {
     this.mode = 'playing';
+    this.hud.show(true);
     this.touch?.show(true);
     this.input.active = true;
     this.input.requestLock();
+    // look / wheel that piled up while paused or replaying would snap the camera
+    this.input.consumeLook();
+    this.input.consumeWheel();
+    this.audio.unlock(); // iOS may have suspended audio meanwhile
   }
 
   retryFromCheckpoint() {
@@ -1250,7 +1275,9 @@ export class Game {
     p.aim = THREE.MathUtils.damp(p.aim, aiming ? 1 : 0, 12, realDt);
     let aim: ExitAim | null = null;
     const targets = this.trapTargets();
-    if (aiming) {
+    // touch RIFT places on release: 'place' arrives in the same frame the aim is let go
+    const placeOnRelease = inp.wasPressed('place') && inp.wasReleased('aim') && this.respawnT < 0;
+    if (aiming || placeOnRelease) {
       const wheel = inp.consumeWheel();
       if (wheel) this.rifts.airDistance = THREE.MathUtils.clamp((this.rifts.airDistance ?? 12) + wheel * 1.5, 3, LAW.riftRange);
       if (inp.wasPressed('flip')) {
@@ -1924,22 +1951,37 @@ export class Game {
     for (const l of this.zones.lifts) {
       if (!l.moving) continue;
       const len = l.def.from.distanceTo(l.def.to);
-      l.t = Math.min(1, l.t + (dt * 3.2) / Math.max(1, len));
-      const k = l.t * l.t * (3 - 2 * l.t);
-      const target = _v.copy(l.base).add(_v2.subVectors(l.def.to, l.def.from).multiplyScalar(k));
-      const delta = _v3.subVectors(target, l.def.mesh.position);
       const onIt = this.zones.liftAt(this.player.body.pos) === l;
-      l.def.mesh.position.copy(target);
-      (this.level.world as any).moveCollider?.(l.def.collider, delta.x, delta.y, delta.z);
+      l.t = THREE.MathUtils.clamp(l.t + (l.dir * dt * 3.2) / Math.max(1, len), 0, 1);
+      const delta = this.syncLift(l);
       if (onIt) {
         this.player.body.pos.add(delta);
         this.player.body.vel.y = Math.max(0, this.player.body.vel.y);
       }
-      if (l.t >= 1) {
+      if (l.dir > 0 && l.t >= 1) {
         l.moving = false;
+        this.audio.lift(l.def.mesh.position, false);
+        // it went up without you: it comes back down for you
+        if (!onIt) {
+          l.dir = -1;
+          l.moving = true;
+        }
+      } else if (l.dir < 0 && l.t <= 0) {
+        l.moving = false;
+        l.dir = 1;
         this.audio.lift(l.def.mesh.position, false);
       }
     }
+  }
+
+  /** Puts a lift's cage and collider where its `t` says; returns how far it moved. */
+  private syncLift(l: LiftState) {
+    const k = l.t * l.t * (3 - 2 * l.t);
+    const target = _v.copy(l.base).add(_v2.subVectors(l.def.to, l.def.from).multiplyScalar(k));
+    const delta = _v3.subVectors(target, l.def.mesh.position);
+    l.def.mesh.position.copy(target);
+    if (delta.lengthSq() > 0) (this.level.world as any).moveCollider?.(l.def.collider, delta.x, delta.y, delta.z);
+    return delta;
   }
 
   // ------------------------------------------------------------------
@@ -2163,6 +2205,10 @@ export class Game {
       return;
     }
     this.mode = 'paused';
+    // the clip panel needs the pointer back (desktop)
+    this.input.active = false;
+    if (document.pointerLockElement) document.exitPointerLock();
+    this.input.releaseAll();
     const done = (blob: Blob | null) => {
       this.onClip(
         blob,

@@ -135,16 +135,26 @@ async function boot() {
   game.onPause = () => menu.showPause();
   game.onEnd = (win, stats, rank) => (menu as any).showEnd(win, stats, rank);
   game.onClip = (blob, share, close) => {
-    if (!m.showClip) {
+    if (!m.showClip || !blob) {
       close();
       return;
     }
+    const url = URL.createObjectURL(blob);
     m.showClip({
       saving: false,
-      previewUrl: blob ? URL.createObjectURL(blob) : undefined,
+      previewUrl: url,
       onShare: share,
+      onDownload: () => {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `threshold-clip.${blob.type.includes('mp4') ? 'mp4' : 'webm'}`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      },
       onClose: () => {
-        menu.hide();
+        m.hideClip();
+        URL.revokeObjectURL(url);
         close();
       },
     });
