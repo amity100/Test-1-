@@ -571,6 +571,12 @@ export class Game {
         if (p.kind === 'bolt') this.audio.boltImpact(hit.point, p.charged);
       },
       onExplode: (p, at) => this.explode(at, LAW.grenade.radius, LAW.grenade.damage, { charged: p.charged, barrel: false, projectile: p }),
+      steer: (p, at, dir) => {
+        const e = this.assistTarget(at, dir, p.owner);
+        if (!e) return false;
+        dir.set(e.pos.x, e.pos.y + e.height * 0.6, e.pos.z).sub(at).normalize();
+        return true;
+      },
       onCross: (p, from, to) => {
         if (p.kind === 'bolt') this.steerReturned(p);
         else if (p.kind === 'grenade') this.steerCaughtGrenade(p);
@@ -593,24 +599,30 @@ export class Game {
     const speed = p.vel.length();
     if (speed < 1e-3) return;
     const dir = _v.copy(p.vel).divideScalar(speed);
+    const best = this.assistTarget(p.pos, dir, p.owner);
+    if (!best) return;
+    p.vel.set(best.pos.x, best.pos.y + best.height * 0.6, best.pos.z).sub(p.pos).setLength(speed);
+  }
+
+  /** The Kessler body a rift-charged shot from `at` along `dir` bends onto (its shooter gets a wide cone), or null. */
+  private assistTarget(at: V3, dir: V3, owner: Projectile['owner']): Enemy | null {
     let best: Enemy | null = null;
     let bestScore = -Infinity;
     for (const e of this.enemies.list) {
       if (!e.alive || !this.zones.active.has(e.def.zone)) continue;
-      const to = _v2.set(e.pos.x, e.pos.y + e.height * 0.6, e.pos.z).sub(p.pos);
+      const to = _v2.set(e.pos.x, e.pos.y + e.height * 0.6, e.pos.z).sub(at);
       const d = to.length();
       if (d < 0.5 || d > FEEL.returnAssistRange) continue;
       const cos = to.dot(dir) / d;
-      const sender = e.id === p.owner;
+      const sender = e.id === owner;
       if (cos < (sender ? FEEL.returnAssistSender : FEEL.returnAssistCone)) continue;
       const score = cos + (sender ? 0.3 : 0) - d * 0.002;
       if (score <= bestScore) continue;
-      if (!this.level.world.lineOfSight(p.pos, _v3.set(e.pos.x, e.pos.y + e.height * 0.6, e.pos.z))) continue;
+      if (!this.level.world.lineOfSight(at, _v3.set(e.pos.x, e.pos.y + e.height * 0.6, e.pos.z))) continue;
       best = e;
       bestScore = score;
     }
-    if (!best) return;
-    p.vel.set(best.pos.x, best.pos.y + best.height * 0.6, best.pos.z).sub(p.pos).setLength(speed);
+    return best;
   }
 
   /** A caught grenade leaving a rift arcs onto a Kessler body roughly ahead of it (POSTAGE). */

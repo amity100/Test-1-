@@ -258,6 +258,8 @@ export interface ProjectileHooks {
   onHitWorld(p: Projectile, hit: RayHit): void;
   onExplode(p: Projectile, at: V3): void;
   onCross(p: Projectile, from: RiftEnd, to: RiftEnd): void;
+  /** Beams: may bend `dir` (in place) where a beam leaves a rift at `at`; true if it did. */
+  steer?(p: Projectile, at: V3, dir: THREE.Vector3): boolean;
 }
 
 export interface ProjectileAPI {

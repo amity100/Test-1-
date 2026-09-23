@@ -49,6 +49,7 @@ const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const _c = new THREE.Vector3();
 const _d = new THREE.Vector3();
+const _e = new THREE.Vector3();
 const _stop = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _s = new THREE.Vector3();
@@ -315,7 +316,21 @@ export class Projectiles implements ProjectileAPI {
   }
 
   private updateBeam(p: Proj) {
-    const segs = this.rifts.raycastThrough(p.pos, p.beamDir!, LAW.beam.range, this.world, LAW.beam.maxHops);
+    let segs = this.rifts.raycastThrough(p.pos, p.beamDir!, LAW.beam.range, this.world, LAW.beam.maxHops);
+    // out of the first rift it crosses, the game may bend it onto a target
+    const k = segs.findIndex((s, i) => !!s.viaEnd && i < segs.length - 1);
+    if (k >= 0 && this.hooks.steer) {
+      const next = segs[k + 1];
+      _e.subVectors(next.to, next.from);
+      // (never bent back into the end it just left)
+      if (_e.lengthSq() > 1e-8 && this.hooks.steer(p, next.from, _e.normalize()) && _e.dot(segs[k].viaEnd!.linked.normal) > 0.1) {
+        let used = 0;
+        for (let i = 0; i <= k; i++) used += segs[i].from.distanceTo(segs[i].to);
+        const tail = this.rifts.raycastThrough(next.from, _e, Math.max(1, LAW.beam.range - used), this.world, Math.max(0, LAW.beam.maxHops - 1));
+        for (const t of tail) t.charged = true;
+        segs = segs.slice(0, k + 1).concat(tail);
+      }
+    }
     p.segments = segs;
     let crossings = 0;
     for (let i = 0; i < segs.length; i++) {
@@ -352,7 +367,8 @@ export class Projectiles implements ProjectileAPI {
     if (len < 1e-6) return false;
     _d.divideScalar(len);
     for (let k = 0; k < 4; k++) {
-      const h = this.hooks.hitTest(_c, seg.to, 0.2, p);
+      // through a rift the beam comes out wider (easier to put on a line of them)
+      const h = this.hooks.hitTest(_c, seg.to, seg.charged ? 0.7 : 0.2, p);
       if (!h) return false;
       if (p.stopKeys!.has(h.key)) {
         seg.to = h.point.clone();
