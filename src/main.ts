@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { defaultQuality, IS_TOUCH, QualityName } from './config';
 import { Game, Settings } from './game/game';
-import { loadCharacterAsset } from './game/characters';
+import { parseCharacterAsset } from './game/characters';
 import { Menu } from './ui/menu';
 
 function loadSettings(): Settings {
@@ -23,19 +23,17 @@ function saveSettings(s: Settings) {
 }
 
 /**
- * Resolves a binary asset to a loadable URL. Prefers the raw file; when the
- * host can't serve that type, falls back to a base64 JSON pack of it.
+ * Loads a binary asset as bytes. Prefers the raw file; when the host can't
+ * serve that type, falls back to a base64 JSON pack of it. Bytes are parsed
+ * in memory (no blob: URLs, which sandboxed hosts may block).
  */
-async function assetUrl(dir: string, name: string, magic: string, onProgress?: (p: number) => void): Promise<string> {
+async function assetBytes(dir: string, name: string, magic: string): Promise<ArrayBuffer> {
   try {
     const r = await fetch(dir + name);
     if (r.ok) {
       const buf = await r.arrayBuffer();
       const head = new TextDecoder().decode(new Uint8Array(buf, 0, Math.min(4, buf.byteLength)));
-      if (head.startsWith(magic)) {
-        onProgress?.(1);
-        return URL.createObjectURL(new Blob([buf]));
-      }
+      if (head.startsWith(magic)) return buf;
     }
   } catch {}
   const r = await fetch(dir + name + '.json');
@@ -44,8 +42,23 @@ async function assetUrl(dir: string, name: string, magic: string, onProgress?: (
   const bin = atob(j.data);
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  onProgress?.(1);
-  return URL.createObjectURL(new Blob([bytes]));
+  return bytes.buffer;
+}
+
+function hdrTexture(buf: ArrayBuffer): THREE.DataTexture | null {
+  try {
+    const d = new HDRLoader().parse(buf) as any;
+    const tex = new THREE.DataTexture(d.data, d.width, d.height, THREE.RGBAFormat, d.type);
+    tex.colorSpace = THREE.LinearSRGBColorSpace;
+    tex.minFilter = tex.magFilter = THREE.LinearFilter;
+    tex.generateMipmaps = false;
+    tex.flipY = true;
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    tex.needsUpdate = true;
+    return tex;
+  } catch {
+    return null;
+  }
 }
 
 async function boot() {
@@ -72,14 +85,13 @@ async function boot() {
   }
 
   const base = import.meta.env.BASE_URL || './';
-  const [soldierUrl, hdrUrl] = await Promise.all([
-    assetUrl(`${base}assets/`, 'Soldier.glb', 'glTF', (p) => menu.showLoading(p * 0.7)),
-    assetUrl(`${base}assets/`, 'moonless_golf_1k.hdr', '#?').catch(() => null),
+  const [soldierBuf, hdrBuf] = await Promise.all([
+    assetBytes(`${base}assets/`, 'Soldier.glb', 'glTF'),
+    assetBytes(`${base}assets/`, 'moonless_golf_1k.hdr', '#?').catch(() => null),
   ]);
-  const [asset, env] = await Promise.all([
-    loadCharacterAsset(soldierUrl, (p) => menu.showLoading(0.7 + p * 0.1)),
-    hdrUrl ? new HDRLoader().loadAsync(hdrUrl).catch(() => null) : Promise.resolve(null),
-  ]);
+  menu.showLoading(0.7);
+  const asset = await parseCharacterAsset(soldierBuf);
+  const env = hdrBuf ? hdrTexture(hdrBuf) : null;
   menu.showLoading(0.85);
   let envMap: THREE.Texture | null = null;
   if (env) {

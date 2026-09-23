@@ -15,6 +15,52 @@ export async function loadCharacterAsset(url: string, onProgress?: (p: number) =
   return { scene: gltf.scene as THREE.Group, animations: gltf.animations };
 }
 
+/**
+ * Decodes embedded glTF images through data: URLs on <img>, instead of the
+ * loader's default blob: fetch, which sandboxed hosts (CSP) refuse.
+ */
+function dataUrlTextures(parser: any) {
+  return {
+    name: 'data-url-textures',
+    loadTexture(index: number) {
+      const json = parser.json;
+      const texDef = json.textures[index];
+      const img = json.images[texDef.source];
+      if (img.bufferView === undefined) return null;
+      return parser.getDependency('bufferView', img.bufferView).then(
+        (view: ArrayBuffer) =>
+          new Promise<THREE.Texture>((resolve, reject) => {
+            const bytes = new Uint8Array(view);
+            let bin = '';
+            for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+            const url = `data:${img.mimeType || 'image/png'};base64,${btoa(bin)}`;
+            new THREE.TextureLoader().load(
+              url,
+              (tex) => {
+                tex.flipY = false;
+                const sampler = texDef.sampler !== undefined ? json.samplers?.[texDef.sampler] ?? {} : {};
+                const wrap = (w?: number) => (w === 33071 ? THREE.ClampToEdgeWrapping : w === 33648 ? THREE.MirroredRepeatWrapping : THREE.RepeatWrapping);
+                tex.wrapS = wrap(sampler.wrapS);
+                tex.wrapT = wrap(sampler.wrapT);
+                tex.needsUpdate = true;
+                resolve(tex);
+              },
+              undefined,
+              reject,
+            );
+          }),
+      );
+    },
+  };
+}
+
+export async function parseCharacterAsset(buf: ArrayBuffer): Promise<CharacterAsset> {
+  const loader = new GLTFLoader();
+  loader.register(dataUrlTextures as any);
+  const gltf = await loader.parseAsync(buf, '');
+  return { scene: gltf.scene as THREE.Group, animations: gltf.animations };
+}
+
 export type Look = 'hero' | 'guard' | 'heavy' | 'officer' | 'hologram';
 
 const LOOKS: Record<Exclude<Look, 'hologram'>, { body: number; visor: number; visorGlow: number; scale: number }> = {
