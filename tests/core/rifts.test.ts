@@ -45,14 +45,18 @@ describe('RiftSystem (renderer = null)', () => {
     rifts.renderViews(new THREE.PerspectiveCamera(), 800, 600, []);
   });
 
-  it('aimExit refuses an air end above the feet (aim.tooHigh) and allows a wall end high up', () => {
+  it('aimExit brings an air end aimed above the feet down to your level, and allows a wall end high up', () => {
     const { rifts } = arena();
     const eye = V(0, 1.7, 0), feet = V(0, 0, 0);
-    // up into open air, well above the ground: an air door above the feet
+    // up into open air: the door comes down so things step out of it at your feet's height
     const air = rifts.aimExit(eye, V(0.8, 0.3, -0.5).normalize(), eye, feet, false, []);
-    expect(air.kind).toBe('air');
-    expect(air.valid).toBe(false);
-    expect(air.reason).toBe('aim.tooHigh');
+    expect(air.valid).toBe(true);
+    expect(air.exitFeet.y).toBeLessThanOrEqual(feet.y + LAW.airAboveFeetMax + 1e-6);
+    // a hatch aimed up there comes down to your feet too
+    rifts.orientation = 'hatch';
+    const hatch = rifts.aimExit(eye, V(0.8, 0.3, -0.5).normalize(), eye, feet, false, []);
+    expect(hatch.frame.position.y).toBeLessThanOrEqual(feet.y + LAW.airAboveFeetMax + 1e-6);
+    rifts.orientation = 'auto';
     // a wall end 10 m up is fine
     const wall = rifts.aimExit(eye, V(0, 0.5, 1).normalize(), eye, feet, false, []);
     expect(wall.kind).toBe('wall');

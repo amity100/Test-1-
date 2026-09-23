@@ -418,6 +418,7 @@ export class Game {
     this.zoneStartT = this.time;
     this.style.reset();
     this.hud.clearHint();
+    this.updateObjective(true);
   }
 
   private respawnPlayer(pos: V3, yaw: number) {
@@ -567,6 +568,7 @@ export class Game {
       onExplode: (p, at) => this.explode(at, LAW.grenade.radius, LAW.grenade.damage, { charged: p.charged, barrel: false, projectile: p }),
       onCross: (p, from, to) => {
         if (p.kind === 'bolt') this.steerReturned(p);
+        else if (p.kind === 'grenade') this.steerCaughtGrenade(p);
         this.fx.riftBurst(to.position, to.normal, COL_CHARGED);
         this.push({ type: 'cross', t: this.time, who: p.kind === 'grenade' ? 'grenade' : p.kind === 'beam' ? 'beam' : 'bolt', speed: p.vel.length(), loops: p.loops, fromKind: from.kind, toKind: to.kind });
         if (from.owner === 'player' && p.team === 'kessler' && p.crossings === 1) {
@@ -604,6 +606,39 @@ export class Game {
     }
     if (!best) return;
     p.vel.set(best.pos.x, best.pos.y + best.height * 0.6, best.pos.z).sub(p.pos).setLength(speed);
+  }
+
+  /** A caught grenade leaving a rift arcs onto a Kessler body roughly ahead of it (POSTAGE). */
+  private steerCaughtGrenade(p: Projectile) {
+    const body = p.body;
+    if (!body) return;
+    const v = body.vel;
+    const hs = Math.hypot(v.x, v.z);
+    if (hs < 4) return;
+    const G = LAW.gravity;
+    let best: Enemy | null = null;
+    let bestScore = -Infinity;
+    for (const e of this.enemies.list) {
+      if (!e.alive || !this.zones.active.has(e.def.zone)) continue;
+      const dx = e.pos.x - body.pos.x, dz = e.pos.z - body.pos.z;
+      const d = Math.hypot(dx, dz);
+      if (d < 0.8 || d > FEEL.returnAssistRange * 0.6) continue;
+      const cos = (dx * v.x + dz * v.z) / (d * hs);
+      const sender = e.id === p.owner;
+      if (cos < (sender ? FEEL.returnAssistSender : FEEL.grenadeAssistCone)) continue;
+      const score = cos + (sender ? 0.3 : 0) - d * 0.004;
+      if (score <= bestScore) continue;
+      if (!this.level.world.lineOfSight(body.pos, _v3.set(e.pos.x, e.pos.y + e.height * 0.6, e.pos.z))) continue;
+      best = e;
+      bestScore = score;
+    }
+    if (!best) return;
+    // same horizontal speed, turned onto him, with the lob that meets his chest
+    const dx = best.pos.x - body.pos.x, dz = best.pos.z - body.pos.z;
+    const d = Math.hypot(dx, dz);
+    const t = d / hs;
+    const dy = best.pos.y + best.height * 0.6 - body.pos.y;
+    v.set((dx / d) * hs, (dy + 0.5 * G * t * t) / t, (dz / d) * hs);
   }
 
   private projectileHitTest(a: V3, b: V3, radius: number, p: Projectile): ActorHit | null {
@@ -1235,6 +1270,7 @@ export class Game {
     this.rifts.setBlockers(this.enemies.blockers());
     this.rifts.update(dt, realDt, this.time);
     this.projectiles.update(dt, this.time);
+    this.detonateCaughtGrenades();
     this.props.update(dt);
     this.updatePropFuses(dt);
     this.updateCatchWindow();
@@ -1386,6 +1422,20 @@ export class Game {
     if (air && this.airStartT >= 0 && this.airCrossings > 0) (this.hud as any).setAirtime?.(this.time - this.airStartT);
   }
 
+  /** A caught (charged) grenade goes off when it reaches a Kessler body: special delivery. */
+  private detonateCaughtGrenades() {
+    for (const pr of this.projectiles.list) {
+      if (pr.kind !== 'grenade' || !pr.alive || !pr.charged || pr.age >= pr.life) continue;
+      for (const e of this.enemies.list) {
+        if (!e.alive || !this.zones.active.has(e.def.zone)) continue;
+        if (pr.pos.y < e.pos.y - 0.3 || pr.pos.y > e.pos.y + e.height + 0.3) continue;
+        if (Math.hypot(pr.pos.x - e.pos.x, pr.pos.z - e.pos.z) > e.radius + 0.55) continue;
+        pr.age = pr.life; // explodes on the next projectile step
+        break;
+      }
+    }
+  }
+
   private keepPlayerOutOfEnemies() {
     const b = this.player.body;
     // a charged player rams through: physics' touch event resolves it (knock / kill)
@@ -1504,7 +1554,7 @@ export class Game {
         pr.body.onGround = false;
       }
     }
-    if (res.mode === 'catch') this.hint('catch', t('hint.returnToSender'), 6);
+    if (res.mode === 'catch' && this.threats().some((q) => q.kind === 'laser')) this.hint('catch', t('hint.returnToSender'), 6);
   }
 
   private hangingUnderCrosshair(): Prop | null {

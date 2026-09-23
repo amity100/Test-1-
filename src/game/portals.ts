@@ -696,9 +696,9 @@ export class RiftSystem implements RiftAPI {
     const snap = this.orientation !== 'door' ? this.snapTarget(camPos, dir, along, hit, targets, touch ? FEEL.hatchSnapTouch : FEEL.hatchSnap, playerEye, playerFeet) : null;
     if (snap) sol = this.hatchOver(snap, playerFeet, hdir, aimYaw);
     else if (this.airDistance !== null && (!hit || along + this.airDistance < hit.distance - 0.4)) {
-      sol = this.airAt(camPos.clone().addScaledVector(dir, along + this.airDistance), playerEye, hdir, aimYaw);
+      sol = this.airAt(camPos.clone().addScaledVector(dir, along + this.airDistance), playerEye, playerFeet, hdir, aimYaw);
     } else if (hit) sol = this.surface(hit, hdir, aimYaw);
-    else sol = this.airAt(camPos.clone().addScaledVector(dir, along + FEEL.airDefault), playerEye, hdir, aimYaw);
+    else sol = this.airAt(camPos.clone().addScaledVector(dir, along + FEEL.airDefault), playerEye, playerFeet, hdir, aimYaw);
 
     // ---- validation ----
     const center = sol.position;
@@ -708,7 +708,8 @@ export class RiftSystem implements RiftAPI {
     if (sol.noSurface) reason = 'aim.noSurface';
     else if (dist > LAW.riftRange + 0.5) reason = 'aim.range';
     else if (!this.canSee(playerEye, dir, sol.losTarget ?? center.clone().addScaledVector(n, 0.15), sol.host)) reason = 'aim.los';
-    else if (sol.kind === 'air' && center.y > playerFeet.y + LAW.airAboveFeetMax + 1e-3) reason = 'aim.tooHigh';
+    // (a door's height is where things step out of it; a hatch's is where they drop from)
+    else if (sol.kind === 'air' && (Math.abs(n.y) < 0.5 ? sol.exitFeet.y : center.y) > playerFeet.y + LAW.airAboveFeetMax + 1e-3) reason = 'aim.tooHigh';
     else if (this.nearSteady(sol, targets, null)) reason = 'aim.enemyClose';
     else if (this.blocked(center)) reason = 'aim.blocked';
     else if (!this.hasSpace(sol, n)) reason = 'aim.space';
@@ -782,10 +783,17 @@ export class RiftSystem implements RiftAPI {
     };
   }
 
-  /** Open air: a door facing along the aim (or a hatch); near the ground it stands on it. */
-  private airAt(point: THREE.Vector3, eye: V3, hdir: V3, aimYaw: number): Solve {
+  /**
+   * Open air: a door facing along the aim (or a hatch); near the ground it
+   * stands on it. It never sits above your feet: aimed higher, it comes down
+   * to your level (height is earned).
+   */
+  private airAt(point: THREE.Vector3, eye: V3, feet: V3, hdir: V3, aimYaw: number): Solve {
     const d = point.distanceTo(eye);
     if (d > LAW.riftRange) point.sub(eye).multiplyScalar(LAW.riftRange / d).add(eye);
+    const top = feet.y + LAW.airAboveFeetMax;
+    if (this.orientation === 'hatch') point.y = Math.min(point.y, top);
+    else point.y = Math.min(point.y, top + DOOR_H / 2 - 0.02);
     if (this.orientation === 'hatch') {
       return {
         ...flatPlaced(point, false, hdir, 'air', null),
