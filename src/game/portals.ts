@@ -9,6 +9,8 @@ export const ANCHOR_COLOR = new THREE.Color(0.1, 0.85, 1.0);
 
 export type PlacementKind = 'stand' | 'wall' | 'ceiling';
 export type SnapKind = 'behind' | 'above' | 'perch' | null;
+export type KillMove = 'strike' | 'drop';
+export type LockBlock = 'armoured' | 'sees' | 'far' | 'room' | null;
 export type Invalid = 'range' | 'close' | 'los' | 'space' | 'inhibited' | 'charge' | 'drop' | null;
 
 export interface SnapTarget {
@@ -16,6 +18,11 @@ export interface SnapTarget {
   pos: THREE.Vector3;
   forward: THREE.Vector3;
   aware: boolean;
+  /** Armoured: no strike from behind, only a drop from above. */
+  heavy: boolean;
+  /** Can be struck right now (unaware, startled, or lost sight of you). */
+  strikeable: boolean;
+  startled: boolean;
 }
 
 export interface Placement {
@@ -30,11 +37,20 @@ export interface Placement {
   exposure: number;
   light: number;
   distance: number;
+  /** A kill move is armed: OPEN performs it on `targetId`. */
+  move: KillMove | null;
+  targetId: string | null;
+  /** A guard is locked but no kill move works; why. */
+  block: LockBlock;
+  /** Both strike and drop are possible (Q/E swaps). */
+  canSwap: boolean;
 }
 
 export interface RiftContext {
   world: CollisionWorld;
   snapTargets(): SnapTarget[];
+  /** How many other guards would see a kill on this guard. */
+  witnessesOf(id: string): number;
   exposureAt(p: THREE.Vector3): number;
   lightAt(p: THREE.Vector3): number;
   inhibited(p: THREE.Vector3): boolean;
@@ -58,6 +74,7 @@ export class Portal implements RiftFrame {
   light: THREE.PointLight | null = null;
   hum: { stop(): void; move(v: THREE.Vector3): void } | null = null;
   rendered = false;
+  pairKind: PairKind = 'rift';
 
   constructor(color: THREE.Color) {
     this.mat = createPortalMaterial(color);
@@ -84,10 +101,15 @@ export class Portal implements RiftFrame {
   }
 }
 
+export type PairKind = 'rift' | 'anchor' | 'strike';
+
 export class RiftPair {
   closeTimer = -1;
   life = 0;
-  constructor(public a: Portal, public b: Portal, public kind: 'rift' | 'anchor') {
+  /** Guard this pair was aimed at (strike/drop target, or the snapped guard). */
+  targetId: string | null = null;
+  move: KillMove | null = null;
+  constructor(public a: Portal, public b: Portal, public kind: PairKind) {
     a.linked = b;
     b.linked = a;
   }
@@ -108,6 +130,7 @@ export interface Traveler {
 const UP = new THREE.Vector3(0, 1, 0);
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
+const _v3 = new THREE.Vector3();
 
 /**
  * Everything about rifts: placement solving (the "smart cursor"), the
@@ -128,6 +151,8 @@ export class RiftSystem {
   anchorMarker: THREE.Group;
   riftsOpened = 0;
   maxViews = 2;
+  /** Q/E: when both STRIKE and DROP work, prefer DROP. */
+  preferDrop = false;
 
   // preview
   ghost: THREE.Mesh;
@@ -407,49 +432,86 @@ export class RiftSystem {
       }
     }
 
-    // ---- magnet snapping onto guards ----
+    // ---- lock onto a guard: STRIKE (from behind) or DROP (from the sky) ----
+    let move: KillMove | null = null;
+    let targetId: string | null = null;
+    let block: LockBlock = null;
+    let canSwap = false;
+    let leanEye: THREE.Vector3 | null = null;
     if (!freeAim) {
       const radius = touch ? FEEL.snapRadiusTouch : FEEL.snapRadius;
+      // you lean over a ledge to look down at a mark
+      const lean = playerEye.clone().add(_v3.set(dir.x, 0, dir.z).setLength(0.8));
+      if (!w.lineOfSight(playerEye, lean)) lean.copy(playerEye);
+      leanEye = lean;
       let best: SnapTarget | null = null;
       let bestD = radius;
       for (const g of this.ctx.snapTargets()) {
-        if (g.aware) continue;
         // distance from the aim ray or from the solved point, whichever is closer
         const dPoint = Math.hypot(g.pos.x - point.x, g.pos.z - point.z);
         _v.subVectors(g.pos, camPos).setY(g.pos.y + 1 - camPos.y);
         const proj = _v.dot(dir);
-        const dRay = proj > 0 ? _v.clone().sub(dir.clone().multiplyScalar(proj)).length() : Infinity;
-        const d = Math.min(dPoint, dRay * 1.4);
-        // only guards you can actually see — never snap through walls
-        if (d < bestD && g.pos.distanceTo(playerFeet) > 2.6 && w.lineOfSight(playerEye, _v2.set(g.pos.x, g.pos.y + 1.3, g.pos.z))) {
+        let dRay = proj > 0 ? _v.clone().sub(dir.clone().multiplyScalar(proj)).length() : Infinity;
+        // aiming at the air above him (where a DROP opens) locks him too
+        _v3.set(g.pos.x, g.pos.y + 4.5, g.pos.z).sub(camPos);
+        const projUp = _v3.dot(dir);
+        if (projUp > 0) dRay = Math.min(dRay, _v3.sub(dir.clone().multiplyScalar(projUp)).length());
+        // a startled witness is the natural next link in a chain
+        const d = Math.min(dPoint, dRay * 1.4) * (g.startled ? 0.5 : 1);
+        // only guards you can actually see — never through walls
+        if (d < bestD && this.canSeeGuard(playerEye, lean, g.pos)) {
           bestD = d;
           best = g;
         }
       }
       if (best) {
-        const f = best.forward;
-        if (kind === 'ceiling' && Math.hypot(best.pos.x - point.x, best.pos.z - point.z) < 2.6) {
-          frame.position.set(best.pos.x, frame.position.y, best.pos.z);
-          exitFeet.set(best.pos.x, frame.position.y - 1.95, best.pos.z);
-          snap = 'above';
-          snapId = best.id;
-        } else {
+        const g = best;
+        targetId = g.id;
+        const f = new THREE.Vector3(g.forward.x, 0, g.forward.z).normalize();
+        // STRIKE: a rift right behind him, facing his back
+        let strike: { frame: { position: THREE.Vector3; quaternion: THREE.Quaternion }; exit: THREE.Vector3 } | null = null;
+        if (!g.heavy && g.strikeable) {
           for (const back of [1.55, 1.3, 1.9]) {
-            const bx = best.pos.x - f.x * back, bz = best.pos.z - f.z * back;
-            const gy = w.groundAt(bx, bz, 0.25, best.pos.y + 0.6);
-            if (!(gy > best.pos.y - 0.6)) continue;
+            const bx = g.pos.x - f.x * back, bz = g.pos.z - f.z * back;
+            const gy = w.groundAt(bx, bz, 0.25, g.pos.y + 0.6);
+            if (!(gy > g.pos.y - 0.6)) continue;
             const base = new THREE.Vector3(bx, gy, bz);
-            const fn = new THREE.Vector3(f.x, 0, f.z).normalize();
-            if (!this.standingClear(base, fn)) continue;
-            frame = this.standingFrame(bx, gy, bz, fn);
-            exitFeet.set(bx + fn.x * 0.55, gy, bz + fn.z * 0.55);
-            exitYaw = yawOf(fn);
-            kind = 'stand';
-            host = null;
-            snap = 'behind';
-            snapId = best.id;
+            if (!this.standingClear(base, f)) continue;
+            strike = { frame: this.standingFrame(bx, gy, bz, f), exit: new THREE.Vector3(bx + f.x * 0.55, gy, bz + f.z * 0.55) };
             break;
           }
+        }
+        // DROP: a rift hanging in the air above his head, you fall on him
+        let drop: { frame: { position: THREE.Vector3; quaternion: THREE.Quaternion }; exit: THREE.Vector3 } | null = null;
+        if (g.strikeable || g.heavy) {
+          const ceil = w.ceilingAt(g.pos.x, g.pos.z, 0.7, g.pos.y + 2.0);
+          const cy = Math.min(g.pos.y + FEEL.dropMaxAbove, ceil - 1.3);
+          if (cy >= g.pos.y + FEEL.dropMinAbove) {
+            const c = new THREE.Vector3(g.pos.x, cy, g.pos.z);
+            if (w.lineOfSight(playerEye, c.clone().add(new THREE.Vector3(0, -0.4, 0)))) {
+              drop = { frame: { position: c, quaternion: orientFrame(new THREE.Vector3(0, -1, 0), f) }, exit: new THREE.Vector3(g.pos.x, cy - 1.95, g.pos.z) };
+            }
+          }
+        }
+        const reach = Math.hypot(g.pos.x - playerFeet.x, g.pos.z - playerFeet.z) <= FEEL.strikeReach + 0.5 && Math.abs(g.pos.y - playerFeet.y) <= 18;
+        if (!reach) block = 'far';
+        else if (!g.strikeable) block = 'sees';
+        else if (strike && drop) {
+          canSwap = true;
+          move = this.preferDrop ? 'drop' : 'strike';
+        } else if (strike) move = 'strike';
+        else if (drop) move = 'drop';
+        else block = g.heavy ? 'armoured' : 'room';
+        const chosen = move === 'strike' ? strike : move === 'drop' ? drop : null;
+        if (chosen) {
+          frame = chosen.frame;
+          exitFeet.copy(chosen.exit);
+          exitYaw = yawOf(f);
+          kind = move === 'drop' ? 'ceiling' : 'stand';
+          host = null;
+          snap = move === 'drop' ? 'above' : 'behind';
+          snapId = g.id;
+          losTarget = null;
         }
       }
     }
@@ -458,17 +520,16 @@ export class RiftSystem {
     let invalid: Invalid = null;
     const center = frame.position;
     const dist = center.distanceTo(playerEye);
-    if (this.charges < 1) invalid = 'charge';
-    else if (this.ctx.inhibited(center) || this.ctx.inhibited(playerFeet)) invalid = 'inhibited';
+    if (this.ctx.inhibited(center) || this.ctx.inhibited(playerFeet)) invalid = 'inhibited';
     else if (dist > FEEL.riftRange + 0.5) invalid = 'range';
-    else if (dist < FEEL.riftMinDistance) invalid = 'close';
+    else if (dist < FEEL.riftMinDistance && !move) invalid = 'close';
     else {
       // line of sight from the eye to the rift centre (a hair in front of it)
       const n = frameNormal(frame as any, new THREE.Vector3());
       const target = losTarget ?? center.clone().addScaledVector(n, 0.15);
       const exitGround = w.groundAt(exitFeet.x, exitFeet.z, 0.2, exitFeet.y + 0.3);
-      if (!w.lineOfSight(playerEye, target, host)) invalid = 'los';
-      else if (exitFeet.y - exitGround > 4.6) invalid = 'drop';
+      if (!w.lineOfSight(playerEye, target, host) && !(move && leanEye && w.lineOfSight(leanEye, target, host))) invalid = 'los';
+      else if (exitFeet.y - exitGround > 4.6 && move !== 'drop') invalid = 'drop';
       else if (kind === 'stand') {
         const base = new THREE.Vector3(center.x, center.y - FEEL.portalHeight / 2 - 0.02, center.z);
         if (!this.standingClear(base, n)) invalid = 'space';
@@ -497,6 +558,10 @@ export class RiftSystem {
       exposure: this.ctx.exposureAt(probe),
       light: this.ctx.lightAt(probe),
       distance: dist,
+      move: invalid ? null : move,
+      targetId,
+      block,
+      canSwap,
     };
   }
 
@@ -543,18 +608,24 @@ export class RiftSystem {
   // Opening / closing
   // ------------------------------------------------------------------
 
-  openPair(near: { frame: RiftFrame; kind: PlacementKind; host: Collider | null }, far: { frame: RiftFrame; kind: PlacementKind; host: Collider | null }, kind: 'rift' | 'anchor') {
-    // one live pair per kind: replace the older one
-    // rifts stay open until closed; anchors are one link at a time
-    const live = this.pairs.filter((p) => p.kind === kind && !p.closing);
-    const max = kind === 'anchor' ? 1 : 3;
-    while (live.length >= max) this.closePair(live.shift()!);
+  openPair(near: { frame: RiftFrame; kind: PlacementKind; host: Collider | null }, far: { frame: RiftFrame; kind: PlacementKind; host: Collider | null }, kind: PairKind) {
+    // travel rifts stay open until closed (max 3); strike rifts snap shut after use
+    if (kind !== 'strike') {
+      const live = this.pairs.filter((p) => p.kind === kind && !p.closing);
+      const max = kind === 'anchor' ? 1 : 3;
+      while (live.length >= max) this.closePair(live.shift()!);
+    }
     const color = kind === 'anchor' ? ANCHOR_COLOR : RIFT_COLOR;
     const a = this.makePortal(color);
     const b = this.makePortal(color);
     a.setFrame(near.frame, near.kind, near.host);
     b.setFrame(far.frame, far.kind, far.host);
     const pair = new RiftPair(a, b, kind);
+    a.pairKind = b.pairKind = kind;
+    if (kind === 'strike') {
+      // a blade, not a doorway: open instantly
+      a.open = b.open = 1;
+    }
     this.pairs.push(pair);
     this.riftsOpened++;
     return pair;
@@ -585,8 +656,18 @@ export class RiftSystem {
   // ------------------------------------------------------------------
 
   /** If the segment prev→cur passes through an open rift, returns it. */
+  private canSeeGuard(eye: THREE.Vector3, lean: THREE.Vector3, pos: THREE.Vector3) {
+    const w = this.ctx.world;
+    for (const from of [eye, lean]) for (const h of [1.3, 1.75]) if (w.lineOfSight(from, _v2.set(pos.x, pos.y + h, pos.z))) return true;
+    return false;
+  }
+
+  /** During a strike dash only the strike pair can be crossed. */
+  strikeOnly = false;
+
   findCrossing(prev: THREE.Vector3, cur: THREE.Vector3, margin = 0): Portal | null {
     for (const pair of this.pairs) {
+      if (this.strikeOnly && pair.kind !== 'strike') continue;
       for (const p of pair.portals) {
         if (!p.isOpen || !p.linked.isOpen) continue;
         if (crossing(p, prev, cur, margin) >= 0) return p;
@@ -615,10 +696,15 @@ export class RiftSystem {
     return passDirection(from, from.linked, d, out);
   }
 
+  pairOf(p: Portal) {
+    return this.pairs.find((q) => q.a === p || q.b === p) ?? null;
+  }
+
   markPassed(p: Portal, _who: 'player' | 'body') {
-    const pair = this.pairs.find((q) => q.a === p || q.b === p);
+    const pair = this.pairOf(p);
     if (!pair) return;
     for (const q of pair.portals) q.mat.uniforms.uPulse.value = 1;
+    if (pair.kind === 'strike' && pair.closeTimer < 0) pair.closeTimer = 0.35;
   }
 
   // ------------------------------------------------------------------
@@ -726,7 +812,7 @@ export class RiftSystem {
     const camPos = camera.getWorldPosition(_v);
     const frustum = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
     const all = this.openPortals();
-    const drawable = all.filter((p) => p.open > 0.01 && p.linked.open > 0.01);
+    const drawable = all.filter((p) => p.open > 0.01 && p.linked.open > 0.01 && p.pairKind !== 'strike');
     const toRender = drawable.filter((p) => {
       const front = _v2.subVectors(camPos, p.position).dot(p.normal) > 0;
       p.mesh.updateMatrixWorld();

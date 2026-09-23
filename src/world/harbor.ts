@@ -26,6 +26,12 @@ export interface GuardDef {
   sweep?: number;
   fov?: number;
   range?: number;
+  /** Guards who watch each other and notice a missing partner. */
+  squad?: string;
+  /** Walks straight lines (decks, barges) instead of the ground nav grid. */
+  noNav?: boolean;
+  /** The mission target. */
+  boss?: boolean;
 }
 
 export interface Inhibitor {
@@ -350,8 +356,7 @@ export function buildHarbor(envMap: THREE.Texture | null, mobile: boolean): Leve
   for (let i = 0; i < 15; i++) solid('metal', 89, 0, 23 + i, 93, 0.4 * (i + 1), 24 + i, 0x4a5058, 2, { tag: 'stairs' });
 
   // inhibitor generator on the catwalk
-  const inhibitor: Inhibitor = { center: V(24, 19, 60), radius: 10.5, active: true, generator: V(72, 6, 41.5) };
-  world.add(V(71.4, 6, 40.9), V(72.6, 7.6, 42.1), { tag: 'generator', noPortal: true });
+  const inhibitor: Inhibitor = { center: V(24, 19, 60), radius: 10.5, active: false, generator: V(72, 6, 41.5) };
   const gen = new THREE.Group();
   const genBody = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.6, 1.2), new THREE.MeshStandardMaterial({ color: 0x1b1d22, metalness: 0.8, roughness: 0.35, envMap }));
   genBody.position.y = 0.8;
@@ -360,6 +365,7 @@ export function buildHarbor(envMap: THREE.Texture | null, mobile: boolean): Leve
   coil.rotation.x = Math.PI / 2;
   gen.add(genBody, coil);
   gen.position.copy(inhibitor.generator);
+  gen.visible = false; // the inhibitor is retired: the tower deck is open to rifts
   root.add(gen);
   // the inhibitor's field around the tower deck (visible dome)
   const dome = new THREE.Mesh(
@@ -378,7 +384,6 @@ export function buildHarbor(envMap: THREE.Texture | null, mobile: boolean): Leve
   root.add(dome);
   animated.push((t) => {
     coil.rotation.z = t * 2;
-    coil.visible = inhibitor.active;
     dome.visible = inhibitor.active;
     (dome.material as THREE.ShaderMaterial).uniforms.uTime.value = t;
   });
@@ -528,29 +533,51 @@ export function buildHarbor(envMap: THREE.Texture | null, mobile: boolean): Leve
 
   // ---------- Guards ----------
   const S = true;
+  // stack tops for the yard lookouts (container heights are random)
+  const top = (x: number, z: number) => world.groundAt(x, z, 0.3, 30);
+  const H = Math.PI / 2;
+  // Guards come in pods: small groups that watch each other. Walking up to one
+  // is suicide; the rift is the blade. Order matters — kill the one his mates
+  // are watching last, or chain them inside the beat.
   const guards: GuardDef[] = [
-    // outer yard
-    { id: 'gate-a', kind: 'heavy', route: [V(-2.5, 0, -13)], wait: [0], facing: Math.PI },
-    { id: 'gate-b', kind: 'guard', route: [V(2.5, 0, -13)], wait: [0], facing: Math.PI },
-    { id: 'outer-west', kind: 'guard', route: [V(-96, 0, -15), V(-12, 0, -15)], wait: [3, 3] },
-    { id: 'outer-east', kind: 'guard', route: [V(10, 0, -30), V(96, 0, -30)], wait: [3, 3] },
+    // P0 canal pair — the tutorial chain, right under your rooftop
+    { id: 'canal-a', kind: 'guard', route: [V(-85.2, 0, -69.3)], wait: [0], facing: H, squad: 'canal' },
+    { id: 'canal-b', kind: 'guard', route: [V(-82.6, 0, -69.1)], wait: [0], facing: -H, squad: 'canal' },
+    // P1 gate: armoured + partner facing each other, sentry on the gatehouse roof
+    { id: 'gate-a', kind: 'heavy', route: [V(-2.2, 0, -13.5)], wait: [0], facing: H, squad: 'gate' },
+    { id: 'gate-b', kind: 'guard', route: [V(1.4, 0, -13.2)], wait: [0], facing: -H, squad: 'gate' },
+    { id: 'gate-roof', kind: 'guard', route: [V(11.5, 3, -18)], wait: [0], facing: -2.4, static: true, squad: 'gate' },
+    // outer yard strays
+    { id: 'outer-west', kind: 'guard', route: [V(-60, 0, -20), V(-38, 0, -20)], wait: [3, 3] },
+    { id: 'outer-east', kind: 'guard', route: [V(24, 0, -30), V(46, 0, -30)], wait: [3, 3] },
     { id: 'bridge-post', kind: 'guard', route: [V(64, 0, -42)], wait: [0], facing: Math.PI },
-    { id: 'bridge-walk', kind: 'guard', route: [V(52, 0, -38), V(78, 0, -38)], wait: [2, 2] },
-    // compound
-    { id: 'searchlight', kind: 'sniper', route: [V(0, 12, 22)], wait: [0], facing: Math.PI, static: S, sweep: 1.25, fov: 0.26, range: 50 },
-    { id: 'officer', kind: 'officer', route: [V(-24, 0, 4), V(24, 0, 4), V(24, 0, 44), V(-24, 0, 44)], wait: [3, 2, 3, 2] },
-    { id: 'plaza', kind: 'guard', route: [V(-28, 0, 28), V(28, 0, 28)], wait: [2, 2] },
-    { id: 'yard-1', kind: 'guard', route: [V(-104, 0, 7.45), V(-40, 0, 7.45)], wait: [2, 2] },
-    { id: 'yard-2', kind: 'guard', route: [V(-40, 0, 27.45), V(-104, 0, 27.45)], wait: [2, 2] },
-    { id: 'yard-3', kind: 'guard', route: [V(-104, 0, 47.45), V(-40, 0, 47.45)], wait: [3, 3] },
-    { id: 'wh-door', kind: 'guard', route: [V(41, 0, 22)], wait: [0], facing: -Math.PI / 2 },
-    { id: 'wh-floor', kind: 'guard', route: [V(45, 0, 4), V(85, 0, 4), V(85, 0, 34), V(45, 0, 34)], wait: [2, 2, 2, 2] },
-    { id: 'catwalk', kind: 'heavy', route: [V(60, 6, 41)], wait: [0], facing: -Math.PI / 2, static: S },
-    { id: 'deck-a', kind: 'guard', route: [V(18.5, 18, 55)], wait: [0], facing: -2.4, static: S },
-    { id: 'deck-b', kind: 'guard', route: [V(30, 18, 66.5)], wait: [0], facing: Math.PI / 2, static: S },
-    { id: 'quay', kind: 'guard', route: [V(-100, 0, 63), V(8, 0, 63)], wait: [3, 3] },
-    { id: 'barge-walk', kind: 'guard', route: [V(-38, 0.45, 85), V(-18, 0.45, 85)], wait: [3, 3] },
-    { id: 'barge-post', kind: 'guard', route: [V(-14, 0.45, 95)], wait: [0], facing: -Math.PI / 2 },
+    { id: 'bridge-walk', kind: 'guard', route: [V(54, 0, -38), V(76, 0, -38)], wait: [2, 2] },
+    // P2 plaza: a chatting trio, and the officer whose loop meets them
+    { id: 'plaza-a', kind: 'guard', route: [V(-10, 0, 27)], wait: [0], facing: H, squad: 'plaza' },
+    { id: 'plaza-b', kind: 'guard', route: [V(-6.5, 0, 27)], wait: [0], facing: -H, squad: 'plaza' },
+    { id: 'plaza-c', kind: 'heavy', route: [V(-8.2, 0, 30)], wait: [0], facing: Math.PI, squad: 'plaza' },
+    { id: 'officer', kind: 'officer', route: [V(-8.2, 0, 24.2), V(10, 0, 8), V(20, 0, 16)], wait: [4, 2, 2], squad: 'plaza' },
+    { id: 'searchlight', kind: 'sniper', route: [V(0, 12, 22)], wait: [0], facing: Math.PI, static: true, sweep: 1.25, fov: 0.26, range: 50 },
+    // P3 container yard: short aisle loops + lookouts on the stacks
+    { id: 'yard-1', kind: 'guard', route: [V(-100, 0, 7.45), V(-78, 0, 7.45)], wait: [2, 2], squad: 'yard' },
+    { id: 'yard-2', kind: 'guard', route: [V(-66, 0, 27.45), V(-44, 0, 27.45)], wait: [2, 2], squad: 'yard' },
+    { id: 'yard-look-1', kind: 'guard', route: [V(-82.7, top(-82.7, 21.2), 21.2)], wait: [0], facing: 0.6, static: true, squad: 'yard' },
+    { id: 'yard-look-2', kind: 'guard', route: [V(-52.3, top(-52.3, 41.2), 41.2)], wait: [0], facing: 2.4, static: true, squad: 'yard' },
+    // P4 warehouse: door, floor loop, two rack pickers, armoured catwalk
+    { id: 'wh-door', kind: 'guard', route: [V(41, 0, 22)], wait: [0], facing: -H, squad: 'wh' },
+    { id: 'wh-floor', kind: 'guard', route: [V(46, 0, 34), V(68, 0, 34)], wait: [3, 3], squad: 'wh' },
+    { id: 'wh-pick-a', kind: 'guard', route: [V(62, 0, 10.5)], wait: [0], facing: 0, squad: 'wh' },
+    { id: 'wh-pick-b', kind: 'guard', route: [V(62, 0, 13.6)], wait: [0], facing: Math.PI, squad: 'wh' },
+    { id: 'catwalk', kind: 'heavy', route: [V(60, 6, 41)], wait: [0], facing: -H, static: true, squad: 'wh' },
+    // P5 control-tower deck: Harbormaster Voss and his escort
+    { id: 'voss', kind: 'officer', boss: true, noNav: true, route: [V(19, 18, 56.5), V(29, 18, 56.5)], wait: [4, 4], squad: 'deck' },
+    { id: 'deck-a', kind: 'guard', route: [V(17.2, 18, 66.5)], wait: [0], facing: -2.4, static: true, squad: 'deck' },
+    { id: 'deck-b', kind: 'guard', route: [V(30.8, 18, 66.5)], wait: [0], facing: 2.4, static: true, squad: 'deck' },
+    { id: 'deck-heavy', kind: 'heavy', route: [V(30.5, 18, 54)], wait: [0], facing: -H, static: true, squad: 'deck' },
+    // P6 quay + barge (the way out)
+    { id: 'quay', kind: 'guard', route: [V(-40, 0, 63), V(-18, 0, 63)], wait: [3, 3], squad: 'dock' },
+    { id: 'barge-walk', kind: 'guard', route: [V(-36, 0.45, 85), V(-20, 0.45, 85)], wait: [3, 3], noNav: true, squad: 'dock' },
+    { id: 'barge-post', kind: 'guard', route: [V(-14, 0.45, 95)], wait: [0], facing: -H, squad: 'dock' },
   ];
 
   const staticMeshes = mb.build(materials);
@@ -561,7 +588,7 @@ export function buildHarbor(envMap: THREE.Texture | null, mobile: boolean): Leve
     root,
     lamps,
     guards,
-    playerStart: V(-89, 16, -77),
+    playerStart: V(-86, 16, -75.6),
     playerYaw: 0,
     manifest: V(24, 18.9, 58.9),
     keycardDoor,

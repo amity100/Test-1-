@@ -29,8 +29,8 @@ export class Player {
   private mantle: { from: THREE.Vector3; to: THREE.Vector3; t: number } | null = null;
   private airTime = 0;
   lungeT = 0;
-  autoWalk: { target: THREE.Vector3; t: number } | null = null;
-  lastPassT = 0;
+  autoWalk: { target: THREE.Vector3; t: number; speed?: number } | null = null;
+  lastPassT = 99;
   crouchT = 0;
   hurtT = 0;
 
@@ -60,6 +60,7 @@ export class Player {
     if (yaw !== undefined) this.yaw = yaw;
     this.mantle = null;
     this.autoWalk = null;
+    this.lastPassT = 99; // a plain move is not a rift exit (callers that are, reset it)
   }
 
   isMantling() {
@@ -112,11 +113,12 @@ export class Player {
     const dirX = fx * my - fz * mx;
     const dirZ = fz * my + fx * mx;
     this.sprinting = sprint && !this.crouched && !this.carrying && inputMag > 0.5;
-    const maxSpeed = this.carrying ? FEEL.carrySpeed : this.sprinting ? FEEL.sprintSpeed : this.crouched ? FEEL.crouchSpeed : FEEL.walkSpeed;
+    const dash = this.autoWalk?.speed;
+    const maxSpeed = dash ?? (this.carrying ? FEEL.carrySpeed : this.sprinting ? FEEL.sprintSpeed : this.crouched ? FEEL.crouchSpeed : FEEL.walkSpeed);
     const tx = dirX * maxSpeed * (inputMag > 0 ? 1 : 0) * Math.max(inputMag, 0.35 * Math.sign(inputMag));
     const tz = dirZ * maxSpeed * (inputMag > 0 ? 1 : 0) * Math.max(inputMag, 0.35 * Math.sign(inputMag));
     const control = this.onGround ? 1 : FEEL.airControl;
-    const a = 1 - Math.exp(-FEEL.accel * control * dt);
+    const a = 1 - Math.exp(-FEEL.accel * (dash ? 3 : 1) * control * dt);
     this.vel.x += (tx - this.vel.x) * a;
     this.vel.z += (tz - this.vel.z) * a;
 

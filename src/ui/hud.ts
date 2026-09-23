@@ -12,7 +12,6 @@ export class HUD {
   private sub: HTMLDivElement;
   private hint: HTMLDivElement;
   private toast: HTMLDivElement;
-  private charges: HTMLDivElement;
   private focus: HTMLDivElement;
   private light: HTMLDivElement;
   private health: HTMLDivElement;
@@ -21,7 +20,9 @@ export class HUD {
   private icons = new Map<Guard, HTMLDivElement>();
   private iconLayer: HTMLDivElement;
   private scry: HTMLDivElement;
-  private anchorEl: HTMLDivElement;
+  private chainEl: HTMLDivElement;
+  private beat: SVGCircleElement;
+  private witnesses = new Set<Guard>();
   private subT = 0;
   private toastT = 0;
   private hintKey = '';
@@ -36,7 +37,8 @@ export class HUD {
       <div class="hud-hint"></div>
       <div class="hud-toast"></div>
       <div class="hud-icons"></div>
-      <div class="hud-cross"><i></i><i></i><i></i><i></i><b></b></div>
+      <div class="hud-cross"><i></i><i></i><i></i><i></i><b></b><svg class="beat" viewBox="0 0 60 60"><circle cx="30" cy="30" r="26" pathLength="100"/></svg></div>
+      <div class="hud-chain"><b></b><span></span></div>
       <div class="hud-aiminfo"></div>
       <div class="hud-scry"><span>RIFT VIEW</span></div>
       <div class="hud-sub"></div>
@@ -44,9 +46,7 @@ export class HUD {
       <div class="hud-bottom">
         <div class="hud-light"><svg viewBox="0 0 24 24"><path d="M12 5C6 5 2 12 2 12s4 7 10 7 10-7 10-7-4-7-10-7zm0 11a4 4 0 110-8 4 4 0 010 8z" fill="currentColor"/></svg><div class="bar"><i></i></div></div>
         <div class="hud-rift">
-          <div class="hud-charges"></div>
           <div class="hud-focus"><i></i></div>
-          <div class="hud-anchor">⚓</div>
         </div>
         <div class="hud-health"><i></i></div>
       </div>`;
@@ -57,7 +57,6 @@ export class HUD {
     this.sub = q('.hud-sub');
     this.hint = q('.hud-hint');
     this.toast = q('.hud-toast');
-    this.charges = q('.hud-charges');
     this.focus = q('.hud-focus i');
     this.light = q('.hud-light .bar i');
     this.health = q('.hud-health i');
@@ -65,8 +64,8 @@ export class HUD {
     this.aimInfo = q('.hud-aiminfo');
     this.iconLayer = q('.hud-icons');
     this.scry = q('.hud-scry');
-    this.anchorEl = q('.hud-anchor');
-    this.charges.innerHTML = Array.from({ length: FEEL.riftCharges }, () => '<i><b></b></i>').join('');
+    this.chainEl = q('.hud-chain');
+    this.beat = this.el.querySelector('.hud-cross .beat circle') as SVGCircleElement;
   }
 
   show(v: boolean) {
@@ -113,17 +112,27 @@ export class HUD {
     this.hint.classList.remove('on');
   }
 
-  update(dt: number, s: { charges: number; focus: number; light: number; health: number; aiming: number; anchor: boolean }) {
+  /** Kill chain: ×N and the moves that built it. */
+  setChain(n: number, trail: string[]) {
+    this.chainEl.classList.toggle('on', n >= 2);
+    if (n >= 2) {
+      this.chainEl.querySelector('b')!.textContent = `×${n}`;
+      this.chainEl.querySelector('span')!.textContent = trail.join(' › ');
+      this.chainEl.classList.remove('pop');
+      void this.chainEl.offsetWidth;
+      this.chainEl.classList.add('pop');
+    }
+  }
+
+  /** Guards who would see the kill on the locked target get an eye. */
+  setWitnesses(list: Guard[]) {
+    this.witnesses = new Set(list);
+  }
+
+  update(dt: number, s: { focus: number; light: number; health: number; aiming: number; chainT: number; chainMax: number }) {
     if (this.subT > 0 && (this.subT -= dt) <= 0) this.sub.classList.remove('on');
     if (this.toastT > 0 && (this.toastT -= dt) <= 0) this.toast.classList.remove('on');
     if (this.hintT > 0 && (this.hintT -= dt) <= 0) this.hint.classList.remove('on');
-    const pips = this.charges.children;
-    for (let i = 0; i < pips.length; i++) {
-      const fill = THREE.MathUtils.clamp(s.charges - i, 0, 1);
-      const el = pips[i] as HTMLElement;
-      (el.firstChild as HTMLElement).style.transform = `scaleY(${fill})`;
-      el.classList.toggle('full', fill >= 1);
-    }
     this.focus.style.transform = `scaleX(${s.focus / FEEL.focusDuration})`;
     this.light.style.transform = `scaleX(${Math.max(0.04, s.light)})`;
     this.light.parentElement!.parentElement!.classList.toggle('lit', s.light > 0.45);
@@ -132,31 +141,41 @@ export class HUD {
     this.cross.style.opacity = String(s.aiming);
     this.aimInfo.style.opacity = String(s.aiming);
     this.scry.style.opacity = String(s.aiming > 0.9 ? 1 : 0);
-    this.anchorEl.classList.toggle('set', s.anchor);
+    // the beat: a ring around the reticle draining while the chain window is open
+    const beatOn = s.chainT > 0;
+    this.cross.classList.toggle('beating', beatOn);
+    this.beat.style.strokeDasharray = `${Math.round((s.chainT / Math.max(0.01, s.chainMax)) * 100)} 100`;
+    if (beatOn) this.cross.style.opacity = '1';
     this.el.classList.toggle('aiming', s.aiming > 0.5);
     const r = this.scry.getBoundingClientRect();
     this.scryRect = { x: r.left, y: r.top, w: r.width, h: r.height };
   }
 
-  setPlacement(p: Placement | null) {
+  setPlacement(p: Placement | null, witnesses = 0) {
     if (!p) {
       this.aimInfo.innerHTML = '';
       this.cross.className = 'hud-cross';
       return;
     }
     const reason: Record<string, StrKey> = { range: 'outOfRange', close: 'tooClose', los: 'blocked', space: 'noSpace', inhibited: 'inhibited', charge: 'noCharge', drop: 'lethalDrop' };
+    const blocks: Record<string, StrKey> = { armoured: 'blockArmoured', sees: 'blockSees', far: 'blockFar', room: 'noSpace' };
     let html = `<div class="dist">${p.distance.toFixed(1)}<small>m</small></div>`;
-    if (p.invalid) html += `<div class="tag bad">${t(reason[p.invalid])}</div>`;
+    if (p.move) {
+      // the kill move is the headline
+      const name = p.move === 'strike' ? t('move_strike') : t('move_drop');
+      html += `<div class="tag kill">${p.move === 'strike' ? '🗡' : '⬇'} ${name}${witnesses ? ` <em>· ${witnesses} ${t('see')}</em>` : ''}</div>`;
+      if (p.canSwap) html += `<div class="tag swap">${t('swapHint')}</div>`;
+    } else if (p.block && p.invalid) html += `<div class="tag bad">${t(blocks[p.block])}</div>`;
+    else if (p.invalid) html += `<div class="tag bad">${t(reason[p.invalid])}</div>`;
     else {
-      if (p.snap === 'behind') html += `<div class="tag snap">🗡 ${t('snapBehind')}</div>`;
-      if (p.snap === 'above') html += `<div class="tag snap">⬇ ${t('snapAbove')}</div>`;
+      if (p.block) html += `<div class="tag bad">${t(blocks[p.block])}</div>`;
       if (p.snap === 'perch') html += `<div class="tag snap">⤒ ${t('snapPerch')}</div>`;
       const ex = p.exposure > 0.66 ? ['bad', t('seenRed')] : p.exposure > 0.25 ? ['warn', t('seenYellow')] : ['good', t('seenGreen')];
       html += `<div class="tag ${ex[0]}">${ex[1]}</div>`;
       if (p.light < 0.25) html += `<div class="tag moon">☾ ${t('snapShadow')}</div>`;
     }
     this.aimInfo.innerHTML = html;
-    this.cross.className = `hud-cross ${p.invalid ? 'bad' : p.snap ? 'snap' : 'ok'}`;
+    this.cross.className = `hud-cross ${p.move ? 'kill' : p.invalid ? 'bad' : p.snap ? 'snap' : 'ok'}`;
   }
 
   /** Floating ?/! indicators over guards, clamped to screen edges. */
@@ -164,7 +183,8 @@ export class HUD {
     const v = new THREE.Vector3();
     for (const g of guards) {
       let el = this.icons.get(g);
-      const show = g.alive && (g.suspicion > 0.04 || g.state !== 'patrol');
+      const witness = this.witnesses.has(g);
+      const show = g.alive && (g.suspicion > 0.04 || g.state !== 'patrol' || witness || g.stunT > 0);
       if (!show) {
         if (el) el.style.display = 'none';
         continue;
@@ -186,11 +206,18 @@ export class HUD {
       y = THREE.MathUtils.clamp(y, 30, h - 30);
       el.style.transform = `translate(${x}px, ${y}px) translate(-50%,-50%) scale(${off ? 0.8 : 1})`;
       const alert = g.state === 'alert';
+      const startled = g.state === 'startled';
+      const stunned = g.stunT > 0;
       el.classList.toggle('alert', alert);
+      el.classList.toggle('startled', startled);
+      el.classList.toggle('stunned', stunned);
+      el.classList.toggle('witness', witness && !startled && !alert);
       el.classList.toggle('search', g.state === 'search' || g.state === 'investigate');
       el.classList.toggle('edge', off);
-      (el.querySelector('.fg') as SVGElement).style.strokeDasharray = `${Math.round(g.suspicion * 100)} 100`;
-      el.querySelector('b')!.textContent = alert ? '!' : '?';
+      // a startled witness's ring drains: silence him before it closes
+      const fill = startled ? g.startleT / Math.max(0.01, g.startleMax) : g.suspicion;
+      (el.querySelector('.fg') as SVGElement).style.strokeDasharray = `${Math.round(fill * 100)} 100`;
+      el.querySelector('b')!.textContent = stunned ? '✶' : alert || startled ? '!' : witness ? '👁' : '?';
     }
   }
 

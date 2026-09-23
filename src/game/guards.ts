@@ -6,7 +6,7 @@ import { GuardDef } from '../world/harbor';
 import { Character } from './characters';
 import { dampAngle } from './player';
 
-export type GuardState = 'patrol' | 'suspicious' | 'investigate' | 'search' | 'alert' | 'dead';
+export type GuardState = 'patrol' | 'suspicious' | 'investigate' | 'search' | 'alert' | 'startled' | 'dead';
 
 export interface Stimulus {
   kind: 'player' | 'noise' | 'body' | 'rift' | 'radio' | 'alarm';
@@ -39,6 +39,8 @@ export class Body {
   yaw = 0;
   state: 'lying' | 'carried' | 'flying' = 'lying';
   discovered = false;
+  /** Game time it last came through a rift (-1 = never / spent). */
+  riftT = -1;
   constructor(public guard: Guard) {}
   get char() {
     return this.guard.char;
@@ -77,11 +79,26 @@ export class Guard {
   lastPos = new THREE.Vector3();
   heardRiftT = 0;
   post: THREE.Vector3;
+  /** Saw a colleague die: real seconds left before he raises his squad. */
+  startleT = 0;
+  startleMax = 1;
+  /** Knocked silly (a body hurled through a rift): any takedown works. */
+  stunT = 0;
+  /** Held still while a strike is in flight. */
+  frozenT = 0;
+  /** About to fire: shown as a laser. */
+  aimWarn = false;
+  glanceT = 3 + Math.random() * 4;
+  glancing = false;
+  missT = 0;
+  missed = new Set<Guard>();
+  dispatchT = -1;
+  raisedAlarm = false;
 
   constructor(public def: GuardDef, char: Character, index: number) {
     this.char = char;
     this.name = NAMES[index % NAMES.length];
-    this.hasKeycard = def.kind === 'officer';
+    this.hasKeycard = def.kind === 'officer' && !def.boss;
     this.pos.copy(def.route[0]);
     this.post = def.route[0].clone();
     this.yaw = def.facing ?? 0;
@@ -114,7 +131,12 @@ export class Guard {
   }
 
   get aware() {
-    return this.state === 'alert' || (this.state === 'suspicious' && this.suspicion > 0.6);
+    return this.state === 'alert' || this.state === 'startled' || (this.state === 'suspicious' && this.suspicion > 0.6);
+  }
+
+  /** A rift strike lands if he is not actively tracking you. */
+  get strikeable() {
+    return this.alive && (this.state !== 'alert' || this.unseenT > 1);
   }
 
   forward(out = new THREE.Vector3()) {
@@ -191,6 +213,12 @@ export class GuardSystem {
 
   private goTo(g: Guard, target: THREE.Vector3) {
     g.target.copy(target);
+    if (g.def.noNav) {
+      // up on a deck or barge: walk straight, never onto the ground grid
+      g.path = [target.clone()];
+      g.pathIdx = 0;
+      return;
+    }
     const path = this.nav.findPath(g.pos, target);
     g.path = path ?? [target.clone()];
     g.pathIdx = 0;
@@ -205,7 +233,7 @@ export class GuardSystem {
   /** Something made noise at `pos` audible within `radius`. */
   noise(pos: THREE.Vector3, radius: number, strength = 0.5) {
     for (const g of this.guards) {
-      if (!g.alive || g.state === 'alert') continue;
+      if (!g.alive || g.state === 'alert' || g.state === 'startled') continue;
       const d = g.pos.distanceTo(pos);
       if (d > radius) continue;
       g.suspicion = Math.min(1, g.suspicion + strength * (1 - d / radius) + 0.1);
@@ -221,12 +249,15 @@ export class GuardSystem {
   }
 
   /** Raise the alarm: everyone searches `pos`. */
-  alarm(pos: THREE.Vector3, source: Guard | null) {
+  alarm(pos: THREE.Vector3, source: Guard | null, radius = 45) {
     this.globalAlarm = Math.max(this.globalAlarm, 1);
     for (const g of this.guards) {
       if (!g.alive || g === source) continue;
-      g.alertLevel = Math.max(g.alertLevel, 2);
-      if (g.state !== 'alert') {
+      // the far side of the harbour gets wary, but keeps its posts
+      g.alertLevel = Math.max(g.alertLevel, 1);
+      if (g.pos.distanceTo(pos) > radius || g.def.static) continue;
+      g.alertLevel = 2;
+      if (g.state !== 'alert' && g.state !== 'startled') {
         g.lastKnown.copy(pos);
         this.startSearch(g);
       }
@@ -240,8 +271,53 @@ export class GuardSystem {
     this.goTo(g, p);
   }
 
+  /**
+   * A guard just died at `victim`'s spot. Anyone who could see it is
+   * startled: he turns, and unless he is silenced within `time` real seconds
+   * he raises his squad. Returns the witnesses.
+   */
+  witness(victim: THREE.Vector3, time: number) {
+    const chest = victim.clone().add(new THREE.Vector3(0, 1.1, 0));
+    const out: Guard[] = [];
+    // every kill is a new beat: witnesses already reeling get a fresh breath too
+    for (const o of this.guards) if (o.alive && o.state === 'startled') o.startleT = Math.max(o.startleT, time);
+    for (const o of this.guards) {
+      if (!o.alive || o.state === 'alert' || o.state === 'startled') continue;
+      if (o.pos.distanceTo(victim) < 0.5) continue;
+      if (this.sightFactor(o, chest, 0.6, false) <= 0.02) continue;
+      o.state = 'startled';
+      o.stateT = 0;
+      o.startleT = o.startleMax = time;
+      o.lastKnown.copy(victim);
+      o.suspicion = Math.max(o.suspicion, 0.8);
+      o.speed = 0;
+      this.hooks.becameSuspicious(o);
+      out.push(o);
+    }
+    return out;
+  }
+
+  /** Guards who would see a kill on `g` right now. */
+  witnessesOf(g: Guard) {
+    const chest = g.pos.clone().add(new THREE.Vector3(0, 1.1, 0));
+    let n = 0;
+    const who: Guard[] = [];
+    for (const o of this.guards) {
+      if (o === g || !o.alive || o.state === 'alert') continue;
+      if (this.sightFactor(o, chest, 0.6, false) > 0.02) {
+        n++;
+        who.push(o);
+      }
+    }
+    return who;
+  }
+
   kill(g: Guard) {
     g.state = 'dead';
+    g.startleT = 0;
+    g.stunT = 0;
+    g.frozenT = 0;
+    g.aimWarn = false;
     g.suspicion = 0;
     g.deadT = 0;
     g.fan.visible = false;
@@ -250,11 +326,15 @@ export class GuardSystem {
     b.pos.copy(g.pos);
     b.yaw = g.yaw;
     this.bodies.push(b);
-    g.radioT = FEEL.radioCheckDelay * (0.8 + Math.random() * 0.4);
+    // squad mates notice a missing partner themselves; loners get a radio check
+    g.radioT = g.def.squad ? -1 : FEEL.radioCheckDelay * (0.8 + Math.random() * 0.4);
     return b;
   }
 
-  update(dt: number, player: PlayerPerception, openRifts: { position: THREE.Vector3; normal: THREE.Vector3 }[], t: number) {
+  /** True while a kill move is in flight: witnesses' reaction clocks wait for it. */
+  holdStartle = false;
+
+  update(dt: number, player: PlayerPerception, openRifts: { position: THREE.Vector3; normal: THREE.Vector3 }[], t: number, realDt = dt) {
     let tension = 0;
     let alertCount = 0;
     for (const g of this.guards) {
@@ -263,6 +343,35 @@ export class GuardSystem {
         continue;
       }
       g.stateT += dt;
+      g.aimWarn = false;
+      // frozen by an incoming strike, or stunned: no thinking, no moving
+      if (g.frozenT > 0 || g.stunT > 0) {
+        g.frozenT = Math.max(0, g.frozenT - realDt);
+        g.stunT = Math.max(0, g.stunT - dt);
+        g.speed = 0;
+        g.char.root.position.copy(g.pos);
+        g.char.root.rotation.y = g.yaw;
+        g.char.update(dt, 0);
+        tension = Math.max(tension, 0.5);
+        continue;
+      }
+      // a startled witness: turn to the body and shout unless silenced in time
+      if (g.state === 'startled') {
+        if (!this.holdStartle) g.startleT -= realDt;
+        const want = Math.atan2(g.lastKnown.x - g.pos.x, g.lastKnown.z - g.pos.z);
+        g.yaw = dampAngle(g.yaw, want, 14, dt);
+        g.speed = 0;
+        tension = Math.max(tension, 0.9);
+        if (g.startleT <= 0) {
+          g.lastKnown.copy(player.feet);
+          this.becomeAlert(g, true);
+        }
+        g.char.root.position.copy(g.pos);
+        g.char.root.rotation.y = g.yaw;
+        g.char.update(dt, 0);
+        continue;
+      }
+      this.squadWatch(g, dt);
       // ---------- perception ----------
       const f = player.alive ? this.sightFactor(g, player.chest, player.light, player.crouched) : 0;
       g.seesPlayer = f > 0;
@@ -372,7 +481,7 @@ export class GuardSystem {
           const arrived = this.follow(g, dt, g.stateT < 8 ? FEEL.guardRun * 0.7 : 2.0);
           if (arrived && this.lookAround(g, dt, 2.5)) {
             g.searchPoints--;
-            if (g.searchPoints <= 0 || g.stateT > 45) {
+            if (g.searchPoints <= 0 || g.stateT > 25) {
               g.suspicion = 0.15;
               this.hooks.bark(g, 'lostBark');
               this.returnToPatrol(g);
@@ -392,6 +501,7 @@ export class GuardSystem {
           const want = Math.atan2(g.lastKnown.x - g.pos.x, g.lastKnown.z - g.pos.z);
           if (g.seesPlayer) {
             g.yaw = dampAngle(g.yaw, want, 8, dt);
+            g.aimWarn = g.fireT < FEEL.aimWarnTime;
             const d = g.pos.distanceTo(player.feet);
             if (d > 11) {
               if (g.path.length === 0 || g.target.distanceTo(g.lastKnown) > 3) this.goTo(g, g.lastKnown);
@@ -445,18 +555,20 @@ export class GuardSystem {
     return { tension, alarm: alertCount > 0 ? 1 : 0 };
   }
 
-  private becomeAlert(g: Guard) {
+  private becomeAlert(g: Guard, squadOnly = false) {
     this.setState(g, 'alert');
+    g.raisedAlarm = true;
     g.suspicion = 1;
     g.alertLevel = 2;
-    g.fireT = 0.6;
+    g.fireT = 0.6 + FEEL.aimWarnTime;
     this.hooks.becameAlert(g);
     this.hooks.bark(g, 'alarmBark');
     this.hooks.alarmRaised(g, g.lastKnown);
-    // shout: nearby guards join
+    // shout: nearby guards join (a witness only reaches his own squad)
+    const radius = squadOnly ? FEEL.squadAlertRadius : 30;
     for (const o of this.guards) {
       if (o === g || !o.alive || o.state === 'alert') continue;
-      if (o.pos.distanceTo(g.pos) < 30) {
+      if (o.pos.distanceTo(g.pos) < radius) {
         o.lastKnown.copy(g.lastKnown);
         o.alertLevel = 2;
         o.suspicion = Math.max(o.suspicion, 0.75);
@@ -497,7 +609,7 @@ export class GuardSystem {
         g.speed = 0;
         g.lookT += dt;
         const base = g.def.facing ?? 0;
-        g.yaw = dampAngle(g.yaw, base + Math.sin(g.lookT * 0.35) * 0.9, 2, dt);
+        if (!g.glancing) g.yaw = dampAngle(g.yaw, base + Math.sin(g.lookT * 0.35) * 0.9, 2, dt);
       }
       return;
     }
@@ -505,7 +617,7 @@ export class GuardSystem {
       g.waitT -= dt;
       g.speed = 0;
       g.lookT += dt;
-      g.yaw = dampAngle(g.yaw, g.lookBase + Math.sin(g.lookT * 0.9) * 0.7, 2.5, dt);
+      if (!g.glancing) g.yaw = dampAngle(g.yaw, g.lookBase + Math.sin(g.lookT * 0.9) * 0.7, 2.5, dt);
       if (g.waitT <= 0) {
         g.routeIdx = (g.routeIdx + 1) % route.length;
         this.goTo(g, route[g.routeIdx]);
@@ -573,7 +685,53 @@ export class GuardSystem {
     // radio check on silent guards
     if (g.radioT > 0) {
       g.radioT -= dt;
-      if (g.radioT <= 0) this.radioCheck(g);
+      if (g.radioT <= 0) {
+        this.radioCheck(g);
+        g.dispatchT = 6;
+      }
+    }
+    if (g.dispatchT > 0) {
+      g.dispatchT -= dt;
+      if (g.dispatchT <= 0) this.dispatchCheck(g);
+    }
+  }
+
+  /**
+   * Squads: posted guards glance at their partner every few seconds, and a
+   * partner who has gone missing is noticed after a while.
+   */
+  private squadWatch(g: Guard, dt: number) {
+    if (!g.def.squad || g.state !== 'patrol') return;
+    const mates = this.guards.filter((o) => o !== g && o.def.squad === g.def.squad);
+    // missing mate
+    for (const m of mates) {
+      if (m.alive || g.missed.has(m)) continue;
+      g.missT += dt;
+      if (g.missT > FEEL.mateMissingTime) {
+        g.missed.add(m);
+        g.missT = 0;
+        g.radioCalled = true;
+        g.alertLevel = Math.max(g.alertLevel, 1);
+        g.lastKnown.copy(m.post);
+        g.suspicion = Math.max(g.suspicion, 0.35);
+        this.hooks.bark(g, 'heardSomething');
+        this.setState(g, 'investigate');
+        this.goTo(g, m.post);
+        return;
+      }
+    }
+    // glance rhythm (only while standing)
+    if (g.speed > 0.3) return;
+    g.glanceT -= dt;
+    if (g.glanceT <= 0) {
+      g.glancing = !g.glancing;
+      g.glanceT = g.glancing ? 1.5 : 5 + Math.random() * 3;
+    }
+    const alive = mates.filter((m) => m.alive);
+    if (g.glancing && alive.length) {
+      const m = alive[0];
+      g.yaw = dampAngle(g.yaw, Math.atan2(m.pos.x - g.pos.x, m.pos.z - g.pos.z), 5, dt);
+      g.lookT = 0;
     }
   }
 

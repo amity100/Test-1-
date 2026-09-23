@@ -54,6 +54,23 @@ export const FEEL = {
   anchorHoldTime: 0.55,
   snatchRange: 2.4,
 
+  // Rift kills ("the rift is the blade")
+  strikeReach: 24, // lock-on distance for STRIKE / DROP (travel rifts still reach riftRange)
+  edgeTime: 1.5, // seconds after leaving a rift in which a takedown is possible
+  strikeDash: 10, // m/s dash through a strike rift
+  dropMaxAbove: 6.0, // sky rift centre above the victim's feet
+  dropMinAbove: 3.9,
+  chainBase: 1.5, // real seconds of "beat" after a kill
+  chainStep: 0.15,
+  chainMin: 0.8,
+  chainTimeScale: 0.4,
+  witnessTime: 1.2, // real seconds before a startled witness raises his squad
+  witnessTimeNoSlow: 1.9,
+  squadAlertRadius: 15,
+  mateMissingTime: 8,
+  hurlSpeed: 5,
+  aimWarnTime: 0.45,
+
   // Stealth
   takedownRange: 1.9,
   guardViewDistance: 27,

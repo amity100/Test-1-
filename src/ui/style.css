@@ -180,7 +180,7 @@ input[type=range] { pointer-events: auto; accent-color: var(--rift); width: 100%
 .t-close { right: 178px; bottom: 84px; width: 46px !important; height: 46px !important; font-size: 16px !important; }
 .t-aim { position: absolute; inset: 0; pointer-events: none; display: none; }
 .touch.aiming .t-aim { display: block; }
-.touch.aiming .t-cluster .t-action, .touch.aiming .t-cluster .t-jump, .touch.aiming .t-cluster .t-crouch, .touch.aiming .t-cluster .t-close, .touch.aiming .t-cluster .t-anchor { opacity: .25; }
+.touch.aiming .t-cluster .t-jump, .touch.aiming .t-cluster .t-crouch, .touch.aiming .t-cluster .t-close { opacity: .25; }
 .t-open { right: max(118px, calc(env(safe-area-inset-right) + 100px)); bottom: max(118px, calc(env(safe-area-inset-bottom) + 100px)); width: 96px; height: 96px; background: rgba(255,140,31,.85) !important; color: #140a02 !important; border: none !important; font-size: 15px !important; box-shadow: 0 0 28px var(--rift-glow); }
 .t-cancel { left: max(18px, env(safe-area-inset-left)); top: max(70px, calc(env(safe-area-inset-top) + 60px)); width: 76px; height: 40px; border-radius: 20px !important; font-size: 11px !important; }
 .t-dist { position: absolute; right: max(14px, env(safe-area-inset-right)); top: 30%; height: 30%; width: 52px; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
@@ -223,3 +223,23 @@ input[type=range] { pointer-events: auto; accent-color: var(--rift); width: 100%
   .stats div { padding: 6px; }
   .ctl-grid div { padding: 6px 10px; font-size: 12px; }
 }
+
+/* ---- kill moves, chain, witnesses ---- */
+.hud-cross.kill i { background: #ff3b2f; box-shadow: 0 0 8px #ff3b2f; }
+.hud-cross .beat { position: absolute; left: 50%; top: 50%; width: 64px; height: 64px; transform: translate(-50%, -50%) rotate(-90deg); opacity: 0; transition: opacity .15s; overflow: visible; }
+.hud-cross .beat circle { fill: none; stroke: var(--rift); stroke-width: 3; stroke-linecap: round; filter: drop-shadow(0 0 4px var(--rift)); }
+.hud-cross.beating .beat { opacity: 1; }
+.hud-aiminfo .tag.kill { color: #ff5a3c; font-size: 13px; font-weight: 800; letter-spacing: .22em; border-left-color: #ff5a3c; background: rgba(40,6,4,.65); }
+.hud-aiminfo .tag.kill em { font-style: normal; color: var(--warn); font-weight: 600; letter-spacing: .1em; }
+.hud-aiminfo .tag.swap { color: var(--dim); font-size: 10px; }
+.hud-chain { position: absolute; left: 50%; top: 30%; transform: translateX(-50%); text-align: center; opacity: 0; transition: opacity .2s; pointer-events: none; direction: ltr; }
+.hud-chain.on { opacity: 1; }
+.hud-chain b { display: block; font-size: 44px; font-weight: 800; color: var(--rift); text-shadow: 0 0 24px var(--rift-glow); letter-spacing: .05em; }
+.hud-chain span { font-size: 12px; letter-spacing: .25em; color: var(--ink); text-shadow: 0 1px 6px #000; }
+.hud-chain.pop b { animation: chainpop .35s ease-out; }
+@keyframes chainpop { 0% { transform: scale(1.6); } 100% { transform: scale(1); } }
+.gicon.startled .fg { stroke: #ff3b2f; }
+.gicon.startled b { color: #ff3b2f; }
+.gicon.witness .bg { stroke: var(--warn); }
+.gicon.witness b { font-size: 14px; }
+.gicon.stunned b { color: #9fd8ff; }

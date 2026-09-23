@@ -34,6 +34,13 @@ export class CameraRig {
     this.pivot.y = THREE.MathUtils.damp(this.pivot.y, pivotTarget.y, 14, dt);
     if (Math.abs(this.pivot.y - pivotTarget.y) > 3) this.pivot.y = pivotTarget.y;
 
+    // looking steeply down (a rooftop, a ledge): lean the view out over the edge
+    const peek = THREE.MathUtils.clamp((-this.pitch - 0.5) / 0.6, 0, 1) * 1.4;
+    if (peek > 0.01) {
+      const fl = _v.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
+      const ph = world.raycast(this.pivot, fl, peek + 0.3);
+      this.pivot.addScaledVector(fl, ph ? Math.max(0, ph.distance - 0.3) : peek);
+    }
     const wantDist = THREE.MathUtils.lerp(FEEL.camDistance, FEEL.aimDistance, this.aim);
     const shoulder = THREE.MathUtils.lerp(FEEL.camShoulder, FEEL.aimShoulder, this.aim);
     const fwd = this.forward(new THREE.Vector3());

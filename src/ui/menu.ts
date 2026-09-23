@@ -100,6 +100,8 @@ export class Menu {
         <div><span>${t('kills')}</span><b>${s.kills}</b></div>
         <div><span>${t('bodiesFound')}</span><b>${s.bodiesFound}</b></div>
         <div><span>${t('riftsUsed')}</span><b>${s.rifts}</b></div>
+        <div><span>${t('bestChain')}</span><b>×${s.bestChain ?? 0}</b></div>
+        <div><span>${t('movesUsed')}</span><b>${s.moves ?? 0}/5</b></div>
       </div>
       <div class="btns">
         ${win ? '' : `<button class="primary" data-go="retry">${t('retry')}</button>`}
@@ -125,8 +127,9 @@ export class Menu {
       <div><b>☝ ${getLang() === 'he' ? 'צד ימין' : 'Right side'}</b><span>${getLang() === 'he' ? 'גרירה = מבט / כיוון' : 'Drag = look / aim'}</span></div>
       <div class="hl"><b>${t('rift')}</b><span>${getLang() === 'he' ? 'מצב כיוון פורטל — גרור למקם, פתח לפתוח' : 'Rift aim mode — drag to place, OPEN to open'}</span></div>
       <div class="hl"><b>${t('distance')}</b><span>${getLang() === 'he' ? 'החלק למעלה/למטה לשינוי מרחק' : 'Slide up/down to change distance'}</span></div>
-      <div class="hl"><b>⚓</b><span>${getLang() === 'he' ? 'נגיעה: פורטל לעוגן · החזקה: הצבת עוגן' : 'Tap: rift to Anchor · Hold: set Anchor'}</span></div>
-      <div><b>F</b><span>${getLang() === 'he' ? 'חיסול · חטיפה · נשיאה · זריקה · שימוש' : 'Takedown · Snatch · Carry · Throw · Use'}</span></div>
+      <div class="hl"><b>⇄</b><span>${getLang() === 'he' ? 'החלפה בין STRIKE ל-DROP / סיבוב היציאה' : 'Swap STRIKE ⇄ DROP / turn the exit'}</span></div>
+      <div class="hl"><b>✕</b><span>${getLang() === 'he' ? 'סגירת כל הפורטלים' : 'Close all rifts'}</span></div>
+      <div><b>F</b><span>${getLang() === 'he' ? 'משיכה · נשיאה · זריקה · שימוש' : 'Pull · Carry · Throw · Use'}</span></div>
     </div>`;
     this.render(`<h2 class="title">${t('controls')}</h2>${IS_TOUCH ? touchHtml : t('controlsHtml')}<div class="btns"><button class="primary" data-go="goBack">${t('back')}</button></div>`, 'panel');
   }

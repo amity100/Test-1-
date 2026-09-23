@@ -36,7 +36,6 @@ export class TouchControls {
       <div class="t-cluster">
         <button class="t-btn t-action" data-a="interact"><span>F</span></button>
         <button class="t-btn t-rift" data-a="rift"><i class="rift-ico"></i><span>${t('rift')}</span></button>
-        <button class="t-btn t-anchor" data-a="anchor"><span>⚓</span></button>
         <button class="t-btn t-jump" data-a="jump"><span class="ico">⤒</span><small>${t('jump')}</small></button>
         <button class="t-btn t-crouch" data-a="crouch"><span class="ico">⤓</span><small>${t('crouch')}</small></button>
         <button class="t-btn t-close" data-a="close"><span>✕</span></button>
@@ -44,7 +43,7 @@ export class TouchControls {
       <div class="t-aim">
         <button class="t-btn t-open" data-a="open"><span>${t('open')}</span></button>
         <button class="t-btn t-cancel" data-a="cancel"><span>${t('cancel')}</span></button>
-        <div class="t-rots"><button class="t-btn t-rot" data-a="rotL"><span>⟲</span></button><button class="t-btn t-rot" data-a="rotR"><span>⟳</span></button></div>
+        <div class="t-rots"><button class="t-btn t-rot" data-a="rotR"><span>⇄</span></button></div>
         <div class="t-dist"><div class="t-dist-label">${t('distance')}</div><div class="t-dist-track"><i></i></div></div>
       </div>`;
     root.appendChild(this.el);
@@ -71,8 +70,6 @@ export class TouchControls {
       this.distLast = tt.clientY;
     }, { passive: false });
 
-    let anchorTimer = 0;
-    let anchorHeld = false;
     this.el.querySelectorAll<HTMLButtonElement>('.t-btn').forEach((b) => {
       const a = b.dataset.a!;
       b.addEventListener('touchstart', (e) => {
@@ -91,11 +88,6 @@ export class TouchControls {
           case 'cancel':
             this.setAiming(false);
             break;
-          case 'anchor':
-            anchorHeld = true;
-            input.down('anchor');
-            anchorTimer = window.setTimeout(() => navigator.vibrate?.(30), FEEL.anchorHoldTime * 1000);
-            break;
           default:
             input.down(a as any);
         }
@@ -103,11 +95,7 @@ export class TouchControls {
       b.addEventListener('touchend', (e) => {
         e.preventDefault();
         b.classList.remove('down');
-        if (a === 'anchor' && anchorHeld) {
-          anchorHeld = false;
-          clearTimeout(anchorTimer);
-          input.up('anchor');
-        } else if (!['rift', 'open', 'cancel'].includes(a)) input.up(a as any);
+        if (!['rift', 'open', 'cancel'].includes(a)) input.up(a as any);
       }, { passive: false });
     });
   }

@@ -12,10 +12,12 @@ import { CameraRig } from './camera';
 import { Character, CharacterAsset } from './characters';
 import { Body, Guard, GuardSystem } from './guards';
 import { Player } from './player';
-import { Placement, Portal, RiftSystem } from './portals';
+import { KillMove, Placement, Portal, RiftPair, RiftSystem } from './portals';
 import { HUD } from '../ui/hud';
 import { t } from '../ui/i18n';
-import { orientFrame } from './portalMath';
+import { frameNormal, orientFrame, RiftFrame } from './portalMath';
+
+const frameNormalOf = (f: RiftFrame) => frameNormal(f, new THREE.Vector3());
 
 export interface Settings {
   quality: QualityName;
@@ -25,6 +27,8 @@ export interface Settings {
 }
 
 export interface MissionStats {
+  bestChain?: number;
+  moves?: number;
   time: number;
   detections: number;
   kills: number;
@@ -82,6 +86,19 @@ export class Game {
   private asset!: CharacterAsset;
   private envMap: THREE.Texture | null = null;
   private searchlights: { guard: Guard; spot: THREE.SpotLight; beam: THREE.Mesh; pool: THREE.Mesh }[] = [];
+  /** A strike/drop in flight. */
+  private strike: { guard: Guard; move: KillMove; pair: RiftPair | null; t: number; passed: boolean; homing: number } | null = null;
+  /** Kill chain: real seconds left in the current beat, links so far, the moves used. */
+  chainT = 0;
+  chain = 0;
+  chainTrail: string[] = [];
+  bestChain = 0;
+  movesUsed = new Set<string>();
+  private noFallDamageT = 0;
+  private nearUnarmed: Guard | null = null;
+  silentPods = 0;
+  podCount = 6;
+  private lasers!: THREE.LineSegments;
   private hintWall = false;
   private hintPlaza = false;
 
@@ -119,6 +136,12 @@ export class Game {
     this.tracer.visible = false;
     this.tracer.frustumCulled = false;
     this.scene.add(this.tracer);
+    // red aim lasers: every shot is telegraphed
+    const lg = new THREE.BufferGeometry();
+    lg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(16 * 6), 3));
+    this.lasers = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: new THREE.Color(5, 0.3, 0.2), transparent: true, opacity: 0.85 }));
+    this.lasers.frustumCulled = false;
+    this.scene.add(this.lasers);
     this.objMarker = document.createElement('div');
     this.objMarker.className = 'objmarker';
     this.objMarker.innerHTML = '<i></i><span></span>';
@@ -144,7 +167,14 @@ export class Game {
     this.rift = new RiftSystem(
       {
         world: this.level.world,
-        snapTargets: () => this.guards.guards.filter((g) => g.alive).map((g) => ({ id: g.name, pos: g.pos, forward: g.forward(), aware: g.aware })),
+        snapTargets: () =>
+          this.guards.guards
+            .filter((g) => g.alive)
+            .map((g) => ({ id: g.def.id, pos: g.pos, forward: g.forward(), aware: g.aware, heavy: g.def.kind === 'heavy', strikeable: g.strikeable, startled: g.state === 'startled' })),
+        witnessesOf: (id) => {
+          const g = this.guardById(id);
+          return g ? this.guards.witnessesOf(g).length : 0;
+        },
         exposureAt: (p) => this.guards.exposureAt(p, this.lightAt(p, false)),
         lightAt: (p) => this.lightAt(p, false),
         inhibited: (p) => this.level.inhibitor.active && p.distanceTo(this.level.inhibitor.center) < this.level.inhibitor.radius,
@@ -185,9 +215,6 @@ export class Game {
       const at = body ? body.pos : g.pos;
       this.audio.radio(at);
       if (at.distanceTo(this.player.pos) < 25) this.hud.subtitle(`RADIO: ${t('radioCheck', { name: g.name })}`, 3.5);
-      setTimeout(() => {
-        if (this.mode === 'playing' || this.mode === 'paused') this.guards.dispatchCheck(g);
-      }, 6000);
     };
     this.scene.add(this.guards.group);
     this.level.guards.forEach((def, i) => {
@@ -231,6 +258,7 @@ export class Game {
   // ------------------------------------------------------------------
 
   resetMission() {
+    this.runId++;
     const L = this.level;
     this.rift.reset();
     for (const b of this.guards.bodies) b.char.root.removeFromParent();
@@ -257,7 +285,16 @@ export class Game {
     this.rig.pitch = -0.15;
     this.rig.snapTo(this.player.pos);
     this.obj = { manifest: false, keycard: false, generator: false, door: false, extracted: false };
-    L.inhibitor.active = true;
+    L.inhibitor.active = false;
+    this.strike = null;
+    this.chainT = 0;
+    this.chain = 0;
+    this.bestChain = 0;
+    this.chainTrail = [];
+    this.movesUsed.clear();
+    this.silentPods = 0;
+    this.podCount = new Set(L.guards.filter((d) => d.squad).map((d) => d.squad)).size;
+    this.hud.setChain(0, []);
     ((L.doorMesh.userData.reader as THREE.Mesh).material as THREE.MeshBasicMaterial).color.setRGB(4, 0.3, 0.3);
     this.nav.rebuild();
     this.stats = { time: 0, detections: 0, kills: 0, bodiesFound: 0, rifts: 0 };
@@ -334,11 +371,12 @@ export class Game {
     this.touch?.show(true);
     this.startT = performance.now();
     this.input.requestLock();
-    setTimeout(() => this.hint('move', t('hintMove'), 6), 1200);
+    setTimeout(() => this.hint('move', t('hintMove'), 8), 1200);
     setTimeout(() => this.hint('aim', this.deviceText('hintAimKbm', 'hintAimPad', 'hintAimTouch'), 9), 7800);
   }
 
   retryFromCheckpoint() {
+    this.runId++;
     this.rift.reset();
     this.player.teleport(this.checkpoint.pos, this.checkpoint.yaw);
     this.player.health = FEEL.maxHealth;
@@ -354,7 +392,13 @@ export class Game {
       g.routeIdx = 0;
       g.waitT = 0;
       g.investigateBody = null;
+      g.startleT = 0;
+      g.stunT = 0;
+      g.frozenT = 0;
     }
+    this.strike = null;
+    this.chainT = 0;
+    this.hud.setChain(0, []);
     this.guards.globalAlarm = 0;
     this.damage = 0;
     this.mode = 'playing';
@@ -389,6 +433,15 @@ export class Game {
     document.exitPointerLock?.();
   }
 
+  /** Delayed failure that a quick retry can't inherit. */
+  private runId = 0;
+  private endLater(win: boolean, ms: number) {
+    const run = this.runId;
+    setTimeout(() => {
+      if (run === this.runId) this.end(win);
+    }, ms);
+  }
+
   private end(win: boolean) {
     this.mode = 'ended';
     this.input.active = false;
@@ -398,7 +451,9 @@ export class Game {
     this.stats.time = this.time;
     this.stats.rifts = this.rift.riftsOpened;
     const s = this.stats;
-    const rating = !win ? '' : s.detections === 0 && s.kills === 0 ? t('ghost') : s.detections === 0 && s.bodiesFound === 0 ? t('shadow') : s.detections <= 1 ? t('assassin') : t('blunt');
+    s.bestChain = this.bestChain;
+    s.moves = this.movesUsed.size;
+    const rating = !win ? '' : s.detections === 0 && s.bodiesFound === 0 ? t('ghost') : s.detections === 0 ? t('shadow') : s.detections <= 1 ? t('assassin') : t('blunt');
     this.onEnd(win, { ...s }, rating);
   }
 
@@ -417,8 +472,7 @@ export class Game {
     this.hud.setObjectives([
       { text: t('objManifest'), done: this.obj.manifest },
       { text: t('objExtract'), done: this.obj.extracted },
-      { text: t('objOptKeycard'), done: this.obj.keycard, optional: true },
-      { text: t('objOptGenerator'), done: this.obj.generator, optional: true },
+      { text: t('objPods', { n: String(this.silentPods), m: String(this.podCount) }), done: this.silentPods >= this.podCount, optional: true },
     ]);
   }
 
@@ -454,14 +508,22 @@ export class Game {
   // Actions
   // ------------------------------------------------------------------
 
+  guardById(id: string | null) {
+    return id ? this.guards.guards.find((g) => g.def.id === id) ?? null : null;
+  }
+
   private tryOpenRift(pl: Placement) {
     if (pl.invalid) {
       this.audio.ui('deny');
       navigator.vibrate?.(40);
       return;
     }
+    const target = this.guardById(pl.targetId);
+    if (pl.move && target) {
+      this.launchStrike(pl, target);
+      return;
+    }
     const near = this.rift.solveNear(this.player.pos, this.rig.yaw);
-    this.rift.charges -= 1;
     const far = { frame: pl.frame, kind: pl.kind, host: pl.host };
     if (!near) {
       // no room in front: blink straight through
@@ -474,13 +536,163 @@ export class Game {
     this.audio.riftOpen(pair.a.position);
     this.audio.riftOpen(pair.b.position);
     navigator.vibrate?.(20);
-    if (pl.snap === 'behind') this.hint('takedown', this.input.lastDevice === 'touch' ? t('hintTakedownTouch') : t('hintTakedown'), 7);
+  }
+
+  /**
+   * STRIKE / DROP: the rift opens instantly, the player dashes through it and
+   * the kill resolves on the far side. The target is held still meanwhile.
+   */
+  private launchStrike(pl: Placement, g: Guard) {
+    const move = pl.move!;
+    g.frozenT = 1.6;
+    this.audio.riftOpen(pl.frame.position);
+    navigator.vibrate?.(20);
+    const near = this.rift.solveNear(this.player.pos, this.rig.yaw);
+    this.strike = { guard: g, move, pair: null, t: 0, passed: false, homing: 1 };
+    if (!near) {
+      // no room to step: fold straight through
+      this.instantPass(pl.exitFeet, pl.exitYaw);
+      this.onRiftExit();
+      return;
+    }
+    const pair = this.rift.openPair(near, { frame: pl.frame, kind: pl.kind, host: pl.host }, 'strike');
+    pair.targetId = g.def.id;
+    pair.move = move;
+    this.strike.pair = pair;
+    this.rift.riftsOpened++;
+    const through = near.frame.position.clone().addScaledVector(frameNormalOf(near.frame), -1.3);
+    through.y = this.player.pos.y;
+    this.player.autoWalk = { target: through, t: 1.2, speed: FEEL.strikeDash };
+  }
+
+  /** Called whenever the player comes out of a rift (walked or folded). */
+  private onRiftExit() {
+    const s = this.strike;
+    if (!s) return;
+    s.passed = true;
+    if (s.move === 'strike') {
+      const g = s.guard;
+      if (g.alive && g.pos.distanceTo(this.player.pos) < 3.2) this.killGuard(g, 'strike');
+      this.strike = null;
+    }
+    // DROP resolves in the air (see updateStrike)
+  }
+
+  /** A pod is cleared silently when every member is down and none raised an alarm. */
+  private checkPods() {
+    const pods = new Map<string, Guard[]>();
+    for (const g of this.guards.guards) if (g.def.squad) pods.set(g.def.squad, [...(pods.get(g.def.squad) ?? []), g]);
+    let silent = 0;
+    for (const [, members] of pods) if (members.every((m) => !m.alive) && !members.some((m) => m.raisedAlarm)) silent++;
+    if (silent !== this.silentPods) {
+      this.silentPods = silent;
+      this.podCount = pods.size;
+      this.refreshObjectives();
+      this.hud.flashToast(t('podSilenced'), 1.8, 'good');
+    }
+  }
+
+  private updateLasers() {
+    const pos = this.lasers.geometry.getAttribute('position') as THREE.BufferAttribute;
+    let n = 0;
+    const target = this.player.chest();
+    for (const g of this.guards.guards) {
+      if (!g.aimWarn || n >= 16) continue;
+      const from = g.eye(new THREE.Vector3()).addScaledVector(g.forward(), 0.5).add(new THREE.Vector3(0, -0.25, 0));
+      pos.setXYZ(n * 2, from.x, from.y, from.z);
+      pos.setXYZ(n * 2 + 1, target.x, target.y, target.z);
+      n++;
+    }
+    this.lasers.geometry.setDrawRange(0, n * 2);
+    pos.needsUpdate = true;
+    this.lasers.visible = n > 0;
+  }
+
+  private updateStrike(realDt: number) {
+    const s = this.strike;
+    if (!s) return;
+    s.t += realDt;
+    const p = this.player;
+    const g = s.guard;
+    if (!g.alive) {
+      this.strike = null;
+      return;
+    }
+    if (s.move === 'drop' && s.passed) {
+      // falling onto him: steer a little, land the blow before touching down
+      const dx = g.pos.x - p.pos.x, dz = g.pos.z - p.pos.z;
+      const hd = Math.hypot(dx, dz);
+      if (hd > 0.05 && s.homing > 0) {
+        const step = Math.min(hd, 6 * realDt, s.homing);
+        p.pos.x += (dx / hd) * step;
+        p.pos.z += (dz / hd) * step;
+        s.homing -= step;
+      }
+      if (hd < 1.3 && p.pos.y - g.pos.y < 2.2) {
+        this.noFallDamageT = 1;
+        p.vel.y = Math.max(p.vel.y, -3);
+        this.killGuard(g, 'drop');
+        this.strike = null;
+        return;
+      }
+      if (p.onGround && p.lastPassT > 0.2) this.strike = null;
+    }
+    if (s.t > 2.5) {
+      // something went wrong (blocked dash): let him go
+      g.frozenT = 0;
+      this.strike = null;
+    }
+  }
+
+  /**
+   * Every kill goes through here: stats, loot, witnesses and the chain beat.
+   */
+  killGuard(g: Guard, verb: 'strike' | 'drop' | 'takedown' | 'pull' | 'hurl') {
+    const p = this.player;
+    if (verb !== 'hurl') {
+      p.yaw = Math.atan2(g.pos.x - p.pos.x, g.pos.z - p.pos.z);
+      p.lungeT = 0.45;
+    }
+    this.cineT = 0.22;
+    this.rig.shake = verb === 'drop' ? 0.9 : 0.6;
+    this.audio.takedown(g.pos);
+    navigator.vibrate?.([10, 30, 40]);
+    const at = g.pos.clone();
+    const body = this.guards.kill(g);
+    body.yaw = g.yaw;
+    this.stats.kills++;
+    this.movesUsed.add(verb);
+    this.loot(g);
+    this.guards.noise(at, verb === 'drop' ? 3 : 2.2, 0.3);
+    // witnesses: anyone who saw it has a moment before raising his squad
+    const time = this.settings.slowmo ? FEEL.witnessTime : FEEL.witnessTimeNoSlow;
+    const seen = this.guards.witness(at, time * (this.input.lastDevice === 'touch' ? 1.25 : 1));
+    if (seen.length) this.hint('witness', t('hintWitness'), 6);
+    // chain beat
+    this.chain = this.chainT > 0 ? this.chain + 1 : 1;
+    if (this.chain === 1) this.chainTrail = [];
+    this.chainTrail.push(verb);
+    this.bestChain = Math.max(this.bestChain, this.chain);
+    this.chainT = Math.max(FEEL.chainMin, FEEL.chainBase - FEEL.chainStep * (this.chain - 1));
+    this.hud.setChain(this.chain, this.chainTrail.map((v) => t(('move_' + v) as any)));
+    this.checkPods();
+    if (g.def.boss) {
+      this.obj.manifest = true;
+      this.refreshObjectives();
+      this.hud.flashToast(t('manifestTaken'), 3.5, 'good');
+      this.audio.ui('objective');
+      this.checkpoint = { pos: p.pos.clone(), yaw: p.yaw };
+    }
+    this.hint('body', t('hintBody'), 6);
   }
 
   private instantPass(feet: THREE.Vector3, yaw: number) {
     const dy = yaw - this.player.yaw;
     this.player.teleport(feet.clone(), yaw);
+    this.player.lastPassT = 0;
+    this.player.onGround = false;
     this.rig.rotateBy(dy);
+    this.rig.pivot.y = feet.y + FEEL.camHeight;
     this.flash = 1;
     this.audio.whoosh();
   }
@@ -564,29 +776,36 @@ export class Game {
       if (d > FEEL.snatchRange + 0.6) continue;
       if (_v.subVectors(p.pos, r.position).dot(r.normal) < 0) continue; // must be on the front side
       const far = r.linked;
+      const pair = this.rift.pairOf(r);
+      if (!pair || pair.kind === 'strike') continue;
       for (const g of this.guards.guards) {
-        if (!g.alive || g.state === 'alert') continue;
+        if (!g.alive || g.state === 'alert' || g.def.kind === 'heavy' || g.def.kind === 'sniper') continue;
+        // a trap, not a turret: the rift can't have been aimed at him
+        if (pair.targetId === g.def.id) continue;
         const gd = _v.subVectors(g.pos, far.position);
         const front = gd.dot(far.normal);
-        if (front > -0.2 && Math.hypot(gd.x, gd.z) < 2.6 && Math.abs(g.pos.y - (far.position.y - far.height / 2)) < 1.2) {
+        const lateral = Math.hypot(gd.x - far.normal.x * front, gd.z - far.normal.z * front);
+        if (front > -0.2 && front < 1.6 && lateral < 1.0 && Math.abs(g.pos.y - (far.position.y - far.height / 2)) < 1.2) {
           return { label: t('snatch'), run: () => this.snatch(g, r) };
         }
       }
     }
 
-    // takedown
+    // takedown: only with the rift's edge (just came through) or on a stunned guard
     let best: Guard | null = null, bd = FEEL.takedownRange;
+    const edge = p.lastPassT < FEEL.edgeTime;
+    this.nearUnarmed = null;
     for (const g of this.guards.guards) {
-      if (!g.alive || g.state === 'alert') continue;
+      if (!g.alive || (g.state === 'alert' && g.stunT <= 0)) continue;
+      if (!edge && g.stunT <= 0) {
+        if (g.pos.distanceTo(p.pos) < FEEL.takedownRange && Math.abs(g.pos.y - p.pos.y) < 1) this.nearUnarmed = g;
+        continue;
+      }
       const d = g.pos.distanceTo(p.pos);
       if (d > bd || Math.abs(g.pos.y - p.pos.y) > 1) continue;
       const to = _v.subVectors(g.pos, p.pos).setY(0).normalize();
       if (to.dot(fwd) < 0.2 && d > 1.0) continue;
-      if (g.def.kind === 'heavy') {
-        // only from behind
-        const behind = g.forward().dot(to) > 0.2;
-        if (!behind) continue;
-      }
+      if (g.def.kind === 'heavy' && g.stunT <= 0) continue; // armoured: drop on him, or stun him first
       bd = d;
       best = g;
     }
@@ -601,20 +820,6 @@ export class Game {
       if (center.distanceTo(p.pos) < 1.7 && Math.abs(b.pos.y - p.pos.y) < 1) return { label: t('grab'), run: () => this.grabBody(b) };
     }
     const L = this.level;
-    // generator
-    if (L.inhibitor.active && p.pos.distanceTo(L.inhibitor.generator) < 1.9) {
-      return {
-        label: t('sabotage'),
-        run: () => {
-          L.inhibitor.active = false;
-          this.obj.generator = true;
-          this.refreshObjectives();
-          this.hud.flashToast(t('inhibitorDown'), 3, 'good');
-          this.audio.ui('objective');
-          this.guards.noise(L.inhibitor.generator, 7, 0.4);
-        },
-      };
-    }
     // keycard elevator at the control tower base
     const reader = (L.doorMesh.userData.reader as THREE.Mesh).position;
     if (p.pos.y < 1 && p.pos.distanceTo(_v.set(reader.x, p.pos.y, reader.z)) < 2.2) {
@@ -650,20 +855,6 @@ export class Game {
         },
       };
     }
-    // manifest
-    if (!this.obj.manifest && Math.abs(p.pos.y - (L.manifest.y - 0.9)) < 1.2 && p.pos.distanceTo(_v.set(L.manifest.x, p.pos.y, L.manifest.z)) < 1.9) {
-      return {
-        label: t('takeManifest'),
-        run: () => {
-          this.obj.manifest = true;
-          this.refreshObjectives();
-          this.hud.flashToast(t('manifestTaken'), 3.5, 'good');
-          this.audio.ui('objective');
-          this.checkpoint = { pos: p.pos.clone(), yaw: p.yaw };
-          setTimeout(() => this.hud.flashToast(t('checkpoint'), 1.6, 'info'), 3600);
-        },
-      };
-    }
     // extraction
     if (this.obj.manifest && p.pos.distanceTo(L.extraction) < 3.2) {
       return {
@@ -690,44 +881,25 @@ export class Game {
   }
 
   private takedown(g: Guard) {
-    const p = this.player;
-    // turn to face the target
-    p.yaw = Math.atan2(g.pos.x - p.pos.x, g.pos.z - p.pos.z);
-    p.lungeT = 0.45;
-    this.cineT = 0.32;
-    this.rig.shake = 0.6;
-    this.audio.takedown(g.pos);
-    navigator.vibrate?.([10, 30, 40]);
-    const body = this.guards.kill(g);
-    // bodies fall away from the attacker
-    body.yaw = g.yaw;
-    this.stats.kills++;
-    this.guards.noise(g.pos, 2.2, 0.3);
-    this.loot(g);
-    this.hint('body', t('hintBody'), 6);
-    setTimeout(() => this.hint('anchor', this.input.lastDevice === 'touch' ? t('hintAnchorTouch') : t('hintAnchorKbm'), 8), 6500);
+    this.killGuard(g, 'takedown');
   }
 
   private snatch(g: Guard, near: Portal) {
     const p = this.player;
-    p.lungeT = 0.5;
-    this.cineT = 0.4;
-    this.rig.shake = 0.5;
+    const far = near.linked;
     this.flash = 0.5;
-    this.audio.takedown(p.pos);
     this.audio.whoosh(0.25);
-    navigator.vibrate?.([10, 30, 60]);
-    const body = this.guards.kill(g);
+    const at = g.pos.clone();
+    this.killGuard(g, 'pull');
+    const body = this.guards.bodies.find((b) => b.guard === g)!;
     // pulled through to our side, lands at our feet
-    const drop = p.pos.clone().addScaledVector(near.normal.clone().setY(0).normalize().negate(), -0.2).addScaledVector(p.forward(), 0.9);
+    const drop = p.pos.clone().addScaledVector(p.forward(), 0.9);
     const gy = this.level.world.groundAt(drop.x, drop.z, 0.2, p.pos.y + 0.5);
     body.pos.set(drop.x, gy > -5 ? gy : p.pos.y, drop.z);
     body.yaw = p.yaw + Math.PI;
     g.pos.copy(body.pos);
-    this.rift.markPassed(near.linked, 'body');
-    this.stats.kills++;
-    this.loot(g);
-    this.hint('body', t('hintBody'), 6);
+    this.rift.markPassed(far, 'body');
+    void at;
   }
 
   private loot(g: Guard) {
@@ -763,6 +935,16 @@ export class Game {
     const pitch = this.rift.aiming ? Math.max(-0.2, this.rig.pitch) : 0.12;
     this.player.chest(b.pos).addScaledVector(f, 0.5);
     b.vel.set(f.x * 7.5 * Math.cos(pitch), 2.6 + Math.sin(pitch) * 6, f.z * 7.5 * Math.cos(pitch));
+    b.riftT = -1;
+    // a rift right in front: throw it straight in
+    for (const r of this.rift.openPortals()) {
+      if (!r.isOpen) continue;
+      const to = r.position.clone().sub(b.pos);
+      if (to.length() > 3.5 || to.clone().setY(0).normalize().dot(f) < 0.5 || r.normal.dot(to) > 0) continue;
+      b.vel.copy(to.setLength(9.5));
+      b.vel.y += 1.2;
+      break;
+    }
     b.yaw = this.player.yaw;
     this.audio.whoosh(0.2);
   }
@@ -798,9 +980,29 @@ export class Game {
           const nv = this.rift.transformDir(portal, b.vel);
           b.pos.copy(np).addScaledVector(portal.linked.normal, 0.3);
           b.vel.copy(nv);
+          // out of an upright rift a body flies like a thrown sack, not a dropped one
+          if (Math.abs(portal.linked.normal.y) < 0.5) b.vel.y = Math.max(b.vel.y, 2.6);
           const fwd = this.rift.transformDir(portal, new THREE.Vector3(Math.sin(b.yaw), 0, Math.cos(b.yaw)));
           b.yaw = Math.atan2(fwd.x, fwd.z);
           this.rift.markPassed(portal, 'body');
+          b.riftT = this.time;
+        }
+        // HURL: fresh out of a rift and fast, it knocks a guard down
+        if (b.riftT > -1 && this.time - b.riftT < 1.5 && b.vel.length() > FEEL.hurlSpeed) {
+          for (const g of this.guards.guards) {
+            if (!g.alive || g === b.guard) continue;
+            const dx = g.pos.x - b.pos.x, dz = g.pos.z - b.pos.z;
+            if (Math.hypot(dx, dz) > 1.2 || b.pos.y < g.pos.y - 0.2 || b.pos.y > g.pos.y + 2.1) continue;
+            if (g.def.kind === 'heavy' || g.def.kind === 'sniper') {
+              g.stunT = 2.2;
+              g.frozenT = 0;
+              this.audio.bodyDrop(g.pos, 1);
+              this.hud.flashToast(t('stunned'), 1.6, 'good');
+            } else this.killGuard(g, 'hurl');
+            b.vel.multiplyScalar(0.15);
+            b.riftT = -1;
+            break;
+          }
         }
         const pushed = w.resolveCircle(b.pos, 0.3, b.pos.y, b.pos.y + 0.5, 0.25, (c) => this.rift.hostPassable(c, b.pos, 0.3));
         if (pushed) { b.vel.x *= -0.2; b.vel.z *= -0.2; }
@@ -852,7 +1054,7 @@ export class Game {
       navigator.vibrate?.(80);
       if (this.player.health <= 0) {
         this.player.health = 0;
-        setTimeout(() => this.end(false), 700);
+        this.endLater(false, 700);
         this.mode = 'ended';
       }
     }
@@ -943,6 +1145,18 @@ export class Game {
       this.cineT -= realDt;
       ts = Math.min(ts, 0.3);
     }
+    // the chain beat: a breath after each kill to line up the next one
+    this.rift.strikeOnly = !!(this.strike && this.strike.pair && !this.strike.passed);
+    this.guards.holdStartle = !!this.strike;
+    if (this.chainT > 0) {
+      // the beat waits while a kill move is in flight
+      if (!this.strike) this.chainT = Math.max(0, this.chainT - realDt);
+      if (this.settings.slowmo) ts = Math.min(ts, FEEL.chainTimeScale);
+      if (this.chainT === 0) this.hud.setChain(0, []);
+    }
+    // never slow the dash itself to a crawl
+    if (this.strike && !this.strike.passed) ts = Math.max(ts, 0.6);
+    this.noFallDamageT = Math.max(0, this.noFallDamageT - realDt);
     this.timeScale = THREE.MathUtils.damp(this.timeScale, ts, 14, realDt);
     const dt = realDt * this.timeScale;
     this.audio.setFocus(wantAim ? 0.6 : this.cineT > 0 ? 0.4 : 0);
@@ -955,8 +1169,14 @@ export class Game {
         this.rift.distanceOverride = THREE.MathUtils.clamp(base + wheel * FEEL.wheelStep, FEEL.riftMinDistance + 0.4, FEEL.riftRange);
         this.audio.ui('click');
       }
-      if (inp.wasPressed('rotL')) this.rift.rotation += FEEL.rotateStep;
-      if (inp.wasPressed('rotR')) this.rift.rotation -= FEEL.rotateStep;
+      const pl0 = this.rift.placement;
+      if (inp.wasPressed('rotL') || inp.wasPressed('rotR')) {
+        if (pl0 && pl0.canSwap) {
+          this.rift.preferDrop = !this.rift.preferDrop;
+          this.audio.ui('click');
+        } else if (inp.wasPressed('rotL')) this.rift.rotation += FEEL.rotateStep;
+        else this.rift.rotation -= FEEL.rotateStep;
+      }
     }
 
     if (inp.wasPressed('crouch')) p.crouched = !p.crouched && !p.carrying;
@@ -971,14 +1191,14 @@ export class Game {
       landed: (pos, impact) => {
         const force = Math.min(1, impact / 14);
         // long drops hurt: ~5m stings, ~9m cripples, a rooftop is fatal
-        if (impact > 13.5) {
+        if (impact > 13.5 && this.noFallDamageT <= 0) {
           p.health -= (impact - 13.5) * 9.5;
           this.damage = 1;
           this.audio.hurt();
           navigator.vibrate?.(60);
           if (p.health <= 0) {
             p.health = 0;
-            setTimeout(() => this.end(false), 500);
+            this.endLater(false, 500);
             this.mode = 'ended';
           }
         }
@@ -992,6 +1212,9 @@ export class Game {
         this.flash = 0.8;
         this.audio.whoosh();
         navigator.vibrate?.(15);
+        const pair = this.rift.pairOf(portal);
+        if (this.strike && pair && pair === this.strike.pair) this.onRiftExit();
+        else if (this.strike && !this.strike.pair) this.onRiftExit();
       },
       fellInWater: () => {
         this.audio.bodyDrop(p.pos, 0.8);
@@ -1023,19 +1246,23 @@ export class Game {
       const ray = this.rig.aimRay();
       const pl = this.rift.solve(ray.origin, ray.dir, p.eye(), p.pos, inp.isHeld('freeAim'), inp.lastDevice === 'touch');
       this.rift.placement = pl;
-      this.hud.setPlacement(pl);
+      const lockG = pl.targetId ? this.guardById(pl.targetId) : null;
+      this.hud.setPlacement(pl, lockG && pl.move ? this.guards.witnessesOf(lockG).length : 0);
       const hand = p.pos.clone().add(new THREE.Vector3(0, p.height * 0.72, 0)).addScaledVector(p.forward(), 0.45).addScaledVector(new THREE.Vector3(Math.cos(p.yaw), 0, -Math.sin(p.yaw)), 0.25);
       this.rift.updatePreview(pl, hand, this.camera);
       if (inp.wasPressed('open')) {
         this.tryOpenRift(pl);
-        if (!pl.invalid && this.touch) this.touch.syncAim(false);
+        if (!pl.invalid && !pl.move && this.touch) this.touch.syncAim(false);
       }
+      // situational hints on the lock
+      const locked = this.guardById(pl.targetId);
+      if (locked && pl.move === 'strike') this.hint('strike', this.deviceText('hintStrikeKbm', 'hintStrikePad', 'hintStrikeTouch'), 7);
+      if (locked && locked.def.kind === 'heavy') this.hint('heavy', t('hintHeavy'), 7);
     } else {
       this.rift.updatePreview(null, p.pos, this.camera);
       this.hud.setPlacement(null);
     }
 
-    this.handleAnchor(realDt);
     if (inp.wasPressed('close')) this.rift.closeAll();
 
     // ---- interaction ----
@@ -1044,6 +1271,8 @@ export class Game {
     this.hud.setPrompt(key, act?.label ?? null);
     this.touch?.setAction(act?.label ?? null);
     if (act && inp.wasPressed('interact')) act.run();
+    if (!act && inp.wasPressed('interact') && this.nearUnarmed && !p.carrying) this.hud.flashToast(t('noWeapon'), 2.2, 'warn');
+    if (p.carrying && this.rift.openPortals().some((r) => r.position.distanceTo(p.pos) < 6)) this.hint('hurl', t('hintHurl'), 6);
     if (!act && inp.wasPressed('interact') && p.carrying) this.dropBody();
 
     // arena hints: the wall, then the searchlight plaza
@@ -1059,12 +1288,14 @@ export class Game {
     if (act && act.label === t('snatch')) this.hint('snatch', t('hintSnatch'), 6);
 
     // ---- world ----
+    this.updateStrike(realDt);
     this.updateBodies(dt);
     this.playerLight = this.lightAt(p.chest(), true);
     const perception = { chest: p.chest(), feet: p.pos.clone(), light: this.playerLight, crouched: p.crouched, speed: Math.hypot(p.vel.x, p.vel.z), alive: p.health > 0 };
     const openRifts = this.rift.openPortals().filter((r) => r.open > 0.5);
     this.guards.viewer.copy(p.pos);
-    const res = this.guards.update(dt, perception, openRifts, this.time);
+    const res = this.guards.update(dt, perception, openRifts, this.time, realDt);
+    this.updateLasers();
     this.audio.setIntensity(res.tension, res.alarm, realDt);
     this.rift.update(dt, realDt, this.time, this.audio);
     this.rig.update(realDt, p.pos, p.crouchT, wantAim, this.level.world);
@@ -1085,7 +1316,9 @@ export class Game {
     grade.uAlert.value = res.alarm * 0.6;
 
     // ---- HUD ----
-    this.hud.update(realDt, { charges: this.rift.charges, focus: this.rift.focus, light: this.playerLight, health: p.health, aiming: this.rig.aim, anchor: !!this.rift.anchor });
+    this.hud.update(realDt, { focus: this.rift.focus, light: this.playerLight, health: p.health, aiming: this.rig.aim, chainT: this.chainT, chainMax: Math.max(FEEL.chainMin, FEEL.chainBase - FEEL.chainStep * Math.max(0, this.chain - 1)) });
+    const lockedG = this.rift.aiming ? this.guardById(this.rift.placement?.targetId ?? null) : null;
+    this.hud.setWitnesses(lockedG ? this.guards.witnessesOf(lockedG) : []);
     this.hud.updateGuardIcons(this.guards.guards, this.camera, this.renderer.width, this.renderer.height);
     this.updateObjectiveMarker();
     this.stats.time = this.time;
@@ -1094,7 +1327,8 @@ export class Game {
   private updateObjectiveMarker() {
     const L = this.level;
     let target: THREE.Vector3 | null = null;
-    if (!this.obj.manifest) target = L.manifest.clone().add(new THREE.Vector3(0, 0.9, 0));
+    const boss = this.guards.guards.find((g) => g.def.boss && g.alive);
+    if (!this.obj.manifest) target = boss ? boss.pos.clone().add(new THREE.Vector3(0, 2.4, 0)) : L.manifest.clone().add(new THREE.Vector3(0, 0.9, 0));
     else if (!this.obj.extracted) target = L.extraction.clone().add(new THREE.Vector3(0, 1.6, 0));
     if (!target || this.rig.aim > 0.5) {
       this.objMarker.style.display = 'none';
