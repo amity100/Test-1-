@@ -193,6 +193,7 @@ export class Game {
   private telegraphs: { kind: 'laser' | 'beam' | 'arc' | 'charge'; from: THREE.Vector3; to: THREE.Vector3; t: number }[] = [];
   private telegraphLines: THREE.LineSegments;
   private arcLine: THREE.Line;
+  private arcWasVisible = false;
   private killCtx: KillCtx | null = null;
   private clipOfferT = 0;
   private clipFrames: Snapshot[] | null = null;
@@ -466,6 +467,9 @@ export class Game {
     this.shoveT = 0;
     this.crouchState = false;
     this.clipOfferT = 0;
+    this.clipFrames = null;
+    // a new life: replays don't reach back past it (the fallen enemies are gone)
+    this.recorder.clear();
     this.hud.offerClip(false);
     this.touch?.offerClip(false);
     (this.hud as any).setAirtime?.(null);
@@ -962,6 +966,12 @@ export class Game {
 
   private onBossDown() {
     this.bossDead = true;
+    // Voss is done for good: his fight counts as won even with his adds still up
+    const enc = this.zones.encounters.find((x) => x.def.lesson === 'boss');
+    if (enc && !enc.cleared) {
+      enc.cleared = true;
+      this.onEncounterCleared(enc);
+    }
     this.audio.sting('victory');
     this.hud.setObjective(t('obj.escape'));
     this.hint('leap', t('hint.leap'), 9);
@@ -1247,16 +1257,18 @@ export class Game {
     this.input.endFrame();
   }
 
+  /** Clock for scenery only (sky, lamps, animated props): it runs in menus, pauses and replays; `time` is the game's and doesn't. */
+  private ambientT = 0;
   private updateAmbient(dt: number) {
-    this.time += dt;
-    for (const f of this.level.animated) f(this.time);
-    (this.sky.material as THREE.ShaderMaterial).uniforms.uTime && ((this.sky.material as THREE.ShaderMaterial).uniforms.uTime.value = this.time);
+    this.ambientT += dt;
+    for (const f of this.level.animated) f(this.ambientT);
+    (this.sky.material as THREE.ShaderMaterial).uniforms.uTime && ((this.sky.material as THREE.ShaderMaterial).uniforms.uTime.value = this.ambientT);
     this.sky.position.copy(this.camera.position);
     if (this.skyline) this.skyline.position.set(this.camera.position.x * 0.9, 0, this.camera.position.z * 0.9);
     const focus = this.mode === 'menu' ? _v.set(0, 20, 30) : this.player.body.pos;
     this.sun.position.copy(focus).addScaledVector(this.level.sunDir, 140);
     this.sun.target.position.copy(focus);
-    this.lamps?.update(this.time, focus);
+    this.lamps?.update(this.ambientT, focus);
   }
 
   private updateMenu(dt: number) {
@@ -1466,7 +1478,7 @@ export class Game {
     this.audio.setAltitude(body.pos.y);
     this.audio.wind(body.charge > 0 ? speed : speed * 0.3);
     if (body.charge > 0 && body.loops >= 2) this.audio.loopWhoosh(speed);
-    this.updateAmbient(0);
+    this.updateAmbient(dt);
     if (this.recorder.wants(this.time)) this.recorder.record(this.capture());
   }
 
@@ -2212,6 +2224,11 @@ export class Game {
       render: () => this.render(0),
       beginReplay: () => {
         this.liveSnap = this.capture();
+        // live-only overlays (lock lasers, grenade arcs, the aim preview) would hang frozen in the clip
+        this.telegraphLines.visible = false;
+        this.arcWasVisible = this.arcLine.visible;
+        this.arcLine.visible = false;
+        this.rifts.updatePreview(null, this.handPos(), this.camera);
         this.projectiles.group.visible = false;
         this.replayProj.visible = true;
         this.replayBeams.visible = true;
@@ -2221,6 +2238,8 @@ export class Game {
       endReplay: () => {
         if (this.liveSnap) this.applySnap(this.liveSnap);
         this.liveSnap = null;
+        this.telegraphLines.visible = true;
+        this.arcLine.visible = this.arcWasVisible;
         this.projectiles.group.visible = true;
         this.replayProj.visible = false;
         this.replayBeams.visible = false;
@@ -2253,11 +2272,13 @@ export class Game {
     if (still && !this.input.wasPressed('pause')) return;
     const skipped = still;
     this.replay.stop();
-    if (skipped && this.exporter.recording) {
-      this.exporter.cancel();
+    if (skipped || !this.exporter.recording) {
+      // skipped, or nothing was recorded (no MediaRecorder): straight back to play
+      if (this.exporter.recording) this.exporter.cancel();
       this.mode = 'playing';
       this.hud.show(true);
       this.touch?.show(true);
+      this.input.consumeLook();
       return;
     }
     this.mode = 'paused';
@@ -2297,13 +2318,19 @@ export class Game {
   private updatePhoto(realDt: number) {
     const look = this.input.consumeLook();
     const wheel = this.input.consumeWheel();
-    this.photo.update(realDt, { lookX: look.x, lookY: -look.y, moveX: this.input.moveX, moveY: this.input.moveY, zoom: wheel });
+    // (a wheel notch is ~15% closer; the photo camera reads zoom as a rate)
+    this.photo.update(realDt, { lookX: look.x, lookY: -look.y, moveX: this.input.moveX, moveY: this.input.moveY, zoom: wheel * 6 });
     this.updateAmbient(0);
     this.render(realDt);
     if (this.input.wasPressed('place') || this.input.wasPressed('gate') || this.input.wasPressed('action')) {
       this.audio.ui('shutter');
       void this.photo.capture(this.renderer.renderer.domElement, () => this.render(0)).then((blob) => {
-        if (blob) void this.exporter.share(blob, 'threshold-photo').then(() => this.hud.toast(t('toast.photoSaved'), 'good'));
+        if (blob)
+          void this.exporter.share(blob, 'threshold-photo').then((r) => {
+            if (r === 'failed') {
+              if (!this.exporter.shareCancelled) this.hud.toast(t('toast.clipFailed'), 'warn');
+            } else this.hud.toast(t('toast.photoSaved'), 'good');
+          });
       });
     }
     if (this.input.wasPressed('photo') || this.input.wasPressed('pause')) {
