@@ -106,7 +106,7 @@ async function boot() {
       done: game.challenges.completed().has(c.id),
       progress: (() => {
         const p = game.challenges.progress(c.id) as any;
-        return p && typeof p === 'object' && 'value' in p ? `${p.value}/${p.target}` : undefined;
+        return p && !p.done && p.goal > 1 ? `${p.count}/${p.goal}` : undefined;
       })(),
     }));
     m.showChallenges?.(items);

@@ -179,13 +179,12 @@ export class Game {
   private airStartT = -1;
   private airCrossings = 0;
   private catchWindow = { t: -1, count: 0 };
-  private tricksFrame: TrickAward[] = [];
   private telegraphs: { kind: 'laser' | 'beam' | 'arc' | 'charge'; from: THREE.Vector3; to: THREE.Vector3; t: number }[] = [];
   private telegraphLines: THREE.LineSegments;
   private arcLine: THREE.Line;
   private killCtx: KillCtx | null = null;
   private clipOfferT = 0;
-  private clipFrom = 0;
+  private clipFrames: Snapshot[] | null = null;
   private visionOn = false;
   private helpers: THREE.Object3D[] = [];
   private asset!: CharacterAsset;
@@ -526,11 +525,14 @@ export class Game {
   // ------------------------------------------------------------------
 
   private push(e: GameEvent) {
-    const awards = this.style.push(e);
+    this.handleAwards(this.style.push(e), e);
+  }
+
+  private handleAwards(awards: TrickAward[], e: GameEvent | null) {
+    if (awards.length) this.recorder.addTricks(awards);
     for (const a of awards) {
       this.hud.popTrick(a);
       this.audio.trick(this.style.state.rank, a.points);
-      this.tricksFrame.push(a);
       if (!this.tricksSeen.has(a.id)) {
         this.tricksSeen.add(a.id);
         this.stats.tricks = this.tricksSeen.size;
@@ -541,7 +543,7 @@ export class Game {
         this.rig.kick = Math.max(this.rig.kick, 1);
       }
     }
-    const done = this.challenges.push(e, awards, this.style.state);
+    const done = this.challenges.push(e as GameEvent, awards, this.style.state);
     for (const id of done) {
       this.stats.challenges++;
       this.hud.toast(`${t('toast.challenge')}: ${t(`challenge.${id}.title`)}`, 'good');
@@ -1228,6 +1230,8 @@ export class Game {
       this.hud.setVision(this.visionOn);
     }
     const banked = this.style.update(realDt, p.airborne);
+    const late = this.style.drainLate();
+    if (late.length) this.handleAwards(late, null);
     if (banked && banked.banked > 0) {
       this.hud.comboBanked(banked.banked, this.style.state.rank);
       this.audio.comboBank(banked.banked);
@@ -1236,7 +1240,7 @@ export class Game {
       const rankIdx = ['D', 'C', 'B', 'A', 'S', 'SS', 'SSS'].indexOf(this.style.state.rank);
       if ((banked.banked >= 1500 || rankIdx >= 3) && this.exporterOk()) {
         this.clipOfferT = 6;
-        this.clipFrom = Math.max(this.time - 14, (this.style.state.chain[0]?.t ?? this.time) - 3);
+        this.clipFrames = this.recorder.aroundCombo(this.style.lastChainSpan);
         this.hud.offerClip(true);
         this.touch?.offerClip(true);
       }
@@ -1277,8 +1281,7 @@ export class Game {
     this.audio.wind(body.charge > 0 ? speed : speed * 0.3);
     if (body.charge > 0 && body.loops >= 2) this.audio.loopWhoosh(speed);
     this.updateAmbient(0);
-    this.recorder.record(this.capture());
-    this.tricksFrame.length = 0;
+    if (this.recorder.wants(this.time)) this.recorder.record(this.capture());
   }
 
   private noise: { at: V3; radius: number }[] = [];
@@ -1871,7 +1874,7 @@ export class Game {
       rifts: this.rifts.snapshot(),
       projs,
       props: this.props.snapshot(),
-      tricks: this.tricksFrame.slice(),
+      tricks: [],
       timeScale: this.timeScale,
       focus: [b.pos.x, b.pos.y, b.pos.z],
     };
@@ -1957,8 +1960,7 @@ export class Game {
   startReplay() {
     if (this.mode !== 'playing') return;
     const now = this.time;
-    const from = this.clipOfferT > 0 ? this.clipFrom : now - 10;
-    const frames = this.recorder.frames(from, now);
+    const frames = this.clipOfferT > 0 && this.clipFrames?.length ? this.clipFrames : this.recorder.frames(now - 10, now);
     if (frames.length < 10) return;
     this.hud.offerClip(false);
     this.touch?.offerClip(false);
@@ -1966,8 +1968,9 @@ export class Game {
     this.mode = 'replay';
     this.audio.ui('clip');
     const record = this.exporter.supported();
+    this.replay.translate = (k: string) => t(k);
     this.replay.play(frames, { cinematic: true, overlay: record });
-    if (record) this.exporter.begin(this.renderer.renderer.domElement, this.replay.overlayCanvas);
+    if (record && !this.exporter.begin(this.renderer.renderer.domElement, this.replay.overlayCanvas)) this.exporter.cancel();
   }
 
   private updateReplay(realDt: number) {
@@ -1976,13 +1979,25 @@ export class Game {
     const still = this.replay.update(realDt);
     if (this.exporter.recording) this.exporter.frame();
     if (still && !this.input.wasPressed('pause')) return;
+    const skipped = still;
     this.replay.stop();
+    if (skipped && this.exporter.recording) {
+      this.exporter.cancel();
+      this.mode = 'playing';
+      this.hud.show(true);
+      this.touch?.show(true);
+      return;
+    }
     this.mode = 'paused';
     const done = (blob: Blob | null) => {
       this.onClip(
         blob,
         () => {
-          if (blob) void this.exporter.share(blob, 'threshold-clip').then((r) => this.hud.toast(t(r === 'failed' ? 'toast.clipFailed' : 'toast.clipSaved'), r === 'failed' ? 'warn' : 'good'));
+          if (blob)
+            void this.exporter.share(blob, 'threshold-clip').then((r) => {
+              if (r === 'failed' && this.exporter.shareCancelled) return;
+              this.hud.toast(t(r === 'failed' ? 'toast.clipFailed' : 'toast.clipSaved'), r === 'failed' ? 'warn' : 'good');
+            });
         },
         () => {
           this.hud.show(true);
@@ -2006,7 +2021,7 @@ export class Game {
   private updatePhoto(realDt: number) {
     const look = this.input.consumeLook();
     const wheel = this.input.consumeWheel();
-    this.photo.update(realDt, { lookX: look.x, lookY: look.y, moveX: this.input.moveX, moveY: this.input.moveY, zoom: wheel });
+    this.photo.update(realDt, { lookX: look.x, lookY: -look.y, moveX: this.input.moveX, moveY: this.input.moveY, zoom: wheel });
     this.updateAmbient(0);
     this.render(realDt);
     if (this.input.wasPressed('place') || this.input.wasPressed('gate') || this.input.wasPressed('action')) {
@@ -2029,6 +2044,7 @@ export class Game {
 
   private victory() {
     if (this.victoryT >= 0) return;
+    this.challenges.complete('crown.3');
     this.victoryT = 2.2;
     this.slowT = 2.2;
     this.slowScale = 0.3;
