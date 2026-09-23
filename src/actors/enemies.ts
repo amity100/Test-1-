@@ -1645,7 +1645,9 @@ export class EnemySystem implements EnemyAPI, Brain {
     for (let i = 0; i < this.list.length; i++) {
       const e = this.list[i];
       const r = e.char.root;
-      out.push({ key: e.key, pos: [r.position.x, r.position.y, r.position.z], yaw: r.rotation.y, pose: e.char.getPose(), visible: r.visible });
+      // only what can be seen (inactive zones, the gone): applySnapshot hides anyone absent
+      if (!r.visible) continue;
+      out.push({ key: e.key, pos: [r.position.x, r.position.y, r.position.z], yaw: r.rotation.y, pose: e.char.getPose(), visible: true });
     }
     return out;
   }

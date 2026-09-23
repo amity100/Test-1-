@@ -389,15 +389,22 @@ export class Game {
 
     this.replay = new ReplayPlayer(this.replayHost());
 
-    // pre-compile every shader variant (incl. clipped rift views) so nothing hitches mid-fight
+    // one global clip plane in every pass (a no-op one in the main view, the rift's far side in
+    // rift views): the plane count never changes, so no material swaps programs per pass
+    r.clippingPlanes = [new THREE.Plane(new THREE.Vector3(0, 1, 0), 1e7)];
+    // Voss's blink fades his materials into transparent clones: warm those programs too
+    const fade = new Character(asset, anims, LOOKS.boss);
+    fade.setOpacity(0.5);
+    fade.root.position.copy(this.camera.position).addScaledVector(this.camera.getWorldDirection(_v), 4);
+    this.scene.add(fade.root);
+    // pre-compile every shader variant so nothing hitches mid-fight
     r.compile(this.scene, this.camera);
     const tmp = new THREE.WebGLRenderTarget(16, 16, { type: THREE.HalfFloatType });
     r.setRenderTarget(tmp);
-    r.clippingPlanes = [new THREE.Plane(new THREE.Vector3(0, 1, 0), 10)];
     r.render(this.scene, this.camera);
-    r.clippingPlanes = [];
     r.setRenderTarget(null);
     tmp.dispose();
+    this.scene.remove(fade.root);
     this.newRun();
   }
 
@@ -440,6 +447,7 @@ export class Game {
     this.tricksSeen.clear();
     for (const g of this.level.gates) this.rifts.setGateOpen(g.id, false);
     for (const z of this.zones.active) this.props.spawnZone(z);
+    this.props.setActive(this.zones.active);
     const cp = this.zones.checkpoint;
     this.respawnPlayer(cp.pos, cp.yaw);
     this.bossDead = false;
@@ -553,6 +561,7 @@ export class Game {
     // loads, barrels and crates come back so a lesson can be tried again
     this.props.clear();
     for (const z of this.zones.active) this.props.spawnZone(z);
+    this.props.setActive(this.zones.active);
     const cp = this.zones.checkpoint;
     this.respawnPlayer(cp.pos, cp.yaw);
     this.respawnT = -1;
@@ -774,7 +783,7 @@ export class Game {
       }
     }
     for (const pr of this.props.items) {
-      if (!pr.alive || pr.body.userData.manual) continue;
+      if (!pr.alive || !pr.active || pr.body.userData.manual) continue;
       if (p.body && p.body === pr.body) continue;
       const tt = segCylinder(a, b, pr.body.pos, pr.body.radius + radius, pr.body.height);
       if (tt >= 0 && tt < best) {
@@ -1181,7 +1190,7 @@ export class Game {
     }
     // push loose things, chain barrels
     for (const pr of this.props.items) {
-      if (!pr.alive) continue;
+      if (!pr.alive || !pr.active) continue;
       const d = at.distanceTo(pr.body.pos);
       if (d > radius * 1.2) continue;
       if (pr.def.explosive) {
@@ -1615,7 +1624,7 @@ export class Game {
       this.audio.impact(e.pos, 6);
     }
     for (const pr of this.props.items) {
-      if (!pr.alive || pr.hanging || pr.body.userData.manual) continue;
+      if (!pr.alive || !pr.active || pr.hanging || pr.body.userData.manual) continue;
       if (pr.body.pos.distanceTo(b.pos) > pr.body.radius + 1.0) continue;
       pr.body.vel.addScaledVector(_v.copy(this.shoveDir).setY(0.2).normalize(), 7);
       pr.body.onGround = false;
@@ -1710,7 +1719,7 @@ export class Game {
     const ray = this.rig.aimRay();
     let best: Prop | null = null, bd = 2.2;
     for (const pr of this.props.items) {
-      if (!pr.alive || !pr.hanging) continue;
+      if (!pr.alive || !pr.active || !pr.hanging) continue;
       const c = _v.copy(pr.body.pos).setY(pr.body.pos.y + pr.body.height * 0.5);
       const toC = _v2.subVectors(c, ray.origin);
       const along = toC.dot(ray.dir);
@@ -1933,7 +1942,8 @@ export class Game {
 
   private onZoneEntered(id: ZoneId) {
     const z = this.zones.zone(id);
-    this.props.spawnZone(id);
+    for (const zz of this.zones.active) this.props.spawnZone(zz);
+    this.props.setActive(this.zones.active);
     this.showZoneTitle(z);
     this.audio.sting(id === 'crown' ? 'boss' : 'zone');
     this.push({ type: 'zone', t: this.time, zone: id });

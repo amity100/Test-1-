@@ -17,9 +17,12 @@ export interface Prop {
   touched: boolean;
   /** Mesh origin offset from the body's feet. */
   yOffset: number;
+  /** Its zone is one the game runs (current ± 1); otherwise frozen and hidden. */
+  active: boolean;
 }
 
 const _q = new THREE.Quaternion();
+const _off = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
 
 /**
@@ -68,7 +71,7 @@ export class PropSystem {
       cable.frustumCulled = false;
       this.group.add(cable);
     }
-    const p: Prop = { id: def.id, key: `prop:${def.id}`, def, body, mesh, alive: true, hanging: !!def.hangFrom, cable, fuse: -1, touched: false, yOffset };
+    const p: Prop = { id: def.id, key: `prop:${def.id}`, def, body, mesh, alive: true, hanging: !!def.hangFrom, cable, fuse: -1, touched: false, yOffset, active: true };
     this.items.push(p);
     this.byBodyId.set(body.id, p);
     this.syncMesh(p);
@@ -111,10 +114,23 @@ export class PropSystem {
 
   trapTargets(out: TrapTarget[]) {
     for (const p of this.items) {
-      if (!p.alive || p.body.userData.manual) continue;
+      if (!p.alive || !p.active || p.body.userData.manual) continue;
       out.push({ key: p.key, pos: p.body.pos, radius: p.body.radius, height: p.body.height, canFall: true, steady: false });
     }
     return out;
+  }
+
+  /** Props of zones the game isn't running sleep: no physics, not drawn. */
+  setActive(zones: ReadonlySet<ZoneId>) {
+    for (const p of this.items) {
+      const on = zones.has(p.def.zone);
+      if (on === p.active) continue;
+      p.active = on;
+      if (!p.alive) continue;
+      p.mesh.visible = on;
+      if (p.cable) p.cable.visible = on;
+      if (!p.body.userData.carried) p.body.enabled = on;
+    }
   }
 
   private syncMesh(p: Prop) {
@@ -122,13 +138,12 @@ export class PropSystem {
     // rotate about the body centre, keep the feet on the floor when upright
     _q.copy(p.body.quat);
     p.mesh.quaternion.copy(_q);
-    const off = new THREE.Vector3(0, p.yOffset, 0).applyQuaternion(_q);
-    p.mesh.position.add(off);
+    p.mesh.position.add(_off.set(0, p.yOffset, 0).applyQuaternion(_q));
   }
 
   update(dt: number) {
     for (const p of this.items) {
-      if (!p.alive) continue;
+      if (!p.alive || !p.active) continue;
       if (p.hanging) {
         // gentle sway on the cable
         p.body.vel.set(0, 0, 0);
@@ -145,15 +160,17 @@ export class PropSystem {
   }
 
   snapshot(): PropSnap[] {
-    return this.items.map((p) => ({
-      key: p.key,
-      pos: [p.body.pos.x, p.body.pos.y, p.body.pos.z],
-      quat: [p.body.quat.x, p.body.quat.y, p.body.quat.z, p.body.quat.w],
-      visible: p.alive,
-    }));
+    const out: PropSnap[] = [];
+    // only what can be seen; applySnapshot hides the rest
+    for (const p of this.items) {
+      if (!p.alive || !p.active) continue;
+      out.push({ key: p.key, pos: [p.body.pos.x, p.body.pos.y, p.body.pos.z], quat: [p.body.quat.x, p.body.quat.y, p.body.quat.z, p.body.quat.w], visible: true });
+    }
+    return out;
   }
 
   applySnapshot(s: PropSnap[]) {
+    for (const p of this.items) p.mesh.visible = false;
     for (const ps of s) {
       const p = this.byKey(ps.key);
       if (!p) continue;

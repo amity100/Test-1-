@@ -770,7 +770,15 @@ export class Character implements CharacterAPI {
       if (!m.isMesh) return;
       m.castShadow = !holo;
       m.receiveShadow = !holo;
-      m.frustumCulled = false;
+      // culled against a padded bind-pose sphere (roomy enough for any pose or tumble), so
+      // off-screen characters aren't skinned and drawn in every pass
+      if (!m.geometry.boundingSphere) m.geometry.computeBoundingSphere();
+      if (m.isSkinnedMesh && m.geometry.boundingSphere) {
+        const bs = m.geometry.boundingSphere.clone();
+        bs.radius = bs.radius * 2 + 20;
+        m.boundingSphere = bs;
+      }
+      m.frustumCulled = !holo;
       m.material = holo ?? lookMaterial(m.material as THREE.Material, look as Exclude<Look, 'hologram'>);
       this.meshes.push(m);
     });
