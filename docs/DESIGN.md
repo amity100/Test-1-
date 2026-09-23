@@ -383,3 +383,46 @@ Old stealth code (`guards.ts`, `harbor.ts`) is removed at integration.
   (pre-warm).
 - Zones far from the player are hidden (`zoneRoots`).
 - Draw calls: static geometry is merged per material per zone.
+
+## 12. Canonical i18n keys (UI writes EN + HE for all of these)
+
+- `zone.<id>.name`, `zone.<id>.sub` for pier, yard, skeleton, lab, crown.
+- `hint.<LessonId>` for every LessonId. Optional device variants are
+  `hint.<lesson>.touch` and `hint.<lesson>.pad`; t() falls back to the base
+  key.
+- `rule.1`, `rule.2`, `rule.3`: the three rules, one line each.
+- Aim refusals: `aim.tooHigh` (air end above your feet), `aim.range`,
+  `aim.los`, `aim.blocked` (jammer), `aim.enemyClose`, `aim.space`,
+  `aim.noSurface`.
+- Gate modes: `gate.air`, `gate.catch`, `gate.trapdoor`, `gate.door`.
+- Gate refusals: `gate.steady`, `gate.enemyClose`, `gate.blocked`,
+  `gate.noSpace`, `gate.range`.
+- `outcome.splash`, `outcome.void`, `outcome.skull`, `outcome.stars`,
+  `outcome.safe`.
+- `prompt.finish`, `prompt.grab`, `prompt.throw`, `prompt.hijack`,
+  `prompt.lift`, `prompt.drop`.
+- `obj.clear`, `obj.lift`, `obj.boss`, `obj.escape`.
+- `toast.checkpoint`, `toast.hijack`, `toast.clipSaved`, `toast.clipFailed`,
+  `toast.photoSaved`, `toast.challenge`, `toast.zoneClear`.
+- Enemy barks: `bark.contact`, `bark.reload`, `bark.grenade`, `bark.charge`,
+  `bark.lost`, `bark.mateDown`, `bark.what`, `bark.boss1`, `bark.boss2`,
+  `bark.boss3`.
+- `trick.<TrickId>` and `challenge.<id>.title` / `challenge.<id>.desc`:
+  provided by META in `src/meta/strings.ts` (`META_STRINGS = { en, he }`).
+  UI merges them through `addStrings`.
+
+## 13. Module entry points (the lead's integration relies on these exactly)
+
+| Module | Entry point |
+|---|---|
+| CORE | `new RiftSystem(scene, renderer \| null, world, { portalScale, lightCount, maxViews, outcomeAt? })` implements `RiftAPI` (+ `events`, `playerEnds()`, `ghostFigure`, `gateEnds(id)`) |
+| CORE | `new Physics(world, rifts, { seaY, isSea, killYAt })` implements `PhysicsAPI` |
+| CORE | `new Projectiles(world, rifts, physics, hooks)` implements `ProjectileAPI` |
+| CORE | `new Player(char, body)`, `update(dt, input, world, physics, physEv, ev, time)` |
+| CORE | `CollisionWorld` gains a broadphase (same API) + `moveCollider(c, dx, dy, dz)` |
+| ENEMIES | `new EnemySystem(physics, hooks, makeChar)` implements `EnemyAPI` (+ `setNav`, `onCrossed`, `onImpact`, `onSplash`, `onFellOut`, `enemyOfBody`, `blockers`, `trapTargets`, `boss()`) |
+| LEVEL | `buildTower(envMap, mobile, { headless? })` returns `TowerLevel`. `fx.ts`: `createSky()` (uniform `uSunDir`), `createSkyline()`, `LampSystem`, `createBeam` |
+| ANIM | `loadAnimLibrary(json, soldierAsset)` returns `AnimLibrary`; `new Character(asset, anims, look)` implements `CharacterAPI`. Looks: hero, rifleman, grenadier, warden, brute, sniper, jammer, boss, hologram |
+| META | `StyleSystem`, `ReplayRecorder`, `ReplayPlayer(host)`, `ClipExporter`, `PhotoMode`, `ChallengeSystem`, `META_STRINGS` |
+| UI | `HUD` implements `HudAPI` (+ `onClip`), `Input` (`Action` from contracts), `TouchControls`, `Menu` (+ `RunStats`, `showChallenges`), `t()` / `addStrings()` |
+| AUDIO | `Audio` implements `AudioAPI` |

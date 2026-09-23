@@ -165,7 +165,12 @@ export interface DynBody {
   /** Ground friction (1 = stops at once). */
   friction: number;
   enabled: boolean;
-  /** Physics integrates gravity etc. When false the owner moves it (walking) but physics still resolves collisions/crossings in stepBody. */
+  /**
+   * true: physics integrates gravity, bounce, friction.
+   * false: kinematic (e.g. a walking enemy): the owner sets `vel` every frame; physics still moves it by vel*dt,
+   * resolves world collisions, snaps to ground (step-up), reports onGround and detects rift crossings.
+   * If a kinematic body loses its ground (walked onto a hole / edge) its owner should switch it to simulate=true.
+   */
   simulate: boolean;
   /** Orientation for props/grenades/tumbling characters (physics spins it by `spin`). */
   quat: THREE.Quaternion;
@@ -196,7 +201,10 @@ export interface PhysicsAPI {
   readonly bodies: DynBody[];
   createBody(kind: BodyKind, opts: { pos: V3; radius: number; height: number; bounce?: number; friction?: number; team?: Team; simulate?: boolean }): DynBody;
   removeBody(b: DynBody): void;
-  /** Steps every enabled simulated body (substeps ≤ 0.25 m), then body-body touches. */
+  /**
+   * Steps every enabled body except those with userData.manual === true (the player controller steps its
+   * own body via stepBody). Substeps keep each move ≤ 0.25 m. Then body-body touches.
+   */
   step(dt: number, ev: PhysicsEvents, time: number): void;
   /** Single body (used by the player controller each frame). */
   stepBody(b: DynBody, dt: number, ev: PhysicsEvents, time: number): void;
@@ -493,6 +501,10 @@ export interface EnemyHooks {
   knocked(e: EnemyView, info: HitInfo): void;
   melee(e: EnemyView, damage: number, push: V3): void;
   sound(kind: 'roar' | 'clang' | 'step' | 'shout' | 'thud', at: V3): void;
+  /** Boss: show/hide his red rift pair between a and b (blink). */
+  bossRift?(e: EnemyView, a: V3 | null, b: V3 | null): void;
+  /** Boss / officers: call reinforcements (the game spawns them through a gate or nearby). */
+  summon?(e: EnemyView, defs: SpawnDef[]): void;
 }
 
 export interface EnemyContext {
@@ -522,7 +534,6 @@ export interface EnemyAPI {
   alertZone(zone: ZoneId): void;
   /** Threats against the player this frame (for CATCH). */
   threats(): Threat[];
-  /** Enemies currently holding the player in a laser lock. */
   clear(): void;
   snapshot(): ActorSnap[];
   applySnapshot(s: ActorSnap[]): void;
