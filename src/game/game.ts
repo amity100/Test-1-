@@ -628,7 +628,6 @@ export class Game {
         source: p.kind === 'beam' ? 'beam' : p.kind === 'grenade' ? 'grenade' : 'bolt',
         amount: p.kind === 'beam' ? LAW.beam.damage * 2 : LAW.bolt.damageCharged,
         charged: true,
-        speed: p.vel.length(),
         dir: dir.clone(),
         from: hit.point.clone().addScaledVector(dir, -1.5),
         team: 'player',
@@ -890,7 +889,7 @@ export class Game {
     };
     if (info.amount <= 0) return;
     const res = this.withKill(kc, () => this.enemies.hit(v, info));
-    if (res === 'knocked' || res === 'hurt') this.enemies.stagger(v, 1.6, _v.copy(imp.vel).setY(0).multiplyScalar(0.25));
+    void res;
     this.fx.dust(v.pos, 1);
     this.audio.impact(v.pos, speed);
   }
@@ -981,7 +980,7 @@ export class Game {
         };
         const kc: KillCtx = o.projectile ? { projectile: o.projectile } : { ...(o.kc ?? {}), byBarrel: o.barrel };
         const res = this.withKill(kc, () => this.enemies.hit(e, info));
-        if (res !== 'killed' && res !== 'blocked' && k > 0.35) this.enemies.stagger(e, 1.4, _v2.subVectors(e.pos, at).setY(0).normalize().multiplyScalar(4 * k));
+        if (res === 'hurt' && k > 0.35) this.enemies.stagger(e, 1.4, _v2.subVectors(e.pos, at).setY(0).normalize().multiplyScalar(4 * k));
       }
     }
     // push loose things, chain barrels
@@ -1327,7 +1326,7 @@ export class Game {
         if (!e.alive || e.pos.distanceTo(pos) > LAW.cometRadius) continue;
         const info: HitInfo = { source: 'impact', amount: 20, charged: true, speed: LAW.knockSpeed, from: pos.clone(), dir: _v.subVectors(e.pos, pos).normalize().clone(), team: 'player', instigator: 'player' };
         const res = this.withKill({ byPlayer: true, playerFling: this.playerFling }, () => this.enemies.hit(e, info));
-        if (res !== 'killed') this.enemies.stagger(e, 2.2, _v2.subVectors(e.pos, pos).setY(0).normalize().multiplyScalar(3));
+        if (res === 'hurt' || res === 'blocked') this.enemies.stagger(e, 2.2, _v2.subVectors(e.pos, pos).setY(0).normalize().multiplyScalar(3));
       }
     }
     this.playerFling = false;
