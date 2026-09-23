@@ -32,6 +32,7 @@ import {
   type TrickAward,
   type V3,
   type ZoneId,
+  type ZoneDef,
 } from '../core/contracts';
 import { Input } from '../engine/input';
 import { TouchControls } from '../engine/touch';
@@ -427,7 +428,7 @@ export class Game {
     this.hintsSeen.clear();
     this.zoneStartT = this.time;
     this.style.reset();
-    this.hud.clearHint();
+    this.clearHints();
     this.updateObjective(true);
   }
 
@@ -452,7 +453,7 @@ export class Game {
     this.input.active = true;
     this.input.requestLock();
     const z = this.zones.current;
-    this.hud.zoneTitle(t(z.nameKey), t(z.subKey));
+    this.showZoneTitle(z);
     this.audio.sting('zone');
     if (z.id === 'pier' && !this.hintsSeen.has('rules')) {
       this.hintsSeen.add('rules');
@@ -534,7 +535,30 @@ export class Game {
   private hint(key: string, html: string, dur = 7) {
     if (this.hintsSeen.has('h:' + key)) return;
     this.hintsSeen.add('h:' + key);
-    this.hud.hint(key, html, dur);
+    this.hintQueue.push({ key, html, dur });
+  }
+
+  /** Hints take turns (each gets a few seconds) and wait for the zone title card. */
+  private hintQueue: { key: string; html: string; dur: number }[] = [];
+  private hintHold = 0;
+  private updateHints(realDt: number) {
+    this.hintHold -= realDt;
+    if (this.hintHold > 0 || !this.hintQueue.length) return;
+    const h = this.hintQueue.shift()!;
+    this.hud.hint(h.key, h.html, h.dur);
+    this.hintHold = Math.min(h.dur, 4.5);
+  }
+
+  private clearHints() {
+    this.hintQueue.length = 0;
+    this.hintHold = 0;
+    this.hud.clearHint();
+  }
+
+  /** The zone title card; hints wait until it has faded. */
+  private showZoneTitle(z: ZoneDef) {
+    this.hud.zoneTitle(t(z.nameKey), t(z.subKey));
+    this.hintHold = Math.max(this.hintHold, 4.2);
   }
 
   // ------------------------------------------------------------------
@@ -1190,6 +1214,7 @@ export class Game {
     const inp = this.input;
     const p = this.player;
     const body = p.body;
+    this.updateHints(realDt);
 
     // ----- time -----
     let ts = 1;
@@ -1812,7 +1837,7 @@ export class Game {
   private onZoneEntered(id: ZoneId) {
     const z = this.zones.zone(id);
     this.props.spawnZone(id);
-    this.hud.zoneTitle(t(z.nameKey), t(z.subKey));
+    this.showZoneTitle(z);
     this.audio.sting(id === 'crown' ? 'boss' : 'zone');
     this.push({ type: 'zone', t: this.time, zone: id });
     this.saveProgress();
