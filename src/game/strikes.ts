@@ -52,6 +52,8 @@ export interface StrikeHost {
   playerFeet(): V3;
   playerEye(): V3;
   aimRay(): { origin: V3; dir: V3 };
+  /** Touch: a thumb aims looser, so the lock-on cone is wider. */
+  touch(): boolean;
 }
 
 export interface StrikeResult {
@@ -136,7 +138,7 @@ export class Strikes {
       const ang = Math.acos(Math.min(1, along / Math.max(1e-6, _b.length())));
       // a body right by the ray counts even if the angle is wide (close range)
       const off = _b.addScaledVector(dir, -along).length();
-      if (ang > STRIKE.cone && off > 1.4) continue;
+      if (ang > STRIKE.cone * (this.h.touch() ? 1.4 : 1) && off > 1.4) continue;
       if (!this.h.world.lineOfSight(eye, c)) continue;
       const score = ang + d * 0.004;
       if (score < bestScore) {

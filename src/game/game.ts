@@ -367,6 +367,7 @@ export class Game {
       playerFeet: () => this.player.body.pos,
       playerEye: () => this.player.eye(_v4),
       aimRay: () => this.rig.aimRay(),
+      touch: () => this.input.lastDevice === 'touch',
     });
     this.scene.add(this.hazards.group);
 
