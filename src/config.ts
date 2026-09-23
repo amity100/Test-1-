@@ -86,6 +86,20 @@ export const FEEL = {
   guardRun: 4.2,
   guardFireInterval: 0.95,
   guardDamage: 34,
+
+  // Rift action (CORE)
+  entranceOpenTime: 0.12, // entrances / boss blinks open fast (crossable at once anyway)
+  airDefault: 10, // air exit distance along the aim ray when nothing is hit (m past the player)
+  hatchSnap: 1.6, // aim ray passing this close over a target snaps a sky hatch above it
+  hatchSnapTouch: 2.2,
+  hatchMaxAbove: 8, // hatch centre above the target's head, at most
+  perchBand: 0.9, // aiming this close below the top of a thing perches on top of it
+  floorPopSpeed: 6.5, // minimum speed out of an up-facing end (so slow things clear the hole)
+  floorPopNudge: 2.2, // ...plus a sideways nudge so they land beside it
+  chargedAirControl: 0.08, // flying out of a rift: momentum is honest
+  shoveTime: 0.25,
+  coyoteTime: 0.1,
+  jumpBuffer: 0.12,
 };
 
 export type QualityName = 'low' | 'medium' | 'high' | 'ultra';

@@ -6,7 +6,8 @@ export const PORTAL_MESH_SCALE = new THREE.Vector2(1.34, 1.16);
  * Rift surface. Front face shows the linked rift's render target sampled in
  * screen space (a true window), wrapped in a turbulent energy rim that
  * drives bloom. Back face is a dark swirling membrane. `uGhost` turns it into
- * the placement hologram.
+ * the placement hologram; `uDormant` draws a placed-but-unlinked end as a dim
+ * closed ring. Works for any orientation (floors, ceilings, walls, air).
  */
 export function createPortalMaterial(color: THREE.Color) {
   return new THREE.ShaderMaterial({
@@ -23,6 +24,7 @@ export function createPortalMaterial(color: THREE.Color) {
       uColor: { value: color.clone() },
       uScale: { value: PORTAL_MESH_SCALE.clone() },
       uPulse: { value: 0 },
+      uDormant: { value: 0 },
     },
     vertexShader: /* glsl */ `
       varying vec2 vUv;
@@ -38,7 +40,7 @@ export function createPortalMaterial(color: THREE.Color) {
     fragmentShader: /* glsl */ `
       uniform sampler2D tView;
       uniform vec2 uScreen, uScale;
-      uniform float uOpen, uTime, uHasView, uGhost, uPulse;
+      uniform float uOpen, uTime, uHasView, uGhost, uPulse, uDormant;
       uniform vec3 uColor;
       varying vec2 vUv;
       varying vec3 vN, vV;
@@ -67,6 +69,16 @@ export function createPortalMaterial(color: THREE.Color) {
           if (a < 0.01) discard;
           vec3 c = uColor * (ring * 3.0 + inside * (0.6 + scan * 0.6));
           gl_FragColor = vec4(c, a * (0.75 + 0.25 * sin(uTime * 6.0)));
+          return;
+        }
+        if (uDormant > 0.5) {
+          // placed but nothing links to it yet: a slow, dim closed ring
+          float rr = max(r, 0.2) * 0.96;
+          float ring = smoothstep(0.07, 0.0, abs(d - rr)) * (0.55 + 0.45 * n);
+          float inside = step(d, rr) * (0.05 + 0.08 * n2);
+          float a = ring * (0.65 + 0.35 * sin(uTime * 2.5)) + inside;
+          if (a < 0.01) discard;
+          gl_FragColor = vec4(uColor * (ring * 1.5 + inside), a);
           return;
         }
         if (d > edge + 0.22 || r < 0.001) discard;
