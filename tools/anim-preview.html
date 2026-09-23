@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Anim preview</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #1d2126; overflow: hidden; font: 12px/1.2 system-ui, sans-serif; }
+      canvas { display: block; }
+      .lbl { position: absolute; transform: translate(-50%, 0); color: #e8eef5; background: rgba(0,0,0,.55); padding: 1px 5px; border-radius: 3px; white-space: nowrap; pointer-events: none; }
+      #info { position: absolute; left: 8px; top: 6px; color: #9fb3c8; }
+    </style>
+  </head>
+  <body>
+    <div id="info"></div>
+    <!--
+      Query params:
+        mode=clips (default) | looks | motion
+        look=rifleman         character look for mode=clips
+        u=0.5                 normalized clip time (clips) / cycle phase
+        az=35 el=8            camera azimuth / elevation (degrees)
+        clips=walk,run        subset of clips
+        zoom=1
+    -->
+    <script type="module" src="./anim-preview.ts"></script>
+  </body>
+</html>
