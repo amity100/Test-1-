@@ -37,8 +37,8 @@ import { Input } from '../engine/input';
 import { TouchControls } from '../engine/touch';
 import { Audio } from '../engine/audio';
 import { Renderer } from '../render/renderer';
-import { createSky, createSkyline, LampSystem } from '../render/fx';
-import { buildTower } from '../world/tower';
+import { createSky, createSkyEnvMap, createSkyline, LampSystem } from '../render/fx';
+import { buildTower, type TowerBuild } from '../world/tower';
 import { CameraRig } from './camera';
 import { Character, type AnimLibrary, type CharacterAsset, type Look } from './characters';
 import { Player, type PlayerEvents, type PlayerInput } from './player';
@@ -141,7 +141,7 @@ export class Game {
   time = 0;
   timeScale = 1;
 
-  level!: TowerLevel;
+  level!: TowerBuild;
   zones!: ZoneManager;
   physics!: Physics;
   rifts!: RiftSystem;
@@ -280,26 +280,27 @@ export class Game {
     this.asset = asset;
     this.anims = anims;
     const r = this.renderer.renderer;
-    // image-based light from the sky itself (warm, matches the sun)
-    const envScene = new THREE.Scene();
-    const envSky = createSky();
-    envScene.add(envSky);
-    const pm = new THREE.PMREMGenerator(r);
-    const envMap = pm.fromScene(envScene, 0.02).texture;
-    pm.dispose();
-    this.scene.environment = envMap;
-    this.scene.environmentIntensity = 0.85;
-
     const mobile = IS_TOUCH;
-    this.level = buildTower(envMap, mobile);
+    // image-based light from the golden-hour sky itself
+    const envMap = createSkyEnvMap(r);
+    this.scene.environment = envMap;
+    this.level = buildTower(envMap, mobile) as TowerBuild;
     this.scene.add(this.level.root);
-    const skyline = createSkyline();
+    const atm = this.level.atmosphere;
+    this.scene.environmentIntensity = atm.environmentIntensity;
+    this.sun.color.setHex(atm.sunColor);
+    this.sun.intensity = atm.sunIntensity;
+    this.hemi.color.setHex(atm.hemiSky);
+    this.hemi.groundColor.setHex(atm.hemiGround);
+    this.hemi.intensity = atm.hemiIntensity;
+    (this.scene.fog as THREE.FogExp2).color.setHex(atm.fogColor);
+    (this.scene.fog as THREE.FogExp2).density = atm.fogDensity;
+    r.toneMappingExposure = atm.exposure;
+    const skyline = createSkyline({ mobile, sunDir: this.level.sunDir });
     this.skyline = skyline;
     this.scene.add(skyline);
     const sunU = (this.sky.material as THREE.ShaderMaterial).uniforms.uSunDir;
     if (sunU) sunU.value.copy(this.level.sunDir);
-    const envU = (envSky.material as THREE.ShaderMaterial).uniforms.uSunDir;
-    if (envU) envU.value.copy(this.level.sunDir);
     const preset = this.renderer.preset;
     this.sun.shadow.mapSize.set(preset.shadowMap, preset.shadowMap);
     if (this.level.lamps.length) {
@@ -313,18 +314,17 @@ export class Game {
       portalScale: preset.portalScale,
       lightCount: mobile ? 2 : 4,
       maxViews: preset.portalViews,
-      outcomeAt: (x, z) => {
-        const zone = this.zones.zoneAt(_v3.set(x, 0, z)) ?? this.zones.current;
-        return zone.sea ? 'splash' : 'void';
+      outcomeAt: (x, z, groundY) => {
+        if (groundY > -Infinity) return null;
+        return this.level.isSea(_v3.set(x, 0, z)) ? 'splash' : 'void';
       },
     });
     this.physics = new Physics(world, this.rifts, {
       seaY: this.level.seaY,
-      isSea: (p) => (this.zones.zoneAt(p) ?? this.zones.current).sea,
-      killYAt: (p) => {
-        const z = this.zones.zoneAt(p);
-        return z ? z.killY : this.level.seaY - 30;
-      },
+      isSea: (p) => this.level.isSea(p),
+      // stacked zones: a body falling off a floor lands on the one below (the yard / the sea);
+      // only far outside the tower is it lost
+      killYAt: () => this.level.seaY - 30,
     });
     this.projectiles = new Projectiles(world, this.rifts, this.physics, this.projectileHooks());
     this.scene.add(this.projectiles.group);
