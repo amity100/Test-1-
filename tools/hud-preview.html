@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>THRESHOLD UI preview</title>
+    <style>
+      /* fake golden-hour scene behind the UI (bright on purpose: the HUD must read on it) */
+      .fake-scene { position: absolute; inset: 0; overflow: hidden;
+        background:
+          radial-gradient(circle at 18% 58%, rgba(255, 236, 170, .95) 0 3%, rgba(255, 200, 120, .55) 7%, rgba(255, 160, 90, 0) 26%),
+          linear-gradient(180deg, #5d7fae 0%, #c9a57e 38%, #f3b36a 55%, #e7925a 62%, #3b5d7a 63%, #27465f 80%, #1a3247 100%); }
+      .fake-scene .tower { position: absolute; left: 52%; bottom: 30%; width: 16%; height: 74%; background: linear-gradient(90deg, #3a3f4a, #20242c); }
+      .fake-scene .tower::before { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(0deg, transparent 0 22px, rgba(255, 190, 120, .35) 22px 24px), repeating-linear-gradient(90deg, transparent 0 30px, rgba(0, 0, 0, .3) 30px 33px); }
+      .fake-scene .quay { position: absolute; left: 0; right: 0; bottom: 0; height: 30%; background: linear-gradient(180deg, #8a8078, #5f5750); }
+      .fake-scene .box { position: absolute; bottom: 30%; background: #b0452c; }
+      .fake-scene .guy { position: absolute; bottom: 30%; width: 1.2%; height: 11%; background: #1b1e24; border-radius: 40% 40% 10% 10%; }
+      .fake-scene .crane { position: absolute; left: 8%; bottom: 30%; width: 1%; height: 60%; background: #d9a441; }
+      .fake-scene .crane::after { content: ''; position: absolute; top: 0; left: 0; width: 2400%; height: 8px; background: #d9a441; }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div class="fake-scene"><div class="crane"></div><div class="tower"></div><div class="quay"></div>
+        <div class="box" style="left:30%;width:12%;height:14%"></div><div class="box" style="left:70%;width:10%;height:9%;background:#2f6d8c"></div>
+        <div class="guy" style="left:44%"></div><div class="guy" style="left:47%"></div><div class="guy" style="left:79%;height:9%"></div>
+      </div>
+    </div>
+    <script type="module" src="./hud-preview.ts"></script>
+  </body>
+</html>
