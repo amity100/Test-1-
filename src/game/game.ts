@@ -354,6 +354,14 @@ export class Game {
       this.fx.riftBurst(end.position, end.normal, which === 'exit' ? COL_EXIT : COL_ENTRANCE);
     };
     this.rifts.events.closed = (end) => this.audio.riftClose(end.position);
+    // by the panel or by an entrance on its arena end: either way it's a HIJACK
+    this.rifts.events.hijacked = (id) => {
+      const g = this.level.gates.find((q) => q.id === id);
+      const at = g ? g.panel : this.player.body.pos;
+      this.audio.hijack(at);
+      this.hud.toast(t('toast.hijack'), 'good');
+      this.push({ type: 'hijack', t: this.time, at: at.clone() });
+    };
     this.helpers = [];
     this.rifts.group.traverse((o) => {
       if (o.userData.helper) this.helpers.push(o);
@@ -406,6 +414,7 @@ export class Game {
     this.recorder.clear();
     this.zones.startAt(id);
     this.gateWaveT.clear();
+    this.gateQueue.length = 0;
     this.challenges.setZone(id);
     this.stats = { time: 0, kills: 0, bestCombo: 0, styleTotal: 0, tricks: 0, deaths: 0, challenges: 0 };
     this.tricksSeen.clear();
@@ -493,6 +502,7 @@ export class Game {
     for (const g of this.level.gates) this.rifts.setGateOpen(g.id, false);
     this.zones.resetUncleared();
     this.gateWaveT.clear();
+    this.gateQueue.length = 0;
     // loads, barrels and crates come back so a lesson can be tried again
     this.props.clear();
     for (const z of this.zones.active) this.props.spawnZone(z);
@@ -853,7 +863,7 @@ export class Game {
     this.hp = Math.min(LAW.player.hp, this.hp + LAW.player.killHeal);
     this.hitstop = Math.max(this.hitstop, 0.05);
     this.rig.kick = Math.max(this.rig.kick, 0.6);
-    const cleared = this.zones.checkClears((id) => this.enemies.get(id)?.alive ?? false);
+    const cleared = this.zones.checkClears((id) => this.enemies.get(id)?.alive ?? false, (enc) => this.wavesPending(enc));
     for (const c of cleared) this.onEncounterCleared(c);
     if (e.kind === 'boss') this.onBossDown();
   }
@@ -1680,7 +1690,7 @@ export class Game {
     }
     // HIJACK a Kessler gate
     for (const g of this.level.gates) {
-      if (g.panel.distanceTo(b.pos) > 2.2) continue;
+      if (g.panel.distanceTo(b.pos) > 2.2 || this.rifts.isHijacked(g.id)) continue;
       return {
         label: t('prompt.hijack'),
         run: () => {
@@ -1689,11 +1699,7 @@ export class Game {
             this.audio.ui('deny');
             return;
           }
-          if (this.rifts.hijackGate(g.id)) {
-            this.audio.hijack(g.panel);
-            this.hud.toast(t('toast.hijack'), 'good');
-            this.push({ type: 'hijack', t: this.time, at: g.panel.clone() });
-          }
+          this.rifts.hijackGate(g.id); // events.hijacked announces it
         },
       };
     }
@@ -1839,11 +1845,18 @@ export class Game {
   }
 
   private gateWaveT = new Map<string, { wave: number; t: number }>();
+
+  /** A gate fight isn't over while its gates still have waves to send. */
+  private wavesPending(enc: EncounterState) {
+    if (enc.def.lesson !== 'hijack') return false;
+    if (this.gateQueue.some((q) => q.enc === enc)) return true;
+    return this.level.gates.some((g) => g.zone === enc.zone && (this.gateWaveT.get(g.id)?.wave ?? 0) < g.waves.length);
+  }
   private updateGates(dt: number) {
     for (const g of this.level.gates) {
       if (!this.zones.active.has(g.zone)) continue;
       const enc = this.zones.encounters.find((x) => x.zone === g.zone && x.def.lesson === 'hijack');
-      if (!enc || !enc.triggered || enc.cleared) continue;
+      if (!enc || !enc.engaged || enc.cleared) continue;
       let s = this.gateWaveT.get(g.id);
       if (!s) {
         s = { wave: 0, t: 4 };
@@ -1852,20 +1865,28 @@ export class Game {
       if (s.wave >= g.waves.length) continue;
       s.t -= dt;
       if (s.t > 0) continue;
-      // reinforcements step through the gate (or through your exit if you hijacked it)
-      const inEnd = this.rifts.gateEnds(g.id).in;
-      if (!inEnd) continue;
+      // reinforcements step through the gate one by one (or through your exit if you hijacked it)
+      if (!this.rifts.gateEnds(g.id).in) continue;
       const wave = g.waves[s.wave++];
       s.t = 9;
-      wave.forEach((def, i) => {
-        const spawnPos = inEnd.position.clone().addScaledVector(inEnd.normal, 1.6 + i * 0.8).setY(inEnd.position.y - inEnd.height / 2 + 0.02);
-        const d: SpawnDef = { ...def, pos: spawnPos, state: 'combat' };
-        const v = this.enemies.spawn(d);
-        enc.enemyIds.push(v.id);
-        this.enemies.launch(v, inEnd.normal.clone().multiplyScalar(-3.5).setY(0.5));
-      });
+      wave.forEach((def, i) => this.gateQueue.push({ gate: g.id, def, enc, t: i * 0.45 }));
+    }
+    for (let i = this.gateQueue.length - 1; i >= 0; i--) {
+      const q = this.gateQueue[i];
+      q.t -= dt;
+      if (q.t > 0) continue;
+      this.gateQueue.splice(i, 1);
+      const inEnd = this.rifts.gateEnds(q.gate).in;
+      if (!inEnd || q.enc.cleared) continue;
+      // just in front of the in-end, hopping into it
+      const spawnPos = inEnd.position.clone().addScaledVector(inEnd.normal, 0.55).setY(inEnd.position.y - inEnd.height / 2 + 0.02);
+      const v = this.enemies.spawn({ ...q.def, pos: spawnPos, state: 'combat' });
+      q.enc.enemyIds.push(v.id);
+      this.enemies.launch(v, inEnd.normal.clone().multiplyScalar(-4.5).setY(2.2));
     }
   }
+
+  private gateQueue: { gate: string; def: SpawnDef; enc: EncounterState; t: number }[] = [];
 
   private liftCarry: { lift: LiftState; last: THREE.Vector3 } | null = null;
   private startLift(l: LiftState) {

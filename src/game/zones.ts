@@ -122,11 +122,12 @@ export class ZoneManager {
     return this.encounters.find((e) => e.enemyIds.includes(id)) ?? null;
   }
 
-  /** Call after enemy deaths; returns encounters that just got cleared. */
-  checkClears(isAlive: (id: number) => boolean): EncounterState[] {
+  /** Call after enemy deaths; returns encounters that just got cleared (`pending`: more enemies still to come). */
+  checkClears(isAlive: (id: number) => boolean, pending?: (e: EncounterState) => boolean): EncounterState[] {
     const out: EncounterState[] = [];
     for (const e of this.encounters) {
       if (!e.triggered || e.cleared) continue;
+      if (pending?.(e)) continue;
       if (e.enemyIds.length === 0 && e.def.spawns.length > 0) continue;
       if (e.enemyIds.every((id) => !isAlive(id))) {
         e.cleared = true;
