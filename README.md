@@ -38,18 +38,30 @@ math unit tests.
 * **Aim → preview → open.** A hologram shows exactly where you will stand and
   which way you will face. It's tinted by exposure: teal = unseen, yellow =
   risky, red = a guard would see you. A live *rift view* window shows the
-  other side before you commit.
-* **Smart snapping.** Aim near an unaware guard and the rift locks in right
-  behind him, facing his back. Aim at a ceiling above a guard to drop on him.
-* **Surfaces decide orientation.** Floor = a standing doorway, wall = step out
-  of the wall, ceiling = drop from above. The wheel overrides distance so you
-  can place a rift in open ground.
-* **Snatch.** Stand at your end of an open rift while a guard stands at the
-  other end, and pull him through.
-* **Anchor.** Drop a persistent anchor in a dark corner. Tap R to open a rift
-  straight to it — to escape, or to dump bodies where nobody patrols.
-* **Limits.** Three charges that recharge; open rifts glow and hum, so guards
-  who see or hear them come to look; purple inhibitor fields block rifts.
+  other side before you commit. Range: 60 m.
+* **Rifts stay open until you close them** (X / middle mouse / ✕) and they are
+  silent: guards react to *you*, never to a rift. Up to three rift pairs can be
+  open at once; opening a fourth closes the oldest.
+* **Perch.** Aim high on a wall, or under a crane boom, and the rift lands you
+  *on top*: roofs, container stacks, the searchlight tower, the crane.
+* **Smart snapping.** Aim near an unaware guard you can see and the rift locks
+  in right behind him, facing his back.
+* **No suicide rifts.** A placement that would drop you from a lethal height,
+  or over water, is refused ("no safe landing"). Long falls hurt; a rooftop
+  fall kills.
+* **Snatch** a guard standing at the far end of an open rift; drop an **Anchor**
+  in a hidden corner and throw bodies through a rift to it.
+* **Inhibitors** block rifts inside their purple dome.
+
+## Mission: Operation Pier 9
+
+A walled port compound at dusk, designed so that walking is never enough:
+you start on a 16 m rooftop across a canal; a 6.5 m wall surrounds the
+compound (look through the mesh gate or climb a stepped container stack to see
+over it); a searchlight sniper sweeps the central plaza; the ledger sits on a
+control-tower deck 18 m up (keycard elevator from the officer, or sabotage the
+warehouse inhibitor and rift up from the crane or the plaza); extraction is a
+helicopter on a barge out on the water.
 
 ## Project layout
 

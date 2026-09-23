@@ -207,7 +207,11 @@ export function windows(size = 256) {
   const c = canvas(size);
   const ctx = c.getContext('2d')!;
   const r = rng(99);
-  ctx.fillStyle = '#05070a';
+  // hazy dusk facade: lighter toward the bottom where the city glow is
+  const grad = ctx.createLinearGradient(0, 0, 0, size);
+  grad.addColorStop(0, '#2b3342');
+  grad.addColorStop(1, '#3a3a48');
+  ctx.fillStyle = grad;
   ctx.fillRect(0, 0, size, size);
   const cols = 16, rows = 32;
   for (let y = 0; y < rows; y++) {

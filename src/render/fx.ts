@@ -32,25 +32,28 @@ export function createSky() {
       void main() {
         vec3 d = normalize(vDir);
         float h = clamp(d.y, -0.2, 1.0);
-        vec3 horizon = vec3(0.075, 0.07, 0.085);
-        vec3 zenith = vec3(0.004, 0.009, 0.02);
-        vec3 col = mix(horizon, zenith, pow(max(h, 0.0), 0.45));
-        // city light pollution glow near the horizon
-        col += vec3(0.09, 0.05, 0.025) * exp(-max(h, 0.0) * 14.0) * (0.6 + 0.4 * smoothstep(-0.5, 0.8, d.z));
-        // stars
+        float sd = max(dot(d, uMoonDir), 0.0);
+        // blue hour: warm horizon, violet band, deep blue zenith
+        vec3 horizon = vec3(0.95, 0.46, 0.22);
+        vec3 band = vec3(0.30, 0.20, 0.34);
+        vec3 zenith = vec3(0.05, 0.09, 0.2);
+        vec3 col = mix(horizon, band, smoothstep(0.0, 0.16, h));
+        col = mix(col, zenith, smoothstep(0.12, 0.65, h));
+        // glow around the setting sun
+        col += vec3(1.0, 0.42, 0.16) * pow(sd, 5.0) * (1.0 - smoothstep(0.0, 0.45, h)) * 0.9;
+        col += vec3(1.0, 0.75, 0.45) * pow(sd, 60.0) * 1.5;
+        col += vec3(1.0, 0.8, 0.55) * smoothstep(0.9986, 0.9993, sd) * 8.0;
+        // first stars high up
         vec3 sp = floor(d * 420.0);
-        float st = step(0.9975, hash(sp)) * smoothstep(0.05, 0.4, h);
-        col += vec3(0.9, 0.95, 1.0) * st * (0.5 + 0.5 * sin(uTime * 2.0 + hash(sp) * 30.0));
-        // moon
-        float md = dot(d, uMoonDir);
-        col += vec3(0.85, 0.9, 1.0) * smoothstep(0.9993, 0.9996, md) * 2.4;
-        col += vec3(0.25, 0.3, 0.4) * pow(max(md, 0.0), 180.0) * 0.8;
-        col += vec3(0.08, 0.1, 0.14) * pow(max(md, 0.0), 12.0) * 0.4;
-        // clouds
+        float st = step(0.998, hash(sp)) * smoothstep(0.45, 0.9, h);
+        col += vec3(0.9, 0.95, 1.0) * st * (0.3 + 0.3 * sin(uTime * 2.0 + hash(sp) * 30.0));
+        // clouds lit from below by the sun
         vec2 cp = d.xz / max(d.y + 0.15, 0.05) * 1.3 + vec2(uTime * 0.004, uTime * 0.002);
         float cl = smoothstep(0.45, 0.85, fbm(cp));
-        vec3 cloudCol = vec3(0.05, 0.05, 0.06) + vec3(0.12, 0.12, 0.14) * pow(max(md, 0.0), 8.0);
-        col = mix(col, cloudCol, cl * smoothstep(0.0, 0.25, h) * 0.85);
+        vec3 cloudCol = mix(vec3(0.20, 0.15, 0.22), vec3(1.0, 0.52, 0.28), 0.25 + 0.75 * pow(sd, 2.5));
+        col = mix(col, cloudCol, cl * smoothstep(0.02, 0.25, h) * 0.8);
+        // haze below the horizon
+        col = mix(col, vec3(0.16, 0.12, 0.13), smoothstep(0.0, -0.12, d.y));
         gl_FragColor = vec4(col, 1.0);
       }`,
   });
@@ -221,4 +224,42 @@ export class LampSystem {
       s.intensity += (target - s.intensity) * 0.12;
     }
   }
+}
+
+/** Volumetric beam for a moving searchlight (apex at origin, points down -Y). */
+export function createBeam(color: THREE.ColorRepresentation, length: number, angle: number) {
+  const radius = Math.tan(angle) * length;
+  const geo = new THREE.CylinderGeometry(0.25, radius, length, 28, 1, true);
+  geo.translate(0, -length / 2, 0);
+  const mat = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+    uniforms: { uColor: { value: new THREE.Color(color) }, uTime: { value: 0 } },
+    vertexShader: /* glsl */ `
+      varying float vH;
+      varying vec3 vN, vV;
+      void main() {
+        vH = uv.y;
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vN = normalize(mat3(modelMatrix) * normal);
+        vV = normalize(cameraPosition - wp.xyz);
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }`,
+    fragmentShader: /* glsl */ `
+      uniform vec3 uColor;
+      varying float vH;
+      varying vec3 vN, vV;
+      void main() {
+        float edge = pow(abs(dot(vN, vV)), 1.4);
+        // fade when looking straight down the beam so it never floods the screen
+        float a = edge * pow(vH, 1.3) * 0.32 * smoothstep(0.02, 0.35, 1.0 - abs(dot(vN, vV)) + 0.2);
+        gl_FragColor = vec4(uColor * 1.2 * a, a);
+      }`,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.frustumCulled = false;
+  mesh.renderOrder = 11;
+  return mesh;
 }

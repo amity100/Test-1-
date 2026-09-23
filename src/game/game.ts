@@ -4,7 +4,7 @@ import { Input } from '../engine/input';
 import { TouchControls } from '../engine/touch';
 import { Audio } from '../engine/audio';
 import { Renderer } from '../render/renderer';
-import { createSky, LampSystem, Rain } from '../render/fx';
+import { createBeam, createSky, LampSystem, Rain } from '../render/fx';
 import { buildHarbor, LevelData } from '../world/harbor';
 import { NavGrid } from '../world/nav';
 import { radial } from '../world/textures';
@@ -81,6 +81,9 @@ export class Game {
   private menuT = 0;
   private asset!: CharacterAsset;
   private envMap: THREE.Texture | null = null;
+  private searchlights: { guard: Guard; spot: THREE.SpotLight; beam: THREE.Mesh; pool: THREE.Mesh }[] = [];
+  private hintWall = false;
+  private hintPlaza = false;
 
   constructor(private canvas: HTMLCanvasElement, private uiRoot: HTMLElement, settings: Settings) {
     this.settings = settings;
@@ -98,16 +101,17 @@ export class Game {
     this.rig = new CameraRig(this.camera);
     this.sky = createSky();
     this.scene.add(this.sky);
-    this.scene.fog = new THREE.FogExp2(new THREE.Color().setRGB(0.018, 0.02, 0.028, THREE.LinearSRGBColorSpace), 0.017);
+    this.scene.fog = new THREE.FogExp2(new THREE.Color().setRGB(0.21, 0.16, 0.17, THREE.LinearSRGBColorSpace), 0.0062);
     this.scene.background = new THREE.Color(0x000000);
-    const hemi = new THREE.HemisphereLight(0x3a4a66, 0x0a0a0c, 0.55);
+    const hemi = new THREE.HemisphereLight(0xa3b6dc, 0x4a3d33, 1.35);
     this.scene.add(hemi);
-    this.moon = new THREE.DirectionalLight(0x9db4ff, 0.55);
+    // low evening sun (the field keeps its old name)
+    this.moon = new THREE.DirectionalLight(0xffb880, 2.6);
     this.moon.castShadow = true;
     this.moon.shadow.bias = -0.0004;
     this.moon.shadow.normalBias = 0.03;
     const sc = this.moon.shadow.camera;
-    sc.left = -34; sc.right = 34; sc.top = 34; sc.bottom = -34; sc.near = 1; sc.far = 160;
+    sc.left = -42; sc.right = 42; sc.top = 42; sc.bottom = -42; sc.near = 1; sc.far = 220;
     this.scene.add(this.moon, this.moon.target);
     this.muzzle = new THREE.PointLight(0xffc070, 0, 10, 2);
     this.scene.add(this.muzzle);
@@ -125,7 +129,7 @@ export class Game {
     this.asset = asset;
     this.envMap = envMap;
     this.scene.environment = envMap;
-    this.scene.environmentIntensity = 0.35;
+    this.scene.environmentIntensity = 0.9;
     const mobile = IS_TOUCH;
     this.level = buildHarbor(envMap, mobile);
     this.scene.add(this.level.root);
@@ -133,7 +137,7 @@ export class Game {
     const preset = this.renderer.preset;
     this.lamps = new LampSystem(this.level.lamps, preset.lampLights, !mobile && preset.shadowMap >= 2048);
     this.scene.add(this.lamps.group);
-    this.rain = new Rain(preset.rainDrops);
+    this.rain = new Rain(Math.round(preset.rainDrops * 0.3));
     this.scene.add(this.rain.mesh);
     this.moon.shadow.mapSize.set(preset.shadowMap, preset.shadowMap);
 
@@ -150,6 +154,8 @@ export class Game {
       preset.portalScale,
       mobile ? 2 : 4,
     );
+    this.rift.maxViews = preset.portalViews;
+    (this.sky.material as THREE.ShaderMaterial).uniforms.uMoonDir.value.copy(this.level.sunDir);
     const holo = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.2, 1.6, 1.4), transparent: true, opacity: 0.28, depthWrite: false, blending: THREE.AdditiveBlending });
     const ghostChar = new Character(asset, 'hologram', holo);
     ghostChar.update(0, 0);
@@ -185,7 +191,7 @@ export class Game {
     };
     this.scene.add(this.guards.group);
     this.level.guards.forEach((def, i) => {
-      const c = new Character(asset, def.kind === 'heavy' ? 'heavy' : def.kind === 'officer' ? 'officer' : 'guard');
+      const c = new Character(asset, def.kind === 'heavy' || def.kind === 'sniper' ? 'heavy' : def.kind === 'officer' ? 'officer' : 'guard');
       this.guards.add(new Guard(def, c, i));
     });
 
@@ -216,6 +222,7 @@ export class Game {
     if (qualityChanged) {
       this.renderer.applyQuality(s.quality);
       this.rift?.setPortalScale(this.renderer.preset.portalScale);
+      if (this.rift) this.rift.maxViews = this.renderer.preset.portalViews;
     }
   }
 
@@ -234,11 +241,14 @@ export class Game {
     this.guards.guards = [];
     old.forEach((g) => g.char.dispose());
     defs.forEach((def, i) => {
-      const c = new Character(this.asset, def.kind === 'heavy' ? 'heavy' : def.kind === 'officer' ? 'officer' : 'guard');
+      const c = new Character(this.asset, def.kind === 'heavy' || def.kind === 'sniper' ? 'heavy' : def.kind === 'officer' ? 'officer' : 'guard');
       this.guards.add(new Guard(def, c, i));
     });
     this.helpers = this.helpers.filter((h) => !(h as any).isMesh || !(h as THREE.Mesh).geometry.getAttribute('alpha'));
     this.helpers.push(...this.guards.guards.map((g) => g.fan));
+    this.buildSearchlights();
+    this.hintWall = false;
+    this.hintPlaza = false;
     this.player.teleport(L.playerStart, L.playerYaw);
     this.player.health = FEEL.maxHealth;
     this.player.carrying = null;
@@ -248,8 +258,6 @@ export class Game {
     this.rig.snapTo(this.player.pos);
     this.obj = { manifest: false, keycard: false, generator: false, door: false, extracted: false };
     L.inhibitor.active = true;
-    L.keycardDoor.enabled = true;
-    L.doorMesh.position.z = 0.8;
     ((L.doorMesh.userData.reader as THREE.Mesh).material as THREE.MeshBasicMaterial).color.setRGB(4, 0.3, 0.3);
     this.nav.rebuild();
     this.stats = { time: 0, detections: 0, kills: 0, bodiesFound: 0, rifts: 0 };
@@ -260,6 +268,62 @@ export class Game {
     this.time = 0;
     this.lastAlarm = -100;
     this.refreshObjectives();
+  }
+
+  /** Searchlight towers: a real spot light plus a volumetric beam that follow the sniper's gaze. */
+  private buildSearchlights() {
+    for (const s of this.searchlights) {
+      s.spot.removeFromParent();
+      s.spot.target.removeFromParent();
+      s.beam.removeFromParent();
+      s.pool.removeFromParent();
+    }
+    this.searchlights = [];
+    for (const g of this.guards.guards) {
+      if (!g.def.sweep) continue;
+      const spot = new THREE.SpotLight(0xf2f6ff, 0, 90, g.def.fov ?? 0.26, 0.35, 1.1);
+      const beam = createBeam(0xdfe8ff, 48, (g.def.fov ?? 0.26) * 0.9);
+      // the lit ellipse on the ground: exactly what the sniper is watching
+      const pool = new THREE.Mesh(
+        new THREE.CircleGeometry(1, 40),
+        new THREE.MeshBasicMaterial({ map: radial(128, 'rgba(255,255,255,1)', 'rgba(255,255,255,0)'), color: new THREE.Color(1.3, 1.35, 1.4), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -4 }),
+      );
+      pool.rotation.order = 'YXZ';
+      pool.renderOrder = 12;
+      this.scene.add(spot, spot.target, beam, pool);
+      this.searchlights.push({ guard: g, spot, beam, pool });
+    }
+  }
+
+  private updateSearchlights() {
+    for (const s of this.searchlights) {
+      const g = s.guard;
+      const on = g.alive;
+      s.beam.visible = on;
+      s.pool.visible = on;
+      s.spot.intensity = on ? 420 : 0;
+      if (!on) continue;
+      const eye = g.eye(new THREE.Vector3()).add(new THREE.Vector3(0, 0.3, 0));
+      const f = g.forward();
+      const pitch = 0.45;
+      const dir = new THREE.Vector3(f.x * Math.cos(pitch), -Math.sin(pitch), f.z * Math.cos(pitch));
+      s.spot.position.copy(eye).addScaledVector(f, 0.4);
+      s.spot.target.position.copy(eye).addScaledVector(dir, 30);
+      s.beam.position.copy(s.spot.position);
+      s.beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), dir);
+      const col = g.state === 'alert' ? [1.0, 0.35, 0.3] : g.suspicion > 0.3 ? [1.0, 0.85, 0.5] : [0.87, 0.91, 1.0];
+      (s.beam.material as THREE.ShaderMaterial).uniforms.uColor.value.setRGB(col[0], col[1], col[2]);
+      s.spot.color.setRGB(col[0], col[1], col[2]);
+      const hit = this.level.world.raycast(s.spot.position, dir, 80);
+      if (hit) {
+        const dist = hit.distance;
+        const r = Math.tan((g.def.fov ?? 0.26) * 0.9) * dist;
+        s.pool.position.copy(hit.point).addScaledVector(hit.normal, 0.04);
+        s.pool.rotation.set(-Math.PI / 2, g.yaw, 0);
+        s.pool.scale.set(r, r / Math.max(0.3, Math.sin(pitch)), 1);
+        (s.pool.material as THREE.MeshBasicMaterial).color.setRGB(col[0] * 0.9, col[1] * 0.9, col[2] * 0.9);
+      } else s.pool.visible = false;
+    }
   }
 
   start() {
@@ -364,7 +428,9 @@ export class Game {
 
   /** 0..1 illumination at a point from lamps, rifts and moonlight. */
   lightAt(p: THREE.Vector3, precise = true) {
-    let L = 0.07;
+    // dusk: open ground is readable; shade from walls and stacks still hides you
+    let L = 0.26;
+    if (!this.level.world.raycast(p, this.level.sunDir, 160, { sight: true })) L += 0.3;
     for (const l of this.level.lamps) {
       const d = l.pos.distanceTo(p);
       if (d > l.range) continue;
@@ -380,10 +446,6 @@ export class Game {
         if (!this.level.world.lineOfSight(from, p)) continue;
       }
       L += c;
-    }
-    for (const r of this.rift.openPortals()) {
-      const d = r.position.distanceTo(p);
-      if (d < 3.5) L += (1 - d / 3.5) * 0.3 * r.open;
     }
     return Math.min(1, L);
   }
@@ -553,27 +615,43 @@ export class Game {
         },
       };
     }
-    // keycard door
+    // keycard elevator at the control tower base
     const reader = (L.doorMesh.userData.reader as THREE.Mesh).position;
-    if (!this.obj.door && p.pos.distanceTo(_v.set(reader.x, p.pos.y, reader.z)) < 1.8) {
+    if (p.pos.y < 1 && p.pos.distanceTo(_v.set(reader.x, p.pos.y, reader.z)) < 2.2) {
       if (this.obj.keycard) {
         return {
           label: t('useKeycard'),
           run: () => {
             this.obj.door = true;
-            L.keycardDoor.enabled = false;
-            L.doorMesh.position.z = 2.3;
             ((L.doorMesh.userData.reader as THREE.Mesh).material as THREE.MeshBasicMaterial).color.setRGB(0.3, 4, 0.5);
-            this.nav.rebuild();
-            this.hud.flashToast(t('doorOpened'), 2.2, 'good');
             this.audio.ui('confirm');
+            this.flash = 0.6;
+            const dy = 0 - this.player.yaw;
+            this.player.teleport(L.elevatorTop.clone(), 0);
+            this.rig.rotateBy(dy);
+            this.rig.pivot.y = L.elevatorTop.y + FEEL.camHeight;
+            this.hud.flashToast(t('doorOpened'), 2.2, 'good');
           },
         };
       }
       return { label: t('locked'), run: () => this.audio.ui('deny') };
     }
+    // the same elevator, riding back down from the deck
+    if (Math.abs(p.pos.y - L.elevatorTop.y) < 1 && p.pos.distanceTo(L.elevatorTop) < 2.2) {
+      return {
+        label: t('rideDown'),
+        run: () => {
+          this.audio.ui('confirm');
+          this.flash = 0.6;
+          const dy = Math.PI - this.player.yaw;
+          this.player.teleport(new THREE.Vector3(24, 0, 52.4), Math.PI);
+          this.rig.rotateBy(dy);
+          this.rig.pivot.y = FEEL.camHeight;
+        },
+      };
+    }
     // manifest
-    if (!this.obj.manifest && p.pos.distanceTo(_v.set(L.manifest.x, p.pos.y, L.manifest.z)) < 1.7) {
+    if (!this.obj.manifest && Math.abs(p.pos.y - (L.manifest.y - 0.9)) < 1.2 && p.pos.distanceTo(_v.set(L.manifest.x, p.pos.y, L.manifest.z)) < 1.9) {
       return {
         label: t('takeManifest'),
         run: () => {
@@ -805,9 +883,9 @@ export class Game {
   private updateMenu(dt: number) {
     this.menuT += dt;
     // slow cinematic drift across the yard toward the cranes
-    const k = (Math.sin(this.menuT * 0.035) + 1) / 2;
-    this.camera.position.set(-44 + k * 30, 13 + Math.sin(this.menuT * 0.08) * 1.5, -42 + k * 6);
-    this.camera.lookAt(-10 + k * 16, 2, 16);
+    const k = (Math.sin(this.menuT * 0.03) + 1) / 2;
+    this.camera.position.set(-70 + k * 70, 26 + Math.sin(this.menuT * 0.07) * 2, -62 + k * 4);
+    this.camera.lookAt(-18 + k * 36, 6, 24);
     this.camera.fov = 52;
     this.camera.updateProjectionMatrix();
     this.updateAmbient(dt);
@@ -824,9 +902,9 @@ export class Game {
     (this.sky.material as THREE.ShaderMaterial).uniforms.uTime.value = this.time;
     this.sky.position.copy(this.camera.position);
     for (const f of this.level.animated) f(this.time);
-    const focus = this.mode === 'menu' ? new THREE.Vector3(-8, 0, 6) : this.player.pos;
-    const md = new THREE.Vector3(-0.35, 0.72, 0.6).normalize();
-    this.moon.position.copy(focus).addScaledVector(md, 70);
+    this.updateSearchlights();
+    const focus = this.mode === 'menu' ? new THREE.Vector3(-10, 0, 0) : this.player.pos;
+    this.moon.position.copy(focus).addScaledVector(this.level.sunDir, 110);
     this.moon.target.position.copy(focus);
   }
 
@@ -890,7 +968,20 @@ export class Game {
         this.audio.footstep(pos, loud);
         if (radius > 2) this.guards.noise(pos, radius, loud * 0.35);
       },
-      landed: (pos, force) => {
+      landed: (pos, impact) => {
+        const force = Math.min(1, impact / 14);
+        // long drops hurt: ~5m stings, ~9m cripples, a rooftop is fatal
+        if (impact > 13.5) {
+          p.health -= (impact - 13.5) * 9.5;
+          this.damage = 1;
+          this.audio.hurt();
+          navigator.vibrate?.(60);
+          if (p.health <= 0) {
+            p.health = 0;
+            setTimeout(() => this.end(false), 500);
+            this.mode = 'ended';
+          }
+        }
         this.audio.bodyDrop(pos, force * 0.5);
         this.guards.noise(pos, 4 + force * 8, 0.3 + force * 0.4);
         this.rig.shake = Math.max(this.rig.shake, force * 0.5);
@@ -955,6 +1046,15 @@ export class Game {
     if (act && inp.wasPressed('interact')) act.run();
     if (!act && inp.wasPressed('interact') && p.carrying) this.dropBody();
 
+    // arena hints: the wall, then the searchlight plaza
+    if (!this.hintWall && p.pos.z > -45 && p.pos.z < -10.5 && p.pos.y < 1) {
+      this.hintWall = true;
+      this.hud.showHint('wall', t('hintWall'), 9);
+    }
+    if (!this.hintPlaza && p.pos.z > -9 && p.pos.y < 13) {
+      this.hintPlaza = true;
+      this.hud.showHint('plaza', t('hintPlaza'), 9);
+    }
     // snatch hint
     if (act && act.label === t('snatch')) this.hint('snatch', t('hintSnatch'), 6);
 
@@ -963,6 +1063,7 @@ export class Game {
     this.playerLight = this.lightAt(p.chest(), true);
     const perception = { chest: p.chest(), feet: p.pos.clone(), light: this.playerLight, crouched: p.crouched, speed: Math.hypot(p.vel.x, p.vel.z), alive: p.health > 0 };
     const openRifts = this.rift.openPortals().filter((r) => r.open > 0.5);
+    this.guards.viewer.copy(p.pos);
     const res = this.guards.update(dt, perception, openRifts, this.time);
     this.audio.setIntensity(res.tension, res.alarm, realDt);
     this.rift.update(dt, realDt, this.time, this.audio);
@@ -993,8 +1094,8 @@ export class Game {
   private updateObjectiveMarker() {
     const L = this.level;
     let target: THREE.Vector3 | null = null;
-    if (!this.obj.manifest) target = L.manifest.clone().setY(1.6);
-    else if (!this.obj.extracted) target = L.extraction.clone().setY(2);
+    if (!this.obj.manifest) target = L.manifest.clone().add(new THREE.Vector3(0, 0.9, 0));
+    else if (!this.obj.extracted) target = L.extraction.clone().add(new THREE.Vector3(0, 1.6, 0));
     if (!target || this.rig.aim > 0.5) {
       this.objMarker.style.display = 'none';
       return;

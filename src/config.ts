@@ -35,10 +35,10 @@ export const FEEL = {
   // Rift (portal) system
   portalWidth: 1.25,
   portalHeight: 2.25,
-  riftRange: 26,
+  riftRange: 60,
   riftMinDistance: 2.2,
   riftCharges: 3,
-  riftRechargeTime: 7.5,
+  riftRechargeTime: 6,
   nearPortalDistance: 1.45,
   portalOpenTime: 0.32,
   portalCloseTime: 0.22,
@@ -49,14 +49,14 @@ export const FEEL = {
   snapRadius: 3.2,
   snapRadiusTouch: 4.4,
   takedownSnapBehind: 1.25,
-  wheelStep: 0.9,
+  wheelStep: 1.5,
   rotateStep: Math.PI / 4,
   anchorHoldTime: 0.55,
   snatchRange: 2.4,
 
   // Stealth
   takedownRange: 1.9,
-  guardViewDistance: 24,
+  guardViewDistance: 27,
   guardFovHalf: 0.95, // radians, ~54 degrees each side
   guardPeripheralHalf: 1.5,
   detectBaseRate: 0.85,
@@ -75,6 +75,7 @@ export type QualityName = 'low' | 'medium' | 'high' | 'ultra';
 
 export interface QualityPreset {
   pixelRatio: number;
+  portalViews: number;
   shadowMap: number;
   bloom: boolean;
   bloomScale: number;
@@ -86,10 +87,10 @@ export interface QualityPreset {
 }
 
 export const QUALITY: Record<QualityName, QualityPreset> = {
-  low: { pixelRatio: 0.75, shadowMap: 1024, bloom: false, bloomScale: 0.5, portalScale: 0.4, lampLights: 4, rainDrops: 1400, antialias: false, scryWindow: true },
-  medium: { pixelRatio: 1.0, shadowMap: 1024, bloom: true, bloomScale: 0.5, portalScale: 0.5, lampLights: 6, rainDrops: 2600, antialias: false, scryWindow: true },
-  high: { pixelRatio: 1.5, shadowMap: 2048, bloom: true, bloomScale: 0.5, portalScale: 0.75, lampLights: 10, rainDrops: 4200, antialias: true, scryWindow: true },
-  ultra: { pixelRatio: 2.0, shadowMap: 4096, bloom: true, bloomScale: 0.5, portalScale: 1.0, lampLights: 14, rainDrops: 6500, antialias: true, scryWindow: true },
+  low: { portalViews: 1, pixelRatio: 0.75, shadowMap: 1024, bloom: false, bloomScale: 0.5, portalScale: 0.4, lampLights: 4, rainDrops: 1400, antialias: false, scryWindow: true },
+  medium: { portalViews: 2, pixelRatio: 1.0, shadowMap: 1024, bloom: true, bloomScale: 0.5, portalScale: 0.5, lampLights: 6, rainDrops: 2600, antialias: false, scryWindow: true },
+  high: { portalViews: 3, pixelRatio: 1.5, shadowMap: 2048, bloom: true, bloomScale: 0.5, portalScale: 0.75, lampLights: 10, rainDrops: 4200, antialias: true, scryWindow: true },
+  ultra: { portalViews: 4, pixelRatio: 2.0, shadowMap: 4096, bloom: true, bloomScale: 0.5, portalScale: 1.0, lampLights: 14, rainDrops: 6500, antialias: true, scryWindow: true },
 };
 
 export const IS_TOUCH =

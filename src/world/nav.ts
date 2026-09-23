@@ -3,7 +3,7 @@ import { CollisionWorld } from './collision';
 
 /** Ground-level walk grid + A* for guards. */
 export class NavGrid {
-  cell = 0.7;
+  cell = 0.9;
   w: number;
   h: number;
   ox: number;

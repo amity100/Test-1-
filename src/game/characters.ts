@@ -127,6 +127,8 @@ export class Character {
     });
     const scale = look === 'hologram' ? 1 : LOOKS[look].scale;
     this.model.scale.setScalar(scale);
+    // the rig is authored facing -Z; gameplay forward is +Z
+    this.model.rotation.y = Math.PI;
     this.root.add(this.model);
 
     this.mixer = new THREE.AnimationMixer(this.model);

@@ -127,7 +127,7 @@ export class Guard {
 
   /** Vision range scaled by alertness. */
   viewDistance() {
-    return FEEL.guardViewDistance * (1 + this.alertLevel * 0.2) * (this.state === 'alert' ? 1.3 : 1);
+    return (this.def.range ?? FEEL.guardViewDistance) * (1 + this.alertLevel * 0.2) * (this.state === 'alert' ? 1.3 : 1);
   }
 }
 
@@ -139,6 +139,8 @@ export class GuardSystem {
   bodies: Body[] = [];
   group = new THREE.Group();
   fansVisible = 0;
+  /** Where the player is; vision cones are only built near them. */
+  viewer = new THREE.Vector3();
   globalAlarm = 0;
 
   constructor(private world: CollisionWorld, private nav: NavGrid, private hooks: GuardHooks) {}
@@ -159,6 +161,8 @@ export class GuardSystem {
     const eye = g.eye(_e);
     _v.subVectors(p, eye);
     const d = _v.length();
+    // a searchlight sniper lights what he looks at
+    if (g.def.kind === 'sniper') light = Math.max(light, 0.9);
     const range = g.viewDistance() * (0.28 + 0.72 * light) * (crouched ? 0.8 : 1);
     if (d > range && d > 2.2) return 0;
     const f = g.forward();
@@ -166,10 +170,11 @@ export class GuardSystem {
     const cos = (f.x * _v.x + f.z * _v.z) / flat;
     const ang = Math.acos(THREE.MathUtils.clamp(cos, -1, 1));
     // vertical cone limit
-    if (Math.abs(Math.atan2(_v.y, flat)) > 0.9) return 0;
+    if (Math.abs(Math.atan2(_v.y, flat)) > (g.def.kind === 'sniper' ? 1.0 : 0.9)) return 0;
     let cone = 0;
-    if (ang < FEEL.guardFovHalf) cone = 1;
-    else if (ang < FEEL.guardPeripheralHalf) cone = 0.3;
+    const fov = g.def.fov ?? FEEL.guardFovHalf;
+    if (ang < fov) cone = 1;
+    else if (ang < (g.def.fov ? fov * 1.3 : FEEL.guardPeripheralHalf)) cone = 0.3;
     else if (d < 1.4) cone = 0.25; // someone breathing down your neck
     if (cone === 0) return 0;
     if (!this.world.lineOfSight(eye, p)) return 0;
@@ -271,21 +276,6 @@ export class GuardSystem {
         g.unseenT += dt;
         if (g.state === 'patrol' || g.state === 'investigate') g.suspicion = Math.max(0, g.suspicion - FEEL.suspicionDecay * dt * (g.unseenT > 2 ? 1 : 0));
       }
-      // open rifts in view (or humming right beside them)
-      for (const r of openRifts) {
-        const d = g.pos.distanceTo(r.position);
-        if (d < 2.6) {
-          g.heardRiftT += dt;
-          if (g.heardRiftT > 2.2 && g.state === 'patrol') {
-            g.suspicion = Math.max(g.suspicion, 0.35);
-            g.lastKnown.copy(r.position);
-          }
-        } else if (d < FEEL.portalSightDistance && this.sightFactor(g, r.position, 0.9, false) > 0.05) {
-          g.suspicion = Math.min(1, g.suspicion + dt * 0.45);
-          if (g.state !== 'alert') g.lastKnown.copy(r.position).setY(0);
-        }
-      }
-      if (!openRifts.some((r) => g.pos.distanceTo(r.position) < 2.6)) g.heardRiftT = 0;
       // bodies
       if (g.state !== 'alert') {
         for (const b of this.bodies) {
@@ -494,7 +484,13 @@ export class GuardSystem {
     const route = g.def.route;
     if (route.length === 1) {
       // sentry: return to post, then idle and glance around
-      if (g.pos.distanceTo(route[0]) > 0.6) {
+      if (g.def.sweep) {
+        g.speed = 0;
+        g.lookT += dt;
+        g.yaw = dampAngle(g.yaw, (g.def.facing ?? 0) + Math.sin(g.lookT * 0.24) * g.def.sweep, 4, dt);
+        return;
+      }
+      if (!g.def.static && g.pos.distanceTo(route[0]) > 0.6) {
         if (g.path.length === 0 || g.target.distanceTo(route[0]) > 0.5) this.goTo(g, route[0]);
         this.follow(g, dt, FEEL.guardWalk);
       } else {
@@ -526,6 +522,12 @@ export class GuardSystem {
 
   /** Walk along the current path. Returns true when arrived. */
   private follow(g: Guard, dt: number, speed: number, faceTarget = false) {
+    if (g.def.static) {
+      // posted on a tower or deck: never walks off it, only turns
+      g.speed = 0;
+      if (g.state !== 'patrol') g.yaw = dampAngle(g.yaw, Math.atan2(g.lastKnown.x - g.pos.x, g.lastKnown.z - g.pos.z), 3, dt);
+      return true;
+    }
     if (g.pathIdx >= g.path.length) {
       g.speed = THREE.MathUtils.damp(g.speed, 0, 10, dt);
       return true;
@@ -610,7 +612,7 @@ export class GuardSystem {
     for (const g of this.guards) {
       const m = g.fan.material as THREE.ShaderMaterial;
       m.uniforms.uOpacity.value = vis * 0.32;
-      g.fan.visible = vis > 0.01 && g.alive;
+      g.fan.visible = vis > 0.01 && g.alive && g.pos.distanceTo(this.viewer) < 70;
       if (!g.fan.visible) continue;
       const col = g.state === 'alert' ? [1, 0.15, 0.1] : g.suspicion > 0.3 ? [1, 0.75, 0.1] : [0.85, 0.9, 1];
       m.uniforms.uColor.value.setRGB(col[0], col[1], col[2]);
@@ -618,12 +620,13 @@ export class GuardSystem {
       const alpha = g.fan.geometry.getAttribute('alpha') as THREE.BufferAttribute;
       const segs = pos.count - 2;
       const eye = g.eye(new THREE.Vector3());
-      const y = g.pos.y + 0.06;
+      const y = g.def.kind === 'sniper' ? 0.06 : g.pos.y + 0.06;
+      const fovHalf = g.def.fov ?? FEEL.guardFovHalf;
       pos.setXYZ(0, g.pos.x, y, g.pos.z);
       alpha.setX(0, 0.9);
-      const range = g.viewDistance() * 0.55;
+      const range = g.viewDistance() * (g.def.kind === 'sniper' ? 0.9 : 0.55);
       for (let i = 0; i <= segs; i++) {
-        const a = g.yaw - FEEL.guardFovHalf + (i / segs) * FEEL.guardFovHalf * 2;
+        const a = g.yaw - fovHalf + (i / segs) * fovHalf * 2;
         const dir = new THREE.Vector3(Math.sin(a), 0, Math.cos(a));
         const from = new THREE.Vector3(g.pos.x, eye.y - 0.4, g.pos.z);
         const hit = this.world.raycast(from, dir, range, { sight: true });

@@ -144,12 +144,13 @@ export class HUD {
       this.cross.className = 'hud-cross';
       return;
     }
-    const reason: Record<string, StrKey> = { range: 'outOfRange', close: 'tooClose', los: 'blocked', space: 'noSpace', inhibited: 'inhibited', charge: 'noCharge' };
+    const reason: Record<string, StrKey> = { range: 'outOfRange', close: 'tooClose', los: 'blocked', space: 'noSpace', inhibited: 'inhibited', charge: 'noCharge', drop: 'lethalDrop' };
     let html = `<div class="dist">${p.distance.toFixed(1)}<small>m</small></div>`;
     if (p.invalid) html += `<div class="tag bad">${t(reason[p.invalid])}</div>`;
     else {
       if (p.snap === 'behind') html += `<div class="tag snap">🗡 ${t('snapBehind')}</div>`;
       if (p.snap === 'above') html += `<div class="tag snap">⬇ ${t('snapAbove')}</div>`;
+      if (p.snap === 'perch') html += `<div class="tag snap">⤒ ${t('snapPerch')}</div>`;
       const ex = p.exposure > 0.66 ? ['bad', t('seenRed')] : p.exposure > 0.25 ? ['warn', t('seenYellow')] : ['good', t('seenGreen')];
       html += `<div class="tag ${ex[0]}">${ex[1]}</div>`;
       if (p.light < 0.25) html += `<div class="tag moon">☾ ${t('snapShadow')}</div>`;

@@ -8,8 +8,8 @@ export const RIFT_COLOR = new THREE.Color(1.0, 0.55, 0.12);
 export const ANCHOR_COLOR = new THREE.Color(0.1, 0.85, 1.0);
 
 export type PlacementKind = 'stand' | 'wall' | 'ceiling';
-export type SnapKind = 'behind' | 'above' | null;
-export type Invalid = 'range' | 'close' | 'los' | 'space' | 'inhibited' | 'charge' | null;
+export type SnapKind = 'behind' | 'above' | 'perch' | null;
+export type Invalid = 'range' | 'close' | 'los' | 'space' | 'inhibited' | 'charge' | 'drop' | null;
 
 export interface SnapTarget {
   id: string;
@@ -127,6 +127,7 @@ export class RiftSystem {
   anchor: { frame: RiftFrame; kind: PlacementKind; host: Collider | null; exitFeet: THREE.Vector3; exitYaw: number } | null = null;
   anchorMarker: THREE.Group;
   riftsOpened = 0;
+  maxViews = 2;
 
   // preview
   ghost: THREE.Mesh;
@@ -261,6 +262,44 @@ export class RiftSystem {
   }
 
   /**
+   * Finds the walkable top of whatever was hit (climbing stacked boxes, e.g.
+   * containers or a roof resting on a wall) and a clear spot on it near the
+   * aimed point.
+   */
+  private perchOn(c: Collider, point: THREE.Vector3, normal: THREE.Vector3, facing: THREE.Vector3) {
+    const w = this.ctx.world;
+    const ix = point.x - normal.x * 0.3, iz = point.z - normal.z * 0.3;
+    let top = c;
+    for (let i = 0; i < 8; i++) {
+      const above = w.colliders.find(
+        (o) => o.enabled && o !== top && !o.seeThrough && Math.abs(o.min.y - top.max.y) < 0.15 && ix >= o.min.x - 0.1 && ix <= o.max.x + 0.1 && iz >= o.min.z - 0.1 && iz <= o.max.z + 0.1,
+      );
+      if (!above) break;
+      top = above;
+    }
+    if (top.noPortal || top.tag === 'bound') return null;
+    if (top.max.x - top.min.x < 1.2 || top.max.z - top.min.z < 1.2) return null;
+    const y = top.max.y;
+    const m = 0.75;
+    const cx = (top.min.x + top.max.x) / 2, cz = (top.min.z + top.max.z) / 2;
+    const px = THREE.MathUtils.clamp(ix, Math.min(top.min.x + m, cx), Math.max(top.max.x - m, cx));
+    const pz = THREE.MathUtils.clamp(iz, Math.min(top.min.z + m, cz), Math.max(top.max.z - m, cz));
+    // try near the aimed spot first, then walk toward the middle of the surface
+    for (const k of [0, 0.35, 0.7, 1]) {
+      const x = THREE.MathUtils.lerp(px, cx, k), z = THREE.MathUtils.lerp(pz, cz, k);
+      for (const f of [facing, facing.clone().negate(), new THREE.Vector3(facing.z, 0, -facing.x), new THREE.Vector3(-facing.z, 0, facing.x)]) {
+        // keep the exit spot on the surface
+        const ex = x + f.x * 0.55, ez = z + f.z * 0.55;
+        if (ex < top.min.x + 0.3 || ex > top.max.x - 0.3 || ez < top.min.z + 0.3 || ez > top.max.z - 0.3) continue;
+        const base = new THREE.Vector3(x - f.x * 0.25, y, z - f.z * 0.25);
+        if (!this.standingClear(base, f)) continue;
+        return { frame: this.standingFrame(base.x, y, base.z, f), exitFeet: new THREE.Vector3(base.x + f.x * 0.55, y, base.z + f.z * 0.55) };
+      }
+    }
+    return null;
+  }
+
+  /**
    * The smart cursor. Turns a camera ray into the best rift placement:
    * surfaces decide orientation, the wheel overrides distance, and nearby
    * unaware guards magnetise the rift behind them.
@@ -279,6 +318,8 @@ export class RiftSystem {
     let exitYaw = aimYaw + rot;
     let snap: SnapKind = null;
     let snapId: string | null = null;
+    // what the eye must see: normally the rift itself; for a perch, the face you aimed at
+    let losTarget: THREE.Vector3 | null = null;
     const standNormal = new THREE.Vector3(Math.sin(aimYaw + rot), 0, Math.cos(aimYaw + rot));
 
     let point: THREE.Vector3;
@@ -331,7 +372,8 @@ export class RiftSystem {
         // host face too small: fall back to standing in front of it
         kind = 'stand';
         host = null;
-        const gy = w.groundAt(point.x + n.x * 0.9, point.z + n.z * 0.9, 0.2, point.y + 0.5);
+        const gy0 = w.groundAt(point.x + n.x * 0.9, point.z + n.z * 0.9, 0.2, point.y + 0.5);
+        const gy = gy0 > -50 ? gy0 : point.y; // over water: stays in the air and fails as "no safe landing"
         frame = this.standingFrame(point.x + n.x * 0.9, gy, point.z + n.z * 0.9, standNormal);
         exitFeet.set(frame.position.x + standNormal.x * 0.55, gy, frame.position.z + standNormal.z * 0.55);
         exitYaw = aimYaw + rot;
@@ -342,6 +384,27 @@ export class RiftSystem {
       const baseY = gy > -50 ? gy : point.y;
       frame = this.standingFrame(point.x, baseY, point.z, standNormal);
       exitFeet.set(point.x + standNormal.x * 0.55, baseY, point.z + standNormal.z * 0.55);
+    }
+
+    // ---- perch: aiming high on a wall, or under something, lands you ON TOP of it ----
+    if (surfaceHit && !surfaceHit.collider.noPortal && surfaceHit.normal.y < 0.7) {
+      const hn = surfaceHit.normal;
+      const high =
+        hn.y < -0.7
+          ? exitFeet.y - w.groundAt(exitFeet.x, exitFeet.z, 0.2, exitFeet.y + 0.3) > 2.6 // a ceiling too high to drop from
+          : surfaceHit.point.y - w.groundAt(surfaceHit.point.x + hn.x * 0.6, surfaceHit.point.z + hn.z * 0.6, 0.2, surfaceHit.point.y - 0.05) > 2.6; // high on a wall
+      if (high) {
+        const perch = this.perchOn(surfaceHit.collider, surfaceHit.point, surfaceHit.normal, standNormal);
+        if (perch) {
+          frame = perch.frame;
+          exitFeet.copy(perch.exitFeet);
+          exitYaw = aimYaw + rot;
+          kind = 'stand';
+          host = null;
+          snap = 'perch';
+          losTarget = surfaceHit.point.clone().addScaledVector(surfaceHit.normal, 0.1);
+        }
+      }
     }
 
     // ---- magnet snapping onto guards ----
@@ -357,7 +420,8 @@ export class RiftSystem {
         const proj = _v.dot(dir);
         const dRay = proj > 0 ? _v.clone().sub(dir.clone().multiplyScalar(proj)).length() : Infinity;
         const d = Math.min(dPoint, dRay * 1.4);
-        if (d < bestD && g.pos.distanceTo(playerFeet) > 2.6) {
+        // only guards you can actually see — never snap through walls
+        if (d < bestD && g.pos.distanceTo(playerFeet) > 2.6 && w.lineOfSight(playerEye, _v2.set(g.pos.x, g.pos.y + 1.3, g.pos.z))) {
           bestD = d;
           best = g;
         }
@@ -401,8 +465,10 @@ export class RiftSystem {
     else {
       // line of sight from the eye to the rift centre (a hair in front of it)
       const n = frameNormal(frame as any, new THREE.Vector3());
-      const target = center.clone().addScaledVector(n, 0.15);
+      const target = losTarget ?? center.clone().addScaledVector(n, 0.15);
+      const exitGround = w.groundAt(exitFeet.x, exitFeet.z, 0.2, exitFeet.y + 0.3);
       if (!w.lineOfSight(playerEye, target, host)) invalid = 'los';
+      else if (exitFeet.y - exitGround > 4.6) invalid = 'drop';
       else if (kind === 'stand') {
         const base = new THREE.Vector3(center.x, center.y - FEEL.portalHeight / 2 - 0.02, center.z);
         if (!this.standingClear(base, n)) invalid = 'space';
@@ -455,17 +521,20 @@ export class RiftSystem {
         return { frame: { position: center, quaternion: orientFrame(n, UP), width: FEEL.portalWidth, height: FEEL.portalHeight }, kind: 'wall', host: c };
       }
     }
-    for (const d of [FEEL.nearPortalDistance, 1.1]) {
-      const base = new THREE.Vector3(playerFeet.x + f.x * d, playerFeet.y, playerFeet.z + f.z * d);
-      const g = w.groundAt(base.x, base.z, 0.2, playerFeet.y + 0.5);
-      if (!(g > playerFeet.y - 0.5)) continue;
-      base.y = g;
-      const n = f.clone().negate();
-      if (!this.standingClear(base, n)) continue;
-      // nothing between player and the rift
-      if (!w.lineOfSight(chest, base.clone().setY(g + 1.1))) continue;
-      const fr = this.standingFrame(base.x, g, base.z, n);
-      return { frame: { ...fr, width: FEEL.portalWidth, height: FEEL.portalHeight }, kind: 'stand', host: null };
+    // in front first; at a ledge or wall, beside or behind you
+    for (const off of [0, Math.PI / 2, -Math.PI / 2, Math.PI]) {
+      const fy = new THREE.Vector3(Math.sin(yaw + off), 0, Math.cos(yaw + off));
+      for (const d of [FEEL.nearPortalDistance, 1.1]) {
+        const base = new THREE.Vector3(playerFeet.x + fy.x * d, playerFeet.y, playerFeet.z + fy.z * d);
+        const g = w.groundAt(base.x, base.z, 0.2, playerFeet.y + 0.5);
+        if (!(g > playerFeet.y - 0.5)) continue;
+        base.y = g;
+        const n = fy.clone().negate();
+        if (!this.standingClear(base, n)) continue;
+        if (!w.lineOfSight(chest, base.clone().setY(g + 1.1))) continue;
+        const fr = this.standingFrame(base.x, g, base.z, n);
+        return { frame: { ...fr, width: FEEL.portalWidth, height: FEEL.portalHeight }, kind: 'stand', host: null };
+      }
     }
     return null;
   }
@@ -476,7 +545,10 @@ export class RiftSystem {
 
   openPair(near: { frame: RiftFrame; kind: PlacementKind; host: Collider | null }, far: { frame: RiftFrame; kind: PlacementKind; host: Collider | null }, kind: 'rift' | 'anchor') {
     // one live pair per kind: replace the older one
-    for (const p of this.pairs) if (p.kind === kind && !p.closing) this.closePair(p);
+    // rifts stay open until closed; anchors are one link at a time
+    const live = this.pairs.filter((p) => p.kind === kind && !p.closing);
+    const max = kind === 'anchor' ? 1 : 3;
+    while (live.length >= max) this.closePair(live.shift()!);
     const color = kind === 'anchor' ? ANCHOR_COLOR : RIFT_COLOR;
     const a = this.makePortal(color);
     const b = this.makePortal(color);
@@ -543,10 +615,9 @@ export class RiftSystem {
     return passDirection(from, from.linked, d, out);
   }
 
-  markPassed(p: Portal, who: 'player' | 'body') {
+  markPassed(p: Portal, _who: 'player' | 'body') {
     const pair = this.pairs.find((q) => q.a === p || q.b === p);
     if (!pair) return;
-    pair.closeTimer = who === 'player' ? FEEL.autoCloseAfterPass : Math.max(pair.closeTimer, 1.2);
     for (const q of pair.portals) q.mat.uniforms.uPulse.value = 1;
   }
 
@@ -674,7 +745,7 @@ export class RiftSystem {
     const meshVis = all.map((p) => p.mesh.visible);
     for (const p of all) p.mesh.visible = false;
 
-    for (const p of toRender.slice(0, 2)) {
+    for (const p of toRender.slice(0, this.maxViews)) {
       if (!p.rt || p.rt.width !== w || p.rt.height !== h) {
         p.rt?.dispose();
         p.rt = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType });

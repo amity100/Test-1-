@@ -182,7 +182,7 @@ export class Player {
     const g = world.groundAt(this.pos.x, this.pos.z, FEEL.playerRadius * 0.65, feet + FEEL.stepUp);
     const wasGround = this.onGround;
     if (g > -Infinity && this.pos.y <= g + 0.001 && this.vel.y <= 0) {
-      if (!wasGround && this.airTime > 0.35) ev.landed(this.pos.clone(), Math.min(1, -this.vel.y / 14));
+      if (!wasGround && this.airTime > 0.35) ev.landed(this.pos.clone(), -this.vel.y);
       this.pos.y = g;
       this.vel.y = 0;
       this.onGround = true;

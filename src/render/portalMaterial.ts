@@ -85,6 +85,8 @@ export function createPortalMaterial(color: THREE.Color) {
           } else {
             float sw = fbm(vec2(ang * 3.0 + d * 4.0 - uTime * 3.0, d * 2.0));
             col = uColor * (0.05 + sw * 0.35) + vec3(0.01, 0.015, 0.02);
+            // from behind a rift is a thin membrane, never a wall you can't see past
+            if (!gl_FrontFacing) alpha = 0.35 + sw * 0.2;
           }
           col += uColor * pow(rimInner, 4.0) * 0.7;
         } else {
