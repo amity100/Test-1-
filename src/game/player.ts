@@ -1,80 +1,162 @@
 import * as THREE from 'three';
 import { FEEL } from '../config';
-import { CollisionWorld } from '../world/collision';
-import { Character } from './characters';
-import { RiftSystem, Portal } from './portals';
+import { LAW } from '../core/contracts';
+import type { CharacterAPI, DynBody, ImpactInfo, LocomotionInput, PhysicsAPI, PhysicsEvents, RiftEnd, V3 } from '../core/contracts';
+import type { CollisionWorld } from '../world/collision';
+import { Body } from '../sim/physics';
 import { yawOf } from './portalMath';
 
+export interface PlayerInput {
+  /** Stick / WASD (x right, y forward) in camera space. */
+  moveX: number;
+  moveY: number;
+  camYaw: number;
+  /** Pressed this frame (buffered briefly). */
+  jump: boolean;
+  sprint: boolean;
+  /** Held / toggled state. */
+  crouch: boolean;
+  /** Pressed this frame. */
+  shove: boolean;
+}
+
 export interface PlayerEvents {
-  footstep(pos: THREE.Vector3, loudness: number, radius: number): void;
-  landed(pos: THREE.Vector3, force: number): void;
-  passed(p: Portal, yawDelta: number): void;
-  fellInWater(): void;
+  footstep(pos: V3, loud: number, radius: number): void;
+  jumped(pos: V3): void;
+  landed(pos: V3, speed: number, charged: boolean): void;
+  fallDamage(amount: number): void;
+  shoved(from: V3, dir: V3): void;
+  crossed(from: RiftEnd, to: RiftEnd, yawDelta: number, speed: number): void;
 }
 
 const _v = new THREE.Vector3();
+const SHOVE_SPEED = LAW.shove.distance / FEEL.shoveTime;
 
+/**
+ * Third-person controller on a DynBody (physics does gravity, collision and
+ * rift crossings). Camera-relative steering on the ground; in the air only
+ * additive air control (and almost none while rift-charged), so momentum
+ * through rifts is honest.
+ */
 export class Player {
-  pos = new THREE.Vector3();
-  vel = new THREE.Vector3();
   yaw = 0;
-  onGround = true;
   crouched = false;
   sprinting = false;
-  health = FEEL.maxHealth;
-  char: Character;
-  carrying: any = null;
+  shoveCooldown = 0;
+  /** The game manages carry / throw; carrying only slows movement here. */
+  carrying: DynBody | null = null;
+  airTime = 0;
+  /** Last grounded spot with real ground under it. */
   lastSafe = new THREE.Vector3();
+  /** 0..1 gauntlet raised (set by the game while aiming). */
+  aim = 0;
+  crouchT = 0;
+
   private stride = 0;
   private mantle: { from: THREE.Vector3; to: THREE.Vector3; t: number } | null = null;
-  private airTime = 0;
-  lungeT = 0;
-  autoWalk: { target: THREE.Vector3; t: number; speed?: number } | null = null;
-  lastPassT = 99;
-  crouchT = 0;
-  hurtT = 0;
+  private shoveT = 0;
+  private shoveDir = new THREE.Vector3();
+  private jumpBuf = 0;
+  private coyote = 0;
+  private physEv: PhysicsEvents | null = null;
+  private ev: PlayerEvents | null = null;
+  private readonly wrapped: PhysicsEvents;
+  private readonly loco: LocomotionInput = { speed: 0, grounded: true, vy: 0, crouch: 0, aim: 0 };
 
-  constructor(char: Character) {
-    this.char = char;
+  constructor(public char: CharacterAPI, public body: DynBody) {
+    this.lastSafe.copy(body.pos);
+    this.body.height = FEEL.playerHeight;
+    // forwards every physics event; the player's own crossings / landings are handled first
+    const self = this;
+    this.wrapped = {
+      crossed(b, from, to, speed) {
+        if (b === self.body) self.onCrossed(from, to, speed);
+        self.physEv?.crossed(b, from, to, speed);
+      },
+      impact(b, e) {
+        if (b === self.body) self.onImpact(e);
+        self.physEv?.impact(b, e);
+      },
+      touch(a, b, s) {
+        self.physEv?.touch(a, b, s);
+      },
+      splash(b) {
+        self.physEv?.splash(b);
+      },
+      fellOut(b) {
+        self.physEv?.fellOut(b);
+      },
+    };
+  }
+
+  get pos() {
+    return this.body.pos;
+  }
+
+  get vel() {
+    return this.body.vel;
+  }
+
+  get airborne() {
+    return !this.body.onGround && !this.mantle;
   }
 
   get height() {
     return THREE.MathUtils.lerp(FEEL.playerHeight, FEEL.crouchHeight, this.crouchT);
   }
 
+  isMantling() {
+    return !!this.mantle;
+  }
+
   eye(out = new THREE.Vector3()) {
-    return out.copy(this.pos).setY(this.pos.y + this.height - 0.12);
+    return out.copy(this.body.pos).setY(this.body.pos.y + this.height - 0.12);
   }
 
   chest(out = new THREE.Vector3()) {
-    return out.copy(this.pos).setY(this.pos.y + this.height * 0.6);
+    return out.copy(this.body.pos).setY(this.body.pos.y + this.height * 0.6);
   }
 
   forward(out = new THREE.Vector3()) {
     return out.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
   }
 
-  teleport(p: THREE.Vector3, yaw?: number) {
-    this.pos.copy(p);
-    this.vel.set(0, 0, 0);
+  /** Plain move (checkpoint, lift): no momentum, no charge. */
+  teleport(p: V3, yaw?: number) {
+    const b = this.body;
+    b.pos.copy(p);
+    b.vel.set(0, 0, 0);
+    b.charge = 0;
+    b.crossings = 0;
+    b.loops = 0;
+    b.lastEnd = null;
+    b.peakY = p.y;
+    b.onGround = false;
+    if (b instanceof Body) {
+      b.live = false;
+      b.landedSinceCross = true;
+      b.wet = false;
+      b.gone = false;
+    }
     if (yaw !== undefined) this.yaw = yaw;
     this.mantle = null;
-    this.autoWalk = null;
-    this.lastPassT = 99; // a plain move is not a rift exit (callers that are, reset it)
+    this.shoveT = 0;
+    this.airTime = 0;
+    this.lastSafe.copy(p);
   }
 
-  isMantling() {
-    return !!this.mantle;
-  }
+  update(dt: number, input: PlayerInput, world: CollisionWorld, physics: PhysicsAPI, physEv: PhysicsEvents, ev: PlayerEvents, time: number) {
+    this.physEv = physEv;
+    this.ev = ev;
+    const b = this.body;
+    this.shoveCooldown = Math.max(0, this.shoveCooldown - dt);
 
-  /**
-   * @param move  input vector (x right, y forward) in camera space
-   * @param camYaw camera yaw, so "forward" means "where I'm looking"
-   */
-  update(dt: number, move: { x: number; y: number }, camYaw: number, jump: boolean, sprint: boolean, strafe: boolean, world: CollisionWorld, rift: RiftSystem, ev: PlayerEvents) {
-    this.crouchT = THREE.MathUtils.damp(this.crouchT, this.crouched ? 1 : 0, 12, dt);
-    this.lastPassT += dt;
-    this.hurtT = Math.max(0, this.hurtT - dt);
+    // crouch (stand up only with headroom)
+    let crouch = input.crouch && !this.mantle;
+    if (!crouch && this.crouched && world.ceilingAt(b.pos.x, b.pos.z, FEEL.playerRadius * 0.7, b.pos.y + 0.5) < b.pos.y + FEEL.playerHeight + 0.02) crouch = true;
+    this.crouched = crouch;
+    this.crouchT = THREE.MathUtils.damp(this.crouchT, crouch ? 1 : 0, 12, dt);
+    b.height = this.height;
 
     if (this.mantle) {
       const m = this.mantle;
@@ -82,155 +164,159 @@ export class Player {
       const k = Math.min(1, m.t);
       const up = Math.min(1, k * 1.6);
       const fwd = Math.max(0, (k - 0.45) / 0.55);
-      this.pos.set(THREE.MathUtils.lerp(m.from.x, m.to.x, fwd), THREE.MathUtils.lerp(m.from.y, m.to.y, 1 - (1 - up) * (1 - up)), THREE.MathUtils.lerp(m.from.z, m.to.z, fwd));
+      b.pos.set(THREE.MathUtils.lerp(m.from.x, m.to.x, fwd), THREE.MathUtils.lerp(m.from.y, m.to.y, 1 - (1 - up) * (1 - up)), THREE.MathUtils.lerp(m.from.z, m.to.z, fwd));
+      b.vel.set(0, 0, 0);
       if (k >= 1) {
         this.mantle = null;
-        this.onGround = true;
-        this.vel.set(0, 0, 0);
+        b.onGround = true;
+        b.peakY = b.pos.y;
       }
-      this.char.root.position.copy(this.pos);
-      this.char.root.rotation.y = this.yaw;
-      this.char.update(dt, 1.2);
+      this.animate(dt, 1.2, true);
       return;
     }
 
-    // --- desired velocity ---
-    let mx = move.x, my = move.y;
-    if (this.autoWalk) {
-      this.autoWalk.t -= dt;
-      _v.subVectors(this.autoWalk.target, this.pos).setY(0);
-      const d = _v.length();
-      if (this.autoWalk.t <= 0 || d < 0.05) this.autoWalk = null;
-      else {
-        const lyaw = Math.atan2(_v.x, _v.z) - camYaw;
-        mx = -Math.sin(lyaw);
-        my = Math.cos(lyaw);
-      }
-    }
+    // --- desired velocity (camera-relative) ---
+    const mx = input.moveX, my = input.moveY;
     const inputMag = Math.min(1, Math.hypot(mx, my));
-    const fx = Math.sin(camYaw), fz = Math.cos(camYaw);
-    // camera-relative: right = (-fz, fx)? yaw 0 looks +Z, right is -X
-    const dirX = fx * my - fz * mx;
-    const dirZ = fz * my + fx * mx;
-    this.sprinting = sprint && !this.crouched && !this.carrying && inputMag > 0.5;
-    const dash = this.autoWalk?.speed;
-    const maxSpeed = dash ?? (this.carrying ? FEEL.carrySpeed : this.sprinting ? FEEL.sprintSpeed : this.crouched ? FEEL.crouchSpeed : FEEL.walkSpeed);
-    const tx = dirX * maxSpeed * (inputMag > 0 ? 1 : 0) * Math.max(inputMag, 0.35 * Math.sign(inputMag));
-    const tz = dirZ * maxSpeed * (inputMag > 0 ? 1 : 0) * Math.max(inputMag, 0.35 * Math.sign(inputMag));
-    const control = this.onGround ? 1 : FEEL.airControl;
-    const a = 1 - Math.exp(-FEEL.accel * (dash ? 3 : 1) * control * dt);
-    this.vel.x += (tx - this.vel.x) * a;
-    this.vel.z += (tz - this.vel.z) * a;
+    const fx = Math.sin(input.camYaw), fz = Math.cos(input.camYaw);
+    // yaw 0 looks +Z; right is -X
+    let dirX = fx * my - fz * mx;
+    let dirZ = fz * my + fx * mx;
+    const dl = Math.hypot(dirX, dirZ);
+    if (dl > 1e-6) {
+      dirX /= dl;
+      dirZ /= dl;
+    }
+    this.sprinting = input.sprint && !this.crouched && !this.carrying && inputMag > 0.5;
+    const maxSpeed = this.carrying ? FEEL.carrySpeed : this.sprinting ? FEEL.sprintSpeed : this.crouched ? FEEL.crouchSpeed : FEEL.walkSpeed;
+    const want = inputMag > 0 ? maxSpeed * Math.max(inputMag, 0.35) : 0;
+    const tx = dirX * want, tz = dirZ * want;
 
-    // facing
-    const hs = Math.hypot(this.vel.x, this.vel.z);
-    if (strafe) this.yaw = dampAngle(this.yaw, camYaw, 18, dt);
-    else if (hs > 0.3 && inputMag > 0.05) this.yaw = dampAngle(this.yaw, Math.atan2(this.vel.x, this.vel.z), 11, dt);
+    // --- shove: a short dash ---
+    if (input.shove && this.shoveCooldown <= 0) {
+      if (inputMag > 0.1) this.shoveDir.set(dirX, 0, dirZ);
+      else this.forward(this.shoveDir);
+      this.shoveT = FEEL.shoveTime;
+      this.shoveCooldown = LAW.shove.cooldown;
+      this.yaw = yawOf(this.shoveDir);
+      this.crouched = false;
+      ev.shoved(b.pos.clone(), this.shoveDir.clone());
+      this.char.play('push', { fade: 0.08 });
+    }
 
-    // jump / mantle
-    if (jump && this.onGround) {
-      if (!this.tryMantle(world)) {
-        this.vel.y = FEEL.jumpSpeed;
-        this.onGround = false;
-        if (this.crouched) this.crouched = false;
+    if (this.shoveT > 0) {
+      this.shoveT -= dt;
+      const s = this.shoveT > 0 ? SHOVE_SPEED : want;
+      b.vel.x = this.shoveDir.x * s;
+      b.vel.z = this.shoveDir.z * s;
+    } else if (b.onGround) {
+      const a = 1 - Math.exp(-FEEL.accel * dt);
+      b.vel.x += (tx - b.vel.x) * a;
+      b.vel.z += (tz - b.vel.z) * a;
+    } else if (want > 0) {
+      // air: only add toward the wish direction, never brake momentum without input
+      const control = b.charge > 0 ? FEEL.chargedAirControl : FEEL.airControl;
+      const cur = b.vel.x * dirX + b.vel.z * dirZ;
+      const add = Math.min(FEEL.accel * control * maxSpeed * dt, want - cur);
+      if (add > 0) {
+        b.vel.x += dirX * add;
+        b.vel.z += dirZ * add;
       }
     }
 
-    // gravity
-    if (!this.onGround) this.vel.y -= FEEL.gravity * dt;
-    this.airTime = this.onGround ? 0 : this.airTime + dt;
+    // --- facing ---
+    const hs = Math.hypot(b.vel.x, b.vel.z);
+    if (this.aim > 0.3) this.yaw = dampAngle(this.yaw, input.camYaw, 18, dt);
+    else if (this.shoveT > 0) this.yaw = yawOf(this.shoveDir);
+    else if (hs > 0.3 && inputMag > 0.05) this.yaw = dampAngle(this.yaw, Math.atan2(b.vel.x, b.vel.z), 11, dt);
 
-    const prevChest = this.chest(new THREE.Vector3());
-    const prevFeet = this.pos.clone();
-    this.pos.addScaledVector(this.vel, dt);
-
-    // --- rift traversal ---
-    const curChest = this.chest(new THREE.Vector3());
-    const portal = rift.findCrossing(prevChest, curChest, 0.05);
-    if (portal) {
-      const exit = portal.linked;
-      const oldYaw = this.yaw;
-      const newFeet = rift.transform(portal, this.pos, new THREE.Vector3());
-      const newVel = rift.transformDir(portal, this.vel, new THREE.Vector3());
-      const fwd = rift.transformDir(portal, this.forward(new THREE.Vector3()), new THREE.Vector3());
-      if (Math.abs(exit.normal.y) > 0.5) {
-        // ceiling (or floor) exit: come out upright, centred, falling
-        newFeet.set(exit.position.x, exit.position.y - (exit.normal.y < 0 ? 1.95 : -0.05), exit.position.z);
-        newVel.set(this.vel.x * 0.2, exit.normal.y < 0 ? -2 : Math.hypot(this.vel.x, this.vel.z), this.vel.z * 0.2);
-        this.yaw = yawOf(new THREE.Vector3(0, 1, 0).applyQuaternion(exit.quaternion));
-      } else {
-        this.yaw = Math.atan2(fwd.x, fwd.z);
-        // pop clear of the exit surface
-        newFeet.addScaledVector(exit.normal, FEEL.playerRadius * 0.6);
+    // --- jump / mantle (buffered, with coyote time) ---
+    this.jumpBuf = input.jump ? FEEL.jumpBuffer : Math.max(0, this.jumpBuf - dt);
+    this.coyote = b.onGround ? FEEL.coyoteTime : Math.max(0, this.coyote - dt);
+    if (this.jumpBuf > 0 && this.coyote > 0 && this.shoveT <= 0) {
+      this.jumpBuf = 0;
+      this.coyote = 0;
+      if (this.tryMantle(world)) {
+        this.animate(dt, 1.2, true);
+        return;
       }
-      this.pos.copy(newFeet);
-      this.vel.copy(newVel);
-      this.onGround = false;
-      this.lastPassT = 0;
-      this.autoWalk = null;
-      rift.markPassed(portal, 'player');
-      ev.passed(portal, this.yaw - oldYaw);
+      b.vel.y = FEEL.jumpSpeed;
+      b.onGround = false;
+      this.crouched = false;
+      ev.jumped(b.pos.clone());
+      this.char.play('jumpStart', { fade: 0.08 });
     }
 
-    // --- collision ---
-    const feet = this.pos.y;
-    const head = feet + this.height;
-    world.resolveCircle(this.pos, FEEL.playerRadius, feet, head, FEEL.stepUp, (c) => rift.hostPassable(c, this.pos, FEEL.playerRadius));
-    const ceil = world.ceilingAt(this.pos.x, this.pos.z, FEEL.playerRadius * 0.7, feet + 0.5);
-    if (head > ceil && this.vel.y > 0) {
-      this.vel.y = 0;
-      this.pos.y = ceil - this.height;
-    }
-    const g = world.groundAt(this.pos.x, this.pos.z, FEEL.playerRadius * 0.65, feet + FEEL.stepUp);
-    const wasGround = this.onGround;
-    if (g > -Infinity && this.pos.y <= g + 0.001 && this.vel.y <= 0) {
-      if (!wasGround && this.airTime > 0.35) ev.landed(this.pos.clone(), -this.vel.y);
-      this.pos.y = g;
-      this.vel.y = 0;
-      this.onGround = true;
-    } else if (wasGround && g > -Infinity && this.pos.y - g < 0.38 && this.vel.y <= 0) {
-      // stick to ground walking down steps
-      this.pos.y = g;
-      this.vel.y = 0;
-      this.onGround = true;
-    } else {
-      this.onGround = false;
-    }
-    if (this.onGround && g > -1) this.lastSafe.copy(this.pos);
-    if (this.pos.y < -1.4) ev.fellInWater();
+    // --- integrate: gravity, collision, rift crossings ---
+    const px = b.pos.x, pz = b.pos.z;
+    physics.stepBody(b, dt, this.wrapped, time);
+
+    this.airTime = b.onGround ? 0 : this.airTime + dt;
+    if (b.onGround && b.groundCollider) this.lastSafe.copy(b.pos);
 
     // --- footsteps ---
-    const moved = Math.hypot(this.pos.x - prevFeet.x, this.pos.z - prevFeet.z);
-    if (this.onGround && moved < 1) {
+    const moved = Math.hypot(b.pos.x - px, b.pos.z - pz);
+    if (b.onGround && moved < 1) {
       this.stride += moved;
       const len = this.sprinting ? 1.05 : this.crouched ? 0.6 : 0.78;
       if (this.stride > len) {
         this.stride = 0;
         const loud = this.sprinting ? 1 : this.crouched ? 0.1 : 0.4;
         const radius = this.sprinting ? 12 : this.crouched ? 1.0 : 3.0;
-        ev.footstep(this.pos.clone(), loud, radius);
+        ev.footstep(b.pos.clone(), loud, radius);
       }
     }
 
-    // --- animation ---
-    this.char.crouch = this.crouchT;
-    this.char.root.position.copy(this.pos);
+    this.animate(dt, b.onGround ? Math.hypot(b.vel.x, b.vel.z) : hs, b.onGround);
+  }
+
+  private animate(dt: number, speed: number, grounded: boolean) {
+    const L = this.loco;
+    L.speed = speed;
+    L.grounded = grounded;
+    L.vy = this.body.vel.y;
+    L.crouch = this.crouchT;
+    L.aim = this.aim;
+    this.char.root.position.copy(this.body.pos);
     this.char.root.rotation.y = this.yaw;
-    this.char.update(dt, this.onGround ? hs : 0.5);
+    this.char.update(dt, L);
+  }
+
+  private onCrossed(from: RiftEnd, to: RiftEnd, speed: number) {
+    const old = this.yaw;
+    // out of a door / wall: face where you're going; floors and ceilings keep your yaw
+    if (Math.abs(to.normal.y) < 0.5) this.yaw = yawOf(to.normal);
+    this.shoveT = 0;
+    let d = this.yaw - old;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    this.ev?.crossed(from, to, d, speed);
+  }
+
+  private onImpact(e: ImpactInfo) {
+    if (e.surface !== 'ground') return;
+    const speed = e.speed, charged = e.charged;
+    if (charged || this.airTime > 0.25 || speed > 4) this.ev?.landed(this.body.pos.clone(), speed, charged);
+    const hurt = LAW.player.uncharged;
+    if (!charged && speed > hurt.hurtFrom) this.ev?.fallDamage((speed - hurt.hurtFrom) * hurt.perMs);
+    if (speed >= 10) this.char.play('roll', { fade: 0.06 });
+    else if (this.airTime > 0.35) this.char.play('jumpLand', { fade: 0.06 });
   }
 
   private tryMantle(world: CollisionWorld) {
+    const b = this.body;
     const f = this.forward(_v);
     for (const d of [0.5, 0.75, 1.0, 1.2]) {
-      const px = this.pos.x + f.x * d, pz = this.pos.z + f.z * d;
-      const top = world.groundAt(px, pz, 0.18, this.pos.y + FEEL.mantleMax);
-      if (!(top > this.pos.y + 0.55)) continue;
+      const px = b.pos.x + f.x * d, pz = b.pos.z + f.z * d;
+      const top = world.groundAt(px, pz, 0.18, b.pos.y + FEEL.mantleMax);
+      if (!(top > b.pos.y + 0.55)) continue;
       if (world.ceilingAt(px, pz, 0.25, top + 0.05) < top + 1.85) continue;
       if (world.overlapsCylinder(px, pz, FEEL.playerRadius * 0.8, top + 0.02, top + 1.7)) continue;
-      // make sure the space above our head on the way up is clear
-      if (world.ceilingAt(this.pos.x, this.pos.z, 0.2, this.pos.y + this.height) < top + 1.0) continue;
-      this.mantle = { from: this.pos.clone(), to: new THREE.Vector3(px + f.x * 0.25, top, pz + f.z * 0.25), t: 0 };
+      // the space above our head on the way up must be clear
+      if (world.ceilingAt(b.pos.x, b.pos.z, 0.2, b.pos.y + this.height) < top + 1.0) continue;
+      this.mantle = { from: b.pos.clone(), to: new THREE.Vector3(px + f.x * 0.25, top, pz + f.z * 0.25), t: 0 };
       this.crouched = false;
+      this.char.play('jumpStart', { fade: 0.08 });
       return true;
     }
     return false;

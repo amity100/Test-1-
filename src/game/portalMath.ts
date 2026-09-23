@@ -14,6 +14,8 @@ export interface RiftFrame {
 const FLIP = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
 const _q = new THREE.Quaternion();
 const _v = new THREE.Vector3();
+const _ca = new THREE.Vector3();
+const _cb = new THREE.Vector3();
 
 export function frameNormal(f: RiftFrame, out = new THREE.Vector3()) {
   return out.set(0, 0, 1).applyQuaternion(f.quaternion);
@@ -57,8 +59,8 @@ export function toLocal(f: RiftFrame, p: THREE.Vector3, out = new THREE.Vector3(
  * Returns the fraction along the segment where the crossing happened, or -1.
  */
 export function crossing(f: RiftFrame, prev: THREE.Vector3, cur: THREE.Vector3, margin = 0): number {
-  const a = toLocal(f, prev, new THREE.Vector3());
-  const b = toLocal(f, cur, new THREE.Vector3());
+  const a = toLocal(f, prev, _ca);
+  const b = toLocal(f, cur, _cb);
   if (!(a.z > 0 && b.z <= 0)) return -1;
   const t = a.z / (a.z - b.z);
   const x = a.x + (b.x - a.x) * t;
