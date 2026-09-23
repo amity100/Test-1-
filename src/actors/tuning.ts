@@ -34,6 +34,8 @@ export const KIND: Record<EnemyKind, KindTune> = {
 
 /** Everything that shapes how Kessler fights. */
 export const AI = {
+  /** A shout reaches the squad, plus anyone in the zone within this radius. */
+  alertRadius: 26,
   /** Vision half-angle (±60°). */
   fovHalf: Math.PI / 3,
   crouchRange: 0.65,
@@ -47,7 +49,7 @@ export const AI = {
   suspiciousAt: 0.3,
   maxThinking: 12,
   maxPathsPerFrame: 2,
-  maxTokens: 3,
+  maxTokens: 2,
   edgeMargin: 1.5,
   witnessRange: 25,
   lookTime: 3,

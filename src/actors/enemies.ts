@@ -485,19 +485,25 @@ export class EnemySystem implements EnemyAPI, Brain {
       e.state = 'combat';
       e.stateT = 0;
     }
-    if (fresh && propagate) this.raise(e.def.zone, spotter);
+    if (fresh && propagate) this.raise(e.def.zone, spotter, e);
   }
 
-  private raise(zone: ZoneId, spotter: Enemy | null) {
+  /**
+   * The shout carries to his own squad and anyone of the zone within earshot
+   * (not the whole zone: later fights stay unaware until you get there).
+   */
+  private raise(zone: ZoneId, spotter: Enemy | null, origin: Enemy | null = null) {
     if (spotter && spotter.kind !== 'boss' && spotter.kind !== 'turret') this.bark(spotter, 'bark.contact', true);
     for (let i = 0; i < this.list.length; i++) {
       const o = this.list[i];
-      if (o.alive && o.def.zone === zone && o.mode !== 'combat') this.enterCombat(o, null, false);
+      if (!o.alive || o.def.zone !== zone || o.mode === 'combat') continue;
+      if (origin && o.def.squad !== origin.def.squad && o.pos.distanceTo(origin.pos) > AI.alertRadius) continue;
+      this.enterCombat(o, null, false);
     }
   }
 
   alertZone(zone: ZoneId) {
-    this.raise(zone, null);
+    this.raise(zone, null, null);
   }
 
   /** Some living enemy of the zone is in combat. */

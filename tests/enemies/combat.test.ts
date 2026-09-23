@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { LAW, type HitInfo } from '../../src/core/contracts';
 import type { Enemy } from '../../src/actors/enemies';
 import { solveLob } from '../../src/actors/aimath';
+import { AI } from '../../src/actors/tuning';
 import { scenario, V } from './fakes';
 
 const charged = (from: THREE.Vector3, amount = LAW.bolt.damageCharged, extra: Partial<HitInfo> = {}): HitInfo => ({
@@ -60,7 +61,7 @@ describe('rifleman', () => {
     expect(t2.from.distanceTo(e.pos)).toBeLessThan(2);
   });
 
-  it('never lets more than 3 enemies telegraph or fire at once (tokens)', () => {
+  it('never lets more than AI.maxTokens enemies telegraph or fire at once (tokens)', () => {
     const s = scenario();
     const list = [-8, -4, 0, 4, 8].map((x) => s.spawn('rifleman', V(x, 0, 0), 0, { state: 'combat' }) as Enemy);
     let max = 0;
@@ -70,10 +71,10 @@ describe('rifleman', () => {
       const busy = list.filter((e) => e.atk === 'aim' || e.atk === 'fire');
       max = Math.max(max, busy.length);
       busy.forEach((e) => shooters.add(e.id));
-      expect(busy.length).toBeLessThanOrEqual(3);
-      expect(s.sys.tokensInUse).toBeLessThanOrEqual(3);
+      expect(busy.length).toBeLessThanOrEqual(AI.maxTokens);
+      expect(s.sys.tokensInUse).toBeLessThanOrEqual(AI.maxTokens);
     }
-    expect(max).toBe(3);
+    expect(max).toBe(AI.maxTokens);
     expect(shooters.size).toBe(5);
     // riflemen keep their distance band from the player
     for (const e of list) {
