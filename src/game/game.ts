@@ -50,6 +50,7 @@ import { Physics } from '../sim/physics';
 import { Projectiles } from '../sim/projectiles';
 import { EnemySystem, type Enemy } from '../actors/enemies';
 import { PropSystem, type Prop } from './props';
+import { Hazards, type HazardHooks } from './hazards';
 import { ZoneManager, type EncounterState, type LiftState } from './zones';
 import { FxKit } from './fxkit';
 import { HUD } from '../ui/hud';
@@ -86,6 +87,8 @@ interface KillCtx {
   comet?: number;
   /** Loops of the thing that went off (a looped barrel: CANNONBALL). */
   loops?: number;
+  /** A lab laser that went through your rift (scores like a beam: FIRING LINE). */
+  laser?: boolean;
 }
 
 const _v = new THREE.Vector3();
@@ -155,6 +158,7 @@ export class Game {
   projectiles!: Projectiles;
   enemies!: EnemySystem;
   props!: PropSystem;
+  hazards!: Hazards;
   fx: FxKit;
   player!: Player;
   lamps: LampSystem | null = null;
@@ -342,6 +346,8 @@ export class Game {
     for (const g of this.level.gates) this.rifts.addGate(g.id, g.inFrame, g.outFrame);
     this.props = new PropSystem(this.physics, this.level);
     this.scene.add(this.props.group);
+    this.hazards = new Hazards(this.level, world, this.rifts, mobile);
+    this.scene.add(this.hazards.group);
 
     // player
     const heroChar = new Character(asset, anims, 'hero');
@@ -914,7 +920,7 @@ export class Game {
       victimCrossings: ctx.crossings,
       ownShot: !!p && p.owner === e.id,
       shotBy: p && typeof p.owner === 'number' && p.owner !== e.id ? p.owner : null,
-      projectileKind: p ? p.kind : null,
+      projectileKind: p ? p.kind : kc.laser ? 'beam' : null,
       turretShot: shooter?.kind === 'turret',
       shotAge: p ? this.time - p.firedAt : 0,
       unaware: ctx.unaware,
@@ -1380,6 +1386,7 @@ export class Game {
     this.rifts.update(dt, realDt, this.time);
     this.projectiles.update(dt, this.time);
     this.detonateCaughtGrenades();
+    this.hazards.update(dt, this.time, this.zones.active, { pos: body.pos, vel: body.vel, radius: FEEL.playerRadius, height: p.height, alive: this.hp > 0 && this.respawnT < 0 }, this.enemies.list, this.hazardHooks);
     this.props.update(dt);
     this.updatePropFuses(dt);
     this.updateCatchWindow();
@@ -1530,6 +1537,20 @@ export class Game {
     }
     if (air && this.airStartT >= 0 && this.airCrossings > 0) (this.hud as any).setAirtime?.(this.time - this.airStartT);
   }
+
+  private readonly hazardHooks: HazardHooks = {
+    hurtPlayer: (amount, at, push) => {
+      this.hurtPlayer(amount, at);
+      this.player.body.vel.add(push);
+      this.player.body.onGround = false;
+      this.fx.sparks(at, _v2.copy(push).normalize(), COL_SPARK, 14);
+    },
+    hitEnemy: (e, amount, at, viaRift) => {
+      const info: HitInfo = { source: 'hazard', amount, charged: true, from: at.clone(), dir: _v.subVectors(e.pos, at).setY(0).normalize().clone(), team: 'player', instigator: 'player' };
+      this.fx.sparks(at, UP, COL_SPARK, 18);
+      this.withKill({ laser: viaRift }, () => this.enemies.hit(e, info));
+    },
+  };
 
   /** A caught (charged) grenade goes off when it reaches a Kessler body: special delivery. */
   private detonateCaughtGrenades() {
