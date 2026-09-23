@@ -92,6 +92,30 @@ priority:
 - These rules make "one click = one kill" impossible. Kills come from
   combinations.
 
+### Assists (so the tricks land the way players mean them)
+- **Air ends come down to your level.** Aimed above your feet, an air door
+  drops until things step out of it at your feet's height (a hatch until
+  its centre is there). Height is still earned, but the refusal never fires
+  for an air end.
+- **Walls behind enemies win.** The auto sky hatch over a target only
+  happens when the aim ray is on his body or hits the ground; aiming past
+  him at a wall puts the EXIT on the wall (Return to Sender set-ups).
+- **Rift magnetism.** A bolt or beam leaving a rift bends onto a Kessler body
+  within 12° of its path, or onto the man who fired it within 60°. A caught
+  grenade arcs onto a body within ~32° of its way out (its thrower within
+  60°) and goes off on contact.
+- **Rift slide.** A charged landing at knock speed or more skids (9 m/s²,
+  a roll) and keeps its charge while it is that fast, so a slingshot through
+  a floor-level door carries into the group. A charged player rams with full
+  speed even at a glance and keeps 65% after each hit.
+- **Stable loops.** An entrance opened while falling out of your own sky
+  hatch centres under it; a floor/ceiling loop is steered over the end it
+  falls back into, so it holds up to the speed cap. LOOP pays up to 12 loops.
+- **Cargo.** Cutting a hanging load opens the entrance on the ground under
+  it when that's a real drop (it arrives fast).
+- **Warning volley.** A rifleman's first burst goes over your head (it still
+  goes through a CATCH door).
+
 ### Kessler rift gates
 - Fixed enemy pairs, drawn in red. Reinforcement waves walk out of the gate's
   arena end.
@@ -99,6 +123,16 @@ priority:
   ENTRANCE on a gate's arena end. The gate's out-end then links to your
   EXIT. Everything that comes through the gate now comes out of your exit
   (over the void, above their commander).
+- Wave members hop into the in-end one by one; with no EXIT to send them to,
+  a hijacked gate lets them out of its arena end on foot. A gate fight isn't
+  cleared while waves are still to come.
+
+### Lab hazards
+- **Laser curtains** burn and block you (20 a touch, thrown back). They are
+  rays like a beam: a laser that goes into your ENTRANCE comes out of your
+  EXIT in rift colours and cuts Kessler (FIRING LINE).
+- **The electric trench** pulses (1 s of every 3). It hurts you, and fries
+  Kessler who are knocked about in it; walking their own lab is safe.
 
 ## 4. The laws (numbers)
 
