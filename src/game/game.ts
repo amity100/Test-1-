@@ -1373,8 +1373,15 @@ export class Game {
         : null,
     );
     this.rifts.updatePreview(aim && aim.valid !== undefined ? aim : null, this.handPos(), this.camera);
-    if (!aiming) this.hud.setGateHint(this.gatePreview(targets));
-    else this.hud.setGateHint(null);
+    if (!aiming) {
+      const gp = this.gatePreview(targets);
+      this.hud.setGateHint(gp);
+      // the touch GATE button says what it will do (and pulses for a CATCH)
+      this.touch?.setGateLabel(gp.mode && !gp.reason ? t(`gate.${gp.mode}`) : null, gp.reason ? null : gp.mode);
+    } else {
+      this.hud.setGateHint(null);
+      this.touch?.setGateLabel(null);
+    }
     this.hud.setRiftState({ exit: this.rifts.hasExit(), entrance: this.rifts.hasEntrance(), aiming, orientation: this.rifts.orientation });
     this.touch?.setAiming(aiming);
 
