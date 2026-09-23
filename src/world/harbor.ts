@@ -377,7 +377,7 @@ export function buildHarbor(envMap: THREE.Texture | null, mobile: boolean): Leve
       blending: THREE.AdditiveBlending,
       uniforms: { uTime: { value: 0 } },
       vertexShader: `varying vec3 vN; varying vec3 vV; varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.0); vW = w.xyz; vN = normalize(mat3(modelMatrix)*normal); vV = normalize(cameraPosition - w.xyz); gl_Position = projectionMatrix * viewMatrix * w; }`,
-      fragmentShader: `uniform float uTime; varying vec3 vN; varying vec3 vV; varying vec3 vW; void main(){ float f = pow(1.0 - abs(dot(vN, vV)), 3.0); float hex = step(0.92, fract(vW.y * 2.0 - uTime * 0.4)) * 0.35; float a = (f * 0.55 + hex * f) ; gl_FragColor = vec4(vec3(0.7, 0.3, 1.0) * a * 1.6, a); }`,
+      fragmentShader: `uniform float uTime; varying vec3 vN; varying vec3 vV; varying vec3 vW; void main(){ float f = pow(clamp(1.0 - abs(dot(vN, vV)), 0.0, 1.0), 3.0); float hex = step(0.92, fract(vW.y * 2.0 - uTime * 0.4)) * 0.35; float a = (f * 0.55 + hex * f) ; gl_FragColor = vec4(vec3(0.7, 0.3, 1.0) * a * 1.6, a); }`,
     }),
   );
   dome.position.set(inhibitor.center.x, 17.9, inhibitor.center.z);

@@ -38,6 +38,7 @@ const GradeShader = {
       col.r = texture2D(tDiffuse, uv + c * ca * 2.0).r;
       col.g = texture2D(tDiffuse, uv).g;
       col.b = texture2D(tDiffuse, uv - c * ca * 2.0).b;
+      if (any(isnan(col)) || any(isinf(col))) col = vec3(0.0);
       // rift focus: cool desaturation with a teal edge glow
       float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
       col = mix(col, vec3(lum) * vec3(0.8, 0.95, 1.1), uFocus * 0.55);
@@ -87,6 +88,17 @@ export class Renderer {
     this.composer.addPass(this.renderPass);
     this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.55, 0.55, 0.92);
     this.composer.addPass(this.bloom);
+    // safety net: bloom blurs its input across the whole screen, so a single
+    // NaN/Inf pixel from any shader would black out every pixel. Scrub it here.
+    const hp = this.bloom.materialHighPassFilter;
+    const texel = 'vec4 texel = texture2D( tDiffuse, vUv );';
+    if (hp.fragmentShader.includes(texel)) {
+      hp.fragmentShader = hp.fragmentShader.replace(
+        texel,
+        `${texel}\n\t\t\tif ( any( isnan( texel ) ) || any( isinf( texel ) ) ) texel = vec4( 0.0 );\n\t\t\ttexel.rgb = min( texel.rgb, vec3( 128.0 ) );`,
+      );
+      hp.needsUpdate = true;
+    } else console.warn('bloom NaN guard not installed');
     this.grade = new ShaderPass(GradeShader);
     this.composer.addPass(this.grade);
     this.composer.addPass(new OutputPass());

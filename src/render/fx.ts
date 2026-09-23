@@ -148,8 +148,11 @@ export class LampSystem {
         varying vec3 vN, vV, vW;
         float hash(vec3 p) { return fract(sin(dot(p, vec3(12.9, 78.2, 37.7))) * 43758.5); }
         void main() {
-          float edge = pow(abs(dot(vN, vV)), 1.6);
-          float fall = pow(vH, 2.2);
+          // clamp before pow: interpolated varyings can dip a hair below 0, and
+          // pow(negative) is NaN on desktop GPUs; one NaN pixel fed to bloom
+          // blacks out the whole screen
+          float edge = pow(clamp(abs(dot(vN, vV)), 0.0, 1.0), 1.6);
+          float fall = pow(clamp(vH, 0.0, 1.0), 2.2);
           float dust = 0.75 + 0.25 * sin(vW.y * 3.0 + uTime * 0.8 + vW.x);
           float a = edge * fall * 0.075 * dust;
           gl_FragColor = vec4(uColor * a, a);
@@ -252,9 +255,10 @@ export function createBeam(color: THREE.ColorRepresentation, length: number, ang
       varying float vH;
       varying vec3 vN, vV;
       void main() {
-        float edge = pow(abs(dot(vN, vV)), 1.4);
+        float nv = clamp(abs(dot(vN, vV)), 0.0, 1.0);
+        float edge = pow(nv, 1.4);
         // fade when looking straight down the beam so it never floods the screen
-        float a = edge * pow(vH, 1.3) * 0.32 * smoothstep(0.02, 0.35, 1.0 - abs(dot(vN, vV)) + 0.2);
+        float a = edge * pow(clamp(vH, 0.0, 1.0), 1.3) * 0.32 * smoothstep(0.02, 0.35, 1.0 - nv + 0.2);
         gl_FragColor = vec4(uColor * 1.2 * a, a);
       }`,
   });

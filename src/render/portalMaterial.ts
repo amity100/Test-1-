@@ -88,12 +88,12 @@ export function createPortalMaterial(color: THREE.Color) {
             // from behind a rift is a thin membrane, never a wall you can't see past
             if (!gl_FrontFacing) alpha = 0.35 + sw * 0.2;
           }
-          col += uColor * pow(rimInner, 4.0) * 0.7;
+          col += uColor * pow(clamp(rimInner, 0.0, 1.0), 4.0) * 0.7;
         } else {
           alpha = rimOuter * rimOuter;
         }
         col += uColor * rim * (1.1 + n2 * 1.2 + uPulse * 2.0);
-        col += vec3(1.0) * pow(rim, 8.0) * 0.5;
+        col += vec3(1.0) * pow(clamp(rim, 0.0, 1.0), 8.0) * 0.5;
         gl_FragColor = vec4(col, alpha);
       }`,
   });
