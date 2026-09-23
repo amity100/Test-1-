@@ -410,6 +410,9 @@ export interface CharacterPose {
   dead: boolean;
   deathKind: DeathKind | null;
   mixerT: number;
+  /** Smoothed airborne / swimming blends (so replays reproduce them exactly). */
+  air?: number;
+  swim?: number;
 }
 
 export type DeathKind = 'fall' | 'shot' | 'cut' | 'drown' | 'blast';
