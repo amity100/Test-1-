@@ -1433,7 +1433,7 @@ export class Game {
     // hanging cargo: a hole opens right under it and the cable snaps
     const hang = this.hangingUnderCrosshair();
     if (hang && this.rifts.hasExit()) {
-      const ok = (this.rifts as any).openEntranceAt?.(
+      const ok = this.rifts.openEntranceAt(
         { position: hang.body.pos.clone().setY(hang.body.pos.y - 1.2), quaternion: orientFrame(UP, new THREE.Vector3(0, 0, 1)), width: LAW.floorEndSize, height: LAW.floorEndSize },
         'air',
       );

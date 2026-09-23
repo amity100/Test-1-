@@ -1121,6 +1121,20 @@ export class RiftSystem implements RiftAPI {
     return null;
   }
 
+  /** Open the entrance at an explicit frame (game-driven: a hole right under hanging cargo). */
+  openEntranceAt(frame: { position: V3; quaternion: THREE.Quaternion; width: number; height: number }, kind: RiftEndKind): boolean {
+    if (!this.exit || this.blocked(frame.position)) return false;
+    if (this.exit.position.distanceTo(frame.position) < 1.0) return false;
+    if (this.entrance) this.retire(this.entrance);
+    const e = this.acquire('entrance', 'entrance', 'player');
+    e.openTime = FEEL.entranceOpenTime;
+    e.setFrame(frame.position, frame.quaternion, frame.width, frame.height, kind, null);
+    this.entrance = e;
+    this.pendingOpened.push({ end: e, which: 'entrance' });
+    this.relink();
+    return true;
+  }
+
   close(straddlers: { key: string; center: V3; radius: number }[]): ShearVictim[] {
     const victims: ShearVictim[] = [];
     for (const end of [this.entrance, this.exit]) {
