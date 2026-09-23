@@ -72,6 +72,8 @@ export const STYLE_TUNING = {
   loopMin: 3,
   /** LOOP ×N award points at these loop counts (then every +5), remainder when the run ends. */
   loopMilestones: [3, 6, 10] as readonly number[],
+  /** Loops past this pay nothing more (no farming a loop forever). */
+  loopPayCap: 12,
   /** A loop run with no crossing for this long has ended. */
   loopTimeout: 1.6,
   /** One BOOM per explosion: byBarrel kills within this window share it. */
@@ -341,16 +343,17 @@ export class StyleSystem implements StyleAPI {
     }
     run.loops = e.loops;
     run.lastT = e.t;
-    if (run.loops >= T.loopMin && run.loops >= nextLoopMilestone(run.awarded)) this.payLoop(run, e.t, out);
+    if (run.loops >= T.loopMin && run.awarded < T.loopPayCap && run.loops >= nextLoopMilestone(run.awarded)) this.payLoop(run, e.t, out);
   }
 
   private finishLoop(run: LoopRun, t: number, out: TrickAward[]): void {
-    if (run.loops >= STYLE_TUNING.loopMin && run.loops > run.awarded) this.payLoop(run, t, out);
+    if (run.loops >= STYLE_TUNING.loopMin && Math.min(run.loops, STYLE_TUNING.loopPayCap) > run.awarded) this.payLoop(run, t, out);
   }
 
   private payLoop(run: LoopRun, t: number, out: TrickAward[]): void {
     const first = run.awarded === 0;
-    const pts = (first ? TRICK_POINTS.loop : 0) + 50 * (run.loops - run.awarded);
+    const upto = Math.min(run.loops, STYLE_TUNING.loopPayCap);
+    const pts = (first ? TRICK_POINTS.loop : 0) + 50 * (upto - run.awarded);
     const a = this.award('loop', t, out, {
       points: pts,
       suffix: `×${run.loops}`,
@@ -358,7 +361,7 @@ export class StyleSystem implements StyleAPI {
       halved: run.halved,
     });
     if (first) run.halved = !!a.halved;
-    run.awarded = run.loops;
+    run.awarded = upto;
   }
 
   private onAir(e: AirEvent, out: TrickAward[]): void {

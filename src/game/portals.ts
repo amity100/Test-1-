@@ -1078,6 +1078,13 @@ export class RiftSystem implements RiftAPI {
     const center = new THREE.Vector3(c0.x + v.x * t, yAt(t), c0.z + v.z * t);
     const vel = new THREE.Vector3(v.x, v.y - G * t, v.z);
     const n = vel.clone().normalize().negate();
+    // falling out of your own sky hatch: open right under it, flat, for a clean loop
+    const ex = this.exit;
+    if (ex && ex.normal.y < -0.9 && ex.position.y > center.y + 0.5 && Math.hypot(ex.position.x - center.x, ex.position.z - center.z) < FEEL.loopSnap) {
+      center.x = ex.position.x;
+      center.z = ex.position.z;
+      n.set(0, 1, 0);
+    }
     // the ground comes first: open on it instead
     const pathLen = center.distanceTo(c0);
     const dir = _b.subVectors(center, c0).normalize();

@@ -225,6 +225,16 @@ describe('LOOP ×N', () => {
     expect([...got, ...end].some((a) => a.halved)).toBe(false);
   });
 
+  it('stops paying past loopPayCap (no farming an endless loop)', () => {
+    const s = new StyleSystem();
+    const got: TrickAward[] = [];
+    for (let i = 1; i <= 60; i++) got.push(...s.push(cross(i * 0.1, i)));
+    got.push(...s.push(cross(7, 1)));
+    const total = got.filter((a) => a.id === 'loop').reduce((p, a) => p + a.points, 0);
+    expect(total).toBe(50 + 50 * STYLE_TUNING.loopPayCap);
+    expect(got.length).toBeLessThanOrEqual(5);
+  });
+
   it('fewer than 3 loops is not a LOOP', () => {
     const s = new StyleSystem();
     expect(s.push(cross(0, 1))).toEqual([]);

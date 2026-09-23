@@ -240,6 +240,7 @@ const EN: Record<string, string> = {
   'obj.lift': 'Get to the lift',
   'obj.boss': 'Take down Director Voss',
   'obj.escape': 'Jump. Trust the rift.',
+  'obj.next': 'Push on to the next area',
 
   // toasts
   'toast.checkpoint': 'Checkpoint',
@@ -583,6 +584,7 @@ const HE: Record<string, string> = {
   'obj.lift': 'הגע למעלית',
   'obj.boss': 'הפל את המנהל ווֹס',
   'obj.escape': 'קפוץ. תסמוך על הפורטל.',
+  'obj.next': 'המשך לאזור הבא',
 
   'toast.checkpoint': 'נקודת שמירה',
   'toast.hijack': 'השתלטת על השער',

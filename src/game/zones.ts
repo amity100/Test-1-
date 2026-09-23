@@ -159,6 +159,9 @@ export class ZoneManager {
     }
     const lift = this.lifts.find((l) => l.zone === z.id);
     if (lift) return { key: 'obj.lift', target: lift.def.platform.getCenter(new THREE.Vector3()) };
+    // no lift out (the pier): walk on into the next zone
+    const next = ORDER[this.index(z.id) + 1];
+    if (next && z.id !== 'crown') return { key: 'obj.next', target: this.zone(next).playerStart };
     if (z.id === 'crown') return { key: 'obj.boss', target: this.level.bossArena?.center ?? null };
     return { key: 'obj.escape', target: null };
   }

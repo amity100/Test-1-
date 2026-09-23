@@ -251,6 +251,14 @@ export class Physics implements PhysicsAPI {
       }
     }
 
+    // a vertical loop (up-facing end under a down-facing one): keep it centred so it holds
+    if (from.normal.y > 0.9 && to.normal.y < -0.9 && Math.hypot(to.position.x - from.position.x, to.position.z - from.position.z) < FEEL.loopSnap) {
+      b.pos.x += (to.position.x - b.pos.x) * 0.5;
+      b.pos.z += (to.position.z - b.pos.z) * 0.5;
+      b.vel.x *= 0.5;
+      b.vel.z *= 0.5;
+    }
+
     b.charge = LAW.chargeTime;
     b.live = true;
     b.restT = 0;

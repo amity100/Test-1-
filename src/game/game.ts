@@ -394,9 +394,6 @@ export class Game {
   /** Fresh run from the pier. */
   newRun() {
     this.startAtZone('pier');
-    this.stats = { time: 0, kills: 0, bestCombo: 0, styleTotal: 0, tricks: 0, deaths: 0, challenges: 0 };
-    this.tricksSeen.clear();
-    this.style.reset();
   }
 
   /** Continue / zone select: earlier zones count as done. */
@@ -408,8 +405,12 @@ export class Game {
     this.fx.clear();
     this.recorder.clear();
     this.zones.startAt(id);
+    this.gateWaveT.clear();
+    this.challenges.setZone(id);
+    this.stats = { time: 0, kills: 0, bestCombo: 0, styleTotal: 0, tricks: 0, deaths: 0, challenges: 0 };
+    this.tricksSeen.clear();
     for (const g of this.level.gates) this.rifts.setGateOpen(g.id, false);
-    this.props.spawnZone(id);
+    for (const z of this.zones.active) this.props.spawnZone(z);
     const cp = this.zones.checkpoint;
     this.respawnPlayer(cp.pos, cp.yaw);
     this.bossDead = false;
@@ -491,6 +492,10 @@ export class Game {
     this.rifts.reset();
     for (const g of this.level.gates) this.rifts.setGateOpen(g.id, false);
     this.zones.resetUncleared();
+    this.gateWaveT.clear();
+    // loads, barrels and crates come back so a lesson can be tried again
+    this.props.clear();
+    for (const z of this.zones.active) this.props.spawnZone(z);
     const cp = this.zones.checkpoint;
     this.respawnPlayer(cp.pos, cp.yaw);
     this.respawnT = -1;
