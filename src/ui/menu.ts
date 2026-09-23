@@ -341,13 +341,16 @@ export class Menu {
         ${row('C / Ctrl', 'ctl.crouch')}${row('V', 'ctl.shove')}
         ${row('key.rmb', 'ctl.aim', true)}${row('key.lmbAim', 'ctl.place', true)}${row('key.lmb', 'ctl.gate', true)}
         ${row('E', 'ctl.flip', true)}${row('key.wheel', 'ctl.dist', true)}${row('key.mmb', 'ctl.close', true)}
+        ${row('1 / Q', 'ctl.strike1', true)}${row('2 / G', 'ctl.strike2', true)}${row('3 / Z', 'ctl.strike3', true)}
         ${row('F', 'ctl.action')}${row('Tab', 'ctl.vision')}${row('R', 'ctl.clip')}${row('K', 'ctl.photo')}${row('Esc', 'ctl.pause')}
       </div><p class="ctl-note">${esc(t('ctl.tab.pad'))}: ${esc(t('ctl.padLine'))}</p>`;
     } else if (tab === 'pad') {
       body = `<div class="ctl-grid">
         ${row('L', 'ctl.move')}${row('R', 'ctl.look')}${row('A', 'ctl.jump')}${row('L3', 'ctl.sprint')}${row('B', 'ctl.crouch')}${row('RB', 'ctl.shove')}
         ${row('LT', 'ctl.aim', true)}${row('RT', 'ctl.place', true)}${row('RT', 'ctl.gate', true)}${row('Y', 'ctl.flip', true)}
-        ${row('D-pad ← →', 'ctl.dist', true)}${row('LB', 'ctl.close', true)}${row('X', 'ctl.action')}${row('D-pad ↓', 'ctl.vision')}
+        ${row('D-pad ← →', 'ctl.dist', true)}${row('LB', 'ctl.close', true)}
+        ${row('R3', 'ctl.strike1', true)}${row('D-pad ←', 'ctl.strike2', true)}${row('D-pad →', 'ctl.strike3', true)}
+        ${row('X', 'ctl.action')}${row('D-pad ↓', 'ctl.vision')}
         ${row('View', 'ctl.clip')}${row('D-pad ↑', 'ctl.photo')}${row('Start', 'ctl.pause')}
       </div><p class="ctl-note">${esc(t('ctl.padLine'))}</p>`;
     } else {
@@ -357,6 +360,7 @@ export class Menu {
         ${tr(`◯ ${esc(t('ctl.touch.left'))}`, 'ctl.touch.stick')}${tr(`☝ ${esc(t('ctl.touch.right'))}`, 'ctl.touch.look')}
         ${tr(`<i class="tg ex"></i>${esc(t('touch.rift'))}`, 'ctl.touch.rift', true)}${tr(`<i class="tg en"></i>${esc(t('touch.gate'))}`, 'ctl.touch.gate', true)}
         ${tr('✕', 'ctl.touch.close', true)}${tr('⇄', 'ctl.touch.flip', true)}
+        ${tr(esc(t('strike.mirror')), 'ctl.strike1', true)}${tr(esc(t('strike.geyser')), 'ctl.strike2', true)}${tr(esc(t('strike.drop')), 'ctl.strike3', true)}
         ${tr(esc(t('touch.jump')), 'ctl.touch.jump')}${tr(esc(t('touch.shove')), 'ctl.touch.shove')}
         ${tr(esc(t('touch.action')), 'ctl.touch.action')}${tr(esc(t('touch.crouch')), 'ctl.touch.crouch')}${tr('🎬', 'ctl.touch.clip')}
       </div>`;

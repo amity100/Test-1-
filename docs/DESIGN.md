@@ -92,6 +92,26 @@ priority:
 - These rules make "one click = one kill" impossible. Kills come from
   combinations.
 
+### STRIKES (fixed rift attacks, one press)
+Three attacks that use the rift like a weapon, no set-up. Aim near an enemy
+(lock-on to the one nearest the crosshair, 32 m, in sight; a reticle shows
+it) and press. Both ends open at once in your colours, do one thing and close
+by themselves; your own free pair is untouched.
+
+| Strike | Keys | What happens |
+|---|---|---|
+| **REFLECT** | 1 / Q · R3 · touch | A catch door 1.4 m in front of you facing him; its exit follows him 3.2 m to his side, facing him, for 3.2 s. Everything that goes in (bolts, grenades, beams, any shooter's) homes in on him. |
+| **GEYSER** | 2 / G · D-pad ◀ · touch | The floor opens under him (steady or not) and spits him up at 21 m/s out of an end facing the sky, over the water or the drop if one is within 22 m, else beside him (as high as the roof allows). |
+| **DROP** | 3 / Z · D-pad ▶ · touch | The floor opens under him and he's thrown out of a door over the edge (sea / void) if one is near, else dropped out of the sky from up to 16 m. |
+
+- **Rift charge:** 3 charges; a strike costs one, one comes back every 9 s,
+  and every kill your own free rift work makes refunds one. Strikes and
+  creative play feed each other. 1.5 s lockout per strike.
+- Turrets can't be moved; Voss only when stunned or down (REFLECT works on
+  anyone).
+- Strike kills score GEYSER / EXPRESS DROP / REFLECT (+ what finished him:
+  SPLASHDOWN, INTO THE VOID, SKYFALL...). Their floor end is not a TRAPDOOR.
+
 ### Assists (so the tricks land the way players mean them)
 - **Air ends come down to your level.** Aimed above your feet, an air door
   drops until things step out of it at your feet's height (a hatch until

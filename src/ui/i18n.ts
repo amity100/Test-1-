@@ -255,6 +255,9 @@ const EN: Record<string, string> = {
   'hint.strikes.pad': '<b>STRIKES</b>: aim near an enemy and press. <b>R3 REFLECT</b> sends his bullets back · <b>◀ GEYSER</b> throws him into the sky · <b>▶ DROP</b> throws him off the edge.',
   'hint.strikes.touch': '<b>STRIKES</b> (left buttons): aim near an enemy and tap. <b>REFLECT</b> sends his bullets back · <b>GEYSER</b> throws him into the sky · <b>DROP</b> throws him off the edge.',
   'ctl.strikes': 'STRIKES: Reflect / Geyser / Drop',
+  'ctl.strike1': 'REFLECT: his bullets go back into him',
+  'ctl.strike2': 'GEYSER: throw him into the sky',
+  'ctl.strike3': 'DROP: throw him off the edge / out of the sky',
 
   // toasts
   'toast.checkpoint': 'Checkpoint',
@@ -347,7 +350,7 @@ const EN: Record<string, string> = {
   'key.mmb': 'X / MMB',
   'key.space': 'Space',
   'ctl.padLine':
-    'LT aim · RT place / gate · LB close · RB shove · A jump · X action · B crouch · Y flip · L3 sprint · D-pad ↓ vision · D-pad ↑ photo · D-pad ←/→ distance · View clip · Start pause',
+    'LT aim · RT place / gate · LB close · RB shove · A jump · X action · B crouch · Y flip · L3 sprint · D-pad ↓ vision · D-pad ↑ photo · D-pad ←/→ distance while aiming, else GEYSER / DROP · R3 REFLECT · View clip · Start pause',
   'ctl.touch.left': 'Left thumb',
   'ctl.touch.right': 'Right side',
   'ctl.touch.stick': 'Move. Push all the way to sprint.',
@@ -615,6 +618,9 @@ const HE: Record<string, string> = {
   'hint.strikes.pad': '<b>מתקפות</b>: כוונו ליד אויב ולחצו. <b>R3 מחזיר</b> מחזיר לו את הכדורים · <b>◀ גייזר</b> זורק אותו לשמיים · <b>▶ השלכה</b> זורקת אותו מהקצה.',
   'hint.strikes.touch': '<b>מתקפות</b> (הכפתורים משמאל): כוונו ליד אויב ולחצו. <b>מחזיר</b> מחזיר לו את הכדורים · <b>גייזר</b> זורק אותו לשמיים · <b>השלכה</b> זורקת אותו מהקצה.',
   'ctl.strikes': 'מתקפות: מחזיר / גייזר / השלכה',
+  'ctl.strike1': 'מחזיר: הכדורים שלו חוזרים אליו',
+  'ctl.strike2': 'גייזר: זורק אותו לשמיים',
+  'ctl.strike3': 'השלכה: זורקת אותו מהקצה / מהשמיים',
 
   'toast.checkpoint': 'נקודת שמירה',
   'toast.hijack': 'השתלטת על השער',
@@ -700,7 +706,7 @@ const HE: Record<string, string> = {
   'key.mmb': 'X / לחיצה על הגלגלת',
   'key.space': 'רווח',
   'ctl.padLine':
-    'LT כיוון · RT הצבה / שער · LB סגירה · RB דחיפה · A קפיצה · X פעולה · B כריעה · Y היפוך · L3 ריצה · חץ ↓ ראיית פורטל · חץ ↑ צילום · חצים ←/→ מרחק · View קליפ · Start הפסקה',
+    'LT כיוון · RT הצבה / שער · LB סגירה · RB דחיפה · A קפיצה · X פעולה · B כריעה · Y היפוך · L3 ריצה · חץ ↓ ראיית פורטל · חץ ↑ צילום · חצים ←/→ מרחק בזמן כיוון, אחרת גייזר / השלכה · R3 מחזיר · View קליפ · Start הפסקה',
   'ctl.touch.left': 'אגודל שמאל',
   'ctl.touch.right': 'צד ימין',
   'ctl.touch.stick': 'תנועה. דחוף עד הסוף כדי לרוץ.',
