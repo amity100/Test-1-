@@ -102,7 +102,7 @@ export const FEEL = {
   unengagedSight: 0.6, // enemies of a fight you haven't reached yet see this much of their calm range
   returnAssistRange: 45, // bolts out of a rift bend onto Kessler within this range...
   returnAssistCone: 0.978, // ...within ~12 deg of their path (cos)
-  returnAssistSender: 0.77, // ...or ~40 deg when it's the man who fired it (Return to Sender)
+  returnAssistSender: 0.5, // ...or 60 deg when it's the man who fired it (Return to Sender)
   shoveTime: 0.25,
   coyoteTime: 0.1,
   jumpBuffer: 0.12,

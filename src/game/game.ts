@@ -1470,9 +1470,16 @@ export class Game {
     // hanging cargo: a hole opens right under it and the cable snaps
     const hang = this.hangingUnderCrosshair();
     if (hang && this.rifts.hasExit()) {
+      // on the ground under it when that's a real drop (it arrives fast: CARGO), else just below it
+      const hp = hang.body.pos;
+      const w = this.level.world;
+      const gy = w.groundAt(hp.x, hp.z, 0.3, hp.y - 0.1);
+      const host = w.lastGround;
+      const steadyNear = this.enemies.list.some((e) => e.alive && !e.offBalance && Math.hypot(e.pos.x - hp.x, e.pos.z - hp.z) < LAW.enemyClearance + e.radius && Math.abs(e.pos.y - gy) < 1);
+      const onGround = gy > -Infinity && hp.y - gy > 3 && !!host && !host.noPortal && !steadyNear;
       const ok = this.rifts.openEntranceAt(
-        { position: hang.body.pos.clone().setY(hang.body.pos.y - 1.2), quaternion: orientFrame(UP, new THREE.Vector3(0, 0, 1)), width: LAW.floorEndSize, height: LAW.floorEndSize },
-        'air',
+        { position: hp.clone().setY(onGround ? gy + 0.01 : hp.y - 1.2), quaternion: orientFrame(UP, new THREE.Vector3(0, 0, 1)), width: LAW.floorEndSize, height: LAW.floorEndSize },
+        onGround ? 'floor' : 'air',
       );
       if (ok !== false) {
         this.props.release(hang);

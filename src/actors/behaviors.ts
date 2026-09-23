@@ -160,7 +160,10 @@ function gunUpdate(b: Brain, e: Enemy, dt: number): boolean {
 }
 
 function fireShot(b: Brain, e: Enemy) {
-  _d.subVectors(e.aimPt, e.muzzle).normalize();
+  _d.subVectors(e.aimPt, e.muzzle);
+  // a rifleman's first burst is a warning over your head (it still goes through a CATCH door)
+  if (e.kind === 'rifleman' && e.bursts === 0) _d.y += AI.rifle.warnOver;
+  _d.normalize();
   if (e.atkKind === 'fan') {
     const n = AI.boss.fan;
     for (let i = 0; i < n; i++) {

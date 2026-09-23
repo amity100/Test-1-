@@ -66,7 +66,7 @@ export const AI = {
   /** First shot delay after a zone goes hot (reaction time). */
   engageDelay: [0.7, 1.3] as const,
   barkGap: 1.4,
-  rifle: { telegraph: 0.6, shots: 3, interval: 0.12, reload: [1.2, 2] as const, spread: 0.014, lead: 0.6, strafe: [2.5, 4] as const },
+  rifle: { telegraph: 0.6, shots: 3, interval: 0.12, reload: [1.2, 2] as const, spread: 0.014, lead: 0.6, strafe: [2.5, 4] as const, warnOver: 0.85 },
   grenade: { every: 5, telegraph: 0.5, flight: 1, minRange: 5, maxRange: 28 },
   warden: { shieldHalf: Math.PI / 3, bashRange: 2, bashReach: 2.6, damage: 15, windup: 0.45, recover: 0.6, cooldown: 1.2, push: 7 },
   brute: { roar: 1, lockAt: 0.75, speed: 14, dist: 18, damage: 35, push: 10, cooldown: [5, 7] as const, minRange: 4, maxRange: 17, punch: 25, punchWindup: 0.5, wallDamage: 20 },
