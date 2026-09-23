@@ -323,7 +323,7 @@ export class Projectiles implements ProjectileAPI {
       const next = segs[k + 1];
       _e.subVectors(next.to, next.from);
       // (never bent back into the end it just left)
-      if (_e.lengthSq() > 1e-8 && this.hooks.steer(p, next.from, _e.normalize()) && _e.dot(segs[k].viaEnd!.linked.normal) > 0.1) {
+      if (_e.lengthSq() > 1e-8 && this.hooks.steer(p, next.from, _e.normalize(), segs[k].viaEnd!.linked) && _e.dot(segs[k].viaEnd!.linked.normal) > 0.1) {
         let used = 0;
         for (let i = 0; i <= k; i++) used += segs[i].from.distanceTo(segs[i].to);
         const tail = this.rifts.raycastThrough(next.from, _e, Math.max(1, LAW.beam.range - used), this.world, Math.max(0, LAW.beam.maxHops - 1));

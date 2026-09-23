@@ -108,6 +108,11 @@ describe('trick detection', () => {
     expect(one({ matador: true, enemyKind: 'brute', cause: 'water', victimCrossings: 1 })).toEqual(['splashdown']);
   });
 
+  it('STRIKE kills name the strike, not TRAPDOOR', () => {
+    expect(one({ strike: 'geyser', viaTrapdoor: true, cause: 'water', victimCrossings: 1 })).toEqual(['geyser', 'splashdown']);
+    expect(one({ strike: 'drop', viaTrapdoor: true, cause: 'fall', fallHeight: 14 })).toEqual(['express', 'skyfall']);
+  });
+
   it('RETURN TO SENDER is for bolts (his own beam is FIRING LINE only)', () => {
     expect(one({ ownShot: true, projectileKind: 'beam', charged: true, cause: 'beam', shotAge: 0.1 })).toEqual(['firingLine']);
     expect(one({ ownShot: true, projectileKind: 'bolt', charged: true, cause: 'bolt', shotAge: 1 })).toEqual(['returnToSender']);

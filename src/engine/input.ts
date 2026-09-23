@@ -71,6 +71,13 @@ export class Input {
     KeyK: 'photo',
     Escape: 'pause',
     KeyP: 'pause',
+    // fixed rift attacks
+    Digit1: 'strike1',
+    KeyQ: 'strike1',
+    Digit2: 'strike2',
+    KeyG: 'strike2',
+    Digit3: 'strike3',
+    KeyZ: 'strike3',
   };
 
   constructor(private canvas: HTMLElement) {
@@ -98,7 +105,8 @@ export class Input {
       } else if (e.button === 1) {
         e.preventDefault();
         this.down('close');
-      }
+      } else if (e.button === 3) this.tap('strike2'); // mouse back: GEYSER
+      else if (e.button === 4) this.tap('strike3'); // mouse forward: DROP
     });
     window.addEventListener('mouseup', (e) => {
       if (e.button === 2) this.up('aim');
@@ -284,8 +292,10 @@ export class Input {
     hold(12, 'photo'); // D-pad up
     hold(8, 'clip'); // View / Back
     hold(9, 'pause'); // Start
-    edge(14, () => (this.wheel -= 1), null); // D-pad left: nearer
-    edge(15, () => (this.wheel += 1), null); // D-pad right: farther
+    // D-pad left/right: exit distance while aiming, else the GEYSER / DROP strikes; R3: MIRROR
+    edge(14, () => (this.held.has('aim') ? (this.wheel -= 1) : this.tap('strike2')), null);
+    edge(15, () => (this.held.has('aim') ? (this.wheel += 1) : this.tap('strike3')), null);
+    edge(11, () => this.tap('strike1'), null);
     // L3 latches sprint until pressed again or the stick is let go
     edge(
       10,

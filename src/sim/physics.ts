@@ -232,6 +232,12 @@ export class Physics implements PhysicsAPI {
     b.spin.copy(_d);
     b.quat.premultiply(passRotation(from, to, _q)).normalize();
     b.pos.set(_p.x, _p.y - b.height * 0.5, _p.z).addScaledVector(to.normal, 0.05);
+    // a STRIKE end throws what comes out of it (at least `boost`, straight out of its face)
+    const boost = to.boost ?? 0;
+    if (boost > 0) {
+      const out = b.vel.dot(to.normal);
+      if (out < boost) b.vel.addScaledVector(to.normal, boost - Math.max(0, out));
+    }
     // something taller than the door out of a floor-level door: feet on the floor, not under it
     if (Math.abs(to.normal.y) < 0.5) {
       const g = this.world.groundAt(b.pos.x, b.pos.z, b.radius * 0.65, _p.y);

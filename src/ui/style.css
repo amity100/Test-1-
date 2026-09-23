@@ -733,3 +733,30 @@ html[dir='rtl'] .ph-exit { right: auto; left: calc(var(--sl, 0px) + 16px); }
 .photo-ui:not(.touch) .ph-in, .photo-ui:not(.touch) .ph-out { display: none; }
 .photo-ui.flash::after { content: ''; position: absolute; inset: 0; background: #fff; animation: phFlash .35s ease-out forwards; pointer-events: none; }
 @keyframes phFlash { from { opacity: .85; } to { opacity: 0; } }
+
+/* ---- STRIKES: fixed rift attacks ---- */
+.strikes { position: absolute; left: 50%; bottom: calc(var(--sb) + 18px); transform: translateX(-50%); display: flex; gap: 12px; z-index: 12; pointer-events: none; }
+.strikes .sk { position: relative; width: 64px; height: 64px; border-radius: 50%; border: 2px solid rgba(255, 138, 31, 0.55); background: rgba(10, 14, 22, 0.5); color: #ffd6b0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 0; font: 800 8px var(--hud-font); letter-spacing: .08em; pointer-events: auto; touch-action: none; -webkit-touch-callout: none; overflow: visible; transition: transform .08s, border-color .15s, box-shadow .15s, opacity .15s; }
+.strikes .sk svg { width: 44%; height: 44%; position: relative; z-index: 1; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .6)); }
+.strikes .sk-name { position: relative; z-index: 1; white-space: nowrap; text-shadow: 0 1px 2px rgba(0, 0, 0, .9); }
+.strikes .sk kbd { position: absolute; top: -7px; right: -5px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: #ff8a1f; color: #1a0d02; font: 800 11px/18px var(--hud-font); text-align: center; z-index: 2; }
+html[dir='rtl'] .strikes .sk kbd { right: auto; left: -5px; }
+html[dir='rtl'] .strikes .sk { font-family: 'Heebo', 'Oxanium', sans-serif; letter-spacing: 0; font-size: 10px; }
+.strikes .sk-cd { position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(rgba(0, 0, 0, 0.62) calc(var(--cd, 0) * 360deg), transparent 0); z-index: 0; }
+.strikes .sk.cooling { opacity: .72; border-color: rgba(255, 255, 255, 0.25); }
+.strikes .sk.ready { border-color: #ff8a1f; box-shadow: 0 0 14px rgba(255, 138, 31, 0.55); color: #fff; }
+.strikes .sk.down { transform: scale(.88); }
+.strikes .sk.pop { animation: skPop .35s cubic-bezier(.2, 1.6, .4, 1); }
+@keyframes skPop { from { transform: scale(1.25); } to { transform: none; } }
+.strikes.touch { left: calc(var(--sl) + 14px); bottom: calc(var(--sb) + 176px); transform: none; gap: 10px; }
+.strikes.touch .sk { width: 58px; height: 58px; }
+.strikes.touch .sk kbd { display: none; }
+.sk-reticle { position: absolute; left: 0; top: 0; width: 46px; height: 46px; margin: -23px 0 0 -23px; z-index: 11; pointer-events: none; opacity: 0; transition: opacity .12s; }
+.sk-reticle.on { opacity: 1; }
+.sk-reticle i { position: absolute; width: 12px; height: 12px; border: 2.5px solid #ff8a1f; filter: drop-shadow(0 0 3px rgba(255, 138, 31, .8)); }
+.sk-reticle i:nth-child(1) { left: 0; top: 0; border-right: 0; border-bottom: 0; }
+.sk-reticle i:nth-child(2) { right: 0; top: 0; border-left: 0; border-bottom: 0; }
+.sk-reticle i:nth-child(3) { left: 0; bottom: 0; border-right: 0; border-top: 0; }
+.sk-reticle i:nth-child(4) { right: 0; bottom: 0; border-left: 0; border-top: 0; }
+.sk-reticle.on i { animation: skLock .5s ease-out; }
+@keyframes skLock { from { transform: scale(1.8); opacity: 0; } to { transform: none; opacity: 1; } }

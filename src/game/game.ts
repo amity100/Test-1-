@@ -56,6 +56,8 @@ import { FxKit } from './fxkit';
 import { HUD } from '../ui/hud';
 import { addStrings, getLang, setDevice, t } from '../ui/i18n';
 import { PhotoUI } from '../ui/photoui';
+import { StrikeBar } from '../ui/strikebar';
+import { Strikes, type StrikeId } from './strikes';
 import type { RunStats } from '../ui/menu';
 import { StyleSystem } from '../meta/style';
 import { ReplayPlayer, ReplayRecorder } from '../meta/replay';
@@ -161,6 +163,8 @@ export class Game {
   props!: PropSystem;
   hazards!: Hazards;
   private photoUi: PhotoUI;
+  strikes!: Strikes;
+  private strikeBar: StrikeBar;
   /** Gamepad Start while paused (main hides the menu and resumes). */
   onResumeKey: () => void = () => {};
   fx: FxKit;
@@ -230,6 +234,7 @@ export class Game {
     this.input.invertY = settings.invertY;
     this.hud = new HUD(uiRoot);
     this.photoUi = new PhotoUI(uiRoot, this.input);
+    this.strikeBar = new StrikeBar(uiRoot, this.input);
     this.hud.show(false);
     this.hud.onClip = () => this.startReplay();
     if (IS_TOUCH) {
@@ -353,6 +358,16 @@ export class Game {
     this.props = new PropSystem(this.physics, this.level);
     this.scene.add(this.props.group);
     this.hazards = new Hazards(this.level, world, this.rifts, mobile);
+    this.strikes = new Strikes({
+      rifts: this.rifts,
+      world,
+      level: this.level,
+      enemies: this.enemies,
+      active: this.zones.active,
+      playerFeet: () => this.player.body.pos,
+      playerEye: () => this.player.eye(_v4),
+      aimRay: () => this.rig.aimRay(),
+    });
     this.scene.add(this.hazards.group);
 
     // player
@@ -469,6 +484,8 @@ export class Game {
     }
     this.carried = null;
     this.player.carrying = null;
+    this.strikes?.reset();
+    this.strikeMarks?.clear();
     this.player.teleport(pos.clone(), yaw);
     this.player.body.charge = 0;
     this.hp = LAW.player.hp;
@@ -507,6 +524,7 @@ export class Game {
     if (z.id === 'pier' && !this.hintsSeen.has('rules')) {
       this.hintsSeen.add('rules');
       this.hint('rules', `<b>${t('rule.1')}</b><br>${t('rule.2')}<br>${t('rule.3')}`, 9);
+      this.hint('strikes', t('hint.strikes'), 10);
     }
   }
 
@@ -593,6 +611,48 @@ export class Game {
     this.hintQueue.push({ key, html, dur });
   }
 
+  private fireStrike(id: StrikeId) {
+    const r = this.strikes.fire(id);
+    if (!r.ok) {
+      this.audio.ui('deny');
+      if (r.reason) this.hud.toast(t(r.reason), 'warn');
+      return;
+    }
+    if (r.target) this.strikeMarks.set(r.target.id, { id, until: this.time + (id === 'mirror' ? 5 : 6) });
+    // a beat of slow motion and a kick: it should feel like a move, not a menu
+    this.slowT = Math.max(this.slowT, 0.35);
+    this.slowScale = 0.35;
+    this.rig.kick = Math.max(this.rig.kick, 0.7);
+    this.rig.shake = Math.max(this.rig.shake, 0.25);
+    navigator.vibrate?.(18);
+    if (r.at) this.fx.ring(r.at, 3.5, 0.35, id === 'mirror' ? COL_EXIT : COL_ENTRANCE);
+    this.player.char.play('push', { fade: 0.05, speed: 1.6 });
+  }
+
+  private strikeOf(id: number): StrikeId | null {
+    const m = this.strikeMarks.get(id);
+    if (!m) return null;
+    this.strikeMarks.delete(id);
+    return this.time <= m.until ? m.id : null;
+  }
+
+  /** Who a STRIKE is working on (its kill names the strike). */
+  private strikeMarks = new Map<number, { id: StrikeId; until: number }>();
+  private strikeTargetPt = { x: 0, y: 0 };
+  private updateStrikeHud() {
+    const tg = this.strikes.target();
+    let pt: { x: number; y: number } | null = null;
+    if (tg) {
+      const v = tg.chest(_v).project(this.camera);
+      if (v.z < 1) {
+        this.strikeTargetPt.x = (v.x * 0.5 + 0.5) * this.renderer.width;
+        this.strikeTargetPt.y = (1 - (v.y * 0.5 + 0.5)) * this.renderer.height;
+        pt = this.strikeTargetPt;
+      }
+    }
+    this.strikeBar.update({ mirror: this.strikes.cooling('mirror'), geyser: this.strikes.cooling('geyser'), drop: this.strikes.cooling('drop') }, pt);
+  }
+
   /** Hints take turns (each gets a few seconds) and wait for the zone title card. */
   private hintQueue: { key: string; html: string; dur: number }[] = [];
   private hintHold = 0;
@@ -660,15 +720,15 @@ export class Game {
         if (p.kind === 'bolt') this.audio.boltImpact(hit.point, p.charged);
       },
       onExplode: (p, at) => this.explode(at, LAW.grenade.radius, LAW.grenade.damage, { charged: p.charged, barrel: false, projectile: p }),
-      steer: (p, at, dir) => {
-        const e = this.assistTarget(at, dir, p.owner);
+      steer: (p, at, dir, end) => {
+        const e = this.mirrorTarget(end, at) ?? this.assistTarget(at, dir, p.owner);
         if (!e) return false;
         dir.set(e.pos.x, e.pos.y + e.height * 0.6, e.pos.z).sub(at).normalize();
         return true;
       },
       onCross: (p, from, to) => {
-        if (p.kind === 'bolt') this.steerReturned(p);
-        else if (p.kind === 'grenade') this.steerCaughtGrenade(p);
+        if (p.kind === 'bolt') this.steerReturned(p, to);
+        else if (p.kind === 'grenade') this.steerCaughtGrenade(p, to);
         this.fx.riftBurst(to.position, to.normal, COL_CHARGED);
         this.push({ type: 'cross', t: this.time, who: p.kind === 'grenade' ? 'grenade' : p.kind === 'beam' ? 'beam' : 'bolt', id: 1e6 + p.id, speed: p.vel.length(), loops: p.loops, fromKind: from.kind, toKind: to.kind });
         if (from.owner === 'player' && p.team === 'kessler' && p.crossings === 1) {
@@ -684,11 +744,20 @@ export class Game {
    * Rift magnetism: a bolt coming out of a rift bends onto a Kessler body it
    * was nearly heading for (its own shooter gets a wide cone: Return to Sender).
    */
-  private steerReturned(p: Projectile) {
+  /** A MIRROR exit sends everything to its target (alive, in sight). */
+  private mirrorTarget(end: RiftEnd, from: V3): Enemy | null {
+    if (end.aimAt === undefined || end.aimAt < 0) return null;
+    const e = this.enemies.get(end.aimAt) as Enemy | null;
+    if (!e || !e.alive) return null;
+    if (!this.level.world.lineOfSight(from, _v3.set(e.pos.x, e.pos.y + e.height * 0.6, e.pos.z))) return null;
+    return e;
+  }
+
+  private steerReturned(p: Projectile, to: RiftEnd) {
     const speed = p.vel.length();
     if (speed < 1e-3) return;
     const dir = _v.copy(p.vel).divideScalar(speed);
-    const best = this.assistTarget(p.pos, dir, p.owner);
+    const best = this.mirrorTarget(to, p.pos) ?? this.assistTarget(p.pos, dir, p.owner);
     if (!best) return;
     p.vel.set(best.pos.x, best.pos.y + best.height * 0.6, best.pos.z).sub(p.pos).setLength(speed);
   }
@@ -715,16 +784,18 @@ export class Game {
   }
 
   /** A caught grenade leaving a rift arcs onto a Kessler body roughly ahead of it (POSTAGE). */
-  private steerCaughtGrenade(p: Projectile) {
+  private steerCaughtGrenade(p: Projectile, to: RiftEnd) {
     const body = p.body;
     if (!body) return;
     const v = body.vel;
-    const hs = Math.hypot(v.x, v.z);
-    if (hs < 4) return;
+    let hs = Math.hypot(v.x, v.z);
+    const mirror = this.mirrorTarget(to, body.pos);
+    if (hs < 4 && !mirror) return;
+    hs = Math.max(hs, 8);
     const G = LAW.gravity;
-    let best: Enemy | null = null;
+    let best: Enemy | null = mirror;
     let bestScore = -Infinity;
-    for (const e of this.enemies.list) {
+    if (!best) for (const e of this.enemies.list) {
       if (!e.alive || !this.zones.active.has(e.def.zone)) continue;
       const dx = e.pos.x - body.pos.x, dz = e.pos.z - body.pos.z;
       const d = Math.hypot(dx, dz);
@@ -952,6 +1023,7 @@ export class Game {
       playerFling: !!kc.playerFling,
       playerAirborne: this.player.airborne,
       impactorId: this.impactorKey(imp, e.id),
+      strike: this.strikeOf(e.id),
       at: ctx.at.clone(),
     };
     this.stats.kills++;
@@ -1249,6 +1321,7 @@ export class Game {
       this.lastDevice = this.input.lastDevice;
       setDevice(this.input.lastDevice);
     }
+    this.strikeBar.show(this.mode === 'playing');
     switch (this.mode) {
       case 'playing':
         this.update(realDt);
@@ -1367,6 +1440,14 @@ export class Game {
       if (inp.wasPressed('gate')) this.openGate(targets);
     }
     if (inp.wasPressed('close')) this.closeRifts();
+    // STRIKES: one press, a whole rift attack
+    this.strikes.update(realDt);
+    if (this.respawnT < 0) {
+      if (inp.wasPressed('strike1')) this.fireStrike('mirror');
+      else if (inp.wasPressed('strike2')) this.fireStrike('geyser');
+      else if (inp.wasPressed('strike3')) this.fireStrike('drop');
+    }
+    this.updateStrikeHud();
     this.hud.setAim(
       aim
         ? { valid: aim.valid, reason: aim.reason, kind: aim.kind, distance: aim.distance, outcome: aim.outcome, dropBelow: aim.dropBelow, orientation: this.rifts.orientation }

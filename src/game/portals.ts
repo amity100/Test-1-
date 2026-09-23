@@ -92,6 +92,10 @@ export class Portal implements RiftEnd {
   fed = false;
   /** Gate / boss id. */
   tag = '';
+  /** STRIKE ends: things come out of it at least this fast (m/s). */
+  boost = 0;
+  /** MIRROR exit: shots coming out of it home in on this enemy id (-1 = none). */
+  aimAt = -1;
   root = new THREE.Group();
   mesh: THREE.Mesh;
   sparks: THREE.Points;
@@ -276,6 +280,8 @@ export class RiftSystem implements RiftAPI {
   private exit: Portal | null = null;
   private gates = new Map<string, Gate>();
   private boss: { a: Portal; b: Portal } | null = null;
+  private strikes = new Map<number, { a: Portal; b: Portal; life: number }>();
+  private nextStrike = 1;
   /** Retired ends collapsing (visual only). */
   private closing: Portal[] = [];
   private pool: Portal[] = [];
@@ -395,6 +401,8 @@ export class RiftSystem implements RiftAPI {
     p.target = 1;
     p.pulse = 0;
     p.tag = '';
+    p.boost = 0;
+    p.aimAt = -1;
     p.openTime = FEEL.portalOpenTime;
     p.role = role;
     p.owner = owner;
@@ -452,11 +460,16 @@ export class RiftSystem implements RiftAPI {
       this.boss.a.linked = this.boss.b;
       this.boss.b.linked = this.boss.a;
     }
+    for (const sp of this.strikes.values()) {
+      sp.a.linked = sp.b;
+      sp.b.linked = sp.a;
+    }
     const L: Portal[] = [];
     if (en) L.push(en);
     if (ex) L.push(ex);
     for (const g of this.gates.values()) L.push(g.in, g.out);
     if (this.boss) L.push(this.boss.a, this.boss.b);
+    for (const sp of this.strikes.values()) L.push(sp.a, sp.b);
     for (const p of L) p.fed = false;
     for (const p of L) if (p.target > 0 && p.linked !== p && p.linked.linked !== p) p.linked.fed = true;
     for (const p of L) p.view = p.linked !== p ? p.linked : null;
@@ -1270,6 +1283,49 @@ export class RiftSystem implements RiftAPI {
     this.relink();
   }
 
+  /**
+   * STRIKE: a short-lived pair of your own rift colours that opens at once
+   * (fixed attacks: mirror, geyser, drop). `boost`: minimum speed out of `b`
+   * (and `a`). Returns its id; it closes itself after `life` seconds.
+   */
+  openStrike(a: RiftFrame & { kind: RiftEndKind }, b: RiftFrame & { kind: RiftEndKind }, life: number, boost = 0, aimAt = -1): number {
+    const pa = this.acquire('entrance', 'entrance', 'player');
+    const pb = this.acquire('exit', 'exit', 'player');
+    pa.openTime = pb.openTime = FEEL.entranceOpenTime;
+    pa.boost = pb.boost = boost;
+    pb.aimAt = aimAt;
+    pa.setFrame(a.position, a.quaternion, a.width, a.height, a.kind, a.kind === 'floor' || a.kind === 'wall' || a.kind === 'ceiling' ? this.findHost(a) : null);
+    pb.setFrame(b.position, b.quaternion, b.width, b.height, b.kind, b.kind === 'floor' || b.kind === 'wall' || b.kind === 'ceiling' ? this.findHost(b) : null);
+    const id = this.nextStrike++;
+    this.strikes.set(id, { a: pa, b: pb, life });
+    this.pendingOpened.push({ end: pa, which: 'entrance' }, { end: pb, which: 'exit' });
+    this.relink();
+    return id;
+  }
+
+  /** Move a strike pair's second end (a MIRROR exit keeps beside its target). */
+  moveStrikeExit(id: number, f: RiftFrame & { kind: RiftEndKind }) {
+    const sp = this.strikes.get(id);
+    if (!sp) return false;
+    sp.b.setFrame(f.position, f.quaternion, f.width, f.height, f.kind, null);
+    return true;
+  }
+
+  /** Close a strike pair now. */
+  closeStrike(id: number) {
+    const sp = this.strikes.get(id);
+    if (!sp) return;
+    this.retire(sp.a);
+    this.retire(sp.b);
+    this.strikes.delete(id);
+    this.relink();
+  }
+
+  /** Any strike pair still open (a strike in progress). */
+  strikeOpen() {
+    return this.strikes.size > 0;
+  }
+
   setBlockers(list: { pos: V3; radius: number }[]) {
     this.blockers = list;
   }
@@ -1285,6 +1341,19 @@ export class RiftSystem implements RiftAPI {
       const cl = this.pendingClosed.splice(0);
       for (const o of op) this.events.opened(o.end, o.which);
       for (const c of cl) this.events.closed(c);
+    }
+
+    if (this.strikes.size) {
+      let gone = false;
+      for (const [id, sp] of this.strikes) {
+        sp.life -= dt;
+        if (sp.life > 0) continue;
+        this.retire(sp.a);
+        this.retire(sp.b);
+        this.strikes.delete(id);
+        gone = true;
+      }
+      if (gone) this.relink();
     }
 
     let released = false;
@@ -1591,6 +1660,11 @@ export class RiftSystem implements RiftAPI {
       this.release(this.boss.b);
       this.boss = null;
     }
+    for (const sp of this.strikes.values()) {
+      this.release(sp.a);
+      this.release(sp.b);
+    }
+    this.strikes.clear();
     // gates stay (level-owned) but come back open and un-hijacked
     for (const g of this.gates.values()) {
       g.hijacked = false;

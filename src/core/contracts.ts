@@ -103,6 +103,10 @@ export interface RiftEnd extends RiftFrame {
   readonly isOpen: boolean;
   owner: RiftOwner;
   role: RiftRole;
+  /** STRIKE ends: bodies come out at least this fast (0 = plain rift). */
+  boost?: number;
+  /** MIRROR exit: shots out of it home in on this enemy id (-1 / absent = none). */
+  aimAt?: number;
 }
 
 export interface RaySegment {
@@ -258,8 +262,8 @@ export interface ProjectileHooks {
   onHitWorld(p: Projectile, hit: RayHit): void;
   onExplode(p: Projectile, at: V3): void;
   onCross(p: Projectile, from: RiftEnd, to: RiftEnd): void;
-  /** Beams: may bend `dir` (in place) where a beam leaves a rift at `at`; true if it did. */
-  steer?(p: Projectile, at: V3, dir: THREE.Vector3): boolean;
+  /** Beams: may bend `dir` (in place) where a beam leaves rift end `end` at `at`; true if it did. */
+  steer?(p: Projectile, at: V3, dir: THREE.Vector3, end: RiftEnd): boolean;
 }
 
 export interface ProjectileAPI {
@@ -685,7 +689,9 @@ export type TrickId =
   | 'returnToSender' | 'crossfire' | 'postage' | 'firingLine' | 'borrowedGun' | 'trapdoor' | 'splashdown'
   | 'void' | 'skyfall' | 'matador' | 'bowling' | 'headsUp' | 'loop' | 'cannonball' | 'slingshot' | 'comet'
   | 'guillotine' | 'cargo' | 'boom' | 'finisher' | 'ghost' | 'airtime' | 'double' | 'triple' | 'multi'
-  | 'mirror' | 'hijack' | 'juggle';
+  | 'mirror' | 'hijack' | 'juggle'
+  /** Kills by the fixed STRIKE attacks. */
+  | 'geyser' | 'express' | 'reflect';
 
 export interface KillEvent {
   type: 'kill';
@@ -728,6 +734,8 @@ export interface KillEvent {
   playerAirborne: boolean;
   /** The impactor was a launched enemy/corpse id (bowling / heads up). */
   impactorId: number | null;
+  /** Killed by a STRIKE (the fixed rift attacks), if so which. */
+  strike?: 'mirror' | 'geyser' | 'drop' | null;
   at: V3;
 }
 
@@ -845,7 +853,9 @@ export interface ReplayHost {
 
 export type Action =
   | 'aim' | 'place' | 'gate' | 'close' | 'action' | 'jump' | 'sprint' | 'crouch' | 'shove'
-  | 'flip' | 'vision' | 'clip' | 'photo' | 'pause';
+  | 'flip' | 'vision' | 'clip' | 'photo' | 'pause'
+  /** Fixed rift attacks: MIRROR, GEYSER, DROP. */
+  | 'strike1' | 'strike2' | 'strike3';
 
 export interface AimInfo {
   valid: boolean;

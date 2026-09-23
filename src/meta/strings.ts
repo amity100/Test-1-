@@ -33,6 +33,9 @@ const en: Record<string, string> = {
   'trick.mirror': 'MIRROR',
   'trick.hijack': 'HIJACK',
   'trick.juggle': 'JUGGLE',
+  'trick.geyser': 'GEYSER',
+  'trick.express': 'EXPRESS DROP',
+  'trick.reflect': 'REFLECT',
 
   // Style
   'rank.D': 'D', 'rank.C': 'C', 'rank.B': 'B', 'rank.A': 'A', 'rank.S': 'S', 'rank.SS': 'SS', 'rank.SSS': 'SSS',
@@ -141,6 +144,9 @@ const he: Record<string, string> = {
   'trick.mirror': 'מראה',
   'trick.hijack': 'חטיפה',
   'trick.juggle': 'להטוטן',
+  'trick.geyser': 'גייזר',
+  'trick.express': 'משלוח אקספרס',
+  'trick.reflect': 'השתקפות',
 
   // Style
   'rank.D': 'D', 'rank.C': 'C', 'rank.B': 'B', 'rank.A': 'A', 'rank.S': 'S', 'rank.SS': 'SS', 'rank.SSS': 'SSS',

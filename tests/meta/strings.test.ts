@@ -5,7 +5,7 @@ import { CHALLENGES } from '../../src/meta/challenges';
 
 describe('META_STRINGS', () => {
   it('names every trick in EN and HE', () => {
-    expect(TRICK_IDS.length).toBe(28);
+    expect(TRICK_IDS.length).toBe(31); // 28 + the three STRIKE tricks
     for (const id of TRICK_IDS) {
       expect(META_STRINGS.en[`trick.${id}`], id).toBeTruthy();
       expect(META_STRINGS.he[`trick.${id}`], id).toBeTruthy();
