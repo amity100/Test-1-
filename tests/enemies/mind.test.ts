@@ -49,21 +49,26 @@ describe('perception and zone alert', () => {
     expect(s.sys.isHot('pier')).toBe(true);
   });
 
-  it('sees only within ±60° and 32 m; crouching shortens it', () => {
+  it('sees only within ±60° and 32 × calmSight m unaware; crouching shortens it', () => {
     const s = scenario();
     const side = s.spawn('rifleman', V(0, 0, 0), Math.PI / 2) as Enemy; // player at 90°
     s.step(120);
     expect(side.seesPlayer).toBe(false);
     expect(side.mode).toBe('calm');
     const far = scenario();
-    far.setPlayer(0, 0, 30);
+    far.setPlayer(0, 0, 20);
     far.player.crouched = true;
     const e = far.spawn('rifleman', V(0, 0, 0), 0) as Enemy;
     far.step(60);
-    expect(e.seesPlayer).toBe(false); // 30 m > 32 × 0.65
+    expect(e.seesPlayer).toBe(false); // 20 m > 32 × 0.7 × 0.65
     far.player.crouched = false;
     far.step(20);
-    expect(e.seesPlayer).toBe(true);
+    expect(e.seesPlayer).toBe(true); // 20 m < 32 × 0.7
+    const beyond = scenario();
+    beyond.setPlayer(0, 0, 26);
+    const u = beyond.spawn('rifleman', V(0, 0, 0), 0) as Enemy;
+    beyond.step(60);
+    expect(u.seesPlayer).toBe(false); // unaware: 26 m > 32 × 0.7
   });
 
   it('a wall hides the player', () => {

@@ -34,11 +34,15 @@ export const KIND: Record<EnemyKind, KindTune> = {
 
 /** Everything that shapes how Kessler fights. */
 export const AI = {
-  /** A shout reaches the squad, plus anyone in the zone within this radius. */
-  alertRadius: 26,
+  /** A shout reaches the squad, plus anyone in the zone within this radius with a clear line to it. */
+  alertRadius: 15,
+  /** Other squads closer than this hear the shout even through walls. */
+  alertRadiusWalled: 8,
   /** Vision half-angle (±60°). */
   fovHalf: Math.PI / 3,
   crouchRange: 0.65,
+  /** Unaware enemies see this fraction of their sight range (combat: 1.25x). */
+  calmSight: 0.7,
   /** Always noticed this close, any direction. */
   nearSense: 2.5,
   /** LOS checks per enemy per second ≈ 1 / senseInterval. */

@@ -128,7 +128,7 @@ thresholds. Water is always a drown, and the void is always death.
 - An uncharged fall over 14 m/s hurts: damage = (v − 14) × 9.
 
 **Bolts:**
-- 26 m/s, 3-round bursts, 15 damage to the player.
+- 26 m/s, 3-round bursts, 10 damage to the player.
 - Charged, they do 60 damage to Kessler actors.
 - They pass through Kessler actors while uncharged.
 

@@ -37,6 +37,8 @@ export { Enemy } from './enemy';
 
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
+const _hearA = new THREE.Vector3();
+const _hearB = new THREE.Vector3();
 const NO_SOURCE_SHIELD: ReadonlySet<DamageSource> = new Set<DamageSource>(['shear', 'void', 'water', 'explosion', 'blade', 'crush']);
 const BOSS_SHIELDED: ReadonlySet<DamageSource> = new Set<DamageSource>(['bolt', 'beam', 'grenade', 'impact', 'explosion']);
 
@@ -497,9 +499,21 @@ export class EnemySystem implements EnemyAPI, Brain {
     for (let i = 0; i < this.list.length; i++) {
       const o = this.list[i];
       if (!o.alive || o.def.zone !== zone || o.mode === 'combat') continue;
-      if (origin && o.def.squad !== origin.def.squad && o.pos.distanceTo(origin.pos) > AI.alertRadius) continue;
+      if (origin && o.def.squad !== origin.def.squad && !this.hears(origin, o)) continue;
       this.enterCombat(o, null, false);
     }
+  }
+
+  /** Another squad hears the shout: close by, or in earshot with a clear line (walls muffle it). */
+  private hears(from: Enemy, o: Enemy) {
+    const d = o.pos.distanceTo(from.pos);
+    if (d > AI.alertRadius) return false;
+    if (d < AI.alertRadiusWalled) return true;
+    const w = this.world;
+    if (!w) return true;
+    _hearA.set(from.pos.x, from.pos.y + 1.6, from.pos.z);
+    _hearB.set(o.pos.x, o.pos.y + 1.6, o.pos.z);
+    return w.lineOfSight(_hearA, _hearB);
   }
 
   alertZone(zone: ZoneId) {

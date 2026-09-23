@@ -244,6 +244,7 @@ export class Projectiles implements ProjectileAPI {
         p.lastEndId = to.id;
         p.hitIds?.clear(); // a returned bolt may hit its shooter
         this.rifts.notePass(end, 'bolt');
+        p.pos.copy(_a); // hooks see where it came out (and may steer p.vel)
         this.hooks.onCross(p, end, to);
         remaining *= 1 - tc;
         continue;

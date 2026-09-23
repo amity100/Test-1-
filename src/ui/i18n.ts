@@ -248,7 +248,7 @@ const EN: Record<string, string> = {
   'toast.clipFailed': 'Couldn’t save the clip',
   'toast.photoSaved': 'Photo saved',
   'toast.challenge': 'Challenge complete',
-  'toast.zoneClear': 'Zone clear',
+  'toast.zoneClear': 'Area clear',
 
   // enemy barks
   'bark.contact': 'Contact!',

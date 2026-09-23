@@ -110,6 +110,8 @@ function startGun(e: Enemy, kind: Enemy['atkKind'], telegraph: number, shots: nu
   e.shotsLeft = shots;
   e.shotGap = gap;
   e.shotT = 0;
+  // threats() reads the muzzle before the first aim tick
+  muzzleOf(e, e.muzzle);
 }
 
 /** Runs the aim + fire phases. Returns true while busy. */

@@ -97,6 +97,9 @@ export const FEEL = {
   floorPopSpeed: 6.5, // minimum speed out of an up-facing end (so slow things clear the hole)
   floorPopNudge: 2.2, // ...plus a sideways nudge so they land beside it
   chargedAirControl: 0.08, // flying out of a rift: momentum is honest
+  returnAssistRange: 45, // bolts out of a rift bend onto Kessler within this range...
+  returnAssistCone: 0.978, // ...within ~12 deg of their path (cos)
+  returnAssistSender: 0.77, // ...or ~40 deg when it's the man who fired it (Return to Sender)
   shoveTime: 0.25,
   coyoteTime: 0.1,
   jumpBuffer: 0.12,

@@ -693,7 +693,7 @@ export class RiftSystem implements RiftAPI {
     const hdir = hdirOf(aimYaw);
 
     let sol: Solve;
-    const snap = this.orientation !== 'door' ? this.snapTarget(camPos, dir, along, hit, targets, touch ? FEEL.hatchSnapTouch : FEEL.hatchSnap, playerEye) : null;
+    const snap = this.orientation !== 'door' ? this.snapTarget(camPos, dir, along, hit, targets, touch ? FEEL.hatchSnapTouch : FEEL.hatchSnap, playerEye, playerFeet) : null;
     if (snap) sol = this.hatchOver(snap, playerFeet, hdir, aimYaw);
     else if (this.airDistance !== null && (!hit || along + this.airDistance < hit.distance - 0.4)) {
       sol = this.airAt(camPos.clone().addScaledVector(dir, along + this.airDistance), playerEye, hdir, aimYaw);
@@ -739,7 +739,7 @@ export class RiftSystem implements RiftAPI {
   }
 
   /** Target the aim ray passes over (auto hatch), or null. */
-  private snapTarget(camPos: V3, dir: V3, along: number, hit: RayHit | null, targets: TrapTarget[], radius: number, eye: V3): TrapTarget | null {
+  private snapTarget(camPos: V3, dir: V3, along: number, hit: RayHit | null, targets: TrapTarget[], radius: number, eye: V3, feet: V3): TrapTarget | null {
     const dxz2 = dir.x * dir.x + dir.z * dir.z;
     if (dxz2 < 1e-4) return null;
     const tEnd = hit ? hit.distance : LAW.riftRange + along;
@@ -752,6 +752,8 @@ export class RiftSystem implements RiftAPI {
       const d = Math.hypot(px - t.pos.x, pz - t.pos.z);
       if (d >= bestD) continue;
       if (py < t.pos.y + 0.3) continue; // passes under him
+      // no legal hatch over him from here (air ends can't be above your feet): aim at what's behind
+      if (t.pos.y + t.height + (t.steady ? LAW.enemyClearance + 0.05 : 0.6) > feet.y + LAW.airAboveFeetMax + 1e-3) continue;
       // a wall right behind him wins unless the ray is on his body
       if (hit && Math.abs(hit.normal.y) < 0.3 && hit.distance - tt < 2 && d > t.radius + 0.25) continue;
       if (!this.world.lineOfSight(eye, _a.set(t.pos.x, t.pos.y + t.height, t.pos.z))) continue;

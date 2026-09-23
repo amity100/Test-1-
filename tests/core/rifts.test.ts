@@ -172,10 +172,9 @@ describe('RiftSystem (renderer = null)', () => {
     expect(hatch.valid).toBe(true);
     expect(hatch.dropBelow).toBeCloseTo(4.1, 5);
     expect(hatch.outcome).toBe('skull');
-    // from the ground you can't get a hatch over his head
+    // from the ground no hatch over his head is legal: the aim goes past him (a wall behind him for Return to Sender)
     const low = rifts.aimExit(V(0, 1.7, 3), V(0, 1.2, 12).sub(V(0, 1.7, 3)).normalize(), V(0, 1.7, 3), V(0, 0, 3), false, [guard]);
-    expect(low.overTarget).toBe('enemy:7');
-    expect(low.reason).toBe('aim.tooHigh');
+    expect(low.overTarget).toBeNull();
     // forced door: no snapping
     rifts.orientation = 'door';
     const door = rifts.aimExit(eye, dir, eye, feet, false, [guard]);

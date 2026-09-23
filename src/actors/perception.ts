@@ -20,7 +20,7 @@ export function seePlayer(e: Enemy, ctx: EnemyContext): number {
   _to.subVectors(pl.chest, _eye);
   const d = _to.length();
   const combat = e.mode === 'combat';
-  const range = e.tune.sight * (pl.crouched ? AI.crouchRange : 1) * (combat ? 1.25 : 1);
+  const range = e.tune.sight * (pl.crouched ? AI.crouchRange : 1) * (combat ? 1.25 : AI.calmSight);
   if (d > range) return -1;
   if (!combat && d > AI.nearSense) {
     const yawTo = Math.atan2(_to.x, _to.z);

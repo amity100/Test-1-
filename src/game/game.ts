@@ -46,7 +46,7 @@ import { RiftSystem } from './portals';
 import { orientFrame } from './portalMath';
 import { Physics } from '../sim/physics';
 import { Projectiles } from '../sim/projectiles';
-import { EnemySystem } from '../actors/enemies';
+import { EnemySystem, type Enemy } from '../actors/enemies';
 import { PropSystem, type Prop } from './props';
 import { ZoneManager, type EncounterState, type LiftState } from './zones';
 import { FxKit } from './fxkit';
@@ -566,6 +566,7 @@ export class Game {
       },
       onExplode: (p, at) => this.explode(at, LAW.grenade.radius, LAW.grenade.damage, { charged: p.charged, barrel: false, projectile: p }),
       onCross: (p, from, to) => {
+        if (p.kind === 'bolt') this.steerReturned(p);
         this.fx.riftBurst(to.position, to.normal, COL_CHARGED);
         this.push({ type: 'cross', t: this.time, who: p.kind === 'grenade' ? 'grenade' : p.kind === 'beam' ? 'beam' : 'bolt', speed: p.vel.length(), loops: p.loops, fromKind: from.kind, toKind: to.kind });
         if (from.owner === 'player' && p.team === 'kessler' && p.crossings === 1) {
@@ -575,6 +576,34 @@ export class Game {
         }
       },
     };
+  }
+
+  /**
+   * Rift magnetism: a bolt coming out of a rift bends onto a Kessler body it
+   * was nearly heading for (its own shooter gets a wide cone: Return to Sender).
+   */
+  private steerReturned(p: Projectile) {
+    const speed = p.vel.length();
+    if (speed < 1e-3) return;
+    const dir = _v.copy(p.vel).divideScalar(speed);
+    let best: Enemy | null = null;
+    let bestScore = -Infinity;
+    for (const e of this.enemies.list) {
+      if (!e.alive || !this.zones.active.has(e.def.zone)) continue;
+      const to = _v2.set(e.pos.x, e.pos.y + e.height * 0.6, e.pos.z).sub(p.pos);
+      const d = to.length();
+      if (d < 0.5 || d > FEEL.returnAssistRange) continue;
+      const cos = to.dot(dir) / d;
+      const sender = e.id === p.owner;
+      if (cos < (sender ? FEEL.returnAssistSender : FEEL.returnAssistCone)) continue;
+      const score = cos + (sender ? 0.3 : 0) - d * 0.002;
+      if (score <= bestScore) continue;
+      if (!this.level.world.lineOfSight(p.pos, _v3.set(e.pos.x, e.pos.y + e.height * 0.6, e.pos.z))) continue;
+      best = e;
+      bestScore = score;
+    }
+    if (!best) return;
+    p.vel.set(best.pos.x, best.pos.y + best.height * 0.6, best.pos.z).sub(p.pos).setLength(speed);
   }
 
   private projectileHitTest(a: V3, b: V3, radius: number, p: Projectile): ActorHit | null {
