@@ -293,8 +293,9 @@ export class Game {
     const mobile = IS_TOUCH;
     this.level = buildTower(envMap, mobile);
     this.scene.add(this.level.root);
-    this.skyline = createSkyline();
-    this.scene.add(this.skyline);
+    const skyline = createSkyline();
+    this.skyline = skyline;
+    this.scene.add(skyline);
     const sunU = (this.sky.material as THREE.ShaderMaterial).uniforms.uSunDir;
     if (sunU) sunU.value.copy(this.level.sunDir);
     const envU = (envSky.material as THREE.ShaderMaterial).uniforms.uSunDir;
@@ -1483,6 +1484,9 @@ export class Game {
   /** What GATE would do right now (HUD hint). */
   private gatePreview(targets: TrapTarget[]) {
     if (!this.rifts.hasExit()) return { mode: null, reason: 'gate.noExit', targetKey: null };
+    if (this.hangingUnderCrosshair()) return { mode: 'trapdoor' as const, reason: null, targetKey: null };
+    const pe = (this.rifts as any).previewEntrance?.(this.entranceCtx(targets));
+    if (pe) return { mode: pe.mode ?? null, reason: pe.ok ? null : pe.reason ?? null, targetKey: pe.targetKey ?? null };
     const b = this.player.body;
     if (this.player.airborne && b.vel.y < -3) return { mode: 'air' as const, reason: null, targetKey: null };
     if (this.threats().length) return { mode: 'catch' as const, reason: null, targetKey: null };
@@ -1622,6 +1626,8 @@ export class Game {
 
   private grab(q: DynBody) {
     q.userData.manual = true;
+    q.userData.carried = true;
+    q.enabled = false;
     q.simulate = true;
     q.vel.set(0, 0, 0);
     this.carried = { body: q, prop: this.props.byBody(q) };
@@ -1633,7 +1639,7 @@ export class Game {
   private updateCarry() {
     const c = this.carried;
     if (!c) return;
-    if (!c.body.enabled) {
+    if (!c.body.userData.carried || (c.prop && !c.prop.alive)) {
       this.carried = null;
       this.player.carrying = null;
       return;
@@ -1651,6 +1657,8 @@ export class Game {
     const b = this.player.body;
     const q = c.body;
     q.userData.manual = false;
+    q.userData.carried = false;
+    q.enabled = true;
     q.simulate = true;
     q.onGround = false;
     const f = this.player.forward(_v);
