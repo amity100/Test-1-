@@ -27,7 +27,7 @@ import {
 import type { CollisionWorld } from '../world/collision';
 import { NavGrid } from '../world/nav';
 import { angleDiff, dampAngle, hdist, mulberry32, stepAngle, yawTo } from './aimath';
-import { chargeUpdate, combat, endAttack, type Brain } from './behaviors';
+import { chargeUpdate, combat, endAttack, muzzleOf, provokeAttack, type Brain } from './behaviors';
 import { Enemy } from './enemy';
 import { detectRate, seePlayer, seesPoint } from './perception';
 import { TurretRig } from './turret';
@@ -263,7 +263,10 @@ export class EnemySystem implements EnemyAPI, Brain {
   sync() {
     for (let i = 0; i < this.list.length; i++) {
       const e = this.list[i];
-      if (e.active && e.body && !e.gone) e.char.root.position.copy(e.body.pos);
+      if (e.active && e.body && !e.gone) {
+        e.char.root.position.copy(e.body.pos);
+        if (e.sink > 0) e.char.root.position.y -= e.sink;
+      }
     }
   }
 
@@ -303,6 +306,12 @@ export class EnemySystem implements EnemyAPI, Brain {
     e.lookT -= dt;
     e.shieldT -= dt;
     e.barkT -= dt;
+    if (e.held) {
+      // the PORTAL has him: pinned where he sank, until he's thrown or let go
+      e.noGroundT = 0;
+      if (b && !b.simulate) b.vel.set(0, 0, 0);
+      return;
+    }
     // a kinematic walker lost his footing (trapdoor, edge): physics takes him
     if (b && !b.simulate && e.kind !== 'turret') {
       e.noGroundT = b.onGround ? 0 : e.noGroundT + dt;
@@ -330,6 +339,7 @@ export class EnemySystem implements EnemyAPI, Brain {
     const L = e.loco;
     if (b) {
       root.position.copy(b.pos);
+      if (e.sink > 0) root.position.y -= e.sink;
       L.speed = Math.hypot(b.vel.x, b.vel.z);
       L.grounded = !b.simulate || b.onGround;
       L.vy = b.simulate ? b.vel.y : 0;
@@ -1093,6 +1103,78 @@ export class EnemySystem implements EnemyAPI, Brain {
     if (e.state !== 'launched') this.beginLaunch(e, false);
   }
 
+  /**
+   * The PORTAL grabs him (on) or lets go (off): while held he stops whatever
+   * he was doing, stands pinned in the floor end and sinks into it.
+   */
+  hold(v: EnemyView, on: boolean) {
+    const e = this.own(v);
+    if (!e || !e.alive) return;
+    if (!on) {
+      e.held = false;
+      return;
+    }
+    if (e.state === 'charge') this.endCharge(e);
+    endAttack(this, e);
+    this.abortBlink(e);
+    e.held = true;
+    e.moveVel.set(0, 0, 0);
+    e.hasGoal = false;
+    const b = e.body;
+    if (b) {
+      b.simulate = false;
+      b.vel.set(0, 0, 0);
+      b.spin.set(0, 0, 0);
+      b.quat.identity();
+    }
+    e.char.setTumble(null);
+    e.char.play('hitChest');
+    this.bark(e, 'bark.grabbed', true);
+    this.noticeFall(e);
+  }
+
+  /**
+   * REFLECT makes him attack now (alerting him if he wasn't): true if he has
+   * something to fire. His muzzle / aim then follow in muzzleInfo().
+   */
+  provoke(v: EnemyView): boolean {
+    const e = this.own(v);
+    if (!e || !e.alive || !e.active) return false;
+    const s = e.state;
+    if (e.held || s === 'launched' || s === 'downed' || s === 'stunned' || s === 'stagger') return false;
+    if (e.mode !== 'combat') this.enterCombat(e, null);
+    if (!e.token) {
+      e.token = true;
+      this.tokens++;
+    }
+    const ok = provokeAttack(this, e);
+    if (!ok) this.releaseToken(e);
+    return ok;
+  }
+
+  /** Where his shots leave from and which way they go now (his aim if he has one, else ahead). */
+  muzzleInfo(v: EnemyView, from: THREE.Vector3, dir: THREE.Vector3): boolean {
+    const e = this.own(v);
+    if (!e || !e.alive) return false;
+    muzzleOf(e, from);
+    const aiming = e.atk === 'aim' || e.atk === 'fire';
+    if (aiming && e.atkKind !== 'lob' && e.atkKind !== 'charge') dir.subVectors(e.aimPt, from);
+    else e.forward(dir);
+    if (dir.lengthSq() < 1e-6) e.forward(dir);
+    dir.normalize();
+    return true;
+  }
+
+  /** How far his model is drawn into the floor (visual; 0 = standing). */
+  setSink(v: EnemyView, m: number) {
+    const e = this.own(v);
+    if (e) e.sink = Math.max(0, m);
+  }
+
+  isHeld(v: EnemyView) {
+    return !!this.own(v)?.held;
+  }
+
   stagger(v: EnemyView, seconds: number, push?: V3) {
     const e = this.own(v);
     if (!e || !e.alive || e.kind === 'turret' || e.kind === 'boss') return;
@@ -1115,6 +1197,8 @@ export class EnemySystem implements EnemyAPI, Brain {
   onCrossed(v: EnemyView, from: RiftEnd, _to: RiftEnd, _speed: number) {
     const e = this.own(v);
     if (!e || !e.alive || !e.body) return;
+    e.held = false;
+    e.sink = 0;
     const charging = e.state === 'charge';
     if (e.state !== 'launched') this.beginLaunch(e, true);
     if (charging && e.kind === 'brute') e.matador = true;

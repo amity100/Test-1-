@@ -1,4 +1,4 @@
-import type { Action, EntranceMode } from '../core/contracts';
+import type { Action } from '../core/contracts';
 import { Input, LOOK } from './input';
 import { onLangChange, t } from '../ui/i18n';
 
@@ -8,18 +8,20 @@ import { onLangChange, t } from '../ui/i18n';
  *
  * - Left side: floating stick (appears under the thumb; a full push sprints).
  * - Right side: drag to look.
- * - RIFT: hold = aim ('aim' held); moving that finger aims (look); release =
- *   tap('place') + up('aim'). Slide onto the CANCEL zone to let go without
- *   placing.
- * - GATE / JUMP / SHOVE / ✕ / ACTION / CROUCH: held while touched (the game
- *   reads wasPressed / isHeld). Dragging off a button also looks.
+ * - PORTAL: touch = the entrance ('portal' down); moving that finger aims the
+ *   exit (look); lift = the exit ('portal' up). A quick tap lets the game
+ *   place the exit. Slide onto the CANCEL zone to let go without an exit.
+ *   Its caption says what a press does now (GRAB, CATCH, ...).
+ * - JUMP / SHOVE / ✕ / ACTION / CROUCH: held while touched (the game reads
+ *   wasPressed / isHeld). Dragging off a button also looks.
  * - ⇄ FLIP (only while aiming, left thumb), 🎬 (when offered), pause: taps.
+ * - The STRIKES are their own bar (ui/strikebar).
  */
 
 type Finger =
   | { kind: 'stick'; ox: number; oy: number; sprint: boolean }
   | { kind: 'look'; x: number; y: number }
-  | { kind: 'rift'; x: number; y: number; t0: number; cancel: boolean }
+  | { kind: 'portal'; x: number; y: number; t0: number; cancel: boolean }
   | { kind: 'btn'; el: HTMLElement; action: Action | null; x: number; y: number; sx: number; sy: number; drag: boolean };
 
 const STICK_R = 58;
@@ -29,9 +31,6 @@ const SVG = (body: string) => `<svg viewBox="0 0 24 24" aria-hidden="true">${bod
 const ICON = {
   rift: SVG(
     '<ellipse cx="12" cy="12" rx="6.3" ry="9.6" fill="none" stroke="currentColor" stroke-width="2.4"/><ellipse cx="12" cy="12" rx="2.8" ry="5.4" fill="currentColor" opacity=".45"/>',
-  ),
-  gate: SVG(
-    '<ellipse cx="15" cy="12" rx="5.4" ry="9.2" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M1.8 12h10.4M8.4 8.2l3.8 3.8-3.8 3.8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>',
   ),
   jump: SVG('<path d="M5.5 12.5L12 6l6.5 6.5M5.5 19L12 12.5l6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>'),
   shove: SVG(
@@ -50,7 +49,7 @@ const ICON = {
 };
 
 /** Buttons whose finger may keep dragging to look. */
-const DRAG_LOOK = new Set<string>(['jump', 'gate', 'shove', 'close', 'action', 'crouch']);
+const DRAG_LOOK = new Set<string>(['jump', 'shove', 'close', 'action', 'crouch']);
 
 function vibrate(ms: number) {
   try {
@@ -68,14 +67,13 @@ export class TouchControls {
   private cancelEl: HTMLDivElement;
   private actionBtn: HTMLButtonElement;
   private actionLbl: HTMLElement;
-  private gateBtn: HTMLButtonElement;
-  private gateCap: HTMLElement;
-  private riftBtn: HTMLButtonElement;
+  private portalCap: HTMLElement;
+  private portalBtn: HTMLButtonElement;
   private crouchBtn: HTMLButtonElement;
   private clipBtn: HTMLButtonElement;
   private shown = true;
   private actionLabel: string | null = null;
-  private gateLabel: string | null = null;
+  private portalLabel: string | null = null;
   private cancelRect: DOMRect | null = null;
 
   constructor(private input: Input, root: HTMLElement) {
@@ -91,11 +89,10 @@ export class TouchControls {
       <div class="t-cancel"><span>${ICON.close}</span><b data-k="touch.cancel"></b></div>
       <div class="t-cluster">
         <button class="t-btn t-action hidden" data-t="action" type="button">${ICON.action}<span class="t-lbl t-act-lbl"></span></button>
-        <button class="t-btn t-rift" data-t="rift" type="button">${ICON.rift}<span class="t-lbl" data-k="touch.rift"></span></button>
+        <button class="t-btn t-rift" data-t="portal" type="button">${ICON.rift}<span class="t-lbl" data-k="touch.portal"></span><span class="t-cap"></span></button>
         <button class="t-btn t-jump" data-t="jump" type="button">${ICON.jump}<span class="t-lbl" data-k="touch.jump"></span></button>
         <button class="t-btn t-crouch" data-t="crouch" type="button">${ICON.crouch}</button>
         <button class="t-btn t-shove" data-t="shove" type="button">${ICON.shove}<span class="t-lbl" data-k="touch.shove"></span></button>
-        <button class="t-btn t-gate" data-t="gate" type="button">${ICON.gate}<span class="t-lbl t-gate-lbl" data-k="touch.gate"></span><span class="t-cap"></span></button>
         <button class="t-btn t-close" data-t="close" type="button">${ICON.close}</button>
         <button class="t-btn t-clip hidden" data-t="clip" type="button">${ICON.clip}</button>
       </div>`;
@@ -106,9 +103,8 @@ export class TouchControls {
     this.cancelEl = q('.t-cancel');
     this.actionBtn = q('.t-action');
     this.actionLbl = q('.t-act-lbl');
-    this.gateBtn = q('.t-gate');
-    this.gateCap = q('.t-cap');
-    this.riftBtn = q('.t-rift');
+    this.portalCap = q('.t-cap');
+    this.portalBtn = q('.t-rift');
     this.crouchBtn = q('.t-crouch');
     this.clipBtn = q('.t-clip');
     this.labels();
@@ -124,7 +120,7 @@ export class TouchControls {
 
   private labels() {
     this.el.querySelectorAll<HTMLElement>('[data-k]').forEach((n) => (n.textContent = t(n.dataset.k!)));
-    this.gateBtn.classList.toggle('has-cap', !!this.gateLabel);
+    this.portalBtn.classList.toggle('has-cap', !!this.portalLabel);
   }
 
   // -------------------------------------------------------------------------
@@ -138,7 +134,7 @@ export class TouchControls {
     if (!v) this.releaseAll();
   }
 
-  /** Sync from the game. If the game stops aiming while RIFT is still held, that finger just looks. */
+  /** Sync from the game. If the game isn't aiming while PORTAL is still held (refused, done), that finger just looks. */
   setAiming(on: boolean) {
     if (on !== this.aiming) {
       this.aiming = on;
@@ -147,10 +143,10 @@ export class TouchControls {
     if (!on) {
       const now = performance.now();
       for (const [id, f] of this.fingers) {
-        if (f.kind === 'rift' && now - f.t0 > 300) {
+        if (f.kind === 'portal' && now - f.t0 > 400) {
           this.fingers.set(id, { kind: 'look', x: f.x, y: f.y });
-          this.input.up('aim');
-          this.riftBtn.classList.remove('down');
+          this.input.up('portal');
+          this.portalBtn.classList.remove('down');
           this.el.classList.remove('rift-held');
           this.cancelEl.classList.remove('hot');
           this.syncAimClass();
@@ -180,14 +176,15 @@ export class TouchControls {
     }
   }
 
-  /** Small caption on GATE: what it will do now (TRAPDOOR / CATCH / AIR / DOOR). `mode` only styles it (catch pulses). */
-  setGateLabel(label: string | null, mode?: EntranceMode | null) {
+  /** Small caption on PORTAL: what a press does now (GRAB / CATCH / LOAD / ...). `mode` only styles it (catch pulses). */
+  setPortalLabel(label: string | null, mode?: string | null) {
     const key = label ? `${label}|${mode ?? ''}` : null;
-    if (key === this.gateLabel) return;
-    this.gateLabel = key;
-    this.gateCap.textContent = label ?? '';
-    this.gateBtn.classList.toggle('has-cap', !!label);
-    this.gateBtn.classList.toggle('urgent', mode === 'catch');
+    if (key === this.portalLabel) return;
+    this.portalLabel = key;
+    this.portalCap.textContent = label ?? '';
+    this.portalBtn.classList.toggle('has-cap', !!label);
+    this.portalBtn.classList.toggle('urgent', mode === 'catch' || mode === 'air');
+    this.portalBtn.classList.toggle('grab', mode === 'grab' || mode === 'load' || mode === 'hijack');
   }
 
   offerClip(v: boolean) {
@@ -216,7 +213,7 @@ export class TouchControls {
 
   private syncAimClass() {
     let riftDown = false;
-    for (const f of this.fingers.values()) if (f.kind === 'rift') riftDown = true;
+    for (const f of this.fingers.values()) if (f.kind === 'portal') riftDown = true;
     this.el.classList.toggle('aiming', this.aiming || riftDown);
   }
 
@@ -249,10 +246,10 @@ export class TouchControls {
         case 'right':
           this.fingers.set(tt.identifier, { kind: 'look', x, y });
           break;
-        case 'rift': {
-          if ([...this.fingers.values()].some((f) => f.kind === 'rift')) break;
-          this.fingers.set(tt.identifier, { kind: 'rift', x, y, t0: performance.now(), cancel: false });
-          this.input.down('aim');
+        case 'portal': {
+          if ([...this.fingers.values()].some((f) => f.kind === 'portal')) break;
+          this.fingers.set(tt.identifier, { kind: 'portal', x, y, t0: performance.now(), cancel: false });
+          this.input.down('portal');
           hit.classList.add('down');
           this.el.classList.add('rift-held');
           this.cancelRect = null;
@@ -338,7 +335,7 @@ export class TouchControls {
           f.x = x;
           f.y = y;
           break;
-        case 'rift': {
+        case 'portal': {
           if (!this.cancelRect) this.cancelRect = this.cancelEl.getBoundingClientRect();
           const r = this.cancelRect,
             pad = 14;
@@ -382,11 +379,14 @@ export class TouchControls {
         if (f.sprint) this.input.up('sprint');
         this.stickEl.classList.remove('on', 'sprint');
         break;
-      case 'rift':
-        if (!f.cancel && !silent) this.input.tap('place');
-        else if (f.cancel) vibrate(20);
-        this.input.up('aim');
-        this.riftBtn.classList.remove('down');
+      case 'portal':
+        // slid onto CANCEL: let go without an exit ('close' is read before the release)
+        if (f.cancel) {
+          this.input.tap('close');
+          vibrate(20);
+        }
+        this.input.up('portal');
+        this.portalBtn.classList.remove('down');
         this.el.classList.remove('rift-held');
         this.cancelEl.classList.remove('hot');
         this.syncAimClass();

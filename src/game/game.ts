@@ -25,6 +25,7 @@ import {
   type ScreenMarker,
   type Snapshot,
   type SpawnDef,
+  type StrikeName,
   type Team,
   type Threat,
   type TowerLevel,
@@ -44,7 +45,8 @@ import { TOWER } from '../world/tower/layout';
 import { CameraRig } from './camera';
 import { Character, type AnimLibrary, type CharacterAsset, type Look } from './characters';
 import { Player, type PlayerEvents, type PlayerInput } from './player';
-import { RiftSystem } from './portals';
+import { OUTCOME_COLOR, RiftSystem } from './portals';
+import { ArcView, PortalKey, type PortalResult } from './portalkey';
 import { orientFrame } from './portalMath';
 import { Physics } from '../sim/physics';
 import { Projectiles } from '../sim/projectiles';
@@ -57,7 +59,7 @@ import { HUD } from '../ui/hud';
 import { addStrings, getLang, setDevice, t } from '../ui/i18n';
 import { PhotoUI } from '../ui/photoui';
 import { StrikeBar } from '../ui/strikebar';
-import { STRIKE, Strikes, type StrikeId } from './strikes';
+import { STRIKE, STRIKES, Strikes, type StrikeResult } from './strikes';
 import type { RunStats } from '../ui/menu';
 import { StyleSystem } from '../meta/style';
 import { ReplayPlayer, ReplayRecorder } from '../meta/replay';
@@ -164,7 +166,14 @@ export class Game {
   hazards!: Hazards;
   private photoUi: PhotoUI;
   strikes!: Strikes;
+  /** The one rift key. */
+  portal!: PortalKey;
+  private arcView!: ArcView;
   private strikeBar: StrikeBar;
+  /** SWAPped men: their own side's fire hurts them until then (game time). */
+  private riftMarked = new Map<number, number>();
+  /** Men grabbed for a charge: their kill gives none back (until). */
+  private paidMarks = new Map<number, number>();
   /** Gamepad Start while paused (main hides the menu and resumes). */
   onResumeKey: () => void = () => {};
   fx: FxKit;
@@ -362,13 +371,38 @@ export class Game {
       rifts: this.rifts,
       world,
       level: this.level,
+      killYAt: (p) => this.killYAt(p),
       enemies: this.enemies,
+      props: this.props,
       active: this.zones.active,
       playerFeet: () => this.player.body.pos,
       playerEye: () => this.player.eye(_v4),
+      playerBody: () => this.player.body,
+      playerGrounded: () => !this.player.airborne,
       aimRay: () => this.rig.aimRay(),
       touch: () => this.input.lastDevice === 'touch',
     });
+    this.portal = new PortalKey({
+      rifts: this.rifts,
+      world,
+      level: this.level,
+      killYAt: (p) => this.killYAt(p),
+      enemies: this.enemies,
+      props: this.props,
+      entranceCtx: () => this.entranceCtx(this.trapTargets()),
+      aimRay: () => this.rig.aimRay(),
+      playerEye: () => this.player.eye(_v4),
+      playerFeet: () => this.player.body.pos,
+      touch: () => this.input.lastDevice === 'touch',
+      live: (e) => this.zones.active.has(e.def.zone),
+      charges: () => this.strikes.charges,
+      spend: (n) => this.strikes.spend(n),
+      refund: (n) => this.strikes.refund(n),
+      markPaid: (id) => this.paidMarks.set(id, this.time + 12),
+      hangingUnderCrosshair: () => this.hangingUnderCrosshair(),
+    });
+    this.arcView = new ArcView(OUTCOME_COLOR);
+    this.scene.add(this.arcView.points);
     this.scene.add(this.hazards.group);
 
     // player
@@ -401,7 +435,7 @@ export class Game {
     this.rifts.group.traverse((o) => {
       if (o.userData.helper) this.helpers.push(o);
     });
-    this.helpers.push(ghost.root, this.telegraphLines, this.arcLine);
+    this.helpers.push(ghost.root, this.telegraphLines, this.arcLine, this.arcView.points);
 
     this.replay = new ReplayPlayer(this.replayHost());
 
@@ -486,7 +520,10 @@ export class Game {
     this.carried = null;
     this.player.carrying = null;
     this.strikes?.reset();
+    this.portal?.reset();
     this.strikeMarks?.clear();
+    this.riftMarked?.clear();
+    this.paidMarks?.clear();
     this.player.teleport(pos.clone(), yaw);
     this.player.body.charge = 0;
     this.hp = LAW.player.hp;
@@ -612,36 +649,44 @@ export class Game {
     this.hintQueue.push({ key, html, dur });
   }
 
-  private fireStrike(id: StrikeId) {
-    const r = this.strikes.fire(id);
+  /** A strike went off (or was refused): marks, feedback. */
+  private onStrike(r: StrikeResult) {
     if (!r.ok) {
       this.audio.ui('deny');
       if (r.reason) this.hud.toast(t(r.reason), 'warn');
       return;
     }
-    if (r.target) this.strikeMarks.set(r.target.id, { id, until: this.time + (id === 'mirror' ? 5 : 6) });
+    if (r.target && r.name) this.strikeMarks.set(r.target.id, { name: r.name, until: this.time + (r.id === 'reflect' ? 6 : r.id === 'swap' ? 4 : 8) });
+    if (r.id === 'swap' && r.target) this.riftMarked.set(r.target.id, this.time + STRIKE.markTime + 0.6);
     // a beat of slow motion and a kick: it should feel like a move, not a menu
-    this.slowT = Math.max(this.slowT, 0.35);
+    this.slowT = Math.max(this.slowT, r.release ? 0.45 : 0.35);
     this.slowScale = 0.35;
-    this.rig.kick = Math.max(this.rig.kick, 0.7);
+    this.rig.kick = Math.max(this.rig.kick, r.release ? 1 : 0.7);
     this.rig.shake = Math.max(this.rig.shake, 0.25);
     navigator.vibrate?.(18);
-    if (r.at) this.fx.ring(r.at, 3.5, 0.35, id === 'mirror' ? COL_EXIT : COL_ENTRANCE);
-    this.player.char.play('push', { fade: 0.05, speed: 1.6 });
+    if (r.at) this.fx.ring(r.at, 3.5, 0.35, r.id === 'reflect' ? COL_EXIT : COL_ENTRANCE);
+    if (r.id !== 'swap' && r.id !== 'dash') this.player.char.play('push', { fade: 0.05, speed: 1.6 });
+    if (r.id === 'loop' && !r.release) this.hint('loopAgain', t('hint.loopAgain'), 6);
   }
 
-  private strikeOf(id: number): StrikeId | null {
+  private strikeOf(id: number): StrikeName | null {
     const m = this.strikeMarks.get(id);
     if (!m) return null;
     this.strikeMarks.delete(id);
-    return this.time <= m.until ? m.id : null;
+    return this.time <= m.until ? m.name : null;
+  }
+
+  /** A SWAPped man: his own side's fire and blasts hurt him for now. */
+  private marked(id: number) {
+    const u = this.riftMarked.get(id);
+    return u !== undefined && this.time <= u;
   }
 
   /** Who a STRIKE is working on (its kill names the strike). */
-  private strikeMarks = new Map<number, { id: StrikeId; until: number }>();
+  private strikeMarks = new Map<number, { name: StrikeName; until: number }>();
   private strikeTargetPt = { x: 0, y: 0 };
   private updateStrikeHud() {
-    const tg = this.strikes.target();
+    const tg = this.portal.holding ? null : this.strikes.target();
     let pt: { x: number; y: number } | null = null;
     if (tg) {
       const v = tg.chest(_v).project(this.camera);
@@ -651,7 +696,52 @@ export class Game {
         pt = this.strikeTargetPt;
       }
     }
-    this.strikeBar.update({ mirror: this.strikes.cooling('mirror'), geyser: this.strikes.cooling('geyser'), drop: this.strikes.cooling('drop') }, pt, this.strikes.charges, STRIKE.maxCharges);
+    const S = this.strikes;
+    this.strikeBar.update(
+      { reflect: S.cooling('reflect'), loop: S.cooling('loop'), swap: S.cooling('swap'), dash: S.cooling('dash') },
+      pt,
+      S.charges,
+      STRIKE.maxCharges,
+      { loop: S.armed('loop') },
+    );
+  }
+
+  /** The PORTAL key went down: the entrance (or why not). */
+  private onPortalPress(r: PortalResult) {
+    if (!r.ok) {
+      this.audio.ui('deny');
+      if (r.reason) this.hud.toast(t(r.reason), 'warn');
+      return;
+    }
+    navigator.vibrate?.(12);
+    this.rifts.orientation = 'auto';
+    if (r.mode === 'grab' && r.at) {
+      this.fx.ring(r.at, 2.4, 0.3, COL_ENTRANCE);
+      this.rig.kick = Math.max(this.rig.kick, 0.4);
+      this.player.char.play('push', { fade: 0.05, speed: 1.4 });
+      if (r.cost) this.hud.toast(t('portal.paid'), 'warn');
+      this.hint('grab', t('hint.grabHold'), 7);
+    }
+    if (r.mode === 'catch' && this.threats().some((q) => q.kind === 'laser')) this.hint('catch', t('hint.returnToSender'), 6);
+  }
+
+  /** The PORTAL key let go: the exit opened (or the hold fell through). */
+  private onPortalRelease(r: PortalResult) {
+    if (!r.ok) {
+      if (r.reason) {
+        this.audio.ui('deny');
+        this.hud.toast(t(r.reason), 'warn');
+      }
+      return;
+    }
+    navigator.vibrate?.(15);
+    if (r.mode === 'grab' || r.mode === 'load' || r.mode === 'hijack') {
+      this.rig.kick = Math.max(this.rig.kick, 0.8);
+      this.rig.shake = Math.max(this.rig.shake, 0.2);
+      if (r.at) this.fx.ring(r.at, 3.2, 0.35, COL_EXIT);
+      this.player.char.play('push', { fade: 0.05, speed: 1.8 });
+    }
+    if (r.mode === 'door') this.hint('door', t('hint.doorPlaced'), 6);
   }
 
   /** Hints take turns (each gets a few seconds) and wait for the zone title card. */
@@ -842,10 +932,12 @@ export class Game {
       }
     }
     // Kessler actors: IFF-locked rounds pass through them until they cross a rift
-    if (p.charged) {
+    // (or he's rift-marked: a SWAPped man takes his own side's fire, not his own)
+    if (p.charged || (p.team === 'kessler' && this.riftMarked.size)) {
       for (const e of this.enemies.list) {
         if (!e.alive) continue;
         if (!this.zones.active.has(e.def.zone)) continue;
+        if (!p.charged && (!this.marked(e.id) || p.owner === e.id)) continue;
         base.copy(e.pos);
         const tt = segCylinder(a, b, base, e.radius + radius, e.height);
         if (tt >= 0 && tt < best) {
@@ -1027,8 +1119,10 @@ export class Game {
       strike: this.strikeOf(e.id),
       at: ctx.at.clone(),
     };
-    // your own rift work (not a STRIKE) recharges the strikes
-    if (!ev.strike) this.strikes.refund(1);
+    // your own free rift work (not a STRIKE, not a man you paid to grab) recharges the strikes
+    const paid = this.paidMarks.get(e.id);
+    this.paidMarks.delete(e.id);
+    if (!ev.strike && !(paid !== undefined && this.time <= paid)) this.strikes.refund(1);
     this.stats.kills++;
     this.push(ev);
     this.fx.embers(ctx.at, 16);
@@ -1078,10 +1172,18 @@ export class Game {
       if (b.kind === 'player') {
         this.airCrossings++;
         this.playerFling = (from.kind === 'floor' || from.kind === 'air') && Math.abs(to.normal.y) < 0.5;
+        this.strikes.crossed('player', -1, from, to);
         this.push({ type: 'cross', t: this.time, who: 'player', speed, loops: b.loops, fromKind: from.kind, toKind: to.kind });
         return;
       }
       const e = this.enemies.enemyOfBody(b);
+      if (e) {
+        this.portal.crossed(`enemy:${e.id}`);
+        this.strikes.crossed('enemy', e.id, from, to);
+      } else {
+        const pr = this.props.byBody(b);
+        if (pr) this.portal.crossed(pr.key);
+      }
       if (e && e.alive) {
         // MATADOR is the move itself: his charge into your entrance
         if (e.kind === 'brute' && e.state === 'charge' && from.owner === 'player') this.push({ type: 'matador', t: this.time, at: e.pos.clone() });
@@ -1240,9 +1342,11 @@ export class Game {
       this.player.body.vel.addScaledVector(_v2.subVectors(this.player.body.pos, at).setY(0.6).normalize(), 9 * k);
     }
     // Kessler: only charged blasts (a grenade that went through your rift) or neutral barrels
-    if (o.charged || o.barrel) {
+    // (a rift-marked man is caught by his own side's too)
+    if (o.charged || o.barrel || this.riftMarked.size) {
       for (const e of this.enemies.list) {
         if (!e.alive || !this.zones.active.has(e.def.zone)) continue;
+        if (!(o.charged || o.barrel || this.marked(e.id))) continue;
         const d = at.distanceTo(e.chest(_v));
         if (d > radius) continue;
         const k = 1 - d / radius;
@@ -1382,8 +1486,13 @@ export class Game {
 
     // ----- time -----
     let ts = 1;
-    const aiming = inp.isHeld('aim') && this.respawnT < 0;
-    if (aiming && this.settings.slowmo) ts = FEEL.focusTimeScale;
+    const alive = this.respawnT < 0;
+    // held PORTAL (aiming the exit) and the LOOP cannon run in slow motion
+    if (this.settings.slowmo && alive) {
+      if (this.portal.holding) ts = this.portal.timeScale();
+      if (this.strikes.aiming) ts = Math.min(ts, 0.12);
+    }
+    const aiming = alive && (this.portal.aiming || this.strikes.aiming);
     if (this.slowT > 0) {
       this.slowT -= realDt;
       ts = Math.min(ts, this.slowScale);
@@ -1409,62 +1518,59 @@ export class Game {
     const look = inp.consumeLook();
     this.rig.look(look.x, look.y);
 
-    // ----- rifts: aim / place / gate / close -----
+    // ----- rifts: the PORTAL key, close, the STRIKES -----
     this.rifts.aiming = aiming;
     p.aim = THREE.MathUtils.damp(p.aim, aiming ? 1 : 0, 12, realDt);
-    let aim: ExitAim | null = null;
-    const targets = this.trapTargets();
-    // touch RIFT places on release: 'place' arrives in the same frame the aim is let go
-    const placeOnRelease = inp.wasPressed('place') && inp.wasReleased('aim') && this.respawnT < 0;
-    if (aiming || placeOnRelease) {
+    // cancel first: a touch slide-to-cancel lets go of the key in the same frame
+    if (inp.wasPressed('close')) {
+      if (this.portal.holding) {
+        this.portal.cancel();
+        this.audio.ui('deny');
+      } else this.closeRifts();
+    }
+    if (this.portal.holding) {
       const wheel = inp.consumeWheel();
       if (wheel) this.rifts.airDistance = THREE.MathUtils.clamp((this.rifts.airDistance ?? 12) + wheel * 1.5, 3, LAW.riftRange);
       if (inp.wasPressed('flip')) {
         this.rifts.orientation = this.rifts.orientation === 'auto' ? 'hatch' : this.rifts.orientation === 'hatch' ? 'door' : 'auto';
         this.audio.ui('click');
       }
-      const ray = this.rig.aimRay();
-      aim = this.rifts.aimExit(ray.origin, ray.dir, p.eye(_v), body.pos, IS_TOUCH, targets);
-      this.lastAim = aim;
-      if (inp.wasPressed('place')) {
-        if (aim.valid && this.rifts.placeExit(aim)) {
-          this.audio.ui('confirm');
-          navigator.vibrate?.(15);
-          this.hint('gate', t('hint.gateAfterExit'), 6);
-        } else {
-          this.audio.ui('deny');
-          if (aim.reason) this.hud.toast(t(aim.reason), 'warn');
-        }
-      }
     } else {
       inp.consumeWheel();
       this.rifts.airDistance = null;
-      this.lastAim = null;
-      if (inp.wasPressed('gate')) this.openGate(targets);
     }
-    if (inp.wasPressed('close')) this.closeRifts();
-    // STRIKES: one press, a whole rift attack
-    this.strikes.update(realDt);
-    if (this.respawnT < 0) {
-      if (inp.wasPressed('strike1')) this.fireStrike('mirror');
-      else if (inp.wasPressed('strike2')) this.fireStrike('geyser');
-      else if (inp.wasPressed('strike3')) this.fireStrike('drop');
+    if (alive && inp.wasPressed('portal')) this.onPortalPress(this.portal.press());
+    const released = this.portal.update(realDt, alive && inp.isHeld('portal'));
+    if (released) this.onPortalRelease(released);
+    // STRIKES: one press, a whole rift attack (not while the PORTAL is in hand)
+    this.strikes.update(realDt, dt);
+    if (alive && !this.portal.holding) {
+      for (let i = 0; i < STRIKES.length; i++) {
+        const a = `strike${i + 1}` as 'strike1';
+        const r = this.strikes.input(STRIKES[i], inp.wasPressed(a), inp.isHeld(a));
+        if (r) this.onStrike(r);
+      }
     }
     this.updateStrikeHud();
+    const H = this.portal.hold;
+    const aim = H && this.portal.aiming ? H.aim : null;
+    this.lastAim = aim;
     this.hud.setAim(
       aim
         ? { valid: aim.valid, reason: aim.reason, kind: aim.kind, distance: aim.distance, outcome: aim.outcome, dropBelow: aim.dropBelow, orientation: this.rifts.orientation }
         : null,
     );
-    this.rifts.updatePreview(aim && aim.valid !== undefined ? aim : null, this.handPos(), this.camera);
-    if (!aiming) {
-      const gp = this.gatePreview(targets);
-      this.hud.setGateHint(gp);
-      // the touch GATE button says what it will do (and pulses for a CATCH)
-      this.touch?.setGateLabel(gp.mode && !gp.reason ? t(`gate.${gp.mode}`) : null, gp.reason ? null : gp.mode);
+    this.rifts.updatePreview(aim, this.handPos(), this.camera, !!H && (H.mode === 'door' || H.mode === 'air' || H.mode === 'hole'));
+    this.strikeBar.setDimmed(this.portal.holding);
+    this.arcView.update(this.portal.arcN > 1 ? this.portal : this.strikes, this.time);
+    if (!this.portal.holding && alive) {
+      const pv = this.portal.preview();
+      this.hud.setGateHint({ mode: pv.mode, reason: pv.reason, targetKey: pv.key, cost: pv.cost });
+      // the touch PORTAL button says what it will do (and pulses for a CATCH)
+      this.touch?.setPortalLabel(pv.reason ? null : t(`portal.${pv.mode}`) + (pv.cost ? ' ⚡' : ''), pv.reason ? null : pv.mode);
     } else {
       this.hud.setGateHint(null);
-      this.touch?.setGateLabel(null);
+      this.touch?.setPortalLabel(null);
     }
     this.hud.setRiftState({ exit: this.rifts.hasExit(), entrance: this.rifts.hasEntrance(), aiming, orientation: this.rifts.orientation });
     this.touch?.setAiming(aiming);
@@ -1765,47 +1871,6 @@ export class Game {
     };
   }
 
-  private openGate(targets: TrapTarget[]) {
-    // hanging cargo: a hole opens right under it and the cable snaps
-    const hang = this.hangingUnderCrosshair();
-    if (hang && this.rifts.hasExit()) {
-      // on the ground under it when that's a real drop (it arrives fast: CARGO), else just below it
-      const hp = hang.body.pos;
-      const w = this.level.world;
-      const gy = w.groundAt(hp.x, hp.z, 0.3, hp.y - 0.1);
-      const host = w.lastGround;
-      const steadyNear = this.enemies.list.some((e) => e.alive && !e.offBalance && Math.hypot(e.pos.x - hp.x, e.pos.z - hp.z) < LAW.enemyClearance + e.radius && Math.abs(e.pos.y - gy) < 1);
-      const onGround = gy > -Infinity && hp.y - gy > 3 && !!host && !host.noPortal && !steadyNear;
-      const ok = this.rifts.openEntranceAt(
-        { position: hp.clone().setY(onGround ? gy + 0.01 : hp.y - 1.2), quaternion: orientFrame(UP, new THREE.Vector3(0, 0, 1)), width: LAW.floorEndSize, height: LAW.floorEndSize },
-        onGround ? 'floor' : 'air',
-      );
-      if (ok !== false) {
-        this.props.release(hang);
-        this.audio.ui('confirm');
-        return;
-      }
-    }
-    const res = this.rifts.openEntrance(this.entranceCtx(targets));
-    if (!res.ok) {
-      this.audio.ui('deny');
-      if (res.reason) this.hud.toast(t(res.reason), 'warn');
-      return;
-    }
-    navigator.vibrate?.(12);
-    if (res.mode === 'trapdoor' && res.targetKey) {
-      const e = this.enemies.byKey(res.targetKey);
-      if (e) this.enemies.launch(e);
-      const pr = this.props.byKey(res.targetKey);
-      if (pr) {
-        pr.touched = true;
-        if (pr.hanging) this.props.release(pr);
-        pr.body.onGround = false;
-      }
-    }
-    if (res.mode === 'catch' && this.threats().some((q) => q.kind === 'laser')) this.hint('catch', t('hint.returnToSender'), 6);
-  }
-
   private hangingUnderCrosshair(): Prop | null {
     const ray = this.rig.aimRay();
     let best: Prop | null = null, bd = 2.2;
@@ -1822,32 +1887,6 @@ export class Game {
       }
     }
     return best;
-  }
-
-  /** What GATE would do right now (HUD hint). */
-  private gatePreview(targets: TrapTarget[]) {
-    if (!this.rifts.hasExit()) return { mode: null, reason: 'gate.noExit', targetKey: null };
-    if (this.hangingUnderCrosshair()) return { mode: 'trapdoor' as const, reason: null, targetKey: null };
-    const pe = (this.rifts as any).previewEntrance?.(this.entranceCtx(targets));
-    if (pe) return { mode: pe.mode ?? null, reason: pe.ok ? null : pe.reason ?? null, targetKey: pe.targetKey ?? null };
-    const b = this.player.body;
-    if (this.player.airborne && b.vel.y < -3) return { mode: 'air' as const, reason: null, targetKey: null };
-    if (this.threats().length) return { mode: 'catch' as const, reason: null, targetKey: null };
-    if (this.hangingUnderCrosshair()) return { mode: 'trapdoor' as const, reason: null, targetKey: null };
-    const ray = this.rig.aimRay();
-    let best: TrapTarget | null = null, bd = 1.8;
-    for (const tt of targets) {
-      const toT = _v.subVectors(tt.pos, ray.origin);
-      const along = toT.dot(ray.dir);
-      if (along < 0 || along > LAW.trapdoorRange) continue;
-      const d = toT.addScaledVector(ray.dir, -along).length();
-      if (d < bd) {
-        bd = d;
-        best = tt;
-      }
-    }
-    if (best) return best.canFall ? { mode: 'trapdoor' as const, reason: null, targetKey: best.key } : { mode: 'trapdoor' as const, reason: 'gate.steady', targetKey: best.key };
-    return { mode: 'door' as const, reason: null, targetKey: null };
   }
 
   private closeRifts() {
@@ -2439,7 +2478,7 @@ export class Game {
     this.photo.update(realDt, { lookX: look.x, lookY: -look.y, moveX: this.input.moveX, moveY: this.input.moveY, zoom: (wheel + this.photoUi.consumePinch()) * 6 + this.photoUi.zoom * 1.2 });
     this.updateAmbient(0);
     this.render(realDt);
-    if (this.photoUi.consumeSnap() || this.input.wasPressed('place') || this.input.wasPressed('gate') || this.input.wasPressed('action')) {
+    if (this.photoUi.consumeSnap() || this.input.wasPressed('portal') || this.input.wasPressed('action')) {
       this.photoUi.flash();
       this.audio.ui('shutter');
       void this.photo.capture(this.renderer.renderer.domElement, () => this.render(0)).then((blob) => {

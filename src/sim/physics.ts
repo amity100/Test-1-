@@ -91,7 +91,8 @@ export class Physics implements PhysicsAPI {
   // resolveCircle skip callback, bound once (the body being solved is stashed here)
   private skipPos = new THREE.Vector3();
   private skipR = 0;
-  private readonly skip = (c: Collider) => this.rifts.hostPassable(c, this.skipPos, this.skipR);
+  private skipPlayer = false;
+  private readonly skip = (c: Collider) => this.rifts.hostPassable(c, this.skipPos, this.skipR, this.skipPlayer);
 
   constructor(private world: CollisionWorld, private rifts: RiftQuery, private opts: PhysicsOptions) {
     this.killYAt = opts.killYAt;
@@ -213,7 +214,7 @@ export class Physics implements PhysicsAPI {
 
     // rift crossing: the body's centre going through an open end's front
     _curC.set(b.pos.x, b.pos.y + half, b.pos.z);
-    const end = this.rifts.findCrossing(_prevC, _curC, b.radius * 0.5);
+    const end = this.rifts.findCrossing(_prevC, _curC, b.radius * 0.5, b.kind === 'player');
     if (end) {
       this.cross(b, end, ev, time);
       prevFeet = b.pos.y;
@@ -290,6 +291,8 @@ export class Physics implements PhysicsAPI {
   private collide(b: Body, prevFeet: number, h: number, ev: PhysicsEvents) {
     const w = this.world;
     const r = b.radius;
+    const pl = b.kind === 'player';
+    this.skipPlayer = pl;
     const stepUp = b.kind === 'player' || !b.simulate ? FEEL.stepUp : 0.05;
 
     // ceiling (skipped where an open down-facing end is cut into it)
@@ -297,7 +300,7 @@ export class Physics implements PhysicsAPI {
     if (b.pos.y + b.height > ceil && b.vel.y > 0) {
       const cc = w.lastCeiling;
       this.skipPos.copy(b.pos);
-      if (!(cc && this.rifts.hostPassable(cc, this.skipPos, r))) {
+      if (!(cc && this.rifts.hostPassable(cc, this.skipPos, r, pl))) {
         const into = b.vel.y;
         b.pos.y = ceil - b.height;
         if (into >= IMPACT_MIN) {
@@ -312,7 +315,7 @@ export class Physics implements PhysicsAPI {
     const wasGround = b.onGround;
     let g = w.groundAt(b.pos.x, b.pos.z, r * 0.65, Math.max(prevFeet, b.pos.y) + stepUp);
     let gc = w.lastGround;
-    if (g > -Infinity && this.rifts.holeAt(b.pos.x, b.pos.z, g)) {
+    if (g > -Infinity && this.rifts.holeAt(b.pos.x, b.pos.z, g, 0, 0.6, pl)) {
       g = -Infinity;
       gc = null;
     }

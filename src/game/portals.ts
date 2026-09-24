@@ -16,6 +16,7 @@ import type {
   RiftRole,
   RiftSnap,
   ShearVictim,
+  Threat,
   TrapTarget,
   V3,
 } from '../core/contracts';
@@ -33,7 +34,7 @@ const COLORS: Record<RiftColorKey, THREE.Color> = { entrance: RIFT_COLOR, exit: 
 
 /** Preview colours: invalid, and what happens to something falling out. */
 const INVALID_COLOR = new THREE.Color(1, 0.18, 0.12);
-const OUTCOME_COLOR: Record<ExitAim['outcome'], THREE.Color> = {
+export const OUTCOME_COLOR: Record<ExitAim['outcome'], THREE.Color> = {
   safe: new THREE.Color(0.15, 1, 0.85),
   stars: new THREE.Color(1, 0.85, 0.2),
   skull: new THREE.Color(1, 0.42, 0.1),
@@ -94,8 +95,10 @@ export class Portal implements RiftEnd {
   tag = '';
   /** STRIKE ends: things come out of it at least this fast (m/s). */
   boost = 0;
-  /** MIRROR exit: shots coming out of it home in on this enemy id (-1 = none). */
+  /** Shots coming out of it home in on this enemy id (-1 = none). */
   aimAt = -1;
+  /** Only for what it was opened for: the player passes through it like air. */
+  noPlayer = false;
   root = new THREE.Group();
   mesh: THREE.Mesh;
   sparks: THREE.Points;
@@ -219,6 +222,13 @@ interface Solve extends Placed {
 }
 
 type Which = 'entrance' | 'exit' | 'gate' | 'boss';
+
+/** openEntrance options: force a mode, allow no exit yet (the one-key PORTAL), a specific threat to catch. */
+export interface EntranceOpts {
+  force?: 'air' | 'catch' | 'door';
+  requireExit?: boolean;
+  threat?: Threat | null;
+}
 
 /** Nearest to the camera first (uses _camPos set by renderViews). */
 function byCamDistance(a: Portal, b: Portal) {
@@ -403,6 +413,7 @@ export class RiftSystem implements RiftAPI {
     p.tag = '';
     p.boost = 0;
     p.aimAt = -1;
+    p.noPlayer = false;
     p.openTime = FEEL.portalOpenTime;
     p.role = role;
     p.owner = owner;
@@ -504,13 +515,13 @@ export class RiftSystem implements RiftAPI {
     return this.openList;
   }
 
-  findCrossing(prev: V3, cur: V3, margin = 0): RiftEnd | null {
+  findCrossing(prev: V3, cur: V3, margin = 0, player = false): RiftEnd | null {
     let best: Portal | null = null;
     let bestT = Infinity;
     const L = this.logical;
     for (let i = 0; i < L.length; i++) {
       const p = L[i];
-      if (!p.isOpen) continue;
+      if (!p.isOpen || (player && p.noPlayer)) continue;
       const n = p.normal, o = p.position;
       // cheap plane test before the full local-frame check
       const a = (prev.x - o.x) * n.x + (prev.y - o.y) * n.y + (prev.z - o.z) * n.z;
@@ -534,11 +545,11 @@ export class RiftSystem implements RiftAPI {
     return passDirection(from, from.linked, d, out);
   }
 
-  holeAt(x: number, z: number, y: number, r = 0, tol = 0.6): RiftEnd | null {
+  holeAt(x: number, z: number, y: number, r = 0, tol = 0.6, player = false): RiftEnd | null {
     const L = this.logical;
     for (let i = 0; i < L.length; i++) {
       const p = L[i];
-      if (p.kind !== 'floor' || !p.isOpen) continue;
+      if (p.kind !== 'floor' || !p.isOpen || (player && p.noPlayer)) continue;
       if (Math.abs(y - p.position.y) > tol) continue;
       toLocal(p, _l.set(x, p.position.y, z), _l);
       if (Math.abs(_l.x) <= p.width / 2 + r && Math.abs(_l.y) <= p.height / 2 + r) return p;
@@ -546,11 +557,11 @@ export class RiftSystem implements RiftAPI {
     return null;
   }
 
-  hostPassable(c: Collider, pos: V3, radius: number): boolean {
+  hostPassable(c: Collider, pos: V3, radius: number, player = false): boolean {
     const L = this.logical;
     for (let i = 0; i < L.length; i++) {
       const p = L[i];
-      if (!p.isOpen) continue;
+      if (!p.isOpen || (player && p.noPlayer)) continue;
       const ny = p.normal.y;
       if (ny > 0.5) {
         // floor end: any collider whose top face holds it, while the mover is inside the rectangle
@@ -979,10 +990,12 @@ export class RiftSystem implements RiftAPI {
     return this.solveEntrance(ctx).res;
   }
 
-  openEntrance(ctx: EntranceContext): EntranceResult {
-    const { res, placed } = this.solveEntrance(ctx);
+  openEntrance(ctx: EntranceContext, opts: EntranceOpts = {}): EntranceResult {
+    const { res, placed } = this.solveEntrance(ctx, opts);
     if (!res.ok || !placed) return res;
-    if (this.entrance) this.retire(this.entrance);
+    // the one-key PORTAL starts a new pair; the old flow kept its exit
+    if (opts.requireExit === false) this.clearPair();
+    else if (this.entrance) this.retire(this.entrance);
     const e = this.acquire('entrance', 'entrance', 'player');
     e.openTime = FEEL.entranceOpenTime;
     e.setFrame(placed.position, placed.quaternion, placed.width, placed.height, placed.kind, placed.host);
@@ -996,9 +1009,9 @@ export class RiftSystem implements RiftAPI {
     return res;
   }
 
-  private solveEntrance(ctx: EntranceContext): { res: EntranceResult; placed: Placed | null } {
+  private solveEntrance(ctx: EntranceContext, opts: EntranceOpts = {}): { res: EntranceResult; placed: Placed | null } {
     const fail = (mode: EntranceMode | null, reason: string, key: string | null = null) => ({ res: { ok: false, mode, targetKey: key, reason }, placed: null });
-    if (!this.exit) return fail(null, 'gate.noExit');
+    if (opts.requireExit !== false && !this.exit) return fail(null, 'gate.noExit');
     const w = this.world;
     const feet = ctx.playerFeet;
     let mode: EntranceMode;
@@ -1006,27 +1019,29 @@ export class RiftSystem implements RiftAPI {
     let key: string | null = null;
     let except: string | null = null;
 
-    const threat = ctx.threats.length ? ctx.threats.reduce((a, b) => (b.eta < a.eta ? b : a)) : null;
+    const threat = opts.threat ?? (ctx.threats.length ? ctx.threats.reduce((a, b) => (b.eta < a.eta ? b : a)) : null);
+    const force = opts.force;
     // the target under the crosshair
     let tgt: TrapTarget | null = null;
-    if (!(ctx.airborne && ctx.playerVel.y < -3) && !threat) tgt = this.crosshairTarget(ctx);
+    if (!force && !(ctx.airborne && ctx.playerVel.y < -3) && !threat) tgt = this.crosshairTarget(ctx);
 
-    if (ctx.airborne && ctx.playerVel.y < -3) {
+    if (force === 'air' || (!force && ctx.airborne && ctx.playerVel.y < -3)) {
       // 1. falling: an end on the fall path, facing the velocity
       mode = 'air';
       placed = this.fallCatch(ctx);
       if (!placed) return fail(mode, 'gate.noSpace');
-    } else if (threat) {
+    } else if (force === 'catch' || (!force && threat)) {
       // 2. CATCH: a door between you and the threat, facing it
       mode = 'catch';
-      const d = _a.set(threat.from.x - feet.x, 0, threat.from.z - feet.z);
+      const from = threat ? threat.from : _c.copy(feet).addScaledVector(hdirOf(ctx.playerYaw, _b), 5);
+      const d = _a.set(from.x - feet.x, 0, from.z - feet.z);
       if (d.lengthSq() < 1e-6) hdirOf(ctx.playerYaw, d);
       d.normalize();
       const bx = feet.x + d.x * 1.4, bz = feet.z + d.z * 1.4;
       const g = w.groundAt(bx, bz, 0.2, feet.y + 0.5);
       if (!ctx.airborne && g > feet.y - 0.6 && this.standingClear(_b.set(bx, g, bz), d)) placed = this.standingFrame(bx, g, bz, d);
       else placed = doorPlaced(_c.set(bx, feet.y + 1.1, bz), d, 'air', null);
-    } else if (tgt) {
+    } else if (!force && tgt) {
       // 3. TRAPDOOR under the target
       mode = 'trapdoor';
       key = except = tgt.key;
@@ -1051,12 +1066,152 @@ export class RiftSystem implements RiftAPI {
 
     if (this.blocked(placed.position)) return fail(mode, 'gate.blocked', key);
     if (this.nearSteady(placed, ctx.targets, except)) return fail(mode, 'gate.enemyClose', key);
-    if (this.exit.position.distanceTo(placed.position) < 1.0) return fail(mode, 'gate.noSpace', key);
+    if (opts.requireExit !== false && this.exit && this.exit.position.distanceTo(placed.position) < 1.0) return fail(mode, 'gate.noSpace', key);
     return { res: { ok: true, mode, targetKey: key, reason: null }, placed };
   }
 
+  /**
+   * The one-key PORTAL's entrance for a mode (air / catch / door), whether or
+   * not an exit exists yet: it opens dormant and the exit comes after.
+   */
+  openEntranceAs(ctx: EntranceContext, force: 'air' | 'catch' | 'door', threat: Threat | null = null): EntranceResult {
+    return this.openEntrance(ctx, { force, requireExit: false, threat });
+  }
+
+  /**
+   * The PORTAL's grab: a floor end right under a target (an enemy, a load),
+   * dormant until the exit comes. `paid`: an alert enemy may be taken (it cost
+   * a charge); otherwise steady ones are refused.
+   */
+  openUnder(t: TrapTarget, feet: V3, playerYaw: number, camPos: V3, paid: boolean): EntranceResult {
+    const w = this.world;
+    const fail = (reason: string) => ({ ok: false, mode: 'trapdoor' as const, targetKey: t.key, reason });
+    const dist = Math.hypot(t.pos.x - camPos.x, t.pos.z - camPos.z, t.pos.y - camPos.y);
+    if (dist > LAW.trapdoorRange) return fail('gate.range');
+    if (!paid && (t.steady || !t.canFall)) return fail('gate.steady');
+    const g = w.groundAt(t.pos.x, t.pos.z, 0.05, t.pos.y + 0.3);
+    const host = w.lastGround;
+    if (!(g > -Infinity) || !host || host.noPortal || t.pos.y - g > 1.5) return fail('portal.noFloor');
+    const hd = _a.set(t.pos.x - feet.x, 0, t.pos.z - feet.z);
+    if (hd.lengthSq() < 1e-6) hdirOf(playerYaw, hd);
+    hd.normalize();
+    const placed = flatPlaced(_c.set(t.pos.x, g + 0.01, t.pos.z), true, hd, 'floor', host);
+    if (this.blocked(placed.position)) return fail('gate.blocked');
+    this.clearPair();
+    const e = this.acquire('entrance', 'entrance', 'player');
+    e.openTime = FEEL.entranceOpenTime;
+    e.setFrame(placed.position, placed.quaternion, placed.width, placed.height, placed.kind, placed.host);
+    e.noPlayer = true;
+    this.entrance = e;
+    this.pendingOpened.push({ end: e, which: 'entrance' });
+    this.relink();
+    return { ok: true, mode: 'trapdoor', targetKey: t.key, reason: null };
+  }
+
+  /** Open the entrance at an explicit frame, with or without an exit yet (hanging loads). */
+  openEntranceFrame(frame: { position: V3; quaternion: THREE.Quaternion; width: number; height: number }, kind: RiftEndKind, noPlayer = false): boolean {
+    if (this.blocked(frame.position)) return false;
+    this.clearPair();
+    const e = this.acquire('entrance', 'entrance', 'player');
+    e.openTime = FEEL.entranceOpenTime;
+    e.setFrame(frame.position, frame.quaternion, frame.width, frame.height, kind, kind === 'floor' ? this.findHost({ ...frame, kind }) : null);
+    e.noPlayer = noPlayer;
+    this.entrance = e;
+    this.pendingOpened.push({ end: e, which: 'entrance' });
+    this.relink();
+    return true;
+  }
+
+  /**
+   * Place (or move) the EXIT at a frame the caller solved (throws, catches).
+   * `boost`: things come out at least this fast; `aimAt`: shots out of it home
+   * in on that enemy; `noPlayer`: it's only for what it was opened for.
+   */
+  placeExitFrame(f: RiftFrame & { kind: RiftEndKind }, host: Collider | null = null, o: { boost?: number; aimAt?: number; noPlayer?: boolean } = {}): boolean {
+    if (this.blocked(f.position)) return false;
+    if (this.exit) {
+      this.leaveCopy(this.exit);
+      this.exit.setFrame(f.position, f.quaternion, f.width, f.height, f.kind, host);
+      this.exit.open = Math.min(this.exit.open, 0.25);
+    } else {
+      this.exit = this.acquire('exit', 'exit', 'player');
+      this.exit.setFrame(f.position, f.quaternion, f.width, f.height, f.kind, host);
+    }
+    this.exit.boost = o.boost ?? 0;
+    this.exit.aimAt = o.aimAt ?? -1;
+    this.exit.noPlayer = !!o.noPlayer;
+    this.pendingOpened.push({ end: this.exit, which: 'exit' });
+    this.relink();
+    return true;
+  }
+
+  /** Slide the live EXIT to a new frame (no collapsing copy): a catch being steered. */
+  moveExit(f: RiftFrame & { kind: RiftEndKind }, host: Collider | null = null) {
+    if (!this.exit || this.blocked(f.position)) return false;
+    this.exit.setFrame(f.position, f.quaternion, f.width, f.height, f.kind, host);
+    return true;
+  }
+
+  /** What comes out of your EXIT is thrown at least this fast (0 = plain). */
+  setExitBoost(v: number) {
+    if (this.exit) this.exit.boost = v;
+  }
+
+  /** Shots out of your EXIT home in on this enemy id (-1 = none). */
+  setExitAimAt(id: number) {
+    if (this.exit) this.exit.aimAt = id;
+  }
+
+  /** Your pair is (or stops being) only for what it was opened for. */
+  setPairNoPlayer(on: boolean) {
+    if (this.entrance) this.entrance.noPlayer = on;
+    if (this.exit) this.exit.noPlayer = on;
+  }
+
+  /** Close both of your ends without cutting anything (a new PORTAL starts). */
+  clearPair() {
+    if (!this.entrance && !this.exit) return;
+    if (this.entrance) this.retire(this.entrance);
+    if (this.exit) this.retire(this.exit);
+    this.entrance = this.exit = null;
+    this.relink();
+  }
+
+  /** Just the entrance (a PORTAL let go of before its exit came). */
+  closeEntrance() {
+    if (!this.entrance) return;
+    this.retire(this.entrance);
+    this.entrance = null;
+    this.relink();
+  }
+
+  /** The Kessler gate whose arena end the ray points at (within ~1.2 m of it and in reach), or null. */
+  gateUnderRay(origin: V3, dir: V3, range = LAW.trapdoorRange): string | null {
+    let best: string | null = null;
+    let bd = 1.4;
+    for (const g of this.gates.values()) {
+      const p = g.out.target > 0 ? g.out : g.in;
+      if (!g.open || p.target === 0) continue;
+      _a.subVectors(p.position, origin);
+      const along = _a.dot(dir);
+      if (along < 1 || along > range) continue;
+      const d = _a.addScaledVector(dir, -along).length();
+      if (d < bd && this.world.lineOfSight(origin, _b.copy(p.position).addScaledVector(p.normal, 0.3))) {
+        bd = d;
+        best = g.id;
+      }
+    }
+    return best;
+  }
+
+  /** Where a gate's arena end is (for aiming what comes out of it). */
+  gateOut(id: string): RiftEnd | null {
+    const g = this.gates.get(id);
+    return g ? g.out : null;
+  }
+
   /** The target whose body is nearest the camera ray (within ~1.8 m) and in sight. */
-  private crosshairTarget(ctx: EntranceContext): TrapTarget | null {
+  crosshairTarget(ctx: EntranceContext): TrapTarget | null {
     const o = ctx.camPos, d = ctx.camDir;
     let best: TrapTarget | null = null;
     let bestD = 1.8;
@@ -1303,12 +1458,32 @@ export class RiftSystem implements RiftAPI {
     return id;
   }
 
-  /** Move a strike pair's second end (a MIRROR exit keeps beside its target). */
+  /** Move a strike pair's second end (it follows a target, or your aim). */
   moveStrikeExit(id: number, f: RiftFrame & { kind: RiftEndKind }) {
     const sp = this.strikes.get(id);
     if (!sp) return false;
-    sp.b.setFrame(f.position, f.quaternion, f.width, f.height, f.kind, null);
+    sp.b.setFrame(f.position, f.quaternion, f.width, f.height, f.kind, f.kind === 'floor' || f.kind === 'wall' || f.kind === 'ceiling' ? this.findHost(f) : null);
     return true;
+  }
+
+  /** Move a strike pair's first end (REFLECT keeps it on a muzzle). */
+  moveStrikeEntrance(id: number, f: RiftFrame & { kind: RiftEndKind }) {
+    const sp = this.strikes.get(id);
+    if (!sp) return false;
+    sp.a.setFrame(f.position, f.quaternion, f.width, f.height, f.kind, f.kind === 'floor' || f.kind === 'wall' || f.kind === 'ceiling' ? this.findHost(f) : null);
+    return true;
+  }
+
+  /** A strike pair's ends (boost / aimAt / noPlayer are set on them directly), or null once closed. */
+  strikeEnds(id: number): { a: RiftEnd; b: RiftEnd } | null {
+    const sp = this.strikes.get(id);
+    return sp ? { a: sp.a, b: sp.b } : null;
+  }
+
+  /** Give a strike pair this long to live from now (s). */
+  setStrikeLife(id: number, life: number) {
+    const sp = this.strikes.get(id);
+    if (sp) sp.life = life;
   }
 
   /** Close a strike pair now. */
@@ -1392,7 +1567,7 @@ export class RiftSystem implements RiftAPI {
     this.ghostMat.uniforms.uTime.value = time;
   }
 
-  updatePreview(aim: ExitAim | null, handPos: V3, cam: THREE.Camera) {
+  updatePreview(aim: ExitAim | null, handPos: V3, cam: THREE.Camera, figure = true) {
     const show = !!aim;
     for (const h of this.helpers) h.visible = show;
     const fig = this.ghostFigure;
@@ -1417,7 +1592,7 @@ export class RiftSystem implements RiftAPI {
     this.arrow.rotation.y = aim.exitYaw;
     this.arrow.visible = !hatch;
     if (fig) {
-      fig.visible = aim.valid && !hatch;
+      fig.visible = figure && aim.valid && !hatch;
       fig.position.copy(aim.exitFeet);
       fig.rotation.y = aim.exitYaw;
     }

@@ -104,86 +104,102 @@ const EN: Record<string, string> = {
 
   // lesson hints (device variants where controls are named)
   'hint.door':
-    'Rifts are doors. Hold <kbd>RMB</kbd> and aim across the channel, <kbd>LMB</kbd> places your blue <b>EXIT</b>. Then <kbd>LMB</kbd> again opens the orange <b>ENTRANCE</b> in front of you. Walk through.',
+    "Rifts are doors. Look across the channel and hold <kbd>LMB</kbd>: time slows and a ghost shows where you’ll come out. Let go: the orange <b>ENTRANCE</b> opens in front of you, the blue <b>EXIT</b> over there. Walk through. (A quick click puts the exit where you look.)",
   'hint.door.pad':
-    'Rifts are doors. Hold <kbd>LT</kbd> and aim across the channel, <kbd>RT</kbd> places your blue <b>EXIT</b>. Then <kbd>RT</kbd> again opens the orange <b>ENTRANCE</b> in front of you. Walk through.',
+    "Rifts are doors. Look across the channel and hold <kbd>RT</kbd>: time slows and a ghost shows where you’ll come out. Let go: the orange <b>ENTRANCE</b> opens in front of you, the blue <b>EXIT</b> over there. Walk through. (A quick press puts the exit where you look.)",
   'hint.door.touch':
-    'Rifts are doors. Hold <b>RIFT</b> and drag to aim across the channel, let go to place your blue <b>EXIT</b>. Then tap <b>GATE</b> to open the orange <b>ENTRANCE</b>. Walk through.',
+    "Rifts are doors. Hold <b>PORTAL</b> and drag to look across the channel: time slows and a ghost shows where you’ll come out. Lift your finger: the orange <b>ENTRANCE</b> opens in front of you, the blue <b>EXIT</b> over there. Walk through.",
   'hint.trapdoor':
-    'Two guards on the edge, the sea behind them. Put your <b>EXIT</b> out over the water. Then crosshair on a guard and <kbd>LMB</kbd>: the floor opens under him.',
+    "Two guards on the edge, the sea behind them. Crosshair on a guard and click <kbd>LMB</kbd>: he sinks into the floor and comes out over the water. Hold it instead to aim where he flies. (A man already fighting you costs one ⚡.)",
   'hint.trapdoor.pad':
-    'Two guards on the edge, the sea behind them. Put your <b>EXIT</b> out over the water. Then crosshair on a guard and <kbd>RT</kbd>: the floor opens under him.',
+    "Two guards on the edge, the sea behind them. Crosshair on a guard and press <kbd>RT</kbd>: he sinks into the floor and comes out over the water. Hold it instead to aim where he flies. (A man already fighting you costs one ⚡.)",
   'hint.trapdoor.touch':
-    'Two guards on the edge, the sea behind them. Put your <b>EXIT</b> out over the water. Then look at a guard and tap <b>GATE</b>: the floor opens under him.',
+    "Two guards on the edge, the sea behind them. Look at a guard and tap <b>PORTAL</b>: he sinks into the floor and comes out over the water. Hold and drag to aim where he flies. (A man already fighting you costs one ⚡.)",
   'hint.returnToSender':
-    'His gun can’t hurt Kessler, until the bullets pass through your rift. Aim your <b>EXIT</b> at him. When his red laser locks on you, <kbd>LMB</kbd> CATCHES the burst.',
+    "His gun can’t hurt Kessler, until the bullets pass through your rift. When his red laser locks on you, click <kbd>LMB</kbd>: a CATCH door takes the burst and sends it back into him. Hold it to send it somewhere else.",
   'hint.returnToSender.pad':
-    'His gun can’t hurt Kessler, until the bullets pass through your rift. Aim your <b>EXIT</b> at him. When his red laser locks on you, <kbd>RT</kbd> CATCHES the burst.',
+    "His gun can’t hurt Kessler, until the bullets pass through your rift. When his red laser locks on you, press <kbd>RT</kbd>: a CATCH door takes the burst and sends it back into him. Hold it to send it somewhere else.",
   'hint.returnToSender.touch':
-    'His gun can’t hurt Kessler, until the bullets pass through your rift. Aim your <b>EXIT</b> at him. When his red laser locks on you, tap <b>GATE</b> to CATCH the burst.',
+    "His gun can’t hurt Kessler, until the bullets pass through your rift. When his red laser locks on you, tap <b>PORTAL</b>: a CATCH door takes the burst and sends it back into him. Hold and drag to send it somewhere else.",
   'hint.slingshot':
-    'Put your <b>EXIT</b> on a wall facing the group. Now jump off the stack and hit <kbd>LMB</kbd> as you fall: an entrance opens under you and you come out at full speed.',
+    "Jump off the stack and hold <kbd>LMB</kbd> as you fall: an entrance opens below you. Look at a wall that faces the group and let go: you come out of it at full speed.",
   'hint.slingshot.pad':
-    'Put your <b>EXIT</b> on a wall facing the group. Now jump off the stack and hit <kbd>RT</kbd> as you fall: an entrance opens under you and you come out at full speed.',
+    "Jump off the stack and hold <kbd>RT</kbd> as you fall: an entrance opens below you. Look at a wall that faces the group and let go: you come out of it at full speed.",
   'hint.slingshot.touch':
-    'Put your <b>EXIT</b> on a wall facing the group. Now jump off the stack and tap <b>GATE</b> as you fall: an entrance opens under you and you come out at full speed.',
-  'hint.arena':
-    'Four riflemen and a warden. Every bullet they fire is yours to borrow. Keep moving, keep the chain alive.',
+    "Jump off the stack and hold <b>PORTAL</b> as you fall: an entrance opens below you. Drag to a wall that faces the group and lift your finger: you come out of it at full speed.",
+  'hint.arena': "Four riflemen and a warden. Every bullet they fire is yours to borrow. Keep moving, keep the chain alive.",
   'hint.loop':
-    'The shaft runs through every floor. Open the <b>ENTRANCE</b> at the bottom and the <b>EXIT</b> above it: whatever falls in keeps falling, faster every lap. Move the exit to fire it out.',
+    "The shaft runs through every floor. Look down at its bottom and hold <kbd>LMB</kbd>: a hole opens there. Aim the exit right above it (a quick click does that for you) and jump in: faster every lap. Hold <kbd>LMB</kbd> again as you fall to fire yourself out.",
+  'hint.loop.pad':
+    "The shaft runs through every floor. Look down at its bottom and hold <kbd>RT</kbd>: a hole opens there. Aim the exit right above it (a quick press does that for you) and jump in: faster every lap. Hold <kbd>RT</kbd> again as you fall to fire yourself out.",
+  'hint.loop.touch':
+    "The shaft runs through every floor. Look down at its bottom and hold <b>PORTAL</b>: a hole opens there. Aim the exit right above it (a quick tap does that for you) and jump in: faster every lap. Hold <b>PORTAL</b> again as you fall to fire yourself out.",
   'hint.cargo':
-    'Loads hang from the crane. Put your <b>EXIT</b> above the guards. Crosshair on a load, <kbd>LMB</kbd>: the floor opens under it and the cargo drops on them.',
+    "Loads hang from the crane over the guards. Crosshair on a load and click <kbd>LMB</kbd>: it drops through a hole and lands on the nearest head. Hold it to aim it yourself.",
   'hint.cargo.pad':
-    'Loads hang from the crane. Put your <b>EXIT</b> above the guards. Crosshair on a load, <kbd>RT</kbd>: the floor opens under it and the cargo drops on them.',
+    "Loads hang from the crane over the guards. Crosshair on a load and press <kbd>RT</kbd>: it drops through a hole and lands on the nearest head. Hold it to aim it yourself.",
   'hint.cargo.touch':
-    'Loads hang from the crane. Put your <b>EXIT</b> above the guards. Look at a load and tap <b>GATE</b>: the floor opens under it and the cargo drops on them.',
+    "Loads hang from the crane over the guards. Look at a load and tap <b>PORTAL</b>: it drops through a hole and lands on the nearest head. Hold and drag to aim it yourself.",
   'hint.matador':
-    'The brute charges in a straight line. Put your <b>EXIT</b> over the sea. When he roars, <kbd>LMB</kbd> opens a door in his path. Olé.',
+    "The brute charges in a straight line. When he roars, click <kbd>LMB</kbd>: a door opens in his path and throws him over the edge. Olé.",
   'hint.matador.pad':
-    'The brute charges in a straight line. Put your <b>EXIT</b> over the sea. When he roars, <kbd>RT</kbd> opens a door in his path. Olé.',
+    "The brute charges in a straight line. When he roars, press <kbd>RT</kbd>: a door opens in his path and throws him over the edge. Olé.",
   'hint.matador.touch':
-    'The brute charges in a straight line. Put your <b>EXIT</b> over the sea. When he roars, tap <b>GATE</b> to open a door in his path. Olé.',
+    "The brute charges in a straight line. When he roars, tap <b>PORTAL</b>: a door opens in his path and throws him over the edge. Olé.",
   'hint.grenade':
-    'Watch the arc: the ring shows where it lands. When a grenade comes close, <kbd>LMB</kbd> CATCHES it and it drops out of your <b>EXIT</b>. Put the exit above him.',
+    "Watch the arc: the ring shows where it lands. When a grenade comes close, click <kbd>LMB</kbd>: a CATCH door swallows it and sends it back to the thrower.",
   'hint.grenade.pad':
-    'Watch the arc: the ring shows where it lands. When a grenade comes close, <kbd>RT</kbd> CATCHES it and it drops out of your <b>EXIT</b>. Put the exit above him.',
+    "Watch the arc: the ring shows where it lands. When a grenade comes close, press <kbd>RT</kbd>: a CATCH door swallows it and sends it back to the thrower.",
   'hint.grenade.touch':
-    'Watch the arc: the ring shows where it lands. When a grenade comes close, tap <b>GATE</b> to CATCH it and it drops out of your <b>EXIT</b>. Put the exit above him.',
+    "Watch the arc: the ring shows where it lands. When a grenade comes close, tap <b>PORTAL</b>: a CATCH door swallows it and sends it back to the thrower.",
   'hint.shield':
-    'His shield blocks everything from the front. Put your <b>EXIT</b> behind him, or <kbd>V</kbd> SHOVE him off balance and open the floor under him.',
+    "His shield blocks everything from the front. <kbd>V</kbd> SHOVE knocks him off balance: then <kbd>LMB</kbd> on him is a free grab (while he stands firm it costs a ⚡).",
   'hint.shield.pad':
-    'His shield blocks everything from the front. Put your <b>EXIT</b> behind him, or <kbd>RB</kbd> SHOVE him off balance and open the floor under him.',
+    "His shield blocks everything from the front. <kbd>RB</kbd> SHOVE knocks him off balance: then <kbd>RT</kbd> on him is a free grab (while he stands firm it costs a ⚡).",
   'hint.shield.touch':
-    'His shield blocks everything from the front. Put your <b>EXIT</b> behind him, or <b>SHOVE</b> him off balance and open the floor under him.',
+    "His shield blocks everything from the front. <b>SHOVE</b> knocks him off balance: then <b>PORTAL</b> on him is a free grab (while he stands firm it costs a ⚡).",
   'hint.firingLine':
-    'The sniper’s beam charges for a second. Aim your <b>EXIT</b> at him, then <kbd>LMB</kbd> CATCHES the beam and it fires out the other side.',
+    "The sniper’s beam charges for a second. As it locks on you, click <kbd>LMB</kbd>: the CATCH door sends the beam back down his own line.",
   'hint.firingLine.pad':
-    'The sniper’s beam charges for a second. Aim your <b>EXIT</b> at him, then <kbd>RT</kbd> CATCHES the beam and it fires out the other side.',
+    "The sniper’s beam charges for a second. As it locks on you, press <kbd>RT</kbd>: the CATCH door sends the beam back down his own line.",
   'hint.firingLine.touch':
-    'The sniper’s beam charges for a second. Aim your <b>EXIT</b> at him, then tap <b>GATE</b> to CATCH the beam and it fires out the other side.',
+    "The sniper’s beam charges for a second. As it locks on you, tap <b>PORTAL</b>: the CATCH door sends the beam back down his own line.",
   'hint.hijack':
-    'Kessler gates bring reinforcements. Press <kbd>F</kbd> at the panel, or open your <b>ENTRANCE</b> on the gate: everything that comes through now leaves from YOUR exit. Over the void, ideally.',
+    "Kessler gates bring reinforcements. Press <kbd>F</kbd> at the panel, or crosshair on the gate and <kbd>LMB</kbd>: everything that comes through now leaves from YOUR exit. Over the void, ideally.",
   'hint.hijack.pad':
-    'Kessler gates bring reinforcements. Press <kbd>X</kbd> at the panel, or open your <b>ENTRANCE</b> on the gate: everything that comes through now leaves from YOUR exit. Over the void, ideally.',
+    "Kessler gates bring reinforcements. Press <kbd>X</kbd> at the panel, or crosshair on the gate and <kbd>RT</kbd>: everything that comes through now leaves from YOUR exit. Over the void, ideally.",
   'hint.hijack.touch':
-    'Kessler gates bring reinforcements. Tap <b>ACTION</b> at the panel, or open your <b>ENTRANCE</b> on the gate: everything that comes through now leaves from YOUR exit. Over the void, ideally.',
-  'hint.jammer':
-    'No rift opens inside the jammer’s bubble. Open yours outside it and send things in: grenades, bodies, cargo.',
+    "Kessler gates bring reinforcements. Tap <b>ACTION</b> at the panel, or look at the gate and tap <b>PORTAL</b>: everything that comes through now leaves from YOUR exit. Over the void, ideally.",
+  'hint.jammer': "No rift opens inside the jammer’s bubble. Open yours outside it and send things in: grenades, bodies, cargo.",
   'hint.borrowedGun':
-    'The turret never stops shooting. Aim your <b>EXIT</b> at its friends, then <kbd>LMB</kbd> CATCHES the stream. Borrowed gun.',
+    "The turret never stops shooting. When it locks on you, hold <kbd>LMB</kbd>: the CATCH takes the stream and its other end goes wherever you look. Look at its friends. Borrowed gun.",
   'hint.borrowedGun.pad':
-    'The turret never stops shooting. Aim your <b>EXIT</b> at its friends, then <kbd>RT</kbd> CATCHES the stream. Borrowed gun.',
+    "The turret never stops shooting. When it locks on you, hold <kbd>RT</kbd>: the CATCH takes the stream and its other end goes wherever you look. Look at its friends. Borrowed gun.",
   'hint.borrowedGun.touch':
-    'The turret never stops shooting. Aim your <b>EXIT</b> at its friends, then tap <b>GATE</b> to CATCH the stream. Borrowed gun.',
+    "The turret never stops shooting. When it locks on you, hold <b>PORTAL</b>: the CATCH takes the stream and its other end goes wherever you drag your view. Look at its friends. Borrowed gun.",
   'hint.boss':
-    'Voss catches straight shots with his own rift. Hit him from behind or from above. Caught halfway through your rift? <kbd>X</kbd> closes it on him.',
+    "Voss catches straight shots with his own rift. Hit him from behind or from above; stunned, he can be grabbed. Caught halfway through your rift? <kbd>X</kbd> closes it on him.",
   'hint.boss.pad':
-    'Voss catches straight shots with his own rift. Hit him from behind or from above. Caught halfway through your rift? <kbd>LB</kbd> closes it on him.',
+    "Voss catches straight shots with his own rift. Hit him from behind or from above; stunned, he can be grabbed. Caught halfway through your rift? <kbd>LB</kbd> closes it on him.",
   'hint.boss.touch':
-    'Voss catches straight shots with his own rift. Hit him from behind or from above. Caught halfway through your rift? <b>✕</b> closes it on him.',
-  'hint.leap': 'Run and jump off the roof. As you fall, <kbd>LMB</kbd> opens an entrance below you. Trust the rift.',
-  'hint.leap.pad': 'Run and jump off the roof. As you fall, <kbd>RT</kbd> opens an entrance below you. Trust the rift.',
-  'hint.leap.touch': 'Run and jump off the roof. As you fall, tap <b>GATE</b> to open an entrance below you. Trust the rift.',
+    "Voss catches straight shots with his own rift. Hit him from behind or from above; stunned, he can be grabbed. Caught halfway through your rift? <b>✕</b> closes it on him.",
+  'hint.leap': "Run and jump off the roof. As you fall, <kbd>LMB</kbd> opens an entrance below you. Trust the rift.",
+  'hint.leap.pad': "Run and jump off the roof. As you fall, <kbd>RT</kbd> opens an entrance below you. Trust the rift.",
+  'hint.leap.touch': "Run and jump off the roof. As you fall, tap <b>PORTAL</b> to open an entrance below you. Trust the rift.",
+  'hint.strikes':
+    "<b>STRIKES</b> cost rift charge ⚡ (kills with your own portal tricks refill it). Aim near an enemy: <kbd>RMB</kbd> <b>REFLECT</b> his own gun fires into him · <kbd>Q</kbd> <b>LOOP</b> he falls forever (<kbd>Q</kbd> again: geyser, hold: human cannon) · <kbd>E</kbd> <b>SWAP</b> places · <kbd>R</kbd> <b>DASH</b> into him.",
+  'hint.strikes.pad':
+    "<b>STRIKES</b> cost rift charge ⚡ (kills with your own portal tricks refill it). Aim near an enemy: <kbd>LT</kbd> <b>REFLECT</b> his own gun fires into him · <kbd>Y</kbd> <b>LOOP</b> he falls forever (<kbd>Y</kbd> again: geyser, hold: human cannon) · <kbd>◀</kbd> <b>SWAP</b> places · <kbd>▶</kbd> <b>DASH</b> into him.",
+  'hint.strikes.touch':
+    "<b>STRIKES</b> (the round buttons on the left) cost rift charge ⚡; kills with your own portal tricks refill it. Aim near an enemy: <b>REFLECT</b> his own gun fires into him · <b>LOOP</b> he falls forever (again: geyser, hold: human cannon) · <b>SWAP</b> places · <b>DASH</b> into him.",
+  'hint.grabHold': "Keep holding: time slows, look where to throw him (the dotted arc shows where he lands). Let go to throw.",
+  'hint.loopAgain': "LOOP again: a tap fires him up as a GEYSER, a hold aims a HUMAN CANNON.",
+  'hint.doorPlaced':
+    "Your rifts stay open until your next PORTAL. <kbd>X</kbd> closes them, and cuts whatever is halfway through.",
+  'hint.doorPlaced.pad':
+    "Your rifts stay open until your next PORTAL. <kbd>LB</kbd> closes them, and cuts whatever is halfway through.",
+  'hint.doorPlaced.touch':
+    "Your rifts stay open until your next PORTAL. <b>✕</b> closes them, and cuts whatever is halfway through.",
 
   // exit aim refusals
   'aim.tooHigh': 'Above your feet: climb higher first',
@@ -194,21 +210,25 @@ const EN: Record<string, string> = {
   'aim.space': 'Not enough room',
   'aim.noSurface': 'Nothing to open on',
 
-  // gate (entrance) modes + refusals
-  'gate.air': 'Entrance below you',
-  'gate.catch': 'CATCH it',
-  'gate.trapdoor': 'Trapdoor under it',
-  'gate.door': 'Door ahead',
+  // PORTAL: what a press does now (HUD + the touch caption), refusals
+  'portal.air': 'AIR',
+  'portal.catch': 'CATCH',
+  'portal.grab': 'GRAB',
+  'portal.load': 'LOAD',
+  'portal.hijack': 'HIJACK',
+  'portal.hole': 'HOLE',
+  'portal.door': 'DOOR',
+  'portal.anchored': "He won't budge (stun him first)",
+  'portal.noCharge': "He's fighting you: grabbing him takes a ⚡",
+  'portal.noFloor': 'No floor under him to open',
+  'portal.nowhere': 'Nowhere to throw it',
+  'portal.loopLow': 'Too low for a loop: aim the exit yourself',
+  'portal.paid': '⚡ −1: he was fighting you',
   'gate.steady': 'STEADY: knock him off balance',
   'gate.enemyClose': 'Too close to an enemy',
   'gate.blocked': 'Jammed: no rifts here',
   'gate.noSpace': 'No room for a rift',
   'gate.range': 'Out of range',
-  'gate.noExit': 'Place an EXIT first',
-  'gateLabel.air': 'AIR',
-  'gateLabel.catch': 'CATCH',
-  'gateLabel.trapdoor': 'TRAPDOOR',
-  'gateLabel.door': 'DOOR',
 
   // what falls out of the exit
   'outcome.splash': 'Drown',
@@ -241,23 +261,24 @@ const EN: Record<string, string> = {
   'obj.boss': 'Take down Director Voss',
   'obj.escape': 'Jump. Trust the rift.',
   'obj.next': 'Push on to the next area',
-  'strike.mirror': 'REFLECT',
-  'strike.geyser': 'GEYSER',
-  'strike.drop': 'DROP',
+  'strike.reflect': 'REFLECT',
+  'strike.loop': 'LOOP',
+  'strike.loop.again': 'FIRE!',
+  'strike.swap': 'SWAP',
+  'strike.dash': 'DASH',
   'strike.cooldown': 'Not ready yet',
   'strike.noCharge': 'No rift charge: a trick kill refills one',
   'strike.noTarget': 'No enemy near your aim',
   'strike.tooClose': 'Too close',
+  'strike.tooHigh': 'Too high above you',
+  'strike.grounded': 'Stand on something first',
   'strike.noFloor': "He isn't on solid floor",
-  'strike.noRoom': 'No room above him',
+  'strike.noRoom': 'No room for it here',
   'strike.anchored': "He won't budge (stun him first)",
-  'hint.strikes': '<b>STRIKES</b>: aim near an enemy and press. <b>1 REFLECT</b> sends his bullets back · <b>2 GEYSER</b> throws him into the sky · <b>3 DROP</b> throws him off the edge (or out of the sky). Each costs a rift charge; kills with your own portal tricks refill them.',
-  'hint.strikes.pad': '<b>STRIKES</b>: aim near an enemy and press. <b>R3 REFLECT</b> sends his bullets back · <b>◀ GEYSER</b> throws him into the sky · <b>▶ DROP</b> throws him off the edge.',
-  'hint.strikes.touch': '<b>STRIKES</b> (left buttons): aim near an enemy and tap. <b>REFLECT</b> sends his bullets back · <b>GEYSER</b> throws him into the sky · <b>DROP</b> throws him off the edge.',
-  'ctl.strikes': 'STRIKES: Reflect / Geyser / Drop',
-  'ctl.strike1': 'REFLECT: his bullets go back into him',
-  'ctl.strike2': 'GEYSER: throw him into the sky',
-  'ctl.strike3': 'DROP: throw him off the edge / out of the sky',
+  'ctl.strike1': 'REFLECT: his own gun fires into him',
+  'ctl.strike2': 'LOOP: he falls forever (again: geyser, hold: human cannon)',
+  'ctl.strike3': 'SWAP: trade places with him',
+  'ctl.strike4': 'DASH: out of a rift, straight into him',
 
   // toasts
   'toast.checkpoint': 'Checkpoint',
@@ -276,6 +297,7 @@ const EN: Record<string, string> = {
   'bark.lost': 'Lost visual.',
   'bark.mateDown': 'Man down!',
   'bark.what': 'What the hell was that?',
+  'bark.grabbed': 'The floor’s gone!',
   'bark.boss1': 'That gauntlet is Kessler property. I’m taking it back.',
   'bark.boss2': 'You think you invented these tricks? I wrote the manual.',
   'bark.boss3': 'Enough! I’ll tear this whole tower open!',
@@ -308,8 +330,7 @@ const EN: Record<string, string> = {
   'hud.charged': 'CHARGED',
 
   // touch buttons
-  'touch.rift': 'RIFT',
-  'touch.gate': 'GATE',
+  'touch.portal': 'PORTAL',
   'touch.jump': 'JUMP',
   'touch.shove': 'SHOVE',
   'touch.crouch': 'CROUCH',
@@ -329,12 +350,11 @@ const EN: Record<string, string> = {
   'ctl.sprint': 'Sprint',
   'ctl.crouch': 'Crouch',
   'ctl.shove': 'SHOVE: dash that knocks enemies off balance',
-  'ctl.aim': 'Aim the EXIT (time slows)',
-  'ctl.place': 'Place the EXIT',
-  'ctl.gate': 'GATE: open the ENTRANCE (air, catch, trapdoor, door)',
-  'ctl.flip': 'Flip exit (hatch / door)',
-  'ctl.dist': 'Air distance',
-  'ctl.close': 'CLOSE the rift (cuts whatever is halfway through)',
+  'ctl.portal': 'PORTAL: press = the entrance (by what you aim at) · hold = aim the exit in slow motion · let go = the exit',
+  'ctl.cancel': 'Let go of a held PORTAL without an exit',
+  'ctl.flip': 'Flip the exit (hatch / door) while holding',
+  'ctl.dist': 'Exit distance while holding',
+  'ctl.close': 'CLOSE your rifts (cuts whatever is halfway through)',
   'ctl.action': 'ACTION: finish, grab, throw, hijack, lift',
   'ctl.vision': 'Rift vision',
   'ctl.clip': 'Save a clip',
@@ -343,20 +363,19 @@ const EN: Record<string, string> = {
   'menu.photo': 'Photo mode',
   'ctl.pause': 'Pause',
   'key.mouse': 'Mouse',
-  'key.rmb': 'RMB (hold)',
-  'key.lmbAim': 'LMB while aiming',
-  'key.lmb': 'LMB',
+  'key.lmb': 'LMB (hold)',
+  'key.rmbHeld': 'RMB while holding',
   'key.wheel': 'Wheel',
   'key.mmb': 'X / MMB',
   'key.space': 'Space',
   'ctl.padLine':
-    'LT aim · RT place / gate · LB close · RB shove · A jump · X action · B crouch · Y flip · L3 sprint · D-pad ↓ vision · D-pad ↑ photo · D-pad ←/→ distance while aiming, else GEYSER / DROP · R3 REFLECT · View clip · Start pause',
+    'RT PORTAL (while held: LT cancel · Y flip · D-pad ←/→ distance) · LT REFLECT · Y LOOP · D-pad ← SWAP · D-pad → DASH · LB close · RB shove · A jump · X action · B crouch · L3 sprint · D-pad ↓ vision · D-pad ↑ photo · View clip · Start pause',
   'ctl.touch.left': 'Left thumb',
   'ctl.touch.right': 'Right side',
   'ctl.touch.stick': 'Move. Push all the way to sprint.',
   'ctl.touch.look': 'Drag to look',
-  'ctl.touch.rift': 'Hold + drag: aim the EXIT. Let go: place it. Slide onto ✕: cancel.',
-  'ctl.touch.gate': 'Open the ENTRANCE. The label shows what it will do.',
+  'ctl.touch.portal': 'Tap: a rift by what you look at. Hold + drag: aim the exit (time slows). Lift: open it. Slide onto ✕: cancel.',
+  'ctl.touch.strikes': 'STRIKES: hold LOOP to aim the cannon',
   'ctl.touch.jump': 'Jump / mantle',
   'ctl.touch.shove': 'Dash that knocks enemies off balance',
   'ctl.touch.close': 'Close the rift (cuts)',
@@ -475,84 +494,102 @@ const HE: Record<string, string> = {
   'rule.3': 'שני הקצוות בשליטה שלך. סגור פורטל על משהו באמצע, והוא נחתך.',
 
   'hint.door':
-    'פורטל הוא דלת. החזק <kbd>קליק ימני</kbd> וכוון לצד השני של התעלה, <kbd>קליק שמאלי</kbd> מציב את ה<b>יציאה</b> הכחולה. עוד <kbd>קליק שמאלי</kbd> פותח את ה<b>כניסה</b> הכתומה מולך. עבור דרכה.',
+    "פורטל הוא דלת. הסתכל לצד השני של התעלה והחזק <kbd>קליק שמאלי</kbd>: הזמן מאט, ודמות רפאים מראה איפה תצא. שחרר: ה<b>כניסה</b> הכתומה נפתחת מולך, וה<b>יציאה</b> הכחולה שם. עבור דרכה. (קליק מהיר שם את היציאה איפה שאתה מסתכל.)",
   'hint.door.pad':
-    'פורטל הוא דלת. החזק <kbd>LT</kbd> וכוון לצד השני של התעלה, <kbd>RT</kbd> מציב את ה<b>יציאה</b> הכחולה. עוד <kbd>RT</kbd> פותח את ה<b>כניסה</b> הכתומה מולך. עבור דרכה.',
+    "פורטל הוא דלת. הסתכל לצד השני של התעלה והחזק <kbd>RT</kbd>: הזמן מאט, ודמות רפאים מראה איפה תצא. שחרר: ה<b>כניסה</b> הכתומה נפתחת מולך, וה<b>יציאה</b> הכחולה שם. עבור דרכה. (לחיצה מהירה שמה את היציאה איפה שאתה מסתכל.)",
   'hint.door.touch':
-    'פורטל הוא דלת. החזק <b>פורטל</b> וגרור כדי לכוון לצד השני של התעלה, ושחרר כדי להציב את ה<b>יציאה</b> הכחולה. אחר כך גע ב<b>שער</b> כדי לפתוח את ה<b>כניסה</b> הכתומה. עבור דרכה.',
+    "פורטל הוא דלת. החזק <b>פורטל</b> וגרור כדי להסתכל לצד השני של התעלה: הזמן מאט, ודמות רפאים מראה איפה תצא. הרם את האצבע: ה<b>כניסה</b> הכתומה נפתחת מולך, וה<b>יציאה</b> הכחולה שם. עבור דרכה.",
   'hint.trapdoor':
-    'שני שומרים על הקצה, והים מאחוריהם. הצב את ה<b>יציאה</b> מעל המים. עכשיו שים את הכוונת על שומר ולחץ <kbd>קליק שמאלי</kbd>: הרצפה נפתחת מתחתיו.',
+    "שני שומרים על הקצה, והים מאחוריהם. שים את הכוונת על שומר ולחץ <kbd>קליק שמאלי</kbd>: הוא שוקע ברצפה ויוצא מעל המים. אם מחזיקים, מכוונים לאן הוא יעוף. (מי שכבר נלחם בך עולה ⚡ אחד.)",
   'hint.trapdoor.pad':
-    'שני שומרים על הקצה, והים מאחוריהם. הצב את ה<b>יציאה</b> מעל המים. עכשיו שים את הכוונת על שומר ולחץ <kbd>RT</kbd>: הרצפה נפתחת מתחתיו.',
+    "שני שומרים על הקצה, והים מאחוריהם. שים את הכוונת על שומר ולחץ <kbd>RT</kbd>: הוא שוקע ברצפה ויוצא מעל המים. אם מחזיקים, מכוונים לאן הוא יעוף. (מי שכבר נלחם בך עולה ⚡ אחד.)",
   'hint.trapdoor.touch':
-    'שני שומרים על הקצה, והים מאחוריהם. הצב את ה<b>יציאה</b> מעל המים. עכשיו הסתכל על שומר וגע ב<b>שער</b>: הרצפה נפתחת מתחתיו.',
+    "שני שומרים על הקצה, והים מאחוריהם. הסתכל על שומר וגע ב<b>פורטל</b>: הוא שוקע ברצפה ויוצא מעל המים. החזק וגרור כדי לכוון לאן הוא יעוף. (מי שכבר נלחם בך עולה ⚡ אחד.)",
   'hint.returnToSender':
-    'הנשק שלו לא פוגע באנשי קסלר, עד שהכדורים עוברים בפורטל שלך. כוון את ה<b>יציאה</b> אליו. כשהלייזר האדום ננעל עליך, <kbd>קליק שמאלי</kbd> תופס את הצרור.',
+    "הנשק שלו לא פוגע באנשי קסלר, עד שהכדורים עוברים בפורטל שלך. כשהלייזר האדום ננעל עליך, לחץ <kbd>קליק שמאלי</kbd>: דלת תפיסה בולעת את הצרור ומחזירה אותו אליו. אם מחזיקים, שולחים אותו למקום אחר.",
   'hint.returnToSender.pad':
-    'הנשק שלו לא פוגע באנשי קסלר, עד שהכדורים עוברים בפורטל שלך. כוון את ה<b>יציאה</b> אליו. כשהלייזר האדום ננעל עליך, <kbd>RT</kbd> תופס את הצרור.',
+    "הנשק שלו לא פוגע באנשי קסלר, עד שהכדורים עוברים בפורטל שלך. כשהלייזר האדום ננעל עליך, לחץ <kbd>RT</kbd>: דלת תפיסה בולעת את הצרור ומחזירה אותו אליו. אם מחזיקים, שולחים אותו למקום אחר.",
   'hint.returnToSender.touch':
-    'הנשק שלו לא פוגע באנשי קסלר, עד שהכדורים עוברים בפורטל שלך. כוון את ה<b>יציאה</b> אליו. כשהלייזר האדום ננעל עליך, גע ב<b>שער</b> כדי לתפוס את הצרור.',
+    "הנשק שלו לא פוגע באנשי קסלר, עד שהכדורים עוברים בפורטל שלך. כשהלייזר האדום ננעל עליך, גע ב<b>פורטל</b>: דלת תפיסה בולעת את הצרור ומחזירה אותו אליו. החזק וגרור כדי לשלוח אותו למקום אחר.",
   'hint.slingshot':
-    'הצב את ה<b>יציאה</b> על קיר מול החבורה. עכשיו קפוץ מערימת המכולות ולחץ <kbd>קליק שמאלי</kbd> תוך כדי נפילה: נפתחת כניסה מתחתיך, ואתה יוצא במלוא המהירות.',
+    "קפוץ מערימת המכולות והחזק <kbd>קליק שמאלי</kbd> תוך כדי נפילה: נפתחת כניסה מתחתיך. הסתכל על קיר שפונה אל החבורה ושחרר: אתה יוצא ממנו במלוא המהירות.",
   'hint.slingshot.pad':
-    'הצב את ה<b>יציאה</b> על קיר מול החבורה. עכשיו קפוץ מערימת המכולות ולחץ <kbd>RT</kbd> תוך כדי נפילה: נפתחת כניסה מתחתיך, ואתה יוצא במלוא המהירות.',
+    "קפוץ מערימת המכולות והחזק <kbd>RT</kbd> תוך כדי נפילה: נפתחת כניסה מתחתיך. הסתכל על קיר שפונה אל החבורה ושחרר: אתה יוצא ממנו במלוא המהירות.",
   'hint.slingshot.touch':
-    'הצב את ה<b>יציאה</b> על קיר מול החבורה. עכשיו קפוץ מערימת המכולות וגע ב<b>שער</b> תוך כדי נפילה: נפתחת כניסה מתחתיך, ואתה יוצא במלוא המהירות.',
-  'hint.arena': 'ארבעה רובאים ולוחם עם מגן. כל כדור שהם יורים הוא שלך להשאיל. תמשיך לזוז, תשמור על השרשרת.',
+    "קפוץ מערימת המכולות והחזק <b>פורטל</b> תוך כדי נפילה: נפתחת כניסה מתחתיך. גרור אל קיר שפונה אל החבורה והרם את האצבע: אתה יוצא ממנו במלוא המהירות.",
+  'hint.arena': "ארבעה רובאים ולוחם עם מגן. כל כדור שהם יורים הוא שלך להשאיל. תמשיך לזוז, תשמור על השרשרת.",
   'hint.loop':
-    'הפיר עובר דרך כל הקומות. פתח <b>כניסה</b> בתחתית ו<b>יציאה</b> מעליה: מה שנופל פנימה ממשיך ליפול, מהר יותר בכל סיבוב. הזז את היציאה כדי לירות אותו החוצה.',
+    "הפיר עובר דרך כל הקומות. הסתכל למטה אל התחתית שלו והחזק <kbd>קליק שמאלי</kbd>: נפתח שם בור. כוון את היציאה ממש מעליו (קליק מהיר עושה את זה לבד) וקפוץ פנימה: מהר יותר בכל סיבוב. החזק שוב <kbd>קליק שמאלי</kbd> תוך כדי נפילה כדי לירות את עצמך החוצה.",
+  'hint.loop.pad':
+    "הפיר עובר דרך כל הקומות. הסתכל למטה אל התחתית שלו והחזק <kbd>RT</kbd>: נפתח שם בור. כוון את היציאה ממש מעליו (לחיצה מהירה עושה את זה לבד) וקפוץ פנימה: מהר יותר בכל סיבוב. החזק שוב <kbd>RT</kbd> תוך כדי נפילה כדי לירות את עצמך החוצה.",
+  'hint.loop.touch':
+    "הפיר עובר דרך כל הקומות. הסתכל למטה אל התחתית שלו והחזק <b>פורטל</b>: נפתח שם בור. כוון את היציאה ממש מעליו (נגיעה מהירה עושה את זה לבד) וקפוץ פנימה: מהר יותר בכל סיבוב. החזק שוב <b>פורטל</b> תוך כדי נפילה כדי לירות את עצמך החוצה.",
   'hint.cargo':
-    'מטענים תלויים על העגורן. הצב את ה<b>יציאה</b> מעל השומרים. שים את הכוונת על מטען ולחץ <kbd>קליק שמאלי</kbd>: הרצפה נפתחת מתחתיו והמטען נוחת עליהם.',
+    "מטענים תלויים על העגורן מעל השומרים. שים את הכוונת על מטען ולחץ <kbd>קליק שמאלי</kbd>: הוא נופל לבור ונוחת על הראש הקרוב. אם מחזיקים, מכוונים בעצמך.",
   'hint.cargo.pad':
-    'מטענים תלויים על העגורן. הצב את ה<b>יציאה</b> מעל השומרים. שים את הכוונת על מטען ולחץ <kbd>RT</kbd>: הרצפה נפתחת מתחתיו והמטען נוחת עליהם.',
+    "מטענים תלויים על העגורן מעל השומרים. שים את הכוונת על מטען ולחץ <kbd>RT</kbd>: הוא נופל לבור ונוחת על הראש הקרוב. אם מחזיקים, מכוונים בעצמך.",
   'hint.cargo.touch':
-    'מטענים תלויים על העגורן. הצב את ה<b>יציאה</b> מעל השומרים. הסתכל על מטען וגע ב<b>שער</b>: הרצפה נפתחת מתחתיו והמטען נוחת עליהם.',
+    "מטענים תלויים על העגורן מעל השומרים. הסתכל על מטען וגע ב<b>פורטל</b>: הוא נופל לבור ונוחת על הראש הקרוב. החזק וגרור כדי לכוון בעצמך.",
   'hint.matador':
-    'הענק מסתער בקו ישר. הצב את ה<b>יציאה</b> מעל הים. כשהוא שואג, <kbd>קליק שמאלי</kbd> פותח דלת בדרך שלו. אולה.',
+    "הענק מסתער בקו ישר. כשהוא שואג, לחץ <kbd>קליק שמאלי</kbd>: נפתחת דלת בדרך שלו והיא זורקת אותו מהקצה. אולה.",
   'hint.matador.pad':
-    'הענק מסתער בקו ישר. הצב את ה<b>יציאה</b> מעל הים. כשהוא שואג, <kbd>RT</kbd> פותח דלת בדרך שלו. אולה.',
+    "הענק מסתער בקו ישר. כשהוא שואג, לחץ <kbd>RT</kbd>: נפתחת דלת בדרך שלו והיא זורקת אותו מהקצה. אולה.",
   'hint.matador.touch':
-    'הענק מסתער בקו ישר. הצב את ה<b>יציאה</b> מעל הים. כשהוא שואג, גע ב<b>שער</b> ונפתחת דלת בדרך שלו. אולה.',
+    "הענק מסתער בקו ישר. כשהוא שואג, גע ב<b>פורטל</b>: נפתחת דלת בדרך שלו והיא זורקת אותו מהקצה. אולה.",
   'hint.grenade':
-    'שים לב לקשת: הטבעת מראה איפה הרימון ינחת. כשרימון מתקרב, <kbd>קליק שמאלי</kbd> תופס אותו והוא נופל מה<b>יציאה</b> שלך. הצב את היציאה מעל הרימונאי.',
+    "שים לב לקשת: הטבעת מראה איפה הרימון ינחת. כשרימון מתקרב, לחץ <kbd>קליק שמאלי</kbd>: דלת תפיסה בולעת אותו ומחזירה אותו לזורק.",
   'hint.grenade.pad':
-    'שים לב לקשת: הטבעת מראה איפה הרימון ינחת. כשרימון מתקרב, <kbd>RT</kbd> תופס אותו והוא נופל מה<b>יציאה</b> שלך. הצב את היציאה מעל הרימונאי.',
+    "שים לב לקשת: הטבעת מראה איפה הרימון ינחת. כשרימון מתקרב, לחץ <kbd>RT</kbd>: דלת תפיסה בולעת אותו ומחזירה אותו לזורק.",
   'hint.grenade.touch':
-    'שים לב לקשת: הטבעת מראה איפה הרימון ינחת. כשרימון מתקרב, גע ב<b>שער</b> כדי לתפוס אותו, והוא נופל מה<b>יציאה</b> שלך. הצב את היציאה מעל הרימונאי.',
+    "שים לב לקשת: הטבעת מראה איפה הרימון ינחת. כשרימון מתקרב, גע ב<b>פורטל</b>: דלת תפיסה בולעת אותו ומחזירה אותו לזורק.",
   'hint.shield':
-    'המגן שלו חוסם הכול מלפנים. הצב את ה<b>יציאה</b> מאחוריו, או לחץ <kbd>V</kbd> כדי לדחוף אותו משיווי משקל ולפתוח את הרצפה מתחתיו.',
+    "המגן שלו חוסם הכול מלפנים. <kbd>V</kbd> דוחף אותו משיווי משקל, ואז <kbd>קליק שמאלי</kbd> עליו הוא חטיפה בחינם (כשהוא יציב זה עולה ⚡).",
   'hint.shield.pad':
-    'המגן שלו חוסם הכול מלפנים. הצב את ה<b>יציאה</b> מאחוריו, או לחץ <kbd>RB</kbd> כדי לדחוף אותו משיווי משקל ולפתוח את הרצפה מתחתיו.',
+    "המגן שלו חוסם הכול מלפנים. <kbd>RB</kbd> דוחף אותו משיווי משקל, ואז <kbd>RT</kbd> עליו הוא חטיפה בחינם (כשהוא יציב זה עולה ⚡).",
   'hint.shield.touch':
-    'המגן שלו חוסם הכול מלפנים. הצב את ה<b>יציאה</b> מאחוריו, או גע ב<b>דחיפה</b> כדי להוציא אותו משיווי משקל ולפתוח את הרצפה מתחתיו.',
+    "המגן שלו חוסם הכול מלפנים. <b>דחיפה</b> מוציאה אותו משיווי משקל, ואז <b>פורטל</b> עליו הוא חטיפה בחינם (כשהוא יציב זה עולה ⚡).",
   'hint.firingLine':
-    'הקרן של הצלף נטענת שנייה אחת. כוון את ה<b>יציאה</b> אליו, ואז <kbd>קליק שמאלי</kbd> תופס את הקרן והיא נורית מהצד השני.',
+    "הקרן של הצלף נטענת שנייה אחת. כשהיא ננעלת עליך, לחץ <kbd>קליק שמאלי</kbd>: דלת התפיסה שולחת את הקרן בחזרה לאורך הקו שלו.",
   'hint.firingLine.pad':
-    'הקרן של הצלף נטענת שנייה אחת. כוון את ה<b>יציאה</b> אליו, ואז <kbd>RT</kbd> תופס את הקרן והיא נורית מהצד השני.',
+    "הקרן של הצלף נטענת שנייה אחת. כשהיא ננעלת עליך, לחץ <kbd>RT</kbd>: דלת התפיסה שולחת את הקרן בחזרה לאורך הקו שלו.",
   'hint.firingLine.touch':
-    'הקרן של הצלף נטענת שנייה אחת. כוון את ה<b>יציאה</b> אליו, ואז גע ב<b>שער</b> כדי לתפוס את הקרן, והיא נורית מהצד השני.',
+    "הקרן של הצלף נטענת שנייה אחת. כשהיא ננעלת עליך, גע ב<b>פורטל</b>: דלת התפיסה שולחת את הקרן בחזרה לאורך הקו שלו.",
   'hint.hijack':
-    'שערי קסלר מביאים תגבורת. לחץ <kbd>F</kbd> ליד הלוח, או פתח את ה<b>כניסה</b> שלך על השער: כל מי שעובר בו יוצא עכשיו מהיציאה שלך. רצוי מעל התהום.',
+    "שערי קסלר מביאים תגבורת. לחץ <kbd>F</kbd> ליד הלוח, או שים את הכוונת על השער ולחץ <kbd>קליק שמאלי</kbd>: כל מי שעובר בו יוצא עכשיו מהיציאה שלך. רצוי מעל התהום.",
   'hint.hijack.pad':
-    'שערי קסלר מביאים תגבורת. לחץ <kbd>X</kbd> ליד הלוח, או פתח את ה<b>כניסה</b> שלך על השער: כל מי שעובר בו יוצא עכשיו מהיציאה שלך. רצוי מעל התהום.',
+    "שערי קסלר מביאים תגבורת. לחץ <kbd>X</kbd> ליד הלוח, או שים את הכוונת על השער ולחץ <kbd>RT</kbd>: כל מי שעובר בו יוצא עכשיו מהיציאה שלך. רצוי מעל התהום.",
   'hint.hijack.touch':
-    'שערי קסלר מביאים תגבורת. גע ב<b>פעולה</b> ליד הלוח, או פתח את ה<b>כניסה</b> שלך על השער: כל מי שעובר בו יוצא עכשיו מהיציאה שלך. רצוי מעל התהום.',
-  'hint.jammer': 'בתוך הבועה של המשבש לא נפתח שום פורטל. פתח את שלך מחוץ לבועה ושלח דברים פנימה: רימונים, גופות, מטענים.',
+    "שערי קסלר מביאים תגבורת. גע ב<b>פעולה</b> ליד הלוח, או הסתכל על השער וגע ב<b>פורטל</b>: כל מי שעובר בו יוצא עכשיו מהיציאה שלך. רצוי מעל התהום.",
+  'hint.jammer': "בתוך הבועה של המשבש לא נפתח שום פורטל. פתח את שלך מחוץ לבועה ושלח דברים פנימה: רימונים, גופות, מטענים.",
   'hint.borrowedGun':
-    'הצריח לא מפסיק לירות. כוון את ה<b>יציאה</b> אל החברים שלו, ואז <kbd>קליק שמאלי</kbd> תופס את הצרור. רובה בהשאלה.',
+    "הצריח לא מפסיק לירות. כשהוא ננעל עליך, החזק <kbd>קליק שמאלי</kbd>: התפיסה לוקחת את הצרור, והקצה השני הולך לאן שאתה מסתכל. הסתכל על החברים שלו. רובה בהשאלה.",
   'hint.borrowedGun.pad':
-    'הצריח לא מפסיק לירות. כוון את ה<b>יציאה</b> אל החברים שלו, ואז <kbd>RT</kbd> תופס את הצרור. רובה בהשאלה.',
+    "הצריח לא מפסיק לירות. כשהוא ננעל עליך, החזק <kbd>RT</kbd>: התפיסה לוקחת את הצרור, והקצה השני הולך לאן שאתה מסתכל. הסתכל על החברים שלו. רובה בהשאלה.",
   'hint.borrowedGun.touch':
-    'הצריח לא מפסיק לירות. כוון את ה<b>יציאה</b> אל החברים שלו, ואז גע ב<b>שער</b> כדי לתפוס את הצרור. רובה בהשאלה.',
+    "הצריח לא מפסיק לירות. כשהוא ננעל עליך, החזק <b>פורטל</b>: התפיסה לוקחת את הצרור, והקצה השני הולך לאן שאתה גורר את המבט. הסתכל על החברים שלו. רובה בהשאלה.",
   'hint.boss':
-    'ווֹס תופס בפורטל שלו כל מה שנורה ישר עליו. תפגע בו מאחור או מלמעלה. נתקע באמצע הפורטל שלך? <kbd>X</kbd> סוגר אותו עליו.',
+    "ווֹס תופס בפורטל שלו כל מה שנורה ישר עליו. תפגע בו מאחור או מלמעלה; כשהוא המום אפשר לחטוף אותו. נתקע באמצע הפורטל שלך? <kbd>X</kbd> סוגר אותו עליו.",
   'hint.boss.pad':
-    'ווֹס תופס בפורטל שלו כל מה שנורה ישר עליו. תפגע בו מאחור או מלמעלה. נתקע באמצע הפורטל שלך? <kbd>LB</kbd> סוגר אותו עליו.',
+    "ווֹס תופס בפורטל שלו כל מה שנורה ישר עליו. תפגע בו מאחור או מלמעלה; כשהוא המום אפשר לחטוף אותו. נתקע באמצע הפורטל שלך? <kbd>LB</kbd> סוגר אותו עליו.",
   'hint.boss.touch':
-    'ווֹס תופס בפורטל שלו כל מה שנורה ישר עליו. תפגע בו מאחור או מלמעלה. נתקע באמצע הפורטל שלך? <b>✕</b> סוגר אותו עליו.',
-  'hint.leap': 'רוץ וקפוץ מהגג. תוך כדי נפילה, <kbd>קליק שמאלי</kbd> פותח כניסה מתחתיך. תסמוך על הפורטל.',
-  'hint.leap.pad': 'רוץ וקפוץ מהגג. תוך כדי נפילה, <kbd>RT</kbd> פותח כניסה מתחתיך. תסמוך על הפורטל.',
-  'hint.leap.touch': 'רוץ וקפוץ מהגג. תוך כדי נפילה, גע ב<b>שער</b> ונפתחת כניסה מתחתיך. תסמוך על הפורטל.',
+    "ווֹס תופס בפורטל שלו כל מה שנורה ישר עליו. תפגע בו מאחור או מלמעלה; כשהוא המום אפשר לחטוף אותו. נתקע באמצע הפורטל שלך? <b>✕</b> סוגר אותו עליו.",
+  'hint.leap': "רוץ וקפוץ מהגג. תוך כדי נפילה, <kbd>קליק שמאלי</kbd> פותח כניסה מתחתיך. תסמוך על הפורטל.",
+  'hint.leap.pad': "רוץ וקפוץ מהגג. תוך כדי נפילה, <kbd>RT</kbd> פותח כניסה מתחתיך. תסמוך על הפורטל.",
+  'hint.leap.touch': "רוץ וקפוץ מהגג. תוך כדי נפילה, גע ב<b>פורטל</b> ונפתחת כניסה מתחתיך. תסמוך על הפורטל.",
+  'hint.strikes':
+    "<b>מתקפות</b> עולות טעינה ⚡ (חיסולים עם טריקים משלך ממלאים אותה). כוון ליד אויב: <kbd>קליק ימני</kbd> <b>מחזיר</b>: הנשק שלו יורה בו · <kbd>Q</kbd> <b>לולאה</b>: הוא נופל בלי סוף (<kbd>Q</kbd> שוב: גייזר, החזקה: תותח אנושי) · <kbd>E</kbd> <b>החלפה</b>: מתחלפים במקומות · <kbd>R</kbd> <b>זינוק</b>: עפים לתוכו.",
+  'hint.strikes.pad':
+    "<b>מתקפות</b> עולות טעינה ⚡ (חיסולים עם טריקים משלך ממלאים אותה). כוון ליד אויב: <kbd>LT</kbd> <b>מחזיר</b>: הנשק שלו יורה בו · <kbd>Y</kbd> <b>לולאה</b>: הוא נופל בלי סוף (<kbd>Y</kbd> שוב: גייזר, החזקה: תותח אנושי) · <kbd>◀</kbd> <b>החלפה</b>: מתחלפים במקומות · <kbd>▶</kbd> <b>זינוק</b>: עפים לתוכו.",
+  'hint.strikes.touch':
+    "<b>מתקפות</b> (הכפתורים העגולים משמאל) עולות טעינה ⚡; חיסולים עם טריקים משלך ממלאים אותה. כוון ליד אויב: <b>מחזיר</b>: הנשק שלו יורה בו · <b>לולאה</b>: הוא נופל בלי סוף (שוב: גייזר, החזקה: תותח אנושי) · <b>החלפה</b>: מתחלפים במקומות · <b>זינוק</b>: עפים לתוכו.",
+  'hint.grabHold': "תמשיך להחזיק: הזמן מאט, תסתכל לאן לזרוק אותו (הקשת המנוקדת מראה איפה הוא ינחת). שחרר כדי לזרוק.",
+  'hint.loopAgain': "לולאה שוב: נגיעה קצרה יורה אותו למעלה כגייזר, החזקה מכוונת תותח אנושי.",
+  'hint.doorPlaced':
+    "הפורטלים שלך נשארים פתוחים עד הפורטל הבא. <kbd>X</kbd> סוגר אותם, וחותך את מה שנמצא באמצע.",
+  'hint.doorPlaced.pad':
+    "הפורטלים שלך נשארים פתוחים עד הפורטל הבא. <kbd>LB</kbd> סוגר אותם, וחותך את מה שנמצא באמצע.",
+  'hint.doorPlaced.touch':
+    "הפורטלים שלך נשארים פתוחים עד הפורטל הבא. <b>✕</b> סוגר אותם, וחותך את מה שנמצא באמצע.",
 
   'aim.tooHigh': 'מעל הרגליים שלך: עלה גבוה יותר קודם',
   'aim.range': 'מחוץ לטווח',
@@ -562,20 +599,24 @@ const HE: Record<string, string> = {
   'aim.space': 'אין מספיק מקום',
   'aim.noSurface': 'אין על מה לפתוח',
 
-  'gate.air': 'כניסה מתחתיך',
-  'gate.catch': 'תפוס את זה',
-  'gate.trapdoor': 'מלכודת מתחתיו',
-  'gate.door': 'דלת לפניך',
+  'portal.air': 'אוויר',
+  'portal.catch': 'תפיסה',
+  'portal.grab': 'חטיפה',
+  'portal.load': 'מטען',
+  'portal.hijack': 'השתלטות',
+  'portal.hole': 'בור',
+  'portal.door': 'דלת',
+  'portal.anchored': 'הוא לא זז (קודם תהמם אותו)',
+  'portal.noCharge': 'הוא נלחם בך: חטיפה שלו עולה ⚡',
+  'portal.noFloor': 'אין מתחתיו רצפה לפתוח',
+  'portal.nowhere': 'אין לאן לזרוק',
+  'portal.loopLow': 'נמוך מדי ללולאה: כוון את היציאה בעצמך',
+  'portal.paid': '⚡ −1: הוא נלחם בך',
   'gate.steady': 'יציב: הוצא אותו משיווי משקל',
   'gate.enemyClose': 'קרוב מדי לאויב',
   'gate.blocked': 'משובש: אין פורטלים כאן',
   'gate.noSpace': 'אין מקום לפורטל',
   'gate.range': 'מחוץ לטווח',
-  'gate.noExit': 'קודם הצב יציאה',
-  'gateLabel.air': 'אוויר',
-  'gateLabel.catch': 'תפיסה',
-  'gateLabel.trapdoor': 'מלכודת',
-  'gateLabel.door': 'דלת',
 
   'outcome.splash': 'טביעה',
   'outcome.void': 'תהום',
@@ -604,23 +645,24 @@ const HE: Record<string, string> = {
   'obj.boss': 'הפל את המנהל ווֹס',
   'obj.escape': 'קפוץ. תסמוך על הפורטל.',
   'obj.next': 'המשך לאזור הבא',
-  'strike.mirror': 'מחזיר',
-  'strike.geyser': 'גייזר',
-  'strike.drop': 'השלכה',
+  'strike.reflect': 'מחזיר',
+  'strike.loop': 'לולאה',
+  'strike.loop.again': 'שגר!',
+  'strike.swap': 'החלפה',
+  'strike.dash': 'זינוק',
   'strike.cooldown': 'עוד לא מוכן',
   'strike.noCharge': 'אין טעינה: חיסול עם טריק ממלא אחת',
   'strike.noTarget': 'אין אויב ליד הכוונת',
   'strike.tooClose': 'קרוב מדי',
+  'strike.tooHigh': 'גבוה מדי מעליך',
+  'strike.grounded': 'קודם תעמוד על משהו',
   'strike.noFloor': 'הוא לא עומד על רצפה',
-  'strike.noRoom': 'אין מקום מעליו',
+  'strike.noRoom': 'אין לזה מקום כאן',
   'strike.anchored': 'הוא לא זז (קודם תהמם אותו)',
-  'hint.strikes': '<b>מתקפות</b>: כוונו ליד אויב ולחצו. <b>1 מחזיר</b> מחזיר לו את הכדורים · <b>2 גייזר</b> זורק אותו לשמיים · <b>3 השלכה</b> זורקת אותו מהקצה (או מהשמיים). כל מתקפה עולה טעינה; חיסולים עם טריקים משלכם ממלאים אותה.',
-  'hint.strikes.pad': '<b>מתקפות</b>: כוונו ליד אויב ולחצו. <b>R3 מחזיר</b> מחזיר לו את הכדורים · <b>◀ גייזר</b> זורק אותו לשמיים · <b>▶ השלכה</b> זורקת אותו מהקצה.',
-  'hint.strikes.touch': '<b>מתקפות</b> (הכפתורים משמאל): כוונו ליד אויב ולחצו. <b>מחזיר</b> מחזיר לו את הכדורים · <b>גייזר</b> זורק אותו לשמיים · <b>השלכה</b> זורקת אותו מהקצה.',
-  'ctl.strikes': 'מתקפות: מחזיר / גייזר / השלכה',
-  'ctl.strike1': 'מחזיר: הכדורים שלו חוזרים אליו',
-  'ctl.strike2': 'גייזר: זורק אותו לשמיים',
-  'ctl.strike3': 'השלכה: זורקת אותו מהקצה / מהשמיים',
+  'ctl.strike1': 'מחזיר: הנשק שלו יורה בו',
+  'ctl.strike2': 'לולאה: הוא נופל בלי סוף (שוב: גייזר, החזקה: תותח אנושי)',
+  'ctl.strike3': 'החלפה: מתחלפים איתו במקומות',
+  'ctl.strike4': 'זינוק: יוצאים מפורטל ישר לתוכו',
 
   'toast.checkpoint': 'נקודת שמירה',
   'toast.hijack': 'השתלטת על השער',
@@ -639,6 +681,7 @@ const HE: Record<string, string> = {
   'bark.lost': 'איבדתי אותו.',
   'bark.mateDown': 'יש נפגע!',
   'bark.what': 'מה זה היה, לעזאזל?',
+  'bark.grabbed': 'הרצפה נעלמה!',
   'bark.boss1': 'הכפפה הזאת שייכת לקסלר. באתי לקחת אותה בחזרה.',
   'bark.boss2': 'אתה חושב שהמצאת את הטריקים האלה? אני כתבתי את המדריך.',
   'bark.boss3': 'די! אני אקרע את כל המגדל הזה!',
@@ -667,8 +710,7 @@ const HE: Record<string, string> = {
   'hud.drop': 'נפילה',
   'hud.charged': 'טעון',
 
-  'touch.rift': 'פורטל',
-  'touch.gate': 'שער',
+  'touch.portal': 'פורטל',
   'touch.jump': 'קפיצה',
   'touch.shove': 'דחיפה',
   'touch.crouch': 'כריעה',
@@ -687,32 +729,30 @@ const HE: Record<string, string> = {
   'ctl.sprint': 'ריצה',
   'ctl.crouch': 'כריעה',
   'ctl.shove': 'דחיפה: זינוק שמוציא אויבים משיווי משקל',
-  'ctl.aim': 'כיוון היציאה (הזמן מאט)',
-  'ctl.place': 'הצבת היציאה',
-  'ctl.gate': 'שער: פתיחת הכניסה (אוויר, תפיסה, מלכודת, דלת)',
-  'ctl.flip': 'היפוך היציאה (צוהר / דלת)',
-  'ctl.dist': 'מרחק באוויר',
-  'ctl.close': 'סגירת הפורטל (חותך את מה שבאמצע)',
+  'ctl.portal': 'פורטל: לחיצה = הכניסה (לפי מה שאתה מכוון אליו) · החזקה = כיוון היציאה בהילוך איטי · שחרור = היציאה',
+  'ctl.cancel': 'שחרור פורטל מוחזק בלי יציאה',
+  'ctl.flip': 'היפוך היציאה (צוהר / דלת) בזמן החזקה',
+  'ctl.dist': 'מרחק היציאה בזמן החזקה',
+  'ctl.close': 'סגירת הפורטלים שלך (חותך את מה שבאמצע)',
   'ctl.action': 'פעולה: חיסול, תפיסה, זריקה, השתלטות, מעלית',
   'ctl.vision': 'ראיית פורטל',
   'ctl.clip': 'שמירת קליפ',
   'ctl.photo': 'מצב צילום',
   'ctl.pause': 'הפסקה',
   'key.mouse': 'עכבר',
-  'key.rmb': 'קליק ימני (החזקה)',
-  'key.lmbAim': 'קליק שמאלי בזמן כיוון',
-  'key.lmb': 'קליק שמאלי',
+  'key.lmb': 'קליק שמאלי (החזקה)',
+  'key.rmbHeld': 'קליק ימני בזמן החזקה',
   'key.wheel': 'גלגלת',
   'key.mmb': 'X / לחיצה על הגלגלת',
   'key.space': 'רווח',
   'ctl.padLine':
-    'LT כיוון · RT הצבה / שער · LB סגירה · RB דחיפה · A קפיצה · X פעולה · B כריעה · Y היפוך · L3 ריצה · חץ ↓ ראיית פורטל · חץ ↑ צילום · חצים ←/→ מרחק בזמן כיוון, אחרת גייזר / השלכה · R3 מחזיר · View קליפ · Start הפסקה',
+    'RT פורטל (בזמן החזקה: LT ביטול · Y היפוך · חצים ←/→ מרחק) · LT מחזיר · Y לולאה · חץ ← החלפה · חץ → זינוק · LB סגירה · RB דחיפה · A קפיצה · X פעולה · B כריעה · L3 ריצה · חץ ↓ ראיית פורטל · חץ ↑ צילום · View קליפ · Start הפסקה',
   'ctl.touch.left': 'אגודל שמאל',
   'ctl.touch.right': 'צד ימין',
   'ctl.touch.stick': 'תנועה. דחוף עד הסוף כדי לרוץ.',
   'ctl.touch.look': 'גרור כדי להסתכל',
-  'ctl.touch.rift': 'החזק וגרור: כיוון היציאה. שחרר: הצבה. החלק אל ✕: ביטול.',
-  'ctl.touch.gate': 'פתיחת הכניסה. התווית מראה מה היא תעשה.',
+  'ctl.touch.portal': 'נגיעה: פורטל לפי מה שאתה מסתכל עליו. החזקה וגרירה: כיוון היציאה (הזמן מאט). הרמה: פתיחה. החלקה אל ✕: ביטול.',
+  'ctl.touch.strikes': 'מתקפות: החזק לולאה כדי לכוון את התותח',
   'ctl.touch.jump': 'קפיצה / טיפוס',
   'ctl.touch.shove': 'זינוק שמוציא אויבים משיווי משקל',
   'ctl.touch.close': 'סגירת הפורטל (חותך)',

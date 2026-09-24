@@ -17,14 +17,18 @@ export const LOOK = {
  * Unified input for keyboard + mouse, gamepad and touch. Systems read intent
  * (move vector, look delta, actions) and never care which device made it.
  *
- * Desktop: RMB held = aim; LMB = place while aiming, else gate; E flip;
- * wheel = air distance; X / MMB close; F action; Space jump; Shift sprint;
- * C / Ctrl crouch; V shove; Tab vision; R clip; K photo; Esc / P pause.
+ * Desktop: LMB = PORTAL (press: the entrance; hold: aim the exit in slow
+ * motion; release: the exit). While it's held: RMB cancels, wheel = exit
+ * distance, G flips hatch / door. STRIKES: RMB (or 1) REFLECT, Q (2) LOOP,
+ * E (3) SWAP, R (4) DASH; mouse back / forward = SWAP / DASH. X / MMB close
+ * your rifts; F action; Space jump; Shift sprint; C crouch; V shove; Tab
+ * vision; T clip; K photo; Esc / P pause.
  *
- * Gamepad (standard mapping): LT aim, RT place/gate, LB close, RB shove,
- * A jump, X action, B crouch, Y flip, L3 sprint (latches until the stick is
- * released), D-pad down vision, D-pad up photo, D-pad left/right air
- * distance, View clip, Start pause; right stick look, left stick move.
+ * Gamepad (standard mapping): RT PORTAL (held: LT cancels, Y flips, D-pad
+ * left/right exit distance); LT REFLECT, Y LOOP, D-pad left/right SWAP /
+ * DASH; LB close, RB shove, A jump, X action, B crouch, L3 sprint (latches
+ * until the stick is released), D-pad down vision, D-pad up photo, View
+ * clip, Start pause; right stick look, left stick move.
  */
 export class Input {
   moveX = 0;
@@ -51,10 +55,11 @@ export class Input {
   onDeviceChange: ((d: Device) => void) | null = null;
 
   private device: Device = 'kbm';
-  /** What LMB pressed ('place' or 'gate'), so its release ends the same action. */
-  private lmbAction: Action | null = null;
+  /** What RMB pressed (REFLECT, or nothing when it cancelled a held PORTAL), so its release ends the same action. */
+  private rmbAction: Action | null = null;
   private padPrev: boolean[] = [];
-  private padTrigger: Action | null = null;
+  /** Per pad button: the action its press started (the dual-use ones), so its release ends it. */
+  private padHeld: (Action | null)[] = [];
   private padSprint = false;
 
   private keyMap: Record<string, Action> = {
@@ -63,21 +68,22 @@ export class Input {
     ShiftRight: 'sprint',
     KeyC: 'crouch',
     KeyV: 'shove',
-    KeyE: 'flip',
+    KeyG: 'flip',
     KeyX: 'close',
     KeyF: 'action',
     Tab: 'vision',
-    KeyR: 'clip',
+    KeyT: 'clip',
     KeyK: 'photo',
     Escape: 'pause',
     KeyP: 'pause',
-    // fixed rift attacks
+    // the STRIKES
     Digit1: 'strike1',
-    KeyQ: 'strike1',
     Digit2: 'strike2',
-    KeyG: 'strike2',
+    KeyQ: 'strike2',
     Digit3: 'strike3',
-    KeyZ: 'strike3',
+    KeyE: 'strike3',
+    Digit4: 'strike4',
+    KeyR: 'strike4',
   };
 
   constructor(private canvas: HTMLElement) {
@@ -98,21 +104,27 @@ export class Input {
     canvas.addEventListener('mousedown', (e) => {
       if (!this.mouseLive()) return;
       this.lastDevice = 'kbm';
-      if (e.button === 2) this.down('aim');
-      else if (e.button === 0) {
-        this.lmbAction = this.held.has('aim') ? 'place' : 'gate';
-        this.down(this.lmbAction);
+      if (e.button === 0) this.down('portal');
+      else if (e.button === 2) {
+        // with the PORTAL in hand it lets go of it; otherwise it's REFLECT
+        if (this.held.has('portal')) {
+          this.tap('close');
+          this.rmbAction = null;
+        } else {
+          this.rmbAction = 'strike1';
+          this.down('strike1');
+        }
       } else if (e.button === 1) {
         e.preventDefault();
         this.down('close');
-      } else if (e.button === 3) this.tap('strike2'); // mouse back: GEYSER
-      else if (e.button === 4) this.tap('strike3'); // mouse forward: DROP
+      } else if (e.button === 3) this.tap('strike3'); // mouse back: SWAP
+      else if (e.button === 4) this.tap('strike4'); // mouse forward: DASH
     });
     window.addEventListener('mouseup', (e) => {
-      if (e.button === 2) this.up('aim');
-      else if (e.button === 0) {
-        if (this.lmbAction) this.up(this.lmbAction);
-        this.lmbAction = null;
+      if (e.button === 0) this.up('portal');
+      else if (e.button === 2) {
+        if (this.rmbAction) this.up(this.rmbAction);
+        this.rmbAction = null;
       } else if (e.button === 1) this.up('close');
     });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -208,8 +220,8 @@ export class Input {
   releaseAll() {
     this.keys.clear();
     for (const a of [...this.held]) this.up(a);
-    this.lmbAction = null;
-    this.padTrigger = null;
+    this.rmbAction = null;
+    this.padHeld.length = 0;
     this.padSprint = false;
     this.touchMove.x = this.touchMove.y = 0;
   }
@@ -258,7 +270,7 @@ export class Input {
     if (anyBtn || Math.abs(lx) + Math.abs(ly) + Math.abs(rx) + Math.abs(ry) > 0) this.lastDevice = 'pad';
     if (this.device !== 'pad') return;
     setMove(lx, -ly);
-    const speed = LOOK.pad * (this.held.has('aim') ? LOOK.padAimScale : 1) * this.sensitivity;
+    const speed = LOOK.pad * (this.held.has('portal') ? LOOK.padAimScale : 1) * this.sensitivity;
     this.lookX += Math.sign(rx) * rx * rx * speed * dt;
     this.lookY += Math.sign(ry) * ry * ry * speed * dt * 0.7 * (this.invertY ? -1 : 1);
 
@@ -269,33 +281,39 @@ export class Input {
       this.padPrev[i] = b;
     };
     const hold = (i: number, a: Action) => edge(i, () => this.down(a), () => this.up(a));
-    hold(6, 'aim'); // LT
-    // RT: place while aiming, else gate (like LMB)
-    edge(
-      7,
-      () => {
-        this.padTrigger = this.held.has('aim') ? 'place' : 'gate';
-        this.down(this.padTrigger);
-      },
-      () => {
-        if (this.padTrigger) this.up(this.padTrigger);
-        this.padTrigger = null;
-      },
-    );
+    // a button that means one thing with the PORTAL in hand and another without
+    const dual = (i: number, withPortal: () => void, a: Action) =>
+      edge(
+        i,
+        () => {
+          if (this.held.has('portal')) {
+            withPortal();
+            this.padHeld[i] = null;
+          } else {
+            this.padHeld[i] = a;
+            this.down(a);
+          }
+        },
+        () => {
+          const was = this.padHeld[i];
+          if (was) this.up(was);
+          this.padHeld[i] = null;
+        },
+      );
+    hold(7, 'portal'); // RT
+    dual(6, () => this.tap('close'), 'strike1'); // LT: REFLECT (cancels a held PORTAL)
+    dual(3, () => this.tap('flip'), 'strike2'); // Y: LOOP (flips a held PORTAL's exit)
+    dual(14, () => (this.wheel -= 1), 'strike3'); // D-pad left: SWAP (exit nearer)
+    dual(15, () => (this.wheel += 1), 'strike4'); // D-pad right: DASH (exit further)
     hold(4, 'close'); // LB
     hold(5, 'shove'); // RB
     hold(0, 'jump'); // A
     hold(2, 'action'); // X
     hold(1, 'crouch'); // B
-    hold(3, 'flip'); // Y
     hold(13, 'vision'); // D-pad down
     hold(12, 'photo'); // D-pad up
     hold(8, 'clip'); // View / Back
     hold(9, 'pause'); // Start
-    // D-pad left/right: exit distance while aiming, else the GEYSER / DROP strikes; R3: MIRROR
-    edge(14, () => (this.held.has('aim') ? (this.wheel -= 1) : this.tap('strike2')), null);
-    edge(15, () => (this.held.has('aim') ? (this.wheel += 1) : this.tap('strike3')), null);
-    edge(11, () => this.tap('strike1'), null);
     // L3 latches sprint until pressed again or the stick is let go
     edge(
       10,

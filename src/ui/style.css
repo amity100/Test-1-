@@ -192,7 +192,12 @@ html[dir='rtl'] .h-clip { letter-spacing: .04em; }
 .h-gate.m-catch { color: #1b0d02; background: var(--entr); text-shadow: none; animation: urgentBg .42s ease-in-out infinite alternate; }
 .h-gate.m-catch::before { border-color: #1b0d02; }
 .h-gate.refuse { color: rgba(255, 255, 255, 0.85); background: rgba(0, 0, 0, 0.5); text-shadow: none; }
-.h-gate.refuse.m-trapdoor { color: #ffd6a8; }
+.h-gate.refuse.m-grab { color: #ffd6a8; }
+.h-gate.m-grab, .h-gate.m-load, .h-gate.m-hijack { color: #ffcf8a; }
+.h-gate.m-door, .h-gate.m-hole { opacity: .7; }
+.h-gate.m-air { color: #1b0d02; background: var(--exit); text-shadow: none; }
+.h-gate.m-air::before { border-color: #04121e; }
+.h-gate.paid { color: #fff1c9; }
 .hud.aiming .h-gate { opacity: 0; }
 @keyframes urgentBg { from { opacity: 1; } to { opacity: .72; } }
 
@@ -364,13 +369,12 @@ html[dir='rtl'] .t-btn { font-family: 'Heebo', 'Oxanium', sans-serif; letter-spa
 .t-rift svg { width: 44%; height: 44%; color: var(--exit); }
 .t-rift.down { transform: scale(.94); background: rgba(56, 182, 255, 0.55); color: #fff; }
 .t-rift.down svg { color: #fff; }
-.t-gate { right: 8px; bottom: 98px; width: 78px; height: 78px; border: 3px solid var(--entr); color: #ffd6b0; background: radial-gradient(circle, rgba(255, 138, 31, 0.3) 0%, rgba(34, 16, 4, 0.5) 72%); }
-.t-gate svg { color: var(--entr); }
-.t-gate.down { background: rgba(255, 138, 31, 0.6); color: #fff; }
-.t-cap { display: none; position: absolute; left: 50%; bottom: -10px; transform: translateX(-50%); padding: 2px 7px 1px; border-radius: 9px; background: var(--entr); color: #1b0d02; font-size: 9px; letter-spacing: .06em; text-shadow: none; white-space: nowrap; }
-.t-gate.has-cap .t-cap { display: block; }
-.t-gate::after, .t-clip::after { content: ''; position: absolute; inset: -2px; border-radius: 50%; background: var(--entr); opacity: 0; pointer-events: none; }
-.t-gate.urgent::after { animation: pulseO .4s ease-in-out infinite alternate; }
+.t-cap { display: none; position: absolute; left: 50%; bottom: -10px; transform: translateX(-50%); padding: 2px 7px 1px; border-radius: 9px; background: var(--exit); color: #04121e; font-size: 9px; letter-spacing: .06em; text-shadow: none; white-space: nowrap; }
+.t-rift.has-cap .t-cap { display: block; }
+.t-rift.grab { border-color: var(--entr); }
+.t-rift.grab .t-cap { background: var(--entr); color: #1b0d02; }
+.t-rift::after, .t-clip::after { content: ''; position: absolute; inset: -2px; border-radius: 50%; background: var(--entr); opacity: 0; pointer-events: none; }
+.t-rift.urgent::after { animation: pulseO .4s ease-in-out infinite alternate; }
 @keyframes pulseO { from { opacity: 0; } to { opacity: .45; } }
 .t-shove { right: 106px; bottom: 110px; width: 62px; height: 62px; }
 .t-crouch { right: 190px; bottom: 102px; width: 48px; height: 48px; }
@@ -748,8 +752,13 @@ html[dir='rtl'] .strikes .sk { font-family: 'Heebo', 'Oxanium', sans-serif; lett
 .strikes .sk.down { transform: scale(.88); }
 .strikes .sk.pop { animation: skPop .35s cubic-bezier(.2, 1.6, .4, 1); }
 @keyframes skPop { from { transform: scale(1.25); } to { transform: none; } }
-.strikes.sk-touch { left: calc(var(--sl) + 14px); bottom: calc(var(--sb) + 176px); transform: none; gap: 10px; }
-.strikes.sk-touch .sk { width: 58px; height: 58px; }
+.strikes .sk.armed { border-color: var(--exit); color: #fff; box-shadow: 0 0 16px rgba(56, 182, 255, 0.75); animation: skArm .45s ease-in-out infinite alternate; }
+@keyframes skArm { from { box-shadow: 0 0 8px rgba(56, 182, 255, 0.5); } to { box-shadow: 0 0 20px rgba(56, 182, 255, 0.95); } }
+.strikes { transition: opacity .12s; }
+.strikes.dim { opacity: .22; }
+.strikes.dim .sk { pointer-events: none; }
+.strikes.sk-touch { left: calc(var(--sl) + 12px); bottom: calc(var(--sb) + 178px); transform: none; gap: 8px; }
+.strikes.sk-touch .sk { width: 54px; height: 54px; }
 .strikes.sk-touch .sk kbd { display: none; }
 .sk-reticle { position: absolute; left: 0; top: 0; width: 46px; height: 46px; margin: -23px 0 0 -23px; z-index: 11; pointer-events: none; opacity: 0; transition: opacity .12s; }
 .sk-reticle.on { opacity: 1; }

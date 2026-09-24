@@ -130,6 +130,10 @@ export class Enemy implements EnemyView {
   loops = 0;
   viaTrapdoor = false;
   matador = false;
+  /** In the PORTAL's grip: sunk into the floor end under him, doing nothing. */
+  held = false;
+  /** How deep his model is drawn into the floor (m, visual only). */
+  sink = 0;
 
   // --- boss
   phase: 1 | 2 | 3 = 1;

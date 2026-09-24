@@ -339,17 +339,17 @@ export class Menu {
       body = `<div class="ctl-grid">
         ${row('WASD', 'ctl.move')}${row('key.mouse', 'ctl.look')}${row('key.space', 'ctl.jump')}${row('Shift', 'ctl.sprint')}
         ${row('C / Ctrl', 'ctl.crouch')}${row('V', 'ctl.shove')}
-        ${row('key.rmb', 'ctl.aim', true)}${row('key.lmbAim', 'ctl.place', true)}${row('key.lmb', 'ctl.gate', true)}
-        ${row('E', 'ctl.flip', true)}${row('key.wheel', 'ctl.dist', true)}${row('key.mmb', 'ctl.close', true)}
-        ${row('1 / Q', 'ctl.strike1', true)}${row('2 / G', 'ctl.strike2', true)}${row('3 / Z', 'ctl.strike3', true)}
-        ${row('F', 'ctl.action')}${row('Tab', 'ctl.vision')}${row('R', 'ctl.clip')}${row('K', 'ctl.photo')}${row('Esc', 'ctl.pause')}
+        ${row('key.lmb', 'ctl.portal', true)}${row('key.rmbHeld', 'ctl.cancel', true)}
+        ${row('G', 'ctl.flip', true)}${row('key.wheel', 'ctl.dist', true)}${row('key.mmb', 'ctl.close', true)}
+        ${row('RMB / 1', 'ctl.strike1', true)}${row('Q / 2', 'ctl.strike2', true)}${row('E / 3', 'ctl.strike3', true)}${row('R / 4', 'ctl.strike4', true)}
+        ${row('F', 'ctl.action')}${row('Tab', 'ctl.vision')}${row('T', 'ctl.clip')}${row('K', 'ctl.photo')}${row('Esc', 'ctl.pause')}
       </div><p class="ctl-note">${esc(t('ctl.tab.pad'))}: ${esc(t('ctl.padLine'))}</p>`;
     } else if (tab === 'pad') {
       body = `<div class="ctl-grid">
         ${row('L', 'ctl.move')}${row('R', 'ctl.look')}${row('A', 'ctl.jump')}${row('L3', 'ctl.sprint')}${row('B', 'ctl.crouch')}${row('RB', 'ctl.shove')}
-        ${row('LT', 'ctl.aim', true)}${row('RT', 'ctl.place', true)}${row('RT', 'ctl.gate', true)}${row('Y', 'ctl.flip', true)}
-        ${row('D-pad ← →', 'ctl.dist', true)}${row('LB', 'ctl.close', true)}
-        ${row('R3', 'ctl.strike1', true)}${row('D-pad ←', 'ctl.strike2', true)}${row('D-pad →', 'ctl.strike3', true)}
+        ${row('RT', 'ctl.portal', true)}${row('RT + LT', 'ctl.cancel', true)}${row('RT + Y', 'ctl.flip', true)}
+        ${row('RT + D-pad ← →', 'ctl.dist', true)}${row('LB', 'ctl.close', true)}
+        ${row('LT', 'ctl.strike1', true)}${row('Y', 'ctl.strike2', true)}${row('D-pad ←', 'ctl.strike3', true)}${row('D-pad →', 'ctl.strike4', true)}
         ${row('X', 'ctl.action')}${row('D-pad ↓', 'ctl.vision')}
         ${row('View', 'ctl.clip')}${row('D-pad ↑', 'ctl.photo')}${row('Start', 'ctl.pause')}
       </div><p class="ctl-note">${esc(t('ctl.padLine'))}</p>`;
@@ -358,9 +358,9 @@ export class Menu {
         `<div class="${hl ? 'hl' : ''}"><b dir="auto">${glyph}</b><span>${esc(t(desc))}</span></div>`;
       body = `<div class="ctl-grid touchctl">
         ${tr(`◯ ${esc(t('ctl.touch.left'))}`, 'ctl.touch.stick')}${tr(`☝ ${esc(t('ctl.touch.right'))}`, 'ctl.touch.look')}
-        ${tr(`<i class="tg ex"></i>${esc(t('touch.rift'))}`, 'ctl.touch.rift', true)}${tr(`<i class="tg en"></i>${esc(t('touch.gate'))}`, 'ctl.touch.gate', true)}
+        ${tr(`<i class="tg ex"></i>${esc(t('touch.portal'))}`, 'ctl.touch.portal', true)}
         ${tr('✕', 'ctl.touch.close', true)}${tr('⇄', 'ctl.touch.flip', true)}
-        ${tr(esc(t('strike.mirror')), 'ctl.strike1', true)}${tr(esc(t('strike.geyser')), 'ctl.strike2', true)}${tr(esc(t('strike.drop')), 'ctl.strike3', true)}
+        ${tr(esc(t('strike.reflect')), 'ctl.strike1', true)}${tr(esc(t('strike.loop')), 'ctl.strike2', true)}${tr(esc(t('strike.swap')), 'ctl.strike3', true)}${tr(esc(t('strike.dash')), 'ctl.strike4', true)}
         ${tr(esc(t('touch.jump')), 'ctl.touch.jump')}${tr(esc(t('touch.shove')), 'ctl.touch.shove')}
         ${tr(esc(t('touch.action')), 'ctl.touch.action')}${tr(esc(t('touch.crouch')), 'ctl.touch.crouch')}${tr('🎬', 'ctl.touch.clip')}
       </div>`;

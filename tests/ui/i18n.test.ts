@@ -19,8 +19,9 @@ const CANONICAL = [
   ...LESSONS.map((l) => `hint.${l}`),
   'rule.1', 'rule.2', 'rule.3',
   'aim.tooHigh', 'aim.range', 'aim.los', 'aim.blocked', 'aim.enemyClose', 'aim.space', 'aim.noSurface',
-  'gate.air', 'gate.catch', 'gate.trapdoor', 'gate.door',
-  'gate.steady', 'gate.enemyClose', 'gate.blocked', 'gate.noSpace', 'gate.range', 'gate.noExit',
+  'portal.air', 'portal.catch', 'portal.grab', 'portal.load', 'portal.hijack', 'portal.hole', 'portal.door',
+  'portal.anchored', 'portal.noCharge', 'portal.noFloor', 'portal.nowhere', 'portal.loopLow', 'portal.paid',
+  'gate.steady', 'gate.enemyClose', 'gate.blocked', 'gate.noSpace', 'gate.range',
   'outcome.splash', 'outcome.void', 'outcome.skull', 'outcome.stars', 'outcome.safe',
   'prompt.finish', 'prompt.grab', 'prompt.throw', 'prompt.hijack', 'prompt.lift', 'prompt.drop',
   'obj.clear', 'obj.lift', 'obj.boss', 'obj.escape',
@@ -38,7 +39,9 @@ const UI_KEYS = [
   'end.styleTotal', 'end.tricks', 'end.challenges', 'end.deaths', 'clip.title', 'clip.saving', 'clip.share',
   'clip.download', 'clip.close', 'photo.title', 'photo.snap', 'photo.exit', 'respawn.void', 'respawn.dead',
   'ctl.padLine', 'orient.auto', 'orient.hatch', 'orient.door', 'kind.floor', 'kind.wall', 'kind.ceiling', 'kind.stand',
-  'kind.air', 'gateLabel.air', 'gateLabel.catch', 'gateLabel.trapdoor', 'gateLabel.door', 'touch.rift', 'touch.gate',
+  'kind.air', 'touch.portal', 'strike.reflect', 'strike.loop', 'strike.loop.again', 'strike.swap', 'strike.dash',
+  'ctl.portal', 'ctl.cancel', 'ctl.strike1', 'ctl.strike2', 'ctl.strike3', 'ctl.strike4', 'ctl.touch.portal',
+  'hint.strikes', 'hint.grabHold', 'hint.loopAgain', 'hint.doorPlaced', 'bark.grabbed',
 ];
 
 afterEach(() => {
@@ -113,11 +116,11 @@ describe('t()', () => {
 
   it('prefers device variants for the current device', () => {
     setDevice('kbm');
-    expect(t('hint.door')).toContain('RMB');
+    expect(t('hint.door')).toContain('LMB');
     setDevice('pad');
-    expect(t('hint.door')).toContain('LT');
+    expect(t('hint.door')).toContain('RT');
     setDevice('touch');
-    expect(t('hint.door')).toContain('RIFT');
+    expect(t('hint.door')).toContain('PORTAL');
     // no variant: base key
     expect(t('hint.arena')).toBe(strings('en')['hint.arena']);
     setLang('he');

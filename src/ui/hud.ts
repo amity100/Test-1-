@@ -471,19 +471,20 @@ export class HUD implements HudAPI {
     this.updateCross();
   }
 
+  /** What a PORTAL press would do now, under the crosshair (a ⚡ when it costs charge). */
   setGateHint(hint: GateHint | null) {
-    const key = hint ? `${hint.mode}|${hint.reason}` : '';
+    const key = hint ? `${hint.mode}|${hint.reason}|${hint.cost ?? 0}` : '';
     if (key === this.gateKey) return;
     this.gateKey = key;
     if (!hint || (!hint.mode && !hint.reason)) {
       this.gateEl.className = 'h-gate';
     } else if (hint.reason) {
-      // refused (a mode with a reason is a refusal of that mode, e.g. STEADY)
+      // refused (a mode with a reason is a refusal of that mode, e.g. anchored)
       this.gateEl.textContent = t(hint.reason);
       this.gateEl.className = `h-gate on refuse${hint.mode ? ` m-${hint.mode}` : ''}`;
     } else {
-      this.gateEl.textContent = t(`gate.${hint.mode}`);
-      this.gateEl.className = `h-gate on mode m-${hint.mode}`;
+      this.gateEl.textContent = t(`portal.${hint.mode}`) + (hint.cost ? ` ⚡${hint.cost}` : '');
+      this.gateEl.className = `h-gate on mode m-${hint.mode}${hint.cost ? ' paid' : ''}`;
     }
     this.updateCross();
   }

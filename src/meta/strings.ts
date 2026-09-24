@@ -34,8 +34,10 @@ const en: Record<string, string> = {
   'trick.hijack': 'HIJACK',
   'trick.juggle': 'JUGGLE',
   'trick.geyser': 'GEYSER',
-  'trick.express': 'EXPRESS DROP',
   'trick.reflect': 'REFLECT',
+  'trick.humanCannon': 'HUMAN CANNON',
+  'trick.swap': 'SWITCHEROO',
+  'trick.dash': 'RIFT DASH',
 
   // Style
   'rank.D': 'D', 'rank.C': 'C', 'rank.B': 'B', 'rank.A': 'A', 'rank.S': 'S', 'rank.SS': 'SS', 'rank.SSS': 'SSS',
@@ -145,8 +147,10 @@ const he: Record<string, string> = {
   'trick.hijack': 'חטיפה',
   'trick.juggle': 'להטוטן',
   'trick.geyser': 'גייזר',
-  'trick.express': 'משלוח אקספרס',
   'trick.reflect': 'השתקפות',
+  'trick.humanCannon': 'כדור תותח אנושי',
+  'trick.swap': 'החלפת מקומות',
+  'trick.dash': 'זינוק שבר',
 
   // Style
   'rank.D': 'D', 'rank.C': 'C', 'rank.B': 'B', 'rank.A': 'A', 'rank.S': 'S', 'rank.SS': 'SS', 'rank.SSS': 'SSS',

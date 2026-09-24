@@ -364,6 +364,48 @@ function brute(b: Brain, e: Enemy, dt: number) {
   }
 }
 
+/**
+ * REFLECT: he's made to attack right now (a short lock, no waiting for his
+ * turn): a burst, a beam, a lob, a charge. False if he has nothing to fire.
+ */
+export function provokeAttack(b: Brain, e: Enemy): boolean {
+  if (e.atk === 'aim' || e.atk === 'fire' || e.atk === 'roar' || e.atk === 'run') return true;
+  e.atk = 'none';
+  e.reloadT = 0;
+  e.lookT = 0;
+  switch (e.kind) {
+    case 'rifleman':
+      // (no warning burst over your head this time)
+      e.bursts = Math.max(1, e.bursts);
+      startGun(e, 'burst', 0.35, AI.rifle.shots + 1, AI.rifle.interval);
+      return true;
+    case 'turret':
+      startGun(e, 'burst', 0.3, AI.turret.shots, AI.turret.interval);
+      return true;
+    case 'boss':
+      startGun(e, 'fan', 0.35, 1, 0.1);
+      return true;
+    case 'sniper':
+      e.atk = 'aim';
+      e.atkKind = 'beam';
+      e.atkDur = LAW.beam.telegraph;
+      e.atkT = Math.max(0, LAW.beam.telegraph - 0.45);
+      e.aimPt.copy(b.ctx.player.chest);
+      muzzleOf(e, e.muzzle);
+      return true;
+    case 'grenadier':
+      if (!startLob(b, e)) return false;
+      e.atkT = Math.max(0, e.atkDur - 0.25);
+      return true;
+    case 'brute':
+      if (e.state === 'charge') return true;
+      startCharge(b, e);
+      e.atkT = AI.brute.roar * 0.5;
+      return true;
+  }
+  return false;
+}
+
 function startCharge(b: Brain, e: Enemy) {
   const pl = b.ctx.player;
   e.state = 'charge';

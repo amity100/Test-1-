@@ -105,8 +105,10 @@ export interface RiftEnd extends RiftFrame {
   role: RiftRole;
   /** STRIKE ends: bodies come out at least this fast (0 = plain rift). */
   boost?: number;
-  /** MIRROR exit: shots out of it home in on this enemy id (-1 / absent = none). */
+  /** Shots out of it home in on this enemy id (-1 / absent = none): REFLECT, catches. */
   aimAt?: number;
+  /** The player can't go through it (throws, catches: only what it was opened for). */
+  noPlayer?: boolean;
 }
 
 export interface RaySegment {
@@ -124,13 +126,13 @@ export interface RaySegment {
 export interface RiftQuery {
   openEnds(): RiftEnd[];
   /** First open end whose front plane the segment prev→cur crosses (front → back), within the rectangle (+margin). */
-  findCrossing(prev: V3, cur: V3, margin?: number): RiftEnd | null;
+  findCrossing(prev: V3, cur: V3, margin?: number, player?: boolean): RiftEnd | null;
   transformPoint(from: RiftEnd, p: V3, out?: V3): V3;
   transformDir(from: RiftEnd, d: V3, out?: V3): V3;
   /** Open floor-kind end whose rectangle contains (x,z) and whose plane is within `tol` of y: the ground there is a hole. */
-  holeAt(x: number, z: number, y: number, r?: number, tol?: number): RiftEnd | null;
+  holeAt(x: number, z: number, y: number, r?: number, tol?: number, player?: boolean): RiftEnd | null;
   /** A mover near an open end on collider `c` may pass through that collider. */
-  hostPassable(c: Collider, pos: V3, radius: number): boolean;
+  hostPassable(c: Collider, pos: V3, radius: number, player?: boolean): boolean;
   /** Rift ends can't open here (jammer bubbles). */
   blocked(p: V3): boolean;
   notePass(end: RiftEnd, who: BodyKind | 'bolt' | 'beam'): void;
@@ -690,8 +692,11 @@ export type TrickId =
   | 'void' | 'skyfall' | 'matador' | 'bowling' | 'headsUp' | 'loop' | 'cannonball' | 'slingshot' | 'comet'
   | 'guillotine' | 'cargo' | 'boom' | 'finisher' | 'ghost' | 'airtime' | 'double' | 'triple' | 'multi'
   | 'mirror' | 'hijack' | 'juggle'
-  /** Kills by the fixed STRIKE attacks. */
-  | 'geyser' | 'express' | 'reflect';
+  /** Kills by the STRIKES (LOOP's geyser and cannon, REFLECT, SWAP, DASH). */
+  | 'geyser' | 'reflect' | 'humanCannon' | 'swap' | 'dash';
+
+/** What a STRIKE kill is named: the strike, or how a LOOP let him out. */
+export type StrikeName = 'reflect' | 'loop' | 'geyser' | 'cannon' | 'swap' | 'dash';
 
 export interface KillEvent {
   type: 'kill';
@@ -735,7 +740,7 @@ export interface KillEvent {
   /** The impactor was a launched enemy/corpse id (bowling / heads up). */
   impactorId: number | null;
   /** Killed by a STRIKE (the fixed rift attacks), if so which. */
-  strike?: 'mirror' | 'geyser' | 'drop' | null;
+  strike?: StrikeName | null;
   at: V3;
 }
 
@@ -852,10 +857,11 @@ export interface ReplayHost {
 // ---------------------------------------------------------------------------
 
 export type Action =
-  | 'aim' | 'place' | 'gate' | 'close' | 'action' | 'jump' | 'sprint' | 'crouch' | 'shove'
+  /** The one rift key: press = the entrance (by what you point at), hold = aim the exit in slow motion, release = the exit. */
+  | 'portal' | 'close' | 'action' | 'jump' | 'sprint' | 'crouch' | 'shove'
   | 'flip' | 'vision' | 'clip' | 'photo' | 'pause'
-  /** Fixed rift attacks: MIRROR, GEYSER, DROP. */
-  | 'strike1' | 'strike2' | 'strike3';
+  /** The STRIKES: REFLECT, LOOP, SWAP, DASH. */
+  | 'strike1' | 'strike2' | 'strike3' | 'strike4';
 
 export interface AimInfo {
   valid: boolean;
@@ -868,10 +874,13 @@ export interface AimInfo {
 }
 
 export interface GateHint {
-  mode: EntranceMode | null;
-  /** i18n key of the reason when the gate would do nothing useful / be refused. */
+  /** What a PORTAL press would do now: air / catch / grab / load / hijack / door. */
+  mode: string | null;
+  /** i18n key of the reason when it would be refused. */
   reason: string | null;
   targetKey: string | null;
+  /** Rift charge it costs (grabbing a man who's fighting you). */
+  cost?: number;
 }
 
 export interface ScreenMarker {

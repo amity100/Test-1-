@@ -110,7 +110,10 @@ describe('trick detection', () => {
 
   it('STRIKE kills name the strike, not TRAPDOOR', () => {
     expect(one({ strike: 'geyser', viaTrapdoor: true, cause: 'water', victimCrossings: 1 })).toEqual(['geyser', 'splashdown']);
-    expect(one({ strike: 'drop', viaTrapdoor: true, cause: 'fall', fallHeight: 14 })).toEqual(['express', 'skyfall']);
+    expect(one({ strike: 'cannon', viaTrapdoor: true, cause: 'fall', fallHeight: 14 })).toEqual(['humanCannon', 'skyfall']);
+    expect(one({ strike: 'swap', cause: 'bolt' })).toEqual(['swap']);
+    expect(one({ strike: 'dash', cause: 'impact', byPlayer: true })).toEqual(['dash']);
+    expect(one({ strike: 'loop', viaTrapdoor: true, cause: 'fall', fallHeight: 3 })).toEqual([]);
   });
 
   it('RETURN TO SENDER is for bolts (his own beam is FIRING LINE only)', () => {

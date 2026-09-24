@@ -41,8 +41,10 @@ export const TRICK_POINTS: Readonly<Record<TrickId, number>> = {
   hijack: 300,
   juggle: 300,
   geyser: 250,
-  express: 250,
   reflect: 200,
+  humanCannon: 400,
+  swap: 250,
+  dash: 250,
 };
 
 export const TRICK_IDS: readonly TrickId[] = Object.keys(TRICK_POINTS) as TrickId[];
@@ -293,8 +295,10 @@ export class StyleSystem implements StyleAPI {
     if (e.cause === 'blade') this.award('finisher', t, out, { at });
     // a STRIKE names its own move (its floor end isn't a TRAPDOOR you set up)
     if (e.strike === 'geyser') this.award('geyser', t, out, { at });
-    else if (e.strike === 'drop') this.award('express', t, out, { at });
-    else if (e.strike === 'mirror') this.award('reflect', t, out, { at });
+    else if (e.strike === 'cannon') this.award('humanCannon', t, out, { at });
+    else if (e.strike === 'reflect') this.award('reflect', t, out, { at });
+    else if (e.strike === 'swap') this.award('swap', t, out, { at });
+    else if (e.strike === 'dash') this.award('dash', t, out, { at });
     if (e.viaTrapdoor && !e.strike) this.award('trapdoor', t, out, { at });
     const afterRift = e.victimCrossings > 0 || e.viaTrapdoor || e.matador || e.charged;
     if (e.cause === 'water' && afterRift) this.award('splashdown', t, out, { at });
