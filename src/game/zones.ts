@@ -108,6 +108,8 @@ export class ZoneManager {
       // spawn well before the trigger so enemies are already in place when you see them
       if (!e.triggered && d < SPAWN_AHEAD) {
         e.triggered = true;
+        // lessons without enemies clear on sight (their hint still waits for you to arrive)
+        if (e.def.spawns.length === 0) e.cleared = true;
         triggered.push(e);
       }
       if (e.triggered && d < ENGAGE_AHEAD) {
@@ -116,6 +118,18 @@ export class ZoneManager {
       }
     }
     return { entered, triggered, engaged };
+  }
+
+  /**
+   * The hint to show as the player reaches `e` (null: none). A fight already
+   * won from afar has nothing left to teach; a lesson without enemies (cleared
+   * on sight) still does. The leap waits for Voss: his fall shows its hint.
+   */
+  lessonHint(e: EncounterState): string | null {
+    const l = e.def.lesson;
+    if (!l || l === 'leap') return null;
+    if (e.cleared && e.def.spawns.length > 0) return null;
+    return e.def.hintKey ?? `hint.${l}`;
   }
 
   encounterOfEnemy(id: number) {

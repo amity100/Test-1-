@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { LAW, type HitInfo } from '../../src/core/contracts';
 import type { Enemy } from '../../src/actors/enemies';
 import { solveLob } from '../../src/actors/aimath';
+import { aimSpread } from '../../src/actors/behaviors';
 import { AI } from '../../src/actors/tuning';
 import { scenario, V } from './fakes';
 
@@ -43,6 +44,23 @@ describe('rifleman', () => {
     // then a reload pause (1.2–2 s) plus a fresh telegraph before the next burst
     s.until(() => s.log.bolts.length > 3, 5);
     expect(s.log.bolts[3].t - bolts[2].t).toBeGreaterThan(1.2 + 0.6 - 0.02);
+  });
+
+  it('his first burst is aimed at you, not over your head (the laser is the warning)', () => {
+    const s = scenario();
+    const e = s.spawn('rifleman', V(0, 0, 0), 0, { state: 'combat', perch: true });
+    s.until(() => s.log.bolts.length >= 3, 6);
+    const first = s.log.bolts.filter((b) => b.id === e.id).slice(0, 3);
+    expect(first.length).toBe(3);
+    let rise = 0;
+    for (const b of first) {
+      // where the bolt's line passes your chest: within his (cold, first-look) spread, centred on you
+      const to = s.player.chest.clone().sub(b.from);
+      const off = b.dir.clone().multiplyScalar(to.dot(b.dir)).sub(to);
+      expect(off.length()).toBeLessThan(to.length() * aimSpread(to.length(), 0, 0) * 1.8);
+      rise += off.y / first.length;
+    }
+    expect(Math.abs(rise)).toBeLessThan(0.45);
   });
 
   it('exposes the laser lock as a CATCH threat with a shrinking eta', () => {
@@ -88,6 +106,7 @@ describe('rifleman', () => {
 describe('grenadier', () => {
   it('shows an arc for 0.5 s, then lobs a grenade that lands at the player', () => {
     const s = scenario();
+    s.step(); // (reinforcements come in knowing roughly where you are)
     const e = s.spawn('grenadier', V(0, 0, 0), 0, { state: 'combat', perch: true });
     s.until(() => s.log.grenades.length > 0, 8);
     const g = s.log.grenades[0];
@@ -230,6 +249,7 @@ describe('brute', () => {
 describe('turret', () => {
   it('turns at 60°/s, telegraphs, then fires a 6-round stream', () => {
     const s = scenario();
+    s.step(); // it's told roughly where you are: it turns to look
     const e = s.spawn('turret', V(0, 0, 0), Math.PI, { state: 'combat' }) as Enemy; // facing away
     s.setPlayer(0, 0, 15);
     s.step(30); // 0.5 s: at most 30° of turn
@@ -258,21 +278,5 @@ describe('turret', () => {
     expect(s.sys.hit(e, charged(V(0, 1, 5)))).toBe('killed');
     expect(e.body).toBeNull();
     expect(s.physics.bodies.length).toBe(0);
-  });
-});
-
-describe('jammer', () => {
-  it('flees to keep 10+ m and projects a 7 m bubble', () => {
-    const s = scenario();
-    const e = s.spawn('jammer', V(0, 0, 0), 0, { state: 'combat' });
-    s.setPlayer(0, 0, 4);
-    s.step(60 * 5);
-    expect(Math.hypot(e.pos.x - s.player.pos.x, e.pos.z - s.player.pos.z)).toBeGreaterThan(9.5);
-    const b = s.sys.blockers();
-    expect(b.length).toBe(1);
-    expect(b[0].radius).toBe(7);
-    expect(b[0].pos).toBe(e.pos);
-    s.sys.kill(e, { source: 'blade', amount: 999, charged: false, team: 'player', instigator: 'player' });
-    expect(s.sys.blockers().length).toBe(0);
   });
 });

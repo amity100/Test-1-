@@ -1112,7 +1112,7 @@ export class Audio implements AudioAPI {
     });
   }
 
-  /** Something hit a CATCH door: suction sweep up, abrupt cut, wet gulp. */
+  /** Kessler fire went into your rift (a REFLECT): suction sweep up, abrupt cut, wet gulp. */
   riftCatch(pos: V3): void {
     this.one('riftCatch', pos, 0.55, O.riftCatch, (v, t) => {
       const g = this.gainN(v, v.out, 0);
@@ -1444,7 +1444,7 @@ export class Audio implements AudioAPI {
     });
   }
 
-  /** FINISH: blade whoosh, a metallic shing and the hit (lands ~0.12 s in, under the hitstop). */
+  /** HIDDEN BLADE: whoosh, a metallic shing and the hit (lands ~0.12 s in, under the hitstop). */
   bladeFinish(pos: V3): void {
     this.one('bladeFinish', pos, 0.85, O.bladeFinish, (v, t) => {
       const g = this.gainN(v, v.out, 0);

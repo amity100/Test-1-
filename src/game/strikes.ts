@@ -272,7 +272,8 @@ export class Strikes {
     if (this.charges < 1) return fail('strike.noCharge');
     const t = this.target();
     if (!t && id !== 'dash') return fail('strike.noTarget');
-    if (t && (id === 'loop' || id === 'swap') && (t.kind === 'turret' || (t.kind === 'boss' && !t.offBalance))) return fail('strike.anchored', t);
+    // a turret never moves; Voss does once stunned (so only his refusal says so)
+    if (t && (id === 'loop' || id === 'swap') && (t.kind === 'turret' || (t.kind === 'boss' && !t.offBalance))) return fail(t.kind === 'boss' ? 'strike.anchored' : 'portal.anchored', t);
     let r: StrikeResult;
     switch (id) {
       case 'reflect':
@@ -335,7 +336,7 @@ export class Strikes {
     const h = this.h;
     const kind: Reflect['kind'] = t.kind === 'grenadier' ? 'lid' : GUNS.has(t.kind) ? 'muzzle' : 'shield';
     const a = this.reflectEntrance(t, kind);
-    if (!a || h.rifts.blocked(a.position)) return { ok: false, id: 'reflect', reason: 'gate.blocked', target: t };
+    if (!a) return { ok: false, id: 'reflect', reason: 'strike.noRoom', target: t };
     // the other end: a brute's charge goes over the edge; everything else back into him
     let b: Frame | null;
     let boost = 0;
@@ -443,7 +444,6 @@ export class Strikes {
     if (!a) return { ok: false, id: 'loop', reason: 'strike.noFloor', target: t };
     const b = skyHatch(h, a.position, STRIKE.loopHeight, STRIKE.loopMin);
     if (!b) return { ok: false, id: 'loop', reason: 'strike.noRoom', target: t };
-    if (h.rifts.blocked(a.position) || h.rifts.blocked(b.position)) return { ok: false, id: 'loop', reason: 'gate.blocked', target: t };
     const id = h.rifts.openStrike(a, b, STRIKE.loopLife + 4, 0, -1);
     const ends = h.rifts.strikeEnds(id)!;
     ends.a.noPlayer = ends.b.noPlayer = true;
@@ -461,10 +461,8 @@ export class Strikes {
     const lock = lockOnEnemy(h, h.enemies.list, (e) => h.active.has(e.def.zone), ray.origin, ray.dir, eye, { skip: L.t, cone: 0.2 * (h.touch() ? 1.5 : 1), range: 40 });
     let frame: Frame;
     let reason: string | null = null;
-    if (lock) {
-      frame = facingFrame(lock.chest(new THREE.Vector3()), ray.origin, 2.6);
-      if (h.rifts.blocked(frame.position)) reason = 'aim.blocked';
-    } else {
+    if (lock) frame = facingFrame(lock.chest(new THREE.Vector3()), ray.origin, 2.6);
+    else {
       const lf = launchFrame(h, ray.origin, ray.dir, along, 14);
       frame = lf.frame;
       reason = lf.reason;
@@ -536,7 +534,6 @@ export class Strikes {
     const b = floorUnder(h, t.pos);
     if (!a || !b) return fail('strike.noFloor');
     if (a.position.distanceTo(b.position) < 3) return fail('strike.tooClose');
-    if (h.rifts.blocked(a.position) || h.rifts.blocked(b.position)) return fail('gate.blocked');
     const id = h.rifts.openStrike(a, b, STRIKE.swapLife, 0, -1);
     // he drops first, you a beat after (so you don't meet in the middle)
     h.enemies.launch(t, new THREE.Vector3(0, -8, 0));
@@ -566,7 +563,6 @@ export class Strikes {
       for (const ang of [0, 0.7, -0.7, 1.4, -1.4]) {
         const d = back.clone().applyAxisAngle(UP, ang);
         const spot = new THREE.Vector3(t.pos.x + d.x * STRIKE.dashGap, t.pos.y, t.pos.z + d.z * STRIKE.dashGap);
-        if (h.rifts.blocked(spot)) continue;
         const f = standingDoor(h, spot, d.clone().negate(), t.pos.y);
         if (!h.world.lineOfSight(f.position, tc)) continue;
         if (f.position.distanceTo(a.position) < 2.5) continue;
@@ -583,7 +579,7 @@ export class Strikes {
       const dist = hit ? hit.distance - 1.2 : STRIKE.dashFree;
       if (dist < 4) return fail('strike.noRoom');
       const spot = new THREE.Vector3(feet.x + hd.x * dist, feet.y, feet.z + hd.z * dist);
-      if (!h.rifts.blocked(spot) && h.world.lineOfSight(eye, _b.set(spot.x, feet.y + 1.2, spot.z))) {
+      if (h.world.lineOfSight(eye, _b.set(spot.x, feet.y + 1.2, spot.z))) {
         b = standingDoor(h, spot, hd, feet.y);
         // (never above where you stand: height is earned)
         if (b.position.y - b.height / 2 > feet.y + 0.3) b = null;
@@ -591,7 +587,6 @@ export class Strikes {
       boost = 18;
     }
     if (!b) return fail('gate.noSpace');
-    if (h.rifts.blocked(a.position)) return fail('gate.blocked');
     const id = h.rifts.openStrike(a, b, STRIKE.dashLife, boost, -1);
     const ends = h.rifts.strikeEnds(id)!;
     ends.a.boost = 0;

@@ -281,7 +281,7 @@ export function loadAnimLibrary(json: unknown, soldier: CharacterAsset): AnimLib
 // Looks
 // ---------------------------------------------------------------------------
 
-export type Look = 'hero' | 'rifleman' | 'grenadier' | 'warden' | 'brute' | 'sniper' | 'jammer' | 'boss' | 'hologram';
+export type Look = 'hero' | 'rifleman' | 'grenadier' | 'warden' | 'brute' | 'sniper' | 'boss' | 'hologram';
 
 interface LookDef {
   body: number;
@@ -299,7 +299,6 @@ const LOOKS: Record<Exclude<Look, 'hologram'>, LookDef> = {
   warden: { body: 0x222a3a, rough: 0.6, metal: 0.35, visor: 0xff3a10, visorGlow: 2.4, scale: 1.08 },
   brute: { body: 0x3a3c42, rough: 0.55, metal: 0.45, visor: 0xff2010, visorGlow: 2.8, scale: 1.25 },
   sniper: { body: 0x2b3038, rough: 0.8, metal: 0.1, visor: 0xff2a2a, visorGlow: 2.2, scale: 1.0 },
-  jammer: { body: 0x2e3a4e, rough: 0.7, metal: 0.2, visor: 0xffa020, visorGlow: 2.2, scale: 1.0 },
   boss: { body: 0xe6e2d6, rough: 0.45, metal: 0.2, visor: 0xb44bff, visorGlow: 2.6, scale: 1.05 },
 };
 
@@ -405,9 +404,6 @@ function geo(): Record<string, THREE.BufferGeometry> {
   const shieldGlow = box(0.42, 0.035, 0.02, 0, 0.3, 0.01);
   const dome = new THREE.SphereGeometry(1, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2);
   const plate = box(0.34, 0.24, 0.08);
-  const pack = merge([box(0.3, 0.38, 0.14), box(0.22, 0.06, 0.16, 0, 0.12, 0), box(0.06, 0.06, 0.06, 0.09, 0.21, 0)]);
-  const antenna = new THREE.CylinderGeometry(0.01, 0.014, 0.55, 6).translate(0, 0.27, 0);
-  const orb = new THREE.SphereGeometry(0.045, 12, 8);
   // long coat, open at the front (the gap faces +Z)
   const coat = new THREE.CylinderGeometry(0.2, 0.36, 0.84, 18, 1, true, 0.5, Math.PI * 2 - 1.0);
   const hem = new THREE.TorusGeometry(0.36, 0.016, 6, 24, Math.PI * 2 - 1.0).rotateX(Math.PI / 2).rotateY(Math.PI / 2 - 0.5);
@@ -416,7 +412,10 @@ function geo(): Record<string, THREE.BufferGeometry> {
   const ring = new THREE.TorusGeometry(0.058, 0.014, 8, 20).rotateX(Math.PI / 2);
   const core = new THREE.SphereGeometry(0.03, 10, 8);
   const satchel = box(0.2, 0.16, 0.1);
-  GEO = { rifle, rifleGlow, launcher, launcherGlow, sniper, sniperGlow, shield, shieldRim, shieldGlow, dome, plate, pack, antenna, orb, coat, hem, collar, bracer, ring, core, satchel };
+  // hidden blade: a slim housing along the forearm; the edge grows out of it along +Y
+  const sheath = box(0.028, 0.15, 0.022);
+  const edge = box(0.006, 0.3, 0.026, 0, 0.15, 0);
+  GEO = { rifle, rifleGlow, launcher, launcherGlow, sniper, sniperGlow, shield, shieldRim, shieldGlow, dome, plate, coat, hem, collar, bracer, ring, core, satchel, sheath, edge };
   return GEO;
 }
 
@@ -431,7 +430,7 @@ interface AttachDef {
   /** Desired transform in body space (metres, +Z forward, +X = character's left) in the reference pose. */
   place: (p: (bone: string) => THREE.Vector3, out: THREE.Matrix4) => void;
   /** Pulses with time (scaled per frame). */
-  pulse?: 'jammer' | 'gauntlet';
+  pulse?: boolean;
 }
 
 const _v = new THREE.Vector3();
@@ -472,7 +471,7 @@ function gauntlet(color: number, core: number): AttachDef[] {
       id: 'core',
       bone: 'LeftHand',
       pose: 'rest',
-      pulse: 'gauntlet',
+      pulse: true,
       mesh: () => meshOf(geo().core, glowMat(core, 4.5)),
       place: (p, out) => {
         // back of the hand (palms face down in the T-pose)
@@ -482,6 +481,34 @@ function gauntlet(color: number, core: number): AttachDef[] {
       },
     },
   ];
+}
+
+/** The hero's hidden blade: under the right wrist (the strike swings the right arm). */
+function hiddenBlade(glow: number): AttachDef {
+  return {
+    id: 'blade',
+    bone: 'RightForeArm',
+    pose: 'rest',
+    mesh: () => {
+      const g = new THREE.Group();
+      g.add(meshOf(geo().sheath, metalMat()));
+      const edge = meshOf(geo().edge, glowMat(glow, 2.2));
+      edge.name = 'edge';
+      edge.position.y = 0.04;
+      edge.visible = false;
+      g.add(edge);
+      return g;
+    },
+    place: (p, out) => {
+      // along the forearm near the wrist, on the palm side (palms face down in the T-pose)
+      const a = p('RightForeArm');
+      const b = p('RightHand');
+      _v.lerpVectors(a, b, 0.8);
+      _v.y -= 0.045;
+      _q.setFromUnitVectors(new THREE.Vector3(0, 1, 0), _v2.subVectors(b, a).normalize());
+      out.compose(_v, _q, _one);
+    },
+  };
 }
 
 function handWeapon(kind: 'rifle' | 'launcher' | 'sniper', glow: number): AttachDef {
@@ -509,7 +536,7 @@ function attachmentsFor(look: Look): AttachDef[] {
   const kesslerGlow = 0xff5a1f;
   switch (look) {
     case 'hero':
-      return gauntlet(0x19f0ff, 0xff8a1f);
+      return [...gauntlet(0x19f0ff, 0xff8a1f), hiddenBlade(0xbff8ff)];
     case 'rifleman':
       return [handWeapon('rifle', kesslerGlow)];
     case 'grenadier':
@@ -570,41 +597,6 @@ function attachmentsFor(look: Look): AttachDef[] {
       ];
     case 'sniper':
       return [handWeapon('sniper', 0xff2a2a)];
-    case 'jammer':
-      return [
-        {
-          id: 'pack',
-          bone: 'Spine2',
-          pose: 'rest',
-          mesh: () => {
-            const g = new THREE.Group();
-            g.add(meshOf(geo().pack, paintMat(0x23272e, 0.7, 0.3)));
-            const a = meshOf(geo().antenna, metalMat());
-            a.position.set(-0.1, 0.19, 0);
-            a.rotation.z = 0.12;
-            g.add(a);
-            return g;
-          },
-          place: (p, out) => {
-            _v.copy(p('Spine2'));
-            _v.z -= 0.19;
-            _v.y += 0.02;
-            out.compose(_v, _q.identity(), _one);
-          },
-        },
-        {
-          id: 'emitter',
-          bone: 'Spine2',
-          pose: 'rest',
-          pulse: 'jammer',
-          mesh: () => meshOf(geo().orb, glowMat(0xffa020, 5)),
-          place: (p, out) => {
-            _v.copy(p('Spine2'));
-            _v.set(_v.x - 0.16, _v.y + 0.77, _v.z - 0.19);
-            out.compose(_v, _q.identity(), _one);
-          },
-        },
-      ];
     case 'boss':
       return [
         ...gauntlet(0xb44bff, 0xe060ff),
@@ -739,7 +731,8 @@ export class Character implements CharacterAPI {
   private meshes: THREE.Mesh[] = [];
   private ownMats: THREE.Material[] = [];
   private faded = false;
-  private pulses: { obj: THREE.Object3D; kind: 'jammer' | 'gauntlet' }[] = [];
+  private pulses: THREE.Object3D[] = [];
+  private bladeEdge: THREE.Object3D | null = null;
   private restChestQ = new THREE.Quaternion();
 
   // --- state (everything getPose() returns) ---
@@ -814,6 +807,7 @@ export class Character implements CharacterAPI {
     this.bodyQ(this.bones.Spine2, this.restChestQ);
 
     if (!holo) this.attach(attachmentsFor(look));
+    this.bladeEdge = this.attachments.blade?.getObjectByName('edge') ?? null;
     this.mixerT = 0;
     this.evaluate();
   }
@@ -1014,6 +1008,14 @@ export class Character implements CharacterAPI {
   gauntletPos(out = new THREE.Vector3()): THREE.Vector3 {
     const c = this.attachments.core;
     return c ? c.getWorldPosition(out) : this.bonePos('LeftHand', out);
+  }
+
+  /** The hero's hidden blade out of the wrist: 0 sheathed .. 1 all the way out. */
+  setBlade(k: number) {
+    const e = this.bladeEdge;
+    if (!e) return;
+    e.visible = k > 0.01;
+    e.scale.y = Math.max(0.01, k);
   }
 
   /** Weapon muzzle (rifleman / grenadier / sniper), else the right hand. */
@@ -1373,10 +1375,9 @@ export class Character implements CharacterAPI {
     const crumple = dead && kind === 'cut' && this.ov.clip === 'death' ? smooth01(deathT / (dd * 0.14)) * (1 - smooth01((deathT / dd - 0.3) / 0.12)) : 0;
     const drown = dead && kind === 'drown' ? smooth01(deathT / 2.5) : 0;
     const t = this.mixerT;
-    for (const p of this.pulses) {
-      const k = p.kind === 'jammer' ? 0.8 + 0.45 * (0.5 + 0.5 * Math.sin(t * 6.5)) : 1 + 0.12 * Math.sin(t * 5) + 0.45 * aim;
-      p.obj.scale.setScalar(k);
-    }
+    // the gauntlet core breathes, and swells while aiming
+    const k = 1 + 0.12 * Math.sin(t * 5) + 0.45 * aim;
+    for (const p of this.pulses) p.scale.setScalar(k);
     if (!(aim > 1e-3 || carry > 0 || flail > 1e-3 || limp > 0 || crumple > 0 || drown > 0)) return;
 
     this.body.updateMatrixWorld(true);
@@ -1487,7 +1488,7 @@ export class Character implements CharacterAPI {
       lib.calib.get(`${this.look}:${d.id}`)!.decompose(holder.position, holder.quaternion, holder.scale);
       this.bones[d.bone].add(holder);
       this.attachments[d.id] = holder;
-      if (d.pulse) this.pulses.push({ obj: o, kind: d.pulse });
+      if (d.pulse) this.pulses.push(o);
     }
   }
 }

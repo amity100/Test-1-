@@ -14,6 +14,9 @@ describe('META_STRINGS', () => {
     expect(META_STRINGS.en['trick.returnToSender']).toBe('RETURN TO SENDER');
     expect(META_STRINGS.he['trick.returnToSender']).toBe('החזרה לשולח');
     expect(META_STRINGS.he['trick.splashdown']).toBe('צלילה');
+    // the blade kill is named for the weapon
+    expect(META_STRINGS.en['trick.finisher']).toBe('HIDDEN BLADE');
+    expect(META_STRINGS.he['trick.finisher']).toBe('להב נסתר');
   });
 
   it('has every challenge title/desc and the daily templates', () => {

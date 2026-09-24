@@ -63,7 +63,7 @@ function hudScene() {
       { x: W * 0.3, y: H * 0.5, onScreen: true, angle: 0, kind: 'gate', label: 'GATE' },
     ]);
     hud.setPrompt(t('prompt.hijack'));
-    tc?.setGateLabel(t('gateLabel.trapdoor'), 'trapdoor');
+    tc?.setPortalLabel(t('portal.grab'), 'grab');
     tc?.setAction(t('prompt.hijack'));
     return;
   }
@@ -94,14 +94,14 @@ function hudScene() {
   ]);
   hud.hint('trapdoor', t('hint.trapdoor'), 30);
   hud.toast(t('toast.checkpoint'), 'good');
-  hud.setPrompt(t('prompt.finish'));
+  hud.setPrompt(t('prompt.blade'));
   hud.offerClip(true);
   hud.setAirtime(2.4);
   hud.setPlayerCharged(true);
   if (state === 'vision') hud.setVision(true);
   tc?.setAiming(true);
-  tc?.setAction(t('prompt.finish'));
-  tc?.setGateLabel(t('gateLabel.catch'), 'catch');
+  tc?.setAction(t('prompt.blade'));
+  tc?.setPortalLabel(t('portal.grab'), 'grab');
   tc?.offerClip(true);
   if (qs.get('cancel') === '1') tc?.el.classList.add('rift-held');
 }

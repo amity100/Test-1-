@@ -11,7 +11,15 @@ export function spawn(zone: ZoneId, id: string, kind: EnemyKind, x: number, y: n
 }
 
 export function encounter(zone: ZoneId, lesson: LessonId, trigger: THREE.Box3, spawns: SpawnDef[], requireClear: boolean, checkpoint?: { pos: THREE.Vector3; yaw: number }): EncounterDef {
-  const e: EncounterDef = { id: `${zone}.${lesson}`, trigger, spawns, hintKey: `hint.${lesson}`, lesson, requireClear };
+  const e = fight(zone, lesson, trigger, spawns, requireClear, checkpoint);
+  e.hintKey = `hint.${lesson}`;
+  e.lesson = lesson;
+  return e;
+}
+
+/** A fight that teaches nothing new (no lesson, no hint): `name` makes its id. */
+export function fight(zone: ZoneId, name: string, trigger: THREE.Box3, spawns: SpawnDef[], requireClear: boolean, checkpoint?: { pos: THREE.Vector3; yaw: number }): EncounterDef {
+  const e: EncounterDef = { id: `${zone}.${name}`, trigger, spawns, requireClear };
   if (checkpoint) e.checkpoint = { pos: checkpoint.pos.clone(), yaw: checkpoint.yaw };
   return e;
 }

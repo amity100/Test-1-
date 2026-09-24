@@ -59,8 +59,19 @@ export class Enemy implements EnemyView {
   seesPlayer = false;
   seeDist = Infinity;
   lastSeenT = -1e9;
+  /** When his current unbroken view of the player began (a steadier aim the longer it lasts). */
+  viewT = 0;
+  /** Where he believes the player is: only what he saw, heard or was told. */
   readonly lastKnown = new THREE.Vector3();
   hasLastKnown = false;
+  /** When that belief was fresh (a sighting, a noise, a mate's shout). */
+  contactT = -1e9;
+  /** In combat but lost track: hunting around lastKnown until searchT runs out. */
+  searching = false;
+  searchT = 0;
+  /** Stood down lately: quicker to notice again. */
+  alertT = 0;
+  calloutT = 0;
   readonly investigate = new THREE.Vector3();
   lostBarked = false;
   /** Looking at where a rift hit came from. */
@@ -105,6 +116,9 @@ export class Enemy implements EnemyView {
   shotGap = 0.12;
   lobFlight = 1;
   token = false;
+  /** Waiting for a turn to fire since queuedT (asked last at askedT). */
+  queuedT = 0;
+  askedT = -1e9;
   reloadT = 0;
   lobT = 0;
   meleeCd = 0;

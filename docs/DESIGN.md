@@ -9,8 +9,9 @@ never around them.
 A third-person portal **action** game for desktop and phones. You have no gun.
 You own one rift pair, and the world does the killing: enemy bullets,
 grenades, beams, charging brutes, hanging cargo, gravity and your own falling
-speed. Every kill passes through a rift. The game rewards invention: named
-tricks, a style meter, auto-replays and one-tap clip sharing.
+speed. Every kill passes through a rift, except up close, where a hidden
+blade does it. The game rewards invention: named tricks, a style meter,
+auto-replays and one-tap clip sharing.
 
 The setting is **Kessler Threshold Tower**, a 100 m skyscraper under
 construction above the harbour at golden hour. Kessler invented rift gates;
@@ -21,10 +22,10 @@ take down Director Voss.
 
 1. **Everything keeps its speed through a rift**: you, enemies, bodies,
    bullets, grenades, cargo, light and sound.
-2. **The rift is your only weapon.** Kessler guns are IFF-locked and can't
+2. **The rift is your weapon.** Kessler guns are IFF-locked and can't
    hurt Kessler. Anything that has passed through your rift is *rift-charged*
    and can hurt anyone. You are attuned: your own rift-charged things never
-   hurt you.
+   hurt you. Up close you also carry a hidden blade (§4).
 3. **You control both ends.** One key opens both: the ENTRANCE where the
    moment needs it, the EXIT where you aim while time slows. Closing a rift
    on something mid-pass cuts it (SHEAR).
@@ -36,16 +37,18 @@ and a **blue EXIT** (where things come out). Both come from **one key**,
 PORTAL (LMB / RT / the PORTAL touch button):
 
 - **Press:** the ENTRANCE opens, by what you aim at and what's happening.
-- **Hold:** time slows and you aim the EXIT (a GRAB, a CATCH or a fall slow
-  time at once; a door, hole or load once you've held past the tap). A ghost
+- **Hold:** time slows and you aim the EXIT (a GRAB or a fall slows time at
+  once; a door, hole or load once you've held past the tap). A ghost
   end shows where it goes;
   for a throw, a dotted arc shows where the thing lands and its colour says
   what that does (drown / void / lethal / knockdown / safe).
 - **Let go:** the EXIT opens there. A **tap** (under 0.2 s) puts the exit
   where it does the most by itself.
 - Every press starts a new pair (the old one collapses). RMB / LT / sliding
-  onto ✕ while holding lets go without an exit; so does pausing. A paid grab
-  let go of gets its charge back.
+  onto ✕ while holding lets go without an exit; so does pausing. A man let
+  go of climbs out stumbling.
+- The PORTAL costs nothing and doesn't answer fire: shots, beams, grenades
+  and charges coming at you are REFLECT's (see STRIKES).
 
 ### What a press opens (priority)
 1. **AIR** (airborne, `vel.y < -3`): an entrance on your fall path (1.5–3 m
@@ -53,31 +56,31 @@ PORTAL (LMB / RT / the PORTAL touch button):
    than your feet would allow). Its EXIT opens at once where you look and
    follows your aim while you hold, until you come out of it (SLINGSHOT /
    COMET / LOOP / CANNONBALL).
-2. **CATCH** (a threat that lands within 1.6 s: a laser lock, a sniper beam,
-   a grenade, a brute's charge): a standing door facing it, 1.4 m out (2.6 m
-   for a charge, beyond his hit). Its EXIT opens at once: beside the man who
-   fired, facing him (shots home in on him: RETURN TO SENDER / FIRING LINE /
-   POSTAGE); a charging brute is thrown out over the nearest drop / water
-   (MATADOR). Hold to steer the exit with your view; it locks onto another
-   man you look at. Among several threats it catches the one you face.
-   Under fire a CATCH wins over a paid GRAB, a LOAD or a HIJACK.
+2. **LOAD** (crosshair on a hanging load, or on a prop nearer it than any
+   man): the same as GRAB for things: 14 m/s, and a tap drops it through a
+   hatch over the head of the man you look at (else the nearest one in
+   sight, not one by the hole).
 3. **GRAB** (crosshair on an enemy, 40 m, in sight): the floor under him
-   opens and he sinks into it (he does nothing while held). Hold to aim the
-   throw: a launcher end along your view (or 2.4 m in front of a man you look
-   at, to hit him with the body), facing where you look, 17 m/s. Tap: out
-   over the nearest drop or water within 22 m, else down from 16 m out of
-   the sky beside where he stood. An unaware or stumbling man is free; **a
-   man who's fighting you costs one rift charge** (and his kill gives none
-   back). Turrets, and Voss unless he's stunned, won't budge.
-4. **LOAD** (crosshair on a prop, or a hanging load): the same for things:
-   14 m/s, and a tap drops it through a hatch over the head of the man you
-   look at (else the nearest one in sight, not one by the hole).
-5. **HIJACK** (crosshair on a Kessler gate's arena end): the gate feeds your
+   opens and he sinks into it (he does nothing while held). Free, whether
+   he's fighting you or not; turrets and Voss (stunned or not) won't
+   budge. Hold to aim the throw: a launcher end along your view (or 2.4 m in
+   front of a man you look at, to hit him with the body), facing where you
+   look, 17 m/s. **Tap** (or let go with no valid aim): **straight on, away
+   from you**: an exit 2 m past him on the level line from you through him,
+   its centre 2 m over his feet, facing on and tilted 20° up, 17 m/s. A
+   wall or roof in the way pulls it back toward you to 1.4 m short of it (a
+   wall right behind him is what he hits); no room even so, he climbs out.
+   On open floor he comes down ~11 m on at ~9 m/s: knocked down, not killed
+   (8 ≤ v < 12). A wall on the way, or a man where he comes down, takes him
+   at 16 m/s; a drop or the sea on the way takes him too. Where you stand
+   decides: put the edge behind him. The tap's pair closes 0.5 s after he's through (off a wall close
+   behind him he'd drop back into his own hole).
+4. **HIJACK** (crosshair on a Kessler gate's arena end): the gate feeds your
    EXIT from now on. Tap: over the nearest drop / out of the sky.
-6. **HOLE** (looking steeply down at a floor near you, or into a pit): a
+5. **HOLE** (looking steeply down at a floor near you, or into a pit): a
    floor end right there. Tap: a hatch straight above it as high as you
    stand (a loop). A falling player drifts onto an open floor end below.
-7. **DOOR** (anything else): a standing door in front of you (or on the wall
+6. **DOOR** (anything else): a standing door in front of you (or on the wall
    you face). The EXIT goes where you aim, snapping to surfaces:
    - floor: faces up; wall: faces out; ceiling: faces down; perch: the top
      of a thing aimed high on its side;
@@ -86,12 +89,12 @@ PORTAL (LMB / RT / the PORTAL touch button):
    **Air ends can never be above your feet** (`LAW.airAboveFeetMax` = 0):
    height is earned. Surface ends are allowed anywhere in range and sight.
 
-Throw / catch pairs (GRAB, LOAD, CATCH, HIJACK exits) are only for what they
-were opened for: **the player passes through them like air**. A throw's pair
+Throw pairs (GRAB, LOAD, HIJACK exits) are only for what they were opened
+for: **the player passes through them like air**. An aimed throw's pair
 closes 1.2 s after its load went through.
 
 ### Rules for both ends
-- Opening costs nothing (only a GRAB of a man who's fighting you does).
+- Opening costs nothing.
 - CLOSE (X / middle mouse / LB / ✕) closes the pair. If an enemy or prop is
   straddling a plane (centre within ±0.45 m and inside the rectangle), it is
   **sheared**: an instant kill for anything, including armour. It doesn't
@@ -100,7 +103,8 @@ closes 1.2 s after its load went through.
 
 ### Anti-exploit
 - No aimed end may open within 1.2 m of a living steady enemy's body.
-- A steady combat enemy is only grabbed for a rift charge.
+- A tapped GRAB throws him straight on, not to the deadliest spot around:
+  it only kills when you've put a wall, a drop, the sea or a man behind him.
 - Air ends can't be above your feet.
 - Speed cap is 40 m/s.
 - Only rift-charged speed hurts.
@@ -121,10 +125,14 @@ close by themselves; your PORTAL pair is untouched.
 | **DASH** | R / 4 · D-pad ▶ · touch | The floor under you, and an end 3 m in front of him facing him: you come out at 22 m/s into him (a charged ram: kills, even armour). With no one in sight, a dash 12 m ahead at your height. |
 
 - **Rift charge:** 3 charges; a strike costs one, one comes back every 9 s,
-  and every kill your own free rift work makes refunds one (not a paid
-  grab's). 1.5 s lockout per strike. The pips sit over the strike bar.
-- Turrets can't be moved; Voss only when stunned or down (REFLECT works on
-  anyone).
+  and every kill that isn't a strike's refunds one. 1.5 s lockout per
+  strike. The pips sit over the strike bar.
+- **REFLECT is the way to return fire** (the PORTAL key has no catch):
+  RETURN TO SENDER, CROSSFIRE, MIRROR, FIRING LINE, POSTAGE and BORROWED
+  GUN; on a brute it sets up MATADOR. (A door you put in a shot's way
+  still sends it on.)
+- Turrets can't be moved; Voss only by LOOP or SWAP when stunned or down,
+  never by the PORTAL grab (REFLECT works on anyone).
 - Strike kills score REFLECT / GEYSER / HUMAN CANNON / SWITCHEROO / RIFT
   DASH (+ what finished him: SPLASHDOWN, INTO THE VOID, SKYFALL...). Their
   floor end is not a TRAPDOOR.
@@ -138,8 +146,8 @@ close by themselves; your PORTAL pair is untouched.
   happens when the aim ray is on his body or hits the ground; aiming past
   him at a wall puts the EXIT on the wall (Return to Sender set-ups).
 - **Rift magnetism.** A bolt or beam leaving a rift bends onto a Kessler body
-  within 12° of its path, or onto the man who fired it within 60°. A caught
-  grenade arcs onto a body within ~32° of its way out (its thrower within
+  within 12° of its path, or onto the man who fired it within 60°. A
+  grenade out of your rift arcs onto a body within ~32° of its way out (its thrower within
   60°) and goes off on contact.
 - **Rift slide.** A charged landing at knock speed or more skids (9 m/s²,
   a roll) and keeps its charge while it is that fast, so a slingshot through
@@ -154,13 +162,12 @@ close by themselves; your PORTAL pair is untouched.
   up-facing end below drifts onto it.
 - **MATADOR keeps his run.** A charging brute's speed carries through the
   rift (his charge ends, not his momentum).
-- **Warning volley.** A rifleman's first burst goes over your head (it still
-  goes through a CATCH door).
 
 ### Kessler rift gates
 - Fixed enemy pairs, drawn in red. Reinforcement waves walk out of the gate's
   arena end.
-- **HIJACK:** stand at the gate's panel and press ACTION, or aim PORTAL at
+- **HIJACK:** stand at the gate's panel and press ACTION (with an EXIT open;
+  else "Open an exit first"), or aim PORTAL at
   a gate's arena end. The gate's out-end then links to your EXIT. Everything that comes through the gate now comes out of your exit
   (over the void, above their commander).
 - Wave members hop into the in-end one by one; with no EXIT to send them to,
@@ -224,14 +231,40 @@ hit by:
 
 **Player:**
 - 100 HP. It regenerates at 25/s after 4 s without damage.
-- A rift kill heals +15 ("embers").
+- A kill heals +15 ("embers"), the blade's too.
 
 **SHOVE** (V / touch): a 4 m dash that staggers enemies it touches for
 1.4 s. It does 0 damage and has a 1.2 s cooldown. This is how you make
 things off-balance on foot.
 
-**FINISH** (F, blade): kills a downed or stunned enemy within 2 m, with a
-0.15 s hitstop.
+**HIDDEN BLADE** (ACTION: F / pad X / the touch ACTION button; first in
+line after throwing what you carry). A blade under the right wrist that
+takes down any enemy in any state: it goes through armour and shields, kills
+a charging brute, wrecks a turret. `src/game/blade.ts` (numbers in `BLADE`).
+- **Reach:** within 2 m of his body, from any side, up to 1.2 m above or
+  below. You turn and step in (0.1 s at most) and the blade lands.
+- **Lunge:** within 3.5 m of his body, ahead of you (±50° of where you face
+  or where the camera looks), within 0.6 m of your level, with a clear run
+  and floor between you: you dash to him at 14 m/s (about 0.2 s, silent, no
+  footsteps) and strike on arrival, 0.6 m from his body. If he gets away
+  (thrown, launched) it misses. Walls and fences block both.
+- **Cooldown** 0.8 s from the press. The prompt stays on the blade while a
+  target is near.
+- **Stealth:** a stab is quiet unless he sees it coming (in combat, on his
+  feet, you inside his ±90° view). A quiet kill is witnessed only by allies
+  looking his way (±90°, LOS, 25 m) or standing within 2.5 m of him;
+  unwitnessed, a calm or suspicious man's death scores GHOST. A loud one
+  (from his front, in a fight) is a death cry: everyone in earshot (15 m,
+  walls muffle it past 8 m) comes to where he fell, and calm ones join the
+  fight. A downed, stunned or held man can't cry out.
+- **Voss** takes 150 per stab, stunned or not, then breaks away at once: he
+  gets up and passes straight through his red rift (no warning) to a blink
+  point about 11 m off. With nowhere to blink, his gauntlet throws you back
+  (9 m/s, no damage).
+- **Feel:** the player turns to him, plays the strike, the blade snaps out
+  of the wrist; 0.1 s hitstop, camera kick, sparks, the blade sound; a kill
+  adds a 0.3 s slow beat. Scoring: HIDDEN BLADE (the `finisher` trick); it
+  is not a strike's kill, so it refunds one strike charge.
 
 ## 5. Enemies (Kessler Security)
 
@@ -240,23 +273,50 @@ launched, downed, stunned and dead.
 
 | Kind | HP | Behaviour | Answers |
 |---|---|---|---|
-| **Rifleman** | 40 | Keeps 10–20 m range and strafes. 0.6 s laser telegraph, then a 3-bolt burst. At most 3 shooters at once (attack tokens). | Return to Sender, trapdoor when off-balance, anything charged |
-| **Grenadier** | 40 | Lobs a grenade every 5 s (shows an arc and landing ring). | CATCH the grenade (POSTAGE), return it, trapdoor |
-| **Warden** | 70 | Front shield (120°) blocks everything from the front, charged too, below armour speed. Advances and shield-bashes (15 damage, knockback). Turns toward an exit that shot him. | Hit from behind (exit behind him), shove + trapdoor, loop, shear, armour-speed impact, grenade |
-| **Brute** | 250, armoured | Telegraphs a charge (roar 1 s), then 14 m/s in a straight line for up to 18 m. Hits for 35 and knocks you down. Stunned 2.5 s if he hits a wall. | MATADOR: his charge into your entrance sends him out of your exit (the sea or void kills him, a wall stuns and damages him, a crowd bowls). Also cannonball, shear, hazards. |
-| **Sniper** | 40 | Perched and never moves. 1.2 s red beam telegraph, then the beam. | FIRING LINE: catch his beam and it exits your exit; also cargo and shear |
-| **Jammer** | 40 | Projects a 7 m bubble where no rift end can open. Flees from you. | Things launched in from outside the bubble, grenades, bodies |
-| **Turret** | 120 | Static and turns. A 6-round stream with a laser. | BORROWED GUN: a caught stream exits your exit. Also barrels. |
-| **Director Voss** (boss) | 3 phases | Carries his own rift gauntlet. He catches straight shots with a red rift (returns your returned bolts) and blinks between two red ends. | Hit him from where his catch-rift doesn't face (behind/above). Shear him mid-blink. Cannonball a looped barrel into him. Drop the crown's hanging load. |
+| **Rifleman** | 40 | Keeps 10–20 m range and strafes; beyond 24 m he closes in instead of firing. 0.6 s laser telegraph (the only warning), then a 3-bolt burst at you. After a burst he varies: moves to a new spot, holds and re-aims, or hesitates. Looser aim at range, at a fast-moving target and on a fresh sighting; steadier the longer he watches you. | Return to Sender (REFLECT), a grab, anything charged, the hidden blade |
+| **Grenadier** | 40 | Lobs a grenade every 5 s (shows an arc and landing ring). | REFLECT: a rift over his throw sends it back (POSTAGE); a grab |
+| **Warden** | 70 | Front shield (120°) blocks everything from the front, charged too, below armour speed. Advances and shield-bashes (15 damage, knockback). Turns toward an exit that shot him. | Hit from behind (exit behind him), a grab (the floor isn't shielded), loop, shear, armour-speed impact, grenade; the hidden blade goes through the shield |
+| **Brute** | 250, armoured | Telegraphs a charge (roar 1 s), then 14 m/s in a straight line for up to 18 m. Hits for 35 and knocks you down. Stunned 2.5 s if he hits a wall. | MATADOR: his charge into your entrance sends him out of your exit (the sea or void kills him, a wall stuns and damages him, a crowd bowls). REFLECT sets it up: he charges now, into a door in front of you, out over the edge. Also cannonball, shear, hazards, and the hidden blade (even mid-charge). |
+| **Sniper** | 40 | Perched and never moves. 1.2 s red beam telegraph, then the beam. | FIRING LINE: REFLECT and he fires his beam into your rift, out into him (or the man you look at); also cargo and shear |
+| **Turret** | 120 | Static and turns. A 6-round stream with a laser. | BORROWED GUN: REFLECT takes its stream; the other end goes where you look. Also barrels. |
+| **Director Voss** (boss) | 1800, armoured, 3 phases (phase 2 under 2/3 of his hp, phase 3 under 1/3) | Carries his own rift gauntlet. He catches straight shots with a red rift (returns your returned bolts) and blinks between two red ends. Anchored: the PORTAL grab never takes him, stunned or not. One impact takes at most 200 (the crown's load 300). | Hit him from where his catch-rift doesn't face (behind/above). Shear him mid-blink. Stunned: LOOP him. The hidden blade wounds him any time (150), then he blinks away at once. Cannonball a looped barrel into him. Drop the crown's hanging load. |
 
-**Perception:**
-- Vision cone ±60°, 32 m. Hearing uses noise events.
+**Perception (information, not telepathy):**
+- Vision: a ±60° cone at 70% of sight range (32 m) while unaware, ±90° at
+  full range in combat. Anyone within 2.5 m is noticed in any direction.
+  Voss alone sees all round. Hearing uses noise events (a sprint carries 12 m).
+- An enemy knows only what he saw, heard or was told. When one spots you, he
+  shouts: his squad and anyone in earshot (15 m, walls muffle it) join the
+  fight with his last known spot, give or take 3 m. They turn to it and come
+  to look, but must see you themselves before they fire. While he has eyes on
+  you he calls out your spot every 2.5 s.
+- Reinforcements (gate waves, Voss's adds) arrive knowing roughly where you
+  were. Someone alarmed with no clue (hurt by something he didn't see) looks
+  around where he is. A witness to a death goes to the body, or stares at
+  the rift exit it came out of.
+- Losing track: no sight, sound or word of you for 5–6.5 s (it varies per
+  man) and he searches ("Where'd he go?"). He walks carefully to your last
+  known spot, looks around, then checks spots nearby. A noise brings him to
+  it. If he sees you again he calls it ("There he is!"), tells the squad, and
+  fires after a 0.3–0.7 s reaction. After 12–16 s of fruitless searching he
+  stands down ("Lost him."): suspicious, then calm, but for 40 s he notices
+  you twice as fast and sees further. Going through a rift out of their sight
+  leaves them searching the wrong place. Rift vision marks a searching man as
+  suspicious. Voss never loses you.
+- Firing: only at what he sees (a lock already running may finish on your
+  last known spot). A short reaction on first sighting and after losing you.
+  At most 2 shooters at once (attack tokens), and the turn goes to whoever
+  has waited longest. After one shooter's turn nobody new opens up for
+  0.5–1 s, and two never lock on in the same breath, so fire comes in waves
+  with gaps.
 - They never see rifts, only effects. When an ally dies to something that
   came out of a rift, they look at the exit and a Warden turns his shield to
   it.
-- A zone becomes "hot" (all its enemies go to combat) when any enemy in it
-  enters combat.
-- Kills of unaware enemies that no one sees score GHOST.
+- A zone is "hot" while any of its enemies is in combat (searching included).
+- Kills of unaware enemies (calm, suspicious, stood down) that no one sees
+  score GHOST. A hidden-blade stab is quiet unless he sees it coming; a
+  quiet one is seen only by allies facing him, a loud one is a death cry
+  (§4).
 
 **Launched:** an enemy that crosses a rift becomes a physics body until it
 lands.
@@ -291,7 +351,7 @@ values.
 | GUILLOTINE | Shear | 350 |
 | CARGO | Killed by a charged falling prop | 300 |
 | BOOM | A barrel explosion kills ≥ 1 | 250 |
-| FINISHER | Blade finish | 150 |
+| HIDDEN BLADE (`finisher`) | Hidden-blade kill | 150 |
 | GHOST | Kill of an unaware enemy unseen by others | +150 bonus |
 | AIRTIME | Airborne ≥ 3 s with ≥ 1 crossing (awarded on landing) | 100/s |
 | DOUBLE / TRIPLE / MULTI | 2 / 3 / 4+ kills within 0.6 s | 200 / 500 / 1000 |
@@ -319,7 +379,8 @@ points and decays (faster at high ranks). Getting hurt drops it one rank.
 - **Recorder:** records a snapshot every 1/30 s (the last 15 s ring buffer;
   types in contracts).
 - **CLIP button:** after a combo ≥ 1500 points or rank ≥ A, a "🎬 CLIP"
-  button pulses for 6 s. R (desktop) or tapping it opens the replay.
+  button pulses for 6 s. T (desktop), View (pad) or tapping it opens the
+  replay.
 - **Replay:**
   - Plays the last ~10 s around the combo.
   - The cinematic camera cuts between the follow cam, orbit cams at trick
@@ -349,10 +410,10 @@ centred near (0, 0, 40).
 
 | Zone | Height | Content | Lessons |
 |---|---|---|---|
-| **pier** | y 0 | Quay 80 × 50 m with sea on 3 sides, containers, crates, gatehouse, a harbour crane, barge | door (cross a channel), trapdoor (2 unaware guards at the quay edge, exit over the sea), returnToSender (a lone rifleman), slingshot (jump from a container stack into an air entrance, exit on a wall facing a group), arena (4 riflemen + warden) |
+| **pier** | y 0 | Quay 80 × 50 m with sea on 3 sides, containers, crates, gatehouse, a harbour crane, barge | door (cross a channel), trapdoor (2 unaware guards at the quay edge: tapped from the gap between stack T and row R1 they're thrown on into the sea; from the top of stack T the one further from the edge lands on the quay, knocked down), returnToSender (a lone rifleman), slingshot (jump from a container stack into an air entrance, exit on a wall facing a group), arena (4 riflemen + warden) |
 | **yard** | y 0–24 | Construction site at the tower base: tower crane with hanging loads (steel beam bundle, container), scaffolding towers, fuel barrels, mixer truck, the hoist | cargo, matador (brute near the pier edge), grenade (postage), shield (warden) |
 | **skeleton** | floors y 30 / 36 / 42 | Open steel floors, void at the edges, elevator shaft (a vertical hole through all floors, for loops), scaffolding, a neighbouring crane cab with a sniper | loop, firingLine, arena with brute + wardens + riflemen |
-| **lab** | y 60 | Glass-walled floor, Kessler rift gates (reinforcement waves), jammer, turret, laser curtains | hijack, jammer, borrowedGun |
+| **lab** | y 60 | Glass-walled floor, Kessler rift gates (reinforcement waves), a server hall, turret, laser curtains | hijack, a plain fight in the server hall (2 riflemen, the electric trench; no lesson, no hint), borrowedGun |
 | **crown** | roof y 90 | Helipad, hanging load on a small crane, the helicopter | boss (Voss, 3 phases), then a leap of faith off the roof into a rift to the sea, the end |
 
 - **Progress:** each zone's `exit` lift (a hoist / elevator platform) runs
@@ -387,7 +448,7 @@ centred near (0, 0, 40).
 | E / 3 · mouse back | SWAP |
 | R / 4 · mouse forward | DASH |
 | X / MMB | CLOSE (shear) |
-| F | ACTION (finish / grab / throw / hijack / use lift) |
+| F | ACTION (hidden blade / grab / throw / hijack / use lift) |
 | Tab | RIFT VISION (routes, cones, outcome icons) |
 | T | CLIP |
 | K | Photo mode |
@@ -404,7 +465,7 @@ centred near (0, 0, 40).
 | LB | Close |
 | RB | Shove |
 | A | Jump |
-| X | Action |
+| X | Action (hidden blade, ...) |
 | B | Crouch |
 | L3 | Sprint (latches) |
 | D-pad ▼ / ▲ | Vision / photo |
@@ -416,13 +477,13 @@ centred near (0, 0, 40).
 - **Buttons:**
   - **PORTAL** (touch = entrance, drag = aim the exit, lift = exit; a quick
     tap = auto exit; slide onto CANCEL to let go without one). Its caption
-    says what a press does now (GRAB ⚡ / CATCH / LOAD / ...).
+    says what a press does now (GRAB / LOAD / DOOR / ...).
   - **The STRIKES bar** (left, above the stick): REFLECT, LOOP (hold it the
     second time to aim the cannon), SWAP, DASH, with the charge pips.
   - **JUMP**
   - **SHOVE**
   - **✕** (tap closes)
-  - **ACTION** (context label)
+  - **ACTION** (context label: HIDDEN BLADE, GRAB, THROW, ...)
   - **⇄** (flip, while holding PORTAL)
   - **CROUCH** (small)
   - **🎬** (when offered)
@@ -436,6 +497,7 @@ src/game/portals.ts          RiftSystem implements RiftQuery (CORE)
 src/sim/physics.ts           DynBody physics, rift crossing  (CORE)
 src/sim/projectiles.ts       bolts, grenades, beams          (CORE)
 src/game/player.ts           player controller on DynBody    (CORE)
+src/game/blade.ts            hidden blade: reach, lunge      (lead)
 src/actors/enemies.ts (+enemy.ts)  Kessler AI               (ENEMIES)
 src/world/nav.ts             multi-floor nav grids           (ENEMIES)
 src/world/tower.ts           the level                       (LEVEL)
@@ -474,24 +536,25 @@ Old stealth code (`guards.ts`, `harbor.ts`) is removed at integration.
   key.
 - `rule.1`, `rule.2`, `rule.3`: the three rules, one line each.
 - Aim refusals: `aim.tooHigh` (air end above your feet), `aim.range`,
-  `aim.los`, `aim.blocked` (jammer), `aim.enemyClose`, `aim.space`,
+  `aim.los`, `aim.enemyClose`, `aim.space`,
   `aim.noSurface`.
-- PORTAL modes: `portal.air`, `portal.catch`, `portal.grab`, `portal.load`,
+- PORTAL modes: `portal.air`, `portal.grab`, `portal.load`,
   `portal.hijack`, `portal.hole`, `portal.door`; refusals `portal.anchored`,
-  `portal.noCharge`, `portal.noFloor`, `portal.nowhere`, `portal.loopLow`;
-  `portal.paid` (a charge spent on a grab).
-- Entrance refusals: `gate.steady`, `gate.enemyClose`, `gate.blocked`,
-  `gate.noSpace`, `gate.range`.
+  `portal.noFloor`, `portal.nowhere`, `portal.loopLow`.
+- Entrance refusals: `gate.steady`, `gate.enemyClose`, `gate.noSpace`,
+  `gate.range`; `gate.noExit` (HIJACK at a panel with no exit open).
 - `outcome.splash`, `outcome.void`, `outcome.skull`, `outcome.stars`,
   `outcome.safe`.
-- `prompt.finish`, `prompt.grab`, `prompt.throw`, `prompt.hijack`,
+- `prompt.blade`, `prompt.grab`, `prompt.throw`, `prompt.hijack`,
   `prompt.lift`, `prompt.drop`.
 - `obj.clear`, `obj.lift`, `obj.boss`, `obj.escape`.
+- Rift vision labels: `state.<EnemyState>` (a searching man shows
+  `state.suspicious`).
 - `toast.checkpoint`, `toast.hijack`, `toast.clipSaved`, `toast.clipFailed`,
   `toast.photoSaved`, `toast.challenge`, `toast.zoneClear`.
 - Enemy barks: `bark.contact`, `bark.reload`, `bark.grenade`, `bark.charge`,
-  `bark.lost`, `bark.mateDown`, `bark.what`, `bark.boss1`, `bark.boss2`,
-  `bark.boss3`.
+  `bark.lost`, `bark.where`, `bark.there`, `bark.mateDown`, `bark.what`,
+  `bark.boss1`, `bark.boss2`, `bark.boss3`.
 - `trick.<TrickId>` and `challenge.<id>.title` / `challenge.<id>.desc`:
   provided by META in `src/meta/strings.ts` (`META_STRINGS = { en, he }`).
   UI merges them through `addStrings`.
@@ -505,9 +568,9 @@ Old stealth code (`guards.ts`, `harbor.ts`) is removed at integration.
 | CORE | `new Projectiles(world, rifts, physics, hooks)` implements `ProjectileAPI` |
 | CORE | `new Player(char, body)`, `update(dt, input, world, physics, physEv, ev, time)` |
 | CORE | `CollisionWorld` gains a broadphase (same API) + `moveCollider(c, dx, dy, dz)` |
-| ENEMIES | `new EnemySystem(physics, hooks, makeChar)` implements `EnemyAPI` (+ `setNav`, `onCrossed`, `onImpact`, `onSplash`, `onFellOut`, `enemyOfBody`, `blockers`, `trapTargets`, `boss()`) |
+| ENEMIES | `new EnemySystem(physics, hooks, makeChar)` implements `EnemyAPI` (+ `setNav`, `onCrossed`, `onImpact`, `onSplash`, `onFellOut`, `enemyOfBody`, `trapTargets`, `boss()`) |
 | LEVEL | `buildTower(envMap, mobile, { headless? })` returns `TowerLevel`. `fx.ts`: `createSky()` (uniform `uSunDir`), `createSkyline()`, `LampSystem`, `createBeam` |
-| ANIM | `loadAnimLibrary(json, soldierAsset)` returns `AnimLibrary`; `new Character(asset, anims, look)` implements `CharacterAPI`. Looks: hero, rifleman, grenadier, warden, brute, sniper, jammer, boss, hologram |
+| ANIM | `loadAnimLibrary(json, soldierAsset)` returns `AnimLibrary`; `new Character(asset, anims, look)` implements `CharacterAPI`. Looks: hero, rifleman, grenadier, warden, brute, sniper, boss, hologram |
 | META | `StyleSystem`, `ReplayRecorder`, `ReplayPlayer(host)`, `ClipExporter`, `PhotoMode`, `ChallengeSystem`, `META_STRINGS` |
 | UI | `HUD` implements `HudAPI` (+ `onClip`), `Input` (`Action` from contracts), `TouchControls`, `Menu` (+ `RunStats`, `showChallenges`), `t()` / `addStrings()` |
 | AUDIO | `Audio` implements `AudioAPI` |

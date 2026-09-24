@@ -22,6 +22,8 @@ export interface Brain {
   moveTo(e: Enemy, goal: V3, speed: number, dt: number, faceMove: boolean): boolean;
   halt(e: Enemy, dt: number): void;
   face(e: Enemy, p: V3, dt: number): void;
+  /** A slow sweep around e.lookBase. */
+  lookAround(e: Enemy, dt: number): void;
   /** A safe nav spot at [min,max] from center, near his current bearing. */
   pickSpot(e: Enemy, center: V3, min: number, max: number, out: V3): boolean;
   tryToken(e: Enemy): boolean;
@@ -44,21 +46,22 @@ export function combat(b: Brain, e: Enemy, dt: number) {
     b.halt(e, dt);
     return;
   }
+  // lost him: hunt instead (a turret only sweeps; Voss never loses you)
+  if (e.searching && e.atk === 'none' && e.kind !== 'turret') return search(b, e, dt);
   switch (e.kind) {
     case 'rifleman': return rifleman(b, e, dt);
     case 'grenadier': return grenadier(b, e, dt);
     case 'warden': return warden(b, e, dt);
     case 'brute': return brute(b, e, dt);
     case 'sniper': return sniper(b, e, dt);
-    case 'jammer': return jammer(b, e, dt);
     case 'turret': return turret(b, e, dt);
     case 'boss': return boss(b, e, dt);
   }
 }
 
-/** Where he thinks the player is. */
+/** Where he thinks the player is: what he sees, else what he last saw, heard or was told. */
 function target(b: Brain, e: Enemy): V3 {
-  return e.seesPlayer || !e.hasLastKnown ? b.ctx.player.pos : e.lastKnown;
+  return e.seesPlayer ? b.ctx.player.pos : e.lastKnown;
 }
 
 /** Face the player, unless staring at a rift exit or turning a shield. */
@@ -95,9 +98,10 @@ export function muzzleOf(e: Enemy, out: V3) {
   return out.set(p.x + s * fwd - c * 0.16, p.y + y, p.z + c * fwd + s * 0.16);
 }
 
-/** Player chest, led a little by his velocity. */
+/** Player chest, led a little by his velocity; out of sight, where he was last known. */
 function predictChest(b: Brain, e: Enemy, out: V3) {
   const pl = b.ctx.player;
+  if (!e.seesPlayer) return out.set(e.lastKnown.x, e.lastKnown.y + pl.chest.y - pl.pos.y, e.lastKnown.z);
   const t = Math.min(0.8, (e.muzzle.distanceTo(pl.chest) / LAW.bolt.speed) * AI.rifle.lead);
   return out.copy(pl.chest).addScaledVector(pl.vel, t);
 }
@@ -149,7 +153,14 @@ function gunUpdate(b: Brain, e: Enemy, dt: number): boolean {
     if (e.kind === 'turret') e.reloadT = b.between(AI.turret.reload);
     else if (e.kind === 'boss') e.reloadT = b.between(AI.boss.reload);
     else {
-      e.reloadT = b.between(AI.rifle.reload);
+      const R = AI.rifle;
+      e.reloadT = b.between(R.reload);
+      // no metronome: he moves to a new spot first, hesitates, or holds and re-aims
+      const r = b.rand();
+      if (r < R.shift) {
+        e.hasSpot = false;
+        e.reloadT += R.shiftTime;
+      } else if (r < R.shift + R.hesitate) e.reloadT += b.between(R.pause);
       if (e.bursts % 3 === 0) {
         e.char.play('reload');
         b.bark(e, 'bark.reload');
@@ -160,10 +171,7 @@ function gunUpdate(b: Brain, e: Enemy, dt: number): boolean {
 }
 
 function fireShot(b: Brain, e: Enemy) {
-  _d.subVectors(e.aimPt, e.muzzle);
-  // a rifleman's first burst is a warning over your head (it still goes through a CATCH door)
-  if (e.kind === 'rifleman' && e.bursts === 0) _d.y += AI.rifle.warnOver;
-  _d.normalize();
+  _d.subVectors(e.aimPt, e.muzzle).normalize();
   if (e.atkKind === 'fan') {
     const n = AI.boss.fan;
     for (let i = 0; i < n; i++) {
@@ -171,7 +179,7 @@ function fireShot(b: Brain, e: Enemy) {
       b.hooks.fireBolt(e, e.muzzle.clone(), _r.clone());
     }
   } else {
-    const s = AI.rifle.spread;
+    const s = e.kind === 'rifleman' ? aimSpread(e.muzzle.distanceTo(e.aimPt), b.ctx.player.vel.length(), e.seesPlayer ? b.time - e.viewT : 0) : AI.gunSpread;
     _d.x += (b.rand() - 0.5) * 2 * s;
     _d.y += (b.rand() - 0.5) * 2 * s;
     _d.z += (b.rand() - 0.5) * 2 * s;
@@ -181,32 +189,61 @@ function fireShot(b: Brain, e: Enemy) {
   e.char.play('shoot');
 }
 
+/**
+ * A rifleman's aim spread (DESIGN §5): range and your speed open it, a long
+ * unbroken look at you tightens it.
+ */
+export function aimSpread(dist: number, speed: number, view: number) {
+  const R = AI.rifle;
+  const cold = 1 + (R.coldAim - 1) * Math.max(0, 1 - view / R.settle);
+  return (R.spread + R.perMetre * dist + R.moveBlur * speed) * cold;
+}
+
 // ---------------------------------------------------------------------------
 // Positioning shared by the ranged kinds
 // ---------------------------------------------------------------------------
 
-/** Keep [keepMin, keepMax] from the player, strafing between safe nav spots; hunt when he's lost. */
+/** Keep [keepMin, keepMax] from where he thinks you are, strafing between safe nav spots; hunt when he's lost sight. */
 function reposition(b: Brain, e: Enemy, dt: number) {
-  const pl = b.ctx.player;
-  const unseen = b.time - e.lastSeenT;
-  if (!e.seesPlayer && unseen > 2.5 && e.hasLastKnown) {
-    const there = b.moveTo(e, e.lastKnown, e.tune.run, dt, true);
-    if (there && unseen > 8 && !e.lostBarked) {
-      e.lostBarked = true;
-      b.bark(e, 'bark.lost');
-    }
+  if (!e.seesPlayer && b.time - e.lastSeenT > 2.5) {
+    b.moveTo(e, e.lastKnown, e.tune.run, dt, true);
     return;
   }
-  e.lostBarked = false;
+  const tgt = target(b, e);
   e.spotT -= dt;
-  const d = hdist(e.pos, pl.pos);
+  const d = hdist(e.pos, tgt);
   const min = e.tune.keepMin, max = e.tune.keepMax;
   if (!e.hasSpot || e.spotT <= 0 || d < min - 3 || d > max + 4) {
-    e.hasSpot = b.pickSpot(e, pl.pos, min, max, e.spot);
+    e.hasSpot = b.pickSpot(e, tgt, min, max, e.spot);
     e.spotT = b.between(AI.rifle.strafe);
   }
   if (e.hasSpot) b.moveTo(e, e.spot, e.tune.run * 0.75, dt, false);
   else b.halt(e, dt);
+}
+
+/**
+ * Lost him: a careful walk to where he was last known, a look around, then
+ * spots nearby, until he turns up or the search runs out (the system stands
+ * him down).
+ */
+function search(b: Brain, e: Enemy, dt: number) {
+  const S = AI.search;
+  if (!e.hasSpot) {
+    e.spot.copy(e.lastKnown);
+    e.hasSpot = true;
+    e.spotT = b.between(S.look);
+  }
+  if (!b.moveTo(e, e.spot, e.tune.walk * S.pace, dt, true)) {
+    e.lookBase = e.yaw;
+    return;
+  }
+  if (e.lookT > 0) b.face(e, e.lookAt, dt);
+  else b.lookAround(e, dt);
+  e.spotT -= dt;
+  if (e.spotT > 0) return;
+  // not here: somewhere near it
+  if (!b.pickSpot(e, e.lastKnown, S.near[0], S.near[1], e.spot)) e.spot.copy(e.pos);
+  e.spotT = b.between(S.look);
 }
 
 // ---------------------------------------------------------------------------
@@ -217,13 +254,14 @@ function rifleman(b: Brain, e: Enemy, dt: number) {
   const tgt = target(b, e);
   if (gunUpdate(b, e, dt)) {
     b.halt(e, dt);
-    b.face(e, b.ctx.player.pos, dt);
+    b.face(e, e.aimPt, dt);
     return;
   }
   reposition(b, e, dt);
   attend(b, e, dt, tgt);
   e.reloadT -= dt;
-  if (canShoot(b, e) && e.seeDist <= e.tune.sight * 1.25 && b.tryToken(e)) startGun(e, 'burst', AI.rifle.telegraph, AI.rifle.shots, AI.rifle.interval);
+  // out of his effective range he closes in (reposition) rather than fire
+  if (canShoot(b, e) && e.seeDist <= AI.rifle.range && b.tryToken(e)) startGun(e, 'burst', AI.rifle.telegraph, AI.rifle.shots, AI.rifle.interval);
 }
 
 function handOf(e: Enemy, out: V3) {
@@ -258,7 +296,7 @@ function lobUpdate(b: Brain, e: Enemy, dt: number): boolean {
   if (e.atk !== 'aim' || e.atkKind !== 'lob') return false;
   const pl = b.ctx.player;
   handOf(e, e.muzzle);
-  e.aimPt.copy(pl.pos);
+  e.aimPt.copy(e.seesPlayer ? pl.pos : e.lastKnown);
   solveLob(e.muzzle, e.aimPt, e.lobFlight, LAW.gravity, e.lobVel);
   e.atkT += dt;
   b.hooks.telegraph(e, 'arc', e.muzzle, e.aimPt, Math.min(1, e.atkT / e.atkDur));
@@ -329,9 +367,8 @@ function warden(b: Brain, e: Enemy, dt: number) {
   if (meleeUpdate(b, e, dt, AI.warden.windup, AI.warden.bashReach, AI.warden.damage, AI.warden.push)) return;
   const tgt = target(b, e);
   const d = hdist(e.pos, pl.pos);
-  // advances shield-first (faces his target, not his path)
-  if (!e.seesPlayer && b.time - e.lastSeenT > 2.5) b.moveTo(e, e.lastKnown, e.tune.run, dt, false);
-  else if (d > 1.8) b.moveTo(e, pl.pos, e.tune.run, dt, false);
+  // advances shield-first (faces his target, not his path) on where he thinks you are
+  if (hdist(e.pos, tgt) > 1.8) b.moveTo(e, tgt, e.tune.run, dt, false);
   else b.halt(e, dt);
   attend(b, e, dt, tgt);
   if (d <= AI.warden.bashRange + 0.2 && e.meleeCd <= 0 && e.shieldT <= 0 && offAxis(e.yaw, e.pos, pl.pos) < 0.6) {
@@ -352,10 +389,10 @@ function brute(b: Brain, e: Enemy, dt: number) {
     startCharge(b, e);
     return;
   }
-  if (!e.seesPlayer && b.time - e.lastSeenT > 2.5) b.moveTo(e, e.lastKnown, e.tune.run, dt, true);
-  else if (d > 2) b.moveTo(e, pl.pos, e.tune.run, dt, true);
+  const tgt = target(b, e);
+  if (hdist(e.pos, tgt) > 2) b.moveTo(e, tgt, e.tune.run, dt, true);
   else b.halt(e, dt);
-  if (d < 6) attend(b, e, dt, target(b, e));
+  if (d < 6) attend(b, e, dt, tgt);
   if (d <= 2.3 && e.meleeCd <= 0) {
     e.atk = 'windup';
     e.atkKind = 'punch';
@@ -375,8 +412,6 @@ export function provokeAttack(b: Brain, e: Enemy): boolean {
   e.lookT = 0;
   switch (e.kind) {
     case 'rifleman':
-      // (no warning burst over your head this time)
-      e.bursts = Math.max(1, e.bursts);
       startGun(e, 'burst', 0.35, AI.rifle.shots + 1, AI.rifle.interval);
       return true;
     case 'turret':
@@ -499,8 +534,8 @@ function sniper(b: Brain, e: Enemy, dt: number) {
   b.halt(e, dt);
   if (e.atk === 'aim' && e.atkKind === 'beam') {
     e.atkT += dt;
-    // tracks, then locks for the last 0.2 s so a dodge is possible
-    if (e.atkT < AI.sniper.lockAt) e.aimPt.copy(pl.chest);
+    // tracks you while he sees you, then locks for the last 0.2 s so a dodge is possible
+    if (e.atkT < AI.sniper.lockAt && e.seesPlayer) e.aimPt.copy(pl.chest);
     b.face(e, e.aimPt, dt);
     muzzleOf(e, e.muzzle);
     b.hooks.telegraph(e, 'beam', e.muzzle, e.aimPt, Math.min(1, e.atkT / LAW.beam.telegraph));
@@ -530,23 +565,6 @@ function sniper(b: Brain, e: Enemy, dt: number) {
   }
 }
 
-function jammer(b: Brain, e: Enemy, dt: number) {
-  const pl = b.ctx.player;
-  const keep = AI.jammer.keep;
-  if (hdist(e.pos, pl.pos) < keep + 2) {
-    e.spotT -= dt;
-    if (!e.hasSpot || e.spotT <= 0 || hdist(e.spot, pl.pos) < keep) {
-      e.hasSpot = b.pickSpot(e, pl.pos, keep + 3, keep + 8, e.spot);
-      e.spotT = 1.5;
-    }
-    if (e.hasSpot) b.moveTo(e, e.spot, e.tune.run, dt, true);
-    else b.halt(e, dt);
-  } else {
-    b.halt(e, dt);
-    attend(b, e, dt, target(b, e));
-  }
-}
-
 /** Head turns at 60°/s, gun pitches toward the target. */
 function aimTurret(e: Enemy, p: V3, dt: number) {
   e.yaw = stepAngle(e.yaw, yawTo(e.pos, p), e.tune.turn * dt);
@@ -561,8 +579,9 @@ function turret(b: Brain, e: Enemy, dt: number) {
     aimTurret(e, e.aimPt, dt);
     return;
   }
-  const tgt = e.lookT > 0 ? e.lookAt : e.seesPlayer || !e.hasLastKnown ? pl.chest : e.lastKnown;
-  aimTurret(e, tgt, dt);
+  // lost you: it sweeps around where it last had you
+  if (e.searching && e.lookT <= 0) e.yaw = stepAngle(e.yaw, e.lookBase + Math.sin(b.time * 0.9 + e.id) * 0.9, e.tune.turn * dt);
+  else aimTurret(e, e.lookT > 0 ? e.lookAt : e.seesPlayer ? pl.chest : e.lastKnown, dt);
   e.reloadT -= dt;
   if (canShoot(b, e) && offAxis(e.yaw, e.pos, pl.pos) < AI.turret.aimCone && b.tryToken(e)) {
     startGun(e, 'burst', AI.turret.telegraph, AI.turret.shots, AI.turret.interval);
@@ -597,7 +616,7 @@ function boss(b: Brain, e: Enemy, dt: number) {
   e.blinkNext -= dt;
   if (gunUpdate(b, e, dt) || lobUpdate(b, e, dt)) {
     b.halt(e, dt);
-    b.face(e, pl.pos, dt);
+    b.face(e, e.aimPt, dt);
     return;
   }
   reposition(b, e, dt);

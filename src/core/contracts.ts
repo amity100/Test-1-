@@ -43,7 +43,6 @@ export const LAW = {
   barrel: { radius: 4.2, damage: 80, playerScale: 0.5 },
   player: { hp: 100, regenDelay: 4, regenRate: 25, killHeal: 15, uncharged: { hurtFrom: 14, perMs: 9 } },
   shove: { distance: 4, stagger: 1.4, cooldown: 1.2 },
-  finishRange: 2,
   cometSpeed: 18,
   cometRadius: 3,
 } as const;
@@ -133,8 +132,6 @@ export interface RiftQuery {
   holeAt(x: number, z: number, y: number, r?: number, tol?: number, player?: boolean): RiftEnd | null;
   /** A mover near an open end on collider `c` may pass through that collider. */
   hostPassable(c: Collider, pos: V3, radius: number, player?: boolean): boolean;
-  /** Rift ends can't open here (jammer bubbles). */
-  blocked(p: V3): boolean;
   notePass(end: RiftEnd, who: BodyKind | 'bolt' | 'beam'): void;
   /** Ray that continues through open rifts (beams, lasers, sight, previews). */
   raycastThrough(origin: V3, dir: V3, maxDist: number, world: CollisionWorld, maxHops?: number): RaySegment[];
@@ -329,11 +326,10 @@ export interface EntranceContext {
   airborne: boolean;
   camPos: V3;
   camDir: V3;
-  threats: Threat[];
   targets: TrapTarget[];
 }
 
-export type EntranceMode = 'air' | 'catch' | 'trapdoor' | 'door';
+export type EntranceMode = 'air' | 'trapdoor' | 'door';
 
 export interface EntranceResult {
   ok: boolean;
@@ -368,8 +364,6 @@ export interface RiftAPI extends RiftQuery {
   setGateOpen(id: string, open: boolean): void;
   /** Boss rifts. */
   setBossPair(a: (RiftFrame & { kind: RiftEndKind }) | null, b: (RiftFrame & { kind: RiftEndKind }) | null): void;
-  /** Jammer bubbles. */
-  setBlockers(list: { pos: V3; radius: number }[]): void;
   updatePreview(aim: ExitAim | null, handPos: V3, cam: THREE.Camera): void;
   update(dt: number, realDt: number, time: number): void;
   renderViews(camera: THREE.PerspectiveCamera, screenW: number, screenH: number, hide: THREE.Object3D[]): void;
@@ -443,7 +437,7 @@ export interface CharacterAPI {
 // Enemies
 // ---------------------------------------------------------------------------
 
-export type EnemyKind = 'rifleman' | 'grenadier' | 'warden' | 'brute' | 'sniper' | 'jammer' | 'turret' | 'boss';
+export type EnemyKind = 'rifleman' | 'grenadier' | 'warden' | 'brute' | 'sniper' | 'turret' | 'boss';
 export type EnemyState = 'idle' | 'patrol' | 'suspicious' | 'combat' | 'stagger' | 'charge' | 'launched' | 'downed' | 'stunned' | 'dead';
 
 export interface SpawnDef {
@@ -472,6 +466,8 @@ export interface EnemyView {
   readonly alive: boolean;
   /** Knows about the player (combat/suspicious). */
   readonly aware: boolean;
+  /** In combat but lost track of the player: searching where he was last known. */
+  readonly searching: boolean;
   /** Can be trapdoored right now. */
   readonly offBalance: boolean;
   readonly armored: boolean;
@@ -543,9 +539,9 @@ export interface EnemyAPI {
   launch(e: EnemyView, vel?: V3): void;
   stagger(e: EnemyView, seconds: number, push?: V3): void;
   kill(e: EnemyView, info: HitInfo): void;
-  /** Zone went hot: all its enemies enter combat. */
+  /** Zone went hot: all its enemies enter combat (with no word of the player, they search). */
   alertZone(zone: ZoneId): void;
-  /** Threats against the player this frame (for CATCH). */
+  /** Attacks about to reach the player this frame (lasers, beams, charges) and when. */
   threats(): Threat[];
   clear(): void;
   snapshot(): ActorSnap[];
@@ -559,7 +555,7 @@ export interface EnemyAPI {
 export type ZoneId = 'pier' | 'yard' | 'skeleton' | 'lab' | 'crown';
 export type LessonId =
   | 'door' | 'trapdoor' | 'returnToSender' | 'slingshot' | 'arena' | 'loop' | 'cargo' | 'matador'
-  | 'grenade' | 'shield' | 'firingLine' | 'hijack' | 'jammer' | 'borrowedGun' | 'boss' | 'leap';
+  | 'grenade' | 'shield' | 'firingLine' | 'hijack' | 'borrowedGun' | 'boss' | 'leap';
 
 export interface LampDef {
   pos: V3;
@@ -876,13 +872,11 @@ export interface AimInfo {
 }
 
 export interface GateHint {
-  /** What a PORTAL press would do now: air / catch / grab / load / hijack / door. */
+  /** What a PORTAL press would do now: air / grab / load / hijack / hole / door. */
   mode: string | null;
   /** i18n key of the reason when it would be refused. */
   reason: string | null;
   targetKey: string | null;
-  /** Rift charge it costs (grabbing a man who's fighting you). */
-  cost?: number;
 }
 
 export interface ScreenMarker {

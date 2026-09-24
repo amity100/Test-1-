@@ -58,6 +58,9 @@ export class Player {
   private mantle: { from: THREE.Vector3; to: THREE.Vector3; t: number } | null = null;
   private shoveT = 0;
   private shoveDir = new THREE.Vector3();
+  private lungeT = 0;
+  private lungeSpeed = 0;
+  private readonly lungeDir = new THREE.Vector3();
   private jumpBuf = 0;
   private coyote = 0;
   private physEv: PhysicsEvents | null = null;
@@ -111,6 +114,27 @@ export class Player {
     return !!this.mantle;
   }
 
+  get lunging() {
+    return this.lungeT > 0;
+  }
+
+  /** The hidden blade's lunge: this fast along `dir` for up to `time` s (the game steers it and ends it). */
+  lunge(dir: V3, speed: number, time: number) {
+    this.lungeDir.set(dir.x, 0, dir.z).normalize();
+    this.lungeSpeed = speed;
+    this.lungeT = time;
+    this.shoveT = 0;
+    this.yaw = yawOf(this.lungeDir);
+  }
+
+  /** Stop where the lunge got you. */
+  endLunge() {
+    if (this.lungeT <= 0) return;
+    this.lungeT = 0;
+    this.body.vel.x = 0;
+    this.body.vel.z = 0;
+  }
+
   eye(out = new THREE.Vector3()) {
     return out.copy(this.body.pos).setY(this.body.pos.y + this.height - 0.12);
   }
@@ -143,6 +167,7 @@ export class Player {
     if (yaw !== undefined) this.yaw = yaw;
     this.mantle = null;
     this.shoveT = 0;
+    this.lungeT = 0;
     this.airTime = 0;
     this.lastSafe.copy(p);
   }
@@ -195,7 +220,7 @@ export class Player {
     const tx = dirX * want, tz = dirZ * want;
 
     // --- shove: a short dash ---
-    if (input.shove && this.shoveCooldown <= 0) {
+    if (input.shove && this.shoveCooldown <= 0 && this.lungeT <= 0) {
       if (inputMag > 0.1) this.shoveDir.set(dirX, 0, dirZ);
       else this.forward(this.shoveDir);
       this.shoveT = FEEL.shoveTime;
@@ -206,7 +231,14 @@ export class Player {
       this.char.play('push', { fade: 0.08 });
     }
 
-    if (this.shoveT > 0) {
+    // the hidden blade's lunge: straight at him, and silent (no footsteps)
+    const lunging = this.lungeT > 0;
+    if (lunging) {
+      this.lungeT -= dt;
+      const s = this.lungeT > 0 ? this.lungeSpeed : 0;
+      b.vel.x = this.lungeDir.x * s;
+      b.vel.z = this.lungeDir.z * s;
+    } else if (this.shoveT > 0) {
       this.shoveT -= dt;
       const s = this.shoveT > 0 ? SHOVE_SPEED : want;
       b.vel.x = this.shoveDir.x * s;
@@ -247,14 +279,15 @@ export class Player {
 
     // --- facing ---
     const hs = Math.hypot(b.vel.x, b.vel.z);
-    if (this.aim > 0.3) this.yaw = dampAngle(this.yaw, input.camYaw, 18, dt);
+    if (lunging) this.yaw = yawOf(this.lungeDir);
+    else if (this.aim > 0.3) this.yaw = dampAngle(this.yaw, input.camYaw, 18, dt);
     else if (this.shoveT > 0) this.yaw = yawOf(this.shoveDir);
     else if (hs > 0.3 && inputMag > 0.05) this.yaw = dampAngle(this.yaw, Math.atan2(b.vel.x, b.vel.z), 11, dt);
 
     // --- jump / mantle (buffered, with coyote time) ---
     this.jumpBuf = input.jump ? FEEL.jumpBuffer : Math.max(0, this.jumpBuf - dt);
     this.coyote = b.onGround ? FEEL.coyoteTime : Math.max(0, this.coyote - dt);
-    if (this.jumpBuf > 0 && this.coyote > 0 && this.shoveT <= 0) {
+    if (this.jumpBuf > 0 && this.coyote > 0 && this.shoveT <= 0 && !lunging) {
       this.jumpBuf = 0;
       this.coyote = 0;
       if (this.tryMantle(world)) {
@@ -277,7 +310,7 @@ export class Player {
 
     // --- footsteps ---
     const moved = Math.hypot(b.pos.x - px, b.pos.z - pz);
-    if (b.onGround && moved < 1) {
+    if (b.onGround && moved < 1 && !lunging) {
       this.stride += moved;
       const len = this.sprinting ? 1.05 : this.crouched ? 0.6 : 0.78;
       if (this.stride > len) {
@@ -308,6 +341,7 @@ export class Player {
     // out of a door / wall: face where you're going; floors and ceilings keep your yaw
     if (Math.abs(to.normal.y) < 0.5) this.yaw = yawOf(to.normal);
     this.shoveT = 0;
+    this.lungeT = 0;
     let d = this.yaw - old;
     while (d > Math.PI) d -= Math.PI * 2;
     while (d < -Math.PI) d += Math.PI * 2;

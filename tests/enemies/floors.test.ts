@@ -55,10 +55,10 @@ describe('fighting on open floors', () => {
     expect(s.log.bolts.length).toBeGreaterThan(6);
   });
 
-  it('a jammer fleeing toward the void stops short of the edge', () => {
+  it('a grenadier backing off toward the void stops short of the edge', () => {
     const s = floors();
     s.setPlayer(-3, 30, 0);
-    const j = s.spawn('jammer', V(8, 30, 0), 0, { zone: 'skeleton', state: 'combat' }) as Enemy;
+    const j = s.spawn('grenadier', V(8, 30, 0), 0, { zone: 'skeleton', state: 'combat' }) as Enemy;
     s.step(60 * 10);
     expect(j.state).not.toBe('launched');
     expect(Math.abs(j.pos.x)).toBeLessThan(12);

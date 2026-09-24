@@ -11,7 +11,7 @@ import { onLangChange, t } from '../ui/i18n';
  * - PORTAL: touch = the entrance ('portal' down); moving that finger aims the
  *   exit (look); lift = the exit ('portal' up). A quick tap lets the game
  *   place the exit. Slide onto the CANCEL zone to let go without an exit.
- *   Its caption says what a press does now (GRAB, CATCH, ...).
+ *   Its caption says what a press does now (GRAB, LOAD, ...).
  * - JUMP / SHOVE / ✕ / ACTION / CROUCH: held while touched (the game reads
  *   wasPressed / isHeld). Dragging off a button also looks.
  * - ⇄ FLIP (only while aiming, left thumb), 🎬 (when offered), pause: taps.
@@ -188,14 +188,14 @@ export class TouchControls {
     }
   }
 
-  /** Small caption on PORTAL: what a press does now (GRAB / CATCH / LOAD / ...). `mode` only styles it (catch pulses). */
+  /** Small caption on PORTAL: what a press does now (GRAB / LOAD / DOOR / ...). `mode` only styles it (AIR pulses). */
   setPortalLabel(label: string | null, mode?: string | null) {
     const key = label ? `${label}|${mode ?? ''}` : null;
     if (key === this.portalLabel) return;
     this.portalLabel = key;
     this.portalCap.textContent = label ?? '';
     this.portalBtn.classList.toggle('has-cap', !!label);
-    this.portalBtn.classList.toggle('urgent', mode === 'catch' || mode === 'air');
+    this.portalBtn.classList.toggle('urgent', mode === 'air');
     this.portalBtn.classList.toggle('grab', mode === 'grab' || mode === 'load' || mode === 'hijack');
   }
 

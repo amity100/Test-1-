@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import type { LessonId, TrickId, ZoneId } from '../../src/core/contracts';
+import type { EnemyState, LessonId, TrickId, ZoneId } from '../../src/core/contracts';
 import { addStrings, formatNumber, getLang, has, setDevice, setLang, strings, t } from '../../src/ui/i18n';
+import { META_STRINGS } from '../../src/meta/strings';
+import { LEAD_STRINGS } from '../../src/game/strings';
 
 const ZONES: ZoneId[] = ['pier', 'yard', 'skeleton', 'lab', 'crown'];
 const LESSONS: LessonId[] = [
   'door', 'trapdoor', 'returnToSender', 'slingshot', 'arena', 'loop', 'cargo', 'matador',
-  'grenade', 'shield', 'firingLine', 'hijack', 'jammer', 'borrowedGun', 'boss', 'leap',
+  'grenade', 'shield', 'firingLine', 'hijack', 'borrowedGun', 'boss', 'leap',
 ];
 const TRICKS: TrickId[] = [
   'returnToSender', 'crossfire', 'postage', 'firingLine', 'borrowedGun', 'trapdoor', 'splashdown', 'void', 'skyfall',
@@ -13,20 +15,29 @@ const TRICKS: TrickId[] = [
   'finisher', 'ghost', 'airtime', 'double', 'triple', 'multi', 'mirror', 'hijack', 'juggle',
 ];
 
+const STATES: EnemyState[] = ['idle', 'patrol', 'suspicious', 'combat', 'stagger', 'charge', 'launched', 'downed', 'stunned', 'dead'];
+
+/** Every source file as text, to find the keys the game names. */
+const SOURCES = import.meta.glob('../../src/**/*.ts', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+/** The string tables themselves (they define keys; their comments name key patterns). */
+const TABLES = ['/src/ui/i18n.ts', '/src/meta/strings.ts', '/src/game/strings.ts'];
+const LITERAL_KEY =
+  /['`]((?:aim|gate|portal|strike|prompt|hint|toast|obj|bark|respawn|hud|touch|ctl|key|menu|set|end|clip|photo|outcome|orient|kind|rule|zone|state|trick|challenge|briefing|boot)\.[A-Za-z0-9_.]+)['`]/g;
+
 /** DESIGN §12 canonical keys (trick.* / challenge.* come from META; tricks have UI fallbacks). */
 const CANONICAL = [
   ...ZONES.flatMap((z) => [`zone.${z}.name`, `zone.${z}.sub`]),
   ...LESSONS.map((l) => `hint.${l}`),
   'rule.1', 'rule.2', 'rule.3',
-  'aim.tooHigh', 'aim.range', 'aim.los', 'aim.blocked', 'aim.enemyClose', 'aim.space', 'aim.noSurface',
-  'portal.air', 'portal.catch', 'portal.grab', 'portal.load', 'portal.hijack', 'portal.hole', 'portal.door',
-  'portal.anchored', 'portal.noCharge', 'portal.noFloor', 'portal.nowhere', 'portal.loopLow', 'portal.paid',
-  'gate.steady', 'gate.enemyClose', 'gate.blocked', 'gate.noSpace', 'gate.range',
+  'aim.tooHigh', 'aim.range', 'aim.los', 'aim.enemyClose', 'aim.space', 'aim.noSurface',
+  'portal.air', 'portal.grab', 'portal.load', 'portal.hijack', 'portal.hole', 'portal.door',
+  'portal.anchored', 'portal.noFloor', 'portal.nowhere', 'portal.loopLow',
+  'gate.steady', 'gate.enemyClose', 'gate.noSpace', 'gate.range', 'gate.noExit',
   'outcome.splash', 'outcome.void', 'outcome.skull', 'outcome.stars', 'outcome.safe',
-  'prompt.finish', 'prompt.grab', 'prompt.throw', 'prompt.hijack', 'prompt.lift', 'prompt.drop',
+  'prompt.blade', 'prompt.grab', 'prompt.throw', 'prompt.hijack', 'prompt.lift', 'prompt.drop',
   'obj.clear', 'obj.lift', 'obj.boss', 'obj.escape',
   'toast.checkpoint', 'toast.hijack', 'toast.clipSaved', 'toast.clipFailed', 'toast.photoSaved', 'toast.challenge', 'toast.zoneClear',
-  'bark.contact', 'bark.reload', 'bark.grenade', 'bark.charge', 'bark.lost', 'bark.mateDown', 'bark.what', 'bark.boss1', 'bark.boss2', 'bark.boss3',
+  'bark.contact', 'bark.reload', 'bark.grenade', 'bark.charge', 'bark.lost', 'bark.where', 'bark.there', 'bark.mateDown', 'bark.what', 'bark.boss1', 'bark.boss2', 'bark.boss3',
   ...TRICKS.map((id) => `trick.${id}`),
 ];
 
@@ -82,6 +93,29 @@ describe('i18n coverage', () => {
     }
   });
 
+  it('every key the game names literally exists in EN and HE (the string tables merged as the game merges them)', () => {
+    const en = { ...strings('en'), ...META_STRINGS.en, ...LEAD_STRINGS.en },
+      he = { ...strings('he'), ...META_STRINGS.he, ...LEAD_STRINGS.he };
+    const missing = new Set<string>();
+    let found = 0;
+    for (const [path, src] of Object.entries(SOURCES)) {
+      if (TABLES.some((f) => path.endsWith(f))) continue;
+      for (const m of src.matchAll(LITERAL_KEY)) {
+        found++;
+        if (!(m[1] in en) || !(m[1] in he)) missing.add(`${m[1]} (${path})`);
+      }
+    }
+    expect(found).toBeGreaterThan(100);
+    expect([...missing]).toEqual([]);
+  });
+
+  it('rift vision labels every enemy state in both languages', () => {
+    for (const s of STATES) {
+      expect(strings('en')[`state.${s}`], `en state.${s}`).toBeTruthy();
+      expect(strings('he')[`state.${s}`], `he state.${s}`).toBeTruthy();
+    }
+  });
+
   it('no empty strings and Hebrew strings contain Hebrew', () => {
     const he = strings('he');
     const latinOnly = new Set(['title', 'orient.auto']);
@@ -90,6 +124,16 @@ describe('i18n coverage', () => {
       expect(v.trim(), k).not.toBe('');
       if (!latinOnly.has(k)) expect(/[֐-׿]/.test(v), `he ${k} is Hebrew`).toBe(true);
     }
+  });
+});
+
+describe('hidden blade', () => {
+  it('its prompt and trick carry the blade name in both languages', () => {
+    for (const k of ['prompt.blade', 'trick.finisher']) {
+      expect(strings('en')[k], k).toBe('HIDDEN BLADE');
+      expect(strings('he')[k], k).toBe('להב נסתר');
+    }
+    expect(has('prompt.finish')).toBe(false);
   });
 });
 

@@ -186,7 +186,6 @@ const noRifts: RiftQuery = {
   transformDir: (_f, d, out) => (out ?? new THREE.Vector3()).copy(d),
   holeAt: () => null,
   hostPassable: () => false,
-  blocked: () => false,
   notePass: () => {},
   raycastThrough: (): RaySegment[] => [],
 };

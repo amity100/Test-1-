@@ -16,7 +16,6 @@ import type {
   RiftRole,
   RiftSnap,
   ShearVictim,
-  Threat,
   TrapTarget,
   V3,
 } from '../core/contracts';
@@ -223,11 +222,10 @@ interface Solve extends Placed {
 
 type Which = 'entrance' | 'exit' | 'gate' | 'boss';
 
-/** openEntrance options: force a mode, allow no exit yet (the one-key PORTAL), a specific threat to catch. */
+/** openEntrance options: force a mode, allow no exit yet (the one-key PORTAL). */
 export interface EntranceOpts {
-  force?: 'air' | 'catch' | 'door';
+  force?: 'air' | 'door';
   requireExit?: boolean;
-  threat?: Threat | null;
 }
 
 /** Nearest to the camera first (uses _camPos set by renderViews). */
@@ -300,7 +298,6 @@ export class RiftSystem implements RiftAPI {
   /** logical + closing: what's drawn in play. */
   private drawn: Portal[] = [];
   private openList: RiftEnd[] = [];
-  private blockers: { pos: V3; radius: number }[] = [];
   private pendingOpened: { end: Portal; which: Which }[] = [];
   private pendingClosed: Portal[] = [];
   private time = 0;
@@ -582,11 +579,6 @@ export class RiftSystem implements RiftAPI {
     return false;
   }
 
-  blocked(p: V3): boolean {
-    for (const b of this.blockers) if (p.distanceToSquared(b.pos) < b.radius * b.radius) return true;
-    return false;
-  }
-
   notePass(end: RiftEnd, _who: BodyKind | 'bolt' | 'beam') {
     const p = end as Portal;
     p.pulse = 1;
@@ -735,7 +727,6 @@ export class RiftSystem implements RiftAPI {
     // (a door's height is where things step out of it; a hatch's is where they drop from)
     else if (sol.kind === 'air' && (Math.abs(n.y) < 0.5 ? sol.exitFeet.y : center.y) > playerFeet.y + LAW.airAboveFeetMax + 1e-3) reason = 'aim.tooHigh';
     else if (this.nearSteady(sol, targets, null)) reason = 'aim.enemyClose';
-    else if (this.blocked(center)) reason = 'aim.blocked';
     else if (!this.hasSpace(sol, n)) reason = 'aim.space';
 
     // ---- what falls out of it ----
@@ -1019,32 +1010,18 @@ export class RiftSystem implements RiftAPI {
     let key: string | null = null;
     let except: string | null = null;
 
-    const threat = opts.threat ?? (ctx.threats.length ? ctx.threats.reduce((a, b) => (b.eta < a.eta ? b : a)) : null);
     const force = opts.force;
     // the target under the crosshair
     let tgt: TrapTarget | null = null;
-    if (!force && !(ctx.airborne && ctx.playerVel.y < -3) && !threat) tgt = this.crosshairTarget(ctx);
+    if (!force && !(ctx.airborne && ctx.playerVel.y < -3)) tgt = this.crosshairTarget(ctx);
 
     if (force === 'air' || (!force && ctx.airborne && ctx.playerVel.y < -3)) {
       // 1. falling: an end on the fall path, facing the velocity
       mode = 'air';
       placed = this.fallCatch(ctx);
       if (!placed) return fail(mode, 'gate.noSpace');
-    } else if (force === 'catch' || (!force && threat)) {
-      // 2. CATCH: a door between you and the threat, facing it
-      mode = 'catch';
-      const from = threat ? threat.from : _c.copy(feet).addScaledVector(hdirOf(ctx.playerYaw, _b), 5);
-      const d = _a.set(from.x - feet.x, 0, from.z - feet.z);
-      if (d.lengthSq() < 1e-6) hdirOf(ctx.playerYaw, d);
-      d.normalize();
-      // a charging body must meet the door before it meets you (his hit reaches 1.5 m)
-      const out = threat && threat.kind === 'charge' ? 2.6 : 1.4;
-      const bx = feet.x + d.x * out, bz = feet.z + d.z * out;
-      const g = w.groundAt(bx, bz, 0.2, feet.y + 0.5);
-      if (!ctx.airborne && g > feet.y - 0.6 && this.standingClear(_b.set(bx, g, bz), d)) placed = this.standingFrame(bx, g, bz, d);
-      else placed = doorPlaced(_c.set(bx, feet.y + 1.1, bz), d, 'air', null);
     } else if (!force && tgt) {
-      // 3. TRAPDOOR under the target
+      // 2. TRAPDOOR under the target
       mode = 'trapdoor';
       key = except = tgt.key;
       const dist = Math.hypot(tgt.pos.x - ctx.camPos.x, tgt.pos.z - ctx.camPos.z, tgt.pos.y - ctx.camPos.y);
@@ -1058,7 +1035,7 @@ export class RiftSystem implements RiftAPI {
       hd.normalize();
       placed = flatPlaced(_c.set(tgt.pos.x, g + 0.01, tgt.pos.z), true, hd, 'floor', host);
     } else {
-      // 4. DOOR in front of you (or on the wall you face)
+      // 3. DOOR in front of you (or on the wall you face)
       mode = 'door';
       const h = Math.hypot(ctx.camDir.x, ctx.camDir.z);
       const yaw = h > 1e-3 ? Math.atan2(ctx.camDir.x, ctx.camDir.z) : ctx.playerYaw;
@@ -1066,31 +1043,28 @@ export class RiftSystem implements RiftAPI {
       if (!placed) return fail(mode, 'gate.noSpace');
     }
 
-    if (this.blocked(placed.position)) return fail(mode, 'gate.blocked', key);
     if (this.nearSteady(placed, ctx.targets, except)) return fail(mode, 'gate.enemyClose', key);
     if (opts.requireExit !== false && this.exit && this.exit.position.distanceTo(placed.position) < 1.0) return fail(mode, 'gate.noSpace', key);
     return { res: { ok: true, mode, targetKey: key, reason: null }, placed };
   }
 
   /**
-   * The one-key PORTAL's entrance for a mode (air / catch / door), whether or
-   * not an exit exists yet: it opens dormant and the exit comes after.
+   * The one-key PORTAL's entrance for a mode (air / door), whether or not an
+   * exit exists yet: it opens dormant and the exit comes after.
    */
-  openEntranceAs(ctx: EntranceContext, force: 'air' | 'catch' | 'door', threat: Threat | null = null): EntranceResult {
-    return this.openEntrance(ctx, { force, requireExit: false, threat });
+  openEntranceAs(ctx: EntranceContext, force: 'air' | 'door'): EntranceResult {
+    return this.openEntrance(ctx, { force, requireExit: false });
   }
 
   /**
    * The PORTAL's grab: a floor end right under a target (an enemy, a load),
-   * dormant until the exit comes. `paid`: an alert enemy may be taken (it cost
-   * a charge); otherwise steady ones are refused.
+   * dormant until the exit comes. Steady or not, anyone on a floor is taken.
    */
-  openUnder(t: TrapTarget, feet: V3, playerYaw: number, camPos: V3, paid: boolean): EntranceResult {
+  openUnder(t: TrapTarget, feet: V3, playerYaw: number, camPos: V3): EntranceResult {
     const w = this.world;
     const fail = (reason: string) => ({ ok: false, mode: 'trapdoor' as const, targetKey: t.key, reason });
     const dist = Math.hypot(t.pos.x - camPos.x, t.pos.z - camPos.z, t.pos.y - camPos.y);
     if (dist > LAW.trapdoorRange) return fail('gate.range');
-    if (!paid && (t.steady || !t.canFall)) return fail('gate.steady');
     const g = w.groundAt(t.pos.x, t.pos.z, 0.05, t.pos.y + 0.3);
     const host = w.lastGround;
     if (!(g > -Infinity) || !host || host.noPortal || t.pos.y - g > 1.5) return fail('portal.noFloor');
@@ -1098,7 +1072,6 @@ export class RiftSystem implements RiftAPI {
     if (hd.lengthSq() < 1e-6) hdirOf(playerYaw, hd);
     hd.normalize();
     const placed = flatPlaced(_c.set(t.pos.x, g + 0.01, t.pos.z), true, hd, 'floor', host);
-    if (this.blocked(placed.position)) return fail('gate.blocked');
     this.clearPair();
     const e = this.acquire('entrance', 'entrance', 'player');
     e.openTime = FEEL.entranceOpenTime;
@@ -1111,8 +1084,7 @@ export class RiftSystem implements RiftAPI {
   }
 
   /** Open the entrance at an explicit frame, with or without an exit yet (hanging loads). */
-  openEntranceFrame(frame: { position: V3; quaternion: THREE.Quaternion; width: number; height: number }, kind: RiftEndKind, noPlayer = false): boolean {
-    if (this.blocked(frame.position)) return false;
+  openEntranceFrame(frame: { position: V3; quaternion: THREE.Quaternion; width: number; height: number }, kind: RiftEndKind, noPlayer = false) {
     this.clearPair();
     const e = this.acquire('entrance', 'entrance', 'player');
     e.openTime = FEEL.entranceOpenTime;
@@ -1121,16 +1093,14 @@ export class RiftSystem implements RiftAPI {
     this.entrance = e;
     this.pendingOpened.push({ end: e, which: 'entrance' });
     this.relink();
-    return true;
   }
 
   /**
-   * Place (or move) the EXIT at a frame the caller solved (throws, catches).
+   * Place (or move) the EXIT at a frame the caller solved (throws).
    * `boost`: things come out at least this fast; `aimAt`: shots out of it home
    * in on that enemy; `noPlayer`: it's only for what it was opened for.
    */
-  placeExitFrame(f: RiftFrame & { kind: RiftEndKind }, host: Collider | null = null, o: { boost?: number; aimAt?: number; noPlayer?: boolean } = {}): boolean {
-    if (this.blocked(f.position)) return false;
+  placeExitFrame(f: RiftFrame & { kind: RiftEndKind }, host: Collider | null = null, o: { boost?: number; aimAt?: number; noPlayer?: boolean } = {}) {
     if (this.exit) {
       this.leaveCopy(this.exit);
       this.exit.setFrame(f.position, f.quaternion, f.width, f.height, f.kind, host);
@@ -1144,12 +1114,11 @@ export class RiftSystem implements RiftAPI {
     this.exit.noPlayer = !!o.noPlayer;
     this.pendingOpened.push({ end: this.exit, which: 'exit' });
     this.relink();
-    return true;
   }
 
-  /** Slide the live EXIT to a new frame (no collapsing copy): a catch being steered. */
+  /** Slide the live EXIT to a new frame (no collapsing copy): an AIR exit being steered. */
   moveExit(f: RiftFrame & { kind: RiftEndKind }, host: Collider | null = null) {
-    if (!this.exit || this.blocked(f.position)) return false;
+    if (!this.exit) return false;
     this.exit.setFrame(f.position, f.quaternion, f.width, f.height, f.kind, host);
     return true;
   }
@@ -1157,11 +1126,6 @@ export class RiftSystem implements RiftAPI {
   /** What comes out of your EXIT is thrown at least this fast (0 = plain). */
   setExitBoost(v: number) {
     if (this.exit) this.exit.boost = v;
-  }
-
-  /** Shots out of your EXIT home in on this enemy id (-1 = none). */
-  setExitAimAt(id: number) {
-    if (this.exit) this.exit.aimAt = id;
   }
 
   /** Your pair is (or stops being) only for what it was opened for. */
@@ -1319,8 +1283,7 @@ export class RiftSystem implements RiftAPI {
 
   /** Open the entrance at an explicit frame (game-driven: a hole right under hanging cargo). */
   openEntranceAt(frame: { position: V3; quaternion: THREE.Quaternion; width: number; height: number }, kind: RiftEndKind): boolean {
-    if (!this.exit || this.blocked(frame.position)) return false;
-    if (this.exit.position.distanceTo(frame.position) < 1.0) return false;
+    if (!this.exit || this.exit.position.distanceTo(frame.position) < 1.0) return false;
     if (this.entrance) this.retire(this.entrance);
     const e = this.acquire('entrance', 'entrance', 'player');
     e.openTime = FEEL.entranceOpenTime;
@@ -1351,7 +1314,7 @@ export class RiftSystem implements RiftAPI {
   }
 
   // ------------------------------------------------------------------
-  // Gates, boss, jammers
+  // Gates, boss
   // ------------------------------------------------------------------
 
   /** Collider an end placed by the level sits on (floors / ceilings / walls). */
@@ -1510,10 +1473,6 @@ export class RiftSystem implements RiftAPI {
   /** Any strike pair still open (a strike in progress). */
   strikeOpen() {
     return this.strikes.size > 0;
-  }
-
-  setBlockers(list: { pos: V3; radius: number }[]) {
-    this.blockers = list;
   }
 
   // ------------------------------------------------------------------
@@ -1860,7 +1819,6 @@ export class RiftSystem implements RiftAPI {
     }
     this.pendingOpened.length = 0;
     this.pendingClosed.length = 0;
-    this.blockers = [];
     this.aiming = false;
     this.airDistance = null;
     this.orientation = 'auto';

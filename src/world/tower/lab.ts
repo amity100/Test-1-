@@ -4,7 +4,7 @@ import { orientFrame, type RiftFrame } from '../../game/portalMath';
 import { Ctx, PALETTE, V, addProp, box3, col, solid } from './kit';
 import { crateStatic, railing } from './parts';
 import { GLASS_LIFT, LAB_CEIL, LAB_Y, TOWER } from './layout';
-import { YAW, encounter, spawn } from './zonekit';
+import { YAW, encounter, fight, spawn } from './zonekit';
 import { glassLift } from './lifts';
 
 export interface LabBuild {
@@ -21,9 +21,10 @@ const Y = LAB_Y;
  * (west + east) hold the gates' in-ends; their out-ends open on the arena side
  * of the staging walls. Open facade bays (no glass) at z 28-34 on both sides
  * give the player the void.
- *   hijack (arena, south/centre) -> jammer (north-west server hall, laser
- *   gate in the west aisle) -> borrowedGun (north-east gallery behind a laser
- *   curtain, turret guarding the glass lift) -> glass lift to the roof.
+ *   hijack (arena, south/centre) -> hall (north-west server hall, a plain
+ *   fight, laser gate in the west aisle) -> borrowedGun (north-east gallery
+ *   behind a laser curtain, turret guarding the glass lift) -> glass lift to
+ *   the roof.
  */
 export function buildLab(ctx: Ctx): LabBuild {
   const b = ctx.mb;
@@ -138,7 +139,7 @@ export function buildLab(ctx: Ctx): LabBuild {
     b.box('hazard', x - 0.25, Y + 0.02, 28, x + 0.25, Y + 0.035, 34, 0xffffff, 1, { ao: 0, uvRotate: true });
   }
 
-  // ---------------- north-west server hall (jammer) ----------------
+  // ---------------- north-west server hall (two riflemen) ----------------
   for (const z0 of [49.2, 53.2]) serverRow(ctx, -15, z0, -4, z0 + 1);
   // ---------------- north-east gallery (turret) ----------------
   crateStatic(ctx, 6, 50.5, 1.3, 1.2, Y, 0xd0d4d8);
@@ -171,11 +172,11 @@ export function buildLab(ctx: Ctx): LabBuild {
       true,
       { pos: V(-7, Y, 44.5), yaw: YAW.N },
     ),
-    encounter(
+    fight(
       Z,
-      'jammer',
+      'hall',
       box3(T.x0, Y - 0.5, 46.2, -0.2, C, T.z1),
-      [spawn(Z, 'jammer.j', 'jammer', -9, Y, 56, YAW.S, 'jammer'), spawn(Z, 'jammer.a', 'rifleman', -16.5, Y, 51.5, YAW.E, 'jammer'), spawn(Z, 'jammer.b', 'rifleman', -2, Y, 52, YAW.W, 'jammer')],
+      [spawn(Z, 'hall.a', 'rifleman', -16.5, Y, 51.5, YAW.E, 'hall'), spawn(Z, 'hall.b', 'rifleman', -2, Y, 52, YAW.W, 'hall')],
       true,
       { pos: V(-2, Y, 48), yaw: YAW.E },
     ),

@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { LAW, type EnemyView, type EntranceContext, type ExitAim, type Threat, type TrapTarget, type V3 } from '../core/contracts';
+import { LAW, type EnemyView, type EntranceContext, type ExitAim, type TrapTarget, type V3 } from '../core/contracts';
 import type { Prop } from './props';
 import { frameNormal, orientFrame } from './portalMath';
-import { besideDoor, facingFrame, launchFrame, lockOnEnemy, simulateArc, skyHatch, throwSpot, type Frame, type Outcome, type SpotHost } from './riftspots';
+import { facingFrame, launchFrame, lockOnEnemy, simulateArc, skyHatch, straightOn, throwSpot, type Frame, type Outcome, type SpotHost } from './riftspots';
 
 /**
  * The PORTAL key: one key for both ends.
@@ -12,20 +12,19 @@ import { besideDoor, facingFrame, launchFrame, lockOnEnemy, simulateArc, skyHatc
  *             an enemy         GRAB    the floor under him: he sinks in
  *             a load / barrel  LOAD    the floor (or the air) under it
  *             a Kessler gate   HIJACK  its arena end becomes yours
- *             under fire       CATCH   a door between you and it
  *             the floor below  HOLE    a hole right there (looking down)
  *             anything else    DOOR    on the wall you face / in front of you
  *  hold     time slows and you aim the exit (where it throws, or where you
  *           come out; the arc and its outcome show)
  *  release  the exit opens there. A tap puts it where it does most: a thrown
- *           man over the nearest drop or water (else out of the sky), shots
- *           back at the man who fired them, a load over the nearest head,
- *           a door where you look.
+ *           man straight on past him, away from you (knocked down on open
+ *           floor; a wall, a drop or the sea on the way, or a man where he
+ *           comes down, kills), a load over the nearest head, a door where
+ *           you look.
  *
- * Grabbing a man who is fighting you costs one rift charge (an unaware or
- * stumbling one is free), and that kill gives no charge back.
+ * It costs nothing. Fire coming at you is the REFLECT strike's (strikes.ts).
  */
-export type PortalMode = 'air' | 'catch' | 'grab' | 'load' | 'hijack' | 'hole' | 'door';
+export type PortalMode = 'air' | 'grab' | 'load' | 'hijack' | 'hole' | 'door';
 
 export const PORTAL = {
   /** A press shorter than this (real s) is a tap: the exit goes where it's best. */
@@ -33,9 +32,17 @@ export const PORTAL = {
   /** Held this long it lets go by itself (real s). */
   maxHold: 3.2,
   /** Time scale while held. */
-  slow: { air: 0.15, catch: 0.15, grab: 0.1, load: 0.12, hijack: 0.3, hole: 0.33, door: 0.33 } as Record<PortalMode, number>,
+  slow: { air: 0.15, grab: 0.1, load: 0.12, hijack: 0.3, hole: 0.33, door: 0.33 } as Record<PortalMode, number>,
   /** How hard what you throw comes out of the exit (m/s). */
-  throwSpeed: { grab: 17, load: 14, hijack: 10, catch: 12 },
+  throwSpeed: { grab: 17, load: 14, hijack: 10 },
+  /**
+   * A GRAB's tap: the exit this far past him (m), its centre this high over
+   * his feet, tilted this far up (rad). At 17 m/s he comes down ~11 m on at
+   * ~9 m/s (knocked down, under the 12 m/s kill); a wall on the way or a man
+   * where he comes down takes him at 16 m/s, a drop or the sea anyhow. Its
+   * pair shuts sooner (s): off a wall close behind him he'd drop back in.
+   */
+  straight: { past: 2, up: 2, tilt: (20 * Math.PI) / 180, linger: 0.5 },
   /** How far out the launcher end goes when the aim hits nothing (m past you). */
   reach: 14,
   /** A grabbed man sinks this deep while you aim (m), this fast (m/s, real). */
@@ -45,11 +52,7 @@ export const PORTAL = {
   linger: 1.2,
   /** ...or this long after it opened, whatever happened. */
   throwLife: 5,
-  /** Grabbing a man who's fighting you. */
-  grabCost: 1,
-  /** A threat this close (s) makes a press a CATCH. */
-  catchEta: 1.6,
-  /** Lock-on for aimed throws / catches: in this range, this close to the aim. */
+  /** Lock-on for aimed throws: in this range, this close to the aim. */
   lockRange: 40,
   lockCone: 0.2,
 };
@@ -72,12 +75,6 @@ export interface PortalHost extends SpotHost {
   touch(): boolean;
   /** Is this enemy in a zone the game runs. */
   live(e: EnemyView): boolean;
-  /** The rift charge pool (shared with the STRIKES). */
-  charges(): number;
-  spend(n: number): void;
-  refund(n: number): void;
-  /** A kill of this man gives no charge back (he was paid for); off = the charge came back. */
-  markPaid(id: number, on: boolean): void;
   /** A hanging load under the crosshair. */
   hangingUnderCrosshair(): Prop | null;
 }
@@ -86,8 +83,6 @@ export interface PortalResult {
   ok: boolean;
   mode: PortalMode | null;
   reason: string | null;
-  /** Charge it costs / cost. */
-  cost: number;
   /** Where the action is (FX). */
   at?: V3;
   /** The enemy it's about. */
@@ -97,12 +92,10 @@ export interface PortalResult {
 interface Resolved {
   mode: PortalMode;
   reason: string | null;
-  cost: number;
   target: TrapTarget | null;
   enemy: EnemyView | null;
   prop: Prop | null;
   gate: string | null;
-  threat: Threat | null;
   /** HOLE: where on the floor. */
   spot: THREE.Vector3 | null;
 }
@@ -114,11 +107,7 @@ interface Hold {
   enemy: EnemyView | null;
   prop: Prop | null;
   gate: string | null;
-  threat: Threat | null;
-  /** Who a CATCH sends back to. */
-  sender: EnemyView | null;
-  paid: boolean;
-  /** The exit is open already and follows the aim (AIR, CATCH). */
+  /** The exit is open already and follows the aim (AIR). */
   live: boolean;
   sink: number;
   /** The current aim (travel modes), for the preview and the release. */
@@ -142,7 +131,7 @@ function steadyOf(e: EnemyView) {
 export class PortalKey {
   hold: Hold | null = null;
   /** A throw's pair: closes a moment after its load went through. */
-  private thrown: { t: number; key: string | null; crossedT: number; enemy?: EnemyView } | null = null;
+  private thrown: { t: number; key: string | null; crossedT: number; linger: number; enemy?: EnemyView } | null = null;
   /** The predicted arc of what's being thrown (for drawing). */
   readonly arc: THREE.Vector3[] = Array.from({ length: ARC_N }, () => new THREE.Vector3());
   arcN = 0;
@@ -182,26 +171,22 @@ export class PortalKey {
   }
 
   /** What a press would do right now (the HUD hint on the crosshair). */
-  preview(): { mode: PortalMode; reason: string | null; cost: number; key: string | null } {
+  preview(): { mode: PortalMode; reason: string | null; key: string | null } {
     const r = this.resolve(this.h.entranceCtx());
-    return { mode: r.mode, reason: r.reason, cost: r.cost, key: r.target?.key ?? null };
+    return { mode: r.mode, reason: r.reason, key: r.target?.key ?? null };
   }
 
   // ------------------------------------------------------------------
 
   private resolve(ctx: EntranceContext): Resolved {
     const h = this.h;
-    const r: Resolved = { mode: 'door', reason: null, cost: 0, target: null, enemy: null, prop: null, gate: null, threat: null, spot: null };
+    const r: Resolved = { mode: 'door', reason: null, target: null, enemy: null, prop: null, gate: null, spot: null };
     if (ctx.airborne && ctx.playerVel.y < -3) {
       r.mode = 'air';
       return r;
     }
-    // under fire, defence first: CATCH what's coming (only a man who can't stand his ground is grabbed instead)
-    const th = this.imminent(ctx);
-    const caught = (): Resolved => ({ ...r, mode: 'catch', reason: null, cost: 0, enemy: null, prop: null, target: null, gate: null, threat: th });
     const hang = h.hangingUnderCrosshair();
     if (hang) {
-      if (th) return caught();
       r.mode = 'load';
       r.prop = hang;
       return r;
@@ -215,24 +200,18 @@ export class PortalKey {
         r.mode = 'grab';
         r.enemy = e;
         r.target = tgt;
-        if (e.kind === 'turret' || (e.kind === 'boss' && !e.offBalance)) r.reason = 'portal.anchored';
-        else if (steadyOf(e)) {
-          r.cost = PORTAL.grabCost;
-          if (h.charges() < r.cost) r.reason = 'portal.noCharge';
-        }
-        if (th && (r.reason || r.cost > 0)) return caught();
+        // (turrets and Voss are anchored, Voss stunned or not)
+        if (e.kind === 'turret' || e.kind === 'boss') r.reason = 'portal.anchored';
         return r;
       }
       const pr = h.props.byKey(tgt.key);
       if (pr) {
-        if (th) return caught();
         r.mode = 'load';
         r.prop = pr;
         r.target = tgt;
         return r;
       }
     }
-    if (th) return caught();
     const gate = h.rifts.gateUnderRay(ctx.camPos, ctx.camDir);
     if (gate) {
       r.mode = 'hijack';
@@ -246,24 +225,6 @@ export class PortalKey {
       r.spot = spot;
     }
     return r;
-  }
-
-  /** The threat a CATCH is for: soon, and the one you're facing (you look at what you want to catch). */
-  private imminent(ctx: EntranceContext): Threat | null {
-    let best: Threat | null = null;
-    let bestScore = Infinity;
-    for (const q of ctx.threats) {
-      if (q.eta > PORTAL.catchEta) continue;
-      _a.subVectors(q.from, ctx.camPos);
-      const len = _a.length();
-      const ang = len > 1e-3 ? Math.acos(THREE.MathUtils.clamp(_a.dot(ctx.camDir) / len, -1, 1)) : 0;
-      const score = q.eta + ang * 0.6;
-      if (score < bestScore) {
-        bestScore = score;
-        best = q;
-      }
-    }
-    return best;
   }
 
   /** Where a HOLE would open: the floor the aim hits, looking well down, near and not above you. */
@@ -288,9 +249,9 @@ export class PortalKey {
     if (this.hold) this.cancel();
     const ctx = h.entranceCtx();
     const r = this.resolve(ctx);
-    const fail = (reason: string | null): PortalResult => ({ ok: false, mode: r.mode, reason, cost: r.cost, enemy: r.enemy });
+    const fail = (reason: string | null): PortalResult => ({ ok: false, mode: r.mode, reason, enemy: r.enemy });
     if (r.reason) return fail(r.reason);
-    const hold: Hold = { mode: r.mode, t: 0, enemy: null, prop: null, gate: null, threat: r.threat, sender: null, paid: false, live: false, sink: 0, aim: null, launch: null };
+    const hold: Hold = { mode: r.mode, t: 0, enemy: null, prop: null, gate: null, live: false, sink: 0, aim: null, launch: null };
     let at: V3 | undefined;
     switch (r.mode) {
       case 'air':
@@ -299,37 +260,22 @@ export class PortalKey {
         if (!pre.ok) return fail(pre.reason);
         break;
       }
-      case 'catch': {
-        const res = h.rifts.openEntrance(ctx, { force: 'catch', requireExit: false, threat: r.threat });
-        if (!res.ok) return fail(res.reason);
-        hold.sender = this.senderOf(r.threat);
-        break;
-      }
       case 'grab': {
         const e = r.enemy!;
-        const paid = r.cost > 0;
-        const res = h.rifts.openUnder(r.target!, ctx.playerFeet, ctx.playerYaw, ctx.camPos, paid);
+        const res = h.rifts.openUnder(r.target!, ctx.playerFeet, ctx.playerYaw, ctx.camPos);
         if (!res.ok) return fail(res.reason);
-        if (paid) {
-          h.spend(r.cost);
-          h.markPaid(e.id, true);
-        }
         h.enemies.hold(e, true);
         hold.enemy = e;
-        hold.paid = paid;
         at = e.pos;
         break;
       }
       case 'load': {
         const pr = r.prop!;
-        let ok: boolean;
-        if (pr.hanging) ok = this.openUnderHanging(pr);
+        if (pr.hanging) this.openUnderHanging(pr);
         else {
-          const res = h.rifts.openUnder(r.target ?? { key: pr.key, pos: pr.body.pos, radius: pr.body.radius, height: pr.body.height, canFall: true, steady: false }, ctx.playerFeet, ctx.playerYaw, ctx.camPos, true);
-          ok = res.ok;
-          if (!ok) return fail(res.reason);
+          const res = h.rifts.openUnder(r.target ?? { key: pr.key, pos: pr.body.pos, radius: pr.body.radius, height: pr.body.height, canFall: true, steady: false }, ctx.playerFeet, ctx.playerYaw, ctx.camPos);
+          if (!res.ok) return fail(res.reason);
         }
-        if (!ok) return fail('gate.noSpace');
         hold.prop = pr;
         at = pr.body.pos;
         break;
@@ -344,29 +290,28 @@ export class PortalKey {
       }
       case 'hole': {
         const sp = r.spot!;
-        if (h.rifts.blocked(sp)) return fail('gate.blocked');
         const yaw = Math.atan2(ctx.camDir.x, ctx.camDir.z);
-        if (!h.rifts.openEntranceFrame({ position: sp, quaternion: orientFrame(UP, _a.set(Math.sin(yaw), 0, Math.cos(yaw))), width: LAW.floorEndSize, height: LAW.floorEndSize }, 'floor')) return fail('gate.noSpace');
+        h.rifts.openEntranceFrame({ position: sp, quaternion: orientFrame(UP, _a.set(Math.sin(yaw), 0, Math.cos(yaw))), width: LAW.floorEndSize, height: LAW.floorEndSize }, 'floor');
         at = sp;
         break;
       }
     }
     this.dropThrown();
     this.hold = hold;
-    // AIR and CATCH can't wait for the release: their exit opens now and follows your aim
-    if (hold.mode === 'air' || hold.mode === 'catch') {
-      hold.live = this.openLiveExit(hold);
-      if (!hold.live && hold.mode === 'air') {
+    // AIR can't wait for the release: its exit opens now and follows your aim
+    if (hold.mode === 'air') {
+      hold.live = this.openAirExit(hold);
+      if (!hold.live) {
         // nowhere to come out: no point keeping a hole in your way
         h.rifts.closeEntrance();
         this.hold = null;
         return fail('aim.space');
       }
     }
-    return { ok: true, mode: hold.mode, reason: null, cost: hold.paid ? r.cost : 0, at, enemy: hold.enemy };
+    return { ok: true, mode: hold.mode, reason: null, at, enemy: hold.enemy };
   }
 
-  /** Let go without an exit: the entrance closes, whoever was held climbs out. */
+  /** Let go without an exit: the entrance closes, whoever was held climbs out (stumbling). */
   cancel() {
     const H = this.hold;
     if (!H) return;
@@ -376,11 +321,7 @@ export class PortalKey {
     if (H.enemy) {
       h.enemies.hold(H.enemy, false);
       h.enemies.setSink(H.enemy, 0);
-      if (H.paid) {
-        // (a man you paid for climbs out ready to fight: no free stumble to grab him again)
-        h.refund(PORTAL.grabCost);
-        h.markPaid(H.enemy.id, false);
-      } else if (H.enemy.alive) h.enemies.stagger(H.enemy, 0.8);
+      if (H.enemy.alive) h.enemies.stagger(H.enemy, 0.8);
     }
     if (H.live) h.rifts.clearPair();
     else h.rifts.closeEntrance();
@@ -408,7 +349,7 @@ export class PortalKey {
     const T = this.thrown;
     if (T) {
       T.t += realDt;
-      if ((T.crossedT >= 0 && T.t - T.crossedT > PORTAL.linger) || T.t > PORTAL.throwLife) {
+      if ((T.crossedT >= 0 && T.t - T.crossedT > T.linger) || T.t > PORTAL.throwLife) {
         this.dropThrown();
         h.rifts.clearPair();
       }
@@ -422,11 +363,11 @@ export class PortalKey {
     // the thing in hand is gone (killed, blown away, sunk): nothing to throw
     if (H.enemy && (!H.enemy.alive || !h.enemies.isHeld(H.enemy))) {
       this.cancel();
-      return { ok: false, mode: H.mode, reason: null, cost: 0 };
+      return { ok: false, mode: H.mode, reason: null };
     }
     if (H.prop && !H.prop.alive) {
       this.cancel();
-      return { ok: false, mode: H.mode, reason: null, cost: 0 };
+      return { ok: false, mode: H.mode, reason: null };
     }
     if (H.enemy) {
       H.sink = Math.min(PORTAL.sinkMax, H.sink + PORTAL.sinkRate * realDt);
@@ -458,42 +399,23 @@ export class PortalKey {
       return;
     }
     // thrown things: a launcher end along the aim (or in front of the man you lock on)
-    const boost = H.mode === 'catch' ? (H.threat?.kind === 'charge' ? PORTAL.throwSpeed.catch : 0) : PORTAL.throwSpeed[H.mode as 'grab' | 'load' | 'hijack'];
+    const boost = PORTAL.throwSpeed[H.mode as 'grab' | 'load' | 'hijack'];
     const lock = this.lockOn(ray.origin, ray.dir, H.enemy);
     let frame: Frame;
     let reason: string | null = null;
-    if (lock) {
-      frame = this.facing(lock, ray.origin, H.mode === 'catch' && boost === 0 ? 3.2 : 2.4);
-      if (h.rifts.blocked(frame.position)) reason = 'aim.blocked';
-    } else {
+    if (lock) frame = this.facing(lock, ray.origin, 2.4);
+    else {
       const lf = launchFrame(h, ray.origin, ray.dir, along, PORTAL.reach);
       frame = lf.frame;
       reason = lf.reason;
     }
     H.launch = { frame, boost, aimAt: lock ? lock.id : -1, valid: !reason, reason };
-    // a CATCH whose exit couldn't open at once: it opens where you aim, as soon as that's somewhere
-    if (H.mode === 'catch' && !H.live && !reason) H.live = this.openCatchAt(H, frame, boost, lock ? lock.id : H.sender ? H.sender.id : -1);
-    if (H.live) {
-      // the real exit is right there: it follows the aim, no ghost needed
-      if (!reason) {
-        h.rifts.moveExit(frame);
-        h.rifts.setExitAimAt(lock ? lock.id : -1);
-      }
-      H.aim = null;
-      this.arcN = 0;
-      if (boost <= 0) return;
-    }
-    // the arc of what comes out (bodies; shots fly straight)
-    if (boost > 0) {
-      const n = frameNormal(frame, _b);
-      const res = simulateArc(h, frame.position, _c.copy(n).multiplyScalar(boost), this.arc, { enemies: h.enemies.list, skipId: H.enemy?.id });
-      this.arcN = reason ? 0 : res.n;
-      this.arcOutcome = res.outcome;
-      H.aim = H.live ? null : this.launchAim(frame, n, res.end, !reason, reason, res.outcome);
-    } else {
-      this.arcN = 0;
-      H.aim = this.launchAim(frame, frameNormal(frame, _b), frame.position, !reason, reason, 'safe');
-    }
+    // the arc of what comes out
+    const n = frameNormal(frame, _b);
+    const res = simulateArc(h, frame.position, _c.copy(n).multiplyScalar(boost), this.arc, { enemies: h.enemies.list, skipId: H.enemy?.id });
+    this.arcN = reason ? 0 : res.n;
+    this.arcOutcome = res.outcome;
+    H.aim = this.launchAim(frame, n, res.end, !reason, reason, res.outcome);
   }
 
   /** An ExitAim-shaped preview for a launcher end (the ghost end, the ring where it lands). */
@@ -528,81 +450,25 @@ export class PortalKey {
   // Exits
   // ------------------------------------------------------------------
 
-  /** AIR / CATCH: the exit opens with the entrance. */
-  private openLiveExit(H: Hold): boolean {
+  /** AIR: the exit opens with the entrance, where you look. */
+  private openAirExit(H: Hold): boolean {
     const h = this.h;
-    if (H.mode === 'air') {
-      const ray = h.aimRay();
-      const ctx = h.entranceCtx();
-      let aim = h.rifts.aimExit(ray.origin, ray.dir, h.playerEye(), h.playerFeet(), h.touch(), ctx.targets);
-      if (!aim.valid) {
-        // looking nowhere useful: a door straight ahead at your height (the fall turns into a run)
-        const hd = _a.set(ray.dir.x, 0, ray.dir.z);
-        if (hd.lengthSq() < 1e-4) hd.set(0, 0, 1);
-        hd.normalize();
-        aim = h.rifts.aimExit(ray.origin, hd, h.playerEye(), h.playerFeet(), h.touch(), ctx.targets);
-      }
-      H.aim = aim;
-      return aim.valid && h.rifts.placeExit(aim);
+    const ray = h.aimRay();
+    const ctx = h.entranceCtx();
+    let aim = h.rifts.aimExit(ray.origin, ray.dir, h.playerEye(), h.playerFeet(), h.touch(), ctx.targets);
+    if (!aim.valid) {
+      // looking nowhere useful: a door straight ahead at your height (the fall turns into a run)
+      const hd = _a.set(ray.dir.x, 0, ray.dir.z);
+      if (hd.lengthSq() < 1e-4) hd.set(0, 0, 1);
+      hd.normalize();
+      aim = h.rifts.aimExit(ray.origin, hd, h.playerEye(), h.playerFeet(), h.touch(), ctx.targets);
     }
-    // CATCH: back at the man it came from; a charging body goes over the edge / off the roof
-    const th = H.threat;
-    if (th && th.kind === 'charge') {
-      const spot = throwSpot(h, h.playerFeet());
-      if (!spot) return false;
-      const ok = h.rifts.placeExitFrame(spot.frame, null, { boost: Math.max(spot.boost, PORTAL.throwSpeed.catch), noPlayer: true });
-      if (ok) h.rifts.setPairNoPlayer(true);
-      return ok;
-    }
-    const s = H.sender;
-    const f = s ? this.senderDoor(s) : null;
-    if (!f) {
-      // no one to send it back to: straight up out of harm's way
-      const up = skyHatch(h, h.playerFeet(), 12, 3);
-      if (!up) return false;
-      up.quaternion.copy(orientFrame(UP, FWD));
-      const ok = h.rifts.placeExitFrame(up, null, { noPlayer: true });
-      if (ok) h.rifts.setPairNoPlayer(true);
-      return ok;
-    }
-    const ok = h.rifts.placeExitFrame(f, null, { aimAt: s!.id, noPlayer: true });
-    if (ok) h.rifts.setPairNoPlayer(true);
-    return ok;
-  }
-
-  /** Open a CATCH's exit at a launcher frame (only for what it caught). */
-  private openCatchAt(H: Hold, f: Frame, boost: number, aimAt: number): boolean {
-    const h = this.h;
-    if (!h.rifts.placeExitFrame(f, null, { boost, aimAt, noPlayer: true })) return false;
-    h.rifts.setPairNoPlayer(true);
-    return true;
-  }
-
-  /** Who fired / threw / charges it: the live enemy nearest where it came from. */
-  private senderOf(th: Threat | null): EnemyView | null {
-    if (!th) return null;
-    let best: EnemyView | null = null;
-    let bd = th.kind === 'grenade' ? 60 : 4;
-    const feet = this.h.playerFeet();
-    for (const e of this.h.enemies.list) {
-      if (!e.alive || !this.h.live(e)) continue;
-      // a grenade's thrower: the nearest man in a fight; the rest start at his muzzle / body
-      const d = th.kind === 'grenade' ? (e.aware ? e.pos.distanceTo(feet) : Infinity) : e.chest(_a).distanceTo(th.from);
-      if (d < bd) {
-        bd = d;
-        best = e;
-      }
-    }
-    return best;
-  }
-
-  /** A door beside him (else in front of him), facing him: what comes out goes into him. */
-  private senderDoor(t: EnemyView): Frame | null {
-    return besideDoor(this.h, t, this.h.playerFeet());
+    H.aim = aim;
+    return aim.valid && h.rifts.placeExit(aim);
   }
 
   /** A hole right under a hanging load (on the ground under it when that's a real drop). */
-  private openUnderHanging(pr: Prop): boolean {
+  private openUnderHanging(pr: Prop) {
     const h = this.h;
     const hp = pr.body.pos;
     const w = h.world;
@@ -611,7 +477,7 @@ export class PortalKey {
     const steadyNear = h.enemies.list.some((e) => e.alive && steadyOf(e) && Math.hypot(e.pos.x - hp.x, e.pos.z - hp.z) < LAW.enemyClearance + e.radius && Math.abs(e.pos.y - gy) < 1);
     const onGround = gy > -Infinity && hp.y - gy > 3 && !!host && !host.noPortal && !steadyNear;
     const q = orientFrame(UP, FWD);
-    return h.rifts.openEntranceFrame(
+    h.rifts.openEntranceFrame(
       { position: new THREE.Vector3(hp.x, onGround ? gy + 0.01 : hp.y - 1.2, hp.z), quaternion: q, width: LAW.floorEndSize, height: LAW.floorEndSize },
       onGround ? 'floor' : 'air',
       true,
@@ -623,20 +489,16 @@ export class PortalKey {
     const h = this.h;
     this.hold = null;
     this.arcN = 0;
-    const ok = (at?: V3): PortalResult => ({ ok: true, mode: H.mode, reason: null, cost: 0, at, enemy: H.enemy });
+    const ok = (at?: V3): PortalResult => ({ ok: true, mode: H.mode, reason: null, at, enemy: H.enemy });
     const lost = (reason: string | null): PortalResult => {
       // nowhere to put it: the entrance closes, whoever was held climbs out
       this.hold = H;
       this.cancel();
-      return { ok: false, mode: H.mode, reason, cost: 0, enemy: H.enemy };
+      return { ok: false, mode: H.mode, reason, enemy: H.enemy };
     };
     switch (H.mode) {
       case 'air':
         return H.live ? ok(h.rifts.playerEnds().exit?.position) : lost('aim.space');
-      case 'catch': {
-        if (!H.live && H.launch?.valid) H.live = this.openCatchAt(H, H.launch.frame, H.launch.boost, H.launch.aimAt);
-        return H.live ? ok(h.rifts.playerEnds().exit?.position) : lost('aim.space');
-      }
       case 'hole': {
         // a tap: the exit right over it, as high as you stand (a loop)
         if (tap || !H.aim) {
@@ -647,7 +509,7 @@ export class PortalKey {
           const y = Math.min(top, ceil - 0.4);
           if (y - en.position.y < 3.2) return lost('portal.loopLow');
           const f: Frame = { position: new THREE.Vector3(en.position.x, y, en.position.z), quaternion: orientFrame(DOWN, FWD), width: LAW.floorEndSize, height: LAW.floorEndSize, kind: 'air' };
-          if (!h.rifts.placeExitFrame(f)) return lost('gate.blocked');
+          h.rifts.placeExitFrame(f);
           return ok(f.position);
         }
         const aim = H.aim;
@@ -665,15 +527,16 @@ export class PortalKey {
       }
       case 'grab': {
         const e = H.enemy!;
+        const aimed = !tap && !!H.launch?.valid;
         const spot = this.throwTarget(H, tap, e.pos);
         if (!spot) return lost('portal.nowhere');
-        if (!h.rifts.placeExitFrame(spot.frame, null, { boost: spot.boost, noPlayer: true })) return lost('gate.blocked');
+        h.rifts.placeExitFrame(spot.frame, null, { boost: spot.boost, noPlayer: true });
         h.rifts.setPairNoPlayer(true);
         h.enemies.hold(e, false);
         h.enemies.launch(e, new THREE.Vector3(0, -9, 0));
         // (still drawn sunk until he's through: no pop back up for the frames it takes)
         h.enemies.setSink(e, H.sink);
-        this.thrown = { t: 0, key: `enemy:${e.id}`, crossedT: -1, enemy: e };
+        this.thrown = { t: 0, key: `enemy:${e.id}`, crossedT: -1, linger: aimed ? PORTAL.linger : PORTAL.straight.linger, enemy: e };
         return ok(spot.frame.position);
       }
       case 'load': {
@@ -681,7 +544,7 @@ export class PortalKey {
         let spot = !tap && H.launch?.valid ? { frame: H.launch.frame, boost: H.launch.boost } : null;
         if (!spot) spot = this.loadAuto(pr);
         if (!spot) return lost('portal.nowhere');
-        if (!h.rifts.placeExitFrame(spot.frame, null, { boost: spot.boost, noPlayer: true })) return lost('gate.blocked');
+        h.rifts.placeExitFrame(spot.frame, null, { boost: spot.boost, noPlayer: true });
         h.rifts.setPairNoPlayer(true);
         pr.touched = true;
         if (pr.hanging) h.props.release(pr);
@@ -689,26 +552,42 @@ export class PortalKey {
           pr.body.vel.set(0, -6, 0);
           pr.body.onGround = false;
         }
-        this.thrown = { t: 0, key: pr.key, crossedT: -1 };
+        this.thrown = { t: 0, key: pr.key, crossedT: -1, linger: PORTAL.linger };
         return ok(spot.frame.position);
       }
       case 'hijack': {
         const out = h.rifts.gateOut(H.gate!);
         const spot = this.throwTarget(H, tap, out ? out.position : h.playerFeet());
         if (!spot) return lost('portal.nowhere');
-        if (!h.rifts.placeExitFrame(spot.frame, null, { boost: spot.boost, noPlayer: true })) return lost('gate.blocked');
+        h.rifts.placeExitFrame(spot.frame, null, { boost: spot.boost, noPlayer: true });
         h.rifts.hijackGate(H.gate!);
         return ok(spot.frame.position);
       }
     }
   }
 
-  /** Aimed (valid) launcher end, else where a throw does most from `from`. */
+  /** The aimed launcher end if valid; else a held man straight on, a gate's arrivals where a throw does most from `from`. */
   private throwTarget(H: Hold, tap: boolean, from: V3): { frame: Frame; boost: number } | null {
     if (!tap && H.launch?.valid) return { frame: H.launch.frame, boost: H.launch.boost };
-    const spot = throwSpot(this.h, from, 22, this.h.playerFeet());
-    if (!spot) return null;
-    return { frame: spot.frame, boost: Math.max(spot.boost, H.mode === 'grab' ? 12 : 8) };
+    if (H.enemy) return this.straightOn(H.enemy);
+    return throwSpot(this.h, from, 22, this.h.playerFeet());
+  }
+
+  /** A GRAB let go of without an aim: straight on past him, away from you (where you stand decides where he lands). */
+  private straightOn(e: EnemyView): { frame: Frame; boost: number } | null {
+    const h = this.h;
+    const f = h.playerFeet();
+    const d = _a.set(e.pos.x - f.x, 0, e.pos.z - f.z);
+    if (d.lengthSq() < 0.04) {
+      // (right over him: the way you look)
+      const look = h.aimRay().dir;
+      d.set(look.x, 0, look.z);
+    }
+    if (d.lengthSq() < 1e-6) return null;
+    d.normalize();
+    const S = PORTAL.straight;
+    const frame = straightOn(h, e.pos, d, S.past, S.up, S.tilt);
+    return frame ? { frame, boost: PORTAL.throwSpeed.grab } : null;
   }
 
   /** A load on a tap: over the head of the man you look at (else the nearest in sight), else over the edge. */
@@ -734,7 +613,7 @@ export class PortalKey {
     }
     if (e) {
       const sky = skyHatch(h, _c.set(e.pos.x, e.pos.y + e.height, e.pos.z), 5, 2.2);
-      if (sky && !h.rifts.blocked(sky.position)) return { frame: sky, boost: 8 };
+      if (sky) return { frame: sky, boost: 8 };
     }
     return throwSpot(h, pr.body.pos);
   }

@@ -92,7 +92,7 @@ function cells(lib: AnimLibrary): Cell[] {
     return list.map((c) => ({ label: `${c} @${U}`, look: LOOK, pose: clipPose(lib, c, U) }));
   }
   if (mode === 'looks') {
-    const looks = (q.get('looks')?.split(',') as Look[] | undefined) ?? (['hero', 'rifleman', 'grenadier', 'warden', 'brute', 'sniper', 'jammer', 'boss', 'hologram'] as Look[]);
+    const looks = (q.get('looks')?.split(',') as Look[] | undefined) ?? (['hero', 'rifleman', 'grenadier', 'warden', 'brute', 'sniper', 'boss', 'hologram'] as Look[]);
     const out: Cell[] = looks.map((l) => ({ label: l, look: l, pose: clipPose(lib, 'idle', U) }));
     for (const l of looks) {
       const p = clipPose(lib, 'idle', U);

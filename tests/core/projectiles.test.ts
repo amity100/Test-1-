@@ -169,24 +169,15 @@ describe('projectiles', () => {
     expect(b.segments[1].to.x).toBeCloseTo(25, 5);
   });
 
-  it('CATCH: a bolt aimed at the player enters the catch door and leaves the exit charged', () => {
+  it('a bolt aimed at the player enters a rift door facing the shooter and leaves the exit charged', () => {
     const world = makeWorld();
     world.add(V(-10, 0, 20), V(10, 30, 21), { tag: 'wall' });
     const rifts = makeRifts(world);
+    const shooterAt = V(15, 1.4, 0);
+    // (a door 1.4 m out toward him, facing him: what REFLECT's shield door is)
+    rifts.openEntranceFrame(rifts.standingFrame(1.4, 0, 0, V(1, 0, 0)), 'stand');
     const eye = V(0, 1.7, 0);
     rifts.placeExit(rifts.aimExit(eye, V(0, 0.2, 1).normalize(), eye, V(0, 0, 0), false, []));
-    const shooterAt = V(15, 1.4, 0);
-    const res = rifts.openEntrance({
-      playerFeet: V(0, 0, 0),
-      playerVel: V(0, 0, 0),
-      playerYaw: 0,
-      airborne: false,
-      camPos: V(0, 1.7, -2.5),
-      camDir: V(0, 0, 1),
-      threats: [{ kind: 'laser', from: shooterAt, eta: 0.6 }],
-      targets: [],
-    });
-    expect(res.mode).toBe('catch');
     const phys = makePhysics(world, rifts);
     const { h, log } = hooks();
     const proj = new Projectiles(world, rifts, phys, h);

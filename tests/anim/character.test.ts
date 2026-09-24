@@ -35,7 +35,7 @@ function worldPos(c: Character, bone: string) {
 
 describe('Character', () => {
   it('builds every look', () => {
-    const looks: Look[] = ['hero', 'rifleman', 'grenadier', 'warden', 'brute', 'sniper', 'jammer', 'boss', 'hologram'];
+    const looks: Look[] = ['hero', 'rifleman', 'grenadier', 'warden', 'brute', 'sniper', 'boss', 'hologram'];
     for (const look of looks) {
       const c = new Character(asset, lib, look, look === 'hologram' ? new THREE.MeshBasicMaterial() : undefined);
       c.update(1 / 60, loco({ speed: 2 }));
@@ -48,6 +48,26 @@ describe('Character', () => {
     expect(w.attachments.shield).toBeTruthy();
     expect(new Character(asset, lib, 'hero').attachments.core).toBeTruthy();
     expect(new Character(asset, lib, 'rifleman').attachments.rifle).toBeTruthy();
+  });
+
+  it("the hero's hidden blade sits under the right wrist and springs out past the hand", () => {
+    const c = new Character(asset, lib, 'hero');
+    for (let i = 0; i < 10; i++) c.update(1 / 30, loco());
+    const edge = c.attachments.blade.getObjectByName('edge')!;
+    expect(edge.visible).toBe(false);
+    c.root.updateMatrixWorld(true);
+    const hand = worldPos(c, 'RightHand');
+    expect(c.attachments.blade.getWorldPosition(new THREE.Vector3()).distanceTo(hand)).toBeLessThan(0.15);
+    c.setBlade(1);
+    c.root.updateMatrixWorld(true);
+    expect(edge.visible).toBe(true);
+    const elbow = worldPos(c, 'RightForeArm');
+    const tip = edge.localToWorld(new THREE.Vector3(0, 0.3, 0));
+    expect(tip.distanceTo(elbow)).toBeGreaterThan(hand.distanceTo(elbow) + 0.1);
+    c.setBlade(0);
+    expect(edge.visible).toBe(false);
+    // only the hero carries one
+    expect(new Character(asset, lib, 'rifleman').attachments.blade).toBeUndefined();
   });
 
   it('stands on the floor facing +Z', () => {

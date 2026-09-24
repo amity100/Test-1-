@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
-import type { DynBody, EnemyView, EntranceContext, Threat, TrapTarget } from '../../src/core/contracts';
+import type { DynBody, EnemyView, EntranceContext, TrapTarget } from '../../src/core/contracts';
 import { LAW } from '../../src/core/contracts';
 import { PortalKey, PORTAL, type PortalHost } from '../../src/game/portalkey';
 import { Strikes, STRIKE, type StrikeHost } from '../../src/game/strikes';
@@ -28,6 +28,7 @@ function fakeEnemy(id: number, pos: THREE.Vector3, o: Partial<{ offBalance: bool
     held: false,
     sink: 0,
     launched: null as THREE.Vector3 | null,
+    staggered: 0,
     chest(out = new THREE.Vector3()) {
       return out.set(this.pos.x, this.pos.y + 1.3, this.pos.z);
     },
@@ -40,12 +41,10 @@ function fakeEnemy(id: number, pos: THREE.Vector3, o: Partial<{ offBalance: bool
 type Fake = ReturnType<typeof fakeEnemy>;
 
 /** Ground, a sea to the east past x = 12 (a 20 m drop), the player at the origin looking +Z. */
-function rig(enemies: Fake[], o: { threats?: Threat[]; falling?: boolean; charges?: number } = {}) {
+function rig(enemies: Fake[], o: { falling?: boolean } = {}) {
   const world = makeWorld(false);
   world.add(V(-40, -2, -40), V(12, 0, 40), { tag: 'ground' });
   const rifts = makeRifts(world);
-  let charges = o.charges ?? 3;
-  const paid: number[] = [];
   const camPos = V(0, 2.2, -3);
   const camDir = V(0, 0, 1);
   const feet = V(0, o.falling ? 6 : 0, 0);
@@ -56,7 +55,6 @@ function rig(enemies: Fake[], o: { threats?: Threat[]; falling?: boolean; charge
     airborne: !!o.falling,
     camPos,
     camDir,
-    threats: o.threats ?? [],
     targets: enemies.filter((e) => e.alive).map((e): TrapTarget => ({ key: `enemy:${e.id}`, pos: e.pos, radius: e.radius, height: e.height, canFall: e.offBalance, steady: !e.offBalance })),
   });
   const host: PortalHost = {
@@ -71,7 +69,7 @@ function rig(enemies: Fake[], o: { threats?: Threat[]; falling?: boolean; charge
       isHeld: (v) => (v as unknown as Fake).held,
       setSink: (v, m) => ((v as unknown as Fake).sink = m),
       launch: (v, vel) => ((v as unknown as Fake).launched = vel ? vel.clone() : V(0, 0, 0)),
-      stagger: () => {},
+      stagger: (v, sec) => ((v as unknown as Fake).staggered = sec),
     },
     props: { byKey: () => null, release: () => {} },
     entranceCtx: ctx,
@@ -80,14 +78,10 @@ function rig(enemies: Fake[], o: { threats?: Threat[]; falling?: boolean; charge
     playerFeet: () => feet,
     touch: () => false,
     live: () => true,
-    charges: () => charges,
-    spend: (n) => (charges -= n),
-    refund: (n) => (charges += n),
-    markPaid: (id, on) => (on ? paid.push(id) : paid.splice(paid.indexOf(id), 1)),
     hangingUnderCrosshair: () => null,
   };
   const pk = new PortalKey(host);
-  return { world, rifts, pk, camDir, charges: () => charges, paid };
+  return { world, rifts, pk, camDir, feet };
 }
 
 const step = (pk: PortalKey, held: boolean, n = 1) => {
@@ -97,25 +91,31 @@ const step = (pk: PortalKey, held: boolean, n = 1) => {
 };
 
 describe('PORTAL key', () => {
-  it('resolves what a press does: grab (crosshair on a man), catch (under fire), air (falling), door', () => {
+  it('resolves what a press does: grab (crosshair on a man, fighting you or not), air (falling), door', () => {
     const e = fakeEnemy(1, V(0, 0, 10));
     expect(rig([e]).pk.preview().mode).toBe('grab');
     expect(rig([]).pk.preview().mode).toBe('door');
     expect(rig([], { falling: true }).pk.preview().mode).toBe('air');
-    const shot: Threat = { kind: 'laser', from: V(5, 1.5, 12), eta: 0.4 };
-    expect(rig([], { threats: [shot] }).pk.preview().mode).toBe('catch');
-    // a man standing firm while you're under fire: the free CATCH, not a paid grab
-    const steady = fakeEnemy(2, V(0, 0, 10), { offBalance: false });
-    expect(rig([steady], { threats: [shot] }).pk.preview().mode).toBe('catch');
-    // no fire: grabbing him costs a charge
-    const p = rig([fakeEnemy(3, V(0, 0, 10), { offBalance: false })]).pk.preview();
-    expect(p.mode).toBe('grab');
-    expect(p.cost).toBe(PORTAL.grabCost);
-    // ...and with no charge left he can't be taken
-    expect(rig([fakeEnemy(4, V(0, 0, 10), { offBalance: false })], { charges: 0.5 }).pk.preview().reason).toBe('portal.noCharge');
+    // a man standing firm is grabbed all the same: no price, no refusal
+    expect(rig([fakeEnemy(2, V(0, 0, 10), { offBalance: false })]).pk.preview()).toEqual({ mode: 'grab', reason: null, key: 'enemy:2' });
+    // ...a turret won't budge
+    expect(rig([fakeEnemy(3, V(0, 0, 10), { kind: 'turret' })]).pk.preview().reason).toBe('portal.anchored');
   });
 
-  it('a grab holds him in a dormant floor end; a tap throws him out over the drop', () => {
+  it('Voss is anchored like a turret: steady or stunned, the grab refuses him', () => {
+    for (const offBalance of [false, true]) {
+      const e = fakeEnemy(4, V(0, 0, 10), { kind: 'boss', offBalance });
+      const { rifts, pk } = rig([e]);
+      expect(pk.preview()).toEqual({ mode: 'grab', reason: 'portal.anchored', key: 'enemy:4' });
+      const r = pk.press();
+      expect(r.ok).toBe(false);
+      expect(r.reason).toBe('portal.anchored');
+      expect(e.held).toBe(false);
+      expect(rifts.playerEnds().entrance).toBeNull();
+    }
+  });
+
+  it('a grab holds him in a dormant floor end; a tap throws him straight on, away from you', () => {
     const e = fakeEnemy(1, V(4, 0, 10));
     const { rifts, pk, camDir } = rig([e]);
     // (look at him)
@@ -133,12 +133,14 @@ describe('PORTAL key', () => {
     expect(e.held).toBe(false);
     expect(e.launched).not.toBeNull();
     const ex = rifts.playerEnds().exit!;
-    expect(ex).toBeTruthy();
     expect(ex.noPlayer).toBe(true);
-    expect(ex.boost).toBeGreaterThan(0);
-    // over the sea (past x = 12), facing out to it
-    expect(ex.position.x).toBeGreaterThan(12);
-    expect(ex.normal.x).toBeGreaterThan(0.5);
+    expect(ex.boost).toBe(PORTAL.throwSpeed.grab);
+    // 2 m past him on the line from you through him, 2 m over his feet (not off to the sea at x > 12)
+    const d = V(4, 0, 10).normalize();
+    expect(ex.position.distanceTo(V(4, PORTAL.straight.up, 10).addScaledVector(d, PORTAL.straight.past))).toBeLessThan(0.01);
+    // facing on along that line, tilted up
+    expect(ex.normal.y).toBeCloseTo(Math.sin(PORTAL.straight.tilt), 3);
+    expect(V(ex.normal.x, 0, ex.normal.z).normalize().dot(d)).toBeGreaterThan(0.999);
     expect(rifts.playerEnds().entrance?.isOpen).toBe(true);
   });
 
@@ -163,17 +165,42 @@ describe('PORTAL key', () => {
     expect(ex.boost).toBe(PORTAL.throwSpeed.grab);
   });
 
-  it('a paid grab spends the charge and marks him; letting go without an exit gives it back', () => {
+  it('a hold let go of with no valid aim throws him straight on too', () => {
+    const e = fakeEnemy(1, V(0, 0, 10));
+    const { rifts, pk, camDir } = rig([e]);
+    pk.press();
+    // (looking at the floor at your feet: no room for a launcher end)
+    camDir.set(0, -1, 0.05).normalize();
+    step(pk, true, 20);
+    expect(pk.hold?.launch?.valid).toBe(false);
+    expect(step(pk, false)?.ok).toBe(true);
+    const ex = rifts.playerEnds().exit!;
+    expect(ex.position.distanceTo(V(0, 2, 12))).toBeLessThan(0.01);
+    expect(ex.normal.z).toBeGreaterThan(0.9);
+  });
+
+  it('grabbing a man who is fighting you is free; let go without an exit, he climbs out stumbling', () => {
     const e = fakeEnemy(7, V(0, 0, 10), { offBalance: false });
     const t = rig([e]);
-    expect(t.pk.press().ok).toBe(true);
-    expect(t.charges()).toBe(2);
-    expect(t.paid).toEqual([7]);
+    const r = t.pk.press();
+    expect(r.ok).toBe(true);
+    expect(e.held).toBe(true);
     t.pk.cancel();
     expect(e.held).toBe(false);
-    expect(t.charges()).toBe(3);
-    // (the charge came back: his mark goes too)
-    expect(t.paid).toEqual([]);
+    expect(e.staggered).toBeGreaterThan(0);
+    expect(t.rifts.playerEnds().entrance).toBeNull();
+  });
+
+  it('a tap with no room straight on (a low roof over him) lets him climb out', () => {
+    const e = fakeEnemy(1, V(0, 0, 10));
+    const t = rig([e]);
+    t.world.add(V(-10, 2.5, 6), V(10, 3, 16), { tag: 'roof' });
+    expect(t.pk.press().ok).toBe(true);
+    const out = step(t.pk, false);
+    expect(out?.ok).toBe(false);
+    expect(out?.reason).toBe('portal.nowhere');
+    expect(e.held).toBe(false);
+    expect(e.staggered).toBeGreaterThan(0);
     expect(t.rifts.playerEnds().entrance).toBeNull();
   });
 
@@ -193,6 +220,77 @@ describe('PORTAL key', () => {
   });
 });
 
+/**
+ * Tap-grab `e` (the player at the origin), then fly him through the pair with
+ * real physics, the PORTAL key ticking as the game runs it.
+ */
+function tapFlight(e: Fake, o: { wall?: number; men?: THREE.Vector3[] } = {}) {
+  const t = rig([e]);
+  t.camDir.copy(e.chest().sub(V(0, 2.2, -3)).normalize());
+  if (o.wall !== undefined) t.world.add(V(-10, 0, e.pos.z + o.wall), V(10, 6, e.pos.z + o.wall + 1), { tag: 'wall' });
+  t.pk.press();
+  step(t.pk, false);
+  const exit = t.rifts.playerEnds().exit!.position.clone();
+  const phys = makePhysics(t.world, t.rifts, { seaY: -20, isSea: (p) => p.x > 12, killYAt: () => -100 });
+  const ev = recorder();
+  const b = phys.createBody('enemy', { pos: e.pos.clone(), radius: e.radius, height: e.height });
+  b.vel.copy(e.launched!);
+  const men = (o.men ?? []).map((p) => phys.createBody('enemy', { pos: p.clone(), radius: 0.42, height: 1.8 }));
+  let time = 0;
+  for (let i = 0; i < 150 && !ev.log.splash.length; i++) {
+    const n = ev.log.crossed.length;
+    time += 1 / 60;
+    phys.step(1 / 60, ev, time);
+    if (ev.log.crossed.length > n) t.pk.crossed(`enemy:${e.id}`);
+    t.pk.update(1 / 60, false);
+  }
+  const hits = ev.log.impacts.filter((i) => i.b === b);
+  return { ev, b, men, exit, crossings: ev.log.crossed.filter((c) => c.b === b).length, ground: hits.find((i) => i.e.surface === 'ground'), wall: hits.find((i) => i.e.surface === 'wall') };
+}
+
+describe('PORTAL key: the straight-on throw', () => {
+  it('the numbers: out at 17 m/s, 20 degrees up, from 2 m over his feet: down at 8..12 m/s, 16 m/s on the level', () => {
+    const S = PORTAL.straight, v = PORTAL.throwSpeed.grab;
+    // (his feet come down 2 m − half his 1.8 m height below where he left)
+    const down = Math.sqrt((v * Math.sin(S.tilt)) ** 2 + 2 * LAW.gravity * (S.up - 0.9));
+    expect(down).toBeGreaterThanOrEqual(LAW.knockSpeed);
+    expect(down).toBeLessThan(LAW.killSpeed);
+    expect(v * Math.cos(S.tilt)).toBeGreaterThanOrEqual(LAW.killSpeed);
+  });
+
+  it('on open floor he is knocked down, not killed', () => {
+    const f = tapFlight(fakeEnemy(1, V(0, 0, 10)));
+    expect(f.crossings).toBe(1);
+    expect(f.ground?.e.charged).toBe(true);
+    expect(f.ground!.e.speed).toBeGreaterThanOrEqual(LAW.knockSpeed);
+    expect(f.ground!.e.speed).toBeLessThan(LAW.killSpeed);
+    // ~11 m on from the exit
+    expect(f.ground!.e.point.z - f.exit.z).toBeGreaterThan(9);
+    expect(f.ground!.e.point.z - f.exit.z).toBeLessThan(13);
+  });
+
+  it('a wall right behind him pulls the exit back: he is slammed into it, and not thrown again', () => {
+    const f = tapFlight(fakeEnemy(1, V(0, 0, 10)), { wall: 1 });
+    // 1.4 m short of the wall, on your side of him
+    expect(f.exit.z).toBeCloseTo(11 - 1.4, 2);
+    expect(f.wall?.e.charged).toBe(true);
+    expect(f.wall!.e.speed).toBeGreaterThanOrEqual(LAW.killSpeed);
+    // (he drops back onto his hole: it has shut by then)
+    expect(f.crossings).toBe(1);
+  });
+
+  it('the sea past him takes him', () => {
+    const f = tapFlight(fakeEnemy(1, V(8, 0, 0)));
+    expect(f.ev.log.splash).toContain(f.b);
+  });
+
+  it('a man where he comes down is hit at a killing speed', () => {
+    const f = tapFlight(fakeEnemy(1, V(0, 0, 10)), { men: [V(0, 0, 22)] });
+    const hit = f.ev.log.touches.find((x) => (x.a === f.b && x.b === f.men[0]) || (x.b === f.b && x.a === f.men[0]));
+    expect(hit?.rel ?? 0).toBeGreaterThanOrEqual(LAW.killSpeed);
+  });
+});
+
 describe('rift ends only for what they were opened for', () => {
   it('the player passes through a noPlayer pair (and its floor holds him); an enemy body falls in', () => {
     const world = makeWorld();
@@ -200,8 +298,8 @@ describe('rift ends only for what they were opened for', () => {
     const phys = makePhysics(world, rifts);
     const ev = recorder();
     const flat = (p: THREE.Vector3, n: THREE.Vector3) => ({ position: p, quaternion: new THREE.Quaternion().setFromUnitVectors(V(0, 0, 1), n), width: LAW.floorEndSize, height: LAW.floorEndSize });
-    expect(rifts.openEntranceFrame(flat(V(0, 0.01, 0), V(0, 1, 0)), 'floor', true)).toBe(true);
-    expect(rifts.placeExitFrame({ ...flat(V(20, 8, 0), V(0, -1, 0)), kind: 'air' }, null, { noPlayer: true })).toBe(true);
+    rifts.openEntranceFrame(flat(V(0, 0.01, 0), V(0, 1, 0)), 'floor', true);
+    rifts.placeExitFrame({ ...flat(V(20, 8, 0), V(0, -1, 0)), kind: 'air' }, null, { noPlayer: true });
     const pl = phys.createBody('player', { pos: V(0, 0.3, 0), radius: 0.35, height: 1.8 });
     const en = phys.createBody('enemy', { pos: V(0, 0.3, 0.1), radius: 0.4, height: 1.8 });
     for (let i = 0; i < 60; i++) phys.step(1 / 60, ev, i / 60);
@@ -346,5 +444,13 @@ describe('STRIKES', () => {
     expect(ends.b.position.y - ends.b.height / 2).toBeLessThan(0.3);
     expect(body.vel.y).toBeLessThan(0);
     expect(s.charges).toBe(STRIKE.maxCharges - 1);
+  });
+
+  it('LOOP / SWAP refuse the anchored: only Voss is told to be stunned first (a turret never moves)', () => {
+    expect(strikeRig([fakeEnemy(1, V(0, 0, 10), { kind: 'turret' })]).s.input('loop', true, true)?.reason).toBe('portal.anchored');
+    const voss = fakeEnemy(2, V(0, 0, 10), { kind: 'boss', offBalance: false });
+    expect(strikeRig([voss]).s.input('swap', true, true)?.reason).toBe('strike.anchored');
+    voss.offBalance = true;
+    expect(strikeRig([voss]).s.input('loop', true, true)?.ok).toBe(true);
   });
 });

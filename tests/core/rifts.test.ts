@@ -30,7 +30,6 @@ function ctx(o: Partial<EntranceContext> = {}): EntranceContext {
     airborne: false,
     camPos: V(0, 1.7, -2.5),
     camDir: V(0, 0, 1),
-    threats: [],
     targets: [],
     ...o,
   };
@@ -126,11 +125,6 @@ describe('RiftSystem (renderer = null)', () => {
     const close = rifts.aimExit(eye, V(0, -0.3, 1).normalize(), eye, feet, false, [guard]);
     expect(close.reason).toBe('aim.enemyClose');
 
-    // jammer bubble
-    rifts.setBlockers([{ pos: V(0, 0, 6), radius: 3 }]);
-    expect(rifts.aimExit(eye, V(0, -0.3, 1).normalize(), eye, feet, false, []).reason).toBe('aim.blocked');
-    rifts.setBlockers([]);
-
     // out of range
     const far = rifts.aimExit(eye, V(0, 0.02, 1).normalize(), eye, feet, false, []);
     expect(far.valid).toBe(true);
@@ -220,7 +214,7 @@ describe('RiftSystem (renderer = null)', () => {
     expect(log).toContain('close'); // the copy left at the old spot collapses
   });
 
-  it('openEntrance: noExit, trapdoor (steady refused / canFall ok), airborne -> air, threat -> catch, blocked', () => {
+  it('openEntrance: noExit, trapdoor (steady refused / canFall ok), airborne -> air, else door', () => {
     const { rifts } = arena();
     expect(rifts.openEntrance(ctx()).reason).toBe('gate.noExit');
     placeWallExit(rifts);
@@ -258,18 +252,11 @@ describe('RiftSystem (renderer = null)', () => {
     expect(air.normal.dot(vel.clone().normalize())).toBeLessThan(-0.9);
     expect(rifts.openEnds().length).toBe(2);
 
-    // threat: a door toward it, facing it
-    const r4 = rifts.openEntrance(ctx({ threats: [{ kind: 'laser', from: V(10, 1.5, 0), eta: 0.5 }, { kind: 'grenade', from: V(-10, 0, 0), eta: 1.5 }] }));
-    expect(r4.mode).toBe('catch');
+    // nothing special: a door in front of you
+    const r4 = rifts.openEntrance(ctx());
+    expect(r4.mode).toBe('door');
     expect(r4.ok).toBe(true);
-    const c = rifts.playerEnds().entrance!;
-    expect(c.normal.x).toBeCloseTo(1, 5);
-    expect(c.position.x).toBeCloseTo(1.4, 5);
-
-    // jammer bubble
-    rifts.setBlockers([{ pos: V(0, 1, 1.45), radius: 3 }]);
-    expect(rifts.openEntrance(ctx()).reason).toBe('gate.blocked');
-    expect(rifts.previewEntrance(ctx()).reason).toBe('gate.blocked');
+    expect(rifts.playerEnds().entrance!.normal.z).toBeLessThan(-0.9);
   });
 
   it('close() shears straddlers and closes the pair (not gates)', () => {

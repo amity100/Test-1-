@@ -200,7 +200,7 @@ export class HUD implements HudAPI {
         <div class="h-hp"><b class="hp-num">100</b><div class="hp-bar"><i class="hp-trail"></i><i class="hp-fill"></i><i class="hp-segs"></i><span class="hp-embers"></span></div></div>
       </div>
       <div class="h-prompt"><span class="p-glyph"></span><span class="p-lbl" dir="auto"></span></div>
-      <button class="h-clip" type="button">${CLAPPER}<span class="c-lbl"></span><kbd>R</kbd><i class="c-timer"></i></button>`;
+      <button class="h-clip" type="button">${CLAPPER}<span class="c-lbl"></span><kbd>T</kbd><i class="c-timer"></i></button>`;
     root.appendChild(el);
     const q = <T extends Element = HTMLElement>(s: string) => el.querySelector(s) as unknown as T;
     this.dmgEl = q('.h-dmg');
@@ -471,9 +471,9 @@ export class HUD implements HudAPI {
     this.updateCross();
   }
 
-  /** What a PORTAL press would do now, under the crosshair (a ⚡ when it costs charge). */
+  /** What a PORTAL press would do now, under the crosshair. */
   setGateHint(hint: GateHint | null) {
-    const key = hint ? `${hint.mode}|${hint.reason}|${hint.cost ?? 0}` : '';
+    const key = hint ? `${hint.mode}|${hint.reason}` : '';
     if (key === this.gateKey) return;
     this.gateKey = key;
     if (!hint || (!hint.mode && !hint.reason)) {
@@ -483,8 +483,8 @@ export class HUD implements HudAPI {
       this.gateEl.textContent = t(hint.reason);
       this.gateEl.className = `h-gate on refuse${hint.mode ? ` m-${hint.mode}` : ''}`;
     } else {
-      this.gateEl.textContent = t(`portal.${hint.mode}`) + (hint.cost ? ` ⚡${hint.cost}` : '');
-      this.gateEl.className = `h-gate on mode m-${hint.mode}${hint.cost ? ' paid' : ''}`;
+      this.gateEl.textContent = t(`portal.${hint.mode}`);
+      this.gateEl.className = `h-gate on mode m-${hint.mode}`;
     }
     this.updateCross();
   }

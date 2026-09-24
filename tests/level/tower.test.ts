@@ -2,19 +2,26 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import * as THREE from 'three';
 import { buildTower, type TowerBuild, SHAFT } from '../../src/world/tower';
 import type { Collider } from '../../src/world/collision';
-import type { EnemyKind, LessonId, SpawnDef, ZoneDef, ZoneId } from '../../src/core/contracts';
+import { LAW, type EnemyKind, type LessonId, type SpawnDef, type ZoneDef, type ZoneId } from '../../src/core/contracts';
+import { RiftSystem } from '../../src/game/portals';
+import { PORTAL } from '../../src/game/portalkey';
+import { straightOn, type SpotHost } from '../../src/game/riftspots';
+import { orientFrame } from '../../src/game/portalMath';
+import { Physics } from '../../src/sim/physics';
+import { ZoneManager } from '../../src/game/zones';
 
 let L: TowerBuild;
 
 const ZONES: ZoneId[] = ['pier', 'yard', 'skeleton', 'lab', 'crown'];
-const LESSONS: Record<ZoneId, LessonId[]> = {
+/** Each zone's encounters in order: a lesson, or null for a plain fight (no hint). */
+const LESSONS: Record<ZoneId, (LessonId | null)[]> = {
   pier: ['door', 'trapdoor', 'returnToSender', 'slingshot', 'arena'],
   yard: ['cargo', 'matador', 'grenade', 'shield'],
   skeleton: ['loop', 'firingLine', 'arena'],
-  lab: ['hijack', 'jammer', 'borrowedGun'],
+  lab: ['hijack', null, 'borrowedGun'],
   crown: ['boss', 'leap'],
 };
-const ALL_LESSONS: LessonId[] = ['door', 'trapdoor', 'returnToSender', 'slingshot', 'arena', 'loop', 'cargo', 'matador', 'grenade', 'shield', 'firingLine', 'hijack', 'jammer', 'borrowedGun', 'boss', 'leap'];
+const ALL_LESSONS: LessonId[] = ['door', 'trapdoor', 'returnToSender', 'slingshot', 'arena', 'loop', 'cargo', 'matador', 'grenade', 'shield', 'firingLine', 'hijack', 'borrowedGun', 'boss', 'leap'];
 
 const BODY: Record<EnemyKind, { r: number; h: number }> = {
   rifleman: { r: 0.4, h: 1.8 },
@@ -22,7 +29,6 @@ const BODY: Record<EnemyKind, { r: number; h: number }> = {
   warden: { r: 0.5, h: 1.9 },
   brute: { r: 0.7, h: 2.4 },
   sniper: { r: 0.4, h: 1.8 },
-  jammer: { r: 0.4, h: 1.8 },
   turret: { r: 0.6, h: 1.5 },
   boss: { r: 0.45, h: 1.9 },
 };
@@ -80,8 +86,13 @@ describe('the tower (level)', () => {
     for (const z of L.zones) {
       expect(z.nameKey).toBe(`zone.${z.id}.name`);
       expect(z.subKey).toBe(`zone.${z.id}.sub`);
-      expect(z.encounters.map((e) => e.lesson)).toEqual(LESSONS[z.id]);
+      expect(z.encounters.map((e) => e.lesson ?? null)).toEqual(LESSONS[z.id]);
       for (const e of z.encounters) {
+        if (!e.lesson) {
+          expect(e.hintKey).toBeUndefined();
+          expect(e.id).toMatch(new RegExp(`^${z.id}\\.[a-z]+$`));
+          continue;
+        }
         expect(ALL_LESSONS).toContain(e.lesson);
         expect(e.hintKey).toBe(`hint.${e.lesson}`);
         expect(e.hintKey).toMatch(/^hint\.[A-Za-z]+$/);
@@ -271,6 +282,33 @@ describe('the tower (level)', () => {
     }
   });
 
+  it('the trapdoor lesson: a PORTAL tap from the way in throws both guards into the sea', () => {
+    const pair = L.zones[0].encounters.find((e) => e.lesson === 'trapdoor')!.spawns;
+    expect(pair.length).toBe(2);
+    // the gap between stack T and row R1, where they first come into sight
+    for (const you of [new THREE.Vector3(-7, 0, -44.3), new THREE.Vector3(-10, 0, -44.3)]) {
+      for (const s of pair) {
+        const man = s.pos;
+        expect(L.world.lineOfSight(new THREE.Vector3(you.x, you.y + 1.68, you.z), new THREE.Vector3(man.x, man.y + 1.1, man.z)), `sees ${s.id}`).toBe(true);
+        const rifts = new RiftSystem(new THREE.Scene(), null, L.world, { portalScale: 0.5, lightCount: 2, maxViews: 2 });
+        const host: SpotHost = { rifts, world: L.world, level: { seaY: L.seaY, isSea: (p) => L.isSea(p as THREE.Vector3) }, killYAt: () => L.seaY - 30 };
+        const d = new THREE.Vector3(man.x - you.x, 0, man.z - you.z).normalize();
+        const S = PORTAL.straight;
+        const exit = straightOn(host, man, d, S.past, S.up, S.tilt)!;
+        expect(exit, `room past ${s.id}`).toBeTruthy();
+        rifts.openEntranceFrame({ position: new THREE.Vector3(man.x, man.y + 0.01, man.z), quaternion: orientFrame(new THREE.Vector3(0, 1, 0), d), width: LAW.floorEndSize, height: LAW.floorEndSize }, 'floor', true);
+        rifts.placeExitFrame(exit, null, { boost: PORTAL.throwSpeed.grab, noPlayer: true });
+        const phys = new Physics(L.world, rifts, { seaY: L.seaY, isSea: (p) => L.isSea(p as THREE.Vector3), killYAt: () => L.seaY - 30 });
+        const b = phys.createBody('enemy', { pos: man.clone(), radius: 0.4, height: 1.8 });
+        b.vel.set(0, -9, 0);
+        let wet = false;
+        const ev = { crossed() {}, impact() {}, touch() {}, splash: () => (wet = true), fellOut() {} };
+        for (let i = 0; i < 150 && !wet; i++) phys.step(1 / 60, ev, i / 60);
+        expect(wet, `${s.id} from ${fmt(you)} lands at ${fmt(b.pos)}`).toBe(true);
+      }
+    }
+  });
+
   it('stays within the collider and draw-call budgets', () => {
     const n = L.world.colliders.length;
     expect(n).toBeLessThan(3000);
@@ -324,5 +362,34 @@ describe('the tower (level)', () => {
     expect(L.isSea(new THREE.Vector3(-60, 0, 20))).toBe(true);
     expect(L.isSea(new THREE.Vector3(0, 0, -53))).toBe(true); // the channel
     expect(L.isSea(new THREE.Vector3(0, 0, -20))).toBe(false);
+  });
+});
+
+describe('lesson hints on arrival', () => {
+  it('the first lesson teaches where the run starts: the door has nothing to clear but still hints', () => {
+    const zm = new ZoneManager(L);
+    const u = zm.update(L.zones[0].playerStart);
+    const door = u.engaged.find((e) => e.def.lesson === 'door')!;
+    expect(door).toBeTruthy();
+    expect(u.triggered).toContain(door);
+    expect(door.cleared).toBe(true);
+    expect(zm.lessonHint(door)).toBe('hint.door');
+  });
+
+  it('a fight won from afar has nothing left to teach; a plain fight never hints; the leap waits for Voss', () => {
+    const zm = new ZoneManager(L);
+    const rts = zm.encounters.find((e) => e.def.lesson === 'returnToSender')!;
+    rts.triggered = true;
+    rts.enemyIds = [1];
+    expect(zm.lessonHint(rts)).toBe('hint.returnToSender');
+    expect(zm.checkClears(() => false)).toEqual([rts]);
+    expect(zm.lessonHint(rts)).toBeNull();
+    expect(zm.lessonHint(zm.encounters.find((e) => e.def.id === 'lab.hall')!)).toBeNull();
+    // on the roof by the leap beam, mid-fight: the boss hints, the leap doesn't (his fall shows it)
+    const u = zm.update(new THREE.Vector3(-12, 90.5, 40));
+    const leap = u.engaged.find((e) => e.def.lesson === 'leap')!;
+    expect(leap.cleared).toBe(true);
+    expect(zm.lessonHint(leap)).toBeNull();
+    expect(zm.lessonHint(u.engaged.find((e) => e.def.lesson === 'boss')!)).toBe('hint.boss');
   });
 });

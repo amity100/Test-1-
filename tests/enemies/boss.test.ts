@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import type { HitInfo } from '../../src/core/contracts';
 import type { Enemy } from '../../src/actors/enemies';
+import { KIND } from '../../src/actors/tuning';
 import { scenario, V } from './fakes';
 
 const bolt = (from: THREE.Vector3, amount = 60): HitInfo => ({ source: 'bolt', amount, charged: true, from, team: 'player', instigator: 'player' });
@@ -21,11 +22,11 @@ describe('Director Voss', () => {
     expect(s.log.barks.some((b) => b.key === 'bark.boss1')).toBe(true);
     expect(s.sys.hit(e, bolt(V(0, 1.3, 10)))).toBe('blocked');
     expect(s.sys.hit(e, bolt(V(6, 1.3, 6)))).toBe('blocked'); // 45° off his nose
-    expect(e.hp).toBe(600);
+    expect(e.hp).toBe(1800);
     expect(s.sys.hit(e, bolt(V(0, 1.3, -10)))).toBe('hurt');
-    expect(e.hp).toBe(540);
+    expect(e.hp).toBe(1740);
     expect(s.sys.hit(e, bolt(V(0, 14, 2)))).toBe('hurt'); // from above
-    expect(e.hp).toBe(480);
+    expect(e.hp).toBe(1680);
     // steady: no trapdoor, no shove, no shear outside a blink
     expect(s.sys.boss()!.phase).toBe(1);
     expect(e.offBalance).toBe(false);
@@ -44,10 +45,26 @@ describe('Director Voss', () => {
     expect(s.log.bolts.length).toBeGreaterThan(before);
   });
 
+  it('has 1800 hp; his phases turn at two thirds and one third of it', () => {
+    expect(KIND.boss.hp).toBe(1800);
+    const { s, e } = arena();
+    expect(e.maxHp).toBe(1800);
+    const to = (hp: number) => s.sys.hit(e, bolt(V(0, 1.3, -10), e.hp - hp));
+    to(1189);
+    expect(s.sys.boss()!.phase).toBe(1);
+    to(1187);
+    expect(s.sys.boss()!.phase).toBe(2);
+    to(595);
+    expect(s.sys.boss()!.phase).toBe(2);
+    to(593);
+    expect(s.sys.boss()!.phase).toBe(3);
+    expect(e.alive).toBe(true);
+  });
+
   it('phases by HP; phase 2 blinks through red rifts and can be sheared mid-pass', () => {
     const { s, e } = arena();
-    s.sys.hit(e, bolt(V(0, 1.3, -10), 250));
-    expect(e.hp).toBe(350);
+    s.sys.hit(e, bolt(V(0, 1.3, -10), 1000));
+    expect(e.hp).toBe(800);
     expect(s.sys.boss()!.phase).toBe(2);
     expect(s.log.barks.some((b) => b.key === 'bark.boss2')).toBe(true);
     // the blink: red pair shown 0.6 s before the pass
@@ -58,22 +75,22 @@ describe('Director Voss', () => {
     s.until(() => s.sys.boss()!.blinking, 2);
     expect(s.clock.t - tShow).toBeCloseTo(0.6, 1);
     expect(s.sys.hit(e, { source: 'shear', amount: 999, charged: false, team: 'player', instigator: 'player' })).toBe('knocked');
-    expect(e.hp).toBe(200);
+    expect(e.hp).toBe(650);
     expect(e.alive).toBe(true);
     expect(e.state).toBe('stunned');
     expect(s.sys.boss()!.blinking).toBe(false);
     expect(s.log.bossRift[s.log.bossRift.length - 1]).toEqual({ a: null, b: null });
-    // stunned: now he can be trapdoored and bladed
+    // stunned: off balance (LOOP and SWAP take him; the PORTAL grab never does); the blade bites (as it does any time)
     expect(e.offBalance).toBe(true);
     expect(s.sys.hit(e, { source: 'blade', amount: 999, charged: false, team: 'player', instigator: 'player' })).toBe('hurt');
-    expect(e.hp).toBe(50);
+    expect(e.hp).toBe(500);
     expect(s.sys.boss()!.phase).toBe(3);
     expect(s.log.barks.some((b) => b.key === 'bark.boss3')).toBe(true);
   });
 
   it('an unsheared blink lands him on a blink point', () => {
     const { s, e } = arena();
-    s.sys.hit(e, bolt(V(0, 1.3, -10), 250));
+    s.sys.hit(e, bolt(V(0, 1.3, -10), 1000));
     s.until(() => s.log.bossRift.some((r) => r.a !== null), 4);
     const target = s.log.bossRift.find((r) => r.a !== null)!.b!;
     s.until(() => s.log.bossRift.some((r) => r.a === null), 2);
@@ -84,7 +101,7 @@ describe('Director Voss', () => {
 
   it('phase 3 summons two riflemen every 15 s', () => {
     const { s, e } = arena();
-    s.sys.hit(e, bolt(V(0, 1.3, -10), 450));
+    s.sys.hit(e, bolt(V(0, 1.3, -10), 1300));
     expect(s.sys.boss()!.phase).toBe(3);
     s.until(() => s.log.summons.length > 0, 6);
     expect(s.log.summons.length).toBe(1);

@@ -64,7 +64,7 @@ export function deathKindOf(src: DamageSource): DeathKind {
 /**
  * Kessler Security: spawning, perception, the per-kind AI, damage rules
  * (shields, armour, launches, landings) and the views the game needs
- * (threats for CATCH, trapdoor targets, jammer bubbles, the boss).
+ * (incoming threats, trapdoor targets, the boss).
  *
  * Every enemy owns a DynBody. Walking bodies are kinematic (we set vel, the
  * game's physics.step moves them); launched / downed-in-air / dead bodies
@@ -81,6 +81,11 @@ export class EnemySystem implements EnemyAPI, Brain {
   private readonly pathQueue: Enemy[] = [];
   private pathHead = 0;
   private tokens = 0;
+  /** Squad pause: no new shooter takes a turn until it runs out. */
+  private volleyT = 0;
+  /** Who waited longest for a turn (last frame's queue), and this frame's. */
+  private firstInLine = Infinity;
+  private nextInLine = Infinity;
   private barkGap = 0;
   private rankT = 0;
   private readonly ranked: Enemy[] = [];
@@ -98,8 +103,6 @@ export class EnemySystem implements EnemyAPI, Brain {
   private readonly threatOut: Threat[] = [];
   private readonly trapPool: TrapTarget[] = [];
   private readonly trapOut: TrapTarget[] = [];
-  private readonly blockPool: { pos: V3; radius: number }[] = [];
-  private readonly blockOut: { pos: V3; radius: number }[] = [];
 
   constructor(
     private readonly physics: PhysicsAPI,
@@ -177,8 +180,12 @@ export class EnemySystem implements EnemyAPI, Brain {
     this.group.add(char.root);
     this.list.push(e);
     this.byId.set(id, e);
-    // later encounters of a zone start as their defs say, even mid-fight
-    if (def.state === 'combat') this.enterCombat(e, null);
+    // later encounters of a zone start as their defs say, even mid-fight;
+    // reinforcements come in on the radio call: roughly where you were
+    if (def.state === 'combat') {
+      if (this.hasPlayer) this.learn(e, this.lastPlayer, AI.reportError);
+      this.enterCombat(e, null);
+    }
     return e;
   }
 
@@ -213,9 +220,9 @@ export class EnemySystem implements EnemyAPI, Brain {
     this.pathQueue.length = 0;
     this.pathHead = 0;
     this.tokens = 0;
+    this.volleyT = 0;
     this.threatOut.length = 0;
     this.trapOut.length = 0;
-    this.blockOut.length = 0;
   }
 
   // -------------------------------------------------------------------------
@@ -230,6 +237,9 @@ export class EnemySystem implements EnemyAPI, Brain {
       this.hasPlayer = true;
     }
     this.barkGap -= dt;
+    this.volleyT -= dt;
+    this.firstInLine = this.nextInLine;
+    this.nextInLine = Infinity;
     this.processPaths();
     this.rankT -= dt;
     if (this.rankT <= 0) {
@@ -306,6 +316,7 @@ export class EnemySystem implements EnemyAPI, Brain {
     e.lookT -= dt;
     e.shieldT -= dt;
     e.barkT -= dt;
+    e.alertT -= dt;
     if (e.held) {
       // the PORTAL has him: pinned where he sank, until he's thrown or let go
       e.noGroundT = 0;
@@ -409,18 +420,26 @@ export class EnemySystem implements EnemyAPI, Brain {
       const elapsed = Math.min(0.5, e.senseAcc);
       e.senseAcc = 0;
       const d = seePlayer(e, ctx);
+      const was = e.seesPlayer;
       e.seesPlayer = d >= 0;
       e.seeDist = d >= 0 ? d : Infinity;
       if (e.seesPlayer) {
-        e.lastKnown.copy(pl.pos);
-        e.hasLastKnown = true;
+        if (!was) this.sighted(e);
+        this.learn(e, pl.pos);
         e.lastSeenT = this.time;
       }
       if (e.mode !== 'combat') {
-        if (e.seesPlayer) e.sus += elapsed * detectRate(d, e.tune.sight) * (pl.crouched ? 0.7 : 1);
+        if (e.seesPlayer) e.sus += elapsed * detectRate(d, e.tune.sight) * (pl.crouched ? 0.7 : 1) * (e.alertT > 0 ? AI.alert.detect : 1);
         else if (this.time - e.lastSeenT > 2) e.sus = Math.max(0, e.sus - elapsed * 0.15);
         if (e.sus >= 1) this.enterCombat(e, e);
         else if (e.seesPlayer && e.sus >= AI.suspiciousAt) this.becomeSuspicious(e, pl.pos);
+      } else if (e.seesPlayer) {
+        // eyes on you: he keeps his squad posted
+        e.calloutT -= elapsed;
+        if (e.calloutT <= 0) {
+          e.calloutT = AI.callout;
+          this.raise(e.def.zone, null, e);
+        }
       }
     }
     // hearing
@@ -430,15 +449,83 @@ export class EnemySystem implements EnemyAPI, Brain {
       const d = e.pos.distanceTo(n.at);
       if (d > n.radius) continue;
       if (e.mode === 'combat') {
-        if (!e.seesPlayer) {
-          e.lastKnown.copy(n.at);
-          e.hasLastKnown = true;
-        }
+        if (!e.seesPlayer) this.learn(e, n.at);
       } else {
         e.sus = Math.max(e.sus, d < n.radius * 0.4 ? 0.75 : 0.45);
         this.becomeSuspicious(e, n.at);
       }
     }
+    if (e.mode === 'combat') this.track(e, dt);
+  }
+
+  /** He knows where the player is, or was: a sighting, a noise, a shout (`err` m off, as old as `t`). */
+  private learn(e: Enemy, at: V3, err = 0, t = this.time) {
+    e.lastKnown.copy(at);
+    if (err > 0) {
+      e.lastKnown.x += (this.rand() - 0.5) * 2 * err;
+      e.lastKnown.z += (this.rand() - 0.5) * 2 * err;
+    }
+    e.hasLastKnown = true;
+    e.contactT = t;
+  }
+
+  /** Eyes on him again: a steadier aim builds from now; after a real loss, a beat to react. */
+  private sighted(e: Enemy) {
+    e.viewT = this.time;
+    e.lostBarked = false;
+    if (e.mode !== 'combat' || this.time - e.lastSeenT < AI.reacquireGap) return;
+    const r = this.between(AI.reacquire);
+    e.reloadT = Math.max(e.reloadT, r);
+    e.lobT = Math.max(e.lobT, r);
+    e.chargeCd = Math.max(e.chargeCd, r);
+    if (!e.searching) return;
+    // his own 'where'd he go?' doesn't hold it back; another voice just now does
+    if (e.kind !== 'turret' && this.barkGap <= 0) this.bark(e, 'bark.there', true);
+    // and tells the squad on this tick
+    e.calloutT = 0;
+  }
+
+  /** No word of the player for a while: search; nothing found: stand down (DESIGN §5). */
+  private track(e: Enemy, dt: number) {
+    // Voss never loses you in his own arena
+    if (e.kind === 'boss') return;
+    // (some men hold on to a sighting a little longer than others)
+    if (this.time - e.contactT <= AI.loseTrack + ((e.id * 0.618) % 1) * AI.loseTrackVary) {
+      if (e.searching) {
+        e.searching = false;
+        e.hasSpot = false;
+      }
+      return;
+    }
+    if (!e.searching) {
+      e.searching = true;
+      e.searchT = -this.rand() * AI.search.vary;
+      e.hasSpot = false;
+      e.hasGoal = false;
+      e.lookBase = hdist(e.pos, e.lastKnown) > 1 ? yawTo(e.pos, e.lastKnown) : e.yaw;
+      if (!e.lostBarked && e.kind !== 'turret') this.bark(e, 'bark.where');
+      e.lostBarked = true;
+      return;
+    }
+    e.searchT += dt;
+    if (e.searchT > AI.search.time) this.standDown(e);
+  }
+
+  /** Searched and found nothing: suspicious, then calm, but quicker to notice for a while. */
+  private standDown(e: Enemy) {
+    endAttack(this, e);
+    e.searching = false;
+    e.mode = 'suspicious';
+    e.sus = 0.5;
+    e.alertT = AI.alert.time;
+    e.investigate.copy(e.lastKnown);
+    e.hasSpot = false;
+    e.hasGoal = false;
+    if (e.state === 'combat') {
+      e.state = 'suspicious';
+      e.stateT = 0;
+    }
+    if (e.kind !== 'turret') this.bark(e, 'bark.lost');
   }
 
   private baseState(e: Enemy) {
@@ -467,8 +554,9 @@ export class EnemySystem implements EnemyAPI, Brain {
   }
 
   /**
-   * He knows. Entering combat makes the zone hot: every living enemy of the
-   * zone joins (DESIGN §5 perception). `propagate` is off for those joiners.
+   * He knows someone is there. His shout brings in his squad and anyone in
+   * earshot (DESIGN §5 perception); `propagate` is off for those joiners. What
+   * he knows of the player is only what he saw, heard or was told.
    */
   private enterCombat(e: Enemy, spotter: Enemy | null, propagate = true) {
     if (!e.alive) return;
@@ -476,10 +564,14 @@ export class EnemySystem implements EnemyAPI, Brain {
     if (fresh) {
       e.mode = 'combat';
       e.sus = 1;
-      if (this.hasPlayer) {
-        e.lastKnown.copy(this.lastPlayer);
+      // no word of the player: he looks around where he is (nobody to lose, so no 'where'd he go?')
+      if (!e.hasLastKnown) {
+        e.lastKnown.copy(e.pos);
         e.hasLastKnown = true;
+        e.lostBarked = true;
       }
+      e.searching = false;
+      e.calloutT = AI.callout;
       e.reloadT = Math.max(e.reloadT, this.between(AI.engageDelay));
       e.lobT = Math.max(e.lobT, 1.5 + this.rand() * 1.5);
       e.chargeCd = Math.max(e.chargeCd, 1.2);
@@ -492,6 +584,9 @@ export class EnemySystem implements EnemyAPI, Brain {
         e.greeted = true;
         this.bark(e, 'bark.boss1', true);
       }
+    } else {
+      // hurt, or a mate down, while searching: the search goes on
+      e.searchT = 0;
     }
     if (e.state === 'idle' || e.state === 'patrol' || e.state === 'suspicious') {
       e.state = 'combat';
@@ -502,15 +597,20 @@ export class EnemySystem implements EnemyAPI, Brain {
 
   /**
    * The shout carries to his own squad and anyone of the zone within earshot
-   * (not the whole zone: later fights stay unaware until you get there).
+   * (not the whole zone: later fights stay unaware until you get there). They
+   * learn his last known spot, give or take a few metres, never more.
    */
   private raise(zone: ZoneId, spotter: Enemy | null, origin: Enemy | null = null) {
     if (spotter && spotter.kind !== 'boss' && spotter.kind !== 'turret') this.bark(spotter, 'bark.contact', true);
     for (let i = 0; i < this.list.length; i++) {
       const o = this.list[i];
-      if (!o.alive || o.def.zone !== zone || o.mode === 'combat') continue;
+      if (!o.alive || o === origin || o.def.zone !== zone) continue;
+      // news only for someone without fresher word (or eyes) of his own
+      const news = !!origin && !o.seesPlayer && (!o.hasLastKnown || origin.contactT > o.contactT);
+      if (o.mode === 'combat' && !news) continue;
       if (origin && o.def.squad !== origin.def.squad && !this.hears(origin, o)) continue;
-      this.enterCombat(o, null, false);
+      if (origin && news) this.learn(o, origin.lastKnown, AI.reportError, origin.contactT);
+      if (o.mode !== 'combat') this.enterCombat(o, null, false);
     }
   }
 
@@ -557,6 +657,7 @@ export class EnemySystem implements EnemyAPI, Brain {
         if (e.stateT > 7 && e.sus < 0.35) {
           e.mode = 'calm';
           e.state = 'idle';
+          e.hasLastKnown = false;
         }
       }
       return;
@@ -573,6 +674,7 @@ export class EnemySystem implements EnemyAPI, Brain {
         e.state = this.baseState(e);
         e.stateT = 0;
         e.hasGoal = false;
+        e.hasLastKnown = false;
       }
       return;
     }
@@ -600,7 +702,7 @@ export class EnemySystem implements EnemyAPI, Brain {
     e.yaw = dampAngle(e.yaw, e.def.yaw + Math.sin(this.time * 0.3 + e.id * 1.7) * 0.35, 1.5, dt);
   }
 
-  private lookAround(e: Enemy, dt: number) {
+  lookAround(e: Enemy, dt: number) {
     e.yaw = dampAngle(e.yaw, e.lookBase + Math.sin(this.time * 0.9 + e.id) * 0.7, 2.5, dt);
   }
 
@@ -838,9 +940,18 @@ export class EnemySystem implements EnemyAPI, Brain {
 
   tryToken(e: Enemy) {
     if (e.token) return true;
-    if (this.tokens >= AI.maxTokens) return false;
+    // (stopped asking for a while: back of the line)
+    if (this.time - e.askedT > 0.1) e.queuedT = this.time;
+    e.askedT = this.time;
+    // a beat between one shooter's turn and the next, and the longest wait goes first (Voss keeps his own rhythm)
+    const wait = e.kind !== 'boss' && (this.volleyT > 0 || e.queuedT > this.firstInLine);
+    if (this.tokens >= AI.maxTokens || wait) {
+      this.nextInLine = Math.min(this.nextInLine, e.queuedT);
+      return false;
+    }
     e.token = true;
     this.tokens++;
+    this.volleyT = Math.max(this.volleyT, this.between(AI.volleyStagger));
     return true;
   }
 
@@ -848,6 +959,7 @@ export class EnemySystem implements EnemyAPI, Brain {
     if (!e.token) return;
     e.token = false;
     this.tokens = Math.max(0, this.tokens - 1);
+    this.volleyT = Math.max(this.volleyT, this.between(AI.volleyGap));
   }
 
   /** Enemies currently holding an attack token (telegraphing or firing). */
@@ -887,6 +999,18 @@ export class EnemySystem implements EnemyAPI, Brain {
   }
 
   startBlink(e: Enemy) {
+    const found = this.blinkSpot(e);
+    e.blinkNext = AI.boss.blinkEvery;
+    if (!found) return;
+    endAttack(this, e);
+    e.blinkFrom.copy(e.pos);
+    e.blink = 'warn';
+    e.blinkT = AI.boss.blinkWarn;
+    this.hooks.bossRift?.(e, e.blinkFrom, e.blinkTo);
+  }
+
+  /** Where Voss blinks to (e.blinkTo): a blink point about 11 m from the player, else a spot in his band. */
+  private blinkSpot(e: Enemy): boolean {
     const pl = this.ctx.player;
     let found = false;
     if (this.arena && this.arena.points.length) {
@@ -902,14 +1026,38 @@ export class EnemySystem implements EnemyAPI, Brain {
         }
       }
     }
-    if (!found) found = this.pickSpot(e, pl.pos, e.tune.keepMin, e.tune.keepMax, e.blinkTo);
-    e.blinkNext = AI.boss.blinkEvery;
-    if (!found) return;
+    return found || this.pickSpot(e, pl.pos, e.tune.keepMin, e.tune.keepMax, e.blinkTo);
+  }
+
+  /**
+   * Voss after a stab: back on his feet and straight out through his own rift
+   * (no warning), so a second stab means crossing his arena first. Nowhere to
+   * blink: his gauntlet throws you off instead.
+   */
+  private breakAway(e: Enemy) {
+    e.char.play('hitChest');
+    // already on his way out (mid-blink, or flying)
+    if (e.blink === 'pass' || e.state === 'launched') return;
+    const b = e.body;
+    if (e.state === 'downed' || e.state === 'stunned') {
+      if (b && b.simulate && !b.onGround) return;
+      this.settle(e);
+      this.recover(e);
+    }
     endAttack(this, e);
-    e.blinkFrom.copy(e.pos);
-    e.blink = 'warn';
-    e.blinkT = AI.boss.blinkWarn;
-    this.hooks.bossRift?.(e, e.blinkFrom, e.blinkTo);
+    this.abortBlink(e);
+    if (!this._ctx) return;
+    if (this.blinkSpot(e)) {
+      e.blinkFrom.copy(e.pos);
+      e.blink = 'pass';
+      e.blinkT = AI.boss.blinkPass;
+      this.hooks.bossRift?.(e, e.blinkFrom, e.blinkTo);
+      return;
+    }
+    const pl = this._ctx.player.pos;
+    _v.set(pl.x - e.pos.x, 0, pl.z - e.pos.z);
+    if (_v.lengthSq() < 1e-6) e.forward(_v);
+    this.hooks.melee(e, 0, _v.normalize().multiplyScalar(AI.boss.throwOff).setY(3));
   }
 
   finishBlink(e: Enemy) {
@@ -1150,6 +1298,8 @@ export class EnemySystem implements EnemyAPI, Brain {
     if (!e || !e.alive || !e.active) return false;
     const s = e.state;
     if (e.held || s === 'launched' || s === 'downed' || s === 'stunned' || s === 'stagger') return false;
+    // the rift on his gun gives you away
+    if (this._ctx) this.learn(e, this._ctx.player.pos);
     if (e.mode !== 'combat') this.enterCombat(e, null);
     if (!e.token) {
       e.token = true;
@@ -1324,8 +1474,9 @@ export class EnemySystem implements EnemyAPI, Brain {
     const src = info.source;
     if (info.from && info.exitEndId != null) this.lookAtExit(e, info.from);
     if (e.kind === 'boss') return this.hitBoss(e, info);
+    if (src === 'blade') return this.stab(e, info);
     if (e.kind === 'turret') return this.hitTurret(e, info);
-    if (src === 'blade' || src === 'shear' || src === 'void' || src === 'water' || src === 'crush') {
+    if (src === 'shear' || src === 'void' || src === 'water' || src === 'crush') {
       this.die(e, info);
       return 'killed';
     }
@@ -1376,13 +1527,44 @@ export class EnemySystem implements EnemyAPI, Brain {
     return 'hurt';
   }
 
+  /**
+   * The hidden blade: through any armour or shield (a turret's too), he's
+   * dead. Quiet unless he saw it coming: then his cry carries to anyone in
+   * earshot. A quiet one is seen only by those looking his way.
+   */
+  private stab(e: Enemy, info: HitInfo): HitResult {
+    const loud = this.seesItComing(e, info);
+    this.die(e, info, !loud);
+    if (loud) this.cry(e);
+    return 'killed';
+  }
+
+  /** In combat, on his feet, and the attacker inside his view (±90°). */
+  private seesItComing(e: Enemy, info: HitInfo) {
+    if (e.mode !== 'combat' || e.held) return false;
+    const s = e.state;
+    if (s === 'downed' || s === 'stunned' || s === 'launched') return false;
+    return this.fromFront(e, info, AI.combatFov);
+  }
+
+  /** His death cry (a turret's crash): whoever hears it comes to where he fell. */
+  private cry(e: Enemy) {
+    this.hooks.sound(e.kind === 'turret' ? 'thud' : 'shout', e.pos);
+    for (let i = 0; i < this.list.length; i++) {
+      const o = this.list[i];
+      if (o === e || !o.alive || !o.active || o.def.zone !== e.def.zone || !this.hears(e, o)) continue;
+      if (!o.seesPlayer) this.learn(o, e.pos);
+      if (o.mode !== 'combat') this.enterCombat(o, null, false);
+    }
+  }
+
   private hitTurret(e: Enemy, info: HitInfo): HitResult {
     const src = info.source;
     if (src === 'shear' || src === 'void' || src === 'water' || src === 'crush') {
       this.die(e, info);
       return 'killed';
     }
-    if (src === 'shove' || src === 'blade' || src === 'melee') return 'ignored';
+    if (src === 'shove' || src === 'melee') return 'ignored';
     let amount = info.amount;
     if (src === 'impact' || src === 'fall') {
       const s = info.speed ?? 0;
@@ -1414,8 +1596,10 @@ export class EnemySystem implements EnemyAPI, Brain {
       return 'knocked';
     }
     if (src === 'blade') {
-      if (e.state !== 'stunned' && e.state !== 'downed') return 'blocked';
-      return this.damage(e, B.bladeDamage, info) ? 'killed' : 'hurt';
+      // the hidden blade finds a gap in his armour, stunned or not; then he's gone
+      if (this.damage(e, B.bladeDamage, info)) return 'killed';
+      this.breakAway(e);
+      return 'hurt';
     }
     if (src === 'shove' || src === 'melee') return 'blocked';
     const upright = e.state === 'combat' || e.state === 'idle' || e.state === 'patrol' || e.state === 'suspicious';
@@ -1528,10 +1712,11 @@ export class EnemySystem implements EnemyAPI, Brain {
     }
   }
 
-  private die(e: Enemy, info: HitInfo) {
+  /** `quiet`: no sound to it (a silent stab), so only those looking his way see it. */
+  private die(e: Enemy, info: HitInfo, quiet = false) {
     if (!e.alive) return;
     const b = e.body;
-    const witnessed = this.findWitnesses(e) > 0;
+    const witnessed = this.findWitnesses(e, quiet) > 0;
     const ctx: DeathContext = {
       cause: info.source,
       info,
@@ -1586,13 +1771,15 @@ export class EnemySystem implements EnemyAPI, Brain {
         barked = true;
         this.bark(w, 'bark.mateDown', true);
       }
+      // he comes to where it happened (or stares at the exit it came out of)
+      if (w.mode !== 'combat') this.learn(w, from ?? e.pos);
       this.enterCombat(w, null);
     }
     this.witnesses.length = 0;
   }
 
-  /** Alive, perceiving allies with LOS to him within 25 m (less for a fight not reached yet). */
-  private findWitnesses(e: Enemy) {
+  /** Alive, perceiving allies with LOS to him within 25 m (less for a fight not reached yet); `cone`: only those facing him. */
+  private findWitnesses(e: Enemy, cone = false) {
     const out = this.witnesses;
     out.length = 0;
     const w = this.world;
@@ -1606,7 +1793,7 @@ export class EnemySystem implements EnemyAPI, Brain {
       if (o.pos.distanceToSquared(e.pos) > r2) continue;
       // a fight you haven't reached yet notices less (sightScale), as with seeing you
       const range = AI.witnessRange * (o.mode === 'combat' ? 1 : o.sightScale);
-      if (seesPoint(o, _w, range, w)) out.push(o);
+      if (seesPoint(o, _w, range, w, cone)) out.push(o);
     }
     return out.length;
   }
@@ -1615,7 +1802,7 @@ export class EnemySystem implements EnemyAPI, Brain {
   // Views for the game
   // -------------------------------------------------------------------------
 
-  /** Threats against the player right now (for CATCH). Pooled: valid until the next call. */
+  /** Attacks about to reach the player right now, and when. Pooled: valid until the next call. */
   threats(): Threat[] {
     const out = this.threatOut;
     out.length = 0;
@@ -1671,25 +1858,6 @@ export class EnemySystem implements EnemyAPI, Brain {
       t.canFall = e.offBalance;
       t.steady = e.steady;
       out.push(t);
-    }
-    return out;
-  }
-
-  /** Living jammers' no-rift bubbles (7 m). Pooled. */
-  blockers(): { pos: V3; radius: number }[] {
-    const out = this.blockOut;
-    out.length = 0;
-    for (let i = 0; i < this.list.length; i++) {
-      const e = this.list[i];
-      if (e.kind !== 'jammer' || !e.alive || !e.active) continue;
-      let b = this.blockPool[out.length];
-      if (!b) {
-        b = { pos: e.pos, radius: AI.jammer.radius };
-        this.blockPool.push(b);
-      }
-      b.pos = e.pos;
-      b.radius = AI.jammer.radius;
-      out.push(b);
     }
     return out;
   }

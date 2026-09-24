@@ -27,7 +27,6 @@ import {
   type SpawnDef,
   type StrikeName,
   type Team,
-  type Threat,
   type TowerLevel,
   type TrapTarget,
   type TrickAward,
@@ -45,6 +44,7 @@ import { TOWER } from '../world/tower/layout';
 import { CameraRig } from './camera';
 import { Character, type AnimLibrary, type CharacterAsset, type Look } from './characters';
 import { Player, type PlayerEvents, type PlayerInput } from './player';
+import { BLADE, HiddenBlade } from './blade';
 import { OUTCOME_COLOR, RiftSystem } from './portals';
 import { ArcView, PortalKey, type PortalResult } from './portalkey';
 import { orientFrame } from './portalMath';
@@ -112,7 +112,6 @@ const LOOKS: Record<EnemyKind, Look> = {
   warden: 'warden',
   brute: 'brute',
   sniper: 'sniper',
-  jammer: 'jammer',
   turret: 'rifleman',
   boss: 'boss',
 };
@@ -168,16 +167,17 @@ export class Game {
   strikes!: Strikes;
   /** The one rift key. */
   portal!: PortalKey;
+  /** ACTION's hidden blade. */
+  blade!: HiddenBlade;
   private arcView!: ArcView;
   private strikeBar: StrikeBar;
   /** SWAPped men: their own side's fire hurts them until then (game time). */
   private riftMarked = new Map<number, number>();
-  /** Men grabbed for a charge: their kill gives none back (until). */
-  private paidMarks = new Map<number, number>();
   /** Gamepad Start while paused (main hides the menu and resumes). */
   onResumeKey: () => void = () => {};
   fx: FxKit;
   player!: Player;
+  private hero!: Character;
   lamps: LampSystem | null = null;
   style = new StyleSystem();
   challenges = new ChallengeSystem();
@@ -395,15 +395,9 @@ export class Game {
       playerFeet: () => this.player.body.pos,
       touch: () => this.input.lastDevice === 'touch',
       live: (e) => this.zones.active.has(e.def.zone),
-      charges: () => this.strikes.charges,
-      spend: (n) => this.strikes.spend(n),
-      refund: (n) => this.strikes.refund(n),
-      markPaid: (id, on) => {
-        if (on) this.paidMarks.set(id, this.time + 12);
-        else this.paidMarks.delete(id);
-      },
       hangingUnderCrosshair: () => this.hangingUnderCrosshair(),
     });
+    this.blade = new HiddenBlade({ world, enemies: this.enemies.list, live: (e) => this.zones.active.has(e.def.zone) });
     this.arcView = new ArcView(OUTCOME_COLOR);
     this.scene.add(this.arcView.points);
     this.scene.add(this.hazards.group);
@@ -413,6 +407,7 @@ export class Game {
     const body = this.physics.createBody('player', { pos: this.zones.current.playerStart.clone(), radius: FEEL.playerRadius, height: FEEL.playerHeight, team: 'player', simulate: true });
     body.userData.manual = true;
     this.player = new Player(heroChar, body);
+    this.hero = heroChar;
     this.scene.add(heroChar.root);
 
     // rift hologram
@@ -524,9 +519,9 @@ export class Game {
     this.player.carrying = null;
     this.strikes?.reset();
     this.portal?.reset();
+    this.blade?.reset();
     this.strikeMarks?.clear();
     this.riftMarked?.clear();
-    this.paidMarks?.clear();
     this.player.teleport(pos.clone(), yaw);
     this.player.body.charge = 0;
     this.hp = LAW.player.hp;
@@ -731,10 +726,8 @@ export class Game {
       this.fx.ring(r.at, 2.4, 0.3, COL_ENTRANCE);
       this.rig.kick = Math.max(this.rig.kick, 0.4);
       this.player.char.play('push', { fade: 0.05, speed: 1.4 });
-      if (r.cost) this.hud.toast(t('portal.paid'), 'warn');
       this.hint('grab', t('hint.grabHold'), 7);
     }
-    if (r.mode === 'catch' && this.threats().some((q) => q.kind === 'laser')) this.hint('catch', t('hint.returnToSender'), 6);
   }
 
   /** The PORTAL key let go: the exit opened (or the hold fell through). */
@@ -1100,6 +1093,9 @@ export class Game {
     const imp = kc.impactor ?? null;
     const impEnemy = imp ? this.enemies.enemyOfBody(imp) : null;
     const shooter = p && typeof p.owner === 'number' ? this.enemies.get(p.owner) : null;
+    // a man a HUMAN CANNON was fired into is the cannon's kill too; the blade's
+    // kill is always its own, even on a man a strike set up
+    const strike = this.strikeOf(e.id) ?? (impEnemy && impEnemy !== e ? this.strikeOn(impEnemy.id, 'cannon') : null);
     const ev: KillEvent = {
       type: 'kill',
       t: this.time,
@@ -1128,14 +1124,11 @@ export class Game {
       playerFling: !!kc.playerFling,
       playerAirborne: this.player.airborne,
       impactorId: this.impactorKey(imp, e.id),
-      // (a man a HUMAN CANNON was fired into: the cannon's kill too)
-      strike: this.strikeOf(e.id) ?? (impEnemy && impEnemy !== e ? this.strikeOn(impEnemy.id, 'cannon') : null),
+      strike: ctx.cause === 'blade' ? null : strike,
       at: ctx.at.clone(),
     };
-    // your own free rift work (not a STRIKE, not a man you paid to grab) recharges the strikes
-    const paid = this.paidMarks.get(e.id);
-    this.paidMarks.delete(e.id);
-    if (!ev.strike && !(paid !== undefined && this.time <= paid)) this.strikes.refund(1);
+    // every kill that isn't a STRIKE's recharges the strikes
+    if (!ev.strike) this.strikes.refund(1);
     this.stats.kills++;
     this.push(ev);
     // the PORTAL first; the STRIKES once you've made your first kill with it
@@ -1506,9 +1499,9 @@ export class Game {
     const alive = this.respawnT < 0;
     // held PORTAL (aiming the exit) and the LOOP cannon run in slow motion
     if (this.settings.slowmo && alive) {
-      // (a grab, a catch, a fall: time slows at once; a door or a load once you're aiming)
+      // (a grab, a fall: time slows at once; a door or a load once you're aiming)
       const H = this.portal.hold;
-      if (H && (this.portal.aiming || H.mode === 'grab' || H.mode === 'catch' || H.mode === 'air')) ts = this.portal.timeScale();
+      if (H && (this.portal.aiming || H.mode === 'grab' || H.mode === 'air')) ts = this.portal.timeScale();
       if (this.strikes.aiming) ts = Math.min(ts, 0.12);
     }
     const aiming = alive && (this.portal.aiming || this.strikes.aiming);
@@ -1592,9 +1585,9 @@ export class Game {
     this.arcView.update(this.portal.arcN > 1 ? this.portal : this.strikes, this.time);
     if (!this.portal.holding && alive) {
       const pv = this.portal.preview();
-      this.hud.setGateHint({ mode: pv.mode, reason: pv.reason, targetKey: pv.key, cost: pv.cost });
-      // the touch PORTAL button says what it will do (and pulses for a CATCH)
-      this.touch?.setPortalLabel(pv.reason ? null : t(`portal.${pv.mode}`) + (pv.cost ? ' ⚡' : ''), pv.reason ? null : pv.mode);
+      this.hud.setGateHint({ mode: pv.mode, reason: pv.reason, targetKey: pv.key });
+      // the touch PORTAL button says what it will do (and pulses while you fall)
+      this.touch?.setPortalLabel(pv.reason ? null : t(`portal.${pv.mode}`), pv.reason ? null : pv.mode);
     } else {
       this.hud.setGateHint(null);
       this.touch?.setPortalLabel(null);
@@ -1618,6 +1611,7 @@ export class Game {
     };
     const wasAir = p.airborne;
     p.update(dt, pin, this.level.world, this.physics, this.physEv, this.playerEvents(), this.time);
+    this.updateBlade(dt);
     this.updateAirtime(wasAir);
     if (this.playerFling && !p.airborne && p.body.charge <= 0) this.playerFling = false;
     this.keepPlayerOutOfEnemies();
@@ -1637,7 +1631,6 @@ export class Game {
     };
     this.enemies.update(dt, ectx);
     this.noise.length = 0;
-    this.rifts.setBlockers(this.enemies.blockers());
     this.rifts.update(dt, realDt, this.time);
     this.projectiles.update(dt, this.time);
     this.detonateCaughtGrenades();
@@ -1716,8 +1709,14 @@ export class Game {
     this.updateObjective(false);
     this.hud.update(realDt);
     this.audio.updateListener(this.camera);
-    const combat = this.enemies.list.some((e) => e.alive && e.state === 'combat' && this.zones.active.has(e.def.zone)) ? 1 : 0;
-    this.audio.setIntensity(combat ? 0.8 : 0.2, combat, realDt);
+    // a fight drives the music; enemies searching for you (or suspicious) only keep it tense
+    let fight = 0, tense = 0;
+    for (const e of this.enemies.list) {
+      if (!e.alive || !this.zones.active.has(e.def.zone)) continue;
+      if (e.state === 'combat' && !e.searching) fight = 1;
+      else if (e.aware) tense = 1;
+    }
+    this.audio.setIntensity(fight ? 0.8 : tense ? 0.6 : 0.2, fight, realDt);
     this.audio.setAltitude(body.pos.y);
     this.audio.wind(body.charge > 0 ? speed : speed * 0.3);
     if (body.charge > 0 && body.loops >= 2) this.audio.loopWhoosh(speed);
@@ -1877,16 +1876,6 @@ export class Game {
     return this.props.trapTargets(out);
   }
 
-  private threats(): Threat[] {
-    const out = this.enemies.threats().slice();
-    const pp = this.player.body.pos;
-    for (const pr of this.projectiles.list) {
-      if (pr.kind !== 'grenade' || !pr.alive || pr.charged) continue;
-      if (pr.pos.distanceTo(pp) < 6) out.push({ kind: 'grenade', from: pr.pos.clone(), eta: Math.max(0, LAW.grenade.fuse - pr.age) });
-    }
-    return out;
-  }
-
   private entranceCtx(targets: TrapTarget[]): EntranceContext {
     const ray = this.rig.aimRay();
     return {
@@ -1896,7 +1885,6 @@ export class Game {
       airborne: this.player.airborne,
       camPos: ray.origin,
       camDir: ray.dir,
-      threats: this.threats(),
       targets,
     };
   }
@@ -1963,7 +1951,7 @@ export class Game {
   }
 
   // ------------------------------------------------------------------
-  // Context action: finish / hijack / lift / grab / throw
+  // Context action: hidden blade / hijack / lift / grab / throw
   // ------------------------------------------------------------------
 
   private contextAction(): { label: string; run: () => void } | null {
@@ -1972,12 +1960,10 @@ export class Game {
     if (this.respawnT >= 0) return null;
     if (this.carried) return { label: t('prompt.throw'), run: () => this.throwCarried() };
     const f = p.forward(_v2);
-    // FINISH: the blade only ends what a rift broke
-    for (const e of this.enemies.list) {
-      if (!e.alive || (e.state !== 'downed' && e.state !== 'stunned')) continue;
-      const d = e.pos.distanceTo(b.pos);
-      if (d > LAW.finishRange + e.radius || Math.abs(e.pos.y - b.pos.y) > 1.2) continue;
-      return { label: t('prompt.finish'), run: () => this.finish(e) };
+    // HIDDEN BLADE: anyone in reach, or a lunge away ahead of you (the label stays through its cooldown)
+    if (!p.isMantling()) {
+      const bt = this.blade.pick(b.pos, f, _v3.set(Math.sin(this.rig.yaw), 0, Math.cos(this.rig.yaw)));
+      if (bt) return { label: t('prompt.blade'), run: () => this.stab(bt.enemy) };
     }
     // HIJACK a Kessler gate
     for (const g of this.level.gates) {
@@ -2021,15 +2007,44 @@ export class Game {
     return null;
   }
 
-  private finish(e: EnemyView) {
-    this.player.char.play('strike', { fade: 0.05, speed: 1.3 });
-    this.player.yaw = Math.atan2(e.pos.x - this.player.body.pos.x, e.pos.z - this.player.body.pos.z);
-    this.hitstop = 0.14;
-    this.rig.kick = 1;
+  /** The hidden blade springs out: strike now if he's right there, else lunge in (updateBlade strikes). */
+  private stab(e: EnemyView) {
+    if (!this.blade.ready) return;
+    const p = this.player;
+    _v.set(e.pos.x - p.body.pos.x, 0, e.pos.z - p.body.pos.z);
+    if (_v.lengthSq() > 1e-6) p.yaw = Math.atan2(_v.x, _v.z);
+    p.char.play('strike', { fade: 0.05, speed: 1.6 });
+    if (this.blade.start(e, p.body.pos)) this.bladeHit(e);
+    else p.lunge(_v, BLADE.lungeSpeed, this.blade.lunging!.t);
+  }
+
+  /** Per frame, after the player moved: steer a lunge onto him, strike when he's reached. */
+  private updateBlade(dt: number) {
+    const p = this.player;
+    const L = this.blade.lunging;
+    const r = this.blade.update(dt, p.body.pos, _v);
+    if (r === 'go') p.lunge(_v, BLADE.lungeSpeed, L!.t);
+    else if (r) {
+      p.endLunge();
+      if (r === 'strike') this.bladeHit(L!.enemy);
+    }
+    this.hero.setBlade(this.blade.extension());
+  }
+
+  /** The blade goes in (enemies.ts decides what it does to him): hitstop, a slow beat on a kill, sparks. */
+  private bladeHit(e: EnemyView) {
+    const p = this.player;
+    p.yaw = Math.atan2(e.pos.x - p.body.pos.x, e.pos.z - p.body.pos.z);
+    const info: HitInfo = { source: 'blade', amount: 9999, charged: false, team: 'player', instigator: 'player', from: p.body.pos.clone() };
+    const res = this.withKill({ byPlayer: true }, () => this.enemies.hit(e, info));
     this.audio.bladeFinish(e.pos);
-    const info: HitInfo = { source: 'blade', amount: 9999, charged: false, team: 'player', instigator: 'player', from: this.player.body.pos.clone() };
-    this.withKill({ byPlayer: true }, () => this.enemies.hit(e, info));
     this.fx.sparks(e.chest(_v), null, COL_SPARK, 18);
+    this.hitstop = Math.max(this.hitstop, 0.1);
+    this.rig.kick = 1;
+    if (res === 'killed' && this.slowT < 0.3) {
+      this.slowT = 0.3;
+      this.slowScale = 0.45;
+    }
   }
 
   private grab(q: DynBody) {
@@ -2119,10 +2134,6 @@ export class Game {
       e.enemyIds.push(v.id);
     }
     if (e.def.lesson === 'hijack') for (const g of this.level.gates) if (g.zone === e.zone) this.rifts.setGateOpen(g.id, true);
-    if (e.def.spawns.length === 0) {
-      // lessons without enemies clear on sight
-      e.cleared = true;
-    }
   }
 
   private engageEncounter(e: EncounterState) {
@@ -2130,10 +2141,8 @@ export class Game {
       const v = this.enemies.get(id);
       if (v) v.sightScale = 1;
     }
-    if (e.def.lesson && !e.cleared) {
-      const key = `hint.${e.def.lesson}`;
-      this.hint(key, t(key), 9);
-    }
+    const key = this.zones.lessonHint(e);
+    if (key) this.hint(key, t(key), 9);
   }
 
   private gateWaveT = new Map<string, { wave: number; t: number }>();
@@ -2261,7 +2270,7 @@ export class Game {
     };
     for (const th of this.telegraphs) if (th.kind === 'laser' || th.kind === 'beam' || th.kind === 'charge') project(th.from, 'threat');
     if (this.visionOn) {
-      for (const e of this.enemies.list) if (e.alive && this.zones.active.has(e.def.zone)) project(_v2.copy(e.pos).setY(e.pos.y + e.height + 0.3), 'target', e.state);
+      for (const e of this.enemies.list) if (e.alive && this.zones.active.has(e.def.zone)) project(_v2.copy(e.pos).setY(e.pos.y + e.height + 0.3), 'target', t(`state.${e.searching ? 'suspicious' : e.state}`));
       for (const g of this.level.gates) if (this.zones.active.has(g.zone)) project(g.panel, 'gate');
     }
     const o = this.zones.objective();

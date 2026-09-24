@@ -7,7 +7,7 @@ import type { CollisionWorld } from '../world/collision';
 /**
  * Where rift ends can go for the PORTAL key and the STRIKES: the floor under
  * someone, the nearest drop or water, the sky over him, a launcher end along
- * your aim, and the arc of whatever gets thrown out of it.
+ * your aim, straight on past him, and the arc of whatever gets thrown out of it.
  */
 export type Frame = RiftFrame & { kind: RiftEndKind };
 
@@ -99,7 +99,7 @@ export function throwSpot(h: SpotHost, pos: V3, search = 22, away?: V3): { frame
   if (edge) {
     const face = new THREE.Vector3(edge.x - pos.x, 0, edge.z - pos.z).normalize();
     const f: Frame = { position: new THREE.Vector3(edge.x, Math.max(edge.y, h.level.seaY + 1) + 1.2, edge.z), quaternion: orientFrame(face, UP), width: 1.3, height: 2.4, kind: 'air' };
-    if (!h.rifts.blocked(f.position)) return { frame: f, boost: 10 };
+    return { frame: f, boost: 10 };
   }
   // out of the sky: off to one side of where he stood (right over it he'd just fall back in: a loop)
   const w = h.world;
@@ -111,11 +111,28 @@ export function throwSpot(h: SpotHost, pos: V3, search = 22, away?: V3): { frame
     if (!(g > pos.y - 3)) continue;
     const p = _p.set(x, g, z);
     const sky = skyHatch(h, p, 16);
-    if (sky && !h.rifts.blocked(sky.position)) return { frame: sky, boost: 8 };
+    if (sky) return { frame: sky, boost: 8 };
   }
   const sky = skyHatch(h, pos, 16);
-  if (sky && !h.rifts.blocked(sky.position)) return { frame: sky, boost: 8 };
-  return null;
+  return sky ? { frame: sky, boost: 8 } : null;
+}
+
+/**
+ * A GRAB let go of without an aim: a launcher end `past` m beyond him on the
+ * level line `dir` (from you through him), `up` m over his feet, facing on
+ * along it and tilted `tilt` rad up. A wall in the way pulls it back toward
+ * you to 1.4 m short of it (as launchFrame does), so a wall right behind him
+ * is what he hits. Null when it still doesn't fit.
+ */
+export function straightOn(h: SpotHost, pos: V3, dir: V3, past: number, up: number, tilt: number): Frame | null {
+  const w = h.world;
+  const o = _a.set(pos.x, pos.y + up, pos.z);
+  const hit = w.raycast(o, dir, past + 1.4, { sight: false });
+  const d = hit ? hit.distance - 1.4 : past;
+  const p = new THREE.Vector3(o.x + dir.x * d, o.y, o.z + dir.z * d);
+  if (w.overlapsCylinder(p.x, p.z, 0.45, p.y - 0.95, p.y + 0.95)) return null;
+  const n = _v.set(dir.x * Math.cos(tilt), Math.sin(tilt), dir.z * Math.cos(tilt));
+  return { position: p, quaternion: orientFrame(n, UP), width: 1.3, height: 1.9, kind: 'air' };
 }
 
 /**
@@ -134,7 +151,6 @@ export function launchFrame(h: SpotHost, origin: V3, dir: V3, along: number, rea
   const frame: Frame = { position: pos, quaternion: orientFrame(n, upRef), width: 1.3, height: 1.9, kind: 'air' };
   let reason: string | null = null;
   if (d < along + 2.2) reason = 'aim.space';
-  else if (h.rifts.blocked(pos)) reason = 'aim.blocked';
   else if (w.overlapsCylinder(pos.x, pos.z, 0.45, pos.y - 0.95, pos.y + 0.95)) reason = 'aim.space';
   return { frame, reason };
 }
@@ -266,12 +282,10 @@ export function besideDoor(h: SpotHost, t: EnemyView, from: V3, aside = 3.2): Fr
   const side = new THREE.Vector3(-toT.z, 0, toT.x);
   for (const s of [1, -1]) {
     const p = new THREE.Vector3(t.pos.x + side.x * s * aside, t.pos.y, t.pos.z + side.z * s * aside);
-    if (h.rifts.blocked(p)) continue;
     if (!h.world.lineOfSight(_c.set(p.x, t.pos.y + 1.2, p.z), tc)) continue;
     const face = new THREE.Vector3(t.pos.x - p.x, 0, t.pos.z - p.z).normalize();
     return standingDoor(h, p, face, t.pos.y);
   }
   const p = new THREE.Vector3(t.pos.x - toT.x * 3, t.pos.y, t.pos.z - toT.z * 3);
-  if (h.rifts.blocked(p)) return null;
   return standingDoor(h, p, toT, t.pos.y);
 }

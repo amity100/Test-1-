@@ -9,9 +9,10 @@ const _eye = new THREE.Vector3();
 const _to = new THREE.Vector3();
 
 /**
- * Vision: ±60° cone (or all-round once in combat), range scaled down for a
- * crouching player, blocked by world geometry. Light is not modelled (golden
- * hour). Returns the distance when seen, -1 otherwise. One raycast at most.
+ * Vision: a ±60° cone (±90° in combat; Voss sees all round), range scaled down
+ * for a crouching player and for the unaware, blocked by world geometry. Light
+ * is not modelled (golden hour). Returns the distance when seen, -1 otherwise.
+ * One raycast at most.
  */
 export function seePlayer(e: Enemy, ctx: EnemyContext): number {
   const pl = ctx.player;
@@ -20,11 +21,12 @@ export function seePlayer(e: Enemy, ctx: EnemyContext): number {
   _to.subVectors(pl.chest, _eye);
   const d = _to.length();
   const combat = e.mode === 'combat';
-  const range = e.tune.sight * (pl.crouched ? AI.crouchRange : 1) * (combat ? 1.25 : AI.calmSight * e.sightScale);
+  const calm = (e.alertT > 0 ? AI.alert.sight : AI.calmSight) * e.sightScale;
+  const range = e.tune.sight * (pl.crouched ? AI.crouchRange : 1) * (combat ? 1 : calm);
   if (d > range) return -1;
-  if (!combat && d > AI.nearSense) {
+  if (d > AI.nearSense && !(combat && e.kind === 'boss')) {
     const yawTo = Math.atan2(_to.x, _to.z);
-    if (Math.abs(angleDiff(e.yaw, yawTo)) > AI.fovHalf) return -1;
+    if (Math.abs(angleDiff(e.yaw, yawTo)) > (combat ? AI.combatFov : AI.fovHalf)) return -1;
   }
   if (!ctx.world.lineOfSight(_eye, pl.chest)) return -1;
   return d;
