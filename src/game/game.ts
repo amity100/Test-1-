@@ -562,7 +562,6 @@ export class Game {
     if (z.id === 'pier' && !this.hintsSeen.has('rules')) {
       this.hintsSeen.add('rules');
       this.hint('rules', `<b>${t('rule.1')}</b><br>${t('rule.2')}<br>${t('rule.3')}`, 9);
-      this.hint('strikes', t('hint.strikes'), 10);
     }
   }
 
@@ -1132,6 +1131,8 @@ export class Game {
     if (!ev.strike && !(paid !== undefined && this.time <= paid)) this.strikes.refund(1);
     this.stats.kills++;
     this.push(ev);
+    // the PORTAL first; the STRIKES once you've made your first kill with it
+    this.hint('strikes', t('hint.strikes'), 10);
     this.fx.embers(ctx.at, 16);
     this.hp = Math.min(LAW.player.hp, this.hp + LAW.player.killHeal);
     this.hitstop = Math.max(this.hitstop, 0.05);
@@ -1565,7 +1566,16 @@ export class Game {
     this.lastAim = aim;
     this.hud.setAim(
       aim
-        ? { valid: aim.valid, reason: aim.reason, kind: aim.kind, distance: aim.distance, outcome: aim.outcome, dropBelow: aim.dropBelow, orientation: this.rifts.orientation }
+        ? {
+            valid: aim.valid,
+            reason: aim.reason,
+            kind: aim.kind,
+            distance: aim.distance,
+            outcome: aim.outcome,
+            dropBelow: aim.dropBelow,
+            orientation: this.rifts.orientation,
+            chip: H && H.mode !== 'door' && H.mode !== 'air' && H.mode !== 'hole' ? t('aim.throw') : undefined,
+          }
         : null,
     );
     this.rifts.updatePreview(aim, this.handPos(), this.camera, !!H && (H.mode === 'door' || H.mode === 'air' || H.mode === 'hole'));

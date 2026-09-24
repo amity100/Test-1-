@@ -209,6 +209,7 @@ const EN: Record<string, string> = {
   'aim.enemyClose': 'Too close to an enemy',
   'aim.space': 'Not enough room',
   'aim.noSurface': 'Nothing to open on',
+  'aim.throw': 'THROW',
 
   // PORTAL: what a press does now (HUD + the touch caption), refusals
   'portal.air': 'AIR',
@@ -598,6 +599,7 @@ const HE: Record<string, string> = {
   'aim.enemyClose': 'קרוב מדי לאויב',
   'aim.space': 'אין מספיק מקום',
   'aim.noSurface': 'אין על מה לפתוח',
+  'aim.throw': 'זריקה',
 
   'portal.air': 'אוויר',
   'portal.catch': 'תפיסה',

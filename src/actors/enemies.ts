@@ -960,6 +960,9 @@ export class EnemySystem implements EnemyAPI, Brain {
   private beginLaunch(e: Enemy, fromCrossing: boolean) {
     const b = e.body;
     if (!e.alive || !b || e.kind === 'turret') return;
+    // blown out of the PORTAL's grip: it lets go (the key sees him gone)
+    e.held = false;
+    e.sink = 0;
     if (!e.launchChain) {
       e.launchChain = true;
       e.launchUnaware = e.mode !== 'combat';

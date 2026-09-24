@@ -142,7 +142,7 @@ function steadyOf(e: EnemyView) {
 export class PortalKey {
   hold: Hold | null = null;
   /** A throw's pair: closes a moment after its load went through. */
-  private thrown: { t: number; key: string | null; crossedT: number } | null = null;
+  private thrown: { t: number; key: string | null; crossedT: number; enemy?: EnemyView } | null = null;
   /** The predicted arc of what's being thrown (for drawing). */
   readonly arc: THREE.Vector3[] = Array.from({ length: ARC_N }, () => new THREE.Vector3());
   arcN = 0;
@@ -399,6 +399,7 @@ export class PortalKey {
       if ((T.crossedT >= 0 && T.t - T.crossedT > PORTAL.linger) || T.t > PORTAL.throwLife) {
         this.thrown = null;
         h.rifts.clearPair();
+        if (T.enemy) h.enemies.setSink(T.enemy, 0);
       }
     }
     const H = this.hold;
@@ -646,7 +647,9 @@ export class PortalKey {
         h.rifts.setPairNoPlayer(true);
         h.enemies.hold(e, false);
         h.enemies.launch(e, new THREE.Vector3(0, -9, 0));
-        this.thrown = { t: 0, key: `enemy:${e.id}`, crossedT: -1 };
+        // (still drawn sunk until he's through: no pop back up for the frames it takes)
+        h.enemies.setSink(e, H.sink);
+        this.thrown = { t: 0, key: `enemy:${e.id}`, crossedT: -1, enemy: e };
         return ok(spot.frame.position);
       }
       case 'load': {
@@ -738,7 +741,8 @@ export class ArcView {
       g.fillRect(0, 0, 32, 32);
     }
     const tex = new THREE.CanvasTexture(c);
-    this.mat = new THREE.PointsMaterial({ size: 0.32, map: tex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true });
+    // a constant size on screen: the arc is read from 10-40 m away
+    this.mat = new THREE.PointsMaterial({ size: 9, map: tex, transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, sizeAttenuation: false });
     this.points = new THREE.Points(this.geo, this.mat);
     this.points.frustumCulled = false;
     this.points.renderOrder = 32;
@@ -769,6 +773,6 @@ export class ArcView {
     k++;
     this.geo.setDrawRange(0, k);
     (this.geo.attributes.position as THREE.BufferAttribute).needsUpdate = true;
-    this.mat.color.copy(this.colors[pk.arcOutcome]).multiplyScalar(1.6);
+    this.mat.color.copy(this.colors[pk.arcOutcome]).multiplyScalar(2.4);
   }
 }

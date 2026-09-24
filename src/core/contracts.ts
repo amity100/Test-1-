@@ -871,6 +871,8 @@ export interface AimInfo {
   outcome: ExitAim['outcome'];
   dropBelow: number;
   orientation: ExitOrientation;
+  /** Label for the chip instead of the kind / orientation (a throw). */
+  chip?: string;
 }
 
 export interface GateHint {

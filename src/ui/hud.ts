@@ -451,7 +451,7 @@ export class HUD implements HudAPI {
     }
     const dist = info.distance.toFixed(1);
     const drop = Number.isFinite(info.dropBelow) ? Math.round(info.dropBelow) : -1;
-    const key = `${info.valid}|${info.reason}|${info.kind}|${dist}|${info.outcome}|${drop}|${info.orientation}`;
+    const key = `${info.valid}|${info.reason}|${info.kind}|${dist}|${info.outcome}|${drop}|${info.orientation}|${info.chip ?? ''}`;
     if (key === this.aimKey) return;
     const prev = this.aimKey.split('|');
     this.aimKey = key;
@@ -465,7 +465,7 @@ export class HUD implements HudAPI {
       this.aimDrop.className = `a-drop${drop < 0 ? ' inf' : drop >= 1 ? '' : ' none'}`;
       this.aimDropV.textContent = drop < 0 ? '∞' : String(drop);
     }
-    this.aimChip.textContent = info.kind === 'air' ? t(`orient.${info.orientation}`) : t(`kind.${info.kind}`);
+    this.aimChip.textContent = info.chip ?? (info.kind === 'air' ? t(`orient.${info.orientation}`) : t(`kind.${info.kind}`));
     this.aimChip.classList.toggle('air', info.kind === 'air');
     this.aimWhy.textContent = !info.valid && info.reason ? t(info.reason) : '';
     this.updateCross();
