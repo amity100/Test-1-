@@ -164,12 +164,28 @@ export class ZoneManager {
     return null;
   }
 
-  /** Objective for the HUD. */
-  objective(): { key: string; target: V3 | null } {
+  /**
+   * Objective for the HUD. `where` (an enemy id: where he is, or null if he's
+   * dead) lets the marker find the last one or two of a fight you're in once
+   * it has lost a man, wherever they ended up (thrown onto a crate top, off
+   * along a ledge): the nearest to `from`.
+   */
+  objective(where?: (id: number) => V3 | null, from?: V3): { key: string; target: V3 | null } {
     const z = this.current;
     const open = this.encounters.filter((e) => e.zone === z.id && e.def.requireClear && !e.cleared);
     if (open.length) {
       const e = open[0];
+      if (where && from && e.engaged) {
+        let best: V3 | null = null;
+        let left = 0;
+        for (const id of e.enemyIds) {
+          const p = where(id);
+          if (!p) continue;
+          left++;
+          if (!best || p.distanceToSquared(from) < best.distanceToSquared(from)) best = p;
+        }
+        if (best && left <= 2 && left < e.enemyIds.length) return { key: 'obj.clear', target: best };
+      }
       return { key: 'obj.clear', target: e.def.trigger.getCenter(new THREE.Vector3()) };
     }
     const lift = this.lifts.find((l) => l.zone === z.id);

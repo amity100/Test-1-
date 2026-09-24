@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import type { DynBody, EnemyView, EntranceContext, TrapTarget } from '../../src/core/contracts';
 import { LAW } from '../../src/core/contracts';
 import { PortalKey, PORTAL, type PortalHost } from '../../src/game/portalkey';
-import { Strikes, STRIKE, type StrikeHost } from '../../src/game/strikes';
+import { killCredit, Strikes, STRIKE, type StrikeHost } from '../../src/game/strikes';
 import { makePhysics, makeRifts, makeWorld, recorder, V } from './helpers';
 
 /** A stand-in enemy: enough of EnemyView for the PORTAL key. */
@@ -102,14 +102,46 @@ describe('PORTAL key', () => {
     expect(rig([fakeEnemy(3, V(0, 0, 10), { kind: 'turret' })]).pk.preview().reason).toBe('portal.anchored');
   });
 
+  it('on a man you could grab, the preview lays out where a tap would throw him, coloured by what it does', () => {
+    const along = rig([fakeEnemy(1, V(0, 0, 10))]);
+    along.camDir.copy(V(0, 1.3, 10).sub(V(0, 2.2, -3)).normalize());
+    // (the plain preview leaves the arc alone)
+    along.pk.preview();
+    expect(along.pk.arcN).toBe(0);
+    expect(along.pk.preview(true).mode).toBe('grab');
+    expect(along.pk.arcN).toBeGreaterThan(2);
+    expect(along.pk.arcOutcome).toBe('stars'); // open floor: knocked down
+    const start = along.pk.arc[0].clone();
+    // an aimed hold draws its own arc in the same buffer; let go of it, and the preview is its own again
+    along.pk.press();
+    along.camDir.set(1, 0.1, 1).normalize();
+    step(along.pk, true, 20);
+    along.pk.cancel();
+    along.camDir.copy(V(0, 1.3, 10).sub(V(0, 2.2, -3)).normalize());
+    step(along.pk, false);
+    along.pk.preview(true);
+    expect(along.pk.arc[0].distanceTo(start)).toBeLessThan(1e-6);
+    expect(along.pk.arcOutcome).toBe('stars');
+    // the sea past him: stand so it's behind him, and the arc says so
+    const sea = rig([fakeEnemy(1, V(8, 0, 0))]);
+    sea.camDir.copy(V(8, 1.3, 0).sub(V(0, 2.2, -3)).normalize());
+    sea.pk.preview(true);
+    expect(sea.pk.arcOutcome).toBe('splash');
+    // a turret (anchored) or nobody under the crosshair: no arc
+    const t = rig([fakeEnemy(3, V(0, 0, 10), { kind: 'turret' })]);
+    t.pk.preview(true);
+    expect(t.pk.arcN).toBe(0);
+  });
+
   it('Voss is anchored like a turret: steady or stunned, the grab refuses him', () => {
     for (const offBalance of [false, true]) {
       const e = fakeEnemy(4, V(0, 0, 10), { kind: 'boss', offBalance });
       const { rifts, pk } = rig([e]);
-      expect(pk.preview()).toEqual({ mode: 'grab', reason: 'portal.anchored', key: 'enemy:4' });
+      // (he's told what does work: the blade)
+      expect(pk.preview()).toEqual({ mode: 'grab', reason: 'portal.anchoredBoss', key: 'enemy:4' });
       const r = pk.press();
       expect(r.ok).toBe(false);
-      expect(r.reason).toBe('portal.anchored');
+      expect(r.reason).toBe('portal.anchoredBoss');
       expect(e.held).toBe(false);
       expect(rifts.playerEnds().entrance).toBeNull();
     }
@@ -224,10 +256,12 @@ describe('PORTAL key', () => {
  * Tap-grab `e` (the player at the origin), then fly him through the pair with
  * real physics, the PORTAL key ticking as the game runs it.
  */
-function tapFlight(e: Fake, o: { wall?: number; men?: THREE.Vector3[] } = {}) {
+function tapFlight(e: Fake, o: { wall?: number; roof?: number; men?: THREE.Vector3[] } = {}) {
   const t = rig([e]);
   t.camDir.copy(e.chest().sub(V(0, 2.2, -3)).normalize());
   if (o.wall !== undefined) t.world.add(V(-10, 0, e.pos.z + o.wall), V(10, 6, e.pos.z + o.wall + 1), { tag: 'wall' });
+  // a ceiling this high over his feet, from just behind him on
+  if (o.roof !== undefined) t.world.add(V(-10, e.pos.y + o.roof, e.pos.z - 4), V(10, e.pos.y + o.roof + 0.08, e.pos.z + 3), { tag: 'roof' });
   t.pk.press();
   step(t.pk, false);
   const exit = t.rifts.playerEnds().exit!.position.clone();
@@ -277,6 +311,41 @@ describe('PORTAL key: the straight-on throw', () => {
     expect(f.wall!.e.speed).toBeGreaterThanOrEqual(LAW.killSpeed);
     // (he drops back onto his hole: it has shut by then)
     expect(f.crossings).toBe(1);
+  });
+
+  it('under a low roof off a wall close behind him, he is slammed into it once: his floor end shuts as he goes through', () => {
+    for (const wall of [0.5, 0.8, 1.2]) {
+      const f = tapFlight(fakeEnemy(1, V(0, 0, 10)), { wall, roof: 3 });
+      expect(f.crossings).toBe(1);
+      const hard = f.ev.log.impacts.filter((i) => i.b === f.b && i.e.surface === 'wall' && i.e.speed >= LAW.killSpeed);
+      expect(hard.length).toBe(1);
+    }
+  });
+
+  it('a crate or stairs behind him step the exit back toward you rather than refuse the throw', () => {
+    const S = PORTAL.straight;
+    // a 1.2 m crate 1..2.5 m behind him (the ray at 2 m over his feet passes over it)
+    for (const z0 of [10.5, 11, 11.5, 12]) {
+      const e = fakeEnemy(1, V(0, 0, 10));
+      const t = rig([e]);
+      t.camDir.copy(e.chest().sub(V(0, 2.2, -3)).normalize());
+      t.world.add(V(-10, 0, z0), V(10, 1.2, z0 + 1.2), { tag: 'crate' });
+      expect(t.pk.press().ok).toBe(true);
+      const out = step(t.pk, false);
+      expect(out?.ok).toBe(true);
+      const ex = t.rifts.playerEnds().exit!;
+      expect(ex.position.z).toBeLessThanOrEqual(z0 - 0.45 + 1e-6);
+      expect(ex.position.z).toBeGreaterThanOrEqual(10 - 1.4 - 1e-6);
+      expect(ex.position.y).toBeCloseTo(S.up, 5);
+    }
+    // stairs climbing away from him (0.3 m risers, 0.4 m treads)
+    const e = fakeEnemy(1, V(0, 0, 10));
+    const t = rig([e]);
+    t.camDir.copy(e.chest().sub(V(0, 2.2, -3)).normalize());
+    for (let k = 1; k <= 10; k++) t.world.add(V(-3, 0, 10.4 + k * 0.4), V(3, k * 0.3, 10.8 + k * 0.4), { tag: 'stair' });
+    expect(t.pk.press().ok).toBe(true);
+    expect(step(t.pk, false)?.ok).toBe(true);
+    expect(t.rifts.playerEnds().exit!.position.z).toBeLessThan(11.5);
   });
 
   it('the sea past him takes him', () => {
@@ -419,6 +488,32 @@ describe('STRIKES', () => {
     expect(ends.a.normal.z).toBeGreaterThan(0.9);
     expect(ends.a.noPlayer && ends.b.noPlayer).toBe(true);
     expect(ends.b.aimAt).toBe(3);
+  });
+
+  it('REFLECT: what comes through its pair is the strike\'s (a kill it makes refunds nothing), until the pair shuts', () => {
+    const e = fakeEnemy(3, V(0, 0, 10));
+    const { rifts, s } = strikeRig([e]);
+    expect(s.input('reflect', true, true)?.ok).toBe(true);
+    const ends = (rifts as any).strikes.get(1);
+    expect(s.viaReflect(ends.a)).toBe(true);
+    expect(s.viaReflect(ends.b)).toBe(true);
+    // (your own PORTAL pair is not the strike's)
+    rifts.openEntranceFrame({ position: V(0, 0.01, 4), quaternion: new THREE.Quaternion().setFromUnitVectors(V(0, 0, 1), V(0, 1, 0)), width: LAW.floorEndSize, height: LAW.floorEndSize }, 'floor');
+    expect(s.viaReflect(rifts.playerEnds().entrance)).toBe(false);
+    for (let i = 0; i < Math.ceil((STRIKE.reflectLife + 0.2) * 60); i++) s.update(1 / 60, 1 / 60);
+    expect(s.reflect).toBeNull();
+    expect(s.viaReflect(ends.a)).toBe(false);
+  });
+
+  it('whose kill it is: the strike that set him up names it and refunds nothing; the blade\'s is its own, never a TRAPDOOR through a strike\'s floor', () => {
+    // a guard a REFLECT's fire was sent into
+    expect(killCredit({ cause: 'bolt', setBy: 'reflect', viaTrapdoor: false })).toEqual({ strike: 'reflect', viaTrapdoor: false, refund: false });
+    // your own trapdoor
+    expect(killCredit({ cause: 'fall', setBy: null, viaTrapdoor: true })).toEqual({ strike: null, viaTrapdoor: true, refund: true });
+    // stabbed while down from a SWAP's floor end: HIDDEN BLADE, not SWAP, and no TRAPDOOR
+    expect(killCredit({ cause: 'blade', setBy: 'swap', viaTrapdoor: true })).toEqual({ strike: null, viaTrapdoor: false, refund: true });
+    // stabbed after dropping through your own floor end: that is a TRAPDOOR
+    expect(killCredit({ cause: 'blade', setBy: null, viaTrapdoor: true }).viaTrapdoor).toBe(true);
   });
 
   it('REFLECT on a gunman who cannot fire now is refused, free', () => {

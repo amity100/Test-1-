@@ -56,6 +56,11 @@ describe('trick detection', () => {
     expect(one({ ownShot: true, projectileKind: 'bolt', shotAge: 0.36 })).not.toContain('mirror');
   });
 
+  it('a REFLECT sent into another man scores REFLECT as well as the gun it borrowed', () => {
+    expect(one({ turretShot: true, shotBy: 4, projectileKind: 'bolt', strike: 'reflect' })).toEqual(['borrowedGun', 'reflect']);
+    expect(one({ shotBy: 4, projectileKind: 'beam', strike: 'reflect' })).toEqual(['firingLine', 'reflect']);
+  });
+
   it('CROSSFIRE: charged bolt fired by another enemy', () => {
     expect(one({ shotBy: 7, projectileKind: 'bolt' })).toEqual(['crossfire']);
     expect(one({ shotBy: 1, enemyId: 1, projectileKind: 'bolt' })).toEqual([]);

@@ -110,11 +110,11 @@ const EN: Record<string, string> = {
   'hint.door.touch':
     "Rifts are doors. Hold <b>PORTAL</b>: the orange <b>ENTRANCE</b> opens in front of you. Drag to look across the channel (time slows, a ghost shows where you’ll come out) and lift your finger: the blue <b>EXIT</b> opens there. Walk through.",
   'hint.trapdoor':
-    "Two guards on the edge, the sea behind them. Crosshair on a guard and click <kbd>LMB</kbd>: he sinks into the floor and flies out past where he stood, away from you. Put the sea behind him. Hold it instead to aim where he flies.",
+    "Two guards on the edge, the sea behind them. Crosshair on a guard and click <kbd>LMB</kbd>: he sinks into the floor and flies out past where he stood, away from you. Put the sea behind him: the dotted arc past him shows where he'll fly. Hold it instead to aim where he flies.",
   'hint.trapdoor.pad':
-    "Two guards on the edge, the sea behind them. Crosshair on a guard and press <kbd>RT</kbd>: he sinks into the floor and flies out past where he stood, away from you. Put the sea behind him. Hold it instead to aim where he flies.",
+    "Two guards on the edge, the sea behind them. Crosshair on a guard and press <kbd>RT</kbd>: he sinks into the floor and flies out past where he stood, away from you. Put the sea behind him: the dotted arc past him shows where he'll fly. Hold it instead to aim where he flies.",
   'hint.trapdoor.touch':
-    "Two guards on the edge, the sea behind them. Look at a guard and tap <b>PORTAL</b>: he sinks into the floor and flies out past where he stood, away from you. Put the sea behind him. Hold and drag to aim where he flies.",
+    "Two guards on the edge, the sea behind them. Look at a guard and tap <b>PORTAL</b>: he sinks into the floor and flies out past where he stood, away from you. Put the sea behind him: the dotted arc past him shows where he'll fly. Hold and drag to aim where he flies.",
   'hint.returnToSender':
     "His gun can’t hurt Kessler, until the bullets pass through your rift. Aim near him and press <kbd>RMB</kbd> <b>REFLECT</b>: a rift on his muzzle, and his burst comes out beside him, into him.",
   'hint.returnToSender.pad':
@@ -217,6 +217,7 @@ const EN: Record<string, string> = {
   'portal.hole': 'HOLE',
   'portal.door': 'DOOR',
   'portal.anchored': "He won't budge",
+  'portal.anchoredBoss': "He won't budge: get in close with the blade",
   'portal.noFloor': 'No floor under him to open',
   'portal.nowhere': 'Nowhere to throw it',
   'portal.loopLow': 'Too low for a loop: aim the exit yourself',
@@ -267,6 +268,7 @@ const EN: Record<string, string> = {
   'obj.clear': 'Clear the area',
   'obj.lift': 'Get to the lift',
   'obj.boss': 'Take down Director Voss',
+  'hud.boss': 'DIRECTOR VOSS',
   'obj.escape': 'Jump. Trust the rift.',
   'obj.next': 'Push on to the next area',
   'strike.reflect': 'REFLECT',
@@ -511,11 +513,11 @@ const HE: Record<string, string> = {
   'hint.door.touch':
     "פורטל הוא דלת. החזק <b>פורטל</b>: ה<b>כניסה</b> הכתומה נפתחת מולך. גרור כדי להסתכל לצד השני של התעלה (הזמן מאט, ודמות רפאים מראה איפה תצא) והרם את האצבע: ה<b>יציאה</b> הכחולה נפתחת שם. עבור דרכה.",
   'hint.trapdoor':
-    "שני שומרים על הקצה, והים מאחוריהם. שים את הכוונת על שומר ולחץ <kbd>קליק שמאלי</kbd>: הוא שוקע ברצפה ועף הלאה מעבר למקום שעמד בו, הרחק ממך. תדאג שהים יהיה מאחוריו. אם מחזיקים, מכוונים לאן הוא יעוף.",
+    "שני שומרים על הקצה, והים מאחוריהם. שים את הכוונת על שומר ולחץ <kbd>קליק שמאלי</kbd>: הוא שוקע ברצפה ועף הלאה מעבר למקום שעמד בו, הרחק ממך. תדאג שהים יהיה מאחוריו: הקו המנוקד שמעבר לו מראה לאן הוא יעוף. אם מחזיקים, מכוונים לאן הוא יעוף.",
   'hint.trapdoor.pad':
-    "שני שומרים על הקצה, והים מאחוריהם. שים את הכוונת על שומר ולחץ <kbd>RT</kbd>: הוא שוקע ברצפה ועף הלאה מעבר למקום שעמד בו, הרחק ממך. תדאג שהים יהיה מאחוריו. אם מחזיקים, מכוונים לאן הוא יעוף.",
+    "שני שומרים על הקצה, והים מאחוריהם. שים את הכוונת על שומר ולחץ <kbd>RT</kbd>: הוא שוקע ברצפה ועף הלאה מעבר למקום שעמד בו, הרחק ממך. תדאג שהים יהיה מאחוריו: הקו המנוקד שמעבר לו מראה לאן הוא יעוף. אם מחזיקים, מכוונים לאן הוא יעוף.",
   'hint.trapdoor.touch':
-    "שני שומרים על הקצה, והים מאחוריהם. הסתכל על שומר וגע ב<b>פורטל</b>: הוא שוקע ברצפה ועף הלאה מעבר למקום שעמד בו, הרחק ממך. תדאג שהים יהיה מאחוריו. החזק וגרור כדי לכוון לאן הוא יעוף.",
+    "שני שומרים על הקצה, והים מאחוריהם. הסתכל על שומר וגע ב<b>פורטל</b>: הוא שוקע ברצפה ועף הלאה מעבר למקום שעמד בו, הרחק ממך. תדאג שהים יהיה מאחוריו: הקו המנוקד שמעבר לו מראה לאן הוא יעוף. החזק וגרור כדי לכוון לאן הוא יעוף.",
   'hint.returnToSender':
     "הנשק שלו לא פוגע באנשי קסלר, עד שהכדורים עוברים בפורטל שלך. כוון לידו ולחץ <kbd>קליק ימני</kbd> <b>מחזיר</b>: פורטל על הלוע של הנשק שלו, והצרור יוצא לידו, לתוכו.",
   'hint.returnToSender.pad':
@@ -616,6 +618,7 @@ const HE: Record<string, string> = {
   'portal.hole': 'בור',
   'portal.door': 'דלת',
   'portal.anchored': 'הוא לא זז',
+  'portal.anchoredBoss': 'הוא לא זז: התקרב עם הלהב',
   'portal.noFloor': 'אין מתחתיו רצפה לפתוח',
   'portal.nowhere': 'אין לאן לזרוק',
   'portal.loopLow': 'נמוך מדי ללולאה: כוון את היציאה בעצמך',
@@ -661,6 +664,7 @@ const HE: Record<string, string> = {
   'obj.clear': 'נקה את האזור',
   'obj.lift': 'הגע למעלית',
   'obj.boss': 'הפל את המנהל ווֹס',
+  'hud.boss': 'המנהל ווֹס',
   'obj.escape': 'קפוץ. תסמוך על הפורטל.',
   'obj.next': 'המשך לאזור הבא',
   'strike.reflect': 'מחזיר',

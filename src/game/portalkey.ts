@@ -40,7 +40,8 @@ export const PORTAL = {
    * his feet, tilted this far up (rad). At 17 m/s he comes down ~11 m on at
    * ~9 m/s (knocked down, under the 12 m/s kill); a wall on the way or a man
    * where he comes down takes him at 16 m/s, a drop or the sea anyhow. Its
-   * pair shuts sooner (s): off a wall close behind him he'd drop back in.
+   * exit lingers less (s). (A thrown man's floor end shuts as soon as he's
+   * through: off a wall close behind him he'd drop back into it.)
    */
   straight: { past: 2, up: 2, tilt: (20 * Math.PI) / 180, linger: 0.5 },
   /** How far out the launcher end goes when the aim hits nothing (m past you). */
@@ -131,7 +132,7 @@ function steadyOf(e: EnemyView) {
 export class PortalKey {
   hold: Hold | null = null;
   /** A throw's pair: closes a moment after its load went through. */
-  private thrown: { t: number; key: string | null; crossedT: number; linger: number; enemy?: EnemyView } | null = null;
+  private thrown: { t: number; key: string | null; crossedT: number; linger: number; enemy?: EnemyView; grab?: boolean; shut?: boolean } | null = null;
   /** The predicted arc of what's being thrown (for drawing). */
   readonly arc: THREE.Vector3[] = Array.from({ length: ARC_N }, () => new THREE.Vector3());
   arcN = 0;
@@ -170,10 +171,47 @@ export class PortalKey {
     if (T?.enemy) this.h.enemies.setSink(T.enemy, 0);
   }
 
-  /** What a press would do right now (the HUD hint on the crosshair). */
-  preview(): { mode: PortalMode; reason: string | null; key: string | null } {
+  /**
+   * What a press would do right now (the HUD hint on the crosshair). `arc`:
+   * on a man you could grab, also lay out where a tap would throw him (the
+   * arc, coloured by what it does to him), so where you stand is a choice.
+   */
+  preview(arc = false): { mode: PortalMode; reason: string | null; key: string | null } {
     const r = this.resolve(this.h.entranceCtx());
+    if (arc && !this.hold) {
+      if (r.mode === 'grab' && !r.reason && r.enemy) this.tapArc(r.enemy);
+      else {
+        this.arcN = 0;
+        this.tapKey = '';
+      }
+    }
     return { mode: r.mode, reason: r.reason, key: r.target?.key ?? null };
+  }
+
+  /** What the tap preview was worked out for (him, you and him to a quarter metre): unchanged, it stands. */
+  private tapKey = '';
+  private tapN = 0;
+  private tapOutcome: Outcome = 'safe';
+
+  /** The straight-on throw a tap would give `e` from where you stand, into the arc. */
+  private tapArc(e: EnemyView) {
+    const f = this.h.playerFeet();
+    const q = (v: number) => Math.round(v * 4);
+    const key = `${e.id}|${q(f.x)}|${q(f.y)}|${q(f.z)}|${q(e.pos.x)}|${q(e.pos.y)}|${q(e.pos.z)}`;
+    if (key !== this.tapKey) {
+      this.tapKey = key;
+      this.tapN = 0;
+      const spot = this.straightOn(e);
+      if (spot) {
+        const n = frameNormal(spot.frame, _b);
+        const res = simulateArc(this.h, spot.frame.position, _c.copy(n).multiplyScalar(spot.boost), this.arc, { enemies: this.h.enemies.list, skipId: e.id });
+        this.tapN = res.n;
+        this.tapOutcome = res.outcome;
+      }
+    }
+    // (update() clears the arc every frame nothing is held)
+    this.arcN = this.tapN;
+    this.arcOutcome = this.tapOutcome;
   }
 
   // ------------------------------------------------------------------
@@ -200,8 +238,9 @@ export class PortalKey {
         r.mode = 'grab';
         r.enemy = e;
         r.target = tgt;
-        // (turrets and Voss are anchored, Voss stunned or not)
-        if (e.kind === 'turret' || e.kind === 'boss') r.reason = 'portal.anchored';
+        // (turrets and Voss are anchored, Voss stunned or not: he's told what works on him)
+        if (e.kind === 'turret') r.reason = 'portal.anchored';
+        else if (e.kind === 'boss') r.reason = 'portal.anchoredBoss';
         return r;
       }
       const pr = h.props.byKey(tgt.key);
@@ -349,6 +388,12 @@ export class PortalKey {
     const T = this.thrown;
     if (T) {
       T.t += realDt;
+      // a thrown man is through: nothing else is meant to go in, so his floor end shuts now
+      // (off a wall close behind him, under a low roof, he'd drop straight back into it); the exit lingers
+      if (T.grab && T.crossedT >= 0 && !T.shut) {
+        T.shut = true;
+        h.rifts.closeEntrance();
+      }
       if ((T.crossedT >= 0 && T.t - T.crossedT > T.linger) || T.t > PORTAL.throwLife) {
         this.dropThrown();
         h.rifts.clearPair();
@@ -410,7 +455,8 @@ export class PortalKey {
       reason = lf.reason;
     }
     H.launch = { frame, boost, aimAt: lock ? lock.id : -1, valid: !reason, reason };
-    // the arc of what comes out
+    // the arc of what comes out (in the buffer the tap preview uses: that is worked out afresh next)
+    this.tapKey = '';
     const n = frameNormal(frame, _b);
     const res = simulateArc(h, frame.position, _c.copy(n).multiplyScalar(boost), this.arc, { enemies: h.enemies.list, skipId: H.enemy?.id });
     this.arcN = reason ? 0 : res.n;
@@ -536,7 +582,7 @@ export class PortalKey {
         h.enemies.launch(e, new THREE.Vector3(0, -9, 0));
         // (still drawn sunk until he's through: no pop back up for the frames it takes)
         h.enemies.setSink(e, H.sink);
-        this.thrown = { t: 0, key: `enemy:${e.id}`, crossedT: -1, linger: aimed ? PORTAL.linger : PORTAL.straight.linger, enemy: e };
+        this.thrown = { t: 0, key: `enemy:${e.id}`, crossedT: -1, linger: aimed ? PORTAL.linger : PORTAL.straight.linger, enemy: e, grab: true };
         return ok(spot.frame.position);
       }
       case 'load': {

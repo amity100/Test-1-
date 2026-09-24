@@ -85,6 +85,23 @@ describe('NavGrid (multi-floor)', () => {
     expect(grid.findPathInto(new THREE.Vector3(2, 30, 2), new THREE.Vector3(-4, 30, -4), out)).toBeGreaterThan(0);
   });
 
+  it('a man pressed against a wall starts on his side of it, not in the room behind', () => {
+    // a floor, a wall across it at x 10.85..11 (a closed room beyond), a man right against it
+    // (the lab's gate mouths: cells laid so the one past the wall is the nearer)
+    const w = new CollisionWorld();
+    w.add({ x: -18, y: 59.7, z: 22 }, { x: 18, y: 60, z: 58 });
+    w.add({ x: 10.85, y: 60, z: 22 }, { x: 11, y: 63, z: 58 });
+    const g = new NavGrid(w, { minX: -18, maxX: 18, minZ: 22, maxZ: 58, floorY: 60 });
+    expect(g.cellCenter(g.nearestWalkable(10.84, 41, 3), new THREE.Vector3()).x).toBeGreaterThan(11);
+    const at = new THREE.Vector3(10.84, 60, 41);
+    expect(g.walkable(at.x, at.z)).toBe(false);
+    const path = g.findPath(at, new THREE.Vector3(0, 60, 35));
+    expect(path).not.toBeNull();
+    expect(path!.every((p) => p.x < 10.85)).toBe(true);
+    const i = g.nearestWalkable(at.x, at.z, 3, at.y);
+    expect(g.cellCenter(i, new THREE.Vector3()).x).toBeLessThan(10.85);
+  });
+
   it('reports no path between disconnected islands', () => {
     const w = new CollisionWorld();
     w.add({ x: 0, y: 29.7, z: 0 }, { x: 5, y: 30, z: 5 });

@@ -181,12 +181,33 @@ export class EnemySystem implements EnemyAPI, Brain {
     this.list.push(e);
     this.byId.set(id, e);
     // later encounters of a zone start as their defs say, even mid-fight;
-    // reinforcements come in on the radio call: roughly where you were
+    // reinforcements come in on the radio call: what the fight there knows of
+    // you (give or take), never where you are now. Voss knows his own arena.
+    // (A spawn has no news of his own to spread.)
     if (def.state === 'combat') {
-      if (this.hasPlayer) this.learn(e, this.lastPlayer, AI.reportError);
-      this.enterCombat(e, null);
+      if (def.kind === 'boss') {
+        if (this.hasPlayer) this.learn(e, this.lastPlayer);
+      } else {
+        const w = this.freshestWord(e);
+        if (w) this.learn(e, w.lastKnown, AI.reportError, w.contactT);
+      }
+      this.enterCombat(e, null, false);
     }
     return e;
+  }
+
+  /** The living man of e's zone, in the fight, with the freshest word of the player (null: nobody has any). */
+  private freshestWord(e: Enemy): Enemy | null {
+    let best: Enemy | null = null;
+    // (-1e9: never had word of him; looking around where he stands isn't news)
+    let bestT = -1e9;
+    for (let i = 0; i < this.list.length; i++) {
+      const o = this.list[i];
+      if (o === e || !o.alive || o.mode !== 'combat' || o.def.zone !== e.def.zone || !o.hasLastKnown || o.contactT <= bestT) continue;
+      best = o;
+      bestT = o.contactT;
+    }
+    return best;
   }
 
   get(id: number): EnemyView | null {
@@ -336,7 +357,13 @@ export class EnemySystem implements EnemyAPI, Brain {
       case 'charge': return chargeUpdate(this, e, dt);
     }
     if (!e.thinking) {
-      this.halt(e, dt);
+      // past the thinking cap (the farthest of a crowd): no eyes, no guns (an attack under way
+      // is dropped, or he'd keep a shooter's turn from everyone), but a man in the fight still
+      // closes on what he knows, so he doesn't stay parked out of it for good
+      if (e.atk !== 'none') endAttack(this, e);
+      if (e.mode === 'combat' && e.hasLastKnown && hdist(e.pos, e.lastKnown) > Math.max(3, e.tune.keepMin)) {
+        this.moveTo(e, e.lastKnown, e.tune.run, dt, true);
+      } else this.halt(e, dt);
       return;
     }
     this.perceive(e, dt);
@@ -667,8 +694,10 @@ export class EnemySystem implements EnemyAPI, Brain {
         this.halt(e, dt);
         this.face(e, e.investigate, dt);
       } else if (this.moveTo(e, e.investigate, e.tune.walk, dt, true)) {
+        // there, or as near as his floor takes him (a spot below his ledge, on another
+        // floor): he looks it over from here
         this.lookAround(e, dt);
-      }
+      } else if (hdist(e.pos, e.investigate) > 0.5) e.lookBase = yawTo(e.pos, e.investigate);
       if (e.stateT > 7 && e.sus < 0.35) {
         e.mode = 'calm';
         e.state = this.baseState(e);
@@ -1123,6 +1152,7 @@ export class EnemySystem implements EnemyAPI, Brain {
     }
     endAttack(this, e);
     this.abortBlink(e);
+    this.blind(e);
     e.state = 'launched';
     e.stateT = 0;
     e.groundT = 0;
@@ -1213,8 +1243,22 @@ export class EnemySystem implements EnemyAPI, Brain {
     if (e.holdT <= 0) this.recover(e);
   }
 
+  /**
+   * Down, flying, reeling or held, he isn't watching you: what he last saw
+   * stops counting, and he looks again on his first moment back (a real
+   * sighting then takes its reaction beat, see sighted()).
+   */
+  private blind(e: Enemy) {
+    e.seesPlayer = false;
+    e.seeDist = Infinity;
+    e.senseT = 0;
+  }
+
   /** On his feet again: the launch chain ends; he fights from wherever he is. */
   private recover(e: Enemy) {
+    this.blind(e);
+    // (no word of you at all: his look around is where he stands now, not where he was thrown from)
+    if (e.mode === 'combat' && e.contactT <= -1e9) e.lastKnown.copy(e.pos);
     e.launchChain = false;
     e.launchUnaware = false;
     e.crossings = 0;
@@ -1228,8 +1272,10 @@ export class EnemySystem implements EnemyAPI, Brain {
     e.grid = null;
     const grids = this.navs.get(e.def.zone);
     if (grids && grids.length) {
+      // (off the walkable cells by a step or two, by an edge or a wall, he walks back on:
+      // paths start from the nearest walkable cell within the same reach)
       const g = this.gridFor(e);
-      e.stranded = !g || g.nearestWalkable(e.pos.x, e.pos.z, 0.9) < 0;
+      e.stranded = !g || g.nearestWalkable(e.pos.x, e.pos.z, AI.rejoinReach, e.pos.y) < 0;
     } else e.stranded = false;
     e.state = this.baseState(e);
     e.stateT = 0;
@@ -1243,6 +1289,7 @@ export class EnemySystem implements EnemyAPI, Brain {
     if (e.state === 'charge') this.endCharge(e);
     endAttack(this, e);
     this.abortBlink(e);
+    this.blind(e);
     e.state = state;
     e.stateT = 0;
     e.holdT = state === 'stunned' ? AI.stunTime : AI.downedTime;
@@ -1266,6 +1313,7 @@ export class EnemySystem implements EnemyAPI, Brain {
   hold(v: EnemyView, on: boolean) {
     const e = this.own(v);
     if (!e || !e.alive) return;
+    this.blind(e);
     if (!on) {
       e.held = false;
       return;
@@ -1339,6 +1387,7 @@ export class EnemySystem implements EnemyAPI, Brain {
     if (e.state === 'launched' || e.state === 'downed' || e.state === 'stunned') return;
     if (e.state === 'charge') this.endCharge(e);
     endAttack(this, e);
+    this.blind(e);
     if (e.state === 'stagger') e.holdT = Math.max(e.holdT, seconds);
     else e.holdT = seconds;
     e.state = 'stagger';
@@ -1771,8 +1820,9 @@ export class EnemySystem implements EnemyAPI, Brain {
         barked = true;
         this.bark(w, 'bark.mateDown', true);
       }
-      // he comes to where it happened (or stares at the exit it came out of)
-      if (w.mode !== 'combat') this.learn(w, from ?? e.pos);
+      // he comes to where it happened (or stares at the exit it came out of),
+      // unless he has fresher word of you: eyes on you, or a fight still on
+      if (!w.seesPlayer && (w.mode !== 'combat' || w.searching)) this.learn(w, from ?? e.pos);
       this.enterCombat(w, null);
     }
     this.witnesses.length = 0;
@@ -1863,10 +1913,10 @@ export class EnemySystem implements EnemyAPI, Brain {
   }
 
   /** Director Voss while he lives. */
-  boss(): { phase: 1 | 2 | 3; blinking: boolean; pos: V3 } | null {
+  boss(): { phase: 1 | 2 | 3; blinking: boolean; pos: V3; hp: number; maxHp: number; fighting: boolean } | null {
     for (let i = 0; i < this.list.length; i++) {
       const e = this.list[i];
-      if (e.kind === 'boss' && e.alive) return { phase: e.phase, blinking: e.blinking, pos: e.pos };
+      if (e.kind === 'boss' && e.alive) return { phase: e.phase, blinking: e.blinking, pos: e.pos, hp: e.hp, maxHp: e.maxHp, fighting: e.mode === 'combat' };
     }
     return null;
   }

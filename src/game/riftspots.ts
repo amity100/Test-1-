@@ -117,22 +117,30 @@ export function throwSpot(h: SpotHost, pos: V3, search = 22, away?: V3): { frame
   return sky ? { frame: sky, boost: 8 } : null;
 }
 
+/** How far a straight-on exit may be pulled back toward you: this far on your side of him (m). */
+const STRAIGHT_BACK = 1.4;
+
 /**
  * A GRAB let go of without an aim: a launcher end `past` m beyond him on the
  * level line `dir` (from you through him), `up` m over his feet, facing on
  * along it and tilted `tilt` rad up. A wall in the way pulls it back toward
  * you to 1.4 m short of it (as launchFrame does), so a wall right behind him
- * is what he hits. Null when it still doesn't fit.
+ * is what he hits; anything lower in the way there (a crate, stairs, a roof
+ * over that spot) steps it back further, as far as 1.4 m on your side of
+ * him, and he flies over it or into it. Null when it still doesn't fit.
  */
 export function straightOn(h: SpotHost, pos: V3, dir: V3, past: number, up: number, tilt: number): Frame | null {
   const w = h.world;
   const o = _a.set(pos.x, pos.y + up, pos.z);
   const hit = w.raycast(o, dir, past + 1.4, { sight: false });
-  const d = hit ? hit.distance - 1.4 : past;
-  const p = new THREE.Vector3(o.x + dir.x * d, o.y, o.z + dir.z * d);
-  if (w.overlapsCylinder(p.x, p.z, 0.45, p.y - 0.95, p.y + 0.95)) return null;
-  const n = _v.set(dir.x * Math.cos(tilt), Math.sin(tilt), dir.z * Math.cos(tilt));
-  return { position: p, quaternion: orientFrame(n, UP), width: 1.3, height: 1.9, kind: 'air' };
+  const p = new THREE.Vector3();
+  for (let d = hit ? hit.distance - 1.4 : past; d >= -STRAIGHT_BACK - 1e-6; d -= 0.25) {
+    p.set(o.x + dir.x * d, o.y, o.z + dir.z * d);
+    if (w.overlapsCylinder(p.x, p.z, 0.45, p.y - 0.95, p.y + 0.95)) continue;
+    const n = _v.set(dir.x * Math.cos(tilt), Math.sin(tilt), dir.z * Math.cos(tilt));
+    return { position: p, quaternion: orientFrame(n, UP), width: 1.3, height: 1.9, kind: 'air' };
+  }
+  return null;
 }
 
 /**

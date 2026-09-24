@@ -253,6 +253,15 @@ html[dir='rtl'] .trk .nm { letter-spacing: .01em; font-size: 18px; }
 @keyframes trkOut { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateX(28px); } }
 
 /* ---- status: health + rift pips (bottom-left) ---- */
+.h-boss { position: absolute; left: 50%; top: calc(var(--st) + 18px); width: min(520px, 46vw); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 5px; opacity: 0; transition: opacity .4s; pointer-events: none; }
+.h-boss.on { opacity: 1; }
+.h-boss .b-name { font: 700 12px/1 var(--font); letter-spacing: .22em; color: #ffd9d4; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6); }
+.h-boss .b-bar { position: relative; width: 100%; height: 8px; background: rgba(8, 11, 17, 0.7); border: 1px solid rgba(255, 255, 255, 0.18); overflow: hidden; }
+.h-boss .b-bar i { position: absolute; inset: 0; transform-origin: left center; }
+.h-boss .b-trail { background: #ffd08a; transition: transform .6s ease-in .35s; }
+.h-boss .b-fill { background: linear-gradient(180deg, #ff6a5c, #c8182c); transition: transform .12s; }
+.h-boss.hit .b-bar { animation: bossHit .25s; }
+@keyframes bossHit { 0% { filter: brightness(2.2); } 100% { filter: none; } }
 .h-status { position: absolute; left: calc(var(--sl) + 26px); bottom: calc(var(--sb) + 24px); display: flex; flex-direction: column; gap: 9px; }
 .h-pips { display: flex; gap: 16px; padding-left: 2px; }
 .pip { display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 800; letter-spacing: .2em; color: rgba(255, 255, 255, 0.5); text-shadow: var(--shadow); transition: color .15s; }

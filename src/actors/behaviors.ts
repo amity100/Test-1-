@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { LAW, type EnemyContext, type EnemyHooks, type V3 } from '../core/contracts';
 import { dampAngle, hdist, lobClear, offAxis, solveLob, stepAngle, yawTo } from './aimath';
 import type { Enemy } from './enemy';
+import { seePlayer } from './perception';
 import { TurretRig } from './turret';
 import { AI } from './tuning';
 
@@ -270,19 +271,26 @@ function handOf(e: Enemy, out: V3) {
   return out.set(p.x + s * 0.3 - c * 0.25, p.y + e.height * 0.95, p.z + c * 0.3 + s * 0.25);
 }
 
-/** Starts a lob if the arc is clear (normal ~1 s flight, else a higher one). */
-function startLob(b: Brain, e: Enemy): boolean {
+/** Flight times a lob tries: the normal one, then a higher arc (s). */
+const LOB_FLIGHTS = [AI.grenade.flight, 1.4] as const;
+
+/** A clear arc from his hand to the player: its flight time (normal ~1 s, else a higher one), 0 if neither is clear. Writes the hand, aim point and lob velocity only. */
+function lobArc(b: Brain, e: Enemy): number {
   const pl = b.ctx.player;
   handOf(e, e.muzzle);
   e.aimPt.copy(pl.pos);
   const g = LAW.gravity;
-  let T: number = AI.grenade.flight;
-  solveLob(e.muzzle, e.aimPt, T, g, e.lobVel);
-  if (!lobClear(b.ctx.world, e.muzzle, e.lobVel, T, g)) {
-    T = 1.4;
+  for (const T of LOB_FLIGHTS) {
     solveLob(e.muzzle, e.aimPt, T, g, e.lobVel);
-    if (!lobClear(b.ctx.world, e.muzzle, e.lobVel, T, g)) return false;
+    if (lobClear(b.ctx.world, e.muzzle, e.lobVel, T, g)) return T;
   }
+  return 0;
+}
+
+/** Starts a lob if the arc is clear. */
+function startLob(b: Brain, e: Enemy): boolean {
+  const T = lobArc(b, e);
+  if (!T) return false;
   e.lobFlight = T;
   e.atk = 'aim';
   e.atkKind = 'lob';
@@ -314,12 +322,23 @@ function tryLob(b: Brain, e: Enemy) {
   const d = hdist(e.pos, b.ctx.player.pos);
   if (!e.seesPlayer || e.lookT > 0 || e.lobT > 0 || e.atk !== 'none') return false;
   if (d < AI.grenade.minRange || d > AI.grenade.maxRange) return false;
+  // no clear arc from here: move and retry soon, without taking a turn from the squad's guns
+  // (while he waits for his turn the arc is looked at again only now and then)
+  if (b.time - e.arcT > 0.25) {
+    if (!lobArc(b, e)) return lobBlocked(e);
+    e.arcT = b.time;
+  }
   if (!b.tryToken(e)) return false;
   if (startLob(b, e)) return true;
-  // no clear arc from here: move and retry soon
+  // (it closed in the moment since)
   b.releaseToken(e);
+  return lobBlocked(e);
+}
+
+function lobBlocked(e: Enemy) {
   e.lobT = 1.5;
   e.hasSpot = false;
+  e.arcT = -1e9;
   return false;
 }
 
@@ -461,7 +480,7 @@ function chargeTelegraph(b: Brain, e: Enemy, t01: number) {
   b.hooks.telegraph(e, 'charge', e.muzzle, e.aimPt, t01);
 }
 
-/** Brute 'charge' state: 1 s roar (tracking, then locked), then a straight 14 m/s run. */
+/** Brute 'charge' state: 1 s roar (tracking you while he sees you, then locked), then a straight 14 m/s run. */
 export function chargeUpdate(b: Brain, e: Enemy, dt: number) {
   const pl = b.ctx.player;
   const body = e.body;
@@ -469,9 +488,14 @@ export function chargeUpdate(b: Brain, e: Enemy, dt: number) {
   if (e.atk === 'roar') {
     e.atkT += dt;
     b.halt(e, dt);
-    if (e.atkT < AI.brute.lockAt && pl.alive) {
+    // (out of his sight he keeps the last line he had on you)
+    if (e.atkT < AI.brute.lockAt && pl.alive && seePlayer(e, b.ctx) >= 0) {
       _d.set(pl.pos.x - e.pos.x, 0, pl.pos.z - e.pos.z);
       if (_d.lengthSq() > 1e-4) e.chargeDir.copy(_d.normalize());
+      // what he sees he remembers (his senses are otherwise off while he charges)
+      e.lastKnown.copy(pl.pos);
+      e.hasLastKnown = true;
+      e.contactT = e.lastSeenT = b.time;
     }
     e.yaw = dampAngle(e.yaw, Math.atan2(e.chargeDir.x, e.chargeDir.z), 12, dt);
     chargeTelegraph(b, e, Math.min(1, e.atkT / AI.brute.roar));

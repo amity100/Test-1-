@@ -56,6 +56,8 @@ export const AI = {
   maxPathsPerFrame: 2,
   maxTokens: 2,
   edgeMargin: 1.5,
+  /** Landed off the walkable cells by up to this much (m), he walks back on; further (a crate top, a beam), he's stranded. */
+  rejoinReach: 3,
   witnessRange: 25,
   lookTime: 3,
   /** Nearby allies look at the exit a hit came out of. */

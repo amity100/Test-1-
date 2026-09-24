@@ -167,6 +167,14 @@ describe('the tower (level)', () => {
     expect(perched).toBeGreaterThanOrEqual(2); // sniper + turret
   });
 
+  it("a void zone's floors and spawns all lie above its killY (a man who falls below it is out of his fight)", () => {
+    for (const z of L.zones) {
+      if (z.sea) continue;
+      for (const n of z.nav) expect(n.floorY, `${z.id} nav layer`).toBeGreaterThan(z.killY + 2);
+      for (const s of allSpawns(z)) expect(s.pos.y, `${s.id}`).toBeGreaterThan(z.killY + 2);
+    }
+  });
+
   it('every encounter trigger lies inside its zone', () => {
     for (const z of L.zones) for (const e of z.encounters) expect(z.bounds.containsBox(e.trigger), `${e.id}`).toBe(true);
   });
@@ -362,6 +370,31 @@ describe('the tower (level)', () => {
     expect(L.isSea(new THREE.Vector3(-60, 0, 20))).toBe(true);
     expect(L.isSea(new THREE.Vector3(0, 0, -53))).toBe(true); // the channel
     expect(L.isSea(new THREE.Vector3(0, 0, -20))).toBe(false);
+  });
+});
+
+describe('the objective marker', () => {
+  it('points at the fight until it has lost a man and only one or two are left, then at the nearest of them, wherever he is', () => {
+    const zm = new ZoneManager(L);
+    const enc = zm.encounters.find((e) => e.zone === 'pier' && e.def.requireClear)!;
+    const centre = enc.def.trigger.getCenter(new THREE.Vector3());
+    const at = new Map<number, THREE.Vector3>([
+      [1, new THREE.Vector3(1, 0, 1)],
+      [2, new THREE.Vector3(-4.2, 5.18, -47)], // thrown onto a container top
+      [3, new THREE.Vector3(9, 0, 9)],
+    ]);
+    enc.triggered = enc.engaged = true;
+    enc.enemyIds = [1, 2, 3];
+    const where = (id: number) => at.get(id) ?? null;
+    const you = new THREE.Vector3(0, 0, -40);
+    expect(zm.objective(where, you).target!.equals(centre)).toBe(true);
+    at.delete(1);
+    expect(zm.objective(where, you).target).toBe(at.get(2));
+    // (a two-man fight with both still up is just the fight)
+    enc.enemyIds = [2, 3];
+    expect(zm.objective(where, you).target!.equals(centre)).toBe(true);
+    // (without a locator it's the fight as before)
+    expect(zm.objective().target!.equals(centre)).toBe(true);
   });
 });
 

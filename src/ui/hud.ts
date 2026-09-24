@@ -114,6 +114,11 @@ export class HUD implements HudAPI {
   private promptGlyph: HTMLElement;
   private promptLbl: HTMLElement;
   private clipEl: HTMLButtonElement;
+  private bossEl: HTMLElement;
+  private bossFill: HTMLElement;
+  private bossTrail: HTMLElement;
+  /** Boss bar fill shown, -1 = hidden. */
+  private bossF = -1;
 
   // cached state
   private shown = true;
@@ -195,6 +200,7 @@ export class HUD implements HudAPI {
         </div>
       </div>
       <div class="h-feed"></div>
+      <div class="h-boss"><span class="b-name" dir="auto"></span><div class="b-bar"><i class="b-trail"></i><i class="b-fill"></i></div></div>
       <div class="h-status">
         <div class="h-pips"><span class="pip ex"><i></i><em></em></span><span class="pip en"><i></i><em></em></span></div>
         <div class="h-hp"><b class="hp-num">100</b><div class="hp-bar"><i class="hp-trail"></i><i class="hp-fill"></i><i class="hp-segs"></i><span class="hp-embers"></span></div></div>
@@ -244,6 +250,9 @@ export class HUD implements HudAPI {
     this.promptGlyph = q('.p-glyph');
     this.promptLbl = q('.p-lbl');
     this.clipEl = q('.h-clip');
+    this.bossEl = q('.h-boss');
+    this.bossFill = q('.b-fill');
+    this.bossTrail = q('.b-trail');
 
     const emb = q('.hp-embers');
     for (let i = 0; i < 8; i++) this.embers.push(emb.appendChild(h('i', 'ember')));
@@ -269,6 +278,7 @@ export class HUD implements HudAPI {
     set('.o-lbl', t('hud.objective'));
     set('.s-lbl', t('hud.style'));
     set('.s-tl', t('hud.total'));
+    set('.b-name', t('hud.boss'));
     set('.pip.ex em', t('hud.exit'));
     set('.pip.en em', t('hud.entrance'));
     set('.air-lbl', t('hud.airtime'));
@@ -314,6 +324,19 @@ export class HUD implements HudAPI {
       this.hpTrail.style.transform = `scaleX(${f.toFixed(3)})`;
       if (prev >= 0 && v > prev) this.ember(f, v - prev >= 5);
     }
+  }
+
+  /** Voss's bar across the top while he fights you (null: hidden). */
+  setBoss(b: { hp: number; maxHp: number } | null) {
+    const f = b ? Math.max(0, Math.min(1, b.hp / Math.max(1, b.maxHp))) : -1;
+    if (f === this.bossF) return;
+    const hit = f >= 0 && this.bossF >= 0 && f < this.bossF;
+    this.bossF = f;
+    this.bossEl.classList.toggle('on', f >= 0);
+    if (f < 0) return;
+    this.bossFill.style.transform = `scaleX(${f.toFixed(3)})`;
+    this.bossTrail.style.transform = `scaleX(${f.toFixed(3)})`;
+    if (hit) replay(this.bossEl, 'hit');
   }
 
   /** Heal sparkle at the bar tip (throttled). */

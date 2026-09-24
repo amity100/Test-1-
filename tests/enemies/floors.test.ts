@@ -79,4 +79,34 @@ describe('fighting on open floors', () => {
     expect(e.pos.distanceTo(at)).toBeLessThan(0.05);
     expect(s.log.bolts.some((b) => b.id === e.id)).toBe(true);
   });
+
+  it('a spot below his ledge: he goes to the edge nearest it and looks it over from there', () => {
+    const s = scenario(['skeleton']);
+    s.ground.enabled = false;
+    s.physics.killY = 10;
+    s.world.add({ x: -12, y: 29.7, z: -12 }, { x: 12, y: 30, z: 12 });
+    s.world.add({ x: -12, y: 35.7, z: -12 }, { x: 4, y: 36, z: 12 }); // the upper floor ends at x = 4
+    s.sys.setNav('skeleton', [{ minX: -14, maxX: 14, minZ: -14, maxZ: 14, floorY: 30 }, { minX: -14, maxX: 14, minZ: -14, maxZ: 14, floorY: 36 }], s.world);
+    s.player.alive = false;
+    const e = s.spawn('rifleman', V(-1, 36, 0), 0, { zone: 'skeleton' }) as Enemy;
+    s.step(10);
+    const spot = V(8, 30, 0);
+    s.player.noise.push({ at: spot, radius: 30 });
+    s.step();
+    s.player.noise.length = 0;
+    expect(e.mode).toBe('suspicious');
+    s.step(60 * 4);
+    expect(e.pos.y).toBeCloseTo(36, 3);
+    expect(e.pos.x).toBeGreaterThan(2); // at the edge, not where he stood
+    // looking it over: his gaze sweeps around the spot, not off somewhere else
+    let sum = 0;
+    for (let i = 0; i < 120; i++) {
+      s.step();
+      let d = e.yaw - Math.atan2(spot.x - e.pos.x, spot.z - e.pos.z);
+      while (d > Math.PI) d -= 2 * Math.PI;
+      while (d < -Math.PI) d += 2 * Math.PI;
+      sum += Math.abs(d);
+    }
+    expect(sum / 120).toBeLessThan(0.6);
+  });
 });

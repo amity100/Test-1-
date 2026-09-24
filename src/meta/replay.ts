@@ -256,6 +256,7 @@ export class SnapshotLerper {
       o.key = n.key;
       o.visible = n.visible;
       o.pose = n.pose as CharacterPose;
+      o.blade = n.blade;
       let f: ActorSnap | null = j < fa.length && fa[j].key === n.key ? fa[j] : null;
       if (!f) for (let k = 0; k < fa.length; k++) if (fa[k].key === n.key) { f = fa[k]; break; }
       if (f && dist2(n.pos, f.pos) <= maxJ2) {

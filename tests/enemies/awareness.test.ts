@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { LAW } from '../../src/core/contracts';
 import { aimSpread } from '../../src/actors/behaviors';
 import type { Enemy } from '../../src/actors/enemies';
 import { seePlayer } from '../../src/actors/perception';
@@ -256,5 +257,135 @@ describe('fire rhythm', () => {
       return sum / s.log.bolts.length;
     };
     expect(stray(22, 6)).toBeGreaterThan(stray(8, 0) * 2);
+  });
+});
+
+describe('what a newcomer, a man back on his feet and a witness know', () => {
+  it('a reinforcement is told what the fight knows (not where you are), and tells nobody', () => {
+    const { s, e } = engaged();
+    const mate = s.spawn('rifleman', V(6, 0, 2), 0, { state: 'combat', perch: true }) as Enemy;
+    s.step(30);
+    const seen = e.lastKnown.clone();
+    vanish(s);
+    s.until(() => e.searching && mate.searching, 10);
+    const eWord = e.lastKnown.clone(), mWord = mate.lastKnown.clone();
+    // the gate sends one in, far off, with you hidden 70 m away
+    const late = s.spawn('rifleman', V(40, 0, 40), 0, { state: 'combat' }) as Enemy;
+    s.step();
+    expect(late.seesPlayer).toBe(false);
+    expect(late.lastKnown.distanceTo(seen)).toBeLessThan(AI.reportError * Math.SQRT2 + 1);
+    expect(late.lastKnown.distanceTo(s.player.pos)).toBeGreaterThan(40);
+    // nobody searching was handed news by him
+    expect(e.searching && mate.searching).toBe(true);
+    expect(e.lastKnown.equals(eWord) && mate.lastKnown.equals(mWord)).toBe(true);
+    // stood down, he stays stood down when the next one arrives
+    s.until(() => e.mode === 'suspicious', 20);
+    s.spawn('rifleman', V(-40, 0, 40), 0, { state: 'combat' });
+    s.step();
+    expect(e.mode).toBe('suspicious');
+  });
+
+  it('knocked down mid-aim, he gets up blind: no lock through the wall you went behind', () => {
+    for (let seed = 1; seed <= 6; seed++) {
+      const s = scenario();
+      s.sys.seed(seed);
+      s.step();
+      const e = s.spawn('rifleman', V(0, 0, 0), 0, { state: 'combat', perch: true }) as Enemy;
+      s.until(() => e.atk === 'aim', 6);
+      s.sys.hit(e, { source: 'impact', amount: 0, charged: false, speed: LAW.killSpeed, team: 'neutral', instigator: null });
+      expect(e.state).toBe('downed');
+      s.world.add(V(-10, 0, 7), V(10, 4, 7.4));
+      s.step();
+      s.until(() => e.state !== 'downed', 4);
+      const up = s.clock.t;
+      s.step(60);
+      expect(s.log.telegraphs.some((t) => t.id === e.id && t.t >= up)).toBe(false);
+    }
+  });
+
+  it('knocked down with you in plain view, he takes a beat to find you again before he aims', () => {
+    for (let seed = 1; seed <= 3; seed++) {
+      const s = scenario();
+      s.sys.seed(seed);
+      s.step();
+      const e = s.spawn('rifleman', V(0, 0, 0), 0, { state: 'combat', perch: true }) as Enemy;
+      s.until(() => e.atk === 'aim', 6);
+      s.sys.hit(e, { source: 'impact', amount: 0, charged: false, speed: LAW.killSpeed, team: 'neutral', instigator: null });
+      s.until(() => e.state !== 'downed', 4);
+      const up = s.clock.t;
+      s.until(() => e.atk === 'aim', 3);
+      expect(s.clock.t - up).toBeGreaterThan(AI.reacquire[0]);
+    }
+  });
+
+  it('a searching man who sees a mate die goes to the body', () => {
+    const { s, e } = engaged();
+    const mate = s.spawn('rifleman', V(4, 0, 6), 0, { state: 'combat', perch: true }) as Enemy;
+    s.step(30);
+    vanish(s);
+    s.until(() => e.searching, 10);
+    const at = mate.pos.clone();
+    s.sys.hit(mate, { source: 'shear', amount: 999, charged: true, team: 'player', instigator: 'player' });
+    expect(mate.alive).toBe(false);
+    expect(e.lastKnown.distanceTo(at)).toBeLessThan(1e-6);
+    s.step();
+    expect(e.searching).toBe(false);
+  });
+
+  it("a brute's roar follows you only while he sees you", () => {
+    const s = scenario();
+    s.setPlayer(0, 0, 10);
+    s.step();
+    const b = s.spawn('brute', V(0, 0, 0), 0, { state: 'combat' }) as Enemy;
+    s.until(() => b.state === 'charge', 4);
+    s.step(6);
+    const line = b.chargeDir.clone();
+    // you duck behind a container 0.1 s into the roar
+    s.world.add(V(2, 0, 0), V(3, 4, 12));
+    s.setPlayer(8, 0, 10);
+    s.until(() => b.atk === 'run', 2);
+    expect(b.chargeDir.dot(line)).toBeGreaterThan(0.999);
+  });
+
+  it('a grenadier with no clear arc waits for one without taking a turn from the guns', () => {
+    const s = scenario();
+    s.step();
+    // a low ceiling over him and you
+    s.world.add(V(-8, 2.3, -4), V(8, 2.6, 22));
+    const g = s.spawn('grenadier', V(0, 0, 0), 0, { state: 'combat', perch: true }) as Enemy;
+    const asked: number[] = [];
+    const tryToken = s.sys.tryToken.bind(s.sys);
+    s.sys.tryToken = (x: Enemy) => (x === g && asked.push(s.clock.t), tryToken(x));
+    s.step(60 * 10);
+    expect(g.seesPlayer).toBe(true);
+    expect(s.log.grenades.length).toBe(0);
+    expect(asked.length).toBe(0);
+  });
+
+  it('past the thinking cap (the farthest of a crowd), a man in the fight still closes in', () => {
+    const s = scenario();
+    s.step();
+    const crowd = Array.from({ length: AI.maxThinking }, (_, i) => s.spawn('rifleman', V(-11 + i * 2, 0, 5), 0, { state: 'combat', perch: true }) as Enemy);
+    s.until(() => crowd.every((e) => e.seesPlayer), 2);
+    const far = s.spawn('rifleman', V(0, 0, -40), 0, { state: 'combat' }) as Enemy;
+    s.step(60);
+    expect(far.thinking).toBe(false);
+    s.step(60 * 4);
+    expect(far.pos.z).toBeGreaterThan(-32);
+  });
+
+  it("past the thinking cap he drops an attack under way: no shooter's turn is held by a man who can't use it", () => {
+    const s = scenario();
+    s.step();
+    s.setPlayer(-14, 0, 10);
+    const line = Array.from({ length: AI.maxThinking + 1 }, (_, i) => s.spawn('rifleman', V(-12 + i * 2, 0, 0), 0, { state: 'combat', perch: true }) as Enemy);
+    const first = line[0];
+    expect(s.until(() => first.atk === 'aim', 30)).toBeLessThan(30);
+    // you're suddenly at the far end of the line: he's the farthest now, and stops thinking mid-aim
+    s.setPlayer(14, 0, 10);
+    s.until(() => !first.thinking, 1);
+    s.step();
+    expect(first.token).toBe(false);
+    expect(first.atk).toBe('none');
   });
 });

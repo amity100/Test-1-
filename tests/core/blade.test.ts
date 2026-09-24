@@ -4,7 +4,7 @@ import type { CharacterAPI, CharacterPose, EnemyView } from '../../src/core/cont
 import { FEEL } from '../../src/config';
 import { BLADE, HiddenBlade } from '../../src/game/blade';
 import { Player, type PlayerEvents, type PlayerInput } from '../../src/game/player';
-import { makePhysics, makeRifts, makeWorld, recorder, V } from './helpers';
+import { frame, makePhysics, makeRifts, makeWorld, recorder, V } from './helpers';
 
 /** A stand-in enemy: what the blade reads of an EnemyView. */
 function fakeEnemy(pos: THREE.Vector3, o: Partial<{ state: EnemyView['state']; zone: string; radius: number }> = {}) {
@@ -106,16 +106,42 @@ describe('hidden blade: who it reaches', () => {
     expect(pickOf(rig([behind, ahead]).blade)?.enemy).toBe(ahead);
   });
 
-  it('skips the dead, fights you are not in, and lunges at a body in flight', () => {
+  it('skips the dead, fights you are not in, and a body flying past unless he is right on you', () => {
     const dead = fakeEnemy(V(0, 0, 1));
     dead.alive = false;
     const away = fakeEnemy(V(0, 0, 1.2), { zone: 'yard' });
     const flying = fakeEnemy(V(0, 0, 3.5), { state: 'launched' });
     const { blade } = rig([dead, away, flying]);
     expect(pickOf(blade)).toBeNull();
-    // in reach, a flying man can still be cut
+    // in reach but a step away: no step after a flying man (it would carry you after him)
     flying.pos.z = 1.5;
+    expect(pickOf(blade)).toBeNull();
+    // right on you, he can still be cut (at once)
+    flying.pos.z = 0.9;
     expect(pickOf(blade)).toEqual({ enemy: flying, lunge: false });
+    expect(blade.start(flying as unknown as EnemyView, feet)).toBe(true);
+  });
+
+  it('never into an open rift end on the way: your own door between you, a hole in the floor', () => {
+    const world = makeWorld();
+    const rifts = makeRifts(world);
+    const e = fakeEnemy(V(0, 0, 3.6));
+    const blade = (withRifts: boolean) => new HiddenBlade({ world, enemies: [e as unknown as EnemyView], live: () => true, rifts: withRifts ? rifts : undefined });
+    expect(blade(true).pick(feet, FWD, FWD)?.lunge).toBe(true);
+    // a door 1.45 m ahead, facing you (its exit far off): the lunge would go through it
+    rifts.openEntranceFrame(frame(V(0, 1.2, 1.45), V(0, 0, -1), 'stand'), 'stand');
+    rifts.placeExitFrame(frame(V(0, 1.2, 30), V(0, 0, 1), 'air'));
+    expect(blade(false).pick(feet, FWD, FWD)).not.toBeNull();
+    expect(blade(true).pick(feet, FWD, FWD)).toBeNull();
+    // ...and a step at a man in reach behind it
+    e.pos.z = 2.2;
+    expect(blade(true).pick(feet, FWD, FWD)).toBeNull();
+    // a hole in the floor between you
+    rifts.clearPair();
+    e.pos.z = 3.6;
+    rifts.openEntranceFrame(frame(V(0, 0.01, 1.8), V(0, 1, 0), 'floor'), 'floor');
+    rifts.placeExitFrame(frame(V(0, 10, 30), V(0, -1, 0), 'air'));
+    expect(blade(true).pick(feet, FWD, FWD)).toBeNull();
   });
 });
 
@@ -183,8 +209,9 @@ describe('hidden blade: the lunge', () => {
   const idle: PlayerInput = { moveX: 0, moveY: 0, camYaw: 0, jump: false, sprint: true, crouch: false, shove: false };
 
   /** The real player controller lunging as the game drives it; returns how it ended and when. */
-  function lungeAt(e: Fake, move: (dt: number) => void = () => {}) {
+  function lungeAt(e: Fake, move: (dt: number) => void = () => {}, build: (w: ReturnType<typeof makeWorld>) => void = () => {}) {
     const world = makeWorld();
+    build(world);
     const phys = makePhysics(world, makeRifts(world));
     const body = phys.createBody('player', { pos: V(0, 0, 0), radius: FEEL.playerRadius, height: FEEL.playerHeight });
     body.userData.manual = true;
@@ -242,5 +269,67 @@ describe('hidden blade: the lunge', () => {
     const { r, t } = lungeAt(flung, (dt) => (flung.pos.z += 20 * dt));
     expect(r).toBe('miss');
     expect(t).toBeLessThanOrEqual(BLADE.lungeTime + 0.02);
+  });
+
+  it('a man who is suddenly elsewhere (out of a rift exit, launched) is a miss at once: no swerve after him', () => {
+    const gone = fakeEnemy(V(0, 0, 3.6));
+    let n = 0;
+    const a = lungeAt(gone, () => {
+      if (++n === 3) gone.pos.set(18, 0, 2);
+    });
+    expect(a.r).toBe('miss');
+    expect(Math.abs(a.player.pos.x)).toBeLessThan(0.1);
+    const thrown = fakeEnemy(V(0, 0, 3.6));
+    n = 0;
+    const b = lungeAt(thrown, (dt) => {
+      if (++n >= 3) {
+        thrown.state = 'launched';
+        thrown.pos.x += 10 * dt;
+      }
+    });
+    expect(b.r).toBe('miss');
+    expect(Math.abs(b.player.pos.x)).toBeLessThan(0.2);
+  });
+
+  it('a rift crossed mid-lunge ends it (as the game does on the crossing): one pass, the exit momentum kept', () => {
+    const world = makeWorld();
+    const rifts = makeRifts(world);
+    const phys = makePhysics(world, rifts);
+    const body = phys.createBody('player', { pos: V(0, 0, 0), radius: FEEL.playerRadius, height: FEEL.playerHeight });
+    body.userData.manual = true;
+    body.onGround = true;
+    const player = new Player(stubChar(), body);
+    const e = fakeEnemy(V(0, 0, 3.6));
+    const blade = new HiddenBlade({ world, enemies: [e as unknown as EnemyView], live: () => true, rifts });
+    let crossings = 0;
+    const ev: PlayerEvents = { footstep() {}, jumped() {}, landed() {}, fallDamage() {}, shoved() {}, crossed: () => (crossings++, blade.cancel()) };
+    const t = blade.pick(body.pos, FWD, FWD)!;
+    expect(blade.start(t.enemy, body.pos)).toBe(false);
+    player.lunge(V(0, 0, 1), BLADE.lungeSpeed, blade.lunging!.t);
+    // a door drops in across the run just after it starts (its exit 30 m on, facing on)
+    rifts.openEntranceFrame(frame(V(0, 1.2, 1.2), V(0, 0, -1), 'stand'), 'stand');
+    rifts.placeExitFrame(frame(V(0, 1.2, 30), V(0, 0, 1), 'air'));
+    const dir = V(0, 0, 0);
+    let result: string | null = null;
+    for (let i = 1; i <= 30; i++) {
+      player.update(1 / 60, idle, world, phys, recorder(), ev, i / 60);
+      const r = blade.update(1 / 60, body.pos, dir);
+      if (r === 'go') player.lunge(dir, BLADE.lungeSpeed, blade.lunging!.t);
+      else if (r) {
+        result = r;
+        player.endLunge();
+      }
+    }
+    expect(crossings).toBe(1);
+    expect(result).toBeNull();
+    expect(blade.lunging).toBeNull();
+    expect(body.pos.z).toBeGreaterThan(30);
+  });
+
+  it('the strike at the end of the run is blocked by a wall he went behind', () => {
+    // he runs past the end of a wall; your run stops against it; time's up with him in reach on the far side
+    const e = fakeEnemy(V(0.4, 0, 2.4));
+    const out = lungeAt(e, (dt) => (e.pos.x += 3.4 * dt), (w) => w.add(V(0.3, 0, 1.3), V(6, 3, 1.5)));
+    expect(out.r).toBe('miss');
   });
 });

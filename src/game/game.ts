@@ -59,7 +59,7 @@ import { HUD } from '../ui/hud';
 import { addStrings, getLang, setDevice, t } from '../ui/i18n';
 import { PhotoUI } from '../ui/photoui';
 import { StrikeBar } from '../ui/strikebar';
-import { STRIKE, STRIKES, Strikes, type StrikeResult } from './strikes';
+import { killCredit, STRIKE, STRIKES, Strikes, type StrikeResult } from './strikes';
 import type { RunStats } from '../ui/menu';
 import { StyleSystem } from '../meta/style';
 import { ReplayPlayer, ReplayRecorder } from '../meta/replay';
@@ -67,7 +67,6 @@ import { ClipExporter } from '../meta/clip';
 import { PhotoMode } from '../meta/photo';
 import { ChallengeSystem } from '../meta/challenges';
 import { META_STRINGS } from '../meta/strings';
-import { LEAD_STRINGS } from './strings';
 
 export interface Settings {
   quality: QualityName;
@@ -94,7 +93,15 @@ interface KillCtx {
   loops?: number;
   /** A lab laser that went through your rift (scores like a beam: FIRING LINE). */
   laser?: boolean;
+  /** Set off by fire a REFLECT sent (a barrel it was steered onto): the strike's kill. */
+  reflect?: boolean;
 }
+
+/** A gate's next arrival waits while anyone is this close (m) to where he comes out, this long at most (s). */
+const GATE_MOUTH = 1.6;
+const GATE_MOUTH_WAIT = 4;
+/** A wave steps through its gate one man at a time, this far apart at least (s). */
+const GATE_SPACING = 0.45;
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -253,7 +260,6 @@ export class Game {
     }
     for (const lang of ['en', 'he'] as const) {
       addStrings(lang, (META_STRINGS as any)[lang] ?? {});
-      addStrings(lang, LEAD_STRINGS[lang]);
     }
     this.rig = new CameraRig(this.camera);
 
@@ -397,7 +403,7 @@ export class Game {
       live: (e) => this.zones.active.has(e.def.zone),
       hangingUnderCrosshair: () => this.hangingUnderCrosshair(),
     });
-    this.blade = new HiddenBlade({ world, enemies: this.enemies.list, live: (e) => this.zones.active.has(e.def.zone) });
+    this.blade = new HiddenBlade({ world, enemies: this.enemies.list, live: (e) => this.zones.active.has(e.def.zone), rifts: this.rifts });
     this.arcView = new ArcView(OUTCOME_COLOR);
     this.scene.add(this.arcView.points);
     this.scene.add(this.hazards.group);
@@ -559,7 +565,8 @@ export class Game {
     this.audio.sting('zone');
     if (z.id === 'pier' && !this.hintsSeen.has('rules')) {
       this.hintsSeen.add('rules');
-      this.hint('rules', `<b>${t('rule.1')}</b><br>${t('rule.2')}<br>${t('rule.3')}`, 9);
+      // (three sentences to read: it holds its full time before the next hint takes its turn)
+      this.hint('rules', `<b>${t('rule.1')}</b><br>${t('rule.2')}<br>${t('rule.3')}`, 9, true);
     }
   }
 
@@ -644,10 +651,11 @@ export class Game {
     }
   }
 
-  private hint(key: string, html: string, dur = 7) {
+  /** `full`: nothing takes its place before its `dur` is up (else hints take turns of 4.5 s at most). */
+  private hint(key: string, html: string, dur = 7, full = false) {
     if (this.hintsSeen.has('h:' + key)) return;
     this.hintsSeen.add('h:' + key);
-    this.hintQueue.push({ key, html, dur });
+    this.hintQueue.push({ key, html, dur, full });
   }
 
   /** A strike went off (or was refused): marks, feedback. */
@@ -658,6 +666,9 @@ export class Game {
       return;
     }
     if (r.target && r.name) this.strikeMarks.set(r.target.id, { name: r.name, until: this.time + (r.id === 'reflect' ? 6 : r.id === 'swap' ? 4 : 8) });
+    // a strike takes over: a blade lunge under way ends where it is (a DASH / SWAP moves you now)
+    this.blade.cancel();
+    this.player.endLunge();
     if (r.id === 'swap' && r.target) this.riftMarked.set(r.target.id, this.time + STRIKE.markTime + 0.6);
     // a beat of slow motion and a kick: it should feel like a move, not a menu
     this.slowT = Math.max(this.slowT, r.release ? 0.45 : 0.35);
@@ -691,6 +702,8 @@ export class Game {
 
   /** Who a STRIKE is working on (its kill names the strike). */
   private strikeMarks = new Map<number, { name: StrikeName; until: number }>();
+  /** Rounds, beams and grenades that came through a REFLECT pair (their kills are the strike's). */
+  private reflected = new WeakSet<Projectile>();
   private strikeTargetPt = { x: 0, y: 0 };
   private updateStrikeHud() {
     const tg = this.portal.holding ? null : this.strikes.target();
@@ -750,14 +763,14 @@ export class Game {
   }
 
   /** Hints take turns (each gets a few seconds) and wait for the zone title card. */
-  private hintQueue: { key: string; html: string; dur: number }[] = [];
+  private hintQueue: { key: string; html: string; dur: number; full: boolean }[] = [];
   private hintHold = 0;
   private updateHints(realDt: number) {
     this.hintHold -= realDt;
     if (this.hintHold > 0 || !this.hintQueue.length) return;
     const h = this.hintQueue.shift()!;
     this.hud.hint(h.key, h.html, h.dur);
-    this.hintHold = Math.min(h.dur, 4.5);
+    this.hintHold = h.full ? h.dur : Math.min(h.dur, 4.5);
   }
 
   private clearHints() {
@@ -823,6 +836,8 @@ export class Game {
         return true;
       },
       onCross: (p, from, to) => {
+        // through a live REFLECT pair: whatever it hits now is the strike's work
+        if (this.strikes.viaReflect(from)) this.reflected.add(p);
         if (p.kind === 'bolt') this.steerReturned(p, to);
         else if (p.kind === 'grenade') this.steerCaughtGrenade(p, to);
         this.fx.riftBurst(to.position, to.normal, COL_CHARGED);
@@ -916,6 +931,14 @@ export class Game {
 
   private killYAt(p: V3, b?: DynBody) {
     const lost = this.level.seaY - 30;
+    // a man who falls below his own fight's floor is out of it for good: the void takes him,
+    // inside the tower too (else a lower floor or roof catches him, stranded far below a
+    // fight he holds up and can never get back to)
+    const e = b && b.kind === 'enemy' ? this.enemies?.enemyOfBody(b) : null;
+    if (e) {
+      const z = this.zones.zone(e.def.zone);
+      if (!z.sea) return Math.max(lost, z.killY);
+    }
     if (p.x > TOWER.x0 - 0.5 && p.x < TOWER.x1 + 0.5 && p.z > TOWER.z0 - 0.5 && p.z < TOWER.z1 + 0.5) return lost;
     // the zone of the floor it fell from
     const y = Math.max(p.y, b ? b.peakY : p.y);
@@ -997,7 +1020,7 @@ export class Game {
     }
     const pr = this.props.byKey(hit.key);
     if (pr) {
-      if (pr.def.explosive && (p.charged || p.kind === 'beam')) this.explodeProp(pr, {});
+      if (pr.def.explosive && (p.charged || p.kind === 'beam')) this.explodeProp(pr, this.reflected.has(p) ? { reflect: true } : {});
       else this.fx.sparks(hit.point, hit.normal, COL_SPARK, 8);
       return 'stop';
     }
@@ -1093,9 +1116,17 @@ export class Game {
     const imp = kc.impactor ?? null;
     const impEnemy = imp ? this.enemies.enemyOfBody(imp) : null;
     const shooter = p && typeof p.owner === 'number' ? this.enemies.get(p.owner) : null;
-    // a man a HUMAN CANNON was fired into is the cannon's kill too; the blade's
-    // kill is always its own, even on a man a strike set up
-    const strike = this.strikeOf(e.id) ?? (impEnemy && impEnemy !== e ? this.strikeOn(impEnemy.id, 'cannon') : null);
+    // a man a HUMAN CANNON was fired into is the cannon's kill too, and so is
+    // one a REFLECT's fire was sent into (or its barrel); the blade's kill is
+    // always its own, even on a man a strike set up (killCredit)
+    const credit = killCredit({
+      cause: ctx.cause,
+      setBy:
+        this.strikeOf(e.id) ??
+        ((p && this.reflected.has(p)) || kc.reflect ? 'reflect' : null) ??
+        (impEnemy && impEnemy !== e ? this.strikeOn(impEnemy.id, 'cannon') : null),
+      viaTrapdoor: ctx.viaTrapdoor,
+    });
     const ev: KillEvent = {
       type: 'kill',
       t: this.time,
@@ -1115,7 +1146,7 @@ export class Game {
       shotAge: p ? this.time - p.firedAt : 0,
       unaware: ctx.unaware,
       witnessed: ctx.witnessed,
-      viaTrapdoor: ctx.viaTrapdoor,
+      viaTrapdoor: credit.viaTrapdoor,
       matador: ctx.matador,
       byBody: !!imp && (imp.kind === 'enemy' || imp.kind === 'corpse') && imp !== e.body,
       byProp: !!kc.byProp,
@@ -1124,17 +1155,18 @@ export class Game {
       playerFling: !!kc.playerFling,
       playerAirborne: this.player.airborne,
       impactorId: this.impactorKey(imp, e.id),
-      strike: ctx.cause === 'blade' ? null : strike,
+      strike: credit.strike,
       at: ctx.at.clone(),
     };
     // every kill that isn't a STRIKE's recharges the strikes
-    if (!ev.strike) this.strikes.refund(1);
+    if (credit.refund) this.strikes.refund(1);
     this.stats.kills++;
     this.push(ev);
     // the PORTAL first; the STRIKES once you've made your first kill with it
     this.hint('strikes', t('hint.strikes'), 10);
     this.fx.embers(ctx.at, 16);
-    this.hp = Math.min(LAW.player.hp, this.hp + LAW.player.killHeal);
+    // (a kill landing after you died heals no one: you stay dead)
+    if (this.respawnT < 0) this.hp = Math.min(LAW.player.hp, this.hp + LAW.player.killHeal);
     this.hitstop = Math.max(this.hitstop, 0.05);
     this.rig.kick = Math.max(this.rig.kick, 0.6);
     const cleared = this.zones.checkClears((id) => this.enemies.get(id)?.alive ?? false, (enc) => this.wavesPending(enc));
@@ -1582,9 +1614,10 @@ export class Game {
     );
     this.rifts.updatePreview(aim, this.handPos(), this.camera, !!H && (H.mode === 'door' || H.mode === 'air' || H.mode === 'hole'));
     this.strikeBar.setDimmed(this.portal.holding);
+    // (on a man you could grab, the preview also lays out where a tap would throw him)
+    const pv = !this.portal.holding && alive ? this.portal.preview(!this.strikes.aiming) : null;
     this.arcView.update(this.portal.arcN > 1 ? this.portal : this.strikes, this.time);
-    if (!this.portal.holding && alive) {
-      const pv = this.portal.preview();
+    if (pv) {
       this.hud.setGateHint({ mode: pv.mode, reason: pv.reason, targetKey: pv.key });
       // the touch PORTAL button says what it will do (and pulses while you fall)
       this.touch?.setPortalLabel(pv.reason ? null : t(`portal.${pv.mode}`), pv.reason ? null : pv.mode);
@@ -1693,6 +1726,8 @@ export class Game {
     // ----- health -----
     if (this.hp > 0 && this.time - this.lastHurtT > LAW.player.regenDelay) this.hp = Math.min(LAW.player.hp, this.hp + LAW.player.regenRate * dt);
     this.hud.setHealth(this.hp, LAW.player.hp);
+    const boss = this.enemies.boss();
+    this.hud.setBoss(boss && boss.fighting ? boss : null);
     this.hud.setStyle(this.style.state);
     (this.hud as any).setPlayerCharged?.(body.charge > 0);
 
@@ -1750,6 +1785,8 @@ export class Game {
         this.audio.shove(this.player.body.pos);
       },
       crossed: (_from, _to, yawDelta) => {
+        // through a rift mid-lunge: the lunge is over (the rift's momentum carries you on)
+        this.blade.cancel();
         this.rig.rotateBy(yawDelta);
         this.rig.kick = Math.max(this.rig.kick, 0.8);
         this.renderer.grade.uniforms.uFlash.value = 1;
@@ -2021,6 +2058,11 @@ export class Game {
   /** Per frame, after the player moved: steer a lunge onto him, strike when he's reached. */
   private updateBlade(dt: number) {
     const p = this.player;
+    // dead (shot, fallen out): a lunge under way stops, and strikes no one
+    if (this.respawnT >= 0 && this.blade.lunging) {
+      this.blade.cancel();
+      p.endLunge();
+    }
     const L = this.blade.lunging;
     const r = this.blade.update(dt, p.body.pos, _v);
     if (r === 'go') p.lunge(_v, BLADE.lungeSpeed, L!.t);
@@ -2170,18 +2212,27 @@ export class Game {
       if (!this.rifts.gateEnds(g.id).in) continue;
       const wave = g.waves[s.wave++];
       s.t = 9;
-      wave.forEach((def, i) => this.gateQueue.push({ gate: g.id, def, enc, t: i * 0.45 }));
+      wave.forEach((def, i) => this.gateQueue.push({ gate: g.id, def, enc, t: i * GATE_SPACING, wait: 0 }));
     }
     for (let i = this.gateQueue.length - 1; i >= 0; i--) {
       const q = this.gateQueue[i];
       q.t -= dt;
       if (q.t > 0) continue;
-      this.gateQueue.splice(i, 1);
       const ends = this.rifts.gateEnds(q.gate);
-      if (!ends.in || q.enc.cleared) continue;
       // hijacked but you have no exit right now: the gate has nowhere to send them, so they
       // step out of its arena end on foot (never stranded in the staging room)
       const stranded = this.rifts.isHijacked(q.gate) && !this.rifts.hasExit();
+      // the next one comes through once the last is clear of where he comes out (a few
+      // seconds at most): else he lands on him and is shoved back through the wall behind
+      const out = stranded ? ends.out : ends.in?.linked;
+      if (ends.in && !q.enc.cleared && out && q.wait < GATE_MOUTH_WAIT && this.mouthBusy(out)) {
+        q.wait += dt;
+        continue;
+      }
+      this.gateQueue.splice(i, 1);
+      if (!ends.in || q.enc.cleared) continue;
+      // (one at a time: the rest of his wave keep their spacing behind him)
+      for (const o of this.gateQueue) if (o.gate === q.gate) o.t = Math.max(o.t, GATE_SPACING);
       const end = stranded && ends.out ? ends.out : ends.in;
       const off = stranded ? 0.9 : 0.55;
       const spawnPos = end.position.clone().addScaledVector(end.normal, off).setY(end.position.y - end.height / 2 + 0.02);
@@ -2192,7 +2243,13 @@ export class Game {
     }
   }
 
-  private gateQueue: { gate: string; def: SpawnDef; enc: EncounterState; t: number }[] = [];
+  private gateQueue: { gate: string; def: SpawnDef; enc: EncounterState; t: number; wait: number }[] = [];
+
+  /** Someone is standing (or lying) where a gate's arrivals come out of `end`. */
+  private mouthBusy(end: RiftEnd) {
+    const p = end.position;
+    return this.enemies.list.some((o) => o.alive && Math.hypot(o.pos.x - p.x, o.pos.z - p.z) < GATE_MOUTH && Math.abs(o.pos.y + 1 - p.y) < 2.5);
+  }
 
   private liftCarry: { lift: LiftState; last: THREE.Vector3 } | null = null;
   private startLift(l: LiftState) {
@@ -2273,7 +2330,11 @@ export class Game {
       for (const e of this.enemies.list) if (e.alive && this.zones.active.has(e.def.zone)) project(_v2.copy(e.pos).setY(e.pos.y + e.height + 0.3), 'target', t(`state.${e.searching ? 'suspicious' : e.state}`));
       for (const g of this.level.gates) if (this.zones.active.has(g.zone)) project(g.panel, 'gate');
     }
-    const o = this.zones.objective();
+    // (the last one or two of your fight are marked where they are, wherever they ended up)
+    const o = this.zones.objective((id) => {
+      const e = this.enemies.get(id);
+      return e && e.alive ? e.pos : null;
+    }, this.player.body.pos);
     if (o.target && !this.bossDead) project(o.target, 'objective', `${Math.round(o.target.distanceTo(this.player.body.pos))}m`);
     this.hud.setMarkers(list);
   }
@@ -2328,7 +2389,7 @@ export class Game {
   private capture(): Snapshot {
     const b = this.player.body;
     const cam = this.camera;
-    const actors: ActorSnap[] = [{ key: 'player', pos: [b.pos.x, b.pos.y, b.pos.z], yaw: this.player.yaw, pose: this.player.char.getPose(), visible: this.player.char.root.visible }];
+    const actors: ActorSnap[] = [{ key: 'player', pos: [b.pos.x, b.pos.y, b.pos.z], yaw: this.player.yaw, pose: this.player.char.getPose(), visible: this.player.char.root.visible, blade: this.blade.extension() }];
     for (const a of this.enemies.snapshot()) actors.push(a);
     const projs: ProjSnap[] = [];
     for (const pr of this.projectiles.list) {
@@ -2367,6 +2428,7 @@ export class Game {
         root.rotation.y = a.yaw;
         root.visible = a.visible;
         this.player.char.setPose(a.pose);
+        this.hero.setBlade(a.blade ?? 0);
       } else enemySnaps.push(a);
     }
     this.enemies.applySnapshot(enemySnaps);
@@ -2414,6 +2476,8 @@ export class Game {
         this.telegraphLines.visible = false;
         this.arcWasVisible = this.arcLine.visible;
         this.arcLine.visible = false;
+        // (a throw's arc, or a tap's preview on the man under the crosshair: the next live frame redraws it)
+        this.arcView.points.visible = false;
         this.rifts.updatePreview(null, this.handPos(), this.camera);
         this.projectiles.group.visible = false;
         this.replayProj.visible = true;

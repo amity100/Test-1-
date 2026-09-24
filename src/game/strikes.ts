@@ -44,7 +44,7 @@ export const STRIKE = {
   cone: 0.42,
   /** Short lockout per strike after use (s). */
   cooldown: 1.5,
-  /** Rift charge: a strike costs one; they come back slowly, and a kill your free rift work made refunds one. */
+  /** Rift charge: a strike costs one; they come back slowly, and every kill that isn't a strike's refunds one. */
   maxCharges: 3,
   regen: 9,
   reflectLife: 4,
@@ -68,6 +68,17 @@ export const STRIKE = {
 };
 
 const GUNS = new Set(['rifleman', 'sniper', 'turret', 'boss']);
+
+/**
+ * Whose kill it is (DESIGN §4): the STRIKE that set him up (its mark on him, a
+ * REFLECT's fire that got him, the HUMAN CANNON fired into him) names it,
+ * except for the blade, whose kill is always its own. A strike's floor end is
+ * never a TRAPDOOR, blade or not. Every kill that isn't a strike's refunds a charge.
+ */
+export function killCredit(o: { cause: string; setBy: StrikeName | null; viaTrapdoor: boolean }): { strike: StrikeName | null; viaTrapdoor: boolean; refund: boolean } {
+  const strike = o.cause === 'blade' ? null : o.setBy;
+  return { strike, viaTrapdoor: o.viaTrapdoor && !o.setBy, refund: !strike };
+}
 
 export interface StrikeHost extends SpotHost {
   enemies: {
@@ -160,7 +171,7 @@ export class Strikes {
     this.arcN = 0;
   }
 
-  /** A kill your freeform rift work made: charge back. */
+  /** A kill that isn't a strike's: charge back. */
   refund(n = 1) {
     this.charges = Math.min(STRIKE.maxCharges, this.charges + n);
   }
@@ -294,6 +305,13 @@ export class Strikes {
       this.charges -= 1;
     }
     return r;
+  }
+
+  /** `end` is one of the live REFLECT pair's: whatever comes through it is the strike's work. */
+  viaReflect(end: unknown): boolean {
+    const r = this.reflect;
+    const ends = r ? this.h.rifts.strikeEnds(r.id) : null;
+    return !!ends && (end === ends.a || end === ends.b);
   }
 
   /** A body went through a rift (the game forwards crossings). */

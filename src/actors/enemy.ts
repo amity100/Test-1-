@@ -121,6 +121,8 @@ export class Enemy implements EnemyView {
   askedT = -1e9;
   reloadT = 0;
   lobT = 0;
+  /** When a clear throwing arc was last found (while he waits his turn to throw). */
+  arcT = -1e9;
   meleeCd = 0;
   bursts = 0;
   /** Unaware sight multiplier: the game keeps it low until the player reaches his fight. */

@@ -196,6 +196,16 @@ describe('interpolation', () => {
     expect(o2.actors[0].pos[0]).toBeCloseTo(0.75, 9);
   });
 
+  it("carries the player's blade from the nearer frame (a replay shows the stab, and nothing frozen out)", () => {
+    const L = new SnapshotLerper();
+    const a = snap(0);
+    const b = snap(0.1);
+    a.actors[0].blade = 0;
+    b.actors[0].blade = 1;
+    expect(L.lerp(a, b, 0.25).actors[0].blade).toBe(0);
+    expect(L.lerp(a, b, 0.75).actors[0].blade).toBe(1);
+  });
+
   it('reuses its output objects (no per-frame allocation)', () => {
     const L = new SnapshotLerper();
     const a = snap(0);

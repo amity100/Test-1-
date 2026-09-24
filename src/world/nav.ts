@@ -12,6 +12,8 @@ export interface NavBounds {
 
 /** Edge distances are capped here (m); anything further is "far from any drop". */
 const EDGE_CAP = 12;
+const _from = new THREE.Vector3();
+const _dir = new THREE.Vector3();
 /** Walkable cells need ground this far around their centre too. */
 const PART = 0.3;
 const SQRT2 = Math.SQRT2;
@@ -194,8 +196,12 @@ export class NavGrid {
     return out.set(this.ox + ((i % this.w) + 0.5) * this.cell, this.floorY, this.oz + (Math.floor(i / this.w) + 0.5) * this.cell);
   }
 
-  /** Nearest walkable cell within a radius (spiral search), or -1. */
-  nearestWalkable(x: number, z: number, maxR = 12): number {
+  /**
+   * Nearest walkable cell within a radius (spiral search), or -1. With `y`
+   * (the feet of someone standing at x,z) only cells he could walk straight
+   * to count: not the far side of the wall he stands against.
+   */
+  nearestWalkable(x: number, z: number, maxR = 12, y?: number): number {
     const i = this.idx(x, z);
     if (i >= 0 && !this.blocked[i]) return i;
     const cx = Math.floor((x - this.ox) / this.cell), cz = Math.floor((z - this.oz) / this.cell);
@@ -210,12 +216,23 @@ export class NavGrid {
           const j = nz * this.w + nx;
           if (this.blocked[j]) continue;
           const d = dx * dx + dz * dz;
-          if (d < bestD) { bestD = d; best = j; }
+          if (d < bestD && (y === undefined || this.reachable(x, z, y, j))) { bestD = d; best = j; }
         }
       }
       if (best >= 0) return best;
     }
     return -1;
+  }
+
+  /** Nothing solid across the body band between (x, y, z) and cell `j`'s centre. */
+  private reachable(x: number, z: number, y: number, j: number) {
+    const c = this.cellCenter(j, this._c);
+    const dx = c.x - x, dz = c.z - z;
+    const len = Math.hypot(dx, dz);
+    if (len < 1e-3) return true;
+    _from.set(x, y + 0.9, z);
+    _dir.set(dx / len, 0, dz / len);
+    return !this.world.raycast(_from, _dir, len, { sight: false });
   }
 
   /** Straight grid walk test (for path smoothing and direct moves). */
@@ -242,7 +259,8 @@ export class NavGrid {
    * this layer's floorY.
    */
   findPathInto(from: THREE.Vector3, to: THREE.Vector3, out: THREE.Vector3[]): number {
-    const s = this.nearestWalkable(from.x, from.z, 3);
+    // (off the cells by a wall: start on its near side, not in the room behind it)
+    const s = this.nearestWalkable(from.x, from.z, 3, from.y);
     const g = this.nearestWalkable(to.x, to.z, 10);
     if (s < 0 || g < 0) return -1;
     const goalExact = this.idx(to.x, to.z) === g;

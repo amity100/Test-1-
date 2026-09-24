@@ -17,6 +17,14 @@ const charged = (from: THREE.Vector3, amount = LAW.bolt.damageCharged, extra: Pa
   ...extra,
 });
 
+/** A mate already in the fight with eyes on you: what reinforcements are told (a warden: no gun of his own). */
+function spotter(s: ReturnType<typeof scenario>) {
+  const w = s.spawn('warden', V(6, 0, 4), 0) as Enemy;
+  s.until(() => w.mode === 'combat', 4);
+  s.step(90); // (his shout has died down)
+  return w;
+}
+
 describe('rifleman', () => {
   it('telegraphs 0.6 s with a laser, then fires exactly 3 bolts at the player', () => {
     const s = scenario();
@@ -106,7 +114,7 @@ describe('rifleman', () => {
 describe('grenadier', () => {
   it('shows an arc for 0.5 s, then lobs a grenade that lands at the player', () => {
     const s = scenario();
-    s.step(); // (reinforcements come in knowing roughly where you are)
+    spotter(s); // (reinforcements come in knowing what the fight knows)
     const e = s.spawn('grenadier', V(0, 0, 0), 0, { state: 'combat', perch: true });
     s.until(() => s.log.grenades.length > 0, 8);
     const g = s.log.grenades[0];
@@ -249,7 +257,7 @@ describe('brute', () => {
 describe('turret', () => {
   it('turns at 60°/s, telegraphs, then fires a 6-round stream', () => {
     const s = scenario();
-    s.step(); // it's told roughly where you are: it turns to look
+    spotter(s); // it's told roughly where you are: it turns to look
     const e = s.spawn('turret', V(0, 0, 0), Math.PI, { state: 'combat' }) as Enemy; // facing away
     s.setPlayer(0, 0, 15);
     s.step(30); // 0.5 s: at most 30° of turn

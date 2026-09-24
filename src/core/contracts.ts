@@ -37,7 +37,7 @@ export const LAW = {
   riftRange: 60,
   trapdoorRange: 40,
   floorEndSize: 1.7,
-  bolt: { speed: 26, damageToPlayer: 10, damageCharged: 60, radius: 0.12, life: 3 },
+  bolt: { speed: 26, damageToPlayer: 15, damageCharged: 60, radius: 0.12, life: 3 },
   grenade: { fuse: 2.2, radius: 4.5, damage: 45, bounce: 0.35, bodyRadius: 0.14 },
   beam: { telegraph: 1.2, duration: 0.35, damage: 45, maxHops: 2, range: 120 },
   barrel: { radius: 4.2, damage: 80, playerScale: 0.5 },
@@ -807,6 +807,8 @@ export interface ActorSnap {
   yaw: number;
   pose: CharacterPose;
   visible: boolean;
+  /** The player's hidden blade out of the wrist (0..1). */
+  blade?: number;
 }
 
 export interface RiftSnap {

@@ -68,13 +68,19 @@ PORTAL (LMB / RT / the PORTAL touch button):
    look, 17 m/s. **Tap** (or let go with no valid aim): **straight on, away
    from you**: an exit 2 m past him on the level line from you through him,
    its centre 2 m over his feet, facing on and tilted 20° up, 17 m/s. A
-   wall or roof in the way pulls it back toward you to 1.4 m short of it (a
-   wall right behind him is what he hits); no room even so, he climbs out.
+   wall in the way pulls it back toward you to 1.4 m short of it (a wall
+   right behind him is what he hits); anything lower there (a crate, stairs,
+   a roof over that spot) steps it back further, at most 1.4 m to your side
+   of him, and he flies over it or into it. No room even so (a low roof over
+   him), he climbs out.
    On open floor he comes down ~11 m on at ~9 m/s: knocked down, not killed
    (8 ≤ v < 12). A wall on the way, or a man where he comes down, takes him
    at 16 m/s; a drop or the sea on the way takes him too. Where you stand
-   decides: put the edge behind him. The tap's pair closes 0.5 s after he's through (off a wall close
-   behind him he'd drop back into his own hole).
+   decides: put the edge behind him. With the crosshair on him, before you
+   press, a dotted arc shows where a tap would throw him, coloured by what
+   it does. A thrown man's floor end shuts as soon as he's through (off a
+   wall close behind him, or under a low roof, he'd drop back into his own
+   hole); its exit fades 0.5 s later on a tap.
 4. **HIJACK** (crosshair on a Kessler gate's arena end): the gate feeds your
    EXIT from now on. Tap: over the nearest drop / out of the sky.
 5. **HOLE** (looking steeply down at a floor near you, or into a pit): a
@@ -135,7 +141,9 @@ close by themselves; your PORTAL pair is untouched.
   never by the PORTAL grab (REFLECT works on anyone).
 - Strike kills score REFLECT / GEYSER / HUMAN CANNON / SWITCHEROO / RIFT
   DASH (+ what finished him: SPLASHDOWN, INTO THE VOID, SKYFALL...). Their
-  floor end is not a TRAPDOOR.
+  floor end is not a TRAPDOOR. Whatever a REFLECT's fire kills (the man you
+  sent it into, a barrel you steered it onto) is REFLECT's kill too, so it
+  refunds nothing.
 
 ### Assists (so the tricks land the way players mean them)
 - **Air ends come down to your level.** Aimed above your feet, an air door
@@ -170,7 +178,9 @@ close by themselves; your PORTAL pair is untouched.
   else "Open an exit first"), or aim PORTAL at
   a gate's arena end. The gate's out-end then links to your EXIT. Everything that comes through the gate now comes out of your exit
   (over the void, above their commander).
-- Wave members hop into the in-end one by one; with no EXIT to send them to,
+- Wave members hop into the in-end one by one, and the next only once
+  nobody is standing where he'd come out (4 s at most), so no one is shoved
+  back through the wall into the staging room; with no EXIT to send them to,
   a hijacked gate lets them out of its arena end on foot. A gate fight isn't
   cleared while waves are still to come.
 
@@ -209,7 +219,7 @@ thresholds. Water is always a drown, and the void is always death.
 - An uncharged fall over 14 m/s hurts: damage = (v − 14) × 9.
 
 **Bolts:**
-- 26 m/s, 3-round bursts, 10 damage to the player.
+- 26 m/s, 3-round bursts, 15 damage to the player (a burst that all lands takes 45).
 - Charged, they do 60 damage to Kessler actors.
 - They pass through Kessler actors while uncharged.
 
@@ -247,7 +257,13 @@ a charging brute, wrecks a turret. `src/game/blade.ts` (numbers in `BLADE`).
   or where the camera looks), within 0.6 m of your level, with a clear run
   and floor between you: you dash to him at 14 m/s (about 0.2 s, silent, no
   footsteps) and strike on arrival, 0.6 m from his body. If he gets away
-  (thrown, launched) it misses. Walls and fences block both.
+  (thrown, launched, through a rift: anywhere much further than he was) it
+  misses at once, with no swerve after him. Walls and fences block both, at
+  the press and again when the blade lands. Neither goes through an open
+  rift end (your own door between you, a hole in the floor on the way); a
+  man flying past is cut only right on you, never stepped after.
+- A rift you go through mid-lunge ends it (its momentum carries you on), as
+  does a strike you fire, or dying.
 - **Cooldown** 0.8 s from the press. The prompt stays on the blade while a
   target is near.
 - **Stealth:** a stab is quiet unless he sees it coming (in combat, on his
@@ -264,7 +280,8 @@ a charging brute, wrecks a turret. `src/game/blade.ts` (numbers in `BLADE`).
 - **Feel:** the player turns to him, plays the strike, the blade snaps out
   of the wrist; 0.1 s hitstop, camera kick, sparks, the blade sound; a kill
   adds a 0.3 s slow beat. Scoring: HIDDEN BLADE (the `finisher` trick); it
-  is not a strike's kill, so it refunds one strike charge.
+  is not a strike's kill, so it refunds one strike charge. Nor is it a
+  TRAPDOOR when a strike's floor end dropped him. Replays show the blade.
 
 ## 5. Enemies (Kessler Security)
 
@@ -279,7 +296,7 @@ launched, downed, stunned and dead.
 | **Brute** | 250, armoured | Telegraphs a charge (roar 1 s), then 14 m/s in a straight line for up to 18 m. Hits for 35 and knocks you down. Stunned 2.5 s if he hits a wall. | MATADOR: his charge into your entrance sends him out of your exit (the sea or void kills him, a wall stuns and damages him, a crowd bowls). REFLECT sets it up: he charges now, into a door in front of you, out over the edge. Also cannonball, shear, hazards, and the hidden blade (even mid-charge). |
 | **Sniper** | 40 | Perched and never moves. 1.2 s red beam telegraph, then the beam. | FIRING LINE: REFLECT and he fires his beam into your rift, out into him (or the man you look at); also cargo and shear |
 | **Turret** | 120 | Static and turns. A 6-round stream with a laser. | BORROWED GUN: REFLECT takes its stream; the other end goes where you look. Also barrels. |
-| **Director Voss** (boss) | 1800, armoured, 3 phases (phase 2 under 2/3 of his hp, phase 3 under 1/3) | Carries his own rift gauntlet. He catches straight shots with a red rift (returns your returned bolts) and blinks between two red ends. Anchored: the PORTAL grab never takes him, stunned or not. One impact takes at most 200 (the crown's load 300). | Hit him from where his catch-rift doesn't face (behind/above). Shear him mid-blink. Stunned: LOOP him. The hidden blade wounds him any time (150), then he blinks away at once. Cannonball a looped barrel into him. Drop the crown's hanging load. |
+| **Director Voss** (boss) | 1800, armoured, 3 phases (phase 2 under 2/3 of his hp, phase 3 under 1/3); his bar runs across the top of the screen while he fights | Carries his own rift gauntlet. He catches straight shots with a red rift (returns your returned bolts) and blinks between two red ends. Anchored: the PORTAL grab never takes him, stunned or not. One impact takes at most 200 (the crown's load 300). | Hit him from where his catch-rift doesn't face (behind/above). Shear him mid-blink. Stunned: LOOP him. The hidden blade wounds him any time (150), then he blinks away at once. Cannonball a looped barrel into him. Drop the crown's hanging load. |
 
 **Perception (information, not telepathy):**
 - Vision: a ±60° cone at 70% of sight range (32 m) while unaware, ±90° at
@@ -290,10 +307,18 @@ launched, downed, stunned and dead.
   fight with his last known spot, give or take 3 m. They turn to it and come
   to look, but must see you themselves before they fire. While he has eyes on
   you he calls out your spot every 2.5 s.
-- Reinforcements (gate waves, Voss's adds) arrive knowing roughly where you
-  were. Someone alarmed with no clue (hurt by something he didn't see) looks
+- Reinforcements (gate waves, Voss's adds) arrive knowing what the fight
+  there knows: the freshest last known spot among their side, give or take
+  3 m (nothing, if nobody has seen you). They bring no news of their own.
+  Someone alarmed with no clue (hurt by something he didn't see) looks
   around where he is. A witness to a death goes to the body, or stares at
-  the rift exit it came out of.
+  the rift exit it came out of (a searching man too), unless he has eyes on
+  you.
+- Down, flying, reeling or held in a floor end, he isn't watching you: back
+  on his feet he looks again, and a real sighting then takes its reaction
+  beat. A brute's roar follows you only while he sees you; out of sight it
+  keeps the last line he had. A grenadier with no clear arc moves for one
+  without holding up the squad's guns.
 - Losing track: no sight, sound or word of you for 5–6.5 s (it varies per
   man) and he searches ("Where'd he go?"). He walks carefully to your last
   known spot, looks around, then checks spots nearby. A noise brings him to
@@ -322,8 +347,16 @@ launched, downed, stunned and dead.
 lands.
 - Landing at 8 m/s or more gives downed (2.5 s).
 - 12 m/s or more kills (18 for armour).
-- Below that he staggers 1 s and resumes on the new spot. If he's off the nav
-  grid he stays and fights from there ("stranded").
+- Below that he staggers 1 s and resumes on the new spot. A step or two off
+  the walkable floor (by a wall, an edge: within 3 m) he walks back on; any
+  further off the nav grid (a crate top, a beam) he stays and fights from
+  there ("stranded"). When a fight has lost a man and is down to its last
+  one or two, the objective marker points at the nearest of them, wherever
+  he ended up.
+- A man who falls below his own zone's floor (`killY`) is out of his fight
+  for good: the void takes him, inside the tower too.
+- Only the 12 enemies nearest you think (see, aim, fire) each frame; the
+  rest of a fight still close in on what they know.
 
 ## 6. Tricks (style)
 

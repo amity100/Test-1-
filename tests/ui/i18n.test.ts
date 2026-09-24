@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { EnemyState, LessonId, TrickId, ZoneId } from '../../src/core/contracts';
 import { addStrings, formatNumber, getLang, has, setDevice, setLang, strings, t } from '../../src/ui/i18n';
 import { META_STRINGS } from '../../src/meta/strings';
-import { LEAD_STRINGS } from '../../src/game/strings';
 
 const ZONES: ZoneId[] = ['pier', 'yard', 'skeleton', 'lab', 'crown'];
 const LESSONS: LessonId[] = [
@@ -20,7 +19,7 @@ const STATES: EnemyState[] = ['idle', 'patrol', 'suspicious', 'combat', 'stagger
 /** Every source file as text, to find the keys the game names. */
 const SOURCES = import.meta.glob('../../src/**/*.ts', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
 /** The string tables themselves (they define keys; their comments name key patterns). */
-const TABLES = ['/src/ui/i18n.ts', '/src/meta/strings.ts', '/src/game/strings.ts'];
+const TABLES = ['/src/ui/i18n.ts', '/src/meta/strings.ts'];
 const LITERAL_KEY =
   /['`]((?:aim|gate|portal|strike|prompt|hint|toast|obj|bark|respawn|hud|touch|ctl|key|menu|set|end|clip|photo|outcome|orient|kind|rule|zone|state|trick|challenge|briefing|boot)\.[A-Za-z0-9_.]+)['`]/g;
 
@@ -94,8 +93,8 @@ describe('i18n coverage', () => {
   });
 
   it('every key the game names literally exists in EN and HE (the string tables merged as the game merges them)', () => {
-    const en = { ...strings('en'), ...META_STRINGS.en, ...LEAD_STRINGS.en },
-      he = { ...strings('he'), ...META_STRINGS.he, ...LEAD_STRINGS.he };
+    const en = { ...strings('en'), ...META_STRINGS.en },
+      he = { ...strings('he'), ...META_STRINGS.he };
     const missing = new Set<string>();
     let found = 0;
     for (const [path, src] of Object.entries(SOURCES)) {
