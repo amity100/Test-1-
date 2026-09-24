@@ -964,7 +964,12 @@ export class EnemySystem implements EnemyAPI, Brain {
       e.launchChain = true;
       e.launchUnaware = e.mode !== 'combat';
     }
-    if (e.state === 'charge') this.endCharge(e);
+    if (e.state === 'charge') {
+      // (the charge ends, not the speed: a MATADOR keeps his run through the rift)
+      _w.copy(b.vel);
+      this.endCharge(e);
+      b.vel.copy(_w);
+    }
     endAttack(this, e);
     this.abortBlink(e);
     e.state = 'launched';

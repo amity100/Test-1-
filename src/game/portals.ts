@@ -1037,7 +1037,9 @@ export class RiftSystem implements RiftAPI {
       const d = _a.set(from.x - feet.x, 0, from.z - feet.z);
       if (d.lengthSq() < 1e-6) hdirOf(ctx.playerYaw, d);
       d.normalize();
-      const bx = feet.x + d.x * 1.4, bz = feet.z + d.z * 1.4;
+      // a charging body must meet the door before it meets you (his hit reaches 1.5 m)
+      const out = threat && threat.kind === 'charge' ? 2.6 : 1.4;
+      const bx = feet.x + d.x * out, bz = feet.z + d.z * out;
       const g = w.groundAt(bx, bz, 0.2, feet.y + 0.5);
       if (!ctx.airborne && g > feet.y - 0.6 && this.standingClear(_b.set(bx, g, bz), d)) placed = this.standingFrame(bx, g, bz, d);
       else placed = doorPlaced(_c.set(bx, feet.y + 1.1, bz), d, 'air', null);
@@ -1264,6 +1266,15 @@ export class RiftSystem implements RiftAPI {
       if (hit.normal.y > 0.7) return flatPlaced(hit.point.clone().setY(hit.point.y + 0.01), true, hd, 'floor', hit.collider, CATCH_FLAT);
       if (hit.normal.y < -0.7) return null;
       return doorPlaced(hit.point, hit.normal, 'wall', hit.collider);
+    }
+    // hovering just over the ground, your feet would land before your middle got through: open on the ground
+    if (n.y > 0.5) {
+      const gy = w.groundAt(center.x, center.z, 0.3, center.y + 0.1);
+      if (gy > center.y - 1.2) {
+        const host = w.lastGround;
+        if (!host || host.noPortal) return null;
+        return flatPlaced(new THREE.Vector3(center.x, gy + 0.01, center.z), true, hd, 'floor', host, CATCH_FLAT);
+      }
     }
     return { position: center, quaternion: orientFrame(n, Math.abs(n.y) > 0.9 ? hd : UP), width: CATCH_FLAT, height: CATCH_FLAT, kind: 'air', host: null };
   }

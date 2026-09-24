@@ -138,6 +138,8 @@ export class Physics implements PhysicsAPI {
   stepBody(b: DynBody, dt: number, ev: PhysicsEvents, time: number) {
     if (!b.enabled || !(dt > 0)) return;
     const body = b as Body;
+    // falling onto your own floor end is hard to judge: the player drifts over it
+    if (b.kind === 'player' && !b.onGround && b.vel.y < -2) this.holeAssist(b, dt);
     const maxS = LAW.maxSpeed;
     const s2 = b.vel.lengthSq();
     if (s2 > maxS * maxS) b.vel.multiplyScalar(maxS / Math.sqrt(s2));
@@ -199,6 +201,28 @@ export class Physics implements PhysicsAPI {
         ev.fellOut(b);
       }
     } else body.gone = false;
+  }
+
+  /** A falling player over (or just past the rim of) an open up-facing end below steers onto it. */
+  private holeAssist(b: DynBody, dt: number) {
+    const ends = this.rifts.openEnds();
+    for (let i = 0; i < ends.length; i++) {
+      const e = ends[i];
+      if (e.normal.y < 0.9 || e.noPlayer) continue;
+      const dy = b.pos.y - e.position.y;
+      if (dy < 0.2 || dy > 9) continue;
+      const ox = e.position.x - b.pos.x, oz = e.position.z - b.pos.z;
+      const off = Math.hypot(ox, oz);
+      if (off > e.width / 2 + FEEL.holeAssist) continue;
+      // where the fall reaches its plane: steer so the drift ends near its middle
+      const vy = -b.vel.y;
+      const t = (-vy + Math.sqrt(vy * vy + 2 * LAW.gravity * dy)) / LAW.gravity;
+      if (!(t > 0.05)) continue;
+      const k = 1 - Math.exp(-7 * dt);
+      b.vel.x += (ox / t - b.vel.x) * k;
+      b.vel.z += (oz / t - b.vel.z) * k;
+      return;
+    }
   }
 
   private substep(b: Body, h: number, ev: PhysicsEvents, time: number) {

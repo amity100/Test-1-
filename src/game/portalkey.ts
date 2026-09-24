@@ -189,8 +189,12 @@ export class PortalKey {
       r.mode = 'air';
       return r;
     }
+    // under fire, defence first: CATCH what's coming (only a man who can't stand his ground is grabbed instead)
+    const th = this.imminent(ctx);
+    const caught = (): Resolved => ({ ...r, mode: 'catch', reason: null, cost: 0, enemy: null, prop: null, target: null, gate: null, threat: th });
     const hang = h.hangingUnderCrosshair();
     if (hang) {
+      if (th) return caught();
       r.mode = 'load';
       r.prop = hang;
       return r;
@@ -207,31 +211,23 @@ export class PortalKey {
           r.cost = PORTAL.grabCost;
           if (h.charges() < r.cost) r.reason = 'portal.noCharge';
         }
-        // under fire, a man standing firm isn't worth a charge: CATCH what's coming (free)
-        if (r.reason || r.cost > 0) {
-          const th = this.imminent(ctx);
-          if (th) return { ...r, mode: 'catch', reason: null, cost: 0, enemy: null, target: null, threat: th };
-        }
+        if (th && (r.reason || r.cost > 0)) return caught();
         return r;
       }
       const pr = h.props.byKey(tgt.key);
       if (pr) {
+        if (th) return caught();
         r.mode = 'load';
         r.prop = pr;
         r.target = tgt;
         return r;
       }
     }
+    if (th) return caught();
     const gate = h.rifts.gateUnderRay(ctx.camPos, ctx.camDir);
     if (gate) {
       r.mode = 'hijack';
       r.gate = gate;
-      return r;
-    }
-    const th = this.imminent(ctx);
-    if (th) {
-      r.mode = 'catch';
-      r.threat = th;
       return r;
     }
     // looking down at the floor near you: a hole right there
@@ -241,6 +237,24 @@ export class PortalKey {
       r.spot = spot;
     }
     return r;
+  }
+
+  /** The threat a CATCH is for: soon, and the one you're facing (you look at what you want to catch). */
+  private imminent(ctx: EntranceContext): Threat | null {
+    let best: Threat | null = null;
+    let bestScore = Infinity;
+    for (const q of ctx.threats) {
+      if (q.eta > PORTAL.catchEta) continue;
+      _a.subVectors(q.from, ctx.camPos);
+      const len = _a.length();
+      const ang = len > 1e-3 ? Math.acos(THREE.MathUtils.clamp(_a.dot(ctx.camDir) / len, -1, 1)) : 0;
+      const score = q.eta + ang * 0.6;
+      if (score < bestScore) {
+        bestScore = score;
+        best = q;
+      }
+    }
+    return best;
   }
 
   /** Where a HOLE would open: the floor the aim hits, looking well down, near and not above you. */
@@ -256,12 +270,6 @@ export class PortalKey {
     const x = THREE.MathUtils.clamp(hit.point.x, c.min.x + half, c.max.x - half);
     const z = THREE.MathUtils.clamp(hit.point.z, c.min.z + half, c.max.z - half);
     return new THREE.Vector3(x, hit.point.y + 0.01, z);
-  }
-
-  private imminent(ctx: EntranceContext): Threat | null {
-    let best: Threat | null = null;
-    for (const q of ctx.threats) if (q.eta <= PORTAL.catchEta && (!best || q.eta < best.eta)) best = q;
-    return best;
   }
 
   // ------------------------------------------------------------------
@@ -364,6 +372,13 @@ export class PortalKey {
     }
     if (H.live) h.rifts.clearPair();
     else h.rifts.closeEntrance();
+  }
+
+  /** You went through a rift: an AIR exit you're still aiming stays where you came out. */
+  playerCrossed(): PortalResult | null {
+    const H = this.hold;
+    if (!H || H.mode !== 'air' || !H.live) return null;
+    return this.finish(H, false);
   }
 
   /** A body / prop went through a rift (the game forwards crossings). */

@@ -669,6 +669,12 @@ export class Game {
     if (r.id === 'loop' && !r.release) this.hint('loopAgain', t('hint.loopAgain'), 6);
   }
 
+  /** `name` if that STRIKE is still working on this man (the mark stays). */
+  private strikeOn(id: number, name: StrikeName): StrikeName | null {
+    const m = this.strikeMarks.get(id);
+    return m && m.name === name && this.time <= m.until ? name : null;
+  }
+
   private strikeOf(id: number): StrikeName | null {
     const m = this.strikeMarks.get(id);
     if (!m) return null;
@@ -1116,7 +1122,8 @@ export class Game {
       playerFling: !!kc.playerFling,
       playerAirborne: this.player.airborne,
       impactorId: this.impactorKey(imp, e.id),
-      strike: this.strikeOf(e.id),
+      // (a man a HUMAN CANNON was fired into: the cannon's kill too)
+      strike: this.strikeOf(e.id) ?? (impEnemy && impEnemy !== e ? this.strikeOn(impEnemy.id, 'cannon') : null),
       at: ctx.at.clone(),
     };
     // your own free rift work (not a STRIKE, not a man you paid to grab) recharges the strikes
@@ -1173,6 +1180,8 @@ export class Game {
         this.airCrossings++;
         this.playerFling = (from.kind === 'floor' || from.kind === 'air') && Math.abs(to.normal.y) < 0.5;
         this.strikes.crossed('player', -1, from, to);
+        const fin = this.portal.playerCrossed();
+        if (fin) this.onPortalRelease(fin);
         this.push({ type: 'cross', t: this.time, who: 'player', speed, loops: b.loops, fromKind: from.kind, toKind: to.kind });
         return;
       }
@@ -1542,14 +1551,13 @@ export class Game {
     if (alive && inp.wasPressed('portal')) this.onPortalPress(this.portal.press());
     const released = this.portal.update(realDt, alive && inp.isHeld('portal'));
     if (released) this.onPortalRelease(released);
-    // STRIKES: one press, a whole rift attack (not while the PORTAL is in hand)
+    // STRIKES: one press, a whole rift attack (none start while the PORTAL is in hand; a LOOP's
+    // second press being held still counts, and dying lets go of it)
     this.strikes.update(realDt, dt);
-    if (alive && !this.portal.holding) {
-      for (let i = 0; i < STRIKES.length; i++) {
-        const a = `strike${i + 1}` as 'strike1';
-        const r = this.strikes.input(STRIKES[i], inp.wasPressed(a), inp.isHeld(a));
-        if (r) this.onStrike(r);
-      }
+    for (let i = 0; i < STRIKES.length; i++) {
+      const a = `strike${i + 1}` as 'strike1';
+      const r = this.strikes.input(STRIKES[i], alive && !this.portal.holding && inp.wasPressed(a), alive && inp.isHeld(a));
+      if (r) this.onStrike(r);
     }
     this.updateStrikeHud();
     const H = this.portal.hold;
@@ -1573,6 +1581,7 @@ export class Game {
       this.touch?.setPortalLabel(null);
     }
     this.hud.setRiftState({ exit: this.rifts.hasExit(), entrance: this.rifts.hasEntrance(), aiming, orientation: this.rifts.orientation });
+    this.touch?.setPortalHeld(this.portal.holding);
     this.touch?.setAiming(aiming);
 
     // ----- player -----

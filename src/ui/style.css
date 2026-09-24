@@ -393,7 +393,7 @@ html[dir='rtl'] .t-btn { font-family: 'Heebo', 'Oxanium', sans-serif; letter-spa
 .t-clip:not(.hidden)::after { animation: pulseO .5s ease-in-out infinite alternate; }
 .t-pause { left: 50%; top: calc(var(--st) + 8px); width: 40px; height: 40px; margin-left: -20px; border-width: 1.5px; }
 .t-pause svg { width: 16px; height: 16px; }
-.t-flip { left: calc(var(--sl) + 30px); bottom: calc(var(--sb) + 176px); width: 64px; height: 64px; border: 3px solid var(--exit); color: #bfe6ff; background: rgba(8, 22, 38, 0.55); opacity: 0; pointer-events: none; transform: scale(.6); }
+.t-flip { left: calc(var(--sl) + 14px); bottom: calc(var(--sb) + 250px); width: 64px; height: 64px; border: 3px solid var(--exit); color: #bfe6ff; background: rgba(8, 22, 38, 0.55); opacity: 0; pointer-events: none; transform: scale(.6); }
 .t-flip svg { color: var(--exit); }
 .touch.aiming .t-flip { opacity: 1; pointer-events: auto; transform: none; }
 .touch.aiming .t-flip.down { transform: scale(.9); }

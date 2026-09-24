@@ -25,92 +25,106 @@ take down Director Voss.
    hurt Kessler. Anything that has passed through your rift is *rift-charged*
    and can hurt anyone. You are attuned: your own rift-charged things never
    hurt you.
-3. **You control both ends.** You place the EXIT, the ENTRANCE opens where
-   the moment needs it, and you can move the exit while things are in transit.
-   Closing a rift on something mid-pass cuts it (SHEAR).
+3. **You control both ends.** One key opens both: the ENTRANCE where the
+   moment needs it, the EXIT where you aim while time slows. Closing a rift
+   on something mid-pass cuts it (SHEAR).
 
 ## 3. The rift model
 
-The player owns **one pair**: a **blue EXIT** (where things come out) and an
-**orange ENTRANCE** (where things go in).
+The player owns **one pair**: an **orange ENTRANCE** (where things go in)
+and a **blue EXIT** (where things come out). Both come from **one key**,
+PORTAL (LMB / RT / the PORTAL touch button):
 
-### EXIT
-- **Aim**, then place it. Hold RMB, or hold the RIFT touch button and drag.
-  Time slows to 0.3 while aiming.
-- **It snaps to surfaces:**
-  - floor: faces up
-  - wall: faces out
-  - ceiling: faces down
-  - perch: the top of a thing aimed high on its side
-- **Open air (`air`)** gives two orientations: a vertical door facing along
-  the aim, or a **sky hatch** facing down. Aiming over an enemy or prop
-  auto-picks the hatch. FLIP (E key / ⇄) toggles. The wheel or drag sets the
-  distance.
-- **Air ends can never be above the player's feet** (`LAW.airAboveFeetMax` =
-  0). Height is earned: you can't make a lethal drop from thin air while
-  standing on the ground. Surface ends (walls, ceilings, floors) are allowed
-  anywhere in range and line of sight (60 m).
-- **It stays until you place it again.** Moving it while things loop or fly
-  re-aims them (CANNONBALL, SPLIT).
+- **Press:** the ENTRANCE opens, by what you aim at and what's happening.
+- **Hold:** time slows and you aim the EXIT. A ghost end shows where it goes;
+  for a throw, a dotted arc shows where the thing lands and its colour says
+  what that does (drown / void / lethal / knockdown / safe).
+- **Let go:** the EXIT opens there. A **tap** (under 0.2 s) puts the exit
+  where it does the most by itself.
+- Every press starts a new pair (the old one collapses). RMB / LT / sliding
+  onto ✕ while holding lets go without an exit.
 
-### ENTRANCE
-Press GATE (LMB when not aiming / the GATE touch button). It resolves by
-priority:
-1. **Airborne and falling** (`vel.y < -3`): an `air` end opens 1.5–3 m below
-   you on your fall path, facing your velocity. You fall in, and out of the
-   EXIT at full speed (SLINGSHOT / COMET / LOOP).
-2. **Imminent threat, CATCH:** a laser lock on you (bolt burst or sniper
-   beam), a grenade within 6 m, or a brute charging at you. A standing door
-   opens 1.4 m in front of you, turned to face the threat. Whatever hits it
-   comes out of the EXIT.
-3. **Crosshair on a target, TRAPDOOR:** the crosshair is on an enemy or prop
-   within 40 m with line of sight, and its footing can fall. A `floor` end
-   (1.7 × 1.7) opens under it.
-   - **Props** always fall.
-   - **Enemies** fall only if they are *off-balance*: unaware (idle/patrol/
-     suspicious), staggered, charging, downed, stunned or airborne.
-   - A steady combat enemy sidesteps. The aim tag says "STEADY: knock him off
-     balance".
-4. **Otherwise, DOOR:** a standing door in front of you (or on the wall you
-   face), for travel.
+### What a press opens (priority)
+1. **AIR** (airborne, `vel.y < -3`): an entrance on your fall path (1.5–3 m
+   below, facing your velocity; on the ground instead when that is closer
+   than your feet would allow). Its EXIT opens at once where you look and
+   follows your aim while you hold, until you come out of it (SLINGSHOT /
+   COMET / LOOP / CANNONBALL).
+2. **CATCH** (a threat that lands within 1.6 s: a laser lock, a sniper beam,
+   a grenade, a brute's charge): a standing door facing it, 1.4 m out (2.6 m
+   for a charge, beyond his hit). Its EXIT opens at once: beside the man who
+   fired, facing him (shots home in on him: RETURN TO SENDER / FIRING LINE /
+   POSTAGE); a charging brute is thrown out over the nearest drop / water
+   (MATADOR). Hold to steer the exit with your view; it locks onto another
+   man you look at. Among several threats it catches the one you face.
+   Under fire a CATCH wins over a paid GRAB, a LOAD or a HIJACK.
+3. **GRAB** (crosshair on an enemy, 40 m, in sight): the floor under him
+   opens and he sinks into it (he does nothing while held). Hold to aim the
+   throw: a launcher end along your view (or 2.4 m in front of a man you look
+   at, to hit him with the body), facing where you look, 17 m/s. Tap: out
+   over the nearest drop or water within 22 m, else down from 16 m out of
+   the sky beside where he stood. An unaware or stumbling man is free; **a
+   man who's fighting you costs one rift charge** (and his kill gives none
+   back). Turrets, and Voss unless he's stunned, won't budge.
+4. **LOAD** (crosshair on a prop, or a hanging load): the same for things:
+   14 m/s, and a tap drops it through a hatch over the head of the man you
+   look at (else the nearest one in sight, not one by the hole).
+5. **HIJACK** (crosshair on a Kessler gate's arena end): the gate feeds your
+   EXIT from now on. Tap: over the nearest drop / out of the sky.
+6. **HOLE** (looking steeply down at a floor near you, or into a pit): a
+   floor end right there. Tap: a hatch straight above it as high as you
+   stand (a loop). A falling player drifts onto an open floor end below.
+7. **DOOR** (anything else): a standing door in front of you (or on the wall
+   you face). The EXIT goes where you aim, snapping to surfaces:
+   - floor: faces up; wall: faces out; ceiling: faces down; perch: the top
+     of a thing aimed high on its side;
+   - open air: a door facing along the aim, or a sky hatch (auto over a
+     target; G / Y / ⇄ flips it while holding; the wheel sets the distance).
+   **Air ends can never be above your feet** (`LAW.airAboveFeetMax` = 0):
+   height is earned. Surface ends are allowed anywhere in range and sight.
+
+Throw / catch pairs (GRAB, LOAD, CATCH, HIJACK exits) are only for what they
+were opened for: **the player passes through them like air**. A throw's pair
+closes 1.2 s after its load went through.
 
 ### Rules for both ends
-- Opening costs nothing. There are no charges.
-- CLOSE (X / middle mouse / ✕) closes the pair. If an enemy or prop is
+- Opening costs nothing (only a GRAB of a man who's fighting you does).
+- CLOSE (X / middle mouse / LB / ✕) closes the pair. If an enemy or prop is
   straddling a plane (centre within ±0.45 m and inside the rectangle), it is
   **sheared**: an instant kill for anything, including armour. It doesn't
   work on the boss core.
-- Only one entrance and one exit exist. Opening a new entrance replaces the
-  old one.
+- Only one entrance and one exit exist. A new PORTAL replaces the old pair.
 
 ### Anti-exploit
-- No end may open within 1.2 m of a living steady enemy's body.
-- Trapdoors are refused on steady combat enemies.
+- No aimed end may open within 1.2 m of a living steady enemy's body.
+- A steady combat enemy is only grabbed for a rift charge.
 - Air ends can't be above your feet.
 - Speed cap is 40 m/s.
 - Only rift-charged speed hurts.
 - These rules make "one click = one kill" impossible. Kills come from
   combinations.
 
-### STRIKES (fixed rift attacks, one press)
-Three attacks that use the rift like a weapon, no set-up. Aim near an enemy
+### STRIKES (rift attacks, one press)
+Four attacks that use the rift like a weapon, no set-up. Aim near an enemy
 (lock-on to the one nearest the crosshair, 32 m, in sight; a reticle shows
-it) and press. Both ends open at once in your colours, do one thing and close
-by themselves; your own free pair is untouched.
+it) and press. Their ends open at once in your colours, do their thing and
+close by themselves; your PORTAL pair is untouched.
 
 | Strike | Keys | What happens |
 |---|---|---|
-| **REFLECT** | 1 / Q · R3 · touch | A catch door 1.4 m in front of you facing him; its exit follows him 3.2 m to his side, facing him, for 3.2 s. Everything that goes in (bolts, grenades, beams, any shooter's) homes in on him. |
-| **GEYSER** | 2 / G · D-pad ◀ · touch | The floor opens under him (steady or not) and spits him up at 21 m/s out of an end facing the sky, over the water or the drop if one is within 22 m, else beside him (as high as the roof allows). |
-| **DROP** | 3 / Z · D-pad ▶ · touch | The floor opens under him and he's thrown out of a door over the edge (sea / void) if one is near, else dropped out of the sky from up to 16 m. |
+| **REFLECT** | RMB / 1 · LT · touch | A rift on his muzzle, facing him (a lid over a grenadier's throw; a door in front of you for the unarmed, 2.6 m out for a brute) and **he's made to fire now**. It all comes out of the other end: beside him, facing him, homing in. Look at another man (or a barrel) and the other end slides over to him. 4 s. A brute's charge is thrown over the edge instead. |
+| **LOOP** | Q / 2 · Y · touch | The floor under him and a hatch 7.5 m over it: he falls forever, faster every lap (to 40 m/s). **Press again:** GEYSER, up out of an end facing the sky over the nearest drop / water (else beside the hole). **Hold:** HUMAN CANNON, slow motion, aim (arc + outcome), let go: he comes out where you look at loop speed (22 m/s at least); men he hits are his kills too. After 6 s, a geyser. |
+| **SWAP** | E / 3 · D-pad ◀ · touch | A floor end under each of you: you trade places (he drops first). He is **rift-marked** for 2.5 s: his own side's bolts and blasts hurt him. Up to 9 m above you. |
+| **DASH** | R / 4 · D-pad ▶ · touch | The floor under you, and an end 3 m in front of him facing him: you come out at 22 m/s into him (a charged ram: kills, even armour). With no one in sight, a dash 12 m ahead at your height. |
 
 - **Rift charge:** 3 charges; a strike costs one, one comes back every 9 s,
-  and every kill your own free rift work makes refunds one. Strikes and
-  creative play feed each other. 1.5 s lockout per strike.
+  and every kill your own free rift work makes refunds one (not a paid
+  grab's). 1.5 s lockout per strike. The pips sit over the strike bar.
 - Turrets can't be moved; Voss only when stunned or down (REFLECT works on
   anyone).
-- Strike kills score GEYSER / EXPRESS DROP / REFLECT (+ what finished him:
-  SPLASHDOWN, INTO THE VOID, SKYFALL...). Their floor end is not a TRAPDOOR.
+- Strike kills score REFLECT / GEYSER / HUMAN CANNON / SWITCHEROO / RIFT
+  DASH (+ what finished him: SPLASHDOWN, INTO THE VOID, SKYFALL...). Their
+  floor end is not a TRAPDOOR.
 
 ### Assists (so the tricks land the way players mean them)
 - **Air ends come down to your level.** Aimed above your feet, an air door
@@ -131,17 +145,20 @@ by themselves; your own free pair is untouched.
 - **Stable loops.** An entrance opened while falling out of your own sky
   hatch centres under it; a floor/ceiling loop is steered over the end it
   falls back into, so it holds up to the speed cap. LOOP pays up to 12 loops.
-- **Cargo.** Cutting a hanging load opens the entrance on the ground under
-  it when that's a real drop (it arrives fast).
+- **Cargo.** A hanging load's entrance opens on the ground under it when
+  that's a real drop (it arrives fast), else just below it.
+- **Hole drift.** A falling player within 1.6 m past the rim of an open
+  up-facing end below drifts onto it.
+- **MATADOR keeps his run.** A charging brute's speed carries through the
+  rift (his charge ends, not his momentum).
 - **Warning volley.** A rifleman's first burst goes over your head (it still
   goes through a CATCH door).
 
 ### Kessler rift gates
 - Fixed enemy pairs, drawn in red. Reinforcement waves walk out of the gate's
   arena end.
-- **HIJACK:** stand at the gate's panel and press ACTION, or put your
-  ENTRANCE on a gate's arena end. The gate's out-end then links to your
-  EXIT. Everything that comes through the gate now comes out of your exit
+- **HIJACK:** stand at the gate's panel and press ACTION, or aim PORTAL at
+  a gate's arena end. The gate's out-end then links to your EXIT. Everything that comes through the gate now comes out of your exit
   (over the void, above their commander).
 - Wave members hop into the in-end one by one; with no EXIT to send them to,
   a hijacked gate lets them out of its arena end on foot. A gate fight isn't
@@ -358,15 +375,18 @@ centred near (0, 0, 40).
 | Shift | Sprint |
 | C | Crouch |
 | V | SHOVE |
-| RMB (hold) | Aim EXIT (time 0.3×) |
-| LMB while aiming | Place EXIT |
-| LMB | GATE (entrance, contextual) |
-| E | Flip exit orientation |
-| Wheel | Air distance |
+| LMB (hold) | PORTAL: press = entrance, hold = aim the exit (slow motion), let go = exit |
+| RMB while holding | Let go without an exit |
+| G while holding | Flip the exit (hatch / door) |
+| Wheel while holding | Exit distance |
+| RMB / 1 | REFLECT |
+| Q / 2 (again / hold) | LOOP (geyser / human cannon) |
+| E / 3 · mouse back | SWAP |
+| R / 4 · mouse forward | DASH |
 | X / MMB | CLOSE (shear) |
 | F | ACTION (finish / grab / throw / hijack / use lift) |
 | Tab | RIFT VISION (routes, cones, outcome icons) |
-| R | CLIP |
+| T | CLIP |
 | K | Photo mode |
 | Esc | Pause |
 
@@ -374,28 +394,33 @@ centred near (0, 0, 40).
 
 | Button | Action |
 |---|---|
-| LT | Aim |
-| RT | Place / gate |
+| RT (hold) | PORTAL |
+| LT | REFLECT (with RT held: let go without an exit) |
+| Y | LOOP (with RT held: flip the exit) |
+| D-pad ◀ / ▶ | SWAP / DASH (with RT held: exit distance) |
 | LB | Close |
 | RB | Shove |
 | A | Jump |
 | X | Action |
 | B | Crouch |
-| Y | Flip |
-| D-pad down | Vision |
+| L3 | Sprint (latches) |
+| D-pad ▼ / ▲ | Vision / photo |
 | View | Clip |
 
 **Touch:**
 - **Left thumb:** the stick (a full push sprints).
 - **Right side:** drag to look.
 - **Buttons:**
-  - **RIFT** (hold + drag = aim exit, release = place; slide off to cancel)
-  - **GATE**
+  - **PORTAL** (touch = entrance, drag = aim the exit, lift = exit; a quick
+    tap = auto exit; slide onto CANCEL to let go without one). Its caption
+    says what a press does now (GRAB ⚡ / CATCH / LOAD / ...).
+  - **The STRIKES bar** (left, above the stick): REFLECT, LOOP (hold it the
+    second time to aim the cannon), SWAP, DASH, with the charge pips.
   - **JUMP**
   - **SHOVE**
   - **✕** (tap closes)
   - **ACTION** (context label)
-  - **⇄** (flip, while aiming)
+  - **⇄** (flip, while holding PORTAL)
   - **CROUCH** (small)
   - **🎬** (when offered)
   - **pause**
@@ -448,8 +473,11 @@ Old stealth code (`guards.ts`, `harbor.ts`) is removed at integration.
 - Aim refusals: `aim.tooHigh` (air end above your feet), `aim.range`,
   `aim.los`, `aim.blocked` (jammer), `aim.enemyClose`, `aim.space`,
   `aim.noSurface`.
-- Gate modes: `gate.air`, `gate.catch`, `gate.trapdoor`, `gate.door`.
-- Gate refusals: `gate.steady`, `gate.enemyClose`, `gate.blocked`,
+- PORTAL modes: `portal.air`, `portal.catch`, `portal.grab`, `portal.load`,
+  `portal.hijack`, `portal.hole`, `portal.door`; refusals `portal.anchored`,
+  `portal.noCharge`, `portal.noFloor`, `portal.nowhere`, `portal.loopLow`;
+  `portal.paid` (a charge spent on a grab).
+- Entrance refusals: `gate.steady`, `gate.enemyClose`, `gate.blocked`,
   `gate.noSpace`, `gate.range`.
 - `outcome.splash`, `outcome.void`, `outcome.skull`, `outcome.stars`,
   `outcome.safe`.

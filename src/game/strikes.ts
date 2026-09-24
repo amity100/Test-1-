@@ -366,7 +366,9 @@ export class Strikes {
     const toT = new THREE.Vector3(t.pos.x - feet.x, 0, t.pos.z - feet.z);
     if (toT.lengthSq() < 1e-4) return null;
     toT.normalize();
-    return standingDoor(h, _a.set(feet.x + toT.x * 1.4, feet.y, feet.z + toT.z * 1.4), toT, feet.y);
+    // (a brute's charge hits from 1.5 m: his door stands further out)
+    const out = t.kind === 'brute' ? 2.6 : 1.4;
+    return standingDoor(h, _a.set(feet.x + toT.x * out, feet.y, feet.z + toT.z * out), toT, feet.y);
   }
 
   /** The muzzle end stays on his gun; the other end goes where you look (another man, a barrel) or back at him. */

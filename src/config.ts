@@ -97,6 +97,7 @@ export const FEEL = {
   floorPopSpeed: 6.5, // minimum speed out of an up-facing end (so slow things clear the hole)
   floorPopNudge: 2.2, // ...plus a sideways nudge so they land beside it
   chargedAirControl: 0.08, // flying out of a rift: momentum is honest
+  holeAssist: 1.6, // a falling player this far past the rim of an open floor end below drifts onto it
   loopSnap: 2.5, // an entrance opened falling out of your hatch within this (m) centres under it; such loops stay centred
   slideDecel: 9, // m/s^2: a charged landing skids (rift slide) instead of stopping dead
   slideSteer: 1.5, // how fast input bends a slide (1/s)

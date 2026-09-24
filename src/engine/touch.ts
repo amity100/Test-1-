@@ -61,6 +61,8 @@ export class TouchControls {
   readonly el: HTMLDivElement;
   /** The game says we are aiming (visual sync). */
   aiming = false;
+  /** The game says the PORTAL is in hand (a press it took and hasn't finished). */
+  private portalHolding = false;
   private fingers = new Map<number, Finger>();
   private stickEl: HTMLDivElement;
   private knobEl: HTMLDivElement;
@@ -140,7 +142,7 @@ export class TouchControls {
       this.aiming = on;
       this.syncAimClass();
     }
-    if (!on) {
+    if (!on && !this.portalHolding) {
       const now = performance.now();
       for (const [id, f] of this.fingers) {
         if (f.kind === 'portal' && now - f.t0 > 400) {
@@ -153,6 +155,11 @@ export class TouchControls {
         }
       }
     }
+  }
+
+  /** Sync from the game: the PORTAL press is still in hand (the finger keeps it until it lifts). */
+  setPortalHeld(on: boolean) {
+    this.portalHolding = on;
   }
 
   /** @deprecated old name */
