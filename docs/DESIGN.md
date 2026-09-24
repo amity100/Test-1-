@@ -36,13 +36,16 @@ and a **blue EXIT** (where things come out). Both come from **one key**,
 PORTAL (LMB / RT / the PORTAL touch button):
 
 - **Press:** the ENTRANCE opens, by what you aim at and what's happening.
-- **Hold:** time slows and you aim the EXIT. A ghost end shows where it goes;
+- **Hold:** time slows and you aim the EXIT (a GRAB, a CATCH or a fall slow
+  time at once; a door, hole or load once you've held past the tap). A ghost
+  end shows where it goes;
   for a throw, a dotted arc shows where the thing lands and its colour says
   what that does (drown / void / lethal / knockdown / safe).
 - **Let go:** the EXIT opens there. A **tap** (under 0.2 s) puts the exit
   where it does the most by itself.
 - Every press starts a new pair (the old one collapses). RMB / LT / sliding
-  onto ✕ while holding lets go without an exit.
+  onto ✕ while holding lets go without an exit; so does pausing. A paid grab
+  let go of gets its charge back.
 
 ### What a press opens (priority)
 1. **AIR** (airborne, `vel.y < -3`): an entrance on your fall path (1.5–3 m
