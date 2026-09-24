@@ -393,10 +393,11 @@ html[dir='rtl'] .t-btn { font-family: 'Heebo', 'Oxanium', sans-serif; letter-spa
 .t-clip:not(.hidden)::after { animation: pulseO .5s ease-in-out infinite alternate; }
 .t-pause { left: 50%; top: calc(var(--st) + 8px); width: 40px; height: 40px; margin-left: -20px; border-width: 1.5px; }
 .t-pause svg { width: 16px; height: 16px; }
-.t-flip { left: calc(var(--sl) + 14px); bottom: calc(var(--sb) + 250px); width: 64px; height: 64px; border: 3px solid var(--exit); color: #bfe6ff; background: rgba(8, 22, 38, 0.55); opacity: 0; pointer-events: none; transform: scale(.6); }
+.t-flip { left: calc(var(--sl) + 20px); bottom: calc(var(--sb) + 172px); width: 64px; height: 64px; border: 3px solid var(--exit); color: #bfe6ff; background: rgba(8, 22, 38, 0.55); opacity: 0; pointer-events: none; transform: scale(.6); }
 .t-flip svg { color: var(--exit); }
-.touch.aiming .t-flip { opacity: 1; pointer-events: auto; transform: none; }
-.touch.aiming .t-flip.down { transform: scale(.9); }
+/* only while a PORTAL exit you'll walk out of is being aimed (it takes the strike bar's place) */
+.touch.flip-on .t-flip { opacity: 1; pointer-events: auto; transform: none; }
+.touch.flip-on .t-flip.down { transform: scale(.9); }
 .t-cancel { position: absolute; right: calc(var(--sr) + 12px); top: calc(var(--st) + 14px); display: flex; align-items: center; gap: 8px; padding: 14px 22px; border-radius: 30px; border: 2px dashed rgba(255, 255, 255, 0.6); background: rgba(10, 12, 18, 0.6); color: #fff; font-size: 12px; font-weight: 800; letter-spacing: .2em; opacity: 0; transform: scale(.85); transition: opacity .12s, transform .12s, background-color .1s; pointer-events: none; }
 html[dir='rtl'] .t-cancel { letter-spacing: .02em; font-family: 'Heebo', 'Oxanium', sans-serif; font-size: 13px; }
 .t-cancel span { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: rgba(255, 255, 255, 0.2); }
@@ -756,6 +757,7 @@ html[dir='rtl'] .strikes .sk { font-family: 'Heebo', 'Oxanium', sans-serif; lett
 @keyframes skArm { from { box-shadow: 0 0 8px rgba(56, 182, 255, 0.5); } to { box-shadow: 0 0 20px rgba(56, 182, 255, 0.95); } }
 .strikes { transition: opacity .12s; }
 .strikes.dim { opacity: .22; }
+.strikes.dim.sk-touch { opacity: 0; }
 .strikes.dim .sk { pointer-events: none; }
 .strikes.sk-touch { left: calc(var(--sl) + 12px); bottom: calc(var(--sb) + 178px); transform: none; gap: 8px; }
 .strikes.sk-touch .sk { width: 54px; height: 54px; }

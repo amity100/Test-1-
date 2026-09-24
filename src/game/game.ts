@@ -1592,6 +1592,7 @@ export class Game {
     }
     this.hud.setRiftState({ exit: this.rifts.hasExit(), entrance: this.rifts.hasEntrance(), aiming, orientation: this.rifts.orientation });
     this.touch?.setPortalHeld(this.portal.holding);
+    this.touch?.setFlip(!!H && this.portal.aiming && (H.mode === 'door' || H.mode === 'air' || H.mode === 'hole'));
     this.touch?.setAiming(aiming);
 
     // ----- player -----

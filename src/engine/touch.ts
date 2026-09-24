@@ -162,6 +162,11 @@ export class TouchControls {
     this.portalHolding = on;
   }
 
+  /** ⇄ FLIP shows while an exit you'll walk out of is being aimed (a door, a fall, a hole). */
+  setFlip(on: boolean) {
+    this.el.classList.toggle('flip-on', on);
+  }
+
   /** @deprecated old name */
   syncAim(aiming: boolean) {
     this.setAiming(aiming);
