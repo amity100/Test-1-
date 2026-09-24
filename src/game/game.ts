@@ -398,7 +398,10 @@ export class Game {
       charges: () => this.strikes.charges,
       spend: (n) => this.strikes.spend(n),
       refund: (n) => this.strikes.refund(n),
-      markPaid: (id) => this.paidMarks.set(id, this.time + 12),
+      markPaid: (id, on) => {
+        if (on) this.paidMarks.set(id, this.time + 12);
+        else this.paidMarks.delete(id);
+      },
       hangingUnderCrosshair: () => this.hangingUnderCrosshair(),
     });
     this.arcView = new ArcView(OUTCOME_COLOR);
@@ -567,6 +570,10 @@ export class Game {
 
   pause() {
     if (this.mode !== 'playing') return;
+    // a PORTAL / LOOP cannon in hand is let go of, not fired on the way back
+    if (this.portal.holding) this.portal.cancel();
+    this.strikes.cancelAim();
+    this.input.portalHolding = false;
     this.mode = 'paused';
     this.touch?.show(false);
     this.input.active = false;
@@ -1499,7 +1506,9 @@ export class Game {
     const alive = this.respawnT < 0;
     // held PORTAL (aiming the exit) and the LOOP cannon run in slow motion
     if (this.settings.slowmo && alive) {
-      if (this.portal.holding) ts = this.portal.timeScale();
+      // (a grab, a catch, a fall: time slows at once; a door or a load once you're aiming)
+      const H = this.portal.hold;
+      if (H && (this.portal.aiming || H.mode === 'grab' || H.mode === 'catch' || H.mode === 'air')) ts = this.portal.timeScale();
       if (this.strikes.aiming) ts = Math.min(ts, 0.12);
     }
     const aiming = alive && (this.portal.aiming || this.strikes.aiming);
@@ -1592,6 +1601,7 @@ export class Game {
     }
     this.hud.setRiftState({ exit: this.rifts.hasExit(), entrance: this.rifts.hasEntrance(), aiming, orientation: this.rifts.orientation });
     this.touch?.setPortalHeld(this.portal.holding);
+    this.input.portalHolding = this.portal.holding;
     this.touch?.setFlip(!!H && this.portal.aiming && (H.mode === 'door' || H.mode === 'air' || H.mode === 'hole'));
     this.touch?.setAiming(aiming);
 

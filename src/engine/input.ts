@@ -51,6 +51,8 @@ export class Input {
   enabled = true;
   /** Touch UI writes here. */
   touchMove = { x: 0, y: 0 };
+  /** The game has a PORTAL in hand (set every frame): RMB / LT / Y / D-pad do its things, not their own. */
+  portalHolding = false;
   /** Called when the last used device changes (i18n device variants are switched automatically). */
   onDeviceChange: ((d: Device) => void) | null = null;
 
@@ -107,7 +109,7 @@ export class Input {
       if (e.button === 0) this.down('portal');
       else if (e.button === 2) {
         // with the PORTAL in hand it lets go of it; otherwise it's REFLECT
-        if (this.held.has('portal')) {
+        if (this.portalHolding && this.held.has('portal')) {
           this.tap('close');
           this.rmbAction = null;
         } else {
@@ -286,7 +288,7 @@ export class Input {
       edge(
         i,
         () => {
-          if (this.held.has('portal')) {
+          if (this.portalHolding && this.held.has('portal')) {
             withPortal();
             this.padHeld[i] = null;
           } else {

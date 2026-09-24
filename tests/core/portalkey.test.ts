@@ -83,7 +83,7 @@ function rig(enemies: Fake[], o: { threats?: Threat[]; falling?: boolean; charge
     charges: () => charges,
     spend: (n) => (charges -= n),
     refund: (n) => (charges += n),
-    markPaid: (id) => paid.push(id),
+    markPaid: (id, on) => (on ? paid.push(id) : paid.splice(paid.indexOf(id), 1)),
     hangingUnderCrosshair: () => null,
   };
   const pk = new PortalKey(host);
@@ -172,6 +172,8 @@ describe('PORTAL key', () => {
     t.pk.cancel();
     expect(e.held).toBe(false);
     expect(t.charges()).toBe(3);
+    // (the charge came back: his mark goes too)
+    expect(t.paid).toEqual([]);
     expect(t.rifts.playerEnds().entrance).toBeNull();
   });
 
@@ -319,6 +321,16 @@ describe('STRIKES', () => {
     expect(ends.a.normal.z).toBeGreaterThan(0.9);
     expect(ends.a.noPlayer && ends.b.noPlayer).toBe(true);
     expect(ends.b.aimAt).toBe(3);
+  });
+
+  it('REFLECT on a gunman who cannot fire now is refused, free', () => {
+    const e = fakeEnemy(3, V(0, 0, 10));
+    const r = strikeRig([e]);
+    (r.s as any).h.enemies.provoke = () => false;
+    const out = r.s.input('reflect', true, true);
+    expect(out?.ok).toBe(false);
+    expect(out?.reason).toBe('strike.cantFire');
+    expect(r.s.charges).toBe(STRIKE.maxCharges);
   });
 
   it('SWAP needs your feet on the ground; DASH with no one in sight dashes ahead at your height', () => {

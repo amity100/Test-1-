@@ -76,8 +76,8 @@ export interface PortalHost extends SpotHost {
   charges(): number;
   spend(n: number): void;
   refund(n: number): void;
-  /** A kill of this man gives no charge back (he was paid for). */
-  markPaid(id: number): void;
+  /** A kill of this man gives no charge back (he was paid for); off = the charge came back. */
+  markPaid(id: number, on: boolean): void;
   /** A hanging load under the crosshair. */
   hangingUnderCrosshair(): Prop | null;
 }
@@ -170,8 +170,15 @@ export class PortalKey {
       this.h.enemies.setSink(this.hold.enemy, 0);
     }
     this.hold = null;
-    this.thrown = null;
+    this.dropThrown();
     this.arcN = 0;
+  }
+
+  /** Forget the last throw (its pair is gone or going): he's drawn standing again. */
+  private dropThrown() {
+    const T = this.thrown;
+    this.thrown = null;
+    if (T?.enemy) this.h.enemies.setSink(T.enemy, 0);
   }
 
   /** What a press would do right now (the HUD hint on the crosshair). */
@@ -199,7 +206,9 @@ export class PortalKey {
       r.prop = hang;
       return r;
     }
-    const tgt = h.rifts.crosshairTarget(ctx);
+    let tgt = h.rifts.crosshairTarget(ctx);
+    // (beyond reach he's just scenery: the press falls through to a door / a hole)
+    if (tgt && Math.hypot(tgt.pos.x - ctx.camPos.x, tgt.pos.y - ctx.camPos.y, tgt.pos.z - ctx.camPos.z) > LAW.trapdoorRange) tgt = null;
     if (tgt) {
       const e = h.enemies.byKey(tgt.key);
       if (e) {
@@ -303,7 +312,7 @@ export class PortalKey {
         if (!res.ok) return fail(res.reason);
         if (paid) {
           h.spend(r.cost);
-          h.markPaid(e.id);
+          h.markPaid(e.id, true);
         }
         h.enemies.hold(e, true);
         hold.enemy = e;
@@ -342,7 +351,7 @@ export class PortalKey {
         break;
       }
     }
-    this.thrown = null;
+    this.dropThrown();
     this.hold = hold;
     // AIR and CATCH can't wait for the release: their exit opens now and follows your aim
     if (hold.mode === 'air' || hold.mode === 'catch') {
@@ -367,8 +376,11 @@ export class PortalKey {
     if (H.enemy) {
       h.enemies.hold(H.enemy, false);
       h.enemies.setSink(H.enemy, 0);
-      if (H.enemy.alive) h.enemies.stagger(H.enemy, 0.8);
-      if (H.paid) h.refund(PORTAL.grabCost);
+      if (H.paid) {
+        // (a man you paid for climbs out ready to fight: no free stumble to grab him again)
+        h.refund(PORTAL.grabCost);
+        h.markPaid(H.enemy.id, false);
+      } else if (H.enemy.alive) h.enemies.stagger(H.enemy, 0.8);
     }
     if (H.live) h.rifts.clearPair();
     else h.rifts.closeEntrance();
@@ -397,9 +409,8 @@ export class PortalKey {
     if (T) {
       T.t += realDt;
       if ((T.crossedT >= 0 && T.t - T.crossedT > PORTAL.linger) || T.t > PORTAL.throwLife) {
-        this.thrown = null;
+        this.dropThrown();
         h.rifts.clearPair();
-        if (T.enemy) h.enemies.setSink(T.enemy, 0);
       }
     }
     const H = this.hold;
@@ -460,6 +471,8 @@ export class PortalKey {
       reason = lf.reason;
     }
     H.launch = { frame, boost, aimAt: lock ? lock.id : -1, valid: !reason, reason };
+    // a CATCH whose exit couldn't open at once: it opens where you aim, as soon as that's somewhere
+    if (H.mode === 'catch' && !H.live && !reason) H.live = this.openCatchAt(H, frame, boost, lock ? lock.id : H.sender ? H.sender.id : -1);
     if (H.live) {
       // the real exit is right there: it follows the aim, no ghost needed
       if (!reason) {
@@ -557,6 +570,14 @@ export class PortalKey {
     return ok;
   }
 
+  /** Open a CATCH's exit at a launcher frame (only for what it caught). */
+  private openCatchAt(H: Hold, f: Frame, boost: number, aimAt: number): boolean {
+    const h = this.h;
+    if (!h.rifts.placeExitFrame(f, null, { boost, aimAt, noPlayer: true })) return false;
+    h.rifts.setPairNoPlayer(true);
+    return true;
+  }
+
   /** Who fired / threw / charges it: the live enemy nearest where it came from. */
   private senderOf(th: Threat | null): EnemyView | null {
     if (!th) return null;
@@ -611,8 +632,11 @@ export class PortalKey {
     };
     switch (H.mode) {
       case 'air':
-      case 'catch':
         return H.live ? ok(h.rifts.playerEnds().exit?.position) : lost('aim.space');
+      case 'catch': {
+        if (!H.live && H.launch?.valid) H.live = this.openCatchAt(H, H.launch.frame, H.launch.boost, H.launch.aimAt);
+        return H.live ? ok(h.rifts.playerEnds().exit?.position) : lost('aim.space');
+      }
       case 'hole': {
         // a tap: the exit right over it, as high as you stand (a loop)
         if (tap || !H.aim) {

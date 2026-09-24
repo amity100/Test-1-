@@ -169,6 +169,12 @@ export class Strikes {
     this.charges = Math.max(0, this.charges - n);
   }
 
+  /** Let go of a LOOP cannon being aimed without firing it (pause): the loop goes on. */
+  cancelAim() {
+    if (this.loop) this.loop.second = 0;
+    this.arcN = 0;
+  }
+
   /** The LOOP cannon is being aimed (slow motion). */
   get aiming() {
     return !!this.loop && !this.loop.fired && this.loop.second > STRIKE.tap;
@@ -266,7 +272,7 @@ export class Strikes {
     if (this.charges < 1) return fail('strike.noCharge');
     const t = this.target();
     if (!t && id !== 'dash') return fail('strike.noTarget');
-    if (t && id !== 'reflect' && (t.kind === 'turret' || (t.kind === 'boss' && !t.offBalance))) return fail('strike.anchored', t);
+    if (t && (id === 'loop' || id === 'swap') && (t.kind === 'turret' || (t.kind === 'boss' && !t.offBalance))) return fail('strike.anchored', t);
     let r: StrikeResult;
     switch (id) {
       case 'reflect':
@@ -339,13 +345,14 @@ export class Strikes {
       boost = 12;
     } else b = besideDoor(h, t, h.playerFeet());
     if (!b) return { ok: false, id: 'reflect', reason: 'gate.noSpace', target: t };
+    // a gunman who can't fire right now (on his back, reeling, no clear throw) isn't worth the charge
+    if (!h.enemies.provoke(t) && kind !== 'shield') return { ok: false, id: 'reflect', reason: 'strike.cantFire', target: t };
     const id = h.rifts.openStrike(a, b, STRIKE.reflectLife + 1, 0, t.kind === 'brute' ? -1 : t.id);
     const ends = h.rifts.strikeEnds(id)!;
     ends.a.noPlayer = ends.b.noPlayer = true;
     ends.a.boost = 0;
     ends.b.boost = boost;
     this.reflect = { id, t, kind, life: STRIKE.reflectLife, pos: b.position.clone(), quat: b.quaternion.clone(), aimAt: t.id, doneT: -1 };
-    h.enemies.provoke(t);
     return { ok: true, id: 'reflect', target: t, at: a.position.clone(), name: 'reflect' };
   }
 
