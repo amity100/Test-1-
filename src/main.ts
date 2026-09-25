@@ -1,8 +1,10 @@
 import './ui/style.css';
-import { defaultQuality, IS_TOUCH, QualityName } from './config';
+import { IS_TOUCH, QualityName } from './config';
+import { readSettings } from './game/settings';
 import { Game, Settings } from './game/game';
 import { loadAnimLibrary, parseCharacterAsset } from './game/characters';
 import { Menu } from './ui/menu';
+import { PerfHud } from './ui/perfhud';
 import { setWorldStrings, t } from './ui/i18n';
 import type { ZoneId } from './core/contracts';
 import { readWorld, saveWorld, WORLDS, type WorldId } from './world/worlds';
@@ -11,13 +13,11 @@ import { readWorld, saveWorld, WORLDS, type WorldId } from './world/worlds';
 const useWorldStrings = (w: WorldId) => setWorldStrings(w === 'harbour' ? '' : w);
 
 function loadSettings(): Settings {
-  const d: Settings = { quality: defaultQuality(), sensitivity: 1, invertY: false, slowmo: true };
+  let raw: string | null = null;
   try {
-    const s = JSON.parse(localStorage.getItem('threshold.settings') || '{}');
-    return { ...d, ...s };
-  } catch {
-    return d;
-  }
+    raw = localStorage.getItem('threshold.settings');
+  } catch {}
+  return readSettings(raw);
 }
 
 function saveSettings(s: Settings) {
@@ -63,7 +63,8 @@ async function boot() {
   const settings = loadSettings();
   let world = readWorld();
   useWorldStrings(world);
-  const menu = new Menu(ui, settings);
+  // (its own copy: the game compares what the menu hands it with what it has, e.g. a quality change)
+  const menu = new Menu(ui, { ...settings });
   menu.worlds = WORLDS;
   menu.world = world;
   menu.showLoading(0);
@@ -159,8 +160,11 @@ async function boot() {
     game.quitToMenu();
     refreshProgress();
   };
+  const perf = new PerfHud(ui, () => game.renderer.perfInfo());
+  perf.show(settings.perf);
   menu.onSettings = (s: Settings) => {
     game.applySettings(s);
+    perf.show(s.perf);
     saveSettings(s);
   };
   menu.onLanguage = () => game.refreshObjectives();
@@ -239,11 +243,16 @@ async function boot() {
   const loop = (now: number) => {
     const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
     last = now;
+    const t0 = performance.now();
+    game.renderer.beginFrame();
     try {
       game.frame(dt);
     } catch (e) {
       console.error(e);
     }
+    const cpu = performance.now() - t0;
+    game.renderer.endFrame(now, cpu);
+    perf.frame(now, cpu);
     requestAnimationFrame(loop);
   };
   requestAnimationFrame(loop);

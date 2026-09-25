@@ -487,8 +487,7 @@ balusters, lamps, planters, trunks, ivy and string lights); `square.ts`,
 `buildings.ts` and `station.ts` place it on the spec's colliders, which stay
 exactly as the grey-box had them (the relief has no colliders). Window
 surrounds (`relief`) and small metalwork (`metal`) cast no shadows; masses,
-cornices, railings and the vault's ribs (`iron`) do (on phones only the
-masses and the statue).
+cornices, railings and the vault's ribs (`iron`) do (phones too).
 
 Its look: `statue.ts` is the Spirit of Tomorrow (a robed bronze figure, five
 brass ribbons with lit outer edges, the armillary with turning rings and two
@@ -531,8 +530,70 @@ Engine rules this world leans on (both worlds get them):
   drop it through the world.
 - A rift window renders only its own patch of the frame (a tight frustum over
   the window's rectangle): the same pixels, a fraction of the fill.
-- On phones only a character's body casts a shadow (not its visor, weapon or
-  glow strips), and only within 22 m of you; phones without MSAA get FXAA.
+- Phones get the PC's shadows: the same 2048 map and box (±50 m in Halcyon),
+  every caster the PC has (railings, ironwork, paint, leaves), and every
+  character with its visor and weapon, at any distance.
+- The sun's shadow box moves across the light in whole shadow-map texels
+  (`render/shadowbox.ts`): static shadow edges stay on their texels while you
+  walk or turn instead of crawling.
+- A character is culled against one sphere, its T-pose sphere x1.5: every
+  pose, death, fall and tumble stays inside it (the bones' reach, tested).
+  The visor shares it (its own small sphere stayed at the T-pose head, so a
+  downed man's visor could be culled with his head in view).
+- The load warms the shadow pass too: one man of every look (a warden's
+  double-sided shield has its own depth program) stands in the sun's box
+  while the shaders compile, for each light-set size, so the first fight
+  compiles nothing (it used to compile two depth programs).
+- Phones start on the `high` preset, the PC's look, at up to 2x their CSS
+  resolution (`touchPixelRatio`; a DPR-3 phone used to render a third of its
+  pixels per axis and upscale them). Desktops keep their caps (`high` 1.5).
+  Saved settings from before (`v` 1) move a phone's old default `medium` to
+  `high`. Presets without MSAA (or a device that can't multisample a
+  half-float target) get FXAA, with gentler subpixel blending.
+- The post chain is two full-resolution passes: the scene (half float, the
+  only MSAA target, colour resolve only) and one final pass that adds the
+  bloom, runs the world grade and does exposure, ACES and sRGB (what the
+  bloom blend, grade and output passes did in three). The bloom itself is
+  unchanged: a quarter of the resolution per axis.
+- The sky and the skylines draw after the opaque world (same pixels: the sky
+  sits at depth 1), so the pixels buildings cover are never shaded twice.
+- Rift glows and blast flashes that aren't lit are left out of the light set
+  (they'd add exactly 0 to every lit pixel). The set holds none of them, two
+  (one rift pair open: the usual case) or all six, so every material has
+  three programs, all compiled at load, with a rift and the post chain, into
+  targets like the real ones: no shader compiles when the first rift opens.
+  Phones get the PC's four rift glows.
+- The additive double-sided effects three would draw face by face (the rift
+  aiming ring and arrow, blast rings and seams) draw both faces in one pass: a
+  sum doesn't depend on the order. (Shader materials, like the lamp cones and
+  light shafts, are drawn in one pass by three already.)
+- A dynamic-resolution safety net lowers the scene's resolution by 5% steps
+  (never below 85% per axis) only after about a second of frames over budget
+  because of the GPU, and steps back up when there is room. Photos and clips
+  are full resolution. Settings → Performance overlay shows fps, frame / CPU /
+  GPU ms, the render size and scale, draws, triangles and the GPU.
+- Phones on `high` and `ultra` build the PC's own world: full-size textures
+  and normal maps, alpha-to-coverage foliage and railings, the full skyline,
+  backdrop and props, lamp cones and the PC's bloom tuning. `low` and `medium`
+  on a phone build the lighter variant (`touchLiteContent`); a desktop builds
+  the full world on every preset. The variant is picked when a world is built
+  (boot, or the menu's world switch), so a quality change mid-session changes
+  the resolution and effects at once and the world's variant at the next build.
+- Opaque draws go nearest first (`frontToBack` in `render/renderer.ts`; three
+  sorts by material first): a GPU's early depth test then skips most of what
+  nearer surfaces cover. Fragments shaded per covered pixel in the opaque pass
+  drop from 2.6 to 2.2 in the Halcyon start view, 2.3 to 1.5 in its arena and
+  1.8 to 1.2 at the harbour start. Only coincident edges between two meshes
+  can resolve differently (a sample or two of a pillar's silhouette).
+- Per frame, not per render call: the scene's world matrices are updated once
+  (`scene.matrixWorldAutoUpdate` is off; `Game.render` updates them before the
+  rift views) and each skeleton's bones are computed and uploaded once
+  (`render/frameonce.ts`), however many rift views render them.
+- The city's traffic (trains, launches, swifts, walkers) is culled as a whole
+  by a fixed sphere round everywhere it goes (tested over a full loop).
+- No per-frame garbage from telegraphs or the player's event handlers; the
+  laser buffers upload only while there is something to draw; the audio
+  listener isn't moved when the camera hasn't.
 - Challenge names follow the world (`halcyon:challenge.pier.3.*`: no "Pier
   Pressure" in a city).
 

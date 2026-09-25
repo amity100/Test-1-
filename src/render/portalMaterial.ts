@@ -111,6 +111,13 @@ export function createPortalMaterial(color: THREE.Color) {
   });
 }
 
+/**
+ * Rift sparks' point size scale, shared by every rift's sparks: points are
+ * sized in render pixels, so a phone rendering at 2x sets it to keep them the
+ * size they were meant to be (the game sets it; desktops keep 1).
+ */
+export const SPARK_PX: THREE.IUniform<number> = { value: 1 };
+
 /** Orbiting spark particles around a rift rim. */
 export function createSparks(color: THREE.Color, count = 70) {
   const g = new THREE.BufferGeometry();
@@ -122,7 +129,7 @@ export function createSparks(color: THREE.Color, count = 70) {
     transparent: true,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
-    uniforms: { uTime: { value: 0 }, uOpen: { value: 0 }, uColor: { value: color.clone() }, uSize: { value: new THREE.Vector2(0.62, 1.12) }, uPx: { value: 1 } },
+    uniforms: { uTime: { value: 0 }, uOpen: { value: 0 }, uColor: { value: color.clone() }, uSize: { value: new THREE.Vector2(0.62, 1.12) }, uPx: SPARK_PX },
     vertexShader: /* glsl */ `
       attribute vec3 seed;
       uniform float uTime, uOpen, uPx;

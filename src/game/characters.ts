@@ -28,7 +28,6 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { CharacterAPI, CharacterPose, ClipName, DeathKind, LocomotionInput, Tuple4 } from '../core/contracts';
-import { IS_TOUCH } from '../config';
 
 // ---------------------------------------------------------------------------
 // Soldier.glb loading
@@ -731,6 +730,12 @@ const _invBody = new THREE.Matrix4();
 const _chest = new THREE.Quaternion();
 const Y = new THREE.Vector3(0, 1, 0);
 
+/**
+ * A character's culling sphere: its bind-pose sphere (the T-pose's, around the body) times this.
+ * Every pose reaches at most 1.31x (the bones' reach, downed; measured in tests/anim/cullsphere.test.ts).
+ */
+export const CULL_SPHERE_GROW = 1.5;
+
 export class Character implements CharacterAPI {
   readonly root = new THREE.Group();
   readonly look: Look;
@@ -793,22 +798,27 @@ export class Character implements CharacterAPI {
       if ((o as THREE.Bone).isBone) this.bones[shortBoneName(o.name)] = o as THREE.Bone;
       const m = o as THREE.SkinnedMesh;
       if (!m.isMesh) return;
-      // (on phones only the body casts: the visor's shadow is inside the head's, and every caster is a draw)
-      m.castShadow = !holo && !(IS_TOUCH && /visor/i.test(m.name));
+      m.castShadow = !holo;
       m.receiveShadow = !holo;
-      // culled against a padded bind-pose sphere (roomy enough for any pose or tumble), so
-      // off-screen characters aren't skinned and drawn in every pass
       if (!m.geometry.boundingSphere) m.geometry.computeBoundingSphere();
-      if (m.isSkinnedMesh && m.geometry.boundingSphere) {
-        const bs = m.geometry.boundingSphere.clone();
-        bs.radius = bs.radius * 2 + 20;
-        m.boundingSphere = bs;
-      }
       m.frustumCulled = !holo;
       m.material = holo ?? lookMaterial(m.material as THREE.Material, look as Exclude<Look, 'hologram'>);
       this.meshes.push(m);
       if (m.castShadow) this.casters.push(m);
     });
+    // culled against one sphere: the body's bind-pose sphere grown to hold every pose (clips, deaths,
+    // downed, swimming, a tumble: tests/anim/cullsphere.test.ts), so off-screen characters aren't
+    // skinned and drawn in any pass. The visor shares it: its own small sphere stayed at the bind
+    // pose's head, so a downed man's visor was culled while his head was in view.
+    let bodyMesh: THREE.SkinnedMesh | null = null;
+    for (const m of this.meshes as THREE.SkinnedMesh[]) {
+      if (m.isSkinnedMesh && (!bodyMesh || m.geometry.boundingSphere!.radius > bodyMesh.geometry.boundingSphere!.radius)) bodyMesh = m;
+    }
+    if (bodyMesh) {
+      const bs = bodyMesh.geometry.boundingSphere!.clone();
+      bs.radius *= CULL_SPHERE_GROW;
+      for (const m of this.meshes as THREE.SkinnedMesh[]) if (m.isSkinnedMesh) m.boundingSphere = bs.clone();
+    }
     // the rig is authored facing -Z; gameplay forward is +Z
     this.model.rotation.y = Math.PI;
     this.body.scale.setScalar(this.scale);
@@ -1520,8 +1530,7 @@ export class Character implements CharacterAPI {
       o.traverse((n) => {
         const mesh = n as THREE.Mesh;
         if (mesh.isMesh) {
-          // (a gun's or a glow strip's shadow is a texel or two on a phone's shadow map: not worth a draw)
-          mesh.castShadow = !IS_TOUCH;
+          mesh.castShadow = true;
           mesh.receiveShadow = true;
         }
       });

@@ -3,13 +3,8 @@ import type { WorldId } from '../world/worlds';
 import { IS_TOUCH, type QualityName } from '../config';
 import { formatNumber, getDevice, getLang, setLang, t, type Lang } from './i18n';
 
-/** Same shape as the game's Settings. */
-export interface Settings {
-  quality: QualityName;
-  sensitivity: number;
-  invertY: boolean;
-  slowmo: boolean;
-}
+import type { Settings } from '../game/settings';
+export type { Settings };
 
 export interface RunStats {
   time: number;
@@ -46,7 +41,7 @@ const LOGO = `<span class="rings"><i class="rg ex"></i><i class="rg en"></i></sp
 
 type Go =
   | 'start' | 'cont' | 'zones' | 'challenges' | 'controls' | 'openSettings' | 'resume' | 'retry' | 'restart'
-  | 'quit' | 'goBack' | 'en' | 'he' | 'photo';
+  | 'quit' | 'goBack' | 'en' | 'he' | 'photo' | 'perf';
 
 /** Title, pause, zones, challenges, settings, controls, end screens and the clip panel. */
 export class Menu {
@@ -139,6 +134,11 @@ export class Menu {
       case 'goBack': return this.goBack();
       case 'en': return this.lang('en');
       case 'he': return this.lang('he');
+      case 'perf':
+        // the performance overlay, on / off (saved with the settings)
+        this.settings.perf = !this.settings.perf;
+        this.onSettings({ ...this.settings });
+        return this.current();
     }
   }
 
@@ -246,6 +246,7 @@ export class Menu {
             <button type="button" data-go="photo"><span>${esc(t('menu.photo'))}</span></button>
             <button type="button" data-go="controls"><span>${esc(t('menu.controls'))}</span></button>
             <button type="button" data-go="openSettings"><span>${esc(t('menu.settings'))}</span></button>
+            <button type="button" data-go="perf" class="m-perf"><span>${esc(t('set.perf'))} · ${esc(t(this.settings.perf ? 'set.on' : 'set.off'))}</span></button>
             <button type="button" data-go="quit"><span>${esc(t('menu.quit'))}</span></button>
           </div>
         </div>
@@ -425,6 +426,7 @@ export class Menu {
         <label><span>${esc(t('set.sensitivity'))} <em class="sens-v" dir="ltr">${s.sensitivity.toFixed(2)}</em></span><input type="range" min="0.3" max="2.5" step="0.05" value="${s.sensitivity}" class="sens" dir="ltr"/></label>
         <label><span>${esc(t('set.invertY'))}</span>${seg('inv', [['0', t('set.off'), !s.invertY], ['1', t('set.on'), s.invertY]])}</label>
         <label><span>${esc(t('set.slowmo'))}</span>${seg('slow', [['1', t('set.on'), s.slowmo], ['0', t('set.off'), !s.slowmo]])}</label>
+        <label><span>${esc(t('set.perf'))}</span>${seg('perf', [['1', t('set.on'), s.perf], ['0', t('set.off'), !s.perf]])}</label>
         <label><span>${esc(t('set.language'))}</span>${this.langSeg()}</label>
       </div></div>`,
       'panel',
@@ -444,6 +446,7 @@ export class Menu {
     bind('.seg.q', (v) => (this.settings.quality = v as QualityName));
     bind('.seg.inv', (v) => (this.settings.invertY = v === '1'));
     bind('.seg.slow', (v) => (this.settings.slowmo = v === '1'));
+    bind('.seg.perf', (v) => (this.settings.perf = v === '1'));
     const sens = this.el.querySelector('.sens') as HTMLInputElement;
     const sv = this.el.querySelector('.sens-v') as HTMLElement;
     sens.addEventListener('input', () => {

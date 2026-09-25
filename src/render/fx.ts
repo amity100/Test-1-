@@ -216,7 +216,10 @@ export function createSky(style: SkyStyle = DEFAULT_SKY) {
   });
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(900, 48, 24), mat);
   mesh.frustumCulled = false;
-  mesh.renderOrder = -1000;
+  // drawn after the opaque world (it sits at depth 1.0: xyww): early-Z skips the sky pixels
+  // buildings cover instead of shading its clouds and then painting over them. Its pixels
+  // are the same (it writes no depth; transparent things still come after it)
+  mesh.renderOrder = 1000;
   mesh.name = 'sky';
   applySkyStyle(mesh, style);
   return mesh;
@@ -433,7 +436,8 @@ export function createSkyline(opts: { mobile?: boolean; sunDir?: THREE.Vector3; 
   const mesh = new THREE.Mesh(g, mat);
   mesh.name = 'skyline';
   mesh.frustumCulled = false;
-  mesh.renderOrder = -900;
+  // after the opaque world, before the sky (depth-tested: the same pixels, fewer shaded)
+  mesh.renderOrder = 900;
   const group = new THREE.Group();
   group.name = 'skyline';
   group.add(mesh);
@@ -502,6 +506,9 @@ export class LampSystem {
   group = new THREE.Group();
   private pool: THREE.SpotLight[] = [];
   private assigned: (LampDef | null)[] = [];
+  private near: LampDef[] = [];
+  private nearD: number[] = [];
+  private free: number[] = [];
   private coneMat: THREE.ShaderMaterial;
   private power: number;
 
@@ -642,21 +649,20 @@ export class LampSystem {
 
   update(t: number, focus: THREE.Vector3) {
     this.coneMat.uniforms.uTime.value = t;
-    // nearest lamps get the real lights
-    const sorted = this.lamps
-      .map((l) => ({ l, d: l.pos.distanceToSquared(focus) }))
-      .sort((a, b) => a.d - b.d)
-      .slice(0, this.pool.length)
-      .map((x) => x.l);
+    // nearest lamps get the real lights (reused arrays: this runs every frame)
+    const near = this.near, n = nearestLamps(this.lamps, focus, this.pool.length, near, this.nearD);
     // keep existing assignments stable
-    const free: number[] = [];
+    const free = this.free;
+    free.length = 0;
     for (let i = 0; i < this.pool.length; i++) {
-      if (!this.assigned[i] || !sorted.includes(this.assigned[i]!)) free.push(i);
+      if (!this.isNear(this.assigned[i])) free.push(i);
     }
-    for (const l of sorted) {
+    let nextFree = 0;
+    for (let k = 0; k < n; k++) {
+      const l = near[k];
       if (this.assigned.includes(l)) continue;
-      const i = free.shift();
-      if (i === undefined) break;
+      if (nextFree >= free.length) break;
+      const i = free[nextFree++];
       this.assigned[i] = l;
       const s = this.pool[i];
       s.position.copy(l.pos);
@@ -669,10 +675,49 @@ export class LampSystem {
     }
     for (let i = 0; i < this.pool.length; i++) {
       const s = this.pool[i];
-      const target = this.assigned[i] && sorted.includes(this.assigned[i]!) ? s.userData.target ?? 0 : 0;
+      const target = this.isNear(this.assigned[i]) ? s.userData.target ?? 0 : 0;
       s.intensity += (target - s.intensity) * 0.12;
     }
   }
+
+  private isNear(l: LampDef | null) {
+    return l !== null && this.near.includes(l);
+  }
+
+  /** The lamp each pooled light is on (null: none yet). */
+  get assignment(): readonly (LampDef | null)[] {
+    return this.assigned;
+  }
+
+  /** The pooled spot lights. */
+  get lights(): readonly THREE.SpotLight[] {
+    return this.pool;
+  }
+}
+
+/**
+ * The `k` lamps nearest to `focus`, nearest first, written into `out` (their
+ * squared distances into `outD`); returns how many (fewer when there are fewer
+ * lamps). Equal distances keep the lamps' order, as a stable sort would.
+ */
+export function nearestLamps(lamps: readonly LampDef[], focus: THREE.Vector3, k: number, out: LampDef[], outD: number[]): number {
+  let n = 0;
+  for (const l of lamps) {
+    const d = l.pos.distanceToSquared(focus);
+    if (n === k && !(d < outD[n - 1])) continue;
+    let p = n < k ? n : k - 1;
+    while (p > 0 && d < outD[p - 1]) {
+      out[p] = out[p - 1];
+      outD[p] = outD[p - 1];
+      p--;
+    }
+    out[p] = l;
+    outD[p] = d;
+    if (n < k) n++;
+  }
+  out.length = n;
+  outD.length = n;
+  return n;
 }
 
 /** Volumetric beam for a moving searchlight (apex at origin, points down -Y). */

@@ -92,7 +92,7 @@ export class FxKit {
     const ringGeo = new THREE.RingGeometry(0.85, 1, 48);
     ringGeo.rotateX(-Math.PI / 2);
     for (let i = 0; i < 6; i++) {
-      const m = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+      const m = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, forceSinglePass: true }));
       m.visible = false;
       m.renderOrder = 39;
       this.group.add(m);
@@ -100,7 +100,7 @@ export class FxKit {
     }
     const seamGeo = new THREE.PlaneGeometry(1, 1);
     for (let i = 0; i < 3; i++) {
-      const m = new THREE.Mesh(seamGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 2.6, 2.2), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+      const m = new THREE.Mesh(seamGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 2.6, 2.2), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, forceSinglePass: true }));
       m.visible = false;
       this.group.add(m);
       this.seams.push({ mesh: m, t: 1 });
@@ -110,6 +110,11 @@ export class FxKit {
       this.group.add(l);
       this.flashes.push({ light: l, t: 1, dur: 1, peak: 0 });
     }
+  }
+
+  /** The blast flash lights (intensity 0 between blasts). */
+  get flashLights(): THREE.PointLight[] {
+    return this.flashes.map((f) => f.light);
   }
 
   setPixelRatio(r: number) {

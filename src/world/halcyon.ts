@@ -19,10 +19,8 @@ import { HALCYON_SKY, halcyonAtmosphere } from './halcyon/atmosphere';
 import { createNearBackdrop } from '../render/cityscape';
 import { CRESCENT, MENU_VIEW, MERIDIAN, RIVER_N, RIVER_SIDE, SEA_Y, SUN_DIR, cutKillY, distToLine, isRiver } from './halcyon/layout';
 
-/** Buckets that never cast: glows, glass, decals, the paving underfoot, fine relief and small metalwork. */
+/** Buckets that never cast: glows, glass, decals, the paving underfoot, fine relief and small metalwork. (Phones cast the same.) */
 const NO_SHADOW = ['emissive', 'glass', 'windark', 'decal', 'paving', 'relief', 'metal'];
-/** On phones only the masses (stone, trim) and the statue cast: railings, ironwork, paint and leaves don't (fewer shadow draws). */
-const NO_SHADOW_MOBILE = [...NO_SHADOW, 'lattice', 'iron', 'paint', 'foliage', 'leaves'];
 
 /**
  * HALCYON: TOMORROW SQUARE. Mission 1 in a second world: Kessler's art-deco
@@ -73,7 +71,7 @@ export function buildHalcyon(envMap: THREE.Texture | null, mobile: boolean, opts
   for (const [name, c] of [['left', L], ['centre', C], ['right', R]] as [string, CityCtx][]) {
     const g = new THREE.Group();
     g.name = `halcyon:${name}`;
-    g.add(c.mb.build(materials, { name: `halcyon:${name}`, noShadow: mobile ? NO_SHADOW_MOBILE : NO_SHADOW }), c.inst.build(materials, `halcyon:${name}:inst`));
+    g.add(c.mb.build(materials, { name: `halcyon:${name}`, noShadow: NO_SHADOW }), c.inst.build(materials, `halcyon:${name}:inst`));
     cityRoot.add(g);
   }
   const scenery = far.build(materials, { name: 'halcyon:far', castShadow: false });

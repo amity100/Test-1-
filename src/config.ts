@@ -114,23 +114,33 @@ export const FEEL = {
 export type QualityName = 'low' | 'medium' | 'high' | 'ultra';
 
 export interface QualityPreset {
+  /** Largest render pixel ratio on a desktop (mouse) device. */
   pixelRatio: number;
+  /**
+   * Largest render pixel ratio on a touch device. Phone screens are small and
+   * dense (DPR 2-3): at 1.0 they showed a third of their pixels per axis,
+   * upscaled and blurry. `high` renders them at 2 (the PC's look, as sharp).
+   */
+  touchPixelRatio: number;
   portalViews: number;
   shadowMap: number;
   bloom: boolean;
   bloomScale: number;
   portalScale: number;
-  lampLights: number;
-  rainDrops: number;
   antialias: boolean;
-  scryWindow: boolean;
+  /**
+   * On a touch device, build the world's lighter variant (half-size textures, no normal maps on stone,
+   * a simpler skyline and props, fewer lamp cones, the bloom tuned for it). high and ultra build the PC's
+   * own world on a phone. Desktops always build the full world, on every preset.
+   */
+  touchLiteContent: boolean;
 }
 
 export const QUALITY: Record<QualityName, QualityPreset> = {
-  low: { portalViews: 1, pixelRatio: 0.75, shadowMap: 1024, bloom: false, bloomScale: 0.5, portalScale: 0.4, lampLights: 4, rainDrops: 1400, antialias: false, scryWindow: true },
-  medium: { portalViews: 2, pixelRatio: 1.0, shadowMap: 1024, bloom: true, bloomScale: 0.5, portalScale: 0.5, lampLights: 6, rainDrops: 2600, antialias: false, scryWindow: true },
-  high: { portalViews: 3, pixelRatio: 1.5, shadowMap: 2048, bloom: true, bloomScale: 0.5, portalScale: 0.75, lampLights: 10, rainDrops: 4200, antialias: true, scryWindow: true },
-  ultra: { portalViews: 4, pixelRatio: 2.0, shadowMap: 4096, bloom: true, bloomScale: 0.5, portalScale: 1.0, lampLights: 14, rainDrops: 6500, antialias: true, scryWindow: true },
+  low: { portalViews: 1, pixelRatio: 0.75, touchPixelRatio: 1.0, shadowMap: 1024, bloom: false, bloomScale: 0.5, portalScale: 0.4, antialias: false, touchLiteContent: true },
+  medium: { portalViews: 2, pixelRatio: 1.0, touchPixelRatio: 1.5, shadowMap: 1024, bloom: true, bloomScale: 0.5, portalScale: 0.5, antialias: false, touchLiteContent: true },
+  high: { portalViews: 3, pixelRatio: 1.5, touchPixelRatio: 2.0, shadowMap: 2048, bloom: true, bloomScale: 0.5, portalScale: 0.75, antialias: true, touchLiteContent: false },
+  ultra: { portalViews: 4, pixelRatio: 2.0, touchPixelRatio: 3.0, shadowMap: 4096, bloom: true, bloomScale: 0.5, portalScale: 1.0, antialias: true, touchLiteContent: false },
 };
 
 export const IS_TOUCH =
@@ -138,7 +148,18 @@ export const IS_TOUCH =
   (window.matchMedia?.('(pointer: coarse)').matches || 'ontouchstart' in window) &&
   !window.matchMedia?.('(pointer: fine)').matches;
 
-export function defaultQuality(): QualityName {
-  if (IS_TOUCH) return 'medium';
+/** Every device starts on `high`: the PC's look (phones at their own resolution, up to 2x: touchPixelRatio). */
+export function defaultQuality(_touch = IS_TOUCH): QualityName {
   return 'high';
+}
+
+/** Whether the world is built in its lighter variant: phones on low or medium only (a desktop always builds the full world). */
+export function liteContent(preset: QualityPreset, touch = IS_TOUCH): boolean {
+  return touch && preset.touchLiteContent;
+}
+
+/** The pixel ratio a preset renders at on this device: its own, up to the preset's cap for the device type. */
+export function renderPixelRatio(preset: QualityPreset, devicePixelRatio: number, touch = IS_TOUCH): number {
+  const dev = devicePixelRatio > 0 && Number.isFinite(devicePixelRatio) ? devicePixelRatio : 1;
+  return Math.min(dev, touch ? preset.touchPixelRatio : preset.pixelRatio);
 }

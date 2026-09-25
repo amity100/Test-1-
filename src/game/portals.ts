@@ -378,7 +378,7 @@ export class RiftSystem implements RiftAPI {
     this.ghost = new THREE.Mesh(UNIT_PLANE, this.ghostMat);
     this.ghost.renderOrder = 30;
 
-    this.ringMat = new THREE.MeshBasicMaterial({ color: 0x20ffe0, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+    this.ringMat = new THREE.MeshBasicMaterial({ color: 0x20ffe0, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, forceSinglePass: true });
     this.ring = new THREE.Mesh(new THREE.RingGeometry(0.34, 0.42, 40).rotateX(-Math.PI / 2), this.ringMat);
     const arrowShape = new THREE.Shape();
     arrowShape.moveTo(0, 0.95);
@@ -421,6 +421,54 @@ export class RiftSystem implements RiftAPI {
   }
 
   private outcomeAt: ((x: number, z: number, y: number) => 'splash' | 'void' | null) | null;
+
+  /**
+   * A rift for warming shaders (compile it with the scene: its window, frame and sparks programs
+   * exist before the first rift opens). Take it out of the scene afterwards.
+   */
+  warmRoot(camera?: THREE.Camera): THREE.Object3D {
+    const p = this.pool[this.pool.length - 1] ?? new Portal();
+    if (!this.pool.includes(p)) this.pool.push(p);
+    if (camera) {
+      // open, facing the camera a few metres ahead: a warm-up render draws it too (some drivers
+      // only finish a shader at its first draw)
+      camera.getWorldDirection(_a);
+      p.root.position.copy(camera.position).addScaledVector(_a, 3);
+      p.root.quaternion.copy(camera.quaternion);
+      p.root.updateMatrixWorld(true);
+      p.applyUniforms(0, 1, false);
+    }
+    return p.root;
+  }
+
+  /** The warm-up rift back to its pooled state (closed, hidden). */
+  warmDone(root: THREE.Object3D) {
+    const p = this.pool.find((q) => q.root === root);
+    p?.applyUniforms(0, 0, false);
+    root.removeFromParent();
+  }
+
+  /**
+   * The windows' render targets, allocated now (at load, after a resize or a quality change) at the
+   * size the next views need, so the frame a rift opens in doesn't allocate them.
+   */
+  preallocate(screenW: number, screenH: number, dpr: number, renderer = this.renderer) {
+    if (!renderer) return;
+    const w = Math.max(64, Math.floor(screenW * dpr * this.portalScale)), h = Math.max(64, Math.floor(screenH * dpr * this.portalScale));
+    for (let i = 0; i < this.maxViews; i++) {
+      const rt = this.rts[i];
+      if (rt && rt.width === w && rt.height === h) continue;
+      rt?.dispose();
+      const n = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType });
+      this.rts[i] = n;
+      renderer.initRenderTarget(n);
+    }
+  }
+
+  /** The pooled rift glow lights (intensity 0 while no end is lit). */
+  get glowLights(): readonly THREE.PointLight[] {
+    return this.lights;
+  }
 
   setPortalScale(s: number) {
     this.portalScale = s;
@@ -1645,7 +1693,12 @@ export class RiftSystem implements RiftAPI {
   // Rendering the windows
   // ------------------------------------------------------------------
 
-  renderViews(camera: THREE.PerspectiveCamera, screenW: number, screenH: number, hide: THREE.Object3D[]) {
+  /**
+   * Render each visible window's view. `sceneW` / `sceneH`: the size in device pixels the main
+   * view renders at this frame (the windows map their view by screen position; with dynamic
+   * resolution it's below the canvas's own). Omitted: screenW / screenH at the renderer's pixel ratio.
+   */
+  renderViews(camera: THREE.PerspectiveCamera, screenW: number, screenH: number, hide: THREE.Object3D[], sceneW?: number, sceneH?: number) {
     const r = this.renderer;
     if (!r) return;
     camera.updateMatrixWorld();
@@ -1734,8 +1787,8 @@ export class RiftSystem implements RiftAPI {
           const o = all[k];
           o.root.visible = rv[k] && o !== p && o !== q && o.view !== p;
         }
+        // (render() clears the view's rectangle itself: the scene's background, depth)
         r.setRenderTarget(rt);
-        r.clear();
         r.render(this.scene, this.vcam);
         p.mat.uniforms.tView.value = rt.texture;
       }
@@ -1750,7 +1803,7 @@ export class RiftSystem implements RiftAPI {
       if (this.ghostFigure) this.ghostFigure.visible = figVis;
       for (let k = 0; k < all.length; k++) all[k].root.visible = rv[k];
     }
-    for (const p of all) p.mat.uniforms.uScreen.value.set(pw, ph);
+    for (const p of all) p.mat.uniforms.uScreen.value.set(sceneW ?? pw, sceneH ?? ph);
   }
 
   // ------------------------------------------------------------------

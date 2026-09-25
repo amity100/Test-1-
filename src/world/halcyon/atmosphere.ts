@@ -47,8 +47,9 @@ export function halcyonAtmosphere(mobile: boolean): TowerAtmosphere {
     look: { bloom: mobile ? [0.4, 0.35, 2.4] : [0.45, 0.5, 1.7], saturation: 1.06, flash: [0.005, 0.2], bloomClamp: mobile ? 3 : 6 },
     // lanterns read in daylight, as in the concept (no light cones on phones: a whole additive pass saved)
     lampLook: { glow: 0.55, cones: mobile ? 0 : 0.25, power: 0.6 },
-    // (the shadow box reaches ahead along the view: the square is lit and shaded while you look at it from above)
-    shadow: { extent: mobile ? 40 : 50, ahead: 18 },
+    // (the shadow box reaches ahead along the view: the square is lit and shaded while you look at it from above;
+    // phones get the same box)
+    shadow: { extent: 50, ahead: 18 },
     // (the route walks into the low sun: without a rim every man is a black cut-out)
     rim: 1,
   };

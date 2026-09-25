@@ -50,6 +50,7 @@ const _y = new THREE.Vector3(0, 1, 0);
  * circling high over the square and people in coats strolling the far
  * quays and the Pont d'Or (those two not on phones). Instanced: one draw per
  * template however many move; the matrices are set each frame. No shadows.
+ * Each is culled as a whole, by a fixed sphere round everywhere it goes.
  */
 export function buildTraffic(ctx: CityCtx) {
   const m = ctx.mobile;
@@ -57,10 +58,27 @@ export function buildTraffic(ctx: CityCtx) {
   const inst = (geo: THREE.BufferGeometry | null, key: string, n: number, name: string) => {
     const im = new THREE.InstancedMesh(geo!, mats[key], n);
     im.name = name;
-    im.frustumCulled = false;
     im.castShadow = false;
     ctx.zoneRoot.add(im);
     return im;
+  };
+  /**
+   * Culled as one: a fixed sphere round every place its instances can reach (`box`: where their origins go),
+   * grown by the template's own reach at its largest scale. Out of the view (or a rift's), no draw.
+   */
+  const reach = (im: THREE.InstancedMesh, box: THREE.Box3, maxScale = 1) => {
+    const g = im.geometry;
+    if (!g.boundingSphere) g.computeBoundingSphere();
+    const gs = g.boundingSphere!;
+    box.expandByScalar((gs.center.length() + gs.radius) * maxScale);
+    im.boundingSphere = box.getBoundingSphere(new THREE.Sphere());
+    im.frustumCulled = true;
+  };
+  /** The box round a polyline (x, z) at height y. */
+  const lineBox = (pts: [number, number][], y: number) => {
+    const b = new THREE.Box3();
+    for (const [x, z] of pts) b.expandByPoint(_p.set(x, y, z));
+    return b;
   };
 
   // ---- trains: 3 cars each, 14 m long, cream over navy
@@ -79,6 +97,10 @@ export function buildTraffic(ctx: CityCtx) {
   const cars = trains.length * 3;
   const body = inst(carBody, 'enamel', cars, 'traffic:cars');
   const glow = inst(carGlow, 'emissive', cars, 'traffic:carGlow');
+  // (both viaducts; past either end a car runs on up to 30 m, into the terminus)
+  const rails = lineBox(MERIDIAN.pts, MERIDIAN.deck + 0.2).union(lineBox(CRESCENT.pts, CRESCENT.deck + 0.2)).expandByScalar(30);
+  reach(body, rails.clone());
+  reach(glow, rails.clone());
 
   // ---- river launches: varnished hull, cream cabin, a striped canopy, a wake
   const [boatBody] = template((b) => {
@@ -96,6 +118,7 @@ export function buildTraffic(ctx: CityCtx) {
     { z: 152, speed: -1.0, x0: 90 },
   ].slice(0, m ? 1 : 2);
   const boatIm = inst(boatBody, 'paint', boats.length, 'traffic:launches');
+  reach(boatIm, new THREE.Box3(V(-420, -2.05, Math.min(...boats.map((b) => b.z))), V(420, -1.95, Math.max(...boats.map((b) => b.z)))));
 
   // ---- swifts: a dark V, circling high over the square (desktop only)
   const birds = m ? 0 : 20;
@@ -111,6 +134,9 @@ export function buildTraffic(ctx: CityCtx) {
     }, ['paint']);
     birdIm = inst(bird, 'paint', birds, 'traffic:swifts');
     for (let i = 0; i < birds; i++) birdInfo.push({ r: 30 + ((i * 37) % 21), y: 55 + ((i * 13) % 15), w: (0.18 + ((i * 7) % 5) * 0.03) * (i % 3 ? 1 : -1), a: i * 1.7, f: 6 + (i % 4) });
+    // (circles of up to 50 m round the statue, 55-69 m up and bobbing 2 m; wings stretched up to 2.9x)
+    const rMax = Math.max(...birdInfo.map((b) => b.r)), y0 = Math.min(...birdInfo.map((b) => b.y)) - 2, y1 = Math.max(...birdInfo.map((b) => b.y)) + 2;
+    reach(birdIm, new THREE.Box3(V(PEDESTAL.x - rMax, y0, PEDESTAL.z - rMax), V(PEDESTAL.x + rMax, y1, PEDESTAL.z + rMax)), 2.9);
   }
 
   // ---- people in coats strolling the far quays and the Pont d'Or (desktop only; distant silhouettes, never in a fight)
@@ -135,6 +161,12 @@ export function buildTraffic(ctx: CityCtx) {
       else w.z = w.lo + r() * (w.hi - w.lo);
     }
     people = inst(person, 'paint', walkers.length, 'traffic:people');
+    const walks = new THREE.Box3();
+    for (const w of walkers) {
+      walks.expandByPoint(_p.set(w.alongX ? w.lo : w.x, w.y, w.alongX ? w.z : w.lo));
+      walks.expandByPoint(_p.set(w.alongX ? w.hi : w.x, w.y + 0.04, w.alongX ? w.z : w.hi));
+    }
+    reach(people, walks);
     const coats = [0x1d2b45, 0x3a2a22, 0x5a1a18, 0x3c4048, 0x6a5a48, 0x22242a];
     walkers.forEach((_, i) => people!.setColorAt(i, new THREE.Color(coats[i % coats.length])));
   }

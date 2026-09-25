@@ -626,6 +626,18 @@ describe('Halcyon architecture: levels, walls and the lessons\' spaces', () => {
     const M = buildHalcyon(null, true, { headless: true });
     expect(tris(M).all).toBeLessThan(t.all * 0.56);
     expect(tris(buildHalcyon(null, false, { headless: true })).all).toBe(t.all);
+    // phones cast what the PC casts: the same buckets (railings, ironwork, paint, leaves too) and the same box
+    const casting = (lv: TowerBuild) => {
+      const keys = new Set<string>();
+      lv.root.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (m.isMesh && m.castShadow && /^halcyon:(left|centre|right):[a-z]+$/.test(m.name)) keys.add(m.name.split(':')[2]);
+      });
+      return [...keys].sort();
+    };
+    expect(casting(M)).toEqual(casting(L));
+    expect(casting(M)).toEqual(expect.arrayContaining(['foliage', 'iron', 'lattice', 'leaves', 'paint', 'stone', 'trim']));
+    expect(M.atmosphere.shadow).toEqual(L.atmosphere.shadow);
   });
 });
 

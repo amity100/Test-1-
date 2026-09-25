@@ -366,7 +366,7 @@ export interface RiftAPI extends RiftQuery {
   setBossPair(a: (RiftFrame & { kind: RiftEndKind }) | null, b: (RiftFrame & { kind: RiftEndKind }) | null): void;
   updatePreview(aim: ExitAim | null, handPos: V3, cam: THREE.Camera): void;
   update(dt: number, realDt: number, time: number): void;
-  renderViews(camera: THREE.PerspectiveCamera, screenW: number, screenH: number, hide: THREE.Object3D[]): void;
+  renderViews(camera: THREE.PerspectiveCamera, screenW: number, screenH: number, hide: THREE.Object3D[], sceneW?: number, sceneH?: number): void;
   setPortalScale(s: number): void;
   maxViews: number;
   reset(): void;

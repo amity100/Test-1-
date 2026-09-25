@@ -213,6 +213,8 @@ export class Audio implements AudioAPI {
   private last = new Map<string, number>();
   private lis = new THREE.Vector3();
   private lisR = new THREE.Vector3(1, 0, 0);
+  /** The camera orientation the listener was last given. */
+  private lisQ = new THREE.Quaternion();
 
   // slow-mo
   private slow = 0;
@@ -831,13 +833,15 @@ export class Audio implements AudioAPI {
   // Listener, intensity, altitude, slow-mo (per-frame safe)
   // ---------------------------------------------------------------------------
 
-  /** Per frame. Moves the WebAudio listener to the camera. */
+  /** Per frame. Moves the WebAudio listener to the camera (not when it hasn't moved: no automation events to queue). */
   updateListener(cam: THREE.Camera): void {
     const ctx = this.ctx;
     if (!ctx) return;
     try {
       cam.getWorldPosition(_p);
       cam.getWorldQuaternion(_q);
+      if (_p.distanceToSquared(this.lis) < 1e-8 && Math.abs(_q.dot(this.lisQ)) > 1 - 1e-9) return;
+      this.lisQ.copy(_q);
       _f.set(0, 0, -1).applyQuaternion(_q);
       _u.set(0, 1, 0).applyQuaternion(_q);
       this.lis.copy(_p);

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { FEEL, IS_TOUCH, QualityName } from '../config';
+import { FEEL, IS_TOUCH, liteContent, QualityName } from '../config';
 import {
   LAW,
   type ActorHit,
@@ -39,6 +39,10 @@ import { TouchControls } from '../engine/touch';
 import { Audio } from '../engine/audio';
 import { Renderer } from '../render/renderer';
 import { applySkyStyle, createSky, createSkyEnvMap, createSkyline, DEFAULT_SKY, LampSystem } from '../render/fx';
+import { LightGate } from '../render/lightgate';
+import { SPARK_PX } from '../render/portalMaterial';
+import { PixelLines } from '../render/pixelLines';
+import { ShadowBox } from '../render/shadowbox';
 import { createDecoSkyline } from '../render/cityscape';
 import type { TowerBuild } from '../world/tower';
 import { TOWER } from '../world/tower/layout';
@@ -70,12 +74,9 @@ import { PhotoMode } from '../meta/photo';
 import { ChallengeSystem } from '../meta/challenges';
 import { META_STRINGS } from '../meta/strings';
 
-export interface Settings {
-  quality: QualityName;
-  sensitivity: number;
-  invertY: boolean;
-  slowmo: boolean;
-}
+import type { Settings } from './settings';
+import { beginRenderFrame } from '../render/frameonce';
+export type { Settings };
 
 export type { RunStats };
 
@@ -104,8 +105,8 @@ const GATE_MOUTH = 1.6;
 const GATE_MOUTH_WAIT = 4;
 /** A wave steps through its gate one man at a time, this far apart at least (s). */
 const GATE_SPACING = 0.45;
-/** Phones: characters further than this (m) from you cast no shadow (a far one's is a few pixels; each costs a draw). */
-const PHONE_SHADOW_R = 22;
+/** Real spot lights the lamp system moves between the lamps nearest the player (every preset). */
+const LAMP_LIGHTS = 4;
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -242,6 +243,7 @@ export class Game {
   private airCrossings = 0;
   private catchWindow = { t: -1, count: 0 };
   private telegraphs: { kind: 'laser' | 'beam' | 'arc' | 'charge'; from: THREE.Vector3; to: THREE.Vector3; t: number }[] = [];
+  private telegraphPool: Game['telegraphs'] = [];
   private telegraphLines: THREE.LineSegments;
   private arcLine: THREE.Line;
   private arcWasVisible = false;
@@ -250,12 +252,19 @@ export class Game {
   private clipFrames: Snapshot[] | null = null;
   private visionOn = false;
   private helpers: THREE.Object3D[] = [];
+  /** Rift glows and blast flashes: out of the light set while none is lit (the same picture, less work). */
+  private effectLights: LightGate | null = null;
   private asset!: CharacterAsset;
   private anims!: AnimLibrary;
   private hintsSeen = new Set<string>();
   private liveSnap: Snapshot | null = null;
   private replayProj: THREE.InstancedMesh;
   private replayBeams: THREE.LineSegments;
+  /**
+   * Lasers and replay beams as 1 CSS pixel wide quads where the render has more than ~1 pixel per
+   * CSS pixel (a phone at 2x: a GL line, always 1 device pixel, would be half as wide as meant).
+   */
+  private wideLines: PixelLines[] = [];
   private bossDead = false;
   private victoryT = -1;
   private tricksSeen = new Set<string>();
@@ -268,11 +277,15 @@ export class Game {
   private built = false;
   /** The faded Voss that warms the blink's shader programs (kept across world switches). */
   private fadeWarm: Character | null = null;
+  /** One man of every enemy look: their casters (a warden's shield, the guns) warm the shadow pass's programs. */
+  private castWarm: Character[] = [];
   /** The level's own finish (the train) is open / the player stepped into it. */
   private meReady = false;
   private boarded = false;
   /** Metres ahead of the player (along the view) the sun's shadow box centres. */
   private shadowAhead = 0;
+  /** The shadow box in the sun's frame: moved in whole shadow-map texels (no edge crawl). */
+  private shadowBox = new ShadowBox();
 
   stats: RunStats = { time: 0, kills: 0, bestCombo: 0, styleTotal: 0, tricks: 0, deaths: 0, challenges: 0 };
   onPause: () => void = () => {};
@@ -282,6 +295,9 @@ export class Game {
 
   constructor(private canvas: HTMLCanvasElement, private uiRoot: HTMLElement, settings: Settings) {
     this.settings = settings;
+    // (the scene's matrices are brought up to date once per frame, in render(), not in each render call:
+    // a frame renders the scene once per rift window as well)
+    this.scene.matrixWorldAutoUpdate = false;
     this.renderer = new Renderer(canvas, settings.quality, this.scene, this.camera);
     this.input = new Input(canvas);
     this.input.sensitivity = settings.sensitivity;
@@ -326,6 +342,7 @@ export class Game {
     this.telegraphLines = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending }));
     this.telegraphLines.frustumCulled = false;
     this.scene.add(this.telegraphLines);
+    this.wideLines.push(new PixelLines(this.telegraphLines, 1));
     const ag = new THREE.BufferGeometry();
     ag.setAttribute('position', new THREE.BufferAttribute(new Float32Array(64 * 3), 3).setUsage(THREE.DynamicDrawUsage));
     this.arcLine = new THREE.Line(ag, new THREE.LineDashedMaterial({ color: new THREE.Color(3, 1.2, 0.4), dashSize: 0.35, gapSize: 0.25, transparent: true, opacity: 0.9, depthWrite: false }));
@@ -345,6 +362,7 @@ export class Game {
     this.replayBeams.visible = false;
     this.replayBeams.frustumCulled = false;
     this.scene.add(this.replayBeams);
+    this.wideLines.push(new PixelLines(this.replayBeams, 1));
   }
 
   // ------------------------------------------------------------------
@@ -354,7 +372,8 @@ export class Game {
   async load(asset: CharacterAsset, anims: AnimLibrary, world: WorldId = 'harbour') {
     this.asset = asset;
     this.anims = anims;
-    this.buildWorld(world);
+    // (shaders compile in parallel where the browser can: the loader keeps going meanwhile)
+    await this.buildWorld(world, true);
   }
 
   /**
@@ -399,11 +418,11 @@ export class Game {
    * shaders) leaves nothing in the scene and throws: the caller may build
    * another in its place.
    */
-  private buildWorld(id: WorldId) {
+  private buildWorld(id: WorldId): void;
+  private buildWorld(id: WorldId, async: true): Promise<void>;
+  private buildWorld(id: WorldId, async = false): void | Promise<void> {
     const before = new Set(this.scene.children);
-    try {
-      this.buildWorldInto(id, before);
-    } catch (e) {
+    const fail = (e: unknown) => {
       for (const o of this.scene.children.filter((c) => !before.has(c))) {
         this.scene.remove(o);
         disposeTree(o);
@@ -412,19 +431,43 @@ export class Game {
       this.scene.environment = null;
       this.worldObjs = [];
       throw e;
+    };
+    if (async) {
+      return (async () => {
+        try {
+          await this.buildWorldInto(id, before, true);
+        } catch (e) {
+          fail(e);
+        }
+        this.built = true;
+      })();
+    }
+    try {
+      this.buildWorldInto(id, before);
+    } catch (e) {
+      fail(e);
     }
     this.built = true;
   }
 
-  private buildWorldInto(id: WorldId, before: Set<THREE.Object3D>) {
+  /** Build the level, warm its shaders (`parallel`: without blocking the page), start a run. */
+  private buildWorldInto(id: WorldId, before: Set<THREE.Object3D>, parallel = false): void | Promise<void> {
+    this.buildLevel(id);
+    if (parallel) return this.warmShaders(true).then(() => this.finishWorld(before));
+    this.warmShaders(false);
+    this.finishWorld(before);
+  }
+
+  private buildLevel(id: WorldId) {
     const asset = this.asset, anims = this.anims;
     this.world = id;
     const r = this.renderer.renderer;
-    const mobile = IS_TOUCH;
+    // (the world's lighter variant: phones on low / medium only; high and ultra build the PC's world everywhere)
+    const lite = liteContent(this.renderer.preset);
     // image-based light from the world's own sky
     const envMap = createSkyEnvMap(r, WORLD_SUN[id], WORLD_SKY[id]);
     this.scene.environment = envMap;
-    this.level = buildWorld(id, envMap, mobile);
+    this.level = buildWorld(id, envMap, lite);
     this.scene.add(this.level.root);
     const atm = this.level.atmosphere;
     this.scene.environmentIntensity = atm.environmentIntensity;
@@ -439,7 +482,7 @@ export class Game {
     applySkyStyle(this.sky, atm.sky ?? DEFAULT_SKY);
     CHAR_RIM.value = atm.rim ?? 0;
     this.renderer.setLook(atm.look);
-    const skyline = atm.skyline === 'deco' ? createDecoSkyline({ mobile, sunDir: this.level.sunDir, sky: atm.sky }) : createSkyline({ mobile, sunDir: this.level.sunDir });
+    const skyline = atm.skyline === 'deco' ? createDecoSkyline({ mobile: lite, sunDir: this.level.sunDir, sky: atm.sky }) : createSkyline({ mobile: lite, sunDir: this.level.sunDir });
     this.skyline = skyline;
     this.scene.add(skyline);
     const sunU = (this.sky.material as THREE.ShaderMaterial).uniforms.uSunDir;
@@ -451,8 +494,9 @@ export class Game {
     sc.left = -ext; sc.right = ext; sc.top = ext; sc.bottom = -ext;
     sc.updateProjectionMatrix();
     this.shadowAhead = atm.shadow?.ahead ?? 0;
+    this.shadowBox.setSun(this.level.sunDir);
     if (this.level.lamps.length) {
-      this.lamps = new LampSystem(this.level.lamps, Math.min(preset.lampLights, 4), false, atm.lampLook);
+      this.lamps = new LampSystem(this.level.lamps, LAMP_LIGHTS, false, atm.lampLook);
       this.scene.add(this.lamps.group);
     }
 
@@ -460,7 +504,8 @@ export class Game {
     const world = this.level.world;
     this.rifts = new RiftSystem(this.scene, r, world, {
       portalScale: preset.portalScale,
-      lightCount: mobile ? 2 : 4,
+      // (the same 4 rift glows on every device: lights are evaluated only where they reach)
+      lightCount: 4,
       maxViews: preset.portalViews,
       outcomeAt: (x, z, groundY) => {
         // (ground under a level kill line, the tracks in a rail cut, is no ground)
@@ -487,7 +532,7 @@ export class Game {
     for (const g of this.level.gates) this.rifts.addGate(g.id, g.inFrame, g.outFrame);
     this.props = new PropSystem(this.physics, this.level);
     this.scene.add(this.props.group);
-    this.hazards = new Hazards(this.level, world, this.rifts, mobile);
+    this.hazards = new Hazards(this.level, world, this.rifts, lite);
     this.strikes = new Strikes({
       rifts: this.rifts,
       world,
@@ -567,16 +612,106 @@ export class Game {
     fade.setOpacity(0.5);
     fade.root.position.copy(this.camera.position).addScaledVector(this.camera.getWorldDirection(_v), 4);
     this.scene.add(fade.root);
-    // pre-compile every shader variant so nothing hitches mid-fight
-    r.compile(this.scene, this.camera);
-    const tmp = new THREE.WebGLRenderTarget(16, 16, { type: THREE.HalfFloatType });
-    r.setRenderTarget(tmp);
-    r.render(this.scene, this.camera);
-    r.setRenderTarget(null);
-    tmp.dispose();
+    // every look's casters in the shadow pass: its depth programs (a warden's double-sided shield has
+    // its own) compiled now, not when the first warden walks into the sun's box mid-fight
+    if (!this.castWarm.length) {
+      for (const look of new Set(Object.values(LOOKS))) if (look !== 'boss') this.castWarm.push(new Character(asset, anims, look));
+    }
+    for (const c of this.castWarm) {
+      c.root.position.copy(fade.root.position);
+      this.scene.add(c.root);
+    }
+    // (0, 2 or all 6 in the light set: none lit, one rift pair open, anything more)
+    this.effectLights = new LightGate([...this.rifts.glowLights, ...this.fx.flashLights], [0, 2]);
+  }
+
+  /**
+   * Pre-compile every shader variant so nothing hitches mid-fight: the world with each size of the
+   * effect-light set (a program of every material for each), a rift (Halcyon has none
+   * in the scene at load: its first one would compile mid-fight), and the post chain. `parallel`:
+   * where the browser compiles in the background (KHR_parallel_shader_compile), wait for it
+   * without blocking the page. Each pass ends in a tiny render, which finishes what compiling left.
+   */
+  private warmShaders(parallel: true): Promise<void>;
+  private warmShaders(parallel: false): void;
+  private warmShaders(parallel: boolean): void | Promise<void> {
+    const r = this.renderer.renderer;
+    const gate = this.effectLights!;
+    const riftWarm = this.rifts.warmRoot(this.camera);
+    this.scene.add(riftWarm);
+    // (the warm-up draws go into targets like the ones the game draws into: the main view's, with
+    // its MSAA, and a rift view's, without)
+    const tmp = new THREE.WebGLRenderTarget(16, 16, { type: THREE.HalfFloatType, samples: this.renderer.sceneRT.samples });
+    const tmpView = new THREE.WebGLRenderTarget(16, 16, { type: THREE.HalfFloatType });
+    // (the sun's shadow box on the stand-ins, and a shadow map drawn in every pass: the depth
+    // programs of each caster for each light-set size; the frame places the sun again)
+    const at = this.fadeWarm!.root.position;
+    this.sun.position.copy(at).addScaledVector(this.level.sunDir, 140);
+    this.sun.target.position.copy(at);
+    const pass = (on: boolean) => {
+      this.scene.updateMatrixWorld();
+      r.shadowMap.needsUpdate = true;
+      r.setRenderTarget(tmp);
+      r.render(this.scene, this.camera);
+      // (rift views render while a rift is lit: some effect lights are in)
+      if (on) {
+        r.setRenderTarget(tmpView);
+        r.render(this.scene, this.camera);
+      }
+      r.setRenderTarget(null);
+    };
+    const done = () => {
+      r.setRenderTarget(null);
+      tmp.dispose();
+      tmpView.dispose();
+      this.rifts.warmDone(riftWarm);
+      gate.update();
+    };
+    const finish = () => {
+      this.renderer.compilePost();
+      // the windows' targets now, not in the frame the first rift opens
+      this.rifts.preallocate(this.renderer.width, this.renderer.height, r.getPixelRatio());
+    };
+    if (parallel) {
+      return (async () => {
+        try {
+          for (const size of [...gate.sizes].reverse()) {
+            gate.setSize(size);
+            // (compiled for a render target: the scene is only ever drawn into one, never the canvas)
+            r.setRenderTarget(tmp);
+            await r.compileAsync(this.scene, this.camera);
+            pass(size > 0);
+          }
+          finish();
+        } finally {
+          done();
+        }
+      })();
+    }
+    try {
+      for (const size of [...gate.sizes].reverse()) {
+        gate.setSize(size);
+        // (compiled for a render target: the scene is only ever drawn into one, never the canvas)
+        r.setRenderTarget(tmp);
+        r.compile(this.scene, this.camera);
+        pass(size > 0);
+      }
+      finish();
+    } finally {
+      done();
+    }
+  }
+
+  /** After the warm-up: the stand-ins go, the world's objects are recorded, a run starts. */
+  private finishWorld(before: Set<THREE.Object3D>) {
+    const fade = this.fadeWarm!;
     this.scene.remove(fade.root);
     // (its materials stay: they keep the warmed programs; its bone textures don't need to)
     fade.root.traverse((c) => (c as THREE.SkinnedMesh).skeleton?.dispose());
+    for (const c of this.castWarm) {
+      this.scene.remove(c.root);
+      c.root.traverse((o) => (o as THREE.SkinnedMesh).skeleton?.dispose());
+    }
     this.worldObjs = this.scene.children.filter((o) => !before.has(o));
     this.newRun();
   }
@@ -588,9 +723,12 @@ export class Game {
     this.input.invertY = s.invertY;
     if (qualityChanged) {
       this.renderer.applyQuality(s.quality);
+      // (the sun's shadow map follows the preset too: three resizes it at the next shadow render)
+      const sm = this.renderer.preset.shadowMap;
+      this.sun.shadow.mapSize.set(sm, sm);
       this.rifts?.setPortalScale(this.renderer.preset.portalScale);
       if (this.rifts) this.rifts.maxViews = this.renderer.preset.portalViews;
-      this.fx.setPixelRatio(this.renderer.renderer.getPixelRatio());
+      this.syncPixelScale(true);
     }
   }
 
@@ -1180,7 +1318,16 @@ export class Game {
         this.audio.beamFire(from);
       },
       telegraph: (_e, kind, from, to, t01) => {
-        if (this.telegraphs.length < 24) this.telegraphs.push({ kind, from: from.clone(), to: to.clone(), t: t01 });
+        const n = this.telegraphs.length;
+        if (n < 24) {
+          // (entries reused frame to frame: the list is refilled every frame)
+          const th = (this.telegraphPool[n] ??= { kind, from: new THREE.Vector3(), to: new THREE.Vector3(), t: 0 });
+          th.kind = kind;
+          th.from.copy(from);
+          th.to.copy(to);
+          th.t = t01;
+          this.telegraphs.push(th);
+        }
         if (kind === 'laser' && t01 < 0.05) this.audio.laserLock(from);
         if (kind === 'beam' && t01 < 0.05) this.audio.beamCharge(from);
       },
@@ -1665,6 +1812,9 @@ export class Game {
       this.camera.getWorldDirection(_v4).setY(0);
       if (_v4.lengthSq() > 1e-6) shadowAt.addScaledVector(_v4.normalize(), this.shadowAhead);
     }
+    // (moved across the light in whole texels: static shadow edges stay on their texels, no crawl)
+    const sh = this.sun.shadow;
+    this.shadowBox.place(shadowAt, (sh.camera.right - sh.camera.left) / sh.mapSize.x, shadowAt);
     this.sun.position.copy(shadowAt).addScaledVector(this.level.sunDir, 140);
     this.sun.target.position.copy(shadowAt);
     this.lamps?.update(this.ambientT, focus);
@@ -1923,8 +2073,6 @@ export class Game {
     // a fight drives the music; enemies searching for you (or suspicious) only keep it tense
     let fight = 0, tense = 0;
     for (const e of this.enemies.list) {
-      // (phones: only the men near you cast a shadow; each one is a skinned draw in the shadow pass)
-      if (IS_TOUCH) e.char.setShadow?.(e.pos.distanceToSquared(body.pos) < PHONE_SHADOW_R * PHONE_SHADOW_R);
       if (!e.alive || !this.zones.active.has(e.def.zone)) continue;
       if (e.state === 'combat' && !e.searching) fight = 1;
       else if (e.aware) tense = 1;
@@ -1947,8 +2095,10 @@ export class Game {
     return this.crouchState;
   }
 
+  /** The player's event handlers: built once (they read the game's state when they run). */
+  private playerEv?: PlayerEvents;
   private playerEvents(): PlayerEvents {
-    return {
+    return (this.playerEv ??= {
       footstep: (pos, loud, radius) => {
         this.audio.footstep(pos, loud, this.player.body.groundCollider?.tag === 'steel');
         if (radius > 2) this.noise.push({ at: pos.clone(), radius });
@@ -1969,7 +2119,7 @@ export class Game {
         this.rig.kick = Math.max(this.rig.kick, 0.8);
         this.renderer.grade.uniforms.uFlash.value = 1;
       },
-    };
+    });
   }
 
   private onPlayerLanded(pos: V3, speed: number, charged: boolean) {
@@ -2517,6 +2667,7 @@ export class Game {
     this.hud.setMarkers(list);
   }
 
+  private telegraphN = 0;
   private drawTelegraphs() {
     const pos = this.telegraphLines.geometry.getAttribute('position') as THREE.BufferAttribute;
     const col = this.telegraphLines.geometry.getAttribute('color') as THREE.BufferAttribute;
@@ -2537,8 +2688,12 @@ export class Game {
       n++;
     }
     this.telegraphLines.geometry.setDrawRange(0, n * 2);
-    pos.needsUpdate = true;
-    col.needsUpdate = true;
+    // (no telegraphs now and none last frame: nothing to upload)
+    if (n > 0 || this.telegraphN > 0) {
+      pos.needsUpdate = true;
+      col.needsUpdate = true;
+    }
+    this.telegraphN = n;
     // grenade arc preview
     if (arc) {
       const ap = this.arcLine.geometry.getAttribute('position') as THREE.BufferAttribute;
@@ -2762,7 +2917,7 @@ export class Game {
     if (this.photoUi.consumeSnap() || this.input.wasPressed('portal') || this.input.wasPressed('action')) {
       this.photoUi.flash();
       this.audio.ui('shutter');
-      void this.photo.capture(this.renderer.renderer.domElement, () => this.render(0)).then((blob) => {
+      void this.photo.capture(this.renderer.renderer.domElement, () => this.renderFull()).then((blob) => {
         if (blob)
           void this.exporter.share(blob, 'threshold-photo').then((r) => {
             if (r === 'failed') {
@@ -2810,11 +2965,51 @@ export class Game {
   // Render
   // ------------------------------------------------------------------
 
+  /** One render at full resolution whatever the dynamic scale (a photo). */
+  private fullRes = false;
+  private renderFull() {
+    this.fullRes = true;
+    try {
+      this.render(0);
+    } finally {
+      this.fullRes = false;
+    }
+  }
+
+  /** Point sprites are sized in render pixels: kept at their intended size at any pixel ratio / dynamic scale. */
+  private pixelScale = -1;
+  private syncPixelScale(force = false) {
+    const R = this.renderer;
+    const dpr = R.renderer.getPixelRatio();
+    const k = dpr * R.renderScale;
+    if (!force && k === this.pixelScale) return;
+    this.pixelScale = k;
+    this.fx.setPixelRatio(k);
+    // (rift sparks: phones at 2x keep their size; desktops as they always were)
+    SPARK_PX.value = (IS_TOUCH ? dpr : 1) * R.renderScale;
+    // (desktops keep their GL lines: they look as they always did)
+    for (const l of this.wideLines) l.enabled = IS_TOUCH && dpr > 1.25;
+  }
+
   private render(realDt: number) {
     const r = this.renderer.renderer;
+    beginRenderFrame();
     r.shadowMap.autoUpdate = false;
     r.shadowMap.needsUpdate = true;
-    if (this.mode !== 'menu') this.rifts.renderViews(this.camera, this.renderer.width, this.renderer.height, this.helpers);
+    this.effectLights?.update();
+    const R = this.renderer;
+    // dynamic resolution adapts in play only (menus, pause and replays keep the scale they have);
+    // a clip being recorded is full resolution
+    R.dynres.active = this.mode === 'playing';
+    R.forceFull = this.exporter.recording || this.fullRes;
+    this.syncPixelScale();
+    // (after a resize or a quality change: the windows' targets before a rift needs them)
+    if (this.mode !== 'menu') this.rifts.preallocate(R.width, R.height, R.renderer.getPixelRatio());
+    const sw = R.sceneWidth, sh = R.sceneHeight;
+    for (const l of this.wideLines) l.sync(sw, sh, R.renderer.getPixelRatio() * R.renderScale);
+    // every transform of the frame is set: world matrices once, for the rift views and the main view alike
+    this.scene.updateMatrixWorld();
+    if (this.mode !== 'menu') this.rifts.renderViews(this.camera, R.width, R.height, this.helpers, sw, sh);
     this.renderer.grade.uniforms.uFocus.value = this.rifts.aiming ? 1 : 0;
     this.renderer.grade.uniforms.uFlash.value = Math.max(0, this.renderer.grade.uniforms.uFlash.value - realDt * 3);
     this.renderer.grade.uniforms.uDamage.value = this.mode === 'playing' ? THREE.MathUtils.clamp(1 - this.hp / 45, 0, 1) * 0.6 : 0;

@@ -402,7 +402,8 @@ export function createDecoSkyline(opts: { mobile?: boolean; sunDir?: THREE.Vecto
   const mesh = new THREE.Mesh(g.build(), decoMaterial({ sunDir: opts.sunDir ?? new THREE.Vector3(0.7, 0.41, 0.59), sky: opts.sky, haze: 0.0005, floor: 0.015 }));
   mesh.name = 'skyline';
   mesh.frustumCulled = false;
-  mesh.renderOrder = -900;
+  // after the opaque world, before the sky (depth-tested: the same pixels, fewer shaded)
+  mesh.renderOrder = 900;
   const group = new THREE.Group();
   group.name = 'skyline';
   group.add(mesh);
