@@ -463,6 +463,9 @@ export class RiftSystem implements RiftAPI {
       this.rts[i] = n;
       renderer.initRenderTarget(n);
     }
+    // (fewer views than before, a lower preset: the targets past them are never drawn again)
+    for (let i = Math.max(0, this.maxViews); i < this.rts.length; i++) this.rts[i].dispose();
+    if (this.rts.length > this.maxViews) this.rts.length = Math.max(0, this.maxViews);
   }
 
   /** The pooled rift glow lights (intensity 0 while no end is lit). */

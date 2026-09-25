@@ -569,8 +569,11 @@ Engine rules this world leans on (both worlds get them):
   light shafts, are drawn in one pass by three already.)
 - A dynamic-resolution safety net lowers the scene's resolution by 5% steps
   (never below 85% per axis) only after about a second of frames over budget
-  because of the GPU, and steps back up when there is room. Photos and clips
-  are full resolution. Settings → Performance overlay shows fps, frame / CPU /
+  because of the GPU, and steps back up when there is room. If the frames at
+  the floor are no faster than before the first step (a 30 Hz rAF in iOS Low
+  Power Mode or a battery saver: the resolution isn't what limits them), it
+  goes back to full resolution and doesn't step down for a minute. Photos and
+  clips are full resolution. Settings → Performance overlay shows fps, frame / CPU /
   GPU ms, the render size and scale, draws, triangles and the GPU.
 - Phones on `high` and `ultra` build the PC's own world: full-size textures
   and normal maps, alpha-to-coverage foliage and railings, the full skyline,

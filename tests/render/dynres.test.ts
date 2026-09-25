@@ -27,9 +27,31 @@ describe('dynamic resolution', () => {
 
   it('steps down under sustained GPU overload, never below the floor', () => {
     const d = new DynRes();
-    run(d, 0, 20000, 33, 5, 30);
+    // (the GPU's time follows the pixel count: each step makes frames a little faster, never fast enough)
+    let t = 0;
+    for (let i = 0; i < 20000; i++) {
+      const iv = 33 * d.scale * d.scale;
+      t += iv;
+      d.sample(t, iv, 5, 30 * d.scale * d.scale);
+    }
     expect(d.scale).toBeCloseTo(0.85, 6);
     expect(d.scale).toBeGreaterThanOrEqual(d.opt.floor);
+  });
+
+  it('gives the pixels back when the drop bought nothing (a 30 Hz rAF: Low Power Mode, no timer)', () => {
+    const d = new DynRes();
+    // every frame 33 ms whatever the resolution, little JS: looks GPU-bound without a timer
+    let t = run(d, 0, 60 * 3, 33.3, 3, null);
+    expect(d.scale).toBeCloseTo(0.85, 6);
+    // a full window at the floor, no faster: back to full resolution...
+    t = run(d, t, 60, 33.3, 3, null);
+    expect(d.scale).toBe(1);
+    // ...and it stays there for a minute
+    t = run(d, t, 1700, 33.3, 3, null);
+    expect(d.scale).toBe(1);
+    // (then it may try again)
+    run(d, t, 110, 33.3, 3, null);
+    expect(d.scale).toBe(0.95);
   });
 
   it('steps 0.05 at a time, at most once a second, each on a fresh window of frames', () => {

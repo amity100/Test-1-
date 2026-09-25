@@ -23,6 +23,19 @@ export interface PerfInfo {
 }
 
 const WINDOW_MS = 2000;
+
+/**
+ * The renderer string, short enough for one overlay line (pure: tested): the
+ * "ANGLE (...)" wrapper and hex device ids go, and a long name is cut, so the
+ * overlay stays narrow and doesn't cover the HUD on a phone.
+ */
+export function shortGpuName(name: string, max = 44): string {
+  let s = name.trim();
+  const m = /^ANGLE \((.*)\)$/.exec(s);
+  if (m) s = m[1];
+  s = s.replace(/\s*\(0x[0-9a-f]+\)/gi, '').replace(/\s+/g, ' ').trim();
+  return s.length > max ? s.slice(0, max - 1).trimEnd() + '\u2026' : s;
+}
 const UPDATE_MS = 250;
 
 /** fps and frame-interval stats over a window of rAF timestamps (pure: tested). */
@@ -113,6 +126,6 @@ export class PerfHud {
       `cpu ${ms(cpu)} ms  gpu ${ms(gpu)} ms\n` +
       `${i.width}x${i.height}  dpr ${i.dpr.toFixed(2)}/${i.deviceDpr.toFixed(2)}  scale ${i.scale.toFixed(2)}  msaa ${i.samples}  ${i.preset}\n` +
       `draws ${i.calls}  tris ${k(i.tris)}\n` +
-      i.gpuName;
+      shortGpuName(i.gpuName);
   }
 }

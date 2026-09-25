@@ -20,10 +20,24 @@ export class GpuTimer {
       this.ext = null;
     }
     this.available = !!this.ext;
+    // a lost context takes its queries with it: the pending ones would never report, begin() would
+    // stop at the pile-up guard, and `ms` would stay frozen at its last value for the dynamic
+    // resolution to read (stuck low after an iOS background / GPU reset). Forget them all.
+    const canvas = gl.canvas as HTMLCanvasElement | OffscreenCanvas | undefined;
+    canvas?.addEventListener?.('webglcontextlost', () => this.forget());
+    canvas?.addEventListener?.('webglcontextrestored', () => this.forget());
+  }
+
+  /** Every query dropped (they belong to a lost context), no reading kept. */
+  private forget() {
+    this.free = [];
+    this.pending = [];
+    this.active = null;
+    this.ms = null;
   }
 
   begin() {
-    if (!this.ext || this.active) return;
+    if (!this.ext || this.active || this.gl.isContextLost()) return;
     this.poll();
     // (a pile-up of unread results means the GPU is far behind: skip rather than grow)
     if (this.pending.length >= 6) return;

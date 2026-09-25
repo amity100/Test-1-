@@ -123,7 +123,8 @@ export class PixelLines {
    * (device pixels, after any dynamic scale); `pxPerCss`: render pixels per CSS pixel.
    */
   sync(renderW: number, renderH: number, pxPerCss: number) {
-    if (!this.mesh.visible) return;
+    // (hidden lines, e.g. the replay beams outside a replay: their last draw range isn't copied every frame)
+    if (!this.mesh.visible || !this.lines.visible) return;
     const lg = this.lines.geometry;
     const lp = lg.getAttribute('position') as THREE.BufferAttribute;
     const lc = lg.getAttribute('color') as THREE.BufferAttribute | undefined;

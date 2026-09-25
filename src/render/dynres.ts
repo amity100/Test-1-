@@ -31,6 +31,14 @@ export interface DynResOptions {
   /** Without a timer: probe one step up after probeAfterMs; if the drop comes back, hold for holdMs. */
   probeAfterMs: number;
   holdMs: number;
+  /**
+   * At the floor, a window of frames whose mean interval isn't at least this much shorter (fraction)
+   * than when the first step down was taken: the lower resolution bought nothing (a 30 Hz rAF in iOS
+   * Low Power Mode or a battery saver, a compositor or CPU limit the JS timer misses). Back to full
+   * resolution, and no stepping down for futileHoldMs.
+   */
+  minGain: number;
+  futileHoldMs: number;
 }
 
 export const DYNRES_DEFAULTS: DynResOptions = {
@@ -47,9 +55,12 @@ export const DYNRES_DEFAULTS: DynResOptions = {
   upAfterMs: 3000,
   probeAfterMs: 5000,
   holdMs: 20000,
+  minGain: 0.05,
+  futileHoldMs: 60000,
 };
 
 interface Sample {
+  iv: number;
   over: boolean;
   cpu: number;
   gpu: number | null;
@@ -69,6 +80,10 @@ export class DynRes {
   private goodSince = -1;
   private probing = false;
   private holdUntil = -Infinity;
+  /** Mean frame interval of the window that took the first step down from full resolution (0: none). */
+  private downFrom = 0;
+  /** No stepping down before this (a drop that bought nothing). */
+  private futileUntil = -Infinity;
 
   constructor(opt: Partial<DynResOptions> = {}) {
     this.opt = { ...DYNRES_DEFAULTS, ...opt };
@@ -83,7 +98,8 @@ export class DynRes {
   reset() {
     this.scale = 1;
     this.samples.length = 0;
-    this.lastDown = this.lastChange = this.holdUntil = -Infinity;
+    this.lastDown = this.lastChange = this.holdUntil = this.futileUntil = -Infinity;
+    this.downFrom = 0;
     this.goodSince = -1;
     this.probing = false;
   }
@@ -103,11 +119,24 @@ export class DynRes {
     }
     if (!(intervalMs > 0) || intervalMs > o.spikeMs) return this.scale;
     const s = this.samples;
-    s.push({ over: intervalMs > o.overMs, cpu: cpuMs, gpu: gpuMs });
+    s.push({ iv: intervalMs, over: intervalMs > o.overMs, cpu: cpuMs, gpu: gpuMs });
     if (s.length > o.window) s.shift();
 
+    // at the floor, a full window no faster than before the first step: the drop bought nothing
+    if (s.length >= o.window && this.scale <= o.floor + 1e-6 && this.scale < 1 - 1e-6 && this.downFrom > 0) {
+      if (meanInterval(s) > this.downFrom * (1 - o.minGain)) {
+        this.set(1, now);
+        this.futileUntil = now + o.futileHoldMs;
+        this.downFrom = 0;
+        this.probing = false;
+        s.length = 0;
+        this.goodSince = -1;
+        return this.scale;
+      }
+    }
+
     // down: most of the last second over budget, and the GPU is why
-    if (s.length >= o.window && this.scale > o.floor + 1e-6 && now - this.lastDown >= o.cooldownMs) {
+    if (s.length >= o.window && this.scale > o.floor + 1e-6 && now - this.lastDown >= o.cooldownMs && now >= this.futileUntil) {
       let over = 0, cpu = 0, gpu = 0, gpuN = 0;
       for (const q of s) {
         if (q.over) over++;
@@ -120,6 +149,7 @@ export class DynRes {
         // a probe up that brought the drop back (within a few seconds): stay down a while
         if (this.probing && now - this.lastChange < o.probeAfterMs) this.holdUntil = now + o.holdMs;
         this.probing = false;
+        if (this.scale >= 1 - 1e-6) this.downFrom = meanInterval(s);
         this.set(this.scale - o.step, now);
         this.lastDown = now;
         s.length = 0;
@@ -156,4 +186,10 @@ export class DynRes {
     this.scale = Math.round(Math.min(1, Math.max(this.opt.floor, v)) * 100) / 100;
     this.lastChange = now;
   }
+}
+
+function meanInterval(s: readonly Sample[]): number {
+  let t = 0;
+  for (const q of s) t += q.iv;
+  return s.length ? t / s.length : 0;
 }
