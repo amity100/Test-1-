@@ -128,6 +128,25 @@ const EN: Record<string, string> = {
   'hint.slingshot.touch':
     "Jump off the stack and hold <b>PORTAL</b> as you fall: an entrance opens below you. Drag to a wall that faces the group and lift your finger: you come out of it at full speed.",
   'hint.arena': "A full squad. Borrow their bullets with <b>REFLECT</b>, cut anyone you reach. Keep moving, keep the chain alive.",
+  // Halcyon (mission 1's second world): its own texts for the three pier hints that name pier places
+  'hint.halcyon.door':
+    "Rifts are doors. The bridge is up. Look across the tracks at the terrace and hold <kbd>LMB</kbd>: the orange <b>ENTRANCE</b> opens in front of you, time slows and a ghost shows where you’ll come out. Let go: the blue <b>EXIT</b> opens there. Walk through. (A quick click puts the exit where you look.)",
+  'hint.halcyon.door.pad':
+    "Rifts are doors. The bridge is up. Look across the tracks at the terrace and hold <kbd>RT</kbd>: the orange <b>ENTRANCE</b> opens in front of you, time slows and a ghost shows where you’ll come out. Let go: the blue <b>EXIT</b> opens there. Walk through. (A quick press puts the exit where you look.)",
+  'hint.halcyon.door.touch':
+    "Hold <b>PORTAL</b>, drag to the terrace across the tracks and lift your finger: the <b>EXIT</b> opens there. Walk through. Rifts are doors.",
+  'hint.halcyon.trapdoor':
+    "Two guards at the River Gate, the river behind them. Crosshair on a guard and click <kbd>LMB</kbd>: he sinks into the floor and flies out past where he stood, away from you, into the river. The dotted arc past him shows where he'll fly. Hold it instead to aim where he flies.",
+  'hint.halcyon.trapdoor.pad':
+    "Two guards at the River Gate, the river behind them. Crosshair on a guard and press <kbd>RT</kbd>: he sinks into the floor and flies out past where he stood, away from you, into the river. The dotted arc past him shows where he'll fly. Hold it instead to aim where he flies.",
+  'hint.halcyon.trapdoor.touch':
+    "Look at a guard and tap <b>PORTAL</b>: he sinks through the floor and flies on into the river. Hold and drag to aim.",
+  'hint.halcyon.slingshot':
+    "Jump off the roof and hold <kbd>LMB</kbd> as you fall: an entrance opens below you. Look at the pavilion wall behind the group and let go: you come out of it at full speed.",
+  'hint.halcyon.slingshot.pad':
+    "Jump off the roof and hold <kbd>RT</kbd> as you fall: an entrance opens below you. Look at the pavilion wall behind the group and let go: you come out of it at full speed.",
+  'hint.halcyon.slingshot.touch':
+    "Jump off the roof and hold <b>PORTAL</b> as you fall. Drag to the pavilion wall behind them and lift: you fly out at them.",
   'hint.loop':
     "The shaft runs through every floor. Look down at its bottom and hold <kbd>LMB</kbd>: a hole opens there. Aim the exit right above it (a quick click does that for you) and jump in: faster every lap. Hold <kbd>LMB</kbd> again as you fall to fire yourself out.",
   'hint.loop.pad':
@@ -318,6 +337,27 @@ const EN: Record<string, string> = {
   // respawn
   'respawn.void': 'Lost to the void',
   'respawn.dead': 'You died',
+  'respawn.water': 'The river took you',
+
+  // worlds: mission 1 in two settings while the owner picks one (menu)
+  'menu.world': 'WORLD',
+  'menu.worldNote': 'Mission 1 in two worlds. Pick one, play, compare.',
+  'world.harbour': 'HARBOUR',
+  'world.halcyon': 'HALCYON',
+  'obj.train': 'Board the Meridian Express',
+  'toast.trainReady': 'The Meridian Express is boarding',
+  // while Halcyon is loaded, t() prefers these to the harbour's own (setWorldStrings)
+  'halcyon:zone.pier.name': 'TOMORROW SQUARE',
+  'halcyon:zone.pier.sub': 'Halcyon, Kessler’s city of tomorrow. The festival starts at seven.',
+  'halcyon:briefing.title': 'HALCYON: TOMORROW SQUARE',
+  'halcyon:briefing.text':
+    'Halcyon is Kessler Industries’ showcase city, dressed up for the Festival of Tomorrow. You stole their prototype Rift Gauntlet. No gun, no armour: one rift pair, a hidden blade, and whatever Kessler throws at you. Cross Tomorrow Square and board the Meridian Express to the Tower.',
+  'halcyon:end.victory': 'MISSION COMPLETE',
+  'halcyon:end.victorySub': 'The Meridian Express is taking you to the Tower.',
+  'halcyon:end.defeatSub': 'Halcyon still belongs to Kessler.',
+  'halcyon:respawn.void': 'The tracks took you',
+  'halcyon:challenge.pier.3.title': 'Brighter Tomorrow',
+  'halcyon:challenge.pier.3.desc': 'Reach an S style rank in Tomorrow Square.',
 
   // clip / photo
   'clip.title': 'REPLAY',
@@ -341,6 +381,7 @@ const EN: Record<string, string> = {
   'hud.combo': 'COMBO',
   'hud.drop': 'DROP',
   'hud.charged': 'CHARGED',
+  'hud.hintShow': 'Show the hint',
 
   // touch buttons
   'touch.portal': 'PORTAL',
@@ -531,6 +572,24 @@ const HE: Record<string, string> = {
   'hint.slingshot.touch':
     "קפוץ מערימת המכולות והחזק <b>פורטל</b> תוך כדי נפילה: נפתחת כניסה מתחתיך. גרור אל קיר שפונה אל החבורה והרם את האצבע: אתה יוצא ממנו במלוא המהירות.",
   'hint.arena': "חוליה שלמה. תשאיל את הכדורים שלהם עם <b>מחזיר</b>, ותחתוך כל מי שתגיע אליו. תמשיך לזוז, תשמור על השרשרת.",
+  'hint.halcyon.door':
+    "פורטל הוא דלת. הגשר מורם. הסתכל אל המרפסת שמעבר למסילה והחזק <kbd>קליק שמאלי</kbd>: ה<b>כניסה</b> הכתומה נפתחת מולך, הזמן מאט, ודמות רפאים מראה איפה תצא. שחרר: ה<b>יציאה</b> הכחולה נפתחת שם. עבור דרכה. (קליק מהיר שם את היציאה איפה שאתה מסתכל.)",
+  'hint.halcyon.door.pad':
+    "פורטל הוא דלת. הגשר מורם. הסתכל אל המרפסת שמעבר למסילה והחזק <kbd>RT</kbd>: ה<b>כניסה</b> הכתומה נפתחת מולך, הזמן מאט, ודמות רפאים מראה איפה תצא. שחרר: ה<b>יציאה</b> הכחולה נפתחת שם. עבור דרכה. (לחיצה מהירה שמה את היציאה איפה שאתה מסתכל.)",
+  'hint.halcyon.door.touch':
+    "החזק <b>פורטל</b>, גרור אל המרפסת שמעבר למסילה והרם את האצבע: ה<b>יציאה</b> נפתחת שם. עבור דרכה. פורטל הוא דלת.",
+  'hint.halcyon.trapdoor':
+    "שני שומרים בשער הנהר, והנהר מאחוריהם. שים את הכוונת על שומר ולחץ <kbd>קליק שמאלי</kbd>: הוא שוקע ברצפה ועף הלאה מעבר למקום שעמד בו, הרחק ממך, אל הנהר. הקו המנוקד שמעבר לו מראה לאן הוא יעוף. אם מחזיקים, מכוונים לאן הוא יעוף.",
+  'hint.halcyon.trapdoor.pad':
+    "שני שומרים בשער הנהר, והנהר מאחוריהם. שים את הכוונת על שומר ולחץ <kbd>RT</kbd>: הוא שוקע ברצפה ועף הלאה מעבר למקום שעמד בו, הרחק ממך, אל הנהר. הקו המנוקד שמעבר לו מראה לאן הוא יעוף. אם מחזיקים, מכוונים לאן הוא יעוף.",
+  'hint.halcyon.trapdoor.touch':
+    "הסתכל על שומר וגע ב<b>פורטל</b>: הוא שוקע ברצפה ועף הלאה, אל הנהר. החזק וגרור כדי לכוון.",
+  'hint.halcyon.slingshot':
+    "קפוץ מהגג והחזק <kbd>קליק שמאלי</kbd> תוך כדי נפילה: נפתחת כניסה מתחתיך. הסתכל על קיר הביתן שמאחורי החבורה ושחרר: אתה יוצא ממנו במלוא המהירות.",
+  'hint.halcyon.slingshot.pad':
+    "קפוץ מהגג והחזק <kbd>RT</kbd> תוך כדי נפילה: נפתחת כניסה מתחתיך. הסתכל על קיר הביתן שמאחורי החבורה ושחרר: אתה יוצא ממנו במלוא המהירות.",
+  'hint.halcyon.slingshot.touch':
+    "קפוץ מהגג והחזק <b>פורטל</b> תוך כדי נפילה. גרור אל קיר הביתן שמאחוריהם והרם: אתה עף מתוכו אליהם.",
   'hint.loop':
     "הפיר עובר דרך כל הקומות. הסתכל למטה אל התחתית שלו והחזק <kbd>קליק שמאלי</kbd>: נפתח שם בור. כוון את היציאה ממש מעליו (קליק מהיר עושה את זה לבד) וקפוץ פנימה: מהר יותר בכל סיבוב. החזק שוב <kbd>קליק שמאלי</kbd> תוך כדי נפילה כדי לירות את עצמך החוצה.",
   'hint.loop.pad':
@@ -713,6 +772,25 @@ const HE: Record<string, string> = {
 
   'respawn.void': 'התהום בלעה אותך',
   'respawn.dead': 'מתת',
+  'respawn.water': 'הנהר לקח אותך',
+
+  'menu.world': 'עולם',
+  'menu.worldNote': 'משימה 1 בשני עולמות. בחר אחד, שחק, השווה.',
+  'world.harbour': 'הנמל',
+  'world.halcyon': 'הלקיון',
+  'obj.train': 'עלה על רכבת המרידיאן',
+  'toast.trainReady': 'רכבת המרידיאן פותחת דלתות',
+  'halcyon:zone.pier.name': 'כיכר המחר',
+  'halcyon:zone.pier.sub': 'הלקיון, עיר המחר של קסלר. הפסטיבל מתחיל בשבע.',
+  'halcyon:briefing.title': 'הלקיון: כיכר המחר',
+  'halcyon:briefing.text':
+    'הלקיון היא עיר הראווה של קסלר תעשיות, מקושטת לכבוד פסטיבל המחר. גנבת מהם את כפפת הפורטל הניסיונית. בלי נשק, בלי שריון: זוג פורטלים אחד, להב נסתר, וכל מה שקסלר יזרקו עליך. חצה את כיכר המחר ועלה על רכבת המרידיאן אל המגדל.',
+  'halcyon:end.victory': 'המשימה הושלמה',
+  'halcyon:end.victorySub': 'רכבת המרידיאן לוקחת אותך אל המגדל.',
+  'halcyon:end.defeatSub': 'הלקיון עדיין שייכת לקסלר.',
+  'halcyon:respawn.void': 'המסילה לקחה אותך',
+  'halcyon:challenge.pier.3.title': 'מחר מזהיר יותר',
+  'halcyon:challenge.pier.3.desc': 'הגיעו לדרגת סטייל S בכיכר המחר.',
 
   'clip.title': 'שידור חוזר',
   'clip.saving': 'שומר קליפ…',
@@ -734,6 +812,7 @@ const HE: Record<string, string> = {
   'hud.combo': 'קומבו',
   'hud.drop': 'נפילה',
   'hud.charged': 'טעון',
+  'hud.hintShow': 'הצג את הרמז',
 
   'touch.portal': 'פורטל',
   'touch.jump': 'קפיצה',
@@ -834,6 +913,8 @@ let lang: Lang = (() => {
 })();
 
 let device: Device = 'kbm';
+/** The loaded world's prefix for its own texts ('' = the harbour's). */
+let world = '';
 const langListeners = new Set<(l: Lang) => void>();
 
 function applyDocumentLang() {
@@ -886,7 +967,25 @@ export function strings(l: Lang): Readonly<Record<string, string>> {
   return DICT[l];
 }
 
+/**
+ * The loaded world's texts: while one is set, `t(key)` prefers `<world>:<key>`
+ * (Halcyon's names for what the harbour calls the pier). '' = none.
+ */
+export function setWorldStrings(w: string) {
+  world = w;
+}
+
+/** The loaded world's own text for `key`, if it has one: for texts that don't go through t() (challenge names). */
+export function worldText(key: string): string | undefined {
+  if (!world) return undefined;
+  return DICT[lang][`${world}:${key}`] ?? DICT.en[`${world}:${key}`];
+}
+
 function lookup(d: Record<string, string>, key: string): string | undefined {
+  if (world) {
+    const w = d[`${world}:${key}.${device}`] ?? d[`${world}:${key}`];
+    if (w !== undefined) return w;
+  }
   return d[`${key}.${device}`] ?? d[key];
 }
 

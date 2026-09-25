@@ -3,8 +3,12 @@ import { defaultQuality, IS_TOUCH, QualityName } from './config';
 import { Game, Settings } from './game/game';
 import { loadAnimLibrary, parseCharacterAsset } from './game/characters';
 import { Menu } from './ui/menu';
-import { getLang, t } from './ui/i18n';
+import { setWorldStrings, t } from './ui/i18n';
 import type { ZoneId } from './core/contracts';
+import { readWorld, saveWorld, WORLDS, type WorldId } from './world/worlds';
+
+/** A world's own texts (Halcyon's names for the pier's places); the harbour's are the base strings. */
+const useWorldStrings = (w: WorldId) => setWorldStrings(w === 'harbour' ? '' : w);
 
 function loadSettings(): Settings {
   const d: Settings = { quality: defaultQuality(), sensitivity: 1, invertY: false, slowmo: true };
@@ -57,7 +61,11 @@ async function boot() {
   if (IS_TOUCH) document.body.classList.add('is-touch');
 
   const settings = loadSettings();
+  let world = readWorld();
+  useWorldStrings(world);
   const menu = new Menu(ui, settings);
+  menu.worlds = WORLDS;
+  menu.world = world;
   menu.showLoading(0);
 
   let game: Game;
@@ -81,12 +89,30 @@ async function boot() {
   const anims = loadAnimLibrary(animsJson, asset);
   menu.showLoading(0.8);
   await new Promise((r) => setTimeout(r, 30));
-  await game.load(asset, anims);
+  try {
+    await game.load(asset, anims, world);
+  } catch (e) {
+    if (world === 'harbour') throw e;
+    // a world this device can't build falls back to the harbour, and the pick is forgotten
+    // (else every reload would fail again before the WORLD toggle could be reached)
+    console.error(e);
+    world = 'harbour';
+    saveWorld(world);
+    useWorldStrings(world);
+    menu.world = world;
+    await game.load(asset, anims, world);
+  }
   menu.showLoading(1);
 
   const m = menu as any;
   const ORDER: ZoneId[] = ['pier', 'yard', 'skeleton', 'lab', 'crown'];
   const refreshProgress = () => {
+    // (another world is mission 1 alone: no zones to continue from or pick)
+    menu.singleZone = game.world !== 'harbour';
+    if (menu.singleZone) {
+      menu.setProgress({ continueZone: null, unlocked: ['pier'] });
+      return;
+    }
     const saved = Game.savedZone();
     const idx = saved ? ORDER.indexOf(saved) : 0;
     menu.setProgress({ continueZone: saved && idx > 0 ? saved : null, unlocked: ORDER.slice(0, Math.max(1, idx + 1)) });
@@ -105,11 +131,10 @@ async function boot() {
     game.start();
   };
   m.onChallenges = () => {
-    const lang = getLang();
     const items = [game.challenges.daily(), ...game.challenges.list()].map((c: any) => ({
       id: c.id,
-      title: game.challenges.text(c.id, lang).title,
-      desc: game.challenges.text(c.id, lang).desc,
+      title: game.challengeText(c.id).title,
+      desc: game.challengeText(c.id).desc,
       done: game.challenges.completed().has(c.id),
       progress: (() => {
         const p = game.challenges.progress(c.id) as any;
@@ -139,6 +164,36 @@ async function boot() {
     saveSettings(s);
   };
   menu.onLanguage = () => game.refreshObjectives();
+  // WORLD: the level is rebuilt in place (no reload: sandboxed hosts may block navigation and storage)
+  menu.onWorld = async (w: WorldId) => {
+    const prev = game.world;
+    if (w === prev) return;
+    useWorldStrings(w);
+    menu.world = w;
+    menu.showLoading(0.5);
+    // (let the loading screen paint before the build blocks the thread)
+    await new Promise((r) => setTimeout(r, 40));
+    try {
+      game.setWorld(w);
+      // (saved only once it's built: a pick that can't be built isn't the one a reload tries)
+      saveWorld(w);
+    } catch (e) {
+      console.error(e);
+      // back to the world that was working, its texts too
+      useWorldStrings(prev);
+      menu.world = prev;
+      try {
+        game.setWorld(prev);
+      } catch (e2) {
+        console.error(e2);
+        menu.fatal(`Failed to build the world: ${(e as Error)?.message ?? e}`);
+        return;
+      }
+    }
+    menu.showLoading(1);
+    refreshProgress();
+    menu.showMain();
+  };
   game.onPause = () => menu.showPause();
   game.onEnd = (win, stats, rank) => (menu as any).showEnd(win, stats, rank);
   game.onClip = (blob, share, close) => {

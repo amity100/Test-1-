@@ -117,6 +117,50 @@ describe('physics through rifts', () => {
     expect(b.charge).toBeGreaterThan(0);
   });
 
+  it('a floor end that closes on a body part-way through (in or out) leaves it on the floor, not out sideways through the slab into the void', () => {
+    const world = makeWorld(false);
+    // a thick terrace slab, as in the city: 9 m of stone under its top
+    world.add(V(-20, -9, -20), V(20, 0, 20), { tag: 'ground' });
+    const rifts = makeRifts(world);
+    const phys = makePhysics(world, rifts, { killYAt: () => -30 });
+    const ev = recorder();
+    const b = phys.createBody('enemy', { pos: V(0.2, 0, 0.1), radius: 0.4, height: 1.8 });
+    run(phys, ev, 0.2);
+    rifts.addGate('trap', frame(V(0, 0.01, 0), V(0, 1, 0), 'floor'), frame(V(30, 8, 0), V(0, -1, 0), 'air'));
+    b.simulate = true;
+    b.vel.set(0, -9, 0);
+    // part-way in (its centre still above the end), and the end goes
+    run(phys, ev, 0.2, 0.2, 1 / 60, () => b.pos.y < -0.4);
+    expect(ev.log.crossed.length).toBe(0);
+    expect(b.pos.y).toBeLessThan(-0.3);
+    rifts.removeGate('trap');
+    run(phys, ev, 1, 0.4);
+    expect(ev.log.fellOut.length).toBe(0);
+    expect(b.pos.y).toBeCloseTo(0, 3);
+    expect(Math.hypot(b.pos.x - 0.2, b.pos.z - 0.1)).toBeLessThan(0.05);
+    expect(b.onGround).toBe(true);
+    // part-way out of a floor exit (rising through its slab) when the pair goes: out on top, where it was
+    rifts.addGate('up', frame(V(-10, 0.01, -10), V(0, 1, 0), 'floor'), frame(V(10, 0.01, -10), V(0, 1, 0), 'floor'));
+    const u = phys.createBody('enemy', { pos: V(-10, 0.5, -10), radius: 0.4, height: 1.8 });
+    u.vel.set(0, -8, 0);
+    const c0 = ev.log.crossed.length;
+    run(phys, ev, 0.5, 1.4, 1 / 60, () => ev.log.crossed.length > c0);
+    expect(ev.log.crossed.length).toBe(c0 + 1);
+    expect(u.pos.y).toBeLessThan(0);
+    rifts.removeGate('up');
+    run(phys, ev, 0.2, 1.9);
+    expect(ev.log.fellOut.length).toBe(0);
+    expect(u.pos.y).toBeGreaterThanOrEqual(0);
+    expect(Math.hypot(u.pos.x - 10, u.pos.z + 10)).toBeLessThan(0.5);
+    // (a plain landing on the slab is still an impact)
+    const p = phys.createBody('prop', { pos: V(5, 4, 5), radius: 0.3, height: 0.6 });
+    p.vel.set(0, -12, 0);
+    const n0 = ev.log.impacts.length;
+    run(phys, ev, 0.5, 1.4);
+    expect(ev.log.impacts.length).toBeGreaterThan(n0);
+    expect(p.pos.y).toBeCloseTo(0, 2);
+  });
+
   it('a kinematic body walking onto a hole reports onGround = false', () => {
     const world = makeWorld();
     const rifts = makeRifts(world);

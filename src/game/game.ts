@@ -38,11 +38,13 @@ import { Input } from '../engine/input';
 import { TouchControls } from '../engine/touch';
 import { Audio } from '../engine/audio';
 import { Renderer } from '../render/renderer';
-import { createSky, createSkyEnvMap, createSkyline, LampSystem } from '../render/fx';
-import { buildTower, type TowerBuild } from '../world/tower';
+import { applySkyStyle, createSky, createSkyEnvMap, createSkyline, DEFAULT_SKY, LampSystem } from '../render/fx';
+import { createDecoSkyline } from '../render/cityscape';
+import type { TowerBuild } from '../world/tower';
 import { TOWER } from '../world/tower/layout';
+import { buildWorld, WORLD_SKY, WORLD_SUN, type WorldId } from '../world/worlds';
 import { CameraRig } from './camera';
-import { Character, type AnimLibrary, type CharacterAsset, type Look } from './characters';
+import { CHAR_RIM, Character, type AnimLibrary, type CharacterAsset, type Look } from './characters';
 import { Player, type PlayerEvents, type PlayerInput } from './player';
 import { BLADE, HiddenBlade } from './blade';
 import { OUTCOME_COLOR, RiftSystem } from './portals';
@@ -56,7 +58,7 @@ import { Hazards, type HazardHooks } from './hazards';
 import { ZoneManager, type EncounterState, type LiftState } from './zones';
 import { FxKit } from './fxkit';
 import { HUD } from '../ui/hud';
-import { addStrings, getLang, setDevice, t } from '../ui/i18n';
+import { addStrings, getLang, setDevice, t, worldText } from '../ui/i18n';
 import { PhotoUI } from '../ui/photoui';
 import { StrikeBar } from '../ui/strikebar';
 import { killCredit, STRIKE, STRIKES, Strikes, type StrikeResult } from './strikes';
@@ -102,6 +104,8 @@ const GATE_MOUTH = 1.6;
 const GATE_MOUTH_WAIT = 4;
 /** A wave steps through its gate one man at a time, this far apart at least (s). */
 const GATE_SPACING = 0.45;
+/** Phones: characters further than this (m) from you cast no shadow (a far one's is a few pixels; each costs a draw). */
+const PHONE_SHADOW_R = 22;
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -122,6 +126,27 @@ const LOOKS: Record<EnemyKind, Look> = {
   turret: 'rifleman',
   boss: 'boss',
 };
+
+function disposeMaterial(m: THREE.Material) {
+  for (const v of Object.values(m)) if (v && (v as THREE.Texture).isTexture) (v as THREE.Texture).dispose();
+  m.dispose();
+}
+
+/** Free a subtree's GPU buffers (skinned characters share their asset's: only their bone textures go). */
+function disposeTree(o: THREE.Object3D) {
+  o.traverse((c) => {
+    const m = c as THREE.Mesh;
+    if ((c as THREE.SkinnedMesh).isSkinnedMesh) {
+      (c as THREE.SkinnedMesh).skeleton?.dispose();
+      return;
+    }
+    // (an instanced mesh's matrix and colour buffers are only freed by its own dispose)
+    if ((c as THREE.InstancedMesh).isInstancedMesh) (c as THREE.InstancedMesh).dispose();
+    if (!m.geometry) return;
+    m.geometry.dispose();
+    for (const mat of Array.isArray(m.material) ? m.material : [m.material]) if (mat) disposeMaterial(mat);
+  });
+}
 
 /** Distance along segment a→b (0..1) where it passes within r of a vertical cylinder, or -1. */
 function segCylinder(a: V3, b: V3, base: V3, r: number, h: number): number {
@@ -163,6 +188,8 @@ export class Game {
   timeScale = 1;
 
   level!: TowerBuild;
+  /** The world the level was built for (mission 1 has two while the owner picks one). */
+  world: WorldId = 'harbour';
   zones!: ZoneManager;
   physics!: Physics;
   rifts!: RiftSystem;
@@ -235,6 +262,17 @@ export class Game {
   private lastDevice = '';
   private menuT = 0;
   private zoneStartT = 0;
+  /** Everything the current world added to the scene (a world switch takes it all away). */
+  private worldObjs: THREE.Object3D[] = [];
+  /** A world is built and in the scene (a failed build leaves none). */
+  private built = false;
+  /** The faded Voss that warms the blink's shader programs (kept across world switches). */
+  private fadeWarm: Character | null = null;
+  /** The level's own finish (the train) is open / the player stepped into it. */
+  private meReady = false;
+  private boarded = false;
+  /** Metres ahead of the player (along the view) the sun's shadow box centres. */
+  private shadowAhead = 0;
 
   stats: RunStats = { time: 0, kills: 0, bestCombo: 0, styleTotal: 0, tricks: 0, deaths: 0, challenges: 0 };
   onPause: () => void = () => {};
@@ -313,15 +351,80 @@ export class Game {
   // Loading
   // ------------------------------------------------------------------
 
-  async load(asset: CharacterAsset, anims: AnimLibrary) {
+  async load(asset: CharacterAsset, anims: AnimLibrary, world: WorldId = 'harbour') {
     this.asset = asset;
     this.anims = anims;
+    this.buildWorld(world);
+  }
+
+  /**
+   * Swap the level for another world's, in place (the menu's WORLD choice):
+   * no page reload, so it works in hosts that block navigation or storage.
+   * Call from the menu only.
+   */
+  setWorld(world: WorldId) {
+    if (world === this.world && this.built) return;
+    if (this.built) this.unloadWorld();
+    this.buildWorld(world);
+  }
+
+  /** Take away everything buildWorld() added (and free its GPU memory). */
+  private unloadWorld() {
+    this.built = false;
+    // (the props' meshes before they're cleared out of their group)
+    disposeTree(this.props.group);
+    this.enemies.clear();
+    this.projectiles.clear();
+    this.props.clear();
+    this.rifts.dispose();
+    this.hero.dispose();
+    // everything the world added goes, its systems' pools too (rift sparks, bolts, the hologram):
+    // anything shared that's used again is simply uploaded again
+    for (const o of this.worldObjs) {
+      this.scene.remove(o);
+      disposeTree(o);
+    }
+    this.worldObjs = [];
+    for (const m of Object.values(this.level.materials)) disposeMaterial(m);
+    this.scene.environment?.dispose();
+    this.scene.environment = null;
+    this.lamps = null;
+    this.skyline = null;
+    this.riftMarked.clear();
+    this.strikeMarks?.clear();
+  }
+
+  /**
+   * Build a world. One that fails (a device that can't take its textures or
+   * shaders) leaves nothing in the scene and throws: the caller may build
+   * another in its place.
+   */
+  private buildWorld(id: WorldId) {
+    const before = new Set(this.scene.children);
+    try {
+      this.buildWorldInto(id, before);
+    } catch (e) {
+      for (const o of this.scene.children.filter((c) => !before.has(c))) {
+        this.scene.remove(o);
+        disposeTree(o);
+      }
+      this.scene.environment?.dispose();
+      this.scene.environment = null;
+      this.worldObjs = [];
+      throw e;
+    }
+    this.built = true;
+  }
+
+  private buildWorldInto(id: WorldId, before: Set<THREE.Object3D>) {
+    const asset = this.asset, anims = this.anims;
+    this.world = id;
     const r = this.renderer.renderer;
     const mobile = IS_TOUCH;
-    // image-based light from the golden-hour sky itself
-    const envMap = createSkyEnvMap(r);
+    // image-based light from the world's own sky
+    const envMap = createSkyEnvMap(r, WORLD_SUN[id], WORLD_SKY[id]);
     this.scene.environment = envMap;
-    this.level = buildTower(envMap, mobile) as TowerBuild;
+    this.level = buildWorld(id, envMap, mobile);
     this.scene.add(this.level.root);
     const atm = this.level.atmosphere;
     this.scene.environmentIntensity = atm.environmentIntensity;
@@ -333,15 +436,23 @@ export class Game {
     (this.scene.fog as THREE.FogExp2).color.setHex(atm.fogColor);
     (this.scene.fog as THREE.FogExp2).density = atm.fogDensity;
     r.toneMappingExposure = atm.exposure;
-    const skyline = createSkyline({ mobile, sunDir: this.level.sunDir });
+    applySkyStyle(this.sky, atm.sky ?? DEFAULT_SKY);
+    CHAR_RIM.value = atm.rim ?? 0;
+    this.renderer.setLook(atm.look);
+    const skyline = atm.skyline === 'deco' ? createDecoSkyline({ mobile, sunDir: this.level.sunDir, sky: atm.sky }) : createSkyline({ mobile, sunDir: this.level.sunDir });
     this.skyline = skyline;
     this.scene.add(skyline);
     const sunU = (this.sky.material as THREE.ShaderMaterial).uniforms.uSunDir;
     if (sunU) sunU.value.copy(this.level.sunDir);
     const preset = this.renderer.preset;
     this.sun.shadow.mapSize.set(preset.shadowMap, preset.shadowMap);
+    const ext = atm.shadow?.extent ?? 38;
+    const sc = this.sun.shadow.camera;
+    sc.left = -ext; sc.right = ext; sc.top = ext; sc.bottom = -ext;
+    sc.updateProjectionMatrix();
+    this.shadowAhead = atm.shadow?.ahead ?? 0;
     if (this.level.lamps.length) {
-      this.lamps = new LampSystem(this.level.lamps, Math.min(preset.lampLights, 4), false);
+      this.lamps = new LampSystem(this.level.lamps, Math.min(preset.lampLights, 4), false, atm.lampLook);
       this.scene.add(this.lamps.group);
     }
 
@@ -352,7 +463,11 @@ export class Game {
       lightCount: mobile ? 2 : 4,
       maxViews: preset.portalViews,
       outcomeAt: (x, z, groundY) => {
-        if (groundY > -Infinity) return null;
+        // (ground under a level kill line, the tracks in a rail cut, is no ground)
+        if (groundY > -Infinity) {
+          const k = this.level.killYAt?.(_v3.set(x, groundY, z));
+          return k != null && groundY < k ? 'void' : null;
+        }
         return this.level.isSea(_v3.set(x, 0, z)) ? 'splash' : 'void';
       },
     });
@@ -447,7 +562,8 @@ export class Game {
     // rift views): the plane count never changes, so no material swaps programs per pass
     r.clippingPlanes = [new THREE.Plane(new THREE.Vector3(0, 1, 0), 1e7)];
     // Voss's blink fades his materials into transparent clones: warm those programs too
-    const fade = new Character(asset, anims, LOOKS.boss);
+    // (one stand-in for every world: a new one per switch would keep its clones for good)
+    const fade = (this.fadeWarm ??= new Character(asset, anims, LOOKS.boss));
     fade.setOpacity(0.5);
     fade.root.position.copy(this.camera.position).addScaledVector(this.camera.getWorldDirection(_v), 4);
     this.scene.add(fade.root);
@@ -459,6 +575,9 @@ export class Game {
     r.setRenderTarget(null);
     tmp.dispose();
     this.scene.remove(fade.root);
+    // (its materials stay: they keep the warmed programs; its bone textures don't need to)
+    fade.root.traverse((c) => (c as THREE.SkinnedMesh).skeleton?.dispose());
+    this.worldObjs = this.scene.children.filter((o) => !before.has(o));
     this.newRun();
   }
 
@@ -506,6 +625,11 @@ export class Game {
     this.respawnPlayer(cp.pos, cp.yaw);
     this.bossDead = false;
     this.victoryT = -1;
+    // the level's own finish waits again (the train back at the platform, you on your feet)
+    this.meReady = false;
+    this.boarded = false;
+    this.level.missionEnd?.ready(false);
+    this.hero.root.visible = true;
     this.hintsSeen.clear();
     this.zoneStartT = this.time;
     this.style.reset();
@@ -608,6 +732,12 @@ export class Game {
     if (document.pointerLockElement) document.exitPointerLock();
   }
 
+  /** A challenge's title and description, in the loaded world's words where it has its own (Halcyon's pier.3). */
+  challengeText(id: string) {
+    const c = this.challenges.text(id, getLang());
+    return { title: worldText(`challenge.${id}.title`) ?? c.title, desc: worldText(`challenge.${id}.desc`) ?? c.desc };
+  }
+
   refreshObjectives() {
     this.updateObjective(true);
   }
@@ -634,6 +764,8 @@ export class Game {
   }
 
   private saveProgress() {
+    // (zone progress is the harbour tower's: another world's mission 1 leaves it alone)
+    if (this.world !== 'harbour') return;
     try {
       const prev = JSON.parse(localStorage.getItem('threshold.progress') || '{}');
       const order: ZoneId[] = ['pier', 'yard', 'skeleton', 'lab', 'crown'];
@@ -762,12 +894,12 @@ export class Game {
     if (r.mode === 'door') this.hint('door', t('hint.doorPlaced'), 6);
   }
 
-  /** Hints take turns (each gets a few seconds) and wait for the zone title card. */
+  /** Hints take turns (each gets a few seconds) and wait for the zone title card, and for a hint the player opened to read (phones). */
   private hintQueue: { key: string; html: string; dur: number; full: boolean }[] = [];
   private hintHold = 0;
   private updateHints(realDt: number) {
     this.hintHold -= realDt;
-    if (this.hintHold > 0 || !this.hintQueue.length) return;
+    if (this.hintHold > 0 || !this.hintQueue.length || this.hud.hintOpen) return;
     const h = this.hintQueue.shift()!;
     this.hud.hint(h.key, h.html, h.dur);
     this.hintHold = h.full ? h.dur : Math.min(h.dur, 4.5);
@@ -811,7 +943,7 @@ export class Game {
     const done = this.challenges.push(e as GameEvent, awards, this.style.state);
     for (const id of done) {
       this.stats.challenges++;
-      this.hud.toast(`${t('toast.challenge')}: ${this.challenges.text(id, getLang()).title}`, 'good');
+      this.hud.toast(`${t('toast.challenge')}: ${this.challengeText(id).title}`, 'good');
       this.audio.ui('objective');
     }
   }
@@ -930,6 +1062,9 @@ export class Game {
   }
 
   private killYAt(p: V3, b?: DynBody) {
+    // the level's own kill lines first (a rail cut: the tracks take you well above the sea)
+    const k = this.level.killYAt?.(p);
+    if (k != null) return k;
     const lost = this.level.seaY - 30;
     // a man who falls below his own fight's floor is out of it for good: the void takes him,
     // inside the tower too (else a lower floor or roof catches him, stranded far below a
@@ -1184,7 +1319,27 @@ export class Game {
     this.slowT = Math.max(this.slowT, 1.1);
     this.slowScale = 0.25;
     this.push({ type: 'checkpoint', t: this.time });
+    this.checkMissionEnd();
     this.updateObjective(true);
+  }
+
+  /** Every fight the level's finish waits for is won: open it (the train's doors, its toast). */
+  private checkMissionEnd() {
+    const me = this.level.missionEnd;
+    if (!me || this.meReady || !this.zones.allCleared(me.requires)) return;
+    this.meReady = true;
+    me.ready(true);
+    if (me.toastKey) this.hud.toast(t(me.toastKey), 'good');
+    this.audio.sting('zone');
+  }
+
+  /** Stepped into the open finish: aboard, it leaves, the run is won. */
+  private board() {
+    const me = this.level.missionEnd!;
+    this.boarded = true;
+    me.depart();
+    this.hero.root.visible = false;
+    this.victory();
   }
 
   private onBossDown() {
@@ -1322,7 +1477,7 @@ export class Game {
     this.audio.splash(b.pos, 1);
     if (b.kind === 'player') {
       if (this.bossDead) this.victory();
-      else this.fallDeath('respawn.void');
+      else this.fallDeath(this.level.drownKey ?? 'respawn.void');
       return;
     }
     const e = this.enemies.enemyOfBody(b);
@@ -1502,19 +1657,37 @@ export class Game {
     (this.sky.material as THREE.ShaderMaterial).uniforms.uTime && ((this.sky.material as THREE.ShaderMaterial).uniforms.uTime.value = this.ambientT);
     this.sky.position.copy(this.camera.position);
     if (this.skyline) this.skyline.position.set(this.camera.position.x * 0.9, 0, this.camera.position.z * 0.9);
-    const focus = this.mode === 'menu' ? _v.set(0, 20, 30) : this.player.body.pos;
-    this.sun.position.copy(focus).addScaledVector(this.level.sunDir, 140);
-    this.sun.target.position.copy(focus);
+    const mv = this.level.menuView;
+    const focus = this.mode === 'menu' ? (mv ? _v.copy(mv.look) : _v.set(0, 20, 30)) : this.player.body.pos;
+    // the shadow box can reach ahead along the view (a square seen from a terrace above it)
+    const shadowAt = _v2.copy(focus);
+    if (this.mode !== 'menu' && this.shadowAhead > 0) {
+      this.camera.getWorldDirection(_v4).setY(0);
+      if (_v4.lengthSq() > 1e-6) shadowAt.addScaledVector(_v4.normalize(), this.shadowAhead);
+    }
+    this.sun.position.copy(shadowAt).addScaledVector(this.level.sunDir, 140);
+    this.sun.target.position.copy(shadowAt);
     this.lamps?.update(this.ambientT, focus);
   }
 
   private updateMenu(dt: number) {
     this.menuT += dt;
-    const a = this.menuT * 0.05;
-    const c = _v.set(0, 0, 40);
-    this.camera.position.set(c.x + Math.sin(a) * 95, 30 + Math.sin(this.menuT * 0.09) * 12, c.z + Math.cos(a) * 95);
-    this.camera.lookAt(c.x, 45, c.z);
-    this.camera.fov = 50;
+    const mv = this.level.menuView;
+    if (mv) {
+      // the world's postcard, drifting a little side to side
+      this.camera.position.copy(mv.pos).x += Math.sin((this.menuT * Math.PI * 2) / 40) * mv.sway;
+      this.camera.lookAt(mv.look);
+      // (an ultra-wide screen keeps a phone's width of the postcard and crops top and bottom:
+      // wider, it would take in the low sun past the left edge and bloom it over everything)
+      const wide = this.camera.aspect / 2.2;
+      this.camera.fov = wide > 1 ? THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(mv.fov / 2)) / wide)) : mv.fov;
+    } else {
+      const a = this.menuT * 0.05;
+      const c = _v.set(0, 0, 40);
+      this.camera.position.set(c.x + Math.sin(a) * 95, 30 + Math.sin(this.menuT * 0.09) * 12, c.z + Math.cos(a) * 95);
+      this.camera.lookAt(c.x, 45, c.z);
+      this.camera.fov = 50;
+    }
     this.camera.updateProjectionMatrix();
     this.updateAmbient(dt);
     this.fx.update(dt);
@@ -1528,7 +1701,8 @@ export class Game {
 
     // ----- time -----
     let ts = 1;
-    const alive = this.respawnT < 0;
+    // (aboard the train: nothing more to do but ride)
+    const alive = this.respawnT < 0 && !this.boarded;
     // held PORTAL (aiming the exit) and the LOOP cannon run in slow motion
     if (this.settings.slowmo && alive) {
       // (a grab, a fall: time slows at once; a door or a load once you're aiming)
@@ -1633,10 +1807,10 @@ export class Game {
 
     // ----- player -----
     const pin: PlayerInput = {
-      moveX: this.respawnT >= 0 ? 0 : inp.moveX,
-      moveY: this.respawnT >= 0 ? 0 : inp.moveY,
+      moveX: this.respawnT >= 0 || this.boarded ? 0 : inp.moveX,
+      moveY: this.respawnT >= 0 || this.boarded ? 0 : inp.moveY,
       camYaw: this.rig.yaw,
-      jump: inp.wasPressed('jump'),
+      jump: !this.boarded && inp.wasPressed('jump'),
       // the touch stick sprints when pushed to its rim (only when it's the stick moving you)
       sprint: inp.isHeld('sprint') || (inp.lastDevice === 'touch' && Math.hypot(inp.moveX, inp.moveY) > 0.95),
       crouch: this.crouchToggle(),
@@ -1680,6 +1854,8 @@ export class Game {
     this.updateLifts(dt);
     this.updateGates(dt);
     if (this.bossDead && this.victoryT < 0 && body.pos.y < (this.level.bossArena?.y ?? 90) - 30) this.victory();
+    const me = this.level.missionEnd;
+    if (me && this.meReady && !this.boarded && this.victoryT < 0 && this.respawnT < 0 && me.box.containsPoint(body.pos)) this.board();
     if (this.victoryT >= 0) {
       this.victoryT -= realDt;
       if (this.victoryT < 0) this.finishRun();
@@ -1747,6 +1923,8 @@ export class Game {
     // a fight drives the music; enemies searching for you (or suspicious) only keep it tense
     let fight = 0, tense = 0;
     for (const e of this.enemies.list) {
+      // (phones: only the men near you cast a shadow; each one is a skinned draw in the shadow pass)
+      if (IS_TOUCH) e.char.setShadow?.(e.pos.distanceToSquared(body.pos) < PHONE_SHADOW_R * PHONE_SHADOW_R);
       if (!e.alive || !this.zones.active.has(e.def.zone)) continue;
       if (e.state === 'combat' && !e.searching) fight = 1;
       else if (e.aware) tense = 1;
@@ -2609,7 +2787,8 @@ export class Game {
 
   private victory() {
     if (this.victoryT >= 0) return;
-    this.challenges.complete('crown.3');
+    // (the crown's challenge is for the leap after Voss: a world that ends on a train doesn't award it)
+    if (this.bossDead) this.challenges.complete('crown.3');
     this.victoryT = 2.2;
     this.slowT = 2.2;
     this.slowScale = 0.3;

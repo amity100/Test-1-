@@ -1,4 +1,5 @@
 import type { StyleRank, ZoneId } from '../core/contracts';
+import type { WorldId } from '../world/worlds';
 import { IS_TOUCH, type QualityName } from '../config';
 import { formatNumber, getDevice, getLang, setLang, t, type Lang } from './i18n';
 
@@ -64,6 +65,14 @@ export class Menu {
   onQuit = () => {};
   onSettings: (s: Settings) => void = () => {};
   onLanguage = () => {};
+  /** WORLD picked (a different one from `world`). */
+  onWorld: (w: WorldId) => void = () => {};
+
+  /** The loaded world and the ones on offer (WORLD toggle; hidden with fewer than two). */
+  world: WorldId = 'harbour';
+  worlds: WorldId[] = [];
+  /** This world is mission 1 only: no ZONES list. */
+  singleZone = false;
 
   /** Saved zone for CONTINUE (null hides the button). */
   continueZone: ZoneId | null = null;
@@ -185,11 +194,12 @@ export class Menu {
           <div class="btns">
             <button type="button" class="primary" data-go="start"><span>${esc(t('menu.play'))}</span></button>
             ${cz ? `<button type="button" data-go="cont"><span>${esc(t('menu.continue'))}</span><small>${esc(t(`zone.${cz}.name`))}</small></button>` : ''}
-            <button type="button" data-go="zones"><span>${esc(t('menu.zones'))}</span></button>
+            ${this.singleZone ? '' : `<button type="button" data-go="zones"><span>${esc(t('menu.zones'))}</span></button>`}
             <button type="button" data-go="challenges"><span>${esc(t('menu.challenges'))}</span></button>
             <button type="button" data-go="controls"><span>${esc(t('menu.controls'))}</span></button>
             <button type="button" data-go="openSettings"><span>${esc(t('menu.settings'))}</span></button>
           </div>
+          ${this.worldSeg()}
           ${this.langSeg()}
         </div>
         <div class="m-brief">
@@ -202,6 +212,20 @@ export class Menu {
       'main',
       () => this.showMain(),
     );
+    this.el.querySelectorAll<HTMLButtonElement>('[data-world]').forEach((b) =>
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const w = b.dataset.world as WorldId;
+        if (w !== this.world) this.onWorld(w);
+      }),
+    );
+  }
+
+  /** Mission 1's two worlds, side by side, so they can be compared. */
+  private worldSeg() {
+    if (this.worlds.length < 2) return '';
+    const opts = this.worlds.map((w) => `<button type="button" data-world="${w}" class="${w === this.world ? 'on' : ''}">${esc(t(`world.${w}`))}</button>`).join('');
+    return `<div class="worlds"><div class="w-top"><span>${esc(t('menu.world'))}</span><small>${esc(t('menu.worldNote'))}</small></div><div class="seg">${opts}</div></div>`;
   }
 
   private rules() {

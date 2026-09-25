@@ -233,6 +233,38 @@ function byCamDistance(a: Portal, b: Portal) {
   return a.vis.position.distanceToSquared(_camPos) - b.vis.position.distanceToSquared(_camPos);
 }
 
+const _corner = new THREE.Vector4();
+const _rect = { x: 0, y: 0, w: 0, h: 0 };
+
+/**
+ * Where a rift's window lands on a w x h target (pixels, top-left origin),
+ * padded for the rim's warp (it samples up to 1.5% off). False when a corner
+ * is behind the camera: then the whole frame is rendered.
+ */
+export function windowRect(mesh: THREE.Object3D, viewProj: THREE.Matrix4, w: number, h: number, out: { x: number; y: number; w: number; h: number }) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let i = 0; i < 4; i++) {
+    _corner.set(i & 1 ? 0.5 : -0.5, i & 2 ? 0.5 : -0.5, 0, 1).applyMatrix4(mesh.matrixWorld).applyMatrix4(viewProj);
+    if (_corner.w <= 1e-3) return false;
+    const sx = (_corner.x / _corner.w + 1) * 0.5 * w, sy = (1 - _corner.y / _corner.w) * 0.5 * h;
+    x0 = Math.min(x0, sx);
+    x1 = Math.max(x1, sx);
+    y0 = Math.min(y0, sy);
+    y1 = Math.max(y1, sy);
+  }
+  const px = 0.02 * w, py = 0.02 * h;
+  x0 = Math.max(0, Math.floor(x0 - px));
+  y0 = Math.max(0, Math.floor(y0 - py));
+  x1 = Math.min(w, Math.ceil(x1 + px));
+  y1 = Math.min(h, Math.ceil(y1 + py));
+  if (x1 - x0 < 1 || y1 - y0 < 1) return false;
+  out.x = x0;
+  out.y = y0;
+  out.w = x1 - x0;
+  out.h = y1 - y0;
+  return true;
+}
+
 function easeOutBack(x: number) {
   const c1 = 1.70158, c3 = c1 + 1;
   return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
@@ -312,6 +344,8 @@ export class RiftSystem implements RiftAPI {
   private lights: THREE.PointLight[] = [];
   private rts: THREE.WebGLRenderTarget[] = [];
   private vcam = new THREE.PerspectiveCamera();
+  /** Render each window's own patch of the frame only (false: the whole frame, as a reference). */
+  tightViews = true;
   private clipPlane = new THREE.Plane();
   private clipList = [this.clipPlane];
   private viewList: Portal[] = [];
@@ -392,6 +426,14 @@ export class RiftSystem implements RiftAPI {
     this.portalScale = s;
     for (const rt of this.rts) rt.dispose();
     this.rts = [];
+  }
+
+  /** Done with it (the level it was built for is going away): frees its views and leaves the scene. */
+  dispose() {
+    this.reset();
+    for (const rt of this.rts) rt.dispose();
+    this.rts = [];
+    this.scene.remove(this.group);
   }
 
   // ------------------------------------------------------------------
@@ -1670,6 +1712,18 @@ export class RiftSystem implements RiftAPI {
         passPoint(p.vis, q.vis, _camPos, this.vcam.position);
         this.vcam.quaternion.copy(passRotation(p.vis, q.vis, _q)).multiply(_camQuat);
         this.vcam.updateMatrixWorld(true);
+        // only the part of the frame the window covers: the tighter frustum culls everything
+        // it can't show (a far exit is a few percent of the screen); its pixels are unchanged
+        if (this.tightViews && windowRect(p.mesh, _m, w, h, _rect)) {
+          this.vcam.setViewOffset(w, h, _rect.x, _rect.y, _rect.w, _rect.h);
+          const by = h - _rect.y - _rect.h;
+          rt.viewport.set(_rect.x, by, _rect.w, _rect.h);
+          rt.scissor.set(_rect.x, by, _rect.w, _rect.h);
+          rt.scissorTest = true;
+        } else {
+          rt.viewport.set(0, 0, w, h);
+          rt.scissorTest = false;
+        }
         // clip everything behind the far end
         frameNormal(q.vis, _a);
         this.clipPlane.setFromNormalAndCoplanarPoint(_a, q.vis.position);

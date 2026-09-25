@@ -3,7 +3,7 @@ import * as THREE from 'three';
 // Procedural PBR-ish textures generated at load time. Deterministic noise so
 // every run looks identical.
 
-function rng(seed: number) {
+export function rng(seed: number) {
   let s = seed >>> 0;
   return () => {
     s = (s + 0x6d2b79f5) >>> 0;
@@ -15,7 +15,7 @@ function rng(seed: number) {
 }
 
 /** Tileable value noise, octaves summed. */
-function noiseField(size: number, seed: number, octaves = 5, base = 4): Float32Array {
+export function noiseField(size: number, seed: number, octaves = 5, base = 4): Float32Array {
   const r = rng(seed);
   const out = new Float32Array(size * size);
   let amp = 1, total = 0;
@@ -44,7 +44,7 @@ function noiseField(size: number, seed: number, octaves = 5, base = 4): Float32A
   return out;
 }
 
-function toTexture(canvas: HTMLCanvasElement, srgb: boolean, repeat = 1) {
+export function toTexture(canvas: HTMLCanvasElement, srgb: boolean, repeat = 1) {
   const t = new THREE.CanvasTexture(canvas);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.repeat.set(repeat, repeat);
@@ -55,13 +55,13 @@ function toTexture(canvas: HTMLCanvasElement, srgb: boolean, repeat = 1) {
   return t;
 }
 
-function canvas(size: number) {
+export function canvas(size: number) {
   const c = document.createElement('canvas');
   c.width = c.height = size;
   return c;
 }
 
-function heightToNormal(h: Float32Array, size: number, strength: number) {
+export function heightToNormal(h: Float32Array, size: number, strength: number) {
   const c = canvas(size);
   const ctx = c.getContext('2d')!;
   const img = ctx.createImageData(size, size);
@@ -271,7 +271,7 @@ export function waterNormals(size = 256) {
 // metalnessMap.
 // ---------------------------------------------------------------------------
 
-function imgPair(size: number) {
+export function imgPair(size: number) {
   const col = canvas(size), rough = canvas(size);
   const cc = col.getContext('2d')!, rc = rough.getContext('2d')!;
   return { col, rough, cc, rc, ci: cc.createImageData(size, size), ri: rc.createImageData(size, size) };

@@ -21,14 +21,78 @@ const NOISE = /* glsl */ `
   float fbm(vec2 p) { float s = 0.0, a = 0.5; for (int i = 0; i < 5; i++) { s += a * vnoise(p); p = p * 2.03 + vec2(17.1, 9.2); a *= 0.5; } return s; }
 `;
 
+type RGB = [number, number, number];
+
+/** A world's sky colours (linear RGB) and cloud shapes; DEFAULT_SKY is the harbour's golden hour. */
+export interface SkyStyle {
+  zenith: RGB;
+  upper: RGB;
+  horizonAway: RGB;
+  horizonSun: RGB;
+  /** Tint of the wide warm glow around the sun. */
+  glow: RGB;
+  /** Cloud colours, mixed by how much each faces the sun: [away, toward]. */
+  cloudLit: [RGB, RGB];
+  cloudShade: [RGB, RGB];
+  /** Cumulus coverage: noise thresholds (lower = more cloud). */
+  cover: [number, number];
+  /** Height (0 horizon .. 1 zenith) where the cumulus layer thins out. */
+  top: number;
+  /** Towering cumulus rising from the horizon (0 = none). */
+  heaps: number;
+  /** Horizon haze; match the fog. */
+  haze: RGB;
+  /** Big separate cumulus heads, self-shaded toward the sun: their frequency (0 or absent = the harbour's soft layer). */
+  puff?: number;
+  /** Strength of the sun's halo and of the clouds' glare round it (absent = 1, the harbour's). */
+  halo?: number;
+}
+
+export const DEFAULT_SKY: SkyStyle = {
+  zenith: [0.12, 0.21, 0.42],
+  upper: [0.34, 0.39, 0.5],
+  horizonAway: [0.62, 0.45, 0.4],
+  horizonSun: [1.25, 0.56, 0.2],
+  glow: [1.0, 0.42, 0.12],
+  cloudLit: [[0.86, 0.62, 0.54], [1.3, 0.64, 0.3]],
+  cloudShade: [[0.4, 0.36, 0.44], [0.66, 0.4, 0.3]],
+  cover: [0.56, 0.8],
+  top: 0.75,
+  heaps: 0,
+  haze: [HAZE_LINEAR.r, HAZE_LINEAR.g, HAZE_LINEAR.b],
+};
+
+const v3 = (c: RGB) => new THREE.Vector3(c[0], c[1], c[2]);
+
+/** Point a sky's uniforms at a style (the menu's world switch rebuilds nothing else). */
+export function applySkyStyle(sky: THREE.Mesh, style: SkyStyle = DEFAULT_SKY) {
+  const u = (sky.material as THREE.ShaderMaterial).uniforms;
+  u.uZenith.value.copy(v3(style.zenith));
+  u.uUpper.value.copy(v3(style.upper));
+  u.uHorizonAway.value.copy(v3(style.horizonAway));
+  u.uHorizonSun.value.copy(v3(style.horizonSun));
+  u.uGlow.value.copy(v3(style.glow));
+  u.uCloudLit0.value.copy(v3(style.cloudLit[0]));
+  u.uCloudLit1.value.copy(v3(style.cloudLit[1]));
+  u.uCloudShade0.value.copy(v3(style.cloudShade[0]));
+  u.uCloudShade1.value.copy(v3(style.cloudShade[1]));
+  u.uCover.value.set(style.cover[0], style.cover[1]);
+  u.uTop.value = style.top;
+  u.uHeaps.value = style.heaps;
+  u.uPuff.value = style.puff ?? 0;
+  u.uHalo.value = style.halo ?? 1;
+  u.uHaze.value.setRGB(style.haze[0], style.haze[1], style.haze[2]);
+}
+
 /**
- * Golden-hour sky dome: warm gold/peach horizon (brightest toward the sun),
- * azure zenith, a soft sun disk with a wide glow, light cumulus and cirrus
- * lit from the sun side, and a warm haze band that meets the sea fog.
+ * Sky dome: a horizon brightest toward the sun, a zenith, a soft sun disk
+ * with a wide glow, cumulus and cirrus lit from the sun side, optional
+ * towering cumulus on the horizon, and a haze band that meets the fog. The
+ * colours come from a SkyStyle (default: the harbour's golden hour).
  * Uniforms: uTime, uSunDir (direction TO the sun), uHaze (match the fog).
  * Keep it centred on the camera.
  */
-export function createSky() {
+export function createSky(style: SkyStyle = DEFAULT_SKY) {
   const mat = new THREE.ShaderMaterial({
     side: THREE.BackSide,
     depthWrite: false,
@@ -37,6 +101,20 @@ export function createSky() {
       uTime: { value: 0 },
       uSunDir: { value: GOLDEN_SUN_DIR.clone() },
       uHaze: { value: GOLDEN_HAZE.clone() },
+      uZenith: { value: new THREE.Vector3() },
+      uUpper: { value: new THREE.Vector3() },
+      uHorizonAway: { value: new THREE.Vector3() },
+      uHorizonSun: { value: new THREE.Vector3() },
+      uGlow: { value: new THREE.Vector3() },
+      uCloudLit0: { value: new THREE.Vector3() },
+      uCloudLit1: { value: new THREE.Vector3() },
+      uCloudShade0: { value: new THREE.Vector3() },
+      uCloudShade1: { value: new THREE.Vector3() },
+      uCover: { value: new THREE.Vector2() },
+      uTop: { value: 0 },
+      uHeaps: { value: 0 },
+      uPuff: { value: 0 },
+      uHalo: { value: 1 },
     },
     vertexShader: /* glsl */ `
       varying vec3 vDir;
@@ -49,6 +127,10 @@ export function createSky() {
       uniform float uTime;
       uniform vec3 uSunDir;
       uniform vec3 uHaze;
+      uniform vec3 uZenith, uUpper, uHorizonAway, uHorizonSun, uGlow;
+      uniform vec3 uCloudLit0, uCloudLit1, uCloudShade0, uCloudShade1;
+      uniform vec2 uCover;
+      uniform float uTop, uHeaps, uPuff, uHalo;
       varying vec3 vDir;
       ${NOISE}
       void main() {
@@ -62,34 +144,68 @@ export function createSky() {
         vec2 sh = sun.xz / max(length(sun.xz), 1e-4);
         float az = dot(dh, sh);
         float sunSide = smoothstep(-0.7, 1.0, az);
-        vec3 zenith = vec3(0.12, 0.21, 0.42);
-        vec3 upper = vec3(0.34, 0.39, 0.5);
-        vec3 horizonAway = vec3(0.62, 0.45, 0.40);
-        vec3 horizonSun = vec3(1.25, 0.56, 0.2);
-        vec3 horizon = mix(horizonAway, horizonSun, sunSide);
-        vec3 col = mix(horizon, upper, smoothstep(0.0, 0.28, sqrt(hp)));
-        col = mix(col, zenith, smoothstep(0.35, 1.0, hp));
+        vec3 horizon = mix(uHorizonAway, uHorizonSun, sunSide);
+        vec3 col = mix(horizon, uUpper, smoothstep(0.0, 0.28, sqrt(hp)));
+        col = mix(col, uZenith, smoothstep(0.35, 1.0, hp));
         // wide warm glow + halo + disk (integer powers: no pow() on the GPU)
         float g1 = sd * sd; g1 *= g1;  // ^4
         float g2 = g1 * g1; g2 *= g2;  // ^16
         float g3 = g2 * g2; g3 *= g3;  // ^64
         float g4 = g3 * g3; g4 *= g4;  // ^256
-        col += vec3(1.0, 0.42, 0.12) * g1 * 0.5 * (1.0 - smoothstep(0.0, 0.6, hp));
-        col += vec3(1.0, 0.5, 0.18) * g2 * 0.45;
-        col += vec3(1.0, 0.62, 0.3) * g3 * 0.6;
-        col += vec3(1.0, 0.78, 0.5) * g4 * 1.6;
+        col += uGlow * g1 * 0.5 * (1.0 - smoothstep(0.0, 0.6, hp));
+        col += vec3(1.0, 0.5, 0.18) * g2 * 0.45 * uHalo;
+        col += vec3(1.0, 0.62, 0.3) * g3 * 0.6 * uHalo;
+        col += vec3(1.0, 0.78, 0.5) * g4 * 1.6 * uHalo;
         col += vec3(1.0, 0.9, 0.72) * smoothstep(0.99955, 0.99975, sd) * 12.0;
         // clouds: low cumulus + high cirrus streaks projected on a dome
         vec2 cp = d.xz / max(d.y + 0.14, 0.04);
-        float cu = fbm(cp * 0.9 + vec2(uTime * 0.006, uTime * 0.002));
-        float cumulus = smoothstep(0.56, 0.8, cu) * smoothstep(0.0, 0.12, h) * (1.0 - smoothstep(0.35, 0.75, h));
         float ci = fbm(vec2(cp.x * 0.35, cp.y * 2.4) + vec2(uTime * 0.004, 0.0));
         float cirrus = smoothstep(0.55, 0.85, ci) * smoothstep(0.08, 0.3, h) * 0.55;
         float lit = 0.3 + 0.7 * sd * sd;
-        vec3 cloudLit = mix(vec3(0.86, 0.62, 0.54), vec3(1.3, 0.64, 0.3), lit);
-        vec3 cloudShade = mix(vec3(0.4, 0.36, 0.44), vec3(0.66, 0.4, 0.3), lit);
-        vec3 cloudCol = mix(cloudShade, cloudLit, smoothstep(0.56, 0.9, cu + 0.1));
-        col = mix(col, cloudCol, clamp(cumulus * 0.85 + cirrus, 0.0, 0.9));
+        vec3 cloudLit = mix(uCloudLit0, uCloudLit1, lit);
+        vec3 cloudShade = mix(uCloudShade0, uCloudShade1, lit);
+        if (uPuff > 0.0) {
+          // big separate cumulus heads: a warped field with billowed detail, and
+          // self-shading (denser toward the sun = in its own shadow): sunlit
+          // crowns and rims, blue-grey bellies, clear blue between them
+          vec2 q = cp * uPuff + vec2(uTime * 0.0035, uTime * 0.0012);
+          vec2 wq = vec2(fbm(q * 1.6 + vec2(4.1, 1.3)), fbm(q * 1.6 + vec2(9.3, 7.7))) - 0.5;
+          vec2 qw = q + wq * 0.55;
+          float det = (fbm(q * 5.3 + wq * 1.5 + 2.7) - 0.5) * 0.32;
+          float dens = fbm(qw) + det;
+          vec2 cs = sun.xz / max(sun.y + 0.14, 0.04) - cp;
+          cs /= max(length(cs), 1e-4);
+          float dl = fbm(qw + cs * 0.05) + det;
+          float edge = smoothstep(uCover.x, uCover.y, dens);
+          float body = edge * smoothstep(0.0, 0.1, h) * (1.0 - smoothstep(uTop - 0.35, uTop, h));
+          float lit2 = clamp(0.6 + (dens - dl) * 10.0, 0.0, 1.0);
+          lit2 = lit2 * lit2 * (3.0 - 2.0 * lit2);
+          float rim = (1.0 - edge) * edge * 4.0 * (0.35 + 0.65 * sd * sd);
+          vec3 cc = mix(cloudShade, cloudLit, lit2) + cloudLit * rim * 0.3 * uHalo;
+          col = mix(col, cc, body * 0.97);
+          col = mix(col, cloudLit, cirrus * 0.4 * (1.0 - body));
+        } else {
+          float cu = fbm(cp * 0.9 + vec2(uTime * 0.006, uTime * 0.002));
+          float cumulus = smoothstep(uCover.x, uCover.y, cu) * smoothstep(0.0, 0.12, h) * (1.0 - smoothstep(uTop - 0.4, uTop, h));
+          vec3 cloudCol = mix(cloudShade, cloudLit, smoothstep(0.56, 0.9, cu + 0.1));
+          col = mix(col, cloudCol, clamp(cumulus * 0.85 + cirrus, 0.0, 0.9));
+        }
+        // towering cumulus heaped on the horizon (integer powers only: NaN-safe)
+        if (uHeaps > 0.0) {
+          // (noise on the unit circle of directions: no seam behind the viewer)
+          float e = max(h, 0.0);
+          // (more heaps: denser and a little taller)
+          float hTop = (0.035 + 0.25 * smoothstep(0.4, 0.68, fbm(dh * 2.3 + vec2(3.1, 0.7)))) * (0.6 + 0.4 * uHeaps);
+          float bil = fbm(dh * 11.0 + vec2(e * 16.0 + uTime * 0.003, -e * 13.0));
+          float heap = smoothstep(hTop + 0.01, hTop - 0.05, e + (bil - 0.5) * 0.1) * smoothstep(-0.01, 0.03, e) * uHeaps;
+          float s2 = sd * sd;
+          float s6 = s2 * s2 * s2;
+          // bellies in shade, crowns lit, warmer toward the sun
+          float up = clamp(e / max(hTop, 0.02), 0.0, 1.0);
+          float lt = clamp(0.2 + 0.55 * up + 0.5 * (bil - 0.4) + 0.3 * sd, 0.0, 1.0);
+          vec3 hc = mix(mix(uCloudShade0, uCloudShade1, s2), mix(uCloudLit0, uCloudLit1, s2), lt) + vec3(1.7, 1.25, 0.75) * s6 * 0.5 * uHalo;
+          col = mix(col, hc, clamp(heap, 0.0, 1.0) * 0.95);
+        }
         // haze band at the horizon (meets the fog) and below it
         float band = 1.0 - smoothstep(-0.02, 0.1, h);
         vec3 haze = mix(uHaze, uHaze * vec3(1.08, 0.98, 0.9), sunSide);
@@ -102,6 +218,7 @@ export function createSky() {
   mesh.frustumCulled = false;
   mesh.renderOrder = -1000;
   mesh.name = 'sky';
+  applySkyStyle(mesh, style);
   return mesh;
 }
 
@@ -110,9 +227,9 @@ export function createSky() {
  * reflections on glass, water and steel. Call once after the renderer exists
  * and pass the result to buildTower() / scene.environment.
  */
-export function createSkyEnvMap(renderer: THREE.WebGLRenderer, sunDir: THREE.Vector3 = GOLDEN_SUN_DIR): THREE.Texture {
+export function createSkyEnvMap(renderer: THREE.WebGLRenderer, sunDir: THREE.Vector3 = GOLDEN_SUN_DIR, style: SkyStyle = DEFAULT_SKY): THREE.Texture {
   const scene = new THREE.Scene();
-  const sky = createSky();
+  const sky = createSky(style);
   (sky.material as THREE.ShaderMaterial).uniforms.uSunDir.value.copy(sunDir);
   sky.scale.setScalar(0.1);
   scene.add(sky);
@@ -123,6 +240,8 @@ export function createSkyEnvMap(renderer: THREE.WebGLRenderer, sunDir: THREE.Vec
   scene.add(floor);
   const pm = new THREE.PMREMGenerator(renderer);
   const rt = pm.fromScene(scene, 0.02, 0.1, 200);
+  // (it's a render target's texture: disposing it alone would leave the target on the GPU)
+  rt.texture.addEventListener('dispose', () => rt.dispose());
   pm.dispose();
   sky.geometry.dispose();
   (sky.material as THREE.Material).dispose();
@@ -431,27 +550,29 @@ export class LampSystem {
     const c = new THREE.Color();
     for (const l of lamps) {
       q.setFromUnitVectors(down, l.dir.clone().normalize());
-      // cone
-      const len = l.range * 0.62;
-      const radius = Math.tan(l.angle * 0.75) * len;
-      const geo = new THREE.CylinderGeometry(0.18, radius, len, 20, 1, true);
-      geo.translate(0, -len / 2, 0);
-      m.compose(l.pos, q, one);
-      nm.getNormalMatrix(m);
-      const p = geo.getAttribute('position'), nn = geo.getAttribute('normal'), uv = geo.getAttribute('uv');
-      const base = conePos.length / 3;
-      c.set(l.color).multiplyScalar(l.intensity * cones);
-      for (let i = 0; i < p.count; i++) {
-        v.fromBufferAttribute(p, i).applyMatrix4(m);
-        n.fromBufferAttribute(nn, i).applyMatrix3(nm).normalize();
-        conePos.push(v.x, v.y, v.z);
-        coneNrm.push(n.x, n.y, n.z);
-        coneUv.push(uv.getX(i), uv.getY(i));
-        coneCol.push(c.r, c.g, c.b);
+      // cone (none at all when they're off: no geometry, no additive overdraw pass)
+      if (cones > 0) {
+        const len = l.range * 0.62;
+        const radius = Math.tan(l.angle * 0.75) * len;
+        const geo = new THREE.CylinderGeometry(0.18, radius, len, 20, 1, true);
+        geo.translate(0, -len / 2, 0);
+        m.compose(l.pos, q, one);
+        nm.getNormalMatrix(m);
+        const p = geo.getAttribute('position'), nn = geo.getAttribute('normal'), uv = geo.getAttribute('uv');
+        const base = conePos.length / 3;
+        c.set(l.color).multiplyScalar(l.intensity * cones);
+        for (let i = 0; i < p.count; i++) {
+          v.fromBufferAttribute(p, i).applyMatrix4(m);
+          n.fromBufferAttribute(nn, i).applyMatrix3(nm).normalize();
+          conePos.push(v.x, v.y, v.z);
+          coneNrm.push(n.x, n.y, n.z);
+          coneUv.push(uv.getX(i), uv.getY(i));
+          coneCol.push(c.r, c.g, c.b);
+        }
+        const gi = geo.index!;
+        for (let i = 0; i < gi.count; i++) coneIdx.push(base + gi.getX(i));
+        geo.dispose();
       }
-      const gi = geo.index!;
-      for (let i = 0; i < gi.count; i++) coneIdx.push(base + gi.getX(i));
-      geo.dispose();
       // bulb: a thin lit box at the lamp head
       const bg = new THREE.BoxGeometry(0.5, 0.06, 0.28);
       m.compose(l.pos.clone().addScaledVector(l.dir, 0.02), q, one);
@@ -471,7 +592,7 @@ export class LampSystem {
       c.set(l.color).multiplyScalar(3.2 * l.intensity * glow);
       glowCol.push(c.r, c.g, c.b);
     }
-    if (lamps.length) {
+    if (conePos.length) {
       const cg = new THREE.BufferGeometry();
       cg.setAttribute('position', new THREE.Float32BufferAttribute(conePos, 3));
       cg.setAttribute('normal', new THREE.Float32BufferAttribute(coneNrm, 3));
@@ -483,6 +604,8 @@ export class LampSystem {
       coneMesh.renderOrder = 10;
       coneMesh.name = 'lamps:cones';
       this.group.add(coneMesh);
+    }
+    if (lamps.length) {
       const bgeo = new THREE.BufferGeometry();
       bgeo.setAttribute('position', new THREE.Float32BufferAttribute(bulbPos, 3));
       bgeo.setAttribute('color', new THREE.Float32BufferAttribute(bulbCol, 3));

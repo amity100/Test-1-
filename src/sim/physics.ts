@@ -318,6 +318,7 @@ export class Physics implements PhysicsAPI {
     const pl = b.kind === 'player';
     this.skipPlayer = pl;
     const stepUp = b.kind === 'player' || !b.simulate ? FEEL.stepUp : 0.05;
+    this.unsink(b, prevFeet, stepUp, pl);
 
     // ceiling (skipped where an open down-facing end is cut into it)
     const ceil = w.ceilingAt(b.pos.x, b.pos.z, r * 0.7, Math.min(prevFeet, b.pos.y) + b.height * 0.5);
@@ -414,6 +415,27 @@ export class Physics implements PhysicsAPI {
         b.vel.z *= f;
       }
     }
+  }
+
+  /**
+   * Sunk into a floor whose end closed on it (a new rift took the pair while it was part-way
+   * in, or part-way out of a floor exit): back up onto it, the shortest way out, instead of
+   * squeezed sideways through the slab and on down into the void. Only a body already under the
+   * top before this substep (a landing is the ground check's), its centre well inside the
+   * floor's footprint (no push from its side gets it that deep) and less than half its height in.
+   * (Rising, it keeps rising.)
+   */
+  private unsink(b: Body, prevFeet: number, stepUp: number, pl: boolean) {
+    const w = this.world;
+    const top = w.groundAt(b.pos.x, b.pos.z, 0, b.pos.y + b.height * 0.5 + 0.3);
+    const c = w.lastGround;
+    if (!c || !(top > b.pos.y + stepUp) || prevFeet >= top - stepUp || c.min.y >= b.pos.y) return;
+    const x = b.pos.x, z = b.pos.z;
+    if (Math.min(x - c.min.x, c.max.x - x, z - c.min.z, c.max.z - z) <= b.radius) return;
+    this.skipPos.copy(b.pos);
+    if (this.rifts.hostPassable(c, this.skipPos, b.radius, pl)) return;
+    b.pos.y = top;
+    if (b.vel.y < 0) b.vel.y = 0;
   }
 
   private impact(b: Body, ev: PhysicsEvents, speed: number, normal: V3, surface: ImpactInfo['surface'], collider: Collider | null, point: V3) {

@@ -188,6 +188,26 @@ export class Builder {
     else for (let i = 0; i < pos.count; i++) b.idx.push(base + i);
   }
 
+  /** A template placed by `m`, keeping its own vertex colours (times an optional tint). */
+  geoColored(key: string, g: THREE.BufferGeometry, m: THREE.Matrix4, tint?: THREE.ColorRepresentation) {
+    const b = this.bucket(key);
+    const pos = g.getAttribute('position'), nrm = g.getAttribute('normal'), uv = g.getAttribute('uv'), col = g.getAttribute('color');
+    const nm = new THREE.Matrix3().getNormalMatrix(m);
+    const t = new THREE.Color(tint ?? 0xffffff);
+    const base = b.pos.length / 3;
+    for (let i = 0; i < pos.count; i++) {
+      _v.fromBufferAttribute(pos, i).applyMatrix4(m);
+      _n.fromBufferAttribute(nrm, i).applyMatrix3(nm).normalize();
+      b.pos.push(_v.x, _v.y, _v.z);
+      b.nrm.push(_n.x, _n.y, _n.z);
+      b.uv.push(uv ? uv.getX(i) : 0, uv ? uv.getY(i) : 0);
+      if (col) b.col.push(col.getX(i) * t.r, col.getY(i) * t.g, col.getZ(i) * t.b);
+      else b.col.push(t.r, t.g, t.b);
+    }
+    if (g.index) for (let i = 0; i < g.index.count; i++) b.idx.push(base + g.index.getX(i));
+    else for (let i = 0; i < pos.count; i++) b.idx.push(base + i);
+  }
+
   /** Transformed copy of a template geometry. */
   geoAt(key: string, g: THREE.BufferGeometry, m: THREE.Matrix4, color: THREE.ColorRepresentation = 0xffffff, uvScale = 1) {
     const c = g.clone().applyMatrix4(m);
@@ -208,6 +228,35 @@ export class Builder {
       bk.col.push(col.r, col.g, col.b);
     });
     bk.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  }
+
+  /** Flat quad with a colour per corner (glow gradients). Corners in CCW order. */
+  quadc(key: string, p: THREE.Vector3[], cols: THREE.Color[], uvs: [number, number][] = [[0, 0], [1, 0], [1, 1], [0, 1]]) {
+    const bk = this.bucket(key);
+    const n = new THREE.Vector3().subVectors(p[1], p[0]).cross(new THREE.Vector3().subVectors(p[3], p[0])).normalize();
+    const base = bk.pos.length / 3;
+    for (let i = 0; i < 4; i++) {
+      bk.pos.push(p[i].x, p[i].y, p[i].z);
+      bk.nrm.push(n.x, n.y, n.z);
+      bk.uv.push(uvs[i][0], uvs[i][1]);
+      bk.col.push(cols[i].r, cols[i].g, cols[i].b);
+    }
+    bk.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  }
+
+  /** One bucket as a standalone geometry (removed from the builder): a template for instancing. */
+  take(key: string): THREE.BufferGeometry | null {
+    const b = this.buckets.get(key);
+    this.buckets.delete(key);
+    if (!b || !b.idx.length) return null;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(b.pos, 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(b.nrm, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(b.uv, 2));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(b.col, 3));
+    g.setIndex(b.idx);
+    g.computeBoundingSphere();
+    return g;
   }
 
   /** Vertical rectangle in a plane of constant x or z (world UVs). */

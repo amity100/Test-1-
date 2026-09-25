@@ -73,13 +73,14 @@ export class ZoneManager {
     this.checkpoint.zone = zone;
   }
 
-  /** Current + the next zone up (so its tower is visible and its lift works). */
+  /** Current + the next zone up (so its tower is visible and its lift works); only zones this level has. */
   refreshActive() {
     this.active.clear();
     this.active.add(this.current.id);
     const i = this.index(this.current.id);
-    if (i > 0) this.active.add(ORDER[i - 1]);
-    if (i < ORDER.length - 1) this.active.add(ORDER[i + 1]);
+    const has = (id: ZoneId | undefined) => !!id && this.level.zones.some((z) => z.id === id);
+    if (i > 0 && has(ORDER[i - 1])) this.active.add(ORDER[i - 1]);
+    if (i < ORDER.length - 1 && has(ORDER[i + 1])) this.active.add(ORDER[i + 1]);
     for (const id of ORDER) {
       const root = this.level.zoneRoots[id];
       if (root) root.visible = this.active.has(id) || Math.abs(this.index(id) - i) <= 1;
@@ -106,7 +107,7 @@ export class ZoneManager {
       _p.copy(playerPos);
       const d = e.def.trigger.distanceToPoint(_p);
       // spawn well before the trigger so enemies are already in place when you see them
-      if (!e.triggered && d < SPAWN_AHEAD) {
+      if (!e.triggered && d < (e.def.spawnAhead ?? SPAWN_AHEAD)) {
         e.triggered = true;
         // lessons without enemies clear on sight (their hint still waits for you to arrive)
         if (e.def.spawns.length === 0) e.cleared = true;
@@ -151,8 +152,13 @@ export class ZoneManager {
     return out;
   }
 
+  /** Every listed encounter is cleared (ids this level doesn't have count as cleared). */
+  allCleared(ids: string[]) {
+    return ids.every((id) => this.encounters.find((e) => e.def.id === id)?.cleared ?? true);
+  }
+
   liftReady(l: LiftState) {
-    return l.def.requires.every((id) => this.encounters.find((e) => e.def.id === id)?.cleared ?? true);
+    return this.allCleared(l.def.requires);
   }
 
   liftAt(p: V3): LiftState | null {
@@ -188,11 +194,15 @@ export class ZoneManager {
       }
       return { key: 'obj.clear', target: e.def.trigger.getCenter(new THREE.Vector3()) };
     }
+    // a mission with its own ending (a one-zone world): that's where to go now
+    const end = this.level.missionEnd;
+    if (end) return { key: end.objKey, target: end.target };
     const lift = this.lifts.find((l) => l.zone === z.id);
     if (lift) return { key: 'obj.lift', target: lift.def.platform.getCenter(new THREE.Vector3()) };
-    // no lift out (the pier): walk on into the next zone
-    const next = ORDER[this.index(z.id) + 1];
-    if (next && z.id !== 'crown') return { key: 'obj.next', target: this.zone(next).playerStart };
+    // no lift out (the pier): walk on into the next zone, if this level has one
+    const nid = ORDER[this.index(z.id) + 1];
+    const next = nid ? this.level.zones.find((q) => q.id === nid) : undefined;
+    if (next && z.id !== 'crown') return { key: 'obj.next', target: next.playerStart };
     if (z.id === 'crown') return { key: 'obj.boss', target: this.level.bossArena?.center ?? null };
     return { key: 'obj.escape', target: null };
   }
@@ -225,9 +235,10 @@ export class ZoneManager {
     this.refreshActive();
   }
 
-  /** Jump straight to a zone (zone select / continue): earlier zones count as cleared. */
+  /** Jump straight to a zone (zone select / continue): earlier zones count as cleared. A zone this level doesn't have starts at its first. */
   startAt(id: ZoneId) {
     this.resetAll();
+    if (!this.level.zones.some((z) => z.id === id)) id = this.level.zones[0].id;
     const idx = this.index(id);
     for (const e of this.encounters) if (this.index(e.zone) < idx) {
       e.triggered = true;

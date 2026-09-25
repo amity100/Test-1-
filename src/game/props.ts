@@ -60,9 +60,10 @@ export class PropSystem {
     body.quat.setFromAxisAngle(UP, def.yaw);
     body.userData.propId = def.id;
     const mesh = this.level.propMesh(def);
-    // meshes are authored centred; bodies stand on their feet
+    // bodies stand on their feet: lift the mesh by its own foot's depth below its origin
+    // (the factory already placed it at def.pos: without subtracting that, a prop 30 m up drew at 0)
     const bb = new THREE.Box3().setFromObject(mesh);
-    const yOffset = Number.isFinite(bb.min.y) ? -bb.min.y : height / 2;
+    const yOffset = Number.isFinite(bb.min.y) ? -(bb.min.y - mesh.position.y) : height / 2;
     this.group.add(mesh);
     let cable: THREE.Line | null = null;
     if (def.hangFrom) {
@@ -108,6 +109,7 @@ export class PropSystem {
     this.physics.removeBody(p.body);
     if (p.cable) {
       p.cable.removeFromParent();
+      p.cable.geometry.dispose();
       p.cable = null;
     }
   }
@@ -184,7 +186,9 @@ export class PropSystem {
   clear() {
     for (const p of this.items) {
       p.mesh.removeFromParent();
+      // (a cable is its own two-point line: every respawn makes new ones)
       p.cable?.removeFromParent();
+      p.cable?.geometry.dispose();
       if (p.alive) this.physics.removeBody(p.body);
     }
     this.items = [];

@@ -11,6 +11,7 @@ import { buildLab } from './tower/lab';
 import { buildCrown } from './tower/crown';
 import { makePropFactory } from './tower/props';
 import { BARGE, LAND, SUN_DIR, inRect } from './tower/layout';
+import type { SkyStyle } from '../render/fx';
 
 export { TOWER, SHAFT, HOIST, GLASS_LIFT, CRANE, LAND } from './tower/layout';
 
@@ -26,6 +27,19 @@ export interface TowerAtmosphere {
   fogDensity: number;
   exposure: number;
   environmentIntensity: number;
+  // (optional, per world: the harbour leaves them out and keeps the defaults)
+  /** Sky colours and clouds (default DEFAULT_SKY). */
+  sky?: SkyStyle;
+  /** Distant city: the harbour's bay skyline or the deco towers. */
+  skyline?: 'harbour' | 'deco';
+  /** Post look: bloom [strength, radius, threshold], saturation, the rift pass flash [colour split, glow]. */
+  look?: { bloom: [number, number, number]; saturation: number; flash?: [number, number]; bloomClamp?: number };
+  /** Lamp look (LampSystem options). */
+  lampLook?: { glow: number; cones: number; power: number };
+  /** Sun shadow box half-size (m) and how far ahead of the player (along the view) it centres. */
+  shadow?: { extent: number; ahead: number };
+  /** Rim light on the characters (0 or left out: none), for a route that walks into the sun. */
+  rim?: number;
 }
 
 /** TowerLevel plus a few extras the integration can use. */

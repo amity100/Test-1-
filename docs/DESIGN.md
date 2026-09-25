@@ -461,6 +461,81 @@ centred near (0, 0, 40).
     falling). If they don't, they respawn at the checkpoint, taking 30
     damage.
 
+### Mission 1 in two worlds (while the owner picks one)
+
+The main menu's **WORLD** toggle chooses where mission 1 happens: the
+**harbour** (the tower above) or **Halcyon**, Kessler's art-deco city of
+tomorrow (`src/world/halcyon/`, spec in its `layout.ts`). Halcyon is one zone
+with the same id (`pier`), the same five lessons and the same encounter ids,
+so challenges, the rules card and the lesson flow are shared; three hints get
+city texts (`hint.halcyon.*`). It has its own river (the lethal water, y −2),
+a rail cut whose tracks kill (`level.killYAt`), a blue sky
+(`atmosphere.sky`), a menu postcard (`level.menuView`) and ends on a train
+(`level.missionEnd`: the doors open once the four fights are won; stepping in
+wins the run). The toggle rebuilds the level in place (no reload: sandboxed
+hosts may block navigation and storage); the pick is kept in
+`threshold.world` and `?world=` where the host allows. While Halcyon is
+loaded, `t()` prefers `halcyon:<key>` strings (its names for the pier's). To
+drop a world: its entry in `src/world/worlds.ts`, its folder and its strings.
+
+The city is built in three chunks (left x > 22, centre, right x < −12), each
+one merged mesh per material (lamps, trees and flowers are merged in too), so
+whole chunks cull. `halcyon/kit.ts` holds the facade vocabulary (arched and
+square windows, shopfronts, cornices, pilasters, balconettes, awnings,
+window boxes, banners and signs from one atlas, alpha-cut railings and
+balusters, lamps, planters, trunks, ivy and string lights); `square.ts`,
+`buildings.ts` and `station.ts` place it on the spec's colliders, which stay
+exactly as the grey-box had them (the relief has no colliders). Window
+surrounds (`relief`) and small metalwork (`metal`) cast no shadows; masses,
+cornices, railings and the vault's ribs (`iron`) do (on phones only the
+masses and the statue).
+
+Its look: `statue.ts` is the Spirit of Tomorrow (a robed bronze figure, five
+brass ribbons with lit outer edges, the armillary with turning rings and two
+orbits of planets; modelled at 1:1 and set up 1.4x on her drum, top +44.5);
+`airship.ts` the AURORA over the square (still: the pod hangs from it) and a
+second airship cruising round the city; `backdrop.ts` the river's banks, the
+Pont d'Or, the Dome of Tomorrow and two stone rail viaducts; `traffic.ts`
+the trains on them, river launches, swifts and people on the far quays
+(instanced, one draw each). Beyond the level, `render/cityscape.ts` draws the
+deco city in one procedural shader: `createNearBackdrop` (the far banks and
+the Kessler Spire, in place) and `createDecoSkyline` (towers, glass domes,
+the Threshold Tower under construction, snow-capped mountains; with the
+harbour skyline's camera parallax). The sky's `puff` layer gives it big
+sunlit cumulus; everything else (sun, fill, bloom, grade) is its
+`atmosphere`, which also sets what the harbour leaves at its old values: a
+rim light on the characters (`rim`: the route walks into the low sun, so
+without it every man is a black cut-out; Kessler's men get an orange rim, you
+a cream one), a gentler rift pass flash, and a bloom that takes in no pixel
+brighter than a lantern (`bloomClamp`: sun glitter on the river and on brass
+would veil the frame; phones, whose wide view takes in the low sun, bloom
+less still and draw no lamp cones). Leaves glow when the sun is behind them.
+Readability beats the painting: nothing navy or near-black stands between
+0 and 2.5 m on a wall that faces a fight (the trunks are oxblood and tan, the
+pedestal has a cream dado, the stage a red base, the armoured car gunmetal).
+
+Engine rules this world leans on (both worlds get them):
+- A world switch frees everything the old world added (its systems' pools,
+  instanced meshes' buffers, the characters' bone textures, the sky's
+  environment map target; the faded Voss that warms the blink's shaders is
+  one for every world): memory stays flat however often the toggle is used.
+- A world that fails to build leaves nothing behind: the switch goes back to
+  the world that was working, and at boot the harbour is loaded instead (the
+  pick is saved only once its world is built).
+- A fight in plain view of the routes into it spawns earlier than 22 m
+  (`EncounterDef.spawnAhead`): Halcyon's square is manned from the start, the
+  café squad as you reach the walkway, so nobody is placed in front of you.
+- A floor end that closes on a body part-way through it (a new PORTAL takes
+  the pair mid-throw) leaves the body standing on that floor. Thick slabs
+  (the city's terraces are 9 m of stone) used to squeeze it out sideways and
+  drop it through the world.
+- A rift window renders only its own patch of the frame (a tight frustum over
+  the window's rectangle): the same pixels, a fraction of the fill.
+- On phones only a character's body casts a shadow (not its visor, weapon or
+  glow strips), and only within 22 m of you; phones without MSAA get FXAA.
+- Challenge names follow the world (`halcyon:challenge.pier.3.*`: no "Pier
+  Pressure" in a city).
+
 ## 9. Controls
 
 **Desktop:**
@@ -521,6 +596,13 @@ centred near (0, 0, 40).
   - **CROUCH** (small)
   - **🎬** (when offered)
   - **pause**
+- **Lesson hints** (touch only; with mouse and keyboard the pointer is locked
+  and a pad can't tap, so small windows keep the full, timed hint box):
+  two lines under the pause button for 5 s, then a small **?** tab (25 s).
+  A tap on either shows the whole text (a tap folds it; the next hint waits
+  while it's open); they step aside while a zone title card plays (on phones
+  a 2 s banner at the top, not over the middle of the view). Toasts
+  there sit under the strip, one line each, two at most (repeats merge).
 
 ## 10. Architecture and ownership
 

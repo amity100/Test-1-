@@ -9,6 +9,7 @@ import type {
   TrickAward,
 } from '../core/contracts';
 import { formatNumber, getDevice, onLangChange, t, type Device } from './i18n';
+import { isCompact, TipState, type TipView } from './hintstrip';
 
 /**
  * The action HUD. DOM only; every setter compares against the last value and
@@ -19,6 +20,11 @@ import { formatNumber, getDevice, onLangChange, t, type Device } from './i18n';
  * - top-left: objective; bottom-left: health + rift pips (top-left on touch)
  * - right: STYLE panel + trick feed; centre: crosshair, aim info, gate hint
  * - top-centre: hint box, toasts, zone title card, combo bank
+ *
+ * Compact (touch): the hint is a two-line strip under the
+ * pause button that folds into a "?" tab (ui/hintstrip); it and the tab live
+ * in their own layer above the touch controls so a tap reaches them. Toasts
+ * sit higher, smaller, two at most.
  *
  * Markers: `x`/`y` are CSS pixels in the viewport. Off-screen markers are
  * placed along `angle` (radians, screen space: 0 = right, +PI/2 = down,
@@ -32,6 +38,10 @@ const FEED_MAX = 4;
 const FEED_LIFE = 2.8;
 const TOAST_LIFE = 2.6;
 const TOAST_MAX = 3;
+const TOAST_MAX_COMPACT = 2;
+/** The zone title card's run (s; CSS zoneCard, shorter on phones): a compact hint keeps out of its way. */
+const ZONE_CARD = 4.8;
+const ZONE_CARD_TOUCH = 2;
 const AIRTIME_GOAL = 3;
 
 const ICONS: Record<AimInfo['outcome'], string> = {
@@ -79,6 +89,9 @@ export class HUD implements HudAPI {
   private objSub: HTMLElement;
   private zoneEl: HTMLDivElement;
   private hintEl: HTMLDivElement;
+  /** Compact hints: the layer over the touch controls, and the "?" tab. */
+  private tipsEl: HTMLDivElement;
+  private tabEl: HTMLButtonElement;
   private toastsEl: HTMLDivElement;
   private crossEl: HTMLDivElement;
   private aimEl: HTMLDivElement;
@@ -148,6 +161,10 @@ export class HUD implements HudAPI {
   private hintKey = '';
   private hintHtml = '';
   private hintT = 0;
+  private tip = new TipState();
+  private tipView: TipView = 'off';
+  private compact = false;
+  private zoneT = 0;
   private dmg = 0;
   private dmgQ = -1;
   private airQ = -2;
@@ -208,6 +225,9 @@ export class HUD implements HudAPI {
       <div class="h-prompt"><span class="p-glyph"></span><span class="p-lbl" dir="auto"></span></div>
       <button class="h-clip" type="button">${CLAPPER}<span class="c-lbl"></span><kbd>T</kbd><i class="c-timer"></i></button>`;
     root.appendChild(el);
+    this.tipsEl = h('div', 'h-tips', '<button class="h-hint-tab" type="button">?</button>');
+    root.appendChild(this.tipsEl);
+    this.tabEl = this.tipsEl.querySelector('.h-hint-tab') as HTMLButtonElement;
     const q = <T extends Element = HTMLElement>(s: string) => el.querySelector(s) as unknown as T;
     this.dmgEl = q('.h-dmg');
     this.marksEl = q('.h-marks');
@@ -262,6 +282,20 @@ export class HUD implements HudAPI {
       this.onClip();
     });
     this.clipEl.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+    // compact hint: the strip and the tab take their own taps (and nothing else does)
+    const tap = (e: Event) => {
+      if (!this.compact) return;
+      e.preventDefault();
+      e.stopPropagation();
+      this.tip.tap();
+      this.applyTip();
+    };
+    for (const n of [this.hintEl, this.tabEl]) {
+      n.addEventListener('touchstart', tap, { passive: false });
+      n.addEventListener('click', tap);
+      // (no focus: a focused tab would take the Space meant for JUMP)
+      n.addEventListener('mousedown', (e) => e.preventDefault());
+    }
 
     this.labels();
     onLangChange(() => this.labels());
@@ -284,6 +318,7 @@ export class HUD implements HudAPI {
     set('.air-lbl', t('hud.airtime'));
     set('.b-lbl', t('hud.combo'));
     set('.c-lbl', t('clip.offer'));
+    this.tabEl.setAttribute('aria-label', t('hud.hintShow'));
     this.aimKey = '';
     this.gateKey = '';
   }
@@ -292,12 +327,31 @@ export class HUD implements HudAPI {
     this.vw = window.innerWidth || 1280;
     this.vh = window.innerHeight || 720;
     this.touch = document.body.classList.contains('is-touch');
+    this.setCompact(isCompact(this.touch));
+  }
+
+  /** The hint moves to the layer over the touch controls (compact) or back into the HUD. */
+  private setCompact(c: boolean) {
+    if (c === this.compact) return;
+    const key = this.hintKey,
+      html = this.hintHtml,
+      live = this.compact ? this.tip.view !== 'off' : this.hintT > 0;
+    this.clearHint();
+    this.compact = c;
+    this.el.classList.toggle('compact', c);
+    this.hintEl.classList.toggle('compact', c);
+    this.tabEl.classList.toggle('compact', c);
+    if (c) this.tipsEl.appendChild(this.hintEl);
+    else this.el.insertBefore(this.hintEl, this.toastsEl);
+    // a hint on screen starts over in the new form
+    if (live) this.hint(key, html, 6);
   }
 
   show(v: boolean) {
     if (v === this.shown) return;
     this.shown = v;
     this.el.style.display = v ? '' : 'none';
+    this.tipsEl.style.display = v ? '' : 'none';
   }
 
   // -------------------------------------------------------------------------
@@ -659,22 +713,47 @@ export class HUD implements HudAPI {
     (this.zoneEl.querySelector('h2') as HTMLElement).textContent = name;
     (this.zoneEl.querySelector('p') as HTMLElement).textContent = sub;
     replay(this.zoneEl, 'go');
+    // (compact: the strip and the tab sit where the card plays; they step aside till it's gone)
+    this.zoneT = this.touch ? ZONE_CARD_TOUCH : ZONE_CARD;
+    this.tipsEl.classList.add('zone');
   }
 
   toast(text: string, kind: 'info' | 'warn' | 'good' = 'info') {
+    if (this.compact) {
+      // phones: three riflemen shouting "Contact!" are one line
+      const same = this.toasts.find((f) => !f.out && f.el.textContent === text);
+      if (same) {
+        same.age = 0;
+        return;
+      }
+    }
     const el = h('div', `tst ${kind}`);
     el.dir = 'auto';
     el.textContent = text;
     this.toastsEl.appendChild(el);
     this.toasts.push({ el, age: 0, out: false });
     let live = 0;
+    const max = this.compact ? TOAST_MAX_COMPACT : TOAST_MAX;
     for (let i = this.toasts.length - 1; i >= 0; i--) {
       const f = this.toasts[i];
-      if (!f.out && ++live > TOAST_MAX) this.retire(f);
+      if (!f.out && ++live > max) this.retire(f);
     }
   }
 
   hint(key: string, html: string, dur = 9) {
+    if (this.compact) {
+      // the same hint again (new device wording) keeps its place; a new one starts as the strip
+      const fresh = key !== this.hintKey || this.tip.view === 'off';
+      this.hintKey = key;
+      if (html !== this.hintHtml) this.hintEl.innerHTML = this.hintHtml = html;
+      if (!fresh) return;
+      this.tip.show(html, dur);
+      this.hintEl.classList.remove('on', 'open');
+      void this.hintEl.offsetWidth;
+      this.tipView = 'off';
+      this.applyTip();
+      return;
+    }
     if (key === this.hintKey && this.hintT > 0) {
       this.hintT = Math.max(this.hintT, dur);
       // same hint, new device wording: swap the text without replaying the entrance
@@ -693,6 +772,24 @@ export class HUD implements HudAPI {
     this.hintT = 0;
     this.hintKey = '';
     this.hintEl.classList.remove('on');
+    this.tip.clear();
+    this.applyTip();
+  }
+
+  /** The compact hint is open (the whole text, asked for): the next one waits. */
+  get hintOpen(): boolean {
+    return this.tip.view === 'open';
+  }
+
+  /** Draw the compact hint's view (strip / tab / open / off). */
+  private applyTip() {
+    const v = this.tip.view;
+    if (v === this.tipView) return;
+    this.tipView = v;
+    if (!this.compact) return;
+    this.hintEl.classList.toggle('on', v === 'strip' || v === 'open');
+    this.hintEl.classList.toggle('open', v === 'open');
+    this.tabEl.classList.toggle('on', v === 'tab');
   }
 
   /** Clear transient state (restart / respawn). */
@@ -713,6 +810,8 @@ export class HUD implements HudAPI {
     this.setVision(false);
     this.bankEl.classList.remove('go');
     this.zoneEl.classList.remove('go');
+    this.zoneT = 0;
+    this.tipsEl.classList.remove('zone');
   }
 
   // -------------------------------------------------------------------------
@@ -728,6 +827,11 @@ export class HUD implements HudAPI {
       if (this.promptLabel) this.renderGlyph();
     }
     if (this.hintT > 0 && (this.hintT -= dt) <= 0) this.clearHint();
+    if (this.tip.update(dt)) {
+      if (this.tip.view === 'off') this.hintKey = '';
+      this.applyTip();
+    }
+    if (this.zoneT > 0 && (this.zoneT -= dt) <= 0) this.tipsEl.classList.remove('zone');
     if (this.dmg > 0 || this.dmgQ !== 0) {
       this.dmg = Math.max(0, this.dmg - dt * 1.8);
       const q = Math.round(this.dmg * 50);

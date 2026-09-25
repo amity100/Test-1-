@@ -100,6 +100,35 @@ html[dir='rtl'] .h-zone p { letter-spacing: .02em; }
 .h-hint kbd { display: inline-block; min-width: 22px; text-align: center; font: 800 12px/1.5 'Oxanium', sans-serif; padding: 0 6px; margin: 0 2px; border: 1.5px solid rgba(255, 255, 255, 0.75); border-radius: 4px; background: rgba(255, 255, 255, 0.1); box-shadow: 0 2px 0 rgba(255, 255, 255, 0.28); color: #fff; unicode-bidi: isolate; vertical-align: 1px; }
 html[dir='rtl'] .h-hint kbd { font-family: 'Heebo', 'Oxanium', sans-serif; }
 
+/* ---- compact hint (touch): two lines under the pause button, then a "?" tab ----
+   Both live in .h-tips, over the touch controls, so a tap on them lands; the layer itself lets touches through.
+   (The block padding is a transparent border: a clamped line's overflow shows in padding, not under a border.) */
+.h-tips { position: absolute; inset: 0; pointer-events: none; overflow: hidden; direction: ltr; z-index: 6; font-family: var(--hud-font); color: #fff; }
+.h-hint.compact { top: calc(var(--st) + 56px); max-width: min(420px, 42vw); padding-block: 0; padding-inline: 32px 12px; border-block: 6px solid transparent; background-origin: border-box; font-size: 12px; line-height: 1.4; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; transform: translate(-50%, 0) scale(.25); transform-origin: 50% 0; transition: opacity .22s, transform .28s cubic-bezier(.2, .9, .3, 1); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3); pointer-events: none; cursor: pointer; touch-action: none; }
+.h-hint.compact::before { content: '?'; position: absolute; inset-inline-start: 8px; top: 0; width: 17px; height: 17px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid var(--entr); color: #ffb068; font: 800 11px/14px 'Oxanium', sans-serif; text-align: center; }
+.h-hint.compact.on { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.h-hint.compact.open { display: block; -webkit-line-clamp: none; line-clamp: none; background-image: linear-gradient(180deg, rgba(8, 11, 17, 0.95), rgba(8, 11, 17, 0.9)); }
+.h-hint.compact kbd { min-width: 18px; padding: 0 4px; font-size: 10px; line-height: 1.35; }
+.h-hint-tab { position: absolute; left: 50%; top: calc(var(--st) + 58px); width: 30px; height: 30px; margin: 0 0 0 -15px; padding: 0; appearance: none; border-radius: 50%; border: 1.5px solid var(--entr); background: rgba(8, 11, 17, 0.7); color: #ffb068; font: 800 15px/1 'Oxanium', sans-serif; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35); opacity: 0; transform: scale(.4); transition: opacity .2s, transform .3s cubic-bezier(.2, 1.6, .4, 1); pointer-events: none; cursor: pointer; touch-action: none; }
+/* a bigger target to the sides and below, away from the pause button above */
+.h-hint-tab::after { content: ''; position: absolute; inset: 0 -12px -10px; }
+.h-hint-tab.on { opacity: .9; transform: none; pointer-events: auto; transition-delay: .1s; }
+.h-tips.zone .h-hint, .h-tips.zone .h-hint-tab { opacity: 0 !important; pointer-events: none !important; }
+
+/* compact toasts: higher (under the hint strip), one line each, two at most (hud.ts) */
+.hud.compact .h-toasts { top: calc(var(--st) + 106px); gap: 4px; }
+.hud.compact .tst { max-width: min(560px, 76vw); overflow: hidden; text-overflow: ellipsis; font-size: 11px; letter-spacing: .12em; padding: 4px 14px; border-top-width: 1.5px; }
+html[dir='rtl'] .hud.compact .tst { letter-spacing: .02em; font-size: 12px; }
+@media (orientation: landscape) {
+  /* the objective stops short of the strip */
+  .hud.compact .h-obj { max-width: calc(50vw - min(210px, 21vw) - var(--sl) - 36px); }
+}
+@media (orientation: portrait) {
+  /* narrow: the strip spans the width below the objective, the toasts under it */
+  .h-hint.compact { top: calc(var(--st) + 118px); max-width: calc(100vw - 32px); }
+  .hud.compact .h-toasts { top: calc(var(--st) + 172px); }
+}
+
 /* ---- toasts ---- */
 .h-toasts { position: absolute; left: 50%; top: 24%; width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .tst { flex: none; white-space: nowrap; font: 800 15px var(--hud-font); letter-spacing: .2em; text-transform: uppercase; padding: 7px 18px; color: #fff; background: linear-gradient(90deg, rgba(8, 11, 17, 0), rgba(8, 11, 17, 0.82) 18%, rgba(8, 11, 17, 0.82) 82%, rgba(8, 11, 17, 0)); border-top: 2px solid rgba(255, 255, 255, 0.55); text-shadow: var(--shadow); animation: tstIn .32s cubic-bezier(.2, 1.4, .4, 1) both; }
@@ -445,12 +474,11 @@ html[dir='rtl'] .t-cancel { letter-spacing: .02em; font-family: 'Heebo', 'Oxaniu
 .is-touch .trk:nth-child(n + 4) { display: none; }
 html[dir='rtl'] .is-touch .trk .nm { font-size: 13px; }
 html[dir='rtl'] .is-touch .trk:first-child .nm { font-size: 15px; }
-.is-touch .h-hint { top: calc(var(--st) + 56px); max-width: 46vw; font-size: 12.5px; line-height: 1.45; padding: 8px 12px; }
-.is-touch .h-toasts { top: 31%; }
-.is-touch .tst { font-size: 12px; padding: 5px 14px; }
-.is-touch .h-zone { top: 22%; }
-.is-touch .h-zone h2 { font-size: 40px; }
-.is-touch .h-zone p { font-size: 12px; }
+/* phones: the zone card is a short banner at the top (under the pause button, where the hint strip waits for it), never over the view's middle */
+.is-touch .h-zone { top: calc(var(--st) + 52px); gap: 5px; }
+.is-touch .h-zone h2 { font-size: 26px; }
+.is-touch .h-zone p { font-size: 11px; }
+.is-touch .h-zone.go, .is-touch .h-zone.go h2, .is-touch .h-zone.go .z-ln { animation-duration: 2s; }
 .is-touch .h-bank { top: calc(var(--st) + 72px); right: calc(var(--sr) + 14px); }
 .is-touch .b-lbl { font-size: 9px; }
 .is-touch .b-pts { font-size: 34px; }
@@ -511,6 +539,14 @@ html[dir='rtl'] .btns button { letter-spacing: .04em; font-size: 16px; clip-path
 .lang { display: inline-flex; gap: 0; border: 1px solid var(--line); align-self: flex-start; }
 .lang button { pointer-events: auto; background: transparent; border: 0; color: var(--dim); padding: 7px 14px; cursor: pointer; font-size: 13px; font-weight: 700; letter-spacing: .08em; }
 .lang button.on { color: #1a0c02; background: var(--entr); }
+/* mission 1's world toggle (main menu) */
+.worlds { display: flex; flex-direction: column; gap: 7px; }
+.worlds .w-top { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; font-size: 11px; font-weight: 800; letter-spacing: .32em; color: var(--entr); }
+html[dir='rtl'] .worlds .w-top { letter-spacing: .06em; font-size: 12px; }
+.worlds .w-top small { font-size: 11.5px; font-weight: 600; letter-spacing: .02em; color: var(--dim); }
+.worlds .seg { flex-wrap: nowrap; }
+.worlds .seg button { padding: 11px 10px; letter-spacing: .22em; }
+html[dir='rtl'] .worlds .seg button { letter-spacing: .04em; }
 .title { margin: 0; font-size: clamp(28px, 4.6vw, 54px); font-weight: 800; letter-spacing: .2em; }
 html[dir='rtl'] .title { letter-spacing: .04em; }
 
@@ -673,6 +709,9 @@ html[dir='rtl'] .cp-btns button { letter-spacing: .02em; font-size: 14px; }
   .btns button { padding: 10px 14px; font-size: 12px; letter-spacing: .14em; }
   html[dir='rtl'] .btns button { font-size: 13px; }
   .btns button small { display: none; }
+  .worlds { gap: 4px; }
+  .worlds .w-top small { display: none; }
+  .worlds .seg button { padding: 7px 10px; }
   .m-brief { padding: 12px 16px; }
   .m-brief h2 { font-size: 16px; margin: 4px 0 6px; }
   .m-brief p { font-size: 12px; line-height: 1.45; }

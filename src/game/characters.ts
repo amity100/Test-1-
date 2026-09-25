@@ -28,6 +28,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { CharacterAPI, CharacterPose, ClipName, DeathKind, LocomotionInput, Tuple4 } from '../core/contracts';
+import { IS_TOUCH } from '../config';
 
 // ---------------------------------------------------------------------------
 // Soldier.glb loading
@@ -290,17 +291,29 @@ interface LookDef {
   visor: number;
   visorGlow: number;
   scale: number;
+  /** Rim light colour and strength (times the world's CHAR_RIM). */
+  rim: [number, number];
 }
 
+/** Warm cream on the hero, Kessler orange on his men (a team colour at a glance). */
+const RIM_HERO: [number, number] = [0xffe2b0, 0.35];
+const RIM_KESSLER: [number, number] = [0xff5a1f, 0.4];
 const LOOKS: Record<Exclude<Look, 'hologram'>, LookDef> = {
-  hero: { body: 0x2c2f35, rough: 0.5, metal: 0.35, visor: 0x19f0ff, visorGlow: 2.0, scale: 1.0 },
-  rifleman: { body: 0x2a3752, rough: 0.75, metal: 0.15, visor: 0xff4a1a, visorGlow: 2.0, scale: 1.0 },
-  grenadier: { body: 0x363c48, rough: 0.75, metal: 0.15, visor: 0xff6a1a, visorGlow: 2.0, scale: 1.0 },
-  warden: { body: 0x222a3a, rough: 0.6, metal: 0.35, visor: 0xff3a10, visorGlow: 2.4, scale: 1.08 },
-  brute: { body: 0x3a3c42, rough: 0.55, metal: 0.45, visor: 0xff2010, visorGlow: 2.8, scale: 1.25 },
-  sniper: { body: 0x2b3038, rough: 0.8, metal: 0.1, visor: 0xff2a2a, visorGlow: 2.2, scale: 1.0 },
-  boss: { body: 0xe6e2d6, rough: 0.45, metal: 0.2, visor: 0xb44bff, visorGlow: 2.6, scale: 1.05 },
+  hero: { body: 0x2c2f35, rough: 0.5, metal: 0.35, visor: 0x19f0ff, visorGlow: 2.0, scale: 1.0, rim: RIM_HERO },
+  rifleman: { body: 0x2a3752, rough: 0.75, metal: 0.15, visor: 0xff4a1a, visorGlow: 2.0, scale: 1.0, rim: RIM_KESSLER },
+  grenadier: { body: 0x363c48, rough: 0.75, metal: 0.15, visor: 0xff6a1a, visorGlow: 2.0, scale: 1.0, rim: RIM_KESSLER },
+  warden: { body: 0x222a3a, rough: 0.6, metal: 0.35, visor: 0xff3a10, visorGlow: 2.4, scale: 1.08, rim: RIM_KESSLER },
+  brute: { body: 0x3a3c42, rough: 0.55, metal: 0.45, visor: 0xff2010, visorGlow: 2.8, scale: 1.25, rim: RIM_KESSLER },
+  sniper: { body: 0x2b3038, rough: 0.8, metal: 0.1, visor: 0xff2a2a, visorGlow: 2.2, scale: 1.0, rim: RIM_KESSLER },
+  boss: { body: 0xe6e2d6, rough: 0.45, metal: 0.2, visor: 0xb44bff, visorGlow: 2.6, scale: 1.05, rim: RIM_KESSLER },
 };
+
+/**
+ * The world's rim light on every character body (0: none). A route that walks
+ * toward a low sun sees only their shaded side: near-black silhouettes. The
+ * rim draws their edges (view-dependent, so from any side).
+ */
+export const CHAR_RIM = { value: 0 };
 
 const sharedMats = new Map<string, THREE.Material>();
 function sharedMat<T extends THREE.Material>(key: string, make: () => T): T {
@@ -314,20 +327,35 @@ const glowMat = (color: number, intensity: number) =>
 const paintMat = (color: number, rough = 0.6, metal = 0.3, side: THREE.Side = THREE.FrontSide) =>
   sharedMat(`paint:${color}:${rough}:${metal}:${side}`, () => new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal, side }));
 
-/** Uses only the luminance of the colour map (detail) under the material colour. */
+/**
+ * Uses only the luminance of the colour map (detail) under the material
+ * colour, and adds the world's rim light (userData.rim: [colour, strength]).
+ */
 function lumMap(m: THREE.Material) {
   m.userData.lumMap = true;
+  const [rc, rk] = (m.userData.rim as [number, number] | undefined) ?? [0, 0];
+  const rimCol = new THREE.Color(rc).multiplyScalar(rk);
   m.onBeforeCompile = (sh) => {
-    sh.fragmentShader = sh.fragmentShader.replace(
-      '#include <map_fragment>',
-      `#ifdef USE_MAP
+    sh.uniforms.uRimK = CHAR_RIM;
+    sh.uniforms.uRimCol = { value: rimCol };
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec3 uRimCol;\nuniform float uRimK;')
+      .replace(
+        '#include <map_fragment>',
+        `#ifdef USE_MAP
         vec4 sampledDiffuseColor = texture2D( map, vMapUv );
         float lum = dot( sampledDiffuseColor.rgb, vec3( 0.2126, 0.7152, 0.0722 ) );
         diffuseColor.rgb *= clamp( lum * 2.6, 0.0, 1.5 );
       #endif`,
-    );
+      )
+      .replace(
+        '#include <emissivemap_fragment>',
+        `#include <emissivemap_fragment>
+        float rimF = 1.0 - saturate( dot( normal, normalize( vViewPosition ) ) );
+        totalEmissiveRadiance += uRimCol * ( uRimK * rimF * rimF * rimF );`,
+      );
   };
-  m.customProgramCacheKey = () => 'threshold-lum-map';
+  m.customProgramCacheKey = () => 'threshold-lum-map-rim';
 }
 
 const bodyMatCache = new WeakMap<THREE.Material, Map<string, THREE.Material>>();
@@ -349,6 +377,7 @@ function lookMaterial(src: THREE.Material, look: Exclude<Look, 'hologram'>): THR
       s.color.set(L.body);
       s.roughness = L.rough;
       s.metalness = L.metal;
+      s.userData.rim = L.rim;
       lumMap(s);
     }
     m.set(look, (mat = s));
@@ -729,6 +758,9 @@ export class Character implements CharacterAPI {
   private pSmp = new THREE.Vector3();
   private baseW = new Float32Array(BASE.length);
   private meshes: THREE.Mesh[] = [];
+  /** The body meshes that cast a shadow (setShadow turns them off and on). */
+  private casters: THREE.Mesh[] = [];
+  private shadowOn = true;
   private ownMats: THREE.Material[] = [];
   private faded = false;
   private pulses: THREE.Object3D[] = [];
@@ -761,7 +793,8 @@ export class Character implements CharacterAPI {
       if ((o as THREE.Bone).isBone) this.bones[shortBoneName(o.name)] = o as THREE.Bone;
       const m = o as THREE.SkinnedMesh;
       if (!m.isMesh) return;
-      m.castShadow = !holo;
+      // (on phones only the body casts: the visor's shadow is inside the head's, and every caster is a draw)
+      m.castShadow = !holo && !(IS_TOUCH && /visor/i.test(m.name));
       m.receiveShadow = !holo;
       // culled against a padded bind-pose sphere (roomy enough for any pose or tumble), so
       // off-screen characters aren't skinned and drawn in every pass
@@ -774,6 +807,7 @@ export class Character implements CharacterAPI {
       m.frustumCulled = !holo;
       m.material = holo ?? lookMaterial(m.material as THREE.Material, look as Exclude<Look, 'hologram'>);
       this.meshes.push(m);
+      if (m.castShadow) this.casters.push(m);
     });
     // the rig is authored facing -Z; gameplay forward is +Z
     this.model.rotation.y = Math.PI;
@@ -961,6 +995,12 @@ export class Character implements CharacterAPI {
     this.frozen = false;
     this.applyTumble();
     this.evaluate();
+  }
+
+  setShadow(on: boolean): void {
+    if (on === this.shadowOn) return;
+    this.shadowOn = on;
+    for (const m of this.casters) m.castShadow = on;
   }
 
   setOpacity(o: number): void {
@@ -1480,7 +1520,8 @@ export class Character implements CharacterAPI {
       o.traverse((n) => {
         const mesh = n as THREE.Mesh;
         if (mesh.isMesh) {
-          mesh.castShadow = true;
+          // (a gun's or a glow strip's shadow is a texel or two on a phone's shadow map: not worth a draw)
+          mesh.castShadow = !IS_TOUCH;
           mesh.receiveShadow = true;
         }
       });

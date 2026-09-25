@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 import { crossing, orientFrame, passDirection, passPoint, passRotation, RiftFrame, yawOf } from '../src/game/portalMath';
+import { windowRect } from '../src/game/portals';
 
 function frame(pos: [number, number, number], normal: [number, number, number]): RiftFrame {
   return {
@@ -54,5 +55,57 @@ describe('rift math', () => {
     expect(crossing(a, new THREE.Vector3(0, 1, 0.2), new THREE.Vector3(0, 1, -0.1))).toBeGreaterThan(0);
     expect(crossing(a, new THREE.Vector3(0, 1, -0.2), new THREE.Vector3(0, 1, 0.1))).toBe(-1);
     expect(crossing(a, new THREE.Vector3(2, 1, 0.2), new THREE.Vector3(2, 1, -0.1))).toBe(-1);
+  });
+});
+
+describe('rift window views', () => {
+  const W = 960, H = 540;
+  const cam = () => {
+    const c = new THREE.PerspectiveCamera(60, W / H, 0.1, 500);
+    c.position.set(0, 1.6, 0);
+    c.lookAt(3, 1.2, -20);
+    c.updateMatrixWorld();
+    return c;
+  };
+  const viewProj = (c: THREE.PerspectiveCamera) => new THREE.Matrix4().multiplyMatrices(c.projectionMatrix, c.matrixWorldInverse);
+  const mesh = (pos: [number, number, number], scale: number) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1));
+    m.position.set(...pos);
+    m.scale.setScalar(scale);
+    m.updateMatrixWorld();
+    return m;
+  };
+  /** Pixel (top-left origin) where p lands through camera c rendering into a viewport rect. */
+  const pixel = (c: THREE.PerspectiveCamera, p: THREE.Vector3, r: { x: number; y: number; w: number; h: number }) => {
+    const n = p.clone().project(c);
+    return [r.x + ((n.x + 1) / 2) * r.w, r.y + ((1 - n.y) / 2) * r.h];
+  };
+
+  it('a far window renders only its own patch of the frame, pixel for pixel the same', () => {
+    const c = cam();
+    const m = mesh([3, 1.5, -18], 2.2);
+    const r = { x: 0, y: 0, w: 0, h: 0 };
+    expect(windowRect(m, viewProj(c), W, H, r)).toBe(true);
+    // a small patch round the window's centre, inside the frame
+    expect(r.w * r.h).toBeLessThan(W * H * 0.1);
+    expect(r.x).toBeGreaterThanOrEqual(0);
+    expect(r.x + r.w).toBeLessThanOrEqual(W);
+    const sub = c.clone();
+    sub.setViewOffset(W, H, r.x, r.y, r.w, r.h);
+    for (const p of [new THREE.Vector3(3, 1.5, -18), new THREE.Vector3(3.8, 2.2, -18), new THREE.Vector3(2.5, 1, -18.5)]) {
+      const [fx, fy] = pixel(c, p, { x: 0, y: 0, w: W, h: H });
+      const [sx, sy] = pixel(sub, p, r);
+      expect(sx).toBeCloseTo(fx, 3);
+      expect(sy).toBeCloseTo(fy, 3);
+      expect(fx).toBeGreaterThan(r.x);
+      expect(fx).toBeLessThan(r.x + r.w);
+    }
+  });
+
+  it('a window reaching behind the camera falls back to the whole frame', () => {
+    const c = cam();
+    const r = { x: 0, y: 0, w: 0, h: 0 };
+    expect(windowRect(mesh([0, 1.6, 0.2], 3), viewProj(c), W, H, r)).toBe(false);
+    expect(windowRect(mesh([0, 1.6, 30], 2), viewProj(c), W, H, r)).toBe(false);
   });
 });

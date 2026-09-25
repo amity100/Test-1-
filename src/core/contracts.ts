@@ -430,6 +430,8 @@ export interface CharacterAPI {
   getPose(): CharacterPose;
   setPose(p: CharacterPose): void;
   setOpacity(o: number): void;
+  /** Whether it casts a shadow now (phones: only the men near you do; optional for stand-ins). */
+  setShadow?(on: boolean): void;
   dispose(): void;
 }
 
@@ -584,6 +586,12 @@ export interface EncounterDef {
   requireClear: boolean;
   /** Checkpoint used after this encounter is cleared. */
   checkpoint?: { pos: V3; yaw: number };
+  /**
+   * Spawn when the player comes this close (m) to the trigger (default 22).
+   * A fight in plain view of the routes into it spawns earlier (Infinity: as
+   * soon as its zone is live), so its men are never placed in front of you.
+   */
+  spawnAhead?: number;
 }
 
 export interface LiftDef {
@@ -657,6 +665,26 @@ export interface LaserDef {
   length: number;
 }
 
+/**
+ * A level's own finish line (a world whose mission ends without a lift or a
+ * boss): once every fight in `requires` is cleared it opens, and stepping into
+ * `box` wins the run.
+ */
+export interface MissionEndDef {
+  box: THREE.Box3;
+  /** Where the objective marker points once it's open. */
+  target: V3;
+  /** Encounter ids that must be cleared first. */
+  requires: string[];
+  objKey: string;
+  /** Toast when it opens. */
+  toastKey?: string;
+  /** Visual only: open and light up (true), or back to waiting (false, a new run). */
+  ready(on: boolean): void;
+  /** Visual only: the player is aboard and it leaves. */
+  depart(): void;
+}
+
 export interface TowerLevel {
   world: CollisionWorld;
   root: THREE.Group;
@@ -677,6 +705,14 @@ export interface TowerLevel {
   /** Crown: helicopter mesh (animated by the game at the end). */
   helicopter: THREE.Object3D | null;
   bossArena: { center: V3; radius: number; y: number; blinkPoints: V3[] } | null;
+  /** Level-specific kill lines (a rail cut you can't fight in), or null where the zone's rules apply. */
+  killYAt?: (p: V3) => number | null;
+  /** The mission's own ending (no lift, no boss). */
+  missionEnd?: MissionEndDef | null;
+  /** Fixed "postcard" camera for the main menu (else the menu orbits the tower). `sway`: metres side to side. */
+  menuView?: { pos: V3; look: V3; fov: number; sway: number };
+  /** Toast when the player falls in the water (default: the void's). */
+  drownKey?: string;
 }
 
 // ---------------------------------------------------------------------------
