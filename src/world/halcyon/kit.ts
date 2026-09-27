@@ -296,6 +296,61 @@ export function windowBay(b: Builder, f0: Face, kind: WinKind, a: number, y: num
   return top;
 }
 
+/** The same wall plane seen from its other side (the back of a grille). */
+export const backFace = (f: Face): Face => makeFace(f.o.clone(), f.u.clone(), f.nv.clone().negate());
+
+/**
+ * A wrought-iron grille standing in the plane of f (offset 0) from a0 to a1,
+ * floor y0 to top y1 (visual: the caller adds its see-through, rift-refusing
+ * collider). The city's railing carried up: square bars every 0.2 m (0.4 on
+ * phones) from a shoe rail on the floor to the top rail, a rail at the
+ * railing's own height with its lattice between the bars below it, a gilt
+ * rail across at `gilt`, flat stiles at the ends (`stiles`).
+ */
+export function ironGrille(b: Builder, f: Face, a0: number, a1: number, y0: number, y1: number, o: { gilt: number; mobile: boolean; stiles?: boolean }) {
+  const K = 1.04;
+  const iron = (p: number, q: number, lo: number, hi: number, t: number, bo: BoxOpts = { ao: 0 }) => fbox(b, 'iron', f, p, q, lo, hi, -t, t, CITY.iron, 1, bo);
+  latticeQuad(b, fp(f, a0, y0, 0), fp(f, a1, y0, 0), K);
+  iron(a0, a1, y0, y0 + 0.08, 0.03, { ao: 0, skipBottom: true });
+  iron(a0, a1, y0 + K - 0.04, y0 + K + 0.04, 0.03);
+  iron(a0, a1, y1 - 0.08, y1, 0.035);
+  const s = o.stiles ? 0.07 : 0;
+  if (s) {
+    iron(a0, a0 + s, y0, y1 - 0.08, 0.04, { ao: 0, skipTop: true, skipBottom: true });
+    iron(a1 - s, a1, y0, y1 - 0.08, 0.04, { ao: 0, skipTop: true, skipBottom: true });
+  }
+  const n = Math.max(1, Math.round((a1 - a0 - 2 * s) / (o.mobile ? 0.4 : 0.2)));
+  for (let i = 0; i < n; i++) {
+    const a = a0 + s + ((a1 - a0 - 2 * s) * (i + 0.5)) / n;
+    iron(a - 0.0175, a + 0.0175, y0 + 0.08, y1 - 0.08, 0.0175, { ao: 0, skipTop: true, skipBottom: true });
+  }
+  fbox(b, 'metal', f, a0 + s, a1 - s, o.gilt, o.gilt + 0.1, -0.045, 0.045, CITY.gilt, 1);
+}
+
+/**
+ * A gilt sunburst filling a half-round head of radius r sprung at (a, y) in
+ * the plane of f (visual, both faces): seven ridged gilt rays (on every other
+ * wedge of thirteen) from a half-disc hub out to the iron ring that carries them.
+ */
+export function sunburst(b: Builder, f: Face, a: number, y: number, r: number, mobile: boolean) {
+  const hub = Math.max(0.2, r * 0.16), ring = 0.07, wedges = 13, arc = mobile ? 10 : 16;
+  for (const g of [f, backFace(f)]) {
+    const P = (rr: number, t: number, w: number) => fp(g, a + Math.cos(t) * rr, y + Math.sin(t) * rr, w);
+    // (each ray ridged down its middle, two facets that catch the low sun in turn: a glint, not a mirror)
+    for (let k = 0; k < wedges; k += 2) {
+      const c = (Math.PI * (k + 0.5)) / wedges, d = (Math.PI * 0.36) / wedges, R = r - ring;
+      const ic = P(hub, c, 0.03), oc = P(R, c, 0.075);
+      fq(b, 'metal', g, [P(hub, c - d * 0.45, 0.012), P(R, c - d, 0.012), oc, ic], CITY.gilt);
+      fq(b, 'metal', g, [ic, oc, P(R, c + d, 0.012), P(hub, c + d * 0.45, 0.012)], CITY.gilt);
+    }
+    fanArch(b, 'metal', g, a, y, hub, 0.02, CITY.gilt, arc / 2);
+    for (let k = 0; k < arc; k++) {
+      const t0 = (Math.PI * k) / arc, t1 = (Math.PI * (k + 1)) / arc;
+      fq(b, 'iron', g, [P(r - ring, t0, 0.02), P(r, t0, 0.02), P(r, t1, 0.02), P(r - ring, t1, 0.02)], CITY.iron);
+    }
+  }
+}
+
 /** A shallow iron balconette: a stone slab on two consoles, railing front and sides. */
 export function ironBalconette(b: Builder, f: Face, a0: number, a1: number, y: number, depth: number) {
   fbox(b, 'trim', f, a0, a1, y - 0.16, y, 0, depth, CITY.trim);
@@ -321,6 +376,8 @@ export interface Floor {
   glow?: number;
   /** Chance of a window box of red geraniums under the sill. */
   flowers?: number;
+  /** No window centred in these a-ranges on this floor (the caller draws its own there); the others keep their pattern. */
+  skip?: [number, number][];
 }
 
 export interface FacadeSpec {
@@ -365,7 +422,12 @@ export function facade(ctx: CityCtx, f: Face, a0: number, a1: number, s: FacadeS
     if (skip(a)) continue;
     for (const fl of s.floors) {
       const w0 = s.base !== undefined && fl.y < s.base ? 0.12 : 0;
-      windowBay(b, f, fl.kind, a, fl.y, { lit: r() < fl.lit, glow: (fl.glow ?? 1.7) * (0.75 + r() * 0.4), mobile: ctx.mobile, balcony: fl.balcony, curtains: r() < 0.3, h: fl.h, w0 });
+      const lit = r() < fl.lit, glow = (fl.glow ?? 1.7) * (0.75 + r() * 0.4), curtains = r() < 0.3;
+      if (fl.skip?.some(([p, q]) => a > p && a < q)) {
+        if (fl.flowers) r();
+        continue;
+      }
+      windowBay(b, f, fl.kind, a, fl.y, { lit, glow, mobile: ctx.mobile, balcony: fl.balcony, curtains, h: fl.h, w0 });
       if (fl.flowers && r() < fl.flowers) {
         // (on a balconette the geraniums stand on its floor, not in a box under it)
         if (fl.balcony) {

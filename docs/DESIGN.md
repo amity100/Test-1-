@@ -298,6 +298,61 @@ launched, downed, stunned and dead.
 | **Turret** | 120 | Static and turns. A 6-round stream with a laser. | BORROWED GUN: REFLECT takes its stream; the other end goes where you look. Also barrels. |
 | **Director Voss** (boss) | 1800, armoured, 3 phases (phase 2 under 2/3 of his hp, phase 3 under 1/3); his bar runs across the top of the screen while he fights | Carries his own rift gauntlet. He catches straight shots with a red rift (returns your returned bolts) and blinks between two red ends. Anchored: the PORTAL grab never takes him, stunned or not. One impact takes at most 200 (the crown's load 300). | Hit him from where his catch-rift doesn't face (behind/above). Shear him mid-blink. Stunned: LOOP him. The hidden blade wounds him any time (150), then he blinks away at once. Cannonball a looped barrel into him. Drop the crown's hanging load. |
 
+**Roles (mission 1): holding ground.** One hero against many works when the
+men hold positions instead of flooding you, and some of them hold ground only
+your power reaches. Each mission-1 spawn has a role built from an existing
+kind (`SpawnDef.role`, with an optional `fallback` post and a `leash`
+override). His *post* is his spawn; his *leash* is how far from it he goes in a
+fight. A spawn without a role behaves as before (the later zones).
+
+| Role | Kind | Job | Leash |
+|---|---|---|---|
+| **Holder** | rifleman | Holds a post above the fight that can't be reached on foot; the squad's spotter ("Up top! I've got him!"). Stands at his post and aims; never strafes. | 1.2 m |
+| **Anchor** | rifleman | Holds a post in cover (the fight's floor, climbable high ground, or behind bars) and covers his mates. Strafes only inside his circle. | 6 m (a level may set less) |
+| **Pusher** | warden | Walks at you so you can't camp, but stays in the fight. | 18 m |
+
+- R1 territory: in a fight (not calm) every walk goal (the hunt to your last
+  known spot, the search, an investigation, the warden's advance) is pulled in
+  to his leash, and further in along the same line if that lands on something
+  he can't stand on, so the walk ends inside his ground. Calm patrols are
+  authored inside it.
+- R2 return: pushed off his ground on his own floor (a grab tap along his
+  roof) by more than 0.75 m past the leash, he runs back and does nothing else
+  until he is inside it again. (A walk to a spot inside his ground that bends
+  out round a corner doesn't count while he is walking it; a path he stopped
+  following, a holder standing to aim, does.)
+- R3 rebase: landed more than 1.2 m (height) off his post's floor, stranded,
+  on ground his post's walk grid doesn't reach (thrown over into the next
+  zone's yard at the same height), or with no way back twice, he fights from
+  where he is: that spot becomes his post (a 6 m circle at least, on the floor
+  under him if he came down on a rail's top or a crate), and a holder fights on
+  as an anchor. He never climbs back. Thrown up onto something over his own
+  floor at an edge (the balcony's rail top), the step down onto his floor is
+  no drop to him: he steps off and walks back instead of standing up there.
+- R4 holders: stand and aim within 24 m in waves like any rifleman. Lost you,
+  he searches, investigates and stands down from his post (the only walk he
+  takes is back onto it). A holder
+  who sees you on his own floor within 10 m (you came up by a door, a swap, a
+  dash) calls "He's up here!" once and tells his squad.
+- R5 anchors: spot picks are pulled in to just inside his circle (as close
+  as his ground lets him get to where he'd like to stand: out of range, he
+  closes in to its edge); with none safe there he takes a spot inside it with
+  a line on you (a few rays, now and then), else holds. You coming close or going far doesn't move him off a
+  spot; only his own strafe timing does. One anchor per fight may have a
+  prepared *fallback* (same floor, 5–12 m back): when you come within 7 m in
+  his sight and it lies further from you than he does, he calls "Falling
+  back!", runs to it once, and it becomes his post. Cornered (no fallback, or
+  it's used), he stays in his circle and keeps firing. Nobody else flees.
+- R6 pushers: R1 only (stairs are still walls to a warden).
+- R7 covering fire: a squad is pressed for 2.5 s when one of its men is
+  grabbed, hurt and still standing, falls back, or sees you within 6 m. Then a
+  mate who sees you takes the next turn to fire ahead of the line ("Covering!",
+  once a press). The volley gap, the stagger and the two-gun limit still hold.
+- R8 calm: his idle walk goes back to the post he holds now.
+- Priority emerges without a morale system: the holder is the spotter (high,
+  sees over cover, calls your spot every 2.5 s). Kill him first and the anchors
+  keep only their own eyes and their leashed hunts.
+
 **Perception (information, not telepathy):**
 - Vision: a ±60° cone at 70% of sight range (32 m) while unaware, ±90° at
   full range in combat. Anyone within 2.5 m is noticed in any direction.
@@ -443,7 +498,7 @@ centred near (0, 0, 40).
 
 | Zone | Height | Content | Lessons |
 |---|---|---|---|
-| **pier** | y 0 | Quay 80 × 50 m with sea on 3 sides, containers, crates, gatehouse, a harbour crane, barge | door (cross a channel), trapdoor (2 unaware guards at the quay edge: tapped from the gap between stack T and row R1 they're thrown on into the sea; from the top of stack T the one further from the edge lands on the quay, knocked down), returnToSender (a lone rifleman), slingshot (jump from a container stack into an air entrance, exit on a wall facing a group), arena (4 riflemen + warden) |
+| **pier** | y 0 | Quay 80 × 50 m with sea on 3 sides, containers, crates, gatehouse, harbour office, warehouse, a harbour crane with a maintenance catwalk, barge | door (cross a channel), trapdoor (2 unaware guards at the quay edge: tapped from the gap between stack T and row R1 they're thrown on into the sea; from the top of stack T the one further from the edge lands on the quay, knocked down), returnToSender (a lone lookout on the office roof), slingshot (jump from a container stack into an air entrance, exit on a wall facing a pair; a sentry on the warehouse roof wakes after), arena (lookouts on stack CA and the crane catwalk, 2 riflemen in cover, the warden) |
 | **yard** | y 0–24 | Construction site at the tower base: tower crane with hanging loads (steel beam bundle, container), scaffolding towers, fuel barrels, mixer truck, the hoist | cargo, matador (brute near the pier edge), grenade (postage), shield (warden) |
 | **skeleton** | floors y 30 / 36 / 42 | Open steel floors, void at the edges, elevator shaft (a vertical hole through all floors, for loops), scaffolding, a neighbouring crane cab with a sniper | loop, firingLine, arena with brute + wardens + riflemen |
 | **lab** | y 60 | Glass-walled floor, Kessler rift gates (reinforcement waves), a server hall, turret, laser curtains | hijack, a plain fight in the server hall (2 riflemen, the electric trench; no lesson, no hint), borrowedGun |
@@ -460,6 +515,87 @@ centred near (0, 0, 40).
     enemies; the player can save themselves with an air entrance while
     falling). If they don't, they respawn at the checkpoint, taking 30
     damage.
+
+### Holding ground: posts you can't walk to (mission 1)
+
+The §5 roles need places to hold. A *holder*'s post is a perch the player
+can't reach on foot, built into the world where a security team would put a
+man, with the way he got up in plain view (a roof hatch, a door in a crane
+leg). Every other tool reaches him: REFLECT always, a GRAB tap (where you
+stand decides: an edge or a wall behind him kills, open roof only knocks him
+down and he walks back), a DOOR onto his perch (aimed 2–3 m beside him: an
+exit within 1.2 m of a steady man is refused), SWAP or DASH (up to 9 m), then
+the blade.
+
+**Perch rules** (checked in `tests/level/tower.test.ts`, `halcyon.test.ts` and `climb.test.ts`):
+- *Jump model* (`tests/level/reach.ts`, from `FEEL`): the player stays grounded
+  until the ground probe (0.65 r) leaves the edge, runs on through the coyote
+  time, jumps at 6.6 m/s under g 22 and lands when the probe reaches the far
+  edge: about 4.5 m edge to edge on the level, 4.3 m onto a surface 0.23 m
+  higher, 5.9 m from 1.9 m higher, 6.2 m from 2.6 m higher. Mantles reach
+  2.75 m up onto a ledge within 1.2 m.
+- *Unreachable on foot*: a perch is more than 2.75 m above every foothold
+  within 1.2 m (railing tops count), and at least jump reach + 0.5 m from
+  every foothold within 7.5 m. The test floods every collider top from the
+  pier's starts with that pessimistic reach, and every move needs a clear line
+  for the body through rails too.
+- *Reachable by every tool*: in sight of his fight's approach and within 24 m
+  of its key spots, a portal-friendly floor under him and a face at least
+  0.6 m tall under his feet for a DOOR to perch on.
+- *Honest*: the collider top is the top you see (±3 cm), no man floats or
+  clips a rail, the same colliders on phones, every post a walkable cell of
+  a nav layer at its floor. Railings that meet at a corner never share an
+  end post (the N/S runs are inset 0.08 m).
+- *In the world's own kit*: containers, `railing()`, `lampPole()`, `jersey()`
+  and steel, metal, concrete and hazard boxes on the pier; `rail()`, the
+  facade vocabulary, trim, iron and gilt in Halcyon (`ironGrille()` and
+  `sunburst()` carry its railing up into bars). All merged into the existing
+  builders (no new draws or materials).
+
+**The pier's posts** (`pier.ts`; the catwalk in `structure.ts`):
+
+| Fight | Holder's post | Why you can't walk there | What was built |
+|---|---|---|---|
+| returnToSender | office roof (−31.2, 8, −34), over the container yard | 8 m up; R1's top is 2.8 m below; the NW block's 20ft is 5.8 m off | the cap is now the roof's collider (8.0: it was 7.5 under an 8.0 top), a guard rail round it, the plant box solid, a roof hatch with its lid thrown back, a floodlight on the NE corner lighting the yard |
+| slingshot | warehouse roof (22.6, 9.35, −31), facing along the roof toward the crane | 9.35 m up; S top is 13 m away | the metal cap is the roof (9.35), a guard rail, a hatch, two vent units |
+| arena (west) | stack CA (−18.5, 5.18, −13.8) | CA is a flat two-high 40ft stack now, 1.5 m further east: 6.2 m from the NW block's 5.18 top, 3.9 m above the crate beside it | CA's top 20ft became a 40ft; the crate moved with it |
+| arena (east) | the crane's maintenance catwalk (26.3, 8.8, −5.8) | 8.8 m up on the crane's west legs | a steel grating on a 0.6 m edge girder and a ledger welded to both legs, two cantilever arms with knee braces, the sill beam as its parapet, rails; the NW leg's stair door stands open onto it, the one at its foot is padlocked |
+
+The NW block's top 20ft moved to the outer column (z0 −18): its 7.77 top is
+the player's own vantage over the arena (a mantle chain 2.59 / 5.18 / 7.77
+from the quay), 20 m from the CA lookout and above him. The rts trigger is
+the container yard itself (x −18..−4), so its hint shows as the lookout comes
+into view; he is out of range as you round row R1 (28 m), in range at the
+checkpoint. The warehouse sentry has his back to stack S and can't see the
+pair, the wall's foot or the landing: the slingshot is learned in quiet, and
+he wakes to the noise (teach, then twist). The two arena lookouts cover
+opposite halves of the floor. The forklift man's fallback is behind a jersey
+by the gate (13, 0, −2), 5.3 m back. The catwalk post sits where a GRAB tap
+from anywhere on the arena floor throws him over the sill beam into the sea
+(2 m further south, the throw from the east entry glanced off the yard's lamp
+pole into the yard).
+
+**Halcyon's posts** (`halcyon/mission.ts`; the grilles and the gallery in
+`buildings.ts`, the gate in `square.ts`):
+
+| Fight | Post | Why you can't walk there | What was built |
+|---|---|---|---|
+| returnToSender | an anchor behind bars in the Hall's river colonnade (45.4, 6, 24.5), leash 3 | an iron grille fills every arch from the floor to the Hall above (one see-through collider that refuses rifts) | in each arch the city's railing carried up (bars on a shoe rail, a rail at railing height, a gilt rail, the top rail at the spring) and a ridged gilt sunburst on an iron ring against the soffit; the north slot beside the Loggia House gets a narrow one |
+| slingshot | a holder on the Hall's speaker's gallery over the café terrace (30, 12.6, 41.35), facing the Grand Stair | 6.6 m over the terrace; the Loggia roof's lip is 6.8 m off | one bay of the café face: a paved slab with a moulded lip and gilt fillet over a 0.6 m apron, four stepped consoles, an iron rail into slim stone newels, geraniums, ivy; its middle window became a lit French window under Kessler's emblem (`Floor.skip` keeps the facade's other windows as they were) |
+| arena (Hall) | a holder on the Hall balcony (19.4, 6, 30.5), behind its locked gate | the gate (4.4 m of bars on a stone pier and a pilaster, a gilt sunburst crest, a chain and padlock) closes the balcony at the café strip; a screen of the same bars replaces the strip's railing, the balcony's railing stops 2 m short of it | the gate and screen; the balcony railing now ends at z 38 |
+| arena (podium) | an anchor on the statue's podium by the maple planter (1.5, 7.8, 35.8), leash 4 | reachable on purpose, by the pedestal stair under the balcony's fire | nothing: a nav layer on the podium |
+
+The square's other two anchors hold cover on its floor (behind the trunks at
+(−4, 48); by the planter at (12, 16), falling back once to the trunks at
+(3, 9)); the warden walks the pod's drop zone. Taps (the level test checks
+each): the gallery sentry dies against the Hall wall from the terrace, the
+slingshot's landing or the Loggia roof, and only goes down along his gallery
+from the stair top; the balcony lookout dies against the Hall wall from the
+square and is knocked down along his balcony through the gate from the stair
+top (he walks back); the colonnade man dies against its back wall when
+tapped through the bars from abeam, and is knocked along it from down the
+walkway. A DOOR onto the one-bay gallery goes at its far end, 2 m beside him
+(the rails keep the room inside the slim newels for it).
 
 ### Mission 1 in two worlds (while the owner picks one)
 
@@ -733,7 +869,8 @@ Old stealth code (`guards.ts`, `harbor.ts`) is removed at integration.
   `toast.photoSaved`, `toast.challenge`, `toast.zoneClear`.
 - Enemy barks: `bark.contact`, `bark.reload`, `bark.grenade`, `bark.charge`,
   `bark.lost`, `bark.where`, `bark.there`, `bark.mateDown`, `bark.what`,
-  `bark.boss1`, `bark.boss2`, `bark.boss3`.
+  `bark.boss1`, `bark.boss2`, `bark.boss3`; men who hold ground (§5 roles):
+  `bark.upTop`, `bark.upHere`, `bark.fallback`, `bark.covering`.
 - `trick.<TrickId>` and `challenge.<id>.title` / `challenge.<id>.desc`:
   provided by META in `src/meta/strings.ts` (`META_STRINGS = { en, he }`).
   UI merges them through `addStrings`.

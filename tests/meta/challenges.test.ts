@@ -48,6 +48,8 @@ function feed(c: ChallengeSystem, s: StyleSystem, e: GameEvent): string[] {
 }
 
 function inZone(c: ChallengeSystem, zone: ZoneId) {
+  // Zone tests assert exact id lists: take today's daily out of them (it could be any trick).
+  c.complete(c.daily().id);
   c.push({ type: 'zone', t: 0, zone }, [], style());
 }
 

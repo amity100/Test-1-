@@ -39,8 +39,20 @@ const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _hearA = new THREE.Vector3();
 const _hearB = new THREE.Vector3();
+// (roles: a leashed goal, and the eye / chest of a spot's line of sight)
+const _lv = new THREE.Vector3();
+const _spotEye = new THREE.Vector3();
+const _spotTo = new THREE.Vector3();
 const NO_SOURCE_SHIELD: ReadonlySet<DamageSource> = new Set<DamageSource>(['shear', 'void', 'water', 'explosion', 'blade', 'crush']);
 const BOSS_SHIELDED: ReadonlySet<DamageSource> = new Set<DamageSource>(['bolt', 'beam', 'grenade', 'impact', 'explosion']);
+
+/** A squad under pressure (roles, DESIGN §5): until `until`, a mate of `by` who sees you fires next. */
+interface Press {
+  until: number;
+  by: Enemy | null;
+  /** Someone has called "Covering!" in this press. */
+  barked: boolean;
+}
 
 function byRank(a: Enemy, b: Enemy) {
   return a.rankD - b.rankD;
@@ -94,6 +106,8 @@ export class EnemySystem implements EnemyAPI, Brain {
   private hasPlayer = false;
   private arena: { center: V3; radius: number; points: V3[] } | null = null;
   private summoned = 0;
+  /** Squads under pressure (roles): one entry per squad, made on its first press. */
+  private readonly presses = new Map<string, Press>();
   private rng = mulberry32(0x5eed);
   private _ctx: EnemyContext | null = null;
   time = 0;
@@ -172,6 +186,9 @@ export class EnemySystem implements EnemyAPI, Brain {
     // frozen until an update finds his zone active
     body.enabled = false;
     const e = new Enemy(id, def, char, body, (id * 0.047) % AI.senseInterval);
+    // the ground he holds: his spawn, as far as his role allows (no role: anywhere)
+    e.post.copy(def.pos);
+    e.leash = def.leash ?? (def.role ? AI.hold.leash[def.role] : Infinity);
     e.state = this.baseState(e);
     e.routeIdx = def.route && def.route.length > 1 ? 1 % def.route.length : 0;
     char.root.position.copy(def.pos);
@@ -242,6 +259,7 @@ export class EnemySystem implements EnemyAPI, Brain {
     this.pathHead = 0;
     this.tokens = 0;
     this.volleyT = 0;
+    this.presses.clear();
     this.threatOut.length = 0;
     this.trapOut.length = 0;
   }
@@ -359,9 +377,9 @@ export class EnemySystem implements EnemyAPI, Brain {
     if (!e.thinking) {
       // past the thinking cap (the farthest of a crowd): no eyes, no guns (an attack under way
       // is dropped, or he'd keep a shooter's turn from everyone), but a man in the fight still
-      // closes on what he knows, so he doesn't stay parked out of it for good
+      // closes on what he knows, so he doesn't stay parked out of it for good (a holder keeps his post)
       if (e.atk !== 'none') endAttack(this, e);
-      if (e.mode === 'combat' && e.hasLastKnown && hdist(e.pos, e.lastKnown) > Math.max(3, e.tune.keepMin)) {
+      if (e.mode === 'combat' && e.role !== 'holder' && e.hasLastKnown && hdist(e.pos, e.lastKnown) > Math.max(3, e.tune.keepMin)) {
         this.moveTo(e, e.lastKnown, e.tune.run, dt, true);
       } else this.halt(e, dt);
       return;
@@ -454,6 +472,8 @@ export class EnemySystem implements EnemyAPI, Brain {
         if (!was) this.sighted(e);
         this.learn(e, pl.pos);
         e.lastSeenT = this.time;
+        // you're on top of a man who holds ground: his squad covers him
+        if (e.mode === 'combat' && e.role && hdist(pl.pos, e.pos) <= AI.hold.pressedAt) this.press(e);
       }
       if (e.mode !== 'combat') {
         if (e.seesPlayer) e.sus += elapsed * detectRate(d, e.tune.sight) * (pl.crouched ? 0.7 : 1) * (e.alertT > 0 ? AI.alert.detect : 1);
@@ -461,6 +481,13 @@ export class EnemySystem implements EnemyAPI, Brain {
         if (e.sus >= 1) this.enterCombat(e, e);
         else if (e.seesPlayer && e.sus >= AI.suspiciousAt) this.becomeSuspicious(e, pl.pos);
       } else if (e.seesPlayer) {
+        // a holder with you on his own ground (a door, a swap, a dash up to him): he tells them, once
+        if (this.upHere(e)) {
+          e.upHereBarked = true;
+          this.bark(e, 'bark.upHere', true);
+          e.calloutT = AI.callout;
+          this.raise(e.def.zone, null, e);
+        }
         // eyes on you: he keeps his squad posted
         e.calloutT -= elapsed;
         if (e.calloutT <= 0) {
@@ -628,7 +655,7 @@ export class EnemySystem implements EnemyAPI, Brain {
    * learn his last known spot, give or take a few metres, never more.
    */
   private raise(zone: ZoneId, spotter: Enemy | null, origin: Enemy | null = null) {
-    if (spotter && spotter.kind !== 'boss' && spotter.kind !== 'turret') this.bark(spotter, 'bark.contact', true);
+    if (spotter && spotter.kind !== 'boss' && spotter.kind !== 'turret') this.bark(spotter, this.contactBark(spotter), true);
     for (let i = 0; i < this.list.length; i++) {
       const o = this.list[i];
       if (!o.alive || o === origin || o.def.zone !== zone) continue;
@@ -666,11 +693,30 @@ export class EnemySystem implements EnemyAPI, Brain {
     return false;
   }
 
-  bark(e: Enemy, key: string, force = false) {
-    if (!force && (this.barkGap > 0 || e.barkT > 0)) return;
+  /** True if he said it (another voice just now, or his own, holds an unforced line back). */
+  bark(e: Enemy, key: string, force = false): boolean {
+    if (!force && (this.barkGap > 0 || e.barkT > 0)) return false;
     this.barkGap = AI.barkGap;
     e.barkT = 4;
     this.hooks.bark(e, key);
+    return true;
+  }
+
+  /** What a spotter shouts: a holder calls it from up top (or you're already up here with him). */
+  private contactBark(e: Enemy) {
+    if (e.role !== 'holder') return 'bark.contact';
+    if (this.upHere(e)) {
+      e.upHereBarked = true;
+      return 'bark.upHere';
+    }
+    return 'bark.upTop';
+  }
+
+  /** A holder who sees you standing on his own floor, close (he hasn't called it yet). */
+  private upHere(e: Enemy) {
+    if (e.role !== 'holder' || e.upHereBarked || !e.seesPlayer || !this._ctx) return false;
+    const pl = this._ctx.player.pos;
+    return Math.abs(pl.y - e.post.y) < AI.hold.floorGap && hdist(pl, e.pos) < AI.hold.upHere;
   }
 
   private calm(e: Enemy, dt: number) {
@@ -690,7 +736,8 @@ export class EnemySystem implements EnemyAPI, Brain {
       return;
     }
     if (e.state === 'suspicious') {
-      if (e.stateT < 0.9 || e.perched || e.stranded) {
+      // (a holder looks it over from his post, like a perched man: he doesn't go and see)
+      if (e.stateT < 0.9 || e.perched || e.stranded || e.role === 'holder') {
         this.halt(e, dt);
         this.face(e, e.investigate, dt);
       } else if (this.moveTo(e, e.investigate, e.tune.walk, dt, true)) {
@@ -722,9 +769,10 @@ export class EnemySystem implements EnemyAPI, Brain {
       }
       return;
     }
-    // idle: back to his post, then a slow look around
-    if (!e.perched && !e.stranded && hdist(e.pos, e.def.pos) > 1.2) {
-      this.moveTo(e, e.def.pos, e.tune.walk, dt, true);
+    // idle: back to his post (the one he holds now, if he has a role), then a slow look around
+    const home = e.role ? e.post : e.def.pos;
+    if (!e.perched && !e.stranded && hdist(e.pos, home) > 1.2) {
+      this.moveTo(e, home, e.tune.walk, dt, true);
       return;
     }
     this.halt(e, dt);
@@ -760,6 +808,8 @@ export class EnemySystem implements EnemyAPI, Brain {
       this.halt(e, dt);
       return true;
     }
+    // a man who holds ground goes no further from his post than his leash, whatever he's after
+    if (e.role && e.mode !== 'calm') goal = this.leashed(e, goal, _lv);
     const pos = e.pos;
     if (hdist(pos, goal) < 0.6) {
       this.halt(e, dt);
@@ -794,13 +844,17 @@ export class EnemySystem implements EnemyAPI, Brain {
     // near a drop (or off the grid): feel ahead before each step
     if (this.world && (!e.grid || e.grid.edgeDistance(pos.x, pos.z) < AI.edgeMargin)) {
       const px = pos.x + (dx / d) * 0.7, pz = pos.z + (dz / d) * 0.7;
-      if (this.world.groundAt(px, pz, 0.05, pos.y + 0.5) < pos.y - 0.6) {
+      // (a man who holds ground, thrown up onto something over his floor, a railing's top, a crate: the step
+      // down onto his floor is no drop, only what's below the floor is. Without it he'd stand up there for good)
+      const floor = e.role && e.grid ? Math.min(pos.y, e.grid.floorY) : pos.y;
+      if (this.world.groundAt(px, pz, 0.05, pos.y + 0.5) < floor - 0.6) {
         this.halt(e, dt);
         e.pathLen = 0;
         return true;
       }
     }
     this.steer(e, (dx / d) * speed, (dz / d) * speed, dt);
+    e.walkT = this.time;
     if (faceMove) e.yaw = dampAngle(e.yaw, Math.atan2(dx, dz), 8, dt);
     // stuck: re-plan, then give up
     e.progressT += dt;
@@ -816,6 +870,142 @@ export class EnemySystem implements EnemyAPI, Brain {
       }
     }
     return false;
+  }
+
+  /**
+   * `goal`, pulled in (ground plane) to within his leash of his post, its
+   * height kept. Pulled in onto something he can't stand on (a container, a
+   * planter, off his floor), it comes further in along the same line to the
+   * first cell he can: the path then ends inside his ground, not at whatever
+   * walkable cell happens to be nearest outside it.
+   */
+  private leashed(e: Enemy, goal: V3, out: THREE.Vector3): V3 {
+    const p = e.post;
+    const dx = goal.x - p.x, dz = goal.z - p.z;
+    const d = Math.hypot(dx, dz);
+    if (d <= e.leash) return goal;
+    const ux = dx / d, uz = dz / d;
+    out.set(p.x + ux * e.leash, goal.y, p.z + uz * e.leash);
+    const g = this.gridFor(e);
+    if (!g || g.walkable(out.x, out.z)) return out;
+    for (let r = e.leash - g.cell * 0.5; r > 0; r -= g.cell * 0.5) {
+      if (g.walkable(p.x + ux * r, p.z + uz * r)) return out.set(p.x + ux * r, goal.y, p.z + uz * r);
+    }
+    return out.set(p.x, goal.y, p.z);
+  }
+
+  /**
+   * The ground he holds (roles, DESIGN §5), before any other move in a fight:
+   * his run to his fallback, the walk back to his post when something pushed
+   * him off it on his own floor, and his one fallback when you come close.
+   * True while it moves him: he does nothing else then.
+   */
+  holdGround(e: Enemy, dt: number): boolean {
+    const b = e.body;
+    if (!e.role || e.stranded || !b || b.simulate || e.held) return false;
+    const H = AI.hold;
+    const d = hdist(e.pos, e.post);
+    if (e.retreating || e.returning) {
+      // (back well inside his ground will do for an anchor; a holder, and a fallback, go all the way)
+      const near = e.retreating ? 0.6 : Math.max(0.6, e.leash - H.returnSlack);
+      const done = d <= near || this.moveTo(e, e.post, e.tune.run, dt, true);
+      if (!done) return true;
+      if (d <= (e.retreating ? 1.5 : e.leash + 0.1)) {
+        e.retreating = false;
+        e.returning = false;
+        e.postFails = 0;
+        e.hasSpot = false;
+        this.halt(e, dt);
+        return false;
+      }
+      // the walk gave up short of it (no path, stuck, an edge in the way): twice, and he fights from here
+      e.postFails++;
+      e.hasGoal = false;
+      if (e.postFails >= 2) {
+        this.rebase(e);
+        return false;
+      }
+      return true;
+    }
+    // on ground his post's walk grid doesn't reach (thrown over into the next zone's yard at the same height):
+    // no walk gets him back, and a walk toward it would only end at the grid's edge and stand there. He fights from here
+    if (!this.postOnHisFloor(e)) {
+      this.rebase(e);
+      return false;
+    }
+    // (a walk to somewhere inside his ground may bend out past it round a corner: that isn't being pushed off it.
+    // Only a walk under way counts: a path left lying after a halt, a holder's stand, a spot pick that found
+    // nothing, would otherwise hold him out there for good)
+    const walkingIn = e.hasGoal && e.pathIdx < e.pathLen && this.time - e.walkT <= H.walking && hdist(e.goal, e.post) <= e.leash + 0.1;
+    if (d > e.leash + H.returnSlack && !walkingIn) {
+      e.returning = true;
+      e.hasSpot = false;
+      e.hasGoal = false;
+      this.moveTo(e, e.post, e.tune.run, dt, true);
+      return true;
+    }
+    // you're on top of him: an anchor with a prepared second post falls back to it, once, and only away from you
+    const fb = e.def.fallback;
+    if (fb && e.role === 'anchor' && !e.fellBack && e.mode === 'combat' && e.seesPlayer && this._ctx) {
+      const pl = this._ctx.player.pos;
+      const me = hdist(pl, e.pos);
+      if (me <= H.fallbackAt && hdist(pl, fb) > me) {
+        endAttack(this, e);
+        this.bark(e, 'bark.fallback', true);
+        this.press(e);
+        e.fellBack = true;
+        e.retreating = true;
+        e.postFails = 0;
+        e.post.copy(fb);
+        e.hasSpot = false;
+        e.hasGoal = false;
+        this.moveTo(e, e.post, e.tune.run, dt, true);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** His post is on the floor he walks now (with no nav, on the same level): he can walk back to it. */
+  private postOnHisFloor(e: Enemy) {
+    const p = e.post;
+    const g = this.gridFor(e);
+    if (!g) return !this.navs.get(e.def.zone)?.length && Math.abs(e.pos.y - p.y) <= AI.hold.floorGap;
+    return g.contains(p.x, p.z) && Math.abs(g.floorY - p.y) <= AI.hold.floorGap;
+  }
+
+  /**
+   * He can't get back to his ground (another floor, stranded, no way there):
+   * where he stands is his post now, a circle an anchor's size at least, and
+   * no fallback later. A holder thrown down fights on as an anchor.
+   */
+  private rebase(e: Enemy) {
+    e.post.copy(e.pos);
+    // (landed on a rail's top or a crate over his floor: his ground is the floor round it)
+    const g = this.gridFor(e);
+    if (g && Math.abs(e.pos.y - g.floorY) <= AI.hold.floorGap) e.post.y = g.floorY;
+    e.leash = Math.max(e.leash, AI.hold.leash.anchor);
+    if (e.role === 'holder') e.role = 'anchor';
+    e.fellBack = true;
+    e.retreating = false;
+    e.returning = false;
+    e.postFails = 0;
+    e.hasSpot = false;
+    e.hasGoal = false;
+  }
+
+  /** His squad is under pressure for a moment: a mate who sees you covers him (DESIGN §5 roles). */
+  private press(e: Enemy) {
+    if (!e.role) return;
+    let p = this.presses.get(e.def.squad);
+    if (!p) {
+      p = { until: -1e9, by: null, barked: false };
+      this.presses.set(e.def.squad, p);
+    }
+    // (a press that ran out: the next one is a new one, with its own call)
+    if (p.until <= this.time) p.barked = false;
+    p.until = this.time + AI.hold.coverFor;
+    p.by = e;
   }
 
   /** Kinematic walk velocity + a little separation from allies. */
@@ -928,7 +1118,15 @@ export class EnemySystem implements EnemyAPI, Brain {
     for (let i = 0; i < 12; i++) {
       const ang = base + (this.rand() - 0.5) * 1.8;
       const r = Math.min(max, Math.max(min, want + (this.rand() - 0.5) * 5));
-      const x = center.x + Math.sin(ang) * r, z = center.z + Math.cos(ang) * r;
+      let x = center.x + Math.sin(ang) * r, z = center.z + Math.cos(ang) * r;
+      // a man who holds ground only picks spots inside it: one past it is pulled in to just inside
+      // its edge (as close as his ground lets him get to where he'd like to stand)
+      const px = x - e.post.x, pz = z - e.post.z, pd = Math.hypot(px, pz);
+      if (pd > e.leash) {
+        const k = Math.max(0, e.leash - 0.5) / pd;
+        x = e.post.x + px * k;
+        z = e.post.z + pz * k;
+      }
       if (g) {
         if (!g.safeSpot(x, z, AI.edgeMargin)) continue;
       } else if (!this.solidSpot(x, z, pos.y)) continue;
@@ -941,7 +1139,31 @@ export class EnemySystem implements EnemyAPI, Brain {
         found = true;
       }
     }
+    // nothing safe in his ground toward his band: a spot in it from which he'd see you (now and then: a ray a try)
+    if (!found && e.leash < Infinity && this.time >= e.groundTryT) {
+      e.groundTryT = this.time + this.between(AI.rifle.strafe);
+      found = this.spotInGround(e, center, out);
+    }
     return found;
+  }
+
+  /** One of 8 random safe spots inside his ground with a clear line from his eye there to `center`'s chest. */
+  private spotInGround(e: Enemy, center: V3, out: V3): boolean {
+    const g = this.gridFor(e);
+    const w = this.world;
+    const p = e.post, y = e.pos.y;
+    for (let i = 0; i < 8; i++) {
+      const a = this.rand() * Math.PI * 2, r = e.leash * Math.sqrt(this.rand());
+      const x = p.x + Math.sin(a) * r, z = p.z + Math.cos(a) * r;
+      if (g) {
+        if (!g.safeSpot(x, z, AI.edgeMargin)) continue;
+      } else if (!this.solidSpot(x, z, y)) continue;
+      if (this.crowded(e, x, z)) continue;
+      if (w && !w.lineOfSight(_spotEye.set(x, y + e.height * 0.92, z), _spotTo.set(center.x, center.y + 1.3, center.z))) continue;
+      out.set(x, y, z);
+      return true;
+    }
+    return false;
   }
 
   /** No nav: ground here and no drop within the edge margin. */
@@ -972,8 +1194,11 @@ export class EnemySystem implements EnemyAPI, Brain {
     // (stopped asking for a while: back of the line)
     if (this.time - e.askedT > 0.1) e.queuedT = this.time;
     e.askedT = this.time;
+    // a squad under pressure: a mate who sees you covers the man in trouble, ahead of the line
+    const p = e.role && e.seesPlayer ? this.presses.get(e.def.squad) : undefined;
+    const covering = !!p && p.until > this.time && p.by !== e;
     // a beat between one shooter's turn and the next, and the longest wait goes first (Voss keeps his own rhythm)
-    const wait = e.kind !== 'boss' && (this.volleyT > 0 || e.queuedT > this.firstInLine);
+    const wait = e.kind !== 'boss' && (this.volleyT > 0 || (!covering && e.queuedT > this.firstInLine));
     if (this.tokens >= AI.maxTokens || wait) {
       this.nextInLine = Math.min(this.nextInLine, e.queuedT);
       return false;
@@ -981,6 +1206,7 @@ export class EnemySystem implements EnemyAPI, Brain {
     e.token = true;
     this.tokens++;
     this.volleyT = Math.max(this.volleyT, this.between(AI.volleyStagger));
+    if (covering && !p!.barked) p!.barked = this.bark(e, 'bark.covering');
     return true;
   }
 
@@ -1277,6 +1503,9 @@ export class EnemySystem implements EnemyAPI, Brain {
       const g = this.gridFor(e);
       e.stranded = !g || g.nearestWalkable(e.pos.x, e.pos.z, AI.rejoinReach, e.pos.y) < 0;
     } else e.stranded = false;
+    // thrown off his ground (another floor, somewhere he can't walk from, no way back): he fights from here
+    // (that includes ground at his height that his post's walk grid doesn't reach: thrown over into the next zone's yard)
+    if (e.role && (e.stranded || Math.abs(e.pos.y - e.post.y) > AI.hold.floorGap || e.postFails >= 2 || !this.postOnHisFloor(e))) this.rebase(e);
     e.state = this.baseState(e);
     e.stateT = 0;
     if (e.recoverToCombat) {
@@ -1335,6 +1564,7 @@ export class EnemySystem implements EnemyAPI, Brain {
     e.char.play('hitChest');
     this.bark(e, 'bark.grabbed', true);
     this.noticeFall(e);
+    this.press(e);
   }
 
   /**
@@ -1520,6 +1750,13 @@ export class EnemySystem implements EnemyAPI, Brain {
   hit(v: EnemyView, info: HitInfo): HitResult {
     const e = this.own(v);
     if (!e || !e.alive) return 'ignored';
+    const r = this.hitOne(e, info);
+    // hurt and still in it: his squad covers him
+    if ((r === 'hurt' || r === 'knocked') && e.alive) this.press(e);
+    return r;
+  }
+
+  private hitOne(e: Enemy, info: HitInfo): HitResult {
     const src = info.source;
     if (info.from && info.exitEndId != null) this.lookAtExit(e, info.from);
     if (e.kind === 'boss') return this.hitBoss(e, info);

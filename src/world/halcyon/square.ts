@@ -14,6 +14,7 @@ import {
   fquad,
   hangLantern,
   inlay,
+  ironGrille,
   ivy,
   newel,
   parapet,
@@ -25,6 +26,7 @@ import {
   stoneStair,
   streetLamp,
   stringLights,
+  sunburst,
   trunks,
   windowBay,
   type City,
@@ -48,6 +50,7 @@ export function buildSquare(city: City) {
   walls(city);
   stairs(city);
   railings(city);
+  hallGate(C);
   pedestal(C);
   buildStatue(C);
   furniture(city);
@@ -268,7 +271,8 @@ function railings(city: City) {
   rail(L, 40, 72, 58, 72, LOGGIA_Y);
   rail(L, 40, 40, 53.5, 40, LOGGIA_Y); // (the Loggia Stair arrives at 53.5..57.5)
   parapet(L, 40, 40, 40.4, 72, LOGGIA_Y, 0.5); // the café side: a low stone lip, easy to jump
-  rail(C, 18, 2, 18, 40, UPPER_Y);
+  // (the Hall balcony's: it stops at its gate's side screen, hallGate())
+  rail(C, 18, 2, 18, 38, UPPER_Y);
   // quay: three openings with gilt bollards only, the deliberate throw edges
   for (const [a, c] of [[-50, -34], [-30, -16], [-12, 0], [4, 22]]) rail(city.at((a + c) / 2), a, 72, c, 72, SQUARE_Y);
   for (const [a, c] of [[-34, -30], [-16, -12], [0, 4]]) for (const x of [a + 0.6, c - 0.6]) bollard(city.at(x), x, 71.6, SQUARE_Y);
@@ -287,15 +291,81 @@ function railings(city: City) {
     }
     stepped(C, 16.4, 18.4, z, 3);
   }
-  // (two edges the spec's tables leave open: the station stair's top and the café strip's side)
+  // (an edge the spec's tables leave open: the station stair's top; the café strip's side is the gate's screen)
   rail(R, -23, -18, -20, -18, SQUARE_Y, 1.1, { newels: false });
-  rail(C, 18, 40, 18, 42, UPPER_Y, 1.1, { newels: false });
   // the landing's lamps and gilt bollards on its three open sides (no rail: the river is the point)
   for (let z = 2.6; z < 12; z += 2.2) bollard(L, 65.6, z, UPPER_Y);
   for (let x = 59.4; x < 65.5; x += 2.1) {
     bollard(L, x, 2.4, UPPER_Y);
     bollard(L, x, 11.6, UPPER_Y);
   }
+}
+
+/**
+ * Kessler has locked the Hall balcony (arena: its lookout holds it). A pair of
+ * iron gates across it at the café strip (z 40), hung between a stone pier on
+ * the square's corner and a pilaster on the Hall, a gilt sunburst crest over
+ * them, a chain and padlock where they meet; an iron screen of the same bars
+ * along the strip's square side (x 18, z 38..42) where its railing was, so
+ * nothing there is a step round the gate. 4.4 m of bars: see-through, no rifts.
+ * The screen hangs pier to pier on the balcony's line: its last newel carried
+ * up into a pier (z 38), the gate's pier, a pier on the strip's corner (z 42)
+ * on a console under the balcony's fascia, carried across the strip's face.
+ */
+function hallGate(ctx: CityCtx) {
+  const b = ctx.mb;
+  const m = ctx.mobile;
+  const y = UPPER_Y, top = y + 4.4, gilt = y + 2.4;
+  const bars = { seeThrough: true, noPortal: true };
+  col(ctx, 18.0, y, 39.9, 22.0, top, 40.1, { tag: 'gate', ...bars });
+  col(ctx, 17.94, y, 38.0, 18.06, top, 42.0, { tag: 'gate', ...bars });
+  // (the gate's pier stands proud of the screen as the balcony's newels do)
+  col(ctx, 17.72, y, 39.7, 18.6, top + 0.2, 40.3, { tag: 'gatePier', noPortal: true });
+  col(ctx, 21.7, y, 39.7, 22.0, top + 0.2, 40.3, { tag: 'gatePier', noPortal: true });
+  // the two leaves (the strip's side faces +Z), their crest
+  const g = face('z', 40, 1);
+  const mid = (18.6 + 21.7) / 2;
+  ironGrille(b, g, 18.6, mid, y, top, { gilt, mobile: m, stiles: true });
+  ironGrille(b, g, mid, 21.7, y, top, { gilt, mobile: m, stiles: true });
+  sunburst(b, g, mid, top, 1.3, m);
+  // the chain round the meeting stiles and its brass padlock
+  for (const w of [-0.06, 0.06]) fbox(b, 'iron', g, mid - 0.12, mid + 0.12, y + 1.78, y + 1.84, w - 0.012, w + 0.012, CITY.iron, 1, { ao: 0 });
+  for (const a of [mid - 0.12, mid + 0.12]) fbox(b, 'iron', g, a - 0.012, a + 0.012, y + 1.78, y + 1.84, -0.06, 0.06, CITY.iron, 1, { ao: 0 });
+  fbox(b, 'metal', g, mid - 0.025, mid + 0.025, y + 1.6, y + 1.78, 0.075, 0.095, CITY.iron, 1, { ao: 0 });
+  fbox(b, 'metal', g, mid - 0.09, mid + 0.09, y + 1.4, y + 1.62, 0.06, 0.12, CITY.brass, 1, { ao: 0 });
+  // the screen along the strip's square side, pier to pier
+  const sf = face('x', 18, -1);
+  const ends = [[37.72, 38.28], [41.44, 42.0]] as const;
+  ironGrille(b, sf, ends[0][1], 39.7, y, top, { gilt, mobile: m, stiles: true });
+  ironGrille(b, sf, 40.3, ends[1][0], y, top, { gilt, mobile: m, stiles: true });
+  // the pier (the kit's newel at gate scale) and the pilaster on the Hall
+  for (const [x0, x1] of [[17.72, 18.6], [21.7, 22.0]]) {
+    b.box('trim', x0 - 0.04, y, 39.66, x1 + (x1 < 20 ? 0.04 : 0), y + 0.35, 40.34, CITY.trim, 1.2, { ao: 0.3 });
+    b.box('trim', x0, y + 0.35, 39.7, x1, top, 40.3, CITY.trim, 1.2, { ao: 0.2, skipBottom: true });
+    b.box('metal', x0 - 0.01, top - 0.62, 39.69, x1 + (x1 < 20 ? 0.01 : 0), top - 0.54, 40.31, CITY.gilt, 1, { ao: 0 });
+    b.box('trim', x0 - 0.06, top, 39.64, x1 + (x1 < 20 ? 0.06 : 0), top + 0.2, 40.36, 0xeadcc2, 1.2, { ao: 0 });
+  }
+  const px = (17.72 + 18.6) / 2;
+  b.box('metal', 17.7, top + 0.2, 39.68, 18.62, top + 0.34, 40.32, CITY.gilt, 1, { ao: 0 });
+  b.cylinder('metal', V(px, top + 0.34, 40), V(px, top + 0.46, 40), 0.07, CITY.gilt, 8, 1, false);
+  const ball = new THREE.SphereGeometry(0.17, m ? 8 : 12, m ? 6 : 8).translate(px, top + 0.62, 40);
+  b.geo('metal', ball, CITY.gilt);
+  ball.dispose();
+  // the screen's end piers: the same pier a size down on the balcony's line (the south one round the
+  // rail's last newel), a stepped crown where the gate's pier has its ball
+  for (const [z0, z1] of ends) {
+    const x0 = 17.72, x1 = 18.28;
+    col(ctx, x0, y, z0, x1, top + 0.4, z1, { tag: 'gatePier', noPortal: true });
+    b.box('trim', x0 - 0.04, y, z0 - 0.04, x1 + 0.04, y + 0.35, z1 + 0.04, CITY.trim, 1.2, { ao: 0.3 });
+    b.box('trim', x0, y + 0.35, z0, x1, top, z1, CITY.trim, 1.2, { ao: 0.2, skipBottom: true });
+    b.box('metal', x0 - 0.01, top - 0.62, z0 - 0.01, x1 + 0.01, top - 0.54, z1 + 0.01, CITY.gilt, 1, { ao: 0 });
+    b.box('trim', x0 - 0.06, top, z0 - 0.06, x1 + 0.06, top + 0.2, z1 + 0.06, 0xeadcc2, 1.2, { ao: 0 });
+    b.box('trim', x0 + 0.05, top + 0.2, z0 + 0.05, x1 - 0.05, top + 0.32, z1 - 0.05, 0xeadcc2, 1.2, { ao: 0 });
+    b.box('metal', x0 + 0.13, top + 0.32, z0 + 0.13, x1 - 0.13, top + 0.4, z1 - 0.13, CITY.gilt, 1, { ao: 0 });
+  }
+  // the balcony's moulded fascia carried across the strip's face, a console under the corner pier
+  fbox(b, 'trim', sf, 40, 42, 5.35, 6.02, 0, 0.16, CITY.trim);
+  fbox(b, 'trim', sf, 41.52, 41.92, 4.7, 5.35, 0, 0.3, CITY.trim);
 }
 
 function stepped(ctx: CityCtx, x0: number, x1: number, z: number, top: number) {

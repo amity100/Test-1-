@@ -92,6 +92,28 @@ export const AI = {
   volleyStagger: [0.25, 0.45] as const,
   barkGap: 1.4,
   /**
+   * Roles (mission 1, DESIGN §5): every man holds a post. `leash`: how far from
+   * it he goes in a fight (m, per role; a spawn may override it). Pushed past it
+   * by more than `returnSlack` on his own floor, he walks back. Landed more than
+   * `floorGap` (m, height) off his post's floor, stranded, or with no way back,
+   * he fights from where he is (it becomes his post). An anchor with a fallback
+   * goes to it once, when you come within `fallbackAt` in his sight. A squad is
+   * pressed for `coverFor` s when one of its men is grabbed, hurt, falls back or
+   * sees you within `pressedAt`: a mate who sees you takes the next turn to fire.
+   * A holder calls "He's up here!" when you stand on his floor within `upHere`.
+   */
+  hold: {
+    leash: { holder: 1.2, anchor: 6, pusher: 18 },
+    returnSlack: 0.75,
+    floorGap: 1.2,
+    fallbackAt: 7,
+    pressedAt: 6,
+    coverFor: 2.5,
+    upHere: 10,
+    /** A walk that stepped him this recently (s) is under way (a path he stopped following isn't). */
+    walking: 0.25,
+  },
+  /**
    * range: no burst beyond this (m), he closes in instead. After a burst: `shift` odds he moves
    * to a new spot first, `hesitate` odds he waits `pause` s longer, else he holds and re-aims.
    * Aim spread = (spread + perMetre x range + moveBlur x your speed) x a cold-aim factor

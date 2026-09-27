@@ -128,7 +128,7 @@ const EN: Record<string, string> = {
     "Jump off the stack and hold <kbd>RT</kbd> as you fall: an entrance opens below you. Look at a wall that faces the group and let go: you come out of it at full speed.",
   'hint.slingshot.touch':
     "Jump off the stack and hold <b>PORTAL</b> as you fall: an entrance opens below you. Drag to a wall that faces the group and lift your finger: you come out of it at full speed.",
-  'hint.arena': "A full squad. Borrow their bullets with <b>REFLECT</b>, cut anyone you reach. Keep moving, keep the chain alive.",
+  'hint.arena': "A full squad, and some of them hold ground you can't walk to. Borrow their bullets with <b>REFLECT</b>, throw them off with the <b>PORTAL</b>, or open a door up to them and cut. Keep moving.",
   // Halcyon (mission 1's second world): its own texts for the three pier hints that name pier places
   'hint.halcyon.door':
     "Rifts are doors. The bridge is up. Look across the tracks at the terrace and hold <kbd>LMB</kbd>: the orange <b>ENTRANCE</b> opens in front of you, time slows and a ghost shows where you’ll come out. Let go: the blue <b>EXIT</b> opens there. Walk through. (A quick click puts the exit where you look.)",
@@ -329,6 +329,11 @@ const EN: Record<string, string> = {
   'bark.where': 'Where’d he go?',
   'bark.there': 'There he is!',
   'bark.mateDown': 'Man down!',
+  // men who hold ground (DESIGN §5 roles)
+  'bark.upTop': 'Up top! I’ve got him!',
+  'bark.upHere': 'He’s up here!',
+  'bark.fallback': 'Falling back!',
+  'bark.covering': 'Covering!',
   'bark.what': 'What the hell was that?',
   'bark.grabbed': 'The floor’s gone!',
   'bark.boss1': 'That gauntlet is Kessler property. I’m taking it back.',
@@ -573,7 +578,7 @@ const HE: Record<string, string> = {
     "קפוץ מערימת המכולות והחזק <kbd>RT</kbd> תוך כדי נפילה: נפתחת כניסה מתחתיך. הסתכל על קיר שפונה אל החבורה ושחרר: אתה יוצא ממנו במלוא המהירות.",
   'hint.slingshot.touch':
     "קפוץ מערימת המכולות והחזק <b>פורטל</b> תוך כדי נפילה: נפתחת כניסה מתחתיך. גרור אל קיר שפונה אל החבורה והרם את האצבע: אתה יוצא ממנו במלוא המהירות.",
-  'hint.arena': "חוליה שלמה. תשאיל את הכדורים שלהם עם <b>מחזיר</b>, ותחתוך כל מי שתגיע אליו. תמשיך לזוז, תשמור על השרשרת.",
+  'hint.arena': "חוליה שלמה, וחלק מהם מחזיקים עמדות שאי אפשר להגיע אליהן ברגל. תשאיל את הכדורים שלהם עם <b>מחזיר</b>, תזרוק אותם משם עם ה<b>פורטל</b>, או תפתח דלת אליהם ותחתוך. תמשיך לזוז.",
   'hint.halcyon.door':
     "פורטל הוא דלת. הגשר מורם. הסתכל אל המרפסת שמעבר למסילה והחזק <kbd>קליק שמאלי</kbd>: ה<b>כניסה</b> הכתומה נפתחת מולך, הזמן מאט, ודמות רפאים מראה איפה תצא. שחרר: ה<b>יציאה</b> הכחולה נפתחת שם. עבור דרכה. (קליק מהיר שם את היציאה איפה שאתה מסתכל.)",
   'hint.halcyon.door.pad':
@@ -766,6 +771,10 @@ const HE: Record<string, string> = {
   'bark.where': 'לאן הוא נעלם?',
   'bark.there': 'הנה הוא!',
   'bark.mateDown': 'יש נפגע!',
+  'bark.upTop': 'אני רואה אותו מלמעלה!',
+  'bark.upHere': 'הוא פה למעלה!',
+  'bark.fallback': 'נסוג!',
+  'bark.covering': 'מחפה!',
   'bark.what': 'מה זה היה, לעזאזל?',
   'bark.grabbed': 'הרצפה נעלמה!',
   'bark.boss1': 'הכפפה הזאת שייכת לקסלר. באתי לקחת אותה בחזרה.',

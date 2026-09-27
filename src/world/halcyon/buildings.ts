@@ -20,12 +20,15 @@ import {
   latticeQuad,
   leafCard,
   ivy,
+  ironGrille,
+  rail,
+  sunburst,
   type City,
   type CityCtx,
   type Face,
 } from './kit';
 import { DECAL, LEAF } from './textures';
-import { LOGGIA_Y, TRACK_Y, UPPER_Y } from './layout';
+import { GALLERY, LOGGIA_Y, TRACK_Y, UPPER_Y } from './layout';
 
 /**
  * The buildings round Tomorrow Square: the Hall of Progress (left, its red
@@ -174,18 +177,20 @@ function hall(ctx: CityCtx, centre: CityCtx) {
     b.box('trim', 47.1, 6, z - 0.1, 48.1, 6.5, z + 0.9, 0xeadcc2, 1.2, { ao: 0 });
     b.box('trim', 47.1, 10.7, z - 0.1, 48.1, 11.2, z + 0.9, 0xeadcc2, 1.2, { ao: 0 });
   }
+  colonnadeGrilles(ctx);
   for (let z = 4; z <= 39; z += 5) {
     col(centre, 17.6, 0, z, 18.4, 5.7, z + 0.8, { tag: 'arcadeCol' });
     column(centre.mb, 18, z + 0.4, 0, 5.7, 0.36, m);
   }
-  // ---- its face on the café terrace (z 40)
+  // ---- its face on the café terrace (z 40): the speaker's gallery over its middle bay
   {
     const f = face('z', 40, 1);
     facade(ctx, f, 22, 40, {
       bay: 3,
       floors: [
         { y: 6.3, kind: 'shop', lit: 1, glow: 1.15 },
-        { y: 12.6, kind: 'arch', lit: 0.5 },
+        // (the middle bay's window is the gallery's French window)
+        { y: 12.6, kind: 'arch', lit: 0.5, skip: [[GALLERY.x0, GALLERY.x1]] },
         { y: 19.2, kind: 'small', lit: 0.4 },
       ],
       top: 24,
@@ -196,6 +201,7 @@ function hall(ctx: CityCtx, centre: CityCtx) {
       margin: 0.8,
     });
     ivy(ctx, 22.5, 40, 39.5, 40, 24, 3.5, V(0, 0, 1), 21);
+    gallery(ctx, f);
   }
   // ---- the corner tower and its gilt dome (frames the start view's top-left edge)
   solid(ctx, 'stone', 40, 24, -6, 48, 38, 2, CITY.stone, 2.4, { tag: 'hallTower' }, { ao: 0.3, skipBottom: true });
@@ -209,6 +215,81 @@ function hall(ctx: CityCtx, centre: CityCtx) {
     for (const s of [-1, 1]) fbox(b, 'trim', f, c + s * 3.7 - 0.3, c + s * 3.7 + 0.3, 24, 37.4, 0, 0.18, CITY.trim);
   }
   dome(b, 44, -2, 38, 3.4, 4.2, { key: 'metal', color: CITY.gilt, drum: 1.4, lantern: 0.55, mobile: m });
+}
+
+/**
+ * Kessler has closed the Hall's river colonnade (returnToSender: the man
+ * inside is seen, shot and REFLECTed through the bars, never walked to).
+ * An iron grille fills each arch between its piers, the city's railing
+ * carried up (its lattice as the kick panel, bars, a gilt rail), with a gilt
+ * sunburst in the arch head on an iron ring against the soffit; the north
+ * slot beside the Loggia House takes a narrow one. One see-through collider
+ * that refuses rifts closes every opening from the floor to the Hall above.
+ */
+function colonnadeGrilles(ctx: CityCtx) {
+  const b = ctx.mb;
+  const m = ctx.mobile;
+  col(ctx, 47.45, UPPER_Y, 14.8, 47.75, 14, 40, { tag: 'grille', ...RAIL });
+  const g = face('x', 47.6, 1);
+  for (const zc of [17.4, 23.4, 29.4, 35.4]) {
+    // (between the piers' bases and capitals, 0.1 m proud of their shafts)
+    ironGrille(b, g, zc - 2.5, zc + 2.5, UPPER_Y, 11.2, { gilt: 9.2, mobile: m });
+    for (const s of [-1, 1]) fbox(b, 'iron', g, zc + s * 2.5, zc + s * 2.6, 6.5, 10.7, -0.04, 0.04, CITY.iron, 1, { ao: 0, skipTop: true, skipBottom: true });
+    sunburst(b, g, zc, 11.2, 2.25, m);
+  }
+  ironGrille(b, g, 38.9, 40, UPPER_Y, 11, { gilt: 9.2, mobile: m, stiles: true });
+  fbox(b, 'iron', g, 38.8, 38.9, 6.5, 10.7, -0.04, 0.04, CITY.iron, 1, { ao: 0, skipTop: true, skipBottom: true });
+}
+
+/**
+ * The Hall's speaker's gallery on its café face (slingshot: the sentry above
+ * the terrace), one bay wide over the facade's middle bay: a paved stone slab
+ * with a moulded lip and a gilt fillet over its apron (the 0.6 m front a
+ * DOOR perches on), carried on four stepped consoles; an iron rail along its
+ * edges into stone newels on its front corners, geraniums, ivy spilling from
+ * its edge, its French window lit behind it under Kessler's emblem. Walkable
+ * at GALLERY.y, 6.6 m over the terrace.
+ */
+function gallery(ctx: CityCtx, f: Face) {
+  const b = ctx.mb;
+  const m = ctx.mobile;
+  const { x0, x1, z1, y } = GALLERY;
+  const apron = y - 0.6, lip = y - 0.3, a = (x0 + x1) / 2;
+  col(ctx, x0, apron, 40, x1, y, z1, { tag: 'cafeGallery' });
+  b.box('trim', x0, lip, 40, x1, y, z1, CITY.trim, 1.2, { ao: 0, skipTop: true });
+  b.quad('paving', V(x0, y, z1), V(x1, y, z1), V(x1, y, 40), V(x0, y, 40), CITY.paving, [
+    [x0 / 2.4, z1 / 2.4],
+    [x1 / 2.4, z1 / 2.4],
+    [x1 / 2.4, 40 / 2.4],
+    [x0 / 2.4, 40 / 2.4],
+  ]);
+  b.box('trim', x0 + 0.06, apron, 40, x1 - 0.06, lip, z1 - 0.08, CITY.trim, 1.2, { ao: 0, skipTop: true, under: 0.3 });
+  b.box('metal', x0 + 0.04, lip - 0.07, 40, x1 - 0.04, lip, z1 - 0.06, CITY.gilt, 1, { ao: 0, skipTop: true });
+  // stepped consoles into the wall, over the shop front
+  for (const c of [a - 1.75, a - 0.55, a + 0.55, a + 1.75]) {
+    fbox(b, 'trim', f, c - 0.14, c + 0.14, apron - 0.38, apron, 0, 2.2, CITY.trim, 1.2, { ao: 0, skipTop: true, under: 0.3 });
+    fbox(b, 'trim', f, c - 0.12, c + 0.12, apron - 0.78, apron - 0.38, 0, 1.45, CITY.trim, 1.2, { ao: 0, skipTop: true, under: 0.3 });
+    fbox(b, 'trim', f, c - 0.1, c + 0.1, apron - 1.1, apron - 0.78, 0, 0.7, CITY.trim, 1.2, { ao: 0, skipTop: true, under: 0.3 });
+  }
+  // the rail along its edges into slim stone newels on its front corners (the room inside them is a DOOR's room beside him)
+  const e = 0.06, nw = 0.36;
+  rail(ctx, x0 + nw, z1 - e, x1 - nw, z1 - e, y, 1.1, { newels: false });
+  rail(ctx, x0 + e, 40, x0 + e, z1 - nw, y, 1.1, { newels: false });
+  rail(ctx, x1 - e, 40, x1 - e, z1 - nw, y, 1.1, { newels: false });
+  for (const [n0, n1] of [[x0, x0 + nw], [x1 - nw, x1]]) {
+    b.box('trim', n0, y, z1 - nw, n1, y + 1.13, z1, CITY.trim, 1.2, { ao: 0.3 });
+    b.box('metal', n0 - 0.03, y + 1.13, z1 - nw - 0.03, n1 + 0.03, y + 1.25, z1 + 0.03, CITY.brass, 1, { ao: 0 });
+    col(ctx, n0, y, z1 - nw, n1, y + 1.25, z1, { tag: 'rail', ...RAIL });
+  }
+  // geraniums in pots at its ends, ivy from its edge
+  for (const x of [x0 + 0.62, x1 - 0.62]) {
+    b.box('paint', x - 0.22, y, z1 - 0.9, x + 0.22, y + 0.32, z1 - 0.48, 0x6e5034, 1, { ao: 0 });
+    ctx.inst.add('flowers', x, y + 0.28, z1 - 0.69, 0);
+  }
+  ivy(ctx, x0 + 0.25, z1, x1 - 0.25, z1, apron, 2.2, V(0, 0, 1), 41);
+  // its French window, lit: he stands against it; Kessler's emblem over it
+  const top = windowBay(b, f, 'tall', a, y + 0.1, { lit: true, glow: 1.3, mobile: m, curtains: true });
+  emblemOn(b, f, a, top + 0.75, 0.42);
 }
 
 // ---------------------------------------------------------------------------

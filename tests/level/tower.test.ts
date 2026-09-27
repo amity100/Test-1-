@@ -5,10 +5,13 @@ import type { Collider } from '../../src/world/collision';
 import { LAW, type EnemyKind, type LessonId, type SpawnDef, type ZoneDef, type ZoneId } from '../../src/core/contracts';
 import { RiftSystem } from '../../src/game/portals';
 import { PORTAL } from '../../src/game/portalkey';
-import { straightOn, type SpotHost } from '../../src/game/riftspots';
-import { orientFrame } from '../../src/game/portalMath';
+import { simulateArc, straightOn, type Outcome, type SpotHost } from '../../src/game/riftspots';
+import { frameNormal, orientFrame } from '../../src/game/portalMath';
 import { Physics } from '../../src/sim/physics';
 import { ZoneManager } from '../../src/game/zones';
+import { NavGrid } from '../../src/world/nav';
+import { AI } from '../../src/actors/tuning';
+import { onFoot } from './reach';
 
 let L: TowerBuild;
 
@@ -133,6 +136,12 @@ describe('the tower (level)', () => {
         const p = s.pos;
         const layer = z.nav.find((n) => p.x >= n.minX && p.x <= n.maxX && p.z >= n.minZ && p.z <= n.maxZ && Math.abs(n.floorY - p.y) <= 0.3);
         expect(layer, `${s.id} ${fmt(p)} on a nav layer`).toBeTruthy();
+        // (mission 1: every man stands on a cell he can walk, and so does his fallback)
+        if (z.id === 'pier') {
+          const g = new NavGrid(L.world, layer!);
+          expect(g.walkable(p.x, p.z), `${s.id} ${fmt(p)} walkable`).toBe(true);
+          if (s.fallback) expect(g.walkable(s.fallback.x, s.fallback.z), `${s.id} fallback ${fmt(s.fallback as THREE.Vector3)} walkable`).toBe(true);
+        }
         const g = groundAt(p.x, p.z, 0.3, p.y + 0.5);
         expect(Math.abs(g - p.y), `${s.id} ${fmt(p)} ground ${g}`).toBeLessThanOrEqual(0.3);
         const b = BODY[s.kind];
@@ -424,5 +433,169 @@ describe('lesson hints on arrival', () => {
     expect(leap.cleared).toBe(true);
     expect(zm.lessonHint(leap)).toBeNull();
     expect(zm.lessonHint(u.engaged.find((e) => e.def.lesson === 'boss')!)).toBe('hint.boss');
+  });
+});
+
+/**
+ * Mission 1 on the pier holds ground (DESIGN §5 roles, §8): lookouts on posts
+ * you can't walk to (the office roof, the warehouse roof, stack CA, the crane
+ * catwalk), riflemen in cover on the fight's floor, the warden pushing. Every
+ * lookout reads from his fight's approach and has his answers: REFLECT (not
+ * modelled here), a GRAB tap whose outcome depends on where you stand, and a
+ * DOOR onto his perch beside him.
+ */
+describe("the pier's posts (holding ground)", () => {
+  const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const pier = () => L.zones[0];
+  const man = (id: string) => allSpawns(pier()).find((s) => s.id === `pier.${id}`)!;
+  const host = (): SpotHost => {
+    const rifts = new RiftSystem(new THREE.Scene(), null, L.world, { portalScale: 0.5, lightCount: 2, maxViews: 2 });
+    return { rifts, world: L.world, level: { seaY: L.seaY, isSea: (p) => L.isSea(p as THREE.Vector3) }, killYAt: () => L.seaY - 30 };
+  };
+  const hd = (a: THREE.Vector3Like, b: THREE.Vector3Like) => Math.hypot(a.x - b.x, a.z - b.z);
+  /** Eye (feet + 1.66) to chest (feet + 1.3), as the awareness model looks. */
+  const sees = (from: THREE.Vector3, to: THREE.Vector3) => L.world.lineOfSight(V(from.x, from.y + 1.66, from.z), V(to.x, to.y + 1.3, to.z));
+  const range = (from: THREE.Vector3, to: THREE.Vector3) => V(from.x, from.y + 1.66, from.z).distanceTo(V(to.x, to.y + 1.3, to.z));
+
+  const HOLDERS = ['rts.a', 'sling.c', 'arena.a', 'arena.c'];
+  /** Each lookout's fight: the spots you fight him from (§8 tables). */
+  const KEY_SPOTS: Record<string, [string, THREE.Vector3][]> = {
+    'rts.a': [['checkpoint', V(-10, 0, -36.5)], ['yard middle', V(-16, 0, -35)], ['lane north', V(-14, 0, -27)], ['under the wall', V(-24, 0, -31)], ['R1 top', V(-20, 5.18, -42)]],
+    'sling.c': [['S top', V(7, 7.77, -25)], ['S top east', V(8, 7.77, -25.5)], ['quay west', V(12, 0, -30)], ['quay north', V(8, 0, -20)]],
+    'arena.a': [['trigger west', V(-12, 0, -18)], ['strip', V(-2, 0, -19)], ['trigger centre', V(0, 0, -18)], ['mid', V(-6, 0, -10)], ['NW top', V(-38.6, 7.77, -16)]],
+    'arena.c': [['trigger east', V(12, 0, -17)], ['east entry', V(15, 0, -19)], ['(16, -12)', V(16, 0, -12)], ['(18, -4)', V(18, 0, -4)], ['fallback D', V(13, 0, -2)]],
+  };
+
+  it('eleven men with roles: four lookouts above their fights, anchors and the warden on the floor', () => {
+    const all = pier().encounters.flatMap((e) => e.spawns);
+    expect(all.length).toBe(11);
+    const roles = Object.fromEntries(all.map((s) => [s.id.slice(5), s.role]));
+    expect(roles).toEqual({
+      'trap.a': 'anchor', 'trap.b': 'anchor', 'rts.a': 'holder', 'sling.a': 'anchor', 'sling.b': 'anchor', 'sling.c': 'holder',
+      'arena.w': 'pusher', 'arena.a': 'holder', 'arena.b': 'anchor', 'arena.c': 'holder', 'arena.d': 'anchor',
+    });
+    for (const s of all) {
+      if (s.role === 'holder') expect(s.route, `${s.id} holds, no patrol`).toBeUndefined();
+      // (a calm patrol isn't leashed: it has to lie inside his ground)
+      const leash = s.leash ?? AI.hold.leash[s.role!];
+      for (const q of s.route ?? []) expect(hd(q, s.pos), `${s.id} patrol inside his ground`).toBeLessThanOrEqual(leash);
+    }
+    // one prepared fallback: same floor, back toward the gate (away from where you come in), 5-12 m
+    const d = man('arena.d');
+    expect(d.fallback).toBeTruthy();
+    expect(d.fallback!.y).toBe(d.pos.y);
+    expect(hd(d.fallback!, d.pos)).toBeGreaterThanOrEqual(5);
+    expect(hd(d.fallback!, d.pos)).toBeLessThanOrEqual(12);
+    expect(d.fallback!.z).toBeGreaterThan(d.pos.z);
+    expect(all.filter((s) => s.fallback).length).toBe(1);
+  });
+
+  it('lookouts see their fight from their posts; the roof sentry has his back to the slingshot', () => {
+    for (const id of HOLDERS) {
+      const p = man(id).pos as THREE.Vector3;
+      const spots = KEY_SPOTS[id].filter(([, q]) => range(p, q) <= 24);
+      const seen = spots.filter(([, q]) => sees(p, q));
+      expect(spots.length, `${id}: key spots in range`).toBeGreaterThanOrEqual(3);
+      expect(seen.length / spots.length, `${id} sees ${seen.map(([n]) => n).join(', ')} of ${spots.map(([n]) => n).join(', ')}`).toBeGreaterThanOrEqual(0.5);
+    }
+    // rts: out of range as you round the row (a beat to read him against the sky), in range at the checkpoint
+    const rts = man('rts.a').pos as THREE.Vector3;
+    expect(range(rts, V(-4, 0, -38))).toBeGreaterThan(24);
+    expect(range(rts, V(-10, 0, -36.5))).toBeLessThan(24);
+    // teach, then twist: the warehouse sentry can't see the pair, the wall foot or the landing...
+    const wh = man('sling.c').pos as THREE.Vector3;
+    for (const q of [V(17.2, 0, -25.6), V(17.2, 0, -24.3), V(19, 0, -28), V(20, 1, -25)]) expect(sees(wh, q), `sentry sees ${fmt(q)}`).toBe(false);
+    // ...and S top, in plain view, is behind him (outside his cone of ±60°)
+    const toS = Math.atan2(7 - wh.x, -25 - wh.z);
+    let off = Math.abs(toS - man('sling.c').yaw) % (2 * Math.PI);
+    if (off > Math.PI) off = 2 * Math.PI - off;
+    expect(sees(wh, V(7, 7.77, -25))).toBe(true);
+    expect(off).toBeGreaterThan(Math.PI / 3 + 0.2);
+    // the arena's two lookouts cover opposite halves: nowhere wide on the floor is in range of both
+    const ca = man('arena.a').pos as THREE.Vector3, cr = man('arena.c').pos as THREE.Vector3;
+    let both = 0;
+    for (let x = -14; x <= 20; x += 2) if (range(ca, V(x, 0, -12)) <= 24 && range(cr, V(x, 0, -12)) <= 24) both++;
+    expect(both).toBeLessThanOrEqual(2);
+  });
+
+  it("the lookouts' posts can't be reached on foot; the player's own high ground can", () => {
+    const f = onFoot(L.world, { x0: -46, x1: 56, z0: -70, z1: 3 }, [pier().playerStart, V(0, 0, -20), V(0, 0, -10)]);
+    for (const id of HOLDERS) expect(f.reached(man(id).pos), `${id} reached: ${f.route(man(id).pos)}`).toBe(false);
+    for (const [n, p] of [['NW top', V(-38.6, 7.77, -16)], ['S top', V(7, 7.77, -25)], ['R1 top', V(-20, 5.18, -42)], ['T top', V(-5, 5.18, -46.6)]] as const) {
+      expect(f.reached(p), `${n} reached`).toBe(true);
+    }
+    // (a flood fill of every collider top: seconds, more with the rest of the suite running beside it)
+  }, 60_000);
+
+  it('every perch: the collider top is the top you see (boots on the surface)', () => {
+    L.root.updateMatrixWorld(true);
+    const ray = new THREE.Raycaster();
+    for (const id of HOLDERS) {
+      const p = man(id).pos;
+      expect(L.world.groundAt(p.x, p.z, 0.3, p.y + 0.5), `${id} collider top`).toBeCloseTo(p.y, 3);
+      ray.set(V(p.x, p.y + 2.5, p.z), V(0, -1, 0));
+      ray.far = 5;
+      const hit = ray.intersectObject(L.root, true).find((h) => (h.object as THREE.Mesh).isMesh);
+      expect(hit, `${id} has a surface under him`).toBeTruthy();
+      expect(Math.abs(hit!.point.y - p.y), `${id}: surface you see at ${hit!.point.y.toFixed(3)} (${hit!.object.name})`).toBeLessThanOrEqual(0.03);
+    }
+  });
+
+  it('a DOOR aimed at a perch face 2.5 m beside a lookout puts you on top, clear of him; aimed at him it is refused', () => {
+    const rifts = host().rifts;
+    /** from `you`, aim at the point `at` on the perch face; `post` is the man (steady, in combat). */
+    const aim = (you: THREE.Vector3, at: THREE.Vector3, post: THREE.Vector3) => {
+      const eye = V(you.x, you.y + 1.66, you.z);
+      const dir = at.clone().sub(eye).normalize();
+      return rifts.aimExit(eye, dir, eye, you, false, [{ key: 'enemy:1', pos: post, radius: 0.4, height: 1.8, canFall: false, steady: true }]);
+    };
+    const cases: [string, THREE.Vector3, THREE.Vector3, THREE.Vector3][] = [
+      // lookout, you, the face beside him, the face right in front of him
+      ['rts.a', V(-16, 0, -35), V(-29.8, 7.75, -36.5), V(-29.8, 7.75, -34)],
+      ['rts.a', V(-16, 0, -35), V(-29.8, 7.75, -31.5), V(-29.8, 7.75, -34)],
+      ['sling.c', V(7, 7.77, -25), V(21.6, 9.2, -28.5), V(21.6, 9.2, -31)],
+      ['arena.a', V(-2, 0, -19), V(-21, 4.9, -15), V(-18.5, 4.9, -15)],
+      ['arena.c', V(15, 0, -19), V(25, 8.5, -8.3), V(25, 8.5, -5.8)],
+      ['arena.c', V(16, 0, -12), V(25, 8.5, -3.3), V(25, 8.5, -5.8)],
+    ];
+    for (const [id, you, beside, front] of cases) {
+      const post = man(id).pos as THREE.Vector3;
+      const a = aim(you, beside, post);
+      expect(a.valid, `${id} from ${fmt(you)}: ${a.reason}`).toBe(true);
+      expect(a.kind, `${id} from ${fmt(you)}`).toBe('stand');
+      expect(a.exitFeet.y, `${id} from ${fmt(you)} lands on top`).toBeCloseTo(post.y, 2);
+      expect(hd(a.exitFeet, post), `${id} from ${fmt(you)}`).toBeGreaterThanOrEqual(1.2);
+      const b = aim(you, front, post);
+      expect(b.valid && b.kind === 'stand' ? hd(b.exitFeet, post) : 9, `${id}: a door on top of him`).toBeGreaterThanOrEqual(1.2);
+    }
+  });
+
+  it('a GRAB tap on a lookout: where you stand decides (a kill off the edge or into a wall, or a knockdown)', () => {
+    const h = host();
+    const arc = Array.from({ length: 120 }, () => new THREE.Vector3());
+    const tapOutcome = (you: THREE.Vector3, p: THREE.Vector3): Outcome | 'none' => {
+      const d = V(p.x - you.x, 0, p.z - you.z).normalize();
+      const S = PORTAL.straight;
+      const f = straightOn(h, p, d, S.past, S.up, S.tilt);
+      if (!f) return 'none';
+      return simulateArc(h, f.position, frameNormal(f).multiplyScalar(PORTAL.throwSpeed.grab), arc).outcome;
+    };
+    const kill = ['skull', 'splash', 'void'];
+    const cases: [string, THREE.Vector3, string[]][] = [
+      ['rts.a', V(-16, 0, -35), kill], // over the west rail into the sea, or into the plant box
+      ['rts.a', V(-10, 0, -36.5), kill],
+      ['sling.c', V(7, 7.77, -25), kill], // from S top: off the south edge
+      ['sling.c', V(12, 0, -30), ['stars']], // from the quay: along his roof, a knockdown (he walks back)
+      ['arena.a', V(-2, 0, -19), kill], // off CA's north side
+      ['arena.a', V(-32.2, 2.59, -14), kill], // from the NW block's low 20ft: off the far end
+      ['arena.c', V(15, 0, -19), kill], // over the sill beam, into the sea past the quay
+      ['arena.c', V(12, 0, -17), kill],
+      ['arena.c', V(16, 0, -12), kill],
+      ['arena.c', V(13, 0, -2), kill],
+    ];
+    for (const [id, you, want] of cases) {
+      const got = tapOutcome(you, man(id).pos as THREE.Vector3);
+      expect(want, `${id} tapped from ${fmt(you)}: ${got}`).toContain(got);
+    }
   });
 });

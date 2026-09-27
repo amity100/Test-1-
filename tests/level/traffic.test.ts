@@ -31,5 +31,6 @@ describe('Halcyon traffic culling', () => {
     }
     // (and not needlessly loose: some instance reaches most of the way out)
     expect(worst).toBeGreaterThan(0.6);
-  });
+    // (builds all of Halcyon and sweeps every instance round its loop: seconds under a full, parallel suite)
+  }, 60_000);
 });

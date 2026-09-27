@@ -27,13 +27,17 @@ function mantle(world: CollisionWorld, pos: THREE.Vector3, dir: THREE.Vector3): 
   return null;
 }
 
-/** Stand at `p` (checked: ground right there, free space), mantle along `dir`, expect to land at `y`. */
-function step(world: CollisionWorld, p: [number, number, number], dir: [number, number, number], y: number, label: string) {
+/** Stand at `p` (checked: ground right there, free space), mantle along `dir`, expect to land at `y` (null: no mantle there). */
+function step(world: CollisionWorld, p: [number, number, number], dir: [number, number, number], y: number | null, label: string) {
   const pos = new THREE.Vector3(...p);
   const g = world.groundAt(pos.x, pos.z, R * 0.65, pos.y + 0.45);
   expect(Math.abs(g - pos.y), `${label}: standing ground at ${pos.toArray()} is ${g}`).toBeLessThan(0.05);
   expect(world.overlapsCylinder(pos.x, pos.z, R, pos.y, pos.y + H), `${label}: free space at ${pos.toArray()}`).toBe(false);
   const to = mantle(world, pos, new THREE.Vector3(...dir));
+  if (y === null) {
+    expect(to, `${label}: no mantle from ${pos.toArray()}`).toBeNull();
+    return;
+  }
   expect(to, `${label}: mantle from ${pos.toArray()}`).not.toBeNull();
   expect(to!.y, `${label}: lands on`).toBeCloseTo(y, 2);
 }
@@ -55,9 +59,13 @@ describe('climb routes (mantle chains)', () => {
     step(w, [-4.7, 0, -25], E, 2.59, 'S1');
     step(w, [1.5, 2.59, -25], E, 5.18, 'S2');
     step(w, [4.6, 5.18, -25], E, 7.77, 'S3');
-    // arena stack CA
-    step(w, [-17.2, 0, -13.8], W, 2.59, 'CA1');
-    step(w, [-23.3, 2.59, -13.8], W, 5.18, 'CA2');
+    // arena stack CA is a lookout's post (flat, 5.18): no way up from the ground or the NW block's low 20ft
+    step(w, [-15.7, 0, -13.8], W, null, 'CA from the ground');
+    step(w, [-32.2, 2.59, -14], E, null, 'CA from the NW 20ft');
+    // the NW block is yours: 2.59 / 5.18 / 7.77 over the arena
+    step(w, [-31.4, 0, -17], W, 2.59, 'NW1');
+    step(w, [-34.1, 2.59, -17], W, 5.18, 'NW2');
+    step(w, [-36.8, 5.18, -16], W, 7.77, 'NW3');
   });
 
   it('yard scaffolds (4 / 8 / 12) and cabins', () => {
@@ -109,8 +117,9 @@ describe('climb routes (mantle chains)', () => {
     for (const z of L.zones) {
       for (const e of z.encounters) {
         if (!e.spawns.length) continue;
-        const ys = e.spawns.map((s) => s.pos.y).sort((a, b) => a - b);
-        const y0 = ys[Math.floor(ys.length / 2)];
+        // (the fight's own floor: holders stand above it on purpose; a fight of holders only is fought from its trigger's floor)
+        const ys = e.spawns.filter((s) => s.role !== 'holder').map((s) => s.pos.y).sort((a, b) => a - b);
+        const y0 = ys.length ? ys[Math.floor(ys.length / 2)] : e.trigger.min.y + 1;
         const c = e.spawns.reduce((a, s) => a.add(s.pos), new THREE.Vector3()).multiplyScalar(1 / e.spawns.length);
         const high = L.world.colliders.filter((k) => {
           if (!k.enabled || k.seeThrough || k.tag === 'lift') return false;

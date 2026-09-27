@@ -29,7 +29,13 @@ export interface Brain {
   pickSpot(e: Enemy, center: V3, min: number, max: number, out: V3): boolean;
   tryToken(e: Enemy): boolean;
   releaseToken(e: Enemy): void;
-  bark(e: Enemy, key: string, force?: boolean): void;
+  /** True if he said it. */
+  bark(e: Enemy, key: string, force?: boolean): boolean;
+  /**
+   * Roles (DESIGN §5): his run to his fallback, his walk back to his post, his
+   * one fallback when you're on top of him. True while it moves him.
+   */
+  holdGround(e: Enemy, dt: number): boolean;
   wallStun(e: Enemy): void;
   endCharge(e: Enemy): void;
   startBlink(e: Enemy): void;
@@ -204,22 +210,35 @@ export function aimSpread(dist: number, speed: number, view: number) {
 // Positioning shared by the ranged kinds
 // ---------------------------------------------------------------------------
 
-/** Keep [keepMin, keepMax] from where he thinks you are, strafing between safe nav spots; hunt when he's lost sight. */
-function reposition(b: Brain, e: Enemy, dt: number) {
+/**
+ * Keep [keepMin, keepMax] from where he thinks you are, strafing between safe
+ * nav spots; hunt when he's lost sight. A man who holds ground does all that
+ * inside his leash (moveTo, pickSpot); a holder only stands at his post and
+ * aims. True when his ground has him on the move (back to his post, off to
+ * his fallback): nothing else then.
+ */
+function reposition(b: Brain, e: Enemy, dt: number): boolean {
+  if (b.holdGround(e, dt)) return true;
+  if (e.role === 'holder') {
+    b.halt(e, dt);
+    return false;
+  }
   if (!e.seesPlayer && b.time - e.lastSeenT > 2.5) {
     b.moveTo(e, e.lastKnown, e.tune.run, dt, true);
-    return;
+    return false;
   }
   const tgt = target(b, e);
   e.spotT -= dt;
   const d = hdist(e.pos, tgt);
   const min = e.tune.keepMin, max = e.tune.keepMax;
-  if (!e.hasSpot || e.spotT <= 0 || d < min - 3 || d > max + 4) {
+  // (a man who holds ground keeps his spot until it's time to shift: you coming close or going far doesn't move him off it)
+  if (!e.hasSpot || e.spotT <= 0 || (!e.role && (d < min - 3 || d > max + 4))) {
     e.hasSpot = b.pickSpot(e, tgt, min, max, e.spot);
     e.spotT = b.between(AI.rifle.strafe);
   }
   if (e.hasSpot) b.moveTo(e, e.spot, e.tune.run * 0.75, dt, false);
   else b.halt(e, dt);
+  return false;
 }
 
 /**
@@ -229,21 +248,23 @@ function reposition(b: Brain, e: Enemy, dt: number) {
  */
 function search(b: Brain, e: Enemy, dt: number) {
   const S = AI.search;
+  const holder = e.role === 'holder';
   if (!e.hasSpot) {
-    e.spot.copy(e.lastKnown);
+    // (a holder looks from his post: all he walks is back onto it, if something moved him off)
+    e.spot.copy(holder ? e.post : e.lastKnown);
     e.hasSpot = true;
     e.spotT = b.between(S.look);
   }
   if (!b.moveTo(e, e.spot, e.tune.walk * S.pace, dt, true)) {
-    e.lookBase = e.yaw;
+    e.lookBase = holder && hdist(e.pos, e.lastKnown) > 1 ? yawTo(e.pos, e.lastKnown) : e.yaw;
     return;
   }
   if (e.lookT > 0) b.face(e, e.lookAt, dt);
   else b.lookAround(e, dt);
   e.spotT -= dt;
   if (e.spotT > 0) return;
-  // not here: somewhere near it
-  if (!b.pickSpot(e, e.lastKnown, S.near[0], S.near[1], e.spot)) e.spot.copy(e.pos);
+  // not here: somewhere near it (a holder keeps his post and looks from there)
+  if (holder || !b.pickSpot(e, e.lastKnown, S.near[0], S.near[1], e.spot)) e.spot.copy(e.pos);
   e.spotT = b.between(S.look);
 }
 
@@ -258,10 +279,10 @@ function rifleman(b: Brain, e: Enemy, dt: number) {
     b.face(e, e.aimPt, dt);
     return;
   }
-  reposition(b, e, dt);
+  if (reposition(b, e, dt)) return;
   attend(b, e, dt, tgt);
   e.reloadT -= dt;
-  // out of his effective range he closes in (reposition) rather than fire
+  // out of his effective range he closes in (reposition), inside his post's leash, rather than fire
   if (canShoot(b, e) && e.seeDist <= AI.rifle.range && b.tryToken(e)) startGun(e, 'burst', AI.rifle.telegraph, AI.rifle.shots, AI.rifle.interval);
 }
 
@@ -349,7 +370,7 @@ function grenadier(b: Brain, e: Enemy, dt: number) {
     b.face(e, e.aimPt, dt);
     return;
   }
-  reposition(b, e, dt);
+  if (reposition(b, e, dt)) return;
   attend(b, e, dt, tgt);
   e.lobT -= dt;
   tryLob(b, e);

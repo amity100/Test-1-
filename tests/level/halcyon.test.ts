@@ -3,15 +3,17 @@ import * as THREE from 'three';
 import { buildHalcyon } from '../../src/world/halcyon';
 import { buildTower, type TowerBuild } from '../../src/world/tower';
 import { buildWorld, readWorld, DEFAULT_WORLD, type WorldStore } from '../../src/world/worlds';
-import { BOARD_AT, CUT_KILL_Y, PLATFORM_Y, UPPER_Y as UPPER } from '../../src/world/halcyon/layout';
+import { BOARD_AT, CUT_KILL_Y, GALLERY, PLATFORM_Y, PODIUM_Y, UPPER_Y as UPPER } from '../../src/world/halcyon/layout';
 import type { Collider } from '../../src/world/collision';
 import { NavGrid } from '../../src/world/nav';
 import { LAW, type EnemyKind, type SpawnDef } from '../../src/core/contracts';
 import { FEEL } from '../../src/config';
 import { RiftSystem } from '../../src/game/portals';
 import { PORTAL } from '../../src/game/portalkey';
-import { straightOn, type SpotHost } from '../../src/game/riftspots';
-import { orientFrame } from '../../src/game/portalMath';
+import { simulateArc, straightOn, type Outcome, type SpotHost } from '../../src/game/riftspots';
+import { frameNormal, orientFrame } from '../../src/game/portalMath';
+import { AI } from '../../src/actors/tuning';
+import { onFoot } from './reach';
 import { Physics } from '../../src/sim/physics';
 import { PropSystem } from '../../src/game/props';
 import { ZoneManager } from '../../src/game/zones';
@@ -299,7 +301,7 @@ describe('Halcyon (mission 1, second world)', () => {
     }
   });
 
-  it('return to sender: the colonnade man sees the walkway through the arches, not the trapdoor pair', () => {
+  it('return to sender: the colonnade man sees the walkway through its barred arches, not the trapdoor pair', () => {
     const rts = spawnOf('rts.a').pos;
     const pts = [V(50, 6, 10), V(53, 6, 12), V(56, 6, 14), V(52, 6, 16), V(49, 6, 18), V(55, 6, 18), V(50, 6, 13)];
     expect(pts.filter((p) => L.world.lineOfSight(eye(p), eye(rts, 1.1))).length).toBeGreaterThanOrEqual(3);
@@ -323,16 +325,16 @@ describe('Halcyon (mission 1, second world)', () => {
     expect(L.world.lineOfSight(eye(stand), eye(spawnOf('sling.a').pos, 1.1))).toBe(true);
   });
 
-  it('arena: the pod over the warden is in sight from the stair top; the quay man can be tapped into the river', () => {
+  it('arena: the pod over the warden is in sight from the stair top; the north-west man keeps the trunks between his legs and the stair foot', () => {
     const cp = enc('slingshot').checkpoint!.pos;
     const pod = L.props.find((p) => p.hangFrom)!;
     expect(L.world.lineOfSight(eye(cp), pod.pos.clone().setY(pod.pos.y + 1.5))).toBe(true);
     const w = spawnOf('arena.w').pos;
     expect(Math.hypot(w.x - pod.pos.x, w.z - pod.pos.z)).toBeLessThan(0.5);
-    for (const you of [V(-6, 0, 52), V(-10, 0, 55)]) {
-      const r = tap(you, spawnOf('arena.c').pos);
-      expect(r.wet, `arena.c from ${fmt(you)} ends at ${fmt(r.at)}`).toBe(true);
-    }
+    // (an anchor in cover: his head over the steamer trunks, his legs behind them)
+    const c = spawnOf('arena.c').pos, foot = V(12.8, 0, 48);
+    expect(L.world.lineOfSight(eye(foot), V(c.x, 0.6, c.z))).toBe(false);
+    expect(L.world.lineOfSight(eye(foot), V(c.x, 1.75, c.z))).toBe(true);
   });
 
   it('hooks: the rail cut kills, the river is water, the station stair goes down to the platform', () => {
@@ -476,18 +478,26 @@ describe('Halcyon architecture: levels, walls and the lessons\' spaces', () => {
 
   it('each nav layer is one walk grid for its squads: stairs are walls to it, every squad reaches its mates', () => {
     const z = zone();
-    const [square, upper] = z.nav.map((n) => new NavGrid(L.world, n));
+    const [square, upper, gallery, podium] = z.nav.map((n) => new NavGrid(L.world, n));
     const reach = (g: NavGrid, a: THREE.Vector3, b: THREE.Vector3) => {
       const path = g.findPath(a, b);
       return !!path && path.length > 0 && Math.hypot(path[path.length - 1].x - b.x, path[path.length - 1].z - b.z) < 1;
     };
-    // the arena: from its checkpoint to every man of the squad, round the pedestal
+    // the arena: from its checkpoint round the pedestal to the men on the square floor; the lookout
+    // behind the Hall balcony's gate and the man on the podium hold ground of their own
     const cp = enc('arena').checkpoint!.pos;
-    for (const id of ['arena.w', 'arena.a', 'arena.b', 'arena.c', 'arena.d']) expect(reach(square, cp, spawnOf(id).pos), id).toBe(true);
-    // the upper ring: walkway to the River Gate and the colonnade; the café terrace to the slingshot pair
+    for (const id of ['arena.w', 'arena.c', 'arena.d']) expect(reach(square, cp, spawnOf(id).pos), id).toBe(true);
+    expect(reach(upper, V(21, 6, 41), spawnOf('arena.a').pos), 'arena.a through his gate').toBe(false);
+    expect(reach(upper, spawnOf('arena.a').pos, V(20, 6, 5)), 'arena.a walks his balcony').toBe(true);
+    expect(podium.walkable(spawnOf('arena.b').pos.x, spawnOf('arena.b').pos.z)).toBe(true);
+    expect(reach(podium, spawnOf('arena.b').pos, V(-6, 7.8, 25)), 'arena.b walks the podium').toBe(true);
+    // the upper ring: walkway to the River Gate; the café terrace to the slingshot pair; the colonnade
+    // man is behind bars (his colonnade is its own island), the gallery sentry on his gallery
     expect(reach(upper, enc('trapdoor').checkpoint!.pos, spawnOf('trap.a').pos)).toBe(true);
-    expect(reach(upper, enc('trapdoor').checkpoint!.pos, spawnOf('rts.a').pos)).toBe(true);
+    expect(reach(upper, enc('trapdoor').checkpoint!.pos, spawnOf('rts.a').pos)).toBe(false);
+    expect(reach(upper, spawnOf('rts.a').pos, V(44, 6, 36))).toBe(true);
     expect(reach(upper, enc('slingshot').checkpoint!.pos, spawnOf('sling.a').pos)).toBe(true);
+    expect(gallery.walkable(spawnOf('sling.c').pos.x, spawnOf('sling.c').pos.z)).toBe(true);
     // (stair treads are blocked cells: each squad keeps to its own level)
     expect(square.walkable(14.6, 48)).toBe(false);
     expect(upper.walkable(20.2, 48)).toBe(false);
@@ -522,10 +532,27 @@ describe('Halcyon architecture: levels, walls and the lessons\' spaces', () => {
       expect(hit?.collider.tag, what).toBe(tag);
       expect(hit!.collider.noPortal, what).toBe(true);
     }
-    for (const c of L.world.colliders.filter((q) => q.tag === 'rail' || q.tag === 'pole' || q.tag === 'barrier' || q.tag === 'hallRoofRail')) {
+    for (const c of L.world.colliders.filter((q) => q.tag === 'rail' || q.tag === 'pole' || q.tag === 'barrier' || q.tag === 'hallRoofRail' || q.tag === 'gate' || q.tag === 'grille')) {
       expect(c.noPortal, `${c.tag} ${fmt(c.min)}`).toBe(true);
       expect(c.seeThrough, `${c.tag} ${fmt(c.min)}`).toBe(true);
     }
+    expect(L.world.colliders.filter((q) => q.tag === 'gate').length).toBe(2);
+    expect(L.world.colliders.filter((q) => q.tag === 'grille').length).toBe(1);
+    // the colonnade's bars and the balcony's gate: seen through, never opened on
+    for (const [what, from, dir, tag] of [
+      ['the colonnade grille', V(52, 7.5, 29.4), V(-1, 0, 0), 'grille'],
+      ['the Hall balcony gate', V(20.3, 7.5, 46), V(0, 0, -1), 'gate'],
+    ] as [string, THREE.Vector3, THREE.Vector3, string][]) {
+      const hit = L.world.raycast(from, dir, 20);
+      expect(hit?.collider.tag, what).toBe(tag);
+      expect(hit!.collider.noPortal, what).toBe(true);
+      expect(aim(from, dir)?.collider.tag, `${what}: a rift aim passes it`).not.toBe(tag);
+    }
+    // the café gallery takes a rift on its floor and on its front (a DOOR perches on it)
+    const gal = L.world.colliders.find((q) => q.tag === 'cafeGallery')!;
+    expect(gal.noPortal).toBeFalsy();
+    expect(gal.max.y - gal.min.y).toBeGreaterThan(0.599);
+    expect(aim(V(31, 6.5, 52), V(0, 12.3, 42.7).sub(V(31, 6.5, 52)).setX(0))?.collider.tag).toBe('cafeGallery');
   });
 
   it('trapdoor: past each River Gate guard, along every approach tap line, open river with nothing in the way', () => {
@@ -638,6 +665,170 @@ describe('Halcyon architecture: levels, walls and the lessons\' spaces', () => {
     expect(casting(M)).toEqual(casting(L));
     expect(casting(M)).toEqual(expect.arrayContaining(['foliage', 'iron', 'lattice', 'leaves', 'paint', 'stone', 'trim']));
     expect(M.atmosphere.shadow).toEqual(L.atmosphere.shadow);
+  });
+});
+
+/**
+ * Mission 1 in Halcyon holds ground (DESIGN §5 roles, §8): a sentry on the
+ * Hall's café gallery and a lookout on the Hall balcony behind its locked gate
+ * (posts you can't walk to), the colonnade man behind its bars, riflemen in
+ * cover on the square and on the statue's podium, the warden pushing. Each
+ * reads from his fight's approach and has his answers: REFLECT (not modelled
+ * here), a GRAB tap whose outcome depends on where you stand, a DOOR onto his
+ * floor beside him.
+ */
+describe("Halcyon's posts (holding ground)", () => {
+  const hd = (a: THREE.Vector3Like, b: THREE.Vector3Like) => Math.hypot(a.x - b.x, a.z - b.z);
+  /** Eye (feet + 1.66) to chest (feet + 1.3), as the awareness model looks. */
+  const sees = (from: THREE.Vector3, to: THREE.Vector3) => L.world.lineOfSight(V(from.x, from.y + 1.66, from.z), V(to.x, to.y + 1.3, to.z));
+  const range = (from: THREE.Vector3, to: THREE.Vector3) => V(from.x, from.y + 1.66, from.z).distanceTo(V(to.x, to.y + 1.3, to.z));
+  /** How far (rad) q lies off a man's facing, in the ground plane. */
+  const offFacing = (s: SpawnDef, q: THREE.Vector3) => {
+    let d = Math.abs(Math.atan2(q.x - s.pos.x, q.z - s.pos.z) - s.yaw) % (2 * Math.PI);
+    return d > Math.PI ? 2 * Math.PI - d : d;
+  };
+  const HOLDERS = ['sling.c', 'arena.a'];
+  /** The spots each lookout's fight is fought from (DESIGN §8 tables). */
+  const KEY_SPOTS: Record<string, [string, THREE.Vector3][]> = {
+    'sling.c': [['terrace', V(32, 6, 52)], ['terrace east', V(38, 6, 50)], ['stair top', V(22.5, 6, 48)], ['slingshot landing', V(31, 6, 61)], ['the pair', V(33.5, 6, 60.4)]],
+    'arena.a': [['stair top', V(20, 6, 48)], ['stair foot', V(12.8, 0, 48)], ['(10, 38)', V(10, 0, 38)], ['(6, 30)', V(6, 0, 30)], ['(12, 20)', V(12, 0, 20)], ['café strip', V(20, 6, 41)], ['podium', V(1, PODIUM_Y, 25)]],
+  };
+
+  it('eleven men with roles: two lookouts above their fights, anchors in cover and behind bars, the warden', () => {
+    const all = zone().encounters.flatMap((e) => e.spawns);
+    expect(all.length).toBe(11);
+    expect(Object.fromEntries(all.map((s) => [s.id.slice(5), s.role]))).toEqual({
+      'trap.a': 'anchor', 'trap.b': 'anchor', 'rts.a': 'anchor', 'sling.a': 'anchor', 'sling.b': 'anchor', 'sling.c': 'holder',
+      'arena.w': 'pusher', 'arena.a': 'holder', 'arena.b': 'anchor', 'arena.c': 'anchor', 'arena.d': 'anchor',
+    });
+    expect(spawnOf('rts.a').leash).toBe(3);
+    expect(spawnOf('arena.b').leash).toBe(4);
+    for (const s of all) {
+      if (s.role === 'holder') expect(s.route, `${s.id} holds, no patrol`).toBeUndefined();
+      // (a calm patrol isn't leashed: it has to lie inside his ground)
+      const leash = s.leash ?? AI.hold.leash[s.role!];
+      for (const q of s.route ?? []) expect(hd(q, s.pos), `${s.id} patrol inside his ground`).toBeLessThanOrEqual(leash);
+    }
+    // one prepared fallback: same floor, walkable, 5-12 m back from the lane you come down, behind the trunks
+    const d = spawnOf('arena.d');
+    expect(all.filter((s) => s.fallback).length).toBe(1);
+    expect(d.fallback!.y).toBe(d.pos.y);
+    expect(hd(d.fallback!, d.pos)).toBeGreaterThanOrEqual(5);
+    expect(hd(d.fallback!, d.pos)).toBeLessThanOrEqual(12);
+    expect(d.fallback!.z).toBeLessThan(d.pos.z);
+    expect(new NavGrid(L.world, zone().nav[0]).walkable(d.fallback!.x, d.fallback!.z)).toBe(true);
+    // different fights' posts stay out of each other's shouting (15 m in sight, 8 m through walls)
+    const posts = all.filter((s) => s.role !== 'pusher');
+    for (const a of posts)
+      for (const b of posts) {
+        if (a.squad === b.squad) continue;
+        const dd = a.pos.distanceTo(b.pos);
+        if (dd < 15) expect(dd > 8 && !sees(a.pos as THREE.Vector3, b.pos as THREE.Vector3), `${a.id} and ${b.id} ${dd.toFixed(1)} m apart`).toBe(true);
+      }
+  });
+
+  it('lookouts see their fight; the gallery sentry has his back to the Loggia roof and the pair (teach, then twist)', () => {
+    for (const id of HOLDERS) {
+      const p = spawnOf(id).pos;
+      const spots = KEY_SPOTS[id].filter(([, q]) => range(p, q) <= 24);
+      const seen = spots.filter(([, q]) => sees(p, q));
+      expect(spots.length, `${id}: key spots in range`).toBeGreaterThanOrEqual(3);
+      expect(seen.length / spots.length, `${id} sees ${seen.map(([n]) => n).join(', ')} of ${spots.map(([n]) => n).join(', ')}`).toBeGreaterThanOrEqual(0.5);
+    }
+    // he watches the Grand Stair; the Loggia roof where the slingshot starts, the pair and their wall are behind
+    // him (outside his ±60° cone): the jump is learned in quiet, he turns on the noise
+    const g = spawnOf('sling.c');
+    expect(offFacing(g, V(22.5, 6, 48))).toBeLessThan(Math.PI / 3);
+    for (const q of [V(41, 14, 61), V(46, 14, 61), V(33.5, 6, 60.4), V(33.5, 6, 61.7), V(31, 6, 61)]) expect(offFacing(g, q), `the sentry faces away from ${fmt(q)}`).toBeGreaterThan(Math.PI / 3 + 0.2);
+    // ...and once he turns, the landing is in his sight; right under his gallery is out of it
+    expect(sees(g.pos as THREE.Vector3, V(31, 6, 61))).toBe(true);
+    expect(sees(g.pos as THREE.Vector3, V(31, 6, 44))).toBe(false);
+    // the balcony lookout: the stair top in range as you arrive, the arcade under him out of his sight
+    const a = spawnOf('arena.a').pos as THREE.Vector3;
+    expect(range(a, V(20, 6, 48))).toBeLessThan(24);
+    expect(sees(a, V(20, 0, 30))).toBe(false);
+  });
+
+  it("the lookouts' posts and the colonnade can't be reached on foot; the podium, the strip and the roofs can", () => {
+    const f = onFoot(L.world, { x0: 0, x1: 60, z0: 0, z1: 72 }, [V(52, 6, 4), V(32, 6, 52), V(12, 0, 30), V(46, 14, 61)]);
+    for (const id of ['sling.c', 'arena.a', 'rts.a']) expect(f.reached(spawnOf(id).pos), `${id} reached: ${f.route(spawnOf(id).pos)}`).toBe(false);
+    for (const [n, p] of [['balcony south end', V(20, 6, 5)], ['colonnade north', V(44, 6, 38)]] as const) expect(f.reached(p), `${n} reached: ${f.route(p)}`).toBe(false);
+    for (const [n, p] of [['podium', spawnOf('arena.b').pos], ['café strip', V(20, 6, 41)], ['Loggia roof', V(46, 14, 61)], ['stair top', V(21.5, 6, 48)], ['terrace', V(32, 6, 52)]] as const) {
+      expect(f.reached(p), `${n} reached`).toBe(true);
+    }
+  }, 60_000);
+
+  it('every post: the collider top is the top you see (boots on the surface)', () => {
+    L.root.updateMatrixWorld(true);
+    const ray = new THREE.Raycaster();
+    for (const id of ['sling.c', 'arena.a', 'arena.b', 'rts.a']) {
+      const p = spawnOf(id).pos;
+      expect(L.world.groundAt(p.x, p.z, 0.3, p.y + 0.5), `${id} collider top`).toBeCloseTo(p.y, 3);
+      ray.set(V(p.x, p.y + 2.5, p.z), V(0, -1, 0));
+      ray.far = 5;
+      const hit = ray.intersectObject(L.root, true).find((h) => (h.object as THREE.Mesh).isMesh);
+      expect(hit, `${id} has a surface under him`).toBeTruthy();
+      expect(Math.abs(hit!.point.y - p.y), `${id}: surface you see at ${hit!.point.y.toFixed(3)} (${hit!.object.name})`).toBeLessThanOrEqual(0.03);
+    }
+    expect(spawnOf('sling.c').pos.y).toBe(GALLERY.y);
+  });
+
+  it('a DOOR aimed at a lookout\'s floor beside him puts you on it, clear of him; aimed at him it is refused', () => {
+    const rifts = new RiftSystem(new THREE.Scene(), null, L.world, { portalScale: 0.5, lightCount: 2, maxViews: 2 });
+    const aim = (you: THREE.Vector3, at: THREE.Vector3, post: THREE.Vector3) => {
+      const e = V(you.x, you.y + 1.66, you.z);
+      return rifts.aimExit(e, at.clone().sub(e).normalize(), e, you, false, [{ key: 'enemy:1', pos: post, radius: 0.4, height: 1.8, canFall: false, steady: true }]);
+    };
+    // lookout, you, the face beside him, the face right in front of him
+    const cases: [string, THREE.Vector3, THREE.Vector3, THREE.Vector3][] = [
+      // (the gallery is one bay wide: the door goes at its far end, 2 m beside him)
+      ['sling.c', V(32, 6, 52), V(32.2, 12.3, GALLERY.z1), V(30, 12.3, GALLERY.z1)],
+      ['sling.c', V(24.5, 6, 47), V(32.2, 12.3, GALLERY.z1), V(30, 12.3, GALLERY.z1)],
+      ['sling.c', V(36, 6, 50), V(32.2, 12.3, GALLERY.z1), V(30, 12.3, GALLERY.z1)],
+      ['arena.a', V(8, 0, 30), V(18, 5.85, 33), V(18, 5.85, 30.5)],
+      ['arena.a', V(8, 0, 30), V(18, 5.85, 27.5), V(18, 5.85, 30.5)],
+      ['arena.a', V(10, 0, 38), V(18, 5.85, 34), V(18, 5.85, 31)],
+    ];
+    for (const [id, you, beside, front] of cases) {
+      const post = spawnOf(id).pos as THREE.Vector3;
+      const a = aim(you, beside, post);
+      expect(a.valid, `${id} from ${fmt(you)}: ${a.reason}`).toBe(true);
+      expect(a.kind, `${id} from ${fmt(you)}`).toBe('stand');
+      expect(a.exitFeet.y, `${id} from ${fmt(you)} lands on his floor`).toBeCloseTo(post.y, 2);
+      expect(hd(a.exitFeet, post), `${id} from ${fmt(you)}`).toBeGreaterThanOrEqual(1.2);
+      const b = aim(you, front, post);
+      expect(b.valid && b.kind === 'stand' ? hd(b.exitFeet, post) : 9, `${id}: a door on top of him`).toBeGreaterThanOrEqual(1.2);
+    }
+  });
+
+  it('a GRAB tap: where you stand decides (a wall kill from abeam, a knockdown along his floor), through the bars too', () => {
+    const rifts = new RiftSystem(new THREE.Scene(), null, L.world, { portalScale: 0.5, lightCount: 2, maxViews: 2 });
+    const h: SpotHost = { rifts, world: L.world, level: { seaY: L.seaY, isSea: (p) => L.isSea(p as THREE.Vector3) }, killYAt: (p) => killYAt(p as THREE.Vector3) };
+    const arc = Array.from({ length: 120 }, () => new THREE.Vector3());
+    const tapOutcome = (you: THREE.Vector3, p: THREE.Vector3): Outcome | 'none' => {
+      const d = V(p.x - you.x, 0, p.z - you.z).normalize();
+      const S = PORTAL.straight;
+      const f = straightOn(h, p, d, S.past, S.up, S.tilt);
+      if (!f) return 'none';
+      return simulateArc(h, f.position, frameNormal(f).multiplyScalar(PORTAL.throwSpeed.grab), arc).outcome;
+    };
+    const kill = ['skull', 'splash', 'void'];
+    const cases: [string, THREE.Vector3, string[]][] = [
+      ['sling.c', V(32, 6, 52), kill], // from the terrace: into the Hall wall behind him
+      ['sling.c', V(41, 14, 61), kill], // from the Loggia roof
+      ['sling.c', V(31, 6, 61), kill], // from the slingshot's landing
+      ['sling.c', V(22.5, 6, 48), ['stars']], // from the stair top: along his gallery
+      ['arena.a', V(6, 0, 30), kill], // from the square: into the Hall wall
+      ['arena.a', V(10, 0, 38), kill],
+      ['arena.a', V(20, 6, 48), ['stars']], // through the gate: along the balcony (he walks back)
+      ['rts.a', V(50, 6, 26), kill], // through the bars from abeam: into the colonnade's back wall
+      ['rts.a', V(52, 6, 22), kill],
+      ['rts.a', V(52, 6, 16), ['stars', 'safe']], // from down the walkway: along the colonnade
+    ];
+    for (const [id, you, want] of cases) {
+      const got = tapOutcome(you, spawnOf(id).pos as THREE.Vector3);
+      expect(want, `${id} tapped from ${fmt(you)}: ${got}`).toContain(got);
+    }
   });
 });
 

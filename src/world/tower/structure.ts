@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import * as TX from '../textures';
 import { Builder, Ctx, PALETTE, V, col, rng } from './kit';
-import { girder, lattice } from './parts';
+import { girder, lattice, railing } from './parts';
 import {
   CORE,
   CRANE,
@@ -412,6 +412,11 @@ export function buildBeacons(beacons: { pos: THREE.Vector3; phase: number }[], a
 // over the pier arena.
 // ---------------------------------------------------------------------------
 export const HARBOUR_CRANE = { legsX: [28, 38], legsZ: [-12, -2], boomY: 24, boomZ: -7, backX: 12, outX: 74, trolleyX: 17 };
+/**
+ * The crane's maintenance catwalk along its west legs at sill-beam height (a
+ * sentry's post over the pier arena): its deck, walkable top at y.
+ */
+export const HARBOUR_CATWALK = { x0: 25.0, x1: 27.45, z0: -12.45, z1: -1.55, y: 8.8 };
 
 function harbourCrane(ctx: Ctx, b: Builder) {
   const H = HARBOUR_CRANE;
@@ -431,6 +436,7 @@ function harbourCrane(ctx: Ctx, b: Builder) {
     b.box('steel', x - 0.5, 9, H.legsZ[0], x + 0.5, 10, H.legsZ[1], c, 2, { ao: 0 });
     b.box('steel', x - 0.6, H.boomY - 2, H.legsZ[0], x + 0.6, H.boomY, H.legsZ[1], c, 2, { ao: 0 });
   }
+  craneCatwalk(ctx, b, c);
   // boom (two box girders)
   for (const dz of [-1.3, 1.3]) {
     b.box('steel', H.backX, H.boomY, H.boomZ + dz - 0.35, H.outX, H.boomY + 1.8, H.boomZ + dz + 0.35, hi, 2, { ao: 0, under: 0.35 });
@@ -456,4 +462,59 @@ function harbourCrane(ctx: Ctx, b: Builder) {
   b.box('steel', H.trolleyX - 1.5, H.boomY - 0.6, H.boomZ - 1.6, H.trolleyX + 1.5, H.boomY, H.boomZ + 1.6, 0x2f3338, 1, { ao: 0 });
   beacon(ctx, V(33, H.boomY + 16.4, H.boomZ));
   beacon(ctx, V(H.outX - 0.5, H.boomY + 2.1, H.boomZ));
+}
+
+/**
+ * The crane's maintenance catwalk (HARBOUR_CATWALK), a sentry's post over the
+ * pier arena: a steel grating on a 0.6 m-deep frame (the west edge girder is
+ * the face a DOOR aims at) whose inner ledger is welded to both west legs,
+ * carried on two cantilever arms out of the legs with knee braces down to
+ * them. The west sill beam is its east parapet (a kick plate closes the slot
+ * under it); yellow rails close the other three sides. The way up is the stair
+ * inside the NW leg: its door stands open onto the deck, the one at the leg's
+ * foot is shut and padlocked.
+ */
+function craneCatwalk(ctx: Ctx, b: Builder, c: number) {
+  const K = HARBOUR_CATWALK, H = HARBOUR_CRANE;
+  const legW = H.legsX[0] - 0.6; // the west legs' west face
+  const [zs, zn] = H.legsZ;
+  const y = K.y, y0 = y - 0.6, gy = y - 0.18;
+  const bz0 = zs + 0.6, bz1 = zn - 0.6; // between the legs
+  col(ctx, K.x0, y0, K.z0, K.x1, y, K.z1, { tag: 'catwalk' });
+  col(ctx, K.x1, y, bz0, H.legsX[0] + 0.5, 10, bz1, { tag: 'crane' });
+  // deck: between the legs out to the sill beam, beside them up to the legs; ribbed steel plate,
+  // the ribs across the walk (the tower's own decking profile, fine-pitched)
+  const grate = 0x5d646c, rib = { ao: 0, uvRotate: true };
+  b.box('container', K.x0, gy, bz0, legW + 0.1, y, bz1, grate, 1, rib);
+  b.box('container', K.x0, gy, K.z0, legW, y, bz0, grate, 1, rib);
+  b.box('container', K.x0, gy, bz1, legW, y, K.z1, grate, 1, rib);
+  // frame: west edge girder, inner ledger, end girders, joists
+  b.box('steel', K.x0, y0, K.z0, K.x0 + 0.22, gy, K.z1, c, 1, { ao: 0 });
+  b.box('steel', legW - 0.22, y0, K.z0, legW, gy, K.z1, c, 1, { ao: 0 });
+  for (const z of [K.z0, K.z1 - 0.2]) b.box('steel', K.x0 + 0.22, y0, z, legW - 0.22, gy, z + 0.2, c, 1, { ao: 0 });
+  for (let z = zs + 2.2; z < zn - 1; z += 2.4) b.box('steel', K.x0 + 0.22, y0 + 0.15, z - 0.06, legW - 0.22, gy, z + 0.06, c, 1, { ao: 0 });
+  // cantilever arms out of the legs' west faces, knee braces down to the legs
+  for (const z of [zs, zn]) {
+    b.box('steel', K.x0, y0 - 0.3, z - 0.15, legW, y0, z + 0.15, c, 1, { ao: 0, under: 0.35 });
+    b.beam('steel', V(K.x0 + 0.6, y0 - 0.2, z), V(legW + 0.1, y0 - 1.9, z), 0.18, 0.18, c, 1);
+  }
+  // kick plate under the sill beam, rails on the open sides (corner posts never shared)
+  b.box('steel', legW + 0.05, y, bz0, legW + 0.1, 9, bz1, c, 1, { ao: 0, skipBottom: true });
+  railing(ctx, K.x0 + 0.08, K.z0, K.x0 + 0.08, K.z1, y, { b });
+  railing(ctx, K.x0 + 0.16, K.z0 + 0.08, legW - 0.04, K.z0 + 0.08, y, { b });
+  railing(ctx, K.x0 + 0.16, K.z1 - 0.08, legW - 0.04, K.z1 - 0.08, y, { b });
+  // the NW leg's stair door at deck level, wide open: dark stairwell, jambs, hazard lintel, the leaf
+  const dz0 = zn - 0.45, dz1 = zn + 0.15, top = y + 2.05, frame = 0x2b2f34, leaf = 0x5a6470;
+  b.box('metal', legW - 0.02, y, dz0, legW, top, dz1, 0x121416, 1, { ao: 0, skipBottom: true });
+  for (const [a, e] of [[dz0 - 0.08, dz0], [dz1, dz1 + 0.08]]) b.box('steel', legW - 0.1, y, a, legW, top, e, frame, 1, { ao: 0, skipBottom: true });
+  b.box('hazard', legW - 0.1, top, dz0 - 0.08, legW, top + 0.16, dz1 + 0.08, 0xffffff, 1, { ao: 0 });
+  col(ctx, legW - 0.7, y, dz0 - 0.05, legW - 0.1, top, dz0, { tag: 'door' });
+  b.box('metal', legW - 0.7, y + 0.02, dz0 - 0.05, legW - 0.1, top - 0.03, dz0, leaf, 1, { ao: 0 });
+  b.box('metal', legW - 0.66, y + 1.0, dz0, legW - 0.58, y + 1.06, dz0 + 0.06, frame, 1, { ao: 0 });
+  // ...and at its foot (over the bogie), shut and padlocked
+  const fy = 0.92, ft = 2.95;
+  b.box('metal', legW - 0.04, fy, dz0 - 0.08, legW, ft + 0.08, dz1 + 0.08, frame, 1, { ao: 0 });
+  b.box('metal', legW - 0.07, fy + 0.04, dz0, legW - 0.04, ft, dz1, leaf, 1, { ao: 0 });
+  b.box('metal', legW - 0.1, 1.9, dz1 - 0.12, legW - 0.04, 2.0, dz1 + 0.06, 0x9aa0a6, 1, { ao: 0 });
+  b.box('steel', legW - 0.14, 1.72, dz1 - 0.09, legW - 0.1, 1.9, dz1 - 0.01, PALETTE.crane, 1, { ao: 0 });
 }

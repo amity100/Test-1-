@@ -95,6 +95,8 @@ export class Enemy implements EnemyView {
   readonly goal = new THREE.Vector3();
   hasGoal = false;
   repathT = 0;
+  /** Last time a walk stepped him along his path (a walk under way, not a path left lying after a halt). */
+  walkT = -1e9;
   readonly moveVel = new THREE.Vector3();
   readonly pushVel = new THREE.Vector3();
   readonly progressAt = new THREE.Vector3();
@@ -105,6 +107,26 @@ export class Enemy implements EnemyView {
   routeIdx = 0;
   waitT = 0;
   lookBase = 0;
+
+  // --- the ground he holds (roles, DESIGN §5)
+  /** How he holds ground now (his spawn's role; a holder thrown off his perch fights on as an anchor). None: the old free behaviour. */
+  role: SpawnDef['role'];
+  /** Centre of the ground he holds: his spawn, then his fallback, or where he landed off his floor. */
+  readonly post = new THREE.Vector3();
+  /** How far from his post he goes in a fight (m; Infinity: no role, no limit). */
+  leash = Infinity;
+  /** His one fallback is spent (taken, or he was thrown off his ground). */
+  fellBack = false;
+  /** On his way to his fallback post. */
+  retreating = false;
+  /** Pushed off his ground on his own floor: walking back to his post. */
+  returning = false;
+  /** Walks back to his post that found no way there, in a row. */
+  postFails = 0;
+  /** No spot in his band: the next look for one inside his ground (a line-of-sight ray per try) waits until then. */
+  groundTryT = -1e9;
+  /** A holder has called "He's up here!" (once). */
+  upHereBarked = false;
 
   // --- attacks
   atk: AttackPhase = 'none';
@@ -174,6 +196,7 @@ export class Enemy implements EnemyView {
     this.yaw = def.yaw;
     this.lookBase = def.yaw;
     this.home.copy(def.pos);
+    this.role = def.role;
     this.senseT = senseOffset;
     this.state = 'idle';
   }

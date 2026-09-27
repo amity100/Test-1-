@@ -454,6 +454,16 @@ export interface SpawnDef {
   wait?: number[];
   /** Never moves (snipers, turrets, posted guards). */
   perch?: boolean;
+  /**
+   * How he holds ground (mission 1, DESIGN §5 roles). holder: stands at his
+   * post above the fight and aims; anchor: strafes inside his post's circle;
+   * pusher: walks at you, inside the fight. None: the old free behaviour.
+   */
+  role?: 'holder' | 'anchor' | 'pusher';
+  /** An anchor's prepared second post (same floor, 5–12 m back from where you come from). He falls back to it once. */
+  fallback?: V3;
+  /** Overrides the role's leash (m): how far from his post he goes in a fight. */
+  leash?: number;
 }
 
 export interface EnemyView {

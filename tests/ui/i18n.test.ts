@@ -37,6 +37,7 @@ const CANONICAL = [
   'obj.clear', 'obj.lift', 'obj.boss', 'obj.escape',
   'toast.checkpoint', 'toast.hijack', 'toast.clipSaved', 'toast.clipFailed', 'toast.photoSaved', 'toast.challenge', 'toast.zoneClear',
   'bark.contact', 'bark.reload', 'bark.grenade', 'bark.charge', 'bark.lost', 'bark.where', 'bark.there', 'bark.mateDown', 'bark.what', 'bark.boss1', 'bark.boss2', 'bark.boss3',
+  'bark.upTop', 'bark.upHere', 'bark.fallback', 'bark.covering',
   ...TRICKS.map((id) => `trick.${id}`),
 ];
 

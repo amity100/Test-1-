@@ -7,6 +7,10 @@ export function spawn(zone: ZoneId, id: string, kind: EnemyKind, x: number, y: n
   if (o.route) s.route = o.route.map((p) => p.clone());
   if (o.wait) s.wait = o.wait.slice();
   if (o.perch) s.perch = true;
+  // the ground he holds (DESIGN §5 roles)
+  if (o.role) s.role = o.role;
+  if (o.fallback) s.fallback = o.fallback.clone();
+  if (o.leash !== undefined) s.leash = o.leash;
   return s;
 }
 

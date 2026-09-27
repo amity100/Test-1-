@@ -27,6 +27,12 @@ export const LANDING3_Y = 3;
 /** The statue's base ring and its podium top. */
 export const T1_Y = 1.2;
 export const PODIUM_Y = 7.8;
+/**
+ * The Hall's speaker's gallery over the café terrace (the slingshot's sentry):
+ * one bay of its café face (x 28.84..33.16, from the wall at z 40 out to z1),
+ * walkable at y, 6.6 m over the terrace and a long jump from the Loggia roof.
+ */
+export const GALLERY = { x0: 28.84, x1: 33.16, z1: 42.7, y: 12.6 };
 /** The rail cut: tracks (lethal) and the platforms beside them (safe). */
 export const TRACK_Y = -8;
 export const PLATFORM_Y = -7;
@@ -126,11 +132,13 @@ export const TRAIN_DOOR = { x0: -14, x1: -12.5 };
 export const BOARD_BOX = { min: new THREE.Vector3(-14.8, -7.1, -22.7), max: new THREE.Vector3(-11.8, -4.8, -21.3) };
 export const BOARD_AT = new THREE.Vector3(-13.3, PLATFORM_Y, -21.6);
 
-/** Zone bounds and nav layers (the square at 0, the upper ring at 6). */
+/** Zone bounds and nav layers (the square at 0, the upper ring at 6, the gallery, the podium). */
 export const BOUNDS = { min: new THREE.Vector3(-66, -12, -56), max: new THREE.Vector3(72, 60, 80) };
 export const NAV = [
   { minX: -50, maxX: 22, minZ: -18, maxZ: 72, floorY: SQUARE_Y },
   { minX: 6, maxX: 66, minZ: -18, maxZ: 72, floorY: UPPER_Y },
+  { minX: GALLERY.x0, maxX: GALLERY.x1, minZ: 40, maxZ: GALLERY.z1, floorY: GALLERY.y },
+  { minX: -9, maxX: 5, minZ: 23, maxZ: 37, floorY: PODIUM_Y },
 ];
 
 /**
