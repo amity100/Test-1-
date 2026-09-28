@@ -1,0 +1,335 @@
+import * as THREE from 'three';
+import './style.css';
+
+const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, html = '') => {
+  const e = document.createElement(tag);
+  e.className = cls;
+  if (html) e.innerHTML = html;
+  return e;
+};
+
+export interface KeyHint { key: string; touch: string; label: string }
+
+/** All DOM overlays: loading, start, cinematic letterbox & captions, title card, HUD, QTE, menus. */
+export class UI {
+  readonly root: HTMLDivElement;
+  private loading: HTMLDivElement;
+  private loadBar: HTMLDivElement;
+  private loadLabel: HTMLDivElement;
+  private bars: HTMLDivElement;
+  private captionEl: HTMLDivElement;
+  private verseEl: HTMLDivElement;
+  private titleEl: HTMLDivElement;
+  private objEl: HTMLDivElement;
+  private promptEl: HTMLDivElement;
+  private crossEl: HTMLDivElement;
+  private markerEl: HTMLDivElement;
+  private healthEl: HTMLDivElement;
+  private bossEl: HTMLDivElement;
+  private qteEl: HTMLDivElement;
+  private toastEl: HTMLDivElement;
+  private fadeEl: HTMLDivElement;
+  private skipEl: HTMLButtonElement;
+  private counterEl: HTMLDivElement;
+  private hintEl: HTMLDivElement;
+  private pauseEl: HTMLDivElement;
+  private endEl: HTMLDivElement;
+  private timers = new Map<string, number>();
+  readonly touch: boolean;
+  onSkip?: () => void;
+  onResume?: () => void;
+  onRestart?: () => void;
+  onVolume?: (v: number) => void;
+  onSensitivity?: (v: number) => void;
+
+  constructor(parent: HTMLElement, touch: boolean) {
+    this.touch = touch;
+    this.root = el('div', 'ui' + (touch ? ' is-touch' : ''));
+    parent.appendChild(this.root);
+
+    this.loading = el('div', 'loading', `
+      <div class="ld-inner">
+        <div class="ld-title">DAVID</div>
+        <div class="ld-bar"><div></div></div>
+        <div class="ld-label"></div>
+        <div class="ld-quote">"ה׳ רֹעִי לֹא אֶחְסָר. בִּנְאוֹת דֶּשֶׁא יַרְבִּיצֵנִי"<span>תהלים כג</span></div>
+      </div>`);
+    this.loadBar = this.loading.querySelector('.ld-bar div') as HTMLDivElement;
+    this.loadLabel = this.loading.querySelector('.ld-label') as HTMLDivElement;
+    this.root.appendChild(this.loading);
+
+    this.bars = el('div', 'letterbox', '<div class="lb-top"></div><div class="lb-bot"></div>');
+    this.captionEl = el('div', 'caption');
+    this.verseEl = el('div', 'verse');
+    this.titleEl = el('div', 'titlecard', `
+      <div class="tc-small">מִסִּפְרֵי שְׁמוּאֵל</div>
+      <h1 class="tc-title" data-t="DAVID">DAVID</h1>
+      <div class="tc-he">דָּוִד</div>
+      <div class="tc-line"></div>
+      <div class="tc-chapter">פֶּרֶק רִאשׁוֹן · הָרֹעֶה</div>`);
+    this.objEl = el('div', 'objective');
+    this.hintEl = el('div', 'hint');
+    this.promptEl = el('div', 'prompt');
+    this.crossEl = el('div', 'crosshair', '<svg viewBox="0 0 100 100"><circle class="ring-bg" cx="50" cy="50" r="30"/><circle class="ring" cx="50" cy="50" r="30"/><circle class="dot" cx="50" cy="50" r="2.6"/></svg><div class="range">מחוץ לטווח — סובב חזק יותר</div>');
+    this.markerEl = el('div', 'marker', '<div class="mk-diamond"></div><div class="mk-label"></div>');
+    this.healthEl = el('div', 'health');
+    this.bossEl = el('div', 'boss', '<div class="boss-name">הַדֹּב</div><div class="boss-bar"><div></div></div>');
+    this.qteEl = el('div', 'qte');
+    this.toastEl = el('div', 'toast');
+    this.counterEl = el('div', 'counter');
+    this.fadeEl = el('div', 'fade');
+    this.skipEl = el('button', 'skip', touch ? 'דלג ›' : 'דלג <span class="key">Enter</span>') as HTMLButtonElement;
+    this.skipEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.onSkip?.();
+    });
+    this.pauseEl = el('div', 'pause');
+    this.endEl = el('div', 'endcard');
+    for (const e of [this.bars, this.markerEl, this.captionEl, this.verseEl, this.titleEl, this.objEl, this.hintEl, this.promptEl, this.crossEl, this.healthEl, this.bossEl, this.qteEl, this.toastEl, this.counterEl, this.skipEl, this.fadeEl, this.pauseEl, this.endEl]) this.root.appendChild(e);
+    this.buildPause();
+  }
+
+  // ------------------------------------------------------------------------------ loading/start
+  setLoading(f: number, label: string) {
+    this.loadBar.style.width = `${Math.round(f * 100)}%`;
+    this.loadLabel.textContent = label;
+  }
+
+  showStart(quality: string, onStart: () => void) {
+    this.loading.classList.add('ready');
+    const inner = this.loading.querySelector('.ld-inner') as HTMLDivElement;
+    const btn = el('button', 'start-btn', 'הַתְחֵל');
+    const note = el('div', 'start-note', `${this.touch ? 'מומלץ לסובב את המכשיר לרוחב · ' : 'מסך מלא ואוזניות לחוויה המלאה · '}איכות: ${quality}`);
+    inner.appendChild(btn);
+    inner.appendChild(note);
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      try {
+        if (this.touch && document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen().catch(() => undefined);
+      } catch {
+        /* ignore */
+      }
+      this.loading.classList.add('gone');
+      setTimeout(() => this.loading.remove(), 1600);
+      onStart();
+    });
+  }
+
+  dismissLoading() {
+    this.loading.classList.add('gone');
+    setTimeout(() => this.loading.remove(), 1600);
+  }
+
+  showError(msg: string) {
+    this.loadLabel.textContent = msg;
+    this.loadLabel.classList.add('err');
+  }
+
+  // ------------------------------------------------------------------------------ cinematic
+  letterbox(on: boolean) {
+    this.bars.classList.toggle('on', on);
+    this.root.classList.toggle('cinematic', on);
+  }
+  skip(visible: boolean) {
+    this.skipEl.classList.toggle('on', visible);
+  }
+
+  private later(key: string, ms: number, fn: () => void) {
+    const t = this.timers.get(key);
+    if (t) clearTimeout(t);
+    this.timers.set(key, window.setTimeout(fn, ms));
+  }
+
+  /** Location card, e.g. "בית לחם יהודה". */
+  caption(title: string, sub = '', seconds = 5) {
+    this.captionEl.innerHTML = `<div class="cap-title">${title}</div>${sub ? `<div class="cap-sub">${sub}</div>` : ''}`;
+    this.captionEl.classList.remove('on');
+    void this.captionEl.offsetWidth;
+    this.captionEl.classList.add('on');
+    this.later('caption', seconds * 1000, () => this.captionEl.classList.remove('on'));
+  }
+
+  /** Scripture line with reference. */
+  verse(text: string, ref: string, seconds = 6) {
+    this.verseEl.innerHTML = `<div class="v-text">${text}</div>${ref ? `<div class="v-ref">${ref}</div>` : ''}`;
+    this.verseEl.classList.remove('on');
+    void this.verseEl.offsetWidth;
+    this.verseEl.classList.add('on');
+    this.later('verse', seconds * 1000, () => this.verseEl.classList.remove('on'));
+  }
+  hideVerse() {
+    this.verseEl.classList.remove('on');
+  }
+
+  titleCard(on: boolean) {
+    this.titleEl.classList.toggle('on', on);
+  }
+
+  // ------------------------------------------------------------------------------ HUD
+  objective(text: string | null, sub = '') {
+    if (!text) {
+      this.objEl.classList.remove('on');
+      return;
+    }
+    this.objEl.innerHTML = `<div class="obj-label">מְשִׂימָה</div><div class="obj-text">${text}</div>${sub ? `<div class="obj-sub">${sub}</div>` : ''}`;
+    this.objEl.classList.remove('on', 'new');
+    void this.objEl.offsetWidth;
+    this.objEl.classList.add('on', 'new');
+  }
+
+  hint(parts: KeyHint[] | string | null, seconds = 0) {
+    if (!parts) {
+      this.hintEl.classList.remove('on');
+      return;
+    }
+    if (typeof parts === 'string') this.hintEl.innerHTML = parts;
+    else this.hintEl.innerHTML = parts.map((p) => `<span class="h-item"><span class="key">${this.touch ? p.touch : p.key}</span>${p.label}</span>`).join('');
+    this.hintEl.classList.add('on');
+    if (seconds) this.later('hint', seconds * 1000, () => this.hintEl.classList.remove('on'));
+  }
+
+  prompt(p: KeyHint | null) {
+    if (!p) {
+      this.promptEl.classList.remove('on');
+      return;
+    }
+    this.promptEl.innerHTML = `<span class="key">${this.touch ? p.touch : p.key}</span><span>${p.label}</span>`;
+    this.promptEl.classList.add('on');
+  }
+
+  counter(text: string | null) {
+    this.counterEl.classList.toggle('on', !!text);
+    if (text) this.counterEl.innerHTML = text;
+  }
+
+  crosshair(visible: boolean, power = 0, onTarget = false, inRange = true) {
+    this.crossEl.classList.toggle('on', visible);
+    if (!visible) return;
+    const ring = this.crossEl.querySelector('.ring') as SVGCircleElement;
+    const c = 2 * Math.PI * 30;
+    ring.style.strokeDasharray = `${c * power} ${c}`;
+    this.crossEl.classList.toggle('target', onTarget);
+    this.crossEl.classList.toggle('far', !inRange && power > 0.2);
+  }
+
+  marker(camera: THREE.Camera, pos: THREE.Vector3 | null, label = '') {
+    if (!pos) {
+      this.markerEl.classList.remove('on');
+      return;
+    }
+    const v = pos.clone().project(camera);
+    const behind = v.z > 1;
+    let x = (v.x * 0.5 + 0.5) * innerWidth;
+    let y = (-v.y * 0.5 + 0.5) * innerHeight;
+    if (behind) {
+      x = innerWidth - x;
+      y = innerHeight - 60;
+    }
+    const m = 44;
+    const cx = Math.min(innerWidth - m, Math.max(m, x));
+    const cy = Math.min(innerHeight - m - 30, Math.max(m + 40, y));
+    const clamped = cx !== x || cy !== y || behind;
+    this.markerEl.style.transform = `translate(${cx}px, ${cy}px)`;
+    this.markerEl.classList.add('on');
+    this.markerEl.classList.toggle('edge', clamped);
+    const d = camera.position.distanceTo(pos);
+    (this.markerEl.querySelector('.mk-label') as HTMLDivElement).textContent = `${label}${label ? ' · ' : ''}${Math.round(d)} מ׳`;
+  }
+
+  health(visible: boolean, value = 3, max = 3) {
+    this.healthEl.classList.toggle('on', visible);
+    if (!visible) return;
+    let h = '';
+    for (let i = 0; i < max; i++) h += `<div class="hp ${i < value ? 'full' : ''}"></div>`;
+    this.healthEl.innerHTML = h;
+  }
+
+  boss(visible: boolean, frac = 1) {
+    this.bossEl.classList.toggle('on', visible);
+    (this.bossEl.querySelector('.boss-bar div') as HTMLDivElement).style.width = `${Math.max(0, frac) * 100}%`;
+  }
+
+  /** QTE overlays: mash meter, timing ring, or a single urgent press. */
+  qte(kind: 'mash' | 'timing' | 'press' | null, value = 0, label = '', key: KeyHint | null = null) {
+    if (!kind) {
+      this.qteEl.className = 'qte';
+      return;
+    }
+    const k = key ? `<span class="key">${this.touch ? key.touch : key.key}</span>` : '';
+    if (kind === 'mash') {
+      this.qteEl.innerHTML = `<div class="q-label">${label}</div><div class="q-mash"><div style="width:${value * 100}%"></div></div><div class="q-key">${k}<span>${this.touch ? 'הקש שוב ושוב' : 'לחץ שוב ושוב'}</span></div>`;
+    } else if (kind === 'timing') {
+      const s = 1 + value * 2.2;
+      this.qteEl.innerHTML = `<div class="q-label">${label}</div><div class="q-timing"><div class="q-target"></div><div class="q-ring" style="transform:translate(-50%,-50%) scale(${s})"></div>${k}</div>`;
+    } else {
+      this.qteEl.innerHTML = `<div class="q-label big">${label}</div><div class="q-key pulse">${k}</div>`;
+    }
+    this.qteEl.className = `qte on ${kind}`;
+  }
+
+  flashQte(ok: boolean) {
+    this.qteEl.classList.remove('ok', 'bad');
+    void this.qteEl.offsetWidth;
+    this.qteEl.classList.add(ok ? 'ok' : 'bad');
+  }
+
+  toast(title: string, body: string, seconds = 7) {
+    this.toastEl.innerHTML = `<div class="t-title">${title}</div><div class="t-body">${body}</div>`;
+    this.toastEl.classList.remove('on');
+    void this.toastEl.offsetWidth;
+    this.toastEl.classList.add('on');
+    this.later('toast', seconds * 1000, () => this.toastEl.classList.remove('on'));
+  }
+
+  fade(opacity: number, seconds = 1) {
+    this.fadeEl.style.transition = `opacity ${seconds}s ease`;
+    this.fadeEl.style.opacity = String(opacity);
+  }
+
+  hud(on: boolean) {
+    this.root.classList.toggle('hud-off', !on);
+  }
+
+  // ------------------------------------------------------------------------------ menus
+  private buildPause() {
+    const keys = this.touch
+      ? `<tr><td>ג׳ויסטיק (שמאל)</td><td>תנועה · דחיפה לקצה = ריצה</td></tr><tr><td>גרירה (ימין)</td><td>מצלמה</td></tr><tr><td>קֶלַע</td><td>החזק לסיבוב · שחרר לקליעה</td></tr><tr><td>מַקֵּל</td><td>הכאה במקל</td></tr><tr><td>פְּעֻלָּה</td><td>אסוף · הצל · תפוס</td></tr><tr><td>הִתְחַמֵּק</td><td>קפיצת התחמקות</td></tr><tr><td>קְרִיאָה</td><td>קריאה לצאן</td></tr>`
+      : `<tr><td><span class="key">W A S D</span></td><td>תנועה</td></tr><tr><td><span class="key">Shift</span></td><td>ריצה</td></tr><tr><td><span class="key">עכבר</span></td><td>מצלמה (לחץ על המסך לנעילת הסמן, או גרור עם העכבר)</td></tr><tr><td><span class="key">לחצן שמאלי</span></td><td>החזק לסיבוב הקלע · שחרר לקליעה</td></tr><tr><td><span class="key">F</span> / <span class="key">לחצן ימני</span></td><td>הכאה במקל</td></tr><tr><td><span class="key">E</span></td><td>פעולה: אסוף · הצל · תפוס</td></tr><tr><td><span class="key">Space</span></td><td>התחמקות</td></tr><tr><td><span class="key">Q</span></td><td>קריאה לצאן</td></tr><tr><td><span class="key">Esc</span></td><td>תפריט</td></tr>`;
+    this.pauseEl.innerHTML = `
+      <div class="p-card">
+        <div class="p-title">DAVID</div>
+        <div class="p-sub">פרק ראשון · הרועה</div>
+        <button class="p-btn" data-a="resume">המשך</button>
+        <table class="p-keys">${keys}</table>
+        <label class="p-row">עוצמת קול <input type="range" min="0" max="1" step="0.05" value="0.9" data-a="vol"></label>
+        <label class="p-row">רגישות מצלמה <input type="range" min="0.3" max="2" step="0.1" value="1" data-a="sens"></label>
+        <button class="p-btn ghost" data-a="restart">התחל את הפרק מחדש</button>
+      </div>`;
+    this.pauseEl.querySelector('[data-a="resume"]')!.addEventListener('click', () => this.onResume?.());
+    this.pauseEl.querySelector('[data-a="restart"]')!.addEventListener('click', () => this.onRestart?.());
+    (this.pauseEl.querySelector('[data-a="vol"]') as HTMLInputElement).addEventListener('input', (e) => this.onVolume?.(Number((e.target as HTMLInputElement).value)));
+    (this.pauseEl.querySelector('[data-a="sens"]') as HTMLInputElement).addEventListener('input', (e) => this.onSensitivity?.(Number((e.target as HTMLInputElement).value)));
+  }
+
+  pause(on: boolean) {
+    this.pauseEl.classList.toggle('on', on);
+  }
+
+  endCard(on: boolean, onReplay?: () => void, onFree?: () => void) {
+    if (!on) {
+      this.endEl.classList.remove('on');
+      return;
+    }
+    this.endEl.innerHTML = `
+      <div class="e-inner">
+        <div class="e-small">סוֹף פֶּרֶק רִאשׁוֹן</div>
+        <div class="e-title">הָרֹעֶה</div>
+        <div class="e-verse">"גַּם אֶת הָאֲרִי גַּם הַדּוֹב הִכָּה עַבְדֶּךָ... ה׳ אֲשֶׁר הִצִּלַנִי מִיַּד הָאֲרִי וּמִיַּד הַדֹּב, הוּא יַצִּילֵנִי מִיַּד הַפְּלִשְׁתִּי הַזֶּה"<span>שמואל א׳ יז, לו–לז</span></div>
+        <div class="e-next"><div class="e-next-label">בַּפֶּרֶק הַבָּא</div><div class="e-next-title">הַמְּשִׁיחָה</div><div class="e-next-verse">"מַלֵּא קַרְנְךָ שֶׁמֶן וְלֵךְ אֶשְׁלָחֲךָ אֶל יִשַׁי בֵּית הַלַּחְמִי, כִּי רָאִיתִי בְּבָנָיו לִי מֶלֶךְ"<span>שמואל א׳ טז, א</span></div></div>
+        <div class="e-btns"><button class="p-btn" data-a="free">המשך לשוטט בשדה</button><button class="p-btn ghost" data-a="replay">שחק שוב</button></div>
+      </div>`;
+    this.endEl.querySelector('[data-a="replay"]')!.addEventListener('click', () => onReplay?.());
+    this.endEl.querySelector('[data-a="free"]')!.addEventListener('click', () => onFree?.());
+    this.endEl.classList.add('on');
+  }
+}
