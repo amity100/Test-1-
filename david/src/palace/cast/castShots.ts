@@ -42,7 +42,7 @@ export interface CastProbe {
   court: { saulEyes: THREE.Vector3; saulHand: THREE.Vector3; fwd: THREE.Vector3; left: THREE.Vector3; seat: THREE.Vector3 };
   portrait: { saulEyes: THREE.Vector3; saulChest: THREE.Vector3; fwd: THREE.Vector3; left: THREE.Vector3; spearTip: THREE.Vector3 };
   warriors: { lineCentre: THREE.Vector3; lineDir: THREE.Vector3; facing: THREE.Vector3; abnerStart: THREE.Vector3; abnerEnd: THREE.Vector3; saulEyes: THREE.Vector3; heads: number };
-  hall: { saulEyes: THREE.Vector3; saulChest: THREE.Vector3; corner: THREE.Vector3; hand: THREE.Vector3; fwd: THREE.Vector3; left: THREE.Vector3 };
+  hall: { saulEyes: THREE.Vector3; saulChest: THREE.Vector3; corner: THREE.Vector3; pinch: THREE.Vector3; hand: THREE.Vector3; fwd: THREE.Vector3; left: THREE.Vector3 };
 }
 
 export interface CastShots {
@@ -64,15 +64,15 @@ export function buildCastShots(p: CastProbe): CastShots {
   // ---- court: front-left of the seated king, lens a little below his eyes
   const c = p.court;
   const court = move(6.5,
-    [c.saulEyes.clone().addScaledVector(c.fwd, 3.4).addScaledVector(c.left, 1.35).add(V(0, -0.28, 0)), c.saulEyes.clone().addScaledVector(c.fwd, 2.55).addScaledVector(c.left, 0.95).add(V(0, -0.24, 0))],
-    [c.saulEyes.clone().add(V(0, -0.25, 0)), c.saulEyes.clone().add(V(0, -0.14, 0))],
-    [34, 30], 0.008);
+    [c.saulEyes.clone().addScaledVector(c.fwd, 2.7).addScaledVector(c.left, 1.05).add(V(0, -0.2, 0)), c.saulEyes.clone().addScaledVector(c.fwd, 2.2).addScaledVector(c.left, 0.8).add(V(0, -0.16, 0))],
+    [c.saulEyes.clone().add(V(0, -0.34, 0)), c.saulEyes.clone().add(V(0, -0.24, 0))],
+    [30, 27], 0.006);
   // ---- portrait: lens at chest height, 1.35 m in front, slightly to his left; looking up to the face
   const q = p.portrait;
   const portrait = move(4.8,
-    [q.saulChest.clone().addScaledVector(q.fwd, 1.55).addScaledVector(q.left, 0.62).add(V(0, -0.42, 0)), q.saulChest.clone().addScaledVector(q.fwd, 1.28).addScaledVector(q.left, 0.4).add(V(0, -0.4, 0))],
-    [q.saulEyes.clone().add(V(0, -0.1, 0)), q.saulEyes.clone().add(V(0, -0.06, 0))],
-    [32, 29], 0.004);
+    [q.saulEyes.clone().addScaledVector(q.fwd, 1.55).addScaledVector(q.left, 0.7).add(V(0, -0.34, 0)), q.saulEyes.clone().addScaledVector(q.fwd, 1.32).addScaledVector(q.left, 0.52).add(V(0, -0.31, 0))],
+    [q.saulEyes.clone().add(V(0, -0.1, 0)), q.saulEyes.clone().add(V(0, -0.08, 0))],
+    [24, 22], 0.003);
   // ---- warriors: lateral track in front of the line (slightly off the axis between the line and the king)
   const w = p.warriors;
   const side = w.lineDir;
@@ -83,22 +83,24 @@ export function buildCastShots(p: CastProbe): CastShots {
     [w.lineCentre.clone().addScaledVector(side, -1.6).add(V(0, 1.45, 0)), w.lineCentre.clone().addScaledVector(side, 1.4).add(V(0, 1.4, 0))],
     [36, 34], 0.01);
   // back to Saul: behind the line, between two men, looking to the king
-  const behind = w.lineCentre.clone().addScaledVector(w.facing, -1.6).addScaledVector(side, 0.55).add(V(0, 1.55, 0));
+  const behind = w.lineCentre.clone().addScaledVector(w.facing, -2.8).addScaledVector(side, 0.62).add(V(0, 1.78, 0));
   const warriorsSaul = move(3,
-    [behind, behind.clone().addScaledVector(w.facing, 0.45).add(V(0, -0.03, 0))],
-    [w.saulEyes.clone().add(V(0, -0.2, 0)), w.saulEyes.clone().add(V(0, -0.16, 0))],
-    [22, 19], 0.006);
+    [behind, behind.clone().addScaledVector(w.facing, 0.4).add(V(0, -0.03, 0))],
+    [w.saulEyes.clone().add(V(0, -0.3, 0)), w.saulEyes.clone().add(V(0, -0.26, 0))],
+    [20, 17], 0.006);
   // ---- hall (evening): from the front-right of the seat, lens at seated chest height, slow push
   const h = p.hall;
   const hall = move(6,
-    [h.saulEyes.clone().addScaledVector(h.fwd, 2.9).addScaledVector(h.left, -1.0).add(V(0, -0.35, 0)), h.saulEyes.clone().addScaledVector(h.fwd, 1.75).addScaledVector(h.left, -0.62).add(V(0, -0.3, 0))],
-    [h.saulEyes.clone().add(V(0, -0.22, 0)), h.saulEyes.clone().add(V(0, -0.12, 0))],
-    [30, 26], 0.004);
+    [h.saulEyes.clone().addScaledVector(h.fwd, 3.1).addScaledVector(h.left, 0.9).add(V(0, -0.42, 0)), h.saulEyes.clone().addScaledVector(h.fwd, 2.2).addScaledVector(h.left, 0.62).add(V(0, -0.38, 0))],
+    [h.saulEyes.clone().add(V(0, -0.36, 0)), h.saulEyes.clone().add(V(0, -0.3, 0))],
+    [32, 29], 0.004);
   // ---- hinge: close on the torn corner in his left hand, drifting across it
-  const rc = h.corner;
+  // look between the pinching fingers and the tzitzit corner: hand, torn edge and fringe in one frame
+  const rc = h.pinch.clone().lerp(h.corner, 0.6);
+  // from the king's left, outside the knee: the torn cloth and its fringe against the dark seat and wall
   const robeCorner = move(5.5,
-    [rc.clone().addScaledVector(h.fwd, 0.62).addScaledVector(h.left, 0.3).add(V(0, 0.22, 0)), rc.clone().addScaledVector(h.fwd, 0.5).addScaledVector(h.left, 0.12).add(V(0, 0.16, 0))],
-    [rc.clone().add(V(0, 0.02, 0)), rc.clone().add(V(0, 0.0, 0))],
-    [26, 24], 0.0015);
+    [rc.clone().addScaledVector(h.fwd, 0.42).addScaledVector(h.left, 0.62).add(V(0, 0.08, 0)), rc.clone().addScaledVector(h.fwd, 0.36).addScaledVector(h.left, 0.5).add(V(0, 0.05, 0))],
+    [rc.clone().add(V(0, 0.01, 0)), rc.clone()],
+    [34, 31], 0.0015);
   return { court, portrait, warriorsLine, warriorsSaul, hall, robeCorner };
 }

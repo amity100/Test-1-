@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { pebbleGeometry } from '../characters/DavidModel';
 
 export interface HitTarget {
   id: string;
@@ -8,15 +9,21 @@ export interface HitTarget {
   onHit: (at: THREE.Vector3, vel: THREE.Vector3) => void;
 }
 
-interface Stone { mesh: THREE.Mesh; vel: THREE.Vector3; life: number; resting: boolean; trail: THREE.Vector3[] }
+const TRAIL = 6;
+interface Stone { mesh: THREE.Mesh; vel: THREE.Vector3; spin: THREE.Vector3; life: number; resting: boolean; trail: THREE.Vector3[]; trailN: number }
 
-/** Sling stones: ballistic flight, sphere targets, terrain impacts, a faint motion trail. */
+const _a = new THREE.Vector3();
+const _b = new THREE.Vector3();
+
+/** Sling stones: ballistic flight, sphere targets, terrain impacts, a faint motion trail. No per-frame allocations. */
 export class Projectiles {
   readonly group = new THREE.Group();
   readonly targets: HitTarget[] = [];
   private stones: Stone[] = [];
-  private geo = new THREE.SphereGeometry(0.028, 10, 8);
-  private mat = new THREE.MeshStandardMaterial({ color: 0xd8cfbd, roughness: 0.55 });
+  private pool: Stone[] = [];
+  // a smooth wadi pebble, the same shape David loads into the pouch (1 Sam 17:40 "חַלֻּקֵּי אֲבָנִים")
+  private geo = pebbleGeometry(11, 1.3);
+  private mat = new THREE.MeshStandardMaterial({ color: 0xd2c6ae, roughness: 0.45 });
   private trailGeo: THREE.BufferGeometry;
   private trailPos: Float32Array;
   private trailLine: THREE.LineSegments;
@@ -32,11 +39,22 @@ export class Projectiles {
   }
 
   fire(pos: THREE.Vector3, vel: THREE.Vector3) {
-    const mesh = new THREE.Mesh(this.geo, this.mat);
-    mesh.castShadow = true;
-    mesh.position.copy(pos);
-    this.group.add(mesh);
-    this.stones.push({ mesh, vel: vel.clone(), life: 0, resting: false, trail: [pos.clone()] });
+    const s = this.pool.pop() ?? {
+      mesh: new THREE.Mesh(this.geo, this.mat), vel: new THREE.Vector3(), spin: new THREE.Vector3(), life: 0, resting: false,
+      trail: Array.from({ length: TRAIL }, () => new THREE.Vector3()), trailN: 0,
+    };
+    s.mesh.castShadow = true;
+    s.mesh.position.copy(pos);
+    s.mesh.rotation.set(Math.random() * 6, Math.random() * 6, 0);
+    s.vel.copy(vel);
+    // a slung stone spins fast about the axis across its flight (backspin from the pouch)
+    s.spin.set(-18 - Math.random() * 8, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4);
+    s.life = 0;
+    s.resting = false;
+    s.trailN = 1;
+    s.trail[0].copy(pos);
+    this.group.add(s.mesh);
+    this.stones.push(s);
   }
 
   /** Solve the launch velocity to hit `target` with speed v (low arc). Falls back to 42° max range. */
@@ -60,8 +78,7 @@ export class Projectiles {
 
   update(dt: number) {
     const g = 9.81;
-    const a = new THREE.Vector3();
-    const b = new THREE.Vector3();
+    const a = _a, b = _b;
     let seg = 0;
     for (const s of this.stones) {
       s.life += dt;
@@ -91,25 +108,36 @@ export class Projectiles {
           this.onGroundHit?.(s.mesh.position.clone(), speed);
           s.vel.multiplyScalar(0.25);
           s.vel.y = Math.abs(s.vel.y) * 0.3;
+          s.spin.multiplyScalar(0.3);
           if (speed < 4) s.resting = true;
         }
       }
-      s.mesh.rotation.x += dt * 20;
-      s.trail.push(s.mesh.position.clone());
-      if (s.trail.length > 6) s.trail.shift();
+      s.mesh.rotation.x += s.spin.x * dt;
+      s.mesh.rotation.y += s.spin.y * dt;
+      s.mesh.rotation.z += s.spin.z * dt;
+      // trail ring (oldest first)
+      if (s.trailN < TRAIL) s.trail[s.trailN++].copy(s.mesh.position);
+      else {
+        const first = s.trail[0];
+        for (let i = 0; i < TRAIL - 1; i++) s.trail[i] = s.trail[i + 1];
+        s.trail[TRAIL - 1] = first.copy(s.mesh.position);
+      }
     }
-    // fade out & remove
-    this.stones = this.stones.filter((s) => {
+    // retire old stones (back to the pool)
+    for (let i = this.stones.length - 1; i >= 0; i--) {
+      const s = this.stones[i];
       if (s.life > 6) {
         this.group.remove(s.mesh);
-        return false;
+        this.stones.splice(i, 1);
+        this.pool.push(s);
       }
-      return true;
-    });
+    }
+    const P = this.trailPos;
     for (const s of this.stones) {
       if (s.resting || s.life > 1.5) continue;
-      for (let i = 0; i < s.trail.length - 1 && seg < 64; i++, seg++) {
-        this.trailPos.set([s.trail[i].x, s.trail[i].y, s.trail[i].z, s.trail[i + 1].x, s.trail[i + 1].y, s.trail[i + 1].z], seg * 6);
+      for (let i = 0; i < s.trailN - 1 && seg < 64; i++, seg++) {
+        const p = s.trail[i], q = s.trail[i + 1], o = seg * 6;
+        P[o] = p.x; P[o + 1] = p.y; P[o + 2] = p.z; P[o + 3] = q.x; P[o + 4] = q.y; P[o + 5] = q.z;
       }
     }
     this.trailGeo.setDrawRange(0, seg * 2);

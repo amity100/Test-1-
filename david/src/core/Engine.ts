@@ -32,6 +32,13 @@ import { SUN } from '../world/Layout';
 // ~180 MB of multisample storage and a resolve per frame and does nothing for sub-pixel shading (strand hair,
 // fur shells, grass, specular glints); TAA resolves all of it (hair dither converges) for 2 history targets.
 // quality.msaa stays the value hair / fur materials key on (GroomOptions.msaa): 0 on every tier now.
+// Post-chain GPU memory (render targets only; three allocates a target on first use):
+//   desktop-high 2560x1440: 136 MB (+49 MB once DoF has been used)   — was 248 MB with MSAA 4
+//   desktop-medium 1920x1080: 76 MB (+28 MB with DoF)                — was 92 MB with MSAA 2
+//   mobile-high 780x1688: 49 MB (+18 MB with DoF)                     — was 28 MB (FXAA)
+//   mobile-low 585x1266: 15 MB (FXAA, no DoF)                         — unchanged
+// Post passes per frame: atmosphere, TAA, bloom (2 x mips - 1), finish, resolve = 15 draws on desktop-high
+// (+4 while DoF is on); the TAA pass reads 24 texels per pixel ('hq') / 16 ('lq').
 // Pixel ratio = min(devicePixelRatio, maxPixelRatio), lowered only if the backing store would exceed
 // maxPixels (e.g. an iPhone 14, 390x844 CSS px @3x: mobile-high renders 780x1688 = 1.32 MP, i.e. 2x CSS
 // pixels; mobile-low 585x1266). The pixel ratio is chosen ONCE (detection + warm-up benchmark behind the
@@ -540,7 +547,29 @@ export interface ViewSwitchOptions {
 // Engine
 // =====================================================================================================
 
-/** Owns renderer, scene, camera, the whole environment and the post-processing stack. */
+/**
+ * Owns renderer, scene, camera, the whole environment and the post-processing stack.
+ *
+ * RENDERING / CINEMATIC API (for the intro and gameplay; details on each member):
+ *   engine.render(dt, gdt)                          per frame: world, or the active view (setView)
+ *   engine.post                                      the ONE PostFX (fx/PostFX.ts):
+ *     .setDoF({ enabled, focusDistance, fStop, focalLength, maxBlur, target })   rack focus: animate per frame
+ *     .setLetterbox(2.39 | null, seconds)          animated bars; .letterboxBars = current bar height (fraction)
+ *     .setFilmLook(0..1, seconds)                  amber bloom tint, halation, grain (desktop), + contrast
+ *     .crossfade(seconds, { through? })            dissolve from the last shown frame (or dip through a colour)
+ *     .grade.uniforms.uFade / .look.uFadeColor     fade to a colour; uRed / uDesat (gameplay effects)
+ *   engine.setView(view: ViewSpec, { crossfade?, through? })     render another world (Saul's house at Gibeah)
+ *   engine.restoreWorldView({ crossfade?, through? })           back to Bethlehem (exposure, haze, sun restored)
+ *   engine.resetTemporal({ crossfade? })             EVERY camera cut: no TAA ghost of the previous shot
+ *   engine.crossfade(seconds, { through? })          same as post.crossfade
+ *   engine.precompileView(view, poses)               during loading: compile + pre-render a view (no hitch / no
+ *                                                    black or half-lit first frame at the cut)
+ *   engine.precompile(scene?, camera?)               compile materials for this chain (default: the world)
+ *   engine.view                                      active ViewSpec or null (world)
+ *   fx/views.ts palaceView(palace)                   the ViewSpec for src/palace PalaceSet
+ * TIERS: engine.quality (see the table at the top of this file): taa 'hq' | 'lq' | false, dofSamples 43/22/16/0,
+ *   msaa 0 everywhere (hair / fur key their coverage mode on quality.msaa: pass it to GroomOptions.msaa).
+ */
 export class Engine {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
@@ -638,7 +667,7 @@ export class Engine {
       try {
         this.sky?.capture(this.scene);
         // render-target contents are gone: start the temporal history (and any dissolve) from scratch
-        this.post?.resetHistory();
+        this.post?.contextRestored();
         for (const h of this.restoreHooks) h();
       } catch (err) {
         console.error('[engine] restore failed', err);
@@ -976,6 +1005,8 @@ export class Engine {
 
   /** Block until the GPU finished the frame (1-pixel read of the default framebuffer). */
   private gpuSync() {
+    // read the canvas (RGBA8): reading a half-float target with UNSIGNED_BYTE is an invalid operation
+    this.renderer.setRenderTarget(null);
     const gl = this.renderer.getContext();
     gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, this.syncPx);
   }

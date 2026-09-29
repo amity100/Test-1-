@@ -41,8 +41,13 @@ async function boot() {
   const cast = await PalaceCast.create(palace, { quality: qn, msaa: q.msaa, beats, onProgress: (f, l) => (hud.textContent = `cast ${(f * 100).toFixed(0)}% ${l}`) });
   const tCast = performance.now();
   const floatTargets = renderer.extensions.has('EXT_color_buffer_float') || renderer.extensions.has('EXT_color_buffer_half_float');
+  // ?taa=0 for quick iteration renders (FXAA instead); the game's desktop tiers use TAA
+  const taaParam = params.get('taa');
+  const qx = q as unknown as { taa?: false | 'hq' | 'lq'; dofSamples?: number };
+  const taa = taaParam === '0' ? false : qx.taa ?? false;
   const post = palace.createPost(camera, {
-    msaa: q.msaa, bloom: q.bloom, godRaySamples: q.godRaySamples, aa: q.aa, sharpen: q.sharpen, filmFx: q.filmFx,
+    ...({ taa, dofSamples: qx.dofSamples ?? 0 } as object),
+    msaa: q.msaa, bloom: q.bloom, godRaySamples: q.godRaySamples, aa: taa ? q.aa : 'fxaa', sharpen: q.sharpen, filmFx: q.filmFx,
     bloomScale: q.bloomScale, bloomMips: q.bloomMips, colorType: floatTargets ? THREE.HalfFloatType : THREE.UnsignedByteType,
   });
   const size = renderer.getDrawingBufferSize(new THREE.Vector2());

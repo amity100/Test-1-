@@ -73,6 +73,9 @@ export class CastActor {
   /** planted spear butt (world) — while set and spearMode === 'hand', the grip solver keeps the spear on it */
   readonly plant = new THREE.Vector3();
   spearMode: 'hand' | 'hidden' = 'hand';
+  /** when set, the left hand is re-aimed so its grip axis (socket +Y) points along this world direction (bows) */
+  leftAim: THREE.Vector3 | null = null;
+  private readonly handCorrL = new THREE.Quaternion();
   /** seated: pelvis height offset applied through hipsY (see sitOn) */
   seatedHipsY: number | null = null;
   /** extra additive pose layer (performances), in proxy Euler radians */
@@ -122,6 +125,36 @@ export class CastActor {
       const m = o as THREE.Mesh;
       if (m.isMesh) m.receiveShadow = true;
     });
+    this.collectDetail();
+  }
+
+  /** meshes that cast shadows (restored by setDetail) and face parts that vanish at a distance */
+  readonly shadowMeshes: THREE.Object3D[] = [];
+  private readonly faceParts: THREE.Object3D[] = [];
+  private detail = 2;
+  get detailLevel() {
+    return this.detail;
+  }
+
+  private collectDetail() {
+    this.shadowMeshes.length = 0;
+    this.root.traverse((o) => {
+      if ((o as THREE.Mesh).isMesh && o.castShadow) this.shadowMeshes.push(o);
+    });
+    const h = this.human;
+    for (const o of [h.eyes.L.cornea, h.eyes.R.cornea, h.lashes, h.tearLines, h.teeth]) if (o) this.faceParts.push(o);
+  }
+
+  /**
+   * Distance LOD: 2 = full, 1 = far (> ~28 m: no face details, no shadow casting), 0 = very far (> ~70 m: no strand
+   * hair either). Only toggles visibility / castShadow (no recompiles).
+   */
+  setDetail(level: number) {
+    if (level === this.detail) return;
+    this.detail = level;
+    for (const o of this.faceParts) o.visible = level >= 2;
+    for (const o of this.shadowMeshes) o.castShadow = level >= 2;
+    this.groom?.setVisible(level >= 1);
   }
 
   /** Load, dress and groom one actor (the heavy part: ~0.3-3 s each). */
@@ -139,9 +172,8 @@ export class CastActor {
     let headband: Headband | undefined;
     const ring = human.sockets.crownAnchor.children.find((c) => c.name === 'headRing');
     if (spec.role === 'saul') headband = { height: 0, radius: [rx + 0.0078, rz + 0.0078], width: 0.017, tilt: 0.008 };
-    else if (spec.role === 'servant') headband = { height: 0.006, radius: [rx + 0.001, rz + 0.001], width: 0.05, tilt: 0.012 };
-    else if (ring) headband = { height: 0, radius: [rx + 0.007, rz + 0.007], width: spec.role === 'abner' ? 0.022 : 0.02 };
-    const style: GroomStyleSpec = spec.role === 'saul' ? 'saul' : { kind: 'man', seed: spec.seed, beard: spec.beard, headband: !!headband };
+    else if (ring && spec.role !== 'servant') headband = { height: 0, radius: [rx + 0.007, rz + 0.007], width: spec.role === 'abner' ? 0.022 : 0.02 };
+    const style: GroomStyleSpec = spec.role === 'saul' ? 'saul' : { kind: 'man', seed: spec.seed, beard: spec.beard, headband: !!headband && spec.role !== 'servant' };
     let groom: Groom | null = null;
     try {
       groom = await createGroom(human, style, { quality: spec.hairQuality ?? tier, msaa, headband, density: spec.hairDensity ?? 1 });
@@ -292,7 +324,16 @@ export class CastActor {
     const spear = this.spear;
     const solve = spear && this.spearMode === 'hand';
     if (solve) j.hdR.quaternion.premultiply(this.handCorr);
+    if (this.leftAim) j.hdL.quaternion.premultiply(this.handCorrL);
     human.update(dt, camera, vh);
+    if (this.leftAim) {
+      human.sockets.handGripL.getWorldQuaternion(_q);
+      const cur = _v.copy(UP).applyQuaternion(_q);
+      _qc.setFromUnitVectors(cur, _v2.copy(this.leftAim).normalize());
+      const pq = j.hdL.parent!.getWorldQuaternion(_q2);
+      _q.copy(pq).invert().multiply(_qc).multiply(pq);
+      this.handCorrL.premultiply(_q).normalize();
+    }
     if (solve) {
       const sock = human.sockets.handGripR;
       sock.getWorldPosition(_v);

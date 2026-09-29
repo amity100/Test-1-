@@ -8,7 +8,10 @@ import { Projectiles, raySphere } from './Projectiles';
 import type { GameAudio } from './GameAudio';
 import { LAYOUT } from '../world/Layout';
 
-/** David: third-person controller, sling (spin → release), staff strikes, dodge, health. */
+/**
+ * David: third-person controller, sling (spin → release), staff strikes, dodge, health.
+ * The realistic model must be loaded first: `await DavidModel.preload(engine.quality.name, { msaa })` (main.ts).
+ */
 export class Player {
   readonly model: DavidModel;
   readonly pos = new THREE.Vector3();
@@ -38,11 +41,18 @@ export class Player {
   outOfBounds = 0;
   throws = 0;
 
+  private readonly _camR = new THREE.Vector3();
+  private readonly _wish = new THREE.Vector3();
+  private readonly _mv = new THREE.Vector2();
+  private readonly _fwd = new THREE.Vector3();
+
   constructor(private engine: Engine, private projectiles: Projectiles, private audio: GameAudio) {
     this.model = new DavidModel(engine.tex);
     this.model.ground = (x, z) => engine.terrain.heightAt(x, z);
+    this.model.camera = engine.camera;
     this.model.attachSling(engine.dynamic);
     engine.scene.add(this.model.root);
+    engine.enforceTextureBudget(this.model.root);
     this.model.onFootstep = (_side, run) => {
       this.audio.at(run ? 'footstepRun' : 'footstep', this.pos, run ? 0.55 : 0.4);
     };
@@ -53,6 +63,7 @@ export class Player {
     this.heading = heading;
     this.speed = 0;
     this.syncModel();
+    this.model.resetDynamics();
   }
 
   private syncModel() {
@@ -62,6 +73,9 @@ export class Player {
 
   get forward() {
     return new THREE.Vector3(Math.sin(this.heading), 0, Math.cos(this.heading));
+  }
+  private fwdInto(out: THREE.Vector3) {
+    return out.set(Math.sin(this.heading), 0, Math.cos(this.heading));
   }
 
   /** Scripted movement (cinematics / QTE): walk toward a point. Returns true when arrived. */
@@ -100,9 +114,9 @@ export class Player {
     this.invuln = Math.max(0, this.invuln - dt);
     // ------------------------------------------------ movement
     const camF = cam.forward();
-    const camR = new THREE.Vector3(-camF.z, 0, camF.x);
-    const mv = this.controlEnabled ? input.move : new THREE.Vector2();
-    const wish = new THREE.Vector3().addScaledVector(camF, mv.y).addScaledVector(camR, mv.x);
+    const camR = this._camR.set(-camF.z, 0, camF.x);
+    const mv = this.controlEnabled ? input.move : this._mv.set(0, 0);
+    const wish = this._wish.set(0, 0, 0).addScaledVector(camF, mv.y).addScaledVector(camR, mv.x);
     const mag = Math.min(1, wish.length());
     let target = 0;
     if (mag > 0.05) {
@@ -120,7 +134,7 @@ export class Player {
       } else if (mag > 0.05) {
         this.heading = dampAngle(this.heading, Math.atan2(wish.x, wish.z), 9, dt);
       }
-      const moveDir = this.aiming && mag > 0.05 ? wish : this.forward;
+      const moveDir = this.aiming && mag > 0.05 ? wish : this.fwdInto(this._fwd);
       if (this.speed > 0.01) this.pos.addScaledVector(moveDir, this.speed * dt);
     }
     // dodge
@@ -194,8 +208,10 @@ export class Player {
     }
     // ------------------------------------------------ dodge
     if (input.take('dodge') && this.controlEnabled && this.canDodge && this.dodgeT < 0 && m.actionName !== 'dodge') {
-      this.dodgeDir.copy(mag > 0.05 ? wish : this.forward.multiplyScalar(-1)).setY(0).normalize();
+      this.dodgeDir.copy(mag > 0.05 ? wish : this.fwdInto(this._fwd).multiplyScalar(-1)).setY(0).normalize();
       this.dodgeT = 0;
+      // lean toward the side of the dodge (character space: +x = his left)
+      m.dodgeSide = this.dodgeDir.x * Math.cos(this.heading) - this.dodgeDir.z * Math.sin(this.heading);
       this.invuln = Math.max(this.invuln, 0.45);
       m.play('dodge');
       this.audio.sfx('dodge', { volume: 0.8 });
@@ -203,6 +219,7 @@ export class Player {
     }
 
     // ------------------------------------------------ animate
+    m.viewportHeight = this.engine.renderer.domElement.height;
     m.update(dt);
     const aimDir = cam.forward();
     m.updateSling(dt, aimDir);

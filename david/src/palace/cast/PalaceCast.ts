@@ -58,6 +58,9 @@ interface Staging {
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
+const _q = new THREE.Quaternion();
+const _q2 = new THREE.Quaternion();
+const _up = new THREE.Vector3(0, 1, 0);
 
 export class PalaceCast {
   /** everything the cast adds to set.scene (actors + character lights) */
@@ -90,27 +93,28 @@ export class PalaceCast {
     const needWarriors = beats.includes('warriors');
     const needCourt = beats.some((b) => b === 'gibeah' || b === 'saul-court' || b === 'saul-portrait' || b === 'warriors');
     // --- who is in the cast (seeds chosen for varied, credible faces; ages / beards vary)
-    const menHair: Tier = tier === 'high' ? 'medium' : 'low';
-    const bg = tier === 'high' ? undefined : 'base';
+    // the court's hair at the low strand tier everywhere (they are never in a close-up); the king's at the full tier
+    const menHair: Tier = 'low';
+    const bg = 'base' as const;
     const specs: ActorSpec[] = [];
     if (needCourt || needWarriors) specs.push({ name: 'abner', role: 'abner', seed: 11, beard: 'full', hairQuality: menHair });
     if (needCourt) {
       specs.push({ name: 'bearer', role: 'bearer', seed: 4, beard: 'none', hairQuality: menHair, geometry: bg });
-      specs.push({ name: 'servantJug', role: 'servant', seed: 2, beard: 'short', hairQuality: menHair, geometry: bg, hairDensity: 0.8 });
-      if (tier !== 'low') specs.push({ name: 'servantBowl', role: 'servant', seed: 7, beard: 'full', hairQuality: menHair, geometry: bg, hairDensity: 0.8 });
-      specs.push({ name: 'guardA', role: 'guard', seed: 3, beard: 'short', hairQuality: menHair, geometry: 'base', hairDensity: 0.8 });
-      specs.push({ name: 'guardB', role: 'guard', seed: 9, beard: 'full', hairQuality: menHair, geometry: 'base', hairDensity: 0.8 });
+      specs.push({ name: 'servantJug', role: 'servant', seed: 2, beard: 'short', hairQuality: menHair, geometry: bg, hairDensity: 0.7 });
+      if (tier !== 'low') specs.push({ name: 'servantBowl', role: 'servant', seed: 7, beard: 'full', hairQuality: menHair, geometry: bg, hairDensity: 0.7 });
+      specs.push({ name: 'guardA', role: 'guard', seed: 3, beard: 'short', hairQuality: menHair, geometry: 'base', hairDensity: 0.6 });
+      specs.push({ name: 'guardB', role: 'guard', seed: 9, beard: 'full', hairQuality: menHair, geometry: 'base', hairDensity: 0.6 });
     }
     if (needWarriors) {
-      specs.push({ name: 'archerA', role: 'archer', seed: 5, beard: 'short', hairQuality: menHair, geometry: 'base', hairDensity: 0.7 });
-      specs.push({ name: 'slingerA', role: 'slinger', seed: 8, beard: 'none', hairQuality: menHair, geometry: 'base', hairDensity: 0.7 });
-      if (tier !== 'low') specs.push({ name: 'archerB', role: 'archer', seed: 12, beard: 'full', hairQuality: menHair, geometry: 'base', hairDensity: 0.7 });
-      if (tier === 'high') specs.push({ name: 'spearman', role: 'guard', seed: 14, beard: 'short', hairQuality: menHair, geometry: 'base', hairDensity: 0.7 });
+      specs.push({ name: 'archerA', role: 'archer', seed: 5, beard: 'short', hairQuality: menHair, geometry: 'base', hairDensity: 0.55 });
+      specs.push({ name: 'slingerA', role: 'slinger', seed: 8, beard: 'none', hairQuality: menHair, geometry: 'base', hairDensity: 0.55 });
+      if (tier !== 'low') specs.push({ name: 'archerB', role: 'archer', seed: 12, beard: 'full', hairQuality: menHair, geometry: 'base', hairDensity: 0.55 });
+      if (tier === 'high') specs.push({ name: 'spearman', role: 'guard', seed: 14, beard: 'short', hairQuality: menHair, geometry: 'base', hairDensity: 0.55 });
     }
     const n = specs.length + 1;
     prog(0.02, 'שָׁאוּל');
     const kitP = loadPropKit(tier);
-    const saul = await CastActor.create({ name: 'saul', role: 'saul', seed: 1 }, tier, msaa);
+    const saul = await CastActor.create({ name: 'saul', role: 'saul', seed: 1, hairDensity: tier === 'high' ? 0.8 : 1 }, tier, msaa);
     const others: CastActor[] = [];
     let abner: CastActor | undefined;
     for (let i = 0; i < specs.length; i++) {
@@ -147,8 +151,34 @@ export class PalaceCast {
     this.layout = this.makeLayout();
     // Saul: brooding weight, not madness — heavy lids, a faint downward pull of the mouth, brows a little lowered
     const saul = actors.saul;
+    saul.human.root.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || !/meil|sash/i.test(m.name)) return;
+      for (const mat of Array.isArray(m.material) ? m.material : [m.material]) {
+        mat.polygonOffset = true;
+        mat.polygonOffsetFactor = -2;
+        mat.polygonOffsetUnits = -24;
+      }
+    });
     saul.human.rig.lipSeal = 0.55;
     saul.headFollow = 0.55;
+    if (saul.groom) saul.groom.shadowFraction = tier === 'high' ? 0.3 : 0.25;
+    for (const a of this.all) if (a !== saul && a.groom) {
+      a.groom.shadowFraction = 0.2;
+      a.groom.lodFullPx = 420;
+    }
+    // phones: the court casts no shadows (halves its draw calls) and drops the tiny face parts
+    if (tier === 'low') {
+      for (const a of this.all) {
+        if (a === saul) continue;
+        a.root.traverse((o) => {
+          if ((o as THREE.Mesh).isMesh) o.castShadow = false;
+        });
+        for (const m of [a.human.tearLines, a.human.teeth]) if (m) m.visible = false;
+        a.shadowMeshes.length = 0;
+        if (a.groom) a.groom.shadowFraction = 0;
+      }
+    }
   }
 
   /** Hand props (jug, bowl, bow, quiver, sling, shields) and the robe corner. */
@@ -175,10 +205,16 @@ export class PalaceCast {
         a.setFingers('both', 'cup');
         a.hideSpear();
       } else if (a.role === 'servant') a.hideSpear();
+      if (a.role === 'servant') {
+        const ring = s.crownAnchor.children.find((c) => c.name === 'headRing');
+        if (ring) ring.visible = false;
+      }
       if (a.role === 'archer') {
         const bow = makeBow(kit);
         s.handGripL.add(bow);
         bow.rotation.set(0, Math.PI / 2, 0);
+        // the bow held upright at the side, the upper limb tilted a little forward
+        a.leftAim = new THREE.Vector3(0, 1, 0);
         a.props.bow = bow;
         a.setFingers('L', 'grip');
         const quiver = makeQuiver(kit);
@@ -211,8 +247,7 @@ export class PalaceCast {
     // the robe corner in the king's left hand (shown in the hall beats)
     const saul = this.actors.saul;
     saul.human.sockets.palmL.add(this.robe.group);
-    this.robe.group.position.set(0.0, -0.035, 0.035);
-    this.robe.group.rotation.set(0.2, 0.4, -1.2);
+    this.robe.group.position.set(0.018, 0.01, 0.0);
     this.robe.group.visible = false;
     saul.props.robeCorner = this.robe.group;
   }
@@ -230,9 +265,35 @@ export class PalaceCast {
       return p;
     };
     const faceTo = (from: THREE.Vector3, to: THREE.Vector3) => Math.atan2(to.x - from.x, to.z - from.z);
-    const kingFeetY = gibeahHeight(ts.x + fwd.x * 0.5, ts.z + fwd.z * 0.5);
+    // the seat is a long limestone block: find its front edge and the sitting height there (raycast the rocks),
+    // so the king sits on the front of the stone with his shins free in front of it
+    const rocks: THREE.Object3D[] = [];
+    this.set.vegetation.group.traverse((o) => {
+      if (/^palace:rocks/.test(o.name)) rocks.push(o);
+    });
+    const ray = new THREE.Raycaster();
+    let front = 0.55, sitY = ts.y;
+    for (let d = 0; d <= 1.6; d += 0.04) {
+      const o = ts.clone().addScaledVector(fwd, d).add(new THREE.Vector3(0, 0.6, 0));
+      ray.set(o, new THREE.Vector3(0, -1, 0));
+      ray.far = 1.2;
+      const hit = ray.intersectObjects(rocks, false)[0];
+      if (!hit || hit.point.y < ts.y - 0.1) {
+        front = d;
+        break;
+      }
+    }
+    const sitD = Math.max(0, front - 0.2);
+    {
+      const o = ts.clone().addScaledVector(fwd, sitD).add(new THREE.Vector3(0, 0.6, 0));
+      ray.set(o, new THREE.Vector3(0, -1, 0));
+      const hit = ray.intersectObjects(rocks, false)[0];
+      if (hit && Math.abs(hit.point.y - ts.y) < 0.15) sitY = hit.point.y;
+    }
+    const sit = ts.clone().addScaledVector(fwd, sitD).setY(sitY);
+    const kingFeetY = gibeahHeight(sit.x + fwd.x * 0.55, sit.z + fwd.z * 0.55);
     const line = { f: 9.0, spacing: 1.25 };
-    return { ts, yaw, fwd, left, P, faceTo, kingFeetY, line };
+    return { ts, yaw, fwd, left, P, faceTo, kingFeetY, line, sit, front };
   }
 
   // ---------------------------------------------------------------------------------------------- staging
@@ -245,10 +306,15 @@ export class PalaceCast {
     const inPalace = beat !== null && PALACE_BEATS.includes(beat);
     this.beat = inPalace ? beat : null;
     this.beatTime = t;
-    this.root.visible = inPalace;
+    // cast.root (and its lights) always stay in the scene: the light count must never change, or three.js
+    // recompiles every program of the palace scene; hidden actors and zero-intensity lights instead
     this.lights.apply(null);
     this.abnerWalk = null;
-    if (!inPalace || !beat) return;
+    if (!inPalace || !beat) {
+      for (const x of this.all) x.setVisible(false);
+      this.robe.group.visible = false;
+      return;
+    }
     const set = this.set;
     if (this.autoTod && typeof set.setTimeOfDay === 'function') {
       const want = beat === 'saul-hall' || beat === 'hinge' ? 'evening' : 'morning';
@@ -279,10 +345,10 @@ export class PalaceCast {
       set.anchors.spearRest.object.visible = false;
       saul.setVisible(true);
       saul.spear!.object.visible = true;
-      saul.setFingers('R', 'grip');
+      saul.setFingers('R', 'fist');
       saul.setFingers('L', 'relaxed');
       if (beat === 'saul-portrait') {
-        const feet = L.P(0.62, -0.05);
+        const feet = L.P(L.front + 0.45, -0.05);
         saul.stand(feet, L.yaw + 0.12);
         saul.setPose('kingStandSpear');
         const r = _v.set(Math.sin(L.yaw + 0.12), 0, Math.cos(L.yaw + 0.12));
@@ -290,10 +356,10 @@ export class PalaceCast {
         saul.plantSpear(feet.clone().addScaledVector(right, 0.36).addScaledVector(r, 0.14).add(new THREE.Vector3(0, -0.06, 0)));
         saul.lookTarget = L.P(14, 2.5, 2.1);
       } else {
-        saul.sitOn(L.ts, L.kingFeetY, L.yaw);
+        saul.sitOn(L.sit, L.kingFeetY, L.yaw);
         saul.setPose('kingSeatedSpear');
         const r = L.fwd, right = _v2.set(-L.left.x, 0, -L.left.z);
-        const plant = L.ts.clone().addScaledVector(r, 0.34).addScaledVector(right, 0.5);
+        const plant = L.sit.clone().addScaledVector(r, 0.42).addScaledVector(right, 0.4);
         plant.y = gibeahHeight(plant.x, plant.z) - 0.06;
         saul.plantSpear(plant);
         saul.lookTarget = saulSeatedLook;
@@ -310,7 +376,7 @@ export class PalaceCast {
         x.lookTarget = look ?? null;
         return x;
       };
-      const kingHead = L.ts.clone().add(new THREE.Vector3(0, 0.95, 0));
+      const kingHead = L.sit.clone().add(new THREE.Vector3(0, 0.95, 0));
       const plantAt = (x: CastActor | null, f: number, l: number) => {
         if (!x || x.spearMode === 'hidden') return;
         const yawv = x.root.rotation.y;
@@ -357,6 +423,7 @@ export class PalaceCast {
           x.stand(m.pos.clone().setY(gibeahHeight(m.pos.x, m.pos.z)), m.yaw);
           x.setPose(x.role === 'archer' ? 'archer' : x.role === 'slinger' ? 'slinger' : 'guardSpearShield');
           x.setVisible(true);
+          if (x.leftAim) x.leftAim.set(Math.sin(m.yaw) * 0.25, 1, Math.cos(m.yaw) * 0.25);
           if (x.name === 'spearman') plantAt(x, 0, 0);
         });
       } else if (beat === 'warriors') {
@@ -369,6 +436,7 @@ export class PalaceCast {
           x.setPose(x.role === 'archer' ? 'archer' : x.role === 'slinger' ? 'slinger' : 'guardSpearShield');
           x.setVisible(true);
           x.lookTarget = null;
+          if (x.leftAim) x.leftAim.set(Math.sin(x.root.rotation.y) * 0.25, 1, Math.cos(x.root.rotation.y) * 0.25);
           if (x.name === 'spearman') plantAt(x, 0, 0);
         });
         // guards close the line at both ends
@@ -412,12 +480,19 @@ export class PalaceCast {
       saul.setFingers('R', 'relaxed');
       saul.setFingers('L', 'cup');
       this.robe.group.visible = true;
-      saul.lookTarget = this.robeWorld(new THREE.Vector3()).add(new THREE.Vector3(0.05, -0.02, 0.35));
+      this.hangRobe();
+      saul.lookTarget = this.robeWorld(new THREE.Vector3()).add(new THREE.Vector3(0, 0.1, 0));
       saul.idle = 0.6;
       this.saulFace('hall');
       this.lightHall(beat);
     }
-    for (const x of this.all) if (x.visible) x.settle(beat === 'hinge' || beat === 'saul-hall' ? 30 : 20);
+    for (const x of this.all) if (x.visible) x.settle(beat === 'hinge' || beat === 'saul-hall' ? 16 : 12);
+    if (!exterior) {
+      this.hangRobe();
+      saul.lookTarget = this.robeWorld(new THREE.Vector3()).add(new THREE.Vector3(0, 0.12, 0));
+      saul.settle(10);
+      this.hangRobe();
+    }
     void kingEyes;
   }
 
@@ -468,14 +543,19 @@ export class PalaceCast {
     const saul = this.actors.saul;
     saul.root.updateMatrixWorld(true);
     const L = this.layout;
-    const eyes = beat === 'saul-portrait' ? L.P(0.62, -0.05, 1.83) : L.ts.clone().add(new THREE.Vector3(0, 0.88, 0));
+    const eyes = beat === 'saul-portrait' ? L.P(0.62, -0.05, 1.83) : L.sit.clone().add(new THREE.Vector3(0, 0.88, 0));
     // key: a soft warm reflector from the sun side, in front-left (the tamarisk canopy shades the seat)
     const sunDir = new THREE.Vector3(Math.sin(THREE.MathUtils.degToRad(100)), 0.22, Math.cos(THREE.MathUtils.degToRad(100))).normalize();
-    const keyPos = eyes.clone().addScaledVector(L.fwd, 2.2).addScaledVector(L.left, 1.4).add(new THREE.Vector3(0, 0.35, 0)).addScaledVector(sunDir, 0.6);
-    const rimPos = eyes.clone().addScaledVector(L.fwd, -2.2).addScaledVector(L.left, -1.6).add(new THREE.Vector3(0, 1.0, 0));
+    const portrait = beat === 'saul-portrait';
+    const keyPos = portrait
+      ? eyes.clone().addScaledVector(L.fwd, 1.9).addScaledVector(L.left, -1.1).add(new THREE.Vector3(0, 0.55, 0))
+      : eyes.clone().addScaledVector(L.fwd, 2.2).addScaledVector(L.left, 1.4).add(new THREE.Vector3(0, 0.35, 0)).addScaledVector(sunDir, 0.6);
+    const rimPos = portrait
+      ? eyes.clone().addScaledVector(L.fwd, -1.6).addScaledVector(L.left, 1.3).add(new THREE.Vector3(0, 0.9, 0))
+      : eyes.clone().addScaledVector(L.fwd, -2.2).addScaledVector(L.left, -1.6).add(new THREE.Vector3(0, 1.0, 0));
     const r: LightRig = {
       key: { pos: keyPos, target: eyes.clone().add(new THREE.Vector3(0, -0.25, 0)), color: 0xffd8a8, intensity: beat === 'warriors' ? 7 : 10, angle: 0.42, distance: 9 },
-      rim: { pos: rimPos, target: eyes.clone().add(new THREE.Vector3(0, -0.3, 0)), color: 0xffc890, intensity: 9, angle: 0.4, distance: 8 },
+      rim: { pos: rimPos, target: eyes.clone().add(new THREE.Vector3(0, -0.3, 0)), color: 0xffc890, intensity: portrait ? 14 : 9, angle: 0.4, distance: 8 },
       fill: { pos: eyes.clone().addScaledVector(L.fwd, 1.3).add(new THREE.Vector3(0, -0.9, 0)), color: 0xffe0bc, intensity: 1.2, distance: 3.5 },
     };
     this.lights.flicker = 0;
@@ -504,8 +584,30 @@ export class PalaceCast {
     if (!this.beat) return;
     this.beatTime += dt;
     if (this.abnerWalk) this.placeAbner(this.beatTime);
+    if (camera) {
+      // distance LOD (with 10 % hysteresis): tiny figures on the walls / at the gate in the aerial shots
+      for (const a of this.all) {
+        if (!a.visible) continue;
+        const d = camera.position.distanceTo(a.root.position);
+        const cur = a.detailLevel;
+        const far1 = cur >= 2 ? 30 : 27, far0 = cur >= 1 ? 75 : 68;
+        a.setDetail(a === this.actors.saul ? Math.max(1, d > far1 ? 1 : 2) : d > far0 ? 0 : d > far1 ? 1 : 2);
+      }
+    }
     for (const a of this.all) a.update(dt, camera, viewportHeight);
+    if (this.robe.group.visible) this.hangRobe();
     this.lights.update(dt);
+  }
+
+  /** The torn corner hangs from the fingers: keep it upright in world space, facing the king's forward. */
+  private hangRobe() {
+    const g = this.robe.group;
+    const parent = g.parent!;
+    parent.updateWorldMatrix(true, false);
+    parent.getWorldQuaternion(_q).invert();
+    _q2.setFromAxisAngle(_up, this.actors.saul.root.rotation.y + 0.35);
+    g.quaternion.copy(_q).multiply(_q2);
+    g.updateMatrixWorld(true);
   }
 
   // ---------------------------------------------------------------------------------------------- camera helpers
@@ -541,10 +643,10 @@ export class PalaceCast {
     const saul = this.actors.saul;
     const v = () => new THREE.Vector3();
     const p: CastProbe = {
-      court: { saulEyes: v(), saulHand: v(), fwd: L.fwd.clone(), left: L.left.clone(), seat: L.ts.clone() },
+      court: { saulEyes: v(), saulHand: v(), fwd: L.fwd.clone(), left: L.left.clone(), seat: L.sit.clone() },
       portrait: { saulEyes: v(), saulChest: v(), fwd: L.fwd.clone(), left: L.left.clone(), spearTip: v() },
       warriors: { lineCentre: L.P(L.line.f, 0), lineDir: L.left.clone(), facing: L.fwd.clone().negate(), abnerStart: v(), abnerEnd: v(), saulEyes: v(), heads: 0 },
-      hall: { saulEyes: v(), saulChest: v(), corner: v(), hand: v(), fwd: new THREE.Vector3(0, 0, 1), left: new THREE.Vector3(1, 0, 0) },
+      hall: { saulEyes: v(), saulChest: v(), corner: v(), pinch: v(), hand: v(), fwd: new THREE.Vector3(0, 0, 1), left: new THREE.Vector3(1, 0, 0) },
     };
     const tod = this.autoTod;
     this.autoTod = false; // probing must not rebuild the set's sky
@@ -560,6 +662,7 @@ export class PalaceCast {
     this.focus('saulFace', p.hall.saulEyes);
     this.focus('saul', p.hall.saulChest);
     this.focus('robeCorner', p.hall.corner);
+    this.robe.group.getWorldPosition(p.hall.pinch);
     saul.human.sockets.palmL.getWorldPosition(p.hall.hand);
     this.autoTod = tod;
     this.shots = buildCastShots(p);

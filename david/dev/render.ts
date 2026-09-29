@@ -11,7 +11,9 @@ import { shared } from '../src/core/Shared';
 import { pose, PoseMixer } from '../src/characters/Rig';
 import { HumanModel } from '../src/characters/human/HumanModel';
 import { createGroom, type Groom } from '../src/characters/hair';
+import { dressDavid, type Outfit } from '../src/characters/wardrobe';
 import { BearActor } from '../src/gameplay/BearActor';
+import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Colliders } from '../src/core/Colliders';
 import type { Terrain } from '../src/world/Terrain';
 import rockAlbedo from '../src/assets/textures/rock_albedo.jpg';
@@ -72,7 +74,7 @@ const groundMat = new THREE.MeshStandardMaterial({ map: ra, normalMap: rn, color
 const ground = new THREE.Mesh(gGeo, groundMat);
 ground.receiveShadow = true;
 scene.add(ground);
-const rockGeo = new THREE.IcosahedronGeometry(1, 3);
+const rockGeo = mergeVertices(new THREE.IcosahedronGeometry(1, 5).deleteAttribute('normal').deleteAttribute('uv'));
 {
   const p = rockGeo.attributes.position as THREE.BufferAttribute;
   for (let i = 0; i < p.count; i++) {
@@ -118,8 +120,12 @@ const IDLE = pose({
 
 let david: HumanModel | null = null;
 let groom: Groom | null = null;
+let outfit: Outfit | null = null;
+const still = new THREE.Vector3();
 let bear: BearActor | null = null;
 let bearMove = false;
+let followBear = false;
+const lastBear = new THREE.Vector3();
 const wind = new THREE.Vector3(1.0, 0, 0.4);
 
 /** Proof of the one-line integration change in HairMaterial.ts: add temporal.uDitherOffset to the IGN input. */
@@ -158,6 +164,10 @@ async function load() {
     david.rig.lookTarget = null;
     david.setPupil(0.2);
     for (let i = 0; i < 30; i++) david.update(1 / 30, camera, H);
+    if (P.get('dress') !== '0') {
+      outfit = await dressDavid(david, { quality: q });
+      david.root.position.y = outfit.groundOffset;
+    }
     groom = await createGroom(david, 'david', { quality: q, msaa, simulate: true });
     if (P.get('tdither') === '1') patchTemporalDither(groom.root);
   }
@@ -176,6 +186,9 @@ const views: Record<string, { pos: [number, number, number]; look: [number, numb
   hair: { pos: [-0.62, 1.74, 0.72], look: [0.0, 1.66, 0.0], fov: 18 },
   bear: { pos: [4.4, 1.25, 0.9], look: [2.6, 0.75, -1.5], fov: 26 },
   wide: { pos: [1.2, 1.55, 5.6], look: [0.8, 1.0, -1.0], fov: 38 },
+  // portrait (phone) framings
+  facep: { pos: [0.55, 1.66, 1.2], look: [0.0, 1.6, 0.0], fov: 40 },
+  bearp: { pos: [4.6, 1.3, 1.2], look: [2.6, 0.75, -1.5], fov: 48 },
 };
 
 function shot(name: string) {
@@ -195,11 +208,18 @@ function frame(dt: number) {
   shared.uCamPos.value.copy(camera.position);
   if (david) {
     david.update(dt, camera, H);
+    outfit?.update(dt, { velocity: still, wind });
     groom?.update(dt, wind);
   }
   if (bear) {
+    lastBear.copy(bear.pos);
     if (bearMove) bear.moveTo(new THREE.Vector3(-40, 0, -2.0), 1.6, dt);
     bear.update(dt);
+    if (followBear) {
+      // third-person style: the camera travels with the subject (screen-static subject, moving background)
+      camera.position.add(lastBear.sub(bear.pos).negate());
+      camera.updateMatrixWorld();
+    }
   }
   sky.update(camera, new THREE.Vector3(0.5, 0, -1));
   post.render(dt);
@@ -237,6 +257,8 @@ win.__r = {
   film: (a: number, s = 1) => post.setFilmLook(a, s),
   fade: (s: number, through?: number) => post.crossfade(s, through === undefined ? {} : { through }),
   move: (on: boolean) => (bearMove = on),
+  follow: (on: boolean) => (followBear = on),
+  dual: (on: boolean) => { if (post.taa) post.taa.uniforms.uDual.value = on ? 1 : 0; },
   bearPos: () => bear?.pos.toArray(),
   stats: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, mem: (post.bytes / 1048576).toFixed(1) + ' MB', taa: post.taaEnabled, groom: groom?.stats.strands }),
   post,

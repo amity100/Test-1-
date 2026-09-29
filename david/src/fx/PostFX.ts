@@ -30,7 +30,8 @@ export type { DoFSettings } from './DoF';
  *   .resetHistory()                        forget the TAA history — call on every camera cut
  *   .setTAAEnabled(on)                     runtime A/B (only when constructed with q.taa)
  *   .setDoF({ enabled, focusDistance, fStop, focalLength, maxBlur, target })   partial updates, animatable per frame
- *                                          (rack focus: animate focusDistance or set target to an Object3D / point)
+ *                                          (animate focusDistance yourself, or set target to an Object3D / point)
+ *   .rackFocus(distance, seconds = 1.5)     eased focus pull from the current focus (log-distance)
  *   .dofAvailable                          false on tiers without DoF (settings are then ignored: always sharp)
  *   .setLetterbox(ratio | null, seconds = 1.2)   animated cinema bars, e.g. 2.39; bars are capped at 10 % of the
  *                                          height each on portrait screens; `.letterboxBars` = current bar height
@@ -47,6 +48,13 @@ export type { DoFSettings } from './DoF';
  *   .look                                  uWhiteBalance, uShadowTint, uFilm, uBloomTint, uHalation, uFadeColor
  *   .bloom                                 strength / radius / threshold / knee (null on tiers without bloom)
  *   .setGodRaySamples(n), .setBloomEnabled(on), .bytes (GPU memory of all targets), .dispose()
+ *   .sceneTarget                           the HDR scene target (bind it to pre-compile materials for this chain)
+ *   .contextRestored()                     after a WebGL context restore (Engine calls it)
+ *
+ * Dithered materials: add `temporal.uDitherOffset` (fx/Temporal.ts) to the pixel coordinate of the dither hash so
+ * the pattern changes every frame under TAA and is averaged away (hair strands; see Temporal.ts).
+ * DoF strength is physical (thin lens): a 35 mm-equivalent wide shot barely blurs its background; for a portrait
+ * look use a longer lens (smaller fov, or `focalLength: 85`), a lower fStop (1.2-2) and maxBlur 0.02-0.03.
  *
  * Mobile safety (kept from the previous chain): the HDR target is RGBA16F; a glancing sun glint on a smooth
  * surface overflows half float (-> Inf -> NaN in ACES); the atmosphere pass scrubs NaN/Inf/negatives and clamps
@@ -215,9 +223,11 @@ export function createGradeUniforms(): Record<string, THREE.IUniform> {
 export function createLookUniforms() {
   return {
     /** scene-referred white balance multiplier (before the tone curve) */
-    uWhiteBalance: { value: new THREE.Vector3(1.0, 0.975, 0.925) },
-    /** added to the darkest tones (display-referred) */
-    uShadowTint: { value: new THREE.Vector3(0.009, 0.003, -0.008) },
+    // measured against the reference (mean chromaticity per luminance band): the game read yellow-green
+    // (mid-tones r 0.44 / g 0.35 / b 0.21), the reference amber (r 0.46 / g 0.33 / b 0.21)
+    uWhiteBalance: { value: new THREE.Vector3(1.08, 0.965, 0.93) },
+    /** added to the darkest tones (display-referred): warm brown shadows (reference: r 0.55 / g 0.31 / b 0.14) */
+    uShadowTint: { value: new THREE.Vector3(0.012, -0.003, -0.006) },
     /** 0..1 cinematic film look (animated by setFilmLook) */
     uFilm: { value: 0 },
     /** bloom colour at full film look (gameplay bloom is neutral) */
@@ -590,14 +600,19 @@ export class PostFX {
   private readonly sceneRT: THREE.WebGLRenderTarget;
   private readonly bufA: THREE.WebGLRenderTarget;
   private readonly bufB: THREE.WebGLRenderTarget;
-  private fadeRT: THREE.WebGLRenderTarget | null = null;
+  /** crossfade captures (double-buffered: a new capture must not write the texture the resolve samples) */
+  private readonly fadeRTs: (THREE.WebGLRenderTarget | null)[] = [null, null];
+  private fadeIdx = 0;
   private lastLdr: THREE.WebGLRenderTarget | null = null;
+  /** B has been rendered to (GPU storage is allocated lazily by three on first use) */
+  private usedB = false;
   private taaOn: boolean;
   private width = 1;
   private height = 1;
   private readonly letter = { from: 0, ratio: null as number | null, t: 1, dur: 0, cur: 0 };
   private readonly film = { from: 0, to: 0, t: 1, dur: 0 };
   private readonly fade = { t: 1, dur: 0, through: false, active: false };
+  private readonly rack = { from: 1, to: 1, t: 1, dur: 0 };
 
   constructor(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.PerspectiveCamera, skyCube: THREE.Texture, q: PostQuality) {
     this.renderer = renderer;
@@ -659,10 +674,11 @@ export class PostFX {
     this.resolve.setSize(w, h);
     this.lastLdr = null;
     this.endFade();
-    if (this.fadeRT) {
-      this.fadeRT.dispose();
-      this.fadeRT = null;
+    for (let i = 0; i < 2; i++) {
+      this.fadeRTs[i]?.dispose();
+      this.fadeRTs[i] = null;
     }
+    this.resolve.uniforms.tFade.value = null;
   }
 
   /** Current size in drawing-buffer pixels. */
@@ -702,6 +718,13 @@ export class PostFX {
     this.taa?.reset();
   }
 
+  /** After a WebGL context restore: every target's contents are gone (history, captured crossfade frame). */
+  contextRestored() {
+    this.resetHistory();
+    this.endFade();
+    this.lastLdr = null;
+  }
+
   /** Temporal AA on/off at runtime (A/B, governor). No effect on tiers built without TAA. */
   setTAAEnabled(on: boolean) {
     const want = on && !!this.taa;
@@ -725,9 +748,31 @@ export class PostFX {
     Object.assign(this.dofSettings, s);
   }
 
+  /**
+   * Rack focus: pull the focus from where it is now to `distance` (m) over `seconds` of render dt, eased and
+   * interpolated in log-distance (how a focus puller's hand moves). Clears `target`. Enable DoF separately.
+   */
+  rackFocus(distance: number, seconds = 1.5) {
+    const R = this.rack;
+    R.from = Math.max(0.05, this.dofFocus);
+    R.to = Math.max(0.05, distance);
+    R.t = 0;
+    R.dur = Math.max(0, seconds);
+    this.dofSettings.target = null;
+    if (R.dur === 0) this.dofSettings.focusDistance = R.to;
+  }
+
+  private updateRack(dt: number) {
+    const R = this.rack;
+    if (R.t >= R.dur) return;
+    R.t += dt;
+    const k = smooth01(R.t / R.dur);
+    this.dofSettings.focusDistance = Math.exp(Math.log(R.from) + (Math.log(R.to) - Math.log(R.from)) * k);
+  }
+
   /** Focus distance used by the last rendered frame (m) — e.g. to start a rack focus from where it is. */
   get dofFocus(): number {
-    return this.dof ? this.dof.lastFocus : this.dofSettings.focusDistance;
+    return this.dofSettings.target && this.dof ? this.dof.lastFocus : this.dofSettings.focusDistance;
   }
 
   /**
@@ -766,22 +811,21 @@ export class PostFX {
    */
   crossfade(seconds: number, opts: { through?: THREE.ColorRepresentation } = {}): boolean {
     if (!this.lastLdr || seconds <= 0) return false;
-    if (!this.fadeRT) {
-      this.fadeRT = new THREE.WebGLRenderTarget(this.width, this.height, {
+    const next = this.fadeIdx ^ 1;
+    let target = this.fadeRTs[next];
+    if (!target) {
+      target = this.fadeRTs[next] = new THREE.WebGLRenderTarget(this.width, this.height, {
         type: THREE.UnsignedByteType, depthBuffer: false, stencilBuffer: false, generateMipmaps: false,
         minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
       });
-      this.fadeRT.texture.name = 'PostFX.fade';
+      target.texture.name = 'PostFX.fade' + next;
     }
-    // keep the outgoing frame exactly as it was shown (sharpened / graded, bars included); no grain / fade on it
+    // keep the outgoing frame exactly as it was shown (sharpened, graded, bars and any running dissolve included:
+    // the resolve still samples the other capture, so a crossfade started during a crossfade stays continuous)
     const u = this.resolve.uniforms;
-    const fm = u.uFadeMix.value as number, tm = u.uThroughMix.value as number;
-    u.uFadeMix.value = 0;
-    u.uThroughMix.value = 0;
-    this.resolve.render(this.renderer, this.lastLdr.texture, this.fadeRT);
-    u.uFadeMix.value = fm;
-    u.uThroughMix.value = tm;
-    u.tFade.value = this.fadeRT.texture;
+    this.resolve.render(this.renderer, this.lastLdr.texture, target);
+    this.fadeIdx = next;
+    u.tFade.value = target.texture;
     const F = this.fade;
     F.t = 0;
     F.dur = seconds;
@@ -856,6 +900,7 @@ export class PostFX {
     this.updateFade(dt);
     this.updateLetterbox(dt);
     this.updateFilm(dt);
+    this.updateRack(dt);
     const cam = this.camera;
     const taa = this.taaOn ? this.taa : null;
     if (taa) {
@@ -889,7 +934,10 @@ export class PostFX {
     const bloom = this.bloom && this.bloom.enabled ? this.bloom : null;
     if (bloom) bloom.compute(r, hdr, this.width, this.height);
     // 6. finish -> the free buffer
-    const ldr = hdr === this.bufA.texture ? this.bufB : this.bufA;
+    // finish target: whichever full-res buffer is free. Without TAA / DoF the scene target's colour is free by
+    // now (depth is no longer read; MSAA-less tiers only), so B is touched — and allocated — only for DoF.
+    const ldr = hdr !== this.bufA.texture ? this.bufA : this.sceneRT.samples === 0 ? this.sceneRT : this.bufB;
+    if (ldr === this.bufB || hdr === this.bufB.texture) this.usedB = true;
     this.grade.render(r, hdr, this.width, this.height, bloom, ldr);
     this.lastLdr = ldr;
     // 7. resolve -> screen
@@ -905,6 +953,7 @@ export class PostFX {
     const r = this.renderer;
     if (this.dof) {
       this.dof.render(r, this.bufA.texture, this.sceneRT.depthTexture!, this.camera, this.bufB);
+      this.usedB = true;
       this.lastLdr = null; // B may have held the last frame
     }
   }
@@ -915,11 +964,11 @@ export class PostFX {
     const bpp = this.sceneRT.texture.type === THREE.UnsignedByteType ? 4 : 8;
     let b = px * bpp + px * 4; // scene colour + depth texture
     if (this.sceneRT.samples > 0) b += px * this.sceneRT.samples * (bpp + 4);
-    b += px * bpp * 2; // A, B
+    b += px * bpp * (this.usedB ? 2 : 1); // A (+ B once depth of field has been used)
     if (this.taa) b += this.taa.bytes;
-    if (this.dof) b += this.dof.bytes;
+    if (this.dof && this.dof.used) b += this.dof.bytes;
     if (this.bloom) b += this.bloom.bytes;
-    if (this.fadeRT) b += px * 4;
+    for (const f of this.fadeRTs) if (f) b += px * 4;
     return b;
   }
 
@@ -934,6 +983,6 @@ export class PostFX {
     this.sceneRT.dispose();
     this.bufA.dispose();
     this.bufB.dispose();
-    this.fadeRT?.dispose();
+    for (const f of this.fadeRTs) f?.dispose();
   }
 }

@@ -24,8 +24,8 @@ export const CAST_POSES: Record<CastPoseName, Pose> = {
     hips: [0, 0, 0], spine: [-0.03, 0, 0], chest: [-0.05, 0.02, 0], neck: [0.05, -0.02, 0], head: [0.09, 0.05, 0.0],
     thL: [-1.42, 0.1, 0.16], shinL: [1.3, 0, 0], ftL: [0.12, -0.08, 0],
     thR: [-1.38, -0.12, -0.2], shinR: [1.15, 0, 0], ftR: [0.2, 0.1, 0],
-    uaR: [-0.42, 0.1, -0.42], faR: [-1.28, 0, 0], hdR: [0.1, 0.35, -0.2],
-    uaL: [-0.32, 0, 0.16], faL: [-0.85, 0.2, 0], hdL: [0.35, 0, -0.1],
+    uaR: [-0.52, 0.18, -0.3], faR: [-1.32, 0, 0], hdR: [0.1, 0.35, -0.2],
+    uaL: [-0.36, 0, 0.14], faL: [-0.8, 0.25, 0], hdL: [0.35, 0, -0.1],
   }),
   // alone in the hall at evening: the same seat, the weight of Samuel's words (15:28, 15:35): shoulders a little
   // forward, forearms on the thighs, head lowered, the left hand holding the torn corner of a robe on the knee
@@ -34,7 +34,7 @@ export const CAST_POSES: Record<CastPoseName, Pose> = {
     thL: [-1.46, 0.08, 0.18], shinL: [1.3, 0, 0], ftL: [0.15, -0.05, 0],
     thR: [-1.4, -0.1, -0.2], shinR: [1.18, 0, 0], ftR: [0.2, 0.08, 0],
     uaR: [-0.52, 0.2, -0.22], faR: [-0.95, 0.35, 0], hdR: [0.25, 0.4, 0.2],
-    uaL: [-0.62, -0.2, 0.14], faL: [-1.0, -0.3, 0], hdL: [0.3, -0.5, 0.35],
+    uaL: [-0.42, 0.05, 0.3], faL: [-1.05, 0.1, 0], hdL: [0.25, -0.2, 0.1],
   }),
   // standing among his men, the spear grounded at his right side (portrait): a head and shoulders above all (9:2)
   kingStandSpear: pose({
@@ -48,7 +48,7 @@ export const CAST_POSES: Record<CastPoseName, Pose> = {
   guardSpearShield: pose({
     hips: [0, -0.04, -0.015], chest: [-0.02, 0.03, 0], head: [0.02, -0.04, 0],
     uaR: [-0.28, 0.1, -0.3], faR: [-1.1, 0, 0], hdR: [0.05, 0.3, -0.2],
-    uaL: [-0.35, 0, 0.18], faL: [-1.35, -0.25, 0], hdL: [0.0, 0.0, 0.0],
+    uaL: [0.02, 0, 0.17], faL: [-0.32, 0, 0], hdL: [0.0, 0.0, 0.0],
     thL: [0.04, 0, 0.08], shinL: [0.05, 0, 0], thR: [-0.03, 0, -0.07], shinR: [0.03, 0, 0], ftR: [0.03, -0.12, 0],
   }),
   guardAtEase: pose({
@@ -86,7 +86,7 @@ export const CAST_POSES: Record<CastPoseName, Pose> = {
   bearer: pose({
     hips: [0, -0.03, 0], chest: [-0.02, 0, 0], head: [0.06, -0.1, 0],
     uaR: [-0.1, 0, -0.1], faR: [-0.4, 0, 0], hdR: [0.05, 0, 0],
-    uaL: [-0.35, 0, 0.18], faL: [-1.35, -0.25, 0], hdL: [0.0, 0.0, 0.0],
+    uaL: [0.02, 0, 0.17], faL: [-0.3, 0, 0], hdL: [0.0, 0.0, 0.0],
     thL: [0.03, 0, 0.06], shinL: [0.04, 0, 0], thR: [-0.02, 0, -0.06], shinR: [0.03, 0, 0],
   }),
   // Benjaminite archer (1 Chr 12:2): strung bow lowered in the left hand, quiver on the back

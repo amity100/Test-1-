@@ -5,6 +5,7 @@ import { Input } from './core/Input';
 import { UI } from './ui/UI';
 import { Flock } from './characters/Flock';
 import { Player } from './gameplay/Player';
+import { DavidModel } from './characters/DavidModel';
 import { BearActor } from './gameplay/BearActor';
 import { Props } from './gameplay/Props';
 import { Projectiles } from './gameplay/Projectiles';
@@ -109,6 +110,9 @@ async function boot() {
   });
   engine.scene.add(flock.group);
   flock.onSound = (kind, pos, vol) => audio.at(kind, pos, vol * 0.8, 1, 70);
+  // David: realistic human + strand hair + fitted costume (async; the Player constructs him synchronously)
+  ui.setLoading(0.97, 'דָּוִד יוֹצֵא אֶל הַצֹּאן…');
+  await DavidModel.preload(q, { msaa: engine.quality.msaa });
   const player = new Player(engine, projectiles, audio);
   const bear = new BearActor(terrain, engine.colliders, engine.scene);
   const cam = new CameraRig(engine.camera, ground);

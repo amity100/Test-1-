@@ -135,6 +135,8 @@ export class DoFPass {
   readonly samples: number;
   /** focus distance actually used by the last rendered frame (m) */
   lastFocus = 10;
+  /** rendered at least once (its half-resolution targets are allocated by three on first use) */
+  used = false;
   private readonly half: THREE.WebGLRenderTarget[];
   private readonly quad = new FullScreenQuad();
   private readonly coc: Record<string, THREE.IUniform>;
@@ -210,6 +212,7 @@ export class DoFPass {
 
   /** src (HDR) + depth -> dst (full resolution). */
   render(renderer: THREE.WebGLRenderer, src: THREE.Texture, depth: THREE.Texture, camera: THREE.PerspectiveCamera, dst: THREE.WebGLRenderTarget) {
+    this.used = true;
     this.lens(camera);
     const [a, b, c] = this.half;
     const hw = a.width, hh = a.height;

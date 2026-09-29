@@ -34,6 +34,24 @@ implementations of published techniques:
 | Dual-filter bloom (13-tap down-sample with Karis average, 3x3 tent up-sample) | J. Jimenez, *Next Generation Post Processing in Call of Duty: Advanced Warfare* (SIGGRAPH 2014) | technique (no code used) | `src/fx/Bloom.ts` |
 | ACES / AgX / Neutral tone-mapping curves | three.js `tonemapping_pars_fragment` chunk (included at build time) | MIT (three.js) | `FinishPass` in `src/fx/PostFX.ts` |
 
+### Temporal AA, depth of field and cinematic post (phase 2) — `src/fx/TAA.ts`, `src/fx/DoF.ts`, `src/fx/Temporal.ts`, `src/fx/views.ts`, `src/fx/PostFX.ts`, `src/core/Engine.ts`
+
+Maintained by *render*. No third-party files, assets or code: own GLSL / TypeScript implementations of published techniques.
+
+| Technique | Origin | License of the reference | Where |
+|---|---|---|---|
+| Temporal anti-aliasing: Halton(2,3) sub-pixel jitter, depth reprojection with the previous view-projection, tone-mapped (Karis) accumulation, luminance-weighted feedback | B. Karis, *High Quality Temporal Supersampling* (SIGGRAPH 2014); L. Pedersen, *Temporal Reprojection Anti-Aliasing in INSIDE* (GDC 2016) | techniques (no code used; the INSIDE reference code is MIT) | `src/fx/TAA.ts` |
+| Neighbourhood variance clipping in YCoCg, clip toward the box centre | M. Salvi, *An Excursion in Temporal Supersampling* (GDC 2016); Pedersen 2016 | techniques | `src/fx/TAA.ts` |
+| 5-tap bicubic Catmull-Rom history filter | J. Jimenez et al., *Filmic SMAA* (SIGGRAPH 2016) | technique | `src/fx/TAA.ts` |
+| Interleaved gradient noise, animated per frame (god-ray start offsets, `temporal.uDitherOffset` for dithered materials) | J. Jimenez, *Next Generation Post Processing in Call of Duty: Advanced Warfare* (SIGGRAPH 2014) | formula | `src/fx/Temporal.ts`, `src/fx/PostFX.ts` |
+| Gather bokeh depth of field (CoC prefilter, ring-kernel background / foreground gather, tent postfilter, CoC composite) | K. Takahashi, Unity *Post-processing Stack v2* depth of field (design) | technique (the reference code is MIT; none copied) | `src/fx/DoF.ts` |
+| Thin-lens circle of confusion | standard optics (f² / (N (s − f)) · (z − s) / z) | — | `src/fx/DoF.ts` |
+
+Jitter-aware current-frame reconstruction (Gaussian fit of a Blackman-Harris window, after Karis 2014), the depth
+disocclusion test (nearest linear depth kept in the history's alpha), the screen-static second history candidate,
+letterbox, crossfade / dip-to-colour, film look (amber bloom tint, halation, mid-tone grain), golden-hour white balance
+and the engine's view switching (`Engine.setView`) are our own code.
+
 The quality tiers, warm-up benchmark, texture-budget resampling, spatial chunking of instanced scenery
 (`src/core/Engine.ts`), the frame watchdog (`src/fx/Watchdog.ts`) and the artifact packager
 (`tools/package_artifact.py`, Python standard library only) are our own code. Test tooling (Playwright)
@@ -158,3 +176,30 @@ rest-pose skin already credited above; nothing is downloaded or baked from exter
 | Hair shading model | own GLSL implementation of the published far-field Marschner model in the approximation of B. Karis, "Physically Based Hair Shading in Unreal" (SIGGRAPH 2016 course notes), after S. Marschner et al., "Light Scattering from Human Hair Fibers" (SIGGRAPH 2003) and Kajiya & Kay (1989) — algorithms from papers, no code copied | our own work | `HairMaterial.ts` |
 | Interleaved gradient noise (dithered coverage) | formula from J. Jimenez, "Next Generation Post Processing in Call of Duty: Advanced Warfare" (SIGGRAPH 2014) | formula (not code) | `HairMaterial.ts` |
 | Sky / sun (`SkySystem`), post chain (`PostFX`), limestone ground textures in the harness | reused from `src/world/`, `src/fx/`, `src/assets/textures/` | our own work | `dev/hair.ts` only |
+
+## Saul's court (cast of the intro at Gibeah) — `src/palace/cast/`, `dev/court*`
+
+Maintained by *court*. No third-party files, assets or code. The actors are the project's MakeHuman (CC0) bodies,
+strand grooms and wardrobe outfits credited above; everything added here is our own procedural work:
+
+| Item | Origin | License | Where used |
+|---|---|---|---|
+| Court staging, poses, idle life, spear grip solver, character lights, cast camera shots | our own code (`PalaceCast.ts`, `CastActor.ts`, `castPoses.ts`, `castLights.ts`, `castShots.ts`) | our own work (project license) | intro beats `gibeah` … `hinge` |
+| Hand props: jug and carinated bowl (Iron Age red-slipped ware), strung self bow, quiver with reed arrows, hanging sling, the torn robe corner with tzitzit and a tekhelet thread | procedural geometry (`castProps.ts`); textures reused from `src/assets/palace/clay_*` and `src/assets/wardrobe/*` (both generated in this project) | our own work | `PalaceCast` |
+
+Textual basis (not assets): `docs/sources.md` 3.1–3.6 — 22:6 (seated under the tamarisk, spear in hand, servants
+standing about him), 22:17 (runners), 14:50 / 14:52 (Abner, the mighty men), 1 Chr 12:2 and Judg 20:15–16 (Benjaminite
+archers and slingers), 14:1 (the armour-bearer), 20:25 (the seat by the wall), 15:27–28 (the torn robe corner: by the
+plain sense of Rashi, Radak and Metzudat David the corner of SAMUEL's robe, torn in Saul's grip), 9:2 / 10:23 (a head
+and shoulders above the people); nothing from after 16:13 (no evil spirit, no madness).
+
+## David — assembly and animation (`src/characters/DavidModel.ts`, `Rig.ts`, `Rope.ts`, `src/gameplay/Player.ts`, `dev/david.*`)
+
+- No new third-party assets or code. David is assembled at load time from the teammates' realistic human
+  (MakeHuman 1.1 CC0 data, see "Realistic humans"), the procedural strand hair ("Hair") and the fitted costume and
+  props ("Wardrobe"); the pebbles in the sling pouch and in his hand are procedural.
+- All motion is procedural and authored for this project: gait from foot trajectories with analytic two-bone IK on the
+  terrain, keyed clips for the sling, staff, stone gathering, calling, dodging, the beard grab, the lamb carry and the
+  thanksgiving, a position-based (verlet) simulation of the two sling cords, and parallel-transport tubes for the cords.
+  Method references only (no code copied): Jakobsen, "Advanced Character Physics" (GDC 2001) for the verlet cords;
+  standard gait biomechanics (heel rocker / toe-off, pelvic rotation and list) for the walk and run.

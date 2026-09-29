@@ -252,46 +252,50 @@ export function makeHangingSling(kit: CastPropKit, length = 0.5): THREE.Group {
 
 /**
  * The torn corner of a robe — a prophet's me'il of undyed dark wool (1 Sam 15:27) with its tzitzit and a tekhelet
- * thread (Num 15:38). About 0.34 x 0.26 m, draped: one straight woven hem along x, one along z meeting at the
- * corner (the tzitzit hang from it), the third side torn and frayed. Origin = where the fingers hold it.
+ * thread (Num 15:38), about 0.36 m long, held pinched in the hand and hanging down in soft folds: the left edge and
+ * the bottom edge are the woven hems meeting at the corner (the tzitzit hang from it), the right edge is the tear,
+ * frayed. Origin = the pinch point in the fingers; the cloth hangs along -Y (keep the group upright in world space).
  */
 export function makeRobeCorner(kit: CastPropKit): { group: THREE.Group; corner: THREE.Object3D } {
   const g = new THREE.Group();
   g.name = 'robeCorner';
-  const nu = kit.tier === 'low' ? 14 : 30, nv = kit.tier === 'low' ? 12 : 24;
-  const Wd = 0.34, Hd = 0.28;
+  const ns = kit.tier === 'low' ? 14 : 30, na = kit.tier === 'low' ? 12 : 26;
+  const Lc = 0.27;
   const pos: number[] = [], uv: number[] = [], gd: number[] = [], idx: number[] = [];
-  // torn edge: a jagged diagonal from (Wd, 0) to (0, Hd) in the cloth plane (corner at the origin)
   let r = 91;
   const rnd = () => ((r = (r * 16807) % 2147483647) / 2147483647);
+  // jagged tear along the right edge
   const jag: number[] = [];
-  for (let i = 0; i <= nu; i++) jag.push((rnd() - 0.5) * 0.028 + Math.sin(i * 1.7) * 0.01);
+  for (let i = 0; i <= ns; i++) jag.push((rnd() - 0.5) * 0.05 + Math.sin(i * 1.9) * 0.03);
+  const width = (sN: number) => 0.018 + 0.15 * Math.pow(sN, 0.75);
   const keep: boolean[] = [];
-  for (let j = 0; j <= nv; j++) {
-    for (let i = 0; i <= nu; i++) {
-      const u = (i / nu) * Wd, v = (j / nv) * Hd;
-      const torn = u / Wd + v / Hd - 1 - jag[i] * 3; // > 0 outside the tear
-      keep.push(torn < 0.02);
-      // drape: the corner hangs down from the fingers (at u~0.12, v~0.1), the rest falls over the hand
-      const hx = u - 0.12, hv = v - 0.1;
-      const d = Math.hypot(hx, hv);
-      const sag = -0.55 * Math.max(0, d - 0.03) * Math.max(0, d - 0.03) * 4;
-      const fold = 0.012 * Math.sin(u * 38 + v * 9) + 0.008 * Math.sin(v * 51 - u * 13);
-      const x = hx, z = hv * 0.55 + fold, y = sag + fold * 0.4 - Math.max(0, -hv) * 0.4;
+  for (let i = 0; i <= ns; i++) {
+    const sN = i / ns;
+    const w = width(sN);
+    for (let j = 0; j <= na; j++) {
+      const a = (j / na) * 2 - 1; // -1 = left hem .. +1 = torn edge
+      const tear = a - (0.82 + jag[i] * (0.4 + sN));
+      keep.push(tear < 0.04);
+      // folds radiating from the pinch; the weight pulls the lower part straight down
+      // deep folds radiating from the pinch (the cloth gathers where the fingers hold it)
+      const fold = Math.sin(a * Math.PI * 2.2 + sN * 1.3) * 0.042 * Math.pow(sN, 0.6) + Math.sin(a * 6.3 + 1.3) * 0.01 * sN + 0.02 * Math.sin(sN * 5 + a * 2) * sN;
+      const x = a * w * 0.7 + Math.sin(sN * 3.1) * 0.01;
+      const y = -sN * Lc * (1 - 0.06 * a * a) - 0.012 * Math.max(0, -a) * sN;
+      const z = fold + 0.03 * sN * sN;
       pos.push(x, y, z);
+      // cloth-space uv in metres (hem along the left edge and the bottom)
+      const u = (a + 1) * 0.5 * w * 2, v = (1 - sN) * Lc;
       uv.push(u, v);
-      // gdata (wardrobe cloth shader): x = distance from the torn edge (frays: edgeMask.x = 1), y = distance from
-      // the two woven hems meeting at the corner (the bands are measured from it), z = grime
-      const tornDist = Math.max(0, -torn) * Math.min(Wd, Hd) * 0.7;
-      gd.push(tornDist, Math.min(u, v), 0.15, 0);
+      const tornDist = Math.max(0, -tear) * w;
+      gd.push(tornDist, Math.min(u, v), 0.12, 0);
     }
   }
-  const row = nu + 1;
-  for (let j = 0; j < nv; j++) {
-    for (let i = 0; i < nu; i++) {
-      const a = j * row + i, b = a + 1, c = a + row, d = c + 1;
-      if (keep[a] && keep[b] && keep[c]) idx.push(a, c, b);
-      if (keep[b] && keep[d] && keep[c]) idx.push(b, c, d);
+  const row = na + 1;
+  for (let i = 0; i < ns; i++) {
+    for (let j = 0; j < na; j++) {
+      const a0 = i * row + j, b0 = a0 + 1, c0 = a0 + row, d0 = c0 + 1;
+      if (keep[a0] && keep[b0] && keep[c0]) idx.push(a0, c0, b0);
+      if (keep[b0] && keep[d0] && keep[c0]) idx.push(b0, c0, d0);
     }
   }
   const geo = new THREE.BufferGeometry();
@@ -302,61 +306,60 @@ export function makeRobeCorner(kit: CastPropKit): { group: THREE.Group; corner: 
   geo.computeVertexNormals();
   // undyed dark wool (natural brown-black fleece), a narrow woven band along the hems, fraying at the torn edge
   const cloth = clothMaterial({
-    tier: kit.tier, tex: kit.weave, tile: 0.1, dye: 0x5b4a3c, roughness: 0.92, sheen: 0.55, transmit: 0.25,
-    hem: [0.25, 0.04, 0.022, 0.95], edgeMask: [1, 0], palette: [0x2e2620, 0xb49a78, 0x2b3f8c, 0xd8c08a],
-    bands: [{ from: 0.014, to: 0.026, motif: 0, pal: 0, edge: 'upper' }, { from: 0.032, to: 0.037, motif: 0, pal: 1, edge: 'upper' }],
+    tier: kit.tier, tex: kit.weave, tile: 0.09, dye: 0x6a5846, roughness: 0.92, sheen: 0.6, transmit: 0.3,
+    hem: [0.2, 0.04, 0.02, 0.95], edgeMask: [1, 0], palette: [0x4a3c30, 0xb49a78, 0x2b3f8c, 0xd8c08a],
+    bands: [{ from: 0.0, to: 0.006, motif: 0, pal: 0, edge: 'upper' }],
   });
   g.add(mesh(kit, geo, cloth));
-  // frayed torn edge: loose threads along the tear
+  // frayed torn edge: loose threads hanging from the tear
   const threads: number[] = [];
-  const nth = kit.tier === 'low' ? 18 : 46;
-  for (let k = 0; k < nth; k++) {
-    const t = rnd();
-    const i = Math.round(t * nu);
-    const u = t * Wd;
-    const v = Math.max(0, (1 - u / Wd + jag[i] * 3) * Hd - 0.004);
-    const j = Math.min(nv, Math.round((v / Hd) * nv));
-    const b = (j * row + i) * 3;
-    const x = pos[b], y = pos[b + 1], z = pos[b + 2];
-    const len = 0.008 + rnd() * 0.02;
-    threads.push(x, y, z, x + (rnd() - 0.3) * len, y - len * (0.6 + rnd()), z + (rnd() - 0.2) * len);
+  for (let i = 1; i <= ns; i++) {
+    for (let k = 0; k < (kit.tier === 'low' ? 1 : 3); k++) {
+      const sN = i / ns;
+      const a = 0.82 + jag[i] * (0.4 + sN) - 0.02;
+      const w = width(sN);
+      const x = a * w * 0.7 + Math.sin(sN * 3.1) * 0.01, y = -sN * Lc * (1 - 0.06 * a * a), z = Math.sin(a * Math.PI * 2.2 + sN * 1.3) * 0.03 * Math.pow(sN, 0.6) + 0.03 * sN * sN;
+      const len = 0.006 + rnd() * 0.022;
+      threads.push(x, y - rnd() * 0.01, z, x + len * (0.3 + rnd() * 0.5), y - len * (0.4 + rnd()), z + (rnd() - 0.5) * len);
+    }
   }
   const tg = new THREE.BufferGeometry();
   tg.setAttribute('position', new THREE.Float32BufferAttribute(threads, 3));
-  const tl = new THREE.LineSegments(track(kit, tg), track(kit, new THREE.LineBasicMaterial({ color: 0x4a3c30 })));
-  g.add(tl);
-  // the corner (u = 0, v = 0) with its tzitzit: 4 cords folded = 8 threads, one of tekhelet; a wound section (gedil)
-  const cIdx = 0;
+  g.add(new THREE.LineSegments(track(kit, tg), track(kit, new THREE.LineBasicMaterial({ color: 0x5a4a3a }))));
+  // the corner: bottom-left (a = -1, s = 1)
+  const cI = ns * row + 0;
   const corner = new THREE.Object3D();
   corner.name = 'robeCornerTip';
-  corner.position.set(pos[cIdx * 3], pos[cIdx * 3 + 1], pos[cIdx * 3 + 2]);
+  corner.position.set(pos[cI * 3], pos[cI * 3 + 1] + 0.01, pos[cI * 3 + 2]);
   g.add(corner);
   const white = solidMaterial({ tier: kit.tier, tex: kit.rope, color: 0xe8e0d0, roughness: 0.9, repeat: [1, 80] });
   const blue = solidMaterial({ tier: kit.tier, tex: kit.rope, color: 0x2b3f8c, roughness: 0.85, repeat: [1, 80] });
-  const gedil = new THREE.CylinderGeometry(0.0042, 0.0038, 0.045, 8, 6);
+  const gedil = new THREE.CylinderGeometry(0.0042, 0.0036, 0.04, 8, 8);
   const gp = gedil.getAttribute('position') as THREE.BufferAttribute;
   for (let i = 0; i < gp.count; i++) {
     const y = gp.getY(i);
-    const k = 1 + 0.18 * Math.abs(Math.sin(y * 420)); // wound ridges
+    const k = 1 + 0.2 * Math.abs(Math.sin(y * 480)); // wound ridges
     gp.setXYZ(i, gp.getX(i) * k, y, gp.getZ(i) * k);
   }
   gedil.computeVertexNormals();
-  gedil.translate(0, -0.028, 0);
-  const gm = mesh(kit, gedil, white);
-  corner.add(gm);
-  const blueWrap = mesh(kit, new THREE.TorusGeometry(0.0046, 0.0012, 4, 10), blue);
+  gedil.translate(0, -0.022, 0);
+  corner.add(mesh(kit, gedil, white));
+  const blueWrap = mesh(kit, new THREE.TorusGeometry(0.0036, 0.001, 4, 10), blue);
   blueWrap.rotation.x = Math.PI / 2;
-  blueWrap.position.y = -0.012;
+  blueWrap.position.y = -0.008;
   corner.add(blueWrap);
+  // 8 threads (4 cords folded), one of tekhelet, splaying a little and curling as they fall
   for (let k = 0; k < 8; k++) {
-    const a = (k / 8) * TAU;
-    const len = 0.11 + ((k * 7) % 5) * 0.006;
+    const a = (k / 8) * TAU + 0.3;
+    const len = 0.11 + ((k * 7) % 5) * 0.008;
+    const sp = 0.007 + ((k * 3) % 4) * 0.003;
     const pts = [
-      new THREE.Vector3(Math.cos(a) * 0.002, -0.05, Math.sin(a) * 0.002),
-      new THREE.Vector3(Math.cos(a) * 0.006 + 0.004, -0.05 - len * 0.5, Math.sin(a) * 0.006),
-      new THREE.Vector3(Math.cos(a) * 0.012 + 0.01, -0.05 - len, Math.sin(a) * 0.01 + 0.004),
+      new THREE.Vector3(Math.cos(a) * 0.002, -0.04, Math.sin(a) * 0.002),
+      new THREE.Vector3(Math.cos(a) * sp * 0.6 + 0.002, -0.04 - len * 0.35, Math.sin(a) * sp * 0.6),
+      new THREE.Vector3(Math.cos(a) * sp + 0.005 * Math.sin(k), -0.04 - len * 0.7, Math.sin(a) * sp + 0.003),
+      new THREE.Vector3(Math.cos(a) * sp * 1.3 + 0.008 * Math.sin(k * 2.1), -0.04 - len, Math.sin(a) * sp * 1.2 + 0.005),
     ];
-    const tube = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 8, 0.0011, 4, false);
+    const tube = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 12, 0.0014, 5, false);
     corner.add(mesh(kit, tube, k === 3 ? blue : white));
   }
   track(kit, white);

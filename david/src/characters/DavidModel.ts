@@ -60,7 +60,7 @@ const IDLE = pose({
   hips: E(0.02, 0.04, 0.035), hipsX: E(0.028),
   spine: E(0.02, -0.02, -0.03), chest: E(-0.03, -0.03, -0.01), neck: E(0.03), head: E(-0.02, 0.02, 0.0),
   uaL: E(-0.2, 0, 0.4), faL: E(-1.3), hdL: E(0),
-  uaR: E(0.06, 0, -0.1), faR: E(-0.32, 0.1, 0), hdR: E(0.12, 0, 0.05),
+  uaR: E(0.02, 0, -0.1), faR: E(-0.55, 0.15, 0), hdR: E(0.15, 0, 0.05),
   thL: E(-0.03, 0, 0.0), shinL: E(0.04), ftL: E(0.0),
   thR: E(0.05, 0.1, -0.08), shinR: E(0.16), ftR: E(-0.08, 0.1, 0),
   staff: E(-0.06, 1, 0.02), staffW: E(1), butt: E(0.4, 0, 0.18), plantW: E(1),
@@ -82,12 +82,17 @@ const HERO = pose({
 const SPIN = pose({
   hips: E(0.04, -0.18, 0), hipsX: E(-0.02),
   spine: E(0.02, -0.14, 0.04), chest: E(0.0, -0.28, 0.05), neck: E(0, 0.14, 0), head: E(0.02, 0.34, -0.04),
-  uaR: E(-2.55, 0, -0.5), faR: E(-0.95), hdR: E(0.15, 0, 0),
-  uaL: E(-0.55, 0, 0.3), faL: E(-0.95), hdL: E(0),
+  uaR: E(-2.25, 0, -0.62), faR: E(-1.3), hdR: E(0.2, 0, 0),
+  uaL: E(-0.6, 0, 0.45), faL: E(-1.0), hdL: E(0),
   thL: E(-0.28, 0.1, 0.1), shinL: E(0.22), ftL: E(0.06),
   thR: E(0.22, -0.2, -0.1), shinR: E(0.16), ftR: E(-0.22, -0.1, 0),
-  staff: E(0.2, 0.75, 0.6), staffW: E(1), plantW: E(0),
+  staff: E(0.12, 1, 0.3), staffW: E(1), plantW: E(0),
 }, -0.035);
+
+/** key helper: joints not given take the calm-stance values; the staff is held (not planted) unless given */
+function full(r: Record<string, E3>, hipsY = -0.012, hipsZ = 0): Pose {
+  return pose({ ...IDLE.r, plantW: E(0), ...r }, hipsY, hipsZ);
+}
 
 const THROW = new Clip([
   { t: 0, p: SPIN },
@@ -128,7 +133,7 @@ const THROW = new Clip([
 const STRIKE_READY = pose({
   hips: E(0.05, 0.1, 0), spine: E(0.04, 0.06, 0), chest: E(0.02, 0.1, 0), head: E(0, -0.12, 0),
   uaL: E(-0.95, 0, 0.3), faL: E(-1.15), hdL: E(0),
-  uaR: E(-0.35, 0, -0.35), faR: E(-0.9), hdR: E(0.1),
+  uaR: E(-0.2, 0, -0.3), faR: E(-1.0), hdR: E(0.1),
   thL: E(-0.28, 0, 0.06), shinL: E(0.24), ftL: E(0.05), thR: E(0.22, 0, -0.06), shinR: E(0.2), ftR: E(-0.2),
   staff: E(0.05, 0.55, 0.85), staffW: E(1), plantW: E(0),
 }, -0.04);
@@ -137,8 +142,8 @@ const STRIKE = new Clip([
   { t: 0.13, e: 'in', p: pose({
     hips: E(-0.02, 0.28, 0), spine: E(-0.08, 0.14, 0.03), chest: E(-0.14, 0.34, 0.04), neck: E(0.02, -0.14, 0), head: E(0.04, -0.3, 0),
     uaL: E(-2.75, 0.2, 0.42), faL: E(-1.45), hdL: E(0.3),
-    uaR: E(-0.9, 0, -0.55), faR: E(-0.7), hdR: E(0),
-    thL: E(-0.22, 0.05, 0.08), shinL: E(0.16), ftL: E(0.02), thR: E(0.14, 0, -0.08), shinR: E(0.24), ftR: E(-0.12),
+    uaR: E(-0.45, 0, -0.5), faR: E(-1.15), hdR: E(0),
+    thL: E(-0.22, 0.05, 0.06), shinL: E(0.16), ftL: E(0.02), thR: E(0.14, 0, -0.06), shinR: E(0.24), ftR: E(-0.12),
     staff: E(0.15, 0.65, -0.75), staffW: E(1), plantW: E(0),
   }, -0.03, -0.02) },
   { t: 0.26, e: 'out', p: pose({
@@ -153,7 +158,7 @@ const STRIKE = new Clip([
     uaL: E(-0.75, 0, -0.35), faL: E(-0.3), hdL: E(-0.1),
     uaR: E(-0.15, 0, -0.45), faR: E(-0.8),
     thL: E(-0.62, 0.05, 0.08), shinL: E(0.55), ftL: E(0.12), thR: E(0.45, 0, -0.08), shinR: E(0.34), ftR: E(-0.4),
-    staff: E(-0.55, -0.6, 0.6), staffW: E(1), plantW: E(0),
+    staff: E(-0.6, -0.28, 0.7), staffW: E(1), plantW: E(0),
   }, -0.1, 0.05) },
   { t: 0.64, p: STRIKE_READY },
 ]);
@@ -162,8 +167,8 @@ const STRIKE = new Clip([
 const STRIKE_HIGH = new Clip([
   { t: 0, p: pose({ uaL: E(-2.1, 0, 0.5), faL: E(-1.3), hdL: E(0.2), chest: E(-0.1, 0.18, 0), spine: E(-0.05, 0.06, 0), staff: E(0.3, 0.9, -0.25), staffW: E(1), plantW: E(0) }) },
   { t: 0.15, e: 'in', p: pose({ uaL: E(-2.95, 0.2, 0.45), faL: E(-1.6), hdL: E(0.35), chest: E(-0.2, 0.32, 0.03), spine: E(-0.08, 0.1, 0), staff: E(0.2, 0.55, -0.8), staffW: E(1), plantW: E(0) }) },
-  { t: 0.27, e: 'out', p: pose({ uaL: E(-2.25, 0, 0.05), faL: E(-0.15), hdL: E(-0.1), chest: E(0.22, -0.2, -0.03), spine: E(0.12, -0.08, 0), staff: E(-0.2, 0.35, 1), staffW: E(1), plantW: E(0) }) },
-  { t: 0.38, p: pose({ uaL: E(-1.7, 0, -0.05), faL: E(-0.3), hdL: E(0), chest: E(0.25, -0.28, -0.03), spine: E(0.14, -0.1, 0), staff: E(-0.35, 0.0, 1), staffW: E(1), plantW: E(0) }) },
+  { t: 0.27, e: 'out', p: pose({ uaL: E(-2.6, 0, 0.12), faL: E(-0.35), hdL: E(-0.1), chest: E(0.2, -0.22, -0.03), spine: E(0.1, -0.08, 0), staff: E(-0.18, 0.12, 1), staffW: E(1), plantW: E(0) }) },
+  { t: 0.38, p: pose({ uaL: E(-2.2, 0, 0.0), faL: E(-0.45), hdL: E(0), chest: E(0.24, -0.28, -0.03), spine: E(0.12, -0.1, 0), staff: E(-0.35, -0.15, 1), staffW: E(1), plantW: E(0) }) },
   { t: 0.58, p: pose({ uaL: E(-2.1, 0, 0.5), faL: E(-1.3), hdL: E(0.2), chest: E(-0.1, 0.18, 0), spine: E(-0.05, 0.06, 0), staff: E(0.3, 0.9, -0.25), staffW: E(1), plantW: E(0) }) },
 ]);
 
@@ -173,27 +178,25 @@ const GRAB_BEARD = pose({
   spine: E(-0.08, -0.08, 0), chest: E(-0.1, -0.12, 0.02), neck: E(-0.1, 0.05), head: E(-0.2, 0.05),
   uaR: E(-2.0, 0, -0.1), faR: E(-0.3), hdR: E(0.1),
   uaL: E(-2.1, 0, 0.5), faL: E(-1.3), hdL: E(0.2),
-  thL: E(-0.4, 0.05, 0.1), shinL: E(0.4), ftL: E(0.05), thR: E(0.35, -0.1, -0.08), shinR: E(0.25), ftR: E(-0.35),
+  thL: E(-0.42, 0, 0.03), shinL: E(0.42), ftL: E(0.05), thR: E(0.32, 0, -0.03), shinR: E(0.28), ftR: E(-0.32),
   staff: E(0.3, 0.9, -0.25), staffW: E(1), plantW: E(0),
 }, -0.06, -0.02);
 
-/** tugging the lamb from the bear's jaws (loop) */
+const PULL_REACH = pose({
+  hips: E(-0.08, -0.1, 0), spine: E(0.3, -0.05, 0), chest: E(0.16, -0.05, 0), neck: E(0.02), head: E(-0.12),
+  uaL: E(-1.35, 0, 0.08), faL: E(-0.25), hdL: E(0.15), uaR: E(-1.3, 0, -0.1), faR: E(-0.25), hdR: E(0.15),
+  thL: E(-0.75, 0, 0.05), shinL: E(0.9), ftL: E(0.15), thR: E(0.3, 0, -0.05), shinR: E(0.28), ftR: E(-0.28),
+}, -0.17, -0.02);
+const PULL_BACK = pose({
+  hips: E(-0.22, -0.14, 0), spine: E(0.02, -0.08, 0), chest: E(-0.1, -0.08, 0), neck: E(0.02), head: E(-0.22),
+  uaL: E(-0.95, 0, 0.1), faL: E(-0.85), hdL: E(0.35), uaR: E(-0.9, 0, -0.12), faR: E(-0.9), hdR: E(0.35),
+  thL: E(-0.55, 0, 0.05), shinL: E(0.7), ftL: E(0.1), thR: E(0.45, 0, -0.05), shinR: E(0.2), ftR: E(-0.4),
+}, -0.14, -0.16);
+/** tugging the lamb from the bear's jaws (loop): lean in and seize, then heave back with the legs */
 const PULL = new Clip([
-  { t: 0, p: pose({
-    hips: E(-0.12, -0.1, 0), spine: E(0.18, -0.05, 0), chest: E(0.1, -0.05, 0), neck: E(0.05), head: E(-0.1),
-    uaL: E(-1.15, 0, 0.12), faL: E(-0.45), hdL: E(0.2), uaR: E(-1.1, 0, -0.14), faR: E(-0.45), hdR: E(0.2),
-    thL: E(-0.7, 0, 0.08), shinL: E(0.85), ftL: E(0.15), thR: E(0.35, 0, -0.08), shinR: E(0.3), ftR: E(-0.3),
-  }, -0.16, -0.08) },
-  { t: 0.32, p: pose({
-    hips: E(-0.2, -0.14, 0), spine: E(0.02, -0.08, 0), chest: E(-0.08, -0.08, 0), neck: E(0.02), head: E(-0.2),
-    uaL: E(-0.8, 0, 0.1), faL: E(-1.0), hdL: E(0.35), uaR: E(-0.75, 0, -0.12), faR: E(-1.05), hdR: E(0.35),
-    thL: E(-0.55, 0, 0.08), shinL: E(0.7), ftL: E(0.1), thR: E(0.45, 0, -0.08), shinR: E(0.22), ftR: E(-0.4),
-  }, -0.14, -0.16) },
-  { t: 0.64, p: pose({
-    hips: E(-0.12, -0.1, 0), spine: E(0.18, -0.05, 0), chest: E(0.1, -0.05, 0), neck: E(0.05), head: E(-0.1),
-    uaL: E(-1.15, 0, 0.12), faL: E(-0.45), hdL: E(0.2), uaR: E(-1.1, 0, -0.14), faR: E(-0.45), hdR: E(0.2),
-    thL: E(-0.7, 0, 0.08), shinL: E(0.85), ftL: E(0.15), thR: E(0.35, 0, -0.08), shinR: E(0.3), ftR: E(-0.3),
-  }, -0.16, -0.08) },
+  { t: 0, p: PULL_REACH },
+  { t: 0.3, e: 'in', p: PULL_BACK },
+  { t: 0.62, p: PULL_REACH },
 ], true);
 
 /** lamb across the shoulders: hands (IK) hold its legs in front of the shoulders, chest braced */
@@ -256,46 +259,46 @@ const CALL = new Clip([
 
 /** evasive duck-and-lunge (Player moves the body along the dodge direction; `dodgeSide` leans the body) */
 const DODGE = new Clip([
-  { t: 0, p: pose({}) },
-  { t: 0.1, e: 'out', p: pose({
+  { t: 0, p: full({}) },
+  { t: 0.1, e: 'out', p: full({
     hips: E(0.25, 0, 0), spine: E(0.3), chest: E(0.15), head: E(-0.2),
     thL: E(-1.0, 0, 0.18), shinL: E(1.3), ftL: E(-0.2), thR: E(-0.3, 0, -0.18), shinR: E(1.25), ftR: E(-0.5),
     uaL: E(-0.9, 0, 0.6), faL: E(-1.1), uaR: E(-0.8, 0, -0.7), faR: E(-1.0),
     staff: E(0.4, 0.6, 0.6), staffW: E(1), plantW: E(0),
   }, -0.3, -0.02) },
-  { t: 0.34, p: pose({
+  { t: 0.34, p: full({
     hips: E(0.2, 0, 0), spine: E(0.22), chest: E(0.1), head: E(-0.15),
     thL: E(-0.7, 0, 0.12), shinL: E(0.9), ftL: E(-0.1), thR: E(-0.15, 0, -0.12), shinR: E(0.85), ftR: E(-0.35),
     uaL: E(-0.7, 0, 0.5), faL: E(-1.1), uaR: E(-0.6, 0, -0.55), faR: E(-1.0),
     staff: E(0.3, 0.8, 0.4), staffW: E(1), plantW: E(0),
   }, -0.2, 0) },
-  { t: 0.56, p: pose({ staff: E(0, 1, 0.1), staffW: E(1), plantW: E(0) }, -0.01) },
+  { t: 0.56, p: full({ staff: E(0, 1, 0.1) }) },
 ]);
 
 const HURT = new Clip([
-  { t: 0, p: pose({}) },
-  { t: 0.07, e: 'out', p: pose({
+  { t: 0, p: full({}) },
+  { t: 0.07, e: 'out', p: full({
     hips: E(-0.1, 0.1, 0), spine: E(-0.15, 0.1, 0.05), chest: E(-0.3, 0.2, 0.08), neck: E(-0.1, 0.15), head: E(-0.25, 0.35, 0.1),
     uaL: E(-0.7, 0, 0.7), faL: E(-1.2), uaR: E(-0.9, 0, -0.6), faR: E(-1.4),
     thL: E(0.1, 0, 0.08), shinL: E(0.2), thR: E(0.25, 0, -0.08), shinR: E(0.3), ftR: E(-0.2),
   }, -0.06, -0.06) },
-  { t: 0.22, p: pose({
+  { t: 0.22, p: full({
     hips: E(0.12, 0.05, 0), spine: E(0.15, 0.05), chest: E(0.1, 0.08), head: E(0.05, 0.15),
     uaL: E(-0.5, 0, 0.5), faL: E(-1.2), uaR: E(-0.5, 0, -0.4), faR: E(-1.0),
     thL: E(-0.2, 0, 0.06), shinL: E(0.35), thR: E(0.2, 0, -0.06), shinR: E(0.3),
   }, -0.08, 0) },
-  { t: 0.48, p: pose({}) },
+  { t: 0.48, p: full({}) },
 ]);
 
-interface ActionDef { clip: Clip; mask?: readonly string[]; legs: boolean; fadeIn: number; fadeOut: number; relativeEnds?: boolean }
+interface ActionDef { clip: Clip; mask?: readonly string[]; legs: boolean; fadeIn: number; fadeOut: number }
 const ACTIONS: Record<ActionName, ActionDef> = {
   throw: { clip: THROW, legs: true, fadeIn: 0.05, fadeOut: 0.2 },
   strike: { clip: STRIKE, legs: true, fadeIn: 0.05, fadeOut: 0.18 },
   strikeHigh: { clip: STRIKE_HIGH, mask: [...UPPER_L, 'chest', 'spine', 'staff', 'staffW', 'plantW'], legs: false, fadeIn: 0.04, fadeOut: 0.12 },
   pick: { clip: PICK, legs: true, fadeIn: 0.1, fadeOut: 0.2 },
   call: { clip: CALL, mask: [...UPPER_R, 'head', 'neck', 'chest', 'spine'], legs: false, fadeIn: 0.1, fadeOut: 0.25 },
-  dodge: { clip: DODGE, legs: true, fadeIn: 0.04, fadeOut: 0.18, relativeEnds: true },
-  hurt: { clip: HURT, mask: [...UPPER_L, ...UPPER_R, ...TORSO, 'hips', ...LEGS], legs: true, fadeIn: 0.03, fadeOut: 0.2, relativeEnds: true },
+  dodge: { clip: DODGE, legs: true, fadeIn: 0.04, fadeOut: 0.18 },
+  hurt: { clip: HURT, mask: [...UPPER_L, ...UPPER_R, ...TORSO, 'hips', ...LEGS], legs: true, fadeIn: 0.03, fadeOut: 0.2 },
 };
 
 interface ActiveAction { name: ActionName; def: ActionDef; t: number; events: { t: number; fn: () => void; fired: boolean }[] }
@@ -318,7 +321,7 @@ function smooth01(x: number) {
 
 // ------------------------------------------------------------------------------------------ sling
 const NC = 7; // points per cord (hand .. pouch end)
-const CORD_LEN = 0.5;
+const CORD_LEN = 0.44;
 const POUCH_W = 0.094;
 const SEG = CORD_LEN / (NC - 1);
 
@@ -341,7 +344,8 @@ class SlingSim {
   /** verlet integration of all free points */
   integrate(dt: number, drag: number, fixedEnds: boolean) {
     const g = -9.81 * dt * dt;
-    for (const [P, Q] of [[this.a, this.pa], [this.b, this.pb]] as const) {
+    for (let c = 0; c < 2; c++) {
+      const P = c === 0 ? this.a : this.b, Q = c === 0 ? this.pa : this.pb;
       const last = fixedEnds ? NC - 1 : NC;
       for (let i = 1; i < last; i++) {
         const p = P[i], q = Q[i];
@@ -358,7 +362,8 @@ class SlingSim {
     for (let it = 0; it < iterations; it++) {
       A[0].copy(hand);
       if (pinB) B[0].copy(pinB);
-      for (const P of [A, B]) {
+      for (let c = 0; c < 2; c++) {
+        const P = c === 0 ? A : B;
         for (let i = 0; i < NC - 1; i++) {
           const p = P[i], q = P[i + 1];
           const dx = q.x - p.x, dy = q.y - p.y, dz = q.z - p.z;
@@ -391,7 +396,10 @@ class SlingSim {
         _v1.set(caps[o], caps[o + 1], caps[o + 2]);
         _v2.set(caps[o + 3], caps[o + 4], caps[o + 5]);
         const r = caps[o + 6];
-        for (const P of [A, B]) for (let i = 2; i < NC; i++) pushOutOfCapsule(P[i], _v1, _v2, r);
+        for (let i = 2; i < NC; i++) {
+          pushOutOfCapsule(A[i], _v1, _v2, r);
+          pushOutOfCapsule(B[i], _v1, _v2, r);
+        }
       }
     }
   }
@@ -413,8 +421,8 @@ function pushOutOfCapsule(p: THREE.Vector3, a: THREE.Vector3, b: THREE.Vector3, 
   p.z += dz * k;
 }
 
-/** a smooth wadi pebble */
-function pebbleGeometry(seed: number, scale = 1) {
+/** a smooth wadi pebble (also used for the sling stones in flight, src/gameplay/Projectiles.ts) */
+export function pebbleGeometry(seed: number, scale = 1) {
   const g = new THREE.IcosahedronGeometry(1, 2);
   const p = g.getAttribute('position') as THREE.BufferAttribute;
   let s = seed;
@@ -520,6 +528,10 @@ export class DavidModel {
   private reloadT = -1;
   private stoneShown = true;
   private lastExpr: Expression | '' = '';
+  private stillT = 0;
+  private autoHeroW = 0;
+  /** settle into the reference 'hero' stance after ~7 s of standing still (gameplay idle, intro portrait) */
+  autoHero = true;
   private lastExprW = -1;
   private fingerL: FingerPose | '' = '';
   private fingerR: FingerPose | '' = '';
@@ -705,14 +717,17 @@ export class DavidModel {
     this.locoW = damp(this.locoW, clamp(v / 0.9, 0, 1), 7, dt);
     this.runW = damp(this.runW, smooth01((v - 2.0) / 0.9), 5, dt);
     const rw = this.runW, lw = this.locoW;
-    const cadence = THREE.MathUtils.lerp(1.55 + 0.25 * Math.min(v, 2.6), 2.6 + 0.08 * v, rw); // steps / s
+    const cadence = THREE.MathUtils.lerp(1.55 + 0.25 * Math.min(v, 2.6), 2.55 + 0.13 * v, rw); // steps / s
     const T = 2 / cadence; // gait cycle (two steps)
     this.phase = (this.phase + (v > 0.05 || lw > 0.05 ? dt / T : 0)) % 1;
     const p = this.phase;
     this.exertion = clamp(this.exertion + dt * (rw > 0.5 ? 0.12 : -0.05), 0, 1);
 
-    // ---------- base: calm idle / hero stance
-    const heroW = this.holdW.hero;
+    // ---------- base: calm idle / hero stance (after standing still for a while he settles into the reference stance)
+    const stillNow = this.locoW < 0.05 && !this.action && this.hold === 'none' && this.sling.state !== 'spin';
+    this.stillT = stillNow ? this.stillT + dt : 0;
+    this.autoHeroW = damp(this.autoHeroW, this.autoHero && this.stillT > 7 ? 1 : 0, this.stillT > 7 ? 0.9 : 6, dt);
+    const heroW = Math.max(this.holdW.hero, this.autoHeroW);
     m.layer(IDLE, 1);
     if (heroW > 0.001) m.layer(HERO, heroW);
     // idle life: weight shift, glances
@@ -739,7 +754,7 @@ export class DavidModel {
     // ---------- locomotion (upper body + pelvis; the legs are solved by IK below)
     if (lw > 0.001) {
       this.buildWalkUpper(p, v, rw);
-      m.layer(this.walkPose, lw);
+      m.layer(this.walkPose, lw, WALK_MASK);
       // footsteps on heel strike (left at p=0, right at p=0.5)
       if (lw > 0.5) {
         if (this.lastPhase > 0.9 && p < 0.1) this.onFootstep?.('L', rw > 0.5);
@@ -752,7 +767,7 @@ export class DavidModel {
     m.add('spine', 0, 0, -this.turnLean * 0.3);
 
     // ---------- holds
-    for (const k of Object.keys(this.holdW) as HoldPose[]) {
+    for (const k of HOLDS) {
       this.holdW[k] = damp(this.holdW[k], this.hold === k ? 1 : 0, k === 'spin' ? 10 : k === 'grab' ? 9 : 5, dt);
     }
     const H = this.holdW;
@@ -770,7 +785,7 @@ export class DavidModel {
       sp.r.faR[0] += Math.sin(a + 0.9) * 0.14;
       sp.r.hdR[0] += Math.sin(a + 1.6) * 0.25;
       sp.r.chest[1] += Math.sin(a) * 0.025 * (0.4 + this.spinPower);
-      m.layer(sp, H.spin, lw > 0.3 ? SPIN_UPPER : undefined);
+      m.layer(sp, H.spin, lw > 0.3 ? SPIN_UPPER : SPIN_ALL);
     }
     if (H.grab > 0.001) m.layer(GRAB_BEARD, H.grab);
     if (H.carry > 0.001) m.layer(CARRY, H.carry, CARRY_MASK);
@@ -778,7 +793,7 @@ export class DavidModel {
     if (H.thanks > 0.001) m.layer(THANKS, H.thanks, lw > 0.3 ? THANKS_UPPER : undefined);
     if (H.pull > 0.001) {
       this.pullT += dt;
-      m.layer(PULL.sample(this.pullT, this.scratchPose), H.pull);
+      m.layer(PULL.sample(this.pullT, this.scratchPose), H.pull, PULL.joints);
     } else this.pullT = 0;
 
     // ---------- one-shot action
@@ -800,7 +815,7 @@ export class DavidModel {
         sp.r.chest[2] += -s * 0.1;
         if (sp.r.hipsX) sp.r.hipsX[0] += s * 0.1;
       }
-      m.layer(sp, this.actionW, a.def.mask);
+      m.layer(sp, this.actionW, a.def.mask ?? a.def.clip.joints);
       if (a.def.legs) actionLegs = this.actionW;
       for (const e of a.events) if (!e.fired && a.t >= e.t) { e.fired = true; e.fn(); }
       if (a.t >= dur) this.action = null;
@@ -876,7 +891,7 @@ export class DavidModel {
     const yawAmp = L(0.07 + 0.015 * v, 0.1, rw);
     const pelvisYaw = -yawAmp * c2; // left hip forward at left heel strike
     const list = L(0.045, 0.03, rw) * stanceL; // swing side drops
-    const lean = L(0.03 + 0.012 * v, 0.1 + 0.025 * v, rw);
+    const lean = L(0.03 + 0.012 * v, 0.12 + 0.035 * v, rw);
     const bounce = L(0, 0.05, rw) * Math.cos(4 * Math.PI * (p - 0.18)); // run: low at mid-stance
     r.hips[0] = L(0.03, 0.1, rw) + bounce * 0.4;
     r.hips[1] = pelvisYaw;
@@ -916,9 +931,9 @@ export class DavidModel {
     r.faL[2] = 0;
     r.hdL[0] = r.hdL[1] = r.hdL[2] = 0;
     // staff: walking — upright with a forward lean and a little lag; running — carried at a slant
-    r.staff[0] = L(-0.02, 0.15, rw);
-    r.staff[1] = L(1, 0.65, rw);
-    r.staff[2] = L(0.16 + 0.07 * v + 0.05 * s2, 0.9, rw);
+    r.staff[0] = L(-0.02, 0.1, rw);
+    r.staff[1] = L(1, 0.36, rw);
+    r.staff[2] = L(0.1 + 0.04 * v + 0.04 * s2, 1, rw);
     r.staffW[0] = 1;
     r.plantW[0] = 0;
     this.walkPose.hipsY = L(-0.012, -0.055, rw) + bounce;
@@ -930,13 +945,14 @@ export class DavidModel {
   private gaitFoot(side: 'L' | 'R', p: number, v: number, rw: number, out: THREE.Vector3) {
     const L = THREE.MathUtils.lerp;
     const ph = (p + (side === 'L' ? 0 : 0.5)) % 1;
-    const beta = L(0.61, 0.37, rw);
-    const T = 2 / THREE.MathUtils.lerp(1.55 + 0.25 * Math.min(v, 2.6), 2.6 + 0.08 * v, rw);
+    const beta = L(0.61, 0.36 - 0.03 * Math.max(0, v - 3), rw);
+    const T = 2 / THREE.MathUtils.lerp(1.55 + 0.25 * Math.min(v, 2.6), 2.55 + 0.13 * v, rw);
     const S = Math.max(0.05, v * T); // stride length
+    const asym = 0.14 * rw; // running: the foot lands near the body and pushes off far behind
     const h0 = this.ankleRest[side].y;
     const x = this.ankleRest[side].x * L(0.8, 0.45, rw);
-    const zStrike = beta * S * 0.5 + L(0.02, 0.06, rw);
-    const zOff = -beta * S * 0.5 + L(0.02, 0.06, rw);
+    const zStrike = beta * S * (0.5 - asym) + L(0.02, 0.05, rw);
+    const zOff = -beta * S * (0.5 + asym) + L(0.02, 0.05, rw);
     const strikePitch = L(-0.3, -0.12, rw) * Math.min(1, v / 1.2);
     const toePitch = L(0.55, 0.7, rw) * Math.min(1, v / 1.0);
     const fb = 0.13, hb = 0.055; // ball of the foot ahead of / heel behind the ankle
@@ -967,9 +983,9 @@ export class DavidModel {
       const kick = rw * Math.sin(Math.PI * Math.min(1, u / 0.55)) * (0.1 + 0.05 * v) * (1 - e);
       z = L(z0, zStrike, e) - kick;
       const lift = L(0.07 + 0.015 * v, 0.14 + 0.07 * v, rw);
-      y = L(h0 * Math.cos(toePitch) + fb * Math.sin(toePitch), h0 + Math.sin(-strikePitch) * hb * 0.6, e) + lift * Math.pow(Math.sin(Math.PI * Math.pow(u, 0.8)), 1.2);
+      y = L(h0 * Math.cos(toePitch) + fb * Math.sin(toePitch), h0 + Math.sin(-strikePitch) * hb * 0.6, e) + lift * Math.pow(Math.sin(Math.PI * Math.pow(u, L(0.8, 0.6, rw))), 1.2);
       pitch = L(toePitch, strikePitch, smooth01(u * 1.2));
-      contact = Math.max(0, 1 - u / 0.12) * 0 + (u > 0.9 ? (u - 0.9) / 0.1 : 0);
+      contact = u > 0.85 ? (u - 0.85) / 0.15 : 0;
     }
     out.set(x, y, z);
     this.footPitch[side] = pitch;
@@ -992,8 +1008,7 @@ export class DavidModel {
       const tgt = this.footTarget[s];
       if (legW > 0.001) {
         this.gaitFoot(s, p, v, rw, _v3);
-        hr.localToWorld(_v3);
-        _v3.y = baseY + this.outfit.groundOffset + (_v3.y - (hr.position.y + 0)) - (hr.getWorldPosition(_v4).y - baseY - this.outfit.groundOffset);
+        hr.localToWorld(_v3); // flat ground under the root
         tgt.copy(fk).lerp(_v3, legW);
       } else {
         tgt.copy(fk);
@@ -1131,12 +1146,27 @@ export class DavidModel {
   private armIK(side: 'L' | 'R', gripTarget: THREE.Vector3, pole: THREE.Vector3, w: number) {
     if (w <= 0.001) return;
     const J = this.j;
-    // aim the wrist so that the grip socket lands on the target (offset from the current hand orientation)
-    const g = this.gripWorld(side, _v5);
-    const wrist = _v6.setFromMatrixPosition(J[`hd${side}`].matrixWorld);
-    const tgt = _v7.copy(gripTarget).sub(g).add(wrist);
-    const t2 = _tmpTarget.copy(tgt);
-    this.twoBone(J[`ua${side}`], J[`fa${side}`], J[`hd${side}`], t2, pole, -1, `ua${side}`, w);
+    _poleIK.copy(pole);
+    _gripIK.copy(gripTarget);
+    const ua = J[`ua${side}`], fa = J[`fa${side}`], hd = J[`hd${side}`];
+    _uaQ.copy(ua.quaternion);
+    _faQ.copy(fa.quaternion);
+    // aim the wrist so that the grip socket lands on the target; the socket offset depends on the hand orientation,
+    // which the solve itself changes -> two passes (the second from the first pass's hand orientation)
+    for (let it = 0; it < 2; it++) {
+      const g = this.gripWorld(side, _v5);
+      const wrist = _v6.setFromMatrixPosition(hd.matrixWorld);
+      _tmpTarget.copy(_gripIK).sub(g).add(wrist);
+      if (it === 0) this.twoBone(ua, fa, hd, _tmpTarget, _poleIK, -1, `ua${side}`, 1);
+      else {
+        // restart from the FK pose so the final blend weight applies to the FK -> IK difference
+        _tmp2.copy(_tmpTarget);
+        ua.quaternion.copy(_uaQ);
+        fa.quaternion.copy(_faQ);
+        ua.updateWorldMatrix(false, true);
+        this.twoBone(ua, fa, hd, _tmp2, _poleIK, -1, `ua${side}`, w);
+      }
+    }
   }
 
   private solveArms(dt: number) {
@@ -1144,11 +1174,13 @@ export class DavidModel {
     const c = this.mixer.cur.r;
     const H = this.holdW;
     const hr = this.human.root;
-    const rootQ = hr.getWorldQuaternion(_q4).clone();
+    const rootQ = hr.getWorldQuaternion(_rootQ);
     // staff slide (strike grip near the butt) and back carry
     const onBack = this.staffMode === 'back' || this.hold === 'carry' || this.hold === 'pull';
     this.staffBackW = damp(this.staffBackW, onBack ? 1 : 0, 7, dt);
-    this.staffSlide = damp(this.staffSlide, this.staffMode === 'strike' && !onBack ? 0.82 : 0, 11, dt);
+    const planted = clamp(c.plantW[0], 0, 1) * (1 - this.locoW);
+    const slideT = this.staffMode === 'strike' && !onBack ? 0.82 : 0.22 * (1 - planted) + 0.5 * H.kneel;
+    this.staffSlide = damp(this.staffSlide, slideT, 11, dt);
     const inHand = 1 - this.staffBackW;
     // staff direction (character -> world)
     const sd = c.staff;
@@ -1230,7 +1262,7 @@ export class DavidModel {
     _m1.premultiply(hand);
     if (this.staffBackW > 0.001) {
       this.staffBack.updateWorldMatrix(true, false);
-      _v1.copy(this.staffBasePos).add(_v2.set(0, -0.28, 0));
+      _v1.copy(this.staffBasePos).add(_v2.set(0, 0.3, 0));
       _m2.compose(_v1, this.staffBaseQ, _s1.set(1, 1, 1)).premultiply(this.staffBack.matrixWorld);
       _m1.decompose(_v3, _q1, _s1);
       _m2.decompose(_v4, _q2, _s1);
@@ -1317,7 +1349,8 @@ export class DavidModel {
       if (!A || !B) continue;
       A.getWorldPosition(_v1);
       B.getWorldPosition(_v2);
-      this.caps.set([_v1.x, _v1.y, _v1.z, _v2.x, _v2.y, _v2.z, cap.radius + 0.035], capCount * 7);
+      const o = capCount * 7, C = this.caps;
+      C[o] = _v1.x; C[o + 1] = _v1.y; C[o + 2] = _v1.z; C[o + 3] = _v2.x; C[o + 4] = _v2.y; C[o + 5] = _v2.z; C[o + 6] = cap.radius + 0.035;
       capCount++;
     }
     const steps = 3;
@@ -1387,7 +1420,7 @@ export class DavidModel {
         }
       }
       for (let i = 0; i < steps; i++) {
-        sim.integrate(h, 0.985, false);
+        sim.integrate(h, 0.97, false);
         if (!pinB) {
           // free cord end: integrate it too
           const p0 = sim.b[0], q0 = sim.pb[0];
@@ -1443,12 +1476,21 @@ export class DavidModel {
   }
 }
 
+const SPIN_ALL = Object.keys(SPIN.r);
+const HOLDS: readonly HoldPose[] = ['none', 'spin', 'grab', 'carry', 'kneel', 'thanks', 'pull', 'hero'];
+const WALK_MASK = ['hips', 'hipsX', ...TORSO, ...UPPER_L, ...UPPER_R, 'staff', 'staffW', 'plantW'];
 const SPIN_UPPER = [...UPPER_R, ...UPPER_L, ...TORSO, 'staff', 'staffW', 'plantW'];
 const CARRY_MASK = [...UPPER_L, ...UPPER_R, 'chest', 'neck', 'head', 'staffW', 'plantW'];
 const THANKS_UPPER = [...UPPER_L, ...UPPER_R, ...TORSO];
 const RELOAD = pose({ uaR: E(-0.35, 0, 0.3), faR: E(-1.2), hdR: E(0.3), chest: E(0.08, 0.12), head: E(0.28, 0.25), neck: E(0.1, 0.1) });
 const RELOAD_MASK = [...UPPER_R, 'chest', 'head', 'neck'];
 const _tmpTarget = new THREE.Vector3();
+const _tmp2 = new THREE.Vector3();
+const _poleIK = new THREE.Vector3();
+const _gripIK = new THREE.Vector3();
+const _uaQ = new THREE.Quaternion();
+const _faQ = new THREE.Quaternion();
+const _rootQ = new THREE.Quaternion();
 const _dirW = new THREE.Vector3();
 const _butt = new THREE.Vector3();
 const _grip = new THREE.Vector3();
