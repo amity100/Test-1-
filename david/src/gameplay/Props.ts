@@ -95,18 +95,50 @@ export class Jar {
 export class SmoothStone {
   readonly mesh: THREE.Mesh;
   readonly glint: THREE.Mesh;
+  readonly beacon: THREE.Sprite;
   taken = false;
-  constructor(pos: THREE.Vector3, mat: THREE.Material, glintMat: THREE.Material) {
-    const g = new THREE.SphereGeometry(0.05, 16, 12);
-    g.scale(1.25, 0.6, 0.95);
+  constructor(pos: THREE.Vector3, mat: THREE.Material, glintMat: THREE.Material, beaconMat: THREE.SpriteMaterial) {
+    const g = new THREE.SphereGeometry(0.075, 18, 12);
+    g.scale(1.25, 0.62, 0.95);
     this.mesh = new THREE.Mesh(g, mat);
-    this.mesh.position.copy(pos).add(new THREE.Vector3(0, 0.025, 0));
+    this.mesh.position.copy(pos).add(new THREE.Vector3(0, 0.035, 0));
     this.mesh.rotation.y = Math.random() * 6;
     this.mesh.castShadow = true;
-    this.glint = new THREE.Mesh(new THREE.RingGeometry(0.18, 0.24, 32), glintMat);
+    this.glint = new THREE.Mesh(new THREE.RingGeometry(0.26, 0.34, 40), glintMat);
     this.glint.rotation.x = -Math.PI / 2;
-    this.glint.position.copy(pos).add(new THREE.Vector3(0, 0.04, 0));
+    this.glint.position.copy(pos).add(new THREE.Vector3(0, 0.06, 0));
+    this.glint.renderOrder = 4;
+    // a soft sparkle hovering above the stone, visible from a distance while the objective is active
+    this.beacon = new THREE.Sprite(beaconMat);
+    this.beacon.position.copy(pos).add(new THREE.Vector3(0, 0.55, 0));
+    this.beacon.scale.setScalar(0.55);
+    this.beacon.renderOrder = 7;
   }
+  setVisible(v: boolean) {
+    this.mesh.visible = v;
+    this.glint.visible = v;
+    this.beacon.visible = v;
+  }
+}
+
+function sparkleTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d')!;
+  const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grd.addColorStop(0, 'rgba(255,248,225,1)');
+  grd.addColorStop(0.18, 'rgba(255,226,160,0.85)');
+  grd.addColorStop(0.5, 'rgba(255,200,120,0.18)');
+  grd.addColorStop(1, 'rgba(255,200,120,0)');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, 64, 64);
+  g.globalCompositeOperation = 'lighter';
+  g.fillStyle = 'rgba(255,245,215,0.7)';
+  g.fillRect(31, 4, 2, 56);
+  g.fillRect(4, 31, 56, 2);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }
 
 export class Props {
@@ -114,6 +146,7 @@ export class Props {
   readonly jars: Jar[] = [];
   readonly stones: SmoothStone[] = [];
   private glintMat: THREE.MeshBasicMaterial;
+  private beaconMat: THREE.SpriteMaterial;
 
   constructor(terrain: Terrain, tex: TextureSet, colliders: Colliders) {
     const ground = (x: number, z: number) => terrain.heightAt(x, z);
@@ -150,14 +183,28 @@ export class Props {
     }
     // smooth stones in the wadi bed
     const S = LAYOUT.stones;
-    const stoneMat = new THREE.MeshStandardMaterial({ color: 0xe2dccd, roughness: 0.32 });
-    this.glintMat = new THREE.MeshBasicMaterial({ color: 0xffe2a0, transparent: true, opacity: 0.0, depthWrite: false });
-    const spots = [[0, 0], [3.5, -1.2], [-2.8, 1.6], [6.5, 1.8], [-5.8, -0.8]];
-    for (const [dx, dz] of spots) {
-      const x = S.x + dx, z = S.z + dz;
-      const st = new SmoothStone(new THREE.Vector3(x, ground(x, z), z), stoneMat, this.glintMat);
+    const stoneMat = new THREE.MeshStandardMaterial({ color: 0xece6d8, roughness: 0.28 });
+    this.glintMat = new THREE.MeshBasicMaterial({ color: 0xffe2a0, transparent: true, opacity: 0.0, depthWrite: false, depthTest: false });
+    this.beaconMat = new THREE.SpriteMaterial({ map: sparkleTexture(), color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
+    // pick 5 spots on the stream bed that are open ground (no boulder, gentle slope) and reachable
+    const wanted = [[0, 0], [3.5, -1.2], [-2.8, 1.6], [6.5, 1.8], [-5.8, -0.8]];
+    const used: THREE.Vector3[] = [];
+    for (const [dx, dz] of wanted) {
+      let found: THREE.Vector3 | null = null;
+      for (let r = 0; r < 10 && !found; r += 0.5) {
+        for (let a = 0; a < Math.PI * 2 && !found; a += Math.PI / 6) {
+          const x = S.x + dx + Math.cos(a) * r, z = S.z + dz + Math.sin(a) * r;
+          if (!colliders.free(x, z, 1.4)) continue;
+          if (terrain.slopeAt(x, z) > 0.35) continue;
+          if (used.some((u) => Math.hypot(u.x - x, u.z - z) < 1.8)) continue;
+          found = new THREE.Vector3(x, ground(x, z), z);
+        }
+      }
+      const p = found ?? new THREE.Vector3(S.x + dx, ground(S.x + dx, S.z + dz), S.z + dz);
+      used.push(p);
+      const st = new SmoothStone(p, stoneMat, this.glintMat, this.beaconMat);
       this.stones.push(st);
-      this.group.add(st.mesh, st.glint);
+      this.group.add(st.mesh, st.glint, st.beacon);
     }
   }
 
@@ -165,13 +212,14 @@ export class Props {
     for (const j of this.jars) j.reset();
     for (const s of this.stones) {
       s.taken = false;
-      s.mesh.visible = true;
-      s.glint.visible = true;
+      s.setVisible(true);
     }
   }
 
   setStoneGlint(on: boolean, time: number) {
-    this.glintMat.opacity = on ? 0.35 + 0.25 * Math.sin(time * 4) : 0;
+    this.glintMat.opacity = on ? 0.4 + 0.25 * Math.sin(time * 4) : 0;
+    this.beaconMat.opacity = on ? 0.55 + 0.35 * Math.sin(time * 3.1) : 0;
+    this.beaconMat.rotation = time * 0.6;
   }
 
   update(dt: number) {

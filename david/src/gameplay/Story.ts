@@ -229,14 +229,30 @@ export class Story {
 
     // ---------------------------------------------------------------- 3. five smooth stones
     this.ui.objective('לַקֵּט חֲמִשָּׁה חַלֻּקֵי אֲבָנִים מִן הַנַּחַל', 'כְּפִי שֶׁיַּעֲשֶׂה יוֹם אֶחָד בְּעֵמֶק הָאֵלָה');
-    this.setMarker(this.groundV(L.stones.x, L.stones.z, 0.6), 'הַנַּחַל');
+    const stonesArea = this.groundV(L.stones.x, L.stones.z, 0.6);
+    const nearestStone = () => {
+      let best: THREE.Vector3 | null = null;
+      let bd = Infinity;
+      for (const s of this.props.stones) {
+        if (s.taken) continue;
+        const d = s.mesh.position.distanceTo(this.player.pos);
+        if (d < bd) { bd = d; best = s.mesh.position; }
+      }
+      return { pos: best, dist: bd };
+    };
+    // far away: point at the stream bed; close by: point at the nearest remaining stone
+    this.setMarker(() => {
+      const n = nearestStone();
+      if (!n.pos) return null;
+      return this.player.pos.distanceTo(stonesArea) > 28 ? stonesArea : n.pos.clone().add(new THREE.Vector3(0, 0.9, 0));
+    }, 'הַנַּחַל');
     let taken = 0;
     let picking = false;
     this.ui.counter(`חַלֻּקֵי אֲבָנִים <b>0 / 5</b>`);
     this.beh = () => {
       this.props.setStoneGlint(true, this.time);
       let near: (typeof this.props.stones)[number] | null = null;
-      let best = 1.7;
+      let best = 2.4;
       for (const s of this.props.stones) {
         if (s.taken) continue;
         const d = Math.hypot(s.mesh.position.x - this.player.pos.x, s.mesh.position.z - this.player.pos.z);
@@ -246,19 +262,21 @@ export class Story {
       if (near && !picking && this.input.take('interact')) {
         picking = true;
         const st = near;
+        let done = false;
+        const collect = () => {
+          if (done) return;
+          done = true;
+          st.taken = true;
+          st.setVisible(false);
+          taken++;
+          this.audio.sfx('pickup');
+          this.ui.counter(`חַלֻּקֵי אֲבָנִים <b>${taken} / 5</b>`);
+          picking = false;
+        };
         this.player.faceToward(st.mesh.position, 1, 100);
-        this.player.model.play('pick', [{
-          t: 0.5,
-          fn: () => {
-            st.taken = true;
-            st.mesh.visible = false;
-            st.glint.visible = false;
-            taken++;
-            this.audio.sfx('pickup');
-            this.ui.counter(`חַלֻּקֵי אֲבָנִים <b>${taken} / 5</b>`);
-            picking = false;
-          },
-        }]);
+        this.player.model.play('pick', [{ t: 0.5, fn: collect }]);
+        // fail-safe: never leave the objective stuck if the animation gets interrupted
+        this.after(1.1, collect, true);
       }
     };
     await this.until(() => taken >= 5);

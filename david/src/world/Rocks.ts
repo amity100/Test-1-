@@ -110,6 +110,9 @@ export class Rocks {
       if (Math.hypot(x - L.pasture.x, z - L.pasture.z) < 7) continue;
       if (Math.hypot(x - L.bethlehem.x, z - L.bethlehem.z) < L.bethlehem.r - 5) continue;
       if (Math.hypot(x - L.thicket.x, z - L.thicket.z) < 10) continue;
+      // gameplay spots must stay clear: the smooth stones in the wadi and the jar wall
+      if (Math.hypot(x - L.stones.x, z - L.stones.z) < 13) continue;
+      if (Math.hypot(x - L.targets.x, z - L.targets.z) < 9) continue;
       const slope = this.terrain.slopeAt(x, z);
       const riser = m.terrace * (slope > 0.3 ? 1 : 0);
       const p = m.rock * m.rock * 0.9 + riser * 0.35 + m.wadi * 0.45 + 0.003;
@@ -124,6 +127,7 @@ export class Rocks {
         const a = rnd() * Math.PI * 2, rr = s * (0.9 + rnd() * 1.6);
         const ex = x + Math.cos(a) * rr, ez = z + Math.sin(a) * rr;
         const es = s * (0.15 + rnd() * 0.35);
+        if (Math.hypot(ex - L.stones.x, ez - L.stones.z) < 13 || Math.hypot(ex - L.targets.x, ez - L.targets.z) < 9) continue;
         if (this.colliders.free(ex, ez, es * 0.6)) add(ex, ez, es, 0.4, es > 0.55);
       }
     }
