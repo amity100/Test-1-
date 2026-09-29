@@ -34,11 +34,11 @@ export class SkinMaterial extends THREE.MeshPhysicalMaterial {
   readonly skinUniforms = {
     uMaskMap: { value: null as THREE.Texture | null },
     uDetailNormal: { value: null as THREE.Texture | null },
-    uDetailTile: { value: 45.0 }, // detail tile repetitions per metre of skin (tile ~2.2 cm, pores ~0.35 mm apart)
+    uDetailTile: { value: 50.0 }, // detail tile repetitions per metre of skin (tile 2 cm, pores ~0.35 mm apart)
     uDetailStrength: { value: 0.7 },
     uRoughRange: { value: new THREE.Vector2(0.34, 0.86) },
     uAOIntensity: { value: 1.0 },
-    uSssWrap: { value: new THREE.Vector3(0.5, 0.2, 0.14) },
+    uSssWrap: { value: new THREE.Vector3(0.26, 0.1, 0.07) },
     uSssNormalBlend: { value: new THREE.Vector3(0.85, 0.45, 0.25) },
     uCurvScale: { value: 0.035 },
     uLobe: { value: new THREE.Vector3(0.78, 1.45, 0.22) }, // lobe1 roughness scale, lobe2 roughness scale, lobe2 mix
@@ -46,7 +46,8 @@ export class SkinMaterial extends THREE.MeshPhysicalMaterial {
     uTransScale: { value: 1.6 },
     uTransPower: { value: 3.0 },
     uTransDepth: { value: 0.022 },
-    uTransAmbient: { value: 0.18 },
+    uTransAmbient: { value: 0.06 },
+    uShadowScatter: { value: new THREE.Vector3(0.55, 0.92, 1.0) }, // per-channel shadow edge softening
     uSkinTint: { value: new THREE.Color(1, 1, 1) },
     uWet: { value: 0.0 }, // sweat / wetness 0..1
     uDirt: { value: 0.0 },
@@ -105,7 +106,7 @@ uniform sampler2D uMaskMap;
 uniform sampler2D uDetailNormal;
 uniform float uDetailTile, uDetailStrength, uAOIntensity, uCurvScale, uTransScale, uTransPower, uTransDepth, uTransAmbient, uWet, uDirt;
 uniform vec2 uRoughRange;
-uniform vec3 uSssWrap, uSssNormalBlend, uLobe, uTransColor, uSkinTint;
+uniform vec3 uSssWrap, uSssNormalBlend, uLobe, uTransColor, uSkinTint, uShadowScatter;
 varying float vDetailScale;
 varying vec3 vSkinWorldPos;
 vec4 gSkinMask = vec4(1.0, 0.5, 0.0, 0.0);
@@ -113,6 +114,7 @@ vec3 gSmoothN = vec3(0.0, 0.0, 1.0);
 vec3 gTransLight = vec3(0.0);
 float gScatter = 0.5;
 float gSpecOcc = 1.0;
+float gCavity = 1.0;
 #if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
 uniform mat4 directionalShadowMatrix[ NUM_DIR_LIGHT_SHADOWS ];
 #endif`,
@@ -142,28 +144,48 @@ roughnessFactor = mix( roughnessFactor, 0.18, uWet );`,
   mapN.xy *= normalScale;
   #ifdef SKIN_DETAIL
   {
+    // tiling micro-relief (pores + furrows): RG = normal, B = micro cavity
     vec2 duv = vNormalMapUv * ( uDetailTile / max( vDetailScale, 0.05 ) );
-    vec3 d1 = texture2D( uDetailNormal, duv ).xyz * 2.0 - 1.0;
+    vec3 t1 = texture2D( uDetailNormal, duv ).xyz;
+    vec2 d1 = t1.xy * 2.0 - 1.0;
+    float cav = t1.z;
     #ifndef SKIN_LOW
-    vec3 d2 = texture2D( uDetailNormal, duv * 2.71 + vec2( 0.37, 0.61 ) ).xyz * 2.0 - 1.0;
-    d1.xy += d2.xy * 0.45;
+    vec3 t2 = texture2D( uDetailNormal, duv * 2.71 + vec2( 0.37, 0.61 ) ).xyz;
+    d1 += ( t2.xy * 2.0 - 1.0 ) * 0.45;
+    cav *= mix( 1.0, t2.z, 0.5 );
     #endif
     vec2 fw = fwidth( duv );
-    float fade = clamp( 1.6 - max( fw.x, fw.y ) * 1.4, 0.0, 1.0 );
-    mapN.xy += d1.xy * uDetailStrength * ( 0.15 + gPores ) * fade;
+    float mip = max( fw.x, fw.y ); // detail tiles per pixel
+    float fade = clamp( 1.6 - mip * 1.4, 0.0, 1.0 );
+    float amt = uDetailStrength * ( 0.15 + gPores );
+    mapN.xy += d1 * amt * fade;
+    gCavity = mix( 1.0, cav, clamp( amt, 0.0, 1.0 ) * fade );
+    // micro-normal variance lost to minification widens the specular lobe instead of vanishing
+    float rv = amt * 0.1 * smoothstep( 0.0015, 0.02, mip );
+    roughnessFactor = min( 1.0, sqrt( roughnessFactor * roughnessFactor + rv ) );
   }
   #endif
   normal = normalize( tbn * mapN );
+  // light scattered deep in the dermis (red) no longer sees pores & fine wrinkles, but still sees muscles
+  // and bone: a mip-biased (~8x blurred) lookup of the same normal map, without the micro detail
+  {
+    vec2 nLo = texture2D( normalMap, vNormalMapUv, 3.0 ).xy * 2.0 - 1.0;
+    vec3 mapNLo = vec3( nLo * normalScale, 0.0 );
+    mapNLo.z = sqrt( max( 1.0 - dot( mapNLo.xy, mapNLo.xy ), 0.0 ) );
+    gSmoothN = normalize( tbn * mapNLo );
+  }
+#else
+  gSmoothN = normalize( nonPerturbedNormal );
 #endif
-gSmoothN = normalize( nonPerturbedNormal );
+diffuseColor.rgb *= 0.86 + 0.14 * gCavity;
 {
   // screen-space curvature -> scattering width (thin/curved parts scatter more visibly)
-  vec3 dn = fwidth( gSmoothN );
+  vec3 dn = fwidth( normalize( nonPerturbedNormal ) );
   vec3 dp = fwidth( vSkinWorldPos );
   float curv = length( dn ) / max( length( dp ), 1e-5 );
-  gScatter = clamp( 0.35 + curv * uCurvScale, 0.35, 1.0 );
+  gScatter = clamp( 0.3 + curv * uCurvScale, 0.3, 1.0 );
 }
-gSpecOcc = mix( 1.0, gSkinMask.r * gSkinMask.r, 0.85 );`,
+gSpecOcc = mix( 1.0, gSkinMask.r * gSkinMask.r, 0.85 ) * mix( 1.0, gCavity, 0.75 );`,
         )
         .replace(
           '#include <lights_physical_pars_fragment>',
@@ -219,7 +241,11 @@ void RE_Direct_Skin( const in IncidentLight directLight, const in vec3 geometryP
           `#ifdef SKIN_TRANSMISSION
 		gTransLight *= ( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, directionalShadowMatrix[ i ] * vec4( vSkinWorldPos + ( vec4( directLight.direction, 0.0 ) * viewMatrix ).xyz * uTransDepth, 1.0 ) ) : 1.0;
 		#endif
-		directLight.color *= ( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] ) : 1.0;`,
+		{
+			// light diffusing under the skin softens shadow edges per channel: a warm fringe instead of a hard cut
+			float skinSh = ( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] ) : 1.0;
+			directLight.color *= pow( vec3( skinSh ), uShadowScatter );
+		}`,
         )
         .replace(
           '#include <aomap_fragment>',

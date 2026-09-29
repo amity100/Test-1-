@@ -29,7 +29,7 @@ def _smooth_noise(rng, n):
     return rng.normal(0, 1, n)
 
 
-def lashes(loop_pos, eye_center, side: int, rng, upper=True, count=110, length=(0.0095, 0.0048), width=0.00016):
+def lashes(loop_pos, eye_center, side: int, rng, upper=True, count=110, length=(0.0098, 0.0042), width=0.00019):
     """Eyelash strands rooted along a lid-margin polyline (ordered medial -> lateral).
 
     Returns list of strands, each (K,3) centerline, plus root parameters (for weights lookup).
@@ -84,7 +84,7 @@ def lashes(loop_pos, eye_center, side: int, rng, upper=True, count=110, length=(
     return strands, np.asarray(roots), np.asarray(widths)
 
 
-def brows(surface: Surface, eye_center, side: int, lid_loop_pos, rng, density=1.0, thickness=1.0, count=620, width=0.00011):
+def brows(surface: Surface, eye_center, side: int, lid_loop_pos, rng, density=1.0, thickness=1.0, count=620, width=0.000125):
     """Eyebrow strands lying on the skin above the eye.  side: +1 left (+X), -1 right."""
     c = np.asarray(eye_center)
     P = np.asarray(lid_loop_pos)

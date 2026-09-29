@@ -117,8 +117,26 @@ interface Control {
   quads: Uint32Array; // 4 per face
   quadsUV: Uint32Array;
   uv: Float32Array; // uv table
-  skinI: Uint16Array; // 4 per position
+  skinI: Uint16Array; // K per position (K = SKIN_K)
   skinW: Float32Array;
+}
+
+/** Bone influences per body vertex (MakeHuman's weights need up to 8 around the shoulders and hips). */
+export const SKIN_K = 8;
+
+/** Re-pack k influences per vertex into SKIN_K (zero padded) — assets baked with 4 still load. */
+function repack(si: ArrayLike<number>, sw: Float32Array, k: number): [Uint16Array, Float32Array] {
+  const n = sw.length / k;
+  const I = new Uint16Array(n * SKIN_K);
+  const W = new Float32Array(n * SKIN_K);
+  const m = Math.min(k, SKIN_K);
+  for (let v = 0; v < n; v++) {
+    for (let j = 0; j < m; j++) {
+      I[v * SKIN_K + j] = si[v * k + j];
+      W[v * SKIN_K + j] = sw[v * k + j];
+    }
+  }
+  return [I, W];
 }
 
 function controlMesh(d: HumanData, variation?: Record<string, number>): Control {
@@ -132,14 +150,14 @@ function controlMesh(d: HumanData, variation?: Record<string, number>): Control 
   }
   const q = d.raw('mesh.quads');
   const qt = d.raw('mesh.quadsUV');
-  const si = d.raw('mesh.skinIndex');
+  const [skinI, skinW] = repack(d.raw('mesh.skinIndex'), d.float('mesh.skinWeight'), d.entry('mesh.skinWeight').itemSize);
   return {
     pos,
     quads: Uint32Array.from(q),
     quadsUV: Uint32Array.from(qt),
     uv: d.float('mesh.uv'),
-    skinI: Uint16Array.from(si),
-    skinW: d.float('mesh.skinWeight'),
+    skinI,
+    skinW,
   };
 }
 
@@ -230,27 +248,28 @@ function subdivide(c: Control, limit: boolean): Control {
     return out;
   };
   const pos = apply(c.pos, 3);
-  // skin weights: accumulate sparse influences, keep the 4 largest
-  const skinI = new Uint16Array(NV * 4);
-  const skinW = new Float32Array(NV * 4);
+  // skin weights: accumulate sparse influences, keep the SKIN_K largest
+  const K = SKIN_K;
+  const skinI = new Uint16Array(NV * K);
+  const skinW = new Float32Array(NV * K);
   const infl = new Map<number, number>();
   for (let i = 0; i < NV; i++) {
     infl.clear();
     for (let j = rowStart[i]; j < rowStart[i + 1]; j++) {
       const s = cols[j], w = wts[j];
-      for (let k = 0; k < 4; k++) {
-        const bw = c.skinW[s * 4 + k];
+      for (let k = 0; k < K; k++) {
+        const bw = c.skinW[s * K + k];
         if (bw <= 0) continue;
-        const b = c.skinI[s * 4 + k];
+        const b = c.skinI[s * K + k];
         infl.set(b, (infl.get(b) ?? 0) + bw * w);
       }
     }
-    const list = [...infl.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4);
+    const list = [...infl.entries()].sort((a, b) => b[1] - a[1]).slice(0, K);
     let sum = 0;
     for (const [, w] of list) sum += w;
     list.forEach(([b, w], k) => {
-      skinI[i * 4 + k] = b;
-      skinW[i * 4 + k] = w / sum;
+      skinI[i * K + k] = b;
+      skinW[i * K + k] = w / sum;
     });
   }
   // new quads (v_k, e_k, f, e_{k-1})
@@ -400,6 +419,8 @@ export function buildBodyGeometry(d: HumanData, level: 0 | 1, variation?: Record
   const uv = new Float32Array(N * 2);
   const skinIndex = new Uint16Array(N * 4);
   const skinWeight = new Float32Array(N * 4);
+  const skinIndex2 = new Uint16Array(N * 4);
+  const skinWeight2 = new Float32Array(N * 4);
   for (let i = 0; i < N; i++) {
     const p = posIndex[i], t = uvIndex[i];
     position[i * 3] = c.pos[p * 3];
@@ -413,8 +434,10 @@ export function buildBodyGeometry(d: HumanData, level: 0 | 1, variation?: Record
     uv[i * 2] = c.uv[t * 2];
     uv[i * 2 + 1] = c.uv[t * 2 + 1];
     for (let k = 0; k < 4; k++) {
-      skinIndex[i * 4 + k] = c.skinI[p * 4 + k];
-      skinWeight[i * 4 + k] = c.skinW[p * 4 + k];
+      skinIndex[i * 4 + k] = c.skinI[p * SKIN_K + k];
+      skinWeight[i * 4 + k] = c.skinW[p * SKIN_K + k];
+      skinIndex2[i * 4 + k] = c.skinI[p * SKIN_K + 4 + k];
+      skinWeight2[i * 4 + k] = c.skinW[p * SKIN_K + 4 + k];
     }
   }
   const tangent = computeTangents(position, normal, uv, index);
@@ -425,6 +448,9 @@ export function buildBodyGeometry(d: HumanData, level: 0 | 1, variation?: Record
   g.setAttribute('tangent', new THREE.BufferAttribute(tangent, 4));
   g.setAttribute('skinIndex', new THREE.BufferAttribute(skinIndex, 4));
   g.setAttribute('skinWeight', new THREE.BufferAttribute(skinWeight, 4));
+  // influences 5-8 (read by the SKIN8 shader path, see DualQuatSkinning.ts)
+  g.setAttribute('skinIndex2', new THREE.BufferAttribute(skinIndex2, 4));
+  g.setAttribute('skinWeight2', new THREE.BufferAttribute(skinWeight2, 4));
   g.setIndex(new THREE.BufferAttribute(N < 65536 ? Uint16Array.from(index) : index, 1));
   return { geometry: g, posIndex: Uint32Array.from(posIndex), vertexCount: N, triangleCount: index.length / 3 };
 }

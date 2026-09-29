@@ -10,6 +10,7 @@ import { Rocks } from '../world/Rocks';
 import { Grass } from '../world/Grass';
 import { Village } from '../world/Village';
 import { loadTextures, type TextureSet } from '../world/Textures';
+import { configureWorld } from '../world/WorldQuality';
 import { SUN } from '../world/Layout';
 
 // =====================================================================================================
@@ -20,18 +21,19 @@ import { SUN } from '../world/Layout';
 // texture detail on. Phones are always content 'low' (tight memory, tile GPUs) but a recent phone gets
 // the 'mobile-high' render budget: a sharp 2x image, FXAA + sharpening, bloom and 2k shadows.
 //
-// | tier           | name   | max PR | max px (w*h) | AA     | shadow | bloom (scale/mips) | god rays | CAS  | grain+CA | grass (patch) | trees | shrubs | farTrees | rocks | tex max | budget |
-// |----------------|--------|--------|--------------|--------|--------|--------------------|----------|------|----------|---------------|-------|--------|----------|-------|---------|--------|
-// | desktop-high   | high   | 2.0    | 3.7 M        | MSAA 4 | 4096   | 1/2, 6             | 40       | 0.20 | yes      | 46000 (54 m)  | 1.00  | 4200   | 9000     | 3600  | 4096    | 18 ms  |
-// | desktop-medium | medium | 1.5    | 2.1 M        | MSAA 2 | 2048   | 1/2, 5             | 28       | 0.25 | yes      | 28000 (44 m)  | 0.80  | 2600   | 6000     | 2400  | 2048    | 24 ms  |
-// | mobile-high    | low    | 2.0    | 1.7 M        | FXAA   | 2048   | 1/2, 5             | 20       | 0.35 | no       | 15000 (36 m)  | 0.65  | 1600   | 4000     | 1600  | 2048    | 30 ms  |
-// | mobile-low     | low    | 1.5    | 0.9 M        | FXAA   | 1024   | 1/4, 4             | 12       | 0.40 | no       | 9000 (30 m)   | 0.50  | 1000   | 2600     | 1000  | 1024    | 38 ms  |
+// | tier           | name   | max PR | max px (w*h) | AA     | shadow | bloom (scale/mips) | god rays | CAS  | grain+CA | grass (patch) | trees | shrubs | farTrees | rocks | tex max | tris/frame | budget |
+// |----------------|--------|--------|--------------|--------|--------|--------------------|----------|------|----------|---------------|-------|--------|----------|-------|---------|------------|--------|
+// | desktop-high   | high   | 2.0    | 3.7 M        | MSAA 4 | 4096   | 1/2, 6             | 40       | 0.20 | yes      | 46000 (54 m)  | 1.00  | 4200   | 9000     | 3600  | 4096    | 8 M        | 18 ms  |
+// | desktop-medium | medium | 1.5    | 2.1 M        | MSAA 2 | 2048   | 1/2, 5             | 28       | 0.25 | yes      | 28000 (44 m)  | 0.80  | 2600   | 6000     | 2400  | 2048    | 5 M        | 24 ms  |
+// | mobile-high    | low    | 2.0    | 1.7 M        | FXAA   | 2048   | 1/2, 5             | 20       | 0.35 | no       | 15000 (36 m)  | 0.65  | 1600   | 4000     | 1600  | 2048    | 2.5 M      | 30 ms  |
+// | mobile-low     | low    | 1.5    | 0.9 M        | FXAA   | 1024   | 1/4, 4             | 12       | 0.40 | no       | 9000 (30 m)   | 0.50  | 1000   | 2600     | 1000  | 1024    | 1.5 M      | 38 ms  |
 //
 // Pixel ratio = min(devicePixelRatio, maxPixelRatio), lowered only if the backing store would exceed
 // maxPixels (e.g. an iPhone 14, 390x844 CSS px @3x: mobile-high renders 780x1688 = 1.32 MP, i.e. 2x CSS
 // pixels; mobile-low 585x1266). The pixel ratio is chosen ONCE (detection + warm-up benchmark behind the
 // loading screen); during play the canvas is only resized when the viewport itself changes size.
-// "budget" is the synchronous (CPU+GPU) frame time the warm-up benchmark allows for the tier.
+// "budget" is the synchronous (CPU+GPU) frame time the warm-up benchmark allows for the tier; "tris/frame" is the
+// drawn-triangle target (camera + shadow pass) content modules should size their LODs against (not enforced).
 
 export type TierName = 'desktop-high' | 'desktop-medium' | 'mobile-high' | 'mobile-low';
 export const TIER_LADDER: readonly TierName[] = ['desktop-high', 'desktop-medium', 'mobile-high', 'mobile-low'];
@@ -80,6 +82,11 @@ export interface ContentBudget {
   texMax: number;
   /** anisotropic filtering cap */
   anisotropy: number;
+  /**
+   * target for content modules (not enforced): triangles drawn per frame including the sun shadow pass,
+   * i.e. renderer.info.render.triangles of a full frame. Size LODs / instance counts against it.
+   */
+  triangleBudget: number;
 }
 
 export interface Quality extends RenderBudget, ContentBudget {
@@ -106,10 +113,10 @@ const RENDER: Record<TierName, RenderBudget> = {
 };
 
 const CONTENT: Record<TierName, ContentBudget> = {
-  'desktop-high': { name: 'high', nearSpacing: 1.6, farSegments: 300, grassCount: 46000, grassPatch: 54, treeScale: 1, shrubs: 4200, farTrees: 9000, rocks: 3600, motes: 700, particles: 1800, texMax: 4096, anisotropy: 8 },
-  'desktop-medium': { name: 'medium', nearSpacing: 2.0, farSegments: 240, grassCount: 28000, grassPatch: 44, treeScale: 0.8, shrubs: 2600, farTrees: 6000, rocks: 2400, motes: 450, particles: 1500, texMax: 2048, anisotropy: 8 },
-  'mobile-high': { name: 'low', nearSpacing: 2.4, farSegments: 200, grassCount: 15000, grassPatch: 36, treeScale: 0.65, shrubs: 1600, farTrees: 4000, rocks: 1600, motes: 300, particles: 1200, texMax: 2048, anisotropy: 4 },
-  'mobile-low': { name: 'low', nearSpacing: 2.6, farSegments: 180, grassCount: 9000, grassPatch: 30, treeScale: 0.5, shrubs: 1000, farTrees: 2600, rocks: 1000, motes: 180, particles: 900, texMax: 1024, anisotropy: 4 },
+  'desktop-high': { name: 'high', nearSpacing: 1.6, farSegments: 300, grassCount: 46000, grassPatch: 54, treeScale: 1, shrubs: 4200, farTrees: 9000, rocks: 3600, motes: 700, particles: 1800, texMax: 4096, anisotropy: 8, triangleBudget: 8_000_000 },
+  'desktop-medium': { name: 'medium', nearSpacing: 2.0, farSegments: 240, grassCount: 28000, grassPatch: 44, treeScale: 0.8, shrubs: 2600, farTrees: 6000, rocks: 2400, motes: 450, particles: 1500, texMax: 2048, anisotropy: 8, triangleBudget: 5_000_000 },
+  'mobile-high': { name: 'low', nearSpacing: 2.4, farSegments: 200, grassCount: 15000, grassPatch: 36, treeScale: 0.65, shrubs: 1600, farTrees: 4000, rocks: 1600, motes: 300, particles: 1200, texMax: 2048, anisotropy: 4, triangleBudget: 2_500_000 },
+  'mobile-low': { name: 'low', nearSpacing: 2.6, farSegments: 180, grassCount: 9000, grassPatch: 30, treeScale: 0.5, shrubs: 1000, farTrees: 2600, rocks: 1000, motes: 180, particles: 900, texMax: 1024, anisotropy: 4, triangleBudget: 1_500_000 },
 };
 
 const STORE_KEY = 'david.gpuTier.v2';
@@ -206,12 +213,13 @@ export function detectQuality(gl: WebGLRenderingContext | WebGL2RenderingContext
     : stored
       ? { ...makeQuality(stored.tier, mobile, gpu, stored.scale), forced: false }
       : { ...makeQuality(guessTier(mobile, gpu), mobile, gpu), forced: false };
-  // developer A/B overrides: ?pr=1.5 (max pixel ratio), ?sharpen=0..1, ?aa=fxaa|none, ?msaa=0|2|4
+  // developer A/B overrides: ?pr=1.5 (max pixel ratio), ?sharpen=0..1, ?aa=fxaa|none, ?msaa=0|2|4, ?texmax=512
   const num = (k: string) => (params.has(k) && Number.isFinite(Number(params.get(k))) ? Number(params.get(k)) : null);
-  const pr = num('pr'), sh = num('sharpen'), ms = num('msaa');
+  const pr = num('pr'), sh = num('sharpen'), ms = num('msaa'), tm = num('texmax');
   if (pr !== null) { q.maxPixelRatio = pr; q.maxPixels = 1e9; q.forced = true; }
   if (sh !== null) q.sharpen = Math.max(0, Math.min(1, sh));
   if (ms !== null) q.msaa = ms;
+  if (tm !== null) q.texMax = Math.max(64, tm);
   const aa = params.get('aa');
   if (aa === 'fxaa' || aa === 'none') q.aa = aa;
   return q;
@@ -280,6 +288,13 @@ function collectTextures(root: THREE.Object3D): Map<THREE.Texture, boolean> {
   return out;
 }
 
+/** JPEG-decoded images carry no alpha: always safe to resample. */
+function isJpegImage(img: unknown): boolean {
+  if (typeof HTMLImageElement === 'undefined' || !(img instanceof HTMLImageElement)) return false;
+  const src = img.currentSrc || img.src || '';
+  return /^data:image\/jpe?g/i.test(src) || /\.jpe?g(\?|#|$)/i.test(src);
+}
+
 /** Pixel size of a texture's CPU-side image, if it is a decoded browser image. */
 function imageSize(img: unknown): { w: number; h: number; bitmap: boolean } | null {
   if (!img) return null;
@@ -312,6 +327,133 @@ function downscaleImage(img: CanvasImageSource, w: number, h: number, tw: number
     sw = nw;
     sh = nh;
   }
+}
+
+// =====================================================================================================
+// Spatial chunking of static instanced scenery
+// =====================================================================================================
+
+export interface ChunkOptions {
+  /** smallest cell edge in metres (default 150) */
+  minCell?: number;
+  /** most cells along one axis (default 5, i.e. <= 25 chunks per mesh: bounded draw-call growth) */
+  maxAxis?: number;
+  /** meshes with fewer instances are left alone (default 64) */
+  minInstances?: number;
+  /** meshes drawing fewer triangles in total are left alone: not worth the extra draw calls (default 40000) */
+  minTriangles?: number;
+}
+
+/**
+ * Splits one static InstancedMesh into spatial chunks (an XZ grid in the mesh's local space) that share
+ * its geometry and material. An InstancedMesh spread over the whole map has one huge bounding sphere, so
+ * without this every instance is drawn every frame, twice (camera + sun shadow pass), even though the
+ * shadow camera only covers ~110 m. Returns the group that replaced the mesh, or null if not worth it.
+ */
+export function chunkInstancedMesh(mesh: THREE.InstancedMesh, opts: ChunkOptions = {}): THREE.Group | null {
+  const n = mesh.count;
+  const minCell = opts.minCell ?? 150, maxAxis = opts.maxAxis ?? 5;
+  // (frustumCulled = false: splitting would only add draw calls)
+  if (n < (opts.minInstances ?? 64) || !mesh.parent || mesh.children.length || !mesh.frustumCulled) return null;
+  const g0 = mesh.geometry;
+  const triangles = ((g0.index ? g0.index.count : (g0.attributes.position?.count ?? 0)) / 3) * n;
+  if (triangles < (opts.minTriangles ?? 40000)) return null;
+  if (mesh.onBeforeRender !== THREE.Object3D.prototype.onBeforeRender || mesh.morphTexture) return null;
+  const src = mesh.instanceMatrix.array as Float32Array;
+  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (let i = 0; i < n; i++) {
+    const x = src[i * 16 + 12], z = src[i * 16 + 14];
+    x0 = Math.min(x0, x); x1 = Math.max(x1, x);
+    z0 = Math.min(z0, z); z1 = Math.max(z1, z);
+  }
+  const cell = Math.max(minCell, (x1 - x0) / maxAxis, (z1 - z0) / maxAxis);
+  const nx = Math.max(1, Math.ceil((x1 - x0) / cell + 1e-6)), nz = Math.max(1, Math.ceil((z1 - z0) / cell + 1e-6));
+  if (nx * nz < 3) return null;
+  const buckets = new Map<number, number[]>();
+  for (let i = 0; i < n; i++) {
+    const cx = Math.min(nx - 1, Math.floor((src[i * 16 + 12] - x0) / cell));
+    const cz = Math.min(nz - 1, Math.floor((src[i * 16 + 14] - z0) / cell));
+    const key = cz * nx + cx;
+    let b = buckets.get(key);
+    if (!b) buckets.set(key, (b = []));
+    b.push(i);
+  }
+  const geo = mesh.geometry;
+  const instAttrs = Object.entries(geo.attributes).filter(([, a]) => (a as THREE.InstancedBufferAttribute).isInstancedBufferAttribute) as [string, THREE.InstancedBufferAttribute][];
+  const group = new THREE.Group();
+  group.name = (mesh.name || 'instanced') + ':chunks';
+  if (mesh.matrixAutoUpdate) mesh.updateMatrix();
+  mesh.matrix.decompose(group.position, group.quaternion, group.scale);
+  group.matrixAutoUpdate = mesh.matrixAutoUpdate;
+  if (!group.matrixAutoUpdate) group.matrix.copy(mesh.matrix);
+  group.visible = mesh.visible;
+  group.renderOrder = mesh.renderOrder;
+  group.userData = { chunkedFrom: mesh };
+  const holder = mesh as THREE.InstancedMesh & { customDepthMaterial?: THREE.Material; customDistanceMaterial?: THREE.Material };
+  for (const [key, idx] of buckets) {
+    let g = geo;
+    if (instAttrs.length) {
+      // per-instance attributes live on the geometry: give the chunk a shallow copy with sliced data
+      g = new THREE.BufferGeometry();
+      g.index = geo.index;
+      for (const [name, a] of Object.entries(geo.attributes)) g.setAttribute(name, a);
+      for (const [name, a] of instAttrs) {
+        const Arr = a.array.constructor as new (len: number) => THREE.TypedArray;
+        const out = new Arr(idx.length * a.itemSize);
+        idx.forEach((i, j) => {
+          for (let c = 0; c < a.itemSize; c++) out[j * a.itemSize + c] = a.array[i * a.itemSize + c];
+        });
+        g.setAttribute(name, new THREE.InstancedBufferAttribute(out, a.itemSize, a.normalized, a.meshPerAttribute));
+      }
+      g.morphAttributes = geo.morphAttributes;
+      g.morphTargetsRelative = geo.morphTargetsRelative;
+      for (const gr of geo.groups) g.addGroup(gr.start, gr.count, gr.materialIndex);
+      g.setDrawRange(geo.drawRange.start, geo.drawRange.count);
+      g.boundingBox = geo.boundingBox;
+      g.boundingSphere = geo.boundingSphere;
+    }
+    const c = new THREE.InstancedMesh(g, mesh.material, idx.length);
+    const dst = c.instanceMatrix.array as Float32Array;
+    idx.forEach((i, j) => dst.set(src.subarray(i * 16, i * 16 + 16), j * 16));
+    if (mesh.instanceColor) {
+      const ic = mesh.instanceColor.array as Float32Array;
+      const out = new Float32Array(idx.length * 3);
+      idx.forEach((i, j) => out.set(ic.subarray(i * 3, i * 3 + 3), j * 3));
+      c.instanceColor = new THREE.InstancedBufferAttribute(out, 3);
+    }
+    c.name = `${mesh.name || 'instanced'}#${key}`;
+    c.castShadow = mesh.castShadow;
+    c.receiveShadow = mesh.receiveShadow;
+    c.renderOrder = mesh.renderOrder;
+    c.layers.mask = mesh.layers.mask;
+    c.customDepthMaterial = holder.customDepthMaterial;
+    c.customDistanceMaterial = holder.customDistanceMaterial;
+    c.userData = { ...mesh.userData };
+    c.computeBoundingSphere();
+    c.boundingSphere!.radius += 3; // headroom for vertex-shader displacement (wind, ground conforming)
+    group.add(c);
+  }
+  const parent = mesh.parent;
+  const at = parent.children.indexOf(mesh);
+  parent.remove(mesh);
+  parent.add(group);
+  // keep the original draw order among siblings
+  parent.children.splice(parent.children.indexOf(group), 1);
+  parent.children.splice(at, 0, group);
+  return group;
+}
+
+/**
+ * true when any texel of a (resampled) canvas is not opaque. The canvas stores premultiplied 8-bit colour,
+ * so an image whose alpha carries data (height / AO packed into alpha, cut-outs) must not go through it:
+ * where alpha is 0 the colour is lost entirely, where it is low the colour is quantised.
+ */
+function canvasHasAlpha(c: HTMLCanvasElement): boolean {
+  const ctx = c.getContext('2d');
+  if (!ctx) return true;
+  const d = ctx.getImageData(0, 0, c.width, c.height).data;
+  for (let i = 3; i < d.length; i += 4) if (d[i] < 250) return true;
+  return false;
 }
 
 export interface TextureBudgetReport {
@@ -444,8 +586,10 @@ export class Engine {
   async build(progress: (f: number, label: string) => void) {
     const q = this.quality;
     const step = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
+    // world modules resolve their content tier / texture caps from the engine's quality (see WorldQuality)
+    configureWorld(q);
     progress(0.02, 'טוען מרקמים…');
-    this.tex = await loadTextures(this.renderer, (f) => progress(0.02 + f * 0.2, 'טוען מרקמים…'));
+    this.tex = await loadTextures(this.renderer, (f) => progress(0.02 + f * 0.2, 'טוען מרקמים…'), q);
     progress(0.25, 'מעצב את הרי יהודה…');
     await step();
     this.terrain = new Terrain({ nearSpacing: q.nearSpacing, farSegments: q.farSegments });
@@ -478,6 +622,10 @@ export class Engine {
     this.motes = new Motes(q.motes);
     this.scene.add(this.motes.points);
     this.smoke = new SmokeColumns(this.particles, this.village.smokeSources);
+    // static scenery: spatial chunks so the camera / shadow frustums can cull (?chunk=0 to compare)
+    if (new URLSearchParams(location.search).get('chunk') !== '0') {
+      for (const g of [this.rocks.group, this.vegetation.group, this.village.group]) this.chunkStatic(g);
+    }
     this.enforceTextureBudget();
     this.makePost();
     this.applySize(true);
@@ -519,9 +667,14 @@ export class Engine {
     this.resizeRequestedAt = performance.now();
   }
 
-  /** Legacy entry point: resize right now. */
+  /**
+   * Legacy entry point. Applied at the start of the next rendered frame (no debounce), never on the
+   * spot: resizing the canvas clears it, and a cleared canvas that gets composited before the next
+   * render is exactly the one-frame black flash this engine avoids.
+   */
   resize() {
-    this.applySize(true);
+    this.resizePending = true;
+    this.resizeRequestedAt = -Infinity;
   }
 
   private applySize(force = false) {
@@ -599,18 +752,50 @@ export class Engine {
   // ------------------------------------------------------------------------------------------ budgets
 
   /**
+   * Re-buckets the big static InstancedMeshes under `root` into spatial chunks (see chunkInstancedMesh)
+   * so the camera and the shadow camera can cull them. Engine applies it to the rocks, vegetation and
+   * village groups right after they are built. Skips meshes marked `userData.dynamic` / `userData.noChunk`
+   * (anything whose instances are rewritten at runtime must set one of them). Returns meshes split.
+   */
+  chunkStatic(root: THREE.Object3D, opts?: ChunkOptions): number {
+    const targets: THREE.InstancedMesh[] = [];
+    root.traverse((o) => {
+      const im = o as THREE.InstancedMesh;
+      if (im.isInstancedMesh && !im.userData.dynamic && !im.userData.noChunk && !o.parent?.userData.chunkedFrom) targets.push(im);
+    });
+    let split = 0;
+    for (const im of targets) if (chunkInstancedMesh(im, opts)) split++;
+    return split;
+  }
+
+  /**
+   * Textures under `root` (see collectTextures); for the whole scene also the engine's shared TextureSet,
+   * which custom terrain / world shaders sample through uniforms that are not discoverable on materials
+   * (resampled only when JPEG-decoded, i.e. certainly without alpha).
+   */
+  private textureMap(root: THREE.Object3D): Map<THREE.Texture, boolean> {
+    const map = collectTextures(root);
+    if (root === this.scene && this.tex) {
+      for (const t of Object.values(this.tex) as THREE.Texture[]) map.set(t, (map.get(t) ?? true) && isJpegImage(t.image));
+    }
+    return map;
+  }
+
+  /**
    * Keeps GPU texture memory inside the tier budget. Every decoded image texture under `root` larger
    * than quality.texMax is resampled on the CPU (before its first upload; it is re-uploaded if it was
    * already on the GPU) and anisotropy is capped at quality.anisotropy. Leaves alone: DataTextures,
    * render-target / video / compressed / cube textures, alpha-tested or blended colour maps and custom
-   * shader uniforms (see collectTextures), and any texture with `userData.keepSize = true`.
+   * shader uniforms (see collectTextures), any image whose alpha is not fully opaque (checked after the
+   * resample: alpha-packed height / AO would be destroyed by the premultiplied canvas), and any texture
+   * with `userData.keepSize = true`. Those are reported in `oversized` (and logged) instead.
    * Engine runs it on the whole scene at the end of build() and at the start of warmup(); modules that
    * add big content later can call it on their own root.
    */
   enforceTextureBudget(root: THREE.Object3D = this.scene): TextureBudgetReport {
     const q = this.quality;
     const rep: TextureBudgetReport = { textures: 0, downscaled: 0, oversized: [], bytes: 0 };
-    for (const [t, resampleOk] of collectTextures(root)) {
+    for (const [t, resampleOk] of this.textureMap(root)) {
       const tex = t as THREE.Texture & { isRenderTargetTexture?: boolean; isVideoTexture?: boolean; isCompressedTexture?: boolean; isCubeTexture?: boolean; isDataTexture?: boolean };
       if (tex.isRenderTargetTexture || tex.isVideoTexture || tex.isCompressedTexture || tex.isCubeTexture || tex.isDataTexture) continue;
       if (tex.anisotropy > q.anisotropy) {
@@ -626,7 +811,8 @@ export class Engine {
           const k = q.texMax / big;
           const tw = Math.max(1, Math.round(s.w * k)), th = Math.max(1, Math.round(s.h * k));
           const c = downscaleImage(tex.image as CanvasImageSource, s.w, s.h, tw, th);
-          if (c) {
+          if (c && canvasHasAlpha(c)) rep.oversized.push(`${tex.name || tex.uuid.slice(0, 8)} ${s.w}x${s.h} (alpha data)`);
+          else if (c) {
             tex.dispose(); // immutable GL storage: an already uploaded texture must be re-allocated
             // ImageBitmaps are uploaded as they are (WebGL ignores flipY / premultiply for them); a canvas
             // is not, so keep the orientation the bitmap was uploaded with
@@ -652,7 +838,7 @@ export class Engine {
     const q = this.quality;
     const MB = 1 / (1024 * 1024);
     let texBytes = 0, textures = 0;
-    for (const [t] of collectTextures(root)) {
+    for (const [t] of this.textureMap(root)) {
       const tex = t as THREE.Texture & { isRenderTargetTexture?: boolean };
       if (tex.isRenderTargetTexture) continue;
       const img = tex.image as { width?: number; height?: number; data?: ArrayBufferView } | null;

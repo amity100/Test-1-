@@ -65,7 +65,12 @@
     "body_hair": 0.55,
     "dust": 0.0,
     "age": 0.55,
-    "tan_lines": "robe"
+    "tan_lines": "robe",
+    "hair_color": [
+      0.1,
+      0.07,
+      0.05
+    ]
   },
   "eyes": {
     "iris": "dark_brown",

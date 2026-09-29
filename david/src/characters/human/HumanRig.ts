@@ -138,8 +138,8 @@ export class HumanRig {
   };
   /** direct per-unit face control (MakeHuman pose units), 0..1 */
   readonly faceUnits: Record<string, number> = {};
-  /** always-on bias (relaxed lids: the MakeHuman neutral face shows a little sclera under the iris) */
-  readonly faceBias: Record<string, number> = { LeftLowerLidUp: 0.16, RightLowerLidUp: 0.16, LeftUpperLidClosed: 0.03, RightUpperLidClosed: 0.03 };
+  /** always-on bias: relaxed lids (the upper lid rests ~1.5 mm over the iris, the lower lid touches its rim) */
+  readonly faceBias: Record<string, number> = { LeftLowerLidUp: 0.22, RightLowerLidUp: 0.22, LeftUpperLidClosed: 0.18, RightUpperLidClosed: 0.18 };
   /** resting gaze pitch (radians, negative = down) */
   gazeRestPitch = -0.035;
   private exprTarget: Partial<Record<Expression, number>> = {};

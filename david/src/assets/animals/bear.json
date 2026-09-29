@@ -1,0 +1,356 @@
+{
+ "version": 1,
+ "bones": [
+  {
+   "name": "root",
+   "parent": null,
+   "pos": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "name": "hips",
+   "parent": "root",
+   "pos": [
+    0.0,
+    0.8,
+    -0.5
+   ]
+  },
+  {
+   "name": "spine1",
+   "parent": "hips",
+   "pos": [
+    0.0,
+    0.84,
+    -0.2
+   ]
+  },
+  {
+   "name": "spine2",
+   "parent": "spine1",
+   "pos": [
+    0.0,
+    0.87,
+    0.12
+   ]
+  },
+  {
+   "name": "neck1",
+   "parent": "spine2",
+   "pos": [
+    0.0,
+    0.86,
+    0.42
+   ]
+  },
+  {
+   "name": "neck2",
+   "parent": "neck1",
+   "pos": [
+    0.0,
+    0.81,
+    0.6
+   ]
+  },
+  {
+   "name": "head",
+   "parent": "neck2",
+   "pos": [
+    0.0,
+    0.77,
+    0.74
+   ]
+  },
+  {
+   "name": "jaw",
+   "parent": "head",
+   "pos": [
+    0.0,
+    0.67807,
+    0.83246
+   ]
+  },
+  {
+   "name": "lipU",
+   "parent": "head",
+   "pos": [
+    0.0,
+    0.65471,
+    1.03825
+   ]
+  },
+  {
+   "name": "earL",
+   "parent": "head",
+   "pos": [
+    0.1012,
+    0.8552,
+    0.81817
+   ]
+  },
+  {
+   "name": "earR",
+   "parent": "head",
+   "pos": [
+    -0.1012,
+    0.8552,
+    0.81817
+   ]
+  },
+  {
+   "name": "tail",
+   "parent": "hips",
+   "pos": [
+    0.0,
+    0.8,
+    -0.82
+   ]
+  },
+  {
+   "name": "scapL",
+   "parent": "spine2",
+   "pos": [
+    0.115,
+    0.93,
+    0.25
+   ]
+  },
+  {
+   "name": "humL",
+   "parent": "scapL",
+   "pos": [
+    0.19,
+    0.63,
+    0.4
+   ]
+  },
+  {
+   "name": "foreL",
+   "parent": "humL",
+   "pos": [
+    0.19,
+    0.37,
+    0.31
+   ]
+  },
+  {
+   "name": "wristL",
+   "parent": "foreL",
+   "pos": [
+    0.18,
+    0.1,
+    0.365
+   ]
+  },
+  {
+   "name": "toesL",
+   "parent": "wristL",
+   "pos": [
+    0.18,
+    0.035,
+    0.47
+   ]
+  },
+  {
+   "name": "scapR",
+   "parent": "spine2",
+   "pos": [
+    -0.115,
+    0.93,
+    0.25
+   ]
+  },
+  {
+   "name": "humR",
+   "parent": "scapR",
+   "pos": [
+    -0.19,
+    0.63,
+    0.4
+   ]
+  },
+  {
+   "name": "foreR",
+   "parent": "humR",
+   "pos": [
+    -0.19,
+    0.37,
+    0.31
+   ]
+  },
+  {
+   "name": "wristR",
+   "parent": "foreR",
+   "pos": [
+    -0.18,
+    0.1,
+    0.365
+   ]
+  },
+  {
+   "name": "toesR",
+   "parent": "wristR",
+   "pos": [
+    -0.18,
+    0.035,
+    0.47
+   ]
+  },
+  {
+   "name": "femL",
+   "parent": "hips",
+   "pos": [
+    0.155,
+    0.74,
+    -0.53
+   ]
+  },
+  {
+   "name": "tibL",
+   "parent": "femL",
+   "pos": [
+    0.19,
+    0.45,
+    -0.37
+   ]
+  },
+  {
+   "name": "ankleL",
+   "parent": "tibL",
+   "pos": [
+    0.18,
+    0.13,
+    -0.575
+   ]
+  },
+  {
+   "name": "htoesL",
+   "parent": "ankleL",
+   "pos": [
+    0.18,
+    0.035,
+    -0.36
+   ]
+  },
+  {
+   "name": "femR",
+   "parent": "hips",
+   "pos": [
+    -0.155,
+    0.74,
+    -0.53
+   ]
+  },
+  {
+   "name": "tibR",
+   "parent": "femR",
+   "pos": [
+    -0.19,
+    0.45,
+    -0.37
+   ]
+  },
+  {
+   "name": "ankleR",
+   "parent": "tibR",
+   "pos": [
+    -0.18,
+    0.13,
+    -0.575
+   ]
+  },
+  {
+   "name": "htoesR",
+   "parent": "ankleR",
+   "pos": [
+    -0.18,
+    0.035,
+    -0.36
+   ]
+  }
+ ],
+ "sockets": {
+  "mouth": {
+   "bone": "head",
+   "pos": [
+    0.0,
+    0.63896,
+    0.97005
+   ]
+  },
+  "beard": {
+   "bone": "jaw",
+   "pos": [
+    0.0,
+    0.53493,
+    0.9078
+   ]
+  },
+  "headCenter": {
+   "bone": "head",
+   "pos": [
+    0.0,
+    0.74876,
+    0.88311
+   ]
+  },
+  "nose": {
+   "bone": "head",
+   "pos": [
+    0.0,
+    0.65785,
+    1.10255
+   ]
+  },
+  "eyeL": {
+   "bone": "head",
+   "pos": [
+    0.05867,
+    0.76194,
+    0.93941
+   ]
+  },
+  "eyeR": {
+   "bone": "head",
+   "pos": [
+    -0.05867,
+    0.76194,
+    0.93941
+   ]
+  }
+ },
+ "headPitch": 0.3,
+ "jawRest": 0.17,
+ "metersPerUV": 2.635632902061887,
+ "furMax": 0.13,
+ "lods": [
+  {
+   "tris": 52000,
+   "shellTris": 50677
+  },
+  {
+   "tris": 20000,
+   "shellTris": 19016
+  },
+  {
+   "tris": 8000,
+   "shellTris": 7603
+  }
+ ],
+ "extrasTris": 6588,
+ "bounds": {
+  "min": [
+   -0.31300724140186575,
+   0.0030064837353335756,
+   -0.8457478380946356
+  ],
+  "max": [
+   0.31316425584461066,
+   1.04017163200619,
+   1.1178092914640123
+  ]
+ }
+}

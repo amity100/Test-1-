@@ -5,6 +5,7 @@ import { SkinMaterial, uvDensityAttribute } from './SkinMaterial';
 import { EyeBall, WetMaterial } from './EyeModel';
 import { StrandMaterial } from './HairStrands';
 import { hasHumanAsset, humanAssetUrl } from './assets';
+import { DualQuatSkinning, defaultDQSFactor } from './DualQuatSkinning';
 
 /*
  * HumanModel — a realistic, skinned human built from MakeHuman (CC0) data by tools/human/build_human.py.
@@ -92,6 +93,8 @@ export class HumanModel {
   readonly root = new THREE.Group();
   readonly body: THREE.SkinnedMesh;
   readonly skeleton: THREE.Skeleton;
+  /** LBS/DQS blend skinning; call `dqs.patchMaterial(mat)` on garment materials so they deform like the body */
+  readonly dqs: DualQuatSkinning;
   readonly rig: HumanRig;
   readonly skin: SkinMaterial;
   readonly eyes: { L: EyeBall; R: EyeBall };
@@ -167,7 +170,11 @@ export class HumanModel {
     const bones = this.rig.boneList;
     const inverses = this.rig.rig.bones.map((b) => new THREE.Matrix4().makeTranslation(-b.h[0], -b.h[1], -b.h[2]));
     this.skeleton = new THREE.Skeleton(bones, inverses);
+    // dual-quaternion / linear blend skinning (volume-preserving shoulders, hips and spine)
+    this.dqs = new DualQuatSkinning(this.skeleton, this.root, defaultDQSFactor);
+    this.dqs.patchMaterial(this.skin, true);
     this.body = new THREE.SkinnedMesh(bg.geometry, this.skin);
+    this.body.customDepthMaterial = this.dqs.patchMaterial(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), true);
     this.body.name = 'body';
     this.body.castShadow = true;
     this.body.receiveShadow = true;
@@ -189,9 +196,9 @@ export class HumanModel {
       this.strandMats.push(mat);
       return mesh;
     };
-    const browCol = new THREE.Color(bc[0], bc[1], bc[2]);
+    const browCol = new THREE.Color().setRGB(bc[0], bc[1], bc[2], THREE.SRGBColorSpace); // preset colours are sRGB
     this.brows = mkStrands('brow', new StrandMaterial({ color: browCol, tipColor: browCol.clone().multiplyScalar(1.5), opacity: 0.92, widthScale: 1.0 }));
-    this.lashes = mkStrands('lash', new StrandMaterial({ color: browCol.clone().multiplyScalar(0.3), tipColor: browCol.clone().multiplyScalar(0.55), opacity: 1, widthScale: 1.0, roughness: 0.75 }));
+    this.lashes = mkStrands('lash', new StrandMaterial({ color: browCol.clone().multiplyScalar(0.35), tipColor: browCol.clone().multiplyScalar(0.8), opacity: 1, widthScale: 1.0, roughness: 0.6 }));
     const tg = buildAuxGeometry(data, 'tear');
     if (tg) {
       const tl = new THREE.SkinnedMesh(tg, new WetMaterial(0.08, 0.45));
@@ -401,18 +408,14 @@ export class HumanModel {
     if (this._restN) return this._restN;
     const g = this.body.geometry;
     const nrm = g.getAttribute('normal') as THREE.BufferAttribute;
-    const si = g.getAttribute('skinIndex') as THREE.BufferAttribute;
-    const sw = g.getAttribute('skinWeight') as THREE.BufferAttribute;
     const rots = this.rig.rest.map((r) => r.Q);
     const out = new Float32Array(nrm.count * 3);
     const v = new THREE.Vector3(), acc = new THREE.Vector3(), t = new THREE.Vector3();
+    const inf = this.influenceReader(g);
     for (let i = 0; i < nrm.count; i++) {
       v.fromBufferAttribute(nrm, i);
       acc.set(0, 0, 0);
-      for (let k = 0; k < 4; k++) {
-        const w = sw.getComponent(i, k);
-        if (w > 0) acc.addScaledVector(t.copy(v).applyQuaternion(rots[si.getComponent(i, k)]), w);
-      }
+      inf(i, (b, w) => acc.addScaledVector(t.copy(v).applyQuaternion(rots[b]), w));
       acc.normalize().toArray(out, i * 3);
     }
     this._restN = out;
@@ -423,23 +426,36 @@ export class HumanModel {
     if (this._rest) return this._rest;
     const g = this.body.geometry;
     const pos = g.getAttribute('position') as THREE.BufferAttribute;
-    const si = g.getAttribute('skinIndex') as THREE.BufferAttribute;
-    const sw = g.getAttribute('skinWeight') as THREE.BufferAttribute;
     const mats = this.restSkinMatrices();
     const out = new Float32Array(pos.count * 3);
     const v = new THREE.Vector3(), acc = new THREE.Vector3(), t = new THREE.Vector3();
+    const inf = this.influenceReader(g);
     for (let i = 0; i < pos.count; i++) {
       v.fromBufferAttribute(pos, i);
       acc.set(0, 0, 0);
-      for (let k = 0; k < 4; k++) {
-        const w = sw.getComponent(i, k);
-        if (w <= 0) continue;
-        acc.addScaledVector(t.copy(v).applyMatrix4(mats[si.getComponent(i, k)]), w);
-      }
+      inf(i, (b, w) => acc.addScaledVector(t.copy(v).applyMatrix4(mats[b]), w));
       acc.toArray(out, i * 3);
     }
     this._rest = out;
     return out;
+  }
+
+  /** Iterate the (up to 8) bone influences of vertex i of a skinned geometry. */
+  private influenceReader(g: THREE.BufferGeometry) {
+    const sets: [THREE.BufferAttribute, THREE.BufferAttribute][] = [];
+    for (const [a, b] of [['skinIndex', 'skinWeight'], ['skinIndex2', 'skinWeight2']]) {
+      const si = g.getAttribute(a) as THREE.BufferAttribute | undefined;
+      const sw = g.getAttribute(b) as THREE.BufferAttribute | undefined;
+      if (si && sw) sets.push([si, sw]);
+    }
+    return (i: number, fn: (bone: number, w: number) => void) => {
+      for (const [si, sw] of sets) {
+        for (let k = 0; k < 4; k++) {
+          const w = sw.getComponent(i, k);
+          if (w > 0) fn(si.getComponent(i, k), w);
+        }
+      }
+    };
   }
 
   /** Bind -> rest skinning matrices (character space). */
@@ -464,7 +480,7 @@ export class HumanModel {
     const bpos = space === 'rest' ? this.restPositions() : (body.getAttribute('position').array as Float32Array);
     const bnrm = opts.facing === false ? null : space === 'rest' ? this.restNormals() : (body.getAttribute('normal').array as Float32Array);
     const bsi = body.getAttribute('skinIndex') as THREE.BufferAttribute;
-    const bsw = body.getAttribute('skinWeight') as THREE.BufferAttribute;
+    const binf = this.influenceReader(body);
     const names = this.data.rig.bones.map((b) => b.n);
     // spatial hash of body vertices
     const cell = 0.03;
@@ -485,8 +501,8 @@ export class HumanModel {
     const g = geo;
     const pos = g.getAttribute('position') as THREE.BufferAttribute;
     const n = pos.count;
-    const si = new Uint16Array(n * 4);
-    const sw = new Float32Array(n * 4);
+    const si = new Uint16Array(n * 8);
+    const sw = new Float32Array(n * 8);
     const p = new THREE.Vector3();
     const mats = space === 'rest' ? this.restSkinMatrices() : null;
     const outPos = new Float32Array(n * 3);
@@ -517,33 +533,30 @@ export class HumanModel {
         const kk = Math.min(k, cand.length);
         for (let c = 0; c < kk; c++) {
           const w = 1 / (cand[c].d + 0.004) ** 2;
-          for (let m = 0; m < 4; m++) {
-            const bw = bsw.getComponent(cand[c].i, m);
-            if (bw <= 0) continue;
-            const b = bsi.getComponent(cand[c].i, m);
-            if (filter && opts.boneFilter && !opts.boneFilter(names[b])) continue;
+          binf(cand[c].i, (b, bw) => {
+            if (filter && opts.boneFilter && !opts.boneFilter(names[b])) return;
             infl.set(b, (infl.get(b) ?? 0) + bw * w);
-          }
+          });
         }
         return infl;
       };
       let infl = gather(true, true);
       if (infl.size === 0) infl = gather(false, true);
       if (infl.size === 0) infl = gather(false, false);
-      const list = [...infl.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4);
+      const list = [...infl.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
       let sum = 0;
       for (const [, w] of list) sum += w;
       list.forEach(([b, w], m) => {
-        si[i * 4 + m] = b;
-        sw[i * 4 + m] = w / (sum || 1);
+        si[i * 8 + m] = b;
+        sw[i * 8 + m] = w / (sum || 1);
       });
       if (mats) {
         // inverse skinning: v_bind = (sum w M)^-1 v_rest
         const M = new THREE.Matrix4().set(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-        for (let m = 0; m < 4; m++) {
-          const w = sw[i * 4 + m];
+        for (let m = 0; m < 8; m++) {
+          const w = sw[i * 8 + m];
           if (w <= 0) continue;
-          const e = mats[si[i * 4 + m]].elements;
+          const e = mats[si[i * 8 + m]].elements;
           for (let z = 0; z < 16; z++) M.elements[z] += e[z] * w;
         }
         p.applyMatrix4(M.invert());
@@ -552,10 +565,26 @@ export class HumanModel {
     }
     const out = geo.clone();
     out.setAttribute('position', new THREE.BufferAttribute(outPos, 3));
-    out.setAttribute('skinIndex', new THREE.BufferAttribute(si, 4));
-    out.setAttribute('skinWeight', new THREE.BufferAttribute(sw, 4));
+    // 8 influences like the body, split into two vec4 attribute pairs
+    const split = (src8: Uint16Array | Float32Array, half: number) => {
+      const o = src8 instanceof Uint16Array ? new Uint16Array(n * 4) : new Float32Array(n * 4);
+      for (let i = 0; i < n; i++) for (let k = 0; k < 4; k++) o[i * 4 + k] = src8[i * 8 + half * 4 + k];
+      return o;
+    };
+    out.setAttribute('skinIndex', new THREE.BufferAttribute(split(si, 0), 4));
+    out.setAttribute('skinWeight', new THREE.BufferAttribute(split(sw, 0), 4));
+    out.setAttribute('skinIndex2', new THREE.BufferAttribute(split(si, 1), 4));
+    out.setAttribute('skinWeight2', new THREE.BufferAttribute(split(sw, 1), 4));
     if (space === 'rest' && out.getAttribute('normal')) out.computeVertexNormals();
+    // same LBS/DQS 8-influence skinning as the body, so the garment follows the skin exactly
+    for (const m of Array.isArray(material) ? material : [material]) {
+      if (!m.userData.humanSkinning) {
+        this.dqs.patchMaterial(m, true);
+        m.userData.humanSkinning = true;
+      }
+    }
     const mesh = new THREE.SkinnedMesh(out, material);
+    mesh.customDepthMaterial = this.dqs.patchMaterial(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), true);
     mesh.frustumCulled = false;
     mesh.castShadow = true;
     mesh.receiveShadow = true;

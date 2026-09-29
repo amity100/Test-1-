@@ -260,9 +260,8 @@ class Human:
 
 
 # ------------------------------------------------------------------------------------------ weights
-def top4(W: np.ndarray):
-    """Dense weights -> (idx uint8/16 x4, w float32 x4), renormalised."""
-    k = 4
+def top4(W: np.ndarray, k: int = 4):
+    """Dense weights -> (idx uint8/16 x k, w float32 x k), renormalised (k = 4 or 8)."""
     idx = np.argsort(-W, axis=1)[:, :k]
     w = np.take_along_axis(W, idx, 1)
     w[w < 0.004] = 0
@@ -509,8 +508,8 @@ def build_strands(h: Human, tier: Tier, eyes, rng_seed=1, density=1.0):
         io = int(np.argmax(lat))
         upper_l = loop[: io + 1]
         lower_l = np.concatenate([loop[io:], loop[:1]])[::-1]
-        up_s, up_r, up_w = lashes(upper_l, c, side, rng, upper=True, count=int(150 * density))
-        lo_s, lo_r, lo_w = lashes(lower_l, c, side, rng, upper=False, count=int(70 * density))
+        up_s, up_r, up_w = lashes(upper_l, c, side, rng, upper=True, count=int(175 * density))
+        lo_s, lo_r, lo_w = lashes(lower_l, c, side, rng, upper=False, count=int(55 * density))
         mask = (allnrm[:, 2] > 0.15) & (allpos[:, 1] > c[1] + 0.002) & (np.abs(allpos[:, 0] - c[0]) < 0.05)
         surf = Surface(allpos, allnrm, mask)
         br_s, br_r, br_w = brows(surf, c, side, loop, rng, density=bcfg.get("density", 1.0) * density,
@@ -801,9 +800,11 @@ def build_preset(name: str, tiers=("base", "sub1")):
     bw.add("mesh.quads", obj.faces[bf], np.uint16, 4)
     bw.add("mesh.quadsUV", obj.faces_t[bf], np.uint16, 4)
     bw.add("mesh.uv", np.round(np.clip(obj.vt, 0, 1) * 65535), np.uint16, 2, normalized=True)
-    si, sw = top4(h.Wd[:NBODY])
-    bw.add("mesh.skinIndex", si, np.uint8, 4)
-    bw.add("mesh.skinWeight", np.round(sw * 65535), np.uint16, 4, normalized=True)
+    # MakeHuman's default weights use up to 8 bones per vertex around the shoulders and hips; truncating to 4
+    # drops different bones on neighbouring vertices and tears the skin under large rotations -> keep 8
+    si, sw = top4(h.Wd[:NBODY], 8)
+    bw.add("mesh.skinIndex", si, np.uint8, 8)
+    bw.add("mesh.skinWeight", np.round(sw * 65535), np.uint16, 8, normalized=True)
     hi_tier = T["sub1"] if "sub1" in T else T["base"]
     st = build_strands(h, hi_tier, eyes, rng_seed=preset.get("skin", {}).get("seed", 1), density=1.0)
     rig["strands"] = {k: {"strands": int(r["nstrands"]), "points": int(r["points"])} for k, r in st.items()}

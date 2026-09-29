@@ -1,20 +1,25 @@
 import * as THREE from 'three';
 import { damp, dampAngle } from '../core/noise';
-import { BearModel } from '../characters/BearModel';
+import { BearModel, type BearModelOptions } from '../characters/BearModel';
 import type { Terrain } from '../world/Terrain';
 import type { Colliders } from '../core/Colliders';
 
-/** Positions the bear model in the world: steering, ground following, slope alignment. */
+/**
+ * Positions the bear model in the world: steering, ground following, slope alignment.
+ * `opts.quality` picks the model's detail tier (defaults to engine.quality.name when available).
+ */
 export class BearActor {
-  readonly model = new BearModel();
+  readonly model: BearModel;
   readonly pos = new THREE.Vector3();
   heading = 0;
   speed = 0;
   private pitch = 0;
+  private roll = 0;
   alive = true;
   hits = 0;
 
-  constructor(private terrain: Terrain, private colliders: Colliders, scene: THREE.Object3D) {
+  constructor(private terrain: Terrain, private colliders: Colliders, scene: THREE.Object3D, opts: BearModelOptions = {}) {
+    this.model = new BearModel(opts);
     scene.add(this.model.root);
     this.model.root.visible = false;
     this.model.ground = (x, z) => terrain.heightAt(x, z);
@@ -61,17 +66,23 @@ export class BearActor {
       this.colliders.resolve(this.pos, 0.6);
     }
     this.pos.y = this.terrain.heightAt(this.pos.x, this.pos.z);
-    // align body pitch with the slope along the heading
+    // align the body with the slope along the heading (the feet adapt per paw with IK)
     const fx = Math.sin(this.heading), fz = Math.cos(this.heading);
     const hf = this.terrain.heightAt(this.pos.x + fx * 0.8, this.pos.z + fz * 0.8);
     const hb = this.terrain.heightAt(this.pos.x - fx * 0.8, this.pos.z - fz * 0.8);
-    this.pitch = damp(this.pitch, -Math.atan2(hf - hb, 1.6) * (this.model.hold === 'rear' ? 0 : 1), 6, dt);
+    const hl = this.terrain.heightAt(this.pos.x + fz * 0.3, this.pos.z - fx * 0.3);
+    const hr = this.terrain.heightAt(this.pos.x - fz * 0.3, this.pos.z + fx * 0.3);
+    const standing = this.model.hold === 'rear' || this.model.hold === 'down';
+    this.pitch = damp(this.pitch, -Math.atan2(hf - hb, 1.6) * (standing ? 0.2 : 0.85), 6, dt);
+    this.roll = damp(this.roll, Math.atan2(hl - hr, 0.6) * (standing ? 0.1 : 0.35), 6, dt);
     const r = this.model.root;
     r.position.copy(this.pos);
-    r.position.y = Math.min(hf, hb, this.pos.y);
+    // sit at the mean height of the footprint so the IK only has to absorb small differences
+    r.position.y = (hf + hb + this.pos.y * 2) / 4;
     r.rotation.set(0, 0, 0);
     r.rotateY(this.heading);
     r.rotateX(this.pitch);
+    r.rotateZ(this.roll);
     this.model.speed = this.speed;
     if (this.visible) this.model.update(dt);
   }

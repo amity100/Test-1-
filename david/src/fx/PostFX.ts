@@ -238,11 +238,12 @@ class FinishPass extends Pass {
           col = (col - 0.5) * uContrast + 0.5;
           col += vec3(uWarm, uWarm * 0.35, -uWarm * 0.6) * smoothstep(0.35, 1.0, l);
           col += vec3(-0.012, 0.0, 0.018) * (1.0 - smoothstep(0.0, 0.35, l));
-          // vignette, relative to the long screen axis (in portrait the old UV-space ellipse turned into
-          // dark bars down both sides of a phone screen)
-          vec2 vd = uAspect >= 1.0 ? dir : dir.yx;
-          float v = smoothstep(0.85, 0.2, length(vd * vec2(1.0, 0.85)) * (1.0 + uVignette));
-          col *= mix(1.0, v, 0.9);
+          // lens vignette, isotropic in screen space and normalised to the half-diagonal: the old UV-space
+          // ellipse darkened the short edges of a portrait phone by ~45 % (dark bands down both sides).
+          // Now ~0.4x in the corners, ~0.55x at the 16:9 side edges, untouched mid-frame in portrait.
+          float r = length(dir * vec2(uAspect, 1.0)) / (0.5 * length(vec2(uAspect, 1.0)));
+          float vig = smoothstep(0.3, 1.1, r);
+          col *= 1.0 - (0.4 + 1.5 * uVignette) * vig * vig;
           // damage pulse
           col = mix(col, col * vec3(1.25, 0.45, 0.4), uRed * smoothstep(0.1, 0.6, length(dir)));
           col *= 1.0 - uFade;

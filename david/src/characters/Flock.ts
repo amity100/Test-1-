@@ -46,7 +46,45 @@ export interface FlockOptions {
   goats?: number;
   seed?: number;
   walkable?: (x: number, z: number) => boolean;
+  /**
+   * Content tier (engine.quality.name): picks geometry detail, LOD distances and the fur-shell budget.
+   * Defaults to the engine's tier when available (window.__engine), else 'high'.
+   */
+  quality?: FlockQuality;
 }
+
+export type FlockQuality = 'low' | 'medium' | 'high';
+
+/** per-tier level-of-detail policy */
+interface LodPolicy {
+  /** geometry detail of LOD0 (1 = full) */
+  detail0: number;
+  /** camera distances (m) where LOD1 / LOD2 take over */
+  dist: [number, number];
+  /** fur shells are drawn only closer than this (m) */
+  shellDist: number;
+  /** number of fur shells (sheep / ram, goat, lamb) */
+  shells: [number, number, number];
+}
+const LOD_POLICY: Record<FlockQuality, LodPolicy> = {
+  high: { detail0: 1, dist: [15, 42], shellDist: 18, shells: [5, 6, 6] },
+  medium: { detail0: 1.15, dist: [10, 28], shellDist: 11, shells: [4, 5, 5] },
+  low: { detail0: 1.35, dist: [6, 17], shellDist: 7, shells: [3, 3, 4] },
+};
+/** geometry detail factor of LOD1 / LOD2 (multiplies the sampling step) */
+const LOD_DETAIL = [2.1, 3.6];
+
+function detectFlockQuality(): FlockQuality {
+  const q = (globalThis as unknown as { __engine?: { quality?: { name?: string } } }).__engine?.quality?.name;
+  return q === 'low' || q === 'medium' || q === 'high' ? q : 'high';
+}
+
+/** geometry detail of the kind being built (1 = full; larger = coarser). Set by buildKind. */
+let GD = 1;
+/** shell count of the kind being built. Set by buildKind. */
+let GSHELLS = 5;
+/** true while building a far LOD (no fur-shell source, no eyelids, fewer segments) */
+const coarse = () => GD > 1.6;
 
 export interface FlockContext {
   shepherd: THREE.Vector3;
@@ -685,7 +723,7 @@ function addSdfPart(gb: GeoBuilder, spec: SdfPartSpec, gs?: GeoBuilder, shellRes
 
 function addSdfPartTo(gb: GeoBuilder, spec: SdfPartSpec, res: number) {
   const f = partsSDF(spec.parts);
-  const net = surfaceNets(f, spec.box, res);
+  const net = surfaceNets(f, spec.box, res * GD);
   const xf = spec.xf ?? new THREE.Matrix4();
   const nm = new THREE.Matrix3().getNormalMatrix(xf);
   const v = new THREE.Vector3(), n = new THREE.Vector3();
@@ -770,7 +808,7 @@ function addLeg(
   const rings: [number, number, number, number][] = [];
   for (let i = 0; i < prof.length - 1; i++) {
     const a = prof[i], b = prof[i + 1];
-    const steps = Math.max(1, Math.ceil((a[0] - b[0]) / 0.018));
+    const steps = Math.max(1, Math.ceil((a[0] - b[0]) / (0.018 * GD)));
     for (let s = 0; s < steps; s++) {
       const t = s / steps;
       const tt = t * t * (3 - 2 * t) * 0.5 + t * 0.5;
@@ -778,7 +816,7 @@ function addLeg(
     }
   }
   rings.push(prof[prof.length - 1]);
-  const SEG = 12;
+  const SEG = GD > 3 ? 6 : GD > 1.6 ? 8 : GD > 1.2 ? 10 : 12;
   const v0 = gb.count;
   const t0 = gb.idx.length;
   const pt = newPaint();
@@ -883,7 +921,7 @@ function addEar(gb: GeoBuilder, e: EarSpec, headXf: THREE.Matrix4, bone: number)
   let w = new THREE.Vector3(...e.inner);
   w.addScaledVector(d, -w.dot(d)).normalize();
   const vv = new THREE.Vector3().crossVectors(d, w).normalize();
-  const NU = 16, NA = 14;
+  const NU = GD > 3 ? 6 : GD > 1.6 ? 10 : 16, NA = GD > 3 ? 6 : GD > 1.6 ? 9 : 14;
   const v0 = gb.count;
   const t0 = gb.idx.length;
   const pt = newPaint();
@@ -978,7 +1016,7 @@ function addEyes(gb: GeoBuilder, e: EyeSpec, headXf: THREE.Matrix4) {
     const up = new THREE.Vector3(0, 1, 0);
     const hz = new THREE.Vector3().crossVectors(up, ax).normalize();
     up.crossVectors(ax, hz).normalize();
-    const NS = 24, NR = 18;
+    const NS = GD > 3 ? 8 : GD > 1.6 ? 14 : GD > 1.2 ? 18 : 24, NR = GD > 3 ? 5 : GD > 1.6 ? 9 : GD > 1.2 ? 12 : 18;
     const v0 = gb.count;
     const pt = newPaint();
     const acc = gb.weights1(B_HEAD);
@@ -1018,8 +1056,9 @@ function addEyes(gb: GeoBuilder, e: EyeSpec, headXf: THREE.Matrix4) {
         gb.triOut(a, b, b1, cw.x, cw.y, cw.z);
         gb.triOut(a, b1, a1, cw.x, cw.y, cw.z);
       }
-    // eyelids: an almond-shaped torus around the eyeball, heavier on top
-    const NP = 28, NQ = 8;
+    // eyelids: an almond-shaped torus around the eyeball, heavier on top (skipped on far LODs)
+    if (coarse()) continue;
+    const NP = GD > 1.2 ? 18 : 28, NQ = GD > 1.2 ? 6 : 8;
     const l0 = gb.count;
     const lt0 = gb.idx.length;
     const tubeC: THREE.Vector3[] = [];
@@ -1073,6 +1112,8 @@ function addTube(
   paint: (t: number, arc: number, out: Paint) => void,
   bone: number,
 ) {
+  steps = Math.max(6, Math.round(steps / GD));
+  seg = Math.max(5, Math.round(seg / Math.sqrt(GD)));
   const v0 = gb.count;
   const t0 = gb.idx.length;
   const starts: number[] = [];
@@ -1151,6 +1192,8 @@ interface KindAssets {
   rig: Rig;
   geometry: THREE.BufferGeometry;
   shells: THREE.BufferGeometry | null;
+  /** [LOD0 (= geometry), LOD1, LOD2] */
+  lods: THREE.BufferGeometry[];
   radius: number;
   height: number;
 }
@@ -1383,8 +1426,8 @@ function buildSheepLike(kind: 'sheep' | 'ram', seed: number): KindAssets {
   for (let l = 0; l < 4; l++) addLeg(gb, rig.legs[l], l, scaleProf(l < 2 ? front : hind), 0.046 * s, hoofC, 0.5, 0, 0);
 
   const geometry = gb.build();
-  const shells = gs.buildShells(5);
-  return { kind, rig, geometry, shells, radius: 1.0 * s, height: 0.9 * s };
+  const shells = coarse() ? null : gs.buildShells(GSHELLS);
+  return { kind, rig, geometry, shells, lods: [], radius: 1.0 * s, height: 0.9 * s };
 }
 
 function addRamHorns(gb: GeoBuilder, HX: THREE.Matrix4, s: number) {
@@ -1567,7 +1610,7 @@ function buildLamb(seed: number): KindAssets {
     addLeg(gb, rig.legs[l], l, l < 2 ? front : hind, 0.03, hoofC, 0.6, 0, 0.004);
     addLeg(gs, rig.legs[l], l, l < 2 ? front : hind, 0.03, hoofC, 0.6, 0, 0.004);
   }
-  return { kind: 'lamb', rig, geometry: gb.build(), shells: gs.buildShells(6), radius: 0.6, height: 0.6 };
+  return { kind: 'lamb', rig, geometry: gb.build(), shells: coarse() ? null : gs.buildShells(GSHELLS), lods: [], radius: 0.6, height: 0.6 };
 }
 
 // ---------------------------------------------------------------- goat
@@ -1753,40 +1796,61 @@ function buildGoat(seed: number): KindAssets {
     addLeg(gb, rig.legs[l], l, l < 2 ? front : hind, 0.045, hoofC, 0.7, 0.05, 0.006);
     addLeg(gs, rig.legs[l], l, l < 2 ? front : hind, 0.045, hoofC, 0.7, 0.05, 0.006);
   }
-  return { kind: 'goat', rig, geometry: gb.build(), shells: gs.buildShells(6), radius: 1.0, height: 1.1 };
+  return { kind: 'goat', rig, geometry: gb.build(), shells: coarse() ? null : gs.buildShells(GSHELLS), lods: [], radius: 1.0, height: 1.1 };
 }
 
 // ---------------------------------------------------------------- asset cache
 
 interface AssetCache {
+  key: string;
   seed: number;
+  quality: FlockQuality;
   kinds: Partial<Record<AnimalKind, KindAssets>>;
   refs: number;
 }
-const _assetCaches = new Map<number, AssetCache>();
+const _assetCaches = new Map<string, AssetCache>();
 
-function buildKind(kind: AnimalKind, seed: number): KindAssets {
-  switch (kind) {
-    case 'sheep':
-      return buildSheepLike('sheep', seed);
-    case 'ram':
-      return buildSheepLike('ram', seed + 1);
-    case 'goat':
-      return buildGoat(seed + 2);
-    default:
-      return buildLamb(seed + 3);
+function buildKindAt(kind: AnimalKind, seed: number, detail: number, shells: number): KindAssets {
+  GD = detail;
+  GSHELLS = shells;
+  try {
+    switch (kind) {
+      case 'sheep':
+        return buildSheepLike('sheep', seed);
+      case 'ram':
+        return buildSheepLike('ram', seed + 1);
+      case 'goat':
+        return buildGoat(seed + 2);
+      default:
+        return buildLamb(seed + 3);
+    }
+  } finally {
+    GD = 1;
+    GSHELLS = 5;
   }
 }
-function getCache(seed: number): AssetCache {
-  let c = _assetCaches.get(seed);
+
+/** LOD0 (with fur-shell source) + two coarser skinned LODs sharing the same rig */
+function buildKind(kind: AnimalKind, seed: number, quality: FlockQuality): KindAssets {
+  const pol = LOD_POLICY[quality];
+  const nShell = kind === 'goat' ? pol.shells[1] : kind === 'lamb' ? pol.shells[2] : pol.shells[0];
+  const a = buildKindAt(kind, seed, pol.detail0, nShell);
+  const l1 = buildKindAt(kind, seed, pol.detail0 * LOD_DETAIL[0], 0);
+  const l2 = buildKindAt(kind, seed, pol.detail0 * LOD_DETAIL[1], 0);
+  a.lods = [a.geometry, l1.geometry, l2.geometry];
+  return a;
+}
+function getCache(seed: number, quality: FlockQuality): AssetCache {
+  const key = `${seed}:${quality}`;
+  let c = _assetCaches.get(key);
   if (!c) {
-    c = { seed, kinds: {}, refs: 0 };
-    _assetCaches.set(seed, c);
+    c = { key, seed, quality, kinds: {}, refs: 0 };
+    _assetCaches.set(key, c);
   }
   return c;
 }
-function acquireCache(seed: number): AssetCache {
-  const c = getCache(seed);
+function acquireCache(seed: number, quality: FlockQuality): AssetCache {
+  const c = getCache(seed, quality);
   c.refs++;
   return c;
 }
@@ -1795,15 +1859,15 @@ function releaseCache(c: AssetCache) {
   if (c.refs > 0) return;
   for (const k of Object.values(c.kinds)) {
     if (!k) continue;
-    k.geometry.dispose();
+    for (const g of k.lods) g.dispose();
     k.shells?.dispose();
   }
-  _assetCaches.delete(c.seed);
+  _assetCaches.delete(c.key);
 }
 function kindAssets(c: AssetCache, kind: AnimalKind): KindAssets {
   let a = c.kinds[kind];
   if (!a) {
-    a = buildKind(kind, c.seed);
+    a = buildKind(kind, c.seed, c.quality);
     c.kinds[kind] = a;
   }
   return a;
@@ -2219,6 +2283,9 @@ export class Animal {
   /** @internal */ neckGrazePitch = 1.6;
   /** @internal */ grazeHeadPitch = 0;
   /** @internal */ shellMesh: THREE.SkinnedMesh | null = null;
+  /** @internal */ bodyMesh: THREE.SkinnedMesh;
+  /** @internal */ lods: THREE.BufferGeometry[];
+  /** @internal current level of detail (0 = full) */ lod = 0;
 
   /** @internal */
   constructor(flock: Flock, kind: AnimalKind, assets: KindAssets, body: THREE.Material, shell: THREE.Material | null, seed: number) {
@@ -2288,6 +2355,8 @@ export class Animal {
     const skeleton = new THREE.Skeleton(B.slice());
     const bs = new THREE.Sphere(new THREE.Vector3(0, assets.height * 0.5, 0), assets.radius);
     const mesh = new THREE.SkinnedMesh(assets.geometry, body);
+    this.bodyMesh = mesh;
+    this.lods = assets.lods.length ? assets.lods : [assets.geometry];
     mesh.name = `${kind}-body`;
     mesh.castShadow = true;
     mesh.receiveShadow = true;
@@ -2479,8 +2548,13 @@ export class Flock {
   private time = 0;
   private camPos = new THREE.Vector3();
   private hasCam = false;
+  /** content tier used for geometry detail / LOD distances / fur shells */
+  readonly quality: FlockQuality;
+  private readonly policy: LodPolicy;
 
   constructor(opts: FlockOptions) {
+    this.quality = opts.quality ?? detectFlockQuality();
+    this.policy = LOD_POLICY[this.quality];
     this.ground = opts.ground;
     this.walkable = opts.walkable;
     this.pastureCenter.copy(opts.pastureCenter);
@@ -2496,7 +2570,8 @@ export class Flock {
     const nGoats = opts.goats ?? 8;
 
     // ---- assets (procedural geometry, cached per seed and shared between flocks; see Flock.preloadAsync)
-    this.cache = acquireCache(seed);
+    this.cache = acquireCache(seed, this.quality);
+    const shellN = this.policy.shells;
     const aSheep = kindAssets(this.cache, 'sheep');
     const aRam = nRams > 0 ? kindAssets(this.cache, 'ram') : null;
     const aGoat = nGoats > 0 ? kindAssets(this.cache, 'goat') : null;
@@ -2513,13 +2588,13 @@ export class Flock {
     ];
     const sheepMats = sheepLooks.map((l) => this.track(makeBodyMaterial(l)));
     const sheepShells = [0, 1, 2, 3].map((i) =>
-      this.track(makeShellMaterial({ color: woolBase[i], tint: 1, fiberFreq: 520, clumpFreq: 34, droop: 0.5, hair: 0, trans: 0.9, rough: 0.95, furScale: 1, count: 5 })),
+      this.track(makeShellMaterial({ color: woolBase[i], tint: 1, fiberFreq: 520, clumpFreq: 34, droop: 0.5, hair: 0, trans: 0.9, rough: 0.95, furScale: 1, count: shellN[0] })),
     );
     const ramMat = this.track(
       makeBodyMaterial({ wool: 0xe2d4b6, hair: 0x3f2717, hair2: 0x3f2717, mottle: 0, dirt: 0x806a54, dirtH: 0.48, curlFreq: 80, curlAmp: 0.004, sheen: 0.6, trans: 0.7 }),
     );
     const ramShell = this.track(
-      makeShellMaterial({ color: 0xe2d4b6, tint: 1, fiberFreq: 480, clumpFreq: 30, droop: 0.55, hair: 0, trans: 0.9, rough: 0.95, furScale: 1, count: 5 }),
+      makeShellMaterial({ color: 0xe2d4b6, tint: 1, fiberFreq: 480, clumpFreq: 30, droop: 0.55, hair: 0, trans: 0.9, rough: 0.95, furScale: 1, count: shellN[0] }),
     );
     const goatLooks: BodyLook[] = [
       { wool: 0x1a1612, hair: 0x1a1612, hair2: 0x1a1612, mottle: 0, dirt: 0x5a4a3a, dirtH: 0.3, curlFreq: 60, curlAmp: 0.001, sheen: 0.0, trans: 0.4 },
@@ -2527,13 +2602,13 @@ export class Flock {
     ];
     const goatMats = goatLooks.map((l) => this.track(makeBodyMaterial(l)));
     const goatShells = [0x1c1713, 0x241c16].map((c, i) =>
-      this.track(makeShellMaterial({ color: c, tint: 1, fiberFreq: 420, clumpFreq: 26, droop: 0.9, hair: 1, trans: 0.5, rough: 0.7, furScale: 1, count: 6 })),
+      this.track(makeShellMaterial({ color: c, tint: 1, fiberFreq: 420, clumpFreq: 26, droop: 0.9, hair: 1, trans: 0.5, rough: 0.7, furScale: 1, count: shellN[1] })),
     );
     const lambMat = this.track(
       makeBodyMaterial({ wool: 0xf4efe4, hair: 0xefe7da, hair2: 0xefe7da, mottle: 0, dirt: 0xa89478, dirtH: 0.14, curlFreq: 150, curlAmp: 0.0025, sheen: 0.8, trans: 0.9 }),
     );
     const lambShell = this.track(
-      makeShellMaterial({ color: 0xf6f1e7, tint: 1, fiberFreq: 640, clumpFreq: 60, droop: 0.1, hair: 0, trans: 1.0, rough: 0.95, furScale: 1, count: 6, lod: [25, 80] }),
+      makeShellMaterial({ color: 0xf6f1e7, tint: 1, fiberFreq: 640, clumpFreq: 60, droop: 0.1, hair: 0, trans: 1.0, rough: 0.95, furScale: 1, count: shellN[2], lod: [25, 80] }),
     );
 
     // ---- animals
@@ -2587,12 +2662,12 @@ export class Flock {
    * geometry takes a noticeable moment (~1-3 s of CPU); the async variant yields to the browser
    * between animal kinds so a loading screen can keep animating.
    */
-  static preload(seed = 1234): void {
-    const c = getCache(seed);
+  static preload(seed = 1234, quality: FlockQuality = detectFlockQuality()): void {
+    const c = getCache(seed, quality);
     for (const k of ['sheep', 'ram', 'goat', 'lamb'] as AnimalKind[]) kindAssets(c, k);
   }
-  static async preloadAsync(seed = 1234): Promise<void> {
-    const c = getCache(seed);
+  static async preloadAsync(seed = 1234, quality: FlockQuality = detectFlockQuality()): Promise<void> {
+    const c = getCache(seed, quality);
     for (const k of ['lamb', 'sheep', 'ram', 'goat'] as AnimalKind[]) {
       await new Promise<void>((r) => setTimeout(r, 0));
       kindAssets(c, k);
@@ -3105,10 +3180,22 @@ export class Flock {
     const r = a.rng;
     const obj = a.object;
 
-    // ---- shell LOD
-    if (a.shellMesh && this.hasCam) {
+    // ---- level of detail (geometry + fur shells) by camera distance, with hysteresis
+    if (this.hasCam) {
       obj.getWorldPosition(_v);
-      a.shellMesh.visible = _v.distanceToSquared(this.camPos) < 45 * 45;
+      const d = Math.sqrt(_v.distanceToSquared(this.camPos));
+      const D = this.policy.dist;
+      let lod = a.lod;
+      if (lod === 0 && d > D[0] * 1.08) lod = 1;
+      if (lod === 1 && d > D[1] * 1.08) lod = 2;
+      if (lod === 2 && d < D[1] * 0.92) lod = 1;
+      if (lod === 1 && d < D[0] * 0.92) lod = 0;
+      lod = Math.min(lod, a.lods.length - 1);
+      if (lod !== a.lod) {
+        a.lod = lod;
+        a.bodyMesh.geometry = a.lods[lod];
+      }
+      if (a.shellMesh) a.shellMesh.visible = lod === 0 && d < this.policy.shellDist;
     }
 
     // breathing

@@ -101,7 +101,12 @@
     "body_hair": 0.5,
     "dust": 0.25,
     "age": 0.25,
-    "tan_lines": "tunic_short"
+    "tan_lines": "tunic_short",
+    "hair_color": [
+      0.08,
+      0.055,
+      0.04
+    ]
   },
   "eyes": {
     "iris": "dark_brown",

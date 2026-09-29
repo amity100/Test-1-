@@ -138,6 +138,12 @@ async function main() {
   const matMode = P.get('mat');
   if (matMode === 'clay') {
     human.body.material = new THREE.MeshStandardMaterial({ color: 0xb9aea4, roughness: 0.62, metalness: 0 });
+  } else if (matMode === 'grey') {
+    // skin shader (normal map, detail, SSS) on a flat grey albedo: judge the relief only
+    const grey = new THREE.DataTexture(new Uint8Array([176, 166, 158, 255]), 1, 1);
+    grey.colorSpace = THREE.SRGBColorSpace;
+    grey.needsUpdate = true;
+    human.skin.map = grey; // keep USE_MAP (the mask shares its uv)
   } else if (matMode) {
     const t = matMode === 'albedo' ? human.skin.map : matMode === 'normal' ? human.skin.normalMap : human.skin.skinUniforms.uMaskMap.value;
     human.body.material = new THREE.MeshBasicMaterial({ map: t });
@@ -160,6 +166,22 @@ async function main() {
   human.rig.setExpression(expr, 1);
   human.rig.blinkEnabled = false;
   human.setPupil(0.2);
+  if (P.has('dqs')) human.dqs.enabled = parseFloat(P.get('dqs')!);
+  if (P.get('shadow') === '0') human.root.traverse((o) => { o.castShadow = false; o.receiveShadow = false; });
+  if (P.has('lids')) {
+    // resting lid bias: upper-lid closure, lower-lid raise
+    const [uc, lu] = P.get('lids')!.split(',').map(Number);
+    const fb = human.rig.faceBias;
+    fb.LeftUpperLidClosed = fb.RightUpperLidClosed = uc;
+    fb.LeftLowerLidUp = fb.RightLowerLidUp = lu;
+  }
+  if (P.has('face')) {
+    // direct pose units, e.g. face=JawDrop:0.2,LeftCheekUp:0.3
+    for (const kv of P.get('face')!.split(',')) {
+      const [k, v] = kv.split(':');
+      human.rig.faceUnits[k] = parseFloat(v);
+    }
+  }
   if (P.has('look')) {
     const [x, y, z] = P.get('look')!.split(',').map(Number);
     human.rig.lookTarget = new THREE.Vector3(x, y, z);
@@ -248,6 +270,11 @@ function frameCamera(v: string) {
     case 'profile': at(new THREE.Vector3(0, h * 0.52, 0).add(r.position), left.clone(), 5.2, 28); break;
     case 'profileFace': at(head.clone().add(new THREE.Vector3(0, -0.03, 0)), left.clone(), 0.7, 24); break;
     case 'back': at(new THREE.Vector3(0, h * 0.52, 0).add(r.position), fwd.clone().negate(), 5.2, 28); break;
+    case 'legs': at(new THREE.Vector3(0, h * 0.2, 0).add(r.position), fwd.clone().addScaledVector(left, 0.6).addScaledVector(up, 0.1), 1.9, 30); break;
+    case 'feet': at(new THREE.Vector3(0, 0.08, 0.04).add(r.position), fwd.clone().addScaledVector(left, 0.5).addScaledVector(up, 0.5), 0.9, 30); break;
+    case 'arm': { const ap = new THREE.Vector3(); human.bones['lowerarm02.L'].getWorldPosition(ap); at(ap, fwd.clone().addScaledVector(left, 1.4).addScaledVector(up, 0.1), 0.75, 30); break; }
+    case 'shoulderF': { const sp = new THREE.Vector3(); human.bones['upperarm01.R'].getWorldPosition(sp); at(sp, fwd.clone().addScaledVector(left, -0.3).addScaledVector(up, 0.05), 1.0, 34); break; }
+    case 'shoulderR': { const sp = new THREE.Vector3(); human.bones['upperarm01.R'].getWorldPosition(sp); at(sp, fwd.clone().addScaledVector(left, -0.9).addScaledVector(up, 0.2), 1.0, 30); break; }
     case 'torso': at(new THREE.Vector3(0, h * 0.7, 0).add(r.position), fwd.clone().addScaledVector(left, 0.35), 2.0, 30); break;
     case 'hands': {
       const hp = new THREE.Vector3();
@@ -273,13 +300,13 @@ function frameCamera(v: string) {
     // key: camera-left, above; rim: behind, camera-right (fixed relative to the view)
     const f = new THREE.Vector3().subVectors(camera.position, head).setY(0).normalize();
     const side = new THREE.Vector3(f.z, 0, -f.x); // camera right
-    const tgt = v === 'full' || v === 'profile' || v === 'back' || v === 'posed' ? new THREE.Vector3(0, h * 0.5, 0) : head;
+    const tgt = v === 'full' || v === 'profile' || v === 'back' || v === 'posed' || v === 'legs' || v === 'feet' || v === 'arm' ? new THREE.Vector3(0, v === 'legs' || v === 'feet' ? h * 0.15 : h * 0.5, 0) : head;
     studioLights.key.position.copy(tgt).addScaledVector(f, 2.2).addScaledVector(side, -2.0).add(new THREE.Vector3(0, 1.9, 0));
     studioLights.key.target.position.copy(tgt);
     studioLights.rim.position.copy(tgt).addScaledVector(f, -2.5).addScaledVector(side, 1.8).add(new THREE.Vector3(0, 1.2, 0));
     studioLights.rim.target.position.copy(tgt);
     const sc = studioLights.key.shadow.camera;
-    const ext = v === 'full' || v === 'profile' || v === 'back' || v === 'posed' ? 1.3 : 0.35;
+    const ext = v === 'full' || v === 'profile' || v === 'back' || v === 'posed' || v === 'legs' || v === 'arm' ? 1.3 : v === 'feet' ? 0.5 : 0.35;
     sc.left = -ext; sc.right = ext; sc.top = ext; sc.bottom = -ext;
     sc.updateProjectionMatrix();
     studioLights.key.target.updateMatrixWorld();

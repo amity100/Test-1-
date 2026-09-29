@@ -197,11 +197,12 @@ def preview_tiled(arr, path, reps=2, size=None):
     return path
 
 
-def shade_preview(albedo, nrm01, path, light=(0.55, 0.45, 0.7), reps=2, size=None, ambient=0.35):
+def shade_preview(albedo, nrm01, path, light=(0.55, 0.45, 0.7), reps=2, size=None, ambient=0.35, ao=None):
     """Quick lambert preview of albedo+normal for inspecting a material under a low sun."""
     n = nrm01 * 2 - 1
     L = np.array(light, dtype=F32)
     L /= np.linalg.norm(L)
     ndl = np.clip((n * L).sum(-1), 0, 1)
-    lin = srgb_to_lin(albedo) * (ambient + 1.6 * ndl[..., None])
+    occ = np.ones_like(ndl) if ao is None else ao
+    lin = srgb_to_lin(albedo) * (ambient * occ[..., None] + 1.6 * ndl[..., None] * (0.4 + 0.6 * occ[..., None]))
     return preview_tiled(lin_to_srgb(lin / 1.25), path, reps, size)

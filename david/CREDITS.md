@@ -34,6 +34,11 @@ implementations of published techniques:
 | Dual-filter bloom (13-tap down-sample with Karis average, 3x3 tent up-sample) | J. Jimenez, *Next Generation Post Processing in Call of Duty: Advanced Warfare* (SIGGRAPH 2014) | technique (no code used) | `src/fx/Bloom.ts` |
 | ACES / AgX / Neutral tone-mapping curves | three.js `tonemapping_pars_fragment` chunk (included at build time) | MIT (three.js) | `FinishPass` in `src/fx/PostFX.ts` |
 
+The quality tiers, warm-up benchmark, texture-budget resampling, spatial chunking of instanced scenery
+(`src/core/Engine.ts`), the frame watchdog (`src/fx/Watchdog.ts`) and the artifact packager
+(`tools/package_artifact.py`, Python standard library only) are our own code. Test tooling (Playwright)
+runs outside the project and is not shipped.
+
 ## Realistic humans (David, Saul, men) — `tools/human/`, `src/characters/human/`, `src/assets/human/`
 
 Maintained by *human-core*. Built by `tools/human/build_human.py` and `tools/human/bake_skin.py` from the

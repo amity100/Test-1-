@@ -42,22 +42,26 @@ def euler(x: float = 0.0, y: float = 0.0, z: float = 0.0) -> np.ndarray:
 
 @dataclass
 class Frame:
-    """Rigid frame: world = R @ local + o."""
+    """Similarity frame: world = R @ (s * local) + o (s = uniform scale of the local design units)."""
     o: np.ndarray = field(default_factory=lambda: np.zeros(3))
     R: np.ndarray = field(default_factory=lambda: np.eye(3))
+    s: float = 1.0
 
     def to_world(self, p) -> np.ndarray:
-        return (self.R @ np.asarray(p, dtype=np.float64).T).T + self.o
+        return (self.R @ (self.s * np.asarray(p, dtype=np.float64)).T).T + self.o
+
+    def to_local(self, P) -> np.ndarray:
+        return ((np.asarray(P, dtype=np.float64) - self.o) @ self.R) / self.s
 
     def pt(self, x: float, y: float, z: float) -> np.ndarray:
-        return self.R @ np.array([x, y, z], dtype=np.float64) + self.o
+        return self.R @ (self.s * np.array([x, y, z], dtype=np.float64)) + self.o
 
     def dir(self, x: float, y: float, z: float) -> np.ndarray:
         return self.R @ np.array([x, y, z], dtype=np.float64)
 
     def child(self, o_local, R_local=None) -> "Frame":
         R2 = self.R if R_local is None else self.R @ R_local
-        return Frame(self.pt(*o_local), R2)
+        return Frame(self.pt(*o_local), R2, self.s)
 
 
 # ----------------------------------------------------------------------------------------------- primitives

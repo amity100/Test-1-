@@ -171,6 +171,7 @@ class Baker:
         dPdv = (e2 * d1[:, 0:1] - e1 * d2[:, 0:1]) / r[:, None]
         self.mpu = np.linalg.norm(dPdu, axis=1)  # metres per uv unit
         self.mpv = np.linalg.norm(dPdv, axis=1)
+        self.dPdu, self.dPdv = dPdu.astype(np.float32), dPdv.astype(np.float32)
         print(f"  raster {S}: {len(self.tid)} texels in {time.time() - t0:.1f}s")
         # per-texel geometry
         self.tp = self.interp(self.P)
@@ -309,6 +310,81 @@ class Baker:
         self.v_thick = thick
         print(f"  ao/thickness {time.time() - t0:.1f}s  ao mean {ao.mean():.2f}")
 
+    # ------------------------------------------------------------------ lips (vermilion) from the mouth seam
+    def lip_mask(self):
+        """Vermilion mask built around the lips' contact line (the seam between the face and the mouth-interior
+        UV island): upper lip ~Hu tall with a cupid's bow, lower lip ~Hl, both tapering into the commissures.
+        Returns (vermilion 0..1, contact-line 0..1, lateral coordinate normalised to the half mouth width)."""
+        from collections import defaultdict
+        h = self.h
+        obj = h.obj
+        bf = obj.group_faces("body")
+        q = obj.faces[bf]
+        lab = uv_islands(obj, bf)
+        mc = (np.array(self.lm["chin"]) + np.array(self.lm["noseTip"])) / 2
+        fc = h.v_all[q].mean(1)
+        near = np.linalg.norm(fc - (mc + np.array([0, 0, -0.01])), axis=1) < 0.02
+        cand = np.unique(lab[near])
+        mouth = lab == min(cand, key=lambda l: (lab == l).sum())
+        ef = defaultdict(list)
+        for fi, quad in enumerate(q):
+            for k in range(4):
+                a, b = quad[k], quad[(k + 1) % 4]
+                ef[(min(a, b), max(a, b))].append(fi)
+        verts = np.unique(np.array([e for e, fs in ef.items() if len(fs) == 2 and mouth[fs[0]] != mouth[fs[1]]]).ravel())
+        L = h.v_all[verts]
+        W = np.abs(L[:, 0]).max()
+        sk = self.skin
+        Hu = float(sk.get("lip_upper", 0.0082))
+        Hl = float(sk.get("lip_lower", 0.0098))
+        p = self.tp
+        out = np.zeros(len(p), np.float32)
+        seam = np.zeros(len(p), np.float32)
+        xs = np.zeros(len(p), np.float32)
+        idx = np.nonzero((np.linalg.norm(p - L.mean(0), axis=1) < 0.035) & (self.treg["head"] > 0.3) & (self.island != 3))[0]
+        from scipy.spatial import cKDTree
+        d, j = cKDTree(L).query(p[idx])
+        x = p[idx, 0]
+        t = np.clip(np.abs(x) / W, 0, 1)
+        above = p[idx, 1] > L[j, 1] + 0.0002
+        bow = 1 - 0.16 * np.exp(-(x / 0.0028) ** 2) + 0.07 * np.exp(-((np.abs(x) - 0.0068) / 0.0032) ** 2)
+        hu = Hu * np.clip(1 - t ** 2.4, 0, 1) ** 0.55 * bow
+        hl = Hl * np.clip(1 - t ** 2.0, 0, 1) ** 0.5
+        hh = np.where(above, hu, hl)
+        m = smoothstep(hh + 0.0006, hh - 0.0008, d) * smoothstep(1.02, 0.9, t)
+        out[idx] = m
+        seam[idx] = np.exp(-(d / 0.0011) ** 2) * smoothstep(1.05, 0.7, t)
+        xs[idx] = t
+        return out, seam, xs
+
+    # ------------------------------------------------------------------ form definition (geometry unsharp mask)
+    def definition(self, iters=24):
+        """Mid-frequency form of the body itself (muscle bellies, separations, bony landmarks): vertex normal minus
+        the normal of a Taubin-smoothed copy (volume preserving, ~4-6 cm kernel).  Added to the normal map so the
+        anatomy MakeHuman models only faintly reads under grazing sun light."""
+        import scipy.sparse as sp
+        from geom import vertex_normals
+        P, tri, N = self.sub.welded
+        V = len(P)
+        i = np.concatenate([tri[:, 0], tri[:, 1], tri[:, 2], tri[:, 1], tri[:, 2], tri[:, 0]])
+        j = np.concatenate([tri[:, 1], tri[:, 2], tri[:, 0], tri[:, 0], tri[:, 1], tri[:, 2]])
+        A = sp.coo_matrix((np.ones(len(i)), (i, j)), shape=(V, V)).tocsr()
+        A.data[:] = 1.0
+        L = sp.diags(1.0 / np.asarray(A.sum(1)).ravel()) @ A
+        Ps = P.copy()
+        for _ in range(iters):
+            Ps = Ps + 0.5 * (L @ Ps - Ps)
+            Ps = Ps - 0.53 * (L @ Ps - Ps)
+        Ns = vertex_normals(Ps, tri)
+        D = N - Ns
+        d = self.interp(D)
+        n = self.tn
+        T = self.dPdu - n * np.sum(n * self.dPdu, 1, keepdims=True)
+        T /= np.linalg.norm(T, axis=1, keepdims=True) + 1e-12
+        B = np.cross(n, T)
+        B *= np.where(np.sum(B * self.dPdv, 1) < 0, -1.0, 1.0)[:, None]
+        self.def_xy = np.stack([np.sum(d * T, 1), np.sum(d * B, 1)], 1).astype(np.float32)
+
     # ------------------------------------------------------------------ painting
     def _tick(self, label):
         now = time.time()
@@ -392,8 +468,9 @@ class Baker:
             hem = smoothstep(ankle_y + 0.12, ankle_y + 0.06, ry + noise_edge)
             vneck = smoothstep(neck_y - 0.02, neck_y + 0.01, ry) * (rp[:, 2] > -0.02)
         else:
-            sleeve = smoothstep(shoulder_y - 0.1, shoulder_y - 0.14, ry + noise_edge)
-            hem = smoothstep(knee_y + 0.13, knee_y + 0.07, ry + noise_edge)
+            # loose tunic: the sleeve and hem move, so the tan lines are soft and ragged
+            sleeve = smoothstep(shoulder_y - 0.08, shoulder_y - 0.17, ry + noise_edge * 2.0)
+            hem = smoothstep(knee_y + 0.15, knee_y + 0.05, ry + noise_edge * 2.0)
             vd = neck_y - ry  # depth below neck base
             vw = np.clip(0.07 - vd * 0.35, 0, 1)
             vneck = smoothstep(0.0, 0.012, vw - np.abs(rp[:, 0])) * smoothstep(0.16, 0.12, vd) * (rp[:, 2] > 0.0) + smoothstep(neck_y - 0.03, neck_y + 0.0, ry)
@@ -410,7 +487,7 @@ class Baker:
         self._tick("before melanin")
         # ---------------- melanin / base tone (linear)
         tone = srgb_to_lin(sk.get("tone", [0.64, 0.45, 0.33]))
-        pale = srgb_to_lin(np.clip(np.array(sk.get("tone", [0.64, 0.45, 0.33])) * np.array([1.1, 1.12, 1.15]), 0, 1))
+        pale = srgb_to_lin(np.clip(np.array(sk.get("tone", [0.64, 0.45, 0.33])) * np.array([1.05, 1.06, 1.08]), 0, 1))
         tan_amt = sk.get("tan", 0.5)
         tanned = tone * np.array([0.84, 0.79, 0.75]) ** (tan_amt * 1.5)
         mel = np.clip(expo, 0, 1)[:, None]
@@ -418,17 +495,20 @@ class Baker:
         # large-scale tone variation (mottling), subtle
         mott = fbm(p * 9.0, 4, seed=seed + 11)
         mott2 = fbm(p * 45.0, 3, seed=seed + 12)
-        col *= (1 + 0.07 * mott[:, None] * np.array([1.0, 1.1, 1.25]) + 0.03 * mott2[:, None])
+        col *= (1 + 0.08 * mott[:, None] * np.array([1.0, 1.1, 1.25]) + 0.04 * mott2[:, None])
+        # hue drift: ruddier vs more olive/yellow patches (1-3 cm)
+        hue = fbm(p * 30.0, 3, seed=seed + 15)
+        col *= np.exp(-0.06 * hue[:, None] * np.array([-0.5, 0.4, 1.0]))
         # mid-frequency blotches (3-6 mm) and fine grain (~1 mm): living skin is never flat
         mid = fbm(p * 220.0, 3, seed=seed + 13)
         grain = fbm(p * 900.0, 2, seed=seed + 14)
-        col *= (1 + 0.045 * mid[:, None] * np.array([0.9, 1.05, 1.2]) + 0.02 * grain[:, None])
+        col *= (1 + 0.065 * mid[:, None] * np.array([0.9, 1.05, 1.2]) + 0.03 * grain[:, None])
         self._tick("before haemoglobin")
         # ---------------- haemoglobin: ruddiness ("admoni")
         ruddy = sk.get("ruddy", 0.4)
         red = (0.95 * m_cheek ** 0.8 * smoothstep(-0.02, 0.2, n[:, 2]) + 0.8 * np.maximum(m_nosetip, m_nostril * 0.8) + 0.25 * m_nose
                + 0.75 * m_ear * smoothstep(0.03, 0.06, np.abs(f[:, 0])) + 0.6 * m_lobe + 0.35 * m_chin + 0.3 * m_cheekbone + 0.25 * m_bag)
-        red += head * 0.22 * smoothstep(-0.12, 0.02, f[:, 1]) * smoothstep(0.0, 0.3, n[:, 2])  # whole face slightly flushed
+        red += head * 0.1 * smoothstep(-0.12, 0.02, f[:, 1]) * smoothstep(0.0, 0.3, n[:, 2])  # whole face slightly flushed
         # forehead mild
         red += head * 0.12 * smoothstep(0.02, 0.06, f[:, 1]) * smoothstep(0.1, 0.5, n[:, 2]) * (0.6 + 0.4 * fbm(p * 25, 2, seed=seed + 4))
         # knuckles, fingertips, palms, elbows, knees, heels, toes
@@ -455,8 +535,14 @@ class Baker:
         red *= 0.65 + 0.35 * (fbm(p * 30.0, 3, seed=seed + 7) * 0.5 + 0.5)
         speck = smoothstep(0.35, 0.75, fbm(p * 520.0, 2, seed=seed + 8)) * np.clip(m_nose + m_nosetip + m_cheek * 0.8 + m_chin * 0.4, 0, 1)
         red += 0.35 * speck
-        red = np.clip(red, 0, 1.3) * (0.45 + 0.8 * ruddy)
-        col = col * (1 + red[:, None] * np.array([0.10, -0.16, -0.14]))
+        red = np.clip(red, 0, 1.3) * (0.25 + 0.45 * ruddy)
+        # haemoglobin absorbs green & blue (Beer-Lambert in linear RGB): pinkish-red flush, not orange
+        col = col * np.exp(-red[:, None] * np.array([-0.03, 0.22, 0.14]))
+        # face zoning: forehead a little yellower (thicker skin, less blood), temples/jawline a little cooler
+        fz = head * smoothstep(0.015, 0.045, f[:, 1]) * smoothstep(0.1, 0.5, n[:, 2])
+        col = col * (1 + fz[:, None] * np.array([0.015, 0.01, -0.05]))
+        jz = head * smoothstep(0.03, 0.06, np.abs(f[:, 0])) * smoothstep(-0.02, -0.06, f[:, 1])
+        col = col * (1 + jz[:, None] * np.array([-0.03, -0.01, 0.02]))
         self._tick("before palms & soles")
         # ---------------- palms & soles: less melanin, more yellow-pink
         pl = np.clip(palm_m + sole_m, 0, 1)[:, None]
@@ -474,11 +560,11 @@ class Baker:
             pw = pw + 3 * nosebr * self.reg["head"]
             pw = np.clip(pw, 0, None)
             pw /= pw.sum()
-            nfr = int(9000 * fr_amt)
+            nfr = int(14000 * fr_amt)
             pick = rng.choice(len(self.P), nfr, p=pw)
             centers = self.P[pick] + rng.normal(0, 0.004, (nfr, 3))
-            rad = rng.uniform(0.00045, 0.0011, nfr)
-            inten = rng.uniform(0.2, 0.85, nfr) ** 1.4
+            rad = rng.uniform(0.00025, 0.00065, nfr)
+            inten = rng.uniform(0.15, 0.6, nfr) ** 1.3
             for c, r, it in zip(centers, rad, inten):
                 ids = tree.query_ball_point(c, r * 1.8)
                 if not ids:
@@ -496,10 +582,10 @@ class Baker:
             if ids:
                 d = np.linalg.norm(p[ids] - c, axis=1)
                 mole[ids] = np.maximum(mole[ids], smoothstep(r * 1.6, r * 0.7, d))
-        col = col * (1 - melf[:, None] * np.array([0.26, 0.37, 0.46])) * (1 - mole[:, None] * np.array([0.55, 0.62, 0.66]))
+        col = col * (1 - melf[:, None] * np.array([0.18, 0.28, 0.38])) * (1 - mole[:, None] * np.array([0.55, 0.62, 0.66]))
         self._tick("before veins")
         # ---------------- veins (bluish, raised) on forearms, hands, feet, temples
-        vein_mask = np.clip(farm * smoothstep(-0.1, 0.4, -palm_side * 0 + 1) + dorsal_m * 1.2 + foot * smoothstep(0.2, 0.7, n[:, 1]) * 0.9
+        vein_mask = np.clip(farm * smoothstep(-0.1, 0.4, -palm_side * 0 + 1) + dorsal_m * 0.5 + foot * smoothstep(0.2, 0.7, n[:, 1]) * 0.9
                             + m_temple * 0.4 * head, 0, 1)
         vein_mask *= 1 - palm_m
         rq = rp * np.array([55.0, 14.0, 55.0])  # stretched along the limbs (rest pose: limbs vertical)
@@ -517,19 +603,21 @@ class Baker:
         must = head * smoothstep(0.03, 0.022, ax) * smoothstep(-0.066, -0.06, f[:, 1]) * smoothstep(-0.043, -0.05, f[:, 1])
         under = (head + neck) * smoothstep(chin_y + 0.005, chin_y - 0.01, f[:, 1]) * smoothstep(chin_y - 0.075, chin_y - 0.05, f[:, 1]) * smoothstep(-0.2, 0.2, n[:, 2] + 0.3)
         beard = np.clip(np.maximum(np.maximum(beard, must), under), 0, 1)
-        lips_v = smoothstep(0.3, 0.55, lips_raw)
+        lips_v, lip_seam, lip_t = self.lip_mask()
         beard *= 1 - lips_v
         beard *= 1 - smoothstep(0.1, 0.4, m_nostril)
-        stub = beard * bs * (0.6 + 0.4 * (fbm(p * 400, 2, seed=seed + 31) * 0.5 + 0.5)) * (0.8 + 0.2 * fbm(p * 60, 2, seed=seed + 32))
-        stub_col = srgb_to_lin([0.2, 0.17, 0.16])
-        col = col * (1 - stub[:, None] * 0.42) + stub_col * stub[:, None] * 0.18
+        speck = smoothstep(-0.1, 0.6, fbm(p * 2600, 1, seed=seed + 33))
+        stub = beard * bs * (0.45 + 0.35 * (fbm(p * 400, 2, seed=seed + 31) * 0.5 + 0.5) + 0.3 * speck) * (0.8 + 0.2 * fbm(p * 60, 2, seed=seed + 32))
+        stub = np.clip(stub, 0, 1)
+        stub_col = srgb_to_lin(np.array(self.preset.get("brows", {}).get("color", [0.2, 0.17, 0.16])) * 0.9 + 0.04)
+        col = col * (1 - stub[:, None] * np.array([0.58, 0.56, 0.5])) + stub_col * stub[:, None] * 0.22
         bh = sk.get("body_hair", 0.2)
         hair_m = (farm * 0.8 + shin * 1.0 + thigh * 0.4 + dorsal_m * 0.3 + torso * 0.15 * bh) * bh
         streak = fbm(rp * np.array([900.0, 180.0, 900.0]), 2, seed=seed + 41) * 0.5 + 0.5
         col = col * (1 - (hair_m * streak * 0.18)[:, None])
         self._tick("before scalp")
         # ---------------- scalp (under the strand hair) and painted eyebrows
-        hair_col = srgb_to_lin(np.array(self.preset.get("brows", {}).get("color", [0.12, 0.07, 0.04])) * 1.2)
+        hair_col = srgb_to_lin(np.array(sk.get("hair_color", np.array(self.preset.get("brows", {}).get("color", [0.12, 0.07, 0.04])) * 1.2)))
         crown = np.array(self.lm["crown"])
         phi = np.abs(np.degrees(np.arctan2(p[:, 0] - crown[0], p[:, 2] - crown[2])))  # 0 = front, 180 = back
         # hairline height (relative to the eye centres) as a function of the angle around the head
@@ -539,8 +627,9 @@ class Baker:
         scalp = (head + neck * 0.5) * smoothstep(hl - 0.003, hl + 0.01, f[:, 1])
         scalp *= 1 - smoothstep(0.25, 0.5, m_ear * smoothstep(0.05, 0.07, np.abs(f[:, 0])))
         scalp = np.clip(scalp, 0, 1)
-        scalp_n = 0.65 + 0.35 * fbm(p * 300, 2, seed=seed + 51)
-        col = col * (1 - (scalp * 0.72 * scalp_n)[:, None]) + hair_col * (scalp * 0.5 * scalp_n)[:, None]
+        # close-cropped roots: fine grain (not a felt-like blotch) so hair cards on top can hide gaps
+        scalp_n = 0.7 + 0.3 * (0.6 * fbm(p * 1400, 2, seed=seed + 52) + 0.4 * fbm(p * 300, 2, seed=seed + 51))
+        col = col * (1 - (scalp * 0.62 * scalp_n)[:, None]) + hair_col * (scalp * 0.45 * scalp_n)[:, None]
         self._tick("before eyebrows ")
         # eyebrows (same shape as the strand generator)
         brow = np.zeros(ntex, np.float32)
@@ -563,19 +652,23 @@ class Baker:
             brow = np.maximum(brow, inside * head * (p[:, 2] > c[2] - 0.005))
         brow_n = 0.6 + 0.4 * fbm(np.stack([p[:, 0] * 400, p[:, 1] * 1600, p[:, 2] * 400], 1), 2, seed=seed + 61)
         brow *= brow_n
-        col = col * (1 - brow[:, None] * 0.6) + hair_col * brow[:, None] * 0.35
+        col = col * (1 - brow[:, None] * 0.72) + hair_col * brow[:, None] * 0.3
         self._tick("before lips")
         # ---------------- lips
-        lipc = srgb_to_lin(sk.get("lip_color", [0.56, 0.3, 0.27]))
-        seam = smoothstep(0.55, 0.9, np.minimum(m_lips_u, m_lips_l) / (np.maximum(m_lips_u, m_lips_l) + 1e-6)) * lips_v
+        lipc = srgb_to_lin(sk.get("lip_color", [0.6, 0.34, 0.31]))
+        seam = lip_seam
         lipn = 0.9 + 0.1 * fbm(np.stack([p[:, 0] * 900, p[:, 1] * 150, p[:, 2] * 900], 1), 2, seed=seed + 71)
-        lipcol = lipc * lipn[:, None] * (1 - 0.35 * seam[:, None])
+        # vermilion: redder centre, a slightly darker border (the lip line) and darker, browner commissures
+        border = smoothstep(0.35, 0.05, lips_v) * smoothstep(0.0, 0.2, lips_v)
+        lipcol = lipc * lipn[:, None] * (1 - 0.18 * border[:, None]) * (1 - 0.3 * smoothstep(0.55, 1.0, lip_t)[:, None] * np.array([0.8, 1.0, 1.0]))
         # lips keep some of the underlying skin tone (natural, not lipstick)
-        lip_mix = (lips_v * 0.85)[:, None]
-        col = col * (1 - lip_mix) + (lipcol * 0.7 + col * np.array([0.95, 0.72, 0.72]) * 0.3) * lip_mix
+        lip_mix = (lips_v * 0.8)[:, None]
+        col = col * (1 - lip_mix) + (lipcol * 0.72 + col * np.array([0.95, 0.72, 0.72]) * 0.28) * lip_mix
+        # the contact line between the lips is in shadow and slightly wet-dark
+        col = col * (1 - 0.55 * seam[:, None])
         # ---------------- eyelids (thin, slightly purple/pink), under-eye
         lid = smoothstep(0.024, 0.012, np.minimum(np.linalg.norm(p - self.eyes["L"]["center"], axis=1), np.linalg.norm(p - self.eyes["R"]["center"], axis=1))) * head
-        col = col * (1 - lid[:, None] * np.array([0.06, 0.12, 0.08])) * (1 - m_bag[:, None] * np.array([0.04, 0.08, 0.02]) * (1 + sk.get("age", 0)))
+        col = col * (1 - lid[:, None] * np.array([0.08, 0.13, 0.07])) * (1 - m_bag[:, None] * np.array([0.04, 0.08, 0.02]) * (1 + sk.get("age", 0)))
         # lash line: dense lash roots darken the lid margin (upper lid much more than the lower)
         lashl = np.zeros(ntex, np.float32)
         for S, sgn in (("L", 1), ("R", -1)):
@@ -632,7 +725,7 @@ class Baker:
         dust_col = srgb_to_lin([0.66, 0.57, 0.46])
         col = col * (1 - (dust * dust_m * 0.5)[:, None]) + dust_col * (dust * dust_m * 0.5)[:, None]
         # ---------------- eye pocket (conjunctiva / caruncle) and mouth interior
-        col = np.where(pocket_isl[:, None], srgb_to_lin([0.42, 0.2, 0.19]), col)
+        col = np.where(pocket_isl[:, None], srgb_to_lin([0.70, 0.42, 0.40]), col)
         dm = smoothstep(1.2, 0.6, np.linalg.norm(p - self._mouth_centre(), axis=1) / 0.03)
         col = np.where(mouth_isl[:, None], srgb_to_lin([0.36, 0.12, 0.11]) * (0.15 + 0.85 * (1 - dm))[:, None], col)
         self.albedo = np.clip(col, 0, 1)
@@ -697,6 +790,14 @@ class Baker:
         amp = 0.000012 + 0.000030 * zone
         relief = fbm(p * 600.0, 2, seed=seed + 98) * 0.7 + fbm(p * 1100.0, 2, seed=seed + 99) * 0.5
         H += relief * amp * (1 - lips_v) * (1 - nails) * (1 + 0.6 * age)
+        # procedural surface anatomy (tendons, bony landmarks, muscle separations, structured veins)
+        an_str = float(self.preset.get("anatomy", 1.0))
+        if an_str > 0:
+            from anatomy import Anatomy
+            joints = {nm: h.rest_world_pos[i] for nm, i in h.index.items()}
+            an = Anatomy(self.R, self.sub.welded[1], self.reg, rp, self.treg, joints)
+            H += an.build(strength=an_str, veins=float(sk.get("veins", 1.0)), rng=np.random.default_rng(seed + 123))
+            self._tick("anatomy")
         self.height = H
         self._tick("before roughness")
         # ================= roughness (0..1 mapped to [0.15, 0.85] at runtime) =================
@@ -711,11 +812,12 @@ class Baker:
         rough += dust * dust_m * 0.25
         rough = rough * (1 - nails) + 0.22 * nails
         rough += fbm(p * 150, 2, seed=seed + 101) * 0.04
+        rough += fbm(p * 700, 2, seed=seed + 102) * 0.06 * np.clip(head + neck, 0, 1)  # ~1 mm specular breakup
         rough = np.where(pocket_isl | mouth_isl, 0.08, rough)
         rough = np.where(scalp > 0.5, rough + 0.1 * scalp, rough)
         self.rough = np.clip(rough, 0, 1)
         # ================= pore strength =================
-        pores = 0.35 * (torso + uarm + thigh + neck * 0.8) + 0.25 * (farm + shin)
+        pores = 0.35 * (torso + uarm + thigh + neck * 0.8) + 0.25 * (farm + shin + hand + foot)
         pores += head * (0.55 + 0.4 * np.clip(m_nose * 1.5 + m_nosetip + m_cheek + m_chin * 0.6, 0, 1))
         pores *= 1 - lips_v
         pores *= 1 - 0.7 * lid
@@ -789,6 +891,17 @@ class Baker:
         S = self.size
         alb = self.dilate(self.image(lin_to_srgb(self.albedo)), 16)
         nrm = self.normal_from_height(S)
+        if getattr(self, "def_xy", None) is not None:
+            R = self.treg
+            gain = (1.5 * (R["torso"] + R["pelvis"] + R["uarm"] + R["farm"] + R["thigh"] + R["shin"] + R["neck"])
+                    + 0.45 * R["head"] + 0.8 * (R["hand"] + R["foot"]))
+            gain *= float(self.preset.get("definition", 1.0))
+            gain = np.where((self.island == 3) | (self.island == 4), 0.0, gain)
+            dxy = self.image(self.def_xy * gain[:, None])
+            n3 = nrm * 2 - 1
+            n3[..., :2] += dxy
+            n3 /= np.linalg.norm(n3, axis=-1, keepdims=True)
+            nrm = n3 * 0.5 + 0.5
         nrm = self.dilate(np.where(self.valid[..., None], nrm, 0.5), 16)
         # AO x cavity
         ao = self.interp(self.v_ao)
@@ -796,10 +909,11 @@ class Baker:
         lap = ndimage.laplace(ndimage.gaussian_filter(self.dilate(Himg, 4), 1.0))
         cav_t = np.clip(1 + lap[self.vy, self.vx] * 2500.0, 0.6, 1.0)
         aoc = np.clip(ao * cav_t, 0, 1)
-        aoc = np.where(self.island == 4, aoc * 0.3, aoc)  # eye-socket pocket is occluded by the eyeball
+        aoc = np.where(self.island == 4, aoc * 0.55, aoc)  # eye-socket pocket is occluded by the eyeball
         aoc = np.where(self.island == 3, aoc * 0.25, aoc)  # mouth interior
         thick = self.interp(self.v_thick)
-        trans = np.clip(np.exp(-(thick - 0.004) / 0.012), 0, 1)
+        # translucency: ears, nostril wings, lids and finger edges glow; cheeks (over the mouth cavity) barely
+        trans = np.clip(np.exp(-(thick - 0.003) / 0.0065), 0, 1)
         trans = np.where((self.island == 3) | (self.island == 4), 0.0, trans)  # no glow from mouth / socket interiors
         mask = np.stack([aoc, self.rough, trans], 1)
         mask = self.dilate(self.image(mask), 16)
@@ -841,112 +955,211 @@ class Baker:
 
 
 # ------------------------------------------------------------------------------------------ common textures
+def _periodic_noise(S, freq, seed):
+    """Smooth periodic noise in [-1, 1] (band-limited to `freq` cycles per tile)."""
+    g = np.random.default_rng(seed).normal(size=(freq, freq))
+    F = np.fft.fft2(g)
+    out = np.zeros((S, S), complex)
+    h = freq // 2
+    out[:h, :h] = F[:h, :h]
+    out[:h, -h:] = F[:h, -h:]
+    out[-h:, :h] = F[-h:, :h]
+    out[-h:, -h:] = F[-h:, -h:]
+    n = np.real(np.fft.ifft2(out))
+    return n / (np.abs(n).max() + 1e-9)
+
+
+def _poisson_sites(S, spacing, rng):
+    """Dart-throwing blue-noise sites on a periodic S x S domain."""
+    cand = rng.random((int((S / spacing) ** 2 * 3), 2)) * S
+    keep = []
+    cell = spacing / np.sqrt(2)
+    G = int(np.ceil(S / cell))
+    grid = -np.ones((G, G), int)
+    for p in cand:
+        gx, gy = int(p[0] / cell), int(p[1] / cell)
+        ok = True
+        for dx in (-2, -1, 0, 1, 2):
+            for dy in (-2, -1, 0, 1, 2):
+                j = grid[(gx + dx) % G, (gy + dy) % G]
+                if j >= 0:
+                    d = np.abs(keep[j] - p)
+                    d = np.minimum(d, S - d)
+                    if d[0] * d[0] + d[1] * d[1] < spacing * spacing:
+                        ok = False
+                        break
+            if not ok:
+                break
+        if ok:
+            grid[gx % G, gy % G] = len(keep)
+            keep.append(p)
+    return np.asarray(keep)
+
+
+def _furrows(S, ncell, rng, warp, aniso, width):
+    """Distance-to-border of a warped, anisotropic periodic Voronoi diagram -> groove profile (0..1)."""
+    from scipy.spatial import cKDTree
+    cs = S / ncell
+    gy, gx = np.mgrid[0:ncell, 0:ncell]
+    sites = np.stack([(gx + 0.5 + (rng.random(gx.shape) - 0.5) * 0.95) * cs,
+                      (gy + 0.5 + (rng.random(gy.shape) - 0.5) * 0.95) * cs], -1).reshape(-1, 2)
+    allp = np.concatenate([sites + np.array([dx * S, dy * S]) for dx in (-1, 0, 1) for dy in (-1, 0, 1)])
+    an = np.asarray(aniso, float)
+    tree = cKDTree(allp * an)
+    yy, xx = np.mgrid[0:S, 0:S].astype(np.float32)
+    q = np.stack([((xx + warp[0]) % S).ravel(), ((yy + warp[1]) % S).ravel()], 1) * an
+    d, _ = tree.query(q, k=2)
+    e = (d[:, 1] - d[:, 0]).reshape(S, S)
+    return np.exp(-(e / width) ** 2)
+
+
 def bake_detail_normal(size=1024, seed=3):
-    """Tileable micro detail: pores (cellular pits) + criss-cross tension lines + fine grain (height -> normal)."""
+    """Tileable skin micro-relief (the tile spans ~2 cm of skin, 0.02 mm per texel at 1024):
+    blue-noise follicle pores (log-normal size/depth, slightly elongated, with a raised rim), the polygonal
+    furrow network of the stratum corneum (primary ~0.8 mm cells, broken up by noise; secondary ~0.3 mm)
+    and an orange-peel grain.  RG = tangent-space normal, B = micro cavity (1 = open skin, 0 = pore floor)."""
     rng = np.random.default_rng(seed)
     S = size
-    H = np.zeros((S, S), np.float32)
-    yy, xx = np.mgrid[0:S, 0:S].astype(np.float32)
-    # pores: jittered grid, periodic
-    cells = 64  # pores across the tile (tile = ~2.2 cm at 45 tiles/m -> ~0.35 mm spacing)
-    cs = S / cells
-    for cy in range(cells):
-        for cx in range(cells):
-            if rng.random() < 0.12:
-                continue
-            px = (cx + rng.random()) * cs
-            py = (cy + rng.random()) * cs
-            r = cs * rng.uniform(0.12, 0.3)
-            depth = rng.uniform(0.4, 1.0)
-            x0, x1 = int(px - 3 * r), int(px + 3 * r) + 1
-            y0, y1 = int(py - 3 * r), int(py + 3 * r) + 1
-            gx, gy = np.meshgrid(np.arange(x0, x1), np.arange(y0, y1))
-            d2 = ((gx - px) ** 2 + (gy - py) ** 2) / (r * r)
-            val = -depth * np.exp(-d2) + 0.15 * depth * np.exp(-d2 / 4)
-            H[gy % S, gx % S] += val
-    # tension lines: two families of periodic wavy grooves
-    def periodic_noise(freq, seed_):
-        g = np.random.default_rng(seed_).normal(size=(freq, freq))
-        up = np.real(np.fft.ifft2(np.fft.fft2(np.kron(g, np.ones((S // freq, S // freq))))))
-        return ndimage.gaussian_filter(up, S / freq / 2, mode="wrap")
-    warp = periodic_noise(8, seed + 1)
-    warp = warp / (np.abs(warp).max() + 1e-6)
-    for ang, per, amp in ((0.6, 18.0, 0.35), (-0.9, 23.0, 0.28), (2.1, 41.0, 0.15)):
-        k = 2 * np.pi / (S / per)
-        # periodic direction: round the wave vector to integer cycles across the tile
-        kx = np.round(np.cos(ang) * per) * 2 * np.pi / S
-        ky = np.round(np.sin(ang) * per) * 2 * np.pi / S
-        ph = kx * xx + ky * yy + warp * 3.0
-        H -= amp * np.clip(np.cos(ph), 0.6, 1.0) * 2.5 - amp * 1.5
-        _ = k
-    # fine grain
-    grain = periodic_noise(128, seed + 2)
-    H += grain / (np.abs(grain).max() + 1e-6) * 0.18
-    H = ndimage.gaussian_filter(H, 0.6, mode="wrap")
+    sp = S / 1024.0
+    # ---- pores: visible follicle funnels ~0.1-0.25 mm across, ~0.45 mm apart
+    pts = _poisson_sites(S, 22.0 * sp, rng)
+    n = len(pts)
+    radii = np.exp(rng.normal(np.log(3.4 * sp), 0.3, n))
+    depths = np.exp(rng.normal(0.0, 0.4, n))
+    ang = rng.random(n) * np.pi
+    elo = 1 + rng.random(n) * 0.45
+    P = np.zeros((S, S), np.float32)
+    for (cx, cy), r, d, a, e in zip(pts, radii, depths, ang, elo):
+        x0, x1 = int(cx - 4 * r), int(cx + 4 * r) + 1
+        y0, y1 = int(cy - 4 * r), int(cy + 4 * r) + 1
+        gx, gy = np.meshgrid(np.arange(x0, x1), np.arange(y0, y1))
+        dx, dy = gx - cx, gy - cy
+        ca, sa = np.cos(a), np.sin(a)
+        u, v = (dx * ca + dy * sa) / e, (-dx * sa + dy * ca) * e
+        d2 = (u * u + v * v) / (r * r)
+        # funnel: a steep pit with a soft conical surround and a faint raised rim
+        P[gy % S, gx % S] += -d * (0.75 * np.exp(-d2 * 2.2) + 0.35 * np.exp(-d2 * 0.55)) + 0.1 * d * np.exp(-((np.sqrt(d2) - 1.9) / 0.5) ** 2)
+    # ---- furrow network
+    warp = (_periodic_noise(S, 12, seed + 11) * 14 * sp, _periodic_noise(S, 12, seed + 12) * 14 * sp)
+    F = -_furrows(S, 24, rng, warp, (1.0, 1.35), 2.2 * sp) * np.clip(_periodic_noise(S, 40, seed + 13) * 1.2 + 0.55, 0, 1)
+    warp2 = (warp[0] * 0.5, warp[1] * 0.5)
+    F += -0.4 * _furrows(S, 60, rng, warp2, (1.2, 1.0), 1.4 * sp) * np.clip(_periodic_noise(S, 60, seed + 14) + 0.6, 0, 1)
+    # ---- orange-peel grain
+    G = _periodic_noise(S, 200, seed + 15) * 0.6 + _periodic_noise(S, 90, seed + 16) * 0.4
+    H = 0.6 * P + 0.4 * F + 0.2 * G
+    H = ndimage.gaussian_filter(H, 0.7 * sp, mode="wrap")
     gy, gx = np.gradient(np.pad(H, 1, mode="wrap"))
-    gy, gx = gy[1:-1, 1:-1], gx[1:-1, 1:-1]
-    strength = 2.2
+    gy, gx = gy[1:-1, 1:-1] / sp, gx[1:-1, 1:-1] / sp
+    strength = 1.2
     nrm = np.stack([-gx * strength, gy * strength, np.ones_like(H)], -1)
     nrm /= np.linalg.norm(nrm, axis=-1, keepdims=True)
-    img = ((nrm * 0.5 + 0.5) * 255 + 0.5).astype(np.uint8)
+    cav = np.clip(1.0 + np.minimum(H - np.median(H), 0) * 0.9, 0, 1)
+    img = np.concatenate([nrm[..., :2] * 0.5 + 0.5, cav[..., None]], -1)
     os.makedirs(COMMON, exist_ok=True)
-    Image.fromarray(img, "RGB").save(os.path.join(COMMON, "skin_detail_normal.webp"), quality=92, method=6)
+    Image.fromarray((np.clip(img, 0, 1) * 255 + 0.5).astype(np.uint8), "RGB").save(os.path.join(COMMON, "skin_detail_normal.webp"), quality=92, method=6)
+
+
+def _polar_noise(nth, nr, fth, fr, seed):
+    """Band-limited noise on a (radius x angle) grid, periodic in angle: fth cycles around, fr along the radius."""
+    rng = np.random.default_rng(seed)
+    g = rng.normal(size=(2 * fr, fth))
+    F = np.fft.fft2(g)
+    out = np.zeros((2 * nr, nth), complex)
+    hr, ht = fr, fth // 2
+    out[:hr, :ht] = F[:hr, :ht]
+    out[:hr, -ht:] = F[:hr, -ht:]
+    out[-hr:, :ht] = F[-hr:, :ht]
+    out[-hr:, -ht:] = F[-hr:, -ht:]
+    n = np.real(np.fft.ifft2(out))[:nr]
+    return n / (np.abs(n).max() + 1e-9)
+
+
+def _sample_polar(img, t, a):
+    """Bilinear lookup of a (nr x nth) polar image at radius t (0..1) and angle a (radians)."""
+    nr, nth = img.shape
+    y = np.clip(t, 0, 1) * (nr - 1)
+    x = ((a / (2 * np.pi)) % 1.0) * nth
+    y0 = np.floor(y).astype(int)
+    x0 = np.floor(x).astype(int)
+    fy, fx = y - y0, x - x0
+    y1 = np.minimum(y0 + 1, nr - 1)
+    x0 %= nth
+    x1 = (x0 + 1) % nth
+    return (img[y0, x0] * (1 - fx) * (1 - fy) + img[y0, x1] * fx * (1 - fy) + img[y1, x0] * (1 - fx) * fy + img[y1, x1] * fx * fy)
+
+
+IRIS_STYLES = {
+    # sRGB: pupillary zone, collarette highlight, ciliary zone, ciliary periphery, limbal ring
+    "brown_hazel": ([0.42, 0.33, 0.15], [0.54, 0.40, 0.19], [0.34, 0.21, 0.11], [0.21, 0.125, 0.07], [0.075, 0.05, 0.035]),
+    "dark_brown": ([0.24, 0.14, 0.07], [0.31, 0.19, 0.09], [0.19, 0.11, 0.06], [0.13, 0.08, 0.045], [0.05, 0.035, 0.03]),
+    # hazel-green (David, per the reference): amber-gold around the pupil, olive-green mid zone, brown periphery
+    "hazel_green": ([0.46, 0.34, 0.14], [0.47, 0.43, 0.22], [0.31, 0.30, 0.17], [0.22, 0.17, 0.09], [0.07, 0.055, 0.04]),
+}
 
 
 def bake_eye(style: str, size=1024, seed=3):
-    """Front-projected eyeball texture: sclera (+ veins, limbal darkening) and iris (fibres, crypts, collarette)."""
-    rng = np.random.default_rng(seed + hash(style) % 1000)
+    """Front-projected eyeball texture: sclera (conjunctival vessels, limbal shading) and a layered iris
+    (pupillary ruff, radial trabecular fibres, collarette, crypts, contraction furrows, dark limbal ring)."""
+    rng = np.random.default_rng(seed + sum(map(ord, style)))
     S = size
     yy, xx = np.mgrid[0:S, 0:S].astype(np.float32)
     x = (xx + 0.5) / S * 2 - 1
     y = 1 - (yy + 0.5) / S * 2
     r = np.sqrt(x * x + y * y)
     a = np.arctan2(y, x)
-    IR = 0.37  # iris radius in texture units (runtime uIrisR ~ irisRadius/eyeRadius: set to match)
+    IR = 0.37  # iris radius in texture units (runtime uTexIrisR)
     col = np.zeros((S, S, 3), np.float32)
-    # ---- sclera
+    # ---- sclera: warm off-white, pinker/yellower toward the canthi, fine tortuous vessels
     z = np.sqrt(np.clip(1 - r * r, 0, 1))
     P3 = np.stack([x, y, z], -1).reshape(-1, 3)
-    n1 = fbm(P3 * 4.0, 4, seed=seed).reshape(S, S)
-    scl = srgb_to_lin([0.82, 0.77, 0.72])
-    col[:] = scl * (1 + 0.04 * n1[..., None])
-    # pinkish toward the canthi (left/right edges), veins
-    canth = smoothstep(0.45, 0.95, np.abs(x)) * smoothstep(0.7, 0.2, np.abs(y))
-    col *= 1 - canth[..., None] * np.array([0.02, 0.14, 0.14])
-    vn = ridged(np.stack([P3[:, 0] * 7, P3[:, 1] * 7, P3[:, 2] * 7], 1), 3, seed=seed + 5).reshape(S, S)
-    veins = smoothstep(0.93, 0.99, vn) * smoothstep(IR * 1.25, 0.8, r) * (0.35 + 0.65 * canth)
-    col = col * (1 - veins[..., None] * np.array([0.05, 0.45, 0.45]))
-    # limbal ring darkening
-    limb = smoothstep(IR * 0.92, IR * 1.0, r) * smoothstep(IR * 1.12, IR * 1.0, r)
-    col *= 1 - 0.35 * limb[..., None]
+    n1 = fbm(P3 * 5.0, 4, seed=seed).reshape(S, S)
+    scl = srgb_to_lin([0.80, 0.76, 0.71])
+    col[:] = scl * (1 + 0.035 * n1[..., None])
+    canth = smoothstep(0.42, 0.95, np.abs(x)) * smoothstep(0.75, 0.15, np.abs(y))
+    col *= 1 - canth[..., None] * np.array([0.03, 0.17, 0.16])
+    vn = ridged(P3 * 6.5, 3, seed=seed + 5).reshape(S, S)
+    vn2 = ridged(P3 * 14.0, 2, seed=seed + 6).reshape(S, S)
+    veins = (smoothstep(0.935, 0.99, vn) + 0.6 * smoothstep(0.95, 0.995, vn2)) * smoothstep(IR * 1.35, 0.85, r) * (0.25 + 0.75 * canth)
+    col = col * (1 - np.clip(veins, 0, 1)[..., None] * np.array([0.08, 0.5, 0.5]))
+    # limbal shadow (the sclera darkens and greys toward the cornea edge)
+    limb = smoothstep(IR * 0.98, IR * 1.02, r) * smoothstep(IR * 1.3, IR * 1.02, r)
+    col *= 1 - 0.3 * limb[..., None]
     # ---- iris
-    t = r / IR
-    if style == "dark_brown":
-        c_out, c_mid, c_in = srgb_to_lin([0.16, 0.09, 0.05]), srgb_to_lin([0.26, 0.15, 0.08]), srgb_to_lin([0.36, 0.22, 0.1])
-    else:  # brown_hazel (David)
-        c_out, c_mid, c_in = srgb_to_lin([0.2, 0.12, 0.06]), srgb_to_lin([0.38, 0.24, 0.1]), srgb_to_lin([0.55, 0.4, 0.16])
-    fib = np.zeros((S, S), np.float32)
-    for k, (freq, amp) in enumerate(((90, 0.5), (180, 0.3), (40, 0.4))):
-        ph = rng.random(freq) * 2 * np.pi
-        aa = (a + np.pi) / (2 * np.pi) * freq
-        i0 = np.floor(aa).astype(int) % freq
-        fr = aa - np.floor(aa)
-        v = (1 - fr) * np.sin(ph[i0] + t * (3 + k * 2)) + fr * np.sin(ph[(i0 + 1) % freq] + t * (3 + k * 2))
-        fib += amp * v
-    fib = fib / 1.2
-    wav = np.sin(a * 11 + np.sin(a * 5) * 1.5) * 0.02
-    collarette = smoothstep(0.42 + wav, 0.48 + wav, t) * smoothstep(0.62 + wav, 0.52 + wav, t)
-    base = np.where(t[..., None] < 0.5, c_in + (c_mid - c_in) * smoothstep(0.28, 0.5, t)[..., None], c_mid + (c_out - c_mid) * smoothstep(0.5, 1.0, t)[..., None])
-    iris = base * (1 + 0.35 * fib[..., None]) * (1 + 0.25 * collarette[..., None])
-    crypt = smoothstep(0.55, 0.85, fbm(np.stack([np.cos(a) * 6, np.sin(a) * 6, t * 8], -1).reshape(-1, 3), 3, seed=seed + 9).reshape(S, S)) * smoothstep(0.35, 0.6, t) * smoothstep(0.95, 0.75, t)
+    c_pup, c_col, c_cil, c_per, c_limb = (srgb_to_lin(c) for c in IRIS_STYLES.get(style, IRIS_STYLES["brown_hazel"]))
+    t = np.clip(r / IR, 0, 1)
+    nth, nr = 2048, 256
+    fib = _polar_noise(nth, nr, 220, 5, seed + 21) * 0.6 + _polar_noise(nth, nr, 520, 9, seed + 22) * 0.4
+    fib_s = _sample_polar(fib, t, a)
+    wav = _sample_polar(_polar_noise(nth, nr, 14, 2, seed + 23), t * 0 + 0.5, a) * 0.035
+    tc = 0.52 + wav  # collarette radius (fraction of the iris radius)
+    # colour zones: the pupillary zone fades from the pupil colour into the collarette, the ciliary zone darkens outward
+    inner = c_pup + (c_col - c_pup) * smoothstep(0.3, tc, t)[..., None]
+    outer = c_cil + (c_per - c_cil) * smoothstep(0.6, 0.98, t)[..., None]
+    zone = smoothstep(tc - 0.04, tc + 0.1, t)[..., None]
+    base = inner * (1 - zone) + outer * zone
+    # trabecular fibres: dark gaps and bright light-catching ridges
+    ridge = np.clip(fib_s, 0, 1) ** 1.5
+    gap = np.clip(-fib_s, 0, 1)
+    iris = base * (1 + 0.9 * ridge[..., None] - 0.45 * gap[..., None])
+    collar = smoothstep(tc - 0.04, tc, t) * smoothstep(tc + 0.06, tc, t)
+    iris = iris * (1 + 0.3 * collar[..., None])
+    # crypts (dark lacunae just outside the collarette), elongated radially
+    cr = _sample_polar(_polar_noise(nth, nr, 60, 7, seed + 24), t, a)
+    crypt = smoothstep(0.4, 0.8, cr) * smoothstep(tc, tc + 0.08, t) * smoothstep(0.88, 0.65, t)
     iris *= 1 - 0.4 * crypt[..., None]
-    iris *= (1 - 0.55 * smoothstep(0.8, 1.0, t))[..., None]  # dark limbal edge of the iris
-    # pupil (texture pupil radius 0.28 of the iris) with a thin ruff
-    pup = smoothstep(0.3, 0.27, t)
-    ruff = smoothstep(0.26, 0.3, t) * smoothstep(0.34, 0.3, t)
-    iris = iris * (1 - pup[..., None]) + np.array([0.004, 0.003, 0.003]) * pup[..., None]
-    iris = iris * (1 - 0.5 * ruff[..., None])
-    irm = smoothstep(IR * 1.01, IR * 0.985, r)
+    # contraction furrows (concentric, broken) in the periphery
+    brk = smoothstep(-0.1, 0.4, _sample_polar(_polar_noise(nth, nr, 30, 4, seed + 25), t, a))
+    fur = (np.cos((t - 0.7) * 2 * np.pi * 9) * 0.5 + 0.5) ** 6 * smoothstep(0.66, 0.78, t) * smoothstep(0.97, 0.9, t) * brk
+    iris *= 1 - 0.35 * fur[..., None]
+    # dark limbal ring
+    lr = smoothstep(0.84, 0.99, t)
+    iris = iris * (1 - lr[..., None]) + c_limb * lr[..., None]
+    # pupil (texture pupil radius = 0.28 of the iris) + pupillary ruff
+    pup = smoothstep(0.295, 0.275, t)
+    ruff = smoothstep(0.27, 0.29, t) * smoothstep(0.33, 0.295, t) * (0.6 + 0.4 * _sample_polar(fib, t, a * 3))
+    iris = iris * (1 - 0.65 * ruff[..., None])
+    iris = iris * (1 - pup[..., None]) + np.array([0.003, 0.0025, 0.0025]) * pup[..., None]
+    irm = smoothstep(IR * 1.012, IR * 0.992, r)
     col = col * (1 - irm[..., None]) + iris * irm[..., None]
     img = (lin_to_srgb(col) * 255 + 0.5).astype(np.uint8)
     os.makedirs(COMMON, exist_ok=True)
@@ -961,7 +1174,7 @@ if __name__ == "__main__":
     a = ap.parse_args()
     if a.common:
         bake_detail_normal()
-        for st in ("brown_hazel", "dark_brown"):
+        for st in ("brown_hazel", "dark_brown", "hazel_green"):
             bake_eye(st)
         print("common textures written")
     for p in a.presets:
@@ -970,6 +1183,7 @@ if __name__ == "__main__":
         b = Baker(p, a.size)
         b.rasterize()
         b.ao_thickness()
+        b.definition()
         b.paint()
         b.write()
         print(f"  total {time.time() - t0:.1f}s")

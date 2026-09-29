@@ -3,13 +3,18 @@ import { Simplex2, clamp, distToPolyline, lerp, smoothstep } from '../core/noise
 import { GLSL_NOISE, shared } from '../core/Shared';
 import { FAR_HALF, LAYOUT, NEAR_HALF } from './Layout';
 import type { TextureSet } from './Textures';
+import { worldTier, type WorldTier } from './WorldQuality';
+import { GLSL_SHADOW_FRAME, worldShared } from './WorldShared';
 
 const N1 = new Simplex2(1337);
 const N2 = new Simplex2(4242);
 const N3 = new Simplex2(99);
 
 /** Output of the analytic height function (module-level scratch to avoid allocations). */
-export const sampleOut = { h: 0, terrace: 0, rock: 0, wadi: 0, path: 0 };
+export const sampleOut = { h: 0, terrace: 0, rock: 0, wadi: 0, path: 0, pre: 0 };
+
+/** Height difference between two agricultural terraces (m). */
+export const TERRACE_STEP = 1.9;
 
 let plateauH = 0;
 
@@ -52,6 +57,13 @@ export function initHeightModel() {
   plateauH = regional(LAYOUT.bethlehem.x, LAYOUT.bethlehem.z) + 1.5;
 }
 
+/** Terrace profile: flat treads (rising 10 % of a step) and a steep riser in the last 14 % of each step. */
+function terraceProfile(h: number) {
+  const t = h / TERRACE_STEP;
+  const f = t - Math.floor(t);
+  return (Math.floor(t) + 0.1 * f + 0.9 * smoothstep(0.86, 1.0, f)) * TERRACE_STEP;
+}
+
 /** Full analytic terrain height + masks at (x,z). Result is written to `sampleOut`. */
 export function sampleTerrain(x: number, z: number) {
   let h = regional(x, z);
@@ -81,12 +93,15 @@ export function sampleTerrain(x: number, z: number) {
   T *= smoothstep(42, 80, dStart) * smoothstep(30, 55, dPasture) * smoothstep(40, 70, dThicket);
   T *= smoothstep(12, 34, wadiD) * smoothstep(3, 8, pathD);
   T *= 1 - smoothstep(1500, 2600, Math.hypot(x, z));
+  const pre = h;
   if (T > 0.001) {
-    const step = 2.3;
-    const t = h / step;
-    const f = t - Math.floor(t);
-    const ter = (Math.floor(t) + 0.1 * f + 0.9 * smoothstep(0.86, 1.0, f)) * step;
-    h = lerp(h, ter, T);
+    // terraces are built where the slope needs them: fade out on nearly flat ground
+    const e = 3;
+    const gx = regional(x + e, z) - regional(x - e, z);
+    const gz = regional(x, z + e) - regional(x, z - e);
+    const grad = Math.hypot(gx, gz) / (2 * e) * (1 - plateau);
+    T *= smoothstep(0.045, 0.11, grad);
+    if (T > 0.001) h = lerp(h, terraceProfile(h), T);
   }
 
   // Carve the dry wadi (stream bed)
@@ -98,6 +113,17 @@ export function sampleTerrain(x: number, z: number) {
   const wadi = 1 - smoothstep(4.5, 9, wadiD);
   const path = 1 - smoothstep(0.7, 2.1, pathD);
   h -= path * 0.1;
+
+  // hillside micro-relief: soil creep, rills and bedrock swells break up the smooth "dune" slopes.
+  // Kept away from the places where the story happens (lookout, pasture, stones, jars, path).
+  const dStones = Math.hypot(x - L.stones.x, z - L.stones.z);
+  const dTargets = Math.hypot(x - L.targets.x, z - L.targets.z);
+  const relief = smoothstep(16, 34, dStart) * smoothstep(L.pasture.r + 4, L.pasture.r + 22, dPasture) *
+    smoothstep(14, 26, dStones) * smoothstep(10, 22, dTargets) * smoothstep(3, 9, pathD) * (1 - plateau) * smoothstep(6, 16, wadiD);
+  if (relief > 0.001) {
+    const rill = 1 - Math.abs(N3.noise(x / 26 + 5, z / 11 - 2));
+    h += relief * (1 - T * 0.75) * (0.85 * N1.fbm(x / 21 + 4, z / 21 - 6, 3) + 0.32 * N2.noise(x / 6.5, z / 6.5) - 0.35 * rill * rill * rill);
+  }
 
   // Limestone outcrops (bedrock breaking through the thin soil)
   let R = smoothstep(0.2, 0.5, N2.fbm(x / 55 + 3, z / 55 - 9, 4)) * 0.85;
@@ -112,6 +138,7 @@ export function sampleTerrain(x: number, z: number) {
   sampleOut.rock = R;
   sampleOut.wadi = wadi;
   sampleOut.path = path;
+  sampleOut.pre = pre;
   return sampleOut;
 }
 
@@ -123,6 +150,23 @@ export function heightAnalytic(x: number, z: number) {
 export interface TerrainQuality {
   nearSpacing: number;
   farSegments: number;
+  /** optional content tier ('low' | 'medium' | 'high'); inferred from nearSpacing when absent */
+  name?: string;
+}
+
+/** A static object whose long golden-hour shadow is baked into the ground beyond the shadow map. */
+export interface ShadowCaster {
+  x: number;
+  z: number;
+  /** half width of the shadow (m) */
+  r: number;
+  /** bottom / top height of the occluder above the ground (m) */
+  h0: number;
+  h1: number;
+  /** opacity 0..1 (foliage lets light through) */
+  k: number;
+  /** extra ambient occlusion disc radius under the object (m, 0 = none) */
+  ao?: number;
 }
 
 export class Terrain {
@@ -131,20 +175,29 @@ export class Terrain {
   readonly nearSpacing: number;
   readonly heights: Float32Array; // near grid heights
   readonly masks: Float32Array; // near grid masks (terrace, rock, wadi, path)
+  /** near grid: height before terracing (lets walls follow the exact contour of each step) */
+  readonly preHeights: Float32Array;
   readonly grassDensity: Float32Array;
   readonly farN: number;
   readonly farHeights: Float32Array;
   readonly heightTexture: THREE.DataTexture; // RG32F: height, grass density
+  /** baked long shadows (R) and contact occlusion (G) of static objects over the near area */
+  readonly shadowTexture: THREE.DataTexture;
+  readonly tier: WorldTier;
   material!: THREE.MeshStandardMaterial;
   private nearGeo!: THREE.BufferGeometry;
   private farGeo!: THREE.BufferGeometry;
+  private shadowData: Uint8Array;
+  private shadowN: number;
 
   constructor(q: TerrainQuality) {
+    this.tier = worldTier(q);
     initHeightModel();
     this.nearSpacing = q.nearSpacing;
     this.nearN = Math.floor((NEAR_HALF * 2) / q.nearSpacing) + 1;
     const n = this.nearN;
     this.heights = new Float32Array(n * n);
+    this.preHeights = new Float32Array(n * n);
     this.masks = new Float32Array(n * n * 4);
     this.grassDensity = new Float32Array(n * n);
     for (let j = 0; j < n; j++) {
@@ -154,6 +207,7 @@ export class Terrain {
         const s = sampleTerrain(x, z);
         const k = j * n + i;
         this.heights[k] = s.h;
+        this.preHeights[k] = s.pre;
         this.masks[k * 4] = s.terrace;
         this.masks[k * 4 + 1] = s.rock;
         this.masks[k * 4 + 2] = s.wadi;
@@ -181,7 +235,7 @@ export class Terrain {
         const riser = this.masks[m] * smoothstep(0.3, 0.55, slope);
         let d = (1 - this.masks[m + 1] * 0.9) * (1 - this.masks[m + 2]) * (1 - this.masks[m + 3]) * (1 - riser);
         d *= 1 - smoothstep(0.55, 0.85, slope);
-        d *= 0.55 + 0.45 * smoothstep(-0.3, 0.3, N3.noise(x / 18, z / 18));
+        d *= smoothstep(-0.45, 0.3, N3.noise(x / 16, z / 16) * 0.65 + N1.noise(x / 4.5, z / 4.5) * 0.35);
         const dv = Math.hypot(x - LAYOUT.bethlehem.x, z - LAYOUT.bethlehem.z);
         d *= smoothstep(LAYOUT.bethlehem.r - 10, LAYOUT.bethlehem.r + 30, dv) * 0.8 + 0.2;
         this.grassDensity[k] = clamp(d, 0, 1);
@@ -196,6 +250,16 @@ export class Terrain {
     this.heightTexture.minFilter = THREE.NearestFilter;
     this.heightTexture.magFilter = THREE.NearestFilter;
     this.heightTexture.needsUpdate = true;
+
+    this.shadowN = this.tier === 'low' ? 512 : 1024;
+    const shadowData = new Uint8Array(this.shadowN * this.shadowN * 2).fill(255);
+    this.shadowData = shadowData;
+    this.shadowTexture = new THREE.DataTexture(shadowData, this.shadowN, this.shadowN, THREE.RGFormat, THREE.UnsignedByteType);
+    this.shadowTexture.minFilter = THREE.LinearFilter;
+    this.shadowTexture.magFilter = THREE.LinearFilter;
+    this.shadowTexture.wrapS = this.shadowTexture.wrapT = THREE.ClampToEdgeWrapping;
+    this.shadowTexture.generateMipmaps = false;
+    this.shadowTexture.needsUpdate = true;
   }
 
   private slopeAtGrid(i: number, j: number) {
@@ -223,6 +287,17 @@ export class Terrain {
     // triangles: (00,01,10) and (01,11,10)
     if (u + v <= 1) return h00 + (h10 - h00) * u + (h01 - h00) * v;
     return h11 + (h01 - h11) * (1 - u) + (h10 - h11) * (1 - v);
+  }
+
+  /** Bilinear height before terracing (near grid), for contour-following walls. */
+  preHeightAt(x: number, z: number): number {
+    const n = this.nearN;
+    const fx = clamp((x + NEAR_HALF) / this.nearSpacing, 0, n - 1.001);
+    const fz = clamp((z + NEAR_HALF) / this.nearSpacing, 0, n - 1.001);
+    const i = Math.floor(fx), j = Math.floor(fz);
+    const u = fx - i, v = fz - j;
+    const p = this.preHeights;
+    return lerp(lerp(p[j * n + i], p[j * n + i + 1], u), lerp(p[(j + 1) * n + i], p[(j + 1) * n + i + 1], u), v);
   }
 
   farHeightAt(x: number, z: number): number {
@@ -260,7 +335,7 @@ export class Terrain {
 
   // ------------------------------------------------------------------------------------------
   build(tex: TextureSet, sunDir: THREE.Vector3) {
-    this.material = createTerrainMaterial(tex);
+    this.material = createTerrainMaterial(tex, this.shadowTexture, this.tier);
     this.nearGeo = this.buildNearGeometry();
     this.farGeo = this.buildFarGeometry();
     this.bakeSun(sunDir);
@@ -277,10 +352,27 @@ export class Terrain {
     seaGeo.rotateX(-Math.PI / 2);
     const sea = new THREE.Mesh(
       seaGeo,
-      new THREE.MeshStandardMaterial({ color: 0x7f9aa6, roughness: 0.12, metalness: 0.0, envMapIntensity: 1.6 }),
+      new THREE.MeshStandardMaterial({ color: 0x7f9aa6, roughness: 0.18, metalness: 0.0, envMapIntensity: 1.3 }),
     );
     sea.position.set(4800, -349, 0);
+    sea.name = 'dead-sea';
     this.group.add(sea);
+  }
+
+  /** Cheap multi-radius curvature occlusion from the height grid (valleys, wadi banks, terrace feet). */
+  private occlusion(h: Float32Array, n: number, sp: number, k: number, i: number, j: number) {
+    const h0 = h[k];
+    let occ = 0;
+    const radii = [3 / sp, 8 / sp, 20 / sp];
+    const w = [0.22, 0.1, 0.045];
+    for (let r = 0; r < 3; r++) {
+      const d = Math.max(1, Math.round(radii[r]));
+      const i0 = Math.max(0, i - d), i1 = Math.min(n - 1, i + d);
+      const j0 = Math.max(0, j - d), j1 = Math.min(n - 1, j + d);
+      const avg = (h[j * n + i0] + h[j * n + i1] + h[j0 * n + i] + h[j1 * n + i]) * 0.25;
+      occ += Math.max(0, avg - h0) * w[r];
+    }
+    return clamp(1 - occ, 0.45, 1);
   }
 
   private buildNearGeometry() {
@@ -292,6 +384,7 @@ export class Terrain {
     const nor = new Float32Array(vcount * 3);
     const mask = new Float32Array(vcount * 4);
     const sun = new Float32Array(vcount).fill(1);
+    const ao = new Float32Array(vcount).fill(1);
     for (let j = 0; j < n; j++) {
       for (let i = 0; i < n; i++) {
         const k = j * n + i;
@@ -309,6 +402,7 @@ export class Terrain {
         nor[k * 3 + 1] = 1 / l;
         nor[k * 3 + 2] = -dz / l;
         mask.set(this.masks.subarray(k * 4, k * 4 + 4), k * 4);
+        ao[k] = this.occlusion(this.heights, n, sp, k, i, j);
       }
     }
     // skirt ring (hangs 14 m below the border to hide cracks against the far mesh)
@@ -324,6 +418,7 @@ export class Terrain {
       pos[v * 3 + 2] = pos[k * 3 + 2];
       nor.set(nor.subarray(k * 3, k * 3 + 3), v * 3);
       mask.set(mask.subarray(k * 4, k * 4 + 4), v * 4);
+      ao[v] = ao[k];
     });
     const idx = new Uint32Array((n - 1) * (n - 1) * 6 + border.length * 6);
     let p = 0;
@@ -346,6 +441,7 @@ export class Terrain {
     g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
     g.setAttribute('aMask', new THREE.BufferAttribute(mask, 4));
     g.setAttribute('aSun', new THREE.BufferAttribute(sun, 1));
+    g.setAttribute('aAO', new THREE.BufferAttribute(ao, 1));
     g.setIndex(new THREE.BufferAttribute(idx, 1));
     g.computeBoundingSphere();
     return g;
@@ -358,6 +454,7 @@ export class Terrain {
     const nor = new Float32Array(n * n * 3);
     const mask = new Float32Array(n * n * 4);
     const sun = new Float32Array(n * n).fill(1);
+    const ao = new Float32Array(n * n).fill(1);
     const inner = NEAR_HALF - 2;
     for (let j = 0; j < n; j++) {
       for (let i = 0; i < n; i++) {
@@ -382,6 +479,9 @@ export class Terrain {
         mask[k * 4 + 1] = s.rock;
         mask[k * 4 + 2] = s.desert;
         mask[k * 4 + 3] = 0;
+        // valleys read darker from afar
+        const avg = (this.farHeights[j * n + i0] + this.farHeights[j * n + i1] + this.farHeights[j0 * n + i] + this.farHeights[j1 * n + i]) * 0.25;
+        ao[k] = clamp(1 - Math.max(0, avg - this.farHeights[k]) * 0.012, 0.6, 1);
       }
     }
     const idx: number[] = [];
@@ -400,6 +500,7 @@ export class Terrain {
     g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
     g.setAttribute('aMask', new THREE.BufferAttribute(mask, 4));
     g.setAttribute('aSun', new THREE.BufferAttribute(sun, 1));
+    g.setAttribute('aAO', new THREE.BufferAttribute(ao, 1));
     g.setIndex(idx);
     g.computeBoundingSphere();
     return g;
@@ -410,7 +511,7 @@ export class Terrain {
     const d2 = Math.hypot(sunDir.x, sunDir.z) || 1;
     const dx = sunDir.x / d2, dz = sunDir.z / d2;
     const tanE = sunDir.y / d2;
-    const bake = (geo: THREE.BufferGeometry, count: number, nearSteps: number, nearStep: number, farSteps: number, farStep: number) => {
+    const bake = (geo: THREE.BufferGeometry, count: number, steps: number[], sizes: number[]) => {
       const pos = geo.getAttribute('position') as THREE.BufferAttribute;
       const sun = geo.getAttribute('aSun') as THREE.BufferAttribute;
       for (let k = 0; k < count; k++) {
@@ -418,23 +519,95 @@ export class Terrain {
         const h0 = Math.abs(x) < NEAR_HALF && Math.abs(z) < NEAR_HALF ? this.heightAt(x, z) : this.farHeightAt(x, z);
         let vis = 1;
         let d = 0;
-        for (let s = 1; s <= nearSteps + farSteps; s++) {
-          d += s <= nearSteps ? nearStep : farStep;
-          const sx = x + dx * d, sz = z + dz * d;
-          const inNear = Math.abs(sx) < NEAR_HALF && Math.abs(sz) < NEAR_HALF;
-          const th = inNear ? this.heightAt(sx, sz) : this.farHeightAt(sx, sz);
-          const ray = h0 + 0.3 + d * tanE;
-          const c = (ray - th) / (d * 0.035 + 0.6);
-          if (c < vis) vis = c;
-          if (vis <= 0) break;
+        outer: for (let band = 0; band < steps.length; band++) {
+          for (let s = 0; s < steps[band]; s++) {
+            d += sizes[band];
+            const sx = x + dx * d, sz = z + dz * d;
+            const inNear = Math.abs(sx) < NEAR_HALF && Math.abs(sz) < NEAR_HALF;
+            const th = inNear ? this.heightAt(sx, sz) : this.farHeightAt(sx, sz);
+            const ray = h0 + 0.3 + d * tanE;
+            const c = (ray - th) / (d * 0.035 + 0.6);
+            if (c < vis) vis = c;
+            if (vis <= 0) break outer;
+          }
         }
         sun.setX(k, clamp(vis, 0, 1));
       }
       sun.needsUpdate = true;
     };
-    bake(this.nearGeo, this.nearN * this.nearN + 4 * (this.nearN - 1), 50, 4, 24, 60);
-    bake(this.farGeo, this.farN * this.farN, 0, 0, 40, 90);
-    // skirt copies border values
+    // fine steps first so the 2 m risers of terraces shade the tread below them
+    bake(this.nearGeo, this.nearN * this.nearN + 4 * (this.nearN - 1), [6, 40, 24], [1.2, 4, 60]);
+    bake(this.farGeo, this.farN * this.farN, [40], [90]);
+  }
+
+  /** Thin out the GPU grass under an object (boulder, wall, tree trunk). Call before Grass is constructed. */
+  suppressGrass(x: number, z: number, r: number, amount = 0.85) {
+    const n = this.nearN, sp = this.nearSpacing;
+    const i0 = Math.max(0, Math.floor((x - r + NEAR_HALF) / sp)), i1 = Math.min(n - 1, Math.ceil((x + r + NEAR_HALF) / sp));
+    const j0 = Math.max(0, Math.floor((z - r + NEAR_HALF) / sp)), j1 = Math.min(n - 1, Math.ceil((z + r + NEAR_HALF) / sp));
+    const data = this.heightTexture.image.data as unknown as Float32Array;
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        const d = Math.hypot(-NEAR_HALF + i * sp - x, -NEAR_HALF + j * sp - z);
+        if (d > r) continue;
+        const k = j * n + i;
+        const f = 1 - amount * (1 - smoothstep(r * 0.6, r, d));
+        this.grassDensity[k] *= f;
+        data[k * 2 + 1] = this.grassDensity[k];
+      }
+    }
+    this.heightTexture.needsUpdate = true;
+  }
+
+  // ------------------------------------------------------------------------------------------ baked shadows
+
+  /**
+   * Stamp long golden-hour shadows (and contact occlusion) of static objects into the ground texture.
+   * Used by the terrain shader only outside the real shadow-map frustum. Call after the sun is set.
+   */
+  stampShadows(casters: ShadowCaster[]) {
+    const sd = shared.uSunDir.value;
+    const hl = Math.hypot(sd.x, sd.z) || 1;
+    const ax = -sd.x / hl, az = -sd.z / hl; // along the shadow (away from the sun)
+    const tanE = Math.max(0.08, sd.y / hl);
+    const N = this.shadowN;
+    const texel = (NEAR_HALF * 2) / N;
+    const data = this.shadowData;
+    for (const c of casters) {
+      const d0 = c.h0 / tanE, d1 = Math.min(90, c.h1 / tanE);
+      const w = Math.max(c.r, texel * 0.7);
+      // bounding box of the capsule
+      const sx0 = c.x + ax * d0, sz0 = c.z + az * d0;
+      const sx1 = c.x + ax * d1, sz1 = c.z + az * d1;
+      const minX = Math.min(sx0, sx1, c.x) - w - 2, maxX = Math.max(sx0, sx1, c.x) + w + 2;
+      const minZ = Math.min(sz0, sz1, c.z) - w - 2, maxZ = Math.max(sz0, sz1, c.z) + w + 2;
+      const i0 = Math.max(0, Math.floor((minX + NEAR_HALF) / texel)), i1 = Math.min(N - 1, Math.ceil((maxX + NEAR_HALF) / texel));
+      const j0 = Math.max(0, Math.floor((minZ + NEAR_HALF) / texel)), j1 = Math.min(N - 1, Math.ceil((maxZ + NEAR_HALF) / texel));
+      const segLen = Math.max(1e-3, d1 - d0);
+      const aoR = c.ao ?? 0;
+      for (let j = j0; j <= j1; j++) {
+        const z = -NEAR_HALF + (j + 0.5) * texel;
+        for (let i = i0; i <= i1; i++) {
+          const x = -NEAR_HALF + (i + 0.5) * texel;
+          const k = (j * N + i) * 2;
+          // capsule distance
+          const px = x - sx0, pz = z - sz0;
+          const t = clamp((px * ax + pz * az) / segLen, 0, 1);
+          const qx = px - ax * segLen * t, qz = pz - az * segLen * t;
+          const dist = Math.sqrt(qx * qx + qz * qz);
+          // soft edge grows with distance from the caster (penumbra)
+          const soft = 0.5 + (d0 + t * segLen) * 0.05;
+          const s = (1 - smoothstep(w - soft, w + soft, dist)) * c.k * (1 - 0.35 * t);
+          if (s > 0.003) data[k] = Math.min(data[k], Math.round(255 * (1 - s)));
+          if (aoR > 0) {
+            const dd = Math.hypot(x - c.x, z - c.z);
+            const a = (1 - smoothstep(aoR * 0.3, aoR, dd)) * 0.5;
+            if (a > 0.003) data[k + 1] = Math.min(data[k + 1], Math.round(255 * (1 - a)));
+          }
+        }
+      }
+    }
+    this.shadowTexture.needsUpdate = true;
   }
 }
 
@@ -459,7 +632,12 @@ function sampleMasksFar(x: number, z: number, h: number) {
 }
 
 // --------------------------------------------------------------------------------------------
-function createTerrainMaterial(tex: TextureSet) {
+/**
+ * Terrain material: height-blended dry grass / terra rossa / limestone bedrock, wadi gravel, dry-stone terrace
+ * risers, two-scale anti-tiling, far-field terrace and strata bands, garrigue speckle, curvature AO, baked sun
+ * visibility and baked long shadows of trees / walls beyond the real shadow map.
+ */
+function createTerrainMaterial(tex: TextureSet, shadowTex: THREE.Texture, tier: WorldTier) {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, metalness: 0 });
   const uniforms = {
     tGrass: { value: tex.grass },
@@ -470,18 +648,26 @@ function createTerrainMaterial(tex: TextureSet) {
     tRockN: { value: tex.rockN },
     tWall: { value: tex.wall },
     tWallN: { value: tex.wallN },
+    tGravel: { value: tex.gravel },
+    tGravelN: { value: tex.gravelN },
+    tBaked: { value: shadowTex },
     uSunDir: shared.uSunDir,
+    ...worldShared,
   };
+  const low = tier === 'low';
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
+    if (low) shader.defines = { ...(shader.defines ?? {}), TERRAIN_LOW: '' };
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
         `#include <common>
 attribute vec4 aMask;
 attribute float aSun;
+attribute float aAO;
 varying vec4 vMask;
 varying float vSun;
+varying float vAO;
 varying vec3 vWPos;
 varying vec3 vWNormal;`,
       )
@@ -490,6 +676,7 @@ varying vec3 vWNormal;`,
         `#include <project_vertex>
 vMask = aMask;
 vSun = aSun;
+vAO = aAO;
 vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
 vWNormal = normalize(mat3(modelMatrix) * objectNormal);`,
       );
@@ -497,15 +684,38 @@ vWNormal = normalize(mat3(modelMatrix) * objectNormal);`,
       .replace(
         '#include <common>',
         `#include <common>
-uniform sampler2D tGrass, tGrassN, tSoil, tSoilN, tRock, tRockN, tWall, tWallN;
+uniform sampler2D tGrass, tGrassN, tSoil, tSoilN, tRock, tRockN, tWall, tWallN, tGravel, tGravelN, tBaked;
 varying vec4 vMask;
 varying float vSun;
+varying float vAO;
 varying vec3 vWPos;
 varying vec3 vWNormal;
 ${GLSL_NOISE}
-vec3 tNormal(sampler2D t, vec2 uv){ return texture2D(t, uv).xyz * 2.0 - 1.0; }
+${GLSL_SHADOW_FRAME}
 vec3 terrainNormalW;
 float terrainRough;
+float terrainAO;
+float terrainBakedSun;
+vec2 tRot(vec2 p, float a){ float c = cos(a), s = sin(a); return vec2(c * p.x - s * p.y, s * p.x + c * p.y); }
+vec3 tN(vec4 t){ return t.xyz * 2.0 - 1.0; }
+// F1, F2 of a cellular (Voronoi) pattern: limestone clints and the soil-filled grikes between them
+vec2 tCell(vec2 p){
+  vec2 i = floor(p), f = fract(p); float d1 = 8.0, d2 = 8.0;
+  for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+    vec2 g = vec2(float(x), float(y));
+    vec2 o = vec2(dHash12(i + g), dHash12(i + g + 19.19));
+    vec2 r = g + o - f; float d = dot(r, r);
+    if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d;
+  }
+  return sqrt(vec2(d1, d2));
+}
+// height-blend three layers; returns normalised weights
+vec3 hblend3(vec3 w, vec3 h){
+  vec3 b = w + h * 0.45 * step(vec3(0.001), w);
+  float ma = max(b.x, max(b.y, b.z)) - 0.14;
+  vec3 r = max(b - ma, vec3(0.0));
+  return r / max(r.x + r.y + r.z, 1e-4);
+}
 `,
       )
       .replace(
@@ -515,91 +725,161 @@ float terrainRough;
   float slope = 1.0 - N.y;
   vec2 p = vWPos.xz;
   float dist = length(vWPos - cameraPosition);
-  float macro = dFbm(p * 0.018);
-  float macro2 = dNoise(p * 0.11);
   float terr = vMask.x, rocky = vMask.y, wadi = vMask.z, path = vMask.w;
-  float desert = 0.0;
-  if (abs(p.x) > ${NEAR_HALF.toFixed(1)} || abs(p.y) > ${NEAR_HALF.toFixed(1)}) { desert = wadi; wadi = 0.0; path = 0.0; }
+  float isFar = (abs(p.x) > ${(NEAR_HALF - 1).toFixed(1)} || abs(p.y) > ${(NEAR_HALF - 1).toFixed(1)}) ? 1.0 : 0.0;
+  float desert = wadi * isFar;
+  wadi *= 1.0 - isFar;
+  path *= 1.0 - isFar;
+  float macro = dFbm(p * 0.011);
+  float m2 = dNoise(p * 0.043 + 7.3);
+  float m3 = dNoise(p * 0.19 - 3.1);
+  float fineFade = 1.0 - smoothstep(90.0, 360.0, dist);
 
-  // ---- grass (golden, dry), two scales to break tiling
-  vec2 gUV1 = p / 3.6;
-  vec2 gUV2 = p / 11.3 + vec2(0.37, 0.71);
-  vec3 grass = mix(texture2D(tGrass, gUV1).rgb, texture2D(tGrass, gUV2).rgb, 0.45);
-  grass *= mix(vec3(0.95, 0.98, 0.8), vec3(1.18, 1.06, 0.86), macro); // patchy hue
-  // darker garrigue scrub patches (thorny burnet, sage) break up the gold
-  float scrub = smoothstep(0.55, 0.75, dNoise(p * 0.05 + 3.0) * 0.7 + dNoise(p * 0.21) * 0.3);
-  grass = mix(grass, grass * vec3(0.62, 0.64, 0.5), scrub * 0.55);
-  grass = mix(grass, grass * vec3(0.78, 0.74, 0.62), smoothstep(0.55, 0.9, macro2) * 0.6);
-  // ---- terra rossa soil
-  vec3 soil = texture2D(tSoil, p / 4.2).rgb;
-  soil = mix(soil, texture2D(tSoil, p / 13.0 + 0.5).rgb, 0.4);
-  // ---- limestone (triplanar)
+  // ---- layer samples (albedo.rgb, height.a) ------------------------------------------------
+  vec2 gUV = p / 4.2;
+#ifdef TERRAIN_LOW
+  vec4 gA = texture2D(tGrass, gUV);
+  vec4 gNt = texture2D(tGrassN, gUV);
+#else
+  vec2 gUV2 = tRot(p, 0.9) / 11.7 + vec2(0.37, 0.71);
+  float gmix = smoothstep(0.3, 0.7, m3 * 0.6 + m2 * 0.4);
+  vec4 gA = mix(texture2D(tGrass, gUV), texture2D(tGrass, gUV2), gmix);
+  vec4 gNt = mix(texture2D(tGrassN, gUV), texture2D(tGrassN, gUV2), gmix);
+#endif
+  vec2 sUV = tRot(p, 0.4) / 4.6;
+  vec4 sA = texture2D(tSoil, sUV);
+  vec4 sNt = texture2D(tSoilN, sUV);
+  // limestone: top projection on gentle ground, triplanar on steep faces
   vec3 bw = pow(abs(N), vec3(4.0)); bw /= (bw.x + bw.y + bw.z);
-  vec3 rp = vWPos / 6.5;
-  vec3 rock = texture2D(tRock, rp.zy).rgb * bw.x + texture2D(tRock, rp.xz).rgb * bw.y + texture2D(tRock, rp.xy).rgb * bw.z;
-  rock *= mix(0.62, 0.84, macro) * vec3(0.98, 0.96, 0.92);
-  // ---- dry-stone terrace walls (side projection)
-  vec2 wallUV = (abs(N.x) > abs(N.z) ? vWPos.zy : vWPos.xy) / 3.1;
-  vec3 wall = texture2D(tWall, wallUV).rgb;
-
-  // ---- weights with height-blending for crisp natural transitions
-  float rockH = dot(rock, vec3(0.33));
-  float breakup = dNoise(p * 0.45) * 0.6 + dNoise(p * 1.7) * 0.4; // bedrock breaks through in slabs
-  float wRock = clamp(rocky * 1.1 + smoothstep(0.42, 0.62, slope) * (1.0 - terr) + desert * 0.35, 0.0, 1.0);
-  wRock = smoothstep(0.45, 0.62, wRock * (0.55 + breakup * 0.9) + (rockH - 0.5) * 0.5);
-  float wWall = smoothstep(0.25, 0.5, terr) * smoothstep(0.3, 0.45, slope);
-  float wSoil = clamp(path * 1.3 + terr * (1.0 - wWall) * 0.35 + smoothstep(0.62, 0.85, macro) * 0.55, 0.0, 1.0);
-  wSoil = smoothstep(0.3, 0.7, wSoil + (macro2 - 0.5) * 0.4);
-  vec3 col = mix(grass, soil, wSoil);
-  // dusty worn path — lighter compacted earth
-  col = mix(col, mix(soil, vec3(0.62, 0.52, 0.40), 0.55), path * 0.8);
-  // wadi bed: pale gravel & cobbles
-  vec3 gravel = mix(texture2D(tRock, p / 1.7).rgb * vec3(0.95, 0.88, 0.76), soil * 1.15, 0.5);
-  col = mix(col, gravel, wadi);
-  // exposed bedrock reads as stony, grey-brown ground (the big bright boulders are real 3D rocks)
-  vec3 stony = mix(soil * 0.95, rock * 0.8, 0.55 + 0.25 * rockH);
-  col = mix(col, stony, wRock * 0.85);
-  col = mix(col, wall, wWall);
-  // desert far away: bare pinkish-tan chalk
-  col = mix(col, mix(vec3(0.74, 0.60, 0.46), rock, 0.35), desert * 0.85);
-  // distance: soften high-frequency detail into average colour (reduces shimmer)
-  float df = smoothstep(120.0, 900.0, dist);
-  vec3 farCol = mix(vec3(0.66, 0.53, 0.33), rock * 0.92, wRock) * mix(0.85, 1.12, macro);
-  farCol = mix(farCol, farCol * vec3(0.55, 0.56, 0.44), scrub * 0.7);
-  col = mix(col, farCol, df * 0.55);
-  col = mix(col, col * 0.86, wRock * (1.0 - rockH) * 0.5);
-  // garrigue speckle: dark shrubs dotting the hills, readable at mid/far distance
-  float cover = smoothstep(0.25, 0.65, dNoise(p * 0.025 + 4.0));
-  float bush = dCellDots(p * 0.45 + 11.0, 0.3) * (0.35 + 0.65 * cover) + dCellDots(p * 0.16 - 5.0, 0.24) * 0.9 * cover + dCellDots(p * 0.07 + 2.0, 0.18) * 0.7;
-  bush *= (1.0 - wRock * 0.5) * (1.0 - path) * (1.0 - wadi) * smoothstep(14.0, 45.0, dist);
-  vec3 bushCol = mix(vec3(0.19, 0.2, 0.12), vec3(0.3, 0.29, 0.2), dNoise(p * 0.9));
-  col = mix(col, bushCol, clamp(bush, 0.0, 1.0) * 0.8);
-  diffuseColor.rgb *= col;
-
-  // ---- normals (UDN blend in world space)
-  vec3 nG = tNormal(tGrassN, gUV1);
-  vec3 nS = tNormal(tSoilN, p / 4.2);
-  vec3 nRx = tNormal(tRockN, rp.zy), nRy = tNormal(tRockN, rp.xz), nRz = tNormal(tRockN, rp.xy);
-  vec3 nW = tNormal(tWallN, wallUV);
-  vec3 tn = mix(nG, nS, wSoil);
-  tn = mix(tn, nS, wadi);
-  vec3 wn = normalize(N + vec3(tn.x, 0.0, -tn.y) * 0.9);
+  vec3 rp = vWPos / 3.1;
+#ifdef TERRAIN_LOW
+  vec4 rA = texture2D(tRock, rp.xz);
+  vec4 rNt = texture2D(tRockN, rp.xz);
+  vec3 rockN = normalize(N + vec3(tN(rNt).x, 0.0, tN(rNt).y) * 0.9);
+#else
+  vec4 rAx = texture2D(tRock, rp.zy), rAy = texture2D(tRock, rp.xz), rAz = texture2D(tRock, rp.xy);
+  vec4 rNx = texture2D(tRockN, rp.zy), rNy = texture2D(tRockN, rp.xz), rNz = texture2D(tRockN, rp.xy);
+  vec4 rA = rAx * bw.x + rAy * bw.y + rAz * bw.z;
+  vec4 rNt = rNx * bw.x + rNy * bw.y + rNz * bw.z;
   vec3 rockN = normalize(
-      bw.x * normalize(vec3(0.0, nRx.y, nRx.x) + N) +
-      bw.y * normalize(vec3(nRy.x, 0.0, -nRy.y) + N) +
-      bw.z * normalize(vec3(nRz.x, nRz.y, 0.0) + N));
-  wn = normalize(mix(wn, rockN, wRock));
-  vec3 wallN = abs(N.x) > abs(N.z) ? normalize(N + vec3(0.0, nW.y, nW.x * sign(N.x)) * 1.2) : normalize(N + vec3(nW.x * sign(N.z), nW.y, 0.0) * 1.2);
-  wn = normalize(mix(wn, wallN, wWall));
-  wn = normalize(mix(wn, N, df));
-  terrainNormalW = wn;
-  terrainRough = mix(0.96, 0.82, wRock);
+      bw.x * normalize(N + vec3(0.0, tN(rNx).y, tN(rNx).x) * 1.1) +
+      bw.y * normalize(N + vec3(tN(rNy).x, 0.0, tN(rNy).y) * 1.1) +
+      bw.z * normalize(N + vec3(tN(rNz).x, tN(rNz).y, 0.0) * 1.1));
+#endif
+
+  // ---- weights -------------------------------------------------------------------------------
+  // bedrock: outcrop mask, steep untended slopes, natural bedding ledges (strata) on the hillsides, desert
+  float strataT = (vWPos.y + (m2 - 0.5) * 3.0) / 1.7;
+  float strata = smoothstep(0.62, 0.8, fract(strataT)) * smoothstep(0.18, 0.4, slope) * (1.0 - terr) * smoothstep(0.35, 0.65, m2);
+  float wR = rocky * 0.8 + smoothstep(0.46, 0.7, slope) * (1.0 - terr * 0.8) * 0.8 + desert * 0.45 + strata * 0.6 * fineFade;
+  wR = clamp(wR * (0.6 + 0.7 * m3) + (macro - 0.5) * 0.2, 0.0, 1.0);
+  wR *= 1.0 - path;
+  // clints and grikes: bedrock breaks into slabs with soil and grass in the joints
+  float grike = 0.0;
+#ifndef TERRAIN_LOW
+  if (wR > 0.02 && dist < 160.0) {
+    vec2 cc = tCell(tRot(p, 0.5) * vec2(0.38, 0.5));
+    grike = (1.0 - smoothstep(0.03, 0.16, cc.y - cc.x)) * (1.0 - smoothstep(110.0, 160.0, dist));
+    wR *= 1.0 - grike * 0.85;
+  }
+#endif
+  // terra rossa: small patches, pockets beside the rock, grike fill, a little on terrace treads
+  float wS = smoothstep(0.62, 0.9, m2 * 0.7 + macro * 0.5) * 0.45 + rocky * (1.0 - rocky) * 0.5 + terr * 0.06 + grike * 0.35;
+  wS = clamp(wS * (1.0 - wR), 0.0, 1.0);
+  float wG = max(0.0, 1.0 - wR - wS);
+  vec3 wts = hblend3(vec3(wG, wS, wR), vec3(gA.a, sA.a, rA.a));
+
+  // ---- colours -----------------------------------------------------------------------------------
+  vec3 grass = gA.rgb * vec3(1.14, 1.03, 0.84);
+  grass *= mix(vec3(0.9, 0.93, 0.84), vec3(1.14, 1.04, 0.86), macro);                   // olive-grey <-> golden
+  grass = mix(grass, grass * vec3(0.8, 0.83, 0.7), smoothstep(0.6, 0.85, m2) * 0.45);   // greyer garrigue
+  vec3 soil = sA.rgb * mix(0.9, 1.04, m3);
+  soil = mix(vec3(dot(soil, vec3(0.3, 0.55, 0.15))), soil, 0.72) * vec3(1.0, 0.97, 0.94); // dry, dusty
+  // weathered bedrock is greyer and darker than fresh boulders (lichen, dust)
+  vec3 rock = rA.rgb * vec3(0.8, 0.79, 0.76) * mix(0.8, 1.0, macro);
+  vec3 col = grass * wts.x + soil * wts.y + rock * wts.z;
+  vec3 nrm = normalize(N + vec3(tN(gNt).x, 0.0, tN(gNt).y) * 0.8) * wts.x
+           + normalize(N + vec3(tN(sNt).x, 0.0, tN(sNt).y) * 0.8) * wts.y
+           + rockN * wts.z;
+  float ao = gNt.a * wts.x + sNt.a * wts.y + rNt.a * wts.z;
+  float rough = 0.97 * wts.x + 0.93 * wts.y + 0.8 * wts.z;
+
+  // dusty, compacted footpath
+  vec3 pathCol = mix(soil, vec3(0.63, 0.53, 0.41), 0.55) * mix(0.95, 1.08, m3);
+  col = mix(col, pathCol, path * 0.85);
+  nrm = normalize(mix(nrm, N, path * 0.6));
+
+  // wadi bed: rounded pebbles and cobbles in pale silt
+#ifndef TERRAIN_LOW
+  if (wadi > 0.01) {
+    vec2 vUV = tRot(p, 0.3) / 2.1;
+    vec4 vA = texture2D(tGravel, vUV);
+    vec4 vNt = texture2D(tGravelN, vUV);
+    // gravel bars and silty hollows along the bed
+    float bar = smoothstep(0.3, 0.7, m3 * 0.6 + dNoise(p * 0.6) * 0.4);
+    float wv = smoothstep(0.0, 1.0, wadi * 1.3 + (vA.a - 0.5) * 0.8 - (1.0 - bar) * 0.45);
+    vec3 silt = mix(soil, vec3(0.64, 0.55, 0.44), 0.55);
+    col = mix(col, mix(silt, vA.rgb * vec3(0.98, 0.95, 0.9), wv), smoothstep(0.1, 0.6, wadi));
+    nrm = normalize(mix(nrm, normalize(N + vec3(tN(vNt).x, 0.0, tN(vNt).y) * 1.2), wv));
+    ao = mix(ao, vNt.a, wv);
+    rough = mix(rough, 0.86, wv);
+  }
+#else
+  col = mix(col, mix(rock, vec3(0.7, 0.62, 0.52), 0.4), wadi * 0.8);
+#endif
+
+  // dry-stone terrace risers (near mesh; the 3D walls stand in front of them)
+  float wWall = smoothstep(0.25, 0.5, terr) * smoothstep(0.32, 0.5, slope) * (1.0 - isFar);
+#ifndef TERRAIN_LOW
+  if (wWall > 0.01) {
+    vec2 wallUV = vec2(abs(N.x) > abs(N.z) ? vWPos.z : vWPos.x, vWPos.y) / 2.4;
+    vec4 wA = texture2D(tWall, wallUV);
+    vec4 wNt = texture2D(tWallN, wallUV);
+    col = mix(col, wA.rgb, wWall);
+    vec3 wn = abs(N.x) > abs(N.z) ? normalize(N + vec3(0.0, tN(wNt).y, tN(wNt).x * sign(N.x)) * 1.2) : normalize(N + vec3(tN(wNt).x * sign(N.z), tN(wNt).y, 0.0) * 1.2);
+    nrm = normalize(mix(nrm, wn, wWall));
+    ao = mix(ao, wNt.a, wWall);
+    rough = mix(rough, 0.86, wWall);
+  }
+#else
+  col = mix(col, rock * 0.95, wWall);
+#endif
+
+  // ---- far field ---------------------------------------------------------------------------
+  // terrace walls as bright stone bands along the contours (the far mesh is too coarse for the steps)
+  float tb = (vWPos.y + (m2 - 0.5) * 0.8) / ${TERRACE_STEP.toFixed(2)};
+  float fwT = fwidth(tb);
+  float fb = fract(tb);
+  float band = smoothstep(0.8 - fwT, 0.84 + fwT, fb) * (1.0 - smoothstep(0.95 - fwT, 1.0, fb));
+  float shade = smoothstep(0.0, 0.12 + fwT, fb) * (1.0 - smoothstep(0.12, 0.3 + fwT, fb));
+  float bandVis = (1.0 - smoothstep(0.18, 0.45, fwT)) * smoothstep(0.15, 0.5, terr) * isFar;
+  vec3 wallAvg = vec3(0.66, 0.62, 0.55);
+  col = mix(col, wallAvg * mix(0.85, 1.1, m3), band * bandVis * 0.85);
+  col *= 1.0 - shade * bandVis * 0.28;
+  col = mix(col, mix(col, wallAvg, 0.22), smoothstep(0.15, 0.5, terr) * isFar * (1.0 - bandVis));
+  // garrigue: dark shrubs and trees dotting the hills where no 3D plants are drawn
+  float cover = smoothstep(0.25, 0.65, dNoise(p * 0.025 + 4.0));
+  float bush = dCellDots(p * 0.33 + 11.0, 0.3) * (0.4 + 0.6 * cover) + dCellDots(p * 0.12 - 5.0, 0.26) * 0.9 * cover + dCellDots(p * 0.05 + 2.0, 0.2) * 0.7 * cover;
+  bush *= (1.0 - wR * 0.5) * (1.0 - path) * (1.0 - wadi) * (1.0 - desert * 0.85) * smoothstep(70.0, 180.0, dist);
+  vec3 bushCol = mix(vec3(0.16, 0.17, 0.11), vec3(0.27, 0.27, 0.19), dNoise(p * 0.9));
+  col = mix(col, bushCol, clamp(bush, 0.0, 1.0) * 0.75);
+  // the Judean desert: bare pinkish-tan chalk and marl
+  col = mix(col, mix(vec3(0.74, 0.62, 0.49), rock, 0.3) * mix(0.9, 1.08, macro), desert * 0.85);
+
+  // baked long shadows of trees / walls outside the shadow-map frustum + contact occlusion
+  vec2 buv = (p + ${NEAR_HALF.toFixed(1)}) / ${(2 * NEAR_HALF).toFixed(1)};
+  vec2 baked = (isFar > 0.5) ? vec2(1.0) : texture2D(tBaked, buv).rg;
+  terrainBakedSun = mix(baked.r, 1.0, inShadowFrame(vWPos));
+  ao *= baked.g;
+
+  diffuseColor.rgb *= col;
+  nrm = normalize(mix(nrm, N, 1.0 - fineFade * 0.85));
+  terrainNormalW = nrm;
+  terrainRough = rough;
+  terrainAO = mix(1.0, ao, fineFade * 0.8 + 0.2) * vAO;
 }`,
       )
-      .replace(
-        '#include <normal_fragment_maps>',
-        `normal = normalize((viewMatrix * vec4(terrainNormalW, 0.0)).xyz);`,
-      )
+      .replace('#include <normal_fragment_maps>', `normal = normalize((viewMatrix * vec4(terrainNormalW, 0.0)).xyz);`)
       .replace(
         '#include <roughnessmap_fragment>',
         `#include <roughnessmap_fragment>
@@ -608,11 +888,13 @@ roughnessFactor = terrainRough;`,
       .replace(
         '#include <lights_fragment_end>',
         `#include <lights_fragment_end>
-reflectedLight.directDiffuse *= vSun;
-reflectedLight.directSpecular *= vSun;
-reflectedLight.indirectDiffuse *= mix(0.72, 1.0, vSun);`,
+float sunVis = vSun * terrainBakedSun;
+reflectedLight.directDiffuse *= sunVis * mix(1.0, terrainAO, 0.45);
+reflectedLight.directSpecular *= sunVis * terrainAO;
+reflectedLight.indirectDiffuse *= mix(0.7, 1.0, vSun) * terrainAO;
+reflectedLight.indirectSpecular *= terrainAO;`,
       );
   };
-  mat.customProgramCacheKey = () => 'terrain-v1';
+  mat.customProgramCacheKey = () => 'terrain-v2' + (low ? '-low' : '');
   return mat;
 }

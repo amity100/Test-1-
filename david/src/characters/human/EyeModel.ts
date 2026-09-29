@@ -46,7 +46,7 @@ export class EyeMaterial extends THREE.MeshPhysicalMaterial {
     uCornea: { value: new THREE.Vector4(0, 0, 0, 0) }, // cornea sphere centre z, radius, iris plane z, eyeball radius (local units)
   };
   constructor(p: EyeParams) {
-    super({ color: 0xffffff, roughness: 0.16, metalness: 0, ior: 1.376, clearcoat: 0, sheen: 0 });
+    super({ color: 0xffffff, roughness: 0.075, metalness: 0, ior: 1.376, clearcoat: 0, sheen: 0 });
     this.name = 'HumanEye';
     const u = this.eyeUniforms;
     u.uEyeTex.value = p.texture;
@@ -70,7 +70,9 @@ varying vec3 vEyeLocal;
 varying vec3 vEyeWorld;
 varying vec3 vEyePos;
 varying vec3 vEyeCam;
-float gEyeOcc = 1.0;`,
+float gEyeOcc = 1.0;
+float gEyeShadow = 1.0;
+float gIris = 0.0;`,
         )
         .replace(
           '#include <map_fragment>',
@@ -116,11 +118,15 @@ float gEyeOcc = 1.0;`,
   vec2 uv = p * 0.5 + 0.5;
   vec4 texel = vEyeLocal.z > 0.0 ? texture2D( uEyeTex, uv ) : vec4( 0.8, 0.7, 0.66, 1.0 );
   diffuseColor.rgb *= texel.rgb;
-  // occlusion from lids & lashes: socket-space distance to the opening ellipse
+  // occlusion from lids & lashes, in socket space relative to the (blink-scaled) opening ellipse
   vec3 sp = ( uSocket * vec4( vEyeWorld, 1.0 ) ).xyz;
   vec2 e = ( sp.xy - uOpening.xy ) / ( uOpening.zw * vec2( 1.0, max( uLidOpen, 0.05 ) ) );
   float d = length( e );
-  gEyeOcc = mix( 0.25, 1.0, smoothstep( 1.02, 0.4, d ) ) * mix( 0.68, 1.0, smoothstep( 0.85, -0.3, e.y ) );
+  // ambient: darker toward the lid margins and much darker in the canthi (the eye sits in a socket)
+  gEyeOcc = mix( 0.3, 1.0, smoothstep( 1.05, 0.3, d ) ) * mix( 0.6, 1.0, smoothstep( 0.95, 0.35, abs( e.x ) ) );
+  // direct light: the upper lid, its thickness and the lashes cast a soft band of shadow below the margin
+  gEyeShadow = mix( 1.0, 0.16, smoothstep( 0.2, 0.95, e.y ) ) * mix( 0.55, 1.0, smoothstep( 1.0, 0.55, d ) );
+  gIris = smoothstep( uIrisR * 1.03, uIrisR * 0.97, length( vEyeLocal.xy ) ) * step( 0.0, vEyeLocal.z );
 }`,
         )
         .replace(
@@ -133,10 +139,11 @@ float gEyeOcc = 1.0;`,
         )
         .replace(
           '#include <aomap_fragment>',
-          `reflectedLight.directDiffuse *= gEyeOcc;
+          `reflectedLight.directDiffuse *= gEyeOcc * gEyeShadow;
 reflectedLight.indirectDiffuse *= gEyeOcc;
-reflectedLight.directSpecular *= gEyeOcc * gEyeOcc;
-reflectedLight.indirectSpecular *= gEyeOcc;`,
+// the clear cornea mesh provides the specular over the iris; the wet sclera reflects on its own
+reflectedLight.directSpecular *= gEyeShadow * ( 1.0 - gIris );
+reflectedLight.indirectSpecular *= gEyeOcc * gEyeOcc * ( 1.0 - gIris );`,
         );
     };
     const eyeKey = p.quality === 'low' ? 'human-eye-low' : 'human-eye';
