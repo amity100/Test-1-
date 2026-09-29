@@ -721,7 +721,7 @@ export class Intro {
         const head = m.j.head.getWorldPosition(V(0, 0, 0));
         const look = hand.clone().lerp(head.add(V(0, -0.35, 0)), ramp(u, 0.12, 0.8));
         const camRight = V(-away.z, 0, away.x).negate();
-        look.addScaledVector(camRight, 0.13 * r * (1 - 0.6 * e));
+        look.addScaledVector(camRight, 0.13 * r * (1 - 0.6 * e) * this.lateral());
         set(pos, look, 30 + e * 7);
         break;
       }
@@ -759,7 +759,7 @@ export class Intro {
         const camRight = V(-to.z, 0, to.x); // screen right: David in the left third, looking into the open frame
         const r = 3.4 - e * 1.5;
         const pos = head.clone().addScaledVector(to, -r).addScaledVector(camRight, -0.25).add(V(0, -0.72 + e * 0.3, 0));
-        const look = head.clone().add(V(0, -0.1 + e * 0.06, 0)).addScaledVector(camRight, 0.17 * r);
+        const look = head.clone().add(V(0, -0.1 + e * 0.06, 0)).addScaledVector(camRight, 0.12 * r * this.lateral());
         set(pos, look, 31 - e * 6);
         break;
       }
@@ -784,6 +784,11 @@ export class Intro {
         set(V(620, 140, 230), V(-100, 30, -150), 42);
       }
     }
+  }
+
+  /** Off-centre framing scale: full on landscape screens, nearly centred on a portrait phone (narrow lens). */
+  private lateral() {
+    return Math.min(1, Math.max(0.2, this.h.engine.camera.aspect / 1.78));
   }
 
   /** World position of the hand that holds the staff (the one nearer the staff's grip). */
