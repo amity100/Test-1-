@@ -4,7 +4,15 @@
  */
 
 export async function gunzip(buf: ArrayBuffer): Promise<ArrayBuffer> {
-  const u8 = new Uint8Array(buf);
+  let u8 = new Uint8Array(buf);
+  // the published artifact can't serve arbitrary binary files, so tools/package_artifact.py ships each .binz as
+  // base64 text (".binz.txt"); gzip data always starts with "H4sI" once base64-encoded
+  if (u8.length >= 4 && u8[0] === 0x48 && u8[1] === 0x34 && u8[2] === 0x73 && u8[3] === 0x49) {
+    const s = atob(new TextDecoder().decode(u8).replace(/\s+/g, ''));
+    u8 = new Uint8Array(s.length);
+    for (let i = 0; i < s.length; i++) u8[i] = s.charCodeAt(i);
+    buf = u8.buffer;
+  }
   if (u8.length < 18 || u8[0] !== 0x1f || u8[1] !== 0x8b) return buf; // not gzip
   const DS = (globalThis as unknown as { DecompressionStream?: new (f: string) => TransformStream<Uint8Array, Uint8Array> }).DecompressionStream;
   if (DS) {

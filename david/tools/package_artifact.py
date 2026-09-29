@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import html
+import base64
 import json
 import mimetypes
 import re
@@ -45,6 +46,15 @@ LIMIT_TEXT = 16 * MB
 LIMIT_BIN = 15 * MB
 LIMIT_FILES = 255
 LIMIT_PUBLISH = 64 * MB
+
+
+BASE64_EXT = {".binz", ".bin", ".gz"}
+SERVED_TYPES = {
+    "text/html", "text/css", "text/javascript", "application/javascript", "application/wasm", "application/json",
+    "text/plain", "text/markdown", "text/csv", "application/xml", "text/xml", "image/svg+xml", "image/png", "image/jpeg",
+    "image/gif", "image/webp", "image/avif", "image/x-icon", "image/vnd.microsoft.icon", "font/woff", "font/woff2",
+    "font/ttf", "font/otf", "audio/mpeg", "audio/wav", "audio/ogg", "video/mp4", "video/webm", "application/pdf",
+}
 
 
 def attr(tag: str, name: str) -> str | None:
@@ -122,19 +132,35 @@ def main() -> int:
     manifest = {"page": {"path": "index.html", "bytes": len(page.encode())}, "files": [], "errors": []}
     total = len(page.encode())
     js_text = "".join(f.read_text(encoding="utf-8", errors="ignore") for f in (dist / "assets").rglob("*.js"))
+    # Artifacts only serve standard web types: binary blobs such as the gzip meshes (.binz) are shipped as base64
+    # text under "<name>.txt" (the runtime's gunzip() decodes them) and the JS chunks are rewritten to point there.
+    renamed = {f.name: f.name + ".txt" for f in (dist / "assets").rglob("*") if f.is_file() and f.suffix.lower() in BASE64_EXT}
     for f in sorted((dist / "assets").rglob("*")):
         if not f.is_file():
             continue
         rel = f.relative_to(dist).as_posix()
         if rel in inlined_css and f.name not in js_text:
             continue  # inlined into the page and not loaded by any chunk: don't publish it twice
+        ext = f.suffix.lower()
+        if f.name in renamed:
+            rel = rel[: -len(f.name)] + renamed[f.name]
+            ext = ".txt"
         dst = out / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(f, dst)
-        size = f.stat().st_size
+        if f.name in renamed:
+            dst.write_text(base64.b64encode(f.read_bytes()).decode("ascii"), encoding="ascii")
+        elif ext == ".js" and renamed:
+            text = f.read_text(encoding="utf-8")
+            for a, b in renamed.items():
+                text = text.replace(a, b)
+            dst.write_text(text, encoding="utf-8")
+        else:
+            shutil.copy2(f, dst)
+        size = dst.stat().st_size
         total += size
-        ext = f.suffix.lower()
-        ctype = TYPES.get(ext) or mimetypes.guess_type(f.name)[0] or "application/octet-stream"
+        ctype = TYPES.get(ext) or mimetypes.guess_type(dst.name)[0] or "application/octet-stream"
+        if ctype not in SERVED_TYPES:
+            manifest["errors"].append(f"{rel}: content type {ctype} is not served by artifacts")
         files[rel] = {"from": str(dst), "contentType": ctype}
         limit = LIMIT_TEXT if ext in TEXT_EXT else LIMIT_BIN
         manifest["files"].append({"path": rel, "bytes": size, "contentType": ctype})
