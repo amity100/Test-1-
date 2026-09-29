@@ -135,7 +135,7 @@ function buildTamarisk(world: TextureSet, tex: PalaceTextures, tier: PalaceTier)
     const c = crownC.clone().add(V3(Math.cos(a) * r, (rnd() - 0.2) * 2.4, Math.sin(a) * r));
     clusters.push({ c, dir: c.clone().sub(crownC).normalize(), r: 1.4 + rnd() * 0.6 });
   }
-  const perCluster = tier === 'high' ? 16 : tier === 'medium' ? 11 : 7;
+  const perCluster = tier === 'high' ? 30 : tier === 'medium' ? 20 : 12;
   for (const cl of clusters) {
     for (let i = 0; i < perCluster; i++) {
       const p = V3(rnd() * 2 - 1, rnd() * 2 - 1, rnd() * 2 - 1);
@@ -144,21 +144,21 @@ function buildTamarisk(world: TextureSet, tex: PalaceTextures, tier: PalaceTier)
       // branchlets droop: the spray "grows" downward and outward from where it hangs
       const out = c.clone().sub(crownC).setY(0).normalize();
       const grow = out.multiplyScalar(0.55).add(V3(0, -1, 0)).add(V3(rnd() - 0.5, rnd() * 0.4, rnd() - 0.5).multiplyScalar(0.6)).normalize();
-      const size = 1.0 + rnd() * 0.8;
+      const size = 0.55 + rnd() * 0.5;
       const k = 0.85 + rnd() * 0.3;
       const tint: [number, number, number] = [k * 0.98, k, k * 0.96];
       const hang = c.clone().addScaledVector(grow, -size * 0.12);
       cards.add(hang, grow, size * 0.95, size, crownC, crownR, Math.floor(rnd() * 4), tint, rnd, 0.6 + 0.4 * Math.min(1, c.distanceTo(crownC) / crownR), rnd());
     }
   }
-  const bark = barkMat(world, 0x8a7c70);
+  const bark = barkMat(world, 0x5e5650);
   for (const g of barkGeos) {
     const m = new THREE.Mesh(g, bark);
     m.castShadow = true;
     m.receiveShadow = true;
     group.add(m);
   }
-  const fol = foliageMaterial(tex.tamarisk, { sway: 0.18, flutter: 0.03, translucency: 0.55, color: 0xd9dccb, roughness: 0.8 });
+  const fol = foliageMaterial(tex.tamarisk, { sway: 0.18, flutter: 0.03, translucency: 0.22, color: 0xc9cbc0, roughness: 0.85 });
   const leaves = new THREE.Mesh(cards.geometry(), fol);
   leaves.castShadow = true;
   leaves.receiveShadow = true;

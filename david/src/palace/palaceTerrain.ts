@@ -50,7 +50,8 @@ function baseHeight(x: number, z: number) {
   h = THREE.MathUtils.lerp(h, VALLEY_Y + 10 * fbm(N1, x * 0.004, z * 0.004, 3), Math.pow(s, 0.8));
   // surrounding hills of the Benjamin plateau
   const far = smoothstep(420, 1400, r);
-  const hills = fbm(N2, x * 0.0009, z * 0.0009, 4) * 110 + fbm(N3, x * 0.0035, z * 0.0035, 2) * 7;
+  const ridge = 1 - Math.abs(fbm(N2, x * 0.0007, z * 0.0007, 4) * 2.2);
+  const hills = ridge * ridge * 150 - 55 + fbm(N3, x * 0.0026, z * 0.0026, 3) * 22;
   // the land falls toward the wilderness in the east
   const east = smoothstep(1500, 6000, x) * -140;
   h += far * (hills + east + 25 * smoothstep(1200, 4000, -z));
@@ -153,6 +154,7 @@ export function terrainMaterial(world: TextureSet) {
     s.uniforms.tWallN = { value: world.wallN };
     s.uniforms.tGravel = { value: world.gravel };
     s.uniforms.uSummit = { value: new THREE.Vector3(SUMMIT.x, 0, SUMMIT.z) };
+    s.uniforms.uFort = { value: new THREE.Vector4(FORT.x0, FORT.x1, FORT.z0, FORT.z1) };
     s.vertexShader = s.vertexShader
       .replace('#include <common>', `#include <common>
 varying vec3 vTW; varying vec3 vTN;`)
@@ -162,7 +164,7 @@ vTN = normalize(mat3(modelMatrix) * objectNormal);`);
     s.fragmentShader = s.fragmentShader
       .replace('#include <common>', `#include <common>
 uniform sampler2D tGrass, tGrassN, tSoil, tRock, tRockN, tWall, tWallN, tGravel;
-uniform vec3 uSummit;
+uniform vec3 uSummit; uniform vec4 uFort;
 varying vec3 vTW; varying vec3 vTN;
 vec3 terWN; float terAO; float terRough;
 float tH(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
@@ -210,7 +212,13 @@ vec4 samp2(sampler2D t, vec2 p){ return mix(texture2D(t, p), texture2D(t, p * 0.
   vec3 plough = so.rgb * vec3(0.95, 0.9, 0.85) * (0.85 + 0.2 * stripe);
   c = mix(c, ptype < 0.45 ? stub : (ptype < 0.7 ? plough : c * 0.92), valley * 0.85);
   c = mix(c, so.rgb, clamp(wSoil, 0.0, 1.0) * 0.8);
-  c = mix(c, gv.rgb * vec3(1.05, 1.0, 0.95), onPlateau * smoothstep(0.55, 0.75, m3) * 0.5);
+  c = mix(c, gv.rgb * vec3(1.0, 0.95, 0.9), onPlateau * smoothstep(0.6, 0.8, m3) * 0.2);
+  // the citadel courtyard and the gate forecourt: trodden, dusty beaten earth
+  vec2 fo = max(vec2(uFort.x - xz.x, uFort.z - xz.y), vec2(xz.x - uFort.y, xz.y - uFort.w));
+  float yard = 1.0 - smoothstep(-1.0, 3.0, max(fo.x, fo.y));
+  float lane = (1.0 - smoothstep(2.0, 4.5, abs(xz.y - 1.5))) * step(uFort.y, xz.x) * (1.0 - smoothstep(60.0, 90.0, xz.x));
+  vec3 earth = mix(so.rgb * vec3(1.1, 0.98, 0.86), gv.rgb * vec3(0.95, 0.9, 0.85), 0.35) * (0.9 + 0.2 * m3);
+  c = mix(c, earth, clamp(max(yard, lane) * 0.92, 0.0, 1.0));
   c = mix(c, ro.rgb * vec3(1.02, 1.0, 0.96), clamp(wRock, 0.0, 1.0));
   c = mix(c, wa.rgb, wWall);
   // far: fade texture detail into a smooth macro colour (hides tiling), slightly bleached by haze
@@ -223,6 +231,15 @@ vec4 samp2(sampler2D t, vec2 p){ return mix(texture2D(t, p), texture2D(t, p * 0.
   macro = mix(macro, vec3(0.17, 0.18, 0.12), orch * 0.55);
   macro = mix(macro, macro * vec3(1.1, 0.82, 0.7), smoothstep(0.6, 0.85, m2) * 0.5);
   c = mix(c, macro, fd * 0.8);
+  // terrace lines along the contours (far slopes): dry-stone risers every ~2.4 m, antialiased
+  float fy = max(fwidth(vTW.y), 1e-4);
+  float tph = fract(vTW.y / 2.4 + tN(xz * 0.02) * 0.6);
+  float lineW = 0.16;
+  float tline = 1.0 - smoothstep(lineW, lineW + fy / 2.4, tph);
+  tline = mix(tline, lineW, smoothstep(0.08, 0.5, fy / 2.4));
+  float slopeBand = smoothstep(0.06, 0.2, slope) * (1.0 - smoothstep(0.55, 0.8, slope)) * smoothstep(380.0, 700.0, rS) * (1.0 - valley * 0.7);
+  c = mix(c, vec3(0.62, 0.58, 0.5), tline * slopeBand * 0.75);
+  c = mix(c, c * 0.72, (1.0 - tline) * slopeBand * smoothstep(0.0, 0.3, tph) * 0.2);
   diffuseColor.rgb *= c;
   // normals: tangent-space maps projected on the dominant plane
   vec3 gn = texture2D(tGrassN, xz / 3.2).xyz * 2.0 - 1.0;
@@ -243,6 +260,6 @@ roughnessFactor = terRough;`)
       .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
 reflectedLight.indirectDiffuse *= terAO;`);
   };
-  mat.customProgramCacheKey = () => 'palace-terrain-v1';
+  mat.customProgramCacheKey = () => 'palace-terrain-v2';
   return mat;
 }

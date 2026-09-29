@@ -90,7 +90,7 @@ export class Flames {
           col += vec3(0.1, 0.18, 0.6) * (1.0 - smoothstep(0.0, 0.09, y)) * (1.0 - smoothstep(0.2, 0.7, d)) * (1.0 - vKind);
           float a = clamp(body + core, 0.0, 1.0);
           if (a < 0.01) discard;
-          gl_FragColor = vec4(col * uIntensity * 3.0, a);
+          gl_FragColor = vec4(col * uIntensity * (vKind > 0.5 ? 0.9 : 3.0), a);
         }`,
       transparent: true,
       depthWrite: false,
@@ -135,7 +135,7 @@ export class LightShafts {
   readonly uniforms = {
     uTime: shared.uTime,
     uSunColor: shared.uSunColor,
-    uStrength: { value: 0.11 },
+    uStrength: { value: 0.07 },
   };
   constructor(windows: WindowOpening[], sunDir: THREE.Vector3) {
     const pos: number[] = [], uvw: number[] = [], idx: number[] = [];
@@ -211,7 +211,8 @@ export class LightShafts {
           float along = smoothstep(0.0, 0.06, vUvw.y) * (1.0 - smoothstep(0.55, 1.0, vUvw.y)) * mix(1.0, 0.55, vUvw.y);
           // drifting dust (slow turbulence) makes the beam uneven
           vec3 p = vW * 2.3 + vec3(0.0, uTime * 0.05, uTime * 0.03);
-          float dust = 0.55 + 0.45 * n3(p) + 0.25 * (n3(p * 3.1) - 0.5);
+          float dust = 0.35 + 0.65 * n3(p) + 0.35 * (n3(p * 3.1) - 0.5);
+          dust *= 0.7 + 0.6 * n3(vec3(vUvw.x * 6.0, vUvw.y * 1.5, uTime * 0.07));
           // don't fill the lens when the camera is inside a beam
           float camFade = smoothstep(0.3, 1.2, length(cameraPosition - vW));
           float a = pow(facing, 0.6) * edge * along * dust * camFade * uStrength;

@@ -165,11 +165,11 @@ ${o.soot ? `diffuseColor.rgb *= 1.0 - ${o.soot.toFixed(3)} * smoothstep(uSoot.x,
 // Exterior masonry (fortress, towers, houses): world-space triplanar fieldstone with mud mortar, optional
 // vertex displacement from the height in the albedo alpha (tessellated walls on medium / high).
 // =====================================================================================================
-export function masonryMaterial(world: TextureSet, opts: { scale: number; displace: number; tint?: number; plaster?: number; key: string; render?: THREE.Texture; renderCover?: number }) {
+export function masonryMaterial(world: TextureSet, opts: { scale: number; displace: number; tint?: number; plaster?: number; key: string; render?: THREE.Texture; renderCover?: number; dry?: boolean }) {
   const mat = new THREE.MeshStandardMaterial({ color: opts.tint ?? 0xffffff, roughness: 0.9, metalness: 0 });
   mat.onBeforeCompile = (s) => {
-    s.uniforms.tMas = { value: world.masonry };
-    s.uniforms.tMasN = { value: world.masonryN };
+    s.uniforms.tMas = { value: opts.dry ? world.wall : world.masonry };
+    s.uniforms.tMasN = { value: opts.dry ? world.wallN : world.masonryN };
     s.uniforms.tPl = { value: world.soil };
     s.uniforms.tRender = { value: opts.render ?? world.soil };
     s.vertexShader = s.vertexShader
@@ -234,8 +234,8 @@ float mHash(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x
   diffuseColor.rgb *= c;
   vec3 tnx = nx.xyz * 2.0 - 1.0, tny = ny.xyz * 2.0 - 1.0, tnz = nz.xyz * 2.0 - 1.0;
   masWN = normalize(bw.x * normalize(Nw + vec3(0.0, tnx.y, tnx.x) * 1.2) + bw.y * normalize(Nw + vec3(tny.x, 0.0, tny.y) * 1.2) + bw.z * normalize(Nw + vec3(tnz.x, tnz.y, 0.0) * 1.2));
-  masWN = normalize(mix(masWN, Nw, masRender * 0.75));
-  masAO = mix(masAO, 1.0, masRender * 0.7);
+  masWN = normalize(mix(masWN, Nw, masRender * 0.92));
+  masAO = mix(masAO, 1.0, masRender * 0.9);
 }`)
       .replace('#include <normal_fragment_maps>', `normal = normalize((viewMatrix * vec4(masWN, 0.0)).xyz);`)
       .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
@@ -243,7 +243,7 @@ reflectedLight.indirectDiffuse *= masAO;
 reflectedLight.directDiffuse *= mix(1.0, masAO, 0.4);`)
       ;
   };
-  mat.customProgramCacheKey = () => `palace-masonry2-${opts.key}-${opts.scale}-${opts.displace}-${opts.plaster ?? 0}-${opts.renderCover ?? 0}`;
+  mat.customProgramCacheKey = () => `palace-masonry3-${opts.key}-${opts.scale}-${opts.displace}-${opts.plaster ?? 0}-${opts.renderCover ?? 0}-${opts.dry ? 1 : 0}`;
   return mat;
 }
 
@@ -347,7 +347,7 @@ uniform float uTime; attribute float aSway;`)
 export function createPalaceMaterials(tex: PalaceTextures, world: TextureSet, tier: PalaceTier): PalaceMaterials {
   const std = (p: THREE.MeshStandardMaterialParameters) => new THREE.MeshStandardMaterial({ metalness: 0, ...p });
   tex.weaveN.repeat.set(1, 1);
-  const plaster = interiorize(std({ map: tex.plaster, normalMap: tex.plasterN, roughness: 0.94, color: 0xf2e6d2, normalScale: new THREE.Vector2(0.9, 0.9) }), { vertexAO: true, soot: 0.62, key: 'plaster' });
+  const plaster = interiorize(std({ map: tex.plaster, normalMap: tex.plasterN, roughness: 0.94, color: 0xfff4e4, normalScale: new THREE.Vector2(1.5, 1.5) }), { vertexAO: true, soot: 0.62, key: 'plaster' });
   const floor = interiorize(std({ map: tex.floor, normalMap: tex.floorN, roughness: 0.9, color: 0xe8dccb }), { vertexAO: true, key: 'floor' });
   const beam = interiorize(std({ map: tex.wood, normalMap: tex.woodN, roughness: 0.82, color: 0xb09a86, normalScale: new THREE.Vector2(1.2, 1.2) }), { vertexAO: false, soot: 0.5, key: 'beam' });
   const beamExt = std({ map: tex.wood, normalMap: tex.woodN, roughness: 0.85, color: 0xc4ae98, normalScale: new THREE.Vector2(1.2, 1.2) });
@@ -364,9 +364,9 @@ export function createPalaceMaterials(tex: PalaceTextures, world: TextureSet, ti
   const coal = std({ color: 0x1a1612, roughness: 0.95, emissive: new THREE.Color(1.0, 0.32, 0.08), emissiveIntensity: 2.2 });
   const textile = [0, 1, 2, 3].map((c) => interiorize(textileMaterial(tex, c, tier), { key: 'tex' + c + tier }));
   const disp = tier === 'high' ? 0.14 : tier === 'medium' ? 0.1 : 0;
-  const masonry = masonryMaterial(world, { scale: 4.4, displace: disp, key: 'fort' + tier, plaster: 0.35, tint: 0xe6dfd4 });
+  const masonry = masonryMaterial(world, { scale: 4.2, displace: disp * 1.3, key: 'fort' + tier, plaster: 0.25, tint: 0xd9d0c2, dry: true });
   const hallShell = masonryMaterial(world, { scale: 3.6, displace: disp * 0.6, key: 'hall' + tier, plaster: 0.3, tint: 0xe6dfd4, render: tex.plaster, renderCover: 0.62 });
-  const masonryFlat = masonryMaterial(world, { scale: 4.4, displace: 0, key: 'fortflat', plaster: 0.35, tint: 0xe6dfd4 });
+  const masonryFlat = masonryMaterial(world, { scale: 4.2, displace: 0, key: 'fortflat', plaster: 0.25, tint: 0xd9d0c2, dry: true });
   const houses = masonryMaterial(world, { scale: 3.2, displace: 0, key: 'houses', plaster: 0.55, tint: 0xece4d8, render: tex.plaster, renderCover: 0.35 });
   const plasterExt = std({ map: tex.plaster, normalMap: tex.plasterN, roughness: 0.95, color: 0xd9c4a2 });
   const roof = roofMaterial(world);

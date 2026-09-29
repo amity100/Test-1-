@@ -361,7 +361,7 @@ def tamarisk():
         C = S // 2 * SS
         # main twig from the bottom centre fanning upward; branchlets droop (the cell is used hanging)
         base = np.array([C * 0.5, C * 0.98])
-        nbr = 34 if ci < 2 else 44
+        nbr = 44 if ci < 2 else 56
         for b in range(nbr):
             ang = -np.pi / 2 + r.uniform(-1.1, 1.1)
             L = C * r.uniform(0.45, 0.9)
@@ -374,12 +374,12 @@ def tamarisk():
                 p = p + np.array([np.cos(a), np.sin(a)]) * L / steps
                 pts.append(p.copy())
             tone = r.uniform(0, 1)
-            gcol = lerp(np.array([118, 134, 112]), np.array([150, 160, 128]), tone)
+            gcol = lerp(np.array([128, 138, 124]), np.array([164, 170, 150]), tone)
             if ci == 3:
                 gcol = gcol * 0.9 + np.array([10, 4, -2])  # a slightly browner, older spray
             # jointed segments: alternating light/dark rings every few pixels; tiny leaf scales make it fuzzy
             for i in range(len(pts) - 1):
-                w = int(max(2, SS * (3.4 - 2.0 * i / len(pts))))
+                w = int(max(2, SS * (2.8 - 1.6 * i / len(pts))))
                 shade = 0.82 + 0.3 * ((i % 3) == 0)
                 c = tuple(int(v) for v in np.clip(gcol * shade, 0, 255)) + (255,)
                 d.line([tuple(pts[i]), tuple(pts[i + 1])], fill=c, width=w)

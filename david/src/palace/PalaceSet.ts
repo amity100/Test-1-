@@ -161,7 +161,7 @@ export class PalaceSet {
     scene.add(this.terrain);
     this.architecture = buildArchitecture(this.mats, tier);
     scene.add(this.architecture.group);
-    this.props = buildInteriorProps(this.mats, tier);
+    this.props = buildInteriorProps(this.mats, tier, world);
     scene.add(this.props.group);
     this.vegetation = buildVegetation(world, tex, tier, this.architecture.houseSpots);
     scene.add(this.vegetation.group);
@@ -269,8 +269,19 @@ export class PalaceSet {
 
   /** A PostFX for this set (the game's post chain with the palace sky cube for the aerial perspective). */
   createPost(camera: THREE.PerspectiveCamera, q: PostQuality) {
-    return new PostFX(this.renderer, this.scene, camera, this.sky.cubeTarget.texture, q);
+    const post = new PostFX(this.renderer, this.scene, camera, this.sky.cubeTarget.texture, q);
+    this.configurePost(post);
+    return post;
   }
+
+  /** Atmosphere settings of this set (clear morning air over Benjamin; call on a shared PostFX when swapping in). */
+  configurePost(post: PostFX) {
+    post.atmosphere.uniforms.uDensity.value = PalaceSet.HAZE_DENSITY;
+    post.atmosphere.uniforms.uGodRays.value = 0.2;
+  }
+
+  /** aerial-perspective density used for this set (the game's default is 0.00042) */
+  static HAZE_DENSITY = 0.00024;
 
   /** Grey mannequins at every anchor (scale check: the king is 1.98 m, others 1.72-1.8 m). */
   showPlaceholders(on: boolean) {

@@ -3,6 +3,9 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { mulberry32 } from '../core/noise';
 import { rockGeometry } from '../world/RockGen';
 import { GeoBuilder, hewnBeam, pole, roomAO, vessel } from './palaceGeometry';
+import { interiorize } from './palaceMaterials';
+import { rockMaterial } from '../world/Rocks';
+import type { TextureSet } from '../world/Textures';
 import { HALL } from './palaceLayout';
 import type { PalaceMaterials, PalaceTier } from './palaceMaterials';
 
@@ -126,7 +129,7 @@ export interface InteriorProps {
 }
 
 /** Everything inside the king's hall. */
-export function buildInteriorProps(mats: PalaceMaterials, tier: PalaceTier): InteriorProps {
+export function buildInteriorProps(mats: PalaceMaterials, tier: PalaceTier, world: TextureSet): InteriorProps {
   const H = HALL;
   const group = new THREE.Group();
   group.name = 'palace:interiorProps';
@@ -149,6 +152,36 @@ export function buildInteriorProps(mats: PalaceMaterials, tier: PalaceTier): Int
   st.block(V3(H.x0 + bD / 2, y0 + bH / 2, -8.0), V3(bD, bH, 9.4), 0.25, 1 / 1.8, { faces: 'px pz nz py', ao });
   st.block(V3(H.x1 - bD / 2, y0 + bH / 2, -8.0), V3(bD, bH, 9.4), 0.25, 1 / 1.8, { faces: 'nx pz nz py', ao });
   group.add(mesh(st.build({ ao: true }), mats.plaster, true, true, 'palace:dais'));
+
+  // ------------------------------------------------------------------ pillars: stacked, roughly squared limestone drums
+  {
+    const pm = interiorize(rockMaterial(world, 0xe8ddcc, 0.9, 'palace-pillar'), { key: 'pillar', soot: 0.35 });
+    const drumGeos = [rockGeometry(401, { kind: 'block', detail: tier === 'low' ? 3 : 5, blocky: 0.8 }), rockGeometry(402, { kind: 'block', detail: tier === 'low' ? 3 : 5, blocky: 0.85 }), rockGeometry(403, { kind: 'stone', detail: tier === 'low' ? 3 : 5, blocky: 0.8 })];
+    const lists: THREE.Matrix4[][] = [[], [], []];
+    const top = H.beam - 0.22;
+    let k = 0;
+    for (const px of H.pillarX) for (const pz of H.pillarZ) {
+      let y = y0 - 0.05;
+      const n = 4;
+      for (let i = 0; i < n; i++) {
+        const hgt = (top - y0) / n;
+        const q = new THREE.Quaternion().setFromAxisAngle(V3(0, 1, 0), (k * 1.7 + i * 0.9) % 6.28 * 0.08 + (i % 2) * Math.PI / 2);
+        const w = 0.62 - i * 0.03 + ((k + i) % 3) * 0.02;
+        lists[(k + i) % 3].push(new THREE.Matrix4().compose(V3(px + ((k + i) % 2 ? 0.015 : -0.015), y + hgt * 0.5, pz), q, V3(w * 0.52, hgt * 0.72, w * 0.5)));
+        y += hgt;
+      }
+      k++;
+    }
+    lists.forEach((l, i) => {
+      const im = new THREE.InstancedMesh(drumGeos[i], pm, l.length);
+      l.forEach((m, j) => im.setMatrixAt(j, m));
+      im.castShadow = true;
+      im.receiveShadow = true;
+      im.userData.noChunk = true;
+      im.name = 'palace:pillars';
+      group.add(im);
+    });
+  }
 
   // ------------------------------------------------------------------ the king's seat
   const seat = new GeoBuilder();
