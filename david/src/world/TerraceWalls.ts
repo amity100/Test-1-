@@ -421,7 +421,8 @@ uniform sampler2D tRock, tRockN; varying vec3 vSWPos; varying vec3 vSWN; varying
   vec4 ax = texture2D(tRock, p.zy), ay = texture2D(tRock, p.xz), az = texture2D(tRock, p.xy);
   vec4 nx = texture2D(tRockN, p.zy), ny = texture2D(tRockN, p.xz), nz = texture2D(tRockN, p.xy);
   vec3 c = ax.rgb * bw.x + ay.rgb * bw.y + az.rgb * bw.z;
-  c *= mix(0.84, 1.04, vSSeed) * mix(vec3(1.0), vec3(1.04, 0.99, 0.9), step(0.7, fract(vSSeed * 7.0)));
+  // field stones are weathered grey (dust, lichen) — much darker than a fresh boulder face
+  c *= vec3(0.82, 0.81, 0.78) * mix(0.66, 1.0, vSSeed) * mix(vec3(1.0), vec3(1.05, 0.99, 0.9), step(0.7, fract(vSSeed * 7.0)));
   float cav = 1.0 - vSRock.x;
   c *= mix(1.0, cav, 0.6);
   c = mix(c, c * vec3(0.7, 0.58, 0.46), (1.0 - smoothstep(0.0, 0.3, vSRock.y)) * 0.35);
@@ -436,6 +437,6 @@ uniform sampler2D tRock, tRockN; varying vec3 vSWPos; varying vec3 vSWN; varying
 reflectedLight.indirectDiffuse *= stAO;
 reflectedLight.directDiffuse *= mix(1.0, stAO, 0.4);`);
   };
-  mat.customProgramCacheKey = () => 'wall-stone-v1-' + detailR;
+  mat.customProgramCacheKey = () => 'wall-stone-v2-' + detailR;
   return mat;
 }

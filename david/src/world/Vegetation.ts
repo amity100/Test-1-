@@ -123,11 +123,18 @@ normal *= faceDirection;
 {
   vec3 vd = normalize(vFolWPos - cameraPosition);
   float back = pow(max(dot(vd, uSunDir), 0.0), 3.0);
-  totalEmissiveRadiance += diffuseColor.rgb * uSunColor * back * ${opts.translucency.toFixed(3)};
+  // light through thin leaves is deeper and more saturated than the leaf surface
+  vec3 through = diffuseColor.rgb * mix(vec3(1.0), diffuseColor.rgb * 2.2, 0.55);
+  totalEmissiveRadiance += through * uSunColor * back * ${opts.translucency.toFixed(3)};
 }`,
-      );
+      )
+      // leaf cards carry crown normals, so grazing Fresnel / GGX peaks land on whole cards and read as white
+      // flakes against the low sun: keep only a soft waxy sheen
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+reflectedLight.directSpecular *= 0.3;
+reflectedLight.indirectSpecular *= 0.35;`);
   };
-  mat.customProgramCacheKey = () => `foliage2-${opts.sway}-${opts.flutter}-${opts.translucency}`;
+  mat.customProgramCacheKey = () => `foliage3-${opts.sway}-${opts.flutter}-${opts.translucency}`;
   return mat;
 }
 

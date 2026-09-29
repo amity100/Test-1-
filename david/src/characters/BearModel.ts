@@ -146,6 +146,8 @@ function loadAssets(q: BearQuality): Promise<BearAssets> {
       ]);
       clumps.minFilter = THREE.NearestMipmapLinearFilter; // clump vectors must not blend across clump borders
       clumps.magFilter = THREE.NearestFilter;
+      // already tier-sized (2k / 1k): keep Engine.enforceTextureBudget() from resampling them (clumps must stay exact)
+      for (const t of [albedo, normal, mask, strands, clumps]) t.userData.keepSize = true;
       const g = bin.get;
       const body = new THREE.BufferGeometry();
       body.setAttribute('position', new THREE.BufferAttribute(g('position') as Float32Array, 3));
@@ -189,6 +191,13 @@ uniform sampler2D uMaskMap;
 uniform float uFurCover;
 uniform vec3 uRootTint;
 uniform vec3 uTipTint;
+varying vec3 vBindP;
+// Syrian bears are palest on the back and flanks; the belly fringe and the upper legs darken to a warm brown
+// (bind-pose height band; the lower legs are already dark in the albedo, so they get less)
+vec3 bearUnderTint(vec3 bp) {
+  float belly = (1.0 - smoothstep(0.42, 0.62, bp.y)) * (1.0 - smoothstep(0.5, 0.66, bp.z));
+  return mix(vec3(1.0), vec3(0.74, 0.61, 0.49), belly * (0.55 + 0.45 * smoothstep(0.18, 0.4, bp.y)));
+}
 `;
 
 function makeBodyMaterial(a: BearAssets, shared: Record<string, THREE.IUniform>) {
@@ -196,6 +205,9 @@ function makeBodyMaterial(a: BearAssets, shared: Record<string, THREE.IUniform>)
   m.name = 'bear-body';
   m.onBeforeCompile = (s) => {
     Object.assign(s.uniforms, shared, { uMaskMap: { value: a.mask } });
+    s.vertexShader = s.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vBindP;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBindP = position;');
     s.fragmentShader = s.fragmentShader
       .replace('#include <common>', `#include <common>\n${GLSL_FUR_COMMON}\nfloat bearAO; float bearFur;`)
       .replace(
@@ -207,6 +219,7 @@ function makeBodyMaterial(a: BearAssets, shared: Record<string, THREE.IUniform>)
   bearFur = bm.b;
   // under the shells the skin shows the dense, darker under-fur; without shells the base carries the pelt
   diffuseColor.rgb *= mix(vec3(1.0), uRootTint, bearFur * uFurCover);
+  diffuseColor.rgb *= bearUnderTint(vBindP);
 }`,
       )
       .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = texture2D(uMaskMap, vMapUv).g;')
@@ -235,7 +248,7 @@ reflectedLight.indirectSpecular *= bearAO * bearAO;
 reflectedLight.directDiffuse *= mix(1.0, bearAO, 0.45);`,
       );
   };
-  m.customProgramCacheKey = () => 'bear-body-v1';
+  m.customProgramCacheKey = () => 'bear-body-v2';
   return m;
 }
 
@@ -261,11 +274,13 @@ uniform float uDroop;
 varying float vH;
 varying vec3 vStrandV;
 varying float vFurAO;
-varying float vFurLen;`,
+varying float vFurLen;
+varying vec3 vBindP;`,
       )
       .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
+vBindP = position;
 float furH = (float(gl_InstanceID) + 1.0) / uShellCount;
 vec3 strandObj;
 {
@@ -371,7 +386,7 @@ float furTip;`,
   vec3 tint = mix(uRootTint, uTipTint, furTip);
   tint *= 1.0 + (lr.y - 0.5) * mix(0.26, 0.1, shortK);
   tint *= mix(1.0, 0.88 + 0.24 * st.b, strandVis);
-  diffuseColor.rgb *= tint;
+  diffuseColor.rgb *= tint * bearUnderTint(vBindP);
 }`,
       )
       .replace(
@@ -483,7 +498,7 @@ const SWIPE = new Clip([
 // the standing swipe (played while rearing): the torso is upright, so its twist is a roll (Z) of the spine bones
 const SWIPE_HIGH = new Clip([
   { t: 0, p: pose({}) },
-  { t: 0.34, p: pose({ scapR: [-0.35, 0, -0.2], humR: [-1.9, 0.3, -0.6], foreR: [-1.25, 0, 0], wristR: [0.6, 0, 0], toesR: [0.5, 0, 0], humL: [0.15, 0, 0.1], spine1: [-0.04, 0, -0.12], spine2: [-0.05, 0, -0.26], neck1: [0.02, 0.12, 0.08], neck2: [0, 0.08, 0.04], head: [0.04, 0.1, 0], earL: [-0.4, 0, 0.1], earR: [-0.4, 0, -0.1] }, 0.03) },
+  { t: 0.34, p: pose({ scapR: [-0.4, 0, -0.35], humR: [-2.0, 0.2, 0.9], foreR: [-1.1, 0, 0], wristR: [0.55, 0, 0], toesR: [0.5, 0, 0], humL: [0.15, 0, 0.1], spine1: [-0.04, 0, -0.12], spine2: [-0.05, 0, -0.26], neck1: [0.02, 0.06, 0.04], neck2: [0.02, 0.05, 0.02], head: [0.12, 0.06, 0], earL: [-0.4, 0, 0.1], earR: [-0.4, 0, -0.1] }, 0.03) },
   { t: 0.5, p: pose({ scapR: [0.1, 0, 0.1], humR: [-0.6, -0.35, 0.55], foreR: [-0.3, 0, 0], wristR: [-0.2, 0, 0], toesR: [-0.3, 0, 0], humL: [-0.1, 0, -0.05], spine1: [0.06, 0, 0.18], spine2: [0.08, 0, 0.34], neck1: [0.1, -0.12, -0.08], neck2: [0.04, -0.08, -0.04], head: [0.1, -0.12, 0], earL: [-0.6, 0, 0.15], earR: [-0.6, 0, -0.15] }, -0.04) },
   { t: 0.95, p: pose({}) },
 ]);
@@ -500,8 +515,8 @@ const HURT = new Clip([
 const DEATH = new Clip([
   { t: 0, p: pose({}) },
   { t: 0.7, p: pose({ hips: [0.12, 0, 0.12], spine1: [0.12, 0, 0.06], spine2: [0.15, 0, 0.05], neck1: [0.35, 0, 0.1], neck2: [0.2, 0, 0], head: [0.25, 0.1, 0.2], humL: [-0.35, 0, 0.1], foreL: [0.6, 0, 0], humR: [-0.2, 0, -0.1], foreR: [0.7, 0, 0], femL: [0.5, 0, 0], tibL: [0.9, 0, 0], femR: [0.4, 0, 0], tibR: [0.8, 0, 0], jaw: [0.2, 0, 0], earL: [-0.4, 0, 0], earR: [-0.4, 0, 0] }, -0.28, 0) },
-  { t: 1.7, p: pose({ hips: [0.05, 0, 1.3], spine1: [0.05, 0.05, 0.04], spine2: [0.02, 0.1, 0.02], neck1: [0.25, 0.1, 0.04], neck2: [0.15, 0.1, 0], head: [0.3, 0.1, 0.1], humL: [-0.6, 0, 0.5], foreL: [-0.4, 0, 0], wristL: [0.6, 0, 0], humR: [-0.4, 0, -0.2], foreR: [-0.3, 0, 0], wristR: [0.5, 0, 0], femL: [-0.3, 0, 0.45], tibL: [0.5, 0, 0], ankleL: [0.3, 0, 0], femR: [-0.5, 0, -0.1], tibR: [0.4, 0, 0], ankleR: [0.3, 0, 0], jaw: [0.3, 0, 0], earL: [-0.3, 0, 0], earR: [-0.3, 0, 0], tail: [0.3, 0, 0] }, -0.47, 0) },
-  { t: 3.0, p: pose({ hips: [0.05, 0, 1.36], spine1: [0.04, 0.06, 0.03], spine2: [0.02, 0.14, 0.02], neck1: [0.1, 0.15, 0.04], neck2: [0.1, 0.1, 0.02], head: [0.2, 0.15, 0.1], humL: [-0.75, 0, 0.55], foreL: [-0.35, 0, 0], wristL: [0.7, 0, 0], toesL: [0.4, 0, 0], humR: [-0.55, 0, -0.25], foreR: [-0.35, 0, 0], wristR: [0.6, 0, 0], femL: [-0.45, 0, 0.5], tibL: [0.4, 0, 0], ankleL: [0.45, 0, 0], femR: [-0.6, 0, -0.15], tibR: [0.35, 0, 0], ankleR: [0.4, 0, 0], jaw: [0.36, 0, 0], earL: [-0.2, 0, 0], earR: [-0.2, 0, 0], tail: [0.35, 0, 0] }, -0.5, 0) },
+  { t: 1.7, p: pose({ hips: [0.05, 0, 1.3], spine1: [0.05, 0.05, 0.04], spine2: [0.02, 0.1, 0.02], neck1: [0.25, 0.1, 0.04], neck2: [0.15, 0.1, 0], head: [0.3, 0.1, 0.1], humL: [-0.6, 0, -0.2], foreL: [-0.4, 0, 0], wristL: [0.6, 0, 0], humR: [-0.4, 0, 0.1], foreR: [-0.3, 0, 0], wristR: [0.5, 0, 0], femL: [-0.3, 0, -0.2], tibL: [0.5, 0, 0], ankleL: [0.3, 0, 0], femR: [-0.5, 0, 0.08], tibR: [0.4, 0, 0], ankleR: [0.3, 0, 0], jaw: [0.3, 0, 0], earL: [-0.3, 0, 0], earR: [-0.3, 0, 0], tail: [0.3, 0, 0] }, -0.47, 0) },
+  { t: 3.0, p: pose({ hips: [0.05, 0, 1.36], spine1: [0.04, 0.06, 0.03], spine2: [0.02, 0.14, 0.02], neck1: [0.1, 0.15, 0.04], neck2: [0.1, 0.1, 0.02], head: [0.2, 0.15, 0.1], humL: [-0.75, 0, -0.3], foreL: [-0.35, 0, 0], wristL: [0.7, 0, 0], toesL: [0.4, 0, 0], humR: [-0.55, 0, 0.12], foreR: [-0.35, 0, 0], wristR: [0.6, 0, 0], femL: [-0.45, 0, -0.25], tibL: [0.4, 0, 0], ankleL: [0.45, 0, 0], femR: [-0.6, 0, 0.1], tibR: [0.35, 0, 0], ankleR: [0.4, 0, 0], jaw: [0.36, 0, 0], earL: [-0.2, 0, 0], earR: [-0.2, 0, 0], tail: [0.35, 0, 0] }, -0.5, 0) },
 ]);
 
 // the standing pose ("וַיָּקָם עָלַי"): hind legs are placed by IK, everything else FK

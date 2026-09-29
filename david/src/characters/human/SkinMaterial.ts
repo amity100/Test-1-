@@ -36,17 +36,17 @@ export class SkinMaterial extends THREE.MeshPhysicalMaterial {
     uDetailNormal: { value: null as THREE.Texture | null },
     uDetailTile: { value: 50.0 }, // detail tile repetitions per metre of skin (tile 2 cm, pores ~0.35 mm apart)
     uDetailStrength: { value: 0.7 },
-    uRoughRange: { value: new THREE.Vector2(0.34, 0.86) },
+    uRoughRange: { value: new THREE.Vector2(0.3, 0.8) },
     uAOIntensity: { value: 1.0 },
-    uSssWrap: { value: new THREE.Vector3(0.26, 0.1, 0.07) },
+    uSssWrap: { value: new THREE.Vector3(0.22, 0.085, 0.06) },
     uSssNormalBlend: { value: new THREE.Vector3(0.85, 0.45, 0.25) },
     uCurvScale: { value: 0.035 },
-    uLobe: { value: new THREE.Vector3(0.78, 1.45, 0.22) }, // lobe1 roughness scale, lobe2 roughness scale, lobe2 mix
+    uLobe: { value: new THREE.Vector3(0.72, 1.5, 0.28) }, // lobe1 roughness scale, lobe2 roughness scale, lobe2 mix
     uTransColor: { value: new THREE.Color(1.0, 0.28, 0.12) },
-    uTransScale: { value: 1.6 },
+    uTransScale: { value: 1.25 },
     uTransPower: { value: 3.0 },
     uTransDepth: { value: 0.022 },
-    uTransAmbient: { value: 0.06 },
+    uTransAmbient: { value: 0.035 },
     uShadowScatter: { value: new THREE.Vector3(0.55, 0.92, 1.0) }, // per-channel shadow edge softening
     uSkinTint: { value: new THREE.Color(1, 1, 1) },
     uWet: { value: 0.0 }, // sweat / wetness 0..1
@@ -115,6 +115,12 @@ vec3 gTransLight = vec3(0.0);
 float gScatter = 0.5;
 float gSpecOcc = 1.0;
 float gCavity = 1.0;
+float skinHash( vec2 p ) { return fract( sin( dot( p, vec2( 127.1, 311.7 ) ) ) * 43758.5453 ); }
+float skinNoise( vec2 p ) {
+  vec2 i = floor( p ), f = fract( p );
+  vec2 u = f * f * ( 3.0 - 2.0 * f );
+  return mix( mix( skinHash( i ), skinHash( i + vec2( 1.0, 0.0 ) ), u.x ), mix( skinHash( i + vec2( 0.0, 1.0 ) ), skinHash( i + vec2( 1.0, 1.0 ) ), u.x ), u.y );
+}
 #if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
 uniform mat4 directionalShadowMatrix[ NUM_DIR_LIGHT_SHADOWS ];
 #endif`,
@@ -126,7 +132,16 @@ diffuseColor.rgb *= uSkinTint;
 #ifdef SKIN_MASK
 gSkinMask = texture2D( uMaskMap, vMapUv );
 #endif
-diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * vec3(0.78, 0.7, 0.6), uDirt * gSkinMask.r );`,
+diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * vec3(0.78, 0.7, 0.6), uDirt * gSkinMask.r );
+#ifdef SKIN_DETAIL
+{
+  // mid-frequency mottling (capillary blotches, uneven tan) at a constant world scale: 1 unit = 2 cm of skin
+  vec2 wuv = vMapUv * ( uDetailTile / max( vDetailScale, 0.05 ) );
+  float n1 = skinNoise( wuv * 0.9 ), n2 = skinNoise( wuv * 3.1 + 7.3 ), n3 = skinNoise( wuv * 1.7 + 3.1 );
+  float lum = 1.0 + 0.07 * ( n1 - 0.5 ) + 0.05 * ( n2 - 0.5 );
+  diffuseColor.rgb *= lum * vec3( 1.0 + 0.05 * ( n3 - 0.5 ), 1.0 - 0.02 * ( n3 - 0.5 ), 1.0 - 0.04 * ( n3 - 0.5 ) );
+}
+#endif`,
         )
         .replace(
           '#include <roughnessmap_fragment>',

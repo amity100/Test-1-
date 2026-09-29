@@ -57,22 +57,25 @@ export type FlockQuality = 'low' | 'medium' | 'high';
 
 /** per-tier level-of-detail policy */
 interface LodPolicy {
-  /** geometry detail of LOD0 (1 = full) */
+  /** geometry detail of LOD0 (1 = full; triangles scale ~ 1 / detail^2) */
   detail0: number;
+  /** detail multipliers of LOD1 / LOD2 relative to LOD0 */
+  lodMul: [number, number];
   /** camera distances (m) where LOD1 / LOD2 take over */
   dist: [number, number];
   /** fur shells are drawn only closer than this (m) */
   shellDist: number;
   /** number of fur shells (sheep / ram, goat, lamb) */
   shells: [number, number, number];
+  /** bodies cast shadows only closer than this (m); far animals are cheap LODs without shadow-pass cost */
+  shadowDist: number;
 }
 const LOD_POLICY: Record<FlockQuality, LodPolicy> = {
-  high: { detail0: 1, dist: [15, 42], shellDist: 18, shells: [5, 6, 6] },
-  medium: { detail0: 1.15, dist: [10, 28], shellDist: 11, shells: [4, 5, 5] },
-  low: { detail0: 1.35, dist: [6, 17], shellDist: 7, shells: [3, 3, 4] },
+  high: { detail0: 1, lodMul: [2.1, 3.6], dist: [15, 42], shellDist: 18, shells: [5, 6, 6], shadowDist: 60 },
+  medium: { detail0: 1.3, lodMul: [1.9, 3.2], dist: [10, 28], shellDist: 11, shells: [4, 5, 5], shadowDist: 34 },
+  // phones: ~8-13k triangles per animal up close, ~3-5k (LOD1) beyond 6 m, ~1-2k (LOD2) beyond 17 m
+  low: { detail0: 1.95, lodMul: [1.6, 2.7], dist: [6, 17], shellDist: 7, shells: [3, 3, 4], shadowDist: 14 },
 };
-/** geometry detail factor of LOD1 / LOD2 (multiplies the sampling step) */
-const LOD_DETAIL = [2.1, 3.6];
 
 function detectFlockQuality(): FlockQuality {
   const q = (globalThis as unknown as { __engine?: { quality?: { name?: string } } }).__engine?.quality?.name;
@@ -83,8 +86,9 @@ function detectFlockQuality(): FlockQuality {
 let GD = 1;
 /** shell count of the kind being built. Set by buildKind. */
 let GSHELLS = 5;
-/** true while building a far LOD (no fur-shell source, no eyelids, fewer segments) */
-const coarse = () => GD > 1.6;
+/** true while building a far LOD (LOD1 / LOD2: no fur-shell source, no eyelids). Set by buildKind. */
+let GFAR = false;
+const coarse = () => GFAR;
 
 export interface FlockContext {
   shepherd: THREE.Vector3;
@@ -1810,9 +1814,10 @@ interface AssetCache {
 }
 const _assetCaches = new Map<string, AssetCache>();
 
-function buildKindAt(kind: AnimalKind, seed: number, detail: number, shells: number): KindAssets {
+function buildKindAt(kind: AnimalKind, seed: number, detail: number, shells: number, far = false): KindAssets {
   GD = detail;
   GSHELLS = shells;
+  GFAR = far;
   try {
     switch (kind) {
       case 'sheep':
@@ -1827,6 +1832,7 @@ function buildKindAt(kind: AnimalKind, seed: number, detail: number, shells: num
   } finally {
     GD = 1;
     GSHELLS = 5;
+    GFAR = false;
   }
 }
 
@@ -1835,8 +1841,8 @@ function buildKind(kind: AnimalKind, seed: number, quality: FlockQuality): KindA
   const pol = LOD_POLICY[quality];
   const nShell = kind === 'goat' ? pol.shells[1] : kind === 'lamb' ? pol.shells[2] : pol.shells[0];
   const a = buildKindAt(kind, seed, pol.detail0, nShell);
-  const l1 = buildKindAt(kind, seed, pol.detail0 * LOD_DETAIL[0], 0);
-  const l2 = buildKindAt(kind, seed, pol.detail0 * LOD_DETAIL[1], 0);
+  const l1 = buildKindAt(kind, seed, pol.detail0 * pol.lodMul[0], 0, true);
+  const l2 = buildKindAt(kind, seed, pol.detail0 * pol.lodMul[1], 0, true);
   a.lods = [a.geometry, l1.geometry, l2.geometry];
   return a;
 }
@@ -2029,12 +2035,19 @@ float fl_Wrap = fl_Wool;
     diffuseColor.rgb *= mix(1.0, 0.72 + 0.28 * curls, smoothstep(0.02, 0.5, fl_Wool));
   }
   if (vAux.z > 0.0) {
-    // hair streaks stretched along the local hair flow
+    // short coat: hair streaks stretched along the local hair flow at two scales (the coarse one survives
+    // at game distances), salt-and-pepper hair tips, and a matte, dry response (no plastic highlight)
     vec3 fdir = normalize(vFlow);
     vec3 q = bp * 520.0 - fdir * dot(bp, fdir) * 480.0;
     float st = fl_vnoise(q) * 0.65 + fl_vnoise(q * 2.3 + 11.0) * 0.35;
-    h += st * 0.0005 * vAux.z;
-    diffuseColor.rgb *= 1.0 - 0.22 * vAux.z * (1.0 - st);
+    vec3 q2 = bp * 190.0 - fdir * dot(bp, fdir) * 170.0;
+    float st2 = fl_vnoise(q2 + 5.0);
+    float fine = 1.0 - smoothstep(0.002, 0.006, fl_px);
+    h += (st * 0.0005 * fine + st2 * 0.0007) * vAux.z;
+    diffuseColor.rgb *= 1.0 - vAux.z * (0.22 * (1.0 - st) * fine + 0.16 * (1.0 - st2));
+    float tips = smoothstep(0.62, 0.8, fl_vnoise(bp * 900.0 + 3.0));
+    diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.25, 1.2, 1.12), tips * 0.35 * vAux.z * fine);
+    roughnessFactor = mix(roughnessFactor, max(roughnessFactor, 0.78), clamp(vAux.z * 1.5, 0.0, 1.0));
   }
   if (vAux.x > 0.0) {
     // annual growth rings: sharp-edged, slightly irregular ridges
@@ -2044,7 +2057,7 @@ float fl_Wrap = fl_Wool;
     h += rid * 0.0009;
     diffuseColor.rgb *= 0.9 + 0.1 * rid + 0.1 * (fl_vnoise(bp * 25.0) - 0.5);
   }
-  h *= 1.0 - smoothstep(0.0025, 0.009, fl_px);
+  h *= 1.0 - smoothstep(0.004, 0.014, fl_px);
   normal = fl_bump(fl_pos, normal, h, faceDirection);
 }`,
       )
@@ -2058,7 +2071,7 @@ material.sheenColor *= smoothstep(0.0, 0.5, fl_Wool) + 0.25 * vAux.z;
       .replace('#include <lights_fragment_begin>', `#include <lights_fragment_begin>\n${GLSL_BACKLIGHT}`);
   };
   // identical shader code for every variant: share one program (defines such as USE_SHEEN still split it)
-  mat.customProgramCacheKey = () => 'flock-body-v1';
+  mat.customProgramCacheKey = () => 'flock-body-v2';
   return mat;
 }
 
@@ -3196,6 +3209,7 @@ export class Flock {
         a.bodyMesh.geometry = a.lods[lod];
       }
       if (a.shellMesh) a.shellMesh.visible = lod === 0 && d < this.policy.shellDist;
+      a.bodyMesh.castShadow = d < this.policy.shadowDist;
     }
 
     // breathing

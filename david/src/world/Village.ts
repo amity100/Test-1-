@@ -68,15 +68,51 @@ export class Village {
     const houses: { x: number; z: number; w: number; d: number; rot: number }[] = [];
     const tint = new THREE.Color();
 
-    const box = (w: number, h: number, d: number, x: number, y: number, z: number, rot: number, cx: number, cz: number, col: THREE.Color) => {
-      const g = new THREE.BoxGeometry(w, h, d);
-      g.translate(x, y + h / 2, z);
+    const wood: THREE.BufferGeometry[] = [];
+    const townWall: THREE.BufferGeometry[] = [];
+    const clay: THREE.BufferGeometry[] = [];
+    // part: a geometry in house-local space (x along the width, z along the depth), optionally tilted about the
+    // local X axis, then turned by `rot` and moved to the house centre
+    const place = (g: THREE.BufferGeometry, x: number, y: number, z: number, rot: number, cx: number, cz: number, col: THREE.Color, tiltX = 0) => {
+      if (tiltX) g.rotateX(tiltX);
+      g.translate(x, y, z);
       g.rotateY(rot);
       g.translate(cx, 0, cz);
       return colorize(g, col);
     };
+    const box = (w: number, h: number, d: number, x: number, y: number, z: number, rot: number, cx: number, cz: number, col: THREE.Color) => {
+      const g = new THREE.BoxGeometry(w, h, d);
+      g.translate(0, h / 2, 0);
+      return place(g, x, y, z, rot, cx, cz, col);
+    };
+    // fieldstone walls are never plumb: a subdivided box whose faces bulge and lean a few cm (world-space noise,
+    // so shared corners move together), with a slight batter toward the top
+    const roughBox = (w: number, h: number, d: number, y: number, rot: number, cx: number, cz: number, col: THREE.Color, amp = 0.07) => {
+      const g = new THREE.BoxGeometry(w, h, d, Math.max(1, Math.round(w / 1.4)), Math.max(1, Math.round(h / 1.2)), Math.max(1, Math.round(d / 1.4)));
+      g.translate(0, h / 2, 0);
+      const pp = g.getAttribute('position') as THREE.BufferAttribute;
+      for (let i = 0; i < pp.count; i++) {
+        const x = pp.getX(i), yy = pp.getY(i), z = pp.getZ(i);
+        const batter = 1 - (yy / h) * 0.025;
+        pp.setXYZ(i, x * batter, yy, z * batter);
+      }
+      g.rotateY(rot);
+      g.translate(cx, y, cz);
+      for (let i = 0; i < pp.count; i++) {
+        const x = pp.getX(i), yy = pp.getY(i), z = pp.getZ(i);
+        const n1 = Math.sin(x * 1.37 + z * 2.11 + yy * 1.9) + Math.sin(x * 3.3 - yy * 2.2 + z * 0.7) * 0.5;
+        const n2 = Math.sin(z * 1.53 - x * 1.91 + yy * 2.3) + Math.sin(z * 2.9 + yy * 1.7 - x * 0.9) * 0.5;
+        const k = yy - y < 0.05 ? 0.4 : 1;
+        pp.setXYZ(i, x + n1 * amp * k, yy, z + n2 * amp * k);
+      }
+      g.computeVertexNormals();
+      return colorize(g, col);
+    };
+    const woodCol = new THREE.Color(0x5b4632);
+    const woodDark = new THREE.Color(0x3a2c20);
 
-    // Houses clustered on the crest, oriented loosely along lanes
+    // Houses clustered on the crest, oriented loosely along lanes (Iron Age pillared / four-room houses:
+    // fieldstone walls on a stone socle, mud plaster, flat roofs of beams, brushwood and rolled clay)
     for (let tries = 0; tries < 900 && houses.length < 58; tries++) {
       const a = rnd() * Math.PI * 2;
       const r = Math.sqrt(rnd()) * (L.r - 6);
@@ -97,40 +133,94 @@ export class Village {
       ) - 0.4;
       const storeys = rnd() < 0.22 ? 2 : 1;
       const H = (storeys === 2 ? 5.2 : 2.9) + rnd() * 0.4;
-      tint.setHSL(0.09 + rnd() * 0.02, 0.18 + rnd() * 0.1, 0.72 + rnd() * 0.12);
-      walls.push(box(h.w, H, h.d, 0, y, 0, h.rot, h.x, h.z, tint));
-      // parapet
+      tint.setHSL(0.09 + rnd() * 0.03, 0.06 + rnd() * 0.08, 0.7 + rnd() * 0.12);
+      walls.push(roughBox(h.w, H, h.d, y, h.rot, h.x, h.z, tint));
+      // parapet on all four sides of the roof ("make a parapet for your roof", Deuteronomy 22:8)
       const pc = tint.clone().multiplyScalar(0.95);
-      walls.push(box(h.w + 0.1, 0.45, 0.25, 0, y + H, h.d / 2 - 0.12, h.rot, h.x, h.z, pc));
-      walls.push(box(h.w + 0.1, 0.45, 0.25, 0, y + H, -h.d / 2 + 0.12, h.rot, h.x, h.z, pc));
-      // flat roof of beams + packed clay
+      const ph = 0.5 + rnd() * 0.15;
+      walls.push(box(h.w, ph, 0.3, 0, y + H, h.d / 2 - 0.15, h.rot, h.x, h.z, pc));
+      walls.push(box(h.w, ph, 0.3, 0, y + H, -h.d / 2 + 0.15, h.rot, h.x, h.z, pc));
+      walls.push(box(0.3, ph, h.d - 0.6, h.w / 2 - 0.15, y + H, 0, h.rot, h.x, h.z, pc));
+      walls.push(box(0.3, ph, h.d - 0.6, -h.w / 2 + 0.15, y + H, 0, h.rot, h.x, h.z, pc));
+      // flat roof: rolled clay over brushwood, on beams whose ends show below the parapet
       const rc = new THREE.Color().setHSL(0.07, 0.25, 0.42 + rnd() * 0.1);
-      roofs.push(box(h.w + 0.35, 0.22, h.d + 0.35, 0, y + H - 0.05, 0, h.rot, h.x, h.z, rc));
-      // doorway + small high windows
+      roofs.push(box(h.w - 0.4, 0.22, h.d - 0.4, 0, y + H - 0.02, 0, h.rot, h.x, h.z, rc));
+      const nb = Math.floor(h.w / 0.85);
+      for (let bi = 0; bi < nb; bi++) {
+        const bx = (bi + 0.5 - nb / 2) * (h.w - 0.6) / nb;
+        for (const side of [-1, 1]) wood.push(box(0.17, 0.17, 0.32, bx + (rnd() - 0.5) * 0.08, y + H - 0.32, side * (h.d / 2 + 0.1), h.rot, h.x, h.z, woodDark));
+      }
+      // stone roof roller (for re-packing the clay after rain) on some roofs
+      if (rnd() < 0.3) {
+        const g = new THREE.CylinderGeometry(0.2, 0.2, 0.7, 10);
+        g.rotateZ(Math.PI / 2);
+        walls.push(place(g, (rnd() - 0.5) * h.w * 0.4, y + H + 0.4, (rnd() - 0.5) * h.d * 0.4, h.rot + rnd(), h.x, h.z, new THREE.Color(0xd9d0c0)));
+      }
+      // doorway: dark recess, timber lintel, threshold stone
       const dc = new THREE.Color(0x1a1410);
-      dark.push(box(1.1, 1.9, 0.12, (rnd() - 0.5) * h.w * 0.4, y + 0.3, h.d / 2 + 0.02, h.rot, h.x, h.z, dc));
-      for (let wi = 0; wi < 2; wi++) dark.push(box(0.45, 0.4, 0.1, (wi - 0.5) * h.w * 0.5, y + H - 1.0, -h.d / 2 - 0.03, h.rot, h.x, h.z, dc));
-      // courtyard wall
-      if (rnd() < 0.55) {
+      const doorX = (rnd() - 0.5) * h.w * 0.4;
+      dark.push(box(1.05, 1.85, 0.14, doorX, y + 0.35, h.d / 2 + 0.02, h.rot, h.x, h.z, dc));
+      wood.push(box(1.6, 0.22, 0.3, doorX, y + 2.2, h.d / 2 + 0.06, h.rot, h.x, h.z, woodCol));
+      walls.push(box(1.3, 0.14, 0.45, doorX, y + 0.3, h.d / 2 + 0.12, h.rot, h.x, h.z, new THREE.Color(0xd8cfbf)));
+      // small high windows with a wooden frame
+      for (let wi = 0; wi < 2; wi++) {
+        dark.push(box(0.42, 0.38, 0.1, (wi - 0.5) * h.w * 0.5, y + H - 1.0, -h.d / 2 - 0.03, h.rot, h.x, h.z, dc));
+        wood.push(box(0.62, 0.08, 0.14, (wi - 0.5) * h.w * 0.5, y + H - 0.6, -h.d / 2 - 0.05, h.rot, h.x, h.z, woodCol));
+      }
+      // ladder to the roof
+      if (rnd() < 0.45) {
+        const lx = h.w / 2 - 0.9 - rnd() * (h.w - 2.5), len = H + 0.9, tilt = -0.28;
+        const lz = h.d / 2 + Math.sin(-tilt) * len * 0.5 + 0.12;
+        for (const side of [-0.23, 0.23]) wood.push(place(new THREE.BoxGeometry(0.07, len, 0.07), lx + side, y + Math.cos(tilt) * len * 0.5, lz, h.rot, h.x, h.z, woodCol, tilt));
+        const rungs = Math.floor(len / 0.4);
+        for (let ri = 1; ri < rungs; ri++) {
+          const t = ri / rungs - 0.5;
+          wood.push(place(new THREE.BoxGeometry(0.5, 0.045, 0.045), lx, y + Math.cos(tilt) * len * (t + 0.5), h.d / 2 + 0.12 + Math.sin(-tilt) * len * (0.5 - t), h.rot, h.x, h.z, woodCol));
+        }
+      }
+      // courtyard wall, tabun oven, goat-hair awning
+      if (rnd() < 0.6) {
         const cd = 4 + rnd() * 3;
         const cc = tint.clone().multiplyScalar(0.9);
-        walls.push(box(0.5, 1.6, cd, h.w / 2 - 0.25, y, h.d / 2 + cd / 2, h.rot, h.x, h.z, cc));
-        walls.push(box(0.5, 1.6, cd, -h.w / 2 + 0.25, y, h.d / 2 + cd / 2, h.rot, h.x, h.z, cc));
-        walls.push(box(h.w * 0.35, 1.6, 0.5, h.w * 0.32, y, h.d / 2 + cd, h.rot, h.x, h.z, cc));
-      }
-      // woven awnings / drying cloths (madder red, indigo, undyed)
-      if (rnd() < 0.35) {
-        const g = new THREE.PlaneGeometry(2.4 + rnd() * 1.5, 1.6 + rnd());
-        g.rotateX(-Math.PI / 2 + 0.25);
-        g.translate(0, y + H + 1.3, 0);
-        g.rotateY(h.rot);
-        g.translate(h.x, 0, h.z);
+        const [cx0, cz0] = [Math.cos(h.rot), -Math.sin(h.rot)];
+        const wpos = (lx: number, lz: number) => [h.x + cx0 * lx + Math.sin(h.rot) * lz, h.z + cz0 * lx + Math.cos(h.rot) * lz];
+        const [ax, az] = wpos(h.w / 2 - 0.25, h.d / 2 + cd / 2);
+        walls.push(roughBox(0.55, 1.6, cd, y, h.rot, ax, az, cc, 0.05));
+        const [bx2, bz2] = wpos(-h.w / 2 + 0.25, h.d / 2 + cd / 2);
+        walls.push(roughBox(0.55, 1.6, cd, y, h.rot, bx2, bz2, cc, 0.05));
+        const [fx, fz] = wpos(h.w * 0.32, h.d / 2 + cd);
+        walls.push(roughBox(h.w * 0.35, 1.6, 0.55, y, h.rot, fx, fz, cc, 0.05));
+        if (rnd() < 0.55) {
+          // tabun: a beehive clay bread oven with a vent on top
+          const prof = [[0, 0], [0.62, 0], [0.66, 0.22], [0.58, 0.5], [0.38, 0.72], [0.16, 0.8], [0.14, 0.72]].map(([px, py]) => new THREE.Vector2(px, py));
+          const og = new THREE.LatheGeometry(prof, 12);
+          const ox = -h.w / 2 + 1.3, oz = h.d / 2 + 1.3 + rnd() * (cd - 2.6);
+          clay.push(place(og, ox, y + 0.35, oz, h.rot, h.x, h.z, new THREE.Color(0xb88a62)));
+          const [sx, sz] = wpos(ox, oz);
+          if (rnd() < 0.5) this.smokeSources.push(new THREE.Vector3(sx, y + 1.2, sz));
+        }
+        if (rnd() < 0.5) {
+          // black goat-hair awning on four poles, sagging in the middle
+          const aw = 2.6 + rnd() * 1.2, ad = 2.0 + rnd() * 0.8, ah = 2.1;
+          const ag = new THREE.PlaneGeometry(aw, ad, 4, 3);
+          ag.rotateX(-Math.PI / 2);
+          const ap = ag.getAttribute('position') as THREE.BufferAttribute;
+          for (let i = 0; i < ap.count; i++) {
+            const u = ap.getX(i) / aw, v = ap.getZ(i) / ad;
+            ap.setY(i, -(1 - 4 * u * u) * (1 - 4 * v * v) * 0.22 + v * 0.25);
+          }
+          ag.computeVertexNormals();
+          const ax2 = h.w / 2 - aw / 2 - 0.6, az2 = h.d / 2 + ad / 2 + 0.3;
+          cloth.push(place(ag, ax2, y + ah, az2, h.rot, h.x, h.z, new THREE.Color(rnd() < 0.7 ? 0x2c2520 : 0x6b5a45)));
+          for (const [qx, qz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) wood.push(box(0.07, ah + qz * 0.12, 0.07, ax2 + qx * (aw / 2 - 0.1), y, az2 + qz * (ad / 2 - 0.1), h.rot, h.x, h.z, woodDark));
+        }
+      } else if (rnd() < 0.3) {
+        // drying cloths on a line (madder red, indigo, undyed)
+        const g = new THREE.PlaneGeometry(1.8 + rnd(), 1.1 + rnd() * 0.5);
         const hues = [new THREE.Color(0x8e2f23), new THREE.Color(0x2e3f6b), new THREE.Color(0xd9ccb0), new THREE.Color(0xa0662a)];
-        cloth.push(colorize(g, hues[Math.floor(rnd() * hues.length)]));
-        const pole = box(0.08, 1.5, 0.08, 0.9, y + H, 0.6, h.rot, h.x, h.z, new THREE.Color(0x4a3a2a));
-        roofs.push(pole);
+        cloth.push(place(g, 0, y + H + 1.2, 0, h.rot, h.x, h.z, hues[Math.floor(rnd() * hues.length)]));
+        for (const qx of [-1, 1]) wood.push(box(0.06, 1.8, 0.06, qx * 1.3, y + H, 0, h.rot, h.x, h.z, woodDark));
       }
-      if (rnd() < 0.12) this.smokeSources.push(new THREE.Vector3(h.x, y + H + 0.3, h.z));
       // colliders: a few circles along the long axis
       const steps = 3;
       for (let s = 0; s < steps; s++) {
@@ -157,12 +247,23 @@ export class Village {
       const len = Math.hypot(x1 - x0, z1 - z0);
       const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
       const y = this.terrain.heightAt(mx, mz) - 0.8;
-      const g = new THREE.BoxGeometry(len + 0.3, 3.4, 1.4);
-      g.translate(0, y + 1.7, 0);
+      // battered fieldstone wall: 2.4 m thick at the foot, 1.7 m at the top
+      const g = new THREE.BoxGeometry(len + 0.3, 4.2, 2.4, Math.max(1, Math.round(len / 2)), 3, 1);
+      {
+        const pp = g.getAttribute('position') as THREE.BufferAttribute;
+        for (let k = 0; k < pp.count; k++) {
+          const yy = pp.getY(k);
+          const t = (yy + 2.1) / 4.2;
+          pp.setZ(k, pp.getZ(k) * (1 - 0.3 * t));
+          pp.setY(k, yy + Math.sin(pp.getX(k) * 0.9 + i) * 0.12 * t);
+        }
+        g.computeVertexNormals();
+      }
+      g.translate(0, y + 2.1, 0);
       g.rotateY(-Math.atan2(z1 - z0, x1 - x0));
       g.translate(mx, 0, mz);
-      tint.setHSL(0.09, 0.14, 0.66 + Math.sin(i * 3.1) * 0.04);
-      walls.push(colorize(g, tint));
+      tint.setHSL(0.09, 0.07, 0.68 + Math.sin(i * 3.1) * 0.05);
+      townWall.push(colorize(g, tint));
       this.colliders.add({ x: mx, z: mz, r: len * 0.55, tag: 'wall' });
     }
     // gate towers
@@ -170,22 +271,47 @@ export class Village {
       const a = gateAngle + side * 0.095;
       const x = L.x + Math.cos(a) * (L.r + 2), z = L.z + Math.sin(a) * (L.r + 2);
       const y = this.terrain.heightAt(x, z) - 0.8;
-      walls.push(box(3.2, 5.2, 3.2, 0, y, 0, -a, x, z, new THREE.Color().setHSL(0.09, 0.14, 0.7)));
+      townWall.push(roughBox(4.2, 6.0, 4.2, y, -a, x, z, new THREE.Color().setHSL(0.09, 0.07, 0.7), 0.08));
+      townWall.push(box(4.4, 0.6, 4.4, 0, y + 6.0, 0, -a, x, z, new THREE.Color().setHSL(0.09, 0.06, 0.66)));
+    }
+    // gate: a flat timber-and-stone lintel between the towers (no arches in Iron Age Judah) and two plank
+    // door leaves standing open inward
+    {
+      const gx = L.x + Math.cos(gateAngle) * (L.r + 2), gz = L.z + Math.sin(gateAngle) * (L.r + 2);
+      const gy = this.terrain.heightAt(gx, gz) - 0.8;
+      const tang = -gateAngle - Math.PI / 2; // local X along the wall line
+      townWall.push(box(9.0, 1.3, 2.6, 0, gy + 4.2, 0, tang, gx, gz, new THREE.Color().setHSL(0.09, 0.07, 0.68)));
+      wood.push(box(9.2, 0.35, 0.4, 0, gy + 3.9, 1.0, tang, gx, gz, woodDark));
+      wood.push(box(9.2, 0.35, 0.4, 0, gy + 3.9, -1.0, tang, gx, gz, woodDark));
+      for (const side of [-1, 1]) {
+        const leaf = new THREE.BoxGeometry(2.1, 3.2, 0.14);
+        leaf.translate(-side * 1.05, 1.6, 0);
+        leaf.rotateY(side * 1.25);
+        wood.push(place(leaf, side * 2.1, gy + 0.8, -0.9, tang, gx, gz, woodCol));
+      }
     }
     void baseY;
 
-    const wallMat = masonryMaterial(this.tex, this.tex.wall, this.tex.wallN, 2.4, 0xf2e6d2, 'wall');
+    const wallMat = masonryMaterial(this.tex, this.tex.masonry, this.tex.masonryN, 3.4, 0xece6da, 'wall');
+    const townWallMat = masonryMaterial(this.tex, this.tex.wall, this.tex.wallN, 3.2, 0xeae4d8, 'townwall');
     const roofMat = masonryMaterial(this.tex, this.tex.soil, this.tex.soilN, 3.0, 0xc8b8a4, 'roof');
-    const wallMesh = new THREE.Mesh(mergeGeometries(walls.map((g) => (g.index ? g.toNonIndexed() : g))), wallMat);
-    const roofMesh = new THREE.Mesh(mergeGeometries(roofs.map((g) => (g.index ? g.toNonIndexed() : g))), roofMat);
-    const darkMesh = new THREE.Mesh(mergeGeometries(dark), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
-    for (const m of [wallMesh, roofMesh, darkMesh]) {
+    const woodMat = masonryMaterial(this.tex, this.tex.bark, this.tex.barkN, 0.6, 0xb8a894, 'wood');
+    const clayMat = masonryMaterial(this.tex, this.tex.soil, this.tex.soilN, 1.2, 0xe0c8a8, 'clay');
+    const merge = (list: THREE.BufferGeometry[]) => mergeGeometries(list.map((g) => (g.index ? g.toNonIndexed() : g)));
+    const wallMesh = new THREE.Mesh(merge(walls), wallMat);
+    const roofMesh = new THREE.Mesh(merge(roofs), roofMat);
+    const darkMesh = new THREE.Mesh(merge(dark), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
+    const extra: THREE.Mesh[] = [];
+    if (wood.length) extra.push(new THREE.Mesh(merge(wood), woodMat));
+    if (townWall.length) extra.push(new THREE.Mesh(merge(townWall), townWallMat));
+    if (clay.length) extra.push(new THREE.Mesh(merge(clay), clayMat));
+    for (const m of [wallMesh, roofMesh, darkMesh, ...extra]) {
       m.castShadow = true;
       m.receiveShadow = true;
       this.group.add(m);
     }
     if (cloth.length) {
-      const clothMesh = new THREE.Mesh(mergeGeometries(cloth), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, side: THREE.DoubleSide }));
+      const clothMesh = new THREE.Mesh(merge(cloth), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, side: THREE.DoubleSide }));
       clothMesh.castShadow = true;
       this.group.add(clothMesh);
     }

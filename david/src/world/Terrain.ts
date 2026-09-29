@@ -75,7 +75,10 @@ export function sampleTerrain(x: number, z: number) {
 
   // Flatten the town plateau
   const plateau = smoothstep(L.bethlehem.r + 55, L.bethlehem.r - 5, dv);
-  h = lerp(h, plateauH + 0.9 * N2.noise(x / 26, z / 26), plateau);
+  // ...into a low tell: the town has grown up over its own ruins, so the houses step up toward the crest and
+  // show above the town wall from the fields below
+  const tell = Math.max(0, 1 - (dv * dv) / ((L.bethlehem.r - 6) * (L.bethlehem.r - 6)));
+  h = lerp(h, plateauH + 0.9 * N2.noise(x / 26, z / 26) + 7 * tell * tell * (3 - 2 * tell), plateau);
 
   // Wadi + path distances (only meaningful near the play area)
   let wadiD = 999;
@@ -122,7 +125,8 @@ export function sampleTerrain(x: number, z: number) {
     smoothstep(14, 26, dStones) * smoothstep(10, 22, dTargets) * smoothstep(3, 9, pathD) * (1 - plateau) * smoothstep(6, 16, wadiD);
   if (relief > 0.001) {
     const rill = 1 - Math.abs(N3.noise(x / 26 + 5, z / 11 - 2));
-    h += relief * (1 - T * 0.75) * (0.85 * N1.fbm(x / 21 + 4, z / 21 - 6, 3) + 0.32 * N2.noise(x / 6.5, z / 6.5) - 0.35 * rill * rill * rill);
+    // (gentle: at a 13 deg sun, metre-high 20 m swells read as moguls / sand dunes)
+    h += relief * (1 - T * 0.75) * (0.5 * N1.fbm(x / 34 + 4, z / 34 - 6, 3) + 0.16 * N2.noise(x / 6.5, z / 6.5) - 0.3 * rill * rill * rill);
   }
 
   // Limestone outcrops (bedrock breaking through the thin soil)
@@ -339,10 +343,9 @@ export class Terrain {
     this.nearGeo = this.buildNearGeometry();
     this.farGeo = this.buildFarGeometry();
     this.bakeSun(sunDir);
-    const near = new THREE.Mesh(this.nearGeo, this.material);
-    near.receiveShadow = true;
-    near.castShadow = true;
-    near.name = 'terrain-near';
+    // near terrain in spatial chunks sharing one vertex buffer: the camera and (small) sun-shadow frustums
+    // cull them, so the shadow pass draws a few chunks instead of the whole 840 m grid
+    const near = this.chunkNear(this.nearGeo, this.tier === 'low' ? 5 : 6);
     const far = new THREE.Mesh(this.farGeo, this.material);
     far.receiveShadow = true;
     far.name = 'terrain-far';
@@ -373,6 +376,41 @@ export class Terrain {
       occ += Math.max(0, avg - h0) * w[r];
     }
     return clamp(1 - occ, 0.45, 1);
+  }
+
+  /** Splits the near grid into k x k chunk meshes (index subsets over the shared attributes). */
+  private chunkNear(geo: THREE.BufferGeometry, k: number): THREE.Group {
+    const group = new THREE.Group();
+    group.name = 'terrain-near';
+    const pos = geo.getAttribute('position').array as Float32Array;
+    const src = geo.index!.array as Uint32Array;
+    const lists: number[][] = Array.from({ length: k * k }, () => []);
+    const cell = (v: number) => Math.min(k - 1, Math.max(0, Math.floor(((v + NEAR_HALF) / (2 * NEAR_HALF)) * k)));
+    for (let t = 0; t < src.length; t += 3) {
+      const a = src[t], b = src[t + 1], c = src[t + 2];
+      const cx = (pos[a * 3] + pos[b * 3] + pos[c * 3]) / 3;
+      const cz = (pos[a * 3 + 2] + pos[b * 3 + 2] + pos[c * 3 + 2]) / 3;
+      lists[cell(cz) * k + cell(cx)].push(a, b, c);
+    }
+    const box = new THREE.Box3();
+    const v = new THREE.Vector3();
+    for (const list of lists) {
+      if (!list.length) continue;
+      const g = new THREE.BufferGeometry();
+      for (const name of Object.keys(geo.attributes)) g.setAttribute(name, geo.getAttribute(name));
+      g.setIndex(new THREE.BufferAttribute(new Uint32Array(list), 1));
+      box.makeEmpty();
+      for (const i of list) box.expandByPoint(v.set(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]));
+      g.boundingBox = box.clone();
+      g.boundingSphere = box.getBoundingSphere(new THREE.Sphere());
+      const m = new THREE.Mesh(g, this.material);
+      m.receiveShadow = true;
+      m.castShadow = true;
+      m.name = 'terrain-near-chunk';
+      m.matrixAutoUpdate = false;
+      group.add(m);
+    }
+    return group;
   }
 
   private buildNearGeometry() {
@@ -790,9 +828,12 @@ vec3 hblend3(vec3 w, vec3 h){
   vec3 wts = hblend3(vec3(wG, wS, wR), vec3(gA.a, sA.a, rA.a));
 
   // ---- colours -----------------------------------------------------------------------------------
-  vec3 grass = gA.rgb * vec3(1.14, 1.03, 0.84);
-  grass *= mix(vec3(0.9, 0.93, 0.84), vec3(1.14, 1.04, 0.86), macro);                   // olive-grey <-> golden
-  grass = mix(grass, grass * vec3(0.8, 0.83, 0.7), smoothstep(0.6, 0.85, m2) * 0.45);   // greyer garrigue
+  vec3 grass = gA.rgb * vec3(1.08, 1.02, 0.88);
+  grass *= mix(vec3(0.88, 0.91, 0.85), vec3(1.1, 1.03, 0.88), macro);                   // olive-grey <-> golden
+  // grey-green garrigue (sage, thorny burnet) and pale sun-bleached straw break up the gold
+  float gl = dot(grass, vec3(0.3, 0.55, 0.15));
+  grass = mix(grass, vec3(gl) * vec3(0.9, 0.96, 0.8), smoothstep(0.55, 0.85, m2) * 0.55);
+  grass = mix(grass, vec3(gl) * vec3(1.12, 1.07, 0.95), smoothstep(0.62, 0.9, m3) * 0.3);
   vec3 soil = sA.rgb * mix(0.9, 1.04, m3);
   soil = mix(vec3(dot(soil, vec3(0.3, 0.55, 0.15))), soil, 0.72) * vec3(1.0, 0.97, 0.94); // dry, dusty
   // weathered bedrock is greyer and darker than fresh boulders (lichen, dust)

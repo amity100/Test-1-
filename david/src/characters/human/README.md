@@ -47,6 +47,25 @@ human.update(dt, camera, renderer.domElement.height);   // proxies -> MakeHuman 
 splits limb twist over the twist bones (the forearm also takes the hand's twist), and drives the clavicle and
 deltoid with the arm (scapulohumeral rhythm) and a subtle breathing cycle (`rig.breathe`).
 
+## Skinning (8 influences, LBS/DQS blend)
+
+The body carries **8 bone influences** per vertex (`skinIndex/skinWeight` + `skinIndex2/skinWeight2`; MakeHuman's
+weights need them around the shoulders and hips) and is skinned by `DualQuatSkinning` (`human.dqs`): per bone a
+blend of linear-blend and dual-quaternion skinning (`defaultDQSFactor`: spine/neck/pelvis 1, thighs 0.85,
+clavicle 0.5, deltoid 0.3, upper arm 0.15, elbows/knees 0.5, hands/feet 0.45, face 0 — full DQS balloons the
+lat/armpit on a raised arm with MakeHuman's broad shoulder weights, pure LBS pinches it).
+
+```ts
+human.dqs.enabled = 1;                         // 0 = plain LBS everywhere (debug)
+human.dqs.setFactors((bone) => 0.5);           // retune per bone at runtime
+human.dqs.patchMaterial(myMaterial, true);     // only for SkinnedMeshes you bind yourself with 8 influences;
+                                               // skinAttachment() already does it
+```
+
+Any other material drawn on a mesh bound to `human.skeleton` must be patched the same way (`eight = false` for
+4-influence geometry), otherwise it deforms with plain three.js LBS and drifts from the skin at the shoulders.
+`patchMaterial` chains an existing `onBeforeCompile`, so set your own hook **before** calling it.
+
 ## Hands, face, eyes
 
 ```ts
@@ -56,6 +75,8 @@ human.rig.setExpression('effort');   // 'neutral' | 'determined' | 'effort' | 'a
 human.rig.setExpressionWeight('awe', 0.5); // layer
 human.rig.faceUnits.JawDrop = 0.3;   // any MakeHuman face pose unit (see rig.json "poseunits")
 human.rig.jawOpen = 0.2;
+human.rig.lipSeal = 0.3;             // resting lip closure (auto-released when the jaw opens); 0 = MakeHuman's parted lips
+human.rig.faceBias.LeftUpperLidClosed = 0.1;  // resting face layer (lids), added under every expression
 human.rig.lookTarget = worldPoint;   // eyes (clamped); null -> rest gaze + micro-saccades
 human.rig.blinkEnabled = true;       // natural blinking; human.rig.blink() forces one
 human.setPupil(0.2);                 // 0 bright sun .. 1 dark
@@ -77,9 +98,11 @@ human.setPupil(0.2);                 // 0 bright sun .. 1 dark
 
 ## Clothing / hair helpers
 
-* `human.skinAttachment(geometry, material, { space: 'rest' })` — skins any garment modelled around the **rest pose**
-  (arms down; get the body with `human.restPositions()`), transferring weights from the nearest body vertices and
-  inverse-skinning it into the bind pose. Returns a `SkinnedMesh` on the same skeleton.
+* `human.skinAttachment(geometry, material, { space: 'rest', k: 6, boneFilter, facing: true })` — skins any garment
+  modelled around the **rest pose** (arms down; get the body with `human.restPositions()` / `human.restNormals()`),
+  transferring up to 8 weights from the k nearest body vertices that face the garment point and inverse-skinning it
+  into the bind pose. Returns a `SkinnedMesh` (added to `human.root`, bound to `human.skeleton`, material(s) patched
+  with the body's 8-influence LBS/DQS skinning, shadow depth material included), so cloth follows the skin exactly.
 * `human.hideSkin((p, bone) => boolean)` — drop body triangles under clothing (rest-pose position test).
 * Hair: parent to `human.bones.head` (or `sockets.headTop`); the painted scalp/hairline and brows are in the albedo.
 

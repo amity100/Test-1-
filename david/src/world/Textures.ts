@@ -18,6 +18,24 @@ import oliveLeaves from '../assets/world/olive_leaves.webp';
 import cypressLeaves from '../assets/world/cypress_leaves.webp';
 import broadLeaves from '../assets/world/broadleaf_leaves.webp';
 import shrubLeaves from '../assets/world/shrub_leaves.webp';
+// 512 px variants for the phone tier (tools/world/make_lowres.py: resampled per channel offline, because a
+// runtime canvas downscale premultiplies alpha and wipes the height / AO packed there -> black texels)
+import limeA512 from '../assets/world/limestone_a_512.webp';
+import limeN512 from '../assets/world/limestone_n_512.webp';
+import groundA512 from '../assets/world/ground_a_512.webp';
+import groundN512 from '../assets/world/ground_n_512.webp';
+import soilA512 from '../assets/world/soil_a_512.webp';
+import soilN512 from '../assets/world/soil_n_512.webp';
+import gravelA512 from '../assets/world/gravel_a_512.webp';
+import gravelN512 from '../assets/world/gravel_n_512.webp';
+import drywallA512 from '../assets/world/drywall_a_512.webp';
+import drywallN512 from '../assets/world/drywall_n_512.webp';
+import masonryA512 from '../assets/world/masonry_a_512.webp';
+import masonryN512 from '../assets/world/masonry_n_512.webp';
+import oliveLeaves512 from '../assets/world/olive_leaves_512.webp';
+import cypressLeaves512 from '../assets/world/cypress_leaves_512.webp';
+import broadLeaves512 from '../assets/world/broadleaf_leaves_512.webp';
+import shrubLeaves512 from '../assets/world/shrub_leaves_512.webp';
 // Character cloth (tools/gen_textures.py) — used by DavidModel
 import linenA from '../assets/textures/linen_albedo.jpg';
 import linenN from '../assets/textures/linen_normal.jpg';
@@ -54,7 +72,7 @@ export interface TextureSet {
   broadleaf: THREE.Texture;
 }
 
-/** Downscale an image to `max` px on its long edge (phones: GPU memory). */
+/** Downscale an opaque (JPEG) image to `max` px on its long edge. Never use it for images whose alpha carries data. */
 function shrink(img: HTMLImageElement | ImageBitmap, max: number): HTMLCanvasElement | null {
   const w = (img as HTMLImageElement).naturalWidth || img.width;
   const h = (img as HTMLImageElement).naturalHeight || img.height;
@@ -78,40 +96,52 @@ export function loadTextures(renderer: THREE.WebGLRenderer, onProgress: (f: numb
   const capAniso = quality?.anisotropy || worldAnisotropy() || (tier === 'low' ? 4 : 8);
   const aniso = Math.min(capAniso, renderer.capabilities.getMaxAnisotropy());
   const engineMax = quality?.texMax || worldTexMax() || 4096;
-  // phones: secondary materials at 512 px (walls, bark, gravel), primary ground / rock kept at 1024
-  const primaryMax = Math.min(engineMax, 1024);
-  const secondaryMax = Math.min(engineMax, tier === 'low' ? 512 : 1024);
-  const load = (url: string, srgb: boolean, repeat = true, max = primaryMax) => {
+  // World textures are never resampled at runtime (alpha carries data): pick the offline 512 px variant instead.
+  // Phones: primary ground / limestone / olive foliage stay at 1024, secondary materials use 512 px.
+  const tiny = engineMax < 1024;
+  const primary = (full: string, small: string) => (tiny ? small : full);
+  const secondary = (full: string, small: string) => (tiny || tier === 'low' ? small : full);
+  const load = (url: string, srgb: boolean, repeat = true) => {
+    const t = loader.load(url);
+    t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+    if (repeat) t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = aniso;
+    // already sized per tier; alpha is data -> the engine's texture budget must not canvas-resample it
+    t.userData.keepSize = true;
+    return t;
+  };
+  // character cloth (JPEG, no alpha): a canvas downscale is safe here
+  const loadJpg = (url: string, srgb: boolean) => {
     const t = loader.load(url, (tex) => {
-      const c = shrink(tex.image as HTMLImageElement, max);
+      const c = shrink(tex.image as HTMLImageElement, Math.min(engineMax, 1024));
       if (c) {
         tex.image = c;
         tex.needsUpdate = true;
       }
     });
     t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
-    if (repeat) t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
     t.anisotropy = aniso;
     return t;
   };
   const foliage = (url: string) => {
-    const t = load(url, true, false, primaryMax);
+    const t = load(url, true, false);
     t.anisotropy = Math.min(aniso, 4);
     return t;
   };
-  const broad = foliage(broadLeaves);
+  const broad = foliage(secondary(broadLeaves, broadLeaves512));
   const set: TextureSet = {
-    rock: load(limeA, true), rockN: load(limeN, false),
-    grass: load(groundA, true), grassN: load(groundN, false),
-    soil: load(soilA, true), soilN: load(soilN, false, true, secondaryMax),
-    wall: load(drywallA, true, true, secondaryMax), wallN: load(drywallN, false, true, secondaryMax),
-    linen: load(linenA, true), linenN: load(linenN, false),
-    leather: load(leatherA, true), leatherN: load(leatherN, false),
-    bark: load(barkA, true, true, secondaryMax), barkN: load(barkN, false, true, secondaryMax),
-    olive: foliage(oliveLeaves), oak: broad, shrub: foliage(shrubLeaves),
-    gravel: load(gravelA, true, true, secondaryMax), gravelN: load(gravelN, false, true, secondaryMax),
-    masonry: load(masonryA, true, true, secondaryMax), masonryN: load(masonryN, false, true, secondaryMax),
-    cypress: foliage(cypressLeaves),
+    rock: load(primary(limeA, limeA512), true), rockN: load(primary(limeN, limeN512), false),
+    grass: load(primary(groundA, groundA512), true), grassN: load(primary(groundN, groundN512), false),
+    soil: load(secondary(soilA, soilA512), true), soilN: load(secondary(soilN, soilN512), false),
+    wall: load(secondary(drywallA, drywallA512), true), wallN: load(secondary(drywallN, drywallN512), false),
+    linen: loadJpg(linenA, true), linenN: loadJpg(linenN, false),
+    leather: loadJpg(leatherA, true), leatherN: loadJpg(leatherN, false),
+    bark: load(barkA, true), barkN: load(barkN, false),
+    olive: foliage(primary(oliveLeaves, oliveLeaves512)), oak: broad, shrub: foliage(secondary(shrubLeaves, shrubLeaves512)),
+    gravel: load(secondary(gravelA, gravelA512), true), gravelN: load(secondary(gravelN, gravelN512), false),
+    masonry: load(secondary(masonryA, masonryA512), true), masonryN: load(secondary(masonryN, masonryN512), false),
+    cypress: foliage(secondary(cypressLeaves, cypressLeaves512)),
     broadleaf: broad,
   };
   return new Promise((resolve, reject) => {

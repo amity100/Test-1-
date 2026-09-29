@@ -139,7 +139,9 @@ export class HumanRig {
   /** direct per-unit face control (MakeHuman pose units), 0..1 */
   readonly faceUnits: Record<string, number> = {};
   /** always-on bias: relaxed lids (the upper lid rests ~1.5 mm over the iris, the lower lid touches its rim) */
-  readonly faceBias: Record<string, number> = { LeftLowerLidUp: 0.22, RightLowerLidUp: 0.22, LeftUpperLidClosed: 0.18, RightUpperLidClosed: 0.18 };
+  /** resting lip closure (lowerLipUp pose-unit weight), released automatically when the jaw opens */
+  lipSeal = 0.3;
+  readonly faceBias: Record<string, number> = { LeftLowerLidUp: 0.16, RightLowerLidUp: 0.16, LeftUpperLidClosed: 0.1, RightUpperLidClosed: 0.1 };
   /** resting gaze pitch (radians, negative = down) */
   gazeRestPitch = -0.035;
   private exprTarget: Partial<Record<Expression, number>> = {};
@@ -561,6 +563,14 @@ export class HumanRig {
     }
     for (const u in this.faceUnits) add(u, this.faceUnits[u]);
     for (const u in this.faceBias) add(u, this.faceBias[u]);
+    {
+      // lips rest closed (MakeHuman's neutral mouth is slightly parted); the seal releases as the jaw opens
+      const iL = this.unitIdx.lowerLipUp, iJ = this.unitIdx.JawDrop, iD = this.unitIdx.lowerLipDown;
+      if (iL !== undefined) {
+        const open = this.jawOpen * 5 + (iJ !== undefined ? W[iJ] * 5 : 0) + (iD !== undefined ? W[iD] * 3 : 0);
+        W[iL] += this.lipSeal * Math.max(0, 1 - open);
+      }
+    }
     // blinking (natural rate ~ every 2-6 s, ~0.25 s)
     if (this.blinkEnabled) {
       this.blinkT -= dt;

@@ -165,7 +165,7 @@ export class SkySystem {
       uSunColor: shared.uSunColor,
       tLut: { value: this.lut },
       uTime: shared.uTime,
-      uCoverage: { value: 0.5 },
+      uCoverage: { value: 0.56 }, // broken clouds: most of the sky stays clear, as in the reference
       uBright: { value: 1.0 },
     };
     const cloudMat = new THREE.ShaderMaterial({
@@ -208,8 +208,10 @@ export class SkySystem {
           float edge = 1.0 - smoothstep(0.0, 0.8, den);
           // sky light: lavender-grey shadow sides pick up the sky colour overhead
           vec3 amb = skyLut(normalize(vec3(d.x, 0.55, d.z))) * 0.75 + skyLut(vec3(0.0, 1.0, 0.0)) * 0.25;
-          vec3 shadowCol = amb * vec3(0.95, 0.9, 1.0) * 0.9;
-          vec3 litCol = uSunColor * vec3(1.35, 1.12, 0.92) * (0.9 + 0.6 * light);
+          // shadow sides: blue-grey sky light warmed by the gold bounce of the lit cloud deck (no violet cast)
+          float al = dot(amb, vec3(0.2126, 0.7152, 0.0722));
+          vec3 shadowCol = mix(amb, vec3(al) * vec3(1.08, 0.99, 0.9), 0.55) * 1.12;
+          vec3 litCol = uSunColor * vec3(1.4, 1.14, 0.88) * (0.9 + 0.6 * light);
           vec3 col = mix(shadowCol, litCol, light * 0.85 + 0.05);
           // forward scattering: bright gold rims toward the sun
           float fwd = pow(mu, 5.0) * 1.2 + pow(mu, 30.0) * 3.5;
@@ -233,7 +235,9 @@ export class SkySystem {
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(shadowSize, shadowSize);
     const sc = this.sun.shadow.camera;
-    sc.left = -55; sc.right = 55; sc.top = 55; sc.bottom = -55; sc.near = 1; sc.far = 600;
+    // 110 x 110 m box, 340 m deep around the focus (the light sits 300 m up-sun): casters further toward the
+    // low sun are covered by the terrain's baked sun-visibility, and a shallow box pulls in far fewer casters
+    sc.left = -55; sc.right = 55; sc.top = 55; sc.bottom = -55; sc.near = 130; sc.far = 470;
     this.sun.shadow.bias = -0.00025;
     this.sun.shadow.normalBias = 0.035;
     this.sun.shadow.radius = 2.5;
@@ -304,8 +308,9 @@ export class SkySystem {
         const ms = 0.9;
         const k = (i + j * LUT_W) * 4;
         // art direction: the low sky is warmed toward the dusty gold of a Judean summer evening
+        // (and the high sky loses a little of its violet: dust / smoke haze of the dry season)
         const w = 1 - THREE.MathUtils.smoothstep(el, -0.05, 0.5);
-        const t0 = 1 + 0.2 * w, t1 = 1 - 0.02 * w, t2 = 1 - 0.2 * w;
+        const t0 = 1.03 + 0.3 * w, t1 = 1.0 + 0.01 * w, t2 = 0.92 - 0.26 * w;
         data[k] = t0 * SUN_E * (BR[0] * sr0 * (pr + ms / (4 * Math.PI)) + MIE_S * sm0 * (pm + ms * 0.5 / (4 * Math.PI)));
         data[k + 1] = t1 * SUN_E * (BR[1] * sr1 * (pr + ms / (4 * Math.PI)) + MIE_S * sm1 * (pm + ms * 0.5 / (4 * Math.PI)));
         data[k + 2] = t2 * SUN_E * (BR[2] * sr2 * (pr + ms / (4 * Math.PI)) + MIE_S * sm2 * (pm + ms * 0.5 / (4 * Math.PI)));

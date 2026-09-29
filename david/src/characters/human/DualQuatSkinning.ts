@@ -246,7 +246,11 @@ export class DualQuatSkinning {
 
 /** Default per-bone DQS factors for the MakeHuman default skeleton. */
 export function defaultDQSFactor(name: string): number {
-  if (/^(clavicle|shoulder01|upperarm0[12])/.test(name)) return 1;
+  // the arm bones blend mostly linearly: MakeHuman's broad shoulder weights make full DQS balloon the lat/armpit
+  // when the arm is raised (the clavicle and deltoid bones already carry part of the swing)
+  if (/^clavicle/.test(name)) return 0.5;
+  if (/^shoulder01/.test(name)) return 0.3;
+  if (/^upperarm0[12]/.test(name)) return 0.15;
   if (/^(spine0[1-5]|root|pelvis|neck0[1-3])/.test(name)) return 1;
   if (/^upperleg0[12]/.test(name)) return 0.85;
   if (/^(lowerarm0[12]|lowerleg0[12])/.test(name)) return 0.5;

@@ -21,7 +21,7 @@ export function boulderGeometry(seed: number, detail = 4) {
  * darker crevices; per-instance tint comes from InstancedMesh.instanceColor.
  * `scale` = texture tile in metres.
  */
-export function rockMaterial(tex: TextureSet, tint = 0xffffff, scale = 1.15, key = 'rock') {
+export function rockMaterial(tex: TextureSet, tint = 0xffffff, scale = 2.0, key = 'rock') {
   const mat = new THREE.MeshStandardMaterial({ color: tint, roughness: 0.86, metalness: 0 });
   mat.onBeforeCompile = (s) => {
     s.uniforms.tRock = { value: tex.rock };
@@ -68,6 +68,11 @@ float rHash(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x
   vec3 vp = floor(vRWPos * 0.7);
   float v1 = rHash(vp), v2 = rHash(vp + 31.7);
   c *= mix(vec3(0.9, 0.9, 0.9), vec3(1.04, 1.0, 0.94), v1) * mix(0.92, 1.06, v2);
+  // solution pits read as shadowed grey cavities (not brown flecks); flanks carry a grey weathering patina
+  float hgt = ax.a * bw.x + ay.a * bw.y + az.a * bw.z;
+  float pit = 1.0 - smoothstep(0.16, 0.4, hgt);
+  c = mix(c, vec3(dot(c, vec3(0.333))) * vec3(0.8, 0.8, 0.82), pit * 0.45);
+  c *= mix(vec3(1.0), vec3(0.83, 0.83, 0.82), (1.0 - smoothstep(0.2, 0.8, Nw.y)) * (0.35 + 0.4 * v2));
   // dusty, sun-bleached tops; soil-stained foot; darker crevices
   float up = smoothstep(0.35, 0.95, Nw.y);
   c = mix(c, c * vec3(1.02, 0.97, 0.88) + vec3(0.05, 0.04, 0.025), up * 0.35);

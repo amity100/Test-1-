@@ -41,7 +41,17 @@ async function boot() {
     });
     return { buildMs, tris, meshes: draws, quality: engine.quality.name, tier: engine.quality.tier, rocks: (engine.rocks as unknown as { stats?: unknown }).stats, walls: engine.rocks.walls ? { length: engine.rocks.walls.length, streamed: engine.rocks.walls.streamed, ribbonTris: engine.rocks.walls.triangles } : null, veg: (engine.vegetation as unknown as { stats?: unknown }).stats, renderInfo: engine.renderer.info.render };
   };
-  w.__world = { engine, shot, info, shared, THREE };
+  // triangles / draw calls of one full frame (camera + shadow pass + post), i.e. what the tier budgets count
+  const measure = () => {
+    const ri = engine.renderer.info;
+    ri.autoReset = false;
+    ri.reset();
+    engine.render(1 / 30, 1 / 30);
+    const r = { triangles: ri.render.triangles, calls: ri.render.calls };
+    ri.autoReset = true;
+    return r;
+  };
+  w.__world = { engine, shot, info, measure, shared, THREE };
   w.__ready = true;
 }
 boot().catch((e) => {

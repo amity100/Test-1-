@@ -12,13 +12,25 @@ import { worldTier } from './WorldQuality';
  * Wind gusts travel across the slope; blades are back-lit by the low sun and pushed aside by characters.
  */
 export class Grass {
-  readonly mesh: THREE.Mesh;
+  /** container of the grass tiles (add it to the scene; it re-places its tiles around the camera itself) */
+  readonly mesh: THREE.Group;
+  /** the tile meshes (world-anchored cells of `tile` m that follow the camera cell) */
+  readonly tiles: THREE.Mesh[] = [];
+  /** tile edge (m) */
+  readonly tile: number;
+  /** triangles of one tuft */
+  readonly tuftTriangles: number;
+  private readonly cells: number;
+  private readonly terrain: Terrain;
+  private lastCell = new THREE.Vector2(NaN, NaN);
 
   constructor(terrain: Terrain, count: number, patch: number) {
     const tier = worldTier({ grassCount: count });
+    this.terrain = terrain;
     const rnd = mulberry32(99);
-    const blades = tier === 'low' ? 6 : 8;
-    const segs = tier === 'low' ? 2 : 3;
+    // phones: 4 blades of 2 segments with a pointed tip (3 tris each) + one seed stalk -> 15 tris per tuft
+    const blades = tier === 'low' ? 4 : tier === 'medium' ? 6 : 8;
+    const bladeSegs = tier === 'low' ? 2 : 3;
     const pos: number[] = [];
     const uvs: number[] = [];
     const cols: number[] = [];
@@ -28,7 +40,7 @@ export class Grass {
     const base = new THREE.Color();
     const tip = new THREE.Color();
     const palette = [0xd8bd78, 0xe6d39e, 0xbd9a5a, 0xcdb070, 0xa7a07a, 0xdcc588, 0xb8a47c];
-    const blade = (ox: number, oz: number, h: number, w: number, lean: number, dir: number, head: number, c: number) => {
+    const blade = (ox: number, oz: number, h: number, w: number, lean: number, dir: number, head: number, c: number, segs = bladeSegs) => {
       const dx = Math.cos(dir), dz = Math.sin(dir);
       const px = -dz, pz = dx; // blade width direction
       tip.setHex(c);
@@ -39,7 +51,10 @@ export class Grass {
         const bend = lean * t * t;
         const cx = ox + dx * bend, cz = oz + dz * bend, cy = h * t;
         const ww = w * (1 - t * 0.9);
-        pos.push(cx - px * ww, cy, cz - pz * ww, cx + px * ww, cy, cz + pz * ww);
+        if (s === segs) {
+          // pointed tip (a single vertex, duplicated to keep the 2-per-row layout)
+          pos.push(cx, cy, cz, cx, cy, cz);
+        } else pos.push(cx - px * ww, cy, cz - pz * ww, cx + px * ww, cy, cz + pz * ww);
         uvs.push(0, t, 1, t);
         const cc = base.clone().lerp(tip, Math.pow(t, 0.7));
         cols.push(cc.r, cc.g, cc.b, cc.r, cc.g, cc.b);
@@ -48,7 +63,9 @@ export class Grass {
       }
       for (let s = 0; s < segs; s++) {
         const i0 = start + s * 2;
-        idx.push(i0, i0 + 1, i0 + 2, i0 + 1, i0 + 3, i0 + 2);
+        // the tip segment converges to a point: one triangle
+        if (s === segs - 1) idx.push(i0, i0 + 1, i0 + 2);
+        else idx.push(i0, i0 + 1, i0 + 2, i0 + 1, i0 + 3, i0 + 2);
       }
       return { x: ox + dx * lean, z: oz + dz * lean, y: h, dx, dz };
     };
@@ -59,14 +76,14 @@ export class Grass {
       blade(Math.cos(a) * r, Math.sin(a) * r, 0.14 + rnd() * 0.26, 0.018 + rnd() * 0.014, 0.06 + rnd() * 0.22, rnd() * Math.PI * 2, 0, palette[Math.floor(rnd() * palette.length)]);
     }
     // --- seed-head stems (wild oats / barley grass): thin stalk + a spikelet made of two crossed quads
-    const stems = tier === 'low' ? 1 : 2;
+    const stems = tier === 'high' ? 2 : 1;
     for (let st = 0; st < stems; st++) {
       const a = rnd() * Math.PI * 2;
       const r = rnd() * 0.12;
       const hh = 0.42 + rnd() * 0.28;
-      const top = blade(Math.cos(a) * r, Math.sin(a) * r, hh, 0.006, 0.08 + rnd() * 0.12, rnd() * Math.PI * 2, 1, 0xd8c290);
+      const top = blade(Math.cos(a) * r, Math.sin(a) * r, hh, 0.006, 0.08 + rnd() * 0.12, rnd() * Math.PI * 2, 1, 0xd8c290, tier === 'low' ? 1 : 2);
       const hc = new THREE.Color(0xe8d7a4);
-      for (let q = 0; q < 2; q++) {
+      for (let q = 0; q < (tier === 'low' ? 1 : 2); q++) {
         const ang = q * Math.PI * 0.5 + a;
         const sx = Math.cos(ang) * 0.022, sz = Math.sin(ang) * 0.022;
         const L = 0.11 + rnd() * 0.05;
@@ -83,26 +100,47 @@ export class Grass {
         idx.push(s0, s0 + 1, s0 + 2, s0, s0 + 2, s0 + 3);
       }
     }
-    const geo = new THREE.InstancedBufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-    geo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
-    geo.setAttribute('normal', new THREE.Float32BufferAttribute(nors, 3));
-    geo.setAttribute('aHead', new THREE.Float32BufferAttribute(heads, 1));
-    geo.setIndex(idx);
-    const offsets = new Float32Array(count * 2);
-    const rands = new Float32Array(count * 4);
-    for (let i = 0; i < count; i++) {
-      offsets[i * 2] = rnd() * patch;
-      offsets[i * 2 + 1] = rnd() * patch;
+    this.tuftTriangles = idx.length / 3;
+    // World-anchored tiles: every cell of `tile` m holds the same tuft offsets (varied per cell in the shader);
+    // a 5x5 block of cells (minus the corners, which lie beyond the fade radius) follows the camera cell, so
+    // each tile has an exact bounding sphere and is frustum-culled (about half the tiles are behind the camera).
+    const tile = patch / 4;
+    this.tile = tile;
+    this.cells = 2;
+    const perTile = Math.max(64, Math.round(count / 16));
+    const offsets = new Float32Array(perTile * 2);
+    const rands = new Float32Array(perTile * 4);
+    for (let i = 0; i < perTile; i++) {
+      offsets[i * 2] = rnd() * tile;
+      offsets[i * 2 + 1] = rnd() * tile;
       rands[i * 4] = rnd() * Math.PI * 2;
       rands[i * 4 + 1] = 0.75 + rnd() * 0.5;
       rands[i * 4 + 2] = rnd();
       rands[i * 4 + 3] = rnd();
     }
-    geo.setAttribute('aOffset', new THREE.InstancedBufferAttribute(offsets, 2));
-    geo.setAttribute('aRand', new THREE.InstancedBufferAttribute(rands, 4));
-    geo.instanceCount = count;
+    const aPos = new THREE.Float32BufferAttribute(pos, 3);
+    const aUv = new THREE.Float32BufferAttribute(uvs, 2);
+    const aCol = new THREE.Float32BufferAttribute(cols, 3);
+    const aNor = new THREE.Float32BufferAttribute(nors, 3);
+    const aHead = new THREE.Float32BufferAttribute(heads, 1);
+    const aIdx = new THREE.Uint16BufferAttribute(idx, 1);
+    const aOff = new THREE.InstancedBufferAttribute(offsets, 2);
+    const aRnd = new THREE.InstancedBufferAttribute(rands, 4);
+    const makeGeo = () => {
+      const geo = new THREE.InstancedBufferGeometry();
+      geo.setAttribute('position', aPos);
+      geo.setAttribute('uv', aUv);
+      geo.setAttribute('color', aCol);
+      geo.setAttribute('normal', aNor);
+      geo.setAttribute('aHead', aHead);
+      geo.setIndex(aIdx);
+      geo.setAttribute('aOffset', aOff);
+      geo.setAttribute('aRand', aRnd);
+      geo.instanceCount = perTile;
+      geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(tile / 2, 0, tile / 2), tile);
+      geo.boundingBox = new THREE.Box3(new THREE.Vector3(0, -1, 0), new THREE.Vector3(tile, 2, tile));
+      return geo;
+    };
 
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.86, metalness: 0 });
     const uniforms = {
@@ -110,6 +148,7 @@ export class Grass {
       uGridN: { value: terrain.nearN },
       uSpacing: { value: terrain.nearSpacing },
       uPatch: { value: patch },
+      uTile: { value: tile },
       uTime: shared.uTime,
       uWind: shared.uWind,
       uWindStrength: shared.uWindStrength,
@@ -124,20 +163,28 @@ export class Grass {
         .replace(
           '#include <common>',
           `#include <common>
-uniform sampler2D uHeightTex; uniform float uGridN; uniform float uSpacing; uniform float uPatch;
+uniform sampler2D uHeightTex; uniform float uGridN; uniform float uSpacing; uniform float uPatch; uniform float uTile;
 uniform float uTime; uniform vec3 uWind; uniform float uWindStrength; uniform vec3 uCamPos; uniform vec4 uPushers[6];
 attribute vec2 aOffset; attribute vec4 aRand; attribute float aHead;
 varying float vGrassT; varying vec3 vGWPos; varying float vGTint;
 ${GLSL_NOISE}
 float gH(ivec2 g){ return texelFetch(uHeightTex, clamp(g, ivec2(0), ivec2(int(uGridN) - 1)), 0).r; }
-vec3 gPlace; float gScale; mat2 gRot;
+vec3 gPlace; vec3 gCell; float gScale; mat2 gRot;
 `,
         )
         .replace(
           '#include <beginnormal_vertex>',
           `
 vec2 cam2 = uCamPos.xz;
-vec2 wp2 = aOffset + uPatch * floor((cam2 - aOffset) / uPatch + 0.5);
+// the tile mesh sits at its cell origin (modelMatrix translation); every cell repeats the same offsets, so
+// rotation / scale / density threshold / seed heads are re-drawn per cell (Cranley-Patterson rotation)
+gCell = vec3(modelMatrix[3][0], 0.0, modelMatrix[3][2]);
+vec2 wp2 = gCell.xz + aOffset;
+float cellH = fract(sin(dot(floor(gCell.xz / uTile + 0.5), vec2(12.9898, 78.233))) * 43758.5453);
+vec4 R = aRand;
+R.x += cellH * 6.2831853;
+R.y = 0.75 + fract((aRand.y - 0.75) * 2.0 + cellH * 0.382) * 0.5;
+R.zw = fract(aRand.zw + cellH * vec2(0.7548, 0.5698));
 vec2 g = (wp2 + ${NEAR_HALF.toFixed(1)}) / uSpacing;
 ivec2 gi = ivec2(floor(g)); vec2 gf = fract(g);
 float h = (gf.x + gf.y <= 1.0)
@@ -146,12 +193,12 @@ float h = (gf.x + gf.y <= 1.0)
 float dens = texelFetch(uHeightTex, clamp(ivec2(floor(g + 0.5)), ivec2(0), ivec2(int(uGridN) - 1)), 0).g;
 float dist = length(wp2 - cam2);
 float fade = 1.0 - smoothstep(uPatch * 0.3, uPatch * 0.5, dist);
-float keep = step(aRand.w, dens * 1.15) * step(abs(wp2.x), ${(NEAR_HALF - 2).toFixed(1)}) * step(abs(wp2.y), ${(NEAR_HALF - 2).toFixed(1)});
+float keep = step(R.w, dens * 1.15) * step(abs(wp2.x), ${(NEAR_HALF - 2).toFixed(1)}) * step(abs(wp2.y), ${(NEAR_HALF - 2).toFixed(1)});
 // patches: taller, seedier stands and short grazed turf
 float stand = dNoise(wp2 * 0.09 + 3.7);
-gScale = aRand.y * keep * fade * (0.55 + 0.45 * dens) * mix(0.75, 1.3, stand);
+gScale = R.y * keep * fade * (0.55 + 0.45 * dens) * mix(0.75, 1.3, stand);
 gPlace = vec3(wp2.x, h - 0.03, wp2.y);
-float cr = cos(aRand.x), sr = sin(aRand.x);
+float cr = cos(R.x), sr = sin(R.x);
 gRot = mat2(cr, -sr, sr, cr);
 vGTint = dNoise(wp2 * 0.035 - 1.3) * 0.6 + dNoise(wp2 * 0.21) * 0.4;
 vec3 objectNormal = vec3(gRot * normal.xz, normal.y).xzy;
@@ -167,7 +214,7 @@ vec3 objectTangent = vec3( tangent.xyz );
           `
 vec3 transformed = position;
 // seed heads only on part of the tufts (more in the tall stands)
-float showHead = step(aRand.z, 0.22 + 0.45 * stand);
+float showHead = step(R.z, 0.22 + 0.45 * stand);
 transformed *= mix(1.0, showHead, aHead);
 transformed.xz = gRot * transformed.xz;
 transformed *= gScale;
@@ -186,8 +233,8 @@ for (int i = 0; i < 6; i++) {
   transformed.xz += normalize(d + 1e-4) * k * t * 0.4 * gScale;
   transformed.y -= k * t * 0.22 * gScale;
 }
-transformed += gPlace;
-vGWPos = transformed;
+vGWPos = transformed + gPlace;
+transformed += gPlace - gCell; // local to the tile (modelMatrix adds the cell origin)
 `,
         );
       s.fragmentShader = s.fragmentShader
@@ -210,11 +257,55 @@ diffuseColor.rgb *= mix(vec3(0.9, 0.92, 0.86), vec3(1.08, 1.0, 0.86), vGTint);`,
 }`,
         );
     };
-    mat.customProgramCacheKey = () => 'grass-v2';
-    this.mesh = new THREE.Mesh(geo, mat);
-    this.mesh.frustumCulled = false;
-    this.mesh.receiveShadow = true;
-    this.mesh.castShadow = false;
+    mat.customProgramCacheKey = () => 'grass-v3';
+    this.mesh = new THREE.Group();
     this.mesh.name = 'grass';
+    for (let i = 0; i < 21; i++) {
+      const m = new THREE.Mesh(makeGeo(), mat);
+      m.name = 'grass-tile';
+      m.receiveShadow = true;
+      m.castShadow = false;
+      m.matrixAutoUpdate = false;
+      m.userData.noChunk = true;
+      this.tiles.push(m);
+      this.mesh.add(m);
+    }
+    // re-place the tiles whenever the scene graph is updated for a render (camera position from shared.uCamPos)
+    const group = this.mesh;
+    const upd = group.updateMatrixWorld.bind(group);
+    group.updateMatrixWorld = (force?: boolean) => {
+      this.place(shared.uCamPos.value);
+      upd(force);
+    };
+  }
+
+  /** Moves the tiles to the 5x5 block of cells around `cam` (called automatically before each render). */
+  place(cam: THREE.Vector3) {
+    const s = this.tile;
+    const cx = Math.floor(cam.x / s), cz = Math.floor(cam.z / s);
+    if (cx === this.lastCell.x && cz === this.lastCell.y) return;
+    this.lastCell.set(cx, cz);
+    const R = this.cells;
+    let k = 0;
+    for (let j = -R; j <= R; j++) {
+      for (let i = -R; i <= R; i++) {
+        if (Math.abs(i) === R && Math.abs(j) === R) continue; // corners: beyond the fade radius
+        const m = this.tiles[k++];
+        const ox = (cx + i) * s, oz = (cz + j) * s;
+        m.position.set(ox, 0, oz);
+        m.updateMatrix();
+        let lo = Infinity, hi = -Infinity;
+        for (const [u, v] of [[0, 0], [1, 0], [0, 1], [1, 1], [0.5, 0.5]]) {
+          const h = this.terrain.heightAt(ox + u * s, oz + v * s);
+          lo = Math.min(lo, h);
+          hi = Math.max(hi, h);
+        }
+        const g = m.geometry;
+        g.boundingSphere!.center.set(s / 2, (lo + hi) / 2 + 0.4, s / 2);
+        g.boundingSphere!.radius = s * 0.7072 + (hi - lo) / 2 + 1.2;
+        g.boundingBox!.min.set(0, lo - 0.5, 0);
+        g.boundingBox!.max.set(s, hi + 1.3, s);
+      }
+    }
   }
 }

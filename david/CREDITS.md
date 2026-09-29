@@ -59,3 +59,43 @@ Only the math of MakeHuman's AGPL program logic (target weighting, skeleton cons
 conversion, proxy fitting) was re-implemented; no MakeHuman source code is included.
 Python tooling additionally uses numpy, scipy, Pillow, trimesh (MIT) and embreex (Apache-2.0) at build
 time only; nothing from them ships in the game.
+
+## Animals (Syrian brown bear, flock) — `tools/animals/`, `src/characters/BearModel.ts`, `src/characters/Flock.ts`, `src/assets/animals/`
+
+Maintained by *animals*. **No third-party data, meshes, photos or textures are shipped.** The bear is sculpted
+as signed-distance primitives in our own code (`tools/animals/bear_design.py`, `sdf.py`), and every texture
+(albedo, normal, AO / roughness / fur-density mask, fur strand and clump maps) is painted or generated
+procedurally by `bear_paint.py` / `fur_textures.py`. The sheep, goats and lamb are generated at runtime by
+`Flock.ts` (procedural SDF + surface nets, no asset files). Build-time-only tools (nothing from them ships):
+
+| Tool | Used for | License |
+|---|---|---|
+| numpy, scipy, Pillow | SDF evaluation, filtering, image output | BSD-3 / BSD-3 / MIT-CMU (HPND) |
+| scikit-image (`measure.marching_cubes`) | iso-surface extraction of the bear sculpt | BSD-3 |
+| fast-simplification | quadric decimation of the sculpt | MIT |
+| xatlas-python | UV atlas | MIT |
+| trimesh + embreex | per-vertex ambient occlusion rays | MIT / Apache-2.0 |
+| meshoptimizer (npm) | LOD index buffers (`tools/animals/meshopt_lod.mjs`) | MIT |
+
+Reference facts (not assets): body proportions and colouring of *Ursus arctos syriacus* from zoological
+descriptions (pale straw / golden-tawny coat, darker legs, shoulder hump, ~1.0 m at the shoulder, ~2 m standing).
+
+## Environment (Judean hills, Bethlehem, vegetation, sky) — `tools/world/`, `src/world/`, `src/assets/world/`
+
+- **All world textures are our own procedural work** (no photographs, scans or third-party images):
+  `tools/world/gen_world_textures.py` + `tools/world/texlib.py` generate the tileable limestone, dry-grass ground,
+  terra rossa, wadi gravel, dry-stone wall, coursed masonry and olive bark materials (albedo + height in alpha,
+  OpenGL normal + AO in alpha) and the foliage card atlases (olive, cypress, oak / terebinth / carob, shrubs,
+  thistles, seed-head grasses) from periodic spectral noise and periodic Voronoi. `tools/world/make_lowres.py`
+  derives the 512 px phone variants (per-channel resampling, so the alpha-packed data survives). Same license as the project.
+- **All world geometry is generated at runtime by our own code**: terrain + terrace walls (`Terrain.ts`,
+  `TerraceWalls.ts`), pitted limestone boulders / outcrops / rubble / pebbles (`RockGen.ts`, `Rocks.ts`), trees and
+  shrubs (`TreeGen.ts`, `Vegetation.ts`), grass (`Grass.ts`), Bethlehem (`Village.ts`).
+- Sky: single-scattering Rayleigh / Mie / ozone atmosphere ray-marched into a sky-view LUT (`Sky.ts`), after the
+  published method of S. Hillaire, "A Scalable and Production Ready Sky and Atmosphere Rendering Technique"
+  (EGSR 2020) and E. Bruneton & F. Neyret, "Precomputed Atmospheric Scattering" (2008) — algorithms only, no code
+  copied. Standard physical constants (Rayleigh / ozone cross-sections, Mie g) from the scientific literature.
+- Noise: simplex / value noise implementations are our own (`src/core/noise.ts`, `src/core/Shared.ts`).
+- Historical / textual basis for Bethlehem ~1000 BCE (flat roofs with parapets — Deuteronomy 22:8; the well by the
+  gate — 2 Samuel 23:15; Rachel's pillar on the road — Genesis 35:19-20; tabun bread ovens, pillared houses, no
+  arches or domes) follows the general archaeological literature on Iron Age II Judah; no third-party assets.

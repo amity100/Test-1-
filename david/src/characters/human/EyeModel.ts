@@ -123,10 +123,12 @@ float gIris = 0.0;`,
   vec2 e = ( sp.xy - uOpening.xy ) / ( uOpening.zw * vec2( 1.0, max( uLidOpen, 0.05 ) ) );
   float d = length( e );
   // ambient: darker toward the lid margins and much darker in the canthi (the eye sits in a socket)
-  gEyeOcc = mix( 0.3, 1.0, smoothstep( 1.05, 0.3, d ) ) * mix( 0.6, 1.0, smoothstep( 0.95, 0.35, abs( e.x ) ) );
+  gEyeOcc = mix( 0.22, 1.0, smoothstep( 0.98, 0.22, d ) ) * mix( 0.5, 1.0, smoothstep( 0.92, 0.3, abs( e.x ) ) );
   // direct light: the upper lid, its thickness and the lashes cast a soft band of shadow below the margin
-  gEyeShadow = mix( 1.0, 0.16, smoothstep( 0.2, 0.95, e.y ) ) * mix( 0.55, 1.0, smoothstep( 1.0, 0.55, d ) );
+  gEyeShadow = mix( 1.0, 0.1, smoothstep( -0.15, 0.7, e.y ) ) * mix( 0.45, 1.0, smoothstep( 0.98, 0.5, d ) );
   gIris = smoothstep( uIrisR * 1.03, uIrisR * 0.97, length( vEyeLocal.xy ) ) * step( 0.0, vEyeLocal.z );
+  // living sclera is never paper white: slightly warm, a touch pinker toward the canthi
+  diffuseColor.rgb *= mix( mix( vec3( 0.86, 0.8, 0.75 ), vec3( 0.84, 0.66, 0.6 ), smoothstep( 0.35, 0.95, abs( e.x ) ) ), vec3( 1.0 ), gIris );
 }`,
         )
         .replace(
