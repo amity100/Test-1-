@@ -184,6 +184,12 @@ export class DualQuatSkinning {
     };
   }
 
+  /** Replace the per-bone DQS factors (0 = LBS .. 1 = DQS), e.g. to tune a joint at runtime. */
+  setFactors(factor: (boneName: string) => number) {
+    this.skeleton.bones.forEach((b, i) => (this.factors[i] = factor(b.name)));
+    this.compute();
+  }
+
   /** Blend amount of DQS over LBS (0 = plain linear blend skinning, 1 = per-bone factors). */
   set enabled(v: number) {
     this.uniforms.dqEnable.value = v;

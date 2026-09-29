@@ -14,6 +14,7 @@ import { PostFX } from '../src/fx/PostFX';
 import { shared } from '../src/core/Shared';
 import { pose, PoseMixer, type Pose } from '../src/characters/Rig';
 import { HumanModel } from '../src/characters/human/HumanModel';
+import { defaultDQSFactor } from '../src/characters/human/DualQuatSkinning';
 import type { Expression, FingerPose } from '../src/characters/human/HumanRig';
 import rockAlbedo from '../src/assets/textures/rock_albedo.jpg';
 import rockNormal from '../src/assets/textures/rock_normal.jpg';
@@ -167,6 +168,11 @@ async function main() {
   human.rig.blinkEnabled = false;
   human.setPupil(0.2);
   if (P.has('dqs')) human.dqs.enabled = parseFloat(P.get('dqs')!);
+  if (P.has('dqf')) {
+    // tuning: dqf=clavicle,shoulder01,upperarm,spine
+    const [fc, fs, fu, fsp] = P.get('dqf')!.split(',').map(Number);
+    human.dqs.setFactors((n) => (/^clavicle/.test(n) ? fc : /^shoulder01/.test(n) ? fs : /^upperarm0[12]/.test(n) ? fu : /^spine0/.test(n) && fsp !== undefined ? fsp : defaultDQSFactor(n)));
+  }
   if (P.get('shadow') === '0') human.root.traverse((o) => { o.castShadow = false; o.receiveShadow = false; });
   if (P.has('lids')) {
     // resting lid bias: upper-lid closure, lower-lid raise

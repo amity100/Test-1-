@@ -480,26 +480,28 @@ const SWIPE = new Clip([
   { t: 0.85, p: pose({}) },
 ]);
 
+// the standing swipe (played while rearing): the torso is upright, so its twist is a roll (Z) of the spine bones
 const SWIPE_HIGH = new Clip([
   { t: 0, p: pose({}) },
-  { t: 0.34, p: pose({ scapR: [-0.35, 0, -0.2], humR: [-1.9, 0.3, -0.6], foreR: [-1.25, 0, 0], wristR: [0.6, 0, 0], toesR: [0.5, 0, 0], spine1: [-0.05, -0.12, 0], spine2: [-0.06, -0.3, 0], neck1: [0, 0.22, 0], head: [-0.1, 0.25, 0] }) },
-  { t: 0.52, p: pose({ scapR: [0.1, 0, 0.1], humR: [-0.6, -0.35, 0.55], foreR: [-0.3, 0, 0], wristR: [-0.2, 0, 0], toesR: [-0.3, 0, 0], spine1: [0.08, 0.2, 0], spine2: [0.1, 0.38, 0], neck1: [0.1, -0.25, 0], head: [0.15, -0.3, 0] }) },
+  { t: 0.34, p: pose({ scapR: [-0.35, 0, -0.2], humR: [-1.9, 0.3, -0.6], foreR: [-1.25, 0, 0], wristR: [0.6, 0, 0], toesR: [0.5, 0, 0], humL: [0.15, 0, 0.1], spine1: [-0.04, 0, -0.12], spine2: [-0.05, 0, -0.26], neck1: [0.02, 0.12, 0.08], neck2: [0, 0.08, 0.04], head: [0.04, 0.1, 0], earL: [-0.4, 0, 0.1], earR: [-0.4, 0, -0.1] }, 0.03) },
+  { t: 0.5, p: pose({ scapR: [0.1, 0, 0.1], humR: [-0.6, -0.35, 0.55], foreR: [-0.3, 0, 0], wristR: [-0.2, 0, 0], toesR: [-0.3, 0, 0], humL: [-0.1, 0, -0.05], spine1: [0.06, 0, 0.18], spine2: [0.08, 0, 0.34], neck1: [0.1, -0.12, -0.08], neck2: [0.04, -0.08, -0.04], head: [0.1, -0.12, 0], earL: [-0.6, 0, 0.15], earR: [-0.6, 0, -0.15] }, -0.04) },
   { t: 0.95, p: pose({}) },
 ]);
 
+// flinch: the head jerks away and ducks, ears pinned, a grunt; the body recoils back and down
 const HURT = new Clip([
   { t: 0, p: pose({}) },
-  { t: 0.07, p: pose({ neck1: [-0.25, 0.3, 0.12], neck2: [-0.2, 0.2, 0.1], head: [-0.25, 0.25, 0.3], spine2: [-0.08, 0.12, 0.06], hips: [0, 0.05, 0], earL: [-0.6, 0, 0], earR: [-0.6, 0, 0], jaw: [0.25, 0, 0] }, 0.02) },
-  { t: 0.2, p: pose({ neck1: [-0.12, 0.15, 0.06], neck2: [-0.1, 0.1, 0.05], head: [-0.1, 0.12, 0.15], spine2: [-0.04, 0.06, 0.03], earL: [-0.5, 0, 0], earR: [-0.5, 0, 0], jaw: [0.18, 0, 0] }) },
-  { t: 0.55, p: pose({}) },
+  { t: 0.08, p: pose({ neck1: [0.12, 0.26, 0.08], neck2: [0.06, 0.16, 0.06], head: [0.1, 0.2, 0.26], spine1: [0.03, 0.05, 0.03], spine2: [0.05, 0.1, 0.05], hips: [0, 0.05, 0], earL: [-0.75, 0, 0.2], earR: [-0.75, 0, -0.2], jaw: [0.22, 0, 0] }, -0.05, -0.06) },
+  { t: 0.22, p: pose({ neck1: [0.06, 0.13, 0.04], neck2: [0.03, 0.08, 0.03], head: [0.05, 0.1, 0.12], spine2: [0.02, 0.05, 0.02], earL: [-0.55, 0, 0.1], earR: [-0.55, 0, -0.1], jaw: [0.14, 0, 0] }, -0.025, -0.03) },
+  { t: 0.6, p: pose({}) },
 ]);
 
 // death: stagger -> legs buckle -> roll onto the side -> settle (all FK; hipsOffset = pose.hipsY/hipsZ)
 const DEATH = new Clip([
   { t: 0, p: pose({}) },
   { t: 0.7, p: pose({ hips: [0.12, 0, 0.12], spine1: [0.12, 0, 0.06], spine2: [0.15, 0, 0.05], neck1: [0.35, 0, 0.1], neck2: [0.2, 0, 0], head: [0.25, 0.1, 0.2], humL: [-0.35, 0, 0.1], foreL: [0.6, 0, 0], humR: [-0.2, 0, -0.1], foreR: [0.7, 0, 0], femL: [0.5, 0, 0], tibL: [0.9, 0, 0], femR: [0.4, 0, 0], tibR: [0.8, 0, 0], jaw: [0.2, 0, 0], earL: [-0.4, 0, 0], earR: [-0.4, 0, 0] }, -0.28, 0) },
-  { t: 1.7, p: pose({ hips: [0.05, 0, 1.38], spine1: [0.05, 0.05, 0.08], spine2: [0.02, 0.1, 0.05], neck1: [0.25, 0.1, 0.1], neck2: [0.15, 0.1, 0], head: [0.3, 0.1, 0.25], humL: [-0.6, 0, 0.5], foreL: [-0.4, 0, 0], wristL: [0.6, 0, 0], humR: [-0.4, 0, -0.2], foreR: [-0.3, 0, 0], wristR: [0.5, 0, 0], femL: [-0.3, 0, 0.45], tibL: [0.5, 0, 0], ankleL: [0.3, 0, 0], femR: [-0.5, 0, -0.1], tibR: [0.4, 0, 0], ankleR: [0.3, 0, 0], jaw: [0.3, 0, 0], earL: [-0.3, 0, 0], earR: [-0.3, 0, 0], tail: [0.3, 0, 0] }, -0.47, 0) },
-  { t: 3.0, p: pose({ hips: [0.05, 0, 1.45], spine1: [0.04, 0.06, 0.08], spine2: [0.02, 0.14, 0.06], neck1: [0.1, 0.15, 0.12], neck2: [0.1, 0.1, 0.05], head: [0.2, 0.15, 0.35], humL: [-0.75, 0, 0.55], foreL: [-0.35, 0, 0], wristL: [0.7, 0, 0], toesL: [0.4, 0, 0], humR: [-0.55, 0, -0.25], foreR: [-0.35, 0, 0], wristR: [0.6, 0, 0], femL: [-0.45, 0, 0.5], tibL: [0.4, 0, 0], ankleL: [0.45, 0, 0], femR: [-0.6, 0, -0.15], tibR: [0.35, 0, 0], ankleR: [0.4, 0, 0], jaw: [0.36, 0, 0], earL: [-0.2, 0, 0], earR: [-0.2, 0, 0], tail: [0.35, 0, 0] }, -0.5, 0) },
+  { t: 1.7, p: pose({ hips: [0.05, 0, 1.3], spine1: [0.05, 0.05, 0.04], spine2: [0.02, 0.1, 0.02], neck1: [0.25, 0.1, 0.04], neck2: [0.15, 0.1, 0], head: [0.3, 0.1, 0.1], humL: [-0.6, 0, 0.5], foreL: [-0.4, 0, 0], wristL: [0.6, 0, 0], humR: [-0.4, 0, -0.2], foreR: [-0.3, 0, 0], wristR: [0.5, 0, 0], femL: [-0.3, 0, 0.45], tibL: [0.5, 0, 0], ankleL: [0.3, 0, 0], femR: [-0.5, 0, -0.1], tibR: [0.4, 0, 0], ankleR: [0.3, 0, 0], jaw: [0.3, 0, 0], earL: [-0.3, 0, 0], earR: [-0.3, 0, 0], tail: [0.3, 0, 0] }, -0.47, 0) },
+  { t: 3.0, p: pose({ hips: [0.05, 0, 1.36], spine1: [0.04, 0.06, 0.03], spine2: [0.02, 0.14, 0.02], neck1: [0.1, 0.15, 0.04], neck2: [0.1, 0.1, 0.02], head: [0.2, 0.15, 0.1], humL: [-0.75, 0, 0.55], foreL: [-0.35, 0, 0], wristL: [0.7, 0, 0], toesL: [0.4, 0, 0], humR: [-0.55, 0, -0.25], foreR: [-0.35, 0, 0], wristR: [0.6, 0, 0], femL: [-0.45, 0, 0.5], tibL: [0.4, 0, 0], ankleL: [0.45, 0, 0], femR: [-0.6, 0, -0.15], tibR: [0.35, 0, 0], ankleR: [0.4, 0, 0], jaw: [0.36, 0, 0], earL: [-0.2, 0, 0], earR: [-0.2, 0, 0], tail: [0.35, 0, 0] }, -0.5, 0) },
 ]);
 
 // the standing pose ("וַיָּקָם עָלַי"): hind legs are placed by IK, everything else FK
@@ -881,9 +883,9 @@ export class BearModel {
     // carrying a lamb in the jaws: head raised, jaws clamped on the lamb's back
     const cw = this.holdW.carry * (1 - down);
     if (cw > 1e-3) {
-      add('neck1', -0.22 * cw);
-      add('neck2', -0.1 * cw);
-      add('head', 0.1 * cw);
+      add('neck1', -0.4 * cw);
+      add('neck2', -0.16 * cw);
+      add('head', 0.24 * cw);
     }
 
     // rearing + bipedal steps
@@ -917,6 +919,7 @@ export class BearModel {
       if (a.name === 'hurt') {
         for (const k in p.r) add(k, p.r[k][0] * w, p.r[k][1] * w, p.r[k][2] * w);
         this.hipsOff.y += (p.hipsY ?? 0) * w;
+        this.hipsOff.z += (p.hipsZ ?? 0) * w;
       } else {
         if (a.name === 'swipeHigh' && quad > 0.5) layer(REAR, Math.min(0.6, w) * quad);
         for (const k in p.r) add(k, p.r[k][0] * w, p.r[k][1] * w, p.r[k][2] * w);

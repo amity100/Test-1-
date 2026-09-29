@@ -220,6 +220,17 @@ async function main() {
   const ri = renderer.info.render;
   info.textContent = P.has('hud') ? `${sceneName} ${anim} q=${q} tris=${ri.triangles} calls=${ri.calls} build=${buildMs.toFixed(0)}ms` : '';
   win.__info = { tris: ri.triangles, calls: ri.calls, buildMs };
+  if (flock) {
+    // per-kind triangle budget: [LOD0, LOD1, LOD2] body + fur shells (all layers) + how many cast shadows now
+    const tri = (g: THREE.BufferGeometry | undefined) => (g ? (g.index ? g.index.count : g.attributes.position.count) / 3 : 0);
+    const kinds: Record<string, unknown> = {};
+    for (const k of ['sheep', 'ram', 'goat', 'lamb']) {
+      const a = flock.animals.find((x) => x.kind === k);
+      if (a) kinds[k] = { lods: a.lods.map(tri), shells: tri(a.shellMesh?.geometry as THREE.BufferGeometry | undefined) };
+    }
+    const casters = flock.animals.filter((a) => a.bodyMesh.castShadow).length;
+    win.__info = { ...(win.__info as object), q, flock: kinds, animals: flock.animals.length, casters };
+  }
   win.__shots = shots.length;
   win.__shot = (i: number) => {
     if (seq && stepper) stepper(seq[1]);
