@@ -35,10 +35,32 @@ outfit.setVisible(false); outfit.dispose();
 | `stats` | `{ triangles, drawCalls, textures, buildMs }` |
 | `capsules` | leg capsules (thigh/shin) used by the skirt vertex-shader push-out and by cords |
 
-Secondary motion: hem sway (damped spring driven by −velocity and wind, applied in the cloth vertex shader, strongest at
-the hem), leg-capsule push-out in the vertex shader (legs never poke through skirts/robes in walk / run / crouch / kneel),
-verlet chains for the sash cords (David) and the tzitzit (Saul) with tassel cards, a pendulum for the satchel.
-No per-frame allocations except inside `Pendulum.step` (two small vectors — TODO pool).
+Secondary motion: hem sway (near-critically damped spring driven by −velocity and wind, applied in the cloth vertex
+shader, strongest at the hem; heavy wool: `outfit.swayGain` 0.012 m per m/s, `outfit.swayMax` 0.05 m), leg-capsule
+push-out in the vertex shader (legs never poke through skirts/robes in walk / run / crouch / kneel; outer layers get a
+`collidePad` so two layers pushed by the same leg never z-fight), verlet chains for the sash cords (David) and the
+tzitzit (Saul) with tassel cards — damped RELATIVE TO THE BODY (`chain.relDamp` 1/s) plus a light air drag
+(`chain.airDrag`), so they swing with the body instead of trailing like sails at a sprint — and a pendulum for the
+satchel. No per-frame allocations.
+
+### Polish pass (fit + draw calls)
+
+* **No more ribbing.** Every tube is lofted round a per-slice centre of the body hull; that centre used to be the mean of
+  the hull vertices, which jumped by up to ~1 cm from one 5 mm slice to the next and printed as horizontal ridges on every
+  garment (Saul's "quilted" me'il, David's "weft streaks"). `HullField` now uses the hull's area centroid, smoothed along
+  the axis before the radii are measured. `bodyTube` also bridges small hollows (vertical closing, ±4 cm), blurs the
+  radius field and layers outer garments on a smooth envelope of the inner ones (gap-filled between their rows).
+* **Exact inverse skinning.** `makeSkinned` inverts the same per-bone LBS/DQS blend the body shader applies
+  (`A = (1-f)·LBS + f·DQS`), so garments sit exactly where they were modelled in the rest pose.
+* **Sleeveless robes** (`fittedTunic({ armhole: { half, top } })`): the bodice's lower edge rises into a clean armhole
+  round each arm (a woven border in palette colour 0 runs round it), the shoulder cap follows the upper arm, and the
+  undertunic's sleeves come out of it instead of cutting through the cloth. `shoulderFolds` adds folds falling from the
+  shoulder seam. Saul's me'il uses both; it no longer layers over the undertunic's sleeves (that made it a barrel).
+* **Open weave** (`clothMaterial({ gap })`): the gaps between the threads read dark, as in the reference.
+* **Draw calls:** sleeves L+R, both sandals (soles + straps, vertex colours), the five plaques, the diadem + its lozenge,
+  and props with shared materials (`mergeStatic`) are single meshes; hanging chains are drawn in batches
+  (`outfit.addChainBatch(chains, [tubeMat(vertexColors), tasselMat])`, class `ChainBatch`) — Saul's 8 tzitzit strings
+  are 2 draw calls, David's 4 sash cords 2. David 34 → 16 calls (high), Saul 42 → 19.
 
 ## What each character wears
 
@@ -65,9 +87,9 @@ No per-frame allocations except inside `Pendulum.step` (two small vectors — TO
 
 | | high | low (phones) |
 |---|---|---|
-| David garments + props | ≈ 65 k triangles, 34 draw calls (+ shadow pass) | ≈ 30 k triangles, ~28 draw calls |
-| Saul | ≈ 55 k triangles, 42 draw calls | fewer segments |
-| court man | 30–54 k triangles, 10–23 draw calls | |
+| David garments + props | ≈ 78 k triangles, 16 draw calls (+ shadow pass; was 34) | ≈ 28 k triangles, 16 draw calls (was 30) |
+| Saul | ≈ 55 k triangles, 19 draw calls (was 42) | ≈ 19 k triangles, 19 draw calls (was 42) |
+| court man (high) | guard 54 k / 14 calls, runner 33 k / 11, servant 30 k / 6, Abner 33 k / 12 (were 23 / 20 / 10 / 21) | |
 | textures | 1K tileable (weave pair 2×~0.3 MB, leather, wood, bark), 512 metal, 256 rope/braid | 512 / 256 variants |
 | fitting time | 1.2–4 s per character (hull fields + weight transfer + inverse skinning), less on low | |
 

@@ -5,14 +5,15 @@ import { clamp, damp } from '../core/noise';
 import { shared } from '../core/Shared';
 import type { UI, KeyHint } from '../ui/UI';
 import type { Animal, Flock } from '../characters/Flock';
-import { CameraRig, dolly, orbit, V, type Shot } from './CameraRig';
+import { CameraRig, orbit, type Shot } from './CameraRig';
 import type { Player } from './Player';
 import type { BearActor } from './BearActor';
 import type { Props } from './Props';
 import type { Projectiles } from './Projectiles';
 import type { GameAudio } from './GameAudio';
+import { Intro } from './Intro';
 import { LAYOUT, SUN } from '../world/Layout';
-import { quoteText, sourceRef, verseArgs, quoteWithRefHtml } from '../content/sources';
+import { quoteText, sourceRef, verseArgs } from '../content/sources';
 
 class Cancelled extends Error {}
 
@@ -421,82 +422,35 @@ export class Story {
   }
 
   // ============================================================================ intro cinematic
+  /**
+   * The opening film (src/gameplay/Intro.ts, cue sheet src/content/introScript.ts): Bethlehem and Gibeah of Saul
+   * intercut. ?intro=short|full forces a cut (default: full on desktop, short on phones and replays); ?introAt=<s>
+   * starts the film at that time (tests). Skip: the skip button, Enter / Esc, or any key / tap twice.
+   */
   private async intro() {
-    const L = LAYOUT;
     this.cinematic(true);
-    this.ui.skip(true);
-    this.audio.music('title', 1.5);
-    this.audio.ambience(0.55, 0.7, 0.45);
-    this.ui.fade(0, 3);
-    const g = (x: number, z: number, up: number) => this.groundV(x, z, up);
-    const dav = () => this.player.pos;
-    const B = L.bethlehem;
-    const R = L.rachel;
-    const P = L.pasture;
-    const lambP = () => this.flock.lamb.position;
-    const heading = this.player.heading;
-    const fwd = new THREE.Vector3(Math.sin(heading), 0, Math.cos(heading));
-    const D = this.player.pos.clone();
-    const shots: Shot[] = [
-      // 1. over the eastern wilderness, toward the low sun and the hills of Judah
-      dolly(8.5, V(640, 150, 560), V(330, 85, 300), V(-120, 20, -200), V(-230, 20, -300), 40, 36),
-      // 2. low glide over terraced olive groves below Bethlehem
-      dolly(7, g(B.x + 205, B.z + 150, 16), g(B.x + 150, B.z + 95, 11), g(B.x, B.z, 12), g(B.x - 10, B.z - 10, 10), 40, 36),
-      // 3. Rachel's pillar on the road to Ephrath
-      dolly(6.5, g(R.x + 14, R.z + 9, 2.2), g(R.x + 6, R.z + 4, 1.8), g(R.x, R.z, 2.6), g(R.x - 30, R.z - 40, 10), 38, 34),
-      // 4. the flock at pasture, the little lamb
-      { duration: 7, at: (u) => {
-        const c = lambP();
-        const a = 1.25 + u * 0.55;
-        return { pos: new THREE.Vector3(c.x + Math.sin(a) * (4.2 - u * 1.5), c.y + 0.7 + u * 0.2, c.z + Math.cos(a) * (4.2 - u * 1.5)), look: c.clone().add(new THREE.Vector3(0, 0.35, 0)), fov: 34 };
-      } },
-      // 5. David on his rock — low-angle orbit (like a portrait)
-      orbit(10, dav, 5.2, 3.2, heading - 0.95, heading - 0.1, 0.5, 1.2, 1.35, 36),
-      // 6. crane up behind him to reveal the land — title
-      { duration: 9.5, at: (u) => {
-        const back = D.clone().addScaledVector(fwd, -(2.6 + u * 7)).add(new THREE.Vector3(0.8 + u * 2, 1.8 + u * 5.5, 0));
-        const look = D.clone().addScaledVector(fwd, 30 + u * 60).add(new THREE.Vector3(0, 1.2 - u * 4, 0));
-        return { pos: back, look, fov: 44 + u * 6 };
-      } },
-    ];
-    void P;
-    let t = 0;
-    const cues: [number, () => void][] = [
-      [1.2, () => this.ui.caption('הָרֵי יְהוּדָה', 'אֶרֶץ יִשְׂרָאֵל · בִּימֵי שָׁאוּל הַמֶּלֶךְ')],
-      [9.3, () => this.ui.caption('בֵּית לֶחֶם יְהוּדָה', 'עִירוֹ שֶׁל יִשַׁי בֶּן עוֹבֵד')],
-      [11.2, () => this.ui.verse(...verseArgs('s1_17_12_ephrathite'), 4.6)],
-      [16.2, () => this.ui.caption('מַצֶּבֶת קְבֻרַת רָחֵל', quoteWithRefHtml('gen_35_19_rachel_buried'))],
-      [22.8, () => this.ui.verse(...verseArgs('s1_16_11_youngest'), 5)],
-      [29.5, () => this.ui.verse(...verseArgs('s1_16_12_ruddy'), 6)],
-      [39.2, () => { this.ui.hideVerse(); this.ui.titleCard(true); this.audio.sfx('titleHit'); }],
-      [46.5, () => this.ui.titleCard(false)],
-    ];
-    const done = this.shots(shots);
-    let finished = false;
-    done.then(() => (finished = true));
-    this.ui.onSkip = () => this.cam.skipShots();
-    let ci = 0;
+    const q = new URLSearchParams(location.search);
+    const cut = q.get('intro');
+    const intro = new Intro(
+      { engine: this.engine, ui: this.ui, input: this.input, audio: this.audio, cam: this.cam, player: this.player, flock: this.flock },
+      { short: cut === 'short' ? true : cut === 'full' ? false : undefined },
+    );
+    intro.startAt = Number(q.get('introAt') ?? 0) || 0;
+    (window as unknown as Record<string, unknown>).__intro = intro;
+    intro.begin();
     this.beh = (dt) => {
-      t += dt;
-      while (ci < cues.length && t >= cues[ci][0]) cues[ci++][1]();
-      if (this.input.take('skip') || this.input.take('pause')) this.cam.skipShots();
-      this.player.model.lookTarget = this.engine.camera.position;
+      if (this.input.take('skip') || this.input.take('pause')) intro.skip();
+      intro.update(dt);
     };
-    await this.until(() => finished);
-    this.check();
-    this.beh = null;
-    this.ui.skip(false);
-    this.player.model.lookTarget = null;
-    if (t < 44) {
-      // skipped: show a short title over gameplay
-      this.ui.hideVerse();
-      this.ui.titleCard(true);
-      if (t < 39) this.audio.sfx('titleHit');
-      setTimeout(() => this.ui.titleCard(false), 4200);
-    } else {
-      setTimeout(() => this.ui.titleCard(false), 800);
+    try {
+      await this.until(() => intro.done);
+    } finally {
+      // also when the story restarts mid-film: world view, post settings and Saul's house are always cleaned up
+      intro.finish();
+      this.beh = null;
+      this.ui.skip(false);
+      this.ui.onSkip = undefined;
     }
-    this.cam.snapBehind(this.player.heading, 0.15);
   }
 
   // ============================================================================ the bear

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { HumanModel } from '../human/HumanModel';
-import { BodyIndex, C, hull2, makeSkinned, rayPoly } from './body';
+import { BodyIndex, C, blendWeights, hull2, makeSkinned, rayPoly } from './body';
 import {
   armWeights, bodyTube, fringeStrip, landmarks, legCapsules, merge, partWeights, ribbon, skirtWeights, sleeveTube,
   torsoWeights, tubeAlong, type Fit,
@@ -53,6 +53,14 @@ export interface TunicOptions {
   beltY?: number;
   hide?: boolean;
   dust?: number;
+  /**
+   * open the upper body at the sides (sleeveless robe / tabard): the lower edge of the bodice rises to `top` (m)
+   * round each arm within `half` rad of the side, so the arms (and the sleeves of the garment under it) come out of
+   * a clean, finished armhole instead of cutting through the cloth
+   */
+  armhole?: { half: number; top: number };
+  /** extra vertical folds falling from the shoulders (heavy cloth hanging from the shoulder seam) */
+  shoulderFolds?: number;
 }
 
 export interface TunicResult {
@@ -89,8 +97,18 @@ export function fittedTunic(fit: Fit, o: TunicOptions): TunicResult {
   const U = outfit.uniforms;
   const rag = noise1(o.seed + 21);
   const hem = (th: number) => hemY + (rag(th * 4.1) - 0.5) * 0.012 * S;
+  const upLow0 = beltY - 0.035 * S;
+  const ah = o.armhole;
+  // lower edge of the bodice: under the belt, rising smoothly into the armhole openings at the sides
+  const upLow = (th: number) => {
+    if (!ah) return upLow0;
+    const d = Math.asin(Math.min(1, Math.abs(Math.cos(th)))); // angular distance from the side (rad)
+    const w = 1 - smoothstep(ah.half * 0.55, ah.half, d);
+    return upLow0 + (ah.top - upLow0) * w * w * (3 - 2 * w);
+  };
+  const sf = o.shoulderFolds ?? 0;
   const upper = bodyTube(fit, {
-    low: () => beltY - 0.035 * S,
+    low: upLow,
     high: neckline,
     mask: C.TORSO | C.NECK,
     armsAbove: lm.yArmpit + 0.012,
@@ -99,7 +117,10 @@ export function fittedTunic(fit: Fit, o: TunicOptions): TunicResult {
     sideCling: 3,
     cinch: [beltY, 0.03 * S, 0.004 + off],
     blouse: 0.015,
-    folds: { amp: (y) => 0.002 + (o.folds ?? 1) * 0.005 * smoothstep(lm.yArmpit, beltY + 0.05, y), k: [7, 17], count: 8, seed: o.seed + 11 },
+    folds: {
+      amp: (y) => 0.002 + (o.folds ?? 1) * 0.005 * smoothstep(lm.yArmpit, beltY + 0.05, y) + sf * 0.004 * smoothstep(lm.yArmpit + 0.13, lm.yArmpit + 0.02, y),
+      k: sf > 0 ? [4, 11] : [7, 17], count: 8, seed: o.seed + 11,
+    },
     cols, rows: low ? 36 : 64,
     grime: () => 0.15,
     inner: o.inner,
@@ -119,11 +140,25 @@ export function fittedTunic(fit: Fit, o: TunicOptions): TunicResult {
   });
   const sway = { uniforms: U, length: Math.max(0.3, (beltY - hemY) * 0.6) };
   const common = { tier, tex: o.tex, tile: o.tile, dye: o.dye, roughness: o.roughness ?? 0.9, sheen: o.sheen ?? 0.6, transmit: 0.5 };
-  const upMat = clothMaterial({ ...common, bands: o.neckBands, palette: o.palette, hem: [0, 0.1, 0.012, o.fray ?? 0.3], edgeMask: [0, 1], grime: [0.7, 0.62, 0.5, 0.4] });
-  const skMat = clothMaterial({ ...common, bands: o.bands, palette: o.palette, hem: [o.dust ?? 0.45, 0.16, 0.015, o.fray ?? 0.3], edgeMask: [1, 0], sway, collide: U });
+  // armhole edges get a narrow woven border in the first palette colour (like the neck and hem bands)
+  const upBands = ah && o.palette ? [...(o.neckBands ?? []), { from: 0.0, to: 0.01, motif: 0, pal: 0, edge: 'lower' as const }] : o.neckBands;
+  const upMat = clothMaterial({ ...common, bands: upBands, palette: o.palette, hem: [0, 0.1, 0.012, o.fray ?? 0.3], edgeMask: [0, 1], grime: [0.7, 0.62, 0.5, 0.4] });
+  // outer layers keep their offset from the inner ones where a leg pushes both out (no z-fighting / white flecks)
+  const pad = Math.max(0, off * 0.8);
+  const skMat = clothMaterial({ ...common, bands: o.bands, palette: o.palette, hem: [o.dust ?? 0.45, 0.16, 0.015, o.fray ?? 0.3], edgeMask: [1, 0], sway, collide: U, collidePad: pad });
   const meshes: THREE.Object3D[] = [];
   const restPos: Float32Array[] = [upper.tube.pos, skirt.tube.pos];
-  const tw = torsoWeights(fit);
+  let tw = torsoWeights(fit);
+  if (ah) {
+    // the shoulder cap over the deltoid follows the upper arm like the sleeve under it (no sleeve poking through)
+    const aw = partWeights(fit, C.TORSO | C.NECK | C.UPARM_L | C.UPARM_R, 8);
+    const t0w = tw;
+    tw = (i: number, p: THREE.Vector3) => {
+      const side = Math.abs(p.x) / Math.max(1e-6, Math.hypot(p.x, p.z));
+      const t = smoothstep(ah.top - 0.03, ah.top + 0.05, p.y) * smoothstep(0.55, 0.9, side) * 0.85;
+      return t > 0.01 ? blendWeights(t0w(i, p), aw(i, p), t) : t0w(i, p);
+    };
+  }
   const up = makeSkinned(human, upper.tube.geometry, upMat, tw, { name: `${o.name}Upper` });
   outfit.add(up);
   meshes.push(up);
@@ -166,18 +201,22 @@ export function fittedTunic(fit: Fit, o: TunicOptions): TunicResult {
     skGeos.push(fringeStrip(skirt.tube, 0.018 * S, o.seed + 7, 0.1));
     mats.push(fringeMaterial({ tier, tex: o.tex, dye: o.dye, width: 0.05, sway, collide: U }));
   }
-  const sk = makeSkinned(human, skGeos.length > 1 ? merge(skGeos) : skirtGeo, mats.length > 1 ? mats : skMat, skirtWeights(fit), { name: `${o.name}Skirt`, depthMaterial: clothDepthMaterial({ sway, collide: U }) });
+  const sk = makeSkinned(human, skGeos.length > 1 ? merge(skGeos) : skirtGeo, mats.length > 1 ? mats : skMat, skirtWeights(fit), { name: `${o.name}Skirt`, depthMaterial: clothDepthMaterial({ sway, collide: U, collidePad: pad }) });
   outfit.add(sk);
   meshes.push(sk);
   if (!o.sleeveless) {
+    // both sleeves in one skinned mesh (weights chosen per vertex by side): one draw call instead of two
     const slMat = clothMaterial({ ...common, bands: o.sleeveBands, palette: o.palette, hem: [0, 0.05, 0.012, o.fray ?? 0.3], edgeMask: [1, 0] });
+    const geos: THREE.BufferGeometry[] = [];
     for (const [i, side] of (['L', 'R'] as const).entries()) {
-      const s = sleeveTube(fit, { side, length: o.sleeve, top: 0.07 * S, easeTop: 0.003 + off, easeEnd: o.sleeve > 1 ? 0.014 : 0.02, folds: 0.006, cols: low ? 24 : 40, rows: low ? 14 : 28, seed: o.seed + 40 + i, ragged: 0.004 });
+      const s = sleeveTube(fit, { side, length: o.sleeve, top: 0.07 * S, easeTop: 0.003 + off, easeEnd: o.sleeve > 1 ? (low ? 0.022 : 0.014) : 0.02, folds: 0.006, cols: low ? 24 : 40, rows: low ? 18 : 28, seed: o.seed + 40 + i, ragged: 0.004 });
       restPos.push(s.tube.pos);
-      const m = makeSkinned(human, s.tube.geometry, slMat, armWeights(fit, side, o.sleeve > 1), { name: `${o.name}Sleeve${side}` });
-      outfit.add(m);
-      meshes.push(m);
+      geos.push(s.tube.geometry);
     }
+    const wL = armWeights(fit, 'L', o.sleeve > 1), wR = armWeights(fit, 'R', o.sleeve > 1);
+    const m = makeSkinned(human, merge(geos, false), slMat, (i, p) => (p.x > 0 ? wL(i, p) : wR(i, p)), { name: `${o.name}Sleeves` });
+    outfit.add(m);
+    meshes.push(m);
   }
   if (o.hide !== false) {
     human.hideSkin((p, bone) => {
@@ -260,17 +299,25 @@ export function headRing(fit: Fit, o: { height: number; thickness: number; mater
 }
 
 /** Hang a group of tzitzit (white wool strings + one tekhelet thread) from rest-space corner points. */
-export function tzitzit(fit: Fit, corners: THREE.Vector3[], o: { white: THREE.Material; blue: THREE.Material; fringe: THREE.Material; length: number }) {
+export function tzitzit(
+  fit: Fit,
+  corners: THREE.Vector3[],
+  o: { white: THREE.Material; blue: THREE.Material; fringe: THREE.Material; length: number; batch?: { material: THREE.Material; white: THREE.ColorRepresentation; blue: THREE.ColorRepresentation } },
+) {
   const { human, tier, outfit, lm } = fit;
   const low = tier === 'low';
+  const all: Chain[] = [];
+  const cw = o.batch ? new THREE.Color(o.batch.white) : undefined, cb = o.batch ? new THREE.Color(o.batch.blue) : undefined;
   corners.forEach((c, i) => {
     const bone = c.x > 0 ? 'upperleg01.L' : 'upperleg01.R';
     const sock = human.addSocket(`wardrobeTzitzit${i}`, bone, c.clone().add(new THREE.Vector3(0, -0.004, 0)));
-    const white = new Chain(sock, o.length, low ? 5 : 8, 0.0032, [o.white, o.fringe], { radial: low ? 3 : 5, tassel: { length: o.length * 0.45, cards: 2 }, initialDir: new THREE.Vector3(0, -1, 0) });
-    outfit.addChain(white);
-    const blue = new Chain(sock, o.length * 0.92, low ? 5 : 8, 0.0014, o.blue, { radial: 3, initialDir: new THREE.Vector3(0.05, -1, 0.02) });
-    outfit.addChain(blue);
+    const white = new Chain(sock, o.length, low ? 5 : 8, 0.0032, [o.white, o.fringe], { radial: low ? 3 : 5, tassel: { length: o.length * 0.45, cards: 2 }, initialDir: new THREE.Vector3(0, -1, 0), color: cw });
+    const blue = new Chain(sock, o.length * 0.92, low ? 5 : 8, 0.0014, o.blue, { radial: 3, initialDir: new THREE.Vector3(0.05, -1, 0.02), color: cb });
+    all.push(white, blue);
   });
+  // all 4 corners (8 strings + tassels) in one mesh: 2 draw calls instead of 12
+  if (o.batch) outfit.addChainBatch(all, [o.batch.material, o.fringe], 'tzitzit');
+  else for (const ch of all) outfit.addChain(ch);
   void lm;
 }
 
@@ -281,8 +328,24 @@ export function sandals(fit: Fit, leather: TexPair, o: { color?: number; wraps?:
   const S = lm.height / 1.75;
   const grp = new THREE.Group();
   grp.name = 'sandals';
-  const soleMat = solidMaterial({ tier, tex: leather, color: 0x5e3f28, roughness: 0.75, repeat: [6, 6], normal: 1 });
-  const strapMat = solidMaterial({ tier, tex: leather, color: o.color ?? 0x4f321f, roughness: 0.6, repeat: [2, 30], normal: 1.2 });
+  // one material + one skinned mesh for both sandals (soles and straps told apart by vertex colour, UVs pre-scaled)
+  const mat = solidMaterial({ tier, tex: leather, color: 0xffffff, roughness: 0.66, repeat: [1, 1], normal: 1.1 });
+  mat.vertexColors = true;
+  const soleCol = new THREE.Color(0x5e3f28), strapCol = new THREE.Color(o.color ?? 0x4f321f);
+  const all: THREE.BufferGeometry[] = [];
+  const paint = (g: THREE.BufferGeometry, col: THREE.Color, su: number, sv: number) => {
+    const n = (g.getAttribute('position') as THREE.BufferAttribute).count;
+    const ca = new Float32Array(n * 3);
+    for (let v = 0; v < n; v++) col.toArray(ca, v * 3);
+    g.setAttribute('color', new THREE.BufferAttribute(ca, 3));
+    const uv = g.getAttribute('uv') as THREE.BufferAttribute | undefined;
+    if (uv) for (let v = 0; v < uv.count; v++) uv.setXY(v, uv.getX(v) * su, uv.getY(v) * sv);
+    if (!g.getAttribute('normal')) g.computeVertexNormals();
+    all.push(g);
+  };
+  const wFoot = { L: partWeights(fit, C.FOOT_L, 6), R: partWeights(fit, C.FOOT_R, 6) };
+  const wLeg = { L: partWeights(fit, C.SHIN_L | C.FOOT_L, 6), R: partWeights(fit, C.SHIN_R | C.FOOT_R, 6) };
+  const ankY = Math.max(lm.ankle.L.y, lm.ankle.R.y);
   for (const s of ['L', 'R'] as const) {
     const footMask = s === 'L' ? C.FOOT_L : C.FOOT_R;
     const pts: number[] = [];
@@ -335,7 +398,7 @@ export function sandals(fit: Fit, leather: TexPair, o: { color?: number; wraps?:
     sole.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
     sole.setIndex(idx);
     sole.computeVertexNormals();
-    grp.add(makeSkinned(human, sole, soleMat, partWeights(fit, footMask, 6), { name: `sole${s}` }));
+    paint(sole, soleCol, 6, 6);
     const ank = lm.ankle[s];
     const legMask = (s === 'L' ? C.SHIN_L : C.SHIN_R) | footMask;
     const F = new HullField(body, makeFrame(new THREE.Vector3(ank.x, 0, ank.z - 0.01), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1)), legMask, 0.01, ank.y + 0.2 * S, 0.004, 64, 0.006, 2);
@@ -374,8 +437,15 @@ export function sandals(fit: Fit, leather: TexPair, o: { color?: number; wraps?:
       }
       geos.push(ribbon(p, n, 0.016 * S, 0.0022));
     }
-    grp.add(makeSkinned(human, merge(geos, false), strapMat, partWeights(fit, legMask, 6), { name: `sandalStraps${s}` }));
+    paint(merge(geos, false), strapCol, 2, 30);
+    void legMask;
   }
+  // soles take the foot's weights only (never the shin), straps above the foot the shin's too
+  grp.add(makeSkinned(human, merge(all, false), mat, (i, p) => {
+    const s = p.x > 0 ? 'L' : 'R';
+    return p.y < 0.012 ? wFoot[s](i, p) : wLeg[s](i, p);
+  }, { name: 'sandals' }));
+  void ankY;
   human.root.add(grp);
   fit.outfit.add(grp);
   fit.outfit.groundOffset = 0.009;

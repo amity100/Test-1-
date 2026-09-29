@@ -79,6 +79,7 @@ export class HullField {
       return lo;
     };
     const pts: number[] = [];
+    const hulls: (number[] | null)[] = new Array(ns).fill(null);
     for (let k = 0; k < ns; k++) {
       const s = s0 + k * ds;
       pts.length = 0;
@@ -89,17 +90,66 @@ export class HullField {
       this.count[k] = pts.length / 2;
       if (pts.length < 6) continue;
       const h = hull2(pts);
-      // centre: mean of hull vertices (robust enough for rays; hull is convex so any interior point works)
-      let ca = 0, cb = 0;
+      hulls[k] = h;
+      // centre: AREA centroid of the hull (the mean of the hull vertices jumped by up to ~1 cm from slice to slice
+      // with the body mesh's vertex rows, and every garment inherited that as horizontal ribbing)
       const hn = h.length / 2;
+      let A2 = 0, cx = 0, cy = 0;
       for (let j = 0; j < hn; j++) {
-        ca += h[j * 2];
-        cb += h[j * 2 + 1];
+        const x0 = h[j * 2], y0 = h[j * 2 + 1], x1 = h[((j + 1) % hn) * 2], y1 = h[((j + 1) % hn) * 2 + 1];
+        const cr = x0 * y1 - x1 * y0;
+        A2 += cr;
+        cx += (x0 + x1) * cr;
+        cy += (y0 + y1) * cr;
       }
-      ca /= hn;
-      cb /= hn;
-      this.ca[k] = ca;
-      this.cb[k] = cb;
+      if (Math.abs(A2) > 1e-9) {
+        this.ca[k] = cx / (3 * A2);
+        this.cb[k] = cy / (3 * A2);
+      } else {
+        let a = 0, b = 0;
+        for (let j = 0; j < hn; j++) {
+          a += h[j * 2];
+          b += h[j * 2 + 1];
+        }
+        this.ca[k] = a / hn;
+        this.cb[k] = b / hn;
+      }
+    }
+    // smooth the centres along the axis (+-2.5 cm, twice) BEFORE measuring the radii from them
+    {
+      const R = Math.max(1, Math.round(0.025 / ds));
+      for (let pass = 0; pass < 2; pass++) {
+        const a0 = this.ca.slice(), b0 = this.cb.slice();
+        for (let k = 0; k < ns; k++) {
+          if (!hulls[k]) continue;
+          let sa = 0, sb = 0, n = 0;
+          for (let d = -R; d <= R; d++) {
+            const kk = k + d;
+            if (kk < 0 || kk >= ns || !hulls[kk]) continue;
+            sa += a0[kk];
+            sb += b0[kk];
+            n++;
+          }
+          this.ca[k] = sa / n;
+          this.cb[k] = sb / n;
+        }
+      }
+    }
+    for (let k = 0; k < ns; k++) {
+      const h = hulls[k];
+      if (!h) continue;
+      let ca = this.ca[k], cb = this.cb[k];
+      // the smoothed centre must stay inside this slice's hull (it does for bodies; guard for thin parts)
+      if (!(rayPoly(h, ca, cb, 1, 0) > 0 && rayPoly(h, ca, cb, -1, 0) > 0 && rayPoly(h, ca, cb, 0, 1) > 0 && rayPoly(h, ca, cb, 0, -1) > 0)) {
+        let a = 0, b = 0;
+        const hn = h.length / 2;
+        for (let j = 0; j < hn; j++) {
+          a += h[j * 2];
+          b += h[j * 2 + 1];
+        }
+        ca = this.ca[k] = a / hn;
+        cb = this.cb[k] = b / hn;
+      }
       for (let t = 0; t < nt; t++) {
         const th = (t / nt) * TAU;
         this.rad[k * nt + t] = rayPoly(h, ca, cb, Math.cos(th), Math.sin(th));

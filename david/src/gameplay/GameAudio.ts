@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { AudioEngine, type MusicMood, type SfxName, type SfxOptions } from '../audio/AudioEngine';
+import { AudioEngine, type BedName, type MusicMood, type SfxName, type SfxOptions } from '../audio/AudioEngine';
 import type { IntroCue } from '../content/introScript';
 
 /** Named ambience beds for the intro and the chapter ('none' fades the bed out). */
-export type AmbienceName = 'fields' | 'gibeah-exterior' | 'gibeah-hall' | 'none';
+export type AmbienceName = BedName;
 
 /** Thin wrapper adding distance attenuation + stereo panning relative to the camera. */
 export class GameAudio {
@@ -42,7 +42,7 @@ export class GameAudio {
   ambience(a: AmbienceName | number, b?: number, c?: number): void {
     try {
       if (typeof a === 'number') this.engine.setAmbience({ wind: a, cicadas: b ?? 0, birds: c ?? 0 });
-      else void b; // named beds: implemented in the score pass
+      else this.engine.setAmbienceBed(a, b ?? 1.5);
     } catch {
       /* never let audio break the game */
     }
@@ -50,14 +50,25 @@ export class GameAudio {
   /**
    * Start the intro score synchronised to the cue sheet (reads each cue's `beat` and `t` at call time,
    * so retimed/reordered sheets stay in sync). `startAt` = intro time (s) to start from (for skipping).
+   * The score plays its own title hit at the 'title' cue (a sfx('titleHit') call at that moment is
+   * absorbed; one made early — a skip — jumps the score to its title statement). While the intro plays,
+   * music('title') is ignored and any other music(mood) ends the intro with that fade. The ambience bed
+   * follows the beats automatically until you call ambience(name) yourself.
    */
   playIntro(cues: readonly IntroCue[], startAt = 0): void {
-    void cues;
-    void startAt;
+    try { this.engine.playIntro(cues, startAt); } catch { /* never let audio break the game */ }
   }
   /** Fade the intro score out (seconds). */
   stopIntro(fade = 1.5): void {
-    void fade;
+    try { this.engine.stopIntro(fade); } catch { /* ignore */ }
+  }
+  /** Optional, cheap: report the intro clock (s) each frame so the score re-locks after hitches. */
+  syncIntro(t: number): void {
+    try { this.engine.syncIntro(t); } catch { /* ignore */ }
+  }
+  /** Force the light (phone) voicing, e.g. from engine.quality.name === 'low'. Auto-detected otherwise. */
+  setLite(on: boolean): void {
+    this.engine.setLite(on);
   }
   slingSpin(active: boolean, power: number) {
     this.engine.slingSpin(active, power);

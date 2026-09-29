@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { HumanModel } from '../human/HumanModel';
 import { C } from './body';
 import { beginFit, beltBand, fittedTunic, hangFromBelt, headRing, legCapsules, limbRing, sandals, tzitzit } from './common';
+import { merge } from './garments';
 import type { DressOptions } from './david';
 import { clothMaterial, fringeMaterial, solidMaterial, texPair } from './materials';
 import type { Outfit } from './Outfit';
@@ -33,11 +34,13 @@ export async function dressSaul(human: HumanModel, opts: DressOptions): Promise<
   outfit.capsules.push(...legCapsules(fit, 0.016, 0.06));
   const ARGAMAN = 0x4b1a45, SHANI = 0x8c1616, TEKHELET = 0x2b3f8c, GOLD = 0xd9a84e, LINEN = 0xdcd3bf;
   // ---- undertunic (linen)
-  const kut = fittedTunic(fit, { tex: fine, tile: 0.07, dye: LINEN, hem: 0.9, sleeve: 1.28, neck: 'slit', ease: 0.006, flare: 0.1, folds: 0.7, seed: 3, name: 'kuttonet', fray: 0, sheen: 0.35, roughness: 0.78, dust: 0.3 });
+  const kut = fittedTunic(fit, { tex: fine, tile: 0.07, dye: LINEN, hem: 0.9, sleeve: 1.28, neck: 'slit', ease: 0.006, flare: 0.1, folds: 0.35, seed: 3, name: 'kuttonet', fray: 0, sheen: 0.35, roughness: 0.78, dust: 0.3 });
   // ---- me'il: purple wool tabard, four corners
+  // the me'il rides on the undertunic's body and skirt only (NOT its sleeves: those come out of the armholes)
   const meil = fittedTunic(fit, {
-    tex: fine, tile: 0.05, dye: ARGAMAN, hem: 0.52, sleeve: 0, sleeveless: true, neck: 'round', offset: 0.009, ease: 0.012, flare: 0.13, folds: 1.1,
-    seed: 9, name: 'meil', sideSlit: { top: hipY - 0.03, half: 0.22 }, hide: false, inner: kut.restPos, fray: 0, sheen: 0.85, roughness: 0.72, dust: 0.25,
+    tex: fine, tile: 0.05, dye: ARGAMAN, hem: 0.52, sleeve: 0, sleeveless: true, neck: 'round', offset: 0.009, ease: 0.01, flare: 0.1, folds: 1.5,
+    seed: 9, name: 'meil', sideSlit: { top: hipY - 0.03, half: 0.22 }, hide: false, inner: [kut.restPos[0], kut.restPos[1]], fray: 0, sheen: 0.85, roughness: 0.72, dust: 0.25,
+    armhole: { half: 0.52, top: lm.yArmpit + 0.012 + 0.066 }, shoulderFolds: 5,
     palette: [SHANI, TEKHELET, GOLD, 0xd8c08a],
     bands: [
       { from: 0.0, to: 0.012, motif: 0, pal: 1 },
@@ -57,14 +60,24 @@ export async function dressSaul(human: HumanModel, opts: DressOptions): Promise<
   const sashMat = clothMaterial({ tier, tex: fine, tile: 0.05, dye: SHANI, roughness: 0.8, sheen: 0.25, hem: [0, 0.1, 0.01, 0], edgeMask: [0, 0], transmit: 0.2 });
   beltBand(fit, meil, { width: 0.075 * S, thickness: 0.007, material: sashMat, offset: 0.004, name: 'sash' });
   const gold = solidMaterial({ tier, tex: metal, color: GOLD, roughness: 0.28, metalness: 1, repeat: [2, 2], metalWear: { patina: 0x7a5424, amount: 0.25, edgeBright: 0.9 } });
-  const plaqueGeo = new THREE.BoxGeometry(0.03, 0.045, 0.004);
-  for (const th of [-0.5, -0.25, 0, 0.25, 0.5]) {
-    const r = meil.upper.R(meil.beltY, th) + 0.013;
-    const p = meil.upper.field.point(meil.beltY, th, r);
-    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), th);
-    const sock = human.addSocket(`wardrobePlaque${th}`, 'spine05', p, q);
-    const m = new THREE.Mesh(plaqueGeo, gold);
+  {
+    // five sewn gold plaques, merged into one mesh on one socket (one draw call)
+    const geos: THREE.BufferGeometry[] = [];
+    const p0 = meil.upper.field.point(meil.beltY, 0, meil.upper.R(meil.beltY, 0) + 0.013);
+    for (const th of [-0.5, -0.25, 0, 0.25, 0.5]) {
+      const r = meil.upper.R(meil.beltY, th) + 0.013;
+      const p = meil.upper.field.point(meil.beltY, th, r);
+      const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), th);
+      human.addSocket(`wardrobePlaque${th}`, 'spine05', p, q); // kept for compatibility (named anchors)
+      const g = new THREE.BoxGeometry(0.03, 0.045, 0.004, 1, 2, 1);
+      g.applyQuaternion(q);
+      g.translate(p.x - p0.x, p.y - p0.y, p.z - p0.z);
+      geos.push(g);
+    }
+    const sock = human.addSocket('wardrobePlaques', 'spine05', p0, new THREE.Quaternion());
+    const m = new THREE.Mesh(merge(geos, false), gold);
     m.castShadow = true;
+    m.name = 'plaques';
     sock.add(m);
     outfit.add(m);
   }
@@ -74,20 +87,24 @@ export async function dressSaul(human: HumanModel, opts: DressOptions): Promise<
   // ---- tzitzit on the four corners of the me'il
   const white = solidMaterial({ tier, tex: rope, color: 0xefe9dc, roughness: 0.9, repeat: [1, 1 / 0.012] });
   const blue = solidMaterial({ tier, tex: rope, color: TEKHELET, roughness: 0.85, repeat: [1, 1 / 0.012] });
+  const strings = solidMaterial({ tier, tex: rope, color: 0xffffff, roughness: 0.88, repeat: [1, 1 / 0.012] });
+  strings.vertexColors = true;
   const fr = fringeMaterial({ tier, tex: fringeT, dye: 0xf1ece0, width: 0.02 });
-  tzitzit(fit, meil.corners, { white, blue, fringe: fr, length: 0.15 * S });
+  // white wool strings + ONE tekhelet thread per corner (Num 15:38), all four corners batched into one mesh
+  tzitzit(fit, meil.corners, { white, blue, fringe: fr, length: 0.15 * S, batch: { material: strings, white: 0xefe9dc, blue: TEKHELET } });
   // ---- nezer (diadem) + etz'adah (armlet)
   const ring = headRing(fit, { height: 0.017, thickness: 0.0022, material: gold, extra: 0.01, tilt: 0.008 });
   {
-    // a lozenge plaque at the front of the band
+    // a lozenge plaque at the front of the band, merged into the band (one draw call)
     const lz = new THREE.CylinderGeometry(0.014, 0.014, 0.003, 4, 1);
     lz.rotateX(Math.PI / 2);
     lz.scale(1, 1.25, 1);
-    const m = new THREE.Mesh(lz, gold);
-    m.position.set(0, -0.008 * 0.5, ring.rz + 0.0012);
-    m.castShadow = true;
-    human.sockets.crownAnchor.add(m);
-    outfit.add(m);
+    lz.translate(0, -0.008 * 0.5, ring.rz + 0.0012);
+    const band = ring.mesh.geometry;
+    const merged = merge([band, lz], false);
+    merged.computeVertexNormals();
+    ring.mesh.geometry = merged;
+    band.dispose();
   }
   limbRing(fit, { side: 'L', from: 'upperarm01', to: 'lowerarm01', t: 0.5, bone: 'upperarm02.L', mask: C.UPARM_L, width: 0.032, thickness: 0.0035, clearance: 0.012, material: gold, ridges: low ? 0 : 3 });
   // ---- sandals + spear

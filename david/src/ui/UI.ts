@@ -31,6 +31,8 @@ export class UI {
   private toastEl: HTMLDivElement;
   private fadeEl: HTMLDivElement;
   private skipEl: HTMLButtonElement;
+  private skipHintEl: HTMLDivElement;
+  private prerollEl: HTMLDivElement;
   private counterEl: HTMLDivElement;
   private hintEl: HTMLDivElement;
   private pauseEl: HTMLDivElement;
@@ -84,9 +86,11 @@ export class UI {
       e.stopPropagation();
       this.onSkip?.();
     });
+    this.skipHintEl = el('div', 'skip-hint');
+    this.prerollEl = el('div', 'preroll', '<div class="pr-line"></div><div class="pr-bar"><div></div></div>');
     this.pauseEl = el('div', 'pause');
     this.endEl = el('div', 'endcard');
-    for (const e of [this.bars, this.markerEl, this.captionEl, this.verseEl, this.titleEl, this.objEl, this.hintEl, this.promptEl, this.crossEl, this.healthEl, this.bossEl, this.qteEl, this.toastEl, this.counterEl, this.skipEl, this.fadeEl, this.pauseEl, this.endEl]) this.root.appendChild(e);
+    for (const e of [this.bars, this.markerEl, this.captionEl, this.verseEl, this.titleEl, this.objEl, this.hintEl, this.promptEl, this.crossEl, this.healthEl, this.bossEl, this.qteEl, this.toastEl, this.counterEl, this.skipEl, this.skipHintEl, this.fadeEl, this.prerollEl, this.pauseEl, this.endEl]) this.root.appendChild(e);
     this.buildPause();
   }
 
@@ -127,12 +131,50 @@ export class UI {
   }
 
   // ------------------------------------------------------------------------------ cinematic
-  letterbox(on: boolean) {
-    this.bars.classList.toggle('on', on);
+  /**
+   * Cinematic mode. `drawn` = the bars are drawn into the image by the renderer (PostFX.setLetterbox, the intro):
+   * the HTML bars stay hidden and captions follow setBars(); otherwise the HTML bars slide in (11 % each).
+   */
+  letterbox(on: boolean, drawn = false) {
+    this.bars.classList.toggle('on', on && !drawn);
     this.root.classList.toggle('cinematic', on);
+    this.root.classList.toggle('film-bars', on && drawn);
   }
+  /**
+   * Height of the image's letterbox bars (fraction of the viewport height per bar, e.g. engine.post.letterboxBars)
+   * so captions, verses and the skip button sit just inside the picture; null = back to the CSS default.
+   */
+  setBars(frac: number | null) {
+    const v = frac === null ? '' : `${(Math.max(0, frac) * 100).toFixed(2)}vh`;
+    if (v !== this.barsVar) {
+      this.barsVar = v;
+      if (v) this.root.style.setProperty('--lb', v);
+      else this.root.style.removeProperty('--lb');
+    }
+  }
+  private barsVar = '';
   skip(visible: boolean) {
     this.skipEl.classList.toggle('on', visible);
+  }
+  /** "press again to skip" hint next to the skip button (first key / tap during the intro). */
+  skipHint(on: boolean, touch = this.touch) {
+    if (on) this.skipHintEl.textContent = touch ? 'הַקֵּשׁ שׁוּב כְּדֵי לְדַלֵּג' : 'לְחַץ שׁוּב כְּדֵי לְדַלֵּג';
+    this.skipHintEl.classList.toggle('on', on);
+    this.skipEl.classList.toggle('strong', on);
+  }
+  /**
+   * Pre-roll card over the black before the intro (while Saul's house is being built): a quiet line and a thin
+   * progress rule. null hides it.
+   */
+  preroll(label: string | null, progress = 0) {
+    if (label === null) {
+      this.prerollEl.classList.remove('on');
+      return;
+    }
+    const line = this.prerollEl.querySelector('.pr-line') as HTMLDivElement;
+    if (line.textContent !== label) line.textContent = label;
+    (this.prerollEl.querySelector('.pr-bar div') as HTMLDivElement).style.width = `${Math.round(Math.min(1, Math.max(0, progress)) * 100)}%`;
+    this.prerollEl.classList.add('on');
   }
 
   private later(key: string, ms: number, fn: () => void) {
@@ -160,6 +202,9 @@ export class UI {
   }
   hideVerse() {
     this.verseEl.classList.remove('on');
+  }
+  hideCaption() {
+    this.captionEl.classList.remove('on');
   }
 
   titleCard(on: boolean) {

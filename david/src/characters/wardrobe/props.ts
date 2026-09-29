@@ -2,6 +2,47 @@ import * as THREE from 'three';
 import { noise1, rng, TAU } from './loft';
 import { solidMaterial, type TexPair, type Tier } from './materials';
 import type { Prop } from './Outfit';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+
+/**
+ * Merge the rigid child meshes of a prop that share a material into one mesh each (fewer draw calls on phones).
+ * Non-mesh children (grip / tip / butt frames, cord anchors) are kept as they are.
+ */
+export function mergeStatic<T extends THREE.Object3D>(group: T): T {
+  const byMat = new Map<THREE.Material, THREE.Mesh[]>();
+  for (const c of [...group.children]) {
+    const m = c as THREE.Mesh;
+    if (!m.isMesh || (m as THREE.SkinnedMesh).isSkinnedMesh || m.children.length || Array.isArray(m.material)) continue;
+    const l = byMat.get(m.material) ?? [];
+    l.push(m);
+    byMat.set(m.material, l);
+  }
+  for (const [mat, list] of byMat) {
+    if (list.length < 2) continue;
+    const geos = list.map((m) => {
+      m.updateMatrix();
+      let g = m.geometry.clone().applyMatrix4(m.matrix);
+      if (!g.index) g = g.toNonIndexed();
+      if (!g.getAttribute('normal')) g.computeVertexNormals();
+      for (const n of Object.keys(g.attributes)) if (n !== 'position' && n !== 'normal' && n !== 'uv') g.deleteAttribute(n);
+      if (!g.getAttribute('uv')) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.getAttribute('position').count * 2), 2));
+      return g.index ? g : g;
+    });
+    const indexed = geos.every((g) => g.index);
+    const merged = mergeGeometries(indexed ? geos : geos.map((g) => (g.index ? g.toNonIndexed() : g)), false);
+    if (!merged) continue;
+    const mesh = new THREE.Mesh(merged, mat);
+    mesh.name = list[0].name;
+    mesh.castShadow = list.some((m) => m.castShadow);
+    mesh.receiveShadow = list.some((m) => m.receiveShadow);
+    for (const m of list) {
+      group.remove(m);
+      m.geometry.dispose();
+    }
+    group.add(mesh);
+  }
+  return group;
+}
 
 /*
  * Hand props and weapons, all procedural (rest frame: +Y along the shaft / blade, origin at the butt / hilt).
@@ -131,6 +172,7 @@ export function makeStaff(tier: Tier, wood: TexPair, bark: TexPair, o: { length?
   const tip = frameAt(group, 'tip', P(1), dirAt(1));
   const butt = frameAt(group, 'butt', P(0), dirAt(0));
   group.userData.radiusAtGrip = profile(tg);
+  mergeStatic(group);
   return { object: group, grip, tip, butt };
 }
 
@@ -166,11 +208,12 @@ export function makeSlingPouch(tier: Tier, leather: TexPair): THREE.Object3D {
   m.castShadow = true;
   m.name = 'slingPouch';
   // thickness: a second, slightly offset layer
-  const back = new THREE.Mesh(g, mat);
+  const back = new THREE.Mesh(g.clone(), mat);
   back.position.y = -0.0025;
   const grp = new THREE.Group();
   grp.name = 'slingPouch';
   grp.add(m, back);
+  mergeStatic(grp);
   for (const [n, x] of [['cordA', -Lh - 0.002], ['cordB', Lh + 0.002]] as const) {
     const o = new THREE.Object3D();
     o.name = n;
@@ -255,6 +298,7 @@ export function makeSpear(tier: Tier, wood: TexPair, metal: TexPair, leather: Te
   const tip = frameAt(group, 'tip', new THREE.Vector3(0, L, 0), new THREE.Vector3(0, 1, 0));
   const buttF = frameAt(group, 'butt', new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 1, 0));
   group.userData.radiusAtGrip = 0.0158;
+  mergeStatic(group);
   return { object: group, grip, tip, butt: buttF };
 }
 
@@ -294,6 +338,7 @@ export function makeSword(tier: Tier, leather: TexPair, metal: TexPair, wood: Te
   pommel.translate(0, 0.111, 0);
   g.add(new THREE.Mesh(pommel, bronze));
   g.traverse((c) => ((c as THREE.Mesh).isMesh ? ((c as THREE.Mesh).castShadow = true) : null));
+  mergeStatic(g);
   return g;
 }
 
@@ -363,6 +408,7 @@ export function makeShield(tier: Tier, leather: TexPair, metal: TexPair, wood: T
   bar.translate(0, 0, -0.03);
   g.add(new THREE.Mesh(bar, woodMat));
   g.traverse((c) => ((c as THREE.Mesh).isMesh ? ((c as THREE.Mesh).castShadow = true) : null));
+  mergeStatic(g);
   const grip = new THREE.Object3D();
   grip.name = 'grip';
   grip.position.set(0, 0, -0.03);

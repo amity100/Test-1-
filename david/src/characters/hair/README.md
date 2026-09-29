@@ -67,7 +67,10 @@ const g = await createGroom(guard, { kind: 'man', seed: 7, beard: 'full', headba
    `MeshStandardMaterial` path. **Transparency without sorting**: strands are opaque; sub-pixel coverage is stochastic
    (interleaved-gradient-noise alpha test) and, with MSAA, geometric per sample. Alpha-to-coverage is *not* used for strands
    (equal alpha values map to the same sample mask, so overlapping strands never accumulate — tried, it looks like a ghost);
-   it *is* used for the cap's soft hairline edge (single layer), alpha-hash without MSAA.
+   it *is* used for the cap's soft hairline edge (single layer), a plain alpha test without MSAA.
+   **Without MSAA** (phones: FXAA, no TAA) a per-pixel dither never resolves and read as static grain, so there the
+   coverage threshold is per *strand* (`fract(rand)`): a sub-pixel strand is drawn as a continuous >= 1 px line or not at
+   all, a uniform random subset that keeps the coverage right — beards read as strands, not noise.
    `HairDepthMaterial` casts shadows with the same expansion (1.6× wider, ≥ 1 shadow texel, dithered coverage).
 4. **Cap**: the scalp (and beard) region of the skin, offset 1-6 mm along the normal, hair-root coloured with noise, soft
    alpha at the hairline; follows the jaw. Keeps the scalp from showing through on every tier.

@@ -203,3 +203,45 @@ and shoulders above the people); nothing from after 16:13 (no evil spirit, no ma
   thanksgiving, a position-based (verlet) simulation of the two sling cords, and parallel-transport tubes for the cords.
   Method references only (no code copied): Jakobsen, "Advanced Character Physics" (GDC 2001) for the verlet cords;
   standard gait biomechanics (heel rocker / toe-off, pelvic rotation and list) for the walk and run.
+
+## Score, ambience beds and sound design — `src/audio/`, `src/gameplay/GameAudio.ts`, `dev/score.*`
+
+Maintained by *score*. **No third-party audio, samples, impulse responses or code**: every sound is synthesized at
+runtime with the Web Audio API (oscillators, noise, filters, envelopes, buffers baked in JS at load time) — the
+kinnor (Karplus-Strong plucked string), the chalil/pipe (breathy flute model), frame drums (tof), taiko-like deep
+drums, the shofar (driven brassy buzz with formant filters), drones, humming/"aah" voices (formant choir), the
+opening-cinematic score (`IntroScore.ts`), the ambience beds (`Beds.ts`: wind, leaves, skylarks, far flocks,
+murmuring voices, bronze clinks, a dog, a far donkey, fire crackle, oil lamps, cloth, footsteps) and the SFX.
+
+| Item | Origin | License | Where used |
+|---|---|---|---|
+| All music, ambience and SFX synthesis, the cue-synchronised intro score, offline-render harness | our own code | our own work (project license) | `src/audio/*`, `dev/score.*` |
+| Karplus-Strong string synthesis | algorithm from K. Karplus & A. Strong, "Digital Synthesis of Plucked-String and Drum Timbres" (CMJ 1983) — method only, no code copied | — | kinnor |
+| Biquad filter formulas | R. Bristow-Johnson, "Cookbook formulae for audio EQ biquad filter coefficients" (public formulas) | formulas | offline baking (`synth.ts` `BQ`) |
+| Pink-noise filter | P. Kellet's economy/refined pink-noise filter (public-domain formula) | formula | noise beds |
+| Loudness check in the verification | ITU-R BS.1770 K-weighting (standard formulas), our Python script in the scratch dir | standard | levels in `dev/screens/score/levels.json` |
+
+Musical/period basis (not assets): instruments named in the Bible for the period — kinnor, nevel, tof, chalil
+(1 Sam 10:5, 16:16-23) and the shofar (1 Sam 13:3); Saul's household keeps donkeys (1 Sam 9:3) and no horses (see
+`docs/sources.md`), so the Gibeah ambience has a far donkey and never hoofbeats. The lyre is kept out of Saul's music
+(no lyre at court before 16:14).
+
+## Wardrobe & hair polish pass — `src/characters/wardrobe/`, `src/characters/hair/`, `tools/wardrobe/gen_textures.py`, `dev/wardrobe*`
+
+No new third-party assets or code. Everything in this pass is original work, generated at load time or by the
+project's own generators:
+- The garment fitting changes (area-centroid hull slices, vertical closing and smoothing of the cloth radius, gap-filled
+  layering envelope, armhole openings, exact LBS/DQS inverse skinning, chain batching and static merging) are original
+  code.
+- `weave_coarse_*` was regenerated with `python3 tools/wardrobe/gen_textures.py weave_coarse`, now with more even weft
+  yarns. It is procedural, from our own generator: CC0 / project-original.
+- Hair: the per-strand coverage threshold without MSAA, the cap alpha test, the Saul beard groom numbers and David's
+  lighter copper colours are original parameters and shader code.
+- Dual-quaternion skinning inverse: the standard DQS formulation (Kavan et al. 2007, "Skinning with Dual Quaternions"),
+  re-derived to match `src/characters/human/DualQuatSkinning.ts`. No code was copied.
+
+## Opening film (intro) — `src/gameplay/Intro.ts`, `src/content/introScript.ts`, `src/ui/UI.ts`, `src/ui/style.css`
+- No third-party assets or code. The film is composed from the project's own content: the Bethlehem world, David, the
+  flock, and Saul's house at Gibeah with its cast; captions and verses come only from the verified catalog
+  (`src/content/sources.ts`, checked by `tools/sources/verify_sources.py`).
+- Camera language (match cuts, dissolves, focus pulls, letterbox) is our own implementation on the engine's post chain.

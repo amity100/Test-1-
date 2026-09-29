@@ -140,11 +140,13 @@ def weave(res, threads, width_frac, slub, wander, seed, fuzz=0.25, gap_jitter=0.
     base_pos = (np.arange(threads) + 0.5 + (rng.random(threads) - 0.5) * gap_jitter * 2) * pitch
     base_pos_w = (np.arange(threads) + 0.5 + (rng.random(threads) - 0.5) * gap_jitter * 2) * pitch
     tones_warp = 1.0 + (rng.random(threads) - 0.5) * 0.08
-    tones_weft = 1.0 + (rng.random(threads) - 0.5) * 0.08
+    # weft yarns: much more even than the warp (polish pass: darker weft yarns printed as horizontal streaks /
+    # bands across the tunic at mid distance, worst on the 512 px phone maps)
+    tones_weft = 1.0 + (rng.random(threads) - 0.5) * 0.025
     # a few darker / browner yarns (natural fleece variation), subtle so it never bands at a distance
-    for arr in (tones_warp, tones_weft):
+    for arr, dark in ((tones_warp, 0.93), (tones_weft, 0.985)):
         k = rng.random(threads) < 0.06
-        arr[k] *= 0.9
+        arr[k] *= dark
     halfw = pitch * width_frac * 0.5
     band = int(np.ceil(pitch * 1.3))
     for axis in (0, 1):  # 0: warp (vertical yarns, vary along y), 1: weft (horizontal)

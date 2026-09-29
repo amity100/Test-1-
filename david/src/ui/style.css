@@ -286,3 +286,52 @@ canvas { display: block; outline: none; }
   .e-next { margin-bottom: 12px; padding: 8px; }
   .e-next-verse { font-size: 14px; }
 }
+
+/* ------------------------------------------------------------------ intro film (bars drawn by the renderer) */
+/* --lb = height of one letterbox bar (UI.setBars, from engine.post.letterboxBars); captions sit inside the picture */
+.ui { --lb: 11vh; }
+.ui.film-bars .letterbox > div { display: none; }
+.ui.film-bars .caption {
+  top: calc(var(--lb) + 3.6vh); bottom: auto; right: 6vw; transform: translateY(-8px);
+  transition: opacity 1.8s ease, transform 2.4s cubic-bezier(0.2, 0.6, 0.2, 1);
+}
+.ui.film-bars .caption.on { transform: none; }
+.ui.film-bars .cap-title { font-size: clamp(22px, 3vw, 40px); letter-spacing: 0.08em; text-shadow: 0 2px 16px rgba(0, 0, 0, 0.7), 0 0 2px rgba(0, 0, 0, 0.6); }
+.ui.film-bars .cap-sub { font-size: clamp(12px, 1.25vw, 16px); letter-spacing: 0.18em; text-shadow: 0 1px 10px rgba(0, 0, 0, 0.85); }
+.ui.film-bars .verse { bottom: calc(var(--lb) + 3.2vh); transition: opacity 1.5s ease, transform 1.8s ease; }
+.ui.film-bars .v-text { font-size: clamp(17px, 2.1vw, 27px); }
+.ui.film-bars .skip { bottom: calc(var(--lb) + 14px); }
+.skip.strong { opacity: 1; border-color: rgba(232, 199, 126, 0.75); background: rgba(0, 0, 0, 0.55); }
+.skip-hint {
+  position: fixed; left: 24px; bottom: calc(var(--lb) + 58px); z-index: 60; font: 400 13px var(--sans-he); letter-spacing: 0.08em;
+  color: #eadcc0; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9); opacity: 0; transition: opacity 0.4s; pointer-events: none;
+}
+.skip-hint.on { opacity: 0.9; }
+
+/* pre-roll: over the black before the film while Saul's house is built */
+.preroll {
+  position: fixed; inset: 0; z-index: 55; display: grid; place-content: center; justify-items: center; gap: 18px;
+  opacity: 0; transition: opacity 1.2s ease; pointer-events: none;
+}
+.preroll.on { opacity: 1; }
+.pr-line { font: 400 clamp(14px, 1.6vw, 19px) var(--serif-he); letter-spacing: 0.4em; color: var(--gold-2); opacity: 0.85; }
+.pr-bar { width: min(220px, 50vw); height: 1px; background: rgba(232, 199, 126, 0.16); overflow: hidden; }
+.pr-bar div { height: 100%; width: 0; background: linear-gradient(90deg, transparent, var(--gold)); transition: width 0.6s ease; }
+
+/* title reveal over the last crane shot: a soft darkening behind the letters, a slow settle of the tracking */
+.titlecard::before {
+  content: ''; position: absolute; left: 50%; top: 50%; width: min(1100px, 120vw); height: min(520px, 70vh);
+  transform: translate(-50%, -50%); background: radial-gradient(ellipse at center, rgba(8, 5, 2, 0.5), rgba(8, 5, 2, 0.22) 45%, transparent 70%);
+  opacity: 0; transition: opacity 3s ease; pointer-events: none; z-index: -1;
+}
+.titlecard.on::before { opacity: 1; }
+.titlecard.on .tc-title { animation: titleIn 5.2s cubic-bezier(0.16, 0.6, 0.1, 1) forwards; }
+.titlecard.on .tc-he { animation: fadeUp 2.8s ease 2.2s forwards; }
+.titlecard.on .tc-line { animation: lineGrow 2.8s ease 2.6s forwards; }
+.titlecard.on .tc-chapter { animation: fadeUp 2.6s ease 3.2s forwards; }
+.titlecard { transition: opacity 2.6s ease; }
+@media (max-width: 700px) {
+  .ui.film-bars .caption { right: 5vw; top: calc(var(--lb) + 2.4vh); }
+  .ui.film-bars .verse { width: 90vw; }
+  .skip-hint { left: 16px; }
+}

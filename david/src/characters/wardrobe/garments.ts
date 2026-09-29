@@ -125,8 +125,10 @@ export function bodyTube(fit: Fit, spec: BodyTubeSpec): { tube: Tube; field: Hul
   const frame = makeFrame(new THREE.Vector3(), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1));
   const ds = 0.005;
   const armsAbove = spec.armsAbove ?? Infinity;
-  const F1 = new HullField(body, frame, spec.mask, lo - 0.02, hi + 0.02, ds, nt, 0.006, 2);
-  const F2 = armsAbove < hi ? new HullField(body, frame, spec.mask | C.UPARM_L | C.UPARM_R, lo - 0.02, hi + 0.02, ds, nt, 0.006, 2) : null;
+  // slab +-12 mm (was 6): the phone-tier body has vertex rings 2-3 cm apart, and thin slabs between them made
+  // under-sampled hull slices that printed as horizontal bands on the skirt
+  const F1 = new HullField(body, frame, spec.mask, lo - 0.02, hi + 0.02, ds, nt, 0.012, 2);
+  const F2 = armsAbove < hi ? new HullField(body, frame, spec.mask | C.UPARM_L | C.UPARM_R, lo - 0.02, hi + 0.02, ds, nt, 0.012, 2) : null;
   const G = new RadiusGrid(F1);
   const { ns } = F1;
   // arms join the hull only toward the sides (no flat panel bridging the chest to the front of the arm)
@@ -148,6 +150,25 @@ export function bodyTube(fit: Fit, spec: BodyTubeSpec): { tube: Tube; field: Hul
       if (k < ns - 1) r = Math.max(r, G.v[(k + 1) * nt + t] - (spec.drape + (spec.sideCling ?? 0) * sideW[t]) * ds);
       if (spec.flare && spec.flareFrom !== undefined && y < spec.flareFrom && k < ns - 1) r = Math.max(r, G.v[(k + 1) * nt + t] + spec.flare * ds * smoothstep(spec.flareFrom, spec.flareFrom - 0.12, y));
       G.v[k * nt + t] = r;
+    }
+  }
+  // cloth bridges small hollows: a vertical morphological closing (max then min filter, +-4 cm) keeps it off the
+  // dips between the ribs / abdominal muscles / scapulae (which printed as horizontal ribbing on every tunic).
+  // closing >= input, so the cloth never moves closer to the body.
+  {
+    const R = 8;
+    const v = G.v, mx = new Float32Array(v.length);
+    for (let t = 0; t < nt; t++) {
+      for (let k = 0; k < ns; k++) {
+        let m = -Infinity;
+        for (let dk = -R; dk <= R; dk++) m = Math.max(m, v[Math.min(ns - 1, Math.max(0, k + dk)) * nt + t]);
+        mx[k * nt + t] = m;
+      }
+      for (let k = 0; k < ns; k++) {
+        let m = Infinity;
+        for (let dk = -R; dk <= R; dk++) m = Math.min(m, mx[Math.min(ns - 1, Math.max(0, k + dk)) * nt + t]);
+        v[k * nt + t] = m;
+      }
     }
   }
   // cinch + blouse (the cloth is pulled tight under the belt and bulges just above it)
@@ -175,6 +196,22 @@ export function bodyTube(fit: Fit, spec: BodyTubeSpec): { tube: Tube; field: Hul
       }
     }
   }
+  // vertical smoothing: each 5 mm slice of the body hull is measured on its own, so the radius jitters at the
+  // body mesh's vertex spacing -> horizontal ridges ("ribbing") across the chest. Blur up the column, but never
+  // closer to the body than 1.5 mm.
+  {
+    const v = G.v, tmp = new Float32Array(v.length), floor = new Float32Array(v.length);
+    for (let k = 0; k < ns; k++) for (let t = 0; t < nt; t++) floor[k * nt + t] = H(k, t) + 0.0015;
+    for (let pass = 0; pass < 3; pass++) {
+      for (let k = 0; k < ns; k++)
+        for (let t = 0; t < nt; t++) {
+          let a = 0;
+          for (let dk = -2; dk <= 2; dk++) a += v[Math.min(ns - 1, Math.max(0, k + dk)) * nt + t];
+          tmp[k * nt + t] = a / 5;
+        }
+      for (let i = 0; i < v.length; i++) v[i] = Math.max(tmp[i], floor[i]);
+    }
+  }
   // layering: max radius of the inner garments per (s, θ) bin (dilated), so this layer never dips into them
   let innerMax: Float32Array | null = null;
   if (spec.inner?.length) {
@@ -192,6 +229,20 @@ export function bodyTube(fit: Fit, spec: BodyTubeSpec): { tube: Tube; field: Hul
         const idx = k * nt + t;
         if (l.r > innerMax[idx]) innerMax[idx] = l.r;
       }
+    // the inner garment is sampled at its vertices only: its rows (7-20 mm apart) leave empty bins between them,
+    // which printed as horizontal ridges on the outer layer. Fill the gaps up the column by linear interpolation.
+    for (let t = 0; t < nt; t++) {
+      let last = -1;
+      for (let k = 0; k < ns; k++) {
+        const v = innerMax[k * nt + t];
+        if (v <= 0) continue;
+        if (last >= 0 && k - last > 1 && k - last <= 12) {
+          const a = innerMax[last * nt + t];
+          for (let j = last + 1; j < k; j++) innerMax[j * nt + t] = a + ((v - a) * (j - last)) / (k - last);
+        }
+        last = k;
+      }
+    }
     for (let pass = 0; pass < 2; pass++) {
       const src = innerMax.slice();
       for (let k = 0; k < ns; k++)
@@ -206,6 +257,33 @@ export function bodyTube(fit: Fit, spec: BodyTubeSpec): { tube: Tube; field: Hul
           innerMax[k * nt + t] = m;
         }
     }
+    // smooth envelope: a max filter followed by a box blur of the same radius is >= the input everywhere, so the
+    // outer layer still never dips into the inner one, but the 5 mm bin steps (horizontal ridges) are gone
+    const smooth1 = (rk: number, rt: number) => {
+      const src = innerMax!.slice();
+      const mx = new Float32Array(ns * nt);
+      for (let k = 0; k < ns; k++)
+        for (let t = 0; t < nt; t++) {
+          let m = 0;
+          for (let dk = -rk; dk <= rk; dk++) {
+            const kk = Math.min(ns - 1, Math.max(0, k + dk));
+            for (let dt = -rt; dt <= rt; dt++) m = Math.max(m, src[kk * nt + ((t + dt + nt) % nt)]);
+          }
+          mx[k * nt + t] = m;
+        }
+      const cnt = (2 * rk + 1) * (2 * rt + 1);
+      for (let k = 0; k < ns; k++)
+        for (let t = 0; t < nt; t++) {
+          let a = 0;
+          for (let dk = -rk; dk <= rk; dk++) {
+            const kk = Math.min(ns - 1, Math.max(0, k + dk));
+            for (let dt = -rt; dt <= rt; dt++) a += mx[kk * nt + ((t + dt + nt) % nt)];
+          }
+          // empty bins (no inner cloth there) stay empty
+          innerMax![k * nt + t] = src[k * nt + t] > 0 ? a / cnt : 0;
+        }
+    };
+    smooth1(3, 2);
   }
   const innerGap = spec.innerGap ?? 0.006;
   const fold = spec.folds ? foldNoise(spec.folds.seed, spec.folds.count, spec.folds.k[0], spec.folds.k[1]) : null;
@@ -224,8 +302,18 @@ export function bodyTube(fit: Fit, spec: BodyTubeSpec): { tube: Tube; field: Hul
       let ft = ((th / TAU) * nt) % nt;
       if (ft < 0) ft += nt;
       const k0 = Math.floor(fk), k1 = Math.min(ns - 1, k0 + 1), t0 = Math.floor(ft) % nt, t1 = (t0 + 1) % nt;
-      const m = Math.max(innerMax[k0 * nt + t0], innerMax[k0 * nt + t1], innerMax[k1 * nt + t0], innerMax[k1 * nt + t1]);
-      if (m > 0) r = Math.max(r, m + innerGap);
+      const a00 = innerMax[k0 * nt + t0], a01 = innerMax[k0 * nt + t1], a10 = innerMax[k1 * nt + t0], a11 = innerMax[k1 * nt + t1];
+      if (a00 > 0 && a01 > 0 && a10 > 0 && a11 > 0) {
+        // bilinear on the smoothed envelope, then a soft max (no crease where the layer starts to ride on it)
+        const tk = fk - Math.floor(fk), tt = ft - Math.floor(ft);
+        const m = (a00 * (1 - tt) + a01 * tt) * (1 - tk) + (a10 * (1 - tt) + a11 * tt) * tk + innerGap;
+        const h = 0.004;
+        const d = m - r;
+        r = d > h ? m : d < -h ? r : r + ((d + h) * (d + h)) / (4 * h);
+      } else {
+        const m = Math.max(a00, a01, a10, a11);
+        if (m > 0) r = Math.max(r, m + innerGap);
+      }
     }
     return r;
   };

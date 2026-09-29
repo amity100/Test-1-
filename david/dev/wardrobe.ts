@@ -10,6 +10,7 @@ import { shared } from '../src/core/Shared';
 import { pose, PoseMixer, type Pose } from '../src/characters/Rig';
 import { HumanModel } from '../src/characters/human/HumanModel';
 import { dressDavid, dressSaul, dressMan, attachProp, type Outfit } from '../src/characters/wardrobe';
+import { createGroom, type Groom, type Headband } from '../src/characters/hair';
 import rockAlbedo from '../src/assets/textures/rock_albedo.jpg';
 import rockNormal from '../src/assets/textures/rock_normal.jpg';
 
@@ -146,6 +147,7 @@ function runPose(ph: number): Pose {
 let human: HumanModel;
 let outfit: Outfit;
 let slingGroup: THREE.Group | null = null;
+let groom: Groom | null = null;
 let mixer: PoseMixer;
 const velocity = new THREE.Vector3();
 const wind = new THREE.Vector3(0.6, 0, 0.2);
@@ -167,6 +169,16 @@ async function main() {
   else if (who === 'saul') outfit = await dressSaul(human, { quality: q });
   else outfit = await dressMan(human, { quality: q, role: who as 'guard' | 'runner' | 'servant' | 'abner', seed });
   const t2 = performance.now();
+  if (P.get('hair') !== '0') {
+    // strand hair / beard (same headband numbers as the court cast / DavidModel)
+    const [rx, rz] = human.metrics.crownRadius;
+    let headband: Headband | undefined;
+    if (who === 'saul') headband = { height: 0, radius: [rx + 0.0078, rz + 0.0078], width: 0.017, tilt: 0.008 };
+    else if (who !== 'david' && who !== 'servant') headband = { height: 0, radius: [rx + 0.007, rz + 0.007], width: who === 'abner' ? 0.022 : 0.02 };
+    const style = who === 'david' ? 'david' as const : who === 'saul' ? 'saul' as const : { kind: 'man' as const, seed, beard: (P.get('beard') ?? 'full') as 'none' | 'short' | 'full', headband: !!headband };
+    groom = await createGroom(human, style, { quality: q, msaa: q === 'low' ? 0 : 4, headband });
+    groom.setSimulation(false);
+  }
   scene.add(human.root);
   human.root.position.y = outfit.groundOffset;
   mixer = new PoseMixer(human.joints);
@@ -251,6 +263,8 @@ function frameCamera(v: string, yawDeg = 0) {
     case 'satchel': at(bone('pelvis.L').add(new THREE.Vector3(0.12, -0.05, 0.05)), fwd.clone().addScaledVector(left, 1.3).addScaledVector(up, 0.12), 0.95, 30); break;
     case 'sandals': at(new THREE.Vector3(0, 0.1, 0.05), fwd.clone().addScaledVector(left, 0.45).addScaledVector(up, 0.35), 0.95, 30); break;
     case 'hem': at(new THREE.Vector3(0, h * 0.33, 0.05), fwd.clone().addScaledVector(left, -0.35).addScaledVector(up, 0.05), 1.1, 30); break;
+    case 'portrait': at(head.clone().add(new THREE.Vector3(0, -0.12, 0.02)), fwd.clone().addScaledVector(left, 0.35).addScaledVector(up, -0.05), 1.25, 30); break;
+    case 'bust': at(head.clone().add(new THREE.Vector3(0, -0.3, 0.02)), fwd.clone().addScaledVector(left, 0.2).addScaledVector(up, 0.02), 2.0, 30); break;
     case 'head': at(head.clone().add(new THREE.Vector3(0, 0.05, 0.02)), fwd.clone().addScaledVector(left, 0.5).addScaledVector(up, 0.08), 0.8, 30); break;
     case 'arm': at(bone('upperarm02.L').add(new THREE.Vector3(0, 0, 0)), left.clone().addScaledVector(fwd, 0.6).addScaledVector(up, 0.1), 0.9, 30); break;
     case 'belt': at(bone('spine04').add(new THREE.Vector3(0.05, -0.1, 0.05)), fwd.clone().addScaledVector(left, 0.7), 1.1, 30); break;
@@ -292,6 +306,7 @@ const api = {
     for (let i = 0; i < n; i++) {
       human.update(1 / 30, camera, H);
       outfit.update(1 / 30, { velocity, wind });
+      groom?.update(1 / 30, wind);
     }
     if (slingGroup) {
       human.sockets.palmL.getWorldPosition(slingGroup.position);

@@ -96,10 +96,12 @@ uniform float uSwayLen;
 #ifdef W_COLLIDE
 uniform vec4 uCapA[4];
 uniform vec4 uCapB[4];
+uniform float uCapPad;
 vec3 wCollide(vec3 p) {
   for (int i = 0; i < 4; i++) {
     vec3 a = uCapA[i].xyz, b = uCapB[i].xyz;
-    float r = uCapA[i].w;
+    // uCapPad: outer layers keep their distance from the inner ones where both are pushed out by a leg
+    float r = uCapA[i].w + uCapPad;
     vec3 ab = b - a;
     float t = clamp(dot(p - a, ab) / max(dot(ab, ab), 1e-6), 0.0, 1.0);
     vec3 c = a + ab * t;
@@ -120,7 +122,7 @@ vGUv = uv;
   float sw = clamp(1.0 - gdata.x / uSwayLen, 0.0, 1.4);
   sw *= sw;
   float ph = uSwayTime * 1.9 + uv.x * 11.0;
-  vec3 flutter = vec3(sin(ph), 0.0, cos(ph * 0.83 + 1.3)) * (0.004 + length(uSway) * 0.18);
+  vec3 flutter = vec3(sin(ph), 0.0, cos(ph * 0.83 + 1.3)) * (0.0025 + length(uSway) * 0.15);
   transformed += (uSway + flutter) * sw;
 }
 #endif
@@ -143,6 +145,7 @@ uniform vec4 uHem;           // x dust amount, y dust height (m), z fray width (
 uniform vec2 uEdgeMask;      // fray/dust weight for the lower / upper edge
 uniform vec3 uDust;
 uniform float uTransmit;
+uniform float uGap;
 uniform vec3 uSunDirW;
 uniform vec3 uSunCol;
 #if W_BANDS > 0
@@ -177,6 +180,8 @@ vec4 wA = texture2D(tWA, wuv);
 vec4 wN = texture2D(tWN, wuv);
 vec3 wCol = uDye * wA.rgb;
 float wCov = wA.a;
+// open weave: the gaps between the threads read darker (shadowed / skin showing through)
+wCol *= 1.0 - uGap * (1.0 - smoothstep(0.3, 0.92, wCov));
 wMetal = 0.0;
 wRough = 0.0;
 float wLow = wFbm(vGUv * 7.0);
@@ -305,6 +310,10 @@ export interface ClothOptions {
   holes?: [number, number, number, number][];
   sway?: { uniforms: OutfitUniforms; length: number };
   collide?: OutfitUniforms;
+  /** extra leg-capsule radius for outer layers (m): layers pushed by the same leg stay apart (no z-fighting) */
+  collidePad?: number;
+  /** darken the open gaps of the weave (0..1): coarse, loosely woven cloth */
+  gap?: number;
   side?: THREE.Side;
 }
 
@@ -341,6 +350,7 @@ export function clothMaterial(o: ClothOptions): THREE.MeshStandardMaterial {
     uEdgeMask: { value: new THREE.Vector2(...(o.edgeMask ?? [1, 1])) },
     uDust: { value: lin(o.dust ?? 0x9c8466) },
     uTransmit: { value: o.transmit ?? 0.9 },
+    uGap: { value: o.gap ?? 0 },
     uSunDirW: shared.uSunDir,
     uSunCol: shared.uSunColor,
     uBands: { value: bands.map((b) => new THREE.Vector4(b.from, b.to, b.motif, b.pal + (b.edge === 'upper' ? 10 : 0))) },
@@ -355,6 +365,7 @@ export function clothMaterial(o: ClothOptions): THREE.MeshStandardMaterial {
   if (o.collide) {
     u.uCapA = o.collide.uCapA;
     u.uCapB = o.collide.uCapB;
+    u.uCapPad = { value: o.collidePad ?? 0 };
   }
   m.userData.wardrobe = u;
   const defs = `#define W_BANDS ${bands.length}\n#define W_HOLES ${holes.length}\n` + (low ? '#define W_LOW\n' : '') + (o.sway ? '#define W_SWAY\n' : '') + (o.collide ? '#define W_COLLIDE\n' : '');
@@ -376,7 +387,7 @@ export function clothMaterial(o: ClothOptions): THREE.MeshStandardMaterial {
 }
 
 /** A depth material for shadows of swaying / colliding garments (so shadows match the hem). */
-export function clothDepthMaterial(o: { sway?: { uniforms: OutfitUniforms; length: number }; collide?: OutfitUniforms }) {
+export function clothDepthMaterial(o: { sway?: { uniforms: OutfitUniforms; length: number }; collide?: OutfitUniforms; collidePad?: number }) {
   const m = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
   const u: Record<string, THREE.IUniform> = { uSwayLen: { value: o.sway?.length ?? 0.3 } };
   if (o.sway) {
@@ -386,6 +397,7 @@ export function clothDepthMaterial(o: { sway?: { uniforms: OutfitUniforms; lengt
   if (o.collide) {
     u.uCapA = o.collide.uCapA;
     u.uCapB = o.collide.uCapB;
+    u.uCapPad = { value: o.collidePad ?? 0 };
   }
   const defs = (o.sway ? '#define W_SWAY\n' : '') + (o.collide ? '#define W_COLLIDE\n' : '');
   m.onBeforeCompile = (shader) => {
@@ -506,7 +518,7 @@ diffuseColor.rgb *= mix(1.0, sN.b, 0.7);
 }
 
 /** Alpha-tested loose-thread cards (fringe texture: rgb luminance, a coverage). uv.x metres along the edge, uv.y 0 (edge) .. 1 (thread tips). */
-export function fringeMaterial(o: { tier: Tier; tex: TexPair; dye: THREE.ColorRepresentation; width: number; sway?: { uniforms: OutfitUniforms; length: number }; collide?: OutfitUniforms; dust?: number }) {
+export function fringeMaterial(o: { tier: Tier; tex: TexPair; dye: THREE.ColorRepresentation; width: number; sway?: { uniforms: OutfitUniforms; length: number }; collide?: OutfitUniforms; collidePad?: number; dust?: number }) {
   const m = new THREE.MeshStandardMaterial({ color: new THREE.Color(o.dye), roughness: 0.95, side: THREE.DoubleSide, alphaTest: 0.5 });
   m.name = 'wardrobe:fringe';
   m.alphaToCoverage = o.tier !== 'low';
@@ -523,6 +535,7 @@ export function fringeMaterial(o: { tier: Tier; tex: TexPair; dye: THREE.ColorRe
   if (o.collide) {
     u.uCapA = o.collide.uCapA;
     u.uCapB = o.collide.uCapB;
+    u.uCapPad = { value: o.collidePad ?? 0 };
   }
   const defs = (o.sway ? '#define W_SWAY\n' : '') + (o.collide ? '#define W_COLLIDE\n' : '');
   m.onBeforeCompile = (shader) => {

@@ -40,6 +40,10 @@ const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
+const _cv = new THREE.Vector3();
+const _cu = new THREE.Vector3();
+const _acc = new THREE.Vector3();
+const _wl = new THREE.Vector3();
 
 /** Leg capsule driven by two bones (root space), used for skirt collision in the vertex shader and by cords. */
 export interface Capsule {
@@ -129,8 +133,19 @@ export class Chain {
   private tassel: { length: number; cards: number };
   private initialDir: THREE.Vector3;
   private stiffness: number;
+  private prevA = new THREE.Vector3();
+  private hasPrevA = false;
+  /** drawn by a ChainBatch (Outfit.addChainBatch) instead of its own mesh */
+  batched = false;
+  get radialCount() {
+    return this.radial;
+  }
+  /** damping of the motion relative to the anchor (1/s) and air drag on the world motion (1/s) */
+  relDamp = 2.2;
+  airDrag = 0.35;
 
   reset() {
+    this.hasPrevA = false;
     this.anchor.getWorldPosition(_v);
     _w.copy(this.initialDir).transformDirection(this.anchor.matrixWorld);
     for (let i = 0; i < this.n; i++) {
@@ -149,13 +164,21 @@ export class Chain {
     p[0] = _v.x;
     p[1] = _v.y;
     p[2] = _v.z;
+    if (!this.hasPrevA) {
+      this.prevA.copy(_v);
+      this.hasPrevA = true;
+    }
     // the first segment leaves the knot along the anchor's direction (stiff root)
     _w.copy(this.initialDir).transformDirection(this.anchor.matrixWorld);
     const g = -9.81 * dt * dt;
-    const damp = 0.985;
+    // damping RELATIVE TO THE BODY (the anchor's motion this step) plus a light air drag: the cords used to be
+    // damped against the world, i.e. dragged like sails, and trailed almost horizontally at a sprint
+    const ax = _v.x - this.prevA.x, ay = _v.y - this.prevA.y, az = _v.z - this.prevA.z;
+    this.prevA.copy(_v);
+    const damp = Math.exp(-this.relDamp * dt), drag = Math.exp(-this.airDrag * dt);
     for (let i = 1; i < n; i++) {
       const k = i * 3;
-      const vx = (p[k] - o[k]) * damp, vy = (p[k + 1] - o[k + 1]) * damp, vz = (p[k + 2] - o[k + 2]) * damp;
+      const vx = (ax + (p[k] - o[k] - ax) * damp) * drag, vy = (ay + (p[k + 1] - o[k + 1] - ay) * damp) * drag, vz = (az + (p[k + 2] - o[k + 2] - az) * damp) * drag;
       o[k] = p[k];
       o[k + 1] = p[k + 1];
       o[k + 2] = p[k + 2];
@@ -215,16 +238,24 @@ export class Chain {
     }
   }
 
+  /** the chain's own geometry (a ChainBatch merges several of them into one draw) */
+  get geometry() {
+    return this.geo;
+  }
+
   /** rebuild the tube in the space of `parentInv` (world -> mesh parent) */
   write(parentInv: THREE.Matrix4) {
-    const pos = this.geo.getAttribute('position') as THREE.BufferAttribute;
-    const nor = this.geo.getAttribute('normal') as THREE.BufferAttribute;
+    this.writeInto(parentInv, this.geo.getAttribute('position') as THREE.BufferAttribute, this.geo.getAttribute('normal') as THREE.BufferAttribute, 0, -1);
+  }
+
+  /** write the tube (at vertex `base`) + tassel cards (at `cardBase`, or right after the tube when < 0) */
+  writeInto(parentInv: THREE.Matrix4, pos: THREE.BufferAttribute, nor: THREE.BufferAttribute, base: number, cardBase: number) {
     const n = this.n, ring = this.radial + 1;
     const P = this.frames;
     for (let i = 0; i < n; i++) P[i].fromArray(this.p, i * 3).applyMatrix4(parentInv);
     // parallel-transport frames
-    const t = _v, u = _w, v = new THREE.Vector3();
-    const prevU = new THREE.Vector3(1, 0, 0);
+    const t = _v, u = _w, v = _cv;
+    const prevU = _cu.set(1, 0, 0);
     for (let i = 0; i < n; i++) {
       const a = P[Math.max(0, i - 1)], b = P[Math.min(n - 1, i + 1)];
       t.subVectors(b, a);
@@ -240,21 +271,21 @@ export class Chain {
         const ang = (j / this.radial) * Math.PI * 2;
         const c = Math.cos(ang), s = Math.sin(ang);
         const nx = u.x * c + v.x * s, ny = u.y * c + v.y * s, nz = u.z * c + v.z * s;
-        const k = i * ring + j;
+        const k = base + i * ring + j;
         const r = this.radius * taper;
         pos.setXYZ(k, P[i].x + nx * r, P[i].y + ny * r, P[i].z + nz * r);
         nor.setXYZ(k, nx, ny, nz);
       }
       if (i === n - 1 && this.tasselCards) {
         // crossed cards continuing the last segment
-        const base = n * ring;
+        const cb = cardBase < 0 ? base + n * ring : cardBase;
         const L = this.tassel.length;
         for (let c = 0; c < this.tasselCards; c++) {
           const ang = (c / this.tasselCards) * Math.PI;
           const cx = Math.cos(ang), sx = Math.sin(ang);
           const wx = u.x * cx + v.x * sx, wy = u.y * cx + v.y * sx, wz = u.z * cx + v.z * sx;
           const w = this.radius * 2.6;
-          const k = base + c * 4;
+          const k = cb + c * 4;
           const end = P[i];
           const flare = 1.8;
           pos.setXYZ(k, end.x - wx * w, end.y - wy * w, end.z - wz * w);
@@ -292,13 +323,13 @@ export class Pendulum {
       this.started = true;
     }
     const nv = _w.subVectors(_v, this.prev).divideScalar(dt);
-    const acc = nv.clone().sub(this.vel).divideScalar(dt);
+    const acc = _acc.copy(nv).sub(this.vel).divideScalar(dt);
     this.vel.copy(nv);
     this.prev.copy(_v);
     // acceleration into the pivot's local frame
     this.pivot.getWorldQuaternion(_q).invert();
     acc.applyQuaternion(_q);
-    const wl = wind.clone().applyQuaternion(_q);
+    const wl = _wl.copy(wind).applyQuaternion(_q);
     const k = (2 * Math.PI * this.opts.freq) ** 2;
     const c = 2 * this.opts.damping * 2 * Math.PI * this.opts.freq;
     // x-rotation swings the bag forward/back (driven by -z acceleration), z-rotation sideways (+x acceleration)
@@ -309,6 +340,78 @@ export class Pendulum {
     this.ang.x = THREE.MathUtils.clamp(this.ang.x + this.angV.x * dt, -this.opts.limit, this.opts.limit);
     this.ang.y = THREE.MathUtils.clamp(this.ang.y + this.angV.y * dt, -this.opts.limit, this.opts.limit);
     this.body.rotation.set(this.ang.x, 0, this.ang.y);
+  }
+}
+
+/** Several verlet chains written into one dynamic geometry (one draw per material group). */
+export class ChainBatch {
+  readonly mesh: THREE.Mesh;
+  private readonly bases: [number, number][] = [];
+  private readonly pos: THREE.BufferAttribute;
+  private readonly nor: THREE.BufferAttribute;
+  constructor(readonly chains: Chain[], material: THREE.Material | THREE.Material[], name: string) {
+    const tubeV: number[] = [], cardV: number[] = [];
+    let V = 0;
+    for (const c of chains) {
+      const total = (c.geometry.getAttribute('position') as THREE.BufferAttribute).count;
+      const tv = c.n * (c.radialCount + 1);
+      tubeV.push(tv);
+      cardV.push(total - tv);
+      V += total;
+    }
+    // layout: all tubes first, then all tassel cards (two contiguous index ranges = two groups)
+    const pos = new Float32Array(V * 3), nor = new Float32Array(V * 3), uv = new Float32Array(V * 2), gd = new Float32Array(V * 4);
+    const col = new Float32Array(V * 3).fill(1);
+    const tubeIdx: number[] = [], cardIdx: number[] = [];
+    const tubeStart: number[] = [];
+    let vt = 0;
+    for (let i = 0; i < chains.length; i++) {
+      tubeStart.push(vt);
+      vt += tubeV[i];
+    }
+    let vc = vt;
+    chains.forEach((c, i) => {
+      const g = c.geometry;
+      const cardStart = vc;
+      vc += cardV[i];
+      this.bases.push([tubeStart[i], cardV[i] > 0 ? cardStart : -1]);
+      const map = (v: number) => (v < tubeV[i] ? tubeStart[i] + v : cardStart + (v - tubeV[i]));
+      const u = g.getAttribute('uv') as THREE.BufferAttribute, d = g.getAttribute('gdata') as THREE.BufferAttribute;
+      const cc = g.getAttribute('color') as THREE.BufferAttribute | undefined;
+      for (let v = 0; v < tubeV[i] + cardV[i]; v++) {
+        const o = map(v);
+        uv[o * 2] = u.getX(v);
+        uv[o * 2 + 1] = u.getY(v);
+        for (let q = 0; q < 4; q++) gd[o * 4 + q] = d.getComponent(v, q);
+        if (cc) for (let q = 0; q < 3; q++) col[o * 3 + q] = cc.getComponent(v, q);
+      }
+      const idx = g.getIndex()!;
+      const tubeCount = g.groups.length > 1 ? g.groups[0].count : idx.count;
+      for (let t = 0; t < idx.count; t++) (t < tubeCount ? tubeIdx : cardIdx).push(map(idx.getX(t)));
+    });
+    const g = new THREE.BufferGeometry();
+    this.pos = new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage);
+    this.nor = new THREE.BufferAttribute(nor, 3).setUsage(THREE.DynamicDrawUsage);
+    g.setAttribute('position', this.pos);
+    g.setAttribute('normal', this.nor);
+    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    g.setAttribute('gdata', new THREE.BufferAttribute(gd, 4));
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.setIndex([...tubeIdx, ...cardIdx]);
+    if (Array.isArray(material)) {
+      g.addGroup(0, tubeIdx.length, 0);
+      if (cardIdx.length) g.addGroup(tubeIdx.length, cardIdx.length, 1);
+    }
+    this.mesh = new THREE.Mesh(g, material);
+    this.mesh.name = name;
+    this.mesh.frustumCulled = false;
+    this.mesh.castShadow = true;
+    this.mesh.receiveShadow = true;
+  }
+  write(parentInv: THREE.Matrix4) {
+    for (let i = 0; i < this.chains.length; i++) this.chains[i].writeInto(parentInv, this.pos, this.nor, this.bases[i][0], this.bases[i][1]);
+    this.pos.needsUpdate = true;
+    this.nor.needsUpdate = true;
   }
 }
 
@@ -323,6 +426,10 @@ export class Outfit {
   readonly stats: OutfitStats = { triangles: 0, drawCalls: 0, textures: [], buildMs: 0 };
   /** sandal sole thickness (m): raise the character by this (root.position.y or foot-IK ground height) */
   groundOffset = 0;
+  /** hem sway per m/s of body velocity (m) and its maximum (m) */
+  swayGain = 0.012;
+  swayMax = 0.05;
+  readonly batches: ChainBatch[] = [];
   private swayVel = new THREE.Vector3();
   private sway = new THREE.Vector3();
   private caps = new Float32Array(8 * 7);
@@ -353,6 +460,24 @@ export class Outfit {
     this.human.root.add(c.mesh);
     this.add(c.mesh);
     return c;
+  }
+
+  /**
+   * Several chains drawn as ONE mesh (tubes: material 0, tassel cards: material 1); per-chain colours come from
+   * each chain's colour attribute (use a vertexColors material). Saves 2 draw calls per chain on phones.
+   */
+  addChainBatch(chains: Chain[], materials: THREE.Material | THREE.Material[], name = 'chains') {
+    const b = new ChainBatch(chains, materials, name);
+    for (const c of chains) {
+      c.batched = true;
+      this.chains.push(c);
+      // the chain's own (unused) geometry is freed with the outfit
+      this.disposables.add(c.geometry);
+    }
+    this.batches.push(b);
+    this.human.root.add(b.mesh);
+    this.add(b.mesh);
+    return b;
   }
 
   finish(t0: number) {
@@ -386,16 +511,17 @@ export class Outfit {
     u.uSwayTime.value += dt;
     this.rootInv.copy(this.human.root.matrixWorld).invert();
     // hem sway: damped spring toward (-velocity * k + wind * k2), in root space
-    const target = _v.copy(ctx.velocity).multiplyScalar(-0.035).addScaledVector(ctx.wind, 0.012);
+    // heavy wool: the hem trails a little behind the motion (at a sprint ~5 cm, not a flared dress)
+    const target = _v.copy(ctx.velocity).multiplyScalar(-this.swayGain).addScaledVector(ctx.wind, 0.01);
     this.human.root.getWorldQuaternion(_q).invert();
     target.applyQuaternion(_q);
     target.y = 0;
-    const k = 60, c = 9;
+    const k = 45, c = 12; // near-critically damped (c_crit = 2 sqrt(k) = 13.4): no ringing after a stop
     if (dt > 0) {
       this.swayVel.addScaledVector(_w.copy(target).sub(this.sway).multiplyScalar(k).addScaledVector(this.swayVel, -c), dt);
       this.sway.addScaledVector(this.swayVel, dt);
     }
-    this.sway.clampLength(0, 0.12);
+    this.sway.clampLength(0, this.swayMax);
     u.uSway.value.copy(this.sway);
     // leg capsules
     const bones = this.human.bones;
@@ -418,7 +544,8 @@ export class Outfit {
       for (const ch of this.chains) ch.step(dt, ctx.wind, this.caps, cc);
       for (const p of this.pendulums) p.step(dt, ctx.wind);
     }
-    for (const ch of this.chains) ch.write(this.rootInv);
+    for (const ch of this.chains) if (!ch.batched) ch.write(this.rootInv);
+    for (const b of this.batches) b.write(this.rootInv);
   }
 
   /** snap dynamic parts to the current pose (after teleports / cuts) */

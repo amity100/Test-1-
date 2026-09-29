@@ -242,7 +242,11 @@ hairAO = vHairAO;
   // ribbons wider than a sample spacing. (Alpha-to-coverage is NOT used for strands: equal alpha maps to the
   // same sample mask, so overlapping strands would never add up.)
   float cov = hairCoverage();
-  if ( cov <= hairIGN( gl_FragCoord.xy + uDitherOffset + vec2( vHairRand * 61.0, vHairRand * 23.0 ) ) ) discard;
+  // Without MSAA (phones: FXAA, no TAA) a per-PIXEL dither never resolves and reads as static grain. There the
+  // threshold is per STRAND instead: a sub-pixel strand is either drawn as a continuous >= 1 px line or dropped
+  // entirely (a uniform random subset keeps the coverage right), so beards / hair read as strands, not noise.
+  float thr = uSamples < 1.5 ? fract( vHairRand * 97.13 + 0.271 ) : hairIGN( gl_FragCoord.xy + uDitherOffset + vec2( vHairRand * 61.0, vHairRand * 23.0 ) );
+  if ( cov <= thr ) discard;
   diffuseColor.a = 1.0;
 }`,
         )
@@ -325,7 +329,7 @@ reflectedLight.indirectSpecular *= hairAO * hairAO;`,
   }
 
   override customProgramCacheKey() {
-    return 'hair-strands-v2';
+    return 'hair-strands-v3';
   }
 }
 
@@ -380,7 +384,9 @@ if ( aJaw > 0.002 ) transformed = mix( transformed, ( uJaw * vec4( transformed, 
   setMSAA(samples: number) {
     const a2c = samples > 1;
     this.alphaToCoverage = a2c;
-    this.alphaHash = !a2c;
+    // without MSAA a hashed alpha is static grain at the hairline (phones have no TAA): a clean alpha test instead
+    this.alphaHash = false;
+    this.alphaTest = a2c ? 0 : 0.5;
     this.needsUpdate = true;
   }
   override customProgramCacheKey() {

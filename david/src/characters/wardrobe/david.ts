@@ -9,7 +9,7 @@ import { HullField, TAU, makeFrame, noise1, rng, smoothstep } from './loft';
 import { makeSkinned } from './body';
 import { clothDepthMaterial, clothMaterial, fringeMaterial, solidMaterial, texPair, type Tier } from './materials';
 import { Chain, Outfit, Pendulum } from './Outfit';
-import { makeSlingPouch, makeStaff, slingCordMaterial } from './props';
+import { makeSlingPouch, makeStaff, mergeStatic, slingCordMaterial } from './props';
 
 /*
  * David son of Jesse as a shepherd (1 Sam 16:11-12, 17:34-40), after the reference still:
@@ -80,7 +80,7 @@ export async function dressDavid(human: HumanModel, opts: DressOptions): Promise
     sideCling: 3,
     cinch: [beltY, 0.028 * S, 0.0045],
     blouse: 0.02,
-    folds: { amp: (y) => 0.0022 + 0.0065 * smoothstep(lm.yArmpit, beltY + 0.05, y), k: [7, 17], count: 8, seed: 11 },
+    folds: { amp: (y) => 0.0028 + 0.008 * smoothstep(lm.yArmpit, beltY + 0.05, y) + 0.003 * smoothstep(lm.yArmpit + 0.13, lm.yArmpit + 0.02, y), k: [5, 14], count: 9, seed: 11 },
     cols, rows: rowsUp, grime,
   });
   // ---------------------------------------------------------------- tunic: skirt (under the sash .. knee) + under-layer
@@ -90,15 +90,19 @@ export async function dressDavid(human: HumanModel, opts: DressOptions): Promise
   const skirtSpec = {
     mask: C.TORSO | C.THIGH_L | C.THIGH_R,
     ease: () => 0.012,
-    drape: 0.18,
-    flare: 0.2,
-    flareFrom: hipY - 0.01,
+    drape: 0.2,
+    flare: 0.15,
+    flareFrom: hipY - 0.02,
     cinch: [beltY, 0.028 * S, 0.0045] as [number, number, number],
-    folds: { amp: (y: number) => 0.005 + 0.024 * smoothstep(hipY + 0.03, hemY, y), k: [4, 11] as [number, number], count: 9, seed: 5 },
-    cols, rows: low ? 26 : 44, grime: () => 0.1,
+    // fewer, deeper, irregular folds (loose heavy weave) instead of an even flared tube
+    folds: { amp: (y: number) => 0.006 + 0.03 * smoothstep(hipY + 0.05, hemY, y), k: [3, 9] as [number, number], count: 11, seed: 5 },
+    // (low: 40 rows, not 26: the deep hem folds faceted into horizontal bands at 2 cm rows)
+    cols, rows: low ? 40 : 48, grime: () => 0.1,
   };
   const skirt = bodyTube(fit, { ...skirtSpec, low: hem, high: () => beltY + 0.035 * S });
-  const under = bodyTube(fit, { ...skirtSpec, low: underHem, high: () => hemY + 0.09 * S, offset: -0.0045, rows: low ? 10 : 16 });
+  // the longer under-layer sits 1 cm inside the skirt: its hem sways less than the skirt's at the same height (its
+  // lower edge is lower), and at 4.5 mm it printed through the skirt as horizontal bands on phones
+  const under = bodyTube(fit, { ...skirtSpec, low: underHem, high: () => hemY + 0.075 * S, offset: -0.01, rows: low ? 14 : 18 });
 
   // ---------------------------------------------------------------- sleeves
   const sleeves = (['L', 'R'] as const).map((side, i) =>
@@ -117,14 +121,16 @@ export async function dressDavid(human: HumanModel, opts: DressOptions): Promise
     [...tubeUV(skirt.tube, 2.7, hemY + 0.17), 0.012, 1.3],
   ];
   const oat = 0xeadcc4;
-  const tunicUp = clothMaterial({ tier, tex: coarse, tile: 0.36, dye: oat, roughness: 0.93, sheen: 0.55, normal: 1.1, grime: [0.62, 0.52, 0.4, 0.75], hem: [0, 0.1, 0.022, 0.75], edgeMask: [0, 1], holes: holesUp, transmit: 1.1 });
-  const tunicSk = clothMaterial({ tier, tex: coarse, tile: 0.36, dye: oat, roughness: 0.93, sheen: 0.55, normal: 1.1, grime: [0.6, 0.5, 0.38, 0.5], hem: [0.75, 0.2, 0.03, 0.85], edgeMask: [1, 0], holes: holesSkirt, sway: swayCfg, collide: U, transmit: 1.1 });
-  const underMat = clothMaterial({ tier, tex: medium, tile: 0.1, dye: 0xe6d3a8, roughness: 0.95, sheen: 0.5, hem: [0.85, 0.12, 0.03, 0.9], edgeMask: [1, 0], sway: swayCfg, collide: U, transmit: 1.0 });
-  const sleeveMat = clothMaterial({ tier, tex: coarse, tile: 0.36, dye: oat, roughness: 0.93, sheen: 0.55, normal: 1.1, grime: [0.62, 0.52, 0.4, 0.6], hem: [0.15, 0.06, 0.022, 0.8], edgeMask: [1, 0], transmit: 1.2 });
-  const fringeMat = fringeMaterial({ tier, tex: fringeT, dye: 0xd9ccb2, width: 0.05, sway: swayCfg, collide: U, dust: 0.5 });
+  // open grid weave like the reference: the gaps between the threads read dark (gap), light shines through at the edges
+  const tunicUp = clothMaterial({ tier, tex: coarse, tile: 0.36, dye: oat, roughness: 0.93, sheen: 0.55, normal: 0.95, grime: [0.62, 0.52, 0.4, 0.75], hem: [0, 0.1, 0.022, 0.75], edgeMask: [0, 1], holes: holesUp, transmit: 1.1, gap: 0.55 });
+  const tunicSk = clothMaterial({ tier, tex: coarse, tile: 0.36, dye: oat, roughness: 0.93, sheen: 0.55, normal: 0.95, grime: [0.6, 0.5, 0.38, 0.5], hem: [0.75, 0.2, 0.03, 0.85], edgeMask: [1, 0], holes: holesSkirt, sway: swayCfg, collide: U, collidePad: 0.004, transmit: 1.1, gap: 0.55 });
+  const underMat = clothMaterial({ tier, tex: medium, tile: 0.1, dye: 0xe6d3a8, roughness: 0.95, sheen: 0.5, hem: [0.85, 0.12, 0.03, 0.9], edgeMask: [1, 0], sway: swayCfg, collide: U, transmit: 1.0, gap: 0.3 });
+  const sleeveMat = clothMaterial({ tier, tex: coarse, tile: 0.36, dye: oat, roughness: 0.93, sheen: 0.55, normal: 0.95, grime: [0.62, 0.52, 0.4, 0.6], hem: [0.15, 0.06, 0.022, 0.8], edgeMask: [1, 0], transmit: 1.2, gap: 0.55 });
+  const fringeMat = fringeMaterial({ tier, tex: fringeT, dye: 0xd9ccb2, width: 0.05, sway: swayCfg, collide: U, collidePad: 0.004, dust: 0.5 });
   const fringeMatUnder = fringeMaterial({ tier, tex: fringeT, dye: 0xc9b58c, width: 0.045, sway: swayCfg, collide: U, dust: 0.55 });
   const fringeMatArm = fringeMaterial({ tier, tex: fringeT, dye: 0xd9ccb2, width: 0.05 });
-  const depthSkirt = clothDepthMaterial({ sway: swayCfg, collide: U });
+  const depthSkirt = clothDepthMaterial({ sway: swayCfg, collide: U, collidePad: 0.004 });
+  const depthUnder = clothDepthMaterial({ sway: swayCfg, collide: U });
 
   // ---------------------------------------------------------------- skinned meshes
   const tw = torsoWeights(fit);
@@ -148,12 +154,14 @@ export async function dressDavid(human: HumanModel, opts: DressOptions): Promise
   const skMesh = makeSkinned(human, skirtGeo, [tunicSk, fringeMat], sw, { name: 'tunicSkirt', depthMaterial: depthSkirt });
   outfit.add(skMesh);
   const underGeo = merge([under.tube.geometry, fringeStrip(under.tube, 0.032 * S, 9, 0.05)]);
-  const unMesh = makeSkinned(human, underGeo, [underMat, fringeMatUnder], sw, { name: 'tunicUnder', depthMaterial: depthSkirt, castShadow: !low });
+  const unMesh = makeSkinned(human, underGeo, [underMat, fringeMatUnder], sw, { name: 'tunicUnder', depthMaterial: depthUnder, castShadow: !low });
   outfit.add(unMesh);
-  for (const [i, s] of sleeves.entries()) {
-    const side = i === 0 ? 'L' : 'R';
-    const g = merge([s.tube.geometry, fringeStrip(s.tube, 0.016 * S, 50 + i, 0.2)]);
-    const m = makeSkinned(human, g, [sleeveMat, fringeMatArm], armWeights(fit, side), { name: `sleeve${side}` });
+  {
+    // both sleeves (+ their frayed cuffs) in one skinned mesh: 2 draw calls instead of 4
+    const tubes = merge(sleeves.map((s) => s.tube.geometry), false);
+    const cuffs = merge(sleeves.map((s, i) => fringeStrip(s.tube, 0.016 * S, 50 + i, 0.2)), false);
+    const wL = armWeights(fit, 'L'), wR = armWeights(fit, 'R');
+    const m = makeSkinned(human, merge([tubes, cuffs]), [sleeveMat, fringeMatArm], (i, p) => (p.x > 0 ? wL(i, p) : wR(i, p)), { name: 'sleeves' });
     outfit.add(m);
   }
 
@@ -173,29 +181,30 @@ export async function dressDavid(human: HumanModel, opts: DressOptions): Promise
   });
 
   // ---------------------------------------------------------------- sash: three twisted wraps + knot + hanging cords
-  const rust = new THREE.Color(0x7c3a1d), tan = new THREE.Color(0xb48a55);
+  // a wide, soft bundle of twisted wool cords (reference: ~8 cm, rust-brown dominant with tan), wound 4 times
+  const rust = new THREE.Color(0x7a3418), tan = new THREE.Color(0xa9824f), rustDk = new THREE.Color(0x5a2512);
   const sashGeos: THREE.BufferGeometry[] = [];
   const ringR = (th: number) => upper.R(beltY, th);
-  const wraps = low ? 2 : 3;
-  const rc = 0.0046 * S; // strand radius
-  const cordR = rc * 2.1;
+  const wraps = low ? 4 : 5;
+  const rc = 0.0052 * S; // strand radius
+  const cordR = rc * 2.05;
   for (let k = 0; k < wraps; k++) {
-    const dy = (k - (wraps - 1) / 2) * cordR * 1.55;
-    const tilt = (k - 1) * 0.006;
+    const dy = (k - (wraps - 1) / 2) * cordR * 1.28;
+    const tilt = (k - (wraps - 1) / 2) * 0.004;
     const ph = k * 1.9;
     for (let sIdx = 0; sIdx < 2; sIdx++) {
       const pts: THREE.Vector3[] = [];
       const N = low ? 120 : 220;
       for (let i = 0; i < N; i++) {
         const th = (i / N) * TAU;
-        const r = ringR(th) + cordR * 0.95;
+        const r = ringR(th) + cordR * 0.8 + 0.0015 * Math.sin(th * 3 + k);
         const tau = th * 26 + sIdx * Math.PI + ph;
         const y = beltY + dy + tilt * Math.cos(th - 0.3) + Math.sin(tau) * rc * 0.95;
-        const rr = r + Math.cos(tau) * rc * 0.95;
+        const rr = r + Math.cos(tau) * rc * 0.7; // pressed flat against the body (soft wool)
         pts.push(upper.field.point(y, th, rr));
       }
       const g = tubeAlong(pts, rc, low ? 4 : 6, { closed: true, uScale: 1 });
-      const col = sIdx === 0 ? rust : tan;
+      const col = sIdx === 0 ? rust : k % 2 ? rustDk : tan;
       const n = (g.getAttribute('position') as THREE.BufferAttribute).count;
       const ca = new Float32Array(n * 3);
       for (let v = 0; v < n; v++) col.toArray(ca, v * 3);
@@ -207,39 +216,79 @@ export async function dressDavid(human: HumanModel, opts: DressOptions): Promise
   const knotTh = 0.26;
   const knotBase = upper.field.point(beltY - 0.004, knotTh, ringR(knotTh) + cordR * 2.2);
   const outDir = new THREE.Vector3(Math.sin(knotTh), 0, Math.cos(knotTh));
-  for (let sIdx = 0; sIdx < 2; sIdx++) {
-    const kg = new THREE.TorusKnotGeometry(0.0135 * S, rc * 1.05, low ? 40 : 72, low ? 4 : 6, 2, 3);
-    kg.scale(1, 1.1, 0.55);
-    kg.rotateZ(sIdx * 0.9 + 0.3);
-    kg.lookAt(outDir);
-    kg.translate(knotBase.x, knotBase.y, knotBase.z);
-    kg.deleteAttribute('normal');
-    kg.computeVertexNormals();
-    const n = (kg.getAttribute('position') as THREE.BufferAttribute).count;
-    const ca = new Float32Array(n * 3);
-    for (let v = 0; v < n; v++) (sIdx === 0 ? rust : tan).toArray(ca, v * 3);
-    kg.setAttribute('color', new THREE.BufferAttribute(ca, 3));
-    const uvs = kg.getAttribute('uv') as THREE.BufferAttribute;
-    for (let v = 0; v < n; v++) uvs.setXY(v, uvs.getY(v), uvs.getX(v) * 0.5);
-    sashGeos.push(kg);
+  {
+    // a real knot: the two ends are wrapped round the bundle (two twisted loops side by side, crossing over the
+    // front), with a squat twisted bulge where they cross; the hanging cords come out from under it
+    const tan3 = new THREE.Vector3(Math.cos(knotTh), 0, -Math.sin(knotTh));
+    const up = new THREE.Vector3(0, 1, 0);
+    const bundleH = wraps * cordR * 1.28 + cordR;
+    const c0 = upper.field.point(beltY, knotTh, ringR(knotTh));
+    for (let L = 0; L < 2; L++) {
+      const side = L === 0 ? -1 : 1;
+      for (let sIdx = 0; sIdx < 2; sIdx++) {
+        const pts: THREE.Vector3[] = [];
+        const N = low ? 28 : 56;
+        for (let i = 0; i <= N; i++) {
+          const f = i / N, ph = f * TAU;
+          // loop round the bundle's cross-section (front half proud, back half tucked just behind it)
+          const outR = Math.sin(ph) > 0 ? cordR * 2.2 + rc * 1.2 : cordR * 0.35;
+          const v = up.clone().multiplyScalar(Math.cos(ph) * (bundleH * 0.55 + rc))
+            .addScaledVector(outDir, cordR * 1.1 + Math.sin(ph) * outR * 0.9)
+            .addScaledVector(tan3, side * (rc * 2.1 + 0.004 * Math.sin(ph * 2)) + (f - 0.5) * rc * 1.2 * side);
+          // twist the two strands of each end round each other
+          const tw = ph * 3 + sIdx * Math.PI;
+          v.addScaledVector(tan3, Math.cos(tw) * rc * 0.8).addScaledVector(outDir, Math.sin(tw) * rc * 0.6);
+          pts.push(c0.clone().add(v));
+        }
+        const g = tubeAlong(pts, rc * 1.08, low ? 4 : 6, { uScale: 1 });
+        const n = (g.getAttribute('position') as THREE.BufferAttribute).count;
+        const ca = new Float32Array(n * 3);
+        for (let q = 0; q < n; q++) (sIdx === 0 ? rust : L ? tan : rustDk).toArray(ca, q * 3);
+        g.setAttribute('color', new THREE.BufferAttribute(ca, 3));
+        sashGeos.push(g);
+      }
+    }
+    // the crossing: a short, fat twisted wrap over the front of both loops
+    for (let sIdx = 0; sIdx < 2; sIdx++) {
+      const pts: THREE.Vector3[] = [];
+      const N = low ? 14 : 28;
+      for (let i = 0; i <= N; i++) {
+        const f = i / N;
+        const x = (f - 0.5) * rc * 7.5;
+        const tw = f * TAU * 1.5 + sIdx * Math.PI;
+        pts.push(c0.clone()
+          .addScaledVector(tan3, x)
+          .addScaledVector(up, -0.004 + Math.cos(tw) * rc * 0.9 - 0.006 * (f - 0.5))
+          .addScaledVector(outDir, cordR * 3.1 + Math.sin(tw) * rc * 0.9 + (1 - Math.abs(f - 0.5) * 2) * rc * 0.8));
+      }
+      const g = tubeAlong(pts, rc * 1.15, low ? 4 : 6, { uScale: 1 });
+      const n = (g.getAttribute('position') as THREE.BufferAttribute).count;
+      const ca = new Float32Array(n * 3);
+      for (let q = 0; q < n; q++) (sIdx === 0 ? rust : tan).toArray(ca, q * 3);
+      g.setAttribute('color', new THREE.BufferAttribute(ca, 3));
+      sashGeos.push(g);
+    }
   }
   const sashMat = solidMaterial({ tier, tex: rope, color: 0xffffff, roughness: 0.88, repeat: [1, 1 / 0.025], normal: 1.3 });
   sashMat.vertexColors = true;
   const sashMesh = makeSkinned(human, merge(sashGeos, false), sashMat, partWeights(fit, C.TORSO, 8), { name: 'sash' });
   outfit.add(sashMesh);
   // hanging cords (verlet) with frayed tassels
-  const knotSock = human.addSocket('wardrobeKnot', 'spine05', knotBase.clone().addScaledVector(outDir, 0.004).add(new THREE.Vector3(0, -0.012, 0)));
+  const knotSock = human.addSocket('wardrobeKnot', 'spine05', knotBase.clone().addScaledVector(outDir, 0.008).add(new THREE.Vector3(0, -0.022, 0)));
   const cordMat = solidMaterial({ tier, tex: rope, color: 0xffffff, roughness: 0.9, repeat: [1, 1 / 0.02], normal: 1.4 });
   cordMat.vertexColors = true;
   const tasselMat = fringeMaterial({ tier, tex: fringeT, dye: 0xa0764a, width: 0.03 });
+  // the two ends of the sash (each a pair of twisted cords) hang to the knee with frayed tassels; all in ONE mesh
   const cords = low ? [0.5, 0.44] : [0.47, 0.52, 0.43, 0.55];
-  cords.forEach((len, i) => {
-    const ch = new Chain(knotSock, len * S, low ? 7 : 11, rc * 1.45, [cordMat, tasselMat], {
-      radial: low ? 4 : 6, tassel: { length: 0.055 * S, cards: 2 }, color: i % 2 ? tan : rust,
-      initialDir: new THREE.Vector3((i - 1.5) * 0.12, -1, 0.25),
+  const cordChains = cords.map((len, i) => {
+    const ch = new Chain(knotSock, len * S, low ? 7 : 11, rc * 1.3, [cordMat, tasselMat], {
+      radial: low ? 4 : 6, tassel: { length: 0.065 * S, cards: 2 }, color: i === 1 ? tan : i === 3 ? rustDk : rust,
+      initialDir: new THREE.Vector3((i - 1.5) * 0.1, -1, 0.18),
     });
-    outfit.addChain(ch);
+    ch.relDamp = 2.6;
+    return ch;
   });
+  outfit.addChainBatch(cordChains, [cordMat, tasselMat], 'sashCords');
 
   // ---------------------------------------------------------------- satchel (left hip) + strap over the left shoulder
   const bagTh = 1.22;
@@ -368,7 +417,9 @@ function buildSatchel(tier: Tier, t: { coarse: Awaited<ReturnType<typeof texPair
   const n = bagGeo.getAttribute('position').count;
   bagGeo.setAttribute('gdata', new THREE.BufferAttribute(new Float32Array(n * 4).map((_, k) => (k % 4 === 2 ? 0.35 : k % 4 === 0 ? 1 : 1)), 4));
   // woven bag body (goat-hair / wool, darker), dusty
-  const bagMat = clothMaterial({ tier, tex: t.coarse, tile: 0.1, dye: 0x9b8062, roughness: 0.95, sheen: 0.3, normal: 1.3, grime: [0.55, 0.45, 0.35, 0.6], hem: [0, 0.1, 0.01, 0], edgeMask: [0, 0], transmit: 0 });
+  // the bag is mostly WOVEN (reference): a coarse goat-hair / wool basket weave, darker gaps, dusty; leather only
+  // for the short flap / rim, the lacing and the strap
+  const bagMat = clothMaterial({ tier, tex: t.coarse, tile: 0.15, dye: 0x8d6d4b, roughness: 0.96, sheen: 0.3, normal: 1.6, grime: [0.55, 0.45, 0.35, 0.6], hem: [0, 0.1, 0.01, 0], edgeMask: [0, 0], transmit: 0, gap: 0.7 });
   const bag = new THREE.Mesh(bagGeo, bagMat);
   bag.castShadow = true;
   bag.receiveShadow = true;
@@ -383,7 +434,7 @@ function buildSatchel(tier: Tier, t: { coarse: Awaited<ReturnType<typeof texPair
       const s = (j / fu) * 2 - 1;
       const x = s * a(0.1) * 1.02;
       let y: number, z: number;
-      const vEnd = 0.52 - 0.13 * s * s;
+      const vEnd = 0.2 - 0.05 * s * s; // a short leather flap over the mouth of the woven bag
       if (q < 0.25) {
         const ang = (q / 0.25) * Math.PI * 0.5; // over the top from the back
         const rb = b(0.02) + 0.006;
@@ -416,7 +467,7 @@ function buildSatchel(tier: Tier, t: { coarse: Awaited<ReturnType<typeof texPair
   swing.add(flap);
   // laced edge of the flap + a toggle
   const lace = tubeAlong(edge, 0.0028, low ? 4 : 5, { twist: 400 });
-  const laceMat = solidMaterial({ tier, tex: t.rope, color: 0x4a2e1a, roughness: 0.8, repeat: [1, 1 / 0.01] });
+  const laceMat = flapMat; // leather thong lacing (same material: merged into the flap's draw call)
   swing.add(new THREE.Mesh(lace, laceMat));
   const toggle = new THREE.CylinderGeometry(0.006, 0.006, 0.03, 8);
   toggle.rotateZ(Math.PI / 2);
@@ -430,6 +481,7 @@ function buildSatchel(tier: Tier, t: { coarse: Awaited<ReturnType<typeof texPair
     swing.add(new THREE.Mesh(loop, flapMat));
   }
   swing.traverse((c) => ((c as THREE.Mesh).isMesh ? ((c as THREE.Mesh).castShadow = true) : null));
+  mergeStatic(swing); // bag + one leather mesh (flap, lacing, toggle, loops): 2 draw calls
   return { pivot, swing };
 }
 
@@ -439,8 +491,23 @@ function buildSandals(fit: Fit, t: { leather: Awaited<ReturnType<typeof texPair>
   const low = tier === 'low';
   const grp = new THREE.Group();
   grp.name = 'sandals';
-  const soleMat = solidMaterial({ tier, tex: t.leather, color: 0x5e3f28, roughness: 0.75, repeat: [6, 6], normal: 1 });
-  const strapMat = solidMaterial({ tier, tex: t.leather, color: 0x4f321f, roughness: 0.6, repeat: [2, 30], normal: 1.2, sheen: low ? 0 : 0.2 });
+  // both sandals (soles + straps) in ONE skinned mesh: vertex colours tell sole and straps apart, UVs pre-scaled
+  const mat = solidMaterial({ tier, tex: t.leather, color: 0xffffff, roughness: 0.66, repeat: [1, 1], normal: 1.15, sheen: low ? 0 : 0.15 });
+  mat.vertexColors = true;
+  const soleCol = new THREE.Color(0x5e3f28), strapCol = new THREE.Color(0x4f321f);
+  const all: THREE.BufferGeometry[] = [];
+  const paint = (g: THREE.BufferGeometry, col: THREE.Color, su: number, sv: number) => {
+    const n = (g.getAttribute('position') as THREE.BufferAttribute).count;
+    const ca = new Float32Array(n * 3);
+    for (let v = 0; v < n; v++) col.toArray(ca, v * 3);
+    g.setAttribute('color', new THREE.BufferAttribute(ca, 3));
+    const uv = g.getAttribute('uv') as THREE.BufferAttribute | undefined;
+    if (uv) for (let v = 0; v < uv.count; v++) uv.setXY(v, uv.getX(v) * su, uv.getY(v) * sv);
+    if (!g.getAttribute('normal')) g.computeVertexNormals();
+    all.push(g);
+  };
+  const wFoot = { L: partWeights(fit, C.FOOT_L, 6), R: partWeights(fit, C.FOOT_R, 6) };
+  const wLeg = { L: partWeights(fit, C.SHIN_L | C.FOOT_L, 6), R: partWeights(fit, C.SHIN_R | C.FOOT_R, 6) };
   for (const s of ['L', 'R'] as const) {
     const footMask = s === 'L' ? C.FOOT_L : C.FOOT_R;
     // footprint hull (xz) of the lowest foot vertices
@@ -502,9 +569,7 @@ function buildSandals(fit: Fit, t: { leather: Awaited<ReturnType<typeof texPair>
     sole.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
     sole.setIndex(idx);
     sole.computeVertexNormals();
-    const footW = partWeights(fit, footMask, 6);
-    const soleMesh = makeSkinned(human, sole, soleMat, footW, { name: `sole${s}` });
-    grp.add(soleMesh);
+    paint(sole, soleCol, 6, 6);
     // straps: forefoot band + criss-cross thongs round the ankle + side risers to the sole
     const ank = lm.ankle[s];
     const legMask = (s === 'L' ? C.SHIN_L : C.SHIN_R) | footMask;
@@ -567,10 +632,13 @@ function buildSandals(fit: Fit, t: { leather: Awaited<ReturnType<typeof texPair>
       }
       strapGeos.push(ribbon(pts, nrm, 0.011 * S, 0.0022));
     }
-    const strapW = partWeights(fit, legMask, 6);
-    const straps = makeSkinned(human, merge(strapGeos, false), strapMat, strapW, { name: `sandalStraps${s}` });
-    grp.add(straps);
+    paint(merge(strapGeos, false), strapCol, 2, 30);
+    void legMask;
   }
+  grp.add(makeSkinned(human, merge(all, false), mat, (i, p) => {
+    const s = p.x > 0 ? 'L' : 'R';
+    return p.y < 0.012 ? wFoot[s](i, p) : wLeg[s](i, p);
+  }, { name: 'sandals' }));
   human.root.add(grp);
   return grp;
 }

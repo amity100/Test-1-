@@ -183,6 +183,32 @@ export function blendWeights(a: Weights, b: Weights, t: number): Weights {
  * skinning (set custom onBeforeCompile hooks BEFORE calling this).  Normals are recomputed in the bind pose
  * unless `keepNormals` (then rest normals are inverse-rotated).
  */
+const _q = new THREE.Quaternion();
+const _t = new THREE.Vector3();
+const _sc = new THREE.Vector3();
+const _dqCache = new WeakMap<object, Float32Array>();
+/** per bone: rest dual quaternion (r xyzw, d xyzw), uniform scale, DQS factor — as human/DualQuatSkinning.ts computes them */
+function restDualQuats(human: HumanModel, mats: THREE.Matrix4[]): Float32Array {
+  const hit = _dqCache.get(human);
+  if (hit && hit.length === mats.length * 10) return hit;
+  const factors = (human.dqs as unknown as { factors?: Float32Array }).factors;
+  const out = new Float32Array(mats.length * 10);
+  const q = new THREE.Quaternion(), t = new THREE.Vector3(), sc = new THREE.Vector3();
+  mats.forEach((mm, i) => {
+    mm.decompose(t, q, sc);
+    const o = i * 10;
+    out[o] = q.x; out[o + 1] = q.y; out[o + 2] = q.z; out[o + 3] = q.w;
+    out[o + 4] = 0.5 * (t.x * q.w + t.y * q.z - t.z * q.y);
+    out[o + 5] = 0.5 * (-t.x * q.z + t.y * q.w + t.z * q.x);
+    out[o + 6] = 0.5 * (t.x * q.y - t.y * q.x + t.z * q.w);
+    out[o + 7] = -0.5 * (t.x * q.x + t.y * q.y + t.z * q.z);
+    out[o + 8] = (sc.x + sc.y + sc.z) / 3;
+    out[o + 9] = factors && factors.length === mats.length ? factors[i] : 0;
+  });
+  _dqCache.set(human, out);
+  return out;
+}
+
 export function makeSkinned(
   human: HumanModel,
   geo: THREE.BufferGeometry,
@@ -195,17 +221,28 @@ export function makeSkinned(
   const si = new Uint16Array(n * 8);
   const sw = new Float32Array(n * 8);
   const mats = human.restSkinMatrices();
+  // The body is skinned with a per-bone blend of LBS and DQS (human/DualQuatSkinning.ts). Inverting only the LBS
+  // matrix put each garment vertex back to a slightly different place than it was modelled (DQS != LBS wherever
+  // bones with different rest rotations share a vertex) — an error that jumps with the weights from row to row and
+  // printed as horizontal ribbing on every tunic. Invert the SAME blend: A = (1 - f) * LBS + f * DQS (both affine
+  // in the bind position), exactly what the vertex shader applies in the rest pose.
+  const dq = restDualQuats(human, mats);
   const out = new Float32Array(n * 3);
   const M = new THREE.Matrix4();
+  const D = new THREE.Matrix4();
   const nrm = geo.getAttribute('normal') as THREE.BufferAttribute | undefined;
   const outN = nrm ? new Float32Array(n * 3) : null;
   const nm = new THREE.Matrix3();
   const v = new THREE.Vector3();
+  const accR = new THREE.Vector4(), accD = new THREE.Vector4();
   for (let i = 0; i < n; i++) {
     _p.fromBufferAttribute(pos, i);
     const w = weights(i, _p);
     let m = 0;
     M.elements.fill(0);
+    accR.set(0, 0, 0, 0);
+    accD.set(0, 0, 0, 0);
+    let accS = 0, accF = 0, ref = -1;
     for (const [b, x] of w) {
       if (m >= 8) break;
       si[i * 8 + m] = b;
@@ -213,11 +250,33 @@ export function makeSkinned(
       m++;
       const e = mats[b].elements;
       for (let z = 0; z < 16; z++) M.elements[z] += e[z] * x;
+      const o = b * 10;
+      if (ref < 0) ref = b;
+      const r0 = ref * 10;
+      const dot = dq[o] * dq[r0] + dq[o + 1] * dq[r0 + 1] + dq[o + 2] * dq[r0 + 2] + dq[o + 3] * dq[r0 + 3];
+      const sx = dot < 0 ? -x : x;
+      accR.x += dq[o] * sx; accR.y += dq[o + 1] * sx; accR.z += dq[o + 2] * sx; accR.w += dq[o + 3] * sx;
+      accD.x += dq[o + 4] * sx; accD.y += dq[o + 5] * sx; accD.z += dq[o + 6] * sx; accD.w += dq[o + 7] * sx;
+      accS += dq[o + 8] * x;
+      accF += dq[o + 9] * x;
     }
     if (m === 0) {
       si[i * 8] = 0;
       sw[i * 8] = 1;
       M.copy(mats[0]);
+    }
+    const f = Math.min(1, Math.max(0, accF * human.dqs.enabled));
+    if (m > 0 && f > 0) {
+      const len = Math.max(accR.length(), 1e-6);
+      accR.divideScalar(len);
+      accD.divideScalar(len);
+      // t = 2 (r.w d.xyz - d.w r.xyz + r.xyz x d.xyz)
+      const tx = 2 * (accR.w * accD.x - accD.w * accR.x + (accR.y * accD.z - accR.z * accD.y));
+      const ty = 2 * (accR.w * accD.y - accD.w * accR.y + (accR.z * accD.x - accR.x * accD.z));
+      const tz = 2 * (accR.w * accD.z - accD.w * accR.z + (accR.x * accD.y - accR.y * accD.x));
+      _q.set(accR.x, accR.y, accR.z, accR.w);
+      D.compose(_t.set(tx, ty, tz), _q, _sc.set(accS, accS, accS));
+      for (let z = 0; z < 16; z++) M.elements[z] = M.elements[z] * (1 - f) + D.elements[z] * f;
     }
     M.invert();
     v.copy(_p).applyMatrix4(M).toArray(out, i * 3);

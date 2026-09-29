@@ -44,9 +44,11 @@ const dir = (out: THREE.Vector3, x: number, y: number, z: number) => out.set(x, 
 // ================================================================================================= DAVID
 /** David (~20): thick, voluminous, tousled loose spiral ringlets, auburn / copper with sun-lightened tips. */
 export function davidStyle(): GroomStyle {
-  const ROOT: [number, number, number] = [0.15, 0.08, 0.045];
-  const MID: [number, number, number] = [0.37, 0.21, 0.11];
-  const TIP: [number, number, number] = [0.66, 0.45, 0.24];
+  // ~12 % lighter, sun-lightened copper (wardrobe polish pass, to match the reference in back light;
+  // was ROOT 0.15 0.08 0.045, MID 0.37 0.21 0.11, TIP 0.66 0.45 0.24)
+  const ROOT: [number, number, number] = [0.17, 0.092, 0.051];
+  const MID: [number, number, number] = [0.415, 0.238, 0.124];
+  const TIP: [number, number, number] = [0.74, 0.51, 0.27];
   const scalp: LayerStyle = {
     name: 'david-scalp',
     kind: 0,
@@ -121,7 +123,9 @@ export function davidStyle(): GroomStyle {
 /** King Saul (~48): thick dark brown-black shoulder-length hair combed back, grey threads; full beard, grey at the chin. */
 export function saulStyle(): GroomStyle {
   const DARK: [number, number, number] = [0.075, 0.056, 0.045];
-  const TIPD: [number, number, number] = [0.13, 0.095, 0.072];
+  // wardrobe polish: a touch lighter at the tips so a dense beard shows strand structure instead of a black mass
+  // (was 0.13 0.095 0.072)
+  const TIPD: [number, number, number] = [0.155, 0.114, 0.086];
   const GREY: [number, number, number] = [0.56, 0.54, 0.51];
   const scalp: LayerStyle = {
     name: 'saul-scalp',
@@ -177,15 +181,17 @@ export function saulStyle(): GroomStyle {
     kind: 1,
     reach: 0.3,
     mask: (s) => s.beardMask(),
-    strands: { low: 1600, medium: 5000, high: 12000 },
-    locks: 220,
+    // wardrobe polish pass: a full, combed, oiled royal beard - denser, shaped (fuller and squarer at the chin),
+    // coherent locks with small tight curls, few flyaways and fewer grey flecks (they read as noise at distance)
+    strands: { low: 2200, medium: 6000, high: 13000 },
+    locks: 240,
     sim: { low: 6, medium: 10, high: 16 },
     length: (f, n, R) => {
       const ax = Math.abs(f.x);
       const must = ss(0.03, 0.02, ax) * ss(-0.075, -0.06, f.y) * ss(0.0, 0.3, n.z);
-      const chin = ss(-0.04, -0.11, f.y) * ss(0.075, 0.02, ax);
-      const L = 0.03 + 0.055 * chin + 0.012 * ss(0.06, 0.03, ax);
-      return (must > 0.5 ? 0.028 : L) * (0.88 + 0.24 * R());
+      const chin = ss(-0.04, -0.11, f.y) * ss(0.085, 0.025, ax);
+      const L = 0.032 + 0.065 * chin + 0.012 * ss(0.06, 0.03, ax);
+      return (must > 0.5 ? 0.026 : L) * (0.92 + 0.16 * R());
     },
     comb: (f, n, out) => {
       const ax = Math.abs(f.x);
@@ -193,26 +199,26 @@ export function saulStyle(): GroomStyle {
       dir(out, Math.sign(f.x) * (0.15 + 0.9 * must), -1, 0.4 - 0.25 * must);
       return out;
     },
-    lift: 0.2, // court: groomed, oiled beard (was 0.35)
+    lift: 0.14, // wardrobe polish (court 0.2, originally 0.35)
     gravity: 12,
-    combPull: 9,
-    tousle: 2.2, // court (was 5)
-    volume: (t, R) => 0.002 + (R + 0.003) * ss(0, 0.3, t) + 0.006 * ss(0.2, 0.8, t),
-    curlR: [0.0018, 0.004],
-    curlPitch: [0.018, 0.03],
-    curlStart: 0.2,
-    curlNoise: 0.4, // court (was 0.6)
-    lockR: 0.005,
-    clump: 0.6, // court: combed locks (was 0.4)
-    frizz: 0.0003, // court (was 0.0005)
-    flyaway: 0.001, // court (was 0.003)
+    combPull: 11,
+    tousle: 1.2, // wardrobe polish (court 2.2, originally 5)
+    volume: (t, R) => 0.0016 + (R + 0.002) * ss(0, 0.3, t) + 0.0035 * ss(0.2, 0.8, t),
+    curlR: [0.0016, 0.0032],
+    curlPitch: [0.016, 0.024],
+    curlStart: 0.25,
+    curlNoise: 0.22, // wardrobe polish (court 0.4, originally 0.6)
+    lockR: 0.0055,
+    clump: 0.82, // wardrobe polish: combed, oiled locks (court 0.6, originally 0.4)
+    frizz: 0.0002, // (court 0.0003)
+    flyaway: 0.0004, // (court 0.001)
     width: 0.00019,
     stiffness: 0.45,
     childLen: [0.75, 1.0],
     colors: (R, f, root, tip) => {
       // grey at the chin (below the mouth, centre), scattered elsewhere
       const chin = ss(-0.07, -0.1, f.y) * ss(0.035, 0.012, Math.abs(f.x));
-      if (R() < 0.05 + 0.3 * chin) {
+      if (R() < 0.02 + 0.14 * chin) {
         lin(GREY, root);
         vary(root, R, 0.2);
         tip.copy(root).multiplyScalar(1.1);
@@ -230,9 +236,9 @@ export function saulStyle(): GroomStyle {
     ctrl: { low: 10, medium: 14, high: 18 },
     segs: { low: 14, medium: 22, high: 32 },
     shading: { shift: 0.035, roughness: 0.38, specular: 0.6, backlit: 0.8, scatter: 0.55, aoDirect: 0.55 },
-    capColor: [0.075, 0.058, 0.048],
+    capColor: [0.092, 0.07, 0.057], // wardrobe polish: a shade lighter under the denser beard (was 0.075 0.058 0.048)
     capOffset: 0.004,
-    capBeard: 0.85,
+    capBeard: 0.7, // wardrobe polish: the beard cap only under the dense core (hard black mask round the mouth on phones)
     widthTier: { low: 2.8, medium: 1.5, high: 1 },
   };
 }
