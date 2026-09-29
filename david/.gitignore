@@ -3,3 +3,4 @@ dist
 dist-single
 dev/screens
 __pycache__
+dist-artifact

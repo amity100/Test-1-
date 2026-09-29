@@ -134,4 +134,52 @@ w.__run = (mode: 'old' | 'new', frames = 24, showAt = 0.5) => {
   post.render(0);
   return res;
 };
+
+/**
+ * The other black flash: the old main.ts adaptive-resolution loop rendered the frame and THEN (same rAF
+ * callback) called renderer.setPixelRatio() + engine.resize(). Resizing a canvas clears its drawing
+ * buffer, and with nothing drawn afterwards the compositor presents that cleared buffer: one black frame
+ * every time the loop changed the resolution (every 2.5 s when a phone hovers around 37/69 fps).
+ * 'new' = Engine: the resize is deferred to the start of the next frame and followed by a render.
+ * Returns the mean luma of the drawing buffer as the compositor would present it.
+ */
+w.__resizeFlash = (mode: 'old' | 'new') => {
+  const post = new PostFX(renderer, scene, camera, cubeRT.texture, { msaa: 0, bloom: true, godRaySamples: 20, aa: 'fxaa', sharpen: 0.35, filmFx: false, bloomScale: 0.5, bloomMips: 5 });
+  const syncSize = () => {
+    const s = renderer.getDrawingBufferSize(new THREE.Vector2());
+    post.setSize(s.x, s.y);
+  };
+  const luma = () => {
+    const gl = renderer.getContext();
+    const W = gl.drawingBufferWidth, H = gl.drawingBufferHeight;
+    const buf = new Uint8Array(W * 4);
+    let sum = 0, n = 0;
+    for (const fy of [0.25, 0.5, 0.75]) {
+      gl.readPixels(0, Math.floor(H * fy), W, 1, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+      for (let x = 0; x < W; x += 3) { sum += 0.2126 * buf[x * 4] + 0.7152 * buf[x * 4 + 1] + 0.0722 * buf[x * 4 + 2]; n++; }
+    }
+    return +(sum / n).toFixed(1);
+  };
+  syncSize();
+  camera.position.set(0, 1.4, 2);
+  camera.lookAt(0, 1.0, -6);
+  camera.updateMatrixWorld();
+  post.render(1 / 30);
+  const before = luma();
+  const prOld = renderer.getPixelRatio();
+  if (mode === 'old') {
+    // main.ts @f96e486: frame(rawDt) ... then  renderer.setPixelRatio(pr); engine.resize();
+    renderer.setPixelRatio(prOld * 0.85);
+    renderer.setSize(innerWidth, innerHeight, false);
+    syncSize();
+  } else {
+    // Engine.render(): flushResize() -> applySize() -> ... -> post.render() in the same task
+    renderer.setPixelRatio(prOld * 0.85);
+    renderer.setSize(innerWidth, innerHeight, false);
+    syncSize();
+    post.render(1 / 30);
+  }
+  const presented = luma();
+  return { mode, before, presented, drawingBuffer: [renderer.getContext().drawingBufferWidth, renderer.getContext().drawingBufferHeight] };
+};
 w.__ready = true;

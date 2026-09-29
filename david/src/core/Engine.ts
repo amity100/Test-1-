@@ -89,7 +89,10 @@ export interface Quality extends RenderBudget, ContentBudget {
   mobile: boolean;
   /** current renderer pixel ratio (kept up to date by Engine; read-only for other modules) */
   pixelRatio: number;
-  /** extra multiplier on maxPixels picked by the benchmark when even the lowest tier is too slow (0.55..1) */
+  /**
+   * multiplier on maxPixels picked by the warm-up benchmark: < 1 when even the lowest tier is too slow
+   * (down to 0.55), > 1 when a fast device is limited by maxPixels, e.g. a tablet (up to 2.2)
+   */
   renderScale: number;
   /** GPU renderer string (for diagnostics) */
   gpu: string;
@@ -174,12 +177,13 @@ function guessTier(mobile: boolean, gpu: string): TierName {
   return 'mobile-low';
 }
 
+/** `?q=` values: a tier name, or the content names (high / medium / low; `?q=high` on a phone = mobile-high). */
 function tierFromParam(p: string | null, mobile: boolean): TierName | null {
   if (!p) return null;
   if ((TIER_LADDER as readonly string[]).includes(p)) return p as TierName;
-  if (p === 'high') return 'desktop-high';
-  if (p === 'medium') return 'desktop-medium';
-  if (p === 'low') return mobile ? 'mobile-low' : 'mobile-low';
+  if (p === 'high') return mobile ? 'mobile-high' : 'desktop-high';
+  if (p === 'medium') return mobile ? 'mobile-high' : 'desktop-medium';
+  if (p === 'low') return 'mobile-low';
   return null;
 }
 
@@ -225,6 +229,112 @@ export interface BenchResult {
   ms: number;
   pixelRatio: number;
   log: string[];
+}
+
+// =====================================================================================================
+// Texture budget helpers
+// =====================================================================================================
+
+/** Texture slots whose alpha channel is never read: safe to resample through a (premultiplied) 2D canvas. */
+const OPAQUE_SLOTS = new Set([
+  'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'bumpMap', 'displacementMap', 'emissiveMap', 'specularMap',
+  'specularIntensityMap', 'specularColorMap', 'clearcoatMap', 'clearcoatNormalMap', 'clearcoatRoughnessMap',
+  'sheenColorMap', 'sheenRoughnessMap', 'thicknessMap', 'lightMap', 'anisotropyMap', 'iridescenceMap',
+]);
+
+/**
+ * Every texture referenced by the materials under `root` (standard slots and ShaderMaterial uniforms).
+ * The value tells whether the texture may be resampled on the CPU: only opaque data (`map` of an opaque
+ * material, normal / roughness / ... maps). Alpha-tested or blended colour maps and custom-shader
+ * uniforms are never resampled (a 2D canvas premultiplies alpha: cut-out foliage would get dark fringes).
+ */
+function collectTextures(root: THREE.Object3D): Map<THREE.Texture, boolean> {
+  const out = new Map<THREE.Texture, boolean>();
+  const seen = new Set<THREE.Material>();
+  const add = (v: unknown, resampleOk: boolean) => {
+    if (!v || !(v as THREE.Texture).isTexture) return;
+    const t = v as THREE.Texture;
+    out.set(t, (out.get(t) ?? true) && resampleOk);
+  };
+  root.traverse((o) => {
+    const holder = o as THREE.Mesh & { customDepthMaterial?: THREE.Material; customDistanceMaterial?: THREE.Material };
+    const mats: (THREE.Material | undefined)[] = [];
+    if (Array.isArray(holder.material)) mats.push(...holder.material);
+    else mats.push(holder.material as THREE.Material | undefined);
+    mats.push(holder.customDepthMaterial, holder.customDistanceMaterial);
+    for (const m of mats) {
+      if (!m || seen.has(m)) continue;
+      seen.add(m);
+      const cutout = m.transparent || m.alphaTest > 0 || m.alphaHash || m.alphaToCoverage || !!(m as THREE.MeshStandardMaterial).alphaMap;
+      for (const [k, v] of Object.entries(m)) add(v, OPAQUE_SLOTS.has(k) || (k === 'map' && !cutout));
+      const uniforms = (m as THREE.ShaderMaterial).uniforms;
+      if (uniforms) {
+        for (const u of Object.values(uniforms)) {
+          const val = u?.value as unknown;
+          if (Array.isArray(val)) val.forEach((x) => add(x, false));
+          else add(val, false);
+        }
+      }
+    }
+  });
+  return out;
+}
+
+/** Pixel size of a texture's CPU-side image, if it is a decoded browser image. */
+function imageSize(img: unknown): { w: number; h: number; bitmap: boolean } | null {
+  if (!img) return null;
+  if (typeof HTMLImageElement !== 'undefined' && img instanceof HTMLImageElement) {
+    return img.complete && img.naturalWidth > 0 ? { w: img.naturalWidth, h: img.naturalHeight, bitmap: false } : null;
+  }
+  if (typeof HTMLCanvasElement !== 'undefined' && img instanceof HTMLCanvasElement) return { w: img.width, h: img.height, bitmap: false };
+  if (typeof ImageBitmap !== 'undefined' && img instanceof ImageBitmap) return { w: img.width, h: img.height, bitmap: true };
+  return null;
+}
+
+/** Area-filtered CPU downscale: repeated 2x halving (box filter, no aliasing), then one bilinear step. */
+function downscaleImage(img: CanvasImageSource, w: number, h: number, tw: number, th: number): HTMLCanvasElement | null {
+  let src = img;
+  let sw = w, sh = h;
+  for (;;) {
+    const halve = sw >= tw * 2 && sh >= th * 2;
+    const nw = halve ? Math.round(sw / 2) : tw;
+    const nh = halve ? Math.round(sh / 2) : th;
+    const c = document.createElement('canvas');
+    c.width = nw;
+    c.height = nh;
+    const ctx = c.getContext('2d');
+    if (!ctx) return null;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(src, 0, 0, sw, sh, 0, 0, nw, nh);
+    if (nw === tw && nh === th) return c;
+    src = c;
+    sw = nw;
+    sh = nh;
+  }
+}
+
+export interface TextureBudgetReport {
+  /** image textures inspected */
+  textures: number;
+  /** textures resampled down to quality.texMax */
+  downscaled: number;
+  /** textures above texMax that could not be resampled safely (alpha / custom shader / keepSize) */
+  oversized: string[];
+  /** estimated GPU bytes of the inspected image textures (RGBA8 + mip chain) after the pass */
+  bytes: number;
+}
+
+export interface MemoryReport {
+  textureMB: number;
+  textures: number;
+  geometryMB: number;
+  geometries: number;
+  /** triangles of every mesh under the root (instanced meshes x instance count), before culling */
+  sceneTriangles: number;
+  /** HDR targets, depth, bloom mips, shadow map and the canvas' own buffers */
+  renderTargetsMB: number;
+  totalMB: number;
 }
 
 // =====================================================================================================
@@ -368,6 +478,7 @@ export class Engine {
     this.motes = new Motes(q.motes);
     this.scene.add(this.motes.points);
     this.smoke = new SmokeColumns(this.particles, this.village.smokeSources);
+    this.enforceTextureBudget();
     this.makePost();
     this.applySize(true);
     const onResize = () => this.requestResize();
@@ -485,6 +596,119 @@ export class Engine {
     this.makePost();
   }
 
+  // ------------------------------------------------------------------------------------------ budgets
+
+  /**
+   * Keeps GPU texture memory inside the tier budget. Every decoded image texture under `root` larger
+   * than quality.texMax is resampled on the CPU (before its first upload; it is re-uploaded if it was
+   * already on the GPU) and anisotropy is capped at quality.anisotropy. Leaves alone: DataTextures,
+   * render-target / video / compressed / cube textures, alpha-tested or blended colour maps and custom
+   * shader uniforms (see collectTextures), and any texture with `userData.keepSize = true`.
+   * Engine runs it on the whole scene at the end of build() and at the start of warmup(); modules that
+   * add big content later can call it on their own root.
+   */
+  enforceTextureBudget(root: THREE.Object3D = this.scene): TextureBudgetReport {
+    const q = this.quality;
+    const rep: TextureBudgetReport = { textures: 0, downscaled: 0, oversized: [], bytes: 0 };
+    for (const [t, resampleOk] of collectTextures(root)) {
+      const tex = t as THREE.Texture & { isRenderTargetTexture?: boolean; isVideoTexture?: boolean; isCompressedTexture?: boolean; isCubeTexture?: boolean; isDataTexture?: boolean };
+      if (tex.isRenderTargetTexture || tex.isVideoTexture || tex.isCompressedTexture || tex.isCubeTexture || tex.isDataTexture) continue;
+      if (tex.anisotropy > q.anisotropy) {
+        tex.anisotropy = q.anisotropy;
+        tex.needsUpdate = true;
+      }
+      let s = imageSize(tex.image);
+      if (!s) continue;
+      rep.textures++;
+      const big = Math.max(s.w, s.h);
+      if (big > q.texMax) {
+        if (resampleOk && !tex.userData?.keepSize) {
+          const k = q.texMax / big;
+          const tw = Math.max(1, Math.round(s.w * k)), th = Math.max(1, Math.round(s.h * k));
+          const c = downscaleImage(tex.image as CanvasImageSource, s.w, s.h, tw, th);
+          if (c) {
+            tex.dispose(); // immutable GL storage: an already uploaded texture must be re-allocated
+            // ImageBitmaps are uploaded as they are (WebGL ignores flipY / premultiply for them); a canvas
+            // is not, so keep the orientation the bitmap was uploaded with
+            if (s.bitmap) tex.flipY = false;
+            tex.image = c;
+            tex.needsUpdate = true;
+            rep.downscaled++;
+            s = { w: tw, h: th, bitmap: false };
+          }
+        } else rep.oversized.push(`${tex.name || tex.uuid.slice(0, 8)} ${s.w}x${s.h}`);
+      }
+      const mips = tex.generateMipmaps && tex.minFilter !== THREE.NearestFilter && tex.minFilter !== THREE.LinearFilter;
+      rep.bytes += s.w * s.h * 4 * (mips ? 4 / 3 : 1);
+    }
+    if (rep.downscaled || rep.oversized.length) {
+      console.info(`[engine] texture budget ${q.texMax}px: ${rep.downscaled} resampled` + (rep.oversized.length ? `, kept (alpha/custom): ${rep.oversized.join(', ')}` : ''));
+    }
+    return rep;
+  }
+
+  /** Rough GPU memory estimate of the scene and the renderer's own targets (diagnostics / tests). */
+  memoryReport(root: THREE.Object3D = this.scene): MemoryReport {
+    const q = this.quality;
+    const MB = 1 / (1024 * 1024);
+    let texBytes = 0, textures = 0;
+    for (const [t] of collectTextures(root)) {
+      const tex = t as THREE.Texture & { isRenderTargetTexture?: boolean };
+      if (tex.isRenderTargetTexture) continue;
+      const img = tex.image as { width?: number; height?: number; data?: ArrayBufferView } | null;
+      const s = imageSize(img) ?? (img && typeof img.width === 'number' && typeof img.height === 'number' ? { w: img.width, h: img.height } : null);
+      if (!s) continue;
+      const bpp = img?.data ? Math.max(1, img.data.byteLength / Math.max(1, s.w * s.h)) : 4;
+      const mips = tex.generateMipmaps && tex.minFilter !== THREE.NearestFilter && tex.minFilter !== THREE.LinearFilter;
+      texBytes += s.w * s.h * bpp * (mips ? 4 / 3 : 1);
+      textures++;
+    }
+    const geos = new Set<THREE.BufferGeometry>();
+    const arrays = new Set<ArrayBufferLike>();
+    let geoBytes = 0, tris = 0;
+    const addArray = (a: ArrayBufferView | undefined) => {
+      if (a && !arrays.has(a.buffer)) {
+        arrays.add(a.buffer);
+        geoBytes += a.byteLength;
+      }
+    };
+    root.traverse((o) => {
+      const m = o as THREE.Mesh;
+      const g = m.geometry as THREE.BufferGeometry | undefined;
+      if (!g || !g.isBufferGeometry) return;
+      const inst = (m as unknown as THREE.InstancedMesh).isInstancedMesh ? (m as unknown as THREE.InstancedMesh) : null;
+      if (m.isMesh) {
+        const n = g.index ? g.index.count : (g.attributes.position?.count ?? 0);
+        tris += (Math.min(n, g.drawRange.count) / 3) * (inst ? inst.count : 1);
+      }
+      if (inst) {
+        addArray(inst.instanceMatrix.array);
+        addArray(inst.instanceColor?.array);
+      }
+      if (geos.has(g)) return;
+      geos.add(g);
+      for (const a of Object.values(g.attributes)) {
+        const ia = a as THREE.InterleavedBufferAttribute;
+        addArray(ia.isInterleavedBufferAttribute ? ia.data.array : (a as THREE.BufferAttribute).array);
+      }
+      addArray(g.index?.array);
+    });
+    // renderer-owned targets: 2 HDR colour targets (+ MSAA storage) with one depth texture, bloom mips
+    // (sum of a quarter-area geometric series), shadow map (RGBA8 + depth), canvas (double buffered)
+    const px = Math.floor(this.cssW * q.pixelRatio) * Math.floor(this.cssH * q.pixelRatio);
+    const color = this.floatTargets ? 8 : 4;
+    let rt = px * 4 * 2 + px * (2 * color + 4);
+    if (q.msaa > 0) rt += px * q.msaa * (color + 4);
+    if (q.bloom) rt += px * q.bloomScale * q.bloomScale * color * (4 / 3);
+    const sh = this.sky?.sun.shadow.mapSize.x ?? q.shadowSize;
+    rt += sh * sh * 8;
+    const r = (x: number) => Math.round(x * MB * 10) / 10;
+    return {
+      textureMB: r(texBytes), textures, geometryMB: r(geoBytes), geometries: geos.size, sceneTriangles: Math.round(tris),
+      renderTargetsMB: r(rt), totalMB: r(texBytes + geoBytes + rt),
+    };
+  }
+
   /** Render one frame of the current scene state without advancing time. */
   private renderStill() {
     shared.uCamPos.value.copy(this.camera.position);
@@ -513,7 +737,7 @@ export class Engine {
     });
     const prev = this.renderer.getRenderTarget();
     try {
-      this.renderer.setRenderTarget(this.post.composer.readBuffer);
+      this.renderer.setRenderTarget(this.post.composer.renderTarget1);
       // bounded: compileAsync polls forever if the context is lost mid-way
       await Promise.race([this.renderer.compileAsync(this.scene, this.camera), new Promise((r) => setTimeout(r, 12000))]);
     } catch (e) {
@@ -525,17 +749,21 @@ export class Engine {
   }
 
   /**
-   * One-time warm-up behind the loading screen: pre-compiles shaders, primes GPU uploads and (unless the
-   * tier is forced, the GPU is a software rasteriser or `bench` is false) measures real frames of the
-   * built scene from the given views and walks the tier ladder until the frame fits the tier's budget.
-   * Hysteresis: down when over budget, up one step only when under 45 % of the higher tier's budget; the
-   * result is stored per device so the next session starts at the right tier. Never runs during play.
+   * One-time warm-up behind the loading screen: enforces the texture budget, pre-compiles shaders, primes
+   * GPU uploads and (unless the tier is forced, the GPU is a software rasteriser or `bench` is false)
+   * measures real frames of the built scene from the given views and walks the tier ladder until the
+   * frame fits the tier's budget. Hysteresis: down when over budget; up one step only when under 45 % of
+   * the higher tier's budget; a device that is still that fast but limited by maxPixels (tablets) gets
+   * more pixels (renderScale up to 2.2) if the measured frame stays within 90 % of the budget. The result
+   * is stored per device so the next session starts at the right tier. Never runs during play.
+   * `force` runs the benchmark even on software GPUs / forced tiers (tests of the ladder itself).
    */
-  async warmup(opts: { views?: BenchView[]; bench?: boolean; precompile?: boolean } = {}): Promise<BenchResult | null> {
+  async warmup(opts: { views?: BenchView[]; bench?: boolean; precompile?: boolean; force?: boolean } = {}): Promise<BenchResult | null> {
     const q = this.quality;
     const cam = this.camera;
     const savedPos = cam.position.clone();
     const savedQuat = cam.quaternion.clone();
+    this.enforceTextureBudget();
     if (opts.precompile ?? true) await this.precompile();
     const views = opts.views?.length ? opts.views : [{ pos: cam.position.clone(), look: cam.position.clone().add(cam.getWorldDirection(new THREE.Vector3())) }];
     const setView = (v: BenchView) => {
@@ -544,7 +772,7 @@ export class Engine {
       cam.updateMatrixWorld();
       this.focus.copy(v.look);
     };
-    const bench = (opts.bench ?? true) && !this.qualityForced && !isSoftwareGpu(q.gpu) && !this.contextLost;
+    const bench = !this.contextLost && (opts.force || ((opts.bench ?? true) && !this.qualityForced && !isSoftwareGpu(q.gpu)));
     if (bench || (opts.precompile ?? true)) {
       // prime: uploads, shadow maps, first-use programs
       for (const v of views) {
@@ -602,6 +830,7 @@ export class Engine {
         // up one step (render budget only) when comfortably fast
         const i = ladder.indexOf(tier);
         const up = i > 0 ? ladder[i - 1] : null;
+        let stepped = false;
         if (up && ms < RENDER[up].frameBudgetMs * 0.45) {
           this.applyRenderTier(up);
           await this.precompile();
@@ -610,6 +839,21 @@ export class Engine {
           log.push(`${up}@${q.pixelRatio.toFixed(2)}: ${ms2.toFixed(1)}ms`);
           if (ms2 <= RENDER[up].frameBudgetMs * 0.9) {
             tier = up;
+            ms = ms2;
+            stepped = true;
+          } else this.applyRenderTier(tier);
+        }
+        // still very fast but capped by maxPixels (tablets, big high-dpi screens): render more pixels
+        const { w, h } = this.viewSize();
+        const fullPr = Math.min(window.devicePixelRatio || 1, q.maxPixelRatio);
+        const want = Math.min(2.2, (w * h * fullPr * fullPr) / q.maxPixels);
+        if (!stepped && want > 1.1 && ms < RENDER[tier].frameBudgetMs * 0.45 && performance.now() - t0 < 6000) {
+          this.applyRenderTier(tier, want);
+          this.renderStill();
+          const ms2 = measure();
+          log.push(`${tier}x${want.toFixed(2)}@${q.pixelRatio.toFixed(2)}: ${ms2.toFixed(1)}ms`);
+          if (ms2 <= RENDER[tier].frameBudgetMs * 0.9) {
+            scale = want;
             ms = ms2;
           } else this.applyRenderTier(tier);
         }

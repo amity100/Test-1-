@@ -139,6 +139,9 @@ class AtmospherePass extends Pass {
     this.uniforms.uGodRaySamples.value = Math.max(0, Math.min(n, Number(this.material.defines.GR_MAX)));
   }
 
+  private readonly sp = new THREE.Vector3();
+  private readonly fwd = new THREE.Vector3();
+
   render(renderer: THREE.WebGLRenderer, writeBuffer: THREE.WebGLRenderTarget, readBuffer: THREE.WebGLRenderTarget) {
     const cam = this.camera;
     this.uniforms.tDiffuse.value = readBuffer.texture;
@@ -146,11 +149,10 @@ class AtmospherePass extends Pass {
     this.uniforms.uProjInv.value.copy(cam.projectionMatrixInverse);
     this.uniforms.uCamWorld.value.copy(cam.matrixWorld);
     this.uniforms.uCamPos.value.setFromMatrixPosition(cam.matrixWorld);
-    // sun screen position
-    const sp = shared.uSunDir.value.clone().multiplyScalar(5000).add(this.uniforms.uCamPos.value);
+    // sun screen position (no per-frame allocations: GC pauses show up as hitches on phones)
+    const sp = this.sp.copy(shared.uSunDir.value).multiplyScalar(5000).add(this.uniforms.uCamPos.value);
     sp.project(cam);
-    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
-    const facing = fwd.dot(shared.uSunDir.value);
+    const facing = this.fwd.set(0, 0, -1).applyQuaternion(cam.quaternion).dot(shared.uSunDir.value);
     const finite = Number.isFinite(sp.x) && Number.isFinite(sp.y);
     this.uniforms.uSunUV.value.set(finite ? sp.x * 0.5 + 0.5 : 0.5, finite ? sp.y * 0.5 + 0.5 : 0.5);
     const onScreen = facing > 0 && finite && this.uniforms.uGodRaySamples.value > 0
@@ -484,13 +486,15 @@ export class PostFX {
     this.renderTarget.texture.name = 'PostFX.rt1';
     this.renderTarget.depthTexture!.format = THREE.DepthFormat;
     this.composer = new EffectComposer(renderer, this.renderTarget);
-    // RenderTarget.clone() shares the depth texture's image source; give the 2nd buffer its own
-    // depth texture so the atmosphere pass never samples the depth it is writing (feedback loop).
-    // (three re-sizes both depth textures together with their targets in setupDepthTexture.)
-    const dt2 = new THREE.DepthTexture(size.x, size.y, THREE.FloatType);
-    dt2.format = THREE.DepthFormat;
-    this.composer.renderTarget2.depthTexture = dt2;
-    this.composer.renderTarget2.texture.name = 'PostFX.rt2';
+    // RenderTarget.clone() shares the depth texture's image source, so the composer's 2nd buffer used to
+    // write into the very depth texture the atmosphere pass samples (a feedback loop: undefined results /
+    // dropped draws). The scene is now always rendered into rt1 (see render()), so rt2 only receives
+    // full-screen passes: no depth attachment and no MSAA storage at all.
+    const rt2 = this.composer.renderTarget2;
+    rt2.depthTexture = null;
+    rt2.depthBuffer = false;
+    rt2.samples = 0;
+    rt2.texture.name = 'PostFX.rt2';
     this.composer.setPixelRatio(1);
     this.composer.addPass(new RenderPass(scene, camera));
     this.atmosphere = new AtmospherePass(camera, skyCube, q.godRaySamples);
@@ -532,13 +536,15 @@ export class PostFX {
 
   render(dt: number) {
     this.grade.uniforms.uTime.value += dt;
+    // the pass chain swaps an odd number of times per frame; start every frame from rt1 (the only
+    // target with depth + MSAA), which is where the RenderPass draws
+    if (this.composer.readBuffer !== this.composer.renderTarget1) this.composer.swapBuffers();
     this.composer.render(dt);
   }
 
   dispose() {
     for (const p of this.composer.passes) (p as Pass & { dispose?: () => void }).dispose?.();
     this.composer.renderTarget1.depthTexture?.dispose();
-    this.composer.renderTarget2.depthTexture?.dispose();
     this.composer.dispose();
   }
 }

@@ -127,6 +127,7 @@ async function boot() {
   const px = LAYOUT.start.x, pz = LAYOUT.start.z;
   const bench = await engine.warmup({
     bench: !testMode && params.get('bench') !== '0',
+    force: params.get('bench') === 'force', // exercise the tier ladder even on software GPUs / in tests
     precompile: !testMode || params.get('precompile') === '1', // headless tests: keep boot fast
     views: [
       // gameplay: shepherd's-eye view over the pasture (grass, flock, trees: the heaviest shot)
@@ -186,6 +187,7 @@ async function boot() {
   // ------------------------------------------------------------------ loop
   let time = 0;
   let pausedFrames = 0;
+  const camDir = new THREE.Vector3();
   const frame = (rawDt: number, render = true) => {
     input.update();
     if (started && input.take('pause') && !cam.inCinematic) setPaused(!paused);
@@ -211,7 +213,8 @@ async function boot() {
     cam.target.set(player.pos.x, player.pos.y + 1.55, player.pos.z);
     cam.update(rawDt, time);
     engine.setFov(cam.fov);
-    engine.focus.copy(cam.inCinematic ? engine.camera.position.clone().add(engine.camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(18)) : player.pos);
+    if (cam.inCinematic) engine.focus.copy(engine.camera.position).addScaledVector(engine.camera.getWorldDirection(camDir), 18);
+    else engine.focus.copy(player.pos);
     audio.update(rawDt);
     if (render) engine.render(rawDt, dt);
     else engine.tickEnvironment(dt);

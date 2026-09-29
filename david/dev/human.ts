@@ -1,7 +1,14 @@
 // Dev-only preview harness for src/characters/human (not part of the game build).
-// /dev/human.html?preset=david|saul|man&pose=idle|walk|sling|rest&view=face|three4|full|profile|back|hands|posed
-//               &q=high|medium|low&expr=neutral|determined|effort|awe|smile&seed=3&yaw=0&sun=13,100&frames=4
+//
+// /dev/human.html?preset=david|saul|man&pose=idle|walk|sling|rest&view=face|three4|full|profile|back|posed|...
+//   &q=high|medium|low   quality tier (engine.quality.name)
+//   &mode=game|studio    game: SkySystem + PostFX (sun elevation 13°, azimuth 100°); studio: neutral 3-point light
+//   &mat=clay            show the geometry only (neutral clay material)
+//   &sheet=face|body     render several views side by side (face: front, 3/4, profile; body: front, profile, back)
+//   &expr=neutral|determined|effort|awe|smile  &seed=3 (man)  &yaw=0 (deg)  &sun=13,100  &frames=3
+//   &w=900&h=900 (per view)  &fl=grip&fr=relaxed (finger poses)  &look=x,y,z  &staff=0  &live=1
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { SkySystem } from '../src/world/Sky';
 import { PostFX } from '../src/fx/PostFX';
 import { shared } from '../src/core/Shared';
@@ -16,36 +23,67 @@ const preset = P.get('preset') ?? 'david';
 const poseName = P.get('pose') ?? 'idle';
 const view = P.get('view') ?? 'three4';
 const q = (P.get('q') ?? 'high') as 'low' | 'medium' | 'high';
+const mode = P.get('mode') ?? 'game';
+const studio = mode === 'studio';
 const expr = (P.get('expr') ?? 'neutral') as Expression;
 const seed = P.has('seed') ? parseInt(P.get('seed')!, 10) : undefined;
 const yawDeg = parseFloat(P.get('yaw') ?? '0');
 const [sunEl, sunAz] = (P.get('sun') ?? '13,100').split(',').map(Number);
 const W = parseInt(P.get('w') ?? '0', 10) || innerWidth;
 const H = parseInt(P.get('h') ?? '0', 10) || innerHeight;
+const sheet = P.get('sheet');
+const VIEWS = sheet === 'face' ? ['face', 'three4', 'profileFace'] : sheet === 'body' ? ['full', 'profile', 'back'] : sheet ? sheet.split(',') : [view];
 const info = document.getElementById('info')!;
 
-const renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true, stencil: false });
+const renderer = new THREE.WebGLRenderer({ antialias: studio, preserveDrawingBuffer: true, stencil: false });
 renderer.setPixelRatio(1);
 renderer.setSize(W, H);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = parseFloat(P.get('exposure') ?? '0.58');
+renderer.toneMappingExposure = parseFloat(P.get('exposure') ?? (studio ? '1.0' : '0.58'));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(30, W / H, 0.02, 26000);
-const sky = new SkySystem(renderer, q === 'high' ? 4096 : 2048);
-scene.add(sky.group);
-sky.setSun(sunEl, sunAz, scene);
-// tight shadow frustum for close-ups
-const sc = sky.sun.shadow.camera;
-sc.left = -2.5; sc.right = 2.5; sc.top = 2.5; sc.bottom = -2.5;
-sc.updateProjectionMatrix();
-sky.sun.shadow.bias = -0.0002;
-sky.sun.shadow.normalBias = 0.012;
-sky.sun.shadow.radius = 2;
+let sky: SkySystem | null = null;
+let post: PostFX | null = null;
+const studioLights: { key: THREE.DirectionalLight; rim: THREE.DirectionalLight } | null = studio ? setupStudio() : null;
+if (!studio) {
+  sky = new SkySystem(renderer, q === 'high' ? 4096 : 2048);
+  scene.add(sky.group);
+  sky.setSun(sunEl, sunAz, scene);
+  // tight shadow frustum for close-ups
+  const sc = sky.sun.shadow.camera;
+  sc.left = -2.5; sc.right = 2.5; sc.top = 2.5; sc.bottom = -2.5;
+  sc.updateProjectionMatrix();
+  sky.sun.shadow.bias = -0.0002;
+  sky.sun.shadow.normalBias = 0.012;
+  sky.sun.shadow.radius = 2;
+  post = new PostFX(renderer, scene, camera, sky.cubeTarget.texture, { msaa: q === 'low' ? 0 : 4, bloom: true, godRaySamples: 24, pixelRatio: 1 });
+  post.setSize(W, H);
+  post.atmosphere.uniforms.uDensity.value = 0.00012;
+}
+
+function setupStudio() {
+  scene.background = new THREE.Color(0x2e3035);
+  const pm = new THREE.PMREMGenerator(renderer);
+  scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture;
+  scene.environmentIntensity = 0.28;
+  const key = new THREE.DirectionalLight(0xfff0dc, 3.2);
+  key.castShadow = true;
+  key.shadow.mapSize.set(2048, 2048);
+  const sc = key.shadow.camera;
+  sc.left = -1.2; sc.right = 1.2; sc.top = 1.2; sc.bottom = -1.2; sc.near = 0.1; sc.far = 12;
+  key.shadow.bias = -0.0002;
+  key.shadow.normalBias = 0.01;
+  key.shadow.radius = 3;
+  const rim = new THREE.DirectionalLight(0xffe6c8, 2.2);
+  const hemi = new THREE.HemisphereLight(0xc8d2e0, 0x3b322c, 0.55);
+  scene.add(key, key.target, rim, rim.target, hemi);
+  return { key, rim };
+}
 
 // ---- limestone ground
 const tl = new THREE.TextureLoader();
@@ -59,13 +97,9 @@ for (const t of [ra, rn]) {
 }
 const gGeo = new THREE.PlaneGeometry(60, 60, 64, 64);
 gGeo.rotateX(-Math.PI / 2);
-const ground = new THREE.Mesh(gGeo, new THREE.MeshStandardMaterial({ map: ra, normalMap: rn, color: 0xe8dcc6, roughness: 0.92 }));
+const ground = new THREE.Mesh(gGeo, new THREE.MeshStandardMaterial({ map: ra, normalMap: rn, color: studio ? 0x6a6560 : 0xe8dcc6, roughness: 0.92 }));
 ground.receiveShadow = true;
 scene.add(ground);
-
-const post = new PostFX(renderer, scene, camera, sky.cubeTarget.texture, { msaa: q === 'low' ? 0 : 4, bloom: true, godRaySamples: 24, pixelRatio: 1 });
-post.setSize(W, H);
-post.atmosphere.uniforms.uDensity.value = 0.00012;
 
 // ---- poses (DavidModel conventions)
 const IDLE = pose({
@@ -101,9 +135,11 @@ const staff = new THREE.Group();
 async function main() {
   const t0 = performance.now();
   human = await HumanModel.load({ preset, quality: q, seed, geometry: (P.get('geo') as 'base' | 'sub1') ?? undefined, textureSize: P.has('tex') ? (parseInt(P.get('tex')!, 10) as 1024 | 2048) : undefined });
-  if (P.get('unlit')) {
-    const which = P.get('unlit')!;
-    const t = which === 'albedo' ? human.skin.map : which === 'normal' ? human.skin.normalMap : human.skin.skinUniforms.uMaskMap.value;
+  const matMode = P.get('mat');
+  if (matMode === 'clay') {
+    human.body.material = new THREE.MeshStandardMaterial({ color: 0xb9aea4, roughness: 0.62, metalness: 0 });
+  } else if (matMode) {
+    const t = matMode === 'albedo' ? human.skin.map : matMode === 'normal' ? human.skin.normalMap : human.skin.skinUniforms.uMaskMap.value;
     human.body.material = new THREE.MeshBasicMaterial({ map: t });
   }
   const loadMs = performance.now() - t0;
@@ -137,7 +173,7 @@ async function main() {
     staff.add(cyl);
     human.sockets.handGripL.add(staff);
   }
-  // clothing API smoke test: a simple sleeveless tube "tunic" modelled around the rest pose
+  // clothing API smoke test: a simple tube "skirt" modelled around the rest pose
   if (P.has('cloth')) {
     const tube = new THREE.CylinderGeometry(0.19, 0.25, 0.5, 48, 16, true);
     tube.scale(1, 1, 0.78);
@@ -147,16 +183,25 @@ async function main() {
     });
     cloth.name = 'testSkirt';
     human.hideSkin((p, bone) => p.y > 0.64 && p.y < 0.98 && /^(root|spine0[45]|pelvis|upperleg)/.test(bone));
-    const r = 0;
-    void r;
   }
   // settle (fingers / expressions cross-fade)
   for (let i = 0; i < 90; i++) human.update(1 / 30, camera, H);
-  frameCamera();
+  const frames = parseInt(P.get('frames') ?? '3', 10);
+  let out: HTMLCanvasElement | null = null;
+  if (VIEWS.length > 1) {
+    out = document.createElement('canvas');
+    out.width = W * VIEWS.length;
+    out.height = H;
+    renderer.domElement.style.display = 'none';
+    document.body.appendChild(out);
+  }
+  for (let v = 0; v < VIEWS.length; v++) {
+    frameCamera(VIEWS[v]);
+    for (let i = 0; i < frames; i++) renderOnce();
+    if (out) out.getContext('2d')!.drawImage(renderer.domElement, v * W, 0);
+  }
   info.textContent = `${preset} q=${q} verts=${human.metrics.vertices} tris=${human.metrics.triangles} load=${loadMs.toFixed(0)}ms`;
   (window as unknown as { __info: unknown }).__info = { loadMs, verts: human.metrics.vertices, tris: human.metrics.triangles, metrics: human.metrics };
-  const frames = parseInt(P.get('frames') ?? '3', 10);
-  for (let i = 0; i < frames; i++) renderOnce();
   (window as unknown as { __ready: boolean }).__ready = true;
   if (P.has('live')) {
     const clock = new THREE.Clock();
@@ -176,7 +221,7 @@ async function main() {
   }
 }
 
-function frameCamera() {
+function frameCamera(v: string) {
   const r = human.root;
   r.updateMatrixWorld(true);
   const head = new THREE.Vector3();
@@ -194,13 +239,16 @@ function frameCamera() {
     camera.lookAt(target);
   };
   const up = new THREE.Vector3(0, 1, 0);
-  switch (view) {
+  switch (v) {
     case 'face': at(head.clone().add(new THREE.Vector3(0, -0.035, 0)), fwd.clone().addScaledVector(left, 0.18).addScaledVector(up, 0.02), 0.62, 24); break;
+    case 'front': at(head.clone().add(new THREE.Vector3(0, -0.035, 0)), fwd.clone(), 0.62, 24); break;
     case 'eye': at(head.clone(), fwd.clone().addScaledVector(left, 0.25), 0.22, 22); break;
     case 'three4': at(head.clone().add(new THREE.Vector3(0, -0.07, 0)), fwd.clone().addScaledVector(left, 0.8).addScaledVector(up, 0.06), 0.95, 26); break;
+    case 'three4r': at(head.clone().add(new THREE.Vector3(0, -0.07, 0)), fwd.clone().addScaledVector(left, -0.8).addScaledVector(up, 0.06), 0.95, 26); break;
     case 'profile': at(new THREE.Vector3(0, h * 0.52, 0).add(r.position), left.clone(), 5.2, 28); break;
     case 'profileFace': at(head.clone().add(new THREE.Vector3(0, -0.03, 0)), left.clone(), 0.7, 24); break;
     case 'back': at(new THREE.Vector3(0, h * 0.52, 0).add(r.position), fwd.clone().negate(), 5.2, 28); break;
+    case 'torso': at(new THREE.Vector3(0, h * 0.7, 0).add(r.position), fwd.clone().addScaledVector(left, 0.35), 2.0, 30); break;
     case 'hands': {
       const hp = new THREE.Vector3();
       const side = P.get('hand') ?? 'L';
@@ -221,13 +269,31 @@ function frameCamera() {
     default: at(new THREE.Vector3(0, h * 0.52, 0).add(r.position), fwd.clone(), 5.2, 28);
   }
   shared.uCamPos.value.copy(camera.position);
+  if (studioLights) {
+    // key: camera-left, above; rim: behind, camera-right (fixed relative to the view)
+    const f = new THREE.Vector3().subVectors(camera.position, head).setY(0).normalize();
+    const side = new THREE.Vector3(f.z, 0, -f.x); // camera right
+    const tgt = v === 'full' || v === 'profile' || v === 'back' || v === 'posed' ? new THREE.Vector3(0, h * 0.5, 0) : head;
+    studioLights.key.position.copy(tgt).addScaledVector(f, 2.2).addScaledVector(side, -2.0).add(new THREE.Vector3(0, 1.9, 0));
+    studioLights.key.target.position.copy(tgt);
+    studioLights.rim.position.copy(tgt).addScaledVector(f, -2.5).addScaledVector(side, 1.8).add(new THREE.Vector3(0, 1.2, 0));
+    studioLights.rim.target.position.copy(tgt);
+    const sc = studioLights.key.shadow.camera;
+    const ext = v === 'full' || v === 'profile' || v === 'back' || v === 'posed' ? 1.3 : 0.35;
+    sc.left = -ext; sc.right = ext; sc.top = ext; sc.bottom = -ext;
+    sc.updateProjectionMatrix();
+    studioLights.key.target.updateMatrixWorld();
+    studioLights.rim.target.updateMatrixWorld();
+  }
 }
 
 function renderOnce(dt = 1 / 60) {
   shared.uTime.value += dt;
   shared.uCamPos.value.copy(camera.position);
-  sky.update(camera, human.root.position.clone().add(new THREE.Vector3(0, 1, 0)));
-  post.render(dt);
+  if (sky && post) {
+    sky.update(camera, human.root.position.clone().add(new THREE.Vector3(0, 1, 0)));
+    post.render(dt);
+  } else renderer.render(scene, camera);
 }
 
 (window as unknown as { __render: (n: number) => void }).__render = (n: number) => {
