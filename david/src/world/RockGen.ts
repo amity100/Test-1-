@@ -109,9 +109,13 @@ export function rockGeometry(seed: number, opts: RockOptions = {}) {
   // geometric solution cups (on the upper half)
   const pitCount = opts.pits ?? 0;
   const pits: { c: THREE.Vector3; r: number; d: number }[] = [];
+  // pits come in nests (as on the reference boulders): most cluster around a few centres on the upper half
+  const nests = [0, 1, 2].map(() => new THREE.Vector3(rnd() * 2 - 1, 0.2 + rnd() * 0.8, rnd() * 2 - 1).normalize());
   for (let i = 0; i < pitCount; i++) {
-    const c = new THREE.Vector3(rnd() * 2 - 1, rnd() * 1.2 - 0.2, rnd() * 2 - 1).normalize();
-    pits.push({ c, r: 0.05 + Math.pow(rnd(), 2.2) * 0.13, d: 0.03 + rnd() * 0.05 });
+    const c = rnd() < 0.7
+      ? nests[i % 3].clone().add(new THREE.Vector3(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).multiplyScalar(0.7)).normalize()
+      : new THREE.Vector3(rnd() * 2 - 1, rnd() * 1.2 - 0.2, rnd() * 2 - 1).normalize();
+    pits.push({ c, r: 0.04 + Math.pow(rnd(), 2.0) * 0.12, d: 0.05 + rnd() * 0.08 });
   }
   const v = new THREE.Vector3();
   const s = seed * 31 + 7;
