@@ -59,7 +59,9 @@ const TIERS: Record<BearQuality, Tier> = {
 
 // ------------------------------------------------------------------------------------------------ assets
 
-const FILES = import.meta.glob('../assets/animals/*.{binz,webp,png}', { query: '?url', import: 'default' }) as Record<string, () => Promise<string>>;
+// eager URL strings only (each tier fetches just its own files; no stub chunk per file in the build)
+const URLS = import.meta.glob('../assets/animals/*.{binz,webp,png}', { query: '?url', import: 'default', eager: true }) as Record<string, string>;
+const FILES: Record<string, () => Promise<string>> = Object.fromEntries(Object.entries(URLS).map(([k, u]) => [k, () => Promise.resolve(u)]));
 
 async function assetUrl(name: string): Promise<string> {
   const f = FILES['../assets/animals/' + name];

@@ -146,6 +146,9 @@ const ramp = (u: number, a: number, b: number) => smooth((u - a) / (b - a));
 
 type DofPlan = { fStop: number; maxBlur?: number } | null;
 
+/** David's heading when play starts (as in Story.resetWorld): the pasture and the flock ahead of him. */
+const GAMEPLAY_HEADING = 0.46;
+
 /** Where David stands for a field shot (null: anywhere, he is not in the frame). */
 type DavidSpot = 'pasture' | 'rock' | null;
 
@@ -364,6 +367,8 @@ export class Intro {
     ui.setBars(engine.post.letterboxBars);
     if (this.state !== 'playing') return;
     this.t += dt;
+    // the score runs on the audio clock: keep it locked to the picture (loading / shader hitches, slow frames)
+    this.h.audio.syncIntro(this.t);
     while (this.idx + 1 < this.plan.length && this.t >= this.plan[this.idx + 1].start) this.enter(this.idx + 1);
     if (this.t >= this.length) {
       this.end(false);
@@ -397,10 +402,14 @@ export class Intro {
     ui.preroll(null);
     ui.skip(false);
     ui.skipHint(false);
-    try {
-      audio.stopIntro(skipped ? 1.2 : 2.5);
-    } catch {
-      /* audio never breaks the game */
+    // skipped while the score plays: it jumps to its own title statement (the sfx('titleHit') below); the story
+    // brings the pastoral in after the title card. Otherwise fade the score (natural end, or skipped in the pre-roll).
+    if (!skipped || wasLoading) {
+      try {
+        audio.stopIntro(skipped ? 1.2 : 2.5);
+      } catch {
+        /* audio never breaks the game */
+      }
     }
     const post = engine.post;
     if (skipped) {
@@ -414,14 +423,19 @@ export class Intro {
       }
       cam.stop();
       this.placeDavid('rock', true);
+      // play starts as it does without the film: on his rock, facing the pasture and the flock (not the low sun and
+      // the tall grass beside the rock, which fill a follow camera's frame)
+      player.place(this.rock.x, this.rock.z, GAMEPLAY_HEADING);
       cam.snapBehind(player.heading, 0.15);
-      // a short title over the start of play
+      // a short title over the start of play (with the score's title statement, or the one-shot title hit)
       ui.titleCard(true);
       audio.sfx('titleHit');
       window.setTimeout(() => ui.titleCard(false), 3800);
     } else {
       if (engine.view) engine.restoreWorldView({ crossfade: 1 });
-      // let the CameraRig blend from the last crane frame into the follow camera behind David
+      // turn him to the chapter's start heading (he is small in the crane's last frame) and let the CameraRig blend
+      // from that frame into the follow camera behind him
+      player.place(this.rock.x, this.rock.z, GAMEPLAY_HEADING);
       cam.snapBehind(player.heading, 0.15);
       cam.skipShots();
       window.setTimeout(() => ui.titleCard(false), 600);
@@ -610,6 +624,24 @@ export class Intro {
     lamb.state = 'graze';
     lamb.aiEnabled = false;
     lamb.manualSpeed = 0;
+    // keep the sight line clear: sheep grazing between the lens (beyond the lamb) and David step aside, so the lamb
+    // is not hidden in its own close shot (the flock is off screen now: the previous shot is at Gibeah)
+    const dx = x - d.x, dz = z - d.z;
+    const len = Math.hypot(dx, dz) || 1;
+    const ux = dx / len, uz = dz / len;
+    const ax = d.x - ux * 1.5, az = d.z - uz * 1.5; // just behind David ... to beyond the lens
+    const span = len + 1.5 + 3.4;
+    for (const a of this.h.flock.animals) {
+      if (a === lamb || a.state === 'carried') continue;
+      const px = a.position.x - ax, pz = a.position.z - az;
+      const along = px * ux + pz * uz;
+      if (along < 0 || along > span) continue;
+      const across = px * -uz + pz * ux;
+      if (Math.abs(across) > 1.6) continue;
+      const k = (across >= 0 ? 1 : -1) * (2.2 + Math.random() * 1.2) - across;
+      const nx = a.position.x - uz * k, nz = a.position.z + ux * k;
+      a.position.set(nx, this.h.engine.terrain.heightAt(nx, nz), nz);
+    }
   }
 
   /** Before an evening Gibeah shot: stage its beat now (sky / lamps rebuilt off screen) and compile anything new. */
@@ -662,19 +694,22 @@ export class Intro {
     camera.updateMatrixWorld();
   }
 
-  /** Insert: the king's fist on the spear shaft, tilting up the shaft to the bronze head (22:6 "his spear in his hand"). */
+  /**
+   * Insert (22:6 "his spear in his hand"): from the bronze spear head against the tamarisk, tilting down the shaft to
+   * the king's fist on it; the fist ends where the next shot finds the shepherd's hand on his staff (match cut).
+   */
   private courtHand(cast: PalaceCast, u: number): ShotFrame {
     const hand = cast.focus('saulHand', this.tmpA);
     const tip = cast.focus('spear', this.tmpB);
     const yaw = cast.actors.saul.root.rotation.y;
     const fwd = V(Math.sin(yaw), 0, Math.cos(yaw));
     const right = V(-fwd.z, 0, fwd.x); // the king's right (lens on his right front, outside the spear)
-    const e = smooth(u);
-    const pos = hand.clone().addScaledVector(fwd, 1.0 - e * 0.15).addScaledVector(right, 0.62).add(V(0, -0.1 + e * 0.45, 0));
-    const look = hand.clone().lerp(tip, 0.05 + e * 0.42);
+    const k = 1 - smooth(u); // 1: up at the spear head, 0: down at the fist
+    const pos = hand.clone().addScaledVector(fwd, 1.0 + k * 0.7).addScaledVector(right, 0.62 + k * 0.25).add(V(0, -0.1 + k * 1.0, 0));
+    const look = hand.clone().lerp(tip, 0.02 + k * 0.9);
     // keep the shaft in the left third: aim a little right of it
     look.addScaledVector(right, 0.1);
-    return { pos, look, fov: 30 - e * 3 };
+    return { pos, look, fov: 27 + k * 3 };
   }
 
   // ---------------------------------------------------------------------------------------------- Bethlehem cameras
@@ -818,9 +853,10 @@ export class Intro {
       case 'court': case 'saul-portrait': case 'hall': case 'warriors-saul': cf('saulFace'); break;
       case 'warriors-line': cf('abner'); break;
       case 'court-hand': {
+        // focus pulls down the shaft with the lens: spear head -> fist
         cf('saulHand');
         const tip = stage ? stage.cast.focus('spear', this.tmpB) : t;
-        t.lerp(tip, ramp(u, 0.35, 0.9) * 0.6);
+        t.lerp(tip, (1 - ramp(u, 0.2, 0.75)) * 0.9);
         break;
       }
       case 'hinge': {

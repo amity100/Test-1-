@@ -189,7 +189,8 @@ export class Story {
       await this.debugJump(this.jump);
       return;
     }
-    if (!skipIntro) await this.intro();
+    let introSkipped = false;
+    if (!skipIntro) introSkipped = await this.intro();
     else {
       this.cam.stop();
       this.ui.fade(0, 1.5);
@@ -199,7 +200,9 @@ export class Story {
 
     // ---------------------------------------------------------------- 1. walk to the flock
     this.cinematic(false);
-    this.audio.music('pastoral', 4);
+    // after a skipped film the score's title statement plays under the title card first
+    if (introSkipped) this.after(3.4, () => this.audio.music('pastoral', 4), true);
+    else this.audio.music('pastoral', 4);
     this.ui.objective('לֵךְ אֶל הַצֹּאן', 'הָעֵדֶר רוֹעֶה בַּמִּרְעֶה שֶׁבְּמוֹרַד הַגִּבְעָה');
     this.ui.hint([K.move, K.look, K.run]);
     this.setMarker(() => this.flockCenter().add(new THREE.Vector3(0, 1.5, 0)), 'הַצֹּאן');
@@ -427,7 +430,8 @@ export class Story {
    * intercut. ?intro=short|full forces a cut (default: full on desktop, short on phones and replays); ?introAt=<s>
    * starts the film at that time (tests). Skip: the skip button, Enter / Esc, or any key / tap twice.
    */
-  private async intro() {
+  /** Resolves true when the film was skipped. */
+  private async intro(): Promise<boolean> {
     this.cinematic(true);
     const q = new URLSearchParams(location.search);
     const cut = q.get('intro');
@@ -451,6 +455,7 @@ export class Story {
       this.ui.skip(false);
       this.ui.onSkip = undefined;
     }
+    return intro.skipped;
   }
 
   // ============================================================================ the bear
@@ -668,12 +673,15 @@ export class Story {
       this.player.model.hold = 'pull';
       this.bearVulnerable = false;
       const bearF = new THREE.Vector3(Math.sin(this.bear.heading), 0, Math.cos(this.bear.heading));
-      const stand = this.bear.pos.clone().addScaledVector(bearF, 1.45);
+      // close enough that both fists reach the lamb in the jaws (DavidModel aims them at pullTarget)
+      const stand = this.bear.pos.clone().addScaledVector(bearF, 1.15);
       let prog = 0.15;
       let time = 0;
+      const lambAt = new THREE.Vector3();
       this.ui.letterbox(true);
       this.beh = (dt) => {
         time += dt;
+        this.player.model.pullTarget = lamb.object.getWorldPosition(lambAt);
         this.player.moveToward(stand, 2, dt, 0.1);
         this.player.faceToward(this.bear.pos, dt, 12);
         this.bear.stop(dt);
@@ -689,13 +697,17 @@ export class Story {
         this.ui.qte('mash', clamp(prog, 0, 1), 'מְשֹׁךְ אֶת הַשֶּׂה!', K.interact);
       };
       this.cam.playShots([{ duration: 30, ease: false, at: (_u, tt) => {
+        // side-on two-shot of the tug of war, wide enough (with the letterbox bars) for David's head and the lamb
         const side = new THREE.Vector3(-bearF.z, 0, bearF.x);
         const mid = this.player.pos.clone().lerp(this.bear.pos, 0.45);
-        return { pos: mid.clone().addScaledVector(side, 3.2).add(new THREE.Vector3(0, 1.1 + Math.sin(tt * 0.5) * 0.1, 0)).addScaledVector(bearF, 0.4), look: mid.clone().add(new THREE.Vector3(0, 0.8, 0)), fov: 38 };
+        const pos = mid.clone().addScaledVector(side, 3.7).add(new THREE.Vector3(0, 1.3 + Math.sin(tt * 0.5) * 0.08, 0)).addScaledVector(bearF, 0.5);
+        pos.y = Math.max(pos.y, this.engine.terrain.heightAt(pos.x, pos.z) + 0.6);
+        return { pos, look: mid.clone().add(new THREE.Vector3(0, 1.0, 0)), fov: 40 };
       } }]);
       await this.until(() => prog >= 1 || time > 6.5);
       this.check();
       this.beh = null;
+      this.player.model.pullTarget = null;
       this.ui.qte(null);
       if (prog >= 1) {
         this.ui.flashQte(true);
@@ -764,12 +776,24 @@ export class Story {
       this.player.model.lookTarget = this.bear.model.headCenter.getWorldPosition(new THREE.Vector3());
     };
     const bp = () => this.bear.pos;
+    const away = new THREE.Vector3();
+    const side = new THREE.Vector3();
     await this.shots([
       { duration: 5.4, at: (u) => {
+        // low angle over David's shoulder, up at the rearing bear. Framed from where David actually is (he steps
+        // back from the rescue into his stand during the shot), so his head and the bear's both stay in frame.
         const b = bp();
-        const side = new THREE.Vector3(-bearF.z, 0, bearF.x);
-        const pos = b.clone().addScaledVector(bearF, 5.2 - u * 0.8).addScaledVector(side, 1.3).add(new THREE.Vector3(0, 0.45, 0));
-        return { pos, look: b.clone().add(new THREE.Vector3(0, 1.4 + u * 0.4, 0)), fov: 42 - u * 4 };
+        const d = this.player.pos;
+        away.set(d.x - b.x, 0, d.z - b.z);
+        if (away.lengthSq() < 1e-4) away.copy(bearF);
+        away.normalize();
+        side.set(-away.z, 0, away.x);
+        const pos = d.clone().addScaledVector(away, 2.7 - u * 0.4).addScaledVector(side, 1.25);
+        // low, but never under the hill's crest (the ground is back-face culled from below)
+        pos.y = Math.max(d.y + 0.55, this.engine.terrain.heightAt(pos.x, pos.z) + 0.35);
+        const look = b.clone().lerp(d, 0.3);
+        look.y = b.y * 0.7 + d.y * 0.3 + 1.5 + u * 0.3;
+        return { pos, look, fov: 46 - u * 4 };
       } },
     ]);
     this.check();
@@ -1047,11 +1071,30 @@ export class Story {
       prevBeh?.(dt);
       while (ci < cues.length && t >= cues[ci][0]) cues[ci++][1]();
     };
+    // the thanks (hand on the heart, face lifted) is played to a front three-quarter lens on the sun's side of him,
+    // so the face is lit; the lamb is set down in front of him and walks off to the flock
+    const hd = this.player.heading;
+    const sd = shared.uSunDir.value;
+    const s = Math.sin(hd + 0.62) * sd.x + Math.cos(hd + 0.62) * sd.z >= Math.sin(hd - 0.62) * sd.x + Math.cos(hd - 0.62) * sd.z ? 1 : -1;
+    const lift = (p: THREE.Vector3, up: number) => {
+      p.y = Math.max(p.y, this.engine.terrain.heightAt(p.x, p.z) + up);
+      return p;
+    };
+    const front = orbit(6.5, () => D, 4.0, 2.7, hd + s * 1.55, hd + s * 0.62, 1.25, 1.5, 1.32, 34);
     await this.shots([
-      orbit(6, () => D, 4.2, 3.2, this.player.heading + 2.4, this.player.heading + 1.4, 1.2, 1.4, 1.3, 36),
+      { duration: front.duration, at: (u, tt) => {
+        const fr = front.at(u, tt);
+        lift(fr.pos, 0.9);
+        return fr;
+      } },
+      // then the crane: up and back behind him, over his shoulder, to the flock he brought the lamb back to and the
+      // hills beyond (the mirror of the opening film's title crane)
       { duration: 12, at: (u) => {
-        const pos = D.clone().addScaledVector(f, 5 + u * 18).add(new THREE.Vector3(-3 - u * 10, 2 + u * 16, 0));
-        return { pos, look: D.clone().add(new THREE.Vector3(0, 1.2 - u * 2, 0)), fov: 40 + u * 10 };
+        const right = new THREE.Vector3(-f.z, 0, f.x);
+        // (David stays in the lower third: the look point rides a few metres ahead of him, the horizon near the top)
+        const pos = lift(D.clone().addScaledVector(f, -(2.4 + u * 9)).addScaledVector(right, s * (1.0 + u * 2.6)).add(new THREE.Vector3(0, 1.7 + u * 5, 0)), 1.5);
+        const look = D.clone().addScaledVector(f, 2 + u * 8).add(new THREE.Vector3(0, 0.8, 0));
+        return { pos, look, fov: 40 + u * 8 };
       } },
     ]);
     this.check();
@@ -1062,6 +1105,7 @@ export class Story {
     this.ui.endCard(true, () => {
       this.ui.endCard(false);
       this.engine.sky.setSun(SUN.elevation, SUN.azimuth, this.engine.scene);
+      this.jump = ''; // "play again" is the whole chapter, also after a ?jump= test start
       this.start(true);
     }, () => {
       this.ui.endCard(false);

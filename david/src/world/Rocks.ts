@@ -162,7 +162,7 @@ export class Rocks {
       v.colors.push(col.clone());
       const visH = (bb.max.y - bb.min.y) * sy * (1 - sink);
       const rad = Math.max(sx * (bb.max.x - bb.min.x), sz * (bb.max.z - bb.min.z)) * 0.5;
-      if ((opts.collide ?? true) && visH > 0.55 && rad > 0.45) this.colliders.add({ x, z, r: rad * 0.85, tag: 'rock' });
+      if ((opts.collide ?? true) && visH > 0.55 && rad > 0.45) this.colliders.add({ x, z, r: rad * 0.85, tag: 'rock', top: this.terrain.heightAt(x, z) + visH });
       if (rad > 0.35) this.terrain.suppressGrass(x, z, rad * 1.05, 0.9);
       if (visH > 0.7) shadows.push({ x, z, r: rad * 0.8, h0: 0, h1: visH, k: 0.9, ao: rad * 1.6 });
       this.placed.push({ x, z, s: rad, h: visH });

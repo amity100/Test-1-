@@ -1,5 +1,12 @@
 /** Static circular colliders on the XZ plane (tree trunks, boulders, house walls) in a spatial hash. */
-export interface Circle { x: number; z: number; r: number; tag?: string }
+export interface Circle {
+  x: number;
+  z: number;
+  r: number;
+  tag?: string;
+  /** world Y of the collider's top (rocks): lets the follow camera tell "inside the rock" from "above it" */
+  top?: number;
+}
 
 export class Colliders {
   private cell = 8;
@@ -29,6 +36,25 @@ export class Colliders {
     if (!arr) return true;
     for (const c of arr) if ((c.x - x) ** 2 + (c.z - z) ** 2 < (c.r + r) ** 2) return false;
     return true;
+  }
+
+  /**
+   * Is the 3D point inside a collider that has a height (`top`: rocks), with `pad` metres of margin? Used by the
+   * follow camera so its boom stops in front of a boulder instead of ending inside it (the rock's inner faces
+   * would fill the frame as grey shards).
+   */
+  solidAt(x: number, y: number, z: number, pad: number) {
+    const ix = Math.floor(x / this.cell), iz = Math.floor(z / this.cell);
+    for (let dx = -1; dx <= 1; dx++)
+      for (let dz = -1; dz <= 1; dz++) {
+        const arr = this.map.get(this.key(ix + dx, iz + dz));
+        if (!arr) continue;
+        for (const c of arr) {
+          if (c.top === undefined || y > c.top + pad) continue;
+          if ((c.x - x) ** 2 + (c.z - z) ** 2 < (c.r + pad) ** 2) return true;
+        }
+      }
+    return false;
   }
 
   /** Push a moving circle out of static colliders. Mutates and returns p. */

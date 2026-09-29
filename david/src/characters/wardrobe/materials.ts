@@ -20,7 +20,9 @@ export type Tier = 'low' | 'medium' | 'high';
 
 // ------------------------------------------------------------------------------------------ textures
 type Loader = () => Promise<string>;
-const FILES = import.meta.glob('../../assets/wardrobe/*.webp', { query: '?url', import: 'default' }) as Record<string, Loader>;
+// eager URL strings only (files are fetched on use; no stub chunk per texture in the build)
+const URLS = import.meta.glob('../../assets/wardrobe/*.webp', { query: '?url', import: 'default', eager: true }) as Record<string, string>;
+const FILES: Record<string, Loader> = Object.fromEntries(Object.entries(URLS).map(([k, u]) => [k, () => Promise.resolve(u)]));
 const PREFIX = '../../assets/wardrobe/';
 const texCache = new Map<string, Promise<THREE.Texture>>();
 

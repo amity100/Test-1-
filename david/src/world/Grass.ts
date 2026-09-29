@@ -193,6 +193,8 @@ float h = (gf.x + gf.y <= 1.0)
 float dens = texelFetch(uHeightTex, clamp(ivec2(floor(g + 0.5)), ivec2(0), ivec2(int(uGridN) - 1)), 0).g;
 float dist = length(wp2 - cam2);
 float fade = 1.0 - smoothstep(uPatch * 0.3, uPatch * 0.5, dist);
+// blades right at a low (cinematic) lens would fill the frame as flat cards: thin them out within ~2 m of it
+fade *= smoothstep(0.6, 1.9, length(vec3(wp2.x, h, wp2.y) - uCamPos));
 float keep = step(R.w, dens * 1.15) * step(abs(wp2.x), ${(NEAR_HALF - 2).toFixed(1)}) * step(abs(wp2.y), ${(NEAR_HALF - 2).toFixed(1)});
 // patches: taller, seedier stands and short grazed turf
 float stand = dNoise(wp2 * 0.09 + 3.7);

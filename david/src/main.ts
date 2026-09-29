@@ -12,6 +12,7 @@ import { Projectiles } from './gameplay/Projectiles';
 import { CameraRig } from './gameplay/CameraRig';
 import { GameAudio } from './gameplay/GameAudio';
 import { Story } from './gameplay/Story';
+import { Intro } from './gameplay/Intro';
 import { LAYOUT, SUN } from './world/Layout';
 
 const params = new URLSearchParams(location.search);
@@ -63,7 +64,21 @@ function contextOverlay(root: HTMLElement) {
   };
 }
 
+/**
+ * The artifact host wraps the page in its own document (with a device-width viewport). Opened on its own,
+ * dist-artifact/index.html has no <head>: without this, phones lay the page out 980 px wide and the game renders
+ * blurry at a fraction of the screen's pixels, with tiny UI.
+ */
+function ensureViewport() {
+  if (document.querySelector('meta[name="viewport"]')) return;
+  const m = document.createElement('meta');
+  m.name = 'viewport';
+  m.content = 'width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no';
+  document.head.appendChild(m);
+}
+
 async function boot() {
+  ensureViewport();
   // Hebrew UI; set on the container too because the artifact host wraps the page in its own <html>
   app.dir = 'rtl';
   app.lang = 'he';
@@ -86,7 +101,15 @@ async function boot() {
     if (started && !wasPausedBeforeLoss) setPaused(false);
   };
 
-  await engine.build((f, label) => ui.setLoading(f, label));
+  // The opening film needs Saul's house at Gibeah (set + cast, lazily imported chunks): it is built behind this
+  // loading screen so the film starts at once after the start click (no pre-roll card, no hitches), and it is
+  // disposed after the film. Not built when the film is skipped (?skip=1, ?jump=...) or with ?preload=0 (the intro
+  // then builds it itself behind its pre-roll card). Headless tests (?test=1) keep the lazy path unless ?preload=1.
+  const wantIntro = params.get('skip') !== '1' && !params.get('jump');
+  const preloadStage = wantIntro && (params.get('preload') ?? (testMode ? '0' : '1')) !== '0';
+  // share of the loading bar before Saul's house (its build is the longest single step)
+  const LP = preloadStage ? 0.6 : 1;
+  await engine.build((f, label) => ui.setLoading(f * LP, label));
   const terrain = engine.terrain;
   const ground = (x: number, z: number) => terrain.heightAt(x, z);
 
@@ -95,7 +118,7 @@ async function boot() {
   const audio = new GameAudio(engine.camera);
   const props = new Props(terrain, engine.tex, engine.colliders);
   engine.scene.add(props.group);
-  ui.setLoading(0.96, 'מכין את הצאן…');
+  ui.setLoading(0.96 * LP, 'מכין את הצאן…');
   await Flock.preloadAsync(7);
   const q = engine.quality.name;
   const flock = new Flock({
@@ -111,11 +134,13 @@ async function boot() {
   engine.scene.add(flock.group);
   flock.onSound = (kind, pos, vol) => audio.at(kind, pos, vol * 0.8, 1, 70);
   // David: realistic human + strand hair + fitted costume (async; the Player constructs him synchronously)
-  ui.setLoading(0.97, 'דָּוִד יוֹצֵא אֶל הַצֹּאן…');
+  ui.setLoading(0.97 * LP, 'דָּוִד יוֹצֵא אֶל הַצֹּאן…');
   await DavidModel.preload(q, { msaa: engine.quality.msaa });
   const player = new Player(engine, projectiles, audio);
   const bear = new BearActor(terrain, engine.colliders, engine.scene);
   const cam = new CameraRig(engine.camera, ground);
+  // the follow camera's boom stops in front of boulders (e.g. the big rock beside David's lookout)
+  cam.solid = (x, y, z) => engine.colliders.solidAt(x, y, z, 0.35);
   const story = new Story(engine, ui, input, audio, cam, player, flock, bear, props, projectiles);
   const jump = params.get('jump');
   if (jump === 'sling' || jump === 'bear' || jump === 'fight' || jump === 'end') story.jump = jump;
@@ -126,7 +151,7 @@ async function boot() {
 
   // one-time warm-up behind the loading screen: shader pre-compilation + GPU benchmark that picks the
   // render tier (pixel ratio, AA, shadows, bloom...). The canvas is never resized for performance later.
-  ui.setLoading(0.98, 'מכוונן את התמונה למכשיר…');
+  ui.setLoading(0.98 * LP, 'מכוונן את התמונה למכשיר…');
   engine.setFov(42);
   const px = LAYOUT.start.x, pz = LAYOUT.start.z;
   const bench = await engine.warmup({
@@ -141,6 +166,20 @@ async function boot() {
     ],
   });
   (window as unknown as Record<string, unknown>).__bench = bench;
+  // the score's voicing follows the final render tier (phones: lighter synthesis, shorter reverb)
+  audio.setLite(engine.quality.name === 'low');
+  if (preloadStage) {
+    // after the warm-up: the stage is pre-compiled for the final tier's post chain (TAA / DoF kernels)
+    const label = 'בֵּית שָׁאוּל בַּגִּבְעָה…';
+    ui.setLoading(LP, label);
+    const t0 = performance.now();
+    const cut = params.get('intro'); // the same cut the story will play (Story.intro): full on desktop, short on phones
+    await Intro.preload(engine, {
+      short: cut === 'short' ? true : cut === 'full' ? false : undefined,
+      onProgress: (f) => ui.setLoading(LP + (0.995 - LP) * f, label),
+    });
+    (window as unknown as Record<string, unknown>).__stageMs = performance.now() - t0;
+  }
   ui.setLoading(1, 'מוכן');
 
   // ------------------------------------------------------------------ pause handling
@@ -191,6 +230,7 @@ async function boot() {
   // ------------------------------------------------------------------ loop
   let time = 0;
   let pausedFrames = 0;
+  let idleFrames = 0;
   const camDir = new THREE.Vector3();
   const frame = (rawDt: number, render = true) => {
     input.update();
@@ -220,7 +260,9 @@ async function boot() {
     if (cam.inCinematic) engine.focus.copy(engine.camera.position).addScaledVector(engine.camera.getWorldDirection(camDir), 18);
     else engine.focus.copy(player.pos);
     audio.update(rawDt);
-    if (render) engine.render(rawDt, dt);
+    // the start screen is opaque: until the start click, redraw only now and then (keeps the canvas valid) instead of
+    // spending a phone's GPU and battery on a picture nobody sees
+    if (render && (started || idleFrames++ % 30 === 0)) engine.render(rawDt, dt);
     else engine.tickEnvironment(dt);
     // unconsumed edge presses expire each frame
     input.clearEdges();

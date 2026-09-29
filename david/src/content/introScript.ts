@@ -150,8 +150,8 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
   },
   {
     id: 'court-hand', beat: 'saul-court', world: 'gibeah', dur: 3, cut: 'cut',
-    direction: 'Insert: the king\'s fist on the spear shaft ("his spear in his hand"), tilting up the shaft to the '
-      + 'bronze head against the tamarisk. The shaft ends vertical in the left third - match cut to the staff.',
+    direction: 'Insert ("his spear in his hand"): the bronze spear head against the tamarisk, tilting down the shaft '
+      + 'to the king\'s fist on it. The fist ends with the shaft vertical in the left third - match cut to the staff.',
   },
   {
     id: 'david-staff', beat: 'flock', world: 'field', dur: 7, cut: 'match', fade: 0.7,

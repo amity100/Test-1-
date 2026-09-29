@@ -27,6 +27,9 @@ export class CameraRig {
   sensitivity = 0.0024;
   private initialized = false;
 
+  /** optional solid-obstacle test for the follow camera's boom (boulders: Colliders.solidAt) */
+  solid: ((x: number, y: number, z: number) => boolean) | null = null;
+
   constructor(private camera: THREE.PerspectiveCamera, private ground: (x: number, z: number) => number) {}
 
   addShake(amount: number) {
@@ -119,12 +122,14 @@ export class CameraRig {
     const right = tmpB.set(-Math.cos(this.yaw), 0, Math.sin(this.yaw));
     const pivot = tmpC.copy(this.smoothTarget).addScaledVector(right, -0.62 * this.aimW);
     pivot.y += 0.08 * this.aimW;
-    // terrain collision along the boom
+    // terrain (and boulder) collision along the boom; boulders are ignored while the pivot itself is inside one's
+    // margin (David pressed against a rock), so the camera never jams onto his head
+    const solid = this.solid !== null && !this.solid(pivot.x, pivot.y, pivot.z) ? this.solid : null;
     let d = want;
     for (let i = 1; i <= 8; i++) {
       const s = (i / 8) * want;
       const px = pivot.x + dir.x * s, pz = pivot.z + dir.z * s, py = pivot.y + dir.y * s;
-      if (py < this.ground(px, pz) + 0.35) {
+      if (py < this.ground(px, pz) + 0.35 || (solid !== null && solid(px, py, pz))) {
         d = Math.max(0.6, s - 0.3);
         break;
       }

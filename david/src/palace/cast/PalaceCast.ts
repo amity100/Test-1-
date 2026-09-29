@@ -169,7 +169,9 @@ export class PalaceCast {
     // tier in the seated poses): pull it in a few mm (it is never seen except at the sleeves, the neck and through the
     // side slits, where a few mm do not show). NB the garment's objectNormal points INTO the body (measured: moving
     // along -objectNormal grew the patches), hence the + sign
-    const shrink = tier === 'low' ? 0.008 : 0.003;
+    // (2 mm on every tier since the me'il has its own armholes and layering pad: the old 8 mm on phones opened jagged
+    // white gaps around the arms in the seated hall close-up)
+    const shrink = 0.002;
     saul.human.root.traverse((o) => {
       const m = o as THREE.Mesh;
       // body and skirt only: the sleeves are seen below the me'il's cap sleeves, and the arm skin under them is not hidden

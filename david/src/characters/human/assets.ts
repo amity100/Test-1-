@@ -5,7 +5,10 @@
  */
 type Loader = () => Promise<string>;
 
-const FILES = import.meta.glob('../../assets/human/**/*.{json,binz,webp,jpg,png}', { query: '?url', import: 'default' }) as Record<string, Loader>;
+// eager URL strings (not the files): nothing is downloaded until a preset asks for it, and the build needs no stub
+// chunk per file (fewer files to publish, one round trip less per asset)
+const URLS = import.meta.glob('../../assets/human/**/*.{json,binz,webp,jpg,png}', { query: '?url', import: 'default', eager: true }) as Record<string, string>;
+const FILES: Record<string, Loader> = Object.fromEntries(Object.entries(URLS).map(([k, u]) => [k, () => Promise.resolve(u)]));
 
 const PREFIX = '../../assets/human/';
 
