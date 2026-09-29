@@ -451,6 +451,14 @@ REFERENCE = [
            'ending (David carrying the rescued lamb) is an artistic choice - never caption it with this text.'),
     E(id='tj_s1_22_6_spear', src=('Targum Jonathan on I Samuel', 22, 6), q=['ומורניתיה בידיה'],
       status='reference', gloss='Targum: "and his spear (murnita) in his hand".'),
+    E(id='tj_s1_16_12_ruddy', src=('Targum Jonathan on I Samuel', 16, 12), q=['והוא סמוק עינוהי יאין ושפיר בריויה'],
+      status='reference', gloss='Targum: "and he was ruddy (samoq), his eyes beautiful and his appearance fine".',
+      note='The Targum reads אַדְמוֹנִי as a ruddy complexion.'),
+    E(id='radak_s1_17_42_ruddy', src=('Radak on I Samuel', 17, 42, 1), q=None, status='reference',
+      gloss='Radak: Goliath despised him not for being a youth but for being ruddy and handsome - he thought '
+            'such a man could not be a warrior, for one who goes to war loses his beauty from toil and '
+            'exposure to cold, rain and heat.',
+      note='Art direction: David\'s face should read fresh and ruddy, not weather-beaten.'),
     E(id='rashi_s1_22_6_tamarisk', src=('Rashi on I Samuel', 22, 6, 2), q=None, status='reference',
       gloss='Rashi: a (place called) Ramah in the border of Benjamin; the Rabbis (Taanit 5b) say it '
             'alludes to Samuel\'s Ramah - Saul sat in Gibeah by the merit of the great "tamarisk" in '
