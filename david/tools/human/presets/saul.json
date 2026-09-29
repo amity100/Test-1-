@@ -2,8 +2,17 @@
   "name": "saul",
   "description": "King Saul son of Kish, now a mature king (~50). 'A choice young man and goodly... from his shoulders and upward he was higher than any of the people' (1 Sam 9:2; 10:23). Very tall, broad and powerful, strong brow and regal features; will get a beard.",
   "height_m": 1.96,
-  "macro": { "gender": 1.0, "age_years": 48, "muscle": 0.78, "weight": 0.6, "height": 1.0, "proportions": 0.85,
-             "african": 0.08, "asian": 0.03, "caucasian": 0.89 },
+  "macro": {
+    "gender": 1.0,
+    "age_years": 48,
+    "muscle": 0.78,
+    "weight": 0.6,
+    "height": 1.0,
+    "proportions": 0.85,
+    "african": 0.08,
+    "asian": 0.03,
+    "caucasian": 0.89
+  },
   "modifiers": {
     "head/head-square": 0.45,
     "head/head-scale-horiz-decr|incr": 0.03,
@@ -38,11 +47,17 @@
     "armslegs/(lr)-lowerarm-muscle-decr|incr": 0.4,
     "armslegs/(lr)-upperleg-muscle-decr|incr": 0.25,
     "armslegs/(lr)-lowerleg-muscle-decr|incr": 0.3,
-    "armslegs/(lr)-hand-scale-decr|incr": 0.08
+    "armslegs/(lr)-hand-scale-decr|incr": 0.08,
+    "breast/nipple-size-decr|incr": -0.35,
+    "breast/nipple-point-decr|incr": -0.7
   },
   "skin": {
     "seed": 44,
-    "tone": [0.64, 0.48, 0.37],
+    "tone": [
+      0.64,
+      0.48,
+      0.37
+    ],
     "tan": 0.45,
     "ruddy": 0.35,
     "freckles": 0.08,
@@ -52,6 +67,17 @@
     "age": 0.55,
     "tan_lines": "robe"
   },
-  "eyes": { "iris": "dark_brown", "seed": 9 },
-  "brows": { "color": [0.07, 0.045, 0.03], "density": 1.25, "thickness": 1.25 }
+  "eyes": {
+    "iris": "dark_brown",
+    "seed": 9
+  },
+  "brows": {
+    "color": [
+      0.07,
+      0.045,
+      0.03
+    ],
+    "density": 1.25,
+    "thickness": 1.25
+  }
 }

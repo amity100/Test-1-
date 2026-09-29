@@ -26,20 +26,21 @@ export type FingerPose = 'relaxed' | 'fist' | 'grip' | 'open' | 'spread' | 'cup'
 export type Expression = 'neutral' | 'determined' | 'effort' | 'awe' | 'smile' | 'fear' | 'pain' | 'anger' | 'sad';
 
 // [MCP, PIP, DIP] flexion (degrees) for index, middle, ring, pinky; thumb [CMC, MCP, IP]; spread (deg, + = toward middle)
-interface FingerShape {
+export interface FingerShape {
   f: [number, number, number][];
   t: [number, number, number];
   tOpp: number; // thumb opposition (deg)
+  tw?: [number, number, number]; // thumb wrap about the grip (cylinder) axis: CMC, MCP, IP (deg)
   spread: [number, number, number, number];
   cup: number; // metacarpal arch for ring/pinky (deg)
 }
 const FINGER_SHAPES: Record<FingerPose, FingerShape> = {
-  open: { f: [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]], t: [0, 0, 0], tOpp: 0, spread: [4, 2, 0, 0], cup: 0 },
+  open: { f: [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]], t: [0, 0, 0], tOpp: 0, spread: [2, 0, 1, 2], cup: 0 },
   spread: { f: [[-5, 0, 0], [-5, 0, 0], [-5, 0, 0], [-5, 0, 0]], t: [-10, 0, 0], tOpp: -10, spread: [-6, 0, -5, -12], cup: -4 },
   relaxed: { f: [[14, 24, 10], [18, 30, 14], [22, 34, 16], [27, 38, 20]], t: [6, 12, 14], tOpp: 16, spread: [6, 1, 4, 9], cup: 5 },
-  cup: { f: [[28, 30, 12], [30, 32, 14], [32, 34, 16], [34, 36, 18]], t: [10, 14, 10], tOpp: 30, spread: [9, 4, -3, -6], cup: 10 },
-  grip: { f: [[58, 78, 42], [64, 80, 44], [68, 82, 46], [72, 84, 48]], t: [18, 28, 32], tOpp: 44, spread: [8, 4, -2, -4], cup: 12 },
-  fist: { f: [[86, 100, 62], [90, 102, 64], [92, 104, 66], [94, 106, 68]], t: [26, 42, 46], tOpp: 52, spread: [9, 4, -3, -6], cup: 16 },
+  cup: { f: [[28, 30, 12], [30, 32, 14], [32, 34, 16], [34, 36, 18]], t: [10, 14, 10], tOpp: 30, spread: [7, 1, 4, 8], cup: 10 },
+  grip: { f: [[58, 78, 42], [64, 80, 44], [68, 82, 46], [72, 84, 48]], t: [0, 8, 10], tOpp: 20, tw: [34, 34, 30], spread: [6, 1, 3, 6], cup: 12 },
+  fist: { f: [[86, 100, 62], [90, 102, 64], [92, 104, 66], [94, 106, 68]], t: [10, 20, 20], tOpp: 30, tw: [30, 36, 30], spread: [7, 1, 4, 8], cup: 16 },
 };
 
 // Facial expressions as MakeHuman pose-unit weights (face-poseunits.bvh).
@@ -80,6 +81,8 @@ const EXPRESSIONS: Record<Expression, Record<string, number>> = {
   },
 };
 
+const EXPR_NAMES = Object.keys(EXPRESSIONS) as Expression[];
+const LR_NAMES = ['Left', 'Right'] as const;
 const _q = new THREE.Quaternion();
 const _q2 = new THREE.Quaternion();
 const _q3 = new THREE.Quaternion();
@@ -87,6 +90,10 @@ const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _m = new THREE.Matrix4();
 const QI = new THREE.Quaternion();
+const T_SW = new THREE.Quaternion(), T_TW = new THREE.Quaternion(), T_A = new THREE.Quaternion(), T_B = new THREE.Quaternion();
+const T_SWF = new THREE.Quaternion(), T_TWF = new THREE.Quaternion(), T_SWH = new THREE.Quaternion(), T_TWH = new THREE.Quaternion();
+const T_T = new THREE.Quaternion(), T_C = new THREE.Quaternion(), T_D = new THREE.Quaternion();
+const T_E = new THREE.Euler();
 const Y = new THREE.Vector3(0, 1, 0);
 
 function frac(q: THREE.Quaternion, f: number, out: THREE.Quaternion) {
@@ -132,7 +139,7 @@ export class HumanRig {
   /** direct per-unit face control (MakeHuman pose units), 0..1 */
   readonly faceUnits: Record<string, number> = {};
   /** always-on bias (relaxed lids: the MakeHuman neutral face shows a little sclera under the iris) */
-  readonly faceBias: Record<string, number> = { LeftLowerLidUp: 0.22, RightLowerLidUp: 0.22, LeftUpperLidClosed: 0.1, RightUpperLidClosed: 0.1 };
+  readonly faceBias: Record<string, number> = { LeftLowerLidUp: 0.16, RightLowerLidUp: 0.16, LeftUpperLidClosed: 0.03, RightUpperLidClosed: 0.03 };
   /** resting gaze pitch (radians, negative = down) */
   gazeRestPitch = -0.035;
   private exprTarget: Partial<Record<Expression, number>> = {};
@@ -155,7 +162,19 @@ export class HumanRig {
   private saccade = new THREE.Vector2();
   private time = 0;
   private fingerAxes: Record<string, { flex: THREE.Vector3; spread: THREE.Vector3 }> = {};
+  /** per-side grip finger shape, solved so the fingers wrap a cylinder of `gripRadius` */
+  readonly gripShape: Record<'L' | 'R', FingerShape> = { L: { ...FINGER_SHAPES.grip }, R: { ...FINGER_SHAPES.grip } };
+  /** rest-pose grip centre / frame per hand (see HumanModel sockets handGripL/R) */
+  readonly grip: Record<'L' | 'R', { center: THREE.Vector3; x: THREE.Vector3; y: THREE.Vector3; z: THREE.Vector3 }> = {} as never;
+  gripRadius = 0.02;
   private unitQ: Record<string, Record<string, THREE.Quaternion>> = {};
+  private unitIdx: Record<string, number> = {};
+  private unitBones: { bi: number; q: THREE.Quaternion }[][] = [];
+  private unitW = new Float32Array(0);
+  private exprUnits: number[][] = [];
+  private faceAcc: THREE.Quaternion[] = [];
+  private faceMark = new Uint8Array(0);
+  private faceTouched: number[] = [];
 
   constructor(readonly rig: RigJson, readonly root: THREE.Object3D) {
     // ---------- MakeHuman bones (bind pose: identity rotations, translations only)
@@ -238,13 +257,90 @@ export class HumanRig {
       }
       this.fingerAxes[`palm${s}`] = { flex: r.clone(), spread: palm.clone() };
     }
+    this.solveGrip(this.gripRadius);
     // ---------- face pose units as quaternions
     for (const [u, map] of Object.entries(rig.poseunits)) {
       const m: Record<string, THREE.Quaternion> = {};
       for (const [b, q] of Object.entries(map)) if (b in this.byName) m[b] = new THREE.Quaternion(q[0], q[1], q[2], q[3]);
       this.unitQ[u] = m;
+      this.unitIdx[u] = this.unitBones.length;
+      this.unitBones.push(Object.entries(m).map(([b, qq]) => ({ bi: this.byName[b], q: qq })));
     }
+    this.unitW = new Float32Array(this.unitBones.length);
+    this.exprUnits = EXPR_NAMES.map((e) => Object.entries(EXPRESSIONS[e]).flatMap(([u, w]) => (u in this.unitIdx ? [this.unitIdx[u], w] : [])));
+    this.faceAcc = this.rest.map(() => new THREE.Quaternion());
+    this.faceMark = new Uint8Array(this.rest.length);
     this.toRest();
+  }
+
+  /**
+   * Solve finger flexion so each finger's joint chain wraps a cylinder (staff) of the given radius whose axis
+   * runs across the palm under the knuckles.  Updates `gripShape` and `grip` (centre/frame in the rest pose).
+   */
+  solveGrip(radius: number) {
+    this.gripRadius = radius;
+    const R = (n: string) => this.rest[this.byName[n]].restWorldPos;
+    const tailRest = (n: string) => {
+      const i = this.byName[n];
+      const b = this.rig.bones[i];
+      return new THREE.Vector3(b.t[0] - b.h[0], b.t[1] - b.h[1], b.t[2] - b.h[2]).applyQuaternion(this.rest[i].Q).add(this.rest[i].restWorldPos);
+    };
+    const D = 180 / Math.PI;
+    for (const s of ['L', 'R'] as const) {
+      const sg = s === 'L' ? 1 : -1;
+      const wr = R(`wrist.${s}`), idx = R(`finger2-1.${s}`), pky = R(`finger5-1.${s}`), mid = R(`finger3-1.${s}`);
+      const f = mid.clone().sub(wr).normalize();
+      const r = idx.clone().sub(pky).normalize();
+      const n = f.clone().cross(r).multiplyScalar(sg).normalize();
+      // cylinder axis across the palm, centre under the distal palm crease
+      const fingerHalf = 0.0085;
+      const center = idx.clone().add(pky).multiplyScalar(0.5).addScaledVector(n, 0.012 + radius + 0.004).addScaledVector(f, -0.012);
+      const y = r.clone().sub(n.clone().multiplyScalar(r.dot(n))).normalize();
+      this.grip[s] = { center, x: n.clone(), y, z: n.clone().cross(y).normalize() };
+      const shape: FingerShape = JSON.parse(JSON.stringify(FINGER_SHAPES.grip));
+      const Re = radius + fingerHalf;
+      for (let k = 2; k <= 5; k++) {
+        const P0 = R(`finger${k}-1.${s}`), P1 = R(`finger${k}-2.${s}`), P2 = R(`finger${k}-3.${s}`), P3 = tailRest(`finger${k}-3.${s}`);
+        const u = P1.clone().sub(P0).normalize();
+        const w = n.clone().sub(u.clone().multiplyScalar(n.dot(u))).normalize();
+        const to2 = (v: THREE.Vector3) => new THREE.Vector2(v.clone().sub(P0).dot(u), v.clone().sub(P0).dot(w));
+        const C = to2(center);
+        const L = [P1.distanceTo(P0), P2.distanceTo(P1), P3.distanceTo(P2)];
+        const rest2 = to2(P2).sub(to2(P1)), rest3 = to2(P3).sub(to2(P2));
+        const restAng = [0, Math.atan2(rest2.y, rest2.x), Math.atan2(rest3.y, rest3.x)];
+        // walk the chain: each next joint lands on the circle of radius Re around C (flexing toward the palm)
+        let P = new THREE.Vector2(0, 0);
+        let prevAng = 0;
+        const abs: number[] = [];
+        for (let j = 0; j < 3; j++) {
+          const PC = P.clone().sub(C);
+          const rho = PC.length();
+          const kk = (Re * Re - rho * rho - L[j] * L[j]) / (2 * L[j]);
+          const alpha = Math.atan2(PC.y, PC.x);
+          const c = THREE.MathUtils.clamp(kk / Math.max(rho, 1e-6), -1, 1);
+          const a1 = alpha + Math.acos(c), a2 = alpha - Math.acos(c);
+          // pick the solution that flexes (angle increases toward +w) but by the least amount
+          const norm = (a: number) => { let x = a - prevAng; while (x < -Math.PI) x += 2 * Math.PI; while (x > Math.PI) x -= 2 * Math.PI; return x; };
+          const c1 = norm(a1), c2 = norm(a2);
+          const pick = [c1, c2].filter((x) => x > -0.05).sort((a, b) => a - b)[0] ?? Math.max(c1, c2);
+          const ang = prevAng + THREE.MathUtils.clamp(pick, 0, THREE.MathUtils.degToRad(110));
+          abs.push(ang);
+          P = P.clone().add(new THREE.Vector2(Math.cos(ang), Math.sin(ang)).multiplyScalar(L[j]));
+          prevAng = ang;
+        }
+        const rel = [abs[0] - restAng[0], abs[1] - abs[0] - (restAng[1] - restAng[0]), abs[2] - abs[1] - (restAng[2] - restAng[1])];
+        shape.f[k - 2] = [rel[0] * D, rel[1] * D, rel[2] * D];
+        // per-finger flexion axis for this chain
+        this.fingerAxes[`${k}${s}`].flex.copy(u.clone().cross(w).normalize());
+      }
+      // thumb wraps around the cylinder axis, curling toward the palm side
+      const tb = R(`finger1-2.${s}`), tt = tailRest(`finger1-3.${s}`);
+      const dT = tt.clone().sub(tb).normalize();
+      const wrap = y.clone();
+      if (dT.clone().cross(n).dot(wrap) < 0) wrap.negate();
+      this.fingerAxes[`thumbWrap${s}`] = { flex: wrap, spread: n.clone() };
+      this.gripShape[s] = shape;
+    }
   }
 
   private worldOfProxy(o: THREE.Object3D) {
@@ -321,7 +417,7 @@ export class HumanRig {
     }
     const J = this.joints;
     const q = (o: THREE.Object3D) => o.quaternion;
-    const sw = new THREE.Quaternion(), tw = new THREE.Quaternion(), a = new THREE.Quaternion(), b = new THREE.Quaternion();
+    const sw = T_SW, tw = T_TW, a = T_A, b = T_B;
     // ---- torso
     const breath = Math.sin(this.time * 1.35) * this.breathe;
     const rs = q(J.spine), rc = _q2.copy(q(J.chest)).multiply(a.setFromAxisAngle(_v.set(1, 0, 0), -0.012 * breath)), rn = q(J.neck);
@@ -345,23 +441,26 @@ export class HumanRig {
       const protract = 0.16 * Math.max(0, dir.z) * Math.min(1, elev);
       const clav = a.setFromAxisAngle(_v2.set(0, 0, 1), sg * lift).multiply(b.setFromAxisAngle(Y, -sg * protract));
       this.setC(`clavicle.${s}`, clav);
-      const ua1 = _q.copy(clav).invert().multiply(sw).multiply(frac(tw, 0.5, b));
+      // the deltoid bone takes part of the swing (keeps the shoulder round when the arm is raised)
+      const sh = frac(sw, 0.3, T_D);
+      this.setC(`shoulder01.${s}`, sh);
+      const ua1 = _q.copy(clav).multiply(sh).invert().multiply(sw).multiply(frac(tw, 0.5, b));
       this.setC(`upperarm01.${s}`, ua1);
       this.setC(`upperarm02.${s}`, frac(tw, 0.5, b));
       // forearm: elbow swing + forearm twist + the hand's twist (pronation/supination)
-      const swF = new THREE.Quaternion(), twF = new THREE.Quaternion(), swH = new THREE.Quaternion(), twH = new THREE.Quaternion();
+      const swF = T_SWF, twF = T_TWF, swH = T_SWH, twH = T_TWH;
       swingTwistY(q(J[`fa${s}`]), swF, twF);
       swingTwistY(q(J[`hd${s}`]), swH, twH);
-      const T = twF.clone().multiply(twH);
-      this.setC(`lowerarm01.${s}`, swF.clone().multiply(frac(T, 0.35, b)));
+      const T = T_T.copy(twF).multiply(twH);
+      this.setC(`lowerarm01.${s}`, T_C.copy(swF).multiply(frac(T, 0.35, b)));
       this.setC(`lowerarm02.${s}`, frac(T, 0.65, b));
-      this.setC(`wrist.${s}`, twH.clone().invert().multiply(q(J[`hd${s}`])));
+      this.setC(`wrist.${s}`, T_C.copy(twH).invert().multiply(q(J[`hd${s}`])));
       // ---- legs
       swingTwistY(q(J[`th${s}`]), sw, tw);
-      this.setC(`upperleg01.${s}`, sw.clone().multiply(frac(tw, 0.5, b)));
+      this.setC(`upperleg01.${s}`, T_C.copy(sw).multiply(frac(tw, 0.5, b)));
       this.setC(`upperleg02.${s}`, frac(tw, 0.5, b));
       swingTwistY(q(J[`shin${s}`]), sw, tw);
-      this.setC(`lowerleg01.${s}`, sw.clone().multiply(frac(tw, 0.5, b)));
+      this.setC(`lowerleg01.${s}`, T_C.copy(sw).multiply(frac(tw, 0.5, b)));
       this.setC(`lowerleg02.${s}`, frac(tw, 0.5, b));
       this.setC(`foot.${s}`, q(J[`ft${s}`]));
       this.updateFingers(s, dt);
@@ -394,22 +493,26 @@ export class HumanRig {
     }
     const f: [number, number, number][] = [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]];
     const t = [0, 0, 0];
+    const tw = [0, 0, 0];
     let opp = 0, cup = 0;
     const spread = [0, 0, 0, 0];
     for (const [p, w0] of st.cur) {
       const w = w0 / (sum || 1);
-      const S = FINGER_SHAPES[p];
+      const S = p === 'grip' ? this.gripShape[s] : FINGER_SHAPES[p];
       for (let i = 0; i < 4; i++) {
         for (let j = 0; j < 3; j++) f[i][j] += S.f[i][j] * w;
         spread[i] += S.spread[i] * w;
       }
-      for (let j = 0; j < 3; j++) t[j] += S.t[j] * w;
+      for (let j = 0; j < 3; j++) {
+        t[j] += S.t[j] * w;
+        tw[j] += (S.tw?.[j] ?? 0) * w;
+      }
       opp += S.tOpp * w;
       cup += S.cup * w;
     }
     const D = Math.PI / 180;
     const sg = s === 'L' ? 1 : -1;
-    const a = new THREE.Quaternion(), b = new THREE.Quaternion();
+    const a = T_A, b = T_B;
     for (let i = 0; i < 4; i++) {
       const ax = this.fingerAxes[`${i + 2}${s}`];
       // spread (abduction) about the palm normal; positive values close the fingers toward the middle finger.
@@ -430,26 +533,35 @@ export class HumanRig {
     const th = this.fingerAxes[`1${s}`];
     const oppAxis = _v2.copy(palm.flex).cross(palm.spread).normalize();
     const oppQ = a.setFromAxisAngle(oppAxis, opp * D * 0.6);
-    this.setC(`finger1-1.${s}`, oppQ.multiply(b.setFromAxisAngle(th.flex, t[0] * D)));
-    this.setC(`finger1-2.${s}`, a.setFromAxisAngle(th.flex, t[1] * D));
-    this.setC(`finger1-3.${s}`, a.setFromAxisAngle(th.flex, t[2] * D));
+    const wrapAx = this.fingerAxes[`thumbWrap${s}`].flex;
+    const c = T_C;
+    this.setC(`finger1-1.${s}`, c.setFromAxisAngle(wrapAx, tw[0] * D).multiply(oppQ).multiply(b.setFromAxisAngle(th.flex, t[0] * D)));
+    this.setC(`finger1-2.${s}`, c.setFromAxisAngle(wrapAx, tw[1] * D).multiply(a.setFromAxisAngle(th.flex, t[1] * D)));
+    this.setC(`finger1-3.${s}`, c.setFromAxisAngle(wrapAx, tw[2] * D).multiply(a.setFromAxisAngle(th.flex, t[2] * D)));
   }
 
   private updateFace(dt: number) {
+    const W = this.unitW;
+    W.fill(0);
+    const add = (name: string, w: number) => {
+      const i = this.unitIdx[name];
+      if (i !== undefined) W[i] += w;
+    };
     // expressions (smoothed)
     const k = 1 - Math.exp(-this.expressionSpeed * dt);
-    const units: Record<string, number> = {};
-    for (const e of Object.keys(EXPRESSIONS) as Expression[]) {
-      const cur = this.exprCur[e] ?? 0;
-      const tgt = this.exprTarget[e] ?? 0;
+    for (let e = 0; e < EXPR_NAMES.length; e++) {
+      const name = EXPR_NAMES[e];
+      const cur = this.exprCur[name] ?? 0;
+      const tgt = this.exprTarget[name] ?? 0;
       const nv = cur + (tgt - cur) * k;
-      this.exprCur[e] = nv;
+      this.exprCur[name] = nv;
       if (nv < 1e-3) continue;
-      for (const [u, w] of Object.entries(EXPRESSIONS[e])) units[u] = (units[u] ?? 0) + w * nv;
+      const list = this.exprUnits[e];
+      for (let j = 0; j < list.length; j += 2) W[list[j]] += list[j + 1] * nv;
     }
-    for (const [u, w] of Object.entries(this.faceUnits)) units[u] = (units[u] ?? 0) + w;
-    for (const [u, w] of Object.entries(this.faceBias)) units[u] = (units[u] ?? 0) + w;
-    // blinking (natural rate ~ every 2-6 s, 0.15 s)
+    for (const u in this.faceUnits) add(u, this.faceUnits[u]);
+    for (const u in this.faceBias) add(u, this.faceBias[u]);
+    // blinking (natural rate ~ every 2-6 s, ~0.25 s)
     if (this.blinkEnabled) {
       this.blinkT -= dt;
       if (this.blinkT <= 0 && this.blinkPhase < 0) {
@@ -476,29 +588,39 @@ export class HumanRig {
     this.eyePitch += (this.eyePitchT + this.gazeRestPitch + this.saccade.y - this.eyePitch) * ke;
     // lids follow the gaze
     const down = Math.max(0, -this.eyePitch) * 1.6, up = Math.max(0, this.eyePitch) * 1.4;
-    for (const S of ['Left', 'Right']) {
-      units[`${S}UpperLidClosed`] = Math.min(1, (units[`${S}UpperLidClosed`] ?? 0) + blink + down * 0.6);
-      units[`${S}UpperLidOpen`] = Math.max(0, (units[`${S}UpperLidOpen`] ?? 0) + up * 0.5 - blink);
-      units[`${S}LowerLidUp`] = (units[`${S}LowerLidUp`] ?? 0) + down * 0.2 + blink * 0.15;
+    for (const S of LR_NAMES) {
+      const uc = this.unitIdx[`${S}UpperLidClosed`], uo = this.unitIdx[`${S}UpperLidOpen`], lu = this.unitIdx[`${S}LowerLidUp`];
+      if (uc !== undefined) W[uc] = Math.min(1, W[uc] + blink + down * 0.6);
+      if (uo !== undefined) W[uo] = Math.max(0, W[uo] + up * 0.5 - blink);
+      if (lu !== undefined) W[lu] += down * 0.2 + blink * 0.15;
     }
-    if (this.jawOpen) units.JawDrop = (units.JawDrop ?? 0) + this.jawOpen;
-    this.lidClose = Math.min(1, units.LeftUpperLidClosed ?? 0);
-    // accumulate unit rotations per bone
-    const acc: Record<string, THREE.Quaternion> = {};
-    const tmp = new THREE.Quaternion();
-    for (const [u, w] of Object.entries(units)) {
+    if (this.jawOpen) add('JawDrop', this.jawOpen);
+    this.lidClose = Math.min(1, W[this.unitIdx.LeftUpperLidClosed] ?? 0);
+    // accumulate unit rotations per bone (small rotations: order-independent enough)
+    const touched = this.faceTouched;
+    touched.length = 0;
+    for (let u = 0; u < W.length; u++) {
+      const w = W[u];
       if (w <= 1e-4) continue;
-      const m = this.unitQ[u];
-      if (!m) continue;
-      for (const [bn, uq] of Object.entries(m)) {
-        const qa = acc[bn] ?? (acc[bn] = new THREE.Quaternion());
-        tmp.copy(QI).slerp(uq, Math.min(w, 1.5));
-        qa.premultiply(tmp);
+      const list = this.unitBones[u];
+      for (let j = 0; j < list.length; j++) {
+        const { bi, q } = list[j];
+        const qa = this.faceAcc[bi];
+        if (!this.faceMark[bi]) {
+          this.faceMark[bi] = 1;
+          qa.identity();
+          touched.push(bi);
+        }
+        T_D.copy(QI).slerp(q, Math.min(w, 1.5));
+        qa.premultiply(T_D);
       }
     }
-    for (const [bn, qa] of Object.entries(acc)) this.mulC(bn, qa);
+    for (const bi of touched) {
+      this.rest[bi].c.multiply(this.faceAcc[bi]);
+      this.faceMark[bi] = 0;
+    }
     // eyeballs
-    const e = tmp.setFromEuler(new THREE.Euler(-this.eyePitch, this.eyeYaw, 0, 'YXZ'));
+    const e = T_D.setFromEuler(T_E.set(-this.eyePitch, this.eyeYaw, 0, 'YXZ'));
     this.mulC('eye.L', e);
     this.mulC('eye.R', e);
   }

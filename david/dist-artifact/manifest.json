@@ -1,0 +1,106 @@
+{
+  "page": {
+    "path": "index.html",
+    "bytes": 18005
+  },
+  "files": [
+    {
+      "path": "assets/bark_albedo-HvYn_ogn.jpg",
+      "bytes": 113133,
+      "contentType": "image/jpeg"
+    },
+    {
+      "path": "assets/bark_normal-CgoR3aeH.jpg",
+      "bytes": 183609,
+      "contentType": "image/jpeg"
+    },
+    {
+      "path": "assets/grass_albedo-kPUKQTiK.jpg",
+      "bytes": 530680,
+      "contentType": "image/jpeg"
+    },
+    {
+      "path": "assets/grass_normal-BBipxroJ.jpg",
+      "bytes": 587364,
+      "contentType": "image/jpeg"
+    },
+    {
+      "path": "assets/index-CFGTGPjf.js",
+      "bytes": 916210,
+      "contentType": "text/javascript"
+    },
+    {
+      "path": "assets/index-oaUrWGLA.css",
+      "bytes": 17350,
+      "contentType": "text/css"
+    },
+    {
+      "path": "assets/leather_albedo-DVtGR37p.jpg",
+      "bytes": 40669,
+      "contentType": "image/jpeg"
+    },
+    {
+      "path": "assets/leather_normal-BQO706dK.jpg",
+      "bytes": 139973,
+      "contentType": "image/jpeg"
+    },
+    {
+      "path": "assets/linen_albedo-CZ6UFzoh.jpg",
+      "bytes": 60253,
+      "contentType": "image/jpeg"
+    },
+    {
+      "path": "assets/linen_normal-NjuX3EyQ.jpg",
+      "bytes": 141069,
+      "contentType": "image/jpeg"
+    },
+    {
+      "path": "assets/oak_leaves-Ct-VHIG6.webp",
+      "bytes": 249240,
+      "contentType": "image/webp"
+    },
+    {
+      "path": "assets/olive_leaves-CxwAj-Dj.webp",
+      "bytes": 440178,
+      "contentType": "image/webp"
+    },
+    {
+      "path": "assets/rock_albedo-D8PLsjH2.jpg",
+      "bytes": 391338,
+      "contentType": "image/jpeg"
+    },
+    {
+      "path": "assets/rock_normal-D4czEm8-.jpg",
+      "bytes": 650636,
+      "contentType": "image/jpeg"
+    },
+    {
+      "path": "assets/shrub_leaves-BEZRrm_7.webp",
+      "bytes": 197624,
+      "contentType": "image/webp"
+    },
+    {
+      "path": "assets/soil_albedo-BXdixt-d.jpg",
+      "bytes": 193454,
+      "contentType": "image/jpeg"
+    },
+    {
+      "path": "assets/soil_normal-D8hW3rFg.jpg",
+      "bytes": 404652,
+      "contentType": "image/jpeg"
+    },
+    {
+      "path": "assets/wall_albedo-BlnbOZGm.jpg",
+      "bytes": 276969,
+      "contentType": "image/jpeg"
+    },
+    {
+      "path": "assets/wall_normal-DRFXZF6f.jpg",
+      "bytes": 335304,
+      "contentType": "image/jpeg"
+    }
+  ],
+  "errors": [],
+  "totalBytes": 5887710,
+  "fileCount": 19
+}

@@ -108,6 +108,7 @@ async function main() {
   }
   const loadMs = performance.now() - t0;
   scene.add(human.root);
+  (window as unknown as { __human: HumanModel }).__human = human;
   human.root.rotation.y = THREE.MathUtils.degToRad(yawDeg);
   mixer = new PoseMixer(human.joints);
   const pz = POSES[poseName] ?? IDLE;
@@ -135,6 +136,19 @@ async function main() {
     cyl.castShadow = true;
     staff.add(cyl);
     human.sockets.handGripL.add(staff);
+  }
+  // clothing API smoke test: a simple sleeveless tube "tunic" modelled around the rest pose
+  if (P.has('cloth')) {
+    const tube = new THREE.CylinderGeometry(0.19, 0.25, 0.5, 48, 16, true);
+    tube.scale(1, 1, 0.78);
+    tube.translate(0, 0.8, 0.0);
+    const cloth = human.skinAttachment(tube, new THREE.MeshStandardMaterial({ color: 0xd8cbb0, roughness: 0.95, side: THREE.DoubleSide }), {
+      space: 'rest', boneFilter: (b) => !/arm|wrist|finger|metacarpal|shoulder|clavicle/.test(b),
+    });
+    cloth.name = 'testSkirt';
+    human.hideSkin((p, bone) => p.y > 0.64 && p.y < 0.98 && /^(root|spine0[45]|pelvis|upperleg)/.test(bone));
+    const r = 0;
+    void r;
   }
   // settle (fingers / expressions cross-fade)
   for (let i = 0; i < 90; i++) human.update(1 / 30, camera, H);
@@ -183,14 +197,24 @@ function frameCamera() {
   switch (view) {
     case 'face': at(head.clone().add(new THREE.Vector3(0, -0.035, 0)), fwd.clone().addScaledVector(left, 0.18).addScaledVector(up, 0.02), 0.62, 24); break;
     case 'eye': at(head.clone(), fwd.clone().addScaledVector(left, 0.25), 0.22, 22); break;
-    case 'three4': at(head.clone().add(new THREE.Vector3(0, -0.16, 0)), fwd.clone().addScaledVector(left, 0.75).addScaledVector(up, 0.05), 1.25, 28); break;
+    case 'three4': at(head.clone().add(new THREE.Vector3(0, -0.07, 0)), fwd.clone().addScaledVector(left, 0.8).addScaledVector(up, 0.06), 0.95, 26); break;
     case 'profile': at(new THREE.Vector3(0, h * 0.52, 0).add(r.position), left.clone(), 5.2, 28); break;
     case 'profileFace': at(head.clone().add(new THREE.Vector3(0, -0.03, 0)), left.clone(), 0.7, 24); break;
     case 'back': at(new THREE.Vector3(0, h * 0.52, 0).add(r.position), fwd.clone().negate(), 5.2, 28); break;
     case 'hands': {
       const hp = new THREE.Vector3();
-      human.bones['wrist.L'].getWorldPosition(hp);
-      at(hp, fwd.clone().addScaledVector(left, 1.2), 0.55, 28);
+      const side = P.get('hand') ?? 'L';
+      human.bones[`wrist.${side}`].getWorldPosition(hp);
+      hp.y -= 0.06;
+      at(hp, fwd.clone().addScaledVector(left, side === 'L' ? 1.2 : -1.2), 0.42, 28);
+      break;
+    }
+    case 'grip': {
+      const hp = new THREE.Vector3();
+      human.sockets.handGripL.getWorldPosition(hp);
+      const az = THREE.MathUtils.degToRad(parseFloat(P.get('az') ?? '60'));
+      const dir = fwd.clone().multiplyScalar(Math.cos(az)).addScaledVector(left, Math.sin(az)).addScaledVector(up, parseFloat(P.get('el') ?? '0.2'));
+      at(hp, dir, 0.32, 30);
       break;
     }
     case 'posed': at(new THREE.Vector3(0, h * 0.58, 0).add(r.position), fwd.clone().addScaledVector(left, 0.55), 4.6, 32); break;

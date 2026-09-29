@@ -51,7 +51,7 @@ function loadData(preset: string) {
   let p = dataCache.get(preset);
   if (!p) {
     p = (async () => {
-      const [rigUrl, binUrl] = await Promise.all([humanAssetUrl(`${preset}/rig.json`), humanAssetUrl(`${preset}/human.bin`)]);
+      const [rigUrl, binUrl] = await Promise.all([humanAssetUrl(`${preset}/rig.json`), humanAssetUrl(`${preset}/human.binz`)]);
       return HumanData.fetch(rigUrl, binUrl);
     })();
     dataCache.set(preset, p);
@@ -98,6 +98,7 @@ export class HumanModel {
   readonly brows: THREE.SkinnedMesh | null = null;
   readonly lashes: THREE.SkinnedMesh | null = null;
   readonly tearLines: THREE.SkinnedMesh | null = null;
+  readonly teeth: THREE.SkinnedMesh | null = null;
   readonly sockets = {} as Record<SocketName, THREE.Object3D>;
   readonly metrics: {
     height: number; hipHeight: number; thighLength: number; shinLength: number;
@@ -147,9 +148,11 @@ export class HumanModel {
     if (!variation && options.seed !== undefined && rig.variations.length) {
       const rnd = mulberry(options.seed * 9973 + 17);
       variation = {};
-      for (const v of rig.variations) variation[v] = Math.max(0, rnd() * 1.6 - 0.6) * (rnd() < 0.5 ? 1 : 0.6);
-      // mutually exclusive body builds
-      if ((variation.heavy ?? 0) > 0 && (variation.lean ?? 0) > 0) variation[rnd() < 0.5 ? 'heavy' : 'lean'] = 0;
+      const BODY = ['heavy', 'lean', 'strong'].filter((v) => rig.variations.includes(v));
+      if (BODY.length && rnd() < 0.8) variation[BODY[Math.floor(rnd() * BODY.length)]] = 0.35 + rnd() * 0.65;
+      if (rig.variations.includes('older') && rnd() < 0.45) variation.older = rnd();
+      // face morphs are linear deltas: negative weights give the opposite trait (smaller nose, narrower jaw...)
+      for (const v of rig.variations) if (!(v in variation) && !['heavy', 'lean', 'strong', 'older'].includes(v)) variation[v] = rnd() * 1.7 - 0.7;
       const tone = 0.86 + rnd() * 0.22;
       tint = new THREE.Color(tone * (1 + (rnd() - 0.5) * 0.06), tone, tone * (1 - rnd() * 0.06));
     }
@@ -188,7 +191,7 @@ export class HumanModel {
     };
     const browCol = new THREE.Color(bc[0], bc[1], bc[2]);
     this.brows = mkStrands('brow', new StrandMaterial({ color: browCol, tipColor: browCol.clone().multiplyScalar(1.5), opacity: 0.92, widthScale: 1.0 }));
-    this.lashes = mkStrands('lash', new StrandMaterial({ color: browCol.clone().multiplyScalar(0.35), tipColor: browCol.clone().multiplyScalar(0.7), opacity: 1, widthScale: 1.0, roughness: 0.4 }));
+    this.lashes = mkStrands('lash', new StrandMaterial({ color: browCol.clone().multiplyScalar(0.3), tipColor: browCol.clone().multiplyScalar(0.55), opacity: 1, widthScale: 1.0, roughness: 0.75 }));
     const tg = buildAuxGeometry(data, 'tear');
     if (tg) {
       const tl = new THREE.SkinnedMesh(tg, new WetMaterial(0.08, 0.45));
@@ -198,6 +201,17 @@ export class HumanModel {
       this.root.add(tl);
       tl.bind(this.skeleton, new THREE.Matrix4());
       this.tearLines = tl;
+    }
+    const teethG = buildAuxGeometry(data, 'teeth');
+    if (teethG) {
+      const tm = new THREE.MeshPhysicalMaterial({ vertexColors: true, color: 0xb8b0a0, roughness: 0.34, metalness: 0, ior: 1.55 });
+      tm.name = 'HumanTeeth';
+      const teeth = new THREE.SkinnedMesh(teethG, tm);
+      teeth.name = 'teeth';
+      teeth.frustumCulled = false;
+      this.root.add(teeth);
+      teeth.bind(this.skeleton, new THREE.Matrix4());
+      this.teeth = teeth;
     }
     // ---- eyes (rigid, parented to the eye bones)
     const mkEye = (S: 'L' | 'R') => {
@@ -243,6 +257,15 @@ export class HumanModel {
       triangles: bg.triangleCount,
       loadMs: 0,
     };
+    this._headRestInv.makeRotationFromQuaternion(this.rig.restWorldQuaternion('head').invert());
+    // conservative bounds (any pose) so skinned parts can be frustum-culled without CPU skinning
+    const h = this.metrics.height;
+    const bounds = new THREE.Sphere(new THREE.Vector3(0, h * 0.55, 0), h * 0.8);
+    for (const m of [this.body, this.brows, this.lashes, this.tearLines, this.teeth]) {
+      if (!m) continue;
+      m.boundingSphere = bounds.clone();
+      m.frustumCulled = true;
+    }
     this.rig.update(0);
     this.root.updateMatrixWorld(true);
   }
@@ -284,17 +307,16 @@ export class HumanModel {
       const f = mid.clone().sub(wr).normalize();
       const r = idx.clone().sub(pky).normalize();
       const palm = f.clone().cross(r).multiplyScalar(sg).normalize();
-      // fist hole: under the knuckle line, ~2.3 cm toward the palm, slightly proximal of the MCP joints
-      const c = idx.clone().add(pky).multiplyScalar(0.5).addScaledVector(palm, 0.022).addScaledVector(f, -0.004);
-      const yAxis = r.clone().sub(palm.clone().multiplyScalar(r.dot(palm))).normalize();
-      const xAxis = palm.clone();
-      const zAxis = xAxis.clone().cross(yAxis).normalize();
-      const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis));
+      const g = this.rig.grip[s];
+      const c = g.center;
+      const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(g.x, g.y, g.z));
+      void palm;
       this.addSocket(`handGrip${s}`, `wrist.${s}`, c, q);
       this.addSocket(`palm${s}`, `wrist.${s}`, mid.clone().lerp(wr, 0.45).addScaledVector(palm, 0.012), q);
     }
     const neck = R('neck01');
-    this.addSocket('shoulderCarry', 'spine01', new THREE.Vector3(0, neck.y + 0.035, neck.z - 0.075));
+    // like DavidModel.shoulderSocket: +Z of the socket runs along the character's +X (a lamb lies across the shoulders)
+    this.addSocket('shoulderCarry', 'spine01', new THREE.Vector3(0, neck.y + 0.035, neck.z - 0.075), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2));
     this.addSocket('headTop', 'head', new THREE.Vector3(...lm.headTop));
     this.addSocket('chin', 'jaw', new THREE.Vector3(...lm.chin));
     this.addSocket('crownAnchor', 'head', new THREE.Vector3(...lm.crown));
@@ -311,11 +333,8 @@ export class HumanModel {
   update(dt: number, camera?: THREE.Camera, viewportHeight?: number) {
     this.rig.update(dt);
     this.root.updateMatrixWorld(true);
-    // eye socket space (head bone) for lid occlusion
-    const head = this.rig.bones.head;
-    const headRestQ = this.rig.restWorldQuaternion('head');
-    const m = new THREE.Matrix4().copy(head.matrixWorld).multiply(new THREE.Matrix4().makeRotationFromQuaternion(headRestQ.invert()));
-    m.invert();
+    // eye socket space (aligned head frame) for lid occlusion on the eyeballs
+    const m = this._sock.copy(this.rig.bones.head.matrixWorld).multiply(this._headRestInv).invert();
     const lidOpen = 1 - this.rig.lidClose;
     for (const S of ['L', 'R'] as const) {
       const u = this.eyes[S].material.eyeUniforms;
@@ -324,6 +343,19 @@ export class HumanModel {
     }
     if (viewportHeight) for (const s of this.strandMats) s.strandUniforms.uResolutionY.value = viewportHeight;
     void camera;
+  }
+  private _sock = new THREE.Matrix4();
+  private _headRestInv = new THREE.Matrix4();
+
+  /** Staff / handle radius (m) for the 'grip' finger pose; re-solves the fingers and moves the grip sockets. */
+  setGripRadius(radius: number) {
+    this.rig.solveGrip(radius);
+    for (const s of ['L', 'R'] as const) {
+      const g = this.rig.grip[s];
+      const sock = this.sockets[`handGrip${s}`];
+      const W = this.rig.restWorldQuaternion(`wrist.${s}`).invert();
+      sock.position.copy(g.center).sub(this.rig.restWorldPosition(`wrist.${s}`)).applyQuaternion(W);
+    }
   }
 
   /** Pupil size 0 (bright sun) .. 1 (dark). */
@@ -363,6 +395,29 @@ export class HumanModel {
   }
 
   private _rest: Float32Array | null = null;
+  private _restN: Float32Array | null = null;
+  /** Body vertex normals in the rest pose (character space). */
+  restNormals(): Float32Array {
+    if (this._restN) return this._restN;
+    const g = this.body.geometry;
+    const nrm = g.getAttribute('normal') as THREE.BufferAttribute;
+    const si = g.getAttribute('skinIndex') as THREE.BufferAttribute;
+    const sw = g.getAttribute('skinWeight') as THREE.BufferAttribute;
+    const rots = this.rig.rest.map((r) => r.Q);
+    const out = new Float32Array(nrm.count * 3);
+    const v = new THREE.Vector3(), acc = new THREE.Vector3(), t = new THREE.Vector3();
+    for (let i = 0; i < nrm.count; i++) {
+      v.fromBufferAttribute(nrm, i);
+      acc.set(0, 0, 0);
+      for (let k = 0; k < 4; k++) {
+        const w = sw.getComponent(i, k);
+        if (w > 0) acc.addScaledVector(t.copy(v).applyQuaternion(rots[si.getComponent(i, k)]), w);
+      }
+      acc.normalize().toArray(out, i * 3);
+    }
+    this._restN = out;
+    return out;
+  }
   /** Body vertex positions in the rest pose (arms down), character space. */
   restPositions(): Float32Array {
     if (this._rest) return this._rest;
@@ -397,15 +452,17 @@ export class HumanModel {
 
   /**
    * Turn a garment / accessory geometry into a SkinnedMesh bound to this skeleton.
-   * Weights are transferred from the nearest body vertices (inverse-distance, k nearest).
+   * Weights are transferred from the nearest body vertices (inverse-distance, k nearest) whose normals face the
+   * garment point (`facing: false` disables that test); `boneFilter` can exclude bones (e.g. arms for a skirt).
    * space 'rest': geometry modelled around the rest pose (arms down — recommended); it is converted into
    * the bind pose by inverse skinning.  space 'bind': geometry already in MakeHuman's bind pose.
    */
-  skinAttachment(geo: THREE.BufferGeometry, material: THREE.Material | THREE.Material[], opts: { space?: 'rest' | 'bind'; k?: number; boneFilter?: (bone: string) => boolean } = {}) {
+  skinAttachment(geo: THREE.BufferGeometry, material: THREE.Material | THREE.Material[], opts: { space?: 'rest' | 'bind'; k?: number; boneFilter?: (bone: string) => boolean; facing?: boolean } = {}) {
     const space = opts.space ?? 'rest';
     const k = opts.k ?? 6;
     const body = this.body.geometry;
     const bpos = space === 'rest' ? this.restPositions() : (body.getAttribute('position').array as Float32Array);
+    const bnrm = opts.facing === false ? null : space === 'rest' ? this.restNormals() : (body.getAttribute('normal').array as Float32Array);
     const bsi = body.getAttribute('skinIndex') as THREE.BufferAttribute;
     const bsw = body.getAttribute('skinWeight') as THREE.BufferAttribute;
     const names = this.data.rig.bones.map((b) => b.n);
@@ -419,7 +476,13 @@ export class HumanModel {
       if (!l) grid.set(key, (l = []));
       l.push(i);
     }
-    const g = geo.index ? geo : geo;
+    // body vertices whose dominant bone passes the bone filter
+    let eligible: Uint8Array | null = null;
+    if (opts.boneFilter) {
+      eligible = new Uint8Array(nb);
+      for (let j = 0; j < nb; j++) eligible[j] = opts.boneFilter(names[bsi.getComponent(j, 0)]) ? 1 : 0;
+    }
+    const g = geo;
     const pos = g.getAttribute('position') as THREE.BufferAttribute;
     const n = pos.count;
     const si = new Uint16Array(n * 4);
@@ -429,31 +492,44 @@ export class HumanModel {
     const outPos = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) {
       p.fromBufferAttribute(pos, i);
-      // gather candidates from growing shells
-      let cand: { i: number; d: number }[] = [];
-      for (let rr = 1; rr <= 6 && cand.length < k; rr++) {
-        cand = [];
+      // gather candidates from growing shells; fall back to plain nearest skin if the filters reject everything
+      const gather = (strict: boolean, filter: boolean) => {
+        let cand: { i: number; d: number }[] = [];
         const cx = Math.floor(p.x / cell), cy = Math.floor(p.y / cell), cz = Math.floor(p.z / cell);
-        for (let x = -rr; x <= rr; x++)
-          for (let y = -rr; y <= rr; y++)
-            for (let z = -rr; z <= rr; z++) {
-              const l = grid.get(`${cx + x},${cy + y},${cz + z}`);
-              if (l) for (const j of l) cand.push({ i: j, d: Math.hypot(bpos[j * 3] - p.x, bpos[j * 3 + 1] - p.y, bpos[j * 3 + 2] - p.z) });
-            }
-      }
-      cand.sort((a, b) => a.d - b.d);
-      const infl = new Map<number, number>();
-      const kk = Math.min(k, cand.length);
-      for (let c = 0; c < kk; c++) {
-        const w = 1 / (cand[c].d + 0.004) ** 2;
-        for (let m = 0; m < 4; m++) {
-          const bw = bsw.getComponent(cand[c].i, m);
-          if (bw <= 0) continue;
-          const b = bsi.getComponent(cand[c].i, m);
-          if (opts.boneFilter && !opts.boneFilter(names[b])) continue;
-          infl.set(b, (infl.get(b) ?? 0) + bw * w);
+        for (let rr = 1; rr <= 10 && cand.length < k * 8; rr++) {
+          cand = [];
+          for (let x = -rr; x <= rr; x++)
+            for (let y = -rr; y <= rr; y++)
+              for (let z = -rr; z <= rr; z++) {
+                const l = grid.get(`${cx + x},${cy + y},${cz + z}`);
+                if (!l) continue;
+                for (const j of l) {
+                  const dx = p.x - bpos[j * 3], dy = p.y - bpos[j * 3 + 1], dz = p.z - bpos[j * 3 + 2];
+                  // only skin that faces the garment point (keeps a skirt/tunic off the arms and the other leg)
+                  if (strict && bnrm && dx * bnrm[j * 3] + dy * bnrm[j * 3 + 1] + dz * bnrm[j * 3 + 2] < -0.002) continue;
+                  if (filter && eligible && !eligible[j]) continue;
+                  cand.push({ i: j, d: Math.hypot(dx, dy, dz) });
+                }
+              }
         }
-      }
+        cand.sort((a, b) => a.d - b.d);
+        const infl = new Map<number, number>();
+        const kk = Math.min(k, cand.length);
+        for (let c = 0; c < kk; c++) {
+          const w = 1 / (cand[c].d + 0.004) ** 2;
+          for (let m = 0; m < 4; m++) {
+            const bw = bsw.getComponent(cand[c].i, m);
+            if (bw <= 0) continue;
+            const b = bsi.getComponent(cand[c].i, m);
+            if (filter && opts.boneFilter && !opts.boneFilter(names[b])) continue;
+            infl.set(b, (infl.get(b) ?? 0) + bw * w);
+          }
+        }
+        return infl;
+      };
+      let infl = gather(true, true);
+      if (infl.size === 0) infl = gather(false, true);
+      if (infl.size === 0) infl = gather(false, false);
       const list = [...infl.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4);
       let sum = 0;
       for (const [, w] of list) sum += w;
@@ -491,7 +567,7 @@ export class HumanModel {
   dispose() {
     this.body.geometry.dispose();
     this.skin.dispose();
-    for (const m of [this.brows, this.lashes, this.tearLines]) {
+    for (const m of [this.brows, this.lashes, this.tearLines, this.teeth]) {
       if (!m) continue;
       m.geometry.dispose();
       (m.material as THREE.Material).dispose();

@@ -14,7 +14,8 @@ import * as THREE from 'three';
  *    per-region pore-strength mask and a per-vertex UV-density factor so pores keep a constant world size.
  *
  * Mask texture (baked by tools/human/bake_skin.py): R = ambient occlusion & cavity, G = roughness (0..1 ->
- * roughnessRange), B = thickness / translucency, A = pore strength.
+ * roughnessRange), B = thickness / translucency.  Normal map: RG = tangent-space normal (z rebuilt),
+ * B = pore strength (no alpha channels: browsers may premultiply them).
  */
 
 export interface SkinTextures {
@@ -33,8 +34,8 @@ export class SkinMaterial extends THREE.MeshPhysicalMaterial {
   readonly skinUniforms = {
     uMaskMap: { value: null as THREE.Texture | null },
     uDetailNormal: { value: null as THREE.Texture | null },
-    uDetailTile: { value: 260.0 }, // repetitions per metre of skin
-    uDetailStrength: { value: 0.55 },
+    uDetailTile: { value: 45.0 }, // detail tile repetitions per metre of skin (tile ~2.2 cm, pores ~0.35 mm apart)
+    uDetailStrength: { value: 0.7 },
     uRoughRange: { value: new THREE.Vector2(0.34, 0.86) },
     uAOIntensity: { value: 1.0 },
     uSssWrap: { value: new THREE.Vector3(0.5, 0.2, 0.14) },
@@ -133,7 +134,11 @@ roughnessFactor = mix( roughnessFactor, 0.18, uWet );`,
         .replace(
           '#include <normal_fragment_maps>',
           `#ifdef USE_NORMALMAP_TANGENTSPACE
-  vec3 mapN = texture2D( normalMap, vNormalMapUv ).xyz * 2.0 - 1.0;
+  vec3 nTex = texture2D( normalMap, vNormalMapUv ).xyz;
+  // xy = tangent-space normal, z channel = pore strength (nz is rebuilt)
+  vec3 mapN = vec3( nTex.xy * 2.0 - 1.0, 0.0 );
+  mapN.z = sqrt( max( 1.0 - dot( mapN.xy, mapN.xy ), 0.0 ) );
+  float gPores = nTex.z;
   mapN.xy *= normalScale;
   #ifdef SKIN_DETAIL
   {
@@ -145,7 +150,7 @@ roughnessFactor = mix( roughnessFactor, 0.18, uWet );`,
     #endif
     vec2 fw = fwidth( duv );
     float fade = clamp( 1.6 - max( fw.x, fw.y ) * 1.4, 0.0, 1.0 );
-    mapN.xy += d1.xy * uDetailStrength * ( 0.25 + gSkinMask.a ) * fade;
+    mapN.xy += d1.xy * uDetailStrength * ( 0.15 + gPores ) * fade;
   }
   #endif
   normal = normalize( tbn * mapN );

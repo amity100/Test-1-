@@ -126,7 +126,7 @@ export class BloomPass extends Pass {
       this.mips.push(rt);
     }
     const u = () => ({ tSrc: { value: null }, uTexel: { value: new THREE.Vector2() } });
-    const pre = () => ({ uThreshold: { value: 1 }, uKnee: { value: 0.5 }, uClamp: { value: 32 }, uKaris: { value: 1 / 16 } });
+    const pre = () => ({ uThreshold: { value: 1 }, uKnee: { value: 0.5 }, uClamp: { value: 32 }, uKaris: { value: 0.02 } });
     this.downPre = mat(DOWN_FRAG, { ...u(), ...pre() }, { PREFILTER: '' });
     this.down = mat(DOWN_FRAG, { ...u(), ...pre() });
     this.up = mat(UP_FRAG, { ...u(), uWeight: { value: 1 } }, {}, THREE.CustomBlending);

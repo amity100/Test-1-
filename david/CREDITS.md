@@ -21,3 +21,36 @@ https://storage.googleapis.com/sefaria-export/json/...), normalized as documente
 | Rashi / Radak on I Samuel | *Sefaria vocalized edition* / *Radak on Nach* | "unknown" | research catalog only |
 
 English glosses in the catalogs are our own short renderings (translation aids, not quotations).
+
+## Rendering algorithms (post-processing) — `src/fx/PostFX.ts`, `src/fx/Bloom.ts`
+
+Maintained by *mobile-render*. No third-party files or assets are shipped; the shaders are our own GLSL
+implementations of published techniques:
+
+| Technique | Origin | License of the reference | Where |
+|---|---|---|---|
+| FXAA 3.11 "quality" (edge search + sub-pixel AA) | Timothy Lottes / NVIDIA, *FXAA 3.11* (as also ported in three.js `examples/jsm/shaders/FXAAShader.js`) | NVIDIA BSD-style license (redistribution with notice); three.js MIT | `ResolvePass` in `src/fx/PostFX.ts` (reimplemented; variable names follow the reference) |
+| Contrast-adaptive sharpening (5-tap variant) | AMD FidelityFX CAS | MIT | `ResolvePass` in `src/fx/PostFX.ts` (simplified reimplementation) |
+| Dual-filter bloom (13-tap down-sample with Karis average, 3x3 tent up-sample) | J. Jimenez, *Next Generation Post Processing in Call of Duty: Advanced Warfare* (SIGGRAPH 2014) | technique (no code used) | `src/fx/Bloom.ts` |
+| ACES / AgX / Neutral tone-mapping curves | three.js `tonemapping_pars_fragment` chunk (included at build time) | MIT (three.js) | `FinishPass` in `src/fx/PostFX.ts` |
+
+## Realistic humans (David, Saul, men) — `tools/human/`, `src/characters/human/`, `src/assets/human/`
+
+Maintained by *human-core*. Built by `tools/human/build_human.py` and `tools/human/bake_skin.py` from the
+MakeHuman 1.1 data set, downloaded from the official repository
+(https://raw.githubusercontent.com/makehumancommunity/makehuman/master/makehuman/…).
+
+| Asset | Origin | License | Where used |
+|---|---|---|---|
+| hm08 base mesh (`data/3dobjs/base.obj`: body topology, UV layout, joint / eye / teeth / lash helpers) | MakeHuman — © Data Collection AB, Joel Palmius, Jonas Hauquier | **CC0 1.0** (MakeHuman `license.txt`, section C: "the assets have been released under CC0 1.0 Universal") | body geometry, UVs, joint positions of every preset |
+| Morph targets (`data/targets/macrodetails/**`, head, forehead, eyebrows, eyes, nose, mouth, ears, chin, cheek, neck, torso, hip, stomach, pelvis, armslegs, breast, measure) and modifier definitions (`data/modifiers/*.json`) | MakeHuman | CC0 1.0 | preset shapes (`tools/human/presets/*.json`), anatomical region masks for the skin bake, variation morphs of the "man" preset |
+| Default skeleton + skin weights (`data/rigs/default.mhskel`, `default_weights.mhw`) | MakeHuman | CC0 1.0 | runtime skeleton (pruned to 132 bones) and skin weights |
+| Face pose units (`data/poseunits/face-poseunits.bvh`, `.json`) | MakeHuman | CC0 1.0 | facial expressions, blinking, jaw, lids (`HumanRig`) |
+| High-poly eye proxy (`data/eyes/high-poly/*`) | MakeHuman | CC0 1.0 | reference only (eye placement); the shipped eyes are our own geometry |
+
+Everything else — skin, eye, detail-normal textures, eyelash/eyebrow strands, teeth, tear lines and all
+shaders — is generated procedurally by our own code (no photographs or third-party textures).
+Only the math of MakeHuman's AGPL program logic (target weighting, skeleton construction, BVH axis
+conversion, proxy fitting) was re-implemented; no MakeHuman source code is included.
+Python tooling additionally uses numpy, scipy, Pillow, trimesh (MIT) and embreex (Apache-2.0) at build
+time only; nothing from them ships in the game.

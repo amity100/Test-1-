@@ -2,8 +2,17 @@
   "name": "man",
   "description": "Ordinary adult Israelite man (servant, guard, shepherd). Runtime seedable variations via baked variation morphs.",
   "height_m": 1.7,
-  "macro": { "gender": 1.0, "age_years": 30, "muscle": 0.6, "weight": 0.5, "height": 0.45, "proportions": 0.55,
-             "african": 0.1, "asian": 0.04, "caucasian": 0.86 },
+  "macro": {
+    "gender": 1.0,
+    "age_years": 30,
+    "muscle": 0.6,
+    "weight": 0.5,
+    "height": 0.45,
+    "proportions": 0.55,
+    "african": 0.1,
+    "asian": 0.04,
+    "caucasian": 0.86
+  },
   "modifiers": {
     "nose/nose-hump-decr|incr": 0.15,
     "nose/nose-scale-vert-decr|incr": 0.08,
@@ -11,23 +20,80 @@
     "chin/chin-width-decr|incr": 0.1,
     "cheek/(lr)-cheek-bones-decr|incr": 0.15,
     "armslegs/(lr)-lowerarm-muscle-decr|incr": 0.2,
-    "armslegs/(lr)-lowerleg-muscle-decr|incr": 0.2
+    "armslegs/(lr)-lowerleg-muscle-decr|incr": 0.2,
+    "breast/nipple-size-decr|incr": -0.35,
+    "breast/nipple-point-decr|incr": -0.7
   },
   "variations": {
-    "heavy":    { "macro": { "weight": 0.78, "muscle": 0.55 } },
-    "lean":     { "macro": { "weight": 0.3, "muscle": 0.62 } },
-    "strong":   { "macro": { "muscle": 0.92 } },
-    "older":    { "macro": { "age_years": 52 } },
-    "noseBig":  { "modifiers": { "nose/nose-scale-vert-decr|incr": 0.45, "nose/nose-hump-decr|incr": 0.5, "nose/nose-scale-horiz-decr|incr": 0.25 } },
-    "jawWide":  { "modifiers": { "chin/chin-width-decr|incr": 0.6, "chin/chin-bones-decr|incr": 0.5, "head/head-square": 0.5 } },
-    "faceLong": { "modifiers": { "head/head-scale-vert-decr|incr": 0.35, "chin/chin-height-decr|incr": 0.4, "head/head-oval": 0.4 } },
-    "browHeavy":{ "modifiers": { "eyebrows/eyebrows-trans-backward|forward": 0.6, "eyes/(lr)-eye-push1-in|out": -0.4 } },
-    "lipsFull": { "modifiers": { "mouth/mouth-lowerlip-volume-decr|incr": 0.5, "mouth/mouth-upperlip-volume-decr|incr": 0.4 } },
-    "eyesSmall":{ "modifiers": { "eyes/(lr)-eye-scale-decr|incr": -0.3, "eyes/(lr)-eye-height2-decr|incr": -0.3 } }
+    "heavy": {
+      "macro": {
+        "weight": 0.78,
+        "muscle": 0.55
+      }
+    },
+    "lean": {
+      "macro": {
+        "weight": 0.3,
+        "muscle": 0.62
+      }
+    },
+    "strong": {
+      "macro": {
+        "muscle": 0.92
+      }
+    },
+    "older": {
+      "macro": {
+        "age_years": 52
+      }
+    },
+    "noseBig": {
+      "modifiers": {
+        "nose/nose-scale-vert-decr|incr": 0.45,
+        "nose/nose-hump-decr|incr": 0.5,
+        "nose/nose-scale-horiz-decr|incr": 0.25
+      }
+    },
+    "jawWide": {
+      "modifiers": {
+        "chin/chin-width-decr|incr": 0.6,
+        "chin/chin-bones-decr|incr": 0.5,
+        "head/head-square": 0.5
+      }
+    },
+    "faceLong": {
+      "modifiers": {
+        "head/head-scale-vert-decr|incr": 0.35,
+        "chin/chin-height-decr|incr": 0.4,
+        "head/head-oval": 0.4
+      }
+    },
+    "browHeavy": {
+      "modifiers": {
+        "eyebrows/eyebrows-trans-backward|forward": 0.6,
+        "eyes/(lr)-eye-push1-in|out": -0.4
+      }
+    },
+    "lipsFull": {
+      "modifiers": {
+        "mouth/mouth-lowerlip-volume-decr|incr": 0.5,
+        "mouth/mouth-upperlip-volume-decr|incr": 0.4
+      }
+    },
+    "eyesSmall": {
+      "modifiers": {
+        "eyes/(lr)-eye-scale-decr|incr": -0.3,
+        "eyes/(lr)-eye-height2-decr|incr": -0.3
+      }
+    }
   },
   "skin": {
     "seed": 7,
-    "tone": [0.62, 0.45, 0.34],
+    "tone": [
+      0.62,
+      0.45,
+      0.34
+    ],
     "tan": 0.6,
     "ruddy": 0.3,
     "freckles": 0.05,
@@ -37,6 +103,17 @@
     "age": 0.25,
     "tan_lines": "tunic_short"
   },
-  "eyes": { "iris": "dark_brown", "seed": 5 },
-  "brows": { "color": [0.06, 0.04, 0.028], "density": 1.15, "thickness": 1.1 }
+  "eyes": {
+    "iris": "dark_brown",
+    "seed": 5
+  },
+  "brows": {
+    "color": [
+      0.06,
+      0.04,
+      0.028
+    ],
+    "density": 1.15,
+    "thickness": 1.1
+  }
 }

@@ -43,6 +43,7 @@ export class EyeMaterial extends THREE.MeshPhysicalMaterial {
     uLidOpen: { value: 1.0 },
     uSocket: { value: new THREE.Matrix4() }, // world -> socket (head) space
     uOpening: { value: new THREE.Vector4(0, 0, 0.012, 0.004) }, // opening centre xy, half extents (socket space)
+    uCornea: { value: new THREE.Vector4(0, 0, 0, 0) }, // cornea sphere centre z, radius, iris plane z, eyeball radius (local units)
   };
   constructor(p: EyeParams) {
     super({ color: 0xffffff, roughness: 0.16, metalness: 0, ior: 1.376, clearcoat: 0, sheen: 0 });
@@ -53,8 +54,8 @@ export class EyeMaterial extends THREE.MeshPhysicalMaterial {
     this.onBeforeCompile = (s) => {
       Object.assign(s.uniforms, u);
       s.vertexShader = s.vertexShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vEyeLocal;\nvarying vec3 vEyeWorld;')
-        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvEyeLocal = normalize( position );')
+        .replace('#include <common>', '#include <common>\nvarying vec3 vEyeLocal;\nvarying vec3 vEyeWorld;\nvarying vec3 vEyePos;\nvarying vec3 vEyeCam;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvEyeLocal = normalize( position );\nvEyePos = position;\nvEyeCam = ( inverse( modelMatrix ) * vec4( cameraPosition, 1.0 ) ).xyz;')
         .replace('#include <project_vertex>', '#include <project_vertex>\nvEyeWorld = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
       s.fragmentShader = s.fragmentShader
         .replace(
@@ -64,8 +65,11 @@ uniform sampler2D uEyeTex;
 uniform float uPupil, uIrisR, uLidOpen, uTexIrisR;
 uniform mat4 uSocket;
 uniform vec4 uOpening;
+uniform vec4 uCornea;
 varying vec3 vEyeLocal;
 varying vec3 vEyeWorld;
+varying vec3 vEyePos;
+varying vec3 vEyeCam;
 float gEyeOcc = 1.0;`,
         )
         .replace(
@@ -74,6 +78,29 @@ float gEyeOcc = 1.0;`,
   // front planar projection of the eyeball (z forward); the texture maps the unit disc x,y in [-1,1] with the
   // limbus at radius uTexIrisR and the pupil at 0.28 of the iris
   vec2 p = vEyeLocal.xy;
+  #ifndef EYE_LOW
+  // corneal refraction: follow the camera ray through the cornea sphere, refract (n = 1.376), hit the iris plane
+  if ( length( p ) < uIrisR * 1.15 && uCornea.y > 0.0 ) {
+    vec3 ro = vEyeCam;
+    vec3 rd = normalize( vEyePos - vEyeCam );
+    vec3 cc = vec3( 0.0, 0.0, uCornea.x );
+    vec3 oc = ro - cc;
+    float b = dot( oc, rd );
+    float c = dot( oc, oc ) - uCornea.y * uCornea.y;
+    float h = b * b - c;
+    if ( h > 0.0 ) {
+      float t = -b - sqrt( h );
+      vec3 hit = ro + rd * t;
+      if ( hit.z > uCornea.z ) {
+        vec3 nrm = normalize( hit - cc );
+        vec3 rr = refract( rd, nrm, 1.0 / 1.376 );
+        float ti = ( uCornea.z - hit.z ) / min( rr.z, -1e-3 );
+        vec3 ip = hit + rr * ti;
+        p = ip.xy / uCornea.w;
+      }
+    }
+  }
+  #endif
   float r = length( p );
   float ir = uIrisR;
   float rt;
@@ -93,7 +120,7 @@ float gEyeOcc = 1.0;`,
   vec3 sp = ( uSocket * vec4( vEyeWorld, 1.0 ) ).xyz;
   vec2 e = ( sp.xy - uOpening.xy ) / ( uOpening.zw * vec2( 1.0, max( uLidOpen, 0.05 ) ) );
   float d = length( e );
-  gEyeOcc = mix( 0.28, 1.0, smoothstep( 1.02, 0.55, d ) ) * mix( 0.8, 1.0, smoothstep( 0.9, -0.2, e.y ) );
+  gEyeOcc = mix( 0.25, 1.0, smoothstep( 1.02, 0.4, d ) ) * mix( 0.68, 1.0, smoothstep( 0.85, -0.3, e.y ) );
 }`,
         )
         .replace(
@@ -112,7 +139,8 @@ reflectedLight.directSpecular *= gEyeOcc * gEyeOcc;
 reflectedLight.indirectSpecular *= gEyeOcc;`,
         );
     };
-    this.customProgramCacheKey = () => 'human-eye';
+    const eyeKey = p.quality === 'low' ? 'human-eye-low' : 'human-eye';
+    this.customProgramCacheKey = () => eyeKey;
   }
 }
 
@@ -160,6 +188,16 @@ export class EyeBall {
   constructor(p: EyeParams) {
     const segs = p.quality === 'high' ? 56 : p.quality === 'medium' ? 40 : 24;
     this.material = new EyeMaterial(p);
+    {
+      const a = p.irisRadius * 1.04;
+      const Rc = a * 1.38;
+      const zl = Math.sqrt(p.radius * p.radius - a * a);
+      const hh = Rc - Math.sqrt(Rc * Rc - a * a);
+      const zc = zl + hh - Rc + p.radius * 0.004;
+      const zIris = Math.sqrt(p.radius * p.radius - p.irisRadius * p.irisRadius) - p.radius * 0.035 * 0.5;
+      this.material.eyeUniforms.uCornea.value.set(zc, Rc, zIris, p.radius);
+      if (p.quality === 'low') this.material.defines = { ...(this.material.defines ?? {}), EYE_LOW: '' };
+    }
     this.ball = new THREE.Mesh(eyeballGeometry(p.radius, p.irisRadius, segs), this.material);
     this.cornea = new THREE.Mesh(corneaGeometry(p.radius, p.irisRadius, Math.round(segs * 0.7)), new WetMaterial(0.025, 1.0));
     this.cornea.renderOrder = 2;

@@ -1,10 +1,11 @@
 import * as THREE from 'three';
+import { gunzip } from './inflate';
 
 /*
  * Runtime side of the MakeHuman pipeline (tools/human/build_human.py).
  *
  * rig.json  : skeleton (MakeHuman default rig, pruned), rest pose, face pose units, eyes, landmarks
- * human.bin : control mesh (hm08 quads, welded positions, face-varying UVs, 4 skin weights / vertex),
+ * human.binz: (gzip) control mesh (hm08 quads, welded positions, face-varying UVs, 4 skin weights / vertex),
  *             eyelash + eyebrow strand ribbons, tear lines and (for "man") variation morphs.
  *
  * The body is triangulated at load time ("base" tier, 13.4k verts) or subdivided once with
@@ -48,7 +49,7 @@ export interface RigJson {
   skin: Record<string, unknown>;
   brows: { color?: [number, number, number]; density?: number; thickness?: number };
   irisStyle: { iris?: string; seed?: number };
-  bin: { file: string; bytes: number; layout: Record<string, BinEntry> };
+  bin: { file: string; bytes: number; gzipBytes?: number; layout: Record<string, BinEntry> };
   variations: string[];
   strands?: Record<string, { strands: number; points: number }>;
   tierStats?: Record<string, { vertices: number; triangles: number }>;
@@ -104,7 +105,7 @@ export class HumanData {
   static async fetch(rigUrl: string, binUrl: string): Promise<HumanData> {
     const [rig, buf] = await Promise.all([
       fetch(rigUrl).then((r) => r.json() as Promise<RigJson>),
-      fetch(binUrl).then((r) => r.arrayBuffer()),
+      fetch(binUrl).then((r) => r.arrayBuffer()).then(gunzip),
     ]);
     return new HumanData(rig, buf);
   }
@@ -476,7 +477,7 @@ export function computeTangents(pos: Float32Array, nrm: Float32Array, uv: Float3
 }
 
 /** Strand ribbons / tear line geometry (already skinned to the same skeleton). */
-export function buildAuxGeometry(d: HumanData, prefix: 'lash' | 'brow' | 'tear', keepEvery = 1): THREE.BufferGeometry | null {
+export function buildAuxGeometry(d: HumanData, prefix: 'lash' | 'brow' | 'tear' | 'teeth', keepEvery = 1): THREE.BufferGeometry | null {
   if (!d.has(prefix + '.position')) return null;
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(d.float(prefix + '.position'), 3));
@@ -490,6 +491,7 @@ export function buildAuxGeometry(d: HumanData, prefix: 'lash' | 'brow' | 'tear',
   g.setAttribute('skinWeight', new THREE.BufferAttribute(d.float(prefix + '.skinWeight'), 4));
   if (d.has(prefix + '.dir')) g.setAttribute('strandDir', new THREE.BufferAttribute(d.float(prefix + '.dir'), 3));
   if (d.has(prefix + '.strand')) g.setAttribute('strand', new THREE.BufferAttribute(d.float(prefix + '.strand'), 4));
+  if (d.has(prefix + '.color')) g.setAttribute('color', new THREE.BufferAttribute(d.float(prefix + '.color'), 3));
   let idx = d.raw(prefix + '.index') as Uint16Array | Uint32Array;
   const info = d.rig.strands?.[prefix];
   if (keepEvery > 1 && info) {

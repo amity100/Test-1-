@@ -196,13 +196,13 @@ class FinishPass extends Pass {
     const defines: Record<string, string> = {};
     if (chromatic) defines.USE_CA = '';
     this.material = new THREE.ShaderMaterial({
-      uniforms: { ...grade, tDiffuse: { value: null }, toneMappingExposure: { value: 1 } },
+      uniforms: { ...grade, tDiffuse: { value: null }, toneMappingExposure: { value: 1 }, uAspect: { value: 1 } },
       defines,
       depthTest: false,
       depthWrite: false,
       vertexShader: FS_VERT,
       fragmentShader: /* glsl */ `
-        uniform sampler2D tDiffuse; uniform float uTime, uVignette, uSaturation, uContrast, uFade, uDesat, uRed, uCA, uWarm;
+        uniform sampler2D tDiffuse; uniform float uTime, uVignette, uSaturation, uContrast, uFade, uDesat, uRed, uCA, uWarm, uAspect;
         varying vec2 vUv;
         #include <tonemapping_pars_fragment>
         vec3 toneMap(vec3 c){
@@ -236,8 +236,10 @@ class FinishPass extends Pass {
           col = (col - 0.5) * uContrast + 0.5;
           col += vec3(uWarm, uWarm * 0.35, -uWarm * 0.6) * smoothstep(0.35, 1.0, l);
           col += vec3(-0.012, 0.0, 0.018) * (1.0 - smoothstep(0.0, 0.35, l));
-          // vignette
-          float v = smoothstep(0.85, 0.2, length(dir * vec2(1.0, 0.85)) * (1.0 + uVignette));
+          // vignette, relative to the long screen axis (in portrait the old UV-space ellipse turned into
+          // dark bars down both sides of a phone screen)
+          vec2 vd = uAspect >= 1.0 ? dir : dir.yx;
+          float v = smoothstep(0.85, 0.2, length(vd * vec2(1.0, 0.85)) * (1.0 + uVignette));
           col *= mix(1.0, v, 0.9);
           // damage pulse
           col = mix(col, col * vec3(1.25, 0.45, 0.4), uRed * smoothstep(0.1, 0.6, length(dir)));
@@ -262,6 +264,7 @@ class FinishPass extends Pass {
     }
     const u = this.material.uniforms;
     u.tDiffuse.value = readBuffer.texture;
+    u.uAspect.value = readBuffer.width / Math.max(1, readBuffer.height);
     u.toneMappingExposure.value = renderer.toneMapping === THREE.NoToneMapping ? 1 : renderer.toneMappingExposure;
     renderer.setRenderTarget(this.renderToScreen ? null : writeBuffer);
     this.quad.render(renderer);
@@ -494,7 +497,7 @@ export class PostFX {
     this.composer.addPass(this.atmosphere);
     if (q.bloom) {
       this.bloom = new BloomPass({
-        strength: 0.2, radius: 0.72, threshold: 0.9, knee: 0.55,
+        strength: 0.6, radius: 0.85, threshold: 0.8, knee: 0.5,
         mips: q.bloomMips ?? 5, scale: q.bloomScale ?? 0.5, type,
       });
       this.composer.addPass(this.bloom);

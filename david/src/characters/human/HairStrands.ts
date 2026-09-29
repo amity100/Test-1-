@@ -27,7 +27,7 @@ export class StrandMaterial extends THREE.MeshStandardMaterial {
     uOpacity: { value: 1 },
   };
   constructor(o: StrandOptions) {
-    super({ color: 0xffffff, roughness: o.roughness ?? 0.55, metalness: 0, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+    super({ color: 0xffffff, roughness: o.roughness ?? 0.7, metalness: 0, transparent: true, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 0.25 });
     this.name = 'HumanStrands';
     const u = this.strandUniforms;
     u.uRootColor.value.copy(o.color);

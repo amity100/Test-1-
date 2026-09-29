@@ -207,6 +207,8 @@ class Human:
             # hand: straight along the forearm with a hint of ulnar deviation & relaxed extension
             f_t = np.array([s * 0.10, -1.0, 0.04])
             a_hd = rot_between_frames(f, palm, f_t, palm_target)
+            # the deltoid (shoulder01) follows part of the arm's swing down from the A-pose
+            world[f"shoulder01.{S}"] = Rot.from_rotvec(a_ua.as_rotvec() * 0.4)
             world[f"upperarm01.{S}"] = a_ua
             world[f"upperarm02.{S}"] = a_ua
             world[f"lowerarm01.{S}"] = a_fa1
@@ -571,6 +573,154 @@ def build_tearline(h: Human, tier: Tier, eyes):
     return {"pos": pos, "tris": np.asarray(tris), "Wd": Wd}
 
 
+def build_teeth(h: Human):
+    """Procedural dentition fitted to MakeHuman's teeth helpers: 2 x 14 crowns + gums, rigid to head / jaw."""
+    out_pos, out_nrm, out_col, out_tri, out_bone = [], [], [], [], []
+    base = 0
+    for which in ("upper", "lower"):
+        gv = h.obj.group_verts(f"helper-{which}-teeth")
+        P = h.v_all[gv]
+        x_half = np.abs(P[:, 0]).max()
+        z_front = P[:, 2].max()
+        z_back = P[np.abs(P[:, 0]) > x_half * 0.9, 2].mean()
+        y_hi, y_lo = P[:, 1].max(), P[:, 1].min()
+        up = which == "upper"
+        # labial arch: z(x) = zf - (zf - zb) * (x / xh)^2.2
+        def arch(x):
+            return z_front - (z_front - z_back) * np.abs(x / x_half) ** 2.2
+        xs = np.linspace(0, x_half, 400)
+        zs = arch(xs)
+        seg = np.hypot(np.diff(xs), np.diff(zs))
+        cum = np.concatenate([[0], np.cumsum(seg)])
+        if up:
+            widths = [8.6, 6.7, 7.8, 7.0, 6.7, 10.2, 9.2]
+            heights = [10.5, 9.0, 10.2, 8.4, 7.6, 7.0, 6.4]
+            thick = [6.8, 6.0, 7.8, 9.0, 9.0, 10.8, 10.2]
+            edge_y = y_lo + 0.0006
+        else:
+            widths = [5.3, 5.9, 6.9, 7.0, 7.2, 11.0, 10.4]
+            heights = [9.0, 9.4, 10.8, 8.2, 7.8, 7.4, 7.0]
+            thick = [6.0, 6.2, 7.4, 8.0, 8.4, 10.4, 10.0]
+            edge_y = y_hi - 0.0018
+        scale = cum[-1] * 0.93 / (sum(widths) * 0.001)
+        widths = [w * 0.001 * scale for w in widths]
+        heights = [v * 0.001 * scale for v in heights]
+        thick = [v * 0.001 * scale for v in thick]
+        inset = 0.0 if up else 0.0022  # lower incisors sit behind the upper ones (overjet)
+        for side in (1, -1):
+            s0 = 0.0
+            for k in range(7):
+                w, hh, th = widths[k], heights[k], thick[k]
+                sc = s0 + w / 2
+                s0 += w
+                x = np.interp(sc, cum, xs) * side
+                z = np.interp(sc, cum, zs)
+                dx = 0.001
+                t = np.array([side * dx, 0, arch(abs(x) + dx) - arch(abs(x))])
+                t /= np.linalg.norm(t)
+                nlab = np.array([t[2] * -side * 0 + 0, 0, 0])
+                nlab = np.cross(t, np.array([0, 1.0, 0])) * side
+                if nlab[2] < 0:
+                    nlab = -nlab
+                nlab /= np.linalg.norm(nlab)
+                c = np.array([x, 0, z]) - nlab * (th / 2 + inset)
+                kind = "inc" if k < 2 else "can" if k == 2 else "pm" if k < 5 else "mol"
+                rings = 7
+                segs = 18
+                gum_y = edge_y + (hh if up else -hh) * (1 if up else 1)
+                ys = np.linspace(0, 1, rings)
+                pts = []
+                for r_i, v in enumerate(ys):
+                    # v: 0 at the gum line, 1 at the incisal edge / cusp
+                    yy = gum_y + (edge_y - gum_y) * v
+                    a = w / 2 * (0.82 + 0.18 * np.sin(np.pi * min(v * 1.3, 1)))
+                    b = th / 2 * (1.0 - 0.25 * v)
+                    if kind == "inc":
+                        b = th / 2 * (1.0 - 0.72 * v ** 1.4)
+                    elif kind == "can":
+                        a = a * (1 - 0.55 * v ** 2)
+                        b = th / 2 * (1.0 - 0.5 * v ** 1.5)
+                    for j in range(segs):
+                        ang = 2 * np.pi * j / segs
+                        ca, sa = np.cos(ang), np.sin(ang)
+                        e = 3.0 if kind in ("pm", "mol") else 2.5
+                        px = np.sign(ca) * abs(ca) ** (2 / e) * a
+                        pz = np.sign(sa) * abs(sa) ** (2 / e) * b
+                        pts.append(c + t * px + nlab * pz + np.array([0, yy, 0]))
+                # cap at the edge
+                capc = c + np.array([0, edge_y + (0.0004 if not up else -0.0004), 0])
+                pts.append(capc)
+                pts = np.asarray(pts)
+                tri = []
+                for r_i in range(rings - 1):
+                    for j in range(segs):
+                        a0 = r_i * segs + j
+                        a1 = r_i * segs + (j + 1) % segs
+                        b0 = (r_i + 1) * segs + j
+                        b1 = (r_i + 1) * segs + (j + 1) % segs
+                        tri += [(a0, b0, a1), (a1, b0, b1)]
+                ci = len(pts) - 1
+                for j in range(segs):
+                    tri.append(((rings - 1) * segs + j, ci, (rings - 1) * segs + (j + 1) % segs))
+                tri = np.asarray(tri)
+                if not up:
+                    tri = tri[:, [0, 2, 1]]
+                # colour: enamel, darker toward the gums and the back of the mouth
+                depth = np.clip((z_front - pts[:, 2]) / (z_front - z_back), 0, 1)
+                gumw = np.clip(np.abs(pts[:, 1] - edge_y) / hh, 0, 1)
+                col = np.array([0.86, 0.8, 0.68])[None] * (1 - 0.55 * depth[:, None] ** 1.2) * (1 - 0.25 * gumw[:, None] ** 3)
+                out_pos.append(pts)
+                out_col.append(col)
+                out_tri.append(tri + base)
+                out_bone.append(np.full(len(pts), 0 if up else 1))
+                base += len(pts)
+        # gum ridge: a tube along the arch at the gum line
+        n_g = 60
+        gpts = []
+        for i in range(n_g + 1):
+            u = -1 + 2 * i / n_g
+            x = u * x_half * 0.98
+            z = arch(x)
+            yy = (edge_y + (np.mean(heights[:3]) if up else -np.mean(heights[:3])) * 0.92)
+            gpts.append(np.array([x, yy, z - 0.0035]))
+        gpts = np.asarray(gpts)
+        ring = 10
+        rad = 0.0042
+        tube = []
+        for i, g in enumerate(gpts):
+            tan = gpts[min(i + 1, n_g)] - gpts[max(i - 1, 0)]
+            tan /= np.linalg.norm(tan)
+            nn = np.cross(tan, np.array([0, 1.0, 0]))
+            nn /= np.linalg.norm(nn)
+            bb = np.cross(tan, nn)
+            for j in range(ring):
+                ang = 2 * np.pi * j / ring
+                tube.append(g + (nn * np.cos(ang) * 1.0 + bb * np.sin(ang) * 1.3) * rad)
+        tube = np.asarray(tube)
+        tri = []
+        for i in range(n_g):
+            for j in range(ring):
+                a0, a1 = i * ring + j, i * ring + (j + 1) % ring
+                b0, b1 = (i + 1) * ring + j, (i + 1) * ring + (j + 1) % ring
+                tri += [(a0, b0, a1), (a1, b0, b1)]
+        depth = np.clip((z_front - tube[:, 2]) / (z_front - z_back), 0, 1)
+        col = np.array([0.62, 0.3, 0.3])[None] * (1 - 0.6 * depth[:, None])
+        out_pos.append(tube)
+        out_col.append(col)
+        out_tri.append(np.asarray(tri) + base)
+        out_bone.append(np.full(len(tube), 0 if up else 1))
+        base += len(tube)
+    pos = np.concatenate(out_pos)
+    tris = np.concatenate(out_tri)
+    from geom import vertex_normals
+    nrm = vertex_normals(pos, tris)
+    bone = np.concatenate(out_bone)
+    W = np.zeros((len(pos), len(h.names)), np.float32)
+    W[bone == 0, h.index["head"]] = 1
+    W[bone == 1, h.index["jaw"]] = 1
+    return {"pos": pos, "nrm": nrm, "col": np.concatenate(out_col), "tris": tris, "Wd": W}
+
+
 def pack_skinned(bw: BinWriter, prefix: str, pos, Wd, tris, nrm=None, uv=None, tan=None, extra=None):
     bw.add_quant(prefix + "position", pos, 3)
     if nrm is not None:
@@ -664,15 +814,23 @@ def build_preset(name: str, tiers=("base", "sub1")):
         })
     tl = build_tearline(h, T["base"], eyes)
     pack_skinned(bw, "tear.", tl["pos"], tl["Wd"], tl["tris"])
+    th = build_teeth(h)
+    pack_skinned(bw, "teeth.", th["pos"], th["Wd"], th["tris"], nrm=th["nrm"], extra={
+        "color": (np.round(np.clip(th["col"], 0, 1) * 255), np.uint8, 3, True),
+    })
     for vname, (dv, dj) in var_data.items():
         bw.add_quant(f"var.{vname}.position", dv, 3)
         bw.add(f"var.{vname}.joints", dj.astype(np.float32), np.float32, 3)
     data = bw.bytes()
-    with open(os.path.join(outdir, "human.bin"), "wb") as f:
-        f.write(data)
-    rig["bin"] = {"file": "human.bin", "bytes": len(data), "layout": bw.layout}
+    import gzip
+    gz = gzip.compress(data, compresslevel=9, mtime=0)
+    with open(os.path.join(outdir, "human.binz"), "wb") as f:
+        f.write(gz)
+    if os.path.exists(os.path.join(outdir, "human.bin")):
+        os.remove(os.path.join(outdir, "human.bin"))
+    rig["bin"] = {"file": "human.binz", "bytes": len(data), "gzipBytes": len(gz), "layout": bw.layout}
     rig["tierStats"] = {k: {"vertices": int(len(t.pos)), "triangles": int(len(t.tris))} for k, t in T.items()}
-    print(f"  wrote human.bin: {len(data) / 1e6:.2f} MB")
+    print(f"  wrote human.binz: {len(data) / 1e6:.2f} MB raw, {len(gz) / 1e6:.2f} MB gzip")
     rig["variations"] = list(variations.keys())
     write_json(os.path.join(outdir, "rig.json"), rig)
     print(f"  done in {time.time() - t0:.1f}s")

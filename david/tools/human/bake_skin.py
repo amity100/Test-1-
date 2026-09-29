@@ -419,6 +419,10 @@ class Baker:
         mott = fbm(p * 9.0, 4, seed=seed + 11)
         mott2 = fbm(p * 45.0, 3, seed=seed + 12)
         col *= (1 + 0.07 * mott[:, None] * np.array([1.0, 1.1, 1.25]) + 0.03 * mott2[:, None])
+        # mid-frequency blotches (3-6 mm) and fine grain (~1 mm): living skin is never flat
+        mid = fbm(p * 220.0, 3, seed=seed + 13)
+        grain = fbm(p * 900.0, 2, seed=seed + 14)
+        col *= (1 + 0.045 * mid[:, None] * np.array([0.9, 1.05, 1.2]) + 0.02 * grain[:, None])
         self._tick("before haemoglobin")
         # ---------------- haemoglobin: ruddiness ("admoni")
         ruddy = sk.get("ruddy", 0.4)
@@ -449,6 +453,8 @@ class Baker:
         red += 0.55 * knuckle + 0.4 * tips + 0.35 * palm_m + 0.25 * elbow + 0.3 * knee * smoothstep(0.0, 0.5, n[:, 2])
         red += foot * (0.35 * smoothstep(-0.02, 0.04, -f[:, 2] * 0) + 0.25)  # feet generally pinker
         red *= 0.65 + 0.35 * (fbm(p * 30.0, 3, seed=seed + 7) * 0.5 + 0.5)
+        speck = smoothstep(0.35, 0.75, fbm(p * 520.0, 2, seed=seed + 8)) * np.clip(m_nose + m_nosetip + m_cheek * 0.8 + m_chin * 0.4, 0, 1)
+        red += 0.35 * speck
         red = np.clip(red, 0, 1.3) * (0.45 + 0.8 * ruddy)
         col = col * (1 + red[:, None] * np.array([0.10, -0.16, -0.14]))
         self._tick("before palms & soles")
@@ -471,8 +477,8 @@ class Baker:
             nfr = int(9000 * fr_amt)
             pick = rng.choice(len(self.P), nfr, p=pw)
             centers = self.P[pick] + rng.normal(0, 0.004, (nfr, 3))
-            rad = rng.uniform(0.00035, 0.0009, nfr)
-            inten = rng.uniform(0.15, 0.65, nfr) ** 1.5
+            rad = rng.uniform(0.00045, 0.0011, nfr)
+            inten = rng.uniform(0.2, 0.85, nfr) ** 1.4
             for c, r, it in zip(centers, rad, inten):
                 ids = tree.query_ball_point(c, r * 1.8)
                 if not ids:
@@ -490,7 +496,7 @@ class Baker:
             if ids:
                 d = np.linalg.norm(p[ids] - c, axis=1)
                 mole[ids] = np.maximum(mole[ids], smoothstep(r * 1.6, r * 0.7, d))
-        col = col * (1 - melf[:, None] * np.array([0.22, 0.32, 0.4])) * (1 - mole[:, None] * np.array([0.55, 0.62, 0.66]))
+        col = col * (1 - melf[:, None] * np.array([0.26, 0.37, 0.46])) * (1 - mole[:, None] * np.array([0.55, 0.62, 0.66]))
         self._tick("before veins")
         # ---------------- veins (bluish, raised) on forearms, hands, feet, temples
         vein_mask = np.clip(farm * smoothstep(-0.1, 0.4, -palm_side * 0 + 1) + dorsal_m * 1.2 + foot * smoothstep(0.2, 0.7, n[:, 1]) * 0.9
@@ -498,8 +504,8 @@ class Baker:
         vein_mask *= 1 - palm_m
         rq = rp * np.array([55.0, 14.0, 55.0])  # stretched along the limbs (rest pose: limbs vertical)
         vn = ridged(rq, 2, seed=seed + 21)
-        vein = smoothstep(0.93, 0.985, vn) * vein_mask * (0.5 + 0.5 * smoothstep(-0.2, 0.4, fbm(rp * 20, 2, seed=seed + 22)))
-        col = col * (1 - vein[:, None] * np.array([0.18, 0.1, 0.0]) * 0.8)
+        vein = smoothstep(0.86, 0.975, vn) * vein_mask * (0.35 + 0.65 * smoothstep(-0.2, 0.4, fbm(rp * 20, 2, seed=seed + 22)))
+        col = col * (1 - vein[:, None] * np.array([0.07, 0.035, -0.02]))
         self._tick("before beard shadow")
         # ---------------- beard shadow & body hair tone
         bs = sk.get("beard_shadow", 0.0)
@@ -507,16 +513,16 @@ class Baker:
         # beard line: sideburn (x=6.4cm, y=0) -> mouth corner (x=2.6cm, y=-5.8cm)
         line_y = np.interp(ax, [0.0, 0.026, 0.064, 0.09], [-0.058, -0.058, -0.005, 0.02])
         chin_y = self.lm["chin"][1] - E[1]
-        beard = head * smoothstep(line_y + 0.004, line_y - 0.008, f[:, 1]) * smoothstep(-0.02, 0.0, f[:, 2] + 0.06 - ax * 0.4)
+        beard = head * smoothstep(line_y + 0.008, line_y - 0.014, f[:, 1]) * smoothstep(-0.035, 0.0, f[:, 2] + 0.06 - ax * 0.4)
         must = head * smoothstep(0.03, 0.022, ax) * smoothstep(-0.066, -0.06, f[:, 1]) * smoothstep(-0.043, -0.05, f[:, 1])
         under = (head + neck) * smoothstep(chin_y + 0.005, chin_y - 0.01, f[:, 1]) * smoothstep(chin_y - 0.075, chin_y - 0.05, f[:, 1]) * smoothstep(-0.2, 0.2, n[:, 2] + 0.3)
         beard = np.clip(np.maximum(np.maximum(beard, must), under), 0, 1)
         lips_v = smoothstep(0.3, 0.55, lips_raw)
         beard *= 1 - lips_v
         beard *= 1 - smoothstep(0.1, 0.4, m_nostril)
-        stub = beard * bs * (0.75 + 0.25 * fbm(p * 400, 2, seed=seed + 31))
+        stub = beard * bs * (0.6 + 0.4 * (fbm(p * 400, 2, seed=seed + 31) * 0.5 + 0.5)) * (0.8 + 0.2 * fbm(p * 60, 2, seed=seed + 32))
         stub_col = srgb_to_lin([0.2, 0.17, 0.16])
-        col = col * (1 - stub[:, None] * 0.55) + stub_col * stub[:, None] * 0.25
+        col = col * (1 - stub[:, None] * 0.42) + stub_col * stub[:, None] * 0.18
         bh = sk.get("body_hair", 0.2)
         hair_m = (farm * 0.8 + shin * 1.0 + thigh * 0.4 + dorsal_m * 0.3 + torso * 0.15 * bh) * bh
         streak = fbm(rp * np.array([900.0, 180.0, 900.0]), 2, seed=seed + 41) * 0.5 + 0.5
@@ -626,9 +632,9 @@ class Baker:
         dust_col = srgb_to_lin([0.66, 0.57, 0.46])
         col = col * (1 - (dust * dust_m * 0.5)[:, None]) + dust_col * (dust * dust_m * 0.5)[:, None]
         # ---------------- eye pocket (conjunctiva / caruncle) and mouth interior
-        col = np.where(pocket_isl[:, None], srgb_to_lin([0.55, 0.3, 0.28]), col)
+        col = np.where(pocket_isl[:, None], srgb_to_lin([0.42, 0.2, 0.19]), col)
         dm = smoothstep(1.2, 0.6, np.linalg.norm(p - self._mouth_centre(), axis=1) / 0.03)
-        col = np.where(mouth_isl[:, None], srgb_to_lin([0.42, 0.14, 0.13]) * (0.35 + 0.65 * (1 - dm))[:, None], col)
+        col = np.where(mouth_isl[:, None], srgb_to_lin([0.36, 0.12, 0.11]) * (0.15 + 0.85 * (1 - dm))[:, None], col)
         self.albedo = np.clip(col, 0, 1)
         self._tick("before height field")
         # ================= height field (metres) =================
@@ -667,7 +673,7 @@ class Baker:
             wl = np.sin(rp[:, 1] * 2 * np.pi / 0.004 + fbm(rp * 200, 2, seed=seed + 5) * 2)
             H -= patch * np.abs(wl) * amp * (smoothstep(0.0, -0.6, n[:, 2]) if "arm" in jn else smoothstep(0.2, 0.7, n[:, 2]))
         # raised veins
-        H += vein * 0.0005
+        H += vein * 0.00035
         # forehead lines, crow's feet, laugh lines (age)
         fl = np.sin(f[:, 1] * 2 * np.pi / 0.0095 + fbm(p * 60, 2, seed=seed + 95) * 1.5)
         forehead = head * smoothstep(0.035, 0.045, f[:, 1]) * smoothstep(0.075, 0.06, f[:, 1]) * smoothstep(0.045, 0.02, ax)
@@ -685,8 +691,12 @@ class Baker:
         H += are * (fbm(p * 1500, 2, seed=seed + 97) * 0.5 + 0.5) * 0.0001
         ring = np.sin(rp[:, 1] * 2 * np.pi / 0.018) * neck * smoothstep(0.1, 0.5, n[:, 2])
         H -= np.clip(ring, 0, 1) * (0.00002 + 0.00008 * age)
-        # general fine relief (skin "tension lines") — subtle
-        H += fbm(p * 900, 2, seed=seed + 99) * 0.000012
+        # micro relief: fine bumps / follicle texture (resolved by the 2K map on the face), strongest on the
+        # nose, cheeks, chin and forehead; the pores themselves come from the tiling detail normal at runtime
+        zone = np.clip(m_nose * 1.2 + m_nosetip + m_cheek + m_chin * 0.7 + head * 0.35, 0, 1)
+        amp = 0.000012 + 0.000030 * zone
+        relief = fbm(p * 600.0, 2, seed=seed + 98) * 0.7 + fbm(p * 1100.0, 2, seed=seed + 99) * 0.5
+        H += relief * amp * (1 - lips_v) * (1 - nails) * (1 + 0.6 * age)
         self.height = H
         self._tick("before roughness")
         # ================= roughness (0..1 mapped to [0.15, 0.85] at runtime) =================
@@ -786,14 +796,18 @@ class Baker:
         lap = ndimage.laplace(ndimage.gaussian_filter(self.dilate(Himg, 4), 1.0))
         cav_t = np.clip(1 + lap[self.vy, self.vx] * 2500.0, 0.6, 1.0)
         aoc = np.clip(ao * cav_t, 0, 1)
+        aoc = np.where(self.island == 4, aoc * 0.3, aoc)  # eye-socket pocket is occluded by the eyeball
+        aoc = np.where(self.island == 3, aoc * 0.25, aoc)  # mouth interior
         thick = self.interp(self.v_thick)
         trans = np.clip(np.exp(-(thick - 0.004) / 0.012), 0, 1)
-        mask = np.stack([aoc, self.rough, trans, self.pores], 1)
+        trans = np.where((self.island == 3) | (self.island == 4), 0.0, trans)  # no glow from mouth / socket interiors
+        mask = np.stack([aoc, self.rough, trans], 1)
         mask = self.dilate(self.image(mask), 16)
-        # fill background of mask sensibly
+        pores = self.dilate(self.image(self.pores), 16)
         mimg = (np.clip(mask, 0, 1) * 255 + 0.5).astype(np.uint8)
         aimg = (np.clip(alb, 0, 1) * 255 + 0.5).astype(np.uint8)
-        nimg = (np.clip(nrm, 0, 1) * 255 + 0.5).astype(np.uint8)
+        # normal map: xy = tangent-space normal, z = pore strength (the shader rebuilds nz = sqrt(1 - x^2 - y^2))
+        nimg_xy = np.clip(nrm[..., :2], 0, 1)
         outs = [(S, {2048: "2k", 1024: "1k", 4096: "4k"}.get(S, f"{S}"))]
         if S > 1024:
             outs.append((1024, "1k"))
@@ -802,10 +816,20 @@ class Baker:
                 im = Image.fromarray(a, mode)
                 return im if sz == S else im.resize((sz, sz), Image.LANCZOS)
             rs(aimg, "RGB").save(os.path.join(outdir, f"albedo_{tag}.webp"), quality=90, method=6)
-            nn = np.asarray(rs(nimg, "RGB")).astype(np.float32) / 255 * 2 - 1
-            nn /= np.linalg.norm(nn, axis=-1, keepdims=True) + 1e-6
-            Image.fromarray(((nn * 0.5 + 0.5) * 255 + 0.5).astype(np.uint8), "RGB").save(os.path.join(outdir, f"normal_{tag}.webp"), quality=92, method=6)
-            rs(mimg, "RGBA").save(os.path.join(outdir, f"mask_{tag}.webp"), quality=90, method=6)
+            if sz == S:
+                xy = nimg_xy
+                pr = pores
+            else:
+                # downsample the normal as a vector field, then renormalise
+                n3 = nrm * 2 - 1
+                n3 = np.asarray(Image.fromarray(((n3 * 0.5 + 0.5) * 255).astype(np.uint8), "RGB").resize((sz, sz), Image.LANCZOS)).astype(np.float32) / 255 * 2 - 1
+                n3 /= np.linalg.norm(n3, axis=-1, keepdims=True) + 1e-6
+                xy = n3[..., :2] * 0.5 + 0.5
+                pr = np.asarray(Image.fromarray((np.clip(pores, 0, 1) * 255).astype(np.uint8), "L").resize((sz, sz), Image.LANCZOS)).astype(np.float32) / 255
+            nimg = np.concatenate([xy, pr[..., None]], -1)
+            Image.fromarray((np.clip(nimg, 0, 1) * 255 + 0.5).astype(np.uint8), "RGB").save(os.path.join(outdir, f"normal_{tag}.webp"), quality=92, method=6)
+            rs(mimg, "RGB").save(os.path.join(outdir, f"mask_{tag}.webp"), quality=90, method=6)
+        nimg = (np.clip(np.concatenate([nimg_xy, pores[..., None]], -1), 0, 1) * 255).astype(np.uint8)
         # debug previews (scratch)
         dbg = os.path.join(os.environ.get("HUMAN_DEBUG", "/tmp"), f"{self.name}_masks.png")
         try:
@@ -884,7 +908,7 @@ def bake_eye(style: str, size=1024, seed=3):
     z = np.sqrt(np.clip(1 - r * r, 0, 1))
     P3 = np.stack([x, y, z], -1).reshape(-1, 3)
     n1 = fbm(P3 * 4.0, 4, seed=seed).reshape(S, S)
-    scl = srgb_to_lin([0.88, 0.84, 0.8])
+    scl = srgb_to_lin([0.82, 0.77, 0.72])
     col[:] = scl * (1 + 0.04 * n1[..., None])
     # pinkish toward the canthi (left/right edges), veins
     canth = smoothstep(0.45, 0.95, np.abs(x)) * smoothstep(0.7, 0.2, np.abs(y))
