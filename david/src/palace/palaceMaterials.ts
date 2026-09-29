@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { shared } from '../core/Shared';
 import type { TextureSet } from '../world/Textures';
+import { rockMaterial } from '../world/Rocks';
 // Saul's house textures (tools/palace/gen_palace_textures.py): albedo *_a (sRGB), normal *_n (OpenGL, RGB)
 import plasterA from '../assets/palace/plaster_a.webp';
 import plasterN from '../assets/palace/plaster_n.webp';
@@ -328,6 +329,8 @@ export interface PalaceMaterials {
   bone: THREE.MeshStandardMaterial;
   /** loose wool (fringes, tassels) */
   wool: THREE.MeshStandardMaterial;
+  /** dressed limestone (door jambs, threshold) */
+  dressed: THREE.MeshStandardMaterial;
 }
 
 /** Cloth: atlas cell sampling with seamless wrap (textureGrad), weave micro-normal, slow draft sway. */
@@ -366,7 +369,8 @@ uniform float uTime; attribute float aSway;`)
 
 export function createPalaceMaterials(tex: PalaceTextures, world: TextureSet, tier: PalaceTier): PalaceMaterials {
   const std = (p: THREE.MeshStandardMaterialParameters) => new THREE.MeshStandardMaterial({ metalness: 0, ...p });
-  tex.weaveN.repeat.set(1, 1);
+  // weave micro-normal: ~5-9 mm threads on every textile (UV units span 0.7-3 m of cloth)
+  tex.weaveN.repeat.set(44, 44);
   const plaster = interiorize(std({ map: tex.plaster, normalMap: tex.plasterN, roughness: 0.94, color: 0xfff4e4, normalScale: new THREE.Vector2(1.5, 1.5) }), { vertexAO: true, soot: 0.62, key: 'plaster' });
   const floor = interiorize(std({ map: tex.floor, normalMap: tex.floorN, roughness: 0.9, color: 0xe8dccb }), { vertexAO: true, key: 'floor' });
   const beam = interiorize(std({ map: tex.wood, normalMap: tex.woodN, roughness: 0.82, color: 0xb09a86, normalScale: new THREE.Vector2(1.2, 1.2) }), { vertexAO: false, soot: 0.5, key: 'beam' });
@@ -378,7 +382,7 @@ export function createPalaceMaterials(tex: PalaceTextures, world: TextureSet, ti
   const fleece = interiorize(std({ map: tex.fleece, normalMap: tex.fleeceN, roughness: 1, color: 0xfff6ea, normalScale: new THREE.Vector2(0.9, 0.9) }), { key: 'fleece' });
   const leather = interiorize(std({ map: world.leather, normalMap: world.leatherN, roughness: 0.62, color: 0xa47c5c }), { key: 'leather' });
   const bronze = interiorize(std({ color: 0xa27a48, metalness: 0.75, roughness: 0.36 }), { key: 'bronze' });
-  const iron = interiorize(std({ color: 0x8a847c, metalness: 0.55, roughness: 0.42 }), { key: 'iron' });
+  const iron = interiorize(std({ color: 0x7d7770, metalness: 0.4, roughness: 0.5 }), { key: "iron" });
   const bread = interiorize(std({ map: tex.clay, color: 0xe7b879, roughness: 0.9, normalMap: tex.floorN, normalScale: new THREE.Vector2(0.4, 0.4) }), { key: 'bread' });
   const olive = interiorize(std({ color: 0x2c2a18, roughness: 0.32 }), { key: 'olive' });
   const coal = std({ color: 0x1a1612, roughness: 0.95, emissive: new THREE.Color(1.0, 0.32, 0.08), emissiveIntensity: 2.2 });
@@ -394,5 +398,6 @@ export function createPalaceMaterials(tex: PalaceTextures, world: TextureSet, ti
   const chairWood = interiorize(std({ map: tex.wood, normalMap: tex.woodN, roughness: 0.46, color: 0x7a5238, normalScale: new THREE.Vector2(0.7, 0.7) }), { key: 'chair' });
   const bone = interiorize(std({ map: tex.clay, color: 0xfff8ea, roughness: 0.38, normalMap: tex.clayN, normalScale: new THREE.Vector2(0.25, 0.25) }), { key: 'bone' });
   const wool = interiorize(std({ color: 0xd9c9a8, roughness: 1, side: THREE.DoubleSide }), { key: 'wool' });
-  return { plaster, floor, beam, beamExt, reed, wood, clay, clayDark, fleece, leather, bronze, iron, bread, olive, coal, textile, masonry, masonryFlat, houses, roof, plasterExt, hallShell, chairWood, bone, wool };
+  const dressed = rockMaterial(world, 0xf4ecdf, 2.8, 'palace-dressed');
+  return { plaster, floor, beam, beamExt, reed, wood, clay, clayDark, fleece, leather, bronze, iron, bread, olive, coal, textile, masonry, masonryFlat, houses, roof, plasterExt, hallShell, chairWood, bone, wool, dressed };
 }

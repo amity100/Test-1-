@@ -136,7 +136,7 @@ def plaster():
     strokes /= strokes.max()
     # tileability of the rotated strokes is not exact: fade the seam with a wrapped blur mix
     strokes = wrap_blur(strokes, 1.2)
-    ck = cracks(S, S, 26, 7)
+    ck = cracks(S, S, 9, 7, length=(30, 110), jitter=0.45) * 0.8
     pits = (band(S, S, 90, 200, 14) > 0.82).astype(float) * band(S, S, 60, 120, 15)
     pits = wrap_blur(pits, 0.8)
     # straw fibres (mud plaster temper)
@@ -149,14 +149,14 @@ def plaster():
         for t in np.linspace(0, L, int(L * 2)):
             straw[int(y + np.sin(a) * t) % S, int(x + np.cos(a) * t) % S] = 1
     straw = wrap_blur(straw, 0.5)
-    h = big * 0.5 + mid * 0.25 + strokes * 0.35 + grain * 0.06 - ck * 0.35 - pits * 0.25 + straw * 0.05
+    h = big * 0.5 + mid * 0.25 + strokes * 0.35 + grain * 0.06 - ck * 0.14 - pits * 0.25 + straw * 0.05
     base = col('#cdb894')
     warm = col('#b89a70')
     pale = col('#ddd0b4')
     t = np.clip(big * 1.6 - 0.35, 0, 1)[..., None]
     alb = lerp(warm, pale, t)
     alb = alb * (0.9 + 0.2 * mid[..., None]) * (0.96 + 0.08 * grain[..., None])
-    alb = lerp(alb, base * 0.55, ck[..., None] * 0.8)
+    alb = lerp(alb, base * 0.7, ck[..., None] * 0.35)
     alb = lerp(alb, col('#8a6f48'), straw[..., None] * 0.55)
     alb = lerp(alb, alb * 0.72, pits[..., None])
     save_rgb('plaster_a', alb)
@@ -297,8 +297,7 @@ def textile_cell(kind, S=512):
         img = checks(img, 0.47, 0.53, lerp(sc, CREAM, 0.15), 1 / 32, x, yy)
         img = bands(img, [(0.455, 0.462, CREAM), (0.538, 0.545, CREAM)], yy)
         # faint warp stripes in the cream field (two yarn lots)
-        warp = (((x * 64) % 1) < 0.5)[..., None]
-        img = np.where((np.abs(img - CREAM).sum(-1, keepdims=True) < 1e-6) & warp, CREAM2 * 1.02, img)
+        # (no warp pin-stripes: they alias into a plaid at a distance)
     elif kind == 1:
         # floor rug: warp-faced stripes of undyed wool (cream, brown, grey, dark goat hair) with a few narrow scarlet
         # and blue stripes; a dark border with checks along the long edges

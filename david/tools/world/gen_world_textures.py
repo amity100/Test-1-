@@ -378,8 +378,9 @@ def _course_wall(name, n, seed, rows, hvar, wmin, wmax, gap, rnd_edge, corner, s
     g = 1 - smooth(gap * 0.5, gap * 1.5, dist)
     bulge = smooth(gap * 0.6, gap + bevel, dist) ** (0.5 + flat) * (0.85 + 0.15 * smooth(0, 0.05, dist)) * stone_h[stone_id]
     det = spectral(n, 1.3, seed + 3, fmin=12)
-    pits = cups(n, 1600, 0.0018, 0.0055, seed + 4, sharp=2.4)
-    h = bulge * 0.8 + det * 0.1 - pits * 0.1
+    # sparse, shallow solution pores (dense dark pits read as a 'chocolate-chip' pattern on dressed stones)
+    pits = cups(n, 800, 0.0016, 0.0045, seed + 4, density=smooth(0.45, 0.8, spectral(n, 2.0, seed + 6, fmin=3)), sharp=2.0)
+    h = bulge * 0.8 + det * 0.1 - pits * 0.07
     if chink:
         cpts = rng.random((900, 2)).astype(F32)
         (c1,), (ci,) = worley(n, cpts, k=1)
@@ -393,7 +394,7 @@ def _course_wall(name, n, seed, rows, hvar, wmin, wmax, gap, rnd_edge, corner, s
     base = lerp(stone_cols[0], stone_cols[1], stone_tone[stone_id])
     base = lerp(base, stone_cols[2], smooth(0.65, 1.0, stone_warm[stone_id]) * 0.7)
     albedo = base * (0.86 + 0.2 * det)[..., None]
-    albedo = lerp(albedo, col('#6d6252'), pits * 0.5)
+    albedo = lerp(albedo, col('#8a7e6c'), pits * 0.22)
     lich = smooth(0.66, 0.74, spectral(n, 1.8, seed + 5, fmin=5)) * bulge
     albedo = lerp(albedo, col('#5b5b4d'), lich * 0.5)
     albedo = lerp(albedo, mortar_col, g)

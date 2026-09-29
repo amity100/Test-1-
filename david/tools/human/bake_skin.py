@@ -570,7 +570,7 @@ class Baker:
             pick = rng.choice(len(self.P), nfr, p=pw)
             centers = self.P[pick] + rng.normal(0, 0.004, (nfr, 3))
             rad = rng.uniform(0.0002, 0.00048, nfr)
-            inten = rng.uniform(0.1, 0.45, nfr) ** 1.3
+            inten = rng.uniform(0.14, 0.55, nfr) ** 1.25
             for c, r, it in zip(centers, rad, inten):
                 ids = tree.query_ball_point(c, r * 1.8)
                 if not ids:
@@ -686,7 +686,8 @@ class Baker:
         col = col * (1 - 0.55 * seam[:, None])
         # ---------------- eyelids (thin, slightly purple/pink), under-eye
         lid = smoothstep(0.024, 0.012, np.minimum(np.linalg.norm(p - self.eyes["L"]["center"], axis=1), np.linalg.norm(p - self.eyes["R"]["center"], axis=1))) * head
-        col = col * (1 - lid[:, None] * np.array([0.06, 0.08, 0.04])) * (1 - m_bag[:, None] * np.array([0.03, 0.06, 0.02]) * (1 + sk.get("age", 0)))
+        # thin lid skin: a neutral, slightly cool darkening (removing more green than red made the lids orange-red)
+        col = col * (1 - lid[:, None] * np.array([0.05, 0.05, 0.035])) * (1 - m_bag[:, None] * np.array([0.04, 0.045, 0.03]) * (0.3 + sk.get("age", 0)))
         self.lid_m = lid
         # lash line: dense lash roots darken the lid margin (upper lid much more than the lower)
         lashl = np.zeros(ntex, np.float32)

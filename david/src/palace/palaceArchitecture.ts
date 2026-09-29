@@ -350,11 +350,11 @@ export function buildArchitecture(mats: PalaceMaterials, tier: PalaceTier): Arch
     for (const sgn of [-1, 1]) {
       for (let k = 0; k < 3; k++) {
         const hk = H.door.h / 3;
-        jb.block(V3(H.cx + sgn * (H.door.w / 2 + 0.2), y0 + hk * (k + 0.5), H.z1 + T - 0.1), V3(0.42 + (k % 2) * 0.06, hk - 0.03, 0.32), 0.12, 0.3, { faces: 'px nx pz py ny', dispEdge: 0.05 });
+        jb.block(V3(H.cx + sgn * (H.door.w / 2 + 0.2), y0 + hk * (k + 0.5), H.z1 + T - 0.1), V3(0.42 + (k % 2) * 0.06, hk - 0.025, 0.32), 0.5, 0.3, { faces: 'px nx pz py ny' });
       }
     }
-    jb.block(V3(H.cx, y0 - 0.03, H.z1 + T * 0.5 + 0.1), V3(H.door.w + 0.5, 0.12, T + 0.25), 0.2, 0.3, { faces: 'px nx pz nz py', dispEdge: 0.05 });
-    group.add(mesh(jb.build({ ao: false, disp: true }), tier === 'low' ? mats.masonryFlat : mats.masonry, true, true, 'palace:doorJambs'));
+    jb.block(V3(H.cx, y0 - 0.03, H.z1 + T * 0.5 + 0.1), V3(H.door.w + 0.5, 0.12, T + 0.25), 0.5, 0.3, { faces: 'px nx pz nz py' });
+    group.add(mesh(jb.build({ ao: false }), mats.dressed, true, true, 'palace:doorJambs'));
   }
   group.add(beams);
 

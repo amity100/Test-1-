@@ -839,7 +839,7 @@ vec3 hblend3(vec3 w, vec3 h){
   float wS = smoothstep(0.62, 0.9, m2 * 0.7 + macro * 0.5) * 0.45 + rocky * (1.0 - rocky) * 0.5 + terr * 0.06 + grike * 0.35;
   // Bethlehem: trampled earth lanes and courtyards with bedrock breaking through (no grass mat in town)
   float town = (1.0 - smoothstep(${(LAYOUT.bethlehem.r - 16).toFixed(1)}, ${(LAYOUT.bethlehem.r + 6).toFixed(1)}, length(p - vec2(${LAYOUT.bethlehem.x.toFixed(1)}, ${LAYOUT.bethlehem.z.toFixed(1)})))) * (1.0 - isFar);
-  wR = max(wR, town * smoothstep(0.58, 0.82, m3 * 0.7 + dNoise(p * 0.37) * 0.3) * 0.75);
+  wR = max(wR, town * smoothstep(0.56, 0.8, m3 * 0.6 + dNoise(p * 0.37) * 0.4) * 0.7);
   wS = clamp(wS * (1.0 - wR) + town * 0.85 * (1.0 - wR), 0.0, 1.0);
   float wG = max(0.0, 1.0 - wR - wS);
   // thin grass (where the 3D tufts are sparse): bare terra rossa and limestone chips show between the tufts
@@ -862,11 +862,12 @@ vec3 hblend3(vec3 w, vec3 h){
   grass *= mix(1.0, 0.78, smoothstep(0.52, 0.78, mp));
   grass = mix(grass, grass * vec3(0.92, 0.86, 0.8), smoothstep(0.35, 0.1, mp) * 0.6);
   vec3 soil = sA.rgb * mix(0.9, 1.04, m3);
-  soil = mix(vec3(dot(soil, vec3(0.3, 0.55, 0.15))), soil, 0.62) * vec3(1.08, 1.0, 0.94);   // dry terra rossa...
+  soil = mix(vec3(dot(soil, vec3(0.3, 0.55, 0.15))), soil, 0.55) * vec3(1.07, 1.0, 0.94);   // dry terra rossa...
   soil = mix(soil, vec3(0.17, 0.11, 0.07) * mix(0.9, 1.1, m2), 0.3 * (1.0 - rocky));            // ...browned (linear colour)
   soil = mix(soil, vec3(0.3, 0.22, 0.15) * mix(0.92, 1.06, m2), town * 0.55);                    // beaten, dusty earth (linear)
   // weathered bedrock is greyer and darker than fresh boulders (lichen, dust)
   vec3 rock = rA.rgb * vec3(0.8, 0.79, 0.76) * mix(0.8, 1.0, macro);
+  rock = mix(rock, rock * vec3(0.8, 0.72, 0.62), town * 0.8); // trodden, dust-stained bedrock in the lanes
   vec3 col = grass * wts.x + soil * wts.y + rock * wts.z;
   vec3 nrm = normalize(N + vec3(tN(gNt).x, 0.0, tN(gNt).y) * 0.8) * wts.x
            + normalize(N + vec3(tN(sNt).x, 0.0, tN(sNt).y) * 0.8) * wts.y
