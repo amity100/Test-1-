@@ -303,7 +303,7 @@ class Checker:
                 if ex:
                     f.expected, f.found_in = ex, label
                     break
-        f.catalog_id = self.catalog_match(q)
+        f.catalog_id = self.catalog_match(f.expected if f.verdict == 'FAIL' and f.expected else q)
         self.findings.append(f)
         return f
 
@@ -398,9 +398,16 @@ def scan_ts(ck: Checker, path: Path, rel: str) -> None:
                 handled.add(b.start)
                 ref = mm.group(2)
                 if re.match(r'^\s*(עַל פִּי|על פי|ע"פ|ע״פ|עַל־פִּי)', ref):
+                    r = L.parse_ref(ref)
+                    alt = ''
+                    if r is not None:
+                        want = f'{r.work.en} {r.ch}:{r.v1}' if r.v1 else f'{r.work.en} {r.ch}'
+                        alt = next((cid for cid, e in ck.catalog.items()
+                                    if e.get('refEn') == want and e.get('status') == 'in-game'), '')
                     ck.findings.append(Finding(rel, b.line, 'ui.toast', ck.clean(mm.group(1)), ref, 'FAIL',
                                                'paraphrase labelled "according to" a source - replace with an exact quotation',
-                                               expected='(see catalog)'))
+                                               expected=L.ELLIPSIS.join(ck.catalog[alt]['quote']) if alt else '(see catalog)',
+                                               catalog_id=alt))
                 else:
                     cited.append(ref)
                     ck.check_quote(rel, b.line, 'ui.toast', mm.group(1), ref)

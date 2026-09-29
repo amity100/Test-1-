@@ -36,7 +36,7 @@ interface FingerShape {
 const FINGER_SHAPES: Record<FingerPose, FingerShape> = {
   open: { f: [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]], t: [0, 0, 0], tOpp: 0, spread: [4, 2, 0, 0], cup: 0 },
   spread: { f: [[-5, 0, 0], [-5, 0, 0], [-5, 0, 0], [-5, 0, 0]], t: [-10, 0, 0], tOpp: -10, spread: [-6, 0, -5, -12], cup: -4 },
-  relaxed: { f: [[14, 24, 10], [18, 30, 14], [22, 34, 16], [27, 38, 20]], t: [6, 12, 14], tOpp: 16, spread: [7, 3, -2, -5], cup: 5 },
+  relaxed: { f: [[14, 24, 10], [18, 30, 14], [22, 34, 16], [27, 38, 20]], t: [6, 12, 14], tOpp: 16, spread: [6, 1, 4, 9], cup: 5 },
   cup: { f: [[28, 30, 12], [30, 32, 14], [32, 34, 16], [34, 36, 18]], t: [10, 14, 10], tOpp: 30, spread: [9, 4, -3, -6], cup: 10 },
   grip: { f: [[58, 78, 42], [64, 80, 44], [68, 82, 46], [72, 84, 48]], t: [18, 28, 32], tOpp: 44, spread: [8, 4, -2, -4], cup: 12 },
   fist: { f: [[86, 100, 62], [90, 102, 64], [92, 104, 66], [94, 106, 68]], t: [26, 42, 46], tOpp: 52, spread: [9, 4, -3, -6], cup: 16 },
@@ -97,7 +97,7 @@ function swingTwistY(q: THREE.Quaternion, swing: THREE.Quaternion, twist: THREE.
   twist.set(0, q.y, 0, q.w);
   const l = twist.length();
   if (l < 1e-6) twist.identity();
-  else twist.multiplyScalar(1 / l);
+  else twist.set(0, q.y / l, 0, q.w / l);
   swing.copy(q).multiply(_q3.copy(twist).invert());
 }
 
@@ -131,6 +131,10 @@ export class HumanRig {
   };
   /** direct per-unit face control (MakeHuman pose units), 0..1 */
   readonly faceUnits: Record<string, number> = {};
+  /** always-on bias (relaxed lids: the MakeHuman neutral face shows a little sclera under the iris) */
+  readonly faceBias: Record<string, number> = { LeftLowerLidUp: 0.22, RightLowerLidUp: 0.22, LeftUpperLidClosed: 0.1, RightUpperLidClosed: 0.1 };
+  /** resting gaze pitch (radians, negative = down) */
+  gazeRestPitch = -0.035;
   private exprTarget: Partial<Record<Expression, number>> = {};
   private exprCur: Partial<Record<Expression, number>> = {};
   expressionSpeed = 4;
@@ -141,6 +145,8 @@ export class HumanRig {
   private eyeYawT = 0;
   private eyePitchT = 0;
   jawOpen = 0;
+  /** current upper-lid closure 0..1 (read-only; blink + expressions) */
+  lidClose = 0;
   breathe = 1;
   blinkEnabled = true;
   private blinkT = 2;
@@ -184,7 +190,6 @@ export class HumanRig {
       const o = new THREE.Object3D();
       o.name = name;
       parent.add(o);
-      o.updateWorldMatrix(true, false);
       const parentWorld = (parent as THREE.Object3D) === root ? new THREE.Vector3() : this.worldOfProxy(parent);
       o.position.copy(at).sub(parentWorld);
       J[name] = o;
@@ -407,20 +412,24 @@ export class HumanRig {
     const a = new THREE.Quaternion(), b = new THREE.Quaternion();
     for (let i = 0; i < 4; i++) {
       const ax = this.fingerAxes[`${i + 2}${s}`];
-      // spread (abduction) about the palm normal: positive = toward the middle finger
-      const toward = i === 0 ? -1 : i === 1 ? -0.3 : 1; // index/middle rotate toward pinky side negative
-      const spr = a.setFromAxisAngle(ax.spread, spread[i] * D * toward * sg * -1);
+      // spread (abduction) about the palm normal; positive values close the fingers toward the middle finger.
+      // A positive rotation about the palm normal moves the fingers toward the thumb on the left hand
+      // and toward the little finger on the right hand.
+      const dirSign = i <= 1 ? -1 : 1;
+      const spr = a.setFromAxisAngle(ax.spread, spread[i] * D * dirSign * sg);
       this.setC(`finger${i + 2}-1.${s}`, spr.multiply(b.setFromAxisAngle(ax.flex, f[i][0] * D)));
       this.setC(`finger${i + 2}-2.${s}`, a.setFromAxisAngle(ax.flex, f[i][1] * D));
       this.setC(`finger${i + 2}-3.${s}`, a.setFromAxisAngle(ax.flex, f[i][2] * D));
     }
-    // palm arch: ring & pinky metacarpals fold slightly toward the thumb
+    // palm arch: ring & little-finger metacarpals roll the ulnar side of the hand toward the palm
     const palm = this.fingerAxes[`palm${s}`];
-    this.setC(`metacarpal3.${s}`, a.setFromAxisAngle(_v.copy(palm.flex), cup * 0.5 * D * sg));
-    this.setC(`metacarpal4.${s}`, a.setFromAxisAngle(_v.copy(palm.flex), cup * D * sg));
-    // thumb: opposition at the CMC joint, then flexion
+    const cupAxis = _v.copy(palm.flex).negate().cross(palm.spread).normalize();
+    this.setC(`metacarpal3.${s}`, a.setFromAxisAngle(cupAxis, cup * 0.5 * D));
+    this.setC(`metacarpal4.${s}`, a.setFromAxisAngle(cupAxis, cup * D));
+    // thumb: opposition at the CMC joint (swings the thumb in front of the palm), then flexion
     const th = this.fingerAxes[`1${s}`];
-    const oppQ = a.setFromAxisAngle(_v.copy(palm.flex).cross(palm.spread).normalize(), -opp * D * 0.6 * sg);
+    const oppAxis = _v2.copy(palm.flex).cross(palm.spread).normalize();
+    const oppQ = a.setFromAxisAngle(oppAxis, opp * D * 0.6);
     this.setC(`finger1-1.${s}`, oppQ.multiply(b.setFromAxisAngle(th.flex, t[0] * D)));
     this.setC(`finger1-2.${s}`, a.setFromAxisAngle(th.flex, t[1] * D));
     this.setC(`finger1-3.${s}`, a.setFromAxisAngle(th.flex, t[2] * D));
@@ -439,6 +448,7 @@ export class HumanRig {
       for (const [u, w] of Object.entries(EXPRESSIONS[e])) units[u] = (units[u] ?? 0) + w * nv;
     }
     for (const [u, w] of Object.entries(this.faceUnits)) units[u] = (units[u] ?? 0) + w;
+    for (const [u, w] of Object.entries(this.faceBias)) units[u] = (units[u] ?? 0) + w;
     // blinking (natural rate ~ every 2-6 s, 0.15 s)
     if (this.blinkEnabled) {
       this.blinkT -= dt;
@@ -463,7 +473,7 @@ export class HumanRig {
     if (this.lookTarget) this.computeLook(this.lookTarget);
     const ke = 1 - Math.exp(-25 * dt);
     this.eyeYaw += (this.eyeYawT + this.saccade.x - this.eyeYaw) * ke;
-    this.eyePitch += (this.eyePitchT + this.saccade.y - this.eyePitch) * ke;
+    this.eyePitch += (this.eyePitchT + this.gazeRestPitch + this.saccade.y - this.eyePitch) * ke;
     // lids follow the gaze
     const down = Math.max(0, -this.eyePitch) * 1.6, up = Math.max(0, this.eyePitch) * 1.4;
     for (const S of ['Left', 'Right']) {
@@ -472,6 +482,7 @@ export class HumanRig {
       units[`${S}LowerLidUp`] = (units[`${S}LowerLidUp`] ?? 0) + down * 0.2 + blink * 0.15;
     }
     if (this.jawOpen) units.JawDrop = (units.JawDrop ?? 0) + this.jawOpen;
+    this.lidClose = Math.min(1, units.LeftUpperLidClosed ?? 0);
     // accumulate unit rotations per bone
     const acc: Record<string, THREE.Quaternion> = {};
     const tmp = new THREE.Quaternion();

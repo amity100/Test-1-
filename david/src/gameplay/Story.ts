@@ -12,6 +12,7 @@ import type { Props } from './Props';
 import type { Projectiles } from './Projectiles';
 import type { GameAudio } from './GameAudio';
 import { LAYOUT, SUN } from '../world/Layout';
+import { quoteText, sourceRef, verseArgs, quoteWithRefHtml } from '../content/sources';
 
 class Cancelled extends Error {}
 
@@ -223,7 +224,7 @@ export class Story {
     this.check();
     this.ui.hint(null);
     await this.wait(2.5);
-    this.ui.toast('מִדְרָשׁ', 'דָּוִד הָיָה מוֹצִיא אֶת הַטְּלָאִים הַקְּטַנִּים לִרְעוֹת רִאשׁוֹנִים — שֶׁיֹּאכְלוּ אֶת הָעֵשֶׂב הָרַךְ. אָמַר הַקָּדוֹשׁ בָּרוּךְ הוּא: מִי שֶׁיּוֹדֵעַ לִרְעוֹת צֹאן אִישׁ לְפִי כֹּחוֹ — יָבוֹא וְיִרְעֶה אֶת עַמִּי.<small>עַל פִּי שְׁמוֹת רַבָּה ב, ב</small>', 11);
+    this.ui.toast('מִדְרָשׁ', `${quoteText('shr_2_2_flock')}<small>${sourceRef('shr_2_2_flock')}</small>`, 16);
     await this.wait(3);
     this.check();
 
@@ -285,7 +286,7 @@ export class Story {
     this.ui.prompt(null);
     this.ui.counter(null);
     this.audio.sfx('uiObjective');
-    this.ui.verse('וַיִּבְחַר לוֹ חֲמִשָּׁה חַלֻּקֵי אֲבָנִים מִן הַנַּחַל, וַיָּשֶׂם אֹתָם בִּכְלִי הָרֹעִים', 'שְׁמוּאֵל א׳ יז, מ', 6);
+    this.ui.verse(...verseArgs('s1_17_40_stones'), 6);
     await this.wait(2);
 
     // ---------------------------------------------------------------- 4. sling practice
@@ -301,7 +302,7 @@ export class Story {
       if (this.jarsBroken !== lastBroken) {
         lastBroken = this.jarsBroken;
         this.ui.counter(`כַּדִּים <b>${this.jarsBroken} / 3</b>`);
-        if (this.jarsBroken === 1) this.ui.verse('כָּל זֶה קֹלֵעַ בָּאֶבֶן אֶל הַשַּׂעֲרָה וְלֹא יַחֲטִא', 'שׁוֹפְטִים כ, טז', 6);
+        if (this.jarsBroken === 1) this.ui.verse(...verseArgs('jdg_20_16_slingers'), 6);
       }
       // gentle coaching if throws keep missing
       if (this.player.throws === 4 && this.jarsBroken === 0) {
@@ -463,10 +464,10 @@ export class Story {
     const cues: [number, () => void][] = [
       [1.2, () => this.ui.caption('הָרֵי יְהוּדָה', 'אֶרֶץ יִשְׂרָאֵל · בִּימֵי שָׁאוּל הַמֶּלֶךְ')],
       [9.3, () => this.ui.caption('בֵּית לֶחֶם יְהוּדָה', 'עִירוֹ שֶׁל יִשַׁי בֶּן עוֹבֵד')],
-      [11.2, () => this.ui.verse('וְדָוִד בֶּן אִישׁ אֶפְרָתִי הַזֶּה מִבֵּית לֶחֶם יְהוּדָה וּשְׁמוֹ יִשַׁי', 'שְׁמוּאֵל א׳ יז, יב', 4.6)],
-      [16.2, () => this.ui.caption('מַצֶּבֶת קְבֻרַת רָחֵל', '"וַתִּקָּבֵר בְּדֶרֶךְ אֶפְרָתָה הִוא בֵּית לָחֶם" · בְּרֵאשִׁית לה, יט')],
-      [22.8, () => this.ui.verse('עוֹד שָׁאַר הַקָּטָן, וְהִנֵּה רֹעֶה בַּצֹּאן', 'שְׁמוּאֵל א׳ טז, יא', 5)],
-      [29.5, () => this.ui.verse('וְהוּא אַדְמוֹנִי עִם יְפֵה עֵינַיִם וְטוֹב רֹאִי', 'שְׁמוּאֵל א׳ טז, יב', 6)],
+      [11.2, () => this.ui.verse(...verseArgs('s1_17_12_ephrathite'), 4.6)],
+      [16.2, () => this.ui.caption('מַצֶּבֶת קְבֻרַת רָחֵל', quoteWithRefHtml('gen_35_19_rachel_buried'))],
+      [22.8, () => this.ui.verse(...verseArgs('s1_16_11_youngest'), 5)],
+      [29.5, () => this.ui.verse(...verseArgs('s1_16_12_ruddy'), 6)],
       [39.2, () => { this.ui.hideVerse(); this.ui.titleCard(true); this.audio.sfx('titleHit'); }],
       [46.5, () => this.ui.titleCard(false)],
     ];
@@ -565,7 +566,7 @@ export class Story {
     ]);
     this.check();
     if (!grabbed) this.grabLamb(true);
-    this.ui.verse('וּבָא הָאֲרִי וְאֶת הַדּוֹב, וְנָשָׂא שֶׂה מֵהָעֵדֶר', 'שְׁמוּאֵל א׳ יז, לד', 5);
+    this.ui.verse(...verseArgs('s1_17_34_bear'), 5);
     this.player.model.lookTarget = null;
   }
 
@@ -757,7 +758,7 @@ export class Story {
         this.player.model.hold = 'none';
         this.audio.at('lambBleat', w, 1);
         this.audio.at('bearHurt', this.bear.pos, 1);
-        this.ui.verse('וְהִכִּתִיו וְהִצַּלְתִּי מִפִּיו', 'שְׁמוּאֵל א׳ יז, לה', 4);
+        this.ui.verse(...verseArgs('s1_17_35_smote_delivered'), 4);
         this.bossHP = 0.55;
         this.cam.skipShots();
         await this.wait(0.8);
@@ -818,7 +819,7 @@ export class Story {
       } },
     ]);
     this.check();
-    this.ui.verse('וַיָּקָם עָלַי', 'שְׁמוּאֵל א׳ יז, לה', 3.5);
+    this.ui.verse(...verseArgs('s1_17_35_rose'), 3.5);
     this.slowMo(1);
     this.audio.music('battle', 0.5);
   }
@@ -877,7 +878,7 @@ export class Story {
         if (this.player.health <= 0) {
           // David is knocked down — rise again
           this.player.health = this.player.maxHealth;
-          this.ui.verse('ה׳ רֹעִי לֹא אֶחְסָר', 'תְּהִלִּים כג, א', 3);
+          this.ui.verse(...verseArgs('ps_23_1_shepherd'), 3);
           this.player.model.play('hurt');
           dodges = Math.max(0, dodges - 1);
         }
@@ -920,7 +921,7 @@ export class Story {
     this.player.model.staffMode = 'strike';
     this.bear.model.hold = 'rear';
     this.bearVulnerable = false;
-    this.ui.verse('וְהֶחֱזַקְתִּי בִּזְקָנוֹ', 'שְׁמוּאֵל א׳ יז, לה', 3.5);
+    this.ui.verse(...verseArgs('s1_17_35_beard'), 3.5);
     this.audio.sfx('grab');
     this.audio.at('bearRoar', this.bear.pos, 1, 1.1);
     const bearF = () => new THREE.Vector3(Math.sin(this.bear.heading), 0, Math.cos(this.bear.heading));
@@ -991,7 +992,7 @@ export class Story {
     this.player.model.lookTarget = this.bear.pos.clone().add(new THREE.Vector3(0, 0.3, 0));
     this.audio.at('bearDeath', this.bear.pos, 1.1);
     this.slowMo(0.4);
-    this.ui.verse('וְהִכִּתִיו וַהֲמִיתִּיו', 'שְׁמוּאֵל א׳ יז, לה', 5);
+    this.ui.verse(...verseArgs('s1_17_35_slew'), 5);
     this.bossHP = 0;
     this.cam.skipShots();
     await this.wait(0.05);
@@ -1083,8 +1084,8 @@ export class Story {
     };
     this.after(0.6, setSunLower);
     const cues: [number, () => void][] = [
-      [4.0, () => this.ui.verse('ה׳ אֲשֶׁר הִצִּלַנִי מִיַּד הָאֲרִי וּמִיַּד הַדֹּב, הוּא יַצִּילֵנִי', 'שְׁמוּאֵל א׳ יז, לז', 6.5)],
-      [11.5, () => this.ui.verse('גַּם כִּי אֵלֵךְ בְּגֵיא צַלְמָוֶת לֹא אִירָא רָע כִּי אַתָּה עִמָּדִי; שִׁבְטְךָ וּמִשְׁעַנְתֶּךָ הֵמָּה יְנַחֲמֻנִי', 'תְּהִלִּים כג, ד', 7)],
+      [4.0, () => this.ui.verse(...verseArgs('s1_17_37_delivered_me'), 6.5)],
+      [11.5, () => this.ui.verse(...verseArgs('ps_23_4_rod_staff'), 7)],
     ];
     let ci = 0;
     const prevBeh = this.beh;

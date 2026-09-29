@@ -29,7 +29,7 @@ export type IntroBeat =
 export interface IntroCaption {
   /** Location / person card title (narration). */
   readonly title: string;
-  /** Subtitle: plain narration, or a catalog quotation rendered with quoteWithRef(id). */
+  /** Subtitle: plain narration, or a catalog quotation rendered with quoteWithRefHtml(id). */
   readonly sub?: string | { readonly quote: SourceId };
 }
 

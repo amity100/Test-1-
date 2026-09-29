@@ -1,0 +1,573 @@
+# DAVID: sources and textual accuracy (מְקוֹרוֹת)
+
+> **Generated file.** Edit `tools/sources/sources_doc.md.tmpl` and run `python3 tools/sources/render_docs.py`.
+> Every Hebrew quotation below comes from the verified catalog (`src/content/sources.ts`,
+> `src/content/sourcesReference.ts`), so it matches the source text exactly.
+
+This document has four parts:
+
+1. **Textual basis.** Which editions we quote, the normalization rules, and the verification tooling.
+2. **Audit.** Every quotation the game displays today, with its verdict and the exact corrected text, plus the code changes needed.
+3. **Dossier.** What the Hebrew Bible and the rabbinic sources say about King Saul, Gibeah of Saul and his court at the moment of the intro (after 1 Samuel 15, before 16:1). It also covers David, for contrast.
+4. **Historical and archaeological context** (separate from the texts; certain facts are marked apart from conjecture), and **recommendations** for the new intro.
+
+---
+
+## 1. Textual basis
+
+### 1.1 Editions
+
+| Work | Edition used (Sefaria `versionTitle`) | License (per Sefaria) | Role |
+|---|---|---|---|
+| Tanakh | **Miqra according to the Masorah (MAM)**: Aleppo Codex tradition; Sefaria's default Hebrew text | CC BY-SA | canonical text for every verse |
+| Tanakh | Tanach with Ta'amei Hamikra: Westminster Leningrad Codex (tanach.us) | Public Domain | cross-check only |
+| Shemot Rabbah, Bereshit Rabbah | Midrash Rabbah (Torat Emet), vocalized | unknown (Torat Emet freeware) | text of the midrash quotations |
+| Shemot Rabbah | Daat Shemot Rabbah, unvocalized | Public Domain | consonantal cross-check |
+| Seder Olam Rabbah | Seder Olam, Warsaw 1904 | Public Domain | chronology |
+| Bavli (Yoma, Megillah, Taanit, Moed Katan) | William Davidson Edition (Koren / Steinsaltz), vocalized by Dicta | **CC BY-NC** | research only (not shipped) |
+| Targum Jonathan | Mikraot Gedolot | Public Domain | research only |
+| Rashi, Radak | Sefaria vocalized edition / Radak on Nach | unknown | research only |
+
+All files come from Sefaria's public export: the index is `https://raw.githubusercontent.com/Sefaria/Sefaria-Export/master/books.json`, and the files are at `https://storage.googleapis.com/sefaria-export/json/<category>/<title>/Hebrew/<version>.json`. Verse numbering is the Hebrew (Masoretic) numbering. Some English Bibles number 1 Sam 21 and 24 differently.
+
+MAM and the Leningrad codex differ in about 8% of the verses of Samuel, Psalms, Judges, Genesis and Ruth, almost always in plene or defective spelling, dagesh or maqaf. The builder checks every displayed quotation against both editions. Only one displayed quotation is affected: 1 Sam 17:36, where MAM (Aleppo) reads **הַדֹּב** and Leningrad reads **הַדּוֹב**. We follow MAM.
+
+### 1.2 Normalization rules (display text)
+
+Tanakh (`sourcelib.normalize_tanakh`):
+
+- **R1 Ketiv/qere → qere**, as read. The ketiv is dropped and the qere is kept, and each pair is recorded in the entry's `kq` field.
+  - **R1b** MAM prints some "trivial" pairs as the ketiv letters with the qere's vowels. These are respelled as the qere: `עָלָו → עָלָיו`, `מְרַאֲשֹׁתָו → מְרַאֲשֹׁתָיו`, `עִירֹה → עִירוֹ`, `שַׁתָּ → שַׁתָּה`. No displayed quotation contains a ketiv/qere word.
+- **R2 Markup removed.** Section markers `{פ}` `{ס}`, HTML tags, line breaks and entities are stripped.
+- **R3 Cantillation removed.**
+  - The te'amim U+0591–U+05AF are removed.
+  - Also removed: meteg/ga'ya U+05BD, paseq/legarmeh U+05C0, rafe U+05BF, nun hafukha U+05C6, sof pasuq U+05C3, and invisible controls (CGJ U+034F, ZWJ/ZWNJ, bidi marks).
+- **R4 Points kept**: every vowel, dagesh/mappiq and shin/sin dot, plus **maqaf U+05BE**. MAM's reader-aid variants are folded to the standard points of printed Tanakhs: qamats qatan U+05C7 → qamats U+05B8, and holam haser U+05BA → holam U+05B9.
+- **R5 Divine name.** The Tetragrammaton, in any pointing and with its one-letter prefixes, is written **ה׳** (U+05D4 U+05F3), for example `וַה׳`, `לַה׳`, `בַּה׳`. This follows the common Jewish printing convention. אֱלֹהִים is kept as written.
+- **R6 Spacing.** Whitespace is collapsed, there is no space after a maqaf, and the text is Unicode **NFC**.
+- **R7 Verse ranges.** Consecutive verses are joined with a single space, since the sof pasuq is dropped (R3).
+
+Rabbinic texts (`sourcelib.normalize_rabbinic`):
+
+- **M1** The edition's inline citation markers `<small>(תהלים עח, ע)</small>` are removed. Tags and entities are stripped.
+- **M2** The edition's own vocalization and punctuation (commas, periods, `״…״`, dashes) are **kept**, because they are part of the edition's text. Editorial brackets such as `[במה הוא בוחנו]` stay in `text` but are never quoted.
+- **M3** Whitespace is collapsed and the text is NFC. The divine-name rule is not applied, because these texts already write ה׳ or ה'.
+
+Display rules (checked by the verifier):
+
+- **D1** A displayed quotation is an **exact contiguous substring** of the normalized source. Nothing may be added: no commas, semicolons, periods, dashes or spaces in place of a maqaf.
+- **D2** When a quotation skips words, it is split into exact pieces joined by `' … '` (U+2026 with spaces), in source order.
+- **D3** Quotation marks around the quotation and the reference label are outside the quotation and are allowed. The reference must name the verse(s) that contain the text, not only the chapter.
+- **D4** A paraphrase is never presented as a quotation, and "עַל פִּי" plus a paraphrase is not allowed.
+
+### 1.3 Tooling
+
+```bash
+python3 tools/sources/build_catalog.py      # spec -> src/content/sources.ts + sourcesReference.ts (exact texts)
+python3 tools/sources/verify_sources.py     # re-fetch sources, verify catalog + scan game strings; exit 1 on mismatch
+python3 tools/sources/render_docs.py        # this document
+```
+
+- `tools/sources/catalog_spec.py` is the only place quotations are chosen. Each piece is written as an *unpointed skeleton*. The builder resolves it to the exact pointed substring on word boundaries, and the build fails if the words are not in the verse.
+- `verify_sources.py` re-downloads every edition used, with a fallback to the cache in `~/.cache/david-sources`. It then does three things:
+  - Checks that every catalog `text` equals the fresh normalized source, that every `quote` piece is a substring in order, and that every Hebrew `ref` label matches `refEn`.
+  - Scans `src/**/*.ts`, `*.html` and `README.md` for pointed Hebrew shown as a quotation: `ui.verse(text, ref)`, `ui.caption(title, '"quote" · ref')`, `ui.toast(title, 'quote<small>ref</small>')`, `"quote"<span>ref</span>` HTML, README `"quote" (ref)`, and any other `"…"` pointed fragment (searched in the cited chapters).
+  - Checks catalog uses: `quoteText('id')` must use a known id, and a hand-typed ref next to it must equal the catalog ref.
+- Options: `--cache-only` (offline), `--quiet`, `--json FILE`. Exit codes: 0 means all exact (warnings allowed), 1 means at least one mismatch, 2 means a fetch or setup error.
+
+---
+
+## 2. Audit of every quotation currently in the game
+
+The snapshot below was taken from the tree before integration (`tools/sources/audit_snapshot.json`). "Exact text to display" is the corrected string, and it is exactly the catalog quotation.
+
+{{AUDIT}}
+
+What the failures have in common:
+
+1. **Maqaf replaced by a space.** Examples: `עִם יְפֵה` for `עִם־יְפֵה`, `חַלֻּקֵי אֲבָנִים` for `חַלֻּקֵי־אֲבָנִים`, `אֶל יִשַׁי` for `אֶל־יִשַׁי`. This affects 1 Sam 16:1, 16:12, 17:12, 17:34, 17:36, 17:40, Judg 20:16, Ps 23:4 and Gen 35:20.
+2. **Added punctuation inside a quotation.** Commas appear in 16:1, 16:11, 17:34, 17:37 and 17:40. There is a semicolon in Ps 23:4 and a period between Ps 23:1 and 23:2.
+3. **Wrong spelling.** 17:36 `הַדּוֹב` should be `הַדֹּב` (Aleppo). README 2 Sam 23:15 `בּוֹר … בַּשַּׁעַר` should be `{{q:s2_23_15_well}}`.
+4. **Paraphrase presented as a source** (Story.ts:226, "עַל פִּי שְׁמוֹת רַבָּה ב, ב"). The shipped text is not in the midrash; for example, it has "רִאשׁוֹנִים" and "אֶת עַמִּי". It is replaced by the exact words of Shemot Rabbah 2:2 below.
+5. **Chapter-only reference** (loading screen "תהלים כג"). It should be `{{ref:ps_23_1_2_loading}}`.
+
+Quotations that were already exact: the 17:35 fragments (verse and objective texts), Ps 23:1, the Rachel caption (Gen 35:19), and README's 17:35 and 17:37 fragments.
+
+### 2.1 Replacement of the midrash toast (Story.ts:226)
+
+The shipped text was a paraphrase. The exact text of **Shemot Rabbah 2:2** (Torat Emet, vocalized; the consonants are identical to the public-domain Daat edition) is:
+
+{{quote:shr_2_2_flock}}
+
+Shorter variant (same passage, two exact pieces):
+
+{{quote:shr_2_2_flock_short}}
+
+The midrash expounds Psalms 78:70–71 (`ps_78_70_71_chose_david`). In the same passage, the story of the shepherd who **carries the tired kid on his shoulder** is told about **Moses**, not David (`shr_2_2_moses_kid`). The game's ending, where David carries the rescued lamb on his shoulders, is therefore an artistic image and must not be captioned with that text.
+
+### 2.2 Integration mapping (for the owner of Story.ts / UI.ts / README.md)
+
+Helpers exported by `src/content/sources.ts`: `quoteText(id)`, `sourceRef(id)`, `verseArgs(id)` (for `ui.verse`), `quoteWithRef(id)` (plain text; the reference uses no-break spaces) and `quoteWithRefHtml(id)`. The HTML helper sets the quotation in the serif Hebrew face with no letter-spacing and keeps the reference on one line; `dev/sources.html` shows that the sans caption style otherwise spreads the niqqud apart and wraps the reference mid-way.
+
+```ts
+import { quoteText, sourceRef, verseArgs, quoteWithRefHtml } from '../content/sources';
+
+// Story.ts intro cues (current timeline)
+this.ui.verse(...verseArgs('s1_17_12_ephrathite'), 4.6);                       // t=11.2
+this.ui.caption('מַצֶּבֶת קְבֻרַת רָחֵל', quoteWithRefHtml('gen_35_19_rachel_buried'));  // t=16.2 (text already exact; the helper keeps the ref unbroken and the quote in the serif face)
+this.ui.verse(...verseArgs('s1_16_11_youngest'), 5);                           // t=22.8
+this.ui.verse(...verseArgs('s1_16_12_ruddy'), 6);                              // t=29.5
+// Story.ts:226 midrash toast
+this.ui.toast('מִדְרָשׁ', `${quoteText('shr_2_2_flock')}<small>${sourceRef('shr_2_2_flock')}</small>`, 16);
+//   (or 'shr_2_2_flock_short' with ~11 s)
+// Story.ts:288 / 304 / 568
+this.ui.verse(...verseArgs('s1_17_40_stones'), 6);
+this.ui.verse(...verseArgs('jdg_20_16_slingers'), 6);
+this.ui.verse(...verseArgs('s1_17_34_bear'), 5);
+// Story.ts:625 / 650 / 697 objective subtitles (already exact; optional switch to the catalog)
+`"${quoteText('s1_17_35_went_after')}" — הַכֵּה אוֹתוֹ בַּקֶּלַע אוֹ בַּמַּקֵּל`
+// Story.ts:760 / 821 / 880 / 923 / 994 (already exact)
+this.ui.verse(...verseArgs('s1_17_35_smote_delivered'), 4);
+this.ui.verse(...verseArgs('s1_17_35_rose'), 3.5);
+this.ui.verse(...verseArgs('ps_23_1_shepherd'), 3);
+this.ui.verse(...verseArgs('s1_17_35_beard'), 3.5);
+this.ui.verse(...verseArgs('s1_17_35_slew'), 5);
+// Story.ts:1086 / 1087 ending
+this.ui.verse(...verseArgs('s1_17_37_delivered_me'), 6.5);
+this.ui.verse(...verseArgs('ps_23_4_rod_staff'), 7);
+// UI.ts:55 loading quote
+`<div class="ld-quote">"${quoteText('ps_23_1_2_loading')}"<span>${sourceRef('ps_23_1_2_loading')}</span></div>`
+// UI.ts:327 / 328 end card
+`<div class="e-verse">"${quoteText('s1_17_36_37_endcard')}"<span>${sourceRef('s1_17_36_37_endcard')}</span></div>`
+`<div class="e-next-verse">"${quoteText('s1_16_1_fill_horn')}"<span>${sourceRef('s1_16_1_fill_horn')}</span></div>`
+```
+
+README.md needs these corrections:
+
+| Line | Replace with | Reference |
+|---|---|---|
+| 42 | {{q:s1_17_34_bear}} | {{ref:s1_17_34_bear}} |
+| 54 | {{q:readme_s1_16_12_admoni}} | {{ref:readme_s1_16_12_admoni}} |
+| 56 | {{q:s2_23_15_well}} | {{ref:s2_23_15_well}} |
+| 57 | {{q:gen_35_20_pillar}} | {{ref:gen_35_20_pillar}} |
+
+---
+
+## 3. Dossier: Saul and his court when the intro takes place
+
+### 3.1 Chronology: where the intro sits
+
+The intro takes place **after 1 Samuel 15** (the war with Amalek, Samuel's rebuke at Gilgal) and **before 16:1** (God sends Samuel to Jesse). The last verses before the gap are:
+
+{{quote:s1_15_34_gibeah_home}}
+
+{{quote:s1_15_35_samuel_mourned}}
+
+The next verse begins the anointing. That is the teaser of chapter 2, already in the end card:
+
+{{quote:s1_16_1_fill_horn}}
+
+**Must not appear in this intro**, because it only happens *after* the anointing (16:13):
+
+{{quote:s1_16_14_evil_spirit}}
+
+The same applies to everything built on 16:14. The following must not be shown in the intro:
+
+- the lyre-player at court (16:16–23)
+- David as armour-bearer (16:21)
+- the spear thrown at David (18:10–11, 19:9–10)
+- Saul "prophesying" or raging
+- Goliath (ch. 17)
+
+Saul in the intro is a king who has just been rejected by Samuel. He is proud, anxious for his honor before the elders, and mourned by Samuel. He is **not** a tormented madman.
+
+{{quote:s1_15_30_honor}}
+
+**Seder Olam** (traditional chronology) places the anointing in Saul's second year, with David aged 29. David becomes king at 30 (2 Sam 5:4). The Bible nevertheless calls him **נַעַר** (17:33, 17:42) and "the youngest" (16:11).
+
+{{quote:seder_olam_13_david_29}}
+
+### 3.2 Saul: stature and appearance
+
+{{quote:s1_9_2_tallest}}
+
+{{quote:s1_10_23_head_above}}
+
+{{quote:s1_10_24_long_live}}
+
+- The Targum renders **בָּחוּר וָטוֹב** as `עוּלֵים וְשַׁפִּיר`, "a young man and handsome". Radak explains **טוֹב** as good in form and appearance, and Metzudat David as "chosen in his deeds and handsome".
+- At the time of the intro, Saul is a **mature man**: his son Jonathan already commands a thousand men (13:2). His age is not stated in the text. 13:1 is famously cryptic, and the Talmud reads it morally (see 3.8).
+- Torah law shapes his grooming: a full beard, and the corners of the head and beard not shaven.
+
+{{quote:lev_19_27_beard}}
+
+- Rashi (17:38): Saul's garments *miraculously fitted* David, although they belonged to Saul, "who was taller than all the people from his shoulders upward". A normal fit would not have been expected.
+
+Character traits from the text, useful for performance:
+
+- Modesty at his election: {{q:s1_10_22_hiding}} ({{ref:s1_10_22_hiding}}).
+- Restraint toward his detractors: {{q:s1_10_27_no_gift}} ({{ref:s1_10_27_no_gift}}).
+- A monument to himself after the victory: {{q:s1_15_12_monument}} ({{ref:s1_15_12_monument}}).
+- Samuel's rebuke: {{q:s1_15_17_small_in_eyes}} ({{ref:s1_15_17_small_in_eyes}}).
+- Even as king he still followed his oxen in the field: {{q:s1_11_5_behind_oxen}} ({{ref:s1_11_5_behind_oxen}}).
+
+### 3.3 Gibeah of Saul: his home, not a "palace"
+
+The Bible calls it **בֵּיתוֹ**, "his house", at **גִּבְעַת שָׁאוּל**. In the books of Samuel, היכל is used only for the sanctuary (1 Sam 1:9; 3:3; 2 Sam 22:7) and ארמון never occurs. The phrase "בית המלך" appears only for David's house (2 Sam 11:8–9; 15:35; 19:19). The tool checked this against the full text of 1–2 Samuel.
+
+{{quote:s1_10_26_valiant_men}}
+
+{{quote:s1_15_34_gibeah_home}}
+
+{{quote:isa_10_29_gibeah}}
+
+{{quote:s2_21_6_gibeah}}
+
+{{quote:radak_s1_15_34_royal_house}}
+
+Radak's "בית מלוכה" is a *possibility* ("אפשר"), not a textual fact. It is the most a caption may claim.
+
+**The tamarisk on the height.** This is the Bible's one image of Saul holding court:
+
+{{quote:s1_22_6_tamarisk}}
+
+{{quote:tj_s1_22_6_spear}}
+
+{{quote:radak_s1_22_6_height}}
+
+{{quote:taan_5b_tamarisk}}
+
+{{quote:rashi_s1_22_6_tamarisk}}
+
+Earlier, during the Philistine war, Saul also sat outdoors under a tree:
+
+{{quote:s1_14_2_pomegranate}}
+
+The tamarisk frames Saul's life. He holds court under one, and his bones are buried under one:
+
+{{quote:s1_31_13_tamarisk_jabesh}}
+
+### 3.4 The court
+
+**Servants standing about the king, and the runners (guards):**
+
+{{quote:s1_22_7_fields_vineyards}}
+
+{{quote:s1_22_17_runners}}
+
+**Commander of the army, and the mighty men he gathered:**
+
+{{quote:s1_14_50_abner}}
+
+{{quote:s2_2_8_abner}}
+
+{{quote:s1_14_52_mighty_men}}
+
+{{quote:s1_13_2_three_thousand}}
+
+{{quote:s1_14_47_took_kingship}}
+
+{{quote:s1_14_48_valor}}
+
+**Family.** Wife Ahinoam; sons Jonathan, Ishvi and Malchishua; daughters Merab and Michal:
+
+{{quote:s1_14_49_51_family}}
+
+{{quote:chr1_8_33_genealogy}}
+
+**Other members of the household:**
+
+{{quote:s1_14_1_armor_bearer}}
+
+{{quote:s1_21_8_doeg}}
+
+**The king's seat and the new-moon meal.** This takes place later, but it shows a court custom:
+
+{{quote:s1_20_24_25_new_moon}}
+
+{{quote:rashi_s1_20_25_reclining}}
+
+**What the Bible does *not* give Saul.** No chariots, horsemen or horses are ever attributed to him; his family's animals are donkeys and oxen. Samuel's warning about "the manner of the king" is a warning, not a description of Saul's court:
+
+{{quote:s1_9_3_donkeys}}
+
+{{quote:s1_8_11_17_king_manner}}
+
+### 3.5 Regalia, dress and arms
+
+**The spear is Saul's constant attribute.** It is in his hand at court (22:6), at home (19:9) and at the table (18:10), and it is stuck in the ground at his head when he sleeps in the camp (26:7):
+
+{{quote:s1_26_7_spear_ground}}
+
+{{quote:s1_26_11_12_water_jug}}
+
+{{quote:s1_18_10_11_spear}}
+
+{{quote:s1_19_9_10_spear}}
+
+Diadem and armlet, which he wore even in his last battle:
+
+{{quote:s2_1_10_diadem}}
+
+The robe (me'il) and its corner (kanaf):
+
+{{quote:s1_24_5_corner}}
+
+{{quote:s1_15_27_robe}}
+
+{{quote:s1_28_14_samuel_meil}}
+
+War gear: garments (madim), bronze helmet, coat of mail, sword, and a shield rubbed with oil:
+
+{{quote:s1_17_38_39_armor}}
+
+{{quote:s2_1_21_22_shield_sword}}
+
+{{quote:s1_18_4_jonathan_gear}}
+
+For contrast, the Philistine gear (scale armour, bronze and iron):
+
+{{quote:s1_17_5_7_goliath_armor}}
+
+Metal was scarce in Israel. Only Saul and Jonathan had sword and spear at Michmash:
+
+{{quote:s1_13_19_no_smith}}
+
+{{quote:s1_13_22_no_swords}}
+
+Prosperity at court (scarlet, gold ornaments):
+
+{{quote:s2_1_24_scarlet_gold}}
+
+{{quote:exo_25_4_dyes}}
+
+Torah dress law that applies to Saul, David and every Israelite man:
+
+{{quote:num_15_38_tzitzit}}
+
+{{quote:deut_22_11_12_shaatnez_gedilim}}
+
+Costume consequences:
+
+- Outer four-cornered garments carry **tzitzit** with one **tekhelet** (blue) thread.
+- No garment mixes **wool and linen**.
+
+Benjaminite warriors, Saul's kin, were ambidextrous slingers and archers:
+
+{{quote:chr1_12_2_benjamin_archers}}
+
+{{quote:jdg_20_15_gibeah_men}}
+
+{{quote:jdg_20_16_slingers}}
+
+Food of the period:
+
+{{quote:s1_17_17_18_provisions}}
+
+{{quote:s1_25_18_provisions}}
+
+### 3.6 Samuel's words to Saul, and God's words
+
+{{quote:s1_15_22_obey}}
+
+{{quote:s1_15_23_rejected}}
+
+{{quote:s1_15_26_rejected}}
+
+{{quote:s1_15_28_torn_kingdom}}
+
+{{quote:s1_13_14_after_his_heart}}
+
+{{quote:s1_16_7_looks_heart}}
+
+{{quote:radak_s1_16_7_saul}}
+
+### 3.7 David, for contrast
+
+{{quote:s1_16_11_youngest}}
+
+{{quote:s1_16_12_ruddy}}
+
+{{quote:tj_s1_16_12_ruddy}}
+
+{{quote:s1_17_42_ruddy_youth}}
+
+{{quote:radak_s1_17_42_ruddy}}
+
+{{quote:brr_63_8_ruddy}}
+
+{{quote:s1_16_18_david_skills}}
+
+{{quote:s1_17_40_stones}}
+
+{{quote:s1_17_15_back_and_forth}}
+
+{{quote:s2_7_8_from_pasture}}
+
+{{quote:ps_78_70_71_chose_david}}
+
+Art direction for David, from the sources:
+
+- The complexion is ruddy (Targum סַמוֹק), with beautiful eyes and a fresh face that is not war-hardened (Radak on 17:42).
+- The hair colour is **not stated**. Auburn or copper hair, as in the reference image, is a legitimate reading of אַדְמוֹנִי, but it is an interpretation.
+- Kit, per 17:40: a staff (מַקֵּל), the shepherd's bag (כְּלִי הָרֹעִים, יַלְקוּט) and a sling.
+- Garments without sha'atnez. Tzitzit on a four-cornered outer garment if he wears one.
+
+### 3.8 Rabbinic statements about Saul (verified text)
+
+{{quote:yoma_22b_one_year_old}}
+
+{{quote:yoma_22b_no_blemish}}
+
+{{quote:yoma_22b_forgave_honor}}
+
+{{quote:yoma_22b_one_sin}}
+
+{{quote:yoma_22b_amalek_mercy}}
+
+{{quote:meg_13b_modesty}}
+
+{{quote:meg_13b_modesty_what}}
+
+{{quote:mk_16b_distinguished}}
+
+{{quote:mk_16b_had_you_been_saul}}
+
+The rabbis defend Saul's greatness: he was sinless when crowned, modest, merciful (to a fault) and "distinguished in his deeds". The intro should therefore show him as **awe-inspiring and noble**. He should not be shown as a villain.
+
+The Talmud texts are CC BY-NC (Koren/Davidson). They live only in `sourcesReference.ts`, which the game does not import. If one must be displayed, first obtain a license, or quote a public-domain edition of the Vilna text instead.
+
+---
+
+## 4. Historical and archaeological context (non-textual)
+
+This section does **not** come from the Jewish sources. Items marked **[certain]** reflect a broad scholarly consensus. Items marked **[debated]** or **[conjecture]** must not be presented to players as fact.
+
+### 4.1 Place and date
+
+- **[certain]** Gibeah of Saul lay in the territory of Benjamin, on the ridge road north of Jerusalem, near Ramah and Geba. See Isa 10:29, and 1 Sam 13:2 ("גִּבְעַת בִּנְיָמִין").
+- **[certain]** In Saul's day Jerusalem was a **Jebusite** city (2 Sam 5:6, Josh 18:28). The intro must not show an Israelite Jerusalem or the Temple.
+- **[debated]** The site is usually identified with **Tell el-Ful**, a prominent hill about 5 km north of the Old City of Jerusalem. W. F. Albright excavated there in 1922–23 and 1933, and P. Lapp in 1964. Albright interpreted a fortified building with a corner tower as "Saul's fortress". Later scholars dispute the date and scale of the Iron Age I remains, and some doubt the identification itself, preferring Jaba' (Geba) or another site. Reconstruct Saul's house as a **fortified stone residence**, not as a palace, and label it *"reconstruction"* in any bonus material. A modern trivia note: an unfinished royal palace begun for King Hussein of Jordan in the 1960s still stands on Tell el-Ful.
+- **[certain]** Conventional scholarly dating puts Saul in the late 11th century BCE (Iron Age I/IIA transition). Traditional Jewish chronology (Seder Olam) gives him a very short reign (see 3.1).
+
+### 4.2 Architecture and daily life (Iron Age I–IIA highlands)
+
+**[certain]**
+
+- Villages of pillared "four-room" houses, built of limestone fieldstones, sometimes with mudbrick upper courses.
+- Flat roofs of wooden beams, branches and packed clay.
+- Courtyards with bread ovens (tabun), silos and plastered cisterns.
+- Agricultural terraces, threshing floors, olive presses.
+- Pottery: collared-rim storage jars, cooking pots, bowls and jugs.
+- **Lamps are open saucer lamps with a single pinched spout.** Do not use closed or Hellenistic "Aladdin" lamps.
+- Looms with clay loom-weights, spindles, grinding stones.
+
+**[conjecture, but plausible]** Saul's house was a larger building of this type inside a walled enclosure, possibly with a tower:
+
+- a hall with wooden beams on stone pillars
+- plastered walls
+- woven wool hangings
+- low benches along the walls
+- a "seat by the wall" for the king (20:25)
+- oil lamps in wall niches
+
+The intro should not include:
+
+- cedar panelling (that belongs to David's and Solomon's later palaces)
+- ivory thrones (Megiddo ivories are Late Bronze Age and Canaanite)
+- marble
+- glass windows
+
+### 4.3 Dress, dyes and ornaments
+
+- **[certain]** Clothes were made of wool and linen, and the Torah forbids mixing them in one garment (Deut 22:11). Men wore:
+  - a tunic (כֻּתֹּנֶת)
+  - a mantle or robe (שִׂמְלָה / מְעִיל) with corners (כְּנָפַיִם) bearing tzitzit
+  - a belt (חֲגוֹרָה / אֵזוֹר)
+  - sandals
+- **[certain]** Dyes:
+  - blue (tekhelet) and purple (argaman) from murex sea snails
+  - scarlet (tola'at shani) from the kermes insect
+  - reds from madder
+  - blues from woad or indigo
+
+  Wool dyed with true murex purple was found at the **Timna** copper mines in textiles dated to about 1000 BCE, the time of Saul and David (published 2021). Scarlet with gold ornaments fits Saul's court (2 Sam 1:24).
+- **[certain]** Royal ornaments named in the text: a **נֵזֶר** (a band or diadem, not a heavy crown) and an **אֶצְעָדָה** (armlet or bracelet), 2 Sam 1:10.
+- **[debated / later evidence]** Israelite and Judahite iconography is 150–300 years later. The Black Obelisk (841 BCE) shows long fringed garments and soft caps. The Lachish reliefs (701 BCE) show short curly hair, beards, headbands and long tunics. Use them as guidance only.
+
+### 4.4 Weapons and armour
+
+- **[certain]** Spears with socketed metal heads, straight swords, bows and slings. Sling-stones of flint or limestone the size of a tennis ball are common finds.
+- **[certain]** Shields of leather on a wooden or wicker frame, oiled (2 Sam 1:21). Bronze helmets and scale armour (17:5, 17:38).
+- **[certain]** Bronze and iron coexisted. The text says the Philistines controlled smithing (13:19–22), so well-armed men are rare and the king's gear stands out.
+- **[conjecture]** Saul's own equipment:
+  - a bronze helmet with a simple crest-less dome
+  - a long spear with an iron head
+  - a straight sword in a leather scabbard
+  - scale armour for battle only; at court, robe and spear
+
+### 4.5 Landscape at Gibeah
+
+- **[certain]** Benjamin hill country: limestone hills, terraces, olive, vine, fig, almond and pomegranate (14:2).
+- **[certain]** The **tamarisk** (אֵשֶׁל, *Tamarix aphylla*) is a large tree with fine grey-green, needle-like foliage and rough, furrowed bark.
+- **[certain]** Donkeys, oxen, sheep and black goats. The text gives Saul no horses. Camels belong to desert peoples such as Amalek (15:3), not to Saul's household.
+- **[likely]** Avoid chickens. Domestic fowl are rare in the southern Levant before the later Iron Age.
+
+---
+
+## 5. Recommendations
+
+### 5.1 Intro: verses in order
+
+This order is implemented as a typed cue sheet in `src/content/introScript.ts` (`INTRO_CUES`, and `INTRO_CUES_SHORT` for the short cut).
+
+1. **Judean hills.** Caption only (narration): "הָרֵי יְהוּדָה · אֶרֶץ יִשְׂרָאֵל · בִּימֵי שָׁאוּל הַמֶּלֶךְ".
+2. **Gibeah of Saul.** Caption: "גִּבְעַת שָׁאוּל · בְּנַחֲלַת בִּנְיָמִין". Then:
+   {{quote:s1_15_34_gibeah_home}}
+3. **Saul holding court under the tamarisk.** The quotation omits the first clause about David, and the reference shows its place:
+   {{quote:s1_22_6_tamarisk}}
+4. **Portrait of Saul.**
+   {{quote:s1_9_2_head_above}}
+5. *(optional)* **Abner and the warriors.** Caption: "אַבְנֵר בֶּן־נֵר · שַׂר הַצָּבָא". Then:
+   {{quote:s1_14_52_mighty_men}}
+6. **Saul alone in his house at dusk.**
+   {{quote:s1_15_35_samuel_mourned}}
+7. **The hinge: from the king to the shepherd.** Show it as the memory of Gilgal and a torn robe corner, then fly south.
+   {{quote:s1_15_28_torn_kingdom}}
+8. **Bethlehem** (existing shots). Caption: "בֵּית לֶחֶם יְהוּדָה · עִירוֹ שֶׁל יִשַׁי בֶּן עוֹבֵד". Then:
+   {{quote:s1_17_12_ephrathite}}
+9. **Rachel's tomb** (existing). Caption: "מַצֶּבֶת קְבֻרַת רָחֵל", with the quotation {{q:gen_35_19_rachel_buried}} · {{ref:gen_35_19_rachel_buried}}.
+10. **The flock.**
+    {{quote:s1_16_11_youngest}}
+11. **David.**
+    {{quote:s1_16_12_ruddy}}
+12. *(optional, before the title)*
+    {{quote:s1_16_7_looks_heart}}
+
+    Alternatives for this slot: `ps_78_70_chose_david` ({{q:ps_78_70_chose_david}}) or `s1_13_14_after_his_heart`.
+13. Title card **DAVID**.
+
+For the end card or epilogue, consider {{q:s2_7_8_from_pasture}} ({{ref:s2_7_8_from_pasture}}).
+
+### 5.2 How to phrase captions that are not quotations
+
+- **Never** put quotation marks, or scripture-style niqqud *styling*, around words that are not an exact substring of the cited verse. Narration is written as plain statements: place names, people, titles.
+- **Never** write "עַל פִּי …" beneath a paraphrase. Quote exactly (catalog) or write clear narration without a source label.
+- Call Saul's residence **"בֵּית שָׁאוּל"**, **"בֵּית הַמֶּלֶךְ"** or **"גִּבְעַת שָׁאוּל"**. **"ארמון"** or **"היכל"** would suggest a textual claim the Bible does not make.
+- Captions for people: "שָׁאוּל בֶּן־קִישׁ · מֶלֶךְ יִשְׂרָאֵל", "אַבְנֵר בֶּן־נֵר · שַׂר הַצָּבָא", "יוֹנָתָן בֶּן־שָׁאוּל". These are narration, without quotation marks.
+- **Proleptic verses** (22:6; 2 Sam 1:23 `s2_1_23_eagles_lions`) always carry their reference and are never introduced with "now", "on that day", "בְּאוֹתוֹ יוֹם" or similar.
+- **16:7** is spoken about Eliab. Show it with its reference, and never caption it as a statement about Saul.
+- Do not show: the evil spirit, madness, the lyre at court, David at Saul's court, the spear thrown, Goliath, horses or chariots at Gibeah, or an Israelite Jerusalem.
+- The divine name is always **ה׳**. Every verse shown is taken from the catalog, never retyped.
+
+---
+
+## 6. Catalog
+
+### 6.1 Display catalog (`src/content/sources.ts`, shipped with the game)
+
+{{CATALOG}}
+
+### 6.2 Research catalog (`src/content/sourcesReference.ts`, not shipped)
+
+{{REFERENCE}}

@@ -356,6 +356,8 @@ REFERENCE = [
       gloss='...they called his name Obed; he is the father of Jesse, the father of David.'),
     E(id='gen_35_20_pillar', src=('Genesis', 35, 20), q=['ויצב יעקב מצבה על קברתה'], status='docs',
       use='README.md (historical accuracy section)', gloss='And Jacob set up a pillar upon her grave.'),
+    E(id='readme_s1_16_12_admoni', src=('I Samuel', 16, 12), q=['אדמוני עם יפה עינים וטוב ראי'], status='docs',
+      use='README.md (David description)', gloss='ruddy, with beautiful eyes and good looks'),
     E(id='s2_23_15_well', src=('II Samuel', 23, 15), q=['מבאר בית לחם אשר בשער'], status='docs',
       use='README.md (Bethlehem well)', gloss='...water of the well of Bethlehem which is by the gate.',
       note='The Aleppo text reads מִבֹּאר (with alef) and בַּשָּׁעַר (pausal qamats).'),

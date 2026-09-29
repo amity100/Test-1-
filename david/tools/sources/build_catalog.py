@@ -211,9 +211,19 @@ export function verseArgs(id: SourceId): [text: string, ref: string] {
   return [quoteText(id), SOURCES[id].ref];
 }
 
-/** '"quotation" · reference' - for caption subtitles. */
+/** '"quotation" · reference' as plain text (the reference never breaks across lines). */
 export function quoteWithRef(id: SourceId, sep = ' \\u00b7 '): string {
-  return `"${quoteText(id)}"${sep}${SOURCES[id].ref}`;
+  return `"${quoteText(id)}"${sep}${SOURCES[id].ref.replace(/ /g, '\\u00a0')}`;
+}
+
+/**
+ * HTML for caption subtitles / toasts: the quotation in the serif Hebrew face without letter-spacing
+ * (the sans caption style spreads niqqud apart) and an unbreakable reference. Works with the current
+ * style.css (inline styles only); the classes `src-quote` / `src-ref` are there for future styling.
+ */
+export function quoteWithRefHtml(id: SourceId, sep = ' \\u00b7 '): string {
+  return `<span class="src-quote" style="font-family:var(--serif-he);letter-spacing:0;font-weight:400">"${quoteText(id)}"</span>`
+    + `${sep}<span class="src-ref" style="white-space:nowrap">${SOURCES[id].ref}</span>`;
 }
 '''
 

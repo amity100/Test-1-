@@ -163,9 +163,9 @@
   "ref": "עַל פִּי שְׁמוֹת רַבָּה ב, ב",
   "verdict": "FAIL",
   "message": "paraphrase labelled \"according to\" a source - replace with an exact quotation",
-  "expected": "(see catalog)",
+  "expected": "בָּדַק לְדָוִד בַּצֹּאן וּמְצָאוֹ רוֹעֶה יָפֶה … הָיָה מוֹנֵעַ הַגְּדוֹלִים מִפְּנֵי הַקְּטַנִּים, וְהָיָה מוֹצִיא הַקְּטַנִּים לִרְעוֹת, כְּדֵי שֶׁיִּרְעוּ עֵשֶׂב הָרַךְ, וְאַחַר כָּךְ מוֹצִיא הַזְּקֵנִים כְּדֵי שֶׁיִּרְעוּ עֵשֶׂב הַבֵּינוֹנִית, וְאַחַר כָּךְ מוֹצִיא הַבַּחוּרִים שֶׁיִּהְיוּ אוֹכְלִין עֵשֶׂב הַקָּשֶׁה. אָמַר הַקָּדוֹשׁ בָּרוּךְ הוּא, מִי שֶׁהוּא יוֹדֵעַ לִרְעוֹת הַצֹּאן אִישׁ לְפִי כֹחוֹ, יָבֹא וְיִרְעֶה בְּעַמִּי",
   "found_in": "",
-  "catalog_id": ""
+  "catalog_id": "shr_2_2_flock"
  },
  {
   "file": "src/gameplay/Story.ts",
@@ -261,7 +261,7 @@
   "message": "quoted fragment not found verbatim in any cited source",
   "expected": "וּבָא הָאֲרִי וְאֶת־הַדּוֹב וְנָשָׂא שֶׂה מֵהָעֵדֶר",
   "found_in": "שְׁמוּאֵל א׳ יז, לד",
-  "catalog_id": ""
+  "catalog_id": "s1_17_34_bear"
  },
  {
   "file": "README.md",
@@ -369,7 +369,7 @@
   "message": "not an exact substring of the cited source",
   "expected": "אַדְמוֹנִי עִם־יְפֵה עֵינַיִם וְטוֹב רֹאִי",
   "found_in": "",
-  "catalog_id": ""
+  "catalog_id": "readme_s1_16_12_admoni"
  },
  {
   "file": "README.md",

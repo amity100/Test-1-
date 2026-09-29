@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import './style.css';
+import { quoteText, sourceRef } from '../content/sources';
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, html = '') => {
   const e = document.createElement(tag);
@@ -52,7 +53,7 @@ export class UI {
         <div class="ld-title">DAVID</div>
         <div class="ld-bar"><div></div></div>
         <div class="ld-label"></div>
-        <div class="ld-quote">"ה׳ רֹעִי לֹא אֶחְסָר. בִּנְאוֹת דֶּשֶׁא יַרְבִּיצֵנִי"<span>תהלים כג</span></div>
+        <div class="ld-quote">"${quoteText('ps_23_1_2_loading')}"<span>${sourceRef('ps_23_1_2_loading')}</span></div>
       </div>`);
     this.loadBar = this.loading.querySelector('.ld-bar div') as HTMLDivElement;
     this.loadLabel = this.loading.querySelector('.ld-label') as HTMLDivElement;
@@ -324,8 +325,8 @@ export class UI {
       <div class="e-inner">
         <div class="e-small">סוֹף פֶּרֶק רִאשׁוֹן</div>
         <div class="e-title">הָרֹעֶה</div>
-        <div class="e-verse">"גַּם אֶת הָאֲרִי גַּם הַדּוֹב הִכָּה עַבְדֶּךָ... ה׳ אֲשֶׁר הִצִּלַנִי מִיַּד הָאֲרִי וּמִיַּד הַדֹּב, הוּא יַצִּילֵנִי מִיַּד הַפְּלִשְׁתִּי הַזֶּה"<span>שמואל א׳ יז, לו–לז</span></div>
-        <div class="e-next"><div class="e-next-label">בַּפֶּרֶק הַבָּא</div><div class="e-next-title">הַמְּשִׁיחָה</div><div class="e-next-verse">"מַלֵּא קַרְנְךָ שֶׁמֶן וְלֵךְ אֶשְׁלָחֲךָ אֶל יִשַׁי בֵּית הַלַּחְמִי, כִּי רָאִיתִי בְּבָנָיו לִי מֶלֶךְ"<span>שמואל א׳ טז, א</span></div></div>
+        <div class="e-verse">"${quoteText('s1_17_36_37_endcard')}"<span>${sourceRef('s1_17_36_37_endcard')}</span></div>
+        <div class="e-next"><div class="e-next-label">בַּפֶּרֶק הַבָּא</div><div class="e-next-title">הַמְּשִׁיחָה</div><div class="e-next-verse">"${quoteText('s1_16_1_fill_horn')}"<span>${sourceRef('s1_16_1_fill_horn')}</span></div></div>
         <div class="e-btns"><button class="p-btn" data-a="free">המשך לשוטט בשדה</button><button class="p-btn ghost" data-a="replay">שחק שוב</button></div>
       </div>`;
     this.endEl.querySelector('[data-a="replay"]')!.addEventListener('click', () => onReplay?.());

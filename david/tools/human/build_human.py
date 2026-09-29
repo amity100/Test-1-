@@ -507,8 +507,8 @@ def build_strands(h: Human, tier: Tier, eyes, rng_seed=1, density=1.0):
         io = int(np.argmax(lat))
         upper_l = loop[: io + 1]
         lower_l = np.concatenate([loop[io:], loop[:1]])[::-1]
-        up_s, up_r, up_w = lashes(upper_l, c, side, rng, upper=True, count=int(105 * density))
-        lo_s, lo_r, lo_w = lashes(lower_l, c, side, rng, upper=False, count=int(55 * density))
+        up_s, up_r, up_w = lashes(upper_l, c, side, rng, upper=True, count=int(150 * density))
+        lo_s, lo_r, lo_w = lashes(lower_l, c, side, rng, upper=False, count=int(70 * density))
         mask = (allnrm[:, 2] > 0.15) & (allpos[:, 1] > c[1] + 0.002) & (np.abs(allpos[:, 0] - c[0]) < 0.05)
         surf = Surface(allpos, allnrm, mask)
         br_s, br_r, br_w = brows(surf, c, side, loop, rng, density=bcfg.get("density", 1.0) * density,
@@ -524,6 +524,8 @@ def build_strands(h: Human, tier: Tier, eyes, rng_seed=1, density=1.0):
     res = {}
     for kind, g in groups.items():
         rib = ribbon_arrays(g["strands"], np.concatenate(g["widths"]), rng)
+        rib["nstrands"] = len(g["strands"])
+        rib["points"] = len(g["strands"][0])
         roots = np.concatenate(g["roots"])
         # skin weights: lashes follow the nearest lid-margin skin, brows the skin under the root
         Wr = weights_for_points(tier, roots, k=2 if kind == "lash" else 4)
@@ -603,8 +605,13 @@ def build_preset(name: str, tiers=("base", "sub1")):
         loop, pocket = lid_margin(h, S)
         c = ed[S]["center"]
         lp = h.v_all[loop]
-        r = float(np.linalg.norm(lp - c, axis=1).min()) - 0.0004
-        eyes[S] = {"center": c, "radius": r, "loop": loop, "loop_pos": lp}
+        # fit the eyeball to the lid margin: centre on the joint's z axis (may sit slightly behind the joint)
+        from scipy.optimize import least_squares
+        fit = least_squares(lambda x: np.linalg.norm(lp - (c + np.array([0, 0, x[0]])), axis=1) - x[1], [0.0, 0.014])
+        dz = float(np.clip(fit.x[0], -0.003, 0.001))
+        cc = c + np.array([0, 0, dz])
+        r = float(np.linalg.norm(lp - cc, axis=1).min()) - 0.00025
+        eyes[S] = {"center": c, "radius": r, "offset": [0.0, 0.0, dz], "loop": loop, "loop_pos": lp}
     # face pose units
     units = face_poseunits(h)
     rig = {
@@ -619,7 +626,7 @@ def build_preset(name: str, tiers=("base", "sub1")):
             for i, n in enumerate(h.names)
         ],
         "poseunits": units,
-        "eyes": {S: {"center": [float(x) for x in eyes[S]["center"]], "radius": eyes[S]["radius"], "bone": f"eye.{S}",
+        "eyes": {S: {"center": [float(x) for x in eyes[S]["center"]], "radius": eyes[S]["radius"], "bone": f"eye.{S}", "offset": eyes[S]["offset"],
                      "opening": [[round(float(x), 6) for x in p] for p in eyes[S]["loop_pos"]]} for S in ("L", "R")},
         "landmarks": landmarks(h),
         "skin": preset.get("skin", {}),
@@ -649,6 +656,7 @@ def build_preset(name: str, tiers=("base", "sub1")):
     bw.add("mesh.skinWeight", np.round(sw * 65535), np.uint16, 4, normalized=True)
     hi_tier = T["sub1"] if "sub1" in T else T["base"]
     st = build_strands(h, hi_tier, eyes, rng_seed=preset.get("skin", {}).get("seed", 1), density=1.0)
+    rig["strands"] = {k: {"strands": int(r["nstrands"]), "points": int(r["points"])} for k, r in st.items()}
     for kind, rib in st.items():
         pack_skinned(bw, kind + ".", rib["pos"], rib["Wd"], rib["tris"], nrm=rib["nrm"], extra={
             "dir": (np.round(rib["dir"] * 127), np.int8, 3, True),

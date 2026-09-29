@@ -274,3 +274,15 @@ canvas { display: block; outline: none; }
 
 .counter { left: 72px; }
 .ui:not(.is-touch) .counter { left: 28px; }
+
+/* readability of verse references over bright frames; end card fits landscape phones */
+.v-ref { opacity: 1; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.95), 0 0 2px #000; }
+.verse::before { content: ''; position: absolute; inset: -18px -40px; z-index: -1; background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.38), transparent 70%); pointer-events: none; }
+.endcard { overflow-y: auto; place-items: safe center; }
+@media (max-height: 480px) {
+  .e-title { font-size: 34px; }
+  .e-next-title { font-size: 22px; }
+  .e-verse { margin: 8px auto 12px; font-size: 15px; }
+  .e-next { margin-bottom: 12px; padding: 8px; }
+  .e-next-verse { font-size: 14px; }
+}

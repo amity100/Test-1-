@@ -48,9 +48,9 @@ def main() -> None:
         e = cat[cid]
         lines = [f'> {q(cid)}', f'>', f'> — **{e["ref"]}** · {e["refEn"]} · `{cid}`']
         if e.get('gloss'):
-            lines.append(f'>\n> _{e["gloss"]}_')
+            lines += ['>', f'> _{e["gloss"]}_']
         if e.get('note'):
-            lines.append(f'>\n> Note: {e["note"]}')
+            lines += ['>', f'> Note: {e["note"]}']
         return '\n'.join(lines)
 
     def audit() -> str:
@@ -91,6 +91,9 @@ def main() -> None:
         return {'q': lambda: q(cid), 'text': lambda: e['text'], 'ref': lambda: e['ref'],
                 'refen': lambda: e['refEn'], 'quote': lambda: block(cid)}[kind]()
 
+    # a {{quote:ID}} alone on an indented line (e.g. inside a list item) keeps that indentation on every line
+    tmpl = re.sub(r'^([ \t]+)\{\{quote:(\w+)\}\}[ \t]*$',
+                  lambda m: '\n'.join(m.group(1) + ln for ln in block(m.group(2)).split('\n')), tmpl, flags=re.M)
     out = re.sub(r'\{\{(q|text|ref|refen|quote|AUDIT|CATALOG|REFERENCE)(?::([\w]+))?\}\}', sub, tmpl)
     left = re.findall(r'\{\{[^}]*\}\}', out)
     if left:

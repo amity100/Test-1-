@@ -716,6 +716,22 @@ export const REFERENCE_SOURCES = {
     gloss: "And Jacob set up a pillar upon her grave.",
     crossCheck: "WLC identical",
   },
+  readme_s1_16_12_admoni: {
+    id: "readme_s1_16_12_admoni",
+    kind: "tanakh",
+    ref: "שְׁמוּאֵל א׳ טז, יב",
+    refEn: "I Samuel 16:12",
+    edition: "Miqra according to the Masorah",
+    license: "CC-BY-SA",
+    text: "וַיִּשְׁלַח וַיְבִיאֵהוּ וְהוּא אַדְמוֹנִי עִם־יְפֵה עֵינַיִם וְטוֹב רֹאִי וַיֹּאמֶר ה׳ קוּם מְשָׁחֵהוּ כִּי־זֶה הוּא",
+    quote: [
+      "אַדְמוֹנִי עִם־יְפֵה עֵינַיִם וְטוֹב רֹאִי",
+    ],
+    status: "docs",
+    use: "README.md (David description)",
+    gloss: "ruddy, with beautiful eyes and good looks",
+    crossCheck: "WLC identical",
+  },
   s2_23_15_well: {
     id: "s2_23_15_well",
     kind: "tanakh",

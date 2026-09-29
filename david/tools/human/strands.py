@@ -29,7 +29,7 @@ def _smooth_noise(rng, n):
     return rng.normal(0, 1, n)
 
 
-def lashes(loop_pos, eye_center, side: int, rng, upper=True, count=110, length=(0.0085, 0.0045), width=0.00011):
+def lashes(loop_pos, eye_center, side: int, rng, upper=True, count=110, length=(0.0095, 0.0048), width=0.00016):
     """Eyelash strands rooted along a lid-margin polyline (ordered medial -> lateral).
 
     Returns list of strands, each (K,3) centerline, plus root parameters (for weights lookup).
@@ -66,16 +66,16 @@ def lashes(loop_pos, eye_center, side: int, rng, upper=True, count=110, length=(
         root = root + out * 0.00035 + lid_up * 0.00025
         K = 6
         pts = []
-        d0 = out * 0.85 + lid_up * (0.35 if upper else 0.25) + fan
+        d0 = out * 0.9 + lid_up * (0.12 if upper else 0.1) + fan
         d0 /= np.linalg.norm(d0)
-        curl = (2.4 if upper else 1.4) * (0.8 + 0.4 * rng.random())
+        curl = (1.5 if upper else 0.9) * (0.8 + 0.4 * rng.random())
         p = root.copy()
         d = d0.copy()
         step = ln / (K - 1)
         for i in range(K):
             pts.append(p.copy())
             # curl toward lid_up (upper lashes curl up, lower curl down)
-            d = d + lid_up * curl * step * 20 + rng.normal(0, 0.05, 3)
+            d = d + lid_up * curl * step * 20 * (i / (K - 1)) ** 0.7 + rng.normal(0, 0.04, 3)
             d /= np.linalg.norm(d)
             p = p + d * step
         strands.append(np.asarray(pts))
@@ -84,7 +84,7 @@ def lashes(loop_pos, eye_center, side: int, rng, upper=True, count=110, length=(
     return strands, np.asarray(roots), np.asarray(widths)
 
 
-def brows(surface: Surface, eye_center, side: int, lid_loop_pos, rng, density=1.0, thickness=1.0, count=420, width=0.000085):
+def brows(surface: Surface, eye_center, side: int, lid_loop_pos, rng, density=1.0, thickness=1.0, count=620, width=0.00011):
     """Eyebrow strands lying on the skin above the eye.  side: +1 left (+X), -1 right."""
     c = np.asarray(eye_center)
     P = np.asarray(lid_loop_pos)

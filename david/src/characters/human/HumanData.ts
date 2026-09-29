@@ -37,7 +37,7 @@ export interface RigJson {
   height: number;
   bones: RigBone[];
   poseunits: Record<string, Record<string, [number, number, number, number]>>;
-  eyes: Record<'L' | 'R', { center: [number, number, number]; radius: number; bone: string; opening: [number, number, number][] }>;
+  eyes: Record<'L' | 'R', { center: [number, number, number]; radius: number; bone: string; offset?: [number, number, number]; opening: [number, number, number][] }>;
   landmarks: {
     headTop: [number, number, number];
     chin: [number, number, number];
