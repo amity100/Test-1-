@@ -371,7 +371,7 @@ export function createPalaceMaterials(tex: PalaceTextures, world: TextureSet, ti
   const std = (p: THREE.MeshStandardMaterialParameters) => new THREE.MeshStandardMaterial({ metalness: 0, ...p });
   // weave micro-normal: ~5-9 mm threads on every textile (UV units span 0.7-3 m of cloth)
   tex.weaveN.repeat.set(44, 44);
-  const plaster = interiorize(std({ map: tex.plaster, normalMap: tex.plasterN, roughness: 0.94, color: 0xfff4e4, normalScale: new THREE.Vector2(1.5, 1.5) }), { vertexAO: true, soot: 0.62, key: 'plaster' });
+  const plaster = interiorize(std({ map: tex.plaster, normalMap: tex.plasterN, roughness: 0.94, color: 0xfff4e4, normalScale: new THREE.Vector2(1.1, 1.1) }), { vertexAO: true, soot: 0.62, key: 'plaster' });
   const floor = interiorize(std({ map: tex.floor, normalMap: tex.floorN, roughness: 0.9, color: 0xe8dccb }), { vertexAO: true, key: 'floor' });
   const beam = interiorize(std({ map: tex.wood, normalMap: tex.woodN, roughness: 0.82, color: 0xb09a86, normalScale: new THREE.Vector2(1.2, 1.2) }), { vertexAO: false, soot: 0.5, key: 'beam' });
   const beamExt = std({ map: tex.wood, normalMap: tex.woodN, roughness: 0.85, color: 0xc4ae98, normalScale: new THREE.Vector2(1.2, 1.2) });

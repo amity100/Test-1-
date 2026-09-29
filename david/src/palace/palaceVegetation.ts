@@ -157,7 +157,7 @@ function buildTamarisk(world: TextureSet, tex: PalaceTextures, tier: PalaceTier)
     m.receiveShadow = true;
     group.add(m);
   }
-  const fol = foliageMaterial(tex.tamarisk, { sway: 0.22, flutter: 0.05, translucency: 0.25, color: 0xc4c6bc, roughness: 0.85 });
+  const fol = foliageMaterial(tex.tamarisk, { sway: 0.22, flutter: 0.05, translucency: 0.3, color: 0xd8ded4, roughness: 0.85 });
   const leaves = new THREE.Mesh(cards.geometry(), fol);
   leaves.castShadow = true;
   leaves.receiveShadow = true;

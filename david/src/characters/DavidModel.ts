@@ -1,192 +1,488 @@
 import * as THREE from 'three';
-import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { mulberry32, Simplex2, clamp, damp } from '../core/noise';
+import { clamp, damp } from '../core/noise';
+import { shared } from '../core/Shared';
 import type { TextureSet } from '../world/Textures';
-import { gnarlyTube } from '../world/Vegetation';
-import { Clip, PoseMixer, pose, type Pose, UPPER_L, UPPER_R, TORSO, LEGS } from './Rig';
+import { Clip, PoseMixer, pose, type Pose, type E3, UPPER_L, UPPER_R, TORSO, LEGS } from './Rig';
 import { Rope } from './Rope';
+import { HumanModel, type HumanQuality } from './human/HumanModel';
+import type { Expression, FingerPose } from './human/HumanRig';
+import { createGroom, type Groom } from './hair';
+import { dressDavid, attachProp, type Outfit, type Prop } from './wardrobe';
 
 /*
- * Young David — "וְהוּא אַדְמוֹנִי עִם יְפֵה עֵינַיִם וְטוֹב רֹאִי" (1 Samuel 16:12):
- * ruddy, with beautiful eyes, handsome. A shepherd youth in a coarse undyed wool/linen tunic
- * (כֻּתֹּנֶת), leather belt, shepherd's bag (כְּלִי הָרֹעִים / יַלְקוּט), sandals, his staff (מַקֵּל)
- * and his sling (קֶלַע) — cf. 1 Samuel 17:40.
+ * Young David — "וְהוּא אַדְמוֹנִי עִם־יְפֵה עֵינַיִם וְטוֹב רֹאִי" (1 Sam 16:12): ruddy, with beautiful eyes, handsome;
+ * a na'ar who has already killed a lion and a bear (17:34-36). His shepherd's things are those of 17:40: the staff
+ * (מַקְלוֹ), the shepherd's bag (כְּלִי הָרֹעִים / יַלְקוּט) with five smooth stones, and the sling (קַלְּעוֹ).
  *
- * Procedural geometry on a joint hierarchy. Character faces +Z; character's left is +X.
+ * The realistic human (MakeHuman CC0 body, src/characters/human) + strand hair (src/characters/hair) + the fitted
+ * costume and props (src/characters/wardrobe), animated procedurally:
+ *   - base / hero idle with breathing, weight shifts and glances;
+ *   - walk & run from foot trajectories (heel strike, roll, toe-off, swing) solved with two-bone IK on the terrain,
+ *     pelvis drop from leg reach, pelvis yaw / list / lateral shift, counter-rotating chest, arm swing, head
+ *     stabilisation, lean into turns;
+ *   - keyed actions (sling throw, staff strikes, stone pick, call, dodge, hurt) and holds (whirl, beard grab, lamb
+ *     carry, pull, kneel, thanks, hero) with arm IK where hands must touch something (staff planted on the ground,
+ *     hand cupped at the mouth, hand on the chest, the bear's beard, the lamb's legs);
+ *   - staff held by solving the wrist so the staff follows an animated direction; it slides in the hand for strikes
+ *     (held near the butt, the long end striking) and goes across the back while both hands are busy;
+ *   - a simulated sling: two braided cords (verlet, leg-capsule collisions) ending in the leather pouch, with the
+ *     stone visible while loaded; whirl, whip-release of one cord, recovery and reload from the satchel.
+ *
+ * Gameplay handedness: sling in the RIGHT hand, staff in the LEFT (the reference image has it mirrored; the 'hero'
+ * hold is the reference stance mirrored). Character faces +Z, its left is +X (same joint conventions as before).
+ *
+ * Loading is async: `await DavidModel.preload(engine.quality.name, { msaa })` during boot, then `new DavidModel()`.
  */
 
-const NZ = new Simplex2(4040);
+export type HoldPose = 'none' | 'spin' | 'grab' | 'carry' | 'kneel' | 'thanks' | 'pull' | 'hero';
+export type StaffMode = 'plant' | 'strike' | 'back';
+export type ActionName = 'throw' | 'strike' | 'strikeHigh' | 'pick' | 'call' | 'dodge' | 'hurt';
 
-function limb(len: number, r0: number, r1: number, bulge = 0, bulgeAt = 0.35, radial = 14) {
-  const pts: THREE.Vector2[] = [];
-  const cap0 = r0 * 0.9;
-  for (let i = 0; i <= 4; i++) {
-    const a = (i / 4) * (Math.PI / 2);
-    pts.push(new THREE.Vector2(Math.sin(a) * r0, Math.cos(a) * cap0 * 0.6));
-  }
-  const steps = 10;
-  for (let i = 1; i <= steps; i++) {
-    const t = i / steps;
-    const r = THREE.MathUtils.lerp(r0, r1, t) + bulge * Math.exp(-((t - bulgeAt) ** 2) / 0.03);
-    pts.push(new THREE.Vector2(r, -len * t));
-  }
-  for (let i = 1; i <= 4; i++) {
-    const a = (i / 4) * (Math.PI / 2);
-    pts.push(new THREE.Vector2(Math.cos(a) * r1, -len - Math.sin(a) * r1 * 0.6));
-  }
-  pts[pts.length - 1].x = 0.0001;
-  pts[0].x = 0.0001;
-  return new THREE.LatheGeometry(pts, radial);
+export interface DavidParts {
+  human: HumanModel;
+  groom: Groom | null;
+  outfit: Outfit;
+  quality: HumanQuality;
+  loadMs: { human: number; outfit: number; groom: number; total: number };
 }
 
-function ellipsoid(rx: number, ry: number, rz: number, x = 0, y = 0, z = 0, w = 16, h = 12) {
-  const g = new THREE.SphereGeometry(1, w, h);
-  g.scale(rx, ry, rz);
-  g.translate(x, y, z);
-  return g;
-}
+// channels (not joints) blended by the pose mixer
+const CHANNELS = ['staff', 'staffW', 'butt', 'plantW', 'hipsX'] as const;
 
-function tint(g: THREE.BufferGeometry, c: THREE.Color | ((p: THREE.Vector3) => THREE.Color)) {
-  const pos = g.getAttribute('position');
-  const arr = new Float32Array(pos.count * 3);
-  const p = new THREE.Vector3();
-  for (let i = 0; i < pos.count; i++) {
-    p.fromBufferAttribute(pos as THREE.BufferAttribute, i);
-    const col = typeof c === 'function' ? c(p) : c;
-    arr[i * 3] = col.r;
-    arr[i * 3 + 1] = col.g;
-    arr[i * 3 + 2] = col.b;
-  }
-  g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
-  return g;
-}
+const E = (x: number, y = 0, z = 0): E3 => [x, y, z];
 
-function merge(list: THREE.BufferGeometry[]) {
-  const norm = list.map((g) => {
-    let x = g.index ? g.toNonIndexed() : g;
-    if (!x.getAttribute('uv')) x.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(x.getAttribute('position').count * 2), 2));
-    if (!x.getAttribute('color')) tint(x, new THREE.Color(1, 1, 1));
-    for (const name of Object.keys(x.attributes)) if (!['position', 'normal', 'uv', 'color'].includes(name)) x.deleteAttribute(name);
-    return x;
-  });
-  return mergeGeometries(norm)!;
-}
+// ------------------------------------------------------------------------------------------ poses
+// DavidModel joint conventions: rotation.x < 0 swings a limb forward (spine/head: + leans forward / nods down),
+// left arm z > 0 = out, right arm z < 0 = out, + shin bends the knee, - foot = toes up, + y turns to the left.
 
-// ------------------------------------------------------------------------------------------ clips
+/** calm stance: weight on the left leg, staff planted at the left, sling hanging from the right hand */
 const IDLE = pose({
-  hips: [0, 0, 0.03],
-  spine: [0.0, 0, 0],
-  chest: [0.02, 0, 0],
-  neck: [0, 0, 0],
-  head: [-0.04, 0.08, 0],
-  uaL: [-0.42, 0, 0.2], faL: [-1.2, 0, 0], hdL: [0.15, 0, 0],
-  uaR: [0.04, 0, -0.1], faR: [-0.25, 0, 0], hdR: [0.0, 0, 0],
-  thL: [-0.06, 0, 0.03], shinL: [0.08, 0, 0], ftL: [-0.02, 0, 0],
-  thR: [0.09, 0, -0.04], shinR: [0.05, 0, 0], ftR: [-0.12, 0, 0],
-});
+  hips: E(0.02, 0.04, 0.035), hipsX: E(0.028),
+  spine: E(0.02, -0.02, -0.03), chest: E(-0.03, -0.03, -0.01), neck: E(0.03), head: E(-0.02, 0.02, 0.0),
+  uaL: E(-0.2, 0, 0.4), faL: E(-1.3), hdL: E(0),
+  uaR: E(0.06, 0, -0.1), faR: E(-0.32, 0.1, 0), hdR: E(0.12, 0, 0.05),
+  thL: E(-0.03, 0, 0.0), shinL: E(0.04), ftL: E(0.0),
+  thR: E(0.05, 0.1, -0.08), shinR: E(0.16), ftR: E(-0.08, 0.1, 0),
+  staff: E(-0.06, 1, 0.02), staffW: E(1), butt: E(0.4, 0, 0.18), plantW: E(1),
+}, -0.012);
 
+/** the reference still, mirrored: staff planted out to the left at chest height, weight on the left leg,
+ *  right foot forward and turned out, chest open, head turned to his right, gaze on the horizon */
+const HERO = pose({
+  hips: E(0.0, 0.1, 0.05), hipsX: E(0.035),
+  spine: E(-0.02, -0.06, -0.04), chest: E(-0.07, -0.08, -0.02), neck: E(-0.02, -0.22, 0.0), head: E(-0.1, -0.3, 0.04),
+  uaL: E(-0.1, 0, 0.55), faL: E(-1.2), hdL: E(0),
+  uaR: E(0.02, 0, -0.14), faR: E(-0.5, 0.15, 0), hdR: E(0.2, 0, 0.1),
+  thL: E(0.02, 0, 0.02), shinL: E(0.02), ftL: E(0.0, -0.05, 0),
+  thR: E(-0.2, -0.25, -0.1), shinR: E(0.14), ftR: E(0.1, -0.2, 0),
+  staff: E(-0.12, 1, -0.02), staffW: E(1), butt: E(0.52, 0, 0.12), plantW: E(1),
+}, -0.015);
+
+/** sling whirl above the head, body coiled, side-on stance, staff held forward-left for balance */
 const SPIN = pose({
-  spine: [0, -0.12, 0], chest: [0.02, -0.3, 0], head: [0, 0.32, 0], neck: [0, 0.05, 0],
-  uaR: [-2.75, 0, -0.35], faR: [-0.35, 0, 0], hdR: [0, 0, 0],
-  uaL: [-1.25, 0, 0.3], faL: [-0.25, 0, 0], hdL: [0.1, 0, 0],
-  thL: [-0.2, 0, 0.08], shinL: [0.15, 0, 0], ftL: [0.05, 0, 0],
-  thR: [0.25, 0, -0.08], shinR: [0.1, 0, 0], ftR: [-0.3, 0, 0],
-});
+  hips: E(0.04, -0.18, 0), hipsX: E(-0.02),
+  spine: E(0.02, -0.14, 0.04), chest: E(0.0, -0.28, 0.05), neck: E(0, 0.14, 0), head: E(0.02, 0.34, -0.04),
+  uaR: E(-2.55, 0, -0.5), faR: E(-0.95), hdR: E(0.15, 0, 0),
+  uaL: E(-0.55, 0, 0.3), faL: E(-0.95), hdL: E(0),
+  thL: E(-0.28, 0.1, 0.1), shinL: E(0.22), ftL: E(0.06),
+  thR: E(0.22, -0.2, -0.1), shinR: E(0.16), ftR: E(-0.22, -0.1, 0),
+  staff: E(0.2, 0.75, 0.6), staffW: E(1), plantW: E(0),
+}, -0.035);
 
 const THROW = new Clip([
   { t: 0, p: SPIN },
-  { t: 0.1, p: pose({ spine: [0, -0.2, 0], chest: [-0.05, -0.55, 0], head: [0, 0.45, 0], uaR: [-2.3, 0.3, -1.1], faR: [-0.6, 0, 0], uaL: [-1.4, 0, 0.3], faL: [-0.2, 0, 0], thL: [-0.25, 0, 0.08], thR: [0.3, 0, -0.08], shinL: [0.2, 0, 0], shinR: [0.1, 0, 0] }) },
-  { t: 0.22, p: pose({ spine: [0.12, 0.2, 0], chest: [0.15, 0.45, 0], head: [0.05, -0.3, 0], uaR: [-1.2, 0, -0.25], faR: [-0.1, 0, 0], uaL: [-0.4, 0, 0.4], faL: [-0.4, 0, 0], thL: [-0.35, 0, 0.08], thR: [0.3, 0, -0.08], shinL: [0.25, 0, 0], shinR: [0.2, 0, 0] }, -0.04) },
-  { t: 0.55, p: pose({ spine: [0.05, 0.1, 0], chest: [0.1, 0.25, 0], head: [0, -0.2, 0], uaR: [-0.5, 0, -0.15], faR: [-0.3, 0, 0], uaL: [-0.35, 0, 0.2], faL: [-0.9, 0, 0], thL: [-0.2, 0, 0.05], thR: [0.2, 0, -0.05], shinL: [0.15, 0, 0], shinR: [0.1, 0, 0] }) },
+  // extra wind-up: arm drops back, shoulders coil further
+  { t: 0.09, e: 'in', p: pose({
+    hips: E(0.04, -0.28, 0), spine: E(-0.02, -0.2, 0.05), chest: E(-0.06, -0.42, 0.06), neck: E(0, 0.2, 0), head: E(0.02, 0.42, -0.04),
+    uaR: E(-2.35, 0.25, -0.95), faR: E(-0.75), hdR: E(0.35),
+    uaL: E(-0.95, 0, 0.35), faL: E(-0.7),
+    thL: E(-0.3, 0.1, 0.1), shinL: E(0.25), thR: E(0.25, -0.2, -0.1), shinR: E(0.2), ftR: E(-0.25),
+    staff: E(0.25, 0.7, 0.65), staffW: E(1), plantW: E(0),
+  }, -0.04) },
+  // release: hips and chest uncoil toward the target, the arm whips over, weight onto the front foot
+  { t: 0.19, e: 'out', p: pose({
+    hips: E(0.1, 0.22, 0), spine: E(0.1, 0.18, -0.02), chest: E(0.14, 0.32, -0.04), neck: E(0.02, -0.12, 0), head: E(0.0, -0.3, 0.03),
+    uaR: E(-1.95, 0, -0.35), faR: E(-0.2), hdR: E(-0.2),
+    uaL: E(-0.45, 0, 0.55), faL: E(-0.8),
+    thL: E(-0.42, 0.05, 0.08), shinL: E(0.38), ftL: E(0.08), thR: E(0.38, -0.1, -0.1), shinR: E(0.24), ftR: E(-0.45),
+    staff: E(0.45, 0.6, 0.35), staffW: E(1), plantW: E(0),
+  }, -0.06, 0.05) },
+  // follow-through across the body
+  { t: 0.36, p: pose({
+    hips: E(0.14, 0.3, 0), spine: E(0.18, 0.24, -0.03), chest: E(0.22, 0.42, -0.06), neck: E(0.02, -0.18, 0), head: E(-0.02, -0.38, 0.03),
+    uaR: E(-0.75, 0, 0.12), faR: E(-0.55), hdR: E(0.1),
+    uaL: E(-0.35, 0, 0.5), faL: E(-0.9),
+    thL: E(-0.45, 0.05, 0.08), shinL: E(0.45), ftL: E(0.1), thR: E(0.4, -0.1, -0.1), shinR: E(0.35), ftR: E(-0.5),
+    staff: E(0.4, 0.7, 0.3), staffW: E(1), plantW: E(0),
+  }, -0.075, 0.06) },
+  { t: 0.62, p: pose({
+    hips: E(0.03, 0.06, 0.02), spine: E(0.03, 0.02, -0.02), chest: E(0, 0.02, -0.01), neck: E(0.02), head: E(-0.02),
+    uaR: E(0.02, 0, -0.1), faR: E(-0.35), hdR: E(0.1),
+    uaL: E(-0.25, 0, 0.4), faL: E(-1.25),
+    thL: E(-0.1, 0, 0.02), shinL: E(0.08), ftL: E(0), thR: E(0.1, 0, -0.06), shinR: E(0.14), ftR: E(-0.1),
+    staff: E(-0.02, 1, 0.1), staffW: E(1), plantW: E(0),
+  }, -0.015) },
 ]);
 
+/** one-handed overhead staff strike with the left hand (staff slid to the butt end; the long end strikes) */
+const STRIKE_READY = pose({
+  hips: E(0.05, 0.1, 0), spine: E(0.04, 0.06, 0), chest: E(0.02, 0.1, 0), head: E(0, -0.12, 0),
+  uaL: E(-0.95, 0, 0.3), faL: E(-1.15), hdL: E(0),
+  uaR: E(-0.35, 0, -0.35), faR: E(-0.9), hdR: E(0.1),
+  thL: E(-0.28, 0, 0.06), shinL: E(0.24), ftL: E(0.05), thR: E(0.22, 0, -0.06), shinR: E(0.2), ftR: E(-0.2),
+  staff: E(0.05, 0.55, 0.85), staffW: E(1), plantW: E(0),
+}, -0.04);
 const STRIKE = new Clip([
-  { t: 0, p: pose({ uaR: [-0.7, 0, -0.2], faR: [-1.0, 0, 0], hdR: [0.6, 0, 0], uaL: [-0.6, 0, 0.2], faL: [-1.1, 0, 0], chest: [0.05, 0, 0], spine: [0, 0, 0], thL: [-0.25, 0, 0.05], shinL: [0.2, 0, 0], thR: [0.2, 0, -0.05], shinR: [0.1, 0, 0] }) },
-  { t: 0.14, p: pose({ uaR: [-2.9, 0, -0.15], faR: [-0.5, 0, 0], hdR: [-0.3, 0, 0], uaL: [-2.8, 0, 0.1], faL: [-0.6, 0, 0], chest: [-0.2, -0.2, 0], spine: [-0.1, 0, 0], head: [-0.15, 0, 0], thL: [-0.3, 0, 0.05], shinL: [0.25, 0, 0], thR: [0.3, 0, -0.05], shinR: [0.15, 0, 0] }) },
-  { t: 0.26, p: pose({ uaR: [-1.35, 0, -0.05], faR: [-0.15, 0, 0], hdR: [1.3, 0, 0], uaL: [-1.3, 0, 0.05], faL: [-0.2, 0, 0], chest: [0.35, 0.1, 0], spine: [0.2, 0, 0], head: [-0.2, 0, 0], thL: [-0.5, 0, 0.05], shinL: [0.45, 0, 0], thR: [0.4, 0, -0.05], shinR: [0.2, 0, 0], ftR: [-0.3, 0, 0] }, -0.07) },
-  { t: 0.6, p: pose({ uaR: [-0.7, 0, -0.2], faR: [-1.0, 0, 0], hdR: [0.6, 0, 0], uaL: [-0.6, 0, 0.2], faL: [-1.1, 0, 0], chest: [0.05, 0, 0], spine: [0, 0, 0], head: [0, 0, 0], thL: [-0.25, 0, 0.05], shinL: [0.2, 0, 0], thR: [0.2, 0, -0.05], shinR: [0.1, 0, 0] }) },
+  { t: 0, p: STRIKE_READY },
+  { t: 0.13, e: 'in', p: pose({
+    hips: E(-0.02, 0.28, 0), spine: E(-0.08, 0.14, 0.03), chest: E(-0.14, 0.34, 0.04), neck: E(0.02, -0.14, 0), head: E(0.04, -0.3, 0),
+    uaL: E(-2.75, 0.2, 0.42), faL: E(-1.45), hdL: E(0.3),
+    uaR: E(-0.9, 0, -0.55), faR: E(-0.7), hdR: E(0),
+    thL: E(-0.22, 0.05, 0.08), shinL: E(0.16), ftL: E(0.02), thR: E(0.14, 0, -0.08), shinR: E(0.24), ftR: E(-0.12),
+    staff: E(0.15, 0.65, -0.75), staffW: E(1), plantW: E(0),
+  }, -0.03, -0.02) },
+  { t: 0.26, e: 'out', p: pose({
+    hips: E(0.14, -0.2, 0), spine: E(0.18, -0.16, -0.03), chest: E(0.24, -0.3, -0.04), neck: E(0, 0.14, 0), head: E(-0.1, 0.3, 0),
+    uaL: E(-1.35, 0, -0.08), faL: E(-0.12), hdL: E(-0.2),
+    uaR: E(-0.2, 0, -0.5), faR: E(-0.9), hdR: E(0),
+    thL: E(-0.62, 0.05, 0.08), shinL: E(0.52), ftL: E(0.12), thR: E(0.45, 0, -0.08), shinR: E(0.3), ftR: E(-0.38),
+    staff: E(-0.1, -0.32, 1), staffW: E(1), plantW: E(0),
+  }, -0.09, 0.05) },
+  { t: 0.4, p: pose({
+    hips: E(0.16, -0.3, 0), spine: E(0.2, -0.22, -0.03), chest: E(0.28, -0.42, -0.04), neck: E(0, 0.18, 0), head: E(-0.1, 0.36, 0),
+    uaL: E(-0.75, 0, -0.35), faL: E(-0.3), hdL: E(-0.1),
+    uaR: E(-0.15, 0, -0.45), faR: E(-0.8),
+    thL: E(-0.62, 0.05, 0.08), shinL: E(0.55), ftL: E(0.12), thR: E(0.45, 0, -0.08), shinR: E(0.34), ftR: E(-0.4),
+    staff: E(-0.55, -0.6, 0.6), staffW: E(1), plantW: E(0),
+  }, -0.1, 0.05) },
+  { t: 0.64, p: STRIKE_READY },
 ]);
 
+/** strike at the head of the reared bear while the right hand holds its beard (clinch) */
 const STRIKE_HIGH = new Clip([
-  { t: 0, p: pose({ uaR: [-1.6, 0, -0.5], faR: [-1.0, 0, 0], hdR: [0.4, 0, 0], chest: [0, 0, 0] }) },
-  { t: 0.16, p: pose({ uaR: [-2.95, 0, -0.55], faR: [-1.1, 0, 0], hdR: [-0.3, 0, 0], chest: [-0.2, -0.3, 0], spine: [-0.05, -0.1, 0] }) },
-  { t: 0.27, p: pose({ uaR: [-2.0, 0, -0.2], faR: [-0.1, 0, 0], hdR: [1.6, 0, 0], chest: [0.25, 0.25, 0], spine: [0.1, 0.1, 0] }) },
-  { t: 0.55, p: pose({ uaR: [-1.6, 0, -0.5], faR: [-1.0, 0, 0], hdR: [0.4, 0, 0], chest: [0, 0, 0], spine: [0, 0, 0] }) },
+  { t: 0, p: pose({ uaL: E(-2.1, 0, 0.5), faL: E(-1.3), hdL: E(0.2), chest: E(-0.1, 0.18, 0), spine: E(-0.05, 0.06, 0), staff: E(0.3, 0.9, -0.25), staffW: E(1), plantW: E(0) }) },
+  { t: 0.15, e: 'in', p: pose({ uaL: E(-2.95, 0.2, 0.45), faL: E(-1.6), hdL: E(0.35), chest: E(-0.2, 0.32, 0.03), spine: E(-0.08, 0.1, 0), staff: E(0.2, 0.55, -0.8), staffW: E(1), plantW: E(0) }) },
+  { t: 0.27, e: 'out', p: pose({ uaL: E(-2.25, 0, 0.05), faL: E(-0.15), hdL: E(-0.1), chest: E(0.22, -0.2, -0.03), spine: E(0.12, -0.08, 0), staff: E(-0.2, 0.35, 1), staffW: E(1), plantW: E(0) }) },
+  { t: 0.38, p: pose({ uaL: E(-1.7, 0, -0.05), faL: E(-0.3), hdL: E(0), chest: E(0.25, -0.28, -0.03), spine: E(0.14, -0.1, 0), staff: E(-0.35, 0.0, 1), staffW: E(1), plantW: E(0) }) },
+  { t: 0.58, p: pose({ uaL: E(-2.1, 0, 0.5), faL: E(-1.3), hdL: E(0.2), chest: E(-0.1, 0.18, 0), spine: E(-0.05, 0.06, 0), staff: E(0.3, 0.9, -0.25), staffW: E(1), plantW: E(0) }) },
 ]);
 
+/** seizing the bear by its beard: "וְהֶחֱזַקְתִּי בִּזְקָנוֹ" (1 Sam 17:35) — right hand (IK) on the beard, staff raised */
 const GRAB_BEARD = pose({
-  uaL: [-2.25, 0, 0.05], faL: [-0.25, 0, 0], hdL: [0, 0, 0],
-  chest: [0.05, 0, 0], head: [-0.3, 0, 0], neck: [-0.1, 0, 0],
-  thL: [-0.35, 0, 0.05], shinL: [0.35, 0, 0], thR: [0.35, 0, -0.05], shinR: [0.25, 0, 0], ftR: [-0.35, 0, 0],
-}, -0.05);
+  hips: E(-0.04, -0.12, 0), hipsX: E(-0.01),
+  spine: E(-0.08, -0.08, 0), chest: E(-0.1, -0.12, 0.02), neck: E(-0.1, 0.05), head: E(-0.2, 0.05),
+  uaR: E(-2.0, 0, -0.1), faR: E(-0.3), hdR: E(0.1),
+  uaL: E(-2.1, 0, 0.5), faL: E(-1.3), hdL: E(0.2),
+  thL: E(-0.4, 0.05, 0.1), shinL: E(0.4), ftL: E(0.05), thR: E(0.35, -0.1, -0.08), shinR: E(0.25), ftR: E(-0.35),
+  staff: E(0.3, 0.9, -0.25), staffW: E(1), plantW: E(0),
+}, -0.06, -0.02);
 
+/** tugging the lamb from the bear's jaws (loop) */
 const PULL = new Clip([
-  { t: 0, p: pose({ spine: [0.45, 0, 0], chest: [0.2, 0, 0], head: [-0.1, 0, 0], uaL: [-1.0, 0, 0.15], faL: [-0.35, 0, 0], uaR: [-1.0, 0, -0.15], faR: [-0.35, 0, 0], thL: [-0.7, 0, 0.05], shinL: [1.1, 0, 0], ftL: [-0.4, 0, 0], thR: [0.1, 0, -0.05], shinR: [0.9, 0, 0], ftR: [-0.2, 0, 0] }, -0.22) },
-  { t: 0.3, p: pose({ spine: [0.25, 0, 0], chest: [0.05, 0, 0], head: [-0.2, 0, 0], uaL: [-0.8, 0, 0.1], faL: [-0.9, 0, 0], uaR: [-0.8, 0, -0.1], faR: [-0.9, 0, 0], thL: [-0.6, 0, 0.05], shinL: [0.8, 0, 0], ftL: [-0.2, 0, 0], thR: [0.25, 0, -0.05], shinR: [0.7, 0, 0], ftR: [-0.3, 0, 0] }, -0.18, -0.05) },
-  { t: 0.6, p: pose({ spine: [0.45, 0, 0], chest: [0.2, 0, 0], head: [-0.1, 0, 0], uaL: [-1.0, 0, 0.15], faL: [-0.35, 0, 0], uaR: [-1.0, 0, -0.15], faR: [-0.35, 0, 0], thL: [-0.7, 0, 0.05], shinL: [1.1, 0, 0], ftL: [-0.4, 0, 0], thR: [0.1, 0, -0.05], shinR: [0.9, 0, 0], ftR: [-0.2, 0, 0] }, -0.22) },
+  { t: 0, p: pose({
+    hips: E(-0.12, -0.1, 0), spine: E(0.18, -0.05, 0), chest: E(0.1, -0.05, 0), neck: E(0.05), head: E(-0.1),
+    uaL: E(-1.15, 0, 0.12), faL: E(-0.45), hdL: E(0.2), uaR: E(-1.1, 0, -0.14), faR: E(-0.45), hdR: E(0.2),
+    thL: E(-0.7, 0, 0.08), shinL: E(0.85), ftL: E(0.15), thR: E(0.35, 0, -0.08), shinR: E(0.3), ftR: E(-0.3),
+  }, -0.16, -0.08) },
+  { t: 0.32, p: pose({
+    hips: E(-0.2, -0.14, 0), spine: E(0.02, -0.08, 0), chest: E(-0.08, -0.08, 0), neck: E(0.02), head: E(-0.2),
+    uaL: E(-0.8, 0, 0.1), faL: E(-1.0), hdL: E(0.35), uaR: E(-0.75, 0, -0.12), faR: E(-1.05), hdR: E(0.35),
+    thL: E(-0.55, 0, 0.08), shinL: E(0.7), ftL: E(0.1), thR: E(0.45, 0, -0.08), shinR: E(0.22), ftR: E(-0.4),
+  }, -0.14, -0.16) },
+  { t: 0.64, p: pose({
+    hips: E(-0.12, -0.1, 0), spine: E(0.18, -0.05, 0), chest: E(0.1, -0.05, 0), neck: E(0.05), head: E(-0.1),
+    uaL: E(-1.15, 0, 0.12), faL: E(-0.45), hdL: E(0.2), uaR: E(-1.1, 0, -0.14), faR: E(-0.45), hdR: E(0.2),
+    thL: E(-0.7, 0, 0.08), shinL: E(0.85), ftL: E(0.15), thR: E(0.35, 0, -0.08), shinR: E(0.3), ftR: E(-0.3),
+  }, -0.16, -0.08) },
 ], true);
 
-const CARRY = pose({ uaL: [-0.75, 0, 0.8], faL: [-2.0, 0, 0], hdL: [0.2, 0, 0], uaR: [-0.75, 0, -0.8], faR: [-2.0, 0, 0], hdR: [0.2, 0, 0], chest: [0.1, 0, 0], head: [0.05, 0, 0] });
+/** lamb across the shoulders: hands (IK) hold its legs in front of the shoulders, chest braced */
+const CARRY = pose({
+  spine: E(0.04), chest: E(-0.02), neck: E(0.06), head: E(0.02),
+  uaL: E(-0.55, 0, 0.55), faL: E(-2.1), hdL: E(0.2), uaR: E(-0.55, 0, -0.55), faR: E(-2.1), hdR: E(0.2),
+  staffW: E(0), plantW: E(0),
+});
 
-const NEUTRAL = pose({});
+/** kneeling on the right knee, staff planted, head bowed */
+const KNEEL = pose({
+  hips: E(0.05, 0, 0), spine: E(0.06), chest: E(0.04), neck: E(0.12), head: E(0.25),
+  thL: E(-1.5, 0, 0.1), shinL: E(1.55), ftL: E(0.0), thR: E(0.05, 0, -0.05), shinR: E(1.62), ftR: E(0.6),
+  uaL: E(-0.6, 0, 0.3), faL: E(-1.2), uaR: E(-0.2, 0, -0.1), faR: E(-0.5),
+  staff: E(0.02, 1, 0.05), staffW: E(1), butt: E(0.34, 0, 0.42), plantW: E(1),
+}, -0.47, 0);
+
+/** thanks — looking up, right hand (IK) on the chest, staff planted */
+const THANKS = pose({
+  hips: E(-0.02, 0, 0.02), spine: E(-0.05), chest: E(-0.12), neck: E(-0.15), head: E(-0.38),
+  uaL: E(-0.2, 0, 0.4), faL: E(-1.3), uaR: E(-0.4, 0, -0.1), faR: E(-1.9), hdR: E(0.1, 0.4, 0),
+  thL: E(-0.02), shinL: E(0.03), thR: E(0.04, 0.08, -0.04), shinR: E(0.1), ftR: E(-0.06),
+  staff: E(-0.05, 1, 0.02), staffW: E(1), butt: E(0.4, 0, 0.2), plantW: E(1),
+});
+
+const PICK_DOWN = pose({
+  hips: E(0.3, 0.1, 0), spine: E(0.35, 0.05, 0), chest: E(0.25, 0.1, 0), neck: E(0.1), head: E(0.15),
+  thL: E(-1.55, 0.05, 0.18), shinL: E(1.95), ftL: E(-0.35), thR: E(-0.85, 0, -0.12), shinR: E(2.25), ftR: E(-0.95),
+  uaR: E(-1.05, 0, -0.08), faR: E(-0.3), hdR: E(0.35),
+  uaL: E(-0.7, 0, 0.35), faL: E(-1.3),
+  staff: E(0.35, 0.5, 1), staffW: E(1), plantW: E(0),
+}, -0.48, -0.04);
+/** crouch, reach for the stone, rise and put it in the satchel */
 const PICK = new Clip([
-  { t: 0, p: NEUTRAL },
-  { t: 0.35, p: pose({ spine: [0.7, 0, 0], chest: [0.3, 0, 0], head: [0.2, 0, 0], uaR: [-1.0, 0, -0.1], faR: [-0.2, 0, 0], thL: [-1.0, 0, 0.05], shinL: [1.5, 0, 0], ftL: [-0.5, 0, 0], thR: [-0.4, 0, -0.05], shinR: [1.3, 0, 0], ftR: [-0.9, 0, 0] }, -0.38) },
-  { t: 0.6, p: pose({ spine: [0.7, 0, 0], chest: [0.3, 0, 0], head: [0.2, 0, 0], uaR: [-1.1, 0, -0.1], faR: [-0.5, 0, 0], thL: [-1.0, 0, 0.05], shinL: [1.5, 0, 0], ftL: [-0.5, 0, 0], thR: [-0.4, 0, -0.05], shinR: [1.3, 0, 0], ftR: [-0.9, 0, 0] }, -0.38) },
-  { t: 0.95, p: NEUTRAL },
+  { t: 0, p: pose({ hips: E(0.03), spine: E(0.04), uaR: E(0.02, 0, -0.1), faR: E(-0.35), uaL: E(-0.25, 0, 0.4), faL: E(-1.25), thL: E(-0.04), shinL: E(0.05), thR: E(0.05, 0, -0.06), shinR: E(0.12), staff: E(0, 1, 0.1), staffW: E(1), plantW: E(0) }) },
+  { t: 0.36, e: 'out', p: PICK_DOWN },
+  { t: 0.56, p: pose({ ...PICK_DOWN.r, uaR: E(-0.95, 0, -0.05), faR: E(-0.5), hdR: E(0.2) }, -0.47, -0.04) },
+  { t: 0.82, p: pose({
+    hips: E(0.06, 0.08, 0), spine: E(0.1, 0.12, 0), chest: E(0.08, 0.2, 0), neck: E(0.1, 0.15), head: E(0.3, 0.25),
+    thL: E(-0.1, 0, 0.03), shinL: E(0.12), ftL: E(0), thR: E(0.05, 0, -0.06), shinR: E(0.16), ftR: E(-0.06),
+    uaR: E(-0.3, 0, 0.25), faR: E(-1.35), hdR: E(0.3),
+    uaL: E(-0.3, 0, 0.45), faL: E(-1.2),
+    staff: E(0.05, 1, 0.15), staffW: E(1), plantW: E(0),
+  }, -0.03) },
+  { t: 1.05, p: pose({ hips: E(0.03), spine: E(0.03), uaR: E(0.02, 0, -0.1), faR: E(-0.35), uaL: E(-0.22, 0, 0.4), faL: E(-1.28), thL: E(-0.04), shinL: E(0.05), thR: E(0.05, 0, -0.06), shinR: E(0.12), staff: E(-0.03, 1, 0.05), staffW: E(1), plantW: E(0) }) },
 ]);
 
+/** calling the flock: right hand cupped at the mouth (IK), chest lifted, head raised toward the flock */
+const CALL_UP = pose({
+  spine: E(-0.04), chest: E(-0.1), neck: E(-0.08), head: E(-0.16, -0.05),
+  uaR: E(-1.2, 0, -0.55), faR: E(-2.3), hdR: E(0.25),
+});
 const CALL = new Clip([
-  { t: 0, p: NEUTRAL },
-  { t: 0.25, p: pose({ uaR: [-1.35, 0, -0.55], faR: [-2.35, 0, 0], hdR: [0.3, 0, 0], head: [-0.25, 0, 0], chest: [-0.1, 0, 0] }) },
-  { t: 1.15, p: pose({ uaR: [-1.35, 0, -0.55], faR: [-2.35, 0, 0], hdR: [0.3, 0, 0], head: [-0.3, 0, 0], chest: [-0.12, 0, 0] }) },
-  { t: 1.45, p: NEUTRAL },
+  { t: 0, p: pose({ spine: E(0.02), chest: E(-0.02), neck: E(0.02), head: E(-0.02), uaR: E(0.02, 0, -0.1), faR: E(-0.35), hdR: E(0.1) }) },
+  { t: 0.28, e: 'out', p: CALL_UP },
+  { t: 0.62, p: pose({ ...CALL_UP.r, chest: E(-0.14), head: E(-0.2, -0.05) }) },
+  { t: 1.12, p: pose({ ...CALL_UP.r, chest: E(-0.12), head: E(-0.18, -0.08) }) },
+  { t: 1.45, p: pose({ spine: E(0.02), chest: E(-0.02), neck: E(0.02), head: E(-0.02), uaR: E(0.02, 0, -0.1), faR: E(-0.35), hdR: E(0.1) }) },
 ]);
 
+/** evasive duck-and-lunge (Player moves the body along the dodge direction; `dodgeSide` leans the body) */
 const DODGE = new Clip([
-  { t: 0, p: NEUTRAL },
-  { t: 0.12, p: pose({ spine: [0.4, 0, 0], chest: [0.2, 0, 0], thL: [-0.9, 0, 0.1], shinL: [1.3, 0, 0], thR: [-0.4, 0, -0.1], shinR: [1.2, 0, 0], uaL: [-0.8, 0, 0.5], uaR: [-0.8, 0, -0.5], faL: [-1.2, 0, 0], faR: [-1.2, 0, 0] }, -0.28) },
-  { t: 0.38, p: pose({ spine: [0.3, 0, 0], chest: [0.15, 0, 0], thL: [-0.6, 0, 0.1], shinL: [0.9, 0, 0], thR: [-0.2, 0, -0.1], shinR: [0.8, 0, 0], uaL: [-0.7, 0, 0.4], uaR: [-0.7, 0, -0.4], faL: [-1.1, 0, 0], faR: [-1.1, 0, 0] }, -0.18) },
-  { t: 0.55, p: NEUTRAL },
+  { t: 0, p: pose({}) },
+  { t: 0.1, e: 'out', p: pose({
+    hips: E(0.25, 0, 0), spine: E(0.3), chest: E(0.15), head: E(-0.2),
+    thL: E(-1.0, 0, 0.18), shinL: E(1.3), ftL: E(-0.2), thR: E(-0.3, 0, -0.18), shinR: E(1.25), ftR: E(-0.5),
+    uaL: E(-0.9, 0, 0.6), faL: E(-1.1), uaR: E(-0.8, 0, -0.7), faR: E(-1.0),
+    staff: E(0.4, 0.6, 0.6), staffW: E(1), plantW: E(0),
+  }, -0.3, -0.02) },
+  { t: 0.34, p: pose({
+    hips: E(0.2, 0, 0), spine: E(0.22), chest: E(0.1), head: E(-0.15),
+    thL: E(-0.7, 0, 0.12), shinL: E(0.9), ftL: E(-0.1), thR: E(-0.15, 0, -0.12), shinR: E(0.85), ftR: E(-0.35),
+    uaL: E(-0.7, 0, 0.5), faL: E(-1.1), uaR: E(-0.6, 0, -0.55), faR: E(-1.0),
+    staff: E(0.3, 0.8, 0.4), staffW: E(1), plantW: E(0),
+  }, -0.2, 0) },
+  { t: 0.56, p: pose({ staff: E(0, 1, 0.1), staffW: E(1), plantW: E(0) }, -0.01) },
 ]);
 
 const HURT = new Clip([
-  { t: 0, p: NEUTRAL },
-  { t: 0.08, p: pose({ chest: [-0.35, 0.2, 0], spine: [-0.15, 0, 0], head: [-0.3, 0, 0], uaL: [-0.5, 0, 0.6], uaR: [-0.5, 0, -0.6], faL: [-0.8, 0, 0], faR: [-0.8, 0, 0] }, -0.05) },
-  { t: 0.45, p: NEUTRAL },
+  { t: 0, p: pose({}) },
+  { t: 0.07, e: 'out', p: pose({
+    hips: E(-0.1, 0.1, 0), spine: E(-0.15, 0.1, 0.05), chest: E(-0.3, 0.2, 0.08), neck: E(-0.1, 0.15), head: E(-0.25, 0.35, 0.1),
+    uaL: E(-0.7, 0, 0.7), faL: E(-1.2), uaR: E(-0.9, 0, -0.6), faR: E(-1.4),
+    thL: E(0.1, 0, 0.08), shinL: E(0.2), thR: E(0.25, 0, -0.08), shinR: E(0.3), ftR: E(-0.2),
+  }, -0.06, -0.06) },
+  { t: 0.22, p: pose({
+    hips: E(0.12, 0.05, 0), spine: E(0.15, 0.05), chest: E(0.1, 0.08), head: E(0.05, 0.15),
+    uaL: E(-0.5, 0, 0.5), faL: E(-1.2), uaR: E(-0.5, 0, -0.4), faR: E(-1.0),
+    thL: E(-0.2, 0, 0.06), shinL: E(0.35), thR: E(0.2, 0, -0.06), shinR: E(0.3),
+  }, -0.08, 0) },
+  { t: 0.48, p: pose({}) },
 ]);
 
-const KNEEL = pose({ thL: [-1.45, 0, 0.1], shinL: [1.6, 0, 0], ftL: [-0.1, 0, 0], thR: [0.35, 0, -0.1], shinR: [2.3, 0, 0], ftR: [0.7, 0, 0], spine: [0.35, 0, 0], chest: [0.1, 0, 0], head: [0.3, 0, 0], uaL: [-0.6, 0, 0.2], faL: [-0.6, 0, 0], uaR: [-0.3, 0, -0.2], faR: [-0.4, 0, 0] }, -0.46);
-
-const THANKS = pose({ uaL: [-0.55, 0, 0.65], faL: [-0.9, 0.0, 0], hdL: [-0.2, 0, 0], uaR: [-0.55, 0, -0.65], faR: [-0.9, 0, 0], hdR: [-0.2, 0, 0], head: [-0.42, 0, 0], neck: [-0.12, 0, 0], chest: [-0.1, 0, 0] });
-
-export type HoldPose = 'none' | 'spin' | 'grab' | 'carry' | 'kneel' | 'thanks' | 'pull';
-export type StaffMode = 'plant' | 'strike' | 'back';
-type ActionName = 'throw' | 'strike' | 'strikeHigh' | 'pick' | 'call' | 'dodge' | 'hurt';
-
-interface ActiveAction { clip: Clip; t: number; mask?: readonly string[]; events: { t: number; fn: () => void; fired: boolean }[] }
-
-const ACTIONS: Record<ActionName, { clip: Clip; mask?: readonly string[] }> = {
-  throw: { clip: THROW },
-  strike: { clip: STRIKE },
-  strikeHigh: { clip: STRIKE_HIGH, mask: [...UPPER_R, 'chest', 'spine'] },
-  pick: { clip: PICK },
-  call: { clip: CALL, mask: [...UPPER_R, 'head', 'chest'] },
-  dodge: { clip: DODGE },
-  hurt: { clip: HURT, mask: [...UPPER_L, ...UPPER_R, ...TORSO, 'hips'] },
+interface ActionDef { clip: Clip; mask?: readonly string[]; legs: boolean; fadeIn: number; fadeOut: number; relativeEnds?: boolean }
+const ACTIONS: Record<ActionName, ActionDef> = {
+  throw: { clip: THROW, legs: true, fadeIn: 0.05, fadeOut: 0.2 },
+  strike: { clip: STRIKE, legs: true, fadeIn: 0.05, fadeOut: 0.18 },
+  strikeHigh: { clip: STRIKE_HIGH, mask: [...UPPER_L, 'chest', 'spine', 'staff', 'staffW', 'plantW'], legs: false, fadeIn: 0.04, fadeOut: 0.12 },
+  pick: { clip: PICK, legs: true, fadeIn: 0.1, fadeOut: 0.2 },
+  call: { clip: CALL, mask: [...UPPER_R, 'head', 'neck', 'chest', 'spine'], legs: false, fadeIn: 0.1, fadeOut: 0.25 },
+  dodge: { clip: DODGE, legs: true, fadeIn: 0.04, fadeOut: 0.18, relativeEnds: true },
+  hurt: { clip: HURT, mask: [...UPPER_L, ...UPPER_R, ...TORSO, 'hips', ...LEGS], legs: true, fadeIn: 0.03, fadeOut: 0.2, relativeEnds: true },
 };
+
+interface ActiveAction { name: ActionName; def: ActionDef; t: number; events: { t: number; fn: () => void; fired: boolean }[] }
+
+// ------------------------------------------------------------------------------------------ scratch
+const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _v4 = new THREE.Vector3();
+const _v5 = new THREE.Vector3(), _v6 = new THREE.Vector3(), _v7 = new THREE.Vector3(), _v8 = new THREE.Vector3();
+const _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _q3 = new THREE.Quaternion(), _q4 = new THREE.Quaternion();
+const _m1 = new THREE.Matrix4(), _m2 = new THREE.Matrix4();
+const _e1 = new THREE.Euler();
+const _s1 = new THREE.Vector3();
+const UP = new THREE.Vector3(0, 1, 0);
+const NEG_Y = new THREE.Vector3(0, -1, 0);
+const X_AXIS = new THREE.Vector3(1, 0, 0);
+
+function smooth01(x: number) {
+  const t = clamp(x, 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
+// ------------------------------------------------------------------------------------------ sling
+const NC = 7; // points per cord (hand .. pouch end)
+const CORD_LEN = 0.5;
+const POUCH_W = 0.094;
+const SEG = CORD_LEN / (NC - 1);
+
+class SlingSim {
+  readonly a: THREE.Vector3[] = Array.from({ length: NC }, () => new THREE.Vector3());
+  readonly b: THREE.Vector3[] = Array.from({ length: NC }, () => new THREE.Vector3());
+  readonly pa: THREE.Vector3[] = Array.from({ length: NC }, () => new THREE.Vector3());
+  readonly pb: THREE.Vector3[] = Array.from({ length: NC }, () => new THREE.Vector3());
+  bPinned = true;
+  reset(hand: THREE.Vector3, side: THREE.Vector3) {
+    for (let i = 0; i < NC; i++) {
+      const t = i / (NC - 1);
+      this.a[i].copy(hand).addScaledVector(NEG_Y, t * CORD_LEN * 0.98).addScaledVector(side, -t * POUCH_W * 0.5);
+      this.b[i].copy(hand).addScaledVector(NEG_Y, t * CORD_LEN * 0.98).addScaledVector(side, t * POUCH_W * 0.5);
+      this.pa[i].copy(this.a[i]);
+      this.pb[i].copy(this.b[i]);
+    }
+    this.bPinned = true;
+  }
+  /** verlet integration of all free points */
+  integrate(dt: number, drag: number, fixedEnds: boolean) {
+    const g = -9.81 * dt * dt;
+    for (const [P, Q] of [[this.a, this.pa], [this.b, this.pb]] as const) {
+      const last = fixedEnds ? NC - 1 : NC;
+      for (let i = 1; i < last; i++) {
+        const p = P[i], q = Q[i];
+        const vx = (p.x - q.x) * drag, vy = (p.y - q.y) * drag, vz = (p.z - q.z) * drag;
+        q.copy(p);
+        p.x += vx;
+        p.y += vy + g;
+        p.z += vz;
+      }
+    }
+  }
+  constrain(hand: THREE.Vector3, iterations: number, caps: Float32Array, capCount: number, pinB: THREE.Vector3 | null, fixedEnds: boolean) {
+    const A = this.a, B = this.b;
+    for (let it = 0; it < iterations; it++) {
+      A[0].copy(hand);
+      if (pinB) B[0].copy(pinB);
+      for (const P of [A, B]) {
+        for (let i = 0; i < NC - 1; i++) {
+          const p = P[i], q = P[i + 1];
+          const dx = q.x - p.x, dy = q.y - p.y, dz = q.z - p.z;
+          const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-6;
+          const diff = (d - SEG) / d;
+          // masses: the hand end is fixed, the pouch end is heavy (leather + stone)
+          const pinnedP = i === 0 && (P === A || pinB !== null);
+          const heavyQ = i + 1 === NC - 1;
+          let wp = pinnedP ? 0 : 1, wq = heavyQ ? (fixedEnds ? 0 : 0.3) : 1;
+          const s = wp + wq;
+          if (s <= 0) continue;
+          wp /= s;
+          wq /= s;
+          p.x += dx * diff * wp; p.y += dy * diff * wp; p.z += dz * diff * wp;
+          q.x -= dx * diff * wq; q.y -= dy * diff * wq; q.z -= dz * diff * wq;
+        }
+      }
+      if (!fixedEnds) {
+        // the pouch keeps its width between the two cord ends
+        const p = A[NC - 1], q = B[NC - 1];
+        const dx = q.x - p.x, dy = q.y - p.y, dz = q.z - p.z;
+        const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-6;
+        const diff = (d - POUCH_W) / d * 0.5;
+        p.x += dx * diff; p.y += dy * diff; p.z += dz * diff;
+        q.x -= dx * diff; q.y -= dy * diff; q.z -= dz * diff;
+      }
+      // legs: push cords and pouch out of the leg capsules
+      for (let c = 0; c < capCount; c++) {
+        const o = c * 7;
+        _v1.set(caps[o], caps[o + 1], caps[o + 2]);
+        _v2.set(caps[o + 3], caps[o + 4], caps[o + 5]);
+        const r = caps[o + 6];
+        for (const P of [A, B]) for (let i = 2; i < NC; i++) pushOutOfCapsule(P[i], _v1, _v2, r);
+      }
+    }
+  }
+}
+
+function pushOutOfCapsule(p: THREE.Vector3, a: THREE.Vector3, b: THREE.Vector3, r: number) {
+  const abx = b.x - a.x, aby = b.y - a.y, abz = b.z - a.z;
+  const l2 = abx * abx + aby * aby + abz * abz;
+  let t = l2 > 0 ? ((p.x - a.x) * abx + (p.y - a.y) * aby + (p.z - a.z) * abz) / l2 : 0;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const cx = a.x + abx * t, cy = a.y + aby * t, cz = a.z + abz * t;
+  const dx = p.x - cx, dy = p.y - cy, dz = p.z - cz;
+  const d2 = dx * dx + dy * dy + dz * dz;
+  if (d2 >= r * r || d2 < 1e-10) return;
+  const d = Math.sqrt(d2);
+  const k = (r - d) / d;
+  p.x += dx * k;
+  p.y += dy * k;
+  p.z += dz * k;
+}
+
+/** a smooth wadi pebble */
+function pebbleGeometry(seed: number, scale = 1) {
+  const g = new THREE.IcosahedronGeometry(1, 2);
+  const p = g.getAttribute('position') as THREE.BufferAttribute;
+  let s = seed;
+  const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  const k1 = rnd() * 6, k2 = rnd() * 6;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const n = 1 + 0.06 * Math.sin(x * 3.1 + k1) * Math.cos(z * 2.7 + k2) + 0.04 * Math.sin(y * 4.3 + k2);
+    p.setXYZ(i, x * n * 0.021 * scale, y * n * 0.0155 * scale, z * n * 0.0185 * scale);
+  }
+  g.computeVertexNormals();
+  return g;
+}
 
 // ------------------------------------------------------------------------------------------ model
 export class DavidModel {
+  /** parts loaded by `preload()` and consumed by the next construction */
+  static preloaded: DavidParts | null = null;
+
+  /**
+   * Load the realistic David: human (MakeHuman preset 'david'), strand hair, costume and props. Tiers follow
+   * engine.quality.name (phones are always 'low'). Await it during boot before constructing the Player.
+   */
+  static async preload(quality: HumanQuality, o: { msaa?: number; hair?: boolean; onProgress?: (f: number) => void } = {}): Promise<DavidParts> {
+    const t0 = performance.now();
+    const human = await HumanModel.load({ preset: 'david', quality });
+    o.onProgress?.(0.4);
+    const t1 = performance.now();
+    const outfit = await dressDavid(human, { quality });
+    o.onProgress?.(0.75);
+    const t2 = performance.now();
+    let groom: Groom | null = null;
+    if (o.hair !== false) {
+      try {
+        groom = await createGroom(human, 'david', { quality, msaa: o.msaa ?? (quality === 'low' ? 0 : 4) });
+      } catch (e) {
+        console.warn('[david] hair groom failed', e);
+      }
+    }
+    o.onProgress?.(1);
+    const t3 = performance.now();
+    const parts: DavidParts = { human, groom, outfit, quality, loadMs: { human: t1 - t0, outfit: t2 - t1, groom: t3 - t2, total: t3 - t0 } };
+    DavidModel.preloaded = parts;
+    return parts;
+  }
+
   readonly root = new THREE.Group();
-  readonly j: Record<string, THREE.Object3D> = {};
+  readonly human: HumanModel;
+  readonly outfit: Outfit;
+  readonly groom: Groom | null;
+  readonly quality: HumanQuality;
+  /** proxy joints (hips spine chest neck head uaL faL hdL uaR faR hdR thL shinL ftL thR shinR ftR) */
+  readonly j: Record<string, THREE.Object3D>;
   readonly mixer: PoseMixer;
-  readonly staff = new THREE.Group();
-  readonly shoulderSocket = new THREE.Object3D(); // for carrying the lamb across the shoulders
-  readonly handSocketR = new THREE.Object3D();
-  readonly handSocketL = new THREE.Object3D();
-  private skirtUniforms = { uLegL: { value: 0 }, uLegR: { value: 0 }, uSway: { value: new THREE.Vector2() } };
-  private hairGroup = new THREE.Group();
+  /** the staff prop's object (a child of human.root, placed every frame) */
+  readonly staff: THREE.Object3D;
+  readonly staffProp: Prop;
+  /** lamb across the shoulders (+Z along the character's +X) */
+  readonly shoulderSocket: THREE.Object3D;
+  readonly handSocketR: THREE.Object3D;
+  readonly handSocketL: THREE.Object3D;
+  /** optional: camera + viewport height for strand LOD (set by the Player) */
+  camera?: THREE.Camera;
+  viewportHeight = 720;
+  /** optional expression override for cinematics (null = automatic per action) */
+  mood: Expression | null = null;
+  /** local (character-space) dodge direction x (+ = to his left), set by the Player before play('dodge') */
+  dodgeSide = 0;
 
   // animation state
   speed = 0; // m/s (for locomotion)
@@ -195,606 +491,339 @@ export class DavidModel {
   private runW = 0;
   private time = 0;
   hold: HoldPose = 'none';
-  private holdW: Record<HoldPose, number> = { none: 0, spin: 0, grab: 0, carry: 0, kneel: 0, thanks: 0, pull: 0 };
+  private holdW: Record<HoldPose, number> = { none: 0, spin: 0, grab: 0, carry: 0, kneel: 0, thanks: 0, pull: 0, hero: 0 };
   private action: ActiveAction | null = null;
   private actionW = 0;
   private pullT = 0;
   spinPhase = 0;
   spinPower = 0;
   staffMode: StaffMode = 'plant';
-  private staffBlend = 0; // 0 plant, 1 strike
-  private staffBack = 0;
+  private staffSlide = 0;
+  private staffBackW = 0;
   lookTarget: THREE.Vector3 | null = null;
   private lookYaw = 0;
   private lookPitch = 0;
   onFootstep?: (side: 'L' | 'R', run: boolean) => void;
-  private lastStepSign = 0;
   ground?: (x: number, z: number) => number;
+  private lastPhase = 0;
+  private turnLean = 0;
+  private lastHeading = 0;
+  private lastRootPos = new THREE.Vector3();
+  private velocity = new THREE.Vector3();
+  private hasLast = false;
+  private pelvisDrop = 0;
+  private exertion = 0;
+  private glance = new THREE.Vector2();
+  private glanceTarget = new THREE.Vector2();
+  private glanceT = 3;
+  private idleT = 0;
+  private reloadT = -1;
+  private stoneShown = true;
+  private lastExpr: Expression | '' = '';
+  private lastExprW = -1;
+  private fingerL: FingerPose | '' = '';
+  private fingerR: FingerPose | '' = '';
+
+  // rest data for IK / staff solving
+  private readonly sockRestQ: Record<'L' | 'R', THREE.Quaternion> = { L: new THREE.Quaternion(), R: new THREE.Quaternion() };
+  private readonly sockRestOff: Record<'L' | 'R', THREE.Vector3> = { L: new THREE.Vector3(), R: new THREE.Vector3() };
+  private readonly restFix: Record<string, THREE.Quaternion> = {};
+  private readonly ankleRest: Record<'L' | 'R', THREE.Vector3> = { L: new THREE.Vector3(), R: new THREE.Vector3() };
+  private readonly staffBaseQ = new THREE.Quaternion();
+  private readonly staffBasePos = new THREE.Vector3();
+  private readonly staffBack = new THREE.Object3D();
+  private readonly staffGripDist: number;
+  private readonly walkPose: Pose = { r: {}, hipsY: 0, hipsZ: 0 };
+  private readonly scratchPose: Pose = { r: {}, hipsY: 0, hipsZ: 0 };
+  private readonly spinPose: Pose = { r: {}, hipsY: 0, hipsZ: 0 };
+  private readonly footTarget: Record<'L' | 'R', THREE.Vector3> = { L: new THREE.Vector3(), R: new THREE.Vector3() };
+  private readonly footPitch: Record<'L' | 'R', number> = { L: 0, R: 0 };
+  private readonly footContact: Record<'L' | 'R', number> = { L: 1, R: 1 };
 
   // sling
   readonly sling = { state: 'idle' as 'idle' | 'spin' | 'release' | 'stowed', pouch: new THREE.Vector3(), prev: new THREE.Vector3(), releaseT: 0, loaded: true };
-  private cordA!: Rope;
-  private cordB!: Rope;
-  private pouchMesh!: THREE.Mesh;
-  private stoneMesh!: THREE.Mesh;
+  private sim = new SlingSim();
+  private cordA: Rope;
+  private cordB: Rope;
+  private pouch: THREE.Object3D;
+  private pouchStone: THREE.Mesh;
+  private handStone: THREE.Mesh;
+  private slingAnchor = new THREE.Object3D();
   private slingInit = false;
+  private slingShown = true;
+  private caps = new Float32Array(4 * 7);
 
-  constructor(private tex: TextureSet) {
-    this.build();
-    this.mixer = new PoseMixer(this.j);
-  }
+  constructor(_tex?: TextureSet, parts: DavidParts | null = DavidModel.preloaded) {
+    if (!parts) throw new Error('DavidModel: await DavidModel.preload(quality) before constructing it');
+    if (parts === DavidModel.preloaded) DavidModel.preloaded = null;
+    const { human, outfit, groom } = parts;
+    this.human = human;
+    this.outfit = outfit;
+    this.groom = groom;
+    this.quality = parts.quality;
+    this.root.name = 'David';
+    this.root.add(human.root);
+    human.root.position.y = outfit.groundOffset;
+    this.j = human.joints as unknown as Record<string, THREE.Object3D>;
+    this.mixer = new PoseMixer(this.j, CHANNELS);
+    for (const k of Object.keys(this.mixer.cur.r)) {
+      this.walkPose.r[k] = [0, 0, 0];
+      this.scratchPose.r[k] = [0, 0, 0];
+      this.spinPose.r[k] = [0, 0, 0];
+    }
+    this.shoulderSocket = human.sockets.shoulderCarry;
+    this.handSocketL = human.sockets.handGripL;
+    this.handSocketR = human.sockets.handGripR;
 
-  // ----------------------------------------------------------------------------------- building
-  private build() {
-    const tex = this.tex;
-    const skin = new THREE.MeshPhysicalMaterial({
-      color: 0xa27a60, roughness: 0.5, metalness: 0, sheen: 0.2, sheenColor: new THREE.Color(0xffb090), sheenRoughness: 0.55, vertexColors: true,
+    // ---- staff: grip radius, fingers; placed by hand every frame (hand / slid for strikes / across the back)
+    const staff = outfit.props.staff!;
+    this.staffProp = staff;
+    this.staff = staff.object;
+    human.setGripRadius((staff.object.userData.radiusAtGrip as number | undefined) ?? 0.018);
+    attachProp(staff, human.sockets.handGripL);
+    this.staffBaseQ.copy(staff.object.quaternion);
+    this.staffBasePos.copy(staff.object.position);
+    human.root.add(staff.object);
+    this.staffGripDist = staff.butt.position.clone().applyQuaternion(this.staffBaseQ).add(this.staffBasePos).length();
+    // across the back: under the satchel strap, tip over the left shoulder
+    const back = human.sockets.spineUpper;
+    back.add(this.staffBack);
+    this.staffBack.position.set(0.0, -0.05, -0.045);
+    this.staffBack.quaternion.setFromEuler(_e1.set(0.12, 0, -0.62));
+
+    // ---- rest data (all proxies at identity right after load)
+    human.rig.toRest();
+    human.update(0);
+    human.root.updateMatrixWorld(true);
+    const rootInv = _m1.copy(human.root.matrixWorld).invert();
+    for (const s of ['L', 'R'] as const) {
+      const sock = human.sockets[`handGrip${s}`];
+      _m2.multiplyMatrices(rootInv, sock.matrixWorld).decompose(_v1, this.sockRestQ[s], _s1);
+      this.sockRestOff[s].copy(_v1).sub(human.rig.restWorldPosition(`wrist.${s}`, _v2));
+      human.rig.restWorldPosition(`foot.${s}`, this.ankleRest[s]);
+    }
+    for (const n of ['uaL', 'uaR', 'thL', 'thR']) {
+      const child = this.j[n.startsWith('ua') ? `fa${n[2]}` : `shin${n[2]}`];
+      this.restFix[n] = new THREE.Quaternion().setFromUnitVectors(NEG_Y, _v1.copy(child.position).normalize());
+    }
+    human.rig.setFingers('L', 'grip');
+    human.rig.setFingers('R', 'fist');
+    human.rig.blinkEnabled = true;
+    human.setPupil(0.25);
+
+    // ---- sling: cords (Rope) + the wardrobe's leather pouch + a stone
+    const cordMat = outfit.props.slingCordMaterial ?? new THREE.MeshStandardMaterial({ color: 0x6a4a2c, roughness: 0.85 });
+    const radial = this.quality === 'low' ? 4 : 6;
+    this.cordA = new Rope(NC, 0.0028, cordMat, radial, this.quality === 'low' ? 2 : 3);
+    this.cordB = new Rope(NC, 0.0028, cordMat, radial, this.quality === 'low' ? 2 : 3);
+    this.pouch = outfit.props.slingPouch ?? new THREE.Group();
+    this.pouch.traverse((o) => {
+      o.castShadow = true;
+      o.receiveShadow = true;
     });
-    // subtle subsurface-like warmth where light wraps around
-    skin.onBeforeCompile = (s) => {
-      s.fragmentShader = s.fragmentShader.replace(
-        '#include <lights_fragment_end>',
-        `#include <lights_fragment_end>
-reflectedLight.indirectDiffuse += diffuseColor.rgb * vec3(0.10, 0.025, 0.01);`,
-      );
-    };
-    skin.customProgramCacheKey = () => 'skin';
-    const linenMap = tex.linen.clone();
-    linenMap.repeat.set(7, 5);
-    linenMap.needsUpdate = true;
-    const linenN = tex.linenN.clone();
-    linenN.repeat.set(7, 5);
-    linenN.needsUpdate = true;
-    const tunicMat = new THREE.MeshStandardMaterial({ map: linenMap, normalMap: linenN, color: 0xf1e7d2, roughness: 0.97, side: THREE.DoubleSide });
-    tunicMat.normalScale.set(0.9, 0.9);
-    const leather = new THREE.MeshStandardMaterial({ map: tex.leather, normalMap: tex.leatherN, color: 0xc49a78, roughness: 0.72 });
-    const darkLeather = new THREE.MeshStandardMaterial({ map: tex.leather, normalMap: tex.leatherN, color: 0x8a6a52, roughness: 0.75 });
-    const hairMat = new THREE.MeshPhysicalMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.62, sheen: 1.0, sheenColor: new THREE.Color(0xb86a3a), sheenRoughness: 0.4 });
-    const eyeWhite = new THREE.MeshStandardMaterial({ color: 0xe9e2d6, roughness: 0.18 });
-    const irisMat = new THREE.MeshPhysicalMaterial({ color: 0x4a2e17, roughness: 0.08, clearcoat: 1, clearcoatRoughness: 0.05 });
-    const pupilMat = new THREE.MeshStandardMaterial({ color: 0x050302, roughness: 0.05 });
-    const woodMat = new THREE.MeshStandardMaterial({ normalMap: tex.barkN, color: 0x7a5534, roughness: 0.62 });
-    woodMat.normalScale.set(0.6, 0.6);
-
-    const J = (name: string, parent: THREE.Object3D, x: number, y: number, z: number) => {
-      const o = new THREE.Group();
-      o.name = name;
-      o.position.set(x, y, z);
-      parent.add(o);
-      this.j[name] = o;
-      return o;
-    };
-    const add = (parent: THREE.Object3D, geo: THREE.BufferGeometry, mat: THREE.Material, shadow = true) => {
-      const m = new THREE.Mesh(geo, mat);
-      m.castShadow = shadow;
-      m.receiveShadow = true;
-      parent.add(m);
-      return m;
-    };
-
-    const hips = J('hips', this.root, 0, 0.97, 0);
-    const spine = J('spine', hips, 0, 0.08, 0);
-    const chest = J('chest', spine, 0, 0.2, 0);
-    const neck = J('neck', chest, 0, 0.23, 0.0);
-    const head = J('head', neck, 0, 0.075, 0.01);
-    const uaL = J('uaL', chest, 0.178, 0.17, -0.01);
-    const faL = J('faL', uaL, 0, -0.29, 0);
-    const hdL = J('hdL', faL, 0, -0.255, 0);
-    const uaR = J('uaR', chest, -0.178, 0.17, -0.01);
-    const faR = J('faR', uaR, 0, -0.29, 0);
-    const hdR = J('hdR', faR, 0, -0.255, 0);
-    const thL = J('thL', hips, 0.092, -0.04, 0);
-    const shinL = J('shinL', thL, 0, -0.44, 0);
-    const ftL = J('ftL', shinL, 0, -0.42, 0);
-    const thR = J('thR', hips, -0.092, -0.04, 0);
-    const shinR = J('shinR', thR, 0, -0.44, 0);
-    const ftR = J('ftR', shinR, 0, -0.42, 0);
-
-    // --- legs (skin) + sandals
-    for (const [th, sh, ft, side] of [[thL, shinL, ftL, 1], [thR, shinR, ftR, -1]] as const) {
-      add(th, tint(limb(0.44, 0.078, 0.056, 0.008, 0.3), new THREE.Color(1, 1, 1)), skin);
-      add(sh, tint(limb(0.42, 0.05, 0.034, 0.012, 0.28), new THREE.Color(1, 1, 1)), skin);
-      // foot: rounded wedge pointing +Z
-      const foot = ellipsoid(0.045, 0.034, 0.12, 0, -0.03, 0.06, 14, 10);
-      const fp = foot.getAttribute('position') as THREE.BufferAttribute;
-      for (let i = 0; i < fp.count; i++) {
-        const y = fp.getY(i);
-        if (y < -0.045) fp.setY(i, -0.045 + (y + 0.045) * 0.2); // flat sole
-        const z = fp.getZ(i);
-        if (z > 0.1) fp.setX(i, fp.getX(i) * 1.12); // wider toes
-      }
-      foot.computeVertexNormals();
-      add(ft, tint(foot, new THREE.Color(1, 1, 1)), skin);
-      // sandal sole
-      const sole = new THREE.BoxGeometry(0.1, 0.018, 0.27);
-      sole.translate(0, -0.058, 0.055);
-      add(ft, sole, darkLeather);
-      // straps wrapping foot + climbing the shin (as in the reference)
-      for (let k = 0; k < 3; k++) {
-        const s = new THREE.TorusGeometry(0.047 + k * 0.002, 0.006, 5, 18);
-        s.rotateX(Math.PI / 2 + 0.3 - k * 0.15);
-        s.translate(0, -0.03 + k * 0.006, 0.03 + k * 0.05);
-        s.scale(1, 0.75, 1);
-        add(ft, s, leather);
-      }
-      for (let k = 0; k < 5; k++) {
-        const y = -0.4 + k * 0.045;
-        const r = 0.036 + k * 0.003;
-        const s = new THREE.TorusGeometry(r, 0.0055, 5, 18);
-        s.rotateX(Math.PI / 2 + (k % 2 ? 0.35 : -0.35));
-        s.translate(0, y, 0.004);
-        add(sh, s, leather);
-      }
-      void side;
-    }
-
-    // --- torso (skin under tunic, visible at the V neckline)
-    add(chest, tint(ellipsoid(0.145, 0.2, 0.098, 0, 0.06, 0.0), new THREE.Color(1, 1, 1)), skin);
-    add(spine, tint(ellipsoid(0.13, 0.14, 0.09, 0, 0.05, 0), new THREE.Color(1, 1, 1)), skin);
-    add(neck, tint(limb(0.1, 0.056, 0.058, 0, 0.5, 12).rotateX(Math.PI).translate(0, 0.02, 0), new THREE.Color(1, 1, 1)), skin);
-
-    // --- tunic (upper, rigid with chest): lathe profile with V-neck
-    const upperProfile: [number, number][] = [
-      [0.074, 0.25], [0.105, 0.232], [0.155, 0.207], [0.185, 0.17], [0.178, 0.1], [0.168, 0.02], [0.158, -0.08], [0.152, -0.16], [0.152, -0.24],
-    ];
-    const upper = new THREE.LatheGeometry(upperProfile.map(([r, y]) => new THREE.Vector2(r, y)), 36);
-    {
-      const p = upper.getAttribute('position') as THREE.BufferAttribute;
-      for (let i = 0; i < p.count; i++) {
-        let x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-        const ang = Math.atan2(x, z); // 0 = front
-        z *= 0.7;
-        const shoulder = THREE.MathUtils.smoothstep(y, 0.05, 0.19);
-        x *= 1 + 0.12 * shoulder;
-        // V-neck: pull the front of the collar down
-        const front = Math.max(0, Math.cos(ang));
-        const v = Math.pow(front, 8) * THREE.MathUtils.smoothstep(y, 0.14, 0.25);
-        y -= v * 0.05;
-        z += v * 0.006;
-        // folds
-        const n = NZ.noise(ang * 2.5, y * 9) * 0.006;
-        const len = Math.hypot(x, z);
-        x += (x / len) * n;
-        z += (z / len) * n;
-        p.setXYZ(i, x, y, z);
-      }
-      upper.computeVertexNormals();
-    }
-    add(chest, upper, tunicMat);
-    // shoulder caps + short sleeves
-    for (const [ua, s] of [[uaL, 1], [uaR, -1]] as const) {
-      void s;
-      const sleeve = new THREE.LatheGeometry([
-        new THREE.Vector2(0.03, 0.075), new THREE.Vector2(0.062, 0.05), new THREE.Vector2(0.072, -0.02), new THREE.Vector2(0.075, -0.1), new THREE.Vector2(0.082, -0.19),
-      ], 20);
-      add(ua, sleeve, tunicMat);
-    }
-
-    // --- tunic skirt (rigid to hips, deformed by the legs in the vertex shader)
-    const skirtProfile: [number, number][] = [
-      [0.152, 0.12], [0.162, 0.03], [0.176, -0.06], [0.197, -0.17], [0.218, -0.3], [0.236, -0.42], [0.25, -0.53], [0.252, -0.55],
-    ];
-    const skirt = new THREE.LatheGeometry(skirtProfile.map(([r, y]) => new THREE.Vector2(r, y)), 40, 0, Math.PI * 2);
-    {
-      const p = skirt.getAttribute('position') as THREE.BufferAttribute;
-      const uv = skirt.getAttribute('uv') as THREE.BufferAttribute;
-      for (let i = 0; i < p.count; i++) {
-        let x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-        const ang = Math.atan2(x, z);
-        z *= 0.8;
-        // vertical folds deepen toward the hem, uneven hem line
-        const depth = THREE.MathUtils.smoothstep(-y, 0.0, 0.5);
-        const fold = Math.sin(ang * 9 + NZ.noise(ang, 0.3) * 2) * 0.012 * depth + NZ.noise(ang * 3, y * 4) * 0.008;
-        const len = Math.hypot(x, z) || 1;
-        x += (x / len) * fold;
-        z += (z / len) * fold;
-        if (y < -0.5) y += NZ.noise(ang * 4, 1.7) * 0.025;
-        p.setXYZ(i, x, y, z);
-        uv.setY(i, THREE.MathUtils.clamp((y + 0.56) / 0.68, 0, 1));
-      }
-      skirt.computeVertexNormals();
-    }
-    const skirtMat = tunicMat.clone();
-    skirtMat.map = linenMap;
-    skirtMat.normalMap = linenN;
-    const su = this.skirtUniforms;
-    skirtMat.onBeforeCompile = (s) => {
-      Object.assign(s.uniforms, su);
-      s.vertexShader = s.vertexShader
-        .replace('#include <common>', `#include <common>
-uniform float uLegL; uniform float uLegR; uniform vec2 uSway; varying float vHem;`)
-        .replace(
-          '#include <begin_vertex>',
-          `#include <begin_vertex>
-{
-  float below = max(0.0, -position.y - 0.02);
-  float wl = smoothstep(-0.06, 0.12, position.x);
-  float wr = smoothstep(0.06, -0.12, position.x);
-  float dzl = -sin(uLegL) * below;
-  float dzr = -sin(uLegR) * below;
-  transformed.z += (dzl * wl + dzr * wr) * 0.95;
-  transformed.y += (abs(dzl) * wl + abs(dzr) * wr) * 0.22;
-  transformed.xz += uSway * below * below * 1.6;
-  vHem = uv.y;
-}`,
-        );
-      s.fragmentShader = s.fragmentShader
-        .replace('#include <common>', `#include <common>
-varying float vHem;`)
-        .replace(
-          '#include <alphatest_fragment>',
-          `if (vHem < 0.045) { float f = fract(vMapUv.x * 9.0 * 16.0); if (f < 0.42 + (0.045 - vHem) * 8.0) discard; }`,
-        );
-    };
-    skirtMat.customProgramCacheKey = () => 'skirt';
-    add(hips, skirt, skirtMat);
-
-    // --- belt: wrapped leather thong with a knot and hanging fringed ends
-    const belt = new THREE.LatheGeometry([new THREE.Vector2(0.157, 0.1), new THREE.Vector2(0.162, 0.065), new THREE.Vector2(0.161, 0.03), new THREE.Vector2(0.155, 0.0)], 36);
-    belt.scale(1, 1, 0.81);
-    add(hips, belt, leather);
-    for (let k = 0; k < 3; k++) {
-      const band = new THREE.TorusGeometry(0.162, 0.006, 5, 36);
-      band.rotateX(Math.PI / 2);
-      band.scale(1, 1, 0.81);
-      band.translate(0, 0.015 + k * 0.035, 0);
-      add(hips, band, darkLeather);
-    }
-    const knot = ellipsoid(0.03, 0.025, 0.02, 0.07, 0.05, 0.135);
-    add(hips, knot, darkLeather);
-    for (let k = 0; k < 4; k++) {
-      const tail = new THREE.BoxGeometry(0.014, 0.28 + k * 0.03, 0.006);
-      tail.translate(0, -(0.14 + k * 0.015), 0);
-      tail.rotateZ(0.08 * (k - 1.5));
-      tail.translate(0.06 + k * 0.012, 0.04, 0.14 - k * 0.004);
-      add(hips, tail, leather);
-    }
-
-    // --- shepherd's bag on the left hip, strap across the chest from the right shoulder
-    const bag = merge([
-      ellipsoid(0.075, 0.1, 0.045, 0, 0, 0, 16, 12),
-      new THREE.BoxGeometry(0.13, 0.07, 0.02).translate(0, 0.05, 0.035),
-    ]);
-    const bagMesh = add(hips, bag, leather);
-    bagMesh.position.set(0.2, -0.13, 0.03);
-    bagMesh.rotation.set(0.05, 0.9, 0.12);
-    const strapCurve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(0.19, -0.33, 0.1), new THREE.Vector3(0.12, -0.14, 0.125), new THREE.Vector3(0.0, 0.02, 0.13),
-      new THREE.Vector3(-0.11, 0.14, 0.115), new THREE.Vector3(-0.16, 0.22, 0.04), new THREE.Vector3(-0.14, 0.2, -0.07),
-      new THREE.Vector3(-0.03, 0.06, -0.12), new THREE.Vector3(0.12, -0.14, -0.115), new THREE.Vector3(0.2, -0.33, -0.06),
-    ]);
-    const strap = new THREE.TubeGeometry(strapCurve, 48, 0.011, 5, false);
-    strap.scale(1, 1, 1);
-    add(chest, strap, leather);
-
-    // --- arms + hands
-    for (const [ua, fa, hd, s] of [[uaL, faL, hdL, 1], [uaR, faR, hdR, -1]] as const) {
-      add(ua, tint(limb(0.29, 0.056, 0.044, 0.01, 0.4), new THREE.Color(1, 1, 1)), skin);
-      add(fa, tint(limb(0.255, 0.046, 0.031, 0.009, 0.22), new THREE.Color(1, 1, 1)), skin);
-      const hand = merge([
-        ellipsoid(0.026, 0.045, 0.036, 0, -0.045, 0.004),
-        ellipsoid(0.028, 0.022, 0.036, 0, -0.088, 0.012),
-        ellipsoid(0.011, 0.028, 0.012, 0.022 * s, -0.05, 0.03),
-      ]);
-      add(hd, tint(hand, new THREE.Color(1, 1, 1)), skin);
-    }
-    this.handSocketL.position.set(0, -0.075, 0.02);
-    this.handSocketR.position.set(0, -0.075, 0.02);
-    hdL.add(this.handSocketL);
-    hdR.add(this.handSocketR);
-
-    // --- head
-    this.buildHead(head, skin, hairMat, eyeWhite, irisMat, pupilMat);
-
-    // --- staff (rod): straight, knotted, worn smooth where held. Grip at y = 0.
-    const staffGeo = gnarlyTube(
-      [new THREE.Vector3(0, -1.06, 0), new THREE.Vector3(0.01, -0.5, 0.005), new THREE.Vector3(-0.005, 0.1, 0), new THREE.Vector3(0.012, 0.74, -0.004)],
-      0.022, 0.018, 24, 7, 0.1, 7,
-    );
-    const staffMesh = new THREE.Mesh(staffGeo, woodMat);
-    staffMesh.castShadow = true;
-    this.staff.add(staffMesh);
-    this.root.add(this.staff);
-
-    // --- sling: two cords + leather pouch + stone
-    const cordMat = new THREE.MeshStandardMaterial({ color: 0x9a7a55, roughness: 0.9 });
-    this.cordA = new Rope(6, 0.0035, cordMat);
-    this.cordB = new Rope(6, 0.0035, cordMat);
-    const pouchGeo = new THREE.SphereGeometry(0.045, 12, 8, 0, Math.PI * 2, Math.PI * 0.45, Math.PI * 0.55);
-    pouchGeo.scale(1.3, 0.8, 0.8);
-    this.pouchMesh = new THREE.Mesh(pouchGeo, new THREE.MeshStandardMaterial({ map: tex.leather, color: 0xa07a58, roughness: 0.8, side: THREE.DoubleSide }));
-    this.pouchMesh.castShadow = true;
-    this.stoneMesh = new THREE.Mesh(new THREE.SphereGeometry(0.024, 10, 8), new THREE.MeshStandardMaterial({ color: 0xcfc6b4, roughness: 0.6 }));
-    this.stoneMesh.castShadow = true;
-
-    // --- shoulder socket (lamb across the shoulders, body along the character's X axis)
-    this.shoulderSocket.position.set(0, 0.25, -0.06);
-    this.shoulderSocket.rotation.set(0, Math.PI / 2, 0);
-    chest.add(this.shoulderSocket);
+    const stoneMat = new THREE.MeshStandardMaterial({ color: 0xcfc3ab, roughness: 0.42, metalness: 0 });
+    this.pouchStone = new THREE.Mesh(pebbleGeometry(11), stoneMat);
+    this.pouchStone.position.set(0, 0.006, 0);
+    this.pouchStone.castShadow = true;
+    this.pouch.add(this.pouchStone);
+    this.handStone = new THREE.Mesh(pebbleGeometry(29, 1.05), stoneMat);
+    this.handStone.visible = false;
+    human.sockets.palmR.add(this.handStone);
+    this.handStone.position.set(0.018, 0, 0.012);
+    human.sockets.handGripR.add(this.slingAnchor);
+    this.slingAnchor.position.set(0, -0.038, 0);
 
     this.root.traverse((o) => {
-      if ((o as THREE.Mesh).isMesh) {
-        o.castShadow = true;
-        o.receiveShadow = true;
-      }
+      if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).receiveShadow = true;
     });
   }
 
   /** Adds sling meshes to the given world-space container (they are simulated in world space). */
   attachSling(container: THREE.Object3D) {
-    container.add(this.cordA.mesh, this.cordB.mesh, this.pouchMesh, this.stoneMesh);
-  }
-
-  private buildHead(head: THREE.Object3D, skin: THREE.Material, hairMat: THREE.Material, eyeWhite: THREE.Material, irisMat: THREE.Material, pupilMat: THREE.Material) {
-    const HX = 0.074, HY = 0.112, HZ = 0.094;
-    const cy = 0.1;
-    const skull = new THREE.SphereGeometry(1, 48, 36);
-    const p = skull.getAttribute('position') as THREE.BufferAttribute;
-    const g = (x: number, y: number, z: number, cx: number, cyy: number, cz: number, s: number) =>
-      Math.exp(-((x - cx) ** 2 + (y - cyy) ** 2 + (z - cz) ** 2) / (2 * s * s));
-    for (let i = 0; i < p.count; i++) {
-      let x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-      const ox = x, oy = y, oz = z;
-      // jaw taper + chin
-      const low = THREE.MathUtils.smoothstep(-y, 0.05, 0.95);
-      x *= 1 - 0.24 * low;
-      if (z > 0) z *= 1 + 0.06 * THREE.MathUtils.smoothstep(-y, 0.5, 0.9) - 0.1 * low * THREE.MathUtils.smoothstep(Math.abs(ox), 0.2, 0.6);
-      // temples slightly flatter, fuller occiput
-      x *= 1 - 0.05 * THREE.MathUtils.smoothstep(y, 0.2, 0.7);
-      if (z < 0 && y > -0.2) z *= 1.07;
-      // face plane: flatten the front a little
-      if (z > 0.6) z = 0.6 + (z - 0.6) * 0.75;
-      // eye sockets, brow ridge, cheekbones
-      let r = 1;
-      r -= 0.07 * g(Math.abs(ox), oy, oz, 0.4, 0.12, 0.86, 0.13);
-      r += 0.035 * g(Math.abs(ox), oy, oz, 0.35, 0.3, 0.88, 0.18);
-      r += 0.03 * g(Math.abs(ox), oy, oz, 0.62, -0.08, 0.72, 0.17);
-      // mouth region slightly forward, philtrum
-      r += 0.02 * g(ox, oy, oz, 0, -0.52, 0.85, 0.16);
-      x *= r; y *= r; z *= r;
-      p.setXYZ(i, x * HX, y * HY + cy, z * HZ);
-    }
-    skull.computeVertexNormals();
-    const blush = (pt: THREE.Vector3) => {
-      const c = new THREE.Color(1, 1, 1);
-      const cheek = Math.max(
-        Math.exp(-((pt.x - 0.045) ** 2 + (pt.y - cy + 0.022) ** 2 + (pt.z - 0.07) ** 2) / (2 * 0.02 * 0.02)),
-        Math.exp(-((pt.x + 0.045) ** 2 + (pt.y - cy + 0.022) ** 2 + (pt.z - 0.07) ** 2) / (2 * 0.02 * 0.02)),
-      );
-      const nose = Math.exp(-((pt.x) ** 2 + (pt.y - cy + 0.03) ** 2 + (pt.z - 0.1) ** 2) / (2 * 0.015 * 0.015));
-      const k = Math.max(cheek * 0.8, nose * 0.5);
-      c.setRGB(1, 1 - 0.14 * k, 1 - 0.16 * k);
-      return c;
-    };
-    const parts: THREE.BufferGeometry[] = [tint(skull, blush)];
-    // nose: bridge + tip + alae
-    const bridge = ellipsoid(0.0075, 0.026, 0.011, 0, 0, 0, 12, 10);
-    bridge.rotateX(-0.32);
-    bridge.translate(0, cy - 0.016, 0.089);
-    parts.push(tint(bridge, blush));
-    parts.push(tint(ellipsoid(0.0095, 0.0085, 0.0095, 0, cy - 0.038, 0.1, 12, 10), blush));
-    parts.push(tint(ellipsoid(0.0068, 0.0058, 0.0068, 0.0095, cy - 0.041, 0.094, 10, 8), blush));
-    parts.push(tint(ellipsoid(0.0068, 0.0058, 0.0068, -0.0095, cy - 0.041, 0.094, 10, 8), blush));
-    // lips
-    const lipC = new THREE.Color(0.8, 0.58, 0.54);
-    parts.push(tint(ellipsoid(0.0165, 0.0038, 0.0065, 0, cy - 0.061, 0.0905, 14, 8), lipC));
-    parts.push(tint(ellipsoid(0.0145, 0.0045, 0.0068, 0, cy - 0.0685, 0.0895, 14, 8), lipC));
-    // ears
-    for (const s of [1, -1]) {
-      const ear = ellipsoid(0.011, 0.028, 0.02, 0, 0, 0, 12, 10);
-      ear.rotateY(-0.35 * s);
-      ear.translate(0.073 * s, cy - 0.005, -0.005);
-      parts.push(tint(ear, new THREE.Color(1, 0.93, 0.9)));
-    }
-    head.scale.setScalar(1.07);
-    const headMesh = new THREE.Mesh(merge(parts), skin);
-    headMesh.castShadow = true;
-    head.add(headMesh);
-
-    // eyes — "יְפֵה עֵינַיִם"
-    for (const s of [1, -1]) {
-      const ex = 0.0295 * s, ey = cy + 0.014, ez = 0.07;
-      const white = new THREE.Mesh(new THREE.SphereGeometry(0.0118, 16, 12), eyeWhite);
-      white.position.set(ex, ey, ez);
-      head.add(white);
-      const iris = new THREE.Mesh(new THREE.SphereGeometry(0.0062, 14, 10), irisMat);
-      iris.scale.set(1, 1, 0.45);
-      iris.position.set(ex, ey - 0.0005, ez + 0.0098);
-      head.add(iris);
-      const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.0032, 10, 8), pupilMat);
-      pupil.scale.set(1, 1, 0.4);
-      pupil.position.set(ex, ey - 0.0005, ez + 0.0124);
-      head.add(pupil);
-      // upper lid
-      const lid = new THREE.Mesh(tint(new THREE.SphereGeometry(0.0128, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.4), new THREE.Color(0.92, 0.8, 0.76)), skin);
-      lid.position.set(ex, ey, ez);
-      lid.rotation.x = 0.28;
-      const lower = new THREE.Mesh(tint(new THREE.SphereGeometry(0.0126, 16, 6, 0, Math.PI * 2, Math.PI * 0.78, Math.PI * 0.22), new THREE.Color(0.95, 0.85, 0.8)), skin);
-      lower.position.set(ex, ey, ez);
-      lower.rotation.x = -0.2;
-      head.add(lower);
-      head.add(lid);
-      // brow
-      const browGeo = ellipsoid(0.017, 0.0036, 0.006, 0, 0, 0, 12, 6);
-      const brow = new THREE.Mesh(tint(browGeo, new THREE.Color(0.1, 0.035, 0.012)), hairMat);
-      brow.position.set(ex + 0.003 * s, ey + 0.0175, ez + 0.0125);
-      brow.rotation.set(0.25, 0.22 * s, -0.1 * s);
-      head.add(brow);
-    }
-
-    // hair — thick auburn curls (אַדְמוֹנִי)
-    const rnd = mulberry32(77);
-    const curls: THREE.BufferGeometry[] = [];
-    const cap = new THREE.SphereGeometry(1, 32, 20, 0, Math.PI * 2, 0, Math.PI * 0.62);
-    {
-      const cp = cap.getAttribute('position') as THREE.BufferAttribute;
-      for (let i = 0; i < cp.count; i++) {
-        let x = cp.getX(i), y = cp.getY(i), z = cp.getZ(i);
-        // hairline: pull the cap back from the face
-        if (z > 0.3 && y < 0.7) {
-          const k = THREE.MathUtils.smoothstep(z, 0.3, 0.75) * THREE.MathUtils.smoothstep(0.7 - y, 0.0, 0.22);
-          z -= k * 0.35;
-          y += k * 0.12;
-        }
-        cp.setXYZ(i, x * HX * 1.06, y * HY * 1.04 + cy + 0.004, z * HZ * 1.05);
-      }
-      cap.computeVertexNormals();
-    }
-    curls.push(tint(cap, new THREE.Color(0.06, 0.018, 0.006)));
-    const dir = new THREE.Vector3();
-    for (let i = 0; i < 420; i++) {
-      dir.set(rnd() * 2 - 1, rnd() * 2 - 1, rnd() * 2 - 1);
-      if (dir.lengthSq() > 1 || dir.lengthSq() < 0.01) { i--; continue; }
-      dir.normalize();
-      if (dir.y < -0.25 && dir.z > -0.2) continue; // no curls on the jaw/cheeks
-      if (dir.y < -0.62) continue;
-      if (dir.z > 0.3 && dir.y < 0.6) continue; // keep the face clear
-      if (dir.z > 0.5 && dir.y < 0.74) continue;
-      const size = 0.011 + rnd() * 0.011;
-      const curl = mergeVertices(new THREE.IcosahedronGeometry(1, 2).deleteAttribute('normal').deleteAttribute('uv'));
-      const cpos = curl.getAttribute('position') as THREE.BufferAttribute;
-      const seed = rnd() * 100;
-      for (let k = 0; k < cpos.count; k++) {
-        const vx = cpos.getX(k), vy = cpos.getY(k), vz = cpos.getZ(k);
-        const n = 1 + NZ.noise(vx * 2 + seed, vy * 2 + vz) * 0.35;
-        cpos.setXYZ(k, vx * n, vy * n * 0.8, vz * n);
-      }
-      curl.computeVertexNormals();
-      curl.scale(size, size * (1 + rnd() * 0.5), size);
-      curl.rotateX(rnd() * 6);
-      curl.rotateY(rnd() * 6);
-      const lift = 1.02 + rnd() * 0.12 + (dir.y > 0.5 ? 0.06 : 0);
-      curl.translate(dir.x * HX * lift * 1.08, dir.y * HY * lift + cy + 0.008, dir.z * HZ * lift * 1.05);
-      const light = rnd();
-      curls.push(tint(curl, new THREE.Color().setRGB(0.085 + light * 0.08, 0.026 + light * 0.024, 0.009 + light * 0.007)));
-    }
-    // a few locks falling over the forehead and nape
-    for (let i = 0; i < 22; i++) {
-      const a = (rnd() - 0.5) * 1.8;
-      const front = i < 9;
-      const size = 0.014 + rnd() * 0.009;
-      const curl = mergeVertices(new THREE.IcosahedronGeometry(size, 2).deleteAttribute('normal').deleteAttribute('uv'));
-      curl.computeVertexNormals();
-      curl.scale(1, 1.3, 1);
-      if (front) curl.translate(Math.sin(a) * 0.05, cy + 0.083 + rnd() * 0.01, 0.066 + Math.cos(a) * 0.01);
-      else curl.translate(Math.sin(a * 1.6) * 0.06, cy - 0.06 - rnd() * 0.04, -0.075 - rnd() * 0.012);
-      const light = rnd();
-      curls.push(tint(curl, new THREE.Color().setRGB(0.09 + light * 0.07, 0.028 + light * 0.02, 0.009)));
-    }
-    const hair = new THREE.Mesh(merge(curls), hairMat);
-    hair.castShadow = true;
-    this.hairGroup.add(hair);
-    head.add(this.hairGroup);
+    container.add(this.cordA.mesh, this.cordB.mesh, this.pouch);
   }
 
   // ----------------------------------------------------------------------------------- control
   play(name: ActionName, events: { t: number; fn: () => void }[] = []) {
-    const a = ACTIONS[name];
-    this.action = { clip: a.clip, t: 0, mask: a.mask, events: events.map((e) => ({ ...e, fired: false })) };
+    const def = ACTIONS[name];
+    this.action = { name, def, t: 0, events: events.map((e) => ({ ...e, fired: false })) };
   }
   get busy() {
     return !!this.action;
   }
-  get actionName() {
-    if (!this.action) return null;
-    for (const [k, v] of Object.entries(ACTIONS)) if (v.clip === this.action.clip) return k as ActionName;
-    return null;
+  get actionName(): ActionName | null {
+    return this.action ? this.action.name : null;
   }
 
   worldOf(o: THREE.Object3D, out = new THREE.Vector3()) {
     return o.getWorldPosition(out);
   }
 
+  /** World position of the staff's striking end (the tip; for strikes the staff is held near the butt). */
+  staffTip(out = new THREE.Vector3()) {
+    return this.staffProp.tip.getWorldPosition(out);
+  }
+
+  /** Snap secondary motion (cloth, sash cords, hair, sling) after a teleport or a camera cut. */
+  resetDynamics() {
+    this.outfit.resetDynamics();
+    this.slingInit = false;
+    this.hasLast = false;
+  }
+
+  setVisible(v: boolean) {
+    this.root.visible = v;
+    this.cordA.mesh.visible = this.cordB.mesh.visible = this.pouch.visible = v && this.slingShown;
+  }
+
   // ----------------------------------------------------------------------------------- update
   update(dt: number) {
     this.time += dt;
     const m = this.mixer;
+    const J = this.j;
     m.reset();
 
-    // ---------- locomotion
+    // ---------- root motion bookkeeping (velocity for cloth, turn rate for leaning)
+    this.root.updateWorldMatrix(true, false);
+    const rootPos = _v1.setFromMatrixPosition(this.root.matrixWorld);
+    const heading = this.root.rotation.y;
+    if (this.hasLast && dt > 0) {
+      this.velocity.subVectors(rootPos, this.lastRootPos).divideScalar(dt);
+      if (this.velocity.lengthSq() > 100) this.velocity.set(0, 0, 0); // teleport
+      let dh = heading - this.lastHeading;
+      while (dh > Math.PI) dh -= Math.PI * 2;
+      while (dh < -Math.PI) dh += Math.PI * 2;
+      const turnRate = clamp(dh / dt, -6, 6);
+      this.turnLean = damp(this.turnLean, clamp(turnRate * this.speed * 0.035, -0.22, 0.22), 6, dt);
+    } else this.velocity.set(0, 0, 0);
+    this.lastRootPos.copy(rootPos);
+    this.lastHeading = heading;
+    this.hasLast = true;
+
+    // ---------- gait state
     const v = this.speed;
-    this.locoW = damp(this.locoW, clamp(v / 1.2, 0, 1), 8, dt);
-    this.runW = damp(this.runW, clamp((v - 2.2) / 2.5, 0, 1), 6, dt);
-    const cycleLen = THREE.MathUtils.lerp(1.45, 2.7, this.runW);
-    this.phase += (Math.PI * 2 * v * dt) / cycleLen;
-    const ph = this.phase;
-    const s = Math.sin(ph), c = Math.cos(ph);
-    const A = THREE.MathUtils.lerp(0.42, 0.85, this.runW) * this.locoW;
+    this.locoW = damp(this.locoW, clamp(v / 0.9, 0, 1), 7, dt);
+    this.runW = damp(this.runW, smooth01((v - 2.0) / 0.9), 5, dt);
+    const rw = this.runW, lw = this.locoW;
+    const cadence = THREE.MathUtils.lerp(1.55 + 0.25 * Math.min(v, 2.6), 2.6 + 0.08 * v, rw); // steps / s
+    const T = 2 / cadence; // gait cycle (two steps)
+    this.phase = (this.phase + (v > 0.05 || lw > 0.05 ? dt / T : 0)) % 1;
+    const p = this.phase;
+    this.exertion = clamp(this.exertion + dt * (rw > 0.5 ? 0.12 : -0.05), 0, 1);
 
-    // idle base
+    // ---------- base: calm idle / hero stance
+    const heroW = this.holdW.hero;
     m.layer(IDLE, 1);
-    const breathe = Math.sin(this.time * 1.4);
-    m.add('chest', breathe * 0.015);
-    m.add('spine', 0, 0, Math.sin(this.time * 0.45) * 0.012);
-    m.add('head', Math.sin(this.time * 0.37) * 0.03, Math.sin(this.time * 0.23) * 0.12 * (1 - this.locoW), 0);
-
-    if (this.locoW > 0.001) {
-      const W = this.locoW;
-      const kneeL = Math.max(0, c) * THREE.MathUtils.lerp(0.95, 1.6, this.runW) + 0.12;
-      const kneeR = Math.max(0, -c) * THREE.MathUtils.lerp(0.95, 1.6, this.runW) + 0.12;
-      const walk = pose({
-        thL: [-s * A, 0, 0.02], shinL: [kneeL, 0, 0], ftL: [-(-s * A + kneeL) * 0.55 + Math.max(0, -s) * 0.25 * W, 0, 0],
-        thR: [s * A, 0, -0.02], shinR: [kneeR, 0, 0], ftR: [-(s * A + kneeR) * 0.55 + Math.max(0, s) * 0.25 * W, 0, 0],
-        uaR: [s * THREE.MathUtils.lerp(0.35, 0.9, this.runW), 0, -0.1], faR: [THREE.MathUtils.lerp(-0.3, -1.4, this.runW), 0, 0],
-        uaL: [-0.42 - s * THREE.MathUtils.lerp(0.12, 0.6, this.runW), 0, 0.2], faL: [THREE.MathUtils.lerp(-1.2, -1.5, this.runW), 0, 0],
-        hips: [0, s * 0.1 * W, 0],
-        spine: [THREE.MathUtils.lerp(0.03, 0.18, this.runW), -s * 0.06, 0],
-        chest: [THREE.MathUtils.lerp(0.02, 0.1, this.runW), -s * 0.1, 0],
-        head: [THREE.MathUtils.lerp(-0.02, -0.08, this.runW), s * 0.05, 0],
-        neck: [0, 0, 0],
-        hdL: [0.15, 0, 0], hdR: [0, 0, 0],
-      }, -Math.abs(c) * THREE.MathUtils.lerp(0.025, 0.06, this.runW) - this.runW * 0.04);
-      m.layer(walk, W);
-      // footsteps on contact
-      const sign = Math.sign(s);
-      if (sign !== this.lastStepSign && W > 0.5) {
-        this.onFootstep?.(sign > 0 ? 'L' : 'R', this.runW > 0.5);
-      }
-      this.lastStepSign = sign;
+    if (heroW > 0.001) m.layer(HERO, heroW);
+    // idle life: weight shift, glances
+    const still = (1 - lw) * (this.action ? 0.3 : 1);
+    this.idleT += dt;
+    const sway = Math.sin(this.idleT * 0.55) * 0.5 + Math.sin(this.idleT * 0.21 + 1.3) * 0.5;
+    m.add('hipsX', sway * 0.012 * still);
+    m.add('hips', 0, 0, sway * 0.018 * still);
+    m.add('spine', 0, 0, -sway * 0.012 * still);
+    m.add('chest', Math.sin(this.idleT * 1.3) * 0.006 * still, 0, 0);
+    this.glanceT -= dt;
+    if (this.glanceT <= 0) {
+      const away = this.glanceTarget.lengthSq() < 1e-4 && Math.random() < 0.7;
+      if (away) this.glanceTarget.set((Math.random() - 0.5) * 1.1, (Math.random() - 0.4) * 0.22);
+      else this.glanceTarget.set(0, 0);
+      this.glanceT = away ? 1.2 + Math.random() * 2.2 : 2.5 + Math.random() * 4.5;
     }
+    const gw = still * (this.lookTarget ? 0 : 1) * (1 - heroW);
+    this.glance.x = damp(this.glance.x, this.glanceTarget.x * gw, 3.5, dt);
+    this.glance.y = damp(this.glance.y, this.glanceTarget.y * gw, 3.5, dt);
+    m.add('head', -this.glance.y * 0.6, this.glance.x * 0.55, 0);
+    m.add('neck', -this.glance.y * 0.3, this.glance.x * 0.35, 0);
+
+    // ---------- locomotion (upper body + pelvis; the legs are solved by IK below)
+    if (lw > 0.001) {
+      this.buildWalkUpper(p, v, rw);
+      m.layer(this.walkPose, lw);
+      // footsteps on heel strike (left at p=0, right at p=0.5)
+      if (lw > 0.5) {
+        if (this.lastPhase > 0.9 && p < 0.1) this.onFootstep?.('L', rw > 0.5);
+        if (this.lastPhase < 0.5 && p >= 0.5) this.onFootstep?.('R', rw > 0.5);
+      }
+    }
+    this.lastPhase = p;
+    // lean into turns (whole body rolls about the feet)
+    m.add('hips', 0, 0, -this.turnLean * 0.6);
+    m.add('spine', 0, 0, -this.turnLean * 0.3);
 
     // ---------- holds
     for (const k of Object.keys(this.holdW) as HoldPose[]) {
-      this.holdW[k] = damp(this.holdW[k], this.hold === k ? 1 : 0, k === 'spin' ? 12 : 6, dt);
+      this.holdW[k] = damp(this.holdW[k], this.hold === k ? 1 : 0, k === 'spin' ? 10 : k === 'grab' ? 9 : 5, dt);
     }
-    if (this.holdW.spin > 0.001) {
+    const H = this.holdW;
+    if (H.spin > 0.001) {
+      const sp = this.spinPose;
       const a = this.spinPhase;
-      const sp = pose({ ...SPIN.r });
-      sp.r.uaR = [SPIN.r.uaR[0] + Math.sin(a) * 0.14, 0, SPIN.r.uaR[2] + Math.cos(a) * 0.14];
-      sp.r.faR = [SPIN.r.faR[0] + Math.sin(a + 0.8) * 0.12, 0, 0];
-      const mask = this.locoW > 0.3 ? [...UPPER_R, ...UPPER_L, ...TORSO] : undefined;
-      m.layer(sp, this.holdW.spin, mask);
+      for (const k in SPIN.r) {
+        const src = SPIN.r[k], dst = sp.r[k] ?? (sp.r[k] = [0, 0, 0]);
+        dst[0] = src[0]; dst[1] = src[1]; dst[2] = src[2];
+      }
+      sp.hipsY = SPIN.hipsY;
+      // the wrist and forearm drive the whirl: small circles of the hand, a slight bob of the body
+      sp.r.uaR[0] += Math.sin(a) * 0.13;
+      sp.r.uaR[2] += Math.cos(a) * 0.12;
+      sp.r.faR[0] += Math.sin(a + 0.9) * 0.14;
+      sp.r.hdR[0] += Math.sin(a + 1.6) * 0.25;
+      sp.r.chest[1] += Math.sin(a) * 0.025 * (0.4 + this.spinPower);
+      m.layer(sp, H.spin, lw > 0.3 ? SPIN_UPPER : undefined);
     }
-    if (this.holdW.grab > 0.001) m.layer(GRAB_BEARD, this.holdW.grab);
-    if (this.holdW.carry > 0.001) m.layer(CARRY, this.holdW.carry, [...UPPER_L, ...UPPER_R, 'chest', 'head']);
-    if (this.holdW.kneel > 0.001) m.layer(KNEEL, this.holdW.kneel);
-    if (this.holdW.thanks > 0.001) m.layer(THANKS, this.holdW.thanks, [...UPPER_L, ...UPPER_R, ...TORSO]);
-    if (this.holdW.pull > 0.001) {
+    if (H.grab > 0.001) m.layer(GRAB_BEARD, H.grab);
+    if (H.carry > 0.001) m.layer(CARRY, H.carry, CARRY_MASK);
+    if (H.kneel > 0.001) m.layer(KNEEL, H.kneel);
+    if (H.thanks > 0.001) m.layer(THANKS, H.thanks, lw > 0.3 ? THANKS_UPPER : undefined);
+    if (H.pull > 0.001) {
       this.pullT += dt;
-      m.layer(PULL.sample(this.pullT, { r: {} }), this.holdW.pull);
-    }
+      m.layer(PULL.sample(this.pullT, this.scratchPose), H.pull);
+    } else this.pullT = 0;
 
     // ---------- one-shot action
+    let actionLegs = 0;
     if (this.action) {
       const a = this.action;
       a.t += dt;
-      const dur = a.clip.duration;
-      const fadeIn = Math.min(1, a.t / 0.06);
-      const fadeOut = Math.min(1, (dur - a.t) / 0.12);
-      this.actionW = Math.max(0, Math.min(fadeIn, fadeOut));
-      const p = a.clip.sample(a.t, { r: {} });
-      m.layer(p, this.actionW, a.mask);
+      const dur = a.def.clip.duration;
+      let w = Math.min(1, a.t / a.def.fadeIn, (dur - a.t) / a.def.fadeOut);
+      // picking up the lamb: once it is on the shoulders, hand over to the carry hold quickly
+      if (a.name === 'pick' && this.hold === 'carry' && a.t > 0.5) w = Math.min(w, Math.max(0, 1 - (a.t - 0.5) / 0.25));
+      this.actionW = Math.max(0, w);
+      const sp = a.def.clip.sample(a.t, this.scratchPose);
+      if (a.name === 'dodge') {
+        // lean / hop toward the dodge side
+        const s = this.dodgeSide;
+        sp.r.hips[2] += -s * 0.25;
+        sp.r.spine[2] += -s * 0.25;
+        sp.r.chest[2] += -s * 0.1;
+        if (sp.r.hipsX) sp.r.hipsX[0] += s * 0.1;
+      }
+      m.layer(sp, this.actionW, a.def.mask);
+      if (a.def.legs) actionLegs = this.actionW;
       for (const e of a.events) if (!e.fired && a.t >= e.t) { e.fired = true; e.fn(); }
       if (a.t >= dur) this.action = null;
+    } else this.actionW = 0;
+
+    // ---------- reload gesture (right hand to the satchel after a throw)
+    if (this.reloadT >= 0) {
+      this.reloadT += dt;
+      const u = this.reloadT / 0.75;
+      const w = Math.sin(Math.PI * clamp(u, 0, 1)) * (1 - H.spin);
+      if (w > 0.001) {
+        m.layer(RELOAD, w, RELOAD_MASK);
+      }
+      if (u >= 1) this.reloadT = -1;
     }
 
     // ---------- head look-at
     if (this.lookTarget) {
-      const headW = this.j.neck.getWorldPosition(tmpA);
-      const local = this.root.worldToLocal(tmpB.copy(this.lookTarget));
-      const hl = this.root.worldToLocal(tmpC.copy(headW));
-      const d = local.sub(hl);
-      const yaw = clamp(Math.atan2(d.x, d.z), -1.0, 1.0);
+      J.neck.getWorldPosition(_v2);
+      this.root.worldToLocal(_v3.copy(this.lookTarget));
+      this.root.worldToLocal(_v2);
+      const d = _v3.sub(_v2);
+      const yaw = clamp(Math.atan2(d.x, d.z), -1.1, 1.1);
       const pitch = clamp(-Math.atan2(d.y, Math.hypot(d.x, d.z)), -0.6, 0.5);
       this.lookYaw = damp(this.lookYaw, yaw, 5, dt);
       this.lookPitch = damp(this.lookPitch, pitch, 5, dt);
@@ -802,153 +831,611 @@ varying float vHem;`)
       this.lookYaw = damp(this.lookYaw, 0, 3, dt);
       this.lookPitch = damp(this.lookPitch, 0, 3, dt);
     }
-    m.add('head', this.lookPitch * 0.6, this.lookYaw * 0.6, 0);
-    m.add('neck', this.lookPitch * 0.3, this.lookYaw * 0.35, 0);
+    m.add('head', this.lookPitch * 0.55, this.lookYaw * 0.55, 0);
+    m.add('neck', this.lookPitch * 0.3, this.lookYaw * 0.3, 0);
+    m.add('chest', 0, this.lookYaw * 0.12, 0);
+
+    // breathing: deeper after running
+    this.human.rig.breathe = 1 + this.exertion * 1.6;
 
     m.apply();
-    this.j.hips.position.y = 0.97 + (m.cur.hipsY ?? 0);
-    this.j.hips.position.z = m.cur.hipsZ ?? 0;
+    const c = m.cur;
+    J.hips.position.set(
+      this.human.rig.pelvis.x + c.r.hipsX[0],
+      this.human.rig.hipHeight + (c.hipsY ?? 0),
+      this.human.rig.pelvis.z + (c.hipsZ ?? 0),
+    );
 
-    // ---------- foot IK on uneven ground
-    this.root.updateMatrixWorld(true);
-    if (this.ground && this.holdW.kneel < 0.5) this.footIK();
+    // ---------- legs: gait targets + terrain IK
+    const legW = lw * (1 - actionLegs) * (1 - H.kneel) * (1 - H.pull * 0.7) * (1 - H.grab * 0.8);
+    this.solveLegs(p, v, rw, legW, dt);
 
-    // ---------- skirt follows the thighs
-    this.skirtUniforms.uLegL.value = this.j.thL.rotation.x;
-    this.skirtUniforms.uLegR.value = this.j.thR.rotation.x;
-    const sway = this.skirtUniforms.uSway.value;
-    sway.x = damp(sway.x, Math.sin(this.phase) * 0.03 * this.locoW, 6, dt);
-    sway.y = damp(sway.y, -0.05 * this.runW - 0.02 * this.locoW, 4, dt);
+    // ---------- arms: staff, hands on targets
+    this.solveArms(dt);
 
-    this.updateStaff(dt);
-    this.root.updateMatrixWorld(true);
+    // ---------- fingers, face, eyes
+    this.updateFace();
+    this.human.rig.lookTarget = this.lookTarget;
+
+    // ---------- skin, hair, clothes
+    this.human.update(dt, this.camera, this.viewportHeight);
+    this.placeStaff(dt);
+    this.updateProps();
+    const wind = _v6.copy(shared.uWind.value).multiplyScalar(1.4 * shared.uWindStrength.value);
+    this.outfit.update(dt, { velocity: this.velocity, wind });
+    this.groom?.update(dt, wind);
   }
 
-  private footIK() {
-    const a = 0.44, b = 0.42;
-    const rootY = this.root.position.y;
-    const res: { th: THREE.Object3D; sh: THREE.Object3D; ft: THREE.Object3D; delta: number }[] = [];
-    for (const side of ['L', 'R']) {
-      const ft = this.j['ft' + side];
-      const w = ft.getWorldPosition(tmpA);
-      const g = this.ground!(w.x, w.z);
-      res.push({ th: this.j['th' + side], sh: this.j['shin' + side], ft, delta: g - rootY });
+  /** procedural walk/run: pelvis, spine counter-rotation, arm swing, head stabilisation (into this.walkPose) */
+  private buildWalkUpper(p: number, v: number, rw: number) {
+    const r = this.walkPose.r;
+    const L = THREE.MathUtils.lerp;
+    const c2 = Math.cos(2 * Math.PI * p);
+    const s2 = Math.sin(2 * Math.PI * p);
+    const stanceL = Math.cos(2 * Math.PI * (p - 0.3)); // +1 at left mid-stance
+    const yawAmp = L(0.07 + 0.015 * v, 0.1, rw);
+    const pelvisYaw = -yawAmp * c2; // left hip forward at left heel strike
+    const list = L(0.045, 0.03, rw) * stanceL; // swing side drops
+    const lean = L(0.03 + 0.012 * v, 0.1 + 0.025 * v, rw);
+    const bounce = L(0, 0.05, rw) * Math.cos(4 * Math.PI * (p - 0.18)); // run: low at mid-stance
+    r.hips[0] = L(0.03, 0.1, rw) + bounce * 0.4;
+    r.hips[1] = pelvisYaw;
+    r.hips[2] = list;
+    r.hipsX[0] = L(0.022, 0.008, rw) * stanceL;
+    r.spine[0] = lean * 0.6;
+    r.spine[1] = -pelvisYaw * 0.7;
+    r.spine[2] = -list * 0.7;
+    r.chest[0] = lean * 0.4 - bounce * 0.2;
+    r.chest[1] = -pelvisYaw * L(1.0, 1.35, rw);
+    r.chest[2] = -list * 0.25;
+    const net = pelvisYaw * (1 - 0.7 - L(1.0, 1.35, rw));
+    r.neck[0] = -lean * 0.3;
+    r.neck[1] = -net * 0.4;
+    r.neck[2] = 0;
+    r.head[0] = -lean * 0.45 + bounce * 0.3;
+    r.head[1] = -net * 0.5;
+    r.head[2] = list * 0.3;
+    // right arm (sling hand): free swing opposite to the right leg
+    const A = L(0.24 + 0.09 * v, 0.55 + 0.05 * v, rw);
+    r.uaR[0] = -A * c2 + L(0.02, -0.12, rw);
+    r.uaR[1] = 0;
+    r.uaR[2] = L(-0.1, -0.2, rw);
+    r.faR[0] = L(-0.28 - 0.22 * Math.max(0, c2), -1.45 - 0.25 * c2, rw);
+    r.faR[1] = L(0.15, 0.25, rw);
+    r.faR[2] = 0;
+    r.hdR[0] = L(0.1, 0.25, rw);
+    r.hdR[1] = 0;
+    r.hdR[2] = 0;
+    // left arm carries the staff: shorter swing, forearm raised
+    const AL = L(0.12 + 0.05 * v, 0.4, rw);
+    r.uaL[0] = AL * c2 + L(-0.32, -0.45, rw);
+    r.uaL[1] = 0;
+    r.uaL[2] = L(0.28, 0.22, rw);
+    r.faL[0] = L(-1.05, -1.4 - 0.2 * c2, rw);
+    r.faL[1] = 0;
+    r.faL[2] = 0;
+    r.hdL[0] = r.hdL[1] = r.hdL[2] = 0;
+    // staff: walking — upright with a forward lean and a little lag; running — carried at a slant
+    r.staff[0] = L(-0.02, 0.15, rw);
+    r.staff[1] = L(1, 0.65, rw);
+    r.staff[2] = L(0.16 + 0.07 * v + 0.05 * s2, 0.9, rw);
+    r.staffW[0] = 1;
+    r.plantW[0] = 0;
+    this.walkPose.hipsY = L(-0.012, -0.055, rw) + bounce;
+    this.walkPose.hipsZ = L(0.01, 0.04, rw);
+  }
+
+  // ----------------------------------------------------------------------------------- legs
+  /** ankle target (character space, relative to the root ground) and pitch for one leg from the gait phase */
+  private gaitFoot(side: 'L' | 'R', p: number, v: number, rw: number, out: THREE.Vector3) {
+    const L = THREE.MathUtils.lerp;
+    const ph = (p + (side === 'L' ? 0 : 0.5)) % 1;
+    const beta = L(0.61, 0.37, rw);
+    const T = 2 / THREE.MathUtils.lerp(1.55 + 0.25 * Math.min(v, 2.6), 2.6 + 0.08 * v, rw);
+    const S = Math.max(0.05, v * T); // stride length
+    const h0 = this.ankleRest[side].y;
+    const x = this.ankleRest[side].x * L(0.8, 0.45, rw);
+    const zStrike = beta * S * 0.5 + L(0.02, 0.06, rw);
+    const zOff = -beta * S * 0.5 + L(0.02, 0.06, rw);
+    const strikePitch = L(-0.3, -0.12, rw) * Math.min(1, v / 1.2);
+    const toePitch = L(0.55, 0.7, rw) * Math.min(1, v / 1.0);
+    const fb = 0.13, hb = 0.055; // ball of the foot ahead of / heel behind the ankle
+    let z: number, y: number, pitch: number, contact: number;
+    if (ph < beta) {
+      const u = ph / beta;
+      z = L(zStrike, zOff, u);
+      if (u < 0.16) {
+        // heel rocker: toes come down about the heel
+        pitch = strikePitch * (1 - smooth01(u / 0.16));
+        y = h0 + Math.sin(-pitch) * hb * 0.6;
+      } else if (u < L(0.62, 0.45, rw)) {
+        pitch = 0;
+        y = h0;
+      } else {
+        // heel rise about the ball of the foot
+        const k = (u - L(0.62, 0.45, rw)) / (1 - L(0.62, 0.45, rw));
+        pitch = toePitch * Math.pow(k, 1.4);
+        y = h0 * Math.cos(pitch) + fb * Math.sin(pitch);
+        z += fb * (1 - Math.cos(pitch)) + h0 * Math.sin(pitch) * 0.4;
+      }
+      contact = 1;
+    } else {
+      const u = (ph - beta) / (1 - beta);
+      const z0 = zOff + fb * (1 - Math.cos(toePitch)) + h0 * Math.sin(toePitch) * 0.4;
+      const e = smooth01(u);
+      // running: the heel first kicks back toward the buttock, then the foot comes through high
+      const kick = rw * Math.sin(Math.PI * Math.min(1, u / 0.55)) * (0.1 + 0.05 * v) * (1 - e);
+      z = L(z0, zStrike, e) - kick;
+      const lift = L(0.07 + 0.015 * v, 0.14 + 0.07 * v, rw);
+      y = L(h0 * Math.cos(toePitch) + fb * Math.sin(toePitch), h0 + Math.sin(-strikePitch) * hb * 0.6, e) + lift * Math.pow(Math.sin(Math.PI * Math.pow(u, 0.8)), 1.2);
+      pitch = L(toePitch, strikePitch, smooth01(u * 1.2));
+      contact = Math.max(0, 1 - u / 0.12) * 0 + (u > 0.9 ? (u - 0.9) / 0.1 : 0);
     }
-    const drop = Math.min(0, res[0].delta, res[1].delta);
-    const dropC = Math.max(drop, -0.35);
-    this.j.hips.position.y += dropC;
-    for (const r of res) {
-      const raise = clamp(r.delta - dropC, 0, 0.4);
-      if (raise < 0.002) continue;
-      const tt = r.th.rotation.x, tk = r.sh.rotation.x;
-      const y0 = -a * Math.cos(tt) - b * Math.cos(tt + tk);
-      const z0 = -a * Math.sin(tt) - b * Math.sin(tt + tk);
-      const y1 = y0 + raise, z1 = z0;
-      const d1 = clamp(Math.hypot(y1, z1), 0.3, a + b - 0.001);
-      const knee = Math.PI - Math.acos(clamp((a * a + b * b - d1 * d1) / (2 * a * b), -1, 1));
-      const phi = Math.atan2(-z1, -y1);
-      const alpha = Math.acos(clamp((a * a + d1 * d1 - b * b) / (2 * a * d1), -1, 1));
-      const nt = phi - alpha;
-      r.ft.rotation.x += tt + tk - (nt + knee);
-      r.th.rotation.x = nt;
-      r.sh.rotation.x = knee;
+    out.set(x, y, z);
+    this.footPitch[side] = pitch;
+    this.footContact[side] = contact;
+  }
+
+  private solveLegs(p: number, v: number, rw: number, legW: number, dt: number) {
+    const J = this.j;
+    const hr = this.human.root;
+    hr.updateWorldMatrix(true, false);
+    J.hips.updateWorldMatrix(false, true);
+    const ground = this.ground;
+    const rootQ = hr.getWorldQuaternion(_q4);
+    const baseY = this.root.position.y; // ground under the root (world)
+    let dropNeed = 0;
+    for (const s of ['L', 'R'] as const) {
+      const th = J[`th${s}`], sh = J[`shin${s}`], ft = J[`ft${s}`];
+      // FK ankle (world) and FK foot orientation (character space)
+      const fk = ft.getWorldPosition(_v2);
+      const tgt = this.footTarget[s];
+      if (legW > 0.001) {
+        this.gaitFoot(s, p, v, rw, _v3);
+        hr.localToWorld(_v3);
+        _v3.y = baseY + this.outfit.groundOffset + (_v3.y - (hr.position.y + 0)) - (hr.getWorldPosition(_v4).y - baseY - this.outfit.groundOffset);
+        tgt.copy(fk).lerp(_v3, legW);
+      } else {
+        tgt.copy(fk);
+        this.footContact[s] = 1;
+        this.footPitch[s] = 0;
+      }
+      const contact = THREE.MathUtils.lerp(1, this.footContact[s], legW);
+      // terrain: raise the target by the ground height under it
+      if (ground) {
+        const g = ground(tgt.x, tgt.z);
+        tgt.y += g - baseY;
+        // reach: how far must the pelvis come down so this (planted) foot can be reached
+        const hip = th.getWorldPosition(_v4);
+        const reach = (this.human.rig.thighLength + this.human.rig.shinLength) * 0.995;
+        const dx = tgt.x - hip.x, dz = tgt.z - hip.z;
+        const hz = dx * dx + dz * dz;
+        const need = hip.y - tgt.y - Math.sqrt(Math.max(0, reach * reach - hz));
+        if (need > 0) dropNeed = Math.max(dropNeed, need * Math.max(contact, 0.35));
+      }
+      void sh;
+    }
+    // pelvis drop: immediate when more reach is needed, eased when released
+    const drop = Math.min(0.45, dropNeed);
+    this.pelvisDrop = drop > this.pelvisDrop ? drop : damp(this.pelvisDrop, drop, 10, dt);
+    J.hips.position.y -= this.pelvisDrop;
+    J.hips.updateWorldMatrix(false, true);
+    for (const s of ['L', 'R'] as const) {
+      const th = J[`th${s}`], sh = J[`shin${s}`], ft = J[`ft${s}`];
+      // FK foot orientation in character space (before the leg is re-solved)
+      const fkFootQ = _q3.copy(rootQ).invert().multiply(ft.getWorldQuaternion(_q2));
+      // knee pole from the FK knee (keeps kneeling / crouching knees where the animation put them)
+      const hip = th.getWorldPosition(_v4);
+      const knee = sh.getWorldPosition(_v5);
+      const ank = ft.getWorldPosition(_v7);
+      const pole = this.poleFrom(hip, knee, ank, _v8.set(Math.sin(this.root.rotation.y), 0, Math.cos(this.root.rotation.y)).addScaledVector(UP, -0.05));
+      this.twoBone(th, sh, ft, this.footTarget[s], pole, 1, 'th' + s);
+      // foot: blend FK orientation with the gait pitch, align to the ground slope while in contact
+      _e1.set(this.footPitch[s], 0, 0);
+      _q1.setFromEuler(_e1);
+      fkFootQ.slerp(_q1, legW);
+      const qWorld = _q2.copy(rootQ).multiply(fkFootQ);
+      const contact = THREE.MathUtils.lerp(1, this.footContact[s], legW);
+      if (this.ground && contact > 0.01) {
+        const t = this.footTarget[s];
+        const e = 0.12;
+        const hx = this.ground(t.x - e, t.z) - this.ground(t.x + e, t.z);
+        const hz = this.ground(t.x, t.z - e) - this.ground(t.x, t.z + e);
+        _v3.set(hx, 2 * e, hz).normalize();
+        _q1.setFromUnitVectors(UP, _v3);
+        _q3.identity().slerp(_q1, contact * 0.85);
+        qWorld.premultiply(_q3);
+      }
+      sh.updateWorldMatrix(false, false);
+      const shinQ = sh.getWorldQuaternion(_q1);
+      ft.quaternion.copy(shinQ.invert().multiply(qWorld));
+      th.updateWorldMatrix(false, true);
     }
   }
 
-  private updateStaff(dt: number) {
-    const target = this.staffMode === 'strike' ? 1 : 0;
-    this.staffBlend = damp(this.staffBlend, target, 14, dt);
-    this.staffBack = damp(this.staffBack, this.staffMode === 'back' ? 1 : 0, 8, dt);
-    this.root.updateMatrixWorld(true);
-    // grip positions in root space
-    const gripL = this.root.worldToLocal(this.handSocketL.getWorldPosition(tmpA));
-    const gripR = this.root.worldToLocal(this.handSocketR.getWorldPosition(tmpB));
-    // plant mode: vertical in left hand, slight tilt with motion
-    const qPlant = tmpQ1.setFromEuler(tmpE.set(0.06 * this.locoW + 0.04, 0, -0.05));
-    // strike mode: long end forward along the right hand's +Z axis
-    const handQ = this.j.hdR.getWorldQuaternion(tmpQ2);
-    const rootQInv = this.root.getWorldQuaternion(tmpQ3).invert();
-    const handLocal = rootQInv.multiply(handQ); // hand orientation in root space
-    const fwd = tmpD.set(0, 0, 1).applyQuaternion(handLocal);
-    const qStrike = tmpQ4.setFromUnitVectors(tmpF.set(0, -1, 0), fwd);
-    // back mode: slung diagonally across the back
-    const qBack = tmpQ5.setFromEuler(tmpE.set(0, 0, 0.9));
-    const pBack = tmpC.set(0.02, 1.25, -0.16);
-    this.staff.quaternion.copy(qPlant).slerp(qStrike, this.staffBlend).slerp(qBack, this.staffBack);
-    this.staff.position.copy(gripL).lerp(gripR, this.staffBlend).lerp(pBack, this.staffBack);
+  private poleFrom(a: THREE.Vector3, mid: THREE.Vector3, c: THREE.Vector3, fallback: THREE.Vector3) {
+    const ac = _v6.subVectors(c, a);
+    const l2 = ac.lengthSq();
+    const am = _v3.subVectors(mid, a);
+    if (l2 > 1e-8) am.addScaledVector(ac, -am.dot(ac) / l2);
+    if (am.lengthSq() < 1e-6) return am.copy(fallback).normalize();
+    // bias toward the fallback a little so near-straight limbs stay stable
+    return am.normalize().multiplyScalar(0.85).addScaledVector(fallback, 0.15).normalize();
   }
 
-  /** World position of the staff's striking end. */
-  staffTip(out = new THREE.Vector3()) {
-    return this.staff.localToWorld(out.set(0, -1.02, 0));
+  /**
+   * Two-bone IK on proxy joints in world space. bend = -1: elbow (the lower limb swings toward +Z of the upper),
+   * +1: knee (toward -Z). Writes upper.quaternion and lower.quaternion (pure hinge), slerped by `w` from the FK.
+   */
+  private twoBone(upper: THREE.Object3D, lower: THREE.Object3D, end: THREE.Object3D, target: THREE.Vector3, pole: THREE.Vector3, bend: 1 | -1, key: string, w = 1) {
+    if (w <= 0.001) return;
+    const a = lower.position.length(), b = end.position.length();
+    upper.updateWorldMatrix(true, false);
+    const S = _v1.setFromMatrixPosition(upper.matrixWorld);
+    const D = _v2.subVectors(target, S);
+    let d = D.length();
+    if (d < 1e-5) return;
+    D.divideScalar(d);
+    d = clamp(d, Math.abs(a - b) + 0.01, a + b - 0.0015);
+    const cosA = clamp((a * a + d * d - b * b) / (2 * a * d), -1, 1);
+    const sinA = Math.sqrt(1 - cosA * cosA);
+    // in-plane direction toward the pole
+    const pp = _v3.copy(pole).addScaledVector(D, -pole.dot(D));
+    if (pp.lengthSq() < 1e-8) pp.set(0, 0, 1).addScaledVector(D, -D.z);
+    pp.normalize();
+    const u = _v4.copy(D).multiplyScalar(cosA).addScaledVector(pp, sinA); // upper limb direction
+    const Ex = S.x + u.x * a, Ey = S.y + u.y * a, Ez = S.z + u.z * a;
+    const f = _v5.set(S.x + D.x * d - Ex, S.y + D.y * d - Ey, S.z + D.z * d - Ez).normalize(); // lower direction
+    const Yp = _v6.copy(u).negate();
+    const perp = _v7.copy(f).addScaledVector(u, -f.dot(u));
+    if (perp.lengthSq() < 1e-8) perp.copy(pp).negate();
+    perp.normalize();
+    if (bend === 1) perp.negate();
+    const Xp = _v8.crossVectors(Yp, perp).normalize();
+    _m1.makeBasis(Xp, Yp, perp);
+    const qWorld = _q1.setFromRotationMatrix(_m1).multiply(_q2.copy(this.restFix[key]).invert());
+    const parentQ = upper.parent!.getWorldQuaternion(_q2);
+    const local = parentQ.invert().multiply(qWorld);
+    upper.quaternion.slerp(local, w);
+    const interior = Math.acos(clamp((a * a + b * b - d * d) / (2 * a * b), -1, 1));
+    const ang = (Math.PI - interior) * (bend === 1 ? 1 : -1);
+    _q3.setFromAxisAngle(X_AXIS, ang);
+    lower.quaternion.slerp(_q3, w);
+    upper.updateWorldMatrix(false, true);
+  }
+
+  // ----------------------------------------------------------------------------------- arms / staff
+  /** rotate the hand proxy so the staff (socket +Y) points along `dir` (world), weight w */
+  private alignHand(side: 'L' | 'R', dir: THREE.Vector3, w: number) {
+    if (w <= 0.001) return;
+    const hd = this.j[`hd${side}`], fa = this.j[`fa${side}`];
+    hd.updateWorldMatrix(true, false);
+    const hq = hd.getWorldQuaternion(_q1);
+    const axis = _v1.copy(UP).applyQuaternion(this.sockRestQ[side]).applyQuaternion(hq);
+    _q2.setFromUnitVectors(axis, _v2.copy(dir).normalize());
+    const newWorld = _q2.multiply(hq);
+    const faQ = fa.getWorldQuaternion(_q3);
+    const local = faQ.invert().multiply(newWorld);
+    hd.quaternion.slerp(local, w);
+    hd.updateWorldMatrix(false, true);
+  }
+
+  /** world position of the grip socket predicted from the hand proxy */
+  private gripWorld(side: 'L' | 'R', out: THREE.Vector3) {
+    const hd = this.j[`hd${side}`];
+    hd.updateWorldMatrix(true, false);
+    const hq = hd.getWorldQuaternion(_q4);
+    return out.copy(this.sockRestOff[side]).applyQuaternion(hq).add(_v8.setFromMatrixPosition(hd.matrixWorld));
+  }
+
+  private armIK(side: 'L' | 'R', gripTarget: THREE.Vector3, pole: THREE.Vector3, w: number) {
+    if (w <= 0.001) return;
+    const J = this.j;
+    // aim the wrist so that the grip socket lands on the target (offset from the current hand orientation)
+    const g = this.gripWorld(side, _v5);
+    const wrist = _v6.setFromMatrixPosition(J[`hd${side}`].matrixWorld);
+    const tgt = _v7.copy(gripTarget).sub(g).add(wrist);
+    const t2 = _tmpTarget.copy(tgt);
+    this.twoBone(J[`ua${side}`], J[`fa${side}`], J[`hd${side}`], t2, pole, -1, `ua${side}`, w);
+  }
+
+  private solveArms(dt: number) {
+    const J = this.j;
+    const c = this.mixer.cur.r;
+    const H = this.holdW;
+    const hr = this.human.root;
+    const rootQ = hr.getWorldQuaternion(_q4).clone();
+    // staff slide (strike grip near the butt) and back carry
+    const onBack = this.staffMode === 'back' || this.hold === 'carry' || this.hold === 'pull';
+    this.staffBackW = damp(this.staffBackW, onBack ? 1 : 0, 7, dt);
+    this.staffSlide = damp(this.staffSlide, this.staffMode === 'strike' && !onBack ? 0.82 : 0, 11, dt);
+    const inHand = 1 - this.staffBackW;
+    // staff direction (character -> world)
+    const sd = c.staff;
+    const dirW = _dirW.set(sd[0], sd[1], sd[2]);
+    if (dirW.lengthSq() < 1e-6) dirW.set(0, 1, 0);
+    dirW.normalize().applyQuaternion(rootQ);
+    const staffW = clamp(c.staffW[0], 0, 1) * inHand;
+    // plant: arm IK so that the butt rests on the ground at c.butt (character space)
+    const plantW = clamp(c.plantW[0], 0, 1) * inHand * (1 - this.locoW) * (this.staffMode === 'plant' ? 1 : 0);
+    if (plantW > 0.001) {
+      const butt = _butt.set(c.butt[0], 0, c.butt[2]);
+      hr.localToWorld(butt);
+      butt.y = this.ground ? this.ground(butt.x, butt.z) + 0.005 : this.root.position.y;
+      const grip = _grip.copy(butt).addScaledVector(dirW, this.staffGripDist - this.staffSlide);
+      const pole = _pole.set(0.35, -1, -0.45).applyQuaternion(rootQ);
+      for (let it = 0; it < 2; it++) {
+        this.alignHand('L', dirW, staffW);
+        this.armIK('L', grip, pole, plantW);
+      }
+    }
+    this.alignHand('L', dirW, staffW);
+
+    // right hand targets
+    const right = _rt;
+    let rw = 0;
+    if (H.grab > 0.01 && this.lookTarget) {
+      // the beard: under the bear's head, toward David
+      right.copy(this.lookTarget);
+      J.chest.getWorldPosition(_v3);
+      _v2.subVectors(_v3, right).setY(0).normalize();
+      right.addScaledVector(_v2, 0.16).add(_v1.set(0, -0.22, 0));
+      rw = H.grab;
+      this.armIK('R', right, _pole.set(-0.6, -0.8, -0.2).applyQuaternion(rootQ), rw * 0.85);
+    }
+    if (this.action?.name === 'call' && this.actionW > 0.01) {
+      // hand cupped at the right side of the mouth
+      this.human.sockets.mouth.getWorldPosition(right);
+      right.add(_v2.set(-0.045, -0.005, 0.045).applyQuaternion(J.head.getWorldQuaternion(_q2)));
+      this.armIK('R', right, _pole.set(-1, -0.5, -0.2).applyQuaternion(rootQ), this.actionW);
+    }
+    if (H.thanks > 0.01) {
+      // flat hand on the chest (heart side)
+      J.chest.updateWorldMatrix(true, false);
+      right.set(0.045, 0.19, 0.155).applyMatrix4(J.chest.matrixWorld);
+      this.armIK('R', right, _pole.set(-0.6, -1, -0.1).applyQuaternion(rootQ), H.thanks * (1 - this.locoW));
+    }
+    if (H.carry > 0.01) {
+      // hands on the lamb's legs in front of the shoulders
+      const sc = this.shoulderSocket;
+      sc.updateWorldMatrix(true, false);
+      for (const s of ['L', 'R'] as const) {
+        const sg = s === 'L' ? 1 : -1;
+        const t = _v5.set(0, 0, 0).applyMatrix4(sc.matrixWorld);
+        t.add(_v2.set(sg * 0.2, -0.1, 0.17).applyQuaternion(J.chest.getWorldQuaternion(_q2)));
+        this.armIK(s, _carryT.copy(t), _pole.set(sg * 0.7, -1, -0.1).applyQuaternion(rootQ), H.carry);
+      }
+    }
+    // pick: after the grasp, the stone goes to the satchel at the left hip
+    if (this.action?.name === 'pick' && this.hold !== 'carry') {
+      const t = this.action.t;
+      const w = smooth01((t - 0.58) / 0.14) * (1 - smooth01((t - 0.86) / 0.14)) * this.actionW;
+      if (w > 0.001 && this.outfit.props.satchel) {
+        this.outfit.props.satchel.getWorldPosition(right);
+        right.add(_v2.set(0.02, 0.02, 0.1).applyQuaternion(rootQ));
+        this.armIK('R', right, _pole.set(-0.8, -0.6, -0.3).applyQuaternion(rootQ), w);
+      }
+    }
+    void rw;
+  }
+
+  /** put the staff object where the hand (or the back) holds it — after human.update() */
+  private placeStaff(_dt: number) {
+    const hr = this.human.root;
+    const o = this.staff;
+    // in the hand: attachProp frame, slid along the shaft for strikes
+    const hand = this.handSocketL.matrixWorld;
+    _v1.copy(this.staffBasePos).add(_v2.set(0, this.staffSlide, 0));
+    _m1.compose(_v1, this.staffBaseQ, _s1.set(1, 1, 1));
+    _m1.premultiply(hand);
+    if (this.staffBackW > 0.001) {
+      this.staffBack.updateWorldMatrix(true, false);
+      _v1.copy(this.staffBasePos).add(_v2.set(0, -0.28, 0));
+      _m2.compose(_v1, this.staffBaseQ, _s1.set(1, 1, 1)).premultiply(this.staffBack.matrixWorld);
+      _m1.decompose(_v3, _q1, _s1);
+      _m2.decompose(_v4, _q2, _s1);
+      const w = smooth01(this.staffBackW);
+      _v3.lerp(_v4, w);
+      _q1.slerp(_q2, w);
+      _m1.compose(_v3, _q1, _s1.set(1, 1, 1));
+    }
+    _m2.copy(hr.matrixWorld).invert().multiply(_m1);
+    _m2.decompose(o.position, o.quaternion, _s1);
+    o.updateMatrixWorld(true);
+  }
+
+  private updateProps() {
+    // stone in the right hand while picking (hidden once it is in the satchel, never while taking up the lamb)
+    const a = this.action;
+    const holdingStone = !!a && a.name === 'pick' && a.t > 0.5 && a.t < 0.86 && this.hold !== 'carry';
+    this.handStone.visible = holdingStone;
+  }
+
+  private updateFace() {
+    const rig = this.human.rig;
+    const a = this.action;
+    const H = this.holdW;
+    let e: Expression = 'neutral', w = 1;
+    if (this.mood) e = this.mood;
+    else if (a && a.name === 'hurt') e = 'pain';
+    else if (a && (a.name === 'throw' || a.name === 'strike' || a.name === 'strikeHigh')) e = 'effort';
+    else if (this.hold === 'pull') e = 'effort';
+    else if (this.hold === 'grab') { e = 'anger'; w = 0.85; }
+    else if (this.hold === 'spin') { e = 'determined'; w = 0.6 + 0.4 * this.spinPower; }
+    else if (this.hold === 'thanks') e = 'awe';
+    else if (this.hold === 'carry') { e = 'smile'; w = 0.3; }
+    else if (a && a.name === 'call') { e = 'determined'; w = 0.3; }
+    else if (this.runW > 0.5) { e = 'determined'; w = 0.45; }
+    if (e !== this.lastExpr || Math.abs(w - this.lastExprW) > 0.05) {
+      rig.setExpression(e, w);
+      this.lastExpr = e;
+      this.lastExprW = w;
+    }
+    rig.jawOpen = a && a.name === 'call' ? 0.22 * this.actionW : this.exertion * 0.05 + (this.hold === 'pull' ? 0.04 : 0);
+    // fingers
+    const inHand = this.staffBackW < 0.5;
+    const L: FingerPose = inHand ? 'grip' : H.carry > 0.5 ? 'grip' : this.hold === 'pull' ? 'fist' : 'relaxed';
+    let R: FingerPose = 'fist';
+    if (a && a.name === 'pick' && this.hold !== 'carry') R = a.t < 0.46 ? 'open' : 'fist';
+    else if (a && a.name === 'call') R = 'cup';
+    else if (this.hold === 'thanks') R = 'open';
+    else if (this.hold === 'carry' || this.hold === 'pull') R = 'grip';
+    else if (this.hold === 'grab') R = 'fist';
+    if (L !== this.fingerL) { rig.setFingers('L', L); this.fingerL = L; }
+    if (R !== this.fingerR) { rig.setFingers('R', R); this.fingerR = R; }
   }
 
   // ----------------------------------------------------------------------------------- sling
   /** Simulate the sling in world space. `aimDir` is the horizontal throwing direction (world). */
   updateSling(dt: number, aimDir: THREE.Vector3) {
     const S = this.sling;
-    const hand = this.handSocketR.getWorldPosition(tmpA);
+    const hidden = S.state === 'stowed' || this.hold === 'carry' || this.hold === 'pull' || this.hold === 'grab' || this.hold === 'thanks' || this.hold === 'kneel';
+    const show = !hidden && this.root.visible;
+    if (show !== this.slingShown) {
+      this.slingShown = show;
+      this.cordA.mesh.visible = this.cordB.mesh.visible = this.pouch.visible = show;
+      if (!show) this.slingInit = false;
+    }
+    if (!show) return;
+    this.slingAnchor.updateWorldMatrix(true, false);
+    const hand = _hand.setFromMatrixPosition(this.slingAnchor.matrixWorld);
+    const rootQ = this.root.getWorldQuaternion(_q4);
+    const side = _side.set(1, 0, 0).applyQuaternion(rootQ);
+    const sim = this.sim;
     if (!this.slingInit) {
-      S.pouch.copy(hand).add(tmpB.set(0, -0.5, 0));
+      sim.reset(hand, side);
+      S.pouch.copy(sim.a[NC - 1]).add(sim.b[NC - 1]).multiplyScalar(0.5);
       S.prev.copy(S.pouch);
       this.slingInit = true;
     }
-    const visible = S.state !== 'stowed';
-    this.cordA.mesh.visible = this.cordB.mesh.visible = this.pouchMesh.visible = visible;
-    this.stoneMesh.visible = visible && S.loaded && S.state !== 'release';
-    if (!visible) return;
-    const L = 0.52;
+    // leg capsules for collisions (world)
+    let capCount = 0;
+    const bones = this.human.bones;
+    for (const cap of this.outfit.capsules) {
+      if (capCount >= 4) break;
+      const A = bones[cap.a], B = bones[cap.b];
+      if (!A || !B) continue;
+      A.getWorldPosition(_v1);
+      B.getWorldPosition(_v2);
+      this.caps.set([_v1.x, _v1.y, _v1.z, _v2.x, _v2.y, _v2.z, cap.radius + 0.035], capCount * 7);
+      capCount++;
+    }
+    const steps = 3;
+    const h = Math.min(dt, 1 / 20) / steps;
+    S.prev.copy(S.pouch);
+    const throwing = this.action?.name === 'throw' && S.state === 'spin';
     if (S.state === 'spin') {
-      // circle above the head in a plane tilted toward the target
-      this.spinPhase += dt * (Math.PI * 2) * (1.8 + this.spinPower * 5.2);
-      const up = tmpC.set(0, 1, 0).addScaledVector(aimDir, -0.35).normalize();
-      const u = tmpD.crossVectors(up, aimDir).normalize();
-      const w = tmpF.crossVectors(u, up).normalize();
-      const ang = this.spinPhase;
-      const target = tmpB.copy(hand).addScaledVector(u, Math.cos(ang) * L).addScaledVector(w, Math.sin(ang) * L).addScaledVector(up, -0.05);
-      S.prev.copy(S.pouch);
-      S.pouch.lerp(target, 1 - Math.exp(-30 * dt));
+      // whirl: the pouch runs on a circle above the head, tilted toward the target; the cords follow
+      const aim = _aim.copy(aimDir).setY(0);
+      if (aim.lengthSq() < 1e-6) aim.set(0, 0, 1).applyQuaternion(rootQ);
+      aim.normalize();
+      const speed = (Math.PI * 2) * (1.7 + this.spinPower * 4.6);
+      this.spinPhase += dt * speed;
+      const up = _v3.set(0, 1, 0).addScaledVector(aim, -0.3).normalize();
+      const u = _v4.crossVectors(up, aim).normalize();
+      const wv = _v5.crossVectors(u, up).normalize();
+      const R = CORD_LEN * 0.97;
+      let tx: number, ty: number, tz: number;
+      if (throwing) {
+        // release swing: the pouch whips over the shoulder and forward along the aim
+        const k = clamp(this.action!.t / 0.19, 0, 1);
+        const ang = THREE.MathUtils.lerp(1.35, 0.15, k * k);
+        tx = hand.x + (aim.x * Math.cos(ang) + up.x * Math.sin(ang)) * R;
+        ty = hand.y + (aim.y * Math.cos(ang) + up.y * Math.sin(ang)) * R;
+        tz = hand.z + (aim.z * Math.cos(ang) + up.z * Math.sin(ang)) * R;
+      } else {
+        const a = this.spinPhase;
+        tx = hand.x + (u.x * Math.cos(a) + wv.x * Math.sin(a)) * R - up.x * 0.05;
+        ty = hand.y + (u.y * Math.cos(a) + wv.y * Math.sin(a)) * R - up.y * 0.05;
+        tz = hand.z + (u.z * Math.cos(a) + wv.z * Math.sin(a)) * R - up.z * 0.05;
+      }
+      const k = 1 - Math.exp(-(throwing ? 45 : 28) * dt);
+      S.pouch.x += (tx - S.pouch.x) * k;
+      S.pouch.y += (ty - S.pouch.y) * k;
+      S.pouch.z += (tz - S.pouch.z) * k;
+      // pouch across the direction of travel
+      const vel = _v1.subVectors(S.pouch, S.prev);
+      if (vel.lengthSq() < 1e-10) vel.copy(u);
+      vel.normalize();
+      for (let i = 0; i < steps; i++) {
+        sim.integrate(h, 0.96, true);
+        sim.a[NC - 1].copy(S.pouch).addScaledVector(vel, -POUCH_W * 0.5);
+        sim.b[NC - 1].copy(S.pouch).addScaledVector(vel, POUCH_W * 0.5);
+        sim.constrain(hand, 3, this.caps, 0, hand, true);
+      }
+      sim.pa[NC - 1].copy(sim.a[NC - 1]);
+      sim.pb[NC - 1].copy(sim.b[NC - 1]);
     } else {
-      // pendulum (verlet) hanging from the hand
-      const vel = tmpB.subVectors(S.pouch, S.prev).multiplyScalar(0.985);
-      S.prev.copy(S.pouch);
-      S.pouch.add(vel).add(tmpC.set(0, -9.8 * dt * dt, 0));
-      const d = tmpD.subVectors(S.pouch, hand);
-      const len = d.length();
-      const maxL = S.state === 'release' ? L * 1.05 : L;
-      if (len > maxL) S.pouch.copy(hand).addScaledVector(d, maxL / len);
+      // hanging / released: verlet chain, B's hand end free after the release until David gathers it again
       if (S.state === 'release') {
         S.releaseT += dt;
-        if (S.releaseT > 0.5) S.state = 'idle';
+        sim.bPinned = false;
+        if (S.releaseT > 0.55) {
+          S.state = 'idle';
+          this.reloadT = S.loaded ? -1 : 0;
+        }
       }
+      let pinB: THREE.Vector3 | null = hand;
+      if (!sim.bPinned) {
+        if (S.state === 'release') pinB = null;
+        else {
+          // gather the loose cord back into the fist
+          const b0 = sim.b[0];
+          b0.lerp(hand, 1 - Math.exp(-14 * dt));
+          if (b0.distanceTo(hand) < 0.01) sim.bPinned = true;
+          pinB = _pinB.copy(b0);
+        }
+      }
+      for (let i = 0; i < steps; i++) {
+        sim.integrate(h, 0.985, false);
+        if (!pinB) {
+          // free cord end: integrate it too
+          const p0 = sim.b[0], q0 = sim.pb[0];
+          const vx = (p0.x - q0.x) * 0.98, vy = (p0.y - q0.y) * 0.98, vz = (p0.z - q0.z) * 0.98;
+          q0.copy(p0);
+          p0.x += vx; p0.y += vy - 9.81 * h * h; p0.z += vz;
+        }
+        sim.constrain(hand, 4, this.caps, capCount, pinB, false);
+      }
+      S.pouch.copy(sim.a[NC - 1]).add(sim.b[NC - 1]).multiplyScalar(0.5);
     }
-    // cords: from hand to the two edges of the pouch
-    const toHand = tmpD.subVectors(hand, S.pouch).normalize();
-    const side = tmpF.crossVectors(toHand, tmpC.set(0, 1, 0.3).normalize()).normalize().multiplyScalar(0.035);
-    const endA = tmpE2.copy(S.pouch).add(side);
-    const endB = tmpE3.copy(S.pouch).sub(side);
-    for (let i = 0; i < 6; i++) {
-      const t = i / 5;
-      const sag = Math.sin(t * Math.PI) * (S.state === 'spin' ? 0.0 : 0.012);
-      this.cordA.points[i].copy(hand).lerp(endA, t).y -= sag;
-      this.cordB.points[i].copy(hand).lerp(endB, t).y -= sag;
-    }
-    if (S.state === 'release') {
-      // released cord flies free
-      for (let i = 1; i < 6; i++) this.cordB.points[i].copy(hand).lerp(endB, i / 5 * 0.5).addScaledVector(toHand, -0.04 * i);
+    // ropes + pouch orientation
+    for (let i = 0; i < NC; i++) {
+      this.cordA.points[i].copy(sim.a[i]);
+      this.cordB.points[i].copy(sim.b[i]);
     }
     this.cordA.update();
-    this.cordB.update();
-    this.pouchMesh.position.copy(S.pouch);
-    this.pouchMesh.lookAt(hand);
-    this.pouchMesh.rotateX(Math.PI / 2);
-    this.stoneMesh.position.copy(S.pouch).addScaledVector(toHand, -0.012);
+    this.cordB.update(S.state === 'release' ? 0.3 : 0);
+    const X = _v1.subVectors(sim.b[NC - 1], sim.a[NC - 1]);
+    if (X.lengthSq() < 1e-10) X.copy(side);
+    X.normalize();
+    const Y = _v2.subVectors(hand, S.pouch);
+    Y.addScaledVector(X, -Y.dot(X));
+    if (Y.lengthSq() < 1e-10) Y.set(0, 1, 0);
+    Y.normalize();
+    const Z = _v3.crossVectors(X, Y);
+    _m1.makeBasis(X, Y, Z);
+    this.pouch.quaternion.setFromRotationMatrix(_m1);
+    this.pouch.position.copy(S.pouch);
+    this.pouch.updateMatrixWorld(true);
+    const showStone = S.loaded && S.state !== 'release' && !(this.reloadT >= 0 && this.reloadT < 0.55);
+    if (showStone !== this.stoneShown) {
+      this.pouchStone.visible = showStone;
+      this.stoneShown = showStone;
+    }
   }
 
   releaseSling(): { pos: THREE.Vector3; vel: THREE.Vector3 } {
     const S = this.sling;
     const pos = S.pouch.clone();
     const vel = S.pouch.clone().sub(S.prev);
+    // the pouch keeps its momentum when the cord slips
+    const sim = this.sim;
+    const dv = _v1.copy(vel);
+    for (let i = 1; i < NC; i++) {
+      sim.pa[i].copy(sim.a[i]).sub(_v2.copy(dv).multiplyScalar(i / (NC - 1)));
+      sim.pb[i].copy(sim.b[i]).sub(_v2.copy(dv).multiplyScalar(i / (NC - 1)));
+    }
     S.state = 'release';
     S.releaseT = 0;
     S.loaded = false;
@@ -956,17 +1443,20 @@ varying float vHem;`)
   }
 }
 
-const tmpA = new THREE.Vector3();
-const tmpB = new THREE.Vector3();
-const tmpC = new THREE.Vector3();
-const tmpD = new THREE.Vector3();
-const tmpF = new THREE.Vector3();
-const tmpE2 = new THREE.Vector3();
-const tmpE3 = new THREE.Vector3();
-const tmpE = new THREE.Euler();
-const tmpQ1 = new THREE.Quaternion();
-const tmpQ2 = new THREE.Quaternion();
-const tmpQ3 = new THREE.Quaternion();
-const tmpQ4 = new THREE.Quaternion();
-const tmpQ5 = new THREE.Quaternion();
+const SPIN_UPPER = [...UPPER_R, ...UPPER_L, ...TORSO, 'staff', 'staffW', 'plantW'];
+const CARRY_MASK = [...UPPER_L, ...UPPER_R, 'chest', 'neck', 'head', 'staffW', 'plantW'];
+const THANKS_UPPER = [...UPPER_L, ...UPPER_R, ...TORSO];
+const RELOAD = pose({ uaR: E(-0.35, 0, 0.3), faR: E(-1.2), hdR: E(0.3), chest: E(0.08, 0.12), head: E(0.28, 0.25), neck: E(0.1, 0.1) });
+const RELOAD_MASK = [...UPPER_R, 'chest', 'head', 'neck'];
+const _tmpTarget = new THREE.Vector3();
+const _dirW = new THREE.Vector3();
+const _butt = new THREE.Vector3();
+const _grip = new THREE.Vector3();
+const _pole = new THREE.Vector3();
+const _rt = new THREE.Vector3();
+const _carryT = new THREE.Vector3();
+const _hand = new THREE.Vector3();
+const _side = new THREE.Vector3();
+const _aim = new THREE.Vector3();
+const _pinB = new THREE.Vector3();
 export { LEGS };

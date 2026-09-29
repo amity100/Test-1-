@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Pass, FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
+import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 
 /**
  * Physically-flavoured bloom (dual filter, "Next Generation Post Processing in Call of Duty: Advanced
@@ -10,6 +10,10 @@ import { Pass, FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js'
  * at half resolution, which is several times more expensive on phones, and a single Inf/NaN pixel in
  * its input spreads over a third of the screen (the smallest mip) and turns into NaN in ACES → a big
  * black blotch for a frame. Here the input is clamped + Karis-averaged, so one hot pixel stays harmless.
+ *
+ * Composite: `compute()` only builds the mip chain; the tone-mapping pass (PostFX FinishPass) samples `texture`
+ * (mip 0, tent-filtered) and adds `compositeScale * tint` of it while it reads the HDR image anyway. This saves a
+ * full-resolution read-modify-write per frame and keeps the bloom out of the TAA history.
  */
 export interface BloomOptions {
   /** fraction of bloom light added to the image */
@@ -71,16 +75,6 @@ const UP_FRAG = /* glsl */ `
     gl_FragColor = vec4(s * (uWeight / 16.0), 1.0);
   }`;
 
-const COMPOSITE_FRAG = /* glsl */ `
-  uniform sampler2D tSrc; uniform vec2 uTexel; uniform float uStrength;
-  varying vec2 vUv;
-  void main(){
-    // 4 bilinear taps = smooth tent up-sample of the half/quarter resolution bloom
-    vec3 s = texture2D(tSrc, vUv + vec2(-0.5, -0.5) * uTexel).rgb + texture2D(tSrc, vUv + vec2(0.5, -0.5) * uTexel).rgb
-      + texture2D(tSrc, vUv + vec2(-0.5, 0.5) * uTexel).rgb + texture2D(tSrc, vUv + vec2(0.5, 0.5) * uTexel).rgb;
-    gl_FragColor = vec4(s * (0.25 * uStrength), 1.0);
-  }`;
-
 function mat(frag: string, uniforms: Record<string, THREE.IUniform>, defines: Record<string, string> = {}, blending: THREE.Blending = THREE.NoBlending) {
   const m = new THREE.ShaderMaterial({
     uniforms, defines, vertexShader: VERT, fragmentShader: frag,
@@ -95,7 +89,9 @@ function mat(frag: string, uniforms: Record<string, THREE.IUniform>, defines: Re
   return m;
 }
 
-export class BloomPass extends Pass {
+export class BloomPass {
+  /** off = compute() is skipped and the finish pass adds nothing */
+  enabled = true;
   strength: number;
   radius: number;
   threshold: number;
@@ -105,12 +101,9 @@ export class BloomPass extends Pass {
   private downPre: THREE.ShaderMaterial;
   private down: THREE.ShaderMaterial;
   private up: THREE.ShaderMaterial;
-  private composite: THREE.ShaderMaterial;
   private scale: number;
 
   constructor(opts: BloomOptions) {
-    super();
-    this.needsSwap = false;
     this.strength = opts.strength;
     this.radius = opts.radius;
     this.threshold = opts.threshold;
@@ -130,7 +123,6 @@ export class BloomPass extends Pass {
     this.downPre = mat(DOWN_FRAG, { ...u(), ...pre() }, { PREFILTER: '' });
     this.down = mat(DOWN_FRAG, { ...u(), ...pre() });
     this.up = mat(UP_FRAG, { ...u(), uWeight: { value: 1 } }, {}, THREE.CustomBlending);
-    this.composite = mat(COMPOSITE_FRAG, { ...u(), uStrength: { value: 0 } }, {}, THREE.CustomBlending);
   }
 
   setSize(width: number, height: number) {
@@ -143,13 +135,14 @@ export class BloomPass extends Pass {
     }
   }
 
-  render(renderer: THREE.WebGLRenderer, _writeBuffer: THREE.WebGLRenderTarget, readBuffer: THREE.WebGLRenderTarget) {
+  /** Builds the bloom mip chain from an HDR texture of `width` x `height` pixels (result: `texture`). */
+  compute(renderer: THREE.WebGLRenderer, source: THREE.Texture, width: number, height: number) {
     const oldAutoClear = renderer.autoClear;
     renderer.autoClear = false;
     const n = this.mips.length;
     // 1. down-sample chain (first level: clamp + soft threshold + Karis average)
-    let src: THREE.Texture = readBuffer.texture;
-    let sw = readBuffer.width, sh = readBuffer.height;
+    let src: THREE.Texture = source;
+    let sw = width, sh = height;
     for (let i = 0; i < n; i++) {
       const m = i === 0 ? this.downPre : this.down;
       m.uniforms.tSrc.value = src;
@@ -175,17 +168,30 @@ export class BloomPass extends Pass {
       renderer.setRenderTarget(this.mips[i]);
       this.quad.render(renderer);
     }
-    // 3. add onto the HDR image (normalised so `strength` is independent of mip count / radius)
-    let norm = 0;
-    for (let i = 0, w = 1; i < n; i++, w *= this.radius) norm += w;
-    const m0 = this.mips[0];
-    this.composite.uniforms.tSrc.value = m0.texture;
-    (this.composite.uniforms.uTexel.value as THREE.Vector2).set(1 / m0.width, 1 / m0.height);
-    this.composite.uniforms.uStrength.value = this.strength / norm;
-    this.quad.material = this.composite;
-    renderer.setRenderTarget(this.renderToScreen ? null : readBuffer);
-    this.quad.render(renderer);
     renderer.autoClear = oldAutoClear;
+  }
+
+  /** mip 0 after the up-sample chain (half / quarter resolution) */
+  get texture(): THREE.Texture {
+    return this.mips[0].texture;
+  }
+
+  /** texel size of `texture` (for the tent-filtered composite) */
+  get texel(): [number, number] {
+    return [1 / this.mips[0].width, 1 / this.mips[0].height];
+  }
+
+  /** multiplier for `texture` in the composite: `strength` normalised by the mip weights (independent of mip count / radius) */
+  get compositeScale(): number {
+    let norm = 0;
+    for (let i = 0, w = 1; i < this.mips.length; i++, w *= this.radius) norm += w;
+    return this.strength / norm;
+  }
+
+  /** GPU bytes of the mip chain */
+  get bytes(): number {
+    const bpp = this.mips[0].texture.type === THREE.UnsignedByteType ? 4 : 8;
+    return this.mips.reduce((a, rt) => a + rt.width * rt.height * bpp, 0);
   }
 
   dispose() {
@@ -193,7 +199,6 @@ export class BloomPass extends Pass {
     this.downPre.dispose();
     this.down.dispose();
     this.up.dispose();
-    this.composite.dispose();
     this.quad.dispose();
   }
 }

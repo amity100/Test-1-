@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Colliders } from './Colliders';
 import { shared } from './Shared';
-import { PostFX, createGradeUniforms } from '../fx/PostFX';
+import { PostFX, createGradeUniforms, createLookUniforms, type DoFSettings } from '../fx/PostFX';
 import { Motes, ParticleSystem, SmokeColumns } from '../fx/Particles';
 import { SkySystem } from '../world/Sky';
 import { Terrain } from '../world/Terrain';
@@ -21,13 +21,17 @@ import { SUN } from '../world/Layout';
 // texture detail on. Phones are always content 'low' (tight memory, tile GPUs) but a recent phone gets
 // the 'mobile-high' render budget: a sharp 2x image, FXAA + sharpening, bloom and 2k shadows.
 //
-// | tier           | name   | max PR | max px (w*h) | AA     | shadow | bloom (scale/mips) | god rays | CAS  | grain+CA | grass (patch) | trees | shrubs | farTrees | rocks | tex max | tris/frame | budget |
-// |----------------|--------|--------|--------------|--------|--------|--------------------|----------|------|----------|---------------|-------|--------|----------|-------|---------|------------|--------|
-// | desktop-high   | high   | 2.0    | 3.7 M        | MSAA 4 | 4096   | 1/2, 6             | 40       | 0.20 | yes      | 46000 (54 m)  | 1.00  | 4200   | 9000     | 3600  | 4096    | 8 M        | 18 ms  |
-// | desktop-medium | medium | 1.5    | 2.1 M        | MSAA 2 | 2048   | 1/2, 5             | 28       | 0.25 | yes      | 28000 (44 m)  | 0.80  | 2600   | 6000     | 2400  | 2048    | 5 M        | 24 ms  |
-// | mobile-high    | low    | 2.0    | 1.7 M        | FXAA   | 2048   | 1/2, 5             | 20       | 0.35 | no       | 15000 (36 m)  | 0.65  | 1600   | 4000     | 1600  | 2048    | 2.5 M      | 30 ms  |
-// | mobile-low     | low    | 1.5    | 0.9 M        | FXAA   | 1024   | 1/4, 4             | 12       | 0.40 | no       | 9000 (30 m)   | 0.50  | 1000   | 2600     | 1000  | 1024    | 1.5 M      | 38 ms  |
+// | tier           | name   | max PR | max px (w*h) | AA          | DoF (bokeh) | shadow | bloom (scale/mips) | god rays | CAS  | grain+CA | grass (patch) | trees | shrubs | farTrees | rocks | tex max | tris/frame | budget |
+// |----------------|--------|--------|--------------|-------------|-------------|--------|--------------------|----------|------|----------|---------------|-------|--------|----------|-------|---------|------------|--------|
+// | desktop-high   | high   | 2.0    | 3.7 M        | TAA hq      | 43 taps     | 4096   | 1/2, 6             | 40       | 0.30 | yes      | 46000 (54 m)  | 1.00  | 4200   | 9000     | 3600  | 4096    | 8 M        | 18 ms  |
+// | desktop-medium | medium | 1.5    | 2.1 M        | TAA hq      | 22 taps     | 2048   | 1/2, 5             | 28       | 0.30 | yes      | 28000 (44 m)  | 0.80  | 2600   | 6000     | 2400  | 2048    | 5 M        | 24 ms  |
+// | mobile-high    | low    | 2.0    | 1.7 M        | TAA lq      | 16 taps     | 2048   | 1/2, 5             | 20       | 0.40 | no       | 15000 (36 m)  | 0.65  | 1600   | 4000     | 1600  | 2048    | 2.5 M      | 30 ms  |
+// | mobile-low     | low    | 1.5    | 0.9 M        | FXAA        | off         | 1024   | 1/4, 4             | 12       | 0.40 | no       | 9000 (30 m)   | 0.50  | 1000   | 2600     | 1000  | 1024    | 1.5 M      | 38 ms  |
 //
+// Anti-aliasing: TAA (see fx/TAA.ts) replaces MSAA on every tier that can afford it. MSAA 4 at 3.7 MP costs
+// ~180 MB of multisample storage and a resolve per frame and does nothing for sub-pixel shading (strand hair,
+// fur shells, grass, specular glints); TAA resolves all of it (hair dither converges) for 2 history targets.
+// quality.msaa stays the value hair / fur materials key on (GroomOptions.msaa): 0 on every tier now.
 // Pixel ratio = min(devicePixelRatio, maxPixelRatio), lowered only if the backing store would exceed
 // maxPixels (e.g. an iPhone 14, 390x844 CSS px @3x: mobile-high renders 780x1688 = 1.32 MP, i.e. 2x CSS
 // pixels; mobile-low 585x1266). The pixel ratio is chosen ONCE (detection + warm-up benchmark behind the
@@ -46,8 +50,12 @@ export interface RenderBudget {
   maxPixels: number;
   /** MSAA samples of the HDR scene target (0 = off) */
   msaa: number;
-  /** post anti-aliasing used when msaa is 0 */
+  /** spatial post anti-aliasing used when neither MSAA nor TAA is on */
   aa: 'fxaa' | 'none';
+  /** temporal anti-aliasing: 'hq' (desktop), 'lq' (phones), false = off */
+  taa: false | 'hq' | 'lq';
+  /** depth-of-field bokeh kernel (0 = no DoF on this tier; 16 / 22 / 43 samples) */
+  dofSamples: number;
   shadowSize: number;
   bloom: boolean;
   /** first bloom mip resolution relative to the render resolution */
@@ -106,10 +114,10 @@ export interface Quality extends RenderBudget, ContentBudget {
 }
 
 const RENDER: Record<TierName, RenderBudget> = {
-  'desktop-high': { maxPixelRatio: 2, maxPixels: 3_700_000, msaa: 4, aa: 'none', shadowSize: 4096, bloom: true, bloomScale: 0.5, bloomMips: 6, godRaySamples: 40, sharpen: 0.2, filmFx: true, frameBudgetMs: 18 },
-  'desktop-medium': { maxPixelRatio: 1.5, maxPixels: 2_100_000, msaa: 2, aa: 'none', shadowSize: 2048, bloom: true, bloomScale: 0.5, bloomMips: 5, godRaySamples: 28, sharpen: 0.25, filmFx: true, frameBudgetMs: 24 },
-  'mobile-high': { maxPixelRatio: 2, maxPixels: 1_700_000, msaa: 0, aa: 'fxaa', shadowSize: 2048, bloom: true, bloomScale: 0.5, bloomMips: 5, godRaySamples: 20, sharpen: 0.35, filmFx: false, frameBudgetMs: 30 },
-  'mobile-low': { maxPixelRatio: 1.5, maxPixels: 900_000, msaa: 0, aa: 'fxaa', shadowSize: 1024, bloom: true, bloomScale: 0.25, bloomMips: 4, godRaySamples: 12, sharpen: 0.4, filmFx: false, frameBudgetMs: 38 },
+  'desktop-high': { maxPixelRatio: 2, maxPixels: 3_700_000, msaa: 0, aa: 'none', taa: 'hq', dofSamples: 43, shadowSize: 4096, bloom: true, bloomScale: 0.5, bloomMips: 6, godRaySamples: 40, sharpen: 0.3, filmFx: true, frameBudgetMs: 18 },
+  'desktop-medium': { maxPixelRatio: 1.5, maxPixels: 2_100_000, msaa: 0, aa: 'none', taa: 'hq', dofSamples: 22, shadowSize: 2048, bloom: true, bloomScale: 0.5, bloomMips: 5, godRaySamples: 28, sharpen: 0.3, filmFx: true, frameBudgetMs: 24 },
+  'mobile-high': { maxPixelRatio: 2, maxPixels: 1_700_000, msaa: 0, aa: 'none', taa: 'lq', dofSamples: 16, shadowSize: 2048, bloom: true, bloomScale: 0.5, bloomMips: 5, godRaySamples: 20, sharpen: 0.4, filmFx: false, frameBudgetMs: 30 },
+  'mobile-low': { maxPixelRatio: 1.5, maxPixels: 900_000, msaa: 0, aa: 'fxaa', taa: false, dofSamples: 0, shadowSize: 1024, bloom: true, bloomScale: 0.25, bloomMips: 4, godRaySamples: 12, sharpen: 0.4, filmFx: false, frameBudgetMs: 38 },
 };
 
 const CONTENT: Record<TierName, ContentBudget> = {
@@ -213,7 +221,8 @@ export function detectQuality(gl: WebGLRenderingContext | WebGL2RenderingContext
     : stored
       ? { ...makeQuality(stored.tier, mobile, gpu, stored.scale), forced: false }
       : { ...makeQuality(guessTier(mobile, gpu), mobile, gpu), forced: false };
-  // developer A/B overrides: ?pr=1.5 (max pixel ratio), ?sharpen=0..1, ?aa=fxaa|none, ?msaa=0|2|4, ?texmax=512
+  // developer A/B overrides: ?pr=1.5 (max pixel ratio), ?sharpen=0..1, ?aa=fxaa|none, ?msaa=0|2|4, ?texmax=512,
+  // ?taa=0|1|hq|lq, ?dof=0|16|22|43
   const num = (k: string) => (params.has(k) && Number.isFinite(Number(params.get(k))) ? Number(params.get(k)) : null);
   const pr = num('pr'), sh = num('sharpen'), ms = num('msaa'), tm = num('texmax');
   if (pr !== null) { q.maxPixelRatio = pr; q.maxPixels = 1e9; q.forced = true; }
@@ -222,6 +231,12 @@ export function detectQuality(gl: WebGLRenderingContext | WebGL2RenderingContext
   if (tm !== null) q.texMax = Math.max(64, tm);
   const aa = params.get('aa');
   if (aa === 'fxaa' || aa === 'none') q.aa = aa;
+  const taa = params.get('taa');
+  if (taa === '0' || taa === 'off') q.taa = false;
+  else if (taa === '1' || taa === 'hq') q.taa = 'hq';
+  else if (taa === 'lq') q.taa = 'lq';
+  const dof = num('dof');
+  if (dof !== null) q.dofSamples = Math.max(0, dof);
   return q;
 }
 
@@ -479,6 +494,48 @@ export interface MemoryReport {
   totalMB: number;
 }
 
+/**
+ * Another world rendered through the engine's ONE post chain (same targets, same tier settings): Saul's house at
+ * Gibeah in the intro, any future set. See Engine.setView. Everything but `scene` is optional.
+ */
+export interface ViewSpec {
+  scene: THREE.Scene;
+  /** camera for this view (default: engine.camera, which the CameraRig drives) */
+  camera?: THREE.PerspectiveCamera;
+  /**
+   * the view's sky: its `cubeTarget.texture` colours the aerial perspective; `update(camera, focus)` runs every
+   * frame (sky dome follows the camera, sun shadow framing) unless `update` below is given
+   */
+  sky?: { cubeTarget: { texture: THREE.Texture }; update(camera: THREE.Camera, focus: THREE.Vector3): void } | null;
+  /** renderer.toneMappingExposure for this view (a number, or read every frame, e.g. () => palace.exposure) */
+  exposure?: number | (() => number);
+  /** atmosphere (aerial perspective / god rays) of this view; unspecified values keep the world's */
+  atmosphere?: { density?: number; heightFalloff?: number; baseHeight?: number; godRays?: number; hazeTint?: THREE.ColorRepresentation };
+  /** extra post configuration applied after `atmosphere` (e.g. (p) => palace.configurePost(p)); undone on leave */
+  configurePost?: (post: PostFX) => void;
+  /**
+   * per-frame update of the view's own content, called with the game dt before rendering (e.g.
+   * (dt, cam) => palace.update(dt, cam)). Called with dt = 0 on the first frame after setView / resetTemporal
+   * so smoothed state (exposure, interior blend) snaps to the new shot instead of easing in.
+   */
+  update?: (dt: number, camera: THREE.PerspectiveCamera) => void;
+  /** shadow focus for `sky.update` when there is no `update` (default engine.focus) */
+  focus?: THREE.Vector3;
+  /** camera clip planes for this view (restored on leave), e.g. near 0.08 for close inserts */
+  near?: number;
+  far?: number;
+  /** called when the engine leaves this view (after the world state is restored), e.g. () => palace.restoreSharedSun() */
+  onLeave?: () => void;
+}
+
+/** Options of setView / restoreWorldView / cut. */
+export interface ViewSwitchOptions {
+  /** dissolve from the last frame of the outgoing view over this many seconds (0 / undefined = hard cut) */
+  crossfade?: number;
+  /** with crossfade: dip through this colour instead of a direct dissolve (e.g. 0x000000) */
+  through?: THREE.ColorRepresentation;
+}
+
 // =====================================================================================================
 // Engine
 // =====================================================================================================
@@ -516,6 +573,16 @@ export class Engine {
   readonly floatTargets: boolean;
 
   private readonly gradeUniforms = createGradeUniforms();
+  private readonly lookUniforms = createLookUniforms();
+  /** active non-world view (null = the Bethlehem world) and the world state saved when it was entered */
+  private activeView: ViewSpec | null = null;
+  private worldState: {
+    exposure: number; near: number; far: number; sunDir: THREE.Vector3; sunColor: THREE.Color;
+    atmo: { density: number; heightFalloff: number; baseHeight: number; godRays: number; hazeTint: THREE.Color; tSky: THREE.Texture };
+  } | null = null;
+  /** next rendered frame is the first of a new shot: view.update(0) snaps smoothed state */
+  private snapNext = false;
+
   private readonly restoreHooks: (() => void)[] = [];
   private readonly container: HTMLElement;
   private cssW = 0;
@@ -570,6 +637,8 @@ export class Engine {
       console.warn('[engine] WebGL context restored');
       try {
         this.sky?.capture(this.scene);
+        // render-target contents are gone: start the temporal history (and any dissolve) from scratch
+        this.post?.resetHistory();
         for (const h of this.restoreHooks) h();
       } catch (err) {
         console.error('[engine] restore failed', err);
@@ -715,13 +784,18 @@ export class Engine {
 
   private makePost() {
     const q = this.quality;
+    const prevDoF: DoFSettings | null = this.post ? { ...this.post.dofSettings } : null;
     this.post?.dispose();
     this.post = new PostFX(this.renderer, this.scene, this.camera, this.sky.cubeTarget.texture, {
       msaa: q.msaa, bloom: q.bloom, godRaySamples: q.godRaySamples, pixelRatio: q.pixelRatio,
-      aa: q.aa, sharpen: q.sharpen, filmFx: q.filmFx, bloomScale: q.bloomScale, bloomMips: q.bloomMips,
+      aa: q.aa, taa: q.taa, dofSamples: q.dofSamples, sharpen: q.sharpen, filmFx: q.filmFx,
+      bloomScale: q.bloomScale, bloomMips: q.bloomMips,
       colorType: this.floatTargets ? THREE.HalfFloatType : THREE.UnsignedByteType,
       gradeUniforms: this.gradeUniforms,
+      lookUniforms: this.lookUniforms,
     });
+    if (prevDoF) this.post.setDoF(prevDoF);
+    if (this.activeView) this.bindView(this.activeView);
     this.post.setSize(Math.floor(this.cssW * q.pixelRatio), Math.floor(this.cssH * q.pixelRatio));
     // developer A/B: ?bloomfx=strength,radius,threshold
     const bfx = new URLSearchParams(location.search).get('bloomfx');
@@ -879,13 +953,10 @@ export class Engine {
       }
       addArray(g.index?.array);
     });
-    // renderer-owned targets: 2 HDR colour targets (+ MSAA storage) with one depth texture, bloom mips
-    // (sum of a quarter-area geometric series), shadow map (RGBA8 + depth), canvas (double buffered)
+    // renderer-owned targets: the post chain (scene colour + MSAA + depth, 2 buffers, TAA history, DoF, bloom),
+    // shadow map (RGBA8 + depth), canvas (double buffered)
     const px = Math.floor(this.cssW * q.pixelRatio) * Math.floor(this.cssH * q.pixelRatio);
-    const color = this.floatTargets ? 8 : 4;
-    let rt = px * 4 * 2 + px * (2 * color + 4);
-    if (q.msaa > 0) rt += px * q.msaa * (color + 4);
-    if (q.bloom) rt += px * q.bloomScale * q.bloomScale * color * (4 / 3);
+    let rt = px * 4 * 2 + (this.post?.bytes ?? 0);
     const sh = this.sky?.sun.shadow.mapSize.x ?? q.shadowSize;
     rt += sh * sh * 8;
     const r = (x: number) => Math.round(x * MB * 10) / 10;
@@ -910,12 +981,13 @@ export class Engine {
   }
 
   /**
-   * Compile every material (also of objects that are hidden right now, e.g. the bear) for the HDR
-   * target, so no shader compiles mid-game (a multi-hundred-ms hitch on phones).
+   * Compile every material (also of objects that are hidden right now, e.g. the bear) for the HDR target, so
+   * no shader compiles mid-game (a multi-hundred-ms hitch on phones). `scene` / `camera` default to the world;
+   * pass another view's scene (e.g. palace.scene) to prepare it during loading — or use precompileView().
    */
-  async precompile() {
+  async precompile(scene: THREE.Scene = this.scene, camera: THREE.Camera = this.camera) {
     const hidden: THREE.Object3D[] = [];
-    this.scene.traverse((o) => {
+    scene.traverse((o) => {
       if (!o.visible) {
         hidden.push(o);
         o.visible = true;
@@ -923,15 +995,171 @@ export class Engine {
     });
     const prev = this.renderer.getRenderTarget();
     try {
-      this.renderer.setRenderTarget(this.post.composer.renderTarget1);
+      this.renderer.setRenderTarget(this.post.sceneTarget);
       // bounded: compileAsync polls forever if the context is lost mid-way
-      await Promise.race([this.renderer.compileAsync(this.scene, this.camera), new Promise((r) => setTimeout(r, 12000))]);
+      await Promise.race([this.renderer.compileAsync(scene, camera), new Promise((r) => setTimeout(r, 12000))]);
     } catch (e) {
       console.warn('[engine] precompile failed', e);
     } finally {
       for (const o of hidden) o.visible = false;
       this.renderer.setRenderTarget(prev);
     }
+  }
+
+  /**
+   * Prepare another view during loading so the first cut to it is never unlit, black or half-initialised:
+   * compiles its materials (hidden objects included) for this post chain, renders one full frame from each
+   * pose (uploads textures, allocates its shadow map, first-use programs incl. the depth-of-field passes) and
+   * returns to the view that was active before. Renders go to the canvas: call it behind the loading screen.
+   */
+  async precompileView(view: ViewSpec, poses: BenchView[] = []) {
+    const back = this.activeView;
+    const cam = view.camera ?? this.camera;
+    const pos = cam.position.clone(), quat = cam.quaternion.clone();
+    this.setView(view);
+    await this.precompile(view.scene, cam);
+    const dof = this.post.dofSettings.enabled;
+    for (const p of poses.length ? poses : [{ pos: pos.clone(), look: pos.clone().add(cam.getWorldDirection(new THREE.Vector3())) }]) {
+      cam.position.copy(p.pos);
+      cam.lookAt(p.look);
+      cam.updateMatrixWorld();
+      this.renderViewFrame(0, 0);
+    }
+    this.post.setDoF({ enabled: true });
+    this.renderViewFrame(0, 0);
+    this.post.warmupPasses();
+    this.post.setDoF({ enabled: dof });
+    this.gpuSync();
+    cam.position.copy(pos);
+    cam.quaternion.copy(quat);
+    cam.updateMatrixWorld();
+    if (back) this.setView(back);
+    else this.restoreWorldView();
+  }
+
+  // ------------------------------------------------------------------------------------------ views (intro)
+
+  /**
+   * Render another world (e.g. Saul's house at Gibeah) through the engine's post chain until restoreWorldView():
+   * swaps the scene / camera / sky cube of the ONE PostFX (no render targets reallocated), applies the view's
+   * exposure, atmosphere and clip planes, and resets the temporal history. The world state (exposure, atmosphere,
+   * sun uniforms, clip planes) is saved on the first switch away from the world and restored on the way back.
+   * `crossfade` dissolves from the last frame of the outgoing view (see PostFX.crossfade).
+   *
+   *   engine.setView({ scene: palace.scene, sky: palace.sky, exposure: () => palace.exposure,
+   *                    update: (dt, cam) => palace.update(dt, cam), configurePost: (p) => palace.configurePost(p),
+   *                    near: 0.08, onLeave: () => palace.restoreSharedSun() }, { crossfade: 1.2 });
+   *   ... engine.restoreWorldView({ crossfade: 1.2 });
+   */
+  setView(view: ViewSpec, opts: ViewSwitchOptions = {}) {
+    if (opts.crossfade && opts.crossfade > 0) this.post.crossfade(opts.crossfade, { through: opts.through });
+    if (this.activeView && this.activeView !== view) this.leaveView();
+    if (!this.worldState) {
+      const a = this.post.atmosphere.uniforms;
+      this.worldState = {
+        exposure: this.renderer.toneMappingExposure,
+        near: this.camera.near,
+        far: this.camera.far,
+        sunDir: shared.uSunDir.value.clone(),
+        sunColor: shared.uSunColor.value.clone(),
+        atmo: {
+          density: a.uDensity.value, heightFalloff: a.uHeightFalloff.value, baseHeight: a.uBaseHeight.value,
+          godRays: a.uGodRays.value, hazeTint: (a.uHazeTint.value as THREE.Color).clone(), tSky: a.tSky.value,
+        },
+      };
+    }
+    this.activeView = view;
+    this.bindView(view);
+  }
+
+  /** Back to the Bethlehem world (restores exposure, atmosphere, sun uniforms, clip planes); see setView. */
+  restoreWorldView(opts: ViewSwitchOptions = {}) {
+    if (opts.crossfade && opts.crossfade > 0) this.post.crossfade(opts.crossfade, { through: opts.through });
+    if (this.activeView) this.leaveView();
+    this.activeView = null;
+    this.post.setView(this.scene, this.camera, this.sky.cubeTarget.texture);
+    this.snapNext = true;
+  }
+
+  /** The active non-world view, or null while the world renders. */
+  get view(): ViewSpec | null {
+    return this.activeView;
+  }
+
+  /**
+   * A camera cut inside the current view: forget the temporal history (no ghost of the previous shot) and snap
+   * the view's smoothed state on the next frame. The intro calls this on every cut. Optional crossfade.
+   */
+  resetTemporal(opts: ViewSwitchOptions = {}) {
+    if (opts.crossfade && opts.crossfade > 0) this.post.crossfade(opts.crossfade, { through: opts.through });
+    this.post.resetHistory();
+    this.snapNext = true;
+  }
+
+  /** Dissolve from the last rendered frame into the next frames (see PostFX.crossfade). */
+  crossfade(seconds: number, opts: { through?: THREE.ColorRepresentation } = {}) {
+    return this.post.crossfade(seconds, opts);
+  }
+
+  private bindView(view: ViewSpec) {
+    const cam = view.camera ?? this.camera;
+    const sky = view.sky ?? null;
+    this.post.setView(view.scene, cam, sky ? sky.cubeTarget.texture : null);
+    const a = this.post.atmosphere.uniforms;
+    const at = view.atmosphere;
+    if (at) {
+      if (at.density !== undefined) a.uDensity.value = at.density;
+      if (at.heightFalloff !== undefined) a.uHeightFalloff.value = at.heightFalloff;
+      if (at.baseHeight !== undefined) a.uBaseHeight.value = at.baseHeight;
+      if (at.godRays !== undefined) a.uGodRays.value = at.godRays;
+      if (at.hazeTint !== undefined) (a.uHazeTint.value as THREE.Color).set(at.hazeTint);
+    }
+    view.configurePost?.(this.post);
+    if (view.near !== undefined || view.far !== undefined) {
+      if (view.near !== undefined) cam.near = view.near;
+      if (view.far !== undefined) cam.far = view.far;
+      cam.updateProjectionMatrix();
+    }
+    this.snapNext = true;
+  }
+
+  /** Undo a view's settings: world atmosphere, exposure, sun uniforms, clip planes. */
+  private leaveView() {
+    const v = this.activeView;
+    const w = this.worldState;
+    if (w) {
+      const a = this.post.atmosphere.uniforms;
+      a.uDensity.value = w.atmo.density;
+      a.uHeightFalloff.value = w.atmo.heightFalloff;
+      a.uBaseHeight.value = w.atmo.baseHeight;
+      a.uGodRays.value = w.atmo.godRays;
+      (a.uHazeTint.value as THREE.Color).copy(w.atmo.hazeTint);
+      a.tSky.value = w.atmo.tSky;
+      this.renderer.toneMappingExposure = w.exposure;
+      shared.uSunDir.value.copy(w.sunDir);
+      shared.uSunColor.value.copy(w.sunColor);
+      const cam = v?.camera ?? this.camera;
+      if (v && (v.near !== undefined || v.far !== undefined)) {
+        cam.near = w.near;
+        cam.far = w.far;
+        cam.updateProjectionMatrix();
+      }
+    }
+    v?.onLeave?.();
+  }
+
+  /** Per-frame view update + render of the active view (non-world). */
+  private renderViewFrame(dt: number, gdt: number) {
+    const v = this.activeView!;
+    const cam = v.camera ?? this.camera;
+    cam.updateMatrixWorld();
+    shared.uCamPos.value.copy(cam.position);
+    const vdt = this.snapNext ? 0 : gdt;
+    if (v.update) v.update(vdt, cam);
+    else v.sky?.update(cam, v.focus ?? this.focus);
+    if (v.exposure !== undefined) this.renderer.toneMappingExposure = typeof v.exposure === 'function' ? v.exposure() : v.exposure;
+    this.snapNext = false;
+    this.post.render(dt);
   }
 
   /**
@@ -1110,15 +1338,25 @@ export class Engine {
     this.smoke.update(gdt);
   }
 
-  /** Per-frame environment update + render. dt is real (unscaled) seconds. */
+  /**
+   * Per-frame environment update + render. dt is real (unscaled) seconds (post: fades, letterbox, grain), gdt the
+   * game dt (world / view animation). Renders the active view (setView) instead of the world when one is set.
+   */
   render(dt: number, gdt: number) {
     shared.uTime.value += gdt;
+    if (this.activeView) {
+      if (this.contextLost) return;
+      this.flushResize();
+      this.renderViewFrame(dt, gdt);
+      return;
+    }
     shared.uCamPos.value.copy(this.camera.position);
     this.particles.update(gdt);
     this.smoke.update(gdt);
     if (this.contextLost) return;
     this.flushResize();
     this.sky.update(this.camera, this.focus);
+    this.snapNext = false;
     this.post.render(dt);
   }
 }

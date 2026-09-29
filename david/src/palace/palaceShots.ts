@@ -93,10 +93,11 @@ export function buildPalaceShots(a: PalaceAnchors): PalaceShots {
     [sb.clone().addScaledVector(spearDir, 1.6), st.clone().addScaledVector(spearDir, -0.18)],
     [32, 30], 0.002, false);
   const hc = a.detailTargets.hanging;
+  // the lower border of the royal hanging: scarlet and tekhelet bands, the twisted wool fringe, the lamp raking from the left
   const textileInsert = move(2,
-    [hc.clone().add(V(-1.25, -0.15, 0.85)), hc.clone().add(V(-0.55, -0.05, 0.8))],
-    [hc.clone().add(V(-0.7, -0.2, 0)), hc.clone().add(V(-0.1, -0.15, 0))],
-    [30, 30], 0.002, false);
+    [hc.clone().add(V(-1.55, -1.1, 0.95)), hc.clone().add(V(-0.95, -1.05, 0.9))],
+    [hc.clone().add(V(-1.15, -1.22, 0)), hc.clone().add(V(-0.6, -1.18, 0))],
+    [32, 31], 0.002, false);
   const detailInserts = [lampInsert, spearInsert, textileInsert];
   // bonus: the court under the tamarisk, slow arc toward the seated king
   const ts = a.tamariskSeat.pos;

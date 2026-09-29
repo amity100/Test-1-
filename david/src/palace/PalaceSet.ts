@@ -351,7 +351,7 @@ export class PalaceSet {
   }
 
   /** aerial-perspective density used for this set (the game's default is 0.00042) */
-  static HAZE_DENSITY = 0.00033;
+  static HAZE_DENSITY = 0.0003;
 
   /** Grey mannequins at every anchor (scale check: the king is 1.98 m, others 1.72-1.8 m). */
   showPlaceholders(on: boolean) {

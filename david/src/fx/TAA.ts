@@ -1,0 +1,301 @@
+import * as THREE from 'three';
+import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
+import { FS_VERT, GLSL_SANITIZE, HDR_CLAMP } from './glsl';
+import { haltonJitter, temporal } from './Temporal';
+
+/**
+ * Temporal anti-aliasing (HDR, before bloom / depth of field / tone mapping).
+ *
+ *  - Sub-pixel projection jitter: Halton(2,3), 8 positions, applied to the camera's projection matrix only
+ *    while the scene itself is drawn (`jitter()` / `unjitter()` around the scene render). Every screen-space
+ *    pass after it (atmosphere, DoF, UI) sees the unjittered camera.
+ *  - Reprojection: the history pixel is found from the depth buffer with the previous frame's UNJITTERED
+ *    view-projection (camera motion; the nearest depth of the neighbourhood is used so foreground silhouettes
+ *    reproject with the foreground). There are no per-object motion vectors: moving characters / animals are
+ *    handled by the neighbourhood clip below.
+ *  - Neighbourhood variance clipping in YCoCg (Salvi 2016, intersected with the min/max box), clipping the history
+ *    toward the box centre (Playdead INSIDE) — limits ghosting behind moving figures without the flicker of a
+ *    hard clamp. All of it in a tone-mapped space c / (1 + max(c)) (Karis 2014), so HDR highlights neither
+ *    dominate the statistics nor flicker.
+ *  - Feedback 0.88..0.96 by luminance difference (lower where history disagrees), lowered further with screen
+ *    speed (less reprojection blur while the camera pans). Off-screen / behind-camera history -> current frame.
+ *  - History sampling: 5-tap bicubic Catmull-Rom ('hq', desktop) or bilinear ('lq', phones). 'lq' also uses a
+ *    5-tap cross neighbourhood instead of 3x3: 7 texture reads per pixel instead of 23.
+ *  - Robustness: input and output are NaN/Inf-scrubbed and clamped (a NaN in the history would otherwise live
+ *    forever). `reset()` (camera cuts, scene switches, resizes, context restore) makes the next frame start
+ *    from the current image; a camera jump of > 6 m or > 35 deg in one frame is treated as a cut automatically.
+ */
+export type TAAQuality = 'hq' | 'lq';
+
+const TAA_FRAG = /* glsl */ `
+  uniform sampler2D tCurrent;
+  uniform sampler2D tHistory;
+  uniform sampler2D tDepth;
+  uniform mat4 uReproject;
+  uniform vec2 uTexel;
+  uniform vec2 uSize;
+  uniform float uReset;
+  uniform float uFeedbackMin, uFeedbackMax, uGamma;
+  varying vec2 vUv;
+  ${GLSL_SANITIZE}
+  vec3 tm(vec3 c){ return c / (1.0 + max(max(c.r, c.g), c.b)); }
+  vec3 itm(vec3 c){ return c / max(1.0 - max(max(c.r, c.g), c.b), 1.0 / 512.0); }
+  vec3 toYCoCg(vec3 c){ return vec3(0.25 * c.r + 0.5 * c.g + 0.25 * c.b, 0.5 * c.r - 0.5 * c.b, -0.25 * c.r + 0.5 * c.g - 0.25 * c.b); }
+  vec3 fromYCoCg(vec3 c){ return vec3(c.x + c.y - c.z, c.x + c.z, c.x - c.y - c.z); }
+  vec3 fetch(vec2 uv){ return toYCoCg(tm(pfxSanitize(texture2D(tCurrent, uv).rgb, HDR_MAX))); }
+  vec3 hist(vec2 uv){ return pfxSanitize(texture2D(tHistory, uv).rgb, HDR_MAX); }
+
+  #ifdef TAA_HQ
+  // 5-tap bicubic Catmull-Rom (bilinear-optimised; Jimenez, "Filmic SMAA", 2016)
+  vec3 sampleHistory(vec2 uv){
+    vec2 sp = uv * uSize;
+    vec2 t1 = floor(sp - 0.5) + 0.5;
+    vec2 f = sp - t1;
+    vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
+    vec2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
+    vec2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));
+    vec2 w3 = f * f * (-0.5 + 0.5 * f);
+    vec2 w12 = w1 + w2;
+    vec2 t0 = (t1 - 1.0) * uTexel;
+    vec2 t3 = (t1 + 2.0) * uTexel;
+    vec2 t12 = (t1 + w2 / w12) * uTexel;
+    float a = w12.x * w0.y, b = w0.x * w12.y, c = w12.x * w12.y, d = w3.x * w12.y, e = w12.x * w3.y;
+    vec3 r = hist(vec2(t12.x, t0.y)) * a + hist(vec2(t0.x, t12.y)) * b + hist(t12) * c
+           + hist(vec2(t3.x, t12.y)) * d + hist(vec2(t12.x, t3.y)) * e;
+    return max(r / (a + b + c + d + e), vec3(0.0));
+  }
+  #else
+  vec3 sampleHistory(vec2 uv){ return hist(uv); }
+  #endif
+
+  // clip p toward the centre of the box (Playdead)
+  vec3 clipBox(vec3 bmin, vec3 bmax, vec3 p){
+    vec3 c = 0.5 * (bmax + bmin);
+    vec3 e = 0.5 * (bmax - bmin) + 1e-5;
+    vec3 v = p - c;
+    vec3 a = abs(v / e);
+    float m = max(a.x, max(a.y, a.z));
+    return m > 1.0 ? c + v / m : p;
+  }
+
+  void main(){
+    vec3 cur = fetch(vUv);
+    if (uReset > 0.5) { gl_FragColor = vec4(pfxSanitize(itm(fromYCoCg(cur)), HDR_MAX), 1.0); return; }
+    vec3 m1 = cur, m2 = cur * cur, mn = cur, mx = cur;
+    float dMin = texture2D(tDepth, vUv).x;
+    vec2 dOff = vec2(0.0);
+    #ifdef TAA_HQ
+      const float N = 9.0;
+      for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+        if (x == 0 && y == 0) continue;
+        vec2 o = vec2(float(x), float(y)) * uTexel;
+        vec3 s = fetch(vUv + o);
+        m1 += s; m2 += s * s; mn = min(mn, s); mx = max(mx, s);
+        float d = texture2D(tDepth, vUv + o).x;
+        if (d < dMin) { dMin = d; dOff = o; }
+      }
+    #else
+      const float N = 5.0;
+      for (int i = 0; i < 4; i++) {
+        vec2 o = (i == 0 ? vec2(1.0, 0.0) : i == 1 ? vec2(-1.0, 0.0) : i == 2 ? vec2(0.0, 1.0) : vec2(0.0, -1.0)) * uTexel;
+        vec3 s = fetch(vUv + o);
+        m1 += s; m2 += s * s; mn = min(mn, s); mx = max(mx, s);
+        float d = texture2D(tDepth, vUv + o).x;
+        if (d < dMin) { dMin = d; dOff = o; }
+      }
+    #endif
+    // reproject (camera motion) with the nearest depth of the neighbourhood
+    vec4 ndc = vec4((vUv + dOff) * 2.0 - 1.0, dMin * 2.0 - 1.0, 1.0);
+    vec4 pc = uReproject * ndc;
+    vec2 prevUv = (pc.w > 1e-6 ? pc.xy / pc.w : vec2(-9.0)) * 0.5 + 0.5 - dOff;
+    if (pc.w <= 1e-6 || any(lessThan(prevUv, vec2(0.0))) || any(greaterThan(prevUv, vec2(1.0)))) {
+      gl_FragColor = vec4(pfxSanitize(itm(fromYCoCg(cur)), HDR_MAX), 1.0);
+      return;
+    }
+    vec3 h = toYCoCg(tm(sampleHistory(prevUv)));
+    // variance clip (intersected with the min/max box)
+    vec3 mu = m1 / N;
+    vec3 sigma = sqrt(max(m2 / N - mu * mu, vec3(0.0)));
+    vec3 bmin = max(mn, mu - uGamma * sigma);
+    vec3 bmax = min(mx, mu + uGamma * sigma);
+    h = clipBox(bmin, bmax, h);
+    // feedback: trust the history less where it disagrees with the current frame, and while moving fast
+    float diff = abs(cur.x - h.x) / max(cur.x, max(h.x, 0.2));
+    float w = 1.0 - diff;
+    float fb = mix(uFeedbackMin, uFeedbackMax, w * w);
+    float speed = length((vUv - prevUv) * uSize);
+    fb = mix(fb, uFeedbackMin, smoothstep(2.0, 24.0, speed) * 0.6);
+    vec3 res = mix(cur, h, fb);
+    gl_FragColor = vec4(pfxSanitize(itm(fromYCoCg(res)), HDR_MAX), 1.0);
+  }`;
+
+export class TAAPass {
+  readonly quality: TAAQuality;
+  readonly uniforms: {
+    tCurrent: THREE.IUniform<THREE.Texture | null>;
+    tHistory: THREE.IUniform<THREE.Texture | null>;
+    tDepth: THREE.IUniform<THREE.Texture | null>;
+    uReproject: THREE.IUniform<THREE.Matrix4>;
+    uTexel: THREE.IUniform<THREE.Vector2>;
+    uSize: THREE.IUniform<THREE.Vector2>;
+    uReset: THREE.IUniform<number>;
+    uFeedbackMin: THREE.IUniform<number>;
+    uFeedbackMax: THREE.IUniform<number>;
+    uGamma: THREE.IUniform<number>;
+  };
+  /** frames accumulated since the last reset (0 = the next frame starts a new history) */
+  accumulated = 0;
+  /** automatic cut detection thresholds (camera jump within one frame) */
+  cutDistance = 6;
+  cutAngleDeg = 35;
+  private readonly material: THREE.ShaderMaterial;
+  private readonly quad: FullScreenQuad;
+  private readonly hist: THREE.WebGLRenderTarget[];
+  private cur = 0;
+  private valid = false;
+  private frame = 0;
+  private width = 1;
+  private height = 1;
+  private readonly seq = haltonJitter(8);
+  private readonly savedProj = new THREE.Matrix4();
+  private readonly savedProjInv = new THREE.Matrix4();
+  private readonly curVP = new THREE.Matrix4();
+  private readonly prevVP = new THREE.Matrix4();
+  private readonly prevPos = new THREE.Vector3();
+  private readonly prevDir = new THREE.Vector3();
+  private readonly tmpPos = new THREE.Vector3();
+  private readonly tmpDir = new THREE.Vector3();
+  private jittered = false;
+
+  constructor(opts: { quality: TAAQuality; type: THREE.TextureDataType }) {
+    this.quality = opts.quality;
+    this.uniforms = {
+      tCurrent: { value: null },
+      tHistory: { value: null },
+      tDepth: { value: null },
+      uReproject: { value: new THREE.Matrix4() },
+      uTexel: { value: new THREE.Vector2(1, 1) },
+      uSize: { value: new THREE.Vector2(1, 1) },
+      uReset: { value: 1 },
+      uFeedbackMin: { value: opts.quality === 'hq' ? 0.88 : 0.86 },
+      uFeedbackMax: { value: opts.quality === 'hq' ? 0.96 : 0.94 },
+      uGamma: { value: 1.15 },
+    };
+    const defines: Record<string, string> = { HDR_MAX: HDR_CLAMP.toFixed(1) };
+    if (opts.quality === 'hq') defines.TAA_HQ = '';
+    this.material = new THREE.ShaderMaterial({
+      name: 'TAA',
+      uniforms: this.uniforms,
+      defines,
+      vertexShader: FS_VERT,
+      fragmentShader: TAA_FRAG,
+      depthTest: false,
+      depthWrite: false,
+    });
+    this.material.toneMapped = false;
+    this.quad = new FullScreenQuad(this.material);
+    this.hist = [0, 1].map((i) => {
+      const rt = new THREE.WebGLRenderTarget(1, 1, {
+        type: opts.type, format: THREE.RGBAFormat, depthBuffer: false, stencilBuffer: false,
+        minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false,
+      });
+      rt.texture.name = 'TAA.history' + i;
+      return rt;
+    });
+  }
+
+  /** Size in drawing-buffer pixels (reallocates the history: the next frame starts fresh). */
+  setSize(w: number, h: number) {
+    w = Math.max(1, Math.floor(w));
+    h = Math.max(1, Math.floor(h));
+    if (w === this.width && h === this.height) return;
+    this.width = w;
+    this.height = h;
+    for (const rt of this.hist) rt.setSize(w, h);
+    this.uniforms.uTexel.value.set(1 / w, 1 / h);
+    this.uniforms.uSize.value.set(w, h);
+    this.reset();
+  }
+
+  /** Forget the history (camera cut, scene switch): the next frame shows the current image only. */
+  reset() {
+    this.valid = false;
+    this.accumulated = 0;
+  }
+
+  /** Current jitter (pixels) of the frame being rendered. */
+  get jitterPx(): readonly [number, number] {
+    return this.seq[this.frame % this.seq.length];
+  }
+
+  /**
+   * Call right before the scene render: stores the unjittered view-projection (for the reprojection), detects
+   * camera cuts and offsets the camera's projection by this frame's sub-pixel jitter.
+   */
+  jitter(camera: THREE.PerspectiveCamera) {
+    camera.updateMatrixWorld();
+    this.curVP.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    const pos = this.tmpPos.setFromMatrixPosition(camera.matrixWorld);
+    const dir = this.tmpDir.set(0, 0, -1).transformDirection(camera.matrixWorld);
+    if (this.valid) {
+      const jump = pos.distanceTo(this.prevPos) > this.cutDistance;
+      const turn = dir.dot(this.prevDir) < Math.cos(THREE.MathUtils.degToRad(this.cutAngleDeg));
+      if (jump || turn) this.reset();
+    }
+    this.prevPos.copy(pos);
+    this.prevDir.copy(dir);
+    const [jx, jy] = this.jitterPx;
+    this.savedProj.copy(camera.projectionMatrix);
+    this.savedProjInv.copy(camera.projectionMatrixInverse);
+    const e = camera.projectionMatrix.elements;
+    e[8] += (jx * 2) / this.width;
+    e[9] += (jy * 2) / this.height;
+    camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+    this.jittered = true;
+    temporal.uJitter.value.set(jx, jy);
+  }
+
+  /** Call right after the scene render: restores the unjittered projection. */
+  unjitter(camera: THREE.PerspectiveCamera) {
+    if (!this.jittered) return;
+    camera.projectionMatrix.copy(this.savedProj);
+    camera.projectionMatrixInverse.copy(this.savedProjInv);
+    this.jittered = false;
+  }
+
+  /** Resolve this frame into the history; returns the anti-aliased HDR image (valid until the next render). */
+  render(renderer: THREE.WebGLRenderer, current: THREE.Texture, depth: THREE.Texture): THREE.Texture {
+    const u = this.uniforms;
+    const prev = this.hist[this.cur], next = this.hist[1 - this.cur];
+    u.tCurrent.value = current;
+    u.tDepth.value = depth;
+    u.tHistory.value = prev.texture;
+    u.uReproject.value.copy(this.curVP).invert().premultiply(this.prevVP);
+    u.uReset.value = this.valid ? 0 : 1;
+    renderer.setRenderTarget(next);
+    this.quad.render(renderer);
+    this.cur = 1 - this.cur;
+    this.valid = true;
+    this.accumulated++;
+    this.prevVP.copy(this.curVP);
+    this.frame = (this.frame + 1) % 64;
+    return next.texture;
+  }
+
+  /** frame index of the jitter / dither sequence (0..63) */
+  get frameIndex() {
+    return this.frame;
+  }
+
+  /** GPU bytes of the history targets */
+  get bytes() {
+    const bpp = this.hist[0].texture.type === THREE.UnsignedByteType ? 4 : 8;
+    return this.width * this.height * bpp * 2;
+  }
+
+  dispose() {
+    for (const rt of this.hist) rt.dispose();
+    this.material.dispose();
+    this.quad.dispose();
+  }
+}

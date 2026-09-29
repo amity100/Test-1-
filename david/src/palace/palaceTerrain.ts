@@ -254,8 +254,8 @@ vec4 samp2(sampler2D t, vec2 p){ return mix(texture2D(t, p), texture2D(t, p * 0.
   float moabZ = smoothstep(6100.0, 6900.0, xz.x);
   float fields = gentle * smoothstep(0.4, 0.56, mB) * (1.0 - wild) * (1.0 - moabZ);
   float terraced = (1.0 - gentle) * (1.0 - steep * 0.75) * smoothstep(0.28, 0.48, mC + 0.12) * (1.0 - wild * 0.9) * (1.0 - moabZ);
-  float groves = clamp(terraced * smoothstep(0.22, 0.45, mD) + gentle * (1.0 - fields) * 0.55 * smoothstep(0.4, 0.6, mD), 0.0, 1.0);
-  vec3 goldG = vec3(0.37, 0.29, 0.16), greyG = vec3(0.21, 0.205, 0.15), limeC = vec3(0.55, 0.525, 0.47);
+  float groves = clamp(terraced * smoothstep(0.16, 0.4, mD) + gentle * (1.0 - fields) * 0.6 * smoothstep(0.36, 0.58, mD), 0.0, 1.0);
+  vec3 goldG = vec3(0.37, 0.29, 0.16), greyG = vec3(0.21, 0.205, 0.15), limeC = vec3(0.5, 0.48, 0.43);
   vec3 macro = mix(goldG, greyG, smoothstep(0.3, 0.75, mC * 0.55 + mD * 0.45));
   macro *= mix(0.86, 1.08, m2);
   // grain parcels: stubble, ploughed terra rossa, fallow, with grey balks between them
@@ -273,7 +273,7 @@ vec4 samp2(sampler2D t, vec2 p){ return mix(texture2D(t, p), texture2D(t, p * 0.
   float fS = fwidth(strataT);
   float strata = smoothstep(0.58, 0.72, fract(strataT)) * (1.0 - smoothstep(0.25, 0.6, fS));
   float bare = clamp(steep * 0.7 + strata * smoothstep(0.03, 0.09, slope) * 0.55 + smoothstep(0.74, 0.9, mB + mD * 0.2) * 0.3, 0.0, 1.0) * (1.0 - fields);
-  macro = mix(macro, limeC * mix(0.84, 1.06, mD), bare * 0.55);
+  macro = mix(macro, limeC * mix(0.84, 1.06, mD), bare * 0.42);
   macro = mix(macro, vec3(0.57, 0.46, 0.35) * mix(0.9, 1.06, mB), wild * 0.85);
   macro = mix(macro, vec3(0.5, 0.42, 0.33) * mix(0.85, 1.05, mB), moabZ * 0.9);
   // terrace walls along the contours: white stone risers, the shaded foot of the tread below
@@ -287,7 +287,7 @@ vec4 samp2(sampler2D t, vec2 p){ return mix(texture2D(t, p), texture2D(t, p * 0.
   vec3 rubble = vec3(0.64, 0.61, 0.55) * mix(0.88, 1.08, tH(floor(xz * 0.7)));
   macro = mix(macro, rubble, riser * tVis * terrW * 0.92);
   macro *= 1.0 - foot * tVis * terrW * 0.32;
-  macro = mix(macro, mix(macro, vec3(0.6, 0.57, 0.51), 0.3), terrW * (1.0 - tVis));
+  macro = mix(macro, mix(macro, vec3(0.6, 0.57, 0.51), 0.15), terrW * (1.0 - tVis));
   // olive trees: rows on the treads, dark silver-green crowns with long shadows away from the sun
   vec2 sd2 = -normalize(uSunP.xz + vec2(1e-4)) * 0.9;
   vec2 op = xz * 0.085;
@@ -299,7 +299,7 @@ vec4 samp2(sampler2D t, vec2 p){ return mix(texture2D(t, p), texture2D(t, p * 0.
   macro *= 1.0 - olS * oFade * 0.5;
   macro = mix(macro, mix(vec3(0.075, 0.085, 0.055), vec3(0.15, 0.16, 0.11), dNoise(xz * 0.4)), ol * oFade * 0.9);
   // groves too far to resolve single trees: dark mottled patches
-  macro = mix(macro, vec3(0.085, 0.095, 0.062) * mix(0.8, 1.2, dNoise(xz * 0.05)), (1.0 - oAA) * groves * oFade * 0.72);
+  macro = mix(macro, vec3(0.085, 0.095, 0.062) * mix(0.8, 1.2, dNoise(xz * 0.05)), (1.0 - oAA) * groves * oFade * 0.8);
   // garrigue: sage, thorny burnet, young oak and terebinth dotting everything that is not a field
   float cover = smoothstep(0.2, 0.6, dNoise(xz * 0.02 + 4.0)) * (1.0 - fields * 0.85) * (1.0 - wild * 0.7) * (1.0 - moabZ);
   vec2 bp = xz * 0.28 + 11.0;
@@ -307,17 +307,21 @@ vec4 samp2(sampler2D t, vec2 p){ return mix(texture2D(t, p), texture2D(t, p * 0.
   float bush = (dCellDots(bp, 0.26) * bAA + dCellDots(xz * 0.11 - 5.0, 0.22) * 0.8) * cover;
   macro = mix(macro, mix(vec3(0.12, 0.125, 0.085), vec3(0.2, 0.2, 0.14), dNoise(xz * 0.9)), clamp(bush, 0.0, 1.0) * 0.7 * smoothstep(90.0, 200.0, dist));
   macro = mix(macro, vec3(0.13, 0.135, 0.09), (1.0 - bAA) * cover * 0.6 * smoothstep(0.3, 0.65, dNoise(xz * 0.07 + 2.0)));
+  // unresolved self-shadowing: terrace risers, bushes and boulders too small for the far mesh throw long shadows in
+  // the low sun, so sun-facing flanks read as rough stony hillside instead of bright bare dunes
+  float sunLit = clamp(dot(Nw, normalize(uSunP)), 0.0, 1.0);
+  macro *= 1.0 - 0.34 * smoothstep(0.3, 0.9, sunLit) * (1.0 - fields * 0.6) * (1.0 - moabZ * 0.5);
   c = mix(c, macro, fdd * farZone);
   // near terrace lines along the contours (textured dry-stone risers every ~2.4 m, antialiased)
   float fy = max(fwidth(vTW.y), 1e-4);
   float tph = fract(vTW.y / 2.4 + tN(xz * 0.02) * 0.6 + tN(xz * 0.055 + 3.0) * 0.35);
   // terraces are not continuous: collapsed stretches, gaps, uneven rubble
-  float tseg = smoothstep(0.22, 0.4, tN(xz * 0.09 + floor(vTW.y / 2.4) * 3.7));
+  float tseg = smoothstep(0.26, 0.46, tN(xz * 0.09 + floor(vTW.y / 2.4) * 3.7)) * mix(0.7, 1.0, tN(xz * 0.4 + 1.7));
   float lineW = 0.13;
   float tline = 1.0 - smoothstep(lineW, lineW + fy / 2.4, tph);
   tline = mix(tline, lineW, smoothstep(0.08, 0.5, fy / 2.4));
   float slopeBand = smoothstep(0.004, 0.013, slope) * (1.0 - smoothstep(0.3, 0.5, slope)) * smoothstep(${(PLATEAU_R + 3).toFixed(1)}, ${(PLATEAU_R + 12).toFixed(1)}, rS) * (1.0 - valley * 0.6) * (1.0 - fdd);
-  c = mix(c, wa.rgb * vec3(1.14, 1.1, 1.03) * mix(0.72, 1.08, tN(xz * 1.3)), tline * slopeBand * 0.9 * tseg);
+  c = mix(c, wa.rgb * vec3(1.03, 1.0, 0.95) * mix(0.72, 1.08, tN(xz * 1.3)), tline * slopeBand * 0.85 * tseg);
   c = mix(c, c * 0.55, (1.0 - smoothstep(0.0, lineW * 1.5 + fy / 2.4, fract(tph + lineW + 0.02))) * slopeBand * 0.5 * tseg * (1.0 - smoothstep(0.08, 0.5, fy / 2.4)));
   c = mix(c, c * 0.72, (1.0 - tline) * slopeBand * smoothstep(0.0, 0.3, tph) * 0.2);
   float fd = fdd;
@@ -328,7 +332,7 @@ vec4 samp2(sampler2D t, vec2 p){ return mix(texture2D(t, p), texture2D(t, p * 0.
     float eB = 5.0;
     #define FRH(q) (tF((q) * 0.021) * 26.0 + tF((q) * 0.07 + 3.0) * 7.0 + tF((q) * 0.19 + 7.0) * 2.2 + (1.0 - abs(tN((q) * 0.012 + 1.3) * 2.0 - 1.0)) * -9.0)
     float h0 = FRH(xz), hx = FRH(xz + vec2(eB, 0.0)), hz = FRH(xz + vec2(0.0, eB));
-    farBump = vec3(-(hx - h0) / eB, 0.0, -(hz - h0) / eB) * fdd * farZone * 0.5;
+    farBump = vec3(-(hx - h0) / eB, 0.0, -(hz - h0) / eB) * fdd * farZone * 0.36;
   }
   diffuseColor.rgb *= c;
   // normals: tangent-space maps projected on the dominant plane
@@ -350,6 +354,6 @@ roughnessFactor = terRough;`)
       .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
 reflectedLight.indirectDiffuse *= terAO;`);
   };
-  mat.customProgramCacheKey = () => 'palace-terrain-v9';
+  mat.customProgramCacheKey = () => 'palace-terrain-v11';
   return mat;
 }

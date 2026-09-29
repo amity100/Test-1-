@@ -424,6 +424,7 @@ export function buildInteriorProps(mats: PalaceMaterials, tier: PalaceTier, worl
     const fb = new GeoBuilder();
     const r = mulberry32(seed);
     const along = b.clone().sub(a).normalize();
+    const flipFringe = along.clone().cross(dir).dot(normal) < 0;
     for (let i = 0; i < n; i++) {
       const u = (i + 0.5) / n;
       const p0 = a.clone().lerp(b, u);
@@ -441,8 +442,15 @@ export function buildInteriorProps(mats: PalaceMaterials, tier: PalaceTier, worl
       }
       for (let k = 0; k < segs; k++) {
         const i0 = ids[k * 2], i1 = ids[k * 2 + 1], i2 = ids[k * 2 + 2], i3 = ids[k * 2 + 3];
-        fb.tri(i0, i1, i3);
-        fb.tri(i0, i3, i2);
+        // wind the front face toward `normal` (DoubleSide flips the normal on back faces: a wrong winding lights
+        // the fringe as if it faced the wall)
+        if (flipFringe) {
+          fb.tri(i0, i3, i1);
+          fb.tri(i0, i2, i3);
+        } else {
+          fb.tri(i0, i1, i3);
+          fb.tri(i0, i3, i2);
+        }
       }
     }
     const m = mesh(fb.build({ ao: false }), mats.wool, false, true, 'palace:fringe');
