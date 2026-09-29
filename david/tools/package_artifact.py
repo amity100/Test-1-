@@ -29,7 +29,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 TITLE = "David the Shepherd"
-BASE_STYLE = ":root{color-scheme:dark}html,body{height:100%;margin:0;background:#0b0806;overflow:hidden}"
+BASE_STYLE = ":root{color-scheme:dark}"  # the page's own <style> (index.html) sets html/body sizing
 TYPES = {
     ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".json": "application/json",
     ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".avif": "image/avif",
@@ -63,6 +63,7 @@ def main() -> int:
 
     fonts: list[str] = []
     styles: list[str] = []
+    inlined_css: set[str] = set()  # dist-relative paths of stylesheets inlined into the page
     scripts: list[str] = []
     preloads: list[str] = []
     for tag in re.findall(r"<link\b[^>]*>", src, flags=re.I):
@@ -84,6 +85,7 @@ def main() -> int:
 
             css = re.sub(r"url\(\s*(['\"]?)([^'\")]+)\1\s*\)", fix, css)
             styles.append(f"<style>{css}</style>")
+            inlined_css.add(css_path.relative_to(dist).as_posix())
         elif rel == "modulepreload":
             preloads.append(f'<link rel="modulepreload" href="{html.escape(href)}" />')
     for tag in re.findall(r"<script\b[^>]*>\s*</script>", src, flags=re.I | re.S):
@@ -119,10 +121,13 @@ def main() -> int:
     files: dict[str, dict[str, str]] = {}
     manifest = {"page": {"path": "index.html", "bytes": len(page.encode())}, "files": [], "errors": []}
     total = len(page.encode())
+    js_text = "".join(f.read_text(encoding="utf-8", errors="ignore") for f in (dist / "assets").rglob("*.js"))
     for f in sorted((dist / "assets").rglob("*")):
         if not f.is_file():
             continue
         rel = f.relative_to(dist).as_posix()
+        if rel in inlined_css and f.name not in js_text:
+            continue  # inlined into the page and not loaded by any chunk: don't publish it twice
         dst = out / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(f, dst)

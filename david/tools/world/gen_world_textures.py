@@ -97,7 +97,7 @@ def limestone(n=SIZE):
     (o1,), _ = worley(n, np.random.default_rng(25).random((2600, 2)), k=1)
     orange = (1 - smooth(0.0, 0.0045, o1)) * smooth(0.6, 0.72, spectral(n, 2.0, 26, fmin=3)) * (1 - pit)
     albedo = lerp(albedo, col('#c2843a'), orange * 0.85)
-    return save_pair('limestone', np.clip(albedo, 0, 1), h, 3.2 * s * 60 / 1024 * 17, ao)
+    return save_pair("limestone", np.clip(albedo, 0, 1), h, 38.0 * s, ao)
 
 
 # ============================================================================= main
