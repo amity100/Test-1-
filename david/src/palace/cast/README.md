@@ -58,6 +58,13 @@ window rim and a warm floor bounce. `castInterior.ts` blends the set's interior 
 set's `uSkyVis`, warm floor bounce) into the cast's skin, garments and props for the hall beats only
 (`castInterior.value` 0 outdoors / 1 inside, switched by `setBeat`), as the set's own `interiorize` does for walls.
 
+## Fixes layered on the shared characters (cast-local)
+
+* Saul's linen kuttonet (body + skirt) is pulled 3 mm (8 mm on low) inside the me'il in the vertex shader — the
+  wardrobe's layering otherwise lets it poke through in the seated poses (large white patches on phones).
+* The me'il / sash get a polygon offset toward the camera (thin layered cloth over the kuttonet).
+* First blinks are desynchronised per actor (HumanRig starts every face 2 s before its first blink).
+
 ## Actors (`CastActor`)
 
 HumanModel + `createGroom` + wardrobe outfit + props, a base pose (`castPoses.ts`) and procedural idle life: breathing,

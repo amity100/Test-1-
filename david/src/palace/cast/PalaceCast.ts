@@ -165,6 +165,26 @@ export class PalaceCast {
         mat.polygonOffsetUnits = -24;
       }
     });
+    // the linen kuttonet under the me'il pokes through the coarser layered meshes (large white patches on the phone
+    // tier in the seated poses): pull it in a few mm (it is never seen except at the sleeves, the neck and through the
+    // side slits, where a few mm do not show). NB the garment's objectNormal points INTO the body (measured: moving
+    // along -objectNormal grew the patches), hence the + sign
+    const shrink = tier === 'low' ? 0.008 : 0.003;
+    saul.human.root.traverse((o) => {
+      const m = o as THREE.Mesh;
+      // body and skirt only: the sleeves are seen below the me'il's cap sleeves, and the arm skin under them is not hidden
+      if (!m.isMesh || !/kuttonet(Upper|Skirt)/.test(m.name)) return;
+      for (const mat of Array.isArray(m.material) ? m.material : [m.material]) {
+        const prev = mat.onBeforeCompile;
+        const prevKey = mat.customProgramCacheKey();
+        mat.onBeforeCompile = (sh, r) => {
+          prev.call(mat, sh, r);
+          sh.vertexShader = sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+transformed += objectNormal * ${shrink.toFixed(4)};`);
+        };
+        mat.customProgramCacheKey = () => `${prevKey}|castShrink${shrink}`;
+      }
+    });
     saul.human.rig.lipSeal = 0.55;
     saul.headFollow = 0.55;
     if (saul.groom) saul.groom.shadowFraction = tier === 'high' ? 0.3 : 0.25;

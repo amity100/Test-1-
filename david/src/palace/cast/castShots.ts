@@ -102,7 +102,7 @@ export function buildCastShots(p: CastProbe): CastShots {
   // from his front-left, close on the torn corner he holds up before him, his bowed face behind it; a slow pull
   // back and up that brings the face into the frame (the memory and the man)
   const robeCorner = move(5.5,
-    [rc.clone().addScaledVector(h.fwd, 0.58).addScaledVector(h.left, 0.3).add(V(0, 0.02, 0)), rc.clone().addScaledVector(h.fwd, 1.15).addScaledVector(h.left, 0.5).add(V(0, 0.16, 0))],
+    [rc.clone().addScaledVector(h.fwd, 0.75).addScaledVector(h.left, 0.38).add(V(0, 0.03, 0)), rc.clone().addScaledVector(h.fwd, 1.15).addScaledVector(h.left, 0.5).add(V(0, 0.16, 0))],
     [rc.clone(), rc.clone().lerp(h.saulEyes, 0.5)],
     [32, 30], 0.0015);
   return { court, portrait, warriorsLine, warriorsSaul, hall, robeCorner };
