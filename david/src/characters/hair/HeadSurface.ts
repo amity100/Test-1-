@@ -294,9 +294,9 @@ export class HeadSurface {
     this.jawRestQuat = human.rig.restWorldQuaternion('jaw');
     // SDF over head + neck + shoulders (long hair falls onto the shoulders)
     // reach: how far below the eyes hair can fall (short hair ~0.2 m, shoulder-length ~0.4 m)
-    const wide = reach > 0.3 ? 0.28 : 0.2;
-    const min = new THREE.Vector3(this.E.x - wide, this.E.y - reach, this.E.z - (reach > 0.3 ? 0.32 : 0.22));
-    const max = new THREE.Vector3(this.E.x + wide, this.headTop.y + 0.06, this.E.z + 0.15);
+    const wide = reach > 0.3 ? 0.28 : 0.21;
+    const min = new THREE.Vector3(this.E.x - wide, this.E.y - reach, this.E.z - (reach > 0.3 ? 0.34 : 0.28));
+    const max = new THREE.Vector3(this.E.x + wide, this.headTop.y + 0.08, this.E.z + 0.15);
     const use = new Uint8Array(nv);
     for (let v = 0; v < nv; v++) {
       const x = this.pos[v * 3], y = this.pos[v * 3 + 1], z = this.pos[v * 3 + 2];

@@ -117,18 +117,32 @@ float gIris = 0.0;`,
   p *= rt / max( r, 1e-5 );
   vec2 uv = p * 0.5 + 0.5;
   vec4 texel = vEyeLocal.z > 0.0 ? texture2D( uEyeTex, uv ) : vec4( 0.8, 0.7, 0.66, 1.0 );
+  if ( r < ir ) {
+    // iris detail on top of the baked texture: radial stroma fibres (crypts between them), a lighter golden
+    // collarette around the pupil and a dark limbal ring — what makes an iris read as alive at portrait distance
+    float t = r / ir;
+    float ang = atan( p.y, p.x );
+    float fib = sin( ang * 71.0 + sin( ang * 13.0 ) * 1.7 + t * 5.0 ) * 0.5 + 0.5;
+    fib = fib * 0.6 + ( sin( ang * 157.0 + sin( ang * 7.0 + t * 9.0 ) * 2.3 ) * 0.5 + 0.5 ) * 0.4;
+    float body = smoothstep( 0.3, 0.45, t ) * smoothstep( 0.97, 0.8, t );
+    texel.rgb *= mix( 1.0, 0.72 + 0.5 * fib, body );
+    float coll = exp( -pow( ( t - 0.4 ) / 0.07, 2.0 ) );
+    texel.rgb = mix( texel.rgb, texel.rgb * vec3( 1.35, 1.2, 0.85 ), coll * 0.55 );
+    texel.rgb *= mix( 1.0, 0.32, smoothstep( 0.8, 0.99, t ) );
+  }
   diffuseColor.rgb *= texel.rgb;
   // occlusion from lids & lashes, in socket space relative to the (blink-scaled) opening ellipse
   vec3 sp = ( uSocket * vec4( vEyeWorld, 1.0 ) ).xyz;
   vec2 e = ( sp.xy - uOpening.xy ) / ( uOpening.zw * vec2( 1.0, max( uLidOpen, 0.05 ) ) );
   float d = length( e );
-  // ambient: darker toward the lid margins and much darker in the canthi (the eye sits in a socket)
-  gEyeOcc = mix( 0.22, 1.0, smoothstep( 0.98, 0.22, d ) ) * mix( 0.5, 1.0, smoothstep( 0.92, 0.3, abs( e.x ) ) );
-  // direct light: the upper lid, its thickness and the lashes cast a soft band of shadow below the margin
-  gEyeShadow = mix( 1.0, 0.1, smoothstep( -0.15, 0.7, e.y ) ) * mix( 0.45, 1.0, smoothstep( 0.98, 0.5, d ) );
+  // ambient: a little darker toward the lid margins and in the canthi (the eye sits in a socket) — a clear,
+  // bright sclera is what makes eyes read as young and beautiful; heavy occlusion made them look sunken
+  gEyeOcc = mix( 0.58, 1.0, smoothstep( 1.0, 0.35, d ) ) * mix( 0.78, 1.0, smoothstep( 0.97, 0.45, abs( e.x ) ) );
+  // direct light: the upper lid and the lashes shade only the top quarter of the opening
+  gEyeShadow = mix( 1.0, 0.3, smoothstep( 0.42, 0.88, e.y ) ) * mix( 0.72, 1.0, smoothstep( 1.0, 0.6, d ) );
   gIris = smoothstep( uIrisR * 1.03, uIrisR * 0.97, length( vEyeLocal.xy ) ) * step( 0.0, vEyeLocal.z );
-  // living sclera is never paper white: slightly warm, a touch pinker toward the canthi
-  diffuseColor.rgb *= mix( mix( vec3( 0.86, 0.8, 0.75 ), vec3( 0.84, 0.66, 0.6 ), smoothstep( 0.35, 0.95, abs( e.x ) ) ), vec3( 1.0 ), gIris );
+  // living sclera: near white with a faint warm cast, a touch pinker only in the canthi
+  diffuseColor.rgb *= mix( mix( vec3( 0.97, 0.95, 0.92 ), vec3( 0.95, 0.85, 0.82 ), smoothstep( 0.6, 0.98, abs( e.x ) ) ), vec3( 1.0 ), gIris );
 }`,
         )
         .replace(

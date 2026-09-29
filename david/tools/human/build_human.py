@@ -9,12 +9,15 @@ For each preset (tools/human/presets/<name>.json) it
   2. scales the body to the requested height (metres, feet on y = 0 in the rest pose),
   3. builds the MakeHuman default skeleton (163 bones -> pruned to ~130) from the morphed joint helpers,
   4. computes a rest pose with arms hanging straight down and straight vertical legs,
-  5. extracts the body, bakes skin weights, and writes two geometry tiers:
-       base  : MakeHuman hm08 body (13 380 verts, quads -> tris)
-       sub1  : one Catmull-Clark level (limit-projected), weights/uvs subdivided (~53k verts)
-  6. adds eyes (+ cornea), tear lines, eyelashes, eyebrows (strand ribbons), teeth,
+  5. extracts the body and its 8 strongest bone weights per vertex; the runtime builds two geometry tiers from the
+     control mesh: base (hm08 quads -> 14.5k render verts) and sub1 (one Catmull-Clark level, ~56k verts),
+  6. fits eyes to the lid margins, grows eyelash / eyebrow strand ribbons, tear lines and teeth,
   7. converts the MakeHuman face pose units (BVH) into bone rotations for expressions,
-  8. writes src/assets/human/<preset>/{rig.json, base.bin, sub1.bin} and bake inputs for bake_skin.py.
+  8. bakes variation morphs (body + joint deltas; the runtime moves brows / lashes / tear lines / teeth with the skin),
+  9. writes src/assets/human/<preset>/{rig.json, human.binz} (one gzip binary; layout in rig.json "bin").
+
+Preset extras: "face_macro" (the head gets its own macro build, blended at the neck) and "skull_lock" (pin the
+cranium / scalp to a reference so a groomed scalp survives face / body reshaping; see skull_lock.py).
 
 Coordinates: metres, +Y up, the character faces +Z, its left is +X.
 """
@@ -89,6 +92,42 @@ def signed_angle(a, b, axis):
 
 
 # ------------------------------------------------------------------------------------------ morph
+_HEAD_MASK = None
+
+
+def head_mask(nv: int) -> np.ndarray:
+    """0..1 per base-mesh vertex: the head (every bone under 'head' incl. jaw, eyes, lids), half the upper neck,
+    smoothed so a face-only macro blends into the body without a seam at the neck."""
+    global _HEAD_MASK
+    if _HEAD_MASK is not None and len(_HEAD_MASK) == nv:
+        return _HEAD_MASK
+    bones, _, _ = load_skeleton()
+    parent = {b.name: b.parent for b in bones}
+
+    def under_head(n):
+        while n:
+            if n == "head":
+                return True
+            n = parent.get(n)
+        return False
+    m = np.zeros(nv)
+    for bname, lst in load_weights().items():
+        k = 1.0 if under_head(bname) else 0.55 if bname == "neck03" else 0.2 if bname == "neck02" else 0.0
+        if k == 0:
+            continue
+        a = np.asarray(lst, float)
+        ok = a[:, 0] < nv
+        np.add.at(m, a[ok, 0].astype(int), a[ok, 1] * k)
+    m = np.clip(m, 0, 1)
+    # helper geometry (eyeballs, teeth, tongue, joint cubes) has no weights: take the nearest body vertex's value
+    obj = load_obj(fetch("data/3dobjs/base.obj"))
+    if nv > NBODY:
+        _, nn = cKDTree(obj.v[:NBODY]).query(obj.v[NBODY:nv])
+        m[NBODY:] = m[nn]
+    _HEAD_MASK = m
+    return _HEAD_MASK
+
+
 def morph_preset(base_v, preset, overrides=None):
     macro = dict(preset["macro"])
     mods = dict(preset.get("modifiers", {}))
@@ -96,7 +135,21 @@ def morph_preset(base_v, preset, overrides=None):
         macro.update(overrides.get("macro", {}))
         mods.update(overrides.get("modifiers", {}))
     tl = macro_targets(macro) + regional_targets(mods)
-    return apply_targets(base_v, tl)
+    v = apply_targets(base_v, tl)
+    fm = preset.get("face_macro")
+    if fm:
+        # the head gets its own macro build (e.g. a youthful, fuller face on a max-muscle body: MakeHuman's
+        # max-muscle / low-weight targets hollow the cheeks and age the face)
+        macro_f = dict(macro)
+        macro_f.update(fm)
+        vf = apply_targets(base_v, macro_targets(macro_f) + regional_targets(mods))
+        m = head_mask(len(base_v))
+        d = vf - v
+        # only the head's own shape change: drop the rigid shift of the head that comes with the other build
+        core = m > 0.97
+        d = d - d[core].mean(0)
+        v = v + d * m[:, None]
+    return v
 
 
 class Human:
@@ -129,6 +182,12 @@ class Human:
             self.origin[1] += dy / self.scale
             self._build_skeleton()
             self._build_rest_pose()
+            # keep a groomed cranium where it was while the face / body are reshaped (tools/human/skull_lock.py)
+            if preset.get("skull_lock"):
+                from skull_lock import apply as skull_apply
+                w, d = skull_apply(self, preset["skull_lock"])
+                sel = w > 0.5
+                print(f"  skull lock: {int(sel.sum())} verts pinned (they had moved up to {d[sel].max() * 1000:.1f} mm)")
         print(f"  human built in {time.time() - t0:.1f}s  scale={self.scale:.5f}")
 
     # ---------------------------------------------------------------- skeleton

@@ -310,7 +310,7 @@ export class SkySystem {
         // art direction: the low sky is warmed toward the dusty gold of a Judean summer evening
         // (and the high sky loses a little of its violet: dust / smoke haze of the dry season)
         const w = 1 - THREE.MathUtils.smoothstep(el, -0.05, 0.5);
-        const t0 = 1.03 + 0.3 * w, t1 = 1.0 + 0.01 * w, t2 = 0.92 - 0.26 * w;
+        const t0 = 1.05 + 0.38 * w, t1 = 1.0 + 0.03 * w, t2 = 0.9 - 0.3 * w;
         data[k] = t0 * SUN_E * (BR[0] * sr0 * (pr + ms / (4 * Math.PI)) + MIE_S * sm0 * (pm + ms * 0.5 / (4 * Math.PI)));
         data[k + 1] = t1 * SUN_E * (BR[1] * sr1 * (pr + ms / (4 * Math.PI)) + MIE_S * sm1 * (pm + ms * 0.5 / (4 * Math.PI)));
         data[k + 2] = t2 * SUN_E * (BR[2] * sr2 * (pr + ms / (4 * Math.PI)) + MIE_S * sm2 * (pm + ms * 0.5 / (4 * Math.PI)));
@@ -337,7 +337,8 @@ export class SkySystem {
     const tr = [0, 0, 0];
     transmittanceTo(RE + OBS_H, Math.max(dir.y, 0.01), tr);
     const mx = Math.max(tr[0], tr[1], tr[2], 1e-4);
-    const c = new THREE.Color().setRGB(1.0, Math.pow(tr[1] / mx, 0.9) * 0.97, Math.pow(tr[2] / mx, 0.9) * 0.9);
+    // amber key light, as in the reference's low evening-gold sun
+    const c = new THREE.Color().setRGB(1.0, Math.pow(tr[1] / mx, 0.9) * 0.93, Math.pow(tr[2] / mx, 0.9) * 0.8);
     shared.uSunColor.value.copy(c);
     this.sun.color.copy(c);
     // low sun: strong, warm key light (flat ground only catches sin(elevation) of it)
@@ -347,7 +348,7 @@ export class SkySystem {
     const hor = this.sampleLut(new THREE.Vector3(-dir.x, 0.25, -dir.z).normalize());
     const skyAmb = new THREE.Color().setRGB((zen[0] + hor[0]) * 0.5, (zen[1] + hor[1]) * 0.5, (zen[2] + hor[2]) * 0.5);
     const lum = Math.max(1e-3, skyAmb.r * 0.2126 + skyAmb.g * 0.7152 + skyAmb.b * 0.0722);
-    this.hemi.color.setRGB(skyAmb.r / lum, skyAmb.g / lum, skyAmb.b / lum).lerp(new THREE.Color(1, 0.9, 0.78), 0.5);
+    this.hemi.color.setRGB(skyAmb.r / lum, skyAmb.g / lum, skyAmb.b / lum).lerp(new THREE.Color(1, 0.88, 0.74), 0.55);
     this.hemi.groundColor.setRGB(0.62, 0.45, 0.28);
     this.hemi.intensity = 0.28 + 0.3 * THREE.MathUtils.smoothstep(elevationDeg, -4, 20);
     (this.skyUniforms.uGround.value as THREE.Color).setRGB(0.3 * c.r, 0.21 * c.g, 0.13 * c.b).multiplyScalar(1.2);

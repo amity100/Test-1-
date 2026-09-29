@@ -1,8 +1,18 @@
 # Realistic humans (`src/characters/human`)
 
 Skinned, photo-real-oriented humans built from **MakeHuman 1.1 (CC0)** data by `tools/human/`.
-Presets: `david` (≈20 y, 1.75 m, lean athletic, "admoni" ruddy tan, freckles), `saul` (≈48 y, 1.96 m, broad,
-strong brow, beard shadow), `man` (ordinary Israelite adult, 1.70 m, **seedable variations**).
+Presets: `david` (a na'ar of ≈19-20, 1.75 m, athletic and muscular — he killed a lion and a bear —, youthful full
+face, "admoni" ruddy tan, auburn brows, freckles), `saul` (≈48 y, 1.96 m, heavy powerful frame, thick neck, broad
+shoulders, strong brow, forehead lines / crow's feet, grey temples, beard shadow), `man` (ordinary Israelite adult,
+1.70 m, **seedable variations**).
+
+Preset options of note (`tools/human/presets/*.json`):
+* `face_macro` — the head gets its own macro build (David: a younger, average-muscle face on a max-muscle body; MakeHuman's
+  max-muscle / low-weight targets otherwise hollow and age the face). Blended at the neck, rigid head shift removed.
+* `skull_lock` — pins the cranium / scalp / ears / nape to a stored reference (`tools/human/ref/<preset>_skull.npz`,
+  written by `python3 tools/human/skull_lock.py save <preset>` **before** reshaping; `... check <preset>` reports the
+  scalp displacement). David's groomed scalp stays within ~1 mm (head-bone relative) of the 12:13 build.
+* `skin.hairline` — optional override of the painted hairline table (see "Hairline" below), `skin.grey_temples`.
 
 ```
 tools/human/presets/<name>.json   modifiers (MakeHuman targets), skin/brow/eye style
@@ -103,11 +113,37 @@ human.setPupil(0.2);                 // 0 bright sun .. 1 dark
   transferring up to 8 weights from the k nearest body vertices that face the garment point and inverse-skinning it
   into the bind pose. Returns a `SkinnedMesh` (added to `human.root`, bound to `human.skeleton`, material(s) patched
   with the body's 8-influence LBS/DQS skinning, shadow depth material included), so cloth follows the skin exactly.
+  Authored normals are kept (carried into the bind pose with the same blended matrix); geometry without normals gets
+  `computeVertexNormals()`.
+* **One human per material.** The DQS patch binds a material to one human's skinning data. `skinAttachment` (and
+  `human.dqs.patchMaterial` / its alias `human.dqs.materialFor(material, eight)`) therefore return a **per-human clone**
+  when the material already skins another human (the clone keeps the onBeforeCompile hook and program key the
+  material had before its first patch). Always use the returned material / `mesh.material`; set custom hooks and
+  `customProgramCacheKey` **before** the first patch (the key is captured at patch time).
 * `human.hideSkin((p, bone) => boolean)` — drop body triangles under clothing (rest-pose position test).
 * Hair: parent to `human.bones.head` (or `sockets.headTop`); the painted scalp/hairline and brows are in the albedo.
 
+### Hairline (painted scalp)
+
+`bake_skin.py` paints the scalp where `y - eyeCentre.y > HL(phi)` (phi = angle around the crown landmark, 0 = front,
+180 = back; `HAIRLINE_PHI = [0, 30, 45, 62, 72, 80, 100, 120, 140, 180]`,
+`HAIRLINE_HL = [0.072, 0.07, 0.064, 0.052, 0.036, -0.04, -0.028, -0.05, -0.08, -0.09]`): a natural, uncut hairline —
+full temples, sideburns down to the ear lobe, hair right up to the ear and down the nape (no modern fade; the corners
+of the head are not rounded, Lev 19:27). The ear itself is excluded by a ray-cast thickness test (thin flap lateral
+to the skull). `src/characters/hair/HeadSurface.ts` uses the same table format.
+
 ## Performance notes
 
-* No per-frame allocations in `HumanRig.update`; 132 bones; skinning on the GPU (bone texture).
+* No per-frame allocations in `HumanRig.update`; 132 bones; skinning on the GPU (bone texture + dual-quaternion
+  texture). Per vertex the 8-influence LBS/DQS blend reads 8 bone matrices (4 texels each) and 8 dual quaternions
+  (3 texels each) — ~56 texel fetches, twice with shadows; fine on desktop, the main vertex cost on phones.
 * One draw call each for body, brows, lashes, tear lines, teeth, 2×eyeball, 2×cornea.
-* Hero load ≈ 0.6–1.2 s on desktop (subdivision + tangents on the CPU); phone tier ≈ 0.3–0.4 s.
+* **Crowds**: per preset (`HumanData`) and geometry level the topology work — Catmull-Clark subdivision (its
+  position stencil is kept), uv split, 8 weights, tangents, uv density, brow/lash/tear/teeth geometry — runs once;
+  every instance gets its own `BufferGeometry` sharing those attributes (David / Saul instances share positions too).
+  A seeded `man` only re-applies the cached stencil to its morphed control mesh and recomputes normals. Textures are
+  loaded once per preset and shared; `human.dispose()` frees per-instance resources only.
+* Variation morphs (`man`) also move the brows, lashes, tear lines, teeth and the lid-opening ellipse with the
+  nearest skin (3 nearest control vertices), so strands never float above or sink into a morphed face.
+* Load time measured in headless software WebGL (swiftshader): hero (sub1) ≈ 0.6–2 s for the first instance,
+  later instances of the same preset much less; phone numbers are not measured on a real device yet.

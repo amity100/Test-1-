@@ -228,21 +228,62 @@ export class DualQuatSkinning {
   /**
    * Patch a material used on a mesh skinned to this skeleton (keeps its own onBeforeCompile).
    * `eight`: the mesh geometry has skinIndex2/skinWeight2 (8 influences; the body and skinAttachment garments).
+   *
+   * The patch binds the material to THIS human's skinning data (its dual-quaternion texture).  A material can
+   * therefore only skin one human: patching the same material again for this human is a no-op, and patching a
+   * material that another human already owns returns a per-human clone instead (use the returned material!).
+   * `materialFor()` is the same call under a clearer name.
    */
   patchMaterial<M extends THREE.Material>(material: M, eight = false): M {
+    const owner = patchOwner.get(material);
+    if (owner === this) return material;
+    if (owner) return this.cloneFor(material, eight);
     const prev = material.onBeforeCompile;
-    const prevKey = material.customProgramCacheKey.bind(material);
+    // the program key is taken now (before the hook is replaced): otherwise every patched material would report
+    // the same key (the source of the patch closure) and share one program across different custom hooks
+    const baseKey = material.customProgramCacheKey();
+    prePatch.set(material, { hook: prev, key: baseKey });
     const u = this.uniforms;
     material.onBeforeCompile = (shader, renderer) => {
       prev.call(material, shader, renderer);
       applyDQSChunks(shader, u, eight);
     };
     const tag = eight ? '|dqs8' : '|dqs';
-    material.customProgramCacheKey = () => prevKey() + tag;
+    material.customProgramCacheKey = () => baseKey + tag;
     material.needsUpdate = true;
+    patchOwner.set(material, this);
     return material;
   }
+
+  /** The material to use on a mesh skinned to this human: `material` itself, or a per-human clone (see patchMaterial). */
+  materialFor<M extends THREE.Material>(material: M, eight = false): M {
+    return this.patchMaterial(material, eight);
+  }
+
+  private clones = new WeakMap<THREE.Material, THREE.Material>();
+  private cloneFor<M extends THREE.Material>(material: M, eight: boolean): M {
+    const hit = this.clones.get(material);
+    if (hit) return hit as M;
+    const c = material.clone() as M;
+    const pre = prePatch.get(material);
+    if (pre) {
+      c.onBeforeCompile = pre.hook;
+      c.customProgramCacheKey = () => pre.key;
+    }
+    this.patchMaterial(c, eight);
+    this.clones.set(material, c);
+    return c;
+  }
+
+  dispose() {
+    this.texture.dispose();
+  }
 }
+
+/** material -> the DualQuatSkinning whose data it was patched with (one human per material) */
+const patchOwner = new WeakMap<THREE.Material, DualQuatSkinning>();
+/** material -> its onBeforeCompile hook and program key before the DQS patch (for per-human clones) */
+const prePatch = new WeakMap<THREE.Material, { hook: THREE.Material['onBeforeCompile']; key: string }>();
 
 /** Default per-bone DQS factors for the MakeHuman default skeleton. */
 export function defaultDQSFactor(name: string): number {

@@ -56,6 +56,7 @@ export class HairSim {
     this.tex = new THREE.DataTexture(this.data, K, Math.max(1, G), THREE.RGBAFormat, THREE.FloatType);
     this.tex.minFilter = this.tex.magFilter = THREE.NearestFilter;
     this.tex.generateMipmaps = false;
+    this.tex.userData.keepSize = true; // data texture: never resampled by engine.enforceTextureBudget
     this.tex.needsUpdate = true;
     // gravity as groomed: world -Y expressed in head space at rest
     this.gGroom.set(0, -9.81, 0).applyMatrix4(new THREE.Matrix4().extractRotation(fromRest));

@@ -251,76 +251,90 @@ UMBER = col('#4b3423')
 
 
 def textile_cell(kind, S=512):
+    """Iron Age wool weaves (cf. the dyed wool textiles from Timna, c. 1000 BCE, and Kuntillet Ajrud): undyed cream,
+    brown and grey wool with woven bands of kermes scarlet, murex purple and blue; small woven borders (dog-tooth,
+    checks); dyes uneven (abrash), colours muted by age and use. Fringes are modelled as geometry."""
     y, x = np.mgrid[0:S, 0:S] / S
+    slub = band(S, S, 30, 120, 40 + kind, aniso=(0.1, 1.0)) * 0.6 + band(S, S, 30, 120, 50 + kind, aniso=(1.0, 0.1)) * 0.4
+    sc, pu, bl = lerp(SCARLET, CREAM, 0.12), lerp(PURPLE, CREAM, 0.1), lerp(BLUE, CREAM, 0.12)
+    brown, grey, dark = col('#8a6a4c'), col('#a39a8a'), col('#4a3a2c')
     img = np.zeros((S, S, 3))
     img[:] = CREAM
-    # slub: uneven hand-spun yarn -> streaks along the weft (horizontal) and warp
-    slub = band(S, S, 30, 120, 40 + kind, aniso=(0.1, 1.0)) * 0.6 + band(S, S, 30, 120, 50 + kind, aniso=(1.0, 0.1)) * 0.4
+
+    def bands(img, spec, coord):
+        for (a0, a1, c) in spec:
+            m = ((coord >= a0) & (coord < a1))[..., None]
+            img = np.where(m, c, img)
+        return img
+
+    def dogtooth(img, yc, h, c, per, coord_x, coord_y, up=True):
+        # a row of small woven triangles (tapestry "running dog-tooth") of height h at yc
+        t = ((coord_x / per) % 1)
+        tri = np.abs(t - 0.5) * 2  # 0 at the tip
+        rel = (coord_y - yc) / h if up else (yc - coord_y) / h
+        m = (rel >= 0) & (rel < 1) & (tri < 1 - rel)
+        return np.where(m[..., None], c, img)
+
+    def checks(img, y0, y1, c, per, coord_x, coord_y):
+        m = (coord_y >= y0) & (coord_y < y1) & (((np.floor(coord_x / per) + np.floor((coord_y - y0) / (y1 - y0) * 2)) % 2) == 0)
+        return np.where(m[..., None], c, img)
+
     if kind == 0:
-        # hanging: broad scarlet field with purple and blue bands, lozenge (diamond) border rows, cream ground
-        img[:] = CREAM
-        def bandy(y0, y1, c):
-            m = ((y >= y0) & (y < y1))[..., None]
-            return np.where(m, c, img)
-        img = bandy(0.18, 0.82, SCARLET)
-        img = bandy(0.22, 0.25, CREAM)
-        img = bandy(0.75, 0.78, CREAM)
-        img = bandy(0.30, 0.36, PURPLE)
-        img = bandy(0.64, 0.70, PURPLE)
-        img = bandy(0.47, 0.53, BLUE)
-        # lozenge row in the central band
-        per = 1 / 8
-        dx = np.abs(((x / per) % 1) - 0.5) * 2
-        dy = np.abs((y - 0.5) / 0.1)
-        loz = (dx * 0.5 + dy * 0.5 < 0.5) & (np.abs(y - 0.5) < 0.1)
-        inner = (dx * 0.5 + dy * 0.5 < 0.28) & (np.abs(y - 0.5) < 0.1)
-        img = np.where(loz[..., None], CREAM, img)
-        img = np.where(inner[..., None], BLUE, img)
-        # zigzags in the purple bands
-        for yc in (0.33, 0.67):
-            zz = np.abs(((x * 16) % 1) - 0.5) * 2 * 0.03
-            m = np.abs(y - (yc - 0.015 + zz)) < 0.006
-            img = np.where(m[..., None], SCARLET2, img)
-        # thin cream ticks in the scarlet
-        tick = (np.abs(((x * 32) % 1) - 0.5) < 0.06) & ((np.abs(y - 0.2) < 0.012) | (np.abs(y - 0.8) < 0.012))
-        img = np.where(tick[..., None], CREAM, img)
-        # dark edge selvedges
-        img = np.where(((y < 0.03) | (y > 0.97))[..., None], MADDER, img)
+        # royal hanging: cream ground; mirrored band groups (blue / scarlet / blue), a central purple band edged with
+        # cream dog-tooth and a scarlet-and-cream check row; brown heading and selvedge
+        yy = y
+        img = bands(img, [(0.0, 0.025, brown), (0.975, 1.0, brown)], yy)
+        for c0 in (0.07, 0.93):
+            s_ = 1 if c0 < 0.5 else -1
+            def rng_(a, b_):
+                return (c0 + s_ * a, c0 + s_ * b_) if s_ > 0 else (c0 + s_ * b_, c0 + s_ * a)
+            for (a_, b_, cc) in [(0.0, 0.012, bl), (0.022, 0.1, sc), (0.11, 0.122, bl), (0.15, 0.158, sc)]:
+                lo, hi = rng_(a_, b_)
+                img = bands(img, [(lo, hi, cc)], yy)
+        img = bands(img, [(0.38, 0.62, pu)], yy)
+        img = dogtooth(img, 0.38, 0.035, CREAM, 1 / 24, x, yy, up=True)
+        img = dogtooth(img, 0.62, 0.035, CREAM, 1 / 24, x, yy, up=False)
+        img = checks(img, 0.47, 0.53, lerp(sc, CREAM, 0.15), 1 / 32, x, yy)
+        img = bands(img, [(0.455, 0.462, CREAM), (0.538, 0.545, CREAM)], yy)
+        # faint warp stripes in the cream field (two yarn lots)
+        warp = (((x * 64) % 1) < 0.5)[..., None]
+        img = np.where((np.abs(img - CREAM).sum(-1, keepdims=True) < 1e-6) & warp, CREAM2 * 1.02, img)
     elif kind == 1:
-        # rug / kilim: stepped lozenges and stripes (madder, blue, cream, umber)
-        img[:] = MADDER
-        stripe = (y * 20).astype(int)
-        img = np.where(((stripe % 5) == 0)[..., None], UMBER, img)
-        img = np.where(((y > 0.08) & (y < 0.12) | (y > 0.88) & (y < 0.92))[..., None], CREAM, img)
-        per = 1 / 4
-        cx = ((x / per) % 1) - 0.5
-        cy = (y - 0.5) / 0.32
-        step = np.floor(np.abs(cx) * 10) / 10 + np.floor(np.abs(cy) * 10) / 10
-        m = (np.abs(cy) < 1.0)
-        img = np.where((m & (step < 0.55))[..., None], CREAM, img)
-        img = np.where((m & (step < 0.42))[..., None], BLUE, img)
-        img = np.where((m & (step < 0.26))[..., None], SCARLET2, img)
-        img = np.where((m & (step < 0.12))[..., None], CREAM, img)
+        # floor rug: warp-faced stripes of undyed wool (cream, brown, grey, dark goat hair) with a few narrow scarlet
+        # and blue stripes; a dark border with checks along the long edges
+        stripes = [(0.0, 0.06, dark), (0.06, 0.1, CREAM), (0.1, 0.16, brown), (0.16, 0.18, sc), (0.18, 0.3, CREAM),
+                   (0.3, 0.34, grey), (0.34, 0.36, bl), (0.36, 0.64, CREAM2), (0.64, 0.66, bl), (0.66, 0.7, grey),
+                   (0.7, 0.82, CREAM), (0.82, 0.84, sc), (0.84, 0.9, brown), (0.9, 0.94, CREAM), (0.94, 1.0, dark)]
+        img = bands(img, stripes, y)
+        # central field: small scattered brown lozenge dots on the cream
+        cx_ = ((x * 8) % 1) - 0.5
+        cy_ = ((y * 8) % 1) - 0.5
+        loz = (np.abs(cx_) + np.abs(cy_) < 0.12) & (y > 0.4) & (y < 0.6)
+        img = np.where(loz[..., None], lerp(brown, CREAM2, 0.3), img)
+        # border along the long edges (u = 0 / 1): dark band with cream checks
+        edge = np.minimum(x, 1 - x)
+        img = np.where((edge < 0.05)[..., None], dark, img)
+        img = checks(img, 0.0, 1.0, lerp(CREAM, dark, 0.35), 1 / 48, y, np.where(edge < 0.03, edge / 0.03 * 0.5 + 0.25, 9))
     elif kind == 2:
-        # cushion: argaman purple with scarlet and cream stripes
-        img[:] = PURPLE
-        s = (y * 12) % 1
-        img = np.where(((s > 0.1) & (s < 0.18))[..., None], SCARLET, img)
-        img = np.where(((s > 0.2) & (s < 0.23))[..., None], CREAM, img)
-        img = np.where(((s > 0.6) & (s < 0.64))[..., None], BLUE * 1.2, img)
+        # cushion: argaman purple with narrow scarlet and cream bands
+        img[:] = pu
+        s2 = (y * 6) % 1
+        img = np.where(((s2 > 0.1) & (s2 < 0.16))[..., None], sc, img)
+        img = np.where(((s2 > 0.18) & (s2 < 0.2))[..., None], CREAM2, img)
+        img = np.where(((s2 > 0.6) & (s2 < 0.63))[..., None], bl, img)
     else:
-        # plain cream wool mantle with a woven blue (tekhelet) and scarlet stripe near the edge
+        # plain cream wool mantle with a woven blue and scarlet stripe near the edge
         img[:] = CREAM
-        img = np.where(((y > 0.86) & (y < 0.9))[..., None], BLUE, img)
-        img = np.where(((y > 0.91) & (y < 0.925))[..., None], SCARLET, img)
-        img = np.where(((y > 0.08) & (y < 0.1))[..., None], UMBER, img)
-    # dye unevenness (natural dyes are never flat), hand-spun slubs, a little wear / fading
-    dye = band(S, S, 3, 12, 60 + kind)[..., None]
-    img = img * (0.86 + 0.24 * dye) * (0.9 + 0.2 * slub[..., None])
+        img = np.where(((y > 0.86) & (y < 0.89))[..., None], bl, img)
+        img = np.where(((y > 0.9) & (y < 0.912))[..., None], sc, img)
+        img = np.where(((y > 0.08) & (y < 0.095))[..., None], brown, img)
+    # abrash (dye lots vary along the weft), hand-spun slubs, a little wear / fading
+    abrash = band(S, S, 2, 8, 60 + kind, aniso=(0.05, 1.0))[..., None]
+    dye = band(S, S, 3, 12, 65 + kind)[..., None]
+    img = img * (0.88 + 0.16 * abrash) * (0.93 + 0.12 * dye) * (0.9 + 0.2 * slub[..., None])
     fade = np.clip(fnoise(S, S, 2.5, 70 + kind, 2) - 0.55, 0, 1)[..., None]
-    img = lerp(img, CREAM2 * 0.95, fade * 0.35)
-    # soften hard pattern edges a touch (threads interlock)
-    img = ndimage.gaussian_filter(img, [0.7, 0.7, 0], mode='wrap')
+    img = lerp(img, CREAM2 * 0.95, fade * 0.3)
+    img = ndimage.gaussian_filter(img, [0.8, 0.8, 0], mode='wrap')
     return img
 
 

@@ -75,13 +75,16 @@ const g = await createGroom(guard, { kind: 'man', seed: 7, beard: 'full', headba
    toward the groomed shape (fading to the tip), gravity applied as the difference to the groomed gravity (still upright
    head = exact groom), wind drag with gusts, SDF collision via the head's current transform. Output: K × G float texture.
 
-## Costs (measured in headless Chromium; desktop GPUs / JS engines are faster)
+## Costs (headless Chromium + SwiftShader on a shared 4-core box; real GPUs / idle CPUs are faster)
 
-| | strands (David / Saul / man) | ctrl pts → segs | triangles (all strands) | draw calls | GPU memory | build (David, desktop CPU) |
+| tier | strands: David / Saul (hair + beard) / man (hair + beard) | ctrl pts -> rendered segs | triangles at full LOD | draw calls | GPU memory | groom build (JS, main thread) |
 |---|---|---|---|---|---|---|
-| high | 24 000 / 34 000 (hair + beard) / ~21-25 000 | 16 → 30 (Saul 20 → 36, man 14 → 24) | 1.44 M / 2.45 M / ~1.1 M | 2 (+1 shadow) | 7.6 / 13 / 7 MB | 0.9-1.2 s |
-| medium | 11 000 / 14 000 / ~10 000 | 12 → 20 | 0.44 M / 0.67 M / ~0.3 M | 2 (+1) | ~2.5 MB | ~0.8 s |
-| low (phones) | 3 800 / 5 000 / ~3 500 | 9 → 12 | 91 k / ~140 k / ~70 k | 2 (+1) | 0.8 MB | ~0.7 s |
+| high | 24 000 / 20 000 + 12 000 / 15 000 + 12-14 000 | 16 -> 30 (Saul 18 -> 32, man 14 -> 24) | 1.44 M / 2.05 M / ~1.4 M | 2 (+1 shadow) | 7.6 / ~12 / ~8 MB | 0.9-1.6 s / 1.8-2.2 s / 0.9-1.4 s |
+| medium | 11 000 / 10 000 + 5 000 / 7 000 + 5 000 | 12 -> 20 (Saul 14 -> 22, man 11 -> 16) | 440 k / 660 k / ~400 k | 2 (+1) | 2.8 MB / ~4 MB | ~0.85 s |
+| low (phones) | 3 800 / 3 500 + 1 600 / 2 500 + 1 500 | 9 -> 12 (Saul 10 -> 14, man 8 -> 10) | 91 k / 143 k / ~82 k | 2 (+1) | 0.8 MB / ~1.3 MB | ~0.7 s |
 
-The distance LOD cuts these with the projected head size (a gameplay camera 4-8 m away draws 12-25 %), and the shadow pass
-draws 45 % of what the camera draws. Per-frame CPU: guide sim (≤ 56 × 20 points) + one tiny texture upload.
+Cap: 900 (low) - 3 400 (high) triangles for David, ~14-15 k for bearded heads on high. The distance LOD cuts the strand
+triangles with the projected head size (a gameplay camera 4-8 m away draws 12-25 %), and the shadow pass draws 45 % of what
+the camera draws. Per frame on the CPU: the guide sim (<= 56 guides x <= 18 points, 1-2 substeps) + a K x G float texture
+upload (a few KB); no allocations. Textures are CPU-side `DataTexture`s (`userData.keepSize = true`), so a WebGL context loss
+needs no `engine.onRestore` hook (three.js re-uploads them).

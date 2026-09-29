@@ -241,7 +241,7 @@ export class Terrain {
         d *= 1 - smoothstep(0.55, 0.85, slope);
         d *= smoothstep(-0.45, 0.3, N3.noise(x / 16, z / 16) * 0.65 + N1.noise(x / 4.5, z / 4.5) * 0.35);
         const dv = Math.hypot(x - LAYOUT.bethlehem.x, z - LAYOUT.bethlehem.z);
-        d *= smoothstep(LAYOUT.bethlehem.r - 10, LAYOUT.bethlehem.r + 30, dv) * 0.8 + 0.2;
+        d *= smoothstep(LAYOUT.bethlehem.r - 10, LAYOUT.bethlehem.r + 30, dv) * 0.92 + 0.08; // trampled lanes in town
         this.grassDensity[k] = clamp(d, 0, 1);
       }
     }
@@ -474,12 +474,18 @@ export class Terrain {
       idx[p++] = k0; idx[p++] = v0; idx[p++] = k1;
       idx[p++] = k1; idx[p++] = v0; idx[p++] = v1;
     }
+    // bare ground where the 3D grass is thin (same density field the grass tufts use), so the shader shows
+    // terra rossa, chips and stones between the tufts instead of a continuous straw mat
+    const bare = new Float32Array(n * n + border.length);
+    for (let k = 0; k < n * n; k++) bare[k] = 1 - this.grassDensity[k];
+    for (let s = 0; s < border.length; s++) bare[n * n + s] = bare[border[s]];
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
     g.setAttribute('aMask', new THREE.BufferAttribute(mask, 4));
     g.setAttribute('aSun', new THREE.BufferAttribute(sun, 1));
     g.setAttribute('aAO', new THREE.BufferAttribute(ao, 1));
+    g.setAttribute('aBare', new THREE.BufferAttribute(bare, 1));
     g.setIndex(new THREE.BufferAttribute(idx, 1));
     g.computeBoundingSphere();
     return g;
@@ -584,6 +590,7 @@ export class Terrain {
     const i0 = Math.max(0, Math.floor((x - r + NEAR_HALF) / sp)), i1 = Math.min(n - 1, Math.ceil((x + r + NEAR_HALF) / sp));
     const j0 = Math.max(0, Math.floor((z - r + NEAR_HALF) / sp)), j1 = Math.min(n - 1, Math.ceil((z + r + NEAR_HALF) / sp));
     const data = this.heightTexture.image.data as unknown as Float32Array;
+    const bare = this.nearGeo?.getAttribute('aBare') as THREE.BufferAttribute | undefined;
     for (let j = j0; j <= j1; j++) {
       for (let i = i0; i <= i1; i++) {
         const d = Math.hypot(-NEAR_HALF + i * sp - x, -NEAR_HALF + j * sp - z);
@@ -592,9 +599,12 @@ export class Terrain {
         const f = 1 - amount * (1 - smoothstep(r * 0.6, r, d));
         this.grassDensity[k] *= f;
         data[k * 2 + 1] = this.grassDensity[k];
+        if (bare) bare.array[k] = 1 - this.grassDensity[k];
       }
     }
     this.heightTexture.needsUpdate = true;
+    // bare, stony soil around rocks and under trees (terrain shader, see aBare)
+    if (bare) bare.needsUpdate = true;
   }
 
   // ------------------------------------------------------------------------------------------ baked shadows
@@ -703,9 +713,11 @@ function createTerrainMaterial(tex: TextureSet, shadowTex: THREE.Texture, tier: 
 attribute vec4 aMask;
 attribute float aSun;
 attribute float aAO;
+attribute float aBare;
 varying vec4 vMask;
 varying float vSun;
 varying float vAO;
+varying float vBare;
 varying vec3 vWPos;
 varying vec3 vWNormal;`,
       )
@@ -713,6 +725,7 @@ varying vec3 vWNormal;`,
         '#include <project_vertex>',
         `#include <project_vertex>
 vMask = aMask;
+vBare = aBare;
 vSun = aSun;
 vAO = aAO;
 vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
@@ -726,6 +739,7 @@ uniform sampler2D tGrass, tGrassN, tSoil, tSoilN, tRock, tRockN, tWall, tWallN, 
 varying vec4 vMask;
 varying float vSun;
 varying float vAO;
+varying float vBare;
 varying vec3 vWPos;
 varying vec3 vWNormal;
 ${GLSL_NOISE}
@@ -823,8 +837,17 @@ vec3 hblend3(vec3 w, vec3 h){
 #endif
   // terra rossa: small patches, pockets beside the rock, grike fill, a little on terrace treads
   float wS = smoothstep(0.62, 0.9, m2 * 0.7 + macro * 0.5) * 0.45 + rocky * (1.0 - rocky) * 0.5 + terr * 0.06 + grike * 0.35;
-  wS = clamp(wS * (1.0 - wR), 0.0, 1.0);
+  // Bethlehem: trampled earth lanes and courtyards with bedrock breaking through (no grass mat in town)
+  float town = (1.0 - smoothstep(${(LAYOUT.bethlehem.r - 16).toFixed(1)}, ${(LAYOUT.bethlehem.r + 6).toFixed(1)}, length(p - vec2(${LAYOUT.bethlehem.x.toFixed(1)}, ${LAYOUT.bethlehem.z.toFixed(1)})))) * (1.0 - isFar);
+  wR = max(wR, town * smoothstep(0.58, 0.82, m3 * 0.7 + dNoise(p * 0.37) * 0.3) * 0.75);
+  wS = clamp(wS * (1.0 - wR) + town * 0.85 * (1.0 - wR), 0.0, 1.0);
   float wG = max(0.0, 1.0 - wR - wS);
+  // thin grass (where the 3D tufts are sparse): bare terra rossa and limestone chips show between the tufts
+  // ragged, small-scale bare patches (tufts survive where the grass texture is tall)
+  float thin = smoothstep(0.35, 0.9, vBare + (m3 - 0.5) * 0.35) * (1.0 - isFar);
+  thin *= smoothstep(0.25, 0.65, dNoise(p * 0.7 + 1.3) * 0.55 + (1.0 - gA.a) * 0.45 + thin * 0.25);
+  float toSoil = wG * thin * 0.7;
+  wS += toSoil; wG -= toSoil;
   vec3 wts = hblend3(vec3(wG, wS, wR), vec3(gA.a, sA.a, rA.a));
 
   // ---- colours -----------------------------------------------------------------------------------
@@ -834,8 +857,14 @@ vec3 hblend3(vec3 w, vec3 h){
   float gl = dot(grass, vec3(0.3, 0.55, 0.15));
   grass = mix(grass, vec3(gl) * vec3(0.9, 0.96, 0.8), smoothstep(0.55, 0.85, m2) * 0.55);
   grass = mix(grass, vec3(gl) * vec3(1.12, 1.07, 0.95), smoothstep(0.62, 0.9, m3) * 0.3);
+  // grazed, trampled stubble (darker, browner) and wind-flattened pale straw break the hills into patches
+  float mp = dNoise(p * 0.085 + 2.3) * 0.65 + dNoise(p * 0.31 - 4.1) * 0.35;
+  grass *= mix(1.0, 0.78, smoothstep(0.52, 0.78, mp));
+  grass = mix(grass, grass * vec3(0.92, 0.86, 0.8), smoothstep(0.35, 0.1, mp) * 0.6);
   vec3 soil = sA.rgb * mix(0.9, 1.04, m3);
-  soil = mix(vec3(dot(soil, vec3(0.3, 0.55, 0.15))), soil, 0.72) * vec3(1.0, 0.97, 0.94); // dry, dusty
+  soil = mix(vec3(dot(soil, vec3(0.3, 0.55, 0.15))), soil, 0.62) * vec3(1.08, 1.0, 0.94);   // dry terra rossa...
+  soil = mix(soil, vec3(0.17, 0.11, 0.07) * mix(0.9, 1.1, m2), 0.3 * (1.0 - rocky));            // ...browned (linear colour)
+  soil = mix(soil, vec3(0.3, 0.22, 0.15) * mix(0.92, 1.06, m2), town * 0.55);                    // beaten, dusty earth (linear)
   // weathered bedrock is greyer and darker than fresh boulders (lichen, dust)
   vec3 rock = rA.rgb * vec3(0.8, 0.79, 0.76) * mix(0.8, 1.0, macro);
   vec3 col = grass * wts.x + soil * wts.y + rock * wts.z;
@@ -869,6 +898,20 @@ vec3 hblend3(vec3 w, vec3 h){
   col = mix(col, mix(rock, vec3(0.7, 0.62, 0.52), 0.4), wadi * 0.8);
 #endif
 
+  // limestone chips and small stones lying on the bare soil (not on the pasture turf or the path)
+#ifndef TERRAIN_LOW
+  if (wts.y > 0.05 && dist < 140.0) {
+    vec2 cUV = tRot(p, 1.3) / 0.55 + 0.21;
+    vec4 cA = texture2D(tGravel, cUV);
+    vec4 cN = texture2D(tGravelN, cUV);
+    float chip = smoothstep(0.68, 0.84, cA.a + (dNoise(p * 0.55) - 0.5) * 0.5) * smoothstep(0.3, 0.8, wts.y) * (1.0 - path) * (1.0 - smoothstep(100.0, 140.0, dist));
+    col = mix(col, mix(cA.rgb * vec3(0.9, 0.86, 0.8), soil * 1.6, 0.45), chip * 0.55);
+    nrm = normalize(mix(nrm, normalize(N + vec3(tN(cN).x, 0.0, tN(cN).y) * 1.3), chip));
+    ao = mix(ao, cN.a, chip);
+    rough = mix(rough, 0.85, chip);
+  }
+#endif
+
   // dry-stone terrace risers (near mesh; the 3D walls stand in front of them)
   float wWall = smoothstep(0.25, 0.5, terr) * smoothstep(0.32, 0.5, slope) * (1.0 - isFar);
 #ifndef TERRAIN_LOW
@@ -894,10 +937,36 @@ vec3 hblend3(vec3 w, vec3 h){
   float band = smoothstep(0.8 - fwT, 0.84 + fwT, fb) * (1.0 - smoothstep(0.95 - fwT, 1.0, fb));
   float shade = smoothstep(0.0, 0.12 + fwT, fb) * (1.0 - smoothstep(0.12, 0.3 + fwT, fb));
   float bandVis = (1.0 - smoothstep(0.18, 0.45, fwT)) * smoothstep(0.15, 0.5, terr) * isFar;
-  vec3 wallAvg = vec3(0.66, 0.62, 0.55);
-  col = mix(col, wallAvg * mix(0.85, 1.1, m3), band * bandVis * 0.85);
-  col *= 1.0 - shade * bandVis * 0.28;
+  vec3 wallAvg = vec3(0.64, 0.6, 0.52);
+  col = mix(col, wallAvg * mix(0.85, 1.1, m3), band * bandVis * 0.9);
+  col *= 1.0 - shade * bandVis * 0.34;
   col = mix(col, mix(col, wallAvg, 0.22), smoothstep(0.15, 0.5, terr) * isFar * (1.0 - bandVis));
+  // white limestone rubble and clearance heaps on the terraced / rocky hills seen from afar, and olive groves in
+  // rows on the terrace treads (dark silver-green crowns with long evening shadows). Only beyond ~120 m, where
+  // the 3D rocks and trees thin out; phones skip the rubble and the shadow sample.
+  if (dist > 120.0) {
+    float farT = smoothstep(120.0, 240.0, dist);
+#ifndef TERRAIN_LOW
+    vec2 rp2 = p * 0.3 + 3.3;
+    float rubAA = 1.0 - smoothstep(0.35, 0.8, fwidth(rp2.x));
+    float rub = dCellDots(rp2, 0.28) * rubAA * clamp(smoothstep(0.15, 0.5, terr) * 0.7 + rocky * 0.8, 0.0, 1.0) * (1.0 - desert) * farT;
+    col = mix(col, vec3(0.6, 0.57, 0.5) * mix(0.9, 1.05, m3), rub * 0.7);
+    col = mix(col, mix(col, vec3(0.58, 0.55, 0.48), 0.12), (1.0 - rubAA) * smoothstep(0.15, 0.5, terr) * farT);
+#endif
+    float grove = smoothstep(0.3, 0.6, dNoise(p * 0.004 + 1.7) * 0.7 + terr * 0.7) * (1.0 - desert) * (1.0 - path) * (1.0 - wadi);
+    vec2 op = p * 0.085;
+    float oAA = 1.0 - smoothstep(0.3, 0.7, fwidth(op.x));
+    float tread = mix(1.0, smoothstep(0.14, 0.3, fb) * (1.0 - smoothstep(0.66, 0.8, fb)), bandVis);
+    float ol = dCellDots(op + 5.0, 0.34) * grove * oAA * tread;
+    float oFade = smoothstep(150.0, 280.0, dist) * (1.0 - wR * 0.45);
+#ifndef TERRAIN_LOW
+    vec2 opS = op + vec2(${(0.985 * 4.0 * 0.085).toFixed(4)}, ${(-0.174 * 4.0 * 0.085).toFixed(4)});
+    float olS = dCellDots(opS + 5.0, 0.34) * grove * oAA * (1.0 - ol);
+    col *= 1.0 - olS * oFade * 0.45;
+#endif
+    col = mix(col, mix(vec3(0.06, 0.07, 0.045), vec3(0.12, 0.13, 0.09), dNoise(p * 0.5)), ol * oFade * 0.9);
+    col *= 1.0 - (1.0 - oAA) * grove * oFade * 0.28;
+  }
   // garrigue: dark shrubs and trees dotting the hills where no 3D plants are drawn
   float cover = smoothstep(0.25, 0.65, dNoise(p * 0.025 + 4.0));
   float bush = dCellDots(p * 0.33 + 11.0, 0.3) * (0.4 + 0.6 * cover) + dCellDots(p * 0.12 - 5.0, 0.26) * 0.9 * cover + dCellDots(p * 0.05 + 2.0, 0.2) * 0.7 * cover;
@@ -936,6 +1005,6 @@ reflectedLight.indirectDiffuse *= mix(0.7, 1.0, vSun) * terrainAO;
 reflectedLight.indirectSpecular *= terrainAO;`,
       );
   };
-  mat.customProgramCacheKey = () => 'terrain-v2' + (low ? '-low' : '');
+  mat.customProgramCacheKey = () => 'terrain-v3' + (low ? '-low' : '');
   return mat;
 }

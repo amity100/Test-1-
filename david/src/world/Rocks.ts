@@ -70,8 +70,8 @@ float rHash(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x
   c *= mix(vec3(0.9, 0.9, 0.9), vec3(1.04, 1.0, 0.94), v1) * mix(0.92, 1.06, v2);
   // solution pits read as shadowed grey cavities (not brown flecks); flanks carry a grey weathering patina
   float hgt = ax.a * bw.x + ay.a * bw.y + az.a * bw.z;
-  float pit = 1.0 - smoothstep(0.16, 0.4, hgt);
-  c = mix(c, vec3(dot(c, vec3(0.333))) * vec3(0.8, 0.8, 0.82), pit * 0.45);
+  float pit = 1.0 - smoothstep(0.4, 0.62, hgt);
+  c = mix(c, vec3(dot(c, vec3(0.333))) * vec3(0.78, 0.76, 0.74), pit * 0.4);
   c *= mix(vec3(1.0), vec3(0.83, 0.83, 0.82), (1.0 - smoothstep(0.2, 0.8, Nw.y)) * (0.35 + 0.4 * v2));
   // dusty, sun-bleached tops; soil-stained foot; darker crevices
   float up = smoothstep(0.35, 0.95, Nw.y);
@@ -82,7 +82,7 @@ float rHash(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x
   c *= mix(1.0, cav, 0.55);
   diffuseColor.rgb *= c;
   vec3 tnx = nx.xyz * 2.0 - 1.0, tny = ny.xyz * 2.0 - 1.0, tnz = nz.xyz * 2.0 - 1.0;
-  rockWN = normalize(bw.x * normalize(Nw + vec3(0.0, tnx.y, tnx.x) * 1.15) + bw.y * normalize(Nw + vec3(tny.x, 0.0, tny.y) * 1.15) + bw.z * normalize(Nw + vec3(tnz.x, tnz.y, 0.0) * 1.15));
+  rockWN = normalize(bw.x * normalize(Nw + vec3(0.0, tnx.y, tnx.x) * 1.35) + bw.y * normalize(Nw + vec3(tny.x, 0.0, tny.y) * 1.35) + bw.z * normalize(Nw + vec3(tnz.x, tnz.y, 0.0) * 1.35));
   rockOcc = cav * mix(1.0, tAO, 0.7);
   rockRough = mix(0.84, 0.93, up) - 0.06 * v2;
 }`,
@@ -95,10 +95,10 @@ roughnessFactor = rockRough;`)
         `#include <lights_fragment_end>
 reflectedLight.indirectDiffuse *= rockOcc;
 reflectedLight.indirectSpecular *= rockOcc;
-reflectedLight.directDiffuse *= mix(1.0, rockOcc, 0.22);`,
+reflectedLight.directDiffuse *= mix(1.0, rockOcc, 0.5);`,
       );
   };
-  mat.customProgramCacheKey = () => 'rock-v2-' + key + scale.toFixed(2);
+  mat.customProgramCacheKey = () => 'rock-v3-' + key + scale.toFixed(2);
   return mat;
 }
 
@@ -129,13 +129,15 @@ export class Rocks {
     type Variant = { geo: THREE.BufferGeometry; mats: THREE.Matrix4[]; colors: THREE.Color[]; shadow: boolean; kind: RockKind };
     const mk = (kind: RockKind, seeds: number[], detail: number, shadow: boolean, pits = 0): Variant[] =>
       seeds.map((s) => ({ geo: rockGeometry(s, { kind, detail, pits }), mats: [], colors: [], shadow, kind }));
-    const hero = mk('boulder', [901, 902, 903], q(8, 12, 15), true, q(0, 20, 36));
-    const boulders = mk('boulder', [11, 12, 13, 14, 15], q(3, 4, 5), true, q(0, 0, 6));
+    const hero = mk('boulder', [901, 902, 903], q(10, 18, 26), true, q(8, 30, 48));
+    // big craggy outcrop boulders (the main rock of a cluster): enough vertices for crests, ledges and fissures
+    const crags = mk('boulder', [16, 17, 18], q(4, 7, 10), true, q(0, 6, 12));
+    const boulders = mk('boulder', [11, 12, 13, 14, 15], q(3, 4, 6), true, q(0, 0, 6));
     const blocks = mk('block', [21, 22, 23], q(3, 4, 5), true);
     const slabs = mk('slab', [31, 32, 33], q(4, 5, 6), true);
     const stones = mk('stone', [41, 42, 43, 44], q(1, 2, 2), tier !== 'low');
     const pebbles = mk('pebble', [51, 52, 53], q(1, 1, 2), false);
-    const all = [...hero, ...boulders, ...blocks, ...slabs, ...stones, ...pebbles];
+    const all = [...hero, ...crags, ...boulders, ...blocks, ...slabs, ...stones, ...pebbles];
 
     const tmpQ = new THREE.Quaternion();
     const tmpE = new THREE.Euler();
@@ -182,7 +184,7 @@ export class Rocks {
       if (Math.hypot(x - (L.start.x + 0.2), z - (L.start.z + 2.3)) < 2.2) continue;
       if (!this.colliders.free(x, z, 0.4)) continue;
       if (rnd() < 0.5) add(slabs, x, z, 1.0 + rnd() * 1.4, 0.55, { flat: 0.8, tilt: 0.1 });
-      else add(boulders, x, z, 0.4 + rnd() * 0.7, 0.4);
+      else add(rnd() < 0.4 ? crags : boulders, x, z, 0.4 + rnd() * 0.7, 0.4);
     }
 
     // --- 2. outcrop clusters on rocky ground: a big boulder / block / slab with smaller stones around
@@ -204,7 +206,7 @@ export class Rocks {
         const big = 0.7 + rnd() * 1.9 * (0.5 + m.rock * 0.5);
         if (!clear(x, z, big) || !this.colliders.free(x, z, big * 0.7)) continue;
         const t = rnd();
-        const main = t < 0.45 ? boulders : t < 0.75 ? blocks : slabs;
+        const main = t < 0.45 ? (big > 1.4 ? crags : boulders) : t < 0.75 ? blocks : slabs;
         const { rad } = add(main, x, z, big, main === slabs ? 0.5 : 0.38, { flat: main === slabs ? 0.9 : 1 });
         const extra = Math.floor(1 + rnd() * 4 * budget);
         for (let e = 0; e < extra; e++) {

@@ -65,7 +65,20 @@ export interface PalaceSetOptions {
   tex?: TextureSet;
   /** progress callback during create() */
   onProgress?: (f: number, label: string) => void;
+  /** 'morning' (default: the chapter's sun, elevation 13 deg, azimuth 100 deg) or 'evening' (the 'saul-hall' beat:
+   * low sun in the west-north-west through the west windows, the lamps and brazier dominate). See setTimeOfDay(). */
+  timeOfDay?: PalaceTimeOfDay;
 }
+
+export type PalaceTimeOfDay = 'morning' | 'evening';
+
+/** Lighting presets per time of day (sun in SkySystem degrees: azimuth from +Z toward +X, i.e. -90 = west). */
+export const PALACE_TIMES: Record<PalaceTimeOfDay, { elevation: number; azimuth: number; exposure: { exterior: number; interior: number }; lamp: number; brazier: number; skyVis: number; doorVis: number; shaft: number }> = {
+  morning: { elevation: SUN.elevation, azimuth: SUN.azimuth, exposure: { exterior: 0.58, interior: 1.3 }, lamp: 1, brazier: 1, skyVis: 0.055, doorVis: 0.45, shaft: 0.07 },
+  // dusk: at a sun this low the 6.6 m west curtain wall (5 m from the hall) shadows the west windows, so no shafts;
+  // the hall is lit by the lamps and the brazier, the sky glows through the door and windows
+  evening: { elevation: 4.0, azimuth: -104, exposure: { exterior: 0.72, interior: 1.45 }, lamp: 1.9, brazier: 1.5, skyVis: 0.03, doorVis: 0.3, shaft: 0 },
+};
 
 export interface PalaceStats {
   drawCalls: number;
@@ -114,10 +127,17 @@ export class PalaceSet {
   private readonly ptex: PalaceTextures;
   private readonly ownsWorldTex: TextureSet | null;
   private readonly flames: Flames;
-  private readonly shafts: LightShafts;
-  private readonly dust: HallDust;
+  private shafts: LightShafts;
+  private dust: HallDust;
+  private dustCount = 0;
+  private dustLamps: THREE.Vector3[] = [];
+  /** current time-of-day preset */
+  timeOfDay: PalaceTimeOfDay = 'morning';
+  /** shared sun uniforms as they were before this set touched them (the game's sun), see restoreSharedSun() */
+  private readonly gameSun = { dir: new THREE.Vector3(), color: new THREE.Color() };
+  private readonly setSun = { dir: new THREE.Vector3(), color: new THREE.Color() };
   private readonly smoke: Smoke;
-  private readonly lights: { light: THREE.PointLight; base: number; seed: number }[] = [];
+  private readonly lights: { light: THREE.PointLight; base: number; base0: number; seed: number; kind: 'brazier' | 'lamp' | 'bounce' }[] = [];
   private readonly terrain: THREE.Mesh;
   private readonly focus = new THREE.Vector3();
   private time = 0;
@@ -135,6 +155,7 @@ export class PalaceSet {
     await ready;
     prog(0.6, 'גִּבְעַת שָׁאוּל');
     const set = new PalaceSet(opts, world, tex, !opts.tex);
+    if (opts.timeOfDay && opts.timeOfDay !== 'morning') set.setTimeOfDay(opts.timeOfDay);
     prog(1, 'גִּבְעַת שָׁאוּל');
     return set;
   }
@@ -149,11 +170,15 @@ export class PalaceSet {
     const scene = this.scene;
     scene.name = 'palace';
     // ---------------------------------------------------------------- sky, sun, ambient
+    this.gameSun.dir.copy(shared.uSunDir.value);
+    this.gameSun.color.copy(shared.uSunColor.value);
     this.sky = new SkySystem(this.renderer, q.shadowSize ?? (tier === 'low' ? 1024 : tier === 'medium' ? 2048 : 4096));
     scene.add(this.sky.group);
     this.sky.setSun(SUN.elevation, SUN.azimuth, scene);
     this.sky.sun.shadow.bias = -0.0002;
     this.sky.sun.shadow.normalBias = 0.02;
+    this.setSun.dir.copy(shared.uSunDir.value);
+    this.setSun.color.copy(shared.uSunColor.value);
     // ---------------------------------------------------------------- content
     this.mats = createPalaceMaterials(tex, world, tier);
     this.terrain = new THREE.Mesh(terrainGeometry(tier), terrainMaterial(world));
@@ -179,7 +204,9 @@ export class PalaceSet {
     scene.add(this.shafts.mesh);
     const brazier = this.props.flames.find((f) => f.kind === 'brazier')!;
     const lampsNear = this.props.flames.filter((f) => f.kind === 'lamp');
-    this.dust = new HallDust(fx.dust, this.architecture.windows, sunDir, [brazier.pos, ...lampsNear.slice(0, 3).map((l) => l.pos)]);
+    this.dustCount = fx.dust;
+    this.dustLamps = [brazier.pos, ...lampsNear.slice(0, 3).map((l) => l.pos)];
+    this.dust = new HallDust(fx.dust, this.architecture.windows, sunDir, this.dustLamps);
     scene.add(this.dust.points);
     const ovens = [new THREE.Vector3(60, 0, 70), new THREE.Vector3(-40, 0, 95), new THREE.Vector3(95, 0, 20), new THREE.Vector3(10, 0, 120)].map((p) => p.setY(gibeahHeight(p.x, p.z) + 1.0));
     this.smoke = new Smoke([
@@ -193,7 +220,7 @@ export class PalaceSet {
     const bl = new THREE.PointLight(warm, 3.2, 11, 2);
     bl.position.copy(brazier.pos).add(new THREE.Vector3(0, 0.35, 0));
     scene.add(bl);
-    this.lights.push({ light: bl, base: 3.2, seed: 1 });
+    this.lights.push({ light: bl, base: 3.2, base0: 3.2, seed: 1, kind: 'brazier' });
     const seatLamps = lampsNear.slice().sort((a, b) => a.pos.distanceTo(this.props.seatTop) - b.pos.distanceTo(this.props.seatTop)).slice(0, fx.lampLights);
     for (const [i, l] of seatLamps.entries()) {
       const pl = new THREE.PointLight(new THREE.Color(1.0, 0.62, 0.3), 0.7, 6, 2);
@@ -201,14 +228,14 @@ export class PalaceSet {
       const out = new THREE.Vector3((HALL.x0 + HALL.x1) / 2 - l.pos.x, 0, (HALL.z0 + HALL.z1) / 2 - l.pos.z).normalize();
       pl.position.copy(l.pos).add(new THREE.Vector3(0, 0.1, 0)).addScaledVector(out, 0.3);
       scene.add(pl);
-      this.lights.push({ light: pl, base: 0.7, seed: 10 + i * 7 });
+      this.lights.push({ light: pl, base: 0.7, base0: 0.7, seed: 10 + i * 7, kind: 'lamp' });
     }
     // sun bounce inside: warm fill where the beams land on the floor / west wall (medium / high)
     if (tier !== 'low') {
       const bounce = new THREE.PointLight(new THREE.Color(1.0, 0.78, 0.55), 1.2, 9, 2);
       bounce.position.set(HALL.x0 + 1.6, HALL.y0 + 1.2, -8.5);
       scene.add(bounce);
-      this.lights.push({ light: bounce, base: 1.2, seed: -1 });
+      this.lights.push({ light: bounce, base: 1.2, base0: 1.2, seed: -1, kind: 'bounce' });
     }
 
     // ---------------------------------------------------------------- anchors
@@ -273,6 +300,43 @@ export class PalaceSet {
     for (const g of [this.architecture.group, this.props.group, this.vegetation.group]) g.updateMatrixWorld(true);
   }
 
+  /**
+   * Switch the lighting preset: 'morning' (the chapter's sun) or 'evening' (low sun through the west windows, lamps
+   * dominant; for the 'saul-hall' beat). Re-runs the sky (LUT + environment capture, a few ms) and rebuilds the
+   * window light shafts and dust for the new sun. Writes the shared sun uniforms; call restoreSharedSun() before the
+   * game world renders again.
+   */
+  setTimeOfDay(t: PalaceTimeOfDay) {
+    const P = PALACE_TIMES[t];
+    this.timeOfDay = t;
+    this.sky.setSun(P.elevation, P.azimuth, this.scene);
+    this.setSun.dir.copy(shared.uSunDir.value);
+    this.setSun.color.copy(shared.uSunColor.value);
+    const sunDir = shared.uSunDir.value.clone();
+    this.scene.remove(this.shafts.mesh, this.dust.points);
+    for (const o of [this.shafts.mesh, this.dust.points]) {
+      o.geometry.dispose();
+      (o.material as THREE.Material).dispose();
+    }
+    this.shafts = new LightShafts(this.architecture.windows, sunDir);
+    this.shafts.uniforms.uStrength.value = P.shaft;
+    this.shafts.mesh.visible = P.shaft > 0;
+    this.dust = new HallDust(this.dustCount, this.architecture.windows, sunDir, this.dustLamps);
+    this.scene.add(this.shafts.mesh, this.dust.points);
+    this.exposureRange = { ...P.exposure };
+    for (const l of this.lights) l.base = l.base0 * (l.kind === 'lamp' ? P.lamp : l.kind === 'brazier' ? P.brazier : t === 'evening' ? 0.35 : 1);
+    for (const l of this.lights) if (l.seed < 0) l.light.intensity = l.base;
+    palaceUniforms.uSkyVis.value = P.skyVis;
+    palaceUniforms.uDoorVis.value = P.doorVis;
+    this.shadowMode = '';
+  }
+
+  /** Put the game's sun back into the shared uniforms (after the palace beats, before engine.render()). */
+  restoreSharedSun() {
+    shared.uSunDir.value.copy(this.gameSun.dir);
+    shared.uSunColor.value.copy(this.gameSun.color);
+  }
+
   /** A PostFX for this set (the game's post chain with the palace sky cube for the aerial perspective). */
   createPost(camera: THREE.PerspectiveCamera, q: PostQuality) {
     const post = new PostFX(this.renderer, this.scene, camera, this.sky.cubeTarget.texture, q);
@@ -287,7 +351,7 @@ export class PalaceSet {
   }
 
   /** aerial-perspective density used for this set (the game's default is 0.00042) */
-  static HAZE_DENSITY = 0.00024;
+  static HAZE_DENSITY = 0.00033;
 
   /** Grey mannequins at every anchor (scale check: the king is 1.98 m, others 1.72-1.8 m). */
   showPlaceholders(on: boolean) {
@@ -350,6 +414,9 @@ export class PalaceSet {
   /** Per-frame: flames, light flicker, cloth / dust (shader time), sun shadow framing, exposure. */
   update(dt: number, camera: THREE.PerspectiveCamera, opts: { advanceTime?: boolean } = {}) {
     if (opts.advanceTime) shared.uTime.value += dt;
+    // this set's sun drives the shared uniforms while it renders (the game restores its own via restoreSharedSun)
+    shared.uSunDir.value.copy(this.setSun.dir);
+    shared.uSunColor.value.copy(this.setSun.color);
     this.time += dt;
     const t = this.time;
     for (const l of this.lights) {

@@ -66,6 +66,11 @@ REGIONS = {
 }
 
 
+# painted scalp hairline: height above the eye centres (m) vs the angle around the head (deg, 0 = front, 180 = back)
+HAIRLINE_PHI = [0, 30, 45, 62, 72, 80, 100, 120, 140, 180]
+HAIRLINE_HL = [0.072, 0.07, 0.064, 0.052, 0.036, -0.04, -0.028, -0.05, -0.08, -0.09]
+
+
 class Baker:
     def __init__(self, preset_name: str, size: int):
         t0 = time.time()
@@ -495,19 +500,20 @@ class Baker:
         # large-scale tone variation (mottling), subtle
         mott = fbm(p * 9.0, 4, seed=seed + 11)
         mott2 = fbm(p * 45.0, 3, seed=seed + 12)
-        col *= (1 + 0.08 * mott[:, None] * np.array([1.0, 1.1, 1.25]) + 0.04 * mott2[:, None])
+        col *= (1 + 0.1 * mott[:, None] * np.array([1.0, 1.1, 1.25]) + 0.05 * mott2[:, None])
         # hue drift: ruddier vs more olive/yellow patches (1-3 cm)
         hue = fbm(p * 30.0, 3, seed=seed + 15)
         col *= np.exp(-0.06 * hue[:, None] * np.array([-0.5, 0.4, 1.0]))
         # mid-frequency blotches (3-6 mm) and fine grain (~1 mm): living skin is never flat
         mid = fbm(p * 220.0, 3, seed=seed + 13)
         grain = fbm(p * 900.0, 2, seed=seed + 14)
-        col *= (1 + 0.065 * mid[:, None] * np.array([0.9, 1.05, 1.2]) + 0.03 * grain[:, None])
+        col *= (1 + 0.08 * mid[:, None] * np.array([0.85, 1.08, 1.25]) + 0.03 * grain[:, None])
         self._tick("before haemoglobin")
         # ---------------- haemoglobin: ruddiness ("admoni")
         ruddy = sk.get("ruddy", 0.4)
         red = (0.95 * m_cheek ** 0.8 * smoothstep(-0.02, 0.2, n[:, 2]) + 0.8 * np.maximum(m_nosetip, m_nostril * 0.8) + 0.25 * m_nose
-               + 0.75 * m_ear * smoothstep(0.03, 0.06, np.abs(f[:, 0])) + 0.6 * m_lobe + 0.35 * m_chin + 0.3 * m_cheekbone + 0.25 * m_bag)
+               + 0.75 * m_ear * smoothstep(0.03, 0.06, np.abs(f[:, 0])) + 0.6 * m_lobe + 0.35 * m_chin + 0.3 * m_cheekbone
+               + 0.25 * m_bag * float(sk.get("age", 0.0)))  # red lower lids read as tired / sore eyes on the young
         red += head * 0.1 * smoothstep(-0.12, 0.02, f[:, 1]) * smoothstep(0.0, 0.3, n[:, 2])  # whole face slightly flushed
         # forehead mild
         red += head * 0.12 * smoothstep(0.02, 0.06, f[:, 1]) * smoothstep(0.1, 0.5, n[:, 2]) * (0.6 + 0.4 * fbm(p * 25, 2, seed=seed + 4))
@@ -560,11 +566,11 @@ class Baker:
             pw = pw + 3 * nosebr * self.reg["head"]
             pw = np.clip(pw, 0, None)
             pw /= pw.sum()
-            nfr = int(14000 * fr_amt)
+            nfr = int(19000 * fr_amt)
             pick = rng.choice(len(self.P), nfr, p=pw)
             centers = self.P[pick] + rng.normal(0, 0.004, (nfr, 3))
-            rad = rng.uniform(0.00025, 0.00065, nfr)
-            inten = rng.uniform(0.15, 0.6, nfr) ** 1.3
+            rad = rng.uniform(0.0002, 0.00048, nfr)
+            inten = rng.uniform(0.1, 0.45, nfr) ** 1.3
             for c, r, it in zip(centers, rad, inten):
                 ids = tree.query_ball_point(c, r * 1.8)
                 if not ids:
@@ -621,15 +627,27 @@ class Baker:
         crown = np.array(self.lm["crown"])
         phi = np.abs(np.degrees(np.arctan2(p[:, 0] - crown[0], p[:, 2] - crown[2])))  # 0 = front, 180 = back
         # hairline height (relative to the eye centres) as a function of the angle around the head
-        hl = np.interp(phi, [0, 30, 45, 62, 72, 80, 100, 120, 140, 180],
-                       [0.074, 0.072, 0.066, 0.05, 0.03, -0.012, 0.02, -0.04, -0.075, -0.088])
+        # natural, uncut hairline: full temples and sideburns down to the ear lobe, hair right up to the ear and down
+        # the nape (no modern fade; "ye shall not round the corners of your heads", Lev 19:27).  Same table format as
+        # src/characters/hair/HeadSurface.ts (PHI knots unchanged, HAIRLINE_HL values below).
+        hl_tab = sk.get("hairline", HAIRLINE_HL)
+        # (averaged over +-5 deg so the steep temple -> sideburn step is a soft edge, not a painted helmet line)
+        hl = (np.interp(phi - 5, HAIRLINE_PHI, hl_tab) + np.interp(phi, HAIRLINE_PHI, hl_tab) + np.interp(phi + 5, HAIRLINE_PHI, hl_tab)) / 3
         hl = hl + fbm(p * 90, 2, seed=seed + 50) * 0.004
         scalp = (head + neck * 0.5) * smoothstep(hl - 0.003, hl + 0.01, f[:, 1])
-        scalp *= 1 - smoothstep(0.25, 0.5, m_ear * smoothstep(0.05, 0.07, np.abs(f[:, 0])))
+        # the ear itself stays bare: a thin flap (ray-cast thickness) lateral to the skull
+        thick_t = self.interp(self.v_thick)
+        ear_flap = smoothstep(0.024, 0.013, thick_t) * smoothstep(0.05, 0.062, np.abs(f[:, 0])) * smoothstep(0.08, 0.25, m_ear)
+        scalp *= 1 - ear_flap
         scalp = np.clip(scalp, 0, 1)
+        # grey at the temples (mature men): salt-and-pepper over the sides, a little everywhere
+        grey = float(sk.get("grey_temples", 0.0))
+        if grey > 0:
+            gm = grey * (0.3 + 0.7 * smoothstep(48, 68, phi) * smoothstep(135, 105, phi)) * (0.6 + 0.4 * (fbm(p * 700, 2, seed=seed + 53) * 0.5 + 0.5))
+            hair_col = hair_col[None, :] * (1 - gm[:, None]) + srgb_to_lin(np.array([0.56, 0.54, 0.51]))[None, :] * gm[:, None]
         # close-cropped roots: fine grain (not a felt-like blotch) so hair cards on top can hide gaps
         scalp_n = 0.7 + 0.3 * (0.6 * fbm(p * 1400, 2, seed=seed + 52) + 0.4 * fbm(p * 300, 2, seed=seed + 51))
-        col = col * (1 - (scalp * 0.62 * scalp_n)[:, None]) + hair_col * (scalp * 0.45 * scalp_n)[:, None]
+        col = col * (1 - (scalp * 0.7 * scalp_n)[:, None]) + hair_col * (scalp * 0.5 * scalp_n)[:, None]
         self._tick("before eyebrows ")
         # eyebrows (same shape as the strand generator)
         brow = np.zeros(ntex, np.float32)
@@ -668,7 +686,8 @@ class Baker:
         col = col * (1 - 0.55 * seam[:, None])
         # ---------------- eyelids (thin, slightly purple/pink), under-eye
         lid = smoothstep(0.024, 0.012, np.minimum(np.linalg.norm(p - self.eyes["L"]["center"], axis=1), np.linalg.norm(p - self.eyes["R"]["center"], axis=1))) * head
-        col = col * (1 - lid[:, None] * np.array([0.08, 0.13, 0.07])) * (1 - m_bag[:, None] * np.array([0.04, 0.08, 0.02]) * (1 + sk.get("age", 0)))
+        col = col * (1 - lid[:, None] * np.array([0.06, 0.08, 0.04])) * (1 - m_bag[:, None] * np.array([0.03, 0.06, 0.02]) * (1 + sk.get("age", 0)))
+        self.lid_m = lid
         # lash line: dense lash roots darken the lid margin (upper lid much more than the lower)
         lashl = np.zeros(ntex, np.float32)
         for S, sgn in (("L", 1), ("R", -1)):
@@ -725,7 +744,8 @@ class Baker:
         dust_col = srgb_to_lin([0.66, 0.57, 0.46])
         col = col * (1 - (dust * dust_m * 0.5)[:, None]) + dust_col * (dust * dust_m * 0.5)[:, None]
         # ---------------- eye pocket (conjunctiva / caruncle) and mouth interior
-        col = np.where(pocket_isl[:, None], srgb_to_lin([0.70, 0.42, 0.40]), col)
+        # conjunctiva / caruncle: moist pale pink, not orange-red (it reads as sore, tired eyes under a warm sun)
+        col = np.where(pocket_isl[:, None], srgb_to_lin([0.78, 0.6, 0.56]), col)
         dm = smoothstep(1.2, 0.6, np.linalg.norm(p - self._mouth_centre(), axis=1) / 0.03)
         col = np.where(mouth_isl[:, None], srgb_to_lin([0.36, 0.12, 0.11]) * (0.15 + 0.85 * (1 - dm))[:, None], col)
         self.albedo = np.clip(col, 0, 1)
@@ -796,9 +816,14 @@ class Baker:
             from anatomy import Anatomy
             joints = {nm: h.rest_world_pos[i] for nm, i in h.index.items()}
             an = Anatomy(self.R, self.sub.welded[1], self.reg, rp, self.treg, joints)
-            H += an.build(strength=an_str, veins=float(sk.get("veins", 1.0)), rng=np.random.default_rng(seed + 123))
+            H_an = an.build(strength=an_str, veins=float(sk.get("veins", 1.0)), rng=np.random.default_rng(seed + 123))
             self._tick("anatomy")
+        else:
+            H_an = np.zeros_like(H)
+        # the procedural anatomy is kept apart: it is low-passed before it enters the normal map and only a fraction
+        # of it darkens the cavity term (sharp grooves turned into ink-like streaks on the 1K maps)
         self.height = H
+        self.height_an = H_an.astype(np.float32)
         self._tick("before roughness")
         # ================= roughness (0..1 mapped to [0.15, 0.85] at runtime) =================
         rough = np.full(ntex, 0.5, np.float32)
@@ -874,6 +899,9 @@ class Baker:
         Himg = self.dilate(self.image(self.height), 6)
         if S != self.size:
             raise ValueError
+        if getattr(self, "height_an", None) is not None:
+            Han = self.dilate(self.image(self.height_an), 8)
+            Himg = Himg + ndimage.gaussian_filter(Han, 1.1 * S / 1024.0)
         gy, gx = np.gradient(Himg)  # per texel
         # per texel metres: du = 1/S uv units -> mpu/S metres
         mpu = self.dilate(self.image(self.mpu, 1.0), 6)
@@ -906,8 +934,11 @@ class Baker:
         # AO x cavity
         ao = self.interp(self.v_ao)
         Himg = self.image(self.height)
-        lap = ndimage.laplace(ndimage.gaussian_filter(self.dilate(Himg, 4), 1.0))
-        cav_t = np.clip(1 + lap[self.vy, self.vx] * 2500.0, 0.6, 1.0)
+        if getattr(self, "height_an", None) is not None:
+            Himg = Himg + ndimage.gaussian_filter(self.dilate(self.image(self.height_an), 8), 2.0 * S / 1024.0) * 0.2
+        k = S / 1024.0
+        lap = ndimage.laplace(ndimage.gaussian_filter(self.dilate(Himg, 4), 1.0 * k))
+        cav_t = np.clip(1 + lap[self.vy, self.vx] * 2500.0 * k * k, 0.72, 1.0)
         aoc = np.clip(ao * cav_t, 0, 1)
         aoc = np.where(self.island == 4, aoc * 0.55, aoc)  # eye-socket pocket is occluded by the eyeball
         aoc = np.where(self.island == 3, aoc * 0.25, aoc)  # mouth interior
@@ -915,6 +946,8 @@ class Baker:
         # translucency: ears, nostril wings, lids and finger edges glow; cheeks (over the mouth cavity) barely
         trans = np.clip(np.exp(-(thick - 0.003) / 0.0065), 0, 1)
         trans = np.where((self.island == 3) | (self.island == 4), 0.0, trans)  # no glow from mouth / socket interiors
+        if getattr(self, "lid_m", None) is not None:
+            trans = trans * (1 - 0.7 * self.lid_m)  # thin lids would glow orange-red in a low sun
         mask = np.stack([aoc, self.rough, trans], 1)
         mask = self.dilate(self.image(mask), 16)
         pores = self.dilate(self.image(self.pores), 16)

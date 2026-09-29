@@ -5,10 +5,10 @@ import { gunzip } from './inflate';
  * Runtime side of the MakeHuman pipeline (tools/human/build_human.py).
  *
  * rig.json  : skeleton (MakeHuman default rig, pruned), rest pose, face pose units, eyes, landmarks
- * human.binz: (gzip) control mesh (hm08 quads, welded positions, face-varying UVs, 4 skin weights / vertex),
- *             eyelash + eyebrow strand ribbons, tear lines and (for "man") variation morphs.
+ * human.binz: (gzip) control mesh (hm08 quads, welded positions, face-varying UVs, 8 skin weights / vertex),
+ *             eyelash + eyebrow strand ribbons, tear lines, teeth and (for "man") variation morphs.
  *
- * The body is triangulated at load time ("base" tier, 13.4k verts) or subdivided once with
+ * The body is triangulated at load time ("base" tier, 14.5k render verts) or subdivided once with
  * Catmull-Clark (limit-projected, face-varying linear UVs, subdivided skin weights) for the "sub1"
  * hero tier (~56k verts) — so the hero geometry costs no extra download.
  */
@@ -119,6 +119,8 @@ interface Control {
   uv: Float32Array; // uv table
   skinI: Uint16Array; // K per position (K = SKIN_K)
   skinW: Float32Array;
+  /** subdivided controls: sparse rows (new vertex <- control vertices) for re-subdividing morphed positions */
+  stencil?: { rowStart: Uint32Array; cols: Uint32Array; wts: Float32Array; limit: boolean };
 }
 
 /** Bone influences per body vertex (MakeHuman's weights need up to 8 around the shoulders and hips). */
@@ -159,6 +161,94 @@ function controlMesh(d: HumanData, variation?: Record<string, number>): Control 
     skinI,
     skinW,
   };
+}
+
+/** Sum of the variation morph deltas at the control vertices (null when nothing applies). */
+export function variationDelta(d: HumanData, variation?: Record<string, number>): Float32Array | null {
+  if (!variation) return null;
+  let out: Float32Array | null = null;
+  for (const [k, w] of Object.entries(variation)) {
+    if (!w || !d.has(`var.${k}.position`)) continue;
+    const dv = d.float(`var.${k}.position`);
+    if (!out) out = new Float32Array(dv.length);
+    for (let i = 0; i < dv.length; i++) out[i] += dv[i] * w;
+  }
+  return out;
+}
+
+/**
+ * For points near the skin (brow / lash strands, tear lines, teeth, the lid opening): the 3 nearest control
+ * vertices of the base mesh with inverse-distance weights, so they can follow the variation morphs of the skin.
+ */
+export function skinNeighbours(d: HumanData, pts: ArrayLike<number>): { idx: Uint32Array; w: Float32Array } {
+  const cp = d.float('mesh.position');
+  const cell = 0.012;
+  let grid = gridCache.get(d);
+  if (!grid) {
+    grid = new Map<number, number[]>();
+    for (let i = 0; i < cp.length / 3; i++) {
+      const k = hashCell(Math.floor(cp[i * 3] / cell), Math.floor(cp[i * 3 + 1] / cell), Math.floor(cp[i * 3 + 2] / cell));
+      let l = grid.get(k);
+      if (!l) grid.set(k, (l = []));
+      l.push(i);
+    }
+    gridCache.set(d, grid);
+  }
+  const n = pts.length / 3;
+  const idx = new Uint32Array(n * 3);
+  const w = new Float32Array(n * 3);
+  const best = [0, 0, 0], bd = [0, 0, 0];
+  for (let p = 0; p < n; p++) {
+    const x = pts[p * 3], y = pts[p * 3 + 1], z = pts[p * 3 + 2];
+    const cx = Math.floor(x / cell), cy = Math.floor(y / cell), cz = Math.floor(z / cell);
+    bd[0] = bd[1] = bd[2] = Infinity;
+    for (let r = 1; r <= 6 && bd[2] === Infinity; r++) {
+      for (let i = -r; i <= r; i++)
+        for (let j = -r; j <= r; j++)
+          for (let k = -r; k <= r; k++) {
+            const l = grid.get(hashCell(cx + i, cy + j, cz + k));
+            if (!l) continue;
+            for (const v of l) {
+              const dd = (cp[v * 3] - x) ** 2 + (cp[v * 3 + 1] - y) ** 2 + (cp[v * 3 + 2] - z) ** 2;
+              if (dd >= bd[2] || v === best[0] || v === best[1]) continue;
+              if (dd < bd[0]) {
+                bd[2] = bd[1]; best[2] = best[1]; bd[1] = bd[0]; best[1] = best[0]; bd[0] = dd; best[0] = v;
+              } else if (dd < bd[1]) {
+                bd[2] = bd[1]; best[2] = best[1]; bd[1] = dd; best[1] = v;
+              } else {
+                bd[2] = dd; best[2] = v;
+              }
+            }
+          }
+    }
+    let sum = 0;
+    for (let q = 0; q < 3; q++) {
+      const ww = bd[q] === Infinity ? 0 : 1 / (Math.sqrt(bd[q]) + 0.002);
+      idx[p * 3 + q] = best[q];
+      w[p * 3 + q] = ww;
+      sum += ww;
+    }
+    for (let q = 0; q < 3; q++) w[p * 3 + q] /= sum || 1;
+  }
+  return { idx, w };
+}
+const gridCache = new WeakMap<HumanData, Map<number, number[]>>();
+function hashCell(i: number, j: number, k: number) {
+  return ((i + 512) * 1024 + (j + 512)) * 1024 + (k + 512);
+}
+
+/** Displace points by the skin's variation delta (see skinNeighbours). */
+export function followSkin(pts: Float32Array, nb: { idx: Uint32Array; w: Float32Array }, delta: Float32Array) {
+  const n = pts.length / 3;
+  for (let p = 0; p < n; p++) {
+    for (let q = 0; q < 3; q++) {
+      const v = nb.idx[p * 3 + q], ww = nb.w[p * 3 + q];
+      pts[p * 3] += delta[v * 3] * ww;
+      pts[p * 3 + 1] += delta[v * 3 + 1] * ww;
+      pts[p * 3 + 2] += delta[v * 3 + 2] * ww;
+    }
+  }
+  return pts;
 }
 
 /** One Catmull-Clark level on a closed quad mesh (positions + sparse skin weights + face-varying UVs). */
@@ -321,7 +411,30 @@ function subdivide(c: Control, limit: boolean): Control {
   }
   const out: Control = { pos, quads, quadsUV, uv: Float32Array.from(uvList), skinI, skinW };
   if (limit) out.pos = limitPositions(out);
+  // keep the (linear) position stencil: variation morphs of the same topology are subdivided without redoing
+  // the edge / weight / uv work (crowds of 'man' instances)
+  out.stencil = { rowStart, cols: Uint32Array.from(cols), wts: Float32Array.from(wts), limit };
   return out;
+}
+
+/** Control positions -> subdivided (limit) positions with a cached stencil. */
+function applyStencil(sub: Control, ctlPos: Float32Array): Float32Array {
+  const st = sub.stencil!;
+  const NV = st.rowStart.length - 1;
+  const out = new Float32Array(NV * 3);
+  for (let i = 0; i < NV; i++) {
+    let x = 0, y = 0, z = 0;
+    for (let j = st.rowStart[i]; j < st.rowStart[i + 1]; j++) {
+      const s = st.cols[j] * 3, w = st.wts[j];
+      x += ctlPos[s] * w;
+      y += ctlPos[s + 1] * w;
+      z += ctlPos[s + 2] * w;
+    }
+    out[i * 3] = x;
+    out[i * 3 + 1] = y;
+    out[i * 3 + 2] = z;
+  }
+  return st.limit ? limitPositions({ ...sub, pos: out }) : out;
 }
 
 /** Push Catmull-Clark control points to the limit surface. */
@@ -365,9 +478,73 @@ export interface BodyGeometryInfo {
   triangleCount: number;
 }
 
-/** Build the renderable body geometry. level 0 = hm08 control mesh, 1 = one Catmull-Clark level. */
+/** Per preset (HumanData) and level: everything of the body geometry that does not depend on the variation morphs. */
+interface BodyTopo {
+  sub: Control;
+  triP: Uint32Array;
+  posIndex: Uint32Array;
+  attrs: Record<string, THREE.BufferAttribute>;
+  index: THREE.BufferAttribute;
+  vertexCount: number;
+  triangleCount: number;
+}
+const topoCache = new WeakMap<HumanData, Map<number, BodyTopo>>();
+
+/**
+ * Build the renderable body geometry. level 0 = hm08 control mesh, 1 = one Catmull-Clark level.
+ * The topology work (subdivision, uv split, weights, tangents) runs once per preset and level; every instance gets
+ * its own BufferGeometry that shares those attributes (and the positions / normals too when it has no variation).
+ * Variation instances only re-apply the cached subdivision stencil and recompute normals (tangents are shared).
+ */
 export function buildBodyGeometry(d: HumanData, level: 0 | 1, variation?: Record<string, number>): BodyGeometryInfo {
-  let c = controlMesh(d, variation);
+  let perData = topoCache.get(d);
+  if (!perData) topoCache.set(d, (perData = new Map()));
+  let topo = perData.get(level);
+  if (!topo) perData.set(level, (topo = buildTopo(d, level)));
+  const g = new THREE.BufferGeometry();
+  for (const [name, a] of Object.entries(topo.attrs)) g.setAttribute(name, a);
+  g.setIndex(topo.index);
+  const delta = variationDelta(d, variation);
+  if (delta) {
+    const cp = d.float('mesh.position').slice();
+    for (let i = 0; i < cp.length; i++) cp[i] += delta[i];
+    const wpos = level === 1 ? applyStencil(topo.sub, cp) : cp;
+    const V = wpos.length / 3;
+    const wn = new Float32Array(V * 3);
+    const tri = topo.triP;
+    for (let t = 0; t < tri.length; t += 3) {
+      const a = tri[t] * 3, b = tri[t + 1] * 3, c = tri[t + 2] * 3;
+      const ux = wpos[b] - wpos[a], uy = wpos[b + 1] - wpos[a + 1], uz = wpos[b + 2] - wpos[a + 2];
+      const vx = wpos[c] - wpos[a], vy = wpos[c + 1] - wpos[a + 1], vz = wpos[c + 2] - wpos[a + 2];
+      const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+      for (const i of [a, b, c]) {
+        wn[i] += nx;
+        wn[i + 1] += ny;
+        wn[i + 2] += nz;
+      }
+    }
+    const pi = topo.posIndex;
+    const N = pi.length;
+    const position = new Float32Array(N * 3);
+    const normal = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) {
+      const p = pi[i] * 3;
+      position[i * 3] = wpos[p];
+      position[i * 3 + 1] = wpos[p + 1];
+      position[i * 3 + 2] = wpos[p + 2];
+      const l = Math.hypot(wn[p], wn[p + 1], wn[p + 2]) || 1;
+      normal[i * 3] = wn[p] / l;
+      normal[i * 3 + 1] = wn[p + 1] / l;
+      normal[i * 3 + 2] = wn[p + 2] / l;
+    }
+    g.setAttribute('position', new THREE.BufferAttribute(position, 3));
+    g.setAttribute('normal', new THREE.BufferAttribute(normal, 3));
+  }
+  return { geometry: g, posIndex: topo.posIndex, vertexCount: topo.vertexCount, triangleCount: topo.triangleCount };
+}
+
+function buildTopo(d: HumanData, level: 0 | 1): BodyTopo {
+  let c = controlMesh(d);
   if (level === 1) c = subdivide(c, true);
   const F = c.quads.length / 4;
   const V = c.pos.length / 3;
@@ -451,8 +628,17 @@ export function buildBodyGeometry(d: HumanData, level: 0 | 1, variation?: Record
   // influences 5-8 (read by the SKIN8 shader path, see DualQuatSkinning.ts)
   g.setAttribute('skinIndex2', new THREE.BufferAttribute(skinIndex2, 4));
   g.setAttribute('skinWeight2', new THREE.BufferAttribute(skinWeight2, 4));
-  g.setIndex(new THREE.BufferAttribute(N < 65536 ? Uint16Array.from(index) : index, 1));
-  return { geometry: g, posIndex: Uint32Array.from(posIndex), vertexCount: N, triangleCount: index.length / 3 };
+  const attrs: Record<string, THREE.BufferAttribute> = {};
+  for (const [name, a] of Object.entries(g.attributes)) attrs[name] = a as THREE.BufferAttribute;
+  return {
+    sub: c,
+    triP,
+    posIndex: Uint32Array.from(posIndex),
+    attrs,
+    index: new THREE.BufferAttribute(N < 65536 ? Uint16Array.from(index) : index, 1),
+    vertexCount: N,
+    triangleCount: index.length / 3,
+  };
 }
 
 /** Same accumulation as tools/human/geom.py:tangents (so baked normal maps match). */
@@ -502,8 +688,33 @@ export function computeTangents(pos: Float32Array, nrm: Float32Array, uv: Float3
   return out;
 }
 
-/** Strand ribbons / tear line geometry (already skinned to the same skeleton). */
-export function buildAuxGeometry(d: HumanData, prefix: 'lash' | 'brow' | 'tear' | 'teeth', keepEvery = 1): THREE.BufferGeometry | null {
+const auxCache = new WeakMap<HumanData, Map<string, { g: THREE.BufferGeometry | null; nb?: { idx: Uint32Array; w: Float32Array } }>>();
+
+/**
+ * Strand ribbons / tear line / teeth geometry (already skinned to the same skeleton).  Cached per preset: every
+ * instance gets its own BufferGeometry sharing the attributes.  With `variation`, the vertices follow the variation
+ * morphs of the nearest skin (brows stay on the brow ridge, lashes / tear lines on the lid margins, teeth in the mouth).
+ */
+export function buildAuxGeometry(d: HumanData, prefix: 'lash' | 'brow' | 'tear' | 'teeth', keepEvery = 1, variation?: Record<string, number>): THREE.BufferGeometry | null {
+  let per = auxCache.get(d);
+  if (!per) auxCache.set(d, (per = new Map()));
+  const key = `${prefix}:${keepEvery}`;
+  let e = per.get(key);
+  if (!e) per.set(key, (e = { g: buildAuxBase(d, prefix, keepEvery) }));
+  if (!e.g) return null;
+  const g = new THREE.BufferGeometry();
+  for (const [name, a] of Object.entries(e.g.attributes)) g.setAttribute(name, a);
+  g.setIndex(e.g.getIndex());
+  const delta = variationDelta(d, variation);
+  if (delta) {
+    const base = e.g.getAttribute('position').array as Float32Array;
+    if (!e.nb) e.nb = skinNeighbours(d, base);
+    g.setAttribute('position', new THREE.BufferAttribute(followSkin(base.slice(), e.nb, delta), 3));
+  }
+  return g;
+}
+
+function buildAuxBase(d: HumanData, prefix: 'lash' | 'brow' | 'tear' | 'teeth', keepEvery = 1): THREE.BufferGeometry | null {
   if (!d.has(prefix + '.position')) return null;
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(d.float(prefix + '.position'), 3));

@@ -105,7 +105,7 @@ scene.add(ground);
 // ---- poses (DavidModel conventions)
 const IDLE = pose({
   hips: [0, 0, 0.03], chest: [0.02, 0, 0], head: [-0.04, 0.08, 0],
-  uaL: [-0.42, 0, 0.2], faL: [-1.2, 0, 0], hdL: [0.15, 0, 0],
+  uaL: [-0.42, 0, 0.2], faL: [-1.2, 0, 0], hdL: [-0.25, 0.457, 0.12],
   uaR: [0.04, 0, -0.1], faR: [-0.25, 0, 0], hdR: [0.0, 0, 0],
   thL: [-0.06, 0, 0.03], shinL: [0.08, 0, 0], ftL: [-0.02, 0, 0],
   thR: [0.09, 0, -0.04], shinR: [0.05, 0, 0], ftR: [-0.12, 0, 0],
@@ -113,7 +113,7 @@ const IDLE = pose({
 const SPIN = pose({
   spine: [0, -0.1, 0], chest: [0.03, -0.22, 0], head: [-0.05, 0.26, 0], neck: [0, 0.06, 0],
   uaR: [-2.45, 0, -0.55], faR: [-0.75, 0, 0], hdR: [0.1, 0, 0],
-  uaL: [-0.42, 0, 0.2], faL: [-1.2, 0, 0], hdL: [0.15, 0, 0],
+  uaL: [-0.42, 0, 0.2], faL: [-1.2, 0, 0], hdL: [-0.25, 0.457, 0.12],
   thL: [-0.2, 0, 0.08], shinL: [0.15, 0, 0], ftL: [0.05, 0, 0],
   thR: [0.25, 0, -0.08], shinR: [0.1, 0, 0], ftR: [-0.3, 0, 0],
 });
@@ -124,7 +124,7 @@ function walkPose(ph: number): Pose {
     thL: [-s * A, 0, 0.02], shinL: [kneeL, 0, 0], ftL: [-(-s * A + kneeL) * 0.55 + Math.max(0, -s) * 0.25, 0, 0],
     thR: [s * A, 0, -0.02], shinR: [kneeR, 0, 0], ftR: [-(s * A + kneeR) * 0.55 + Math.max(0, s) * 0.25, 0, 0],
     uaR: [s * 0.35, 0, -0.1], faR: [-0.3, 0, 0], uaL: [-0.42 - s * 0.12, 0, 0.2], faL: [-1.2, 0, 0],
-    hips: [0, s * 0.1, 0], spine: [0.03, -s * 0.06, 0], chest: [0.02, -s * 0.1, 0], head: [-0.02, s * 0.05, 0], hdL: [0.15, 0, 0],
+    hips: [0, s * 0.1, 0], spine: [0.03, -s * 0.06, 0], chest: [0.02, -s * 0.1, 0], head: [-0.02, s * 0.05, 0], hdL: [-0.25, 0.457, 0.12],
   }, -Math.abs(c) * 0.025);
 }
 const POSES: Record<string, Pose> = { idle: IDLE, sling: SPIN, walk: walkPose(0.9), rest: pose({}) };
@@ -151,6 +151,20 @@ async function main() {
   }
   const loadMs = performance.now() - t0;
   scene.add(human.root);
+  // ?crowd=N: load N extra seeded 'man' instances (same quality) to measure the cached per-preset CPU work
+  if (P.has('crowd')) {
+    const n = parseInt(P.get('crowd')!, 10) || 3;
+    const times: string[] = [];
+    for (let i = 0; i < n; i++) {
+      const t1 = performance.now();
+      const m = await HumanModel.load({ preset: 'man', quality: q, seed: 20 + i });
+      times.push((performance.now() - t1).toFixed(0));
+      m.root.position.set((i - (n - 1) / 2) * 0.8, 0, -1.6 - (i % 2) * 0.6);
+      m.update(0, camera, H);
+      scene.add(m.root);
+    }
+    console.log(`crowd: ${n} x man (${q}) load ms = ${times.join(', ')}`);
+  }
   (window as unknown as { __human: HumanModel }).__human = human;
   human.root.rotation.y = THREE.MathUtils.degToRad(yawDeg);
   mixer = new PoseMixer(human.joints);
@@ -214,6 +228,23 @@ async function main() {
   }
   // settle (fingers / expressions cross-fade)
   for (let i = 0; i < 90; i++) human.update(1 / 30, camera, H);
+  // staff held upright (default with the grip): rotate the left hand proxy by the smallest rotation that makes the
+  // staff vertical, and log the resulting hdL Euler (character axes) — the value to put into the game's poses
+  if (fingersL === 'grip' && P.get('staff') !== '0' && P.get('staffUp') !== '0') {
+    const hd = human.joints.hdL;
+    const down = new THREE.Vector3(0, -1, 0);
+    for (let it = 0; it < 3; it++) {
+      human.root.updateMatrixWorld(true);
+      const d = down.clone().applyQuaternion(human.sockets.handGripL.getWorldQuaternion(new THREE.Quaternion()));
+      const qc = new THREE.Quaternion().setFromUnitVectors(d, down);
+      const pq = hd.parent!.getWorldQuaternion(new THREE.Quaternion());
+      hd.quaternion.premultiply(pq.clone().invert().multiply(qc).multiply(pq));
+      for (let i = 0; i < 3; i++) human.update(1 / 30, camera, H);
+    }
+    const e = hd.rotation;
+    console.log(`staff upright: hdL = [${e.x.toFixed(3)}, ${e.y.toFixed(3)}, ${e.z.toFixed(3)}] (${e.order}) for pose ${poseName}`);
+    (window as unknown as { __staffHand: number[] }).__staffHand = [e.x, e.y, e.z];
+  }
   const frames = parseInt(P.get('frames') ?? '3', 10);
   let out: HTMLCanvasElement | null = null;
   if (VIEWS.length > 1) {

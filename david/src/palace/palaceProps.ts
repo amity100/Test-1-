@@ -153,21 +153,49 @@ export function buildInteriorProps(mats: PalaceMaterials, tier: PalaceTier, worl
   st.block(V3(H.x1 - bD / 2, y0 + bH / 2, -8.0), V3(bD, bH, 9.4), 0.25, 1 / 1.8, { faces: 'nx pz nz py', ao });
   group.add(mesh(st.build({ ao: true }), mats.plaster, true, true, 'palace:dais'));
 
-  // ------------------------------------------------------------------ pillars: stacked, roughly squared limestone drums
+  // ------------------------------------------------------------------ pillars: slender, roughly squared limestone
+  // drums (~0.46 m across, three to a pillar) on a low plinth, a squared timber abacus under the wooden bolster
   {
-    const pm = interiorize(rockMaterial(world, 0xe8ddcc, 0.9, 'palace-pillar'), { key: 'pillar', soot: 0.35 });
-    const drumGeos = [rockGeometry(401, { kind: 'block', detail: tier === 'low' ? 3 : 5, blocky: 0.8 }), rockGeometry(402, { kind: 'block', detail: tier === 'low' ? 3 : 5, blocky: 0.85 }), rockGeometry(403, { kind: 'stone', detail: tier === 'low' ? 3 : 5, blocky: 0.8 })];
+    const pm = interiorize(rockMaterial(world, 0xfff6e6, 1.3, 'palace-pillar'), { key: 'pillar', soot: 0.35 });
+    const drum = (seed: number, hgt: number, w: number) => {
+      const r = mulberry32(seed);
+      const radial = tier === 'low' ? 12 : 24, rows = tier === 'low' ? 4 : 10;
+      const g = new THREE.CylinderGeometry(1, 1, 1, radial, rows, false);
+      const pp = g.getAttribute('position') as THREE.BufferAttribute;
+      const ph = [r() * 6.28, r() * 6.28, r() * 6.28];
+      const pe = 3.2 + r() * 1.4; // superellipse: roughly squared with rounded arrises
+      for (let i = 0; i < pp.count; i++) {
+        const x = pp.getX(i), y = pp.getY(i), z = pp.getZ(i);
+        const th = Math.atan2(z, x);
+        const c = Math.cos(th), sn = Math.sin(th);
+        let rad = Math.pow(Math.pow(Math.abs(c), pe) + Math.pow(Math.abs(sn), pe), -1 / pe);
+        rad *= 1 + 0.02 * Math.sin(th * 3 + ph[0]) + 0.012 * Math.sin(th * 7 + ph[1] + y * 3) + 0.008 * Math.sin(y * 9 + ph[2]);
+        // chamfered bed joints: the drum narrows at top and bottom
+        const e = 1 - Math.abs(y) * 2;
+        rad *= 1 - 0.07 * Math.pow(1 - Math.min(1, e / 0.12), 2);
+        const top = Math.abs(Math.abs(y) - 0.5) < 1e-4 && Math.hypot(x, z) < 1e-4;
+        pp.setXYZ(i, top ? 0 : c * rad * w * 0.5, y * hgt, top ? 0 : sn * rad * w * 0.5);
+      }
+      g.computeVertexNormals();
+      return g;
+    };
+    const plinthGeo = new RoundedBoxGeometry(0.66, 0.22, 0.66, 2, 0.03);
+    const top = H.beam - 0.22 - 0.12; // abacus under the bolster
+    const plinthTop = y0 + 0.2;
+    const drumGeos = [drum(401, 1, 0.46), drum(402, 1, 0.47), drum(403, 1, 0.45)];
     const lists: THREE.Matrix4[][] = [[], [], []];
-    const top = H.beam - 0.22;
+    const plinths: THREE.Matrix4[] = [];
     let k = 0;
     for (const px of H.pillarX) for (const pz of H.pillarZ) {
-      let y = y0 - 0.05;
-      const n = 4;
+      plinths.push(new THREE.Matrix4().compose(V3(px, y0 + 0.09, pz), new THREE.Quaternion().setFromAxisAngle(V3(0, 1, 0), (k % 3) * 0.05 - 0.05), V3(1, 1, 1)));
+      const n = 3;
+      const hs = [0.36, 0.31, 0.33].map((f) => f + ((k * 7) % 5) * 0.004);
+      const tot = hs.reduce((q, v) => q + v, 0);
+      let y = plinthTop;
       for (let i = 0; i < n; i++) {
-        const hgt = (top - y0) / n;
-        const q = new THREE.Quaternion().setFromAxisAngle(V3(0, 1, 0), (k * 1.7 + i * 0.9) % 6.28 * 0.08 + (i % 2) * Math.PI / 2);
-        const w = 0.62 - i * 0.03 + ((k + i) % 3) * 0.02;
-        lists[(k + i) % 3].push(new THREE.Matrix4().compose(V3(px + ((k + i) % 2 ? 0.015 : -0.015), y + hgt * 0.5, pz), q, V3(w * 0.52, hgt * 0.72, w * 0.5)));
+        const hgt = ((top - plinthTop) * hs[i]) / tot;
+        const q = new THREE.Quaternion().setFromAxisAngle(V3(0, 1, 0), ((k * 1.7 + i * 0.9) % 6.28) * 0.05);
+        lists[(k + i) % 3].push(new THREE.Matrix4().compose(V3(px + ((k + i) % 2 ? 0.006 : -0.006), y + hgt * 0.5, pz), q, V3(1, hgt, 1)));
         y += hgt;
       }
       k++;
@@ -181,32 +209,141 @@ export function buildInteriorProps(mats: PalaceMaterials, tier: PalaceTier, worl
       im.name = 'palace:pillars';
       group.add(im);
     });
+    const pl = new THREE.InstancedMesh(plinthGeo, pm, plinths.length);
+    plinths.forEach((m, j) => pl.setMatrixAt(j, m));
+    pl.castShadow = true;
+    pl.receiveShadow = true;
+    pl.userData.noChunk = true;
+    pl.name = 'palace:plinths';
+    group.add(pl);
+    // squared timber abacus blocks between the stone and the bolster
+    const ab = new GeoBuilder();
+    let sd0 = 510;
+    for (const px of H.pillarX) for (const pz of H.pillarZ) {
+      const g = hewnBeam(0.56, 0.52, 0.13, sd0++, 2);
+      ab.merge(g, new THREE.Matrix4().makeRotationY(-Math.PI / 2).setPosition(px, top + 0.065, pz - 0.28));
+    }
+    group.add(mesh(ab.build({ ao: false }), mats.beam, true, true, 'palace:abacus'));
   }
 
   // ------------------------------------------------------------------ the king's seat
+  // "the seat by the wall" (1 Sam 20:25): a carved high-backed chair of dark oiled hardwood on lion-paw feet, the
+  // back panel and arm panels inlaid with bone plaques and rosettes (cf. the Levantine carved-and-inlaid furniture
+  // of the Iron Age; no gilding), a footstool before it
   const seat = new GeoBuilder();
+  const inlay = new GeoBuilder();
   const sx = H.cx, sz = D.z0 + 0.95; // seat centre
   const sw = 0.74, sd = 0.62, sh = 0.5, backH = 1.32;
-  const legs: [number, number][] = [[-sw / 2 + 0.05, -sd / 2 + 0.05], [sw / 2 - 0.05, -sd / 2 + 0.05], [-sw / 2 + 0.05, sd / 2 - 0.05], [sw / 2 - 0.05, sd / 2 - 0.05]];
   let sdx = 0;
-  for (const [lx, lz] of legs) {
-    const back = lz < 0;
-    stick(seat, V3(sx + lx, dTop, sz + lz), V3(sx + lx, dTop + (back ? backH : sh + 0.2), sz + lz + (back ? -0.06 : 0)), 0.075, 0.075, 40 + sdx++);
+  // lion leg: lathe profile (paw on a small drum, slender tapering shank) + four toes toward `fwd`
+  const legGeo = vessel([[0, 0], [0.05, 0], [0.052, 0.022], [0.045, 0.028], [0.062, 0.04], [0.064, 0.07], [0.05, 0.1], [0.034, 0.14], [0.032, 0.18], [0.04, 0.26], [0.042, 0.33], [0.037, 0.4], [0.036, 0.46], [0.0, 0.46]], tier === 'low' ? 10 : 18);
+  const toe = new THREE.SphereGeometry(0.019, 10, 8);
+  toe.scale(1, 0.8, 1.35);
+  const paw = (x: number, z: number, fwd: THREE.Vector3, hgt: number) => {
+    const m = new THREE.Matrix4().compose(V3(x, dTop, z), new THREE.Quaternion(), V3(1, hgt / 0.46, 1));
+    seat.merge(legGeo, m);
+    const side = V3(fwd.z, 0, -fwd.x);
+    for (let t = 0; t < 4; t++) {
+      const o = (t - 1.5) * 0.026;
+      const pos = V3(x, dTop + 0.045, z).addScaledVector(fwd, 0.05 - Math.abs(o) * 0.35).addScaledVector(side, o);
+      const q = new THREE.Quaternion().setFromUnitVectors(V3(0, 0, 1), fwd);
+      seat.merge(toe, new THREE.Matrix4().compose(pos, q, V3(1, 1, 1)));
+    }
+  };
+  const fz = sz + sd / 2 - 0.05, bkz = sz - sd / 2 + 0.05;
+  const lx = sw / 2 - 0.05;
+  for (const x of [-lx, lx]) {
+    paw(sx + x, fz, V3(0, 0, 1), sh - 0.05);
+    paw(sx + x, bkz, V3(0, 0, 1), sh - 0.05);
   }
-  // seat rails, stretchers, arm rests, back rails, slats
-  for (const [a, b] of [[legs[0], legs[1]], [legs[2], legs[3]], [legs[0], legs[2]], [legs[1], legs[3]]] as [number, number][][]) {
-    stick(seat, V3(sx + a[0], dTop + sh - 0.05, sz + a[1]), V3(sx + b[0], dTop + sh - 0.05, sz + b[1]), 0.07, 0.06, 50 + sdx++);
-    stick(seat, V3(sx + a[0], dTop + 0.14, sz + a[1]), V3(sx + b[0], dTop + 0.14, sz + b[1]), 0.04, 0.04, 60 + sdx++);
+  // seat frame, stretchers
+  const railY = dTop + sh - 0.05;
+  const corners: [number, number][] = [[-lx, bkz - sz], [lx, bkz - sz], [-lx, fz - sz], [lx, fz - sz]];
+  for (const [ai, bi] of [[0, 1], [2, 3], [0, 2], [1, 3]]) {
+    const A = corners[ai], B = corners[bi];
+    stick(seat, V3(sx + A[0], railY, sz + A[1]), V3(sx + B[0], railY, sz + B[1]), 0.075, 0.07, 50 + sdx++);
+    stick(seat, V3(sx + A[0], dTop + 0.17, sz + A[1]), V3(sx + B[0], dTop + 0.17, sz + B[1]), 0.035, 0.035, 60 + sdx++);
   }
-  for (const s of [-1, 1]) stick(seat, V3(sx + s * (sw / 2 - 0.05), dTop + sh + 0.2, sz + sd / 2 - 0.02), V3(sx + s * (sw / 2 - 0.05), dTop + sh + 0.22, sz - sd / 2 + 0.02), 0.07, 0.05, 70 + sdx++);
-  for (const y of [dTop + sh + 0.35, dTop + backH - 0.04]) stick(seat, V3(sx - sw / 2 + 0.02, y, sz - sd / 2 + 0.05 - 0.06 * ((y - dTop) / backH)), V3(sx + sw / 2 - 0.02, y, sz - sd / 2 + 0.05 - 0.06 * ((y - dTop) / backH)), 0.08, 0.07, 80 + sdx++);
-  for (let k = -2; k <= 2; k++) stick(seat, V3(sx + k * 0.12, dTop + sh, sz - sd / 2 + 0.045), V3(sx + k * 0.12, dTop + backH - 0.05, sz - sd / 2 - 0.01), 0.05, 0.02, 90 + sdx++);
+  // back posts (slightly reclined) with carved bud finials, crest rail, solid back panel
+  const lean = 0.07;
+  const postTop = dTop + backH;
+  for (const x of [-lx, lx]) {
+    stick(seat, V3(sx + x, railY - 0.02, bkz), V3(sx + x, postTop, bkz - lean), 0.07, 0.07, 70 + sdx++);
+    const fin = vessel([[0, 0], [0.034, 0], [0.04, 0.02], [0.03, 0.04], [0.042, 0.075], [0.03, 0.11], [0.0, 0.14]], 14);
+    seat.merge(fin, new THREE.Matrix4().makeTranslation(sx + x, postTop - 0.01, bkz - lean));
+  }
+  stick(seat, V3(sx - lx - 0.05, postTop - 0.06, bkz - lean + 0.005), V3(sx + lx + 0.05, postTop - 0.06, bkz - lean + 0.005), 0.1, 0.085, 80 + sdx++);
+  const panelLo = railY + 0.06, panelHi = postTop - 0.12;
+  {
+    const ph = panelHi - panelLo, pw = 2 * lx - 0.07;
+    const g = new RoundedBoxGeometry(pw, ph, 0.03, 1, 0.008);
+    const tilt = Math.atan2(lean, backH - sh);
+    const zc = bkz - lean * ((panelLo + panelHi) / 2 - railY) / (postTop - railY);
+    const m = new THREE.Matrix4().compose(V3(sx, (panelLo + panelHi) / 2, zc), new THREE.Quaternion().setFromAxisAngle(V3(1, 0, 0), -tilt), V3(1, 1, 1));
+    seat.merge(g, m);
+    // bone inlay on the front of the back panel: a frame of strips, 2 x 3 plaques, rosettes between them
+    const q = new THREE.Quaternion().setFromAxisAngle(V3(1, 0, 0), -tilt);
+    const put = (g2: THREE.BufferGeometry, u: number, v: number) => {
+      const off = V3(u, v, 0.017).applyQuaternion(q);
+      inlay.merge(g2, new THREE.Matrix4().compose(V3(sx, (panelLo + panelHi) / 2, zc).add(off), q, V3(1, 1, 1)));
+    };
+    const strip = (w: number, h2: number) => new RoundedBoxGeometry(w, h2, 0.006, 1, 0.002);
+    put(strip(pw - 0.05, 0.022), 0, ph / 2 - 0.035);
+    put(strip(pw - 0.05, 0.022), 0, -ph / 2 + 0.035);
+    put(strip(0.022, ph - 0.09), -pw / 2 + 0.035, 0);
+    put(strip(0.022, ph - 0.09), pw / 2 - 0.035, 0);
+    // two columns of small square plaques and a central file of rosettes (bone inlay in the dark wood)
+    const sq = new RoundedBoxGeometry(0.05, 0.05, 0.005, 1, 0.002);
+    const nPl = 7;
+    for (let j = 0; j < nPl; j++) for (const u of [-pw / 2 + 0.085, pw / 2 - 0.085]) put(sq, u, (j - (nPl - 1) / 2) * ((ph - 0.14) / nPl));
+    const ros = new THREE.CylinderGeometry(0.036, 0.04, 0.007, 16);
+    ros.rotateX(Math.PI / 2);
+    const bud = new THREE.SphereGeometry(0.012, 10, 6);
+    bud.scale(1, 1, 0.5);
+    for (let j = 0; j < 3; j++) {
+      put(ros, 0, (j - 1) * 0.2);
+      put(bud, 0, (j - 1) * 0.2);
+      for (let k = 0; k < 8; k++) {
+        const a2 = (k / 8) * Math.PI * 2;
+        const pet = new THREE.SphereGeometry(0.009, 6, 4);
+        pet.scale(1.6, 0.8, 0.5);
+        pet.rotateZ(a2);
+        put(pet, Math.cos(a2) * 0.05, (j - 1) * 0.2 + Math.sin(a2) * 0.05);
+      }
+    }
+    // a vertical fillet of bone between the rosettes
+    put(strip(0.012, ph - 0.1), 0, 0);
+  }
+  // arms: rails from the back posts to carved front posts rising from the front legs, solid side panels below
+  const armY = railY + 0.25;
+  for (const x of [-lx, lx]) {
+    stick(seat, V3(sx + x, railY, fz), V3(sx + x, armY + 0.02, fz + 0.01), 0.06, 0.06, 90 + sdx++);
+    stick(seat, V3(sx + x * 1.03, armY + 0.03, bkz - 0.02), V3(sx + x * 1.03, armY + 0.03, fz + 0.06), 0.07, 0.055, 95 + sdx++);
+    const sp = new RoundedBoxGeometry(0.024, armY - railY - 0.04, fz - bkz - 0.08, 1, 0.006);
+    seat.merge(sp, new THREE.Matrix4().makeTranslation(sx + x, (railY + armY) / 2, (fz + bkz) / 2));
+    // inlay on the outer face of the side panel: a strip frame and two plaques
+    const sgn = Math.sign(x);
+    const inl = new RoundedBoxGeometry(0.005, armY - railY - 0.11, 0.11, 1, 0.002);
+    for (const zz of [-0.1, 0.1]) inlay.merge(inl, new THREE.Matrix4().makeTranslation(sx + x + sgn * 0.0145, (railY + armY) / 2, (fz + bkz) / 2 + zz));
+    const ls = new RoundedBoxGeometry(0.005, 0.016, fz - bkz - 0.12, 1, 0.002);
+    inlay.merge(ls, new THREE.Matrix4().makeTranslation(sx + x + sgn * 0.0145, armY - 0.035, (fz + bkz) / 2));
+    inlay.merge(ls, new THREE.Matrix4().makeTranslation(sx + x + sgn * 0.0145, railY + 0.045, (fz + bkz) / 2));
+  }
+  // bone inlay along the front seat rail
+  inlay.merge(new RoundedBoxGeometry(2 * lx - 0.1, 0.02, 0.005, 1, 0.002), new THREE.Matrix4().makeTranslation(sx, railY, fz + 0.0395));
   // seat board
   seat.merge(new RoundedBoxGeometry(sw - 0.02, 0.05, sd - 0.02, 2, 0.015), new THREE.Matrix4().makeTranslation(sx, dTop + sh - 0.01, sz));
-  // footstool
-  seat.merge(new RoundedBoxGeometry(0.62, 0.14, 0.34, 2, 0.02), new THREE.Matrix4().makeTranslation(sx, dTop + 0.07, sz + 0.62));
-  const seatMesh = mesh(seat.build({ ao: false }), mats.wood, true, true, 'palace:seat');
+  // footstool on small lion paws
+  seat.merge(new RoundedBoxGeometry(0.62, 0.07, 0.34, 2, 0.02), new THREE.Matrix4().makeTranslation(sx, dTop + 0.105, sz + 0.62));
+  for (const x of [-0.26, 0.26]) for (const z of [0.5, 0.74]) {
+    seat.merge(new THREE.CylinderGeometry(0.03, 0.036, 0.07, 10), new THREE.Matrix4().makeTranslation(sx + x, dTop + 0.035, sz + z));
+    const tq = new THREE.Quaternion();
+    for (let t = 0; t < 3; t++) seat.merge(toe, new THREE.Matrix4().compose(V3(sx + x + (t - 1) * 0.022, dTop + 0.012, sz + z + 0.03), tq, V3(0.8, 0.7, 0.8)));
+  }
+  inlay.merge(new RoundedBoxGeometry(0.5, 0.018, 0.005, 1, 0.002), new THREE.Matrix4().makeTranslation(sx, dTop + 0.105, sz + 0.62 + 0.1725));
+  const seatMesh = mesh(seat.build({ ao: false }), mats.chairWood, true, true, 'palace:seat');
   group.add(seatMesh);
+  group.add(mesh(inlay.build({ ao: false }), mats.bone, true, true, 'palace:seatInlay'));
   // cushion (argaman wool) and a sheep fleece over the back
   const cushion = new RoundedBoxGeometry(sw - 0.06, 0.1, sd - 0.04, 4, 0.045);
   const cu = mesh(cushion, mats.textile[2], true, true, 'palace:cushion');
@@ -217,19 +354,20 @@ export function buildInteriorProps(mats: PalaceMaterials, tier: PalaceTier, worl
   // fleece: a lumpy pelt draped over the back rail, down the back and over the seat's rear half
   {
     const nu = 18, nv = 34;
-    const path: THREE.Vector3[] = [V3(0, sh + 0.12, 0.02), V3(0, sh + 0.13, -sd / 2 + 0.1), V3(0, sh + 0.2, -sd / 2 + 0.02), V3(0, backH - 0.1, -sd / 2 - 0.02), V3(0, backH + 0.03, -sd / 2 - 0.06), V3(0, backH - 0.05, -sd / 2 - 0.16), V3(0, backH - 0.55, -sd / 2 - 0.2)];
+    // thrown over the seat under the cushion and hanging down the front, so the carved back stays visible
+    const path: THREE.Vector3[] = [V3(0, sh + 0.035, -0.14), V3(0, sh + 0.035, sd / 2 - 0.1), V3(0, sh + 0.012, sd / 2 + 0.02), V3(0, sh - 0.08, sd / 2 + 0.065), V3(0, sh - 0.26, sd / 2 + 0.08)];
     const curve = new THREE.CatmullRomCurve3(path);
     const pos: number[] = [], uv: number[] = [], idx: number[] = [], sway: number[] = [];
     const L = curve.getLength();
     for (let j = 0; j <= nv; j++) {
       const t = j / nv;
       const p = curve.getPointAt(t);
-      const halfW = 0.34 + 0.05 * Math.sin(t * 9.0) + (t > 0.85 ? -0.08 * (t - 0.85) / 0.15 : 0);
+      const halfW = (t < 0.5 ? 0.27 : 0.27 - 0.05 * (t - 0.5) / 0.5) + 0.03 * Math.sin(t * 9.0 + 1.0) + (t > 0.85 ? -0.08 * (t - 0.85) / 0.15 : 0);
       for (let i = 0; i <= nu; i++) {
         const u = i / nu;
         const x = (u - 0.5) * 2 * halfW;
         const bulge = 0.03 * Math.sin(u * Math.PI) + 0.012 * Math.sin(u * 17 + t * 23);
-        const n = curve.getTangentAt(t).cross(V3(1, 0, 0)).normalize().multiplyScalar(-1);
+        const n = curve.getTangentAt(t).cross(V3(1, 0, 0)).normalize();
         pos.push(sx + x, dTop + p.y + n.y * bulge, sz + p.z + n.z * bulge);
         uv.push(x * 2.2, t * L * 2.2);
         sway.push(0);
@@ -281,16 +419,47 @@ export function buildInteriorProps(mats: PalaceMaterials, tier: PalaceTier, worl
     return m;
   };
   const clothSeg = tier === 'low' ? 6 : 14;
+  /** twisted wool fringe: `n` thin ribbons along `edge` (from a to b), hanging along `dir`, `len` long */
+  const fringe = (a: THREE.Vector3, b: THREE.Vector3, dir: THREE.Vector3, normal: THREE.Vector3, n: number, len: number, seed: number, offset?: (u: number) => number) => {
+    const fb = new GeoBuilder();
+    const r = mulberry32(seed);
+    const along = b.clone().sub(a).normalize();
+    for (let i = 0; i < n; i++) {
+      const u = (i + 0.5) / n;
+      const p0 = a.clone().lerp(b, u);
+      if (offset) p0.addScaledVector(normal, offset(u));
+      const L = len * (0.82 + 0.3 * r());
+      const d = dir.clone().addScaledVector(along, (r() - 0.5) * 0.35).normalize();
+      const w0 = 0.011, w1 = 0.005;
+      const segs = 3;
+      const ids: number[] = [];
+      for (let k = 0; k <= segs; k++) {
+        const t = k / segs;
+        const c = p0.clone().addScaledVector(d, L * t).addScaledVector(normal, Math.sin(t * 2.5 + i) * 0.004);
+        const w = THREE.MathUtils.lerp(w0, w1, t);
+        ids.push(fb.vertex(c.clone().addScaledVector(along, -w / 2), normal, 0, t), fb.vertex(c.clone().addScaledVector(along, w / 2), normal, 1, t));
+      }
+      for (let k = 0; k < segs; k++) {
+        const i0 = ids[k * 2], i1 = ids[k * 2 + 1], i2 = ids[k * 2 + 2], i3 = ids[k * 2 + 3];
+        fb.tri(i0, i1, i3);
+        fb.tri(i0, i3, i2);
+      }
+    }
+    const m = mesh(fb.build({ ao: false }), mats.wool, false, true, 'palace:fringe');
+    return m;
+  };
   // royal hanging behind the seat (dyed wool: scarlet, argaman, tekhelet on cream)
   const hang = clothPlane(3.3, 2.5, 7, 0.035, clothSeg, 0, [2, 1], 'palace:hanging');
   hang.position.set(sx, y0 + 4.05, H.z0 + 0.02);
   group.add(hang);
+  // fringe along the lower edge, following the folds (local space of the hanging)
+  hang.add(fringe(V3(-1.65, -2.5, 0), V3(1.65, -2.5, 0), V3(0, -1, 0), V3(0, 0, 1), tier === 'low' ? 40 : 110, 0.13, 77, (u) => Math.sin(u * Math.PI * 2 * 7) * 0.035 + Math.sin(u * 37.0) * 0.004 + 0.03));
   // rod
   const rod = mesh(pole(3.8, 0.035, 0.03, 5, 8, 0.002), mats.beam, true, true);
   rod.position.set(sx - 1.9, y0 + 4.1, H.z0 + 0.09);
   group.add(rod);
   // side hangings near the dais
-  for (const [x, rotY, cell] of [[H.x0 + 0.02, Math.PI / 2, 3], [H.x1 - 0.02, -Math.PI / 2, 3]] as [number, number, number][]) {
+  for (const [x, rotY, cell] of [[H.x0 + 0.02, Math.PI / 2, 0], [H.x1 - 0.02, -Math.PI / 2, 0]] as [number, number, number][]) {
     const m = clothPlane(1.6, 2.2, 3, 0.03, clothSeg, cell, [1, 1], 'palace:sideHanging');
     m.position.set(x, y0 + 3.3, -13.4);
     m.rotation.y = rotY;
@@ -314,6 +483,8 @@ export function buildInteriorProps(mats: PalaceMaterials, tier: PalaceTier, worl
     m.position.set(x, y0, z);
     m.rotation.y = rot;
     group.add(m);
+    // fringes at both short ends, lying on the floor
+    for (const e of [-1, 1]) m.add(fringe(V3(-w / 2 + 0.04, 0.007, e * l / 2), V3(w / 2 - 0.04, 0.007, e * l / 2), V3(0, 0, e), V3(0, 1, 0), Math.round(w * (tier === 'low' ? 12 : 30)), 0.09, 90 + Math.round(w * 10 + e), undefined));
     return m;
   };
   rug(3.0, 2.0, H.cx, D.z1 + 1.3, 0, 1, [1, 1]);

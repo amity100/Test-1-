@@ -4,6 +4,7 @@ import { HeadSurface, rng, ss } from './HeadSurface';
 import { growStrands, type Headband, type LayerBuild, type Tier } from './grow';
 import { HairCapMaterial, HairDepthMaterial, HairMaterial, createHairUniforms, type HairUniforms } from './HairMaterial';
 import { HairSim } from './HairSim';
+import { enhanceLashes } from './lashes';
 import { capNoise, davidStyle, manStyle, saulStyle, type GroomStyle, type ManStyleOptions } from './styles';
 
 /*
@@ -27,6 +28,8 @@ export interface GroomOptions {
   simulate?: boolean;
   /** strand density scale (1 = tier default) */
   density?: number;
+  /** also thicken / darken the HumanModel eyelashes (default true) */
+  lashes?: boolean;
 }
 
 export interface GroomStats {
@@ -186,7 +189,7 @@ export class Groom {
     this.depthMaterial.dispose();
     this.capMaterial?.dispose();
     this.pointsTex.dispose();
-    this.sim?.tex.dispose();
+    this.uniforms.uSim.value?.dispose();
   }
 }
 
@@ -206,6 +209,7 @@ function resolveStyle(spec: GroomStyleSpec): { style: GroomStyle; seed: number }
 export async function createGroom(human: HumanModel, spec: GroomStyleSpec, opts: GroomOptions): Promise<Groom> {
   const t0 = performance.now();
   const q = opts.quality;
+  if (opts.lashes !== false) enhanceLashes(human);
   const msaa = opts.msaa ?? (q === 'low' ? 0 : 4);
   const { style, seed } = resolveStyle(spec);
   const reach = style.layers.reduce((a, l) => Math.max(a, l.reach ?? 0.22), 0.22);

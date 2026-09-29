@@ -90,12 +90,14 @@ export class SkinMaterial extends THREE.MeshPhysicalMaterial {
           `#include <common>
 attribute float detailScale;
 varying float vDetailScale;
-varying vec3 vSkinWorldPos;`,
+varying vec3 vSkinWorldPos;
+varying vec3 vSkinBind;`,
         )
         .replace(
           '#include <project_vertex>',
           `#include <project_vertex>
 vSkinWorldPos = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;
+vSkinBind = position;
 vDetailScale = detailScale;`,
         );
       s.fragmentShader = s.fragmentShader
@@ -109,6 +111,7 @@ uniform vec2 uRoughRange;
 uniform vec3 uSssWrap, uSssNormalBlend, uLobe, uTransColor, uSkinTint, uShadowScatter;
 varying float vDetailScale;
 varying vec3 vSkinWorldPos;
+varying vec3 vSkinBind;
 vec4 gSkinMask = vec4(1.0, 0.5, 0.0, 0.0);
 vec3 gSmoothN = vec3(0.0, 0.0, 1.0);
 vec3 gTransLight = vec3(0.0);
@@ -116,6 +119,16 @@ float gScatter = 0.5;
 float gSpecOcc = 1.0;
 float gCavity = 1.0;
 float skinHash( vec2 p ) { return fract( sin( dot( p, vec2( 127.1, 311.7 ) ) ) * 43758.5453 ); }
+float skinHash3( vec3 p ) { return fract( sin( dot( p, vec3( 127.1, 311.7, 74.7 ) ) ) * 43758.5453 ); }
+float skinNoise3( vec3 p ) {
+  vec3 i = floor( p ), f = fract( p );
+  vec3 u = f * f * ( 3.0 - 2.0 * f );
+  float a = mix( skinHash3( i ), skinHash3( i + vec3( 1.0, 0.0, 0.0 ) ), u.x );
+  float b = mix( skinHash3( i + vec3( 0.0, 1.0, 0.0 ) ), skinHash3( i + vec3( 1.0, 1.0, 0.0 ) ), u.x );
+  float c = mix( skinHash3( i + vec3( 0.0, 0.0, 1.0 ) ), skinHash3( i + vec3( 1.0, 0.0, 1.0 ) ), u.x );
+  float d = mix( skinHash3( i + vec3( 0.0, 1.0, 1.0 ) ), skinHash3( i + vec3( 1.0, 1.0, 1.0 ) ), u.x );
+  return mix( mix( a, b, u.y ), mix( c, d, u.y ), u.z );
+}
 float skinNoise( vec2 p ) {
   vec2 i = floor( p ), f = fract( p );
   vec2 u = f * f * ( 3.0 - 2.0 * f );
@@ -135,9 +148,10 @@ gSkinMask = texture2D( uMaskMap, vMapUv );
 diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * vec3(0.78, 0.7, 0.6), uDirt * gSkinMask.r );
 #ifdef SKIN_DETAIL
 {
-  // mid-frequency mottling (capillary blotches, uneven tan) at a constant world scale: 1 unit = 2 cm of skin
-  vec2 wuv = vMapUv * ( uDetailTile / max( vDetailScale, 0.05 ) );
-  float n1 = skinNoise( wuv * 0.9 ), n2 = skinNoise( wuv * 3.1 + 7.3 ), n3 = skinNoise( wuv * 1.7 + 3.1 );
+  // mid-frequency mottling (capillary blotches, uneven tan) in bind-pose space (metres), so it is continuous across
+  // uv seams (a uv-space noise broke at every island border)
+  vec3 bp = vSkinBind;
+  float n1 = skinNoise3( bp * 45.0 ), n2 = skinNoise3( bp * 155.0 + 7.3 ), n3 = skinNoise3( bp * 85.0 + 3.1 );
   float lum = 1.0 + 0.07 * ( n1 - 0.5 ) + 0.05 * ( n2 - 0.5 );
   diffuseColor.rgb *= lum * vec3( 1.0 + 0.05 * ( n3 - 0.5 ), 1.0 - 0.02 * ( n3 - 0.5 ), 1.0 - 0.04 * ( n3 - 0.5 ) );
 }

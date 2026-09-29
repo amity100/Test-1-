@@ -175,13 +175,13 @@ export function createGradeUniforms(): Record<string, THREE.IUniform> {
     uTime: { value: 0 },
     uVignette: { value: 0.16 },
     uGrain: { value: 0.018 },
-    uSaturation: { value: 1.06 },
-    uContrast: { value: 1.05 },
+    uSaturation: { value: 1.08 },
+    uContrast: { value: 1.06 },
     uFade: { value: 0 },
     uDesat: { value: 0 },
     uRed: { value: 0 },
     uCA: { value: 0.0012 },
-    uWarm: { value: 0.03 },
+    uWarm: { value: 0.055 },
   };
 }
 

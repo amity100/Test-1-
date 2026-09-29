@@ -138,12 +138,16 @@ export class HumanRig {
   };
   /** direct per-unit face control (MakeHuman pose units), 0..1 */
   readonly faceUnits: Record<string, number> = {};
-  /** always-on bias: relaxed lids (the upper lid rests ~1.5 mm over the iris, the lower lid touches its rim) */
   /** resting lip closure (lowerLipUp pose-unit weight), released automatically when the jaw opens */
   lipSeal = 0.3;
+  /** always-on bias: relaxed lids (the upper lid rests ~1.5 mm over the iris, the lower lid touches its rim) */
   readonly faceBias: Record<string, number> = { LeftLowerLidUp: 0.16, RightLowerLidUp: 0.16, LeftUpperLidClosed: 0.1, RightUpperLidClosed: 0.1 };
   /** resting gaze pitch (radians, negative = down) */
   gazeRestPitch = -0.035;
+  private readonly _fAcc: [number, number, number][] = [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]];
+  private readonly _tAcc = [0, 0, 0];
+  private readonly _twAcc = [0, 0, 0];
+  private readonly _spAcc = [0, 0, 0, 0];
   private exprTarget: Partial<Record<Expression, number>> = {};
   private exprCur: Partial<Record<Expression, number>> = {};
   expressionSpeed = 4;
@@ -493,11 +497,14 @@ export class HumanRig {
       else st.cur.delete(p);
       sum += nv > 1e-3 ? nv : 0;
     }
-    const f: [number, number, number][] = [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]];
-    const t = [0, 0, 0];
-    const tw = [0, 0, 0];
+    // scratch arrays reused every frame (no per-frame allocations)
+    const f = this._fAcc, t = this._tAcc, tw = this._twAcc, spread = this._spAcc;
+    for (let i = 0; i < 4; i++) {
+      f[i][0] = f[i][1] = f[i][2] = 0;
+      spread[i] = 0;
+    }
+    t[0] = t[1] = t[2] = tw[0] = tw[1] = tw[2] = 0;
     let opp = 0, cup = 0;
-    const spread = [0, 0, 0, 0];
     for (const [p, w0] of st.cur) {
       const w = w0 / (sum || 1);
       const S = p === 'grip' ? this.gripShape[s] : FINGER_SHAPES[p];

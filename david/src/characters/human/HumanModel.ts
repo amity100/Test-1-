@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { HumanData, buildAuxGeometry, buildBodyGeometry, type RigJson } from './HumanData';
+import { HumanData, buildAuxGeometry, buildBodyGeometry, followSkin, skinNeighbours, variationDelta, type RigJson } from './HumanData';
 import { HumanRig } from './HumanRig';
 import { SkinMaterial, uvDensityAttribute } from './SkinMaterial';
 import { EyeBall, WetMaterial } from './EyeModel';
@@ -33,7 +33,7 @@ export type SocketName =
 export interface HumanLoadOptions {
   preset: string; // 'david' | 'saul' | 'man'
   quality: HumanQuality; // engine.quality.name
-  /** body geometry tier; default: high -> 'sub1' (Catmull-Clark, ~56k verts), else 'base' (13.4k) */
+  /** body geometry tier; default: high -> 'sub1' (Catmull-Clark, ~56k verts), else 'base' (14.5k) */
   geometry?: 'base' | 'sub1';
   /** texture resolution; default: low -> 1024, else 2048 */
   textureSize?: 1024 | 2048;
@@ -47,6 +47,8 @@ export interface HumanLoadOptions {
 
 const dataCache = new Map<string, Promise<HumanData>>();
 const texCache = new Map<string, Promise<THREE.Texture | null>>();
+/** uv-density attribute per shared uv attribute (same topology -> same values; crowds compute it once) */
+const densityCache = new WeakMap<THREE.BufferAttribute, THREE.BufferAttribute>();
 
 function loadData(preset: string) {
   let p = dataCache.get(preset);
@@ -87,6 +89,51 @@ function mulberry(seed: number) {
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+/**
+ * Teeth: natural off-white enamel (never gold), lit only as much as the mouth lets light in — the molars sit in the
+ * dark mouth interior, the incisors get most of the light but still less than the lips (per-vertex occlusion).
+ */
+function teethMaterial(g: THREE.BufferGeometry): THREE.MeshPhysicalMaterial {
+  const pos = g.getAttribute('position') as THREE.BufferAttribute;
+  let zmax = -Infinity;
+  for (let i = 0; i < pos.count; i++) zmax = Math.max(zmax, pos.getZ(i));
+  const occ = new Float32Array(pos.count);
+  for (let i = 0; i < pos.count; i++) {
+    const t = THREE.MathUtils.smoothstep(pos.getZ(i), zmax - 0.03, zmax - 0.004);
+    occ[i] = 0.12 + 0.88 * t * t;
+  }
+  g.setAttribute('teethOcc', new THREE.BufferAttribute(occ, 1));
+  // enamel is a diffuse, slightly translucent off-white with a soft sheen — a strong mirror specular over a shadowed
+  // diffuse reads as metal (gold / chrome) at game distance
+  const m = new THREE.MeshPhysicalMaterial({ vertexColors: true, color: 0xf0e9dc, roughness: 0.48, metalness: 0, ior: 1.5, specularIntensity: 0.22 });
+  m.name = 'HumanTeeth';
+  m.onBeforeCompile = (s) => {
+    s.vertexShader = s.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float teethOcc;\nvarying float vTeethOcc;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvTeethOcc = teethOcc;');
+    s.fragmentShader = s.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vTeethOcc;')
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+// enamel: keep the baked shade variation but desaturate it toward a slightly warm off-white
+diffuseColor.rgb = mix( vec3( dot( diffuseColor.rgb, vec3( 0.3, 0.59, 0.11 ) ) ) * vec3( 1.0, 0.97, 0.9 ), diffuseColor.rgb, 0.35 );`,
+      )
+      .replace(
+        '#include <aomap_fragment>',
+        `#include <aomap_fragment>
+reflectedLight.directDiffuse *= vTeethOcc;
+reflectedLight.directSpecular *= vTeethOcc * 0.6;
+// the lips usually shadow the teeth from the sun: light bounced inside the mouth keeps them off-white, not black
+reflectedLight.indirectDiffuse *= vTeethOcc * 1.15;
+reflectedLight.indirectDiffuse += diffuseColor.rgb * 0.035 * vTeethOcc;
+reflectedLight.indirectSpecular *= vTeethOcc * 0.25;`,
+      );
+  };
+  m.customProgramCacheKey = () => 'human-teeth';
+  return m;
 }
 
 export class HumanModel {
@@ -165,7 +212,12 @@ export class HumanModel {
     const level = (options.geometry ?? (q === 'high' ? 'sub1' : 'base')) === 'sub1' ? 1 : 0;
     const bg = buildBodyGeometry(data, level, variation);
     this.posIndex = bg.posIndex;
-    bg.geometry.setAttribute('detailScale', uvDensityAttribute(bg.geometry));
+    {
+      const uvA = bg.geometry.getAttribute('uv') as THREE.BufferAttribute;
+      let ds = densityCache.get(uvA);
+      if (!ds) densityCache.set(uvA, (ds = uvDensityAttribute(bg.geometry)));
+      bg.geometry.setAttribute('detailScale', ds);
+    }
     this.skin = new SkinMaterial({ albedo: tex.albedo, normal: tex.normal, mask: tex.mask, detail: tex.detail }, { quality: q, tint });
     const bones = this.rig.boneList;
     const inverses = this.rig.rig.bones.map((b) => new THREE.Matrix4().makeTranslation(-b.h[0], -b.h[1], -b.h[2]));
@@ -185,7 +237,7 @@ export class HumanModel {
     const bc = rig.brows.color ?? [0.12, 0.07, 0.04];
     const keep = q === 'low' ? 2 : 1;
     const mkStrands = (prefix: 'brow' | 'lash', mat: StrandMaterial) => {
-      const g = buildAuxGeometry(data, prefix, keep);
+      const g = buildAuxGeometry(data, prefix, keep, variation);
       if (!g) return null;
       const mesh = new THREE.SkinnedMesh(g, mat);
       mesh.name = prefix;
@@ -199,9 +251,10 @@ export class HumanModel {
     const browCol = new THREE.Color().setRGB(bc[0], bc[1], bc[2], THREE.SRGBColorSpace); // preset colours are sRGB
     this.brows = mkStrands('brow', new StrandMaterial({ color: browCol, tipColor: browCol.clone().multiplyScalar(1.5), opacity: 0.92, widthScale: 1.0 }));
     this.lashes = mkStrands('lash', new StrandMaterial({ color: browCol.clone().multiplyScalar(0.35), tipColor: browCol.clone().multiplyScalar(0.8), opacity: 1, widthScale: 1.0, roughness: 0.6 }));
-    const tg = buildAuxGeometry(data, 'tear');
+    const tg = buildAuxGeometry(data, 'tear', 1, variation);
     if (tg) {
-      const tl = new THREE.SkinnedMesh(tg, new WetMaterial(0.08, 0.45));
+      // the wet meniscus along the lower lid: a thin bright specular line gives the eyes life
+      const tl = new THREE.SkinnedMesh(tg, new WetMaterial(0.045, 0.9));
       tl.name = 'tearLines';
       tl.frustumCulled = false;
       tl.renderOrder = 2;
@@ -209,10 +262,9 @@ export class HumanModel {
       tl.bind(this.skeleton, new THREE.Matrix4());
       this.tearLines = tl;
     }
-    const teethG = buildAuxGeometry(data, 'teeth');
+    const teethG = buildAuxGeometry(data, 'teeth', 1, variation);
     if (teethG) {
-      const tm = new THREE.MeshPhysicalMaterial({ vertexColors: true, color: 0xb8b0a0, roughness: 0.34, metalness: 0, ior: 1.55 });
-      tm.name = 'HumanTeeth';
+      const tm = teethMaterial(teethG);
       const teeth = new THREE.SkinnedMesh(teethG, tm);
       teeth.name = 'teeth';
       teeth.frustumCulled = false;
@@ -221,9 +273,17 @@ export class HumanModel {
       this.teeth = teeth;
     }
     // ---- eyes (rigid, parented to the eye bones)
+    const vDelta = variationDelta(data, variation);
     const mkEye = (S: 'L' | 'R') => {
       const e = rig.eyes[S];
-      const op = e.opening;
+      let op = e.opening;
+      if (vDelta) {
+        // the lid opening follows the variation morphs (eyesSmall, browHeavy...) like the skin does
+        const flat = new Float32Array(op.length * 3);
+        op.forEach((p, i) => flat.set(p, i * 3));
+        followSkin(flat, skinNeighbours(data, flat), vDelta);
+        op = op.map((_, i) => [flat[i * 3], flat[i * 3 + 1], flat[i * 3 + 2]] as [number, number, number]);
+      }
       let minx = Infinity, maxx = -Infinity;
       for (const p of op) {
         minx = Math.min(minx, p[0]);
@@ -506,6 +566,12 @@ export class HumanModel {
     const p = new THREE.Vector3();
     const mats = space === 'rest' ? this.restSkinMatrices() : null;
     const outPos = new Float32Array(n * 3);
+    // authored normals are kept: they are carried into the bind pose with the same blended matrix (n' = M^T n for
+    // p' = M^-1 p); only geometry without normals gets computeVertexNormals()
+    const nrmA = g.getAttribute('normal') as THREE.BufferAttribute | undefined;
+    const outNrm = nrmA && mats ? new Float32Array(n * 3) : null;
+    const nv = new THREE.Vector3();
+    const n3 = new THREE.Matrix3();
     for (let i = 0; i < n; i++) {
       p.fromBufferAttribute(pos, i);
       // gather candidates from growing shells; fall back to plain nearest skin if the filters reject everything
@@ -559,6 +625,10 @@ export class HumanModel {
           const e = mats[si[i * 8 + m]].elements;
           for (let z = 0; z < 16; z++) M.elements[z] += e[z] * w;
         }
+        if (outNrm && nrmA) {
+          nv.fromBufferAttribute(nrmA, i).applyMatrix3(n3.setFromMatrix4(M).transpose()).normalize();
+          nv.toArray(outNrm, i * 3);
+        }
         p.applyMatrix4(M.invert());
       }
       p.toArray(outPos, i * 3);
@@ -575,15 +645,14 @@ export class HumanModel {
     out.setAttribute('skinWeight', new THREE.BufferAttribute(split(sw, 0), 4));
     out.setAttribute('skinIndex2', new THREE.BufferAttribute(split(si, 1), 4));
     out.setAttribute('skinWeight2', new THREE.BufferAttribute(split(sw, 1), 4));
-    if (space === 'rest' && out.getAttribute('normal')) out.computeVertexNormals();
-    // same LBS/DQS 8-influence skinning as the body, so the garment follows the skin exactly
-    for (const m of Array.isArray(material) ? material : [material]) {
-      if (!m.userData.humanSkinning) {
-        this.dqs.patchMaterial(m, true);
-        m.userData.humanSkinning = true;
-      }
-    }
-    const mesh = new THREE.SkinnedMesh(out, material);
+    if (outNrm) out.setAttribute('normal', new THREE.BufferAttribute(outNrm, 3));
+    else if (!out.getAttribute('normal')) out.computeVertexNormals();
+    // same LBS/DQS 8-influence skinning as the body, so the garment follows the skin exactly.  The patch is per
+    // (material, human): a material already skinning another human is replaced by a per-human clone here
+    // (so read mesh.material back instead of assuming it is the instance you passed).
+    const mm = Array.isArray(material) ? material.map((m) => this.dqs.materialFor(m, true)) : this.dqs.materialFor(material, true);
+    for (const m of Array.isArray(mm) ? mm : [mm]) m.userData.humanSkinning = true;
+    const mesh = new THREE.SkinnedMesh(out, mm);
     mesh.customDepthMaterial = this.dqs.patchMaterial(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), true);
     mesh.frustumCulled = false;
     mesh.castShadow = true;
@@ -593,9 +662,14 @@ export class HumanModel {
     return mesh;
   }
 
+  /**
+   * Free GPU resources of this instance (materials, the skinning textures, per-instance geometry).  Textures loaded
+   * from the preset (albedo / normal / mask / detail / iris) are shared by every instance and stay cached.
+   */
   dispose() {
     this.body.geometry.dispose();
     this.skin.dispose();
+    (this.body.customDepthMaterial as THREE.Material | undefined)?.dispose();
     for (const m of [this.brows, this.lashes, this.tearLines, this.teeth]) {
       if (!m) continue;
       m.geometry.dispose();
@@ -605,7 +679,15 @@ export class HumanModel {
       e.ball.geometry.dispose();
       e.cornea.geometry.dispose();
       e.material.dispose();
+      (e.cornea.material as THREE.Material).dispose();
     }
+    // garments created by skinAttachment: their depth materials are ours (their own materials belong to the caller)
+    this.root.traverse((o) => {
+      const sm = o as THREE.SkinnedMesh;
+      if (sm.isSkinnedMesh && sm !== this.body && sm.customDepthMaterial) sm.customDepthMaterial.dispose();
+    });
+    this.dqs.dispose();
+    this.skeleton.dispose();
     this.root.removeFromParent();
   }
 }

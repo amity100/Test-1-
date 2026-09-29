@@ -56,6 +56,48 @@ function parapet(b: GeoBuilder, x0: number, x1: number, z0: number, z1: number, 
   }
 }
 
+
+/**
+ * Battered base (sloping stone skirt / glacis) around a rectangular footprint [x0,x1] x [z0,z1]: the face leans from
+ * the wall at `yTop` out by `d` at `yBot` (below ground). `sides` picks the faces ('n' = -Z, 's' = +Z, 'w' = -X,
+ * 'e' = +X); adjacent battered faces are mitred at the corners. Tessellated like the walls (aDisp 0 on the borders).
+ */
+function batter(b: GeoBuilder, x0: number, x1: number, z0: number, z1: number, yTop: number, yBot: number, d: number, sides: string, spacing: number) {
+  const has = (c: string) => sides.includes(c);
+  // corners of the top (wall face) and bottom (expanded) rectangles
+  const faces: { t0: THREE.Vector3; t1: THREE.Vector3; b0: THREE.Vector3; b1: THREE.Vector3 }[] = [];
+  const ex = (c: string) => (has(c) ? d : 0);
+  if (has('n')) faces.push({ t0: V3(x1, yTop, z0), t1: V3(x0, yTop, z0), b0: V3(x1 + ex('e'), yBot, z0 - d), b1: V3(x0 - ex('w'), yBot, z0 - d) });
+  if (has('s')) faces.push({ t0: V3(x0, yTop, z1), t1: V3(x1, yTop, z1), b0: V3(x0 - ex('w'), yBot, z1 + d), b1: V3(x1 + ex('e'), yBot, z1 + d) });
+  if (has('w')) faces.push({ t0: V3(x0, yTop, z0), t1: V3(x0, yTop, z1), b0: V3(x0 - d, yBot, z0 - ex('n')), b1: V3(x0 - d, yBot, z1 + ex('s')) });
+  if (has('e')) faces.push({ t0: V3(x1, yTop, z1), t1: V3(x1, yTop, z0), b0: V3(x1 + d, yBot, z1 + ex('s')), b1: V3(x1 + d, yBot, z0 - ex('n')) });
+  const p = new THREE.Vector3(), q0 = new THREE.Vector3(), q1 = new THREE.Vector3();
+  for (const f of faces) {
+    const len = f.b0.distanceTo(f.b1);
+    const nu = Math.max(1, Math.round(len / spacing));
+    const nv = Math.max(1, Math.round(f.t0.distanceTo(f.b0) / spacing));
+    const n = new THREE.Vector3().subVectors(f.b1, f.b0).cross(new THREE.Vector3().subVectors(f.t0, f.b0)).normalize();
+    const ids: number[][] = [];
+    for (let j = 0; j <= nv; j++) {
+      const v = j / nv;
+      ids.push([]);
+      q0.lerpVectors(f.b0, f.t0, v);
+      q1.lerpVectors(f.b1, f.t1, v);
+      for (let i = 0; i <= nu; i++) {
+        const u = i / nu;
+        p.lerpVectors(q0, q1, u);
+        const m = Math.min(u * len, (1 - u) * len, v * 2.5, (1 - v) * 2.5);
+        ids[j].push(b.vertex(p, n, p.x * 0.3, p.y * 0.3, 1, THREE.MathUtils.smoothstep(m, 0, 0.35)));
+      }
+    }
+    for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) {
+      const a = ids[j][i], bb = ids[j][i + 1], c = ids[j + 1][i], dd = ids[j + 1][i + 1];
+      b.tri(a, bb, dd);
+      b.tri(a, dd, c);
+    }
+  }
+}
+
 export function buildArchitecture(mats: PalaceMaterials, tier: PalaceTier): Architecture {
   const group = new THREE.Group();
   group.name = 'palace:architecture';
@@ -96,6 +138,16 @@ export function buildArchitecture(mats: PalaceMaterials, tier: PalaceTier): Arch
   parapet(fort, G.towerX1 - pt, G.towerX1, G.z0 - G.towerW, G.z1 + G.towerW, gw, G.towerTop, sp, false);
   parapet(fort, G.towerX0, G.towerX1 - pt, G.z0 - G.towerW, G.z0 - G.towerW + pt, gw, G.towerTop, sp, true);
   parapet(fort, G.towerX0, G.towerX1 - pt, G.z1 + G.towerW - pt, G.z1 + G.towerW, gw, G.towerTop, sp, true);
+  // battered bases: the lower courses of towers and curtain walls lean outward (sloping stone skirt against sapping)
+  const bT = 1.5, bB = -0.9, bD = 0.85, bsp = tier === 'low' ? 3.0 : Math.max(sp, 0.3);
+  batter(fort, F.x0 + 7, F.x1 - 7, F.z0, F.z0 + F.wall, bT, bB, bD, 'n', bsp);
+  batter(fort, F.x0 + 7, F.x1 - 7, F.z1 - F.wall, F.z1, bT, bB, bD, 's', bsp);
+  batter(fort, F.x0, F.x0 + F.wall, F.z0 + 7, F.z1 - 7, bT, bB, bD, 'w', bsp);
+  batter(fort, F.x1 - F.wall, F.x1, F.z0 + 7, GATE.z0 - GATE.towerW, bT, bB, bD, 'e', bsp);
+  batter(fort, F.x1 - F.wall, F.x1, GATE.z1 + GATE.towerW, F.z1 - 7, bT, bB, bD, 'e', bsp);
+  for (const [tx, tz] of towers) batter(fort, tx, tx + F.tower, tz, tz + F.tower, bT + 0.4, bB, bD + 0.25, 'nswe', bsp);
+  batter(fort, G.towerX0, G.towerX1, G.z0 - G.towerW, G.z0, bT + 0.3, bB, bD + 0.15, 'ne', bsp);
+  batter(fort, G.towerX0, G.towerX1, G.z1, G.z1 + G.towerW, bT + 0.3, bB, bD + 0.15, 'se', bsp);
   const fortGeo = fort.build({ ao: false, disp: true });
   const fortMesh = mesh(fortGeo, tier === 'low' ? mats.masonryFlat : mats.masonry, true, true, 'palace:fortress');
   group.add(fortMesh);
@@ -288,6 +340,22 @@ export function buildArchitecture(mats: PalaceMaterials, tier: PalaceTier): Arch
     m.position.set(H.cx - H.door.w / 2 - 0.45, y0 + H.door.h + 0.14, zz);
     beams.add(m);
   }
+  // outer doorway: a proud timber lintel over dressed stone jambs and a worn threshold slab with a door-socket stone
+  {
+    const g = hewnBeam(H.door.w + 1.1, 0.34, 0.3, 93);
+    const m = mesh(g, mats.beamExt);
+    m.position.set(H.cx - H.door.w / 2 - 0.55, y0 + H.door.h + 0.17, H.z1 + T + 0.08);
+    beams.add(m);
+    const jb = new GeoBuilder();
+    for (const sgn of [-1, 1]) {
+      for (let k = 0; k < 3; k++) {
+        const hk = H.door.h / 3;
+        jb.block(V3(H.cx + sgn * (H.door.w / 2 + 0.2), y0 + hk * (k + 0.5), H.z1 + T - 0.1), V3(0.42 + (k % 2) * 0.06, hk - 0.03, 0.32), 0.12, 0.3, { faces: 'px nx pz py ny', dispEdge: 0.05 });
+      }
+    }
+    jb.block(V3(H.cx, y0 - 0.03, H.z1 + T * 0.5 + 0.1), V3(H.door.w + 0.5, 0.12, T + 0.25), 0.2, 0.3, { faces: 'px nx pz nz py', dispEdge: 0.05 });
+    group.add(mesh(jb.build({ ao: false, disp: true }), tier === 'low' ? mats.masonryFlat : mats.masonry, true, true, 'palace:doorJambs'));
+  }
   group.add(beams);
 
   // ------------------------------------------------------------------ courtyard buildings (storerooms / quarters along the south wall)
@@ -347,10 +415,61 @@ export function buildArchitecture(mats: PalaceMaterials, tier: PalaceTier): Arch
     const rb = new GeoBuilder();
     rb.block(V3(0, top + 0.12, 0), V3(w + 0.25, 0.24, d + 0.25), 20, 0.3, { faces: 'px nx pz nz py' });
     roofs.merge(rb.build({ ao: false }), m4);
+    // roof parapet (Deut 22:8) and, on some houses, an upper room (aliyah) on the roof
+    const pb = new GeoBuilder();
+    const pt2 = 0.3, ph2 = 0.45;
+    pb.block(V3(0, top + 0.24 + ph2 / 2, -d / 2 + pt2 / 2), V3(w, ph2, pt2), 20, 0.3, { faces: 'px nx pz nz py' });
+    pb.block(V3(0, top + 0.24 + ph2 / 2, d / 2 - pt2 / 2), V3(w, ph2, pt2), 20, 0.3, { faces: 'px nx pz nz py' });
+    pb.block(V3(-w / 2 + pt2 / 2, top + 0.24 + ph2 / 2, 0), V3(pt2, ph2, d - 2 * pt2), 20, 0.3, { faces: 'px nx py' });
+    pb.block(V3(w / 2 - pt2 / 2, top + 0.24 + ph2 / 2, 0), V3(pt2, ph2, d - 2 * pt2), 20, 0.3, { faces: 'px nx py' });
+    if (rnd() < 0.35) {
+      const uw = Math.min(3.6, w * 0.45), ud = Math.min(3.4, d * 0.45), uh = 2.3;
+      const ux = (rnd() - 0.5) * (w - uw - 0.8), uz = -d / 2 + ud / 2 + 0.3;
+      pb.block(V3(ux, top + 0.24 + uh / 2, uz), V3(uw, uh, ud), 20, 0.3, { faces: 'px nx pz nz' });
+      const ur = new GeoBuilder();
+      ur.block(V3(ux, top + 0.24 + uh + 0.1, uz), V3(uw + 0.2, 0.2, ud + 0.2), 20, 0.3, { faces: 'px nx pz nz py' });
+      roofs.merge(ur.build({ ao: false }), m4);
+      const ud2 = new GeoBuilder();
+      ud2.grid(V3(ux - 0.4, top + 0.26, uz + ud / 2 + 0.02), V3(1, 0, 0), V3(0, 1, 0), { u0: 0, u1: 0.8, v0: 0, v1: 1.6 }, 3, 1, {});
+      dark.merge(ud2.build({ ao: false }), m4);
+    }
+    houses.merge(pb.build({ ao: false }), m4);
+    // small window slits
+    const wb = new GeoBuilder();
+    for (const sx2 of [-w / 4, w / 4]) wb.grid(V3(sx2 - 0.15, top - 1.2, d / 2 + 0.02), V3(1, 0, 0), V3(0, 1, 0), { u0: 0, u1: 0.3, v0: 0, v1: 0.45 }, 3, 1, {});
+    dark.merge(wb.build({ ao: false }), m4);
     // doorway into the courtyard house
     const db = new GeoBuilder();
     db.grid(V3(-0.5, hi - 0.05, d / 2 + 0.02), V3(1, 0, 0), V3(0, 1, 0), { u0: 0, u1: 1.0, v0: 0, v1: 1.9 }, 3, 1, {});
     dark.merge(db.build({ ao: false }), m4);
+  }
+  // neighbouring villages of Benjamin on the surrounding hilltops (Ramah to the north, Geba to the north-east,
+  // Anathoth to the south-east, a hamlet to the west): clusters of flat-roofed courtyard houses seen from afar
+  const nFar = tier === 'high' ? 30 : tier === 'medium' ? 20 : 10;
+  for (const [vx, vz, vs] of [[250, -2300, 11], [2300, -2150, 12], [1900, 950, 13], [-1850, -650, 14]] as [number, number, number][]) {
+    // settle on the local summit
+    let bx = vx, bz = vz, bh = gibeahHeight(vx, vz);
+    for (let k = 0; k < 40; k++) {
+      const x = vx + (rnd() - 0.5) * 600, z = vz + (rnd() - 0.5) * 600;
+      const hh = gibeahHeight(x, z);
+      if (hh > bh) { bh = hh; bx = x; bz = z; }
+    }
+    const vr = mulberry32(vs);
+    for (let i = 0; i < nFar; i++) {
+      const a = vr() * Math.PI * 2, r = Math.sqrt(vr()) * 85;
+      const x = bx + Math.cos(a) * r, z = bz + Math.sin(a) * r;
+      const w = 7 + vr() * 5, d = 7 + vr() * 5;
+      const lo = Math.min(gibeahHeight(x - w / 2, z - d / 2), gibeahHeight(x + w / 2, z + d / 2), gibeahHeight(x - w / 2, z + d / 2), gibeahHeight(x + w / 2, z - d / 2));
+      const top = lo + 3.2 + vr() * 1.8 + (vr() < 0.15 ? 2.5 : 0);
+      const hb = new GeoBuilder();
+      hb.block(V3(0, (lo - 2 + top) / 2, 0), V3(w, top - lo + 2, d), 40, 0.3, { faces: 'px nx pz nz' });
+      q.setFromAxisAngle(V3(0, 1, 0), vr() * 0.6 - 0.3 + (vs % 2) * 0.4);
+      m4.compose(V3(x, 0, z), q, sc);
+      houses.merge(hb.build({ ao: false }), m4);
+      const rb = new GeoBuilder();
+      rb.block(V3(0, top + 0.12, 0), V3(w + 0.3, 0.24, d + 0.3), 40, 0.3, { faces: 'px nx pz nz py' });
+      roofs.merge(rb.build({ ao: false }), m4);
+    }
   }
   group.add(mesh(houses.build({ ao: false }), mats.houses, true, true, 'palace:village'));
   group.add(mesh(roofs.build({ ao: false }), mats.roof, true, true, 'palace:roofs'));

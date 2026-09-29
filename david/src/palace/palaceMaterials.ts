@@ -17,6 +17,12 @@ import fleeceA from '../assets/palace/fleece_a.webp';
 import fleeceN from '../assets/palace/fleece_n.webp';
 import reedA from '../assets/palace/reed_a.webp';
 import reedN from '../assets/palace/reed_n.webp';
+// rough fieldstone masonry of the citadel (tools/palace/gen_fieldstone.py): albedo + height (A), normal + AO (A)
+import fortstoneA from '../assets/palace/fortstone_a.webp';
+import fortstoneN from '../assets/palace/fortstone_n.webp';
+
+/** metres covered by one tile of the fieldstone texture */
+export const FIELDSTONE_TILE = 4.8;
 
 export type PalaceTier = 'low' | 'medium' | 'high';
 
@@ -30,6 +36,8 @@ export interface PalaceTextures {
   clay: THREE.Texture; clayN: THREE.Texture;
   fleece: THREE.Texture; fleeceN: THREE.Texture;
   reed: THREE.Texture; reedN: THREE.Texture;
+  /** citadel fieldstone masonry: RGB albedo + height in A; normal + AO in A */
+  fortstone: THREE.Texture; fortstoneN: THREE.Texture;
 }
 
 /** Loads the palace textures. `max` caps the edge (phones: 512 for secondary maps). Resolves when all decoded. */
@@ -71,6 +79,8 @@ export function loadPalaceTextures(renderer: THREE.WebGLRenderer, tier: PalaceTi
     clay: load(clayA, true, 512, 'clay'), clayN: load(clayN, false, 512, 'clayN'),
     fleece: load(fleeceA, true, 512, 'fleece'), fleeceN: load(fleeceN, false, 512, 'fleeceN'),
     reed: load(reedA, true, 512, 'reed'), reedN: load(reedN, false, 512, 'reedN'),
+    fortstone: load(fortstoneA, true, tier === 'low' ? 512 : Math.min(texMax, 1024), 'fortstone'),
+    fortstoneN: load(fortstoneN, false, tier === 'low' ? 512 : Math.min(texMax, 1024), 'fortstoneN'),
   };
   // alpha-tested foliage atlas: no wrapping, keep its alpha (never resampled through a canvas by the engine)
   tex.tamarisk.wrapS = tex.tamarisk.wrapT = THREE.ClampToEdgeWrapping;
@@ -165,11 +175,11 @@ ${o.soot ? `diffuseColor.rgb *= 1.0 - ${o.soot.toFixed(3)} * smoothstep(uSoot.x,
 // Exterior masonry (fortress, towers, houses): world-space triplanar fieldstone with mud mortar, optional
 // vertex displacement from the height in the albedo alpha (tessellated walls on medium / high).
 // =====================================================================================================
-export function masonryMaterial(world: TextureSet, opts: { scale: number; displace: number; tint?: number; plaster?: number; key: string; render?: THREE.Texture; renderCover?: number; dry?: boolean }) {
+export function masonryMaterial(world: TextureSet, opts: { scale: number; displace: number; tint?: number; plaster?: number; key: string; render?: THREE.Texture; renderCover?: number; dry?: boolean; stone?: { map: THREE.Texture; normal: THREE.Texture } }) {
   const mat = new THREE.MeshStandardMaterial({ color: opts.tint ?? 0xffffff, roughness: 0.9, metalness: 0 });
   mat.onBeforeCompile = (s) => {
-    s.uniforms.tMas = { value: opts.dry ? world.wall : world.masonry };
-    s.uniforms.tMasN = { value: opts.dry ? world.wallN : world.masonryN };
+    s.uniforms.tMas = { value: opts.stone ? opts.stone.map : opts.dry ? world.wall : world.masonry };
+    s.uniforms.tMasN = { value: opts.stone ? opts.stone.normal : opts.dry ? world.wallN : world.masonryN };
     s.uniforms.tPl = { value: world.soil };
     s.uniforms.tRender = { value: opts.render ?? world.soil };
     s.uniforms.tLime = { value: world.rock };
@@ -247,7 +257,7 @@ reflectedLight.indirectDiffuse *= masAO;
 reflectedLight.directDiffuse *= mix(1.0, masAO, 0.4);`)
       ;
   };
-  mat.customProgramCacheKey = () => `palace-masonry3-${opts.key}-${opts.scale}-${opts.displace}-${opts.plaster ?? 0}-${opts.renderCover ?? 0}-${opts.dry ? 1 : 0}`;
+  mat.customProgramCacheKey = () => `palace-masonry4-${opts.stone ? 'fs' : ''}-${opts.key}-${opts.scale}-${opts.displace}-${opts.plaster ?? 0}-${opts.renderCover ?? 0}-${opts.dry ? 1 : 0}`;
   return mat;
 }
 
@@ -312,6 +322,12 @@ export interface PalaceMaterials {
   plasterExt: THREE.MeshStandardMaterial;
   /** the king's house: masonry under a flaking mud-lime render */
   hallShell: THREE.MeshStandardMaterial;
+  /** the king's chair: dark, oiled hardwood */
+  chairWood: THREE.MeshStandardMaterial;
+  /** bone / ivory-like inlay plaques */
+  bone: THREE.MeshStandardMaterial;
+  /** loose wool (fringes, tassels) */
+  wool: THREE.MeshStandardMaterial;
 }
 
 /** Cloth: atlas cell sampling with seamless wrap (textureGrad), weave micro-normal, slow draft sway. */
@@ -359,7 +375,7 @@ export function createPalaceMaterials(tex: PalaceTextures, world: TextureSet, ti
   const wood = interiorize(std({ map: tex.wood, normalMap: tex.woodN, roughness: 0.62, color: 0xd9c0a4 }), { key: 'wood' });
   const clay = interiorize(std({ map: tex.clay, normalMap: tex.clayN, roughness: 0.78, color: 0xffffff }), { key: 'clay' });
   const clayDark = interiorize(std({ map: tex.clay, normalMap: tex.clayN, roughness: 0.7, color: 0x8a6a58 }), { key: 'clayd' });
-  const fleece = interiorize(std({ map: tex.fleece, normalMap: tex.fleeceN, roughness: 1, color: 0xf4ece0, normalScale: new THREE.Vector2(1.4, 1.4) }), { key: 'fleece' });
+  const fleece = interiorize(std({ map: tex.fleece, normalMap: tex.fleeceN, roughness: 1, color: 0xfff6ea, normalScale: new THREE.Vector2(0.9, 0.9) }), { key: 'fleece' });
   const leather = interiorize(std({ map: world.leather, normalMap: world.leatherN, roughness: 0.62, color: 0xa47c5c }), { key: 'leather' });
   const bronze = interiorize(std({ color: 0xa27a48, metalness: 0.75, roughness: 0.36 }), { key: 'bronze' });
   const iron = interiorize(std({ color: 0x8a847c, metalness: 0.55, roughness: 0.42 }), { key: 'iron' });
@@ -368,11 +384,15 @@ export function createPalaceMaterials(tex: PalaceTextures, world: TextureSet, ti
   const coal = std({ color: 0x1a1612, roughness: 0.95, emissive: new THREE.Color(1.0, 0.32, 0.08), emissiveIntensity: 2.2 });
   const textile = [0, 1, 2, 3].map((c) => interiorize(textileMaterial(tex, c, tier), { key: 'tex' + c + tier }));
   const disp = tier === 'high' ? 0.14 : tier === 'medium' ? 0.1 : 0;
-  const masonry = masonryMaterial(world, { scale: 5.6, displace: disp * 1.5, key: 'fort' + tier, plaster: 0.25, tint: 0xc9c0b2, dry: true });
+  const stone = { map: tex.fortstone, normal: tex.fortstoneN };
+  const masonry = masonryMaterial(world, { scale: FIELDSTONE_TILE, displace: disp * 1.6, key: 'fort' + tier, plaster: 0.1, tint: 0xe2dace, stone });
   const hallShell = masonryMaterial(world, { scale: 3.6, displace: disp * 0.6, key: 'hall' + tier, plaster: 0.3, tint: 0xe6dfd4, render: tex.plaster, renderCover: 0.62 });
-  const masonryFlat = masonryMaterial(world, { scale: 5.6, displace: 0, key: 'fortflat', plaster: 0.25, tint: 0xc9c0b2, dry: true });
+  const masonryFlat = masonryMaterial(world, { scale: FIELDSTONE_TILE, displace: 0, key: 'fortflat', plaster: 0.1, tint: 0xe2dace, stone });
   const houses = masonryMaterial(world, { scale: 3.2, displace: 0, key: 'houses', plaster: 0.55, tint: 0xece4d8, render: tex.plaster, renderCover: 0.35 });
   const plasterExt = std({ map: tex.plaster, normalMap: tex.plasterN, roughness: 0.95, color: 0xd9c4a2 });
   const roof = roofMaterial(world);
-  return { plaster, floor, beam, beamExt, reed, wood, clay, clayDark, fleece, leather, bronze, iron, bread, olive, coal, textile, masonry, masonryFlat, houses, roof, plasterExt, hallShell };
+  const chairWood = interiorize(std({ map: tex.wood, normalMap: tex.woodN, roughness: 0.46, color: 0x7a5238, normalScale: new THREE.Vector2(0.7, 0.7) }), { key: 'chair' });
+  const bone = interiorize(std({ map: tex.clay, color: 0xfff8ea, roughness: 0.38, normalMap: tex.clayN, normalScale: new THREE.Vector2(0.25, 0.25) }), { key: 'bone' });
+  const wool = interiorize(std({ color: 0xd9c9a8, roughness: 1, side: THREE.DoubleSide }), { key: 'wool' });
+  return { plaster, floor, beam, beamExt, reed, wood, clay, clayDark, fleece, leather, bronze, iron, bread, olive, coal, textile, masonry, masonryFlat, houses, roof, plasterExt, hallShell, chairWood, bone, wool };
 }

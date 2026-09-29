@@ -230,7 +230,8 @@ export class Vegetation {
     const ts = this.quality.treeScale;
 
     // --- olive groves on the terrace treads, scattered olives, orchards around the town
-    const oliveTarget = Math.round(880 * ts);
+    // the reference's hills are dotted with olives on every terrace (desktop tiers get denser groves)
+    const oliveTarget = Math.round(880 * ts * q(1.0, 1.3, 1.5));
     let olives = 0;
     for (let tries = 0; tries < oliveTarget * 30 && olives < oliveTarget; tries++) {
       const x = (rnd() * 2 - 1) * (NEAR_HALF - 8);
@@ -241,7 +242,7 @@ export class Vegetation {
       if (slope > 0.22) continue; // not on a riser / steep bank
       const dv = Math.hypot(x - L.bethlehem.x, z - L.bethlehem.z);
       const grove = smoothstep(0.1, 0.45, NZ.fbm(x / 140 + 3, z / 140 - 2, 2) + 0.2);
-      const p = m.terrace * 0.8 * grove + 0.055 + (dv < L.bethlehem.r + 170 ? 0.12 : 0);
+      const p = m.terrace * q(0.8, 0.95, 1.0) * grove + 0.055 + (dv < L.bethlehem.r + 170 ? 0.12 : 0);
       if (rnd() > p) continue;
       if (!this.colliders.free(x, z, 3.4)) continue;
       place('olive', x, z, 0.75 + rnd() * 0.45, 0.42);
@@ -475,7 +476,7 @@ export class Vegetation {
     geo.scale(2.4, 1.7, 2.4);
     geo.translate(0, 2.0, 0);
     const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95 });
-    const count = this.quality.farTrees;
+    const count = Math.round(this.quality.farTrees * perTier(this.tier, 1.0, 1.6, 2.0));
     const im = new THREE.InstancedMesh(geo, mat, count);
     const color = new THREE.Color();
     let k = 0;
@@ -494,7 +495,7 @@ export class Vegetation {
       const cyp = rnd() < 0.06;
       im.setMatrixAt(k, new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion(), cyp ? new THREE.Vector3(s * 0.45, s * 2.6, s * 0.45) : new THREE.Vector3(s, s * (0.8 + rnd() * 0.3), s)));
       if (cyp) im.setColorAt(k, color.setRGB(0.1, 0.13, 0.08));
-      else im.setColorAt(k, color.setHSL(0.17 + rnd() * 0.05, 0.2 + rnd() * 0.08, 0.2 + rnd() * 0.08));
+      else im.setColorAt(k, color.setHSL(0.18 + rnd() * 0.05, 0.16 + rnd() * 0.08, 0.1 + rnd() * 0.06)); // dark silver-green olive crowns
       k++;
     }
     im.count = k;

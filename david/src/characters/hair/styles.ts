@@ -44,9 +44,9 @@ const dir = (out: THREE.Vector3, x: number, y: number, z: number) => out.set(x, 
 // ================================================================================================= DAVID
 /** David (~20): thick, voluminous, tousled loose spiral ringlets, auburn / copper with sun-lightened tips. */
 export function davidStyle(): GroomStyle {
-  const ROOT: [number, number, number] = [0.12, 0.058, 0.034];
-  const MID: [number, number, number] = [0.29, 0.135, 0.068];
-  const TIP: [number, number, number] = [0.53, 0.3, 0.15];
+  const ROOT: [number, number, number] = [0.15, 0.08, 0.045];
+  const MID: [number, number, number] = [0.37, 0.21, 0.11];
+  const TIP: [number, number, number] = [0.66, 0.45, 0.24];
   const scalp: LayerStyle = {
     name: 'david-scalp',
     kind: 0,
@@ -60,13 +60,15 @@ export function davidStyle(): GroomStyle {
       const front = ss(-0.02, 0.06, f.z);
       const back = ss(0.0, -0.08, f.z) * ss(0.05, -0.04, f.y);
       const side = ss(0.05, 0.075, Math.abs(f.x)) * ss(0.06, 0.0, f.y);
-      return (0.078 + 0.014 * top + 0.022 * front + 0.006 * back - 0.02 * side) * (0.82 + 0.36 * R());
+      return (0.084 + 0.016 * top + 0.026 * front + 0.006 * back - 0.02 * side) * (0.82 + 0.36 * R());
     },
     comb: (f, n, out) => {
       // whorl at the top-back; hair flows out from it, forward over the forehead, down the sides / back
       dir(out, f.x, f.y - 0.1, f.z + 0.055);
       out.normalize();
       out.z += 0.35 * ss(0.04, 0.09, f.y) * ss(-0.06, 0.02, f.z);
+      // fringe swept across the forehead toward his left (as in the reference)
+      out.x += 0.45 * ss(0.03, 0.08, f.y) * ss(-0.03, 0.05, f.z);
       out.y -= 0.5 * (1 - ss(0.02, 0.09, f.y));
       out.x += 0.25 * vnoise(f.x * 30, f.y * 30, f.z * 30, 3);
       out.z += 0.25 * vnoise(f.x * 30, f.y * 30, f.z * 30, 4);
@@ -77,11 +79,11 @@ export function davidStyle(): GroomStyle {
     combPull: 10,
     tousle: 12,
     volume: (t, R) => 0.003 + (0.55 * R + 0.004) * ss(0, 0.35, t),
-    curlR: [0.008, 0.0145],
-    curlPitch: [0.034, 0.06],
-    curlStart: 0.3,
-    curlNoise: 0.9,
-    straightLocks: 0.12,
+    curlR: [0.0095, 0.017],
+    curlPitch: [0.055, 0.085],
+    curlStart: 0.42,
+    curlNoise: 1.0,
+    straightLocks: 0.15,
     lockR: 0.0062,
     clump: 0.72,
     frizz: 0.0026,
@@ -108,7 +110,7 @@ export function davidStyle(): GroomStyle {
     ctrl: { low: 9, medium: 12, high: 16 },
     segs: { low: 12, medium: 20, high: 30 },
     shading: { shift: 0.035, roughness: 0.42, specular: 0.5, backlit: 0.75, scatter: 0.25, aoDirect: 0.6 },
-    capColor: [0.1, 0.05, 0.03],
+    capColor: [0.16, 0.085, 0.046],
     capOffset: 0.006,
     capBeard: 0,
     widthTier: { low: 2.8, medium: 1.5, high: 1 },
@@ -126,7 +128,7 @@ export function saulStyle(): GroomStyle {
     kind: 0,
     reach: 0.42,
     mask: (s) => s.scalpMask(),
-    strands: { low: 3500, medium: 10000, high: 24000 },
+    strands: { low: 3500, medium: 10000, high: 20000 },
     locks: 170,
     sim: { low: 16, medium: 28, high: 40 },
     length: (f, n, R) => {
@@ -139,11 +141,11 @@ export function saulStyle(): GroomStyle {
       out.y -= 0.8 * ss(-0.02, -0.08, f.z);
       return out;
     },
-    lift: 0.08,
-    gravity: 9,
+    lift: 0.05,
+    gravity: 13,
     combPull: 14,
     tousle: 2,
-    volume: (t, R) => 0.003 + (R + 0.004) * ss(0, 0.25, t) + 0.006 * ss(0.3, 1, t),
+    volume: (t, R) => 0.003 + (R + 0.003) * ss(0, 0.25, t) + 0.003 * ss(0.3, 1, t),
     curlR: [0.0025, 0.0055],
     curlPitch: [0.08, 0.12],
     curlStart: 0.35,
@@ -175,7 +177,7 @@ export function saulStyle(): GroomStyle {
     kind: 1,
     reach: 0.3,
     mask: (s) => s.beardMask(),
-    strands: { low: 1500, medium: 4500, high: 10000 },
+    strands: { low: 1600, medium: 5000, high: 12000 },
     locks: 220,
     sim: { low: 6, medium: 10, high: 16 },
     length: (f, n, R) => {
@@ -196,15 +198,15 @@ export function saulStyle(): GroomStyle {
     combPull: 9,
     tousle: 5,
     volume: (t, R) => 0.002 + (R + 0.003) * ss(0, 0.3, t) + 0.006 * ss(0.2, 0.8, t),
-    curlR: [0.002, 0.0045],
-    curlPitch: [0.02, 0.035],
+    curlR: [0.0018, 0.004],
+    curlPitch: [0.018, 0.03],
     curlStart: 0.2,
     curlNoise: 0.6,
     lockR: 0.005,
-    clump: 0.45,
-    frizz: 0.0006,
-    flyaway: 0.004,
-    width: 0.00022,
+    clump: 0.4,
+    frizz: 0.0005,
+    flyaway: 0.003,
+    width: 0.00019,
     stiffness: 0.45,
     childLen: [0.75, 1.0],
     colors: (R, f, root, tip) => {
@@ -225,12 +227,12 @@ export function saulStyle(): GroomStyle {
   return {
     name: 'saul',
     layers: [scalp, beard],
-    ctrl: { low: 10, medium: 14, high: 20 },
-    segs: { low: 14, medium: 24, high: 36 },
+    ctrl: { low: 10, medium: 14, high: 18 },
+    segs: { low: 14, medium: 22, high: 32 },
     shading: { shift: 0.035, roughness: 0.38, specular: 0.6, backlit: 0.8, scatter: 0.55, aoDirect: 0.55 },
     capColor: [0.075, 0.058, 0.048],
     capOffset: 0.004,
-    capBeard: 0.7,
+    capBeard: 0.85,
     widthTier: { low: 2.8, medium: 1.5, high: 1 },
   };
 }
@@ -313,7 +315,7 @@ export function manStyle(o: ManStyleOptions): GroomStyle {
       name: 'man-beard',
       kind: 1,
       mask: (s) => s.beardMask(),
-      strands: full ? { low: 1400, medium: 4000, high: 9000 } : { low: 1600, medium: 4500, high: 10000 },
+      strands: full ? { low: 1500, medium: 5000, high: 12000 } : { low: 1600, medium: 5500, high: 14000 },
       locks: full ? 170 : 220,
       sim: full ? { low: 4, medium: 8, high: 12 } : { low: 0, medium: 0, high: 0 },
       length: (f, n, Rr) => {
@@ -327,19 +329,20 @@ export function manStyle(o: ManStyleOptions): GroomStyle {
         dir(out, Math.sign(f.x) * (0.15 + 0.9 * must), -1, 0.35 - 0.2 * must);
         return out;
       },
-      lift: full ? 0.3 : 0.15,
+      lift: full ? 0.25 : 0.1,
       gravity: full ? 10 : 3,
-      combPull: 12,
-      tousle: 4,
-      volume: (t, Rv) => 0.001 + (Rv + 0.0015) * ss(0, 0.3, t) + (full ? 0.005 * ss(0.2, 0.8, t) : 0),
-      curlR: full ? [0.002, 0.0045] : [0.0008, 0.0016],
-      curlPitch: full ? [0.016, 0.028] : [0.007, 0.011],
+      combPull: 14,
+      tousle: 3,
+      volume: (t, Rv) => 0.001 + (Rv + 0.0012) * ss(0, 0.3, t) + (full ? 0.004 * ss(0.2, 0.8, t) : 0),
+      curlR: full ? [0.0015, 0.0035] : [0.0005, 0.001],
+      curlPitch: full ? [0.012, 0.022] : [0.005, 0.008],
+      curlNoise: 0.6,
       curlStart: 0.2,
       lockR: 0.003,
-      clump: full ? 0.55 : 0.4,
-      frizz: 0.0006,
-      flyaway: 0.005,
-      width: 0.0002,
+      clump: full ? 0.4 : 0.3,
+      frizz: 0.0005,
+      flyaway: 0.004,
+      width: full ? 0.00017 : 0.00015,
       stiffness: 0.5,
       childLen: [0.7, 1.0],
       colors: col((f) => ss(-0.07, -0.1, f.y) * 1.5),
@@ -353,7 +356,7 @@ export function manStyle(o: ManStyleOptions): GroomStyle {
     shading: { shift: 0.035, roughness: 0.4, specular: 0.55, backlit: 0.7, scatter: 0.5, aoDirect: 0.55 },
     capColor: [base[0] * 0.9, base[1] * 0.9, base[2] * 0.9],
     capOffset: 0.004,
-    capBeard: beardKind === 'full' ? 0.7 : beardKind === 'short' ? 0.55 : 0,
+    capBeard: beardKind === 'full' ? 0.85 : beardKind === 'short' ? 0.75 : 0,
     widthTier: { low: 2.8, medium: 1.5, high: 1 },
     headband: !!o.headband,
   };

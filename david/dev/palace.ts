@@ -4,6 +4,7 @@
 //   ?figs=1   grey placeholder figures at the anchors (king 1.98 m)
 //   ?play=1   play all shots in a loop (interactive); otherwise wait for the test driver
 //   ?hud=1    stats overlay
+//   ?tod=evening  the evening lighting preset (PalaceSet.setTimeOfDay)
 //
 // Test driver API (window.__palace):
 //   ready: boolean;  shot(name, u, frames?) -> renders shot `name` ('establishingExterior' | 'tamariskAndWalls' |
@@ -35,7 +36,8 @@ async function boot() {
   app.appendChild(renderer.domElement);
   const camera = new THREE.PerspectiveCamera(45, app.clientWidth / app.clientHeight, 0.08, 26000);
   const t0 = performance.now();
-  const palace = await PalaceSet.create({ renderer, quality: q });
+  const tod = params.get('tod') === 'evening' ? 'evening' : 'morning';
+  const palace = await PalaceSet.create({ renderer, quality: q, timeOfDay: tod });
   const buildMs = performance.now() - t0;
   const floatTargets = renderer.extensions.has('EXT_color_buffer_float') || renderer.extensions.has('EXT_color_buffer_half_float');
   const post = palace.createPost(camera, {
@@ -95,7 +97,7 @@ async function boot() {
     const st = palace.stats();
     return { ...st, lastFrame: { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles }, buildMs: Math.round(buildMs), tier: q.tier, content: q.name, memory: renderer.info.memory };
   };
-  w.__palace = { palace, shot, view, stats, figs: (on: boolean) => palace.showPlaceholders(on), THREE, camera, renderer, post };
+  w.__palace = { palace, shot, view, stats, figs: (on: boolean) => palace.showPlaceholders(on), tod: (t: 'morning' | 'evening') => palace.setTimeOfDay(t), THREE, camera, renderer, post };
   w.__ready = true;
   if (params.get('hud') === '1') hud.classList.remove('off');
   if (params.get('play') === '1') {
