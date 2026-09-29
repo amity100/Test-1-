@@ -292,7 +292,7 @@ export function buildVegetation(world: TextureSet, tex: PalaceTextures, tier: Pa
       const k = 1 + NZ.noise(p3.x * 2.1, p3.z * 2.1 + p3.y) * 0.25;
       p.setXYZ(i, p3.x * k, p3.y * k * 0.85, p3.z * k);
       const shade = 0.55 + 0.45 * THREE.MathUtils.smoothstep(p3.y, -0.8, 0.8);
-      col.push(0.36 * shade, 0.4 * shade, 0.28 * shade);
+      col.push(0.06 * shade, 0.07 * shade, 0.04 * shade);
     }
     blob.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
     blob.computeVertexNormals();

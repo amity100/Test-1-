@@ -94,9 +94,9 @@ export function loadPalaceTextures(renderer: THREE.WebGLRenderer, tier: PalaceTi
  * and courtyard. Direct light (sun through the openings, lamps, brazier) is untouched.
  */
 export const palaceUniforms = {
-  uSkyVis: { value: 0.1 },
+  uSkyVis: { value: 0.055 },
   uDoorPos: { value: new THREE.Vector3() },
-  uDoorVis: { value: 0.55 },
+  uDoorVis: { value: 0.45 },
   uBounce: { value: new THREE.Color(1.0, 0.8, 0.62) },
   /** y (world) where ceiling soot starts / is full */
   uSoot: { value: new THREE.Vector2(3.2, 5.0) },
@@ -165,12 +165,13 @@ ${o.soot ? `diffuseColor.rgb *= 1.0 - ${o.soot.toFixed(3)} * smoothstep(uSoot.x,
 // Exterior masonry (fortress, towers, houses): world-space triplanar fieldstone with mud mortar, optional
 // vertex displacement from the height in the albedo alpha (tessellated walls on medium / high).
 // =====================================================================================================
-export function masonryMaterial(world: TextureSet, opts: { scale: number; displace: number; tint?: number; plaster?: number; key: string }) {
+export function masonryMaterial(world: TextureSet, opts: { scale: number; displace: number; tint?: number; plaster?: number; key: string; render?: THREE.Texture; renderCover?: number }) {
   const mat = new THREE.MeshStandardMaterial({ color: opts.tint ?? 0xffffff, roughness: 0.9, metalness: 0 });
   mat.onBeforeCompile = (s) => {
     s.uniforms.tMas = { value: world.masonry };
     s.uniforms.tMasN = { value: world.masonryN };
     s.uniforms.tPl = { value: world.soil };
+    s.uniforms.tRender = { value: opts.render ?? world.soil };
     s.vertexShader = s.vertexShader
       .replace('#include <common>', `#include <common>
 uniform sampler2D tMas;
@@ -191,9 +192,13 @@ vMWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
 vMWNormal = normalize(mat3(modelMatrix) * objectNormal);`);
     s.fragmentShader = s.fragmentShader
       .replace('#include <common>', `#include <common>
-uniform sampler2D tMas; uniform sampler2D tMasN; uniform sampler2D tPl;
+uniform sampler2D tMas; uniform sampler2D tMasN; uniform sampler2D tPl; uniform sampler2D tRender;
 varying vec3 vMWPos; varying vec3 vMWNormal;
-vec3 masWN; float masAO;
+vec3 masWN; float masAO; float masRender;
+float mN(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
+  float a = fract(sin(dot(i, vec2(127.1, 311.7))) * 43758.5), b = fract(sin(dot(i + vec2(1, 0), vec2(127.1, 311.7))) * 43758.5);
+  float c = fract(sin(dot(i + vec2(0, 1), vec2(127.1, 311.7))) * 43758.5), d = fract(sin(dot(i + vec2(1, 1), vec2(127.1, 311.7))) * 43758.5);
+  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y); }
 float mHash(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }`)
       .replace('#include <map_fragment>', `{
   vec3 Nw = normalize(vMWNormal);
@@ -212,9 +217,25 @@ float mHash(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x
   vec3 pl = texture2D(tPl, p.xz * 0.37 + p.y * 0.21).rgb * vec3(1.25, 1.12, 1.0);
   float plm = smoothstep(0.62, 0.35, hgt) * ${opts.plaster.toFixed(2)};
   c = mix(c, pl * vec3(0.95, 0.85, 0.72), plm);` : ''}
+  // weathering: sun-bleached, greyer limestone; darker, damp foot; dark streaks running down from the top
+  float lum = dot(c, vec3(0.3, 0.55, 0.15));
+  c = mix(c, vec3(lum) * vec3(1.02, 0.99, 0.94), 0.35);
+  float streak = mN(vec2(dot(vMWPos.xz, vec2(0.7, 0.7)) * 1.7, vMWPos.y * 0.08));
+  c *= mix(1.0, 0.8, smoothstep(0.55, 0.9, streak));
+  masRender = 0.0;
+  ${opts.renderCover ? `
+  // mud-lime render over the stones, flaking off in patches (more loss near the ground)
+  vec2 rp2 = vec2(dot(vMWPos.xz, vec2(0.707, 0.707)), vMWPos.y);
+  float flake = mN(rp2 * 0.9) * 0.6 + mN(rp2 * 3.1) * 0.3 + mN(rp2 * 9.0) * 0.1;
+  float keep = smoothstep(0.42, 0.5, flake + ${opts.renderCover.toFixed(2)} - 0.5 + smoothstep(0.0, 1.6, vMWPos.y) * 0.25);
+  vec3 rc = texture2D(tRender, rp2 / 1.9).rgb * vec3(0.98, 0.93, 0.85);
+  c = mix(c, rc, keep);
+  masRender = keep;` : ''}
   diffuseColor.rgb *= c;
   vec3 tnx = nx.xyz * 2.0 - 1.0, tny = ny.xyz * 2.0 - 1.0, tnz = nz.xyz * 2.0 - 1.0;
   masWN = normalize(bw.x * normalize(Nw + vec3(0.0, tnx.y, tnx.x) * 1.2) + bw.y * normalize(Nw + vec3(tny.x, 0.0, tny.y) * 1.2) + bw.z * normalize(Nw + vec3(tnz.x, tnz.y, 0.0) * 1.2));
+  masWN = normalize(mix(masWN, Nw, masRender * 0.75));
+  masAO = mix(masAO, 1.0, masRender * 0.7);
 }`)
       .replace('#include <normal_fragment_maps>', `normal = normalize((viewMatrix * vec4(masWN, 0.0)).xyz);`)
       .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
@@ -222,7 +243,7 @@ reflectedLight.indirectDiffuse *= masAO;
 reflectedLight.directDiffuse *= mix(1.0, masAO, 0.4);`)
       ;
   };
-  mat.customProgramCacheKey = () => `palace-masonry-${opts.key}-${opts.scale}-${opts.displace}-${opts.plaster ?? 0}`;
+  mat.customProgramCacheKey = () => `palace-masonry2-${opts.key}-${opts.scale}-${opts.displace}-${opts.plaster ?? 0}-${opts.renderCover ?? 0}`;
   return mat;
 }
 
@@ -250,7 +271,8 @@ uniform sampler2D tSoil; uniform sampler2D tGr; varying vec3 vRfW;`)
   vec3 a = texture2D(tSoil, vRfW.xz * 0.23).rgb;
   vec3 g = texture2D(tGr, vRfW.xz * 0.31).rgb;
   float m = smoothstep(0.35, 0.75, texture2D(tSoil, vRfW.xz * 0.05).a);
-  vec3 c = mix(a * vec3(1.35, 1.2, 1.05), g, m * 0.45);
+  float la = dot(a, vec3(0.33));
+  vec3 c = mix(mix(a, vec3(la), 0.7) * vec3(1.55, 1.42, 1.25), g, m * 0.4);
   diffuseColor.rgb *= c;
 }`);
   };
@@ -284,6 +306,8 @@ export interface PalaceMaterials {
   houses: THREE.MeshStandardMaterial;
   roof: THREE.MeshStandardMaterial;
   plasterExt: THREE.MeshStandardMaterial;
+  /** the king's house: masonry under a flaking mud-lime render */
+  hallShell: THREE.MeshStandardMaterial;
 }
 
 /** Cloth: atlas cell sampling with seamless wrap (textureGrad), weave micro-normal, slow draft sway. */
@@ -340,10 +364,11 @@ export function createPalaceMaterials(tex: PalaceTextures, world: TextureSet, ti
   const coal = std({ color: 0x1a1612, roughness: 0.95, emissive: new THREE.Color(1.0, 0.32, 0.08), emissiveIntensity: 2.2 });
   const textile = [0, 1, 2, 3].map((c) => interiorize(textileMaterial(tex, c, tier), { key: 'tex' + c + tier }));
   const disp = tier === 'high' ? 0.14 : tier === 'medium' ? 0.1 : 0;
-  const masonry = masonryMaterial(world, { scale: 3.4, displace: disp, key: 'fort' + tier, plaster: 0.35 });
-  const masonryFlat = masonryMaterial(world, { scale: 3.4, displace: 0, key: 'fortflat', plaster: 0.35 });
-  const houses = masonryMaterial(world, { scale: 2.6, displace: 0, key: 'houses', plaster: 0.55, tint: 0xf4ead8 });
+  const masonry = masonryMaterial(world, { scale: 4.4, displace: disp, key: 'fort' + tier, plaster: 0.35, tint: 0xe6dfd4 });
+  const hallShell = masonryMaterial(world, { scale: 3.6, displace: disp * 0.6, key: 'hall' + tier, plaster: 0.3, tint: 0xe6dfd4, render: tex.plaster, renderCover: 0.62 });
+  const masonryFlat = masonryMaterial(world, { scale: 4.4, displace: 0, key: 'fortflat', plaster: 0.35, tint: 0xe6dfd4 });
+  const houses = masonryMaterial(world, { scale: 3.2, displace: 0, key: 'houses', plaster: 0.55, tint: 0xece4d8, render: tex.plaster, renderCover: 0.35 });
   const plasterExt = std({ map: tex.plaster, normalMap: tex.plasterN, roughness: 0.95, color: 0xd9c4a2 });
   const roof = roofMaterial(world);
-  return { plaster, floor, beam, beamExt, reed, wood, clay, clayDark, fleece, leather, bronze, iron, bread, olive, coal, textile, masonry, masonryFlat, houses, roof, plasterExt };
+  return { plaster, floor, beam, beamExt, reed, wood, clay, clayDark, fleece, leather, bronze, iron, bread, olive, coal, textile, masonry, masonryFlat, houses, roof, plasterExt, hallShell };
 }

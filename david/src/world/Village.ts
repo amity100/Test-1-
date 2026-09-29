@@ -8,7 +8,7 @@ import { LAYOUT } from './Layout';
 import { boulderGeometry, rockMaterial } from './Rocks';
 
 /** World-space triplanar masonry (fieldstone + mud plaster) — no UVs needed for merged buildings. */
-function masonryMaterial(tex: TextureSet, map: THREE.Texture, normal: THREE.Texture, scale: number, tint: number, key: string) {
+function masonryMaterial(tex: TextureSet, map: THREE.Texture, normal: THREE.Texture, scale: number, tint: number, key: string, sat = 1, plaster = 0) {
   const mat = new THREE.MeshStandardMaterial({ color: tint, roughness: 0.93, vertexColors: true });
   mat.onBeforeCompile = (s) => {
     s.uniforms.tMap = { value: map };
@@ -27,7 +27,12 @@ uniform sampler2D tMap; uniform sampler2D tNor; varying vec3 vMWPos; varying vec
   vec3 Nw = normalize(vMWN);
   vec3 bw = pow(abs(Nw), vec3(6.0)); bw /= (bw.x + bw.y + bw.z);
   vec3 p = vMWPos / ${scale.toFixed(2)};
-  vec3 c = texture2D(tMap, p.zy).rgb * bw.x + texture2D(tMap, p.xz).rgb * bw.y + texture2D(tMap, p.xy).rgb * bw.z;
+  vec4 c4 = texture2D(tMap, p.zy) * bw.x + texture2D(tMap, p.xz) * bw.y + texture2D(tMap, p.xy) * bw.z;
+  vec3 c = mix(vec3(dot(c4.rgb, vec3(0.3, 0.55, 0.15))), c4.rgb, ${sat.toFixed(2)});
+  // mud plaster / mortar fills the joints (low height in the albedo alpha) and patches the faces
+  float patchy = 0.5 + 0.5 * sin(vMWPos.x * 0.83 + vMWPos.y * 1.31) * sin(vMWPos.z * 0.71 - vMWPos.y * 0.57);
+  float pl = ${plaster.toFixed(2)} * (smoothstep(0.55, 0.2, c4.a) + 0.35 * smoothstep(0.55, 0.8, patchy));
+  c = mix(c, vec3(0.74, 0.66, 0.55), clamp(pl, 0.0, 0.85));
   diffuseColor.rgb *= c;
   vec3 nx = texture2D(tNor, p.zy).xyz * 2.0 - 1.0, ny = texture2D(tNor, p.xz).xyz * 2.0 - 1.0, nz = texture2D(tNor, p.xy).xyz * 2.0 - 1.0;
   mWN = normalize(bw.x * normalize(vec3(0.0, nx.y, nx.x * sign(Nw.x)) + Nw) + bw.y * normalize(vec3(ny.x, 0.0, -ny.y) + Nw) + bw.z * normalize(vec3(nz.x * sign(Nw.z), nz.y, 0.0) + Nw));
@@ -35,7 +40,7 @@ uniform sampler2D tMap; uniform sampler2D tNor; varying vec3 vMWPos; varying vec
       )
       .replace('#include <normal_fragment_maps>', `normal = normalize((viewMatrix * vec4(mWN, 0.0)).xyz);`);
   };
-  mat.customProgramCacheKey = () => 'masonry-' + key;
+  mat.customProgramCacheKey = () => 'masonry2-' + key;
   void tex;
   return mat;
 }
@@ -108,12 +113,12 @@ export class Village {
       g.computeVertexNormals();
       return colorize(g, col);
     };
-    const woodCol = new THREE.Color(0x5b4632);
-    const woodDark = new THREE.Color(0x3a2c20);
+    const woodCol = new THREE.Color(0x7a624a);
+    const woodDark = new THREE.Color(0x5e4a38);
 
     // Houses clustered on the crest, oriented loosely along lanes (Iron Age pillared / four-room houses:
     // fieldstone walls on a stone socle, mud plaster, flat roofs of beams, brushwood and rolled clay)
-    for (let tries = 0; tries < 900 && houses.length < 58; tries++) {
+    for (let tries = 0; tries < 2000 && houses.length < 84; tries++) {
       const a = rnd() * Math.PI * 2;
       const r = Math.sqrt(rnd()) * (L.r - 6);
       const x = L.x + Math.cos(a) * r;
@@ -122,7 +127,12 @@ export class Village {
       const d = 7 + rnd() * 5;
       const rot = Math.round(rnd() * 4) * (Math.PI / 2) + (rnd() - 0.5) * 0.25 + 0.3;
       let ok = true;
-      for (const h of houses) if (Math.hypot(h.x - x, h.z - z) < (Math.max(w, d) + Math.max(h.w, h.d)) * 0.62) ok = false;
+      // houses share walls / crowd along narrow lanes (the gate lane stays open)
+      const ga = Math.atan2(LAYOUT.path[LAYOUT.path.length - 1][1] - L.z, LAYOUT.path[LAYOUT.path.length - 1][0] - L.x);
+      let dga = Math.abs(a - ga) % (Math.PI * 2);
+      dga = Math.min(dga, Math.PI * 2 - dga);
+      if (r > 30 && dga * r < 7 + Math.max(w, d) * 0.5) continue;
+      for (const h of houses) if (Math.hypot(h.x - x, h.z - z) < (Math.max(w, d) + Math.max(h.w, h.d)) * 0.56) ok = false;
       if (!ok) continue;
       houses.push({ x, z, w, d, rot });
     }
@@ -216,10 +226,12 @@ export class Village {
         }
       } else if (rnd() < 0.3) {
         // drying cloths on a line (madder red, indigo, undyed)
-        const g = new THREE.PlaneGeometry(1.8 + rnd(), 1.1 + rnd() * 0.5);
+        const g = new THREE.PlaneGeometry(1.1 + rnd() * 0.6, 0.7 + rnd() * 0.3);
+        g.translate(0, -0.35, 0); // hangs from the line
         const hues = [new THREE.Color(0x8e2f23), new THREE.Color(0x2e3f6b), new THREE.Color(0xd9ccb0), new THREE.Color(0xa0662a)];
-        cloth.push(place(g, 0, y + H + 1.2, 0, h.rot, h.x, h.z, hues[Math.floor(rnd() * hues.length)]));
-        for (const qx of [-1, 1]) wood.push(box(0.06, 1.8, 0.06, qx * 1.3, y + H, 0, h.rot, h.x, h.z, woodDark));
+        cloth.push(place(g, 0, y + H + 1.45, 0, h.rot, h.x, h.z, hues[Math.floor(rnd() * hues.length)]));
+        for (const qx of [-1, 1]) wood.push(box(0.06, 1.5, 0.06, qx * 1.3, y + H, 0, h.rot, h.x, h.z, woodDark));
+        wood.push(box(2.6, 0.03, 0.03, 0, y + H + 1.45, 0, h.rot, h.x, h.z, woodDark));
       }
       // colliders: a few circles along the long axis
       const steps = 3;
@@ -292,11 +304,13 @@ export class Village {
     }
     void baseY;
 
-    const wallMat = masonryMaterial(this.tex, this.tex.masonry, this.tex.masonryN, 3.4, 0xece6da, 'wall');
-    const townWallMat = masonryMaterial(this.tex, this.tex.wall, this.tex.wallN, 3.2, 0xeae4d8, 'townwall');
-    const roofMat = masonryMaterial(this.tex, this.tex.soil, this.tex.soilN, 3.0, 0xc8b8a4, 'roof');
-    const woodMat = masonryMaterial(this.tex, this.tex.bark, this.tex.barkN, 0.6, 0xb8a894, 'wood');
-    const clayMat = masonryMaterial(this.tex, this.tex.soil, this.tex.soilN, 1.2, 0xe0c8a8, 'clay');
+    // houses: mud-mortared fieldstone with patches of mud plaster; town wall: big dry-laid fieldstones
+    const wallMat = masonryMaterial(this.tex, this.tex.wall, this.tex.wallN, 2.6, 0xeee8dc, 'wall', 0.6, 0.55);
+    const townWallMat = masonryMaterial(this.tex, this.tex.wall, this.tex.wallN, 3.6, 0xeae4d8, 'townwall', 0.6, 0.2);
+    // roofs: rolled grey-brown clay and straw (the terra rossa texture, strongly desaturated)
+    const roofMat = masonryMaterial(this.tex, this.tex.soil, this.tex.soilN, 3.0, 0xd8cfc0, 'roof', 0.3, 0.3);
+    const woodMat = masonryMaterial(this.tex, this.tex.bark, this.tex.barkN, 0.6, 0xd8c8b0, 'wood', 0.7, 0);
+    const clayMat = masonryMaterial(this.tex, this.tex.soil, this.tex.soilN, 1.2, 0xe8d4b8, 'clay', 0.55, 0.3);
     const merge = (list: THREE.BufferGeometry[]) => mergeGeometries(list.map((g) => (g.index ? g.toNonIndexed() : g)));
     const wallMesh = new THREE.Mesh(merge(walls), wallMat);
     const roofMesh = new THREE.Mesh(merge(roofs), roofMat);

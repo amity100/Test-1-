@@ -33,7 +33,7 @@ export function saucerLamp(): { geo: THREE.BufferGeometry; wick: THREE.Vector3 }
     const x = pos.getX(i), z = pos.getZ(i), y = pos.getY(i);
     const r = Math.hypot(x, z);
     const phi = Math.atan2(z, x);
-    const s = Math.exp(-(phi / 0.42) ** 2) * THREE.MathUtils.smoothstep(r, 0.03, 0.07);
+    const s = Math.exp(-((phi / 0.42) ** 2)) * THREE.MathUtils.smoothstep(r, 0.03, 0.07);
     const r2 = r * (1 + 0.42 * s);
     const phi2 = phi * (1 - 0.55 * s);
     pos.setXYZ(i, Math.cos(phi2) * r2, y + s * 0.006, Math.sin(phi2) * r2 * (1 - 0.25 * s));
@@ -298,7 +298,7 @@ export function buildInteriorProps(mats: PalaceMaterials, tier: PalaceTier): Int
   // ------------------------------------------------------------------ pottery, table, food
   const pottery = new THREE.Group();
   const jarGeo = storageJar();
-  for (const [x, z, s, ry] of [[H.x0 + 0.45, H.z1 - 0.5, 1.0, 0.3], [H.x0 + 1.12, H.z1 - 0.42, 0.93, 1.3], [H.x0 + 0.42, H.z1 - 1.18, 1.04, 2.2], [H.x1 - 0.45, H.z1 - 0.48, 0.96, 0.7]] as [number, number, number, number][]) {
+  for (const [x, z, s, ry] of [[H.x0 + 0.45, H.z1 - 0.5, 1.0, 0.3], [H.x0 + 1.12, H.z1 - 0.42, 0.93, 1.3], [H.x0 + 0.42, H.z1 - 1.18, 1.04, 2.2], [H.x1 - 0.45, H.z1 - 0.48, 0.96, 0.7], [H.x1 - 0.5, -13.75, 0.9, 1.9]] as [number, number, number, number][]) {
     const m = mesh(jarGeo, mats.clay, true, true, 'palace:jar');
     m.position.set(x, y0, z);
     m.scale.setScalar(s);
@@ -307,7 +307,7 @@ export function buildInteriorProps(mats: PalaceMaterials, tier: PalaceTier): Int
   }
   // low table beside the dais (the king's table at the new moon)
   const tb = new GeoBuilder();
-  const tx = H.cx - 1.75, tz = D.z1 + 0.35, tH = 0.46, tW = 1.2, tD = 0.62;
+  const tx = H.cx + 1.75, tz = D.z1 + 0.35, tH = 0.46, tW = 1.2, tD = 0.62;
   for (const [lx, lz] of [[-tW / 2 + 0.07, -tD / 2 + 0.07], [tW / 2 - 0.07, -tD / 2 + 0.07], [-tW / 2 + 0.07, tD / 2 - 0.07], [tW / 2 - 0.07, tD / 2 - 0.07]]) {
     stick(tb, V3(tx + lx, y0, tz + lz), V3(tx + lx, y0 + tH - 0.04, tz + lz), 0.06, 0.06, 130 + Math.round(lx * 100 + lz * 10));
   }
@@ -330,7 +330,7 @@ export function buildInteriorProps(mats: PalaceMaterials, tier: PalaceTier): Int
   jm.position.set(tx + 0.36, tTop, tz - 0.1);
   pottery.add(jm);
   const jm2 = mesh(jug(), mats.clayDark, true, true, 'palace:jug');
-  jm2.position.set(H.cx + 1.05, dTop, D.z0 + 0.4);
+  jm2.position.set(H.cx + 1.05, dTop, D.z0 + 0.35);
   jm2.scale.setScalar(1.3);
   pottery.add(jm2);
   const bowlGeo = bowl();
@@ -383,7 +383,7 @@ export function buildInteriorProps(mats: PalaceMaterials, tier: PalaceTier): Int
 
   // ------------------------------------------------------------------ brazier: bronze bowl on an iron tripod, glowing charcoal
   const bz = new THREE.Group();
-  const bx = H.cx + 1.45, bzz = D.z1 + 1.9;
+  const bx = H.cx - 1.3, bzz = D.z1 + 1.55;
   const bowlB = vessel([[0, 0], [0.12, 0.0], [0.3, 0.1], [0.36, 0.2], [0.37, 0.215], [0.34, 0.2], [0.28, 0.1], [0.1, 0.02], [0, 0.02]], 32);
   const bb = mesh(bowlB, mats.bronze, true, true, 'palace:brazier');
   bb.position.set(bx, y0 + 0.52, bzz);
@@ -437,8 +437,8 @@ export function buildInteriorProps(mats: PalaceMaterials, tier: PalaceTier): Int
   group.add(arms);
   // the king's spear: leaning against the wall at the right hand of the seat (1 Sam 22:6 / 26:7)
   const kingSpear = spear(mats, 2.62, 99);
-  const butt = V3(sx + 0.72, dTop + 0.002, sz - 0.12);
-  const tip = V3(sx + 0.86, dTop + 2.58, H.z0 + 0.05);
+  const butt = V3(sx - 0.7, dTop + 0.002, sz - 0.1);
+  const tip = V3(sx - 0.84, dTop + 2.58, H.z0 + 0.05);
   const dir = tip.clone().sub(butt).normalize();
   kingSpear.quaternion.setFromUnitVectors(V3(0, 1, 0), dir);
   kingSpear.position.copy(butt);

@@ -17,7 +17,7 @@ const N2 = new Simplex2(9102);
 const N3 = new Simplex2(9103);
 
 export const SUMMIT = { x: 6, z: -2 };
-export const PLATEAU_R = 50;
+export const PLATEAU_R = 42;
 export const VALLEY_Y = -62;
 
 function fbm(n: Simplex2, x: number, z: number, oct: number) {
@@ -50,7 +50,7 @@ function baseHeight(x: number, z: number) {
   h = THREE.MathUtils.lerp(h, VALLEY_Y + 10 * fbm(N1, x * 0.004, z * 0.004, 3), Math.pow(s, 0.8));
   // surrounding hills of the Benjamin plateau
   const far = smoothstep(420, 1400, r);
-  const hills = fbm(N2, x * 0.0011, z * 0.0011, 4) * 95 + fbm(N3, x * 0.004, z * 0.004, 3) * 18;
+  const hills = fbm(N2, x * 0.0009, z * 0.0009, 4) * 110 + fbm(N3, x * 0.0035, z * 0.0035, 2) * 7;
   // the land falls toward the wilderness in the east
   const east = smoothstep(1500, 6000, x) * -140;
   h += far * (hills + east + 25 * smoothstep(1200, 4000, -z));
@@ -62,7 +62,7 @@ export function gibeahHeight(x: number, z: number) {
   const r = Math.hypot(dx, dz);
   let h = baseHeight(x, z);
   // agricultural terraces on the flanks (not on the plateau, fading out in the valley)
-  const tw = smoothstep(PLATEAU_R + 2, PLATEAU_R + 22, r) * (1 - smoothstep(330, 480, r));
+  const tw = smoothstep(PLATEAU_R + 2, PLATEAU_R + 22, r) * (1 - smoothstep(330, 480, r)) + smoothstep(600, 1100, r) * (1 - smoothstep(2600, 4000, r)) * 0.7;
   if (tw > 0) {
     const jitter = fbm(N3, x * 0.02, z * 0.02, 2) * 0.9;
     h = THREE.MathUtils.lerp(h, terrace(h + jitter, 2.1, 0.32) - jitter * 0.4, tw * 0.92);
@@ -189,18 +189,21 @@ vec4 samp2(sampler2D t, vec2 p){ return mix(texture2D(t, p), texture2D(t, p * 0.
   vec4 wa = (wx * bw.x + wz * bw.z) / max(bw.x + bw.z, 1e-3);
   // macro noise
   float m1 = tF(xz * 0.03), m2 = tF(xz * 0.008 + 3.0), m3 = tF(xz * 0.12);
+  // harvested grain parcels in the valley (stubble stripes / ploughed terra rossa)
+  float valley = smoothstep(260.0, 420.0, rS) * (1.0 - smoothstep(1500.0, 2600.0, rS));
   // weights
   float wRock = smoothstep(0.3, 0.55, slope + (m1 - 0.5) * 0.35) ;
   float onPlateau = 1.0 - smoothstep(${PLATEAU_R.toFixed(1)} - 4.0, ${PLATEAU_R.toFixed(1)} + 6.0, rS);
-  wRock = max(wRock, onPlateau * smoothstep(0.52, 0.7, m1 + ro.a * 0.3) );
+  wRock = max(wRock, onPlateau * smoothstep(0.66, 0.8, m1 + ro.a * 0.3) * 0.8);
   float terr = smoothstep(${(PLATEAU_R + 4).toFixed(1)}, ${(PLATEAU_R + 22).toFixed(1)}, rS) * (1.0 - smoothstep(330.0, 470.0, rS));
   float wWall = terr * smoothstep(0.42, 0.62, slope);
   float wSoil = smoothstep(0.55, 0.8, m2 + so.a * 0.25) * 0.8 + onPlateau * 0.35 * smoothstep(0.4, 0.7, m3);
-  // harvested grain parcels in the valley (stubble stripes / ploughed terra rossa)
-  float valley = smoothstep(260.0, 420.0, rS) * (1.0 - smoothstep(1500.0, 2600.0, rS));
   vec2 pc = floor(xz / vec2(46.0, 31.0) + vec2(tN(xz * 0.004) * 2.0));
   float ptype = tH(pc);
-  vec3 c = gr.rgb * mix(vec3(1.0), vec3(1.08, 1.0, 0.86), m2);
+  vec3 c = gr.rgb * mix(vec3(0.86, 0.8, 0.68), vec3(0.98, 0.9, 0.74), m2);
+  // scrub (sage, thorny burnet, young oak): dark grey-green specks in patches
+  float scrub = smoothstep(0.62, 0.8, tN(xz * 0.35) * 0.6 + tN(xz * 1.3) * 0.4) * smoothstep(0.35, 0.65, m1);
+  c = mix(c, vec3(0.16, 0.17, 0.11), scrub * 0.75 * (1.0 - valley * 0.8));
   // stubble: paler, striped along the parcel
   float stripe = 0.5 + 0.5 * sin((xz.x * 0.9 + xz.y * 0.4) * 3.14159 * 1.2);
   vec3 stub = gr.rgb * vec3(1.22, 1.08, 0.8) * (0.9 + 0.12 * stripe);
@@ -212,9 +215,14 @@ vec4 samp2(sampler2D t, vec2 p){ return mix(texture2D(t, p), texture2D(t, p * 0.
   c = mix(c, wa.rgb, wWall);
   // far: fade texture detail into a smooth macro colour (hides tiling), slightly bleached by haze
   float fd = smoothstep(250.0, 1800.0, dist);
-  vec3 macro = mix(vec3(0.47, 0.39, 0.27), vec3(0.56, 0.47, 0.33), m2) * mix(1.0, 0.85, m1);
-  macro = mix(macro, vec3(0.6, 0.55, 0.46), smoothstep(0.55, 0.8, slope + m1 * 0.2) * 0.6);
-  c = mix(c, macro, fd * 0.75);
+  vec3 macro = mix(vec3(0.36, 0.29, 0.19), vec3(0.47, 0.38, 0.25), m2) * mix(1.0, 0.8, m1);
+  // far: limestone terrace bands on the slopes, dark scrub / orchard patches
+  float band = smoothstep(0.35, 0.6, slope) ;
+  macro = mix(macro, vec3(0.55, 0.52, 0.46), band * 0.55);
+  float orch = smoothstep(0.55, 0.75, tN(xz * 0.01 + 11.0) * 0.7 + tN(xz * 0.06) * 0.3);
+  macro = mix(macro, vec3(0.17, 0.18, 0.12), orch * 0.55);
+  macro = mix(macro, macro * vec3(1.1, 0.82, 0.7), smoothstep(0.6, 0.85, m2) * 0.5);
+  c = mix(c, macro, fd * 0.8);
   diffuseColor.rgb *= c;
   // normals: tangent-space maps projected on the dominant plane
   vec3 gn = texture2D(tGrassN, xz / 3.2).xyz * 2.0 - 1.0;

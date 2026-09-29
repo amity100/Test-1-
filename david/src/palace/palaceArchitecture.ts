@@ -239,7 +239,7 @@ export function buildArchitecture(mats: PalaceMaterials, tier: PalaceTier): Arch
   ext.block(V3(px1 - 0.225, (py0 + py1) / 2, (pz0 + pz1) / 2), V3(0.45, py1 - py0, pz1 - pz0 - 0.9), sp, 0.3, { faces: 'px nx py', dispEdge: 0.15 });
   // wall tops between the interior ceiling and the roof slab are hidden: the roof slab closes the volume
   const extGeo = ext.build({ ao: false, disp: true });
-  group.add(mesh(extGeo, tier === 'low' ? mats.masonryFlat : mats.masonry, true, true, 'palace:hallShell'));
+  group.add(mesh(extGeo, mats.hallShell, true, true, 'palace:hallShell'));
   // wall body between inner and outer faces at the top (visible from the aerial shot): the roof slab
   const roofB = new GeoBuilder();
   roofB.block(V3((ex0 + ex1) / 2, (H.ceil + hallTop) / 2, (ez0 + ez1) / 2), V3(ex1 - ex0, hallTop - H.ceil, ez1 - ez0), 2, 0.3, { faces: 'py px nx pz nz' });
@@ -320,7 +320,7 @@ export function buildArchitecture(mats: PalaceMaterials, tier: PalaceTier): Arch
   while (placed.length < nHouses && tries++ < 4000) {
     // mostly on the southern and eastern slopes, clustered along a lane
     const a = (rnd() < 0.7 ? THREE.MathUtils.lerp(-0.35, 1.9, rnd()) : THREE.MathUtils.lerp(1.9, 3.6, rnd())) ;
-    const r = THREE.MathUtils.lerp(72, 205, Math.pow(rnd(), 0.8));
+    const r = THREE.MathUtils.lerp(58, 200, Math.pow(rnd(), 0.9));
     const x = SUMMIT.x + Math.cos(a) * r, z = SUMMIT.z + Math.sin(a) * r / 0.82;
     if (Math.hypot(x - TAMARISK.x, z - TAMARISK.z) < 26) continue;
     const w = 6 + rnd() * 4.5, d = 7 + rnd() * 4, rad = Math.hypot(w, d) * 0.5 + 3.5;

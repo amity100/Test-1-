@@ -178,7 +178,8 @@ export class Vegetation {
     const tex = this.tex;
     const barkOlive = barkMaterial(tex, 0.05, 0xc9c2b4);
     const barkDark = barkMaterial(tex, 0.05, 0x8f877b);
-    const oliveMat = foliageMaterial(tex.olive, { sway: 0.06, flutter: 0.025, translucency: 0.5, roughness: 0.6 });
+    // olive: silvery grey-green even in warm light (a slightly cool, desaturated tint on the atlas)
+    const oliveMat = foliageMaterial(tex.olive, { sway: 0.06, flutter: 0.025, translucency: 0.5, roughness: 0.6, color: 0xd2dace });
     const oakMat = foliageMaterial(tex.broadleaf, { sway: 0.045, flutter: 0.018, translucency: 0.4, roughness: 0.62 });
     const cypressMat = foliageMaterial(tex.cypress, { sway: 0.05, flutter: 0.008, translucency: 0.25, roughness: 0.78 });
     const cypressCore = new THREE.MeshStandardMaterial({ color: 0x2f3d24, roughness: 0.88, vertexColors: true });

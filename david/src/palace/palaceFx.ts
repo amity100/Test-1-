@@ -35,9 +35,9 @@ export class Flames {
       } else {
         for (let k = 0; k < 5; k++) {
           const o = V3((rnd() - 0.5) * 0.28, -0.03, (rnd() - 0.5) * 0.28);
-          push(pos, corner, data, idx, s.pos.clone().add(o), 0.16 + rnd() * 0.1, 0.26 + rnd() * 0.2, rnd() * 100, 1);
+          push(pos, corner, data, idx, s.pos.clone().add(o), 0.1 + rnd() * 0.06, 0.13 + rnd() * 0.12, rnd() * 100, 1);
         }
-        push(gpos, gcorner, gdata, gidx, s.pos.clone().add(V3(0, 0.12, 0)), 1.5, 1.3, rnd() * 100, 1);
+        push(gpos, gcorner, gdata, gidx, s.pos.clone().add(V3(0, 0.08, 0)), 0.9, 0.7, rnd() * 100, 1);
       }
     }
     const mk = (P: number[], C: number[], D: number[], I: number[]) => {
@@ -108,7 +108,7 @@ export class Flames {
           vec2 q = vec2(vC.x * 2.0, (vC.y - 0.42) * 2.0);
           float r = length(q);
           float g = exp(-r * r * 9.0) * 0.5 + exp(-r * 4.0) * 0.12;
-          vec3 col = (vKind > 0.5 ? vec3(1.0, 0.4, 0.12) : vec3(1.0, 0.55, 0.22)) * g * uIntensity * (vKind > 0.5 ? 0.5 : 0.8);
+          vec3 col = (vKind > 0.5 ? vec3(1.0, 0.4, 0.12) : vec3(1.0, 0.55, 0.22)) * g * uIntensity * (vKind > 0.5 ? 0.25 : 0.4);
           gl_FragColor = vec4(col, 1.0);
         }`,
       transparent: true,
@@ -135,7 +135,7 @@ export class LightShafts {
   readonly uniforms = {
     uTime: shared.uTime,
     uSunColor: shared.uSunColor,
-    uStrength: { value: 0.3 },
+    uStrength: { value: 0.11 },
   };
   constructor(windows: WindowOpening[], sunDir: THREE.Vector3) {
     const pos: number[] = [], uvw: number[] = [], idx: number[] = [];
@@ -207,7 +207,7 @@ export class LightShafts {
           vec3 V = normalize(cameraPosition - vW);
           // soft edges: faces seen edge-on fade (fake volume), fade along the beam and near its ends
           float facing = abs(dot(normalize(vN), V));
-          float edge = smoothstep(0.0, 0.25, vUvw.x) * smoothstep(1.0, 0.75, vUvw.x);
+          float edge = smoothstep(0.0, 0.12, vUvw.x) * smoothstep(1.0, 0.88, vUvw.x);
           float along = smoothstep(0.0, 0.06, vUvw.y) * (1.0 - smoothstep(0.55, 1.0, vUvw.y)) * mix(1.0, 0.55, vUvw.y);
           // drifting dust (slow turbulence) makes the beam uneven
           vec3 p = vW * 2.3 + vec3(0.0, uTime * 0.05, uTime * 0.03);
@@ -374,8 +374,8 @@ export class Smoke {
         void main(){
           vec2 c = gl_PointCoord - 0.5;
           float r = dot(c, c) * 4.0;
-          float a = (1.0 - smoothstep(0.2, 1.0, r)) * vA * 0.16;
-          vec3 col = mix(vec3(0.62, 0.6, 0.58) * (0.4 + uSunColor * 0.5), vec3(0.18, 0.16, 0.15), vDark);
+          float a = (1.0 - smoothstep(0.0, 1.0, r)) * vA * 0.09;
+          vec3 col = mix(vec3(0.62, 0.6, 0.58) * (0.4 + uSunColor * 0.5), vec3(0.05, 0.045, 0.04), vDark);
           gl_FragColor = vec4(col, a);
         }`,
       transparent: true,
