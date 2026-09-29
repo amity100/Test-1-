@@ -185,6 +185,7 @@ async function main() {
   for (const a of actors) {
     a.human.update(1 / 30, camera, H);
     a.groom?.update(1 / 30, wind);
+    if (a.groom && P.get('nojaw') === '1') a.groom.uniforms.uJaw.value.identity();
   }
   const frames = parseInt(P.get('frames') ?? '2', 10);
   let out: HTMLCanvasElement | null = null;

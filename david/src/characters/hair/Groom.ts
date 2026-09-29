@@ -40,6 +40,7 @@ export interface GroomStats {
   buildMs: number;
   /** ms per build phase: surface (rest skin + SDF), grow (guides + children + AO), upload */
   timings: { surface: number; grow: number; finish: number };
+  layers: { name: string; n: number; meanLen: number; maxLen: number; maxPush: number }[];
 }
 
 const _v = new THREE.Vector3();
@@ -318,6 +319,7 @@ export async function createGroom(human: HumanModel, spec: GroomStyleSpec, opts:
     gpuBytes: texData.byteLength + set.n * 56 + nv * 20 + (cap ? cap.getAttribute('position').count * 48 : 0),
     buildMs: 0,
     timings: { surface: t1 - t0, grow: t2 - t1, finish: 0 },
+    layers: set.diag,
   };
   const groom = new Groom(human, style, { geo, uniforms: U, pointsTex, sim, cap, msaa, stats, jawA });
   stats.buildMs = performance.now() - t0;
@@ -362,11 +364,11 @@ function buildCap(S: HeadSurface, style: GroomStyle, fromRest: THREE.Matrix4): T
     p.addScaledVector(q, off + 0.0008).applyMatrix4(fromRest);
     p.toArray(pos, i * 3);
     q.applyMatrix3(nm).normalize().toArray(nrm, i * 3);
-    const k = capNoise(S.pos[v * 3], S.pos[v * 3 + 1], S.pos[v * 3 + 2]) * (0.9 + 0.2 * R());
+    const k = capNoise(S.pos[v * 3], S.pos[v * 3 + 1], S.pos[v * 3 + 2]) * (0.9 + 0.2 * R()) * (isBeard ? 1.35 : 1);
     col[i * 4] = base.r * k;
     col[i * 4 + 1] = base.g * k;
     col[i * 4 + 2] = base.b * k;
-    col[i * 4 + 3] = isBeard ? ss(0.2, 0.7, mv) * 0.75 : ss(0.06, 0.5, mv);
+    col[i * 4 + 3] = isBeard ? ss(0.25, 0.95, mv) * 0.8 : ss(0.06, 0.5, mv);
     jaw[i] = S.jaw[v];
   });
   const g = new THREE.BufferGeometry();

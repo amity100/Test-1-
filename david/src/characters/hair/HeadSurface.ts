@@ -221,6 +221,7 @@ export class HeadSurface {
   readonly pos: Float32Array;
   readonly nrm: Float32Array;
   readonly region: Float32Array; // head 1, neck 0.5
+  readonly headW: Float32Array; // head bones only
   readonly jaw: Float32Array;
   readonly tris: Uint32Array; // head/neck triangles
   readonly E = new THREE.Vector3(); // eye-centre midpoint
@@ -252,6 +253,7 @@ export class HeadSurface {
       neckSet[i] = /^neck0/.test(n) ? 1 : 0;
     });
     this.region = new Float32Array(nv);
+    this.headW = new Float32Array(nv);
     this.jaw = new Float32Array(nv);
     for (const [ia, wa] of [['skinIndex', 'skinWeight'], ['skinIndex2', 'skinWeight2']] as const) {
       const si = g.getAttribute(ia) as THREE.BufferAttribute | undefined;
@@ -262,7 +264,10 @@ export class HeadSurface {
           const w = sw.getComponent(v, c);
           if (w <= 0) continue;
           const b = si.getComponent(v, c);
-          if (headSet[b]) this.region[v] += w;
+          if (headSet[b]) {
+            this.region[v] += w;
+            this.headW[v] += w;
+          }
           else if (neckSet[b]) this.region[v] += w * 0.5;
           if (b === jawIdx) this.jaw[v] += w;
         }
@@ -344,11 +349,11 @@ export class HeadSurface {
       if (r <= 0.01) continue;
       const fx = P[v * 3] - E.x, fy = P[v * 3 + 1] - E.y, fz = P[v * 3 + 2] - E.z;
       const ax = Math.abs(fx);
-      const head = Math.min(1, r);
+      const head = ss(0.55, 0.9, this.headW[v]);
       const lineY = interp(ax, [0, 0.026, 0.064, 0.09], [-0.058, -0.058, -0.005, 0.02]);
       let beard = head * ss(lineY + 0.008, lineY - 0.014, fy) * ss(-0.035, 0, fz + 0.06 - ax * 0.4);
       const must = head * ss(0.03, 0.022, ax) * ss(-0.066, -0.06, fy) * ss(-0.043, -0.05, fy);
-      const under = Math.min(1, r * 2) * ss(chinY + 0.005, chinY - 0.01, fy) * ss(chinY - 0.05, chinY - 0.032, fy) * ss(-0.2, 0.2, N[v * 3 + 2] + 0.3);
+      const under = Math.min(1, r * 2) * ss(chinY + 0.005, chinY - 0.01, fy) * ss(chinY - 0.04, chinY - 0.02, fy) * ss(-0.2, 0.2, N[v * 3 + 2] + 0.3);
       beard = Math.max(beard, must, under);
       // keep the lips and the nostrils bare
       const lipW = 0.027;

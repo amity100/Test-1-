@@ -40,56 +40,110 @@ def save_pair(name, albedo, h, nrm_strength, ao, alpha_a=None, q=86):
 
 
 # ============================================================================= limestone
+def _pit_field(n, count, rfac, seed, cluster, warp, depth_var=0.5, sharp=0.7):
+    """Karst solution pits on a periodic Voronoi: each cell may hold a steep-walled cup whose rim is clipped to
+    the cell border, so dense clusters merge into a honeycomb with knife-edge ridges while sparse areas keep
+    isolated cups on smooth rock. Returns (depth 0..1, rim 0..1)."""
+    rng = np.random.default_rng(seed)
+    pts = rng.random((count, 2)).astype(F32)
+    (f1, f2), (i1, _) = worley(n, pts, warp=warp)
+    spacing = 1.0 / math.sqrt(count)
+    ix = (pts[:, 0] * n).astype(int) % n
+    iy = (pts[:, 1] * n).astype(int) % n
+    cl = cluster[iy, ix]
+    # presence and size grow with the cluster mask (clusters of pits, as on the reference boulders)
+    keep = (rng.random(count) < 0.18 + 0.82 * cl).astype(F32)
+    rad = (spacing * (0.28 + 0.3 * rng.random(count)) * (0.75 + 0.9 * cl)).astype(F32)
+    dep = (1.0 - depth_var + depth_var * rng.random(count) ** 0.7).astype(F32)
+    r = rad[i1]
+    e = f1 / np.maximum(f1 + f2, 1e-6) * 2.0          # 0 centre .. 1 cell border
+    t = np.maximum(f1 / r, e ** 1.6)
+    cup = np.clip(1.0 - t * t, 0, 1) ** sharp
+    depth = cup * keep[i1] * dep[i1]
+    rim = np.clip(1.0 - np.abs(t - 1.0) / 0.18, 0, 1) * keep[i1]
+    return depth.astype(F32), rim.astype(F32)
+
+
 def limestone(n=SIZE):
-    """Weathered Judean limestone as in the reference: rounded cream-white lumps, pocked by distinct
-    solution holes (dark, steep-walled cups of 2-6 cm), a few shallow basins, tiny pores, hairline cracks,
-    sparse dark crustose and orange lichen. Tile ~2.4 m in world space."""
+    """Weathered Judean limestone (karst) as in the reference: cream-white rock eaten by clusters of solution pits
+    with shadowed interiors that merge into a honeycomb of knife-edge ridges, pits within pits, rillen grooves,
+    hairline and open cracks, grey weathering rind, crustose lichen and dust in the hollows.
+    Tile ~2 m on boulders (2 mm / texel), ~3 m on terrain bedrock."""
     s = n / 1024.0
-    wx = (spectral(n, 2.0, 141, fmin=2) - 0.5) * 0.04
-    wy = (spectral(n, 2.0, 142, fmin=2) - 0.5) * 0.04
+    wx = (spectral(n, 2.0, 141, fmin=2) - 0.5) * 0.05
+    wy = (spectral(n, 2.0, 142, fmin=2) - 0.5) * 0.05
     base = spectral(n, 2.4, 11, fmin=1)
     lumps = spectral(n, 2.0, 12, fmin=4, fmax=70 * s)
     knob = spectral(n, 1.5, 13, fmin=16, fmax=160 * s)
     fine = spectral(n, 0.9, 14, fmin=80)
-    pitty = smooth(0.3, 0.72, spectral(n, 2.0, 15, fmin=2))
-    holes = cups(n, 900, 0.0045, 0.016, 17, density=0.45 + 0.55 * pitty, power=1.8, warp=(wx, wy), sharp=2.6)
-    basins = cups(n, 36, 0.03, 0.075, 16, density=0.3 + 0.7 * pitty, power=2.0, warp=(wx, wy), sharp=1.1)
-    pores = cups(n, 2600, 0.0022, 0.005, 18, density=0.08 + 0.92 * pitty, power=1.2, sharp=2.6)
+    rid = 1.0 - np.abs(spectral(n, 1.6, 27, fmin=10, fmax=120 * s) * 2 - 1)   # sharp crests between hollows
+    # where the pits cluster: big patches + mid-size nests, mostly on the upper / exposed parts
+    cluster = np.clip(smooth(0.45, 0.75, spectral(n, 2.2, 15, fmin=2)) * 0.8 + smooth(0.6, 0.85, spectral(n, 1.8, 28, fmin=6)) * 0.45, 0, 1)
+    # sponge / cauliflower karst: domed knobs separated by V-grooves, deep holes where three knobs meet
+    spk = []
+    for cnt, sd, amp in ((260, 34, 1.0), (1100, 35, 0.55)):
+        (k1, k2, k3), _ = worley(n, np.random.default_rng(sd).random((cnt, 2)), warp=(wx * 0.8, wy * 0.8), k=3)
+        sp = 1.0 / math.sqrt(cnt)
+        dome = np.sqrt(np.clip((k2 - k1) / (0.42 * sp), 0, 1))
+        hole = (1.0 - smooth(0.0, 0.22 * sp, k3 - k1)) * (1.0 - smooth(0.0, 0.12 * sp, k2 - k1))
+        spk.append((dome, hole, amp))
+    knob_c = np.clip(cluster * 1.3 - 0.1, 0, 1)
+    sponge = (spk[0][0] - 1) * 0.6 + (spk[1][0] - 1) * 0.4 * np.clip(knob_c + 0.3, 0, 1)
+    big = np.clip(spk[0][1] * (0.35 + 0.65 * knob_c) + spk[1][1] * knob_c * 0.7, 0, 1)
+    cupsA, big_rim = _pit_field(n, 160, 0.5, 17, cluster * 0.6, (wx, wy), depth_var=0.55, sharp=0.5)
+    big = np.clip(big + cupsA * 0.8, 0, 1)
+    mid, mid_rim = _pit_field(n, 1500, 0.5, 18, np.clip(cluster * 0.6 + 0.3 * big - 0.2, 0, 1), (wx * 0.6, wy * 0.6), depth_var=0.6, sharp=0.55)
+    pores = cups(n, 3600, 0.0016, 0.0042, 29, density=0.02 + 0.35 * cluster + 0.4 * smooth(0.1, 0.5, big), power=1.3, sharp=2.4)
+    basins = cups(n, 30, 0.035, 0.08, 16, density=0.25 + 0.5 * cluster, power=2.0, warp=(wx, wy), sharp=1.0)
+    # rillen: parallel runnels (vertical on the side projections of the triplanar mapping)
+    xs, ys = grid(n)
+    rill_ph = xs * 2 * math.pi * 23 + (spectral(n, 2.0, 30, fmin=2) - 0.5) * 9.0
+    rill = (0.5 + 0.5 * np.cos(rill_ph)) ** 3 * smooth(0.55, 0.8, spectral(n, 2.2, 31, fmin=2, aspect=(1.0, 0.35))) * (1 - cluster)
+    # joints / cracks: a few long open cracks and a net of hairlines
     rng = np.random.default_rng(19)
-    (f1, f2), _ = worley(n, rng.random((18, 2)), warp=(wx * 2.5, wy * 2.5))
-    crack = (1.0 - smooth(0.0, 0.0024, f2 - f1)) * smooth(0.5, 0.72, spectral(n, 2.0, 20, fmin=2))
+    (f1, f2), _ = worley(n, rng.random((14, 2)), warp=(wx * 3, wy * 3))
+    open_crack = (1.0 - smooth(0.0, 0.006, f2 - f1)) * smooth(0.45, 0.65, spectral(n, 2.0, 20, fmin=2))
+    (g1, g2), _ = worley(n, np.random.default_rng(32).random((70, 2)), warp=(wx * 2, wy * 2))
+    hair = (1.0 - smooth(0.0, 0.0018, g2 - g1)) * smooth(0.5, 0.75, spectral(n, 2.0, 33, fmin=3))
 
-    h = (0.42 * base + 0.38 * lumps + 0.14 * knob + 0.025 * fine
-         - 0.14 * basins - 0.42 * holes - 0.08 * pores - 0.07 * crack)
+    h = (0.34 * base + 0.28 * lumps + 0.1 * knob + 0.05 * rid + 0.006 * fine + 0.2 * sponge * (0.4 + 0.6 * knob_c)
+         - 0.1 * basins - 0.3 * big - 0.12 * mid - 0.06 * pores - 0.035 * rill
+         - 0.16 * open_crack - 0.04 * hair + 0.025 * big_rim)
     h = norm01(h)
     cav = cavity(h, sigmas=(1.5 * s, 5 * s, 16 * s), weights=(0.4, 0.35, 0.25))
     cav = np.clip(cav * 8.0, -1, 1)
-    ao = np.clip(1.0 - np.maximum(cav, 0) * 0.9 - smooth(0.05, 0.9, holes) * 0.45 - pores * 0.2, 0.4, 1.0)
+    pit_in = np.clip(smooth(0.05, 0.6, big) * 0.85 + smooth(0.05, 0.6, mid) * 0.6 + pores * 0.5, 0, 1)
+    ao = np.clip(1.0 - np.maximum(cav, 0) * 0.8 - pit_in * 0.5 - open_crack * 0.6 - hair * 0.2, 0.22, 1.0)
 
-    c_crust = col('#dcd4c1')
-    c_warm = col('#d8c8a9')
-    c_grey = col('#b3aea2')
-    c_rim = col('#8a7a64')
-    c_hole = col('#3a322a')
-    albedo = lerp(c_grey, c_crust, smooth(0.2, 0.7, 0.55 * base + 0.45 * lumps))
-    albedo = lerp(albedo, c_warm, smooth(0.5, 0.85, spectral(n, 2.2, 22, fmin=2)) * 0.55)
-    albedo *= (0.93 + 0.1 * knob)[..., None]
-    albedo *= (0.96 + 0.07 * fine)[..., None]
-    albedo = lerp(albedo, c_rim, smooth(0.02, 0.35, holes) * 0.35 + smooth(0.1, 0.6, pores) * 0.25)
-    albedo = lerp(albedo, c_hole, smooth(0.5, 0.95, holes) * 0.3)
-    albedo = lerp(albedo, c_rim, smooth(0.2, 0.9, basins) * 0.25)
-    albedo = lerp(albedo, c_hole, crack * 0.55)
-    albedo *= (1.0 - np.maximum(cav, 0) * 0.35)[..., None]
-    # sparse lichen: dark grey crusts, pale grey-green crusts, tiny orange Xanthoria rosettes
-    clean = 1 - np.clip(holes * 2 + pores, 0, 1)
-    lichen_mask = smooth(0.7, 0.77, spectral(n, 1.7, 23, fmin=5)) * clean
-    albedo = lerp(albedo, col('#55544b'), lichen_mask * 0.7)
-    lich2 = smooth(0.72, 0.78, spectral(n, 1.6, 24, fmin=8)) * clean
-    albedo = lerp(albedo, col('#9ba08f'), lich2 * 0.4)
-    (o1,), _ = worley(n, np.random.default_rng(25).random((1800, 2)), k=1)
-    orange = (1 - smooth(0.0, 0.004, o1)) * smooth(0.62, 0.72, spectral(n, 2.0, 26, fmin=3)) * clean
-    albedo = lerp(albedo, col('#c2843a'), orange * 0.8)
-    return save_pair('limestone', np.clip(albedo, 0, 1), h, 30.0 * s, ao)
+    c_crust = col('#ddd6c6')   # sun-bleached crust
+    c_warm = col('#d9cbb0')    # creamy, iron-tinged
+    c_grey = col('#aaa69c')    # grey weathering rind
+    c_pit = col('#8c8172')     # pit walls: dust, algae
+    c_deep = col('#554a3f')    # deep pit floor / crack
+    albedo = lerp(c_grey, c_crust, smooth(0.25, 0.75, 0.5 * base + 0.35 * lumps + 0.15 * rid))
+    albedo = lerp(albedo, c_warm, smooth(0.5, 0.85, spectral(n, 2.2, 22, fmin=2)) * 0.5)
+    albedo *= (0.92 + 0.1 * knob)[..., None]
+    albedo *= (0.96 + 0.06 * fine)[..., None]
+    # ridges between pits are bleached, pit walls stained, floors dark
+    albedo = lerp(albedo, albedo * 1.06, np.clip(big_rim + mid_rim * 0.5 + np.maximum(spk[0][0] - 0.7, 0) * knob_c, 0, 1) * 0.5)
+    albedo *= (0.9 + 0.1 * np.clip(sponge + 1, 0, 1))[..., None]
+    albedo = lerp(albedo, c_pit, np.clip(smooth(0.02, 0.4, big) * 0.3 + smooth(0.02, 0.4, mid) * 0.22 + smooth(0.1, 0.6, pores) * 0.2, 0, 1))
+    albedo = lerp(albedo, c_deep, np.clip(smooth(0.55, 1.0, big) * 0.28 + smooth(0.6, 1.0, mid) * 0.15, 0, 1))
+    albedo = lerp(albedo, c_pit, smooth(0.2, 0.9, basins) * 0.25 + rill * 0.12)
+    albedo = lerp(albedo, c_deep, np.clip(open_crack * 0.8 + hair * 0.35, 0, 1))
+    albedo *= (1.0 - np.maximum(cav, 0) * 0.3)[..., None]
+    # lichen: dark grey-black crusts, pale grey-green crusts, tiny orange Xanthoria rosettes (on clean rock)
+    clean = 1 - np.clip(big * 2 + mid * 2 + pores, 0, 1)
+    lichen_mask = smooth(0.68, 0.76, spectral(n, 1.7, 23, fmin=5)) * clean
+    albedo = lerp(albedo, col('#57564e'), lichen_mask * 0.5)
+    lich2 = smooth(0.7, 0.77, spectral(n, 1.6, 24, fmin=8)) * clean
+    albedo = lerp(albedo, col('#a3a796'), lich2 * 0.4)
+    (o1,), _ = worley(n, np.random.default_rng(25).random((1500, 2)), k=1)
+    orange = (1 - smooth(0.0, 0.004, o1)) * smooth(0.64, 0.74, spectral(n, 2.0, 26, fmin=3)) * clean
+    albedo = lerp(albedo, col('#c08040'), orange * 0.75)
+    # ochre dust settled in shallow hollows
+    albedo = lerp(albedo, col('#b59a78'), smooth(0.35, 0.8, basins) * 0.3)
+    return save_pair('limestone', np.clip(albedo, 0, 1), h, 44.0 * s, ao)
 
 
 # ============================================================================= drawing helpers

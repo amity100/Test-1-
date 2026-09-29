@@ -21,6 +21,8 @@ export interface RockOptions {
   pits?: number;
   /** 0..1 how boxy (bedded blocks) vs round */
   blocky?: number;
+  /** 0..1 extra karst craggyness: sharp crests, bedding ledges, open fissures (default per kind) */
+  crag?: number;
 }
 
 // --- small seeded 3D value noise ------------------------------------------------------------------------
@@ -43,6 +45,18 @@ export function vnoise3(x: number, y: number, z: number, s = 0) {
     ) * 2 - 1
   );
 }
+/** ridged multifractal: sharp crests where the noise crosses zero (weathered, knife-edged karst) */
+function ridged3(x: number, y: number, z: number, s: number, oct: number) {
+  let a = 0.5, f = 1, sum = 0, norm = 0;
+  for (let i = 0; i < oct; i++) {
+    const r = 1 - Math.abs(vnoise3(x * f, y * f, z * f, s + i * 23));
+    sum += a * r * r;
+    norm += a;
+    a *= 0.5;
+    f *= 2.13;
+  }
+  return sum / norm;
+}
 function fbm3(x: number, y: number, z: number, s: number, oct: number) {
   let a = 0.5, f = 1, sum = 0, norm = 0;
   for (let i = 0; i < oct; i++) {
@@ -54,12 +68,12 @@ function fbm3(x: number, y: number, z: number, s: number, oct: number) {
   return sum / norm;
 }
 
-const SHAPES: Record<RockKind, { scale: [number, number, number]; blocky: number; cuts: number; lump: number; bump: number; base: number }> = {
-  boulder: { scale: [1.0, 0.72, 0.86], blocky: 0.25, cuts: 2, lump: 0.22, bump: 0.07, base: -0.42 },
-  slab: { scale: [1.5, 0.45, 1.15], blocky: 0.35, cuts: 2, lump: 0.18, bump: 0.06, base: -0.2 },
-  block: { scale: [1.0, 0.64, 0.8], blocky: 0.45, cuts: 3, lump: 0.14, bump: 0.05, base: -0.5 },
-  stone: { scale: [1.0, 0.58, 0.72], blocky: 0.4, cuts: 2, lump: 0.12, bump: 0.04, base: -0.5 },
-  pebble: { scale: [1.0, 0.55, 0.78], blocky: 0.0, cuts: 0, lump: 0.08, bump: 0.01, base: -0.4 },
+const SHAPES: Record<RockKind, { scale: [number, number, number]; blocky: number; cuts: number; lump: number; bump: number; base: number; crag: number; cutK: number }> = {
+  boulder: { scale: [1.0, 0.72, 0.86], blocky: 0.3, cuts: 4, lump: 0.2, bump: 0.07, base: -0.42, crag: 1.0, cutK: 0.9 },
+  slab: { scale: [1.5, 0.45, 1.15], blocky: 0.4, cuts: 3, lump: 0.16, bump: 0.06, base: -0.2, crag: 0.8, cutK: 0.95 },
+  block: { scale: [1.0, 0.64, 0.8], blocky: 0.5, cuts: 4, lump: 0.12, bump: 0.05, base: -0.5, crag: 0.6, cutK: 0.95 },
+  stone: { scale: [1.0, 0.58, 0.72], blocky: 0.45, cuts: 3, lump: 0.12, bump: 0.04, base: -0.5, crag: 0.35, cutK: 0.9 },
+  pebble: { scale: [1.0, 0.55, 0.78], blocky: 0.0, cuts: 0, lump: 0.08, bump: 0.01, base: -0.4, crag: 0, cutK: 0.6 },
 };
 
 /** Build one rock geometry (indexed, smooth normals, `aRock` attribute). Roughly unit sized, base near y<0. */
@@ -80,8 +94,18 @@ export function rockGeometry(seed: number, opts: RockOptions = {}) {
       ? new THREE.Vector3((rnd() - 0.5) * 0.35, 1, (rnd() - 0.5) * 0.35) // bedding plane on top
       : new THREE.Vector3(Math.cos(rnd() * 6.283), (rnd() - 0.5) * 0.5, Math.sin(rnd() * 6.283));
     nrm.normalize();
-    cuts.push({ n: nrm, d: (c === 0 ? 0.6 : 0.7) + rnd() * 0.25, k: 0.55 + rnd() * 0.3 });
+    // joint faces are near-planar breaks (sharp edges), the bedding top a little softer
+    cuts.push({ n: nrm, d: (c === 0 ? 0.6 : 0.62) + rnd() * 0.25, k: c === 0 ? 0.7 + rnd() * 0.2 : S.cutK * (0.85 + rnd() * 0.15) });
   }
+  // karst detail: open fissures through the rock (solution-widened joints) and bedding ledges on the flanks
+  const crag = (opts.crag ?? S.crag) * (detail >= 4 ? 1 : detail >= 3 ? 0.5 : 0.2);
+  const fissures: { n: THREE.Vector3; d: number; w: number; depth: number }[] = [];
+  const nf = crag > 0.3 && kind !== 'pebble' ? 1 + Math.floor(rnd() * (detail >= 8 ? 3 : 2)) : 0;
+  for (let i = 0; i < nf; i++) {
+    const a = rnd() * 6.283;
+    fissures.push({ n: new THREE.Vector3(Math.cos(a), (rnd() - 0.5) * 0.6, Math.sin(a)).normalize(), d: (rnd() - 0.5) * 0.9, w: 0.035 + rnd() * 0.05, depth: 0.08 + rnd() * 0.1 });
+  }
+  const ledgeF = 3.5 + rnd() * 3, ledgePh = rnd() * 10;
   // geometric solution cups (on the upper half)
   const pitCount = opts.pits ?? 0;
   const pits: { c: THREE.Vector3; r: number; d: number }[] = [];
@@ -104,12 +128,30 @@ export function rockGeometry(seed: number, opts: RockOptions = {}) {
     // bulbous, cauliflower-like dissolution lumps (the look of weathered Judean limestone)
     r *= 1 + S.lump * 0.45 * Math.pow(Math.max(0, fbm3(dir.x * 2.4 - s, dir.y * 2.4, dir.z * 2.4 + s, seed + 3, 2) + 0.15), 0.8);
     r *= 1 + S.bump * fbm3(dir.x * 4.3, dir.y * 4.3 + s, dir.z * 4.3, seed + 5, 3);
+    if (crag > 0) {
+      // knife-edged crests and hollows (ridged noise), strongest on the upper, exposed half
+      const cr = ridged3(dir.x * 2.6 + s, dir.y * 2.6, dir.z * 2.6 - s, seed + 9, detail >= 8 ? 4 : 3);
+      r *= 1 + crag * 0.16 * (cr - 0.55) * (0.6 + 0.4 * Math.max(0, dir.y));
+      // bedding ledges: stepped recesses on the flanks (horizontal strata of the Judean limestone)
+      const side = 1 - Math.min(1, Math.abs(dir.y) * 1.4);
+      const lt = dir.y * ledgeF + ledgePh + 0.35 * fbm3(dir.x * 1.7, dir.y, dir.z * 1.7, seed + 11, 2);
+      const fr = lt - Math.floor(lt);
+      r *= 1 - crag * 0.07 * side * THREE.MathUtils.smoothstep(fr, 0.62, 0.9);
+    }
     v.copy(dir).multiplyScalar(r);
     v.set(v.x * sx, v.y * sy, v.z * sz);
     // planar cuts flatten the rock into facets (rounded where the plane meets the body)
     for (const c of cuts) {
       const t = v.dot(c.n) - c.d * (c.n.y > 0.8 ? sy : Math.max(sx, sz) * 0.8);
       if (t > 0) v.addScaledVector(c.n, -t * c.k * (0.55 + 0.45 * Math.min(1, t * 4)));
+    }
+    // open fissures: V-grooves along joint planes
+    for (const f of fissures) {
+      const d = Math.abs(dir.dot(f.n) - f.d);
+      if (d < f.w) {
+        const q = 1 - d / f.w;
+        v.multiplyScalar(1 - f.depth * crag * q * q);
+      }
     }
     // solution cups
     for (const p of pits) {

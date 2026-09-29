@@ -446,7 +446,6 @@ JOBS = {
     'braid': gen_braid,
     'wood': gen_wood,
     'metal': gen_scratches,
-    'scales': gen_scales,
 }
 
 if __name__ == '__main__':

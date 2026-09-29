@@ -107,6 +107,9 @@ export interface BodyTubeSpec {
   grime?: (p: THREE.Vector3) => number;
   /** extra radial offset (e.g. inner layers: negative) */
   offset?: number;
+  /** rest positions of garments UNDER this one: the tube is kept at least `innerGap` outside them */
+  inner?: Float32Array[];
+  innerGap?: number;
 }
 
 /** A vertical tube around the torso/legs (tunic top, skirt, robe) fitted to the rest-pose body. */
@@ -172,6 +175,39 @@ export function bodyTube(fit: Fit, spec: BodyTubeSpec): { tube: Tube; field: Hul
       }
     }
   }
+  // layering: max radius of the inner garments per (s, θ) bin (dilated), so this layer never dips into them
+  let innerMax: Float32Array | null = null;
+  if (spec.inner?.length) {
+    innerMax = new Float32Array(ns * nt);
+    const p = new THREE.Vector3();
+    for (const arr of spec.inner)
+      for (let i = 0; i < arr.length; i += 3) {
+        p.fromArray(arr, i);
+        const l = F1.toLocal(p);
+        const k = Math.round((l.s - F1.s0) / ds);
+        if (k < 0 || k >= ns) continue;
+        let t = Math.round(((l.th / TAU) * nt) % nt);
+        if (t < 0) t += nt;
+        t %= nt;
+        const idx = k * nt + t;
+        if (l.r > innerMax[idx]) innerMax[idx] = l.r;
+      }
+    for (let pass = 0; pass < 2; pass++) {
+      const src = innerMax.slice();
+      for (let k = 0; k < ns; k++)
+        for (let t = 0; t < nt; t++) {
+          let m = src[k * nt + t];
+          for (let dk = -1; dk <= 1; dk++)
+            for (let dt = -1; dt <= 1; dt++) {
+              const kk = k + dk;
+              if (kk < 0 || kk >= ns) continue;
+              m = Math.max(m, src[kk * nt + ((t + dt + nt) % nt)]);
+            }
+          innerMax[k * nt + t] = m;
+        }
+    }
+  }
+  const innerGap = spec.innerGap ?? 0.006;
   const fold = spec.folds ? foldNoise(spec.folds.seed, spec.folds.count, spec.folds.k[0], spec.folds.k[1]) : null;
   const fold2 = spec.folds ? foldNoise(spec.folds.seed + 7, 5, spec.folds.k[1], spec.folds.k[1] * 2) : null;
   const off = spec.offset ?? 0;
@@ -182,6 +218,14 @@ export function bodyTube(fit: Fit, spec: BodyTubeSpec): { tube: Tube; field: Hul
       // folds hang: their phase drifts slowly with height; creases (negative lobes) sharper than ridges
       const f = fold(th, s) * 0.75 + fold2(th, s * 2) * 0.25;
       r += a * (f > 0 ? f : f * 0.6);
+    }
+    if (innerMax) {
+      const fk = THREE.MathUtils.clamp((s - F1.s0) / ds, 0, ns - 1);
+      let ft = ((th / TAU) * nt) % nt;
+      if (ft < 0) ft += nt;
+      const k0 = Math.floor(fk), k1 = Math.min(ns - 1, k0 + 1), t0 = Math.floor(ft) % nt, t1 = (t0 + 1) % nt;
+      const m = Math.max(innerMax[k0 * nt + t0], innerMax[k0 * nt + t1], innerMax[k1 * nt + t0], innerMax[k1 * nt + t1]);
+      if (m > 0) r = Math.max(r, m + innerGap);
     }
     return r;
   };
@@ -393,20 +437,36 @@ export function ribbon(points: THREE.Vector3[], normals: THREE.Vector3[], width:
 }
 
 // ------------------------------------------------------------------------------------------ weights
+/** Memoise a weight function on a small spatial grid (weights vary smoothly; saves most k-NN searches). */
+export function memoWeights(fn: (i: number, p: THREE.Vector3) => Weights, cell = 0.006) {
+  const cache = new Map<number, Weights>();
+  const q = new THREE.Vector3();
+  return (i: number, p: THREE.Vector3): Weights => {
+    const x = Math.round(p.x / cell), y = Math.round(p.y / cell), z = Math.round(p.z / cell);
+    const key = ((x + 512) * 1024 + (y + 512)) * 1024 + (z + 512);
+    let w = cache.get(key);
+    if (!w) {
+      w = fn(i, q.set(x * cell, y * cell, z * cell));
+      cache.set(key, w);
+    }
+    return w;
+  };
+}
+
 /** skin weights for torso garments (no forearm / hand / head / leg bones) */
 export function torsoWeights(fit: Fit) {
   const b = fit.body;
   const vOk = b.vertsIn(C.TORSO | C.NECK | C.UPARM_L | C.UPARM_R);
   const names = b.boneNames;
   const bOk = (i: number) => (b.boneCls[i] & (C.TORSO | C.NECK)) !== 0 || /^shoulder01/.test(names[i]);
-  return (_i: number, p: THREE.Vector3) => b.nearestWeights(p, 8, vOk, bOk);
+  return memoWeights((_i: number, p: THREE.Vector3) => b.nearestWeights(p, 8, vOk, bOk));
 }
 
 export function armWeights(fit: Fit, side: 'L' | 'R', forearm = false) {
   const b = fit.body;
   const m = C.TORSO | (side === 'L' ? C.UPARM_L | (forearm ? C.FOREARM_L : 0) : C.UPARM_R | (forearm ? C.FOREARM_R : 0));
   const vOk = b.vertsIn(m), bOk = b.bonesIn(m);
-  return (_i: number, p: THREE.Vector3) => b.nearestWeights(p, 8, vOk, bOk);
+  return memoWeights((_i: number, p: THREE.Vector3) => b.nearestWeights(p, 8, vOk, bOk));
 }
 
 /**
@@ -421,7 +481,7 @@ export function skirtWeights(fit: Fit) {
   const thL = b.boneIndex['upperleg01.L'], thR = b.boneIndex['upperleg01.R'], root = b.boneIndex['root'];
   const hipY = (lm.hip.L.y + lm.hip.R.y) / 2, kneeY = (lm.knee.L.y + lm.knee.R.y) / 2;
   const q = new THREE.Vector3();
-  return (_i: number, p: THREE.Vector3): Weights => {
+  return memoWeights((_i: number, p: THREE.Vector3): Weights => {
     // sample the body a little above the point so a flared hem still takes the hip/thigh weights
     q.copy(p);
     const near = b.nearestWeights(q, 8, vOk, bOk, false);
@@ -433,14 +493,14 @@ export function skirtWeights(fit: Fit) {
       [root, 0.38],
     ]);
     return blendWeights(near, normalizeWeights(proc), t * 0.9);
-  };
+  });
 }
 
 /** weights of the nearest skin of the given parts */
 export function partWeights(fit: Fit, mask: number, k = 6) {
   const b = fit.body;
   const vOk = b.vertsIn(mask), bOk = b.bonesIn(mask);
-  return (_i: number, p: THREE.Vector3) => b.nearestWeights(p, k, vOk, bOk);
+  return memoWeights((_i: number, p: THREE.Vector3) => b.nearestWeights(p, k, vOk, bOk), 0.005);
 }
 
 /** rigid weights on one bone */

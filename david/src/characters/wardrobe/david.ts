@@ -265,8 +265,8 @@ export async function dressDavid(human: HumanModel, opts: DressOptions): Promise
   };
   // (θ, distance below the neckline) control points; the shoulder crossing sits ~4.5 cm out from the neck
   const onBody: [number, number][] = [
-    [0.95, colLen(0.95) - 0.05], [0.9, 0.3 * S], [0.86, 0.18 * S], [0.9, 0.09 * S], [Math.PI / 2, 0.045 * S],
-    [Math.PI - 0.9, 0.09 * S], [Math.PI - 0.84, 0.2 * S], [Math.PI - 0.9, 0.32 * S], [Math.PI - 0.95, colLen(Math.PI - 0.95) - 0.05],
+    [0.95, colLen(0.95) - 0.05], [0.92, 0.3 * S], [0.9, 0.17 * S], [1.0, 0.085 * S], [Math.PI / 2, 0.045 * S],
+    [Math.PI - 1.0, 0.085 * S], [Math.PI - 0.95, 0.2 * S], [Math.PI - 0.95, colLen(Math.PI - 0.95) - 0.05],
   ];
   const NP = low ? 40 : 72;
   const strapPts: THREE.Vector3[] = [], strapN: THREE.Vector3[] = [];

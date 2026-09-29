@@ -60,6 +60,8 @@ export interface Headband {
   radius: [number, number];
   /** band height (m), default 0.014 */
   width?: number;
+  /** band lower at the front / higher at the back by this much (m) — wardrobe headRing `tilt` convention */
+  tilt?: number;
 }
 
 export interface StrandSet {
@@ -77,6 +79,8 @@ export interface StrandSet {
   simGuides: Float32Array;
   simStiff: Float32Array;
   G: number;
+  /** per layer: strand count, mean / max strand length (m), mean root SDF (m), max push-out (m) */
+  diag: { name: string; n: number; meanLen: number; maxLen: number; maxPush: number }[];
 }
 
 const GK = 40; // flow-curve resolution
@@ -172,7 +176,7 @@ export function growStrands(S: HeadSurface, layers: LayerBuild[], K: number, hea
   const set: StrandSet = {
     K, n: 0, pts: new Float32Array(total * K * 4), a: new Float32Array(total * 4), b: new Float32Array(total * 4),
     rootCol: new Float32Array(total * 3), tipCol: new Float32Array(total * 3),
-    simGuides: new Float32Array(Math.max(1, simTotal) * K * 3), simStiff: new Float32Array(Math.max(1, simTotal)), G: 0,
+    simGuides: new Float32Array(Math.max(1, simTotal) * K * 3), simStiff: new Float32Array(Math.max(1, simTotal)), G: 0, diag: [],
   };
   const P = new THREE.Vector3(), U = new THREE.Vector3(), V = new THREE.Vector3(), X = new THREE.Vector3(), tmp = new THREE.Vector3();
   const rootC = new THREE.Color(), tipC = new THREE.Color();
@@ -286,6 +290,9 @@ export function growStrands(S: HeadSurface, layers: LayerBuild[], K: number, hea
       return best;
     };
     const cl = st.childLen ?? [0.8, 1.0];
+    const first = set.n;
+    let maxPush = 0;
+    const pre = new THREE.Vector3();
     for (let c = 0; c < roots.n; c++) {
       const si = set.n++;
       const x0 = roots.pos[c * 3], y0 = roots.pos[c * 3 + 1], z0 = roots.pos[c * 3 + 2];
@@ -325,7 +332,9 @@ export function growStrands(S: HeadSurface, layers: LayerBuild[], K: number, hea
           X.x += vnoise(q, 1.7, 0.3, nseed) * amp;
           X.y += vnoise(q, 5.3, 2.1, nseed) * amp;
           X.z += vnoise(q, 9.9, 4.4, nseed) * amp;
+          pre.copy(X);
           S.sdf.pushOut(X, 0.0012 + 0.0025 * t, tmp);
+          maxPush = Math.max(maxPush, pre.distanceTo(X));
         }
         set.pts[base + k * 4] = X.x;
         set.pts[base + k * 4 + 1] = X.y;
@@ -345,6 +354,17 @@ export function growStrands(S: HeadSurface, layers: LayerBuild[], K: number, hea
       rootC.toArray(set.rootCol, si * 3);
       tipC.toArray(set.tipCol, si * 3);
     }
+    let sum = 0, mx = 0;
+    for (let si = first; si < set.n; si++) {
+      let l = 0;
+      for (let k = 1; k < K; k++) {
+        const i = (si * K + k) * 4;
+        l += Math.hypot(set.pts[i] - set.pts[i - 4], set.pts[i + 1] - set.pts[i - 3], set.pts[i + 2] - set.pts[i - 2]);
+      }
+      sum += l;
+      mx = Math.max(mx, l);
+    }
+    set.diag.push({ name: st.name, n: set.n - first, meanLen: sum / Math.max(1, set.n - first), maxLen: mx, maxPush });
   }
   if (headband) compressHeadband(S, set, headband);
   bakeAO(S, set);
@@ -385,12 +405,13 @@ function compressHeadband(S: HeadSurface, set: StrandSet, hb: Headband) {
   const apply = (arr: Float32Array, stride: number, count: number) => {
     for (let i = 0; i < count; i++) {
       const o = i * stride;
-      const dy = Math.abs(arr[o + 1] - cy);
-      const w = 1 - ss(halfW, halfW + 0.03, dy);
-      if (w <= 0) continue;
       const dx = arr[o] - cx, dz = arr[o + 2] - cz;
       const e = Math.sqrt((dx / rx) ** 2 + (dz / rz) ** 2);
       if (e <= 1) continue;
+      const sa = dz / rz / e; // sine of the ellipse angle: +1 at the front
+      const dy = Math.abs(arr[o + 1] - (cy - (hb.tilt ?? 0) * sa));
+      const w = 1 - ss(halfW, halfW + 0.03, dy);
+      if (w <= 0) continue;
       // squeeze the part outside the band; tight under the band, relaxing above / below
       const e2 = 1 + (e - 1) * (1 - w * 0.92);
       const k = e2 / e;

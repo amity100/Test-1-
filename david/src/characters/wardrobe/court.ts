@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { HumanModel } from '../human/HumanModel';
-import { beginFit, beltBand, fittedTunic, headRing, legCapsules, sandals } from './common';
+import { beginFit, beltBand, fittedTunic, hangFromBelt, headRing, legCapsules, sandals } from './common';
 import { rng } from './loft';
 import { clothMaterial, solidMaterial, texPair, type Tier } from './materials';
 import type { Outfit } from './Outfit';
@@ -44,11 +44,7 @@ export async function dressMan(human: HumanModel, opts: { quality: Tier; role: C
     });
     beltBand(fit, t, { width: 0.055 * S, thickness: 0.006, material: leatherBelt, name: 'swordBelt' });
     const sword = makeSword(tier, leather, metal, wood);
-    const th = 1.35;
-    const p = t.upper.field.point(t.beltY - 0.01, th, t.upper.R(t.beltY, th) + 0.03);
-    const sock = human.addSocket('wardrobeSword', 'pelvis.L', p, new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.5, th, 0.12, 'YXZ')));
-    sock.add(sword);
-    outfit.add(sword);
+    hangFromBelt(fit, t, sword, { th: 1.45, out: 0.026, drop: 0.01, forward: 0.42, bone: 'pelvis.L', name: 'wardrobeSword' });
     outfit.props.sword = sword;
     outfit.props.spear = makeSpear(tier, wood, metal, leather, { length: 2.3, head: 0.28, gripAt: 1.2 });
     const band = clothMaterial({ tier, tex: fine, tile: 0.05, dye: 0x2b3f8c, hem: [0, 0.1, 0.01, 0], edgeMask: [0, 0], transmit: 0 });
@@ -68,7 +64,7 @@ export async function dressMan(human: HumanModel, opts: { quality: Tier; role: C
     beltBand(fit, t, { width: 0.045 * S, thickness: 0.006, material: leatherBelt, name: 'belt' });
     if (!runner && r() < 0.6) {
       // sleeveless leather jerkin over the tunic, ending at the hips
-      fittedTunic(fit, { tex: leather, tile: 0.3, dye: pick([0x6b4a30, 0x5a3e28, 0x7a5638]), hem: -1.6, sleeve: 0, sleeveless: true, neck: 'round', offset: 0.007, flare: 0.05, folds: 0.3, seed: opts.seed + 3, name: 'jerkin', hide: false, fray: 0, sheen: 0.3, roughness: 0.62 });
+      fittedTunic(fit, { tex: leather, tile: 0.3, dye: pick([0x6b4a30, 0x5a3e28, 0x7a5638]), hem: -1.6, sleeve: 0, sleeveless: true, neck: 'round', offset: 0.007, flare: 0.05, folds: 0.3, seed: opts.seed + 3, name: 'jerkin', hide: false, fray: 0, sheen: 0.3, roughness: 0.62, inner: t.restPos });
     }
     if (r() < 0.65) {
       const band = clothMaterial({ tier, tex: medium, tile: 0.08, dye: pick([0x8e3f2c, 0x5a4632, 0xd9cba8, 0x2e3a5c]), hem: [0, 0.1, 0.01, 0], edgeMask: [0, 0], transmit: 0 });
@@ -77,11 +73,7 @@ export async function dressMan(human: HumanModel, opts: { quality: Tier; role: C
     outfit.props.spear = makeSpear(tier, wood, metal, leather, { length: runner ? 1.9 : 2.2, head: 0.24, gripAt: 1.1, seed: opts.seed });
     if (!runner) outfit.props.shield = makeShield(tier, leather, metal, wood, { radius: 0.28 + r() * 0.05, oval: r() < 0.35 ? 1.3 : 1, boss: r() < 0.5 ? 'bronze' : 'leather', seed: opts.seed });
     const dagger = makeDagger(tier, leather, metal, wood);
-    const th = -1.1;
-    const p = t.upper.field.point(t.beltY - 0.005, th, t.upper.R(t.beltY, th) + 0.022);
-    const sock = human.addSocket('wardrobeDagger', 'pelvis.R', p, new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.3, th, -0.2, 'YXZ')));
-    sock.add(dagger);
-    outfit.add(dagger);
+    hangFromBelt(fit, t, dagger, { th: -1.0, out: 0.02, drop: 0.005, forward: -0.3, bone: 'pelvis.R', name: 'wardrobeDagger' });
     outfit.props.dagger = dagger;
   }
   sandals(fit, leather, { wraps: 1 + r(), height: 0.05 + r() * 0.04 });

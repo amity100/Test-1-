@@ -46,6 +46,8 @@ export interface TunicOptions {
   /** open side slits from the hem up to this height (tabard / four-cornered robe) and slit half-angle */
   sideSlit?: { top: number; half: number };
   sleeveless?: boolean;
+  /** rest positions of garments under this one (TunicResult.restPos of the inner layer) */
+  inner?: Float32Array[];
   seed: number;
   name: string;
   beltY?: number;
@@ -60,6 +62,8 @@ export interface TunicResult {
   beltY: number;
   corners: THREE.Vector3[];
   meshes: THREE.Object3D[];
+  /** rest positions of every tube of this garment (pass as `inner` to the next layer) */
+  restPos: Float32Array[];
 }
 
 export function fittedTunic(fit: Fit, o: TunicOptions): TunicResult {
@@ -98,6 +102,7 @@ export function fittedTunic(fit: Fit, o: TunicOptions): TunicResult {
     folds: { amp: (y) => 0.002 + (o.folds ?? 1) * 0.005 * smoothstep(lm.yArmpit, beltY + 0.05, y), k: [7, 17], count: 8, seed: o.seed + 11 },
     cols, rows: low ? 36 : 64,
     grime: () => 0.15,
+    inner: o.inner,
   });
   const skirt = bodyTube(fit, {
     low: hem, high: () => beltY + 0.035 * S,
@@ -110,12 +115,14 @@ export function fittedTunic(fit: Fit, o: TunicOptions): TunicResult {
     folds: { amp: (y) => 0.004 + (o.folds ?? 1) * 0.02 * smoothstep(hipY + 0.03, hemY, y), k: [4, 12], count: 9, seed: o.seed + 5 },
     cols, rows: low ? 26 : 48,
     grime: () => 0.1,
+    inner: o.inner,
   });
   const sway = { uniforms: U, length: Math.max(0.3, (beltY - hemY) * 0.6) };
   const common = { tier, tex: o.tex, tile: o.tile, dye: o.dye, roughness: o.roughness ?? 0.9, sheen: o.sheen ?? 0.6, transmit: 0.5 };
   const upMat = clothMaterial({ ...common, bands: o.neckBands, palette: o.palette, hem: [0, 0.1, 0.012, o.fray ?? 0.3], edgeMask: [0, 1], grime: [0.7, 0.62, 0.5, 0.4] });
   const skMat = clothMaterial({ ...common, bands: o.bands, palette: o.palette, hem: [o.dust ?? 0.45, 0.16, 0.015, o.fray ?? 0.3], edgeMask: [1, 0], sway, collide: U });
   const meshes: THREE.Object3D[] = [];
+  const restPos: Float32Array[] = [upper.tube.pos, skirt.tube.pos];
   const tw = torsoWeights(fit);
   const up = makeSkinned(human, upper.tube.geometry, upMat, tw, { name: `${o.name}Upper` });
   outfit.add(up);
@@ -166,6 +173,7 @@ export function fittedTunic(fit: Fit, o: TunicOptions): TunicResult {
     const slMat = clothMaterial({ ...common, bands: o.sleeveBands, palette: o.palette, hem: [0, 0.05, 0.012, o.fray ?? 0.3], edgeMask: [1, 0] });
     for (const [i, side] of (['L', 'R'] as const).entries()) {
       const s = sleeveTube(fit, { side, length: o.sleeve, top: 0.07 * S, easeTop: 0.003 + off, easeEnd: o.sleeve > 1 ? 0.014 : 0.02, folds: 0.006, cols: low ? 24 : 40, rows: low ? 14 : 28, seed: o.seed + 40 + i, ragged: 0.004 });
+      restPos.push(s.tube.pos);
       const m = makeSkinned(human, s.tube.geometry, slMat, armWeights(fit, side, o.sleeve > 1), { name: `${o.name}Sleeve${side}` });
       outfit.add(m);
       meshes.push(m);
@@ -185,7 +193,7 @@ export function fittedTunic(fit: Fit, o: TunicOptions): TunicResult {
       return p.y < neckline(th) - 0.03 && p.y > hemY + 0.08 && !(o.sideSlit && p.y < o.sideSlit.top && Math.abs(p.x) > 0.08);
     });
   }
-  return { upper, skirt, hemY, beltY, corners, meshes };
+  return { upper, skirt, hemY, beltY, corners, meshes, restPos };
 }
 
 /** A belt / sash band around the waist over the garment (flat band + optional hanging ends). */
@@ -372,6 +380,21 @@ export function sandals(fit: Fit, leather: TexPair, o: { color?: number; wraps?:
   fit.outfit.add(grp);
   fit.outfit.groundOffset = 0.009;
   return grp;
+}
+
+/** Hang a rigid accessory (sword / dagger, +Y toward the hilt) from the belt at angle th. */
+export function hangFromBelt(fit: Fit, t: TunicResult, obj: THREE.Object3D, o: { th: number; out: number; drop: number; forward: number; bone: string; name: string }) {
+  const outward = new THREE.Vector3(Math.sin(o.th), 0, Math.cos(o.th));
+  const p = t.upper.field.point(t.beltY - o.drop, o.th, t.upper.R(t.beltY, o.th) + o.out);
+  const tangent = new THREE.Vector3(0, 1, 0).cross(outward).normalize(); // toward the front at the left hip
+  const Y = new THREE.Vector3(0, 1, 0).multiplyScalar(0.9).addScaledVector(tangent, o.forward).normalize();
+  const X = new THREE.Vector3().crossVectors(Y, outward).normalize();
+  const Z = new THREE.Vector3().crossVectors(X, Y).normalize();
+  const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(X, Y, Z));
+  const sock = fit.human.addSocket(o.name, o.bone, p, q);
+  sock.add(obj);
+  fit.outfit.add(obj);
+  return sock;
 }
 
 /** Rigid ring (armlet / bracelet) around a limb at fraction t between two joints. */

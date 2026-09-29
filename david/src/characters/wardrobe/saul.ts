@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { HumanModel } from '../human/HumanModel';
 import { C } from './body';
-import { beginFit, beltBand, fittedTunic, headRing, legCapsules, limbRing, sandals, tzitzit } from './common';
+import { beginFit, beltBand, fittedTunic, hangFromBelt, headRing, legCapsules, limbRing, sandals, tzitzit } from './common';
 import type { DressOptions } from './david';
 import { clothMaterial, fringeMaterial, solidMaterial, texPair } from './materials';
 import type { Outfit } from './Outfit';
@@ -31,13 +31,13 @@ export async function dressSaul(human: HumanModel, opts: DressOptions): Promise<
   const S = lm.height / 1.75;
   const hipY = (lm.hip.L.y + lm.hip.R.y) / 2;
   outfit.capsules.push(...legCapsules(fit, 0.016, 0.06));
-  const ARGAMAN = 0x4b1a45, SHANI = 0xa01c1c, TEKHELET = 0x2b3f8c, GOLD = 0xe2b25a, LINEN = 0xebe4d2;
+  const ARGAMAN = 0x4b1a45, SHANI = 0x8c1616, TEKHELET = 0x2b3f8c, GOLD = 0xd9a84e, LINEN = 0xdcd3bf;
   // ---- undertunic (linen)
-  fittedTunic(fit, { tex: fine, tile: 0.07, dye: LINEN, hem: 0.9, sleeve: 1.28, neck: 'slit', ease: 0.006, flare: 0.1, folds: 0.7, seed: 3, name: 'kuttonet', fray: 0, sheen: 0.35, roughness: 0.78, dust: 0.3 });
+  const kut = fittedTunic(fit, { tex: fine, tile: 0.07, dye: LINEN, hem: 0.9, sleeve: 1.28, neck: 'slit', ease: 0.006, flare: 0.1, folds: 0.7, seed: 3, name: 'kuttonet', fray: 0, sheen: 0.35, roughness: 0.78, dust: 0.3 });
   // ---- me'il: purple wool tabard, four corners
   const meil = fittedTunic(fit, {
     tex: fine, tile: 0.05, dye: ARGAMAN, hem: 0.52, sleeve: 0, sleeveless: true, neck: 'round', offset: 0.009, ease: 0.012, flare: 0.13, folds: 1.1,
-    seed: 9, name: 'meil', sideSlit: { top: hipY - 0.03, half: 0.22 }, hide: false, fray: 0, sheen: 0.85, roughness: 0.72, dust: 0.25,
+    seed: 9, name: 'meil', sideSlit: { top: hipY - 0.03, half: 0.22 }, hide: false, inner: kut.restPos, fray: 0, sheen: 0.85, roughness: 0.72, dust: 0.25,
     palette: [SHANI, TEKHELET, GOLD, 0xd8c08a],
     bands: [
       { from: 0.0, to: 0.012, motif: 0, pal: 1 },
@@ -54,7 +54,7 @@ export async function dressSaul(human: HumanModel, opts: DressOptions): Promise<
     ],
   });
   // ---- sash (scarlet) with gold plaques, sword at the left hip
-  const sashMat = clothMaterial({ tier, tex: fine, tile: 0.05, dye: SHANI, roughness: 0.75, sheen: 0.7, hem: [0, 0.1, 0.01, 0], edgeMask: [0, 0], transmit: 0.2 });
+  const sashMat = clothMaterial({ tier, tex: fine, tile: 0.05, dye: SHANI, roughness: 0.8, sheen: 0.25, hem: [0, 0.1, 0.01, 0], edgeMask: [0, 0], transmit: 0.2 });
   beltBand(fit, meil, { width: 0.075 * S, thickness: 0.007, material: sashMat, offset: 0.004, name: 'sash' });
   const gold = solidMaterial({ tier, tex: metal, color: GOLD, roughness: 0.28, metalness: 1, repeat: [2, 2], metalWear: { patina: 0x7a5424, amount: 0.25, edgeBright: 0.9 } });
   const plaqueGeo = new THREE.BoxGeometry(0.03, 0.045, 0.004);
@@ -69,15 +69,8 @@ export async function dressSaul(human: HumanModel, opts: DressOptions): Promise<
     outfit.add(m);
   }
   const sword = makeSword(tier, leather, metal, wood, { gold: true });
-  {
-    const th = 1.35;
-    const p = meil.upper.field.point(meil.beltY - 0.01, th, meil.upper.R(meil.beltY, th) + 0.035);
-    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.5, th, 0.12, 'YXZ'));
-    const sock = human.addSocket('wardrobeSword', 'pelvis.L', p, q);
-    sock.add(sword);
-    outfit.add(sword);
-    outfit.props.sword = sword;
-  }
+  hangFromBelt(fit, meil, sword, { th: 1.45, out: 0.03, drop: 0.012, forward: 0.42, bone: 'pelvis.L', name: 'wardrobeSword' });
+  outfit.props.sword = sword;
   // ---- tzitzit on the four corners of the me'il
   const white = solidMaterial({ tier, tex: rope, color: 0xefe9dc, roughness: 0.9, repeat: [1, 1 / 0.012] });
   const blue = solidMaterial({ tier, tex: rope, color: TEKHELET, roughness: 0.85, repeat: [1, 1 / 0.012] });
