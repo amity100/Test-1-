@@ -11,7 +11,7 @@ import { pose, type Pose } from '../../characters/Rig';
  */
 
 export type CastPoseName =
-  | 'kingSeatedSpear' | 'kingSeatedBrood' | 'kingStandSpear'
+  | 'kingSeatedSpear' | 'kingSeatedBrood' | 'kingSeatedMemory' | 'kingStandSpear'
   | 'guardSpearShield' | 'guardAtEase' | 'runnerSpear'
   | 'servantJug' | 'servantBowl' | 'servantHands'
   | 'bearer' | 'archer' | 'slinger'
@@ -35,6 +35,14 @@ export const CAST_POSES: Record<CastPoseName, Pose> = {
     thR: [-1.4, -0.1, -0.2], shinR: [1.18, 0, 0], ftR: [0.2, 0.08, 0],
     uaR: [-0.52, 0.2, -0.22], faR: [-0.95, 0.35, 0], hdR: [0.25, 0.4, 0.2],
     uaL: [-0.42, 0.05, 0.3], faL: [-1.05, 0.1, 0], hdL: [0.25, -0.2, 0.1],
+  }),
+  // 'hinge': the same seat; he has lifted the torn corner in his left hand, the elbow on the thigh, and looks at it
+  kingSeatedMemory: pose({
+    hips: [0.08, 0, 0], spine: [0.12, 0, 0], chest: [0.1, 0.06, 0], neck: [0.12, 0.04, 0], head: [0.2, 0.1, -0.03],
+    thL: [-1.46, 0.08, 0.18], shinL: [1.3, 0, 0], ftL: [0.15, -0.05, 0],
+    thR: [-1.4, -0.1, -0.2], shinR: [1.18, 0, 0], ftR: [0.2, 0.08, 0],
+    uaR: [-0.52, 0.2, -0.22], faR: [-0.95, 0.35, 0], hdR: [0.25, 0.4, 0.2],
+    uaL: [-0.62, 0.1, 0.1], faL: [-1.85, 0.25, 0], hdL: [0.2, -0.2, 0.3],
   }),
   // standing among his men, the spear grounded at his right side (portrait): a head and shoulders above all (9:2)
   kingStandSpear: pose({

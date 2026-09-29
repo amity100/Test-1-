@@ -24,7 +24,7 @@ export interface DoFSettings {
   fStop: number;
   /** focal length in mm; null = derived from the camera's vertical FOV (24 mm sensor height) */
   focalLength: number | null;
-  /** largest blur radius as a fraction of the image height (default 0.012, capped at 0.03) */
+  /** largest blur radius as a fraction of the image height (default 0.012, capped at 0.03 and at the kernel's gap-free radius, DoFPass.maxCoCPx) */
   maxBlur: number;
   /** optional focus target (world point or object): overrides focusDistance every frame */
   target: THREE.Vector3 | THREE.Object3D | null;
@@ -147,10 +147,18 @@ export class DoFPass {
   private width = 1;
   private height = 1;
   private readonly tmp = new THREE.Vector3();
+  /**
+   * largest CoC (full-resolution px) this kernel gathers without visible gaps between the samples of its outer
+   * ring (<= 3 half-resolution px apart; beyond that the blur shows rings / a wavy pattern): 43 taps 20 px,
+   * 22 taps 13 px, 16 taps 9.5 px. settings.maxBlur is clamped to it.
+   */
+  readonly maxCoCPx: number;
 
   constructor(samples: number, type: THREE.TextureDataType, settings: DoFSettings = defaultDoF()) {
     this.samples = samples;
     this.settings = settings;
+    const outer = samples >= 43 ? 21 : samples >= 22 ? 14 : 10; // samples on the outer ring of diskKernel()
+    this.maxCoCPx = (2 * outer * 3.0) / (2 * Math.PI);
     this.half = [0, 1, 2].map((i) => {
       const rt = new THREE.WebGLRenderTarget(1, 1, {
         type, format: THREE.RGBAFormat, depthBuffer: false, stencilBuffer: false,
@@ -207,7 +215,7 @@ export class DoFPass {
     c.uFar.value = camera.far;
     c.uFocus.value = sd;
     c.uCoCScale.value = ((f * f) / (N * (sd - f)) / 0.024) * this.height;
-    c.uMaxCoC.value = Math.max(1, Math.min(0.03, Math.max(0, s.maxBlur)) * this.height);
+    c.uMaxCoC.value = Math.max(1, Math.min(this.maxCoCPx, Math.min(0.03, Math.max(0, s.maxBlur)) * this.height));
   }
 
   /** src (HDR) + depth -> dst (full resolution). */

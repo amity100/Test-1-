@@ -227,6 +227,7 @@ async function boot() {
   };
   // black-frame watchdog: every frame in test runs, every 30th with ?watchdog=1 (field diagnostics)
   const watchdog = testMode || params.has('watchdog') ? new FrameWatchdog(engine.renderer, testMode ? 1 : 30) : null;
+  if (watchdog) watchdog.ignore = () => engine.post.intentionallyDark; // dips to black / fades are intended
   (window as unknown as Record<string, unknown>).__watchdog = watchdog;
   let errors = 0;
   const safeFrame = (dt: number, render = true) => {

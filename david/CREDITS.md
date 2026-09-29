@@ -184,7 +184,7 @@ strand grooms and wardrobe outfits credited above; everything added here is our 
 
 | Item | Origin | License | Where used |
 |---|---|---|---|
-| Court staging, poses, idle life, spear grip solver, character lights, cast camera shots | our own code (`PalaceCast.ts`, `CastActor.ts`, `castPoses.ts`, `castLights.ts`, `castShots.ts`) | our own work (project license) | intro beats `gibeah` … `hinge` |
+| Court staging, poses, idle life, spear grip solver, character lights, interior light blend, cast camera shots | our own code (`PalaceCast.ts`, `CastActor.ts`, `castPoses.ts`, `castLights.ts`, `castInterior.ts`, `castShots.ts`) | our own work (project license) | intro beats `gibeah` … `hinge` |
 | Hand props: jug and carinated bowl (Iron Age red-slipped ware), strung self bow, quiver with reed arrows, hanging sling, the torn robe corner with tzitzit and a tekhelet thread | procedural geometry (`castProps.ts`); textures reused from `src/assets/palace/clay_*` and `src/assets/wardrobe/*` (both generated in this project) | our own work | `PalaceCast` |
 
 Textual basis (not assets): `docs/sources.md` 3.1–3.6 — 22:6 (seated under the tamarisk, spear in hand, servants

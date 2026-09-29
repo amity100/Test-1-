@@ -32,7 +32,9 @@ async function main() {
   const t1 = performance.now();
   const palace = await PalaceSet.create({ renderer: engine.renderer, quality: engine.quality, tex: engine.tex });
   engine.enforceTextureBudget(palace.scene);
-  const gib = palaceView(palace);
+  // ?cam=own: the palace view gets its own camera (what the intro should do); engine.camera stays the world's
+  const ownCam = new URLSearchParams(location.search).get('cam') === 'own' ? new THREE.PerspectiveCamera(40, 1, 0.08, 26000) : undefined;
+  const gib = palaceView(palace, { camera: ownCam });
   const shotPose = (s: { at: (u: number, t: number) => { pos: THREE.Vector3; look: THREE.Vector3; fov?: number } }, u: number) => {
     const f = s.at(u, u * 5);
     return { pos: f.pos.clone(), look: f.look.clone(), fov: f.fov };
@@ -43,6 +45,7 @@ async function main() {
   log(`palace created + precompiled ${(performance.now() - t1).toFixed(0)} ms`);
   const cam = engine.camera;
   const watchdog = new FrameWatchdog(engine.renderer, 1);
+  watchdog.ignore = () => engine.post.intentionallyDark;
   let frameNo = 0;
   const frames = (n: number, dt = 1 / 30) => {
     const ts = performance.now();
@@ -63,7 +66,12 @@ async function main() {
   const palaceShot = (name: string, u: number) => {
     const s = name.startsWith('insert') ? P.detailInserts[+name.slice(6)] : (P as unknown as Record<string, typeof P.enterHall>)[name];
     const p = shotPose(s, u);
-    place(p.pos, p.look, p.fov ?? 40);
+    if (!ownCam) return place(p.pos, p.look, p.fov ?? 40);
+    ownCam.position.copy(p.pos);
+    ownCam.lookAt(p.look);
+    ownCam.fov = p.fov ?? 40;
+    ownCam.updateProjectionMatrix();
+    ownCam.updateMatrixWorld();
   };
   win.__v = {
     engine, set: palace, watchdog,
@@ -84,7 +92,7 @@ async function main() {
     },
     stats: () => {
       const info = engine.renderer.info;
-      return { tier: engine.quality.tier, taa: engine.post.taaEnabled, dof: engine.post.dofAvailable, view: engine.view ? 'palace' : 'world', exposure: +engine.renderer.toneMappingExposure.toFixed(3), near: cam.near, calls: info.render.calls, bars: +engine.post.letterboxBars.toFixed(3), fading: engine.post.fading, mem: engine.memoryReport() };
+      return { ownCamAspect: ownCam ? +ownCam.aspect.toFixed(4) : null, tier: engine.quality.tier, taa: engine.post.taaEnabled, dof: engine.post.dofAvailable, view: engine.view ? 'palace' : 'world', exposure: +engine.renderer.toneMappingExposure.toFixed(3), near: cam.near, calls: info.render.calls, bars: +engine.post.letterboxBars.toFixed(3), fading: engine.post.fading, mem: engine.memoryReport() };
     },
   };
   win.__ready = true;

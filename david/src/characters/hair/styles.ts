@@ -153,7 +153,7 @@ export function saulStyle(): GroomStyle {
     lockR: 0.009,
     clump: 0.45,
     frizz: 0.0008,
-    flyaway: 0.003,
+    flyaway: 0.0015, // court: groomed (was 0.003)
     width: 0.00011,
     stiffness: 0.22,
     childLen: [0.8, 1.0],
@@ -193,19 +193,19 @@ export function saulStyle(): GroomStyle {
       dir(out, Math.sign(f.x) * (0.15 + 0.9 * must), -1, 0.4 - 0.25 * must);
       return out;
     },
-    lift: 0.35,
+    lift: 0.2, // court: groomed, oiled beard (was 0.35)
     gravity: 12,
     combPull: 9,
-    tousle: 5,
+    tousle: 2.2, // court (was 5)
     volume: (t, R) => 0.002 + (R + 0.003) * ss(0, 0.3, t) + 0.006 * ss(0.2, 0.8, t),
     curlR: [0.0018, 0.004],
     curlPitch: [0.018, 0.03],
     curlStart: 0.2,
-    curlNoise: 0.6,
+    curlNoise: 0.4, // court (was 0.6)
     lockR: 0.005,
-    clump: 0.4,
-    frizz: 0.0005,
-    flyaway: 0.003,
+    clump: 0.6, // court: combed locks (was 0.4)
+    frizz: 0.0003, // court (was 0.0005)
+    flyaway: 0.001, // court (was 0.003)
     width: 0.00019,
     stiffness: 0.45,
     childLen: [0.75, 1.0],

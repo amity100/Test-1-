@@ -4,6 +4,7 @@
 // Scripted (Playwright): await window.__D.sheet({ mode, view, frames, every, settle, w, h, cols }) renders a contact
 // sheet of the clip into the page (one row per `cols` frames). Modes: idle hero walk walkslow jog sprint carrywalk
 // startstop turn spin throw strike strikeHigh grab pick call dodge hurt pull carry kneel thanks.
+// Views: side sideL front back three4 three4L low face bust feet wide handL handR (close-ups of the grips).
 // window.__D.perf(mode, n) returns the mean CPU ms of DavidModel.update + updateSling.
 import * as THREE from 'three';
 import { SkySystem } from '../src/world/Sky';
@@ -199,6 +200,8 @@ function frameCamera(view: string, dist = 0) {
     case 'bust': at(head.clone().add(new THREE.Vector3(0, -0.25, 0)), f.clone().addScaledVector(left, -0.5).add(new THREE.Vector3(0, 0.05, 0)), dist || 1.8, 30); break;
     case 'feet': at(r.clone().add(new THREE.Vector3(0, 0.25, 0)), left.clone().negate().addScaledVector(f, 0.3).add(new THREE.Vector3(0, 0.15, 0)), dist || 1.8, 30); break;
     case 'wide': at(c, f.clone().addScaledVector(left, -0.9).add(new THREE.Vector3(0, 0.25, 0)), dist || 9, 30); break;
+    case 'handL': at(david.human.sockets.handGripL.getWorldPosition(new THREE.Vector3()), f.clone().addScaledVector(left, 0.6).add(new THREE.Vector3(0, 0.1, 0)), dist || 0.7, 30); break;
+    case 'handR': at(david.human.sockets.handGripR.getWorldPosition(new THREE.Vector3()), f.clone().addScaledVector(left, -0.6).add(new THREE.Vector3(0, 0.1, 0)), dist || 0.7, 30); break;
     default: at(c, f, 5.2, 30);
   }
   shared.uCamPos.value.copy(camera.position);

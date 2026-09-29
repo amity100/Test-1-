@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { temporal } from '../../fx/Temporal';
 
 /*
  * Strand hair rendering.
@@ -144,6 +145,8 @@ varying float vHairSide;
 varying float vHairS;
 varying float vHairRand;
 float hairIGN( vec2 p ) { return fract( 52.9829189 * fract( dot( p, vec2( 0.06711056, 0.00583715 ) ) ) ); }
+// TAA frame offset of the dither (fx/Temporal.ts): (0, 0) without TAA; the shadow pass does not bind it (static)
+uniform vec2 uDitherOffset;
 float hairCoverage() {
   return vHairAlpha * ( 1.0 - 0.75 * smoothstep( 0.86, 1.0, vHairS ) );
 }
@@ -186,6 +189,7 @@ export class HairMaterial extends THREE.MeshStandardMaterial {
     this.setMSAA(msaa);
     this.onBeforeCompile = (s) => {
       Object.assign(s.uniforms, this.hair, this.shade);
+      s.uniforms.uDitherOffset = temporal.uDitherOffset;
       s.vertexShader = s.vertexShader
         .replace(
           '#include <common>',
@@ -238,7 +242,7 @@ hairAO = vHairAO;
   // ribbons wider than a sample spacing. (Alpha-to-coverage is NOT used for strands: equal alpha maps to the
   // same sample mask, so overlapping strands would never add up.)
   float cov = hairCoverage();
-  if ( cov <= hairIGN( gl_FragCoord.xy + vec2( vHairRand * 61.0, vHairRand * 23.0 ) ) ) discard;
+  if ( cov <= hairIGN( gl_FragCoord.xy + uDitherOffset + vec2( vHairRand * 61.0, vHairRand * 23.0 ) ) ) discard;
   diffuseColor.a = 1.0;
 }`,
         )

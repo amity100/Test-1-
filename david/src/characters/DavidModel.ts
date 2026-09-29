@@ -26,7 +26,10 @@ import { dressDavid, attachProp, type Outfit, type Prop } from './wardrobe';
  *   - staff held by solving the wrist so the staff follows an animated direction; it slides in the hand for strikes
  *     (held near the butt, the long end striking) and goes across the back while both hands are busy;
  *   - a simulated sling: two braided cords (verlet, leg-capsule collisions) ending in the leather pouch, with the
- *     stone visible while loaded; whirl, whip-release of one cord, recovery and reload from the satchel.
+ *     stone visible while loaded; whirl, whip-release of one cord, recovery and reload from the satchel; while he
+ *     runs the pouch is gathered up into the sling hand (the slack cords hang in short loops).
+ *   - hero stance ('hero' hold, or automatically after ~7 s standing still): the reference still — the hand high on
+ *     the planted staff at shoulder height, weight on one leg, gaze on the horizon (set lookTarget = null).
  *
  * Gameplay handedness: sling in the RIGHT hand, staff in the LEFT (the reference image has it mirrored; the 'hero'
  * hold is the reference stance mirrored). Character faces +Z, its left is +X (same joint conventions as before).
@@ -174,13 +177,13 @@ const STRIKE_HIGH = new Clip([
 
 /** seizing the bear by its beard: "וְהֶחֱזַקְתִּי בִּזְקָנוֹ" (1 Sam 17:35) — right hand (IK) on the beard, staff raised */
 const GRAB_BEARD = pose({
-  hips: E(-0.04, -0.12, 0), hipsX: E(-0.01),
-  spine: E(-0.08, -0.08, 0), chest: E(-0.1, -0.12, 0.02), neck: E(-0.1, 0.05), head: E(-0.2, 0.05),
+  hips: E(0.06, -0.12, 0), hipsX: E(-0.01),
+  spine: E(0.1, -0.1, 0), chest: E(0.02, -0.14, 0.02), neck: E(-0.14, 0.05), head: E(-0.26, 0.05),
   uaR: E(-2.0, 0, -0.1), faR: E(-0.3), hdR: E(0.1),
   uaL: E(-2.1, 0, 0.5), faL: E(-1.3), hdL: E(0.2),
   thL: E(-0.42, 0, 0.03), shinL: E(0.42), ftL: E(0.05), thR: E(0.32, 0, -0.03), shinR: E(0.28), ftR: E(-0.32),
   staff: E(0.3, 0.9, -0.25), staffW: E(1), plantW: E(0),
-}, -0.06, -0.02);
+}, -0.07, 0.07);
 
 const PULL_REACH = pose({
   hips: E(-0.08, -0.1, 0), spine: E(0.3, -0.05, 0), chest: E(0.16, -0.05, 0), neck: E(0.02), head: E(-0.12),
@@ -489,6 +492,8 @@ export class DavidModel {
   viewportHeight = 720;
   /** optional expression override for cinematics (null = automatic per action) */
   mood: Expression | null = null;
+  /** optional: world point the hands seize during the 'pull' hold (the lamb in the bear's jaws); null = ~0.6 m ahead */
+  pullTarget: THREE.Vector3 | null = null;
   /** local (character-space) dodge direction x (+ = to his left), set by the Player before play('dodge') */
   dodgeSide = 0;
 
@@ -530,6 +535,8 @@ export class DavidModel {
   private lastExpr: Expression | '' = '';
   private stillT = 0;
   private autoHeroW = 0;
+  /** weight of the reference stance this frame (hold 'hero' or the automatic settle) */
+  private heroW = 0;
   /** settle into the reference 'hero' stance after ~7 s of standing still (gameplay idle, intro portrait) */
   autoHero = true;
   private lastExprW = -1;
@@ -551,6 +558,12 @@ export class DavidModel {
   private readonly footTarget: Record<'L' | 'R', THREE.Vector3> = { L: new THREE.Vector3(), R: new THREE.Vector3() };
   private readonly footPitch: Record<'L' | 'R', number> = { L: 0, R: 0 };
   private readonly footContact: Record<'L' | 'R', number> = { L: 1, R: 1 };
+  /**
+   * Where the real hands (MakeHuman skeleton) end up relative to the proxy-chain prediction, in human-root space.
+   * The rig's scapulohumeral rhythm raises the clavicle / deltoid with the arm (up to ~17 cm at the mouth), which the
+   * proxy chain does not model: the arm IK aims at target - error (measured last frame; converges in a few frames).
+   */
+  private readonly armErr: Record<'L' | 'R', THREE.Vector3> = { L: new THREE.Vector3(), R: new THREE.Vector3() };
 
   // sling
   readonly sling = { state: 'idle' as 'idle' | 'spin' | 'release' | 'stowed', pouch: new THREE.Vector3(), prev: new THREE.Vector3(), releaseT: 0, loaded: true };
@@ -608,7 +621,7 @@ export class DavidModel {
     human.update(0);
     human.root.updateMatrixWorld(true);
     const rootInv = _m1.copy(human.root.matrixWorld).invert();
-    for (const s of ['L', 'R'] as const) {
+    for (const s of SIDES) {
       const sock = human.sockets[`handGrip${s}`];
       _m2.multiplyMatrices(rootInv, sock.matrixWorld).decompose(_v1, this.sockRestQ[s], _s1);
       this.sockRestOff[s].copy(_v1).sub(human.rig.restWorldPosition(`wrist.${s}`, _v2));
@@ -648,6 +661,22 @@ export class DavidModel {
     this.root.traverse((o) => {
       if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).receiveShadow = true;
     });
+    // phone tier: only the big shapes (body, tunic, staff, hair) cast into the shadow map; the small parts (sash cords,
+    // fringes, sandals, satchel, eyes, teeth, lashes, the sling) would each cost a shadow-pass draw call for a shadow
+    // a few pixels wide
+    if (this.quality === 'low') {
+      const keep = this.groom?.strands;
+      const prune = (o: THREE.Object3D) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh || !m.castShadow || m === keep) return;
+        const g = m.geometry;
+        if (!g.boundingSphere) g.computeBoundingSphere();
+        if ((g.boundingSphere?.radius ?? 0) < 0.3) m.castShadow = false;
+      };
+      this.root.traverse(prune);
+      this.pouch.traverse(prune);
+      this.cordA.mesh.castShadow = this.cordB.mesh.castShadow = false;
+    }
   }
 
   /** Adds sling meshes to the given world-space container (they are simulated in world space). */
@@ -679,6 +708,8 @@ export class DavidModel {
   /** Snap secondary motion (cloth, sash cords, hair, sling) after a teleport or a camera cut. */
   resetDynamics() {
     this.outfit.resetDynamics();
+    this.armErr.L.set(0, 0, 0);
+    this.armErr.R.set(0, 0, 0);
     this.slingInit = false;
     this.hasLast = false;
   }
@@ -728,6 +759,7 @@ export class DavidModel {
     this.stillT = stillNow ? this.stillT + dt : 0;
     this.autoHeroW = damp(this.autoHeroW, this.autoHero && this.stillT > 7 ? 1 : 0, this.stillT > 7 ? 0.9 : 6, dt);
     const heroW = Math.max(this.holdW.hero, this.autoHeroW);
+    this.heroW = heroW;
     m.layer(IDLE, 1);
     if (heroW > 0.001) m.layer(HERO, heroW);
     // idle life: weight shift, glances
@@ -874,6 +906,7 @@ export class DavidModel {
 
     // ---------- skin, hair, clothes
     this.human.update(dt, this.camera, this.viewportHeight);
+    this.measureArmError();
     this.placeStaff(dt);
     this.updateProps();
     const wind = _v6.copy(shared.uWind.value).multiplyScalar(1.4 * shared.uWindStrength.value);
@@ -1001,7 +1034,7 @@ export class DavidModel {
     const rootQ = hr.getWorldQuaternion(_q4);
     const baseY = this.root.position.y; // ground under the root (world)
     let dropNeed = 0;
-    for (const s of ['L', 'R'] as const) {
+    for (const s of SIDES) {
       const th = J[`th${s}`], sh = J[`shin${s}`], ft = J[`ft${s}`];
       // FK ankle (world) and FK foot orientation (character space)
       const fk = ft.getWorldPosition(_v2);
@@ -1035,7 +1068,7 @@ export class DavidModel {
     this.pelvisDrop = drop > this.pelvisDrop ? drop : damp(this.pelvisDrop, drop, 10, dt);
     J.hips.position.y -= this.pelvisDrop;
     J.hips.updateWorldMatrix(false, true);
-    for (const s of ['L', 'R'] as const) {
+    for (const s of SIDES) {
       const th = J[`th${s}`], sh = J[`shin${s}`], ft = J[`ft${s}`];
       // FK foot orientation in character space (before the leg is re-solved)
       const fkFootQ = _q3.copy(rootQ).invert().multiply(ft.getWorldQuaternion(_q2));
@@ -1147,7 +1180,8 @@ export class DavidModel {
     if (w <= 0.001) return;
     const J = this.j;
     _poleIK.copy(pole);
-    _gripIK.copy(gripTarget);
+    // compensate the clavicle / deltoid lift of the real skeleton (see armErr)
+    _gripIK.copy(gripTarget).sub(_errW.copy(this.armErr[side]).applyQuaternion(this.human.root.getWorldQuaternion(_errQ)));
     const ua = J[`ua${side}`], fa = J[`fa${side}`], hd = J[`hd${side}`];
     _uaQ.copy(ua.quaternion);
     _faQ.copy(fa.quaternion);
@@ -1169,6 +1203,20 @@ export class DavidModel {
     }
   }
 
+  /** real grip socket vs the proxy prediction (after human.update), smoothed, in human-root space */
+  private measureArmError() {
+    const hr = this.human.root;
+    hr.getWorldQuaternion(_errQ).invert();
+    for (let i = 0; i < 2; i++) {
+      const s = SIDES[i];
+      this.human.sockets[s === 'L' ? 'handGripL' : 'handGripR'].getWorldPosition(_errReal);
+      this.gripWorld(s, _errPred);
+      _errReal.sub(_errPred).applyQuaternion(_errQ);
+      if (_errReal.lengthSq() > 0.09) _errReal.setLength(0.3);
+      this.armErr[s].lerp(_errReal, 0.6);
+    }
+  }
+
   private solveArms(dt: number) {
     const J = this.j;
     const c = this.mixer.cur.r;
@@ -1179,7 +1227,8 @@ export class DavidModel {
     const onBack = this.staffMode === 'back' || this.hold === 'carry' || this.hold === 'pull';
     this.staffBackW = damp(this.staffBackW, onBack ? 1 : 0, 7, dt);
     const planted = clamp(c.plantW[0], 0, 1) * (1 - this.locoW);
-    const slideT = this.staffMode === 'strike' && !onBack ? 0.82 : 0.22 * (1 - planted) + 0.5 * H.kneel;
+    // hero stance (the reference): the hand high on the staff, at shoulder height
+    const slideT = this.staffMode === 'strike' && !onBack ? 0.82 : 0.22 * (1 - planted) + 0.5 * H.kneel - 0.2 * this.heroW * planted;
     this.staffSlide = damp(this.staffSlide, slideT, 11, dt);
     const inHand = 1 - this.staffBackW;
     // staff direction (character -> world)
@@ -1213,13 +1262,13 @@ export class DavidModel {
       _v2.subVectors(_v3, right).setY(0).normalize();
       right.addScaledVector(_v2, 0.16).add(_v1.set(0, -0.22, 0));
       rw = H.grab;
-      this.armIK('R', right, _pole.set(-0.6, -0.8, -0.2).applyQuaternion(rootQ), rw * 0.85);
+      this.armIK('R', right, _pole.set(-0.6, -0.8, -0.2).applyQuaternion(rootQ), rw);
     }
     if (this.action?.name === 'call' && this.actionW > 0.01) {
       // hand cupped at the right side of the mouth
       this.human.sockets.mouth.getWorldPosition(right);
-      right.add(_v2.set(-0.045, -0.005, 0.045).applyQuaternion(J.head.getWorldQuaternion(_q2)));
-      this.armIK('R', right, _pole.set(-1, -0.5, -0.2).applyQuaternion(rootQ), this.actionW);
+      right.add(_v2.set(-0.06, -0.01, 0.04).applyQuaternion(J.head.getWorldQuaternion(_q2)));
+      this.armIK('R', right, _pole.set(-0.75, -1, 0.05).applyQuaternion(rootQ), this.actionW);
     }
     if (H.thanks > 0.01) {
       // flat hand on the chest (heart side)
@@ -1227,11 +1276,28 @@ export class DavidModel {
       right.set(0.045, 0.19, 0.155).applyMatrix4(J.chest.matrixWorld);
       this.armIK('R', right, _pole.set(-0.6, -1, -0.1).applyQuaternion(rootQ), H.thanks * (1 - this.locoW));
     }
+    if (H.pull > 0.01) {
+      // both hands seize the lamb in the bear's jaws: pullTarget (the lamb, when the story gives it), else where the
+      // lamb hangs when he stands at the bear's head (~0.6 m ahead, hip height); the fists stay on it while the body
+      // heaves back, so the arms straighten on each pull
+      const c0 = _carryT;
+      if (this.pullTarget) c0.copy(this.pullTarget);
+      else {
+        c0.set(0, 0, 0.62).applyQuaternion(rootQ).add(this.root.position);
+        c0.y = this.root.position.y + 0.98;
+      }
+      const w = H.pull * (this.action ? 1 - this.actionW : 1);
+      for (const s of SIDES) {
+        const sg = s === 'L' ? 1 : -1;
+        const t = _v5.set(sg * 0.1, 0.02, 0).applyQuaternion(rootQ).add(c0);
+        this.armIK(s, t, _pole.set(sg * 0.8, -1, -0.2).applyQuaternion(rootQ), w);
+      }
+    }
     if (H.carry > 0.01) {
       // hands on the lamb's legs in front of the shoulders
       const sc = this.shoulderSocket;
       sc.updateWorldMatrix(true, false);
-      for (const s of ['L', 'R'] as const) {
+      for (const s of SIDES) {
         const sg = s === 'L' ? 1 : -1;
         const t = _v5.set(0, 0, 0).applyMatrix4(sc.matrixWorld);
         t.add(_v2.set(sg * 0.2, -0.1, 0.17).applyQuaternion(J.chest.getWorldQuaternion(_q2)));
@@ -1429,6 +1495,20 @@ export class DavidModel {
           p0.x += vx; p0.y += vy - 9.81 * h * h; p0.z += vz;
         }
         sim.constrain(hand, 4, this.caps, capCount, pinB, false);
+        // running: the pouch is gathered up into the sling hand (the slack cords hang in two short loops)
+        // instead of flailing at full length round the legs
+        const gather = S.state === 'idle' ? smooth01((this.runW - 0.15) / 0.5) : 0;
+        if (gather > 0.001) {
+          const k = gather * (1 - Math.exp(-40 * h));
+          const cx = hand.x, cy = hand.y - 0.085, cz = hand.z;
+          for (let c = 0; c < 2; c++) {
+            const p = c === 0 ? sim.a[NC - 1] : sim.b[NC - 1], q = c === 0 ? sim.pa[NC - 1] : sim.pb[NC - 1];
+            const sg = (c === 0 ? -0.5 : 0.5) * POUCH_W;
+            const dx = (cx + side.x * sg - p.x) * k, dy = (cy + side.y * sg - p.y) * k, dz = (cz + side.z * sg - p.z) * k;
+            p.x += dx; p.y += dy; p.z += dz;
+            q.x += dx; q.y += dy; q.z += dz;
+          }
+        }
       }
       S.pouch.copy(sim.a[NC - 1]).add(sim.b[NC - 1]).multiplyScalar(0.5);
     }
@@ -1485,6 +1565,11 @@ const THANKS_UPPER = [...UPPER_L, ...UPPER_R, ...TORSO];
 const RELOAD = pose({ uaR: E(-0.35, 0, 0.3), faR: E(-1.2), hdR: E(0.3), chest: E(0.08, 0.12), head: E(0.28, 0.25), neck: E(0.1, 0.1) });
 const RELOAD_MASK = [...UPPER_R, 'chest', 'head', 'neck'];
 const _tmpTarget = new THREE.Vector3();
+const SIDES = ['L', 'R'] as const;
+const _errW = new THREE.Vector3();
+const _errReal = new THREE.Vector3();
+const _errPred = new THREE.Vector3();
+const _errQ = new THREE.Quaternion();
 const _tmp2 = new THREE.Vector3();
 const _poleIK = new THREE.Vector3();
 const _gripIK = new THREE.Vector3();

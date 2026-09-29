@@ -6,8 +6,8 @@
 //   ?hud=1               stats overlay     ?play=1  play every beat's shots in a loop
 //
 // Test driver (window.__court):
-//   ready; beat(name, t?) stages a beat; shot(beat, index, u, frames?) renders shot `index` of cast.beatShots(beat)
-//   at normalised time u; view(pos[3], look[3], fov, frames?); focus(name) -> [x,y,z]; stats()
+//   ready; beat(name, t?) stages a beat; shot(beat, index, u, frames?, acc?) renders shot `index` of
+//   cast.beatShots(beat) at normalised time u (acc > 0: + acc averaged frames of the same instant, returns { url }); view(pos[3], look[3], fov, frames?); focus(name) -> [x,y,z]; stats()
 import * as THREE from 'three';
 import { makeQuality, type TierName } from '../src/core/Engine';
 import { PalaceSet } from '../src/palace/PalaceSet';
@@ -79,7 +79,27 @@ async function boot() {
     curBeat = b;
     cast.setBeat(b, t);
   };
-  const shot = (b: IntroBeat, i: number, u: number, frames = 3) => {
+  // screenshot accumulation: `n` extra frames of the same instant (dt = 0: only the TAA jitter / hair dither
+  // sequence advances) averaged on the CPU — what the game's TAA converges to over ~0.5 s of a slow camera move
+  const accCanvas = document.createElement('canvas');
+  const accumulate = (n: number) => {
+    const W = renderer.domElement.width, H = renderer.domElement.height;
+    accCanvas.width = W;
+    accCanvas.height = H;
+    const ctx = accCanvas.getContext('2d', { willReadFrequently: true })!;
+    const sum = new Float32Array(W * H * 4);
+    for (let k = 0; k < n; k++) {
+      renderFrame(0);
+      ctx.drawImage(renderer.domElement, 0, 0);
+      const d = ctx.getImageData(0, 0, W, H).data;
+      for (let i = 0; i < d.length; i++) sum[i] += d[i];
+    }
+    const out = ctx.createImageData(W, H);
+    for (let i = 0; i < sum.length; i++) out.data[i] = Math.round(sum[i] / n);
+    ctx.putImageData(out, 0, 0);
+    return accCanvas.toDataURL('image/png');
+  };
+  const shot = (b: IntroBeat, i: number, u: number, frames = 3, acc = 0) => {
     if (curBeat !== b) beat(b, 0);
     const list = cast.beatShots(b);
     const s = list[i];
@@ -88,7 +108,11 @@ async function boot() {
     palace.interior = -1;
     // advance the beat's performance to the shot time (Abner walking etc.)
     for (let k = 0; k < frames; k++) renderFrame(k === 0 ? 0 : 1 / 30);
-    return { calls: renderer.info.render.calls, tris: renderer.info.render.triangles };
+    // a still of the king mid-blink is no still: let a blink in progress finish (screenshots only)
+    const saulRig = cast.actors.saul.human.rig as unknown as { blinkPhase: number };
+    for (let k = 0; k < 12 && saulRig.blinkPhase >= 0; k++) renderFrame(1 / 30);
+    const calls = renderer.info.render.calls, tris = renderer.info.render.triangles;
+    return acc > 0 ? { calls, tris, url: accumulate(acc) } : { calls, tris };
   };
   const view = (p: number[], l: number[], fov = 35, frames = 3) => {
     camera.position.set(p[0], p[1], p[2]);

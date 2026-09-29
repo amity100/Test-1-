@@ -25,7 +25,7 @@ import { SUN } from '../world/Layout';
 // |----------------|--------|--------|--------------|-------------|-------------|--------|--------------------|----------|------|----------|---------------|-------|--------|----------|-------|---------|------------|--------|
 // | desktop-high   | high   | 2.0    | 3.7 M        | TAA hq      | 43 taps     | 4096   | 1/2, 6             | 40       | 0.30 | yes      | 46000 (54 m)  | 1.00  | 4200   | 9000     | 3600  | 4096    | 8 M        | 18 ms  |
 // | desktop-medium | medium | 1.5    | 2.1 M        | TAA hq      | 22 taps     | 2048   | 1/2, 5             | 28       | 0.30 | yes      | 28000 (44 m)  | 0.80  | 2600   | 6000     | 2400  | 2048    | 5 M        | 24 ms  |
-// | mobile-high    | low    | 2.0    | 1.7 M        | TAA lq      | 16 taps     | 2048   | 1/2, 5             | 20       | 0.40 | no       | 15000 (36 m)  | 0.65  | 1600   | 4000     | 1600  | 2048    | 2.5 M      | 30 ms  |
+// | mobile-high    | low    | 2.0    | 1.7 M        | TAA lq      | 22 taps     | 2048   | 1/2, 5             | 20       | 0.40 | no       | 15000 (36 m)  | 0.65  | 1600   | 4000     | 1600  | 2048    | 2.5 M      | 30 ms  |
 // | mobile-low     | low    | 1.5    | 0.9 M        | FXAA        | off         | 1024   | 1/4, 4             | 12       | 0.40 | no       | 9000 (30 m)   | 0.50  | 1000   | 2600     | 1000  | 1024    | 1.5 M      | 38 ms  |
 //
 // Anti-aliasing: TAA (see fx/TAA.ts) replaces MSAA on every tier that can afford it. MSAA 4 at 3.7 MP costs
@@ -123,7 +123,7 @@ export interface Quality extends RenderBudget, ContentBudget {
 const RENDER: Record<TierName, RenderBudget> = {
   'desktop-high': { maxPixelRatio: 2, maxPixels: 3_700_000, msaa: 0, aa: 'none', taa: 'hq', dofSamples: 43, shadowSize: 4096, bloom: true, bloomScale: 0.5, bloomMips: 6, godRaySamples: 40, sharpen: 0.3, filmFx: true, frameBudgetMs: 18 },
   'desktop-medium': { maxPixelRatio: 1.5, maxPixels: 2_100_000, msaa: 0, aa: 'none', taa: 'hq', dofSamples: 22, shadowSize: 2048, bloom: true, bloomScale: 0.5, bloomMips: 5, godRaySamples: 28, sharpen: 0.3, filmFx: true, frameBudgetMs: 24 },
-  'mobile-high': { maxPixelRatio: 2, maxPixels: 1_700_000, msaa: 0, aa: 'none', taa: 'lq', dofSamples: 16, shadowSize: 2048, bloom: true, bloomScale: 0.5, bloomMips: 5, godRaySamples: 20, sharpen: 0.4, filmFx: false, frameBudgetMs: 30 },
+  'mobile-high': { maxPixelRatio: 2, maxPixels: 1_700_000, msaa: 0, aa: 'none', taa: 'lq', dofSamples: 22, shadowSize: 2048, bloom: true, bloomScale: 0.5, bloomMips: 5, godRaySamples: 20, sharpen: 0.4, filmFx: false, frameBudgetMs: 30 },
   'mobile-low': { maxPixelRatio: 1.5, maxPixels: 900_000, msaa: 0, aa: 'fxaa', taa: false, dofSamples: 0, shadowSize: 1024, bloom: true, bloomScale: 0.25, bloomMips: 4, godRaySamples: 12, sharpen: 0.4, filmFx: false, frameBudgetMs: 38 },
 };
 
@@ -566,8 +566,11 @@ export interface ViewSwitchOptions {
  *                                                    black or half-lit first frame at the cut)
  *   engine.precompile(scene?, camera?)               compile materials for this chain (default: the world)
  *   engine.view                                      active ViewSpec or null (world)
- *   fx/views.ts palaceView(palace)                   the ViewSpec for src/palace PalaceSet
- * TIERS: engine.quality (see the table at the top of this file): taa 'hq' | 'lq' | false, dofSamples 43/22/16/0,
+ *   fx/views.ts palaceView(palace, { camera? })      the ViewSpec for src/palace PalaceSet. Give it its own camera
+ *                                                    (the CameraRig / setFov keep writing engine.camera every
+ *                                                    frame); a view camera follows the canvas aspect automatically
+ *   engine.post.intentionallyDark + FrameWatchdog.ignore   dips to black are not reported as black frames
+ * TIERS: engine.quality (see the table at the top of this file): taa 'hq' | 'lq' | false, dofSamples 43/22/22/0,
  *   msaa 0 everywhere (hair / fur key their coverage mode on quality.msaa: pass it to GroomOptions.msaa).
  */
 export class Engine {
@@ -1108,6 +1111,8 @@ export class Engine {
     if (opts.crossfade && opts.crossfade > 0) this.post.crossfade(opts.crossfade, { through: opts.through });
     if (this.activeView) this.leaveView();
     this.activeView = null;
+    // re-captured on the next switch away: the world's exposure / haze / sun may change between visits
+    this.worldState = null;
     this.post.setView(this.scene, this.camera, this.sky.cubeTarget.texture);
     this.snapNext = true;
   }
@@ -1183,11 +1188,22 @@ export class Engine {
   private renderViewFrame(dt: number, gdt: number) {
     const v = this.activeView!;
     const cam = v.camera ?? this.camera;
+    if (cam !== this.camera && this.cssW > 0 && this.cssH > 0) {
+      // a view's own camera follows the canvas shape like engine.camera (resize / rotation during the view)
+      const aspect = this.cssW / this.cssH;
+      if (Math.abs(cam.aspect - aspect) > 1e-6) {
+        cam.aspect = aspect;
+        cam.updateProjectionMatrix();
+      }
+    }
     cam.updateMatrixWorld();
     shared.uCamPos.value.copy(cam.position);
     const vdt = this.snapNext ? 0 : gdt;
     if (v.update) v.update(vdt, cam);
     else v.sky?.update(cam, v.focus ?? this.focus);
+    // the view's sky may have re-created its capture (e.g. palace.setTimeOfDay): keep the haze colour source bound
+    const tSky = this.post.atmosphere.uniforms.tSky;
+    if (v.sky && tSky.value !== v.sky.cubeTarget.texture) tSky.value = v.sky.cubeTarget.texture;
     if (v.exposure !== undefined) this.renderer.toneMappingExposure = typeof v.exposure === 'function' ? v.exposure() : v.exposure;
     this.snapNext = false;
     this.post.render(dt);

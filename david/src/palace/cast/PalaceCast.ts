@@ -3,9 +3,10 @@ import type { Shot } from '../../gameplay/CameraRig';
 import type { IntroBeat } from '../../content/introScript';
 import { makeShield } from '../../characters/wardrobe/props';
 import { texPair } from '../../characters/wardrobe/materials';
-import { gibeahHeight, HALL, type PalaceSet } from '../PalaceSet';
+import { gibeahHeight, HALL, PALACE_TIMES, type PalaceSet } from '../PalaceSet';
 import { CastActor, type ActorSpec, type Tier } from './CastActor';
 import { CastLights, type LightRig } from './castLights';
+import { castInterior, patchCastInterior } from './castInterior';
 import { loadPropKit, makeBow, makeBowl, makeHangingSling, makeJug, makeQuiver, makeRobeCorner, type CastPropKit } from './castProps';
 import { buildCastShots, type CastProbe, type CastShots } from './castShots';
 
@@ -83,6 +84,8 @@ export class PalaceCast {
   private readonly layout: ReturnType<PalaceCast['makeLayout']>;
   private readonly zero = new THREE.Vector3();
   private abnerWalk: { from: THREE.Vector3; to: THREE.Vector3; yaw: number; dur: number } | null = null;
+  /** Abner's head height above his walking feet (the king's look target in 'warriors') */
+  private readonly abnerHead = new THREE.Vector3();
 
   static async create(set: PalaceSet, opts: PalaceCastOptions): Promise<PalaceCast> {
     const t0 = performance.now();
@@ -128,6 +131,8 @@ export class PalaceCast {
     const kit = await kitP;
     const cast = new PalaceCast(set, tier, { saul, abner, others }, kit, opts.autoTimeOfDay ?? true, performance.now() - t0);
     await cast.equip();
+    // the set's interior light model on skin / garments / props, blended in only for the hall beats
+    patchCastInterior(cast.root, new WeakSet());
     cast.probe(beats);
     cast.setBeat(null);
     prog(1, 'שָׁאוּל');
@@ -293,7 +298,24 @@ export class PalaceCast {
     const sit = ts.clone().addScaledVector(fwd, sitD).setY(sitY);
     const kingFeetY = gibeahHeight(sit.x + fwd.x * 0.55, sit.z + fwd.z * 0.55);
     const line = { f: 9.0, spacing: 1.25 };
-    return { ts, yaw, fwd, left, P, faceTo, kingFeetY, line, sit, front };
+    // the portrait: Saul risen before his seat, turned so the low morning sun is behind his left shoulder (a warm
+    // rim on hair, beard and mantle) and the dark shade of the tamarisk is behind him; at(f, r, h) = his frame
+    // (f forward, r to his right, h above the ground, feet on the terrain when h is omitted)
+    const pYaw = THREE.MathUtils.degToRad(PALACE_TIMES.morning.azimuth - 130);
+    const pFwd = new THREE.Vector3(Math.sin(pYaw), 0, Math.cos(pYaw));
+    const pLeft = new THREE.Vector3(pFwd.z, 0, -pFwd.x);
+    const pFeet = P(front + 0.45, -0.05);
+    const portrait = {
+      yaw: pYaw, fwd: pFwd, left: pLeft, feet: pFeet,
+      at: (f: number, r: number, h = 0) => {
+        const q = pFeet.clone().addScaledVector(pFwd, f).addScaledVector(pLeft, -r);
+        q.y = gibeahHeight(q.x, q.z) + h;
+        return q;
+      },
+      /** a look target at height h above HIS feet (the knoll falls away in front of him) */
+      look: (f: number, r: number, h: number) => pFeet.clone().addScaledVector(pFwd, f).addScaledVector(pLeft, -r).setY(pFeet.y + h),
+    };
+    return { ts, yaw, fwd, left, P, faceTo, kingFeetY, line, sit, front, portrait };
   }
 
   // ---------------------------------------------------------------------------------------------- staging
@@ -335,10 +357,11 @@ export class PalaceCast {
     this.robe.group.visible = false;
     set.anchors.spearRest.object.visible = true;
     const exterior = beat !== 'saul-hall' && beat !== 'hinge';
+    castInterior.value = exterior ? 0 : 1;
     const wind = exterior ? this.wind : this.zero;
     for (const x of this.all) x.wind.copy(wind);
     const kingEyes = new THREE.Vector3();
-    const saulSeatedLook = L.P(9, 0, 1.6);
+    const saulSeatedLook = L.P(9, 0).setY(L.sit.y + 0.8);
 
     if (exterior) {
       // the king's own spear is in his hand outside: the set's spear (inside the hall) is hidden for consistency
@@ -348,13 +371,14 @@ export class PalaceCast {
       saul.setFingers('R', 'fist');
       saul.setFingers('L', 'relaxed');
       if (beat === 'saul-portrait') {
-        const feet = L.P(L.front + 0.45, -0.05);
-        saul.stand(feet, L.yaw + 0.12);
+        const P = L.portrait;
+        saul.stand(P.feet, P.yaw);
         saul.setPose('kingStandSpear');
-        const r = _v.set(Math.sin(L.yaw + 0.12), 0, Math.cos(L.yaw + 0.12));
-        const right = _v2.set(-r.z, 0, r.x);
-        saul.plantSpear(feet.clone().addScaledVector(right, 0.36).addScaledVector(r, 0.14).add(new THREE.Vector3(0, -0.06, 0)));
-        saul.lookTarget = L.P(14, 2.5, 2.1);
+        const plant = P.at(0.16, 0.38);
+        plant.y -= 0.06;
+        saul.plantSpear(plant);
+        // looking out past the lens over his men and his land, a little down: the king surveys, he does not pose
+        saul.lookTarget = P.look(12, 0.9, 2.0);
       } else {
         saul.sitOn(L.sit, L.kingFeetY, L.yaw);
         saul.setPose('kingSeatedSpear');
@@ -388,8 +412,42 @@ export class PalaceCast {
         void f; void l;
       };
       const courtBeat = beat === 'gibeah' || beat === 'saul-court' || beat === 'saul-portrait' || beat === 'warriors';
-      if (courtBeat) {
-        const portrait = beat === 'saul-portrait';
+      if (beat === 'saul-portrait') {
+        const P = L.portrait;
+        const kingEyesP = P.at(0, 0, 1.84);
+        const stand = (n: string, f: number, r: number, pose: Parameters<CastActor['setPose']>[0], look: THREE.Vector3 | null, yawOff = 0) => {
+          const x = by(n);
+          if (!x) return null;
+          const p = P.at(f, r);
+          x.stand(p, P.yaw + yawOff);
+          x.setPose(pose);
+          x.setVisible(true);
+          x.lookTarget = look;
+          return x;
+        };
+        // the young armour-bearer at the king's left shoulder with his shield (14:1), a runner at his right (22:17)
+        const bearer = stand('bearer', -0.42, 0.98, 'bearer', P.look(10, 1.5, 1.55), 0.12);
+        if (bearer) bearer.glances.push(kingEyesP);
+        const ga = stand('guardA', -0.55, -1.12, 'guardSpearShield', P.look(10, -2.5, 1.55), -0.1);
+        plantAt(ga, 0, 0);
+        const sj = stand('servantJug', -1.5, 1.95, 'servantJug', kingEyesP, -0.5);
+        if (sj) sj.idle = 0.8;
+        const sb = stand('servantBowl', -1.7, -2.2, 'servantBowl', kingEyesP, 0.55);
+        if (sb) sb.idle = 0.8;
+        const gb = stand('guardB', -2.6, -3.1, 'guardSpearShield', P.look(10, -4, 1.55), 0.1);
+        plantAt(gb, 0, 0);
+        if (abner) {
+          abner.stand(P.at(-1.9, 3.0), P.yaw - 0.45);
+          abner.setPose('abnerStand');
+          abner.setVisible(true);
+          abner.lookTarget = kingEyesP;
+          plantAt(abner, 0, 0);
+          abner.setFingers('R', 'grip');
+          abner.setFingers('L', 'grip');
+        }
+      }
+      if (courtBeat && beat !== 'saul-portrait') {
+        const portrait = false;
         const bearer = place('bearer', portrait ? 0.1 : -0.35, portrait ? -1.05 : -0.95, 'bearer', kingHead.clone().add(new THREE.Vector3(0, 0.2, 0)), 0.9);
         if (bearer) bearer.glances.push(L.P(8, 1, 1.6));
         const sj = place('servantJug', portrait ? 0.5 : 0.25, -1.6, 'servantJug', kingHead, 0.5);
@@ -466,7 +524,7 @@ export class PalaceCast {
           abner.setFingers('R', 'relaxed');
           this.placeAbner(t);
         }
-        saul.lookTarget = abner ? abner.root.position : L.P(L.line.f, 0, 1.6);
+        saul.lookTarget = abner ? this.abnerHead : L.P(L.line.f, 0, 1.6);
       }
       // wind in the hair / cloth, the low morning sun
       this.lightExterior(beat);
@@ -474,7 +532,7 @@ export class PalaceCast {
       // ---- evening in the hall: the king alone on his seat by the wall
       saul.setVisible(true);
       saul.sitOn(set.anchors.thronePos, set.anchors.throneFootstool.y, set.anchors.throneFacing);
-      saul.setPose('kingSeatedBrood');
+      saul.setPose(beat === 'hinge' ? 'kingSeatedMemory' : 'kingSeatedBrood');
       saul.hideSpear();
       set.anchors.spearRest.object.visible = true;
       saul.setFingers('R', 'relaxed');
@@ -510,11 +568,12 @@ export class PalaceCast {
       U.lowerLipUp = 0.12;
       U.NasolabialDeepener = 0.15;
     } else {
-      // gravity and authority: brows set low and level, steady lids, lips closed and firm
-      U.LeftBrowDown = U.RightBrowDown = mood === 'portrait' ? 0.34 : 0.26;
+      // gravity and authority: brows set low and level, steady open eyes (a slight narrowing of the lower lids
+      // against the light in the portrait), lips closed and firm
+      U.LeftBrowDown = U.RightBrowDown = mood === 'portrait' ? 0.22 : 0.26;
       U.LeftInnerBrowUp = U.RightInnerBrowUp = 0.1;
-      U.LeftUpperLidClosed = U.RightUpperLidClosed = 0.1;
-      U.LeftLowerLidUp = U.RightLowerLidUp = 0.12;
+      U.LeftUpperLidClosed = U.RightUpperLidClosed = mood === 'portrait' ? 0 : 0.1;
+      U.LeftLowerLidUp = U.RightLowerLidUp = mood === 'portrait' ? 0.08 : 0.12;
       U.lowerLipUp = 0.1;
       U.MouthLeftPullDown = U.MouthRightPullDown = 0.1;
       U.NasolabialDeepener = 0.12;
@@ -530,6 +589,7 @@ export class PalaceCast {
     const p = _v.copy(w.from).lerp(w.to, u);
     p.y = gibeahHeight(p.x, p.z);
     abner.root.position.copy(p);
+    this.abnerHead.copy(p).setY(p.y + 1.62);
     if (u >= 1) abner.walkSpeed = 0;
   }
 
@@ -543,7 +603,7 @@ export class PalaceCast {
     const saul = this.actors.saul;
     saul.root.updateMatrixWorld(true);
     const L = this.layout;
-    const eyes = beat === 'saul-portrait' ? L.P(0.62, -0.05, 1.83) : L.sit.clone().add(new THREE.Vector3(0, 0.88, 0));
+    const eyes = beat === 'saul-portrait' ? L.portrait.at(0.05, 0, 1.84) : L.sit.clone().add(new THREE.Vector3(0, 0.88, 0));
     // key: a soft warm reflector from the sun side, in front-left (the tamarisk canopy shades the seat)
     const sunDir = new THREE.Vector3(Math.sin(THREE.MathUtils.degToRad(100)), 0.22, Math.cos(THREE.MathUtils.degToRad(100))).normalize();
     const portrait = beat === 'saul-portrait';
@@ -553,6 +613,18 @@ export class PalaceCast {
     const rimPos = portrait
       ? eyes.clone().addScaledVector(L.fwd, -1.6).addScaledVector(L.left, 1.3).add(new THREE.Vector3(0, 0.9, 0))
       : eyes.clone().addScaledVector(L.fwd, -2.2).addScaledVector(L.left, -1.6).add(new THREE.Vector3(0, 1.0, 0));
+    if (portrait) {
+      // low-key portrait: the sun rims him from behind-left, a warm bounce keys the far (left) side of the face,
+      // the near side falls into shade with only a faint fill (the lens sits to his right)
+      const P = L.portrait, up = new THREE.Vector3(0, 1, 0);
+      this.lights.flicker = 0;
+      this.lights.apply({
+        key: { pos: eyes.clone().addScaledVector(P.fwd, 1.8).addScaledVector(P.left, 0.95).addScaledVector(up, 0.14), target: eyes.clone().addScaledVector(up, -0.12), color: 0xffdcb4, intensity: 13, angle: 0.45, distance: 7 },
+        rim: { pos: eyes.clone().addScaledVector(P.fwd, -1.3).addScaledVector(P.left, 1.2).addScaledVector(up, 0.6), target: eyes.clone().addScaledVector(up, -0.25), color: 0xffc58a, intensity: 34, angle: 0.42, distance: 7 },
+        fill: { pos: eyes.clone().addScaledVector(P.fwd, 1.4).addScaledVector(P.left, -0.7).addScaledVector(up, -0.8), color: 0xffe6cc, intensity: 0.5, distance: 3.5 },
+      });
+      return;
+    }
     const r: LightRig = {
       key: { pos: keyPos, target: eyes.clone().add(new THREE.Vector3(0, -0.25, 0)), color: 0xffd8a8, intensity: beat === 'warriors' ? 7 : 10, angle: 0.42, distance: 9 },
       rim: { pos: rimPos, target: eyes.clone().add(new THREE.Vector3(0, -0.3, 0)), color: 0xffc890, intensity: portrait ? 14 : 9, angle: 0.4, distance: 8 },
@@ -569,10 +641,10 @@ export class PalaceCast {
     // the nearest niche lamp at the king's left (+x) is the motivation for the key
     const lampSide = new THREE.Vector3(HALL.cx + 1.25, seat.y + 0.55, seat.z + 1.1);
     const r: LightRig = {
-      key: { pos: lampSide, target: beat === 'hinge' ? this.robeWorld(new THREE.Vector3()) : eyes.clone().add(new THREE.Vector3(0, -0.15, 0.05)), color: 0xffa860, intensity: beat === 'hinge' ? 2.4 : 3.2, angle: 0.6, distance: 7 },
+      key: { pos: lampSide, target: beat === 'hinge' ? this.robeWorld(new THREE.Vector3()) : eyes.clone().add(new THREE.Vector3(0, -0.15, 0.05)), color: 0xffa860, intensity: beat === 'hinge' ? 3.0 : 4.0, angle: 0.6, distance: 7 },
       // cool dusk from the west window (the king's right, high)
       rim: { pos: new THREE.Vector3(HALL.x0 + 0.9, HALL.y0 + 3.6, seat.z + 1.6), target: eyes.clone().add(new THREE.Vector3(0, -0.2, 0)), color: 0x8fa6d8, intensity: 2.2, angle: 0.5, distance: 7 },
-      fill: { pos: seat.clone().add(new THREE.Vector3(-0.4, -0.2, 1.4)), color: 0xff9a52, intensity: 0.35, distance: 3 },
+      fill: { pos: seat.clone().add(new THREE.Vector3(-0.4, -0.2, 1.4)), color: 0xff9a52, intensity: 0.9, distance: 3 },
     };
     this.lights.flicker = 1;
     this.lights.apply(r);
@@ -644,7 +716,7 @@ export class PalaceCast {
     const v = () => new THREE.Vector3();
     const p: CastProbe = {
       court: { saulEyes: v(), saulHand: v(), fwd: L.fwd.clone(), left: L.left.clone(), seat: L.sit.clone() },
-      portrait: { saulEyes: v(), saulChest: v(), fwd: L.fwd.clone(), left: L.left.clone(), spearTip: v() },
+      portrait: { saulEyes: v(), saulChest: v(), fwd: L.portrait.fwd.clone(), left: L.portrait.left.clone(), spearTip: v() },
       warriors: { lineCentre: L.P(L.line.f, 0), lineDir: L.left.clone(), facing: L.fwd.clone().negate(), abnerStart: v(), abnerEnd: v(), saulEyes: v(), heads: 0 },
       hall: { saulEyes: v(), saulChest: v(), corner: v(), pinch: v(), hand: v(), fwd: new THREE.Vector3(0, 0, 1), left: new THREE.Vector3(1, 0, 0) },
     };

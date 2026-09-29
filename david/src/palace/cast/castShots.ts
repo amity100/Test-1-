@@ -61,18 +61,19 @@ export interface CastShots {
 }
 
 export function buildCastShots(p: CastProbe): CastShots {
-  // ---- court: front-left of the seated king, lens a little below his eyes
+  // ---- court: front-left of the seated king at his eye level: the whole court about him, pushing in to the king
   const c = p.court;
   const court = move(6.5,
-    [c.saulEyes.clone().addScaledVector(c.fwd, 2.7).addScaledVector(c.left, 1.05).add(V(0, -0.2, 0)), c.saulEyes.clone().addScaledVector(c.fwd, 2.2).addScaledVector(c.left, 0.8).add(V(0, -0.16, 0))],
-    [c.saulEyes.clone().add(V(0, -0.34, 0)), c.saulEyes.clone().add(V(0, -0.24, 0))],
-    [30, 27], 0.006);
-  // ---- portrait: lens at chest height, 1.35 m in front, slightly to his left; looking up to the face
+    [c.saulEyes.clone().addScaledVector(c.fwd, 4.3).addScaledVector(c.left, 0.95).add(V(0, 0.02, 0)), c.saulEyes.clone().addScaledVector(c.fwd, 3.1).addScaledVector(c.left, 0.62).add(V(0, -0.02, 0))],
+    [c.saulEyes.clone().add(V(0, -0.42, 0)), c.saulEyes.clone().add(V(0, -0.26, 0))],
+    [34, 29], 0.006);
+  // ---- portrait: low angle from his right front (the key side of the face away from the lens), a slow push from a
+  // medium shot where the armour-bearer's and the runner's heads reach his shoulders (9:2) to a close shot
   const q = p.portrait;
   const portrait = move(4.8,
-    [q.saulEyes.clone().addScaledVector(q.fwd, 1.55).addScaledVector(q.left, 0.7).add(V(0, -0.34, 0)), q.saulEyes.clone().addScaledVector(q.fwd, 1.32).addScaledVector(q.left, 0.52).add(V(0, -0.31, 0))],
-    [q.saulEyes.clone().add(V(0, -0.1, 0)), q.saulEyes.clone().add(V(0, -0.08, 0))],
-    [24, 22], 0.003);
+    [q.saulEyes.clone().addScaledVector(q.fwd, 3.0).addScaledVector(q.left, -0.5).add(V(0, -0.72, 0)), q.saulEyes.clone().addScaledVector(q.fwd, 1.6).addScaledVector(q.left, -0.22).add(V(0, -0.42, 0))],
+    [q.saulEyes.clone().add(V(0, -0.14, 0)), q.saulEyes.clone().add(V(0, -0.06, 0))],
+    [30, 24], 0.003);
   // ---- warriors: lateral track in front of the line (slightly off the axis between the line and the king)
   const w = p.warriors;
   const side = w.lineDir;
@@ -91,16 +92,18 @@ export function buildCastShots(p: CastProbe): CastShots {
   // ---- hall (evening): from the front-right of the seat, lens at seated chest height, slow push
   const h = p.hall;
   const hall = move(6,
-    [h.saulEyes.clone().addScaledVector(h.fwd, 3.1).addScaledVector(h.left, 0.9).add(V(0, -0.42, 0)), h.saulEyes.clone().addScaledVector(h.fwd, 2.2).addScaledVector(h.left, 0.62).add(V(0, -0.38, 0))],
-    [h.saulEyes.clone().add(V(0, -0.36, 0)), h.saulEyes.clone().add(V(0, -0.3, 0))],
-    [32, 29], 0.004);
+    [h.saulEyes.clone().addScaledVector(h.fwd, 2.7).addScaledVector(h.left, 0.8).add(V(0, -0.4, 0)), h.saulEyes.clone().addScaledVector(h.fwd, 1.8).addScaledVector(h.left, 0.5).add(V(0, -0.34, 0))],
+    [h.saulEyes.clone().add(V(0, -0.3, 0)), h.saulEyes.clone().add(V(0, -0.18, 0))],
+    [31, 28], 0.004);
   // ---- hinge: close on the torn corner in his left hand, drifting across it
   // look between the pinching fingers and the tzitzit corner: hand, torn edge and fringe in one frame
   const rc = h.pinch.clone().lerp(h.corner, 0.6);
   // from the king's left, outside the knee: the torn cloth and its fringe against the dark seat and wall
+  // from his front-left, close on the torn corner he holds up before him, his bowed face behind it; a slow pull
+  // back and up that brings the face into the frame (the memory and the man)
   const robeCorner = move(5.5,
-    [rc.clone().addScaledVector(h.fwd, 0.42).addScaledVector(h.left, 0.62).add(V(0, 0.08, 0)), rc.clone().addScaledVector(h.fwd, 0.36).addScaledVector(h.left, 0.5).add(V(0, 0.05, 0))],
-    [rc.clone().add(V(0, 0.01, 0)), rc.clone()],
-    [34, 31], 0.0015);
+    [rc.clone().addScaledVector(h.fwd, 0.58).addScaledVector(h.left, 0.3).add(V(0, 0.02, 0)), rc.clone().addScaledVector(h.fwd, 1.15).addScaledVector(h.left, 0.5).add(V(0, 0.16, 0))],
+    [rc.clone(), rc.clone().lerp(h.saulEyes, 0.5)],
+    [32, 30], 0.0015);
   return { court, portrait, warriorsLine, warriorsSaul, hall, robeCorner };
 }

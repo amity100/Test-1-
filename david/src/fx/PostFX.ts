@@ -42,6 +42,8 @@ export type { DoFSettings } from './DoF';
  *                                          next (call it right before switching view / cutting); with `through`
  *                                          it dips through that colour instead (old -> colour -> new)
  *   .fading                                true while a crossfade runs
+ *   .intentionallyDark                     true during a dip through a colour / grade uFade > 0.25 (black-frame
+ *                                          watchdogs skip those frames: FrameWatchdog.ignore)
  *   .atmosphere.uniforms                   uDensity, uHeightFalloff, uBaseHeight, uGodRays, uHazeTint, tSky ...
  *   .grade.uniforms                        uRed, uDesat, uFade, uVignette, uSaturation, uContrast, uWarm, uGrain,
  *                                          uCA, uTime (shared with Engine; see createGradeUniforms)
@@ -839,6 +841,14 @@ export class PostFX {
   /** true while a crossfade is running */
   get fading() {
     return this.fade.active;
+  }
+
+  /**
+   * true while the image is meant to be (mostly) a flat colour: a dip through a colour past a quarter of its way,
+   * or grade.uniforms.uFade > 0.25. Black-frame watchdogs skip these frames (FrameWatchdog.ignore).
+   */
+  get intentionallyDark(): boolean {
+    return this.resolve.uniforms.uThroughMix.value > 0.25 || this.grade.uniforms.uFade.value > 0.25;
   }
 
   private endFade() {

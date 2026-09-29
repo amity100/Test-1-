@@ -22,7 +22,14 @@ export class FrameWatchdog {
   blotches = 0;
   lastDark = 0;
   lastMean = 0;
+  /** frames sampled while `ignore()` returned true (intentional fades: never flagged) */
+  ignored = 0;
   readonly events: WatchdogEvent[] = [];
+  /**
+   * Frames for which this returns true are sampled but never flagged, and the next frame is not compared with
+   * them: intentional dips to black / fades, e.g. `watchdog.ignore = () => engine.post.intentionallyDark`.
+   */
+  ignore: (() => boolean) | null = null;
   private buf = new Uint8Array(4);
   private prevDark = -1;
 
@@ -53,6 +60,11 @@ export class FrameWatchdog {
     this.lastDark = d;
     this.lastMean = sum / Math.max(1, n);
     let flagged = false;
+    if (this.ignore?.()) {
+      this.ignored++;
+      this.prevDark = -1;
+      return false;
+    }
     if (d > 0.97) {
       this.black++;
       this.events.push({ frame: this.frames, dark: d, mean: this.lastMean, kind: 'black' });
@@ -68,6 +80,6 @@ export class FrameWatchdog {
   }
 
   stats() {
-    return { frames: this.frames, sampled: this.sampled, black: this.black, blotches: this.blotches, lastDark: this.lastDark, lastMean: this.lastMean, events: this.events.slice(-20) };
+    return { frames: this.frames, sampled: this.sampled, ignored: this.ignored, black: this.black, blotches: this.blotches, lastDark: this.lastDark, lastMean: this.lastMean, events: this.events.slice(-20) };
   }
 }

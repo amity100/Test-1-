@@ -114,6 +114,9 @@ export class CastActor {
     this.phase = hash(spec.seed + spec.name.length * 7.3) * 100;
     this.glanceT = 2 + hash(this.phase) * 5;
     human.rig.blinkEnabled = true;
+    // desynchronise the first blink (HumanRig starts every face 2 s before its first blink: a whole court blinking
+    // together, and a king caught mid-blink on the first frames of a beat); later blinks are random anyway
+    (human.rig as unknown as { blinkT: number }).blinkT = 2.5 + hash(spec.seed * 3.1 + spec.name.length) * 3.5;
     human.setPupil(0.25);
     this.spear = outfit.props.spear ?? null;
     if (this.spear) {
