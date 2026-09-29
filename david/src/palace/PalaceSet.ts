@@ -122,6 +122,8 @@ export class PalaceSet {
   private readonly focus = new THREE.Vector3();
   private time = 0;
   private shadowMode: 'ext' | 'int' | '' = '';
+  /** content invisible from inside the hall (village, groves, rocks, tamarisk): hidden while the camera is inside */
+  private readonly exteriorOnly: THREE.Object3D[] = [];
 
   static async create(opts: PalaceSetOptions): Promise<PalaceSet> {
     const q = opts.quality;
@@ -263,6 +265,10 @@ export class PalaceSet {
     this.buildPlaceholders();
     this.placeholders.visible = false;
     scene.add(this.placeholders);
+    this.exteriorOnly.push(this.vegetation.group);
+    this.architecture.group.traverse((o) => {
+      if (/^palace:(village|roofs|doorways)$/.test(o.name)) this.exteriorOnly.push(o);
+    });
     // static scenery: world matrices once
     for (const g of [this.architecture.group, this.props.group, this.vegetation.group]) g.updateMatrixWorld(true);
   }
@@ -370,6 +376,8 @@ export class PalaceSet {
       sc.left = -half; sc.right = half; sc.top = half; sc.bottom = -half;
       sc.updateProjectionMatrix();
     }
+    const deepInside = this.interior > 0.97;
+    for (const o of this.exteriorOnly) o.visible = !deepInside;
     if (mode === 'int') this.focus.set(H.cx, H.y0 + 2, (H.z0 + H.z1) / 2);
     else this.focus.set(0, 0, -2);
     this.sky.update(camera, this.focus);

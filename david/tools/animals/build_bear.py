@@ -313,17 +313,17 @@ def build_extras(prims):
 
     # ---- eyes: seat each eyeball in its orbit, protruding a little past the lids
     for s, side in ((1, 'L'), (-1, 'R')):
-        ax = B.HEAD.R @ (np.array([np.sin(0.52 * s), 0.08, np.cos(0.52)]))
+        ax = B.HEAD.R @ (np.array([np.sin(B.EYE_YAW * s), 0.1, np.cos(B.EYE_YAW)]))
         ax /= np.linalg.norm(ax)
-        c0 = B.HEAD.pt(0.056 * s, 0.047, 0.18)
+        c0 = B.HEAD.pt((B.EYE[0] - 0.006) * s, B.EYE[1], B.EYE[2] - 0.01)
         # march outward from inside the head to the surface along the eye axis
         ts = np.linspace(0, 0.06, 241)
         pts = c0[None, :] + ts[:, None] * ax[None, :]
         d = evaluate(prims, pts)
         out = np.argmax(d > 0)
         surf = pts[out]
-        r = 0.0128 * B.HEAD_S
-        c = surf - ax * r * 0.42
+        r = B.EYE_R * B.HEAD_S
+        c = surf - ax * r * 0.36
         V, N, F = uv_sphere(np.zeros(3), r, 24, 16)
         # orient the sphere pole (+Y of the lathe) along the eye axis
         up = np.array([0.0, 1.0, 0.0])
@@ -375,18 +375,18 @@ def build_extras(prims):
     jd = B.JAWF.dir(0, 1, 0.1)
     for s in (1, -1):
         # upper canine
-        tooth(B.HEAD.pt(0.024 * s, -0.036, 0.285), hd + B.HEAD.dir(0.08 * s, 0, 0), 0.032 * HS, 0.0068 * HS, 'head', curve=-0.12)
+        tooth(B.HEAD.pt(0.023 * s, -0.034, 0.305), hd + B.HEAD.dir(0.08 * s, 0, 0), 0.032 * HS, 0.0068 * HS, 'head', curve=-0.12)
         # lower canine (sits in front of the upper one when closed)
-        tooth(B.JAWF.pt(0.021 * s, -0.012, 0.162), jd + B.JAWF.dir(0.1 * s, 0, 0.15), 0.026 * HS, 0.006 * HS, 'jaw', curve=-0.15)
+        tooth(B.JAWF.pt(0.02 * s, -0.012, 0.182), jd + B.JAWF.dir(0.1 * s, 0, 0.15), 0.026 * HS, 0.006 * HS, 'jaw', curve=-0.15)
         # incisors
         for k, dx in enumerate((0.004, 0.0105, 0.017)):
-            tooth(B.HEAD.pt(dx * s, -0.038, 0.303 - 0.004 * k), hd, (0.011 + 0.002 * (k == 2)) * HS, (0.0028 + 0.0006 * (k == 2)) * HS, 'head', curve=0.0, seg=6)
-            tooth(B.JAWF.pt(dx * 0.9 * s, -0.012, 0.172 - 0.004 * k), jd, 0.009 * HS, 0.0025 * HS, 'jaw', curve=0.0, seg=6)
+            tooth(B.HEAD.pt(dx * 0.95 * s, -0.036, 0.322 - 0.004 * k), hd, (0.011 + 0.002 * (k == 2)) * HS, (0.0028 + 0.0006 * (k == 2)) * HS, 'head', curve=0.0, seg=6)
+            tooth(B.JAWF.pt(dx * 0.88 * s, -0.012, 0.194 - 0.004 * k), jd, 0.009 * HS, 0.0025 * HS, 'jaw', curve=0.0, seg=6)
         # cheek teeth (premolars / molars): blunt cones along the tooth rows
         for k in range(4):
-            z = 0.255 - 0.03 * k
-            tooth(B.HEAD.pt(0.029 * s, -0.036, z), hd, (0.008 + 0.002 * k) * HS, (0.005 + 0.0012 * k) * HS, 'head', curve=0.0, seg=7)
-            zj = 0.135 - 0.028 * k
+            z = 0.272 - 0.031 * k
+            tooth(B.HEAD.pt(0.028 * s, -0.035, z), hd, (0.008 + 0.002 * k) * HS, (0.005 + 0.0012 * k) * HS, 'head', curve=0.0, seg=7)
+            zj = 0.152 - 0.029 * k
             tooth(B.JAWF.pt(0.026 * s, -0.012, zj), jd, (0.007 + 0.0018 * k) * HS, (0.0048 + 0.001 * k) * HS, 'jaw', curve=0.0, seg=7)
 
     Vs, Ns, Fs, bones, aux = [], [], [], [], []
@@ -551,14 +551,15 @@ def bake(prims, mesh, res, log=log):
         normal[ys[sl], xs[sl]] = tn * 0.5 + 0.5
         # ---- colour
         base_noise = fbm(P * 7.0, 3, seed=41)
-        C = BP.fur_colour(P, Ns, Wt, base_noise)
+        patch_noise = fbm(P * 4.5 + 3.1, 3, seed=43)
+        C = BP.fur_colour(P, Ns, Wt, base_noise, patch_noise)
         # streak / clump variation in the pelt
         st = streaks(P, FD, 180.0, 12.0, seed=51)
         st2 = streaks(P, FD, 40.0, 3.5, seed=57)
-        C *= (0.84 + 0.24 * st)[:, None] * (0.92 + 0.16 * st2)[:, None]
+        C *= (0.8 + 0.3 * st)[:, None] * (0.88 + 0.24 * st2)[:, None]
         # skin colours
-        nose_c = BP.srgb_to_lin([0.05, 0.043, 0.04]) * (0.8 + 0.4 * fbm(P * 300.0, 2, 71))[:, None]
-        lip_c = BP.srgb_to_lin([0.09, 0.07, 0.065])
+        nose_c = BP.srgb_to_lin([0.045, 0.04, 0.038]) * (0.75 + 0.5 * fbm(P * 300.0, 2, 71))[:, None]
+        lip_c = BP.srgb_to_lin([0.06, 0.047, 0.043]) * (0.8 + 0.4 * fbm(P * 220.0, 2, 73))[:, None]
         gum_c = BP.srgb_to_lin([0.46, 0.25, 0.25])
         pig = BP.smoothstep(0.45, 0.62, fbm(P * 90.0, 3, 81))[:, None]
         gum_c = gum_c * (1 - pig) + BP.srgb_to_lin([0.16, 0.1, 0.1]) * pig
@@ -567,7 +568,7 @@ def bake(prims, mesh, res, log=log):
         tongue_c = BP.srgb_to_lin([0.66, 0.38, 0.38]) * (0.85 + 0.3 * fbm(P * 400.0, 2, 91))[:, None]
         mouth_c = gum_c * (1 - tongue) + tongue_c * tongue
         pad_c = BP.srgb_to_lin([0.1, 0.085, 0.075]) * (0.8 + 0.4 * fbm(P * 200.0, 2, 95))[:, None]
-        eye_c = BP.srgb_to_lin([0.05, 0.035, 0.03])
+        eye_c = BP.srgb_to_lin([0.035, 0.026, 0.022])
         skin = lip_c * np.ones((len(P), 1))
         skin = skin * (1 - nose[:, None]) + nose_c * nose[:, None]
         skin = skin * (1 - interior[:, None]) + mouth_c * interior[:, None]
@@ -582,7 +583,7 @@ def bake(prims, mesh, res, log=log):
         rough = np.where(interior > 0.5, 0.3, rough)
         rough = np.where(pad > 0.5, 0.82, rough)
         rough = np.where(eyem * (1 - nose) > 0.5, 0.45, rough)
-        dens = np.clip(1 - bare, 0, 1) * BP.smoothstep(0.002, 0.012, FL)
+        dens = np.clip(1 - bare, 0, 1) * BP.smoothstep(0.0015, 0.007, FL)
         maskt[ys[sl], xs[sl]] = np.stack([cav, rough, dens], axis=1)
         log(f'    {e}/{len(ys)}')
     albedo = dilate(albedo, valid)

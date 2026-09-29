@@ -139,12 +139,12 @@ def weave(res, threads, width_frac, slub, wander, seed, fuzz=0.25, gap_jitter=0.
     fibre_hi2 = periodic_noise((res, res), threads * 3, rng, octaves=2, aniso=(0.25, 4.0))  # along x (weft)
     base_pos = (np.arange(threads) + 0.5 + (rng.random(threads) - 0.5) * gap_jitter * 2) * pitch
     base_pos_w = (np.arange(threads) + 0.5 + (rng.random(threads) - 0.5) * gap_jitter * 2) * pitch
-    tones_warp = 1.0 + (rng.random(threads) - 0.5) * 0.22
-    tones_weft = 1.0 + (rng.random(threads) - 0.5) * 0.22
-    # a few darker / browner yarns (natural fleece variation)
+    tones_warp = 1.0 + (rng.random(threads) - 0.5) * 0.08
+    tones_weft = 1.0 + (rng.random(threads) - 0.5) * 0.08
+    # a few darker / browner yarns (natural fleece variation), subtle so it never bands at a distance
     for arr in (tones_warp, tones_weft):
-        k = rng.random(threads) < 0.12
-        arr[k] *= 0.8
+        k = rng.random(threads) < 0.06
+        arr[k] *= 0.9
     halfw = pitch * width_frac * 0.5
     band = int(np.ceil(pitch * 1.3))
     for axis in (0, 1):  # 0: warp (vertical yarns, vary along y), 1: weft (horizontal)
@@ -191,7 +191,7 @@ def weave(res, threads, width_frac, slub, wander, seed, fuzz=0.25, gap_jitter=0.
                 cov = np.clip((1.0 - t) * 3.5, 0, 1)
                 cover[:, idx] = np.maximum(cover[:, idx], cov)
                 tsub = tone[:, idx]
-                tone[:, idx] = np.where(m, tones[i] * (0.93 + 0.14 * slubn[:, None]), tsub)
+                tone[:, idx] = np.where(m, tones[i] * (0.96 + 0.08 * slubn[:, None]), tsub)
                 ssub = streak[:, idx]
                 streak[:, idx] = np.where(m, fibre_hi[:, idx], ssub)
             else:
@@ -201,7 +201,7 @@ def weave(res, threads, width_frac, slub, wander, seed, fuzz=0.25, gap_jitter=0.
                 cov = np.clip((1.0 - t) * 3.5, 0, 1)
                 cover[idx, :] = np.maximum(cover[idx, :], cov)
                 tsub = tone[idx, :]
-                tone[idx, :] = np.where(m, tones[i] * (0.93 + 0.14 * slubn[None, :]), tsub)
+                tone[idx, :] = np.where(m, tones[i] * (0.96 + 0.08 * slubn[None, :]), tsub)
                 ssub = streak[idx, :]
                 streak[idx, :] = np.where(m, fibre_hi2[idx, :], ssub)
     height = np.clip(height, 0, 1) * height_boost
@@ -289,7 +289,7 @@ def gen_leather(res_list=(1024, 512), seed=11):
     pores = np.clip((periodic_noise((hi, hi), 180, rng, octaves=1) - 0.72) * 5, 0, 1)
     height = 0.55 + 0.25 * grain + 0.12 * cells - 0.35 * creases - 0.08 * pores
     low = periodic_noise((hi, hi), 4, rng, octaves=4)
-    lum = 0.78 + 0.28 * low + 0.08 * grain - 0.22 * creases - 0.05 * pores
+    lum = 0.86 + 0.12 * low + 0.07 * grain - 0.1 * creases - 0.04 * pores
     albedo = np.dstack([lum, lum, lum])
     ao = ao_from_height(height, 4) * (1 - 0.3 * creases)
     rough = 0.5 + 0.3 * low

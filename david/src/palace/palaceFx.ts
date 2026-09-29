@@ -18,12 +18,15 @@ export class Flames {
   constructor(spots: LampSpot[]) {
     const pos: number[] = [], corner: number[] = [], data: number[] = [], idx: number[] = [];
     const gpos: number[] = [], gcorner: number[] = [], gdata: number[] = [], gidx: number[] = [];
+    const norm: number[] = [], gnorm: number[] = [];
     const rnd = mulberry32(55);
     const push = (P: number[], C: number[], D: number[], I: number[], p: THREE.Vector3, w: number, h: number, seed: number, kind: number) => {
       const b = P.length / 3;
+      const NN = P === pos ? norm : gnorm;
       for (const [cx, cy] of [[-0.5, 0], [0.5, 0], [0.5, 1], [-0.5, 1]]) {
         P.push(p.x, p.y, p.z);
         C.push(cx * w, cy * h - h * 0.08);
+        NN.push(cx, cy);
         D.push(seed, kind);
       }
       I.push(b, b + 1, b + 2, b, b + 2, b + 3);
@@ -44,6 +47,7 @@ export class Flames {
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
       g.setAttribute('aCorner', new THREE.Float32BufferAttribute(C, 2));
+      g.setAttribute('aNorm', new THREE.Float32BufferAttribute(P === pos ? norm : gnorm, 2));
       g.setAttribute('aData', new THREE.Float32BufferAttribute(D, 2));
       g.setIndex(I);
       g.computeBoundingSphere();
@@ -51,7 +55,7 @@ export class Flames {
       return g;
     };
     const vert = /* glsl */ `
-      attribute vec2 aCorner; attribute vec2 aData;
+      attribute vec2 aCorner; attribute vec2 aData; attribute vec2 aNorm;
       uniform float uTime;
       varying vec2 vC; varying float vSeed; varying float vKind;
       void main(){
@@ -62,7 +66,7 @@ export class Flames {
         // flames sway a little in the draft (top moves more)
         c.x += sin(uTime * 3.1 + s * 3.0) * 0.12 * aCorner.y;
         mv.xy += c;
-        vC = aCorner; vSeed = s; vKind = aData.y;
+        vC = aNorm; vSeed = s; vKind = aData.y;
         gl_Position = projectionMatrix * mv;
       }`;
     const flameMat = new THREE.ShaderMaterial({
@@ -76,7 +80,7 @@ export class Flames {
           return mix(mix(h(i), h(i + vec2(1, 0)), u.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), u.x), u.y); }
         void main(){
           // teardrop in normalised coords: x in [-0.5,0.5], y in [0,1]
-          vec2 q = vec2(vC.x * 2.0, (vC.y + 0.08) / 1.0);
+          vec2 q = vec2(vC.x * 2.0, vC.y);
           float y = clamp(q.y, 0.0, 1.2);
           float wob = (n2(vec2(y * 3.0 - uTime * 4.0, vSeed)) - 0.5) * 0.35 * y;
           float width = mix(0.95, 0.0, pow(y, 0.9)) * (1.0 - smoothstep(0.0, 0.14, 0.14 - y) * 0.4);
@@ -84,13 +88,13 @@ export class Flames {
           float body = (1.0 - smoothstep(0.55, 1.0, d)) * smoothstep(0.0, 0.08, y) * (1.0 - smoothstep(0.8, 1.05, y));
           float core = (1.0 - smoothstep(0.0, 0.55, d)) * (1.0 - smoothstep(0.1, 0.55, y)) * smoothstep(0.0, 0.06, y);
           vec3 cOut = vKind > 0.5 ? vec3(1.0, 0.36, 0.06) : vec3(1.0, 0.45, 0.1);
-          vec3 cIn = vec3(1.0, 0.86, 0.55);
+          vec3 cIn = vKind > 0.5 ? vec3(1.0, 0.62, 0.25) : vec3(1.0, 0.86, 0.55);
           vec3 col = mix(cOut, cIn, core) * (body * 2.2 + core * 5.0);
           // blue base of an oil flame
           col += vec3(0.1, 0.18, 0.6) * (1.0 - smoothstep(0.0, 0.09, y)) * (1.0 - smoothstep(0.2, 0.7, d)) * (1.0 - vKind);
           float a = clamp(body + core, 0.0, 1.0);
           if (a < 0.01) discard;
-          gl_FragColor = vec4(col * uIntensity * (vKind > 0.5 ? 0.9 : 3.0), a);
+          gl_FragColor = vec4(col * uIntensity * (vKind > 0.5 ? 0.38 : 3.0), a);
         }`,
       transparent: true,
       depthWrite: false,
@@ -101,7 +105,7 @@ export class Flames {
     this.mesh.renderOrder = 5;
     const glowMat = new THREE.ShaderMaterial({
       uniforms: this.uniforms,
-      vertexShader: vert.replace('c.x += sin(uTime * 3.1 + s * 3.0) * 0.12 * aCorner.y;', '').replace('vec2 c = aCorner * vec2(1.0, fl);', 'vec2 c = (aCorner - vec2(0.0, 0.42)) * fl;'),
+      vertexShader: vert.replace('c.x += sin(uTime * 3.1 + s * 3.0) * 0.12 * aCorner.y;', '').replace('vec2 c = aCorner * vec2(1.0, fl);', 'vec2 c = aCorner * (0.94 + 0.06 * fl);'),
       fragmentShader: /* glsl */ `
         uniform float uIntensity; varying vec2 vC; varying float vKind;
         void main(){

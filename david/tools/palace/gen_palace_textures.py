@@ -349,58 +349,51 @@ def textiles():
 
 # ------------------------------------------------------------------------------------------ tamarisk
 def tamarisk():
-    """Tamarix aphylla sprays: long jointed, drooping grey-green branchlets made of tiny sheathing scale leaves."""
+    """Tamarix aphylla foliage: masses of fine, jointed, drooping grey-green branchlets hanging from a few twigs.
+    Each cell hangs from its top edge (the card is attached at v = 1)."""
     S = 1024
-    SS = 2  # supersample
+    SS = 2
+    C = S // 2 * SS
     atlas = Image.new('RGBA', (S * SS, S * SS), (0, 0, 0, 0))
     r = np.random.default_rng(90)
-    cells = [(0, 0), (1, 0), (0, 1), (1, 1)]
-    for ci, (cx, cy) in enumerate(cells):
-        cell = Image.new('RGBA', (S // 2 * SS, S // 2 * SS), (0, 0, 0, 0))
+    for ci, (cx, cy) in enumerate([(0, 0), (1, 0), (0, 1), (1, 1)]):
+        cell = Image.new('RGBA', (C, C), (0, 0, 0, 0))
         d = ImageDraw.Draw(cell)
-        C = S // 2 * SS
-        # main twig from the bottom centre fanning upward; branchlets droop (the cell is used hanging)
-        base = np.array([C * 0.5, C * 0.98])
-        nbr = 44 if ci < 2 else 56
-        for b in range(nbr):
-            ang = -np.pi / 2 + r.uniform(-1.1, 1.1)
-            L = C * r.uniform(0.45, 0.9)
-            p = base + np.array([r.uniform(-C * 0.05, C * 0.05), 0])
-            pts = [p.copy()]
-            a = ang
-            steps = 26
-            for s in range(steps):
-                a += r.normal(0, 0.05) + (0.018 if np.cos(a) > 0 else -0.018)  # gentle arch outward
-                p = p + np.array([np.cos(a), np.sin(a)]) * L / steps
-                pts.append(p.copy())
+        # a few woody twigs along the top
+        twigs = []
+        for t in range(4):
+            x0 = r.uniform(0.1, 0.9) * C
+            y0 = r.uniform(0.0, 0.06) * C
+            x1 = x0 + r.uniform(-0.3, 0.3) * C
+            y1 = y0 + r.uniform(0.08, 0.2) * C
+            d.line([(x0, y0), (x1, y1)], fill=(92, 80, 66, 255), width=int(SS * 2.5))
+            twigs.append(((x0, y0), (x1, y1)))
+        n = 150 if ci < 3 else 190
+        for k in range(n):
+            (ax, ay), (bx, by) = twigs[k % len(twigs)]
+            t = r.uniform(0, 1)
+            x, y = ax + (bx - ax) * t, ay + (by - ay) * t
+            L = r.uniform(0.35, 0.92) * C
+            a = np.pi / 2 + r.normal(0, 0.18)
             tone = r.uniform(0, 1)
-            gcol = lerp(np.array([128, 138, 124]), np.array([164, 170, 150]), tone)
-            if ci == 3:
-                gcol = gcol * 0.9 + np.array([10, 4, -2])  # a slightly browner, older spray
-            # jointed segments: alternating light/dark rings every few pixels; tiny leaf scales make it fuzzy
-            for i in range(len(pts) - 1):
-                w = int(max(2, SS * (2.8 - 1.6 * i / len(pts))))
-                shade = 0.82 + 0.3 * ((i % 3) == 0)
+            gcol = lerp(np.array([122, 132, 118]), np.array([168, 172, 152]), tone)
+            steps = 30
+            for s_ in range(steps):
+                a += r.normal(0, 0.03)
+                nx, ny = x + np.cos(a) * L / steps, y + np.sin(a) * L / steps
+                shade = 0.8 + 0.28 * ((s_ % 3) == 0)
                 c = tuple(int(v) for v in np.clip(gcol * shade, 0, 255)) + (255,)
-                d.line([tuple(pts[i]), tuple(pts[i + 1])], fill=c, width=w)
-                # secondary branchlets
-                if i > 2 and r.random() < 0.8:
-                    a2 = np.arctan2(pts[i + 1][1] - pts[i][1], pts[i + 1][0] - pts[i][0]) + r.choice([-1, 1]) * r.uniform(0.4, 0.9)
-                    q = pts[i].copy()
-                    L2 = C * r.uniform(0.06, 0.2)
-                    for s in range(8):
-                        a2 += 0.03 * np.sign(np.cos(a2))
-                        q2 = q + np.array([np.cos(a2), np.sin(a2)]) * L2 / 8
-                        c2 = tuple(int(v) for v in np.clip(gcol * r.uniform(0.85, 1.12), 0, 255)) + (255,)
-                        d.line([tuple(q), tuple(q2)], fill=c2, width=max(2, int(SS * 1.5)))
-                        q = q2
-            # woody base
-            d.line([tuple(pts[0]), tuple(pts[3])], fill=(96, 82, 66, 255), width=int(SS * 3))
-        cell = cell.filter(ImageFilter.GaussianBlur(0.4))
+                d.line([(x, y), (nx, ny)], fill=c, width=max(2, int(SS * (1.9 - 0.8 * s_ / steps))))
+                # tiny side branchlets
+                if r.random() < 0.18:
+                    a2 = a + r.choice([-1, 1]) * r.uniform(0.3, 0.7)
+                    l2 = r.uniform(0.02, 0.06) * C
+                    d.line([(x, y), (x + np.cos(a2) * l2, y + np.sin(a2) * l2)], fill=c, width=max(1, SS))
+                x, y = nx, ny
+        cell = cell.filter(ImageFilter.GaussianBlur(0.35))
         atlas.paste(cell, (cx * C, cy * C))
     atlas = atlas.resize((S, S), Image.LANCZOS)
     a = np.asarray(atlas).astype(np.float32) / 255
-    # dilate colour into transparent texels (no dark fringes after mip-mapping)
     rgb = a[..., :3].copy()
     al = a[..., 3]
     mask = al > 0.05

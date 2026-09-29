@@ -51,7 +51,7 @@ function baseHeight(x: number, z: number) {
   // surrounding hills of the Benjamin plateau
   const far = smoothstep(420, 1400, r);
   const ridge = 1 - Math.abs(fbm(N2, x * 0.0007, z * 0.0007, 4) * 2.2);
-  const hills = ridge * ridge * 150 - 55 + fbm(N3, x * 0.0026, z * 0.0026, 3) * 22;
+  const hills = Math.pow(Math.max(0, ridge), 1.5) * 95 - 30 + fbm(N3, x * 0.0022, z * 0.0022, 3) * 18;
   // the land falls toward the wilderness in the east
   const east = smoothstep(1500, 6000, x) * -140;
   h += far * (hills + east + 25 * smoothstep(1200, 4000, -z));
@@ -62,12 +62,9 @@ export function gibeahHeight(x: number, z: number) {
   const dx = x - SUMMIT.x, dz = (z - SUMMIT.z) * 0.82;
   const r = Math.hypot(dx, dz);
   let h = baseHeight(x, z);
-  // agricultural terraces on the flanks (not on the plateau, fading out in the valley)
-  const tw = smoothstep(PLATEAU_R + 2, PLATEAU_R + 22, r) * (1 - smoothstep(330, 480, r)) + smoothstep(600, 1100, r) * (1 - smoothstep(2600, 4000, r)) * 0.7;
-  if (tw > 0) {
-    const jitter = fbm(N3, x * 0.02, z * 0.02, 2) * 0.9;
-    h = THREE.MathUtils.lerp(h, terrace(h + jitter, 2.1, 0.32) - jitter * 0.4, tw * 0.92);
-  }
+  // agricultural terraces are drawn by the terrain shader as contour lines of dry-stone risers: 2 m steps cannot be
+  // represented by the polar mesh away from the summit (they alias into ripples), so the geometry stays smooth
+  void terrace;
   // bedrock bumps on the plateau
   h += fbm(N1, x * 0.05, z * 0.05, 3) * 0.35 * (1 - smoothstep(PLATEAU_R, PLATEAU_R + 20, r));
   // the citadel courtyard is levelled beaten earth (and the ground just outside the walls)
@@ -217,28 +214,29 @@ vec4 samp2(sampler2D t, vec2 p){ return mix(texture2D(t, p), texture2D(t, p * 0.
   vec2 fo = max(vec2(uFort.x - xz.x, uFort.z - xz.y), vec2(xz.x - uFort.y, xz.y - uFort.w));
   float yard = 1.0 - smoothstep(-1.0, 3.0, max(fo.x, fo.y));
   float lane = (1.0 - smoothstep(2.0, 4.5, abs(xz.y - 1.5))) * step(uFort.y, xz.x) * (1.0 - smoothstep(60.0, 90.0, xz.x));
-  vec3 earth = mix(so.rgb * vec3(1.1, 0.98, 0.86), gv.rgb * vec3(0.95, 0.9, 0.85), 0.35) * (0.9 + 0.2 * m3);
+  vec3 earth = mix(so.rgb * vec3(1.02, 0.92, 0.82), gv.rgb * vec3(0.8, 0.75, 0.7), 0.15) * (0.82 + 0.2 * m3);
   c = mix(c, earth, clamp(max(yard, lane) * 0.92, 0.0, 1.0));
   c = mix(c, ro.rgb * vec3(1.02, 1.0, 0.96), clamp(wRock, 0.0, 1.0));
   c = mix(c, wa.rgb, wWall);
   // far: fade texture detail into a smooth macro colour (hides tiling), slightly bleached by haze
   float fd = smoothstep(250.0, 1800.0, dist);
-  vec3 macro = mix(vec3(0.36, 0.29, 0.19), vec3(0.47, 0.38, 0.25), m2) * mix(1.0, 0.8, m1);
+  vec3 macro = mix(vec3(0.27, 0.21, 0.14), vec3(0.37, 0.29, 0.19), m2) * mix(1.0, 0.78, m1);
   // far: limestone terrace bands on the slopes, dark scrub / orchard patches
   float band = smoothstep(0.35, 0.6, slope) ;
   macro = mix(macro, vec3(0.55, 0.52, 0.46), band * 0.55);
   float orch = smoothstep(0.55, 0.75, tN(xz * 0.01 + 11.0) * 0.7 + tN(xz * 0.06) * 0.3);
-  macro = mix(macro, vec3(0.17, 0.18, 0.12), orch * 0.55);
+  macro = mix(macro, vec3(0.1, 0.11, 0.07), orch * 0.7);
   macro = mix(macro, macro * vec3(1.1, 0.82, 0.7), smoothstep(0.6, 0.85, m2) * 0.5);
   c = mix(c, macro, fd * 0.8);
   // terrace lines along the contours (far slopes): dry-stone risers every ~2.4 m, antialiased
   float fy = max(fwidth(vTW.y), 1e-4);
   float tph = fract(vTW.y / 2.4 + tN(xz * 0.02) * 0.6);
-  float lineW = 0.16;
+  float lineW = 0.13;
   float tline = 1.0 - smoothstep(lineW, lineW + fy / 2.4, tph);
   tline = mix(tline, lineW, smoothstep(0.08, 0.5, fy / 2.4));
-  float slopeBand = smoothstep(0.06, 0.2, slope) * (1.0 - smoothstep(0.55, 0.8, slope)) * smoothstep(380.0, 700.0, rS) * (1.0 - valley * 0.7);
-  c = mix(c, vec3(0.62, 0.58, 0.5), tline * slopeBand * 0.75);
+  float slopeBand = smoothstep(0.04, 0.14, slope) * (1.0 - smoothstep(0.6, 0.85, slope)) * smoothstep(${(PLATEAU_R + 3).toFixed(1)}, ${(PLATEAU_R + 12).toFixed(1)}, rS) * (1.0 - valley * 0.6);
+  c = mix(c, wa.rgb * vec3(1.08, 1.04, 0.98), tline * slopeBand * 0.85);
+  c = mix(c, c * 0.55, (1.0 - smoothstep(0.0, lineW * 1.5 + fy / 2.4, fract(tph + lineW + 0.02))) * slopeBand * 0.5 * (1.0 - smoothstep(0.08, 0.5, fy / 2.4)));
   c = mix(c, c * 0.72, (1.0 - tline) * slopeBand * smoothstep(0.0, 0.3, tph) * 0.2);
   diffuseColor.rgb *= c;
   // normals: tangent-space maps projected on the dominant plane
@@ -260,6 +258,6 @@ roughnessFactor = terRough;`)
       .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
 reflectedLight.indirectDiffuse *= terAO;`);
   };
-  mat.customProgramCacheKey = () => 'palace-terrain-v2';
+  mat.customProgramCacheKey = () => 'palace-terrain-v3';
   return mat;
 }

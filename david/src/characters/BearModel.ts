@@ -195,8 +195,8 @@ varying vec3 vBindP;
 // Syrian bears are palest on the back and flanks; the belly fringe and the upper legs darken to a warm brown
 // (bind-pose height band; the lower legs are already dark in the albedo, so they get less)
 vec3 bearUnderTint(vec3 bp) {
-  float belly = (1.0 - smoothstep(0.42, 0.62, bp.y)) * (1.0 - smoothstep(0.5, 0.66, bp.z));
-  return mix(vec3(1.0), vec3(0.74, 0.61, 0.49), belly * (0.55 + 0.45 * smoothstep(0.18, 0.4, bp.y)));
+  float belly = (1.0 - smoothstep(0.47, 0.67, bp.y)) * (1.0 - smoothstep(0.5, 0.66, bp.z));
+  return mix(vec3(1.0), vec3(0.74, 0.61, 0.49), belly * (0.55 + 0.45 * smoothstep(0.2, 0.43, bp.y)));
 }
 `;
 
@@ -275,6 +275,7 @@ varying float vH;
 varying vec3 vStrandV;
 varying float vFurAO;
 varying float vFurLen;
+varying vec2 vComb;
 varying vec3 vBindP;`,
       )
       .replace(
@@ -299,6 +300,9 @@ vec3 strandObj;
   vH = h;
   vFurAO = fur.w;
   vFurLen = L;
+  // combing direction in UV space (tangent = dP/du, bitangent ~ dP/dv): locks are elongated along it
+  float fl = length(fd);
+  vComb = fl > 1e-3 ? fd / fl : vec2(1.0, 0.0);
 }`,
       )
       .replace(
@@ -334,43 +338,55 @@ varying float vH;
 varying vec3 vStrandV;
 varying float vFurAO;
 varying float vFurLen;
-float furTip;`,
+varying vec2 vComb;
+float furTip;
+float furSpecK;
+float furScatK;`,
       )
       .replace(
         '#include <map_fragment>',
         `#include <map_fragment>
 {
   vec3 bm = texture2D(uMaskMap, vMapUv).rgb;
-  // Coverage is procedural (no mip-mapping problems): the pelt is a dense under-fur (low shells) through which
-  // tapered locks of guard hair rise (jittered cells ~1 cm apart); fine strands only break up the lock tips
-  // where they are resolvable on screen.
+  // Coverage is procedural (no mip-mapping problems). The pelt is a dense, dark under-fur (low shells) through
+  // which pointed LOCKS of coarse hair rise; locks are elongated along the combing direction and most end well
+  // below the outer shell, so only sparse guard-hair tips reach the silhouette (coarse, never plush).
   // short hair (face, paws) is a dense velvet of fine locks; long hair shows big guard-hair locks
   float shortK = 1.0 - smoothstep(0.02, 0.05, vFurLen);
-  vec2 p = vMapUv * uLockFreq * mix(1.0, 2.6, shortK);
+  vec2 p = vMapUv * uLockFreq * mix(1.0, 3.4, shortK);
   vec2 ip = floor(p);
   vec2 fp = fract(p);
+  vec2 cdir = normalize(vComb);
+  vec2 cper = vec2(-cdir.y, cdir.x);
+  float stretch = mix(1.9, 1.35, shortK);
   float best = 8.0;
   vec2 bid = ip;
   for (int y = -1; y <= 1; y++) {
     for (int x = -1; x <= 1; x++) {
       vec2 g = vec2(float(x), float(y));
       vec2 dv = g + 0.12 + furHash22(ip + g) * 0.76 - fp;
-      float dd = dot(dv, dv);
+      // anisotropic metric: a lock is a long, narrow tuft lying along the comb
+      float da = dot(dv, cdir) / stretch;
+      float dc = dot(dv, cper);
+      float dd = da * da + dc * dc;
       if (dd < best) { best = dd; bid = ip + g; }
     }
   }
   float d = sqrt(best);
   vec3 lr = furHash32(bid);
-  float len = mix(0.6, 1.1, lr.x);
+  vec3 lr2 = furHash32(bid + 17.31);
+  // lock classes: guard locks reach (almost) the outer shell, body locks end at 45-80 % of the fur length
+  float guard = step(0.72, lr2.x);
+  float len = mix(mix(0.45, 0.8, lr.x), mix(0.86, 1.0, lr.x), guard);
   float t = vH / len;
-  float r = mix(0.48, 0.66, lr.z) * pow(max(0.0, 1.0 - t), 0.7);
-  float under = 1.0 - smoothstep(mix(0.24, 0.72, shortK), mix(0.4, 0.95, shortK), vH + 0.1 * (lr.y - 0.5));
+  float r = mix(0.42, 0.62, lr.z) * mix(1.0, 0.72, guard) * pow(max(0.0, 1.0 - t), mix(0.7, 1.1, guard));
+  float under = 1.0 - smoothstep(mix(0.2, 0.7, shortK), mix(0.36, 0.95, shortK), vH + 0.1 * (lr.y - 0.5));
   float cov = max(r - d, under * 0.5 - 0.04);
   vec2 suv = vMapUv * uStrandTile;
   vec3 st = texture2D(uStrands, suv).rgb;
   vec2 sw = fwidth(suv) * 512.0;
   float strandVis = 1.0 - smoothstep(1.2, 3.0, max(sw.x, sw.y));
-  cov -= smoothstep(0.35, 0.9, t) * strandVis * (1.0 - st.r) * 0.3;
+  cov -= smoothstep(0.3, 0.9, t) * strandVis * (1.0 - st.r) * 0.3;
   cov -= (1.0 - smoothstep(0.35, 0.8, bm.b)) * 2.0;
   #ifdef ALPHA_TO_COVERAGE
     float aa = max(fwidth(d), 1e-3);
@@ -382,10 +398,24 @@ float furTip;`,
     diffuseColor.a = 1.0;
   #endif
   furTip = smoothstep(0.1, 1.0, t);
-  // colour along the hair: darker, greyer roots -> sun-bleached golden tips; per lock / strand variation
+  // colour along the hair: dark, greyish roots -> golden mid-shaft -> tips that are sun-bleached on some locks
+  // and darker on others (the grizzled look); per-lock value / hue variation; the lock's edge is darker
+  // (strands separate there and shadow each other)
   vec3 tint = mix(uRootTint, uTipTint, furTip);
-  tint *= 1.0 + (lr.y - 0.5) * mix(0.26, 0.1, shortK);
-  tint *= mix(1.0, 0.88 + 0.24 * st.b, strandVis);
+  // (short face / paw hair: almost no per-lock variation, or the lock cells would read as a mosaic)
+  float val = 1.0 + (lr.y - 0.5) * mix(0.42, 0.03, shortK);
+  vec3 bleach = vec3(1.16, 1.1, 0.98);
+  vec3 dusky = vec3(0.74, 0.64, 0.56);
+  float gz = lr2.y;
+  vec3 tipC = gz > 0.62 ? bleach : (gz < 0.22 ? dusky : vec3(1.0));
+  tint *= mix(vec3(1.0), tipC, smoothstep(0.45, 1.0, t) * (1.0 - shortK));
+  tint *= val * mix(vec3(1.0), vec3(1.03, 0.98, 0.93), (lr2.z - 0.5) * (1.0 - shortK));
+  float edge = r > 1e-3 ? smoothstep(0.35, 1.0, d / r) : 1.0;
+  tint *= 1.0 - 0.28 * edge * (1.0 - under) * (1.0 - 0.85 * shortK);
+  tint *= mix(1.0, 0.84 + 0.3 * st.b, strandVis);
+  // coarse hair: sheen varies strongly per lock (some locks catch the light, most are matte and dusty)
+  furSpecK = mix(mix(0.35, 1.5, lr2.z * lr2.z) * (1.0 - 0.5 * edge), 0.8, shortK);
+  furScatK = mix(mix(0.55, 1.25, lr.y), 0.9, shortK);
   diffuseColor.rgb *= tint * bearUnderTint(vBindP);
 }`,
       )
@@ -411,11 +441,11 @@ void RE_Direct_Fur(const in IncidentLight directLight, const in vec3 geometryPos
   float s1 = pow(sqrt(max(0.0, 1.0 - th1 * th1)), 90.0);
   float s2 = pow(sqrt(max(0.0, 1.0 - th2 * th2)), 16.0);
   float vis = smoothstep(-0.15, 0.3, nl);
-  vec3 spec = (vec3(s1) * uSpec1 + material.diffuseColor * s2 * uSpec2) * vis * (0.35 + 0.65 * furTip);
+  vec3 spec = (vec3(s1) * uSpec1 + material.diffuseColor * s2 * uSpec2) * vis * (0.35 + 0.65 * furTip) * furSpecK;
   // light transmitted through thin, backlit hair: the golden halo of a low sun
   float back = pow(saturate(dot(-L, V)), 2.5);
   float rim = pow(1.0 - saturate(abs(dot(N, V))), 1.5);
-  vec3 scatter = material.diffuseColor * back * (0.25 + 1.6 * rim) * uScatter * (0.25 + 0.75 * furTip);
+  vec3 scatter = material.diffuseColor * back * (0.25 + 1.6 * rim) * uScatter * (0.25 + 0.75 * furTip) * furScatK;
   reflectedLight.directDiffuse += directLight.color * (material.diffuseColor * diff + scatter) * RECIPROCAL_PI;
   reflectedLight.directSpecular += directLight.color * spec;
 }
@@ -427,16 +457,18 @@ void RE_Direct_Fur(const in IncidentLight directLight, const in vec3 geometryPos
         `#include <aomap_fragment>
 {
   // self-shadowing inside the pelt: deep layers see little sky and little sun
-  float self = mix(0.34, 1.0, pow(vH, 0.75));
+  // (a short velvet pelt is shallow: little depth darkening, or its lock cells read as flat flakes)
+  float shortS = 1.0 - smoothstep(0.02, 0.05, vFurLen);
+  float self = mix(mix(0.34, 0.82, shortS), 1.0, pow(vH, 0.75));
   float ao = mix(vFurAO, 1.0, 0.35 + 0.5 * vH);
   reflectedLight.indirectDiffuse *= self * ao;
   reflectedLight.indirectSpecular *= self * ao;
-  reflectedLight.directDiffuse *= mix(0.5, 1.0, pow(vH, 0.6)) * mix(1.0, ao, 0.4);
+  reflectedLight.directDiffuse *= mix(mix(0.5, 0.88, shortS), 1.0, pow(vH, 0.6)) * mix(1.0, ao, 0.4);
   reflectedLight.directSpecular *= ao;
 }`,
       );
   };
-  m.customProgramCacheKey = () => 'bear-fur-v2';
+  m.customProgramCacheKey = () => 'bear-fur-v3';
   return m;
 }
 
@@ -455,15 +487,16 @@ function makeExtrasMaterial() {
 {
   float kind = vAux.x;
   if (kind < 0.5) {
-    // eye: small, almost all dark-brown iris, black pupil, a rim of brownish sclera
+    // eye: small, almost all warm dark-brown iris with a lighter amber ring, black pupil, a sliver of brownish
+    // sclera in the corners; a wet clear-coat gives the catch-light that makes the small eye read at a distance
     float c = dot(normalize(vBindN), normalize(vAux.yzw));
-    float iris = smoothstep(0.55, 0.62, c);
-    float pupil = smoothstep(0.86, 0.9, c);
-    float ring = smoothstep(0.62, 0.7, c) * (1.0 - smoothstep(0.8, 0.86, c));
-    vec3 sclera = vec3(0.16, 0.12, 0.1);
-    vec3 irisC = mix(vec3(0.07, 0.035, 0.015), vec3(0.16, 0.08, 0.03), ring);
-    diffuseColor.rgb = mix(mix(sclera, irisC, iris), vec3(0.004), pupil);
-    exRough = 0.2; exCoat = 1.0;
+    float iris = smoothstep(0.5, 0.58, c);
+    float pupil = smoothstep(0.87, 0.91, c);
+    float ring = smoothstep(0.6, 0.7, c) * (1.0 - smoothstep(0.8, 0.87, c));
+    vec3 sclera = vec3(0.2, 0.15, 0.12);
+    vec3 irisC = mix(vec3(0.075, 0.036, 0.014), vec3(0.24, 0.12, 0.04), ring);
+    diffuseColor.rgb = mix(mix(sclera, irisC, iris), vec3(0.003), pupil);
+    exRough = 0.12; exCoat = 1.0;
   } else if (kind < 1.5) {
     // claw: dark horn at the root -> pale ivory tip
     float t = vAux.y;
@@ -480,7 +513,7 @@ function makeExtrasMaterial() {
       .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = exRough;')
       .replace('#include <lights_physical_fragment>', '#include <lights_physical_fragment>\nmaterial.clearcoat *= exCoat;');
   };
-  m.customProgramCacheKey = () => 'bear-extras-v1';
+  m.customProgramCacheKey = () => 'bear-extras-v2';
   return m;
 }
 
@@ -514,9 +547,9 @@ const HURT = new Clip([
 // death: stagger -> legs buckle -> roll onto the side -> settle (all FK; hipsOffset = pose.hipsY/hipsZ)
 const DEATH = new Clip([
   { t: 0, p: pose({}) },
-  { t: 0.7, p: pose({ hips: [0.12, 0, 0.12], spine1: [0.12, 0, 0.06], spine2: [0.15, 0, 0.05], neck1: [0.35, 0, 0.1], neck2: [0.2, 0, 0], head: [0.25, 0.1, 0.2], humL: [-0.35, 0, 0.1], foreL: [0.6, 0, 0], humR: [-0.2, 0, -0.1], foreR: [0.7, 0, 0], femL: [0.5, 0, 0], tibL: [0.9, 0, 0], femR: [0.4, 0, 0], tibR: [0.8, 0, 0], jaw: [0.2, 0, 0], earL: [-0.4, 0, 0], earR: [-0.4, 0, 0] }, -0.28, 0) },
-  { t: 1.7, p: pose({ hips: [0.05, 0, 1.3], spine1: [0.05, 0.05, 0.04], spine2: [0.02, 0.1, 0.02], neck1: [0.25, 0.1, 0.04], neck2: [0.15, 0.1, 0], head: [0.3, 0.1, 0.1], humL: [-0.6, 0, -0.2], foreL: [-0.4, 0, 0], wristL: [0.6, 0, 0], humR: [-0.4, 0, 0.1], foreR: [-0.3, 0, 0], wristR: [0.5, 0, 0], femL: [-0.3, 0, -0.2], tibL: [0.5, 0, 0], ankleL: [0.3, 0, 0], femR: [-0.5, 0, 0.08], tibR: [0.4, 0, 0], ankleR: [0.3, 0, 0], jaw: [0.3, 0, 0], earL: [-0.3, 0, 0], earR: [-0.3, 0, 0], tail: [0.3, 0, 0] }, -0.47, 0) },
-  { t: 3.0, p: pose({ hips: [0.05, 0, 1.36], spine1: [0.04, 0.06, 0.03], spine2: [0.02, 0.14, 0.02], neck1: [0.1, 0.15, 0.04], neck2: [0.1, 0.1, 0.02], head: [0.2, 0.15, 0.1], humL: [-0.75, 0, -0.3], foreL: [-0.35, 0, 0], wristL: [0.7, 0, 0], toesL: [0.4, 0, 0], humR: [-0.55, 0, 0.12], foreR: [-0.35, 0, 0], wristR: [0.6, 0, 0], femL: [-0.45, 0, -0.25], tibL: [0.4, 0, 0], ankleL: [0.45, 0, 0], femR: [-0.6, 0, 0.1], tibR: [0.35, 0, 0], ankleR: [0.4, 0, 0], jaw: [0.36, 0, 0], earL: [-0.2, 0, 0], earR: [-0.2, 0, 0], tail: [0.35, 0, 0] }, -0.5, 0) },
+  { t: 0.7, p: pose({ hips: [0.12, 0, 0.12], spine1: [0.12, 0, 0.06], spine2: [0.15, 0, 0.05], neck1: [0.35, 0, 0.1], neck2: [0.2, 0, 0], head: [0.25, 0.1, 0.2], humL: [-0.35, 0, 0.1], foreL: [0.6, 0, 0], humR: [-0.2, 0, -0.1], foreR: [0.7, 0, 0], femL: [0.5, 0, 0], tibL: [0.9, 0, 0], femR: [0.4, 0, 0], tibR: [0.8, 0, 0], jaw: [0.2, 0, 0], earL: [-0.4, 0, 0], earR: [-0.4, 0, 0] }, -0.31, 0) },
+  { t: 1.7, p: pose({ hips: [0.05, 0, 1.3], spine1: [0.05, 0.05, 0.04], spine2: [0.02, 0.1, 0.02], neck1: [0.25, 0.1, 0.04], neck2: [0.15, 0.1, 0], head: [0.3, 0.1, 0.1], humL: [-0.6, 0, -0.2], foreL: [-0.4, 0, 0], wristL: [0.6, 0, 0], humR: [-0.4, 0, 0.1], foreR: [-0.3, 0, 0], wristR: [0.5, 0, 0], femL: [-0.3, 0, -0.2], tibL: [0.5, 0, 0], ankleL: [0.3, 0, 0], femR: [-0.5, 0, 0.08], tibR: [0.4, 0, 0], ankleR: [0.3, 0, 0], jaw: [0.3, 0, 0], earL: [-0.3, 0, 0], earR: [-0.3, 0, 0], tail: [0.3, 0, 0] }, -0.52, 0) },
+  { t: 3.0, p: pose({ hips: [0.05, 0, 1.36], spine1: [0.04, 0.06, 0.03], spine2: [0.02, 0.14, 0.02], neck1: [0.1, 0.15, 0.04], neck2: [0.1, 0.1, 0.02], head: [0.2, 0.15, 0.1], humL: [-0.75, 0, -0.3], foreL: [-0.35, 0, 0], wristL: [0.7, 0, 0], toesL: [0.4, 0, 0], humR: [-0.55, 0, 0.12], foreR: [-0.35, 0, 0], wristR: [0.6, 0, 0], femL: [-0.45, 0, -0.25], tibL: [0.4, 0, 0], ankleL: [0.45, 0, 0], femR: [-0.6, 0, 0.1], tibR: [0.35, 0, 0], ankleR: [0.4, 0, 0], jaw: [0.36, 0, 0], earL: [-0.2, 0, 0], earR: [-0.2, 0, 0], tail: [0.35, 0, 0] }, -0.55, 0) },
 ]);
 
 // the standing pose ("וַיָּקָם עָלַי"): hind legs are placed by IK, everything else FK
@@ -637,8 +670,8 @@ export class BearModel {
   private furShells = 0;
   private readonly shared: Record<string, THREE.IUniform> = {
     uFurCover: { value: 1 },
-    uRootTint: { value: new THREE.Color(0.45, 0.4, 0.36) },
-    uTipTint: { value: new THREE.Color(1.05, 0.98, 0.88) },
+    uRootTint: { value: new THREE.Color(0.36, 0.31, 0.27) },
+    uTipTint: { value: new THREE.Color(1.04, 0.97, 0.86) },
   };
   private readonly furU: Record<string, THREE.IUniform> = {
     uShellCount: { value: 16 },
@@ -649,9 +682,9 @@ export class BearModel {
     uDroop: { value: 0.18 },
     uStrandTile: { value: RIG.metersPerUV / 0.09 },
     uLockFreq: { value: RIG.metersPerUV / 0.011 },
-    uSpec1: { value: 0.1 },
+    uSpec1: { value: 0.085 },
     uSpec2: { value: 0.16 },
-    uScatter: { value: 0.8 },
+    uScatter: { value: 0.7 },
   };
 
   // animation state

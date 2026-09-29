@@ -135,19 +135,18 @@ function buildTamarisk(world: TextureSet, tex: PalaceTextures, tier: PalaceTier)
     const c = crownC.clone().add(V3(Math.cos(a) * r, (rnd() - 0.2) * 2.4, Math.sin(a) * r));
     clusters.push({ c, dir: c.clone().sub(crownC).normalize(), r: 1.4 + rnd() * 0.6 });
   }
-  const perCluster = tier === 'high' ? 30 : tier === 'medium' ? 20 : 12;
+  const perCluster = tier === 'high' ? 22 : tier === 'medium' ? 15 : 9;
   for (const cl of clusters) {
     for (let i = 0; i < perCluster; i++) {
       const p = V3(rnd() * 2 - 1, rnd() * 2 - 1, rnd() * 2 - 1);
       if (p.lengthSq() > 1) p.normalize();
       const c = cl.c.clone().addScaledVector(p, cl.r * 0.8);
-      // branchlets droop: the spray "grows" downward and outward from where it hangs
-      const out = c.clone().sub(crownC).setY(0).normalize();
-      const grow = out.multiplyScalar(0.55).add(V3(0, -1, 0)).add(V3(rnd() - 0.5, rnd() * 0.4, rnd() - 0.5).multiplyScalar(0.6)).normalize();
-      const size = 0.55 + rnd() * 0.5;
+      // branchlets droop: each card hangs from its top edge (atlas v = 1) at the cluster point
+      const grow = V3((rnd() - 0.5) * 0.25, 1, (rnd() - 0.5) * 0.25).normalize();
+      const size = 0.9 + rnd() * 0.9;
       const k = 0.85 + rnd() * 0.3;
-      const tint: [number, number, number] = [k * 0.98, k, k * 0.96];
-      const hang = c.clone().addScaledVector(grow, -size * 0.12);
+      const tint: [number, number, number] = [k * 0.98, k, k * 0.97];
+      const hang = c.clone().addScaledVector(grow, -size);
       cards.add(hang, grow, size * 0.95, size, crownC, crownR, Math.floor(rnd() * 4), tint, rnd, 0.6 + 0.4 * Math.min(1, c.distanceTo(crownC) / crownR), rnd());
     }
   }
@@ -158,7 +157,7 @@ function buildTamarisk(world: TextureSet, tex: PalaceTextures, tier: PalaceTier)
     m.receiveShadow = true;
     group.add(m);
   }
-  const fol = foliageMaterial(tex.tamarisk, { sway: 0.18, flutter: 0.03, translucency: 0.22, color: 0xc9cbc0, roughness: 0.85 });
+  const fol = foliageMaterial(tex.tamarisk, { sway: 0.22, flutter: 0.05, translucency: 0.25, color: 0xc4c6bc, roughness: 0.85 });
   const leaves = new THREE.Mesh(cards.geometry(), fol);
   leaves.castShadow = true;
   leaves.receiveShadow = true;

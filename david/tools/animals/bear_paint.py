@@ -75,9 +75,10 @@ def dir_to_jaw(D):
 def nose_mask(P):
     """1 on the bare rhinarium (nose pad)."""
     Q = to_head(P)
-    d = sd_ellipsoid(Q, (0, -0.002, 0.33), (0.044, 0.035, 0.028))
-    front = smoothstep(0.295, 0.312, Q[:, 2])
-    return (1 - smoothstep(0.0, 0.006, d)) * front
+    r = np.array(B.NOSE_R) + 0.001
+    d = sd_ellipsoid(Q, B.NOSE, r)
+    front = smoothstep(B.NOSE_TIP_Z - 0.05, B.NOSE_TIP_Z - 0.034, Q[:, 2])
+    return (1 - smoothstep(0.0, 0.005, d)) * front
 
 
 def mouth_fields(P, N, W):
@@ -89,11 +90,12 @@ def mouth_fields(P, N, W):
     Qj = to_jaw(P)
     Nj = dir_to_jaw(N)
     # upper jaw: everything below the lip line (palate between the lips, the lips' lower margin)
-    up_band = smoothstep(-0.052, -0.059, Qh[:, 1]) * smoothstep(0.11, 0.14, Qh[:, 2]) * (1 - smoothstep(0.058, 0.068, np.abs(Qh[:, 0])))
-    up_in = up_band * smoothstep(0.15, 0.6, -Nh[:, 1]) * (1 - smoothstep(0.034, 0.046, np.abs(Qh[:, 0]))) * (1 - smoothstep(0.325, 0.345, Qh[:, 2]))
+    zt = B.NOSE_TIP_Z
+    up_band = smoothstep(-0.047, -0.055, Qh[:, 1]) * smoothstep(0.11, 0.14, Qh[:, 2]) * (1 - smoothstep(0.056, 0.066, np.abs(Qh[:, 0])))
+    up_in = up_band * smoothstep(0.15, 0.6, -Nh[:, 1]) * (1 - smoothstep(0.032, 0.044, np.abs(Qh[:, 0]))) * (1 - smoothstep(zt - 0.045, zt - 0.025, Qh[:, 2]))
     # lower jaw: the top of the mandible (tongue, gums) and the lower lip margin
     lo_band = smoothstep(-0.003, 0.003, Qj[:, 1]) * (1 - smoothstep(0.028, 0.038, Qj[:, 1])) \
-        * smoothstep(0.0, 0.03, Qj[:, 2]) * (1 - smoothstep(0.2, 0.215, Qj[:, 2])) * (1 - smoothstep(0.05, 0.06, np.abs(Qj[:, 0])))
+        * smoothstep(0.0, 0.03, Qj[:, 2]) * (1 - smoothstep(0.222, 0.237, Qj[:, 2])) * (1 - smoothstep(0.05, 0.06, np.abs(Qj[:, 0])))
     lo_in = lo_band * smoothstep(0.15, 0.6, Nj[:, 1]) * (1 - smoothstep(0.031, 0.042, np.abs(Qj[:, 0])))
     up_band *= 1 - jw
     up_in *= 1 - jw
@@ -104,15 +106,19 @@ def mouth_fields(P, N, W):
     return interior, lip
 
 
-def eye_mask(P):
-    """1 on the bare eyelid rim around each eye."""
+def eye_dist(P):
+    """distance (head design units) to the nearest eye centre, squashed vertically (almond-shaped lids)."""
     Q = to_head(P)
-    m = np.zeros(len(P))
+    d = np.full(len(P), 9.0)
     for s in (1, -1):
-        c = np.array([0.061 * s, 0.047, 0.192])
-        d = np.linalg.norm((Q - c) / np.array([1.0, 1.25, 1.0]), axis=1)
-        m = np.maximum(m, 1 - smoothstep(0.016, 0.024, d))
-    return m
+        c = np.array([B.EYE[0] * s, B.EYE[1], B.EYE[2]])
+        d = np.minimum(d, np.linalg.norm((Q - c) / np.array([1.0, 1.3, 1.0]), axis=1))
+    return d
+
+
+def eye_mask(P):
+    """1 on the bare, dark eyelid rim around each eye (the eyeball itself is separate geometry)."""
+    return 1 - smoothstep(0.0145, 0.0195, eye_dist(P))
 
 
 def pad_mask(P, N, W):
@@ -133,30 +139,42 @@ def fur_length(P, N, W):
     Qh = to_head(P)
     y = P[:, 1]
     L = np.zeros(len(P))
-    # torso: long guard hair on the hump / back / belly, shorter on the flanks
+    # torso: long guard hair on the hump / back, shorter on the flanks and the (sparser) belly
     flank = np.abs(N[:, 0])
     belly = smoothstep(0.2, 0.8, -N[:, 1])
     back = smoothstep(0.3, 0.9, N[:, 1])
     hump = np.exp(-((P[:, 2] - 0.26) ** 2) / 0.05) * back
-    torso = 0.085 + 0.02 * back + 0.02 * hump + 0.022 * belly - 0.01 * flank
+    torso = 0.082 + 0.022 * back + 0.024 * hump - 0.012 * belly - 0.01 * flank
     L += r['torso'] * torso + r['tail'] * 0.05
-    L += r['neck'] * (0.095 + 0.015 * smoothstep(-0.2, 0.6, -N[:, 1]))
+    L += r['neck'] * (0.095 + 0.01 * smoothstep(-0.2, 0.6, -N[:, 1]))
     # legs: long on the upper limbs, "feathering" behind the forearms, short on the paws
     behind = smoothstep(0.0, 0.8, -N[:, 2])
-    L += r['foreUp'] * (0.085 + 0.015 * behind)
-    L += r['foreLo'] * (0.062 + 0.03 * behind * smoothstep(0.12, 0.32, y))
+    L += r['foreUp'] * (0.082 + 0.018 * behind)
+    L += r['foreLo'] * (0.058 + 0.032 * behind * smoothstep(0.12, 0.34, y))
     L += r['forePaw'] * (0.018 + 0.02 * smoothstep(0.05, 0.11, y))
-    L += r['hindUp'] * (0.085 + 0.01 * behind)
-    L += r['hindLo'] * (0.055 + 0.015 * behind)
+    L += r['hindUp'] * (0.082 + 0.012 * behind)
+    L += r['hindLo'] * (0.052 + 0.016 * behind)
     L += r['hindPaw'] * (0.015 + 0.015 * smoothstep(0.05, 0.12, y))
-    # head
+    # head: dense 3-4 cm pelt on the skull, a ruff on the cheeks behind the eyes, very short hair on the muzzle
     zh = Qh[:, 2]
-    muzzle = smoothstep(0.16, 0.24, zh)
-    cheek = smoothstep(0.04, 0.09, np.abs(Qh[:, 0])) * (1 - smoothstep(0.14, 0.2, zh)) * (1 - smoothstep(0.03, 0.08, Qh[:, 1]))
-    head = 0.032 * (1 - muzzle) + 0.011 * muzzle + 0.03 * cheek
-    head *= 1 - 0.6 * smoothstep(0.26, 0.31, zh)
+    ax_ = np.abs(Qh[:, 0])
+    muzzle = smoothstep(B.MUZZLE_Z0 - 0.02, B.MUZZLE_Z0 + 0.06, zh)
+    cheek = smoothstep(0.045, 0.1, ax_) * (1 - smoothstep(0.12, 0.19, zh)) * (1 - smoothstep(0.02, 0.07, Qh[:, 1]))
+    crown = smoothstep(0.04, 0.1, Qh[:, 1]) * (1 - smoothstep(0.12, 0.17, zh))
+    head = 0.03 * (1 - muzzle) + 0.0125 * muzzle + 0.038 * cheek + 0.008 * crown
+    head *= 1 - 0.4 * smoothstep(B.NOSE_TIP_Z - 0.09, B.NOSE_TIP_Z - 0.035, zh)
+    # clear the eyes: short hair around the lids (longer only well away, so no hair leans over the eyeball);
+    # the clearing reaches further toward the nose because the head hair is combed backward over the eye
+    Qe = Qh.copy()
+    ed = np.full(len(P), 9.0)
+    for s in (1, -1):
+        dq = Qe - np.array([B.EYE[0] * s, B.EYE[1], B.EYE[2]])
+        dq[:, 2] *= np.where(dq[:, 2] > 0, 0.55, 1.0)
+        ed = np.minimum(ed, np.linalg.norm(dq, axis=1))
+    head *= 0.12 + 0.88 * smoothstep(0.016, 0.05, ed)
     L += r['head'] * head
-    ear = 0.028
+    # ears: thick, furry (longest on the back and the rim) so they read as rounded tufts, not discs
+    ear = 0.04
     L = L * (1 - r['ear']) + r['ear'] * ear
     # jaw: short on the lower lip, long "beard" ruff under the chin / throat
     Qj = to_jaw(P)
@@ -192,7 +210,20 @@ def fur_flow(P, N, W):
     F += r['head'][:, None] * (Hback + ch * cheek_out)
     Jback = B.JAWF.dir(0, -0.5, -1.0)
     F += r['jaw'][:, None] * Jback
-    F += r['ear'][:, None] * B.HEAD.dir(0, 1.0, -0.3) * 2.0
+    for s in (1, -1):
+        ec = B.HEAD.pt(0.115 * s, 0.11, 0.03)
+        ev = P - ec
+        ev /= np.maximum(np.linalg.norm(ev, axis=1, keepdims=True), 1e-6)
+        side_w = (np.sign(P[:, 0]) == s).astype(np.float64)[:, None]
+        F += (r['ear'][:, None] * side_w) * (ev + B.HEAD.dir(0, 0.6, -0.4)) * 2.0
+    # around the eyes the hair radiates away from the lids (backward-outward), never over the eyeball
+    for s in (1, -1):
+        c = B.HEAD.pt(B.EYE[0] * s, B.EYE[1], B.EYE[2])
+        dv = P - c
+        dl = np.linalg.norm(dv, axis=1, keepdims=True)
+        w = (1 - smoothstep(0.02, 0.06, dl[:, 0]))[:, None] * r['head'][:, None]
+        radial = dv / np.maximum(dl, 1e-6) + B.HEAD.dir(0, 0.1, -0.6)
+        F = F * (1 - w) + radial * w * 1.5
     # project to the tangent plane
     F -= (F * N).sum(1, keepdims=True) * N
     ln = np.linalg.norm(F, axis=1, keepdims=True)
@@ -203,38 +234,57 @@ def fur_flow(P, N, W):
 
 # ----------------------------------------------------------------------------------------------- colour
 
-def fur_colour(P, N, W, noise):
-    """linear base colour of the pelt (colour at mid-shaft) — pale straw / golden-tawny with darker legs."""
+def fur_colour(P, N, W, noise, noise2=None):
+    """linear base colour of the pelt (colour at mid-shaft) — pale straw / golden-tawny with darker legs,
+    a darker nape line, a dusky leathery muzzle, darker eye patches and ear backs, dusty / matted patches."""
     r = regions(W)
     y = P[:, 1]
-    straw = srgb_to_lin([0.70, 0.57, 0.38])
-    golden = srgb_to_lin([0.63, 0.49, 0.31])
-    tawny = srgb_to_lin([0.48, 0.35, 0.22])
-    brown = srgb_to_lin([0.32, 0.22, 0.14])
-    dark = srgb_to_lin([0.2, 0.14, 0.09])
+    L = B.LIFT
+    straw = srgb_to_lin([0.68, 0.55, 0.36])
+    golden = srgb_to_lin([0.60, 0.46, 0.28])
+    tawny = srgb_to_lin([0.46, 0.33, 0.2])
+    brown = srgb_to_lin([0.30, 0.2, 0.125])
+    dark = srgb_to_lin([0.17, 0.115, 0.075])
     back = smoothstep(0.0, 0.9, N[:, 1])[:, None]
-    belly = smoothstep(0.35, 0.95, -N[:, 1])[:, None] * 0.8
+    belly = smoothstep(0.35, 0.95, -N[:, 1])[:, None] * 0.85
     body = golden * (1 - back) + straw * back
-    body = body * (1 - belly) + tawny * belly
-    # legs darken toward the paws
-    # darker legs: the colour deepens gradually from the elbows / knees down to the paws
-    legs = (r['foreUp'] + r['foreLo'] + r['forePaw'] + r['hindUp'] + r['hindLo'] + r['hindPaw'])[:, None] * smoothstep(0.62, 0.36, y)[:, None]
-    lk = smoothstep(0.42, 0.1, y)[:, None]
-    legc = tawny * (1 - lk) + (brown * 0.6 + dark * 0.4) * lk
+    body = body * (1 - belly) + (tawny * 0.8 + brown * 0.2) * belly
+    # a darker line along the nape and over the withers (the pelt parts there)
+    nape = (np.exp(-(P[:, 0] / 0.06) ** 2) * smoothstep(0.2, 0.7, N[:, 1]) * smoothstep(0.05, 0.3, P[:, 2]) * (1 - smoothstep(0.62, 0.78, P[:, 2])))[:, None]
+    body = body * (1 - 0.45 * nape) + tawny * 0.45 * nape
+    # darker legs: the colour deepens from the elbows / knees down to the paws
+    legs = (r['foreUp'] + r['foreLo'] + r['forePaw'] + r['hindUp'] + r['hindLo'] + r['hindPaw'])[:, None] * smoothstep(0.66 + L, 0.38 + L * 0.5, y)[:, None]
+    lk = smoothstep(0.44, 0.1, y)[:, None]
+    legc = (tawny * 0.7 + brown * 0.3) * (1 - lk) + (brown * 0.55 + dark * 0.45) * lk
     C = body * (1 - legs) + legc * legs
     C = C * (1 - r['tail'][:, None] * 0.35)
-    # head: golden forehead, pale cheeks, tan muzzle darkening to the nose, darker ears
+    # head: golden crown, pale cheek ruff, dusky-brown muzzle darkening to the nose, dark eye patches and ears
     Qh = to_head(P)
     hw = np.clip(r['head'] + r['jaw'], 0, 1)[:, None]
-    muzzle = smoothstep(0.17, 0.28, Qh[:, 2])[:, None]
-    headc = golden * 1.05 * (1 - muzzle) + (tawny * 0.75 + brown * 0.25) * muzzle
-    cheek = (smoothstep(0.05, 0.1, np.abs(Qh[:, 0])) * (1 - smoothstep(0.0, 0.05, Qh[:, 1])))[:, None]
+    muzzle = smoothstep(B.MUZZLE_Z0 - 0.02, B.MUZZLE_Z0 + 0.1, Qh[:, 2])[:, None]
+    tip = smoothstep(B.NOSE_TIP_Z - 0.1, B.NOSE_TIP_Z - 0.03, Qh[:, 2])[:, None]
+    muzc = (tawny * 0.7 + brown * 0.3) * (1 - tip) + (brown * 0.7 + dark * 0.3) * tip
+    headc = golden * 1.02 * (1 - muzzle) + muzc * muzzle
+    cheek = (smoothstep(0.05, 0.1, np.abs(Qh[:, 0])) * (1 - smoothstep(0.0, 0.05, Qh[:, 1])) * (1 - smoothstep(0.15, 0.2, Qh[:, 2])))[:, None]
     headc = headc * (1 - cheek * 0.5) + straw * cheek * 0.5
-    eyes = (1 - smoothstep(0.02, 0.05, np.min([np.linalg.norm(Qh - np.array([0.061 * s, 0.047, 0.192]), axis=1) for s in (1, -1)], axis=0)))[:, None]
-    headc = headc * (1 - 0.45 * eyes)
-    earc = brown * 0.8 + tawny * 0.2
+    ed = eye_dist(P)[:, None]
+    eyes = 1 - smoothstep(0.018, 0.045, ed)
+    headc = headc * (1 - 0.35 * eyes) + brown * 0.35 * eyes
+    # the lower jaw and chin: dusky, the throat ruff paler
+    Qj = to_jaw(P)
+    chin = (r['jaw'] * smoothstep(0.08, 0.16, Qj[:, 2]))[:, None]
+    headc = headc * (1 - 0.6 * chin) + (brown * 0.7 + tawny * 0.3) * 0.6 * chin
+    earc = golden * 0.55 + tawny * 0.45
     headc = headc * (1 - r['ear'][:, None]) + earc * r['ear'][:, None]
     C = C * (1 - hw) + headc * hw
     # large-scale variation: sun-bleached patches, darker saddle
-    C = C * (0.93 + 0.14 * noise[:, None])
+    C = C * (0.9 + 0.2 * noise[:, None])
+    if noise2 is not None:
+        # dusty / matted patches: terra-rossa dust on the lower body and legs, darker matted clumps elsewhere
+        low = (1 - smoothstep(0.35, 0.75, y))[:, None]
+        dust = smoothstep(0.52, 0.72, noise2)[:, None] * (0.35 + 0.65 * low) * (1 - hw)
+        dust_c = srgb_to_lin([0.55, 0.38, 0.27])
+        C = C * (1 - 0.5 * dust) + dust_c * 0.5 * dust
+        matted = smoothstep(0.62, 0.8, 1 - noise2)[:, None] * (1 - hw) * 0.4
+        C = C * (1 - 0.35 * matted)
     return C

@@ -1532,9 +1532,10 @@ function buildLamb(seed: number): KindAssets {
     },
   }, gs, 0.016);
   const HX = rig.headXf;
-  const nostril = (sx: number): Part => ({ f: sdEllR([0.01 * sx, -0.013, 0.143], [0.004, 0.003, 0.007], 0.2, 0.5 * sx, 0.5 * sx), k: 0.004, sub: true });
+  // nostrils: oblique, comma-shaped slits on the front-sides of the hairless nose pad
+  const nostril = (sx: number): Part => ({ f: sdEllR([0.0105 * sx, -0.0115, 0.1445], [0.0026, 0.0062, 0.0075], 0.15, 0.55 * sx, 0.72 * sx), k: 0.003, sub: true });
   const headParts: Part[] = [
-      // big round cranium, short muzzle
+      // rounded lamb cranium, short muzzle
       { f: sdEll([0, 0.005, 0.03], [0.056, 0.056, 0.06]), k: 0, w: rigid(B_HEAD) },
       { f: sdRC([0, 0.012, 0.06], [0, -0.005, 0.125], 0.038, 0.024), k: 0.03, w: rigid(B_HEAD) },
       { f: sdEll([0.028, -0.02, 0.06], [0.025, 0.03, 0.04]), k: 0.02, w: rigid(B_HEAD) },
@@ -1547,6 +1548,8 @@ function buildLamb(seed: number): KindAssets {
       hairNeckPart(HX, [0, 0.39, 0.185], [0, 0.49, 0.258], 0.062, 0.042, neckA, neckP, 0.035),
       nostril(1),
       nostril(-1),
+      // philtrum: the groove from the nose pad down the split upper lip
+      { f: sdEll([0, -0.026, 0.1515], [0.0017, 0.011, 0.0045]), k: 0.002, sub: true },
       { f: sdEll([0, -0.0405, 0.12], [0.022, 0.002, 0.034]), k: 0.003, sub: true },
   ];
   addSdfPart(gb, {
@@ -1560,27 +1563,48 @@ function buildLamb(seed: number): KindAssets {
       o.tint = 1;
       o.rough = 0.85;
       o.streak = 0.55;
-      const nose = smoothstep(0.142, 0.153, lz) * smoothstep(-0.03, -0.021, ly) * (1 - smoothstep(0.012, 0.02, Math.abs(lx)));
-      const pink = lin(0xa98983);
+      const nose = smoothstep(0.137, 0.149, lz) * smoothstep(-0.033, -0.022, ly) * (1 - smoothstep(0.014, 0.021, Math.abs(lx)));
+      const pink = lin(0x9d7f7a);
       // pink skin shows through the fine white hair around the eyes, nose and lips
       const eyeD = Math.hypot(Math.abs(lx) - 0.043, ly - 0.012, lz - 0.068);
       const blush = Math.max(nose, 0.35 * (1 - smoothstep(0.014, 0.024, eyeD)), 0.3 * smoothstep(0.1, 0.135, lz) * (1 - smoothstep(-0.04, -0.025, ly)));
       o.r = pink[0]; o.g = pink[1]; o.b = pink[2];
       o.tint = 1 - blush;
-      o.rough = lerp(0.85, 0.45, nose);
-      o.streak = 0.55 * (1 - nose);
+      o.rough = lerp(0.85, 0.42, nose);
+      o.streak = 0.8 * (1 - nose);
+      // nostrils and the philtrum: dark, moist
+      const nd = Math.hypot(Math.abs(lx) - 0.0105, (ly + 0.0115) * 0.7, (lz - 0.1445) * 0.8);
+      const nostrilK = (1 - smoothstep(0.004, 0.0075, nd)) * smoothstep(0.13, 0.14, lz);
+      const phil = (1 - smoothstep(0.0012, 0.003, Math.abs(lx))) * smoothstep(-0.018, -0.024, ly) * smoothstep(0.14, 0.148, lz);
+      const dk = Math.max(nostrilK, phil * 0.7);
+      if (dk > 0) {
+        const d = lin(0x3a2624);
+        o.r = lerp(o.r, d[0], dk); o.g = lerp(o.g, d[1], dk); o.b = lerp(o.b, d[2], dk);
+        o.tint *= 1 - dk;
+        o.rough = lerp(o.rough, 0.3, dk);
+      }
       const mm = mouthMask(ly, lz, -0.0405, 0.08, 0.155);
       if (mm > 0) {
         o.r = lerp(o.r, MOUTH[0], mm); o.g = lerp(o.g, MOUTH[1], mm); o.b = lerp(o.b, MOUTH[2], mm);
         o.tint *= 1 - mm;
       }
-      // a little woolly tuft on the poll
-      const crown = smoothstep(0.035, 0.056, ly) * (1 - smoothstep(0.03, 0.065, lz)) * smoothstep(-0.04, -0.01, lz);
-      o.wool = crown * 0.9;
-      o.fur = 0.01 * crown;
+      // tight woolly curls on the poll and down the forehead (a lamb's first fleece), fine hair on the face
+      const crown = smoothstep(0.018, 0.05, ly) * (1 - smoothstep(0.045, 0.09, lz)) * smoothstep(-0.05, -0.015, lz) * (1 - smoothstep(0.03, 0.052, Math.abs(lx)) * 0.6);
+      o.wool = crown * 0.95;
+      // fine short hair everywhere on the face except the bare nose pad: a velvety fuzz on the silhouette
+      // (skipped on the phone tier and far LODs to keep the shell budget)
+      o.fur = Math.max(0.012 * crown, GD < 1.5 ? 0.0035 * (1 - nose) * (1 - mm) : 0);
+      // not a uniform white: creamy / greyish variation, warmer on the muzzle
+      const fv = vnoise3(lx * 60 + 3, ly * 60, lz * 60, 2);
+      const cream = lin(0xe8dcc8);
+      const k = 0.35 * smoothstep(0.35, 0.8, fv) + 0.25 * smoothstep(0.09, 0.14, lz);
+      if (o.tint > 0.5) {
+        o.r = lerp(o.r, cream[0], k); o.g = lerp(o.g, cream[1], k); o.b = lerp(o.b, cream[2], k);
+        o.tint *= 1 - 0.35 * k;
+      }
     },
   }, gs, 0.0068);
-  addEyes(gb, { c: [0.015, 0.012, 0.07], r: 0.0135, dir: [0.8, 0.2, 0.55], iris: 0x3b2716, irisSize: 0.55, pupil: [0.26, 0.12], protrude: 0.5, sdf: partsSDF(headParts), lid: 0.3 }, HX);
+  addEyes(gb, { c: [0.015, 0.012, 0.07], r: 0.0118, dir: [0.8, 0.2, 0.55], iris: 0x5c3f1f, irisSize: 0.62, pupil: [0.32, 0.1], protrude: 0.36, sdf: partsSDF(headParts), lid: 0.7 }, HX);
   const earIn = lin(0xd6a79c);
   for (const sx of [1, -1]) {
     addEar(

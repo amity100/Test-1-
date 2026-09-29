@@ -172,6 +172,7 @@ export function masonryMaterial(world: TextureSet, opts: { scale: number; displa
     s.uniforms.tMasN = { value: opts.dry ? world.wallN : world.masonryN };
     s.uniforms.tPl = { value: world.soil };
     s.uniforms.tRender = { value: opts.render ?? world.soil };
+    s.uniforms.tLime = { value: world.rock };
     s.vertexShader = s.vertexShader
       .replace('#include <common>', `#include <common>
 uniform sampler2D tMas;
@@ -192,7 +193,7 @@ vMWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
 vMWNormal = normalize(mat3(modelMatrix) * objectNormal);`);
     s.fragmentShader = s.fragmentShader
       .replace('#include <common>', `#include <common>
-uniform sampler2D tMas; uniform sampler2D tMasN; uniform sampler2D tPl; uniform sampler2D tRender;
+uniform sampler2D tMas; uniform sampler2D tMasN; uniform sampler2D tPl; uniform sampler2D tRender; uniform sampler2D tLime;
 varying vec3 vMWPos; varying vec3 vMWNormal;
 vec3 masWN; float masAO; float masRender;
 float mN(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
@@ -208,6 +209,9 @@ float mHash(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x
   vec4 nx = texture2D(tMasN, p.zy), ny = texture2D(tMasN, p.xz), nz = texture2D(tMasN, p.xy);
   vec3 c = ax.rgb * bw.x + ay.rgb * bw.y + az.rgb * bw.z;
   float hgt = ax.a * bw.x + ay.a * bw.y + az.a * bw.z;
+  vec3 lp = vMWPos / 1.7;
+  vec3 lime = texture2D(tLime, lp.zy).rgb * bw.x + texture2D(tLime, lp.xz).rgb * bw.y + texture2D(tLime, lp.xy).rgb * bw.z;
+  c *= mix(vec3(1.0), lime * 1.25, 0.55 * smoothstep(0.3, 0.6, hgt));
   masAO = nx.a * bw.x + ny.a * bw.y + nz.a * bw.z;
   // large-scale colour variation (repairs, sun bleaching), soil splash at the foot of the walls
   vec3 cp = floor(vMWPos * vec3(0.35, 0.5, 0.35));
@@ -357,16 +361,16 @@ export function createPalaceMaterials(tex: PalaceTextures, world: TextureSet, ti
   const clayDark = interiorize(std({ map: tex.clay, normalMap: tex.clayN, roughness: 0.7, color: 0x8a6a58 }), { key: 'clayd' });
   const fleece = interiorize(std({ map: tex.fleece, normalMap: tex.fleeceN, roughness: 1, color: 0xf4ece0, normalScale: new THREE.Vector2(1.4, 1.4) }), { key: 'fleece' });
   const leather = interiorize(std({ map: world.leather, normalMap: world.leatherN, roughness: 0.62, color: 0xa47c5c }), { key: 'leather' });
-  const bronze = interiorize(std({ color: 0xa27a48, metalness: 1, roughness: 0.38 }), { key: 'bronze' });
-  const iron = interiorize(std({ color: 0x77726c, metalness: 1, roughness: 0.46 }), { key: 'iron' });
+  const bronze = interiorize(std({ color: 0xa27a48, metalness: 0.75, roughness: 0.36 }), { key: 'bronze' });
+  const iron = interiorize(std({ color: 0x8a847c, metalness: 0.55, roughness: 0.42 }), { key: 'iron' });
   const bread = interiorize(std({ map: tex.clay, color: 0xe7b879, roughness: 0.9, normalMap: tex.floorN, normalScale: new THREE.Vector2(0.4, 0.4) }), { key: 'bread' });
   const olive = interiorize(std({ color: 0x2c2a18, roughness: 0.32 }), { key: 'olive' });
   const coal = std({ color: 0x1a1612, roughness: 0.95, emissive: new THREE.Color(1.0, 0.32, 0.08), emissiveIntensity: 2.2 });
   const textile = [0, 1, 2, 3].map((c) => interiorize(textileMaterial(tex, c, tier), { key: 'tex' + c + tier }));
   const disp = tier === 'high' ? 0.14 : tier === 'medium' ? 0.1 : 0;
-  const masonry = masonryMaterial(world, { scale: 4.2, displace: disp * 1.3, key: 'fort' + tier, plaster: 0.25, tint: 0xd9d0c2, dry: true });
+  const masonry = masonryMaterial(world, { scale: 5.6, displace: disp * 1.5, key: 'fort' + tier, plaster: 0.25, tint: 0xc9c0b2, dry: true });
   const hallShell = masonryMaterial(world, { scale: 3.6, displace: disp * 0.6, key: 'hall' + tier, plaster: 0.3, tint: 0xe6dfd4, render: tex.plaster, renderCover: 0.62 });
-  const masonryFlat = masonryMaterial(world, { scale: 4.2, displace: 0, key: 'fortflat', plaster: 0.25, tint: 0xd9d0c2, dry: true });
+  const masonryFlat = masonryMaterial(world, { scale: 5.6, displace: 0, key: 'fortflat', plaster: 0.25, tint: 0xc9c0b2, dry: true });
   const houses = masonryMaterial(world, { scale: 3.2, displace: 0, key: 'houses', plaster: 0.55, tint: 0xece4d8, render: tex.plaster, renderCover: 0.35 });
   const plasterExt = std({ map: tex.plaster, normalMap: tex.plasterN, roughness: 0.95, color: 0xd9c4a2 });
   const roof = roofMaterial(world);
