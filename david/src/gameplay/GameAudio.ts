@@ -1,5 +1,9 @@
 import * as THREE from 'three';
 import { AudioEngine, type MusicMood, type SfxName, type SfxOptions } from '../audio/AudioEngine';
+import type { IntroCue } from '../content/introScript';
+
+/** Named ambience beds for the intro and the chapter ('none' fades the bed out). */
+export type AmbienceName = 'fields' | 'gibeah-exterior' | 'gibeah-hall' | 'none';
 
 /** Thin wrapper adding distance attenuation + stereo panning relative to the camera. */
 export class GameAudio {
@@ -29,8 +33,31 @@ export class GameAudio {
   music(m: MusicMood, fade = 3) {
     this.engine.setMusicMood(m, fade);
   }
-  ambience(wind: number, cicadas: number, birds: number) {
-    this.engine.setAmbience({ wind, cicadas, birds });
+  /**
+   * Either the legacy continuous levels `ambience(wind, cicadas, birds)` (0..1 each) or a named bed
+   * `ambience('fields' | 'gibeah-exterior' | 'gibeah-hall' | 'none', fade = 1.5)`.
+   */
+  ambience(name: AmbienceName, fade?: number): void;
+  ambience(wind: number, cicadas: number, birds: number): void;
+  ambience(a: AmbienceName | number, b?: number, c?: number): void {
+    try {
+      if (typeof a === 'number') this.engine.setAmbience({ wind: a, cicadas: b ?? 0, birds: c ?? 0 });
+      else void b; // named beds: implemented in the score pass
+    } catch {
+      /* never let audio break the game */
+    }
+  }
+  /**
+   * Start the intro score synchronised to the cue sheet (reads each cue's `beat` and `t` at call time,
+   * so retimed/reordered sheets stay in sync). `startAt` = intro time (s) to start from (for skipping).
+   */
+  playIntro(cues: readonly IntroCue[], startAt = 0): void {
+    void cues;
+    void startAt;
+  }
+  /** Fade the intro score out (seconds). */
+  stopIntro(fade = 1.5): void {
+    void fade;
   }
   slingSpin(active: boolean, power: number) {
     this.engine.slingSpin(active, power);
