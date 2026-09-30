@@ -113,7 +113,8 @@ export async function dressSamuel(human: HumanModel, opts: FilmDressOptions): Pr
   const kut = fittedTunic(fit, { tex: t.weave_medium, tile: 0.12, dye: 0xcdbf9f, hem: 0.95, sleeve: 1.85, neck: 'slit', ease: 0.008, flare: 0.12, folds: 0.8, seed: 5, name: 'kuttonet', fray: 0.15, dust: 0.7, roughness: 0.92, sheen: 0.5 });
   // (2) the me'il: dark undyed wool, heavy, ankle length, four corners (side openings), woven border near the hem
   const DARK = 0x655645;
-  const half = 0.2;
+  // side openings of the wrap: narrow (a wide slit showed the light tunic as a stripe down both sides)
+  const half = 0.11;
   const meil = fittedTunic(fit, {
     tex: t.weave_coarse, tile: 0.1, dye: DARK, hem: 0.92, sleeve: 0, sleeveless: true, neck: 'round', offset: 0.014, ease: 0.016, flare: 0.2, folds: 2.2,
     seed: 17, name: 'meil', sideSlit: { top: hipY + 0.02, half }, hide: false, inner: [kut.restPos[0], kut.restPos[1]], fray: 0.25, sheen: 0.55, roughness: 0.95, dust: 0.85,
@@ -134,7 +135,7 @@ export async function dressSamuel(human: HumanModel, opts: FilmDressOptions): Pr
   // tearable corner: back-right (index 3: th = -PI/2 - half; the cloth extends toward the back, th decreasing)
   const skirtMesh = meil.meshes[1] as THREE.SkinnedMesh;
   const freeMat = clothMaterial({ tier, tex: t.weave_coarse, tile: 0.1, dye: DARK, roughness: 0.95, sheen: 0.55, hem: [0.85, 0.16, 0.015, 0.25], edgeMask: [1, 0], transmit: 0.3, bands: [{ from: 0.05, to: 0.075, motif: 0, pal: 0 }, { from: 0.08, to: 0.088, motif: 0, pal: 1 }], palette: [0x4e4236, 0x8a7a60, 0x3b3128, 0x6f604c] });
-  const tear = new MeilTear(human, skirtMesh, meil.skirt.tube, { mesh: skirtMesh }, -Math.PI / 2 - half, -1, meil.hemY, { freeMaterial: freeMat, width: 0.3 * S, height: 0.46 * S, seed: 27, threadColor: 0x8b7b62 });
+  const tear = new MeilTear(human, skirtMesh, meil.skirt.tube, { mesh: skirtMesh }, -Math.PI / 2 - half, -1, meil.hemY, { freeMaterial: freeMat, width: 0.3 * S, height: 0.5 * S, seed: 27, threadColor: 0x8b7b62 });
   outfit.add(tear.flapSkinned);
   const sock = (human.sockets as Record<string, THREE.Object3D>)['wardrobeTzitzit3'];
   if (sock) {
@@ -183,8 +184,9 @@ export async function dressSaulGilgal(human: HumanModel, opts: FilmDressOptions)
   hangFromBelt(fit, coat, sword, { th: 1.45, out: 0.045, drop: 0.012, forward: 0.42, bone: 'pelvis.L', name: 'wardrobeSword' });
   outfit.props.sword = sword;
   // nezer: thin hammered gold band on the bare head, one small lozenge at the front
-  const gold = solidMaterial({ tier, tex: t.metal, color: 0xd6a743, roughness: 0.3, metalness: 1, repeat: [2, 2], metalWear: { patina: 0x7a5424, amount: 0.2, edgeBright: 0.9 } });
-  const ring = headRing(fit, { height: 0.018, thickness: 0.0022, material: gold, extra: 0.01, tilt: 0.008 });
+  const gold = solidMaterial({ tier, tex: t.metal, color: 0xd6a743, roughness: 0.38, metalness: 1, repeat: [2, 2], normal: 1.3, metalWear: { patina: 0x7a5424, amount: 0.22, edgeBright: 0.6 } });
+  // (lift: the band sits on the forehead ABOVE the brow — visual-bible 3.2; the groom's headband matches, FilmActor)
+  const ring = headRing(fit, { height: 0.018, thickness: 0.0022, material: gold, extra: 0.01, tilt: 0.008, lift: 0.013 });
   {
     const lz = new THREE.CylinderGeometry(0.013, 0.013, 0.003, 4, 1);
     lz.rotateX(Math.PI / 2);

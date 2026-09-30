@@ -116,6 +116,8 @@ export class CrowdAgent {
   lean = 0.2;
   headYaw = 0;
   visible = true;
+  /** 0..1 how hard the feet strike (walking = 1): drives CrowdDust footstep puffs */
+  stride = 0;
   cur: Track | null = null;
   prev: Track | null = null;
   fade = 1;

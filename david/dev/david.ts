@@ -12,6 +12,7 @@ import { PostFX } from '../src/fx/PostFX';
 import { shared } from '../src/core/Shared';
 import { SUN } from '../src/world/Layout';
 import { DavidModel, type DavidParts } from '../src/characters/DavidModel';
+import { MocapLibrary, MocapPose, MOCAP_BONES } from '../src/characters/mocap';
 import rockAlbedo from '../src/assets/textures/soil_albedo.jpg';
 import rockNormal from '../src/assets/textures/soil_normal.jpg';
 
@@ -251,6 +252,22 @@ async function main() {
 
 const api = {
   get david() { return david; },
+  /** per-frame pelvis height, contacts and the right arm's angular speed (deg/frame) of a loaded mocap clip */
+  clipInfo(name: string) {
+    const c = MocapLibrary.shared.get(name);
+    if (!c) return null;
+    const a = new MocapPose(), b = new MocapPose();
+    const ua = MOCAP_BONES.indexOf('upperarm01.R') * 4, la = MOCAP_BONES.indexOf('lowerarm01.R') * 4;
+    const rows: [number, number, number, number][] = [];
+    for (let f = 0; f < c.frames; f++) {
+      c.sample(f / c.fps, a);
+      if (f > 0) c.sample((f - 1) / c.fps, b);
+      else b.copy(a);
+      const ang = (o: number) => { const d = Math.abs(a.q[o] * b.q[o] + a.q[o + 1] * b.q[o + 1] + a.q[o + 2] * b.q[o + 2] + a.q[o + 3] * b.q[o + 3]); return 2 * Math.acos(Math.min(1, d)) * 57.3; };
+      rows.push([+(f / c.fps).toFixed(2), +a.hy.toFixed(3), a.contacts, +(ang(ua) + ang(la)).toFixed(1)]);
+    }
+    return { duration: c.duration, rows };
+  },
   async sheet(o: { mode: Mode; view?: string; frames?: number; every?: number; settle?: number; w?: number; h?: number; cols?: number; dist?: number; label?: boolean }) {
     const w = o.w ?? 360, h = o.h ?? 480;
     if (w !== W || h !== H) {

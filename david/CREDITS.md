@@ -293,10 +293,15 @@ project's own generators:
   `.hgt.gz` files, mirrored as release assets of github.com/shalomfr/amshinov-terrain-tiles. Resampled by
   `tools/land/build_dem.py` into `src/assets/land/*.binz` (heights) and `*_lc.webp` (derived landcover: aridity,
   drainage, water, valley depth). The raw tiles are not in the repository.
-- The Ramah gate walls reuse the palace teammate's generated fieldstone texture (`src/assets/palace/fortstone_*.webp`,
+- The Ramah gateway and houses reuse the palace teammate's generated fieldstone texture (`src/assets/palace/fortstone_*.webp`,
   own work, see the palace section). Everything else (terrain / water / cloud shaders, the 3D cloud noise generated at
   load, dust, placeholders) is own code implementing published techniques (exponential height fog, Beer–powder cloud
   lighting with Henyey–Greenstein phase, perlin-worley noise).
+
+- Polish pass (land): the coast tile now covers Ashdod, its dunes and the shore (same SRTM data, `build_dem.py coast`).
+  Ramah's four-room houses and gateway reuse the same fieldstone texture; the trees and scrub of the coast and Ramah
+  sets and the Rachel's-tomb shot reuse the project's own TreeGen models and world textures (in-house, CC0 project
+  content). The Rachel's-tomb monolith (`src/world/Village.ts`) is procedural. No new third-party assets.
 
 ## Skin, eyes and hero close-up level — `src/fx/SSS.ts`, `src/characters/human/{SkinMaterial,EyeModel}.ts`, `tools/human/bake_skin.py --regions`, `dev/skin*`
 - **No third-party assets.** The region maps (`src/assets/human/<preset>/region_1k.webp`) are baked by

@@ -426,19 +426,15 @@ export class Story {
 
   // ============================================================================ intro cinematic
   /**
-   * The opening film (src/gameplay/Intro.ts, cue sheet src/content/introScript.ts): Bethlehem and Gibeah of Saul
-   * intercut. ?intro=short|full forces a cut (default: full on desktop, short on phones and replays); ?introAt=<s>
-   * starts the film at that time (tests). Skip: the skip button, Enter / Esc, or any key / tap twice.
+   * The opening film "הַטּוֹב מִמֶּךָּ" (docs/intro-script.md; player src/gameplay/Intro.ts, shot sheet
+   * src/content/introScript.ts, sets src/film/**). ?introAt=<s> starts the film at that time (tests); ?filmcast=0 /
+   * ?filmcrowd=0 play it with the sets' stand-ins. Skip: the skip button, Enter / Esc, or any key / tap twice.
    */
   /** Resolves true when the film was skipped. */
   private async intro(): Promise<boolean> {
     this.cinematic(true);
     const q = new URLSearchParams(location.search);
-    const cut = q.get('intro');
-    const intro = new Intro(
-      { engine: this.engine, ui: this.ui, input: this.input, audio: this.audio, cam: this.cam, player: this.player, flock: this.flock },
-      { short: cut === 'short' ? true : cut === 'full' ? false : undefined },
-    );
+    const intro = new Intro({ engine: this.engine, ui: this.ui, input: this.input, audio: this.audio, cam: this.cam, player: this.player, flock: this.flock, bear: this.bear });
     intro.startAt = Number(q.get('introAt') ?? 0) || 0;
     (window as unknown as Record<string, unknown>).__intro = intro;
     intro.begin();

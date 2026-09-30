@@ -122,6 +122,11 @@ export function speechJaw(t: number, dur: number, syllables: number, pauses: num
 }
 
 // ================================================================================================ GILGAL
+/** face light per shot [Saul, Samuel] (FilmActor.faceFill: illuminance in the sun's units; the sun is ≈3-7) */
+export const FACE_FILL: Record<GilgalShotName, [number, number]> = {
+  dustWall: [2.2, 0], king: [2.6, 0], spearRaised: [2.4, 0], silence: [2.0, 1.4], faceOff: [1.5, 1.3],
+  tear: [1.1, 1.1], verdict: [1.1, 1.7], saulAlone: [1.9, 0.8], rise: [1.4, 0],
+};
 export interface GilgalCast {
   saul: FilmActor;
   samuel: FilmActor;
@@ -144,6 +149,7 @@ export class GilgalPerformance {
   private readonly tearTarget = new THREE.Vector3();
   private readonly _p = new THREE.Vector3();
   private readonly _f = new THREE.Vector3();
+  private lungeLegs = false;
   /** wind (world m/s) passed to the actors' hair / cloth */
   readonly wind = new THREE.Vector3(1.4, 0, 0.3);
   /** hook for the film's FX: a thread snaps (lint / dust puff) */
@@ -160,6 +166,9 @@ export class GilgalPerformance {
     saul.upright.R.weight = 1;
     saul.ground = ground;
     samuel.ground = ground;
+    // film light on the two faces (the low sun is behind Saul in 7-9): created here, before the set is precompiled
+    saul.enableFaceLight();
+    samuel.enableFaceLight(0xffe2c4);
     samuel.human.rig.faceBias.LeftUpperLidClosed = 0.22; // heavy, tired lids (15:11 he cried all night)
     samuel.human.rig.faceBias.RightUpperLidClosed = 0.22;
     if (samuel.tear) samuel.tear.onSnap = (p) => this.onThreadSnap?.(p);
@@ -215,6 +224,8 @@ export class GilgalPerformance {
     samuel.mocap.lookWeight = 1;
     saul.headingRate = 3;
     samuel.cancelHeading = true;
+    if (this.lungeLegs) saul.mocap.stopLayer('lunge', 0.001);
+    this.lungeLegs = false;
     this.saulFrom.copy(saulAt(shot, 0).pos);
     saul.mocap.timeScale = 1;
     samuel.mocap.timeScale = 1;
@@ -326,6 +337,8 @@ export class GilgalPerformance {
         break;
     }
     if (shot !== 'saulAlone' && shot !== 'rise') saul.mocap.breathe = 1;
+    saul.faceFill = FACE_FILL[shot][0];
+    samuel.faceFill = FACE_FILL[shot][1];
     // ---------------------------------------------------------------- SAMUEL
     samuel.mocap.timeScale = ts;
     if (shot === 'tear') {
@@ -386,7 +399,7 @@ export class GilgalPerformance {
     if (tear) tear.cornerWorld(this.corner);
     else samuel.root.getWorldPosition(this.corner).setY(this.corner.y + 0.5);
     // ---- placement: from his mark to a lunge distance behind the corner (tracks the corner as Samuel walks)
-    const lungeReach = 0.74; // root -> hand, horizontally, at full lunge (2.02 m man, arm straight down-forward)
+    const lungeReach = 0.56; // root -> grip, horizontally, at full lunge (2.02 m man, arm down-forward; measured)
     const tx = this.corner.x - fwd.x * lungeReach - right.x * 0.24;
     const tz = this.corner.z - fwd.z * lungeReach - right.z * 0.24;
     const u = ss(B.go, B.grab, at) * 0.35 + 0.65 * THREE.MathUtils.clamp((at - B.go) / (B.grab - B.go), 0, 1) ** 1.15;
@@ -407,10 +420,16 @@ export class GilgalPerformance {
     }
     if (cur === 'walk') saul.mocap.matchSpeed('walk', THREE.MathUtils.clamp(Math.hypot(saul.velocity.x, saul.velocity.z), 0.8, 1.9));
     if (at >= B.lunge + 0.15 && cur !== 'idle_king') saul.mocap.play('idle_king', { fade: 0.35, time: 0.5 });
+    // the legs: the walk frozen in a long stride, RIGHT foot forward (walk t = 0.74 s: R +0.28 m, L -0.33 m) —
+    // with the pelvis drop below, a fencer's lunge onto the reaching side
+    if (at >= B.lunge - 0.1 && !this.lungeLegs) {
+      saul.mocap.playLayer('lunge', 'walk', { mask: 'legs', time: 0.74, speed: 0, fade: 0.3 });
+      this.lungeLegs = true;
+    }
     // ---- body: the lunge low, then partly up again as he pulls
     const lunge = ss(B.lunge, B.grab + 0.02, at) * (1 - 0.4 * ss(B.grab + 0.3, B.tearTo + 0.2, at));
-    saul.body.drop = 0.27 * lunge;
-    saul.body.lean = 0.7 * lunge - 0.08 * ss(B.tearTo, B.tearTo + 0.3, at);
+    saul.body.drop = 0.31 * lunge;
+    saul.body.lean = 0.78 * lunge - 0.08 * ss(B.tearTo, B.tearTo + 0.3, at);
     saul.body.twist = 0.16 * lunge;
     saul.headingRate = 12;
     // ---- arms: the right hand to the corner (IK), the helmet stays under the left arm
@@ -504,9 +523,12 @@ export interface RamahMark {
 
 export class RamahPerformance {
   private faces: FaceDriver[] = [];
+  private samFace: FaceDriver;
   readonly wind = new THREE.Vector3(0.8, 0, -0.2);
   constructor(readonly samuel: FilmActor, readonly elders: FilmActor[], samuelMark: RamahMark, elderMarks: RamahMark[], ground: (x: number, z: number) => number = () => 0) {
     samuel.ground = ground;
+    samuel.enableFaceLight(0xffe2c4);
+    samuel.faceFill = 1.0;
     samuel.place(samuelMark.pos, samuelMark.yaw);
     samuel.mocap.play('idle_king', { fade: 0 });
     samuel.human.rig.faceBias.LeftUpperLidClosed = 0.18;
@@ -516,16 +538,22 @@ export class RamahPerformance {
       e.ground = ground;
       const mk = elderMarks[i % elderMarks.length];
       e.place(mk.pos, mk.yaw);
-      const clip = clips[i % clips.length];
+      // seated marks carry the seat top as pos.y: sit on it (the pelvis drops, the feet go forward)
+      if (mk.seated) e.sit(mk.pos.y - ground(mk.pos.x, mk.pos.z));
+      const clip = mk.seated ? (i % 3 === 0 ? 'talk_gesture' : 'idle_old') : clips[i % clips.length];
       e.mocap.play(clip, { fade: 0, time: (i * 0.73) % 2, mirror: i % 2 === 1 });
       if (e.props.staff) {
         e.holdProp('staff', i % 2 ? 'R' : 'L');
       }
       e.mocap.lookAt = samuel.eyesWorld(new THREE.Vector3());
+      e.headingSnap = true;
       const f = new FaceDriver(e, 2);
       f.set(i % 3 === 0 ? { determined: 0.4 } : i % 3 === 1 ? { sad: 0.25, fear: 0.1 } : { anger: 0.2, determined: 0.2 });
       this.faces.push(f);
     });
+    this.samFace = new FaceDriver(samuel, 2);
+    // 8:6 "וַיֵּרַע הַדָּבָר בְּעֵינֵי שְׁמוּאֵל" — displeased, grave; lids heavy
+    this.samFace.set({ sad: 0.35, determined: 0.3 });
   }
 
   update(t: number, dt: number, camera?: THREE.Camera, viewportH?: number) {
@@ -536,8 +564,7 @@ export class RamahPerformance {
       f.update(dt);
       e.update(dt, camera, viewportH, this.wind);
     });
-    this.samuel.human.rig.setExpressionWeight('sad', 0.35);
-    this.samuel.human.rig.setExpressionWeight('determined', 0.3);
+    this.samFace.update(dt);
     const lead = this.elders[0];
     if (lead) this.samuel.mocap.lookAt = lead.eyesWorld(new THREE.Vector3());
     this.samuel.update(dt, camera, viewportH, this.wind);

@@ -64,13 +64,22 @@ interface Thread {
   breakLen: number;
   dA: THREE.Vector3;
   dB: THREE.Vector3;
+  /** small fixed offsets of the two ends (several threads per edge vertex spread along the weave) */
+  oA: THREE.Vector3;
+  oB: THREE.Vector3;
+  /** ribbon half-width (m) */
+  w: number;
 }
+const _s = new THREE.Vector3();
+const _d = new THREE.Vector3();
 
 export class MeilTear {
   /** the free piece (world space, add to the scene; hidden until the tear starts) */
   readonly free: THREE.Mesh;
-  /** threads / frayed fibres (world space) */
-  readonly threads: THREE.LineSegments;
+  /** threads / frayed fibres (world space): camera-facing ribbons ~1-1.5 mm wide (1 px lines vanished at 1080p) */
+  readonly threads: THREE.Mesh;
+  /** where the camera is (world): the thread ribbons face it — FilmActor.update sets it */
+  readonly viewer = new THREE.Vector3(0, 1.6, 10);
   /** skinned flap (part of the robe while intact) */
   readonly flapSkinned: THREE.SkinnedMesh;
   /** 0 intact .. 1 torn through */
@@ -97,6 +106,7 @@ export class MeilTear {
   private tzitzitAnchor = new THREE.Object3D();
   private posAttr: THREE.BufferAttribute;
   private lineAttr: THREE.BufferAttribute;
+  private readonly segs: Float32Array;
 
   /**
    * @param skirtMesh the me'il skirt SkinnedMesh (makeSkinned; vertex order = tube order)
@@ -200,7 +210,7 @@ export class MeilTear {
         maxArc = Math.max(maxArc, arc);
       }
       // the grab point: on the slit edge near the top of the piece (the highest point Saul's hand can reach)
-      const s = Math.abs(arc - 0.04) + Math.abs(P[v * 3 + 1] - hemY - (height - 0.07));
+      const s = Math.abs(arc - 0.04) + Math.abs(P[v * 3 + 1] - hemY - (height - 0.035));
       if (s < bestScore) {
         bestScore = s;
         bestCorner = k;
@@ -212,8 +222,15 @@ export class MeilTear {
         // the tear front sweeps the line from the edge (0.15) to the inside (0.95), a little ragged
         const f = this.edgeTau[k] / Math.max(1e-3, maxArc);
         this.edgeTau[k] = 0.15 + 0.8 * f + (R() - 0.5) * 0.08;
-        this.threadList.push({ edge: k, skirtV: list[k], state: 0, breakLen: 0.01 + 0.06 * R() ** 2, dA: new THREE.Vector3(), dB: new THREE.Vector3() });
-        if (R() < 0.5) this.threadList.push({ edge: k, skirtV: list[k], state: 0, breakLen: 0.015 + 0.05 * R(), dA: new THREE.Vector3(), dB: new THREE.Vector3() });
+        // 2-4 threads per edge vertex, spread a few mm along the weave; most snap early (1-4 cm), a few hold long
+        const nT = 2 + Math.floor(R() * 3);
+        for (let q = 0; q < nT; q++) {
+          const off = () => new THREE.Vector3((R() - 0.5) * 0.012, (R() - 0.5) * 0.012, (R() - 0.5) * 0.012);
+          this.threadList.push({
+            edge: k, skirtV: list[k], state: 0, breakLen: 0.008 + 0.035 * R() ** 2 + (R() < 0.12 ? 0.05 * R() : 0),
+            dA: new THREE.Vector3(), dB: new THREE.Vector3(), oA: off(), oB: off(), w: 0.0005 + 0.0004 * R(),
+          });
+        }
       }
       const v = list[k];
       const cx = P[this.vIdx[this.cornerP] * 3], cy = P[this.vIdx[this.cornerP] * 3 + 1], cz = P[this.vIdx[this.cornerP] * 3 + 2];
@@ -240,12 +257,22 @@ export class MeilTear {
     this.free.castShadow = true;
     this.free.receiveShadow = true;
     this.free.frustumCulled = false;
-    // threads
+    // threads: 2 segments per thread (stretched: edge -> skirt; snapped: two frayed ends), each a camera-facing quad
+    const nT = this.threadList.length;
+    this.segs = new Float32Array(nT * 4 * 3);
     const lg = new THREE.BufferGeometry();
-    this.lineAttr = new THREE.BufferAttribute(new Float32Array(this.threadList.length * 4 * 3), 3);
+    this.lineAttr = new THREE.BufferAttribute(new Float32Array(nT * 2 * 4 * 3), 3);
     this.lineAttr.setUsage(THREE.DynamicDrawUsage);
     lg.setAttribute('position', this.lineAttr);
-    this.threads = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: o.threadColor ?? 0x8a7a64, transparent: true, opacity: 0.9 }));
+    const ti: number[] = [];
+    for (let q = 0; q < nT * 2; q++) {
+      const b = q * 4;
+      ti.push(b, b + 1, b + 2, b + 1, b + 3, b + 2);
+    }
+    lg.setIndex(ti);
+    // undyed wool fibres, a shade lighter than the cloth (they catch the backlight)
+    const tc = new THREE.Color(o.threadColor ?? 0x8a7a64).multiplyScalar(1.35);
+    this.threads = new THREE.Mesh(lg, new THREE.MeshBasicMaterial({ color: tc, transparent: true, opacity: 0.92, side: THREE.DoubleSide, depthWrite: false }));
     this.threads.name = 'meilThreads';
     this.threads.visible = false;
     this.threads.frustumCulled = false;
@@ -273,7 +300,7 @@ export class MeilTear {
       if (this.grabW[k] <= 0) continue;
       _v.fromArray(this.p, k * 3).applyMatrix4(_m);
       // pull the offsets toward the fist (the cloth is bunched in the hand)
-      _v.multiplyScalar(0.35);
+      _v.multiplyScalar(0.2);
       _v.toArray(this.grabOff, k * 3);
     }
     this.handOn = 0;
@@ -391,21 +418,23 @@ export class MeilTear {
       }
     }
     this.writeMesh();
-    // threads
-    const la = this.lineAttr.array as Float32Array;
+    // threads (segment endpoints into this.segs, then ribbons)
+    const la = this.segs;
     let o = 0;
     for (const t of this.threadList) {
       const tau = this.edgeTau[t.edge];
       _a.fromArray(p, t.edge * 3);
       if (t.state === 0 && this.progress >= tau) t.state = 1;
+      _a.add(t.oA);
       if (t.state === 1) {
-        skinnedWorld(this.skirtRef.mesh, t.skirtV, _b);
+        skinnedWorld(this.skirtRef.mesh, t.skirtV, _b).add(t.oB);
         const d = _a.distanceTo(_b);
         if (d > t.breakLen) {
           t.state = 2;
           const dir = _b.clone().sub(_a).normalize();
-          t.dA.copy(dir).multiplyScalar(0.006 + 0.012 * Math.random()).add(new THREE.Vector3(0, -0.004, 0));
-          t.dB.copy(dir).multiplyScalar(-(0.006 + 0.012 * Math.random())).add(new THREE.Vector3(0, -0.006, 0));
+          // frayed ends 1-3 cm, drooping
+          t.dA.copy(dir).multiplyScalar(0.01 + 0.02 * Math.random()).add(_v.set(0, -0.008, 0));
+          t.dB.copy(dir).multiplyScalar(-(0.01 + 0.02 * Math.random())).add(_v.set(0, -0.01, 0));
           this.onSnap?.(_a.clone().lerp(_b, 0.5));
         } else {
           _a.toArray(la, o);
@@ -417,7 +446,7 @@ export class MeilTear {
         }
       }
       if (t.state === 2) {
-        skinnedWorld(this.skirtRef.mesh, t.skirtV, _b);
+        skinnedWorld(this.skirtRef.mesh, t.skirtV, _b).add(t.oB);
         _a.toArray(la, o);
         _v.copy(_a).add(t.dA).toArray(la, o + 3);
         _b.toArray(la, o + 6);
@@ -431,11 +460,34 @@ export class MeilTear {
       }
       o += 12;
     }
-    this.lineAttr.needsUpdate = true;
+    this.writeThreads();
     if (this.tzitzitSockets.length) {
       this.tzitzitAnchor.position.fromArray(p, this.cornerP * 3);
       this.tzitzitAnchor.updateMatrixWorld(true);
     }
+  }
+
+  /** segments -> camera-facing quads */
+  private writeThreads() {
+    const S = this.segs, out = this.lineAttr.array as Float32Array;
+    const n = this.threadList.length * 2;
+    for (let q = 0; q < n; q++) {
+      const i = q * 6, o = q * 12;
+      _a.fromArray(S, i);
+      _b.fromArray(S, i + 3);
+      const w = this.threadList[q >> 1].w * ((q & 1) ? 0.8 : 1);
+      _d.copy(_b).sub(_a);
+      _s.copy(_a).add(_b).multiplyScalar(0.5).sub(this.viewer).cross(_d);
+      const l = _s.length();
+      if (l < 1e-9) _s.set(0, 0, 0);
+      else _s.multiplyScalar(w / l);
+      out[o] = _a.x - _s.x; out[o + 1] = _a.y - _s.y; out[o + 2] = _a.z - _s.z;
+      out[o + 3] = _a.x + _s.x; out[o + 4] = _a.y + _s.y; out[o + 5] = _a.z + _s.z;
+      out[o + 6] = _b.x - _s.x; out[o + 7] = _b.y - _s.y; out[o + 8] = _b.z - _s.z;
+      out[o + 9] = _b.x + _s.x; out[o + 10] = _b.y + _s.y; out[o + 11] = _b.z + _s.z;
+    }
+    this.lineAttr.needsUpdate = true;
+    this.threads.geometry.computeBoundingSphere();
   }
 
   private writeMesh() {

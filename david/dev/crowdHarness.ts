@@ -65,6 +65,7 @@ async function main() {
     info.frames = army.anim.totalFrames;
     info.lodTris = army.crowd.lodTriangles;
     scene.add(army.group);
+    if (P.get('impAt')) { const c = (army.crowd as unknown as { cfg: { imp: number[]; d: number[] } }).cfg; c.imp[0] = +P.get('impAt')!; c.d = [0, 0, 0]; }
     if (P.get('mask')) for (const a of army.crowd.agents) a.mask = +P.get('mask')!;
     // a stand-in king at the head (the cast teammate's Saul goes here)
     const king = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 1.5, 4, 8), new THREE.MeshStandardMaterial({ color: 0x7a2020, roughness: 0.6 }));
@@ -96,6 +97,7 @@ async function main() {
     info.bakeMs = Math.round(host.anim.bakeMs);
     info.lodTris = host.crowd.lodTriangles;
     scene.add(host.group);
+    if (P.get('impAt')) { const c = (host.crowd as unknown as { cfg: { imp: number[]; d: number[] } }).cfg; c.imp[0] = +P.get('impAt')!; c.d = [0, 0, 0]; }
     update = (dt) => host.update(dt, camera);
     const c = host.center;
     camera.position.set(c.x + 60, 14, c.z + 140);

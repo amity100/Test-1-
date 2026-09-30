@@ -44,6 +44,8 @@ export interface CrowdUniforms {
   uSkin: { value: THREE.Color };
   /** bind heads of the impostor joints (impostorShader IMP_JOINTS) */
   uJB: { value: THREE.Vector3[] };
+  /** impostor debug: 1 = no metal / rough, 2 = flat normal */
+  uImpDbg: { value: number };
   uTunic: { value: THREE.Color[] };
   uCloth: { value: THREE.Color[] };
   uHair: { value: THREE.Color[] };
@@ -71,11 +73,12 @@ export function crowdUniforms(army: 'israel' | 'philistine'): CrowdUniforms {
     uSpearExt: { value: new THREE.Vector2(0.9, 1.5) },
     uSkin: { value: C(0x8a5a40) },
     uJB: { value: Array.from({ length: 11 }, () => new THREE.Vector3()) },
+    uImpDbg: { value: 0 },
     // tunics: light undyed wool x3, beige, grey, dark wool x2, madder-faded
     uTunic: {
       value: isr
         ? [C(0xcdbf9f), C(0xc4b492), C(0xb9a887), C(0xa89a7c), C(0x8f8674), C(0x74644f), C(0x5e5143), C(0x9c7a5a)]
-        : [C(0xddd3bb), C(0xd4c9ae), C(0xcfc3a5), C(0xc8bb9c), C(0xd8ceb6), C(0xbfb294), C(0xd2c6aa), C(0xc6b89a)],
+        : [C(0xd2c8b0), C(0xc8bb9c), C(0xbfb294), C(0xb3a587), C(0xcdc2a8), C(0xa89a7c), C(0xc2b596), C(0x9c8c70)],
     },
     // head-cloths, bedrolls / rolled mantles
     uCloth: { value: [C(0xc9bc9c), C(0xb3a283), C(0x8a7a62), C(0x6a5b48)] },
@@ -241,10 +244,13 @@ void crowdCompute() {
   else if (reg == R_HEADBAND) { col = uAccent[int(h.z * 3.999)]; rough = 0.9; }
   else if (reg == R_HEADCLOTH || reg == R_BEDROLL) { col = uCloth[int(h.z * 3.999)] * (reg == R_BEDROLL ? 0.85 : 1.0); rough = 0.95; }
   else if (reg == R_SPEARSHAFT) { col = cc * (0.85 + 0.3 * h2.x); rough = 0.7; }
-  else if (reg == R_SPEARHEAD || reg == R_DAGGER || reg == R_SWORD) { col = uArmy > 0.5 ? vec3(0.34, 0.33, 0.31) : mix(vec3(0.3, 0.29, 0.28), vec3(0.45, 0.3, 0.17), step(0.6, h2.y)); metal = 0.85; rough = 0.45; }
+  // iron #4b4a48 (Philistine spear heads, 17:7) / field bronze #8c5e33 (visual bible 2)
+  else if (reg == R_SPEARHEAD || reg == R_DAGGER || reg == R_SWORD) { col = uArmy > 0.5 ? vec3(0.07, 0.066, 0.062) * 1.6 : mix(vec3(0.07, 0.066, 0.062) * 1.6, vec3(0.26, 0.11, 0.034) * 1.4, step(0.6, h2.y)); metal = 0.85; rough = 0.5; }
   else if (reg == R_SHIELDARM || reg == R_SHIELDBACK) { col = cc * (0.8 + 0.35 * h2.z); rough = 0.4; } // oiled leather (Rashi 2 Sam 1:21)
-  else if (reg == R_BOSS || reg == R_BOSSBACK) { col = uArmy > 0.5 ? vec3(0.55, 0.37, 0.2) : cc; metal = uArmy > 0.5 ? 1.0 : 0.0; rough = uArmy > 0.5 ? 0.38 : 0.5; }
-  else if (reg == R_HELMET || reg == R_GREAVES) { col = vec3(0.55, 0.36, 0.19) * (0.85 + 0.3 * h2.x); metal = 1.0; rough = 0.36; }
+  else if (reg == R_BOSS || reg == R_BOSSBACK) { col = uArmy > 0.5 ? vec3(0.3, 0.13, 0.04) * (0.9 + 0.3 * h2.x) : cc; metal = uArmy > 0.5 ? 0.9 : 0.0; rough = 0.5; }
+  // bronze helmets (17:5) between polished #b8773c and field #8c5e33; greaves (17:6) field bronze
+  else if (reg == R_HELMET) { col = mix(vec3(0.26, 0.11, 0.034), vec3(0.48, 0.18, 0.045), h2.x) * 1.1; metal = 1.0; rough = 0.38 + 0.12 * h2.y; }
+  else if (reg == R_GREAVES) { col = vec3(0.3, 0.13, 0.04) * (0.9 + 0.3 * h2.x); metal = 0.95; rough = 0.5; }
   else if (reg == R_CROWN) { col = cc * (0.9 + 0.2 * h2.y); rough = 0.9; }
   else if (reg == R_BOW || reg == R_QUIVER) { col = cc; rough = 0.7; }
   // dust of the march: feet, shins, hems
@@ -306,7 +312,7 @@ export function crowdMaterial(u: CrowdUniforms, lite: boolean): THREE.MeshStanda
           }
           if (uArmy > 0.5) {
             // Peleset ribbed corselet above the belt, kilt with a darker tasselled hem below it
-            if (vCwBind.y > uBeltY + 0.03) cwc *= 0.72 + 0.4 * step(0.5, fract(vCwBind.y * 26.0));
+            if (vCwBind.y > uBeltY + 0.03) cwc *= mix(vec3(0.45, 0.36, 0.28), vec3(1.05), step(0.45, fract(vCwBind.y * 26.0)));
             else if (vCwBind.y < uHemY + 0.05) cwc *= 0.6 + 0.4 * step(0.5, fract(atan(vCwBind.x, vCwBind.z) * 9.0));
           }
         } else if (cwr == R_HAIR || cwr == R_BEARD) {

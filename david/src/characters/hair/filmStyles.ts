@@ -54,8 +54,9 @@ export function samuelStyle(): GroomStyle {
     kind: 0,
     reach: 0.66,
     mask: (s) => s.scalpMask(0, (phi) => 0.006 * Math.exp(-(((phi - 40) / 22) ** 2))), // a little receded at the temples (age)
-    strands: { low: 3800, medium: 13000, high: 24000 },
-    locks: 220,
+    // second cast pass: denser and fuller (read stringy / sparse at medium): more, broader strands in bigger locks
+    strands: { low: 4600, medium: 18000, high: 30000 },
+    locks: 240,
     sim: { low: 16, medium: 32, high: 48 },
     length: (f, n, R) => {
       // uncut since birth: very long at the back (to mid-back), long at the sides (over the shoulders), the front
@@ -75,7 +76,7 @@ export function samuelStyle(): GroomStyle {
     lift: 0.12,
     gravity: 16,
     combPull: 10,
-    tousle: 6,
+    tousle: 4,
     // stay clear of the mantle over the shoulders and the back (1-3 cm of wool over the skin)
     volume: (t, R) => 0.004 + (R + 0.004) * ss(0, 0.25, t) + 0.03 * ss(0.35, 0.7, t),
     curlR: [0.004, 0.011],
@@ -83,11 +84,11 @@ export function samuelStyle(): GroomStyle {
     curlStart: 0.3,
     curlNoise: 0.8,
     straightLocks: 0.3,
-    lockR: 0.011,
-    clump: 0.5,
-    frizz: 0.0022, // old, dry, loose hair (פֶּרַע): frizzy
-    flyaway: 0.03,
-    width: 0.0001,
+    lockR: 0.013,
+    clump: 0.62,
+    frizz: 0.0015, // old, dry, loose hair (פֶּרַע): a little frizzy (was 0.0022)
+    flyaway: 0.014, // (was 0.03: too many lone strays read as stringy)
+    width: 0.00015,
     stiffness: 0.22,
     childLen: [0.72, 1.0],
     colors: (R, f, root, tip) => greyWhite(R, f, root, tip, 0.1),
@@ -97,7 +98,7 @@ export function samuelStyle(): GroomStyle {
     kind: 1,
     reach: 0.66,
     mask: (s) => s.beardMask(),
-    strands: { low: 2400, medium: 7000, high: 15000 },
+    strands: { low: 2800, medium: 9000, high: 17000 },
     locks: 200,
     sim: { low: 8, medium: 12, high: 18 },
     length: (f, n, R) => {
@@ -128,7 +129,7 @@ export function samuelStyle(): GroomStyle {
     clump: 0.55,
     frizz: 0.001,
     flyaway: 0.004,
-    width: 0.00016,
+    width: 0.0002,
     stiffness: 0.35,
     childLen: [0.7, 1.0],
     colors: (R, f, root, tip) => {
@@ -144,7 +145,7 @@ export function samuelStyle(): GroomStyle {
     ctrl: { low: 10, medium: 14, high: 20 },
     segs: { low: 14, medium: 24, high: 38 },
     shading: { shift: 0.03, roughness: 0.45, specular: 0.45, backlit: 0.9, scatter: 0.75, aoDirect: 0.5 },
-    capColor: [0.7, 0.68, 0.64],
+    capColor: [0.8, 0.78, 0.73], // the scalp cap matches the white hair (a grey cap showed through)
     capOffset: 0.005,
     capBeard: 0.8,
     widthTier: { low: 2.8, medium: 1.5, high: 1 },

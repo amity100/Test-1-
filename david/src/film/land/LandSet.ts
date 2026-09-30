@@ -8,6 +8,8 @@ import { cloudShared, GLSL_CLOUD_WEATHER, landAtmo } from './landAtmo';
 import { LandClouds } from './landClouds';
 import { GEO, LandHeight, loadLandcover, loadTile, PLACES, shadeTexture, type HeightTile } from './landData';
 import { buildArmyPlaceholders, buildDust, buildRamahGate, mannequinGeometry, roadGlslFor, type Mark } from './landSites';
+import { buildAshdod } from './landCoast';
+import { buildFlora, grove, scatter } from './landFlora';
 import { landMaterial, polarTerrain, type LandTier } from './landTerrain';
 import { waterMesh } from './landWater';
 
@@ -31,7 +33,7 @@ export const LAND_LIGHT: Record<LandLocation, { elevation: number; azimuth: numb
   // winter dawn: the sun just risen over the Moab plateau, slightly south of east
   judah: { elevation: 6.0, azimuth: 78, exposure: 0.5 },
   // late afternoon over the sea: the column marches toward the camera out of the backlit dust
-  coast: { elevation: 9, azimuth: -112, exposure: 0.55 },
+  coast: { elevation: 7, azimuth: -104, exposure: 0.55 },
   // morning at the gate of Ramah
   ramah: { elevation: 15, azimuth: 105, exposure: 0.56 },
 };
@@ -45,6 +47,8 @@ export interface CoastAnchors {
   /** where the head of the column is at the start of the shots */
   columnHead: THREE.Vector3;
   camera: THREE.Vector3;
+  /** Ashdod: top of its tell (centre) and the east gate the column leaves from */
+  town: THREE.Vector3; townGate: THREE.Vector3;
 }
 export interface RamahAnchors { gate: THREE.Vector3; gateYaw: number; samuel: Mark; elders: Mark[]; plazaY: number; altar: THREE.Vector3 }
 
@@ -83,6 +87,7 @@ export class LandSet {
   private readonly focus = new THREE.Vector3();
   private time = 0;
   private terrainTris = 0;
+  private floraTris = 0;
   buildMs = 0;
 
   static async create(o: LandSetOptions): Promise<LandSet> {
@@ -133,9 +138,11 @@ export class LandSet {
     if (o.location === 'judah') {
       focus = new THREE.Vector3(-1500, 0, 700);
     } else if (o.location === 'coast') {
-      // a low kurkar rise on the plain SE of Ashdod; the road runs SW -> NE toward the Shephelah
-      focus = new THREE.Vector3(-46800, 0, 1800);
-      const pts2 = [new THREE.Vector2(-50400, 5600), new THREE.Vector2(-49200, 4300), new THREE.Vector2(-48100, 3050), new THREE.Vector2(-47150, 2200), new THREE.Vector2(-46350, 1650), new THREE.Vector2(-45200, 900), new THREE.Vector2(-43600, -300)];
+      // the plain east of Ashdod (the city on its tell, the dune belt and the sea behind it to the west): the host
+      // leaves the city's east gate and marches ESE toward the Shephelah (1 Sam 17:1, 13:5)
+      const A = PLACES.ashdod;
+      focus = new THREE.Vector3(A.x + 2200, 0, A.z + 720);
+      const pts2 = [new THREE.Vector2(A.x + 230, A.z + 80), new THREE.Vector2(A.x + 700, A.z + 230), new THREE.Vector2(A.x + 1250, A.z + 390), new THREE.Vector2(A.x + 1750, A.z + 560), new THREE.Vector2(A.x + 2200, A.z + 720), new THREE.Vector2(A.x + 2800, A.z + 950), new THREE.Vector2(A.x + 3600, A.z + 1300), new THREE.Vector2(A.x + 4800, A.z + 1850), new THREE.Vector2(A.x + 6400, A.z + 2400)];
       roadGlsl = roadGlslFor(pts2, 7);
       mods.push((x, z, h) => {
         // road bed: slightly levelled across its width
@@ -239,26 +246,86 @@ export class LandSet {
     } else if (o.location === 'coast') {
       for (const p of route) p.y = q(p.x, p.z);
       const heading = new THREE.Vector3().subVectors(route[route.length - 1], route[0]).setY(0).normalize();
-      const count = tier === 'high' ? 1200 : tier === 'medium' ? 720 : 360;
-      // the column's head is near the camera; ranks trail back toward the sea (reverse the route for placement)
-      const back = route.slice().reverse().filter((p) => p.distanceTo(focus) < 4200);
-      const headAt = new THREE.Vector3(-46350, 0, 1650); headAt.y = q(headAt.x, headAt.z);
-      const trail = [headAt, ...back.filter((p) => p.x < headAt.x)];
+      const count = tier === 'high' ? 900 : tier === 'medium' ? 560 : 300;
+      const headAt = focus.clone(); headAt.y = q(headAt.x, headAt.z);
+      // the column trails back from its head toward the city gate
+      const trail = [headAt, ...route.slice().reverse().filter((p) => p.x < headAt.x - 1)];
       const army = buildArmyPlaceholders(trail, count, q);
       this.placeholders.add(army.group);
       this.disposables.push(army);
-      const dust = buildDust(trail, tier === 'low' ? 60 : 160, shared.uSunDir.value, shared.uSunColor.value);
+      const dust = buildDust(trail, tier === 'low' ? 70 : 190, shared.uSunDir.value, shared.uSunColor.value, 900);
       scene.add(dust.mesh);
       this.dust = dust;
       this.disposables.push(dust);
-      const cam = new THREE.Vector3(-46180, 0, 1540); cam.y = q(cam.x, cam.z);
-      anchors.coast = { route, heading, columnWidth: 6.3, columnHead: headAt.clone(), camera: cam };
+      // Ashdod on its tell, behind the host
+      const town = buildAshdod(tex!, tier, new THREE.Vector3(PLACES.ashdod.x, 0, PLACES.ashdod.z), q, rnd);
+      scene.add(town.group);
+      this.disposables.push(town);
+      // the plain: scrub along the balks and the road, olive groves, sycamore figs (1 Kings 10:27) near the fields
+      const onRoad = (x: number, z: number) => {
+        let d = 1e9;
+        for (let i = 0; i < route.length - 1; i++) {
+          const a = route[i], b = route[i + 1];
+          const bx = b.x - a.x, bz = b.z - a.z, px = x - a.x, pz = z - a.z;
+          const t = Math.max(0, Math.min(1, (px * bx + pz * bz) / (bx * bx + bz * bz)));
+          d = Math.min(d, Math.hypot(px - bx * t, pz - bz * t));
+        }
+        return d;
+      };
+      const offTown = (x: number, z: number) => Math.hypot(x - PLACES.ashdod.x, z - PLACES.ashdod.z) > 360;
+      const k = tier === 'high' ? 1 : tier === 'medium' ? 0.6 : 0.3;
+      const camC = new THREE.Vector3(headAt.x + heading.x * 250, 0, headAt.z + heading.z * 250);
+      const lists = {
+        bush: [
+          ...scatter(Math.round(700 * k), camC.x, camC.z, 700, 700, rnd, [0.7, 1.5], (x, z) => onRoad(x, z) > 9),
+          ...scatter(Math.round(450 * k), camC.x, camC.z, 200, 200, rnd, [0.8, 1.7], (x, z) => onRoad(x, z) > 7),
+          ...scatter(Math.round(900 * k), headAt.x - 900, headAt.z - 300, 1800, 1100, rnd, [0.8, 1.6], (x, z) => onRoad(x, z) > 9 && offTown(x, z)),
+        ],
+        olive: [
+          ...grove(headAt.x - 500, headAt.z + 420, 260, 140, 9, 0.35, rnd, [0.9, 1.2], (x, z) => onRoad(x, z) > 14),
+          ...grove(headAt.x + 380, headAt.z - 380, 200, 120, 9, 0.3, rnd, [0.9, 1.15], (x, z) => onRoad(x, z) > 14),
+          ...grove(headAt.x - 1600, headAt.z - 650, 300, 160, 10, 0.4, rnd, [0.9, 1.2], (x, z) => onRoad(x, z) > 14 && offTown(x, z)),
+        ].filter((_, i) => i % Math.round(1 / k) === 0),
+        oak: scatter(Math.round(40 * k), headAt.x - 600, headAt.z, 1500, 900, rnd, [1.3, 1.8], (x, z) => onRoad(x, z) > 16 && offTown(x, z)),
+      };
+      const flora = buildFlora(tex!, tier, q, lists, { center: camC, radius: 400 });
+      scene.add(flora.group);
+      this.disposables.push(flora);
+      this.floraTris = flora.triangles;
+      const cam = camC.clone(); cam.y = q(cam.x, cam.z);
+      anchors.coast = { route, heading, columnWidth: 6.3, columnHead: headAt.clone(), camera: cam, town: new THREE.Vector3(PLACES.ashdod.x, town.top, PLACES.ashdod.z), townGate: town.gate.setY(q(town.gate.x, town.gate.z)) };
     } else if (o.location === 'ramah') {
       const gate = buildRamahGate(tex!, tier, { origin: focus.clone(), yaw: 0.25 }, q, rnd);
       scene.add(gate.group);
       this.disposables.push(...gate.materials);
       for (const m of gate.materials) for (const t of ((m.userData.ownTextures ?? []) as THREE.Texture[])) this.disposables.push(t);
       gate.group.traverse((c) => { if ((c as THREE.Mesh).isMesh) this.disposables.push((c as THREE.Mesh).geometry); });
+      // olives on the terraces below the gate, a few figs / terebinths about the village; the beaten-earth plaza
+      const fl = buildFlora(tex!, tier, q, {
+        olive: gate.terraceOlives.filter((_, i) => tier !== 'low' || i % 2 === 0),
+        oak: scatter(tier === 'low' ? 3 : 7, focus.x, focus.z - 40, 70, 60, rnd, [0.9, 1.2], (x, z) => Math.hypot(x - focus.x, z - focus.z) > 22),
+      }, { center: focus, radius: 90 });
+      scene.add(fl.group);
+      this.disposables.push(fl);
+      this.floraTris = fl.triangles;
+      {
+        const pg = new THREE.CircleGeometry(24, 48);
+        pg.rotateX(-Math.PI / 2);
+        const pp = pg.getAttribute('position') as THREE.BufferAttribute;
+        const uv = pg.getAttribute('uv') as THREE.BufferAttribute;
+        for (let i = 0; i < pp.count; i++) {
+          const x = focus.x + pp.getX(i), z = focus.z + pp.getZ(i);
+          pp.setY(i, q(x, z) + 0.04);
+          uv.setXY(i, x / 7, z / 7);
+        }
+        pg.computeVertexNormals();
+        const pm = new THREE.MeshStandardMaterial({ color: 0xcfc2ad, roughness: 1, map: tex!.rock, normalMap: tex!.rockN, polygonOffset: true, polygonOffsetFactor: -2 });
+        const plaza = new THREE.Mesh(pg, pm);
+        plaza.position.set(focus.x, 0, focus.z);
+        plaza.receiveShadow = true;
+        scene.add(plaza);
+        this.disposables.push(pg, pm);
+      }
       // placeholders
       const standG = mannequinGeometry(1.72), seatG = mannequinGeometry(1.72, true), samG = mannequinGeometry(1.76);
       const pm = new THREE.MeshStandardMaterial({ color: 0x9a8f80, roughness: 0.9 });
@@ -279,7 +346,7 @@ export class LandSet {
     this.near = ground ? 0.25 : 6;
     this.far = 210000;
     this.atmosphere = ground
-      ? { density: 0.00011, heightFalloff: 1 / 900, baseHeight: o.location === 'coast' ? -20 : 500, godRays: 0.3 }
+      ? { density: o.location === 'coast' ? 0.00006 : 0.00011, heightFalloff: 1 / 900, baseHeight: o.location === 'coast' ? -20 : 500, godRays: 0.3 }
       : { density: 0, heightFalloff: 1 / 1800, baseHeight: -400, godRays: 0.35 };
     const { shots, sequence } = this.buildShots();
     this.shots = shots;
@@ -316,13 +383,25 @@ export class LandSet {
       // wide: from the rise ahead of the column, looking back SW down the road toward the sea and the low sun
       // low, in front of the head of the column, looking back down the road into the dust and the low sun
       const T = (back: number, lat: number, up: number) => { const x = head.x + hd.x * back + side.x * lat, z = head.z + hd.z * back + side.z * lat; return V(x, this.height.height(x, z) + up, z); };
-      shots.threat = path([T(46, 9, 1.9), T(38, 7.5, 2.3)], [T(-60, 1, 2.6), T(-70, 0, 2.2)], [34, 30], 8);
-      // lateral track along the ranks, low angle
-      shots.column = path([T(-10, 16, 1.3), T(-45, 15, 1.4)], [T(-20, 0, 1.7), T(-60, 0, 1.8)], [30, 30], 6);
-      // tele: shields and spear points glinting in the dust
-      shots.glint = path([T(95, 3, 1.7), T(90, 2.5, 1.7)], [T(-6, 0, 1.4), T(-8, 0, 1.4)], [11, 10], 4);
+      // (the sun is low in the WNW, behind the city and the sea: the host marches out of the backlit dust)
+      // THREAT — telephoto from 260 m ahead on the road verge: the column coming on, Ashdod on its tell behind it,
+      //          the dunes and the glittering sea on the horizon; slow creep in.
+      shots.threat = path([T(270, 16, 8.5), T(255, 13, 8.0)], [T(-900, -40, 14), T(-900, -30, 12)], [15, 13.5], 8);
+      // VISTA — the establishing wide from a rise south-east of the column: the plain of fields, the host a dark
+      //         line in its dust, the city, the dune belt and the sea with the sun above it.
+      {
+        // toward the low sun (azimuth -104: WNW), a few degrees south of it so the disc sits in the upper right
+        const sd = V(Math.sin(THREE.MathUtils.degToRad(-110)), 0, Math.cos(THREE.MathUtils.degToRad(-110)));
+        const c0 = T(650, 520, 85), c1 = T(560, 470, 72);
+        const l0 = c0.clone().addScaledVector(sd, 9000).setY(-60), l1 = c1.clone().addScaledVector(sd, 9000).setY(-80);
+        shots.vista = path([c0, c1], [l0, l1], [30, 27], 7);
+      }
+      // COLUMN — low lateral track along the ranks at 24 m, the dust lit from behind
+      shots.column = path([T(-10, 26, 1.5), T(-50, 24, 1.6)], [T(-30, 0, 1.8), T(-72, 0, 1.9)], [30, 29], 6);
+      // GLINT — long lens on the front ranks: helmets, shields and spear points catching the low sun
+      shots.glint = path([T(110, 4, 1.8), T(104, 3.5, 1.8)], [T(-4, 0, 1.5), T(-6, 0, 1.5)], [9, 8.5], 4);
       void cam;
-      sequence = [shots.threat, shots.column, shots.glint];
+      sequence = [shots.vista, shots.threat, shots.glint];
     } else {
       const r = this.anchors.ramah!;
       const g = r.gate, yaw = r.gateYaw;

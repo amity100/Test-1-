@@ -18,9 +18,11 @@
  */
 import * as THREE from 'three';
 import { armyAt, armySlot, timeScale, RAISE_DELAY_PER_RANK, MARCH_SPEED, type GilgalShotName } from '../gilgal/gilgalBlocking';
-import { ARMY, SAMUEL } from '../gilgal/gilgalLayout';
+import { ARMY, SAMUEL, roadZ } from '../gilgal/gilgalLayout';
 import { Crowd, type CrowdAgent, type CrowdTier } from './Crowd';
 import { CrowdAnim, type CrowdClipSpec } from './CrowdAnim';
+import { CrowdDust } from './CrowdDust';
+import { SpoilHerd } from './SpoilHerd';
 import { bit } from './crowdShader';
 
 const WALKS = ['march', 'march_c', 'walk_b', 'walk_c', 'walk_d'];
@@ -76,6 +78,10 @@ export interface GilgalArmyOptions {
    * many extra ranks, false = none.
    */
   impostors?: boolean | number;
+  /** footstep dust puffs (CrowdDust); default true */
+  dust?: boolean;
+  /** the spoil herds beside the column (SpoilHerd, visual bible 3.5); default true */
+  herds?: boolean;
   anim?: CrowdAnim;
 }
 
@@ -104,6 +110,11 @@ export class GilgalArmy {
   readonly anim: CrowdAnim;
   readonly soldiers: Soldier[] = [];
   readonly ranks: number;
+  /** footstep dust (null if disabled) */
+  readonly dust: CrowdDust | null;
+  /** the driven flocks and herds (null if disabled) */
+  readonly herd: SpoilHerd | null;
+  private front = { x: 0, walk: false };
   private readonly ground: (x: number, z: number) => number;
   private readonly ownsAnim: boolean;
   private beat: GilgalShotName | null = null;
@@ -168,6 +179,10 @@ export class GilgalArmy {
     this.ground = o.ground ?? (() => 0);
     this.ownsAnim = owns;
     this.lite = lite;
+    this.dust = o.dust === false ? null : new CrowdDust({ tier: o.tier });
+    if (this.dust) crowd.group.add(this.dust.mesh);
+    this.herd = o.herds === false ? null : new SpoilHerd({ tier: o.tier, ground: this.ground });
+    if (this.herd) crowd.group.add(this.herd.group);
     const walks = lite ? ['march', 'march_c', 'walk_b'] : WALKS;
     let i = 0;
     for (let r = 0; r < ranks; r++) {
@@ -223,6 +238,8 @@ export class GilgalArmy {
     this.beat = shot;
     this.beatT = time;
     const st = armyAt(shot, time);
+    this.front.x = st.frontX;
+    this.front.walk = st.walk > 0;
     if (newBeat) this.raiseT = -1;
     if (st.raise > 0.01 && this.raiseT < 0) this.raiseT = time;
     const pos = this.tmp;
@@ -246,6 +263,7 @@ export class GilgalArmy {
         const want = Math.atan2(this.samuel.x - pos.x, this.samuel.z - pos.z) - ag.yaw;
         ag.headYaw = THREE.MathUtils.clamp(Math.atan2(Math.sin(want), Math.cos(want)), -0.9, 0.9) * (s.rank < 20 ? 1 : 0.5);
       } else ag.headYaw = 0;
+      ag.stride = st.walk > 0 ? 1 : s.state === 'step' ? 0.6 : 0;
       if (st.walk > 0) {
         if (s.state !== 'march' || newBeat) {
           const k = this.key(s.walk, s);
@@ -293,6 +311,8 @@ export class GilgalArmy {
   update(dt: number, camera: THREE.Camera) {
     const ts = this.beat ? timeScale(this.beat, this.beatT) : 1;
     this.crowd.update(dt * ts, camera);
+    this.dust?.update(dt * ts, this.crowd);
+    this.herd?.update(dt * ts, this.front.x, this.front.walk, roadZ);
   }
 
   get group() {
@@ -300,6 +320,8 @@ export class GilgalArmy {
   }
 
   dispose() {
+    this.herd?.dispose();
+    this.dust?.dispose();
     this.crowd.dispose();
     if (this.ownsAnim) this.anim.dispose();
   }

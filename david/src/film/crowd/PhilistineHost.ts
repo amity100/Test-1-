@@ -13,6 +13,7 @@
 import * as THREE from 'three';
 import { Crowd, type CrowdAgent, type CrowdTier } from './Crowd';
 import { CrowdAnim, type CrowdClipSpec } from './CrowdAnim';
+import { CrowdDust } from './CrowdDust';
 import { bit } from './crowdShader';
 
 export function philistineClips(lite: boolean): CrowdClipSpec[] {
@@ -57,6 +58,8 @@ export interface PhilistineHostOptions {
   flanks?: number[];
   /** far field as skeletal impostors (Crowd LOD3); default true. Counts include them. */
   impostors?: boolean;
+  /** footstep dust puffs (CrowdDust, coastal-plain sand colour); default true */
+  dust?: boolean;
 }
 
 function hash(a: number, b: number) {
@@ -70,6 +73,8 @@ export class PhilistineHost {
   readonly crowd: Crowd;
   readonly anim: CrowdAnim;
   readonly center = new THREE.Vector3();
+  /** footstep dust (null if disabled) */
+  readonly dust: CrowdDust | null;
   /** marching speed (m/s); 0 halts (the men keep their pose) */
   speed = 1.2;
   heading: number;
@@ -94,6 +99,8 @@ export class PhilistineHost {
     this.crowd = crowd;
     this.anim = anim;
     this.ownsAnim = owns;
+    this.dust = o.dust === false ? null : new CrowdDust({ tier: o.tier, color: 0xc9b38c });
+    if (this.dust) crowd.group.add(this.dust.mesh);
     this.origin = (o.origin ?? new THREE.Vector3()).clone();
     this.heading = o.heading ?? Math.PI / 2;
     this.ground = o.ground ?? (() => 0);
@@ -233,9 +240,13 @@ export class PhilistineHost {
 
   update(dt: number, camera: THREE.Camera) {
     this.travelled += dt * this.speed;
-    for (const m of this.men) if (m.ag.cur) m.ag.cur.rate = (this.speed / Math.max(0.5, m.ag.cur.clip.speed)) * m.pace;
+    for (const m of this.men) {
+      if (m.ag.cur) m.ag.cur.rate = (this.speed / Math.max(0.5, m.ag.cur.clip.speed)) * m.pace;
+      m.ag.stride = this.speed > 0.05 ? 1 : 0;
+    }
     this.place();
     this.crowd.update(dt, camera);
+    this.dust?.update(dt, this.crowd);
   }
 
   get group() {
@@ -243,6 +254,7 @@ export class PhilistineHost {
   }
 
   dispose() {
+    this.dust?.dispose();
     this.crowd.dispose();
     if (this.ownsAnim) this.anim.dispose();
   }

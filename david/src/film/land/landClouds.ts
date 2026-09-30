@@ -87,9 +87,9 @@ export class LandClouds {
       ...landAtmo, ...cloudShared,
       tNoise: { value: this.noise },
       uExt: { value: 0.0085 },
-      uAmbTop: { value: new THREE.Color(0.3, 0.34, 0.5) },
-      uAmbBottom: { value: new THREE.Color(0.12, 0.1, 0.1) },
-      uSunI: { value: 11.0 },
+      uAmbTop: { value: new THREE.Color(0.34, 0.34, 0.56) },
+      uAmbBottom: { value: new THREE.Color(0.22, 0.19, 0.27) },
+      uSunI: { value: 8.5 },
       uDitherOffset: temporal.uDitherOffset,
       uFrame: temporal.uFrame,
     };

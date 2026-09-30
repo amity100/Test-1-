@@ -1,0 +1,517 @@
+import * as THREE from 'three';
+import type { Engine, ViewSpec } from '../core/Engine';
+import type { ShotFrame } from '../gameplay/CameraRig';
+import type { LandSet, LandLocation } from './land/LandSet';
+import type { GilgalSet, GilgalShotName } from './gilgal/GilgalSet';
+import type { FilmActor, GilgalPerformance, RamahPerformance } from './cast';
+import type { GilgalArmy } from './crowd/GilgalArmy';
+import type { PhilistineHost } from './crowd/PhilistineHost';
+import { landAtmo, cloudShared } from './land/landAtmo';
+import { INTRO_SHOTS, type FilmSetName } from '../content/introScript';
+
+/**
+ * THE FILM STAGE of the opening film (docs/intro-script.md): every film-only set, crowd and actor, built behind the
+ * loading screen and disposed set by set as the film leaves it (phones!). This module is imported lazily (it pulls in
+ * src/film/land, src/film/gilgal, src/film/cast and src/film/crowd through dynamic imports only).
+ *
+ *   const stage = await FilmStage.load(engine, { onProgress });
+ *   stage.sets.gilgal?.view                     ViewSpec for engine.setView
+ *   stage.sets.gilgal?.frame(take, u, t, out)   camera of a take (u = normalised, t = shot seconds)
+ *   stage.sets.gilgal?.enter(take)              on every cut into the set
+ *   stage.sets.gilgal?.tick(take, t, dt)        per frame before engine.render (set beat, crowd, actors)
+ *   stage.sets.gilgal?.focus(take, t)           DoF target
+ *   stage.release('coast')                      dispose a set when the film is done with it; stage.dispose() = all
+ *
+ * ACTOR SLOTS (FilmActor per role; the cast / crowd teammates' modules drop in here — a failed or missing module falls
+ * back to the set's own placeholders so the cut always plays):
+ *   gilgal: saul, samuel (hero), armourBearer (desktop) -> GilgalPerformance; the army -> GilgalArmy
+ *   ramah:  samuel ('near' LOD, own instance), elders (crowd LOD, 6 / 4 / 3 per tier) -> RamahPerformance
+ *   coast:  the Philistine host -> PhilistineHost (column mode on the set's road)
+ */
+export type FilmStageSet = Exclude<FilmSetName, 'black' | 'world'>;
+
+export interface FilmFocus {
+  point: THREE.Vector3;
+  fStop: number;
+}
+
+export interface FilmSetHandle {
+  readonly name: FilmStageSet;
+  readonly view: ViewSpec;
+  readonly camera: THREE.PerspectiveCamera;
+  /** Camera of `take` at normalised time u (0..1, already remapped to the shot's span); t = shot seconds. */
+  frame(take: string, u: number, t: number, out: ShotFrame): boolean;
+  /** On every cut into a take of this set. */
+  enter(take: string): void;
+  /** Per frame, before engine.render: the set's beat, crowds and actors. */
+  tick(take: string, t: number, dt: number): void;
+  /** Depth-of-field target of a take (null = deep focus). */
+  focus(take: string, t: number): FilmFocus | null;
+  /** What is real and what is placeholder in this set (for the report / HUD). */
+  readonly status: string[];
+  disposed: boolean;
+  dispose(): void;
+}
+
+export interface FilmStageOptions {
+  onProgress?: (f: number, label: string) => void;
+  /** build the cast (FilmActor humans). default true; ?filmcast=0 turns it off (placeholders) */
+  cast?: boolean;
+  /** build the GPU crowds. default true; ?filmcrowd=0 */
+  crowd?: boolean;
+}
+
+const smooth = (u: number) => u * u * (3 - 2 * u);
+
+/** Snapshot of the land sets' shared uniforms (sun / sky / haze / deck live in module singletons). */
+interface LandSnap {
+  sunDir: THREE.Vector3;
+  sunCol: THREE.Color;
+  sky: THREE.Texture | null;
+  haze: THREE.Vector4;
+  deck: THREE.Vector4;
+}
+const snapLand = (): LandSnap => ({
+  sunDir: landAtmo.uSunDirA.value.clone(),
+  sunCol: landAtmo.uSunColA.value.clone(),
+  sky: landAtmo.tSkyCube.value,
+  haze: landAtmo.uHaze.value.clone(),
+  deck: (cloudShared.uDeck.value as THREE.Vector4).clone(),
+});
+const applyLand = (s: LandSnap) => {
+  landAtmo.uSunDirA.value.copy(s.sunDir);
+  landAtmo.uSunColA.value.copy(s.sunCol);
+  landAtmo.tSkyCube.value = s.sky;
+  landAtmo.uHaze.value.copy(s.haze);
+  (cloudShared.uDeck.value as THREE.Vector4).copy(s.deck);
+};
+
+/** clips only the film uses (released after it; generic clips stay: gameplay may share them) */
+const FILM_ONLY_CLIPS = ['walk_king', 'walk_halt', 'idle_king', 'grab_pull_R', 'old_turn_walk', 'walk_old', 'talk_gesture', 'argue', 'point_directions', 'idle_bus', 'walk_old_hunched'];
+
+export class FilmStage {
+  readonly sets: Partial<Record<FilmStageSet, FilmSetHandle>> = {};
+  loadMs = 0;
+  private releaseTiles: (() => void) | null = null;
+  private releaseClips: (() => void) | null = null;
+
+  private constructor(private readonly engine: Engine) {}
+
+  /** Build every film set (+ crowds and actors) and pre-compile its view. Never rejects: a failed set is left out. */
+  static async load(engine: Engine, o: FilmStageOptions = {}): Promise<FilmStage> {
+    const t0 = performance.now();
+    const stage = new FilmStage(engine);
+    const prog = o.onProgress ?? (() => {});
+    const wantCast = o.cast !== false;
+    const wantCrowd = o.crowd !== false;
+    const q = engine.quality;
+    const low = q.name === 'low';
+    // budget of the loading bar per step
+    const steps = { judah: 0.14, coast: 0.14, ramah: 0.16, gilgal: 0.4, compile: 0.16 };
+    let base = 0;
+    const sub = (w: number, label: string) => {
+      const b = base;
+      base += w;
+      return (f: number) => prog(Math.min(0.999, b + w * Math.max(0, Math.min(1, f))), label);
+    };
+    const yieldFrame = () => new Promise<void>((r) => setTimeout(r, 0));
+
+    let landMod: typeof import('./land/LandSet') | null = null;
+    try {
+      landMod = await import('./land/LandSet');
+      const data = await import('./land/landData');
+      stage.releaseTiles = () => data.releaseTiles();
+    } catch (e) {
+      console.warn('[film] land sets unavailable', e);
+    }
+    let castMod: typeof import('./cast') | null = null;
+    if (wantCast) {
+      try {
+        castMod = await import('./cast');
+        const clips = [...castMod.GILGAL_CLIPS, ...castMod.RAMAH_CLIPS];
+        await castMod.FilmActor.preloadClips(clips);
+        const { MocapLibrary } = await import('../characters/mocap/MocapLibrary');
+        stage.releaseClips = () => MocapLibrary.shared.release(FILM_ONLY_CLIPS);
+      } catch (e) {
+        console.warn('[film] cast unavailable (placeholders)', e);
+        castMod = null;
+      }
+    }
+
+    // ------------------------------------------------------------------ prologue: the land (shots 2, 4, 5)
+    const land = async (loc: LandLocation, w: number, label: string) => {
+      if (!landMod) {
+        base += w;
+        return null;
+      }
+      const p = sub(w, label);
+      try {
+        const set = await landMod.LandSet.create({ renderer: engine.renderer, quality: engine.quality, location: loc, tex: engine.tex, onProgress: (f) => p(f * 0.6) });
+        set.restoreSharedSun();
+        engine.enforceTextureBudget(set.scene);
+        return { set, snap: snapLand(), p };
+      } catch (e) {
+        console.warn(`[film] land set ${loc} failed`, e);
+        return null;
+      }
+    };
+
+    const judah = await land('judah', steps.judah, 'הָאָרֶץ…');
+    if (judah && landMod) stage.sets.judah = stage.landHandle('judah', judah.set, judah.snap, landMod.landView);
+    await yieldFrame();
+
+    const coast = await land('coast', steps.coast, 'אֶרֶץ פְּלִשְׁתִּים…');
+    if (coast && landMod) {
+      let host: PhilistineHost | null = null;
+      if (wantCrowd) {
+        try {
+          const { PhilistineHost } = await import('./crowd/PhilistineHost');
+          const a = coast.set.anchors.coast!;
+          host = await PhilistineHost.create({
+            tier: engine.quality.tier,
+            coast: { route: a.route, columnHead: a.columnHead, columnWidth: a.columnWidth },
+            ground: (x, z) => coast.set.height.height(x, z),
+          });
+          coast.set.scene.add(host.group);
+          coast.set.showPlaceholders(false);
+        } catch (e) {
+          console.warn('[film] Philistine host failed (placeholders)', e);
+          host = null;
+          coast.set.showPlaceholders(true);
+        }
+      }
+      coast.p(1);
+      stage.sets.coast = stage.landHandle('coast', coast.set, coast.snap, landMod.landView, { host });
+    }
+    await yieldFrame();
+
+    const ramah = await land('ramah', steps.ramah * 0.4, 'הָרָמָה…');
+    if (ramah && landMod) {
+      let perf: RamahPerformance | null = null;
+      const actors: FilmActor[] = [];
+      const p = sub(steps.ramah * 0.6, 'הָרָמָה…');
+      if (castMod) {
+        try {
+          const A = ramah.set.anchors.ramah!;
+          const ground = (x: number, z: number) => ramah.set.height.height(x, z);
+          const samuel = await castMod.FilmActor.create({ role: 'samuel', quality: q.name, msaa: q.msaa, lod: 'near', ground });
+          actors.push(samuel);
+          const n = low ? 3 : q.name === 'medium' ? 4 : 6;
+          const elders: FilmActor[] = [];
+          for (let i = 0; i < n; i++) {
+            p((i + 1) / (n + 1));
+            await yieldFrame();
+            const e = await castMod.FilmActor.create({ role: 'elder', quality: q.name, msaa: q.msaa, seed: i + 1, lod: i < 2 ? 'near' : 'crowd', ground });
+            elders.push(e);
+            actors.push(e);
+          }
+          // the seated elders first (on the benches facing the gate), then the standing arc
+          const marks = [...A.elders.filter((m) => m.seated), ...A.elders.filter((m) => !m.seated)];
+          for (const a of actors) {
+            a.addTo(ramah.set.scene);
+            engine.enforceTextureBudget(a.root);
+          }
+          perf = new castMod.RamahPerformance(samuel, elders, A.samuel, marks, ground);
+          ramah.set.showPlaceholders(false);
+        } catch (e) {
+          console.warn('[film] Ramah cast failed (placeholders)', e);
+          for (const a of actors) a.dispose();
+          actors.length = 0;
+          perf = null;
+          ramah.set.showPlaceholders(true);
+        }
+      }
+      p(1);
+      stage.sets.ramah = stage.landHandle('ramah', ramah.set, ramah.snap, landMod.landView, { ramah: perf, actors });
+    }
+    await yieldFrame();
+
+    // ------------------------------------------------------------------ Act I + the rise: Gilgal (shots 6-13)
+    {
+      const p = sub(steps.gilgal, 'הַגִּלְגָּל…');
+      try {
+        const [{ GilgalSet }, { gilgalView }] = await Promise.all([import('./gilgal/GilgalSet'), import('./gilgal/gilgalView')]);
+        const gilgal = await GilgalSet.create({ renderer: engine.renderer, quality: engine.quality, tex: engine.tex, onProgress: (f) => p(f * 0.3) });
+        gilgal.restoreSharedSun();
+        engine.enforceTextureBudget(gilgal.scene);
+        let army: GilgalArmy | null = null;
+        if (wantCrowd) {
+          try {
+            const { GilgalArmy } = await import('./crowd/GilgalArmy');
+            army = await GilgalArmy.create({ tier: engine.quality.tier, ground: (x, z) => gilgal.ground.height(x, z) });
+            gilgal.scene.add(army.group);
+          } catch (e) {
+            console.warn('[film] Gilgal army failed', e);
+            army = null;
+          }
+        }
+        p(0.5);
+        let perf: GilgalPerformance | null = null;
+        const actors: FilmActor[] = [];
+        if (castMod) {
+          try {
+            const ground = (x: number, z: number) => gilgal.height(x, z);
+            const saul = await castMod.FilmActor.create({ role: 'saul', quality: q.name, msaa: q.msaa, ground });
+            actors.push(saul);
+            p(0.65);
+            await yieldFrame();
+            const samuel = await castMod.FilmActor.create({ role: 'samuel', quality: q.name, msaa: q.msaa, ground });
+            actors.push(samuel);
+            p(0.8);
+            let armourBearer: FilmActor | undefined;
+            if (!low) {
+              await yieldFrame();
+              armourBearer = await castMod.FilmActor.create({ role: 'armourBearer', quality: q.name, msaa: q.msaa, seed: 3, lod: 'near', ground });
+              actors.push(armourBearer);
+            }
+            for (const a of actors) {
+              a.addTo(gilgal.scene);
+              engine.enforceTextureBudget(a.root);
+            }
+            perf = new castMod.GilgalPerformance({ saul, samuel, armourBearer }, ground);
+          } catch (e) {
+            console.warn('[film] Gilgal cast failed (placeholders)', e);
+            for (const a of actors) a.dispose();
+            actors.length = 0;
+            perf = null;
+          }
+        }
+        // the set's own stand-ins cover what the cast / crowd modules could not build
+        if (!perf || !army) gilgal.showPlaceholders(true);
+        p(1);
+        const cam = new THREE.PerspectiveCamera(40, 1, 0.05, 90000);
+        stage.sets.gilgal = stage.gilgalHandle(gilgal, gilgalView(gilgal, { camera: cam }), cam, army, perf, actors);
+      } catch (e) {
+        console.warn('[film] Gilgal set failed', e);
+      }
+    }
+
+    // ------------------------------------------------------------------ pre-compile every view for the final tier
+    {
+      const p = sub(steps.compile, 'מֵכִין אֶת הַסֶּרֶט…');
+      const names = Object.keys(stage.sets) as FilmStageSet[];
+      let i = 0;
+      for (const name of names) {
+        const h = stage.sets[name]!;
+        try {
+          const takes = INTRO_SHOTS.filter((s) => s.set === name);
+          const f: ShotFrame = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: 40, roll: 0 };
+          const poses: { pos: THREE.Vector3; look: THREE.Vector3 }[] = [];
+          for (const s of takes) {
+            if (name === 'gilgal' && s.take === 'rise') continue;
+            h.enter(s.take);
+            h.tick(s.take, s.dur * 0.5, 0);
+            if (h.frame(s.take, 0.5, s.dur * 0.5, f)) poses.push({ pos: f.pos.clone(), look: f.look.clone() });
+          }
+          await engine.precompileView(h.view, poses);
+          if (name === 'gilgal') {
+            // the rise shows the LandClouds deck (hidden in the other beats)
+            const rise = INTRO_SHOTS.find((s) => s.take === 'rise');
+            if (rise) {
+              const rp: { pos: THREE.Vector3; look: THREE.Vector3 }[] = [];
+              for (const u of [0.35, 0.9]) {
+                h.enter('rise');
+                h.tick('rise', rise.dur * u, 0);
+                if (h.frame('rise', u, rise.dur * u, f)) rp.push({ pos: f.pos.clone(), look: f.look.clone() });
+              }
+              await engine.precompileView(h.view, rp);
+            }
+          }
+        } catch (e) {
+          console.warn(`[film] precompile ${name}`, e);
+        }
+        p(++i / names.length);
+        await yieldFrame();
+      }
+    }
+    stage.loadMs = performance.now() - t0;
+    prog(1, '');
+    return stage;
+  }
+
+  /** Dispose one set (after the film has left it for good). */
+  release(name: FilmStageSet) {
+    const h = this.sets[name];
+    if (!h || h.disposed) return;
+    if (this.engine.view === h.view) return; // never while on screen
+    try {
+      h.dispose();
+    } catch (e) {
+      console.warn('[film] dispose', name, e);
+    }
+    h.disposed = true;
+    delete this.sets[name];
+  }
+
+  /** Dispose everything (after the film, or when it is skipped). */
+  dispose() {
+    for (const n of Object.keys(this.sets) as FilmStageSet[]) {
+      const h = this.sets[n];
+      if (!h) continue;
+      if (this.engine.view === h.view) this.engine.restoreWorldView();
+      try {
+        h.dispose();
+      } catch (e) {
+        console.warn('[film] dispose', n, e);
+      }
+      h.disposed = true;
+      delete this.sets[n];
+    }
+    this.releaseTiles?.();
+    this.releaseTiles = null;
+    try {
+      this.releaseClips?.();
+    } catch {
+      /* ignore */
+    }
+    this.releaseClips = null;
+  }
+
+  // ---------------------------------------------------------------------------------------------- handles
+  private landHandle(
+    name: 'judah' | 'coast' | 'ramah',
+    set: LandSet,
+    snap: LandSnap,
+    landView: (s: LandSet, o: { camera?: THREE.PerspectiveCamera }) => ViewSpec,
+    extra: { host?: PhilistineHost | null; ramah?: RamahPerformance | null; actors?: FilmActor[] } = {},
+  ): FilmSetHandle {
+    const camera = new THREE.PerspectiveCamera(45, 1, set.near, set.far);
+    const base = landView(set, { camera });
+    // the land sets share their sun / haze / deck uniforms (module singletons): each view puts its own back
+    const view: ViewSpec = {
+      ...base,
+      update: (dt, cam) => {
+        applyLand(snap);
+        base.update?.(dt, cam);
+      },
+    };
+    const engine = this.engine;
+    const status: string[] = [];
+    if (name === 'coast') status.push(extra.host ? 'Philistine host: GPU crowd (PhilistineHost)' : 'Philistine host: set placeholders');
+    if (name === 'ramah') status.push(extra.ramah ? `Samuel + ${(extra.actors?.length ?? 1) - 1} elders: FilmActor (RamahPerformance)` : 'Samuel + elders: set placeholders');
+    const tmp = new THREE.Vector3();
+    return {
+      name,
+      view,
+      camera,
+      status,
+      disposed: false,
+      frame(take, u, _t, out) {
+        const s = set.shots[take];
+        if (!s) return false;
+        const f = set.frame(s, Math.max(0, Math.min(1, u)));
+        out.pos.copy(f.pos);
+        out.look.copy(f.look);
+        out.fov = f.fov ?? 45;
+        out.roll = f.roll ?? 0;
+        return true;
+      },
+      enter() {
+        /* the land sets have no per-shot state */
+      },
+      tick(_take, t, dt) {
+        const h = engine.renderer.domElement.height;
+        if (extra.host) extra.host.update(dt, camera);
+        if (extra.ramah) extra.ramah.update(t, dt, camera, h);
+      },
+      focus(take) {
+        if (name === 'ramah' && extra.ramah && extra.actors?.length) {
+          const sam = extra.actors[0];
+          if (take === 'elders' && extra.actors.length > 1) return { point: extra.actors[1].eyesWorld(tmp), fStop: 2.8 };
+          return { point: sam.eyesWorld(tmp), fStop: 4 };
+        }
+        return null;
+      },
+      dispose() {
+        extra.host?.dispose();
+        for (const a of extra.actors ?? []) a.dispose();
+        set.dispose();
+      },
+    };
+  }
+
+  private gilgalHandle(
+    gilgal: GilgalSet,
+    view: ViewSpec,
+    camera: THREE.PerspectiveCamera,
+    army: GilgalArmy | null,
+    perf: GilgalPerformance | null,
+    actors: FilmActor[],
+  ): FilmSetHandle {
+    const engine = this.engine;
+    const tmp = new THREE.Vector3();
+    let current: string | null = null;
+    const status = [
+      perf ? `Saul + Samuel${actors.length > 2 ? ' + armour-bearer' : ''}: FilmActor (GilgalPerformance)` : 'Saul + Samuel: set stand-ins',
+      army ? `army: GPU crowd (GilgalArmy, ${army.ranks} ranks)` : 'army: set stand-ins',
+    ];
+    return {
+      name: 'gilgal',
+      view,
+      camera,
+      status,
+      disposed: false,
+      frame(take, u, t, out) {
+        const info = gilgal.shots[take as GilgalShotName];
+        if (!info) return false;
+        const e = info.shot.ease !== false ? smooth(Math.max(0, Math.min(1, u))) : u;
+        const f = info.shot.at(e, t);
+        out.pos.copy(f.pos);
+        out.look.copy(f.look);
+        out.fov = f.fov ?? 40;
+        out.roll = f.roll ?? 0;
+        return true;
+      },
+      enter(take) {
+        const name = take as GilgalShotName;
+        if (!gilgal.shots[name]) return;
+        current = take;
+        gilgal.setBeat(name, 0);
+        army?.setBeat(name, 0);
+        if (perf) {
+          try {
+            perf.enter(name);
+          } catch (e) {
+            console.warn('[film] performance enter', e);
+          }
+        }
+      },
+      tick(take, t, dt) {
+        const name = take as GilgalShotName;
+        if (!gilgal.shots[name]) return;
+        if (current !== take) this.enter(take);
+        gilgal.setBeat(name, t);
+        if (army) {
+          army.setBeat(name, t);
+          army.update(dt, camera);
+        }
+        if (perf) {
+          try {
+            perf.update(t, dt, camera, engine.renderer.domElement.height);
+          } catch (e) {
+            console.warn('[film] performance', e);
+          }
+        }
+      },
+      focus(take, t) {
+        const name = take as GilgalShotName;
+        const info = gilgal.shots[name];
+        if (!info) return null;
+        const fp = info.focus(t);
+        if (!fp) return null;
+        // on the actors' eyes in the close shots (the set's focus point is the blocking mark)
+        if (actors.length >= 2) {
+          const [saul, samuel] = actors;
+          if (name === 'verdict') return { point: samuel.eyesWorld(tmp), fStop: info.fStop };
+          if (name === 'saulAlone' || name === 'king' || name === 'faceOff') return { point: saul.eyesWorld(tmp), fStop: info.fStop };
+        }
+        return { point: tmp.copy(fp), fStop: info.fStop };
+      },
+      dispose() {
+        army?.dispose();
+        for (const a of actors) a.dispose();
+        gilgal.dispose();
+      },
+    };
+  }
+}

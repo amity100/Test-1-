@@ -322,7 +322,7 @@ const ACTIONS: Record<ActionName, ActionDef> = {
   hurt: { clip: HURT, mask: [...UPPER_L, ...UPPER_R, ...TORSO, 'hips', ...LEGS], legs: true, fadeIn: 0.03, fadeOut: 0.2 },
 };
 
-interface ActiveAction { name: ActionName; def: ActionDef; t: number; events: { t: number; fn: () => void; fired: boolean }[] }
+interface ActiveAction { name: ActionName; def: ActionDef; t: number; events: { t: number; fn: () => void; fired: boolean }[]; mocap?: boolean }
 
 // ------------------------------------------------------------------------------------------ scratch
 const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _v4 = new THREE.Vector3();
@@ -762,6 +762,8 @@ export class DavidModel {
   dodgeSide = 0;
   /** 0..1: how much the motion capture drives the body (0 = the old procedural motion); ignored if clips failed */
   mocapWeight = 1;
+  /** capture legs / trunk under the keyed pick-up and sling release (see play) */
+  mocapActions = true;
   /** hair and cloth wind multiplier (film shots set it through performFilm) */
   windScale = 1;
   private readonly mo: MocapDriver | null = null;
@@ -979,7 +981,21 @@ export class DavidModel {
   // ----------------------------------------------------------------------------------- control
   play(name: ActionName, events: { t: number; fn: () => void }[] = []) {
     const def = ACTIONS[name];
-    this.action = { name, def, t: 0, events: events.map((e) => ({ ...e, fired: false })) };
+    let mocap = false;
+    // real legs and trunk under the keyed arms: the stone / lamb pick-up bends the knees like pickup_box, the sling
+    // release steps into the throw like throw_ball (time-aligned so the release frame lands on the keyed release)
+    const mo = this.mo;
+    if (mo && this.moW > 0.5 && this.mocapActions) {
+      if (name === 'pick') {
+        mo.play('action', 'pickup_box', { t: PICK_MO[0], rate: (PICK_MO[1] - PICK_MO[0]) / PICK.duration, end: PICK_MO[1], mask: MASK_LOWER, fade: 0.12 });
+        mocap = true;
+      } else if (name === 'throw') {
+        mo.play('action', 'throw_ball', { t: THROW_MO - 0.19, end: THROW_MO + 0.43, mask: MASK_LOWER, fade: 0.08, weight: 0.85 });
+        mocap = true;
+      }
+    }
+    if (!mocap) mo?.stop('action', 0.1);
+    this.action = { name, def, t: 0, events: events.map((e) => ({ ...e, fired: false })), mocap };
   }
   get busy() {
     return !!this.action;
@@ -1080,6 +1096,8 @@ export class DavidModel {
     if (mo && mw > 0.001) {
       this.updateMocap(dt, v, stillNow);
       m.layer(this.moPose, mw, MO_MASK);
+      // the idle captures look at the ground a lot: standing, the head keeps the calm procedural gaze
+      m.layer(this.moPose, mw * THREE.MathUtils.lerp(0.3, 1, lw), MO_HEAD);
       // the staff arm keeps a little of the actor's swing
       m.layer(this.moPose, mw * THREE.MathUtils.lerp(0.12, 0.3, lw), UPPER_L);
       // footsteps from the capture's heel contacts
@@ -1175,8 +1193,9 @@ export class DavidModel {
         sp.r.chest[2] += -s * 0.1;
         if (sp.r.hipsX) sp.r.hipsX[0] += s * 0.1;
       }
-      m.layer(sp, this.actionW, a.def.mask ?? a.def.clip.joints);
+      m.layer(sp, this.actionW, a.mocap && this.moW > 0.5 ? ACTION_UPPER[a.name] : a.def.mask ?? a.def.clip.joints);
       if (a.def.legs) actionLegs = this.actionW;
+      if (a.t + dt >= dur && a.mocap) this.mo?.stop('action', 0.2);
       for (const e of a.events) if (!e.fired && a.t >= e.t) { e.fired = true; e.fn(); }
       if (a.t >= dur) this.action = null;
     } else this.actionW = 0;
@@ -1313,7 +1332,7 @@ export class DavidModel {
     const f = this.film;
     const wind = o.wind ?? (shot === 'back' ? 1.8 : shot === 'reveal' ? 1.4 : 1.6);
     if (!f || f.shot !== shot) {
-      this.film = { shot, t, look: o.look ?? null, wind, turnAt: o.turnAt ?? 0.9, turnDur: o.turnDur ?? 2.2, mood: o.mood ?? 'smile', moodW: o.moodWeight ?? 0.2, blinked: false };
+      this.film = { shot, t, look: o.look ?? null, wind, turnAt: o.turnAt ?? 0.9, turnDur: o.turnDur ?? 2.2, mood: o.mood ?? 'smile', moodW: o.moodWeight ?? 0.12, blinked: false };
       if (shot !== 'reveal') this.filmTurn = 0;
     } else {
       f.t = t;
@@ -1345,7 +1364,7 @@ export class DavidModel {
     const d = this.root.worldToLocal(_v7.copy(look)).sub(_v8);
     // the hero stance already turns the head ~0.6 rad to his right: the turn adds the rest
     const yaw = clamp(Math.atan2(d.x, d.z) + 0.6, -2.1, 2.1);
-    const pitch = clamp(-Math.atan2(d.y, Math.hypot(d.x, d.z)), -0.5, 0.45);
+    const pitch = clamp(-Math.atan2(d.y, Math.hypot(d.x, d.z)), -0.3, 0.3) * 0.6;
     const u = clamp((f.t - f.turnAt) / Math.max(0.1, f.turnDur), 0, 1);
     const target = u * u * u * (u * (u * 6 - 15) + 10); // smootherstep: slow start, slow settle
     this.filmTurn = damp(this.filmTurn, target, 10, dt);
@@ -1519,6 +1538,11 @@ export class DavidModel {
           if (lk.w < 0.05) lk.pos.copy(tgt);
         } else if (Math.hypot(lk.pos.x - tgt.x, lk.pos.z - tgt.z) > 0.22) lk.on = false;
       } else lk.on = false;
+      // teleports / cuts: never drag a foot back across the map
+      if (lk.w > 0 && Math.hypot(lk.pos.x - tgt.x, lk.pos.z - tgt.z) > 0.6) {
+        lk.on = false;
+        lk.w = 0;
+      }
       lk.w = damp(lk.w, lk.on ? 1 : 0, lk.on ? 40 : 14, dt);
       if (lk.w > 1e-3) {
         tgt.x += (lk.pos.x - tgt.x) * lk.w;
@@ -2030,7 +2054,16 @@ const RELOAD_MASK = [...UPPER_R, 'chest', 'head', 'neck'];
 const _tmpTarget = new THREE.Vector3();
 const SIDES = ['L', 'R'] as const;
 /** the mocap base drives everything but the staff arm (UPPER_L gets a smaller share) */
-const MO_MASK = ['hips', 'hipsX', ...TORSO, ...UPPER_R, ...LEGS];
+const MO_MASK = ['hips', 'hipsX', 'spine', 'chest', ...UPPER_R, ...LEGS];
+const MO_HEAD = ['neck', 'head'];
+/** pickup_box: the window from the bend to standing again, time-warped onto the keyed PICK (1.05 s) */
+const PICK_MO: [number, number] = [0.55, 2.35];
+/** throw_ball: the release frame (fastest right arm) */
+const THROW_MO = 1.4;
+const NOT_LOWER = new Set(['hips', 'hipsX', 'spine', ...LEGS]);
+const ACTION_UPPER: Record<ActionName, string[]> = Object.fromEntries(
+  (Object.keys(ACTIONS) as ActionName[]).map((k) => [k, (ACTIONS[k].mask ?? ACTIONS[k].clip.joints).filter((j) => !NOT_LOWER.has(j))]),
+) as Record<ActionName, string[]>;
 const KNEEL_UPPER = [...UPPER_L, ...UPPER_R, 'neck', 'head', 'staff', 'staffW', 'butt', 'plantW'];
 const _errW = new THREE.Vector3();
 const _errReal = new THREE.Vector3();

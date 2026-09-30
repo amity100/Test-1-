@@ -10,8 +10,8 @@ export const landAtmo = {
   uHaze: { value: new THREE.Vector4(2.4e-5, 1 / 1900, -400, 1) },
   /** sky capture of the set (SkySystem.cubeTarget.texture) */
   tSkyCube: { value: null as THREE.Texture | null },
-  uHazeWarm: { value: new THREE.Color(1.0, 0.8, 0.58) },
-  uHazeCool: { value: new THREE.Color(0.6, 0.64, 0.78) },
+  uHazeWarm: { value: new THREE.Color(1.0, 0.76, 0.62) },
+  uHazeCool: { value: new THREE.Color(0.5, 0.52, 0.84) },
   uSunDirA: { value: new THREE.Vector3(0, 1, 0) },
   uSunColA: { value: new THREE.Color(1, 1, 1) },
 };
@@ -30,7 +30,7 @@ vec3 landHazeColor(vec3 rd){
   vec3 skyDir = normalize(vec3(rd.x, max(rd.y, 0.015) * 0.35 + 0.012, rd.z));
   vec3 h = textureCube(tSkyCube, skyDir).rgb;
   float mu = max(dot(rd, uSunDirA), 0.0);
-  h *= mix(uHazeCool, uHazeWarm, pow(mu, 3.0));
+  h *= mix(uHazeCool, uHazeWarm, pow(mu, 6.0));
   return h * 0.92 + uSunColA * (pow(mu, 8.0) * 0.22 + pow(mu, 48.0) * 0.45);
 }
 vec3 landApplyHaze(vec3 col, vec3 cam, vec3 wp){

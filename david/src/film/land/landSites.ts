@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { TextureSet } from '../../world/Textures';
 import type { LandTier } from './landTerrain';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import fortA from '../../assets/palace/fortstone_a.webp?url';
 import fortN from '../../assets/palace/fortstone_n.webp?url';
 
@@ -56,12 +57,12 @@ export function stoneMaterial(tex: TextureSet, map: 'wall' | 'masonry' | 'rock',
 export function mannequinGeometry(height = 1.74, seated = false): THREE.BufferGeometry {
   const s = height / 1.74;
   const parts: THREE.BufferGeometry[] = [];
-  const body = new THREE.CylinderGeometry(0.17 * s, 0.26 * s, (seated ? 0.62 : 1.18) * s, 10);
-  body.translate(0, seated ? 0.62 * s : 0.62 * s + 0.0, 0);
+  const body = new THREE.CylinderGeometry(0.17 * s, 0.26 * s, (seated ? 0.62 : 1.45) * s, 10);
+  body.translate(0, seated ? 0.62 * s : 0.725 * s, 0);
   if (seated) body.translate(0, 0.18 * s, 0);
   parts.push(body);
   const head = new THREE.SphereGeometry(0.11 * s, 10, 8);
-  head.translate(0, (seated ? 1.28 : 1.62) * s, 0);
+  head.translate(0, (seated ? 1.2 : 1.56) * s, 0);
   parts.push(head);
   if (seated) {
     const legs = new THREE.BoxGeometry(0.34 * s, 0.14 * s, 0.5 * s);
@@ -127,53 +128,124 @@ export function buildRamahGate(tex: TextureSet, tier: LandTier, frame: { origin:
     group.add(mesh);
     return mesh;
   };
-  const H = 3.6; // perimeter (outer house) wall height
-  const passW = 3.0, towerW = 5.5, towerD = 4.2, towerH = 4.0; // wall stubs flanking the passage (not towers)
-  // towers flanking the entrance (project 3 m outside the wall face)
-  for (const sgn of [-1, 1]) {
-    const cx = sgn * (passW / 2 + towerW / 2);
-    add(meterBox(towerW, towerH + 3, towerD, 4.8, 0.05), wallM, cx, (towerH + 3) / 2 - 3, -towerD / 2 + 0.6);
-    // parapet stones on the tower top (irregular, no crenellation pattern)
-    // inner chamber walls (one pair of chambers along the passage)
-    add(meterBox(0.9, H + 3, 8.5, 4.8, 0.04), wallM, sgn * (passW / 2 + 0.45), (H + 3) / 2 - 3, -4.25 - 3.5);
-    add(meterBox(4.2, H + 3, 0.9, 4.8, 0.04), wallM, sgn * (passW / 2 + 2.1), (H + 3) / 2 - 3, -12.0);
-    // town wall running off from the tower, 4 m thick, following the ground
-    const segs = tier === 'low' ? 5 : 8;
-    for (let i = 0; i < segs; i++) {
-      const lx = sgn * (passW / 2 + towerW + 4 + i * 8);
-      const lz = -2 - i * i * 0.55;
-      const wp = toWorld(lx, 0, lz);
-      const gy = ground(wp.x, wp.z) - frame.origin.y;
-      add(meterBox(8.4, H + 4, 4, 4.8, 0.05), wallM, lx, gy + (H + 4) / 2 - 4, lz, sgn * i * 0.07);
-    }
-    // benches along the outer wall face, both sides of the entrance (elders' seats)
-    add(meterBox(towerW - 0.4, 0.46, 0.55, 1.4, 0.02), benchM, cx, 0.23, 0.6 + 0.3);
-    add(meterBox(6.5, 0.46, 0.55, 1.4, 0.02), benchM, sgn * (passW / 2 + towerW + 3.6), 0.23, 0.3 + 0.1);
-  }
-  // flat timber lintel beams over the entrance + wall above (no arch)
-  add(meterBox(passW + 1.4, 0.35, 0.45, 1.5), woodM, 0, 2.9, 0.35);
-  add(meterBox(passW + 1.4, 0.35, 0.45, 1.5), woodM, 0, 2.9, -1.0);
-  add(meterBox(passW + 0.6, 1.1, 1.9, 4.8, 0.04), wallM, 0, 3.07 + 0.55, -0.35);
-  // open gate leaves (planks) against the passage walls
-  for (const sgn of [-1, 1]) {
-    const leaf = add(meterBox(1.9, 2.7, 0.12, 1.0), woodM, sgn * (passW / 2 - 0.1), 1.35, -1.4, sgn * Math.PI / 2);
-    leaf.position.add(new THREE.Vector3(0, 0, 0));
-  }
-  // threshold stone and a beaten-earth passage floor
-  add(meterBox(passW, 0.18, 1.0, 1.4), benchM, 0, 0.02, 0.4);
-  // houses of the town behind the wall (flat roofs of beams + packed earth)
-  const nh = tier === 'low' ? 14 : tier === 'medium' ? 26 : 38;
-  for (let i = 0; i < nh; i++) {
-    const a = (rnd() - 0.5) * Math.PI * 1.1;
-    const r = 18 + rnd() * 55;
-    const lx = Math.sin(a) * r * 1.1, lz = -17 - Math.cos(a) * r * 0.8;
-    const wp = toWorld(lx, 0, lz);
+  const H = 3.2; // house wall height (one storey + parapet)
+  const passW = 3.0, stubW = 5.5, stubD = 4.2;
+  // ---- merged geometry per material (a few draw calls for the whole village)
+  const parts: Record<'wall' | 'roof' | 'wood' | 'bench', THREE.BufferGeometry[]> = { wall: [], roof: [], wood: [], bench: [] };
+  const tmpC = new THREE.Color();
+  const piece = (kind: keyof typeof parts, g: THREE.BufferGeometry, lx: number, ly: number, lz: number, ry: number, tint: THREE.Color) => {
+    const w = toWorld(lx, ly, lz);
+    const m = new THREE.Matrix4().compose(w, new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), frame.yaw + ry), new THREE.Vector3(1, 1, 1));
+    g.applyMatrix4(m);
+    const n = g.getAttribute('position').count;
+    const c = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { c[i * 3] = tint.r; c[i * 3 + 1] = tint.g; c[i * 3 + 2] = tint.b; }
+    g.setAttribute('color', new THREE.BufferAttribute(c, 3));
+    parts[kind].push(g.index ? g.toNonIndexed() : g);
+  };
+  /**
+   * A pillared four-room house (Iron I, Raddana / Ai / Tell en-Nasbeh): rough fieldstone walls, entrance in the
+   * short front wall, two rows of monolithic stone pillars dividing a central space from the side rooms, a broad
+   * room across the back; flat roofs of beams, branches and packed clay with a low parapet (Deut 22:8) over the
+   * side and back rooms; a clay oven (tannur) in the court. Local house frame: (hx, hz) centre, `ry` yaw, the
+   * front (door) toward +Z of the house.
+   */
+  const house = (hx: number, hz: number, ry: number, W: number, D: number, big = false) => {
+    const c = Math.cos(ry), sn = Math.sin(ry);
+    const L = (x: number, z: number): [number, number] => [hx + x * c + z * sn, hz - x * sn + z * c];
+    const wp = toWorld(hx, 0, hz);
     const gy = ground(wp.x, wp.z) - frame.origin.y;
-    const w = 5 + rnd() * 4, d = 6 + rnd() * 5, h = 3.0 + rnd() * 1.6;
-    const ry = (rnd() - 0.5) * 0.5;
-    add(meterBox(w, h + 2, d, 4.8, 0.03), houseM, lx, gy + (h + 2) / 2 - 2, lz, ry);
-    add(meterBox(w + 0.4, 0.35, d + 0.4, 3.0), roofM, lx, gy + h + 0.15, lz, ry);
+    const tint = tmpC.setHSL(0.09 + rnd() * 0.03, 0.18 + rnd() * 0.12, 0.72 + rnd() * 0.12).clone();
+    const t = 0.75, h = H + (big ? 0.5 : 0) + rnd() * 0.4, sink = 1.6;
+    const wall = (x: number, z: number, w: number, d: number, hh = h) => { const [px, pz] = L(x, z); piece('wall', meterBox(w, hh + sink, d, 4.8, 0.04), px, gy + (hh + sink) / 2 - sink, pz, ry, tint); };
+    wall(0, -D / 2 + t / 2, W, t); // back
+    wall(-W / 2 + t / 2, 0, t, D); wall(W / 2 - t / 2, 0, t, D); // sides
+    const door = 1.1;
+    wall(-(W / 2 + door / 2) / 2 - 0.1, D / 2 - t / 2, W / 2 - door / 2 + 0.2, t);
+    wall((W / 2 + door / 2) / 2 + 0.1, D / 2 - t / 2, W / 2 - door / 2 + 0.2, t);
+    { const [px, pz] = L(0, D / 2 - t / 2); piece('wood', meterBox(door + 0.6, 0.22, t + 0.1, 1.5), px, gy + 1.95, pz, ry, tmpC.setRGB(0.6, 0.5, 0.4)); piece('wall', meterBox(door + 0.4, h - 2.06, t, 4.8), px, gy + 2.06 + (h - 2.06) / 2, pz, ry, tint); }
+    // pillar rows (the side rooms), the broad room across the back
+    const side = W * 0.27, back = D * 0.28;
+    for (const sg of [-1, 1]) for (let i = 0; i < 3; i++) {
+      const [px, pz] = L(sg * (W / 2 - t - side), D / 2 - t - 1.2 - i * ((D - t * 2 - back - 1.2) / 2.2));
+      piece('bench', meterBox(0.42, 2.3, 0.42, 1.2, 0.03), px, gy + 1.15, pz, ry + rnd() * 0.2, tmpC.setRGB(0.9, 0.87, 0.8));
+    }
+    { const [px, pz] = L(0, -D / 2 + t + back); piece('wall', meterBox(W - t * 2, 2.4 + sink, 0.5, 4.8, 0.03), px, gy + (2.4 + sink) / 2 - sink, pz, ry, tint); }
+    // roofs: side rooms + back room (beams + packed clay), low parapet on the edge
+    const rt = tmpC.setHSL(0.08, 0.22, 0.6 + rnd() * 0.08).clone();
+    for (const sg of [-1, 1]) { const [px, pz] = L(sg * (W / 2 - (side + t) / 2), 0.2); piece('roof', meterBox(side + t + 0.1, 0.32, D - 0.3, 3.0), px, gy + h - 0.3, pz, ry, rt); }
+    { const [px, pz] = L(0, -D / 2 + (back + t) / 2); piece('roof', meterBox(W - 0.2, 0.32, back + t, 3.0), px, gy + h - 0.3, pz, ry, rt); }
+    // beam ends under the roofs (timber)
+    for (let i = 0; i < 5; i++) { const [px, pz] = L(-W / 2 + side + t + 0.05, D / 2 - 1.5 - i * (D - 3) / 4); piece('wood', meterBox(0.24, 0.2, 0.24, 1.0), px, gy + h - 0.52, pz, ry, tmpC.setRGB(0.55, 0.45, 0.36)); }
+    // tannur (clay oven) in the court
+    if (rnd() < 0.7) { const [px, pz] = L((rnd() - 0.5) * 1.2, D / 2 - 2.6); const ov = new THREE.SphereGeometry(0.55, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2); ov.scale(1, 1.2, 1); piece('roof', ov, px, gy, pz, 0, tmpC.setRGB(0.72, 0.52, 0.38)); }
+    // collared-rim jars by the door
+    if (rnd() < 0.6) { const [px, pz] = L(door * 0.9, D / 2 + 0.5); const jar = new THREE.CylinderGeometry(0.2, 0.26, 0.9, 8); piece('roof', jar, px, gy + 0.45, pz, 0, tmpC.setRGB(0.78, 0.6, 0.45)); }
+  };
+  // ---- the ring of houses: their back walls make the continuous perimeter (Raddana / Ai / Nasbeh); the gateway is
+  // a narrow passage between two of them with short wall stubs, a flat timber lintel (no arch, no towers)
+  const ringR = 58, ringC = { x: 0, z: -ringR };
+  const nRing = tier === 'low' ? 14 : tier === 'medium' ? 22 : 30;
+  let ang = 0.21;
+  for (let k = 0; k < nRing; k++) {
+    for (const sg of [-1, 1]) {
+      if (k * 2 + (sg > 0 ? 1 : 0) >= nRing) continue;
+      const W = 9 + rnd() * 2.5, D = 11 + rnd() * 2.5;
+      const a = sg * (ang + (k === 0 ? 0 : 0)) ;
+      const r = ringR - D / 2 + 0.5;
+      const hx = ringC.x + Math.sin(a) * r, hz = ringC.z + Math.cos(a) * r;
+      // front faces into the village (toward the centre): house +Z = inward
+      house(hx, hz, a + Math.PI, W, D, false);
+      if (sg > 0) ang += (W + 0.6) / ringR;
+    }
   }
+  // inner houses; Samuel's house (slightly larger) near the high point, by the altar
+  const nIn = tier === 'low' ? 5 : tier === 'medium' ? 9 : 14;
+  for (let i = 0; i < nIn; i++) {
+    const a = rnd() * Math.PI * 2, r = 14 + rnd() * 20;
+    house(ringC.x + Math.sin(a) * r, ringC.z + Math.cos(a) * r, rnd() * Math.PI * 2, 8.5 + rnd() * 2, 10 + rnd() * 2);
+  }
+  house(-8, -34, 0.3, 12.5, 14, true);
+  // gate: short wall stubs flanking the passage + benches on the outer face (the elders sit here, Ruth 4:1-2)
+  for (const sgn of [-1, 1]) {
+    const cx = sgn * (passW / 2 + stubW / 2);
+    piece('wall', meterBox(stubW, H + 0.6 + 1.6, stubD, 4.8, 0.05), cx, (H + 0.6 + 1.6) / 2 - 1.6, -stubD / 2 + 0.6, 0, tmpC.setRGB(0.95, 0.91, 0.84));
+    piece('bench', meterBox(stubW - 0.4, 0.46, 0.55, 1.4, 0.02), cx, 0.23, 0.9, 0, tmpC.setRGB(0.95, 0.92, 0.86));
+    piece('bench', meterBox(6.5, 0.46, 0.55, 1.4, 0.02), sgn * (passW / 2 + stubW + 3.6), 0.23, 0.4, 0, tmpC.setRGB(0.93, 0.9, 0.84));
+    // wall between the stubs and the first houses of the ring
+    piece('wall', meterBox(9, H + 1.6, 1.1, 4.8, 0.05), sgn * (passW / 2 + stubW + 4.2), (H + 1.6) / 2 - 1.6, -1.6, 0, tmpC.setRGB(0.92, 0.88, 0.8));
+  }
+  piece('wood', meterBox(passW + 1.4, 0.35, 0.45, 1.5), 0, 2.9, 0.35, 0, tmpC.setRGB(0.62, 0.5, 0.38));
+  piece('wood', meterBox(passW + 1.4, 0.35, 0.45, 1.5), 0, 2.9, -1.0, 0, tmpC.setRGB(0.62, 0.5, 0.38));
+  piece('wall', meterBox(passW + 0.6, 0.9, 1.9, 4.8, 0.04), 0, 3.07 + 0.45, -0.35, 0, tmpC.setRGB(0.95, 0.91, 0.84));
+  for (const sgn of [-1, 1]) piece('wood', meterBox(1.9, 2.7, 0.12, 1.0), sgn * (passW / 2 - 0.1), 1.35, -1.4, sgn * Math.PI / 2, tmpC.setRGB(0.66, 0.54, 0.42));
+  piece('bench', meterBox(passW, 0.18, 1.0, 1.4), 0, 0.02, 0.4, 0, tmpC.setRGB(0.9, 0.87, 0.8));
+  // terraces on the slope below the gate (dry-stone risers following the contour), olives planted on them
+  const terraceOlives: { x: number; z: number; s: number; yaw: number }[] = [];
+  for (let i = 0; i < (tier === 'low' ? 3 : 5); i++) {
+    const R = ringR + 16 + i * 11;
+    for (let a = -1.25; a < 1.25; a += 0.07) {
+      const lx = Math.sin(a) * R, lz = ringC.z + Math.cos(a) * R;
+      if (Math.abs(lx) < 16 && lz < 30) continue; // the plaza and the road out of the gate
+      const w = toWorld(lx, 0, lz);
+      const gy = ground(w.x, w.z) - frame.origin.y;
+      piece('wall', meterBox(R * 0.072, 1.9, 0.9, 4.8, 0.06), lx, gy - 0.25, lz, -a, tmpC.setRGB(0.86, 0.83, 0.76));
+      if (rnd() < 0.55) { const o = toWorld(Math.sin(a) * (R + 5), 0, ringC.z + Math.cos(a) * (R + 5)); terraceOlives.push({ x: o.x, z: o.z, s: 0.85 + rnd() * 0.35, yaw: rnd() * 6.28 }); }
+    }
+  }
+  const mats: Record<keyof typeof parts, THREE.Material> = { wall: houseM, roof: roofM, wood: woodM, bench: benchM };
+  for (const m of [houseM, roofM, woodM, benchM]) (m as THREE.MeshStandardMaterial).vertexColors = true;
+  for (const k of Object.keys(parts) as (keyof typeof parts)[]) {
+    if (!parts[k].length) continue;
+    const g = mergeGeometries(parts[k].map((x) => { x.deleteAttribute('uv1'); return x; }), false);
+    for (const x of parts[k]) x.dispose();
+    if (!g) continue;
+    g.computeBoundingSphere();
+    const mesh = new THREE.Mesh(g, mats[k]);
+    mesh.castShadow = mesh.receiveShadow = true;
+    group.add(mesh);
+  }
+  void wallM; void add;
   // the elders on the benches and before the gate; Samuel stands in the gateway facing them
   const elders: Mark[] = [];
   const benchY = 0.46;
@@ -204,7 +276,7 @@ export function buildRamahGate(tex: TextureSet, tier: LandTier, frame: { origin:
     const s0 = 0.55 + rnd() * 0.35;
     add(meterBox(s0 * 1.3, s0, s0, 1.2, 0.08), benchM, 6 + (i % 3 - 1) * 0.7 + (rnd() - 0.5) * 0.2, ay + s0 / 2 + Math.floor(i / 3) * 0.5, -38 + (Math.floor(i / 3) % 2) * 0.3 + (rnd() - 0.5) * 0.4, rnd());
   }
-  return { group, elders, samuel, toWorld, altar: altarAt.setY(frame.origin.y + ay + 1.5), materials: [wallM, houseM, benchM, woodM, roofM] };
+  return { group, elders, samuel, toWorld, altar: altarAt.setY(frame.origin.y + ay + 1.5), materials: [wallM, houseM, benchM, woodM, roofM], terraceOlives };
 }
 
 // ============================================================================================ COAST
@@ -273,7 +345,7 @@ export function buildArmyPlaceholders(route: THREE.Vector3[], count: number, gro
 }
 
 /** Soft dust billboards along the road, lit by the sun with strong forward scattering (backlit glow). */
-export function buildDust(route: THREE.Vector3[], count: number, sunDir: THREE.Vector3, sunColor: THREE.Color) {
+export function buildDust(route: THREE.Vector3[], count: number, sunDir: THREE.Vector3, sunColor: THREE.Color, spread = 420) {
   const g = new THREE.PlaneGeometry(1, 1);
   const inst = new THREE.InstancedBufferGeometry();
   inst.index = g.index; inst.setAttribute('position', g.getAttribute('position')); inst.setAttribute('uv', g.getAttribute('uv'));
@@ -284,13 +356,13 @@ export function buildDust(route: THREE.Vector3[], count: number, sunDir: THREE.V
   for (let i = 1; i < route.length; i++) lens.push(lens[i - 1] + route[i].distanceTo(route[i - 1]));
   const total = lens[lens.length - 1];
   for (let k = 0; k < count; k++) {
-    const s = 30 + rnd() * Math.min(total - 30, 420);
+    const s = 25 + rnd() * Math.min(total - 25, spread);
     let i = 1;
     while (i < route.length - 1 && lens[i] < s) i++;
     const f = (s - lens[i - 1]) / Math.max(1e-3, lens[i] - lens[i - 1]);
     const p = new THREE.Vector3().lerpVectors(route[i - 1], route[i], f);
     offs[k * 4] = p.x + (rnd() - 0.5) * 14; offs[k * 4 + 1] = p.y + 0.5 + rnd() * rnd() * 7; offs[k * 4 + 2] = p.z + (rnd() - 0.5) * 14;
-    offs[k * 4 + 3] = 5 + rnd() * 9;
+    offs[k * 4 + 3] = 6 + rnd() * 12;
   }
   inst.setAttribute('aOff', new THREE.InstancedBufferAttribute(offs, 4));
   inst.instanceCount = count;
@@ -318,9 +390,10 @@ export function buildDust(route: THREE.Vector3[], count: number, sunDir: THREE.V
         float a = (1.0 - smoothstep(0.2, 1.0, r)) * (0.55 + 0.45 * n2(vUv * 4.0 + vSeed * 17.0));
         vec3 rd = normalize(vW - cameraPosition);
         float mu = max(dot(rd, normalize(uSunDir)), 0.0);
-        float ph = 0.35 + 2.8 * pow(mu, 6.0) + 6.0 * pow(mu, 40.0);
-        vec3 col = uSunCol * ph * 1.4 + uAmb;
-        gl_FragColor = vec4(col * a * 0.16, a * 0.16);
+        float ph = 0.3 + 1.1 * pow(mu, 5.0) + 1.2 * pow(mu, 30.0);
+        vec3 col = uSunCol * ph * 0.9 + uAmb;
+        float al = a * 0.075;
+        gl_FragColor = vec4(col * al, al);
       }`,
     blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
   });

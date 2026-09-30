@@ -61,7 +61,7 @@ export class FilmActor {
   /** arm poses from the proxy path (masked out of the mocap); weight 0..1 each */
   readonly armPose: Record<'L' | 'R', { pose: ArmPose | null; weight: number }> = { L: { pose: null, weight: 0 }, R: { pose: null, weight: 0 } };
   /** world-space reach targets for post-IK (e.g. Saul's hand to the corner of the me'il) */
-  readonly reach: Record<'L' | 'R', { target: THREE.Vector3 | null; weight: number }> = { L: { target: null, weight: 0 }, R: { target: null, weight: 0 } };
+  readonly reach: Record<'L' | 'R', { target: THREE.Vector3 | null; weight: number; grip?: boolean }> = { L: { target: null, weight: 0, grip: true }, R: { target: null, weight: 0, grip: true } };
   /** keep a held prop's shaft world-aligned with `axis` (e.g. a carried spear upright) by turning the wrist */
   readonly upright: Record<'L' | 'R', { weight: number; axis: THREE.Vector3; prop: string | null }> = {
     L: { weight: 0, axis: new THREE.Vector3(0, 1, 0), prop: null },
@@ -82,9 +82,45 @@ export class FilmActor {
   /**
    * procedural body layer over the mocap (lunges, reaching low, recoil): `drop` lowers the pelvis (m; the legs bend
    * and the feet stay planted), `lean` bends hips + spine forward about the actor's right axis (rad; < 0 = back),
-   * `twist` turns the chest (rad, + = to the actor's left), `side` shifts the pelvis to the actor's right (m).
+   * `twist` turns the chest (rad, + = to the actor's left), `side` shifts the pelvis to the actor's right (m),
+   * `feetFwd` moves the planted feet forward (m) — with `drop` that is sitting (see sit()).
    */
-  readonly body = { drop: 0, lean: 0, twist: 0, side: 0 };
+  readonly body = { drop: 0, lean: 0, twist: 0, side: 0, feetFwd: 0 };
+
+  /**
+   * seated on a bench / stone whose top is `seatTop` m above the ground under the actor: the pelvis drops onto it,
+   * the feet go forward (knees ~90°). 0 = standing.
+   */
+  sit(seatTop: number) {
+    if (seatTop <= 0) {
+      this.body.drop = 0;
+      this.body.feetFwd = 0;
+      return;
+    }
+    const hip = this.human.rig.restWorldPosition('upperleg01.L').y + (this.human.root.position.y || 0);
+    this.body.drop = Math.max(0, hip - seatTop - 0.085);
+    this.body.feetFwd = 0.36 * (hip / 0.86);
+  }
+  /**
+   * Head / neck aim. The performances keep setting `mocap.lookAt` / `mocap.lookWeight` as before, but FilmActor
+   * does the aiming itself, in world space after the rig: MocapPlayer's own look-at turns these heads AWAY from
+   * the target (its yaw correction has the wrong sign on this rig and runs away to the limit — see the report).
+   * The eyes still converge on the target through rig.lookTarget (pre-compensated for the head turn).
+   */
+  readonly lookLimits = { yaw: 1.25, up: 0.45, down: 0.7 };
+  /** 1/s: how fast the head follows a new target */
+  lookRate = 5;
+  private lookYaw = 0;
+  private lookPitch = 0;
+  /**
+   * Film light on the face (enableFaceLight): a soft warm spot from the camera side, aimed at the eyes, so the face
+   * reads against the low sun (shots 7-9 are backlit). `faceFill` = illuminance on the face in the sun's units
+   * (sun.intensity ≈ 3-7 at golden hour; 1-2.5 is a fill); 0 = off. No shadows.
+   */
+  faceLight: THREE.SpotLight | null = null;
+  faceFill = 0;
+  readonly faceLightRig = { dist: 1.15, side: 0.4, up: 0.22 };
+  private readonly lookEye = new THREE.Vector3();
 
   private constructor(
     readonly spec: ActorSpec,
@@ -124,7 +160,7 @@ export class FilmActor {
         props.helmet = r.helmet;
         (props.spear as THREE.Object3D).userData.prop = r.spear;
         groomSpec = 'saul';
-        headband = { height: 0, radius: [rx + 0.0078, rz + 0.0078], width: 0.018, tilt: 0.008 };
+        headband = { height: 0.013, radius: [rx + 0.0078, rz + 0.0078], width: 0.018, tilt: 0.008 };
         break;
       }
       case 'samuel': {
@@ -206,13 +242,31 @@ export class FilmActor {
     return this.root.rotation.y;
   }
 
+  /**
+   * world heading (yaw, game convention) of the body: the mean of the hip line and the shoulder line, each turned to a
+   * forward vector (left x up). Measured from the bones, so it does not depend on any clip's rest frame.
+   */
+  bodyHeading() {
+    const b = this.human.bones as Record<string, THREE.Object3D>;
+    const f = (l: string, r: string, out: THREE.Vector3) => {
+      b[l].getWorldPosition(_v);
+      b[r].getWorldPosition(_v2);
+      _v.sub(_v2); // the character's left
+      return out.set(-_v.z, 0, _v.x); // left x up = forward (checked against the eyes: facing() and the studio views)
+    };
+    f('upperleg01.L', 'upperleg01.R', _v3);
+    f('upperarm01.L', 'upperarm01.R', _T);
+    _v3.normalize().add(_T.normalize());
+    return Math.atan2(_v3.x, _v3.z);
+  }
+
   /** diagnostics: horizontal facing angle of the face (from the eyes) vs the placement yaw */
   facing() {
     const s = this.human.sockets as Record<string, THREE.Object3D>;
     const h = this.human.bones.head.getWorldPosition(new THREE.Vector3());
     const e = this.eyesWorld(new THREE.Vector3());
     void s;
-    return { yaw: this.yaw, face: Math.atan2(e.x - h.x, e.z - h.z) };
+    return { yaw: this.yaw, face: Math.atan2(e.x - h.x, e.z - h.z), body: this.bodyHeading() };
   }
 
   /** world position of a named head / chest point (camera and look-at targets) */
@@ -261,6 +315,19 @@ export class FilmActor {
     this.lastPos.copy(this.root.position);
     this.hasLast = true;
     this.applyArmMasks();
+    // look: take the target from the mocap player (see lookLimits) and aim the eyes at it, pre-compensated for the
+    // head turn applied after the rig (the eyes are children of the head)
+    const want = this.mocap.lookAt;
+    const wantW = want ? this.mocap.lookWeight : 0;
+    this.mocap.lookAt = null;
+    this.mocap.lookEyes = false;
+    if (want) {
+      const hb = this.human.bones.head.getWorldPosition(_v);
+      this.lookEye.copy(want).sub(hb);
+      this.lookEye.applyAxisAngle(_axU.set(0, 1, 0), -this.lookYaw);
+      this.lookEye.add(hb);
+      this.human.rig.lookTarget = this.lookEye;
+    } else this.human.rig.lookTarget = null;
     this.mocap.update(dt);
     if (!(this.mocap.rootMotion === 'inplace' && this.cancelHeading)) this.headingCorr = 0;
     this.human.root.rotation.y = this.headingCorr;
@@ -269,40 +336,91 @@ export class FilmActor {
     // in-place playback keeps the clip's own pelvis heading (idles were captured facing anywhere): measure the pelvis
     // heading relative to the placement and cancel its average (slowly, so a walk keeps its natural pelvis swing)
     if (this.mocap.rootMotion === 'inplace' && this.cancelHeading) {
-      const rb = (this.human.bones as Record<string, THREE.Object3D>).root;
-      if (rb) {
-        rb.getWorldQuaternion(_q);
-        this.root.getWorldQuaternion(_q2);
-        _q.premultiply(_q2.invert());
-        _q.multiply(this.human.rig.restWorldQuaternion('root', _q3).invert());
-        _v.set(0, 0, 1).applyQuaternion(_q);
-        const heading = Math.atan2(_v.x, _v.z);
-        const k = this.headingSnap ? 1 : 1 - Math.exp(-this.headingRate * dt);
-        this.headingCorr -= heading * k;
-        this.headingSnap = false;
-      }
+      const heading = this.bodyHeading() - this.root.rotation.y;
+      const e = Math.atan2(Math.sin(heading), Math.cos(heading));
+      const k = this.headingSnap ? 1 : 1 - Math.exp(-this.headingRate * dt);
+      this.headingCorr -= e * k;
+      this.headingSnap = false;
     }
     this.applyBody();
+    this.applyLook(want, wantW, dt);
+    this.mocap.lookAt = want;
     for (const side of ['L', 'R'] as const) {
       const r = this.reach[side];
-      if (r.target && r.weight > 0.001) this.armIK(side, r.target, r.weight);
+      if (r.target && r.weight > 0.001) {
+        if (r.grip === false) this.armIK(side, r.target, r.weight);
+        else {
+          // the GRIP (inside the closed hand), not the wrist, goes to the target: two passes (the hand turns)
+          const sock = side === 'L' ? this.human.sockets.handGripL : this.human.sockets.handGripR;
+          const wr = (this.human.bones as Record<string, THREE.Object3D>)[`wrist.${side}`];
+          const passes = r.weight > 0.999 ? 2 : 1;
+          for (let pass = 0; pass < passes; pass++) {
+            sock.getWorldPosition(_G);
+            wr.getWorldPosition(_W2);
+            _G2.copy(r.target).sub(_G).add(_W2);
+            this.armIK(side, _G2, r.weight);
+          }
+        }
+      }
     }
     for (const side of ['L', 'R'] as const) {
       const u = this.upright[side];
       if (u.prop && u.weight > 0.001) this.keepUpright(side, u.prop, u.axis, u.weight);
     }
+    this.updateFaceLight(camera);
     this.groom?.update(dt, wind);
     this.outfit.update(dt, { velocity: this.velocity, wind });
     if (this.tear) {
       this.tear.wind.copy(wind);
+      if (camera) camera.getWorldPosition(this.tear.viewer);
       this.tear.update(dt);
+    }
+  }
+
+  /** head / neck aim at `target` (world), after the rig and the body layer; smoothed, limited relative to the chest */
+  private applyLook(target: THREE.Vector3 | null, w: number, dt: number) {
+    const b = this.human.bones as Record<string, THREE.Object3D>;
+    const head = b.head;
+    const k = dt > 0 ? 1 - Math.exp(-this.lookRate * dt) : 0;
+    let wantYaw = 0, wantPitch = 0;
+    if (target && w > 0) {
+      head.getWorldPosition(_A);
+      this.eyesWorld(_B);
+      const faceYaw = Math.atan2(_B.x - _A.x, _B.z - _A.z); // animated face heading (checked in the studio views)
+      // chest heading from the shoulder line (left x up)
+      b['upperarm01.L'].getWorldPosition(_C);
+      b['upperarm01.R'].getWorldPosition(_D);
+      _C.sub(_D);
+      const chest = Math.atan2(-_C.z, _C.x);
+      _D.copy(target).sub(_B);
+      const tYaw = Math.atan2(_D.x, _D.z);
+      const L = this.lookLimits;
+      const rel = THREE.MathUtils.clamp(wrapAngle(tYaw - chest), -L.yaw, L.yaw);
+      wantYaw = wrapAngle(chest + rel - faceYaw) * w;
+      // pitch: absolute (idle / walk clips carry a level head), the eyes do the rest
+      wantPitch = THREE.MathUtils.clamp(Math.atan2(_D.y, Math.hypot(_D.x, _D.z)) * 0.8, -L.down, L.up) * w;
+    }
+    this.lookYaw += (wantYaw - this.lookYaw) * (this.headingSnap ? 1 : k);
+    this.lookPitch += (wantPitch - this.lookPitch) * (this.headingSnap ? 1 : k);
+    if (Math.abs(this.lookYaw) < 1e-4 && Math.abs(this.lookPitch) < 1e-4) return;
+    // distribute over the neck and head: yaw about world up; pitch about the face's left axis (+ = down)
+    head.getWorldPosition(_A);
+    this.eyesWorld(_B);
+    const fy = Math.atan2(_B.x - _A.x, _B.z - _A.z) + this.lookYaw;
+    const left = _axL.set(Math.cos(fy), 0, -Math.sin(fy));
+    const up = _axU.set(0, 1, 0);
+    for (const [n, f] of LOOK_BONES) {
+      const bone = b[n];
+      if (!bone) continue;
+      rotateWorld(bone, _q.setFromAxisAngle(up, this.lookYaw * f));
+      rotateWorld(bone, _q.setFromAxisAngle(left, -this.lookPitch * f));
     }
   }
 
   /** the procedural body layer (see `body`): runs after the mocap / rig, before the arm IK */
   private applyBody() {
-    const { drop, lean, twist, side } = this.body;
-    if (Math.abs(drop) < 1e-4 && Math.abs(lean) < 1e-4 && Math.abs(twist) < 1e-4 && Math.abs(side) < 1e-4) return;
+    const { drop, lean, twist, side, feetFwd } = this.body;
+    if (Math.abs(drop) < 1e-4 && Math.abs(lean) < 1e-4 && Math.abs(twist) < 1e-4 && Math.abs(side) < 1e-4 && Math.abs(feetFwd) < 1e-4) return;
     const b = this.human.bones as Record<string, THREE.Object3D>;
     const rootB = b.root;
     if (!rootB) return;
@@ -316,18 +434,19 @@ export class FilmActor {
     this.root.getWorldQuaternion(_q2);
     const right = _axR.set(-1, 0, 0).applyQuaternion(_q2);
     const fwd = _axF.set(0, 0, 1).applyQuaternion(_q2);
+    if (feetFwd) for (let i = 0; i < 2; i++) _ank[i].addScaledVector(fwd, feetFwd).addScaledVector(right, (i === 0 ? -1 : 1) * 0.04 * Math.min(1, feetFwd / 0.3));
     // pelvis: down (and a little back as the hips fold), to the side
     rootB.getWorldPosition(_v);
     _v.y -= drop;
-    _v.addScaledVector(fwd, -0.25 * Math.max(0, lean) * 0.3).addScaledVector(right, side);
+    _v.addScaledVector(fwd, -0.04 * Math.max(0, lean)).addScaledVector(right, side);
     rootB.parent!.worldToLocal(_v);
     rootB.position.copy(_v);
     rootB.updateMatrixWorld(true);
     // hips fold 25%, the spine takes the rest (lower spine more)
     // (right-handed rotation about the actor's LEFT axis tips the chest forward)
     const left = _axL.copy(right).negate();
-    rotateWorld(rootB, _q.setFromAxisAngle(left, lean * 0.25));
-    const shares: [string, number][] = [['spine05', 0.26], ['spine04', 0.22], ['spine03', 0.14], ['spine02', 0.08], ['spine01', 0.05]];
+    rotateWorld(rootB, _q.setFromAxisAngle(left, lean * 0.05));
+    const shares: [string, number][] = [['spine05', 0.34], ['spine04', 0.28], ['spine03', 0.18], ['spine02', 0.1], ['spine01', 0.05]];
     for (const [n, f] of shares) {
       const bone = b[n];
       if (!bone) continue;
@@ -409,9 +528,39 @@ export class FilmActor {
     }
   }
 
-  /** add world-space helper objects (the torn piece, threads) to the scene */
+  /** create the face light (call before the scene is precompiled: a new light changes every shader in it) */
+  enableFaceLight(color: THREE.ColorRepresentation = 0xffd8b0) {
+    if (this.faceLight) return this.faceLight;
+    const l = new THREE.SpotLight(color, 0, 3.5, 0.42, 0.9, 2);
+    l.name = `faceLight:${this.spec.role}`;
+    l.castShadow = false;
+    this.faceLight = l;
+    if (this.root.parent) this.root.parent.add(l, l.target);
+    return l;
+  }
+
+  private updateFaceLight(camera?: THREE.Camera) {
+    const l = this.faceLight;
+    if (!l) return;
+    l.visible = this.root.visible && this.faceFill > 0;
+    if (!l.visible || !camera) return;
+    const e = this.eyesWorld(_A);
+    camera.getWorldPosition(_B);
+    _C.copy(_B).sub(e).setY(0);
+    if (_C.lengthSq() < 1e-6) _C.set(0, 0, 1);
+    _C.normalize();
+    _D.set(_C.z, 0, -_C.x); // camera-side horizontal
+    const r = this.faceLightRig;
+    l.position.copy(e).addScaledVector(_C, r.dist).addScaledVector(_D, r.side).add(_B.set(0, r.up, 0));
+    l.target.position.copy(e);
+    l.target.updateMatrixWorld();
+    l.intensity = this.faceFill * (r.dist * r.dist + r.side * r.side + r.up * r.up);
+  }
+
+  /** add world-space helper objects (the torn piece, threads, the face light) to the scene */
   addTo(scene: THREE.Object3D) {
     scene.add(this.root);
+    if (this.faceLight) scene.add(this.faceLight, this.faceLight.target);
     if (this.tear) scene.add(this.tear.free, this.tear.threads);
   }
 
@@ -420,6 +569,11 @@ export class FilmActor {
     this.groom?.dispose();
     this.outfit.dispose();
     this.tear?.dispose();
+    if (this.faceLight) {
+      this.faceLight.removeFromParent();
+      this.faceLight.target.removeFromParent();
+      this.faceLight.dispose();
+    }
     for (const k in this.props) {
       this.props[k].traverse((c) => {
         const m = c as THREE.Mesh;
@@ -443,12 +597,15 @@ export class FilmActor {
 const _zero = new THREE.Vector3();
 
 const SIDES = ['L', 'R'] as const;
+const LOOK_BONES: [string, number][] = [['spine01', 0.1], ['neck01', 0.15], ['neck02', 0.2], ['neck03', 0.2], ['head', 0.35]];
+const wrapAngle = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 const _ank = [new THREE.Vector3(), new THREE.Vector3()];
 const _fq = [new THREE.Quaternion(), new THREE.Quaternion()];
 const _axR = new THREE.Vector3(), _axF = new THREE.Vector3(), _axL = new THREE.Vector3(), _axU = new THREE.Vector3();
 const _rwP = new THREE.Quaternion(), _rwW = new THREE.Quaternion();
 const _A = new THREE.Vector3(), _B = new THREE.Vector3(), _C = new THREE.Vector3(), _D = new THREE.Vector3(), _P = new THREE.Vector3();
 const _tq = new THREE.Quaternion();
+const _G = new THREE.Vector3(), _G2 = new THREE.Vector3(), _W2 = new THREE.Vector3();
 
 /** apply a world-space rotation `dq` to a bone (children follow) */
 function rotateWorld(bone: THREE.Object3D, dq: THREE.Quaternion) {

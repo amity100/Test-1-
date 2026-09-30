@@ -179,8 +179,37 @@ export function landMaterial(tt: TerrainTex, look: TerrainLook, tier: LandTier):
         hills = mix(hills, hills * vec3(0.55, 0.6, 0.45), grove * dCellDots(xz * 0.11, 0.3));
         // the Shephelah and plain: fields; dunes along the shore
         float plain = smoothstep(420.0, 140.0, hgt) * step(xz.x, -12000.0);
-        hills = mix(hills, mix(field, chalk, 0.25 * n1), plain * 0.8);
-        hills = mix(hills, sand, smoothstep(-47000.0, -53500.0, xz.x) * smoothstep(60.0, 5.0, hgt));
+        {
+          // field parcels of the plain (irregular strips 30-110 m, rotated grid): stubble gold, ploughed brown,
+          // fallow grass, a few green plots; darker balks / hedges of scrub between them; threshing-bare patches
+          vec2 fp = mat2(0.93, 0.36, -0.36, 0.93) * xz;
+          vec2 fs = vec2(110.0, 46.0);
+          vec2 fc = floor(fp / fs + vec2(0.0, floor(fp.x / fs.x) * 0.37));
+          vec2 ff = fract(fp / fs + vec2(0.0, floor(fp.x / fs.x) * 0.37));
+          float fr = dHash12(fc + 3.1), fr2 = dHash12(fc + 17.7);
+          vec3 stub = mix(vec3(0.74, 0.62, 0.40), vec3(0.80, 0.69, 0.46), fr2);
+          vec3 plough = mix(vec3(0.44, 0.32, 0.22), vec3(0.52, 0.38, 0.26), fr2);
+          vec3 fallow = mix(vec3(0.60, 0.55, 0.38), vec3(0.54, 0.52, 0.34), fr2);
+          vec3 greenP = vec3(0.40, 0.43, 0.25);
+          vec3 fcol = fr < 0.42 ? stub : fr < 0.7 ? plough : fr < 0.93 ? fallow : greenP;
+          fcol = mix(fcol, vec3(0.62, 0.52, 0.35), 0.35 + 0.35 * (1.0 - smoothstep(150.0, 900.0, landDist)));
+          // furrows / stubble rows along the parcel
+          fcol *= 0.93 + 0.07 * sin(fp.y * 2.4 + fr * 20.0);
+          float balk = 1.0 - smoothstep(0.0, 0.035, min(min(ff.x, 1.0 - ff.x) * fs.x / 46.0, min(ff.y, 1.0 - ff.y)));
+          fcol = mix(fcol, vec3(0.36, 0.34, 0.22), balk * 0.55 * (1.0 - smoothstep(2500.0, 9000.0, landDist)));
+          fcol = mix(fcol, field, smoothstep(6000.0, 20000.0, landDist) * 0.5);
+          hills = mix(hills, mix(fcol, chalk, 0.12 * n1), plain * 0.88);
+        }
+        // the dune belt along the shore (the real coastline trends NNE: x_shore ≈ -56760 - 0.5 (z + 5470) near
+        // Ashdod): pale sand with dune ridges transverse to the west wind, kurkar and scrub farther inland
+        float dShore = xz.x - (-56760.0 - (xz.y + 5470.0) * 0.5);
+        float sandW = smoothstep(4600.0, 2000.0, dShore) * smoothstep(90.0, 8.0, hgt) * step(xz.x, -30000.0);
+        {
+          float ph = dot(xz, vec2(0.95, 0.31)) * 0.034 + dFbm(xz * 0.0035) * 7.0;
+          vec3 sandC = sand * (0.9 + 0.14 * sin(ph)) * mix(0.95, 1.05, n3);
+          hills = mix(hills, sandC, sandW);
+          nW = normalize(nW + vec3(-0.95, 0.0, -0.31) * cos(ph) * 0.3 * sandW);
+        }
         // desert: chalk and marl, hard limestone on the cliffs, darker wadi beds
         vec3 desert = mix(chalk, desertRock, smoothstep(0.12, 0.4, slope));
         desert = mix(desert, marl, smoothstep(-150.0, -330.0, hgt) * (1.0 - smoothstep(0.25, 0.5, slope)));

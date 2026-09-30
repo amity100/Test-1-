@@ -359,7 +359,7 @@ export class Village {
     this.group.add(pillar);
     // the grave: a low oval mound of fieldstones (≈2.6 x 1.7 m, ≈0.4 m high) east of the stone, earth between them
     const moundMat = rockMaterial(this.tex, 0xe6dccb, 1.6, 'rachel-mound');
-    const nStones = 46;
+    const nStones = 64;
     const heap = new THREE.InstancedMesh(boulderGeometry(3, 3), moundMat, nStones);
     const m4 = new THREE.Matrix4();
     const ca = Math.cos(-0.78), sa = Math.sin(-0.78);
@@ -369,7 +369,7 @@ export class Village {
       const a = rnd() * Math.PI * 2, rr = Math.sqrt(0.15 + rnd() * 0.85);
       const lx = 0.55 + Math.cos(a) * rr * 1.3, lz = Math.sin(a) * rr * 0.85;
       const mh = 0.36 * Math.max(0, 1 - rr * rr);
-      const s = (0.2 + rnd() * 0.22) * (1.1 - rr * 0.35);
+      const s = (0.12 + rnd() * 0.13) * (1.1 - rr * 0.35);
       const x = R.x + lx * ca - lz * sa, z = R.z + lx * sa + lz * ca;
       m4.compose(new THREE.Vector3(x, this.terrain.heightAt(x, z) + mh + s * 0.05, z), new THREE.Quaternion().setFromEuler(new THREE.Euler((rnd() - 0.5) * 0.5, rnd() * 6.28, (rnd() - 0.5) * 0.5)), new THREE.Vector3(s * 1.25, s * 0.62, s));
       heap.setMatrixAt(i, m4);
@@ -378,7 +378,7 @@ export class Village {
     heap.castShadow = heap.receiveShadow = true;
     this.group.add(heap);
     // the earth of the mound under the stones
-    const earth = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x7a5c44, roughness: 1, map: this.tex.soil, normalMap: this.tex.soilN }));
+    const earth = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xc4a888, roughness: 1, map: this.tex.soil, normalMap: this.tex.soilN }));
     earth.scale.set(1.45, 0.3, 0.95);
     earth.position.set(R.x + 0.55 * ca, ry - 0.04, R.z + 0.55 * sa);
     earth.rotation.y = 0.78;

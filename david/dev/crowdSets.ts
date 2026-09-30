@@ -157,6 +157,7 @@ async function boot() {
     info.hostMs = Math.round(performance.now() - ta);
     info.bakeMs = Math.round(host.anim.bakeMs);
     set.scene.add(host.group);
+    if (params.get('nohost') === '1') host.group.visible = false;
     info.loadMs = Math.round(performance.now() - t0);
     const order = set.sequence;
     const names = Object.keys(set.shots);
@@ -197,7 +198,16 @@ async function boot() {
       for (let i = 0; i < frames; i++) renderFrame(i === 0 ? 0 : 1 / 30);
       return { calls: renderer.info.render.calls, tris: renderer.info.render.triangles };
     };
-    w.__cs = { set, host, shot, view, info, names, camera, renderer, post, THREE, coast: c };
+    // a view in the coast shots' frame: (back along the heading, lateral on the land set's `side`, up above ground)
+    const T = (back: number, lat: number, up: number) => {
+      const hd = c.heading, x = c.columnHead.x + hd.x * back - hd.z * lat, z = c.columnHead.z + hd.z * back + hd.x * lat;
+      return [x, set.height.height(x, z) + up, z];
+    };
+    const viewRel = (p: number[], l: number[], fov = 40, travel = 0) => {
+      host.setTravel(travel);
+      return view(T(p[0], p[1], p[2]), T(l[0], l[1], l[2]), fov);
+    };
+    w.__cs = { set, host, shot, view, viewRel, info, names, camera, renderer, post, THREE, coast: c };
   }
   w.__ready = true;
   if (params.get('hud') === '1') hud.classList.remove('off');

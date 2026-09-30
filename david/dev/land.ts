@@ -43,6 +43,16 @@ async function boot() {
   const size = renderer.getDrawingBufferSize(new THREE.Vector2());
   post.setSize(size.x, size.y);
   set.showPlaceholders(params.get('figs') !== '0');
+  // ?host=1: the crowd teammate's PhilistineHost on the coast anchors (instead of the placeholders)
+  let host: { group: THREE.Object3D; update(dt: number, cam: THREE.Camera): void } | null = null;
+  if (params.get('host') === '1' && set.anchors.coast) {
+    const { PhilistineHost } = await import('../src/film/crowd/PhilistineHost');
+    const a = set.anchors.coast;
+    const h = await PhilistineHost.create({ tier: q.tier, trail: [a.columnHead, ...a.route.slice().reverse().filter((p) => p.x < a.columnHead.x - 1)], columnWidth: a.columnWidth, ground: (x, z) => set.height.height(x, z) });
+    set.scene.add(h.group);
+    host = h as unknown as typeof host;
+    set.showPlaceholders(false);
+  }
   const applyFrame = (name: string, u: number) => {
     const s = set.shots[name];
     if (!s) throw new Error('no shot ' + name);
@@ -58,6 +68,7 @@ async function boot() {
   const renderFrame = (dt: number) => {
     renderer.info.reset();
     set.update(dt, camera);
+    host?.update(dt, camera);
     renderer.toneMappingExposure = set.exposure;
     post.render(dt);
   };

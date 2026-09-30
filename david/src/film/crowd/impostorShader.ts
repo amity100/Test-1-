@@ -112,6 +112,7 @@ uniform vec3 uCloth[4];
 uniform vec3 uHair[6];
 uniform vec3 uAccent[4];
 uniform vec2 uSpearExt;
+uniform float uImpDbg;
 flat varying vec4 vJ[6];
 flat varying vec4 vImpA;
 flat varying vec4 vImpB;
@@ -161,7 +162,7 @@ const FRAG_BODY = /* glsl */ `
   vec3 skin = uSkin * mix(0.8, 1.1, h.x);
   vec3 tunic = uTunic[int(h.y * 7.999)] * (0.94 + 0.12 * h2.y);
   vec3 hair = uHair[int(min(5.0, h.w * (h2.w > 0.86 ? 6.0 : 5.0)))] * (0.9 + 0.2 * h2.x);
-  vec3 bronze = vec3(0.55, 0.36, 0.19) * (0.85 + 0.3 * h2.x);
+  vec3 bronze = mix(vec3(0.26, 0.11, 0.034), vec3(0.48, 0.18, 0.045), h2.x) * 1.1;
   vec3 col = vec3(0.0);
   float metal = 0.0, rough = 0.9;
   bool hit = false;
@@ -170,10 +171,10 @@ const FRAG_BODY = /* glsl */ `
     vec2 d = normalize(Tip - WrR);
     float below = uSpearExt.x / max(0.01, uSpearExt.y);
     vec2 butt = WrR - (Tip - WrR) * below;
-    if ((mask & B_SPEARHEAD) != 0 && impSeg(p, Tip - d * 0.24 * s, Tip, 0.02 * s + 0.2 * px)) {
-      hit = true; col = uArmy > 0.5 ? vec3(0.34, 0.33, 0.31) : mix(vec3(0.3, 0.29, 0.28), vec3(0.45, 0.3, 0.17), step(0.6, h2.y)); metal = 0.85; rough = 0.42;
-    } else if (impSeg(p, butt, Tip, 0.014 * s + 0.35 * px)) {
-      hit = true; col = vec3(0.2, 0.14, 0.085) * (0.85 + 0.3 * h2.x); rough = 0.7;
+    if ((mask & B_SPEARHEAD) != 0 && impSeg(p, Tip - d * 0.24 * s, Tip, 0.016 * s + 0.4 * px)) {
+      hit = true; col = uArmy > 0.5 ? vec3(0.2) : mix(vec3(0.2), vec3(0.36, 0.15, 0.05), step(0.6, h2.y)); metal = 0.3; rough = 0.55;
+    } else if (impSeg(p, butt, Tip, 0.014 * s + 0.4 * px)) {
+      hit = true; col = vec3(0.24, 0.17, 0.1) * (0.85 + 0.3 * h2.x); rough = 0.7;
     }
   }
   if (!hit && (mask & B_SHIELDARM) != 0 && facing > -0.35) {
@@ -182,8 +183,8 @@ const FRAG_BODY = /* glsl */ `
       hit = true;
       float rr = length((p - c) / vec2(max(0.12, abs(facing)), 1.0)) / (0.3 * s);
       col = uArmy > 0.5 ? mix(bronze, vec3(0.3, 0.2, 0.12), step(0.2, rr) * step(rr, 0.85)) : vec3(0.28, 0.17, 0.1) * (0.8 + 0.35 * h2.z);
-      metal = uArmy > 0.5 && (rr < 0.2 || rr > 0.85) ? 1.0 : 0.0;
-      rough = metal > 0.5 ? 0.38 : 0.45;
+      metal = uArmy > 0.5 && (rr < 0.2 || rr > 0.85) ? 0.4 : 0.0;
+      rough = metal > 0.5 ? 0.5 : 0.45;
     }
   }
   if (!hit) {
@@ -197,7 +198,7 @@ const FRAG_BODY = /* glsl */ `
       hit = true;
       vec2 dn = dh / (hr + 0.02 * s);
       impNrm = vec3(dn, sqrt(max(0.0, 1.0 - dot(dn, dn))));
-      if ((mask & B_HELMET) != 0) { col = bronze; metal = 1.0; rough = 0.36; }
+      if ((mask & B_HELMET) != 0) { col = bronze; metal = 0.45; rough = 0.5; }
       else { col = uCloth[int(h.z * 3.999)]; rough = 0.95; }
     } else if (impSeg(p, head, head, hr)) {
       hit = true;
@@ -218,7 +219,7 @@ const FRAG_BODY = /* glsl */ `
   if (!hit && (impSeg(p, N - up * 0.08 * s, PV + up * 0.12 * s, 0.155 * s * gi) || impSeg(p, shL, shR, 0.075 * s))) {
     hit = true; col = tunic; rough = 0.95;
     if (abs(p.y - (PV.y + 0.1 * s)) < 0.028 * s) col = vec3(0.2, 0.12, 0.07);
-    if (uArmy > 0.5 && p.y > PV.y + 0.14 * s) col *= 0.72 + 0.4 * step(0.5, fract(p.y / (0.038 * s)));
+    if (uArmy > 0.5 && p.y > PV.y + 0.14 * s) col *= mix(vec3(0.45, 0.36, 0.28), vec3(1.05), step(0.45, fract(p.y / (0.038 * s))));
   }
   // the skirt of the tunic / kilt down to the knees, swinging with the stride
   vec2 kn = (KnL + KnR) * 0.5;
@@ -239,7 +240,7 @@ const FRAG_BODY = /* glsl */ `
   if (!hit && (impSeg(p, KnL, AnL, 0.052 * s) || impSeg(p, KnR, AnR, 0.052 * s) || impSeg(p, AnL, AnL + vec2(fwdR * 0.15 * s, -0.045 * s), 0.042 * s) || impSeg(p, AnR, AnR + vec2(fwdR * 0.15 * s, -0.045 * s), 0.042 * s))) {
     hit = true;
     col = (mask & B_GREAVES) != 0 && p.y > AnL.y + 0.05 * s ? bronze : skin;
-    metal = (mask & B_GREAVES) != 0 && p.y > AnL.y + 0.05 * s ? 1.0 : 0.0;
+    metal = (mask & B_GREAVES) != 0 && p.y > AnL.y + 0.05 * s ? 0.4 : 0.0;
     if (metal < 0.5) col = mix(col, uDustColor * 0.85, 0.5 * uDust);
     rough = metal > 0.5 ? 0.36 : 0.75;
   }
@@ -250,8 +251,12 @@ const FRAG_BODY = /* glsl */ `
   // march dust over everything low
   if (metal < 0.5) col = mix(col, uDustColor * 0.9, clamp((0.5 * s - p.y) / (0.5 * s), 0.0, 1.0) * 0.4 * uDust);
   diffuseColor.rgb *= col;
+  // no grazing normals on a flat card: a metal edge turned to a low sun behind the host would flare into the bloom
+  impNrm = normalize(vec3(impNrm.xy, max(impNrm.z, 0.45)));
   impMetal = metal;
-  impRough = rough;
+  impRough = max(rough, 0.5);
+  if (uImpDbg > 0.5) { impMetal = 0.0; impRough = 1.0; }
+  if (uImpDbg > 1.5) impNrm = vec3(0.0, 0.0, 1.0);
 `;
 
 export function impostorMaterial(u: CrowdUniforms): THREE.MeshStandardMaterial {

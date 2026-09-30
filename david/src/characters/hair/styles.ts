@@ -57,24 +57,26 @@ export function davidStyle(): GroomStyle {
     locks: 190,
     sim: { low: 16, medium: 32, high: 48 },
     // david v2: the reference's long flowing curls reach the jaw and the nape (below the ears)
-    reach: 0.3,
+    reach: 0.34,
     length: (f, n, R) => {
       // david v2 (reference image): long, loose S-curls — crown and forelock tumbling onto the forehead, the sides
       // over the ears down to the jaw, the nape to the collar (was 0.084 + ... ≈ 8-13 cm: too short and tight)
       const top = ss(0.03, 0.1, f.y);
       const front = ss(-0.02, 0.06, f.z);
-      const back = ss(0.0, -0.08, f.z) * ss(0.05, -0.04, f.y);
+      const back = ss(0.02, -0.07, f.z) * ss(0.08, -0.02, f.y);
       const side = ss(0.05, 0.075, Math.abs(f.x)) * ss(0.06, 0.0, f.y);
       // the hairline at the forehead stays shorter so the forelock falls to the brows, not over the eyes
-      const hairline = ss(0.035, 0.075, f.z) * ss(0.11, 0.06, f.y);
-      return (0.15 + 0.03 * top + 0.035 * back + 0.012 * side - 0.07 * hairline) * (0.84 + 0.32 * R());
+      // (f is measured from the eye centres: the forehead hairline sits at z ≈ -0.01, the crown at z ≈ -0.08)
+      const hairline = ss(-0.07, -0.01, f.z) * ss(0.02, 0.07, f.y);
+      return (0.15 + 0.02 * top + 0.075 * back + 0.012 * side - 0.075 * hairline) * (0.84 + 0.32 * R());
     },
     comb: (f, n, out) => {
       // whorl at the top-back; hair flows out from it, forward over the forehead, down the sides / back
       dir(out, f.x, f.y - 0.1, f.z + 0.055);
       out.normalize();
-      out.z += 0.3 * ss(0.04, 0.09, f.y) * ss(-0.06, 0.02, f.z);
-      out.y += 0.35 * ss(0.03, 0.07, f.z); // the front lifts off the forehead before it falls
+      // david v2: the top is swept back and up (volume, like the reference), not forward over the face
+      out.z -= 0.35 * ss(0.04, 0.09, f.y) * ss(-0.09, -0.02, f.z);
+      out.y += 0.5 * ss(-0.06, 0.0, f.z) * ss(0.03, 0.07, f.y); // the front lifts off the forehead before it falls
       // fringe swept across the forehead toward his left (as in the reference)
       out.x += 0.45 * ss(0.03, 0.08, f.y) * ss(-0.03, 0.05, f.z);
       out.y -= 0.5 * (1 - ss(0.02, 0.09, f.y));
@@ -98,7 +100,7 @@ export function davidStyle(): GroomStyle {
     frizz: 0.0013,
     flyaway: 0.022,
     width: 0.00014,
-    stiffness: 0.3,
+    stiffness: 0.4,
     childLen: [0.78, 1.0],
     colors: (R, f, root, tip) => {
       lin(ROOT, root);
@@ -139,8 +141,10 @@ export function saulStyle(): GroomStyle {
     kind: 0,
     reach: 0.42,
     mask: (s) => s.scalpMask(),
-    strands: { low: 3500, medium: 10000, high: 20000 },
-    locks: 170,
+    // cast pass (opening film): thick, groomed, slightly wavy hair pushed back (visual-bible 3.2) — denser, broader
+    // strands in coherent locks, less frizz (was 3500/10000/20000, 170 locks)
+    strands: { low: 3800, medium: 13000, high: 24000 },
+    locks: 210,
     sim: { low: 16, medium: 28, high: 40 },
     length: (f, n, R) => {
       const back = ss(0.02, -0.08, f.z);
@@ -155,17 +159,17 @@ export function saulStyle(): GroomStyle {
     lift: 0.05,
     gravity: 13,
     combPull: 14,
-    tousle: 2,
+    tousle: 1.2,
     volume: (t, R) => 0.003 + (R + 0.003) * ss(0, 0.25, t) + 0.003 * ss(0.3, 1, t),
-    curlR: [0.0025, 0.0055],
-    curlPitch: [0.08, 0.12],
-    curlStart: 0.35,
-    curlNoise: 0.3,
-    lockR: 0.009,
-    clump: 0.45,
-    frizz: 0.0008,
-    flyaway: 0.0015, // court: groomed (was 0.003)
-    width: 0.00011,
+    curlR: [0.003, 0.006],
+    curlPitch: [0.09, 0.13],
+    curlStart: 0.4,
+    curlNoise: 0.2,
+    lockR: 0.011,
+    clump: 0.62,
+    frizz: 0.0004,
+    flyaway: 0.0008, // court: groomed (was 0.003); cast pass 0.0015 -> 0.0008
+    width: 0.000135,
     stiffness: 0.22,
     childLen: [0.8, 1.0],
     colors: (R, f, root, tip) => {
@@ -197,8 +201,11 @@ export function saulStyle(): GroomStyle {
       const ax = Math.abs(f.x);
       const must = ss(0.03, 0.02, ax) * ss(-0.075, -0.06, f.y) * ss(0.0, 0.3, n.z);
       const chin = ss(-0.04, -0.11, f.y) * ss(0.085, 0.025, ax);
-      const L = 0.032 + 0.065 * chin + 0.012 * ss(0.06, 0.03, ax);
-      return (must > 0.5 ? 0.026 : L) * (0.92 + 0.16 * R());
+      const L = 0.032 + 0.062 * chin + 0.012 * ss(0.06, 0.03, ax);
+      // cast pass: a groomed line under the jaw — roots facing down (under the chin, onto the neck) stay short, so no
+      // strands trail down the throat (visual-bible 3.2: full, 6-10 cm, natural)
+      const under = ss(-0.25, -0.65, n.y) * ss(0.06, 0.0, n.z + 0.2);
+      return (must > 0.5 ? 0.026 : L * (1 - 0.6 * under)) * (0.92 + 0.16 * R());
     },
     comb: (f, n, out) => {
       const ax = Math.abs(f.x);
@@ -211,14 +218,16 @@ export function saulStyle(): GroomStyle {
     combPull: 11,
     tousle: 1.2, // wardrobe polish (court 2.2, originally 5)
     volume: (t, R) => 0.0016 + (R + 0.002) * ss(0, 0.3, t) + 0.0035 * ss(0.2, 0.8, t),
-    curlR: [0.0016, 0.0032],
-    curlPitch: [0.016, 0.024],
-    curlStart: 0.25,
-    curlNoise: 0.22, // wardrobe polish (court 0.4, originally 0.6)
-    lockR: 0.0055,
-    clump: 0.82, // wardrobe polish: combed, oiled locks (court 0.6, originally 0.4)
-    frizz: 0.0002, // (court 0.0003)
-    flyaway: 0.0004, // (court 0.001)
+    // cast pass: natural waves, not Assyrian corkscrews (visual-bible 3.2) — looser, longer-pitched curl (was
+    // 0.0016-0.0032 / 0.016-0.024), almost no frizz or flyaways at the edges
+    curlR: [0.0024, 0.0042],
+    curlPitch: [0.03, 0.045],
+    curlStart: 0.3,
+    curlNoise: 0.14, // wardrobe polish (court 0.4, originally 0.6)
+    lockR: 0.006,
+    clump: 0.84, // wardrobe polish: combed, oiled locks (court 0.6, originally 0.4)
+    frizz: 0.0001, // (court 0.0003)
+    flyaway: 0.0002, // (court 0.001)
     width: 0.00019,
     stiffness: 0.45,
     childLen: [0.75, 1.0],

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import './style.css';
 import { quoteText, sourceRef } from '../content/sources';
+import { narration, INTRO_FILM_TITLE } from '../content/introNarration';
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, html = '') => {
   const e = document.createElement(tag);
@@ -33,6 +34,7 @@ export class UI {
   private skipEl: HTMLButtonElement;
   private skipHintEl: HTMLDivElement;
   private prerollEl: HTMLDivElement;
+  private filmLayer: HTMLDivElement;
   private counterEl: HTMLDivElement;
   private hintEl: HTMLDivElement;
   private pauseEl: HTMLDivElement;
@@ -64,12 +66,15 @@ export class UI {
     this.bars = el('div', 'letterbox', '<div class="lb-top"></div><div class="lb-bot"></div>');
     this.captionEl = el('div', 'caption');
     this.verseEl = el('div', 'verse');
+    // the title card of the opening film (docs/intro-script.md shot 20): every word from the narration module
+    // (src/content/introNarration.ts) — the film's own name "הַטּוֹב מִמֶּךָּ" is a quotation (1 Sam 15:28), rendered
+    // only from the catalog with its reference
     this.titleEl = el('div', 'titlecard', `
-      <div class="tc-small">מִסִּפְרֵי שְׁמוּאֵל</div>
-      <h1 class="tc-title" data-t="DAVID">DAVID</h1>
-      <div class="tc-he">דָּוִד</div>
+      <div class="tc-film"><span class="tc-film-name">${quoteText(INTRO_FILM_TITLE)}</span><span class="tc-film-ref">${sourceRef(INTRO_FILM_TITLE)}</span></div>
+      <h1 class="tc-title" data-t="${narration('davidLogo')}">${narration('davidLogo')}</h1>
+      <div class="tc-he">${narration('davidName')}</div>
       <div class="tc-line"></div>
-      <div class="tc-chapter">פֶּרֶק רִאשׁוֹן · הָרֹעֶה</div>`);
+      <div class="tc-chapter">${narration('chapterTitle')}</div>`);
     this.objEl = el('div', 'objective');
     this.hintEl = el('div', 'hint');
     this.promptEl = el('div', 'prompt');
@@ -88,9 +93,10 @@ export class UI {
     });
     this.skipHintEl = el('div', 'skip-hint');
     this.prerollEl = el('div', 'preroll', '<div class="pr-line"></div><div class="pr-bar"><div></div></div>');
+    this.filmLayer = el('div', 'film-layer');
     this.pauseEl = el('div', 'pause');
     this.endEl = el('div', 'endcard');
-    for (const e of [this.bars, this.markerEl, this.captionEl, this.verseEl, this.titleEl, this.objEl, this.hintEl, this.promptEl, this.crossEl, this.healthEl, this.bossEl, this.qteEl, this.toastEl, this.counterEl, this.skipEl, this.skipHintEl, this.fadeEl, this.prerollEl, this.pauseEl, this.endEl]) this.root.appendChild(e);
+    for (const e of [this.bars, this.markerEl, this.captionEl, this.verseEl, this.filmLayer, this.titleEl, this.objEl, this.hintEl, this.promptEl, this.crossEl, this.healthEl, this.bossEl, this.qteEl, this.toastEl, this.counterEl, this.skipEl, this.skipHintEl, this.fadeEl, this.prerollEl, this.pauseEl, this.endEl]) this.root.appendChild(e);
     this.buildPause();
   }
 
@@ -209,6 +215,54 @@ export class UI {
 
   titleCard(on: boolean) {
     this.titleEl.classList.toggle('on', on);
+  }
+
+  // ------------------------------------------------------------------------------ opening-film typography
+  /**
+   * One text event of the opening film, on its own element (texts of neighbouring shots overlap and fade
+   * independently of the canvas crossfades). Kinds (docs/intro-script.md; the text itself comes from
+   * src/content/introNarration.ts or, for 'verse', from the catalog helpers of src/content/sources.ts):
+   *  - 'time'   the time card, alone on black, centred, slow tracking
+   *  - 'line'   a prologue narration line over the picture (lower third, centred)
+   *  - 'place'  a place card (top right inside the picture, a gold rule)
+   *  - 'person' a person card: `main` = name, `sub` = title (lower right)
+   *  - 'verse'  a quotation: `main` = quoteText(id), `sub` = sourceRef(id) (bottom centre)
+   * Fades in over ~1.4 s, holds, fades out over ~1.2 s, then removes itself. Returns the element.
+   */
+  filmText(kind: 'time' | 'line' | 'place' | 'person' | 'verse', main: string, sub = '', seconds = 5): HTMLDivElement {
+    const e = el('div', `ft ft-${kind}`);
+    const inner =
+      kind === 'verse'
+        ? `<div class="ft-v">${main}</div>${sub ? `<div class="ft-ref">${sub}</div>` : ''}`
+        : kind === 'person'
+          ? `<div class="ft-name">${main}</div>${sub ? `<div class="ft-rule"></div><div class="ft-sub">${sub}</div>` : ''}`
+          : kind === 'place'
+            ? `<div class="ft-main">${main}</div><div class="ft-rule"></div>`
+            : `<div class="ft-main">${main}</div>`;
+    e.innerHTML = inner;
+    const dur = Math.max(1.6, seconds);
+    e.style.setProperty('--dur', `${dur}s`);
+    e.style.setProperty('--out', `${Math.max(0.2, dur - 1.2)}s`);
+    this.filmLayer.appendChild(e);
+    window.setTimeout(() => e.remove(), dur * 1000 + 300);
+    return e;
+  }
+  /** Fade out every film text now (skip / seek / end of the film). */
+  clearFilmText(seconds = 0.6) {
+    for (const c of Array.from(this.filmLayer.children) as HTMLElement[]) {
+      if (seconds <= 0) {
+        c.remove();
+        continue;
+      }
+      c.style.transition = `opacity ${seconds}s ease`;
+      c.style.animation = 'none';
+      c.style.opacity = '0';
+      window.setTimeout(() => c.remove(), seconds * 1000 + 50);
+    }
+  }
+  /** Film mode: film typography rules + safe areas (class .film on the root). */
+  filmMode(on: boolean) {
+    this.root.classList.toggle('film', on);
   }
 
   // ------------------------------------------------------------------------------ HUD
