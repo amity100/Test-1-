@@ -9,7 +9,7 @@ export interface LabMaterials {
 
 /**
  * The lab's decal atlas: white glyphs on transparent (vertex colours tint
- * them), DECAL_COLS x DECAL_ROWS cells, each twice as wide as tall.
+ * them), DECAL_COLS x DECAL_ROWS square cells; the glyphs fill each cell's middle half (a 2:1 band).
  */
 export const DECALS = ['01', '02', '03', '04', '05', 'T1', 'T2', 'R', '10 M', '20 M', '30 M', '40 M', 'SPAWN', 'COMBAT LAB', 'VOID', 'WATER'] as const;
 export type DecalId = (typeof DECALS)[number];

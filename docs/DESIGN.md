@@ -890,3 +890,38 @@ Old stealth code (`guards.ts`, `harbor.ts`) is removed at integration.
 | META | `StyleSystem`, `ReplayRecorder`, `ReplayPlayer(host)`, `ClipExporter`, `PhotoMode`, `ChallengeSystem`, `META_STRINGS` |
 | UI | `HUD` implements `HudAPI` (+ `onClip`), `Input` (`Action` from contracts), `TouchControls`, `Menu` (+ `RunStats`, `showChallenges`), `t()` / `addStrings()` |
 | AUDIO | `Audio` implements `AudioAPI` |
+
+## 14. The COMBAT LAB (combat variants, side by side)
+
+A third world, `'lab'` (menu: **COMBAT LAB** under the WORLD toggle; `?world=lab`),
+built in place like the others. It is a grey-box test range, not a mission: its
+wave director brings the fights, and the owner plays the same five waves under
+each **combat variant** to choose one.
+
+- **Arena** (`src/world/combatlab.ts`, plan in `combatlab/layout.ts`): a 60 x 58 m
+  deck (y 0) in a 4 m measured grid; perimeter walls (6 m) with five gate alcoves
+  (Kessler rifts, numbered 01-05); the north edge open over a void (lethal,
+  kill line y -9); a pool on the east (lethal water, y -1.2); a raised ring (4 m)
+  with 16-step stairs on its west and east sides; two sniper towers T1 / T2 (8.5 m,
+  rift access only, their tops portal-able); a free-standing long wall (5 m) for
+  flanking exits; cover blocks of 1 m and 2 m; a gantry (not portal-able) with
+  two hanging loads; three casks, two crates; the player's pad in the south.
+  One zone (`'pier'`, no encounters), nav layers: deck, ring, each tower top.
+- **Waves** (`WAVES`, `game/labdirector.ts`): W1 3 rifle anchors; W2 3 anchors + 2
+  tower holders; W3 warden + 2 brutes pushing, 2 riflemen (one on the ring);
+  W4 sniper + rifleman holding the towers, grenadier, flanking riflemen, a brute,
+  a warden; W5 both towers sniping, grenadiers (ring and deck), 2 brutes, a warden,
+  3 riflemen. Edge-gate men step out of their gate's rift and walk to their posts;
+  drop-gate men appear on their post (a tower top, the ring). All arrive in the
+  fight, knowing where you are (`EnemySystem.inform`). 3.5 s before W1, 3 s between
+  waves (WAVE CLEAR card, then the WAVE n banner with a countdown).
+- **Run**: death respawns you on the pad (1.5 s guard) and the wave goes on; the
+  run records it. Enter (or the pause menu) restarts. After W5: the results card.
+  Stats (real time): time per wave, total, damage taken, deaths, kills by tool
+  (`killTool`: GRAB/THROW, REFLECT, LOOP incl. geyser/cannon, SWAP, DASH, BLADE,
+  OTHER), per wave too. Lab kills don't count toward the missions' challenges.
+- **Variants** (`src/game/variant.ts`): `current` (the game as it plays today),
+  `precision`, `onslaught`. The pick is the `combatVariant` setting; F1/F2/F3, the
+  pause menu, the main menu and the HUD chips switch it and restart the run.
+  Systems read `activeVariant()`: the pick inside the lab, `current` everywhere
+  else; `onVariantChange()` notifies. PRECISION and ONSLAUGHT are flags only so far.

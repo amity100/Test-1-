@@ -1,0 +1,162 @@
+import * as THREE from 'three';
+import type { KillEvent, SpawnDef, V3 } from '../core/contracts';
+import type { EnemySystem, Enemy } from '../actors/enemies';
+import type { Audio } from '../engine/audio';
+import type { LabArena, LabWave } from '../world/combatlab/layout';
+import { LabHud } from '../ui/labhud';
+import { t } from '../ui/i18n';
+import type { FxKit } from './fxkit';
+import { killTool, LabDirector, type LabRunStats } from './labdirector';
+import { chosenVariant, type CombatVariant } from './variant';
+
+/** Kessler's gate orange (HDR), for the arrivals' rift flash. */
+const KESSLER = new THREE.Color(2.6, 0.75, 0.2);
+/** Seconds the WAVE CLEAR card holds before the next wave's banner. */
+const CLEAR_HOLD = 1.3;
+/** After a respawn on the pad: this long before anything can hurt you (s). */
+export const LAB_SPAWN_GUARD = 1.5;
+
+export interface LabHost {
+  enemies: EnemySystem;
+  fx: FxKit;
+  audio: Audio;
+  /** Where the player's feet are (the arrivals know it). */
+  playerPos(): V3;
+  /** A wave is down (a beat of slow motion, a sting). */
+  onCleared(wave: number): void;
+  /** The last wave is down: the results. */
+  onFinished(stats: LabRunStats): void;
+}
+
+/**
+ * The COMBAT LAB in the game: its wave director, wired to the enemies (men
+ * brought in through the arena's gates, already aware), the effects, and
+ * the lab HUD (run panel, WAVE banner). The Game owns one while the lab world
+ * is loaded and feeds it kills, damage and deaths.
+ */
+export class LabMode {
+  readonly director: LabDirector;
+  readonly hud: LabHud;
+  private pending: { n: number; def: LabWave; secs: number } | null = null;
+  private pendingT = 0;
+  private seq = 0;
+
+  constructor(readonly arena: LabArena, hudRoot: HTMLElement, private host: LabHost) {
+    this.hud = new LabHud(hudRoot);
+    this.director = new LabDirector(arena, {
+      spawn: (s, gate, wave) => {
+        const E = host.enemies;
+        const def: SpawnDef = {
+          id: `pier.lab.w${wave}.${++this.seq}`,
+          kind: s.kind,
+          pos: s.post.clone(),
+          yaw: gate.yaw,
+          zone: 'pier',
+          squad: `pier.lab.w${wave}`,
+          state: 'combat',
+          role: s.role,
+        };
+        if (s.leash !== undefined) def.leash = s.leash;
+        if (s.kind === 'sniper') def.perch = true;
+        const v = E.spawn(def) as Enemy;
+        // through an edge gate: he steps out of its rift and walks in to his post
+        if (gate.kind === 'edge' && v.body) {
+          v.body.pos.copy(gate.pos);
+          v.char.root.position.copy(gate.pos);
+        }
+        E.inform(v, host.playerPos());
+        const fwd = new THREE.Vector3(Math.sin(gate.yaw), 0, Math.cos(gate.yaw));
+        const at = gate.pos.clone().setY(gate.pos.y + 1.1);
+        host.fx.riftBurst(at, fwd, KESSLER);
+        host.fx.ring(gate.pos.clone().setY(gate.pos.y + 0.05), 1.8, 0.4, KESSLER);
+        host.fx.flash(at, 4, 0.35, 0xff7a2a);
+        host.audio.riftOpen(at, 'gate');
+        return v.id;
+      },
+      alive: (id) => host.enemies.get(id)?.alive ?? false,
+      announce: (n, def, secs) => {
+        // (right after a clear the card holds a moment first)
+        if (n > 1) {
+          this.pending = { n, def, secs };
+          this.pendingT = CLEAR_HOLD;
+          return;
+        }
+        this.showWave(n, def);
+      },
+      cleared: (n, time) => {
+        this.hud.cleared(n, time);
+        host.onCleared(n);
+      },
+      finished: (stats) => host.onFinished(stats),
+    });
+  }
+
+  private showWave(n: number, def: LabWave) {
+    this.hud.announce(n, this.director.waveCount, t(def.subKey), chosenVariant());
+    this.host.audio.sting('zone');
+  }
+
+  /** A fresh run (the world around it is reset by the Game). */
+  restart() {
+    this.pending = null;
+    this.seq = 0;
+    this.director.start();
+  }
+
+  setVariant(v: CombatVariant) {
+    this.pending = null;
+    this.seq = 0;
+    this.director.setVariant(v);
+  }
+
+  update(realDt: number) {
+    const d = this.director;
+    d.update(realDt);
+    if (this.pending) {
+      this.pendingT -= realDt;
+      if (this.pendingT <= 0) {
+        this.showWave(this.pending.n, this.pending.def);
+        this.pending = null;
+      }
+    } else if (d.phase === 'breather') this.hud.countdown(d.breatherT);
+    this.hud.update({
+      variant: chosenVariant(),
+      wave: d.wave + 1,
+      waves: d.waveCount,
+      phase: d.phase,
+      left: d.left,
+      waveT: d.waveT,
+      stats: d.stats,
+    });
+  }
+
+  noteKill(ev: KillEvent) {
+    this.director.noteKill(killTool(ev));
+  }
+
+  noteDamage(n: number) {
+    this.director.noteDamage(n);
+  }
+
+  noteDeath() {
+    this.director.noteDeath();
+  }
+
+  /** The current wave's men still standing (the markers find the last two). */
+  standing(): Enemy[] {
+    const out: Enemy[] = [];
+    for (const id of this.director.ids) {
+      const e = this.host.enemies.get(id) as Enemy | null;
+      if (e && e.alive) out.push(e);
+    }
+    return out;
+  }
+
+  show(on: boolean) {
+    this.hud.show(on);
+  }
+
+  dispose() {
+    this.hud.dispose();
+  }
+}

@@ -73,6 +73,9 @@ import { ClipExporter } from '../meta/clip';
 import { PhotoMode } from '../meta/photo';
 import { ChallengeSystem } from '../meta/challenges';
 import { META_STRINGS } from '../meta/strings';
+import { LAB_SPAWN_GUARD, LabMode } from './lab';
+import type { LabRunStats } from './labdirector';
+import { setLabActive, setVariant, type CombatVariant } from './variant';
 
 import type { Settings } from './settings';
 import { beginRenderFrame } from '../render/frameonce';
@@ -288,6 +291,14 @@ export class Game {
   private shadowBox = new ShadowBox();
 
   stats: RunStats = { time: 0, kills: 0, bestCombo: 0, styleTotal: 0, tricks: 0, deaths: 0, challenges: 0 };
+  /** The COMBAT LAB (only while the lab world is loaded): its wave director and HUD. */
+  lab: LabMode | null = null;
+  /** The lab's results are in (the run ends on them, not on the mission's end screen). */
+  private labStats: LabRunStats | null = null;
+  /** Game time until which the player can't be hurt (a lab respawn on the pad). */
+  private guardUntil = -1;
+  /** The lab's run is over: its results card. */
+  onLabEnd: (stats: LabRunStats) => void = () => {};
   onPause: () => void = () => {};
   onEnd: (win: boolean, stats: RunStats, rank: string) => void = () => {};
   /** Clip ready (blob may be null when recording isn't supported: replay only). */
@@ -411,6 +422,10 @@ export class Game {
     this.skyline = null;
     this.riftMarked.clear();
     this.strikeMarks?.clear();
+    this.lab?.dispose();
+    this.lab = null;
+    this.hud?.el.classList.remove('lab');
+    setLabActive(false);
   }
 
   /**
@@ -527,6 +542,25 @@ export class Game {
     this.projectiles = new Projectiles(world, this.rifts, this.physics, this.projectileHooks());
     this.scene.add(this.projectiles.group);
     this.enemies = new EnemySystem(this.physics, this.enemyHooks(), (kind) => new Character(asset, anims, LOOKS[kind]));
+    // the COMBAT LAB: its director brings the fights, its variant is in force
+    const arena = this.level.lab;
+    this.lab = arena
+      ? new LabMode(arena, this.hud.el, {
+          enemies: this.enemies,
+          fx: this.fx,
+          audio: this.audio,
+          playerPos: () => this.player.body.pos,
+          onCleared: () => {
+            this.slowT = Math.max(this.slowT, 0.9);
+            this.slowScale = 0.3;
+            this.audio.sting('alert');
+          },
+          onFinished: (st) => this.labFinished(st),
+        })
+      : null;
+    this.hud.el.classList.toggle('lab', !!arena);
+    setVariant(this.settings.combatVariant);
+    setLabActive(!!arena);
     this.scene.add(this.enemies.group);
     for (const z of this.level.zones) this.enemies.setNav(z.id, z.nav, world);
     if (this.level.bossArena) (this.enemies as any).setBossArena?.(this.level.bossArena.center, this.level.bossArena.radius, this.level.bossArena.blinkPoints);
@@ -773,7 +807,40 @@ export class Game {
     this.zoneStartT = this.time;
     this.style.reset();
     this.clearHints();
+    this.labStats = null;
+    this.guardUntil = -1;
+    this.lab?.restart();
     this.updateObjective(true);
+  }
+
+  // ------------------------------------------------------------------
+  // COMBAT LAB
+  // ------------------------------------------------------------------
+
+  /** The lab's run starts over (Enter, the pause menu, a variant switch), in play. */
+  labRestart() {
+    if (!this.lab) return;
+    this.newRun();
+    if (this.mode !== 'playing') this.start();
+  }
+
+  /** Switch the combat variant (F1-F3, the menus, the HUD chips): the run starts over under it. */
+  labVariant(v: CombatVariant) {
+    this.settings = { ...this.settings, combatVariant: v };
+    setVariant(v);
+    if (!this.lab) return;
+    const playing = this.mode === 'playing';
+    this.newRun();
+    if (playing) this.hud.toast(t('lab.switched', { v: t(`lab.v.${v}`) }), 'good');
+  }
+
+  /** W5 is down: a slow beat, then the results card. */
+  private labFinished(st: LabRunStats) {
+    this.labStats = st;
+    this.victoryT = 2;
+    this.slowT = 2;
+    this.slowScale = 0.3;
+    this.audio.sting('victory');
   }
 
   private respawnPlayer(pos: V3, yaw: number) {
@@ -824,9 +891,13 @@ export class Game {
     this.input.active = true;
     this.input.requestLock();
     const z = this.zones.current;
-    this.showZoneTitle(z);
-    this.audio.sting('zone');
-    if (z.id === 'pier' && !this.hintsSeen.has('rules')) {
+    this.lab?.show(true);
+    // (the lab has its own WAVE banner; its rules are the mission's)
+    if (!this.lab) {
+      this.showZoneTitle(z);
+      this.audio.sting('zone');
+    }
+    if (z.id === 'pier' && !this.lab && !this.hintsSeen.has('rules')) {
       this.hintsSeen.add('rules');
       // (three sentences to read: it holds its full time before the next hint takes its turn)
       this.hint('rules', `<b>${t('rule.1')}</b><br>${t('rule.2')}<br>${t('rule.3')}`, 9, true);
@@ -884,6 +955,14 @@ export class Game {
   /** Death / fell out: back to the checkpoint, uncleared fights reset. */
   private respawn(died: boolean) {
     if (died) this.stats.deaths++;
+    if (this.lab) {
+      // the lab: back on the pad, the wave goes on (the run records the death)
+      if (died) this.lab.noteDeath();
+      this.respawnPlayer(this.lab.arena.pad.pos, this.lab.arena.pad.yaw);
+      this.guardUntil = this.time + LAB_SPAWN_GUARD;
+      this.push({ type: 'death', t: this.time });
+      return;
+    }
     this.enemies.clear();
     this.projectiles.clear();
     this.rifts.reset();
@@ -1079,7 +1158,8 @@ export class Game {
         this.rig.kick = Math.max(this.rig.kick, 1);
       }
     }
-    const done = this.challenges.push(e as GameEvent, awards, this.style.state);
+    // (the lab is a test range: its kills don't count toward the missions' challenges)
+    const done = this.lab ? [] : this.challenges.push(e as GameEvent, awards, this.style.state);
     for (const id of done) {
       this.stats.challenges++;
       this.hud.toast(`${t('toast.challenge')}: ${this.challengeText(id).title}`, 'good');
@@ -1444,6 +1524,7 @@ export class Game {
     // every kill that isn't a STRIKE's recharges the strikes
     if (credit.refund) this.strikes.refund(1);
     this.stats.kills++;
+    this.lab?.noteKill(ev);
     this.push(ev);
     // the PORTAL first; the STRIKES once you've made your first kill with it
     this.hint('strikes', t('hint.strikes'), 10);
@@ -1738,6 +1819,8 @@ export class Game {
 
   private hurtPlayer(amount: number, from: V3) {
     if (amount <= 0 || this.hp <= 0 || this.respawnT >= 0) return;
+    if (this.time < this.guardUntil) return;
+    this.lab?.noteDamage(Math.min(amount, this.hp));
     this.hp -= amount;
     this.lastHurtT = this.time;
     this.hud.damageFlash(Math.min(1, amount / 40));
@@ -1996,6 +2079,9 @@ export class Game {
     this.props.update(dt);
     this.updatePropFuses(dt);
     this.updateCatchWindow();
+
+    // ----- the lab's waves -----
+    if (this.lab && this.victoryT < 0) this.lab.update(realDt);
 
     // ----- zones, encounters, lifts -----
     const zu = this.zones.update(body.pos);
@@ -2630,6 +2716,12 @@ export class Game {
 
   private lastObjKey = '';
   private updateObjective(force: boolean) {
+    // (the lab's panel says what's going on)
+    if (this.lab) {
+      this.lastObjKey = '';
+      this.hud.setObjective('');
+      return;
+    }
     const o = this.zones.objective();
     const key = this.bossDead ? 'obj.escape' : o.key;
     if (!force && key === this.lastObjKey) return;
@@ -2658,6 +2750,14 @@ export class Game {
     if (this.visionOn) {
       for (const e of this.enemies.list) if (e.alive && this.zones.active.has(e.def.zone)) project(_v2.copy(e.pos).setY(e.pos.y + e.height + 0.3), 'target', t(`state.${e.searching ? 'suspicious' : e.state}`));
       for (const g of this.level.gates) if (this.zones.active.has(g.zone)) project(g.panel, 'gate');
+    }
+    // the lab: the last two of a wave are marked where they are
+    if (this.lab) {
+      const st = this.lab.standing();
+      if (st.length && st.length <= 2 && this.lab.director.left === st.length)
+        for (const e of st) project(_v2.copy(e.pos).setY(e.pos.y + e.height + 0.4), 'objective', `${Math.round(e.pos.distanceTo(this.player.body.pos))}m`);
+      this.hud.setMarkers(list);
+      return;
     }
     // (the last one or two of your fight are marked where they are, wherever they ended up)
     const o = this.zones.objective((id) => {
@@ -2959,7 +3059,8 @@ export class Game {
     if (document.pointerLockElement) document.exitPointerLock();
     this.stats.bestCombo = Math.max(this.stats.bestCombo, this.style.state.bestCombo);
     this.stats.styleTotal = this.style.state.total;
-    this.onEnd(true, this.stats, this.style.state.rank);
+    if (this.lab && this.labStats) this.onLabEnd(this.labStats);
+    else this.onEnd(true, this.stats, this.style.state.rank);
   }
 
   // ------------------------------------------------------------------

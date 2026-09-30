@@ -109,7 +109,8 @@ function decal(b: Builder, id: DecalId, c: THREE.Vector3, r: THREE.Vector3, u: T
 const UP = V(0, 1, 0);
 /** A decal on the floor at (x, y, z), read from the south (its top toward +z), or rotated by `yaw`. */
 function floorDecal(b: Builder, id: DecalId, x: number, y: number, z: number, w: number, color: THREE.ColorRepresentation, yaw = 0) {
-  const r = V(Math.cos(yaw), 0, -Math.sin(yaw)), u = V(Math.sin(yaw), 0, Math.cos(yaw));
+  // (up the decal = the reader's forward; right = forward x up)
+  const r = V(-Math.cos(yaw), 0, Math.sin(yaw)), u = V(Math.sin(yaw), 0, Math.cos(yaw));
   decal(b, id, V(x, y + 0.004, z), r, u, w, w / 2, UP, color);
 }
 /** A decal on a wall facing `n` (horizontal unit), centred at c. */
@@ -483,11 +484,10 @@ function buildBackdrop({ far }: Lab) {
   // the pit: its north cliff face under the deck's edge, a floor far below
   const PIT = -48;
   far.quad('grid', V(-R, PIT, DECK.z1), V(R, PIT, DECK.z1), V(R, -3, DECK.z1), V(-R, -3, DECK.z1), C.pit, [[-R / 8, PIT / 8], [R / 8, PIT / 8], [R / 8, 0], [-R / 8, 0]]);
-  quadY(-R, DECK.z1, R, R, PIT, 0x565c63, 16);
-  // across the pit: a sister range, and the facility's blocks in the haze all round
-  far.box('grid', -60, PIT, 92, 70, 0, 150, C.far, 8, { ao: 0 });
-  far.box('grid', -38, 0, 104, -20, 14, 118, 0xb9bec4, 8, { ao: 0.3 });
-  far.box('grid', 12, 0, 110, 22, 26, 120, 0xa9afb6, 8, { ao: 0.3 });
+  quadY(-R, DECK.z1, R, R, PIT, 0x3e444c, 16);
+  // across the pit, far off: a couple of columns rising out of it (the drop reads as a drop: nothing to land on)
+  far.box('grid', -46, PIT, 128, -34, -6, 140, 0x8d949c, 8, { ao: 0 });
+  far.box('grid', 24, PIT, 150, 38, 4, 164, 0x969da5, 8, { ao: 0 });
   let seed = 9151;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
   for (let k = 0; k < 26; k++) {
@@ -495,6 +495,8 @@ function buildBackdrop({ far }: Lab) {
     const d = 170 + rnd() * 160;
     const x = Math.sin(a) * d, z = Math.cos(a) * d;
     const w = 14 + rnd() * 36, dd = 14 + rnd() * 36, h = 12 + rnd() * 60;
+    // (north of the deck they stand in the pit, and start further out)
+    if (z > DECK.z1 && d < 230) continue;
     const base = z > DECK.z1 + 20 ? PIT : 0;
     const tone = new THREE.Color(C.far).multiplyScalar(0.82 + rnd() * 0.2);
     far.box('grid', x - w / 2, base, z - dd / 2, x + w / 2, h, z + dd / 2, tone, 8, { ao: 0.2 });

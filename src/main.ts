@@ -8,6 +8,7 @@ import { PerfHud } from './ui/perfhud';
 import { setWorldStrings, t } from './ui/i18n';
 import type { ZoneId } from './core/contracts';
 import { readWorld, saveWorld, WORLDS, type WorldId } from './world/worlds';
+import { setVariant, variantForKey, type CombatVariant } from './game/variant';
 
 /** A world's own texts (Halcyon's names for the pier's places); the harbour's are the base strings. */
 const useWorldStrings = (w: WorldId) => setWorldStrings(w === 'harbour' ? '' : w);
@@ -67,6 +68,8 @@ async function boot() {
   const menu = new Menu(ui, { ...settings });
   menu.worlds = WORLDS;
   menu.world = world;
+  setVariant(settings.combatVariant);
+  menu.variant = settings.combatVariant;
   menu.showLoading(0);
 
   let game: Game;
@@ -195,11 +198,45 @@ async function boot() {
       }
     }
     menu.showLoading(1);
+    if (game.lab) game.lab.hud.onPick = pickVariant;
     refreshProgress();
     menu.showMain();
   };
   game.onPause = () => menu.showPause();
   game.onEnd = (win, stats, rank) => (menu as any).showEnd(win, stats, rank);
+  // COMBAT LAB: its results card; the variant (F1-F3, the menus, the HUD chips) restarts the run
+  game.onLabEnd = (st) => menu.showLabEnd(st);
+  const pickVariant = (v: CombatVariant) => {
+    settings.combatVariant = v;
+    saveSettings({ ...settings, ...game.settings, combatVariant: v });
+    menu.setVariant(v);
+    game.labVariant(v);
+  };
+  menu.onVariant = pickVariant;
+  if (game.lab) game.lab.hud.onPick = pickVariant;
+  window.addEventListener('keydown', (e) => {
+    if (game.world !== 'lab' || e.repeat) return;
+    const v = variantForKey(e.code);
+    if (v) {
+      e.preventDefault();
+      if (game.mode === 'replay' || game.mode === 'photo') return;
+      pickVariant(v);
+      // (a menu on screen shows the new pick)
+      if (game.mode !== 'playing' && menu.isOpen) (menu as any).current?.();
+      return;
+    }
+    if (e.code === 'Enter' || e.code === 'NumpadEnter') {
+      if (game.mode === 'playing') {
+        e.preventDefault();
+        game.labRestart();
+      } else if (game.mode === 'ended') {
+        e.preventDefault();
+        menu.hide();
+        game.newRun();
+        game.start();
+      }
+    }
+  });
   game.onClip = (blob, share, close) => {
     if (!m.showClip || !blob) {
       close();

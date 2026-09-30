@@ -2,6 +2,9 @@ import type { StyleRank, ZoneId } from '../core/contracts';
 import type { WorldId } from '../world/worlds';
 import { IS_TOUCH, type QualityName } from '../config';
 import { formatNumber, getDevice, getLang, setLang, t, type Lang } from './i18n';
+import { fmtTime, LAB_TOOLS, type LabRunStats } from '../game/labdirector';
+import { VARIANTS, type CombatVariant } from '../game/variant';
+import { TOOL_KEY } from './labhud';
 
 import type { Settings } from '../game/settings';
 export type { Settings };
@@ -60,8 +63,12 @@ export class Menu {
   onQuit = () => {};
   onSettings: (s: Settings) => void = () => {};
   onLanguage = () => {};
-  /** WORLD picked (a different one from `world`). */
+  /** WORLD picked (a different one from `world`), or the COMBAT LAB. */
   onWorld: (w: WorldId) => void = () => {};
+  /** A combat variant picked (COMBAT LAB). */
+  onVariant: (v: CombatVariant) => void = () => {};
+  /** The lab's variant (shown on its selectors). */
+  variant: CombatVariant = 'current';
 
   /** The loaded world and the ones on offer (WORLD toggle; hidden with fewer than two). */
   world: WorldId = 'harbour';
@@ -114,6 +121,34 @@ export class Menu {
         this.go(b.dataset.go as Go);
       }),
     );
+    this.el.querySelectorAll<HTMLElement>('[data-variant]').forEach((b) =>
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const v = b.dataset.variant as CombatVariant;
+        this.setVariant(v);
+        this.onVariant(v);
+        this.current();
+      }),
+    );
+  }
+
+  /** The lab's variant changed (a key, a chip): the selectors follow. */
+  setVariant(v: CombatVariant) {
+    this.variant = v;
+    this.settings.combatVariant = v;
+  }
+
+  get inLab() {
+    return this.world === 'lab';
+  }
+
+  /** CURRENT / PRECISION / ONSLAUGHT, F1-F3, each with a line on what it is. */
+  private variantSeg(withNotes = true) {
+    const opts = VARIANTS.map(
+      (v, i) =>
+        `<button type="button" data-variant="${v}" class="${v === this.variant ? 'on' : ''}"><span class="vk" dir="ltr">F${i + 1}</span><b>${esc(t(`lab.v.${v}`))}</b>${withNotes ? `<small>${esc(t(`lab.vd.${v}`))}</small>` : ''}</button>`,
+    ).join('');
+    return `<div class="variants"><div class="w-top"><span>${esc(t('lab.variant'))}</span><small>${esc(t('lab.variantNote'))}</small></div><div class="vseg">${opts}</div></div>`;
   }
 
   private go(g: Go) {
@@ -206,7 +241,7 @@ export class Menu {
           <div class="mc-tag">${esc(t('briefing.tag'))}</div>
           <h2>${esc(t('briefing.title'))}</h2>
           <p>${esc(t('briefing.text'))}</p>
-          ${this.rules()}
+          ${this.inLab ? this.variantSeg() : this.rules()}
         </div>
       </div>`,
       'main',
@@ -225,7 +260,8 @@ export class Menu {
   private worldSeg() {
     if (this.worlds.length < 2) return '';
     const opts = this.worlds.map((w) => `<button type="button" data-world="${w}" class="${w === this.world ? 'on' : ''}">${esc(t(`world.${w}`))}</button>`).join('');
-    return `<div class="worlds"><div class="w-top"><span>${esc(t('menu.world'))}</span><small>${esc(t('menu.worldNote'))}</small></div><div class="seg">${opts}</div></div>`;
+    const lab = `<button type="button" data-world="lab" class="lab-go${this.inLab ? ' on' : ''}"><span>${esc(t('menu.lab'))}</span><small>${esc(t('menu.labNote'))}</small></button>`;
+    return `<div class="worlds"><div class="w-top"><span>${esc(t('menu.world'))}</span><small>${esc(t('menu.worldNote'))}</small></div><div class="seg">${opts}</div>${lab}</div>`;
   }
 
   private rules() {
@@ -240,8 +276,8 @@ export class Menu {
           <h2 class="title">${esc(t('menu.paused'))}</h2>
           <div class="btns">
             <button type="button" class="primary" data-go="resume"><span>${esc(t('menu.resume'))}</span></button>
-            <button type="button" data-go="retry"><span>${esc(t('menu.retry'))}</span></button>
-            <button type="button" data-go="restart"><span>${esc(t('menu.restart'))}</span></button>
+            ${this.inLab ? '' : `<button type="button" data-go="retry"><span>${esc(t('menu.retry'))}</span></button>`}
+            <button type="button" data-go="restart"><span>${esc(t(this.inLab ? 'lab.restart' : 'menu.restart'))}</span>${this.inLab ? '<small dir="ltr">Enter</small>' : ''}</button>
             <button type="button" data-go="challenges"><span>${esc(t('menu.challenges'))}</span></button>
             <button type="button" data-go="photo"><span>${esc(t('menu.photo'))}</span></button>
             <button type="button" data-go="controls"><span>${esc(t('menu.controls'))}</span></button>
@@ -250,7 +286,7 @@ export class Menu {
             <button type="button" data-go="quit"><span>${esc(t('menu.quit'))}</span></button>
           </div>
         </div>
-        <div class="m-brief m-rulebox"><div class="mc-tag">${esc(t('menu.rules'))}</div>${this.rules()}</div>
+        ${this.inLab ? `<div class="m-brief m-rulebox">${this.variantSeg()}</div>` : `<div class="m-brief m-rulebox"><div class="mc-tag">${esc(t('menu.rules'))}</div>${this.rules()}</div>`}
       </div>`,
       'pause',
       () => this.showPause(),
@@ -289,6 +325,45 @@ export class Menu {
       </div>`,
       `end ${win ? 'win' : 'fail'}`,
       () => this.showEnd(win, s, rank),
+    );
+  }
+
+  /** The COMBAT LAB's results card: splits, totals, kills by tool; RUN AGAIN (Enter), the variants, the main menu. */
+  showLabEnd(r: LabRunStats) {
+    this.back = () => this.showLabEnd(r);
+    let kills = 0;
+    for (const k of LAB_TOOLS) kills += r.kills[k];
+    const most = Math.max(1, ...LAB_TOOLS.map((k) => r.kills[k]));
+    const waves = r.waves
+      .map(
+        (w, i) =>
+          `<tr><th>${esc(t('lab.wave', { n: i + 1 }))}</th><td dir="ltr">${fmtTime(w.time)}</td><td>${formatNumber(w.kills)}</td><td>${formatNumber(Math.round(w.damage))}</td><td>${formatNumber(w.deaths)}</td></tr>`,
+      )
+      .join('');
+    const tools = LAB_TOOLS.map(
+      (k) => `<div class="lr-tool"><span>${esc(t(TOOL_KEY[k]))}</span><i><u style="transform:scaleX(${(r.kills[k] / most).toFixed(3)})"></u></i><b>${formatNumber(r.kills[k])}</b></div>`,
+    ).join('');
+    this.render(
+      `<div class="m-labend">
+        <div class="end-head">
+          <div class="mc-tag">${esc(t('lab.title'))} · ${esc(t(`lab.v.${r.variant}`))}</div>
+          <h2 class="title">${esc(t('lab.results'))}</h2>
+        </div>
+        <div class="lr-grid">
+          <div class="lr-big"><small>${esc(t('lab.total'))}</small><b dir="ltr">${fmtTime(r.total)}</b>
+            <div class="lr-row"><div><small>${esc(t('lab.damage'))}</small><b>${formatNumber(Math.round(r.damage))}</b></div><div><small>${esc(t('lab.deaths'))}</small><b>${formatNumber(r.deaths)}</b></div><div><small>${esc(t('lab.kills'))}</small><b>${formatNumber(kills)}</b></div></div>
+          </div>
+          <table class="lr-waves"><thead><tr><th></th><th>${esc(t('lab.time'))}</th><th>${esc(t('lab.kills'))}</th><th>${esc(t('lab.damage'))}</th><th>${esc(t('lab.deaths'))}</th></tr></thead><tbody>${waves}</tbody></table>
+          <div class="lr-tools"><div class="mc-tag">${esc(t('lab.byTool'))}</div>${tools}</div>
+        </div>
+        ${this.variantSeg(false)}
+        <div class="btns row">
+          <button type="button" class="primary" data-go="restart"><span>${esc(t('lab.runAgain'))}</span><small dir="ltr">Enter</small></button>
+          <button type="button" data-go="quit"><span>${esc(t('menu.quit'))}</span></button>
+        </div>
+      </div>`,
+      'end win lab',
+      () => this.showLabEnd(r),
     );
   }
 

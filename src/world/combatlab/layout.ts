@@ -124,10 +124,10 @@ export interface LabArena {
 
 const E = Math.PI / 2, W = -Math.PI / 2, N = 0;
 
-/** Alcoves 3 m wide, 2.2 m deep behind the perimeter walls; their spawn point sits 1 m inside. */
+/** Alcoves 3 m wide, 2.8 m deep behind the perimeter walls; their spawn point sits 1 m inside. */
 export const GATE_W = 3;
 export const GATE_H = 4;
-export const GATE_D = 2.2;
+export const GATE_D = 2.8;
 export const GATES: LabGate[] = [
   { id: 'west', kind: 'edge', pos: V(-31.2, 0, -2), yaw: E },
   { id: 'northwest', kind: 'edge', pos: V(-31.2, 0, 16), yaw: E },
