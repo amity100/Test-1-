@@ -42,7 +42,7 @@ function vary(out: THREE.Color, R: () => number, amount: number, warm = 0) {
 const dir = (out: THREE.Vector3, x: number, y: number, z: number) => out.set(x, y, z);
 
 // ================================================================================================= DAVID
-/** David (~20): thick, voluminous, tousled loose spiral ringlets, auburn / copper with sun-lightened tips. */
+/** David (a youth ~17): thick, voluminous, tousled short-to-medium curls (the reference), copper with sun-lightened tips. */
 export function davidStyle(): GroomStyle {
   // ~12 % lighter, sun-lightened copper (wardrobe polish pass, to match the reference in back light;
   // was ROOT 0.15 0.08 0.045, MID 0.37 0.21 0.11, TIP 0.66 0.45 0.24)
@@ -56,49 +56,49 @@ export function davidStyle(): GroomStyle {
     strands: { low: 3600, medium: 10500, high: 22000 },
     locks: 190,
     sim: { low: 16, medium: 32, high: 48 },
-    // david v2: the reference's long flowing curls reach the jaw and the nape (below the ears)
-    reach: 0.34,
+    // face pass (the user's order, 30 Sep; visual-bible 3.13): the reference's SHORT-TO-MEDIUM tousled curls — volume on
+    // the crown, a few curls onto the forehead (never over the eyes), the tops of the ears covered with the lobes
+    // showing, the back ending at the nape. NOT long hair (the v2 values, reach 0.34 / 15-22 cm, were wrong).
+    reach: 0.2,
     length: (f, n, R) => {
-      // david v2 (reference image): long, loose S-curls — crown and forelock tumbling onto the forehead, the sides
-      // over the ears down to the jaw, the nape to the collar (was 0.084 + ... ≈ 8-13 cm: too short and tight)
+      // strand length (m); curls compress it: the apparent length is ~50-60 % of this
       const top = ss(0.03, 0.1, f.y);
-      const front = ss(-0.02, 0.06, f.z);
-      const back = ss(0.02, -0.07, f.z) * ss(0.08, -0.02, f.y);
-      const side = ss(0.05, 0.075, Math.abs(f.x)) * ss(0.06, 0.0, f.y);
-      // the hairline at the forehead stays shorter so the forelock falls to the brows, not over the eyes
-      // (f is measured from the eye centres: the forehead hairline sits at z ≈ -0.01, the crown at z ≈ -0.08)
-      const hairline = ss(-0.07, -0.01, f.z) * ss(0.02, 0.07, f.y);
-      return (0.15 + 0.02 * top + 0.13 * back + 0.012 * side - 0.075 * hairline) * (0.84 + 0.32 * R());
+      const front = ss(-0.02, 0.06, f.z) * ss(0.02, 0.07, f.y);
+      // nape roots (low at the back): a little longer so the back reaches the top of the neck, never the collar
+      const back = ss(0.0, -0.08, f.z) * ss(0.05, -0.04, f.y);
+      // over / around the ears: shorter, so the curls cover only the top of the ear and the lobe shows
+      const side = ss(0.05, 0.075, Math.abs(f.x)) * ss(0.06, 0.0, f.y) * ss(-0.12, -0.04, f.z);
+      return (0.088 + 0.02 * top + 0.02 * front + 0.012 * back - 0.024 * side) * (0.84 + 0.32 * R());
     },
     comb: (f, n, out) => {
       // whorl at the top-back; hair flows out from it, forward over the forehead, down the sides / back
       dir(out, f.x, f.y - 0.1, f.z + 0.055);
       out.normalize();
-      // david v2: the top is swept back and up (volume, like the reference), not forward over the face
-      out.z -= 0.35 * ss(0.04, 0.09, f.y) * ss(-0.09, -0.02, f.z);
-      out.y += 0.5 * ss(-0.06, 0.0, f.z) * ss(0.03, 0.07, f.y); // the front lifts off the forehead before it falls
+      // the top is tousled up and back (volume on the crown, like the reference), the front lifts before it falls
+      out.z -= 0.2 * ss(0.04, 0.09, f.y) * ss(-0.09, -0.02, f.z);
+      out.y += 0.45 * ss(-0.06, 0.0, f.z) * ss(0.03, 0.07, f.y);
       // fringe swept across the forehead toward his left (as in the reference)
       out.x += 0.45 * ss(0.03, 0.08, f.y) * ss(-0.03, 0.05, f.z);
       out.y -= 0.5 * (1 - ss(0.02, 0.09, f.y));
-      out.x += 0.25 * vnoise(f.x * 30, f.y * 30, f.z * 30, 3);
-      out.z += 0.25 * vnoise(f.x * 30, f.y * 30, f.z * 30, 4);
+      out.x += 0.3 * vnoise(f.x * 30, f.y * 30, f.z * 30, 3);
+      out.z += 0.3 * vnoise(f.x * 30, f.y * 30, f.z * 30, 4);
       return out;
     },
-    lift: 0.3,
-    gravity: 22,
+    lift: 0.36,
+    gravity: 18,
     combPull: 10,
-    tousle: 12,
-    volume: (t, R) => 0.003 + (0.55 * R + 0.004) * ss(0, 0.35, t),
-    // loose S-shaped ringlets (bigger radius, longer pitch), defined clumped locks, little frizz (the old values read grainy)
-    curlR: [0.012, 0.021],
-    curlPitch: [0.075, 0.115],
-    curlStart: 0.28,
-    curlNoise: 0.75,
+    tousle: 14,
+    volume: (t, R) => 0.004 + (0.6 * R + 0.005) * ss(0, 0.3, t),
+    // tousled natural curls (about 1-1.5 turns per lock at this length), defined clumps, a little frizz
+    curlR: [0.0095, 0.017],
+    curlPitch: [0.05, 0.08],
+    curlStart: 0.3,
+    curlNoise: 0.9,
     straightLocks: 0.1,
-    lockR: 0.0078,
-    clump: 0.84,
-    frizz: 0.0013,
-    flyaway: 0.022,
+    lockR: 0.007,
+    clump: 0.8,
+    frizz: 0.0018,
+    flyaway: 0.03,
     width: 0.00014,
     stiffness: 0.4,
     childLen: [0.78, 1.0],

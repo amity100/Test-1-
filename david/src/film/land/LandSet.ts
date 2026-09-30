@@ -470,8 +470,9 @@ export class LandSet {
         shade: { tile: local, data: shadeImg.data }, mask: dress, sunDir, views,
         mist: { color: new THREE.Color(0.95, 0.82, 0.74), top: 650 },
         fog: JUDAH_FOG[tier],
-        // the near ridge of the final pose: a hamlet on the shoulder right of the axis, olive groves on the slopes
-        hamlets: [{ ...judahAhead(620, 130), r: 48 }],
+        // the near ridge of the final pose: hamlets on the visible hilltops right of the axis (1.1 / 1.5 km, found by
+        // line of sight on the DEM), olive groves on the slopes
+        hamlets: [{ x: 1330, z: -60, r: 46 }, { x: 1780, z: 20, r: 36 }],
         groves: [{ ...judahAhead(330, -140), r: 280 }, { ...judahAhead(820, 90), r: 320 }, { ...judahAhead(520, 260), r: 200 }],
       });
       scene.add(dz.group);

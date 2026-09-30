@@ -69,6 +69,8 @@ interface Thread {
   oB: THREE.Vector3;
   /** ribbon half-width (m) */
   w: number;
+  /** edge-to-skirt distance when the tear front reached it (the thread is drawn from there; -1 = not yet) */
+  d0: number;
 }
 const _s = new THREE.Vector3();
 const _d = new THREE.Vector3();
@@ -230,7 +232,7 @@ export class MeilTear {
             // wool threads stretch a long way before they give (the slow-motion shot needs them visible): 2-9 cm,
             // a few up to 15 cm
             edge: k, skirtV: list[k], state: 0, breakLen: 0.02 + 0.07 * R() ** 1.5 + (R() < 0.15 ? 0.06 * R() : 0),
-            dA: new THREE.Vector3(), dB: new THREE.Vector3(), oA: off(), oB: off(), w: 0.0006 + 0.0006 * R(),
+            dA: new THREE.Vector3(), dB: new THREE.Vector3(), oA: off(), oB: off(), w: 0.0006 + 0.0006 * R(), d0: -1,
           });
         }
       }
@@ -347,7 +349,10 @@ export class MeilTear {
     this.flapSkinned.visible = true;
     this.free.visible = false;
     this.threads.visible = false;
-    for (const t of this.threadList) t.state = 0;
+    for (const t of this.threadList) {
+      t.state = 0;
+      t.d0 = -1;
+    }
     // the tzitzit sockets go back to the leg bone they came from
     for (const s of this.tzitzitSockets) {
       const home = s.userData.tearHome as THREE.Object3D | undefined;
@@ -431,7 +436,10 @@ export class MeilTear {
       if (t.state === 1) {
         skinnedWorld(this.skirtRef.mesh, t.skirtV, _b).add(t.oB);
         const d = _a.distanceTo(_b);
-        if (d > t.breakLen) {
+        // the thread stretches from the gap it had when the tear front reached it (the flap is already pulled
+        // away by the fist, so an absolute length snapped every thread on the frame it was released)
+        if (t.d0 < 0) t.d0 = d;
+        if (d > t.d0 + t.breakLen) {
           t.state = 2;
           const dir = _b.clone().sub(_a).normalize();
           // frayed ends 1-3 cm, drooping
