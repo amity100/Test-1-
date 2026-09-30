@@ -1,4 +1,5 @@
 import { defaultQuality, IS_TOUCH, QUALITY, type QualityName } from '../config';
+import { DEFAULT_VARIANT, isVariant, type CombatVariant } from './variant';
 
 export interface Settings {
   quality: QualityName;
@@ -7,6 +8,8 @@ export interface Settings {
   slowmo: boolean;
   /** Performance overlay (fps, frame / CPU / GPU ms, resolution, draws). */
   perf: boolean;
+  /** The COMBAT LAB's variant (game/variant.ts): CURRENT, PRECISION or ONSLAUGHT. Outside the lab the game is CURRENT. */
+  combatVariant: CombatVariant;
   /** Settings format (see readSettings). */
   v: number;
 }
@@ -19,7 +22,7 @@ export interface Settings {
 export const SETTINGS_VERSION = 2;
 
 export function defaultSettings(touch = IS_TOUCH): Settings {
-  return { quality: defaultQuality(touch), sensitivity: 1, invertY: false, slowmo: true, perf: false, v: SETTINGS_VERSION };
+  return { quality: defaultQuality(touch), sensitivity: 1, invertY: false, slowmo: true, perf: false, combatVariant: DEFAULT_VARIANT, v: SETTINGS_VERSION };
 }
 
 /** Settings from their saved JSON (null / broken: the defaults), migrated to the current version. */
@@ -35,6 +38,7 @@ export function readSettings(raw: string | null, touch = IS_TOUCH): Settings {
   if (v < 2 && touch && s.quality === 'medium') out.quality = 'high';
   if (!(out.quality in QUALITY)) out.quality = d.quality;
   if (typeof out.perf !== 'boolean') out.perf = false;
+  if (!isVariant(out.combatVariant)) out.combatVariant = DEFAULT_VARIANT;
   out.v = SETTINGS_VERSION;
   return out;
 }

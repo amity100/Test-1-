@@ -4,27 +4,37 @@ import { buildTower, type TowerBuild } from './tower';
 import { buildHalcyon } from './halcyon';
 import { HALCYON_SKY } from './halcyon/atmosphere';
 import { SUN_DIR as HALCYON_SUN } from './halcyon/layout';
+import { buildCombatLab, LAB_SKY } from './combatlab';
+import { SUN_DIR as LAB_SUN } from './combatlab/layout';
 
 /**
  * Mission 1 comes in two worlds while the owner picks one: the harbour tower
  * and Halcyon, the city of tomorrow. To drop one later: remove its entry here
  * (and, for Halcyon, src/world/halcyon/ + halcyon.ts and its `halcyon:` strings).
+ *
+ * The third world, 'lab', is the COMBAT LAB: a grey-box test range where the
+ * combat variants are played side by side (src/world/combatlab*, game/lab.ts).
+ * It isn't a mission: the menu offers it as its own entry, not in WORLDS.
  */
-export type WorldId = 'harbour' | 'halcyon';
+export type WorldId = 'harbour' | 'halcyon' | 'lab';
+/** The mission worlds (the menu's WORLD toggle). */
 export const WORLDS: WorldId[] = ['harbour', 'halcyon'];
+export const LAB_WORLD: WorldId = 'lab';
+export const ALL_WORLDS: WorldId[] = [...WORLDS, LAB_WORLD];
 export const DEFAULT_WORLD: WorldId = 'halcyon';
 
 const KEY = 'threshold.world';
 
 /** Sun and sky each world is lit by (the env map is baked before the level is built). */
-export const WORLD_SUN: Record<WorldId, THREE.Vector3> = { harbour: GOLDEN_SUN_DIR, halcyon: HALCYON_SUN };
-export const WORLD_SKY: Record<WorldId, SkyStyle> = { harbour: DEFAULT_SKY, halcyon: HALCYON_SKY };
+export const WORLD_SUN: Record<WorldId, THREE.Vector3> = { harbour: GOLDEN_SUN_DIR, halcyon: HALCYON_SUN, lab: LAB_SUN };
+export const WORLD_SKY: Record<WorldId, SkyStyle> = { harbour: DEFAULT_SKY, halcyon: HALCYON_SKY, lab: LAB_SKY };
 
 export function buildWorld(id: WorldId, envMap: THREE.Texture | null, mobile: boolean, opts: { headless?: boolean } = {}): TowerBuild {
+  if (id === 'lab') return buildCombatLab(envMap, mobile, opts);
   return id === 'halcyon' ? buildHalcyon(envMap, mobile, opts) : buildTower(envMap, mobile, opts);
 }
 
-const isWorld = (s: unknown): s is WorldId => typeof s === 'string' && (WORLDS as string[]).includes(s);
+const isWorld = (s: unknown): s is WorldId => typeof s === 'string' && (ALL_WORLDS as string[]).includes(s);
 
 /** Minimal storage (localStorage, or a stand-in in tests). */
 export interface WorldStore {

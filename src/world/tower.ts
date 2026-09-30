@@ -12,6 +12,7 @@ import { buildCrown } from './tower/crown';
 import { makePropFactory } from './tower/props';
 import { BARGE, LAND, SUN_DIR, inRect } from './tower/layout';
 import type { SkyStyle } from '../render/fx';
+import type { LabArena } from './combatlab/layout';
 
 export { TOWER, SHAFT, HOIST, GLASS_LIFT, CRANE, LAND } from './tower/layout';
 
@@ -30,8 +31,8 @@ export interface TowerAtmosphere {
   // (optional, per world: the harbour leaves them out and keeps the defaults)
   /** Sky colours and clouds (default DEFAULT_SKY). */
   sky?: SkyStyle;
-  /** Distant city: the harbour's bay skyline or the deco towers. */
-  skyline?: 'harbour' | 'deco';
+  /** Distant city: the harbour's bay skyline, the deco towers, or none (the lab brings its own backdrop). */
+  skyline?: 'harbour' | 'deco' | 'none';
   /** Post look: bloom [strength, radius, threshold], saturation, the rift pass flash [colour split, glow]. */
   look?: { bloom: [number, number, number]; saturation: number; flash?: [number, number]; bloomClamp?: number };
   /** Lamp look (LampSystem options). */
@@ -52,6 +53,8 @@ export interface TowerBuild extends TowerLevel {
   atmosphere: TowerAtmosphere;
   /** Always-visible landmark geometry (tower shell, cranes, hoist, lifts). */
   shellRoot: THREE.Object3D;
+  /** The COMBAT LAB's gates and waves (only the lab world has them: its wave director runs the fights). */
+  lab?: LabArena;
 }
 
 const ZONE_ORDER: ZoneId[] = ['pier', 'yard', 'skeleton', 'lab', 'crown'];

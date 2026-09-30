@@ -482,9 +482,10 @@ export class Game {
     applySkyStyle(this.sky, atm.sky ?? DEFAULT_SKY);
     CHAR_RIM.value = atm.rim ?? 0;
     this.renderer.setLook(atm.look);
-    const skyline = atm.skyline === 'deco' ? createDecoSkyline({ mobile: lite, sunDir: this.level.sunDir, sky: atm.sky }) : createSkyline({ mobile: lite, sunDir: this.level.sunDir });
+    const skyline =
+      atm.skyline === 'none' ? null : atm.skyline === 'deco' ? createDecoSkyline({ mobile: lite, sunDir: this.level.sunDir, sky: atm.sky }) : createSkyline({ mobile: lite, sunDir: this.level.sunDir });
     this.skyline = skyline;
-    this.scene.add(skyline);
+    if (skyline) this.scene.add(skyline);
     const sunU = (this.sky.material as THREE.ShaderMaterial).uniforms.uSunDir;
     if (sunU) sunU.value.copy(this.level.sunDir);
     const preset = this.renderer.preset;

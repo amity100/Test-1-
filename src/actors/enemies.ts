@@ -684,6 +684,14 @@ export class EnemySystem implements EnemyAPI, Brain {
     this.raise(zone, null, null);
   }
 
+  /** He knows where the player is right now, and he's in the fight (the COMBAT LAB's arrivals come through their gates aware). */
+  inform(v: EnemyView, at: V3) {
+    const e = this.own(v);
+    if (!e || !e.alive) return;
+    this.enterCombat(e, null, false);
+    this.learn(e, at, AI.reportError);
+  }
+
   /** Some living enemy of the zone is in combat. */
   isHot(zone: ZoneId) {
     for (let i = 0; i < this.list.length; i++) {
