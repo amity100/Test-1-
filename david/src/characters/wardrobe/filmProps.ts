@@ -115,7 +115,7 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions &
   const patina = new THREE.Color(0x56745b).multiply(new THREE.Color(bronzeHex).set(1 / new THREE.Color(bronzeHex).r, 1 / new THREE.Color(bronzeHex).g, 1 / new THREE.Color(bronzeHex).b));
   // (metal: the vertex colour scales F0, so road dust must darken and desaturate it, never brighten it — a pale dust
   // colour turned the whole coat silver-lilac against the bright sky)
-  const dust = new THREE.Color(0.6, 0.5, 0.38);
+  const dust = new THREE.Color(0.62, 0.45, 0.28);
   const c = new THREE.Color();
   const tmpT = new THREE.Vector3(), tmpD = new THREE.Vector3(), q = new THREE.Vector3();
   const place = (t: Tube, zoneId: number, dStart: number, maxLen: (th: number) => number, rowOffset: number) => {
@@ -176,7 +176,8 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions &
         const vi0 = pos.length / 3;
         for (let j = 0; j <= nv; j++) {
           const v = j / nv; // 0 = top (laced), 1 = rounded lower end
-          const halfW = v < 0.62 ? 0.5 : 0.5 * Math.sqrt(Math.max(0, 1 - ((v - 0.62) / 0.38) ** 2));
+          // (third pass) a long rounded-end rectangle like the Iron Age scales from Lachish / Nuzi, not a pointed leaf
+          const halfW = v < 0.72 ? 0.5 : 0.5 * (0.5 + 0.5 * Math.sqrt(Math.max(0, 1 - ((v - 0.72) / 0.28) ** 2)));
           for (let i = 0; i <= nu; i++) {
             const u = (i / nu - 0.5) * 2; // -1..1
             const x = u * halfW * W;
@@ -229,10 +230,20 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions &
   // maps put packed road dust (rough, non-metal) along the overlap line and keep the rib and the lower edge burnished
   const maps = scaleDetailMaps();
   const mat = new THREE.MeshStandardMaterial({
-    color: royal ? 0xb88550 : 0x9a6a40, roughness: royal ? 1.0 : 1.12, metalness: 1, envMapIntensity: 0.85,
-    normalMap: maps.normal, normalScale: new THREE.Vector2(1.1, 1.1), roughnessMap: maps.orm, metalnessMap: maps.orm,
+    color: royal ? 0xb88550 : 0x9a6a40, roughness: royal ? 1.0 : 1.12, metalness: 1, envMapIntensity: 0.75,
+    normalMap: maps.normal, normalScale: new THREE.Vector2(0.8, 0.8), roughnessMap: maps.orm, metalnessMap: maps.orm,
   });
   mat.name = 'wardrobe:scaleBronze';
+  // the environment the coat reflects is mostly pale sky: through a strong normal map (grazing Fresnel) it turned
+  // many scales silver-lilac. Warm the reflected environment (dust-laden air, the sunlit plain the lower facets see)
+  // so the coat stays bronze in every shot; the direct sun highlight is untouched.
+  mat.onBeforeCompile = (sh) => {
+    sh.fragmentShader = sh.fragmentShader.replace(
+      '#include <lights_fragment_end>',
+      '#include <lights_fragment_end>\nreflectedLight.indirectSpecular *= vec3(1.0, 0.66, 0.38);',
+    );
+  };
+  mat.customProgramCacheKey = () => 'scaleBronze';
   mat.vertexColors = true;
   mat.side = THREE.DoubleSide;
   // weights: upper zone follows the torso, and near the shoulders blends into the upper arm (like the armhole cap)
@@ -369,7 +380,7 @@ export function makeHelmet(tier: Tier, metal: TexPair, leather: TexPair, o: { ra
   dome.computeVertexNormals();
   const bronze = solidMaterial({
     // dusty, hammered dark bronze after a campaign (a smooth bright dome read as a glowing ball in the backlight)
-    tier, tex: metal, color: royal ? 0x5f3b1f : 0x6e4a2c, roughness: royal ? 0.68 : 0.7, metalness: 0.85, repeat: [2, 2], normal: 1.8,
+    tier, tex: metal, color: royal ? 0x523420 : 0x6e4a2c, roughness: royal ? 0.74 : 0.7, metalness: 0.85, repeat: [2, 2], normal: 1.8,
     metalWear: { patina: 0x56745b, amount: royal ? 0.2 : 0.5, edgeBright: 0.3 },
   });
   bronze.side = THREE.DoubleSide;

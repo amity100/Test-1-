@@ -11,6 +11,7 @@ import { dressDavid, dressSaul } from '../src/characters/wardrobe';
 import { PostFX } from '../src/fx/PostFX';
 import { SkySystem } from '../src/world/Sky';
 import { shared } from '../src/core/Shared';
+import { FaceLightRig, eyesMidpoint, type FaceLightPresetName } from '../src/film/cast/faceLight';
 
 const P = new URLSearchParams(location.search);
 const preset = (P.get('preset') ?? 'david') as 'david' | 'saul' | 'samuel';
@@ -90,6 +91,10 @@ if (P.get('hair') !== '0') {
   }
 }
 const loadMs = performance.now() - t0;
+const faceP = P.get('face') as FaceLightPresetName | null;
+const rig = faceP ? new FaceLightRig({ quality: q }).addTo(scene) : null;
+rig?.setPreset(faceP!, Number(P.get('fl') ?? '1'));
+const _eyes = new THREE.Vector3();
 human.rig.blinkEnabled = false;
 human.rig.lipSeal = 0.35;
 human.setPupil(0.25);
@@ -138,6 +143,7 @@ for (const v of views) {
     shared.uCamPos.value.copy(camera.position);
     human.update(dt, camera, H);
     groom?.update(dt);
+    if (rig) rig.update(eyesMidpoint(human.sockets, _eyes), camera);
     sky.update(camera, human.root.position.clone().add(new THREE.Vector3(0, 1, 0)));
     const a = performance.now();
     post.render(dt);
