@@ -50,10 +50,10 @@ SETTINGS: dict[str, dict] = {
     # David (visual-bible 3.13, the reference image): a youth ~17 — some real structure (brow ridge, cheekbones,
     # nose bridge, chin) but young, full cheeks; the reference's face is WIDER at the cheekbones and the jaw than ours,
     # with a defined square-ish chin and full, defined lips.
-    "david": {"amount": 0.8, "goals": [
+    "david": {"amount": 0.8, "scanLow": 0.15, "goals": [
         ("cheekbone", (0.043, -0.026, -0.018), (0.016, 0.012, 0.02), 3.6, "out"),
         ("cheekboneFwd", (0.036, -0.024, -0.004), (0.012, 0.01, 0.014), 1.8, "fwd"),
-        ("jawAngle", (0.05, -0.085, -0.045), (0.014, 0.016, 0.02), 3.4, "out"),
+        ("jawAngle", (0.05, -0.085, -0.045), (0.014, 0.016, 0.02), 4.0, "out"),
         ("jawLine", (0.035, -0.1, -0.01), (0.02, 0.012, 0.03), 1.6, "out"),
         ("chin", (0.0, -0.112, 0.012), (0.016, 0.012, 0.012), 1.6, "fwd"),
         ("browRidge", (0.02, 0.019, 0.012), (0.022, 0.007, 0.012), 1.8, "fwd"),
@@ -226,7 +226,9 @@ def build(name: str):
         D = 0.5 * D + 0.5 * (M @ D)
     D *= (w * np.maximum(w_eye, 0.0))[:, None] ** 0.5
     raw_max = np.linalg.norm(D, axis=1).max() * 1000
-    D *= cfg["amount"]
+    # the scan's lower face may be narrower than the look we want (David: a defined, not a narrow jaw) — per preset
+    # the scan's share below the mouth ('scanLow', 1 = same as above)
+    D *= (cfg["amount"] * (cfg.get("scanLow", 1.0) + (1.0 - cfg.get("scanLow", 1.0)) * ss(-0.085, -0.06, f[:, 1])))[:, None]
     # ---- named goals (Gaussians in head space, both sides mirrored)
     G = np.zeros((NBODY, 3))
     Gl = np.zeros((NBODY, 3))  # 'lid' goals: the fold above the upper-lid crease (no eye mask, gated above the crease)
