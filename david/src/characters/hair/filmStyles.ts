@@ -107,7 +107,9 @@ export function samuelStyle(): GroomStyle {
       // long, full, untrimmed (Lev 19:27): chin to mid-chest, the cheeks falling into it
       const chin = ss(-0.03, -0.11, f.y) * ss(0.09, 0.02, ax);
       const L = 0.1 + 0.16 * chin + 0.04 * ss(0.07, 0.03, ax);
-      return (must > 0.5 ? 0.055 : L) * (0.82 + 0.3 * R());
+      // face pass 2: the upper cheek edge grows short and blends into the skin (it hung as a curtain from a hard line)
+      const cheekEdge = ss(-0.05, -0.022, f.y) * ss(0.028, 0.048, ax);
+      return (must > 0.5 ? 0.055 : L * (1 - 0.65 * cheekEdge)) * (0.82 + 0.3 * R());
     },
     comb: (f, n, out) => {
       const ax = Math.abs(f.x);

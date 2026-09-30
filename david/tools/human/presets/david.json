@@ -16,8 +16,8 @@
   "modifiers": {
     "head/head-age-decr|incr": -0.45,
     "head/head-oval": 0.3,
-    "head/head-square": 0.35,
-    "head/head-scale-horiz-decr|incr": 0.08,
+    "head/head-square": 0.25,
+    "head/head-scale-horiz-decr|incr": 0.02,
     "forehead/forehead-scale-vert-decr|incr": -0.1,
     "eyebrows/eyebrows-trans-backward|forward": 0.85,
     "eyebrows/eyebrows-angle-down|up": 0.0,
@@ -73,8 +73,7 @@
     "head/head-rectangular": 0.0,
     "mouth/mouth-laugh-lines-in|out": 0.0,
     "stomach/stomach-tone-decr|incr": 0.5,
-    "nose/nose-scale-depth-decr|incr": 0.15,
-    "head/head-scale-vert-decr|incr": -0.06
+    "nose/nose-scale-depth-decr|incr": 0.15
   },
   "skin": {
     "seed": 16,

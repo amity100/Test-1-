@@ -666,7 +666,9 @@ def build_tearline(h: Human, tier: Tier, eyes):
                 tris += [(a0, b0, a1), (a1, b0, b1)]
         base += 3 * n
     pos = np.asarray(pos)
-    Wd = weights_for_points(tier, pos, k=2)
+    # face pass 2: the strip carries the lid margin's own weights (nearest-skin weights let it drift off the margin
+    # when the lids move, and the wet strip then showed as a grey-green sky reflection at the outer corner)
+    Wd = loop_weights(h, eyes, pos)
     return {"pos": pos, "tris": np.asarray(tris), "Wd": Wd}
 
 

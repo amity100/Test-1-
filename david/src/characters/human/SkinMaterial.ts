@@ -445,6 +445,19 @@ void RE_Direct_Skin( const in IncidentLight directLight, const in vec3 geometryP
 		{
 			// light diffusing under the skin softens shadow edges per channel: a warm fringe instead of a hard cut
 			float skinSh = ( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] ) : 1.0;
+			#ifdef SKIN_HERO
+			if ( directLight.visible && receiveShadow ) {
+				// face pass 2 ('high' only): thin casters (hair strands, lashes of a beard) alias in a 1-texel PCF; on skin
+				// four more bilinear-PCF lookups on a rotated ~1.7-texel square soften them into a penumbra
+				vec2 sts = 1.7 / directionalLightShadow.shadowMapSize;
+				float acc = skinSh;
+				acc += getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] + vec4( 0.8 * sts.x, 0.6 * sts.y, 0.0, 0.0 ) );
+				acc += getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] + vec4( -0.6 * sts.x, 0.8 * sts.y, 0.0, 0.0 ) );
+				acc += getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] + vec4( -0.8 * sts.x, -0.6 * sts.y, 0.0, 0.0 ) );
+				acc += getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] + vec4( 0.6 * sts.x, -0.8 * sts.y, 0.0, 0.0 ) );
+				skinSh = acc * 0.2;
+			}
+			#endif
 			// face pass 2: at GRAZING incidence a shadow-map texel stretches ~1/cos across the skin, so the thin hair
 			// strands' shadow turned into a blocky vertical stripe on a rim-lit temple / cheek (golden back light, shot
 			// 16; proven by switching the groom's castShadow off). Where the sun only grazes the skin (N.L ~0.02-0.3)
@@ -452,7 +465,7 @@ void RE_Direct_Skin( const in IncidentLight directLight, const in vec3 geometryP
 			// and on surfaces facing the light the shadow map is used in full.
 			{
 				float nlg = dot( geometryNormal, directLight.direction );
-				float graze = smoothstep( -0.06, 0.02, nlg ) * ( 1.0 - smoothstep( 0.04, 0.32, nlg ) );
+				float graze = smoothstep( -0.06, 0.02, nlg ) * ( 1.0 - smoothstep( 0.06, 0.42, nlg ) );
 				skinSh = mix( skinSh, 1.0, graze );
 			}
 			directLight.color *= pow( vec3( skinSh ), mix( uShadowScatter, vec3( 1.0 ), uSSSActive ) );
