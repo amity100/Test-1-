@@ -110,7 +110,7 @@ export async function dressSamuel(human: HumanModel, opts: FilmDressOptions): Pr
   outfit.capsules.push(...legCapsules(fit, 0.018, 0.07));
   outfit.swayGain = 0.01; // heavy wool
   // (1) ankle tunic, light undyed wool, long sleeves
-  const kut = fittedTunic(fit, { tex: t.weave_medium, tile: 0.12, dye: 0xcdbf9f, hem: 0.95, sleeve: 1.85, neck: 'slit', ease: 0.008, flare: 0.12, folds: 0.8, seed: 5, name: 'kuttonet', fray: 0.15, dust: 0.7, roughness: 0.92, sheen: 0.5 });
+  const kut = fittedTunic(fit, { tex: t.weave_medium, tile: 0.12, dye: 0xcdbf9f, hem: 0.95, sleeve: 1.85, neck: 'slit', ease: 0.008, flare: 0.12, folds: 0.8, seed: 5, name: 'kuttonet', fray: 0.03, dust: 0.7, roughness: 0.92, sheen: 0.5 });
   // (2) the me'il: dark undyed wool, heavy, ankle length, four corners (side openings), woven border near the hem
   const DARK = 0x655645;
   // side openings of the wrap: narrow (a wide slit showed the light tunic as a stripe down both sides)
