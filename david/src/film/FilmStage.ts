@@ -511,6 +511,14 @@ export class FilmStage {
         // every cut: the strand-hair sims start from rest (a pose / heading jump across a cut — Samuel turns back
         // between 10b and 11 — otherwise whips the hair and beard outward for a second)
         resetHair(actors);
+        // Samuel's long hair and beard flare outward under the slow-motion tear and in the verdict close-up (the
+        // guide sim leaves its collision field there); those two shots use the exact groom, the others the sim
+        const samuelActor = actors[1];
+        try {
+          samuelActor?.groom?.setSimulation(!(name === 'tear' || name === 'verdict'));
+        } catch {
+          /* hair is cosmetic */
+        }
         if (cont) return; // a cut inside one blocking beat: the actors keep performing
         gilgal.setBeat(name, TAKE_OFFSET[take] ?? 0);
         if (perf) {

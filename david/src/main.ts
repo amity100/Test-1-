@@ -14,6 +14,7 @@ import { GameAudio } from './gameplay/GameAudio';
 import { Story } from './gameplay/Story';
 import { Intro } from './gameplay/Intro';
 import { LAYOUT, SUN } from './world/Layout';
+import { narration } from './content/introNarration';
 
 const params = new URLSearchParams(location.search);
 const app = document.getElementById('app')!;
@@ -101,14 +102,14 @@ async function boot() {
     if (started && !wasPausedBeforeLoss) setPaused(false);
   };
 
-  // The opening film needs its stage (the prologue sets, Gilgal, the cast and the armies; lazily imported chunks): its
-  // build starts right after the loading screen and goes on behind the start screen, and it is disposed after the
+  // The opening film needs its stage (the prologue sets, Gilgal, the cast and the armies; lazily imported chunks): it
+  // is built behind this loading screen so the film starts at once after the start click, and it is disposed after the
   // film. Not built when the film is skipped (?skip=1, ?jump=...) or with ?preload=0 (the intro then builds it itself
   // behind its pre-roll card). Headless tests (?test=1) keep the lazy path unless ?preload=1.
   const wantIntro = params.get('skip') !== '1' && !params.get('jump');
   const preloadStage = wantIntro && (params.get('preload') ?? (testMode ? '0' : '1')) !== '0';
-  // the loading bar covers the game only: the film stage is not awaited (see below)
-  const LP = 1;
+  // share of the loading bar before the film stage (its build is the longest single step)
+  const LP = preloadStage ? 0.45 : 1;
   await engine.build((f, label) => ui.setLoading(f * LP, label));
   const terrain = engine.terrain;
   const ground = (x: number, z: number) => terrain.heightAt(x, z);
@@ -169,11 +170,14 @@ async function boot() {
   // the score's voicing follows the final render tier (phones: lighter synthesis, shorter reverb)
   audio.setLite(engine.quality.name === 'low');
   if (preloadStage) {
-    // after the warm-up: the film stage (pre-compiled for the final tier's post chain) keeps building while the start
-    // screen is up, so the player is not held on the loading bar; a click before it is ready waits behind the
-    // intro's pre-roll card, which shows the same progress (Intro.preload is idempotent: no second build)
+    // after the warm-up: the film stage is built and pre-compiled for the final tier's post chain behind the loading
+    // bar, so the film starts at once after the start click (a build behind the start screen left the player on a
+    // black screen after the click while long build tasks held the page)
+    const label = narration('chapterTitle');
+    ui.setLoading(LP, label);
     const t0 = performance.now();
-    void Intro.preload(engine).then(() => ((window as unknown as Record<string, unknown>).__stageMs = performance.now() - t0));
+    await Intro.preload(engine, { onProgress: (f) => ui.setLoading(LP + (0.995 - LP) * f, label) });
+    (window as unknown as Record<string, unknown>).__stageMs = performance.now() - t0;
   }
   ui.setLoading(1, 'מוכן');
 
