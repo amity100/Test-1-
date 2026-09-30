@@ -548,8 +548,8 @@ export class RamahPerformance {
     samuel.root.updateMatrixWorld(true);
     samuel.eyesWorld(this.samEyes);
     samuel.mocap.play('idle_king', { fade: 0 });
-    samuel.human.rig.faceBias.LeftUpperLidClosed = 0.18;
-    samuel.human.rig.faceBias.RightUpperLidClosed = 0.18;
+    samuel.human.rig.faceBias.LeftUpperLidClosed = 0.1;
+    samuel.human.rig.faceBias.RightUpperLidClosed = 0.1;
     const clips = ['talk_gesture', 'idle_old', 'argue', 'idle_bus', 'point_directions', 'idle_shift'];
     elders.forEach((e, i) => {
       e.ground = ground;

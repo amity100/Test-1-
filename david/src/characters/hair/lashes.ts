@@ -14,5 +14,9 @@ export function enhanceLashes(human: HumanModel, o: { width?: number; minPx?: nu
   u.uMinPx.value = Math.max(u.uMinPx.value, o.minPx ?? 0.9);
   u.uRootColor.value.multiplyScalar(o.darken ?? 0.7);
   u.uTipColor.value.multiplyScalar(o.darken ?? 0.7);
+  // backlight: a glossy lash ribbon lit through the skin normal under its root flared into a bright white line along
+  // the lid (skin report, film shots 5 / 7-12) — lashes are matte, dark and never mirror the sky
+  m.roughness = Math.max(m.roughness, 0.85);
+  m.envMapIntensity = Math.min(m.envMapIntensity ?? 1, 0.25);
   m.userData.hairEnhanced = true;
 }

@@ -60,6 +60,8 @@ export interface PhilistineHostOptions {
   impostors?: boolean;
   /** footstep dust puffs (CrowdDust, coastal-plain sand colour); default true */
   dust?: boolean;
+  /** override the tier's mesh LOD caps (nearest first; the overflow falls to the next LOD / the impostors) */
+  lodCaps?: [number, number, number];
 }
 
 function hash(a: number, b: number) {
@@ -91,7 +93,7 @@ export class PhilistineHost {
       ? (o.tier === 'mobile-low' ? 1200 : o.tier === 'mobile-high' ? 1600 : o.tier === 'desktop-medium' ? 2600 : 3800)
       : (o.tier === 'mobile-low' ? 360 : o.tier === 'mobile-high' ? 500 : o.tier === 'desktop-medium' ? 900 : 1400));
     const anim = o.anim ?? (await CrowdAnim.bake(philistineClips(lite)));
-    const crowd = await Crowd.create({ army: 'philistine', anim, capacity: count, tier: o.tier, castShadow: [true, false, false], impostors: imp });
+    const crowd = await Crowd.create({ army: 'philistine', anim, capacity: count, tier: o.tier, castShadow: [true, false, false], impostors: imp, lodCaps: o.lodCaps });
     return new PhilistineHost(crowd, anim, count, o, !o.anim, lite);
   }
 

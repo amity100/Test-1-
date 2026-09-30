@@ -82,6 +82,8 @@ export interface GilgalArmyOptions {
   dust?: boolean;
   /** the spoil herds beside the column (SpoilHerd, visual bible 3.5); default true */
   herds?: boolean;
+  /** override the tier's mesh LOD caps (nearest first; the overflow falls to the next LOD / the impostors) */
+  lodCaps?: [number, number, number];
   anim?: CrowdAnim;
 }
 
@@ -131,7 +133,7 @@ export class GilgalArmy {
     const tailDefault = o.tier === 'mobile-low' ? 44 : o.tier === 'mobile-high' ? 60 : o.tier === 'desktop-medium' ? 100 : 110;
     const tail = o.impostors === false ? 0 : typeof o.impostors === 'number' ? o.impostors : tailDefault;
     const ranks = near + tail;
-    const crowd = await Crowd.create({ army: 'israel', anim, capacity: ranks * ARMY.files, tier: o.tier, impostors: tail > 0 });
+    const crowd = await Crowd.create({ army: 'israel', anim, capacity: ranks * ARMY.files, tier: o.tier, impostors: tail > 0, lodCaps: o.lodCaps });
     return new GilgalArmy(crowd, anim, ranks, o, !o.anim, lite);
   }
 

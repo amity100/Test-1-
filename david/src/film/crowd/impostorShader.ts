@@ -257,7 +257,8 @@ const FRAG_BODY = /* glsl */ `
   if (!hit) discard;
   // march dust over everything low
   if (metal < 0.5) col = mix(col, uDustColor * 0.9, clamp((0.5 * s * ey - p.y) / (0.5 * s * ey), 0.0, 1.0) * 0.4 * uDust);
-  diffuseColor.rgb *= col;
+  // a flat card catches more sky than the self-shadowed mesh of a backlit man: match the mesh LODs' tone at the switch
+  diffuseColor.rgb *= col * 0.8;
   // no grazing normals on a flat card: a metal edge turned to a low sun behind the host would flare into the bloom
   impNrm = normalize(vec3(impNrm.xy, max(impNrm.z, 0.45)));
   impMetal = metal;
