@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { buildCombatLab } from '../../src/world/combatlab';
 import type { TowerBuild } from '../../src/world/tower';
 import { ALL_WORLDS, buildWorld, readWorld, WORLDS, type WorldStore } from '../../src/world/worlds';
-import { DECK, GATES, KILL_Y, LOADS, POOL, RING, SEA_Y, STAIR_E, STAIR_W, TOWER_H, TOWERS, WAVES } from '../../src/world/combatlab/layout';
+import { DECK, GATES, KILL_Y, labWaves, LOADS, ONSLAUGHT_WAVES, POOL, RING, SEA_Y, STAIR_E, STAIR_W, TOWER_H, TOWERS, WAVES } from '../../src/world/combatlab/layout';
 import type { Collider } from '../../src/world/collision';
 import { NavGrid } from '../../src/world/nav';
 import { FEEL } from '../../src/config';
@@ -86,9 +86,10 @@ describe('COMBAT LAB: the arena', () => {
       expect(Math.abs(groundAt(g.pos.x, g.pos.z, 0.3, g.pos.y + 0.3) - g.pos.y), `gate ${g.id} ground`).toBeLessThan(0.05);
       expect(overlapping(g.pos.x, g.pos.z, 0.6, g.pos.y, g.pos.y + 2.2), `gate ${g.id} clear`).toEqual([]);
     }
-    for (const [wi, w] of WAVES.entries()) {
+    // (ONSLAUGHT's own sequence stands on the same ground rules)
+    for (const [wi, w] of [...WAVES, ...ONSLAUGHT_WAVES].entries()) {
       for (const s of w.spawns) {
-        const where = `W${wi + 1} ${s.kind} ${fmt(s.post)}`;
+        const where = `${wi < WAVES.length ? 'W' : 'O'}${(wi % WAVES.length) + 1} ${s.kind} ${fmt(s.post)}`;
         const gate = GATES.find((g) => g.id === s.gate)!;
         expect(gate, where).toBeTruthy();
         const li = layerOf(s.post);
@@ -328,5 +329,111 @@ describe('COMBAT LAB: variants and kill credit', () => {
     expect(killTool({ ...base, cause: 'explosion' })).toBe('other');
     expect(fmtTime(59.96)).toBe('0:59.9');
     expect(fmtTime(83.25)).toBe('1:23.2');
+  });
+});
+
+describe('COMBAT LAB: ONSLAUGHT waves', () => {
+  it('each variant plays its own list: CURRENT and PRECISION the baseline, ONSLAUGHT its own', () => {
+    const a = L.lab!;
+    expect(labWaves(a, 'current')).toBe(a.waves);
+    expect(labWaves(a, 'precision')).toBe(a.waves);
+    const o = labWaves(a, 'onslaught');
+    expect(o).not.toBe(a.waves);
+    expect(o.map((w) => w.subKey)).toEqual(['lab.o1', 'lab.o2', 'lab.o3', 'lab.o4', 'lab.o5']);
+    // the baseline is untouched: no archetypes, no pulses
+    expect(a.waves.flatMap((w) => w.spawns).some((q) => q.arch || q.pulse)).toBe(false);
+    expect(a.waves.some((w) => w.pulse)).toBe(false);
+    for (const w of ONSLAUGHT_WAVES) for (const k of ['en', 'he'] as const) expect(strings(k)[w.subKey], `${k} ${w.subKey}`).toBeTruthy();
+  });
+
+  it('the sequence the owner asked for: stormer pairs from different sides, suppressors, heavies, ten in two pulses', () => {
+    const kinds = (w: (typeof ONSLAUGHT_WAVES)[number]) => w.spawns.map((q) => q.arch ?? q.kind).sort();
+    expect(kinds(ONSLAUGHT_WAVES[0])).toEqual(['stormer', 'stormer', 'suppressor']);
+    expect(kinds(ONSLAUGHT_WAVES[1])).toEqual(['sniper', 'stormer', 'stormer', 'suppressor']);
+    expect(ONSLAUGHT_WAVES[1].spawns.find((q) => q.kind === 'sniper')).toMatchObject({ role: 'holder', gate: 'tw' });
+    expect(kinds(ONSLAUGHT_WAVES[2])).toEqual(['stormer', 'stormer', 'suppressor', 'warden']);
+    expect(kinds(ONSLAUGHT_WAVES[3])).toEqual(['brute', 'grenadier', 'stormer', 'stormer', 'suppressor', 'warden']);
+    const w5 = ONSLAUGHT_WAVES[4];
+    expect(w5.spawns.length).toBeGreaterThanOrEqual(8);
+    expect(w5.spawns.length).toBeLessThanOrEqual(10);
+    expect(w5.pulse).toBeTruthy();
+    const second = w5.spawns.filter((q) => q.pulse === 2).length;
+    expect(second).toBeGreaterThan(2);
+    expect(w5.spawns.length - second).toBeGreaterThan(2);
+    for (const [i, w] of ONSLAUGHT_WAVES.entries()) {
+      // stormers come in pairs, from different gates
+      for (const p of [undefined, 2]) {
+        const st = w.spawns.filter((q) => q.arch === 'stormer' && q.pulse === p);
+        if (!st.length) continue;
+        expect(st.length % 2, `O${i + 1} pairs`).toBe(0);
+        expect(new Set(st.map((q) => q.gate)).size, `O${i + 1} from different sides`).toBe(st.length);
+      }
+      // only riflemen carry an archetype; never more than 10 in a wave
+      expect(w.spawns.every((q) => !q.arch || q.kind === 'rifleman')).toBe(true);
+      expect(w.spawns.length).toBeLessThanOrEqual(10);
+    }
+  });
+
+  it('the director plays ONSLAUGHT\'s list under ONSLAUGHT, the second pulse on its clock or when the first is nearly down', () => {
+    setLabActive(true);
+    setVariant('onslaught');
+    const { d, step, killAll, alive } = fakeRun();
+    d.start();
+    expect(d.stats.variant).toBe('onslaught');
+    expect(d.waveCount).toBe(5);
+    expect(d.stats.waves.length).toBe(5);
+    for (let w = 0; w < 4; w++) {
+      step(w === 0 ? LAB_TIMING.first + 0.1 : LAB_TIMING.breather + 0.1);
+      step(3);
+      expect(d.ids.length, `O${w + 1}`).toBe(ONSLAUGHT_WAVES[w].spawns.length);
+      killAll();
+      step(1 / 60);
+    }
+    step(LAB_TIMING.breather + 0.1);
+    const w5 = ONSLAUGHT_WAVES[4];
+    const first = w5.spawns.filter((q) => q.pulse !== 2).length;
+    step(3);
+    expect(d.ids.length).toBe(first);
+    expect(d.left).toBe(w5.spawns.length);
+    // down to the pulse's `left`: the rest come through
+    const ids = [...d.ids];
+    for (const id of ids.slice(0, ids.length - w5.pulse!.left)) alive.set(id, false);
+    step(3);
+    expect(d.ids.length).toBe(w5.spawns.length);
+    killAll();
+    step(1 / 60);
+    expect(d.phase).toBe('done');
+  });
+
+  it('the second pulse comes on its clock even if the first still stands', () => {
+    setLabActive(true);
+    setVariant('onslaught');
+    const { d, step, killAll } = fakeRun();
+    d.start();
+    for (let w = 0; w < 4; w++) {
+      step(w === 0 ? LAB_TIMING.first + 0.1 : LAB_TIMING.breather + 0.1);
+      step(3);
+      killAll();
+      step(1 / 60);
+    }
+    step(LAB_TIMING.breather + 0.1);
+    const w5 = ONSLAUGHT_WAVES[4];
+    step(w5.pulse!.at - 1);
+    expect(d.ids.length).toBeLessThan(w5.spawns.length);
+    step(4);
+    expect(d.ids.length).toBe(w5.spawns.length);
+  });
+
+  it('PRECISION and CURRENT still play the baseline five', () => {
+    for (const v of ['current', 'precision'] as const) {
+      setLabActive(true);
+      setVariant(v);
+      const { d, step, log } = fakeRun();
+      d.start();
+      step(LAB_TIMING.first + 3);
+      expect(d.ids.length).toBe(WAVES[0].spawns.length);
+      expect(log.filter((l) => l.startsWith('spawn')).every((l) => l.includes('rifleman'))).toBe(true);
+      expect(d.waves).toBe(L.lab!.waves);
+    }
   });
 });

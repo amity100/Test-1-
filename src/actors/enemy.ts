@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { CharacterAPI, DynBody, EnemyKind, EnemyState, EnemyView, LocomotionInput, SpawnDef, V3 } from '../core/contracts';
 import type { NavGrid } from '../world/nav';
-import { KIND, type KindTune } from './tuning';
+import { KIND, ONS, type KindTune } from './tuning';
 
 /** What he believes (states like stagger/launched are only bodily). */
 export type Mode = 'calm' | 'suspicious' | 'combat';
@@ -15,7 +15,39 @@ export type Mode = 'calm' | 'suspicious' | 'combat';
  * recover after a melee swing
  */
 export type AttackPhase = 'none' | 'aim' | 'fire' | 'windup' | 'roar' | 'run' | 'recover';
-export type AttackKind = 'burst' | 'fan' | 'return' | 'beam' | 'lob' | 'bash' | 'punch' | 'charge';
+export type AttackKind = 'burst' | 'fan' | 'return' | 'beam' | 'lob' | 'bash' | 'punch' | 'charge' | 'strike' | 'rush' | 'slam' | 'suppress';
+
+/** ONSLAUGHT: what a man of its squad is up to beyond his attack (actors/onslaught.ts). */
+export class OnsState {
+  /** The zig-zag's phase (rad). */
+  zig = 0;
+  /** Which way he circles you while he waits for a blow (+1 / -1). */
+  side = 1;
+  /** Sent round your side: where to (flankT s left). */
+  readonly flank = new THREE.Vector3();
+  flankT = 0;
+  /** Suppressive fire on where you were last known, this long more (s). */
+  suppressT = 0;
+  /** A melee rush / blow under way: how far it has run, its line. */
+  runDist = 0;
+  readonly runDir = new THREE.Vector3();
+  readonly runLast = new THREE.Vector3();
+  lowMove = 0;
+  /** It met you. */
+  landed = false;
+  /** A stormer springing back out of reach after a blow, this long more (s). */
+  backT = 0;
+  /** A stormer has closed on you once (his size-up is spent). */
+  engaged = false;
+  /** Slam cooldown (the brute's charge keeps its own). */
+  slamCd = 0;
+  /** A gun: how long he hasn't had you in sight (s). */
+  blindT = 0;
+  /** Stuck watch: where he was when the clock last started, and for how long. */
+  readonly stuckAt = new THREE.Vector3();
+  stuckT = 0;
+  unstuck = 0;
+}
 
 /** One Kessler actor. All fields are public for the system and tests; the game sees it as an EnemyView. */
 export class Enemy implements EnemyView {
@@ -184,11 +216,17 @@ export class Enemy implements EnemyView {
   returnT = -1;
   greeted = false;
 
+  // --- ONSLAUGHT (only for a man spawned with `def.onslaught`)
+  readonly arch: 'stormer' | 'suppressor' | null;
+  readonly ons: OnsState | null;
+
   constructor(readonly id: number, readonly def: SpawnDef, char: CharacterAPI, body: DynBody | null, senseOffset: number) {
     this.key = `enemy:${id}`;
     this.kind = def.kind;
     this.tune = KIND[def.kind];
-    this.hp = this.maxHp = this.tune.hp;
+    this.arch = def.onslaught ? def.archetype ?? null : null;
+    this.ons = def.onslaught ? new OnsState() : null;
+    this.hp = this.maxHp = this.arch ? ONS[this.arch].hp : this.tune.hp;
     this.radius = this.tune.radius;
     this.height = this.tune.height;
     this.char = char;

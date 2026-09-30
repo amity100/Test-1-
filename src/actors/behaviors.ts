@@ -67,12 +67,12 @@ export function combat(b: Brain, e: Enemy, dt: number) {
 }
 
 /** Where he thinks the player is: what he sees, else what he last saw, heard or was told. */
-function target(b: Brain, e: Enemy): V3 {
+export function target(b: Brain, e: Enemy): V3 {
   return e.seesPlayer ? b.ctx.player.pos : e.lastKnown;
 }
 
 /** Face the player, unless staring at a rift exit or turning a shield. */
-function attend(b: Brain, e: Enemy, dt: number, tgt: V3) {
+export function attend(b: Brain, e: Enemy, dt: number, tgt: V3) {
   if (e.lookT > 0) b.face(e, e.lookAt, dt);
   else if (e.kind === 'warden' && e.shieldT > 0) b.face(e, e.shieldFrom, dt);
   else b.face(e, tgt, dt);
@@ -217,7 +217,7 @@ export function aimSpread(dist: number, speed: number, view: number) {
  * aims. True when his ground has him on the move (back to his post, off to
  * his fallback): nothing else then.
  */
-function reposition(b: Brain, e: Enemy, dt: number): boolean {
+export function reposition(b: Brain, e: Enemy, dt: number): boolean {
   if (b.holdGround(e, dt)) return true;
   if (e.role === 'holder') {
     b.halt(e, dt);
@@ -481,7 +481,7 @@ export function provokeAttack(b: Brain, e: Enemy): boolean {
   return false;
 }
 
-function startCharge(b: Brain, e: Enemy) {
+export function startCharge(b: Brain, e: Enemy) {
   const pl = b.ctx.player;
   e.state = 'charge';
   e.stateT = 0;

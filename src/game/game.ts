@@ -121,6 +121,12 @@ const COL_EXIT = new THREE.Color(0.25, 1.6, 2.2);
 const COL_ENTRANCE = new THREE.Color(2.4, 1.2, 0.3);
 const COL_CHARGED = new THREE.Color(0.3, 1.6, 2.4);
 const COL_SPARK = new THREE.Color(2.6, 1.6, 0.7);
+/** ONSLAUGHT's melee red (wind-ups, the slam). */
+const COL_MELEE = new THREE.Color(3, 0.25, 0.12);
+/** Telegraph line segments drawn per frame (lasers, beams, charges). */
+const TELEGRAPH_SEGS = 48;
+/** ONSLAUGHT's solid tells (a slam takes 48: two rings). */
+const MELEE_SEGS = 160;
 
 const LOOKS: Record<EnemyKind, Look> = {
   rifleman: 'rifleman',
@@ -246,9 +252,11 @@ export class Game {
   private airStartT = -1;
   private airCrossings = 0;
   private catchWindow = { t: -1, count: 0 };
-  private telegraphs: { kind: 'laser' | 'beam' | 'arc' | 'charge'; from: THREE.Vector3; to: THREE.Vector3; t: number }[] = [];
+  private telegraphs: { kind: 'laser' | 'beam' | 'arc' | 'charge' | 'melee' | 'slam'; from: THREE.Vector3; to: THREE.Vector3; t: number }[] = [];
   private telegraphPool: Game['telegraphs'] = [];
   private telegraphLines: THREE.LineSegments;
+  private meleeLines: THREE.LineSegments;
+  private meleeWide: PixelLines;
   private arcLine: THREE.Line;
   private arcWasVisible = false;
   private killCtx: KillCtx | null = null;
@@ -363,12 +371,22 @@ export class Game {
 
     // telegraph visuals (lasers, beam charge, grenade arcs)
     const lg = new THREE.BufferGeometry();
-    lg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(48 * 6), 3).setUsage(THREE.DynamicDrawUsage));
-    lg.setAttribute('color', new THREE.BufferAttribute(new Float32Array(48 * 6), 3).setUsage(THREE.DynamicDrawUsage));
+    lg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TELEGRAPH_SEGS * 6), 3).setUsage(THREE.DynamicDrawUsage));
+    lg.setAttribute('color', new THREE.BufferAttribute(new Float32Array(TELEGRAPH_SEGS * 6), 3).setUsage(THREE.DynamicDrawUsage));
     this.telegraphLines = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending }));
     this.telegraphLines.frustumCulled = false;
     this.scene.add(this.telegraphLines);
     this.wideLines.push(new PixelLines(this.telegraphLines, 1));
+    // ONSLAUGHT's tells (red melee, orange gunfire): solid, and wide on every screen
+    const mg = new THREE.BufferGeometry();
+    mg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MELEE_SEGS * 6), 3).setUsage(THREE.DynamicDrawUsage));
+    mg.setAttribute('color', new THREE.BufferAttribute(new Float32Array(MELEE_SEGS * 6), 3).setUsage(THREE.DynamicDrawUsage));
+    mg.setDrawRange(0, 0);
+    this.meleeLines = new THREE.LineSegments(mg, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.95, depthWrite: false, toneMapped: false }));
+    this.meleeLines.frustumCulled = false;
+    this.scene.add(this.meleeLines);
+    this.meleeWide = new PixelLines(this.meleeLines, 3);
+    this.meleeWide.enabled = true;
     const ag = new THREE.BufferGeometry();
     ag.setAttribute('position', new THREE.BufferAttribute(new Float32Array(64 * 3), 3).setUsage(THREE.DynamicDrawUsage));
     this.arcLine = new THREE.Line(ag, new THREE.LineDashedMaterial({ color: new THREE.Color(3, 1.2, 0.4), dashSize: 0.35, gapSize: 0.25, transparent: true, opacity: 0.9, depthWrite: false }));
@@ -557,7 +575,7 @@ export class Game {
     this.projectiles = new Projectiles(world, this.rifts, this.physics, this.projectileHooks());
     this.scene.add(this.projectiles.group);
     this.scene.add(this.parryView.group);
-    this.enemies = new EnemySystem(this.physics, this.enemyHooks(), (kind) => new Character(asset, anims, LOOKS[kind]));
+    this.enemies = new EnemySystem(this.physics, this.enemyHooks(), (kind, def) => new Character(asset, anims, def?.onslaught && def.archetype ? def.archetype : LOOKS[kind]));
     // the COMBAT LAB: its director brings the fights, its variant is in force
     const arena = this.level.lab;
     this.lab = arena
@@ -656,7 +674,7 @@ export class Game {
     this.rifts.group.traverse((o) => {
       if (o.userData.helper) this.helpers.push(o);
     });
-    this.helpers.push(ghost.root, this.telegraphLines, this.arcLine, this.arcView.points);
+    this.helpers.push(ghost.root, this.telegraphLines, this.meleeLines, this.arcLine, this.arcView.points);
 
     this.replay = new ReplayPlayer(this.replayHost());
 
@@ -1440,7 +1458,7 @@ export class Game {
           th.t = t01;
           this.telegraphs.push(th);
         }
-        if (kind === 'laser' && t01 < 0.05) this.audio.laserLock(from);
+        if ((kind === 'laser' || kind === 'melee') && t01 < 0.05) this.audio.laserLock(from);
         if (kind === 'beam' && t01 < 0.05) this.audio.beamCharge(from);
       },
       bark: (e, key) => {
@@ -1455,6 +1473,8 @@ export class Game {
         this.fx.dust(e.pos, 0.6);
       },
       melee: (_e, dmg, push) => {
+        // ONSLAUGHT: a DODGE's moment untouchable is untouchable by a blow too (no shove either)
+        if (activeVariant() === 'onslaught' && this.time < this.dodgeSafeUntil) return;
         this.hurtPlayer(dmg, this.player.body.pos);
         this.player.body.vel.add(push);
         this.player.body.onGround = false;
@@ -1475,6 +1495,26 @@ export class Game {
         const fa = { position: a.clone().setY(a.y + FEEL.portalHeight / 2), quaternion: orientFrame(n.clone().negate(), UP), width: FEEL.portalWidth, height: FEEL.portalHeight, kind: 'stand' as const };
         const fb = { position: b.clone().setY(b.y + FEEL.portalHeight / 2), quaternion: orientFrame(n.clone(), UP), width: FEEL.portalWidth, height: FEEL.portalHeight, kind: 'stand' as const };
         this.rifts.setBossPair(fa, fb);
+      },
+      windup: (e, kind, secs) => {
+        // ONSLAUGHT's red: a melee blow is coming (dodge it)
+        const c = e.chest(new THREE.Vector3());
+        this.fx.flash(c, kind === 'slam' ? 6 : 4, Math.min(0.5, secs), 0xff1a10);
+        this.fx.ring(_v.copy(e.pos).setY(e.pos.y + 0.06), kind === 'slam' ? 1.4 : 0.9, Math.min(0.45, secs), COL_MELEE);
+        if (kind === 'strike' || kind === 'rush') this.audio.shout(c);
+      },
+      opening: (e, secs) => {
+        this.exposedUntil.set(e.id, Math.max(this.exposedUntil.get(e.id) ?? -1, this.time + secs));
+      },
+      slam: (_e, at, radius) => {
+        const p = _v.copy(at).setY(at.y + 0.08);
+        this.fx.ring(p, radius, 0.35, COL_MELEE);
+        this.fx.ring(p, radius * 0.6, 0.25, COL_MELEE);
+        this.fx.dust(at, 1.6);
+        this.fx.flash(_v.copy(at).setY(at.y + 0.5), 8, 0.25, 0xff3010);
+        this.audio.impact(at, 12);
+        const d = at.distanceTo(this.player.body.pos);
+        if (d < 14) this.rig.shake = Math.max(this.rig.shake, 0.5 * (1 - d / 14));
       },
       summon: (_e, defs) => {
         for (const d of defs) {
@@ -2109,7 +2149,16 @@ export class Game {
     this.telegraphs.length = 0;
     const ectx: EnemyContext = {
       time: this.time,
-      player: { pos: body.pos, chest: p.chest(_v3.clone()), vel: body.vel, alive: this.hp > 0, airborne: p.airborne, crouched: p.crouched, noise: this.noise },
+      player: {
+        pos: body.pos,
+        chest: p.chest(_v3.clone()),
+        vel: body.vel,
+        alive: this.hp > 0,
+        airborne: p.airborne,
+        crouched: p.crouched,
+        noise: this.noise,
+        safe: this.time < this.dodgeSafeUntil || this.time < this.guardUntil || this.respawnT >= 0,
+      },
       world: this.level.world,
       rifts: this.rifts,
       physics: this.physics,
@@ -3066,7 +3115,7 @@ export class Game {
       const angle = Math.atan2(y - h / 2, x - w / 2);
       list.push({ x: THREE.MathUtils.clamp(x, 40, w - 40), y: THREE.MathUtils.clamp(y, 60, h - 60), onScreen: on, angle, kind, label });
     };
-    for (const th of this.telegraphs) if (th.kind === 'laser' || th.kind === 'beam' || th.kind === 'charge') project(th.from, 'threat');
+    for (const th of this.telegraphs) if (th.kind !== 'arc') project(th.from, 'threat');
     if (this.visionOn) {
       for (const e of this.enemies.list) if (e.alive && this.zones.active.has(e.def.zone)) project(_v2.copy(e.pos).setY(e.pos.y + e.height + 0.3), 'target', t(`state.${e.searching ? 'suspicious' : e.state}`));
       for (const g of this.level.gates) if (this.zones.active.has(g.zone)) project(g.panel, 'gate');
@@ -3089,26 +3138,95 @@ export class Game {
   }
 
   private telegraphN = 0;
+  private meleeN = 0;
+
+  /**
+   * ONSLAUGHT's tells, solid (not added to what's behind: on a pale floor an
+   * additive line washes out) and wide. RED melee: a wind-up's line, a rush's
+   * lane (its centre and two edges a body apart), a slam's ring on the ground.
+   * ORANGE gunfire: a lock's laser, a beam. Brighter as it comes. Returns the
+   * next free segment.
+   */
+  private drawMelee(th: Game['telegraphs'][number], m: number) {
+    const pos = this.meleeLines.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const col = this.meleeLines.geometry.getAttribute('color') as THREE.BufferAttribute;
+    const gun = th.kind === 'laser' || th.kind === 'beam';
+    const k = (0.55 + 0.45 * th.t) * (th.kind === 'laser' ? 0.8 + 0.2 * Math.sin(this.time * 40) : 1);
+    const cr = k * 1.6, cg = gun ? k * 0.75 : 0.06, cb = gun ? 0.02 : 0.04;
+    const seg = (ax: number, ay: number, az: number, bx: number, by: number, bz: number, fade = 1) => {
+      if (m >= MELEE_SEGS) return;
+      pos.setXYZ(m * 2, ax, ay, az);
+      pos.setXYZ(m * 2 + 1, bx, by, bz);
+      col.setXYZ(m * 2, cr, cg, cb);
+      col.setXYZ(m * 2 + 1, cr * fade, cg * fade, cb * fade);
+      m++;
+    };
+    const f = th.from, to = th.to;
+    if (th.kind === 'slam') {
+      // the reach, and an inner ring that closes out onto it as the blow comes
+      const r = f.distanceTo(to);
+      const segs = 24;
+      for (const rr of [r, r * (0.35 + 0.65 * th.t)]) {
+        for (let i = 0; i < segs; i++) {
+          const a0 = (i / segs) * Math.PI * 2, a1 = ((i + 1) / segs) * Math.PI * 2;
+          seg(f.x + Math.sin(a0) * rr, f.y, f.z + Math.cos(a0) * rr, f.x + Math.sin(a1) * rr, f.y, f.z + Math.cos(a1) * rr);
+        }
+      }
+      return m;
+    }
+    const dx = to.x - f.x, dz = to.z - f.z, len = Math.hypot(dx, dz);
+    if (!gun && len > 3.5) {
+      const ox = (-dz / len) * 0.55, oz = (dx / len) * 0.55;
+      for (const sg of [-1, 1]) seg(f.x + ox * sg, f.y, f.z + oz * sg, to.x + ox * sg, to.y, to.z + oz * sg, 0.35);
+      // rungs across it, filling in toward him as the wind-up runs
+      const rungs = 6;
+      for (let i = 0; i < rungs; i++) {
+        const u = (i + 1) / (rungs + 1);
+        if (u > th.t + 0.05) break;
+        const x = f.x + dx * u, z = f.z + dz * u, y = f.y + (to.y - f.y) * u;
+        seg(x - ox, y, z - oz, x + ox, y, z + oz);
+      }
+    }
+    seg(f.x, f.y, f.z, to.x, to.y, to.z);
+    return m;
+  }
+
   private drawTelegraphs() {
     const pos = this.telegraphLines.geometry.getAttribute('position') as THREE.BufferAttribute;
     const col = this.telegraphLines.geometry.getAttribute('color') as THREE.BufferAttribute;
     let n = 0;
+    let m = 0;
     let arc: (typeof this.telegraphs)[number] | null = null;
+    // ONSLAUGHT keeps its colours apart: ORANGE gunfire (parry it), RED melee (dodge it)
+    const ons = activeVariant() === 'onslaught';
     for (const th of this.telegraphs) {
       if (th.kind === 'arc') {
         arc = th;
         continue;
       }
-      if (n >= 48) break;
+      if (th.kind === 'slam' || th.kind === 'melee' || (ons && (th.kind === 'laser' || th.kind === 'beam'))) {
+        m = this.drawMelee(th, m);
+        continue;
+      }
+      if (n >= TELEGRAPH_SEGS) break;
       const k = th.kind === 'beam' ? 1 + th.t * 3 : 2.5;
       pos.setXYZ(n * 2, th.from.x, th.from.y, th.from.z);
       pos.setXYZ(n * 2 + 1, th.to.x, th.to.y, th.to.z);
       const pulse = th.kind === 'laser' ? 0.6 + 0.4 * Math.sin(this.time * 40) : 1;
-      col.setXYZ(n * 2, k * pulse, 0.12, 0.08);
-      col.setXYZ(n * 2 + 1, k * pulse, 0.12, 0.08);
+      const r = k * pulse;
+      // (ONSLAUGHT's gunfire in orange; everywhere else the lasers stay as they were)
+      const gun = ons && (th.kind === 'laser' || th.kind === 'beam');
+      col.setXYZ(n * 2, r, gun ? r * 0.42 : 0.12, gun ? 0.03 : 0.08);
+      col.setXYZ(n * 2 + 1, r, gun ? r * 0.42 : 0.12, gun ? 0.03 : 0.08);
       n++;
     }
     this.telegraphLines.geometry.setDrawRange(0, n * 2);
+    this.meleeLines.geometry.setDrawRange(0, m * 2);
+    if (m > 0 || this.meleeN > 0) {
+      this.meleeLines.geometry.getAttribute('position').needsUpdate = true;
+      this.meleeLines.geometry.getAttribute('color').needsUpdate = true;
+    }
+    this.meleeN = m;
     // (no telegraphs now and none last frame: nothing to upload)
     if (n > 0 || this.telegraphN > 0) {
       pos.needsUpdate = true;
@@ -3228,6 +3346,7 @@ export class Game {
         this.liveSnap = this.capture();
         // live-only overlays (lock lasers, grenade arcs, the aim preview) would hang frozen in the clip
         this.telegraphLines.visible = false;
+        this.meleeLines.visible = false;
         this.arcWasVisible = this.arcLine.visible;
         this.arcLine.visible = false;
         // (a throw's arc, or a tap's preview on the man under the crosshair: the next live frame redraws it)
@@ -3243,6 +3362,7 @@ export class Game {
         if (this.liveSnap) this.applySnap(this.liveSnap);
         this.liveSnap = null;
         this.telegraphLines.visible = true;
+        this.meleeLines.visible = true;
         this.arcLine.visible = this.arcWasVisible;
         this.projectiles.group.visible = true;
         this.replayProj.visible = false;
@@ -3429,6 +3549,7 @@ export class Game {
     if (this.mode !== 'menu') this.rifts.preallocate(R.width, R.height, R.renderer.getPixelRatio());
     const sw = R.sceneWidth, sh = R.sceneHeight;
     for (const l of this.wideLines) l.sync(sw, sh, R.renderer.getPixelRatio() * R.renderScale);
+    this.meleeWide?.sync(sw, sh, R.renderer.getPixelRatio() * R.renderScale);
     // every transform of the frame is set: world matrices once, for the rift views and the main view alike
     this.scene.updateMatrixWorld();
     if (this.mode !== 'menu') this.rifts.renderViews(this.camera, R.width, R.height, this.helpers, sw, sh);

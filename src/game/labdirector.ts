@@ -1,5 +1,5 @@
 import type { KillEvent } from '../core/contracts';
-import type { LabArena, LabGate, LabSpawn, LabWave } from '../world/combatlab/layout';
+import { labWaves, type LabArena, type LabGate, type LabSpawn, type LabWave } from '../world/combatlab/layout';
 import { chosenVariant, setVariant, type CombatVariant } from './variant';
 
 /** What a lab kill is credited to (the run's KILLS BY TOOL). */
@@ -91,23 +91,31 @@ export class LabDirector {
   /** Ids of the current wave's men brought in so far. */
   readonly ids: number[] = [];
   private queue: { spawn: LabSpawn; t: number }[] = [];
+  /** The current wave's second pulse, still to come (LabWave.pulse). */
+  private held: LabSpawn[] = [];
 
   constructor(readonly arena: LabArena, private hooks: LabDirectorHooks) {
     this.stats = this.freshStats();
   }
 
+  /** The sequence this run plays (the variant's own, else the baseline). */
+  get waves(): LabWave[] {
+    return labWaves(this.arena, this.stats.variant);
+  }
+
   get waveCount() {
-    return this.arena.waves.length;
+    return this.waves.length;
   }
 
   private freshStats(): LabRunStats {
+    const variant = chosenVariant();
     return {
-      variant: chosenVariant(),
+      variant,
       total: 0,
       damage: 0,
       deaths: 0,
       kills: zeroKills(),
-      waves: this.arena.waves.map(() => ({ time: 0, damage: 0, deaths: 0, kills: 0, cleared: false })),
+      waves: labWaves(this.arena, variant).map(() => ({ time: 0, damage: 0, deaths: 0, kills: 0, cleared: false })),
       done: false,
     };
   }
@@ -120,6 +128,7 @@ export class LabDirector {
     this.waveT = 0;
     this.ids.length = 0;
     this.queue.length = 0;
+    this.held.length = 0;
     this.stats = this.freshStats();
   }
 
@@ -138,7 +147,7 @@ export class LabDirector {
   /** Men of the current wave still to beat (standing, or still to come through). */
   get left() {
     if (this.phase !== 'fight') return 0;
-    let n = this.queue.length;
+    let n = this.queue.length + this.held.length;
     for (const id of this.ids) if (this.hooks.alive(id)) n++;
     return n;
   }
@@ -157,6 +166,16 @@ export class LabDirector {
     }
     this.waveT += dt;
     this.stats.waves[this.wave].time = this.waveT;
+    // the second pulse: on its clock, or once the first is nearly down
+    const pulse = this.waves[this.wave].pulse;
+    if (this.held.length && pulse) {
+      let standing = this.queue.length;
+      for (const id of this.ids) if (this.hooks.alive(id)) standing++;
+      if (this.waveT >= pulse.at || standing <= pulse.left) {
+        this.enqueue(this.held);
+        this.held.length = 0;
+      }
+    }
     for (let i = 0; i < this.queue.length; ) {
       const q = this.queue[i];
       q.t -= dt;
@@ -169,13 +188,13 @@ export class LabDirector {
       if (!gate) continue;
       this.ids.push(this.hooks.spawn(q.spawn, gate, this.wave + 1));
     }
-    if (this.queue.length || this.ids.some((id) => this.hooks.alive(id))) return;
+    if (this.queue.length || this.held.length || this.ids.some((id) => this.hooks.alive(id))) return;
     // the wave is down
     const w = this.stats.waves[this.wave];
     w.cleared = true;
     w.time = this.waveT;
     this.hooks.cleared?.(this.wave + 1, this.waveT);
-    if (this.wave + 1 < this.arena.waves.length) {
+    if (this.wave + 1 < this.waves.length) {
       this.breathe(this.wave + 1, LAB_TIMING.breather);
       return;
     }
@@ -215,15 +234,23 @@ export class LabDirector {
     this.waveT = 0;
     this.ids.length = 0;
     this.queue.length = 0;
-    this.hooks.announce?.(wave + 1, this.arena.waves[wave], secs);
+    this.held.length = 0;
+    this.hooks.announce?.(wave + 1, this.waves[wave], secs);
   }
 
   private fight() {
     this.phase = 'fight';
     this.waveT = 0;
-    // each gate lets its men through one by one; the gates open together
+    const def = this.waves[this.wave];
+    const first = def.pulse ? def.spawns.filter((q) => q.pulse !== 2) : def.spawns;
+    this.held = def.pulse ? def.spawns.filter((q) => q.pulse === 2) : [];
+    this.enqueue(first);
+  }
+
+  /** Each gate lets its men through one by one; the gates open together. */
+  private enqueue(spawns: readonly LabSpawn[]) {
     const perGate = new Map<string, number>();
-    for (const sp of this.arena.waves[this.wave].spawns) {
+    for (const sp of spawns) {
       const k = perGate.get(sp.gate) ?? 0;
       perGate.set(sp.gate, k + 1);
       this.queue.push({ spawn: sp, t: k * LAB_TIMING.spacing });

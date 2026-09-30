@@ -281,7 +281,8 @@ export function loadAnimLibrary(json: unknown, soldier: CharacterAsset): AnimLib
 // Looks
 // ---------------------------------------------------------------------------
 
-export type Look = 'hero' | 'rifleman' | 'grenadier' | 'warden' | 'brute' | 'sniper' | 'boss' | 'hologram';
+/** (stormer / suppressor: ONSLAUGHT's riflemen, told apart at a glance) */
+export type Look = 'hero' | 'rifleman' | 'grenadier' | 'warden' | 'brute' | 'sniper' | 'boss' | 'stormer' | 'suppressor' | 'hologram';
 
 interface LookDef {
   body: number;
@@ -305,6 +306,9 @@ const LOOKS: Record<Exclude<Look, 'hologram'>, LookDef> = {
   brute: { body: 0x3a3c42, rough: 0.55, metal: 0.45, visor: 0xff2010, visorGlow: 2.8, scale: 1.25, rim: RIM_KESSLER },
   sniper: { body: 0x2b3038, rough: 0.8, metal: 0.1, visor: 0xff2a2a, visorGlow: 2.2, scale: 1.0, rim: RIM_KESSLER },
   boss: { body: 0xe6e2d6, rough: 0.45, metal: 0.2, visor: 0xb44bff, visorGlow: 2.6, scale: 1.05, rim: RIM_KESSLER },
+  // ONSLAUGHT: the stormer in rust red (he comes to you), the suppressor in olive with an orange visor (his fire)
+  stormer: { body: 0x5c2620, rough: 0.7, metal: 0.2, visor: 0xff2a10, visorGlow: 2.6, scale: 0.98, rim: RIM_KESSLER },
+  suppressor: { body: 0x4a4a2c, rough: 0.75, metal: 0.2, visor: 0xffa020, visorGlow: 2.4, scale: 1.04, rim: RIM_KESSLER },
 };
 
 /**

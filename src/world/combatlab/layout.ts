@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { EnemyKind } from '../../core/contracts';
+import type { CombatVariant } from '../../game/variant';
 
 /**
  * THE COMBAT LAB: a grey-box test range for the core combat. One 60 x 58 m
@@ -108,18 +109,35 @@ export interface LabSpawn {
   /** The ground he holds (his post); a pusher walks at you from it. */
   post: THREE.Vector3;
   leash?: number;
+  /** ONSLAUGHT: a rifleman who fights as a STORMER or a SUPPRESSOR. */
+  arch?: 'stormer' | 'suppressor';
+  /** Comes in with the wave's second pulse (see LabWave.pulse). */
+  pulse?: 2;
 }
 
 export interface LabWave {
   /** i18n key of the banner's line under WAVE n. */
   subKey: string;
   spawns: LabSpawn[];
+  /**
+   * The spawns marked `pulse: 2` come through `at` s into the wave, or as soon
+   * as no more than `left` of the first pulse still stand, whichever is first.
+   */
+  pulse?: { at: number; left: number };
 }
 
 export interface LabArena {
   pad: { pos: THREE.Vector3; yaw: number };
   gates: LabGate[];
+  /** The baseline sequence (CURRENT, PRECISION). */
   waves: LabWave[];
+  /** A variant's own sequence, where it has one (ONSLAUGHT). */
+  variants?: Partial<Record<CombatVariant, LabWave[]>>;
+}
+
+/** The waves a run under variant `v` plays. */
+export function labWaves(a: Pick<LabArena, 'waves' | 'variants'>, v: CombatVariant): LabWave[] {
+  return a.variants?.[v] ?? a.waves;
 }
 
 const E = Math.PI / 2, W = -Math.PI / 2, N = 0;
@@ -215,11 +233,93 @@ export const WAVES: LabWave[] = [
   },
 ];
 
+/** A STORMER: free to go anywhere on the deck. */
+const storm = (gate: string, x: number, z: number, pulse?: 2): LabSpawn => {
+  const o = s('rifleman', 'pusher', gate, x, 0, z, 60);
+  o.arch = 'stormer';
+  if (pulse) o.pulse = pulse;
+  return o;
+};
+/** A SUPPRESSOR: holds his ground (an edge gate's post, or a drop onto the ring). */
+const supp = (gate: string, x?: number, z?: number, pulse?: 2): LabSpawn => {
+  const o = x === undefined ? drop('rifleman', 'anchor', gate) : s('rifleman', 'anchor', gate, x, 0, z!, 7);
+  o.arch = 'suppressor';
+  if (pulse) o.pulse = pulse;
+  return o;
+};
+const later = (q: LabSpawn): LabSpawn => ({ ...q, pulse: 2 });
+
+/**
+ * ONSLAUGHT's own sequence (DESIGN §14): stormers in pairs from different
+ * sides, suppressors to pin you for them, heavies with their patterns, a
+ * last wave of ten in two pulses. Hard, and fair to a player who parries,
+ * dodges and finishes.
+ */
+export const ONSLAUGHT_WAVES: LabWave[] = [
+  // O1: two stormers from both sides of the south, a suppressor holding the west
+  {
+    subKey: 'lab.o1',
+    spawns: [storm('southwest', -14, -22), storm('southeast', 13, -24), supp('west', -9, -5)],
+  },
+  // O2: a sniper takes the west tower; stormers from the south-west and the east; a suppressor on the ring
+  {
+    subKey: 'lab.o2',
+    spawns: [drop('sniper', 'holder', 'tw'), storm('southwest', -10, -18), storm('east', 14, 9), supp('rings')],
+  },
+  // O3: a warden rushes in with two stormers, a suppressor lays fire from the north field
+  {
+    subKey: 'lab.o3',
+    spawns: [
+      s('warden', 'pusher', 'west', -12, 0, -3, 40),
+      storm('southeast', 12, -24),
+      storm('northwest', -20, 12),
+      supp('northwest', 0, 6),
+    ],
+  },
+  // O4: a brute and a warden push, two stormers flank, a suppressor on the ring, a grenadier behind it
+  {
+    subKey: 'lab.o4',
+    spawns: [
+      s('brute', 'pusher', 'southeast', 8, 0, -16, 40),
+      s('warden', 'pusher', 'southwest', -14, 0, -14, 40),
+      storm('west', -20, -5),
+      storm('east', 22, 10),
+      supp('rings'),
+      s('grenadier', 'anchor', 'northwest', -6, 0, 20),
+    ],
+  },
+  // O5: ten in two pulses: stormers, a warden, a sniper and a suppressor first; a brute, more stormers, a suppressor and a grenadier after
+  {
+    subKey: 'lab.o5',
+    pulse: { at: 25, left: 2 },
+    spawns: [
+      storm('southwest', -14, -22),
+      storm('southeast', 13, -24),
+      s('warden', 'pusher', 'west', -12, 0, -3, 40),
+      drop('sniper', 'holder', 'te'),
+      supp('rings'),
+      later(s('brute', 'pusher', 'southeast', 14, 0, -22, 40)),
+      storm('west', -20, -5, 2),
+      storm('east', 22, 10, 2),
+      supp('ringn', undefined, undefined, 2),
+      later(s('grenadier', 'anchor', 'northwest', -6, 0, 20)),
+    ],
+  },
+];
+
+const copyWaves = (ws: LabWave[]): LabWave[] =>
+  ws.map((w) => {
+    const o: LabWave = { subKey: w.subKey, spawns: w.spawns.map((q) => ({ ...q, post: q.post.clone() })) };
+    if (w.pulse) o.pulse = { ...w.pulse };
+    return o;
+  });
+
 export function labArena(): LabArena {
   return {
     pad: { pos: START.pos.clone(), yaw: START.yaw },
     gates: GATES.map((g) => ({ ...g, pos: g.pos.clone() })),
-    waves: WAVES.map((w) => ({ subKey: w.subKey, spawns: w.spawns.map((q) => ({ ...q, post: q.post.clone() })) })),
+    waves: copyWaves(WAVES),
+    variants: { onslaught: copyWaves(ONSLAUGHT_WAVES) },
   };
 }
 

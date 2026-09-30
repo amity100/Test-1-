@@ -208,13 +208,16 @@ export interface Log {
   sounds: { kind: string }[];
   bossRift: { a: THREE.Vector3 | null; b: THREE.Vector3 | null }[];
   summons: SpawnDef[][];
+  windups: { t: number; id: number; kind: string; secs: number }[];
+  openings: { t: number; id: number; secs: number }[];
+  slams: { t: number; id: number; radius: number }[];
 }
 
 export function scenario(zones: ZoneId[] = ['pier']) {
   const world = new CollisionWorld();
   const ground = world.add({ x: -60, y: -1, z: -60 }, { x: 60, y: 0, z: 60 });
   const physics = new FakePhysics(world);
-  const log: Log = { bolts: [], grenades: [], beams: [], telegraphs: [], barks: [], aware: [], died: [], knocked: [], melee: [], sounds: [], bossRift: [], summons: [] };
+  const log: Log = { bolts: [], grenades: [], beams: [], telegraphs: [], barks: [], aware: [], died: [], knocked: [], melee: [], sounds: [], bossRift: [], summons: [], windups: [], openings: [], slams: [] };
   const clock = { t: 0 };
   const hooks: EnemyHooks = {
     fireBolt: (e, from, dir) => log.bolts.push({ t: clock.t, id: e.id, from: from.clone(), dir: dir.clone() }),
@@ -229,6 +232,9 @@ export function scenario(zones: ZoneId[] = ['pier']) {
     sound: (kind) => log.sounds.push({ kind }),
     bossRift: (_e, a, b) => log.bossRift.push({ a: a ? a.clone() : null, b: b ? b.clone() : null }),
     summon: (_e, defs) => log.summons.push(defs),
+    windup: (e, kind, secs) => log.windups.push({ t: clock.t, id: e.id, kind, secs }),
+    opening: (e, secs) => log.openings.push({ t: clock.t, id: e.id, secs }),
+    slam: (e, _at, radius) => log.slams.push({ t: clock.t, id: e.id, radius }),
   };
   const chars = new Map<number, StubChar>();
   let pending: StubChar[] = [];
@@ -238,7 +244,7 @@ export function scenario(zones: ZoneId[] = ['pier']) {
     return c;
   });
   sys.seed(7);
-  const player = { pos: V(0, 0, 15), chest: V(0, 1.3, 15), vel: V(), alive: true, airborne: false, crouched: false, noise: [] as { at: THREE.Vector3; radius: number }[] };
+  const player = { pos: V(0, 0, 15), chest: V(0, 1.3, 15), vel: V(), alive: true, airborne: false, crouched: false, noise: [] as { at: THREE.Vector3; radius: number }[], safe: false };
   const ctx: EnemyContext = { time: 0, player, world, rifts: noRifts, physics, activeZones: new Set(zones) };
   const physEv: PhysicsEvents = {
     crossed: (b, f, t, s) => {

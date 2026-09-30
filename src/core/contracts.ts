@@ -464,6 +464,13 @@ export interface SpawnDef {
   fallback?: V3;
   /** Overrides the role's leash (m): how far from his post he goes in a fight. */
   leash?: number;
+  /**
+   * COMBAT LAB, ONSLAUGHT only: he fights by its squad rules (actors/onslaught.ts:
+   * readable telegraphed patterns, a shared squad director). Never set elsewhere.
+   */
+  onslaught?: boolean;
+  /** ONSLAUGHT: a rifleman who fights as a STORMER (melee rusher) or a SUPPRESSOR (long bursts). */
+  archetype?: 'stormer' | 'suppressor';
 }
 
 export interface EnemyView {
@@ -514,8 +521,12 @@ export interface EnemyHooks {
   fireBolt(e: EnemyView, from: V3, dir: V3): void;
   throwGrenade(e: EnemyView, from: V3, vel: V3): void;
   fireBeam(e: EnemyView, from: V3, dir: V3): void;
-  /** Laser telegraph lines (drawn by the game): list replaced every frame. */
-  telegraph(e: EnemyView, kind: 'laser' | 'beam' | 'arc' | 'charge', from: V3, to: V3, t01: number): void;
+  /**
+   * Laser telegraph lines (drawn by the game): list replaced every frame.
+   * ONSLAUGHT adds `melee` (a red wind-up line: dodge it) and `slam` (a red
+   * ring on the ground: from = its centre, to = a point on its rim).
+   */
+  telegraph(e: EnemyView, kind: 'laser' | 'beam' | 'arc' | 'charge' | 'melee' | 'slam', from: V3, to: V3, t01: number): void;
   bark(e: EnemyView, key: string): void;
   becameAware(e: EnemyView): void;
   died(e: EnemyView, ctx: DeathContext): void;
@@ -526,11 +537,28 @@ export interface EnemyHooks {
   bossRift?(e: EnemyView, a: V3 | null, b: V3 | null): void;
   /** Boss / officers: call reinforcements (the game spawns them through a gate or nearby). */
   summon?(e: EnemyView, defs: SpawnDef[]): void;
+  /** ONSLAUGHT: a melee wind-up starts (the red flash on him), `secs` before it lands. */
+  windup?(e: EnemyView, kind: 'strike' | 'bash' | 'rush' | 'slam', secs: number): void;
+  /** ONSLAUGHT: he whiffed and is open for `secs` (the blade finishes him meanwhile). */
+  opening?(e: EnemyView, secs: number): void;
+  /** ONSLAUGHT: a brute's ground slam lands at `at` (radius m): the shockwave. */
+  slam?(e: EnemyView, at: V3, radius: number): void;
 }
 
 export interface EnemyContext {
   time: number;
-  player: { pos: V3; chest: V3; vel: V3; alive: boolean; airborne: boolean; crouched: boolean; /** noise this frame */ noise: { at: V3; radius: number }[] };
+  player: {
+    pos: V3;
+    chest: V3;
+    vel: V3;
+    alive: boolean;
+    airborne: boolean;
+    crouched: boolean;
+    /** noise this frame */
+    noise: { at: V3; radius: number }[];
+    /** Nothing can touch him right now (a DODGE's moment, a respawn guard): a melee swing whiffs. */
+    safe?: boolean;
+  };
   world: CollisionWorld;
   rifts: RiftQuery;
   physics: PhysicsAPI;

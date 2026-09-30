@@ -58,6 +58,11 @@ export class LabMode {
         };
         if (s.leash !== undefined) def.leash = s.leash;
         if (s.kind === 'sniper') def.perch = true;
+        // ONSLAUGHT: every man of its waves fights by its squad rules
+        if (this.director.stats.variant === 'onslaught') {
+          def.onslaught = true;
+          if (s.arch) def.archetype = s.arch;
+        }
         const v = E.spawn(def) as Enemy;
         // through an edge gate: he steps out of its rift and walks in to his post
         if (gate.kind === 'edge' && v.body) {

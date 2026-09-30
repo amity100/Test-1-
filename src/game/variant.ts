@@ -5,7 +5,8 @@
  * - current:   the game exactly as it plays today (the baseline).
  * - precision: manual aim, a PARRY, a DODGE, a blade that finishes the
  *              exposed (precision.ts; systems ask `precisionOn()`).
- * - onslaught: builds on PRECISION (its own mechanics come in the next step).
+ * - onslaught: PRECISION, and an enemy side that attacks (actors/onslaught.ts:
+ *              stormers, suppressors, heavy patterns, a squad director, its own waves).
  *
  * Systems read `activeVariant()`: the chosen preset while the lab is loaded,
  * CURRENT everywhere else (the missions keep playing as they do today).

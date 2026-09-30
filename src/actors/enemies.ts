@@ -29,9 +29,10 @@ import { NavGrid } from '../world/nav';
 import { angleDiff, dampAngle, hdist, mulberry32, stepAngle, yawTo } from './aimath';
 import { chargeUpdate, combat, endAttack, muzzleOf, provokeAttack, type Brain } from './behaviors';
 import { Enemy } from './enemy';
+import { onsCombat, OnsSquad, type OnsBrain } from './onslaught';
 import { detectRate, seePlayer, seesPoint } from './perception';
 import { TurretRig } from './turret';
-import { AI, KIND } from './tuning';
+import { AI, KIND, ONS } from './tuning';
 
 export { Enemy } from './enemy';
 
@@ -82,7 +83,7 @@ export function deathKindOf(src: DamageSource): DeathKind {
  * game's physics.step moves them); launched / downed-in-air / dead bodies
  * simulate. The character root follows the body.
  */
-export class EnemySystem implements EnemyAPI, Brain {
+export class EnemySystem implements EnemyAPI, Brain, OnsBrain {
   readonly list: Enemy[] = [];
   readonly group = new THREE.Group();
 
@@ -109,6 +110,8 @@ export class EnemySystem implements EnemyAPI, Brain {
   /** Squads under pressure (roles): one entry per squad, made on its first press. */
   private readonly presses = new Map<string, Press>();
   private rng = mulberry32(0x5eed);
+  /** ONSLAUGHT's squad director (only men spawned with `def.onslaught` answer to it). */
+  readonly squad = new OnsSquad();
   private _ctx: EnemyContext | null = null;
   time = 0;
 
@@ -121,7 +124,7 @@ export class EnemySystem implements EnemyAPI, Brain {
   constructor(
     private readonly physics: PhysicsAPI,
     readonly hooks: EnemyHooks,
-    private readonly makeChar: (kind: EnemyKind) => CharacterAPI,
+    private readonly makeChar: (kind: EnemyKind, def?: SpawnDef) => CharacterAPI,
   ) {
     this.group.name = 'enemies';
   }
@@ -171,7 +174,7 @@ export class EnemySystem implements EnemyAPI, Brain {
   spawn(def: SpawnDef): EnemyView {
     const id = this.nextId++;
     const tune = KIND[def.kind];
-    const char = def.kind === 'turret' ? new TurretRig() : this.makeChar(def.kind);
+    const char = def.kind === 'turret' ? new TurretRig() : this.makeChar(def.kind, def);
     const body = this.physics.createBody('enemy', {
       pos: def.pos.clone(),
       radius: tune.radius,
@@ -260,6 +263,7 @@ export class EnemySystem implements EnemyAPI, Brain {
     this.tokens = 0;
     this.volleyT = 0;
     this.presses.clear();
+    this.squad.reset();
     this.threatOut.length = 0;
     this.trapOut.length = 0;
   }
@@ -280,6 +284,7 @@ export class EnemySystem implements EnemyAPI, Brain {
     this.firstInLine = this.nextInLine;
     this.nextInLine = Infinity;
     this.processPaths();
+    this.squad.update(this, dt);
     this.rankT -= dt;
     if (this.rankT <= 0) {
       this.rankT = 0.5;
@@ -385,8 +390,10 @@ export class EnemySystem implements EnemyAPI, Brain {
       return;
     }
     this.perceive(e, dt);
-    if (e.mode === 'combat') combat(this, e, dt);
-    else this.calm(e, dt);
+    if (e.mode === 'combat') {
+      // (ONSLAUGHT's men fight by its squad rules; false: the plain behaviour)
+      if (!e.ons || !onsCombat(this, e, dt)) combat(this, e, dt);
+    } else this.calm(e, dt);
   }
 
   private animate(e: Enemy, dt: number) {
@@ -405,7 +412,9 @@ export class EnemySystem implements EnemyAPI, Brain {
       L.vy = 0;
     }
     root.rotation.y = e.yaw;
-    L.weaponUp = e.tune.gun && e.mode === 'combat' ? 1 : 0;
+    // (an ONSLAUGHT stormer runs with his gun down; a suppressor kneels to fire)
+    L.weaponUp = e.tune.gun && e.mode === 'combat' && e.arch !== 'stormer' ? 1 : 0;
+    if (e.arch === 'suppressor') L.crouch = e.atkKind === 'suppress' && (e.atk === 'aim' || e.atk === 'fire') ? 1 : 0;
     L.downed = e.state === 'downed' || e.state === 'stunned';
     L.aim = e.kind === 'turret' ? e.pitch : 0;
     if (b && (e.state === 'launched' || (b.simulate && !b.onGround))) e.char.setTumble(b.quat);
@@ -1207,7 +1216,9 @@ export class EnemySystem implements EnemyAPI, Brain {
     const covering = !!p && p.until > this.time && p.by !== e;
     // a beat between one shooter's turn and the next, and the longest wait goes first (Voss keeps his own rhythm)
     const wait = e.kind !== 'boss' && (this.volleyT > 0 || (!covering && e.queuedT > this.firstInLine));
-    if (this.tokens >= AI.maxTokens || wait) {
+    // ONSLAUGHT: up to 3 guns at once, and his first round lands clear of every other attack
+    const cap = e.ons ? ONS.maxShooters : AI.maxTokens;
+    if (this.tokens >= cap || wait || (e.ons && !this.squad.reserve(e, this.time + this.firstHit(e)))) {
       this.nextInLine = Math.min(this.nextInLine, e.queuedT);
       return false;
     }
@@ -1222,7 +1233,17 @@ export class EnemySystem implements EnemyAPI, Brain {
     if (!e.token) return;
     e.token = false;
     this.tokens = Math.max(0, this.tokens - 1);
-    this.volleyT = Math.max(this.volleyT, this.between(AI.volleyGap));
+    this.volleyT = Math.max(this.volleyT, this.between(e.ons ? ONS.volleyGap : AI.volleyGap));
+  }
+
+  /** ONSLAUGHT: seconds from a gun's turn to its first round reaching you (lock + flight). */
+  private firstHit(e: Enemy) {
+    const fly = (Number.isFinite(e.seeDist) ? e.seeDist : hdist(e.pos, e.lastKnown)) / LAW.bolt.speed;
+    switch (e.kind) {
+      case 'sniper': return LAW.beam.telegraph;
+      case 'grenadier': return AI.grenade.telegraph + AI.grenade.flight;
+      default: return (e.arch === 'suppressor' ? ONS.suppressor.telegraph : AI.rifle.telegraph) + fly;
+    }
   }
 
   /** Enemies currently holding an attack token (telegraphing or firing). */
@@ -1807,7 +1828,13 @@ export class EnemySystem implements EnemyAPI, Brain {
       this.stagger(e, s >= LAW.knockSpeed ? 1 : AI.hurtStagger);
       return 'hurt';
     }
-    if (this.damage(e, info.amount, info)) return 'killed';
+    let amount = info.amount;
+    // ONSLAUGHT: a suppressor's chest plate takes most of what comes back at him from the front
+    if (e.arch === 'suppressor' && (src === 'bolt' || src === 'beam') && this.fromFront(e, info, ONS.suppressor.plateHalf)) {
+      amount *= ONS.suppressor.plate;
+      this.hooks.sound('clang', e.chest(_w));
+    }
+    if (this.damage(e, amount, info)) return 'killed';
     this.turnShield(e, info);
     // a big blast floors the unarmoured
     if ((src === 'explosion' || src === 'grenade') && info.amount >= 25 && !e.armored && e.state !== 'launched') {
@@ -1815,10 +1842,20 @@ export class EnemySystem implements EnemyAPI, Brain {
       this.enterCombat(e, null);
       return 'knocked';
     }
-    e.char.play('hitChest');
-    if (e.state !== 'charge') this.stagger(e, e.armored ? 0.25 : AI.hurtStagger);
+    if (e.ons) this.onsHurt(e, info);
+    else {
+      e.char.play('hitChest');
+      if (e.state !== 'charge') this.stagger(e, e.armored ? 0.25 : AI.hurtStagger);
+    }
     this.enterCombat(e, null);
     return 'hurt';
+  }
+
+  /** ONSLAUGHT: a hit that doesn't kill rocks him (0.2-0.4 s): the head snaps back from a high one, else the chest. */
+  private onsHurt(e: Enemy, info: HitInfo) {
+    if (e.state !== 'charge') this.stagger(e, e.armored ? ONS.armoredStagger : this.between(ONS.hurtStagger));
+    const high = !!info.from && info.from.y > e.pos.y + e.height * 0.8;
+    e.char.play(high ? 'hitHead' : 'hitChest');
   }
 
   /**
@@ -2047,6 +2084,7 @@ export class EnemySystem implements EnemyAPI, Brain {
       }
     }
     this.hooks.died(e, ctx);
+    if (e.ons) this.squad.onDeath(this, e);
     // whoever saw it: the zone goes hot
     const from = info.exitEndId != null ? info.from : undefined;
     let barked = false;
@@ -2063,7 +2101,8 @@ export class EnemySystem implements EnemyAPI, Brain {
       }
       if (!barked) {
         barked = true;
-        this.bark(w, 'bark.mateDown', true);
+        // (ONSLAUGHT's squad calls a stormer's death its own way)
+        if (e.arch !== 'stormer') this.bark(w, 'bark.mateDown', true);
       }
       // he comes to where it happened (or stares at the exit it came out of),
       // unless he has fresher word of you: eyes on you, or a fight still on

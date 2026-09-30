@@ -165,3 +165,122 @@ export const AI = {
     returnDelay: 0.35,
   },
 } as const;
+
+/**
+ * ONSLAUGHT (a COMBAT LAB variant, on top of PRECISION; DESIGN §14): the
+ * enemy side that attacks. Readable, telegraphed, varied patterns answered
+ * with the precision tools. Only men spawned with `SpawnDef.onslaught` read
+ * any of this (actors/onslaught.ts); everyone else fights as in DESIGN §5.
+ * Colours: RED wind-ups are melee (dodge them), ORANGE lasers are gunfire
+ * (parry them).
+ */
+export const ONS = {
+  /** At most this many men telegraphing or firing a gun at once. */
+  maxShooters: 3,
+  /** At most this many melee wind-ups / rushes committed at once. */
+  maxMelee: 2,
+  /** No two attacks land closer together than this (s): each is read, and answered, on its own. */
+  hitGap: 0.3,
+  /** Melee blows (strikes, bashes, rushes, slams, charges) take turns: one lands, the next no sooner than this (s). */
+  meleeTurn: 2,
+  /** After a shooter's turn the next may start this much sooner than in DESIGN §5 (s). */
+  volleyGap: [0.25, 0.5] as const,
+  /** A hit that doesn't kill: he reels this long (s; hitHead from above his shoulders, else hitChest). */
+  hurtStagger: [0.2, 0.4] as const,
+  /** Armour reels less. */
+  armoredStagger: 0.2,
+  stormer: {
+    hp: 55,
+    /** The sprint in (m/s), zig-zagging `zigAngle` rad either side of the line to you, a full swing every 2π/zigRate s. */
+    sprint: 6.4,
+    zigAngle: 0.6,
+    zigRate: 4.2,
+    /** He strikes from this far (m); the blow reaches this far (m, + your body). */
+    strikeRange: 2.4,
+    reach: 2.3,
+    /** Red flash, then the blow (s); the last `commit` s of it he no longer turns (a dodge beats it). */
+    windup: 0.45,
+    commit: 0.18,
+    /** A short step in with the blow (m/s, during the commit). */
+    lunge: 4.5,
+    damage: 25,
+    push: 8,
+    /** After a blow that landed, after a whiff (open: the blade finishes him) (s). */
+    recover: 0.5,
+    whiff: 0.8,
+    /** Between blows (s): he circles you at `stalk` m meanwhile. */
+    cooldown: [1.4, 2.4] as const,
+    /** Waiting his turn he circles you this far off (m): the dash in to strike is a tell of its own. */
+    stalk: 5.5,
+    /** After a blow (and its recovery) he springs back out of reach this long (s), until `backTo` m off. */
+    backOff: 0.8,
+    backTo: 6.5,
+    /** The first time he's close: this long circling you before his first blow (s). */
+    sizeUp: [1.4, 2.4] as const,
+  },
+  suppressor: {
+    hp: 120,
+    /** Orange lock (s), then a long burst: `rounds` at `interval` s. */
+    telegraph: 0.7,
+    rounds: [8, 10] as const,
+    interval: 0.13,
+    /** His aim walks toward where you are at this speed (m/s): keep moving and it trails you. */
+    track: 3.2,
+    spread: 0.022,
+    /** Between bursts (s). */
+    reload: [2, 3] as const,
+    /** He lays fire on your cover (no sight of you) this long after he last knew where you were (s). */
+    coverFire: 6,
+    range: 32,
+    /** His chest plate: fire from within this of his front (rad) does this much of its damage (a PERFECT parry, a flank, a GRAB answer him). */
+    plateHalf: (70 * Math.PI) / 180,
+    plate: 0.4,
+  },
+  squad: {
+    /** You've been in cover (no gun of theirs sees you, one had you just before) this long (s): pinned; still out of sight after `coverFor` s, you've moved on. */
+    pinned: 2,
+    coverFor: 8,
+    /** Flankers go this far to your side (m), for at most `time` s; the next flank order waits `cooldown` s. */
+    flankSide: 7,
+    flankTime: 5,
+    cooldown: 7,
+    /** A stormer down: the suppressors lay fire for this long (s). */
+    avenge: 3,
+    /** A man who hasn't moved `stuckMove` m in `stuckTime` s (and isn't meant to stand) is unstuck. */
+    stuckTime: 4,
+    stuckMove: 0.8,
+    /** Whoever can't see you is told where you are this often (s): nobody searches or stands down. */
+    radio: 2.5,
+    /** A gun blind to you this long (s) widens his ground by `widen` m (up to `maxLeash`): he comes out after you. */
+    blind: 8,
+    widen: 6,
+    maxLeash: 40,
+  },
+  warden: {
+    /** The shield rush: from `rushMin`..`rushMax` m, a red wind-up (s), then a run at `speed` m/s for up to `dist` m. */
+    rushMin: 3.5,
+    rushMax: 10,
+    windup: 0.55,
+    commit: 0.15,
+    speed: 9,
+    dist: 9,
+    damage: 20,
+    push: 10,
+    /** Rushed past you / into a wall: open this long (s). */
+    whiff: 1,
+    cooldown: [2.8, 4] as const,
+    /** The close bash (a red wind-up too). */
+    bashWindup: 0.45,
+  },
+  brute: {
+    /** The ground slam: within `range` m, a red ring for `windup` s, then everything within `radius` m on the ground. */
+    range: 3.8,
+    radius: 4.2,
+    windup: 0.8,
+    damage: 30,
+    push: 7,
+    lift: 6,
+    recover: 1.2,
+    cooldown: [3.5, 5] as const,
+  },
+};

@@ -924,8 +924,8 @@ each **combat variant** to choose one.
   `precision`, `onslaught`. The pick is the `combatVariant` setting; F1/F2/F3, the
   pause menu, the main menu and the HUD chips switch it and restart the run.
   Systems read `activeVariant()`: the pick inside the lab, `current` everywhere
-  else; `onVariantChange()` notifies. ONSLAUGHT is a flag only so far (it will build on
-  PRECISION, whose rules already apply to it: `precisionOn()`).
+  else; `onVariantChange()` notifies. ONSLAUGHT is PRECISION (`precisionOn()`) plus the
+  enemy side below.
 - **PRECISION** (`src/game/precision.ts`; the answer to "the game plays itself"). Nothing
   aims, picks or chases for you; defence and execution are skills:
   - *Manual aim.* Strikes (REFLECT's key aside), a LOOP cannon's catch, and GRAB take only
@@ -962,3 +962,50 @@ each **combat variant** to choose one.
   - *HUD.* The lab panel's PRECISION RULES card (one line per key, the key per device,
     EN + HE); the red crosshair; the dodge pip; the PARRY / FINISHER / GUARDED callouts;
     the strike bar's REFLECT button reads PARRY.
+- **ONSLAUGHT** (`src/actors/onslaught.ts`, numbers `ONS` in `actors/tuning.ts`; the answer to
+  "enemies don't really fight"). PRECISION's tools, and an enemy side that attacks in clear,
+  telegraphed, varied patterns. Only men spawned with `SpawnDef.onslaught` (the lab's spawner sets
+  it under ONSLAUGHT) read any of it; everyone else, and every other variant, plays as before.
+  Colours: **RED** = melee (dodge it), **ORANGE** = gunfire (parry it); in ONSLAUGHT both are drawn
+  solid and wide (an additive line washes out on the lab's pale floor), CURRENT's lasers are untouched.
+  - *STORMER* (a rifleman, `archetype: 'stormer'`, rust red, gun down, 55 hp). Sprints in at
+    6.4 m/s zig-zagging (±0.6 rad) on an open line, the nav's way round anything else; the first
+    time he's close he circles you 1.4-2.4 s (size-up). His blow: a 0.45 s RED wind-up (strike clip,
+    a red flash and ring, a red line; tracking you until its last 0.18 s, then a 4.5 m/s step in),
+    25 and an 8 m/s knock back within 2.3 m. Dodged (or out of reach): a whiff, open 0.8 s (the
+    blade finishes him). After a blow he springs back out of reach (0.8 s), then circles you at
+    5.5 m until his next turn (1.4-2.4 s cooldown) and dashes in. Comes in pairs from two sides.
+  - *SUPPRESSOR* (a rifleman, `archetype: 'suppressor'`, olive with an orange visor, 120 hp,
+    kneels to fire). An ORANGE 0.7 s lock, then 8-10 rounds 0.13 s apart; his aim walks onto you
+    at 3.2 m/s (keep moving and it trails; stand and it finds you): every round parryable. He lays
+    fire on your cover (no sight of you) while the squad has word of you. A chest plate: returned
+    rounds from his front (±70°) do 40% (a PERFECT parry and the blade, a flank, a GRAB answer him).
+  - *WARDEN.* A shield rush from 3.5-10 m on an open line: a 0.55 s RED wind-up with his lane drawn
+    on the floor (edges a body apart, rungs filling in), then 9 m/s for up to 9 m: 20 and a 10 m/s
+    knock back. Dodged, run out, stopped by a wall or pulled up at a drop: open 1 s. The close bash
+    gets a red 0.45 s wind-up (a whiff: open 0.6 s). His shield still turns parried rounds from
+    the front; behind him (a dodge through) he's open as in PRECISION.
+  - *BRUTE.* His charge as before (a DOOR in its path sends him through: MATADOR), and a ground
+    slam within 3.8 m: a 0.8 s RED double ring (his reach, 4.2 m, and one closing out onto it), then
+    30 and a lift to anyone on the ground in it (a jump or a dodge clears it); open 1.2 s after,
+    hit or miss.
+  - *The squad* (`OnsSquad`, run before the men think). At most 3 guns telegraphing / firing at
+    once (2 in DESIGN §5) and 2 melee attackers; every attack books the moment it lands: no two
+    within 0.3 s, and melee blows (strikes, bashes, rushes, slams, charges) take turns 2 s apart.
+    Pinned (a gun had you, none sees you for 2 s): the stormers flank you, one each side (7 m out),
+    the suppressors fire on your cover ("He's pinned! Flank him!", 7 s between orders). A stormer
+    down: the nearest man calls it, the suppressors open up (3 s). The radio: whoever can't see you
+    hears where you are every 2.5 s (± 3 m): nobody searches or stands down. A gun blind to you 8 s
+    widens his ground by 6 m (to 40): he comes out after you. Nobody stands stuck (4 s without
+    moving 0.8 m, not meant to stand: he drops his plan; twice, his ground moves a third of the way
+    to you). A non-lethal hit rocks him 0.2-0.4 s (hitHead from a high hit, else hitChest; armour
+    0.2 s) and breaks a wind-up. Barks: flank, suppress, stormer down, "I'm on him!", shield rush.
+  - *Waves* (`ONSLAUGHT_WAVES`; `LabArena.variants.onslaught`, `labWaves(arena, v)`; CURRENT and
+    PRECISION keep `WAVES`): O1 2 stormers + a suppressor; O2 + a tower-holder sniper (a ring
+    suppressor); O3 a warden + 2 stormers + a suppressor; O4 a brute + a warden + a suppressor +
+    2 stormers + a grenadier; O5 ten in two pulses (`LabWave.pulse`: the second 5 come at 25 s, or
+    once no more than 2 of the first stand). Grenadiers and snipers fight as in DESIGN §5, under
+    the squad's gun cap and booking.
+  - *Measured* (headless, a scripted player that reads 65% of attacks with a 0.22 s reaction:
+    parry, dodge through, blade finisher): O1-O5 32 / 38 / 45 / 65 / 77 s, 595 damage, 2 deaths;
+    with no tools, W1 alone takes 400 damage (4 deaths) a minute.
