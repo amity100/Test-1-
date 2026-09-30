@@ -114,8 +114,10 @@ cloud-out: empty, washed out, and far too long. → cut; a 0.6 s warm light-flas
 A slow aerial over terraced hills; Bethlehem cannot be found; no life. → cut.
 
 ### 15 · David from behind (123.8–131.3 s)
-David stands on the rock with his staff for 7.5 s; the camera barely moves; the flock is not in frame; the verse
-16:11 at the bottom. → 4 s, the orbit behind him, the flock moving below, wind, his weight shifting.
+At 2 fps: the first 3 s are a milky, washed-out haze (the dissolve and an over-bright exposure), then David stands
+on the rock with his staff, completely still, for 4.5 s; the camera only creeps; not one sheep of his flock is in
+frame, so "a shepherd tending the sheep" is never seen. → 4 s, the orbit behind him, the flock moving and grazing
+below him in frame, wind in his curls and tunic, his weight shifting on the staff.
 
 ### 16 · The face (131.3–138.3 s)
 A 7 s medium close-up of David's face turning slightly; it holds far too long on a face that still reads CG.
@@ -126,9 +128,11 @@ A pull-back from below over a huge pale rock slab (cracked bedrock with a visibl
 speck. → cut.
 
 ### 18 · Peace / 19 · Thicket / lamb (145.8–158.2 s)
-Twelve seconds: the lamb walks to the thicket's edge; the lamb reads as a glowing white blob (overexposed wool with
-no shading), the camera creeps, the eyes are never visible. → 4 s total: the lamb grazing and lifting its head, the
-birds stop, two eyes open in the dark, smash.
+At 2 fps: 'peace' is a pale rock slab whose crack pattern reads as hexagonal floor tiles, followed by a 2 s ghosted
+dissolve; 'thicket' shows grass with the lamb as a translucent white blob at the right edge that walks out of frame;
+'lamb' is a close-up of the lamb's back where the wool looks see-through, like a jellyfish; the eyes in the dark
+are never visible; for twelve seconds nothing happens. → 4 s total: the lamb (solid, dirty, shaded wool) grazing at
+the edge and lifting its head, ears twitching, the birds stop, two eyes open in the dark, smash.
 
 ### 20 · Title (158.2–164.8 s)
 Clean but plain: DAVID fading in with a small Hebrew line; the chapter line tiny. → the smash hit, DAVID forming
@@ -143,4 +147,5 @@ from light with a sweep, דָּוִד, the chapter line, 5 s.
 * Soldiers near the lens (shot 9, and Saul's surroundings in 7): doll-like faces and shell hair; the tunics are
   flat colour; the far ranks and impostors are fine at distance.
 * The Philistine host: bright rectangular blocks of identical figures (formation and material both).
-* The lamb/flock near the lens: overexposed wool, no self-shadowing.
+* The lamb/flock near the lens: overexposed wool with no self-shadowing, and see-through (the wool shells read
+  as translucent, like a jellyfish, in the close-up).

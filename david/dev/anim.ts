@@ -184,7 +184,7 @@ function shot(name: GilgalShotName, t: number, cam: string | number[] = 'side') 
   if (!perf) throw new Error('mode');
   if (!cur || cur.name !== name || t < cur.t - 1e-6) {
     perf.enter(name);
-    samuel!.groom?.setSimulation(!(name === 'tear' || name === 'verdict'));
+    samuel!.groom?.setSimulation(P.get('hairsim') === '1' || !(name === 'tear' || name === 'verdict'));
     saul!.groom?.sim?.reset?.();
     samuel!.groom?.sim?.reset?.();
     cur = { name, t: 0 };
