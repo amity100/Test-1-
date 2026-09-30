@@ -93,7 +93,7 @@ function dressMaterial(o: { color?: number; vertexColors?: boolean; roughness?: 
             vec3 rdF = normalize(vDW - cameraPosition);
             float top = uVFog.x + uVFog.y * (dFbm(vDW.xz * 0.0009) - 0.5);
             float fdep = max(vLand.y * 250.0 - top, 0.0);
-            float fm = (1.0 - exp(-fdep / max(abs(rdF.y), 0.03) * uVFog.z)) * smoothstep(uVFogNear, uVFogNear * 3.0, dd);
+            float fm = (1.0 - exp(-fdep / max(abs(rdF.y), 0.03) * uVFog.z)) * smoothstep(0.0, 22.0, fdep) * smoothstep(uVFogNear, uVFogNear * 4.0, dd);
             fm *= 0.7 + 0.5 * dFbm(vDW.xz * 0.0021 + 3.0);
             vec3 fc = landHazeColor(rdF) * (0.62 + 0.38 * vLand.x) * 1.08 + uMistC * 0.06;
             outgoingLight = mix(outgoingLight, fc, clamp(fm, 0.0, 0.94));
@@ -366,7 +366,7 @@ export function buildJudahDressing(o: JudahDressInput): JudahDressing {
   let nOl = 0;
   {
     const cell = 8.5;
-    const maxN = Math.round(46000 * K);
+    const maxN = Math.round((tier === 'low' ? 46000 : 30000) * K);
     const pts: number[] = []; // x, z, r, vis
     for (let x = bx0; x < bx1; x += cell) {
       for (let z = bz0; z < bz1; z += cell) {
@@ -388,7 +388,7 @@ export function buildJudahDressing(o: JudahDressInput): JudahDressing {
         // thinner with distance (they turn into the shader's grove dots)
         const far = THREE.MathUtils.smoothstep(d, reach * 0.55, reach);
         if (hash2(px * 1.7, pz * 1.3) > dens * (1 - far * 0.65) * K * 1.05) continue;
-        pts.push(px, pz, 2.2 + hash2(px * 3.1, pz * 2.7) * 1.4, sunVis(px, pz));
+        pts.push(px, pz, 1.7 + hash2(px * 3.1, pz * 2.7) * 1.2, sunVis(px, pz));
       }
     }
     if (pts.length / 4 > maxN) {
@@ -402,9 +402,18 @@ export function buildJudahDressing(o: JudahDressInput): JudahDressing {
     }
     nOl = pts.length / 4;
     if (nOl > 0) {
-      let g: THREE.BufferGeometry = new THREE.IcosahedronGeometry(1, 0);
+      let g: THREE.BufferGeometry = new THREE.IcosahedronGeometry(1, tier === 'low' ? 0 : 1);
       g.deleteAttribute('uv');
       g = mergeVertices(g);
+      {
+        // a lumpy, flattened olive crown (several leaf masses), not a faceted ball
+        const pa = g.getAttribute('position') as THREE.BufferAttribute;
+        for (let i = 0; i < pa.count; i++) {
+          const x = pa.getX(i), y = pa.getY(i), z = pa.getZ(i);
+          const k = 0.82 + 0.3 * vnoise(x * 2.3 + 4, z * 2.3 + y * 1.7) + (y < -0.3 ? -0.12 : 0);
+          pa.setXYZ(i, x * k, y * k * 0.8, z * k);
+        }
+      }
       g.computeVertexNormals();
       const land = new Float32Array(nOl * 2);
       g.setAttribute('aLand', new THREE.InstancedBufferAttribute(land, 2));
@@ -443,7 +452,7 @@ export function buildJudahDressing(o: JudahDressInput): JudahDressing {
       im.name = 'land:olives';
       group.add(im);
       disposables.push(g, mat);
-      triangles += nOl * 20;
+      triangles += nOl * (tier === 'low' ? 20 : 80);
       if (si.length) {
         const sg = new THREE.BufferGeometry();
         sg.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3));

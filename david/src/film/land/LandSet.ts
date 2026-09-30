@@ -47,7 +47,7 @@ export const LAND_LIGHT: Record<LandLocation, { elevation: number; azimuth: numb
  * them, the Dead Sea a molten strip and the level Moab wall under the rising sun. Local metres (x east, z south).
  * az: heading in SkySystem degrees (from +Z toward +X); pitch in degrees; `above` = height over the ridge (m).
  */
-export const JUDAH_FINAL = { x: -50, z: -850, above: 62, az: 82, pitch: -3.1, fov: 21 };
+export const JUDAH_FINAL = { x: 300, z: -500, above: 118, az: 80, pitch: -4.2, fov: 24 };
 
 /** a point `ahead` m along the final heading and `right` m to its right (local x, z) */
 export function judahAhead(ahead: number, right: number): { x: number; z: number } {
@@ -57,9 +57,9 @@ export function judahAhead(ahead: number, right: number): { x: number; z: number
 
 /** valley fog of the dawn inversion (landTerrain TerrainLook.valleyFog), per tier */
 const JUDAH_FOG: Record<LandTier, { offset: number; jitter: number; density: number; xMax: number; near: number }> = {
-  high: { offset: 14, jitter: 22, density: 1 / 70, xMax: 21000, near: 260 },
-  medium: { offset: 14, jitter: 22, density: 1 / 70, xMax: 21000, near: 260 },
-  low: { offset: 14, jitter: 22, density: 1 / 70, xMax: 21000, near: 260 },
+  high: { offset: 16, jitter: 30, density: 1 / 160, xMax: 21000, near: 300 },
+  medium: { offset: 16, jitter: 30, density: 1 / 160, xMax: 21000, near: 300 },
+  low: { offset: 16, jitter: 30, density: 1 / 160, xMax: 21000, near: 300 },
 };
 
 const HAZE_WARM0 = landAtmo.uHazeWarm.value.clone();
@@ -198,6 +198,15 @@ export class LandSet {
         const on = THREE.MathUtils.smoothstep(vnoise(x * 0.011 + 40, z * 0.011 + 7), 0.35, 0.6);
         return h + (step - h) * 0.75 * on * w + (vnoise(x * 0.07, z * 0.07) - 0.5) * 1.2 * w;
       });
+      // rocky knolls and scarps on the crests (sub-DEM relief, 60-160 m): the ridgelines break into ledges and
+      // knobs instead of smooth dune crests; fades out by 6 km (the mesh can't carry it farther)
+      mods.push((x, z, h) => {
+        const d = Math.hypot(x - JUDAH_FINAL.x, z - JUDAH_FINAL.z);
+        if (d > 6500) return h;
+        const w = 1 - THREE.MathUtils.smoothstep(d, 3500, 6500);
+        const r1 = 1 - Math.abs(vnoise(x * 0.0085, z * 0.0085) * 2 - 1), r2 = 1 - Math.abs(vnoise(x * 0.019 + 3, z * 0.019 + 9) * 2 - 1);
+        return h + ((r1 * r1 - 0.45) * 7 + (r2 * r2 - 0.45) * 3) * w;
+      });
     } else if (o.location === 'coast') {
       // the plain east of Ashdod (the city on its tell, the dune belt and the sea behind it to the west): the host
       // leaves the city's east gate and marches ESE toward the Shephelah (1 Sam 17:1, 13:5)
@@ -264,6 +273,16 @@ export class LandSet {
     this.sky.hemi.groundColor.setRGB(0.32, 0.25, 0.2);
     this.sky.hemi.intensity = ground ? 0.5 : 0.62;
     scene.environmentIntensity = ground ? 1.0 : 0.7;
+    if (o.location === 'judah') {
+      // backlit dawn: the slopes facing the lens are in shade and read blue-violet (the env capture of the dawn sky
+      // is dominated by the orange horizon, so it is turned down; the blue sky dome carries the fill)
+      this.sky.hemi.color.setRGB(0.42, 0.5, 1.0);
+      this.sky.hemi.groundColor.setRGB(0.26, 0.2, 0.24);
+      this.sky.hemi.intensity = 0.78;
+      scene.environmentIntensity = 0.15;
+      // rose-gold first light on the crests (the physical sun at 4 deg is a deep orange)
+      this.sky.sun.color.multiply(new THREE.Color(1.0, 0.84, 0.9));
+    }
 
     // ------------------------------------------------------------------ terrain
     const regShade = shadeTexture(region, new LandHeight(region, null), sunDir, { maxDist: 45000 });
@@ -314,12 +333,12 @@ export class LandSet {
       (cu.uAmbBottom.value as THREE.Color).setRGB(0.24, 0.2, 0.3);
       cu.uSunI.value = 9.5;
       // aerial perspective: bluer away from the sun, so the Moab wall reads as a blue-violet silhouette
-      this.hazeTint = { warm: new THREE.Color(1.0, 0.72, 0.58), cool: new THREE.Color(0.5, 0.55, 1.0), lobe: new THREE.Vector3(22, 2.2, 0.8) };
+      this.hazeTint = { warm: new THREE.Color(1.0, 0.72, 0.6), cool: new THREE.Color(0.44, 0.52, 1.05), lobe: new THREE.Vector3(30, 2.2, 0.82) };
       // the deck ends over the ridge east of Bethlehem: the flight comes out from under it into the open dawn
       this.deck = new THREE.Vector4(1850, 2450, -1400, 1.0);
       // stronger, lower aerial perspective: each farther ridge bluer and paler; the ray to Moab's top passes above
       // most of it (the wall stays a sharp dark silhouette), the rift below is filled with glowing haze
-      landAtmo.uHaze.value.x = 7.5e-5;
+      landAtmo.uHaze.value.x = 6.2e-5;
       landAtmo.uHaze.value.y = 1 / 820;
       scene.add(this.clouds.mesh);
       this.disposables.push(this.clouds);

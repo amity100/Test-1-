@@ -177,10 +177,13 @@ export class GilgalPerformance {
     saul.human.skin.skinUniforms.uDirt.value = 0.25;
     samuel.human.skin.skinUniforms.uRuddy.value = 0.75;
     // film light on the two faces (the low sun is behind Saul in 7-9): created here, before the set is precompiled
+    // (phones: Saul's only — every extra light is evaluated by every lit material of the set)
     saul.enableFaceLight();
-    samuel.enableFaceLight(0xffe2c4);
-    samuel.faceLightRig.side = 0.85; // a 3/4 key on the old face: the lines of age need modelling, a flat fill erases them
-    samuel.faceLightRig.up = 0.35;
+    if (samuel.spec.quality !== 'low') {
+      samuel.enableFaceLight(0xffe2c4);
+      samuel.faceLightRig.side = 0.85; // a 3/4 key on the old face: the lines of age need modelling, a flat fill erases them
+      samuel.faceLightRig.up = 0.35;
+    }
     samuel.human.rig.faceBias.LeftUpperLidClosed = 0.12; // heavy, tired lids (15:11 he cried all night) — the eyes stay alive
     samuel.human.rig.faceBias.RightUpperLidClosed = 0.12;
     if (samuel.tear) samuel.tear.onSnap = (p) => this.onThreadSnap?.(p);

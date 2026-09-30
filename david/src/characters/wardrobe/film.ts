@@ -159,7 +159,9 @@ export async function dressSaulGilgal(human: HumanModel, opts: FilmDressOptions)
   const fit = await beginFit(human, 'saulGilgal', tier, opts.seed ?? 3);
   const { lm, outfit } = fit;
   const S = lm.height / 1.75;
-  outfit.capsules.push(...legCapsules(fit, 0.016, 0.06));
+  // thin margin: the cloth-collision push moved the madim and the coat's leather skirt OUT past the bronze scales at
+  // the buttocks (the scales are not pushed) — black / crimson patches at the back of the coat
+  outfit.capsules.push(...legCapsules(fit, -0.006, 0.06));
   const KERMES = 0x8a1c20;
   // madim: crimson wool, knee length, short sleeves; sweat-darkened and dusty from the campaign
   const madim = fittedTunic(fit, {

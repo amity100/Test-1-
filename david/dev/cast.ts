@@ -151,7 +151,7 @@ async function boot() {
     if (o.names) {
       const names: string[] = [];
       a.root.traverse((c) => {
-        if ((c as THREE.Mesh).isMesh) names.push(c.name);
+        if ((c as THREE.Mesh).isMesh) names.push(c.name + (c.userData.skirtBins ? JSON.stringify(c.userData.skirtBins) : ''));
       });
       return { ...r, names };
     }

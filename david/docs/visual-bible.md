@@ -80,7 +80,7 @@ Context notes the film must respect (they are why each line is shown *with its r
 | Israelite soldiers | 6–10 | 20–50 | ≈1.60–1.75 m | full beards, hair to nape/shoulders, some head-cloths | knee tunics of undyed wool, belts, sandals/barefoot; almost no armour | spears, slings, bows, a few swords/axes, round leather shields; rams' horns |
 | Elders | 5 (and a few at Gilgal) | 50–75 | ≈1.65 m | long grey/white beards | long tunic + wool mantle with tzitzit; head bare / headband / head-cloth | walking staffs |
 | Philistines | 4 | 20–40 | ≈1.65–1.75 m | **clean-shaven** | elite: bronze helmets, scale/banded corselets, **greaves**; others: reed/feather headdress, kilts | round shields, straight long swords, spears; chariots only far away |
-| **David** | 15–17, 21 | ≈17 youth | ≈1.70 m | sun-lightened copper curls; no real beard | coarse undyed tunic, sash, shepherd's bag | staff, sling |
+| **David** | 15–17, 21 | ≈17 youth | ≈1.70 m | sun-lightened copper curls, SHORT-to-medium exactly as the reference (to the nape, ear lobes visible — never long); no real beard | coarse undyed tunic, sash, shepherd's bag | staff, sling |
 | Bear | 19 | adult Syrian brown bear | — | straw/golden-tan coat | — | eyes: faint amber shine only |
 
 ---
@@ -544,7 +544,11 @@ Context notes the film must respect (they are why each line is shown *with its r
   decision (docs/sources.md §3.7) is a **youth**, and the reference image.
 * **MUST:** exactly the existing chapter-1 David (the user's reference image): a youth ≈17, ≈1.70 m, lean-strong
   shepherd's build; **ruddy, fresh face** (not weather-beaten), **beautiful, warm, expressive eyes**; sun-lightened
-  copper/auburn curls (אַדְמוֹנִי read as ruddy — hair colour is an interpretation, keep the reference); little or
+  copper/auburn curls (אַדְמוֹנִי read as ruddy — hair colour is an interpretation, keep the reference);
+  **HAIR LENGTH = EXACTLY THE REFERENCE IMAGE (the user's explicit order, 30 Sep): short-to-medium tousled curls,
+  NOT long hair** — volume on the crown, a few loose curls falling onto the forehead (not over the eyes), the curls
+  cover only the top of the ears (the ear lobes show), at the back they end at the nape/top of the neck and never
+  reach the collar or the shoulders; no ringlets hanging to the jaw; little or
   no beard (a youth's soft down at most); coarse undyed wool tunic, belt/sash, the shepherd's bag at the hip,
   **sling** (wound at the wrist or tucked in the belt), **staff** planted on the rock. Tzitzit only if an outer
   four-cornered mantle is worn.

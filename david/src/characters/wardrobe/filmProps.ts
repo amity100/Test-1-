@@ -185,7 +185,7 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions &
             const rib = (0.0022 * S) * Math.max(0, 1 - Math.abs(u) * 2.2) * Math.sin(Math.PI * Math.min(1, v * 1.05));
             const curve = 0.0012 * S * (1 - u * u); // slightly cupped across
             const lift = tilt * v * v + rib + curve + roll * u * v;
-            q.copy(s0.p).addScaledVector(tmpT, xr).addScaledVector(tmpD, yr).addScaledVector(nrm, lift + 0.0015);
+            q.copy(s0.p).addScaledVector(tmpT, xr).addScaledVector(tmpD, yr).addScaledVector(nrm, lift + 0.0015 + (zoneId === 1 ? 0.003 : 0));
             pos.push(q.x, q.y, q.z);
             // normal: base normal tilted by the rib / lift slope
             const nx = -Math.sign(u) * (Math.abs(u) < 0.45 ? 0.35 : 0.05) * (1 - v);

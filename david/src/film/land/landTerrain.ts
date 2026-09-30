@@ -273,8 +273,13 @@ export function landMaterial(tt: TerrainTex, look: TerrainLook, tier: LandTier):
           float foot = smoothstep(0.78, 1.0, f);
           float seg = dHash12(vec2(floor(ph), floor(dot(xz, vec2(0.0105, 0.0071)) + dNoise(xz * 0.004) * 2.0)));
           vec3 tread = seg < 0.3 ? vec3(0.50, 0.34, 0.23) : seg < 0.55 ? vec3(0.63, 0.53, 0.37) : seg < 0.8 ? vec3(0.44, 0.40, 0.29) : vec3(0.55, 0.45, 0.33);
-          tread *= 0.9 + 0.2 * n3;
           vec3 wallC = mix(vec3(0.63, 0.60, 0.54), vec3(0.72, 0.69, 0.62), n2);
+          #ifdef LAND_JNEAR
+          // greyer, browner plots (fallow, stubble, olive rows), and walls that read as a step, not a contour line
+          tread = seg < 0.3 ? vec3(0.42, 0.35, 0.27) : seg < 0.55 ? vec3(0.50, 0.44, 0.35) : seg < 0.8 ? vec3(0.36, 0.36, 0.27) : vec3(0.46, 0.40, 0.32);
+          wallC = tread * 0.9;
+          #endif
+          tread *= 0.9 + 0.2 * n3;
           vec3 tc = mix(tread * (1.0 - 0.28 * foot), wallC, riser);
           // far field: the mean of the pattern (fields + walls), slightly lighter than the bare hills
           vec3 tcAvg = mix(vec3(0.53, 0.43, 0.31), wallC, wallW) * 0.97;
@@ -283,6 +288,9 @@ export function landMaterial(tt: TerrainTex, look: TerrainLook, tier: LandTier):
           vec2 dn = normalize(nW.xz + vec2(1e-5));
           vec3 riserN = normalize(vec3(dn.x, 0.45, dn.y));
           vec3 treadN = normalize(vec3(nW.x * 0.25, 1.0, nW.z * 0.25));
+          #ifdef LAND_JNEAR
+          riser *= 0.6;
+          #endif
           terrNrm = normalize(mix(nW, mix(treadN, riserN, riser), tk * aa));
           terrN = tk;
         }
@@ -352,28 +360,34 @@ export function landMaterial(tt: TerrainTex, look: TerrainLook, tier: LandTier):
           // grey-white limestone ledges (nari crust / bedding steps) breaking the ochre soil along the contours,
           // broken and irregular, a dark undercut below each; dark-green garrigue cushions (thorny burnet, sage).
           float nearW = 1.0 - smoothstep(1500.0, 3400.0, landDist);
-          float lp = hgt / 1.85 + (dNoise(xz * 0.019) - 0.5) * 1.3 + (dNoise(xz * 0.13) - 0.5) * 0.22;
+          float lp = hgt / 2.7 + (dNoise(xz * 0.019) - 0.5) * 1.6 + (dNoise(xz * 0.07) - 0.5) * 0.35;
           float lf = fract(lp);
           float lfw = max(fwidth(lp), 1e-4);
           float laa = 1.0 - smoothstep(0.22, 0.55, lfw);
-          float ledgeOn = smoothstep(0.40, 0.60, dFbm(xz * 0.011 + vec2(floor(lp) * 3.7, floor(lp) * 1.3)))
-                        * smoothstep(0.04, 0.12, slope) * (1.0 - terrN * 0.8) * (1.0 - smoothstep(0.7, 0.95, arid) * 0.5);
-          float face = clamp((0.30 - lf) / lfw + 0.5, 0.0, 1.0) * clamp(lf / lfw + 0.5, 0.0, 1.0);
-          float under = clamp((lf - 0.30) / lfw + 0.5, 0.0, 1.0) * clamp((0.40 - lf) / lfw + 0.5, 0.0, 1.0);
-          vec3 rockC = mix(vec3(0.66, 0.645, 0.60), vec3(0.79, 0.77, 0.72), dNoise(xz * 0.37)) * (0.9 + 0.2 * n3);
+          float sinSl = length(landN0.xz); // sin of the slope angle (the 'slope' above is 1 - cos: tiny on hills)
+          float ledgeOn = smoothstep(0.40, 0.58, dFbm(xz * 0.011 + vec2(floor(lp) * 3.7, floor(lp) * 1.3)))
+                        * smoothstep(0.42, 0.6, dNoise(xz * 0.045 + vec2(floor(lp) * 5.3, floor(lp) * 2.9))) // short broken runs
+                        * smoothstep(0.07, 0.2, sinSl) * (1.0 - terrN * 0.8) * (1.0 - smoothstep(0.7, 0.95, arid) * 0.5);
+          // mottled hillside: bare grey limestone pavements, ochre soil pockets (20-80 m patches)
+          float rp = smoothstep(0.42, 0.62, dFbm(xz * 0.017 + 11.0) + (sinSl - 0.15) * 0.8 + (conv - 0.5) * 0.6);
+          alb = mix(alb, mix(vec3(0.60, 0.58, 0.54), vec3(0.70, 0.68, 0.63), n3), rp * 0.7 * nearW * (1.0 - terrN * 0.7));
+          float fw0 = 0.16 + 0.2 * dNoise(xz * 0.08 + floor(lp));
+          float face = clamp((fw0 - lf) / lfw + 0.5, 0.0, 1.0) * clamp(lf / lfw + 0.5, 0.0, 1.0);
+          float under = clamp((lf - fw0) / lfw + 0.5, 0.0, 1.0) * clamp((fw0 + 0.09 - lf) / lfw + 0.5, 0.0, 1.0);
+          vec3 rockC = mix(vec3(0.74, 0.73, 0.69), vec3(0.86, 0.85, 0.80), dNoise(xz * 0.37)) * (0.9 + 0.2 * n3);
           float lk = ledgeOn * nearW;
           alb = mix(alb, rockC, face * lk * laa * 0.92);
-          alb *= 1.0 - under * lk * laa * 0.5;
+          alb *= 1.0 - under * lk * laa * 0.68;
           alb = mix(alb, mix(alb, rockC, 0.3), lk * (1.0 - laa));
           // the rock face stands steeper, facing down-slope; the soil step above it is flatter
           vec2 dn = normalize(nW.xz + vec2(1e-5));
           nW = normalize(mix(nW, normalize(vec3(dn.x, 0.55, dn.y)), face * lk * laa * 0.7));
           // garrigue cushions (0.3-0.8 m) and scattered small boulders
-          vec2 gp = xz * 0.62;
+          vec2 gp = xz * 0.33;
           float gfw = fwidth(gp.x);
           float gaa = 1.0 - smoothstep(0.35, 0.9, gfw);
           float gmask = smoothstep(0.30, 0.62, dFbm(xz * 0.021 + 5.0) + (0.4 - arid) * 0.5) * (1.0 - face * lk) * nearW;
-          float gd = dCellDots(gp, 0.28) * gmask;
+          float gd = dCellDots(gp, 0.3) * gmask;
           vec3 gC = mix(vec3(0.16, 0.19, 0.12), vec3(0.24, 0.27, 0.16), dNoise(xz * 1.3));
           alb = mix(alb, gC, gd * gaa * 0.95);
           alb = mix(alb, alb * vec3(0.78, 0.82, 0.74), gmask * 0.35 * (1.0 - gaa));
@@ -459,8 +473,8 @@ export function landMaterial(tt: TerrainTex, look: TerrainLook, tier: LandTier):
           float top = uVFog.x + uVFog.y * (dFbm(xz * 0.0009 + vec2(uTime * 0.002, 0.0)) - 0.5);
           float fdep = max(vdep * 250.0 - top, 0.0);
           float path = fdep / max(abs(rdF.y), 0.03);
-          float fm = 1.0 - exp(-path * uVFog.z);
-          fm *= smoothstep(uVFogNear, uVFogNear * 3.0, landDist);
+          float fm = (1.0 - exp(-path * uVFog.z)) * smoothstep(0.0, 22.0, fdep);
+          fm *= smoothstep(uVFogNear, uVFogNear * 4.0, landDist);
           fm *= 1.0 - smoothstep(uVFog.w - 3000.0, uVFog.w, xz.x);
           fm *= 1.0 - 0.45 * smoothstep(0.5, 0.9, arid);
           fm *= 0.7 + 0.5 * dFbm(xz * 0.0021 + 3.0);
