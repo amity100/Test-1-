@@ -74,6 +74,8 @@ interface Thread {
 }
 const _s = new THREE.Vector3();
 const _d = new THREE.Vector3();
+/** tear progress over which a tear-line vertex lets go of the skirt (see update) */
+const RELEASE = 0.12;
 
 export class MeilTear {
   /** the free piece (world space, add to the scene; hidden until the tear starts) */
@@ -409,11 +411,14 @@ export class MeilTear {
       for (let k = 0; k < n; k++) {
         const i = k * 3;
         const tau = this.edgeTau[k];
-        if (tau >= 0 && this.progress < tau) {
+        if (tau >= 0 && this.progress < tau + RELEASE) {
+          // the weave gives gradually as the tear front passes (a hard release jumped the edge across the gap in
+          // one step and every thread snapped on that frame, unseen)
+          const kp = this.progress < tau ? 1 : 1 - (this.progress - tau) / RELEASE;
           skinnedWorld(this.skirtRef.mesh, this.vIdx[k], _v);
-          p[i] = _v.x;
-          p[i + 1] = _v.y;
-          p[i + 2] = _v.z;
+          p[i] += (_v.x - p[i]) * kp;
+          p[i + 1] += (_v.y - p[i + 1]) * kp;
+          p[i + 2] += (_v.z - p[i + 2]) * kp;
         }
         const gw = this.grabW[k] * this.handOn;
         if (this.hand && gw > 0) {
@@ -438,7 +443,7 @@ export class MeilTear {
         const d = _a.distanceTo(_b);
         // the thread stretches from the gap it had when the tear front reached it (the flap is already pulled
         // away by the fist, so an absolute length snapped every thread on the frame it was released)
-        if (t.d0 < 0) t.d0 = d;
+        if (t.d0 < 0) t.d0 = Math.min(d, 0.02);
         if (d > t.d0 + t.breakLen) {
           t.state = 2;
           const dir = _b.clone().sub(_a).normalize();

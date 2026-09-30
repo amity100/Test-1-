@@ -72,8 +72,13 @@ export class HeightTile {
   height(x: number, z: number): number {
     let u = (x - this.x0) / this.dx, v = (z - this.z0) / this.dz;
     const W = this.w - 1, H = this.h - 1;
-    if (u < 0) u = -u; else if (u > W) u = Math.max(0, 2 * W - u);
-    if (v < 0) v = -v; else if (v > H) v = Math.max(0, 2 * H - v);
+    // mirror once at the edges, then CLAMP: the polar mesh's far rings reach 150 km, several tile widths out; a single
+    // reflection left u/v outside the grid and the bilinear weights extrapolated (fu/fv >> 1) into km-high spikes on
+    // the horizon (the 'brown spikes' of the Ramah crane, 130-165 km north)
+    if (u < 0) u = -u; else if (u > W) u = 2 * W - u;
+    if (v < 0) v = -v; else if (v > H) v = 2 * H - v;
+    u = u < 0 ? 0 : u > W ? W : u;
+    v = v < 0 ? 0 : v > H ? H : v;
     const i = Math.min(W - 1, Math.floor(u)), j = Math.min(H - 1, Math.floor(v));
     const fu = u - i, fv = v - j;
     const d = this.data, w = this.w, k = j * w + i;

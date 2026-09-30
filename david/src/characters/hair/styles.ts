@@ -68,7 +68,7 @@ export function davidStyle(): GroomStyle {
       const back = ss(0.0, -0.08, f.z) * ss(0.05, -0.04, f.y);
       // over / around the ears: shorter, so the curls cover only the top of the ear and the lobe shows
       const side = ss(0.05, 0.075, Math.abs(f.x)) * ss(0.06, 0.0, f.y) * ss(-0.12, -0.04, f.z);
-      return (0.088 + 0.02 * top + 0.02 * front + 0.012 * back - 0.024 * side) * (0.84 + 0.32 * R());
+      return (0.088 + 0.026 * top + 0.028 * front + 0.004 * back - 0.022 * side) * (0.84 + 0.32 * R());
     },
     comb: (f, n, out) => {
       // whorl at the top-back; hair flows out from it, forward over the forehead, down the sides / back
@@ -76,28 +76,30 @@ export function davidStyle(): GroomStyle {
       out.normalize();
       // the top is tousled up and back (volume on the crown, like the reference), the front lifts before it falls
       out.z -= 0.2 * ss(0.04, 0.09, f.y) * ss(-0.09, -0.02, f.z);
-      out.y += 0.45 * ss(-0.06, 0.0, f.z) * ss(0.03, 0.07, f.y);
+      out.y += 0.3 * ss(-0.06, 0.0, f.z) * ss(0.03, 0.07, f.y);
       // fringe swept across the forehead toward his left (as in the reference)
       out.x += 0.45 * ss(0.03, 0.08, f.y) * ss(-0.03, 0.05, f.z);
       out.y -= 0.5 * (1 - ss(0.02, 0.09, f.y));
+      // above / in front of the ears the hair is swept back behind the ear, so the ear lobe shows (the reference)
+      out.z -= 0.5 * ss(0.055, 0.075, Math.abs(f.x)) * ss(0.06, 0.0, f.y) * ss(-0.1, -0.03, f.z);
       out.x += 0.3 * vnoise(f.x * 30, f.y * 30, f.z * 30, 3);
       out.z += 0.3 * vnoise(f.x * 30, f.y * 30, f.z * 30, 4);
       return out;
     },
-    lift: 0.36,
+    lift: 0.4,
     gravity: 18,
     combPull: 10,
     tousle: 14,
     volume: (t, R) => 0.004 + (0.6 * R + 0.005) * ss(0, 0.3, t),
     // tousled natural curls (about 1-1.5 turns per lock at this length), defined clumps, a little frizz
-    curlR: [0.0095, 0.017],
-    curlPitch: [0.05, 0.08],
-    curlStart: 0.3,
+    curlR: [0.012, 0.02],
+    curlPitch: [0.065, 0.1],
+    curlStart: 0.25,
     curlNoise: 0.9,
-    straightLocks: 0.1,
-    lockR: 0.007,
-    clump: 0.8,
-    frizz: 0.0018,
+    straightLocks: 0.08,
+    lockR: 0.0082,
+    clump: 0.86,
+    frizz: 0.0012,
     flyaway: 0.03,
     width: 0.00014,
     stiffness: 0.4,

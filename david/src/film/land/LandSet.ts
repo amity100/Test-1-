@@ -383,9 +383,10 @@ export class LandSet {
       const camC = new THREE.Vector3(headAt.x + heading.x * 250, 0, headAt.z + heading.z * 250);
       const lists = {
         bush: [
-          ...scatter(Math.round(700 * k), camC.x, camC.z, 700, 700, rnd, [0.7, 1.5], (x, z) => onRoad(x, z) > 9),
-          ...scatter(Math.round(450 * k), camC.x, camC.z, 200, 200, rnd, [0.8, 1.7], (x, z) => onRoad(x, z) > 7),
-          ...scatter(Math.round(900 * k), headAt.x - 900, headAt.z - 300, 1800, 1100, rnd, [0.8, 1.6], (x, z) => onRoad(x, z) > 9 && offTown(x, z)),
+          // (land p4: slimmed ~45 % so the set + the PhilistineHost (~1.3 M) stay under the 8 M desktop-high budget)
+          ...scatter(Math.round(380 * k), camC.x, camC.z, 700, 700, rnd, [0.7, 1.5], (x, z) => onRoad(x, z) > 9),
+          ...scatter(Math.round(260 * k), camC.x, camC.z, 200, 200, rnd, [0.8, 1.7], (x, z) => onRoad(x, z) > 7),
+          ...scatter(Math.round(480 * k), headAt.x - 900, headAt.z - 300, 1800, 1100, rnd, [0.8, 1.6], (x, z) => onRoad(x, z) > 9 && offTown(x, z)),
         ],
         olive: [
           ...grove(headAt.x - 500, headAt.z + 420, 260, 140, 9, 0.35, rnd, [0.9, 1.2], (x, z) => onRoad(x, z) > 14),
@@ -453,7 +454,7 @@ export class LandSet {
     this.near = ground ? 0.25 : 6;
     this.far = 210000;
     this.atmosphere = ground
-      ? { density: o.location === 'coast' ? 0.00006 : 0.00011, heightFalloff: 1 / 900, baseHeight: o.location === 'coast' ? -20 : 500, godRays: 0.3 }
+      ? { density: o.location === 'coast' ? 0.00009 : 0.00011, heightFalloff: 1 / 900, baseHeight: o.location === 'coast' ? -20 : 500, godRays: o.location === 'coast' ? 0.38 : 0.3 }
       : { density: 0, heightFalloff: 1 / 1800, baseHeight: -400, godRays: 0.35 };
     const { shots, sequence } = this.buildShots();
     this.shots = shots;

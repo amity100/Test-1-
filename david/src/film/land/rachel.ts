@@ -85,3 +85,38 @@ export function rachelShots(ground: (x: number, z: number) => number, pillar: TH
   const sequence = [shots.dawn, shots.road];
   return { shots, sequence, anchors: { pillar: P.clone(), pillarTop: top, road, shepherdRoute, flockRoute, walkSpeed: 1.0 } };
 }
+
+/**
+ * Film hook (land p4): hide the game world's trees of the given kinds within `radius` metres of Rachel's pillar
+ * for the shot-3 takes and return a restore function. visual-bible 3.10 wants the stone by the worn road with
+ * terrace walls and a few OLIVE trees; the tall Mediterranean cypresses the chapter plants along its paths read
+ * as a later, ornamental (Ottoman / modern) planting next to the tomb, so the film removes them round the stone.
+ * The vegetation's instanced meshes are named `tree-<kind>` (src/world/Vegetation.ts). Instances are collapsed to
+ * a zero scale (their baked ground shadow stays: keep the radius where the camera doesn't dwell on the ground).
+ *
+ *   const restore = hideTreesNear(engine.scene, engine.village.rachelPillar, 45);   // on entering 'rachel-dawn'
+ *   restore();                                                                        // after 'rachel-road'
+ */
+export function hideTreesNear(root: THREE.Object3D, center: THREE.Vector3, radius = 45, kinds: string[] = ['cypress']): () => void {
+  const saved: { mesh: THREE.InstancedMesh; i: number; m: THREE.Matrix4 }[] = [];
+  const m4 = new THREE.Matrix4(), p = new THREE.Vector3(), zero = new THREE.Matrix4().makeScale(0, 0, 0);
+  const names = new Set(kinds.map((k) => `tree-${k}`));
+  root.traverse((o) => {
+    const im = o as THREE.InstancedMesh;
+    if (!im.isInstancedMesh || !names.has(im.name)) return;
+    let touched = false;
+    for (let i = 0; i < im.count; i++) {
+      im.getMatrixAt(i, m4);
+      p.setFromMatrixPosition(m4).applyMatrix4(im.matrixWorld);
+      if (Math.hypot(p.x - center.x, p.z - center.z) > radius) continue;
+      saved.push({ mesh: im, i, m: m4.clone() });
+      im.setMatrixAt(i, zero);
+      touched = true;
+    }
+    if (touched) im.instanceMatrix.needsUpdate = true;
+  });
+  return () => {
+    for (const s of saved) { s.mesh.setMatrixAt(s.i, s.m); s.mesh.instanceMatrix.needsUpdate = true; }
+    saved.length = 0;
+  };
+}

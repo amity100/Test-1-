@@ -3,7 +3,7 @@ import { GLSL_NOISE, shared } from '../../core/Shared';
 import { Simplex2, smoothstep } from '../../core/noise';
 import { gunzip } from '../../characters/human/inflate';
 import type { TextureSet } from '../../world/Textures';
-import { ROAD_GLSL, ROAD_HALF, roadZ, STONES } from './gilgalLayout';
+import { CAMP, ROAD_GLSL, ROAD_HALF, roadZ, STONES } from './gilgalLayout';
 import features from '../../assets/gilgal/gilgal_features.json';
 import demUrl from '../../assets/gilgal/jordan_dem.binz?url';
 import maskUrl from '../../assets/gilgal/jordan_mask.png?url';
@@ -162,7 +162,9 @@ export function loadMask(renderer: THREE.WebGLRenderer, relief = false): Promise
  *  - the Dead Sea shore (salt) to the south; heat shimmer (mirage) low over the far plain.
  */
 export function terrainMaterial(world: TextureSet, mask: THREE.Texture, relief: THREE.Texture) {
-  const mat = new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0, color: 0xffffff });
+  // dry powdery ground has almost no sheen: at the grazing, backlit angles of Act I the default specular + env
+  // reflection mirrored the white hazy sky and the plain read as SNOW (land p4)
+  const mat = new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0, color: 0xffffff, envMapIntensity: 0.25 });
   mat.onBeforeCompile = (s) => {
     s.uniforms.tGrass = { value: world.grass };
     s.uniforms.tGrassN = { value: world.grassN };
@@ -209,8 +211,10 @@ float lum(vec3 c){ return dot(c, vec3(0.2126, 0.7152, 0.0722)); }`)
   float m1 = tF(xz * 0.03), m2 = tF(xz * 0.004 + 3.0), m3 = tF(xz * 0.0009 - 2.0);
   // ---------------------------------------------------------------- macro colour (the whole valley)
   // Lisan marl and loess: pale grey-cream (visual-bible palette #d8cfbb, darkened for the lit albedo)
-  vec3 plainC = mix(vec3(0.5, 0.47, 0.4), vec3(0.56, 0.52, 0.44), m2) * mix(0.9, 1.05, m3);
-  vec3 marlC = mix(vec3(0.80, 0.78, 0.70), vec3(0.88, 0.85, 0.77), m1);
+  // (land p4: the plain read as snow) hot, dusty ochre-grey silt and loess on the plain; the pale marl only on the
+  // badlands toward the river
+  vec3 plainC = mix(vec3(0.43, 0.38, 0.31), vec3(0.49, 0.43, 0.35), m2) * mix(0.9, 1.05, m3);
+  vec3 marlC = mix(vec3(0.72, 0.69, 0.61), vec3(0.80, 0.77, 0.69), m1);
   vec3 desertC = mix(vec3(0.56, 0.45, 0.33), vec3(0.66, 0.56, 0.43), m2);
   vec3 moabLow = vec3(0.56, 0.36, 0.27), moabHigh = vec3(0.62, 0.52, 0.41);
   vec3 moabC = mix(moabLow, moabHigh, smoothstep(0.0, 700.0, asl)) * mix(0.9, 1.06, m2);
@@ -291,7 +295,7 @@ float lum(vec3 c){ return dot(c, vec3(0.2126, 0.7152, 0.0722)); }`)
     // pale silty alluvium (Lisan marl silt): the plain's macro colour, textured by the soil / gravel / grass maps'
     // luminance (their own hues are the terra rossa hills of Bethlehem, not the rift)
     float sL = lum(so.rgb) / 0.3, gL = lum(gv.rgb) / 0.32, grL = lum(gr.rgb) / 0.36;
-    vec3 base0 = mix(vec3(0.5, 0.47, 0.4), vec3(0.55, 0.51, 0.43), m1);
+    vec3 base0 = mix(vec3(0.42, 0.37, 0.30), vec3(0.47, 0.41, 0.33), m1);
     vec3 silt = base0 * mix(1.0, sL, 0.55);
     vec3 pebbles = base0 * vec3(0.96, 0.95, 0.93) * mix(1.0, gL, 0.9);
     vec3 dry = mix(base0 * vec3(1.08, 0.98, 0.78), gr.rgb * vec3(1.0, 0.92, 0.72), 0.5) * mix(1.0, grL, 0.5);
@@ -302,8 +306,41 @@ float lum(vec3 c){ return dot(c, vec3(0.2126, 0.7152, 0.0722)); }`)
     // the road: trodden, dusty, pale, with a scatter of pebbles along the verges
     float dz = abs(xz.y - gilRoadZ(xz.x));
     float road = (1.0 - smoothstep(${(ROAD_HALF - 1.5).toFixed(2)}, ${(ROAD_HALF + 1.2).toFixed(2)}, dz + (tN(xz * 0.5) - 0.5) * 1.6)) * step(-2500.0, xz.x) * step(xz.x, 3000.0);
-    vec3 dust = mix(base0 * vec3(1.16, 1.12, 1.06) * mix(1.0, sL, 0.3), pebbles, 0.15) * mix(0.93, 1.05, tN(xz * 1.7));
-    cn = mix(cn, dust, road * 0.92);
+    vec3 dust = mix(base0 * vec3(1.0, 0.97, 0.93) * mix(1.0, sL, 0.3), pebbles, 0.15) * mix(0.93, 1.05, tN(xz * 1.7));
+    // the camp (black tents, fires, the host's beasts): trampled like the road
+    float camp = 1.0 - smoothstep(${(CAMP.r * 0.6).toFixed(1)}, ${(CAMP.r * 1.25).toFixed(1)}, length(xz - vec2(${CAMP.x.toFixed(1)}, ${CAMP.z.toFixed(1)})) + (tN(xz * 0.05) - 0.5) * 30.0);
+    float trampled = clamp(road * 0.92 + camp * 0.8, 0.0, 1.0);
+    cn = mix(cn, dust, trampled);
+    // an army of thousands and its herds came down this road: footprints, hoof prints, dung, ruts of trodden dust,
+    // stones kicked out of the bed (no wheels: Israel had no chariots)
+    {
+      vec2 fp = xz * vec2(2.6, 3.4);
+      float fAA = 1.0 - smoothstep(0.25, 0.7, fwidth(fp.x));
+      float prints = dCellDots(fp, 0.26) * smoothstep(0.3, 0.6, tN(xz * 0.9));
+      float hoof = dCellDots(xz * 5.2 + 3.1, 0.3) * smoothstep(0.55, 0.8, tN(xz * 0.35 + 5.0));
+      cn *= 1.0 - (prints * 0.22 + hoof * 0.3) * trampled * fAA;
+      float dung = dCellDots(xz * 0.9 + 7.7, 0.12) * step(0.8, tH(floor(xz * 0.9 + 7.7))) * trampled;
+      cn = mix(cn, vec3(0.16, 0.12, 0.08), dung * fAA * 0.85);
+      float ruts = smoothstep(0.62, 0.8, tN(vec2(xz.x * 0.08, (xz.y - gilRoadZ(xz.x)) * 1.1)));
+      cn *= 1.0 - ruts * road * 0.14;
+      float stn = dCellDots(xz * 1.3 + 1.7, 0.17) * step(0.55, tH(floor(xz * 1.3 + 1.7))) * (road * (1.0 - road) * 3.0 + camp * 0.4);
+      cn = mix(cn, mix(vec3(0.55, 0.52, 0.46), vec3(0.34, 0.31, 0.28), tH(floor(xz * 1.3 + 9.0))), clamp(stn, 0.0, 1.0) * fAA * 0.9);
+    }
+    // cracked, sun-baked silt in the flats away from the road (polygons of the dried sheet-wash)
+    {
+      vec2 cp = xz * 0.55;
+      vec2 ci = floor(cp), cf = fract(cp);
+      float d1 = 8.0, d2 = 8.0;
+      for (int yy = -1; yy <= 1; yy++) for (int xx = -1; xx <= 1; xx++) {
+        vec2 g = vec2(float(xx), float(yy));
+        vec2 o = vec2(tH(ci + g), tH(ci + g + 17.3));
+        float d = length(g + o - cf);
+        if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d;
+      }
+      float crack = 1.0 - smoothstep(0.0, 0.06 + fwidth(cp.x) * 1.5, d2 - d1);
+      float crackW = smoothstep(0.55, 0.75, tN(xz * 0.03 + 9.0)) * (1.0 - trampled) * (1.0 - grassW) * (1.0 - smoothstep(0.5, 1.2, fwidth(cp.x)));
+      cn *= 1.0 - crack * crackW * 0.4;
+    }
     // trampled around the stone ring
     float ring = 1.0 - smoothstep(uStones.y + 1.0, uStones.y + 6.0, length(xz - uStones.xz));
     cn = mix(cn, dust * 0.97, ring * 0.6);
@@ -317,7 +354,7 @@ float lum(vec3 c){ return dot(c, vec3(0.2126, 0.7152, 0.0722)); }`)
   float graze = 1.0 - smoothstep(0.004, 0.035, abs(vd.y));
   float mir = graze * smoothstep(700.0, 2600.0, dist) * (1.0 - hills) * (1.0 - th * 0.5);
   float shim = 0.55 + 0.45 * sin(vTW.x * 0.01 + vTW.z * 0.013 + uTimeT * 1.7 + tN(xz * 0.004) * 6.0);
-  c = mix(c, vec3(0.74, 0.66, 0.54), mir * shim * 0.32);
+  c = mix(c, vec3(0.70, 0.60, 0.48), mir * shim * 0.32);
   // looking into the low sun, every clod, pebble and tuft turns its shadowed side toward the camera
   vec3 sH = normalize(vec3(uSunP.x, 0.0, uSunP.z));
   float backlit = pow(max(dot(normalize(vec3(vd.x, 0.0, vd.z)), sH), 0.0), 2.0) * (1.0 - hills * 0.5);
@@ -343,10 +380,12 @@ float lum(vec3 c){ return dot(c, vec3(0.2126, 0.7152, 0.0722)); }`)
   terRough = mix(0.97, 0.9, rN);
 }`)
       .replace('#include <normal_fragment_maps>', `normal = normalize((viewMatrix * vec4(terWN, 0.0)).xyz);`)
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+reflectedLight.directSpecular *= 0.15;`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
 roughnessFactor = terRough;`);
   };
-  mat.customProgramCacheKey = () => 'gilgal-terrain-v5';
+  mat.customProgramCacheKey = () => 'gilgal-terrain-v6';
   return mat;
 }
 

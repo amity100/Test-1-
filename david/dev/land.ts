@@ -48,8 +48,11 @@ async function boot() {
   if (params.get('host') === '1' && set.anchors.coast) {
     const { PhilistineHost } = await import('../src/film/crowd/PhilistineHost');
     const a = set.anchors.coast;
-    const h = await PhilistineHost.create({ tier: q.tier, trail: [a.columnHead, ...a.route.slice().reverse().filter((p) => p.x < a.columnHead.x - 1)], columnWidth: a.columnWidth, ground: (x, z) => set.height.height(x, z) });
+    const h = await PhilistineHost.create({ tier: q.tier, coast: a, ground: (x, z) => set.height.height(x, z) });
     set.scene.add(h.group);
+    h.crowd.viewportHeight = renderer.getDrawingBufferSize(new THREE.Vector2()).y;
+    h.setTravel(0);
+    w.__host = h;
     host = h as unknown as typeof host;
     set.showPlaceholders(false);
   }

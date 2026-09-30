@@ -305,6 +305,9 @@ project's own generators:
 - Third pass (land): `src/assets/land/judah_dress.webp` is derived from the same SRTM landcover (`tools/land/bake_dress.py`:
   aridity / drainage / valley depth as an opaque RGB mask); the Judah terrace walls, olive groves and hamlets
   (`src/film/land/landJudah.ts`) and the dawn sky grade are procedural own code. No new third-party assets.
+- Fourth pass (land): valley fog, limestone ledges, garrigue, the Herodion-cone removal and the crest relief (all
+  procedural, own code, on the same SRTM data); Gilgal ground detail (prints, dung, stones, cracks) is procedural
+  own code. No new third-party assets.
 
 ## Skin, eyes and hero close-up level — `src/fx/SSS.ts`, `src/characters/human/{SkinMaterial,EyeModel}.ts`, `tools/human/bake_skin.py --regions`, `dev/skin*`
 - **No third-party assets.** The region maps (`src/assets/human/<preset>/region_1k.webp`) are baked by

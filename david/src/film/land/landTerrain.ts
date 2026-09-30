@@ -311,18 +311,26 @@ export function landMaterial(tt: TerrainTex, look: TerrainLook, tier: LandTier):
           // field parcels of the plain (irregular strips 30-110 m, rotated grid): stubble gold, ploughed brown,
           // fallow grass, a few green plots; darker balks / hedges of scrub between them; threshing-bare patches
           vec2 fp = mat2(0.93, 0.36, -0.36, 0.93) * xz;
-          vec2 fs = vec2(110.0, 46.0);
-          vec2 fc = floor(fp / fs + vec2(0.0, floor(fp.x / fs.x) * 0.37));
-          vec2 ff = fract(fp / fs + vec2(0.0, floor(fp.x / fs.x) * 0.37));
+          fp += vec2(dNoise(xz * 0.0021), dNoise(xz * 0.0019 + 4.0)) * 60.0; // balks wander: no grid
+          // irregular parcels: each strip of land (column) has its own width and field length (no checkerboard)
+          float colW = 95.0;
+          float colI = floor(fp.x / colW);
+          float lenK = 38.0 + 90.0 * dHash12(vec2(colI, 3.3));
+          vec2 fs = vec2(colW, lenK);
+          vec2 fc = vec2(colI, floor(fp.y / lenK + dHash12(vec2(colI, 8.1))));
+          vec2 ff = vec2(fract(fp.x / colW), fract(fp.y / lenK + dHash12(vec2(colI, 8.1))));
           float fr = dHash12(fc + 3.1), fr2 = dHash12(fc + 17.7);
           vec3 stub = mix(vec3(0.74, 0.62, 0.40), vec3(0.80, 0.69, 0.46), fr2);
           vec3 plough = mix(vec3(0.44, 0.32, 0.22), vec3(0.52, 0.38, 0.26), fr2);
           vec3 fallow = mix(vec3(0.60, 0.55, 0.38), vec3(0.54, 0.52, 0.34), fr2);
           vec3 greenP = vec3(0.40, 0.43, 0.25);
           vec3 fcol = fr < 0.42 ? stub : fr < 0.7 ? plough : fr < 0.93 ? fallow : greenP;
-          fcol = mix(fcol, vec3(0.62, 0.52, 0.35), 0.35 + 0.35 * (1.0 - smoothstep(150.0, 900.0, landDist)));
+          fcol = mix(fcol, vec3(0.62, 0.52, 0.35), 0.5 + 0.3 * (1.0 - smoothstep(150.0, 900.0, landDist)));
           // furrows / stubble rows along the parcel
-          fcol *= 1.0 + 0.07 * sin(fp.y * 2.4 + fr * 20.0) * (1.0 - smoothstep(40.0, 160.0, landDist)); // no far moire
+          // furrows: each parcel ploughed in its own direction (along or across the strip), no far moire
+          float fa = (fr2 - 0.5) * 0.5 + (fr > 0.55 ? 1.5708 : 0.0);
+          vec2 fdir = vec2(cos(fa), sin(fa));
+          fcol *= 1.0 + 0.07 * sin(dot(fp, fdir) * 2.4 + fr * 20.0) * (1.0 - smoothstep(40.0, 160.0, landDist));
           float balk = 1.0 - smoothstep(0.0, 0.035, min(min(ff.x, 1.0 - ff.x) * fs.x / 46.0, min(ff.y, 1.0 - ff.y)));
           fcol = mix(fcol, vec3(0.36, 0.34, 0.22), balk * 0.55 * (1.0 - smoothstep(2500.0, 9000.0, landDist)));
           fcol = mix(fcol, field, smoothstep(6000.0, 20000.0, landDist) * 0.5);
@@ -425,7 +433,7 @@ export function landMaterial(tt: TerrainTex, look: TerrainLook, tier: LandTier):
           alb = mix(alb, dry, villW * 0.9);
           float pd = length(xz - uPlaza.xy) + (dNoise(xz * 0.13) - 0.5) * 6.0 + (dNoise(xz * 0.5) - 0.5) * 1.6;
           plazaW = 1.0 - smoothstep(uPlaza.z * 0.7, uPlaza.z * 1.15, pd);
-          vec3 earth = mix(vec3(0.60, 0.56, 0.49), vec3(0.68, 0.64, 0.57), n3) * (0.9 + 0.2 * dNoise(xz * 0.7));
+          vec3 earth = mix(vec3(0.55, 0.52, 0.47), vec3(0.62, 0.59, 0.53), n3) * (0.9 + 0.2 * dNoise(xz * 0.7));
           alb = mix(alb, earth, plazaW);
         }
         #endif
@@ -444,7 +452,29 @@ export function landMaterial(tt: TerrainTex, look: TerrainLook, tier: LandTier):
             gr *= 1.0 - villW * 0.85;
             rk = max(rk, villW * 0.6 * smoothstep(0.35, 0.7, dNoise(xz * 0.3))) * (1.0 - plazaW * 0.5);
             vec3 det = mix(mix(s1 / 0.36, g1 / 0.42, gr), r1 / 0.55, rk);
+            // round the village: the textures' luminance only (their hue is Bethlehem's red terra rossa: it turned the
+            // plaza pink), plus a stony surface - limestone pebbles with a shadowed side, darker trodden lanes
+            float dl = dot(det, vec3(0.2126, 0.7152, 0.0722));
+            det = mix(det, vec3(dl) * vec3(1.02, 1.0, 0.96), clamp(villW * 1.2, 0.0, 1.0));
             albL = mix(albL, albL * clamp(mix(vec3(1.0), det, 0.6), 0.3, 1.8), nw) * 1.3;
+            #ifdef LAND_VILLAGE
+            {
+              // small, sparse, irregular limestone pebbles (a cell keeps its stone only 40 % of the time)
+              vec2 pp = xz * 3.6;
+              float pAA = 1.0 - smoothstep(0.3, 0.8, fwidth(pp.x));
+              float keep = step(0.6, dHash12(floor(pp) + 3.7)) * smoothstep(0.45, 0.75, dNoise(xz * 0.21) + villW * 0.15) * villW * pAA;
+              float peb = dCellDots(pp, 0.16) * keep;
+              float pebS = dCellDots(pp + vec2(0.1, 0.08), 0.16) * (1.0 - peb) * keep;
+              albL = mix(albL, srgb(vec3(0.70, 0.68, 0.63)) * (0.8 + 0.35 * dHash12(floor(pp))), peb * 0.6);
+              albL *= 1.0 - pebS * 0.3;
+              // trodden: darker, compacted earth where feet go (the lane into the gate, round the benches)
+              float trod = plazaW * smoothstep(0.45, 0.75, dNoise(xz * 0.09 + 2.0)) * 0.5;
+              albL *= 1.0 - trod * 0.28;
+              // fine cracks of the dry beaten earth
+              float cr = abs(dNoise(xz * 0.8) - 0.5) + abs(dNoise(xz * 1.9 + 3.0) - 0.5) * 0.5;
+              albL *= 1.0 - (1.0 - smoothstep(0.0, 0.03, cr)) * plazaW * pAA * 0.3;
+            }
+            #endif
             vec3 tn = texture2D(tGrassN, tuv * 0.8).xyz * 2.0 - 1.0;
             nW = normalize(nW + vec3(tn.x, 0.0, tn.y) * 0.35 * nw);
           }

@@ -96,10 +96,10 @@ export class GilgalSet {
   private post: PostFX | null = null;
   /** recommended renderer.toneMappingExposure (base x the current shot's exposure hint) */
   exposure = 0.56;
-  static BASE_EXPOSURE = 0.56;
+  static BASE_EXPOSURE = 0.5;
   /** near plane of the view (close inserts at 0.5-1 m); update() raises it with the camera's height above the ground */
   static NEAR = 0.05;
-  static ATMOSPHERE = { density: 0.00007, heightFalloff: 0.0011, baseHeight: -140, godRays: 0.22, hazeTint: new THREE.Color(1.0, 0.93, 0.84) };
+  static ATMOSPHERE = { density: 0.00007, heightFalloff: 0.0011, baseHeight: -140, godRays: 0.22, hazeTint: new THREE.Color(1.0, 0.86, 0.7) };
   /** the beat set by setBeat (null = free camera: no shot-driven state) */
   beat: { name: GilgalShotName; time: number } | null = null;
   private readonly renderer: THREE.WebGLRenderer;
