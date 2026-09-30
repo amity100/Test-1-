@@ -904,11 +904,11 @@ export class IntroScore {
   private planBroken(sec: Sec): void {
     const S = this.s, lite = this.lite, t0 = sec.t0, end = sec.t1, d = end - t0;
     const look = this.beat(sec, 'look'), tighten = this.beat(sec, 'tighten');
-    // A (he looks down) — B♭, the sigh — A (the fingers tighten) — G F E, and below the tonic: C♯
+    // A (he looks down) — B♭, the sigh — A; the fingers tighten — F, E, and below the tonic: C♯ (into the flash)
     const a0 = look - 0.25, sigh = look + 0.3;
     this.add(sec, a0, (t, m) => {
-      const k = (tighten - a0) / 1.15; // the contract: the fingers tighten 0.9 s after the look
-      this.line(m, t, [[57, 0.55 * k], [58, 0.5 * k], [57, 0.3 * k], [55, 0.22], [53, 0.2], [52, 0.18], [49, 0.9]], 1, 0.062, 'cello');
+      const k = clamp((tighten + 0.1 - a0) / 1.25, 0.6, 1.4); // the contract: the fingers tighten 0.9 s after the look
+      this.line(m, t, [[57, 0.5 * k], [58, 0.45 * k], [57, 0.3 * k], [53, 0.2], [52, 0.2], [49, 0.7]], 1, 0.062, 'cello');
     });
     this.add(sec, t0, (t, m, h) => S.pad(m, t, h, lite ? [38, 45] : [26, 38, 45], { level: 0.032, attack: 0.4, release: 0.4, cutoff: 600, voices: 2, detune: 6 }), d);
     this.add(sec, sigh, (t, m, h) => S.choir(m, t, h, [46, 50], { level: 0.016, attack: 0.6, release: 0.4, vowel: 'oo', breath: 0.08 }), end - sigh);

@@ -181,7 +181,10 @@ export async function dressSaulGilgal(human: HumanModel, opts: FilmDressOptions)
     bands: [{ from: 0.0, to: 0.02, motif: 0, pal: 0 }],
     neckBands: [{ from: 0.0, to: 0.02, motif: 0, pal: 0, edge: 'upper' }],
   });
-  scaleArmour(fit, coat, { metal: t.metal, polish: 'royal', seed: 29, width: opts.crowd ? 0.04 : 0.03, length: opts.crowd ? 0.075 : 0.058, row: opts.crowd ? 0.05 : 0.036, skirtStiff: 0.6 });
+  // models pass: many small scales (≈2.5 × 4.8 cm at Saul's height), half-length row overlap, a third sideways
+  // (phones: fewer, slightly bigger scales at 4 tris each)
+  const sc = opts.crowd ? { width: 0.04, length: 0.075, row: 0.05, side: 0.97 } : tier === 'low' ? { width: 0.028, length: 0.054, row: 0.027, side: 0.72 } : { width: 0.022, length: 0.042, row: 0.021, side: 0.66 };
+  scaleArmour(fit, coat, { metal: t.metal, polish: 'royal', seed: 29, ...sc, skirtStiff: 0.6 });
   // belt over the coat + straight sword at the left hip, girded over the madim (17:39)
   const beltMat = solidMaterial({ tier, tex: t.leather, color: 0x3d2a1c, roughness: 0.55, repeat: [1, 12], normal: 1.2 });
   beltBand(fit, coat, { width: 0.05 * S, thickness: 0.008, material: beltMat, offset: 0.012, name: 'swordBelt' });

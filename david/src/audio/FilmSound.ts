@@ -31,11 +31,22 @@ export class FilmSound {
   sfxAt: SfxAtFn | null = null;
   private marchBuf: AudioBuffer | null = null;
   private ripBuf: AudioBuffer | null = null;
+  /** the tear's beats (s from the pull): the rip runs, the corner comes free */
+  private ripShape: readonly [number, number] = [0.4, 1.6];
   private drive: Curve | null = null;
 
   constructor(private readonly c: Core, private lite: boolean) {}
 
   setLite(on: boolean): void { this.lite = on; }
+
+  /**
+   * Shape the baked tear to the beats of the insert: `run` = s from the pull until the rip runs, `free` = s from the
+   * pull until the corner comes free. Call before the bake (IntroScore.start does); a changed shape re-bakes.
+   */
+  shapeRip(run: number, free: number): void {
+    const r = clamp(Number.isFinite(run) ? run : 0.4, 0.05, 3), f = clamp(Number.isFinite(free) ? free : 1.6, r + 0.2, 5);
+    if (Math.abs(r - this.ripShape[0]) > 0.01 || Math.abs(f - this.ripShape[1]) > 0.01) { this.ripShape = [r, f]; this.ripBuf = null; }
+  }
 
   /** Drop the baked buffers (after the film; sources still playing keep theirs alive until they end). */
   release(): void { this.marchBuf = null; this.ripBuf = null; }
@@ -51,7 +62,7 @@ export class FilmSound {
     const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
     if (!this.drive) this.drive = this.c.curve('drive', 3);
     if (!this.marchBuf) this.marchBuf = bakeMarch(this.c.ctx);
-    else if (!this.ripBuf) this.ripBuf = bakeRip(this.c.ctx);
+    else if (!this.ripBuf) this.ripBuf = bakeRip(this.c.ctx, this.ripShape[0], this.ripShape[1]);
     else return 0;
     return (typeof performance !== 'undefined' ? performance.now() : 0) - t0;
   }
@@ -399,23 +410,25 @@ export class FilmSound {
   }
 
   /**
-   * THE TEAR (1 Sam 15:27), slowed: the baked rip (fibres parting and threads snapping, already pitched down)
-   * time-stretched onto [t, t + dur] by the playback rate, plus a low groan of the stretched wool under it.
+   * THE TEAR (1 Sam 15:27), slowed: the baked rip (fibres parting and threads snapping, already pitched down) from
+   * the pull; `dur` = pull → the corner free. Baked to that shape (shapeRip) it plays at its own speed; otherwise it
+   * is time-stretched by the playback rate. A low groan of the stretched wool rises under it until it gives.
    */
   rip(o: Out, t: number, dur: number, level: number): void {
-    if (!this.ripBuf) this.ripBuf = bakeRip(this.c.ctx);
+    if (!this.ripBuf) this.ripBuf = bakeRip(this.c.ctx, this.ripShape[0], this.ripShape[1]);
     const v = new Voice(this.c);
-    const rate = clamp(this.ripBuf.duration / Math.max(0.5, dur), 0.6, 1.6);
+    const shaped = this.ripShape[1];
+    const rate = clamp(shaped / Math.max(0.3, dur), 0.6, 1.6);
     const s = v.buffer(this.ripBuf, rate, t), lpf = v.filter('lowpass', 3600, 0.6), g = v.gain(level);
     s.connect(lpf); lpf.connect(g); out2(g, o, 0.2, v); // dry (visual-bible 3.3: a dry, fibrous rip)
-    const len = this.ripBuf.duration / rate;
+    const len = this.ripBuf.duration / rate, give = shaped / rate;
     // the groan: stretched wool under tension, rising until it gives
     const gr = v.osc('sawtooth', 48, 0, t), gr2 = v.osc('sawtooth', 48.7, 0, t), lp = v.filter('lowpass', 220, 2), gg = v.gain(0);
     gr.connect(lp); gr2.connect(lp); lp.connect(gg); out2(gg, o, 0.5, v);
-    gr.frequency.setValueAtTime(44, t); gr.frequency.linearRampToValueAtTime(58, t + len * 0.8);
-    gr2.frequency.setValueAtTime(44.6, t); gr2.frequency.linearRampToValueAtTime(58.8, t + len * 0.8);
+    gr.frequency.setValueAtTime(44, t); gr.frequency.linearRampToValueAtTime(58, t + give);
+    gr2.frequency.setValueAtTime(44.6, t); gr2.frequency.linearRampToValueAtTime(58.8, t + give);
     const G = gg.gain;
-    G.setValueAtTime(0, t); G.linearRampToValueAtTime(level * 0.12, t + len * 0.75); G.setTargetAtTime(0, t + len * 0.8, 0.12);
+    G.setValueAtTime(0, t); G.linearRampToValueAtTime(level * 0.12, t + give * 0.95); G.setTargetAtTime(0, t + give, 0.08);
     v.play(t, t + len + 0.2);
   }
 
@@ -623,24 +636,31 @@ function bakeMarch(ctx: BaseAudioContext): AudioBuffer {
  * The robe tearing, as heard in slow motion (~3.7 s): tension creaks, then fibres parting in an accelerating,
  * then thinning train of grains (pitched down ~3x), threads snapping as low plucked "twangs", a final give.
  */
-function bakeRip(ctx: BaseAudioContext): AudioBuffer {
-  const L = 3.8;
+/**
+ * The slowed tear, baked to the beats of the insert (s from the pull): the wool under tension until `run`, the tear
+ * running until `free` (fibres parting ever faster, threads snapping), the corner coming away at `free` (a last burst
+ * of snaps and a cloth flap), then a few last fibres.
+ */
+function bakeRip(ctx: BaseAudioContext, run = 0.4, free = 1.6): AudioBuffer {
+  const L = free + 0.5;
   return bake(ctx, L, 2, (d, sr, len) => {
     const [yl, yr] = d;
     // a faint friction of the wool under tension (kept low: the tear must read as snaps, not hiss)
     const bpL = new BQ('bp', 650, 1.2, sr), bpR = new BQ('bp', 720, 1.2, sr);
     for (let i = 0; i < len; i++) {
-      const u = i / len;
-      const env = u < 0.1 ? u / 0.1 : u < 0.85 ? 1 : Math.max(0, 1 - (u - 0.85) / 0.15);
+      const ts = i / sr;
+      const env = ts < run ? 0.35 + 0.65 * (ts / Math.max(0.05, run)) : ts < free ? 1 : Math.max(0, 1 - (ts - free) / 0.2);
       yl[i] += bpL.run(white()) * env * 0.12;
       yr[i] += bpR.run(white()) * env * 0.12;
     }
-    // fibres parting, heard in slow motion: discrete resonant ticks (an impulse into a narrow band, 1-5 ms), their
-    // rate rising to ~140/s as the tear runs, then thinning as the last threads hold; now and then a cluster "pop"
-    let t = 0.2;
-    while (t < L - 0.12) {
-      const u = t / L;
-      const rate = 12 + 130 * Math.sin(Math.PI * clamp((u - 0.03) / 0.9, 0, 1)) ** 1.2;
+    // fibres parting, heard in slow motion: discrete resonant ticks (an impulse into a narrow band, 1-5 ms) — sparse
+    // under the pull, their rate rising to ~140/s as the tear runs, then only a few after the corner is free
+    let t = 0.04;
+    while (t < L - 0.08) {
+      let rate: number, amp0: number;
+      if (t < run) { rate = 6 + 16 * (t / Math.max(0.05, run)); amp0 = 0.5; }
+      else if (t < free) { const u = (t - run) / Math.max(0.1, free - run); rate = 25 + 115 * Math.sin(Math.PI * clamp(0.12 + u * 0.8, 0, 1)) ** 1.2; amp0 = 0.6 + 0.6 * u; }
+      else { rate = Math.max(5, 45 * Math.exp(-(t - free) / 0.1)); amp0 = 0.6; }
       const cluster = chance(0.12) ? randi(2, 4) : 1;
       for (let c = 0; c < cluster; c++) {
         const s0 = Math.floor((t + c * rand(0.002, 0.006)) * sr);
@@ -648,7 +668,7 @@ function bakeRip(ctx: BaseAudioContext): AudioBuffer {
         const bq = new BQ('bp', f, rand(1.4, 3.5), sr); // wool: dry and fuzzy, not a ringing tick
         const n = Math.floor(rand(0.003, 0.008) * sr);
         const kd = Math.exp(-1 / (rand(0.0008, 0.0025) * sr));
-        const amp = rand(0.25, 1) * (0.55 + 0.6 * u) * (cluster > 1 ? 1.3 : 1);
+        const amp = rand(0.25, 1) * amp0 * (cluster > 1 ? 1.3 : 1);
         const pan = clamp(0.5 + (Math.random() - 0.5) * 0.9, 0, 1);
         let e = 1;
         for (let i = 0; i < n && s0 + i < len; i++) {
@@ -659,15 +679,14 @@ function bakeRip(ctx: BaseAudioContext): AudioBuffer {
       }
       t += (1 / rate) * rand(0.35, 1.65);
     }
-    // threads snapping: low, fast-decaying plucks that bend down (pitched down by the slow motion)
-    const snaps = 30;
-    for (let k = 0; k < snaps; k++) {
-      const ts = rand(0.35, L - 0.25);
+    // threads snapping while the tear runs: low, fast-decaying plucks that bend down (pitched down by the slow motion)
+    const snaps = Math.round(clamp(20 * (free - run), 10, 36));
+    const snap = (ts: number, amp: number): void => {
       const s0 = Math.floor(ts * sr), n = Math.floor(0.14 * sr);
       let ph = 0;
       const f0 = rand(150, 480), kd = Math.exp(-1 / (rand(0.02, 0.05) * sr));
       let e = 1;
-      const amp = rand(0.35, 0.9), pan = Math.random();
+      const pan = Math.random();
       for (let i = 0; i < n && s0 + i < len; i++) {
         const f = f0 * (1 - 0.4 * (i / n));
         ph += (2 * Math.PI * f) / sr;
@@ -675,9 +694,11 @@ function bakeRip(ctx: BaseAudioContext): AudioBuffer {
         yl[s0 + i] += x * (1 - pan); yr[s0 + i] += x * pan;
         e *= kd;
       }
-    }
-    // the give: the corner comes away — a last burst of snaps and a soft cloth flap
-    const g0 = Math.floor((L - 0.55) * sr);
+    };
+    for (let k = 0; k < snaps; k++) snap(rand(run, free - 0.05), rand(0.35, 0.9));
+    // the give: the corner comes away — a burst of snaps and a soft cloth flap on `free`
+    for (let k = 0; k < 5; k++) snap(free - 0.03 + rand(0, 0.06), rand(0.6, 1));
+    const g0 = Math.floor((free - 0.02) * sr);
     const bq = new BQ('bp', 800, 0.9, sr);
     for (let i = 0; i < Math.floor(0.35 * sr) && g0 + i < len; i++) {
       const u = i / (0.35 * sr);
@@ -686,5 +707,5 @@ function bakeRip(ctx: BaseAudioContext): AudioBuffer {
     }
     const hp = [new BQ('hp', 90, 0.7, sr), new BQ('hp', 90, 0.7, sr)];
     for (let c = 0; c < 2; c++) { const y = d[c]; for (let i = 0; i < len; i++) y[i] = hp[c].run(y[i]); }
-  }, 0.85, Math.round(ctx.sampleRate / 2)); // half rate: its content sits below 6 kHz (0.7 MB instead of 1.5)
+  }, 0.85, Math.round(ctx.sampleRate / 2)); // half rate: its content sits below 6 kHz
 }

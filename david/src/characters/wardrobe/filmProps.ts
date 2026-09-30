@@ -88,6 +88,8 @@ export interface ScaleArmourOptions {
   length?: number;
   /** vertical distance between rows (m): < length = overlap */
   row?: number;
+  /** horizontal spacing of the scales in a row as a fraction of their width (< 1 = they overlap sideways; default 0.97) */
+  side?: number;
   /** polished royal bronze (Saul) or dull field bronze (Philistines) */
   polish?: 'royal' | 'field';
   seed?: number;
@@ -97,27 +99,45 @@ export interface ScaleArmourOptions {
 
 /**
  * Bronze scales on the coat `coat` (fittedTunic result used as the leather backing). Returns the skinned mesh
- * (one draw call). Cost: high ≈ 700-900 scales × 24 tris ≈ 20 k tris; low ≈ 8 tris per scale.
+ * (one draw call).
+ *
+ * models pass (CUT v2) — the coat read as cardboard / feathers (big flat scales, a dark band at the top of every
+ * scale, rows splaying off the body, dark gaps in the skirt). Now, for Saul: many small scales (≈2.5 × 4.8 cm at his
+ * height) laced in rows that overlap by half their length and sideways by a third, each lying almost flat on the
+ * backing (lower end lifted 3 mm, one edge 1 mm — consistent roof-tile layering, so no backing shows and nothing
+ * z-fights), the visible part carrying the rib, the rolled lower edge and the hammer marks (shared detail maps), a
+ * thin contact shadow under the edge of the row above instead of a dark band, and per-scale facets so the coat
+ * sparkles like beaten metal. Cost for Saul: high ≈ 2,300 scales × 24 tris ≈ 55 k tris, medium × 12, low (bigger
+ * scales) × 4.
  */
 export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions & { skirtStiff?: number }): THREE.SkinnedMesh {
   const { lm, tier, human } = fit;
   const low = tier === 'low';
+  const med = tier === 'medium';
   const S = lm.height / 1.75;
   const W = (o.width ?? 0.03) * S, L = (o.length ?? 0.058) * S, ROW = (o.row ?? 0.036) * S;
+  const SIDE = o.side ?? 0.97;
   const R = rng(o.seed ?? 17);
-  const nu = low ? 2 : 4, nv = low ? 3 : 5; // grid per scale
+  // grid per scale: columns across (nu) and the rows' v stations (the upper part is hidden under the row above, so the
+  // vertices go where the scale shows: its lower part, the rolled end)
+  const nu = low ? 1 : med ? 2 : 3;
+  const vs = low ? [0, 0.5, 1] : med ? [0, 0.5, 0.78, 1] : [0, 0.42, 0.62, 0.8, 0.93, 1];
+  const nv = vs.length - 1;
   const pos: number[] = [], nor: number[] = [], uv: number[] = [], col: number[] = [], idx: number[] = [];
   const zone: number[] = []; // 0 upper (torso / shoulder), 1 skirt
   const royal = (o.polish ?? 'royal') === 'royal';
-  // warm bronze F0 (Cu-Sn ~10%): saturated enough that the pale sky it reflects cannot turn it grey / lilac
-  const bronzeHex = royal ? 0xa8602a : 0x8c5a2e;
   const base = new THREE.Color(1, 1, 1);
-  const patina = new THREE.Color(0x56745b).multiply(new THREE.Color(bronzeHex).set(1 / new THREE.Color(bronzeHex).r, 1 / new THREE.Color(bronzeHex).g, 1 / new THREE.Color(bronzeHex).b));
-  // (metal: the vertex colour scales F0, so road dust must darken and desaturate it, never brighten it — a pale dust
-  // colour turned the whole coat silver-lilac against the bright sky)
-  const dust = new THREE.Color(0.62, 0.45, 0.28);
+  // verdigris in the crevices, relative to the bronze F0 (the vertex colour multiplies the material colour)
+  const bronzeHex = royal ? 0xb8773c : 0x8c5e33;
+  const bc = new THREE.Color(bronzeHex);
+  const patina = new THREE.Color(0x56745b).multiply(new THREE.Color(1 / bc.r, 1 / bc.g, 1 / bc.b)).multiplyScalar(0.8);
+  // (metal: the vertex colour scales F0, so road dust must darken and desaturate it, never brighten it)
+  const dust = new THREE.Color(0.55, 0.42, 0.3);
   const c = new THREE.Color();
-  const tmpT = new THREE.Vector3(), tmpD = new THREE.Vector3(), q = new THREE.Vector3();
+  const tmpT = new THREE.Vector3(), tmpD = new THREE.Vector3(), q = new THREE.Vector3(), nn = new THREE.Vector3();
+  const overlap = Math.max(0, 1 - ROW / L); // hidden fraction of each scale (under the row above)
+  const tilt = (royal ? 0.003 : 0.0035) * S; // the lower end sits on the row below
+  const edge = 0.001 * S; // sideways layering: each scale's left edge rests on its right-hand neighbour
   const place = (t: Tube, zoneId: number, dStart: number, maxLen: (th: number) => number, rowOffset: number) => {
     // column length per th (distance from the top edge of the tube to its lower edge)
     const gd = t.geometry.getAttribute('gdata') as THREE.BufferAttribute;
@@ -129,8 +149,7 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions &
       // row 0 is the lower edge (largest distance from the top edge)
       return Math.min(Math.max(gd.getY(c0), gd.getY((t.rows - 1) * Wc + c0)), Math.max(gd.getY(c0 + 1), gd.getY((t.rows - 1) * Wc + c0 + 1)), maxLen(th));
     };
-    // the skirt of the coat hangs level from the belt: rows all the way round (the per-column length left the back
-    // of the skirt bare leather — second cast pass)
+    // the skirt of the coat hangs level from the belt: rows all the way round
     let skirtLen = 0;
     if (zoneId === 1) for (let k = 0; k < 96; k++) skirtLen = Math.max(skirtLen, colLenRaw((k / 96) * TAU));
     const colLen = (th: number) => (zoneId === 1 ? Math.min(skirtLen, maxLen(th)) : colLenRaw(th));
@@ -140,8 +159,8 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions &
       let circ = 0;
       let prev: THREE.Vector3 | null = null;
       let any = false;
-      for (let k = 0; k <= 48; k++) {
-        const th = (k / 48) * TAU;
+      for (let k = 0; k <= 64; k++) {
+        const th = (k / 64) * TAU;
         if (colLen(th) < d + 0.01) {
           prev = null;
           continue;
@@ -152,10 +171,11 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions &
         prev = p;
       }
       if (!any) break;
-      const n = Math.max(8, Math.round(circ / (W * 0.97)));
+      const n = Math.max(8, Math.round(circ / (W * SIDE)));
       const stagger = ((rowI + rowOffset) % 2) * 0.5;
+      // the last rows of the skirt catch more dust; the top rows near the neck edging a little less
       for (let k = 0; k < n; k++) {
-        const th = ((k + stagger) / n) * TAU;
+        const th = ((k + stagger + (R() - 0.5) * 0.06) / n) * TAU;
         if (colLen(th) < d + L * 0.55) continue; // no scale hanging below the backing / into the armhole
         const s0 = tubeSurface(t, th, d);
         const s1 = tubeSurface(t, th + 0.01, d);
@@ -163,42 +183,42 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions &
         tmpT.copy(s1.p).sub(s0.p).normalize(); // across (around the body)
         tmpD.copy(s2.p).sub(s0.p).normalize(); // down the body
         const nrm = s0.n.clone();
-        // per-scale variation: tone, patina, dust in the rows, slight dents
-        // (hand-made scales: each sits a little differently on its lacing — tilt, roll, twist, dents, a darker
-        // replaced scale here and there; this irregularity is what keeps rows of rounded scales from reading as feathers)
-        const tone = (0.72 + 0.34 * R()) * (R() < 0.08 ? 0.62 : 1);
-        const pat = Math.pow(R(), 3) * (royal ? 0.3 : 0.6);
-        const tilt = 0.003 * S + 0.007 * S * R() ** 1.5; // lower end lifted off the row below
-        const roll = (R() - 0.5) * 0.0045 * S; // one side lifted
-        const rot = (R() - 0.5) * 0.14;
-        const dnT = (R() - 0.5) * 0.5, dnD = (R() - 0.5) * 0.3; // dent / facet: the whole scale catches light differently
+        // hand-made scales: each sits a little differently on its lacing — a small twist, a facet, a dent, a darker
+        // replaced scale here and there; the variation is what makes rows of scales sparkle like beaten metal
+        const tone = (0.82 + 0.3 * R()) * (R() < 0.06 ? 0.7 : 1);
+        const pat = Math.pow(R(), 4) * (royal ? 0.35 : 0.7);
+        const tl = tilt * (0.8 + 0.4 * R());
+        const rot = (R() - 0.5) * 0.08;
+        const dnT = (R() - 0.5) * 0.36, dnD = (R() - 0.5) * 0.28; // facet: the whole scale catches light differently
         const ca = Math.cos(rot), sa = Math.sin(rot);
         const vi0 = pos.length / 3;
         for (let j = 0; j <= nv; j++) {
-          const v = j / nv; // 0 = top (laced), 1 = rounded lower end
-          // (third pass) a long rounded-end rectangle like the Iron Age scales from Lachish / Nuzi, not a pointed leaf
-          const halfW = v < 0.72 ? 0.5 : 0.5 * (0.5 + 0.5 * Math.sqrt(Math.max(0, 1 - ((v - 0.72) / 0.28) ** 2)));
+          const v = vs[j]; // 0 = top (laced, hidden), 1 = rounded lower end
+          // a long rounded-end rectangle like the Iron Age scales from Lachish / Nuzi, not a pointed leaf
+          const halfW = v < 0.74 ? 0.5 : 0.5 * (0.42 + 0.58 * Math.sqrt(Math.max(0, 1 - ((v - 0.74) / 0.26) ** 2)));
           for (let i = 0; i <= nu; i++) {
             const u = (i / nu - 0.5) * 2; // -1..1
             const x = u * halfW * W;
             const y = v * L;
             const xr = x * ca - y * sa * 0.2, yr = y + x * sa * 0.2;
-            const rib = (0.0022 * S) * Math.max(0, 1 - Math.abs(u) * 2.2) * Math.sin(Math.PI * Math.min(1, v * 1.05));
-            const curve = 0.0012 * S * (1 - u * u); // slightly cupped across
-            const lift = tilt * v * v + rib + curve + roll * u * v;
-            q.copy(s0.p).addScaledVector(tmpT, xr).addScaledVector(tmpD, yr).addScaledVector(nrm, lift + 0.0015 + (zoneId === 1 ? 0.003 : 0));
+            // lies almost flat: the lower end lifted onto the row below, the left edge (u = -1) resting on the
+            // neighbour, a slight cup across and the repoussé rib (the rest of the relief is in the normal map)
+            const cup = 0.0006 * S * (1 - u * u);
+            const lift = tl * v + edge * (0.5 - 0.5 * u) + cup + 0.0006 * S * Math.max(0, 1 - Math.abs(u) * 2.4) * Math.sin(Math.PI * v);
+            q.copy(s0.p).addScaledVector(tmpT, xr).addScaledVector(tmpD, yr).addScaledVector(nrm, lift + 0.0016 + (zoneId === 1 ? 0.0025 : 0));
             pos.push(q.x, q.y, q.z);
-            // normal: base normal tilted by the rib / lift slope
-            const nx = -Math.sign(u) * (Math.abs(u) < 0.45 ? 0.35 : 0.05) * (1 - v);
-            const ny = -0.18 * v - 0.1;
-            const nn = nrm.clone().addScaledVector(tmpT, nx + dnT - roll / (0.02 * S)).addScaledVector(tmpD, ny + dnD).normalize();
+            // normal: the base normal tilted by the lift slope (down), the cup (across) and the scale's facet
+            const nx = -u * 0.12 + dnT - edge / W;
+            const ny = -tl / L + dnD;
+            nn.copy(nrm).addScaledVector(tmpT, nx).addScaledVector(tmpD, ny).normalize();
             nor.push(nn.x, nn.y, nn.z);
-            uv.push(0.5 + u * 0.5 * halfW * 2, v);
-            // colour: darker where the row above overlaps (top), dust caught along the overlap line, bright rib
-            const shade = (0.16 + 0.84 * Math.min(1, v * 1.45) ** 1.3) * tone * 0.8;
-            c.copy(base).lerp(patina, pat * (1 - v)).multiplyScalar(shade);
-            // road dust packed along the overlap line and in the lower rows (the skirt catches more)
-            c.lerp(dust, (royal ? 0.22 : 0.32) * Math.max(0, 1 - Math.abs(v - 0.4) * 5) + (zoneId === 1 ? 0.08 : 0.03));
+            uv.push(0.5 + u * halfW, v);
+            // colour: a thin contact shadow just below the edge of the row above (not a dark band), dust packed along
+            // that line, verdigris only deep in the crevices, a burnished lower edge
+            const below = v - overlap; // 0 at the overlap line
+            const ao = below < 0 ? 0.55 : 0.62 + 0.38 * Math.min(1, below / 0.18);
+            c.copy(base).lerp(patina, pat * (below < 0.12 ? 1 : 0.25)).multiplyScalar(tone * ao);
+            c.lerp(dust, (royal ? 0.3 : 0.4) * Math.max(0, 1 - Math.abs(below - 0.04) / 0.12) + (zoneId === 1 ? 0.06 : 0.02));
             col.push(c.r, c.g, c.b);
             zone.push(zoneId);
           }
@@ -222,28 +242,25 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions &
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   g.setIndex(idx);
-  // plain PBR bronze (no wear texture: its bright scratch layer turned the scales silver): colour = F0 of bronze,
-  // per-scale tone / overlap shading / dust from the vertex colours
-  // (third cast pass) full metal driven by a per-scale detail map (every scale has uv 0..1): hammered dimples, a
-  // raised central rib and rolled edges in the normal map, so each scale carries its own highlight and dark facet
-  // like beaten bronze — flat-shaded scales at metalness 0.85 read as painted cardboard; the roughness / metalness
-  // maps put packed road dust (rough, non-metal) along the overlap line and keep the rib and the lower edge burnished
+  // full metal driven by the per-scale detail map (every scale has uv 0..1): hammered dimples, the raised rib and
+  // the rolled edge in the normal map; roughness / metalness maps put packed road dust (rough, non-metal) along the
+  // overlap line and keep the rib and the lower edge burnished (sharp highlights)
   const maps = scaleDetailMaps();
   const mat = new THREE.MeshStandardMaterial({
-    color: royal ? 0xb88550 : 0x9a6a40, roughness: royal ? 1.0 : 1.12, metalness: 1, envMapIntensity: 0.75,
-    normalMap: maps.normal, normalScale: new THREE.Vector2(0.8, 0.8), roughnessMap: maps.orm, metalnessMap: maps.orm,
+    color: royal ? 0xc08448 : 0x9a6a40, roughness: royal ? 1.0 : 1.15, metalness: 1, envMapIntensity: 0.85,
+    normalMap: maps.normal, normalScale: new THREE.Vector2(1, 1), roughnessMap: maps.orm, metalnessMap: maps.orm,
   });
   mat.name = 'wardrobe:scaleBronze';
-  // the environment the coat reflects is mostly pale sky: through a strong normal map (grazing Fresnel) it turned
-  // many scales silver-lilac. Warm the reflected environment (dust-laden air, the sunlit plain the lower facets see)
-  // so the coat stays bronze in every shot; the direct sun highlight is untouched.
+  // the environment the coat reflects is mostly pale sky: through the facets (grazing Fresnel) it turned scales
+  // silver-lilac. Warm the reflected environment (dust-laden air, the sunlit plain the lower facets see) so the coat
+  // stays bronze in every shot; the direct sun highlight is untouched.
   mat.onBeforeCompile = (sh) => {
     sh.fragmentShader = sh.fragmentShader.replace(
       '#include <lights_fragment_end>',
-      '#include <lights_fragment_end>\nreflectedLight.indirectSpecular *= vec3(1.0, 0.66, 0.38);',
+      '#include <lights_fragment_end>\nreflectedLight.indirectSpecular *= vec3(1.0, 0.7, 0.42);',
     );
   };
-  mat.customProgramCacheKey = () => 'scaleBronze';
+  mat.customProgramCacheKey = () => 'scaleBronze2';
   mat.vertexColors = true;
   mat.side = THREE.DoubleSide;
   // weights: upper zone follows the torso, and near the shoulders blends into the upper arm (like the armhole cap)
@@ -269,6 +286,8 @@ let _scaleMaps: { normal: THREE.DataTexture; orm: THREE.DataTexture } | null = n
  * Shared 64² detail maps for one bronze scale (uv u across, v down from the lacing). CPU DataTextures: they survive
  * a context loss (three re-uploads them), cost 32 KB, and are shared by every scale coat (Saul, Philistine elites).
  * orm: g = roughness factor, b = metalness factor (three's channels).
+ * models pass: the visible lower half carries the relief (raised rib, rolled rounded end, hammer marks); the dust sits
+ * in a narrow band at the overlap line (v ≈ 0.5), the exposed metal is polished (roughness ≈ 0.28-0.42).
  */
 export function scaleDetailMaps(): { normal: THREE.DataTexture; orm: THREE.DataTexture } {
   if (_scaleMaps) return _scaleMaps;
@@ -276,24 +295,28 @@ export function scaleDetailMaps(): { normal: THREE.DataTexture; orm: THREE.DataT
   const R = rng(911);
   const h = new Float32Array(N * N);
   const dimples: [number, number, number, number][] = [];
-  for (let k = 0; k < 26; k++) dimples.push([0.1 + 0.8 * R(), 0.12 + 0.82 * R(), 0.05 + 0.06 * R(), 0.25 + 0.35 * R()]);
+  for (let k = 0; k < 30; k++) dimples.push([0.08 + 0.84 * R(), 0.35 + 0.62 * R(), 0.05 + 0.07 * R(), 0.2 + 0.3 * R()]);
+  const halfW = (v: number) => (v < 0.74 ? 0.5 : 0.5 * (0.42 + 0.58 * Math.sqrt(Math.max(0, 1 - ((v - 0.74) / 0.26) ** 2))));
   for (let y = 0; y < N; y++) {
     for (let x = 0; x < N; x++) {
       const u = (x + 0.5) / N, v = (y + 0.5) / N;
-      const ax = Math.abs(u - 0.5) * 2;
-      // raised rib down the middle (repoussé), fading at the lacing and at the tip
-      let z = 0.9 * Math.exp(-(((u - 0.5) / 0.07) ** 2)) * Math.min(1, v / 0.2) * Math.min(1, (1 - v) / 0.25);
-      // rolled / bevelled edges: the rim bends back toward the backing
-      z -= 0.8 * THREE.MathUtils.smoothstep(ax, 0.72, 1.0) + 0.6 * THREE.MathUtils.smoothstep(v, 0.82, 1.0);
+      // distance from the outline (the uv follows the rounded outline: u in [0.5 - halfW, 0.5 + halfW])
+      const hw = halfW(v);
+      const ax = Math.min(1, Math.abs(u - 0.5) / Math.max(0.05, hw));
+      // raised rib down the middle (repoussé), fading at the lacing and before the tip
+      let z = 0.8 * Math.exp(-(((u - 0.5) / (0.07 * hw * 2)) ** 2)) * THREE.MathUtils.smoothstep(v, 0.2, 0.45) * (1 - THREE.MathUtils.smoothstep(v, 0.86, 0.97));
+      // gently domed across, rolled / bevelled edges bending back toward the backing (catch a bright rim)
+      z += 0.25 * (1 - ax * ax);
+      z -= 0.9 * THREE.MathUtils.smoothstep(ax, 0.78, 1.0) + 0.7 * THREE.MathUtils.smoothstep(v, 0.9, 1.0);
       // hammer marks
       for (const [cx, cy, r, d] of dimples) {
-        const q = ((u - cx) ** 2 + (v - cy) ** 2) / (r * r);
-        if (q < 1) z -= d * (1 - q) * (1 - q);
+        const qq = ((u - cx) ** 2 + (v - cy) ** 2) / (r * r);
+        if (qq < 1) z -= d * (1 - qq) * (1 - qq);
       }
-      // two lacing holes near the top
+      // lacing holes near the top (hidden under the row above)
       for (const cx of [0.32, 0.68]) {
-        const q = ((u - cx) ** 2 + (v - 0.1) ** 2) / 0.0016;
-        if (q < 1) z -= 1.2 * (1 - q);
+        const qq = ((u - cx) ** 2 + (v - 0.1) ** 2) / 0.0016;
+        if (qq < 1) z -= 1.2 * (1 - qq);
       }
       h[y * N + x] = z;
     }
@@ -303,19 +326,20 @@ export function scaleDetailMaps(): { normal: THREE.DataTexture; orm: THREE.DataT
   for (let y = 0; y < N; y++) {
     for (let x = 0; x < N; x++) {
       const i = (y * N + x) * 4;
-      const dx = (H(x + 1, y) - H(x - 1, y)) * N * 0.018, dy = (H(x, y + 1) - H(x, y - 1)) * N * 0.018;
+      const dx = (H(x + 1, y) - H(x - 1, y)) * N * 0.02, dy = (H(x, y + 1) - H(x, y - 1)) * N * 0.02;
       const l = Math.hypot(dx, dy, 1);
       nrm[i] = Math.round((-dx / l) * 127.5 + 127.5);
       nrm[i + 1] = Math.round((-dy / l) * 127.5 + 127.5);
       nrm[i + 2] = Math.round((1 / l) * 127.5 + 127.5);
       nrm[i + 3] = 255;
       const u = (x + 0.5) / N, v = (y + 0.5) / N;
-      // dust packed where the row above overlaps (v < 0.35) and in the hammer marks; burnished rib and lower edge
-      const dustBand = 1 - THREE.MathUtils.smoothstep(v, 0.18, 0.4);
-      const pit = Math.max(0, -H(x, y)) * 0.4;
-      const rib = Math.exp(-(((u - 0.5) / 0.08) ** 2)) * THREE.MathUtils.smoothstep(v, 0.3, 0.6);
-      const rough = THREE.MathUtils.clamp(0.36 + 0.4 * dustBand + 0.18 * pit - 0.12 * rib + 0.06 * (R() - 0.5), 0.2, 0.95);
-      const metal = THREE.MathUtils.clamp(1 - 0.55 * dustBand - 0.2 * pit, 0.3, 1);
+      // dust packed along the overlap line (v ≈ 0.45-0.58) and in the hammer marks; burnished rib and lower edge
+      const dustBand = Math.exp(-(((v - 0.5) / 0.07) ** 2)) + (1 - THREE.MathUtils.smoothstep(v, 0.3, 0.45)) * 0.8;
+      const pit = Math.max(0, -H(x, y) - 0.1) * 0.35;
+      const rib = Math.exp(-(((u - 0.5) / 0.08) ** 2)) * THREE.MathUtils.smoothstep(v, 0.45, 0.65);
+      const rim = THREE.MathUtils.smoothstep(v, 0.9, 0.98);
+      const rough = THREE.MathUtils.clamp(0.3 + 0.45 * dustBand + 0.2 * pit - 0.1 * rib - 0.08 * rim + 0.08 * (R() - 0.5), 0.18, 0.95);
+      const metal = THREE.MathUtils.clamp(1 - 0.6 * dustBand - 0.25 * pit, 0.3, 1);
       orm[i] = 255;
       orm[i + 1] = Math.round(rough * 255);
       orm[i + 2] = Math.round(metal * 255);

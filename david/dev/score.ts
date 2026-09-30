@@ -2,18 +2,25 @@
 // runtime code path), driven exactly like src/gameplay/Intro.ts drives it, and downloads float WAVs. Used by the
 // headless verification (dev/screens/score/). Every time comes from the live shot sheet (INTRO_CUES).
 import { AudioEngine, type OfflineRenderOptions } from '../src/audio/AudioEngine';
-import { INTRO_CUES } from '../src/content/introScript';
+import { INTRO_CUES as LIVE_CUES, type IntroCue } from '../src/content/introScript';
+import { V2_CUES } from './scoreSheet';
 
 type Job = Omit<OfflineRenderOptions, 'script'> & { script: NonNullable<OfflineRenderOptions['script']> };
 const STEP = 0.05;
 const at = (t: number, t0: number): boolean => t >= t0 && t < t0 + STEP - 1e-9;
-const END_T = INTRO_CUES.reduce((m, c) => (c.shot && c.dur !== undefined ? Math.max(m, c.t + c.dur) : m), 0);
-const shotT = (id: string): number => (INTRO_CUES.find((c) => c.shot === id) ?? { t: NaN }).t;
+const lengthOf = (cs: readonly IntroCue[]): number => cs.reduce((m, c) => (c.shot && c.dur !== undefined ? Math.max(m, c.t + c.dur) : m), 0);
+// the live sheet (src/content/introScript.ts) once it holds CUT v2; the contract fixture (dev/scoreSheet.ts) while
+// it still holds the 164.8 s rough cut, or with ?sheet=v2
+const SHEET = new URLSearchParams(location.search).get('sheet');
+const INTRO_CUES: readonly IntroCue[] = SHEET === 'v2' || (SHEET !== 'live' && lengthOf(LIVE_CUES) > 90) ? V2_CUES : LIVE_CUES;
+const END_T = lengthOf(INTRO_CUES);
+/** Start of the first shot whose cue is one of `cues` (NaN when none). */
+const cueT = (...cues: string[]): number => (INTRO_CUES.find((c) => c.shot && cues.includes(String(c.cue))) ?? { t: NaN }).t;
 
 /**
- * The film's call pattern (Intro.ts): playIntro at 0, syncIntro(filmClock) every frame, the legacy ambience call and
- * the growl / bleat at the thicket, titleHit on the title, stopIntro(2.5) + ambience('fields') at the end, then
- * Story's music('pastoral', 4). `clock(t)` maps audio time -> film clock (stalls).
+ * The film's call pattern (Intro.ts): playIntro at 0, syncIntro(filmClock) every frame, titleHit on the title,
+ * stopIntro(2.5) + ambience('fields') at the end, then Story's music('pastoral', 4). `clock(t)` maps audio time ->
+ * film clock (stalls).
  */
 function filmCalls(clock: (t: number) => number, skipAt = Infinity) {
   let skipped = false;
@@ -27,10 +34,7 @@ function filmCalls(clock: (t: number) => number, skipAt = Infinity) {
     const f = clock(t);
     e.syncIntro(f);
     const cross = (x: number): boolean => prev < x && f >= x;
-    if (cross(shotT('thicket'))) e.setAmbience({ wind: 0.32, cicadas: 0, birds: 0 });
-    if (cross(shotT('thicket') + 1.0)) e.sfx('bearGrowl', { volume: 0.28, pitch: 0.7 });
-    if (cross(shotT('lamb') + 0.9)) e.sfx('lambBleat', { volume: 0.5 });
-    if (cross(shotT('title'))) e.sfx('titleHit');
+    if (cross(cueT('title'))) e.sfx('titleHit');
     if (cross(END_T)) { e.stopIntro(2.5); e.setAmbienceBed('fields', 2); e.setMusicMood('pastoral', 4); }
     if (t >= skipAt) {
       // Intro.end(skipped): no stopIntro while the score plays, the title hit (jumps the score to its title)
@@ -43,14 +47,14 @@ function filmCalls(clock: (t: number) => number, skipAt = Infinity) {
 }
 const straight = (t: number): number => t;
 /** a 1.4 s picture stall (loading hitch) just before the shofar cut: the film clock stands still, then runs on */
-const STALL_AT = shotT('gilgal-dust') - 1.0;
+const STALL_AT = cueT('shofar') - 1.0;
 const stalled = (t: number): number => (t < STALL_AT ? t : t < STALL_AT + 1.4 ? STALL_AT : t - 1.4);
 
 const JOBS: Record<string, Job> = {
   film: { seconds: END_T + 7, script: filmCalls(straight) },
   'film-lite': { seconds: END_T + 7, lite: true, script: filmCalls(straight) },
-  'film-stall': { seconds: 52, script: filmCalls(stalled) },
-  'film-skip': { seconds: 70, script: filmCalls(straight, 60) },
+  'film-stall': { seconds: STALL_AT + 12, script: filmCalls(stalled) },
+  'film-skip': { seconds: cueT('saul') + 9, script: filmCalls(straight, cueT('saul') + 1) },
   'bed-heights': { seconds: 14, script: (e, t) => { if (t === 0) e.setAmbienceBed('heights', 0.5); } },
   'bed-coast': { seconds: 14, script: (e, t) => { if (t === 0) e.setAmbienceBed('coast', 0.5); } },
   'bed-gilgal': { seconds: 14, script: (e, t) => { if (t === 0) e.setAmbienceBed('gilgal', 0.5); } },
@@ -83,7 +87,12 @@ async function render(name: string): Promise<Record<string, unknown>> {
   const t0 = performance.now();
   let maxVoices = 0, sumVoices = 0, nV = 0;
   const script: Job['script'] = (e, t) => { job.script(e, t); const v = e.voices; maxVoices = Math.max(maxVoices, v); sumVoices += v; nV++; };
-  const buf = await AudioEngine.renderOffline({ ...job, script, sampleRate: 48000, step: STEP });
+  let beats: unknown = null;
+  const script2: Job['script'] = (e, t) => {
+    script(e, t);
+    if (beats === null) { const sc = (e as unknown as { intro?: { beatTable?: () => unknown } }).intro; if (sc && sc.beatTable) beats = sc.beatTable(); }
+  };
+  const buf = await AudioEngine.renderOffline({ ...job, script: script2, sampleRate: 48000, step: STEP });
   const ms = performance.now() - t0;
   let peak = 0;
   for (let c = 0; c < buf.numberOfChannels; c++) {
@@ -95,7 +104,7 @@ async function render(name: string): Promise<Record<string, unknown>> {
   a.download = name + '.wav';
   document.body.appendChild(a);
   a.click();
-  return { name, seconds: buf.duration, renderMs: Math.round(ms), peak, maxVoices, meanVoices: Math.round(sumVoices / Math.max(1, nV)) };
+  return { name, seconds: buf.duration, renderMs: Math.round(ms), peak, maxVoices, meanVoices: Math.round(sumVoices / Math.max(1, nV)), sheet: INTRO_CUES === V2_CUES ? 'v2-fixture' : 'live', beats };
 }
 
 (window as unknown as Record<string, unknown>).renderJob = render;
@@ -103,8 +112,8 @@ const shotMarks = (): Array<[number, string]> => INTRO_CUES.filter((c) => c.shot
 (window as unknown as Record<string, unknown>).marks = {
   film: [...shotMarks(), [END_T, 'END']],
   'film-lite': [...shotMarks(), [END_T, 'END']],
-  'film-stall': [...shotMarks().filter((m) => m[0] < 52), [STALL_AT, 'STALL']],
-  'film-skip': [...shotMarks().filter((m) => m[0] < 60), [60, 'SKIP']],
+  'film-stall': [...shotMarks().filter((m) => m[0] < STALL_AT + 12), [STALL_AT, 'STALL']],
+  'film-skip': [...shotMarks().filter((m) => m[0] < cueT('saul') + 9), [cueT('saul') + 1, 'SKIP']],
 };
 (window as unknown as Record<string, unknown>).shots = INTRO_CUES.filter((c) => c.shot).map((c) => ({ t: c.t, id: c.shot, n: c.n, cue: c.cue, dur: c.dur, cut: c.cut }));
 (window as unknown as Record<string, unknown>).jobNames = Object.keys(JOBS);
@@ -122,7 +131,7 @@ for (const k of Object.keys(JOBS)) {
 (window as unknown as Record<string, unknown>).realtime = async (): Promise<Record<string, unknown>> => {
   const e = new AudioEngine();
   await e.init();
-  const start = shotT('gilgal-spear') - 3;
+  const start = cueT('peak') - 3;
   let film = start;
   let last = performance.now();
   const log: Array<[number, number]> = [];
