@@ -48,6 +48,7 @@ export interface CrowdUniforms {
   uImpDbg: { value: number };
   /** drawing-buffer height in px (keeps far spear shafts >= ~0.5 px wide) */
   uViewH: { value: number };
+  uDagC: { value: THREE.Vector4 };
   uTunic: { value: THREE.Color[] };
   uCloth: { value: THREE.Color[] };
   uHair: { value: THREE.Color[] };
@@ -77,6 +78,7 @@ export function crowdUniforms(army: 'israel' | 'philistine'): CrowdUniforms {
     uJB: { value: Array.from({ length: 11 }, () => new THREE.Vector3()) },
     uImpDbg: { value: 0 },
     uViewH: { value: 720 },
+    uDagC: { value: new THREE.Vector4() },
     // tunics: light undyed wool x3, beige, grey, dark wool x2, madder-faded
     uTunic: {
       value: isr
@@ -135,6 +137,7 @@ uniform vec3 uLegJ[4]; // bind heads: upperleg01.L, lowerleg01.L, upperleg01.R, 
 uniform vec3 uArmJ[3]; // bind heads: upperarm01.R, lowerarm01.R, wrist.R
 uniform vec2 uSpearExt; // shaft length below / above the grip (m)
 uniform float uViewH;
+uniform vec4 uDagC; // bind-space x, z centres of the dagger and the sword
 attribute vec4 cJoints;
 attribute vec4 cWeights;
 attribute float cRegion;
@@ -204,7 +207,12 @@ void crowdCompute() {
     mat4 m = cwBone(cJoints.x) * cWeights.x + cwBone(cJoints.y) * cWeights.y;
     if (cWeights.z > 0.0) m += cwBone(cJoints.z) * cWeights.z;
     if (cWeights.w > 0.0) m += cwBone(cJoints.w) * cWeights.w;
-    p = (m * vec4(position, 1.0)).xyz;
+    // daggers / swords hang sheathed and slim: squeeze the cross-guard toward the blade so a hilt at the belt never
+    // reads as a dark cross on a light tunic (visual bible 5: no crosses)
+    vec3 bp = position;
+    if (reg == R_DAGGER) bp.xz = uDagC.xy + (bp.xz - uDagC.xy) * 0.35;
+    else if (reg == R_SWORD) bp.xz = uDagC.zw + (bp.xz - uDagC.zw) * 0.5;
+    p = (m * vec4(bp, 1.0)).xyz;
     n = mat3(m) * normal;
     // the tunic skirt never lets a thigh through at full stride: push hem vertices out of the posed thigh capsules
     if (reg == R_TUNIC && position.y < uBeltY - 0.02) {
@@ -260,7 +268,8 @@ void crowdCompute() {
   else if (reg == R_HEADCLOTH || reg == R_BEDROLL) { col = uCloth[int(h.z * 3.999)] * (reg == R_BEDROLL ? 0.85 : 1.0); rough = 0.95; }
   else if (reg == R_SPEARSHAFT) { col = cc * (0.85 + 0.3 * h2.x); rough = 0.7; }
   // iron #4b4a48 (Philistine spear heads, 17:7) / field bronze #8c5e33 (visual bible 2)
-  else if (reg == R_SPEARHEAD || reg == R_DAGGER || reg == R_SWORD) { col = uArmy > 0.5 ? vec3(0.07, 0.066, 0.062) * 1.6 : mix(vec3(0.07, 0.066, 0.062) * 1.6, vec3(0.26, 0.11, 0.034) * 1.4, step(0.6, h2.y)); metal = 0.85; rough = 0.5; }
+  else if (reg == R_DAGGER || reg == R_SWORD) { col = vec3(0.16, 0.095, 0.055) * (0.85 + 0.3 * h2.x); rough = 0.55; } // in a leather sheath
+  else if (reg == R_SPEARHEAD) { col = uArmy > 0.5 ? vec3(0.07, 0.066, 0.062) * 1.6 : mix(vec3(0.07, 0.066, 0.062) * 1.6, vec3(0.26, 0.11, 0.034) * 1.4, step(0.6, h2.y)); metal = 0.85; rough = 0.5; }
   else if (reg == R_SHIELDARM || reg == R_SHIELDBACK) { col = cc * (0.8 + 0.35 * h2.z); rough = 0.4; } // oiled leather (Rashi 2 Sam 1:21)
   else if (reg == R_BOSS || reg == R_BOSSBACK) { col = uArmy > 0.5 ? vec3(0.3, 0.13, 0.04) * (0.9 + 0.3 * h2.x) : cc; metal = uArmy > 0.5 ? 0.9 : 0.0; rough = 0.5; }
   // bronze helmets (17:5) between polished #b8773c and field #8c5e33; greaves (17:6) field bronze

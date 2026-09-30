@@ -67,6 +67,8 @@ Low level: `CrowdAnim.bake(specs)` then `Crowd.create({ army, anim, capacity, ti
   head-cloths (40 %) or headbands (25 %); kit per 100 men 45 spears, 20 slingers, 15 archers, 10 swords/daggers,
   10 goads; ~35 % round oiled-leather shields (Rashi 2 Sam 1:21), on the arm or slung on the back; 5 % leather
   corselet; no bronze helmets or scale armour (Saul's alone). The king's first two ranks: spear + shield.
+* No crosses (§5): daggers and swords hang sheathed in brown leather with their guards slimmed in the shader, so a hilt
+  at the belt never reads as a dark cross on a light tunic. No banners, standards, drums, horses, camels or chariots.
 * Spoils (§3.5): fat-tailed sheep (Awassi: cream wool, dark head and legs, the fat tail), black goats, small humpless
   cattle, north of the road beside / behind the column, walking with it and grazing at the halt; no camels, no Agag.
 * Philistines (§3.9): clean-shaven, reed / feather crown on a band (rank and file), ribbed corselet over a kilt

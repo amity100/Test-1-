@@ -354,3 +354,10 @@ layers of FilmActor and the Ramah harness (dev/cast-ramah.html) — all own code
   (`src/palace/palaceFx.ts`) and the land teammate's raymarched cloud deck (`src/film/land/landClouds.ts`) for the
   rise. Everything else (terrain shading, date palms, stones, altar, tents, acacias, dust wall, motes, cloud veil,
   placeholder figures, shots) is own code. No third-party assets.
+
+## David v2 (opening-film phase, `src/characters/DavidModel.ts`)
+
+No new third-party assets. David's gameplay motion uses the CMU Graphics Lab Motion Capture Database clips already
+listed under "Motion capture" (`idle_shift`, `idle_soldier`, `walk`, `jog`, `run`, `turn_left`, `pickup_box`,
+`throw_ball`, `kneel`, `kneel_hold`); his body is the MakeHuman 1.1 (CC0) preset `david` rebuilt with new modifier
+values and re-baked by our own tools (`tools/human`).

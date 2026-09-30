@@ -92,15 +92,18 @@ export class FilmActor {
    * the feet go forward (knees ~90°). 0 = standing.
    */
   sit(seatTop: number) {
+    this.seatTop = Math.max(0, seatTop);
     if (seatTop <= 0) {
       this.body.drop = 0;
       this.body.feetFwd = 0;
       return;
     }
-    const hip = this.human.rig.restWorldPosition('upperleg01.L').y + (this.human.root.position.y || 0);
-    this.body.drop = Math.max(0, hip - seatTop - 0.085);
+    const hip = this.human.rig.restWorldPosition('upperleg01.L').y;
     this.body.feetFwd = 0.36 * (hip / 0.86);
   }
+  /** seat top above the ground under the actor (m); > 0 = seated: the pelvis drop is measured each frame */
+  private seatTop = 0;
+
   /**
    * Head / neck aim. The performances keep setting `mocap.lookAt` / `mocap.lookWeight` as before, but FilmActor
    * does the aiming itself, in world space after the rig: MocapPlayer's own look-at turns these heads AWAY from
@@ -431,6 +434,12 @@ export class FilmActor {
 
   /** the procedural body layer (see `body`): runs after the mocap / rig, before the arm IK */
   private applyBody() {
+    if (this.seatTop > 0) {
+      // seated: the hip joints come to rest ~8.5 cm above the seat whatever the clip does with the pelvis
+      const bb = this.human.bones as Record<string, THREE.Object3D>;
+      const hy = (bb['upperleg01.L'].getWorldPosition(_v).y + bb['upperleg01.R'].getWorldPosition(_v2).y) / 2;
+      this.body.drop = Math.max(0, hy - (this.root.position.y + this.seatTop + 0.085));
+    }
     const { drop, lean, twist, side, feetFwd } = this.body;
     if (Math.abs(drop) < 1e-4 && Math.abs(lean) < 1e-4 && Math.abs(twist) < 1e-4 && Math.abs(side) < 1e-4 && Math.abs(feetFwd) < 1e-4) return;
     const b = this.human.bones as Record<string, THREE.Object3D>;

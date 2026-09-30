@@ -1,7 +1,7 @@
 /*
  * Skeletal impostors for the far field of the film crowds (src/film/crowd/Crowd.ts, LOD 3).
  *
- * Every far soldier is ONE camera-facing quad (cylindrical billboard, 4 vertices). Its vertex shader samples the same
+ * Every far soldier is ONE camera-facing quad (4 vertices; the joints are projected on the view plane). Its vertex shader samples the same
  * mocap skinning texture as the mesh LODs (CrowdAnim) for 11 joints of that soldier's own clip, time and cross-fade,
  * projects them onto the billboard plane and fits the quad around them; the fragment shader draws the figure as
  * capsules between those joints (legs, tunic skirt, torso, arms, head with hair / beard / head-cloth / reed crown /
@@ -47,6 +47,7 @@ uniform vec2 uSpearExt;
 flat varying vec4 vJ[6];
 flat varying vec4 vImpA; // seed, mask, forward . right (2D x of the facing), facing (forward . to-camera)
 flat varying vec4 vImpB; // height scale, girth, right.x, right.z
+flat varying vec4 vImpC; // to-camera (3D), cos of the view elevation (vertical foreshortening)
 varying vec2 vQ;
 vec3 cwPos;
 vec3 cwNrm;
@@ -62,6 +63,9 @@ void impCompute() {
   float tl = length(tc);
   vec3 toCam = tl > 1e-4 ? tc / tl : vec3(0.0, 0.0, 1.0);
   vec3 right = vec3(toCam.z, 0.0, -toCam.x);
+  // the card faces the camera also in elevation (seen from above, the skeleton projects foreshortened, not as a sliver)
+  vec3 toC3 = normalize(cameraPosition - (base + vec3(0.0, iVar.x, 0.0)));
+  vec3 upV = normalize(cross(toC3, right));
   float cy = cos(iPose.w), sy = sin(iPose.w);
   vec2 P[12];
   float bn[11];
@@ -69,7 +73,7 @@ void impCompute() {
   vec2 mn = vec2(1e5), mx = vec2(-1e5);
   for (int i = 0; i < 11; i++) {
     vec3 w = impW((cwBone(bn[i]) * vec4(uJB[i], 1.0)).xyz, cy, sy);
-    P[i] = vec2(dot(w, right), w.y);
+    P[i] = vec2(dot(w, right), dot(w, upV));
     mn = min(mn, P[i]);
     mx = max(mx, P[i]);
   }
@@ -78,10 +82,10 @@ void impCompute() {
   mat4 g = cwBone(23.0) * uGripBind;
   vec3 dir = normalize(mix(normalize(g[1].xyz), normalize(vec3(0.0, 1.0, iVar.w)), uSpearUp));
   vec3 tip = impW(g[3].xyz + dir * uSpearExt.y, cy, sy);
-  P[11] = vec2(dot(tip, right), tip.y);
+  P[11] = vec2(dot(tip, right), dot(tip, upV));
   if ((mask & B_SPEAR) != 0) {
     vec3 butt = impW(g[3].xyz - dir * uSpearExt.x, cy, sy);
-    vec2 pb = vec2(dot(butt, right), butt.y);
+    vec2 pb = vec2(dot(butt, right), dot(butt, upV));
     mn = min(mn, min(P[11], pb));
     mx = max(mx, max(P[11], pb));
   }
@@ -91,8 +95,8 @@ void impCompute() {
   mn.y = min(mn.y, -0.03);
   vec2 q = mix(mn, mx, position.xy);
   vQ = q;
-  cwPos = base + right * q.x + vec3(0.0, q.y, 0.0);
-  cwNrm = toCam;
+  cwPos = base + right * q.x + upV * q.y;
+  cwNrm = toC3;
   vJ[0] = vec4(P[0], P[1]);
   vJ[1] = vec4(P[2], P[3]);
   vJ[2] = vec4(P[4], P[5]);
@@ -101,6 +105,7 @@ void impCompute() {
   vJ[5] = vec4(P[10], P[11]);
   vImpA = vec4(iVar.z, iMask, dot(vec3(sy, 0.0, cy), right), dot(vec3(sy, 0.0, cy), toCam));
   vImpB = vec4(s, iVar.y, right.x, right.z);
+  vImpC = vec4(toC3, upV.y);
 }
 `;
 
@@ -116,6 +121,7 @@ uniform float uImpDbg;
 flat varying vec4 vJ[6];
 flat varying vec4 vImpA;
 flat varying vec4 vImpB;
+flat varying vec4 vImpC;
 varying vec2 vQ;
 vec3 impNrm;
 float impGrow;
@@ -153,7 +159,8 @@ const FRAG_BODY = /* glsl */ `
   float lat = facing * s * gi;
   vec2 H = vJ[0].xy, N = vJ[0].zw, PV = vJ[1].xy, ElL = vJ[1].zw, WrL = vJ[2].xy, ElR = vJ[2].zw, WrR = vJ[3].xy;
   vec2 KnL = vJ[3].zw, AnL = vJ[4].xy, KnR = vJ[4].zw, AnR = vJ[5].xy, Tip = vJ[5].zw;
-  vec2 up = vec2(0.0, 1.0);
+  float ey = max(0.2, vImpC.w);
+  vec2 up = vec2(0.0, ey);
   vec2 head = H + up * 0.085 * s;
   vec2 shL = N + vec2(lat * 0.17, -0.07 * s), shR = N - vec2(lat * 0.17, 0.07 * s);
   vec2 hipL = PV + vec2(lat * 0.09, -0.02 * s), hipR = PV - vec2(lat * 0.09, 0.02 * s);
@@ -190,7 +197,7 @@ const FRAG_BODY = /* glsl */ `
   if (!hit) {
     float hr = 0.105 * s;
     vec2 dh = p - head;
-    if ((mask & B_CROWN) != 0 && dh.y > 0.02 * s && dh.y < 0.26 * s && abs(dh.x) < 0.1 * s + impGrow) {
+    if ((mask & B_CROWN) != 0 && dh.y > 0.02 * s * ey && dh.y < 0.26 * s * ey && abs(dh.x) < 0.1 * s + impGrow) {
       // Peleset reed / feather crown on a band (Medinet Habu): vertical strips
       hit = true; col = vec3(0.62, 0.55, 0.42) * (0.65 + 0.4 * step(0.4, fract(dh.x / (0.028 * s)))); impNrm = vec3(dh.x / (0.12 * s), 0.0, 0.8);
       if (dh.y < 0.055 * s) col = vec3(0.3, 0.22, 0.14);
@@ -218,8 +225,8 @@ const FRAG_BODY = /* glsl */ `
   // torso (tunic; a leather belt at the waist)
   if (!hit && (impSeg(p, N - up * 0.08 * s, PV + up * 0.12 * s, 0.155 * s * gi) || impSeg(p, shL, shR, 0.075 * s))) {
     hit = true; col = tunic; rough = 0.95;
-    if (abs(p.y - (PV.y + 0.1 * s)) < 0.028 * s) col = vec3(0.2, 0.12, 0.07);
-    if (uArmy > 0.5 && p.y > PV.y + 0.14 * s) col *= mix(vec3(0.45, 0.36, 0.28), vec3(1.05), step(0.45, fract(p.y / (0.038 * s))));
+    if (abs(p.y - (PV.y + 0.1 * s * ey)) < 0.028 * s * ey) col = vec3(0.2, 0.12, 0.07);
+    if (uArmy > 0.5 && p.y > PV.y + 0.14 * s * ey) col *= mix(vec3(0.45, 0.36, 0.28), vec3(1.05), step(0.45, fract(p.y / (0.038 * s * ey))));
   }
   // the skirt of the tunic / kilt down to the knees, swinging with the stride
   vec2 kn = (KnL + KnR) * 0.5;
@@ -249,7 +256,7 @@ const FRAG_BODY = /* glsl */ `
   }
   if (!hit) discard;
   // march dust over everything low
-  if (metal < 0.5) col = mix(col, uDustColor * 0.9, clamp((0.5 * s - p.y) / (0.5 * s), 0.0, 1.0) * 0.4 * uDust);
+  if (metal < 0.5) col = mix(col, uDustColor * 0.9, clamp((0.5 * s * ey - p.y) / (0.5 * s * ey), 0.0, 1.0) * 0.4 * uDust);
   diffuseColor.rgb *= col;
   // no grazing normals on a flat card: a metal edge turned to a low sun behind the host would flare into the bloom
   impNrm = normalize(vec3(impNrm.xy, max(impNrm.z, 0.45)));
@@ -278,8 +285,9 @@ export function impostorMaterial(u: CrowdUniforms): THREE.MeshStandardMaterial {
         /* glsl */ `#include <normal_fragment_begin>
         {
           vec3 rgt = vec3(vImpB.z, 0.0, vImpB.w);
-          vec3 toC = vec3(-vImpB.w, 0.0, vImpB.z);
-          vec3 nw = normalize(rgt * impNrm.x + vec3(0.0, impNrm.y, 0.0) + toC * impNrm.z);
+          vec3 toC = vImpC.xyz;
+          vec3 upC = normalize(cross(toC, rgt));
+          vec3 nw = normalize(rgt * impNrm.x + upC * impNrm.y + toC * impNrm.z);
           normal = normalize((viewMatrix * vec4(nw, 0.0)).xyz);
         }`,
       );

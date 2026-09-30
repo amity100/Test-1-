@@ -113,7 +113,15 @@ async function boot() {
     samuel: anchors.samuel.pos.toArray().map((x) => +x.toFixed(2)), gate: anchors.gate.toArray().map((x) => +x.toFixed(2)),
     elders: anchors.elders.slice(0, n).map((m) => [...m.pos.toArray().map((x) => +x.toFixed(2)), +m.yaw.toFixed(2), m.seated ? 1 : 0]),
   });
-  w.__ramah = { shot, view, face, info, stats: () => renderer.info.render };
+  /** numbers: seated elder i — seat top, pelvis, hip joints, feet (world) after `t` s */
+  const seat = (i: number, t = 2) => {
+    sim(t);
+    const e = elders[i];
+    const b = e.human.bones as Record<string, THREE.Object3D>;
+    const f = (o: THREE.Object3D) => o.getWorldPosition(new THREE.Vector3()).toArray().map((x) => +x.toFixed(2));
+    return { mark: anchors.elders[i].pos.toArray().map((x) => +x.toFixed(2)), yaw: anchors.elders[i].yaw, ground: +H(anchors.elders[i].pos.x, anchors.elders[i].pos.z).toFixed(2), root: e.root.position.toArray().map((x) => +x.toFixed(2)), body: { ...e.body }, pelvis: f(b.root), hipL: f(b['upperleg01.L']), kneeL: f(b['lowerleg01.L']), footL: f(b['foot.L']), head: f(b.head) };
+  };
+  w.__ramah = { shot, view, face, info, seat, stats: () => renderer.info.render };
   w.__ready = true;
 }
 boot().catch((e) => {

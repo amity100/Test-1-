@@ -534,6 +534,9 @@ export interface RamahMark {
 export class RamahPerformance {
   private faces: FaceDriver[] = [];
   private samFace: FaceDriver;
+  /** Samuel's eyes (world), refreshed every frame: the elders' eye-line */
+  private readonly samEyes = new THREE.Vector3();
+  private readonly leadEyes = new THREE.Vector3();
   readonly wind = new THREE.Vector3(0.8, 0, -0.2);
   constructor(readonly samuel: FilmActor, readonly elders: FilmActor[], samuelMark: RamahMark, elderMarks: RamahMark[], ground: (x: number, z: number) => number = () => 0) {
     samuel.ground = ground;
@@ -542,6 +545,8 @@ export class RamahPerformance {
     samuel.faceLightRig.up = 0.35;
     samuel.faceFill = 1.0;
     samuel.place(samuelMark.pos, samuelMark.yaw);
+    samuel.root.updateMatrixWorld(true);
+    samuel.eyesWorld(this.samEyes);
     samuel.mocap.play('idle_king', { fade: 0 });
     samuel.human.rig.faceBias.LeftUpperLidClosed = 0.18;
     samuel.human.rig.faceBias.RightUpperLidClosed = 0.18;
@@ -552,12 +557,13 @@ export class RamahPerformance {
       e.place(mk.pos, mk.yaw);
       // seated marks carry the seat top as pos.y: sit on it (the pelvis drops, the feet go forward)
       if (mk.seated) e.sit(mk.pos.y - ground(mk.pos.x, mk.pos.z));
-      const clip = mk.seated ? (i % 3 === 0 ? 'talk_gesture' : 'idle_old') : clips[i % clips.length];
+      // seated: upright clips (the stooped idle_old folds a seated man in two)
+      const clip = mk.seated ? (i % 3 === 0 ? 'talk_gesture' : i % 3 === 1 ? 'idle_king' : 'idle_bus') : clips[i % clips.length];
       e.mocap.play(clip, { fade: 0, time: (i * 0.73) % 2, mirror: i % 2 === 1 });
       if (e.props.staff) {
         e.holdProp('staff', i % 2 ? 'R' : 'L');
       }
-      e.mocap.lookAt = samuel.eyesWorld(new THREE.Vector3());
+      e.mocap.lookAt = this.samEyes;
       e.headingSnap = true;
       const f = new FaceDriver(e, 2);
       f.set(i % 3 === 0 ? { determined: 0.4 } : i % 3 === 1 ? { sad: 0.25, fear: 0.1 } : { anger: 0.2, determined: 0.2 });
@@ -569,6 +575,7 @@ export class RamahPerformance {
   }
 
   update(t: number, dt: number, camera?: THREE.Camera, viewportH?: number) {
+    this.samuel.eyesWorld(this.samEyes);
     // 8:5 is spoken by the elders: the first two speakers' jaws move
     this.elders.forEach((e, i) => {
       const f = this.faces[i];
@@ -578,7 +585,7 @@ export class RamahPerformance {
     });
     this.samFace.update(dt);
     const lead = this.elders[0];
-    if (lead) this.samuel.mocap.lookAt = lead.eyesWorld(new THREE.Vector3());
+    if (lead) this.samuel.mocap.lookAt = lead.eyesWorld(this.leadEyes);
     this.samuel.update(dt, camera, viewportH, this.wind);
   }
 }

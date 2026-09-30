@@ -88,7 +88,18 @@ async function loadMesh(army: CrowdArmy) {
     if (reg[i] === REGION.skin) { skin[0] += col[i * 3]; skin[1] += col[i * 3 + 1]; skin[2] += col[i * 3 + 2]; ns++; }
   }
   const skinColor = new THREE.Color().setRGB(skin[0] / ns / 255, skin[1] / ns / 255, skin[2] / ns / 255, THREE.SRGBColorSpace);
-  return { header, geos, hem, beltY: nb ? beltY / nb : 1.0, spear: [-sMin || 0.9, sMax || 1.5] as [number, number], skinColor };
+  // bind-space centre lines of the dagger and the sword (the shader slims their guards)
+  const dag = new THREE.Vector4();
+  const cnt = [0, 0];
+  for (let i = 0; i < reg.length; i++) {
+    const k = reg[i] === REGION.dagger ? 0 : reg[i] === REGION.sword ? 1 : -1;
+    if (k < 0) continue;
+    if (k === 0) { dag.x += pos[i * 3]; dag.y += pos[i * 3 + 2]; } else { dag.z += pos[i * 3]; dag.w += pos[i * 3 + 2]; }
+    cnt[k]++;
+  }
+  if (cnt[0]) { dag.x /= cnt[0]; dag.y /= cnt[0]; }
+  if (cnt[1]) { dag.z /= cnt[1]; dag.w /= cnt[1]; }
+  return { header, geos, hem, beltY: nb ? beltY / nb : 1.0, spear: [-sMin || 0.9, sMax || 1.5] as [number, number], skinColor, dag };
 }
 
 // ---------------------------------------------------------------------------------------------------- agents
@@ -252,6 +263,7 @@ export class Crowd {
     u.uBeltY.value = m.beltY;
     u.uSpearExt.value.set(m.spear[0], m.spear[1]);
     u.uSkin.value.copy(m.skinColor);
+    u.uDagC.value.copy(m.dag);
     const hd = m.header.heads;
     const jv = (b: string, v: THREE.Vector3) => { const a = hd[b]; if (a) v.set(a[0], a[1], a[2]); };
     ['upperleg01.L', 'lowerleg01.L', 'upperleg01.R', 'lowerleg01.R'].forEach((b, i) => jv(b, u.uLegJ.value[i]));
