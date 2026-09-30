@@ -229,7 +229,7 @@ export class UI {
    *  - 'verse'  a quotation: `main` = quoteText(id), `sub` = sourceRef(id) (bottom centre)
    * Fades in over ~1.4 s, holds, fades out over ~1.2 s, then removes itself. Returns the element.
    */
-  filmText(kind: 'time' | 'line' | 'place' | 'person' | 'verse', main: string, sub = '', seconds = 5): HTMLDivElement {
+  filmText(kind: 'time' | 'line' | 'place' | 'person' | 'verse', main: string, sub = '', seconds = 5, elapsed = 0, autoRemove = true): HTMLDivElement {
     const e = el('div', `ft ft-${kind}`);
     const inner =
       kind === 'verse'
@@ -244,8 +244,16 @@ export class UI {
     e.style.setProperty('--dur', `${dur}s`);
     e.style.setProperty('--out', `${Math.max(0.2, dur - 1.2)}s`);
     this.filmLayer.appendChild(e);
-    window.setTimeout(() => e.remove(), dur * 1000 + 300);
+    if (elapsed > 0) {
+      // re-shown part-way through its life (the film was sought): jump every animation of it to `elapsed`
+      for (const a of e.getAnimations({ subtree: true })) a.currentTime = elapsed * 1000;
+    }
+    if (autoRemove) window.setTimeout(() => e.remove(), Math.max(0.1, dur - elapsed) * 1000 + 300);
     return e;
+  }
+  /** the title card element (the film pins its animations to the film clock in tests) */
+  get titleElement(): HTMLElement {
+    return this.titleEl;
   }
   /** Fade out every film text now (skip / seek / end of the film). */
   clearFilmText(seconds = 0.6) {

@@ -555,6 +555,10 @@ export class Core {
   readonly slowFilter: BiquadFilterNode;
   readonly slowVerb: GainNode;
   readonly hallIn: GainNode;
+  /** Return of the shared hall reverb (the film score ducks it to cut a reverb tail at once). */
+  readonly hallRet: GainNode;
+  /** Resting level of `hallRet`. */
+  readonly hallLevel = 1.25;
   readonly echoIn: GainNode;
   readonly master: GainNode;
   readonly mute: GainNode;
@@ -627,7 +631,8 @@ export class Core {
     const conv = ctx.createConvolver();
     this.conv = conv; // impulse is baked on the first warm() tick to keep init() short
     const hlp = bq('lowpass', 7000);
-    const hret = g(1.25);
+    const hret = g(this.hallLevel);
+    this.hallRet = hret;
     this.hallIn.connect(hhp); hhp.connect(conv); conv.connect(hlp); hlp.connect(hret); hret.connect(sum);
     this.slowVerb = g(0);
     this.worldIn.connect(this.slowVerb); this.slowVerb.connect(this.hallIn);
@@ -841,6 +846,8 @@ export function connectOut(n: AudioNode, o: Out): void {
 export interface PadOpts {
   level: number; attack: number; release: number; cutoff: number; cutoffEnd?: number; q?: number;
   detune?: number; voices?: number; type?: OscillatorType; lfoCents?: number; trem?: number; tremRate?: number;
+  /** bowed-string pitch vibrato depth (cents), its rate (Hz) and the delay before it blooms (s) */
+  vib?: number; vibRate?: number; vibDelay?: number;
 }
 export interface ChoirOpts { level: number; attack: number; release: number; vowel: Vowel; to?: Vowel; morph?: number; breath?: number; }
 export type ShofarCall = 'tekiah' | 'gedolah' | 'shevarim' | 'teruah';
@@ -878,11 +885,22 @@ export class Synth {
     const v = new Voice(this.c);
     const n = o.voices ?? 3, det = o.detune ?? 9;
     const L = v.gain(), R = v.gain();
+    let vibG: GainNode | null = null;
+    if (o.vib && o.vib > 0) {
+      const vl = v.osc('sine', (o.vibRate ?? 5.3) * rand(0.94, 1.06), 0, t);
+      vibG = v.gain(0);
+      const vd = Math.min(Math.max(0.05, o.vibDelay ?? 0.35), Math.max(0.06, dur * 0.6));
+      vibG.gain.setValueAtTime(0, t);
+      vibG.gain.linearRampToValueAtTime(0, t + vd);
+      vibG.gain.linearRampToValueAtTime(o.vib, t + vd + 0.5);
+      vl.connect(vibG);
+    }
     let k = 0;
     for (const m of midis) {
       for (let i = 0; i < n; i++) {
         const d = n === 1 ? 0 : (i / (n - 1) - 0.5) * 2 * det + rand(-2, 2);
         const osc = v.osc(o.type ?? 'sawtooth', mtof(m), d, t + rand(0, 0.03));
+        if (vibG) vibG.connect(osc.detune);
         osc.connect(k++ % 2 === 0 ? L : R);
       }
     }

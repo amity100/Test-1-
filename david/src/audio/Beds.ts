@@ -9,7 +9,11 @@
  *                    no horses anywhere, see docs/sources.md);
  *   gibeah-hall      the room tone of a stone house, the wind outside through thick walls, oil
  *                    lamps fluttering and sputtering, fabric, bare feet / sandals on packed earth,
- *                    low murmurs.
+ *                    low murmurs;
+ *   the opening film's beds (IntroScore.ts): dawn (the fields at first light — larks, no cicadas),
+ *                    heights (air above the clouds: broad gusts, a thin whistle), coast (the sea beyond
+ *                    the plain, grit on the wind), gilgal (hot dusty gusts of the Jordan valley — the
+ *                    army itself is the score's sound design), hush (the pasture holding its breath).
  *
  * Continuous layers are built only while their bed is audible (sources stop and disconnect a few
  * seconds after the bed fades out); sporadic events are short-lived Voices, a handful per second
@@ -17,15 +21,24 @@
  */
 import { Core, Voice, SmoothNoise, bake, BQ, addGrains, white, clamp, rand, randi, chance, pick, lerp } from './synth';
 
-export type BedName = 'fields' | 'gibeah-exterior' | 'gibeah-hall' | 'none';
+export type BedName = 'fields' | 'dawn' | 'gibeah-exterior' | 'gibeah-hall' | 'heights' | 'coast' | 'gilgal' | 'hush' | 'none';
 type Bed = Exclude<BedName, 'none'>;
-const BEDS: readonly Bed[] = ['fields', 'gibeah-exterior', 'gibeah-hall'];
+const BEDS: readonly Bed[] = ['fields', 'dawn', 'gibeah-exterior', 'gibeah-hall', 'heights', 'coast', 'gilgal', 'hush'];
+/** Every valid bed name (for input validation). */
+export const BED_NAMES: ReadonlySet<string> = new Set<string>([...BEDS, 'none']);
 
 /** Legacy ambience levels (wind, cicadas, birds) that go with each bed. */
 export const BED_LEGACY: Record<BedName, { wind: number; cicadas: number; birds: number }> = {
   fields: { wind: 0.5, cicadas: 0.6, birds: 0.5 },
   'gibeah-exterior': { wind: 0.62, cicadas: 0.15, birds: 0.18 },
   'gibeah-hall': { wind: 0, cicadas: 0, birds: 0 },
+  // the opening film's beds (src/audio/IntroScore.ts): above the clouds / the coastal plain / the Jordan valley at
+  // Gilgal / the thicket when the birds fall silent
+  dawn: { wind: 0.4, cicadas: 0, birds: 0.55 }, // the fields at first light (Rachel's pillar): larks, no cicadas yet
+  heights: { wind: 0.72, cicadas: 0, birds: 0 },
+  coast: { wind: 0.5, cicadas: 0.12, birds: 0.04 },
+  gilgal: { wind: 0.55, cicadas: 0.1, birds: 0 },
+  hush: { wind: 0.3, cicadas: 0, birds: 0 },
   none: { wind: 0, cicadas: 0, birds: 0 },
 };
 
@@ -107,7 +120,7 @@ export class Beds {
     const t = now + 0.03;
     try {
       switch (bed) {
-        case 'fields':
+        case 'fields': case 'dawn':
           if (due('lark', 7, 17) && chance(this.density)) this.lark(t, s.far);
           if (due('flock', 5, 12) && chance(0.3 + 0.7 * this.density)) this.farFlock(s.far);
           if (!this.lite && due('leaf', 2.5, 6)) this.leafGust(t, s.gain);
@@ -152,7 +165,8 @@ export class Beds {
     // first events soon after the bed starts (so a short shot still "reads")
     if (b === 'gibeah-exterior') s.next = { voice: at + rand(0.3, 1), clink: at + rand(0.8, 2), dog: at + rand(2.5, 5), donkey: at + rand(6, 14) };
     else if (b === 'gibeah-hall') s.next = { murmur: at + rand(0.8, 2), sputter: at + rand(0.5, 2), fabric: at + rand(1.5, 3), steps: at + rand(1.2, 3) };
-    else s.next = { lark: at + rand(0.5, 2.5), flock: at + rand(1.5, 4), leaf: at + rand(1, 3) };
+    else if (b === 'fields' || b === 'dawn') s.next = { lark: at + rand(0.5, 2.5), flock: at + rand(1.5, 4), leaf: at + rand(1, 3) };
+    else s.next = {};
   }
 
   private build(b: Bed, at: number): Layer {
@@ -170,7 +184,7 @@ export class Beds {
     const out = this.st[b].gain;
     out.connect(this.bus);
     switch (b) {
-      case 'fields': {
+      case 'fields': case 'dawn': {
         // olive / oak leaves: two bands following the gusts
         const n = loop(this.c.noise.pink);
         const hi = bq('bandpass', 4200, 0.8), hg = g(0.0);
@@ -191,6 +205,49 @@ export class Beds {
         const fl = loop(this.c.noise.brown), flp = bq('lowpass', 170, 0.7), fg = g(0.05);
         fl.connect(flp); flp.connect(fg); fg.connect(out);
         L.params.flame = fg.gain;
+        break;
+      }
+      case 'heights': {
+        // altitude: a broad air band, the body of the wind, a thin whistle over the cloud tops
+        const pk = loop(this.c.noise.pink), br = loop(this.c.noise.brown);
+        const air = bq('bandpass', 700, 0.6), ag = g(0.02);
+        pk.connect(air); air.connect(ag); ag.connect(out);
+        const body = bq('lowpass', 150, 0.6), bg = g(0.05);
+        br.connect(body); body.connect(bg); bg.connect(out);
+        L.params.air = ag.gain; L.params.body = bg.gain;
+        if (!this.lite) {
+          const wh = bq('bandpass', 1500, 11), wg = g(0);
+          pk.connect(wh); wh.connect(wg); wg.connect(out);
+          L.params.whistle = wg.gain; L.params.whistleF = wh.frequency;
+        }
+        break;
+      }
+      case 'coast': {
+        // the sea beyond the plain (slow swells) + dry grit carried on the wind
+        const pk = loop(this.c.noise.pink), wn = loop(this.c.noise.white);
+        const sl = bq('lowpass', 650, 0.5), sg = g(0.02), sp = this.panNode(L, -0.55);
+        pk.connect(sl); sl.connect(sg); sg.connect(sp); sp.connect(out);
+        const dh = bq('bandpass', 3000, 0.7), dg = g(0.004);
+        wn.connect(dh); dh.connect(dg); dg.connect(out);
+        L.params.surf = sg.gain; L.params.dust = dg.gain;
+        break;
+      }
+      case 'gilgal': {
+        // the hot, low Jordan valley: dust-laden gusts over bare earth, a heavy low body
+        const pk = loop(this.c.noise.pink), br = loop(this.c.noise.brown);
+        const dh = bq('bandpass', 2400, 0.7), dg = g(0.006);
+        pk.connect(dh); dh.connect(dg); dg.connect(out);
+        const body = bq('lowpass', 180, 0.6), bg = g(0.04);
+        br.connect(body); body.connect(bg); bg.connect(out);
+        L.params.dust = dg.gain; L.params.body = bg.gain;
+        break;
+      }
+      case 'hush': {
+        // the pasture holding its breath: only the leaves at the thicket's edge
+        const pk = loop(this.c.noise.pink);
+        const hi = bq('bandpass', 3800, 0.8), hg = g(0.003);
+        pk.connect(hi); hi.connect(hg); hg.connect(out);
+        L.params.leafHi = hg.gain;
         break;
       }
       case 'gibeah-hall': {
@@ -223,12 +280,25 @@ export class Beds {
     const ph = this.phase;
     const gust = clamp(0.55 * this.gust.at(ph * 0.09) + 0.45 * this.gust.at(ph * 0.37 + 17), 0, 1);
     const P = L.params;
-    if (b === 'fields') {
+    if (b === 'fields' || b === 'dawn') {
       const g2 = gust * gust;
       if (P.leafHi) P.leafHi.setTargetAtTime(0.004 + 0.03 * g2, now, 0.3);
       if (P.leafMid) P.leafMid.setTargetAtTime(0.002 + 0.02 * g2 * gust, now, 0.3);
     } else if (b === 'gibeah-exterior') {
       if (P.flame) P.flame.setTargetAtTime(0.03 + 0.03 * this.flick.at(ph * 1.7), now, 0.15);
+    } else if (b === 'heights') {
+      if (P.air) P.air.setTargetAtTime(0.012 + 0.05 * gust * gust, now, 0.35);
+      if (P.body) P.body.setTargetAtTime(0.04 + 0.08 * gust, now, 0.4);
+      if (P.whistle) P.whistle.setTargetAtTime(0.012 * gust * gust * gust, now, 0.4);
+      if (P.whistleF) P.whistleF.setTargetAtTime(this.c.hz(1100 + 900 * gust), now, 0.5);
+    } else if (b === 'coast') {
+      if (P.surf) P.surf.setTargetAtTime(0.012 + 0.03 * (0.5 + 0.5 * Math.sin(ph * 0.9)) ** 2, now, 0.5);
+      if (P.dust) P.dust.setTargetAtTime(0.002 + 0.012 * gust * gust, now, 0.3);
+    } else if (b === 'gilgal') {
+      if (P.dust) P.dust.setTargetAtTime(0.003 + 0.022 * gust * gust, now, 0.3);
+      if (P.body) P.body.setTargetAtTime(0.03 + 0.06 * gust, now, 0.4);
+    } else if (b === 'hush') {
+      if (P.leafHi) P.leafHi.setTargetAtTime(0.002 + 0.008 * gust * gust, now, 0.4);
     } else {
       if (P.wallWind) P.wallWind.setTargetAtTime(0.006 + 0.03 * gust * gust, now, 0.4);
       for (let i = 0; i < 2; i++) {

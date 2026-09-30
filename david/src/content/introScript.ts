@@ -90,6 +90,7 @@ export type IntroShotId =
   | 'gilgal-spear'
   | 'gilgal-silence'
   | 'gilgal-faceoff'
+  | 'gilgal-faceoff-rev'
   | 'gilgal-tear'
   | 'gilgal-verdict'
   | 'gilgal-saul'
@@ -240,8 +241,13 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
       + 'man wrapped in a me\'il stands in the way; the front ranks part.',
   },
   {
-    id: 'gilgal-faceoff', n: '10a', set: 'gilgal', take: 'faceOff', dur: 5, cut: 'cut', cue: 'faceoff', beat: 'saul-hall',
-    direction: 'The giant king and the old prophet face to face.',
+    id: 'gilgal-faceoff', n: '10a', set: 'gilgal', take: 'faceOff', dur: 2.6, cut: 'cut', cue: 'faceoff', beat: 'saul-hall',
+    direction: 'The giant king and the old prophet face to face — over Samuel\'s shoulder onto the king, backlit, looming '
+      + '(src/film/FilmCams.ts coverage A).',
+  },
+  {
+    id: 'gilgal-faceoff-rev', n: '10a', set: 'gilgal', take: 'faceOff:rev', dur: 2.4, cut: 'cut', cue: 'faceoff', beat: 'saul-hall',
+    direction: 'The reverse: over the king\'s shoulder onto the old prophet, lit full-face by the low sun (coverage B).',
   },
   {
     id: 'gilgal-tear', n: '10b', set: 'gilgal', take: 'tear', dur: 7, cut: 'cut', cue: 'tear', beat: 'saul-hall',

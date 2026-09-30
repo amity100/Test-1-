@@ -1,0 +1,124 @@
+{
+  "name": "david",
+  "description": "David son of Jesse, a na'ar (1 Sam 16:11, 17:33,42; visual-bible 3.13: a youth ~17, ~1.70 m, lean-strong): 'admoni, with beautiful eyes, and goodly to look upon' (1 Sam 16:12), strong enough to have killed a lion and a bear (17:34-36). Lean-strong shepherd's build (not a bodybuilder), long legs; youthful oval face (face_macro: a younger, average-muscle head), large expressive eyes, straight nose, full lips, a defined but not heavy jaw (david v2 likeness pass, reference image). The cranium is pinned to the groomed scalp (skull_lock, tools/human/skull_lock.py).",
+  "height_m": 1.72,
+  "macro": {
+    "gender": 1.0,
+    "age_years": 20,
+    "muscle": 0.86,
+    "weight": 0.42,
+    "height": 0.62,
+    "proportions": 1.0,
+    "african": 0.08,
+    "asian": 0.03,
+    "caucasian": 0.89
+  },
+  "modifiers": {
+    "head/head-age-decr|incr": -0.45,
+    "head/head-oval": 0.45,
+    "head/head-square": 0.05,
+    "head/head-scale-horiz-decr|incr": -0.08,
+    "forehead/forehead-scale-vert-decr|incr": -0.1,
+    "eyebrows/eyebrows-trans-backward|forward": 0.65,
+    "eyebrows/eyebrows-angle-down|up": 0.0,
+    "eyes/(lr)-eye-bag-decr|incr": -0.8,
+    "eyes/(lr)-eye-push1-in|out": -0.35,
+    "eyes/(lr)-eye-scale-decr|incr": 0.62,
+    "eyes/(lr)-eye-height2-decr|incr": 0.05,
+    "nose/nose-hump-decr|incr": -0.1,
+    "nose/nose-greek-decr|incr": 0.2,
+    "nose/nose-scale-horiz-decr|incr": -0.12,
+    "nose/nose-point-width-decr|incr": -0.25,
+    "nose/nose-nostrils-width-decr|incr": -0.12,
+    "nose/nose-scale-vert-decr|incr": -0.1,
+    "nose/nose-trans-backward|forward": 0.14,
+    "mouth/mouth-lowerlip-volume-decr|incr": 0.48,
+    "mouth/mouth-upperlip-volume-decr|incr": 0.4,
+    "mouth/mouth-cupidsbow-decr|incr": 0.35,
+    "mouth/mouth-scale-horiz-decr|incr": 0.06,
+    "mouth/mouth-philtrum-volume-decr|incr": 0.2,
+    "chin/chin-prominent-decr|incr": 0.18,
+    "chin/chin-width-decr|incr": -0.15,
+    "chin/chin-bones-decr|incr": 0.35,
+    "chin/chin-height-decr|incr": -0.42,
+    "chin/chin-cleft-decr|incr": 0.15,
+    "cheek/(lr)-cheek-bones-decr|incr": 0.65,
+    "cheek/(lr)-cheek-volume-decr|incr": -0.15,
+    "cheek/(lr)-cheek-inner-decr|incr": 0.0,
+    "neck/neck-scale-horiz-decr|incr": 0.12,
+    "torso/torso-vshape-decr|incr": 0.5,
+    "torso/torso-muscle-dorsi-decr|incr": 0.45,
+    "torso/torso-muscle-pectoral-decr|incr": 0.35,
+    "stomach/stomach-pregnant-decr|incr": -0.35,
+    "pelvis/pelvis-tone-decr|incr": 0.3,
+    "armslegs/(lr)-upperarm-muscle-decr|incr": 0.4,
+    "armslegs/(lr)-lowerarm-muscle-decr|incr": 0.55,
+    "armslegs/(lr)-upperleg-muscle-decr|incr": 0.4,
+    "armslegs/(lr)-lowerleg-muscle-decr|incr": 0.6,
+    "breast/nipple-size-decr|incr": -0.35,
+    "breast/nipple-point-decr|incr": -0.7,
+    "head/head-fat-decr|incr": 0.0,
+    "neck/neck-double-decr|incr": -1.0,
+    "forehead/forehead-temple-decr|incr": -0.1,
+    "eyes/(lr)-eye-trans-in|out": 0.15,
+    "measure/measure-shoulder-dist-decr|incr": 0.4,
+    "measure/measure-waist-circ-decr|incr": -0.15,
+    "measure/measure-neck-circ-decr|incr": 0.15,
+    "armslegs/(lr)-upperarm-shoulder-muscle-decr|incr": 0.4,
+    "eyebrows/eyebrows-trans-down|up": -0.15,
+    "eyes/(lr)-eye-push2-in|out": -0.2,
+    "eyes/(lr)-eye-eyefold-down|up": -0.3,
+    "eyes/(lr)-eye-eyefold-concave|convex": 0.25,
+    "forehead/forehead-nubian-decr|incr": 0.0,
+    "head/head-rectangular": 0.0,
+    "mouth/mouth-laugh-lines-in|out": 0.0,
+    "stomach/stomach-tone-decr|incr": 0.5
+  },
+  "skin": {
+    "seed": 16,
+    "tone": [
+      0.68,
+      0.51,
+      0.4
+    ],
+    "tan": 0.55,
+    "ruddy": 0.75,
+    "freckles": 0.4,
+    "beard_shadow": 0.4,
+    "body_hair": 0.25,
+    "dust": 0.5,
+    "age": 0.0,
+    "tan_lines": "tunic_short",
+    "hair_color": [
+      0.36,
+      0.17,
+      0.085
+    ],
+    "lip_color": [
+      0.66,
+      0.4,
+      0.36
+    ]
+  },
+  "eyes": {
+    "iris": "hazel_green",
+    "seed": 3
+  },
+  "brows": {
+    "color": [
+      0.34,
+      0.17,
+      0.08
+    ],
+    "density": 1.3,
+    "thickness": 1.0
+  },
+  "face_macro": {
+    "muscle": 0.5,
+    "weight": 0.52,
+    "age_years": 18
+  },
+  "skull_lock": {
+    "ref": "ref/david_skull.npz"
+  }
+}

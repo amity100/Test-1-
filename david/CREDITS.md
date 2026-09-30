@@ -244,6 +244,17 @@ Musical/period basis (not assets): instruments named in the Bible for the period
 `docs/sources.md`), so the Gibeah ambience has a far donkey and never hoofbeats. The lyre is kept out of Saul's music
 (no lyre at court before 16:14).
 
+**Opening film "הַטּוֹב מִמֶּךָּ" — score and sound design (`src/audio/IntroScore.ts`, `src/audio/FilmSound.ts`, the
+film beds in `src/audio/Beds.ts`).** Again **no third-party audio or code**: the army on foot (a marching texture baked
+in JS), the murmur and roar of the ranks (formant-filtered voices + noise), bronze clinks and strikes (inharmonic
+partials), dust and altitude wind, the far sea, the lowing of oxen, the slowed tearing of the robe (baked fibre
+snaps and thread plucks), the thicket (leaves, twigs, heavy breathing, a low rumble) and every hit are our own
+synthesis; the flock's bleats and the heartbeat reuse the game's own synthesized SFX. No CC0 recordings were used
+(none could be located by exact path on raw.githubusercontent.com within the phase). Source basis of the sound (not
+assets): the bleating of the sheep and the lowing of the oxen of the spoil (1 Sam 15:14) heard in the silence of shot 9; the army on foot, never
+hoofbeats or chariots for Israel (15:4); the shofar for the king's army (13:3); no drums heard as if played on screen by
+Israel's army — the drums are the score's (docs/visual-bible.md §6).
+
 ## Wardrobe & hair polish pass — `src/characters/wardrobe/`, `src/characters/hair/`, `tools/wardrobe/gen_textures.py`, `dev/wardrobe*`
 
 No new third-party assets or code. Everything in this pass is original work, generated at load time or by the
@@ -364,3 +375,16 @@ No new third-party assets. David's gameplay motion uses the CMU Graphics Lab Mot
 listed under "Motion capture" (`idle_shift`, `idle_soldier`, `walk`, `jog`, `run`, `turn_left`, `pickup_box`,
 `throw_ball`, `kneel`, `kneel_hold`); his body is the MakeHuman 1.1 (CC0) preset `david` rebuilt with new modifier
 values and re-baked by our own tools (`tools/human`).
+
+## Face pass (tools/human/photoscan_detail.py, src/characters/human, src/film/cast/faceLight.ts)
+
+- **Photoscan skin detail:** the "Lee Perry-Smith" head scan by **Infinite-Realities** (ir-ltd.net), licensed
+  **Creative Commons Attribution 3.0 (CC BY 3.0)** — obtained from the three.js examples
+  (`raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/LeePerrySmith/`: `LeePerrySmith.glb`,
+  `Map-COL.jpg`, `Map-SPEC.jpg`, `Infinite-Level_02_Tangent_SmoothUV.jpg`). Only its high-frequency content
+  (pores, fine wrinkles, micro relief, albedo / specular variation) is transferred — by landmark alignment and a
+  thin-plate warp — into the MakeHuman UV layout and blended into our own baked skin maps
+  (`src/assets/human/<preset>/{albedo,normal,mask}_{2k,1k}.webp`). The downloaded scan files are cached in
+  `tools/human/ref/lps/` for the offline tool only; they are not shipped in the game. Attribution: "Lee Perry-Smith
+  head scan © Infinite-Realities, CC BY 3.0".
+- Face lighting rig, eye / lash / lid shading and the preset reshapes are own code; the MakeHuman data is CC0 (above).

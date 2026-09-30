@@ -8,6 +8,7 @@ import type { GilgalArmy } from './crowd/GilgalArmy';
 import type { PhilistineHost } from './crowd/PhilistineHost';
 import { landAtmo, cloudShared } from './land/landAtmo';
 import { INTRO_SHOTS, type FilmSetName } from '../content/introScript';
+import { baseTake, FILM_CAM, gilgalCam, gilgalCamFocusActor, TAKE_OFFSET } from './FilmCams';
 
 /**
  * THE FILM STAGE of the opening film (docs/intro-script.md): every film-only set, crowd and actor, built behind the
@@ -62,6 +63,17 @@ export interface FilmStageOptions {
 }
 
 const smooth = (u: number) => u * u * (3 - 2 * u);
+
+/** snap every actor's strand-hair simulation back to rest (on cuts) */
+function resetHair(actors: readonly FilmActor[]) {
+  for (const a of actors) {
+    try {
+      a.groom?.sim?.reset();
+    } catch {
+      /* hair is cosmetic */
+    }
+  }
+}
 
 /** Snapshot of the land sets' shared uniforms (sun / sky / haze / deck live in module singletons). */
 interface LandSnap {
@@ -276,11 +288,29 @@ export class FilmStage {
             perf = null;
           }
         }
+        // face lighting of the close-ups (src/film/cast/faceLight.ts, face pass): one fixed rig for the whole set,
+        // added BEFORE the precompile (a light changes every shader); re-aimed per shot, off = intensity 0
+        let rig: import('./cast/faceLight').FaceLightRig | null = null;
+        if (perf && castMod) {
+          try {
+            const { FaceLightRig } = await import('./cast/faceLight');
+            rig = new FaceLightRig({ quality: q.name });
+            rig.addTo(gilgal.scene);
+            rig.setPreset('off', 0);
+            // the rig replaces the performances' own fill in its shots (no double key on the face)
+            castMod.FACE_FILL.king[0] = 0;
+            castMod.FACE_FILL.saulAlone[0] = 0;
+            castMod.FACE_FILL.verdict[1] = 0;
+          } catch (e) {
+            console.warn('[film] face light rig', e);
+            rig = null;
+          }
+        }
         // the set's own stand-ins cover what the cast / crowd modules could not build
         if (!perf || !army) gilgal.showPlaceholders(true);
         p(1);
         const cam = new THREE.PerspectiveCamera(40, 1, 0.05, 90000);
-        stage.sets.gilgal = stage.gilgalHandle(gilgal, gilgalView(gilgal, { camera: cam }), cam, army, perf, actors);
+        stage.sets.gilgal = stage.gilgalHandle(gilgal, gilgalView(gilgal, { camera: cam }), cam, army, perf, actors, rig);
       } catch (e) {
         console.warn('[film] Gilgal set failed', e);
       }
@@ -407,6 +437,7 @@ export class FilmStage {
         return true;
       },
       enter(take) {
+        resetHair(extra.actors ?? []);
         // the host marches from the head of its road at the cut into shot 4 (and keeps marching into the glint)
         if (extra.host && take === 'threat') extra.host.setTravel(0);
       },
@@ -441,9 +472,12 @@ export class FilmStage {
     army: GilgalArmy | null,
     perf: GilgalPerformance | null,
     actors: FilmActor[],
+    rig: import('./cast/faceLight').FaceLightRig | null = null,
   ): FilmSetHandle {
     const engine = this.engine;
     const tmp = new THREE.Vector3();
+    const H = (x: number, z: number) => gilgal.height(x, z);
+    if (new URLSearchParams(location.search).get('test') === '1') (window as unknown as Record<string, unknown>).__filmCams = FILM_CAM;
     let current: string | null = null;
     let armyOk = !!army;
     const status = [
@@ -457,6 +491,8 @@ export class FilmStage {
       status,
       disposed: false,
       frame(take, u, t, out) {
+        // orchestration coverage first (FilmCams: shot 7 hero, the 10a over-the-shoulder pair), else the set's move
+        if (gilgalCam(take, Math.max(0, Math.min(1, u)), t + (TAKE_OFFSET[take] ?? 0), H, out)) return true;
         const info = gilgal.shots[take as GilgalShotName];
         if (!info) return false;
         const e = info.shot.ease !== false ? smooth(Math.max(0, Math.min(1, u))) : u;
@@ -468,10 +504,15 @@ export class FilmStage {
         return true;
       },
       enter(take) {
-        const name = take as GilgalShotName;
+        const name = baseTake(take);
         if (!gilgal.shots[name]) return;
+        const cont = current !== null && current !== take && baseTake(current) === name; // 'faceOff' -> 'faceOff:rev'
         current = take;
-        gilgal.setBeat(name, 0);
+        // every cut: the strand-hair sims start from rest (a pose / heading jump across a cut — Samuel turns back
+        // between 10b and 11 — otherwise whips the hair and beard outward for a second)
+        resetHair(actors);
+        if (cont) return; // a cut inside one blocking beat: the actors keep performing
+        gilgal.setBeat(name, TAKE_OFFSET[take] ?? 0);
         if (perf) {
           try {
             perf.enter(name);
@@ -480,10 +521,11 @@ export class FilmStage {
           }
         }
       },
-      tick(take, t, dt) {
-        const name = take as GilgalShotName;
+      tick(take, t0, dt) {
+        const name = baseTake(take);
         if (!gilgal.shots[name]) return;
         if (current !== take) this.enter(take);
+        const t = t0 + (TAKE_OFFSET[take] ?? 0);
         gilgal.setBeat(name, t);
         if (army && armyOk) {
           try {
@@ -505,16 +547,27 @@ export class FilmStage {
             console.warn('[film] performance', e);
           }
         }
+        if (rig && actors.length >= 2) {
+          // 7 / 12 'afternoonKing' on Saul, 11 'verdict' on Samuel (faceLight.ts presets)
+          const who = take === 'king' || take === 'saulAlone' ? actors[0] : take === 'verdict' ? actors[1] : null;
+          if (who) {
+            rig.setPreset(take === 'verdict' ? 'verdict' : 'afternoonKing', 1);
+            rig.update(who.eyesWorld(tmp), camera);
+          } else rig.setPreset('off', 0);
+        }
       },
-      focus(take, t) {
-        const name = take as GilgalShotName;
+      focus(take, t0) {
+        const name = baseTake(take);
         const info = gilgal.shots[name];
         if (!info) return null;
+        const t = t0 + (TAKE_OFFSET[take] ?? 0);
         const fp = info.focus(t);
         if (!fp) return null;
         // on the actors' eyes in the close shots (the set's focus point is the blocking mark)
         if (actors.length >= 2) {
           const [saul, samuel] = actors;
+          const who = gilgalCamFocusActor(take);
+          if (who) return { point: (who === 'saul' ? saul : samuel).eyesWorld(tmp), fStop: take === 'king' ? 2.8 : 2.2 };
           if (name === 'verdict') return { point: samuel.eyesWorld(tmp), fStop: info.fStop };
           if (name === 'saulAlone' || name === 'king' || name === 'faceOff') return { point: saul.eyesWorld(tmp), fStop: info.fStop };
         }
@@ -522,6 +575,7 @@ export class FilmStage {
       },
       dispose() {
         army?.dispose();
+        rig?.dispose();
         for (const a of actors) a.dispose();
         gilgal.dispose();
       },

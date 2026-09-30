@@ -147,3 +147,30 @@ to the skull). `src/characters/hair/HeadSurface.ts` uses the same table format.
   nearest skin (3 nearest control vertices), so strands never float above or sink into a morphed face.
 * Load time measured in headless software WebGL (swiftshader): hero (sub1) ≈ 0.6–2 s for the first instance,
   later instances of the same preset much less; phone numbers are not measured on a real device yet.
+
+## Face pass (30 Sep): photoscan skin detail, eyes, lashes, face lighting
+
+* **Photoscan detail** — `tools/human/photoscan_detail.py` transfers the HIGH-FREQUENCY content of the Infinite-Realities
+  "Lee Perry-Smith" head scan (CC BY 3.0, see CREDITS) onto the hm08 UV layout: the scan's tangent normal map is
+  integrated to a height field (FFT Poisson), height / log-albedo / log-specular are split into a fine (≈1.1 mm: pores,
+  micro relief) and a mid band (1.1–4.5 mm: fine wrinkles, lip lines, creases); 14 landmarks (eye corners, glabella,
+  nose, alae, subnasale, mouth corners, lips, chin — picked on front renders of both heads, `LM_LPS` / `LM_MH`) give a
+  similarity + thin-plate-spline warp; every head texel samples the nearest scan texel (KD-tree, normal agreement,
+  confidence faded at the eye openings, the scan's holes and the ear backs). The result
+  (`tools/human/ref/lps_detail_2048.npz`, rebuildable in ~1.5 min: `python3 tools/human/photoscan_detail.py build`) is
+  blended per preset (`STRENGTH`: David fine detail with few wrinkles and only a trace of the scan man's stubble in the
+  beard zone; Saul / man mature; Samuel / elder the full wrinkle band) into the baked maps by
+  `python3 tools/human/photoscan_detail.py apply <preset>` — albedo × exp(detail), height → tangent slopes whiteout-
+  blended into the RG normal (B keeps the pore strength), mask R (cavity) and G (roughness) modulated; 1K maps are
+  downsampled from the 2K result, so **phones get the detail in their 1K maps at zero runtime cost**. `apply` always
+  starts from the pristine bakes in `tools/human/ref/pre_lps/<preset>/` (idempotent); `bake_skin.py` calls it after
+  every 2K bake (`NO_SCAN_DETAIL=1` to skip) and refreshes the pristine copies.
+* **Lashes** — the strand material keeps strand normals on the camera side (lash ribbons faced away from the camera; the
+  GGX term at N·V < 0 turned them into a cream-white "eyeliner" fringe in every back-lit shot) and lashes are near-black
+  at every hair colour, so they read as a dark lash line.
+* **Eyes** — ivory sclera (not paper white), pinker / darker canthi, deeper socket occlusion and a stronger upper-lid
+  shadow on the top third of the eyeball; the rest pose lowers the upper lid (`faceBias` UpperLidClosed 0.1 → 0.2), so
+  the lid covers the top of the iris instead of staring.
+* **Face lighting for the film** — `src/film/cast/faceLight.ts` (`FaceLightRig`, presets `goldenBack` / `afternoonKing`
+  / `verdict` / `soft`): key / rim / fill spot lights placed relative to the camera → face axis; fixed light count per
+  quality (low 1, medium 2, high 3), no shadows, distance cut-off.

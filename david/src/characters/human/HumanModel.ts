@@ -268,7 +268,12 @@ export class HumanModel {
     };
     const browCol = new THREE.Color().setRGB(bc[0], bc[1], bc[2], THREE.SRGBColorSpace); // preset colours are sRGB
     this.brows = mkStrands('brow', new StrandMaterial({ color: browCol, tipColor: browCol.clone().multiplyScalar(1.5), opacity: 0.92, widthScale: 1.0 }));
-    this.lashes = mkStrands('lash', new StrandMaterial({ color: browCol.clone().multiplyScalar(0.35), tipColor: browCol.clone().multiplyScalar(0.8), opacity: 1, widthScale: 1.0, roughness: 0.6 }));
+    // face pass: lashes are near-black at every hair colour (they read as a dark lash LINE that frames the eye); the
+    // old brow-tinted, glossy lashes caught the back light and read as a pale "eyeliner" rim above the eye
+    const lashCol = browCol.clone().multiplyScalar(0.12).lerp(new THREE.Color(0.012, 0.008, 0.006), 0.6);
+    const lashMat = new StrandMaterial({ color: lashCol, tipColor: lashCol.clone().multiplyScalar(1.6), opacity: 1, widthScale: 1.15, roughness: 0.85 });
+    lashMat.envMapIntensity = 0.08;
+    this.lashes = mkStrands('lash', lashMat);
     const tg = buildAuxGeometry(data, 'tear', 1, variation);
     if (tg) {
       // the wet meniscus along the lower lid: a thin bright specular line gives the eyes life

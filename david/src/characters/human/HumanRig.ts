@@ -141,7 +141,8 @@ export class HumanRig {
   /** resting lip closure (lowerLipUp pose-unit weight), released automatically when the jaw opens */
   lipSeal = 0.3;
   /** always-on bias: relaxed lids (the upper lid rests ~1.5 mm over the iris, the lower lid touches its rim) */
-  readonly faceBias: Record<string, number> = { LeftLowerLidUp: 0.16, RightLowerLidUp: 0.16, LeftUpperLidClosed: 0.1, RightUpperLidClosed: 0.1 };
+  // face pass: the upper lid a little lower (0.1 -> 0.16) - the old rest pose showed sclera above the iris (a stare)
+  readonly faceBias: Record<string, number> = { LeftLowerLidUp: 0.16, RightLowerLidUp: 0.16, LeftUpperLidClosed: 0.16, RightUpperLidClosed: 0.16 };
   /** resting gaze pitch (radians, negative = down) */
   gazeRestPitch = -0.035;
   private readonly _fAcc: [number, number, number][] = [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]];

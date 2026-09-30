@@ -145,6 +145,12 @@ export class Intro {
   private black = 1;
   private birdsOff = false;
   private readonly sfxFired = new Set<string>();
+  /** ?test=1: on-screen text and the title card run on the FILM clock (contact sheets / slow software rendering) */
+  private readonly testClock = params().get('test') === '1';
+  /** ?filmkeep=1 (tests): keep every film set resident so the harness can seek backwards */
+  private readonly keepSets = params().get('filmkeep') === '1';
+  private readonly liveTexts: { el: HTMLElement; start: number; dur: number }[] = [];
+  private titleStart = -1;
 
   constructor(private readonly h: IntroHost, _opts: { short?: boolean } = {}) {
     let t = 0;
@@ -228,15 +234,47 @@ export class Intro {
     let i = 0;
     while (i + 1 < this.plan.length && this.t >= this.plan[i + 1].start) i++;
     this.h.ui.clearFilmText(0);
+    this.liveTexts.length = 0;
+    if (this.plan[i].shot.id !== 'title' && this.titleShown) {
+      // seeking back out of the title (tests)
+      this.titleShown = false;
+      this.titleStart = -1;
+      this.h.ui.titleCard(false);
+    }
     if (i !== this.idx) this.enter(i, true);
     this.textIdx = 0;
     while (this.textIdx < this.texts.length && this.texts[this.textIdx].t < this.t - 0.05) {
-      // text that is still on screen at t is shown again
+      // text that is still on screen at t is shown again, part-way through its animation
       const e = this.texts[this.textIdx];
-      if (e.t + e.x.seconds > this.t + 0.2) this.showText(e.x, e.t + e.x.seconds - this.t);
+      if (e.t + e.x.seconds > this.t + 0.2) this.showText(e.x, e.t, this.t - e.t);
       this.textIdx++;
     }
     this.updateShot(0);
+    this.syncTextClock();
+  }
+
+  /** tests: pin every film text / title animation to the film clock (wall-clock CSS would run ahead of slow frames) */
+  private syncTextClock() {
+    if (!this.testClock) return;
+    for (let k = this.liveTexts.length - 1; k >= 0; k--) {
+      const x = this.liveTexts[k];
+      const el = this.t - x.start;
+      if (el > x.dur + 0.3 || !x.el.isConnected) {
+        x.el.remove();
+        this.liveTexts.splice(k, 1);
+        continue;
+      }
+      for (const a of x.el.getAnimations({ subtree: true })) {
+        a.pause();
+        a.currentTime = Math.max(0, el) * 1000;
+      }
+    }
+    if (this.titleShown && this.titleStart >= 0) {
+      for (const a of this.h.ui.titleElement.getAnimations({ subtree: true })) {
+        a.pause();
+        a.currentTime = Math.max(0, this.t - this.titleStart) * 1000;
+      }
+    }
   }
 
   /** Per frame (game dt), from Story's behaviour: before the CameraRig and engine.render(). */
@@ -258,6 +296,7 @@ export class Intro {
     }
     this.fireText();
     this.updateShot(dt);
+    this.syncTextClock();
     if (this.skipArmedT >= 0 && performance.now() - this.skipArmedT > 3200) {
       this.skipArmedT = -1;
       ui.skipHint(false);
@@ -418,7 +457,7 @@ export class Intro {
     // the new frame is posed before it renders (no frame of the old camera in the new set)
     this.updateShot(0);
     // a set the film has left for good is disposed now (phones: memory)
-    if (this.stage) {
+    if (this.stage && !this.keepSets) {
       for (const n of Object.keys(this.stage.sets) as FilmStageSet[]) {
         if (!this.plan.slice(i).some((p) => p.shot.set === n)) this.stage.release(n);
       }
@@ -431,7 +470,9 @@ export class Intro {
       }
       if (s.id === 'title' && !this.titleShown) {
         this.titleShown = true;
+        this.titleStart = this.plan[i].start;
         ui.clearFilmText(0.2);
+        this.liveTexts.length = 0;
         ui.titleCard(true);
         audio.sfx('titleHit');
       }
@@ -454,11 +495,13 @@ export class Intro {
     const post = this.h.engine.post;
     let focus: { point: THREE.Vector3; fStop: number } | null = null;
     let cam: THREE.PerspectiveCamera | null = null;
+    let camPos: THREE.Vector3 | null = null;
     if (tk.set === 'world') {
       this.world.tick(tk.take, lt, dt);
       this.world.frame(tk.take, u, lt, this.frame);
       focus = this.world.focus(tk.take, lt);
       cam = this.h.engine.camera;
+      camPos = this.frame.pos; // the CameraRig poses the world camera after this update: focus on this frame's lens
     } else if (tk.set === 'stage') {
       const hdl = this.handle(s)!;
       hdl.tick(tk.take, lt, dt);
@@ -481,7 +524,7 @@ export class Intro {
     this.sfx(s, lt);
     if (!post.dofAvailable) return;
     if (focus && cam) {
-      const d = Math.max(0.2, focus.point.distanceTo(cam.position));
+      const d = Math.max(0.2, focus.point.distanceTo(camPos ?? cam.position));
       post.setDoF({ enabled: true, focusDistance: d, fStop: focus.fStop, focalLength: null, target: null });
     } else if (post.dofSettings.enabled) post.setDoF({ enabled: false, target: null });
   }
@@ -506,21 +549,25 @@ export class Intro {
   private fireText() {
     while (this.textIdx < this.texts.length && this.t >= this.texts[this.textIdx].t) {
       const e = this.texts[this.textIdx++];
-      this.showText(e.x, e.x.seconds);
+      this.showText(e.x, e.t, 0);
     }
   }
 
-  private showText(x: IntroText, seconds: number) {
+  /** one text event (started at film time `start`; `elapsed` s of it already played: seek) */
+  private showText(x: IntroText, start: number, elapsed: number) {
     const { ui } = this.h;
+    const auto = !this.testClock;
+    let el: HTMLElement | null = null;
     if (x.kind === 'verse' && x.quote) {
       const [text, ref] = verseArgs(x.quote);
-      ui.filmText('verse', text, ref, seconds);
-      return;
+      el = ui.filmText('verse', text, ref, x.seconds, elapsed, auto);
+    } else {
+      const ids = x.narration ?? [];
+      if (!ids.length) return;
+      if (x.kind === 'person') el = ui.filmText('person', narration(ids[0]), ids[1] ? narration(ids[1]) : '', x.seconds, elapsed, auto);
+      else el = ui.filmText(x.kind, narration(ids[0]), '', x.seconds, elapsed, auto);
     }
-    const ids = x.narration ?? [];
-    if (!ids.length) return;
-    if (x.kind === 'person') ui.filmText('person', narration(ids[0]), ids[1] ? narration(ids[1]) : '', seconds);
-    else ui.filmText(x.kind, narration(ids[0]), '', seconds);
+    if (el && this.testClock) this.liveTexts.push({ el, start, dur: x.seconds });
   }
 
   /** black drawn by the renderer (post grade uFade): texts and the title stay above it */

@@ -412,3 +412,13 @@ canvas { display: block; outline: none; }
   .ft-person .ft-name { font-size: clamp(24px, 7.5vw, 38px); }
   .ft-person .ft-sub { font-size: clamp(11px, 3.4vw, 15px); }
 }
+
+/* cut pass 2: during the film the skip button sits small in the lower letterbox bar (never over the picture) and
+   dims after 4 s; the first key / tap brings it back at full strength with the hint (Intro.armSkip -> skipHint) */
+.ui.film .skip {
+  bottom: max(8px, calc(var(--lb, 11vh) * 0.5 - 14px)); left: max(18px, calc(env(safe-area-inset-left, 0px) + 12px));
+  padding: 4px 12px; font-size: 12px !important; letter-spacing: 0.06em;
+}
+.ui.film .skip.on { animation: skipDim 1.2s ease 4s forwards; }
+.ui.film .skip.on.strong { animation: none; opacity: 1; }
+@keyframes skipDim { to { opacity: 0.3; } }

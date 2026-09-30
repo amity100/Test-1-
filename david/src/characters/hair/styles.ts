@@ -196,7 +196,7 @@ export function saulStyle(): GroomStyle {
     mask: (s) => s.beardMask(),
     // wardrobe polish pass: a full, combed, oiled royal beard - denser, shaped (fuller and squarer at the chin),
     // coherent locks with small tight curls, few flyaways and fewer grey flecks (they read as noise at distance)
-    strands: { low: 2200, medium: 6000, high: 13000 },
+    strands: { low: 2200, medium: 7000, high: 15000 }, // face pass: denser (was medium 6000 / high 13000)
     locks: 240,
     sim: { low: 6, medium: 10, high: 16 },
     length: (f, n, R) => {
@@ -207,7 +207,10 @@ export function saulStyle(): GroomStyle {
       // cast pass: a groomed line under the jaw — roots facing down (under the chin, onto the neck) stay short, so no
       // strands trail down the throat (visual-bible 3.2: full, 6-10 cm, natural)
       const under = ss(-0.25, -0.65, n.y) * ss(0.06, 0.0, n.z + 0.2);
-      return (must > 0.5 ? 0.026 : L * (1 - 0.6 * under)) * (0.92 + 0.16 * R());
+      // face pass: the upper edge on the cheeks grows short (a dense, groomed cheek line instead of long sparse
+      // strands that read as a hard, stringy mesh edge)
+      const cheekEdge = ss(-0.052, -0.026, f.y) * ss(0.03, 0.05, ax);
+      return (must > 0.5 ? 0.026 : L * (1 - 0.6 * under) * (1 - 0.55 * cheekEdge)) * (0.92 + 0.16 * R());
     },
     comb: (f, n, out) => {
       const ax = Math.abs(f.x);
@@ -236,7 +239,7 @@ export function saulStyle(): GroomStyle {
     colors: (R, f, root, tip) => {
       // grey at the chin (below the mouth, centre), scattered elsewhere
       const chin = ss(-0.07, -0.1, f.y) * ss(0.035, 0.012, Math.abs(f.x));
-      if (R() < 0.02 + 0.14 * chin) {
+      if (R() < 0.03 + 0.18 * chin) { // grey threads at the chin (visual-bible 3.2), a few elsewhere
         lin(GREY, root);
         vary(root, R, 0.2);
         tip.copy(root).multiplyScalar(1.1);

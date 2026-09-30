@@ -161,8 +161,15 @@ def ortho_front(P, col, frame, size=512, axes=(0, 1, 2)):
 
 
 def mh_head():
+    """The MakeHuman head the landmarks were picked on (david as of the face pass, tools/human/ref/lps_mh_ref.json):
+    the mapping lives in UV space, which every preset shares, so later preset reshapes do not need new picks."""
     from bake_skin import Baker
-    B = Baker("david", 2048)
+    tmp = os.path.join(HERE, "presets", "_lpsref.json")
+    shutil.copy2(os.path.join(HERE, "ref", "lps_mh_ref.json"), tmp)
+    try:
+        B = Baker("_lpsref", 2048)
+    finally:
+        os.remove(tmp)
     B.rasterize()
     return B
 
@@ -331,13 +338,21 @@ def build():
     eR = pick3d(MP, fM, ((LM_MH["eyeInR"][0] + LM_MH["eyeOutR"][0]) / 2, 369))
     de = np.minimum(np.linalg.norm(MP - eL, axis=1), np.linalg.norm(MP - eR, axis=1))
     w *= np.clip((de - 0.012) / 0.008, 0, 1) * 0.75 + 0.25 * np.clip((de - 0.008) / 0.004, 0, 1)
-    out = np.zeros((2048, 2048, 9), np.float32)
+    # beard zone (upper lip, chin, jaw, cheeks below the cheekbone): the scan man's stubble lives there; a beardless
+    # youth (David, visual-bible 3.13) keeps only a trace of it
+    ss = lambda a, b, x: np.clip((x - a) / (b - a), 0, 1) ** 2 * (3 - 2 * np.clip((x - a) / (b - a), 0, 1))
+    sub = pick3d(MP, fM, LM_MH["subnasale"])
+    chin_m = np.array(lmh["chin"])
+    beard = (ss(sub[1] + 0.012, sub[1] - 0.004, MP[:, 1]) * ss(chin_m[1] - 0.045, chin_m[1] - 0.015, MP[:, 1])
+             * ss(E[2] - 0.085, E[2] - 0.06, MP[:, 2]))
+    out = np.zeros((2048, 2048, 10), np.float32)
     ly, lx = vy[j], vx[j]
     hy, hx = mh["vy"][head], mh["vx"][head]
     vals = layers[ly, lx]
     vals[:, :2] *= 1000  # height layers in mm (float16 friendly)
     out[hy, hx, :6] = vals
     out[hy, hx, 6] = w
+    out[hy, hx, 9] = beard
     # MakeHuman texel size (mm per texel step along +u / +v) for the height -> normal conversion
     out[mh["vy"], mh["vx"], 7] = mh["mpu"] / 2048 * 1000
     out[mh["vy"], mh["vx"], 8] = mh["mpv"] / 2048 * 1000
@@ -357,7 +372,7 @@ def build():
 # David is a youth (1 Sam 17:33,42): full micro detail, few wrinkles; Saul mature (older than David by a generation,
 # a king in his reign's middle years), Samuel very old (1 Sam 12:2 "וַאֲנִי זָקַנְתִּי וָשַׂבְתִּי").
 STRENGTH = {
-    "david": dict(hf=1.0, hm=0.3, af=0.75, am=0.2, rg=0.35, sp=0.6, cav=0.6),
+    "david": dict(hf=1.0, hm=0.3, af=0.75, am=0.2, rg=0.35, sp=0.6, cav=0.6, beard=0.25),
     "saul": dict(hf=1.1, hm=0.95, af=0.9, am=0.55, rg=0.5, sp=0.7, cav=1.0),
     "man": dict(hf=1.0, hm=0.8, af=0.85, am=0.5, rg=0.45, sp=0.6, cav=0.9),
     "elder": dict(hf=1.1, hm=1.2, af=0.9, am=0.7, rg=0.5, sp=0.5, cav=1.1),
@@ -389,11 +404,17 @@ def apply(preset, refresh=False):
         if refresh or not os.path.exists(os.path.join(pre, f)):
             shutil.copy2(os.path.join(src, f), os.path.join(pre, f))
     alb = np.asarray(Image.open(os.path.join(pre, "albedo_2k.webp")).convert("RGB"), np.float32) / 255
-    nrm = np.asarray(Image.open(os.path.join(pre, "normal_2k.webp")).convert("RGB"), np.float32) / 255 * 2 - 1
+    nimg = np.asarray(Image.open(os.path.join(pre, "normal_2k.webp")).convert("RGB"), np.float32) / 255
+    # bake_skin encoding: RG = tangent-space normal xy, B = pore strength (the shader rebuilds nz)
+    nxy = nimg[..., :2] * 2 - 1
+    pores = nimg[..., 2]
+    nrm = np.concatenate([nxy, np.sqrt(np.clip(1 - (nxy ** 2).sum(-1), 0.02, 1))[..., None]], -1)
     msk = np.asarray(Image.open(os.path.join(pre, "mask_2k.webp")).convert("RGB"), np.float32) / 255
     if alb.shape[0] != 2048:
         raise SystemExit("expected 2K maps")
     w = D[..., 6]
+    if D.shape[-1] > 9 and k.get("beard", 1.0) < 1.0:
+        w = w * (1 - (1 - k["beard"]) * D[..., 9])
     # albedo: luminance (log) detail + a little redness variation, clamped so the preset's own colour survives
     lum = np.clip(w * (k["af"] * D[..., 2] + k["am"] * D[..., 3]), -0.35, 0.3)
     rg = np.clip(w * k["rg"] * D[..., 4], -0.15, 0.15)
@@ -418,13 +439,14 @@ def apply(preset, refresh=False):
     m2[..., 1] = np.clip(msk[..., 1] * np.exp(-0.45 * k["sp"] * w * np.clip(D[..., 5], -0.8, 0.8)), 0.2, 1)
     save = lambda a, n, q: Image.fromarray((np.clip(a, 0, 1) * 255 + 0.5).astype(np.uint8), "RGB").save(os.path.join(src, n), quality=q, method=6)
     save(alb2, "albedo_2k.webp", 90)
-    save(n2 * 0.5 + 0.5, "normal_2k.webp", 92)
+    save(np.concatenate([n2[..., :2] * 0.5 + 0.5, pores[..., None]], -1), "normal_2k.webp", 92)
     save(m2, "mask_2k.webp", 90)
     half = lambda a: np.asarray(Image.fromarray((np.clip(a, 0, 1) * 255 + 0.5).astype(np.uint8), "RGB").resize((1024, 1024), Image.LANCZOS)).astype(np.float32) / 255
     save(half(alb2), "albedo_1k.webp", 90)
     n1 = half(n2 * 0.5 + 0.5) * 2 - 1
     n1 /= np.linalg.norm(n1, axis=-1, keepdims=True) + 1e-9
-    save(n1 * 0.5 + 0.5, "normal_1k.webp", 92)
+    p1 = np.asarray(Image.fromarray((np.clip(pores, 0, 1) * 255).astype(np.uint8), "L").resize((1024, 1024), Image.LANCZOS)).astype(np.float32) / 255
+    save(np.concatenate([n1[..., :2] * 0.5 + 0.5, p1[..., None]], -1), "normal_1k.webp", 92)
     save(half(m2), "mask_1k.webp", 90)
     print(f"  {preset}: scan detail applied in {time.time() - t0:.0f}s")
 

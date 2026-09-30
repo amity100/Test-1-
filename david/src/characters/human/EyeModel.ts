@@ -142,12 +142,14 @@ float gIris = 0.0;`,
   float d = length( e );
   // ambient: a little darker toward the lid margins and in the canthi (the eye sits in a socket) — a clear,
   // bright sclera is what makes eyes read as young and beautiful; heavy occlusion made them look sunken
-  gEyeOcc = mix( 0.58, 1.0, smoothstep( 1.0, 0.35, d ) ) * mix( 0.78, 1.0, smoothstep( 0.97, 0.45, abs( e.x ) ) );
-  // direct light: the upper lid and the lashes shade only the top quarter of the opening
-  gEyeShadow = mix( 1.0, 0.3, smoothstep( 0.42, 0.88, e.y ) ) * mix( 0.72, 1.0, smoothstep( 1.0, 0.6, d ) );
+  // (face pass: deeper - the eye must sit IN a socket under the lid, not float on the face)
+  gEyeOcc = mix( 0.42, 1.0, smoothstep( 1.0, 0.3, d ) ) * mix( 0.66, 1.0, smoothstep( 0.97, 0.4, abs( e.x ) ) ) * mix( 1.0, 0.62, smoothstep( 0.05, 0.8, e.y ) );
+  // direct light: the upper lid (with its thickness) and the lashes shade the top third of the eyeball
+  gEyeShadow = mix( 1.0, 0.22, smoothstep( 0.18, 0.78, e.y ) ) * mix( 0.62, 1.0, smoothstep( 1.0, 0.55, d ) );
   gIris = smoothstep( uIrisR * 1.03, uIrisR * 0.97, length( vEyeLocal.xy ) ) * step( 0.0, vEyeLocal.z );
   // living sclera: near white with a faint warm cast, a touch pinker only in the canthi
-  diffuseColor.rgb *= mix( mix( vec3( 0.97, 0.95, 0.92 ), vec3( 0.95, 0.85, 0.82 ), smoothstep( 0.6, 0.98, abs( e.x ) ) ), vec3( 1.0 ), gIris );
+  // (face pass: a real sclera is not paper white - ivory with a faint yellow, pinker and darker toward the canthi)
+  diffuseColor.rgb *= mix( mix( vec3( 0.84, 0.79, 0.72 ), vec3( 0.8, 0.62, 0.57 ), smoothstep( 0.55, 0.98, abs( e.x ) ) ), vec3( 1.0 ), gIris );
   #ifndef EYE_LOW
   if ( gIris < 1.0 ) {
     // sclera around the limbus: a soft grey-blue shadow ring (the cornea's edge) rounds the eye; faint
@@ -183,7 +185,9 @@ void RE_Direct_Eye( const in IncidentLight directLight, const in vec3 geometryPo
     vec3 c = -Lp / max( t, 1e-4 ) * mix( 0.15, 0.62, t ) * irisR;
     float d = length( qp - c ) / irisR;
     float caus = exp( -d * d / mix( 0.06, 0.1, uHero ) ) * smoothstep( 0.08, 0.55, t ) * smoothstep( -0.25, 0.25, lf );
-    reflectedLight.directDiffuse += caus * directLight.color * material.diffuseColor * ( 1.4 + 1.0 * uHero ) * uCaustic * gEyeShadow;
+    // (face pass: 1.4 + 1.0 hero -> 0.5 + 0.35 hero and clamped: with a film key light the crescent turned the whole
+    // iris into a glowing orange disc)
+    reflectedLight.directDiffuse += min( caus * directLight.color * material.diffuseColor * ( 0.5 + 0.35 * uHero ) * uCaustic * gEyeShadow, vec3( 0.6 ) * material.diffuseColor );
   }
   #endif
 }

@@ -96,6 +96,20 @@ const rig = faceP ? new FaceLightRig({ quality: q }).addTo(scene) : null;
 rig?.setPreset(faceP!, Number(P.get('fl') ?? '1'));
 const _eyes = new THREE.Vector3();
 human.rig.blinkEnabled = false;
+if (P.get('nolash') === '1' && human.lashes) human.lashes.visible = false;
+if (P.get('lashdbg') && human.lashes) {
+  const m = human.lashes.material as THREE.MeshStandardMaterial;
+  const ob = m.onBeforeCompile;
+  const mode = P.get('lashdbg');
+  m.onBeforeCompile = (sh, r) => {
+    ob.call(m, sh, r);
+    sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', mode === 'albedo' ? 'gl_FragColor = vec4( diffuseColor.rgb * 4.0, 1.0 );' : mode === 'normal' ? 'gl_FragColor = vec4( normal * 0.5 + 0.5, 1.0 );' : 'gl_FragColor = vec4( outgoingLight, 1.0 );');
+  };
+  m.customProgramCacheKey = () => 'lashdbg-' + mode;
+  m.needsUpdate = true;
+}
+if (P.get('notear') === '1' && human.tearLines) human.tearLines.visible = false;
+if (P.get('nobrow') === '1' && human.brows) human.brows.visible = false;
 human.rig.lipSeal = 0.35;
 human.setPupil(0.25);
 human.setHero(hero ? 1 : 0);

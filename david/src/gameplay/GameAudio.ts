@@ -35,7 +35,9 @@ export class GameAudio {
   }
   /**
    * Either the legacy continuous levels `ambience(wind, cicadas, birds)` (0..1 each) or a named bed
-   * `ambience('fields' | 'gibeah-exterior' | 'gibeah-hall' | 'none', fade = 1.5)`.
+   * `ambience('fields' | 'dawn' | 'gibeah-exterior' | 'gibeah-hall' | 'heights' | 'coast' | 'gilgal' | 'hush' | 'none', fade = 1.5)`.
+   * While the opening film's score plays it owns the ambience: legacy level calls are ignored then, and a named
+   * call takes the ambience over from the score.
    */
   ambience(name: AmbienceName, fade?: number): void;
   ambience(wind: number, cicadas: number, birds: number): void;
@@ -48,12 +50,12 @@ export class GameAudio {
     }
   }
   /**
-   * Start the intro score synchronised to the cue sheet (reads each cue's `beat` and `t` at call time,
-   * so retimed/reordered sheets stay in sync). `startAt` = intro time (s) to start from (for skipping).
-   * The score plays its own title hit at the 'title' cue (a sfx('titleHit') call at that moment is
-   * absorbed; one made early — a skip — jumps the score to its title statement). While the intro plays,
-   * music('title') is ignored and any other music(mood) ends the intro with that fade. The ambience bed
-   * follows the beats automatically until you call ambience(name) yourself.
+   * Start the score + sound design of the opening film, synchronised to its shot sheet (reads each shot cue's
+   * `cue`, `t`, `shot`, `dur`, `cut` and `fade` at call time, so a retimed sheet stays in sync). `startAt` = film
+   * time (s) to start from. The score plays its own hit on the title smash (a sfx('titleHit') at that moment is
+   * absorbed; one made early — a skip — jumps the score to its title hit and tail). While it plays,
+   * music('title') is ignored and any other music(mood) ends it with that fade. The ambience bed follows the cues
+   * automatically until you call ambience(name) yourself. Call syncIntro(filmClock) every frame.
    */
   playIntro(cues: readonly IntroCue[], startAt = 0): void {
     try { this.engine.playIntro(cues, startAt); } catch { /* never let audio break the game */ }
@@ -62,7 +64,7 @@ export class GameAudio {
   stopIntro(fade = 1.5): void {
     try { this.engine.stopIntro(fade); } catch { /* ignore */ }
   }
-  /** Optional, cheap: report the intro clock (s) each frame so the score re-locks after hitches. */
+  /** Report the film clock (s) every frame: the score re-locks when it drifts > 0.1 s (hitches, stalls). */
   syncIntro(t: number): void {
     try { this.engine.syncIntro(t); } catch { /* ignore */ }
   }

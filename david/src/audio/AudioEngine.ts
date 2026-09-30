@@ -3,15 +3,17 @@
  *
  * Everything is synthesized at runtime: a generative cinematic score (kinnor/lyre via
  * Karplus-Strong, low strings, formant choir, frame drums & taiko, shofar, ney/chalil flute),
- * the cue-synchronised opening score (IntroScore.ts), golden-hour ambience (wind, cicadas,
- * birds) with named beds on top (Beds.ts: fields / Gibeah exterior / Saul's hall) and all
+ * the score + sound design of the opening film, keyed on its shot sheet (IntroScore.ts +
+ * FilmSound.ts), golden-hour ambience (wind, cicadas, birds) with named beds on top (Beds.ts:
+ * fields, dawn / Gibeah exterior / Saul's hall / the film's heights, coast, Gilgal and hush) and all
  * gameplay SFX. Shared DSP, instruments and the Composer base live in synth.ts.
  *
  * Signal flow
  *
  *   mood composers ─► moodFader ─┐
  *   intro score (per-section buses) ─┴─► musicIn ─► musicDuck ─────┐
- *   world sfx ──┐                                                 │
+ *   film sound design (per-section) ─┐                            │
+ *   world sfx ──┤                                                 │
  *   ambience + beds ─┴─► worldIn ─► slow-mo lowpass ──────────────┤
  *   ui / cinematic sfx ─► uiIn ───────────────────────────────────┤
  *   sends ─► hallIn ─► convolver (generated IR; 1.8 s on phones) ─┤
@@ -50,7 +52,7 @@ import {
   Out, Synth, makeMelody, Composer, MOTIF_DEG, MOTIF_LEN,
 } from './synth';
 import { IntroScore, riserFx, robeTearFx } from './IntroScore';
-import { Beds, BED_LEGACY, type BedName } from './Beds';
+import { Beds, BED_LEGACY, BED_NAMES, type BedName } from './Beds';
 import type { IntroCue } from '../content/introScript';
 
 export type { BedName } from './Beds';
@@ -1328,6 +1330,8 @@ export class AudioEngine {
     this.beds = beds;
     const intro = new IntroScore(core, syn, this.lite);
     intro.onAmbience = (bed, fade, t) => { if (this.introAutoAmb) this.applyBed(bed, fade, t); };
+    // the film's sound design borrows the flock and the heart from the SFX library, placed at exact times
+    intro.fx.sfxAt = (name, t, volume, pan, pitch, dest) => lib.play(name, { volume, pan, pitch }, Math.max(ctx.currentTime, t - 0.012), dest);
     this.intro = intro;
     this.sling = new SlingSpin(core);
     core.master.gain.value = this.vol;
@@ -1464,12 +1468,13 @@ export class AudioEngine {
   // ------------------------------------------------------------------------------ ambience
 
   /**
-   * Named ambience bed: 'fields' | 'gibeah-exterior' | 'gibeah-hall' | 'none' (crossfade `fade` s).
+   * Named ambience bed: 'fields' | 'dawn' | 'gibeah-exterior' | 'gibeah-hall' | 'heights' | 'coast' | 'gilgal' | 'hush' |
+   * 'none' (crossfade `fade` s).
    * Sets the legacy wind / cicadas / birds levels that go with it. Calling this during the intro
    * takes the ambience over from the score's automatic per-beat switching.
    */
   setAmbienceBed(name: BedName, fade = 1.5): void {
-    const n: BedName = name === 'fields' || name === 'gibeah-exterior' || name === 'gibeah-hall' ? name : 'none';
+    const n: BedName = BED_NAMES.has(name) ? name : 'none';
     const f = clamp(fin(fade, 1.5), 0, 20);
     if (this.core && this.introActive && this.core.ctx.currentTime - this.introStartedAt > 0.5) this.introAutoAmb = false;
     this.bedFade = f;
@@ -1497,6 +1502,9 @@ export class AudioEngine {
    */
   setAmbience(levels: AmbienceLevels): void {
     if (!levels || typeof levels !== 'object') return;
+    // during the opening film the score owns the ambience (e.g. the birds falling silent at the thicket is its
+    // 'hush' bed): legacy level calls are ignored until the film ends or the game names a bed itself
+    if (this.introActive && this.introAutoAmb) return;
     for (const k of ['wind', 'cicadas', 'birds'] as const) {
       const v = levels[k];
       if (v !== undefined) this.amblv[k] = clamp(fin(v, this.amblv[k]), 0, 1);

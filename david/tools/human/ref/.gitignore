@@ -1,0 +1,4 @@
+# face pass: the downloaded Lee Perry-Smith scan (CC BY 3.0, fetched on demand by photoscan_detail.py) and the
+# rebuildable transfer cache stay out of the repository; pre_lps/ (pristine pre-transfer bakes) is kept.
+lps/
+lps_detail_*.npz

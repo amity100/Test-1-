@@ -1281,4 +1281,9 @@ if __name__ == "__main__":
         b.paint()
         b.write()
         b.regions()
+        if a.size == 2048 and os.environ.get("NO_SCAN_DETAIL") != "1":
+            # face pass: photoscan high-frequency detail (Lee Perry-Smith scan, CC BY 3.0) on top of the fresh bake;
+            # the fresh maps become the new pristine copies (tools/human/ref/pre_lps/<preset>/)
+            import photoscan_detail
+            photoscan_detail.apply(p, refresh=True)
         print(f"  total {time.time() - t0:.1f}s")

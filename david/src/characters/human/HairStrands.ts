@@ -86,6 +86,18 @@ varying float vStrandAlpha;
 varying float vStrandRand;`,
         )
         .replace(
+          '#include <normal_fragment_begin>',
+          `#include <normal_fragment_begin>
+  // face pass: the lash ribbons' normals point AWAY from the camera (up / back, toward a back light): the GGX term
+  // at N.V < 0 exploded into a cream-white "eyeliner" fringe above every eye. Keep strand normals on the camera side.
+  if ( !( dot( normal, normal ) > 0.01 ) ) normal = vec3( 0.0, 0.0, 1.0 );
+  {
+    vec3 sv = normalize( vViewPosition );
+    float snv = dot( normal, sv );
+    if ( snv < 0.45 ) normal = normalize( normal + ( 0.45 - snv ) * sv );
+  }`,
+        )
+        .replace(
           '#include <map_fragment>',
           `#include <map_fragment>
 diffuseColor.rgb = mix( uRootColor, uTipColor, smoothstep( 0.1, 1.0, vStrandT ) ) * ( 0.75 + 0.5 * vStrandRand );
