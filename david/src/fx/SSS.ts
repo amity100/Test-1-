@@ -19,7 +19,7 @@ import { FS_VERT } from './glsl';
  *               (additive blend, may be negative) where the skin is visible (skin depth == scene depth: hair,
  *               beards, cloth and props in front are untouched). Specular never enters the blur.
  *
- * Cost (only while a registered skin mesh is on screen and its kernel spans >= ~0.75 px): one extra draw of the
+ * Cost (only while a registered skin mesh is on screen and its kernel spans >= ~1.25 px, i.e. closer than ~3 m at 1080p): one extra draw of the
  * skin meshes (no shadow pass), two full-screen passes that early-out off the skin, 20 bytes / pixel of targets
  * (allocated on first use, freed after ~5 s unused). Level 2 (desktop-high) = 17 taps, level 1 = 11 taps.
  *
@@ -281,7 +281,7 @@ export class SSSPass {
       const d = Math.max(0.15, Math.hypot(this.v.x - cx, this.v.y + 1.0 - cy, this.v.z - cz) - 1.0);
       best = Math.max(best, (pxK / d) * this.settings.width * 1e-3 * maxKernelMm);
     }
-    if (best < 0.75) return this.idleTick();
+    if (best < 1.25) return this.idleTick(); // kernel under ~1 px: medium / wide shots keep the pre-integrated look
     this.active = true;
     this.idle = 0;
     skinShading.uSSSActive.value = 1;
@@ -386,6 +386,24 @@ export class SSSPass {
     this.quad.material = this.vMat;
     renderer.setRenderTarget(dst);
     this.quad.render(renderer);
+    renderer.autoClear = autoClear;
+  }
+
+  /** Compile the two blur programs (PostFX.warmupPasses calls it) so the first close-up doesn't hitch. */
+  warmup(renderer: THREE.WebGLRenderer) {
+    this.ensureTargets();
+    this.idle = 0;
+    const autoClear = renderer.autoClear;
+    renderer.autoClear = false;
+    for (const m of [this.hMat, this.vMat]) {
+      m.uniforms.tSrc.value = this.skinRT.texture;
+      m.uniforms.tCentre.value = this.skinRT.texture;
+      m.uniforms.tSkinDepth.value = this.skinRT.depthTexture;
+      m.uniforms.tSceneDepth.value = this.skinRT.depthTexture;
+      this.quad.material = m;
+      renderer.setRenderTarget(this.blurRT);
+      this.quad.render(renderer);
+    }
     renderer.autoClear = autoClear;
   }
 

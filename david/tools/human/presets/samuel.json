@@ -1,0 +1,93 @@
+{
+  "name": "samuel",
+  "description": "Samuel the prophet at Gilgal (1 Sam 15; docs/visual-bible.md 3.1): a Nazirite from birth (1:11), 'I am old and grey' (12:2) - about 51 in years but 'old age sprang upon him' (Taanit 5b): he must look ~70. Average height (~1.65 m), lean, sun-weathered, deeply lined, prominent cheekbones, heavy brows, piercing eyes with heavy red-rimmed lids (a night of crying out, 15:11).",
+  "height_m": 1.65,
+  "macro": {
+    "gender": 1.0,
+    "age_years": 70,
+    "muscle": 0.42,
+    "weight": 0.36,
+    "height": 0.4,
+    "proportions": 0.55,
+    "african": 0.1,
+    "asian": 0.03,
+    "caucasian": 0.87
+  },
+  "face_macro": {
+    "age_years": 76,
+    "muscle": 0.5,
+    "weight": 0.3
+  },
+  "modifiers": {
+    "head/head-age-decr|incr": 0.85,
+    "head/head-fat-decr|incr": -0.45,
+    "head/head-oval": 0.35,
+    "head/head-scale-vert-decr|incr": 0.12,
+    "forehead/forehead-nubian-decr|incr": 0.25,
+    "forehead/forehead-trans-backward|forward": 0.1,
+    "eyebrows/eyebrows-trans-backward|forward": 0.85,
+    "eyebrows/eyebrows-angle-down|up": -0.25,
+    "eyes/(lr)-eye-push1-in|out": -0.45,
+    "eyes/(lr)-eye-bag-decr|incr": 0.7,
+    "eyes/(lr)-eye-height2-decr|incr": -0.2,
+    "nose/nose-hump-decr|incr": 0.45,
+    "nose/nose-scale-vert-decr|incr": 0.25,
+    "nose/nose-scale-depth-decr|incr": 0.2,
+    "nose/nose-curve-concave|convex": 0.35,
+    "nose/nose-point-width-decr|incr": -0.15,
+    "mouth/mouth-upperlip-volume-decr|incr": -0.35,
+    "mouth/mouth-lowerlip-volume-decr|incr": -0.2,
+    "mouth/mouth-laugh-lines-in|out": -0.6,
+    "cheek/(lr)-cheek-bones-decr|incr": 0.65,
+    "cheek/(lr)-cheek-volume-decr|incr": -0.75,
+    "chin/chin-prominent-decr|incr": 0.2,
+    "chin/chin-bones-decr|incr": 0.35,
+    "chin/chin-width-decr|incr": 0.1,
+    "neck/neck-scale-horiz-decr|incr": -0.15,
+    "torso/torso-scale-horiz-decr|incr": -0.05,
+    "armslegs/(lr)-lowerarm-muscle-decr|incr": 0.1,
+    "armslegs/(lr)-hand-scale-decr|incr": 0.05,
+    "breast/nipple-size-decr|incr": -0.35,
+    "breast/nipple-point-decr|incr": -0.7
+  },
+  "skin": {
+    "seed": 72,
+    "tone": [
+      0.62,
+      0.47,
+      0.37
+    ],
+    "tan": 0.62,
+    "ruddy": 0.45,
+    "freckles": 0.18,
+    "beard_shadow": 0.35,
+    "body_hair": 0.5,
+    "dust": 0.4,
+    "age": 1.0,
+    "tan_lines": "robe",
+    "hair_color": [
+      0.74,
+      0.72,
+      0.68
+    ],
+    "grey_temples": 1.0,
+    "lip_color": [
+      0.56,
+      0.36,
+      0.33
+    ]
+  },
+  "eyes": {
+    "iris": "dark_brown",
+    "seed": 21
+  },
+  "brows": {
+    "color": [
+      0.62,
+      0.6,
+      0.56
+    ],
+    "density": 1.35,
+    "thickness": 1.4
+  }
+}

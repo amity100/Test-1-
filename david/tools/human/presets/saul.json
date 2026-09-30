@@ -1,10 +1,10 @@
 {
   "name": "saul",
-  "description": "King Saul son of Kish, now a mature king of ~48: 'a choice young man and goodly... from his shoulders and upward he was higher than any of the people' (1 Sam 9:2; 10:23). Very tall (1.96 m), broad and powerful: heavy frame, thick neck, broad shoulders and chest, strong brow; forehead lines, crow's feet, beard shadow and grey at the temples; still handsome and kingly.",
-  "height_m": 1.96,
+  "description": "King Saul son of Kish at Gilgal after the war with Amalek (1 Sam 15; docs/visual-bible.md 3.2): a mature king at his peak, looks 50-55 (by the text's arithmetic 50+: Jonathan a commander in 13:2, Ish-boshet 40 at Saul's death, 2 Sam 2:10). 'From his shoulders and upward he was higher than any of the people' (9:2; 10:23): ~2.02 m against a crowd of ~1.66 m. Broad, powerful, athletic (not fat), strikingly handsome (Radak 9:2; Berakhot 48b), sun-creased from the campaign (Radak 17:42); grey at the temples and chin.",
+  "height_m": 2.02,
   "macro": {
     "gender": 1.0,
-    "age_years": 48,
+    "age_years": 53,
     "muscle": 0.86,
     "weight": 0.72,
     "height": 1.0,
@@ -50,15 +50,15 @@
     "armslegs/(lr)-hand-scale-decr|incr": 0.08,
     "breast/nipple-size-decr|incr": -0.35,
     "breast/nipple-point-decr|incr": -0.7,
-    "head/head-age-decr|incr": 0.35,
+    "head/head-age-decr|incr": 0.4,
     "head/head-fat-decr|incr": 0.1,
     "mouth/mouth-laugh-lines-in|out": -0.35,
     "measure/measure-neck-circ-decr|incr": 0.45,
     "torso/torso-scale-depth-decr|incr": 0.15,
     "measure/measure-shoulder-dist-decr|incr": 0.5,
     "armslegs/(lr)-upperarm-shoulder-muscle-decr|incr": 0.55,
-    "stomach/stomach-pregnant-decr|incr": 0.15,
-    "measure/measure-waist-circ-decr|incr": 0.2
+    "stomach/stomach-pregnant-decr|incr": 0.05,
+    "measure/measure-waist-circ-decr|incr": 0.05
   },
   "skin": {
     "seed": 44,
@@ -72,7 +72,7 @@
     "freckles": 0.08,
     "beard_shadow": 0.85,
     "body_hair": 0.55,
-    "dust": 0.0,
+    "dust": 0.35,
     "age": 0.75,
     "tan_lines": "robe",
     "hair_color": [

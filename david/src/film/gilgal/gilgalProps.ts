@@ -24,16 +24,17 @@ export function buildStones(ground: GilgalGround, world: TextureSet) {
   for (let i = 0; i < STONES.count; i++) {
     const g = new THREE.IcosahedronGeometry(1, 4);
     const p = g.getAttribute('position');
-    const h = 1.2 + rand() * 0.5, w = 0.72 + rand() * 0.3, d = 0.52 + rand() * 0.22;
+    // visual-bible 3.6: rounded river boulders ~70-100 cm, upright, half-buried at the base
+    const h = 1.05 + rand() * 0.35, w = 0.5 + rand() * 0.2, d = 0.4 + rand() * 0.15;
     const sd = rand() * 100;
     const uv: number[] = [];
     const col: number[] = [];
     const dark = i % 4 === 1 ? 1 : 0; // a few darker flint / basalt-grey river stones among the pale limestone
-    const base = dark ? new THREE.Color(0.52, 0.49, 0.45) : new THREE.Color(0.93, 0.88, 0.8).multiplyScalar(0.9 + rand() * 0.15);
+    const base = dark ? new THREE.Color(0.36, 0.34, 0.31) : new THREE.Color(0.66, 0.61, 0.54).multiplyScalar(0.85 + rand() * 0.2);
     for (let k = 0; k < p.count; k++) {
       let x = p.getX(k), y = p.getY(k), z = p.getZ(k);
       // water-worn: low-frequency lumps only, flattened faces, a slightly narrower top
-      const n = noise.noise(x * 1.1 + sd, y * 1.1 + z * 0.7) * 0.12 + noise.noise(x * 2.3 - sd, z * 2.3 + y) * 0.04;
+      const n = noise.noise(x * 1.1 + sd, y * 1.1 + z * 0.7) * 0.16 + noise.noise(x * 2.3 - sd, z * 2.3 + y) * 0.07 + noise.noise(x * 5.1 + sd, y * 5.3 - z) * 0.025;
       const r = 1 + n;
       x *= r; y *= r; z *= r;
       const top = (y + 1) / 2;
@@ -62,6 +63,47 @@ export function buildStones(ground: GilgalGround, world: TextureSet) {
     tops.push(m.position.clone().setY(m.position.y + h - 0.28));
   }
   return { group, tops };
+}
+
+/** stones and pebbles of the plain (flint and limestone, long shadows in the low sun) near the stage */
+export function buildPebbles(ground: GilgalGround, world: TextureSet, tier: GilgalTier, clear: (x: number, z: number) => boolean) {
+  const count = tier === 'high' ? 2600 : tier === 'medium' ? 1500 : 600;
+  const g = new THREE.IcosahedronGeometry(1, 1);
+  const p = g.getAttribute('position');
+  const nz = new Simplex2(77);
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const r = 1 + nz.noise(x * 1.7, y * 1.7 + z) * 0.25;
+    p.setXYZ(i, x * r, y * r * 0.6, z * r);
+  }
+  g.computeVertexNormals();
+  const mat = new THREE.MeshStandardMaterial({ map: world.rock, roughness: 0.9, metalness: 0, color: 0xb8ab98 });
+  const mesh = new THREE.InstancedMesh(g, mat, count);
+  mesh.name = 'gilgal:pebbles';
+  const rand = mulberry32(4242);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), c = new THREE.Color();
+  let n = 0;
+  for (let t = 0; n < count && t < count * 6; t++) {
+    const a = rand() * 6.283, r = 3 + Math.pow(rand(), 1.8) * 160;
+    const x = Math.cos(a) * r - 60 + (rand() - 0.5) * 60, z = Math.sin(a) * r * 0.7;
+    const onStage = x > -60 && x < 40 && Math.abs(z) < 6;
+    if (onStage && rand() < 0.8) continue;
+    const s = 0.04 + Math.pow(rand(), 3) * 0.32;
+    e.set(rand() * 0.6, rand() * 6.28, rand() * 0.6);
+    q.setFromEuler(e);
+    m.compose(new THREE.Vector3(x, ground.height(x, z) - s * 0.25, z), q, new THREE.Vector3(s * (0.8 + rand() * 0.5), s, s * (0.8 + rand() * 0.5)));
+    mesh.setMatrixAt(n, m);
+    c.setRGB(0.95, 0.9, 0.82).multiplyScalar(0.7 + rand() * 0.4);
+    if (rand() < 0.25) c.setRGB(0.5, 0.46, 0.42);
+    mesh.setColorAt(n, c);
+    n++;
+  }
+  void clear;
+  mesh.count = n;
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  mesh.computeBoundingSphere();
+  return mesh;
 }
 
 // =====================================================================================================
@@ -141,7 +183,7 @@ export function buildPlaceholders(ground: GilgalGround, tier: GilgalTier): Place
   // ---------------------------------------------------------------- Saul (1.98 m) and Samuel (1.70 m)
   const saul = new THREE.Group();
   saul.name = 'placeholder:saul';
-  saul.add(new THREE.Mesh(manGeometry(1.98, { tunic: new THREE.Color(0.42, 0.14, 0.1), skin, hair: new THREE.Color(0.12, 0.09, 0.07), beard: new THREE.Color(0.14, 0.1, 0.08), armour: new THREE.Color(0.55, 0.42, 0.26), band: true }), mat));
+  saul.add(new THREE.Mesh(manGeometry(1.98, { tunic: new THREE.Color(0.26, 0.015, 0.02), skin, hair: new THREE.Color(0.1, 0.08, 0.06), beard: new THREE.Color(0.12, 0.09, 0.07), armour: new THREE.Color(0.48, 0.18, 0.05), band: true }), mat));
   const saulSpear = new THREE.Group();
   const sp = new THREE.Mesh(spearGeometry(2.6), mat);
   sp.position.y = -0.95;
@@ -150,15 +192,15 @@ export function buildPlaceholders(ground: GilgalGround, tier: GilgalTier): Place
   saul.add(saulSpear);
   const samuel = new THREE.Group();
   samuel.name = 'placeholder:samuel';
-  samuel.add(new THREE.Mesh(manGeometry(1.7, { tunic: new THREE.Color(0.52, 0.47, 0.4), skin: new THREE.Color(0.5, 0.36, 0.28), hair: new THREE.Color(0.8, 0.78, 0.74), beard: new THREE.Color(0.85, 0.83, 0.8), robe: true }), mat));
+  samuel.add(new THREE.Mesh(manGeometry(1.65, { tunic: new THREE.Color(0.11, 0.083, 0.057), skin: new THREE.Color(0.5, 0.36, 0.28), hair: new THREE.Color(0.72, 0.7, 0.66), beard: new THREE.Color(0.78, 0.76, 0.72), robe: true }), mat));
   for (const g of [saul, samuel]) g.traverse((o) => { o.castShadow = true; o.receiveShadow = true; });
   group.add(saul, samuel);
   // ---------------------------------------------------------------- the army (instanced)
   const ranks = tier === 'high' ? ARMY.ranks : tier === 'medium' ? 34 : 20;
   const n = ranks * ARMY.files;
   const variants = [
-    manGeometry(1.72, { tunic: new THREE.Color(0.7, 0.64, 0.52), skin, hair: new THREE.Color(0.1, 0.08, 0.06), beard: new THREE.Color(0.1, 0.08, 0.06), shield: true }),
-    manGeometry(1.7, { tunic: new THREE.Color(0.5, 0.4, 0.3), skin, hair: new THREE.Color(0.1, 0.08, 0.06), beard: new THREE.Color(0.12, 0.09, 0.06) }),
+    manGeometry(1.72, { tunic: new THREE.Color(0.6, 0.52, 0.4), skin, hair: new THREE.Color(0.1, 0.08, 0.06), beard: new THREE.Color(0.1, 0.08, 0.06), shield: true }),
+    manGeometry(1.7, { tunic: new THREE.Color(0.38, 0.3, 0.22), skin, hair: new THREE.Color(0.1, 0.08, 0.06), beard: new THREE.Color(0.12, 0.09, 0.06) }),
   ];
   const bodies = variants.map((g) => new THREE.InstancedMesh(g, mat, n));
   const spears = new THREE.InstancedMesh(spearGeometry(2.4), mat, n);

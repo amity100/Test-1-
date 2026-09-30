@@ -1,0 +1,424 @@
+import * as THREE from 'three';
+import type { Expression } from '../../characters/human/HumanRig';
+import { armyAt, samuelAt, saulAt, SHOT_DURATION, timeScale, type GilgalShotName } from '../gilgal/gilgalBlocking';
+import { SAMUEL, SAUL_FACE } from '../gilgal/gilgalLayout';
+import type { FilmActor, ArmPose } from './FilmActor';
+
+/*
+ * Performances of shots 5-12 (docs/intro-script.md; acting notes from docs/visual-bible.md 3.1-3.3):
+ *
+ *   GilgalPerformance  shots 6-12 on the Gilgal set, driven by src/film/gilgal/gilgalBlocking (saulAt / samuelAt /
+ *                      armyAt: the same clock the cameras use, so actors and cameras stay in register).
+ *     Saul    6-7   the king's stride (mocap walk_king, speed-matched to the column, slow motion in 7), spear upright
+ *                   in the right hand, the bronze helmet under the left arm, chin up, eyes on the road ahead.
+ *             8     halts (walk_halt -> idle_king) and raises the spear to the sky, roaring (jaw open, anger/effort).
+ *             9     lowers the spear; his face falls as he sees the old man in the road.
+ *             10a   face to face: towering over Samuel (eye line = Samuel's at Saul's collarbone), pleading
+ *                   (15:24-25 "חָטָאתִי ... וְשׁוּב עִמִּי") — sad / fear, eyes on Samuel's eyes, breathing high.
+ *             10b   Samuel turns to go; Saul lunges (grab_pull_R), his right hand reaches the lower corner of the
+ *                   me'il (arm IK onto the cloth), the fist closes, he pulls — the wool tears (desperation, not
+ *                   violence; 3.3).
+ *             11    listens, the torn piece in his fist; the verdict lands: the eyes widen, the jaw slackens.
+ *             12    the long close-up: shattered — head bowed a little, unfocused eyes, trembling breath, the fist
+ *                   with the cloth held at his chest.
+ *     Samuel 9-10a  stands in the road, upright and still, wrapped in the me'il; eyes on the king (red-rimmed,
+ *                   grieving; iron resolve — not anger, not triumph).
+ *             10b   turns away to leave (old_turn_walk), one step — the corner is seized — the wool tears.
+ *             11    turned back to the king: the verdict, quiet and hard (jaw speech keys, sad + determined).
+ *             12    turns and walks away east (walk_old, slow).
+ *   RamahPerformance   shot 5: Samuel before the elders at the gate of Ramah (idle_old; the elders talk / argue /
+ *                      gesture with open palms, some seated, some leaning on staffs).
+ *
+ * Every clip is from src/characters/mocap (CMU). Arm holds (helmet, spear) are proxy poses masked over the mocap.
+ */
+
+export const GILGAL_CLIPS = ['walk_king', 'walk_halt', 'idle_king', 'raise_arm_R', 'grab_pull_R', 'idle_old', 'old_turn_walk', 'walk_old', 'flinch', 'march', 'walk'];
+export const RAMAH_CLIPS = ['idle_old', 'talk_gesture', 'argue', 'point_directions', 'idle_bus', 'idle_shift', 'walk_old_hunched'];
+
+const ss = (a: number, b: number, x: number) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+const lerp3 = (a: [number, number, number], b: [number, number, number], t: number): [number, number, number] => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+const mixPose = (a: ArmPose, b: ArmPose, t: number): ArmPose => ({ ua: lerp3(a.ua, b.ua, t), fa: lerp3(a.fa, b.fa, t), hd: lerp3(a.hd, b.hd, t) });
+
+/** arm holds (proxy Euler, character axes; x < 0 swings forward; L: +z = outward, R: -z = outward) */
+export const POSES = {
+  /** the bronze helmet cradled under the left arm against the hip */
+  helmetL: { ua: [0.08, 0, 0.2], fa: [-1.4, 0, 0], hd: [0, 0, 0] } as ArmPose,
+  /** spear carried upright in the right hand, elbow bent, hand at the belt */
+  spearCarryR: { ua: [-0.12, -0.1, -0.16], fa: [-1.2, 0, 0], hd: [0.1, 0, 0.05] } as ArmPose,
+  /** spear raised to the sky (shot 8 peak) */
+  spearRaiseR: { ua: [-2.85, 0.1, -0.32], fa: [-0.25, 0, 0], hd: [0.25, 0, 0] } as ArmPose,
+  /** fist with the torn cloth held before the chest (shot 12) */
+  clothFistR: { ua: [-0.35, 0, -0.1], fa: [-1.75, 0.2, 0], hd: [0.2, 0, 0] } as ArmPose,
+};
+
+/** smooth expression mixer: set targets, it eases the rig's expression weights */
+export class FaceDriver {
+  readonly target: Partial<Record<Expression, number>> = {};
+  private cur: Partial<Record<Expression, number>> = {};
+  jawTarget = 0;
+  private jaw = 0;
+  constructor(readonly actor: FilmActor, readonly rate = 3) {}
+  set(t: Partial<Record<Expression, number>>) {
+    for (const k in this.target) this.target[k as Expression] = 0;
+    Object.assign(this.target, t);
+  }
+  snap() {
+    Object.assign(this.cur, this.target);
+    this.jaw = this.jawTarget;
+  }
+  update(dt: number) {
+    const k = 1 - Math.exp(-this.rate * dt);
+    const rig = this.actor.human.rig;
+    const keys = new Set([...Object.keys(this.target), ...Object.keys(this.cur)]) as Set<Expression>;
+    for (const e of keys) {
+      const c = (this.cur[e] ?? 0) + ((this.target[e] ?? 0) - (this.cur[e] ?? 0)) * k;
+      this.cur[e] = c;
+      rig.setExpressionWeight(e, c);
+    }
+    this.jaw += (this.jawTarget - this.jaw) * (1 - Math.exp(-18 * dt));
+    rig.jawOpen = this.jaw;
+  }
+}
+
+/** speech jaw curve for a line of `syllables` over `dur` s with pauses at the given fractions */
+export function speechJaw(t: number, dur: number, syllables: number, pauses: number[] = [], seed = 1) {
+  if (t < 0 || t > dur) return 0;
+  const u = t / dur;
+  for (const p of pauses) if (Math.abs(u - p) < 0.035) return 0;
+  const ph = u * syllables;
+  const i = Math.floor(ph);
+  const f = ph - i;
+  const h = Math.sin((i + 1) * 12.9898 * seed) * 43758.5453;
+  const amp = 0.08 + 0.14 * (h - Math.floor(h));
+  return amp * Math.sin(Math.PI * f) ** 1.5;
+}
+
+// ================================================================================================ GILGAL
+export interface GilgalCast {
+  saul: FilmActor;
+  samuel: FilmActor;
+  armourBearer?: FilmActor;
+}
+
+export class GilgalPerformance {
+  private shot: GilgalShotName | null = null;
+  private saulFace: FaceDriver;
+  private samFace: FaceDriver;
+  private grabbed = false;
+  private lookSaul = new THREE.Vector3();
+  private lookSam = new THREE.Vector3();
+  private tmp = new THREE.Vector3();
+  private samTurnStarted = false;
+  /** wind (world m/s) passed to the actors' hair / cloth */
+  readonly wind = new THREE.Vector3(1.4, 0, 0.3);
+  /** hook for the film's FX: a thread snaps (lint / dust puff) */
+  onThreadSnap: ((p: THREE.Vector3) => void) | null = null;
+
+  constructor(readonly cast: GilgalCast, readonly ground: (x: number, z: number) => number = () => 0) {
+    this.saulFace = new FaceDriver(cast.saul, 2.5);
+    this.samFace = new FaceDriver(cast.samuel, 2);
+    const { saul, samuel } = cast;
+    saul.holdProp('spear', 'R');
+    // the bronze helmet carried under the left arm (crown outward, rim against the hip); the spear kept upright
+    saul.carryUnderArm('helmet', 'L');
+    saul.upright.R.prop = 'spear';
+    saul.upright.R.weight = 1;
+    saul.ground = ground;
+    samuel.ground = ground;
+    samuel.human.rig.faceBias.LeftUpperLidClosed = 0.22; // heavy, tired lids (15:11 he cried all night)
+    samuel.human.rig.faceBias.RightUpperLidClosed = 0.22;
+    if (samuel.tear) samuel.tear.onSnap = (p) => this.onThreadSnap?.(p);
+    if (cast.armourBearer) {
+      cast.armourBearer.ground = ground;
+      cast.armourBearer.holdProp('main', 'R');
+      cast.armourBearer.upright.R.prop = 'main';
+      cast.armourBearer.upright.R.weight = 1;
+      cast.armourBearer.armPose.R.pose = POSES.spearCarryR;
+      cast.armourBearer.armPose.R.weight = 1;
+      const sh = cast.armourBearer.props.shield;
+      if (sh) cast.armourBearer.human.sockets.handGripL.add(sh);
+    }
+  }
+
+  /** the spear held (upright) or planted in the ground by its butt-spike (26:7) beside the king */
+  private spearPlanted(on: boolean, s?: { pos: THREE.Vector3; yaw: number }) {
+    const { saul } = this.cast;
+    const sp = saul.props.spear;
+    if (!sp) return;
+    if (on && s) {
+      const scene = saul.root.parent;
+      if (!scene) return;
+      scene.add(sp);
+      const right = new THREE.Vector3(-Math.cos(s.yaw), 0, Math.sin(s.yaw));
+      const p = s.pos.clone().addScaledVector(right, 0.55).add(new THREE.Vector3(-Math.sin(s.yaw) * 0.25, 0, -Math.cos(s.yaw) * 0.25));
+      sp.position.set(p.x, this.ground(p.x, p.z) - 0.08, p.z);
+      sp.rotation.set(0.03, 0, -0.04);
+      saul.upright.R.weight = 0;
+      saul.human.rig.setFingers('R', 'relaxed');
+    } else if (!on && sp.parent !== null && sp.parent === saul.root.parent) {
+      saul.holdProp('spear', 'R');
+      saul.upright.R.weight = 1;
+    }
+  }
+
+  /** call on each cut (and before the first frame of a shot) */
+  enter(shot: GilgalShotName) {
+    const { saul, samuel } = this.cast;
+    const plant = shot === 'tear' || shot === 'verdict' || shot === 'saulAlone' || shot === 'rise';
+    this.spearPlanted(plant, plant ? saulAt(shot === 'tear' ? 'faceOff' : shot, 0) : undefined);
+    this.shot = shot;
+    saul.headingSnap = true;
+    samuel.headingSnap = true;
+    if (this.cast.armourBearer) this.cast.armourBearer.headingSnap = true;
+    this.grabbed = false;
+    this.samTurnStarted = false;
+    saul.reach.R.weight = 0;
+    saul.reach.R.target = null;
+    saul.mocap.timeScale = 1;
+    samuel.mocap.timeScale = 1;
+    samuel.mocap.rootMotion = 'inplace';
+    const walkShots: GilgalShotName[] = ['dustWall', 'king'];
+    if (walkShots.includes(shot)) {
+      saul.mocap.play('walk_king', { fade: 0, sync: true, time: shot === 'king' ? 0.4 : 0 });
+      saul.mocap.matchSpeed('walk_king', saulAt(shot, 0).walk);
+    } else if (shot === 'spearRaised') {
+      saul.mocap.play('walk_halt', { fade: 0, onEnd: () => saul.mocap.play('idle_king', { fade: 0.5 }) });
+    } else if (shot === 'tear') {
+      saul.mocap.play('idle_king', { fade: 0 });
+    } else {
+      saul.mocap.play('idle_king', { fade: 0, time: shot === 'saulAlone' ? 2 : 0 });
+    }
+    // Samuel
+    // upright and still (bible 3.1): the upright idle, not the stooped one
+    samuel.mocap.play('idle_king', { fade: 0, time: 1.3 });
+    // the tear state is a function of the shot: intact before 'tear', torn after
+    const tear = samuel.tear;
+    if (tear) {
+      if (shot === 'tear') tear.reset();
+      else if (shot === 'verdict' || shot === 'saulAlone' || shot === 'rise') {
+        // already torn: the piece in Saul's fist
+        if (!tear.isTorn) {
+          saul.armPose.R.pose = POSES.clothFistR;
+          saul.armPose.R.weight = 1;
+          saul.update(0);
+          tear.progress = 1;
+          tear.grab(saul.human.sockets.handGripR);
+        }
+      } else tear.reset();
+    }
+    this.saulFace.set({});
+    this.samFace.set({});
+  }
+
+  /** per frame: shot-local time t (s, real time, like CameraRig) and frame dt */
+  update(t: number, dt: number, camera?: THREE.Camera, viewportH?: number) {
+    const shot = this.shot;
+    if (!shot) return;
+    const { saul, samuel, armourBearer } = this.cast;
+    const ts = timeScale(shot, t);
+    const adt = dt * ts;
+    const s = saulAt(shot, t);
+    const m = samuelAt(shot, t);
+    saul.place(s.pos, s.yaw);
+    // ---------------------------------------------------------------- SAUL
+    saul.mocap.timeScale = ts;
+    const torn = shot === 'verdict' || shot === 'saulAlone' || shot === 'rise';
+    saul.armPose.L.pose = POSES.helmetL;
+    saul.armPose.L.weight = 1;
+    let spear = 0; // 0 carry .. 1 raised
+    if (shot === 'spearRaised') spear = s.cue;
+    if (shot === 'silence') spear = s.cue;
+    if (!torn && shot !== 'tear') {
+      saul.armPose.R.pose = mixPose(POSES.spearCarryR, POSES.spearRaiseR, ss(0, 1, spear));
+      saul.armPose.R.weight = 1;
+    }
+    samuel.headWorld(this.lookSam);
+    saul.headWorld(this.lookSaul);
+    switch (shot) {
+      case 'dustWall':
+      case 'king':
+        saul.mocap.lookAt = this.tmp.copy(s.pos).add(new THREE.Vector3(Math.sin(s.yaw) * 30, 2.2, Math.cos(s.yaw) * 30));
+        this.saulFace.set({ determined: 0.55 });
+        this.saulFace.jawTarget = 0;
+        break;
+      case 'spearRaised': {
+        saul.mocap.lookAt = this.tmp.copy(s.pos).add(new THREE.Vector3(Math.sin(s.yaw) * 6, 2.0 + 6 * s.cue, Math.cos(s.yaw) * 6));
+        const roar = ss(1.6, 2.2, t) * (1 - ss(4.3, 5.4, t));
+        this.saulFace.set({ anger: 0.55 * roar, effort: 0.35 * roar, determined: 0.4 * (1 - roar) });
+        this.saulFace.jawTarget = 0.42 * roar;
+        break;
+      }
+      case 'silence':
+        saul.mocap.lookAt = this.lookSam;
+        this.saulFace.set({ fear: 0.25 * ss(1.5, 4, t), awe: 0.2 * ss(0.5, 2, t), determined: 0.3 * (1 - ss(1, 3, t)) });
+        this.saulFace.jawTarget = 0;
+        break;
+      case 'faceOff':
+        saul.mocap.lookAt = this.eyeOf(samuel);
+        this.saulFace.set({ sad: 0.45, fear: 0.3 });
+        this.saulFace.jawTarget = speechJaw(t - 0.6, 2.2, 7, [0.45], 3) * 0.8; // "חָטָאתִי ... שׁוּב עִמִּי" (unvoiced here)
+        break;
+      case 'tear': {
+        // lunge + seize: grab_pull_R from its lunge (1.2 s) as Samuel turns; the hand is guided onto the corner
+        const cue = s.cue; // 0 reach .. 0.5 seized .. 0.8-1 torn
+        if (t > 0.5 && saul.mocap.current()?.name !== 'grab_pull_R') saul.mocap.play('grab_pull_R', { fade: 0.35, time: 0.6 });
+        saul.armPose.R.pose = null;
+        saul.armPose.R.weight = 0;
+        saul.upright.R.weight = 0;
+        saul.mocap.lookAt = this.tear(samuel, this.tmp);
+        const tear = samuel.tear;
+        if (tear) {
+          const target = tear.cornerWorld(new THREE.Vector3());
+          saul.reach.R.target = target;
+          saul.reach.R.weight = ss(0.1, 0.5, cue) * (tear.isTorn ? 1 - ss(0.75, 1, cue) * 0.6 : 1);
+          if (!this.grabbed && cue >= 0.5) {
+            this.grabbed = true;
+            saul.human.rig.setFingers('R', 'fist');
+            tear.grab(saul.human.sockets.handGripR);
+          }
+          tear.progress = ss(0.62, 1, cue);
+        }
+        this.saulFace.set({ effort: 0.6 * ss(0.2, 0.6, cue), fear: 0.35, sad: 0.3 * (1 - cue) });
+        this.saulFace.jawTarget = 0.12 * ss(0.4, 0.7, cue);
+        break;
+      }
+      case 'verdict':
+        saul.upright.R.weight = 0;
+        saul.armPose.R.pose = POSES.clothFistR;
+        saul.armPose.R.weight = 1;
+        saul.mocap.lookAt = this.eyeOf(samuel);
+        this.saulFace.set({ sad: 0.35 + 0.35 * ss(2, 7, t), fear: 0.35 * ss(1, 4, t), awe: 0.25 * ss(4, 6, t) });
+        this.saulFace.jawTarget = 0.06 * ss(5, 7, t);
+        break;
+      case 'saulAlone':
+      case 'rise':
+        saul.upright.R.weight = 0;
+        saul.armPose.R.pose = POSES.clothFistR;
+        saul.armPose.R.weight = 1;
+        // unfocused: the gaze falls to the ground a few metres ahead, drifting
+        saul.mocap.lookAt = this.tmp.copy(s.pos).add(new THREE.Vector3(Math.sin(s.yaw) * 5 + 0.4 * Math.sin(t * 0.3), 0.6 + 0.2 * Math.sin(t * 0.21), Math.cos(s.yaw) * 5));
+        saul.mocap.lookWeight = 0.8;
+        this.saulFace.set({ sad: 0.7, pain: 0.3, fear: 0.15 });
+        this.saulFace.jawTarget = 0.04 + 0.03 * Math.sin(t * 1.7);
+        saul.mocap.breathe = 1.8;
+        break;
+    }
+    if (shot !== 'saulAlone' && shot !== 'rise') saul.mocap.breathe = 1;
+    // ---------------------------------------------------------------- SAMUEL
+    samuel.mocap.timeScale = ts;
+    if (shot === 'tear') {
+      // he turns to go (15:27): old_turn_walk from its turn, root motion applied from his mark
+      if (!this.samTurnStarted && t >= 0.15) {
+        this.samTurnStarted = true;
+        samuel.place(SAMUEL.pos, SAMUEL.yaw);
+        samuel.mocap.rootMotion = 'apply';
+        samuel.mocap.rootTarget = samuel.root;
+        samuel.mocap.play('old_turn_walk', { fade: 0.3, time: 1.2 });
+      }
+      if (!this.samTurnStarted) samuel.place(m.pos, m.yaw);
+      // the seized robe holds him back: stop the clip once the tear is through
+      if (s.cue > 0.9) samuel.mocap.setSpeed('old_turn_walk', 0.25);
+      samuel.mocap.lookAt = null;
+      this.samFace.set({ sad: 0.5, determined: 0.3 });
+    } else if (shot === 'saulAlone' || shot === 'rise') {
+      samuel.place(m.pos, m.yaw);
+      if (m.walk > 0 && samuel.mocap.current()?.name !== 'walk_old') {
+        samuel.mocap.play('walk_old', { fade: 0.6, sync: true });
+        samuel.mocap.matchSpeed('walk_old', m.walk);
+      }
+      samuel.mocap.lookAt = null;
+      this.samFace.set({ sad: 0.6 });
+    } else {
+      samuel.place(m.pos, m.yaw);
+      samuel.mocap.lookAt = this.eyeOf(saul);
+      if (shot === 'verdict') {
+        // 15:28 — quiet and hard: ~24 syllables over ~6 s, pauses after "הַיּוֹם" and before "הַטּוֹב מִמֶּךָּ"
+        this.samFace.set({ sad: 0.45, determined: 0.4 });
+        this.samFace.jawTarget = speechJaw(t - 1.2, 6.2, 24, [0.52, 0.8], 7);
+      } else {
+        this.samFace.set({ sad: 0.4, determined: 0.35 });
+        this.samFace.jawTarget = 0;
+      }
+    }
+    // ---------------------------------------------------------------- ARMOUR-BEARER one step behind the king
+    if (armourBearer) {
+      const back = new THREE.Vector3(-Math.sin(s.yaw) * 1.6, 0, -Math.cos(s.yaw) * 1.6).add(new THREE.Vector3(Math.cos(s.yaw) * 0.7, 0, -Math.sin(s.yaw) * 0.7));
+      armourBearer.place(s.pos.clone().add(back), s.yaw);
+      const a = armyAt(shot, t);
+      const want = a.walk > 0 ? 'walk' : 'idle_king';
+      if (armourBearer.mocap.current()?.name !== want) {
+        armourBearer.mocap.play(want, { fade: 0.4, sync: true });
+        if (a.walk > 0) armourBearer.mocap.matchSpeed('walk', a.walk);
+      }
+      armourBearer.mocap.timeScale = ts;
+      armourBearer.update(dt, camera, viewportH, this.wind);
+    }
+    this.saulFace.update(adt || dt);
+    this.samFace.update(adt || dt);
+    saul.update(adt, camera, viewportH, this.wind);
+    samuel.update(adt, camera, viewportH, this.wind);
+    void SAUL_FACE;
+    void SHOT_DURATION;
+  }
+
+  private eyeOf(a: FilmActor) {
+    return a.eyesWorld(new THREE.Vector3());
+  }
+
+  private tear(samuel: FilmActor, out: THREE.Vector3) {
+    if (samuel.tear) return samuel.tear.cornerWorld(out);
+    return samuel.root.getWorldPosition(out).setY(out.y + 0.5);
+  }
+}
+
+// ================================================================================================ RAMAH (shot 5)
+export interface RamahMark {
+  pos: THREE.Vector3;
+  yaw: number;
+  seated?: boolean;
+}
+
+export class RamahPerformance {
+  private faces: FaceDriver[] = [];
+  readonly wind = new THREE.Vector3(0.8, 0, -0.2);
+  constructor(readonly samuel: FilmActor, readonly elders: FilmActor[], samuelMark: RamahMark, elderMarks: RamahMark[], ground: (x: number, z: number) => number = () => 0) {
+    samuel.ground = ground;
+    samuel.place(samuelMark.pos, samuelMark.yaw);
+    samuel.mocap.play('idle_king', { fade: 0 });
+    samuel.human.rig.faceBias.LeftUpperLidClosed = 0.18;
+    samuel.human.rig.faceBias.RightUpperLidClosed = 0.18;
+    const clips = ['talk_gesture', 'idle_old', 'argue', 'idle_bus', 'point_directions', 'idle_shift'];
+    elders.forEach((e, i) => {
+      e.ground = ground;
+      const mk = elderMarks[i % elderMarks.length];
+      e.place(mk.pos, mk.yaw);
+      const clip = clips[i % clips.length];
+      e.mocap.play(clip, { fade: 0, time: (i * 0.73) % 2, mirror: i % 2 === 1 });
+      if (e.props.staff) {
+        e.holdProp('staff', i % 2 ? 'R' : 'L');
+      }
+      e.mocap.lookAt = samuel.eyesWorld(new THREE.Vector3());
+      const f = new FaceDriver(e, 2);
+      f.set(i % 3 === 0 ? { determined: 0.4 } : i % 3 === 1 ? { sad: 0.25, fear: 0.1 } : { anger: 0.2, determined: 0.2 });
+      this.faces.push(f);
+    });
+  }
+
+  update(t: number, dt: number, camera?: THREE.Camera, viewportH?: number) {
+    // 8:5 is spoken by the elders: the first two speakers' jaws move
+    this.elders.forEach((e, i) => {
+      const f = this.faces[i];
+      f.jawTarget = i < 2 ? speechJaw(t - 0.8 - i * 0.3, 3.5, 12, [0.5], 11 + i) : 0;
+      f.update(dt);
+      e.update(dt, camera, viewportH, this.wind);
+    });
+    this.samuel.human.rig.setExpressionWeight('sad', 0.35);
+    this.samuel.human.rig.setExpressionWeight('determined', 0.3);
+    const lead = this.elders[0];
+    if (lead) this.samuel.mocap.lookAt = lead.eyesWorld(new THREE.Vector3());
+    this.samuel.update(dt, camera, viewportH, this.wind);
+  }
+}

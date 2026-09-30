@@ -15,8 +15,9 @@ import * as THREE from 'three';
  * full-face by that sun, with the twelve stones of Joshua (Josh 4:20) and the palms beyond him.
  */
 
-/** late afternoon: low sun in the west (SkySystem degrees: azimuth from +Z toward +X, -90 = west) */
-export const SUN = { elevation: 12.5, azimuth: -95 };
+/** late afternoon: sun in the west behind the army, 16 deg (visual-bible 4: shots 6-9 afternoon, 10-12 at 15-20 deg);
+ * SkySystem degrees: azimuth from +Z toward +X, -90 = west */
+export const SUN = { elevation: 16, azimuth: -95 };
 
 /** the road (centre line z as a function of x), shared by the terrain shader (GLSL twin in gilgalTerrain.ts) */
 export function roadZ(x: number) {
@@ -37,7 +38,7 @@ export const ROAD_HALF = 4.5;
 export const STONES = { center: new THREE.Vector3(21, 0, -13), radius: 5.4, count: 12 };
 
 /** Samuel's mark in the road, facing west toward the army (and into the sun) */
-export const SAMUEL = { pos: new THREE.Vector3(12.0, 0, 0.4), yaw: -Math.PI / 2, height: 1.7 };
+export const SAMUEL = { pos: new THREE.Vector3(12.0, 0, 0.4), yaw: -Math.PI / 2, height: 1.65 };
 /** Saul's mark for the face-off and the tearing (15:27), facing east toward Samuel */
 export const SAUL_FACE = { pos: new THREE.Vector3(9.75, 0, 0.35), yaw: Math.PI / 2, height: 1.98 };
 /** where the army halts for the roar (shot 8) and stands during the silence (shot 9): Saul's feet */
@@ -57,5 +58,9 @@ export const ARMY = {
 };
 /** the close-up zone (shots 10-12): midway between the two men at hand height */
 export const TEAR = new THREE.Vector3((SAMUEL.pos.x + SAUL_FACE.pos.x) / 2 + 0.25, 1.05, 0.35);
+/** the altar of unhewn stones (Exod 20:22; Radak 15:12), NE of the stone ring: centre, side, height */
+export const ALTAR = { x: 31.5, z: -21.5, size: 2.5, height: 1.2 };
+/** the camp of the returning army: black goat-hair tents south-east of the site (centre, radius) */
+export const CAMP = { x: 150, z: 70, r: 55 };
 /** Samuel's way out after the verdict: east along the road */
 export const SAMUEL_EXIT = [new THREE.Vector3(12.0, 0, 0.4), new THREE.Vector3(20, 0, 0.5), new THREE.Vector3(60, 0, 0.1), new THREE.Vector3(160, 0, -1.6)];

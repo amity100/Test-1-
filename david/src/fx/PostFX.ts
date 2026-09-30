@@ -979,6 +979,7 @@ export class PostFX {
   warmupPasses() {
     if (!this.lastLdr) return;
     const r = this.renderer;
+    this.sss?.warmup(r);
     if (this.dof) {
       this.dof.render(r, this.bufA.texture, this.sceneRT.depthTexture!, this.camera, this.bufB);
       this.usedB = true;

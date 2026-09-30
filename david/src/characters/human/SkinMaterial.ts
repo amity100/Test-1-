@@ -47,6 +47,8 @@ export interface SkinOptions {
   freckles?: number;
   /** capillary flush amount 0..1 (preset skin.ruddy); default 0.4 */
   ruddy?: number;
+  /** larger pale spots / age spots 0..1 (preset skin.sun_spots); default 0.3 x freckles */
+  sunSpots?: number;
 }
 
 export class SkinMaterial extends THREE.MeshPhysicalMaterial {
@@ -72,6 +74,7 @@ export class SkinMaterial extends THREE.MeshPhysicalMaterial {
     uDirt: { value: 0.0 },
     uRegionMap: { value: null as THREE.Texture | null },
     uFreckles: { value: 0.0 }, // procedural freckle amount ('high')
+    uSunSpots: { value: 0.0 }, // larger pale spots / age spots ('high'; preset skin.sun_spots)
     uRuddy: { value: 0.4 }, // capillary flush amount
     uLipWet: { value: 0.7 }, // lip moisture
     uHero: { value: 0.0 }, // hero close-up detail 0..1 ('high' quality only)
@@ -99,6 +102,7 @@ export class SkinMaterial extends THREE.MeshPhysicalMaterial {
     if (opts.tint) u.uSkinTint.value.copy(opts.tint);
     if (opts.freckles !== undefined) u.uFreckles.value = opts.freckles;
     if (opts.ruddy !== undefined) u.uRuddy.value = opts.ruddy;
+    u.uSunSpots.value = opts.sunSpots ?? 0.3 * u.uFreckles.value;
     const q = opts.quality;
     const defines: Record<string, string> = {};
     if (tex.mask) defines.SKIN_MASK = '';
@@ -136,7 +140,7 @@ vDetailScale = detailScale;`,
 uniform sampler2D uMaskMap;
 uniform sampler2D uDetailNormal;
 uniform float uDetailTile, uDetailStrength, uAOIntensity, uCurvScale, uTransScale, uTransPower, uTransDepth, uTransAmbient, uWet, uDirt;
-uniform float uSSSActive, uSkinPass, uFreckles, uRuddy, uLipWet, uHero;
+uniform float uSSSActive, uSkinPass, uFreckles, uSunSpots, uRuddy, uLipWet, uHero;
 uniform sampler2D uRegionMap;
 vec3 gRegion = vec3( 0.0 );
 float gLips = 0.0;
@@ -164,7 +168,9 @@ float skinNoise3( vec3 p ) {
   return mix( mix( a, b, u.y ), mix( c, d, u.y ), u.z );
 }
 // resolution-independent freckles: cellular spots in bind space (p in cells; one candidate spot per cell)
+float gFreckleWarp = 0.5;
 float skinFreckles( vec3 p, float density ) {
+  gFreckleWarp = skinNoise3( p * 3.1 );
   vec3 i = floor( p - 0.5 );
   float acc = 0.0;
   for ( int k = 0; k < 8; k++ ) {
@@ -172,12 +178,14 @@ float skinFreckles( vec3 p, float density ) {
     float h = skinHash3( c );
     if ( h > density ) continue;
     vec3 jit = vec3( skinHash3( c + 17.1 ), skinHash3( c + 31.7 ), skinHash3( c + 47.3 ) );
-    float r = 0.24 + 0.24 * skinHash3( c + 5.3 );
+    float hr = skinHash3( c + 5.3 );
+    float r = 0.16 + 0.36 * hr * hr;
     // slightly irregular outline
     vec3 d = p - ( c + jit );
-    float l = length( d ) * ( 1.0 + 0.25 * ( skinHash3( floor( p * 4.0 ) ) - 0.5 ) );
-    float sp = 1.0 - smoothstep( r * 0.1, r, l );
-    acc = max( acc, sp * ( 0.3 + 0.7 * fract( h * 91.7 ) ) );
+    // irregular, blotchy outline (a freckle is a patch of pigment, not a disc)
+    float l = length( d ) * ( 1.0 + 0.6 * ( gFreckleWarp - 0.5 ) ) + 0.12 * ( skinHash3( c + 71.0 ) - 0.5 ) * d.x / max( r, 1e-3 );
+    float sp = 1.0 - smoothstep( r * 0.15, r * 1.1, l );
+    acc = acc + sp * ( 0.25 + 0.6 * fract( h * 91.7 ) ) * ( 1.0 - acc );
   }
   return acc;
 }
@@ -223,7 +231,7 @@ diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * vec3(0.78, 0.7, 0.6
   float fl = gRegion.r * uRuddy * ( 0.1 + 0.4 * cap + 0.25 * cap2 );
   diffuseColor.rgb *= exp( -fl * vec3( -0.03, 0.3, 0.2 ) );
   #ifdef SKIN_HERO
-  if ( uFreckles > 0.0 && gRegion.b > 0.01 ) {
+  if ( uFreckles + uSunSpots > 0.0 && gRegion.b > 0.01 ) {
     // fine freckles (0.6-1.3 mm) over the baked ones; blend to their mean tone once a spot is sub-pixel
     vec3 fp = bp * 330.0;
     float fw = length( fwidth( fp ) );
@@ -232,7 +240,15 @@ diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * vec3(0.78, 0.7, 0.6
     float dens = clamp( gRegion.b * uFreckles * ( 0.45 + 1.1 * clus ), 0.0, 1.0 ) * 0.85;
     float fr = fw < 1.2 ? skinFreckles( fp, dens ) : 0.0;
     fr = mix( fr, dens * 0.22, smoothstep( 0.35, 1.2, fw ) );
-    diffuseColor.rgb *= mix( vec3( 1.0 ), vec3( 0.8, 0.66, 0.52 ), fr );
+    // a sparser layer of larger, paler spots (2-4 mm): a few big freckles on a youth, age / sun spots on an old,
+    // weathered face (preset skin.sun_spots; David stays "fresh, not weather-beaten" — docs/visual-bible.md 3.13)
+    vec3 lp = bp * 150.0 + 7.7;
+    float fwl = length( fwidth( lp ) );
+    float dl = clamp( gRegion.b * uSunSpots * ( 0.45 + 1.1 * clus ), 0.0, 1.0 ) * 0.6;
+    float lg = fwl < 1.2 && dl > 0.0 ? skinFreckles( lp, dl ) : 0.0;
+    lg = mix( lg, dl * 0.18, smoothstep( 0.35, 1.2, fwl ) );
+    diffuseColor.rgb *= mix( vec3( 1.0 ), vec3( 0.84, 0.72, 0.6 ), lg * 0.7 );
+    diffuseColor.rgb *= mix( vec3( 1.0 ), vec3( 0.76, 0.61, 0.47 ), fr * 0.9 );
   }
   #endif
 }
@@ -247,11 +263,11 @@ float gSpecBreak = 1.0;
 {
   // micro-relief breakup of the sheen (~0.5-2 mm): real skin highlights are granular, a smooth highlight reads as
   // plastic. Faded out once the pattern is sub-pixel (TAA would average it anyway).
-  vec3 mp = vSkinBind * 900.0;
+  vec3 mp = vSkinBind * 1500.0;
   float fwm = length( fwidth( mp ) );
   float amt = clamp( 1.4 - fwm * 0.9, 0.0, 1.0 ) * ( 0.75 + 0.25 * uHero );
   float m1 = skinNoise3( mp ), m2 = skinNoise3( mp * 2.7 + 3.3 );
-  gSpecBreak = mix( 1.0, 0.45 + 0.75 * m1 + 0.3 * ( m2 - 0.5 ), amt );
+  gSpecBreak = mix( 1.0, 0.5 + 0.7 * m1 + 0.3 * ( m2 - 0.5 ), amt );
   roughnessFactor *= mix( 1.0, 0.88 + 0.26 * m2, amt );
 }
 #endif
@@ -307,6 +323,10 @@ roughnessFactor = mix( roughnessFactor, 0.2 + 0.18 * skinNoise3( vSkinBind * 140
     float mip = max( fw.x, fw.y ); // detail tiles per pixel
     float fade = clamp( 1.6 - mip * 1.4, 0.0, 1.0 );
     float amt = uDetailStrength * ( 0.15 + gPores );
+    #ifdef SKIN_HERO
+    // close-ups: the pore field must read (the 2K map can't carry it); stronger on the face's pore zones
+    amt *= 1.0 + 0.7 * uHero;
+    #endif
     mapN.xy += d1 * amt * fade;
     gCavity = mix( 1.0, cav, clamp( amt, 0.0, 1.0 ) * fade );
     // micro-normal variance lost to minification widens the specular lobe instead of vanishing
@@ -326,7 +346,11 @@ roughnessFactor = mix( roughnessFactor, 0.2 + 0.18 * skinNoise3( vSkinBind * 140
 #else
   gSmoothN = normalize( nonPerturbedNormal );
 #endif
+#ifdef SKIN_HERO
+diffuseColor.rgb *= mix( 0.86 + 0.14 * gCavity, 0.76 + 0.24 * gCavity, uHero );
+#else
 diffuseColor.rgb *= 0.86 + 0.14 * gCavity;
+#endif
 {
   // screen-space curvature -> scattering width (thin/curved parts scatter more visibly)
   vec3 dn = fwidth( normalize( nonPerturbedNormal ) );

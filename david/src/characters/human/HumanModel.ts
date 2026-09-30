@@ -231,7 +231,7 @@ export class HumanModel {
       const num = (v: unknown, d: number) => (typeof v === 'number' ? v : d);
       this.skin = new SkinMaterial(
         { albedo: tex.albedo, normal: tex.normal, mask: tex.mask, detail: tex.detail, region: tex.region ?? null },
-        { quality: q, tint, freckles: num(sk.freckles, 0), ruddy: num(sk.ruddy, 0.4) },
+        { quality: q, tint, freckles: num(sk.freckles, 0), ruddy: num(sk.ruddy, 0.4), sunSpots: typeof sk.sun_spots === 'number' ? sk.sun_spots : undefined },
       );
     }
     const bones = this.rig.boneList;

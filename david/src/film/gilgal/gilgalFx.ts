@@ -29,7 +29,7 @@ export class DustWall {
     for (let i = 0; i < count; i++) {
       const low = i < count * 0.3; // ground-hugging puffs kicked up among the ranks
       const back = low ? -2 - Math.pow(rand(), 1.3) * 150 : -8 - Math.pow(rand(), 0.8) * 230;
-      const s = low ? 4 + rand() * 7 : 14 + rand() * 30 * (0.6 + 0.4 * Math.min(1, -back / 120));
+      const s = low ? 4 + rand() * 7 : 16 + rand() * 34 * (0.6 + 0.4 * Math.min(1, -back / 120));
       const w = 11 + Math.min(20, -back * 0.09);
       off[i * 3] = back;
       off[i * 3 + 1] = low ? s * 0.42 + rand() * 1.2 : s * 0.45 + rand() * (4 + Math.min(18, -back * 0.12));
@@ -90,16 +90,16 @@ export class DustWall {
           float den = smoothstep(0.15, 0.85, (n * 0.65 + n2 * 0.45) * 1.25 - r * r * 0.95);
           // the ground cuts the bottom of the billboard: fade the lower edge
           den *= smoothstep(0.0, 0.35, vUv.y);
-          float a = den * 0.42 * uOpacity * vFade;
+          float a = den * 0.5 * uOpacity * vFade;
           if (a < 0.003) discard;
           vec3 vd = normalize(vWP - cameraPosition);
           float mu = dot(vd, normalize(uSunDir));
           // forward scattering: dust glows when the sun stands behind it; light that crossed the column is dimmer
-          float fwd = hg(mu, 0.72) * 9.0 + hg(mu, 0.2) * 2.0;
+          float fwd = hg(mu, 0.6) * 2.4 + hg(mu, 0.15) * 1.2;
           float trans = mix(1.0, 0.45, vDepth < 0.5 ? 1.0 - vDepth * 2.0 : 0.0);
           float thin = 1.0 + (1.0 - den) * 1.2;
           vec3 dustTint = vec3(1.0, 0.8, 0.58);
-          vec3 col = uSunColor * dustTint * (0.35 + fwd * trans * thin) + uAmb * dustTint * 0.55;
+          vec3 col = uSunColor * dustTint * (0.18 + fwd * trans * thin) * 0.55 + uAmb * dustTint * 0.5;
           gl_FragColor = vec4(col, a);
         }`,
     });
@@ -152,7 +152,7 @@ export class Motes {
           vec4 mv = modelViewMatrix * vec4(p, 1.0);
           gl_Position = projectionMatrix * mv;
           float d = -mv.z;
-          gl_PointSize = clamp((0.006 + aSeed * 0.01) * uPx / max(d, 0.1) * 2.2, 1.0, 9.0);
+          gl_PointSize = clamp((0.004 + aSeed * 0.007) * uPx / max(d, 0.1) * 2.2, 1.0, 5.0);
           vA = smoothstep(0.3, 1.2, d) * (1.0 - smoothstep(9.0, 16.0, d)) * (0.4 + aSeed * 0.6);
         }`,
       fragmentShader: /* glsl */ `
@@ -184,21 +184,22 @@ export class Motes {
  * (self-shadowing toward the sun, forward-scattering silver lining) and the sky ambient. Cheap enough for phones
  * (N = 4 there). The mesh follows the camera in x/z; the noise is anchored to world x/z.
  *
- * Shared look for hand-offs (see the gilgal report): cell scale ~2.8 km, coverage 0.48, base 2300 m / top 3000 m
- * above the Gilgal floor (~2050-2750 m ASL), white-gold in the sun, blue-grey-lavender shadow sides.
+ * Shared look for hand-offs (see the gilgal report): cell scale ~2.8 km, coverage 0.64, base 2116 m / top 2716 m above
+ * the Gilgal floor (= 1850-2450 m ASL, the deck heights of the land set's cloudShared.uDeck), white-gold in the sun,
+ * blue-grey shadow sides.
  */
 export class CloudDeck {
   readonly group = new THREE.Group();
   readonly uniforms: Record<string, THREE.IUniform>;
   private readonly layers: THREE.Mesh[] = [];
-  constructor(tier: GilgalTier, readonly base = 2300, readonly top = 3000) {
+  constructor(tier: GilgalTier, readonly base = 2116, readonly top = 2716) {
     const n = tier === 'high' ? 10 : tier === 'medium' ? 7 : 4;
     this.uniforms = {
       uTime: shared.uTime,
       uSunDir: shared.uSunDir,
       uSunColor: shared.uSunColor,
       uAmb: { value: new THREE.Color(0.55, 0.6, 0.72) },
-      uCoverage: { value: 0.48 },
+      uCoverage: { value: 0.64 },
       uScale: { value: 1 / 2800 },
       uCamY: { value: 0 },
       uOpacity: { value: 1 },
@@ -238,11 +239,11 @@ export class CloudDeck {
             // self-shadowing toward the sun + light from above (tops bright, bases grey)
             vec2 ts = normalize(uSunDir.xz + 1e-4) * 0.08;
             float occ = max(dens(p + ts) - thr, 0.0) * 1.6 + max(dens(p + ts * 2.5) - thr, 0.0) * 1.0;
-            float light = exp(-occ * 3.0) * mix(0.45, 1.0, uF);
+            float light = exp(-occ * 5.0) * mix(0.35, 1.0, uF);
             vec3 vd = normalize(vWP - cameraPosition);
             float mu = max(dot(vd, normalize(uSunDir)), 0.0);
             float edge = 1.0 - smoothstep(thr, thr + 0.2, d);
-            vec3 lit = uSunColor * vec3(1.35, 1.15, 0.92) * (0.75 + 0.5 * light);
+            vec3 lit = uSunColor * vec3(1.25, 1.18, 1.08) * (0.8 + 0.6 * light) * 1.6;
             vec3 shade = uAmb * mix(0.55, 0.9, uF);
             vec3 col = mix(shade, lit, light * 0.9 + 0.05);
             col += uSunColor * (pow(mu, 6.0) * 1.2 + pow(mu, 40.0) * 3.0) * (0.3 + edge * 1.6) * (0.4 + 0.6 * light);
@@ -276,5 +277,39 @@ export class CloudDeck {
       // transparent sort: layers farther from the camera draw first
       m.renderOrder = 3 - Math.abs(m.position.y - cy) * 0.0001;
     }
+  }
+}
+
+// =====================================================================================================
+// Cloud immersion: the frame fills with sunlit cloud when the camera enters the deck (the hand-off dissolve)
+// =====================================================================================================
+export class CloudVeil {
+  readonly mesh: THREE.Mesh;
+  readonly uniforms: Record<string, THREE.IUniform>;
+  constructor() {
+    this.uniforms = { uAmount: { value: 0 }, uTime: shared.uTime, uSunColor: shared.uSunColor, uAmb: { value: new THREE.Color(0.55, 0.6, 0.72) } };
+    const mat = new THREE.ShaderMaterial({
+      uniforms: this.uniforms,
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+      vertexShader: /* glsl */ `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy * 2.0, 0.0, 1.0); }`,
+      fragmentShader: /* glsl */ `
+        uniform float uAmount, uTime; uniform vec3 uSunColor, uAmb; varying vec2 vUv;
+        ${NOISE}
+        void main(){
+          if (uAmount < 0.002) discard;
+          vec2 p = vUv * vec2(3.0, 1.7) + vec2(uTime * 0.05, -uTime * 0.12);
+          float n = gfbm(p, 5);
+          float a = clamp(uAmount * 1.25 - 0.25 + (n - 0.5) * 0.9 * (1.0 - uAmount), 0.0, 1.0);
+          vec3 lit = uSunColor * vec3(1.25, 1.18, 1.08) * 1.5;
+          vec3 col = mix(uAmb * 0.9, lit, 0.55 + 0.35 * n + 0.2 * vUv.y);
+          gl_FragColor = vec4(col, a);
+        }`,
+    });
+    this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
+    this.mesh.frustumCulled = false;
+    this.mesh.renderOrder = 50;
+    this.mesh.name = 'gilgal:cloudVeil';
   }
 }

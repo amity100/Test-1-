@@ -5,9 +5,14 @@ import { SkySystem } from '../../world/Sky';
 import { loadTextures, type TextureSet } from '../../world/Textures';
 import { armyAt, armySlot, samuelAt, saulAt, SHOT_DURATION, SHOT_ORDER, timeScale, MARCH_SPEED, type ActorState, type ArmyState, type GilgalShotName } from './gilgalBlocking';
 import { buildFlora, type Flora, type PalmTextures } from './gilgalFlora';
-import { CloudDeck, DustWall, Motes } from './gilgalFx';
+import { CloudDeck, CloudVeil, DustWall, Motes } from './gilgalFx';
+import { buildCamp } from './gilgalCamp';
+import type { Smoke } from '../../palace/palaceFx';
+// the land teammate's raymarched cloud deck: the SAME clouds as the prologue / Bethlehem descent (shot 14)
+import { LandClouds } from '../land/landClouds';
+import { cloudShared, landAtmo } from '../land/landAtmo';
 import { ARMY, roadZ, SAMUEL, SAMUEL_EXIT, SAUL_FACE, SAUL_HALT, STONES, SUN, TEAR } from './gilgalLayout';
-import { buildPlaceholders, buildStones, type Placeholders } from './gilgalProps';
+import { buildPebbles, buildPlaceholders, buildStones, type Placeholders } from './gilgalProps';
 import { buildGilgalShots, type GilgalShots } from './gilgalShots';
 import { deadSea, GilgalGround, jordanRiver, loadMask, terrainGeometry, terrainMaterial, DEAD_SEA_Y, ORIGIN_ASL, type GilgalTier } from './gilgalTerrain';
 import frondUrl from '../../assets/gilgal/palm_frond.webp?url';
@@ -76,13 +81,23 @@ export class GilgalSet {
   readonly shots: GilgalShots;
   readonly placeholders: Placeholders;
   readonly flora: Flora;
+  /** 2.5D layered deck (fallback, not in the scene by default) */
   readonly clouds: CloudDeck;
+  /** the raymarched deck shared with the land set (shown in shot 13) */
+  readonly deck: LandClouds;
+  /** the land set's shared cloud / haze uniforms as they were before this set took them over (restored on leave) */
+  private landSnap: { sunDir: THREE.Vector3; sunCol: THREE.Color; sky: THREE.Texture | null; haze: THREE.Vector4; deck: THREE.Vector4; time: number } | null = null;
+  /** deck of the rise in set metres: base, top (= 1850 / 2450 m ASL as in the land set), east edge x, coverage gain */
+  static DECK = new THREE.Vector4(2116, 2716, -1500, 0.85);
   readonly dust: DustWall;
   readonly motes: Motes;
+  readonly veil: CloudVeil;
+  private readonly smoke: Smoke;
+  private post: PostFX | null = null;
   /** recommended renderer.toneMappingExposure (base x the current shot's exposure hint) */
-  exposure = 0.62;
-  static BASE_EXPOSURE = 0.62;
-  static ATMOSPHERE = { density: 0.00011, heightFalloff: 0.0011, baseHeight: -140, godRays: 0.32, hazeTint: new THREE.Color(1.0, 0.93, 0.84) };
+  exposure = 0.56;
+  static BASE_EXPOSURE = 0.56;
+  static ATMOSPHERE = { density: 0.00007, heightFalloff: 0.0011, baseHeight: -140, godRays: 0.22, hazeTint: new THREE.Color(1.0, 0.93, 0.84) };
   /** the beat set by setBeat (null = free camera: no shot-driven state) */
   beat: { name: GilgalShotName; time: number } | null = null;
   private readonly renderer: THREE.WebGLRenderer;
@@ -108,21 +123,21 @@ export class GilgalSet {
       t.name = 'gilgal.' + name;
       return t;
     });
-    const [ground, mask, frond, trunk, trunkN] = await Promise.all([GilgalGround.load(), loadMask(opts.renderer), tex(frondUrl, true, 'frond'), tex(trunkUrl, true, 'trunk'), tex(trunkNUrl, false, 'trunkN')]);
+    const [ground, mask, relief, frond, trunk, trunkN] = await Promise.all([GilgalGround.load(), loadMask(opts.renderer), loadMask(opts.renderer, true), tex(frondUrl, true, 'frond'), tex(trunkUrl, true, 'trunk'), tex(trunkNUrl, false, 'trunkN')]);
     frond.wrapS = frond.wrapT = THREE.ClampToEdgeWrapping;
     prog(0.6, 'הַגִּלְגָּל');
-    const set = new GilgalSet(opts, world, ground, mask, { frond, trunk, trunkN }, !opts.tex);
+    const set = new GilgalSet(opts, world, ground, mask, relief, { frond, trunk, trunkN }, !opts.tex);
     prog(1, 'הַגִּלְגָּל');
     return set;
   }
 
-  private constructor(opts: GilgalSetOptions, world: TextureSet, ground: GilgalGround, mask: THREE.Texture, ptex: PalmTextures, ownsWorld: boolean) {
+  private constructor(opts: GilgalSetOptions, world: TextureSet, ground: GilgalGround, mask: THREE.Texture, relief: THREE.Texture, ptex: PalmTextures, ownsWorld: boolean) {
     const q = opts.quality;
     this.renderer = opts.renderer;
     this.tier = q.name;
     this.ground = ground;
     this.ownsWorld = ownsWorld ? world : null;
-    this.ownTex = [mask, ptex.frond, ptex.trunk, ptex.trunkN];
+    this.ownTex = [mask, relief, ptex.frond, ptex.trunk, ptex.trunkN];
     const scene = this.scene;
     scene.name = 'gilgal';
     // ---------------------------------------------------------------- sky and sun: late afternoon, low in the west
@@ -139,7 +154,7 @@ export class GilgalSet {
     this.setSun.dir.copy(shared.uSunDir.value);
     this.setSun.color.copy(shared.uSunColor.value);
     // ---------------------------------------------------------------- land
-    const terrain = new THREE.Mesh(terrainGeometry(ground, this.tier), terrainMaterial(world, mask));
+    const terrain = new THREE.Mesh(terrainGeometry(ground, this.tier), terrainMaterial(world, mask, relief));
     terrain.name = 'gilgal:terrain';
     terrain.receiveShadow = true;
     scene.add(terrain);
@@ -147,12 +162,20 @@ export class GilgalSet {
     this.flora = buildFlora(ground, ptex, world, this.tier);
     scene.add(this.flora.group);
     const stones = buildStones(ground, world);
-    scene.add(stones.group);
+    scene.add(stones.group, buildPebbles(ground, world, this.tier, () => true));
+    const camp = buildCamp(ground, world, this.tier);
+    scene.add(camp.group);
+    this.smoke = camp.smoke;
     // ---------------------------------------------------------------- air: dust, motes, clouds
     this.dust = new DustWall(this.tier);
     this.motes = new Motes(this.tier);
     this.clouds = new CloudDeck(this.tier);
-    scene.add(this.dust.mesh, this.motes.points, this.clouds.group);
+    this.veil = new CloudVeil();
+    this.deck = new LandClouds(this.tier, { x0: -48000, x1: 16000, z0: -30000, z1: 42000 });
+    this.deck.mesh.visible = false;
+    // the late-afternoon sun is far stronger than the land set's dawn sun: scale the deck's sun term down
+    this.deck.uniforms.uSunI.value = 5.0;
+    scene.add(this.dust.mesh, this.motes.points, this.deck.mesh, this.veil.mesh);
     // ---------------------------------------------------------------- stand-ins
     this.placeholders = buildPlaceholders(ground, this.tier);
     this.placeholders.group.visible = false;
@@ -179,7 +202,7 @@ export class GilgalSet {
       army: { files: ARMY.files, ranksVisible: ARMY.ranks, fileSpacing: ARMY.fileSpacing, rankSpacing: ARMY.rankSpacing, leadGap: ARMY.leadGap, depth: ARMY.depth, volume: vol, road, slot: armySlot },
     };
     this.shots = buildGilgalShots(ground);
-    for (const g of [this.flora.group, stones.group]) g.updateMatrixWorld(true);
+    for (const g of [this.flora.group, stones.group, camp.group]) g.updateMatrixWorld(true);
     this.setBeat('dustWall', 0);
   }
 
@@ -205,7 +228,7 @@ export class GilgalSet {
     du.uOpacity.value = idx < 3 ? 1 : 0.75;
     const mu = this.motes.uniforms;
     const close = name === 'faceOff' || name === 'tear' || name === 'verdict' || name === 'saulAlone';
-    mu.uAmount.value = close ? 1 : name === 'king' ? 0.8 : 0;
+    mu.uAmount.value = close ? 1 : name === 'king' ? 0.35 : 0;
     if (name === 'king') mu.uCenter.value.copy(saul.pos).setY(this.ground.height(saul.pos.x, saul.pos.z) - 0.3).add(new THREE.Vector3(3.5, 0, 0));
     else mu.uCenter.value.copy(this.anchors.tear.center).setY(this.anchors.tear.center.y - 1.2);
     // sun shadow framing per shot
@@ -226,6 +249,11 @@ export class GilgalSet {
       sc.updateProjectionMatrix();
     }
     this.exposure = GilgalSet.BASE_EXPOSURE * this.shots[name].exposure;
+    // shot 13 ends inside the cloud deck: the hand-off to the land set's descent through the clouds (shot 14)
+    this.veil.uniforms.uAmount.value = name === 'rise' ? 0.85 * THREE.MathUtils.smoothstep(time, 14.1, 15) : 0;
+    this.deck.mesh.visible = name === 'rise';
+    this.dust.mesh.visible = name !== 'rise' || time < 2.2;
+    if (name === 'rise') du.uOpacity.value = 0.75 * (1 - THREE.MathUtils.smoothstep(time, 0.3, 2.0));
   }
 
   /** Per frame (before rendering): sun uniforms, sky dome / shadow frame, cloud deck, point sprite scale. */
@@ -235,9 +263,17 @@ export class GilgalSet {
     shared.uSunColor.value.copy(this.setSun.color);
     if (!this.beat) this.focus.copy(camera.position).setY(this.ground.height(camera.position.x, camera.position.z));
     this.sky.update(camera, this.focus);
-    this.clouds.update(camera);
+    this.driveLandClouds();
+    // high above the valley the sunlit cloud deck fills the frame: stop down like a camera operator would
+    if (this.beat) this.exposure = GilgalSet.BASE_EXPOSURE * this.shots[this.beat.name].exposure * THREE.MathUtils.lerp(1, 0.58, THREE.MathUtils.smoothstep(camera.position.y, 700, 2600));
+    if (this.post) {
+      // the valley haze is a low dust layer: from high above the deck the air is clear (the deck itself is not hazed)
+      const alt = camera.position.y;
+      this.post.atmosphere.uniforms.uDensity.value = GilgalSet.ATMOSPHERE.density * (1 - 0.9 * THREE.MathUtils.smoothstep(alt, 150, 2000));
+    }
     const size = this.renderer.getDrawingBufferSize(tmpV2);
     this.motes.uniforms.uPx.value = size.y / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
+    this.smoke.setPixelScale(size.y, camera.fov);
   }
 
   /** the slow-motion factor of the action at the current beat (actors' animation clocks: dt * timeScale) */
@@ -247,6 +283,38 @@ export class GilgalSet {
 
   applyExposure(renderer: THREE.WebGLRenderer = this.renderer) {
     renderer.toneMappingExposure = this.exposure;
+  }
+
+  /** leaving the view: the game's sun back, and forget the post chain (its haze belongs to the world again) */
+  leave() {
+    this.restoreSharedSun();
+    this.post = null;
+    if (this.landSnap) {
+      const s = this.landSnap;
+      landAtmo.uSunDirA.value.copy(s.sunDir);
+      landAtmo.uSunColA.value.copy(s.sunCol);
+      landAtmo.tSkyCube.value = s.sky;
+      landAtmo.uHaze.value.copy(s.haze);
+      cloudShared.uDeck.value.copy(s.deck);
+      cloudShared.uCloudTime.value = s.time;
+      this.landSnap = null;
+    }
+  }
+
+  /** point the shared land cloud / haze uniforms at this set (sun, sky, deck in set metres, haze base) */
+  private driveLandClouds() {
+    if (!this.landSnap) {
+      this.landSnap = {
+        sunDir: landAtmo.uSunDirA.value.clone(), sunCol: landAtmo.uSunColA.value.clone(), sky: landAtmo.tSkyCube.value,
+        haze: landAtmo.uHaze.value.clone(), deck: cloudShared.uDeck.value.clone(), time: cloudShared.uCloudTime.value,
+      };
+    }
+    landAtmo.uSunDirA.value.copy(this.setSun.dir);
+    landAtmo.uSunColA.value.copy(this.setSun.color);
+    landAtmo.tSkyCube.value = this.sky.cubeTarget.texture;
+    landAtmo.uHaze.value.set(2.4e-5, 1 / 1900, -400 - ORIGIN_ASL, 1);
+    cloudShared.uDeck.value.copy(GilgalSet.DECK);
+    cloudShared.uCloudTime.value = shared.uTime.value;
   }
 
   /** Put the game's sun back into the shared uniforms (after the Gilgal beats, before the world renders again). */
@@ -263,6 +331,7 @@ export class GilgalSet {
 
   /** hot, dusty air of the rift: denser low haze with a long scale height, strong god rays through the dust */
   configurePost(post: PostFX) {
+    this.post = post;
     const a = post.atmosphere.uniforms, A = GilgalSet.ATMOSPHERE;
     a.uDensity.value = A.density;
     a.uHeightFalloff.value = A.heightFalloff;
@@ -305,6 +374,8 @@ export class GilgalSet {
     geos.forEach((g) => g.dispose());
     mats.forEach((m) => m.dispose());
     for (const t of this.ownTex) t.dispose();
+    this.deck.dispose();
+    this.leave();
     if (this.ownsWorld) for (const t of Object.values(this.ownsWorld)) (t as THREE.Texture).dispose();
     this.sky.cubeTarget.dispose();
     this.sky.lut.dispose();

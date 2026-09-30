@@ -297,3 +297,31 @@ project's own generators:
   own work, see the palace section). Everything else (terrain / water / cloud shaders, the 3D cloud noise generated at
   load, dust, placeholders) is own code implementing published techniques (exponential height fog, Beer–powder cloud
   lighting with Henyey–Greenstein phase, perlin-worley noise).
+
+## Skin, eyes and hero close-up level — `src/fx/SSS.ts`, `src/characters/human/{SkinMaterial,EyeModel}.ts`, `tools/human/bake_skin.py --regions`, `dev/skin*`
+- **No third-party assets.** The region maps (`src/assets/human/<preset>/region_1k.webp`) are baked by
+  `tools/human/bake_skin.py` from the same CC0 MakeHuman data as the other skin maps (see the human section).
+- **Screen-space subsurface scattering:** own implementation of the published technique of J. Jimenez, A. Zsolnai,
+  A. Jarabo, C. Freude, T. Auzinger, X.-C. Wu, J. von der Pahlen, M. Wimmer, D. Gutierrez, "Separable Subsurface
+  Scattering", Computer Graphics Forum 34(6), 2015 — the kernel is the paper's sum of five Gaussians fitted to the
+  measured skin diffusion profile (d'Eon & Luebke, "Advanced Techniques for Realistic Real-Time Skin Rendering",
+  GPU Gems 3, 2007), with its per-channel falloff / strength parameterisation. No code copied.
+- Procedural freckles, capillaries, highlight breakup, the corneal caustic and the level-2 Catmull-Clark hero mesh
+  are own code.
+
+## Film crowds — `src/film/crowd`, `tools/crowd`, `src/assets/crowd`, `dev/crowd*`
+- **No new third-party assets.** The crowd meshes (`src/assets/crowd/*.binz`) are derived from the CC0 MakeHuman
+  body and textures already credited above (the `man` preset, its albedo sampled into vertex colours) and from the
+  wardrobe's own procedural garments/props; the animations are the CMU motion-capture clips already credited in the
+  "Motion capture" section, baked at load into skinning-matrix textures.
+- **Offline tool only (not shipped):** `pyfqmr` (Python bindings of Sp4cerat's Fast-Quadric-Mesh-Simplification),
+  **MIT license**, used by `tools/crowd/bake_crowd.py` for the LOD decimation.
+- Instanced skinning from animation textures, per-instance region masks and the bow / quiver / bedroll / waterskin /
+  reed crown / helmet / greaves geometry are own code.
+
+## Cast of the opening film (src/film/cast, src/characters/wardrobe/film*.ts, tear.ts, src/characters/hair/filmStyles.ts)
+
+No third-party assets. New MakeHuman presets `samuel` and `elder` (tools/human/presets/*.json) are built from the
+MakeHuman 1.1 CC0 data already credited above; the scale armour, helmet, bow, quiver, axe, ram's horn, feather crown,
+greaves, bedroll, the tearable me'il and all grooms are procedural (this project's code). Motion comes from the CMU
+Graphics Lab Motion Capture Database clips already credited in the "Motion capture" section.

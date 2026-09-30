@@ -27,6 +27,6 @@ export function gilgalView(set: GilgalSet, opts: { camera?: THREE.PerspectiveCam
     configurePost: (post) => set.configurePost(post),
     near: opts.near ?? 0.05,
     far: opts.far ?? 90000,
-    onLeave: () => set.restoreSharedSun(),
+    onLeave: () => set.leave(),
   };
 }

@@ -6,6 +6,7 @@ import { HairCapMaterial, HairDepthMaterial, HairMaterial, createHairUniforms, t
 import { HairSim } from './HairSim';
 import { enhanceLashes } from './lashes';
 import { capNoise, davidStyle, manStyle, saulStyle, type GroomStyle, type ManStyleOptions } from './styles';
+import { elderStyle, philistineStyle, samuelStyle, soldierStyle } from './filmStyles';
 
 /*
  * createGroom(human, style, opts) — strand hair + beard for a HumanModel, parented to its head bone.
@@ -16,7 +17,15 @@ import { capNoise, davidStyle, manStyle, saulStyle, type GroomStyle, type ManSty
  * One groom = 2 draw calls (strands: instanced ribbons, 1 + cap: offset skin shell) + 1 in the shadow pass.
  */
 
-export type GroomStyleSpec = 'david' | 'saul' | ({ kind: 'man' } & ManStyleOptions);
+export type GroomStyleSpec =
+  | 'david'
+  | 'saul'
+  | 'samuel'
+  | ({ kind: 'man' } & ManStyleOptions)
+  | { kind: 'elder'; seed: number }
+  | { kind: 'soldier'; seed: number; headband?: boolean }
+  | { kind: 'philistine'; seed: number }
+  | { kind: 'custom'; style: GroomStyle; seed: number };
 
 export interface GroomOptions {
   quality: Tier;
@@ -202,6 +211,11 @@ function _vCam(camera: THREE.Camera) {
 function resolveStyle(spec: GroomStyleSpec): { style: GroomStyle; seed: number } {
   if (spec === 'david') return { style: davidStyle(), seed: 1201 };
   if (spec === 'saul') return { style: saulStyle(), seed: 4807 };
+  if (spec === 'samuel') return { style: samuelStyle(), seed: 5101 };
+  if (spec.kind === 'elder') return { style: elderStyle(spec.seed), seed: 7001 + spec.seed * 97 };
+  if (spec.kind === 'soldier') return { style: soldierStyle(spec.seed, spec.headband), seed: 9001 + spec.seed * 101 };
+  if (spec.kind === 'philistine') return { style: philistineStyle(spec.seed), seed: 12001 + spec.seed * 89 };
+  if (spec.kind === 'custom') return { style: spec.style, seed: spec.seed };
   return { style: manStyle(spec), seed: 9001 + spec.seed * 101 };
 }
 

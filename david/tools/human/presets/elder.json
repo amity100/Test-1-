@@ -1,0 +1,121 @@
+{
+  "name": "elder",
+  "description": "The elders of Israel (1 Sam 8:4; 15:30; docs/visual-bible.md 3.7): heads of families, 50-75 years old, weathered, average height (~1.66 m). Seedable variations (older / heavy / lean / nose / jaw / face / brows).",
+  "height_m": 1.66,
+  "macro": {
+    "gender": 1.0,
+    "age_years": 60,
+    "muscle": 0.5,
+    "weight": 0.5,
+    "height": 0.42,
+    "proportions": 0.55,
+    "african": 0.1,
+    "asian": 0.04,
+    "caucasian": 0.86
+  },
+  "modifiers": {
+    "head/head-age-decr|incr": 0.5,
+    "nose/nose-hump-decr|incr": 0.25,
+    "nose/nose-scale-vert-decr|incr": 0.15,
+    "eyebrows/eyebrows-trans-backward|forward": 0.45,
+    "eyes/(lr)-eye-bag-decr|incr": 0.45,
+    "cheek/(lr)-cheek-bones-decr|incr": 0.3,
+    "cheek/(lr)-cheek-volume-decr|incr": -0.3,
+    "mouth/mouth-laugh-lines-in|out": -0.4,
+    "chin/chin-width-decr|incr": 0.1,
+    "breast/nipple-size-decr|incr": -0.35,
+    "breast/nipple-point-decr|incr": -0.7
+  },
+  "variations": {
+    "heavy": {
+      "macro": {
+        "weight": 0.8,
+        "muscle": 0.45
+      }
+    },
+    "lean": {
+      "macro": {
+        "weight": 0.28,
+        "muscle": 0.45
+      }
+    },
+    "older": {
+      "macro": {
+        "age_years": 76
+      }
+    },
+    "younger": {
+      "macro": {
+        "age_years": 50
+      }
+    },
+    "noseBig": {
+      "modifiers": {
+        "nose/nose-scale-vert-decr|incr": 0.45,
+        "nose/nose-hump-decr|incr": 0.5,
+        "nose/nose-scale-horiz-decr|incr": 0.25
+      }
+    },
+    "jawWide": {
+      "modifiers": {
+        "chin/chin-width-decr|incr": 0.6,
+        "chin/chin-bones-decr|incr": 0.5,
+        "head/head-square": 0.5
+      }
+    },
+    "faceLong": {
+      "modifiers": {
+        "head/head-scale-vert-decr|incr": 0.35,
+        "chin/chin-height-decr|incr": 0.4,
+        "head/head-oval": 0.4
+      }
+    },
+    "browHeavy": {
+      "modifiers": {
+        "eyebrows/eyebrows-trans-backward|forward": 0.6,
+        "eyes/(lr)-eye-push1-in|out": -0.4
+      }
+    },
+    "eyesSmall": {
+      "modifiers": {
+        "eyes/(lr)-eye-scale-decr|incr": -0.3,
+        "eyes/(lr)-eye-height2-decr|incr": -0.3
+      }
+    }
+  },
+  "skin": {
+    "seed": 61,
+    "tone": [
+      0.63,
+      0.46,
+      0.35
+    ],
+    "tan": 0.6,
+    "ruddy": 0.35,
+    "freckles": 0.12,
+    "beard_shadow": 0.55,
+    "body_hair": 0.5,
+    "dust": 0.2,
+    "age": 0.8,
+    "tan_lines": "robe",
+    "hair_color": [
+      0.45,
+      0.43,
+      0.4
+    ],
+    "grey_temples": 0.85
+  },
+  "eyes": {
+    "iris": "dark_brown",
+    "seed": 13
+  },
+  "brows": {
+    "color": [
+      0.36,
+      0.34,
+      0.31
+    ],
+    "density": 1.25,
+    "thickness": 1.25
+  }
+}

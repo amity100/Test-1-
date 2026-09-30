@@ -33,3 +33,5 @@ export function attachProp(prop: Prop, socket: THREE.Object3D, flip = false) {
   socket.add(o);
   return o;
 }
+export { dressSamuel, dressSaulGilgal, dressSoldier, dressArmourBearer, dressElder, dressPhilistine, soldierKitFor, type FilmDressOptions, type SoldierKit, type SoldierResult } from './film';
+export { MeilTear, skinnedWorld } from './tear';

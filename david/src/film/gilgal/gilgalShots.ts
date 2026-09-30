@@ -50,21 +50,21 @@ export function buildGilgalShots(ground: GilgalGround): GilgalShots {
 
   // ---------------------------------------------------------------- 6. the dust wall; the army emerges (shofar)
   const dustWall: GilgalShotInfo = {
-    name: 'dustWall', script: SCRIPT_SHOT.dustWall, fStop: 5.6, exposure: 1.0, caption: 'הַגִּלְגָּל',
+    name: 'dustWall', script: SCRIPT_SHOT.dustWall, fStop: 5.6, exposure: 0.85, caption: 'הַגִּלְגָּל',
     shot: shot('dustWall', (u) => {
-      const p = V(-60 - 9 * u, 0, 8.5 - 1.2 * u);
-      p.y = H(p.x, p.z) + 1.25 + 0.2 * u;
-      const lx = -170;
-      return frame(p, V(lx, H(lx, 0) + 7.5 - 2.5 * u, -0.5), 25 - 8 * u);
+      const p = V(-124 - 5 * u, 0, 10.5 - 1.5 * u);
+      p.y = H(p.x, p.z) + 0.9 + 0.25 * u;
+      const lx = -175;
+      return frame(p, V(lx, H(lx, 0) + 8.5 - 3.5 * u, -2.5), 34 - 8 * u);
     }),
     focus: (t) => saulHead('dustWall', t, 1.2),
   };
   // ---------------------------------------------------------------- 7. Saul: low angle, slow motion, sun behind him
   const king: GilgalShotInfo = {
-    name: 'king', script: SCRIPT_SHOT.king, fStop: 2.8, exposure: 1.12, caption: 'שָׁאוּל בֶּן־קִישׁ · מֶלֶךְ יִשְׂרָאֵל',
+    name: 'king', script: SCRIPT_SHOT.king, fStop: 2.8, exposure: 0.85, caption: 'שָׁאוּל בֶּן־קִישׁ · מֶלֶךְ יִשְׂרָאֵל',
     shot: shot('king', (u, t) => {
       const head = saulHead('king', t);
-      const D = 7.4 - 1.6 * u;
+      const D = 6.0 - 1.2 * u;
       // on the line from his head away from the sun, so the sun stands just beside his head
       const p = head.clone().addScaledVector(toSunH, -D);
       p.z += 0.42;
@@ -76,7 +76,7 @@ export function buildGilgalShots(ground: GilgalGround): GilgalShots {
   };
   // ---------------------------------------------------------------- 8. the peak: the spear raised, the roar
   const spearRaised: GilgalShotInfo = {
-    name: 'spearRaised', script: SCRIPT_SHOT.spearRaised, fStop: 4, exposure: 1.05,
+    name: 'spearRaised', script: SCRIPT_SHOT.spearRaised, fStop: 4, exposure: 0.95,
     shot: shot('spearRaised', (u) => {
       const s = SAUL_HALT;
       const g = H(s.x, s.z);
@@ -100,7 +100,7 @@ export function buildGilgalShots(ground: GilgalGround): GilgalShots {
   };
   // ---------------------------------------------------------------- 10a. face to face (profile two-shot)
   const faceOff: GilgalShotInfo = {
-    name: 'faceOff', script: SCRIPT_SHOT.faceOff, fStop: 2.8, exposure: 1.1,
+    name: 'faceOff', script: SCRIPT_SHOT.faceOff, fStop: 2.8, exposure: 1.05,
     shot: shot('faceOff', (u) => {
       const mid = saulHead('faceOff', 0, 1.62).lerp(samuelHead('faceOff', 0, 1.5), 0.5);
       const p = V(mid.x + 0.25, 0, mid.z + 6.4 - 1.3 * u);
@@ -111,7 +111,7 @@ export function buildGilgalShots(ground: GilgalGround): GilgalShots {
   };
   // ---------------------------------------------------------------- 10b. the tearing (slow motion, into the light)
   const tear: GilgalShotInfo = {
-    name: 'tear', script: SCRIPT_SHOT.tear, fStop: 2.0, exposure: 1.2,
+    name: 'tear', script: SCRIPT_SHOT.tear, fStop: 2.0, exposure: 1.05,
     shot: shot('tear', (u, t) => {
       const sm = samuelAt('tear', t).pos;
       const grip = V(sm.x - 0.35, H(sm.x, sm.z) + 1.0, sm.z + 0.12);
@@ -128,7 +128,7 @@ export function buildGilgalShots(ground: GilgalGround): GilgalShots {
   };
   // ---------------------------------------------------------------- 11. the verdict: close on Samuel
   const verdict: GilgalShotInfo = {
-    name: 'verdict', script: SCRIPT_SHOT.verdict, fStop: 2.0, exposure: 1.05,
+    name: 'verdict', script: SCRIPT_SHOT.verdict, fStop: 2.0, exposure: 1.0,
     shot: shot('verdict', (u) => {
       const head = samuelHead('verdict', 0);
       const p = V(head.x - 2.25 + 0.35 * u, 0, head.z + 1.15 - 0.15 * u);
@@ -139,7 +139,7 @@ export function buildGilgalShots(ground: GilgalGround): GilgalShots {
   };
   // ---------------------------------------------------------------- 12. Saul: the fist, then the long close-up
   const saulAlone: GilgalShotInfo = {
-    name: 'saulAlone', script: SCRIPT_SHOT.saulAlone, fStop: 2.0, exposure: 1.3,
+    name: 'saulAlone', script: SCRIPT_SHOT.saulAlone, fStop: 2.0, exposure: 1.2,
     shot: shot('saulAlone', (_u, t) => {
       const s = saulAt('saulAlone', t).pos;
       const g = H(s.x, s.z);
@@ -164,23 +164,22 @@ export function buildGilgalShots(ground: GilgalGround): GilgalShots {
     shot: shot('rise', (_u, t) => {
       const s = saulAt('rise', 0).pos;
       const g = H(s.x, s.z);
-      // altitude: a slow lift off the king, then an accelerating climb through the deck to ~3.8 km
-      const a1 = ss(0, 4.0, t), a2 = ss(3.0, 11.5, t), a3 = ss(10.5, 15, t);
-      const alt = 2.4 + 50 * a1 + 3350 * Math.pow(a2, 1.7) + 450 * a3;
-      // horizontal: first straight above him, then the gaze sweeps away south-west
-      const travel = 2600 * Math.pow(a2, 2.2) + 7000 * a3;
-      const p = V(s.x + 1.4 + 2.5 * a1, g + alt, s.z + 0.9).addScaledVector(toBeth, travel);
-      // orientation: look down at the king, pitch up to the horizon while turning toward Bethlehem
-      const pitch = THREE.MathUtils.lerp(-1.45, -0.5, ss(2.5, 9.5, t)) * (1 - ss(9.0, 15, t)) + -0.1 * ss(9.0, 15, t);
-      const yaw0 = Math.atan2(-1, 0.1); // facing west (toward the king and the army) at the start
-      const yaw1 = Math.atan2(toBeth.x, toBeth.z);
-      let dy = yaw1 - yaw0;
-      if (dy > Math.PI) dy -= Math.PI * 2;
-      if (dy < -Math.PI) dy += Math.PI * 2;
-      const yaw = yaw0 + dy * ss(3.0, 12.5, t);
+      // altitude: a slow lift off the king (the army from above), a climb that opens the valley (the oasis, the
+      // escarpment, the Dead Sea to the south, Moab), up through the edge of the cloud deck, a glide south-west over
+      // it and a sink into its top (the hand-off to shot 14)
+      const alt = 2.4 + 55 * ss(0, 3.5, t) + 700 * Math.pow(ss(2.5, 7, t), 1.6) + 2250 * Math.pow(ss(6, 11, t), 1.3) - 560 * Math.pow(ss(11.5, 15, t), 2);
+      // the searching gaze: first south over the plain toward the Dead Sea (Moab on the left, the escarpment on the
+      // right), then it turns south-west toward the hills of Judah and Bethlehem
+      const south = V(0, 0, 1);
+      const p = V(s.x + 1.4 + 2.5 * ss(0, 4, t), g + alt, s.z + 0.9)
+        .addScaledVector(south, 1800 * ss(2.8, 9.5, t))
+        .addScaledVector(toBeth, 3000 * Math.pow(ss(7, 12, t), 1.5) + 8000 * ss(10.5, 15, t));
+      const pitch = -1.45 + 1.08 * ss(2.2, 5.5, t) + 0.12 * ss(5.5, 8, t) + 0.13 * ss(8, 11, t) - 0.1 * ss(12.5, 15, t);
+      const yawW = Math.atan2(-1, 0.1), yawS = 0, yawSW = Math.atan2(toBeth.x, toBeth.z);
+      const yaw = yawW + (yawS - yawW) * ss(2.5, 7, t) + (yawSW - yawS) * ss(8, 12.5, t);
       const dir = V(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
       const look = t < 3.0 ? V(s.x, g + 1.2, s.z).lerp(p.clone().add(dir), ss(0.5, 3.0, t)) : p.clone().add(dir);
-      return frame(p, look, 40 + 12 * ss(4, 12, t), 0.06 * Math.sin(t * 0.35) * ss(5, 12, t));
+      return frame(p, look, 42 + 10 * ss(4, 10, t), 0.05 * Math.sin(t * 0.35) * ss(5, 12, t));
     }, false),
     focus: () => null,
   };

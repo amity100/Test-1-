@@ -29,7 +29,7 @@ renderer.setSize(W, H);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = Number(P.get('expo') ?? (light === 'lamp' ? '0.9' : '0.58'));
+renderer.toneMappingExposure = Number(P.get('expo') ?? (light === 'lamp' || light === 'earlamp' ? '0.7' : '0.58'));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.body.appendChild(renderer.domElement);
 
@@ -38,7 +38,8 @@ const camera = new THREE.PerspectiveCamera(24, W / H, 0.02, 26000);
 const sky = new SkySystem(renderer, q === 'high' ? 4096 : 2048);
 scene.add(sky.group);
 // warm low sun from camera-left/front (sun) or behind the head (back); a night lamp scene (lamp)
-const sunEl = light === 'back' ? 9 : light === 'lamp' ? -12 : 13;
+const night = light === 'lamp' || light === 'earlamp';
+const sunEl = light === 'back' ? 9 : night ? -12 : 13;
 const sunAz = Number(P.get('az') ?? (light === 'back' ? 200 : 60));
 sky.setSun(sunEl, sunAz, scene);
 {
@@ -50,21 +51,25 @@ sky.setSun(sunEl, sunAz, scene);
   sky.sun.shadow.radius = 2;
 }
 const lamps: THREE.PointLight[] = [];
-if (light === 'lamp') {
+if (night) {
   sky.sun.intensity = 0;
   sky.hemi.intensity = 0.06;
   scene.environmentIntensity = 0.05;
+}
+if (light === 'lamp') {
   // oil lamp in front / side (warm, low) and one behind the head (ear glow)
-  const a = new THREE.PointLight(0xff9a48, 3.2, 6, 2);
+  const a = new THREE.PointLight(0xff9a48, 1.3, 6, 2);
   a.position.set(0.45, 1.45, 0.55);
   a.castShadow = true;
   a.shadow.mapSize.set(1024, 1024);
   a.shadow.bias = -0.0005;
-  const b = new THREE.PointLight(0xffa860, 2.4, 5, 2);
+  const b = new THREE.PointLight(0xffa860, 1.2, 5, 2);
   b.position.set(-0.25, 1.62, -0.5);
   lamps.push(a, b);
   scene.add(a, b);
 }
+
+
 const post = new PostFX(renderer, scene, camera, sky.cubeTarget.texture, {
   msaa: 0, bloom: true, godRaySamples: 16, pixelRatio: 1, taa: 'hq', sharpen: 0.25, filmFx: false, sss: sssLevel,
 });
@@ -90,13 +95,31 @@ const loadMs = performance.now() - t0;
 human.rig.blinkEnabled = false;
 human.rig.lipSeal = 0.35;
 human.setPupil(light === 'lamp' ? 0.75 : 0.25);
+let heroGeoMs = 0;
+if (hero && P.get('heroGeo') === '1') {
+  const t = performance.now();
+  human.prepareHeroGeometry();
+  heroGeoMs = Math.round(performance.now() - t);
+}
 human.setHero(hero ? 1 : 0);
 if (old) {
   const u = human.skin.skinUniforms;
   u.uFreckles.value = 0;
+  u.uSunSpots.value = 0;
   u.uRuddy.value = 0;
   u.uLipWet.value = 0;
   for (const S of ['L', 'R'] as const) human.eyes[S].material.eyeUniforms.uCaustic.value = 0;
+}
+if (light === 'earlamp') {
+  // a lamp just behind the left ear (the ear flap is between it and a side-front camera): transmission test
+  human.root.updateMatrixWorld(true);
+  const e = new THREE.Vector3();
+  human.sockets.eyeL.getWorldPosition(e);
+  const b = new THREE.PointLight(0xffb070, 0.9, 3, 2);
+  b.position.set(e.x + 0.1, e.y - 0.01, e.z - 0.22);
+  const f = new THREE.PointLight(0xff9a50, 0.25, 4, 2);
+  f.position.set(e.x + 0.5, e.y + 0.1, e.z + 0.5);
+  scene.add(b, f);
 }
 const yaw = Number(P.get('yaw') ?? '0');
 human.joints.head.rotation.y = yaw;
@@ -152,7 +175,8 @@ function frame() {
       preset, view, light, sss: sssLevel, hero, old, loadMs: Math.round(loadMs),
       frameMs: times.slice(-4).map((t) => t.toFixed(1)),
       tris: renderer.info.render.triangles, calls: renderer.info.render.calls,
-      sssBytes: post.sss?.bytes ?? 0, postBytes: post.bytes,
+      sssBytes: post.sss?.bytes ?? 0, postBytes: post.bytes, heroGeoMs, heroTris: human.heroTriangles,
+      bodyTris: (human.body.geometry.getIndex()?.count ?? 0) / 3,
     };
     w.__ready = true;
   }

@@ -130,6 +130,41 @@ def main():
     img = np.dstack([thicket, np.clip(marl, 0, 1), np.clip(oasis, 0, 1), np.clip(sea, 0, 1)])
     Image.fromarray((img * 255).astype(np.uint8), 'RGBA').save(os.path.join(OUT, 'jordan_mask.png'), optimize=True)
 
+    # ---- relief map (RG, lossless): R = cavity (0.5 neutral, < 0.5 hollows / wadi beds, > 0.5 ridges and spurs) from
+    # the Laplacian of the DEM at two scales; G = drainage (D8 flow accumulation, log-scaled): the wadis that cut the
+    # desert and the plain, lined with acacia, tamarisk and retama - they make the land readable from the air
+    lap = ndimage.gaussian_laplace(h, 1.2) * 0.6 + ndimage.gaussian_laplace(h, 4.0) * 1.6
+    cav = np.clip(0.5 - lap / 6.0, 0, 1)
+    hs = ndimage.gaussian_filter(h, 0.7)
+    order = np.argsort(-hs, axis=None)
+    acc = np.ones(N * N, np.float64)
+    flat = hs.ravel()
+    offs = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+    # lowest neighbour per cell (vectorised), then accumulate in elevation order
+    pad = np.pad(hs, 1, mode='edge')
+    best = np.full((N, N), -1, np.int64)
+    bestv = hs.copy()
+    jj, ii = np.mgrid[0:N, 0:N]
+    for dj, di in offs:
+        nb = pad[1 + dj:N + 1 + dj, 1 + di:N + 1 + di]
+        w = 1.0 / np.hypot(dj, di)
+        better = (hs - nb) * w > (hs - bestv) * 1.0 + 1e-6
+        tj = np.clip(jj + dj, 0, N - 1)
+        ti = np.clip(ii + di, 0, N - 1)
+        upd = better & (nb < bestv)
+        best[upd] = (tj * N + ti)[upd]
+        bestv = np.where(upd, nb, bestv)
+    bflat = best.ravel()
+    for k in order:
+        b = bflat[k]
+        if b >= 0:
+            acc[b] += acc[k]
+    acc = acc.reshape(N, N)
+    drain = np.clip((np.log(acc) - 2.5) / 5.0, 0, 1)
+    drain = ndimage.gaussian_filter(drain, 0.6)
+    rel = np.dstack([cav, drain, np.zeros_like(cav)])
+    Image.fromarray((np.clip(rel, 0, 1) * 255).astype(np.uint8), 'RGB').save(os.path.join(OUT, 'jordan_relief.webp'), 'WEBP', quality=88, method=6)
+
     # ---- palm positions of the oasis (far groves, drawn as low-detail palms), clustered in groves
     prng = np.random.default_rng(77)
     grove = ndimage.gaussian_filter(prng.standard_normal((N, N)), 6.0)

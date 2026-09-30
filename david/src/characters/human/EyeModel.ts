@@ -148,6 +148,19 @@ float gIris = 0.0;`,
   gIris = smoothstep( uIrisR * 1.03, uIrisR * 0.97, length( vEyeLocal.xy ) ) * step( 0.0, vEyeLocal.z );
   // living sclera: near white with a faint warm cast, a touch pinker only in the canthi
   diffuseColor.rgb *= mix( mix( vec3( 0.97, 0.95, 0.92 ), vec3( 0.95, 0.85, 0.82 ), smoothstep( 0.6, 0.98, abs( e.x ) ) ), vec3( 1.0 ), gIris );
+  #ifndef EYE_LOW
+  if ( gIris < 1.0 ) {
+    // sclera around the limbus: a soft grey-blue shadow ring (the cornea's edge) rounds the eye; faint
+    // capillaries toward the canthi keep it from reading as painted porcelain
+    float rl = length( vEyeLocal.xy ) / uIrisR;
+    float limb = exp( -pow( ( rl - 1.08 ) / 0.1, 2.0 ) );
+    diffuseColor.rgb *= mix( vec3( 1.0 ), vec3( 0.8, 0.8, 0.84 ), limb * 0.6 * ( 1.0 - gIris ) );
+    float ang = atan( vEyeLocal.y, vEyeLocal.x );
+    float vein = sin( ang * 23.0 + sin( ang * 7.0 + rl * 3.0 ) * 2.0 + rl * 4.0 ) * 0.5 + 0.5;
+    vein = pow( vein, 18.0 ) * smoothstep( 1.4, 2.4, rl ) * smoothstep( 0.5, 0.95, abs( e.x ) );
+    diffuseColor.rgb *= mix( vec3( 1.0 ), vec3( 0.95, 0.62, 0.6 ), vein * 0.5 * ( 1.0 - gIris ) );
+  }
+  #endif
 }`,
         )
         .replace(
