@@ -52,6 +52,7 @@ async function boot() {
       const nxt = alongPolyline(a.shepherdRoute, simT * a.walkSpeed + 1, new THREE.Vector3());
       shep.position.copy(shepPos);
       shep.rotation.y = Math.atan2(nxt.x - shepPos.x, nxt.z - shepPos.z);
+      if (flock && simT <= dt * 1.5) flock.call(shepPos);
       if (flock) {
         flock.setPasture(alongPolyline(a.flockRoute, Math.max(0, simT * a.walkSpeed - 6), new THREE.Vector3()), 8);
         flock.update(dt, simT, { shepherd: shepPos, threats: [], camera: cam });

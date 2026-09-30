@@ -89,9 +89,12 @@ export function buildCamp(ground: GilgalGround, world: TextureSet, tier: GilgalT
       const x = p.getX(i), z = p.getZ(i);
       // two rows of poles (1.9 m middle, 1.3 m front, low back wall), cloth sagging between them
       const u = (z + 2.2) / 4.4; // 0 back .. 1 front
-      const prof = u < 0.5 ? THREE.MathUtils.lerp(0.35, 1.9, Math.sin(u * Math.PI)) : THREE.MathUtils.lerp(1.9, 1.3, (u - 0.5) * 2);
+      const prof = u < 0.5 ? THREE.MathUtils.lerp(0.9, 1.9, Math.sin(u * Math.PI)) : THREE.MathUtils.lerp(1.9, 1.35, (u - 0.5) * 2);
       const poles = Math.abs(Math.sin((x / 7) * Math.PI * 3));
-      p.setY(i, prof - (1 - poles) * 0.22 + noise.noise(x * 0.8, z * 0.8) * 0.05);
+      // side curtains and the back wall hang to the ground; the front (toward the road) stays open
+      const side = 1 - THREE.MathUtils.smoothstep(Math.abs(x), 2.9, 3.5);
+      const back = THREE.MathUtils.smoothstep(u, 0.0, 0.14);
+      p.setY(i, Math.max(0.02, (prof - (1 - poles) * 0.22 + noise.noise(x * 0.8, z * 0.8) * 0.05) * Math.min(side, back)));
     }
     g.computeVertexNormals();
     return g;

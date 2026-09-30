@@ -87,6 +87,9 @@ function resetState(mode: Mode) {
   david.sling.loaded = true;
   dodgeT = -1;
   nextPlay = 0;
+  vCur = 0;
+  david.performFilm(null);
+  david.autoHero = mode === 'idlehero';
   if (mode === 'hero') david.hold = 'hero';
   if (mode === 'pull') david.hold = 'pull';
   if (mode === 'carry' || mode === 'carrywalk') david.hold = 'carry';
@@ -108,6 +111,8 @@ function place() {
 }
 
 let playedAt = -1;
+let vCur = 0;
+const dampA = (a: number, b: number, k: number, dt: number) => { let d = b - a; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return a + d * (1 - Math.exp(-k * dt)); };
 let nextPlay = 0;
 function tick(mode: Mode, dt: number) {
   t += dt;
@@ -121,6 +126,18 @@ function tick(mode: Mode, dt: number) {
     case 'carrywalk': v = 2.1; break;
     case 'startstop': v = t % 4 < 2 ? 3.0 : 0; break;
     case 'turn': v = 3.0; heading += dt * 1.6; break;
+    case 'run': v = 4.3; break;
+    // like the Player: damped speed (accelerate 6/s, brake 9/s) and damped heading (9/s)
+    case 'walkstop': case 'jogstop': {
+      const target = t % 3 < 1.5 ? (mode === 'walkstop' ? 1.6 : 3.0) : 0;
+      vCur += (target - vCur) * (1 - Math.exp(-(target > vCur ? 6 : 9) * dt));
+      v = vCur;
+      break;
+    }
+    case 'turnspot': heading = dampA(heading, (Math.floor(t / 1.5) % 4) * (Math.PI / 2) * (Math.floor(t / 6) % 2 ? -1 : 1), 9, dt); break;
+    case 'film_back': david.performFilm('back', t); break;
+    case 'film_reveal': david.performFilm('reveal', t, { look: camera.position }); break;
+    case 'film_wide': david.performFilm('wide', t); break;
     case 'spin':
       david.hold = 'spin';
       david.sling.state = 'spin';
@@ -216,6 +233,7 @@ async function main() {
   const t0 = performance.now();
   parts = await DavidModel.preload(q, { msaa: q === 'low' ? 0 : 4 });
   david = new DavidModel(undefined, parts);
+  if (P.get('mocap') === '0') david.mocapWeight = 0;
   david.ground = hf;
   david.camera = camera;
   scene.add(david.root);

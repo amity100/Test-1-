@@ -148,7 +148,17 @@ async function boot() {
     post.resetHistory();
     return render(3);
   };
-  const shot = (name: GilgalShotName, t: number, o: { cam?: number[]; dof?: boolean } = {}) => {
+  const markers = new THREE.Group();
+  markers.visible = false;
+  const mk = (c: number) => {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.012, 10, 8), new THREE.MeshBasicMaterial({ color: c, depthTest: false }));
+    m.renderOrder = 999;
+    markers.add(m);
+    return m;
+  };
+  const mCorner = mk(0xff2020), mHand = mk(0x20ff40);
+  set.scene.add(markers);
+  const shot = (name: GilgalShotName, t: number, o: { cam?: number[]; dof?: boolean; follow?: number[]; mark?: boolean } = {}) => {
     hideAll();
     const saul = actors.saul, samuel = actors.samuel;
     if (!perf) perf = new GilgalPerformance({ saul, samuel, armourBearer: actors.bearer }, H);
@@ -160,7 +170,20 @@ async function boot() {
     for (let k = 0, tt = 0; tt <= t; k++, tt = k * dt) perf.update(tt, dt, camera, size.y);
     const info = set.shots[name];
     set.setBeat(name, t);
-    if (o.cam) {
+    markers.visible = !!o.mark;
+    if (o.mark && perf) {
+      perf.tearFocus(mCorner.position);
+      saul.human.sockets.handGripR.getWorldPosition(mHand.position);
+    }
+    if (o.follow && perf) {
+      // camera relative to the tear focus: [dx, dy, dz, fov, lookDy]
+      const f = perf.tearFocus(new THREE.Vector3());
+      camera.position.set(f.x + o.follow[0], f.y + o.follow[1], f.z + o.follow[2]);
+      camera.lookAt(f.x, f.y + (o.follow[4] ?? 0.1), f.z);
+      camera.fov = o.follow[3] ?? 32;
+      if (post.dofAvailable && o.dof !== false) post.setDoF({ enabled: true, focusDistance: camera.position.distanceTo(f), fStop: 2.4, focalLength: null, target: null });
+      else post.setDoF({ enabled: false });
+    } else if (o.cam) {
       camera.position.set(o.cam[0], o.cam[1], o.cam[2]);
       camera.lookAt(o.cam[3], o.cam[4], o.cam[5]);
       camera.fov = o.cam[6] ?? 35;
@@ -184,13 +207,73 @@ async function boot() {
     post.resetHistory();
     return render(3);
   };
+  /** numbers only: the performance of a shot simulated to each time in `times` (positions, yaw, face heading) */
+  const perfTrace = (name: GilgalShotName, times: number[]) => {
+    const saul = actors.saul, samuel = actors.samuel;
+    if (!perf) perf = new GilgalPerformance({ saul, samuel, armourBearer: actors.bearer }, H);
+    perf.enter(name);
+    const dt = 1 / 30;
+    const out: string[] = [];
+    const f2 = (x: number) => x.toFixed(2);
+    let ti = 0;
+    for (let k = 0, tt = 0; ti < times.length; k++, tt = k * dt) {
+      perf.update(tt, dt, camera, size.y);
+      if (tt >= times[ti] - 1e-6) {
+        const a = saul.facing(), b = samuel.facing();
+        const c = perf.tearFocus(new THREE.Vector3());
+        const h = saul.human.sockets.handGripR.getWorldPosition(new THREE.Vector3());
+        out.push(`t=${f2(tt)} saul x=${f2(saul.root.position.x)} yaw=${f2(a.yaw)} face=${f2(a.face)} | sam x=${f2(samuel.root.position.x)} yaw=${f2(b.yaw)} face=${f2(b.face)} | corner ${f2(c.x)},${f2(c.y)},${f2(c.z)} hand ${f2(h.x)},${f2(h.y)},${f2(h.z)} torn=${samuel.tear?.isTorn} p=${f2(samuel.tear?.progress ?? 0)}`);
+        ti++;
+      }
+    }
+    return out;
+  };
   const diag = (key: string, clip: string, t = 1) => {
     const a = actors[key];
     posed(a, { clip, t });
     return a.facing();
   };
+  /** clip trajectory probe: root (world xz, yaw) + right wrist / head in the placement frame, every `step` s */
+  const trace = (key: string, clip: string, o: { dur?: number; step?: number; mode?: 'apply' | 'inplace'; time?: number; cancel?: boolean } = {}) => {
+    const a = actors[key];
+    a.setVisible(true);
+    a.place(STUDIO, Math.PI / 2);
+    a.human.root.position.x = 0;
+    a.human.root.position.z = 0;
+    a.human.root.rotation.y = 0;
+    a.armPose.L.pose = null;
+    a.armPose.R.pose = null;
+    a.reach.R.weight = 0;
+    a.upright.R.weight = 0;
+    a.mocap.lookAt = null;
+    a.cancelHeading = o.cancel ?? true;
+    a.mocap.rootMotion = o.mode ?? 'apply';
+    a.mocap.rootTarget = a.root;
+    a.headingSnap = true;
+    a.mocap.play(clip, { fade: 0, time: o.time ?? 0 });
+    const rows: number[][] = [];
+    const inv = new THREE.Matrix4();
+    const f = (v: THREE.Vector3) => [+v.x.toFixed(2), +v.y.toFixed(2), +v.z.toFixed(2)];
+    const dt = 1 / 30;
+    const step = o.step ?? 0.2;
+    const origin = STUDIO.clone();
+    for (let t = 0, k = 0; t <= (o.dur ?? 3); k++, t = k * dt) {
+      a.update(dt, camera, size.y);
+      if (k % Math.round(step / dt) === 0) {
+        // frame of the ORIGINAL placement (x forward = +X world since yaw = PI/2)
+        inv.makeTranslation(origin.x, 0, origin.z);
+        const w = (a.human.bones as Record<string, THREE.Object3D>)['wrist.R'].getWorldPosition(new THREE.Vector3()).sub(origin);
+        const h = a.headWorld(new THREE.Vector3()).sub(origin);
+        const r = a.root.position.clone().sub(origin);
+        rows.push([+t.toFixed(2), ...f(r), +a.root.rotation.y.toFixed(2), +a.facing().face.toFixed(2), ...f(w), ...f(h)]);
+      }
+    }
+    a.mocap.rootMotion = 'inplace';
+    a.cancelHeading = true;
+    return { cols: 't rx ry rz yaw face wx wy wz hx hy hz', rows: rows.map((r) => r.join(' ')) };
+  };
   const stats = () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, memory: renderer.info.memory, programs: renderer.info.programs?.length });
-  w.__cast = { load, diag, studio, lineup, shot, stats, actors, set, camera, THREE, renderer };
+  w.__cast = { load, diag, studio, lineup, shot, stats, trace, perfTrace, actors, set, camera, THREE, renderer };
   w.__ready = true;
 }
 boot().catch((e) => {

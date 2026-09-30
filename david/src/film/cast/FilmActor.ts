@@ -77,6 +77,14 @@ export class FilmActor {
   private headingCorr = 0;
   /** next update cancels the full heading at once (after a cut / clip change) */
   headingSnap = true;
+  /** how fast (1/s) the in-place heading correction follows the clip (3 = keeps a walk's natural pelvis swing) */
+  headingRate = 3;
+  /**
+   * procedural body layer over the mocap (lunges, reaching low, recoil): `drop` lowers the pelvis (m; the legs bend
+   * and the feet stay planted), `lean` bends hips + spine forward about the actor's right axis (rad; < 0 = back),
+   * `twist` turns the chest (rad, + = to the actor's left), `side` shifts the pelvis to the actor's right (m).
+   */
+  readonly body = { drop: 0, lean: 0, twist: 0, side: 0 };
 
   private constructor(
     readonly spec: ActorSpec,
@@ -269,11 +277,12 @@ export class FilmActor {
         _q.multiply(this.human.rig.restWorldQuaternion('root', _q3).invert());
         _v.set(0, 0, 1).applyQuaternion(_q);
         const heading = Math.atan2(_v.x, _v.z);
-        const k = this.headingSnap ? 1 : 1 - Math.exp(-3 * dt);
+        const k = this.headingSnap ? 1 : 1 - Math.exp(-this.headingRate * dt);
         this.headingCorr -= heading * k;
         this.headingSnap = false;
       }
     }
+    this.applyBody();
     for (const side of ['L', 'R'] as const) {
       const r = this.reach[side];
       if (r.target && r.weight > 0.001) this.armIK(side, r.target, r.weight);
@@ -287,6 +296,49 @@ export class FilmActor {
     if (this.tear) {
       this.tear.wind.copy(wind);
       this.tear.update(dt);
+    }
+  }
+
+  /** the procedural body layer (see `body`): runs after the mocap / rig, before the arm IK */
+  private applyBody() {
+    const { drop, lean, twist, side } = this.body;
+    if (Math.abs(drop) < 1e-4 && Math.abs(lean) < 1e-4 && Math.abs(twist) < 1e-4 && Math.abs(side) < 1e-4) return;
+    const b = this.human.bones as Record<string, THREE.Object3D>;
+    const rootB = b.root;
+    if (!rootB) return;
+    // the feet as the mocap left them (they stay planted)
+    for (let i = 0; i < 2; i++) {
+      const f = b[`foot.${SIDES[i]}`];
+      f.updateWorldMatrix(true, false);
+      _ank[i].setFromMatrixPosition(f.matrixWorld);
+      f.getWorldQuaternion(_fq[i]);
+    }
+    this.root.getWorldQuaternion(_q2);
+    const right = _axR.set(-1, 0, 0).applyQuaternion(_q2);
+    const fwd = _axF.set(0, 0, 1).applyQuaternion(_q2);
+    // pelvis: down (and a little back as the hips fold), to the side
+    rootB.getWorldPosition(_v);
+    _v.y -= drop;
+    _v.addScaledVector(fwd, -0.25 * Math.max(0, lean) * 0.3).addScaledVector(right, side);
+    rootB.parent!.worldToLocal(_v);
+    rootB.position.copy(_v);
+    rootB.updateMatrixWorld(true);
+    // hips fold 25%, the spine takes the rest (lower spine more)
+    // (right-handed rotation about the actor's LEFT axis tips the chest forward)
+    const left = _axL.copy(right).negate();
+    rotateWorld(rootB, _q.setFromAxisAngle(left, lean * 0.25));
+    const shares: [string, number][] = [['spine05', 0.26], ['spine04', 0.22], ['spine03', 0.14], ['spine02', 0.08], ['spine01', 0.05]];
+    for (const [n, f] of shares) {
+      const bone = b[n];
+      if (!bone) continue;
+      rotateWorld(bone, _q.setFromAxisAngle(left, lean * f));
+      if (twist) rotateWorld(bone, _q.setFromAxisAngle(_axU.set(0, 1, 0), twist * f * 1.3));
+    }
+    // legs: back onto the planted feet (knees bend forward)
+    for (let i = 0; i < 2; i++) {
+      const s = SIDES[i];
+      twoBone(b[`upperleg01.${s}`], b[`lowerleg01.${s}`], b[`foot.${s}`], _ank[i], fwd);
+      setWorldQuat(b[`foot.${s}`], _fq[i]);
     }
   }
 
@@ -390,12 +442,51 @@ export class FilmActor {
 
 const _zero = new THREE.Vector3();
 
+const SIDES = ['L', 'R'] as const;
+const _ank = [new THREE.Vector3(), new THREE.Vector3()];
+const _fq = [new THREE.Quaternion(), new THREE.Quaternion()];
+const _axR = new THREE.Vector3(), _axF = new THREE.Vector3(), _axL = new THREE.Vector3(), _axU = new THREE.Vector3();
+const _rwP = new THREE.Quaternion(), _rwW = new THREE.Quaternion();
+const _A = new THREE.Vector3(), _B = new THREE.Vector3(), _C = new THREE.Vector3(), _D = new THREE.Vector3(), _P = new THREE.Vector3();
+const _tq = new THREE.Quaternion();
+
+/** apply a world-space rotation `dq` to a bone (children follow) */
 function rotateWorld(bone: THREE.Object3D, dq: THREE.Quaternion) {
   bone.updateWorldMatrix(true, false);
-  bone.getWorldQuaternion(_q3);
-  const parentQ = new THREE.Quaternion();
-  bone.parent!.getWorldQuaternion(parentQ);
-  const world = dq.clone().multiply(_q3);
-  bone.quaternion.copy(parentQ.invert().multiply(world));
+  bone.getWorldQuaternion(_rwW);
+  bone.parent!.getWorldQuaternion(_rwP);
+  _rwW.premultiply(dq);
+  bone.quaternion.copy(_rwP.invert().multiply(_rwW));
   bone.updateMatrixWorld(true);
+}
+
+function setWorldQuat(bone: THREE.Object3D, qw: THREE.Quaternion) {
+  bone.parent!.updateWorldMatrix(true, false);
+  bone.parent!.getWorldQuaternion(_rwP);
+  bone.quaternion.copy(_rwP.invert().multiply(qw));
+  bone.updateMatrixWorld(true);
+}
+
+/** analytic two-bone IK: end of the chain a -> b -> c onto `target`; the middle joint bends toward `pole` (world dir) */
+function twoBone(a: THREE.Object3D, b: THREE.Object3D, c: THREE.Object3D, target: THREE.Vector3, pole: THREE.Vector3) {
+  if (!a || !b || !c) return;
+  a.updateWorldMatrix(true, true);
+  a.getWorldPosition(_A);
+  b.getWorldPosition(_B);
+  c.getWorldPosition(_C);
+  const la = _A.distanceTo(_B), lb = _B.distanceTo(_C);
+  _D.copy(target).sub(_A);
+  const d = THREE.MathUtils.clamp(_D.length(), Math.abs(la - lb) + 1e-4, la + lb - 1e-4);
+  const dn = _D.normalize();
+  _P.copy(pole).addScaledVector(dn, -pole.dot(dn));
+  if (_P.lengthSq() < 1e-8) _P.copy(_B).sub(_A).addScaledVector(dn, -_B.clone().sub(_A).dot(dn));
+  _P.normalize();
+  const x = (la * la - lb * lb + d * d) / (2 * d);
+  const y = Math.sqrt(Math.max(0, la * la - x * x));
+  const knee = _P.multiplyScalar(y).addScaledVector(dn, x).add(_A);
+  rotateWorld(a, _tq.setFromUnitVectors(_B.sub(_A).normalize(), knee.sub(_A).normalize()));
+  b.getWorldPosition(_B);
+  c.getWorldPosition(_C);
+  const end = _D.copy(dn).multiplyScalar(d).add(_A);
+  rotateWorld(b, _tq.setFromUnitVectors(_C.sub(_B).normalize(), end.sub(_B).normalize()));
 }

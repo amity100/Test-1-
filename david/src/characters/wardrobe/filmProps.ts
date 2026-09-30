@@ -109,7 +109,8 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions):
   const pos: number[] = [], nor: number[] = [], uv: number[] = [], col: number[] = [], idx: number[] = [];
   const zone: number[] = []; // 0 upper (torso / shoulder), 1 skirt
   const royal = (o.polish ?? 'royal') === 'royal';
-  const bronzeHex = royal ? 0xb8773c : 0x8c5e33;
+  // warm bronze F0 (Cu-Sn ~10%): saturated enough that the pale sky it reflects cannot turn it grey / lilac
+  const bronzeHex = royal ? 0xb46a2c : 0x8c5a2e;
   const base = new THREE.Color(1, 1, 1);
   const patina = new THREE.Color(0x56745b).multiply(new THREE.Color(bronzeHex).set(1 / new THREE.Color(bronzeHex).r, 1 / new THREE.Color(bronzeHex).g, 1 / new THREE.Color(bronzeHex).b));
   const dust = new THREE.Color(0.95, 0.88, 0.72);
@@ -156,10 +157,14 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions):
         tmpD.copy(s2.p).sub(s0.p).normalize(); // down the body
         const nrm = s0.n.clone();
         // per-scale variation: tone, patina, dust in the rows, slight dents
-        const tone = 0.82 + 0.3 * R();
-        const pat = Math.pow(R(), 3) * (royal ? 0.25 : 0.6);
-        const tilt = 0.004 * S + 0.002 * S * R(); // lower end lifted off the row below
-        const rot = (R() - 0.5) * 0.08;
+        // (hand-made scales: each sits a little differently on its lacing — tilt, roll, twist, dents, a darker
+        // replaced scale here and there; this irregularity is what keeps rows of rounded scales from reading as feathers)
+        const tone = (0.72 + 0.34 * R()) * (R() < 0.08 ? 0.62 : 1);
+        const pat = Math.pow(R(), 3) * (royal ? 0.3 : 0.6);
+        const tilt = 0.003 * S + 0.007 * S * R() ** 1.5; // lower end lifted off the row below
+        const roll = (R() - 0.5) * 0.0045 * S; // one side lifted
+        const rot = (R() - 0.5) * 0.14;
+        const dnT = (R() - 0.5) * 0.5, dnD = (R() - 0.5) * 0.3; // dent / facet: the whole scale catches light differently
         const ca = Math.cos(rot), sa = Math.sin(rot);
         const vi0 = pos.length / 3;
         for (let j = 0; j <= nv; j++) {
@@ -172,19 +177,20 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions):
             const xr = x * ca - y * sa * 0.2, yr = y + x * sa * 0.2;
             const rib = (0.0022 * S) * Math.max(0, 1 - Math.abs(u) * 2.2) * Math.sin(Math.PI * Math.min(1, v * 1.05));
             const curve = 0.0012 * S * (1 - u * u); // slightly cupped across
-            const lift = tilt * v * v + rib + curve;
+            const lift = tilt * v * v + rib + curve + roll * u * v;
             q.copy(s0.p).addScaledVector(tmpT, xr).addScaledVector(tmpD, yr).addScaledVector(nrm, lift + 0.0015);
             pos.push(q.x, q.y, q.z);
             // normal: base normal tilted by the rib / lift slope
             const nx = -Math.sign(u) * (Math.abs(u) < 0.45 ? 0.35 : 0.05) * (1 - v);
             const ny = -0.18 * v - 0.1;
-            const nn = nrm.clone().addScaledVector(tmpT, nx).addScaledVector(tmpD, ny).normalize();
+            const nn = nrm.clone().addScaledVector(tmpT, nx + dnT - roll / (0.02 * S)).addScaledVector(tmpD, ny + dnD).normalize();
             nor.push(nn.x, nn.y, nn.z);
             uv.push(0.5 + u * 0.5 * halfW * 2, v);
             // colour: darker where the row above overlaps (top), dust caught along the overlap line, bright rib
-            const shade = (0.35 + 0.65 * Math.min(1, v * 1.6)) * tone * 0.9;
+            const shade = (0.16 + 0.84 * Math.min(1, v * 1.45) ** 1.3) * tone * 0.92;
             c.copy(base).lerp(patina, pat * (1 - v)).multiplyScalar(shade);
-            c.lerp(dust, (royal ? 0.18 : 0.3) * Math.max(0, 1 - Math.abs(v - 0.42) * 6));
+            // road dust packed along the overlap line and in the lower rows (the skirt catches more)
+            c.lerp(dust, (royal ? 0.22 : 0.32) * Math.max(0, 1 - Math.abs(v - 0.4) * 5) + (zoneId === 1 ? 0.08 : 0.03));
             col.push(c.r, c.g, c.b);
             zone.push(zoneId);
           }
@@ -211,8 +217,8 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions):
   // plain PBR bronze (no wear texture: its bright scratch layer turned the scales silver): colour = F0 of bronze,
   // per-scale tone / overlap shading / dust from the vertex colours
   const mat = tier === 'low'
-    ? new THREE.MeshStandardMaterial({ color: bronzeHex, roughness: royal ? 0.42 : 0.55, metalness: 1 })
-    : new THREE.MeshPhysicalMaterial({ color: bronzeHex, roughness: royal ? 0.4 : 0.52, metalness: 1, clearcoat: royal ? 0.15 : 0, clearcoatRoughness: 0.5 });
+    ? new THREE.MeshStandardMaterial({ color: bronzeHex, roughness: royal ? 0.5 : 0.58, metalness: 0.9, envMapIntensity: 0.75 })
+    : new THREE.MeshPhysicalMaterial({ color: bronzeHex, roughness: royal ? 0.48 : 0.56, metalness: 0.9, envMapIntensity: 0.75, sheen: 0.25, sheenColor: new THREE.Color(0xc8a878), sheenRoughness: 0.8 });
   mat.vertexColors = true;
   mat.side = THREE.DoubleSide;
   // weights: upper zone follows the torso, and near the shoulders blends into the upper arm (like the armhole cap)
@@ -276,8 +282,9 @@ export function makeHelmet(tier: Tier, metal: TexPair, leather: TexPair, o: { ra
   dome.setIndex(idx);
   dome.computeVertexNormals();
   const bronze = solidMaterial({
-    tier, tex: metal, color: royal ? 0x96602f : 0x8c5e33, roughness: royal ? 0.5 : 0.55, metalness: 1, repeat: [2, 2], normal: 1.4,
-    metalWear: { patina: 0x56745b, amount: royal ? 0.12 : 0.5, edgeBright: 0.7 },
+    // dusty, hammered dark bronze after a campaign (a smooth bright dome read as a glowing ball in the backlight)
+    tier, tex: metal, color: royal ? 0x7a4a26 : 0x6e4a2c, roughness: royal ? 0.62 : 0.66, metalness: 0.88, repeat: [2, 2], normal: 1.8,
+    metalWear: { patina: 0x56745b, amount: royal ? 0.2 : 0.5, edgeBright: 0.3 },
   });
   bronze.side = THREE.DoubleSide;
   const dm = new THREE.Mesh(dome, bronze);

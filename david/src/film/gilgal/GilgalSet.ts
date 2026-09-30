@@ -97,6 +97,8 @@ export class GilgalSet {
   /** recommended renderer.toneMappingExposure (base x the current shot's exposure hint) */
   exposure = 0.56;
   static BASE_EXPOSURE = 0.56;
+  /** near plane of the view (close inserts at 0.5-1 m); update() raises it with the camera's height above the ground */
+  static NEAR = 0.05;
   static ATMOSPHERE = { density: 0.00007, heightFalloff: 0.0011, baseHeight: -140, godRays: 0.22, hazeTint: new THREE.Color(1.0, 0.93, 0.84) };
   /** the beat set by setBeat (null = free camera: no shot-driven state) */
   beat: { name: GilgalShotName; time: number } | null = null;
@@ -210,6 +212,15 @@ export class GilgalSet {
     this.exposure = GilgalSet.BASE_EXPOSURE;
   }
 
+  /**
+   * Gilgal set metres -> the land set's frame (src/film/land/landData.ts: origin Bethlehem 31.7054 N 35.2024 E, +X east,
+   * +Z south, y = metres above sea level). Same projection family as both bakers; error < 30 m over the region.
+   * Use it to line up the hand-off of shot 13 -> 14 (the end pose of the rise, in the land set's coordinates).
+   */
+  static toLandFrame(v: THREE.Vector3, out = new THREE.Vector3()) {
+    return out.set(25343.5 + 1.0017 * v.x, v.y + ORIGIN_ASL, -17315.9 + 0.99706 * v.z);
+  }
+
   /** ground height of the set at (x, z) (feet placement) */
   height(x: number, z: number) {
     return this.ground.height(x, z);
@@ -281,6 +292,13 @@ export class GilgalSet {
     }
     this.sky.update(camera, this.focus);
     this.driveLandClouds();
+    // depth precision for the rise: close inserts need a 5 cm near plane, the view from 3 km up a far larger one
+    const agl = camera.position.y - this.ground.height(camera.position.x, camera.position.z);
+    const near = agl > 120 ? Math.min(8, agl * 0.004) : GilgalSet.NEAR;
+    if (Math.abs(camera.near - near) > 1e-3 && (agl > 120 || camera.near > GilgalSet.NEAR)) {
+      camera.near = near;
+      camera.updateProjectionMatrix();
+    }
     // high above the valley the sunlit cloud deck fills the frame: stop down like a camera operator would
     if (this.beat) this.exposure = GilgalSet.BASE_EXPOSURE * this.shots[this.beat.name].exposure * THREE.MathUtils.lerp(1, 0.58, THREE.MathUtils.smoothstep(camera.position.y, 700, 2600));
     if (this.post) {

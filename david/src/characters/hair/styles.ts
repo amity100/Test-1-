@@ -53,22 +53,28 @@ export function davidStyle(): GroomStyle {
     name: 'david-scalp',
     kind: 0,
     mask: (s) => s.scalpMask(0, (phi) => -0.009 * Math.exp(-(((phi - 58) / 16) ** 2))),
-    strands: { low: 3800, medium: 11000, high: 24000 },
-    locks: 230,
+    strands: { low: 3600, medium: 10500, high: 22000 },
+    locks: 190,
     sim: { low: 16, medium: 32, high: 48 },
+    // david v2: the reference's long flowing curls reach the jaw and the nape (below the ears)
+    reach: 0.3,
     length: (f, n, R) => {
-      // top / crown longest, forelock tumbling onto the forehead, nape to the neck
+      // david v2 (reference image): long, loose S-curls — crown and forelock tumbling onto the forehead, the sides
+      // over the ears down to the jaw, the nape to the collar (was 0.084 + ... ≈ 8-13 cm: too short and tight)
       const top = ss(0.03, 0.1, f.y);
       const front = ss(-0.02, 0.06, f.z);
       const back = ss(0.0, -0.08, f.z) * ss(0.05, -0.04, f.y);
       const side = ss(0.05, 0.075, Math.abs(f.x)) * ss(0.06, 0.0, f.y);
-      return (0.084 + 0.016 * top + 0.026 * front + 0.006 * back - 0.02 * side) * (0.82 + 0.36 * R());
+      // the hairline at the forehead stays shorter so the forelock falls to the brows, not over the eyes
+      const hairline = ss(0.035, 0.075, f.z) * ss(0.11, 0.06, f.y);
+      return (0.15 + 0.03 * top + 0.035 * back + 0.012 * side - 0.07 * hairline) * (0.84 + 0.32 * R());
     },
     comb: (f, n, out) => {
       // whorl at the top-back; hair flows out from it, forward over the forehead, down the sides / back
       dir(out, f.x, f.y - 0.1, f.z + 0.055);
       out.normalize();
-      out.z += 0.35 * ss(0.04, 0.09, f.y) * ss(-0.06, 0.02, f.z);
+      out.z += 0.3 * ss(0.04, 0.09, f.y) * ss(-0.06, 0.02, f.z);
+      out.y += 0.35 * ss(0.03, 0.07, f.z); // the front lifts off the forehead before it falls
       // fringe swept across the forehead toward his left (as in the reference)
       out.x += 0.45 * ss(0.03, 0.08, f.y) * ss(-0.03, 0.05, f.z);
       out.y -= 0.5 * (1 - ss(0.02, 0.09, f.y));
@@ -76,20 +82,21 @@ export function davidStyle(): GroomStyle {
       out.z += 0.25 * vnoise(f.x * 30, f.y * 30, f.z * 30, 4);
       return out;
     },
-    lift: 0.34,
-    gravity: 20,
+    lift: 0.3,
+    gravity: 22,
     combPull: 10,
     tousle: 12,
     volume: (t, R) => 0.003 + (0.55 * R + 0.004) * ss(0, 0.35, t),
-    curlR: [0.0095, 0.017],
-    curlPitch: [0.055, 0.085],
-    curlStart: 0.42,
-    curlNoise: 1.0,
-    straightLocks: 0.15,
-    lockR: 0.0062,
-    clump: 0.72,
-    frizz: 0.0026,
-    flyaway: 0.04,
+    // loose S-shaped ringlets (bigger radius, longer pitch), defined clumped locks, little frizz (the old values read grainy)
+    curlR: [0.012, 0.021],
+    curlPitch: [0.075, 0.115],
+    curlStart: 0.28,
+    curlNoise: 0.75,
+    straightLocks: 0.1,
+    lockR: 0.0078,
+    clump: 0.84,
+    frizz: 0.0013,
+    flyaway: 0.022,
     width: 0.00014,
     stiffness: 0.3,
     childLen: [0.78, 1.0],
@@ -109,8 +116,8 @@ export function davidStyle(): GroomStyle {
   return {
     name: 'david',
     layers: [scalp],
-    ctrl: { low: 9, medium: 12, high: 16 },
-    segs: { low: 12, medium: 20, high: 30 },
+    ctrl: { low: 10, medium: 14, high: 18 },
+    segs: { low: 14, medium: 24, high: 36 },
     shading: { shift: 0.035, roughness: 0.42, specular: 0.5, backlit: 0.75, scatter: 0.25, aoDirect: 0.6 },
     capColor: [0.16, 0.085, 0.046],
     capOffset: 0.006,

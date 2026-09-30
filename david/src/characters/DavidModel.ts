@@ -8,6 +8,7 @@ import { HumanModel, type HumanQuality } from './human/HumanModel';
 import type { Expression, FingerPose } from './human/HumanRig';
 import { createGroom, type Groom } from './hair';
 import { dressDavid, attachProp, type Outfit, type Prop } from './wardrobe';
+import { MocapLibrary, MocapPose, type MocapClip } from './mocap';
 
 /*
  * Young David — "וְהוּא אַדְמוֹנִי עִם־יְפֵה עֵינַיִם וְטוֹב רֹאִי" (1 Sam 16:12): ruddy, with beautiful eyes, handsome;
@@ -47,6 +48,23 @@ export interface DavidParts {
   outfit: Outfit;
   quality: HumanQuality;
   loadMs: { human: number; outfit: number; groom: number; total: number };
+  /** the gameplay mocap clips (DAVID_MOCAP) are decoded in MocapLibrary.shared */
+  mocap?: boolean;
+}
+
+/** film performances for the opening film (docs/intro-script.md shots 15-17), see DavidModel.performFilm */
+export type FilmShot = 'back' | 'reveal' | 'wide';
+export interface FilmOptions {
+  /** world point he turns to in 'reveal' (usually the camera); default: 3 m to his right-front at eye height */
+  look?: THREE.Vector3 | null;
+  /** hair / cloth wind multiplier (default back 1.8, reveal 1.4, wide 1.6) */
+  wind?: number;
+  /** 'reveal': when the head turn starts (s into the shot, default 0.9) and how long it takes (default 2.2 s) */
+  turnAt?: number;
+  turnDur?: number;
+  /** face after the turn (default 'smile' at 0.2: calm, warm) */
+  mood?: Expression;
+  moodWeight?: number;
 }
 
 // channels (not joints) blended by the pose mixer
@@ -441,6 +459,246 @@ export function pebbleGeometry(seed: number, scale = 1) {
 }
 
 // ------------------------------------------------------------------------------------------ model
+// ------------------------------------------------------------------------------------------ motion capture
+/**
+ * Real motion capture (CMU, retargeted onto the MakeHuman skeleton: src/characters/mocap) drives David's body in
+ * gameplay: idles, walk / jog / run by speed (phase-synced blend), turning in place, the stone pick, the sling
+ * throw's legs and trunk, kneeling. The blended mocap pose is converted to the proxy joints (`human.joints`) and
+ * enters the pose mixer as the BASE layer, so every procedural layer keeps working on top of it: holds, keyed
+ * actions, the staff / sling arm IK, look-at, terrain foot IK (+ foot locking from the mocap contacts).
+ */
+export const DAVID_MOCAP = ['idle_shift', 'idle_soldier', 'walk', 'jog', 'run', 'turn_left', 'pickup_box', 'throw_ball', 'kneel', 'kneel_hold'] as const;
+type DClip = (typeof DAVID_MOCAP)[number];
+
+/** proxy joints and the MOCAP_BONES that compose each (product in chain order, aligned frames — see HumanRig.update) */
+const PX = ['hips', 'spine', 'chest', 'neck', 'head', 'uaL', 'faL', 'hdL', 'uaR', 'faR', 'hdR', 'thL', 'shinL', 'ftL', 'thR', 'shinR', 'ftR'] as const;
+const PX_BONES: number[][] = [[0], [1, 2, 3], [4, 5], [6, 7, 8], [9], [10, 11, 12, 13], [14, 15], [16], [17, 18, 19, 20], [21, 22], [23], [24, 25], [26, 27], [28], [30, 31], [32, 33], [34]];
+const NPX = PX.length;
+const pxMask = (w: Partial<Record<(typeof PX)[number], number>>) => {
+  const m = new Float32Array(NPX);
+  PX.forEach((k, i) => (m[i] = w[k] ?? 0));
+  return m;
+};
+/** legs + pelvis (+ a little trunk) */
+const MASK_LOWER = pxMask({ hips: 1, spine: 0.6, chest: 0.3, thL: 1, shinL: 1, ftL: 1, thR: 1, shinR: 1, ftR: 1 });
+/** legs + pelvis + trunk + head */
+const MASK_BODY = pxMask({ hips: 1, spine: 1, chest: 1, neck: 0.7, head: 0.5, thL: 1, shinL: 1, ftL: 1, thR: 1, shinR: 1, ftR: 1 });
+
+class ProxyPose {
+  readonly q = new Float32Array(NPX * 4);
+  hx = 0;
+  hy = 0.97;
+  hz = 0;
+  contacts = 15;
+  copy(p: ProxyPose) {
+    this.q.set(p.q);
+    this.hx = p.hx; this.hy = p.hy; this.hz = p.hz; this.contacts = p.contacts;
+    return this;
+  }
+}
+const _mq1 = new THREE.Quaternion(), _mq2 = new THREE.Quaternion();
+function toProxy(p: MocapPose, out: ProxyPose) {
+  const q = p.q;
+  for (let i = 0; i < NPX; i++) {
+    const bs = PX_BONES[i];
+    let o = bs[0] * 4;
+    _mq1.set(q[o], q[o + 1], q[o + 2], q[o + 3]);
+    for (let k = 1; k < bs.length; k++) {
+      o = bs[k] * 4;
+      _mq1.multiply(_mq2.set(q[o], q[o + 1], q[o + 2], q[o + 3]));
+    }
+    const d = i * 4;
+    out.q[d] = _mq1.x; out.q[d + 1] = _mq1.y; out.q[d + 2] = _mq1.z; out.q[d + 3] = _mq1.w;
+  }
+  out.hx = p.hx; out.hy = p.hy; out.hz = p.hz; out.contacts = p.contacts;
+}
+/** weighted nlerp accumulation of bone quaternions (first = overwrite) */
+function accumPose(dst: MocapPose, src: MocapPose, w: number, first: boolean) {
+  const a = dst.q, b = src.q;
+  if (first) {
+    for (let i = 0; i < a.length; i++) a[i] = b[i] * w;
+    dst.hx = src.hx * w; dst.hy = src.hy * w; dst.hz = src.hz * w;
+    return;
+  }
+  for (let o = 0; o < a.length; o += 4) {
+    const d = a[o] * b[o] + a[o + 1] * b[o + 1] + a[o + 2] * b[o + 2] + a[o + 3] * b[o + 3];
+    const ww = d < 0 ? -w : w;
+    a[o] += b[o] * ww; a[o + 1] += b[o + 1] * ww; a[o + 2] += b[o + 2] * ww; a[o + 3] += b[o + 3] * ww;
+  }
+  dst.hx += src.hx * w; dst.hy += src.hy * w; dst.hz += src.hz * w;
+}
+function finishPose(dst: MocapPose, sumW: number) {
+  const a = dst.q;
+  for (let o = 0; o < a.length; o += 4) {
+    const n = 1 / (Math.hypot(a[o], a[o + 1], a[o + 2], a[o + 3]) || 1);
+    a[o] *= n; a[o + 1] *= n; a[o + 2] *= n; a[o + 3] *= n;
+  }
+  const k = 1 / Math.max(1e-6, sumW);
+  dst.hx *= k; dst.hy *= k; dst.hz *= k;
+}
+
+/** one overlay (turn / action / kneel) on top of the base blend */
+interface MoSlot {
+  clip: MocapClip | null;
+  name: string;
+  t: number;
+  rate: number;
+  w: number;
+  target: number;
+  fade: number;
+  mirror: boolean;
+  mask: Float32Array;
+  /** stop at this clip time (one-shots); loop clips ignore it */
+  end: number;
+  /** externally timed: t is set by the owner every frame */
+  driven: boolean;
+}
+
+class MocapDriver {
+  readonly clips: Record<DClip, MocapClip>;
+  /** leg-length ratio (root motion / pelvis) */
+  readonly scale: number;
+  /** gait phase 0..1 (0 = left heel strike) and the clip time of each clip's left heel strike */
+  phase = 0;
+  private heel0: Record<string, number> = {};
+  private stride: Record<string, number> = {};
+  /** locomotion weights (read by the model) */
+  readonly w = { idle: 1, walk: 0, jog: 0, run: 0 };
+  private idleA: DClip = 'idle_shift';
+  private idleB: DClip = 'idle_soldier';
+  private idleMix = 0;
+  private idleTA = 0;
+  private idleTB = 0;
+  private idleSwitch = 9;
+  private idleToB = false;
+  readonly slots: Record<'turn' | 'action' | 'kneel', MoSlot>;
+  readonly out = new ProxyPose();
+  private readonly acc = new MocapPose();
+  private readonly tmp = new MocapPose();
+  private readonly over = new ProxyPose();
+
+  constructor(lib: MocapLibrary, legLength: number) {
+    const c = {} as Record<DClip, MocapClip>;
+    for (const n of DAVID_MOCAP) {
+      const clip = lib.get(n);
+      if (!clip) throw new Error(`mocap clip ${n} missing`);
+      c[n] = clip;
+    }
+    this.clips = c;
+    this.scale = legLength / 0.8969;
+    const P = new MocapPose();
+    for (const n of ['walk', 'jog', 'run'] as const) {
+      const clip = c[n];
+      // left heel strike: first rising edge of the heelL contact bit
+      let prev = -1, at = 0;
+      for (let f = 0; f <= clip.frames; f++) {
+        clip.sample(f / clip.fps, P);
+        const on = P.contacts & 1;
+        if (prev === 0 && on) { at = f / clip.fps; break; }
+        prev = on;
+      }
+      this.heel0[n] = at;
+      this.stride[n] = Math.max(0.2, clip.meta.speed * clip.duration * this.scale);
+    }
+    const slot = (): MoSlot => ({ clip: null, name: '', t: 0, rate: 1, w: 0, target: 0, fade: 8, mirror: false, mask: MASK_LOWER, end: 0, driven: false });
+    this.slots = { turn: slot(), action: slot(), kneel: slot() };
+  }
+
+  /** start an overlay clip in a slot */
+  play(slot: 'turn' | 'action' | 'kneel', name: DClip, o: { t?: number; rate?: number; mirror?: boolean; mask?: Float32Array; fade?: number; end?: number; driven?: boolean; weight?: number } = {}) {
+    const s = this.slots[slot];
+    const clip = this.clips[name];
+    s.clip = clip;
+    s.name = name;
+    s.t = o.t ?? 0;
+    s.rate = o.rate ?? 1;
+    s.mirror = !!o.mirror;
+    s.mask = o.mask ?? MASK_LOWER;
+    s.fade = 1 / Math.max(0.02, o.fade ?? 0.15);
+    s.end = o.end ?? clip.duration;
+    s.driven = !!o.driven;
+    s.target = o.weight ?? 1;
+  }
+  stop(slot: 'turn' | 'action' | 'kneel', fade = 0.2) {
+    const s = this.slots[slot];
+    s.target = 0;
+    s.fade = 1 / Math.max(0.02, fade);
+  }
+
+  update(dt: number, v: number, still: boolean) {
+    const c = this.clips;
+    // ---- locomotion weights along the speed axis (walk 1.3-1.9, jog ~3, run for the sprint 5.7)
+    const ww = smooth01((v - 0.12) / 0.75);
+    const wj = smooth01((v - 1.75) / 1.1);
+    const wr = smooth01((v - 3.3) / 1.9);
+    const W = this.w;
+    W.idle = 1 - ww;
+    W.walk = ww * (1 - wj);
+    W.jog = ww * wj * (1 - wr);
+    W.run = ww * wj * wr;
+    const loco = W.walk + W.jog + W.run;
+    if (loco > 1e-4) {
+      const S = (W.walk * this.stride.walk + W.jog * this.stride.jog + W.run * this.stride.run) / loco;
+      const fMin = 0.55 / c.walk.duration;
+      this.phase = (this.phase + dt * Math.max(v / S, fMin)) % 1;
+    }
+    // ---- idle: two loops cross-fading every ~9-15 s (weight shifts, a soldier's rest)
+    this.idleTA += dt;
+    this.idleTB += dt;
+    if (still) {
+      this.idleSwitch -= dt;
+      if (this.idleSwitch <= 0) {
+        this.idleToB = !this.idleToB;
+        this.idleSwitch = 9 + Math.random() * 6;
+        if (this.idleToB) this.idleTB = 0;
+        else this.idleTA = Math.random() * c[this.idleA].duration;
+      }
+    }
+    this.idleMix = damp(this.idleMix, this.idleToB ? 1 : 0, 1.6, dt);
+    // ---- base blend
+    let first = true, sum = 0, best = -1;
+    const add = (clip: MocapClip, t: number, w: number) => {
+      if (w <= 1e-4) return;
+      clip.sample(t, this.tmp);
+      accumPose(this.acc, this.tmp, w, first);
+      first = false;
+      sum += w;
+      if (w > best) { best = w; this.acc.contacts = this.tmp.contacts; }
+    };
+    add(c[this.idleA], this.idleTA, W.idle * (1 - this.idleMix));
+    add(c[this.idleB], this.idleTB, W.idle * this.idleMix);
+    for (const n of ['walk', 'jog', 'run'] as const) {
+      const clip = c[n];
+      add(clip, this.heel0[n] + this.phase * clip.duration, W[n]);
+    }
+    finishPose(this.acc, sum);
+    toProxy(this.acc, this.out);
+    // ---- overlays (slerp per proxy by weight x mask)
+    for (const k of ['kneel', 'turn', 'action'] as const) {
+      const s = this.slots[k];
+      if (!s.driven) s.t += dt * s.rate;
+      if (s.clip && !s.clip.loop && s.t >= s.end) s.target = 0;
+      s.w = s.w < s.target ? Math.min(s.target, s.w + dt * s.fade) : Math.max(s.target, s.w - dt * s.fade);
+      if (!s.clip || s.w <= 1e-3) continue;
+      s.clip.sample(Math.min(s.t, s.end), this.tmp, s.mirror);
+      toProxy(this.tmp, this.over);
+      const o = this.out;
+      for (let i = 0; i < NPX; i++) {
+        const w = s.w * s.mask[i];
+        if (w <= 1e-4) continue;
+        const d = i * 4;
+        _mq1.set(o.q[d], o.q[d + 1], o.q[d + 2], o.q[d + 3]).slerp(_mq2.set(this.over.q[d], this.over.q[d + 1], this.over.q[d + 2], this.over.q[d + 3]), w);
+        o.q[d] = _mq1.x; o.q[d + 1] = _mq1.y; o.q[d + 2] = _mq1.z; o.q[d + 3] = _mq1.w;
+      }
+      const wh = s.w * s.mask[0];
+      o.hx += (this.over.hx - o.hx) * wh;
+      o.hy += (this.over.hy - o.hy) * wh;
+      o.hz += (this.over.hz - o.hz) * wh;
+      if (wh > 0.5) o.contacts = this.over.contacts;
+    }
+  }
+}
+
 export class DavidModel {
   /** parts loaded by `preload()` and consumed by the next construction */
   static preloaded: DavidParts | null = null;
@@ -449,8 +707,13 @@ export class DavidModel {
    * Load the realistic David: human (MakeHuman preset 'david'), strand hair, costume and props. Tiers follow
    * engine.quality.name (phones are always 'low'). Await it during boot before constructing the Player.
    */
-  static async preload(quality: HumanQuality, o: { msaa?: number; hair?: boolean; onProgress?: (f: number) => void } = {}): Promise<DavidParts> {
+  static async preload(quality: HumanQuality, o: { msaa?: number; hair?: boolean; mocap?: boolean; onProgress?: (f: number) => void } = {}): Promise<DavidParts> {
     const t0 = performance.now();
+    // the gameplay mocap clips (~110 KB in all) load in parallel with the body; if they fail David stays procedural
+    const mocapP = o.mocap === false ? Promise.resolve(false) : MocapLibrary.shared.preload([...DAVID_MOCAP]).then(() => true, (e) => {
+      console.warn('[david] mocap clips failed, procedural motion only', e);
+      return false;
+    });
     const human = await HumanModel.load({ preset: 'david', quality });
     o.onProgress?.(0.4);
     const t1 = performance.now();
@@ -465,9 +728,10 @@ export class DavidModel {
         console.warn('[david] hair groom failed', e);
       }
     }
+    const mocap = await mocapP;
     o.onProgress?.(1);
     const t3 = performance.now();
-    const parts: DavidParts = { human, groom, outfit, quality, loadMs: { human: t1 - t0, outfit: t2 - t1, groom: t3 - t2, total: t3 - t0 } };
+    const parts: DavidParts = { human, groom, outfit, quality, mocap, loadMs: { human: t1 - t0, outfit: t2 - t1, groom: t3 - t2, total: t3 - t0 } };
     DavidModel.preloaded = parts;
     return parts;
   }
@@ -496,6 +760,25 @@ export class DavidModel {
   pullTarget: THREE.Vector3 | null = null;
   /** local (character-space) dodge direction x (+ = to his left), set by the Player before play('dodge') */
   dodgeSide = 0;
+  /** 0..1: how much the motion capture drives the body (0 = the old procedural motion); ignored if clips failed */
+  mocapWeight = 1;
+  /** hair and cloth wind multiplier (film shots set it through performFilm) */
+  windScale = 1;
+  private readonly mo: MocapDriver | null = null;
+  private readonly moPose: Pose = { r: {}, hipsY: 0, hipsZ: 0 };
+  private moW = 0;
+  private turnRate = 0;
+  private kneelOn = false;
+  private kneelT = 0;
+  private lastContacts = 15;
+  private readonly lock = {
+    L: { on: false, w: 0, pos: new THREE.Vector3() },
+    R: { on: false, w: 0, pos: new THREE.Vector3() },
+  };
+  private film: { shot: FilmShot; t: number; look: THREE.Vector3 | null; wind: number; turnAt: number; turnDur: number; mood: Expression; moodW: number; blinked: boolean } | null = null;
+  private filmTurn = 0;
+  private filmEyes: THREE.Vector3 | null = null;
+  private readonly filmLook = new THREE.Vector3();
 
   // animation state
   speed = 0; // m/s (for locomotion)
@@ -633,6 +916,15 @@ export class DavidModel {
     }
     human.rig.setFingers('L', 'grip');
     human.rig.setFingers('R', 'fist');
+    // ---- motion capture driver (the clips were decoded by preload())
+    if (parts.mocap) {
+      try {
+        this.mo = new MocapDriver(MocapLibrary.shared, human.rig.thighLength + human.rig.shinLength);
+        for (const k of [...PX, 'hipsX']) this.moPose.r[k] = [0, 0, 0];
+      } catch (e) {
+        console.warn('[david] mocap driver', e);
+      }
+    }
     human.rig.blinkEnabled = true;
     human.setPupil(0.25);
 
@@ -712,6 +1004,8 @@ export class DavidModel {
     this.armErr.R.set(0, 0, 0);
     this.slingInit = false;
     this.hasLast = false;
+    this.lock.L.on = this.lock.R.on = false;
+    this.lock.L.w = this.lock.R.w = 0;
   }
 
   setVisible(v: boolean) {
@@ -737,8 +1031,12 @@ export class DavidModel {
       while (dh > Math.PI) dh -= Math.PI * 2;
       while (dh < -Math.PI) dh += Math.PI * 2;
       const turnRate = clamp(dh / dt, -6, 6);
+      this.turnRate = turnRate;
       this.turnLean = damp(this.turnLean, clamp(turnRate * this.speed * 0.035, -0.22, 0.22), 6, dt);
-    } else this.velocity.set(0, 0, 0);
+    } else {
+      this.velocity.set(0, 0, 0);
+      this.turnRate = 0;
+    }
     this.lastRootPos.copy(rootPos);
     this.lastHeading = heading;
     this.hasLast = true;
@@ -754,16 +1052,57 @@ export class DavidModel {
     const p = this.phase;
     this.exertion = clamp(this.exertion + dt * (rw > 0.5 ? 0.12 : -0.05), 0, 1);
 
+    // ---------- film performance (opening film shots 15-17): the reference stance, still, wind in the curls
+    const film = this.film;
+    if (film) {
+      this.hold = 'hero';
+      this.speed = 0;
+      this.lookTarget = null;
+    }
+
     // ---------- base: calm idle / hero stance (after standing still for a while he settles into the reference stance)
     const stillNow = this.locoW < 0.05 && !this.action && this.hold === 'none' && this.sling.state !== 'spin';
     this.stillT = stillNow ? this.stillT + dt : 0;
     this.autoHeroW = damp(this.autoHeroW, this.autoHero && this.stillT > 7 ? 1 : 0, this.stillT > 7 ? 0.9 : 6, dt);
+    m.layer(IDLE, 1);
+
+    // ---------- procedural locomotion (upper body + pelvis; legs by IK below) — under the mocap, it still carries the
+    // staff channels and the staff arm
+    if (lw > 0.001) {
+      this.buildWalkUpper(p, v, rw);
+      m.layer(this.walkPose, lw, WALK_MASK);
+    }
+
+    // ---------- motion capture base: idles / walk / jog / run / turn / kneel (everything but the staff arm)
+    const mo = this.mo;
+    this.moW = mo ? clamp(this.mocapWeight, 0, 1) : 0;
+    const mw = this.moW;
+    if (mo && mw > 0.001) {
+      this.updateMocap(dt, v, stillNow);
+      m.layer(this.moPose, mw, MO_MASK);
+      // the staff arm keeps a little of the actor's swing
+      m.layer(this.moPose, mw * THREE.MathUtils.lerp(0.12, 0.3, lw), UPPER_L);
+      // footsteps from the capture's heel contacts
+      const c = mo.out.contacts;
+      if (lw > 0.5 && mo.w.idle < 0.5) {
+        if (c & 1 && !(this.lastContacts & 1)) this.onFootstep?.('L', rw > 0.5);
+        if (c & 4 && !(this.lastContacts & 4)) this.onFootstep?.('R', rw > 0.5);
+      }
+      this.lastContacts = c;
+    } else if (lw > 0.5) {
+      // footsteps on heel strike (left at p=0, right at p=0.5)
+      if (this.lastPhase > 0.9 && p < 0.1) this.onFootstep?.('L', rw > 0.5);
+      if (this.lastPhase < 0.5 && p >= 0.5) this.onFootstep?.('R', rw > 0.5);
+    }
+    this.lastPhase = p;
+
+    // ---------- the reference stance (hold 'hero', the automatic settle, the film)
+    if (film) this.holdW.hero = Math.max(this.holdW.hero, film.t < 0.05 ? 1 : this.holdW.hero);
     const heroW = Math.max(this.holdW.hero, this.autoHeroW);
     this.heroW = heroW;
-    m.layer(IDLE, 1);
     if (heroW > 0.001) m.layer(HERO, heroW);
-    // idle life: weight shift, glances
-    const still = (1 - lw) * (this.action ? 0.3 : 1);
+    // idle life: weight shift, glances (the capture brings its own; the procedural sway stays for the hero stance)
+    const still = (1 - lw) * (this.action ? 0.3 : 1) * Math.max(1 - mw, heroW);
     this.idleT += dt;
     const sway = Math.sin(this.idleT * 0.55) * 0.5 + Math.sin(this.idleT * 0.21 + 1.3) * 0.5;
     m.add('hipsX', sway * 0.012 * still);
@@ -777,23 +1116,12 @@ export class DavidModel {
       else this.glanceTarget.set(0, 0);
       this.glanceT = away ? 1.2 + Math.random() * 2.2 : 2.5 + Math.random() * 4.5;
     }
-    const gw = still * (this.lookTarget ? 0 : 1) * (1 - heroW);
+    const gw = (1 - lw) * (this.action ? 0.3 : 1) * (this.lookTarget ? 0 : 1) * (1 - heroW) * (1 - 0.4 * mw);
     this.glance.x = damp(this.glance.x, this.glanceTarget.x * gw, 3.5, dt);
     this.glance.y = damp(this.glance.y, this.glanceTarget.y * gw, 3.5, dt);
     m.add('head', -this.glance.y * 0.6, this.glance.x * 0.55, 0);
     m.add('neck', -this.glance.y * 0.3, this.glance.x * 0.35, 0);
-
-    // ---------- locomotion (upper body + pelvis; the legs are solved by IK below)
-    if (lw > 0.001) {
-      this.buildWalkUpper(p, v, rw);
-      m.layer(this.walkPose, lw, WALK_MASK);
-      // footsteps on heel strike (left at p=0, right at p=0.5)
-      if (lw > 0.5) {
-        if (this.lastPhase > 0.9 && p < 0.1) this.onFootstep?.('L', rw > 0.5);
-        if (this.lastPhase < 0.5 && p >= 0.5) this.onFootstep?.('R', rw > 0.5);
-      }
-    }
-    this.lastPhase = p;
+    if (film) this.filmHead(dt);
     // lean into turns (whole body rolls about the feet)
     m.add('hips', 0, 0, -this.turnLean * 0.6);
     m.add('spine', 0, 0, -this.turnLean * 0.3);
@@ -821,7 +1149,7 @@ export class DavidModel {
     }
     if (H.grab > 0.001) m.layer(GRAB_BEARD, H.grab);
     if (H.carry > 0.001) m.layer(CARRY, H.carry, CARRY_MASK);
-    if (H.kneel > 0.001) m.layer(KNEEL, H.kneel);
+    if (H.kneel > 0.001) m.layer(KNEEL, H.kneel, mo && mw > 0.5 ? KNEEL_UPPER : undefined);
     if (H.thanks > 0.001) m.layer(THANKS, H.thanks, lw > 0.3 ? THANKS_UPPER : undefined);
     if (H.pull > 0.001) {
       this.pullT += dt;
@@ -894,24 +1222,145 @@ export class DavidModel {
     );
 
     // ---------- legs: gait targets + terrain IK
-    const legW = lw * (1 - actionLegs) * (1 - H.kneel) * (1 - H.pull * 0.7) * (1 - H.grab * 0.8);
-    this.solveLegs(p, v, rw, legW, dt);
+    const legW = lw * (1 - mw) * (1 - actionLegs) * (1 - H.kneel) * (1 - H.pull * 0.7) * (1 - H.grab * 0.8);
+    // planted feet stay locked in the world while the capture drives the legs (no skating in blends / stops / turns)
+    const lockW = mw * (1 - Math.max(heroW, H.spin, H.kneel, H.pull, H.grab, H.carry * 0, actionLegs));
+    this.solveLegs(p, v, rw, legW, dt, lockW > 0.6 && mo ? mo.out.contacts : 0);
 
     // ---------- arms: staff, hands on targets
     this.solveArms(dt);
 
     // ---------- fingers, face, eyes
     this.updateFace();
-    this.human.rig.lookTarget = this.lookTarget;
+    this.human.rig.lookTarget = this.film ? this.filmEyes : this.lookTarget;
 
     // ---------- skin, hair, clothes
     this.human.update(dt, this.camera, this.viewportHeight);
     this.measureArmError();
     this.placeStaff(dt);
     this.updateProps();
-    const wind = _v6.copy(shared.uWind.value).multiplyScalar(1.4 * shared.uWindStrength.value);
+    const wind = _v6.copy(shared.uWind.value).multiplyScalar(1.4 * shared.uWindStrength.value * this.windScale);
     this.outfit.update(dt, { velocity: this.velocity, wind });
     this.groom?.update(dt, wind);
+  }
+
+  // ----------------------------------------------------------------------------------- mocap
+  /** advance the capture blend (speed, turning in place, kneeling) and convert it to proxy Euler angles (this.moPose) */
+  private updateMocap(dt: number, v: number, still: boolean) {
+    const mo = this.mo!;
+    // turning on the spot: stepping feet from the capture (turn_left, mirrored for a right turn), sped up to the turn
+    const tr = this.turnRate;
+    const ts = mo.slots.turn;
+    if (Math.abs(tr) > 1.1 && v < 0.6 && !this.action && (this.hold === 'none' || this.hold === 'spin')) {
+      const rate = clamp(Math.abs(tr) / 0.9, 1.2, 2.6);
+      if (ts.target === 0) mo.play('turn', 'turn_left', { t: 0.15, rate, mirror: tr < 0, mask: MASK_LOWER, end: 1.55, fade: 0.12 });
+      else ts.rate = Math.max(ts.rate, rate);
+    }
+    if (v > 0.9 || this.action) mo.stop('turn', 0.2);
+    // kneeling: down (kneel 0-0.95 s), the held kneel (kneel_hold loop), up again (kneel 3.95-5.1 s)
+    if (this.hold === 'kneel') {
+      if (!this.kneelOn) {
+        this.kneelOn = true;
+        this.kneelT = 0;
+        mo.play('kneel', 'kneel', { t: 0, rate: 1.1, mask: MASK_BODY, end: 0.95, fade: 0.25 });
+        mo.slots.kneel.target = 1;
+      }
+      this.kneelT += dt;
+      if (this.kneelT > 0.8 && mo.slots.kneel.name === 'kneel') mo.play('kneel', 'kneel_hold', { t: 0, mask: MASK_BODY, fade: 0.35 });
+      mo.slots.kneel.target = 1;
+    } else if (this.kneelOn) {
+      this.kneelOn = false;
+      mo.play('kneel', 'kneel', { t: 3.95, rate: 1.25, mask: MASK_BODY, end: 5.05, fade: 0.2 });
+    }
+    mo.update(dt, v, still);
+    const o = mo.out, r = this.moPose.r;
+    for (let i = 0; i < NPX; i++) {
+      const d = i * 4;
+      _e1.setFromQuaternion(_q1.set(o.q[d], o.q[d + 1], o.q[d + 2], o.q[d + 3]), 'XYZ');
+      const e = r[PX[i]];
+      e[0] = _e1.x; e[1] = _e1.y; e[2] = _e1.z;
+    }
+    const rig = this.human.rig;
+    r.hipsX[0] = o.hx * mo.scale - rig.pelvis.x;
+    this.moPose.hipsY = o.hy * mo.scale - rig.hipHeight;
+    this.moPose.hipsZ = o.hz * mo.scale - rig.pelvis.z;
+  }
+
+  // ----------------------------------------------------------------------------------- film
+  /**
+   * Opening-film performance (docs/intro-script.md, Act II). Call every frame BEFORE update(dt), with t = seconds since
+   * the shot began; performFilm(null) returns to gameplay. The caller places `root` (position on the rock, heading)
+   * and sets `ground` to the rock's surface so the feet and the planted staff land on it; call resetDynamics() at
+   * each cut, and human.setHero(1) for the close-up (skin teammate).
+   *  - 'back'   (shot 15): the reference stance seen from behind — staff planted, weight on one leg, gaze on the
+   *             horizon, stillness, the wind in his curls and tunic (1 Sam 16:11 "רֹעֶה בַּצֹּאן").
+   *  - 'reveal' (shot 16): the same stance; at `turnAt` the eyes lead, a blink, then the head, neck and shoulders turn
+   *             slowly to `look` (the camera) — the first time we see his face (16:12 "יְפֵה עֵינַיִם") — and the face
+   *             settles into a calm, warm expression.
+   *  - 'wide'   (shot 17): the stance, small in the vast land; gaze to the horizon.
+   */
+  performFilm(shot: FilmShot | null, t = 0, o: FilmOptions = {}) {
+    if (!shot) {
+      if (this.film) {
+        this.film = null;
+        this.hold = 'none';
+        this.windScale = 1;
+        this.mood = null;
+        this.filmEyes = null;
+      }
+      return;
+    }
+    const f = this.film;
+    const wind = o.wind ?? (shot === 'back' ? 1.8 : shot === 'reveal' ? 1.4 : 1.6);
+    if (!f || f.shot !== shot) {
+      this.film = { shot, t, look: o.look ?? null, wind, turnAt: o.turnAt ?? 0.9, turnDur: o.turnDur ?? 2.2, mood: o.mood ?? 'smile', moodW: o.moodWeight ?? 0.2, blinked: false };
+      if (shot !== 'reveal') this.filmTurn = 0;
+    } else {
+      f.t = t;
+      if (o.look !== undefined) f.look = o.look;
+      f.wind = wind;
+      if (o.turnAt !== undefined) f.turnAt = o.turnAt;
+      if (o.turnDur !== undefined) f.turnDur = o.turnDur;
+      if (o.mood) f.mood = o.mood;
+      if (o.moodWeight !== undefined) f.moodW = o.moodWeight;
+    }
+    this.windScale = wind;
+    this.autoHero = true;
+  }
+
+  /** the film's head turn (added over the hero stance) + eyes, blink and face */
+  private filmHead(dt: number) {
+    const f = this.film!;
+    const m = this.mixer;
+    const rig = this.human.rig;
+    if (f.shot !== 'reveal') {
+      this.mood = null;
+      this.filmEyes = null;
+      return;
+    }
+    // where to look: the camera (or 3 m to his right-front at eye height), in character space from the neck
+    const look = f.look ? this.filmLook.copy(f.look) : this.root.localToWorld(this.filmLook.set(-1.8, 1.55, 2.4));
+    this.j.neck.getWorldPosition(_v8);
+    this.root.worldToLocal(_v8);
+    const d = this.root.worldToLocal(_v7.copy(look)).sub(_v8);
+    // the hero stance already turns the head ~0.6 rad to his right: the turn adds the rest
+    const yaw = clamp(Math.atan2(d.x, d.z) + 0.6, -2.1, 2.1);
+    const pitch = clamp(-Math.atan2(d.y, Math.hypot(d.x, d.z)), -0.5, 0.45);
+    const u = clamp((f.t - f.turnAt) / Math.max(0.1, f.turnDur), 0, 1);
+    const target = u * u * u * (u * (u * 6 - 15) + 10); // smootherstep: slow start, slow settle
+    this.filmTurn = damp(this.filmTurn, target, 10, dt);
+    const k = this.filmTurn;
+    m.add('head', pitch * 0.55 * k, yaw * 0.42 * k, 0);
+    m.add('neck', pitch * 0.35 * k, yaw * 0.28 * k, 0);
+    m.add('chest', 0, yaw * 0.18 * k, 0);
+    m.add('spine', 0, yaw * 0.12 * k, 0);
+    // the eyes lead the head by ~0.3 s; a blink as the turn begins
+    this.filmEyes = f.t > f.turnAt - 0.3 ? look : null;
+    if (!f.blinked && f.t > f.turnAt + 0.05) {
+      f.blinked = true;
+      rig.blink();
+    }
+    this.mood = u > 0.35 ? f.mood : 'neutral';
   }
 
   /** procedural walk/run: pelvis, spine counter-rotation, arm swing, head stabilisation (into this.walkPose) */
@@ -1025,7 +1474,7 @@ export class DavidModel {
     this.footContact[side] = contact;
   }
 
-  private solveLegs(p: number, v: number, rw: number, legW: number, dt: number) {
+  private solveLegs(p: number, v: number, rw: number, legW: number, dt: number, contacts = 0) {
     const J = this.j;
     const hr = this.human.root;
     hr.updateWorldMatrix(true, false);
@@ -1060,6 +1509,20 @@ export class DavidModel {
         const hz = dx * dx + dz * dz;
         const need = hip.y - tgt.y - Math.sqrt(Math.max(0, reach * reach - hz));
         if (need > 0) dropNeed = Math.max(dropNeed, need * Math.max(contact, 0.35));
+      }
+      // mocap foot lock: a planted foot (heel or ball contact in the capture) keeps its world x/z until it lifts or
+      // the body has moved too far from it (then it glides back into the animation over ~0.1 s)
+      const lk = this.lock[s];
+      if (contacts & (s === 'L' ? 3 : 12)) {
+        if (!lk.on) {
+          lk.on = true;
+          if (lk.w < 0.05) lk.pos.copy(tgt);
+        } else if (Math.hypot(lk.pos.x - tgt.x, lk.pos.z - tgt.z) > 0.22) lk.on = false;
+      } else lk.on = false;
+      lk.w = damp(lk.w, lk.on ? 1 : 0, lk.on ? 40 : 14, dt);
+      if (lk.w > 1e-3) {
+        tgt.x += (lk.pos.x - tgt.x) * lk.w;
+        tgt.z += (lk.pos.z - tgt.z) * lk.w;
       }
       void sh;
     }
@@ -1566,6 +2029,9 @@ const RELOAD = pose({ uaR: E(-0.35, 0, 0.3), faR: E(-1.2), hdR: E(0.3), chest: E
 const RELOAD_MASK = [...UPPER_R, 'chest', 'head', 'neck'];
 const _tmpTarget = new THREE.Vector3();
 const SIDES = ['L', 'R'] as const;
+/** the mocap base drives everything but the staff arm (UPPER_L gets a smaller share) */
+const MO_MASK = ['hips', 'hipsX', ...TORSO, ...UPPER_R, ...LEGS];
+const KNEEL_UPPER = [...UPPER_L, ...UPPER_R, 'neck', 'head', 'staff', 'staffW', 'butt', 'plantW'];
 const _errW = new THREE.Vector3();
 const _errReal = new THREE.Vector3();
 const _errPred = new THREE.Vector3();

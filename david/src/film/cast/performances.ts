@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Expression } from '../../characters/human/HumanRig';
-import { armyAt, samuelAt, saulAt, SHOT_DURATION, timeScale, type GilgalShotName } from '../gilgal/gilgalBlocking';
+import { armyAt, samuelAt, saulAt, SHOT_DURATION, SLOWMO, timeScale, type GilgalShotName } from '../gilgal/gilgalBlocking';
 import { SAMUEL, SAUL_FACE } from '../gilgal/gilgalLayout';
 import type { FilmActor, ArmPose } from './FilmActor';
 
@@ -41,6 +41,31 @@ const ss = (a: number, b: number, x: number) => {
 };
 const lerp3 = (a: [number, number, number], b: [number, number, number], t: number): [number, number, number] => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 const mixPose = (a: ArmPose, b: ArmPose, t: number): ArmPose => ({ ua: lerp3(a.ua, b.ua, t), fa: lerp3(a.fa, b.fa, t), hd: lerp3(a.hd, b.hd, t) });
+
+/**
+ * action time of a shot at shot time t (the integral of gilgalBlocking.timeScale — same piecewise form as the
+ * blocking's own, so the actors stay in register with saulAt / samuelAt and the cameras)
+ */
+export function actionTime(shot: GilgalShotName, t: number) {
+  if (shot === 'king') return t * SLOWMO.king;
+  if (shot === 'tear') return t < 2.05 ? t : 2.05 + (t - 2.05) * SLOWMO.tear;
+  return t;
+}
+
+/** THE TEAR (shot 10b) in action time: the beats (s) */
+export const TEAR_BEATS = {
+  /** Samuel starts to turn away (15:27 "וַיִּסֹּב שְׁמוּאֵל לָלֶכֶת") */
+  turn: 0.2,
+  /** Saul goes after him */
+  go: 0.3,
+  /** the lunge: pelvis drops, the torso folds, the arm reaches */
+  lunge: 1.45,
+  /** the fist closes on the corner (the slow motion is fully in by t = 2.3 s) */
+  grab: 1.95,
+  /** the tear runs through the wool (progress 0 -> 1) */
+  tearFrom: 2.08,
+  tearTo: 3.2,
+};
 
 /** arm holds (proxy Euler, character axes; x < 0 swings forward; L: +z = outward, R: -z = outward) */
 export const POSES = {
@@ -112,6 +137,13 @@ export class GilgalPerformance {
   private lookSam = new THREE.Vector3();
   private tmp = new THREE.Vector3();
   private samTurnStarted = false;
+  /** tear choreography state */
+  private saulFrom = new THREE.Vector3();
+  private grabAt = new THREE.Vector3();
+  private readonly corner = new THREE.Vector3();
+  private readonly tearTarget = new THREE.Vector3();
+  private readonly _p = new THREE.Vector3();
+  private readonly _f = new THREE.Vector3();
   /** wind (world m/s) passed to the actors' hair / cloth */
   readonly wind = new THREE.Vector3(1.4, 0, 0.3);
   /** hook for the film's FX: a thread snaps (lint / dust puff) */
@@ -177,6 +209,13 @@ export class GilgalPerformance {
     this.samTurnStarted = false;
     saul.reach.R.weight = 0;
     saul.reach.R.target = null;
+    saul.body.drop = saul.body.lean = saul.body.twist = saul.body.side = 0;
+    samuel.body.drop = samuel.body.lean = samuel.body.twist = samuel.body.side = 0;
+    saul.mocap.lookWeight = 1;
+    samuel.mocap.lookWeight = 1;
+    saul.headingRate = 3;
+    samuel.cancelHeading = true;
+    this.saulFrom.copy(saulAt(shot, 0).pos);
     saul.mocap.timeScale = 1;
     samuel.mocap.timeScale = 1;
     samuel.mocap.rootMotion = 'inplace';
@@ -220,9 +259,10 @@ export class GilgalPerformance {
     const { saul, samuel, armourBearer } = this.cast;
     const ts = timeScale(shot, t);
     const adt = dt * ts;
+    const at = actionTime(shot, t);
     const s = saulAt(shot, t);
     const m = samuelAt(shot, t);
-    saul.place(s.pos, s.yaw);
+    if (shot !== 'tear') saul.place(s.pos, s.yaw);
     // ---------------------------------------------------------------- SAUL
     saul.mocap.timeScale = ts;
     const torn = shot === 'verdict' || shot === 'saulAlone' || shot === 'rise';
@@ -261,30 +301,9 @@ export class GilgalPerformance {
         this.saulFace.set({ sad: 0.45, fear: 0.3 });
         this.saulFace.jawTarget = speechJaw(t - 0.6, 2.2, 7, [0.45], 3) * 0.8; // "חָטָאתִי ... שׁוּב עִמִּי" (unvoiced here)
         break;
-      case 'tear': {
-        // lunge + seize: grab_pull_R from its lunge (1.2 s) as Samuel turns; the hand is guided onto the corner
-        const cue = s.cue; // 0 reach .. 0.5 seized .. 0.8-1 torn
-        if (t > 0.5 && saul.mocap.current()?.name !== 'grab_pull_R') saul.mocap.play('grab_pull_R', { fade: 0.35, time: 0.6 });
-        saul.armPose.R.pose = null;
-        saul.armPose.R.weight = 0;
-        saul.upright.R.weight = 0;
-        saul.mocap.lookAt = this.tear(samuel, this.tmp);
-        const tear = samuel.tear;
-        if (tear) {
-          const target = tear.cornerWorld(new THREE.Vector3());
-          saul.reach.R.target = target;
-          saul.reach.R.weight = ss(0.1, 0.5, cue) * (tear.isTorn ? 1 - ss(0.75, 1, cue) * 0.6 : 1);
-          if (!this.grabbed && cue >= 0.5) {
-            this.grabbed = true;
-            saul.human.rig.setFingers('R', 'fist');
-            tear.grab(saul.human.sockets.handGripR);
-          }
-          tear.progress = ss(0.62, 1, cue);
-        }
-        this.saulFace.set({ effort: 0.6 * ss(0.2, 0.6, cue), fear: 0.35, sad: 0.3 * (1 - cue) });
-        this.saulFace.jawTarget = 0.12 * ss(0.4, 0.7, cue);
+      case 'tear':
+        this.tearSaul(at, s.pos, s.yaw);
         break;
-      }
       case 'verdict':
         saul.upright.R.weight = 0;
         saul.armPose.R.pose = POSES.clothFistR;
@@ -310,19 +329,7 @@ export class GilgalPerformance {
     // ---------------------------------------------------------------- SAMUEL
     samuel.mocap.timeScale = ts;
     if (shot === 'tear') {
-      // he turns to go (15:27): old_turn_walk from its turn, root motion applied from his mark
-      if (!this.samTurnStarted && t >= 0.15) {
-        this.samTurnStarted = true;
-        samuel.place(SAMUEL.pos, SAMUEL.yaw);
-        samuel.mocap.rootMotion = 'apply';
-        samuel.mocap.rootTarget = samuel.root;
-        samuel.mocap.play('old_turn_walk', { fade: 0.3, time: 1.2 });
-      }
-      if (!this.samTurnStarted) samuel.place(m.pos, m.yaw);
-      // the seized robe holds him back: stop the clip once the tear is through
-      if (s.cue > 0.9) samuel.mocap.setSpeed('old_turn_walk', 0.25);
-      samuel.mocap.lookAt = null;
-      this.samFace.set({ sad: 0.5, determined: 0.3 });
+      this.tearSamuel(at, m.pos, m.yaw);
     } else if (shot === 'saulAlone' || shot === 'rise') {
       samuel.place(m.pos, m.yaw);
       if (m.walk > 0 && samuel.mocap.current()?.name !== 'walk_old') {
@@ -362,6 +369,120 @@ export class GilgalPerformance {
     samuel.update(adt, camera, viewportH, this.wind);
     void SAUL_FACE;
     void SHOT_DURATION;
+  }
+
+  /**
+   * 10b, Saul: "וַיַּחֲזֵק בִּכְנַף־מְעִילוֹ" — he goes after the old man (walk, 2-3 fast steps), lunges low (pelvis
+   * drops, torso folds, the right arm reaches down to the lower corner of the me'il), the fist closes on it and he
+   * holds on — pulling back and up while Samuel's step carries on — until the wool gives. Desperation, not
+   * violence (visual-bible 3.3): face open, brows up, a gasp at the grab, shock as it tears.
+   */
+  private tearSaul(at: number, _pos: THREE.Vector3, yaw: number) {
+    const { saul, samuel } = this.cast;
+    const B = TEAR_BEATS;
+    const tear = samuel.tear;
+    const fwd = this._f.set(Math.sin(yaw), 0, Math.cos(yaw));
+    const right = this._p.set(-Math.cos(yaw), 0, Math.sin(yaw));
+    if (tear) tear.cornerWorld(this.corner);
+    else samuel.root.getWorldPosition(this.corner).setY(this.corner.y + 0.5);
+    // ---- placement: from his mark to a lunge distance behind the corner (tracks the corner as Samuel walks)
+    const lungeReach = 0.74; // root -> hand, horizontally, at full lunge (2.02 m man, arm straight down-forward)
+    const tx = this.corner.x - fwd.x * lungeReach - right.x * 0.24;
+    const tz = this.corner.z - fwd.z * lungeReach - right.z * 0.24;
+    const u = ss(B.go, B.grab, at) * 0.35 + 0.65 * THREE.MathUtils.clamp((at - B.go) / (B.grab - B.go), 0, 1) ** 1.15;
+    const k = this.grabbed ? 1 : Math.min(1, u);
+    let x = this.saulFrom.x + (tx - this.saulFrom.x) * k;
+    let z = this.saulFrom.z + (tz - this.saulFrom.z) * k;
+    if (this.grabbed) {
+      // after the grab he plants and pulls back a little (his weight against the old man's step)
+      const pull = 0.14 * ss(B.grab + 0.1, B.tearTo, at);
+      x = this.grabAt.x - fwd.x * (lungeReach + pull) - right.x * 0.24;
+      z = this.grabAt.z - fwd.z * (lungeReach + pull) - right.z * 0.24;
+    }
+    saul.place(this.tmp.set(x, 0, z), yaw);
+    // ---- clips: pleading stand -> fast walk after him -> the lunge (stand) -> hold
+    const cur = saul.mocap.current()?.name;
+    if (at >= B.go && at < B.lunge + 0.15 && cur !== 'walk') {
+      saul.mocap.play('walk', { fade: 0.25, sync: true });
+    }
+    if (cur === 'walk') saul.mocap.matchSpeed('walk', THREE.MathUtils.clamp(Math.hypot(saul.velocity.x, saul.velocity.z), 0.8, 1.9));
+    if (at >= B.lunge + 0.15 && cur !== 'idle_king') saul.mocap.play('idle_king', { fade: 0.35, time: 0.5 });
+    // ---- body: the lunge low, then partly up again as he pulls
+    const lunge = ss(B.lunge, B.grab + 0.02, at) * (1 - 0.4 * ss(B.grab + 0.3, B.tearTo + 0.2, at));
+    saul.body.drop = 0.27 * lunge;
+    saul.body.lean = 0.7 * lunge - 0.08 * ss(B.tearTo, B.tearTo + 0.3, at);
+    saul.body.twist = 0.16 * lunge;
+    saul.headingRate = 12;
+    // ---- arms: the right hand to the corner (IK), the helmet stays under the left arm
+    saul.armPose.R.pose = null;
+    saul.armPose.R.weight = 0;
+    saul.upright.R.weight = 0;
+    if (!this.grabbed) {
+      saul.reach.R.target = this.tearTarget.copy(this.corner);
+      saul.reach.R.weight = ss(B.lunge - 0.05, B.grab - 0.02, at);
+      if (at >= B.lunge) saul.human.rig.setFingers('R', 'relaxed');
+      if (at >= B.grab && tear) {
+        this.grabbed = true;
+        saul.human.rig.setFingers('R', 'fist');
+        saul.update(0); // the hand exactly at the corner this frame
+        tear.grab(saul.human.sockets.handGripR);
+        this.grabAt.copy(this.corner);
+      }
+    } else {
+      // the fist pulls back toward him and up (the wool stretches, then gives)
+      const p = ss(B.grab + 0.05, B.tearTo, at);
+      this.tearTarget.copy(this.grabAt).addScaledVector(fwd, -0.12 * p).add(this.tmp.set(0, 0.1 * p + 0.12 * ss(B.tearTo - 0.2, B.tearTo + 0.3, at), 0));
+      saul.reach.R.target = this.tearTarget;
+      saul.reach.R.weight = 1;
+    }
+    if (tear) tear.progress = ss(B.tearFrom, B.tearTo, at);
+    // ---- eyes and face
+    if (at < B.go + 0.2) saul.mocap.lookAt = this.eyeOf(samuel);
+    else if (at < B.tearTo - 0.3) saul.mocap.lookAt = this.corner;
+    else saul.mocap.lookAt = this.eyeOf(samuel);
+    const reach = ss(B.lunge - 0.2, B.grab, at);
+    const torn = ss(B.tearTo - 0.4, B.tearTo + 0.1, at);
+    this.saulFace.set({
+      sad: 0.45 * (1 - reach) + 0.3 * torn, fear: 0.35 + 0.2 * reach - 0.1 * torn, effort: 0.55 * reach * (1 - torn),
+      awe: 0.35 * torn, pain: 0.15 * torn,
+    });
+    // a gasp as he lunges; the mouth hangs open when it tears
+    this.saulFace.jawTarget = 0.16 * ss(B.lunge, B.grab, at) * (1 - ss(B.grab + 0.2, B.grab + 0.6, at)) + 0.12 * torn;
+  }
+
+  /**
+   * 10b, Samuel: "וַיִּסֹּב שְׁמוּאֵל לָלֶכֶת" — he turns away (yaw from samuelAt; the head leads the turn) and walks
+   * off slowly; the seized corner jerks him (a small recoil in the chest), he keeps his step — the wool tears —
+   * and he stops and turns his head back over his shoulder toward the king.
+   */
+  private tearSamuel(at: number, pos: THREE.Vector3, yaw: number) {
+    const { saul, samuel } = this.cast;
+    const B = TEAR_BEATS;
+    samuel.place(pos, yaw);
+    samuel.mocap.rootMotion = 'inplace';
+    samuel.cancelHeading = true;
+    const cur = samuel.mocap.current()?.name;
+    // (walk_old is stooped — bible 3.1 wants him upright: the natural walk, slowed to his pace)
+    if (at >= B.turn + 0.3 && at < B.grab + 0.25 && cur !== 'walk') samuel.mocap.play('walk', { fade: 0.45, sync: true });
+    if (cur === 'walk') samuel.mocap.matchSpeed('walk', 0.5);
+    if (at >= B.grab + 0.25 && cur !== 'idle_king') samuel.mocap.play('idle_king', { fade: 0.6, time: 0.3 });
+    // eyes: on Saul, then ahead (east, his way), then back over the shoulder once held
+    if (at < B.turn + 0.15) samuel.mocap.lookAt = this.eyeOf(saul);
+    else if (at < B.grab + 0.35) samuel.mocap.lookAt = this.tmp.set(pos.x + Math.sin(yaw) * 20, samuel.root.position.y + 1.5, pos.z + Math.cos(yaw) * 20);
+    else samuel.mocap.lookAt = this.eyeOf(saul);
+    samuel.mocap.lookLimits.yaw = 1.35;
+    // the jerk of the held robe, then the chest turns back toward the king
+    const jerk = ss(B.grab, B.grab + 0.18, at) * (1 - ss(B.grab + 0.25, B.tearTo, at));
+    samuel.body.lean = -0.09 * jerk;
+    samuel.body.twist = -0.42 * ss(B.grab + 0.4, B.tearTo + 0.2, at);
+    this.samFace.set({ sad: 0.5 + 0.15 * ss(B.grab, B.tearTo, at), determined: 0.35, pain: 0.12 * jerk });
+    this.samFace.jawTarget = 0;
+  }
+
+  /** world position of the tear (the corner of the me'il / Saul's fist) — for the 10b camera and FX */
+  tearFocus(out = new THREE.Vector3()) {
+    const t = this.cast.samuel.tear;
+    return t ? t.cornerWorld(out) : this.cast.samuel.root.getWorldPosition(out).setY(out.y + 0.5);
   }
 
   private eyeOf(a: FilmActor) {

@@ -38,7 +38,8 @@ TILES = {
     # name: (x0, x1, z0, z1, spacing)  in local metres
     'region': (-80000.0, 72000.0, -32400.0, 48000.0, 150.0),
     'judah': (-9000.0, 17000.0, -13000.0, 9000.0, 30.0),
-    'coast': (-54000.0, -40000.0, -3000.0, 11000.0, 30.0),
+    # Ashdod, its dunes and shore, and the plain east of it (the host marches inland from the city)
+    'coast': (-60000.0, -44000.0, -12000.0, 4000.0, 30.0),
     'ramah': (-1500.0, 7500.0, -20500.0, -11500.0, 30.0),
 }
 

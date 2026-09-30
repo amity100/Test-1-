@@ -17,6 +17,7 @@ import * as THREE from 'three';
 import { gunzip } from '../../characters/human/inflate';
 import { CrowdAnim, type BakedClip } from './CrowdAnim';
 import { ALWAYS, crowdDepthMaterial, crowdMaterial, crowdUniforms, REGION, type CrowdUniforms } from './crowdShader';
+import { IMP_JOINTS, impostorGeometry, impostorMaterial } from './impostorShader';
 
 export type CrowdArmy = 'israel' | 'philistine';
 export type CrowdTier = 'desktop-high' | 'desktop-medium' | 'mobile-high' | 'mobile-low';
@@ -76,7 +77,18 @@ async function loadMesh(army: CrowdArmy) {
   for (let i = 0; i < reg.length; i++) if (reg[i] === REGION.tunic) hem = Math.min(hem, pos[i * 3 + 1]);
   let beltY = 0, nb = 0;
   for (let i = 0; i < reg.length; i++) if (reg[i] === REGION.belt) { beltY += pos[i * 3 + 1]; nb++; }
-  return { header, geos, hem, beltY: nb ? beltY / nb : 1.0 };
+  // spear extent along the shaft (prop vertices are in the grip frame: y = along the shaft) and the mean skin colour
+  const prop = g0.attributes.cProp.array as Uint8Array;
+  const col = g0.attributes.cColor.array as Uint8Array;
+  let sMin = 0, sMax = 0;
+  const skin = [0, 0, 0];
+  let ns = 0;
+  for (let i = 0; i < reg.length; i++) {
+    if (prop[i] > 0) { sMin = Math.min(sMin, pos[i * 3 + 1]); sMax = Math.max(sMax, pos[i * 3 + 1]); }
+    if (reg[i] === REGION.skin) { skin[0] += col[i * 3]; skin[1] += col[i * 3 + 1]; skin[2] += col[i * 3 + 2]; ns++; }
+  }
+  const skinColor = new THREE.Color().setRGB(skin[0] / ns / 255, skin[1] / ns / 255, skin[2] / ns / 255, THREE.SRGBColorSpace);
+  return { header, geos, hem, beltY: nb ? beltY / nb : 1.0, spear: [-sMin || 0.9, sMax || 1.5] as [number, number], skinColor };
 }
 
 // ---------------------------------------------------------------------------------------------------- agents
@@ -174,13 +186,25 @@ export interface CrowdOptions {
   /** max instances drawn per LOD (nearest first); the rest fall to the next LOD */
   lodCaps?: [number, number, number];
   castShadow?: boolean | [boolean, boolean, boolean];
+  /**
+   * far field as skeletal impostors (LOD3, see impostorShader.ts): true = the tier defaults, or [start m, far m, cap].
+   * Default false (mesh LODs only).
+   */
+  impostors?: boolean | [number, number, number];
+  /** agents nearer than this to the camera are not drawn (a lens inside the ranks); default 0.9 m */
+  nearHide?: number;
 }
 
-const TIER_LOD: Record<CrowdTier, { d: [number, number, number]; caps: [number, number, number]; shadow: [boolean, boolean, boolean]; lite: boolean }> = {
-  'desktop-high': { d: [22, 60, 900], caps: [90, 320, 4000], shadow: [true, true, false], lite: false },
-  'desktop-medium': { d: [16, 45, 700], caps: [60, 220, 3000], shadow: [true, false, false], lite: false },
-  'mobile-high': { d: [10, 32, 500], caps: [24, 120, 1200], shadow: [true, false, false], lite: true },
-  'mobile-low': { d: [8, 26, 400], caps: [14, 80, 700], shadow: [false, false, false], lite: true },
+/**
+ * Per tier: LOD switch distances, per-LOD caps (nearest first; overflow falls to the next LOD), shadow casters.
+ * With impostors: mesh LOD2 up to `imp[0]` m (cap `caps[2]`), skeletal impostors (LOD3) up to `imp[1]` m (cap imp[2]).
+ * Without: mesh LOD2 up to d[2] (the old behaviour).
+ */
+const TIER_LOD: Record<CrowdTier, { d: [number, number, number]; caps: [number, number, number]; imp: [number, number, number]; shadow: [boolean, boolean, boolean]; lite: boolean }> = {
+  'desktop-high': { d: [22, 60, 900], caps: [90, 320, 1500], imp: [150, 2500, 6000], shadow: [true, true, false], lite: false },
+  'desktop-medium': { d: [16, 45, 700], caps: [60, 220, 900], imp: [110, 2000, 4000], shadow: [true, false, false], lite: false },
+  'mobile-high': { d: [10, 32, 500], caps: [24, 120, 360], imp: [70, 1500, 2400], shadow: [true, false, false], lite: true },
+  'mobile-low': { d: [8, 26, 400], caps: [14, 70, 200], imp: [55, 1200, 1600], shadow: [false, false, false], lite: true },
 };
 
 const _frustum = new THREE.Frustum();
@@ -195,13 +219,16 @@ export class Crowd {
   readonly meshes: THREE.Mesh[] = [];
   readonly lodTriangles: number[];
   /** live stats of the last update */
-  readonly stats = { drawn: [0, 0, 0], culled: 0, triangles: 0 };
+  readonly stats = { drawn: [0, 0, 0, 0], culled: 0, triangles: 0 };
+  /** agents nearer than this (m) to the camera are skipped (the camera stands inside the ranks in shot 9) */
+  nearHide: number;
   private readonly buf: { pose: Float32Array; vari: Float32Array; a: Float32Array; b: Float32Array; mask: Float32Array; attrs: THREE.InstancedBufferAttribute[] }[] = [];
-  private readonly cfg: { d: [number, number, number]; caps: [number, number, number] };
+  private readonly cfg: { d: [number, number, number]; caps: [number, number, number]; imp: [number, number, number] | null };
   private readonly order: Int32Array;
   private readonly keyd: Float32Array;
   private readonly mat: THREE.MeshStandardMaterial;
   private readonly depth: THREE.MeshDepthMaterial;
+  private readonly impMat: THREE.MeshStandardMaterial | null = null;
 
   static async create(o: CrowdOptions): Promise<Crowd> {
     const m = await loadMesh(o.army);
@@ -210,7 +237,9 @@ export class Crowd {
 
   private constructor(o: CrowdOptions, m: Awaited<ReturnType<typeof loadMesh>>) {
     const t = TIER_LOD[o.tier];
-    this.cfg = { d: o.lodDistances ?? t.d, caps: o.lodCaps ?? t.caps };
+    const imp = o.impostors === true ? t.imp : o.impostors ? o.impostors : null;
+    this.cfg = { d: o.lodDistances ?? t.d, caps: o.lodCaps ?? t.caps, imp };
+    this.nearHide = o.nearHide ?? 0.9;
     this.uniforms = crowdUniforms(o.army);
     const u = this.uniforms;
     u.uAnim.value = o.anim.texture;
@@ -219,6 +248,13 @@ export class Crowd {
     if (n3) u.uHeadPivot.value.set(n3[0], n3[1], n3[2]);
     u.uHemY.value = m.hem;
     u.uBeltY.value = m.beltY;
+    u.uSpearExt.value.set(m.spear[0], m.spear[1]);
+    u.uSkin.value.copy(m.skinColor);
+    const hd = m.header.heads;
+    const jv = (b: string, v: THREE.Vector3) => { const a = hd[b]; if (a) v.set(a[0], a[1], a[2]); };
+    ['upperleg01.L', 'lowerleg01.L', 'upperleg01.R', 'lowerleg01.R'].forEach((b, i) => jv(b, u.uLegJ.value[i]));
+    ['upperarm01.R', 'lowerarm01.R', 'wrist.R'].forEach((b, i) => jv(b, u.uArmJ.value[i]));
+    IMP_JOINTS.forEach(([b], i) => jv(b, u.uJB.value[i]));
     this.mat = crowdMaterial(u, t.lite);
     this.depth = crowdDepthMaterial(u);
     this.group.name = `crowd:${o.army}`;
@@ -248,6 +284,32 @@ export class Crowd {
       this.meshes.push(mesh);
       this.group.add(mesh);
     });
+    if (imp) {
+      // LOD3: one quad per far soldier
+      const g = impostorGeometry();
+      const n = Math.min(cap, imp[2]);
+      const pose = new Float32Array(n * 4), vari = new Float32Array(n * 4), a = new Float32Array(n * 4), b = new Float32Array(n * 4), mask = new Float32Array(n);
+      const attrs = [
+        new THREE.InstancedBufferAttribute(pose, 4), new THREE.InstancedBufferAttribute(vari, 4),
+        new THREE.InstancedBufferAttribute(a, 4), new THREE.InstancedBufferAttribute(b, 4), new THREE.InstancedBufferAttribute(mask, 1),
+      ];
+      ['iPose', 'iVar', 'iA', 'iB', 'iMask'].forEach((k, i) => {
+        attrs[i].setUsage(THREE.DynamicDrawUsage);
+        g.setAttribute(k, attrs[i]);
+      });
+      g.instanceCount = 0;
+      this.buf.push({ pose, vari, a, b, mask, attrs });
+      this.impMat = impostorMaterial(u);
+      const mesh = new THREE.Mesh(g, this.impMat);
+      mesh.frustumCulled = false;
+      mesh.castShadow = false;
+      mesh.receiveShadow = true;
+      mesh.name = `crowd:${o.army}:impostors`;
+      mesh.renderOrder = 3;
+      this.meshes.push(mesh);
+      this.group.add(mesh);
+      this.lodTriangles.push(2);
+    }
     for (let i = 0; i < cap; i++) this.agents.push(new CrowdAgent(i, o.anim));
     this.order = new Int32Array(cap);
     this.keyd = new Float32Array(cap);
@@ -261,7 +323,9 @@ export class Crowd {
     const cp = camera.getWorldPosition(_cp);
     let n = 0;
     let culled = 0;
-    const far = this.cfg.d[2];
+    const imp = this.cfg.imp;
+    const far = imp ? imp[1] : this.cfg.d[2];
+    const near = this.nearHide;
     for (const ag of this.agents) {
       ag.advance(dt);
       ag.lod = -1;
@@ -270,7 +334,7 @@ export class Crowd {
       _sphere.radius = 1.9 * ag.scale;
       const d = _sphere.center.distanceTo(cp);
       ag.dist = d;
-      if (d > far || !_frustum.intersectsSphere(_sphere)) {
+      if (d > far || !_frustum.intersectsSphere(_sphere) || Math.hypot(ag.pos.x - cp.x, ag.pos.z - cp.z) < near) {
         culled++;
         continue;
       }
@@ -289,13 +353,16 @@ export class Crowd {
       }
       ord[j + 1] = v;
     }
-    const counts = [0, 0, 0];
+    const counts = [0, 0, 0, 0];
+    const nl = this.buf.length;
+    const d2 = imp ? imp[0] : Infinity;
     let tris = 0;
     for (let i = 0; i < n; i++) {
       const ag = this.agents[ord[i]];
-      let lod = ag.dist < this.cfg.d[0] ? 0 : ag.dist < this.cfg.d[1] ? 1 : 2;
-      while (lod < 3 && counts[lod] >= this.buf[lod].mask.length) lod++;
-      if (lod > 2) break;
+      let lod = ag.dist < this.cfg.d[0] ? 0 : ag.dist < this.cfg.d[1] ? 1 : ag.dist < d2 ? 2 : 3;
+      if (lod >= nl) lod = nl - 1;
+      while (lod < nl && counts[lod] >= this.buf[lod].mask.length) lod++;
+      if (lod >= nl) break;
       ag.lod = lod;
       const B = this.buf[lod];
       const k = counts[lod]++;
@@ -313,7 +380,7 @@ export class Crowd {
       B.mask[k] = ag.mask;
       tris += this.lodTriangles[lod];
     }
-    for (let l = 0; l < 3; l++) {
+    for (let l = 0; l < nl; l++) {
       const g = this.meshes[l].geometry as THREE.InstancedBufferGeometry;
       g.instanceCount = counts[l];
       this.meshes[l].visible = counts[l] > 0;
@@ -338,6 +405,7 @@ export class Crowd {
     for (const m of this.meshes) m.geometry.dispose();
     this.mat.dispose();
     this.depth.dispose();
+    this.impMat?.dispose();
     this.group.removeFromParent();
   }
 }

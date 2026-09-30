@@ -38,6 +38,12 @@ export interface CrowdUniforms {
   uDust: { value: number };
   uDustColor: { value: THREE.Color };
   uSpearUp: { value: number };
+  uLegJ: { value: THREE.Vector3[] };
+  uArmJ: { value: THREE.Vector3[] };
+  uSpearExt: { value: THREE.Vector2 };
+  uSkin: { value: THREE.Color };
+  /** bind heads of the impostor joints (impostorShader IMP_JOINTS) */
+  uJB: { value: THREE.Vector3[] };
   uTunic: { value: THREE.Color[] };
   uCloth: { value: THREE.Color[] };
   uHair: { value: THREE.Color[] };
@@ -60,6 +66,11 @@ export function crowdUniforms(army: 'israel' | 'philistine'): CrowdUniforms {
     uDust: { value: 1 },
     uDustColor: { value: C(0xcbbd9c) },
     uSpearUp: { value: 0.72 },
+    uLegJ: { value: [new THREE.Vector3(0.109, 0.91, -0.01), new THREE.Vector3(0.149, 0.502, 0.023), new THREE.Vector3(-0.109, 0.91, -0.01), new THREE.Vector3(-0.149, 0.502, 0.023)] },
+    uArmJ: { value: [new THREE.Vector3(-0.188, 1.364, 0.014), new THREE.Vector3(-0.35, 1.178, 0.013), new THREE.Vector3(-0.479, 1.056, 0.194)] },
+    uSpearExt: { value: new THREE.Vector2(0.9, 1.5) },
+    uSkin: { value: C(0x8a5a40) },
+    uJB: { value: Array.from({ length: 11 }, () => new THREE.Vector3()) },
     // tunics: light undyed wool x3, beige, grey, dark wool x2, madder-faded
     uTunic: {
       value: isr
@@ -76,32 +87,14 @@ export function crowdUniforms(army: 'israel' | 'philistine'): CrowdUniforms {
   };
 }
 
-const VERT_HEAD = DEFINES + /* glsl */ `
+/** instance attributes + skinning-matrix fetch from the CrowdAnim texture (shared by the mesh LODs and the impostors) */
+export const ANIM_GLSL = /* glsl */ `
 uniform highp sampler2D uAnim;
-uniform mat4 uGripBind;
-uniform vec3 uHeadPivot;
-uniform float uArmy, uHemY, uBeltY, uDust, uSpearUp;
-uniform vec3 uDustColor;
-uniform vec3 uTunic[8];
-uniform vec3 uCloth[4];
-uniform vec3 uHair[6];
-uniform vec3 uAccent[4];
-attribute vec4 cJoints;
-attribute vec4 cWeights;
-attribute float cRegion;
-attribute vec3 cColor;
-attribute float cProp;
 attribute vec4 iPose;
 attribute vec4 iVar;
 attribute vec4 iA;
 attribute vec4 iB;
 attribute float iMask;
-varying vec3 vCwColor;
-varying vec4 vCwInfo; // region, metalness, roughness, stripe flag
-varying vec3 vCwBind;
-vec3 cwPos;
-vec3 cwNrm;
-
 mat4 cwFetch(float frame, float bone) {
   int base = int(frame) * ${TEX_PER_FRAME} + int(bone) * 3;
   ivec2 p0 = ivec2(base % ${ANIM_TEX_W}, base / ${ANIM_TEX_W});
@@ -121,6 +114,54 @@ mat4 cwBone(float bone) {
 vec4 cwHash(float s) {
   return fract(sin(vec4(s * 127.1 + 1.3, s * 311.7 + 7.1, s * 74.7 + 3.7, s * 269.5 + 5.3)) * 43758.5453);
 }
+`;
+
+const VERT_HEAD = DEFINES + ANIM_GLSL + /* glsl */ `
+uniform mat4 uGripBind;
+uniform vec3 uHeadPivot;
+uniform float uArmy, uHemY, uBeltY, uDust, uSpearUp;
+uniform vec3 uDustColor;
+uniform vec3 uTunic[8];
+uniform vec3 uCloth[4];
+uniform vec3 uHair[6];
+uniform vec3 uAccent[4];
+uniform vec3 uLegJ[4]; // bind heads: upperleg01.L, lowerleg01.L, upperleg01.R, lowerleg01.R
+uniform vec3 uArmJ[3]; // bind heads: upperarm01.R, lowerarm01.R, wrist.R
+uniform vec2 uSpearExt; // shaft length below / above the grip (m)
+attribute vec4 cJoints;
+attribute vec4 cWeights;
+attribute float cRegion;
+attribute vec3 cColor;
+attribute float cProp;
+varying vec3 vCwColor;
+varying vec4 vCwInfo; // region, metalness, roughness, stripe flag
+varying vec3 vCwBind;
+vec3 cwPos;
+vec3 cwNrm;
+
+// closest points of segments p1-q1 and p2-q2 (Ericson, Real-Time Collision Detection 5.1.9): returns c2 - c1
+vec3 cwSegSeg(vec3 p1, vec3 q1, vec3 p2, vec3 q2) {
+  vec3 d1 = q1 - p1, d2 = q2 - p2, r = p1 - p2;
+  float a = dot(d1, d1), e = dot(d2, d2), f = dot(d2, r);
+  float c = dot(d1, r), b = dot(d1, d2);
+  float den = a * e - b * b;
+  float s = den > 1e-7 ? clamp((b * f - c * e) / den, 0.0, 1.0) : 0.0;
+  float t = (b * s + f) / e;
+  if (t < 0.0) { t = 0.0; s = clamp(-c / a, 0.0, 1.0); }
+  else if (t > 1.0) { t = 1.0; s = clamp((b - c) / a, 0.0, 1.0); }
+  return (p2 + d2 * t) - (p1 + d1 * s);
+}
+// push a skirt vertex out of a thigh capsule (hip -> knee, radius tapering r0 -> r1)
+vec3 cwThigh(vec3 p, vec3 hip, vec3 knee, float r0, float r1) {
+  vec3 ab = knee - hip;
+  float h = clamp(dot(p - hip, ab) / max(dot(ab, ab), 1e-6), 0.0, 1.15);
+  vec3 c = hip + ab * h;
+  vec3 d = p - c;
+  float l = length(d);
+  float r = mix(r0, r1, min(h, 1.0)) + 0.016;
+  if (l < r && l > 1e-5) p = c + d * (r / l);
+  return p;
+}
 void crowdCompute() {
   int reg = int(cRegion + 0.5);
   int mask = int(iMask + 0.5);
@@ -135,7 +176,18 @@ void crowdCompute() {
     vec3 gz = normalize(g[2].xyz);
     vec3 X = normalize(cross(dir, gz));
     vec3 Z = cross(X, dir);
-    p = g[3].xyz + X * position.x + dir * position.y + Z * position.z;
+    // keep the shaft clear of the forearm / upper arm: slide it sideways out of the arm where they cross
+    vec3 G = g[3].xyz;
+    vec3 sh = (cwBone(19.0) * vec4(uArmJ[0], 1.0)).xyz;
+    vec3 el = (cwBone(21.0) * vec4(uArmJ[1], 1.0)).xyz;
+    vec3 wr = (cwBone(23.0) * vec4(uArmJ[2], 1.0)).xyz;
+    vec3 s0 = G - dir * uSpearExt.x, s1 = G + dir * uSpearExt.y;
+    vec3 dA = cwSegSeg(el, wr - (wr - el) * 0.25, s0, s1);
+    vec3 dB = cwSegSeg(sh, el, s0, s1);
+    float lA = length(dA), lB = length(dB);
+    if (lA < 0.06) G += (lA > 1e-4 ? dA / lA : X) * (0.06 - lA);
+    if (lB < 0.075) G += (lB > 1e-4 ? dB / lB : X) * (0.075 - lB);
+    p = G + X * position.x + dir * position.y + Z * position.z;
     n = normalize(X * normal.x + dir * normal.y + Z * normal.z);
   } else {
     mat4 m = cwBone(cJoints.x) * cWeights.x + cwBone(cJoints.y) * cWeights.y;
@@ -143,6 +195,13 @@ void crowdCompute() {
     if (cWeights.w > 0.0) m += cwBone(cJoints.w) * cWeights.w;
     p = (m * vec4(position, 1.0)).xyz;
     n = normalize(mat3(m) * normal);
+    // the tunic skirt never lets a thigh through at full stride: push hem vertices out of the posed thigh capsules
+    if (reg == R_TUNIC && position.y < uBeltY - 0.02) {
+      vec3 hl = (cwBone(24.0) * vec4(uLegJ[0], 1.0)).xyz, kl = (cwBone(26.0) * vec4(uLegJ[1], 1.0)).xyz;
+      vec3 hr = (cwBone(30.0) * vec4(uLegJ[2], 1.0)).xyz, kr = (cwBone(32.0) * vec4(uLegJ[3], 1.0)).xyz;
+      p = cwThigh(p, hl, kl, 0.088, 0.058);
+      p = cwThigh(p, hr, kr, 0.088, 0.058);
+    }
   }
   // head turn (neck / head vertices rotate about the posed neck)
   if (abs(iB.w) > 0.001 && (reg == R_HAIR || reg == R_BEARD || reg == R_EYE || reg == R_HEADBAND || reg == R_HEADCLOTH || reg == R_CROWN || reg == R_HELMET || reg == R_SCALP || (reg == R_SKIN && position.y > uHeadPivot.y - 0.02))) {

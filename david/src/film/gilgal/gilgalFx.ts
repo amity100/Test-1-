@@ -18,30 +18,33 @@ export class DustWall {
   readonly mesh: THREE.Mesh;
   readonly uniforms: Record<string, THREE.IUniform>;
   constructor(tier: GilgalTier) {
-    const count = tier === 'high' ? 300 : tier === 'medium' ? 190 : 110;
+    const count = tier === 'high' ? 420 : tier === 'medium' ? 260 : 140;
     const rand = mulberry32(606);
     const base = new THREE.PlaneGeometry(1, 1);
     const g = new THREE.InstancedBufferGeometry();
     g.index = base.index;
     g.setAttribute('position', base.getAttribute('position'));
     g.setAttribute('uv', base.getAttribute('uv'));
-    const off = new Float32Array(count * 3), size = new Float32Array(count), seed = new Float32Array(count), depth = new Float32Array(count);
+    const off = new Float32Array(count * 3), size = new Float32Array(count), seed = new Float32Array(count), depth = new Float32Array(count), shade = new Float32Array(count);
     for (let i = 0; i < count; i++) {
       const low = i < count * 0.3; // ground-hugging puffs kicked up among the ranks
       const back = low ? -2 - Math.pow(rand(), 1.3) * 150 : -8 - Math.pow(rand(), 0.8) * 230;
       const s = low ? 4 + rand() * 7 : 16 + rand() * 34 * (0.6 + 0.4 * Math.min(1, -back / 120));
       const w = 11 + Math.min(20, -back * 0.09);
       off[i * 3] = back;
-      off[i * 3 + 1] = low ? s * 0.42 + rand() * 1.2 : s * 0.45 + rand() * (4 + Math.min(18, -back * 0.12));
+      // the wall towers toward the rear: billows 25-45 m high behind the first ranks
+      off[i * 3 + 1] = low ? s * 0.42 + rand() * 1.2 : s * 0.45 + rand() * (5 + Math.min(30, -back * 0.2));
       off[i * 3 + 2] = (rand() - 0.5) * 2 * w;
       size[i] = s;
       seed[i] = rand() * 100;
       depth[i] = Math.min(1, -back / 220);
+      shade[i] = 0.65 + rand() * 0.55;
     }
     g.setAttribute('aOff', new THREE.InstancedBufferAttribute(off, 3));
     g.setAttribute('aSize', new THREE.InstancedBufferAttribute(size, 1));
     g.setAttribute('aSeed', new THREE.InstancedBufferAttribute(seed, 1));
     g.setAttribute('aDepth', new THREE.InstancedBufferAttribute(depth, 1));
+    g.setAttribute('aShade', new THREE.InstancedBufferAttribute(shade, 1));
     g.instanceCount = count;
     this.uniforms = {
       uFrontX: { value: -170 },
@@ -57,12 +60,12 @@ export class DustWall {
       transparent: true,
       depthWrite: false,
       vertexShader: /* glsl */ `
-        attribute vec3 aOff; attribute float aSize, aSeed, aDepth;
+        attribute vec3 aOff; attribute float aSize, aSeed, aDepth, aShade;
         uniform float uFrontX, uTime, uSettle;
-        varying vec2 vUv; varying float vSeed, vDepth, vFade; varying vec3 vWP;
+        varying vec2 vUv; varying float vSeed, vDepth, vFade, vShade; varying vec3 vWP;
         ${ROAD_GLSL}
         void main(){
-          vUv = uv; vSeed = aSeed; vDepth = aDepth;
+          vUv = uv; vSeed = aSeed; vDepth = aDepth; vShade = aShade;
           float drift = uTime * (0.35 + fract(aSeed * 0.37) * 0.5);
           vec3 c = vec3(uFrontX + aOff.x + sin(aSeed + uTime * 0.05) * 3.0 - drift * 0.2, aOff.y + drift * 0.08 * (1.0 + fract(aSeed)), 0.0);
           c.z = gilRoadZ(c.x) + aOff.z + sin(aSeed * 2.0 + uTime * 0.07) * 2.0;
@@ -79,7 +82,7 @@ export class DustWall {
         }`,
       fragmentShader: /* glsl */ `
         uniform vec3 uSunDir, uSunColor, uAmb; uniform float uOpacity, uTime;
-        varying vec2 vUv; varying float vSeed, vDepth, vFade; varying vec3 vWP;
+        varying vec2 vUv; varying float vSeed, vDepth, vFade, vShade; varying vec3 vWP;
         ${NOISE}
         void main(){
           vec2 p = vUv - 0.5;
@@ -97,9 +100,11 @@ export class DustWall {
           // forward scattering: dust glows when the sun stands behind it; light that crossed the column is dimmer
           float fwd = hg(mu, 0.6) * 2.4 + hg(mu, 0.15) * 1.2;
           float trans = mix(1.0, 0.45, vDepth < 0.5 ? 1.0 - vDepth * 2.0 : 0.0);
-          float thin = 1.0 + (1.0 - den) * 1.2;
+          float thin = 1.0 + (1.0 - den) * 1.4;
+          // billows: shadowed bellies, sunlit crowns
+          float body = mix(0.72, 1.18, smoothstep(0.2, 0.85, vUv.y + (n2 - 0.5) * 0.4)) * vShade;
           vec3 dustTint = vec3(1.0, 0.8, 0.58);
-          vec3 col = uSunColor * dustTint * (0.18 + fwd * trans * thin) * 0.55 + uAmb * dustTint * 0.5;
+          vec3 col = (uSunColor * dustTint * (0.18 + fwd * trans * thin) * 0.55 + uAmb * dustTint * 0.5) * body;
           gl_FragColor = vec4(col, a);
         }`,
     });

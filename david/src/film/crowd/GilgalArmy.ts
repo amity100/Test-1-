@@ -59,15 +59,39 @@ interface Soldier {
   state: 'none' | 'march' | 'idle' | 'raise' | 'lower' | 'step';
   raised: boolean;
   last: THREE.Vector3;
+  gx: number;
+  gz: number;
+  gy: number;
 }
 
 export interface GilgalArmyOptions {
   tier: CrowdTier;
   /** ground height of the set (GilgalSet.ground.height or similar); default flat 0 */
   ground?: (x: number, z: number) => number;
-  /** ranks drawn as figures (default: ARMY.ranks on desktop, fewer on phones; the rest is dust) */
+  /** ranks near enough to be drawn as meshes (default: ARMY.ranks on desktop, fewer on phones) */
   ranks?: number;
+  /**
+   * the column behind them as skeletal impostors (Crowd LOD3) receding into the dust wall: true (default) = the tier's
+   * tail (desktop-high 110 more ranks = 1650 men, desktop-medium 100, mobile-high 60, mobile-low 44), a number = that
+   * many extra ranks, false = none.
+   */
+  impostors?: boolean | number;
   anim?: CrowdAnim;
+}
+
+/** what a formation slot does now: a FilmActor standing in for the crowd figure mirrors it */
+export interface SlotState {
+  file: number;
+  rank: number;
+  pos: THREE.Vector3;
+  yaw: number;
+  kit: 'spear' | 'sling' | 'bow' | 'sword' | 'goad';
+  /** 'march' | 'idle' | 'raise' | 'lower' | 'step' | 'none' */
+  state: string;
+  /** baked clip key and its time (s) */
+  clip: string;
+  time: number;
+  headYaw: number;
 }
 
 function hash(a: number, b: number) {
@@ -92,9 +116,49 @@ export class GilgalArmy {
   static async create(o: GilgalArmyOptions): Promise<GilgalArmy> {
     const lite = o.tier.startsWith('mobile');
     const anim = o.anim ?? (await CrowdAnim.bake(israelClips(lite)));
-    const ranks = o.ranks ?? (o.tier === 'mobile-low' ? 22 : o.tier === 'mobile-high' ? 30 : o.tier === 'desktop-medium' ? ARMY.ranks : Math.round(ARMY.ranks * 1.6));
-    const crowd = await Crowd.create({ army: 'israel', anim, capacity: ranks * ARMY.files, tier: o.tier });
+    const near = o.ranks ?? (o.tier === 'mobile-low' ? 22 : o.tier === 'mobile-high' ? 30 : o.tier === 'desktop-medium' ? ARMY.ranks : Math.round(ARMY.ranks * 1.6));
+    const tailDefault = o.tier === 'mobile-low' ? 44 : o.tier === 'mobile-high' ? 60 : o.tier === 'desktop-medium' ? 100 : 110;
+    const tail = o.impostors === false ? 0 : typeof o.impostors === 'number' ? o.impostors : tailDefault;
+    const ranks = near + tail;
+    const crowd = await Crowd.create({ army: 'israel', anim, capacity: ranks * ARMY.files, tier: o.tier, impostors: tail > 0 });
     return new GilgalArmy(crowd, anim, ranks, o, !o.anim, lite);
+  }
+
+  /** the impostor layer's live stats (null without impostors) */
+  get impostors() {
+    return this.crowd.meshes.length > 3 ? { drawn: this.crowd.stats.drawn[3] } : null;
+  }
+
+  private slotIndex(file: number, rank: number) {
+    return rank * ARMY.files + file;
+  }
+
+  /**
+   * Hide the crowd figures in these formation slots (a FilmActor stands there instead; see slotState); pass [] to
+   * show them all again. Slots: file 0..14 across the road (7 = its centre; 0 = north), rank 0 = first behind the king.
+   */
+  setActorSlots(slots: { file: number; rank: number }[]) {
+    for (const s of this.soldiers) s.ag.visible = true;
+    for (const { file, rank } of slots) {
+      const s = this.soldiers[this.slotIndex(file, rank)];
+      if (s) s.ag.visible = false;
+    }
+  }
+
+  /** current pose of slot (file, rank) (after setBeat), for the FilmActor that replaces that figure */
+  slotState(file: number, rank: number): SlotState | null {
+    const s = this.soldiers[this.slotIndex(file, rank)];
+    if (!s) return null;
+    const c = s.ag.cur;
+    return { file, rank, pos: s.ag.pos.clone(), yaw: s.ag.yaw, kit: s.kit, state: s.state, clip: c ? c.clip.clip : '', time: c ? c.t : 0, headYaw: s.ag.headYaw };
+  }
+
+  /** the n formation slots nearest to a point (e.g. the camera of shot 9), nearest first */
+  nearestSlots(p: THREE.Vector3, n: number) {
+    return this.soldiers
+      .map((s) => ({ file: s.file, rank: s.rank, dist: Math.hypot(s.ag.pos.x - p.x, s.ag.pos.z - p.z) }))
+      .sort((a, b) => a.dist - b.dist)
+      .slice(0, n);
   }
 
   private constructor(crowd: Crowd, anim: CrowdAnim, ranks: number, o: GilgalArmyOptions, owns: boolean, lite: boolean) {
@@ -137,7 +201,7 @@ export class GilgalArmy {
         const carry = kit === 'spear' || kit === 'goad';
         this.soldiers.push({
           ag, file: f, rank: r, kit, walk: walks[Math.floor(h(14) * walks.length)], mirror: !lite && h(15) < 0.5, carry,
-          phase: h(16) * 3, pace: 0.94 + h(17) * 0.12, delay: 0, state: 'none', raised: false, last: new THREE.Vector3(),
+          phase: h(16) * 3, pace: 0.94 + h(17) * 0.12, delay: 0, state: 'none', raised: false, last: new THREE.Vector3(), gx: 1e9, gz: 1e9, gy: 0,
         });
       }
     }
@@ -165,7 +229,13 @@ export class GilgalArmy {
     for (const s of this.soldiers) {
       const ag = s.ag;
       armySlot(s.file, s.rank, st.frontX, st.part, 0.18, pos);
-      pos.y = this.ground(pos.x, pos.z);
+      // the set's ground function is costly (DEM + noise): re-sample it only every 0.3 m of a man's way
+      if (Math.abs(pos.x - s.gx) + Math.abs(pos.z - s.gz) > 0.3) {
+        s.gx = pos.x;
+        s.gz = pos.z;
+        s.gy = this.ground(pos.x, pos.z);
+      }
+      pos.y = s.gy;
       const moved = newBeat ? 0 : Math.hypot(pos.x - s.last.x, pos.z - s.last.z);
       ag.pos.copy(pos);
       s.last.copy(pos);

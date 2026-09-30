@@ -103,7 +103,8 @@
       0.43,
       0.4
     ],
-    "grey_temples": 0.85
+    "grey_temples": 0.85,
+    "sun_spots": 0.5
   },
   "eyes": {
     "iris": "dark_brown",

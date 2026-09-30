@@ -179,7 +179,8 @@ export function buildFlora(ground: GilgalGround, ptex: PalmTextures, world: Text
   const clear = (x: number, z: number) => {
     if (Math.abs(z - roadZ(x)) < 9) return false;
     if (Math.hypot(x - STONES.center.x, z - STONES.center.z) < STONES.radius + 6) return false;
-    if (x > SAUL_HALT.x - 70 && x < 40 && Math.abs(z) < 22) return false; // the stage of the march and the face-off
+    if (x > SAUL_HALT.x - 106 && x < 40 && Math.abs(z) < 22) return false; // the stage of the march and the face-off
+    if (x > -140 && x < -110 && z > -4 && z < 30) return false; // the lens of shot 6
     return true;
   };
   const groves: [number, number, number, number][] = [

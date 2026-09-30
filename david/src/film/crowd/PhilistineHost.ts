@@ -44,6 +44,19 @@ export interface PhilistineHostOptions {
    */
   trail?: THREE.Vector3[];
   columnWidth?: number;
+  /**
+   * the land set's coast anchors (LandSet.anchors.coast): COLUMN mode along its road from `columnHead` back toward
+   * the sea, `columnWidth` wide (same trail as the set's own placeholders). Overrides trail / columnWidth.
+   */
+  coast?: { route: THREE.Vector3[]; columnHead: THREE.Vector3; columnWidth: number };
+  /**
+   * column mode: lateral offsets (m, + = the camera side of the coast shots) of further columns marching in the fields
+   * beside the road, so the host reads as an army and not a file of men. Default by tier: desktop-high [-21, -42],
+   * desktop-medium / mobile-high [-22], mobile-low [].
+   */
+  flanks?: number[];
+  /** far field as skeletal impostors (Crowd LOD3); default true. Counts include them. */
+  impostors?: boolean;
 }
 
 function hash(a: number, b: number) {
@@ -51,7 +64,7 @@ function hash(a: number, b: number) {
   return h - Math.floor(h);
 }
 
-interface Man { ag: CrowdAgent; x: number; z: number; pace: number }
+interface Man { ag: CrowdAgent; x: number; z: number; pace: number; seg: number; gx: number; gz: number; gy: number }
 
 export class PhilistineHost {
   readonly crowd: Crowd;
@@ -68,9 +81,12 @@ export class PhilistineHost {
 
   static async create(o: PhilistineHostOptions): Promise<PhilistineHost> {
     const lite = o.tier.startsWith('mobile');
-    const count = o.count ?? (o.tier === 'mobile-low' ? 360 : o.tier === 'mobile-high' ? 500 : o.tier === 'desktop-medium' ? 900 : 1400);
+    const imp = o.impostors !== false;
+    const count = o.count ?? (imp
+      ? (o.tier === 'mobile-low' ? 900 : o.tier === 'mobile-high' ? 1400 : o.tier === 'desktop-medium' ? 2600 : 3800)
+      : (o.tier === 'mobile-low' ? 360 : o.tier === 'mobile-high' ? 500 : o.tier === 'desktop-medium' ? 900 : 1400));
     const anim = o.anim ?? (await CrowdAnim.bake(philistineClips(lite)));
-    const crowd = await Crowd.create({ army: 'philistine', anim, capacity: count, tier: o.tier, castShadow: [true, false, false] });
+    const crowd = await Crowd.create({ army: 'philistine', anim, capacity: count, tier: o.tier, castShadow: [true, false, false], impostors: imp });
     return new PhilistineHost(crowd, anim, count, o, !o.anim, lite);
   }
 
@@ -81,27 +97,20 @@ export class PhilistineHost {
     this.origin = (o.origin ?? new THREE.Vector3()).clone();
     this.heading = o.heading ?? Math.PI / 2;
     this.ground = o.ground ?? (() => 0);
-    if (o.trail && o.trail.length > 1) {
-      this.trail = o.trail.map((p) => p.clone());
+    let trail = o.trail;
+    let width = o.columnWidth;
+    if (o.coast) {
+      const c = o.coast;
+      trail = [c.columnHead, ...c.route.slice().reverse().filter((p) => p.x < c.columnHead.x)];
+      width = c.columnWidth;
+    }
+    if (trail && trail.length > 1) {
+      this.trail = trail.map((p) => p.clone());
       this.cum = [0];
       for (let i = 1; i < this.trail.length; i++) this.cum.push(this.cum[i - 1] + this.trail[i].distanceTo(this.trail[i - 1]));
     }
-    const files = this.trail ? Math.max(3, Math.round((o.columnWidth ?? 6.3) / 1.1)) : o.files ?? 24;
-    const companies = o.companies ?? Math.max(1, Math.round(Math.sqrt(count / files / 6)));
-    const perCompany = Math.ceil(count / companies);
     const clips = philistineClips(lite).map((c) => `${c.clip}${c.mirror ? ':m' : ''}:c`);
-    for (let i = 0; i < count; i++) {
-      const c = i % companies;
-      const k = Math.floor(i / companies);
-      const f = k % files, r = Math.floor(k / files);
-      const h = (s: number) => hash(i * 0.713 + s * 13.1, s * 7.7 + c);
-      const ranksPer = Math.ceil(perCompany / files);
-      // companies side by side with gaps, the flanks a little behind (a loose, wide host)
-      const col = !!this.trail;
-      const lat = col ? (f - (files - 1) / 2) * 1.1 + (h(1) - 0.5) * 0.45 : (c - (companies - 1) / 2) * (files * 1.15 + 9) + (f - (files - 1) / 2) * 1.15 + (h(1) - 0.5) * 0.5;
-      const back = col ? Math.floor(i / files) * 1.4 + (h(2) - 0.5) * 0.6 : r * 1.45 + Math.abs(c - (companies - 1) / 2) * 6 + (h(2) - 0.5) * 0.6;
-      const ag = crowd.agents[i];
-      const elite = (this.trail ? Math.floor(i / files) < 3 : r < 2 + Math.floor(h(3) * 2)) || h(4) < 0.08;
+    const kit = (ag: CrowdAgent, h: (s: number) => number, elite: boolean) => {
       let mask = bit('skin', 'hair', 'eye', 'tunic', 'belt', 'scalp', 'spearShaft', 'spearHead');
       mask |= elite ? bit('helmet', 'greaves', 'sword') : bit('crown');
       mask |= h(5) < (elite ? 0.95 : 0.7) ? bit('shieldArm', 'boss') : 0;
@@ -112,8 +121,45 @@ export class PhilistineHost {
       ag.seed = h(9);
       ag.lean = 0.1 + h(10) * 0.25;
       ag.play(clips[Math.floor(h(11) * clips.length)], { fade: 0, time: h(12) * 3, rate: 1 });
-      this.men.push({ ag, x: lat, z: -back, pace: 0.95 + h(13) * 0.1 });
-      void ranksPer;
+    };
+    if (this.trail) {
+      // COLUMN mode: the main column on the road (half the men), companies of 16 ranks with a gap between them and an
+      // elite rank at the head of each (bronze helmets and greaves catch the sun all along the column), flank columns
+      // in the fields beside it, starting further back
+      const flanks = o.flanks ?? (o.tier === 'mobile-low' ? [] : o.tier === 'desktop-high' ? [-21, -42] : [-22]);
+      const cols = [{ lat: 0, files: Math.max(3, Math.round((width ?? 6.3) / 1.1)), start: 0, share: flanks.length ? 0.5 : 1 }];
+      flanks.forEach((l, k) => cols.push({ lat: l, files: 8, start: 26 + k * 34, share: 0.5 / flanks.length }));
+      let i = 0;
+      cols.forEach((c, ci) => {
+        const n = ci === cols.length - 1 ? count - i : Math.round(count * c.share);
+        for (let k = 0; k < n && i < count; k++, i++) {
+          const f = k % c.files, r = Math.floor(k / c.files);
+          const comp = Math.floor(r / 16);
+          const h = (s: number) => hash(i * 0.713 + s * 13.1, s * 7.7 + ci);
+          // m.x is along the marching men's right = -(the land set's `side`), so a flank at + lies on the camera side
+          const lat = -c.lat + (f - (c.files - 1) / 2) * 1.1 + (h(1) - 0.5) * 0.45;
+          const back = c.start + r * 1.4 + comp * 5.5 + (h(2) - 0.5) * 0.6;
+          const elite = (ci === 0 && r < 3) || r % 16 === 0 || h(4) < 0.06;
+          const ag = crowd.agents[i];
+          kit(ag, h, elite);
+          this.men.push({ ag, x: lat, z: -back, pace: 0.97 + h(13) * 0.06, seg: 0, gx: 1e9, gz: 1e9, gy: 0 });
+        }
+      });
+    } else {
+      const files = o.files ?? 24;
+      const companies = o.companies ?? Math.max(1, Math.round(Math.sqrt(count / files / 6)));
+      for (let i = 0; i < count; i++) {
+        const c = i % companies;
+        const k = Math.floor(i / companies);
+        const f = k % files, r = Math.floor(k / files);
+        const h = (s: number) => hash(i * 0.713 + s * 13.1, s * 7.7 + c);
+        // companies side by side with gaps, the flanks a little behind (a loose, wide host)
+        const lat = (c - (companies - 1) / 2) * (files * 1.15 + 9) + (f - (files - 1) / 2) * 1.15 + (h(1) - 0.5) * 0.5;
+        const back = r * 1.45 + Math.abs(c - (companies - 1) / 2) * 6 + (h(2) - 0.5) * 0.6;
+        const ag = crowd.agents[i];
+        kit(ag, h, r < 2 + Math.floor(h(3) * 2) || h(4) < 0.08);
+        this.men.push({ ag, x: lat, z: -back, pace: 0.95 + h(13) * 0.1, seg: 0, gx: 1e9, gz: 1e9, gy: 0 });
+      }
     }
     this.place();
   }
@@ -122,10 +168,12 @@ export class PhilistineHost {
   private readonly cum: number[] = [];
   private readonly _a = new THREE.Vector3();
   /** point and yaw at distance d along the trail (d < 0: extrapolated ahead of trail[0]) */
-  private along(d: number, out: THREE.Vector3) {
+  private along(d: number, out: THREE.Vector3, m?: Man) {
     const T = this.trail!, C = this.cum;
-    let i = 0;
+    let i = m ? Math.min(m.seg, C.length - 2) : 0;
+    while (i > 0 && C[i] > d) i--;
     while (i < C.length - 2 && C[i + 1] < d) i++;
+    if (m) m.seg = i;
     const seg = Math.max(1e-6, C[i + 1] - C[i]);
     const u = (d - C[i]) / seg;
     out.copy(T[i]).lerp(T[i + 1], u);
@@ -133,14 +181,24 @@ export class PhilistineHost {
     return Math.atan2(T[i].x - T[i + 1].x, T[i].z - T[i + 1].z);
   }
 
+  /** ground under a man, re-sampled only every 0.3 m of his way (the land set's height function is costly) */
+  private groundOf(m: Man, x: number, z: number) {
+    if (Math.abs(x - m.gx) + Math.abs(z - m.gz) > 0.3) {
+      m.gx = x;
+      m.gz = z;
+      m.gy = this.ground(x, z);
+    }
+    return m.gy;
+  }
+
   private place() {
     if (this.trail) {
       let cx = 0, cz = 0;
       for (const m of this.men) {
-        const yaw = this.along(-m.z - this.travelled * m.pace, this._a);
+        const yaw = this.along(-m.z - this.travelled * m.pace, this._a, m);
         const rx = Math.cos(yaw), rz = -Math.sin(yaw);
         const x = this._a.x + rx * m.x, z = this._a.z + rz * m.x;
-        m.ag.pos.set(x, this.ground(x, z), z);
+        m.ag.pos.set(x, this.groundOf(m, x, z), z);
         m.ag.yaw = yaw;
         cx += x;
         cz += z;
@@ -155,7 +213,7 @@ export class PhilistineHost {
       const fwd = m.z + this.travelled * m.pace;
       const x = this.origin.x + c * m.x + s * fwd;
       const z = this.origin.z - s * m.x + c * fwd;
-      m.ag.pos.set(x, this.ground(x, z), z);
+      m.ag.pos.set(x, this.groundOf(m, x, z), z);
       m.ag.yaw = this.heading;
       cx += x;
       cz += z;
@@ -166,6 +224,11 @@ export class PhilistineHost {
   /** move the host (keeps the formation); t = 0 -> origin */
   setTravel(metres: number) {
     this.travelled = metres;
+  }
+
+  /** the impostor layer's live stats (null without impostors) */
+  get impostors() {
+    return this.crowd.meshes.length > 3 ? { drawn: this.crowd.stats.drawn[3] } : null;
   }
 
   update(dt: number, camera: THREE.Camera) {

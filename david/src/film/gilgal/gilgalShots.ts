@@ -52,10 +52,10 @@ export function buildGilgalShots(ground: GilgalGround): GilgalShots {
   const dustWall: GilgalShotInfo = {
     name: 'dustWall', script: SCRIPT_SHOT.dustWall, fStop: 5.6, exposure: 0.85, caption: 'הַגִּלְגָּל',
     shot: shot('dustWall', (u) => {
-      const p = V(-124 - 5 * u, 0, 10.5 - 1.5 * u);
-      p.y = H(p.x, p.z) + 0.9 + 0.25 * u;
-      const lx = -175;
-      return frame(p, V(lx, H(lx, 0) + 8.5 - 3.5 * u, -2.5), 34 - 8 * u);
+      const p = V(-122 - 6 * u, 0, 10.5 - 1.5 * u);
+      p.y = H(p.x, p.z) + 0.7 + 0.2 * u;
+      const lx = -178;
+      return frame(p, V(lx, H(lx, 0) + 11 - 4.5 * u, -2.5), 36 - 9 * u);
     }),
     focus: (t) => saulHead('dustWall', t, 1.2),
   };

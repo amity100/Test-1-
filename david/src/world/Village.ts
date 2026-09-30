@@ -342,37 +342,48 @@ export class Village {
     this.group.add(well, wellHole);
     this.colliders.add({ x: wx, z: wz, r: 1.4, tag: 'well' });
 
-    // Rachel's pillar (Genesis 35:20): a tall rough standing stone on a heap of fieldstones
+    // Rachel's pillar (Genesis 35:20 "וַיַּצֵּב יַעֲקֹב מַצֵּבָה עַל־קְבֻרָתָהּ"; docs/visual-bible.md 3.10): ONE rough,
+    // unworked, uninscribed limestone monolith ≈2.25 m high, ≈0.72 m wide, ≈0.36 m thick, slightly tapering with a
+    // rounded top, deeply weathered (rain flutes, pits, darker rain streaks), set at the head of a low oval mound of
+    // fieldstones (the grave) beside the road north of the town. Filmed close in the opening film (src/film/land/rachel.ts).
     const R = LAYOUT.rachel;
     const ry = this.terrain.heightAt(R.x, R.z);
     this.rachelPillar.set(R.x, ry, R.z);
-    const rmat = rockMaterial(this.tex, 0xf0e8da);
-    const pillarGeo = new THREE.BoxGeometry(0.62, 2.7, 0.4, 4, 12, 3);
-    {
-      const pp = pillarGeo.getAttribute('position') as THREE.BufferAttribute;
-      for (let i = 0; i < pp.count; i++) {
-        const x = pp.getX(i), y = pp.getY(i), z = pp.getZ(i);
-        const taper = 1 - (y + 1.35) * 0.06;
-        const n = Math.sin(y * 7.1 + x * 9) * 0.012 + Math.sin(z * 13 + y * 3) * 0.01;
-        pp.setXYZ(i, x * taper + n, y + (y > 1.3 ? Math.sin(x * 5) * 0.06 : 0), z * taper + n);
-      }
-      pillarGeo.computeVertexNormals();
-    }
-    const pillar = new THREE.Mesh(pillarGeo, rmat);
-    pillar.position.set(R.x, ry + 1.2, R.z);
-    pillar.rotation.set(0.03, 0.6, -0.02);
+    const rmat = rockMaterial(this.tex, 0xf4eee4, 2.6, 'rachel');
+    rmat.vertexColors = true;
+    const pillar = new THREE.Mesh(standingStoneGeometry(35), rmat);
+    pillar.position.set(R.x, ry, R.z);
+    // broad face toward the road (NE-SW), a slight lean from five centuries of settling
+    pillar.rotation.set(0.025, -1.25, -0.018);
     pillar.castShadow = pillar.receiveShadow = true;
     this.group.add(pillar);
-    const heap = new THREE.InstancedMesh(boulderGeometry(3, 2), rmat, 22);
+    // the grave: a low oval mound of fieldstones (≈2.6 x 1.7 m, ≈0.4 m high) east of the stone, earth between them
+    const moundMat = rockMaterial(this.tex, 0xe6dccb, 1.6, 'rachel-mound');
+    const nStones = 46;
+    const heap = new THREE.InstancedMesh(boulderGeometry(3, 3), moundMat, nStones);
     const m4 = new THREE.Matrix4();
-    for (let i = 0; i < 22; i++) {
-      const a = rnd() * Math.PI * 2, r = 0.5 + rnd() * 1.4;
-      const s = 0.25 + rnd() * 0.35;
-      m4.compose(new THREE.Vector3(R.x + Math.cos(a) * r, ry + s * 0.2 + (r < 1 ? 0.2 : 0), R.z + Math.sin(a) * r), new THREE.Quaternion().setFromEuler(new THREE.Euler(rnd(), rnd() * 6, rnd())), new THREE.Vector3(s, s, s));
+    const ca = Math.cos(-0.78), sa = Math.sin(-0.78);
+    const c = new THREE.Color();
+    for (let i = 0; i < nStones; i++) {
+      // polar sample of the oval (denser rim), local frame: +X along the grave, +Z across
+      const a = rnd() * Math.PI * 2, rr = Math.sqrt(0.15 + rnd() * 0.85);
+      const lx = 0.55 + Math.cos(a) * rr * 1.3, lz = Math.sin(a) * rr * 0.85;
+      const mh = 0.36 * Math.max(0, 1 - rr * rr);
+      const s = (0.2 + rnd() * 0.22) * (1.1 - rr * 0.35);
+      const x = R.x + lx * ca - lz * sa, z = R.z + lx * sa + lz * ca;
+      m4.compose(new THREE.Vector3(x, this.terrain.heightAt(x, z) + mh + s * 0.05, z), new THREE.Quaternion().setFromEuler(new THREE.Euler((rnd() - 0.5) * 0.5, rnd() * 6.28, (rnd() - 0.5) * 0.5)), new THREE.Vector3(s * 1.25, s * 0.62, s));
       heap.setMatrixAt(i, m4);
+      heap.setColorAt(i, c.setRGB(0.86 + rnd() * 0.16, 0.84 + rnd() * 0.14, 0.8 + rnd() * 0.12));
     }
     heap.castShadow = heap.receiveShadow = true;
     this.group.add(heap);
+    // the earth of the mound under the stones
+    const earth = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x7a5c44, roughness: 1, map: this.tex.soil, normalMap: this.tex.soilN }));
+    earth.scale.set(1.45, 0.3, 0.95);
+    earth.position.set(R.x + 0.55 * ca, ry - 0.04, R.z + 0.55 * sa);
+    earth.rotation.y = 0.78;
+    earth.receiveShadow = true;
+    this.group.add(earth);
     this.colliders.add({ x: R.x, z: R.z, r: 1.6, tag: 'pillar' });
 
     // Threshing floor (גֹּרֶן): a circle of beaten earth with a straw heap
@@ -390,4 +401,73 @@ export class Village {
     straw.castShadow = straw.receiveShadow = true;
     this.group.add(floor, straw);
   }
+}
+
+/**
+ * The standing stone of Rachel's grave (visual-bible 3.10): a rough limestone monolith, origin at ground level,
+ * 2.25 m above ground (+0.35 m set in the earth), rounded-rectangle section 0.72 x 0.36 m at the foot tapering to
+ * ≈0.58 x 0.29 m, an irregular rounded top, weathering (rain flutes near the top, solution pits, chipped edges).
+ * Attributes: position, normal, aRock (cavity, height-in-rock for rockMaterial), color (rain streaks, lichen).
+ */
+function standingStoneGeometry(seed: number): THREE.BufferGeometry {
+  const rnd = mulberry32(seed);
+  const ph = Array.from({ length: 12 }, () => rnd() * 100);
+  const n3 = (x: number, y: number, z: number, f: number, o: number) =>
+    (Math.sin(x * f + ph[o] + Math.sin(y * f * 0.7 + ph[o + 1])) * Math.sin(y * f * 1.3 + ph[o + 2] + Math.sin(z * f * 0.9)) + Math.sin(z * f * 1.1 + ph[o + 3] + x * f * 0.5) * 0.5) / 1.5;
+  const H = 2.25, D = 0.35, NS = 40, NR = 46;
+  const pos: number[] = [], rock: number[] = [], col: number[] = [], idx: number[] = [];
+  const cap = 0.3;
+  for (let j = 0; j <= NR; j++) {
+    const y = -D + (H + D) * (j / NR);
+    const t = THREE.MathUtils.clamp(y / H, 0, 1);
+    // taper; the top rounds over the last `cap` metres (one shoulder a little higher)
+    const w0 = 0.37 - 0.08 * t, t0 = 0.185 - 0.04 * t;
+    for (let i = 0; i < NS; i++) {
+      const a = (i / NS) * Math.PI * 2;
+      const ca = Math.cos(a), sa = Math.sin(a);
+      const sx = Math.sign(ca) * Math.pow(Math.abs(ca), 0.4), sz = Math.sign(sa) * Math.pow(Math.abs(sa), 0.4);
+      const htop = H - 0.06 * (1 - sx);
+      const shoulder = htop - cap;
+      const yc = Math.min(y, htop);
+      const k = yc > shoulder ? Math.sqrt(Math.max(0, 1 - Math.pow((yc - shoulder) / (htop - shoulder), 2))) : 1;
+      let x = sx * w0 * Math.max(k, 0.02), z = sz * t0 * Math.max(k, 0.02);
+      // broad bulges and a slight twist
+      const bulge = 1 + 0.07 * n3(x, y, z, 2.2, 0) + 0.04 * Math.sin(y * 3.1 + a * 2 + ph[4]);
+      x *= bulge; z *= bulge * (1 + 0.05 * Math.sin(y * 2.3 + ph[5]));
+      // outward normal of the section (approximate)
+      let nx = ca / Math.max(w0, 1e-3), nz = sa / Math.max(t0, 1e-3);
+      const nl = Math.hypot(nx, nz); nx /= nl; nz /= nl;
+      // weathering: pits, rain flutes near the top (vertical grooves), chips on the edges
+      const pits = Math.min(0, n3(x * 3, y * 3, z * 3, 9, 6) + 0.35) * 0.018;
+      const flute = -Math.pow(Math.abs(Math.sin(a * 13 + n3(x, y, z, 3, 8) * 2)), 6) * 0.014 * THREE.MathUtils.smoothstep(t, 0.45, 0.9);
+      const edge = Math.pow(Math.abs(ca * sa) * 2, 2);
+      const chip = Math.min(0, n3(x, y, z, 4.5, 2) + 0.25) * 0.05 * edge;
+      const fine = n3(x, y, z, 23, 3) * 0.004;
+      const disp = (pits + flute + chip + fine) * (y < 0 ? 0.3 : 1) * Math.max(k, 0.3);
+      pos.push(x + nx * disp * k, yc, z + nz * disp * k);
+      const cav = THREE.MathUtils.clamp(-(pits + flute + chip) * 18, 0, 0.8);
+      rock.push(cav, THREE.MathUtils.clamp(y / 0.6, 0, 1));
+      // colour: rain streaks run down from the top (dark grey), lichen patches (pale grey-green), sun-bleached crown
+      const streak = THREE.MathUtils.smoothstep(Math.sin(a * 9 + ph[9] + Math.sin(a * 23 + ph[10]) * 1.5) * 0.5 + 0.5, 0.62, 0.95) * THREE.MathUtils.smoothstep(t, 0.15, 0.75);
+      const lichen = THREE.MathUtils.smoothstep(n3(x * 2, y * 2, z * 2, 7, 1), 0.45, 0.7) * (1 - t * 0.5);
+      const r = 1 - streak * 0.3 - cav * 0.15, gg = 1 - streak * 0.29 - cav * 0.15, b = 1 - streak * 0.26 - cav * 0.14;
+      col.push(r * (1 - lichen * 0.08), gg * (1 - lichen * 0.02), b * (1 - lichen * 0.1));
+    }
+  }
+  for (let j = 0; j < NR; j++) for (let i = 0; i < NS; i++) {
+    const a = j * NS + i, b = j * NS + ((i + 1) % NS), c = a + NS, d = b + NS;
+    idx.push(a, c, b, b, c, d);
+  }
+  // top vertex
+  const top = pos.length / 3;
+  pos.push(0.02, H + 0.01, 0); rock.push(0, 1); col.push(0.96, 0.95, 0.93);
+  for (let i = 0; i < NS; i++) idx.push(NR * NS + i, top, NR * NS + ((i + 1) % NS));
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('aRock', new THREE.Float32BufferAttribute(rock, 2));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  g.computeBoundingSphere();
+  return g;
 }

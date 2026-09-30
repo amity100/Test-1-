@@ -64,20 +64,23 @@ export function rachelShots(ground: (x: number, z: number) => number, pillar: TH
   const top = V(P.x, P.y + 2.25, P.z);
   // the road: the ridge route north -> south past the tomb, a few metres west of the stone
   const road = [g(-22, -140, 0), g(-12, -70, 0), g(-5.5, -20, 0), g(-4.2, 0, 0), g(-5.5, 25, 0), g(-14, 70, 0), g(-40, 125, 0)];
-  // the shepherd and flock cross the eastern slope from north to south, 150-300 m behind the stone
-  const shepherdRoute = [g(175, -95, 0), g(190, -40, 0), g(200, 10, 0), g(215, 60, 0)];
-  const flockRoute = [g(182, -112, 0), g(196, -58, 0), g(206, -8, 0), g(220, 42, 0)];
+  // the shepherd and flock cross the slope east of the stone from north to south, 120-220 m away, then turn down
+  // toward the pasture (the chapter's pasture lies SE of the tomb)
+  const shepherdRoute = [g(112, -58, 0), g(150, -8, 0), g(168, 52, 0), g(172, 112, 0), g(150, 170, 0)];
+  const flockRoute = [g(100, -76, 0), g(140, -26, 0), g(162, 34, 0), g(170, 96, 0), g(152, 156, 0)];
 
   const shots: Record<string, Shot> = {};
-  // A — the establishing image: low, west of the stone, looking east into the first light; the sun just off the
-  //     stone's shoulder, the slope falling away to the desert and the Moab wall; a slow push-in with a drift left.
-  shots.dawn = path([g(-9.5, 3.4, 0.55), g(-7.2, 2.1, 0.62)], [V(P.x + 30, top.y + 1.2, P.z - 4.5), V(P.x + 30, top.y + 1.4, P.z - 3.2)], [40, 36], 6.5);
-  // B — side light: from the south on the road, the light rakes from the right, the long shadow falls west across
-  //     the road; a slow lateral move, the flock small on the slope behind.
-  shots.side = path([g(-3.5, 11.5, 1.35), g(-7.5, 10.2, 1.3)], [g(1.5, -3, 1.25), g(-0.5, -3.5, 1.2)], [34, 32], 5.5);
-  // C — telephoto: far west on the road, long lens: the stone large against the sun-hazed slope, the shepherd and
-  //     the flock crossing behind it (lens compression brings them close).
-  shots.tele = path([g(-78, 7, 1.7), g(-78, 4, 1.7)], [V(P.x + 6, P.y + 1.15, P.z - 1.2), V(P.x + 6, P.y + 1.15, P.z - 0.4)], [10.5, 10], 5);
-  const sequence = [shots.dawn];
+  // A — the establishing image: eye level, west of the stone, looking east into the first light; the sun just off
+  //     the stone's shoulder, the slope falling away toward the desert and the Moab wall; a slow push-in.
+  shots.dawn = path([g(-10.5, 2.6, 1.45), g(-7.6, 1.6, 1.38)], [V(P.x + 40, top.y + 0.2, P.z - 7.5), V(P.x + 40, top.y + 0.3, P.z - 6.0)], [38, 34], 6.5);
+  // B — the road: on the worn road north-west of the tomb, looking down it to the south-east; the stone stands by
+  //     the road side-lit from the left, its long shadow thrown west; the flock and the shepherd far down the slope.
+  shots.road = path([g(-8.2, -8.8, 1.75), g(-6.9, -7.6, 1.65)], [g(12, 13, 0.4), g(13, 14, 0.5)], [40, 38], 6);
+  // C — the stone itself (insert): close, three-quarter from the south-west, light raking across the weathered face.
+  shots.stone = path([g(-2.6, 3.3, 1.2), g(-3.3, 2.5, 1.3)], [g(0, 0, 1.25), g(0, 0, 1.3)], [34, 32], 4.5);
+  // D — high wide (alternate establishing): a crane from the south-west, the stone small by the road, the slope and the
+  //     crossing flock beyond, the desert and the Moab wall on the horizon.
+  shots.wide = path([g(-34, 26, 9), g(-30, 22, 6.5)], [g(60, -30, -6), g(60, -26, -6)], [42, 40], 6);
+  const sequence = [shots.dawn, shots.road];
   return { shots, sequence, anchors: { pillar: P.clone(), pillarTop: top, road, shepherdRoute, flockRoute, walkSpeed: 1.0 } };
 }
