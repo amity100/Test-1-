@@ -30,7 +30,7 @@ narration (on-screen text, not quotations) and must never be styled or reference
    "וַתָּמָת רָחֵל וַתִּקָּבֵר בְּדֶרֶךְ אֶפְרָתָה הִוא בֵּית לָחֶם" (Gen 35:19)
 4. **The threat.** West, on the coastal plain by the sea, a Philistine army marches in the dust; bronze glints;
    war drums rise. "וַתְּהִי הַמִּלְחָמָה חֲזָקָה עַל־פְּלִשְׁתִּים כֹּל יְמֵי שָׁאוּל" (1 Sam 14:52)
-5. **The people.** The elders of Israel gathered at Ramah, before one old man (Samuel).
+5. **The people.** The elders of Israel gathered at Ramah (Samuel's town, 1 Sam 7:17 — Ramathaim in the hill country of Ephraim, 1:1; its site is debated), before one old man (Samuel).
    "שִׂימָה־לָּנוּ מֶלֶךְ לְשָׁפְטֵנוּ כְּכָל־הַגּוֹיִם" (1 Sam 8:5)
 
 ## ACT I · המלך (0:40–1:40) — spectacle, then collapse
@@ -42,7 +42,7 @@ narration (on-screen text, not quotations) and must never be styled or reference
    "מִשִּׁכְמוֹ וָמַעְלָה גָּבֹהַּ מִכָּל־הָעָם" (1 Sam 9:2)
 8. **The peak.** Saul raises his spear to the sky; thousands roar and raise their spears. Music at its peak.
    "וְשָׁאוּל לָכַד הַמְּלוּכָה עַל־יִשְׂרָאֵל וַיִּלָּחֶם סָבִיב בְּכָל־אֹיְבָיו" (1 Sam 14:47)
-9. **Silence.** The roar cuts out at once; only wind. At the head of the road an old man wrapped in a robe
+9. **Silence.** The roar cuts out at once; only wind — and, faintly, the bleating and lowing of the spoil (15:14). At the head of the road an old man wrapped in a robe
    stands in the way; the army parts. Caption: *שְׁמוּאֵל*
 10. **The tearing.** The giant king and the old prophet face to face. Samuel turns to go; Saul seizes the corner
     of his robe — it tears, in slow motion: threads snapping, dust in the light.
@@ -74,7 +74,7 @@ narration (on-screen text, not quotations) and must never be styled or reference
 18. **Peace.** The flock grazes; a little lamb wanders to the edge of a dark thicket.
 19. **The silence before.** The birds fall silent. Deep in the thicket something large shifts; heavy breathing;
     two eyes open in the dark. The lamb lifts its head.
-20. **Smash cut to black + a deep hit:** DAVID · דָּוִד · *פֶּרֶק רִאשׁוֹן · הָרֹעֶה*
+20. **Smash cut to black + a deep hit:** DAVID · דָּוִד · *פֶּרֶק רִאשׁוֹן · הָרֹעֶה* (the film's name "הַטּוֹב מִמֶּךָּ" is itself a quotation: render it only from the catalog, id s1_15_28_better_than_you)
 21. **The game begins:** open on David on his rock and the first objective.
 
 ---
@@ -88,10 +88,10 @@ Verified verse texts (Miqra according to the Masorah):
 | **Samuel** | 1 Sam 1:11 "וּמוֹרָה לֹא־יַעֲלֶה עַל־רֹאשׁוֹ" (a Nazirite from birth); 12:2 "וַאֲנִי זָקַנְתִּי וָשַׂבְתִּי"; 28:14 "אִישׁ זָקֵן עֹלֶה וְהוּא עֹטֶה מְעִיל"; 2:19 his mother made him a מְעִיל; 7:17 his home is Ramah | an **old, grey** man, **uncut long hair and full beard** (no razor ever), **wrapped in a me'il** (a mantle/robe he is known by); dignified, prophet not wizard (no staff-magic, no halo) |
 | **Saul** | 9:2 "בָּחוּר וָטוֹב … מִשִּׁכְמוֹ וָמַעְלָה גָּבֹהַּ מִכָּל־הָעָם"; 10:23 "וַיִּגְבַּהּ מִכָּל־הָעָם מִשִּׁכְמוֹ וָמָעְלָה"; 17:38 his own gear: "קוֹבַע נְחֹשֶׁת … שִׁרְיוֹן"; 2 Sam 1:10 in battle "הַנֵּזֶר אֲשֶׁר עַל־רֹאשׁוֹ וְאֶצְעָדָה אֲשֶׁר עַל־זְרֹעוֹ"; spear always at hand (18:10, 22:6, 26:7) | head and shoulders taller than everyone, handsome, mature and powerful; returning from war: **bronze helmet** (carried under the arm), **שִׁרְיוֹן** (scale armour coat), the **נֵזֶר** (a thin gold band, not a crown) and the **אֶצְעָדָה** (armlet) — worn even in battle — and his **spear** |
 | **The tearing** | 15:27 "וַיִּסֹּב שְׁמוּאֵל לָלֶכֶת וַיַּחֲזֵק בִּכְנַף־מְעִילוֹ וַיִּקָּרַע" — plain sense (Rashi, Radak, Metzudat David): Saul grasped the corner of **Samuel's** robe | Saul tears the corner of **Samuel's** me'il; the torn piece stays in Saul's hand |
-| **Gilgal** | 15:12–13 Saul came to Carmel, then went down to Gilgal, where Samuel came to him; Josh 4:19 "בַּגִּלְגָּל בִּקְצֵה מִזְרַח יְרִיחוֹ"; Josh 4:20 the **twelve stones** Joshua set up at Gilgal; Deut 34:3 "בִּקְעַת יְרֵחוֹ עִיר הַתְּמָרִים" | the Jordan Valley at the eastern edge of Jericho: a hot, low plain, **date palms**, the Jordan's green thicket line, the mountains of **Moab** to the east and the Judean desert escarpment to the west; the **circle/cairn of twelve standing stones** of Joshua can mark the place; late afternoon light |
-| **Saul's army** | 15:4 "מָאתַיִם אֶלֶף רַגְלִי"; 14:52 he gathered every mighty man; 15:20 Agag was brought back | **on foot** (no horses, no chariots for Israel), spears, round/oval shields, slingers and archers (Benjaminites, 1 Chr 12:2), simple tunics, few metal helmets; dust, sweat, spoils in the background (never emphasised) |
+| **Gilgal** | 15:12–13 Saul came to Carmel, then went down to Gilgal, where Samuel came to him; Josh 4:19 "בַּגִּלְגָּל בִּקְצֵה מִזְרַח יְרִיחוֹ"; Josh 4:20 the **twelve stones** Joshua set up at Gilgal; Deut 34:3 "בִּקְעַת יְרֵחוֹ עִיר הַתְּמָרִים" | the Jordan Valley at the eastern edge of Jericho: a hot, low plain, **date palms**, the Jordan's green thicket line, the mountains of **Moab** to the east and the Judean desert escarpment to the west; the **twelve stones Joshua set up** (הֵקִים — standing upright, not a heap; a ring layout is conjecture) and an altar of unhewn stones mark the place; afternoon to late-afternoon light |
+| **Saul's army** (no war drums in the army — drums live only in the score) | 15:4 "מָאתַיִם אֶלֶף רַגְלִי"; 14:52 he gathered every mighty man; 15:20 Agag was brought back | **on foot** (no horses, no chariots for Israel), spears, round/oval shields, slingers and archers (Benjaminites, 1 Chr 12:2), simple tunics, few metal helmets; dust, sweat, spoils in the background (never emphasised) |
 | **Philistines** | 13:5 "שְׁלֹשִׁים אֶלֶף רֶכֶב וְשֵׁשֶׁת אֲלָפִים פָּרָשִׁים וְעָם כַּחוֹל"; 17:5–7 bronze helmet, scale armour, bronze greaves, javelin, iron-headed spear, a shield-bearer before him | a big, well-armed army on the coastal plain (bronze glints, shields, spears; chariots may appear only as distant shapes if horses can be done believably — otherwise infantry only) |
-| **Elders at Ramah** | 8:4 "וַיִּתְקַבְּצוּ כֹּל זִקְנֵי יִשְׂרָאֵל וַיָּבֹאוּ אֶל־שְׁמוּאֵל הָרָמָתָה"; 8:1 Samuel had grown old | **elders** (older bearded men in mantles) gathered before Samuel at **Ramah** (a hill town of Benjamin), not a random crowd |
+| **Elders at Ramah** (see docs/visual-bible.md) | 8:4 "וַיִּתְקַבְּצוּ כֹּל זִקְנֵי יִשְׂרָאֵל וַיָּבֹאוּ אֶל־שְׁמוּאֵל הָרָמָתָה"; 8:1 Samuel had grown old | **elders** (older bearded men in wool mantles with tzitzit) gathered before Samuel at **Ramah** (a small hill village of four-room stone houses with a modest gate and Samuel's altar), not a random crowd |
 | **Rachel's tomb** | Gen 35:19 on the road to Ephrath, which is Bethlehem; 35:20 "וַיַּצֵּב יַעֲקֹב מַצֵּבָה עַל־קְבֻרָתָהּ" | a single **standing stone pillar** by the road (not a domed building — that is medieval/Ottoman) |
 | **The land** | Deut 34:3; Josh 4:19; the geography of Judah | west→east: coastal plain and sea → Shephelah → the Judean mountains (terraces, olives) → the Judean desert → the Dead Sea → the mountains of Moab |
 | **David** | 16:11, 16:12 "אַדְמוֹנִי עִם־יְפֵה עֵינַיִם וְטוֹב רֹאִי"; 17:34–35; 17:40 staff, the shepherd's bag, the sling | the user's reference image; ruddy, beautiful eyes, a youth; staff, sling, the shepherd's bag |
@@ -100,3 +100,6 @@ Verified verse texts (Miqra according to the Masorah):
 
 Narration lines (*italic* above) were chosen to be factual and non-quotational; don't add others without
 checking them against `docs/visual-bible.md` (written by the sources teammate).
+
+
+**Refinements from the visual bible (docs/visual-bible.md §6), applied above:** no war drums in Israel's army; shot 9 carries the faint sound of the spoil; the twelve stones stood upright plus an altar; Ramah per 1:1 and 7:17; the title is a catalog quotation; Samuel's Nazirite status is debated in the Mishnah (Nazir 9:5), so it is shown (uncut hair) but never captioned as certain.

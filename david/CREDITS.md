@@ -31,9 +31,12 @@ https://storage.googleapis.com/sefaria-export/json/...), normalized as documente
 | Shemot Rabbah (cross-check) | *Daat Shemot Rabbah* (daat.ac.il) | Public Domain | verification only |
 | Bereshit Rabbah 63:8 | *Midrash Rabbah — TE* | "unknown" | research catalog only (not shipped) |
 | Seder Olam Rabbah 13 | *Seder Olam, Warsaw 1904* | Public Domain | research catalog only |
-| Talmud Bavli (Yoma 22b, Megillah 13b, Taanit 5b, Moed Katan 16b) | *William Davidson Edition — Vocalized Aramaic* (Koren Noé Talmud, R. Adin Even-Israel Steinsaltz; vocalization by Dicta) | CC BY-NC | research catalog only (`sourcesReference.ts`, never imported by the game) |
+| Talmud Bavli (Yoma 22b, Megillah 13b, Taanit 5b, Moed Katan 16b and 28a, Berakhot 48b, Sotah 17a) | *William Davidson Edition — Vocalized Aramaic* (Koren Noé Talmud, R. Adin Even-Israel Steinsaltz; vocalization by Dicta) | CC BY-NC | research catalog only (`sourcesReference.ts`, never imported by the game) |
 | Targum Jonathan on I Samuel | *Mikraot Gedolot* | Public Domain | research catalog only |
 | Rashi / Radak on I Samuel | *Sefaria vocalized edition* / *Radak on Nach* | "unknown" | research catalog only |
+| Rashi on II Samuel | *Sefaria vocalized edition* | "unknown" | research catalog only (visual bible of the opening film) |
+| Metzudat David on I Samuel | *On Your Way* | Public Domain | research catalog only (visual bible) |
+| Mishnah Nazir 9:5 | *Torat Emet 357* | Public Domain | research catalog only (visual bible) |
 
 English glosses in the catalogs are our own short renderings (translation aids, not quotations).
 
@@ -268,3 +271,29 @@ project's own generators:
   follow camera's boom stops at boulders (`Colliders.solidAt`); the page adds a device-width viewport when it is
   opened outside the artifact host.
 
+
+## Motion capture — `tools/mocap/`, `src/characters/mocap/`, `src/assets/mocap/`, `dev/mocap*`
+- **Motion data: CMU Graphics Lab Motion Capture Database**, http://mocap.cs.cmu.edu — "free for use in research
+  and commercial projects worldwide". *The data used in this project was obtained from mocap.cs.cmu.edu. The
+  database was created with funding from NSF EIA-0196217.*
+- **BVH conversion: Bruce Hahne** (cgspeed.com, "Motionbuilder-friendly BVH conversion", 2010 release), who places
+  no additional restrictions on its use; fetched from the GitHub mirror `una-dinosauria/cmu-mocap`
+  (`data/<subject>/<take>.bvh`, `READMEFIRST.txt`, `cmu-mocap-index-text.txt`).
+- Takes used (subject_trial): 05_12, 07_01, 09_01, 13_26, 14_20, 15_06, 16_15, 16_33, 16_55, 17_08, 18_05, 18_08,
+  18_10, 20_06, 23_03, 23_12, 35_01, 35_17, 40_10, 56_02, 69_01, 69_16, 69_70, 77_09, 79_69, 79_73, 82_09, 82_14,
+  91_19, 104_06, 104_09, 115_06, 120_15, 124_01, 137_28, 137_32, 137_33, 137_41, 137_42, 139_01, 139_02, 139_25,
+  141_11, 142_07, 142_09. Only retargeted, filtered, quantized derivatives ship (`src/assets/mocap/*.binz`); the raw
+  BVH files are not redistributed.
+- Retargeting, cleanup (foot lock, loops, twist distribution) and the runtime player are original code.
+
+## Opening film — the land sets of the prologue (src/film/land, tools/land, src/assets/land)
+
+- **Elevation data:** NASA Shuttle Radar Topography Mission, SRTM 1 arc-second (SRTMGL1), tiles N31E034 and
+  N31E035 — **public domain** (U.S. Government work, NASA/USGS). Obtained as the Mapzen / AWS Open Data "skadi"
+  `.hgt.gz` files, mirrored as release assets of github.com/shalomfr/amshinov-terrain-tiles. Resampled by
+  `tools/land/build_dem.py` into `src/assets/land/*.binz` (heights) and `*_lc.webp` (derived landcover: aridity,
+  drainage, water, valley depth). The raw tiles are not in the repository.
+- The Ramah gate walls reuse the palace teammate's generated fieldstone texture (`src/assets/palace/fortstone_*.webp`,
+  own work, see the palace section). Everything else (terrain / water / cloud shaders, the 3D cloud noise generated at
+  load, dust, placeholders) is own code implementing published techniques (exponential height fog, Beer–powder cloud
+  lighting with Henyey–Greenstein phase, perlin-worley noise).

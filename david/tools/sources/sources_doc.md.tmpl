@@ -517,7 +517,11 @@ The intro should not include:
 
 ## 5. Recommendations
 
-### 5.1 Intro: verses in order
+### 5.0 The new opening film "הַטּוֹב מִמֶּךָּ" (supersedes 5.1)
+
+The approved script is `docs/intro-script.md`. Its binding art direction, the shot → catalog-id mapping and the sourced rules for every character, costume, prop, place, light and sound are in **`docs/visual-bible.md`**. Its narration (non-quotation) lines are typed constants in `src/content/introNarration.ts` (`INTRO_NARRATION`, `INTRO_FILM_TEXTS`); `verify_sources.py` checks them as narration and checks every quotation in both documents.
+
+### 5.1 Intro (previous film, kept for reference): verses in order
 
 This order is implemented as a typed cue sheet in `src/content/introScript.ts` (`INTRO_CUES`, and `INTRO_CUES_SHORT` for the short cut).
 

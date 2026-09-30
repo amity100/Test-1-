@@ -990,7 +990,11 @@ The intro should not include:
 
 ## 5. Recommendations
 
-### 5.1 Intro: verses in order
+### 5.0 The new opening film "הַטּוֹב מִמֶּךָּ" (supersedes 5.1)
+
+The approved script is `docs/intro-script.md`. Its binding art direction, the shot → catalog-id mapping and the sourced rules for every character, costume, prop, place, light and sound are in **`docs/visual-bible.md`**. Its narration (non-quotation) lines are typed constants in `src/content/introNarration.ts` (`INTRO_NARRATION`, `INTRO_FILM_TEXTS`); `verify_sources.py` checks them as narration and checks every quotation in both documents.
+
+### 5.1 Intro (previous film, kept for reference): verses in order
 
 This order is implemented as a typed cue sheet in `src/content/introScript.ts` (`INTRO_CUES`, and `INTRO_CUES_SHORT` for the short cut).
 
@@ -1113,6 +1117,12 @@ For the end card or epilogue, consider אֲנִי לְקַחְתִּיךָ מִ�
 | `ps_23_4_rod_staff` | in-game | תְּהִלִּים כג, ד · Psalms 23:4 | גַּם כִּי־אֵלֵךְ בְּגֵיא צַלְמָוֶת לֹא־אִירָא רָע כִּי־אַתָּה עִמָּדִי שִׁבְטְךָ וּמִשְׁעַנְתֶּךָ הֵמָּה יְנַחֲמֻנִי |
 | `s1_17_36_37_endcard` | in-game | שְׁמוּאֵל א׳ יז, לו–לז · I Samuel 17:36-37 | גַּם אֶת־הָאֲרִי גַּם־הַדֹּב הִכָּה עַבְדֶּךָ … ה׳ אֲשֶׁר הִצִּלַנִי מִיַּד הָאֲרִי וּמִיַּד הַדֹּב הוּא יַצִּילֵנִי מִיַּד הַפְּלִשְׁתִּי הַזֶּה |
 | `s1_16_1_fill_horn` | in-game | שְׁמוּאֵל א׳ טז, א · I Samuel 16:1 | מַלֵּא קַרְנְךָ שֶׁמֶן וְלֵךְ אֶשְׁלָחֲךָ אֶל־יִשַׁי בֵּית־הַלַּחְמִי כִּי־רָאִיתִי בְּבָנָיו לִי מֶלֶךְ |
+| `gen_35_19_rachel_full` | intro | בְּרֵאשִׁית לה, יט · Genesis 35:19 | וַתָּמָת רָחֵל וַתִּקָּבֵר בְּדֶרֶךְ אֶפְרָתָה הִוא בֵּית לָחֶם |
+| `s1_14_52_war_all_days` | intro | שְׁמוּאֵל א׳ יד, נב · I Samuel 14:52 | וַתְּהִי הַמִּלְחָמָה חֲזָקָה עַל־פְּלִשְׁתִּים כֹּל יְמֵי שָׁאוּל |
+| `s1_8_5_give_us_king` | intro | שְׁמוּאֵל א׳ ח, ה · I Samuel 8:5 | שִׂימָה־לָּנוּ מֶלֶךְ לְשָׁפְטֵנוּ כְּכָל־הַגּוֹיִם |
+| `s1_14_47_fought_around` | intro | שְׁמוּאֵל א׳ יד, מז · I Samuel 14:47 | וְשָׁאוּל לָכַד הַמְּלוּכָה עַל־יִשְׂרָאֵל וַיִּלָּחֶם סָבִיב בְּכָל־אֹיְבָיו |
+| `s1_15_27_robe_torn` | intro | שְׁמוּאֵל א׳ טו, כז · I Samuel 15:27 | וַיִּסֹּב שְׁמוּאֵל לָלֶכֶת וַיַּחֲזֵק בִּכְנַף־מְעִילוֹ וַיִּקָּרַע |
+| `s1_15_28_better_than_you` | intro | שְׁמוּאֵל א׳ טו, כח · I Samuel 15:28 | הַטּוֹב מִמֶּךָּ |
 | `s1_15_34_gibeah_home` | intro | שְׁמוּאֵל א׳ טו, לד · I Samuel 15:34 | וְשָׁאוּל עָלָה אֶל־בֵּיתוֹ גִּבְעַת שָׁאוּל |
 | `s1_15_35_samuel_mourned` | intro | שְׁמוּאֵל א׳ טו, לה · I Samuel 15:35 | וְלֹא־יָסַף שְׁמוּאֵל לִרְאוֹת אֶת־שָׁאוּל עַד־יוֹם מוֹתוֹ כִּי־הִתְאַבֵּל שְׁמוּאֵל אֶל־שָׁאוּל |
 | `s1_9_2_tallest` | intro | שְׁמוּאֵל א׳ ט, ב · I Samuel 9:2 | בָּחוּר וָטוֹב וְאֵין אִישׁ מִבְּנֵי יִשְׂרָאֵל טוֹב מִמֶּנּוּ מִשִּׁכְמוֹ וָמַעְלָה גָּבֹהַּ מִכָּל־הָעָם |
@@ -1221,3 +1231,52 @@ For the end card or epilogue, consider אֲנִי לְקַחְתִּיךָ מִ�
 | `rashi_s1_20_25_reclining` | reference | רַשִׁ״י, שְׁמוּאֵל א׳ כ, כה · Rashi on I Samuel 20:25:2 | שֶׁדַּרְכָּן הָיָה לֶאֱכֹל מְסֻבִּין עַל הַמִּטּוֹת |
 | `radak_s1_16_7_saul` | reference | רַדַ״ק, שְׁמוּאֵל א׳ טז, ז · Radak on I Samuel 16:7:2 | ושאול הוא שהיה יפה מראה וגבה קומה |
 | `rashi_s1_17_38_garments` | reference | רַשִׁ״י, שְׁמוּאֵל א׳ יז, לח · Rashi on I Samuel 17:38:1 | (full text; no display quote) |
+| `s1_1_11_no_razor` | reference | שְׁמוּאֵל א׳ א, יא · I Samuel 1:11 | וּמוֹרָה לֹא־יַעֲלֶה עַל־רֹאשׁוֹ |
+| `num_6_5_nazir_hair` | reference | בְּמִדְבַּר ו, ה · Numbers 6:5 | גַּדֵּל פֶּרַע שְׂעַר רֹאשׁוֹ |
+| `mnazir_9_5_samuel_nazir` | reference | מִשְׁנָה, נָזִיר ט, ה · Mishnah Nazir 9:5 | נָזִיר הָיָה שְׁמוּאֵל, כְּדִבְרֵי רַבִּי נְהוֹרַאי |
+| `s1_8_1_samuel_old` | reference | שְׁמוּאֵל א׳ ח, א · I Samuel 8:1 | וַיְהִי כַּאֲשֶׁר זָקֵן שְׁמוּאֵל |
+| `s1_12_2_old_grey` | reference | שְׁמוּאֵל א׳ יב, ב · I Samuel 12:2 | וַאֲנִי זָקַנְתִּי וָשַׂבְתִּי |
+| `taan_5b_samuel_52` | reference | תַּעֲנִית ה ע״ב · Taanit 5b:3 | וְהָא בַּר חֲמִישִּׁים וּשְׁתַּיִם הֲוָה |
+| `taan_5b_old_age_sprang` | reference | תַּעֲנִית ה ע״ב · Taanit 5b:4 | זִקְנָה קָפְצָה עָלָיו |
+| `mk_28a_samuel_52` | reference | מוֹעֵד קָטָן כח ע״א · Moed Katan 28a:8 | חֲמִשִּׁים וּשְׁתַּיִם שָׁנָה … זוֹ הִיא מִיתָתוֹ שֶׁל שְׁמוּאֵל הָרָמָתִי |
+| `s1_15_11_cried_all_night` | reference | שְׁמוּאֵל א׳ טו, יא · I Samuel 15:11 | וַיִּחַר לִשְׁמוּאֵל וַיִּזְעַק אֶל־ה׳ כָּל־הַלָּיְלָה |
+| `s1_15_12_rose_early` | reference | שְׁמוּאֵל א׳ טו, יב · I Samuel 15:12 | וַיַּשְׁכֵּם שְׁמוּאֵל לִקְרַאת שָׁאוּל בַּבֹּקֶר |
+| `s1_2_19_little_meil` | reference | שְׁמוּאֵל א׳ ב, יט · I Samuel 2:19 | וּמְעִיל קָטֹן תַּעֲשֶׂה־לּוֹ אִמּוֹ |
+| `radak_s1_2_19_meil_great` | reference | רַדַ״ק, שְׁמוּאֵל א׳ ב, יט · Radak on I Samuel 2:19:1 | כי לא היה מנהגם לעטות מעיל אלא הגדולים |
+| `rashi_s1_28_14_meil` | reference | רַשִׁ״י, שְׁמוּאֵל א׳ כח, יד · Rashi on I Samuel 28:14:2 | (full text; no display quote) |
+| `metz_s1_28_14_meil` | reference | מְצוּדַת דָּוִד, שְׁמוּאֵל א׳ כח, יד · Metzudat David on I Samuel 28:14:2 | והוא מלבוש המיוחד לאדם גדול וחשוב |
+| `ber_48b_saul_beauty` | reference | בְּרָכוֹת מח ע״ב · Berakhot 48b:9 | כְּדֵי לְהִסְתַּכֵּל בְּיָפְיוֹ שֶׁל שָׁאוּל |
+| `radak_s1_9_2_goodly` | reference | רַדַ״ק, שְׁמוּאֵל א׳ ט, ב · Radak on I Samuel 9:2:1 | טוב בתואר ובמראה |
+| `metz_s1_9_2_goodly` | reference | מְצוּדַת דָּוִד, שְׁמוּאֵל א׳ ט, ב · Metzudat David on I Samuel 9:2:1 | נבחר במעשיו ויפה מראה |
+| `s2_2_10_ishbosheth_40` | reference | שְׁמוּאֵל ב׳ ב, י · II Samuel 2:10 | בֶּן־אַרְבָּעִים שָׁנָה אִישׁ־בֹּשֶׁת בֶּן־שָׁאוּל בְּמָלְכוֹ |
+| `s2_1_21_shield_oil` | reference | שְׁמוּאֵל ב׳ א, כא · II Samuel 1:21 | מָגֵן שָׁאוּל בְּלִי מָשִׁיחַ בַּשָּׁמֶן |
+| `rashi_s2_1_21_leather_shields` | reference | רַשִׁ״י, שְׁמוּאֵל ב׳ א, כא · Rashi on II Samuel 1:21:3 | מָגִינֵּי עוֹר הָיוּ לָהֶם, וּכְשֶׁיּוֹצְאִים לַמִּלְחָמָה מוֹשְׁחִין אוֹתָן בְּשֶׁמֶן |
+| `rashi_s2_1_10_armlet` | reference | רַשִׁ״י, שְׁמוּאֵל ב׳ א, י · Rashi on II Samuel 1:10:1 | (full text; no display quote) |
+| `s1_13_3_shofar` | reference | שְׁמוּאֵל א׳ יג, ג · I Samuel 13:3 | וְשָׁאוּל תָּקַע בַּשּׁוֹפָר בְּכָל־הָאָרֶץ |
+| `s1_15_4_foot_soldiers` | reference | שְׁמוּאֵל א׳ טו, ד · I Samuel 15:4 | מָאתַיִם אֶלֶף רַגְלִי וַעֲשֶׂרֶת אֲלָפִים אֶת־אִישׁ יְהוּדָה |
+| `s1_18_6_frame_drums` | avoid-in-intro | שְׁמוּאֵל א׳ יח, ו · I Samuel 18:6 | (full text; no display quote) |
+| `s1_15_3_ban` | reference | שְׁמוּאֵל א׳ טו, ג · I Samuel 15:3 | (full text; no display quote) |
+| `s1_15_9_spared` | reference | שְׁמוּאֵל א׳ טו, ט · I Samuel 15:9 | וַיַּחְמֹל שָׁאוּל וְהָעָם עַל־אֲגָג וְעַל־מֵיטַב הַצֹּאן וְהַבָּקָר |
+| `s1_15_14_bleating` | reference | שְׁמוּאֵל א׳ טו, יד · I Samuel 15:14 | וּמֶה קוֹל־הַצֹּאן הַזֶּה בְּאָזְנָי וְקוֹל הַבָּקָר אֲשֶׁר אָנֹכִי שֹׁמֵעַ |
+| `s1_15_21_gilgal_sacrifice` | reference | שְׁמוּאֵל א׳ טו, כא · I Samuel 15:21 | וַיִּקַּח הָעָם מֵהַשָּׁלָל צֹאן וּבָקָר רֵאשִׁית הַחֵרֶם לִזְבֹּחַ לַה׳ אֱלֹהֶיךָ בַּגִּלְגָּל |
+| `s1_15_33_agag` | avoid-in-intro | שְׁמוּאֵל א׳ טו, לג · I Samuel 15:33 | (full text; no display quote) |
+| `josh_4_3_river_stones` | reference | יְהוֹשֻׁעַ ד, ג · Joshua 4:3 | (full text; no display quote) |
+| `josh_4_19_gilgal` | reference | יְהוֹשֻׁעַ ד, יט · Joshua 4:19 | וַיַּחֲנוּ בַּגִּלְגָּל בִּקְצֵה מִזְרַח יְרִיחוֹ |
+| `josh_4_20_twelve_stones` | reference | יְהוֹשֻׁעַ ד, כ · Joshua 4:20 | וְאֵת שְׁתֵּים עֶשְׂרֵה הָאֲבָנִים הָאֵלֶּה אֲשֶׁר לָקְחוּ מִן־הַיַּרְדֵּן הֵקִים יְהוֹשֻׁעַ בַּגִּלְגָּל |
+| `josh_5_9_gilgal_name` | reference | יְהוֹשֻׁעַ ה, ט · Joshua 5:9 | (full text; no display quote) |
+| `deut_34_3_palms` | reference | דְּבָרִים לד, ג · Deuteronomy 34:3 | בִּקְעַת יְרֵחוֹ עִיר הַתְּמָרִים |
+| `s1_11_15_gilgal_crowned` | reference | שְׁמוּאֵל א׳ יא, טו · I Samuel 11:15 | וַיַּמְלִכוּ שָׁם אֶת־שָׁאוּל לִפְנֵי ה׳ בַּגִּלְגָּל |
+| `radak_s1_15_12_gilgal_altar` | reference | רַדַ״ק, שְׁמוּאֵל א׳ טו, יב · Radak on I Samuel 15:12:2 | לפי שהיה שם המזבח ואהל מועד תחילה |
+| `rashi_s1_15_27_whose_robe` | reference | רַשִׁ״י, שְׁמוּאֵל א׳ טו, כז · Rashi on I Samuel 15:27:1 | (full text; no display quote) |
+| `metz_s1_15_27_torn` | reference | מְצוּדַת דָּוִד, שְׁמוּאֵל א׳ טו, כז · Metzudat David on I Samuel 15:27:2 | שאול אחז בכנף מעיל שמואל למנעו מללכת מעמו |
+| `exo_20_22_unhewn_altar` | reference | שְׁמוֹת כ, כב · Exodus 20:22 | לֹא־תִבְנֶה אֶתְהֶן גָּזִית |
+| `s1_1_1_ramathaim` | reference | שְׁמוּאֵל א׳ א, א · I Samuel 1:1 | מִן־הָרָמָתַיִם צוֹפִים מֵהַר אֶפְרָיִם |
+| `s1_7_17_ramah_altar` | reference | שְׁמוּאֵל א׳ ז, יז · I Samuel 7:17 | וּתְשֻׁבָתוֹ הָרָמָתָה כִּי־שָׁם בֵּיתוֹ … וַיִּבֶן־שָׁם מִזְבֵּחַ לַה׳ |
+| `s1_8_4_elders_ramah` | reference | שְׁמוּאֵל א׳ ח, ד · I Samuel 8:4 | וַיִּתְקַבְּצוּ כֹּל זִקְנֵי יִשְׂרָאֵל וַיָּבֹאוּ אֶל־שְׁמוּאֵל הָרָמָתָה |
+| `zech_8_4_staff` | reference | זְכַרְיָה ח, ד · Zechariah 8:4 | וְאִישׁ מִשְׁעַנְתּוֹ בְּיָדוֹ מֵרֹב יָמִים |
+| `sotah_17a_tekhelet` | reference | סוֹטָה יז ע״א · Sotah 17a:24 | שֶׁהַתְּכֵלֶת דּוֹמֶה לַיָּם, וְיָם דּוֹמֶה לָרָקִיעַ |
+| `s1_13_5_philistine_host` | reference | שְׁמוּאֵל א׳ יג, ה · I Samuel 13:5 | שְׁלֹשִׁים אֶלֶף רֶכֶב וְשֵׁשֶׁת אֲלָפִים פָּרָשִׁים וְעָם כַּחוֹל אֲשֶׁר עַל־שְׂפַת־הַיָּם לָרֹב |
+| `amos_9_7_caphtor` | reference | עָמוֹס ט, ז · Amos 9:7 | וּפְלִשְׁתִּיִּים מִכַּפְתּוֹר |
+| `s1_10_2_rachel_tomb` | reference | שְׁמוּאֵל א׳ י, ב · I Samuel 10:2 | עִם־קְבֻרַת רָחֵל בִּגְבוּל בִּנְיָמִן בְּצֶלְצַח |
+| `rashi_s1_10_2_rachel` | reference | רַשִׁ״י, שְׁמוּאֵל א׳ י, ב · Rashi on I Samuel 10:2:1 | (full text; no display quote) |
+| `lam_3_10_bear_ambush` | reference | אֵיכָה ג, י · Lamentations 3:10 | דֹּב אֹרֵב הוּא לִי אֲרִי בְּמִסְתָּרִים |

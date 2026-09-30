@@ -91,6 +91,19 @@ WORKS: dict[str, Work] = {w.key: w for w in [
          'רַשִׁ״י, שְׁמוּאֵל א׳', 'Rashi on I Samuel', 'commentary', 'Sefaria vocalized edition', (), ()),
     Work('Radak on I Samuel', 'Tanakh/Rishonim on Tanakh/Radak/Prophets/Radak on I Samuel',
          'רַדַ״ק, שְׁמוּאֵל א׳', 'Radak on I Samuel', 'commentary', 'Radak on Nach', (), ()),
+    # ---- added for the opening film "הַטּוֹב מִמֶּךָּ" (docs/visual-bible.md)
+    Work('Zechariah', 'Tanakh/Prophets/Zechariah', 'זְכַרְיָה', 'Zechariah', 'tanakh', MAM, (WLC,), ('זכריה',)),
+    Work('Lamentations', 'Tanakh/Writings/Lamentations', 'אֵיכָה', 'Lamentations', 'tanakh', MAM, (WLC,), ('איכה',)),
+    Work('Berakhot', 'Talmud/Bavli/Seder Zeraim/Berakhot', 'בְּרָכוֹת', 'Berakhot', 'talmud', DAVIDSON, (WIKI_BAVLI,),
+         ('ברכות',)),
+    Work('Sotah', 'Talmud/Bavli/Seder Nashim/Sotah', 'סוֹטָה', 'Sotah', 'talmud', DAVIDSON, (WIKI_BAVLI,), ('סוטה',)),
+    # A Mishnah tractate has the chapter/section shape of a midrash, so it is handled as kind 'midrash'.
+    Work('Mishnah Nazir', 'Mishnah/Seder Nashim/Mishnah Nazir', 'מִשְׁנָה, נָזִיר', 'Mishnah Nazir', 'midrash',
+         'Torat Emet 357', (), ('משנה נזיר',)),
+    Work('Rashi on II Samuel', 'Tanakh/Rishonim on Tanakh/Rashi/Prophets/Rashi on II Samuel',
+         'רַשִׁ״י, שְׁמוּאֵל ב׳', 'Rashi on II Samuel', 'commentary', 'Sefaria vocalized edition', (), ()),
+    Work('Metzudat David on I Samuel', 'Tanakh/Acharonim on Tanakh/Metzudat David/Prophets/Metzudat David on I Samuel',
+         'מְצוּדַת דָּוִד, שְׁמוּאֵל א׳', 'Metzudat David on I Samuel', 'commentary', 'On Your Way', (), ()),
 ]}
 
 

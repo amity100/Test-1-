@@ -1,0 +1,258 @@
+import * as THREE from 'three';
+import { GLSL_NOISE, shared } from '../../core/Shared';
+import type { TextureSet } from '../../world/Textures';
+import { GEO, type HeightTile, type LandHeight } from './landData';
+import { cloudShared, GLSL_LAND_HAZE, landAtmo } from './landAtmo';
+
+export type LandTier = 'low' | 'medium' | 'high';
+
+/**
+ * Polar ("foveated") terrain mesh around a focus: square cells whose size grows with the distance, from `r0` at
+ * the focus to `rMax` (km-scale far land). Heights come from the real DEM (LandHeight); the Earth's curvature
+ * drop d^2 / 2R (relative to the focus) is baked into y, so the far Moab ridge and the sea horizon sit right.
+ */
+export function polarTerrain(H: LandHeight, cx: number, cz: number, o: { nTheta: number; r0: number; rMax: number; underwater?: (x: number, z: number) => number | null }): THREE.BufferGeometry {
+  const nT = o.nTheta;
+  const k = (2 * Math.PI) / nT;
+  const radii: number[] = [0];
+  let r = o.r0;
+  while (r < o.rMax) { radii.push(r); r *= 1 + k; }
+  radii.push(o.rMax);
+  const nR = radii.length;
+  const pos = new Float32Array((1 + (nR - 1) * nT) * 3);
+  const R2 = 2 * GEO.R;
+  const put = (idx: number, x: number, z: number) => {
+    let y = H.height(x, z);
+    if (o.underwater) { const w = o.underwater(x, z); if (w !== null && y > w - 60 && y < w + 0.5) y = Math.min(y, w - 60); }
+    const d2 = (x - cx) * (x - cx) + (z - cz) * (z - cz);
+    pos[idx * 3] = x; pos[idx * 3 + 1] = y - d2 / R2; pos[idx * 3 + 2] = z;
+  };
+  put(0, cx, cz);
+  for (let i = 1; i < nR; i++) {
+    const rr = radii[i];
+    const off = (i & 1) * 0.5; // stagger alternate rings: better triangles
+    for (let j = 0; j < nT; j++) {
+      const a = (j + off) * k;
+      put(1 + (i - 1) * nT + j, cx + Math.cos(a) * rr, cz + Math.sin(a) * rr);
+    }
+  }
+  const idx: number[] = [];
+  for (let j = 0; j < nT; j++) idx.push(0, 1 + ((j + 1) % nT), 1 + j);
+  for (let i = 1; i < nR - 1; i++) {
+    const a0 = 1 + (i - 1) * nT, a1 = 1 + i * nT;
+    for (let j = 0; j < nT; j++) {
+      const j1 = (j + 1) % nT;
+      if (i & 1) { idx.push(a0 + j, a1 + j1, a1 + j, a0 + j, a0 + j1, a1 + j1); }
+      else { idx.push(a0 + j, a0 + j1, a1 + j, a0 + j1, a1 + j1, a1 + j); }
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const nrm = new Float32Array(pos.length);
+  for (let i = 1; i < nrm.length; i += 3) nrm[i] = 1;
+  g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+  g.setIndex(pos.length / 3 > 65535 ? new THREE.Uint32BufferAttribute(idx, 1) : new THREE.Uint16BufferAttribute(idx, 1));
+  g.boundingSphere = new THREE.Sphere(new THREE.Vector3(cx, 0, cz), o.rMax * 1.5);
+  return g;
+}
+
+export interface TerrainTex {
+  regTile: HeightTile; regShade: THREE.Texture; regLC: THREE.Texture;
+  locTile: HeightTile | null; locShade: THREE.Texture | null; locLC: THREE.Texture | null;
+}
+
+export interface TerrainLook {
+  /** 0 = no valley mist; 1 = full dawn mist in the valleys */
+  mist: number;
+  /** mist colour (linear, before sunlight) */
+  mistColor: THREE.Color;
+  /** absolute height (m) under which valleys fill with mist (relative mist uses valley depth) */
+  mistTop: number;
+  /** extra GLSL: float cloudShadow(vec3 worldPos) — 1 = lit */
+  cloudShadowGlsl?: string;
+  /** use the world textures for near-ground detail (ground-level sets) */
+  near?: TextureSet | null;
+  /** world-space road / path polylines are painted by `roadGlsl` (float roadMask(vec2 xz)) */
+  roadGlsl?: string;
+  /** apply the in-shader km-scale haze (landAtmo) */
+  haze?: boolean;
+}
+
+export const terrainUniforms = () => ({
+  uMist: { value: 0 },
+  uMistTop: { value: 0 },
+  uMistColor: { value: new THREE.Color(1, 1, 1) },
+  uTime: shared.uTime,
+});
+
+function tileBox(t: HeightTile | null) {
+  if (!t) return new THREE.Vector4(1e9, 1e9, 1, 1);
+  return new THREE.Vector4(t.x0 - t.dx * 0.5, t.z0 - t.dz * 0.5, 1 / (t.dx * t.w), 1 / (t.dz * t.h));
+}
+
+/** The land material: real-DEM normals + sun visibility, landcover-driven palette of Judah, near texture detail. */
+export function landMaterial(tt: TerrainTex, look: TerrainLook, tier: LandTier): THREE.MeshStandardMaterial {
+  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, metalness: 0 });
+  const u = {
+    tRegShade: { value: tt.regShade }, tRegLC: { value: tt.regLC }, uRegBox: { value: tileBox(tt.regTile) },
+    tLocShade: { value: tt.locShade ?? tt.regShade }, tLocLC: { value: tt.locLC ?? tt.regLC }, uLocBox: { value: tileBox(tt.locTile) },
+    uLocEdge: { value: tt.locTile ? new THREE.Vector4(tt.locTile.x0, tt.locTile.z0, tt.locTile.x1, tt.locTile.z1) : new THREE.Vector4(1e9, 1e9, 1e9, 1e9) },
+    tSoil: { value: look.near?.soil ?? null }, tGrass: { value: look.near?.grass ?? null }, tRock: { value: look.near?.rock ?? null },
+    tRockN: { value: look.near?.rockN ?? null }, tGrassN: { value: look.near?.grassN ?? null },
+    ...terrainUniforms(),
+    ...landAtmo, ...cloudShared,
+  };
+  u.uMist.value = look.mist;
+  u.uMistTop.value = look.mistTop;
+  u.uMistColor.value.copy(look.mistColor);
+  const defines: Record<string, string> = {};
+  if (look.near) defines.LAND_NEAR = '1';
+  if (look.cloudShadowGlsl) defines.LAND_CLOUDSHADOW = '1';
+  if (look.roadGlsl) defines.LAND_ROAD = '1';
+  if (tier !== 'low') defines.LAND_HQ = '1';
+  if (look.haze) defines.LAND_HAZE = '1';
+  mat.userData.landUniforms = u;
+  mat.onBeforeCompile = (s) => {
+    Object.assign(s.uniforms, u);
+    Object.assign(s.defines ??= {}, defines);
+    s.vertexShader = s.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vLandW;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\nvLandW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    s.fragmentShader = s.fragmentShader
+      .replace('#include <common>', /* glsl */ `#include <common>
+        varying vec3 vLandW;
+        uniform sampler2D tRegShade, tRegLC, tLocShade, tLocLC;
+        uniform vec4 uRegBox, uLocBox, uLocEdge;
+        uniform float uMist, uMistTop, uTime;
+        uniform vec3 uMistColor;
+        #ifdef LAND_NEAR
+        uniform sampler2D tSoil, tGrass, tRock, tRockN, tGrassN;
+        #endif
+        ${GLSL_NOISE}
+        ${GLSL_LAND_HAZE}
+        ${look.cloudShadowGlsl ?? ''}
+        ${look.roadGlsl ?? ''}
+        vec3 srgb(vec3 c){ return pow(c, vec3(2.2)); }
+        float landSunVis; vec3 landN; float landDist;
+      `)
+      .replace('#include <map_fragment>', /* glsl */ `
+        vec2 xz = vLandW.xz;
+        landDist = length(vLandW - cameraPosition);
+        vec2 uvR = (xz - uRegBox.xy) * uRegBox.zw;
+        vec4 shR = texture2D(tRegShade, uvR);
+        vec4 lcR = texture2D(tRegLC, uvR);
+        vec2 uvL = (xz - uLocBox.xy) * uLocBox.zw;
+        float edge = min(min(xz.x - uLocEdge.x, uLocEdge.z - xz.x), min(xz.y - uLocEdge.y, uLocEdge.w - xz.y));
+        float wl = smoothstep(0.0, 1200.0, edge);
+        vec4 sh = shR, lc = lcR;
+        if (wl > 0.0) { sh = mix(shR, texture2D(tLocShade, uvL), wl); lc = mix(lcR, texture2D(tLocLC, uvL), wl); }
+        vec2 nxz = sh.xy * 2.0 - 1.0;
+        vec3 nW = normalize(vec3(nxz.x, sqrt(max(1.0 - dot(nxz, nxz), 0.04)), nxz.y));
+        float arid = lc.r, drain = lc.g, water = lc.b, vdep = lc.a;
+        float conv = sh.a;
+        float slope = 1.0 - nW.y;
+        float hgt = vLandW.y;
+        // ---- macro palette (sRGB, from photographs of the Judean hills / desert / rift at low sun) ----
+        float n1 = dFbm(xz * 0.0021), n2 = dFbm(xz * 0.013 + 7.0), n3 = dNoise(xz * 0.06);
+        vec3 terra = mix(vec3(0.47, 0.31, 0.21), vec3(0.56, 0.42, 0.30), n2);          // terra rossa / hamra
+        vec3 lime = mix(vec3(0.66, 0.62, 0.55), vec3(0.74, 0.70, 0.62), n1);           // grey Cenomanian limestone
+        vec3 maquis = mix(vec3(0.20, 0.22, 0.13), vec3(0.29, 0.29, 0.17), n2);         // maquis, oak, olive
+        vec3 chalk = mix(vec3(0.80, 0.72, 0.56), vec3(0.86, 0.79, 0.64), n1);          // Senonian chalk of the desert
+        vec3 desertRock = mix(vec3(0.62, 0.50, 0.36), vec3(0.70, 0.58, 0.42), n2);     // hard limestone cliffs
+        vec3 marl = vec3(0.86, 0.82, 0.74);                                            // Lisan marl of the rift floor
+        vec3 sand = vec3(0.86, 0.77, 0.58);                                            // coastal dunes
+        vec3 field = mix(vec3(0.58, 0.47, 0.31), vec3(0.66, 0.56, 0.36), n3);          // stubble / fallow fields
+        vec3 moab = mix(vec3(0.62, 0.43, 0.30), vec3(0.72, 0.56, 0.40), n1);           // Moab: red sandstone + plateau
+        vec3 thicket = vec3(0.14, 0.19, 0.09);                                         // Jordan thicket / oasis
+        // humid hills: soil with maquis patches and rock outcrops on steep / convex ground
+        float north = clamp(-nW.z * 2.5, -1.0, 1.0);
+        float n4 = dFbm(xz * 0.0045 + 3.0);
+        float veg = smoothstep(0.3, 0.72, n2 * 0.5 + n4 * 0.7 + (0.45 - arid) * 0.9 + drain * 0.35 + north * 0.18 - slope * 0.4);
+        vec3 hills = mix(terra, maquis, veg * 0.75);
+        hills = mix(hills, lime, clamp(smoothstep(0.16, 0.4, slope) * 0.55 + (conv - 0.5) * 1.4 + (n1 - 0.5) * 0.4, 0.0, 0.75));
+        // terraces on the humid slopes: fine contour banding (walls in shadow, soil strips) seen from a height
+        float terr = (1.0 - smoothstep(0.35, 0.6, arid)) * smoothstep(0.04, 0.12, slope) * (1.0 - smoothstep(0.35, 0.5, slope)) * smoothstep(300.0, 500.0, hgt);
+        float band = smoothstep(0.55, 0.95, fract(hgt / 3.2 + n3 * 0.3));
+        hills *= 1.0 - terr * band * 0.28 * (1.0 - smoothstep(1500.0, 6000.0, landDist));
+        // olive groves and villages' orchards: dark dotted patches on the gentle slopes around the towns
+        float grove = smoothstep(0.62, 0.75, n4) * terr;
+        hills = mix(hills, hills * vec3(0.55, 0.6, 0.45), grove * dCellDots(xz * 0.11, 0.3));
+        // the Shephelah and plain: fields; dunes along the shore
+        float plain = smoothstep(420.0, 140.0, hgt) * step(xz.x, -12000.0);
+        hills = mix(hills, mix(field, chalk, 0.25 * n1), plain * 0.8);
+        hills = mix(hills, sand, smoothstep(-47000.0, -53500.0, xz.x) * smoothstep(60.0, 5.0, hgt));
+        // desert: chalk and marl, hard limestone on the cliffs, darker wadi beds
+        vec3 desert = mix(chalk, desertRock, smoothstep(0.12, 0.4, slope));
+        desert = mix(desert, marl, smoothstep(-150.0, -330.0, hgt) * (1.0 - smoothstep(0.25, 0.5, slope)));
+        desert = mix(desert, desert * vec3(0.78, 0.74, 0.68), smoothstep(0.35, 0.7, drain));
+        // Moab (east of the rift): red-brown escarpment, ochre plateau
+        float east = smoothstep(33000.0, 40000.0, xz.x);
+        desert = mix(desert, moab, east * 0.85);
+        vec3 alb = mix(hills, desert, smoothstep(0.35, 0.8, arid));
+        // green lines: the Jordan thicket, springs (Jericho, En-gedi) and wadi beds in the rift
+        float green = smoothstep(0.55, 0.9, drain) * smoothstep(-150.0, -320.0, hgt) * (1.0 - water);
+        alb = mix(alb, thicket, green * 0.8);
+        // far-field speckle of bushes / boulders (reads as texture from a height)
+        float dots = dCellDots(xz * 0.045, 0.22) * (1.0 - arid * 0.7);
+        alb *= 1.0 - dots * 0.25 * (1.0 - smoothstep(4000.0, 12000.0, landDist)) * smoothstep(400.0, 1200.0, landDist);
+        alb *= 0.82 + 0.36 * n3 * (1.0 - smoothstep(3000.0, 9000.0, landDist)) + 0.1 * (1.0 - n1);
+        #ifdef LAND_HQ
+        {
+          // micro-relief below the DEM resolution (boulders, terrace risers, gullies): fbm gradient
+          float fs = mix(0.035, 0.012, smoothstep(300.0, 4000.0, landDist));
+          vec2 e = vec2(4.0, 0.0);
+          float c0 = dFbm(xz * fs), cx = dFbm((xz + e.xy) * fs), cz = dFbm((xz + e.yx) * fs);
+          vec2 gr = vec2(cx - c0, cz - c0) * 5.5 * (1.0 - smoothstep(2500.0, 14000.0, landDist));
+          #ifdef LAND_NEAR
+          gr *= 0.18;
+          #endif
+          nW = normalize(nW + vec3(-gr.x, 0.0, -gr.y));
+        }
+        #endif
+        #ifdef LAND_ROAD
+        alb = mix(alb, vec3(0.74, 0.66, 0.52), roadMask(xz) * 0.85);
+        #endif
+        vec3 albL = srgb(alb);
+        #ifdef LAND_NEAR
+        {
+          float nw = 1.0 - smoothstep(60.0, 380.0, landDist);
+          if (nw > 0.0) {
+            vec2 tuv = xz / 3.2;
+            vec3 s1 = texture2D(tSoil, tuv).rgb, g1 = texture2D(tGrass, tuv * 0.8).rgb, r1 = texture2D(tRock, tuv * 0.5).rgb;
+            float rk = smoothstep(0.2, 0.45, slope + (dNoise(xz * 0.21) - 0.5) * 0.4);
+            float gr = smoothstep(0.35, 0.7, dNoise(xz * 0.08) + (0.5 - arid) * 0.6);
+            vec3 det = mix(mix(s1 / 0.36, g1 / 0.42, gr), r1 / 0.55, rk);
+            albL = mix(albL, albL * clamp(mix(vec3(1.0), det, 0.6), 0.3, 1.8), nw) * 1.3;
+            vec3 tn = texture2D(tGrassN, tuv * 0.8).xyz * 2.0 - 1.0;
+            nW = normalize(nW + vec3(tn.x, 0.0, tn.y) * 0.35 * nw);
+          }
+        }
+        #endif
+        diffuseColor.rgb = albL;
+        landN = nW;
+        landSunVis = sh.b;
+        #ifdef LAND_CLOUDSHADOW
+        landSunVis *= cloudShadow(vLandW);
+        #endif
+      `)
+      .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = roughness;')
+      .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nnormal = normalize((viewMatrix * vec4(landN, 0.0)).xyz);')
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+        reflectedLight.directDiffuse *= landSunVis; reflectedLight.directSpecular *= landSunVis;
+        // valleys lose sky light (baked concavity) - reads as depth from the air
+        reflectedLight.indirectDiffuse *= 0.72 + 0.28 * smoothstep(0.3, 0.7, sh.a);`)
+      .replace('#include <opaque_fragment>', /* glsl */ `
+        {
+          // dawn mist pooled in the valleys: thicker in deep valleys and low ground, lit by the low sun
+          float m = uMist * 0.6 * smoothstep(0.04, 0.5, vdep) * smoothstep(uMistTop + 150.0, uMistTop - 250.0, vLandW.y);
+          m *= smoothstep(600.0, 3500.0, landDist) * (0.75 + 0.5 * dFbm(xz * 0.0009 + uTime * 0.002));
+          outgoingLight = mix(outgoingLight, uMistColor, clamp(m, 0.0, 0.92));
+        }
+        #ifdef LAND_HAZE
+        outgoingLight = landApplyHaze(outgoingLight, cameraPosition, vLandW);
+        #endif
+        #include <opaque_fragment>`);
+  };
+  mat.customProgramCacheKey = () => 'land-terrain-' + Object.keys(defines).join('-') + (look.cloudShadowGlsl ? look.cloudShadowGlsl.length : 0) + (look.roadGlsl ? look.roadGlsl.length : 0);
+  return mat;
+}

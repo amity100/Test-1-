@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Colliders } from './Colliders';
 import { shared } from './Shared';
 import { PostFX, createGradeUniforms, createLookUniforms, type DoFSettings } from '../fx/PostFX';
+import { sssLevelFor } from '../fx/SSS';
 import { Motes, ParticleSystem, SmokeColumns } from '../fx/Particles';
 import { SkySystem } from '../world/Sky';
 import { Terrain } from '../world/Terrain';
@@ -822,6 +823,7 @@ export class Engine {
       msaa: q.msaa, bloom: q.bloom, godRaySamples: q.godRaySamples, pixelRatio: q.pixelRatio,
       aa: q.aa, taa: q.taa, dofSamples: q.dofSamples, sharpen: q.sharpen, filmFx: q.filmFx,
       bloomScale: q.bloomScale, bloomMips: q.bloomMips,
+      sss: sssLevelFor(q), // skin: screen-space subsurface scattering on desktop tiers (fx/SSS.ts; ?sss=0|1|2)
       colorType: this.floatTargets ? THREE.HalfFloatType : THREE.UnsignedByteType,
       gradeUniforms: this.gradeUniforms,
       lookUniforms: this.lookUniforms,

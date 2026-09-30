@@ -1,0 +1,1201 @@
+{
+ "walk": {
+  "file": "walk.binz",
+  "src": "35_01",
+  "desc": "natural walk (subject 35, the cleanest CMU walker)",
+  "tags": [
+   "loco",
+   "game",
+   "film"
+  ],
+  "duration": 1.1333,
+  "frames": 34,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 1.3231,
+  "distance": 1.4995,
+  "turn": 0.0042,
+  "cycle": [
+   0.0289,
+   1.4992,
+   0.0042
+  ],
+  "bytes": 5851,
+  "range": [
+   0.0,
+   2.983
+  ]
+ },
+ "walk_b": {
+  "file": "walk_b.binz",
+  "src": "16_15",
+  "desc": "walk, subject 16 (variation)",
+  "tags": [
+   "loco",
+   "film",
+   "army"
+  ],
+  "duration": 1.1667,
+  "frames": 35,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 1.1924,
+  "distance": 1.3912,
+  "turn": -0.0195,
+  "cycle": [
+   -0.0253,
+   1.391,
+   -0.01948
+  ],
+  "bytes": 5961,
+  "range": [
+   0.0,
+   3.925
+  ]
+ },
+ "walk_c": {
+  "file": "walk_c.binz",
+  "src": "69_01",
+  "desc": "walk forward, subject 69 (variation)",
+  "tags": [
+   "loco",
+   "film",
+   "army"
+  ],
+  "duration": 1.1667,
+  "frames": 35,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 0.9656,
+  "distance": 1.1265,
+  "turn": 0.0031,
+  "cycle": [
+   0.0424,
+   1.1257,
+   0.00311
+  ],
+  "bytes": 5951,
+  "range": [
+   0.5,
+   3.908
+  ]
+ },
+ "walk_d": {
+  "file": "walk_d.binz",
+  "src": "07_01",
+  "desc": "walk, subject 7 (variation)",
+  "tags": [
+   "loco",
+   "film",
+   "army"
+  ],
+  "duration": 1.0667,
+  "frames": 32,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 1.5436,
+  "distance": 1.6465,
+  "turn": 0.0304,
+  "cycle": [
+   0.0569,
+   1.6455,
+   0.03042
+  ],
+  "bytes": 5722,
+  "range": [
+   0.0,
+   2.633
+  ]
+ },
+ "jog": {
+  "file": "jog.binz",
+  "src": "35_17",
+  "desc": "run/jog",
+  "tags": [
+   "loco",
+   "game"
+  ],
+  "duration": 0.7667,
+  "frames": 23,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 3.269,
+  "distance": 2.5062,
+  "turn": 0.0394,
+  "cycle": [
+   -0.0285,
+   2.5061,
+   0.03942
+  ],
+  "bytes": 4315,
+  "range": [
+   0.0,
+   1.392
+  ]
+ },
+ "run": {
+  "file": "run.binz",
+  "src": "16_55",
+  "desc": "run",
+  "tags": [
+   "loco",
+   "game"
+  ],
+  "duration": 0.5667,
+  "frames": 17,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 4.4488,
+  "distance": 2.521,
+  "turn": -0.0482,
+  "cycle": [
+   -0.0458,
+   2.5206,
+   -0.04821
+  ],
+  "bytes": 3512,
+  "range": [
+   0.0,
+   1.508
+  ]
+ },
+ "sprint": {
+  "file": "sprint.binz",
+  "src": "09_01",
+  "desc": "fast run (subject 9)",
+  "tags": [
+   "loco",
+   "game"
+  ],
+  "duration": 0.7333,
+  "frames": 22,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 3.7686,
+  "distance": 2.7636,
+  "turn": 0.0316,
+  "cycle": [
+   0.3193,
+   2.7451,
+   0.03157
+  ],
+  "bytes": 4251,
+  "range": [
+   0.0,
+   1.233
+  ]
+ },
+ "start_walk": {
+  "file": "start_walk.binz",
+  "src": "82_09",
+  "desc": "stand -> confident walk",
+  "tags": [
+   "loco",
+   "game"
+  ],
+  "duration": 3.0,
+  "frames": 90,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.4814,
+  "distance": 1.4443,
+  "turn": 0.0445,
+  "cycle": null,
+  "bytes": 14114,
+  "range": [
+   4.8,
+   7.8
+  ]
+ },
+ "start_jog": {
+  "file": "start_jog.binz",
+  "src": "104_06",
+  "desc": "start jog",
+  "tags": [
+   "loco",
+   "game"
+  ],
+  "duration": 2.4,
+  "frames": 72,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 1.6399,
+  "distance": 3.9359,
+  "turn": 0.0709,
+  "cycle": null,
+  "bytes": 12399,
+  "range": [
+   0.0,
+   2.4
+  ]
+ },
+ "stop_jog": {
+  "file": "stop_jog.binz",
+  "src": "104_09",
+  "desc": "jog -> stop",
+  "tags": [
+   "loco",
+   "game"
+  ],
+  "duration": 2.6333,
+  "frames": 79,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 1.4064,
+  "distance": 3.7035,
+  "turn": -0.044,
+  "cycle": null,
+  "bytes": 13558,
+  "range": [
+   0.3,
+   2.908
+  ]
+ },
+ "walk_stop": {
+  "file": "walk_stop.binz",
+  "src": "16_33",
+  "desc": "slow walk, stop, stand",
+  "tags": [
+   "loco",
+   "game",
+   "film"
+  ],
+  "duration": 2.4,
+  "frames": 72,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.6639,
+  "distance": 1.5934,
+  "turn": -0.0046,
+  "cycle": null,
+  "bytes": 11624,
+  "range": [
+   0.0,
+   2.375
+  ]
+ },
+ "turn_left": {
+  "file": "turn_left.binz",
+  "src": "69_16",
+  "desc": "turn in place ~65 deg left (mirror = right)",
+  "tags": [
+   "loco",
+   "game"
+  ],
+  "duration": 1.7,
+  "frames": 51,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.1383,
+  "distance": 0.2352,
+  "turn": 1.1219,
+  "cycle": null,
+  "bytes": 7912,
+  "range": [
+   0.0,
+   1.7
+  ]
+ },
+ "march_c": {
+  "file": "march_c.binz",
+  "src": "91_19",
+  "desc": "march (subject 91)",
+  "tags": [
+   "film",
+   "army",
+   "loco"
+  ],
+  "duration": 1.2333,
+  "frames": 37,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 1.1606,
+  "distance": 1.4314,
+  "turn": 0.0125,
+  "cycle": [
+   -0.0471,
+   1.4306,
+   0.01251
+  ],
+  "bytes": 6798,
+  "range": [
+   2.8,
+   6.8
+  ]
+ },
+ "march": {
+  "file": "march.binz",
+  "src": "20_06",
+  "desc": "soldiers march (subject 20)",
+  "tags": [
+   "film",
+   "army",
+   "loco"
+  ],
+  "duration": 1.5,
+  "frames": 45,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 1.0812,
+  "distance": 1.6218,
+  "turn": -0.0028,
+  "cycle": [
+   0.0194,
+   1.6217,
+   -0.00278
+  ],
+  "bytes": 7887,
+  "range": [
+   0.0,
+   2.408
+  ]
+ },
+ "walk_king": {
+  "file": "walk_king.binz",
+  "src": "82_09",
+  "desc": "confident, proud stride",
+  "tags": [
+   "film",
+   "saul",
+   "loco"
+  ],
+  "duration": 1.3667,
+  "frames": 41,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 0.934,
+  "distance": 1.2765,
+  "turn": -0.013,
+  "cycle": [
+   -0.0911,
+   1.2732,
+   -0.01296
+  ],
+  "bytes": 7091,
+  "range": [
+   6.2,
+   10.3
+  ]
+ },
+ "walk_strong": {
+  "file": "walk_strong.binz",
+  "src": "137_42",
+  "desc": "\"strong man\" heavy, broad walk",
+  "tags": [
+   "film",
+   "saul",
+   "loco"
+  ],
+  "duration": 1.8,
+  "frames": 54,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 0.7264,
+  "distance": 1.3075,
+  "turn": 0.0013,
+  "cycle": [
+   -0.3896,
+   1.2481,
+   0.00127
+  ],
+  "bytes": 8844,
+  "range": [
+   2.0,
+   6.2
+  ]
+ },
+ "walk_heavy": {
+  "file": "walk_heavy.binz",
+  "src": "17_08",
+  "desc": "muscular heavyset person walk",
+  "tags": [
+   "film",
+   "saul",
+   "loco"
+  ],
+  "duration": 1.7333,
+  "frames": 52,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 0.6878,
+  "distance": 1.1921,
+  "turn": 0.0028,
+  "cycle": [
+   -0.143,
+   1.1835,
+   0.00281
+  ],
+  "bytes": 8503,
+  "range": [
+   1.0,
+   5.0
+  ]
+ },
+ "walk_halt": {
+  "file": "walk_halt.binz",
+  "src": "82_14",
+  "desc": "walk, slow down, come to a halt, stand",
+  "tags": [
+   "film",
+   "saul",
+   "loco"
+  ],
+  "duration": 7.0,
+  "frames": 210,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.465,
+  "distance": 3.2551,
+  "turn": -0.8566,
+  "cycle": null,
+  "bytes": 31656,
+  "range": [
+   0.5,
+   7.5
+  ]
+ },
+ "idle_king": {
+  "file": "idle_king.binz",
+  "src": "137_41",
+  "desc": "\"strong man\" wait: broad stance",
+  "tags": [
+   "film",
+   "saul",
+   "idle"
+  ],
+  "duration": 3.2,
+  "frames": 96,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 0.0109,
+  "distance": 0.035,
+  "turn": 0.0176,
+  "cycle": [
+   0.0328,
+   0.0122,
+   0.01765
+  ],
+  "bytes": 11919,
+  "range": [
+   0.5,
+   9.0
+  ]
+ },
+ "raise_arm_R": {
+  "file": "raise_arm_R.binz",
+  "src": "13_26",
+  "desc": "right arm thrust up overhead (the spear raise; hold the peak with setSpeed 0)",
+  "tags": [
+   "film",
+   "saul",
+   "army",
+   "gesture"
+  ],
+  "duration": 1.3667,
+  "frames": 41,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.0297,
+  "distance": 0.0406,
+  "turn": -1.3409,
+  "cycle": null,
+  "bytes": 7200,
+  "range": [
+   8.0,
+   9.35
+  ]
+ },
+ "cheer_arms": {
+  "file": "cheer_arms.binz",
+  "src": "79_69",
+  "desc": "very happy: both arms up, cheering",
+  "tags": [
+   "film",
+   "army",
+   "gesture"
+  ],
+  "duration": 5.7,
+  "frames": 171,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.0031,
+  "distance": 0.0177,
+  "turn": 0.0381,
+  "cycle": null,
+  "bytes": 28466,
+  "range": [
+   0.5,
+   6.2
+  ]
+ },
+ "cheer_reach": {
+  "file": "cheer_reach.binz",
+  "src": "14_20",
+  "desc": "both arms reach up high",
+  "tags": [
+   "film",
+   "army",
+   "gesture"
+  ],
+  "duration": 3.6,
+  "frames": 108,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.0712,
+  "distance": 0.2564,
+  "turn": -0.0474,
+  "cycle": null,
+  "bytes": 17741,
+  "range": [
+   13.0,
+   16.6
+  ]
+ },
+ "arms_high": {
+  "file": "arms_high.binz",
+  "src": "05_12",
+  "desc": "one arm swept up high",
+  "tags": [
+   "film",
+   "army",
+   "gesture"
+  ],
+  "duration": 3.3,
+  "frames": 99,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.1476,
+  "distance": 0.4872,
+  "turn": -0.1134,
+  "cycle": null,
+  "bytes": 16669,
+  "range": [
+   8.0,
+   11.283
+  ]
+ },
+ "cheer_walk": {
+  "file": "cheer_walk.binz",
+  "src": "142_09",
+  "desc": "joyful walk with the arms up",
+  "tags": [
+   "film",
+   "army",
+   "gesture"
+  ],
+  "duration": 3.1,
+  "frames": 93,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 1.2039,
+  "distance": 3.732,
+  "turn": 0.2883,
+  "cycle": null,
+  "bytes": 16281,
+  "range": [
+   11.5,
+   14.6
+  ]
+ },
+ "grab_pull_R": {
+  "file": "grab_pull_R.binz",
+  "src": "18_05",
+  "desc": "step in, seize with the right hand and pull (A pulls B by the elbow)",
+  "tags": [
+   "film",
+   "saul",
+   "gesture"
+  ],
+  "duration": 3.6667,
+  "frames": 110,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.3364,
+  "distance": 1.2335,
+  "turn": 2.5983,
+  "cycle": null,
+  "bytes": 18779,
+  "range": [
+   0.0,
+   3.65
+  ]
+ },
+ "grab_R": {
+  "file": "grab_R.binz",
+  "src": "56_02",
+  "desc": "angry grab forward",
+  "tags": [
+   "film",
+   "saul",
+   "gesture"
+  ],
+  "duration": 3.5,
+  "frames": 105,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.0011,
+  "distance": 0.0037,
+  "turn": 0.1226,
+  "cycle": null,
+  "bytes": 16122,
+  "range": [
+   10.5,
+   14.0
+  ]
+ },
+ "reach_forward": {
+  "file": "reach_forward.binz",
+  "src": "15_06",
+  "desc": "lean forward, reach for",
+  "tags": [
+   "film",
+   "gesture"
+  ],
+  "duration": 3.1,
+  "frames": 93,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.0082,
+  "distance": 0.0253,
+  "turn": -0.1387,
+  "cycle": null,
+  "bytes": 14667,
+  "range": [
+   0.5,
+   3.6
+  ]
+ },
+ "stagger_back": {
+  "file": "stagger_back.binz",
+  "src": "23_12",
+  "desc": "bumped: stumble / recoil",
+  "tags": [
+   "film",
+   "saul",
+   "gesture"
+  ],
+  "duration": 2.5333,
+  "frames": 76,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.8535,
+  "distance": 2.1622,
+  "turn": 0.0708,
+  "cycle": null,
+  "bytes": 12625,
+  "range": [
+   0.0,
+   2.533
+  ]
+ },
+ "flinch": {
+  "file": "flinch.binz",
+  "src": "77_09",
+  "desc": "duck / flinch away",
+  "tags": [
+   "film",
+   "gesture"
+  ],
+  "duration": 2.7,
+  "frames": 81,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.0386,
+  "distance": 0.1041,
+  "turn": -0.3263,
+  "cycle": null,
+  "bytes": 13695,
+  "range": [
+   0.5,
+   3.2
+  ]
+ },
+ "recoil_surprised": {
+  "file": "recoil_surprised.binz",
+  "src": "120_15",
+  "desc": "surprised, backs away",
+  "tags": [
+   "film",
+   "gesture"
+  ],
+  "duration": 4.1,
+  "frames": 123,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.45,
+  "distance": 1.8451,
+  "turn": 0.0712,
+  "cycle": null,
+  "bytes": 19881,
+  "range": [
+   2.5,
+   6.6
+  ]
+ },
+ "walk_old": {
+  "file": "walk_old.binz",
+  "src": "142_07",
+  "desc": "elderly man walk, slow and upright",
+  "tags": [
+   "film",
+   "samuel",
+   "elders",
+   "loco"
+  ],
+  "duration": 0.9333,
+  "frames": 28,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 0.2779,
+  "distance": 0.2594,
+  "turn": -0.0034,
+  "cycle": [
+   -0.018,
+   0.2587,
+   -0.00343
+  ],
+  "bytes": 4683,
+  "range": [
+   3.0,
+   11.0
+  ]
+ },
+ "walk_old_hunched": {
+  "file": "walk_old_hunched.binz",
+  "src": "137_33",
+  "desc": "old man walk, stooped",
+  "tags": [
+   "film",
+   "elders",
+   "loco"
+  ],
+  "duration": 1.6,
+  "frames": 48,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 0.418,
+  "distance": 0.6688,
+  "turn": -0.0015,
+  "cycle": [
+   -0.116,
+   0.6586,
+   -0.00149
+  ],
+  "bytes": 7687,
+  "range": [
+   2.0,
+   8.0
+  ]
+ },
+ "old_turn_walk": {
+  "file": "old_turn_walk.binz",
+  "src": "142_07",
+  "desc": "elderly man turns away and walks off",
+  "tags": [
+   "film",
+   "samuel",
+   "loco"
+  ],
+  "duration": 6.0,
+  "frames": 180,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.0577,
+  "distance": 0.346,
+  "turn": 3.0724,
+  "cycle": null,
+  "bytes": 25934,
+  "range": [
+   17.5,
+   23.5
+  ]
+ },
+ "idle_old": {
+  "file": "idle_old.binz",
+  "src": "137_32",
+  "desc": "old man wait",
+  "tags": [
+   "film",
+   "samuel",
+   "elders",
+   "idle"
+  ],
+  "duration": 3.0333,
+  "frames": 91,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 0.0024,
+  "distance": 0.0074,
+  "turn": -0.0094,
+  "cycle": [
+   -0.0069,
+   0.0026,
+   -0.00938
+  ],
+  "bytes": 13332,
+  "range": [
+   0.5,
+   9.0
+  ]
+ },
+ "talk_gesture": {
+  "file": "talk_gesture.binz",
+  "src": "18_08",
+  "desc": "explaining with hand gestures (standing)",
+  "tags": [
+   "film",
+   "elders",
+   "gesture"
+  ],
+  "duration": 12.0,
+  "frames": 360,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.017,
+  "distance": 0.2037,
+  "turn": -0.123,
+  "cycle": null,
+  "bytes": 51169,
+  "range": [
+   1.0,
+   13.0
+  ]
+ },
+ "argue": {
+  "file": "argue.binz",
+  "src": "18_10",
+  "desc": "quarrel: angry hand gestures",
+  "tags": [
+   "film",
+   "elders",
+   "gesture"
+  ],
+  "duration": 3.0,
+  "frames": 90,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.0284,
+  "distance": 0.0853,
+  "turn": -0.1084,
+  "cycle": null,
+  "bytes": 14843,
+  "range": [
+   0.0,
+   3.0
+  ]
+ },
+ "point_directions": {
+  "file": "point_directions.binz",
+  "src": "139_25",
+  "desc": "giving directions, pointing",
+  "tags": [
+   "film",
+   "elders",
+   "gesture"
+  ],
+  "duration": 5.5333,
+  "frames": 166,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.1646,
+  "distance": 0.9106,
+  "turn": -0.5234,
+  "cycle": null,
+  "bytes": 27014,
+  "range": [
+   0.0,
+   5.525
+  ]
+ },
+ "kneel": {
+  "file": "kneel.binz",
+  "src": "23_03",
+  "desc": "kneel down, stay, rise",
+  "tags": [
+   "film",
+   "game",
+   "gesture"
+  ],
+  "duration": 5.1,
+  "frames": 153,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.0607,
+  "distance": 0.3097,
+  "turn": -0.0926,
+  "cycle": null,
+  "bytes": 24242,
+  "range": [
+   0.3,
+   5.4
+  ]
+ },
+ "kneel_hold": {
+  "file": "kneel_hold.binz",
+  "src": "23_03",
+  "desc": "kneeling (loop)",
+  "tags": [
+   "film",
+   "game",
+   "idle"
+  ],
+  "duration": 1.0,
+  "frames": 30,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 0.019,
+  "distance": 0.019,
+  "turn": 0.004,
+  "cycle": [
+   -0.0069,
+   -0.0177,
+   0.00397
+  ],
+  "bytes": 5055,
+  "range": [
+   1.2,
+   4.0
+  ]
+ },
+ "kneel_bow": {
+  "file": "kneel_bow.binz",
+  "src": "23_03",
+  "desc": "kneeling, bowed low (kneel_hold + spine/head pitch): obeisance",
+  "tags": [
+   "film",
+   "idle"
+  ],
+  "duration": 1.0,
+  "frames": 30,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 0.019,
+  "distance": 0.019,
+  "turn": 0.004,
+  "cycle": [
+   -0.0069,
+   -0.0177,
+   0.00397
+  ],
+  "bytes": 5118,
+  "range": [
+   1.2,
+   4.0
+  ]
+ },
+ "idle_soldier": {
+  "file": "idle_soldier.binz",
+  "src": "137_28",
+  "desc": "normal wait",
+  "tags": [
+   "film",
+   "army",
+   "idle",
+   "game"
+  ],
+  "duration": 2.5,
+  "frames": 75,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 0.0271,
+  "distance": 0.0678,
+  "turn": -0.0117,
+  "cycle": [
+   0.0077,
+   -0.0674,
+   -0.01168
+  ],
+  "bytes": 11188,
+  "range": [
+   0.3,
+   6.0
+  ]
+ },
+ "idle_shift": {
+  "file": "idle_shift.binz",
+  "src": "139_02",
+  "desc": "shifting weight",
+  "tags": [
+   "film",
+   "army",
+   "idle",
+   "game"
+  ],
+  "duration": 4.8667,
+  "frames": 146,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 0.0029,
+  "distance": 0.014,
+  "turn": -0.0063,
+  "cycle": [
+   -0.0101,
+   -0.0096,
+   -0.00627
+  ],
+  "bytes": 20600,
+  "range": [
+   0.5,
+   7.808
+  ]
+ },
+ "idle_nervous": {
+  "file": "idle_nervous.binz",
+  "src": "79_73",
+  "desc": "scared, fidgeting",
+  "tags": [
+   "film",
+   "idle"
+  ],
+  "duration": 2.4667,
+  "frames": 74,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 0.0025,
+  "distance": 0.0061,
+  "turn": 0.0052,
+  "cycle": [
+   -0.0042,
+   -0.0043,
+   0.00524
+  ],
+  "bytes": 11084,
+  "range": [
+   0.3,
+   6.2
+  ]
+ },
+ "idle_bus": {
+  "file": "idle_bus.binz",
+  "src": "40_10",
+  "desc": "wait for the bus: restless stand",
+  "tags": [
+   "film",
+   "idle",
+   "elders"
+  ],
+  "duration": 2.5667,
+  "frames": 77,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 0.0046,
+  "distance": 0.0118,
+  "turn": 0.0001,
+  "cycle": [
+   0.0101,
+   0.0061,
+   0.00011
+  ],
+  "bytes": 10864,
+  "range": [
+   0.5,
+   9.0
+  ]
+ },
+ "pickup_squat": {
+  "file": "pickup_squat.binz",
+  "src": "69_70",
+  "desc": "step up, squat, pick up, rise",
+  "tags": [
+   "game"
+  ],
+  "duration": 3.5,
+  "frames": 105,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.2119,
+  "distance": 0.7416,
+  "turn": -1.4009,
+  "cycle": null,
+  "bytes": 17219,
+  "range": [
+   1.3,
+   4.8
+  ]
+ },
+ "pickup_box": {
+  "file": "pickup_box.binz",
+  "src": "115_06",
+  "desc": "pick up from the ground bending the knees",
+  "tags": [
+   "game"
+  ],
+  "duration": 3.0,
+  "frames": 90,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.0126,
+  "distance": 0.0377,
+  "turn": -0.0268,
+  "cycle": null,
+  "bytes": 14954,
+  "range": [
+   0.0,
+   2.975
+  ]
+ },
+ "throw_overhand": {
+  "file": "throw_overhand.binz",
+  "src": "124_01",
+  "desc": "overhand throw (baseball pitch) - base for the sling release",
+  "tags": [
+   "game"
+  ],
+  "duration": 3.8,
+  "frames": 114,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.2834,
+  "distance": 1.077,
+  "turn": 1.8219,
+  "cycle": null,
+  "bytes": 18901,
+  "range": [
+   0.8,
+   4.6
+  ]
+ },
+ "throw_ball": {
+  "file": "throw_ball.binz",
+  "src": "141_11",
+  "desc": "overhand throw",
+  "tags": [
+   "game"
+  ],
+  "duration": 2.9,
+  "frames": 87,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.062,
+  "distance": 0.1798,
+  "turn": -0.0396,
+  "cycle": null,
+  "bytes": 14710,
+  "range": [
+   0.3,
+   3.2
+  ]
+ },
+ "look_around": {
+  "file": "look_around.binz",
+  "src": "139_01",
+  "desc": "cautious look around",
+  "tags": [
+   "game",
+   "idle"
+  ],
+  "duration": 4.5,
+  "frames": 135,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.0057,
+  "distance": 0.0257,
+  "turn": -0.7198,
+  "cycle": null,
+  "bytes": 21171,
+  "range": [
+   4.5,
+   9.0
+  ]
+ }
+}

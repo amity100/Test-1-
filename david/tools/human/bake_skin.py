@@ -362,6 +362,61 @@ class Baker:
         xs[idx] = t
         return out, seam, xs
 
+    # ------------------------------------------------------------------ region map (runtime shader masks)
+    def regions(self):
+        """Region map for SkinMaterial (region_1k.webp, linear RGB, fast: needs only rasterize()):
+        R = capillary flush zones (nose, cheeks, ears, chin; scaled by skin.ruddy at runtime),
+        G = sebum T-zone 0..0.6 (forehead centre, nose, chin) / lips >= 0.8 (vermilion, moist),
+        B = sun-exposure freckle density (nose bridge, cheeks, forehead, shoulders, forearms, hands).
+        Generic: works for any preset (the amounts are runtime uniforms from the preset's skin block)."""
+        t0 = time.time()
+        p, n = self.tp, self.tn
+        R = self.treg
+        head = R["head"]
+        f = p - self.E
+        isl = self.island
+        tm = lambda rel, pw=1.0: self.interp(self.target_mask(rel, pw))  # noqa: E731
+        m_nostril = tm("nose/nose-nostrils-width-incr")
+        m_nosetip = tm("nose/nose-point-width-incr")
+        m_nose = tm("nose/nose-scale-horiz-incr")
+        m_ear = np.maximum(tm("ears/l-ear-scale-incr"), tm("ears/r-ear-scale-incr"))
+        m_lobe = np.maximum(tm("ears/l-ear-lobe-incr"), tm("ears/r-ear-lobe-incr"))
+        m_cheek = np.maximum(tm("cheek/l-cheek-volume-incr"), tm("cheek/r-cheek-volume-incr"))
+        m_cheekbone = np.maximum(tm("cheek/l-cheek-bones-incr"), tm("cheek/r-cheek-bones-incr"))
+        m_chin = tm("chin/chin-prominent-incr")
+        front = smoothstep(-0.02, 0.25, n[:, 2])
+        red = (0.95 * m_cheek ** 0.8 * front + 0.9 * np.maximum(m_nosetip, m_nostril * 0.85) + 0.35 * m_nose
+               + 0.8 * m_ear * smoothstep(0.03, 0.06, np.abs(f[:, 0])) + 0.7 * m_lobe + 0.35 * m_chin + 0.35 * m_cheekbone * front)
+        red = red * (0.7 + 0.3 * (fbm(p * 30.0, 3, seed=5) * 0.5 + 0.5))
+        red = np.clip(red, 0, 1) * head
+        # sebaceous T-zone: forehead centre, nose, chin
+        fore = head * smoothstep(0.012, 0.04, f[:, 1]) * np.exp(-(f[:, 0] / 0.04) ** 2) * smoothstep(0.2, 0.6, n[:, 2])
+        tz = np.clip(fore + 0.9 * np.clip(m_nose + m_nosetip, 0, 1) + 0.55 * m_chin * front, 0, 1) * head
+        lips_v, _seam, _t = self.lip_mask()
+        lips = np.clip(lips_v, 0, 1)  # per texel
+        oil = np.where(lips > 0.5, 0.8 + 0.2 * lips, 0.6 * tz * (1 - lips))
+        # sun-exposed freckle zones (the face under a head cloth still catches the low sun on the nose and cheeks)
+        nosebr = np.exp(-((f[:, 0]) ** 2 + (f[:, 1] + 0.02) ** 2) / 0.035 ** 2)
+        face_front = smoothstep(0.1, 0.45, n[:, 2]) * smoothstep(0.075, 0.03, np.abs(f[:, 1] + 0.005))
+        shoulder_y = self.h.rest_world_pos[self.h.index["upperarm01.L"]][1]
+        rp = self.tr
+        sh = (R["torso"] + R["neck"] * 0.6) * smoothstep(shoulder_y - 0.12, shoulder_y - 0.02, rp[:, 1]) * smoothstep(-0.2, 0.5, n[:, 1] + 0.3)
+        sun = (head * (0.25 + 0.75 * face_front + 0.9 * nosebr) + R["farm"] * 0.55 + R["hand"] * 0.45 * smoothstep(-0.1, 0.4, n[:, 1] + 0.2)
+               + R["uarm"] * 0.3 + sh * 0.6)
+        sun = sun * (0.55 + 0.45 * smoothstep(-0.3, 0.5, fbm(p * 18.0, 2, seed=9)))
+        sun = np.clip(sun, 0, 1)
+        interior = (isl == 3) | (isl == 4)
+        img = np.stack([np.where(interior, 0, red), np.where(isl == 4, 0, oil), np.where(interior, 0, sun)], 1)
+        img = self.dilate(self.image(img), 16)
+        outdir = os.path.join(OUT, self.name)
+        os.makedirs(outdir, exist_ok=True)
+        a = (np.clip(img, 0, 1) * 255 + 0.5).astype(np.uint8)
+        im = Image.fromarray(a, "RGB")
+        if self.size != 1024:
+            im = im.resize((1024, 1024), Image.LANCZOS)
+        im.save(os.path.join(outdir, "region_1k.webp"), quality=90, method=6)
+        print(f"  regions in {time.time() - t0:.1f}s")
+
     # ------------------------------------------------------------------ form definition (geometry unsharp mask)
     def definition(self, iters=24):
         """Mid-frequency form of the body itself (muscle bellies, separations, bony landmarks): vertex normal minus
@@ -1205,6 +1260,7 @@ if __name__ == "__main__":
     ap.add_argument("presets", nargs="*", default=[])
     ap.add_argument("--size", type=int, default=2048)
     ap.add_argument("--common", action="store_true")
+    ap.add_argument("--regions", action="store_true", help="only (re)write region_1k.webp (fast, no full bake)")
     a = ap.parse_args()
     if a.common:
         bake_detail_normal()
@@ -1216,8 +1272,13 @@ if __name__ == "__main__":
         print(f"== bake {p}")
         b = Baker(p, a.size)
         b.rasterize()
+        if a.regions:
+            b.regions()
+            print(f"  total {time.time() - t0:.1f}s")
+            continue
         b.ao_thickness()
         b.definition()
         b.paint()
         b.write()
+        b.regions()
         print(f"  total {time.time() - t0:.1f}s")

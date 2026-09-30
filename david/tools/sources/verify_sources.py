@@ -482,6 +482,75 @@ def narration_warnings(ck: Checker) -> None:
             break
 
 
+# ============================================================================ opening film (docs + narration)
+FILM_DOCS = ['docs/intro-script.md', 'docs/visual-bible.md']
+NARRATION_FILE = 'src/content/introNarration.ts'
+
+
+def scan_film_docs(ck: Checker, catalog: dict) -> None:
+    """Every pointed "quotation" in the opening-film brief and the visual bible must be an exact substring of a
+    catalog text (the catalog holds every verse / passage the docs cite)."""
+    corpus = [(f'{e["ref"]} [{cid}]', e['text']) for cid, e in catalog.items()]
+    for rel in FILM_DOCS:
+        path = ROOT / rel
+        if not path.exists():
+            continue
+        src = path.read_text(encoding='utf-8')
+        for mm in re.finditer(r'"([^"]+)"', src):
+            q = mm.group(1)
+            if not L.has_niqqud(q):
+                continue
+            ln = src.count('\n', 0, mm.start()) + 1
+            line = src.split('\n')[ln - 1]
+            if line.lstrip().startswith('|') and len(q.split()) == 1:
+                continue  # a one-word label in a table
+            ck.check_fragment(rel, ln, q, corpus)
+
+
+def scan_intro_narration(ck: Checker, catalog: dict) -> None:
+    """The narration lines of the opening film are NOT quotations: pointed, no quotation marks, and they must not
+    reproduce 4+ consecutive words of any catalogued verse (that would be an unmarked quotation)."""
+    path = ROOT / NARRATION_FILE
+    if not path.exists():
+        return
+    src = path.read_text(encoding='utf-8')
+    texts = [(cid, ' ' + L.skeleton(e['text']) + ' ') for cid, e in catalog.items()]
+    for m in re.finditer(r"^  (\w+): \{\n(.*?)^  \},", src, re.S | re.M):
+        key, body = m.group(1), m.group(2)
+        ln = src.count('\n', 0, m.start()) + 1
+        idm = re.search(r"^\s*id: '([^']*)'", body, re.M)
+        tm = re.search(r"^\s*text: '([^'\n]*)'", body, re.M)
+        text = tm.group(1) if tm else ''
+        probs = []
+        if not tm:
+            probs.append('no text')
+        if not idm or idm.group(1) != key:
+            probs.append('id differs from its key')
+        if re.search('["״“”„]', text):
+            probs.append('narration must not contain quotation marks')
+        heb = [w for w in re.split(r'[\s·־]+', text) if re.search('[א-ת]', w)]
+        bare = [w for w in heb if not L.has_niqqud(w)]
+        if bare:
+            probs.append('unpointed Hebrew: ' + ' '.join(bare))
+        words = L.skeleton(text.replace('·', ' ')).split()
+        hit = None
+        for cid, vs in texts:
+            for i in range(len(words) - 3):
+                g = ' '.join(words[i:i + 4])
+                if ' ' + g + ' ' in vs:
+                    hit = (g, cid)
+                    break
+            if hit:
+                break
+        f = Finding(NARRATION_FILE, ln, 'intro narration (not a quotation)', text, '', 'OK', '',
+                    found_in=f'INTRO_NARRATION.{key}')
+        if probs:
+            f.verdict, f.message = 'FAIL', '; '.join(probs)
+        elif hit:
+            f.verdict, f.message = 'WARN', f'reproduces scripture wording ("{hit[0]}", {hit[1]}) - quote it from the catalog instead'
+        ck.findings.append(f)
+
+
 # ============================================================================ main
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -545,9 +614,12 @@ def main() -> int:
             scan_ts(ck, p, rel)
     if (ROOT / 'README.md').exists():
         scan_markdown(ck, ROOT / 'README.md', 'README.md')
+    scan_film_docs(ck, catalog)
+    scan_intro_narration(ck, catalog)
     narration_warnings(ck)
 
-    print('\n== quotations found in game files (src/**/*.ts, *.html, README.md)')
+    print('\n== quotations found in game files (src/**/*.ts, *.html, README.md), the opening-film docs '
+          f'({", ".join(FILM_DOCS)}) and the intro narration ({NARRATION_FILE})')
     for f in ck.findings:
         if f.verdict == 'FAIL':
             fails += 1

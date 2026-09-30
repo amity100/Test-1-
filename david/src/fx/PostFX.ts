@@ -6,6 +6,7 @@ import { TAAPass, type TAAQuality } from './TAA';
 import { DoFPass, defaultDoF, type DoFSettings } from './DoF';
 import { temporal, GLSL_IGN } from './Temporal';
 import { FS_VERT, GLSL_SANITIZE, HDR_CLAMP } from './glsl';
+import { SSSPass, skinShading } from './SSS';
 
 export { HDR_CLAMP, GLSL_SANITIZE } from './glsl';
 export type { DoFSettings } from './DoF';
@@ -14,6 +15,8 @@ export type { DoFSettings } from './DoF';
  * Post chain — one explicit pass sequence (no EffectComposer), every pass a full-screen triangle, no depth test:
  *
  *   scene ─► HDR target (RGBA16F, MSAA 0/2/4, depth texture; camera projection sub-pixel jittered when TAA is on)
+ *     ─► SSS skin    skin meshes' diffuse again (same jitter) ─► separable skin blur, correction added after the
+ *                    atmosphere (fx/SSS.ts) ............................ desktop tiers, only while a face is close
  *     ─► Atmosphere  NaN/Inf scrub + HDR clamp, aerial perspective / height fog from depth, god rays
  *     ─► TAA         temporal anti-aliasing (history, reprojection, YCoCg variance clip) .............. TAA tiers
  *     ─► DoF         bokeh depth of field (half-res gather + full-res composite) ...... only while enabled
@@ -51,6 +54,8 @@ export type { DoFSettings } from './DoF';
  *   .bloom                                 strength / radius / threshold / knee (null on tiers without bloom)
  *   .setGodRaySamples(n), .setBloomEnabled(on), .bytes (GPU memory of all targets), .dispose()
  *   .sceneTarget                           the HDR scene target (bind it to pre-compile materials for this chain)
+ *   .sss                                   screen-space skin scattering (null on phones / without float targets):
+ *                                          .enabled, .settings { width, strength, follow } (see fx/SSS.ts)
  *   .contextRestored()                     after a WebGL context restore (Engine calls it)
  *
  * Dithered materials: add `temporal.uDitherOffset` (fx/Temporal.ts) to the pixel coordinate of the dither hash so
@@ -569,6 +574,8 @@ export interface PostQuality {
   gradeUniforms?: Record<string, THREE.IUniform>;
   /** shared look uniforms (see createLookUniforms) */
   lookUniforms?: LookUniforms;
+  /** screen-space subsurface scattering for skin: 0 = off (phones: pre-integrated skin only), 1 = 11 taps, 2 = 17 taps */
+  sss?: 0 | 1 | 2;
 }
 
 const smooth01 = (x: number) => {
@@ -587,6 +594,8 @@ export class PostFX {
   /** depth of field (null on tiers without DoF); settings live in `dofSettings` either way */
   readonly dof: DoFPass | null;
   readonly dofSettings: DoFSettings;
+  /** screen-space skin scattering (fx/SSS.ts); null on tiers without it */
+  readonly sss: SSSPass | null;
   /** look uniforms: uWhiteBalance, uShadowTint, uFilm, uBloomTint, uHalation, uFadeColor */
   readonly look: LookUniforms;
   /** @deprecated compatibility with the former EffectComposer: renderTarget1 = the HDR scene target */
@@ -650,6 +659,8 @@ export class PostFX {
     this.taaOn = !!this.taa;
     this.dofSettings = defaultDoF();
     this.dof = (q.dofSamples ?? 0) > 0 ? new DoFPass(q.dofSamples!, type, this.dofSettings) : null;
+    // the skin correction is added with a signed additive blend: needs a float colour buffer
+    this.sss = (q.sss ?? 0) > 0 && type !== THREE.UnsignedByteType ? new SSSPass(q.sss === 2 ? 2 : 1, type) : null;
     const grade = q.gradeUniforms ?? createGradeUniforms();
     this.look = q.lookUniforms ?? createLookUniforms();
     const film = q.filmFx ?? true;
@@ -673,6 +684,7 @@ export class PostFX {
     this.bloom?.setSize(w, h);
     this.taa?.setSize(w, h);
     this.dof?.setSize(w, h);
+    this.sss?.setSize(w, h);
     this.resolve.setSize(w, h);
     this.lastLdr = null;
     this.endFade();
@@ -925,13 +937,19 @@ export class PostFX {
       temporal.uDitherOffset.value.set(0, 0);
       temporal.uJitter.value.set(0, 0);
     }
-    // 1. scene -> HDR target (jittered projection only for this draw)
+    // 1. scene -> HDR target (jittered projection only for this draw); skin shades for the SSS blur when it runs
+    const sss = this.sss && this.sss.prepare(this.scene, cam) ? this.sss : null;
     r.setRenderTarget(this.sceneRT);
     r.render(this.scene, cam);
+    skinShading.uSSSActive.value = 0;
+    // 1b. skin diffuse with the same jittered camera (fx/SSS.ts)
+    if (sss) sss.renderSkin(r, this.scene, cam);
     if (taa) taa.unjitter(cam);
     const depth = this.sceneRT.depthTexture!;
     // 2. atmosphere (sanitises) -> A
     this.atmosphere.render(r, this.sceneRT, this.bufA);
+    // 2b. skin scattering: blurred-minus-sharp skin diffuse added to A (faces are close: no fog to account for)
+    if (sss) sss.composite(r, depth, cam, this.bufA);
     let hdr: THREE.Texture = this.bufA.texture;
     // 3. temporal AA -> history
     if (taa) hdr = taa.render(r, hdr, depth);
@@ -978,6 +996,7 @@ export class PostFX {
     if (this.taa) b += this.taa.bytes;
     if (this.dof && this.dof.used) b += this.dof.bytes;
     if (this.bloom) b += this.bloom.bytes;
+    if (this.sss) b += this.sss.bytes;
     for (const f of this.fadeRTs) if (f) b += px * 4;
     return b;
   }
@@ -987,6 +1006,7 @@ export class PostFX {
     this.bloom?.dispose();
     this.taa?.dispose();
     this.dof?.dispose();
+    this.sss?.dispose();
     this.grade.dispose();
     this.resolve.dispose();
     this.sceneRT.depthTexture?.dispose();

@@ -3,6 +3,7 @@ import { HumanData, buildAuxGeometry, buildBodyGeometry, followSkin, skinNeighbo
 import { HumanRig } from './HumanRig';
 import { SkinMaterial, uvDensityAttribute } from './SkinMaterial';
 import { EyeBall, WetMaterial } from './EyeModel';
+import { registerSkinMesh, unregisterSkinMesh } from '../../fx/SSS';
 import { StrandMaterial } from './HairStrands';
 import { hasHumanAsset, humanAssetUrl } from './assets';
 import { DualQuatSkinning, defaultDQSFactor } from './DualQuatSkinning';
@@ -155,6 +156,11 @@ export class HumanModel {
     crownRadius: [number, number]; vertices: number; triangles: number; loadMs: number;
   };
   private strandMats: StrandMaterial[] = [];
+  /** the body geometry of the load-time level (garment fitting / hideSkin / restPositions always use it) */
+  private baseGeo!: THREE.BufferGeometry;
+  /** hero close-up geometry (two Catmull-Clark levels), built by prepareHeroGeometry() */
+  private heroGeo: THREE.BufferGeometry | null = null;
+  private hideFn: ((p: THREE.Vector3, bone: string) => boolean) | null = null;
   private opening = { L: new THREE.Vector4(), R: new THREE.Vector4() };
   private posIndex: Uint32Array;
 
@@ -172,14 +178,16 @@ export class HumanModel {
     const aniso = o.quality === 'high' ? 8 : 4;
     const data = await loadData(o.preset);
     const irisStyle = data.rig.irisStyle.iris ?? 'brown_hazel';
-    const [albedo, normal, mask, detail, eye] = await Promise.all([
+    const [albedo, normal, mask, detail, eye, region] = await Promise.all([
       loadTex(`${o.preset}/albedo_${sz}.webp`, true, aniso),
       loadTex(`${o.preset}/normal_${sz}.webp`, false, aniso),
       loadTex(`${o.preset}/mask_${sz}.webp`, false, aniso),
       o.quality === 'low' ? Promise.resolve(null) : loadTex('common/skin_detail_normal.webp', false, aniso),
       loadTex(`common/eye_${irisStyle}.webp`, true, 4),
+      // region map (flush / sebum+lips / freckle zones): medium + high only (phones keep the baked look)
+      o.quality === 'low' ? Promise.resolve(null) : loadTex(`${o.preset}/region_1k.webp`, false, 4),
     ]);
-    const m = new HumanModel(data, o, { albedo, normal, mask, detail, eye });
+    const m = new HumanModel(data, o, { albedo, normal, mask, detail, eye, region });
     (m.metrics as { loadMs: number }).loadMs = performance.now() - t0;
     return m;
   }
@@ -187,7 +195,7 @@ export class HumanModel {
   constructor(
     readonly data: HumanData,
     readonly options: HumanLoadOptions,
-    tex: { albedo: THREE.Texture | null; normal: THREE.Texture | null; mask: THREE.Texture | null; detail: THREE.Texture | null; eye: THREE.Texture | null },
+    tex: { albedo: THREE.Texture | null; normal: THREE.Texture | null; mask: THREE.Texture | null; detail: THREE.Texture | null; eye: THREE.Texture | null; region?: THREE.Texture | null },
   ) {
     const q = options.quality;
     const rig = data.rig;
@@ -218,13 +226,21 @@ export class HumanModel {
       if (!ds) densityCache.set(uvA, (ds = uvDensityAttribute(bg.geometry)));
       bg.geometry.setAttribute('detailScale', ds);
     }
-    this.skin = new SkinMaterial({ albedo: tex.albedo, normal: tex.normal, mask: tex.mask, detail: tex.detail }, { quality: q, tint });
+    {
+      const sk = rig.skin ?? {};
+      const num = (v: unknown, d: number) => (typeof v === 'number' ? v : d);
+      this.skin = new SkinMaterial(
+        { albedo: tex.albedo, normal: tex.normal, mask: tex.mask, detail: tex.detail, region: tex.region ?? null },
+        { quality: q, tint, freckles: num(sk.freckles, 0), ruddy: num(sk.ruddy, 0.4) },
+      );
+    }
     const bones = this.rig.boneList;
     const inverses = this.rig.rig.bones.map((b) => new THREE.Matrix4().makeTranslation(-b.h[0], -b.h[1], -b.h[2]));
     this.skeleton = new THREE.Skeleton(bones, inverses);
     // dual-quaternion / linear blend skinning (volume-preserving shoulders, hips and spine)
     this.dqs = new DualQuatSkinning(this.skeleton, this.root, defaultDQSFactor);
     this.dqs.patchMaterial(this.skin, true);
+    this.baseGeo = bg.geometry;
     this.body = new THREE.SkinnedMesh(bg.geometry, this.skin);
     this.body.customDepthMaterial = this.dqs.patchMaterial(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), true);
     this.body.name = 'body';
@@ -233,6 +249,8 @@ export class HumanModel {
     this.body.frustumCulled = false;
     this.root.add(this.body);
     this.body.bind(this.skeleton, new THREE.Matrix4());
+    // screen-space subsurface scattering (desktop PostFX): the body is skin
+    registerSkinMesh(this.body);
     // ---- strands (brows, lashes) and tear lines share the skeleton
     const bc = rig.brows.color ?? [0.12, 0.07, 0.04];
     const keep = q === 'low' ? 2 : 1;
@@ -425,6 +443,47 @@ export class HumanModel {
     }
   }
 
+  /**
+   * Hero close-up detail level (film close-ups; 'high' quality = desktop only, a no-op on phones / 'medium'):
+   * 0..1 fades in a third, finer pore octave, micro roughness breakup, a stronger vellus-hair rim on the skin and
+   * the iris caustic / wet detail on the eyes. Free to animate per shot (uniforms only, no recompile).
+   */
+  setHero(amount: number | boolean) {
+    const a = typeof amount === 'boolean' ? (amount ? 1 : 0) : Math.max(0, Math.min(1, amount));
+    this.skin.skinUniforms.uHero.value = this.options.quality === 'high' ? a : 0;
+    for (const S of ['L', 'R'] as const) this.eyes[S].material.eyeUniforms.uHero.value = this.options.quality === 'low' ? 0 : a;
+    // hero geometry (only if prepared): swapped in while hero > 0
+    const want = a > 0 && this.heroGeo ? this.heroGeo : this.baseGeo;
+    if (this.body.geometry !== want) this.body.geometry = want;
+  }
+
+  /**
+   * Build the hero close-up geometry: two Catmull-Clark levels (~214k verts / 428k tris for the body, silhouettes of
+   * nose, lips, ears and jaw stay round in a 4K close-up). CPU work (~1-3 s on a desktop, cached per preset and shared by
+   * instances), so call it while loading (before the film), not mid-shot. Only on 'high' quality (desktop-high) and
+   * for presets without variation morphs; returns false (and does nothing) otherwise. setHero(>0) then swaps it in,
+   * setHero(0) back. The load-time geometry stays the reference for garments, hideSkin and restPositions.
+   */
+  prepareHeroGeometry(): boolean {
+    if (this.heroGeo) return true;
+    if (this.options.quality !== 'high' || this.options.variation || this.options.seed !== undefined) return false;
+    const bg = buildBodyGeometry(this.data, 2);
+    const uvA = bg.geometry.getAttribute('uv') as THREE.BufferAttribute;
+    let ds = densityCache.get(uvA);
+    if (!ds) densityCache.set(uvA, (ds = uvDensityAttribute(bg.geometry)));
+    bg.geometry.setAttribute('detailScale', ds);
+    this.heroGeo = bg.geometry;
+    if (this.hideFn) this.applyHide(this.heroGeo, this.hideFn);
+    if (this.skin.skinUniforms.uHero.value > 0) this.body.geometry = this.heroGeo;
+    return true;
+  }
+
+  /** Triangles of the hero geometry (0 until prepared) — for budgets. */
+  get heroTriangles(): number {
+    const i = this.heroGeo?.getIndex();
+    return i ? i.count / 3 : 0;
+  }
+
   /** Pupil size 0 (bright sun) .. 1 (dark). */
   setPupil(v: number) {
     this.eyes.L.material.eyeUniforms.uPupil.value = v;
@@ -438,14 +497,19 @@ export class HumanModel {
    * a triangle is removed when all three vertices are hidden.  Call again with `null` to restore.
    */
   hideSkin(hidden: ((p: THREE.Vector3, bone: string) => boolean) | null) {
-    const g = this.body.geometry;
+    this.hideFn = hidden;
+    this.applyHide(this.baseGeo, hidden);
+    if (this.heroGeo) this.applyHide(this.heroGeo, hidden);
+  }
+
+  private applyHide(g: THREE.BufferGeometry, hidden: ((p: THREE.Vector3, bone: string) => boolean) | null) {
     if (!g.userData.fullIndex) g.userData.fullIndex = g.getIndex()!.clone();
     const full = g.userData.fullIndex as THREE.BufferAttribute;
     if (!hidden) {
       g.setIndex(full.clone());
       return;
     }
-    const rest = this.restPositions();
+    const rest = this.restPositions(g);
     const si = g.getAttribute('skinIndex') as THREE.BufferAttribute;
     const n = rest.length / 3;
     const hid = new Uint8Array(n);
@@ -466,7 +530,7 @@ export class HumanModel {
   /** Body vertex normals in the rest pose (character space). */
   restNormals(): Float32Array {
     if (this._restN) return this._restN;
-    const g = this.body.geometry;
+    const g = this.baseGeo;
     const nrm = g.getAttribute('normal') as THREE.BufferAttribute;
     const rots = this.rig.rest.map((r) => r.Q);
     const out = new Float32Array(nrm.count * 3);
@@ -482,9 +546,14 @@ export class HumanModel {
     return out;
   }
   /** Body vertex positions in the rest pose (arms down), character space. */
-  restPositions(): Float32Array {
+  restPositions(geometry?: THREE.BufferGeometry): Float32Array {
+    // the cached result is for the load-time body level; the hero level (hideSkin on it) is computed on demand
+    if (geometry && geometry !== this.baseGeo) return this.computeRest(geometry);
     if (this._rest) return this._rest;
-    const g = this.body.geometry;
+    this._rest = this.computeRest(this.baseGeo);
+    return this._rest;
+  }
+  private computeRest(g: THREE.BufferGeometry): Float32Array {
     const pos = g.getAttribute('position') as THREE.BufferAttribute;
     const mats = this.restSkinMatrices();
     const out = new Float32Array(pos.count * 3);
@@ -496,7 +565,6 @@ export class HumanModel {
       inf(i, (b, w) => acc.addScaledVector(t.copy(v).applyMatrix4(mats[b]), w));
       acc.toArray(out, i * 3);
     }
-    this._rest = out;
     return out;
   }
 
@@ -536,7 +604,7 @@ export class HumanModel {
   skinAttachment(geo: THREE.BufferGeometry, material: THREE.Material | THREE.Material[], opts: { space?: 'rest' | 'bind'; k?: number; boneFilter?: (bone: string) => boolean; facing?: boolean } = {}) {
     const space = opts.space ?? 'rest';
     const k = opts.k ?? 6;
-    const body = this.body.geometry;
+    const body = this.baseGeo;
     const bpos = space === 'rest' ? this.restPositions() : (body.getAttribute('position').array as Float32Array);
     const bnrm = opts.facing === false ? null : space === 'rest' ? this.restNormals() : (body.getAttribute('normal').array as Float32Array);
     const bsi = body.getAttribute('skinIndex') as THREE.BufferAttribute;
@@ -667,7 +735,9 @@ export class HumanModel {
    * from the preset (albedo / normal / mask / detail / iris) are shared by every instance and stay cached.
    */
   dispose() {
-    this.body.geometry.dispose();
+    unregisterSkinMesh(this.body);
+    this.baseGeo.dispose();
+    this.heroGeo?.dispose();
     this.skin.dispose();
     (this.body.customDepthMaterial as THREE.Material | undefined)?.dispose();
     for (const m of [this.brows, this.lashes, this.tearLines, this.teeth]) {

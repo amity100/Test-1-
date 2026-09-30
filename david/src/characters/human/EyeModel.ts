@@ -44,6 +44,8 @@ export class EyeMaterial extends THREE.MeshPhysicalMaterial {
     uSocket: { value: new THREE.Matrix4() }, // world -> socket (head) space
     uOpening: { value: new THREE.Vector4(0, 0, 0.012, 0.004) }, // opening centre xy, half extents (socket space)
     uCornea: { value: new THREE.Vector4(0, 0, 0, 0) }, // cornea sphere centre z, radius, iris plane z, eyeball radius (local units)
+    uCaustic: { value: 1.0 }, // strength of the corneal caustic on the iris (the crescent opposite the light)
+    uHero: { value: 0.0 }, // hero close-up 0..1 (HumanModel.setHero): stronger caustic, limbal detail
   };
   constructor(p: EyeParams) {
     super({ color: 0xffffff, roughness: 0.075, metalness: 0, ior: 1.376, clearcoat: 0, sheen: 0 });
@@ -54,8 +56,8 @@ export class EyeMaterial extends THREE.MeshPhysicalMaterial {
     this.onBeforeCompile = (s) => {
       Object.assign(s.uniforms, u);
       s.vertexShader = s.vertexShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vEyeLocal;\nvarying vec3 vEyeWorld;\nvarying vec3 vEyePos;\nvarying vec3 vEyeCam;')
-        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvEyeLocal = normalize( position );\nvEyePos = position;\nvEyeCam = ( inverse( modelMatrix ) * vec4( cameraPosition, 1.0 ) ).xyz;')
+        .replace('#include <common>', '#include <common>\nvarying vec3 vEyeLocal;\nvarying vec3 vEyeWorld;\nvarying vec3 vEyePos;\nvarying vec3 vEyeCam;\nvarying vec3 vEyeCentreV;\nvarying vec3 vEyeFwdV;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvEyeLocal = normalize( position );\nvEyePos = position;\nvEyeCam = ( inverse( modelMatrix ) * vec4( cameraPosition, 1.0 ) ).xyz;\nvEyeCentreV = ( modelViewMatrix * vec4( 0.0, 0.0, 0.0, 1.0 ) ).xyz;\nvEyeFwdV = normalize( ( modelViewMatrix * vec4( 0.0, 0.0, 1.0, 0.0 ) ).xyz );')
         .replace('#include <project_vertex>', '#include <project_vertex>\nvEyeWorld = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
       s.fragmentShader = s.fragmentShader
         .replace(
@@ -66,6 +68,9 @@ uniform float uPupil, uIrisR, uLidOpen, uTexIrisR;
 uniform mat4 uSocket;
 uniform vec4 uOpening;
 uniform vec4 uCornea;
+uniform float uCaustic, uHero;
+varying vec3 vEyeCentreV;
+varying vec3 vEyeFwdV;
 varying vec3 vEyeLocal;
 varying vec3 vEyeWorld;
 varying vec3 vEyePos;
@@ -144,6 +149,33 @@ float gIris = 0.0;`,
   // living sclera: near white with a faint warm cast, a touch pinker only in the canthi
   diffuseColor.rgb *= mix( mix( vec3( 0.97, 0.95, 0.92 ), vec3( 0.95, 0.85, 0.82 ), smoothstep( 0.6, 0.98, abs( e.x ) ) ), vec3( 1.0 ), gIris );
 }`,
+        )
+        .replace(
+          '#include <lights_physical_pars_fragment>',
+          `#include <lights_physical_pars_fragment>
+void RE_Direct_Eye( const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight ) {
+  RE_Direct_Physical( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
+  #ifndef EYE_LOW
+  if ( gIris > 0.0 ) {
+    // the cornea is a lens: light arriving from the side is focused into a bright crescent on the iris on the
+    // side AWAY from the light (what makes an iris read as deep and wet, not painted)
+    vec3 L = directLight.direction;
+    vec3 fwd = normalize( vEyeFwdV );
+    float lf = dot( L, fwd );
+    vec3 Lp = L - lf * fwd;
+    float t = length( Lp );
+    vec3 q = geometryPosition - vEyeCentreV;
+    vec3 qp = q - dot( q, fwd ) * fwd;
+    float irisR = uIrisR * uCornea.w;
+    vec3 c = -Lp / max( t, 1e-4 ) * mix( 0.15, 0.62, t ) * irisR;
+    float d = length( qp - c ) / irisR;
+    float caus = exp( -d * d / mix( 0.06, 0.1, uHero ) ) * smoothstep( 0.08, 0.55, t ) * smoothstep( -0.25, 0.25, lf );
+    reflectedLight.directDiffuse += caus * directLight.color * material.diffuseColor * ( 1.4 + 1.0 * uHero ) * uCaustic * gEyeShadow;
+  }
+  #endif
+}
+#undef RE_Direct
+#define RE_Direct RE_Direct_Eye`,
         )
         .replace(
           '#include <roughnessmap_fragment>',

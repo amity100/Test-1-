@@ -491,12 +491,14 @@ interface BodyTopo {
 const topoCache = new WeakMap<HumanData, Map<number, BodyTopo>>();
 
 /**
- * Build the renderable body geometry. level 0 = hm08 control mesh, 1 = one Catmull-Clark level.
+ * Build the renderable body geometry. level 0 = hm08 control mesh, 1 = one Catmull-Clark level, 2 = two levels (the
+ * hero close-up level, ~214k verts / 428k tris; variation morphs are not supported there: level 1 is used instead).
  * The topology work (subdivision, uv split, weights, tangents) runs once per preset and level; every instance gets
  * its own BufferGeometry that shares those attributes (and the positions / normals too when it has no variation).
  * Variation instances only re-apply the cached subdivision stencil and recompute normals (tangents are shared).
  */
-export function buildBodyGeometry(d: HumanData, level: 0 | 1, variation?: Record<string, number>): BodyGeometryInfo {
+export function buildBodyGeometry(d: HumanData, level: 0 | 1 | 2, variation?: Record<string, number>): BodyGeometryInfo {
+  if (level === 2 && variationDelta(d, variation)) level = 1;
   let perData = topoCache.get(d);
   if (!perData) topoCache.set(d, (perData = new Map()));
   let topo = perData.get(level);
@@ -543,9 +545,11 @@ export function buildBodyGeometry(d: HumanData, level: 0 | 1, variation?: Record
   return { geometry: g, posIndex: topo.posIndex, vertexCount: topo.vertexCount, triangleCount: topo.triangleCount };
 }
 
-function buildTopo(d: HumanData, level: 0 | 1): BodyTopo {
+function buildTopo(d: HumanData, level: 0 | 1 | 2): BodyTopo {
   let c = controlMesh(d);
   if (level === 1) c = subdivide(c, true);
+  // hero level: the first level stays on the subdivision surface (not pushed to the limit), the second goes to it
+  if (level === 2) c = subdivide(subdivide(c, false), true);
   const F = c.quads.length / 4;
   const V = c.pos.length / 3;
   // triangulate
