@@ -450,7 +450,7 @@ function standingStoneGeometry(seed: number): THREE.BufferGeometry {
       // colour: rain streaks run down from the top (dark grey), lichen patches (pale grey-green), sun-bleached crown
       const streak = THREE.MathUtils.smoothstep(Math.sin(a * 9 + ph[9] + Math.sin(a * 23 + ph[10]) * 1.5) * 0.5 + 0.5, 0.62, 0.95) * THREE.MathUtils.smoothstep(t, 0.15, 0.75);
       const lichen = THREE.MathUtils.smoothstep(n3(x * 2, y * 2, z * 2, 7, 1), 0.45, 0.7) * (1 - t * 0.5);
-      const r = 1 - streak * 0.3 - cav * 0.15, gg = 1 - streak * 0.29 - cav * 0.15, b = 1 - streak * 0.26 - cav * 0.14;
+      const r = 1 - streak * 0.16 - cav * 0.1, gg = 1 - streak * 0.155 - cav * 0.1, b = 1 - streak * 0.14 - cav * 0.09;
       col.push(r * (1 - lichen * 0.08), gg * (1 - lichen * 0.02), b * (1 - lichen * 0.1));
     }
   }

@@ -22,6 +22,8 @@ export async function beginFit(human: HumanModel, name: string, tier: Tier, seed
 }
 
 export interface TunicOptions {
+  /** 0..1: a stiff skirt (leather-backed armour) follows the pelvis more than the thighs (default 0) */
+  skirtStiff?: number;
   tex: TexPair;
   tile: number;
   dye: THREE.ColorRepresentation;
@@ -201,7 +203,7 @@ export function fittedTunic(fit: Fit, o: TunicOptions): TunicResult {
     skGeos.push(fringeStrip(skirt.tube, 0.018 * S, o.seed + 7, 0.1));
     mats.push(fringeMaterial({ tier, tex: o.tex, dye: o.dye, width: 0.05, sway, collide: U }));
   }
-  const sk = makeSkinned(human, skGeos.length > 1 ? merge(skGeos) : skirtGeo, mats.length > 1 ? mats : skMat, skirtWeights(fit), { name: `${o.name}Skirt`, depthMaterial: clothDepthMaterial({ sway, collide: U, collidePad: pad }) });
+  const sk = makeSkinned(human, skGeos.length > 1 ? merge(skGeos) : skirtGeo, mats.length > 1 ? mats : skMat, skirtWeights(fit, o.skirtStiff ?? 0), { name: `${o.name}Skirt`, depthMaterial: clothDepthMaterial({ sway, collide: U, collidePad: pad }) });
   outfit.add(sk);
   meshes.push(sk);
   if (!o.sleeveless) {

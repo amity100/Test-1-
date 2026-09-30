@@ -135,6 +135,15 @@ export class GilgalArmy {
     return new GilgalArmy(crowd, anim, ranks, o, !o.anim, lite);
   }
 
+  /**
+   * Recommended FilmActor stand-ins per shot (the crowd figures nearest the lens that are in frame): shot 9 opens with
+   * the camera inside the column at rank 6 (the two slots within 0.9 m of the lens are hidden automatically); ranks 4-5
+   * of the centre files fill the foreground at 1.7-4 m. Shots 6-8 need none (the nearest figures are >= 10 m away).
+   */
+  static readonly HERO_SLOTS: Partial<Record<GilgalShotName, { file: number; rank: number }[]>> = {
+    silence: [{ file: 7, rank: 5 }, { file: 8, rank: 5 }, { file: 6, rank: 5 }, { file: 9, rank: 4 }],
+  };
+
   /** the impostor layer's live stats (null without impostors) */
   get impostors() {
     return this.crowd.meshes.length > 3 ? { drawn: this.crowd.stats.drawn[3] } : null;
@@ -164,10 +173,18 @@ export class GilgalArmy {
     return { file, rank, pos: s.ag.pos.clone(), yaw: s.ag.yaw, kit: s.kit, state: s.state, clip: c ? c.clip.clip : '', time: c ? c.t : 0, headYaw: s.ag.headYaw };
   }
 
-  /** the n formation slots nearest to a point (e.g. the camera of shot 9), nearest first */
-  nearestSlots(p: THREE.Vector3, n: number) {
+  /**
+   * the n formation slots nearest to a point (e.g. the camera of shot 9) at a beat of the blocking (default: the
+   * current one), nearest first. Use it to choose which crowd figures FilmActors replace (setActorSlots).
+   */
+  nearestSlots(p: THREE.Vector3, n: number, shot: GilgalShotName = this.beat ?? 'silence', time = this.beatT) {
+    const st = armyAt(shot, time);
+    const v = new THREE.Vector3();
     return this.soldiers
-      .map((s) => ({ file: s.file, rank: s.rank, dist: Math.hypot(s.ag.pos.x - p.x, s.ag.pos.z - p.z) }))
+      .map((s) => {
+        armySlot(s.file, s.rank, st.frontX, st.part, 0.18, v);
+        return { file: s.file, rank: s.rank, dist: Math.hypot(v.x - p.x, v.z - p.z) };
+      })
       .sort((a, b) => a.dist - b.dist)
       .slice(0, n);
   }

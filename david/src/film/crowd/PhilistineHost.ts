@@ -53,7 +53,7 @@ export interface PhilistineHostOptions {
   /**
    * column mode: lateral offsets (m, + = the camera side of the coast shots) of further columns marching in the fields
    * beside the road, so the host reads as an army and not a file of men. Default by tier: desktop-high [-21, -42],
-   * desktop-medium / mobile-high [-22], mobile-low [].
+   * others [-22].
    */
   flanks?: number[];
   /** far field as skeletal impostors (Crowd LOD3); default true. Counts include them. */
@@ -88,7 +88,7 @@ export class PhilistineHost {
     const lite = o.tier.startsWith('mobile');
     const imp = o.impostors !== false;
     const count = o.count ?? (imp
-      ? (o.tier === 'mobile-low' ? 900 : o.tier === 'mobile-high' ? 1400 : o.tier === 'desktop-medium' ? 2600 : 3800)
+      ? (o.tier === 'mobile-low' ? 1200 : o.tier === 'mobile-high' ? 1600 : o.tier === 'desktop-medium' ? 2600 : 3800)
       : (o.tier === 'mobile-low' ? 360 : o.tier === 'mobile-high' ? 500 : o.tier === 'desktop-medium' ? 900 : 1400));
     const anim = o.anim ?? (await CrowdAnim.bake(philistineClips(lite)));
     const crowd = await Crowd.create({ army: 'philistine', anim, capacity: count, tier: o.tier, castShadow: [true, false, false], impostors: imp });
@@ -133,7 +133,7 @@ export class PhilistineHost {
       // COLUMN mode: the main column on the road (half the men), companies of 16 ranks with a gap between them and an
       // elite rank at the head of each (bronze helmets and greaves catch the sun all along the column), flank columns
       // in the fields beside it, starting further back
-      const flanks = o.flanks ?? (o.tier === 'mobile-low' ? [] : o.tier === 'desktop-high' ? [-21, -42] : [-22]);
+      const flanks = o.flanks ?? (o.tier === 'desktop-high' ? [-21, -42] : [-22]);
       const cols = [{ lat: 0, files: Math.max(3, Math.round((width ?? 6.3) / 1.1)), start: 0, share: flanks.length ? 0.5 : 1 }];
       flanks.forEach((l, k) => cols.push({ lat: l, files: 8, start: 26 + k * 34, share: 0.5 / flanks.length }));
       let i = 0;

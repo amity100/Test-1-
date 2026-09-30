@@ -80,7 +80,8 @@ export function rachelShots(ground: (x: number, z: number) => number, pillar: TH
   shots.stone = path([g(-2.6, 3.3, 1.2), g(-3.3, 2.5, 1.3)], [g(0, 0, 1.25), g(0, 0, 1.3)], [34, 32], 4.5);
   // D — high wide (alternate establishing): a crane from the south-west, the stone small by the road, the slope and the
   //     crossing flock beyond, the desert and the Moab wall on the horizon.
-  shots.wide = path([g(-34, 26, 9), g(-30, 22, 6.5)], [g(60, -30, -6), g(60, -26, -6)], [42, 40], 6);
+  //     (the camera rises clear of the terrace west of the road and keeps the stone in the lower left third)
+  shots.wide = path([g(-24, 30, 15), g(-21, 26, 8.5)], [g(38, -14, 0.5), g(34, -12, 0.2)], [40, 38], 6);
   const sequence = [shots.dawn, shots.road];
   return { shots, sequence, anchors: { pillar: P.clone(), pillarTop: top, road, shepherdRoute, flockRoute, walkSpeed: 1.0 } };
 }

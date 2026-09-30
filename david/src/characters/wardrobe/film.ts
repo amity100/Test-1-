@@ -170,13 +170,14 @@ export async function dressSaulGilgal(human: HumanModel, opts: FilmDressOptions)
   // shiryon: leather backing (neck to mid-thigh, sleeveless) + bronze scales
   const coat = fittedTunic(fit, {
     tex: t.leather, tile: 0.25, dye: 0x4a3322, hem: -0.95, sleeve: 0, sleeveless: true, neck: 'round', offset: 0.012, ease: 0.012, flare: 0.08, folds: 0.25,
+    skirtStiff: 0.6, // leather-backed scales: the skirt of the coat hangs from the belt (a flexible one bulged out behind in a lunge)
     seed: 8, name: 'shiryonBacking', hide: false, inner: madim.restPos, fray: 0, sheen: 0.25, roughness: 0.6, dust: 0.5,
     armhole: { half: 0.5, top: lm.yArmpit + 0.012 + 0.075 },
     palette: [0x3a2618, 0x3a2618, 0x3a2618, 0x3a2618],
     bands: [{ from: 0.0, to: 0.02, motif: 0, pal: 0 }],
     neckBands: [{ from: 0.0, to: 0.02, motif: 0, pal: 0, edge: 'upper' }],
   });
-  scaleArmour(fit, coat, { metal: t.metal, polish: 'royal', seed: 29, width: opts.crowd ? 0.04 : 0.03, length: opts.crowd ? 0.075 : 0.058, row: opts.crowd ? 0.05 : 0.036 });
+  scaleArmour(fit, coat, { metal: t.metal, polish: 'royal', seed: 29, width: opts.crowd ? 0.04 : 0.03, length: opts.crowd ? 0.075 : 0.058, row: opts.crowd ? 0.05 : 0.036, skirtStiff: 0.6 });
   // belt over the coat + straight sword at the left hip, girded over the madim (17:39)
   const beltMat = solidMaterial({ tier, tex: t.leather, color: 0x3d2a1c, roughness: 0.55, repeat: [1, 12], normal: 1.2 });
   beltBand(fit, coat, { width: 0.05 * S, thickness: 0.008, material: beltMat, offset: 0.012, name: 'swordBelt' });
@@ -313,7 +314,7 @@ export async function dressSoldier(human: HumanModel, opts: FilmDressOptions & {
           const mm = m.material as THREE.MeshPhysicalMaterial;
           if (mm.metalness < 0.5) {
             mm.color.set(0x5a3a22); // oiled hide, dark, with an oily sheen (Rashi 2 Sam 1:21)
-            mm.roughness = 0.35;
+            mm.roughness = 0.52; // an oily sheen, not a mirror (0.35 flashed white against the low sun in shot 7)
           }
         }
       });

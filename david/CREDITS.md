@@ -302,6 +302,9 @@ project's own generators:
   Ramah's four-room houses and gateway reuse the same fieldstone texture; the trees and scrub of the coast and Ramah
   sets and the Rachel's-tomb shot reuse the project's own TreeGen models and world textures (in-house, CC0 project
   content). The Rachel's-tomb monolith (`src/world/Village.ts`) is procedural. No new third-party assets.
+- Third pass (land): `src/assets/land/judah_dress.webp` is derived from the same SRTM landcover (`tools/land/bake_dress.py`:
+  aridity / drainage / valley depth as an opaque RGB mask); the Judah terrace walls, olive groves and hamlets
+  (`src/film/land/landJudah.ts`) and the dawn sky grade are procedural own code. No new third-party assets.
 
 ## Skin, eyes and hero close-up level — `src/fx/SSS.ts`, `src/characters/human/{SkinMaterial,EyeModel}.ts`, `tools/human/bake_skin.py --regions`, `dev/skin*`
 - **No third-party assets.** The region maps (`src/assets/human/<preset>/region_1k.webp`) are baked by
@@ -323,6 +326,10 @@ project's own generators:
   **MIT license**, used by `tools/crowd/bake_crowd.py` for the LOD decimation.
 - Instanced skinning from animation textures, per-instance region masks and the bow / quiver / bedroll / waterskin /
   reed crown / helmet / greaves geometry are own code.
+- Second pass (no new third-party assets either): the skeletal impostors (`impostorShader.ts`), the footstep dust
+  (`CrowdDust.ts`) and the spoil herds' low-poly sheep / goats / cattle (`SpoilHerd.ts`, built from three.js
+  primitives at load) are own code. `SpoilHerd` uses `mergeGeometries` from three.js's examples (MIT, part of the
+  `three` dependency).
 
 ## Cast of the opening film (src/film/cast, src/characters/wardrobe/film*.ts, tear.ts, src/characters/hair/filmStyles.ts)
 
@@ -330,6 +337,9 @@ No third-party assets. New MakeHuman presets `samuel` and `elder` (tools/human/p
 MakeHuman 1.1 CC0 data already credited above; the scale armour, helmet, bow, quiver, axe, ram's horn, feather crown,
 greaves, bedroll, the tearable me'il and all grooms are procedural (this project's code). Motion comes from the CMU
 Graphics Lab Motion Capture Database clips already credited in the "Motion capture" section.
+Second cast pass: full 2K/1K skin bakes of `samuel`, `elder` and `saul` (tools/human/bake_skin.py, own tool, from the
+same CC0 MakeHuman data; region maps per the skin teammate), the tear's thread ribbons, the lunge / look / face-light
+layers of FilmActor and the Ramah harness (dev/cast-ramah.html) — all own code, no new third-party assets.
 
 ## Opening film — Gilgal, ACT I and the rise (src/film/gilgal, tools/gilgal, src/assets/gilgal, dev/gilgal*)
 

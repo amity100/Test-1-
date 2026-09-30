@@ -82,7 +82,14 @@ async function boot() {
   };
   const STUDIO = new THREE.Vector3(SAMUEL.pos.x + 6, 0, SAMUEL.pos.z + 3);
   /** pose one actor at the studio mark, simulate its clip for a while */
-  const posed = (a: FilmActor, o: { yaw?: number; clip?: string; t?: number; pose?: string; at?: THREE.Vector3; noLook?: boolean }) => {
+  const posed = (a: FilmActor, o: { yaw?: number; clip?: string; t?: number; pose?: string; at?: THREE.Vector3; noLook?: boolean; body?: Partial<FilmActor['body']>; legs?: number; hide?: string[] }) => {
+    a.body.drop = a.body.lean = a.body.twist = a.body.side = a.body.feetFwd = 0;
+    Object.assign(a.body, o.body ?? {});
+    a.mocap.stopLayer('lunge', 0.001);
+    if (o.legs !== undefined) a.mocap.playLayer('lunge', 'walk', { mask: 'legs', time: o.legs, speed: 0, fade: 0.001 });
+    a.root.traverse((c) => {
+      if ((c as THREE.Mesh).isMesh) c.visible = !(o.hide ?? []).some((h) => c.name.includes(h));
+    });
     a.setVisible(true);
     const at = o.at ?? STUDIO;
     a.place(at, o.yaw ?? -Math.PI / 2);
@@ -107,7 +114,7 @@ async function boot() {
     const T = o.t ?? 1.5;
     for (let t = 0; t < T; t += 1 / 30) a.update(1 / 30, camera, size.y, new THREE.Vector3(1.2, 0, 0.2));
   };
-  const studio = (key: string, view: string, o: { yaw?: number; fov?: number; dist?: number; h?: number; clip?: string; t?: number; pose?: string; side?: number } = {}) => {
+  const studio = (key: string, view: string, o: { yaw?: number; fov?: number; dist?: number; h?: number; clip?: string; t?: number; pose?: string; side?: number; body?: Partial<FilmActor['body']>; legs?: number; hide?: string[]; names?: boolean } = {}) => {
     hideAll();
     const a = actors[key];
     posed(a, o);
@@ -131,7 +138,15 @@ async function boot() {
     if (faceView) post.setDoF({ enabled: true, focusDistance: dist, fStop: 2.8, focalLength: null, target: null });
     else post.setDoF({ enabled: false });
     post.resetHistory();
-    return render(3);
+    const r = render(3);
+    if (o.names) {
+      const names: string[] = [];
+      a.root.traverse((c) => {
+        if ((c as THREE.Mesh).isMesh) names.push(c.name);
+      });
+      return { ...r, names };
+    }
+    return r;
   };
   const lineup = (keys: string[], o: { dist?: number; fov?: number } = {}) => {
     hideAll();

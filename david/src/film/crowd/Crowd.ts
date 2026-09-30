@@ -203,7 +203,7 @@ export interface CrowdOptions {
  * Without: mesh LOD2 up to d[2] (the old behaviour).
  */
 const TIER_LOD: Record<CrowdTier, { d: [number, number, number]; caps: [number, number, number]; imp: [number, number, number]; shadow: [boolean, boolean, boolean]; lite: boolean }> = {
-  'desktop-high': { d: [22, 60, 900], caps: [90, 320, 1500], imp: [150, 2500, 6000], shadow: [true, true, false], lite: false },
+  'desktop-high': { d: [22, 60, 900], caps: [90, 320, 1100], imp: [150, 2500, 6000], shadow: [true, true, false], lite: false },
   'desktop-medium': { d: [16, 45, 700], caps: [60, 220, 900], imp: [110, 2000, 4000], shadow: [true, false, false], lite: false },
   'mobile-high': { d: [10, 32, 500], caps: [24, 120, 360], imp: [70, 1500, 2400], shadow: [true, false, false], lite: true },
   'mobile-low': { d: [8, 26, 400], caps: [14, 70, 200], imp: [55, 1200, 1600], shadow: [false, false, false], lite: true },
@@ -395,6 +395,11 @@ export class Crowd {
     }
     this.stats.culled = culled;
     this.stats.triangles = tris;
+  }
+
+  /** drawing-buffer height in pixels (renderer.getDrawingBufferSize().y); keeps far spear shafts visible */
+  set viewportHeight(h: number) {
+    this.uniforms.uViewH.value = Math.max(1, h);
   }
 
   /** compile the programs before the first shot (pass the set's scene + camera) */

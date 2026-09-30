@@ -99,7 +99,7 @@ export interface ScaleArmourOptions {
  * Bronze scales on the coat `coat` (fittedTunic result used as the leather backing). Returns the skinned mesh
  * (one draw call). Cost: high ≈ 700-900 scales × 24 tris ≈ 20 k tris; low ≈ 8 tris per scale.
  */
-export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions): THREE.SkinnedMesh {
+export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions & { skirtStiff?: number }): THREE.SkinnedMesh {
   const { lm, tier, human } = fit;
   const low = tier === 'low';
   const S = lm.height / 1.75;
@@ -110,10 +110,12 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions):
   const zone: number[] = []; // 0 upper (torso / shoulder), 1 skirt
   const royal = (o.polish ?? 'royal') === 'royal';
   // warm bronze F0 (Cu-Sn ~10%): saturated enough that the pale sky it reflects cannot turn it grey / lilac
-  const bronzeHex = royal ? 0xb46a2c : 0x8c5a2e;
+  const bronzeHex = royal ? 0xa8602a : 0x8c5a2e;
   const base = new THREE.Color(1, 1, 1);
   const patina = new THREE.Color(0x56745b).multiply(new THREE.Color(bronzeHex).set(1 / new THREE.Color(bronzeHex).r, 1 / new THREE.Color(bronzeHex).g, 1 / new THREE.Color(bronzeHex).b));
-  const dust = new THREE.Color(0.95, 0.88, 0.72);
+  // (metal: the vertex colour scales F0, so road dust must darken and desaturate it, never brighten it — a pale dust
+  // colour turned the whole coat silver-lilac against the bright sky)
+  const dust = new THREE.Color(0.6, 0.5, 0.38);
   const c = new THREE.Color();
   const tmpT = new THREE.Vector3(), tmpD = new THREE.Vector3(), q = new THREE.Vector3();
   const place = (t: Tube, zoneId: number, dStart: number, maxLen: (th: number) => number, rowOffset: number) => {
@@ -187,7 +189,7 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions):
             nor.push(nn.x, nn.y, nn.z);
             uv.push(0.5 + u * 0.5 * halfW * 2, v);
             // colour: darker where the row above overlaps (top), dust caught along the overlap line, bright rib
-            const shade = (0.16 + 0.84 * Math.min(1, v * 1.45) ** 1.3) * tone * 0.92;
+            const shade = (0.16 + 0.84 * Math.min(1, v * 1.45) ** 1.3) * tone * 0.8;
             c.copy(base).lerp(patina, pat * (1 - v)).multiplyScalar(shade);
             // road dust packed along the overlap line and in the lower rows (the skirt catches more)
             c.lerp(dust, (royal ? 0.22 : 0.32) * Math.max(0, 1 - Math.abs(v - 0.4) * 5) + (zoneId === 1 ? 0.08 : 0.03));
@@ -217,14 +219,14 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions):
   // plain PBR bronze (no wear texture: its bright scratch layer turned the scales silver): colour = F0 of bronze,
   // per-scale tone / overlap shading / dust from the vertex colours
   const mat = tier === 'low'
-    ? new THREE.MeshStandardMaterial({ color: bronzeHex, roughness: royal ? 0.5 : 0.58, metalness: 0.9, envMapIntensity: 0.75 })
-    : new THREE.MeshPhysicalMaterial({ color: bronzeHex, roughness: royal ? 0.48 : 0.56, metalness: 0.9, envMapIntensity: 0.75, sheen: 0.25, sheenColor: new THREE.Color(0xc8a878), sheenRoughness: 0.8 });
+    ? new THREE.MeshStandardMaterial({ color: bronzeHex, roughness: royal ? 0.5 : 0.58, metalness: 0.85, envMapIntensity: 0.45 })
+    : new THREE.MeshPhysicalMaterial({ color: bronzeHex, roughness: royal ? 0.48 : 0.56, metalness: 0.85, envMapIntensity: 0.45, sheen: 0.2, sheenColor: new THREE.Color(0xa8845a), sheenRoughness: 0.8 });
   mat.vertexColors = true;
   mat.side = THREE.DoubleSide;
   // weights: upper zone follows the torso, and near the shoulders blends into the upper arm (like the armhole cap)
   const tw = partWeights(fit, C.TORSO | C.NECK, 8);
   const aw = partWeights(fit, C.TORSO | C.NECK | C.UPARM_L | C.UPARM_R, 8);
-  const sw = skirtWeights(fit);
+  const sw = skirtWeights(fit, o.skirtStiff ?? 0);
   const w = (i: number, p: THREE.Vector3) => {
     if (zone[i] === 1) return sw(i, p);
     const side = Math.abs(p.x) / Math.max(1e-6, Math.hypot(p.x, p.z));
@@ -283,7 +285,7 @@ export function makeHelmet(tier: Tier, metal: TexPair, leather: TexPair, o: { ra
   dome.computeVertexNormals();
   const bronze = solidMaterial({
     // dusty, hammered dark bronze after a campaign (a smooth bright dome read as a glowing ball in the backlight)
-    tier, tex: metal, color: royal ? 0x7a4a26 : 0x6e4a2c, roughness: royal ? 0.62 : 0.66, metalness: 0.88, repeat: [2, 2], normal: 1.8,
+    tier, tex: metal, color: royal ? 0x5f3b1f : 0x6e4a2c, roughness: royal ? 0.68 : 0.7, metalness: 0.85, repeat: [2, 2], normal: 1.8,
     metalWear: { patina: 0x56745b, amount: royal ? 0.2 : 0.5, edgeBright: 0.3 },
   });
   bronze.side = THREE.DoubleSide;

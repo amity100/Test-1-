@@ -46,6 +46,8 @@ export interface CrowdUniforms {
   uJB: { value: THREE.Vector3[] };
   /** impostor debug: 1 = no metal / rough, 2 = flat normal */
   uImpDbg: { value: number };
+  /** drawing-buffer height in px (keeps far spear shafts >= ~0.5 px wide) */
+  uViewH: { value: number };
   uTunic: { value: THREE.Color[] };
   uCloth: { value: THREE.Color[] };
   uHair: { value: THREE.Color[] };
@@ -74,6 +76,7 @@ export function crowdUniforms(army: 'israel' | 'philistine'): CrowdUniforms {
     uSkin: { value: C(0x8a5a40) },
     uJB: { value: Array.from({ length: 11 }, () => new THREE.Vector3()) },
     uImpDbg: { value: 0 },
+    uViewH: { value: 720 },
     // tunics: light undyed wool x3, beige, grey, dark wool x2, madder-faded
     uTunic: {
       value: isr
@@ -131,6 +134,7 @@ uniform vec3 uAccent[4];
 uniform vec3 uLegJ[4]; // bind heads: upperleg01.L, lowerleg01.L, upperleg01.R, lowerleg01.R
 uniform vec3 uArmJ[3]; // bind heads: upperarm01.R, lowerarm01.R, wrist.R
 uniform vec2 uSpearExt; // shaft length below / above the grip (m)
+uniform float uViewH;
 attribute vec4 cJoints;
 attribute vec4 cWeights;
 attribute float cRegion;
@@ -177,7 +181,8 @@ void crowdCompute() {
     vec3 up = normalize(vec3(0.0, 1.0, iVar.w));
     vec3 dir = normalize(mix(gy, up, uSpearUp));
     vec3 gz = normalize(g[2].xyz);
-    vec3 X = normalize(cross(dir, gz));
+    vec3 cx = cross(dir, gz);
+    vec3 X = dot(cx, cx) > 1e-8 ? normalize(cx) : normalize(cross(dir, abs(dir.x) < 0.9 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 0.0, 1.0)));
     vec3 Z = cross(X, dir);
     // keep the shaft clear of the forearm / upper arm: slide it sideways out of the arm where they cross
     vec3 G = g[3].xyz;
@@ -190,14 +195,17 @@ void crowdCompute() {
     float lA = length(dA), lB = length(dB);
     if (lA < 0.06) G += (lA > 1e-4 ? dA / lA : X) * (0.06 - lA);
     if (lB < 0.075) G += (lB > 1e-4 ? dB / lB : X) * (0.075 - lB);
-    p = G + X * position.x + dir * position.y + Z * position.z;
-    n = normalize(X * normal.x + dir * normal.y + Z * normal.z);
+    // far away the shaft would fall under a pixel and leave only the dark point floating: keep it ~0.5 px wide
+    float mpp = length(cameraPosition - iPose.xyz) * 2.0 / (projectionMatrix[1][1] * uViewH);
+    float widen = max(1.0, 0.5 * mpp / 0.03);
+    p = G + (X * position.x + Z * position.z) * widen + dir * position.y;
+    n = X * normal.x + dir * normal.y + Z * normal.z;
   } else {
     mat4 m = cwBone(cJoints.x) * cWeights.x + cwBone(cJoints.y) * cWeights.y;
     if (cWeights.z > 0.0) m += cwBone(cJoints.z) * cWeights.z;
     if (cWeights.w > 0.0) m += cwBone(cJoints.w) * cWeights.w;
     p = (m * vec4(position, 1.0)).xyz;
-    n = normalize(mat3(m) * normal);
+    n = mat3(m) * normal;
     // the tunic skirt never lets a thigh through at full stride: push hem vertices out of the posed thigh capsules
     if (reg == R_TUNIC && position.y < uBeltY - 0.02) {
       vec3 hl = (cwBone(24.0) * vec4(uLegJ[0], 1.0)).xyz, kl = (cwBone(26.0) * vec4(uLegJ[1], 1.0)).xyz;
@@ -206,6 +214,8 @@ void crowdCompute() {
       p = cwThigh(p, hr, kr, 0.088, 0.058);
     }
   }
+  // the decimated LODs carry a few zero normals (normalize -> NaN -> black blocks after the half-res post passes)
+  n = dot(n, n) > 1e-8 ? normalize(n) : vec3(0.0, 1.0, 0.0);
   // head turn (neck / head vertices rotate about the posed neck)
   if (abs(iB.w) > 0.001 && (reg == R_HAIR || reg == R_BEARD || reg == R_EYE || reg == R_HEADBAND || reg == R_HEADCLOTH || reg == R_CROWN || reg == R_HELMET || reg == R_SCALP || (reg == R_SKIN && position.y > uHeadPivot.y - 0.02))) {
     mat4 hm = cwBone(8.0);
@@ -232,8 +242,13 @@ void crowdCompute() {
   vec3 hair = uHair[int(min(5.0, h.w * (h2.w > 0.86 ? 6.0 : 5.0)))];
   if (reg == R_EYE) { col = vec3(0.09, 0.075, 0.065); rough = 0.3; }
   else if (reg == R_SKIN) { col = cc * mix(vec3(0.8, 0.78, 0.76), vec3(1.1, 1.04, 1.0), h.x); rough = 0.62; }
-  else if (reg == R_SCALP) { col = mix(cc * 0.6, hair, 0.85); rough = 0.8; }
-  else if (reg == R_HAIR || reg == R_BEARD) { col = hair * (0.9 + 0.2 * h2.x); rough = 0.78; }
+  else if (reg == R_SCALP) { col = mix(mix(cc * 0.6, hair, 0.85), uDustColor * 0.4, 0.18 + 0.4 * smoothstep(20.0, 110.0, length(cameraPosition - iPose.xyz)) * uDust); rough = 0.8; }
+  else if (reg == R_HAIR || reg == R_BEARD) {
+    // road dust in the hair and beard, and the dust in the air between: far heads must not read as floating black dots
+    float dd = smoothstep(20.0, 110.0, length(cameraPosition - iPose.xyz));
+    col = mix(hair * (0.9 + 0.2 * h2.x), uDustColor * 0.4, 0.18 + 0.4 * dd * uDust);
+    rough = 0.78;
+  }
   else if (reg == R_TUNIC) {
     col = uTunic[int(h.y * 7.999)] * (0.94 + 0.12 * h2.y);
     stripe = h2.z < 0.18 ? 1.0 + floor(h2.x * 2.999) : 0.0;

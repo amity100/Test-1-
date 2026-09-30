@@ -14,12 +14,15 @@ export const landAtmo = {
   uHazeCool: { value: new THREE.Color(0.5, 0.52, 0.84) },
   uSunDirA: { value: new THREE.Vector3(0, 1, 0) },
   uSunColA: { value: new THREE.Color(1, 1, 1) },
+  /** x = exponent of the warm lobe round the sun, y = sharpness of the sun glare terms, z = haze brightness */
+  uHazeLobe: { value: new THREE.Vector3(6, 1, 0.92) },
 };
 
 export const GLSL_LAND_HAZE = /* glsl */ `
 uniform vec4 uHaze;
 uniform samplerCube tSkyCube;
 uniform vec3 uHazeWarm, uHazeCool, uSunDirA, uSunColA;
+uniform vec3 uHazeLobe; // x warm-lobe exponent, y sun-lobe sharpness, z haze brightness
 float landFog(vec3 cam, vec3 wp){
   vec3 d = wp - cam; float dist = length(d); vec3 rd = d / max(dist, 1e-3);
   float b = uHaze.y, h0 = max(cam.y - uHaze.z, 0.0), ry = rd.y;
@@ -30,8 +33,8 @@ vec3 landHazeColor(vec3 rd){
   vec3 skyDir = normalize(vec3(rd.x, max(rd.y, 0.015) * 0.35 + 0.012, rd.z));
   vec3 h = textureCube(tSkyCube, skyDir).rgb;
   float mu = max(dot(rd, uSunDirA), 0.0);
-  h *= mix(uHazeCool, uHazeWarm, pow(mu, 6.0));
-  return h * 0.92 + uSunColA * (pow(mu, 8.0) * 0.22 + pow(mu, 48.0) * 0.45);
+  h *= mix(uHazeCool, uHazeWarm, pow(mu, uHazeLobe.x));
+  return h * uHazeLobe.z + uSunColA * (pow(mu, 8.0 * uHazeLobe.y) * 0.22 + pow(mu, 48.0 * uHazeLobe.y) * 0.45);
 }
 vec3 landApplyHaze(vec3 col, vec3 cam, vec3 wp){
   float f = landFog(cam, wp);
@@ -49,11 +52,14 @@ export const cloudShared = {
   /** x = deck base (m), y = deck top (m), z = east edge of the deck (local x, m), w = coverage gain */
   uDeck: { value: new THREE.Vector4(1850, 2450, 5500, 1.0) },
   uCloudTime: { value: 0 },
+  /** strength of the small cumuli over the Moab plateau (land x > 30 km) */
+  uPuffs: { value: 0.8 },
 };
 
 export const GLSL_CLOUD_WEATHER = /* glsl */ `
 uniform vec4 uDeck;
 uniform float uCloudTime;
+uniform float uPuffs;
 float cwNoise(vec2 p){ return dNoise(p); }
 float cwFbm(vec2 p){ float s = 0.0, a = 0.5; for (int i = 0; i < 4; i++){ s += a * dNoise(p); p = p * 2.07 + 11.3; a *= 0.5; } return s; }
 // 0..1 coverage of the deck over (x, z) in local metres
@@ -64,7 +70,7 @@ float cloudWeather(vec2 xz){
   float holes = cwFbm(w * 0.00016 + 5.0);
   float cov = deck * smoothstep(0.30, 0.52, holes + 0.12);
   // scattered small cumuli over the Moab plateau, catching the first light
-  float puffs = smoothstep(0.66, 0.8, cwFbm(w * 0.00042 + 21.0)) * smoothstep(30000.0, 38000.0, xz.x) * 0.8;
+  float puffs = smoothstep(0.66, 0.8, cwFbm(w * 0.00042 + 21.0)) * smoothstep(30000.0, 38000.0, xz.x) * uPuffs;
   return clamp(max(cov, puffs) * uDeck.w, 0.0, 1.0);
 }
 float cloudShadow(vec3 p){

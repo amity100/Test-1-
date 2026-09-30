@@ -441,6 +441,7 @@ export class FilmStage {
     const engine = this.engine;
     const tmp = new THREE.Vector3();
     let current: string | null = null;
+    let armyOk = !!army;
     const status = [
       perf ? `Saul + Samuel${actors.length > 2 ? ' + armour-bearer' : ''}: FilmActor (GilgalPerformance)` : 'Saul + Samuel: set stand-ins',
       army ? `army: GPU crowd (GilgalArmy, ${army.ranks} ranks)` : 'army: set stand-ins',
@@ -467,7 +468,6 @@ export class FilmStage {
         if (!gilgal.shots[name]) return;
         current = take;
         gilgal.setBeat(name, 0);
-        army?.setBeat(name, 0);
         if (perf) {
           try {
             perf.enter(name);
@@ -481,9 +481,17 @@ export class FilmStage {
         if (!gilgal.shots[name]) return;
         if (current !== take) this.enter(take);
         gilgal.setBeat(name, t);
-        if (army) {
-          army.setBeat(name, t);
-          army.update(dt, camera);
+        if (army && armyOk) {
+          try {
+            army.setBeat(name, t);
+            army.update(dt, camera);
+          } catch (e) {
+            // a crowd error never stops the film: the set's stand-in army takes over
+            console.warn('[film] army failed; stand-ins', e);
+            armyOk = false;
+            army.group.visible = false;
+            gilgal.showPlaceholders(true);
+          }
         }
         if (perf) {
           try {

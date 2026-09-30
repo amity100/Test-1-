@@ -106,12 +106,12 @@
   },
   "brows": {
     "color": [
-      0.3,
-      0.15,
-      0.072
+      0.34,
+      0.17,
+      0.08
     ],
-    "density": 1.55,
-    "thickness": 1.15
+    "density": 1.3,
+    "thickness": 1.0
   },
   "face_macro": {
     "muscle": 0.5,

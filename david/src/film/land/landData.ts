@@ -13,6 +13,9 @@ const url = (name: string) => {
   return URLS[k];
 };
 
+/** URL of a land asset (src/assets/land/<name>) */
+export const landAssetUrl = (name: string) => url(name);
+
 export type TileName = 'region' | 'judah' | 'coast' | 'ramah';
 
 /** geographic helpers (the same projection as the baker) */

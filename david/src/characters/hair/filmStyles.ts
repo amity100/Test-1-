@@ -145,9 +145,9 @@ export function samuelStyle(): GroomStyle {
     ctrl: { low: 10, medium: 14, high: 20 },
     segs: { low: 14, medium: 24, high: 38 },
     shading: { shift: 0.03, roughness: 0.45, specular: 0.45, backlit: 0.9, scatter: 0.75, aoDirect: 0.5 },
-    capColor: [0.8, 0.78, 0.73], // the scalp cap matches the white hair (a grey cap showed through)
+    capColor: [0.74, 0.72, 0.67], // the scalp cap near the white hair (a grey cap showed through; brighter lit the moustache white)
     capOffset: 0.005,
-    capBeard: 0.8,
+    capBeard: 0.55,
     widthTier: { low: 2.8, medium: 1.5, high: 1 },
   };
 }

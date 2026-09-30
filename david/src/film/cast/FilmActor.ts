@@ -112,6 +112,8 @@ export class FilmActor {
   lookRate = 5;
   private lookYaw = 0;
   private lookPitch = 0;
+  /** pitch of (eyes - head joint) in the rest pose: the face is level when the measured pitch equals it */
+  private restEyePitch = 0;
   /**
    * Film light on the face (enableFaceLight): a soft warm spot from the camera side, aimed at the eyes, so the face
    * reads against the low sun (shots 7-9 are backlit). `faceFill` = illuminance on the face in the sun's units
@@ -213,6 +215,13 @@ export class FilmActor {
     mocap.rootMotion = 'inplace';
     const a = new FilmActor({ ...spec, lod }, human, groom, outfit, mocap);
     a.tear = tear;
+    {
+      // rest pose (nothing played yet): the eye line relative to the head joint, for the absolute look pitch
+      human.root.updateMatrixWorld(true);
+      const e = a.eyesWorld(new THREE.Vector3());
+      const h = human.bones.head.getWorldPosition(new THREE.Vector3());
+      a.restEyePitch = Math.atan2(e.y - h.y, Math.hypot(e.x - h.x, e.z - h.z));
+    }
     Object.assign(a.props, props);
     human.root.position.y = outfit.groundOffset;
     return a;
@@ -397,8 +406,11 @@ export class FilmActor {
       const L = this.lookLimits;
       const rel = THREE.MathUtils.clamp(wrapAngle(tYaw - chest), -L.yaw, L.yaw);
       wantYaw = wrapAngle(chest + rel - faceYaw) * w;
-      // pitch: absolute (idle / walk clips carry a level head), the eyes do the rest
-      wantPitch = THREE.MathUtils.clamp(Math.atan2(_D.y, Math.hypot(_D.x, _D.z)) * 0.8, -L.down, L.up) * w;
+      // pitch: the head goes 80% of the way to the target's elevation, measured against the animated face pitch
+      // (idle_king carries a proud raised chin), the eyes do the rest
+      const facePitch = Math.atan2(_B.y - _A.y, Math.hypot(_B.x - _A.x, _B.z - _A.z)) - this.restEyePitch;
+      const tPitch = THREE.MathUtils.clamp(Math.atan2(_D.y, Math.hypot(_D.x, _D.z)) * 0.8, -L.down, L.up);
+      wantPitch = THREE.MathUtils.clamp(tPitch - facePitch, -L.down - 0.3, L.up + 0.3) * w;
     }
     this.lookYaw += (wantYaw - this.lookYaw) * (this.headingSnap ? 1 : k);
     this.lookPitch += (wantPitch - this.lookPitch) * (this.headingSnap ? 1 : k);
@@ -542,8 +554,11 @@ export class FilmActor {
   private updateFaceLight(camera?: THREE.Camera) {
     const l = this.faceLight;
     if (!l) return;
-    l.visible = this.root.visible && this.faceFill > 0;
-    if (!l.visible || !camera) return;
+    // never toggle `visible`: the light count is compiled into every shader of the scene — off = intensity 0
+    if (!this.root.visible || this.faceFill <= 0 || !camera) {
+      l.intensity = 0;
+      return;
+    }
     const e = this.eyesWorld(_A);
     camera.getWorldPosition(_B);
     _C.copy(_B).sub(e).setY(0);

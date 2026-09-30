@@ -562,7 +562,8 @@ export function armWeights(fit: Fit, side: 'L' | 'R', forearm = false) {
  * two thighs lower down (never the shins: the hem must not follow the knee bend).  Legs that still push
  * through are handled by the leg-capsule push-out in the cloth vertex shader.
  */
-export function skirtWeights(fit: Fit) {
+/** `stiff` 0..1: a stiff skirt (leather-backed armour) follows the pelvis more and the thighs less (default 0) */
+export function skirtWeights(fit: Fit, stiff = 0) {
   const b = fit.body, lm = fit.lm;
   const vOk = b.vertsIn(C.TORSO | C.THIGH_L | C.THIGH_R);
   const bOk = b.bonesIn(C.TORSO | C.THIGH_L | C.THIGH_R);
@@ -575,10 +576,11 @@ export function skirtWeights(fit: Fit) {
     const near = b.nearestWeights(q, 8, vOk, bOk, false);
     const t = smoothstep(hipY + 0.02, kneeY + 0.06, p.y);
     const side = smoothstep(-0.07, 0.07, p.x);
+    const leg = 0.62 * (1 - 0.65 * stiff);
     const proc: Weights = new Map([
-      [thL, 0.62 * side],
-      [thR, 0.62 * (1 - side)],
-      [root, 0.38],
+      [thL, leg * side],
+      [thR, leg * (1 - side)],
+      [root, 1 - leg],
     ]);
     return blendWeights(near, normalizeWeights(proc), t * 0.9);
   });

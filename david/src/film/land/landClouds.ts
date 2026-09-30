@@ -90,6 +90,7 @@ export class LandClouds {
       uAmbTop: { value: new THREE.Color(0.34, 0.34, 0.56) },
       uAmbBottom: { value: new THREE.Color(0.22, 0.19, 0.27) },
       uSunI: { value: 8.5 },
+      uSunTint: { value: new THREE.Color(1, 1, 1) },
       uDitherOffset: temporal.uDitherOffset,
       uFrame: temporal.uFrame,
     };
@@ -113,7 +114,7 @@ export class LandClouds {
         precision highp sampler3D;
         uniform sampler3D tNoise;
         uniform float uExt, uSunI;
-        uniform vec3 uAmbTop, uAmbBottom;
+        uniform vec3 uAmbTop, uAmbBottom, uSunTint;
         uniform vec2 uDitherOffset;
         uniform float uFrame;
         varying vec3 vW;
@@ -152,7 +153,7 @@ export class LandClouds {
           vec3 sd = normalize(uSunDirA);
           float mu = dot(rd, sd);
           float phase = mix(hg(mu, 0.72), hg(mu, -0.18), 0.35) * 12.566 * 0.55 + 0.25;
-          vec3 sunC = uSunColA * uSunI;
+          vec3 sunC = uSunColA * uSunTint * uSunI;
           float jit = ign(gl_FragCoord.xy + uDitherOffset + vec2(uFrame * 5.3, 0.0));
           float T = 1.0; vec3 col = vec3(0.0); float tSum = 0.0, wSum = 0.0;
           float L = t1 - t0;

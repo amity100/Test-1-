@@ -137,6 +137,13 @@ export function buildRamahGate(tex: TextureSet, tier: LandTier, frame: { origin:
     const w = toWorld(lx, ly, lz);
     const m = new THREE.Matrix4().compose(w, new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), frame.yaw + ry), new THREE.Vector3(1, 1, 1));
     g.applyMatrix4(m);
+    const uvA = g.getAttribute('uv') as THREE.BufferAttribute | undefined;
+    if (uvA) {
+      // every piece gets its own window into the 4.8 m fieldstone tile (+ a quarter turn now and then): no two walls
+      // repeat the same stones side by side
+      const ou = rnd() * 7.3, ov = rnd() * 5.1, rot = rnd() < 0.35;
+      for (let i = 0; i < uvA.count; i++) { const u0 = uvA.getX(i), v0 = uvA.getY(i); uvA.setXY(i, (rot ? v0 : u0) + ou, (rot ? -u0 : v0) + ov); }
+    }
     const n = g.getAttribute('position').count;
     const c = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) { c[i * 3] = tint.r; c[i * 3 + 1] = tint.g; c[i * 3 + 2] = tint.b; }
@@ -155,8 +162,8 @@ export function buildRamahGate(tex: TextureSet, tier: LandTier, frame: { origin:
     const L = (x: number, z: number): [number, number] => [hx + x * c + z * sn, hz - x * sn + z * c];
     const wp = toWorld(hx, 0, hz);
     const gy = ground(wp.x, wp.z) - frame.origin.y;
-    const tint = tmpC.setHSL(0.09 + rnd() * 0.03, 0.18 + rnd() * 0.12, 0.72 + rnd() * 0.12).clone();
-    const t = 0.75, h = H + (big ? 0.5 : 0) + rnd() * 0.4, sink = 1.6;
+    const tint = tmpC.setHSL(0.08 + rnd() * 0.04, 0.14 + rnd() * 0.14, 0.66 + rnd() * 0.18).clone();
+    const t = 0.75, h = H - 0.4 + (big ? 0.6 : 0) + rnd() * 1.1, sink = 1.6;
     const wall = (x: number, z: number, w: number, d: number, hh = h) => { const [px, pz] = L(x, z); piece('wall', meterBox(w, hh + sink, d, 4.8, 0.04), px, gy + (hh + sink) / 2 - sink, pz, ry, tint); };
     wall(0, -D / 2 + t / 2, W, t); // back
     wall(-W / 2 + t / 2, 0, t, D); wall(W / 2 - t / 2, 0, t, D); // sides
@@ -175,6 +182,22 @@ export function buildRamahGate(tex: TextureSet, tier: LandTier, frame: { origin:
     const rt = tmpC.setHSL(0.08, 0.22, 0.6 + rnd() * 0.08).clone();
     for (const sg of [-1, 1]) { const [px, pz] = L(sg * (W / 2 - (side + t) / 2), 0.2); piece('roof', meterBox(side + t + 0.1, 0.32, D - 0.3, 3.0), px, gy + h - 0.3, pz, ry, rt); }
     { const [px, pz] = L(0, -D / 2 + (back + t) / 2); piece('roof', meterBox(W - 0.2, 0.32, back + t, 3.0), px, gy + h - 0.3, pz, ry, rt); }
+    // the low parapet round the roof (Deut 22:8 "וְעָשִׂיתָ מַעֲקֶה לְגַגֶּךָ"), uneven fieldstone courses
+    const pH = 0.45 + rnd() * 0.25;
+    { const [px, pz] = L(0, -D / 2 + t / 2); piece('wall', meterBox(W, pH, 0.45, 4.8, 0.05), px, gy + h + pH / 2, pz, ry, tint); }
+    for (const sg of [-1, 1]) { const [px, pz] = L(sg * (W / 2 - 0.22), 0); piece('wall', meterBox(0.45, pH, D, 4.8, 0.05), px, gy + h + pH / 2, pz, ry, tint); }
+    // an upper room on some roofs (the עֲלִיָּה of 1 Kings 17:19 / 2 Kings 4:10), reached by a ladder: breaks the
+    // skyline so the ring reads as houses, not as a town wall
+    if (rnd() < (big ? 1 : 0.32)) {
+      const uw = side + t + 0.4, ud = Math.min(D * 0.45, 4.2), uh = 2.2 + rnd() * 0.3, sg = rnd() < 0.5 ? -1 : 1;
+      const [px, pz] = L(sg * (W / 2 - uw / 2), -D / 2 + ud / 2 + 0.2);
+      piece('wall', meterBox(uw, uh, ud, 4.8, 0.04), px, gy + h + uh / 2, pz, ry, tint);
+      piece('roof', meterBox(uw + 0.2, 0.28, ud + 0.2, 3.0), px, gy + h + uh + 0.1, pz, ry, rt);
+      const [lx2, lz2] = L(sg * (W / 2 - uw - 0.4), -D / 2 + ud + 0.6);
+      piece('wood', meterBox(0.5, h + 0.4, 0.08, 1.0), lx2, gy + (h + 0.4) / 2, lz2, ry + 0.25, tmpC.setRGB(0.55, 0.45, 0.35));
+    }
+    // flax / figs drying on a roof, a stack of brushwood (roof life seen from the plaza)
+    if (rnd() < 0.45) { const [px, pz] = L((rnd() - 0.5) * W * 0.5, -D / 2 + back * 0.5 + 0.4); piece('wood', meterBox(1.6 + rnd(), 0.35, 1.1, 1.0, 0.1), px, gy + h + 0.12, pz, ry + rnd(), tmpC.setRGB(0.66, 0.58, 0.4)); }
     // beam ends under the roofs (timber)
     for (let i = 0; i < 5; i++) { const [px, pz] = L(-W / 2 + side + t + 0.05, D / 2 - 1.5 - i * (D - 3) / 4); piece('wood', meterBox(0.24, 0.2, 0.24, 1.0), px, gy + h - 0.52, pz, ry, tmpC.setRGB(0.55, 0.45, 0.36)); }
     // tannur (clay oven) in the court
@@ -192,7 +215,7 @@ export function buildRamahGate(tex: TextureSet, tier: LandTier, frame: { origin:
       if (k * 2 + (sg > 0 ? 1 : 0) >= nRing) continue;
       const W = 9 + rnd() * 2.5, D = 11 + rnd() * 2.5;
       const a = sg * (ang + (k === 0 ? 0 : 0)) ;
-      const r = ringR - D / 2 + 0.5;
+      const r = ringR - D / 2 + 0.5 + (rnd() - 0.5) * 2.4;
       const hx = ringC.x + Math.sin(a) * r, hz = ringC.z + Math.cos(a) * r;
       // front faces into the village (toward the centre): house +Z = inward
       house(hx, hz, a + Math.PI, W, D, false);

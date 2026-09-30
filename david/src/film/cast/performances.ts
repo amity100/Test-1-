@@ -33,7 +33,7 @@ import type { FilmActor, ArmPose } from './FilmActor';
  */
 
 export const GILGAL_CLIPS = ['walk_king', 'walk_halt', 'idle_king', 'raise_arm_R', 'grab_pull_R', 'idle_old', 'old_turn_walk', 'walk_old', 'flinch', 'march', 'walk'];
-export const RAMAH_CLIPS = ['idle_old', 'talk_gesture', 'argue', 'point_directions', 'idle_bus', 'idle_shift', 'walk_old_hunched'];
+export const RAMAH_CLIPS = ['idle_king', 'idle_old', 'talk_gesture', 'argue', 'point_directions', 'idle_bus', 'idle_shift', 'walk_old_hunched'];
 
 const ss = (a: number, b: number, x: number) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -125,7 +125,7 @@ export function speechJaw(t: number, dur: number, syllables: number, pauses: num
 /** face light per shot [Saul, Samuel] (FilmActor.faceFill: illuminance in the sun's units; the sun is ≈3-7) */
 export const FACE_FILL: Record<GilgalShotName, [number, number]> = {
   dustWall: [2.2, 0], king: [2.6, 0], spearRaised: [2.4, 0], silence: [2.0, 1.4], faceOff: [1.5, 1.3],
-  tear: [1.1, 1.1], verdict: [1.1, 1.7], saulAlone: [1.9, 0.8], rise: [1.4, 0],
+  tear: [1.1, 1.1], verdict: [1.1, 0.9], saulAlone: [1.9, 0.8], rise: [1.4, 0],
 };
 export interface GilgalCast {
   saul: FilmActor;
@@ -166,11 +166,18 @@ export class GilgalPerformance {
     saul.upright.R.weight = 1;
     saul.ground = ground;
     samuel.ground = ground;
+    // skin: Saul — sweat and road dust after the campaign (bible 3.2); Samuel — flushed, red about the eyes and nose
+    // after a night of crying out (15:11; bible 3.1)
+    saul.human.skin.skinUniforms.uWet.value = 0.3;
+    saul.human.skin.skinUniforms.uDirt.value = 0.25;
+    samuel.human.skin.skinUniforms.uRuddy.value = 0.75;
     // film light on the two faces (the low sun is behind Saul in 7-9): created here, before the set is precompiled
     saul.enableFaceLight();
     samuel.enableFaceLight(0xffe2c4);
-    samuel.human.rig.faceBias.LeftUpperLidClosed = 0.22; // heavy, tired lids (15:11 he cried all night)
-    samuel.human.rig.faceBias.RightUpperLidClosed = 0.22;
+    samuel.faceLightRig.side = 0.85; // a 3/4 key on the old face: the lines of age need modelling, a flat fill erases them
+    samuel.faceLightRig.up = 0.35;
+    samuel.human.rig.faceBias.LeftUpperLidClosed = 0.12; // heavy, tired lids (15:11 he cried all night) — the eyes stay alive
+    samuel.human.rig.faceBias.RightUpperLidClosed = 0.12;
     if (samuel.tear) samuel.tear.onSnap = (p) => this.onThreadSnap?.(p);
     if (cast.armourBearer) {
       cast.armourBearer.ground = ground;
@@ -399,7 +406,7 @@ export class GilgalPerformance {
     if (tear) tear.cornerWorld(this.corner);
     else samuel.root.getWorldPosition(this.corner).setY(this.corner.y + 0.5);
     // ---- placement: from his mark to a lunge distance behind the corner (tracks the corner as Samuel walks)
-    const lungeReach = 0.56; // root -> grip, horizontally, at full lunge (2.02 m man, arm down-forward; measured)
+    const lungeReach = 0.62; // root -> grip, horizontally, at full lunge (2.02 m man, arm down-forward; measured)
     const tx = this.corner.x - fwd.x * lungeReach - right.x * 0.24;
     const tz = this.corner.z - fwd.z * lungeReach - right.z * 0.24;
     const u = ss(B.go, B.grab, at) * 0.35 + 0.65 * THREE.MathUtils.clamp((at - B.go) / (B.grab - B.go), 0, 1) ** 1.15;
@@ -428,8 +435,9 @@ export class GilgalPerformance {
     }
     // ---- body: the lunge low, then partly up again as he pulls
     const lunge = ss(B.lunge, B.grab + 0.02, at) * (1 - 0.4 * ss(B.grab + 0.3, B.tearTo + 0.2, at));
-    saul.body.drop = 0.31 * lunge;
-    saul.body.lean = 0.78 * lunge - 0.08 * ss(B.tearTo, B.tearTo + 0.3, at);
+    // a deep lunge in the legs, the torso less folded, the arm long: his head stays off Samuel's back
+    saul.body.drop = 0.4 * lunge;
+    saul.body.lean = 0.6 * lunge - 0.1 * ss(B.grab + 0.2, B.tearTo, at);
     saul.body.twist = 0.16 * lunge;
     saul.headingRate = 12;
     // ---- arms: the right hand to the corner (IK), the helmet stays under the left arm
@@ -456,8 +464,10 @@ export class GilgalPerformance {
     }
     if (tear) tear.progress = ss(B.tearFrom, B.tearTo, at);
     // ---- eyes and face
+    // eyes: on Samuel; down to the corner as he lunges and seizes it; then UP to Samuel's face as he holds on —
+    // their eyes meet while the wool gives
     if (at < B.go + 0.2) saul.mocap.lookAt = this.eyeOf(samuel);
-    else if (at < B.tearTo - 0.3) saul.mocap.lookAt = this.corner;
+    else if (at < B.grab + 0.18) saul.mocap.lookAt = this.corner;
     else saul.mocap.lookAt = this.eyeOf(samuel);
     const reach = ss(B.lunge - 0.2, B.grab, at);
     const torn = ss(B.tearTo - 0.4, B.tearTo + 0.1, at);
@@ -528,6 +538,8 @@ export class RamahPerformance {
   constructor(readonly samuel: FilmActor, readonly elders: FilmActor[], samuelMark: RamahMark, elderMarks: RamahMark[], ground: (x: number, z: number) => number = () => 0) {
     samuel.ground = ground;
     samuel.enableFaceLight(0xffe2c4);
+    samuel.faceLightRig.side = 0.85; // more of a 3/4 key: the old face needs modelling (the lines vanish in a flat fill)
+    samuel.faceLightRig.up = 0.35;
     samuel.faceFill = 1.0;
     samuel.place(samuelMark.pos, samuelMark.yaw);
     samuel.mocap.play('idle_king', { fade: 0 });

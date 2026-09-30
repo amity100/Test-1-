@@ -68,7 +68,7 @@ export function davidStyle(): GroomStyle {
       // the hairline at the forehead stays shorter so the forelock falls to the brows, not over the eyes
       // (f is measured from the eye centres: the forehead hairline sits at z ≈ -0.01, the crown at z ≈ -0.08)
       const hairline = ss(-0.07, -0.01, f.z) * ss(0.02, 0.07, f.y);
-      return (0.15 + 0.02 * top + 0.075 * back + 0.012 * side - 0.075 * hairline) * (0.84 + 0.32 * R());
+      return (0.15 + 0.02 * top + 0.13 * back + 0.012 * side - 0.075 * hairline) * (0.84 + 0.32 * R());
     },
     comb: (f, n, out) => {
       // whorl at the top-back; hair flows out from it, forward over the forehead, down the sides / back
@@ -143,8 +143,8 @@ export function saulStyle(): GroomStyle {
     mask: (s) => s.scalpMask(),
     // cast pass (opening film): thick, groomed, slightly wavy hair pushed back (visual-bible 3.2) — denser, broader
     // strands in coherent locks, less frizz (was 3500/10000/20000, 170 locks)
-    strands: { low: 3800, medium: 13000, high: 24000 },
-    locks: 210,
+    strands: { low: 3800, medium: 15000, high: 26000 },
+    locks: 230,
     sim: { low: 16, medium: 28, high: 40 },
     length: (f, n, R) => {
       const back = ss(0.02, -0.08, f.z);
@@ -166,10 +166,10 @@ export function saulStyle(): GroomStyle {
     curlStart: 0.4,
     curlNoise: 0.2,
     lockR: 0.011,
-    clump: 0.62,
-    frizz: 0.0004,
-    flyaway: 0.0008, // court: groomed (was 0.003); cast pass 0.0015 -> 0.0008
-    width: 0.000135,
+    clump: 0.7,
+    frizz: 0.0003,
+    flyaway: 0.0003, // court: groomed (was 0.003); cast pass 0.0015 -> 0.0003 (spiky strays at the crown in backlight)
+    width: 0.00016,
     stiffness: 0.22,
     childLen: [0.8, 1.0],
     colors: (R, f, root, tip) => {
@@ -201,7 +201,7 @@ export function saulStyle(): GroomStyle {
       const ax = Math.abs(f.x);
       const must = ss(0.03, 0.02, ax) * ss(-0.075, -0.06, f.y) * ss(0.0, 0.3, n.z);
       const chin = ss(-0.04, -0.11, f.y) * ss(0.085, 0.025, ax);
-      const L = 0.032 + 0.062 * chin + 0.012 * ss(0.06, 0.03, ax);
+      const L = 0.03 + 0.048 * chin + 0.01 * ss(0.06, 0.03, ax); // 3-8 cm: full, natural, not a long beard
       // cast pass: a groomed line under the jaw — roots facing down (under the chin, onto the neck) stay short, so no
       // strands trail down the throat (visual-bible 3.2: full, 6-10 cm, natural)
       const under = ss(-0.25, -0.65, n.y) * ss(0.06, 0.0, n.z + 0.2);
@@ -225,7 +225,7 @@ export function saulStyle(): GroomStyle {
     curlStart: 0.3,
     curlNoise: 0.14, // wardrobe polish (court 0.4, originally 0.6)
     lockR: 0.006,
-    clump: 0.84, // wardrobe polish: combed, oiled locks (court 0.6, originally 0.4)
+    clump: 0.9, // combed, oiled locks (court 0.6, originally 0.4; wardrobe polish 0.84)
     frizz: 0.0001, // (court 0.0003)
     flyaway: 0.0002, // (court 0.001)
     width: 0.00019,

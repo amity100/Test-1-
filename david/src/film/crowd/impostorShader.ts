@@ -161,7 +161,7 @@ const FRAG_BODY = /* glsl */ `
   vec4 h2 = impHash(vImpA.x * 31.7 + 4.1);
   vec3 skin = uSkin * mix(0.8, 1.1, h.x);
   vec3 tunic = uTunic[int(h.y * 7.999)] * (0.94 + 0.12 * h2.y);
-  vec3 hair = uHair[int(min(5.0, h.w * (h2.w > 0.86 ? 6.0 : 5.0)))] * (0.9 + 0.2 * h2.x);
+  vec3 hair = mix(uHair[int(min(5.0, h.w * (h2.w > 0.86 ? 6.0 : 5.0)))] * (0.9 + 0.2 * h2.x), uDustColor * 0.4, 0.58 * uDust);
   vec3 bronze = mix(vec3(0.26, 0.11, 0.034), vec3(0.48, 0.18, 0.045), h2.x) * 1.1;
   vec3 col = vec3(0.0);
   float metal = 0.0, rough = 0.9;

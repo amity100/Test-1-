@@ -57,6 +57,7 @@ async function boot() {
     info.armyMs = Math.round(performance.now() - ta);
     info.bakeMs = Math.round(army.anim.bakeMs);
     set.scene.add(army.group);
+    army.crowd.viewportHeight = size.y;
     info.loadMs = Math.round(performance.now() - t0);
     const prof = { beat: 0, upd: 0, n: 0 };
     const applyFrame = (name: Shot, time: number, dt: number) => {
@@ -157,6 +158,7 @@ async function boot() {
     info.hostMs = Math.round(performance.now() - ta);
     info.bakeMs = Math.round(host.anim.bakeMs);
     set.scene.add(host.group);
+    host.crowd.viewportHeight = size.y;
     if (params.get('nohost') === '1') host.group.visible = false;
     info.loadMs = Math.round(performance.now() - t0);
     const order = set.sequence;

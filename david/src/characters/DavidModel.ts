@@ -16,7 +16,17 @@ import { MocapLibrary, MocapPose, type MocapClip } from './mocap';
  * (מַקְלוֹ), the shepherd's bag (כְּלִי הָרֹעִים / יַלְקוּט) with five smooth stones, and the sling (קַלְּעוֹ).
  *
  * The realistic human (MakeHuman CC0 body, src/characters/human) + strand hair (src/characters/hair) + the fitted
- * costume and props (src/characters/wardrobe), animated procedurally:
+ * costume and props (src/characters/wardrobe).
+ *
+ * v2 (opening-film phase): the body is driven by REAL MOTION CAPTURE (CMU, src/characters/mocap — MocapDriver below):
+ * idles, walk / jog / run blended by speed with a synced gait phase, stepping while turning on the spot, kneeling, and
+ * the legs + trunk of the stone / lamb pick-up and of the sling release. The capture is converted to the proxy joints
+ * and enters the pose mixer as the base layer, so all the procedural layers listed below keep working on top of it;
+ * the terrain foot IK now follows the captured legs and locks planted feet (from the capture's contacts) in the
+ * world. `mocapWeight = 0` restores the old procedural motion. Film performances for the opening film (shots 15-17):
+ * performFilm('back' | 'reveal' | 'wide', t).
+ *
+ * The procedural layers (the whole motion when the clips are missing):
  *   - base / hero idle with breathing, weight shifts and glances;
  *   - walk & run from foot trajectories (heel strike, roll, toe-off, swing) solved with two-bone IK on the terrain,
  *     pelvis drop from leg reach, pelvis yaw / list / lateral shift, counter-rotating chest, arm swing, head
@@ -62,7 +72,7 @@ export interface FilmOptions {
   /** 'reveal': when the head turn starts (s into the shot, default 0.9) and how long it takes (default 2.2 s) */
   turnAt?: number;
   turnDur?: number;
-  /** face after the turn (default 'smile' at 0.2: calm, warm) */
+  /** face after the turn (default 'neutral': calm; e.g. 'smile' with moodWeight 0.1 for a hint of warmth) */
   mood?: Expression;
   moodWeight?: number;
 }
@@ -756,6 +766,8 @@ export class DavidModel {
   viewportHeight = 720;
   /** optional expression override for cinematics (null = automatic per action) */
   mood: Expression | null = null;
+  /** weight of `mood` (0..1) */
+  moodWeight = 1;
   /** optional: world point the hands seize during the 'pull' hold (the lamb in the bear's jaws); null = ~0.6 m ahead */
   pullTarget: THREE.Vector3 | null = null;
   /** local (character-space) dodge direction x (+ = to his left), set by the Player before play('dodge') */
@@ -929,6 +941,11 @@ export class DavidModel {
     }
     human.rig.blinkEnabled = true;
     human.setPupil(0.25);
+    // "עִם־יְפֵה עֵינַיִם" (16:12): open, bright eyes — the upper lids rest higher than the rig's default relaxed bias
+    const fb = human.rig.faceBias;
+    fb.LeftUpperLidClosed = fb.RightUpperLidClosed = 0;
+    fb.LeftUpperLidOpen = fb.RightUpperLidOpen = 0.08;
+    fb.LeftLowerLidUp = fb.RightLowerLidUp = 0.1;
 
     // ---- sling: cords (Rope) + the wardrobe's leather pouch + a stone
     const cordMat = outfit.props.slingCordMaterial ?? new THREE.MeshStandardMaterial({ color: 0x6a4a2c, roughness: 0.85 });
@@ -1098,6 +1115,7 @@ export class DavidModel {
       m.layer(this.moPose, mw, MO_MASK);
       // the idle captures look at the ground a lot: standing, the head keeps the calm procedural gaze
       m.layer(this.moPose, mw * THREE.MathUtils.lerp(0.3, 1, lw), MO_HEAD);
+      m.add('head', -0.05 * (1 - lw) * mw, 0, 0);
       // the staff arm keeps a little of the actor's swing
       m.layer(this.moPose, mw * THREE.MathUtils.lerp(0.12, 0.3, lw), UPPER_L);
       // footsteps from the capture's heel contacts
@@ -1276,20 +1294,20 @@ export class DavidModel {
       else ts.rate = Math.max(ts.rate, rate);
     }
     if (v > 0.9 || this.action) mo.stop('turn', 0.2);
-    // kneeling: down (kneel 0-0.95 s), the held kneel (kneel_hold loop), up again (kneel 3.95-5.1 s)
+    // kneeling: down (kneel 0.1-1.55 s), the held kneel (kneel_hold loop), up again (kneel 3.6-4.8 s)
     if (this.hold === 'kneel') {
       if (!this.kneelOn) {
         this.kneelOn = true;
         this.kneelT = 0;
-        mo.play('kneel', 'kneel', { t: 0, rate: 1.1, mask: MASK_BODY, end: 0.95, fade: 0.25 });
+        mo.play('kneel', 'kneel', { t: 0.1, rate: 1.4, mask: MASK_BODY, end: 1.55, fade: 0.25 });
         mo.slots.kneel.target = 1;
       }
       this.kneelT += dt;
-      if (this.kneelT > 0.8 && mo.slots.kneel.name === 'kneel') mo.play('kneel', 'kneel_hold', { t: 0, mask: MASK_BODY, fade: 0.35 });
+      if (this.kneelT > 1.0 && mo.slots.kneel.name === 'kneel') mo.play('kneel', 'kneel_hold', { t: 0, mask: MASK_BODY, fade: 0.35 });
       mo.slots.kneel.target = 1;
     } else if (this.kneelOn) {
       this.kneelOn = false;
-      mo.play('kneel', 'kneel', { t: 3.95, rate: 1.25, mask: MASK_BODY, end: 5.05, fade: 0.2 });
+      mo.play('kneel', 'kneel', { t: 3.6, rate: 1.3, mask: MASK_BODY, end: 4.8, fade: 0.2 });
     }
     mo.update(dt, v, still);
     const o = mo.out, r = this.moPose.r;
@@ -1325,6 +1343,7 @@ export class DavidModel {
         this.hold = 'none';
         this.windScale = 1;
         this.mood = null;
+        this.moodWeight = 1;
         this.filmEyes = null;
       }
       return;
@@ -1332,7 +1351,7 @@ export class DavidModel {
     const f = this.film;
     const wind = o.wind ?? (shot === 'back' ? 1.8 : shot === 'reveal' ? 1.4 : 1.6);
     if (!f || f.shot !== shot) {
-      this.film = { shot, t, look: o.look ?? null, wind, turnAt: o.turnAt ?? 0.9, turnDur: o.turnDur ?? 2.2, mood: o.mood ?? 'smile', moodW: o.moodWeight ?? 0.12, blinked: false };
+      this.film = { shot, t, look: o.look ?? null, wind, turnAt: o.turnAt ?? 0.9, turnDur: o.turnDur ?? 2.2, mood: o.mood ?? 'neutral', moodW: o.moodWeight ?? 0.12, blinked: false };
       if (shot !== 'reveal') this.filmTurn = 0;
     } else {
       f.t = t;
@@ -1380,6 +1399,7 @@ export class DavidModel {
       rig.blink();
     }
     this.mood = u > 0.35 ? f.mood : 'neutral';
+    this.moodWeight = f.moodW;
   }
 
   /** procedural walk/run: pelvis, spine counter-rotation, arm swing, head stabilisation (into this.walkPose) */
@@ -1841,7 +1861,10 @@ export class DavidModel {
     const a = this.action;
     const H = this.holdW;
     let e: Expression = 'neutral', w = 1;
-    if (this.mood) e = this.mood;
+    if (this.mood) {
+      e = this.mood;
+      w = this.moodWeight;
+    }
     else if (a && a.name === 'hurt') e = 'pain';
     else if (a && (a.name === 'throw' || a.name === 'strike' || a.name === 'strikeHigh')) e = 'effort';
     else if (this.hold === 'pull') e = 'effort';
@@ -2057,7 +2080,7 @@ const SIDES = ['L', 'R'] as const;
 const MO_MASK = ['hips', 'hipsX', 'spine', 'chest', ...UPPER_R, ...LEGS];
 const MO_HEAD = ['neck', 'head'];
 /** pickup_box: the window from the bend to standing again, time-warped onto the keyed PICK (1.05 s) */
-const PICK_MO: [number, number] = [0.55, 2.35];
+const PICK_MO: [number, number] = [0.4, 1.35];
 /** throw_ball: the release frame (fastest right arm) */
 const THROW_MO = 1.4;
 const NOT_LOWER = new Set(['hips', 'hipsX', 'spine', ...LEGS]);

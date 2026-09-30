@@ -154,7 +154,7 @@ const HIDES: Record<HerdKind, number[]> = {
   cattle: [0x6b4a31, 0x8a5a36, 0x3a2c24, 0x2a211b], // brown, red-brown, black-brown
 };
 
-interface Beast { kind: number; i: number; lat: number; back: number; phase: number; pace: number; size: number; yaw: number; x: number; z: number; gy: number; gx: number; gz: number }
+interface Beast { kind: number; i: number; lat: number; back: number; phase: number; pace: number; size: number; yaw: number; cy: number; x: number; z: number; gy: number; gx: number; gz: number }
 
 export interface SpoilHerdOptions {
   tier: CrowdTier;
@@ -214,7 +214,7 @@ export class SpoilHerd {
         const u = rnd(), v = rnd();
         this.beasts.push({
           kind: ki, i, lat: lat0 + v * v * (k === 'cattle' ? 14 : 10), back: back0 + u * len, phase: rnd() * 6.28, pace: 0.9 + rnd() * 0.2,
-          size: (k === 'cattle' ? 0.92 : 0.88) + rnd() * 0.22, yaw: Math.PI / 2 + (rnd() - 0.5) * 0.5, x: 0, z: 0, gy: 0, gx: 1e9, gz: 1e9,
+          size: (k === 'cattle' ? 0.92 : 0.88) + rnd() * 0.22, yaw: Math.PI / 2 + (rnd() - 0.5) * 0.5, cy: Math.PI / 2, x: 0, z: 0, gy: 0, gx: 1e9, gz: 1e9,
         });
         vari[i * 4 + 3] = rnd();
       }
@@ -238,7 +238,10 @@ export class SpoilHerd {
         b.gz = z;
         b.gy = this.ground(x, z);
       }
-      B.pose[o] = x; B.pose[o + 1] = b.gy; B.pose[o + 2] = z; B.pose[o + 3] = walking ? Math.PI / 2 + (b.yaw - Math.PI / 2) * 0.3 : b.yaw * 1.7 + b.i;
+      // walking: along the road (east); halted: each turns slowly to graze in its own direction
+      const want = walking ? Math.PI / 2 + (b.yaw - Math.PI / 2) * 0.3 : Math.PI / 2 + Math.sin(b.i * 12.9898) * 2.2;
+      b.cy += (want - b.cy) * Math.min(1, dt * 0.7);
+      B.pose[o] = x; B.pose[o + 1] = b.gy; B.pose[o + 2] = z; B.pose[o + 3] = b.cy;
       B.vari[o] = b.size; B.vari[o + 1] = b.phase; B.vari[o + 2] = stride;
     }
     for (const B of this.bufs) for (const a of B.attrs) a.needsUpdate = true;

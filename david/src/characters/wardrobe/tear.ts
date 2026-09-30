@@ -227,8 +227,10 @@ export class MeilTear {
         for (let q = 0; q < nT; q++) {
           const off = () => new THREE.Vector3((R() - 0.5) * 0.012, (R() - 0.5) * 0.012, (R() - 0.5) * 0.012);
           this.threadList.push({
-            edge: k, skirtV: list[k], state: 0, breakLen: 0.008 + 0.035 * R() ** 2 + (R() < 0.12 ? 0.05 * R() : 0),
-            dA: new THREE.Vector3(), dB: new THREE.Vector3(), oA: off(), oB: off(), w: 0.0005 + 0.0004 * R(),
+            // wool threads stretch a long way before they give (the slow-motion shot needs them visible): 2-9 cm,
+            // a few up to 15 cm
+            edge: k, skirtV: list[k], state: 0, breakLen: 0.02 + 0.07 * R() ** 1.5 + (R() < 0.15 ? 0.06 * R() : 0),
+            dA: new THREE.Vector3(), dB: new THREE.Vector3(), oA: off(), oB: off(), w: 0.0006 + 0.0006 * R(),
           });
         }
       }
@@ -271,7 +273,7 @@ export class MeilTear {
     }
     lg.setIndex(ti);
     // undyed wool fibres, a shade lighter than the cloth (they catch the backlight)
-    const tc = new THREE.Color(o.threadColor ?? 0x8a7a64).multiplyScalar(1.35);
+    const tc = new THREE.Color(o.threadColor ?? 0x8a7a64).multiplyScalar(1.7);
     this.threads = new THREE.Mesh(lg, new THREE.MeshBasicMaterial({ color: tc, transparent: true, opacity: 0.92, side: THREE.DoubleSide, depthWrite: false }));
     this.threads.name = 'meilThreads';
     this.threads.visible = false;

@@ -56,6 +56,62 @@ export function polarTerrain(H: LandHeight, cx: number, cz: number, o: { nTheta:
   return g;
 }
 
+/**
+ * Exact height of the RENDERED polar terrain mesh at (x, z) (the same triangles, including the Earth's curvature
+ * drop baked into y): objects set on the land with it never float or sink, whatever the mesh resolution.
+ * Pass the same options as polarTerrain(). Outside the mesh it returns the last ring's value.
+ */
+export function polarSampler(geo: THREE.BufferGeometry, cx: number, cz: number, o: { nTheta: number; r0: number; rMax: number }): (x: number, z: number) => number {
+  const nT = o.nTheta;
+  const k = (2 * Math.PI) / nT;
+  const radii: number[] = [0];
+  let r = o.r0;
+  while (r < o.rMax) { radii.push(r); r *= 1 + k; }
+  radii.push(o.rMax);
+  const nR = radii.length;
+  const P = (geo.getAttribute('position') as THREE.BufferAttribute).array as Float32Array;
+  const lnK = Math.log(1 + k);
+  const tri = (x: number, z: number, a: number, b: number, c: number): number | null => {
+    const ax = P[a * 3], az = P[a * 3 + 2], bx = P[b * 3], bz = P[b * 3 + 2], qx = P[c * 3], qz = P[c * 3 + 2];
+    const d = (bz - qz) * (ax - qx) + (qx - bx) * (az - qz);
+    if (Math.abs(d) < 1e-9) return null;
+    const l1 = ((bz - qz) * (x - qx) + (qx - bx) * (z - qz)) / d;
+    const l2 = ((qz - az) * (x - qx) + (ax - qx) * (z - qz)) / d;
+    const l3 = 1 - l1 - l2;
+    if (l1 < -1e-4 || l2 < -1e-4 || l3 < -1e-4) return null;
+    return l1 * P[a * 3 + 1] + l2 * P[b * 3 + 1] + l3 * P[c * 3 + 1];
+  };
+  return (x: number, z: number) => {
+    const dx = x - cx, dz = z - cz;
+    const rr = Math.hypot(dx, dz);
+    let ang = Math.atan2(dz, dx); if (ang < 0) ang += 2 * Math.PI;
+    if (rr >= o.rMax) { const j = Math.round(ang / k) % nT; return P[(1 + (nR - 2) * nT + j) * 3 + 1]; }
+    // ring band i: radii[i] <= r < radii[i+1]
+    let i = rr < o.r0 ? 0 : Math.min(nR - 2, 1 + Math.floor(Math.log(rr / o.r0) / lnK));
+    while (i > 0 && radii[i] > rr) i--;
+    while (i < nR - 2 && radii[i + 1] <= rr) i++;
+    const jc = Math.floor(ang / k);
+    if (i === 0) {
+      for (let dj = -1; dj <= 1; dj++) { const j = (((jc + dj) % nT) + nT) % nT; const h = tri(x, z, 0, 1 + ((j + 1) % nT), 1 + j); if (h !== null) return h; }
+      return P[1];
+    }
+    const a0 = 1 + (i - 1) * nT, a1 = 1 + i * nT;
+    for (let dj = -2; dj <= 2; dj++) {
+      const j = (((jc + dj) % nT) + nT) % nT, j1 = (j + 1) % nT;
+      let h: number | null;
+      if (i & 1) { h = tri(x, z, a0 + j, a1 + j1, a1 + j); if (h === null) h = tri(x, z, a0 + j, a0 + j1, a1 + j1); }
+      else { h = tri(x, z, a0 + j, a0 + j1, a1 + j); if (h === null) h = tri(x, z, a0 + j1, a1 + j1, a1 + j); }
+      if (h !== null) return h;
+    }
+    return P[(a0 + (jc % nT)) * 3 + 1];
+  };
+}
+
+/** Analytic wobble of the terrace contours (identical in GLSL: keep in sync with GLSL_TERRACE in landMaterial). */
+export const terraceWobble = (x: number, z: number) => 0.35 * Math.sin(x * 0.013 + z * 0.007) + 0.25 * Math.sin(z * 0.017 - x * 0.004 + 1.3);
+/** vertical spacing of the Judean terraces (m) */
+export const TERRACE_STEP = 3.2;
+
 export interface TerrainTex {
   regTile: HeightTile; regShade: THREE.Texture; regLC: THREE.Texture;
   locTile: HeightTile | null; locShade: THREE.Texture | null; locLC: THREE.Texture | null;
@@ -76,6 +132,10 @@ export interface TerrainLook {
   roadGlsl?: string;
   /** apply the in-shader km-scale haze (landAtmo) */
   haze?: boolean;
+  /** dry-stone terraces of the Judean hills drawn per pixel (stepped normals, wall faces, fields; anti-aliased) */
+  terraces?: boolean;
+  /** a hilltop village: beaten earth in the plaza (x, z, r) and dry, pale, stony ground round the village (cx, cz, rIn, rOut) */
+  village?: { plaza: THREE.Vector3; center: THREE.Vector2; rIn: number; rOut: number };
 }
 
 export const terrainUniforms = () => ({
@@ -100,6 +160,8 @@ export function landMaterial(tt: TerrainTex, look: TerrainLook, tier: LandTier):
     tSoil: { value: look.near?.soil ?? null }, tGrass: { value: look.near?.grass ?? null }, tRock: { value: look.near?.rock ?? null },
     tRockN: { value: look.near?.rockN ?? null }, tGrassN: { value: look.near?.grassN ?? null },
     ...terrainUniforms(),
+    uPlaza: { value: look.village ? look.village.plaza.clone() : new THREE.Vector3(1e9, 1e9, 1) },
+    uVillage: { value: look.village ? new THREE.Vector4(look.village.center.x, look.village.center.y, look.village.rIn, look.village.rOut) : new THREE.Vector4(1e9, 1e9, 1, 2) },
     ...landAtmo, ...cloudShared,
   };
   u.uMist.value = look.mist;
@@ -111,6 +173,8 @@ export function landMaterial(tt: TerrainTex, look: TerrainLook, tier: LandTier):
   if (look.roadGlsl) defines.LAND_ROAD = '1';
   if (tier !== 'low') defines.LAND_HQ = '1';
   if (look.haze) defines.LAND_HAZE = '1';
+  if (look.terraces) defines.LAND_TERRACE = '1';
+  if (look.village) defines.LAND_VILLAGE = '1';
   mat.userData.landUniforms = u;
   mat.onBeforeCompile = (s) => {
     Object.assign(s.uniforms, u);
@@ -124,6 +188,7 @@ export function landMaterial(tt: TerrainTex, look: TerrainLook, tier: LandTier):
         uniform sampler2D tRegShade, tRegLC, tLocShade, tLocLC;
         uniform vec4 uRegBox, uLocBox, uLocEdge;
         uniform float uMist, uMistTop, uTime;
+        uniform vec3 uPlaza; uniform vec4 uVillage;
         uniform vec3 uMistColor;
         #ifdef LAND_NEAR
         uniform sampler2D tSoil, tGrass, tRock, tRockN, tGrassN;
@@ -148,34 +213,70 @@ export function landMaterial(tt: TerrainTex, look: TerrainLook, tier: LandTier):
         if (wl > 0.0) { sh = mix(shR, texture2D(tLocShade, uvL), wl); lc = mix(lcR, texture2D(tLocLC, uvL), wl); }
         vec2 nxz = sh.xy * 2.0 - 1.0;
         vec3 nW = normalize(vec3(nxz.x, sqrt(max(1.0 - dot(nxz, nxz), 0.04)), nxz.y));
+        vec3 landN0 = nW;
         float arid = lc.r, drain = lc.g, water = lc.b, vdep = lc.a;
         float conv = sh.a;
         float slope = 1.0 - nW.y;
         float hgt = vLandW.y;
         // ---- macro palette (sRGB, from photographs of the Judean hills / desert / rift at low sun) ----
         float n1 = dFbm(xz * 0.0021), n2 = dFbm(xz * 0.013 + 7.0), n3 = dNoise(xz * 0.06);
-        vec3 terra = mix(vec3(0.47, 0.31, 0.21), vec3(0.56, 0.42, 0.30), n2);          // terra rossa / hamra
-        vec3 lime = mix(vec3(0.66, 0.62, 0.55), vec3(0.74, 0.70, 0.62), n1);           // grey Cenomanian limestone
-        vec3 maquis = mix(vec3(0.20, 0.22, 0.13), vec3(0.29, 0.29, 0.17), n2);         // maquis, oak, olive
+        vec3 terra = mix(vec3(0.46, 0.30, 0.21), vec3(0.54, 0.41, 0.31), n2);          // terra rossa / hamra
+        vec3 lime = mix(vec3(0.64, 0.62, 0.58), vec3(0.74, 0.72, 0.67), n1);           // grey Cenomanian limestone
+        vec3 maquis = mix(vec3(0.17, 0.20, 0.13), vec3(0.25, 0.27, 0.17), n2);         // maquis, oak, olive
         vec3 chalk = mix(vec3(0.80, 0.72, 0.56), vec3(0.86, 0.79, 0.64), n1);          // Senonian chalk of the desert
         vec3 desertRock = mix(vec3(0.62, 0.50, 0.36), vec3(0.70, 0.58, 0.42), n2);     // hard limestone cliffs
-        vec3 marl = vec3(0.86, 0.82, 0.74);                                            // Lisan marl of the rift floor
+        vec3 marl = vec3(0.74, 0.69, 0.60);                                            // Lisan marl of the rift floor
         vec3 sand = vec3(0.86, 0.77, 0.58);                                            // coastal dunes
         vec3 field = mix(vec3(0.58, 0.47, 0.31), vec3(0.66, 0.56, 0.36), n3);          // stubble / fallow fields
-        vec3 moab = mix(vec3(0.62, 0.43, 0.30), vec3(0.72, 0.56, 0.40), n1);           // Moab: red sandstone + plateau
+        vec3 moab = mix(vec3(0.46, 0.33, 0.26), vec3(0.56, 0.43, 0.33), n1);           // Moab: red sandstone + plateau
         vec3 thicket = vec3(0.14, 0.19, 0.09);                                         // Jordan thicket / oasis
         // humid hills: soil with maquis patches and rock outcrops on steep / convex ground
         float north = clamp(-nW.z * 2.5, -1.0, 1.0);
         float n4 = dFbm(xz * 0.0045 + 3.0);
         float veg = smoothstep(0.3, 0.72, n2 * 0.5 + n4 * 0.7 + (0.45 - arid) * 0.9 + drain * 0.35 + north * 0.18 - slope * 0.4);
         vec3 hills = mix(terra, maquis, veg * 0.75);
-        hills = mix(hills, lime, clamp(smoothstep(0.16, 0.4, slope) * 0.55 + (conv - 0.5) * 1.4 + (n1 - 0.5) * 0.4, 0.0, 0.75));
+        hills = mix(hills, lime, clamp(smoothstep(0.1, 0.35, slope) * 0.6 + (conv - 0.5) * 1.4 + (n1 - 0.5) * 0.5 + 0.12, 0.0, 0.8));
         // terraces on the humid slopes: fine contour banding (walls in shadow, soil strips) seen from a height
         float terr = (1.0 - smoothstep(0.35, 0.6, arid)) * smoothstep(0.04, 0.12, slope) * (1.0 - smoothstep(0.35, 0.5, slope)) * smoothstep(300.0, 500.0, hgt);
+        #ifdef LAND_TERRACE
+        float terrN = 0.0; vec3 terrNrm = nW;
+        {
+          // dry-stone terraces along the contours of the rendered surface (the geometric walls of landJudah.ts
+          // sit exactly on the same lines): a narrow wall face, the level tread above it, a dark foot line;
+          // every terrace segment is its own little field. Fades to the mean tone where the steps are sub-pixel.
+          float tw = 0.35 * sin(xz.x * 0.013 + xz.y * 0.007) + 0.25 * sin(xz.y * 0.017 - xz.x * 0.004 + 1.3);
+          float ph = hgt / 3.2 + tw;
+          float fw = max(fwidth(ph), 1e-4);
+          float aa = 1.0 - smoothstep(0.28, 0.65, fw);
+          float f = fract(ph);
+          float wallW = 0.13;
+          float riser = clamp((wallW - f) / fw + 0.5, 0.0, 1.0) * clamp(f / fw + 0.5, 0.0, 1.0);
+          float foot = smoothstep(0.78, 1.0, f);
+          float seg = dHash12(vec2(floor(ph), floor(dot(xz, vec2(0.0105, 0.0071)) + dNoise(xz * 0.004) * 2.0)));
+          vec3 tread = seg < 0.3 ? vec3(0.50, 0.34, 0.23) : seg < 0.55 ? vec3(0.63, 0.53, 0.37) : seg < 0.8 ? vec3(0.44, 0.40, 0.29) : vec3(0.55, 0.45, 0.33);
+          tread *= 0.9 + 0.2 * n3;
+          vec3 wallC = mix(vec3(0.63, 0.60, 0.54), vec3(0.72, 0.69, 0.62), n2);
+          vec3 tc = mix(tread * (1.0 - 0.28 * foot), wallC, riser);
+          // far field: the mean of the pattern (fields + walls), slightly lighter than the bare hills
+          vec3 tcAvg = mix(vec3(0.53, 0.43, 0.31), wallC, wallW) * 0.97;
+          float tk = terr * 0.95 * smoothstep(0.36, 0.5, dFbm(xz * 0.0011 + 9.0) + dNoise(xz * 0.004) * 0.15);
+          hills = mix(hills, mix(tcAvg, tc, aa), tk);
+          vec2 dn = normalize(nW.xz + vec2(1e-5));
+          vec3 riserN = normalize(vec3(dn.x, 0.45, dn.y));
+          vec3 treadN = normalize(vec3(nW.x * 0.25, 1.0, nW.z * 0.25));
+          terrNrm = normalize(mix(nW, mix(treadN, riserN, riser), tk * aa));
+          terrN = tk;
+        }
+        #else
         float band = smoothstep(0.55, 0.95, fract(hgt / 3.2 + n3 * 0.3));
         hills *= 1.0 - terr * band * 0.28 * (1.0 - smoothstep(1500.0, 6000.0, landDist));
+        float terrN = 0.0; vec3 terrNrm = nW;
+        #endif
         // olive groves and villages' orchards: dark dotted patches on the gentle slopes around the towns
         float grove = smoothstep(0.62, 0.75, n4) * terr;
+        #ifdef LAND_TERRACE
+        grove *= smoothstep(2600.0, 4200.0, landDist); // nearer, the instanced olive trees of landJudah.ts
+        #endif
         hills = mix(hills, hills * vec3(0.55, 0.6, 0.45), grove * dCellDots(xz * 0.11, 0.3));
         // the Shephelah and plain: fields; dunes along the shore
         float plain = smoothstep(420.0, 140.0, hgt) * step(xz.x, -12000.0);
@@ -194,7 +295,7 @@ export function landMaterial(tt: TerrainTex, look: TerrainLook, tier: LandTier):
           vec3 fcol = fr < 0.42 ? stub : fr < 0.7 ? plough : fr < 0.93 ? fallow : greenP;
           fcol = mix(fcol, vec3(0.62, 0.52, 0.35), 0.35 + 0.35 * (1.0 - smoothstep(150.0, 900.0, landDist)));
           // furrows / stubble rows along the parcel
-          fcol *= 0.93 + 0.07 * sin(fp.y * 2.4 + fr * 20.0);
+          fcol *= 1.0 + 0.07 * sin(fp.y * 2.4 + fr * 20.0) * (1.0 - smoothstep(40.0, 160.0, landDist)); // no far moire
           float balk = 1.0 - smoothstep(0.0, 0.035, min(min(ff.x, 1.0 - ff.x) * fs.x / 46.0, min(ff.y, 1.0 - ff.y)));
           fcol = mix(fcol, vec3(0.36, 0.34, 0.22), balk * 0.55 * (1.0 - smoothstep(2500.0, 9000.0, landDist)));
           fcol = mix(fcol, field, smoothstep(6000.0, 20000.0, landDist) * 0.5);
@@ -206,9 +307,10 @@ export function landMaterial(tt: TerrainTex, look: TerrainLook, tier: LandTier):
         float sandW = smoothstep(4600.0, 2000.0, dShore) * smoothstep(90.0, 8.0, hgt) * step(xz.x, -30000.0);
         {
           float ph = dot(xz, vec2(0.95, 0.31)) * 0.034 + dFbm(xz * 0.0035) * 7.0;
-          vec3 sandC = sand * (0.9 + 0.14 * sin(ph)) * mix(0.95, 1.05, n3);
+          // soft, irregular dune swells (no washboard): the phase wanders and the relief is gentle
+          vec3 sandC = sand * (0.95 + 0.06 * sin(ph)) * mix(0.94, 1.06, n3);
           hills = mix(hills, sandC, sandW);
-          nW = normalize(nW + vec3(-0.95, 0.0, -0.31) * cos(ph) * 0.3 * sandW);
+          nW = normalize(nW + vec3(-0.95, 0.0, -0.31) * cos(ph) * 0.1 * sandW * (0.4 + 0.6 * n2));
         }
         // desert: chalk and marl, hard limestone on the cliffs, darker wadi beds
         vec3 desert = mix(chalk, desertRock, smoothstep(0.12, 0.4, slope));
@@ -235,7 +337,27 @@ export function landMaterial(tt: TerrainTex, look: TerrainLook, tier: LandTier):
           #ifdef LAND_NEAR
           gr *= 0.18;
           #endif
+          gr *= 1.0 - 0.7 * terrN;
           nW = normalize(nW + vec3(-gr.x, 0.0, -gr.y));
+        }
+        #endif
+        #ifdef LAND_TERRACE
+        nW = normalize(nW + (terrNrm - landN0) * (1.0 - smoothstep(0.35, 0.8, arid)));
+        #endif
+        float villW = 0.0, plazaW = 0.0;
+        #ifdef LAND_VILLAGE
+        {
+          // the hilltop round the village: trampled, stony, pale dry ground (no dark scrub); the plaza before the gate
+          // is beaten earth with a ragged edge that frays into the stony ground (no paved disc)
+          float wob = (dNoise(xz * 0.021) - 0.5) * 18.0 + (dNoise(xz * 0.09) - 0.5) * 7.0;
+          villW = 1.0 - smoothstep(uVillage.z, uVillage.w, length(xz - uVillage.xy) + wob);
+          vec3 dry = mix(vec3(0.64, 0.60, 0.52), vec3(0.58, 0.55, 0.48), n2) * (0.9 + 0.2 * n3);
+          dry = mix(dry, vec3(0.78, 0.74, 0.66), smoothstep(0.62, 0.8, dNoise(xz * 0.35)) * 0.6); // limestone rubble
+          alb = mix(alb, dry, villW * 0.9);
+          float pd = length(xz - uPlaza.xy) + (dNoise(xz * 0.13) - 0.5) * 6.0 + (dNoise(xz * 0.5) - 0.5) * 1.6;
+          plazaW = 1.0 - smoothstep(uPlaza.z * 0.7, uPlaza.z * 1.15, pd);
+          vec3 earth = mix(vec3(0.60, 0.56, 0.49), vec3(0.68, 0.64, 0.57), n3) * (0.9 + 0.2 * dNoise(xz * 0.7));
+          alb = mix(alb, earth, plazaW);
         }
         #endif
         #ifdef LAND_ROAD
@@ -250,6 +372,8 @@ export function landMaterial(tt: TerrainTex, look: TerrainLook, tier: LandTier):
             vec3 s1 = texture2D(tSoil, tuv).rgb, g1 = texture2D(tGrass, tuv * 0.8).rgb, r1 = texture2D(tRock, tuv * 0.5).rgb;
             float rk = smoothstep(0.2, 0.45, slope + (dNoise(xz * 0.21) - 0.5) * 0.4);
             float gr = smoothstep(0.35, 0.7, dNoise(xz * 0.08) + (0.5 - arid) * 0.6);
+            gr *= 1.0 - villW * 0.85;
+            rk = max(rk, villW * 0.6 * smoothstep(0.35, 0.7, dNoise(xz * 0.3))) * (1.0 - plazaW * 0.5);
             vec3 det = mix(mix(s1 / 0.36, g1 / 0.42, gr), r1 / 0.55, rk);
             albL = mix(albL, albL * clamp(mix(vec3(1.0), det, 0.6), 0.3, 1.8), nw) * 1.3;
             vec3 tn = texture2D(tGrassN, tuv * 0.8).xyz * 2.0 - 1.0;
@@ -274,6 +398,8 @@ export function landMaterial(tt: TerrainTex, look: TerrainLook, tier: LandTier):
         {
           // dawn mist pooled in the valleys: thicker in deep valleys and low ground, lit by the low sun
           float m = uMist * 0.6 * smoothstep(0.04, 0.5, vdep) * smoothstep(uMistTop + 150.0, uMistTop - 250.0, vLandW.y);
+          // the dawn inversion fills the valleys of the humid hills only (not the desert wadis or Moab's gorges)
+          m *= (1.0 - smoothstep(0.35, 0.65, arid)) * (1.0 - smoothstep(14000.0, 22000.0, xz.x));
           m *= smoothstep(600.0, 3500.0, landDist) * (0.75 + 0.5 * dFbm(xz * 0.0009 + uTime * 0.002));
           outgoingLight = mix(outgoingLight, uMistColor, clamp(m, 0.0, 0.92));
         }
@@ -282,6 +408,6 @@ export function landMaterial(tt: TerrainTex, look: TerrainLook, tier: LandTier):
         #endif
         #include <opaque_fragment>`);
   };
-  mat.customProgramCacheKey = () => 'land-terrain-' + Object.keys(defines).join('-') + (look.cloudShadowGlsl ? look.cloudShadowGlsl.length : 0) + (look.roadGlsl ? look.roadGlsl.length : 0);
+  mat.customProgramCacheKey = () => 'land-terrain2-' + Object.keys(defines).join('-') + (look.cloudShadowGlsl ? look.cloudShadowGlsl.length : 0) + (look.roadGlsl ? look.roadGlsl.length : 0);
   return mat;
 }

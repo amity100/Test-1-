@@ -6,11 +6,12 @@ import { SkySystem } from '../../world/Sky';
 import { loadTextures, type TextureSet } from '../../world/Textures';
 import { cloudShared, GLSL_CLOUD_WEATHER, landAtmo } from './landAtmo';
 import { LandClouds } from './landClouds';
-import { GEO, LandHeight, loadLandcover, loadTile, PLACES, shadeTexture, type HeightTile } from './landData';
+import { GEO, landAssetUrl, LandHeight, loadLandcover, loadTile, PLACES, shadeTexture, type HeightTile } from './landData';
+import { buildJudahDressing, loadDressMask, type JudahDressInput } from './landJudah';
 import { buildArmyPlaceholders, buildDust, buildRamahGate, mannequinGeometry, roadGlslFor, type Mark } from './landSites';
 import { buildAshdod } from './landCoast';
 import { buildFlora, grove, scatter } from './landFlora';
-import { landMaterial, polarTerrain, type LandTier } from './landTerrain';
+import { landMaterial, polarSampler, polarTerrain, type LandTier } from './landTerrain';
 import { waterMesh } from './landWater';
 
 export type { Mark } from './landSites';
@@ -30,13 +31,18 @@ export interface LandSetOptions {
 
 /** Sun (SkySystem degrees: elevation, azimuth from +Z (south) toward +X (east)) and exposure per location. */
 export const LAND_LIGHT: Record<LandLocation, { elevation: number; azimuth: number; exposure: number }> = {
-  // winter dawn: the sun just risen over the Moab plateau, slightly south of east
-  judah: { elevation: 6.0, azimuth: 78, exposure: 0.5 },
-  // late afternoon over the sea: the column marches toward the camera out of the backlit dust
-  coast: { elevation: 7, azimuth: -104, exposure: 0.55 },
+  // dawn (visual-bible 3.11 / §4: rising behind Moab): the sun just clear of the plateau, a little north of the
+  // camera's axis so the hills get raking side light (terraces, olive shadows) and the Dead Sea its glitter path
+  judah: { elevation: 4.2, azimuth: 93, exposure: 0.5 },
+  // early morning (visual-bible §4 shot 4): the sun in the east BEHIND the camera, which faces west over the host
+  // toward Ashdod, the dunes and the sea — frontal warm light on the Philistines, bronze glints toward the lens
+  coast: { elevation: 10, azimuth: 72, exposure: 0.52 },
   // morning at the gate of Ramah
   ramah: { elevation: 15, azimuth: 105, exposure: 0.56 },
 };
+
+const HAZE_WARM0 = landAtmo.uHazeWarm.value.clone();
+const HAZE_COOL0 = landAtmo.uHazeCool.value.clone();
 
 export interface JudahAnchors { focus: THREE.Vector3; bethlehem: THREE.Vector3; deadSea: THREE.Vector3; moab: THREE.Vector3; sea: THREE.Vector3 }
 export interface CoastAnchors {
@@ -87,6 +93,13 @@ export class LandSet {
   private readonly focus = new THREE.Vector3();
   private time = 0;
   private terrainTris = 0;
+  /** height of the rendered terrain mesh (exact, incl. the curvature drop): put props on it with this */
+  meshHeight: (x: number, z: number) => number = () => 0;
+  /** judah: haze tints applied while the set is on screen (landAtmo is shared; restored on leave) */
+  private hazeTint: { warm: THREE.Color; cool: THREE.Color; lobe: THREE.Vector3 } | null = null;
+  private deck: THREE.Vector4 | null = null;
+  /** judah: instanced dressing counts (olives, terrace walls, houses) */
+  dressCounts: { olives: number; walls: number; houses: number } | null = null;
   private floraTris = 0;
   buildMs = 0;
 
@@ -96,21 +109,22 @@ export class LandSet {
     prog(0.05, 'land');
     const localName = o.location;
     const needTex = o.location !== 'judah';
-    const [region, local, regLC, locLC, tex] = await Promise.all([
+    const [region, local, regLC, locLC, tex, dress] = await Promise.all([
       loadTile('region'),
       loadTile(localName),
       loadLandcover('region', o.quality.anisotropy ?? 4),
       loadLandcover(localName, o.quality.anisotropy ?? 4),
       needTex ? (o.tex ? Promise.resolve(o.tex) : loadTextures(o.renderer, () => {}, o.quality as never)) : Promise.resolve(null),
+      o.location === 'judah' ? loadTile('judah').then((t) => loadDressMask(landAssetUrl('judah_dress.webp'), t)).catch(() => null) : Promise.resolve(null),
     ]);
     prog(0.6, 'land');
-    const set = new LandSet(o, region, local, regLC, locLC, tex);
+    const set = new LandSet(o, region, local, regLC, locLC, tex, dress);
     set.buildMs = performance.now() - t0;
     prog(1, 'land');
     return set;
   }
 
-  private constructor(o: LandSetOptions, region: HeightTile, local: HeightTile, regLC: THREE.Texture, locLC: THREE.Texture, tex: TextureSet | null) {
+  private constructor(o: LandSetOptions, region: HeightTile, local: HeightTile, regLC: THREE.Texture, locLC: THREE.Texture, tex: TextureSet | null, dress: JudahDressInput['mask'] | null = null) {
     const tier: LandTier = o.quality.name;
     this.tier = tier;
     this.location = o.location;
@@ -124,6 +138,7 @@ export class LandSet {
     const ground = o.location !== 'judah';
     this.sky = new SkySystem(o.renderer, ground ? (o.quality.shadowSize ?? 2048) : 512);
     scene.add(this.sky.group);
+    if (o.location === 'judah') gradeDawnSky(this.sky);
     const mods: ((x: number, z: number, h: number) => number)[] = [];
     this.height = new LandHeight(region, local, mods);
     const anchors: LandSet['anchors'] = {};
@@ -136,7 +151,8 @@ export class LandSet {
     let roadGlsl: string | undefined;
     let route: THREE.Vector3[] = [];
     if (o.location === 'judah') {
-      focus = new THREE.Vector3(-1500, 0, 700);
+      // the terrain mesh is finest here: under the end of the flight, where the terraced hills are closest
+      focus = new THREE.Vector3(200, 0, 1700);
     } else if (o.location === 'coast') {
       // the plain east of Ashdod (the city on its tell, the dune belt and the sea behind it to the west): the host
       // leaves the city's east gate and marches ESE toward the Shephelah (1 Sam 17:1, 13:5)
@@ -178,6 +194,12 @@ export class LandSet {
     }
     this.focus.copy(focus);
     focus.y = this.height.height(focus.x, focus.z);
+    let villageLook: { plaza: THREE.Vector3; center: THREE.Vector2; rIn: number; rOut: number } | undefined;
+    if (o.location === 'ramah') {
+      // the village sits round the summit, 58 m ring north of the gate (landSites buildRamahGate)
+      const yaw = 0.25, cx = focus.x - Math.sin(yaw) * 58, cz = focus.z - Math.cos(yaw) * 58;
+      villageLook = { plaza: new THREE.Vector3(focus.x + Math.sin(yaw) * 9, focus.z + Math.cos(yaw) * 9, 24), center: new THREE.Vector2(cx, cz), rIn: 95, rOut: 190 };
+    }
 
     // ------------------------------------------------------------------ sun / sky
     this.sky.setSun(L.elevation, L.azimuth, scene);
@@ -203,10 +225,12 @@ export class LandSet {
     const locShade = shadeTexture(local, this.height, sunDir, { maxDist: 30000, useMods: true });
     this.disposables.push(regShade, locShade);
     const nTheta = tier === 'high' ? 448 : tier === 'medium' ? 320 : 200;
+    const polarOpts = { nTheta, r0: ground ? 0.8 : 20, rMax: 150000 };
     const geo = polarTerrain(this.height, focus.x, focus.z, {
-      nTheta, r0: ground ? 0.8 : 20, rMax: 150000,
+      ...polarOpts,
       underwater: (x) => (x < -30000 ? 0 : x > 12000 && x < 60000 ? GEO.deadSea : null),
     });
+    this.meshHeight = polarSampler(geo, focus.x, focus.z, polarOpts);
     this.terrainTris = (geo.index?.count ?? 0) / 3;
     const tmat = landMaterial({ regTile: region, regShade, regLC, locTile: local, locShade, locLC }, {
       mist: o.location === 'judah' ? 1 : 0,
@@ -216,6 +240,8 @@ export class LandSet {
       near: ground ? tex : null,
       roadGlsl,
       haze: !ground,
+      terraces: o.location === 'judah',
+      village: villageLook,
     }, tier);
     const terrain = new THREE.Mesh(geo, tmat);
     terrain.name = 'land:terrain';
@@ -234,6 +260,18 @@ export class LandSet {
     const q = (x: number, z: number) => this.height.height(x, z);
     if (o.location === 'judah') {
       this.clouds = new LandClouds(tier, { x0: -75000, x1: 70000, z0: -70000, z1: 80000 });
+      // dawn cloud sea: rose-gold sunlit tops, blue-violet shade in the troughs, lavender underside
+      const cu = this.clouds.uniforms;
+      (cu.uSunTint.value as THREE.Color).setRGB(1.0, 0.8, 0.66);
+      (cu.uAmbTop.value as THREE.Color).setRGB(0.27, 0.31, 0.62);
+      (cu.uAmbBottom.value as THREE.Color).setRGB(0.24, 0.2, 0.3);
+      cu.uSunI.value = 9.5;
+      // aerial perspective: bluer away from the sun, so the Moab wall reads as a blue-violet silhouette
+      this.hazeTint = { warm: new THREE.Color(1.0, 0.72, 0.58), cool: new THREE.Color(0.5, 0.55, 1.0), lobe: new THREE.Vector3(22, 2.2, 0.8) };
+      // the deck ends over the ridge east of Bethlehem: the flight comes out from under it into the open dawn
+      this.deck = new THREE.Vector4(1850, 2450, -1400, 1.0);
+      landAtmo.uHaze.value.x = 2.2e-5;
+      landAtmo.uHaze.value.y = 1 / 1450;
       scene.add(this.clouds.mesh);
       this.disposables.push(this.clouds);
       const bl = new THREE.Vector3(PLACES.bethlehem.x, 0, PLACES.bethlehem.z); bl.y = q(bl.x, bl.z);
@@ -308,7 +346,8 @@ export class LandSet {
       scene.add(fl.group);
       this.disposables.push(fl);
       this.floraTris = fl.triangles;
-      {
+      if (tier === ('never' as LandTier)) {
+        // (kept for reference) the old paved disc: the terrain shader paints the plaza now (LAND_VILLAGE)
         const pg = new THREE.CircleGeometry(24, 48);
         pg.rotateX(-Math.PI / 2);
         const pp = pg.getAttribute('position') as THREE.BufferAttribute;
@@ -351,6 +390,23 @@ export class LandSet {
     const { shots, sequence } = this.buildShots();
     this.shots = shots;
     this.sequence = sequence;
+
+    // the inhabited hill country seen at the end of the flight: terrace walls, olive groves, hamlets (landJudah.ts)
+    if (o.location === 'judah' && dress) {
+      const views: { pos: THREE.Vector3; look: THREE.Vector3 }[] = [];
+      for (const e of [0.5, 0.58, 0.66, 0.74, 0.82, 0.9, 0.97]) { const f = shots.flight.at(e, 0); views.push({ pos: f.pos, look: f.look }); }
+      for (const e of [0.2, 0.6, 1]) { const f = shots.judahDawn.at(e, 0); views.push({ pos: f.pos, look: f.look }); }
+      const shadeImg = locShade.image as unknown as { data: Uint8Array };
+      const dz = buildJudahDressing({
+        tier, ground: this.meshHeight, dem: (x, z) => this.height.height(x, z),
+        shade: { tile: local, data: shadeImg.data }, mask: dress, sunDir, views,
+        mist: { color: new THREE.Color(0.95, 0.82, 0.74), top: 650 },
+      });
+      scene.add(dz.group);
+      this.disposables.push(dz);
+      this.floraTris = dz.triangles;
+      this.dressCounts = dz.counts;
+    }
     this.restoreSharedSun();
   }
 
@@ -367,11 +423,15 @@ export class LandSet {
     if (this.location === 'judah') {
       const e = (x: number, z: number, above: number) => V(x, this.height.height(x, z) + above, z);
       void e;
-      shots.cloudSea = path([V(-11500, 3350, 2600), V(-9800, 3200, 2200), V(-8200, 3000, 1900)], [V(40000, 1500, -2000), V(40000, 1300, 2000), V(40000, 1000, 5000)], [48, 46], 7);
-      shots.descent = path([V(-8200, 3000, 1900), V(-6600, 2300, 1500), V(-5200, 1650, 1200), V(-4200, 1320, 1000)], [V(40000, 1000, 5000), V(36000, 300, 6000), V(32000, -200, 7000), V(30000, -350, 7500)], [46, 42], 6);
-      shots.judahDawn = path([V(-4200, 1320, 1000), V(-2200, 1240, 1100), V(200, 1200, 1300)], [V(30000, -900, 7500), V(30000, -1000, 8200), V(30500, -1000, 9000)], [42, 36], 9);
-      shots.flight = path([V(-11500, 3350, 2600), V(-8200, 3000, 1900), V(-5800, 1950, 1350), V(-3600, 1300, 1050), V(-1000, 1230, 1200), V(600, 1200, 1350)],
-        [V(40000, 1500, -2000), V(40000, 1000, 5000), V(34000, 0, 6500), V(30000, -350, 7500), V(30000, -380, 8400), V(30500, -390, 9000)], [48, 36], 22);
+      // one continuous flight (the film plays `flight`): above the sunlit cloud sea, the sun just over the Moab wall
+      // -> dive through the deck -> skim the terraced ridge country east of Bethlehem at ~250-300 m, the desert
+      // falling away in layered haze to the Dead Sea mirror and the blue-violet Moab plateau.
+      const FP = [V(-12500, 3400, 1500), V(-9000, 3060, 1600), V(-6200, 2080, 1500), V(-3800, 1330, 1350), V(-1400, 1075, 1300), V(800, 1015, 1400)];
+      const FL = [V(40000, 1300, 6100), V(40000, 1000, 7000), V(36000, 150, 8200), V(32000, -300, 9500), V(30500, -380, 10500), V(30500, -390, 11500)];
+      shots.cloudSea = path([FP[0], V(-10700, 3230, 1550), FP[1]], [FL[0], V(40000, 1150, 6500), FL[1]], [48, 46], 7);
+      shots.descent = path([FP[1], FP[2], FP[3]], [FL[1], FL[2], FL[3]], [46, 42], 6);
+      shots.judahDawn = path([FP[3], FP[4], FP[5]], [FL[3], FL[4], FL[5]], [42, 38], 9);
+      shots.flight = path(FP, FL, [48, 38], 22);
       shots.panorama = path([V(-3000, 2600, 26000), V(-1500, 2600, 25000)], [V(-3000, 0, -30000), V(-1500, 0, -30000)], [62, 60], 8);
       sequence = [shots.cloudSea, shots.descent, shots.judahDawn];
     } else if (this.location === 'coast') {
@@ -383,19 +443,13 @@ export class LandSet {
       // wide: from the rise ahead of the column, looking back SW down the road toward the sea and the low sun
       // low, in front of the head of the column, looking back down the road into the dust and the low sun
       const T = (back: number, lat: number, up: number) => { const x = head.x + hd.x * back + side.x * lat, z = head.z + hd.z * back + side.z * lat; return V(x, this.height.height(x, z) + up, z); };
-      // (the sun is low in the WNW, behind the city and the sea: the host marches out of the backlit dust)
-      // THREAT — telephoto from 260 m ahead on the road verge: the column coming on, Ashdod on its tell behind it,
-      //          the dunes and the glittering sea on the horizon; slow creep in.
-      shots.threat = path([T(270, 16, 8.5), T(255, 13, 8.0)], [T(-900, -40, 14), T(-900, -30, 12)], [15, 13.5], 8);
-      // VISTA — the establishing wide from a rise south-east of the column: the plain of fields, the host a dark
-      //         line in its dust, the city, the dune belt and the sea with the sun above it.
-      {
-        // toward the low sun (azimuth -104: WNW), a few degrees south of it so the disc sits in the upper right
-        const sd = V(Math.sin(THREE.MathUtils.degToRad(-110)), 0, Math.cos(THREE.MathUtils.degToRad(-110)));
-        const c0 = T(650, 520, 85), c1 = T(560, 470, 72);
-        const l0 = c0.clone().addScaledVector(sd, 9000).setY(-60), l1 = c1.clone().addScaledVector(sd, 9000).setY(-80);
-        shots.vista = path([c0, c1], [l0, l1], [30, 27], 7);
-      }
+      // THREAT — the establishing wide from a crane ~170 m over the plain, 1 km ahead of the host, looking WNW with the
+      //          morning sun behind the camera: the column a long bristling line coming on down the road out of its
+      //          dust, Ashdod on its tell behind it, the dune belt, and the sea as a pale band on the horizon
+      //          (visual-bible 3.9 MUST: "the Mediterranean as a pale band on the western horizon").
+      shots.threat = path([T(1150, 300, 175), T(1020, 270, 160)], [T(-1100, 40, 36), T(-1100, 30, 30)], [21, 19], 8);
+      // VISTA — higher and wider, from the south-east: the plain of fields, the host, the city, the dunes, the sea
+      shots.vista = path([T(1900, 950, 340), T(1750, 880, 310)], [T(-2600, -250, 0), T(-2600, -220, 0)], [34, 31], 7);
       // COLUMN — low lateral track along the ranks at 24 m, the dust lit from behind
       shots.column = path([T(-10, 26, 1.5), T(-50, 24, 1.6)], [T(-30, 0, 1.8), T(-72, 0, 1.9)], [30, 29], 6);
       // GLINT — long lens on the front ranks: helmets, shields and spear points catching the low sun
@@ -408,7 +462,8 @@ export class LandSet {
       const f = V(Math.sin(yaw), 0, Math.cos(yaw)); // out of the gate
       const s = V(Math.cos(yaw), 0, -Math.sin(yaw)); // along the wall
       const P = (along: number, out: number, up: number) => V(g.x + s.x * along + f.x * out, g.y + up, g.z + s.z * along + f.z * out);
-      shots.gateWide = path([P(-14, 34, 16), P(-9, 26, 7), P(-6, 21, 3.2)], [P(0, 2, 3), P(0, 3, 2.2), P(0, 4, 1.8)], [44, 40], 7);
+      // (starts looking down on the roofs — the far horizon stays out of the top of frame — and settles level on the gate)
+      shots.gateWide = path([P(-14, 34, 16), P(-9, 26, 7), P(-6, 21, 3.2)], [P(0, 2, 0.2), P(0, 3, 1.6), P(0, 4, 1.8)], [44, 40], 7);
       shots.elders = path([P(-13, 8.5, 1.3), P(-6, 9.5, 1.3)], [P(-3, 3.5, 1.1), P(1.5, 3.2, 1.4)], [34, 32], 5);
       shots.samuel = path([P(3.5, 12, 1.55), P(3.0, 11, 1.6)], [P(0, 3.2, 1.55), P(0, 3.2, 1.6)], [26, 24], 4);
       sequence = [shots.gateWide, shots.elders, shots.samuel];
@@ -431,6 +486,8 @@ export class LandSet {
     shared.uSunColor.value.copy(landAtmo.uSunColA.value);
     landAtmo.tSkyCube.value = this.sky.cubeTarget.texture;
     landAtmo.uHaze.value.w = this.location === 'judah' ? 1 : 0;
+    if (this.hazeTint) { landAtmo.uHazeWarm.value.copy(this.hazeTint.warm); landAtmo.uHazeCool.value.copy(this.hazeTint.cool); landAtmo.uHazeLobe.value.copy(this.hazeTint.lobe); }
+    if (this.deck) { cloudShared.uDeck.value.copy(this.deck); cloudShared.uPuffs.value = 0; }
     cloudShared.uCloudTime.value = this.time;
     for (const w of this.waters) (w.material as THREE.ShaderMaterial).uniforms.uTime.value = this.time;
     if (this.dust) this.dust.material.uniforms.uTime.value = this.time;
@@ -445,6 +502,10 @@ export class LandSet {
   restoreSharedSun() {
     shared.uSunDir.value.copy(this.gameSun.dir);
     shared.uSunColor.value.copy(this.gameSun.color);
+    landAtmo.uHazeWarm.value.copy(HAZE_WARM0);
+    landAtmo.uHazeCool.value.copy(HAZE_COOL0);
+    landAtmo.uHazeLobe.value.set(6, 1, 0.92);
+    if (this.deck) { cloudShared.uDeck.value.set(1850, 2450, 5500, 1.0); cloudShared.uPuffs.value = 0.8; }
   }
 
   stats(renderer: THREE.WebGLRenderer): LandStats {
@@ -476,4 +537,36 @@ export function landView(set: LandSet, opts: { camera?: THREE.PerspectiveCamera 
     far: set.far,
     onLeave: () => set.restoreSharedSun(),
   };
+}
+
+/**
+ * Dawn grade of the set's physical sky (visual-bible 3.11: "the sky gold -> rose -> blue above" Moab): re-hues the
+ * LUT sky by elevation (gold at the horizon near the sun, a rose band above it, blue-violet overhead, the pink
+ * belt over the anti-solar horizon) keeping its luminance. It changes this SkySystem's own material only (the
+ * capture / haze / reflections follow, since they sample the same sky).
+ */
+export function gradeDawnSky(sky: SkySystem, amount = 0.62) {
+  const mat = sky.sky.material as THREE.ShaderMaterial;
+  mat.uniforms.uGrade = { value: amount };
+  mat.onBeforeCompile = (sh) => {
+    sh.fragmentShader = sh.fragmentShader
+      .replace('uniform float uGlow;', 'uniform float uGlow; uniform float uGrade;')
+      .replace('void main(){', `vec3 dawnGrade(vec3 col, vec3 d){
+          float el = max(d.y, 0.0);
+          vec2 a = normalize(d.xz + vec2(1e-5)), s = normalize(uSunDir.xz + vec2(1e-5));
+          float mu = dot(a, s) * 0.5 + 0.5;
+          float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
+          vec3 gold = vec3(1.0, 0.60, 0.28), rose = vec3(0.98, 0.56, 0.60), blue = vec3(0.34, 0.44, 0.86), violet = vec3(0.62, 0.52, 0.86);
+          float hs = smoothstep(0.0, 0.14, el), hb = smoothstep(0.08, 0.5, el);
+          vec3 t = mix(mix(gold, rose, hs), blue, hb);
+          vec3 anti = mix(mix(vec3(0.86, 0.62, 0.74), violet, smoothstep(0.02, 0.2, el)), blue, hb);
+          t = mix(anti, t, smoothstep(0.1, 0.75, mu));
+          t /= dot(t, vec3(0.2126, 0.7152, 0.0722));
+          return mix(col, t * lum, uGrade * (1.0 - smoothstep(0.9993, 0.99995, dot(d, uSunDir))));
+        }
+        void main(){`)
+      .replace('gl_FragColor = vec4(col, 1.0);', 'col = dawnGrade(col, d);\n          gl_FragColor = vec4(col, 1.0);');
+  };
+  mat.customProgramCacheKey = () => 'land-dawn-sky-1';
+  mat.needsUpdate = true;
 }
