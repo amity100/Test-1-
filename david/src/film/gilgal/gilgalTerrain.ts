@@ -317,7 +317,7 @@ float lum(vec3 c){ return dot(c, vec3(0.2126, 0.7152, 0.0722)); }`)
   float graze = 1.0 - smoothstep(0.004, 0.035, abs(vd.y));
   float mir = graze * smoothstep(700.0, 2600.0, dist) * (1.0 - hills) * (1.0 - th * 0.5);
   float shim = 0.55 + 0.45 * sin(vTW.x * 0.01 + vTW.z * 0.013 + uTimeT * 1.7 + tN(xz * 0.004) * 6.0);
-  c = mix(c, vec3(0.78, 0.72, 0.62), mir * shim * 0.45);
+  c = mix(c, vec3(0.74, 0.66, 0.54), mir * shim * 0.32);
   // looking into the low sun, every clod, pebble and tuft turns its shadowed side toward the camera
   vec3 sH = normalize(vec3(uSunP.x, 0.0, uSunP.z));
   float backlit = pow(max(dot(normalize(vec3(vd.x, 0.0, vd.z)), sH), 0.0), 2.0) * (1.0 - hills * 0.5);

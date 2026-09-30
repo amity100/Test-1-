@@ -148,7 +148,8 @@ export function buildGilgalShots(ground: GilgalGround): GilgalShots {
       const k = ss(0.6, 4.2, t);
       const push = ss(3.5, 10, t);
       const look = fist.clone().lerp(face, k);
-      const p = V(s.x + 2.3 - 0.5 * push, g + 1.3 + 0.5 * k, s.z + 1.05 - 0.2 * push);
+      // nearly frontal: the army stands behind him, out of focus in the dust and the low sun
+      const p = V(s.x + 2.3 - 0.5 * push, g + 1.3 + 0.5 * k, s.z + 0.55 - 0.25 * push);
       return frame(p, look, 27 - 6 * push);
     }, false),
     focus: (t) => {

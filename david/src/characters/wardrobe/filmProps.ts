@@ -226,6 +226,8 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions):
     return t > 0.01 ? blendWeights(tw(i, p), aw(i, p), t) : tw(i, p);
   };
   const m = makeSkinned(human, g, mat, w, { name: 'scaleArmour' });
+  // makeSkinned rebuilds the geometry without vertex colours: carry them over (same vertex order)
+  m.geometry.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   m.userData.scales = idx.length / (nu * nv * 6);
   fit.outfit.add(m);
   return m;

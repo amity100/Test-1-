@@ -203,7 +203,11 @@ export class GilgalSet {
     };
     this.shots = buildGilgalShots(ground);
     for (const g of [this.flora.group, stones.group, camp.group]) g.updateMatrixWorld(true);
+    // initial state = the start of shot 6; then free-camera mode until the film calls setBeat (shadow focus follows
+    // the camera, base exposure)
     this.setBeat('dustWall', 0);
+    this.beat = null;
+    this.exposure = GilgalSet.BASE_EXPOSURE;
   }
 
   /** ground height of the set at (x, z) (feet placement) */
@@ -261,7 +265,20 @@ export class GilgalSet {
     if (opts.advanceTime) shared.uTime.value += dt;
     shared.uSunDir.value.copy(this.setSun.dir);
     shared.uSunColor.value.copy(this.setSun.color);
-    if (!this.beat) this.focus.copy(camera.position).setY(this.ground.height(camera.position.x, camera.position.z));
+    if (!this.beat) {
+      // free camera: frame the sun shadows on the ground ~15 m ahead of the lens
+      camera.getWorldDirection(this.focus);
+      this.focus.y = 0;
+      if (this.focus.lengthSq() < 1e-6) this.focus.set(0, 0, 1);
+      this.focus.normalize().multiplyScalar(15).add(camera.position);
+      this.focus.y = this.ground.height(this.focus.x, this.focus.z);
+      if (this.shadowHalf !== 30) {
+        this.shadowHalf = 30;
+        const sc = this.sky.sun.shadow.camera;
+        sc.left = -30; sc.right = 30; sc.top = 30; sc.bottom = -30;
+        sc.updateProjectionMatrix();
+      }
+    }
     this.sky.update(camera, this.focus);
     this.driveLandClouds();
     // high above the valley the sunlit cloud deck fills the frame: stop down like a camera operator would
