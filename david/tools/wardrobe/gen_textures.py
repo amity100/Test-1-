@@ -18,7 +18,7 @@ import numpy as np
 from PIL import Image
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-OUT = os.path.join(ROOT, 'src', 'assets', 'wardrobe')
+OUT = os.environ.get('WARDROBE_OUT') or os.path.join(ROOT, 'src', 'assets', 'wardrobe')
 
 
 # ----------------------------------------------------------------------------------------------- helpers
@@ -107,11 +107,16 @@ def save_pair(name, res, albedo, alpha, nrm, ao, height, q=80):
     a = np.dstack([np.clip(albedo, 0, 1), np.clip(alpha, 0, 1)])
     img = Image.fromarray((a * 255 + 0.5).astype(np.uint8), 'RGBA')
     tag = f'{res // 1024}k' if res >= 1024 else f'{res}'
-    img.save(os.path.join(OUT, f'{name}_a_{tag}.webp'), 'WEBP', quality=q, method=6, alpha_quality=90)
+    # atomic writes (temp name, then rename): teammates' builds may read the assets at any moment
+    def put(im, fn, **kw):
+        tmp = os.path.join(OUT, '.tmp_' + fn)
+        im.save(tmp, 'WEBP', **kw)
+        os.replace(tmp, os.path.join(OUT, fn))
+    put(img, f'{name}_a_{tag}.webp', quality=q, method=6, alpha_quality=90)
     nx, ny, nz = nrm
     n = np.dstack([nx * 0.5 + 0.5, ny * 0.5 + 0.5, np.clip(ao, 0, 1), np.clip(height, 0, 1)])
     img = Image.fromarray((n * 255 + 0.5).astype(np.uint8), 'RGBA')
-    img.save(os.path.join(OUT, f'{name}_n_{tag}.webp'), 'WEBP', quality=q - 10, method=6, alpha_quality=70)
+    put(img, f'{name}_n_{tag}.webp', quality=q - 10, method=6, alpha_quality=70)
     print('  wrote', name, tag)
 
 
@@ -135,6 +140,7 @@ def weave(res, threads, width_frac, slub, wander, seed, fuzz=0.25, gap_jitter=0.
     cover = np.zeros((res, res), np.float32)
     tone = np.ones((res, res), np.float32)
     streak = np.zeros((res, res), np.float32)
+    topax = np.zeros((res, res), np.float32)  # 0 warp on top, 1 weft on top
     fibre_hi = periodic_noise((res, res), threads * 3, rng, octaves=2, aniso=(4.0, 0.25))  # along y (warp)
     fibre_hi2 = periodic_noise((res, res), threads * 3, rng, octaves=2, aniso=(0.25, 4.0))  # along x (weft)
     base_pos = (np.arange(threads) + 0.5 + (rng.random(threads) - 0.5) * gap_jitter * 2) * pitch
@@ -196,6 +202,7 @@ def weave(res, threads, width_frac, slub, wander, seed, fuzz=0.25, gap_jitter=0.
                 tone[:, idx] = np.where(m, tones[i] * (0.96 + 0.08 * slubn[:, None]), tsub)
                 ssub = streak[:, idx]
                 streak[:, idx] = np.where(m, fibre_hi[:, idx], ssub)
+                topax[:, idx] = np.where(m, 0.0, topax[:, idx])
             else:
                 sub_h = height[idx, :]
                 m = h > sub_h
@@ -206,25 +213,51 @@ def weave(res, threads, width_frac, slub, wander, seed, fuzz=0.25, gap_jitter=0.
                 tone[idx, :] = np.where(m, tones[i] * (0.96 + 0.08 * slubn[None, :]), tsub)
                 ssub = streak[idx, :]
                 streak[idx, :] = np.where(m, fibre_hi2[idx, :], ssub)
+                topax[idx, :] = np.where(m, 1.0, topax[idx, :])
     height = np.clip(height, 0, 1) * height_boost
     # fuzz: stray fibres partly bridging the gaps
     fz = periodic_noise((res, res), threads * 2, rng, octaves=3)
     cover = np.clip(cover + np.clip(fz - (1 - fuzz), 0, 1) * 2.0, 0, 1)
+    weave.topax = topax
     return height, cover, tone, streak
 
 
-def gen_weave(name, res_list, threads, width_frac, slub, wander, seed, base_rgb, fuzz, normal_strength, gap_jitter=0.18, twill=False, gap_dark=0.35):
+def gen_weave(name, res_list, threads, width_frac, slub, wander, seed, base_rgb, fuzz, normal_strength, gap_jitter=0.18, twill=False, gap_dark=0.35, felt=0.0, heather=0.0):
+    """
+    models pass (CUT v2): thread-scale cloth. `threads` yarns per tile in each direction; the garments pick the tile
+    size so one yarn is about 1-1.5 mm (coarse homespun) / 0.6 mm (fine linen, wool twill) — real cloth, not ropes.
+      gap_dark  albedo in the gaps between yarns relative to the yarn tops (1 = no darkening): real fulled wool shows
+                almost no dark grid (the old 0.3 read as basketry / straw)
+      felt      0..1: a fibre-fuzz layer over the weave (fulled / worn wool): softens the relief and the tone contrast
+      heather   0..1: naturally darker / browner fleece fibres spun into the yarns (undyed wool is never one flat tone)
+    """
     hi = max(res_list)
     height, cover, tone, streak = weave(hi, threads, width_frac, slub, wander, seed, fuzz, gap_jitter, twill=twill)
     rng = np.random.default_rng(seed + 99)
     height = height + (streak - 0.5) * 0.12 * (height > 0)
     low = periodic_noise((hi, hi), 3, rng, octaves=4)  # large-scale blotch (tileable)
     br = np.array(base_rgb, np.float32)
-    lum = tone * (0.9 + 0.2 * streak) * (0.94 + 0.12 * low)
+    lum = tone * (0.93 + 0.14 * streak) * (0.97 + 0.06 * low)
+    if heather > 0:
+        # short dark / light fibres along the yarns (aniso noise at fibre scale), a few per mm
+        # fibres run along the yarn that is on top: long thin streaks, never isotropic speckle
+        fy = periodic_noise((hi, hi), threads * 4, rng, octaves=2, aniso=(0.35, 3.0))  # thin across x, long along y
+        fx = periodic_noise((hi, hi), threads * 4, rng, octaves=2, aniso=(3.0, 0.35))
+        fib = np.where(weave.topax > 0.5, fx, fy)
+        spots = np.clip((fib - 0.64) * 5.0, 0, 1)
+        lum = lum * (1.0 - heather * 0.2 * spots) + heather * 0.045 * np.clip((0.32 - fib) * 5.0, 0, 1)
     albedo = br[None, None, :] * lum[:, :, None]
     # gaps (where coverage is partial) darker: seen-through shadowed interior
     albedo *= (gap_dark + (1 - gap_dark) * np.clip(height * 1.6 + 0.25, 0, 1))[:, :, None]
     ao = ao_from_height(height, max(2, hi // threads // 3)) * (0.55 + 0.45 * np.clip(height * 1.5, 0, 1))
+    if felt > 0:
+        fz = periodic_noise((hi, hi), threads * 2, rng, octaves=3)
+        mean = albedo.reshape(-1, 3).mean(0)
+        k = felt * (0.55 + 0.45 * fz)
+        albedo = albedo * (1 - k[:, :, None]) + mean[None, None, :] * (0.97 + 0.06 * fz)[:, :, None] * k[:, :, None]
+        height = height * (1 - 0.5 * felt) + 0.5 * felt * blur_periodic(height, 2)
+        ao = 1 - (1 - ao) * (1 - 0.6 * felt)
+        cover = np.clip(cover + felt * 0.35 * fz, 0, 1)
     for res in res_list:
         f = lambda a: resample(a, res)
         h = blur_periodic(f(height), 1)
@@ -436,12 +469,15 @@ def gen_scales(res=512, seed=51):
 
 
 JOBS = {
-    # David's tunic: loose, slubby, open grid weave (oatmeal), ~3.2 mm pitch over a 16 cm tile
-    'weave_coarse': lambda: gen_weave('weave_coarse', (1024, 512), 50, 0.8, 0.32, 0.10, 7, (0.86, 0.80, 0.68), 0.12, 7.0, 0.22, gap_dark=0.3),
-    # under-layer / plain wool tunics (court): tighter, still hand-spun (neutral: dyed at runtime)
-    'weave_medium': lambda: gen_weave('weave_medium', (1024, 512), 64, 0.9, 0.22, 0.06, 13, (0.9, 0.9, 0.9), 0.2, 5.0, 0.12, gap_dark=0.55),
-    # fine wool twill / linen (Saul's robe and undertunic): neutral, dyed at runtime
-    'weave_fine': lambda: gen_weave('weave_fine', (1024, 512), 96, 0.95, 0.12, 0.04, 17, (0.92, 0.92, 0.92), 0.25, 3.5, 0.06, twill=True, gap_dark=0.7),
+    # models pass (CUT v2): thread-scale weaves. The garments choose the tile (m) so one yarn is ~1.3 mm (coarse
+    # homespun wool / linen: David, the soldiers, Samuel's me'il, the elders' mantles), ~1 mm (medium: tunics) and
+    # ~0.6 mm (fine: Saul's crimson madim, linen). The old 50-yarn tile at 36 cm made 7 mm "ropes" = basketry.
+    # coarse: loose, slubby handspun tabby (pre-tinted oatmeal; David's tunic, mantles)
+    'weave_coarse': lambda: gen_weave('weave_coarse', (1024, 512), 128, 0.9, 0.34, 0.09, 7, (0.86, 0.80, 0.68), 0.3, 4.2, 0.2, gap_dark=0.72, felt=0.3, heather=0.8),
+    # medium: plain wool tunics (neutral: dyed at runtime)
+    'weave_medium': lambda: gen_weave('weave_medium', (1024, 512), 144, 0.92, 0.24, 0.06, 13, (0.9, 0.9, 0.9), 0.32, 3.4, 0.12, gap_dark=0.8, felt=0.25, heather=0.6),
+    # fine wool twill / linen (Saul's madim, kilts): neutral, dyed at runtime
+    'weave_fine': lambda: gen_weave('weave_fine', (1024, 512), 224, 0.95, 0.12, 0.035, 17, (0.92, 0.92, 0.92), 0.3, 2.4, 0.06, twill=True, gap_dark=0.86, felt=0.15, heather=0.3),
     'fringe': gen_fringe,
     'leather': gen_leather,
     'rope': gen_rope,

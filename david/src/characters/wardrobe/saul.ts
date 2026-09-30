@@ -34,11 +34,11 @@ export async function dressSaul(human: HumanModel, opts: DressOptions): Promise<
   outfit.capsules.push(...legCapsules(fit, 0.016, 0.06));
   const ARGAMAN = 0x4b1a45, SHANI = 0x8c1616, TEKHELET = 0x2b3f8c, GOLD = 0xd9a84e, LINEN = 0xdcd3bf;
   // ---- undertunic (linen)
-  const kut = fittedTunic(fit, { tex: fine, tile: 0.07, dye: LINEN, hem: 0.9, sleeve: 1.28, neck: 'slit', ease: 0.006, flare: 0.1, folds: 0.35, seed: 3, name: 'kuttonet', fray: 0, sheen: 0.35, roughness: 0.78, dust: 0.3 });
+  const kut = fittedTunic(fit, { tex: fine, tile: 0.13, dye: LINEN, hem: 0.9, sleeve: 1.28, neck: 'slit', ease: 0.006, flare: 0.1, folds: 0.35, seed: 3, name: 'kuttonet', fray: 0, sheen: 0.35, roughness: 0.78, dust: 0.3 });
   // ---- me'il: purple wool tabard, four corners
   // the me'il rides on the undertunic's body and skirt only (NOT its sleeves: those come out of the armholes)
   const meil = fittedTunic(fit, {
-    tex: fine, tile: 0.05, dye: ARGAMAN, hem: 0.52, sleeve: 0, sleeveless: true, neck: 'round', offset: 0.009, ease: 0.01, flare: 0.1, folds: 1.5,
+    tex: fine, tile: 0.12, dye: ARGAMAN, hem: 0.52, sleeve: 0, sleeveless: true, neck: 'round', offset: 0.009, ease: 0.01, flare: 0.1, folds: 1.5,
     seed: 9, name: 'meil', sideSlit: { top: hipY - 0.03, half: 0.22 }, hide: false, inner: [kut.restPos[0], kut.restPos[1]], fray: 0, sheen: 0.85, roughness: 0.72, dust: 0.25,
     armhole: { half: 0.52, top: lm.yArmpit + 0.012 + 0.066 }, shoulderFolds: 5,
     palette: [SHANI, TEKHELET, GOLD, 0xd8c08a],
@@ -57,7 +57,7 @@ export async function dressSaul(human: HumanModel, opts: DressOptions): Promise<
     ],
   });
   // ---- sash (scarlet) with gold plaques, sword at the left hip
-  const sashMat = clothMaterial({ tier, tex: fine, tile: 0.05, dye: SHANI, roughness: 0.8, sheen: 0.25, hem: [0, 0.1, 0.01, 0], edgeMask: [0, 0], transmit: 0.2 });
+  const sashMat = clothMaterial({ tier, tex: fine, tile: 0.1, dye: SHANI, roughness: 0.8, sheen: 0.25, hem: [0, 0.1, 0.01, 0], edgeMask: [0, 0], transmit: 0.2 });
   beltBand(fit, meil, { width: 0.075 * S, thickness: 0.007, material: sashMat, offset: 0.004, name: 'sash' });
   const gold = solidMaterial({ tier, tex: metal, color: GOLD, roughness: 0.28, metalness: 1, repeat: [2, 2], metalWear: { patina: 0x7a5424, amount: 0.25, edgeBright: 0.9 } });
   {

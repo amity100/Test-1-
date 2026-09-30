@@ -74,18 +74,25 @@ his arm in the SAME pose at the same moment (a uniform wall of raised arms); not
 verse (9:2) placed in the sky, never across a face or body.
 
 ### 9 · Silence (61.8–69.8 s)
-The camera stands inside the column behind soldiers whose backs, heads and spears fill the frame (crowd-quality
-figures: doll faces and shell hair up close), then finds Saul and Samuel far away by zoom; for most of 8 s nothing
-changes. → 3 s: the push between shoulders, heads turning, men stepping aside, Samuel revealed standing in the road.
+At 2 fps: the camera starts inside the column among blurred backs, heads and spears (crowd-quality figures: doll
+heads, shell hair), then glides out behind Saul and the armour-bearer — both seen from behind, standing still —
+while Samuel is a tiny figure far down the road; for the last 4 s the frame only defocuses. Nobody turns, nobody
+steps aside; the silence has no reaction in it. → 3 s: the push between shoulders, heads turning toward the road,
+men stepping aside, Samuel revealed standing in the road, his hair and mantle moving, one step forward.
 
 ### 10a · Face-off (69.8–74.8 s)
 Over Samuel's shoulder (his white hair a soft blob in the foreground) onto Saul, then the reverse onto Samuel's
 back; both actors stand still. → folded into the tear (G5a).
 
 ### 10b · The tear (74.8–81.8 s)
-A medium two-shot at eye level in flat afternoon light: Samuel turns, Saul reaches, the corner tears, but at this
-distance and speed the moment has no weight — no close angle on the hand and the cloth, the slow motion does not
-read as slow motion, and Samuel's hair flares outward. → G5a wide (2 s) + G5b insert on the fist (2.5 s).
+At 2 fps: Saul walks in from the left and ends up pressed against Samuel's side with his head lowered — it reads as
+a stumble or an embrace, not a grab; his hand and the mantle's corner are hidden between their bodies, so THE TEAR
+IS NEVER SEEN; from 76.9 s the two bodies hold almost still for 3+ s (the slow motion shows nothing moving);
+Samuel stands stiff and does not really turn to go; the long 15:27 verse lies across both bodies; Saul's planted
+spear stands alone as a stray vertical line at the left edge. → G5a wide (2 s: Samuel's real turn-step away, Saul's
+lunge, the arm reaching for the corner, clear silhouettes with space between them) + G5b insert (2.5 s, slow
+motion: the fist closing on the wool, the pull, the rip running through the weave, threads snapping, the corner
+coming free). No verse on these shots.
 
 ### 11 · The verdict (81.8–90.8 s)
 Nine seconds of almost the same frame: Samuel centred, the long verse at the bottom in small type, his mouth

@@ -543,7 +543,7 @@ export class Intro {
     };
     const a = this.h.audio;
     if (s.id === 'thicket') fire('breath', 1.0, () => a.sfx('bearGrowl', { volume: 0.28, pitch: 0.7 }));
-    if (s.id === 'lamb') fire('lamb', 0.9, () => a.sfx('lambBleat', { volume: 0.5 }));
+    if (s.id === 'eyes') fire('lamb', 0.2, () => a.sfx('lambBleat', { volume: 0.5 }));
   }
 
   private fireText() {

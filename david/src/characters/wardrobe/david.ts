@@ -120,12 +120,16 @@ export async function dressDavid(human: HumanModel, opts: DressOptions): Promise
     [...tubeUV(skirt.tube, 0.35, hemY + 0.09), 0.009, 0.8],
     [...tubeUV(skirt.tube, 2.7, hemY + 0.17), 0.012, 1.3],
   ];
-  const oat = 0xeadcc4;
-  // open grid weave like the reference: the gaps between the threads read dark (gap), light shines through at the edges
-  const tunicUp = clothMaterial({ tier, tex: coarse, tile: 0.36, dye: oat, roughness: 0.93, sheen: 0.55, normal: 0.95, grime: [0.62, 0.52, 0.4, 0.75], hem: [0, 0.1, 0.022, 0.75], edgeMask: [0, 1], holes: holesUp, transmit: 1.1, gap: 0.55 });
-  const tunicSk = clothMaterial({ tier, tex: coarse, tile: 0.36, dye: oat, roughness: 0.93, sheen: 0.55, normal: 0.95, grime: [0.6, 0.5, 0.38, 0.5], hem: [0.75, 0.2, 0.03, 0.85], edgeMask: [1, 0], holes: holesSkirt, sway: swayCfg, collide: U, collidePad: 0.004, transmit: 1.1, gap: 0.55 });
-  const underMat = clothMaterial({ tier, tex: medium, tile: 0.1, dye: 0xe6d3a8, roughness: 0.95, sheen: 0.5, hem: [0.85, 0.12, 0.03, 0.9], edgeMask: [1, 0], sway: swayCfg, collide: U, transmit: 1.0, gap: 0.3 });
-  const sleeveMat = clothMaterial({ tier, tex: coarse, tile: 0.36, dye: oat, roughness: 0.93, sheen: 0.55, normal: 0.95, grime: [0.62, 0.52, 0.4, 0.6], hem: [0.15, 0.06, 0.022, 0.8], edgeMask: [1, 0], transmit: 1.2, gap: 0.55 });
+  const oat = 0xe6d9c6;
+  // models pass (CUT v2): real cloth, not basketry — the coarse weave is now thread-scale (128 yarns per 17 cm tile ≈
+  // 1.3 mm yarns; the old 36 cm tile of 50 yarns made 7 mm "ropes"), the gaps barely darken, and the character comes
+  // from non-periodic yarn streaks, sweat / dirt blotches, the dusty hem, fraying, holes and the folds gathered under
+  // the sash (reference image). The weave still opens up and lets light through at the frayed edges.
+  const cloth = { tier, tex: coarse, tile: 0.17, dye: oat, roughness: 0.93, sheen: 0.5, normal: 0.9, gap: 0.12, variation: [0.07, 0.18, 0.025] as [number, number, number] };
+  const tunicUp = clothMaterial({ ...cloth, grime: [0.6, 0.5, 0.38, 0.8], hem: [0, 0.1, 0.022, 0.75], edgeMask: [0, 1], holes: holesUp, transmit: 1.1, gather: { lower: 0.9, falloff: 0.06, spacing: 0.03 } });
+  const tunicSk = clothMaterial({ ...cloth, grime: [0.58, 0.48, 0.36, 0.55], hem: [0.85, 0.22, 0.03, 0.85], edgeMask: [1, 0], holes: holesSkirt, sway: swayCfg, collide: U, collidePad: 0.004, transmit: 1.1, gather: { upper: 1.0, falloff: 0.1, spacing: 0.036 } });
+  const underMat = clothMaterial({ tier, tex: medium, tile: 0.14, dye: 0xe0cfa8, roughness: 0.95, sheen: 0.5, hem: [0.85, 0.12, 0.03, 0.9], edgeMask: [1, 0], sway: swayCfg, collide: U, transmit: 1.0, gap: 0.1, variation: [0.05, 0.14, 0.02] });
+  const sleeveMat = clothMaterial({ ...cloth, grime: [0.6, 0.5, 0.38, 0.65], hem: [0.2, 0.06, 0.022, 0.8], edgeMask: [1, 0], transmit: 1.2 });
   const fringeMat = fringeMaterial({ tier, tex: fringeT, dye: 0xd9ccb2, width: 0.05, sway: swayCfg, collide: U, collidePad: 0.004, dust: 0.5 });
   const fringeMatUnder = fringeMaterial({ tier, tex: fringeT, dye: 0xc9b58c, width: 0.045, sway: swayCfg, collide: U, dust: 0.55 });
   const fringeMatArm = fringeMaterial({ tier, tex: fringeT, dye: 0xd9ccb2, width: 0.05 });
@@ -419,7 +423,8 @@ function buildSatchel(tier: Tier, t: { coarse: Awaited<ReturnType<typeof texPair
   // woven bag body (goat-hair / wool, darker), dusty
   // the bag is mostly WOVEN (reference): a coarse goat-hair / wool basket weave, darker gaps, dusty; leather only
   // for the short flap / rim, the lacing and the strap
-  const bagMat = clothMaterial({ tier, tex: t.coarse, tile: 0.15, dye: 0x8d6d4b, roughness: 0.96, sheen: 0.3, normal: 1.6, grime: [0.55, 0.45, 0.35, 0.6], hem: [0, 0.1, 0.01, 0], edgeMask: [0, 0], transmit: 0, gap: 0.7 });
+  // a coarse woven bag (a heavier yarn than the tunic: ~2.3 mm)
+  const bagMat = clothMaterial({ tier, tex: t.coarse, tile: 0.3, dye: 0x8d6d4b, roughness: 0.96, sheen: 0.3, normal: 1.5, grime: [0.55, 0.45, 0.35, 0.6], hem: [0, 0.1, 0.01, 0], edgeMask: [0, 0], transmit: 0, gap: 0.5, variation: [0.08, 0.15, 0.03] });
   const bag = new THREE.Mesh(bagGeo, bagMat);
   bag.castShadow = true;
   bag.receiveShadow = true;

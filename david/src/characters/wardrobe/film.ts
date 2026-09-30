@@ -110,20 +110,22 @@ export async function dressSamuel(human: HumanModel, opts: FilmDressOptions): Pr
   outfit.capsules.push(...legCapsules(fit, 0.018, 0.07));
   outfit.swayGain = 0.01; // heavy wool
   // (1) ankle tunic, light undyed wool, long sleeves
-  const kut = fittedTunic(fit, { tex: t.weave_medium, tile: 0.12, dye: 0xcdbf9f, hem: 0.95, sleeve: 1.62, neck: 'slit', ease: 0.008, flare: 0.12, folds: 0.8, seed: 5, name: 'kuttonet', fray: 0.03, dust: 0.7, roughness: 0.92, sheen: 0.5 });
+  // models pass: thread-scale weaves (medium ≈1 mm yarns, the me'il's heavy coarse wool ≈1.5 mm), non-periodic tone
+  // variation, folds gathered under the belt
+  const kut = fittedTunic(fit, { tex: t.weave_medium, tile: 0.15, dye: 0xcdbf9f, hem: 0.95, sleeve: 1.62, neck: 'slit', ease: 0.008, flare: 0.12, folds: 0.8, seed: 5, name: 'kuttonet', fray: 0.03, dust: 0.7, roughness: 0.92, sheen: 0.5, gather: 0.6, variation: [0.05, 0.12, 0.02] });
   // (2) the me'il: dark undyed wool, heavy, ankle length, four corners (side openings), woven border near the hem
   const DARK = 0x655645;
   // side openings of the wrap: narrow (a wide slit showed the light tunic as a stripe down both sides)
   const half = 0.11;
   const meil = fittedTunic(fit, {
-    tex: t.weave_coarse, tile: 0.1, dye: DARK, hem: 0.92, sleeve: 0, sleeveless: true, neck: 'round', offset: 0.014, ease: 0.016, flare: 0.2, folds: 2.2,
+    tex: t.weave_coarse, tile: 0.2, dye: DARK, hem: 0.92, sleeve: 0, sleeveless: true, neck: 'round', offset: 0.014, ease: 0.016, flare: 0.2, folds: 2.2, variation: [0.09, 0.14, 0.03],
     seed: 17, name: 'meil', sideSlit: { top: hipY + 0.02, half }, hide: false, inner: [kut.restPos[0], kut.restPos[1]], fray: 0.25, sheen: 0.55, roughness: 0.95, dust: 0.85,
     armhole: { half: 0.55, top: lm.yArmpit + 0.012 + 0.07 }, shoulderFolds: 6,
     palette: [0x4e4236, 0x8a7a60, 0x3b3128, 0x6f604c],
     bands: [{ from: 0.05, to: 0.075, motif: 0, pal: 0 }, { from: 0.08, to: 0.088, motif: 0, pal: 1 }],
   });
   // the thrown end over the left shoulder
-  const throwMat = clothMaterial({ tier, tex: t.weave_coarse, tile: 0.1, dye: DARK, roughness: 0.95, sheen: 0.55, hem: [0, 0.1, 0.012, 0.25], edgeMask: [1, 1], transmit: 0.3 });
+  const throwMat = clothMaterial({ tier, tex: t.weave_coarse, tile: 0.2, dye: DARK, variation: [0.09, 0.14, 0.03], roughness: 0.95, sheen: 0.55, hem: [0, 0.1, 0.012, 0.25], edgeMask: [1, 1], transmit: 0.3 });
   shoulderThrow(fit, meil, throwMat, { width: 0.2 * S, thickness: 0.012, name: 'meilThrow' });
   // (3) cloth belt on the tunic (under the me'il), (4) sandals
   const beltMat = clothMaterial({ tier, tex: t.weave_medium, tile: 0.08, dye: 0x8a7a60, hem: [0, 0.1, 0.01, 0], edgeMask: [0, 0], transmit: 0 });
@@ -134,7 +136,7 @@ export async function dressSamuel(human: HumanModel, opts: FilmDressOptions): Pr
   tzitzit(fit, meil.corners, { ...tm, length: 0.17 * S });
   // tearable corner: back-right (index 3: th = -PI/2 - half; the cloth extends toward the back, th decreasing)
   const skirtMesh = meil.meshes[1] as THREE.SkinnedMesh;
-  const freeMat = clothMaterial({ tier, tex: t.weave_coarse, tile: 0.1, dye: DARK, roughness: 0.95, sheen: 0.55, hem: [0.85, 0.16, 0.015, 0.25], edgeMask: [1, 0], transmit: 0.3, bands: [{ from: 0.05, to: 0.075, motif: 0, pal: 0 }, { from: 0.08, to: 0.088, motif: 0, pal: 1 }], palette: [0x4e4236, 0x8a7a60, 0x3b3128, 0x6f604c] });
+  const freeMat = clothMaterial({ tier, tex: t.weave_coarse, tile: 0.2, dye: DARK, variation: [0.09, 0.14, 0.03], roughness: 0.95, sheen: 0.55, hem: [0.85, 0.16, 0.015, 0.25], edgeMask: [1, 0], transmit: 0.3, bands: [{ from: 0.05, to: 0.075, motif: 0, pal: 0 }, { from: 0.08, to: 0.088, motif: 0, pal: 1 }], palette: [0x4e4236, 0x8a7a60, 0x3b3128, 0x6f604c] });
   const tear = new MeilTear(human, skirtMesh, meil.skirt.tube, { mesh: skirtMesh }, -Math.PI / 2 - half, -1, meil.hemY, { freeMaterial: freeMat, width: 0.3 * S, height: 0.5 * S, seed: 27, threadColor: 0x8b7b62 });
   outfit.add(tear.flapSkinned);
   const sock = (human.sockets as Record<string, THREE.Object3D>)['wardrobeTzitzit3'];
@@ -165,7 +167,7 @@ export async function dressSaulGilgal(human: HumanModel, opts: FilmDressOptions)
   const KERMES = 0x8a1c20;
   // madim: crimson wool, knee length, short sleeves; sweat-darkened and dusty from the campaign
   const madim = fittedTunic(fit, {
-    tex: t.weave_fine, tile: 0.06, dye: KERMES, hem: -0.15, sleeve: 0.42, neck: 'round', ease: 0.006, flare: 0.14, folds: 1.1, seed: 4, name: 'madim',
+    tex: t.weave_fine, tile: 0.13, dye: KERMES, hem: -0.15, sleeve: 0.42, neck: 'round', ease: 0.006, flare: 0.14, folds: 1.1, seed: 4, name: 'madim', variation: [0.05, 0.2, 0.015],
     fray: 0.1, sheen: 0.55, roughness: 0.82, dust: 0.75, palette: [0x9c3a30, 0x6e1518, 0x000000, 0x000000],
     bands: [{ from: 0.0, to: 0.012, motif: 0, pal: 1 }],
   });
@@ -248,8 +250,8 @@ export async function dressSoldier(human: HumanModel, opts: FilmDressOptions & {
   const dye = pick([0xcdbf9f, 0xc4b594, 0xb9a887, 0x9a8466, 0x8a7a64, 0x7c7266, 0xb0a48c]);
   const striped = R() < 0.3;
   const tun = fittedTunic(fit, {
-    tex: pick([t.weave_medium, t.weave_coarse]), tile: 0.13, dye, hem: -0.15 + R() * 0.2, sleeve: 0.35 + R() * 0.35, neck: 'slit', flare: 0.14,
-    seed, name: 'tunic', fray: 0.35, dust: 0.75 + 0.2 * R(), folds: 1,
+    tex: pick([t.weave_medium, t.weave_coarse]), tile: 0.17, dye, hem: -0.15 + R() * 0.2, sleeve: 0.35 + R() * 0.35, neck: 'slit', flare: 0.14,
+    seed, name: 'tunic', fray: 0.35, dust: 0.75 + 0.2 * R(), folds: 1, gather: 0.8, variation: [0.07, 0.18, 0.025],
     ...(striped ? { palette: [pick([0x9a4a2c, 0xa7773a]), 0, 0, 0], bands: [{ from: 0.03, to: 0.045, motif: 0, pal: 0 }] } : {}),
   });
   const beltMat = R() < 0.6
@@ -347,12 +349,12 @@ export async function dressElder(human: HumanModel, opts: FilmDressOptions): Pro
   const hipY = (lm.hip.L.y + lm.hip.R.y) / 2;
   outfit.capsules.push(...legCapsules(fit, 0.016, 0.06));
   const pick = <T,>(a: T[]) => a[Math.floor(R() * a.length)];
-  const kut = fittedTunic(fit, { tex: t.weave_medium, tile: 0.12, dye: pick(WOOL_LIGHT), hem: 0.55 + 0.3 * R(), sleeve: 1.5 + 0.4 * R(), neck: 'slit', flare: 0.12, folds: 0.8, seed, name: 'kuttonet', fray: 0.15, dust: 0.5 });
+  const kut = fittedTunic(fit, { tex: t.weave_medium, tile: 0.15, dye: pick(WOOL_LIGHT), hem: 0.55 + 0.3 * R(), sleeve: 1.5 + 0.4 * R(), neck: 'slit', flare: 0.12, folds: 0.8, seed, name: 'kuttonet', fray: 0.15, dust: 0.5, variation: [0.05, 0.12, 0.02] });
   const rich = R() < 0.35;
   const mdye = pick([0xcdbf9f, 0xb9a887, 0x74644f, 0x5e5143, 0x3a332c, 0x8a8070]);
   const bandCol = pick([0x9a4a2c, 0xa7773a, TEKHELET]);
   const mantle = fittedTunic(fit, {
-    tex: t.weave_coarse, tile: 0.11, dye: mdye, hem: 0.35 + 0.35 * R(), sleeve: 0, sleeveless: true, neck: 'round', offset: 0.012, ease: 0.014, flare: 0.16, folds: 1.8,
+    tex: t.weave_coarse, tile: 0.2, dye: mdye, hem: 0.35 + 0.35 * R(), sleeve: 0, sleeveless: true, neck: 'round', offset: 0.012, ease: 0.014, flare: 0.16, folds: 1.8, variation: [0.08, 0.14, 0.03],
     seed: seed + 9, name: 'mantle', sideSlit: { top: hipY + 0.02, half: 0.24 }, hide: false, inner: [kut.restPos[0], kut.restPos[1]], fray: 0.2, sheen: 0.5, roughness: 0.95, dust: 0.6,
     armhole: { half: 0.55, top: lm.yArmpit + 0.012 + 0.07 }, shoulderFolds: 5,
     ...(rich ? { palette: [bandCol, 0x3b3128, 0, 0], bands: [{ from: 0.04, to: 0.07, motif: 0, pal: 0 }, { from: 0.074, to: 0.08, motif: 0, pal: 1 }] } : {}),
@@ -391,7 +393,7 @@ export async function dressPhilistine(human: HumanModel, opts: FilmDressOptions 
   const pick = <T,>(a: T[]) => a[Math.floor(R() * a.length)];
   // kilt / short tunic of linen with a tasselled hem band
   const tun = fittedTunic(fit, {
-    tex: t.weave_fine, tile: 0.07, dye: pick([0xe2dac8, 0xd8ccb0, 0xcbb994]), hem: -0.6 - 0.2 * R(), sleeve: 0.3, neck: 'round', flare: 0.2, folds: 1, seed, name: 'kilt',
+    tex: t.weave_fine, tile: 0.13, dye: pick([0xe2dac8, 0xd8ccb0, 0xcbb994]), hem: -0.6 - 0.2 * R(), sleeve: 0.3, neck: 'round', flare: 0.2, folds: 1, seed, name: 'kilt', gather: 0.6,
     fray: 0.1, dust: 0.6, fringe: !opts.crowd, palette: [pick([0x9a4a2c, 0x7c2b22, 0x2e3a5c]), 0, 0, 0], bands: [{ from: 0.0, to: 0.03, motif: 4, pal: 0 }],
   });
   if (elite) {

@@ -151,6 +151,20 @@ DISPLAY = [
       gloss='And as Samuel turned to go, he laid hold of the corner of his robe, and it tore.',
       note='Whole verse. Plain sense (Rashi, Radak, Metzudat David; Midrash Shmuel 18 "ומסתברא"): Saul grasped the '
            'corner of SAMUEL\'s me\'il. Radak on ללכת: segol, in pause (etnachta).'),
+    # CUT v2 (docs/intro-script-v2.md): 15:28 split across the cut G6 -> D1 - the first half over Samuel at Gilgal,
+    # the second half writes itself over David (Metzudat David on 15:28: "לרעך. זהו דוד" - metz_s1_15_28_neighbor)
+    E(id='s1_15_28_torn_today', src=('I Samuel', 15, 28),
+      q=['קרע ה׳ את ממלכות ישראל מעליך היום'],
+      status='intro', use='Opening film CUT v2 shot G6 (the verdict: Samuel speaks, word by word, synced to his lips)',
+      gloss='The LORD has torn the kingdom of Israel from you this day...',
+      note='Samuel\'s words to Saul at Gilgal (15:28), first half of the verse; the second half is '
+           's1_15_28_to_your_neighbor, shown after the cut over David.'),
+    E(id='s1_15_28_to_your_neighbor', src=('I Samuel', 15, 28),
+      q=['ונתנה לרעך הטוב ממך'],
+      status='intro', use='Opening film CUT v2 shot D1 (David from behind above his flock)',
+      gloss='...and has given it to a neighbour of yours who is better than you.',
+      note='Samuel\'s words to Saul at Gilgal (15:28), second half of the verse. Shown over David following Metzudat '
+           'David on 15:28, who identifies the "neighbour" as David (metz_s1_15_28_neighbor). Pausal מִמֶּךָּ.'),
     E(id='s1_15_28_better_than_you', src=('I Samuel', 15, 28), q=['הטוב ממך'],
       status='intro', use='The opening film\'s title "הַטּוֹב מִמֶּךָּ" (title cards, loading screen)',
       gloss='...who is better than you.',
@@ -555,6 +569,9 @@ REFERENCE = [
     E(id='rashi_s1_28_14_meil', src=('Rashi on I Samuel', 28, 14, 2), q=None, status='reference',
       use='visual-bible 3.1',
       gloss='Rashi: he was accustomed to wear a me\'il (2:19), and he was buried in his me\'il, and so he came up.'),
+    E(id='metz_s1_15_28_neighbor', src=('Metzudat David on I Samuel', 15, 28, 2), q=['לרעך זהו דוד'],
+      status='reference', use='Opening film CUT v2 shot D1 (why 15:28b is shown over David)',
+      gloss='Metzudat David on 15:28: "to your neighbour" - this is David.'),
     E(id='metz_s1_28_14_meil', src=('Metzudat David on I Samuel', 28, 14, 2), q=['והוא מלבוש המיוחד לאדם גדול וחשוב'],
       status='reference', use='visual-bible 3.1',
       gloss='Metzudat David: a garment special to a great and important man.'),

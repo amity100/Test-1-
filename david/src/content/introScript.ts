@@ -1,20 +1,22 @@
-// Shot sheet of the opening film "הַטּוֹב מִמֶּךָּ" (≈2:44) — the approved script docs/intro-script.md, shot by shot.
-// docs/visual-bible.md is binding for everything on screen; this file is DATA ONLY (the camera work lives in
-// src/gameplay/Intro.ts + src/film/Film*.ts, keyed by `set` + `take`).
+// Shot sheet of the opening film "הַטּוֹב מִמֶּךָּ" — CUT v2 (58 s): docs/intro-script-v2.md (the binding shot list,
+// the shared timing contract and the typography) + docs/director-notes-v4.md. docs/visual-bible.md is binding for
+// everything on screen; docs/intro-script.md for the story and the sources. This file is DATA ONLY (the camera work
+// lives in src/gameplay/Intro.ts + src/film/Film*.ts, keyed by `set` + `take`).
+//
+// THE SHARED TIMING CONTRACT (cut3 · anim · score3): every shot's take, length and named BEATS (seconds from the
+// start of the shot) are below. The performances time every action to `beats`, the score keys every hit to them
+// (read `INTRO_SHOTS` / the shot cues' `beats`, never hard-coded seconds). Change a number only together with the
+// other two teammates (and write it in your report).
 //
 // Every shot names the SET it is filmed in ('black', the prologue land sets 'judah' | 'coast' | 'ramah' of
 // src/film/land, the Gilgal set of src/film/gilgal, or 'world' = the chapter's game world around Bethlehem), the
-// TAKE inside that set (a named camera move of the set, or a world shot of src/film/FilmWorld.ts), its length, how
-// it comes in (transition), the score cue and the on-screen text.
+// TAKE inside that set (a named camera move; 'base:variant' = a second angle filmed on the blocking of `base`, see
+// src/film/FilmCams.ts), its length, how it comes in (transition), the score cue and the on-screen text.
 //
-// On-screen text rules (docs/visual-bible.md §1, docs/intro-script.md):
+// On-screen text rules (docs/visual-bible.md §1, intro-script-v2 "On-screen text"): ONLY the 11 text events below.
 //  * `narration` ids come from ./introNarration (narration(id)) — never styled or referenced as a verse;
 //  * `quote` ids are catalog ids of ./sources, shown ONLY through verseArgs / quoteText / sourceRef /
-//    quoteWithRefHtml — never hand-typed. The ids per shot are INTRO_FILM_TEXTS of ./introNarration.
-//
-// The score: every shot start is an IntroCue with `cue` (the new data-driven cue name, FilmCue) and a legacy `beat`
-// (IntroBeat) that the current score (src/audio/IntroScore.ts) still understands. When the score is rewritten it
-// should key on `cue`; the legacy `beat` / `world` fields can then go.
+//    quoteWithRefHtml — never hand-typed. Words appear one by one (`stagger`, or `words` = timed to speech).
 
 import type { SourceId } from './sources';
 import type { IntroNarrationId } from './introNarration';
@@ -41,100 +43,122 @@ export type IntroWorld = 'field' | 'gibeah';
  * How a shot comes in:
  *  'cut'      hard cut (engine.resetTemporal, no crossfade)
  *  'dissolve' crossfade from the previous frame (`fade` s)
- *  'black'    fade in from black (`fade` s) — the first picture after the time card
- *  'light'    dip through the sunlit cloud colour (the rise into the clouds -> Bethlehem)
+ *  'black'    out of black: `hold` s of black, then the picture rises out of it over `fade` s (the first shot)
+ *  'light'    a warm white light-flash dip (`fade` s in all, centred on the cut: the G7 -> D1 transition)
  *  'match'    short dissolve that matches a shape
  *  'smash'    smash cut to BLACK (the title) — the picture is gone in one frame
- *  'hard'     hard cut ON A SOUND (the shofar blast of shot 6) — the score's hit sits exactly on it
+ *  'hard'     hard cut ON A SOUND (the shofar blast of G1) — the score's hit sits exactly on it
  */
 export type IntroTransition = 'cut' | 'dissolve' | 'match' | 'light' | 'black' | 'smash' | 'hard';
 
 /** Where a shot is filmed. */
 export type FilmSetName = 'black' | 'judah' | 'coast' | 'ramah' | 'gilgal' | 'world';
 
-/** Score cue names (data-driven: the score teammate keys the music on these). */
+/**
+ * Score cue names (data-driven: the score keys the music on these; consecutive shots with the same cue form one
+ * section). CUT v2 uses: land, rachel, threat, elders, shofar, saul, peak, silence, tear, verdict, broken, figure,
+ * face, thicket, title. The others are UNUSED in CUT v2 (kept only so older score code still compiles).
+ */
 export type FilmCue =
-  | 'dark' //       1  black, wind, one deep tone
-  | 'land' //       2  above the clouds, dawn over Judah
-  | 'rachel' //     3  Rachel's pillar in the first light
-  | 'threat' //     4  the Philistine host on the coastal plain (war drums in the score)
-  | 'elders' //     5  the elders before Samuel at Ramah
-  | 'shofar' //     6  HARD CUT on a shofar blast: the army out of the dust
-  | 'saul' //       7  the king, slow motion
-  | 'peak' //       8  the spear raised, the roar: music at its peak
-  | 'silence' //    9  the roar cuts out: wind and the far sound of the spoil (15:14)
-  | 'faceoff' //   10a king and prophet face to face
-  | 'tear' //      10b the robe tears (slow motion)
-  | 'verdict' //   11  15:28
-  | 'broken' //    12  the king shattered
-  | 'rise' //      13  the rise into the sky, dark -> warm
-  | 'bethlehem' // 14  down through the clouds into Bethlehem
-  | 'figure' //    15  the figure on the rock, from behind
-  | 'face' //      16  he turns: the face
-  | 'contrast' //  17  the small youth in the vast land
-  | 'peace' //     18  the flock grazes, the lamb strays to the thicket
-  | 'thicket' //   19  the birds fall silent; eyes in the dark
-  | 'title'; //    20  smash cut to black + deep hit: the title
-
-export type IntroShotId =
-  | 'black'
-  | 'land'
-  | 'rachel-dawn'
-  | 'rachel-road'
-  | 'coast-threat'
-  | 'coast-glint'
-  | 'ramah-gate'
-  | 'ramah-elders'
-  | 'gilgal-dust'
-  | 'gilgal-king'
-  | 'gilgal-spear'
-  | 'gilgal-silence'
-  | 'gilgal-faceoff'
-  | 'gilgal-faceoff-rev'
-  | 'gilgal-tear'
-  | 'gilgal-verdict'
-  | 'gilgal-saul'
+  | 'land' //       P1+P2  the flight: black -> the clouds -> through the deck -> the Judean ridges
+  | 'rachel' //     P3     Rachel's standing stone, a shepherd and his flock pass
+  | 'threat' //     P4     the Philistine column on the coastal plain (war drums in the score)
+  | 'elders' //     P5     the elders demand a king at Ramah (8:5)
+  | 'shofar' //     G1     HARD CUT on a shofar blast: the army out of the dust
+  | 'saul' //       G2     the king's slow-motion stride
+  | 'peak' //       G3     the halt, the spear raised, THE ROAR
+  | 'silence' //    G4     the roar cuts out; the ranks part; Samuel in the road
+  | 'tear' //       G5a+b  the tear: wide, then the insert on the fist (slow motion)
+  | 'verdict' //    G6     15:28a, close on Samuel, near-silence
+  | 'broken' //     G7     Saul and the torn piece in his fist
+  | 'figure' //     D1     (after the light-flash) David from behind above the flock — 15:28b
+  | 'face' //       D2     his face turns into the light — 16:7
+  | 'thicket' //    H1+H2  the lamb at the thicket; the birds fall silent; two eyes open; SMASH
+  | 'title' //      T      smash cut to black + the hit: the title
+  // ---- unused in CUT v2 (legacy names of the rough cut) ----
+  | 'dark'
+  | 'faceoff'
   | 'rise'
   | 'bethlehem'
-  | 'figure'
-  | 'face'
   | 'contrast'
-  | 'peace'
-  | 'thicket'
-  | 'lamb'
-  | 'title';
+  | 'peace';
+
+export type IntroShotId =
+  | 'flight' //       P1+P2
+  | 'rachel' //       P3
+  | 'coast' //        P4
+  | 'elders' //       P5
+  | 'dust' //         G1
+  | 'king' //         G2
+  | 'spear' //        G3
+  | 'silence' //      G4
+  | 'tear' //         G5a
+  | 'tear-insert' //  G5b
+  | 'verdict' //      G6
+  | 'saul-alone' //   G7
+  | 'figure' //       D1
+  | 'face' //         D2
+  | 'thicket' //      H1
+  | 'eyes' //         H2
+  | 'title'; //       T
 
 /** How a text event is laid out (src/ui/UI.ts filmText kinds). */
 export type FilmTextKind = 'time' | 'line' | 'place' | 'person' | 'verse';
 
+/** One spoken word of a speech-synced verse: `t` = seconds from the start of the SHOT, `syl` = its syllables. */
+export interface IntroWord {
+  readonly t: number;
+  readonly dur: number;
+  readonly syl: number;
+}
+
 /** A text event inside a shot (`at` = seconds from the start of the shot; it may run past the shot's end). */
 export interface IntroText {
   readonly at: number;
+  /** lifetime on screen (s), fade-out included */
   readonly seconds: number;
   readonly kind: FilmTextKind;
   /** narration line(s) (./introNarration); for 'person' the second id is the smaller title line */
   readonly narration?: readonly IntroNarrationId[];
   /** catalog quotation (./sources) */
   readonly quote?: SourceId;
+  /** verses: seconds between words (word-by-word reveal); default 0.11 */
+  readonly stagger?: number;
+  /** verses: explicit word timing (spoken: the jaw of the speaker follows these) — one entry per word of the
+   *  quotation split on spaces (a maqaf joins two words into one entry) */
+  readonly words?: readonly IntroWord[];
+  /** where the card sits: the negative space of the composition ('left' / 'right'; 'center' default for verses) */
+  readonly side?: 'left' | 'right' | 'center';
+  /** vertical placement of place / person cards */
+  readonly v?: 'top' | 'middle' | 'bottom';
 }
+
+/** Named beats of a shot (seconds from the start of the shot) — the shared timing contract. */
+export type IntroBeats = Readonly<Record<string, number>>;
 
 export interface IntroShot {
   readonly id: IntroShotId;
-  /** shot number of docs/intro-script.md ('10a' etc.) */
+  /** shot number of docs/intro-script-v2.md ('P1+P2', 'G5a', 'T' ...) */
   readonly n: string;
   readonly set: FilmSetName;
-  /** the camera move inside the set: a LandSet shot name, a GilgalShotName or a world take (FilmWorld) */
+  /** the camera move inside the set: a land take, a Gilgal take ('base:variant' allowed) or a world take */
   readonly take: string;
   /** sub-range of the take's normalised time to play (default [0, 1]); the take is re-timed to `dur` */
   readonly span?: readonly [number, number];
-  /** seconds on screen (an incoming dissolve overlaps the start of the shot) */
+  /** seconds on screen */
   readonly dur: number;
   readonly cut: IntroTransition;
-  /** dissolve length (s) for 'dissolve' / 'light' / 'match' / 'black' */
+  /** transition length (s) for 'dissolve' / 'light' / 'match' / 'black' */
   readonly fade?: number;
+  /** 'black': seconds of pure black before the picture starts to rise */
+  readonly hold?: number;
   readonly cue: FilmCue;
   /** legacy score beat (see IntroBeat) */
   readonly beat: IntroBeat;
+  /** the timing contract: named beats in shot seconds (performances and score key to these) */
+  readonly beats?: IntroBeats;
+  /** slow motion: the ACTION runs at this fraction of real time (the camera moves in real time); 1 = none */
+  readonly slowmo?: number;
   readonly text?: readonly IntroText[];
   /** Camera / art direction (what the shot must show). */
   readonly direction: string;
@@ -164,157 +188,154 @@ export interface IntroCue {
   readonly cut?: IntroTransition;
   /** Dissolve length (s), on shot cues that dissolve. */
   readonly fade?: number;
+  /** On shot cues: the shot's named beats (shot seconds) — see IntroShot.beats. */
+  readonly beats?: IntroBeats;
+  /** On shot cues: slow-motion factor of the action. */
+  readonly slowmo?: number;
+  /** On text cues of speech-synced verses: the word timing (shot seconds). */
+  readonly words?: readonly IntroWord[];
 }
 
+/**
+ * G6 — Samuel speaks 15:28a (6 words; ה׳ is read as three syllables). Seconds from the start of the verdict shot.
+ * The verse words appear exactly at `t` and Samuel's jaw/lips speak each word over [t, t + dur] (anim).
+ */
+export const VERDICT_WORDS: readonly IntroWord[] = [
+  { t: 0.9, dur: 0.34, syl: 2 }, //  1 kara
+  { t: 1.34, dur: 0.44, syl: 3 }, // 2 (the Name)
+  { t: 1.82, dur: 0.6, syl: 4 }, //  3 et-mamlechut
+  { t: 2.46, dur: 0.46, syl: 3 }, // 4 Yisrael
+  { t: 3.02, dur: 0.58, syl: 4 }, // 5 me'alecha
+  { t: 3.66, dur: 0.38, syl: 2 }, // 6 hayom
+];
+
 // ---------------------------------------------------------------------------------------------------------
-// THE FILM — prologue 0:00-0:40 · Act I 0:40-1:40 · the rise 1:40-1:55 · Act II 1:55-2:25 · hook 2:25-2:44
+// THE FILM — prologue 0-17 s · Act I (Gilgal) 17-41.5 s · David 41.5-49 s · the hook 49-53 s · title 53-58 s
 // ---------------------------------------------------------------------------------------------------------
 export const INTRO_SHOTS: readonly IntroShot[] = [
-  // ================================================================== PROLOGUE · הָאָרֶץ — distant, mythic
+  // ================================================================== PROLOGUE — flows (dissolves, the music builds)
   {
-    id: 'black', n: '1', set: 'black', take: 'black', dur: 4.5, cut: 'cut', cue: 'dark', beat: 'judea',
-    text: [{ at: 0.7, seconds: 3.3, kind: 'time', narration: ['timeCard'] }],
-    direction: 'Black. Wind; a single deep tone. The time card, alone, slow fade.',
+    id: 'flight', n: 'P1+P2', set: 'judah', take: 'flight', dur: 7.5, cut: 'black', hold: 0.3, fade: 1.3, cue: 'land', beat: 'judea',
+    // one continuous flight: over the sea of clouds at dawn -> the dive through the deck -> out over the ridges
+    beats: { timeCard: 0.3, deckIn: 3.1, deck: 3.6, ridges: 4.5 },
+    text: [{ at: 0.3, seconds: 3.9, kind: 'time', narration: ['timeCard'] }],
+    direction: 'Black -> the sea of clouds at dawn: the camera races forward low over the deck, banks into the sun, dives '
+      + 'through it (wisps rushing past the lens) and bursts out over the Judean ridges in valley fog, the Dead Sea '
+      + 'glinting, Moab beyond — still racing forward, banking into the light.',
   },
   {
-    id: 'land', n: '2', set: 'judah', take: 'flight', span: [0.1, 0.92], dur: 13, cut: 'black', fade: 2.4, cue: 'land', beat: 'judea',
-    // span end 0.92 (land pass 4): through the deck at ~4.1-4.9 s, the ridges-in-mist tableau holds from ~8 s
-    text: [{ at: 5.0, seconds: 6.6, kind: 'line', narration: ['tribes'] }],
-    direction: 'Above the sunlit cloud sea at dawn, the sun rising behind Moab; the camera sinks and breaks through the '
-      + 'deck: the Judean hills with mist in the valleys, the Dead Sea glinting in the east, the Moab wall beyond. '
-      + 'The line appears as the camera breaks through.',
+    id: 'rachel', n: 'P3', set: 'world', take: 'rachel-dawn', dur: 3.0, cut: 'dissolve', fade: 0.8, cue: 'rachel', beat: 'rachel',
+    beats: { card: 0.4, flockCross: 0.0 },
+    text: [{ at: 0.4, seconds: 2.5, kind: 'place', narration: ['rachelTomb'], side: 'right', v: 'top' }],
+    direction: "Rachel's single standing stone at first light by the road (visual-bible 3.10); a low dolly through the "
+      + 'grass toward it with parallax; a shepherd with his staff and his flock pass behind it; grass in the wind.',
   },
   {
-    id: 'rachel-dawn', n: '3', set: 'world', take: 'rachel-dawn', dur: 4.6, cut: 'dissolve', fade: 1.6, cue: 'rachel', beat: 'rachel',
-    text: [{ at: 1.0, seconds: 6.4, kind: 'verse', quote: 'gen_35_19_rachel_full' }],
-    direction: "Rachel's standing stone (one rough pillar, visual-bible 3.10) alone by the road in the first light, eye "
-      + 'level, against the low sun; a slow push-in.',
+    id: 'coast', n: 'P4', set: 'coast', take: 'glint', dur: 2.5, cut: 'cut', cue: 'threat', beat: 'warriors',
+    beats: {},
+    direction: 'The Philistine host on the coastal plain: a long lens, a lateral track along the marching COLUMN on the '
+      + 'road (depth, not blocks), the dust plume, bronze glints, heat haze.',
   },
   {
-    id: 'rachel-road', n: '3', set: 'world', take: 'rachel-road', dur: 3.6, cut: 'cut', cue: 'rachel', beat: 'rachel',
-    direction: 'Down the worn road past the stone: a shepherd and his flock cross the slope in the distance.',
-  },
-  {
-    id: 'coast-threat', n: '4', set: 'coast', take: 'threat', span: [0.15, 0.75], dur: 4.4, cut: 'cut', cue: 'threat', beat: 'warriors',
-    text: [{ at: 0.8, seconds: 6.2, kind: 'verse', quote: 's1_14_52_war_all_days' }],
-    direction: 'West, on the coastal plain by the sea: the Philistine host marches out of the dust toward the lens, '
-      + 'bronze glinting against the late sun.',
-  },
-  {
-    id: 'coast-glint', n: '4', set: 'coast', take: 'glint', dur: 3.1, cut: 'cut', cue: 'threat', beat: 'warriors',
-    direction: 'Telephoto along the column: helmets, spear points and shields compressed in the heat haze.',
-  },
-  {
-    id: 'ramah-gate', n: '5', set: 'ramah', take: 'gateWide', span: [0.25, 1], dur: 4.2, cut: 'dissolve', fade: 1.0, cue: 'elders', beat: 'saul-court',
-    text: [{ at: 1.2, seconds: 6.0, kind: 'verse', quote: 's1_8_5_give_us_king' }],
-    direction: 'Ramah: the modest gateway of a hill village; the elders of Israel gathered before one old man.',
-  },
-  {
-    id: 'ramah-elders', n: '5', set: 'ramah', take: 'elders', dur: 3.4, cut: 'cut', cue: 'elders', beat: 'saul-court',
-    direction: 'Along the benches: the elders (bearded, wool mantles) turned toward Samuel in the gate.',
+    id: 'elders', n: 'P5', set: 'ramah', take: 'elders', dur: 4.0, cut: 'dissolve', fade: 0.6, cue: 'elders', beat: 'saul-court',
+    beats: { rise: 0.5, verse: 1.0, turnAway: 2.6 },
+    text: [{ at: 1.0, seconds: 2.85, kind: 'verse', quote: 's1_8_5_give_us_king', stagger: 0.22 }],
+    direction: "Ramah: a dolly in over the elders' heads (they fill the lower third, beards and faces readable) toward "
+      + 'Samuel; one elder rises and demands with his arm raised, the others gesture and react; Samuel turns his face '
+      + 'away (8:6).',
   },
 
-  // ================================================================== ACT I · הַמֶּלֶךְ — spectacle, then collapse
+  // ================================================================== ACT I · GILGAL — hits hard (cuts on the beat)
   {
-    id: 'gilgal-dust', n: '6', set: 'gilgal', take: 'dustWall', dur: 7, cut: 'hard', cue: 'shofar', beat: 'warriors',
-    text: [{ at: 1.6, seconds: 4.2, kind: 'place', narration: ['gilgal'] }],
-    direction: 'A shofar blast — HARD CUT. Out of a towering, backlit dust cloud an army on foot returns from war.',
+    id: 'dust', n: 'G1', set: 'gilgal', take: 'dustWall', dur: 3.0, cut: 'hard', cue: 'shofar', beat: 'warriors',
+    beats: { shofar: 0.0, horns: 0.4, card: 0.6 },
+    text: [{ at: 0.6, seconds: 2.3, kind: 'place', narration: ['gilgal'], side: 'left', v: 'top' }],
+    direction: 'HARD CUT on the shofar. Low and close to the front rank as it comes out of the dust wall at the lens, '
+      + "backing away, handheld: rams' horns lifted and blown in the front rank, the ranks marching (not in lockstep), dust.",
   },
   {
-    id: 'gilgal-king', n: '7', set: 'gilgal', take: 'king', dur: 8, cut: 'cut', cue: 'saul', beat: 'warriors',
-    text: [
-      { at: 0.9, seconds: 4.6, kind: 'person', narration: ['saulName', 'saulTitle'] },
-      { at: 3.4, seconds: 4.8, kind: 'verse', quote: 's1_9_2_head_above' },
-    ],
-    direction: 'Low angle, slow motion, the sun behind him: at the head of the army the man taller than all — helmet '
-      + 'under his arm, scale armour, the gold band, the spear.',
+    id: 'king', n: 'G2', set: 'gilgal', take: 'king', dur: 4.5, cut: 'cut', cue: 'saul', beat: 'warriors', slowmo: 0.5,
+    beats: { card: 0.8 },
+    text: [{ at: 0.8, seconds: 3.2, kind: 'person', narration: ['saulShort', 'saulTitle'], side: 'left', v: 'top' }],
+    direction: 'SAUL — slow-motion stride at the head of the army, the sun behind him: very low, tracking backward in '
+      + 'front of him with a slow push; cloak, hair and beard in the wind, the spear swinging with the stride, dust '
+      + 'kicked up, the army behind. The name card huge in the sky\'s negative space.',
   },
   {
-    id: 'gilgal-spear', n: '8', set: 'gilgal', take: 'spearRaised', dur: 6, cut: 'cut', cue: 'peak', beat: 'warriors',
-    text: [{ at: 1.0, seconds: 4.8, kind: 'verse', quote: 's1_14_47_fought_around' }],
-    direction: 'Saul raises his spear to the sky; thousands roar and raise theirs. The music at its peak.',
+    id: 'spear', n: 'G3', set: 'gilgal', take: 'spearRaised', dur: 3.0, cut: 'cut', cue: 'peak', beat: 'warriors',
+    beats: { halt: 0.3, spearUp: 0.8, roar: 1.1, roarSpread: 0.4, verse: 1.3 },
+    text: [{ at: 1.3, seconds: 2.5, kind: 'verse', quote: 's1_9_2_head_above', stagger: 0.1 }],
+    direction: 'The halt; Saul thrusts his spear up with the whole body; THE ROAR (every rank, staggered 0-0.4 s): a '
+      + 'fast push-in from low in front, a jolt on the roar; spears and fists raised through the ranks, mouths open.',
   },
   {
-    id: 'gilgal-silence', n: '9', set: 'gilgal', take: 'silence', dur: 8, cut: 'cut', cue: 'silence', beat: 'saul-hall',
-    text: [{ at: 3.6, seconds: 4.0, kind: 'person', narration: ['samuel'] }],
-    direction: 'The roar cuts out at once: only wind and the far bleating of the spoil. At the head of the road an old '
-      + 'man wrapped in a me\'il stands in the way; the front ranks part.',
+    id: 'silence', n: 'G4', set: 'gilgal', take: 'silence', dur: 3.0, cut: 'cut', cue: 'silence', beat: 'saul-hall',
+    beats: { roarCut: 0.0, headsTurn: 0.3, part: 0.8, card: 1.4, step: 2.2 },
+    text: [{ at: 1.4, seconds: 2.4, kind: 'person', narration: ['samuel'], side: 'right', v: 'top' }],
+    direction: "The roar cuts to silence. A slow push between the soldiers' shoulders: heads turn, men step aside, the "
+      + "ranks part; Samuel stands in the road, white hair and mantle in the wind, and takes one step forward.",
   },
   {
-    id: 'gilgal-faceoff', n: '10a', set: 'gilgal', take: 'faceOff', dur: 2.6, cut: 'cut', cue: 'faceoff', beat: 'saul-hall',
-    direction: 'The giant king and the old prophet face to face — over Samuel\'s shoulder onto the king, backlit, looming '
-      + '(src/film/FilmCams.ts coverage A).',
+    id: 'tear', n: 'G5a', set: 'gilgal', take: 'tear', dur: 2.0, cut: 'cut', cue: 'tear', beat: 'saul-hall',
+    beats: { turn: 0.2, lunge: 0.9, grip: 1.6 },
+    direction: 'THE TEAR, wide profile: Samuel turns to go; Saul lunges and seizes the corner of his mantle (15:27). '
+      + 'No text: the picture says it.',
   },
   {
-    id: 'gilgal-faceoff-rev', n: '10a', set: 'gilgal', take: 'faceOff:rev', dur: 2.4, cut: 'cut', cue: 'faceoff', beat: 'saul-hall',
-    direction: 'The reverse: over the king\'s shoulder onto the old prophet, lit full-face by the low sun (coverage B).',
+    // the insert continues the SAME action on the blocking of 'tear' (base shot time = shot time + 2.0)
+    id: 'tear-insert', n: 'G5b', set: 'gilgal', take: 'tear:insert', dur: 2.5, cut: 'cut', cue: 'tear', beat: 'saul-hall', slowmo: 0.35,
+    beats: { pull: 0.2, rip: 0.6, free: 1.8 },
+    direction: 'Insert, slow motion: close on the fist and the ripping wool — the pull, fibres stretching and snapping, '
+      + 'the corner coming free, dust in the light.',
   },
   {
-    id: 'gilgal-tear', n: '10b', set: 'gilgal', take: 'tear', dur: 7, cut: 'cut', cue: 'tear', beat: 'saul-hall',
-    text: [{ at: 0.6, seconds: 6.0, kind: 'verse', quote: 's1_15_27_robe_torn' }],
-    direction: 'Samuel turns to go; Saul seizes the corner of his robe — it tears in slow motion: threads snapping, '
-      + 'dust in the light.',
+    id: 'verdict', n: 'G6', set: 'gilgal', take: 'verdict', dur: 4.5, cut: 'cut', cue: 'verdict', beat: 'saul-hall',
+    beats: { turnBack: 0.4, speech: 0.9, speechEnd: 4.04 },
+    text: [{ at: 0.9, seconds: 3.6, kind: 'verse', quote: 's1_15_28_torn_today', words: VERDICT_WORDS }],
+    direction: "THE VERDICT: Samuel turns back and speaks, close; a slow push, Saul's shoulder soft in the foreground; the "
+      + 'jaw speaks the words as they appear, eyes on Saul, hair in the wind. Near-silence.',
   },
   {
-    id: 'gilgal-verdict', n: '11', set: 'gilgal', take: 'verdict', dur: 9, cut: 'cut', cue: 'verdict', beat: 'saul-hall',
-    text: [{ at: 1.4, seconds: 7.0, kind: 'verse', quote: 's1_15_28_torn_kingdom' }],
-    direction: 'Close on Samuel, hard and quiet.',
-  },
-  {
-    id: 'gilgal-saul', n: '12', set: 'gilgal', take: 'saulAlone', dur: 10, cut: 'cut', cue: 'broken', beat: 'saul-hall',
-    direction: 'A long close-up: the king at the height of his glory — shattered; the torn piece in his fist; the army '
-      + 'behind him out of focus.',
-  },
-
-  // ================================================================== TRANSITION · הַחִפּוּשׂ
-  {
-    id: 'rise', n: '13', set: 'gilgal', take: 'rise', dur: 15, cut: 'cut', cue: 'rise', beat: 'hinge',
-    text: [{ at: 4.2, seconds: 6.6, kind: 'verse', quote: 's1_13_14_after_his_heart' }],
-    direction: 'One continuous move: up from Saul above the army, the plain, the clouds, the whole land, sweeping '
-      + 'south over the hills like a searching gaze; into the sunlit cloud deck. Dark -> warm.',
+    id: 'saul-alone', n: 'G7', set: 'gilgal', take: 'saulAlone', dur: 2.0, cut: 'cut', cue: 'broken', beat: 'saul-hall',
+    beats: { lookDown: 0.3, tighten: 1.2, flash: 1.75 },
+    direction: 'Saul looks down at the torn piece in his fist: a slow push to the fist, a focus pull to his face; breath, '
+      + 'a tremble, the fingers tighten. At the end a whip up into the light.',
   },
 
-  // ================================================================== ACT II · הָרֹעֶה
+  // ================================================================== DAVID — calm but alive
   {
-    id: 'bethlehem', n: '14', set: 'world', take: 'bethlehem', dur: 8, cut: 'light', fade: 1.6, cue: 'bethlehem', beat: 'bethlehem',
-    direction: 'Down out of the clouds into the low golden light: Bethlehem on its ridge, the terraces, the flock on the '
-      + 'slope; the descent continues toward the pasture.',
+    id: 'figure', n: 'D1', set: 'world', take: 'figure', dur: 4.0, cut: 'light', fade: 0.6, cue: 'figure', beat: 'david',
+    beats: { verse: 0.3 },
+    text: [{ at: 0.3, seconds: 3.65, kind: 'verse', quote: 's1_15_28_to_your_neighbor', stagger: 0.34 }],
+    direction: 'Out of the light-flash: David from behind on a rock above the flock at golden hour, the Bethlehem hills; '
+      + 'a slow crane / orbit behind him revealing the valley; wind in his curls and tunic, the flock moving and grazing '
+      + 'below, he shifts his weight on his staff. 15:28b writes itself.',
   },
   {
-    id: 'figure', n: '15', set: 'world', take: 'figure', dur: 7.5, cut: 'dissolve', fade: 1.1, cue: 'figure', beat: 'david',
-    text: [{ at: 1.3, seconds: 5.6, kind: 'verse', quote: 's1_16_11_youngest' }],
-    direction: 'On a rock above the flock a lone figure seen from behind: staff planted, wind in his curls (the '
-      + "user's reference image); a slow push toward him.",
-  },
-  {
-    id: 'face', n: '16', set: 'world', take: 'face', dur: 7, cut: 'cut', cue: 'face', beat: 'david',
-    text: [{ at: 2.8, seconds: 4.2, kind: 'verse', quote: 's1_16_12_ruddy' }],
-    direction: 'He turns his head — the first time we see his face, in warm light (shallow focus on the eyes).',
-  },
-  {
-    id: 'contrast', n: '17', set: 'world', take: 'contrast', dur: 7.5, cut: 'cut', cue: 'contrast', beat: 'david',
-    text: [{ at: 1.0, seconds: 6.0, kind: 'verse', quote: 's1_16_7_looks_heart' }],
-    direction: 'Wide: the small youth in the vast landscape — the answer to Saul, taller than all the people.',
+    id: 'face', n: 'D2', set: 'world', take: 'face', dur: 3.5, cut: 'cut', cue: 'face', beat: 'david',
+    beats: { turn: 0.5, verse: 1.2 },
+    text: [{ at: 1.2, seconds: 3.0, kind: 'verse', quote: 's1_16_7_looks_heart', stagger: 0.12 }],
+    direction: 'His face turns into the light: a slow push-in, backlit rim, shallow focus; the turn, a blink, the eyes '
+      + 'settle, wind.',
   },
 
-  // ================================================================== HOOK · בַּסְּבַךְ
+  // ================================================================== THE HOOK — tightens for 4 s, smash to the title
   {
-    id: 'peace', n: '18', set: 'world', take: 'peace', dur: 6, cut: 'dissolve', fade: 1.2, cue: 'peace', beat: 'flock',
-    direction: 'The flock grazes; a little lamb wanders to the edge of a dark thicket.',
+    id: 'thicket', n: 'H1', set: 'world', take: 'thicket', dur: 2.5, cut: 'dissolve', fade: 0.8, cue: 'thicket', beat: 'flock',
+    beats: { birdsStop: 0.4, lambHead: 1.5 },
+    direction: 'A lamb strays to the edge of the thicket; the birds fall silent: low in the grass, following the lamb, the '
+      + 'light dims; the lamb grazing, lifting its head, ears twitching; branches stirring.',
   },
   {
-    id: 'thicket', n: '19', set: 'world', take: 'thicket', dur: 3.9, cut: 'cut', cue: 'thicket', beat: 'flock',
-    direction: 'The birds fall silent. Over the lamb into the dark thicket: something large shifts; heavy breathing; '
-      + 'two eyes open in the dark.',
+    id: 'eyes', n: 'H2', set: 'world', take: 'lamb', dur: 1.5, cut: 'cut', cue: 'thicket', beat: 'flock',
+    beats: { eyesOpen: 0.7, smash: 1.5 },
+    direction: 'In the dark of the thicket two eyes open: a slow creep in; leaves shiver, a breath, the eyes catch the light.',
   },
   {
-    id: 'lamb', n: '19', set: 'world', take: 'lamb', dur: 2.5, cut: 'cut', cue: 'thicket', beat: 'flock',
-    direction: 'Reverse, low and close: the lamb lifts its head toward the thicket.',
-  },
-  {
-    id: 'title', n: '20', set: 'black', take: 'title', dur: 6.6, cut: 'smash', cue: 'title', beat: 'title',
-    direction: 'Smash cut to black + a deep hit: DAVID · דָּוִד · פֶּרֶק רִאשׁוֹן · הָרֹעֶה, and the film\'s name '
-      + '(catalog s1_15_28_better_than_you). Then shot 21: the game opens on David on his rock.',
+    id: 'title', n: 'T', set: 'black', take: 'title', dur: 5.0, cut: 'smash', cue: 'title', beat: 'title',
+    beats: { hit: 0.0, david: 0.3, hebrew: 1.6, chapter: 2.4 },
+    direction: 'Smash to black on a hit: DAVID forms from light (blur -> sharp, a slow light sweep), דָּוִד beneath, a gold '
+      + 'rule grows, פֶּרֶק רִאשׁוֹן · הָרֹעֶה last. Then the dissolve into gameplay (David on his rock).',
   },
 ];
 
@@ -324,16 +345,19 @@ function worldOf(s: IntroShot): IntroWorld {
 }
 
 /**
- * Cue list (derived from INTRO_SHOTS): one cue per shot start (`shot`, `cue`, `n`, `set`, `dur`, `cut`, `fade`) plus
- * one per text event. `short` is kept for API compatibility: the approved film has no optional shots.
+ * Cue list (derived from INTRO_SHOTS): one cue per shot start (`shot`, `cue`, `n`, `set`, `dur`, `cut`, `fade`,
+ * `beats`, `slowmo`) plus one per text event. `short` is kept for API compatibility (one cut for every device).
  */
 export function introCues(_short = false): IntroCue[] {
   const cues: IntroCue[] = [];
   let t = 0;
   for (const s of INTRO_SHOTS) {
-    cues.push({ beat: s.beat, t: round(t), cue: s.cue, n: s.n, set: s.set, shot: s.id, world: worldOf(s), dur: s.dur, cut: s.cut, fade: s.fade, direction: s.direction });
+    cues.push({
+      beat: s.beat, t: round(t), cue: s.cue, n: s.n, set: s.set, shot: s.id, world: worldOf(s), dur: s.dur, cut: s.cut,
+      fade: s.fade, beats: s.beats, slowmo: s.slowmo, direction: s.direction,
+    });
     for (const x of s.text ?? []) {
-      cues.push({ beat: s.beat, t: round(t + x.at), verse: x.quote, narration: x.narration, seconds: x.seconds, direction: `${s.id}: text` });
+      cues.push({ beat: s.beat, t: round(t + x.at), verse: x.quote, narration: x.narration, seconds: x.seconds, words: x.words, direction: `${s.id}: text` });
     }
     t += s.dur;
   }
@@ -357,10 +381,31 @@ export function shotStarts(): { shot: IntroShot; start: number }[] {
   });
 }
 
+/** Film time (s) of a named beat of a shot (NaN if the shot or beat is unknown). */
+export function beatTime(shot: IntroShotId, beat: string): number {
+  let t = 0;
+  for (const s of INTRO_SHOTS) {
+    if (s.id === shot) {
+      const b = s.beats?.[beat];
+      return b === undefined ? NaN : t + b;
+    }
+    t += s.dur;
+  }
+  return NaN;
+}
+
+/** The shot of a take (e.g. 'tear:insert' -> the G5b shot), or undefined. */
+export function shotOfTake(take: string): IntroShot | undefined {
+  return INTRO_SHOTS.find((s) => s.take === take);
+}
+
 const round = (x: number) => Math.round(x * 1000) / 1000;
 
-/** The film (desktop and phones play the same approved cut). */
+/** The film (desktop and phones play the same cut). */
 export const INTRO_CUES: readonly IntroCue[] = introCues(false);
 
 /** Kept for API compatibility (the score's tests import it): identical to INTRO_CUES. */
 export const INTRO_CUES_SHORT: readonly IntroCue[] = INTRO_CUES;
+
+/** Total length of the film incl. the title card (58 s). */
+export const INTRO_LENGTH = introLength(INTRO_CUES);

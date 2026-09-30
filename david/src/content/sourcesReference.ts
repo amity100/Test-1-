@@ -1415,6 +1415,21 @@ export const REFERENCE_SOURCES = {
     use: "visual-bible 3.1",
     gloss: "Rashi: he was accustomed to wear a me'il (2:19), and he was buried in his me'il, and so he came up.",
   },
+  metz_s1_15_28_neighbor: {
+    id: "metz_s1_15_28_neighbor",
+    kind: "commentary",
+    ref: "מְצוּדַת דָּוִד, שְׁמוּאֵל א׳ טו, כח",
+    refEn: "Metzudat David on I Samuel 15:28:2",
+    edition: "On Your Way",
+    license: "Public Domain",
+    text: "לרעך. זהו דוד:",
+    quote: [
+      "לרעך. זהו דוד",
+    ],
+    status: "reference",
+    use: "Opening film CUT v2 shot D1 (why 15:28b is shown over David)",
+    gloss: "Metzudat David on 15:28: \"to your neighbour\" - this is David.",
+  },
   metz_s1_28_14_meil: {
     id: "metz_s1_28_14_meil",
     kind: "commentary",

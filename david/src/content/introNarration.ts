@@ -83,6 +83,15 @@ export const INTRO_NARRATION = {
     en: 'Saul son of Kish · King of Israel',
     note: 'Name as in 1 Sam 10:21; "king over Israel" 15:17, 15:26. Two-line layouts: saulName + saulTitle.',
   },
+  saulShort: {
+    id: 'saulShort',
+    kind: 'person',
+    shots: [7],
+    text: 'שָׁאוּל',
+    rtl: true,
+    en: 'Saul',
+    note: 'CUT v2 person card (docs/intro-script-v2.md): the name alone, very large, with saulTitle under it. The name as in 1 Sam 9:2.',
+  },
   saulName: {
     id: 'saulName',
     kind: 'person',
@@ -173,8 +182,9 @@ export const INTRO_NARRATION = {
     text: 'קֶבֶר רָחֵל',
     rtl: true,
     en: "Rachel's tomb",
-    note: 'Traditional name of the place; the verse (Gen 35:19) is shown with it, so the card is optional.',
-    optional: true,
+    note:
+      'Traditional name of the place (Rachel\'s pillar, Gen 35:20). CUT v2: the place card of shot P3 ' +
+      'replaces the verse Gen 35:19 (docs/intro-script-v2.md).',
   },
   philistia: {
     id: 'philistia',
@@ -282,21 +292,18 @@ export interface IntroFilmText {
 }
 
 export const INTRO_FILM_TEXTS: readonly IntroFilmText[] = [
+  // CUT v2 (docs/intro-script-v2.md): 11 text events; shot numbers of the story script (P1 = 1, P3 = 3, P5 = 5,
+  // G1 = 6, G2 = 7, G3 = 8, G4 = 9, G6 = 11, D1 = 15, D2 = 16, T = 20)
   { shot: 1, narration: ['timeCard'] },
-  { shot: 2, narration: ['tribes'] },
-  { shot: 3, quote: 'gen_35_19_rachel_full' },
-  { shot: 4, quote: 's1_14_52_war_all_days' },
+  { shot: 3, narration: ['rachelTomb'] },
   { shot: 5, quote: 's1_8_5_give_us_king' },
   { shot: 6, narration: ['gilgal'] },
-  { shot: 7, narration: ['saul'], quote: 's1_9_2_head_above' },
-  { shot: 8, quote: 's1_14_47_fought_around' },
+  { shot: 7, narration: ['saulShort', 'saulTitle'] },
+  { shot: 8, quote: 's1_9_2_head_above' },
   { shot: 9, narration: ['samuel'] },
-  { shot: 10, quote: 's1_15_27_robe_torn' },
-  { shot: 11, quote: 's1_15_28_torn_kingdom' },
-  { shot: 13, quote: 's1_13_14_after_his_heart' },
-  { shot: 15, quote: 's1_16_11_youngest' },
-  { shot: 16, quote: 's1_16_12_ruddy' },
-  { shot: 17, quote: 's1_16_7_looks_heart' },
+  { shot: 11, quote: 's1_15_28_torn_today' },
+  { shot: 15, quote: 's1_15_28_to_your_neighbor' },
+  { shot: 16, quote: 's1_16_7_looks_heart' },
   { shot: 20, narration: ['davidLogo', 'davidName', 'chapterTitle'] },
 ];
 

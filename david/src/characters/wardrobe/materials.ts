@@ -148,6 +148,10 @@ uniform vec2 uEdgeMask;      // fray/dust weight for the lower / upper edge
 uniform vec3 uDust;
 uniform float uTransmit;
 uniform float uGap;
+uniform vec4 uVar;           // x warp streaks, y stains, z weft bars, w (unused)
+#ifdef W_GATHER
+uniform vec4 uGather;        // x lower-edge amount, y upper-edge amount, z falloff (m), w fold spacing (m)
+#endif
 uniform vec3 uSunDirW;
 uniform vec3 uSunCol;
 #if W_BANDS > 0
@@ -187,6 +191,35 @@ wCol *= 1.0 - uGap * (1.0 - smoothstep(0.3, 0.92, wCov));
 wMetal = 0.0;
 wRough = 0.0;
 float wLow = wFbm(vGUv * 7.0);
+// models pass (CUT v2): handwoven cloth is never one flat tone — non-periodic yarn-group streaks along the warp
+// (vertical, ~4 mm wide, 30-40 cm long), faint weft bars, and darker blotches (sweat, soot, road dirt) at 3-10 cm;
+// none of it repeats with the texture tile
+{
+#ifndef W_LOW
+  float st = wNoise(vec2(vGUv.x * 240.0, vGUv.y * 2.6)) * 0.6 + wNoise(vec2(vGUv.x * 70.0 + 3.1, vGUv.y * 1.3)) * 0.4;
+  float br = wNoise(vec2(vGUv.x * 1.7 + 7.7, vGUv.y * 150.0));
+#else
+  float st = wNoise(vec2(vGUv.x * 120.0, vGUv.y * 2.0));
+  float br = 0.5;
+#endif
+  wCol *= 1.0 + uVar.x * (st - 0.5) * 2.0 + uVar.z * (br - 0.5) * 2.0;
+  float stain = wFbm(vGUv * 10.0 + 4.3);
+  wCol *= 1.0 - uVar.y * smoothstep(0.56, 0.8, stain);
+}
+float wGatherSlope = 0.0;
+#ifdef W_GATHER
+{
+  // cloth gathered under a belt: tight vertical folds that open out away from it (crests lighter, troughs darker)
+  float fx = vGUv.x / uGather.w;
+  float fid = floor(fx);
+  float len = uGather.z * (0.55 + 0.9 * wHash(vec2(fid, 3.7)));
+  float amt = uGather.x * exp(-max(vGd.x, 0.0) / len) + uGather.y * exp(-max(vGd.y, 0.0) / len);
+  float ph = fx * 6.2832 + 2.2 * wNoise(vec2(vGUv.x * 11.0, 0.7));
+  float prof = 0.5 + 0.5 * cos(ph);
+  wGatherSlope = -amt * sin(ph) * (1.0 + 0.6 * cos(ph));
+  wCol *= 1.0 - amt * 0.22 * (1.0 - prof) * (1.0 - prof);
+}
+#endif
 float wEdgeL = vGd.x, wEdgeU = vGd.y;
 #if W_BANDS > 0
 for (int i = 0; i < W_BANDS; i++) {
@@ -258,6 +291,7 @@ const FRAG_NORMAL = /* glsl */ `
   vec3 mapN = vec3(wN.rg * 2.0 - 1.0, 0.0);
   mapN.xy *= uNormalAmt;
   mapN.z = sqrt(max(0.0, 1.0 - dot(mapN.xy, mapN.xy)));
+  mapN = normalize(mapN + vec3(wGatherSlope, 0.0, 0.0));
   mat3 tbn = wTBN(-vViewPosition, normal, vGUv);
   tbn[0] *= faceDirection;
   tbn[1] *= faceDirection;
@@ -316,6 +350,10 @@ export interface ClothOptions {
   collidePad?: number;
   /** darken the open gaps of the weave (0..1): coarse, loosely woven cloth */
   gap?: number;
+  /** models pass: [warp streaks, stains, weft bars] — non-periodic tone variation of handwoven cloth (defaults 0.05, 0.1, 0.02) */
+  variation?: [number, number, number];
+  /** models pass: folds gathered under a belt at the [lower, upper] edge of this piece: amount (0..1.5), falloff (m), fold spacing (m) */
+  gather?: { lower?: number; upper?: number; falloff?: number; spacing?: number };
   side?: THREE.Side;
 }
 
@@ -353,6 +391,8 @@ export function clothMaterial(o: ClothOptions): THREE.MeshStandardMaterial {
     uDust: { value: lin(o.dust ?? 0x9c8466) },
     uTransmit: { value: o.transmit ?? 0.9 },
     uGap: { value: o.gap ?? 0 },
+    uVar: { value: new THREE.Vector4(...(o.variation ?? [0.05, 0.1, 0.02]), 0) },
+    uGather: { value: new THREE.Vector4(o.gather?.lower ?? 0, o.gather?.upper ?? 0, o.gather?.falloff ?? 0.07, o.gather?.spacing ?? 0.035) },
     uSunDirW: shared.uSunDir,
     uSunCol: shared.uSunColor,
     uBands: { value: bands.map((b) => new THREE.Vector4(b.from, b.to, b.motif, b.pal + (b.edge === 'upper' ? 10 : 0))) },
@@ -370,7 +410,8 @@ export function clothMaterial(o: ClothOptions): THREE.MeshStandardMaterial {
     u.uCapPad = { value: o.collidePad ?? 0 };
   }
   m.userData.wardrobe = u;
-  const defs = `#define W_BANDS ${bands.length}\n#define W_HOLES ${holes.length}\n` + (low ? '#define W_LOW\n' : '') + (o.sway ? '#define W_SWAY\n' : '') + (o.collide ? '#define W_COLLIDE\n' : '');
+  const gather = !!o.gather && ((o.gather.lower ?? 0) > 0 || (o.gather.upper ?? 0) > 0);
+  const defs = `#define W_BANDS ${bands.length}\n#define W_HOLES ${holes.length}\n` + (low ? '#define W_LOW\n' : '') + (o.sway ? '#define W_SWAY\n' : '') + (o.collide ? '#define W_COLLIDE\n' : '') + (gather ? '#define W_GATHER\n' : '');
   m.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, u);
     shader.vertexShader = defs + shader.vertexShader
