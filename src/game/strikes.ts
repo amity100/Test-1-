@@ -17,6 +17,7 @@ import {
   type Outcome,
   type SpotHost,
 } from './riftspots';
+import { aimedEnemy, precisionOn } from './precision';
 
 /**
  * STRIKES: four rift attacks on one press each (they cost rift charge; the
@@ -96,6 +97,8 @@ export interface StrikeHost extends SpotHost {
   aimRay(): { origin: V3; dir: V3 };
   /** Touch: a thumb aims looser, so the lock-on cone is wider. */
   touch(): boolean;
+  /** PRECISION: a thumb or a pad aims a little looser (default: touch). */
+  looseAim?(): boolean;
 }
 
 export interface StrikeResult {
@@ -208,11 +211,17 @@ export class Strikes {
   target(): EnemyView | null {
     const h = this.h;
     const { origin, dir } = h.aimRay();
+    // PRECISION: the man under the crosshair, or no one (no lock-on)
+    if (precisionOn()) return aimedEnemy(h.world, h.enemies.list, (e) => h.active.has(e.def.zone), origin, dir, h.playerEye(), { range: STRIKE.range, loose: this.loose() });
     return lockOnEnemy(h, h.enemies.list, (e) => h.active.has(e.def.zone), origin, dir, h.playerEye(), {
       cone: STRIKE.cone * (h.touch() ? 1.4 : 1),
       range: STRIKE.range,
       off: 1.4,
     });
+  }
+
+  private loose() {
+    return this.h.looseAim ? this.h.looseAim() : this.h.touch();
   }
 
   // ------------------------------------------------------------------
@@ -412,7 +421,9 @@ export class Strikes {
     if (t.kind === 'brute') return;
     const ray = h.aimRay();
     const eye = h.playerEye();
-    const other = lockOnEnemy(h, h.enemies.list, (e) => h.active.has(e.def.zone), ray.origin, ray.dir, eye, { skip: t, cone: 0.12, range: 45 });
+    const other = precisionOn()
+      ? aimedEnemy(h.world, h.enemies.list, (e) => h.active.has(e.def.zone), ray.origin, ray.dir, eye, { skip: t, range: 45, loose: this.loose() })
+      : lockOnEnemy(h, h.enemies.list, (e) => h.active.has(e.def.zone), ray.origin, ray.dir, eye, { skip: t, cone: 0.12, range: 45 });
     let want: Frame | null = null;
     let aimAt = t.id;
     if (other) {
@@ -476,7 +487,9 @@ export class Strikes {
     const ray = h.aimRay();
     const eye = h.playerEye();
     const along = Math.max(0, _a.subVectors(eye, ray.origin).dot(ray.dir));
-    const lock = lockOnEnemy(h, h.enemies.list, (e) => h.active.has(e.def.zone), ray.origin, ray.dir, eye, { skip: L.t, cone: 0.2 * (h.touch() ? 1.5 : 1), range: 40 });
+    const lock = precisionOn()
+      ? aimedEnemy(h.world, h.enemies.list, (e) => h.active.has(e.def.zone), ray.origin, ray.dir, eye, { skip: L.t, range: 40, loose: this.loose() })
+      : lockOnEnemy(h, h.enemies.list, (e) => h.active.has(e.def.zone), ray.origin, ray.dir, eye, { skip: L.t, cone: 0.2 * (h.touch() ? 1.5 : 1), range: 40 });
     let frame: Frame;
     let reason: string | null = null;
     if (lock) frame = facingFrame(lock.chest(new THREE.Vector3()), ray.origin, 2.6);

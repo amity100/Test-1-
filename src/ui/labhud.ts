@@ -1,6 +1,6 @@
 import { fmtTime, LAB_TOOLS, type LabRunStats, type LabTool } from '../game/labdirector';
 import { VARIANTS, type CombatVariant } from '../game/variant';
-import { formatNumber, onLangChange, t } from './i18n';
+import { formatNumber, getDevice, onLangChange, t } from './i18n';
 
 export interface LabHudState {
   variant: CombatVariant;
@@ -14,6 +14,29 @@ export interface LabHudState {
 }
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+
+/** PRECISION's rules card: one line per key (the key's label follows the device). */
+export const PREC_RULES = ['aim', 'grab', 'parry', 'dodge', 'blade', 'hp'] as const;
+
+/** The key each rule is on, per device (touch: the button's own label). */
+const PREC_KEYS: Record<string, { kbm: string; pad: string; touch: string }> = {
+  grab: { kbm: 'LMB', pad: 'RT', touch: 'touch.portal' },
+  parry: { kbm: 'RMB', pad: 'LT', touch: 'strike.parry' },
+  dodge: { kbm: 'V', pad: 'RB', touch: 'touch.dodge' },
+  blade: { kbm: 'F', pad: 'X', touch: 'touch.action' },
+};
+
+function precKey(k: string): string {
+  const m = PREC_KEYS[k];
+  if (!m) return t(k === 'aim' ? 'prec.k.aim' : 'prec.k.hp');
+  const dev = getDevice();
+  return dev === 'touch' ? t(m.touch) : dev === 'pad' ? m.pad : m.kbm;
+}
+
+export function precisionRules(): string {
+  const rows = PREC_RULES.map((k) => `<div class="pr-${k}"><kbd>${esc(precKey(k))}</kbd><span>${esc(t(`prec.${k}`))}</span></div>`).join('');
+  return `<small class="pr-title">${esc(t('prec.title'))}</small>${rows}`;
+}
 
 /** Short labels for the tool grid. */
 export const TOOL_KEY: Record<LabTool, string> = {
@@ -76,8 +99,12 @@ export class LabHud {
         <div><small>${esc(t('lab.deaths'))}</small><b data-f="deaths"></b></div>
         <div><small>${esc(t('lab.kills'))}</small><b data-f="kills"></b></div>
       </div>
-      <div class="lp-tools">${tools}</div>`;
+      <div class="lp-tools">${tools}</div>
+      <div class="lp-rules" data-f="rules"></div>`;
+    this.rulesDev = '';
   }
+
+  private rulesDev = '';
 
   private set(f: string, v: string, html = false) {
     if (this.cache.get(f) === v) return;
@@ -122,6 +149,12 @@ export class LabHud {
       this.set(`k.${k}`, String(s.stats.kills[k]));
     }
     this.set('kills', formatNumber(n));
+    // PRECISION / ONSLAUGHT: the rules card (CSS hides it under CURRENT)
+    const dev = getDevice();
+    if (dev !== this.rulesDev) {
+      this.rulesDev = dev;
+      this.set('rules', precisionRules(), true);
+    }
   }
 
   /** WAVE n: the banner, with a countdown to the first man through. */

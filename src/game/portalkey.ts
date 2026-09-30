@@ -3,6 +3,7 @@ import { LAW, type EnemyView, type EntranceContext, type ExitAim, type TrapTarge
 import type { Prop } from './props';
 import { frameNormal, orientFrame } from './portalMath';
 import { facingFrame, launchFrame, lockOnEnemy, simulateArc, skyHatch, straightOn, throwSpot, type Frame, type Outcome, type SpotHost } from './riftspots';
+import { aimedEnemy, PRECISION, precisionOn } from './precision';
 
 /**
  * The PORTAL key: one key for both ends.
@@ -74,6 +75,8 @@ export interface PortalHost extends SpotHost {
   playerEye(): V3;
   playerFeet(): V3;
   touch(): boolean;
+  /** PRECISION: a thumb or a pad aims a little looser (default: touch). */
+  looseAim?(): boolean;
   /** Is this enemy in a zone the game runs. */
   live(e: EnemyView): boolean;
   /** A hanging load under the crosshair. */
@@ -149,9 +152,20 @@ export class PortalKey {
     return !!this.hold && this.hold.t > PORTAL.tap;
   }
 
-  /** Time scale while held (1 when not). */
+  /** Time scale while held (1 when not). PRECISION: a GRAB's slow motion is lighter. */
   timeScale() {
-    return this.hold ? PORTAL.slow[this.hold.mode] : 1;
+    if (!this.hold) return 1;
+    if (this.hold.mode === 'grab' && precisionOn()) return PRECISION.grab.slow;
+    return PORTAL.slow[this.hold.mode];
+  }
+
+  /** Held this long it lets go by itself (real s). PRECISION: a GRAB holds shorter. */
+  private maxHold(H: Hold) {
+    return H.mode === 'grab' && precisionOn() ? PRECISION.grab.maxHold : PORTAL.maxHold;
+  }
+
+  private loose() {
+    return this.h.looseAim ? this.h.looseAim() : this.h.touch();
   }
 
   reset() {
@@ -195,6 +209,14 @@ export class PortalKey {
 
   /** The straight-on throw a tap would give `e` from where you stand, into the arc. */
   private tapArc(e: EnemyView) {
+    if (precisionOn()) {
+      // PRECISION: what letting go right now would do (the exit where the crosshair is)
+      this.tapKey = '';
+      const spot = this.aimedThrow(e);
+      this.arcN = spot.valid ? spot.arcN : 0;
+      this.arcOutcome = spot.outcome;
+      return;
+    }
     const f = this.h.playerFeet();
     const q = (v: number) => Math.round(v * 4);
     const key = `${e.id}|${q(f.x)}|${q(f.y)}|${q(f.z)}|${q(e.pos.x)}|${q(e.pos.y)}|${q(e.pos.z)}`;
@@ -230,6 +252,12 @@ export class PortalKey {
       return r;
     }
     let tgt = h.rifts.crosshairTarget(ctx);
+    // PRECISION: a man is taken only with the crosshair on him (a load near the aim still is)
+    if (precisionOn() && tgt && h.enemies.byKey(tgt.key)) {
+      const on = aimedEnemy(h.world, h.enemies.list, (e) => h.live(e), ctx.camPos, ctx.camDir, h.playerEye(), { range: LAW.trapdoorRange + 4, loose: this.loose() });
+      const key = on ? `enemy:${on.id}` : null;
+      tgt = key ? (ctx.targets.find((q) => q.key === key) ?? null) : null;
+    }
     // (beyond reach he's just scenery: the press falls through to a door / a hole)
     if (tgt && Math.hypot(tgt.pos.x - ctx.camPos.x, tgt.pos.y - ctx.camPos.y, tgt.pos.z - ctx.camPos.z) > LAW.trapdoorRange) tgt = null;
     if (tgt) {
@@ -419,7 +447,7 @@ export class PortalKey {
       h.enemies.setSink(H.enemy, H.sink);
     }
     const tap = H.t <= PORTAL.tap;
-    const letGo = !held || H.t >= PORTAL.maxHold;
+    const letGo = !held || H.t >= this.maxHold(H);
     if (!tap) this.aimNow(H);
     else this.arcN = 0;
     if (!letGo) return null;
@@ -441,6 +469,15 @@ export class PortalKey {
       H.aim = aim;
       this.arcN = 0;
       if (H.live && aim.valid) h.rifts.moveExit({ ...aim.frame, kind: aim.kind } as Frame, aim.host);
+      return;
+    }
+    // PRECISION: a man in hand goes where the crosshair is (in front of whoever it's on)
+    if (H.mode === 'grab' && H.enemy && precisionOn()) {
+      const a = this.aimedThrow(H.enemy);
+      H.launch = { frame: a.frame, boost: a.boost, aimAt: a.aimAt, valid: a.valid, reason: a.reason };
+      this.arcN = a.valid ? a.arcN : 0;
+      this.arcOutcome = a.outcome;
+      H.aim = this.launchAim(a.frame, frameNormal(a.frame, _b), a.end, a.valid, a.reason, a.outcome);
       return;
     }
     // thrown things: a launcher end along the aim (or in front of the man you lock on)
@@ -481,9 +518,37 @@ export class PortalKey {
     };
   }
 
+  /**
+   * PRECISION: the exit for the man in hand, from the crosshair alone: in
+   * front of the man it's on (facing him), else a launcher end just short of
+   * what the aim meets (never short of the man himself), along the aim. With
+   * the arc of his flight and what it does to him.
+   */
+  aimedThrow(e: EnemyView): { frame: Frame; boost: number; aimAt: number; valid: boolean; reason: string | null; arcN: number; outcome: Outcome; end: THREE.Vector3 } {
+    const h = this.h;
+    const ray = h.aimRay();
+    const eye = h.playerEye();
+    const along = Math.max(0, _a.subVectors(eye, ray.origin).dot(ray.dir));
+    const boost = PORTAL.throwSpeed.grab;
+    const on = aimedEnemy(h.world, h.enemies.list, (q) => h.live(q), ray.origin, ray.dir, eye, { skip: e, range: PORTAL.lockRange, loose: this.loose() });
+    let frame: Frame;
+    let reason: string | null = null;
+    if (on) frame = this.facing(on, ray.origin, 2.4);
+    else {
+      const past = Math.max(0, _a.subVectors(e.pos, ray.origin).dot(ray.dir)) + PRECISION.grab.pastMan - along;
+      const lf = launchFrame(h, ray.origin, ray.dir, along, Math.max(PORTAL.reach, past));
+      frame = lf.frame;
+      reason = lf.reason;
+    }
+    const n = frameNormal(frame, _b);
+    const res = simulateArc(h, frame.position, _c.copy(n).multiplyScalar(boost), this.arc, { enemies: h.enemies.list, skipId: e.id });
+    return { frame, boost, aimAt: on ? on.id : -1, valid: !reason, reason, arcN: res.n, outcome: res.outcome, end: res.end };
+  }
+
   /** The enemy the aim is on (closest to the ray, in range and in sight), besides `skip`. */
   private lockOn(origin: V3, dir: V3, skip: EnemyView | null): EnemyView | null {
     const h = this.h;
+    if (precisionOn()) return aimedEnemy(h.world, h.enemies.list, (e) => h.live(e), origin, dir, h.playerEye(), { skip, range: PORTAL.lockRange, loose: this.loose() });
     return lockOnEnemy(h, h.enemies.list, (e) => h.live(e), origin, dir, h.playerEye(), { skip, cone: PORTAL.lockCone * (h.touch() ? 1.5 : 1), range: PORTAL.lockRange });
   }
 
@@ -573,8 +638,15 @@ export class PortalKey {
       }
       case 'grab': {
         const e = H.enemy!;
-        const aimed = !tap && !!H.launch?.valid;
-        const spot = this.throwTarget(H, tap, e.pos);
+        let aimed = !tap && !!H.launch?.valid;
+        let spot: { frame: Frame; boost: number } | null;
+        if (precisionOn()) {
+          // PRECISION: the exit is where the crosshair is now, tap or hold (no best spot picked for you)
+          const a = this.aimedThrow(e);
+          if (!a.valid) return lost(a.reason ?? 'aim.space');
+          spot = { frame: a.frame, boost: a.boost };
+          aimed = true;
+        } else spot = this.throwTarget(H, tap, e.pos);
         if (!spot) return lost('portal.nowhere');
         h.rifts.placeExitFrame(spot.frame, null, { boost: spot.boost, noPlayer: true });
         h.rifts.setPairNoPlayer(true);

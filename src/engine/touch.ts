@@ -129,6 +129,15 @@ export class TouchControls {
   // Public
   // -------------------------------------------------------------------------
 
+  /** PRECISION: the SHOVE button is a DODGE. */
+  setDodge(on: boolean) {
+    const n = this.el.querySelector('.t-shove .t-lbl') as HTMLElement | null;
+    const k = on ? 'touch.dodge' : 'touch.shove';
+    if (!n || n.dataset.k === k) return;
+    n.dataset.k = k;
+    n.textContent = t(k);
+  }
+
   show(v: boolean) {
     if (v === this.shown) return;
     this.shown = v;

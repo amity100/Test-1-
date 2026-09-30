@@ -103,12 +103,25 @@ export class StrikeBar {
     onLangChange(() => this.labels());
   }
 
+  /** A strike's key doing something else for now (PRECISION: REFLECT is a PARRY): its label key, or null. */
+  private over: Record<string, string | null> = {};
+  setOverride(id: string, key: string | null) {
+    if ((this.over[id] ?? null) === key) return;
+    this.over[id] = key;
+    this.btns[id]?.classList.toggle('over', !!key);
+    this.labels();
+  }
+
+  private name(id: string, arm = false) {
+    return t(this.over[id] ?? (arm ? `strike.${id}.again` : `strike.${id}`));
+  }
+
   private labels() {
     const dev = getDevice();
     this.last = {};
     for (const id in this.btns) {
       const b = this.btns[id];
-      (b.querySelector('.sk-name') as HTMLElement).textContent = t(`strike.${id}`);
+      (b.querySelector('.sk-name') as HTMLElement).textContent = this.name(id);
       (b.querySelector('kbd') as HTMLElement).textContent = dev === 'pad' ? PAD[id] : KEYS[id];
     }
     this.el.classList.toggle('sk-touch', dev === 'touch');
@@ -171,10 +184,10 @@ export class StrikeBar {
       this.last[id] = key;
       const b = this.btns[id];
       b.style.setProperty('--cd', String(c));
-      b.classList.toggle('ready', c <= 0 && (!!target || id === 'dash'));
+      b.classList.toggle('ready', c <= 0 && (!!target || id === 'dash' || !!this.over[id]));
       b.classList.toggle('cooling', c > 0);
       b.classList.toggle('armed', arm);
-      (b.querySelector('.sk-name') as HTMLElement).textContent = t(arm ? `strike.${id}.again` : `strike.${id}`);
+      (b.querySelector('.sk-name') as HTMLElement).textContent = this.name(id, arm);
       if (c <= 0 && this.last[id + ':was'] === '1') {
         b.classList.remove('pop');
         void b.offsetWidth;

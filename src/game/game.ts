@@ -75,7 +75,8 @@ import { ChallengeSystem } from '../meta/challenges';
 import { META_STRINGS } from '../meta/strings';
 import { LAB_SPAWN_GUARD, LabMode } from './lab';
 import type { LabRunStats } from './labdirector';
-import { setLabActive, setVariant, type CombatVariant } from './variant';
+import { activeVariant, setLabActive, setVariant, type CombatVariant } from './variant';
+import { behind, dodgeAt, dodgeSpot, exposedTo, Parry, ParryView, PRECISION, precisionOn, type DodgeRun } from './precision';
 
 import type { Settings } from './settings';
 import { beginRenderFrame } from '../render/frameonce';
@@ -297,6 +298,20 @@ export class Game {
   private labStats: LabRunStats | null = null;
   /** Game time until which the player can't be hurt (a lab respawn on the pad). */
   private guardUntil = -1;
+  // PRECISION (a lab variant; see precision.ts)
+  /** RMB's PARRY window and lockout. */
+  private parry = new Parry();
+  private parryView = new ParryView();
+  /** Rounds, beams and grenades a PARRY sent back (they hit for PRECISION.parry.damage). */
+  private parried = new WeakSet<Projectile>();
+  /** The DODGE under way, its lockout (real s), and game time until which nothing touches you. */
+  private dodgeRun: DodgeRun | null = null;
+  private dodgeCd = 0;
+  private dodgeSafeUntil = -1;
+  /** Men a dodge came up behind (or a PERFECT parry rocked): the blade finishes them until this game time. */
+  private exposedUntil = new Map<number, number>();
+  /** The variant the HUD's key labels were last set for. */
+  private hudVariant: CombatVariant | '' = '';
   /** The lab's run is over: its results card. */
   onLabEnd: (stats: LabRunStats) => void = () => {};
   onPause: () => void = () => {};
@@ -541,6 +556,7 @@ export class Game {
     });
     this.projectiles = new Projectiles(world, this.rifts, this.physics, this.projectileHooks());
     this.scene.add(this.projectiles.group);
+    this.scene.add(this.parryView.group);
     this.enemies = new EnemySystem(this.physics, this.enemyHooks(), (kind) => new Character(asset, anims, LOOKS[kind]));
     // the COMBAT LAB: its director brings the fights, its variant is in force
     const arena = this.level.lab;
@@ -551,6 +567,10 @@ export class Game {
           audio: this.audio,
           playerPos: () => this.player.body.pos,
           onCleared: () => {
+            // PRECISION: no regen in a fight, so a cleared wave gives you your health back
+            if (precisionOn() && this.hp > 0 && this.respawnT < 0) {
+              this.hp = LAW.player.hp;
+            }
             this.slowT = Math.max(this.slowT, 0.9);
             this.slowScale = 0.3;
             this.audio.sting('alert');
@@ -582,6 +602,7 @@ export class Game {
       playerGrounded: () => !this.player.airborne,
       aimRay: () => this.rig.aimRay(),
       touch: () => this.input.lastDevice === 'touch',
+      looseAim: () => this.input.lastDevice === 'touch' || this.input.lastDevice === 'pad',
     });
     this.portal = new PortalKey({
       rifts: this.rifts,
@@ -595,10 +616,11 @@ export class Game {
       playerEye: () => this.player.eye(_v4),
       playerFeet: () => this.player.body.pos,
       touch: () => this.input.lastDevice === 'touch',
+      looseAim: () => this.input.lastDevice === 'touch' || this.input.lastDevice === 'pad',
       live: (e) => this.zones.active.has(e.def.zone),
       hangingUnderCrosshair: () => this.hangingUnderCrosshair(),
     });
-    this.blade = new HiddenBlade({ world, enemies: this.enemies.list, live: (e) => this.zones.active.has(e.def.zone), rifts: this.rifts });
+    this.blade = new HiddenBlade({ world, enemies: this.enemies.list, live: (e) => this.zones.active.has(e.def.zone), rifts: this.rifts, reachOnly: () => precisionOn() });
     this.arcView = new ArcView(OUTCOME_COLOR);
     this.scene.add(this.arcView.points);
     this.scene.add(this.hazards.group);
@@ -858,6 +880,7 @@ export class Game {
     this.blade?.reset();
     this.strikeMarks?.clear();
     this.riftMarked?.clear();
+    this.resetPrecision();
     this.player.teleport(pos.clone(), yaw);
     this.player.body.charge = 0;
     this.hp = LAW.player.hp;
@@ -1068,7 +1091,7 @@ export class Game {
     }
     const S = this.strikes;
     this.strikeBar.update(
-      { reflect: S.cooling('reflect'), loop: S.cooling('loop'), swap: S.cooling('swap'), dash: S.cooling('dash') },
+      { reflect: precisionOn() ? this.parry.cooling() : S.cooling('reflect'), loop: S.cooling('loop'), swap: S.cooling('swap'), dash: S.cooling('dash') },
       pt,
       S.charges,
       STRIKE.maxCharges,
@@ -1306,8 +1329,10 @@ export class Game {
     let key = '';
     const base = _v2;
     // the player: only uncharged Kessler fire can hurt you (you're attuned to your own rift)
-    if (!p.charged && p.team === 'kessler' && this.hp > 0) {
-      const tt = segCylinder(a, b, this.player.body.pos, FEEL.playerRadius + radius, this.player.body.height);
+    // (a DODGE under way: nothing touches you; an open PARRY is a little wider than you, facing the fire)
+    if (!p.charged && p.team === 'kessler' && this.hp > 0 && this.time >= this.dodgeSafeUntil) {
+      const pad = this.parry.open && precisionOn() && Parry.facing(p.vel, this.lookFlat(_v4)) ? PRECISION.parry.pad : 0;
+      const tt = segCylinder(a, b, this.player.body.pos, FEEL.playerRadius + radius + pad, this.player.body.height);
       if (tt >= 0 && tt < best) {
         best = tt;
         key = 'player';
@@ -1345,6 +1370,12 @@ export class Game {
 
   private projectileHitActor(p: Projectile, hit: ActorHit): 'stop' | 'pass' {
     if (hit.key === 'player') {
+      // PRECISION: fire that meets the open PARRY goes back where it came from
+      if (this.parry.open && precisionOn() && Parry.facing(p.vel, this.lookFlat(_v4))) {
+        this.parryCatch(p);
+        if (p.kind === 'beam') p.life = p.age;
+        return 'stop';
+      }
       const dmg = p.kind === 'beam' ? LAW.beam.damage : LAW.bolt.damageToPlayer;
       this.hurtPlayer(dmg, hit.point);
       return p.kind === 'beam' ? 'pass' : 'stop';
@@ -1355,7 +1386,7 @@ export class Game {
       const dir = _v.copy(p.vel).normalize();
       const info: HitInfo = {
         source: p.kind === 'beam' ? 'beam' : p.kind === 'grenade' ? 'grenade' : 'bolt',
-        amount: p.kind === 'beam' ? LAW.beam.damage * 2 : LAW.bolt.damageCharged,
+        amount: this.parried.has(p) ? PRECISION.parry.damage : p.kind === 'beam' ? LAW.beam.damage * 2 : LAW.bolt.damageCharged,
         charged: true,
         dir: dir.clone(),
         from: hit.point.clone().addScaledVector(dir, -1.5),
@@ -1820,6 +1851,8 @@ export class Game {
   private hurtPlayer(amount: number, from: V3) {
     if (amount <= 0 || this.hp <= 0 || this.respawnT >= 0) return;
     if (this.time < this.guardUntil) return;
+    // PRECISION: a DODGE's moment untouchable
+    if (this.time < this.dodgeSafeUntil) return;
     this.lab?.noteDamage(Math.min(amount, this.hp));
     this.hp -= amount;
     this.lastHurtT = this.time;
@@ -1997,8 +2030,16 @@ export class Game {
     // STRIKES: one press, a whole rift attack (none start while the PORTAL is in hand; a LOOP's
     // second press being held still counts, and dying lets go of it)
     this.strikes.update(realDt, dt);
+    const prec = precisionOn();
+    this.parry.update(realDt, dt);
+    this.dodgeCd = Math.max(0, this.dodgeCd - realDt);
     for (let i = 0; i < STRIKES.length; i++) {
       const a = `strike${i + 1}` as 'strike1';
+      // PRECISION: REFLECT's key is the PARRY (no lock-on, no charge)
+      if (prec && i === 0) {
+        if (alive && !this.portal.holding && inp.wasPressed(a)) this.parryPress();
+        continue;
+      }
       const r = this.strikes.input(STRIKES[i], alive && !this.portal.holding && inp.wasPressed(a), alive && inp.isHeld(a));
       if (r) this.onStrike(r);
     }
@@ -2048,10 +2089,13 @@ export class Game {
       // the touch stick sprints when pushed to its rim (only when it's the stick moving you)
       sprint: inp.isHeld('sprint') || (inp.lastDevice === 'touch' && Math.hypot(inp.moveX, inp.moveY) > 0.95),
       crouch: this.crouchToggle(),
-      shove: inp.wasPressed('shove'),
+      // PRECISION: V is the DODGE (no SHOVE)
+      shove: !prec && inp.wasPressed('shove'),
     };
+    if (prec && alive && inp.wasPressed('shove')) this.dodgePress(inp.moveX, inp.moveY);
     const wasAir = p.airborne;
     p.update(dt, pin, this.level.world, this.physics, this.physEv, this.playerEvents(), this.time);
+    this.updateDodge(dt);
     this.updateBlade(dt);
     this.updateAirtime(wasAir);
     if (this.playerFling && !p.airborne && p.body.charge <= 0) this.playerFling = false;
@@ -2073,6 +2117,7 @@ export class Game {
     this.enemies.update(dt, ectx);
     this.noise.length = 0;
     this.rifts.update(dt, realDt, this.time);
+    this.updateParried();
     this.projectiles.update(dt, this.time);
     this.detonateCaughtGrenades();
     this.hazards.update(dt, this.time, this.zones.active, { pos: body.pos, vel: body.vel, radius: FEEL.playerRadius, height: p.height, alive: this.hp > 0 && this.respawnT < 0 }, this.enemies.list, this.hazardHooks);
@@ -2137,7 +2182,9 @@ export class Game {
     if (inp.wasPressed('pause')) this.pause();
 
     // ----- health -----
-    if (this.hp > 0 && this.time - this.lastHurtT > LAW.player.regenDelay) this.hp = Math.min(LAW.player.hp, this.hp + LAW.player.regenRate * dt);
+    // (PRECISION: no regen while they're on to you; a cleared wave heals you instead)
+    if (this.hp > 0 && this.time - this.lastHurtT > LAW.player.regenDelay && !(prec && this.lab && this.underFire())) this.hp = Math.min(LAW.player.hp, this.hp + LAW.player.regenRate * dt);
+    this.updatePrecisionHud(prec, realDt);
     this.hud.setHealth(this.hp, LAW.player.hp);
     const boss = this.enemies.boss();
     this.hud.setBoss(boss && boss.fighting ? boss : null);
@@ -2492,6 +2539,13 @@ export class Game {
   private bladeHit(e: EnemyView) {
     const p = this.player;
     p.yaw = Math.atan2(e.pos.x - p.body.pos.x, e.pos.z - p.body.pos.z);
+    // PRECISION: the blade finishes the exposed (behind him, reeling, down, unaware, parried);
+    // a man on his guard, facing you, turns it aside
+    const finisher = precisionOn() && e.alive && e.kind !== 'boss';
+    if (finisher && !this.isExposed(e)) {
+      this.bladeGuarded(e);
+      return;
+    }
     const info: HitInfo = { source: 'blade', amount: 9999, charged: false, team: 'player', instigator: 'player', from: p.body.pos.clone() };
     const res = this.withKill({ byPlayer: true }, () => this.enemies.hit(e, info));
     this.audio.bladeFinish(e.pos);
@@ -2502,6 +2556,270 @@ export class Game {
       this.slowT = 0.3;
       this.slowScale = 0.45;
     }
+    if (finisher && res === 'killed') {
+      // the FINISHER beat: a harder stop, a longer slow, a flare
+      const B = PRECISION.blade;
+      this.hitstop = Math.max(this.hitstop, B.hitstop);
+      this.slowT = Math.max(this.slowT, B.slowT);
+      this.slowScale = B.slowScale;
+      this.rig.shake = Math.max(this.rig.shake, 0.35);
+      const c = e.chest(_v);
+      this.fx.flash(c, 5, 0.3, 0xffb050);
+      this.fx.sparks(c, null, COL_SPARK, 30);
+      this.fx.ring(c, 1.6, 0.3, COL_SPARK);
+      this.renderer.grade.uniforms.uFlash.value = Math.max(this.renderer.grade.uniforms.uFlash.value, 0.45);
+      this.hud.callout(t('prec.call.finisher'), 'finisher');
+      this.exposedUntil.delete(e.id);
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // PRECISION: parry, dodge, the blade's finisher (see precision.ts)
+  // ------------------------------------------------------------------
+
+  private resetPrecision() {
+    this.parry.reset();
+    this.dodgeRun = null;
+    this.dodgeCd = 0;
+    this.dodgeSafeUntil = -1;
+    this.exposedUntil.clear();
+    if (this.player) this.player.char.root.visible = true;
+  }
+
+  /** Where you look, level (unit). */
+  private lookFlat(out: THREE.Vector3) {
+    return out.set(Math.sin(this.rig.yaw), 0, Math.cos(this.rig.yaw));
+  }
+
+  /** The PARRY rift's centre: at your chest, in front of you. */
+  private parryPoint(out: THREE.Vector3) {
+    const b = this.player.body;
+    const f = this.lookFlat(_v3);
+    return out.set(b.pos.x + f.x * 0.85, b.pos.y + this.player.height * 0.62, b.pos.z + f.z * 0.85);
+  }
+
+  /** Someone is fighting you (aware, in a live zone): no regen in PRECISION. */
+  private underFire() {
+    for (const e of this.enemies.list) if (e.alive && e.aware && this.zones.active.has(e.def.zone)) return true;
+    return false;
+  }
+
+  /** The blade finishes him: he can't see it coming, or a dodge / a perfect parry opened him up. */
+  private isExposed(e: EnemyView) {
+    if (this.enemies.isHeld(e)) return true;
+    if ((this.exposedUntil.get(e.id) ?? -1) >= this.time) return true;
+    return exposedTo(e, this.player.body.pos);
+  }
+
+  /** RMB in PRECISION: the parry rift opens for its window (or it's still locked out). */
+  private parryPress() {
+    if (!this.parry.press()) return;
+    const at = this.parryPoint(_v);
+    this.audio.parryOpen(at);
+    this.player.char.play('push', { fade: 0.04, speed: 2.2 });
+    // the parry is a stance: whatever the blade was doing stops
+    if (this.blade.lunging) {
+      this.blade.cancel();
+      this.player.endLunge();
+    }
+  }
+
+  /**
+   * A PARRY caught `p`: it goes back to whoever fired it, charged (a round or
+   * a beam as a fast charged round, a grenade lobbed onto him). PERFECT: he
+   * reels, and the blade finishes him while he does.
+   */
+  private parryCatch(p: Projectile) {
+    const P = PRECISION.parry;
+    const perfect = this.parry.perfect;
+    const first = this.parry.caught++ === 0;
+    const at = this.parryPoint(new THREE.Vector3());
+    const look = this.lookFlat(new THREE.Vector3());
+    const shooter = typeof p.owner === 'number' ? (this.enemies.get(p.owner) as Enemy | null) : null;
+    const live = !!shooter && shooter.alive;
+    const aim = live ? shooter!.chest(new THREE.Vector3()) : null;
+    if (p.kind === 'grenade' && p.body) {
+      // lobbed back onto him (or back the way it came), fused to go off on arrival
+      const b = p.body;
+      b.pos.set(at.x, at.y - b.radius, at.z);
+      const tgt = aim ?? new THREE.Vector3().copy(at).addScaledVector(look, 12);
+      const dx = tgt.x - at.x, dz = tgt.z - at.z;
+      const d = Math.max(0.5, Math.hypot(dx, dz));
+      const hs = THREE.MathUtils.clamp(d / 0.9, 10, 24);
+      const tt = d / hs;
+      const dy = tgt.y - at.y;
+      b.vel.set((dx / d) * hs, (dy + 0.5 * LAW.gravity * tt * tt) / tt, (dz / d) * hs);
+      b.onGround = false;
+      p.charged = true;
+      p.crossings++;
+      p.life = p.age + tt + 0.5;
+      this.reflected.add(p);
+      this.parried.add(p);
+    } else {
+      const dir = aim ? aim.clone().sub(at).normalize() : new THREE.Vector3().copy(p.vel).normalize().negate();
+      const nb = this.projectiles.fireBolt(at, dir, 'kessler', p.owner, { speed: P.speed, damage: P.damage });
+      nb.charged = true;
+      nb.crossings = 1;
+      this.reflected.add(nb);
+      this.parried.add(nb);
+    }
+    if (perfect && live) {
+      this.enemies.stagger(shooter!, P.stagger);
+      this.exposedUntil.set(shooter!.id, this.time + P.stagger);
+    }
+    // the feel: a hard stop, a flare, a ring, the sound, the word
+    this.hitstop = Math.max(this.hitstop, first ? P.hitstop : P.hitstop * 0.5);
+    this.parryView.flare();
+    this.fx.flash(at, perfect ? 7 : 5, 0.22, 0x9ff8ff);
+    this.fx.ring(at, perfect ? 1.8 : 1.2, 0.25, COL_CHARGED);
+    this.fx.sparks(at, look, COL_CHARGED, perfect ? 26 : 16);
+    this.renderer.grade.uniforms.uFlash.value = Math.max(this.renderer.grade.uniforms.uFlash.value, perfect ? 0.7 : 0.4);
+    this.rig.kick = Math.max(this.rig.kick, perfect ? 0.9 : 0.6);
+    this.audio.parry(at, perfect);
+    if (first || perfect) this.hud.callout(t(perfect ? 'prec.call.perfect' : 'prec.call.parry'), perfect ? 'perfect' : 'parry');
+    navigator.vibrate?.(perfect ? 35 : 20);
+  }
+
+  /** Per frame: a parried round stays on its shooter (sent back to him, not near him); grenades meet an open parry here. */
+  private updateParried() {
+    const open = this.parry.open && precisionOn() && this.hp > 0;
+    const chest = open ? this.player.chest(new THREE.Vector3()) : null;
+    const look = this.lookFlat(_v4);
+    for (const p of this.projectiles.list) {
+      if (!p.alive) continue;
+      if (p.kind === 'bolt' && this.parried.has(p) && typeof p.owner === 'number') {
+        const e = this.enemies.get(p.owner);
+        if (!e || !e.alive) continue;
+        const sp = p.vel.length();
+        const c = e.chest(_v);
+        if (sp > 1e-3 && c.distanceToSquared(p.pos) > 0.04) p.vel.copy(c).sub(p.pos).setLength(sp);
+        continue;
+      }
+      if (chest && p.kind === 'grenade' && !p.charged && p.team === 'kessler') {
+        const d = _v.subVectors(p.pos, chest);
+        if (d.length() > PRECISION.parry.grenadeReach) continue;
+        if (d.x * look.x + d.z * look.z < -0.3) continue;
+        this.parryCatch(p);
+      }
+    }
+  }
+
+  /** V in PRECISION: down through a floor rift, up again `dodge.dist` m the way you move (else back). */
+  private dodgePress(mx: number, my: number) {
+    const p = this.player;
+    const b = p.body;
+    if (this.dodgeRun || this.dodgeCd > 0) return;
+    if (p.airborne || p.isMantling() || this.carried) {
+      this.audio.ui('deny');
+      return;
+    }
+    const yaw = this.rig.yaw;
+    const fx = Math.sin(yaw), fz = Math.cos(yaw);
+    const dir = new THREE.Vector3(fx * my - fz * mx, 0, fz * my + fx * mx);
+    if (dir.lengthSq() < 0.01) dir.set(-fx, 0, -fz);
+    dir.normalize();
+    const to = dodgeSpot(this.level.world, this.level, b.pos, dir, p.height);
+    if (!to) {
+      this.dodgeCd = 0.25;
+      this.audio.ui('deny');
+      this.hud.toast(t('prec.noDodge'), 'warn');
+      return;
+    }
+    const D = PRECISION.dodge;
+    this.dodgeRun = { from: b.pos.clone(), to, t: 0, up: false };
+    this.dodgeCd = D.cooldown;
+    this.dodgeSafeUntil = this.time + D.invuln;
+    if (this.blade.lunging) {
+      this.blade.cancel();
+      p.endLunge();
+    }
+    // the floor opens under you, the other end opens where you'll come up
+    const from = this.dodgeRun.from;
+    this.fx.ring(_v.copy(from).setY(from.y + 0.04), 1.3, 0.3, COL_EXIT);
+    this.fx.riftBurst(_v.copy(from).setY(from.y + 0.1), UP, COL_EXIT);
+    this.fx.flash(_v.copy(from).setY(from.y + 0.5), 3, 0.18, 0x7ff4ff);
+    this.fx.ring(_v.copy(to).setY(to.y + 0.04), 0.9, 0.22, COL_EXIT);
+    this.audio.dodge(from, false);
+    p.char.root.visible = false;
+  }
+
+  /** The DODGE under way (after the player moved): the body rides it; at the end you come up. */
+  private updateDodge(dt: number) {
+    const r = this.dodgeRun;
+    if (!r) return;
+    const b = this.player.body;
+    if (this.respawnT >= 0) {
+      this.dodgeRun = null;
+      this.player.char.root.visible = true;
+      return;
+    }
+    r.t += dt;
+    const at = dodgeAt(r, _v);
+    if (at) {
+      b.pos.copy(at);
+      b.vel.set(0, 0, 0);
+      b.onGround = true;
+      this.player.char.root.visible = false;
+      return;
+    }
+    const D = PRECISION.dodge;
+    this.dodgeRun = null;
+    b.pos.copy(r.to);
+    b.vel.set(0, D.pop, 0);
+    b.onGround = false;
+    this.player.char.root.visible = true;
+    this.fx.ring(_v.copy(r.to).setY(r.to.y + 0.05), 1.5, 0.3, COL_EXIT);
+    this.fx.riftBurst(_v.copy(r.to).setY(r.to.y + 0.1), UP, COL_EXIT);
+    this.fx.dust(r.to, 0.6);
+    this.audio.dodge(r.to, true);
+    this.rig.kick = Math.max(this.rig.kick, 0.5);
+    // came up behind a man: he's caught out
+    for (const e of this.enemies.list) {
+      if (!e.alive || !this.zones.active.has(e.def.zone) || e.kind === 'turret' || e.kind === 'boss') continue;
+      if (Math.hypot(e.pos.x - r.to.x, e.pos.z - r.to.z) > D.behindRange + e.radius || Math.abs(e.pos.y - r.to.y) > 1.5) continue;
+      if (!behind(e, r.to)) continue;
+      this.enemies.stagger(e, D.behindStagger, _v2.set(e.pos.x - r.to.x, 0, e.pos.z - r.to.z).normalize().multiplyScalar(1.5));
+      this.exposedUntil.set(e.id, this.time + D.exposed);
+      this.fx.sparks(e.chest(_v2), null, COL_EXIT, 10);
+      this.audio.impact(e.pos, 5);
+    }
+  }
+
+  /** The blade turned aside by a man on his guard: a clang, he reels a moment, you're pushed off. */
+  private bladeGuarded(e: EnemyView) {
+    const B = PRECISION.blade;
+    const b = this.player.body;
+    const c = e.chest(new THREE.Vector3());
+    const away = _v.set(b.pos.x - e.pos.x, 0, b.pos.z - e.pos.z);
+    if (away.lengthSq() < 1e-6) this.lookFlat(away).negate();
+    away.normalize();
+    this.audio.shieldClang(c);
+    this.fx.sparks(c, away, COL_SPARK, 22);
+    this.hitstop = Math.max(this.hitstop, 0.05);
+    this.rig.shake = Math.max(this.rig.shake, 0.3);
+    if (!e.armored) this.enemies.stagger(e, B.guardStagger, _v2.copy(away).multiplyScalar(-2.5));
+    b.vel.x = away.x * B.guardPush;
+    b.vel.z = away.z * B.guardPush;
+    this.hud.callout(t('prec.call.guard'), 'guard');
+  }
+
+  /** PRECISION's HUD: the red crosshair on a man, the dodge pip, the parry rift, the relabelled keys. */
+  private updatePrecisionHud(prec: boolean, realDt: number) {
+    const v = activeVariant();
+    if (v !== this.hudVariant) {
+      this.hudVariant = v;
+      this.strikeBar.setOverride('reflect', prec ? 'strike.parry' : null);
+      this.touch?.setDodge(prec);
+    }
+    let hot = false;
+    if (prec && this.respawnT < 0) {
+      const H = this.portal.hold;
+      if (H) hot = H.mode === 'grab' && !!H.launch && H.launch.aimAt >= 0;
+      else hot = !!this.strikes.target() || this.hud.gateMode() === 'grab';
+    }
+    this.hud.setCrossHot(hot);
+    this.hud.setDodge(prec ? this.dodgeCd / PRECISION.dodge.cooldown : null);
+    this.parryView.update(prec ? this.parry.t : -1, this.parryPoint(_v), this.lookFlat(_v2), realDt);
   }
 
   private grab(q: DynBody) {

@@ -184,6 +184,31 @@ html[dir='rtl'] .tst { letter-spacing: .04em; font-family: 'Heebo', 'Oxanium', s
 .h-cross.gate .c-brk { opacity: 1; transform: none; }
 .h-cross.gate .tk { opacity: 0; }
 .h-cross.gate .dot { background: var(--entr); }
+/* PRECISION: on a man (red), a parry flash, the dodge pip, the callout */
+.h-cross.hot .tk, .h-cross.hot .dot { background: #ff3b3b; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 0 6px rgba(255, 50, 50, 0.8); }
+.h-cross.hot .tk.n { transform: translateY(3px); }
+.h-cross.hot .tk.s { transform: translateY(-3px); }
+.h-cross.hot .tk.w { transform: translateX(3px); }
+.h-cross.hot .tk.e { transform: translateX(-3px); }
+.h-cross.flash { animation: xflash .28s ease-out; }
+@keyframes xflash { 0% { transform: scale(1.9) rotate(45deg); filter: brightness(2.5) drop-shadow(0 0 8px #7ff4ff); } 100% { transform: none; filter: none; } }
+.h-dodge { position: absolute; left: -9px; top: 26px; width: 18px; height: 18px; opacity: 0; transition: opacity .15s; pointer-events: none; }
+.h-dodge.on { opacity: .9; }
+.h-dodge svg { display: block; width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible; }
+.h-dodge circle { fill: none; stroke-width: 2.6; }
+.h-dodge .dg-bg { stroke: rgba(0, 0, 0, 0.45); }
+.h-dodge .dg-fg { stroke: rgba(255, 255, 255, 0.55); stroke-dasharray: 1 1; stroke-dashoffset: var(--cd, 0); }
+.h-dodge.ready .dg-fg { stroke: #7ff4ff; filter: drop-shadow(0 0 3px rgba(127, 244, 255, 0.9)); }
+.h-dodge.pop { animation: dgpop .25s ease-out; }
+@keyframes dgpop { 0% { transform: scale(1.8); } 100% { transform: none; } }
+.h-parry { position: absolute; left: -200px; width: 400px; top: -92px; text-align: center; pointer-events: none; opacity: 0; }
+.h-parry b { font-size: 26px; font-weight: 900; letter-spacing: .22em; color: #7ff4ff; text-shadow: 0 0 14px rgba(127, 244, 255, 0.9), var(--shadow); }
+.h-parry.k-perfect b { color: #fff; font-size: 30px; text-shadow: 0 0 18px #7ff4ff, 0 0 32px rgba(127, 244, 255, 0.8), var(--shadow); }
+.h-parry.k-finisher b { color: #ffcf6a; text-shadow: 0 0 16px rgba(255, 170, 60, 0.9), var(--shadow); }
+.h-parry.k-guard b { color: #cfd6de; font-size: 20px; }
+html[dir='rtl'] .h-parry b { letter-spacing: .04em; }
+.h-parry.go { animation: pcall .75s ease-out forwards; }
+@keyframes pcall { 0% { opacity: 0; transform: scale(1.7); } 12% { opacity: 1; transform: scale(1); } 70% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(-14px); } }
 
 .h-aim { position: absolute; left: 38px; top: -34px; display: flex; flex-direction: column; gap: 3px; white-space: nowrap; opacity: 0; transform: translateX(-8px); transition: opacity .12s, transform .12s; --oc: var(--exit); }
 .h-aim.on { opacity: 1; transform: none; }
@@ -858,6 +883,12 @@ html[dir='rtl'] .vseg b { letter-spacing: .03em; font-size: 15px; }
 .hud.lab .h-obj { display: none; }
 .lab-panel { position: absolute; top: calc(var(--st) + 18px); left: calc(var(--sl) + 20px); width: 318px; display: none; flex-direction: column; gap: 7px; padding: 10px 12px 11px; background: linear-gradient(180deg, rgba(8, 11, 17, 0.8), rgba(8, 11, 17, 0.62)); border-left: 3px solid var(--exit); font-family: var(--hud-font); color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7); clip-path: polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%); }
 .lab-panel.on { display: flex; }
+.lp-rules { display: none; flex-direction: column; gap: 2px; border-top: 1px solid rgba(255, 255, 255, 0.12); padding-top: 6px; }
+.lab-panel[data-variant='precision'] .lp-rules, .lab-panel[data-variant='onslaught'] .lp-rules { display: flex; }
+.lp-rules .pr-title { font-size: 8px; font-weight: 800; letter-spacing: .12em; color: #7ff4ff; margin-bottom: 1px; }
+.lp-rules div { display: flex; align-items: baseline; gap: 6px; font-size: 10.5px; line-height: 1.25; color: rgba(255, 255, 255, 0.88); }
+.lp-rules kbd { flex: 0 0 auto; min-width: 30px; text-align: center; font: 800 9px/1.5 var(--hud-font); padding: 0 4px; border: 1px solid rgba(127, 244, 255, 0.55); border-radius: 3px; color: #7ff4ff; background: rgba(127, 244, 255, 0.08); }
+.is-touch .lp-rules div { font-size: 9px; }
 .lp-head { display: flex; flex-direction: column; gap: 6px; }
 .lp-tag { font-size: 10px; font-weight: 800; letter-spacing: .38em; color: var(--exit); }
 .lp-vars { display: flex; gap: 4px; }

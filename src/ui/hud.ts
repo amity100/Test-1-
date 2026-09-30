@@ -197,6 +197,8 @@ export class HUD implements HudAPI {
           <i class="tk n"></i><i class="tk s"></i><i class="tk e"></i><i class="tk w"></i>
           <b class="dot"></b>
         </div>
+        <div class="h-dodge"><svg viewBox="0 0 20 20"><circle class="dg-bg" cx="10" cy="10" r="8"/><circle class="dg-fg" cx="10" cy="10" r="8" pathLength="1"/></svg></div>
+        <div class="h-parry"><b></b></div>
         <div class="h-aim">
           <div class="a-top"><span class="a-ico"></span><span class="a-oc" dir="auto"></span></div>
           <div class="a-mid"><b class="a-dist"><span></span><small>m</small></b><span class="a-drop"><i>↓</i><span></span><small>m</small></span><span class="a-chip"></span></div>
@@ -408,6 +410,49 @@ export class HUD implements HudAPI {
     if (big) replay(this.hpEl, 'heal');
   }
 
+  // -------------------------------------------------------------------------
+  // PRECISION: the crosshair on a man, the dodge pip, the parry callout
+  // -------------------------------------------------------------------------
+
+  /** The PORTAL mode the crosshair hint shows now (null: none, or refused). */
+  gateMode(): string | null {
+    const [m, r] = this.gateKey.split('|');
+    return m && (!r || r === 'null') ? m : null;
+  }
+
+  private crossHot = false;
+  /** PRECISION: the crosshair is on a man a strike / GRAB would take (red). */
+  setCrossHot(on: boolean) {
+    if (on === this.crossHot) return;
+    this.crossHot = on;
+    this.crossEl.classList.toggle('hot', on);
+  }
+
+  private dodgeKey = '';
+  /** PRECISION: the DODGE pip under the crosshair (null: hidden; 0 ready .. 1 just used). */
+  setDodge(cooling: number | null) {
+    const key = cooling === null ? '' : String(Math.ceil(cooling * 24));
+    if (key === this.dodgeKey) return;
+    const was = this.dodgeKey;
+    this.dodgeKey = key;
+    const el = this.el.querySelector('.h-dodge') as HTMLElement;
+    el.classList.toggle('on', cooling !== null);
+    if (cooling === null) return;
+    el.style.setProperty('--cd', cooling.toFixed(3));
+    el.classList.toggle('ready', cooling <= 0);
+    if (cooling <= 0 && was !== '' && was !== '0') replay(el, 'pop');
+  }
+
+  /** PRECISION: a parry landed (PERFECT: the shooter reels), or a blade callout (FINISHER / GUARDED). */
+  callout(text: string, kind: 'parry' | 'perfect' | 'finisher' | 'guard') {
+    const el = this.el.querySelector('.h-parry') as HTMLElement;
+    (el.firstElementChild as HTMLElement).textContent = text;
+    el.className = `h-parry k-${kind}`;
+    void el.offsetWidth;
+    el.className = `h-parry k-${kind} go`;
+    if (kind === 'parry' || kind === 'perfect') replay(this.crossEl, 'flash');
+  }
+
   damageFlash(amount: number) {
     this.dmg = Math.min(1, this.dmg + Math.max(0.35, amount / 40));
   }
@@ -572,7 +617,7 @@ export class HUD implements HudAPI {
     else if (this.gateKey && this.gateEl.classList.contains('mode')) s = 'gate';
     if (s === this.crossState) return;
     this.crossState = s;
-    this.crossEl.className = `h-cross ${s}`;
+    this.crossEl.className = `h-cross ${s}${this.crossHot ? ' hot' : ''}`;
   }
 
   setRiftState(s: { exit: boolean; entrance: boolean; aiming: boolean; orientation: ExitOrientation }) {

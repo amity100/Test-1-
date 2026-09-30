@@ -63,6 +63,9 @@ const O = {
   roar: { ref: 12, gap: 0.5, crit: true, bus: 'drive' },
   bladeFinish: { ref: 5, gap: 0.1, crit: true },
   shove: { ref: 4, gap: 0.1 },
+  parry: { ref: 6, gap: 0.04, cap: 3, crit: true },
+  parryOpen: { ref: 4, gap: 0.1 },
+  dodge: { ref: 5, gap: 0.05, cap: 2, crit: true },
   footstep: { ref: 3, gap: 0.07, cap: 4, cell: 1 },
   jump: { ref: 3, gap: 0.12 },
   land: { ref: 4, gap: 0.1 },
@@ -1465,6 +1468,43 @@ export class Audio implements AudioAPI {
       this.tone(v, v.out, 'sine', h, 150, 48, 0.2, 0.9, 0.002, 0.24);
       this.hiss(v, v.out, 'crackle', 'bandpass', h, 1500, 1000, 0.8, 0.6, 0.002, 0.14);
       this.hiss(v, v.out, 'white', 'highpass', h, 2500, 2500, 0.7, 0.5, 0.001, 0.05);
+    });
+  }
+
+  /** PRECISION's PARRY opening (a thin rift snaps open in front of you): a short glassy zip. */
+  parryOpen(pos: V3): void {
+    this.one('parryOpen', pos, 0.4, O.parryOpen, (v, t) => {
+      this.hiss(v, v.out, 'white', 'bandpass', t, 2600, 6200, 3, 0.35, 0.002, 0.09);
+      this.tone(v, v.out, 'sine', t, 880, 1320, 0.06, 0.18, 0.002, 0.1);
+    });
+  }
+
+  /**
+   * A PARRY caught something: a hard bright ring over a snapped-back suction
+   * (perfect: an octave up and a low thump under it).
+   */
+  parry(pos: V3, perfect = false): void {
+    this.one('parry', pos, perfect ? 1 : 0.85, O.parry, (v, t) => {
+      const k = perfect ? 2 : 1;
+      this.ring(v, v.out, t, [1180 * k, 2360 * k, 3540 * k, 5310], [0.32, 0.22, 0.14, 0.08], perfect ? 0.9 : 0.6, 1.004);
+      this.hiss(v, v.out, 'white', 'bandpass', t, 5200, 1400, 2, 0.6, 0.001, 0.12);
+      this.tone(v, v.out, 'sine', t, 420, 1400, 0.08, 0.35, 0.002, 0.14);
+      if (perfect) this.tone(v, v.out, 'sine', t, 110, 42, 0.25, 0.9, 0.002, 0.35);
+    });
+  }
+
+  /** DODGE: down through the floor (a closing suck) or up out of it (an opening pop). */
+  dodge(pos: V3, up: boolean): void {
+    this.one('dodge', pos, 0.7, O.dodge, (v, t) => {
+      const g = this.gainN(v, v.out, 0);
+      g.gain.setValueAtTime(EPS, t);
+      g.gain.exponentialRampToValueAtTime(0.6, t + 0.04);
+      g.gain.exponentialRampToValueAtTime(EPS, t + 0.16);
+      const bp = this.filt(v, g, 'bandpass', 1200, 1.6);
+      glide(bp.frequency, t, up ? 700 : 4200, up ? 4800 : 600, 0.14);
+      this.noise(v, bp, 'white', t, t + 0.17);
+      this.tone(v, v.out, 'sine', t, up ? 180 : 320, up ? 520 : 90, 0.12, 0.45, 0.003, 0.16);
+      if (up) this.tone(v, v.out, 'sine', t + 0.02, 70, 45, 0.15, 0.5, 0.003, 0.2);
     });
   }
 

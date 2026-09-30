@@ -35,6 +35,8 @@ export interface BladeHost {
   live(e: EnemyView): boolean;
   /** Open rift ends: you never close in through one (your own door, a hole on the way). */
   readonly rifts?: Pick<RiftQuery, 'findCrossing' | 'holeAt'>;
+  /** PRECISION: reach only, no lunge after a man further off. */
+  reachOnly?(): boolean;
 }
 
 export interface BladeTarget {
@@ -82,6 +84,7 @@ export class HiddenBlade {
    * horizontal unit vectors: where you face and where the camera looks.
    */
   pick(feet: V3, facing: V3, look: V3): BladeTarget | null {
+    const noLunge = !!this.h.reachOnly?.();
     let best: EnemyView | null = null;
     let bestScore = Infinity;
     let lunge = false;
@@ -94,7 +97,7 @@ export class HiddenBlade {
       const ahead = d > 1e-3 ? Math.max(facing.x * dx + facing.z * dz, look.x * dx + look.z * dz) / d : 1;
       const reach = d <= BLADE.reach + e.radius && rise <= BLADE.reachRise;
       // a lunge only at a man ahead of you and about level; a man flying past only right on you (no step after him)
-      if (!reach && (ahead < BLADE.lungeCone || rise > BLADE.lungeRise)) continue;
+      if (!reach && (noLunge || ahead < BLADE.lungeCone || rise > BLADE.lungeRise)) continue;
       if (e.state === 'launched' && d - e.radius > BLADE.lungeStop) continue;
       const score = (reach ? 0 : 10) + d - ahead;
       if (score >= bestScore || !this.clear(feet, e, !reach)) continue;
