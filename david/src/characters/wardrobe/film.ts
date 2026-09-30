@@ -80,7 +80,9 @@ function shoulderThrow(fit: Fit, meil: TunicResult, material: THREE.Material, o:
   for (let i = 0; i < N; i++) {
     const c = curve.getPoint(i / (N - 1));
     const th = c.x, y = Math.min(c.y, lm.neck.y - 0.05);
-    const r = meil.upper.R(y, th) + o.thickness * 0.5 + 0.006;
+    // (models pass: 0.006 let the me'il's shoulder cap push through the band in a pose — a light jagged patch on
+    // Samuel's chest in the verdict close-up)
+    const r = meil.upper.R(y, th) + o.thickness * 0.5 + 0.015;
     const p = meil.upper.field.point(y, th, r);
     pts.push(p);
     const p2 = meil.upper.field.point(y, th, r + 0.01);
@@ -114,18 +116,28 @@ export async function dressSamuel(human: HumanModel, opts: FilmDressOptions): Pr
   // variation, folds gathered under the belt
   const kut = fittedTunic(fit, { tex: t.weave_medium, tile: 0.15, dye: 0xcdbf9f, hem: 0.95, sleeve: 1.62, neck: 'slit', ease: 0.008, flare: 0.12, folds: 0.8, seed: 5, name: 'kuttonet', fray: 0.03, dust: 0.7, roughness: 0.92, sheen: 0.5, gather: 0.6, variation: [0.05, 0.12, 0.02] });
   // (2) the me'il: dark undyed wool, heavy, ankle length, four corners (side openings), woven border near the hem
-  const DARK = 0x655645;
+  // models pass: the neutral medium weave at a coarse yarn (≈1.5 mm) — the oatmeal pre-tint of weave_coarse turned the
+  // dark undyed wool saturated brown; now it lands on the bible's #5e5143-#74644f
+  const DARK = 0x6a5a4a;
   // side openings of the wrap: narrow (a wide slit showed the light tunic as a stripe down both sides)
   const half = 0.11;
   const meil = fittedTunic(fit, {
-    tex: t.weave_coarse, tile: 0.2, dye: DARK, hem: 0.92, sleeve: 0, sleeveless: true, neck: 'round', offset: 0.014, ease: 0.016, flare: 0.2, folds: 2.2, variation: [0.09, 0.14, 0.03],
+    tex: t.weave_medium, tile: 0.22, dye: DARK, hem: 0.92, sleeve: 0, sleeveless: true, neck: 'round', offset: 0.014, ease: 0.016, flare: 0.2, folds: 2.2, variation: [0.09, 0.14, 0.03],
+    skirtFolds: [0.5, 0.45, 0.085], // heavy wool falling in long, wide folds (shading; the geometry keeps the tear's tube)
+    fuzz: 0.5,
     seed: 17, name: 'meil', sideSlit: { top: hipY + 0.02, half }, hide: false, inner: [kut.restPos[0], kut.restPos[1]], fray: 0.25, sheen: 0.55, roughness: 0.95, dust: 0.85,
     armhole: { half: 0.55, top: lm.yArmpit + 0.012 + 0.07 }, shoulderFolds: 6,
     palette: [0x4e4236, 0x8a7a60, 0x3b3128, 0x6f604c],
     bands: [{ from: 0.05, to: 0.075, motif: 0, pal: 0 }, { from: 0.08, to: 0.088, motif: 0, pal: 1 }],
   });
   // the thrown end over the left shoulder
-  const throwMat = clothMaterial({ tier, tex: t.weave_coarse, tile: 0.2, dye: DARK, variation: [0.09, 0.14, 0.03], roughness: 0.95, sheen: 0.55, hem: [0, 0.1, 0.012, 0.25], edgeMask: [1, 1], transmit: 0.3 });
+  // models pass: the thrown end is a heavy band — pleats along its length (shading folds across the ribbon's u,
+  // which runs 0..1 over its width) and the weave at its true scale across (the ribbon's u is not in metres)
+  const throwMat = clothMaterial({ tier, tex: t.weave_medium, tile: 0.22, dye: DARK, fuzz: 0.5, variation: [0.09, 0.14, 0.03], roughness: 0.95, sheen: 0.55, hem: [0, 0.1, 0.012, 0.25], edgeMask: [1, 1], transmit: 0.3, gather: { lower: 1.1, falloff: 10, spacing: 0.3 } });
+  (throwMat.userData.wardrobe.uTile.value as THREE.Vector2).x = (0.2 * S) / 0.22;
+  throwMat.polygonOffset = true;
+  throwMat.polygonOffsetFactor = -2;
+  throwMat.polygonOffsetUnits = -2;
   shoulderThrow(fit, meil, throwMat, { width: 0.2 * S, thickness: 0.012, name: 'meilThrow' });
   // (3) cloth belt on the tunic (under the me'il), (4) sandals
   const beltMat = clothMaterial({ tier, tex: t.weave_medium, tile: 0.08, dye: 0x8a7a60, hem: [0, 0.1, 0.01, 0], edgeMask: [0, 0], transmit: 0 });
@@ -136,8 +148,10 @@ export async function dressSamuel(human: HumanModel, opts: FilmDressOptions): Pr
   tzitzit(fit, meil.corners, { ...tm, length: 0.17 * S });
   // tearable corner: back-right (index 3: th = -PI/2 - half; the cloth extends toward the back, th decreasing)
   const skirtMesh = meil.meshes[1] as THREE.SkinnedMesh;
-  const freeMat = clothMaterial({ tier, tex: t.weave_coarse, tile: 0.2, dye: DARK, variation: [0.09, 0.14, 0.03], roughness: 0.95, sheen: 0.55, hem: [0.85, 0.16, 0.015, 0.25], edgeMask: [1, 0], transmit: 0.3, bands: [{ from: 0.05, to: 0.075, motif: 0, pal: 0 }, { from: 0.08, to: 0.088, motif: 0, pal: 1 }], palette: [0x4e4236, 0x8a7a60, 0x3b3128, 0x6f604c] });
-  const tear = new MeilTear(human, skirtMesh, meil.skirt.tube, { mesh: skirtMesh }, -Math.PI / 2 - half, -1, meil.hemY, { freeMaterial: freeMat, width: 0.3 * S, height: 0.5 * S, seed: 27, threadColor: 0x8b7b62 });
+  const freeMat = clothMaterial({ tier, tex: t.weave_medium, tile: 0.22, dye: DARK, fuzz: 0.5, variation: [0.09, 0.14, 0.03], roughness: 0.95, sheen: 0.55, hem: [0.85, 0.16, 0.015, 0.25], edgeMask: [1, 0], transmit: 0.3, bands: [{ from: 0.05, to: 0.075, motif: 0, pal: 0 }, { from: 0.08, to: 0.088, motif: 0, pal: 1 }], palette: [0x4e4236, 0x8a7a60, 0x3b3128, 0x6f604c] });
+  // (models pass: the torn corner ≈ 28 × 35 cm, visual-bible 3.3 "≈25-35 cm" — at 47 cm it hung from Saul's fist as a
+  // long dark ribbon)
+  const tear = new MeilTear(human, skirtMesh, meil.skirt.tube, { mesh: skirtMesh }, -Math.PI / 2 - half, -1, meil.hemY, { freeMaterial: freeMat, width: 0.3 * S, height: 0.37 * S, seed: 27, threadColor: 0x8b7b62 });
   outfit.add(tear.flapSkinned);
   const sock = (human.sockets as Record<string, THREE.Object3D>)['wardrobeTzitzit3'];
   if (sock) {
@@ -254,7 +268,7 @@ export async function dressSoldier(human: HumanModel, opts: FilmDressOptions & {
   const striped = R() < 0.3;
   const tun = fittedTunic(fit, {
     tex: pick([t.weave_medium, t.weave_coarse]), tile: 0.17, dye, hem: -0.15 + R() * 0.2, sleeve: 0.35 + R() * 0.35, neck: 'slit', flare: 0.14,
-    seed, name: 'tunic', fray: 0.35, dust: 0.75 + 0.2 * R(), folds: 1, gather: 0.8, variation: [0.07, 0.18, 0.025],
+    seed, name: 'tunic', fray: 0.35, dust: 0.75 + 0.2 * R(), folds: 1.4, gather: 0.6, variation: [0.07, 0.18, 0.025], skirtFolds: [0.55, 0.16, 0.05],
     ...(striped ? { palette: [pick([0x9a4a2c, 0xa7773a]), 0, 0, 0], bands: [{ from: 0.03, to: 0.045, motif: 0, pal: 0 }] } : {}),
   });
   const beltMat = R() < 0.6
@@ -357,7 +371,7 @@ export async function dressElder(human: HumanModel, opts: FilmDressOptions): Pro
   const mdye = pick([0xcdbf9f, 0xb9a887, 0x74644f, 0x5e5143, 0x3a332c, 0x8a8070]);
   const bandCol = pick([0x9a4a2c, 0xa7773a, TEKHELET]);
   const mantle = fittedTunic(fit, {
-    tex: t.weave_coarse, tile: 0.2, dye: mdye, hem: 0.35 + 0.35 * R(), sleeve: 0, sleeveless: true, neck: 'round', offset: 0.012, ease: 0.014, flare: 0.16, folds: 1.8, variation: [0.08, 0.14, 0.03],
+    tex: t.weave_medium, tile: 0.22, dye: mdye, hem: 0.35 + 0.35 * R(), sleeve: 0, sleeveless: true, neck: 'round', offset: 0.012, ease: 0.014, flare: 0.16, folds: 1.8, variation: [0.08, 0.14, 0.03], skirtFolds: [0.5, 0.4, 0.08], fuzz: 0.45,
     seed: seed + 9, name: 'mantle', sideSlit: { top: hipY + 0.02, half: 0.24 }, hide: false, inner: [kut.restPos[0], kut.restPos[1]], fray: 0.2, sheen: 0.5, roughness: 0.95, dust: 0.6,
     armhole: { half: 0.55, top: lm.yArmpit + 0.012 + 0.07 }, shoulderFolds: 5,
     ...(rich ? { palette: [bandCol, 0x3b3128, 0, 0], bands: [{ from: 0.04, to: 0.07, motif: 0, pal: 0 }, { from: 0.074, to: 0.08, motif: 0, pal: 1 }] } : {}),

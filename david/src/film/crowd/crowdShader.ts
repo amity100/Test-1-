@@ -83,12 +83,14 @@ export function crowdUniforms(army: 'israel' | 'philistine'): CrowdUniforms {
     uTunic: {
       value: isr
         ? [C(0xcdbf9f), C(0xc4b492), C(0xb9a887), C(0xa89a7c), C(0x8f8674), C(0x74644f), C(0x5e5143), C(0x9c7a5a)]
-        : [C(0xd2c8b0), C(0xc8bb9c), C(0xbfb294), C(0xb3a587), C(0xcdc2a8), C(0xa89a7c), C(0xc2b596), C(0x9c8c70)],
+        : // models pass: dusty linen, a little darker and more varied (the host read as bright blocks at a distance)
+          [C(0xc6bca2), C(0xbaad8e), C(0xb1a386), C(0xa39578), C(0xc0b498), C(0x988a6e), C(0xb4a787), C(0x8e7f64)],
     },
     // head-cloths, bedrolls / rolled mantles
     uCloth: { value: [C(0xc9bc9c), C(0xb3a283), C(0x8a7a62), C(0x6a5b48)] },
     // hair: black-brown, dark brown, brown, greying
-    uHair: { value: [C(0x1a130e), C(0x22180f), C(0x2e2116), C(0x3a2a1c), C(0x151110), C(0x6d665e)] },
+    // (models pass: dark brown in the sun, not black — near the lens the beards read as black masks)
+    uHair: { value: [C(0x2a1f17), C(0x33241a), C(0x3f2d1f), C(0x4a3524), C(0x241b15), C(0x6d665e)] },
     // narrow madder / ochre stripes and head-bands (small areas only)
     uAccent: { value: [C(0x9a4a2c), C(0xa7773a), C(0x7a3a26), C(0x5a4632)] },
     uTime: { value: 0 },
@@ -363,6 +365,18 @@ export function crowdMaterial(u: CrowdUniforms, lite: boolean): THREE.MeshStanda
             else if (vCwBind.y < uHemY + 0.05) cwc *= 0.6 + 0.4 * step(0.5, fract(atan(vCwBind.x, vCwBind.z) * 9.0));
           }
         } else if (cwr == R_HAIR || cwr == R_BEARD) {
+          ${lite ? '' : `if (cwNear > 0.0 && cwr == R_HAIR) {
+            // no helmet edge: the hair shell ends in ragged locks at the hairline (the painted scalp shows under it).
+            // (A silhouette discard was tried and dropped: it revealed the lit skin under the shells as white specks.)
+            float nn = cwN(vCwBind * vec3(130.0, 40.0, 130.0));
+            {
+              vec3 rel = vCwBind - vec3(0.0, 1.6331, 0.0537);
+              float phi = degrees(atan(abs(rel.x), rel.z));
+              // the painted hairline (tools/crowd/bake_crowd.py HAIRLINE_PHI / HAIRLINE_HL)
+              float hl = phi < 30.0 ? mix(0.072, 0.07, phi / 30.0) : phi < 45.0 ? mix(0.07, 0.064, (phi - 30.0) / 15.0) : phi < 62.0 ? mix(0.064, 0.052, (phi - 45.0) / 17.0) : phi < 72.0 ? mix(0.052, 0.036, (phi - 62.0) / 10.0) : phi < 80.0 ? mix(0.036, -0.04, (phi - 72.0) / 8.0) : phi < 100.0 ? mix(-0.04, -0.028, (phi - 80.0) / 20.0) : phi < 120.0 ? mix(-0.028, -0.05, (phi - 100.0) / 20.0) : phi < 140.0 ? mix(-0.05, -0.08, (phi - 120.0) / 20.0) : mix(-0.08, -0.09, (phi - 140.0) / 40.0);
+              if ((vCwBind.y - 1.5986) - hl < 0.012 * nn * cwNear) discard;
+            }
+          }`}
           // strands: fine streaks across the flow (down the beard, back over the scalp), clumps, lighter sun-dried tips
           ${lite ? 'cwc *= 0.75 + 0.5 * cwN(vCwBind * vec3(160.0, 600.0, 160.0));' : `{
             vec3 q = cwr == R_BEARD ? vCwBind * vec3(900.0, 70.0, 500.0) : vCwBind * vec3(900.0, 260.0, 160.0);

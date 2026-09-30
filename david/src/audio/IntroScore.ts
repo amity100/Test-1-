@@ -190,6 +190,8 @@ export class IntroScore {
   /** The film's sound design (the engine wires `fx.sfxAt` to its SFX library). */
   readonly fx: FilmSound;
   private secs: Sec[] = [];
+  private cues: readonly IntroCue[] = [];
+  private level = 0.92;
   private evs: Ev[] = [];
   private ei = 0;
   private readonly buses = new Map<number, Bus>();
@@ -197,6 +199,13 @@ export class IntroScore {
   private fxMaster: GainNode | null = null;
   private wetMaster: GainNode | null = null;
   private anchor = 0;
+  /** How far ahead of the film clock the score is scheduled: the output latency of the device (s). */
+  private lead = 0;
+  /** The film clock's last report (syncIntro): film time and context time. */
+  private syncT = 0;
+  private syncNow = -1;
+  /** tools: [film time, picture drift (s) when built] of every hard-cut hit (after the tight re-lock) */
+  readonly hitLog: Array<[number, number]> = [];
   private running = false;
   private endT = 0;
   private titleT = Infinity;
@@ -215,8 +224,8 @@ export class IntroScore {
   }
 
   get active(): boolean { return this.running; }
-  /** Current intro time (s) according to the score clock. */
-  time(now: number): number { return now - this.anchor; }
+  /** Current intro time (s) according to the score clock (the picture's time; the sound is scheduled `lead` ahead). */
+  time(now: number): number { return now - this.anchor - this.lead; }
   /** Sections derived from the last cue sheet (tools / debugging). */
   get sections(): readonly IntroSection[] { return this.secs; }
   /** Film times of the named beats the score keys on, per section (tools: the sync table). */
@@ -233,6 +242,7 @@ export class IntroScore {
 
   start(cues: readonly IntroCue[], startAt: number, now: number, level = 0.92): void {
     if (this.running) this.stop(now, 0.3);
+    this.cues = cues; this.level = level;
     this.secs = buildSections(cues);
     if (!this.secs.length) return;
     const t0 = clamp(Number.isFinite(startAt) ? startAt : 0, 0, this.secs[this.secs.length - 1].t1 - 0.5);
@@ -247,11 +257,17 @@ export class IntroScore {
     this.evs.sort((a, b) => a.at - b.at);
     if (t0 > 0.05) this.trimBefore(t0);
     this.ei = 0;
-    this.anchor = now + 0.03 - t0; // a 30 ms pre-roll: events due "now" still start on time
+    // the picture and the sound meet at the listener: schedule ahead by the device's output latency (a realtime
+    // context reports it; offline renders have none)
+    const ac = this.ctx as BaseAudioContext & { outputLatency?: number; baseLatency?: number };
+    this.lead = clamp((Number.isFinite(ac.outputLatency) ? (ac.outputLatency as number) : 0) + (Number.isFinite(ac.baseLatency) ? (ac.baseLatency as number) : 0) - 0.016, 0, 0.12);
+    this.anchor = now - t0 - this.lead;
     this.endT = this.secs[this.secs.length - 1].t1;
     const tsec = this.secs.find((x) => x.role === 'title');
     this.titleT = tsec ? tsec.t0 : Infinity;
     this.titleAt = -Infinity;
+    this.syncNow = -1;
+    this.hitLog.length = 0;
     const ctx = this.ctx;
     this.master = ctx.createGain(); this.master.gain.value = level;
     this.fxMaster = ctx.createGain(); this.fxMaster.gain.value = 1;
@@ -297,9 +313,21 @@ export class IntroScore {
    */
   sync(t: number, now: number): void {
     if (!this.running || !Number.isFinite(t)) return;
-    const drift = now - this.anchor - t;
+    this.syncT = t; this.syncNow = now;
+    const drift = now - this.anchor - this.lead - t;
     if (Math.abs(drift) < 0.1) return;
-    this.anchor = now - t;
+    // a jump of the film clock (a seek): start over from there instead of firing every skipped event at once
+    if (Math.abs(drift) > 0.75 && this.cues.length) { this.start(this.cues, t, now, this.level); this.syncT = t; this.syncNow = now; return; }
+    this.anchor = now - t - this.lead;
+    for (const b of this.buses.values()) this.envelope(b, now);
+  }
+
+  /** Before a hard-cut hit: re-anchor to the picture (extrapolated from the last film-clock report) beyond 25 ms. */
+  private relock(now: number): void {
+    if (this.syncNow < 0 || now - this.syncNow > 0.12) return;
+    const pic = this.syncT + (now - this.syncNow);
+    if (Math.abs(now - this.anchor - this.lead - pic) <= 0.025) return;
+    this.anchor = now - pic - this.lead;
     for (const b of this.buses.values()) this.envelope(b, now);
   }
 
@@ -318,7 +346,7 @@ export class IntroScore {
     }
     this.buses.clear();
     this.restoreWorld(now, 0.3);
-    this.anchor = now + 0.03 - this.titleT;
+    this.anchor = now - this.titleT;
     this.evs = this.evs.filter((e) => e.at >= this.titleT - 0.01);
     this.ei = 0;
     return true;
@@ -335,17 +363,23 @@ export class IntroScore {
       }
     }
     if (!this.running) return;
-    // the film's baked buffers: one per tick from 0.6 s of film time (under the time card), never on the first
-    // frame; a film started mid-way bakes lazily when a generator first needs its buffer
-    if (!this.fx.ready && now - this.anchor > 0.6) {
+    // the film's baked buffers: one per tick right after the first frame, i.e. under the black the film opens on (the
+    // first shot's `hold`), never in the frame that plans the score; a film started mid-way bakes lazily when a
+    // generator first needs its buffer
+    if (!this.fx.ready && this.time(now) > 0.02) {
       try { this.bakeMs += this.fx.prepareStep(); } catch { /* the generators bake lazily */ }
     }
     const limit = horizon - this.anchor;
     let guard = 0;
     while (this.ei < this.evs.length && this.evs[this.ei].at <= limit && guard++ < 64) {
       const e = this.evs[this.ei];
-      // the hits of the hard cuts are built only just before they are due (never early after a stall)
-      if (e.tight && e.at + this.anchor > now + 0.06) break;
+      // the hits of the hard cuts are built only just before they are due (never early after a stall), re-locked
+      // tightly to the picture first (a jump there is masked by the cut itself)
+      if (e.tight) {
+        this.relock(now);
+        if (e.at + this.anchor > now + 0.06) break;
+        if (this.syncNow >= 0 && this.hitLog.length < 64) this.hitLog.push([round3(e.at), round3(now - this.anchor - this.lead - (this.syncT + (now - this.syncNow)))]);
+      }
       this.ei++;
       const t = Math.max(now + 0.004, e.at + this.anchor);
       const bus = this.bus(e.bus, now);
@@ -682,8 +716,11 @@ export class IntroScore {
     if (hasCut && swell > 0.3) {
       const t1 = end - sec.gap;
       this.add(sec, t1 - swell, (t, m) => {
-        this.fx.suck(m, t + swell, swell, 0.13, 1.2);
-        riserFx(this.c, S, m, t, swell, 'dark', 0.95, lite);
+        this.fx.suck(m, t + swell, swell, 0.26, 1.3);
+        riserFx(this.c, S, m, t, swell, 'dark', 2, lite);
+        // the A (with its B♭) swells and brightens into the breath before the blast
+        S.choir(m, t, swell + 0.02, lite ? [45, 52, 57] : [45, 52, 57, 61, 64, 70], { level: 0.15, attack: swell * 0.95, release: 0.03, vowel: 'ah', breath: 0.14 });
+        S.pad(m, t, swell + 0.02, [33, 45, 52], { level: 0.11, attack: swell * 0.95, release: 0.03, cutoff: 900, cutoffEnd: 2800, voices: lite ? 2 : 3, detune: 12 });
       });
       for (let x = t1 - swell; x < t1 - 0.03; x += BEAT / 4) {
         const k = (x - (t1 - swell)) / swell;
@@ -700,9 +737,9 @@ export class IntroScore {
     const horns = this.beat(sec, 'horns'), card = this.text(sec, 0, this.beat(sec, 'card'));
     // the blast on the cut (tight: built just before it is due)
     this.add(sec, t0, (t, m, _h, fx) => {
-      S.shofar(m, t, 'gedolah', 0.5, 220, 293.66);
-      this.hit(m, t, 0.85, true);
-      this.fx.impact(fx, t, 0.5, 2.2);
+      S.shofar(m, t, 'gedolah', 0.46, 220, 293.66);
+      this.hit(m, t, 0.72, true);
+      this.fx.impact(fx, t, 0.42, 2.2);
     }, 0, undefined, true);
     // the front rank lifts its horns: two more rams' horns, raw and untuned against the first
     this.add(sec, horns, (t, m) => {
@@ -711,14 +748,14 @@ export class IntroScore {
     });
     // the army: thousands on foot, the murmur of the ranks, bronze, spear shafts on shields, dust
     this.add(sec, t0, (t, _m, h, fx) => {
-      this.fx.march(fx, t, h, 0.45, 1, 6500, 0.35);
-      this.fx.murmur(fx, t + 0.3, h - 0.3, 0.4);
+      this.fx.march(fx, t, h, 0.4, 1, 6500, 0.35);
+      this.fx.murmur(fx, t + 0.3, h - 0.3, 0.4, lite ? 2 : 0);
     }, d + 0.35);
     this.add(sec, t0 + 0.25, (t, _m, _h, fx) => this.fx.dustGust(fx, t, Math.min(3.2, d), 0.09));
-    for (let x = t0 + 0.7; x < end - 0.2; x += rand(0.3, 0.7)) {
+    for (let x = t0 + 0.7; x < end - 0.2; x += lite ? rand(0.5, 1) : rand(0.3, 0.7)) {
       this.add(sec, x, (t, _m, _h, fx) => {
         this.fx.clinks(fx, t, rand(0.012, 0.028));
-        if (chance(0.45)) this.fx.knock(fx, t + rand(0.05, 0.25), rand(0.02, 0.04), randi(1, 3));
+        if (chance(lite ? 0.3 : 0.45)) this.fx.knock(fx, t + rand(0.05, 0.25), rand(0.02, 0.04), randi(1, 3));
       });
     }
     // the drums (120 bpm) from the second beat, with low men's voices on D; the card gets its stroke
@@ -728,12 +765,12 @@ export class IntroScore {
       const tt = p0 + k * BEAT, kk = k, u = k / Math.max(1, nb - 1);
       this.add(sec, tt, (t, m) => {
         const dry: Out = { dry: m.dry, wet: null };
-        S.drum(m, t, 'taiko', (kk % 2 === 0 ? 0.46 : 0.35) * (0.85 + 0.3 * u), kk % 2 ? 0.25 : -0.25);
+        S.drum(m, t, 'taiko', (kk % 2 === 0 ? 0.42 : 0.32) * (0.8 + 0.3 * u), kk % 2 ? 0.25 : -0.25);
         S.drum(dry, t, 'dum', 0.28, 0);
         S.drum(dry, t + BEAT * 0.5, 'tek', lite ? 0.14 : 0.11, 0.2);
         if (!lite) S.drum(dry, t + BEAT * 0.75, 'ka', 0.08, -0.3);
         S.strStac(dry, t, kk % 4 === 3 ? 45 : 38, 0.5, 0.28, 0.6);
-        S.strStac(dry, t + BEAT * 0.5, 38, 0.32, 0.2, 0.5);
+        if (!lite) S.strStac(dry, t + BEAT * 0.5, 38, 0.32, 0.2, 0.5);
         if (kk % 2 === 0) S.choir(m, t, BEAT * 2 + 0.25, lite ? [38, 45] : [38, 45, 50], { level: 0.06 + 0.02 * u, attack: 0.06, release: 0.35, vowel: 'oh', breath: 0.12 });
       });
     }
@@ -758,8 +795,8 @@ export class IntroScore {
     for (let x = t0, k = 0; x < end - 0.3; x += BEAT * 2, k++) {
       const first = k === 0;
       this.add(sec, x, (t, m) => {
-        S.drum(m, t, 'taiko', first ? 0.72 : 0.5, 0, 0.8);
-        S.drum(m, t, 'boom', first ? 0.34 : 0.15, 0, 0.88);
+        S.drum(m, t, 'taiko', first ? 0.6 : 0.48, 0, 0.8);
+        S.drum(m, t, 'boom', first ? 0.28 : 0.15, 0, 0.88);
       });
     }
     // the theme: D A B♭-A G F … then the E (held through the halt and the spear, on the peak's bus)
@@ -786,8 +823,9 @@ export class IntroScore {
   /** G3 — THE PEAK: the halt, the spear raised, and the roar of thousands ON the theme's resolution. Cut at once. */
   private planPeak(sec: Sec): void {
     const S = this.s, lite = this.lite, t0 = sec.t0, end = sec.t1;
-    const halt = this.beat(sec, 'halt'), spear = this.beat(sec, 'spear');
+    const spear = this.beat(sec, 'spear');
     const roar = clamp(this.beat(sec, 'roar'), spear + 0.05, end - 0.4);
+    const halt = Math.min(this.beat(sec, 'halt'), roar - 0.25);
     // the march until the halt: thousands of feet stop, a last scuff and rattle
     this.add(sec, t0, (t, _m, _h, fx) => this.fx.march(fx, t, Math.max(0.3, halt - t0 + 0.25), 0.5, 1, 6500, 0.04));
     this.add(sec, halt, (t, _m, _h, fx) => {
@@ -859,7 +897,7 @@ export class IntroScore {
     }, Math.max(0.6, step - part));
     // under Samuel's name: the ground tone creeps in, and one high A that will carry into the tear
     const tear = this.secs[sec.i + 1]?.role === 'tear' ? this.secs[sec.i + 1] : undefined;
-    this.add(sec, card, (t, m, h) => this.ground(m, t, h, 0.05, 1.2, 0.6), end - card + 0.3);
+    this.add(sec, card, (t, m, h) => this.ground(m, t, h, 0.05, 1.2, 0.6), (tear ? tear.t1 : end) - card + 0.3, tear);
     this.add(sec, card + 0.2, (t, m, h) => S.pad(m, t, h, [69], {
       level: 0.03, attack: Math.min(2.5, h * 0.45), release: 0.5, cutoff: 1500, voices: 2, detune: 4, lfoCents: 40, vib: 9, vibRate: 5.2, vibDelay: 1.2,
     }), (tear ? tear.t1 : end) - card - 0.2, tear);
@@ -870,7 +908,7 @@ export class IntroScore {
   /** G5a + G5b — THE TEAR: Samuel turns to go, Saul lunges and grips the corner of the me'il; it tears (slow motion). */
   private planTear(sec: Sec): void {
     const S = this.s, lite = this.lite, end = sec.t1;
-    const turn = this.beat(sec, 'turn'), lunge = this.beat(sec, 'lunge'), grip = this.beat(sec, 'grip');
+    const turn = this.beat(sec, 'turn'), grip = this.beat(sec, 'grip'), lunge = Math.min(this.beat(sec, 'lunge'), grip - 0.15);
     const ins = this.shotStart(sec, 1, (SPLIT.tear ?? [2])[0]);
     const pull = Math.max(grip + 0.05, this.beat(sec, 'pull')), free = Math.max(pull + 0.3, this.beat(sec, 'free'));
     // the turn: wool, a step of an old man
@@ -959,35 +997,39 @@ export class IntroScore {
     const verse = clamp(this.text(sec, 0, this.beat(sec, 'verse')), t0, face - 1);
     const turn = this.beat(sec, 'turn'), heart = clamp(this.text(sec, 1, this.beat(sec, 'heart')), turn + 0.2, end - 0.5);
     const dis = sec.exit === 'x' ? Math.min(0.8, sec.tau * 3) : 0.3; // the dissolve out (the light cools)
-    // the bloom of the light: D major, voices, strings, a soft stroke, a kinnor strum, a high shimmer
+    // the bloom of the light: a soft stroke, a kinnor strum, voices opening, a high shimmer; wind in his curls
     this.add(sec, t0, (t, m, _h, fx) => {
       S.drum(m, t, 'boom', 0.14, 0, 1);
-      S.choir(m, t, face - t0 + 0.4, lite ? [50, 57, 62, 66] : [50, 57, 62, 66, 69], { level: 0.034, attack: 0.25, release: 0.9, vowel: 'ah', to: 'oo', morph: 2, breath: 0.07 });
-      S.pad(m, t, face - t0 + 0.4, [38, 45, 50, 54], { level: 0.028, attack: 0.25, release: 0.9, cutoff: 1200, cutoffEnd: 700, voices: lite ? 2 : 3, detune: 8 });
-      S.strum(m, t + 0.03, [50, 54, 57, 62, 66, 69], 0.4, 0.045);
-      S.pad(m, t, 1.8, [86, 90], { level: 0.01, attack: 0.05, release: 1.4, cutoff: 7000, voices: 2, detune: 8, trem: 0.3, tremRate: 10 });
-      this.fx.windSwell(fx, t + 0.3, face - t0, 0.028, 700, 2600, -0.3, 0.4); // wind in his curls
+      S.strum(m, t + 0.03, [50, 54, 57, 62, 66, 69], 0.36, 0.045);
+      S.choir(m, t, 1.8, lite ? [57, 62, 66] : [57, 62, 66, 69], { level: 0.03, attack: 0.12, release: 1.1, vowel: 'ah', to: 'oo', morph: 1.4, breath: 0.07 });
+      S.pad(m, t, 1.8, [86, 90], { level: 0.009, attack: 0.05, release: 1.4, cutoff: 7000, voices: 2, detune: 8, trem: 0.3, tremRate: 10 });
+      this.fx.windSwell(fx, t + 0.3, face - t0, 0.026, 700, 2600, -0.3, 0.4);
     });
-    // the kinnor in 6/8 over both shots (D – C – G/D – D; then G – D – A – D as he turns)
-    this.kinnor(sec, t0 + STEP68 * 1.5, face, ['D', 'C', 'G', 'D'], 0.56);
-    this.kinnor(sec, face, end - dis * 0.6, ['G', 'D', 'A', 'D'], 0.5);
+    // a warm D-major bed under both shots (it opens when he turns)
+    this.add(sec, t0 + 0.05, (t, m, h) => {
+      S.pad(m, t, h, [38, 45, 50, 54], { level: 0.024, attack: 0.5, release: dis + 0.3, cutoff: 1000, voices: lite ? 2 : 3, detune: 7 });
+      S.choir(m, t, h, lite ? [50, 57] : [50, 57, 62], { level: 0.016, attack: 0.8, release: dis + 0.3, vowel: 'oo', breath: 0.05 });
+    }, end - t0 + 0.2);
+    // the kinnor in 6/8 over both shots (D – C – G – D; then G – D – A – D as he turns)
+    this.kinnor(sec, t0 + STEP68 * 1.5, face, ['D', 'C', 'G', 'D'], 0.46);
+    this.kinnor(sec, face, end - dis * 0.6, ['G', 'D', 'A', 'D'], 0.42);
     // 15:28b over David: his motif on the shepherd's pipe (D A G F E F D, Dorian), close and intimate
     const u = clamp((face - verse - 0.2) / 11, 0.24, STEP68);
-    this.add(sec, verse + 0.1, (t, m) => { S.ney(m, t, motif(74, DAVID, u), 0.12); });
-    this.add(sec, verse, (t, m, h) => S.pad(m, t, h, [38, 45, 50], { level: 0.026, attack: 1, release: 0.6, cutoff: 800, voices: 2, detune: 5 }), face - verse + 0.3);
+    this.add(sec, verse + 0.1, (t, m) => { S.ney(m, t, motif(74, DAVID, u), 0.075); });
     // the flock below him, the birds of the golden hour (they stop at the thicket)
-    this.add(sec, t0 + 0.9, (t, _m, _h, fx) => this.fx.bleat(fx.dry, t, 0.16, 0.45));
+    this.add(sec, t0 + 0.9, (t, _m, _h, fx) => this.fx.bleat(fx.dry, t, 0.15, 0.45));
     this.add(sec, t0 + 2.4, (t, _m, _h, fx) => this.fx.chukar(this.far(fx, t, 4, 4500, 0.3, 0.5), t, 0.014, -0.6));
-    this.add(sec, face - 0.8, (t, _m, _h, fx) => this.fx.bleat(fx.dry, t, 0.12, -0.35, 'lambBleat', 1.08));
+    this.add(sec, face - 0.8, (t, _m, _h, fx) => this.fx.bleat(fx.dry, t, 0.11, -0.35, 'lambBleat', 1.08));
     this.add(sec, face + 0.25, (t, _m, _h, fx) => this.fx.bulbul(fx, t, 0.009, 0.5));
-    // he turns into the light: warm voices open to "ah" with the turn and bloom on 16:7; the kinnor answers
-    this.add(sec, turn, (t, m, h) => {
-      S.choir(m, t, h, lite ? [62, 66, 69] : [57, 62, 66, 69, 74], { level: 0.05, attack: heart - turn, release: dis + 0.2, vowel: 'oo', to: 'ah', morph: heart - turn + 0.4, breath: 0.06 });
-      S.pad(m, t, h, [38, 50, 57, 62], { level: 0.04, attack: heart - turn, release: dis + 0.2, cutoff: 1500, voices: lite ? 2 : 3, detune: 7 });
-    }, end - turn + 0.2);
+    // he turns into the light: warm voices open to "ah" from the cut and bloom on 16:7; the kinnor answers
+    const sw = Math.min(face, turn - 0.3);
+    this.add(sec, sw, (t, m, h) => {
+      S.choir(m, t, h, lite ? [62, 66, 69] : [57, 62, 66, 69, 74], { level: 0.04, attack: heart - sw, release: dis + 0.2, vowel: 'oo', to: 'ah', morph: heart - sw + 0.3, breath: 0.06 });
+      S.pad(m, t, h, [50, 57, 62, 66], { level: 0.028, attack: heart - sw, release: dis + 0.2, cutoff: 1500, voices: lite ? 2 : 3, detune: 7 });
+    }, end - sw + 0.2);
     this.add(sec, heart, (t, m) => {
-      S.strum(m, t, [62, 66, 69, 74, 78], 0.5, 0.05);
-      S.ney(m, t + 0.25, motif(74, ANSWER, clamp((end - heart - 0.6) / 10, 0.16, 0.26)), 0.1);
+      S.strum(m, t, [62, 66, 69, 74, 78], 0.4, 0.05);
+      S.ney(m, t + 0.25, motif(74, ANSWER, clamp((end - heart - 0.6) / 10, 0.16, 0.26)), 0.07);
     });
   }
 
@@ -1026,7 +1068,13 @@ export class IntroScore {
     }
     // the pull into the smash
     const sl = Math.min(0.9, t1 - eyes - 0.05);
-    if (sl > 0.2) this.add(sec, t1 - sl, (t, m) => this.fx.suck(m, t + sl, sl, 0.1, 1.4));
+    if (sl > 0.2) {
+      this.add(sec, t1 - sl, (t, m) => {
+        this.fx.suck(m, t + sl, sl, 0.3, 1.4);
+        // a trembling cluster (D–E♭–A) that swells and brightens into the breath before the smash
+        S.pad(m, t, sl + 0.02, lite ? [50, 51, 57] : [38, 50, 51, 57, 63], { level: 0.095, attack: sl * 0.95, release: 0.03, cutoff: 700, cutoffEnd: 3200, voices: 2, detune: 14, trem: 0.4, tremRate: 11 });
+      });
+    }
   }
 
   /** T — SMASH to black on the loudest hit; DAVID forms from light; the title motif; the tail into gameplay. */

@@ -127,6 +127,8 @@ export interface IntroText {
   /** verses: explicit word timing (spoken: the jaw of the speaker follows these) — one entry per word of the
    *  quotation split on spaces (a maqaf joins two words into one entry) */
   readonly words?: readonly IntroWord[];
+  /** verses: the reference fades in this long after the last word appears (default 0.55 s) */
+  readonly refAfter?: number;
   /** where the card sits: the negative space of the composition ('left' / 'right'; 'center' default for verses) */
   readonly side?: 'left' | 'right' | 'center';
   /** vertical placement of place / person cards */
@@ -201,12 +203,12 @@ export interface IntroCue {
  * The verse words appear exactly at `t` and Samuel's jaw/lips speak each word over [t, t + dur] (anim).
  */
 export const VERDICT_WORDS: readonly IntroWord[] = [
-  { t: 0.9, dur: 0.34, syl: 2 }, //  1 kara
-  { t: 1.34, dur: 0.44, syl: 3 }, // 2 (the Name)
-  { t: 1.82, dur: 0.6, syl: 4 }, //  3 et-mamlechut
-  { t: 2.46, dur: 0.46, syl: 3 }, // 4 Yisrael
-  { t: 3.02, dur: 0.58, syl: 4 }, // 5 me'alecha
-  { t: 3.66, dur: 0.38, syl: 2 }, // 6 hayom
+  { t: 0.9, dur: 0.3, syl: 2 }, //   1 kara
+  { t: 1.22, dur: 0.44, syl: 3 }, // 2 (the Name)
+  { t: 1.68, dur: 0.58, syl: 4 }, // 3 et-mamlechut
+  { t: 2.28, dur: 0.44, syl: 3 }, // 4 Yisrael
+  { t: 2.74, dur: 0.54, syl: 4 }, // 5 me'alecha
+  { t: 3.3, dur: 0.34, syl: 2 }, //  6 hayom (speech ends 3.64)
 ];
 
 // ---------------------------------------------------------------------------------------------------------
@@ -290,8 +292,9 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
   },
   {
     id: 'verdict', n: 'G6', set: 'gilgal', take: 'verdict', dur: 4.5, cut: 'cut', cue: 'verdict', beat: 'saul-hall',
-    beats: { turnBack: 0.4, speech: 0.9, speechEnd: 4.04 },
-    text: [{ at: 0.9, seconds: 3.6, kind: 'verse', quote: 's1_15_28_torn_today', words: VERDICT_WORDS }],
+    beats: { turnBack: 0.4, speech: 0.9, speechEnd: 3.64 },
+    // the words land on the cut: the verse fades out 0.35 s into G7 (Saul hears it)
+    text: [{ at: 0.9, seconds: 3.95, kind: 'verse', quote: 's1_15_28_torn_today', words: VERDICT_WORDS, refAfter: 0.25 }],
     direction: "THE VERDICT: Samuel turns back and speaks, close; a slow push, Saul's shoulder soft in the foreground; the "
       + 'jaw speaks the words as they appear, eyes on Saul, hair in the wind. Near-silence.',
   },

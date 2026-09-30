@@ -51,7 +51,8 @@ export class GameAudio {
   }
   /**
    * Start the score + sound design of the opening film, synchronised to its shot sheet (reads each shot cue's
-   * `cue`, `t`, `shot`, `dur`, `cut` and `fade` at call time, so a retimed sheet stays in sync). `startAt` = film
+   * `cue`, `set`, `t`, `shot`, `dur`, `cut`, `fade`, `beats` and `slowmo`, and the text cues' times and `words`, at
+   * call time — every hit is keyed to the named beats of the sheet, so a retimed sheet stays in sync). `startAt` = film
    * time (s) to start from. The score plays its own hit on the title smash (a sfx('titleHit') at that moment is
    * absorbed; one made early — a skip — jumps the score to its title hit and tail). While it plays,
    * music('title') is ignored and any other music(mood) ends it with that fade. The ambience bed follows the cues

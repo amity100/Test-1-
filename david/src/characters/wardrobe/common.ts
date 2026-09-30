@@ -6,7 +6,7 @@ import {
   torsoWeights, tubeAlong, type Fit,
 } from './garments';
 import { HullField, TAU, makeFrame, noise1, smoothstep, type Tube } from './loft';
-import { clothDepthMaterial, clothMaterial, fringeMaterial, solidMaterial, type Band, type TexPair, type Tier } from './materials';
+import { clothDepthMaterial, clothMaterial, fringeMaterial, insideFace, solidMaterial, type Band, type TexPair, type Tier } from './materials';
 import { Chain, Outfit } from './Outfit';
 
 /*
@@ -65,10 +65,15 @@ export interface TunicOptions {
   shoulderFolds?: number;
   /** models pass: cloth gathered under a belt — tight vertical folds above and below the belt line (0..1.5; 0 = none) */
   gather?: number;
+  /** models pass: shading folds of the skirt running down from its upper edge: [amount, falloff m, spacing m]
+   * (defaults to the belt gather: [gather, 0.09, 0.036]) — heavy unbelted mantles use long, wide folds */
+  skirtFolds?: [number, number, number];
   /** models pass: non-periodic cloth tone variation [warp streaks, stains, weft bars] (clothMaterial `variation`) */
   variation?: [number, number, number];
   /** models pass: darken the gaps of an open weave (clothMaterial `gap`) */
   gap?: number;
+  /** models pass: back-lit fibre fuzz on the silhouette (clothMaterial `fuzz`) */
+  fuzz?: number;
 }
 
 export interface TunicResult {
@@ -147,14 +152,15 @@ export function fittedTunic(fit: Fit, o: TunicOptions): TunicResult {
     inner: o.inner,
   });
   const sway = { uniforms: U, length: Math.max(0.3, (beltY - hemY) * 0.6) };
-  const common = { tier, tex: o.tex, tile: o.tile, dye: o.dye, roughness: o.roughness ?? 0.9, sheen: o.sheen ?? 0.6, transmit: 0.5, variation: o.variation, gap: o.gap };
+  const common = { tier, tex: o.tex, tile: o.tile, dye: o.dye, roughness: o.roughness ?? 0.9, sheen: o.sheen ?? 0.6, transmit: 0.5, variation: o.variation, gap: o.gap, fuzz: o.fuzz };
   const g = o.gather ?? 0;
   // armhole edges get a narrow woven border in the first palette colour (like the neck and hem bands)
   const upBands = ah && o.palette ? [...(o.neckBands ?? []), { from: 0.0, to: 0.01, motif: 0, pal: 0, edge: 'lower' as const }] : o.neckBands;
-  const upMat = clothMaterial({ ...common, bands: upBands, palette: o.palette, hem: [0, 0.1, 0.012, o.fray ?? 0.3], edgeMask: [0, 1], grime: [0.7, 0.62, 0.5, 0.4], ...(g > 0 ? { gather: { lower: g, falloff: 0.06, spacing: 0.03 } } : {}) });
+  const upMat = clothMaterial({ ...common, bands: upBands, palette: o.palette, hem: [0, 0.1, 0.012, o.fray ?? 0.3], edgeMask: [0, 1], grime: [0.7, 0.62, 0.5, 0.4], inside: insideFace(upper.tube.geometry), ...(g > 0 ? { gather: { lower: g, falloff: 0.06, spacing: 0.03 } } : {}) });
   // outer layers keep their offset from the inner ones where a leg pushes both out (no z-fighting / white flecks)
   const pad = Math.max(0, off * 0.8);
-  const skMat = clothMaterial({ ...common, bands: o.bands, palette: o.palette, hem: [o.dust ?? 0.45, 0.16, 0.015, o.fray ?? 0.3], edgeMask: [1, 0], sway, collide: U, collidePad: pad, ...(g > 0 ? { gather: { upper: g, falloff: 0.09, spacing: 0.036 } } : {}) });
+  const sf2 = o.skirtFolds ?? (g > 0 ? [g, 0.09, 0.036] : null);
+  const skMat = clothMaterial({ ...common, bands: o.bands, palette: o.palette, hem: [o.dust ?? 0.45, 0.16, 0.015, o.fray ?? 0.3], edgeMask: [1, 0], sway, collide: U, collidePad: pad, inside: insideFace(skirt.tube.geometry), ...(sf2 ? { gather: { upper: sf2[0], falloff: sf2[1], spacing: sf2[2] } } : {}) });
   const meshes: THREE.Object3D[] = [];
   const restPos: Float32Array[] = [upper.tube.pos, skirt.tube.pos];
   let tw = torsoWeights(fit);

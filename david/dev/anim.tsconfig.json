@@ -1,0 +1,5 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": { "noEmit": true },
+  "include": ["anim.ts", "../src/film/cast", "../src/film/crowd"]
+}

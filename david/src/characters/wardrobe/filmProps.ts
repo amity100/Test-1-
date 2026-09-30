@@ -121,10 +121,16 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions &
   // grid per scale: columns across (nu) and the rows' v stations (the upper part is hidden under the row above, so the
   // vertices go where the scale shows: its lower part, the rolled end)
   const nu = low ? 1 : med ? 2 : 3;
+  // (phones: 3 stations but a BLUNT end — with one quad across, the rounded end became a pointed feather tip)
   const vs = low ? [0, 0.5, 1] : med ? [0, 0.5, 0.78, 1] : [0, 0.42, 0.62, 0.8, 0.93, 1];
+  const tipMin = low ? 0.38 : med ? 0.3 : 0.21;
   const nv = vs.length - 1;
   const pos: number[] = [], nor: number[] = [], uv: number[] = [], col: number[] = [], idx: number[] = [];
   const zone: number[] = []; // 0 upper (torso / shoulder), 1 skirt
+  // (models pass: rigid per-scale skinning — every vertex of a scale with the weights of its lacing point — was
+  // tried and dropped: across the skirt's pelvis/thigh weight seam the two halves of the coat split apart. The scales
+  // keep per-vertex weights; `anchor` is kept for a softer blend below)
+  const anchor: number[] = [];
   const royal = (o.polish ?? 'royal') === 'royal';
   const base = new THREE.Color(1, 1, 1);
   // verdigris in the crevices, relative to the bronze F0 (the vertex colour multiplies the material colour)
@@ -192,10 +198,11 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions &
         const dnT = (R() - 0.5) * 0.36, dnD = (R() - 0.5) * 0.28; // facet: the whole scale catches light differently
         const ca = Math.cos(rot), sa = Math.sin(rot);
         const vi0 = pos.length / 3;
+        const ax = s0.p.x + tmpD.x * L * 0.5, ay = s0.p.y + tmpD.y * L * 0.5, az = s0.p.z + tmpD.z * L * 0.5;
         for (let j = 0; j <= nv; j++) {
           const v = vs[j]; // 0 = top (laced, hidden), 1 = rounded lower end
           // a long rounded-end rectangle like the Iron Age scales from Lachish / Nuzi, not a pointed leaf
-          const halfW = v < 0.74 ? 0.5 : 0.5 * (0.42 + 0.58 * Math.sqrt(Math.max(0, 1 - ((v - 0.74) / 0.26) ** 2)));
+          const halfW = Math.max(v < 0.74 ? 0.5 : 0.5 * (0.42 + 0.58 * Math.sqrt(Math.max(0, 1 - ((v - 0.74) / 0.26) ** 2))), tipMin);
           for (let i = 0; i <= nu; i++) {
             const u = (i / nu - 0.5) * 2; // -1..1
             const x = u * halfW * W;
@@ -221,6 +228,7 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions &
             c.lerp(dust, (royal ? 0.3 : 0.4) * Math.max(0, 1 - Math.abs(below - 0.04) / 0.12) + (zoneId === 1 ? 0.06 : 0.02));
             col.push(c.r, c.g, c.b);
             zone.push(zoneId);
+            anchor.push(ax, ay, az);
           }
         }
         for (let j = 0; j < nv; j++) {
@@ -247,7 +255,8 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions &
   // overlap line and keep the rib and the lower edge burnished (sharp highlights)
   const maps = scaleDetailMaps();
   const mat = new THREE.MeshStandardMaterial({
-    color: royal ? 0xc08448 : 0x9a6a40, roughness: royal ? 1.0 : 1.15, metalness: 1, envMapIntensity: 0.85,
+    // polished bronze (visual-bible §2 #b8773c), a touch more golden than copper
+    color: royal ? 0xbe8c52 : 0x9a6a40, roughness: royal ? 1.0 : 1.15, metalness: 1, envMapIntensity: 0.85,
     normalMap: maps.normal, normalScale: new THREE.Vector2(1, 1), roughnessMap: maps.orm, metalnessMap: maps.orm,
   });
   mat.name = 'wardrobe:scaleBronze';
@@ -257,7 +266,7 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions &
   mat.onBeforeCompile = (sh) => {
     sh.fragmentShader = sh.fragmentShader.replace(
       '#include <lights_fragment_end>',
-      '#include <lights_fragment_end>\nreflectedLight.indirectSpecular *= vec3(1.0, 0.7, 0.42);',
+      '#include <lights_fragment_end>\nreflectedLight.indirectSpecular *= vec3(1.0, 0.76, 0.5);',
     );
   };
   mat.customProgramCacheKey = () => 'scaleBronze2';
@@ -267,7 +276,10 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions &
   const tw = partWeights(fit, C.TORSO | C.NECK, 8);
   const aw = partWeights(fit, C.TORSO | C.NECK | C.UPARM_L | C.UPARM_R, 8);
   const sw = skirtWeights(fit, o.skirtStiff ?? 0);
-  const w = (i: number, p: THREE.Vector3) => {
+  const ap = new THREE.Vector3();
+  const w = (i: number, pv: THREE.Vector3) => {
+    // a scale's vertices take the weights of a point halfway to its lacing point: less shear inside a scale, no split
+    const p = ap.fromArray(anchor, i * 3).lerp(pv, 0.65);
     if (zone[i] === 1) return sw(i, p);
     const side = Math.abs(p.x) / Math.max(1e-6, Math.hypot(p.x, p.z));
     const t = THREE.MathUtils.smoothstep(p.y, lm.yArmpit - 0.02, lm.yArmpit + 0.08) * THREE.MathUtils.smoothstep(side, 0.55, 0.9) * 0.85;
@@ -295,7 +307,8 @@ export function scaleDetailMaps(): { normal: THREE.DataTexture; orm: THREE.DataT
   const R = rng(911);
   const h = new Float32Array(N * N);
   const dimples: [number, number, number, number][] = [];
-  for (let k = 0; k < 30; k++) dimples.push([0.08 + 0.84 * R(), 0.35 + 0.62 * R(), 0.05 + 0.07 * R(), 0.2 + 0.3 * R()]);
+  // (shallow: deep dimples read as dark leopard spots / pitting in a full-frame close-up)
+  for (let k = 0; k < 22; k++) dimples.push([0.08 + 0.84 * R(), 0.35 + 0.62 * R(), 0.06 + 0.08 * R(), 0.07 + 0.12 * R()]);
   const halfW = (v: number) => (v < 0.74 ? 0.5 : 0.5 * (0.42 + 0.58 * Math.sqrt(Math.max(0, 1 - ((v - 0.74) / 0.26) ** 2))));
   for (let y = 0; y < N; y++) {
     for (let x = 0; x < N; x++) {
@@ -335,7 +348,7 @@ export function scaleDetailMaps(): { normal: THREE.DataTexture; orm: THREE.DataT
       const u = (x + 0.5) / N, v = (y + 0.5) / N;
       // dust packed along the overlap line (v ≈ 0.45-0.58) and in the hammer marks; burnished rib and lower edge
       const dustBand = Math.exp(-(((v - 0.5) / 0.07) ** 2)) + (1 - THREE.MathUtils.smoothstep(v, 0.3, 0.45)) * 0.8;
-      const pit = Math.max(0, -H(x, y) - 0.1) * 0.35;
+      const pit = Math.max(0, -H(x, y) - 0.1) * 0.15;
       const rib = Math.exp(-(((u - 0.5) / 0.08) ** 2)) * THREE.MathUtils.smoothstep(v, 0.45, 0.65);
       const rim = THREE.MathUtils.smoothstep(v, 0.9, 0.98);
       const rough = THREE.MathUtils.clamp(0.3 + 0.45 * dustBand + 0.2 * pit - 0.1 * rib - 0.08 * rim + 0.08 * (R() - 0.5), 0.18, 0.95);
@@ -404,9 +417,12 @@ export function makeHelmet(tier: Tier, metal: TexPair, leather: TexPair, o: { ra
   dome.computeVertexNormals();
   const bronze = solidMaterial({
     // dusty, hammered dark bronze after a campaign (a smooth bright dome read as a glowing ball in the backlight)
-    tier, tex: metal, color: royal ? 0x523420 : 0x6e4a2c, roughness: royal ? 0.74 : 0.7, metalness: 0.85, repeat: [2, 2], normal: 1.8,
-    metalWear: { patina: 0x56745b, amount: royal ? 0.2 : 0.5, edgeBright: 0.3 },
+    // models pass: still dark and dusty, but METAL — hammered facets that catch a highlight (at roughness 0.74 it read
+    // as a brown leather ball under his arm)
+    tier, tex: metal, color: royal ? 0x604024 : 0x6e4a2c, roughness: royal ? 0.52 : 0.62, metalness: 0.95, repeat: [2, 2], normal: 2.0,
+    metalWear: { patina: 0x56745b, amount: royal ? 0.28 : 0.5, edgeBright: 0.25 },
   });
+  bronze.envMapIntensity = 0.8;
   bronze.side = THREE.DoubleSide;
   const dm = new THREE.Mesh(dome, bronze);
   g.add(dm);

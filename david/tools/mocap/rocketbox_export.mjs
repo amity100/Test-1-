@@ -117,10 +117,13 @@ for (const f of anims) {
   const n = Math.max(1, Math.round(clip.duration * fps) + 1);
   const mixer = new THREE.AnimationMixer(obj);
   const action = mixer.clipAction(clip);
+  // one pass, held at the end: a repeating action would wrap the last frame (t = duration) back to frame 0
+  action.setLoop(THREE.LoopOnce, 1);
+  action.clampWhenFinished = true;
   action.play();
   const frames = [ref];
   for (let i = 0; i < n; i++) {
-    mixer.setTime(Math.min(clip.duration, i / fps));
+    mixer.setTime(Math.min(clip.duration - 1e-4, i / fps));
     obj.updateMatrixWorld(true);
     frames.push(grab(bones));
   }

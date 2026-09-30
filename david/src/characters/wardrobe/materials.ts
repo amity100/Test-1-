@@ -148,7 +148,7 @@ uniform vec2 uEdgeMask;      // fray/dust weight for the lower / upper edge
 uniform vec3 uDust;
 uniform float uTransmit;
 uniform float uGap;
-uniform vec4 uVar;           // x warp streaks, y stains, z weft bars, w (unused)
+uniform vec4 uVar;           // x warp streaks, y stains, z weft bars, w back-lit fibre fuzz
 #ifdef W_GATHER
 uniform vec4 uGather;        // x lower-edge amount, y upper-edge amount, z falloff (m), w fold spacing (m)
 #endif
@@ -199,11 +199,16 @@ float wLow = wFbm(vGUv * 7.0);
   float st = wNoise(vec2(vGUv.x * 240.0, vGUv.y * 2.6)) * 0.6 + wNoise(vec2(vGUv.x * 70.0 + 3.1, vGUv.y * 1.3)) * 0.4;
   float br = wNoise(vec2(vGUv.x * 1.7 + 7.7, vGUv.y * 150.0));
 #else
-  float st = wNoise(vec2(vGUv.x * 120.0, vGUv.y * 2.0));
+  // phones: a softer, coarser streak (fine streaks alias into stripes without TAA)
+  float st = 0.5 + 0.5 * (wNoise(vec2(vGUv.x * 60.0, vGUv.y * 2.0)) - 0.5);
   float br = 0.5;
 #endif
   wCol *= 1.0 + uVar.x * (st - 0.5) * 2.0 + uVar.z * (br - 0.5) * 2.0;
+#ifndef W_LOW
   float stain = wFbm(vGUv * 10.0 + 4.3);
+#else
+  float stain = wNoise(vGUv * 12.0 + 4.3);
+#endif
   wCol *= 1.0 - uVar.y * smoothstep(0.56, 0.8, stain);
 }
 float wGatherSlope = 0.0;
@@ -211,12 +216,16 @@ float wGatherSlope = 0.0;
 {
   // cloth gathered under a belt: tight vertical folds that open out away from it (crests lighter, troughs darker)
   float fx = vGUv.x / uGather.w;
-  float fid = floor(fx);
-  float len = uGather.z * (0.55 + 0.9 * wHash(vec2(fid, 3.7)));
+  // (smooth per-fold length variation: a hash per fold index left a seam between folds)
+  float len = uGather.z * (0.55 + 0.9 * wNoise(vec2(fx * 0.9, 3.7)));
   float amt = uGather.x * exp(-max(vGd.x, 0.0) / len) + uGather.y * exp(-max(vGd.y, 0.0) / len);
-  float ph = fx * 6.2832 + 2.2 * wNoise(vec2(vGUv.x * 11.0, 0.7));
+#ifdef W_LOW
+  amt *= 0.55; // phones (FXAA, no TAA): half-strength folds, full ones stripe
+#endif
+  float ph = fx * 6.2832 + 2.6 * wNoise(vec2(vGUv.x * 9.0, 0.7)) + 1.2 * wNoise(vec2(vGUv.x * 23.0, vGd.x * 3.0 + 1.9));
   float prof = 0.5 + 0.5 * cos(ph);
-  wGatherSlope = -amt * sin(ph) * (1.0 + 0.6 * cos(ph));
+  // (tangent-space normal of h = cos(ph): crests at ph = 0 lit, the troughs at ph = PI get the AO below)
+  wGatherSlope = amt * sin(ph) * (1.0 + 0.6 * cos(ph));
   wCol *= 1.0 - amt * 0.22 * (1.0 - prof) * (1.0 - prof);
 }
 #endif
@@ -282,6 +291,13 @@ for (int i = 0; i < W_HOLES; i++) {
 #endif
 if (wAlpha < 0.5) discard;
 float wAo = mix(1.0, wN.b, uAO);
+// models pass: the inside of a garment (seen at the neck, the hem, through holes and the open weave) lies in the
+// body's shadow — it must not light up like the outside (a hole on David's chest showed a bright crescent)
+#if defined(W_INSIDE_FRONT)
+if (gl_FrontFacing) wAo *= 0.45;
+#elif defined(W_INSIDE_BACK)
+if (!gl_FrontFacing) wAo *= 0.45;
+#endif
 diffuseColor.rgb = wCol * wAo;
 diffuseColor.a = 1.0;
 `;
@@ -308,6 +324,10 @@ const FRAG_EMISSIVE = /* glsl */ `
   vec3 Vv = normalize(vViewPosition);
   float back = pow(max(0.0, dot(-Vv, -Lv)), 5.0);
   float thin = (1.0 - abs(dot(normal, Vv))) * 0.6 + (1.0 - wCov) * 1.4 + wOpen;
+  // models pass: the fibre fuzz on the surface of wool catches the back light as a soft warm rim (a dark mantle
+  // otherwise reads as a flat black shape against the low sun)
+  float rim = pow(1.0 - abs(dot(normal, Vv)), 3.0);
+  totalEmissiveRadiance += uSunCol * mix(diffuseColor.rgb, vec3(0.42, 0.36, 0.29), 0.55) * pow(max(0.0, dot(-Vv, -Lv)), 3.0) * rim * uVar.w;
   totalEmissiveRadiance += uSunCol * diffuseColor.rgb * back * thin * uTransmit;
 }
 #endif
@@ -352,8 +372,12 @@ export interface ClothOptions {
   gap?: number;
   /** models pass: [warp streaks, stains, weft bars] — non-periodic tone variation of handwoven cloth (defaults 0.05, 0.1, 0.02) */
   variation?: [number, number, number];
+  /** models pass: back-lit fibre fuzz on the silhouette (0..1, wool; default 0.25) */
+  fuzz?: number;
   /** models pass: folds gathered under a belt at the [lower, upper] edge of this piece: amount (0..1.5), falloff (m), fold spacing (m) */
   gather?: { lower?: number; upper?: number; falloff?: number; spacing?: number };
+  /** models pass: which rasterised side is the garment's INSIDE (darkened); see insideFace(geometry) */
+  inside?: 'front' | 'back';
   side?: THREE.Side;
 }
 
@@ -391,7 +415,7 @@ export function clothMaterial(o: ClothOptions): THREE.MeshStandardMaterial {
     uDust: { value: lin(o.dust ?? 0x9c8466) },
     uTransmit: { value: o.transmit ?? 0.9 },
     uGap: { value: o.gap ?? 0 },
-    uVar: { value: new THREE.Vector4(...(o.variation ?? [0.05, 0.1, 0.02]), 0) },
+    uVar: { value: new THREE.Vector4(...(o.variation ?? [0.05, 0.1, 0.02]), o.fuzz ?? 0.25) },
     uGather: { value: new THREE.Vector4(o.gather?.lower ?? 0, o.gather?.upper ?? 0, o.gather?.falloff ?? 0.07, o.gather?.spacing ?? 0.035) },
     uSunDirW: shared.uSunDir,
     uSunCol: shared.uSunColor,
@@ -411,7 +435,7 @@ export function clothMaterial(o: ClothOptions): THREE.MeshStandardMaterial {
   }
   m.userData.wardrobe = u;
   const gather = !!o.gather && ((o.gather.lower ?? 0) > 0 || (o.gather.upper ?? 0) > 0);
-  const defs = `#define W_BANDS ${bands.length}\n#define W_HOLES ${holes.length}\n` + (low ? '#define W_LOW\n' : '') + (o.sway ? '#define W_SWAY\n' : '') + (o.collide ? '#define W_COLLIDE\n' : '') + (gather ? '#define W_GATHER\n' : '');
+  const defs = `#define W_BANDS ${bands.length}\n#define W_HOLES ${holes.length}\n` + (low ? '#define W_LOW\n' : '') + (o.sway ? '#define W_SWAY\n' : '') + (o.collide ? '#define W_COLLIDE\n' : '') + (gather ? '#define W_GATHER\n' : '') + (o.inside === 'front' ? '#define W_INSIDE_FRONT\n' : o.inside === 'back' ? '#define W_INSIDE_BACK\n' : '');
   m.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, u);
     shader.vertexShader = defs + shader.vertexShader
@@ -427,6 +451,32 @@ export function clothMaterial(o: ClothOptions): THREE.MeshStandardMaterial {
   };
   m.customProgramCacheKey = () => `wcloth|${defs}|${low}`;
   return m;
+}
+
+/**
+ * models pass: which rasterised side of a garment tube is its inside. The loft's winding depends on the frame (the
+ * vertex normals from computeVertexNormals point to the FRONT side): sample the normals against the outward radial
+ * direction (from the vertical axis through the piece's centre at that height).
+ */
+export function insideFace(geo: THREE.BufferGeometry): 'front' | 'back' {
+  const p = geo.getAttribute('position') as THREE.BufferAttribute;
+  const n = geo.getAttribute('normal') as THREE.BufferAttribute | undefined;
+  if (!n) return 'back';
+  let cx = 0, cz = 0;
+  for (let i = 0; i < p.count; i++) {
+    cx += p.getX(i);
+    cz += p.getZ(i);
+  }
+  cx /= p.count;
+  cz /= p.count;
+  let vote = 0;
+  const step = Math.max(1, Math.floor(p.count / 400));
+  for (let i = 0; i < p.count; i += step) {
+    const rx = p.getX(i) - cx, rz = p.getZ(i) - cz;
+    vote += Math.sign(n.getX(i) * rx + n.getZ(i) * rz);
+  }
+  // normals outward = the front side is the outside
+  return vote >= 0 ? 'back' : 'front';
 }
 
 /** A depth material for shadows of swaying / colliding garments (so shadows match the hem). */

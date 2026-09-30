@@ -791,6 +791,7 @@ export class DavidModel {
   };
   private film: { shot: FilmShot; t: number; look: THREE.Vector3 | null; wind: number; turnAt: number; turnDur: number; mood: Expression; moodW: number; blinked: boolean } | null = null;
   private filmTurn = 0;
+  private filmBlink2 = -1;
   private filmEyes: THREE.Vector3 | null = null;
   private readonly filmLook = new THREE.Vector3();
 
@@ -1371,8 +1372,33 @@ export class DavidModel {
     const f = this.film!;
     const m = this.mixer;
     const rig = this.human.rig;
+    // breathing, visible in every film shot (the chest rises, the shoulders lift a little)
+    const br = Math.sin(f.t * Math.PI * 2 * 0.24) * 0.5 + 0.5;
+    m.add('chest', -0.018 * br, 0, 0);
+    m.add('spine', -0.006 * br, 0, 0);
     if (f.shot !== 'reveal') {
       this.mood = null;
+      if (f.shot === 'back') {
+        // D1 (cut v2): alive on the rock — the weight goes over onto the staff and settles, the head follows the flock
+        // grazing on the slope below (down and across), the free hand comes up to the sling at his belt and back
+        const u = f.t;
+        const shift = smooth01((u - 0.4) / 1.4) - 0.55 * smooth01((u - 2.6) / 1.3);
+        m.add('hipsX', 0.034 * shift);
+        m.add('hips', 0, 0, 0.045 * shift);
+        m.add('spine', 0, 0, -0.03 * shift);
+        m.add('chest', 0, 0, -0.018 * shift);
+        const follow = -0.28 + 0.5 * smooth01((u - 0.3) / 2.2) - 0.12 * smooth01((u - 2.8) / 1.0);
+        m.add('head', 0.1 + 0.03 * Math.sin(u * 0.9), follow * 0.55, 0);
+        m.add('neck', 0.05, follow * 0.35, 0);
+        const hand = smooth01((u - 1.9) / 0.45) * (1 - smooth01((u - 3.1) / 0.5));
+        m.add('uaR', -0.16 * hand, 0, 0.05 * hand);
+        m.add('faR', -0.55 * hand, 0.2 * hand, 0);
+        m.add('hdR', 0.25 * hand, 0, 0);
+        if (!f.blinked && u > 1.3) {
+          f.blinked = true;
+          rig.blink();
+        }
+      }
       this.filmEyes = null;
       return;
     }
@@ -1388,14 +1414,22 @@ export class DavidModel {
     const target = u * u * u * (u * (u * 6 - 15) + 10); // smootherstep: slow start, slow settle
     this.filmTurn = damp(this.filmTurn, target, 10, dt);
     const k = this.filmTurn;
-    m.add('head', pitch * 0.55 * k, yaw * 0.42 * k, 0);
-    m.add('neck', pitch * 0.35 * k, yaw * 0.28 * k, 0);
-    m.add('chest', 0, yaw * 0.18 * k, 0);
-    m.add('spine', 0, yaw * 0.12 * k, 0);
-    // the eyes lead the head by ~0.3 s; a blink as the turn begins
+    // the head leads; the shoulders follow ~0.35 s later (cut v2: "the head and then the shoulders turn into the light")
+    const us = clamp((f.t - f.turnAt - 0.35) / Math.max(0.1, f.turnDur), 0, 1);
+    const ks = us * us * us * (us * (us * 6 - 15) + 10);
+    m.add('head', pitch * 0.55 * k, yaw * 0.46 * k, 0.03 * k);
+    m.add('neck', pitch * 0.35 * k, yaw * 0.3 * k, 0);
+    m.add('chest', 0, yaw * 0.16 * ks, 0);
+    m.add('spine', 0, yaw * 0.1 * ks, 0);
+    // the eyes lead the head by ~0.3 s; a blink as the turn begins, and one more as the eyes settle (not a stare)
     this.filmEyes = f.t > f.turnAt - 0.3 ? look : null;
     if (!f.blinked && f.t > f.turnAt + 0.05) {
       f.blinked = true;
+      this.filmBlink2 = f.turnAt + f.turnDur * 0.8 + 0.4;
+      rig.blink();
+    }
+    if (this.filmBlink2 > 0 && f.t > this.filmBlink2) {
+      this.filmBlink2 = -1;
       rig.blink();
     }
     this.mood = u > 0.35 ? f.mood : 'neutral';

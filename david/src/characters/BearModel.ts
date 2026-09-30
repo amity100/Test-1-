@@ -474,15 +474,19 @@ void RE_Direct_Fur(const in IncidentLight directLight, const in vec3 geometryPos
   return m;
 }
 
+/** models pass (CUT v2): tapetum eye-shine strength of every bear eye (0 in gameplay; the film's H2 raises it) */
+const eyeShineU = { value: 0 };
+
 function makeExtrasMaterial() {
   const m = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.4, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.06 });
   m.name = 'bear-extras';
   m.onBeforeCompile = (s) => {
+    s.uniforms.uEyeShine = eyeShineU;
     s.vertexShader = s.vertexShader
       .replace('#include <common>', `#include <common>\nattribute vec4 aux;\nvarying vec4 vAux;\nvarying vec3 vBindN;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>\nvAux = aux;\nvBindN = normal;`);
     s.fragmentShader = s.fragmentShader
-      .replace('#include <common>', `#include <common>\nvarying vec4 vAux;\nvarying vec3 vBindN;\nfloat exRough; float exCoat;`)
+      .replace('#include <common>', `#include <common>\nvarying vec4 vAux;\nvarying vec3 vBindN;\nuniform float uEyeShine;\nfloat exRough; float exCoat; float exShine = 0.0;`)
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
@@ -499,6 +503,9 @@ function makeExtrasMaterial() {
     vec3 irisC = mix(vec3(0.075, 0.036, 0.014), vec3(0.24, 0.12, 0.04), ring);
     diffuseColor.rgb = mix(mix(sclera, irisC, iris), vec3(0.003), pupil);
     exRough = 0.12; exCoat = 1.0;
+    // tapetum lucidum: behind the pupil the eye returns light toward its source (a lamp / the sky behind the
+    // viewer) — a faint AMBER shine, strongest in the pupil, never red (visual-bible 3.15)
+    exShine = smoothstep(0.62, 0.9, c);
   } else if (kind < 1.5) {
     // claw: dark horn at the root -> pale ivory tip
     float t = vAux.y;
@@ -513,9 +520,18 @@ function makeExtrasMaterial() {
 }`,
       )
       .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = exRough;')
-      .replace('#include <lights_physical_fragment>', '#include <lights_physical_fragment>\nmaterial.clearcoat *= exCoat;');
+      .replace('#include <lights_physical_fragment>', '#include <lights_physical_fragment>\nmaterial.clearcoat *= exCoat;')
+      .replace(
+        '#include <emissivemap_fragment>',
+        `#include <emissivemap_fragment>
+if (uEyeShine > 0.0 && exShine > 0.0) {
+  // retro-reflection: only where the eye faces the viewer (vViewPosition points from the surface to the camera)
+  float face = smoothstep(0.3, 0.85, dot(normalize(normal), normalize(vViewPosition)));
+  totalEmissiveRadiance += vec3(1.0, 0.58, 0.2) * uEyeShine * exShine * face;
+}`,
+      );
   };
-  m.customProgramCacheKey = () => 'bear-extras-v2';
+  m.customProgramCacheKey = () => 'bear-extras-v3';
   return m;
 }
 
@@ -658,6 +674,17 @@ export class BearModel {
   speed = 0;
   hold: BearHold = 'none';
   roar = 0; // 0..1 mouth open / roar intensity (set by gameplay)
+  /**
+   * models pass (CUT v2): tapetum eye-shine (HDR emissive strength, amber) of the bear's eyes — 0 in gameplay; the
+   * film's H2 ("two eyes open in the dark") sets ≈ 2-4 so the eyes catch the light while the body stays dark.
+   * Shared by every bear (one uniform).
+   */
+  get eyeShine() {
+    return eyeShineU.value;
+  }
+  set eyeShine(v: number) {
+    eyeShineU.value = Math.max(0, v);
+  }
   lookTarget: THREE.Vector3 | null = null;
   deathT = -1;
   ground?: (x: number, z: number) => number;

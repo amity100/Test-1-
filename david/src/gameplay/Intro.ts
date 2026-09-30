@@ -12,9 +12,10 @@ import { narration } from '../content/introNarration';
 import { verseArgs } from '../content/sources';
 import type { FilmStage, FilmSetHandle, FilmStageSet } from '../film/FilmStage';
 import { FilmWorld } from '../film/FilmWorld';
+import { applyHandheld } from '../film/FilmCams';
 
 /**
- * THE OPENING FILM "הַטּוֹב מִמֶּךָּ" (docs/intro-script.md, ≈2:45): the player of the shot sheet
+ * THE OPENING FILM "הַטּוֹב מִמֶּךָּ" (CUT v2, docs/intro-script-v2.md, 58 s): the player of the shot sheet
  * src/content/introScript.ts. It switches between the film sets (src/film/FilmStage.ts: the prologue land sets, Gilgal)
  * and the game world (src/film/FilmWorld.ts: Rachel's pillar, Bethlehem, David, the flock, the thicket) with
  * engine.setView / restoreWorldView / resetTemporal on every cut, drives the letterbox, depth of field, the film look
@@ -22,7 +23,10 @@ import { FilmWorld } from '../film/FilmWorld';
  * catalog helpers), keeps the score locked to the picture, and hands off to gameplay (David on his rock).
  *
  * Black is drawn by the renderer (post.grade uFade), so the time card and the title sit above it and every
- * dissolve from / into black is a real crossfade of the canvas.
+ * dissolve from / into black is a real crossfade of the canvas. CUT v2 transitions are a pure function of film time
+ * (seek-safe): the first shot rises out of black after `hold`, the G7 -> D1 'light' cut is a warm white flash centred
+ * on the cut (uFade toward look.uFadeColor), 'smash' is black in one frame. Every camera gets the handheld layer of
+ * src/film/FilmCams.ts (TAKE_LOOK).
  */
 export interface IntroHost {
   engine: Engine;
@@ -43,8 +47,13 @@ export interface IntroPreloadOptions {
 
 /** heading David is given for the first gameplay frame (facing the pasture and the flock) */
 const GAMEPLAY_HEADING = 0.46;
-/** the sunlit cloud colour the rise dissolves through into Bethlehem (shot 13 -> 14) */
-const CLOUD_LIGHT = 0xf2e6cf;
+/** the warm white of the light-flash cut G7 -> D1 */
+const FLASH_LIGHT = new THREE.Color(1.0, 0.95, 0.84);
+const BLACK = new THREE.Color(0, 0, 0);
+const smooth01 = (x: number) => {
+  const u = Math.max(0, Math.min(1, x));
+  return u * u * (3 - 2 * u);
+};
 
 let stageP: Promise<FilmStage | null> | null = null;
 let stageLive: FilmStage | null = null;
@@ -348,8 +357,9 @@ export class Intro {
       if (engine.view) engine.restoreWorldView({ crossfade: 2.2 });
       else engine.crossfade(2.2);
       this.setBlack(0);
-      window.setTimeout(() => ui.titleCard(false), 250);
+      window.setTimeout(() => ui.titleCard(false, 1.9), 150);
     }
+    this.setBlack(0, BLACK);
     post.setLetterbox(null, skipped ? 0.8 : 2.4);
     post.setFilmLook(this.savedFilm, skipped ? 0.8 : 2.6);
     post.setDoF({ enabled: false, target: null });
@@ -431,18 +441,21 @@ export class Intro {
     if (s.set === 'black') return { set: 'black', take: s.take };
     if (s.set === 'world') return { set: 'world', take: s.take };
     if (this.handle(s)) return { set: 'stage', take: s.take };
-    return { set: 'world', take: s.set === 'gilgal' || s.set === 'coast' ? 'contrast' : 'bethlehem' };
+    return { set: 'world', take: 'vista' };
   }
 
   private enter(i: number, instant = false) {
     const { engine, audio, ui } = this.h;
     const s = this.plan[i].shot;
     this.idx = i;
-    const fade = instant ? 0 : s.cut === 'dissolve' || s.cut === 'match' || s.cut === 'light' || s.cut === 'black' ? s.fade ?? 1.2 : 0;
-    const opts = fade > 0 ? { crossfade: fade, through: s.cut === 'light' ? CLOUD_LIGHT : undefined } : {};
+    // dissolves crossfade the canvas; 'black' and 'light' are drawn by the grade (fadeState), 'smash' is a cut to black
+    const fade = instant ? 0 : s.cut === 'dissolve' || s.cut === 'match' ? s.fade ?? 0.8 : 0;
+    const opts = fade > 0 ? { crossfade: fade } : {};
     const tk = this.takeOf(s);
-    // stage the actors for the new take first (a cut shows them already in place)
+    // stage the actors for the new take first (a cut shows them already in place); leaving the world gives it back
+    // its own exposure before a film set's view saves it
     if (tk.set === 'world') this.world.enter(tk.take);
+    else this.world.suspend();
     const hdl = tk.set === 'stage' ? this.handle(s) : null;
     if (hdl) hdl.enter(tk.take);
     if (tk.set === 'black') {
@@ -453,7 +466,7 @@ export class Intro {
       else engine.resetTemporal(opts);
     } else if (engine.view) engine.restoreWorldView(opts);
     else engine.resetTemporal(opts);
-    this.setBlack(tk.set === 'black' ? 1 : 0);
+    this.applyFade();
     // the new frame is posed before it renders (no frame of the old camera in the new set)
     this.updateShot(0);
     // a set the film has left for good is disposed now (phones: memory)
@@ -464,9 +477,11 @@ export class Intro {
     }
     // sound design hooks the score does not own (the score keys on the cue sheet itself)
     try {
-      if (s.id === 'thicket' && !this.birdsOff) {
-        this.birdsOff = true;
-        audio.ambience(0.32, 0, 0); // the birds fall silent; only the wind
+      if (s.id === 'flight') {
+        // the wisps rushing past the lens (the skim and the dive through the deck), on the film clock in tests
+        const el0 = instant ? Math.max(0, this.t - this.plan[i].start) : 0;
+        const w = ui.filmWisps(el0, !this.testClock);
+        if (this.testClock) this.liveTexts.push({ el: w, start: this.plan[i].start, dur: 4.2 });
       }
       if (s.id === 'title' && !this.titleShown) {
         this.titleShown = true;
@@ -496,16 +511,22 @@ export class Intro {
     let focus: { point: THREE.Vector3; fStop: number } | null = null;
     let cam: THREE.PerspectiveCamera | null = null;
     let camPos: THREE.Vector3 | null = null;
+    this.applyFade();
     if (tk.set === 'world') {
       this.world.tick(tk.take, lt, dt);
       this.world.frame(tk.take, u, lt, this.frame);
+      applyHandheld(tk.take, lt, this.t, this.frame);
       focus = this.world.focus(tk.take, lt);
+      this.portrait(this.frame, focus?.point ?? null);
       cam = this.h.engine.camera;
       camPos = this.frame.pos; // the CameraRig poses the world camera after this update: focus on this frame's lens
     } else if (tk.set === 'stage') {
       const hdl = this.handle(s)!;
       hdl.tick(tk.take, lt, dt);
+      focus = hdl.focus(tk.take, lt);
       if (hdl.frame(tk.take, u, lt, this.f2)) {
+        applyHandheld(tk.take, lt, this.t, this.f2);
+        this.portrait(this.f2, focus?.point ?? null);
         const c = hdl.camera;
         c.position.copy(this.f2.pos);
         c.up.set(0, 1, 0);
@@ -519,7 +540,6 @@ export class Intro {
         c.updateMatrixWorld();
         cam = c;
       }
-      focus = hdl.focus(tk.take, lt);
     }
     this.sfx(s, lt);
     if (!post.dofAvailable) return;
@@ -528,6 +548,37 @@ export class Intro {
       post.setDoF({ enabled: true, focusDistance: d, fStop: focus.fStop, focalLength: null, target: null });
     } else if (post.dofSettings.enabled) post.setDoF({ enabled: false, target: null });
   }
+
+  /**
+   * Phones in portrait: the shots are composed for a 2.39 frame, and the lens keeps its vertical angle, so a tall
+   * screen would show only the middle quarter of the composition (the subject on a third is lost). The lens widens
+   * to keep ~45 % of the horizontal coverage and turns toward the take's focus point (by design the subject: eyes,
+   * the fist, the stone, the lamb).
+   */
+  private portrait(f: ShotFrame, subject: THREE.Vector3 | null) {
+    const el = this.h.engine.renderer.domElement;
+    const aspect = el.clientWidth / Math.max(1, el.clientHeight);
+    if (!(aspect < 0.95)) return;
+    const fov = f.fov ?? 40;
+    const k = Math.min(2.6, Math.max(1, (0.45 * 2.39) / aspect));
+    const half = Math.atan(Math.tan(THREE.MathUtils.degToRad(fov) / 2) * k);
+    f.fov = Math.min(78, THREE.MathUtils.radToDeg(2 * half));
+    if (subject) {
+      // re-aim horizontally toward the subject (keep the shot's tilt)
+      const d = this.pv.copy(f.look).sub(f.pos);
+      const dist = d.length();
+      const s = this.pv2.copy(subject).sub(f.pos);
+      const sd = s.length();
+      if (dist > 1e-4 && sd > 0.3) {
+        d.multiplyScalar(1 / dist);
+        s.multiplyScalar(1 / sd);
+        d.lerp(s, 0.6).normalize();
+        f.look.copy(f.pos).addScaledVector(d, dist);
+      }
+    }
+  }
+  private readonly pv = new THREE.Vector3();
+  private readonly pv2 = new THREE.Vector3();
 
   /** one-shot sounds inside shots (breathing in the thicket, the lamb) */
   private sfx(s: IntroShot, lt: number) {
@@ -542,8 +593,18 @@ export class Intro {
       }
     };
     const a = this.h.audio;
-    if (s.id === 'thicket') fire('breath', 1.0, () => a.sfx('bearGrowl', { volume: 0.28, pitch: 0.7 }));
-    if (s.id === 'eyes') fire('lamb', 0.2, () => a.sfx('lambBleat', { volume: 0.5 }));
+    const b = s.beats ?? {};
+    if (s.id === 'thicket') {
+      // the birds fall silent (beats.birdsStop); the lamb's small bleat as its head comes up
+      fire('birds', b.birdsStop ?? 0.4, () => {
+        if (!this.birdsOff) {
+          this.birdsOff = true;
+          a.ambience(0.32, 0, 0);
+        }
+      });
+      fire('lamb', (b.lambHead ?? 1.5) + 0.1, () => a.sfx('lambBleat', { volume: 0.35 }));
+    }
+    if (s.id === 'eyes') fire('breath', 0.2, () => a.sfx('bearGrowl', { volume: 0.26, pitch: 0.62 }));
   }
 
   private fireText() {
@@ -558,22 +619,67 @@ export class Intro {
     const { ui } = this.h;
     const auto = !this.testClock;
     let el: HTMLElement | null = null;
+    const o = {
+      side: x.side,
+      v: x.v,
+      stagger: x.stagger,
+      refAfter: x.refAfter,
+      // speech-synced words: shot seconds -> seconds from the text's start
+      words: x.words ? x.words.map((w) => Math.max(0, w.t - x.at)) : undefined,
+    };
     if (x.kind === 'verse' && x.quote) {
       const [text, ref] = verseArgs(x.quote);
-      el = ui.filmText('verse', text, ref, x.seconds, elapsed, auto);
+      el = ui.filmText('verse', text, ref, x.seconds, elapsed, auto, o);
     } else {
       const ids = x.narration ?? [];
       if (!ids.length) return;
-      if (x.kind === 'person') el = ui.filmText('person', narration(ids[0]), ids[1] ? narration(ids[1]) : '', x.seconds, elapsed, auto);
-      else el = ui.filmText(x.kind, narration(ids[0]), '', x.seconds, elapsed, auto);
+      if (x.kind === 'person') el = ui.filmText('person', narration(ids[0]), ids[1] ? narration(ids[1]) : '', x.seconds, elapsed, auto, o);
+      else el = ui.filmText(x.kind, narration(ids[0]), '', x.seconds, elapsed, auto, o);
     }
     if (el && this.testClock) this.liveTexts.push({ el, start, dur: x.seconds });
   }
 
   /** black drawn by the renderer (post grade uFade): texts and the title stay above it */
-  private setBlack(v: number) {
+  private setBlack(v: number, color: THREE.Color = BLACK) {
     this.black = v;
-    const u = this.h.engine.post.grade.uniforms.uFade;
+    const post = this.h.engine.post;
+    const u = post.grade.uniforms.uFade;
     if (u) u.value = v;
+    const c = post.look.uFadeColor;
+    if (c && !(c.value as THREE.Color).equals(color)) (c.value as THREE.Color).copy(color);
+  }
+
+  /**
+   * The grade's fade for film time t (pure: seek-safe): out of black at the start, the warm light-flash across the
+   * 'light' cut (half before it, half after), black on 'black' / 'smash' shots (the title).
+   */
+  private fadeState(): { v: number; color: THREE.Color } {
+    const p = this.plan[this.idx];
+    if (!p) return { v: 1, color: BLACK };
+    const s = p.shot;
+    const lt = this.t - p.start;
+    if (s.set === 'black') return { v: 1, color: BLACK };
+    if (s.cut === 'black') {
+      const hold = s.hold ?? 0.3, f = s.fade ?? 1.2;
+      return { v: 1 - smooth01((lt - hold) / f), color: BLACK };
+    }
+    // the flash: the second half after a 'light' cut ...
+    if (s.cut === 'light') {
+      const half = (s.fade ?? 0.6) / 2;
+      if (lt < half * 1.25) return { v: 1 - smooth01(lt / (half * 1.25)), color: FLASH_LIGHT };
+    }
+    // ... and the first half before it (at the end of the previous shot)
+    const next = this.plan[this.idx + 1];
+    if (next && next.shot.cut === 'light') {
+      const half = (next.shot.fade ?? 0.6) / 2;
+      const to = next.start - this.t;
+      if (to < half * 0.8) return { v: smooth01(1 - to / (half * 0.8)), color: FLASH_LIGHT };
+    }
+    return { v: 0, color: BLACK };
+  }
+
+  private applyFade() {
+    const f = this.fadeState();
+    this.setBlack(f.v, f.color);
   }
 }

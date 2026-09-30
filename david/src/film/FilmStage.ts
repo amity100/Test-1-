@@ -478,7 +478,8 @@ export class FilmStage {
         // the host marches from the head of its road at the cut into P4 (the lens is keyed to the column's head)
         if (extra.host && (take === 'threat' || take === 'glint')) extra.host.setTravel(0);
       },
-      tick(_take, t, dt) {
+      tick(take, t, dt) {
+        expMul = takeExposure(take, t);
         const h = engine.renderer.domElement.height;
         if (extra.host) {
           extra.host.crowd.viewportHeight = h; // keeps the far spear shafts visible
@@ -599,6 +600,7 @@ export class FilmStage {
         if (!gilgal.shots[name]) return;
         if (current !== take) this.enter(take);
         const t = t0 + (TAKE_OFFSET[take] ?? 0);
+        expMul = takeExposure(take, t0);
         gilgal.setBeat(name, t);
         if (army && armyOk) {
           try {

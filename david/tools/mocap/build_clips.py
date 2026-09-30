@@ -91,7 +91,11 @@ def build(spec, tg, verbose=True):
     if loop:
         lo, hi = loop
         stationary = 'idle' in spec.get('tags', [])
-        cost, a, bb = find_loop(clip, tg, lo, hi, search_start_s=spec.get('loopSearch', 0.3), stationary=stationary)
+        if spec.get('loopWhole'):
+            # a take that IS one cycle whose last frame repeats the first (Rocketbox walks): loop [0, F-1)
+            a, bb, cost = 0, len(clip.hips) - 1, 0.0
+        else:
+            cost, a, bb = find_loop(clip, tg, lo, hi, search_start_s=spec.get('loopSearch', 0.3), stationary=stationary)
         make_loop(clip, tg, a, bb)
         if spec.get('straight', 'loco' in spec.get('tags', []) or stationary):
             straighten_loop(clip)

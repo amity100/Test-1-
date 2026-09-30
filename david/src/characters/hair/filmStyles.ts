@@ -39,8 +39,9 @@ function greyWhite(R: () => number, f: THREE.Vector3, root: THREE.Color, tip: TH
     vary(tip, R, 0.2);
     return;
   }
-  if (r < 0.35) lin([0.86, 0.85, 0.82], root);
-  else lin([0.66, 0.645, 0.61], root);
+  // (models pass: a little greyer at the roots — the white mass needs depth, not a white wall)
+  if (r < 0.35) lin([0.8, 0.79, 0.76], root);
+  else lin([0.6, 0.585, 0.555], root);
   vary(root, R, 0.12);
   // yellowed, sun-bleached tips (old white hair in the sun is ivory, never blue-white)
   lin([0.8, 0.77, 0.7], tip).lerp(root, 0.4 + 0.3 * R());
@@ -73,23 +74,26 @@ export function samuelStyle(): GroomStyle {
       out.x += 0.3 * vnoise(f.x * 20, f.y * 20, f.z * 20, 7);
       return out;
     },
-    lift: 0.12,
-    gravity: 16,
-    combPull: 10,
-    tousle: 4,
+    // models pass (CUT v2): in the verdict close-up the hair read as a spiky white mop (strands radiating in every
+    // direction). Long uncut hair is HEAVY: it falls in big coherent locks with gentle waves — less lift / tousle /
+    // curl noise, strong clumping, almost no frizz or flyaways, a little heavier and stiffer
+    lift: 0.06,
+    gravity: 22,
+    combPull: 14,
+    tousle: 1.5,
     // stay clear of the mantle over the shoulders and the back (1-3 cm of wool over the skin)
-    volume: (t, R) => 0.004 + (R + 0.004) * ss(0, 0.25, t) + 0.03 * ss(0.35, 0.7, t),
-    curlR: [0.004, 0.011],
-    curlPitch: [0.1, 0.16],
+    volume: (t, R) => 0.004 + (R + 0.004) * ss(0, 0.25, t) + 0.02 * ss(0.35, 0.7, t),
+    curlR: [0.003, 0.008],
+    curlPitch: [0.14, 0.22],
     curlStart: 0.3,
-    curlNoise: 0.8,
+    curlNoise: 0.35,
     straightLocks: 0.3,
-    lockR: 0.013,
-    clump: 0.62,
-    frizz: 0.0015, // old, dry, loose hair (פֶּרַע): a little frizzy (was 0.0022)
-    flyaway: 0.014, // (was 0.03: too many lone strays read as stringy)
+    lockR: 0.012,
+    clump: 0.84,
+    frizz: 0.0005, // (cast 0.0015, originally 0.0022)
+    flyaway: 0.003, // (cast 0.014, originally 0.03)
     width: 0.00015,
-    stiffness: 0.22,
+    stiffness: 0.3,
     childLen: [0.72, 1.0],
     colors: (R, f, root, tip) => greyWhite(R, f, root, tip, 0.1),
   };
@@ -117,20 +121,21 @@ export function samuelStyle(): GroomStyle {
       dir(out, Math.sign(f.x) * (0.1 + 0.9 * must), -1, 0.35 - 0.25 * must);
       return out;
     },
-    lift: 0.08,
-    gravity: 18,
-    combPull: 12,
-    tousle: 3,
-    volume: (t, R) => 0.002 + (R + 0.002) * ss(0, 0.3, t) + 0.006 * ss(0.2, 0.7, t),
-    curlR: [0.003, 0.007],
-    curlPitch: [0.04, 0.07],
+    // models pass: a heavy, full beard falling in groomed wavy locks (no radiating strays)
+    lift: 0.05,
+    gravity: 22,
+    combPull: 13,
+    tousle: 1.2,
+    volume: (t, R) => 0.002 + (R + 0.002) * ss(0, 0.3, t) + 0.005 * ss(0.2, 0.7, t),
+    curlR: [0.0025, 0.005],
+    curlPitch: [0.06, 0.1],
     curlStart: 0.25,
-    curlNoise: 0.6, // face pass 2: wavy LOCKS with structure, not a fuzzy white mass (was 0.8)
+    curlNoise: 0.35, // (face pass 2 0.6, originally 0.8)
     straightLocks: 0.35,
     lockR: 0.0068,
-    clump: 0.76, // (was 0.55)
-    frizz: 0.0006, // (was 0.001)
-    flyaway: 0.0025, // (was 0.004)
+    clump: 0.88, // (face pass 2 0.76, originally 0.55)
+    frizz: 0.0003, // (0.0006)
+    flyaway: 0.0008, // (0.0025)
     width: 0.0002,
     stiffness: 0.35,
     childLen: [0.7, 1.0],
@@ -151,8 +156,9 @@ export function samuelStyle(): GroomStyle {
     layers: [scalp, beard],
     ctrl: { low: 10, medium: 14, high: 20 },
     segs: { low: 14, medium: 24, high: 38 },
-    shading: { shift: 0.03, roughness: 0.45, specular: 0.45, backlit: 0.9, scatter: 0.75, aoDirect: 0.5 },
-    capColor: [0.74, 0.72, 0.67], // the scalp cap near the white hair (a grey cap showed through; brighter lit the moustache white)
+    // (models pass: less back-lit glow — the white mass lit up like a halo against the low sun)
+    shading: { shift: 0.03, roughness: 0.45, specular: 0.42, backlit: 0.55, scatter: 0.75, aoDirect: 0.55 },
+    capColor: [0.62, 0.6, 0.56], // the scalp cap near the white hair (models pass: a shade greyer — the beard read as a white wall)
     capOffset: 0.005,
     capBeard: 0.55,
     widthTier: { low: 2.8, medium: 1.5, high: 1 },
@@ -191,16 +197,17 @@ export function elderStyle(seed: number): GroomStyle {
     lift: 0.1,
     gravity: 13,
     combPull: 12,
-    tousle: 4,
-    volume: (t, Rv) => 0.003 + (Rv + 0.003) * ss(0, 0.3, t) + 0.015 * ss(0.4, 0.8, t),
-    curlR: wavy > 0.5 ? [0.003, 0.007] : [0.0015, 0.004],
-    curlPitch: wavy > 0.5 ? [0.03, 0.05] : [0.08, 0.14],
+    // models pass: groomed, heavier locks (read stringy in medium shots)
+    tousle: 2,
+    volume: (t, Rv) => 0.003 + (Rv + 0.003) * ss(0, 0.3, t) + 0.012 * ss(0.4, 0.8, t),
+    curlR: wavy > 0.5 ? [0.003, 0.006] : [0.0015, 0.0035],
+    curlPitch: wavy > 0.5 ? [0.04, 0.065] : [0.09, 0.15],
     curlStart: 0.25,
-    curlNoise: 0.7,
+    curlNoise: 0.45,
     lockR: 0.008,
-    clump: 0.55,
-    frizz: 0.0016,
-    flyaway: 0.015,
+    clump: 0.76,
+    frizz: 0.0008,
+    flyaway: 0.005,
     width: 0.00011,
     stiffness: 0.25,
     childLen: [0.75, 1.0],
@@ -227,19 +234,19 @@ export function elderStyle(seed: number): GroomStyle {
       dir(out, Math.sign(f.x) * (0.12 + 0.9 * must), -1, 0.35 - 0.25 * must);
       return out;
     },
-    lift: 0.22,
-    gravity: 14,
-    combPull: 11,
-    tousle: 3,
-    volume: (t, Rv) => 0.0018 + (Rv + 0.002) * ss(0, 0.3, t) + 0.005 * ss(0.2, 0.8, t),
-    curlR: [0.002, 0.005],
-    curlPitch: [0.02, 0.04],
+    lift: 0.14,
+    gravity: 16,
+    combPull: 12,
+    tousle: 1.6,
+    volume: (t, Rv) => 0.0018 + (Rv + 0.002) * ss(0, 0.3, t) + 0.004 * ss(0.2, 0.8, t),
+    curlR: [0.002, 0.0045],
+    curlPitch: [0.035, 0.06],
     curlStart: 0.2,
-    curlNoise: 0.7,
-    lockR: 0.005,
-    clump: 0.55,
-    frizz: 0.0009,
-    flyaway: 0.006,
+    curlNoise: 0.45,
+    lockR: 0.0055,
+    clump: 0.8,
+    frizz: 0.0005,
+    flyaway: 0.002,
     width: 0.00017,
     stiffness: 0.4,
     childLen: [0.7, 1.0],
@@ -251,7 +258,7 @@ export function elderStyle(seed: number): GroomStyle {
     layers: [scalp, beard],
     ctrl: { low: 9, medium: 12, high: 16 },
     segs: { low: 12, medium: 18, high: 28 },
-    shading: { shift: 0.03, roughness: 0.42, specular: 0.5, backlit: 0.8, scatter: 0.65, aoDirect: 0.5 },
+    shading: { shift: 0.03, roughness: 0.42, specular: 0.48, backlit: 0.6, scatter: 0.65, aoDirect: 0.55 },
     capColor: [capG, capG * 0.96, capG * 0.9],
     capOffset: 0.004,
     capBeard: 0.8,

@@ -286,11 +286,11 @@
   "frames": 51,
   "fps": 30.0,
   "loop": false,
-  "speed": 0.1383,
-  "distance": 0.2352,
+  "speed": 0.1342,
+  "distance": 0.2282,
   "turn": 1.1219,
   "cycle": null,
-  "bytes": 7912,
+  "bytes": 7904,
   "range": [
    0.0,
    1.7
@@ -851,11 +851,11 @@
   "frames": 360,
   "fps": 30.0,
   "loop": false,
-  "speed": 0.017,
-  "distance": 0.2037,
+  "speed": 0.0165,
+  "distance": 0.1976,
   "turn": -0.123,
   "cycle": null,
-  "bytes": 51169,
+  "bytes": 51145,
   "range": [
    1.0,
    13.0
@@ -1196,6 +1196,798 @@
   "range": [
    4.5,
    9.0
+  ]
+ },
+ "cheer_1": {
+  "file": "cheer_1.binz",
+  "src": "rb:m_cheer_02",
+  "desc": "roar: both fists thrust high, pumping (Rocketbox m_cheer_02)",
+  "tags": [
+   "film",
+   "army",
+   "gesture",
+   "rb"
+  ],
+  "duration": 2.9,
+  "frames": 87,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.0255,
+  "distance": 0.074,
+  "turn": -0.0914,
+  "cycle": null,
+  "bytes": 15132,
+  "range": [
+   0.0,
+   2.9
+  ]
+ },
+ "cheer_2": {
+  "file": "cheer_2.binz",
+  "src": "rb:m_cheer_04",
+  "desc": "roar: both arms up and held (Rocketbox m_cheer_04)",
+  "tags": [
+   "film",
+   "army",
+   "gesture",
+   "rb"
+  ],
+  "duration": 3.6,
+  "frames": 108,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.0431,
+  "distance": 0.1552,
+  "turn": 0.2175,
+  "cycle": null,
+  "bytes": 15633,
+  "range": [
+   0.2,
+   3.8
+  ]
+ },
+ "cheer_3": {
+  "file": "cheer_3.binz",
+  "src": "rb:m_cheer_03",
+  "desc": "roar: right fist raised (Rocketbox m_cheer_03)",
+  "tags": [
+   "film",
+   "army",
+   "gesture",
+   "rb"
+  ],
+  "duration": 2.7,
+  "frames": 81,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.0014,
+  "distance": 0.0038,
+  "turn": -0.0055,
+  "cycle": null,
+  "bytes": 10517,
+  "range": [
+   0.3,
+   3.0
+  ]
+ },
+ "cheer_4": {
+  "file": "cheer_4.binz",
+  "src": "rb:m_cheer_05",
+  "desc": "roar: right fist pumping (Rocketbox m_cheer_05)",
+  "tags": [
+   "film",
+   "army",
+   "gesture",
+   "rb"
+  ],
+  "duration": 2.8,
+  "frames": 84,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.006,
+  "distance": 0.0167,
+  "turn": 0.3081,
+  "cycle": null,
+  "bytes": 13167,
+  "range": [
+   0.2,
+   3.0
+  ]
+ },
+ "cheer_5": {
+  "file": "cheer_5.binz",
+  "src": "rb:m_cheer_01",
+  "desc": "roar: fists up to the head, shouting (Rocketbox m_cheer_01)",
+  "tags": [
+   "film",
+   "army",
+   "gesture",
+   "rb"
+  ],
+  "duration": 3.3,
+  "frames": 99,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.0093,
+  "distance": 0.0307,
+  "turn": -0.0187,
+  "cycle": null,
+  "bytes": 14298,
+  "range": [
+   11.0,
+   14.3
+  ]
+ },
+ "walk_cool": {
+  "file": "walk_cool.binz",
+  "src": "rb:m_walk_cool_01",
+  "desc": "a proud, regal stride (Rocketbox m_walk_cool_01)",
+  "tags": [
+   "film",
+   "saul",
+   "loco",
+   "rb"
+  ],
+  "duration": 1.2667,
+  "frames": 38,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 1.1443,
+  "distance": 1.4495,
+  "turn": -0.012,
+  "cycle": [
+   -0.0942,
+   1.4464,
+   -0.01199
+  ],
+  "bytes": 6658,
+  "range": [
+   0.0,
+   1.3
+  ]
+ },
+ "walk_cool_b": {
+  "file": "walk_cool_b.binz",
+  "src": "rb:m_walk_cool_02",
+  "desc": "a confident stride, longer steps (Rocketbox m_walk_cool_02)",
+  "tags": [
+   "film",
+   "saul",
+   "army",
+   "loco",
+   "rb"
+  ],
+  "duration": 1.1333,
+  "frames": 34,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 1.4647,
+  "distance": 1.66,
+  "turn": 0.0024,
+  "cycle": [
+   -0.055,
+   1.6591,
+   0.0024
+  ],
+  "bytes": 6127,
+  "range": [
+   0.0,
+   1.167
+  ]
+ },
+ "walk_slow": {
+  "file": "walk_slow.binz",
+  "src": "rb:m_walk_slow_01",
+  "desc": "slow, upright walk (Rocketbox m_walk_slow_01)",
+  "tags": [
+   "film",
+   "samuel",
+   "elders",
+   "loco",
+   "rb"
+  ],
+  "duration": 1.4667,
+  "frames": 44,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 0.9032,
+  "distance": 1.3248,
+  "turn": 0.0009,
+  "cycle": [
+   -0.1882,
+   1.3113,
+   0.00086
+  ],
+  "bytes": 7287,
+  "range": [
+   0.0,
+   1.5
+  ]
+ },
+ "walk_n1": {
+  "file": "walk_n1.binz",
+  "src": "rb:m_walk_neutral_01",
+  "desc": "walk (Rocketbox m_walk_neutral_01)",
+  "tags": [
+   "film",
+   "army",
+   "loco",
+   "rb"
+  ],
+  "duration": 1.2,
+  "frames": 36,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 1.1075,
+  "distance": 1.3289,
+  "turn": -0.0093,
+  "cycle": [
+   -0.0595,
+   1.3276,
+   -0.00929
+  ],
+  "bytes": 6210,
+  "range": [
+   0.0,
+   1.233
+  ]
+ },
+ "walk_n2": {
+  "file": "walk_n2.binz",
+  "src": "rb:m_walk_neutral_02",
+  "desc": "walk (Rocketbox m_walk_neutral_02)",
+  "tags": [
+   "film",
+   "army",
+   "loco",
+   "rb"
+  ],
+  "duration": 1.0667,
+  "frames": 32,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 1.4639,
+  "distance": 1.5615,
+  "turn": 0.0014,
+  "cycle": [
+   0.0128,
+   1.5615,
+   0.00144
+  ],
+  "bytes": 5622,
+  "range": [
+   0.0,
+   1.1
+  ]
+ },
+ "walk_stop_rb": {
+  "file": "walk_stop_rb.binz",
+  "src": "rb:m_walk_stop",
+  "desc": "walk, halt in two steps, stand (Rocketbox m_walk_stop)",
+  "tags": [
+   "film",
+   "saul",
+   "loco",
+   "rb"
+  ],
+  "duration": 2.0333,
+  "frames": 61,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.6391,
+  "distance": 1.2995,
+  "turn": 0.0287,
+  "cycle": null,
+  "bytes": 9677,
+  "range": [
+   0.0,
+   2.033
+  ]
+ },
+ "turn_go_L": {
+  "file": "turn_go_L.binz",
+  "src": "rb:m_turn_left_180_to_walk",
+  "desc": "turn 180 deg to the left into a walk away (Rocketbox m_turn_left_180_to_walk)",
+  "tags": [
+   "film",
+   "samuel",
+   "loco",
+   "rb"
+  ],
+  "duration": 1.6667,
+  "frames": 50,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.5702,
+  "distance": 0.9504,
+  "turn": 2.7244,
+  "cycle": null,
+  "bytes": 8637,
+  "range": [
+   0.0,
+   1.667
+  ]
+ },
+ "turn_go_R": {
+  "file": "turn_go_R.binz",
+  "src": "rb:m_turn_right_180_to_walk",
+  "desc": "turn 180 deg to the right into a walk away (Rocketbox m_turn_right_180_to_walk)",
+  "tags": [
+   "film",
+   "samuel",
+   "loco",
+   "rb"
+  ],
+  "duration": 2.1,
+  "frames": 63,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.1623,
+  "distance": 0.3408,
+  "turn": -2.8515,
+  "cycle": null,
+  "bytes": 10325,
+  "range": [
+   0.0,
+   2.1
+  ]
+ },
+ "turn_180_L": {
+  "file": "turn_180_L.binz",
+  "src": "rb:m_turn_left_180",
+  "desc": "turn 180 deg to the left on the spot (Rocketbox m_turn_left_180)",
+  "tags": [
+   "film",
+   "loco",
+   "rb"
+  ],
+  "duration": 2.4667,
+  "frames": 74,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.0034,
+  "distance": 0.0084,
+  "turn": 2.9561,
+  "cycle": null,
+  "bytes": 11392,
+  "range": [
+   0.0,
+   2.467
+  ]
+ },
+ "stand_up": {
+  "file": "stand_up.binz",
+  "src": "rb:m_sit_stand_up_chair_01",
+  "desc": "rise from a seat (Rocketbox m_sit_stand_up_chair_01)",
+  "tags": [
+   "film",
+   "elders",
+   "gesture",
+   "rb"
+  ],
+  "duration": 2.5333,
+  "frames": 76,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.182,
+  "distance": 0.461,
+  "turn": 0.0331,
+  "cycle": null,
+  "bytes": 11417,
+  "range": [
+   0.0,
+   2.533
+  ]
+ },
+ "talk_angry": {
+  "file": "talk_angry.binz",
+  "src": "rb:m_gestic_talk_angry_01",
+  "desc": "angry demand: the arm raised high at 2.5 s (Rocketbox m_gestic_talk_angry_01)",
+  "tags": [
+   "film",
+   "elders",
+   "gesture",
+   "rb"
+  ],
+  "duration": 6.0,
+  "frames": 180,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.0209,
+  "distance": 0.1251,
+  "turn": -0.0516,
+  "cycle": null,
+  "bytes": 27346,
+  "range": [
+   1.5,
+   7.5
+  ]
+ },
+ "talk_excited": {
+  "file": "talk_excited.binz",
+  "src": "rb:m_gestic_talk_excited_02",
+  "desc": "excited talk, both hands (Rocketbox m_gestic_talk_excited_02)",
+  "tags": [
+   "film",
+   "elders",
+   "gesture",
+   "rb"
+  ],
+  "duration": 6.0,
+  "frames": 180,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.0192,
+  "distance": 0.1151,
+  "turn": 0.1464,
+  "cycle": null,
+  "bytes": 26672,
+  "range": [
+   1.5,
+   7.5
+  ]
+ },
+ "talk_sad": {
+  "file": "talk_sad.binz",
+  "src": "rb:m_gestic_talk_sad_01",
+  "desc": "grave, sad talk (Rocketbox m_gestic_talk_sad_01)",
+  "tags": [
+   "film",
+   "elders",
+   "samuel",
+   "gesture",
+   "rb"
+  ],
+  "duration": 6.0,
+  "frames": 180,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.0084,
+  "distance": 0.0505,
+  "turn": -0.0285,
+  "cycle": null,
+  "bytes": 22571,
+  "range": [
+   4.5,
+   10.5
+  ]
+ },
+ "listen_deny": {
+  "file": "listen_deny.binz",
+  "src": "rb:m_gestic_listen_deny_03",
+  "desc": "listens, shakes the head, turns away (Rocketbox m_gestic_listen_deny_03)",
+  "tags": [
+   "film",
+   "samuel",
+   "elders",
+   "gesture",
+   "rb"
+  ],
+  "duration": 4.0667,
+  "frames": 122,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.0001,
+  "distance": 0.0005,
+  "turn": 0.0113,
+  "cycle": null,
+  "bytes": 13983,
+  "range": [
+   0.0,
+   4.067
+  ]
+ },
+ "listen_deny_b": {
+  "file": "listen_deny_b.binz",
+  "src": "rb:m_gestic_listen_deny_02",
+  "desc": "listens, turns the head away (Rocketbox m_gestic_listen_deny_02)",
+  "tags": [
+   "film",
+   "samuel",
+   "gesture",
+   "rb"
+  ],
+  "duration": 3.3,
+  "frames": 99,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.0,
+  "distance": 0.0001,
+  "turn": 0.0013,
+  "cycle": null,
+  "bytes": 10346,
+  "range": [
+   0.0,
+   3.3
+  ]
+ },
+ "listen_sad": {
+  "file": "listen_sad.binz",
+  "src": "rb:m_gestic_listen_sad_01",
+  "desc": "sad, still listening (Rocketbox m_gestic_listen_sad_01)",
+  "tags": [
+   "film",
+   "samuel",
+   "idle",
+   "rb"
+  ],
+  "duration": 2.5,
+  "frames": 75,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 0.0019,
+  "distance": 0.0047,
+  "turn": 0.0018,
+  "cycle": [
+   -0.0,
+   0.0047,
+   0.00178
+  ],
+  "bytes": 6874,
+  "range": [
+   3.0,
+   10.0
+  ]
+ },
+ "listen_angry": {
+  "file": "listen_angry.binz",
+  "src": "rb:m_gestic_listen_angry_01",
+  "desc": "listens with crossed arms, angry (Rocketbox m_gestic_listen_angry_01)",
+  "tags": [
+   "film",
+   "elders",
+   "gesture",
+   "rb"
+  ],
+  "duration": 5.0,
+  "frames": 150,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.004,
+  "distance": 0.0201,
+  "turn": 0.0521,
+  "cycle": null,
+  "bytes": 17131,
+  "range": [
+   1.0,
+   6.0
+  ]
+ },
+ "idle_breathe": {
+  "file": "idle_breathe.binz",
+  "src": "rb:m_idle_breathe_02",
+  "desc": "deep breathing stand (Rocketbox m_idle_breathe_02)",
+  "tags": [
+   "film",
+   "idle",
+   "saul",
+   "rb"
+  ],
+  "duration": 2.5,
+  "frames": 75,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 0.0014,
+  "distance": 0.0034,
+  "turn": -0.0001,
+  "cycle": [
+   -0.0013,
+   0.0032,
+   -0.00011
+  ],
+  "bytes": 6819,
+  "range": [
+   0.0,
+   10.0
+  ]
+ },
+ "idle_n1": {
+  "file": "idle_n1.binz",
+  "src": "rb:m_idle_neutral_01",
+  "desc": "neutral stand, weight shifts (Rocketbox m_idle_neutral_01)",
+  "tags": [
+   "film",
+   "idle",
+   "army",
+   "elders",
+   "rb"
+  ],
+  "duration": 3.3,
+  "frames": 99,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 0.0006,
+  "distance": 0.0021,
+  "turn": 0.0008,
+  "cycle": [
+   0.002,
+   -0.0005,
+   0.00076
+  ],
+  "bytes": 8302,
+  "range": [
+   0.0,
+   11.6
+  ]
+ },
+ "idle_n2": {
+  "file": "idle_n2.binz",
+  "src": "rb:m_idle_neutral_02",
+  "desc": "neutral stand (Rocketbox m_idle_neutral_02)",
+  "tags": [
+   "film",
+   "idle",
+   "army",
+   "rb"
+  ],
+  "duration": 3.0,
+  "frames": 90,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 0.0016,
+  "distance": 0.0049,
+  "turn": -0.0005,
+  "cycle": [
+   -0.0011,
+   -0.0047,
+   -0.00047
+  ],
+  "bytes": 7003,
+  "range": [
+   0.0,
+   15.4
+  ]
+ },
+ "idle_angry": {
+  "file": "idle_angry.binz",
+  "src": "rb:m_idle_angry_02",
+  "desc": "agitated stand, head turns (Rocketbox m_idle_angry_02)",
+  "tags": [
+   "film",
+   "idle",
+   "elders",
+   "rb"
+  ],
+  "duration": 3.0,
+  "frames": 90,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 0.0008,
+  "distance": 0.0024,
+  "turn": 0.0059,
+  "cycle": [
+   0.0003,
+   0.0023,
+   0.00591
+  ],
+  "bytes": 13205,
+  "range": [
+   0.3,
+   8.0
+  ]
+ },
+ "look_around_L": {
+  "file": "look_around_L.binz",
+  "src": "rb:m_idle_look_around_01",
+  "desc": "turns to look to the right and back (Rocketbox m_idle_look_around_01)",
+  "tags": [
+   "film",
+   "army",
+   "gesture",
+   "rb"
+  ],
+  "duration": 4.1,
+  "frames": 123,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.0007,
+  "distance": 0.0027,
+  "turn": 0.0497,
+  "cycle": null,
+  "bytes": 14251,
+  "range": [
+   0.3,
+   4.4
+  ]
+ },
+ "look_around_R": {
+  "file": "look_around_R.binz",
+  "src": "rb:m_idle_look_around_02",
+  "desc": "turns to look to the left and back (Rocketbox m_idle_look_around_02)",
+  "tags": [
+   "film",
+   "army",
+   "gesture",
+   "rb"
+  ],
+  "duration": 4.0,
+  "frames": 120,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.0008,
+  "distance": 0.0033,
+  "turn": -0.0839,
+  "cycle": null,
+  "bytes": 14667,
+  "range": [
+   0.3,
+   4.3
+  ]
+ },
+ "crouch_in": {
+  "file": "crouch_in.binz",
+  "src": "rb:m_crouch_in",
+  "desc": "crouch down (Rocketbox m_crouch_in)",
+  "tags": [
+   "film",
+   "game",
+   "gesture",
+   "rb"
+  ],
+  "duration": 4.5333,
+  "frames": 136,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.0418,
+  "distance": 0.1896,
+  "turn": -0.4215,
+  "cycle": null,
+  "bytes": 18288,
+  "range": [
+   0.0,
+   4.533
+  ]
+ },
+ "crouch_idle": {
+  "file": "crouch_idle.binz",
+  "src": "rb:m_crouch_idle",
+  "desc": "crouching (Rocketbox m_crouch_idle)",
+  "tags": [
+   "film",
+   "game",
+   "idle",
+   "rb"
+  ],
+  "duration": 2.0,
+  "frames": 60,
+  "fps": 30.0,
+  "loop": true,
+  "speed": 0.0005,
+  "distance": 0.001,
+  "turn": 0.0003,
+  "cycle": [
+   -0.0002,
+   -0.001,
+   0.0003
+  ],
+  "bytes": 4995,
+  "range": [
+   0.0,
+   6.9
+  ]
+ },
+ "crouch_out": {
+  "file": "crouch_out.binz",
+  "src": "rb:m_crouch_out",
+  "desc": "rise from a crouch (Rocketbox m_crouch_out)",
+  "tags": [
+   "film",
+   "game",
+   "gesture",
+   "rb"
+  ],
+  "duration": 4.5333,
+  "frames": 136,
+  "fps": 30.0,
+  "loop": false,
+  "speed": 0.0444,
+  "distance": 0.2014,
+  "turn": 0.4334,
+  "cycle": null,
+  "bytes": 19072,
+  "range": [
+   0.0,
+   4.533
   ]
  }
 }

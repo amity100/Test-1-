@@ -413,6 +413,9 @@ export class Crowd {
   set viewportHeight(h: number) {
     this.uniforms.uViewH.value = Math.max(1, h);
   }
+  get viewportHeight() {
+    return this.uniforms.uViewH.value as number;
+  }
 
   /** compile the programs before the first shot (pass the set's scene + camera) */
   precompile(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera) {

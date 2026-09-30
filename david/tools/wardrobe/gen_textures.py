@@ -260,10 +260,19 @@ def gen_weave(name, res_list, threads, width_frac, slub, wander, seed, base_rgb,
         cover = np.clip(cover + felt * 0.35 * fz, 0, 1)
     for res in res_list:
         f = lambda a: resample(a, res)
-        h = blur_periodic(f(height), 1)
-        n = normal_from_height(h, normal_strength * res / 1024)
+        # phones (512): the yarns are ~4 px; at phone resolutions they are sub-pixel anyway and a full-strength weave
+        # beats against the pixel grid into swirling moire bands (no TAA there) — soften relief and tone contrast
+        soft = res < 1024
+        h = blur_periodic(f(height), 2 if soft else 1)
+        n = normal_from_height(h, normal_strength * res / 1024 * (0.45 if soft else 1.0))
         alb = np.dstack([f(albedo[:, :, c]) for c in range(3)])
-        save_pair(name, res, alb, f(cover), n, f(ao), h)
+        if soft:
+            m = alb.reshape(-1, 3).mean(0)
+            alb = m[None, None, :] + (np.dstack([blur_periodic(alb[:, :, c], 1) for c in range(3)]) - m[None, None, :]) * 0.55
+            aoo = 1 - (1 - f(ao)) * 0.5
+        else:
+            aoo = f(ao)
+        save_pair(name, res, alb, f(cover), n, aoo, h)
 
 
 # ----------------------------------------------------------------------------------------------- fringe (frayed hem)

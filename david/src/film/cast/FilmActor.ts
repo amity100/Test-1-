@@ -90,6 +90,18 @@ export class FilmActor {
    * `feetFwd` moves the planted feet forward (m) — with `drop` that is sitting (see sit()).
    */
   readonly body = { drop: 0, lean: 0, twist: 0, side: 0, feetFwd: 0 };
+  /**
+   * visible breathing over the mocap (the capture's own breath is tiny): `amp` 0..1.5 (0.25 = calm, 1 = heavy after a
+   * shout or a run), `rate` breaths per second. The chest rises and the shoulders lift on the in-breath.
+   */
+  readonly breath = { amp: 0.25, rate: 0.3 };
+  private breathPhase = Math.random() * 6;
+  /** a tilt of the head about the face's forward axis (rad, + = toward the actor's left shoulder), eased */
+  headRoll = 0;
+  private headRollCur = 0;
+  private lookSnap = true;
+  /** 0..1 how firmly a seated actor's pelvis is held on the seat (ease it out as he rises) */
+  seatWeight = 1;
 
   /**
    * seated on a bench / stone whose top is `seatTop` m above the ground under the actor: the pelvis drops onto it,
@@ -219,7 +231,8 @@ export class FilmActor {
         groomSpec = { kind: 'soldier', seed, headband: false };
       }
     }
-    const groom = await createGroom(human, groomSpec, { quality: gq, msaa: spec.msaa, headband, density: crowd ? 0.5 : 1, simulate: !crowd });
+    // (models pass: the elders' long beards and hair are their identity — at crowd LOD half density read stringy)
+    const groom = await createGroom(human, groomSpec, { quality: gq, msaa: spec.msaa, headband, density: crowd ? (spec.role === 'elder' ? 0.8 : 0.5) : 1, simulate: !crowd });
     const mocap = new MocapPlayer(human);
     mocap.rootMotion = 'inplace';
     const a = new FilmActor({ ...spec, lod }, human, groom, outfit, mocap);
@@ -329,6 +342,8 @@ export class FilmActor {
    * Per frame. `wind` world m/s. Call after the performance has set clips, poses, targets and placement.
    */
   update(dt: number, camera?: THREE.Camera, viewportH?: number, wind = _zero) {
+    // a cut (headingSnap): the head aim snaps too, instead of easing over from the previous shot's look
+    this.lookSnap = this.headingSnap;
     // velocity from placement (performances move root directly)
     if (this.hasLast && dt > 0) this.velocity.copy(this.root.position).sub(this.lastPos).divideScalar(dt);
     this.lastPos.copy(this.root.position);
@@ -361,6 +376,8 @@ export class FilmActor {
       this.headingCorr -= e * k;
       this.headingSnap = false;
     }
+    this.breathPhase += dt * this.breath.rate;
+    if (this.seatTop <= 0) this.applyBreath();
     this.applyBody();
     this.applyLook(want, wantW, dt);
     this.mocap.lookAt = want;
@@ -422,8 +439,22 @@ export class FilmActor {
       const tPitch = THREE.MathUtils.clamp(Math.atan2(_D.y, Math.hypot(_D.x, _D.z)) * 0.8, -L.down, L.up);
       wantPitch = THREE.MathUtils.clamp(tPitch - facePitch, -L.down - 0.3, L.up + 0.3) * w;
     }
-    this.lookYaw += (wantYaw - this.lookYaw) * (this.headingSnap ? 1 : k);
-    this.lookPitch += (wantPitch - this.lookPitch) * (this.headingSnap ? 1 : k);
+    this.lookYaw += (wantYaw - this.lookYaw) * (this.lookSnap ? 1 : k);
+    this.lookPitch += (wantPitch - this.lookPitch) * (this.lookSnap ? 1 : k);
+    if (this.lookSnap) this.headRollCur = this.headRoll;
+    this.lookSnap = false;
+    this.headRollCur += (this.headRoll - this.headRollCur) * (dt > 0 ? 1 - Math.exp(-3 * dt) : 0);
+    if (Math.abs(this.headRollCur) > 1e-4) {
+      // the tilt about the face's forward axis, shared by the upper neck and the head
+      head.getWorldPosition(_A);
+      this.eyesWorld(_B);
+      const fwd = _axF.set(_B.x - _A.x, 0, _B.z - _A.z);
+      if (fwd.lengthSq() > 1e-8) {
+        fwd.normalize();
+        rotateWorld(b.neck03 ?? head, _q.setFromAxisAngle(fwd, this.headRollCur * 0.4));
+        rotateWorld(head, _q.setFromAxisAngle(fwd, this.headRollCur * 0.6));
+      }
+    }
     if (Math.abs(this.lookYaw) < 1e-4 && Math.abs(this.lookPitch) < 1e-4) return;
     // distribute over the neck and head: yaw about world up; pitch about the face's left axis (+ = down)
     head.getWorldPosition(_A);
@@ -439,14 +470,37 @@ export class FilmActor {
     }
   }
 
+  /** visible breathing (see `breath`): the chest pitches back and the shoulders lift on the in-breath */
+  private applyBreath() {
+    const { amp, rate } = this.breath;
+    if (amp < 1e-3) return;
+    // an in-breath is quicker than the out-breath: a skewed cycle
+    const ph = this.breathPhase % 1;
+    const inh = ph < 0.42 ? Math.sin((ph / 0.42) * Math.PI * 0.5) : Math.cos(((ph - 0.42) / 0.58) * Math.PI * 0.5);
+    const v = inh * amp;
+    const b = this.human.bones as Record<string, THREE.Object3D>;
+    this.root.getWorldQuaternion(_q2);
+    const left = _axL.set(1, 0, 0).applyQuaternion(_q2);
+    if (b.spine02) rotateWorld(b.spine02, _q.setFromAxisAngle(left, -0.022 * v));
+    if (b.spine01) rotateWorld(b.spine01, _q.setFromAxisAngle(left, -0.012 * v));
+    const fwd = _axF.set(0, 0, 1).applyQuaternion(_q2);
+    for (const s of SIDES) {
+      const c = b[`clavicle.${s}`];
+      if (!c) continue;
+      // lift: about the forward axis, outward side up
+      rotateWorld(c, _q.setFromAxisAngle(fwd, (s === 'L' ? 1 : -1) * 0.045 * v));
+    }
+  }
+
   /** the procedural body layer (see `body`): runs after the mocap / rig, before the arm IK */
   private applyBody() {
     if (this.seatTop > 0) {
       // seated: the hip joints come to rest ~8.5 cm above the seat whatever the clip does with the pelvis
       const bb = this.human.bones as Record<string, THREE.Object3D>;
       const hy = (bb['upperleg01.L'].getWorldPosition(_v).y + bb['upperleg01.R'].getWorldPosition(_v2).y) / 2;
-      this.body.drop = Math.max(0, hy - (this.root.position.y + this.seatTop + 0.085));
+      this.body.drop = Math.max(0, hy - (this.root.position.y + this.seatTop + 0.085)) * this.seatWeight;
     }
+    this.applyBreath();
     const { drop, lean, twist, side, feetFwd } = this.body;
     if (Math.abs(drop) < 1e-4 && Math.abs(lean) < 1e-4 && Math.abs(twist) < 1e-4 && Math.abs(side) < 1e-4 && Math.abs(feetFwd) < 1e-4) return;
     const b = this.human.bones as Record<string, THREE.Object3D>;

@@ -1,6 +1,7 @@
 # Motion capture (`src/characters/mocap`)
 
-Real motion capture from the **CMU Graphics Lab Motion Capture Database** (BVH conversion by Bruce Hahne), retargeted
+Real motion capture from the **CMU Graphics Lab Motion Capture Database** (BVH conversion by Bruce Hahne) and, since
+the film's cut v2, the **Microsoft Rocketbox animation library** (MIT, see "Rocketbox clips" below), retargeted
 offline onto the MakeHuman skeleton of our humans (`src/characters/human`), cleaned, and played at runtime directly
 on the MakeHuman bones.
 
@@ -8,7 +9,9 @@ on the MakeHuman bones.
 tools/mocap/mocap_lib.py     BVH parser + FK, MakeHuman rest skeleton (rig.json), retarget, contacts, foot lock,
                              loop search/blend, straightening, twist distribution, despike, quantized export
 tools/mocap/clips.py         the clip table (CMU take + time range + loop + tags)
-tools/mocap/build_clips.py   python3 tools/mocap/build_clips.py [patterns]   (~30 s for the whole library)
+tools/mocap/build_clips.py   python3 tools/mocap/build_clips.py [patterns]   (~40 s for the whole library)
+tools/mocap/rocketbox.py     Rocketbox takes (src='rb:<stem>') as a BVH-like source for the same retarget
+tools/mocap/rocketbox_export.mjs  FBX -> world joint tracks (three's FBXLoader in Node; run by rocketbox.py)
 src/assets/mocap/*.binz      one gzip'ed clip each (loaded lazily) + index.json (bundled, ~8 KB)
 dev/mocap.html               contact sheets + slide / pop / CPU checks (screens in dev/screens/mocap/)
 ```
@@ -146,3 +149,66 @@ Total **49 clips, 664 KB** (gzip; the phone downloads only the clips a scene pre
   the whirl above the head is procedural.
 * Army march: `march` (20_06 "soldiers march"), `march_c`, `walk`..`walk_d` (+ `speed`, `mirror`, time offsets). A
   stylised high-knee parade march (142_11) was rejected: not an Iron-Age levy.
+
+## Rocketbox clips (cut v2 of the film)
+
+Source: **Microsoft Rocketbox** (https://github.com/microsoft/Microsoft-Rocketbox, MIT, © 2020 Microsoft) —
+`Assets/Animations/all_animations_max_motextr_{static,xy,xyz}/<stem>.max.fbx`, 30 fps, 3ds Max biped ("Bip01")
+skeleton, fetched by exact path from raw.githubusercontent.com into `$RB_CACHE` (default the scratchpad cache) and
+never shipped raw.
+
+How they enter the pipeline (`tools/mocap/rocketbox.py`):
+1. `rocketbox_export.mjs` parses the FBX in Node with three's `FBXLoader` (three tiny DOM shims), plays the take with an
+   `AnimationMixer` (LoopOnce, clamped — a repeating action would wrap the last frame back to the first) and writes the
+   WORLD rotation + position of the body joints per frame. The loader already brings the file into three's frame
+   (+Y up, the character faces +Z, its left is +X, cm) — the pipeline's character space.
+2. Frame 0 is the **reference pose**: the bind pose of the avatar `Male_Adult_01` (an A-pose); every joint's rotation is
+   measured as a world delta from it, exactly like the T-pose frame of the CMU takes (the min-arc limb alignment
+   absorbs the A-pose vs our arms-down rest). The avatar has no end nubs: HeadNub / Toe0Nub are hung off their parent
+   bones with the animation skeleton's bone lengths.
+3. Names map onto the CMU names the retarget reads: Pelvis -> Hips, Spine -> LowerBack, Spine1 -> Spine, Spine2 ->
+   Spine1, Neck -> Neck, (Neck1 = half-way Neck..Head), Head; UpperArm / Forearm / Hand -> Arm / ForeArm / Hand,
+   the hand direction = wrist -> the middle finger's knuckle; Thigh / Calf / Foot / Toe0 (+ Toe0Nub end).
+4. Then the unchanged pipeline: retarget (low-pass σ 0.6 frames at 30 fps instead of 1.6 at 120), grounding, contacts,
+   foot lock, loops (`loopWhole=True`: a Rocketbox walk IS one cycle whose last frame repeats the first), export.
+
+| clip | Rocketbox take (range) | s | loop | m/s | turn | KB | tags | notes |
+|---|---|---|---|---|---|---|---|---|
+| `cheer_1` | m_cheer_02 (0.0–2.9 s) | 2.90 | — | 0.03 | -5° | 14.8 | film, army, gesture | roar: both fists thrust high, pumping |
+| `cheer_2` | m_cheer_04 (0.2–3.8 s) | 3.60 | — | 0.04 | +12° | 15.3 | film, army, gesture | roar: both arms up and held |
+| `cheer_3` | m_cheer_03 (0.3–3.0 s) | 2.70 | — | 0.00 | -0° | 10.3 | film, army, gesture | roar: right fist raised |
+| `cheer_4` | m_cheer_05 (0.2–3.0 s) | 2.80 | — | 0.01 | +18° | 12.9 | film, army, gesture | roar: right fist pumping |
+| `cheer_5` | m_cheer_01 (11.0–14.3 s) | 3.30 | — | 0.01 | -1° | 14.0 | film, army, gesture | roar: fists up to the head, shouting |
+| `walk_cool` | m_walk_cool_01 (0.0–1.3 s) | 1.27 | loop | 1.14 | -1° | 6.5 | film, saul, loco | a proud, regal stride |
+| `walk_cool_b` | m_walk_cool_02 (0.0–1.2 s) | 1.13 | loop | 1.46 | +0° | 6.0 | film, saul, army, loco | a confident stride, longer steps |
+| `walk_slow` | m_walk_slow_01 (0.0–1.5 s) | 1.47 | loop | 0.90 | +0° | 7.1 | film, samuel, elders, loco | slow, upright walk |
+| `walk_n1` | m_walk_neutral_01 (0.0–1.2 s) | 1.20 | loop | 1.11 | -1° | 6.1 | film, army, loco | walk |
+| `walk_n2` | m_walk_neutral_02 (0.0–1.1 s) | 1.07 | loop | 1.46 | +0° | 5.5 | film, army, loco | walk |
+| `walk_stop_rb` | m_walk_stop (0.0–2.0 s) | 2.03 | — | 0.64 | +2° | 9.5 | film, saul, loco | walk, halt in two steps, stand |
+| `turn_go_L` | m_turn_left_180_to_walk (0.0–1.7 s) | 1.67 | — | 0.57 | +156° | 8.4 | film, samuel, loco | turn 180 deg to the left into a walk away |
+| `turn_go_R` | m_turn_right_180_to_walk (0.0–2.1 s) | 2.10 | — | 0.16 | -163° | 10.1 | film, samuel, loco | turn 180 deg to the right into a walk away |
+| `turn_180_L` | m_turn_left_180 (0.0–2.5 s) | 2.47 | — | 0.00 | +169° | 11.1 | film, loco | turn 180 deg to the left on the spot |
+| `stand_up` | m_sit_stand_up_chair_01 (0.0–2.5 s) | 2.53 | — | 0.18 | +2° | 11.1 | film, elders, gesture | rise from a seat |
+| `talk_angry` | m_gestic_talk_angry_01 (1.5–7.5 s) | 6.00 | — | 0.02 | -3° | 26.7 | film, elders, gesture | angry demand: the arm raised high at 2.5 s |
+| `talk_excited` | m_gestic_talk_excited_02 (1.5–7.5 s) | 6.00 | — | 0.02 | +8° | 26.0 | film, elders, gesture | excited talk, both hands |
+| `talk_sad` | m_gestic_talk_sad_01 (4.5–10.5 s) | 6.00 | — | 0.01 | -2° | 22.0 | film, elders, samuel, gesture | grave, sad talk |
+| `listen_deny` | m_gestic_listen_deny_03 (0.0–4.1 s) | 4.07 | — | 0.00 | +1° | 13.7 | film, samuel, elders, gesture | listens, shakes the head, turns away |
+| `listen_deny_b` | m_gestic_listen_deny_02 (0.0–3.3 s) | 3.30 | — | 0.00 | +0° | 10.1 | film, samuel, gesture | listens, turns the head away |
+| `listen_sad` | m_gestic_listen_sad_01 (3.0–10.0 s) | 2.50 | loop | 0.00 | +0° | 6.7 | film, samuel, idle | sad, still listening |
+| `listen_angry` | m_gestic_listen_angry_01 (1.0–6.0 s) | 5.00 | — | 0.00 | +3° | 16.7 | film, elders, gesture | listens with crossed arms, angry |
+| `idle_breathe` | m_idle_breathe_02 (0.0–10.0 s) | 2.50 | loop | 0.00 | -0° | 6.7 | film, idle, saul | deep breathing stand |
+| `idle_n1` | m_idle_neutral_01 (0.0–11.6 s) | 3.30 | loop | 0.00 | +0° | 8.1 | film, idle, army, elders | neutral stand, weight shifts |
+| `idle_n2` | m_idle_neutral_02 (0.0–15.4 s) | 3.00 | loop | 0.00 | -0° | 6.8 | film, idle, army | neutral stand |
+| `idle_angry` | m_idle_angry_02 (0.3–8.0 s) | 3.00 | loop | 0.00 | +0° | 12.9 | film, idle, elders | agitated stand, head turns |
+| `look_around_L` | m_idle_look_around_01 (0.3–4.4 s) | 4.10 | — | 0.00 | +3° | 13.9 | film, army, gesture | turns to look to the right and back |
+| `look_around_R` | m_idle_look_around_02 (0.3–4.3 s) | 4.00 | — | 0.00 | -5° | 14.3 | film, army, gesture | turns to look to the left and back |
+| `crouch_in` | m_crouch_in (0.0–4.5 s) | 4.53 | — | 0.04 | -24° | 17.9 | film, game, gesture | crouch down |
+| `crouch_idle` | m_crouch_idle (0.0–6.9 s) | 2.00 | loop | 0.00 | +0° | 4.9 | film, game, idle | crouching |
+| `crouch_out` | m_crouch_out (0.0–4.5 s) | 4.53 | — | 0.04 | +25° | 18.6 | film, game, gesture | rise from a crouch |
+
+Checked in contact sheets on the MakeHuman bodies (`dev/mocap.html`: planted-ball slide 0.2–5.6 cm/s, largest joint
+step ≤ 37°/frame, no broken wrists or shoulders; the cheers and walks read naturally). `walk_stop_rb`'s heel figure
+(21 cm/s) is the ankle roll of the stopping steps. The film uses them in `src/film/cast/performances.ts` (Saul's
+stride, halt, Samuel's turn to go, the elders), `src/film/crowd/GilgalArmy.ts` + `ArmyHeroes.ts` (the roar: every
+soldier a different cheer, the march variety, the whole-body look down the road) and `PhilistineHost.ts` (walks).
+

@@ -60,6 +60,8 @@ const JOBS: Record<string, Job> = {
   'film-lite': { seconds: END_T + 7, lite: true, script: filmCalls(straight) },
   'film-stall': { seconds: STALL_AT + 12, script: filmCalls(stalled) },
   'film-skip': { seconds: cueT('saul') + 9, script: filmCalls(straight, cueT('saul') + 1) },
+  // a seek (Intro.seek / ?introAt=): the film clock jumps from 5 s to the verdict - 2 s; the score must restart there
+  'film-seek': { seconds: 14, script: filmCalls((t) => (t < 5 ? t : t + cueT('verdict') - 7)) },
   'bed-heights': { seconds: 14, script: (e, t) => { if (t === 0) e.setAmbienceBed('heights', 0.5); } },
   'bed-coast': { seconds: 14, script: (e, t) => { if (t === 0) e.setAmbienceBed('coast', 0.5); } },
   'bed-gilgal': { seconds: 14, script: (e, t) => { if (t === 0) e.setAmbienceBed('gilgal', 0.5); } },
@@ -90,8 +92,15 @@ async function render(name: string): Promise<Record<string, unknown>> {
   const job = JOBS[name];
   if (!job) throw new Error('unknown job ' + name);
   const t0 = performance.now();
-  let maxVoices = 0, sumVoices = 0, nV = 0;
-  const script: Job['script'] = (e, t) => { job.script(e, t); const v = e.voices; maxVoices = Math.max(maxVoices, v); sumVoices += v; nV++; };
+  let maxVoices = 0, sumVoices = 0, nV = 0, maxAt = 0;
+  const busy: Array<[number, number]> = [];
+  const script: Job['script'] = (e, t) => {
+    job.script(e, t);
+    const v = e.voices;
+    if (v > maxVoices) { maxVoices = v; maxAt = t; }
+    if (v >= 45) busy.push([Math.round(t * 10) / 10, v]);
+    sumVoices += v; nV++;
+  };
   let beats: unknown = null;
   const script2: Job['script'] = (e, t) => {
     script(e, t);
@@ -109,7 +118,7 @@ async function render(name: string): Promise<Record<string, unknown>> {
   a.download = name + '.wav';
   document.body.appendChild(a);
   a.click();
-  return { name, seconds: buf.duration, renderMs: Math.round(ms), peak, maxVoices, meanVoices: Math.round(sumVoices / Math.max(1, nV)), sheet: INTRO_CUES === V2_CUES ? 'v2-fixture' : 'live', beats };
+  return { name, seconds: buf.duration, renderMs: Math.round(ms), peak, maxVoices, meanVoices: Math.round(sumVoices / Math.max(1, nV)), maxVoicesAt: Math.round(maxAt * 100) / 100, busy: busy.filter((_, i) => i % 4 === 0).slice(0, 40), sheet: INTRO_CUES === V2_CUES ? 'v2-fixture' : 'live', beats };
 }
 
 (window as unknown as Record<string, unknown>).renderJob = render;
@@ -119,6 +128,7 @@ const shotMarks = (): Array<[number, string]> => INTRO_CUES.filter((c) => c.shot
   'film-lite': [...shotMarks(), [END_T, 'END']],
   'film-stall': [...shotMarks().filter((m) => m[0] < STALL_AT + 12), [STALL_AT, 'STALL']],
   'film-skip': [...shotMarks().filter((m) => m[0] < cueT('saul') + 9), [cueT('saul') + 1, 'SKIP']],
+  'film-seek': [[5, 'SEEK'], [7, 'verdict']],
 };
 (window as unknown as Record<string, unknown>).shots = INTRO_CUES.filter((c) => c.shot).map((c) => ({ t: c.t, id: c.shot, n: c.n, cue: c.cue, dur: c.dur, cut: c.cut }));
 (window as unknown as Record<string, unknown>).jobNames = Object.keys(JOBS);

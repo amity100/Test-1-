@@ -17,7 +17,8 @@ import { CrowdDust } from './CrowdDust';
 import { bit } from './crowdShader';
 
 export function philistineClips(lite: boolean): CrowdClipSpec[] {
-  const w = lite ? ['march', 'walk_b'] : ['march', 'march_c', 'walk_b', 'walk_d'];
+  // CMU marches + Rocketbox walks (cut v2): heavier and more varied, no two neighbours alike
+  const w = lite ? ['march', 'walk_b', 'walk_n1'] : ['march', 'march_c', 'walk_b', 'walk_d', 'walk_n1', 'walk_n2'];
   const s: CrowdClipSpec[] = [];
   for (const c of w) {
     s.push({ clip: c, carry: true });
@@ -69,7 +70,7 @@ function hash(a: number, b: number) {
   return h - Math.floor(h);
 }
 
-interface Man { ag: CrowdAgent; x: number; z: number; pace: number; seg: number; gx: number; gz: number; gy: number }
+interface Man { ag: CrowdAgent; x: number; z: number; pace: number; seg: number; gx: number; gz: number; gy: number; /** weave + head: phase, rate */ ph: number; hr: number }
 
 export class PhilistineHost {
   readonly crowd: Crowd;
@@ -82,6 +83,7 @@ export class PhilistineHost {
   heading: number;
   private readonly origin: THREE.Vector3;
   private readonly men: Man[] = [];
+  private clock = 0;
   private readonly ground: (x: number, z: number) => number;
   private readonly ownsAnim: boolean;
   private travelled = 0;
@@ -151,7 +153,7 @@ export class PhilistineHost {
           const elite = (ci === 0 && r < 3) || r % 16 === 0 || h(4) < 0.06;
           const ag = crowd.agents[i];
           kit(ag, h, elite);
-          this.men.push({ ag, x: lat, z: -back, pace: 0.97 + h(13) * 0.06, seg: 0, gx: 1e9, gz: 1e9, gy: 0 });
+          this.men.push({ ag, x: lat, z: -back, pace: 0.97 + h(13) * 0.06, seg: 0, gx: 1e9, gz: 1e9, gy: 0, ph: h(14) * 6.28, hr: 0.2 + h(15) * 0.5 });
         }
       });
     } else {
@@ -167,7 +169,7 @@ export class PhilistineHost {
         const back = r * 1.45 + Math.abs(c - (companies - 1) / 2) * 6 + (h(2) - 0.5) * 0.6;
         const ag = crowd.agents[i];
         kit(ag, h, r < 2 + Math.floor(h(3) * 2) || h(4) < 0.08);
-        this.men.push({ ag, x: lat, z: -back, pace: 0.95 + h(13) * 0.1, seg: 0, gx: 1e9, gz: 1e9, gy: 0 });
+        this.men.push({ ag, x: lat, z: -back, pace: 0.95 + h(13) * 0.1, seg: 0, gx: 1e9, gz: 1e9, gy: 0, ph: h(14) * 6.28, hr: 0.2 + h(15) * 0.5 });
       }
     }
     this.place();
@@ -204,9 +206,12 @@ export class PhilistineHost {
     if (this.trail) {
       let cx = 0, cz = 0;
       for (const m of this.men) {
-        const yaw = this.along(-m.z - this.travelled * m.pace, this._a, m);
+        const d = -m.z - this.travelled * m.pace;
+        const yaw = this.along(d, this._a, m);
         const rx = Math.cos(yaw), rz = -Math.sin(yaw);
-        const x = this._a.x + rx * m.x, z = this._a.z + rz * m.x;
+        // nobody walks on rails: a slow weave across the file (a man drifting, closing up, stepping round a stone)
+        const wx = m.x + 0.14 * Math.sin(d * 0.21 + m.ph) + 0.06 * Math.sin(d * 0.63 + 2 * m.ph);
+        const x = this._a.x + rx * wx, z = this._a.z + rz * wx;
         m.ag.pos.set(x, this.groundOf(m, x, z), z);
         m.ag.yaw = yaw;
         cx += x;
@@ -242,9 +247,13 @@ export class PhilistineHost {
 
   update(dt: number, camera: THREE.Camera) {
     this.travelled += dt * this.speed;
+    this.clock += dt;
     for (const m of this.men) {
       if (m.ag.cur) m.ag.cur.rate = (this.speed / Math.max(0.5, m.ag.cur.clip.speed)) * m.pace;
       m.ag.stride = this.speed > 0.05 ? 1 : 0;
+      // the heads are not locked forward: a glance to the side now and then
+      const g = Math.sin(this.clock * m.hr + m.ph);
+      m.ag.headYaw = 0.4 * Math.sign(g) * Math.max(0, Math.abs(g) - 0.6) / 0.4;
     }
     this.place();
     this.crowd.update(dt, camera);

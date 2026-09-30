@@ -25,7 +25,8 @@ export const FILM_CAM = {
   // G3: a fast push-in from low in front of the halted king, the jolt on the roar
   spear: { d0: 10.5, d1: 5.3, creep: 0.55, dirX: 0.9, dirZ: 0.44, h0: 0.8, h1: 0.46, lookH0: 1.65, lookH1: 2.35, lookBack: 0.7, fov0: 42, fov1: 36, pushT: 1.05 },
   // G4: between the soldiers' shoulders, pushing toward Samuel in the road; the ranks part
-  silence: { x0: -8.6, x1: -5.8, z0: 0.95, z1: 0.75, h: 1.62, fov0: 15, fov1: 10.5, clear: 0.95 },
+  // (the lane between files 8 and 9 of the formation: Saul stands soft at frame left, Samuel clear beyond him)
+  silence: { x0: -8.6, x1: -5.8, z0: 1.575, z1: 1.575, h: 1.62, fov0: 15, fov1: 10.5, clear: 0.8 },
   // G5a: wide profile from the south, a slow drift with the action
   tear: { dx0: -0.5, dx1: 0.45, dz0: 6.9, dz1: 5.9, h: 1.22, lookH: 1.2, lookX: 0.25, fov0: 34, fov1: 30.5 },
   // G5b: the insert on the fist and the ripping wool (north of the grip, raking light from the west)
@@ -52,8 +53,9 @@ export const baseTake = (take: string) => take.split(':')[0] as GilgalShotName;
  * Per take: handheld amplitude (deg, scaled by the lens), exposure multiplier on the set's own exposure, and an
  * impulse (jolt) at shot time `jolt` of `joltAmp` deg (the roar, the shofar). Seeds keep the takes different.
  */
-export const TAKE_LOOK: Record<string, { hand: number; freq?: number; exp?: number; seed: number; jolt?: number; joltAmp?: number }> = {
-  flight: { hand: 0.28, freq: 0.9, exp: 1.18, seed: 1 },
+export const TAKE_LOOK: Record<string, { hand: number; freq?: number; exp?: number; expCurve?: [number, number][]; seed: number; jolt?: number; joltAmp?: number }> = {
+  // the sunlit deck blows out at the set's exposure: down over the clouds, back up under them over the ridges
+  flight: { hand: 0.28, freq: 0.9, expCurve: [[0, 0.8], [2.4, 0.78], [3.3, 0.95], [4.2, 1.06], [7.5, 1.04]], seed: 1 },
   'rachel-dawn': { hand: 0.22, seed: 2 },
   glint: { hand: 0.2, freq: 0.8, seed: 3 },
   elders: { hand: 0.3, seed: 4 },
@@ -478,9 +480,20 @@ export function applyHandheld(take: string, t: number, ft: number, f: ShotFrame)
   f.roll = (f.roll ?? 0) + roll;
 }
 
-/** exposure multiplier of a take (on top of the set's own) */
-export function takeExposure(take: string): number {
-  return TAKE_LOOK[take]?.exp ?? 1;
+/** exposure multiplier of a take at shot second t (on top of the set's own) */
+export function takeExposure(take: string, t = 0): number {
+  const L = TAKE_LOOK[take];
+  if (!L) return 1;
+  const c = L.expCurve;
+  if (!c || !c.length) return L.exp ?? 1;
+  if (t <= c[0][0]) return c[0][1];
+  for (let i = 1; i < c.length; i++) {
+    if (t <= c[i][0]) {
+      const [t0, v0] = c[i - 1], [t1, v1] = c[i];
+      return v0 + (v1 - v0) * smooth((t - t0) / (t1 - t0));
+    }
+  }
+  return c[c.length - 1][1];
 }
 
 /** DoF focus of an orchestration take: which actor's eyes (kept for API compatibility with cut pass 2) */

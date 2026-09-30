@@ -139,7 +139,8 @@ export function saulStyle(): GroomStyle {
   const DARK: [number, number, number] = [0.075, 0.056, 0.045];
   // wardrobe polish: a touch lighter at the tips so a dense beard shows strand structure instead of a black mass
   // (was 0.13 0.095 0.072)
-  const TIPD: [number, number, number] = [0.155, 0.114, 0.086];
+  // models pass: a little lighter again at the tips (0.155 0.114 0.086) — the dense beard still read as a black mass
+  const TIPD: [number, number, number] = [0.19, 0.14, 0.104];
   const GREY: [number, number, number] = [0.56, 0.54, 0.51];
   const scalp: LayerStyle = {
     name: 'saul-scalp',
@@ -226,11 +227,13 @@ export function saulStyle(): GroomStyle {
     gravity: 12,
     combPull: 11,
     tousle: 1.2, // wardrobe polish (court 2.2, originally 5)
-    volume: (t, R) => 0.0016 + (R + 0.002) * ss(0, 0.3, t) + 0.0035 * ss(0.2, 0.8, t),
+    // models pass: less outward push at the tips (the frizzy halo at the beard's edges)
+    volume: (t, R) => 0.0014 + (R * 0.85 + 0.0016) * ss(0, 0.3, t) + 0.0024 * ss(0.2, 0.8, t),
     // cast pass: natural waves, not Assyrian corkscrews (visual-bible 3.2) — looser, longer-pitched curl (was
     // 0.0016-0.0032 / 0.016-0.024), almost no frizz or flyaways at the edges
-    curlR: [0.0024, 0.0042],
-    curlPitch: [0.03, 0.045],
+    // models pass: longer, gentler waves (two tight turns per strand crossed each other into frizz at the edges)
+    curlR: [0.0017, 0.0032],
+    curlPitch: [0.045, 0.07],
     curlStart: 0.3,
     curlNoise: 0.14, // wardrobe polish (court 0.4, originally 0.6)
     lockR: 0.006,
@@ -260,7 +263,8 @@ export function saulStyle(): GroomStyle {
     layers: [scalp, beard],
     ctrl: { low: 10, medium: 14, high: 18 },
     segs: { low: 14, medium: 22, high: 32 },
-    shading: { shift: 0.035, roughness: 0.38, specular: 0.6, backlit: 0.8, scatter: 0.55, aoDirect: 0.55 },
+    // models pass: less back-lit glow (G2 / G7 are shot against the sun: stray strands lit up like wires)
+    shading: { shift: 0.035, roughness: 0.4, specular: 0.55, backlit: 0.6, scatter: 0.55, aoDirect: 0.6 },
     capColor: [0.092, 0.07, 0.057], // wardrobe polish: a shade lighter under the denser beard (was 0.075 0.058 0.048)
     capOffset: 0.004,
     capBeard: 0.7, // wardrobe polish: the beard cap only under the dense core (hard black mask round the mouth on phones)
@@ -284,7 +288,8 @@ export function manStyle(o: ManStyleOptions): GroomStyle {
   const age = R();
   const hueR = R();
   const base: [number, number, number] = hueR < 0.5 ? [0.05, 0.04, 0.035] : hueR < 0.85 ? [0.085, 0.06, 0.045] : [0.13, 0.085, 0.055];
-  const tipB: [number, number, number] = [base[0] * 1.6, base[1] * 1.55, base[2] * 1.45];
+  // (models pass: sun-dried, dusty tips a little lighter so beards and curls show their strands instead of a black mass)
+  const tipB: [number, number, number] = [base[0] * 2.1, base[1] * 2.0, base[2] * 1.8];
   const greyP = age > 0.7 ? (age - 0.7) * 1.2 : 0;
   const GREY: [number, number, number] = [0.52, 0.5, 0.47];
   const col = (greyBoost: (f: THREE.Vector3) => number) => (Rr: () => number, f: THREE.Vector3, root: THREE.Color, tip: THREE.Color) => {
@@ -331,8 +336,8 @@ export function manStyle(o: ManStyleOptions): GroomStyle {
     curlStart: 0.25,
     lockR: 0.0035,
     clump: curly ? 0.8 : 0.6,
-    frizz: curly ? 0.0016 : 0.0009,
-    flyaway: curly ? 0.02 : 0.006,
+    frizz: curly ? 0.0011 : 0.0008,
+    flyaway: curly ? 0.008 : 0.004, // models pass (0.02 / 0.006: a halo of strays)
     width: 0.00011,
     stiffness: 0.35,
     childLen: [0.75, 1.0],
@@ -365,14 +370,15 @@ export function manStyle(o: ManStyleOptions): GroomStyle {
       combPull: 14,
       tousle: 3,
       volume: (t, Rv) => 0.001 + (Rv + 0.0012) * ss(0, 0.3, t) + (full ? 0.004 * ss(0.2, 0.8, t) : 0),
-      curlR: full ? [0.0015, 0.0035] : [0.0005, 0.001],
-      curlPitch: full ? [0.012, 0.022] : [0.005, 0.008],
-      curlNoise: 0.6,
+      // models pass: a full beard in coherent wavy locks, not a frizzy black mass (was clump 0.4, tight curls)
+      curlR: full ? [0.0014, 0.0028] : [0.0005, 0.001],
+      curlPitch: full ? [0.03, 0.05] : [0.005, 0.008],
+      curlNoise: 0.45,
       curlStart: 0.2,
-      lockR: 0.003,
-      clump: full ? 0.4 : 0.3,
-      frizz: 0.0005,
-      flyaway: 0.004,
+      lockR: full ? 0.0038 : 0.003,
+      clump: full ? 0.7 : 0.35,
+      frizz: 0.0004,
+      flyaway: 0.0015,
       width: full ? 0.00017 : 0.00015,
       stiffness: 0.5,
       childLen: [0.7, 1.0],
@@ -384,7 +390,7 @@ export function manStyle(o: ManStyleOptions): GroomStyle {
     layers,
     ctrl: { low: 8, medium: 11, high: 14 },
     segs: { low: 10, medium: 16, high: 24 },
-    shading: { shift: 0.035, roughness: 0.4, specular: 0.55, backlit: 0.7, scatter: 0.5, aoDirect: 0.55 },
+    shading: { shift: 0.035, roughness: 0.4, specular: 0.5, backlit: 0.55, scatter: 0.5, aoDirect: 0.6 },
     capColor: [base[0] * 0.9, base[1] * 0.9, base[2] * 0.9],
     capOffset: 0.004,
     capBeard: beardKind === 'full' ? 0.85 : beardKind === 'short' ? 0.75 : 0,

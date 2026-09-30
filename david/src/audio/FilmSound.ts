@@ -493,8 +493,8 @@ export class FilmSound {
     const g = v.gain(0), sub = v.gain(0.5), tri = v.gain(0.12), nz = v.gain(1.6);
     a.connect(sub); b.connect(sub); c3.connect(tri); n.connect(lp); lp.connect(nz);
     sub.connect(g); tri.connect(g); nz.connect(g); out2(g, o, 0.3, v);
-    if (this.lite) { // phones: the same dread an octave up, with harmonics the speaker can play
-      const ph = v.osc('sawtooth', mtof(38), 0, t), ph2 = v.osc('sawtooth', mtof(38) * 1.02, 0, t), pl = v.filter('lowpass', 260, 1.2), pg = v.gain(0.05);
+    if (this.lite) { // phones: the same dread an octave up, with harmonics the speaker can play (300-600 Hz)
+      const ph = v.osc('sawtooth', mtof(38), 0, t), ph2 = v.osc('sawtooth', mtof(38) * 1.02, 0, t), pl = v.filter('lowpass', 560, 1.2), pg = v.gain(0.06);
       ph.connect(pl); ph2.connect(pl); pl.connect(pg); pg.connect(g);
     }
     const G = g.gain;
@@ -566,8 +566,8 @@ export class FilmSound {
       s1.frequency.setValueAtTime(70, tt); s1.frequency.exponentialRampToValueAtTime(42, tt + 0.12);
       g1.gain.setValueAtTime(0, tt); g1.gain.linearRampToValueAtTime(level * a, tt + 0.008); g1.gain.setTargetAtTime(0, tt + 0.01, 0.06);
       s1.connect(g1); out2(g1, o, 0.2, v);
-      const n = v.noise('brown', tt), bp = v.filter('bandpass', 230, 1.6), g2 = v.gain(0);
-      g2.gain.setValueAtTime(0, tt); g2.gain.linearRampToValueAtTime(level * a * knock * 1.6, tt + 0.006); g2.gain.setTargetAtTime(0, tt + 0.008, 0.035);
+      const n = v.noise('brown', tt), bp = v.filter('bandpass', this.lite ? 340 : 230, 1.6), g2 = v.gain(0);
+      g2.gain.setValueAtTime(0, tt); g2.gain.linearRampToValueAtTime(level * a * knock * (this.lite ? 2.4 : 1.6), tt + 0.006); g2.gain.setTargetAtTime(0, tt + 0.008, 0.035);
       n.connect(bp); bp.connect(g2); out2(g2, o, 0.2, v);
     }
     v.play(t, t + 0.7);

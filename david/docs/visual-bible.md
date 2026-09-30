@@ -25,50 +25,41 @@ Quotations appear on screen **only** through the catalog `src/content/sources.ts
 **only** from `src/content/introNarration.ts` (`INTRO_NARRATION[id].text`) and must never be styled as a verse,
 put in quotation marks or given a reference.
 
+**CUT v2 (58 s, `docs/intro-script-v2.md`; cut3, 30 Sep):** only these 11 text events. The rough cut's lines
+(the tribes line, Gen 35:19, 14:52, 14:47, 15:27, 13:14, 16:11, 16:12 and the film's name on the title card) are
+dropped. Shot ids and timing: `src/content/introScript.ts`.
+
 | Shot | On screen | Kind | Id |
 |---|---|---|---|
-| 1 | לִפְנֵי כִּשְׁלֹשֶׁת אֲלָפִים שָׁנָה | narration (time card) | `INTRO_NARRATION.timeCard` |
-| 2 | שִׁבְטֵי יִשְׂרָאֵל יוֹשְׁבִים בְּאַרְצָם | narration | `INTRO_NARRATION.tribes` |
-| 3 | Gen 35:19 (whole verse) | quotation | `gen_35_19_rachel_full` |
-| 4 | 1 Sam 14:52 (first half) | quotation | `s1_14_52_war_all_days` |
-| 5 | 1 Sam 8:5 (Samuel's elders) | quotation | `s1_8_5_give_us_king` |
-| 6 | הַגִּלְגָּל | narration (place card) | `INTRO_NARRATION.gilgal` |
-| 7 | שָׁאוּל בֶּן־קִישׁ · מֶלֶךְ יִשְׂרָאֵל | narration (person card) | `INTRO_NARRATION.saul` |
-| 7 | 1 Sam 9:2 (end of verse) | quotation | `s1_9_2_head_above` |
-| 8 | 1 Sam 14:47 (first half) | quotation | `s1_14_47_fought_around` |
-| 9 | שְׁמוּאֵל | narration (person card) | `INTRO_NARRATION.samuel` |
-| 10 | 1 Sam 15:27 (whole verse) | quotation | `s1_15_27_robe_torn` |
-| 11 | 1 Sam 15:28 (Samuel's words) | quotation | `s1_15_28_torn_kingdom` |
-| 13 | 1 Sam 13:14 (four words) | quotation | `s1_13_14_after_his_heart` |
-| 15 | 1 Sam 16:11 (Jesse's words) | quotation | `s1_16_11_youngest` |
-| 16 | 1 Sam 16:12 | quotation | `s1_16_12_ruddy` |
-| 17 | 1 Sam 16:7 (end of verse) | quotation | `s1_16_7_looks_heart` |
-| 20 | DAVID · דָּוִד | narration (title) | `INTRO_NARRATION.davidName` |
-| 20 | פֶּרֶק רִאשׁוֹן · הָרֹעֶה | narration (chapter card) | `INTRO_NARRATION.chapterTitle` |
-| title | הַטּוֹב מִמֶּךָּ (the film's name) | quotation (two words of 15:28) | `s1_15_28_better_than_you` |
+| P1 (0.3 s, over black into the clouds) | לִפְנֵי כִּשְׁלֹשֶׁת אֲלָפִים שָׁנָה | narration (time card) | `INTRO_NARRATION.timeCard` |
+| P3 | קֶבֶר רָחֵל | narration (place card) | `INTRO_NARRATION.rachelTomb` |
+| P5 | 1 Sam 8:5 (the elders' demand) | quotation | `s1_8_5_give_us_king` |
+| G1 | הַגִּלְגָּל | narration (place card) | `INTRO_NARRATION.gilgal` |
+| G2 | שָׁאוּל · מֶלֶךְ יִשְׂרָאֵל | narration (person card: the name, the title under it) | `INTRO_NARRATION.saulShort` + `saulTitle` |
+| G3 | 1 Sam 9:2 (end of verse) | quotation | `s1_9_2_head_above` |
+| G4 | שְׁמוּאֵל | narration (person card) | `INTRO_NARRATION.samuel` |
+| G6 | 1 Sam 15:28, first half (Samuel speaks it; word by word with his lips) | quotation | `s1_15_28_torn_today` |
+| D1 | 1 Sam 15:28, second half (writes itself over David) | quotation | `s1_15_28_to_your_neighbor` |
+| D2 | 1 Sam 16:7 (end of verse) | quotation | `s1_16_7_looks_heart` |
+| T | DAVID · דָּוִד · פֶּרֶק רִאשׁוֹן · הָרֹעֶה | narration (title + chapter card) | `davidLogo`, `davidName`, `chapterTitle` |
 
 Exact texts (all verified, catalog = source of truth):
 
-* shot 3 — "וַתָּמָת רָחֵל וַתִּקָּבֵר בְּדֶרֶךְ אֶפְרָתָה הִוא בֵּית לָחֶם" (Gen 35:19)
-* shot 4 — "וַתְּהִי הַמִּלְחָמָה חֲזָקָה עַל־פְּלִשְׁתִּים כֹּל יְמֵי שָׁאוּל" (1 Sam 14:52)
-* shot 5 — "שִׂימָה־לָּנוּ מֶלֶךְ לְשָׁפְטֵנוּ כְּכָל־הַגּוֹיִם" (1 Sam 8:5)
-* shot 7 — "מִשִּׁכְמוֹ וָמַעְלָה גָּבֹהַּ מִכָּל־הָעָם" (1 Sam 9:2)
-* shot 8 — "וְשָׁאוּל לָכַד הַמְּלוּכָה עַל־יִשְׂרָאֵל וַיִּלָּחֶם סָבִיב בְּכָל־אֹיְבָיו" (1 Sam 14:47)
-* shot 10 — "וַיִּסֹּב שְׁמוּאֵל לָלֶכֶת וַיַּחֲזֵק בִּכְנַף־מְעִילוֹ וַיִּקָּרַע" (1 Sam 15:27)
-* shot 11 — "קָרַע ה׳ אֶת־מַמְלְכוּת יִשְׂרָאֵל מֵעָלֶיךָ הַיּוֹם וּנְתָנָהּ לְרֵעֲךָ הַטּוֹב מִמֶּךָּ" (1 Sam 15:28)
-* shot 13 — "בִּקֵּשׁ ה׳ לוֹ אִישׁ כִּלְבָבוֹ" (1 Sam 13:14)
-* shot 15 — "עוֹד שָׁאַר הַקָּטָן וְהִנֵּה רֹעֶה בַּצֹּאן" (1 Sam 16:11)
-* shot 16 — "וְהוּא אַדְמוֹנִי עִם־יְפֵה עֵינַיִם וְטוֹב רֹאִי" (1 Sam 16:12)
-* shot 17 — "כִּי הָאָדָם יִרְאֶה לַעֵינַיִם וַה׳ יִרְאֶה לַלֵּבָב" (1 Sam 16:7)
+* P5 — "שִׂימָה־לָּנוּ מֶלֶךְ לְשָׁפְטֵנוּ כְּכָל־הַגּוֹיִם" (1 Sam 8:5)
+* G3 — "מִשִּׁכְמוֹ וָמַעְלָה גָּבֹהַּ מִכָּל־הָעָם" (1 Sam 9:2)
+* G6 — "קָרַע ה׳ אֶת־מַמְלְכוּת יִשְׂרָאֵל מֵעָלֶיךָ הַיּוֹם" (1 Sam 15:28)
+* D1 — "וּנְתָנָהּ לְרֵעֲךָ הַטּוֹב מִמֶּךָּ" (1 Sam 15:28)
+* D2 — "כִּי הָאָדָם יִרְאֶה לַעֵינַיִם וַה׳ יִרְאֶה לַלֵּבָב" (1 Sam 16:7)
 
 Context notes the film must respect (they are why each line is shown *with its reference*):
 
-* 13:14 was said by Samuel to Saul **at Gilgal too**, at the first rebuke (13:8–14) — the same place as Act I.
-  Its past tense ("has sought") fits the transition.
-* 16:11 is Jesse's answer on the day of the anointing; 16:7 is God's word to Samuel about Eliab (Radak 16:7 cites
-  "some explain" that it also alludes to tall, handsome Saul — `radak_s1_16_7_saul`). Never caption either as
-  "said about Saul" or "said about this moment".
-* 14:52 and 14:47 are the narrator's summaries of Saul's whole reign; fine as prologue/portrait lines.
+* 15:28 is split across the cut G6 -> D1. The first half is Samuel's verdict to Saul at Gilgal; it fades out with
+  Samuel. The second half is shown over David because Metzudat David on 15:28 reads "to your neighbour" as David
+  (`metz_s1_15_28_neighbor`). Both halves carry the verse reference.
+* 8:5 is the elders' demand at Ramah (8:4-5), years before Gilgal; Samuel's displeasure is 8:6 (he turns his face
+  away in P5).
+* 16:7 is God's word to Samuel about Eliab (Radak 16:7 cites "some explain" that it also alludes to tall, handsome
+  Saul — `radak_s1_16_7_saul`). Never caption it as "said about Saul" or "said about this moment".
 
 ### 1.1 Cast at a glance (details and sources in §3)
 

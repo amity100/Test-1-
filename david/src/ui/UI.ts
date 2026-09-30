@@ -12,6 +12,23 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, html = '
 
 export interface KeyHint { key: string; touch: string; label: string }
 
+/** Layout of one film text event (CUT v2 typography, docs/intro-script-v2.md). */
+export interface FilmTextOptions {
+  /** verses: seconds from the text's start at which each word appears (speech-synced); overrides `stagger` */
+  words?: readonly number[];
+  /** verses: seconds between words (default 0.11) */
+  stagger?: number;
+  /** verses: the reference fades in this long after the last word (default 0.55 s) */
+  refAfter?: number;
+  /** cards: the negative space of the composition the card sits in */
+  side?: 'left' | 'right' | 'center';
+  /** cards: vertical placement */
+  v?: 'top' | 'middle' | 'bottom';
+}
+
+/** split a catalog text into words (on spaces; a maqaf keeps two words together) — the text itself is never changed */
+const splitWords = (t: string) => t.split(' ').filter((w) => w.length > 0);
+
 /** All DOM overlays: loading, start, cinematic letterbox & captions, title card, HUD, QTE, menus. */
 export class UI {
   readonly root: HTMLDivElement;
@@ -213,36 +230,48 @@ export class UI {
     this.captionEl.classList.remove('on');
   }
 
-  titleCard(on: boolean) {
+  /** The title card; `fadeOut` = seconds the card takes to leave (the film's end dissolves slowly into gameplay). */
+  titleCard(on: boolean, fadeOut = 0.35) {
+    this.titleEl.style.transition = on ? '' : `opacity ${fadeOut}s ease`;
     this.titleEl.classList.toggle('on', on);
   }
 
   // ------------------------------------------------------------------------------ opening-film typography
   /**
-   * One text event of the opening film, on its own element (texts of neighbouring shots overlap and fade
-   * independently of the canvas crossfades). Kinds (docs/intro-script.md; the text itself comes from
-   * src/content/introNarration.ts or, for 'verse', from the catalog helpers of src/content/sources.ts):
-   *  - 'time'   the time card, alone on black, centred, slow tracking
-   *  - 'line'   a prologue narration line over the picture (lower third, centred)
-   *  - 'place'  a place card (top right inside the picture, a gold rule)
-   *  - 'person' a person card: `main` = name, `sub` = title (lower right)
-   *  - 'verse'  a quotation: `main` = quoteText(id), `sub` = sourceRef(id) (bottom centre)
-   * Fades in over ~1.4 s, holds, fades out over ~1.2 s, then removes itself. Returns the element.
+   * One text event of the opening film (CUT v2, docs/intro-script-v2.md "On-screen text"), on its own element over the
+   * canvas (never tied to the canvas crossfades). The text itself comes from src/content/introNarration.ts or, for
+   * 'verse', from the catalog helpers of src/content/sources.ts — it is only split into words, never changed.
+   *  - 'time'    the time card: centred, large, light serif; resolves out of a soft blur while the tracking closes
+   *              (0.6em -> 0.28em over 2.5 s), a faint bloom; melts away at the end
+   *  - 'place'   a place card in the negative space: a soft mask wipe from the right (RTL), a gold rule grows under it
+   *  - 'person'  `main` = the name, very large in a gold-to-cream metal gradient with one light sweep; `sub` = the
+   *              title under it, small and letter-spaced
+   *  - 'verse'   `main` = quoteText(id) LARGE in the lower third, word by word (`words` timing or `stagger`), a soft
+   *              dark glow behind; `sub` = sourceRef(id) small, letter-spaced, fading in after the words
+   *  - 'line'    a plain narration line (lower third)
+   * Every animation is CSS (the film's test clock pins them to film time). Returns the element.
    */
-  filmText(kind: 'time' | 'line' | 'place' | 'person' | 'verse', main: string, sub = '', seconds = 5, elapsed = 0, autoRemove = true): HTMLDivElement {
-    const e = el('div', `ft ft-${kind}`);
-    const inner =
-      kind === 'verse'
-        ? `<div class="ft-v">${main}</div>${sub ? `<div class="ft-ref">${sub}</div>` : ''}`
-        : kind === 'person'
-          ? `<div class="ft-name">${main}</div>${sub ? `<div class="ft-rule"></div><div class="ft-sub">${sub}</div>` : ''}`
-          : kind === 'place'
-            ? `<div class="ft-main">${main}</div><div class="ft-rule"></div>`
-            : `<div class="ft-main">${main}</div>`;
-    e.innerHTML = inner;
+  filmText(kind: 'time' | 'line' | 'place' | 'person' | 'verse', main: string, sub = '', seconds = 5, elapsed = 0, autoRemove = true, o: FilmTextOptions = {}): HTMLDivElement {
+    const side = o.side ?? (kind === 'place' || kind === 'person' ? 'right' : 'center');
+    const e = el('div', `ft ft-${kind} ft-side-${side} ft-v-${o.v ?? (kind === 'verse' || kind === 'line' ? 'bottom' : kind === 'time' ? 'middle' : 'top')}`);
     const dur = Math.max(1.6, seconds);
+    let inner: string;
+    if (kind === 'verse') {
+      const words = splitWords(main);
+      const step = o.stagger ?? 0.11;
+      const at = (i: number) => (o.words && o.words[i] !== undefined ? o.words[i] : i * step);
+      const spans = words.map((w, i) => `<span class="w" style="--d:${at(i).toFixed(3)}s">${w}</span>`).join(' ');
+      const last = at(words.length - 1);
+      e.style.setProperty('--ref', `${(last + (o.refAfter ?? 0.55)).toFixed(2)}s`);
+      inner = `<div class="ft-v">${spans}</div>${sub ? `<div class="ft-ref">${sub}</div>` : ''}`;
+    } else if (kind === 'person') {
+      inner = `<div class="ft-name" data-t="${main}">${main}</div>${sub ? `<div class="ft-sub">${sub}</div>` : ''}`;
+    } else if (kind === 'place') {
+      inner = `<div class="ft-main">${main}</div><div class="ft-rule"></div>`;
+    } else inner = `<div class="ft-main">${main}</div>`;
+    e.innerHTML = inner;
     e.style.setProperty('--dur', `${dur}s`);
-    e.style.setProperty('--out', `${Math.max(0.2, dur - 1.2)}s`);
+    e.style.setProperty('--out', `${Math.max(0.2, dur - (kind === 'time' ? 1.0 : 0.7))}s`);
     this.filmLayer.appendChild(e);
     if (elapsed > 0) {
       // re-shown part-way through its life (the film was sought): jump every animation of it to `elapsed`
@@ -251,6 +280,35 @@ export class UI {
     if (autoRemove) window.setTimeout(() => e.remove(), Math.max(0.1, dur - elapsed) * 1000 + 300);
     return e;
   }
+  /**
+   * P1+P2 (the flight): soft cloud wisps rushing past the lens — low over the deck while the lens skims it, then from
+   * every side as it dives through (a pale veil at the heart of the deck). Clipped to the picture (inside --lb), under
+   * the film texts, pure CSS (times = seconds from the start of the flight; `elapsed` = seconds already played).
+   * Removes itself after ~4.2 s unless `autoRemove` is false (the test clock pins it). Returns the element.
+   */
+  filmWisps(elapsed = 0, autoRemove = true): HTMLDivElement {
+    // [delay, duration, x0, y0, x1, y1 (vw / vh), rotation (deg), peak opacity]
+    const W: [number, number, number, number, number, number, number, number][] = [
+      [1.15, 0.62, -6, 10, -62, 44, -8, 0.3],
+      [1.55, 0.58, 7, 12, 66, 46, 10, 0.34],
+      [1.95, 0.55, -3, 14, -40, 52, -4, 0.36],
+      [2.3, 0.5, 9, 9, 70, 40, 12, 0.4],
+      [2.58, 0.46, -10, -2, -72, -10, -16, 0.46],
+      [2.72, 0.44, 8, -6, 70, -30, 18, 0.5],
+      [2.86, 0.42, -4, 6, -58, 42, -6, 0.52],
+      [3.0, 0.42, 5, -9, 50, -44, 8, 0.5],
+      [3.14, 0.44, -8, 3, -74, 22, -12, 0.46],
+      [3.3, 0.48, 6, 8, 64, 40, 6, 0.4],
+      [3.5, 0.55, -2, -4, -30, -40, -3, 0.3],
+    ];
+    const e = el('div', 'film-wisps');
+    e.innerHTML = W.map(([d, du, x0, y0, x1, y1, r, o]) => `<i class="wisp" style="--wdel:${d}s;--wd:${du}s;--x0:${x0}vw;--y0:${y0}vh;--x1:${x1}vw;--y1:${y1}vh;--r:${r}deg;--wo:${o}"></i>`).join('') + '<i class="wisp-veil"></i>';
+    this.root.insertBefore(e, this.filmLayer);
+    if (elapsed > 0) for (const a of e.getAnimations({ subtree: true })) a.currentTime = elapsed * 1000;
+    if (autoRemove) window.setTimeout(() => e.remove(), Math.max(0.1, 4.3 - elapsed) * 1000);
+    return e;
+  }
+
   /** the title card element (the film pins its animations to the film clock in tests) */
   get titleElement(): HTMLElement {
     return this.titleEl;

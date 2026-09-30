@@ -1,7 +1,9 @@
 """
 Clip table for the DAVID mocap library (CMU takes; start/end = seconds of motion after the T-pose frame, 120 fps).
 
-name  : runtime id.   src: CMU take "<subject>_<trial>" (see cmu-mocap-index-text.txt for the descriptions)
+name  : runtime id.   src: CMU take "<subject>_<trial>" (see cmu-mocap-index-text.txt for the descriptions), or
+        'rb:<stem>' = a Microsoft Rocketbox take (MIT; Assets/Animations/all_animations_max_motextr_*/<stem>.max.fbx,
+        30 fps, tools/mocap/rocketbox.py) - start/end are seconds of that take
 loop  : (min, max) cycle length in seconds to search for a seamless loop; absent = one-shot
 tags  : 'film' (opening film), 'game' (David gameplay), 'loco', 'idle', 'gesture', 'saul', 'samuel', 'army', 'elders'
 Mirror any clip at runtime (play(name, { mirror: true })) for the other hand / the other turn direction.
@@ -65,4 +67,40 @@ CLIPS = [
     dict(name='throw_overhand', src='124_01', start=0.8, end=4.6, tags=['game'], desc='overhand throw (baseball pitch) - base for the sling release'),
     dict(name='throw_ball', src='141_11', start=0.3, end=3.2, tags=['game'], desc='overhand throw'),
     dict(name='look_around', src='139_01', start=4.5, end=9.0, tags=['game', 'idle'], desc='cautious look around'),
+    # ================================================================== Microsoft Rocketbox (MIT) - cut v2 of the film
+    # ---- the army's ROAR at Gilgal (every soldier a different take, offset 0-0.4 s): one-shots that end arms-high
+    dict(name='cheer_1', src='rb:m_cheer_02', start=0.0, end=2.9, tags=['film', 'army', 'gesture', 'rb'], desc='roar: both fists thrust high, pumping (Rocketbox m_cheer_02)'),
+    dict(name='cheer_2', src='rb:m_cheer_04', start=0.2, end=3.8, tags=['film', 'army', 'gesture', 'rb'], desc='roar: both arms up and held (Rocketbox m_cheer_04)'),
+    dict(name='cheer_3', src='rb:m_cheer_03', start=0.3, end=3.0, tags=['film', 'army', 'gesture', 'rb'], desc='roar: right fist raised (Rocketbox m_cheer_03)'),
+    dict(name='cheer_4', src='rb:m_cheer_05', start=0.2, end=3.0, tags=['film', 'army', 'gesture', 'rb'], desc='roar: right fist pumping (Rocketbox m_cheer_05)'),
+    dict(name='cheer_5', src='rb:m_cheer_01', start=11.0, end=14.3, tags=['film', 'army', 'gesture', 'rb'], desc='roar: fists up to the head, shouting (Rocketbox m_cheer_01)'),
+    # ---- walks (the king's stride, the army's variety, Samuel's step)
+    dict(name='walk_cool', src='rb:m_walk_cool_01', loop=(1.1, 1.3), loopWhole=True, tags=['film', 'saul', 'loco', 'rb'], desc="a proud, regal stride (Rocketbox m_walk_cool_01)"),
+    dict(name='walk_cool_b', src='rb:m_walk_cool_02', loop=(1.0, 1.17), loopWhole=True, tags=['film', 'saul', 'army', 'loco', 'rb'], desc='a confident stride, longer steps (Rocketbox m_walk_cool_02)'),
+    dict(name='walk_slow', src='rb:m_walk_slow_01', loop=(1.3, 1.5), loopWhole=True, tags=['film', 'samuel', 'elders', 'loco', 'rb'], desc='slow, upright walk (Rocketbox m_walk_slow_01)'),
+    dict(name='walk_n1', src='rb:m_walk_neutral_01', loop=(1.05, 1.23), loopWhole=True, tags=['film', 'army', 'loco', 'rb'], desc='walk (Rocketbox m_walk_neutral_01)'),
+    dict(name='walk_n2', src='rb:m_walk_neutral_02', loop=(0.95, 1.1), loopWhole=True, tags=['film', 'army', 'loco', 'rb'], desc='walk (Rocketbox m_walk_neutral_02)'),
+    dict(name='walk_stop_rb', src='rb:m_walk_stop', tags=['film', 'saul', 'loco', 'rb'], desc='walk, halt in two steps, stand (Rocketbox m_walk_stop)'),
+    dict(name='turn_go_L', src='rb:m_turn_left_180_to_walk', tags=['film', 'samuel', 'loco', 'rb'], desc='turn 180 deg to the left into a walk away (Rocketbox m_turn_left_180_to_walk)'),
+    dict(name='turn_go_R', src='rb:m_turn_right_180_to_walk', tags=['film', 'samuel', 'loco', 'rb'], desc='turn 180 deg to the right into a walk away (Rocketbox m_turn_right_180_to_walk)'),
+    dict(name='turn_180_L', src='rb:m_turn_left_180', tags=['film', 'loco', 'rb'], desc='turn 180 deg to the left on the spot (Rocketbox m_turn_left_180)'),
+    # ---- the elders at Ramah, Samuel
+    dict(name='stand_up', src='rb:m_sit_stand_up_chair_01', tags=['film', 'elders', 'gesture', 'rb'], desc='rise from a seat (Rocketbox m_sit_stand_up_chair_01)', lock=False),
+    dict(name='talk_angry', src='rb:m_gestic_talk_angry_01', start=1.5, end=7.5, tags=['film', 'elders', 'gesture', 'rb'], desc='angry demand: the arm raised high at 2.5 s (Rocketbox m_gestic_talk_angry_01)'),
+    dict(name='talk_excited', src='rb:m_gestic_talk_excited_02', start=1.5, end=7.5, tags=['film', 'elders', 'gesture', 'rb'], desc='excited talk, both hands (Rocketbox m_gestic_talk_excited_02)'),
+    dict(name='talk_sad', src='rb:m_gestic_talk_sad_01', start=4.5, end=10.5, tags=['film', 'elders', 'samuel', 'gesture', 'rb'], desc='grave, sad talk (Rocketbox m_gestic_talk_sad_01)'),
+    dict(name='listen_deny', src='rb:m_gestic_listen_deny_03', start=0.0, end=4.1, tags=['film', 'samuel', 'elders', 'gesture', 'rb'], desc='listens, shakes the head, turns away (Rocketbox m_gestic_listen_deny_03)'),
+    dict(name='listen_deny_b', src='rb:m_gestic_listen_deny_02', start=0.0, end=3.3, tags=['film', 'samuel', 'gesture', 'rb'], desc='listens, turns the head away (Rocketbox m_gestic_listen_deny_02)'),
+    dict(name='listen_sad', src='rb:m_gestic_listen_sad_01', start=3.0, end=10.0, loop=(2.5, 6.0), tags=['film', 'samuel', 'idle', 'rb'], desc='sad, still listening (Rocketbox m_gestic_listen_sad_01)'),
+    dict(name='listen_angry', src='rb:m_gestic_listen_angry_01', start=1.0, end=6.0, tags=['film', 'elders', 'gesture', 'rb'], desc='listens with crossed arms, angry (Rocketbox m_gestic_listen_angry_01)'),
+    # ---- idles with life (breath, weight shifts, looking around)
+    dict(name='idle_breathe', src='rb:m_idle_breathe_02', start=0.0, end=10.0, loop=(2.5, 6.0), tags=['film', 'idle', 'saul', 'rb'], desc='deep breathing stand (Rocketbox m_idle_breathe_02)'),
+    dict(name='idle_n1', src='rb:m_idle_neutral_01', start=0.0, end=11.6, loop=(3.0, 7.0), tags=['film', 'idle', 'army', 'elders', 'rb'], desc='neutral stand, weight shifts (Rocketbox m_idle_neutral_01)'),
+    dict(name='idle_n2', src='rb:m_idle_neutral_02', start=0.0, end=15.4, loop=(3.0, 7.0), tags=['film', 'idle', 'army', 'rb'], desc='neutral stand (Rocketbox m_idle_neutral_02)'),
+    dict(name='idle_angry', src='rb:m_idle_angry_02', start=0.3, end=8.0, loop=(3.0, 7.0), tags=['film', 'idle', 'elders', 'rb'], desc='agitated stand, head turns (Rocketbox m_idle_angry_02)'),
+    dict(name='look_around_L', src='rb:m_idle_look_around_01', start=0.3, end=4.4, tags=['film', 'army', 'gesture', 'rb'], desc='turns to look to the right and back (Rocketbox m_idle_look_around_01)'),
+    dict(name='look_around_R', src='rb:m_idle_look_around_02', start=0.3, end=4.3, tags=['film', 'army', 'gesture', 'rb'], desc='turns to look to the left and back (Rocketbox m_idle_look_around_02)'),
+    dict(name='crouch_in', src='rb:m_crouch_in', tags=['film', 'game', 'gesture', 'rb'], desc='crouch down (Rocketbox m_crouch_in)'),
+    dict(name='crouch_idle', src='rb:m_crouch_idle', loop=(2.0, 5.0), tags=['film', 'game', 'idle', 'rb'], desc='crouching (Rocketbox m_crouch_idle)', lock=False),
+    dict(name='crouch_out', src='rb:m_crouch_out', tags=['film', 'game', 'gesture', 'rb'], desc='rise from a crouch (Rocketbox m_crouch_out)'),
 ]

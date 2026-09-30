@@ -17,31 +17,47 @@
  * front ranks step aside to open the road for Samuel, heads turning toward him; later shots: standing, idle.
  */
 import * as THREE from 'three';
-import { armyAt, armySlot, timeScale, RAISE_DELAY_PER_RANK, MARCH_SPEED, type GilgalShotName } from '../gilgal/gilgalBlocking';
+import { armyAt, armySlot, timeScale, BEATS, MARCH_SPEED, type GilgalShotName } from '../gilgal/gilgalBlocking';
 import { ARMY, SAMUEL, roadZ } from '../gilgal/gilgalLayout';
 import { Crowd, type CrowdAgent, type CrowdTier } from './Crowd';
 import { CrowdAnim, type CrowdClipSpec } from './CrowdAnim';
 import { CrowdDust } from './CrowdDust';
 import { SpoilHerd } from './SpoilHerd';
 import { bit } from './crowdShader';
+import { ArmyHeroes, type HeroCue } from './ArmyHeroes';
 
-const WALKS = ['march', 'march_c', 'walk_b', 'walk_c', 'walk_d'];
-const CHEERS_SPEAR = ['raise_arm_R', 'cheer_reach', 'arms_high'];
+/** marching takes (CMU + Rocketbox): every man draws his own, his own phase and pace — never in lockstep */
+const WALKS = ['march', 'march_c', 'walk_b', 'walk_c', 'walk_d', 'walk_n1', 'walk_n2', 'walk_cool_b'];
+const WALKS_LITE = ['march', 'march_c', 'walk_b', 'walk_n1'];
+/** standing takes (weight shifts, breath) */
+const IDLES = ['idle_soldier', 'idle_shift', 'idle_n1', 'idle_n2'];
+const IDLES_LITE = ['idle_soldier', 'idle_n1'];
+/** THE ROAR (G3): Rocketbox cheers (m_cheer_01..05) + the CMU arm raises held at their peak */
+const CHEERS = ['cheer_1', 'cheer_2', 'cheer_3', 'cheer_4', 'cheer_5'];
+const PEAKS = ['raise_arm_R', 'cheer_reach', 'arms_high'];
 
-/** clips the Israelite army needs (bake once; `lite` for phones: no mirrored takes) */
+/** clips the Israelite army needs (bake once; `lite` for phones: fewer takes, no mirrored ones) */
 export function israelClips(lite: boolean): CrowdClipSpec[] {
   const s: CrowdClipSpec[] = [];
-  for (const w of lite ? ['march', 'march_c', 'walk_b'] : WALKS) {
+  for (const w of lite ? WALKS_LITE : WALKS) {
     s.push({ clip: w }, { clip: w, carry: true });
     if (!lite) s.push({ clip: w, mirror: true }, { clip: w, mirror: true, carry: true });
   }
-  s.push({ clip: 'idle_soldier' }, { clip: 'idle_soldier', carry: true });
-  if (!lite) s.push({ clip: 'idle_shift' }, { clip: 'idle_shift', carry: true }, { clip: 'idle_soldier', mirror: true, carry: true });
-  for (const c of CHEERS_SPEAR) {
+  for (const w of lite ? IDLES_LITE : IDLES) {
+    s.push({ clip: w }, { clip: w, carry: true });
+    if (!lite) s.push({ clip: w, mirror: true, carry: true });
+  }
+  for (const c of CHEERS) {
+    s.push({ clip: c });
+    if (!lite) s.push({ clip: c, mirror: true });
+  }
+  for (const c of PEAKS) {
     s.push({ clip: c, peak: 'wrist.R' });
     if (!lite) s.push({ clip: c, peak: 'wrist.R', mirror: true });
   }
   s.push({ clip: 'cheer_arms' });
+  // the silence (G4): men turn their whole body to look down the road
+  s.push({ clip: 'look_around_L' }, { clip: 'look_around_R' });
   return s;
 }
 
@@ -53,14 +69,17 @@ interface Soldier {
   rank: number;
   kit: Kit;
   walk: string;
+  idle: string;
+  cheer: string;
   mirror: boolean;
   carry: boolean;
   phase: number;
   pace: number;
-  delay: number;
-  state: 'none' | 'march' | 'idle' | 'raise' | 'lower' | 'step';
-  raised: boolean;
+  /** per-man random numbers (fixed): timing jitter, choices */
+  r: number[];
+  state: 'none' | 'march' | 'halt' | 'roar' | 'freeze' | 'lower' | 'look' | 'step' | 'idle';
   last: THREE.Vector3;
+  yaw: number;
   gx: number;
   gz: number;
   gy: number;
@@ -85,6 +104,11 @@ export interface GilgalArmyOptions {
   /** override the tier's mesh LOD caps (nearest first; the overflow falls to the next LOD / the impostors) */
   lodCaps?: [number, number, number];
   anim?: CrowdAnim;
+  /**
+   * full FilmActor soldiers standing in for the crowd figures nearest the lens (ArmyHeroes: the rams'-horn blowers of
+   * G1 + near spear-men): false = none; default by tier (ArmyHeroes.HERO_COUNT)
+   */
+  heroes?: boolean | { horns: number; near: number };
 }
 
 /** what a formation slot does now: a FilmActor standing in for the crowd figure mirrors it */
@@ -102,6 +126,12 @@ export interface SlotState {
   headYaw: number;
 }
 
+const ss = (a: number, b: number, x: number) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
+
 function hash(a: number, b: number) {
   const h = Math.sin(a * 12.9898 + b * 78.233 + 0.123) * 43758.5453;
   return h - Math.floor(h);
@@ -117,11 +147,11 @@ export class GilgalArmy {
   /** the driven flocks and herds (null if disabled) */
   readonly herd: SpoilHerd | null;
   private front = { x: 0, walk: false };
-  private readonly ground: (x: number, z: number) => number;
+  readonly ground: (x: number, z: number) => number;
   private readonly ownsAnim: boolean;
   private beat: GilgalShotName | null = null;
   private beatT = 0;
-  private raiseT = -1;
+  private lastDt = 1 / 30;
   private readonly lite: boolean;
   private readonly tmp = new THREE.Vector3();
   private readonly samuel = SAMUEL.pos.clone();
@@ -134,8 +164,30 @@ export class GilgalArmy {
     const tail = o.impostors === false ? 0 : typeof o.impostors === 'number' ? o.impostors : tailDefault;
     const ranks = near + tail;
     const crowd = await Crowd.create({ army: 'israel', anim, capacity: ranks * ARMY.files, tier: o.tier, impostors: tail > 0, lodCaps: o.lodCaps });
-    return new GilgalArmy(crowd, anim, ranks, o, !o.anim, lite);
+    const army = new GilgalArmy(crowd, anim, ranks, o, !o.anim, lite);
+    if (o.heroes !== false) {
+      try {
+        const h = typeof o.heroes === 'object' ? o.heroes : {};
+        army.heroes = await ArmyHeroes.create({ tier: o.tier, ground: army.ground, ...h });
+        army.heroes.addTo(army.group);
+      } catch (e) {
+        console.warn('[army] hero soldiers unavailable', e);
+        army.heroes = null;
+      }
+    }
+    return army;
   }
+
+  /** the FilmActor soldiers near the lens (null = none) */
+  heroes: ArmyHeroes | null = null;
+  /** per hero: the soldier index it stands in for this beat (-1 = none) */
+  private heroSlot: number[] = [];
+  private heroBeat: string | null = null;
+  private heroFrames = 0;
+  private readonly heroCues: HeroCue[] = [];
+  private readonly samEyes = SAMUEL.pos.clone().setY(1.55);
+  private readonly wind = new THREE.Vector3(1.4, 0, 0.3);
+  private windClock = 0;
 
   /**
    * Recommended FilmActor stand-ins per shot (the crowd figures nearest the lens that are in frame): shot 9 opens with
@@ -202,7 +254,8 @@ export class GilgalArmy {
     if (this.dust) crowd.group.add(this.dust.mesh);
     this.herd = o.herds === false ? null : new SpoilHerd({ tier: o.tier, ground: this.ground });
     if (this.herd) crowd.group.add(this.herd.group);
-    const walks = lite ? ['march', 'march_c', 'walk_b'] : WALKS;
+    const walks = lite ? WALKS_LITE : WALKS;
+    const idles = lite ? IDLES_LITE : IDLES;
     let i = 0;
     for (let r = 0; r < ranks; r++) {
       for (let f = 0; f < ARMY.files; f++, i++) {
@@ -233,38 +286,75 @@ export class GilgalArmy {
         ag.seed = h(12);
         ag.lean = kit === 'goad' ? 0.9 : 0.12 + h(13) * 0.25;
         const carry = kit === 'spear' || kit === 'goad';
+        // the roar: every man his own take (spear-men mostly the right-arm raises, so the spear goes up)
+        const ch = h(18);
+        const cheer = carry
+          ? (ch < 0.5 ? CHEERS[Math.floor(h(19) * 5)] : ch < 0.8 ? `${PEAKS[Math.floor(h(19) * 3)]}:p` : 'cheer_2')
+          : (ch < 0.75 ? CHEERS[Math.floor(h(19) * 5)] : ch < 0.9 ? 'cheer_arms' : `${PEAKS[Math.floor(h(19) * 3)]}:p`);
         this.soldiers.push({
-          ag, file: f, rank: r, kit, walk: walks[Math.floor(h(14) * walks.length)], mirror: !lite && h(15) < 0.5, carry,
-          phase: h(16) * 3, pace: 0.94 + h(17) * 0.12, delay: 0, state: 'none', raised: false, last: new THREE.Vector3(), gx: 1e9, gz: 1e9, gy: 0,
+          ag, file: f, rank: r, kit, walk: walks[Math.floor(h(14) * walks.length)], idle: idles[Math.floor(h(20) * idles.length)], cheer,
+          mirror: !lite && h(15) < 0.5, carry, phase: h(16) * 3, pace: 0.94 + h(17) * 0.12,
+          r: [h(21), h(22), h(23), h(24), h(25), h(26)], state: 'none', last: new THREE.Vector3(), yaw: Math.PI / 2, gx: 1e9, gz: 1e9, gy: 0,
         });
       }
     }
   }
 
   private key(clip: string, s: Soldier, carry = s.carry, mirror = s.mirror) {
-    const k = `${clip}${mirror && !this.lite ? ':m' : ''}${carry ? ':c' : ''}`;
+    const m = mirror && !this.lite ? ':m' : '';
+    const k = `${clip}${m}${carry ? ':c' : ''}`;
     if (this.anim.has(k)) return k;
     const k2 = `${clip}${carry ? ':c' : ''}`;
-    return this.anim.has(k2) ? k2 : clip;
+    if (this.anim.has(k2)) return k2;
+    const k3 = `${clip}${m}`;
+    return this.anim.has(k3) ? k3 : clip;
+  }
+
+  /** the soldier's roar take (a peak key 'x:p' keeps its mirror before the ':p') */
+  private cheerKey(s: Soldier) {
+    if (s.cheer.endsWith(':p')) {
+      const base = s.cheer.slice(0, -2);
+      const km = `${base}:m:p`;
+      if (s.mirror && !this.lite && base !== 'raise_arm_R' && this.anim.has(km)) return km;
+      return this.anim.has(s.cheer) ? s.cheer : 'cheer_arms';
+    }
+    // spear-men do not mirror (their spear is in the right hand)
+    return this.key(s.cheer, s, false, s.mirror && !s.carry);
   }
 
   /**
    * Drive the army from the gilgal blocking. `shot`/`time` exactly as GilgalSet.setBeat; call every frame with the
-   * real frame dt before update().
+   * real frame dt before update(). The beats come from the timing contract (gilgalBlocking BEATS):
+   *   G1-G2  the march: every man his own take, phase and pace, the head looking about now and then;
+   *   G3     the halt ripples back from the king (the front ranks stop first), then THE ROAR: every man his own cheer
+   *          take (Rocketbox m_cheer_01..05 / the CMU arm raises), started 0-roarSpread s after the beat (the front
+   *          and the centre first), some turned to shout at a neighbour;
+   *   G4     the roar cuts: the men freeze in their pose, then their heads turn down the road, the arms come down, some
+   *          turn the whole body to look; the front ranks STEP aside (they turn into the step, walk, turn back);
+   *   later  they stand, weight shifting, heads toward the two men.
    */
   setBeat(shot: GilgalShotName, time: number) {
     const newBeat = shot !== this.beat || time < this.beatT - 0.05;
+    const prevBeat = this.beat;
     this.beat = shot;
     this.beatT = time;
     const st = armyAt(shot, time);
     this.front.x = st.frontX;
-    this.front.walk = st.walk > 0;
-    if (newBeat) this.raiseT = -1;
-    if (st.raise > 0.01 && this.raiseT < 0) this.raiseT = time;
+    this.front.walk = st.walk > 0.2;
     const pos = this.tmp;
+    const midFile = (ARMY.files - 1) / 2;
     for (const s of this.soldiers) {
       const ag = s.ag;
+      const [r0, r1, r2, r3, r4] = s.r;
       armySlot(s.file, s.rank, st.frontX, st.part, 0.18, pos);
+      // the halt of G3: the column still rolling in onto its marks (decelerating), the halt rippling back
+      let haltT = 0;
+      if (shot === 'spearRaised') {
+        const B = BEATS.spearRaised;
+        haltT = B.halt + 0.12 + s.rank * 0.018 + r0 * 0.22;
+        const u = Math.min(1, time / haltT);
+        pos.x -= MARCH_SPEED * haltT * 0.5 * (1 - u) * (1 - u);
+      }
       // the set's ground function is costly (DEM + noise): re-sample it only every 0.3 m of a man's way
       if (Math.abs(pos.x - s.gx) + Math.abs(pos.z - s.gz) > 0.3) {
         s.gx = pos.x;
@@ -272,64 +362,206 @@ export class GilgalArmy {
         s.gy = this.ground(pos.x, pos.z);
       }
       pos.y = s.gy;
-      const moved = newBeat ? 0 : Math.hypot(pos.x - s.last.x, pos.z - s.last.z);
+      const dx = newBeat ? 0 : pos.x - s.last.x;
+      const dz = newBeat ? 0 : pos.z - s.last.z;
+      const moved = Math.hypot(dx, dz);
       ag.pos.copy(pos);
       s.last.copy(pos);
-      const lookSamuel = shot === 'silence' || shot === 'faceOff' || shot === 'tear' || shot === 'verdict' || shot === 'saulAlone';
-      // facing: east along the road; the front ranks turn their heads toward Samuel in the silence
-      ag.yaw = Math.PI / 2 + (hash(s.file, s.rank) - 0.5) * 0.12;
-      if (lookSamuel) {
-        const want = Math.atan2(this.samuel.x - pos.x, this.samuel.z - pos.z) - ag.yaw;
-        ag.headYaw = THREE.MathUtils.clamp(Math.atan2(Math.sin(want), Math.cos(want)), -0.9, 0.9) * (s.rank < 20 ? 1 : 0.5);
-      } else ag.headYaw = 0;
-      ag.stride = st.walk > 0 ? 1 : s.state === 'step' ? 0.6 : 0;
-      if (st.walk > 0) {
+      const face = Math.PI / 2 + (r4 - 0.5) * 0.12;
+      if (newBeat) s.yaw = face;
+      const toSam = Math.atan2(this.samuel.x - pos.x, this.samuel.z - pos.z);
+      const headToSam = THREE.MathUtils.clamp(wrap(toSam - s.yaw), -1.1, 1.1) * (s.rank < 24 ? 1 : 0.6);
+      ag.stride = st.walk > 0.2 ? 1 : s.state === 'step' ? 0.6 : 0;
+      // ---------------------------------------------------------------- G1-G2: the march
+      if (shot === 'dustWall' || shot === 'king') {
         if (s.state !== 'march' || newBeat) {
           const k = this.key(s.walk, s);
           const clip = this.anim.get(k);
-          ag.play(k, { fade: s.state === 'none' || newBeat ? 0 : 0.4, time: s.phase, rate: (st.walk / Math.max(0.5, clip.speed)) * s.pace });
+          ag.play(k, { fade: 0, time: s.phase, rate: (st.walk / Math.max(0.5, clip.speed)) * s.pace });
           s.state = 'march';
         }
+        // the head looks about (to a neighbour, the road, the dust) now and then
+        ag.headYaw = 0.35 * Math.sin(time * (0.35 + 0.3 * r1) + r2 * 6.28) * (r3 < 0.45 ? 1 : 0.25);
+        ag.yaw = face;
         continue;
       }
-      // halted
-      const raiseOn = st.raise > 0.02 && this.raiseT >= 0 && time - this.raiseT > s.rank * RAISE_DELAY_PER_RANK + Math.abs(s.file - (ARMY.files - 1) / 2) * 0.03 + hash(s.file + 9, s.rank) * 0.25;
-      if (shot === 'spearRaised' && raiseOn && s.state !== 'raise') {
-        let clip: string;
-        if (s.kit === 'spear' || s.kit === 'goad') clip = hash(s.file + 3, s.rank + 1) < 0.6 ? 'raise_arm_R' : 'cheer_reach';
-        else clip = hash(s.file + 5, s.rank) < 0.5 ? 'cheer_arms' : 'arms_high';
-        const pk = clip === 'cheer_arms' ? 'cheer_arms' : `${clip}${s.mirror && !this.lite && clip !== 'raise_arm_R' ? ':m' : ''}:p`;
-        ag.play(this.anim.has(pk) ? pk : clip === 'cheer_arms' ? 'cheer_arms' : `${clip}:p`, { fade: 0.25, rate: 1.1 + hash(s.file, s.rank + 7) * 0.3 });
-        s.state = 'raise';
+      // ---------------------------------------------------------------- G3: the halt and THE ROAR
+      if (shot === 'spearRaised') {
+        const B = BEATS.spearRaised;
+        if (time < haltT) {
+          if (s.state !== 'march' || newBeat) {
+            const k = this.key(s.walk, s);
+            const clip = this.anim.get(k);
+            ag.play(k, { fade: 0, time: s.phase + time, rate: (MARCH_SPEED / Math.max(0.5, clip.speed)) * s.pace });
+            s.state = 'march';
+          }
+          const c = ag.cur;
+          if (c) c.rate = (MARCH_SPEED * (1 - time / haltT) / Math.max(0.5, c.clip.speed)) * s.pace + 0.25;
+          ag.stride = 1 - time / haltT;
+        } else if (s.state === 'march' || s.state === 'none') {
+          ag.play(this.key(s.idle, s, s.carry, false), { fade: s.state === 'none' ? 0 : 0.35, time: s.phase * 1.7 });
+          s.state = 'halt';
+        }
+        // the roar runs back from the king: the front and the centre first, the spread of the contract, a jitter
+        const roarT = B.roar + Math.min(B.roarSpread, s.rank * 0.009 + Math.abs(s.file - midFile) * 0.012 + r1 * 0.2);
+        if (time >= roarT && s.state !== 'roar') {
+          ag.play(this.cheerKey(s), { fade: 0.16, time: r2 * 0.22, rate: 0.95 + r3 * 0.3 });
+          s.state = 'roar';
+        }
+        // some shout to their neighbours (the head turned half toward the next file)
+        const shout = s.state === 'roar' && r4 < 0.22 ? (r3 < 0.5 ? -0.6 : 0.6) * ss(roarT + 0.25, roarT + 0.6, time) : 0;
+        ag.headYaw = shout + (s.state === 'roar' ? 0 : 0.12 * Math.sin(time * 0.8 + r2 * 6));
+        ag.yaw = face;
         continue;
       }
-      if (shot === 'silence' && s.state === 'raise' && st.raise < 0.97) {
-        ag.play(this.key('idle_soldier', s), { fade: 0.9 + hash(s.file, s.rank + 2) * 0.5, time: s.phase });
+      // ---------------------------------------------------------------- G4: the silence
+      if (shot === 'silence') {
+        const B = BEATS.silence;
+        if (newBeat) {
+          // the roar is cut: the men freeze where they are (coming from G3 the cheer holds, barely drifting); seeking
+          // straight into the shot, they stand in the roar's peak
+          if (prevBeat !== 'spearRaised' || s.state !== 'roar') {
+            ag.play(this.cheerKey(s), { fade: 0, time: 1.1 + r2 * 0.5, rate: 0.05 });
+          } else if (ag.cur) ag.cur.rate = 0.05;
+          s.state = 'freeze';
+        }
+        const turnT = B.headsTurn + s.rank * 0.012 + r0 * 0.3;
+        const lowerT = turnT + 0.12 + r1 * 0.45;
+        const turned = ss(turnT, turnT + 0.4, time);
+        ag.headYaw = headToSam * turned;
+        if (s.state === 'freeze' && time >= lowerT) {
+          if (s.rank >= 2 && r2 < 0.28 && !this.lite) {
+            // a whole-body look down the road (Rocketbox look-around): the body turns, then back
+            const side = wrap(toSam - s.yaw) > 0 ? 'look_around_R' : 'look_around_L';
+            ag.play(side, { fade: 0.7, time: 0.35, rate: 1.1 });
+            s.state = 'look';
+          } else {
+            ag.play(this.key(s.idle, s, s.carry, false), { fade: 0.9 + r3 * 0.6, time: s.phase * 1.7 });
+            s.state = 'lower';
+          }
+        }
+        // the front ranks step aside: they turn into the step, walk, and turn back toward the road
+        if (moved > 0.002 && s.state !== 'step' && time > B.part - 0.05) {
+          ag.play(this.key(this.lite ? 'walk_b' : 'walk_c', s), { fade: 0.25, time: s.phase, rate: 1 });
+          s.state = 'step';
+        }
+        if (s.state === 'step') {
+          const v = moved / Math.max(1e-3, this.lastDt);
+          const c = ag.cur;
+          if (c) c.rate = THREE.MathUtils.clamp(v / Math.max(0.5, c.clip.speed), 0.3, 1.6);
+          const dir = Math.atan2(dx, dz);
+          const k = THREE.MathUtils.clamp(v / 0.8, 0, 1);
+          s.yaw += wrap(face + wrap(dir - face) * 0.75 * k - s.yaw) * 0.2;
+          ag.headYaw = headToSam * 0.6;
+          if (moved < 0.0015) {
+            ag.play(this.key(s.idle, s, s.carry, false), { fade: 0.45, time: s.phase * 1.7 });
+            s.state = 'idle';
+          }
+        } else s.yaw += wrap(face - s.yaw) * 0.08;
+        ag.yaw = s.yaw;
+        continue;
+      }
+      // ---------------------------------------------------------------- later: standing, watching
+      if (newBeat || s.state === 'none' || s.state === 'march' || s.state === 'roar' || s.state === 'freeze') {
+        ag.play(this.key(s.idle, s, s.carry, false), { fade: newBeat ? 0 : 0.6, time: s.phase * 1.7 + r0 * 2 });
         s.state = 'idle';
-        continue;
       }
-      if (shot === 'silence' && moved > 0.004 && s.state !== 'step') {
-        // phones bake the lite clip set (no walk_c): the step aside uses walk_b there (cut pass 2 fix)
-        ag.play(this.key(this.lite ? 'walk_b' : 'walk_c', s), { fade: 0.35, time: s.phase, rate: 0.8 });
-        s.state = 'step';
-        continue;
-      }
-      if (s.state === 'step' && moved < 0.002) {
-        ag.play(this.key('idle_soldier', s), { fade: 0.5, time: s.phase });
-        s.state = 'idle';
-        continue;
-      }
-      if (s.state === 'none' || s.state === 'march' || (s.state === 'raise' && shot !== 'spearRaised' && shot !== 'silence')) {
-        const idle = !this.lite && hash(s.file, s.rank + 11) < 0.5 ? 'idle_shift' : 'idle_soldier';
-        ag.play(this.key(idle, s, s.carry, false), { fade: s.state === 'none' || newBeat ? 0 : 0.6, time: s.phase * 1.7 });
-        s.state = 'idle';
-      }
+      s.yaw = face;
+      ag.yaw = face;
+      ag.headYaw = headToSam * (0.8 + 0.2 * Math.sin(time * 0.4 + r2 * 6));
     }
+    this.fillHeroCues(shot, time);
+  }
+
+  /** the heroes mirror their slots' soldiers (see ArmyHeroes) */
+  private fillHeroCues(shot: GilgalShotName, time: number) {
+    const H = this.heroes;
+    if (!H) return;
+    const B = BEATS.spearRaised;
+    H.heroes.forEach((h, i) => {
+      const si = this.heroSlot[i] ?? -1;
+      const s = si >= 0 ? this.soldiers[si] : null;
+      if (!s) {
+        h.cue = null;
+        return;
+      }
+      let c = this.heroCues[i];
+      if (!c) c = this.heroCues[i] = { file: 0, rank: 0, pos: new THREE.Vector3(), yaw: 0, headYaw: 0, state: '', walk: '', idle: '', cheer: '', mirror: false, phase: 0, pace: 1, roarT: -1 };
+      c.file = s.file;
+      c.rank = s.rank;
+      c.pos.copy(s.ag.pos);
+      c.yaw = s.ag.yaw;
+      c.headYaw = s.ag.headYaw;
+      c.state = s.state;
+      c.walk = s.walk;
+      c.idle = s.idle;
+      // a peak take (held at its top by the crowd bake) is a full cheer on the hero
+      c.cheer = s.cheer.endsWith(':p') ? 'cheer_1' : s.cheer;
+      c.mirror = s.mirror && !this.lite;
+      c.phase = s.phase;
+      c.pace = s.pace;
+      c.roarT = shot === 'spearRaised' ? B.roar : -1;
+      h.cue = c;
+      void time;
+    });
+  }
+
+  /**
+   * cast the heroes into the slots nearest the lens that are in view (the horn blowers first into the front rank in
+   * G1); the crowd figures of those slots are hidden
+   */
+  private castHeroes(camera: THREE.Camera) {
+    const H = this.heroes;
+    if (!H || !this.beat) return;
+    camera.getWorldPosition(this.tmp);
+    const cam = this.tmp;
+    const dir = camera.getWorldDirection(new THREE.Vector3());
+    dir.y = 0;
+    dir.normalize();
+    const cand: { i: number; d: number; rank: number }[] = [];
+    this.soldiers.forEach((s, i) => {
+      if (s.rank > 30) return;
+      const dx = s.ag.pos.x - cam.x, dz = s.ag.pos.z - cam.z;
+      const d = Math.hypot(dx, dz);
+      if (d < 1.4 || d > 40) return;
+      if ((dx * dir.x + dz * dir.z) / d < 0.72) return; // inside a ~45 deg cone
+      cand.push({ i, d, rank: s.rank });
+    });
+    cand.sort((a, b) => a.d - b.d);
+    const taken = new Set<number>();
+    const slots: { file: number; rank: number }[] = [];
+    this.heroSlot = H.heroes.map((h) => {
+      const horn = h.role.kit === 'horn';
+      // G1: the horn blowers in the front rank (the nearest front-rank men in view); else the nearest men
+      const pool = horn && this.beat === 'dustWall' ? cand.filter((c) => c.rank <= 1) : cand;
+      const pick = pool.find((c) => !taken.has(c.i)) ?? cand.find((c) => !taken.has(c.i));
+      if (!pick) return -1;
+      taken.add(pick.i);
+      const s = this.soldiers[pick.i];
+      slots.push({ file: s.file, rank: s.rank });
+      return pick.i;
+    });
+    this.setActorSlots(slots);
   }
 
   /** per frame after setBeat: advances the clocks by dt × the shot's slow-motion factor */
   update(dt: number, camera: THREE.Camera) {
     const ts = this.beat ? timeScale(this.beat, this.beatT) : 1;
+    this.lastDt = dt;
+    if (this.heroes && this.beat) {
+      // (re)cast on the first frames of a beat (the camera of the new shot is set by then)
+      if (this.heroBeat !== this.beat) {
+        this.heroBeat = this.beat;
+        this.heroFrames = 0;
+      }
+      if (this.heroFrames++ < 3) {
+        this.castHeroes(camera);
+        this.fillHeroCues(this.beat, this.beatT);
+      }
+      this.windClock += dt;
+      this.wind.set(1.4, 0, 0.3).multiplyScalar(0.8 + 0.25 * Math.sin(this.windClock * 0.9));
+      this.heroes.update(this.beat, this.beatT, dt * ts, camera, this.crowd.viewportHeight, this.wind, this.samEyes);
+    }
     this.crowd.update(dt * ts, camera);
     this.dust?.update(dt * ts, this.crowd);
     this.herd?.update(dt * ts, this.front.x, this.front.walk, roadZ);
@@ -340,6 +572,7 @@ export class GilgalArmy {
   }
 
   dispose() {
+    this.heroes?.dispose();
     this.herd?.dispose();
     this.dust?.dispose();
     this.crowd.dispose();
