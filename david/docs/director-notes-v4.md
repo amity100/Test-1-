@@ -53,5 +53,14 @@ the elders are not readable as elders, Samuel is a speck; the verse is the only 
 elders' heads (they fill the lower third, faces and beards readable), one rises and demands with his arm up,
 the others react, Samuel turns his face away (8:6).
 
-### 6 · Gilgal dust wall (40.8–47.8 s) · 7 · The king (47.8–55.8 s) · 8 · The spear (55.8–61.8 s)
-(see the Gilgal section below — completed as the capture progresses)
+### 6 · Gilgal dust wall (40.8–47.8 s)
+A locked wide frame for 7 s: palms, a dust cloud, and the army as a thin band on the horizon; nothing arrives, no
+shofar is seen, the "hard cut" lands on a still postcard. The place card is small in the top corner. → 3 s, low
+and close to the front rank as it comes out of the dust at the lens, horns lifted and blown, the card large.
+
+### 7 · The king (47.8–55.8 s)
+Low angle with Saul centre-left among soldiers, but for 8 s the frame is the same: the slow motion (≈¼ speed) makes
+him take about one step, the camera does not move, the soldiers around him are a static crowd. His name card
+collides with the soldiers on the right; the verse is small at the bottom. → 4.5 s: the camera tracks backward
+low in front of him while he strides (slow motion but the stride continuous), dust, the spear swinging, the cloak
+and beard moving; the name card huge in the sky's negative space.
