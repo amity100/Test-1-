@@ -64,3 +64,70 @@ him take about one step, the camera does not move, the soldiers around him are a
 collides with the soldiers on the right; the verse is small at the bottom. → 4.5 s: the camera tracks backward
 low in front of him while he strides (slow motion but the stride continuous), dust, the spear swinging, the cloak
 and beard moving; the name card huge in the sky's negative space.
+
+### 8 · The spear (55.8–61.8 s)
+A wide, side-on, far frame of the whole army with Saul a small red figure in it; the "peak" of the act is a
+distant arm-raise; the army's cheer reads as a uniform ripple; nothing comes toward us. The verse is the long
+14:47. → 3 s, a fast push-in from low in front, the whole body in the thrust, the roar of every man different.
+
+### 9 · Silence (61.8–69.8 s)
+The camera stands inside the column behind soldiers whose backs, heads and spears fill the frame (crowd-quality
+figures: doll faces and shell hair up close), then finds Saul and Samuel far away by zoom; for most of 8 s nothing
+changes. → 3 s: the push between shoulders, heads turning, men stepping aside, Samuel revealed standing in the road.
+
+### 10a · Face-off (69.8–74.8 s)
+Over Samuel's shoulder (his white hair a soft blob in the foreground) onto Saul, then the reverse onto Samuel's
+back; both actors stand still. → folded into the tear (G5a).
+
+### 10b · The tear (74.8–81.8 s)
+A medium two-shot at eye level in flat afternoon light: Samuel turns, Saul reaches, the corner tears, but at this
+distance and speed the moment has no weight — no close angle on the hand and the cloth, the slow motion does not
+read as slow motion, and Samuel's hair flares outward. → G5a wide (2 s) + G5b insert on the fist (2.5 s).
+
+### 11 · The verdict (81.8–90.8 s)
+Nine seconds of almost the same frame: Samuel centred, the long verse at the bottom in small type, his mouth
+barely moving, the background palms and boulders soft. → 4.5 s, a slow push, the words appearing with his speech,
+Saul's shoulder in the foreground.
+
+### 12 · Saul alone (90.8–100.8 s)
+Ten seconds: a medium of Saul, then a close-up; he barely moves; the torn piece is not readable. → 2 s on the fist
+and his face.
+
+### 13 · The rise (100.8–115.8 s)
+Fifteen seconds looking straight down at pale desert ground, then flying over a flat pale landscape into a white
+cloud-out: empty, washed out, and far too long. → cut; a 0.6 s warm light-flash replaces it.
+
+### 14 · Bethlehem (115.8–123.8 s)
+A slow aerial over terraced hills; Bethlehem cannot be found; no life. → cut.
+
+### 15 · David from behind (123.8–131.3 s)
+David stands on the rock with his staff for 7.5 s; the camera barely moves; the flock is not in frame; the verse
+16:11 at the bottom. → 4 s, the orbit behind him, the flock moving below, wind, his weight shifting.
+
+### 16 · The face (131.3–138.3 s)
+A 7 s medium close-up of David's face turning slightly; it holds far too long on a face that still reads CG.
+→ 3.5 s, backlit, a push-in, the turn into the light, a blink.
+
+### 17 · The contrast (138.3–145.8 s)
+A pull-back from below over a huge pale rock slab (cracked bedrock with a visible texture repeat); David becomes a
+speck. → cut.
+
+### 18 · Peace / 19 · Thicket / lamb (145.8–158.2 s)
+Twelve seconds: the lamb walks to the thicket's edge; the lamb reads as a glowing white blob (overexposed wool with
+no shading), the camera creeps, the eyes are never visible. → 4 s total: the lamb grazing and lifting its head, the
+birds stop, two eyes open in the dark, smash.
+
+### 20 · Title (158.2–164.8 s)
+Clean but plain: DAVID fading in with a small Hebrew line; the chapter line tiny. → the smash hit, DAVID forming
+from light with a sweep, דָּוִד, the chapter line, 5 s.
+
+## Models seen in the film (for the models teammate)
+* David's tunic: the weave texture is far too big and contrasty — it reads as woven straw/basketry, especially in
+  the back and face shots.
+* Saul's scale coat: large flat scales in rows with dark gaps in the skirt — reads as cardboard/feathers; the nezer
+  and helmet are fixed but the coat is not metal.
+* Samuel: the white hair and beard read stringy and flare outward in motion; the dark mantle is a flat dark shape.
+* Soldiers near the lens (shot 9, and Saul's surroundings in 7): doll-like faces and shell hair; the tunics are
+  flat colour; the far ranks and impostors are fine at distance.
+* The Philistine host: bright rectangular blocks of identical figures (formation and material both).
+* The lamb/flock near the lens: overexposed wool, no self-shadowing.
