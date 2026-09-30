@@ -134,6 +134,16 @@ export interface TerrainLook {
   haze?: boolean;
   /** dry-stone terraces of the Judean hills drawn per pixel (stepped normals, wall faces, fields; anti-aliased) */
   terraces?: boolean;
+  /**
+   * valley fog of the dawn inversion (visual-bible 3.11 "mist/fog lying in the valleys"): fills every valley below the
+   * smoothed surface (baked valley depth) with a lit fog layer, integrated along the view ray, so each ridge's foot
+   * dissolves into mist and its crest stays sharp (layered ridgelines). Replaces the old `mist` term when given.
+   *  offset: fog top, metres below the smoothed surface; jitter: its variation; density: 1/m along the ray;
+   *  xMax: no fog east of this x (the rift floor, Moab); near: fade-in distance (m).
+   */
+  valleyFog?: { offset: number; jitter: number; density: number; xMax: number; near: number };
+  /** Judah's near hills (with `terraces`): limestone ledges (nari), garrigue cushions, ochre soil; no micro-relief peel */
+  nearHills?: boolean;
   /** a hilltop village: beaten earth in the plaza (x, z, r) and dry, pale, stony ground round the village (cx, cz, rIn, rOut) */
   village?: { plaza: THREE.Vector3; center: THREE.Vector2; rIn: number; rOut: number };
 }
@@ -162,6 +172,8 @@ export function landMaterial(tt: TerrainTex, look: TerrainLook, tier: LandTier):
     ...terrainUniforms(),
     uPlaza: { value: look.village ? look.village.plaza.clone() : new THREE.Vector3(1e9, 1e9, 1) },
     uVillage: { value: look.village ? new THREE.Vector4(look.village.center.x, look.village.center.y, look.village.rIn, look.village.rOut) : new THREE.Vector4(1e9, 1e9, 1, 2) },
+    uVFog: { value: look.valleyFog ? new THREE.Vector4(look.valleyFog.offset, look.valleyFog.jitter, look.valleyFog.density, look.valleyFog.xMax) : new THREE.Vector4(0, 0, 0, 0) },
+    uVFogNear: { value: look.valleyFog?.near ?? 400 },
     ...landAtmo, ...cloudShared,
   };
   u.uMist.value = look.mist;
@@ -175,6 +187,8 @@ export function landMaterial(tt: TerrainTex, look: TerrainLook, tier: LandTier):
   if (look.haze) defines.LAND_HAZE = '1';
   if (look.terraces) defines.LAND_TERRACE = '1';
   if (look.village) defines.LAND_VILLAGE = '1';
+  if (look.valleyFog) defines.LAND_VFOG = '1';
+  if (look.nearHills) defines.LAND_JNEAR = '1';
   mat.userData.landUniforms = u;
   mat.onBeforeCompile = (s) => {
     Object.assign(s.uniforms, u);
@@ -189,6 +203,7 @@ export function landMaterial(tt: TerrainTex, look: TerrainLook, tier: LandTier):
         uniform vec4 uRegBox, uLocBox, uLocEdge;
         uniform float uMist, uMistTop, uTime;
         uniform vec3 uPlaza; uniform vec4 uVillage;
+        uniform vec4 uVFog; uniform float uVFogNear;
         uniform vec3 uMistColor;
         #ifdef LAND_NEAR
         uniform sampler2D tSoil, tGrass, tRock, tRockN, tGrassN;
@@ -221,6 +236,10 @@ export function landMaterial(tt: TerrainTex, look: TerrainLook, tier: LandTier):
         // ---- macro palette (sRGB, from photographs of the Judean hills / desert / rift at low sun) ----
         float n1 = dFbm(xz * 0.0021), n2 = dFbm(xz * 0.013 + 7.0), n3 = dNoise(xz * 0.06);
         vec3 terra = mix(vec3(0.46, 0.30, 0.21), vec3(0.54, 0.41, 0.31), n2);          // terra rossa / hamra
+        #ifdef LAND_JNEAR
+        // Judah at dawn (orchestrator p4 / visual-bible 3.11): ochre-brown soil between grey limestone, not orange
+        terra = mix(vec3(0.43, 0.345, 0.27), vec3(0.52, 0.43, 0.34), n2);
+        #endif
         vec3 lime = mix(vec3(0.64, 0.62, 0.58), vec3(0.74, 0.72, 0.67), n1);           // grey Cenomanian limestone
         vec3 maquis = mix(vec3(0.17, 0.20, 0.13), vec3(0.25, 0.27, 0.17), n2);         // maquis, oak, olive
         vec3 chalk = mix(vec3(0.80, 0.72, 0.56), vec3(0.86, 0.79, 0.64), n1);          // Senonian chalk of the desert
@@ -327,6 +346,39 @@ export function landMaterial(tt: TerrainTex, look: TerrainLook, tier: LandTier):
         float dots = dCellDots(xz * 0.045, 0.22) * (1.0 - arid * 0.7);
         alb *= 1.0 - dots * 0.25 * (1.0 - smoothstep(4000.0, 12000.0, landDist)) * smoothstep(400.0, 1200.0, landDist);
         alb *= 0.82 + 0.36 * n3 * (1.0 - smoothstep(3000.0, 9000.0, landDist)) + 0.1 * (1.0 - n1);
+        #ifdef LAND_JNEAR
+        {
+          // Judah's near ridge (80 m - 3 km): the detail that proves the place (visual-bible 3.11, orchestrator p4):
+          // grey-white limestone ledges (nari crust / bedding steps) breaking the ochre soil along the contours,
+          // broken and irregular, a dark undercut below each; dark-green garrigue cushions (thorny burnet, sage).
+          float nearW = 1.0 - smoothstep(1500.0, 3400.0, landDist);
+          float lp = hgt / 1.85 + (dNoise(xz * 0.019) - 0.5) * 1.3 + (dNoise(xz * 0.13) - 0.5) * 0.22;
+          float lf = fract(lp);
+          float lfw = max(fwidth(lp), 1e-4);
+          float laa = 1.0 - smoothstep(0.22, 0.55, lfw);
+          float ledgeOn = smoothstep(0.40, 0.60, dFbm(xz * 0.011 + vec2(floor(lp) * 3.7, floor(lp) * 1.3)))
+                        * smoothstep(0.04, 0.12, slope) * (1.0 - terrN * 0.8) * (1.0 - smoothstep(0.7, 0.95, arid) * 0.5);
+          float face = clamp((0.30 - lf) / lfw + 0.5, 0.0, 1.0) * clamp(lf / lfw + 0.5, 0.0, 1.0);
+          float under = clamp((lf - 0.30) / lfw + 0.5, 0.0, 1.0) * clamp((0.40 - lf) / lfw + 0.5, 0.0, 1.0);
+          vec3 rockC = mix(vec3(0.66, 0.645, 0.60), vec3(0.79, 0.77, 0.72), dNoise(xz * 0.37)) * (0.9 + 0.2 * n3);
+          float lk = ledgeOn * nearW;
+          alb = mix(alb, rockC, face * lk * laa * 0.92);
+          alb *= 1.0 - under * lk * laa * 0.5;
+          alb = mix(alb, mix(alb, rockC, 0.3), lk * (1.0 - laa));
+          // the rock face stands steeper, facing down-slope; the soil step above it is flatter
+          vec2 dn = normalize(nW.xz + vec2(1e-5));
+          nW = normalize(mix(nW, normalize(vec3(dn.x, 0.55, dn.y)), face * lk * laa * 0.7));
+          // garrigue cushions (0.3-0.8 m) and scattered small boulders
+          vec2 gp = xz * 0.62;
+          float gfw = fwidth(gp.x);
+          float gaa = 1.0 - smoothstep(0.35, 0.9, gfw);
+          float gmask = smoothstep(0.30, 0.62, dFbm(xz * 0.021 + 5.0) + (0.4 - arid) * 0.5) * (1.0 - face * lk) * nearW;
+          float gd = dCellDots(gp, 0.28) * gmask;
+          vec3 gC = mix(vec3(0.16, 0.19, 0.12), vec3(0.24, 0.27, 0.16), dNoise(xz * 1.3));
+          alb = mix(alb, gC, gd * gaa * 0.95);
+          alb = mix(alb, alb * vec3(0.78, 0.82, 0.74), gmask * 0.35 * (1.0 - gaa));
+                  }
+        #endif
         #ifdef LAND_HQ
         {
           // micro-relief below the DEM resolution (boulders, terrace risers, gullies): fbm gradient
@@ -338,6 +390,9 @@ export function landMaterial(tt: TerrainTex, look: TerrainLook, tier: LandTier):
           gr *= 0.18;
           #endif
           gr *= 1.0 - 0.7 * terrN;
+          #ifdef LAND_JNEAR
+          gr *= smoothstep(900.0, 3500.0, landDist); // no 'orange peel' at the near ridge: the ledges carry the detail
+          #endif
           nW = normalize(nW + vec3(-gr.x, 0.0, -gr.y));
         }
         #endif
@@ -395,6 +450,25 @@ export function landMaterial(tt: TerrainTex, look: TerrainLook, tier: LandTier):
         // valleys lose sky light (baked concavity) - reads as depth from the air
         reflectedLight.indirectDiffuse *= 0.72 + 0.28 * smoothstep(0.3, 0.7, sh.a);`)
       .replace('#include <opaque_fragment>', /* glsl */ `
+        #ifdef LAND_VFOG
+        {
+          // the dawn inversion (visual-bible 3.11): fog lying in every valley below the smoothed surface, integrated
+          // along the view ray (grazing looks over far valleys see more of it), lit by the low sun from behind:
+          // each ridge's foot dissolves into the glowing layer and its crest stays sharp -> layered ridgelines.
+          vec3 rdF = normalize(vLandW - cameraPosition);
+          float top = uVFog.x + uVFog.y * (dFbm(xz * 0.0009 + vec2(uTime * 0.002, 0.0)) - 0.5);
+          float fdep = max(vdep * 250.0 - top, 0.0);
+          float path = fdep / max(abs(rdF.y), 0.03);
+          float fm = 1.0 - exp(-path * uVFog.z);
+          fm *= smoothstep(uVFogNear, uVFogNear * 3.0, landDist);
+          fm *= 1.0 - smoothstep(uVFog.w - 3000.0, uVFog.w, xz.x);
+          fm *= 1.0 - 0.45 * smoothstep(0.5, 0.9, arid);
+          fm *= 0.7 + 0.5 * dFbm(xz * 0.0021 + 3.0);
+          float lit = 0.62 + 0.38 * landSunVis;
+          vec3 fc = landHazeColor(rdF) * lit * 1.08 + uMistColor * 0.06 * lit;
+          outgoingLight = mix(outgoingLight, fc, clamp(fm, 0.0, 0.94) * uMist);
+        }
+        #else
         {
           // dawn mist pooled in the valleys: thicker in deep valleys and low ground, lit by the low sun
           float m = uMist * 0.6 * smoothstep(0.04, 0.5, vdep) * smoothstep(uMistTop + 150.0, uMistTop - 250.0, vLandW.y);
@@ -403,6 +477,7 @@ export function landMaterial(tt: TerrainTex, look: TerrainLook, tier: LandTier):
           m *= smoothstep(600.0, 3500.0, landDist) * (0.75 + 0.5 * dFbm(xz * 0.0009 + uTime * 0.002));
           outgoingLight = mix(outgoingLight, uMistColor, clamp(m, 0.0, 0.92));
         }
+        #endif
         #ifdef LAND_HAZE
         outgoingLight = landApplyHaze(outgoingLight, cameraPosition, vLandW);
         #endif

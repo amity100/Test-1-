@@ -32,6 +32,12 @@ export interface JudahDressInput {
   /** camera poses of the shots that look at the hills (placement wedge) */
   views: { pos: THREE.Vector3; look: THREE.Vector3 }[];
   mist: { color: THREE.Color; top: number };
+  /** the terrain's valley fog (landTerrain TerrainLook.valleyFog): the dressing fades into the same layer */
+  fog?: { offset: number; jitter: number; density: number; xMax: number; near: number };
+  /** hamlets placed by the set (hilltops in view of the final pose), before the automatic candidates */
+  hamlets?: { x: number; z: number; r: number }[];
+  /** extra olive density near these points (x, z, radius) — the near ridge of the final pose */
+  groves?: { x: number; z: number; r: number }[];
 }
 
 export interface JudahDressing { group: THREE.Group; triangles: number; counts: { olives: number; walls: number; houses: number }; dispose(): void }
@@ -47,9 +53,13 @@ const vnoise = (x: number, y: number) => {
 const fbm2 = (x: number, y: number) => vnoise(x, y) * 0.55 + vnoise(x * 2.1 + 5.2, y * 2.1 + 1.3) * 0.3 + vnoise(x * 4.3 + 9.1, y * 4.3 + 3.7) * 0.15;
 
 /** shared shader chunk: land light for dressing (baked sun visibility + cloud shadow + mist + haze) */
-function dressMaterial(o: { color?: number; vertexColors?: boolean; roughness?: number; mist: { color: THREE.Color; top: number } }): THREE.MeshStandardMaterial {
+function dressMaterial(o: { color?: number; vertexColors?: boolean; roughness?: number; mist: { color: THREE.Color; top: number }; fog?: JudahDressInput['fog'] }): THREE.MeshStandardMaterial {
   const m = new THREE.MeshStandardMaterial({ color: o.color ?? 0xffffff, vertexColors: o.vertexColors ?? false, roughness: o.roughness ?? 0.95, metalness: 0 });
-  const u = { ...landAtmo, ...cloudShared, uMistC: { value: o.mist.color.clone() }, uMistTop: { value: o.mist.top } };
+  const f = o.fog;
+  const u = {
+    ...landAtmo, ...cloudShared, uMistC: { value: o.mist.color.clone() }, uMistTop: { value: o.mist.top },
+    uVFog: { value: f ? new THREE.Vector4(f.offset, f.jitter, f.density, f.xMax) : new THREE.Vector4(0, 0, 0, 0) }, uVFogNear: { value: f?.near ?? 400 },
+  };
   m.onBeforeCompile = (s) => {
     Object.assign(s.uniforms, u);
     s.vertexShader = s.vertexShader
@@ -70,19 +80,32 @@ function dressMaterial(o: { color?: number; vertexColors?: boolean; roughness?: 
       .replace('#include <common>', `#include <common>
         varying vec3 vDW; varying vec2 vLand; varying float vCloud;
         uniform vec3 uMistC; uniform float uMistTop;
+        uniform vec4 uVFog; uniform float uVFogNear;
+        ${GLSL_NOISE}
         ${GLSL_LAND_HAZE}`)
       .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
         reflectedLight.directDiffuse *= vLand.x * vCloud; reflectedLight.directSpecular *= vLand.x * vCloud;`)
       .replace('#include <opaque_fragment>', `
         {
           float dd = length(vDW - cameraPosition);
-          float m = 0.6 * smoothstep(0.04, 0.5, vLand.y) * smoothstep(uMistTop + 150.0, uMistTop - 250.0, vDW.y) * smoothstep(600.0, 3500.0, dd);
-          outgoingLight = mix(outgoingLight, uMistC, clamp(m, 0.0, 0.9));
+          if (uVFog.z > 0.0) {
+            // the terrain's valley fog (landTerrain LAND_VFOG), same model, so trees and walls sink into the layer
+            vec3 rdF = normalize(vDW - cameraPosition);
+            float top = uVFog.x + uVFog.y * (dFbm(vDW.xz * 0.0009) - 0.5);
+            float fdep = max(vLand.y * 250.0 - top, 0.0);
+            float fm = (1.0 - exp(-fdep / max(abs(rdF.y), 0.03) * uVFog.z)) * smoothstep(uVFogNear, uVFogNear * 3.0, dd);
+            fm *= 0.7 + 0.5 * dFbm(vDW.xz * 0.0021 + 3.0);
+            vec3 fc = landHazeColor(rdF) * (0.62 + 0.38 * vLand.x) * 1.08 + uMistC * 0.06;
+            outgoingLight = mix(outgoingLight, fc, clamp(fm, 0.0, 0.94));
+          } else {
+            float m = 0.6 * smoothstep(0.04, 0.5, vLand.y) * smoothstep(uMistTop + 150.0, uMistTop - 250.0, vDW.y) * smoothstep(600.0, 3500.0, dd);
+            outgoingLight = mix(outgoingLight, uMistC, clamp(m, 0.0, 0.9));
+          }
           outgoingLight = landApplyHaze(outgoingLight, cameraPosition, vDW);
         }
         #include <opaque_fragment>`);
   };
-  m.customProgramCacheKey = () => 'land-dress-1';
+  m.customProgramCacheKey = () => 'land-dress-2' + (f ? 'f' : '');
   return m;
 }
 
@@ -171,6 +194,7 @@ export function buildJudahDressing(o: JudahDressInput): JudahDressing {
     }
     cands.sort((a, b) => b.h - a.h);
     const maxV = tier === 'high' ? 7 : tier === 'medium' ? 5 : 4;
+    for (const hm of o.hamlets ?? []) villages.push({ ...hm });
     for (const c of cands) {
       if (villages.length >= maxV) break;
       if (villages.some((v) => Math.hypot(v.x - c.x, v.z - c.z) < 1500)) continue;
@@ -206,7 +230,7 @@ export function buildJudahDressing(o: JudahDressInput): JudahDressing {
       g.setAttribute('color', new THREE.BufferAttribute(col, 3));
       const land = new Float32Array(houses.length * 2);
       g.setAttribute('aLand', new THREE.InstancedBufferAttribute(land, 2));
-      const mat = dressMaterial({ vertexColors: true, roughness: 0.92, mist: o.mist });
+      const mat = dressMaterial({ vertexColors: true, roughness: 0.92, mist: o.mist, fog: o.fog });
       const im = new THREE.InstancedMesh(g, mat, houses.length);
       const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3(), c = new THREE.Color();
       houses.forEach((hh, i) => {
@@ -294,7 +318,7 @@ export function buildJudahDressing(o: JudahDressInput): JudahDressing {
       const g = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
       const land = new Float32Array(nWalls * 2);
       g.setAttribute('aLand', new THREE.InstancedBufferAttribute(land, 2));
-      const mat = dressMaterial({ color: 0x9a907f, roughness: 0.95, mist: o.mist });
+      const mat = dressMaterial({ color: 0x9a907f, roughness: 0.95, mist: o.mist, fog: o.fog });
       const uRange = { value: new THREE.Vector2(range * 0.78, range) };
       const base = mat.onBeforeCompile;
       mat.onBeforeCompile = (s, r) => {
@@ -355,6 +379,7 @@ export function buildJudahDressing(o: JudahDressInput): JudahDressing {
         const gn = fbm2(px * 0.0042 + 3.3, pz * 0.0042 + 1.1);
         let near = 0;
         for (const v of villages) near = Math.max(near, 1 - THREE.MathUtils.smoothstep(Math.hypot(v.x - px, v.z - pz), v.r + 30, v.r + 700));
+        for (const g of o.groves ?? []) near = Math.max(near, 1.3 * (1 - THREE.MathUtils.smoothstep(Math.hypot(g.x - px, g.z - pz), g.r * 0.5, g.r)));
         const dens = THREE.MathUtils.smoothstep(gn + near * 0.35, 0.5, 0.64) * hm;
         if (dens <= 0) continue;
         const sl = slopeAt(px, pz);
@@ -383,7 +408,7 @@ export function buildJudahDressing(o: JudahDressInput): JudahDressing {
       g.computeVertexNormals();
       const land = new Float32Array(nOl * 2);
       g.setAttribute('aLand', new THREE.InstancedBufferAttribute(land, 2));
-      const mat = dressMaterial({ color: 0x5d6446, roughness: 0.9, mist: o.mist });
+      const mat = dressMaterial({ color: 0x5d6446, roughness: 0.9, mist: o.mist, fog: o.fog });
       const im = new THREE.InstancedMesh(g, mat, nOl);
       const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3(), c = new THREE.Color();
       const up = new THREE.Vector3(0, 1, 0);

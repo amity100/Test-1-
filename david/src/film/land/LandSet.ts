@@ -41,6 +41,27 @@ export const LAND_LIGHT: Record<LandLocation, { elevation: number; azimuth: numb
   ramah: { elevation: 15, azimuth: 105, exposure: 0.56 },
 };
 
+/**
+ * The end of the Judah flight (orchestrator p4): the photographers' dawn view from the east edge of the Bethlehem
+ * ridge — a low, long-lens look ESE over the layered ridgelines of the Judean desert, valley fog lying between
+ * them, the Dead Sea a molten strip and the level Moab wall under the rising sun. Local metres (x east, z south).
+ * az: heading in SkySystem degrees (from +Z toward +X); pitch in degrees; `above` = height over the ridge (m).
+ */
+export const JUDAH_FINAL = { x: -50, z: -850, above: 62, az: 82, pitch: -3.1, fov: 21 };
+
+/** a point `ahead` m along the final heading and `right` m to its right (local x, z) */
+export function judahAhead(ahead: number, right: number): { x: number; z: number } {
+  const a = THREE.MathUtils.degToRad(JUDAH_FINAL.az), dx = Math.sin(a), dz = Math.cos(a);
+  return { x: JUDAH_FINAL.x + dx * ahead - dz * right, z: JUDAH_FINAL.z + dz * ahead + dx * right };
+}
+
+/** valley fog of the dawn inversion (landTerrain TerrainLook.valleyFog), per tier */
+const JUDAH_FOG: Record<LandTier, { offset: number; jitter: number; density: number; xMax: number; near: number }> = {
+  high: { offset: 14, jitter: 22, density: 1 / 70, xMax: 21000, near: 260 },
+  medium: { offset: 14, jitter: 22, density: 1 / 70, xMax: 21000, near: 260 },
+  low: { offset: 14, jitter: 22, density: 1 / 70, xMax: 21000, near: 260 },
+};
+
 const HAZE_WARM0 = landAtmo.uHazeWarm.value.clone();
 const HAZE_COOL0 = landAtmo.uHazeCool.value.clone();
 
@@ -69,6 +90,15 @@ export interface LandStats { drawCalls: number; triangles: number; terrainTris: 
  *             the set stands on er-Ram's summit), elders' benches, Samuel's altar, marks for Samuel and ~20 elders.
  * Each set owns its THREE.Scene + SkySystem; render it through the game's PostFX via `landView(set, {camera})`.
  */
+// small CPU value noise (height mods)
+const hsh = (x: number, y: number) => { const t = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return t - Math.floor(t); };
+function vnoise(x: number, y: number) {
+  const xi = Math.floor(x), yi = Math.floor(y), fx = x - xi, fy = y - yi;
+  const u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy);
+  const a = hsh(xi, yi), b = hsh(xi + 1, yi), c = hsh(xi, yi + 1), d = hsh(xi + 1, yi + 1);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+
 export class LandSet {
   readonly scene = new THREE.Scene();
   readonly sky: SkySystem;
@@ -151,8 +181,23 @@ export class LandSet {
     let roadGlsl: string | undefined;
     let route: THREE.Vector3[] = [];
     if (o.location === 'judah') {
-      // the terrain mesh is finest here: under the end of the flight, where the terraced hills are closest
-      focus = new THREE.Vector3(200, 0, 1700);
+      // the terrain mesh is finest under the final pose of the flight (the polar mesh is foveated round it)
+      focus = new THREE.Vector3(JUDAH_FINAL.x, 0, JUDAH_FINAL.z);
+      // Herodion's cone is Herod's work (1st c. BCE, heaped on a lower natural hill): take the modern cone off
+      const hx = PLACES.herodionHill.x, hz = PLACES.herodionHill.z;
+      mods.push((x, z, h) => { const d = Math.hypot(x - hx, z - hz); return d > 420 ? h : h - 48 * Math.pow(1 - THREE.MathUtils.smoothstep(d, 0, 420), 1.6); });
+      // bedding steps of the limestone under the near ridge (the 30 m DEM is smooth): 1.85 m risers along the
+      // contours in patches, real geometry so the ridge's own silhouette is stepped, not a dune
+      mods.push((x, z, h) => {
+        const d = Math.hypot(x - JUDAH_FINAL.x, z - JUDAH_FINAL.z);
+        if (d > 1600) return h;
+        const w = 1 - THREE.MathUtils.smoothstep(d, 700, 1600);
+        const ph = h / 1.85 + (vnoise(x * 0.019, z * 0.019) - 0.5) * 1.3;
+        const f = ph - Math.floor(ph);
+        const step = (Math.floor(ph) + THREE.MathUtils.smoothstep(f, 0.62, 0.97)) * 1.85 - (ph - h / 1.85) * 1.85;
+        const on = THREE.MathUtils.smoothstep(vnoise(x * 0.011 + 40, z * 0.011 + 7), 0.35, 0.6);
+        return h + (step - h) * 0.75 * on * w + (vnoise(x * 0.07, z * 0.07) - 0.5) * 1.2 * w;
+      });
     } else if (o.location === 'coast') {
       // the plain east of Ashdod (the city on its tell, the dune belt and the sea behind it to the west): the host
       // leaves the city's east gate and marches ESE toward the Shephelah (1 Sam 17:1, 13:5)
@@ -241,6 +286,8 @@ export class LandSet {
       roadGlsl,
       haze: !ground,
       terraces: o.location === 'judah',
+      nearHills: o.location === 'judah',
+      valleyFog: o.location === 'judah' ? JUDAH_FOG[tier] : undefined,
       village: villageLook,
     }, tier);
     const terrain = new THREE.Mesh(geo, tmat);
@@ -270,8 +317,10 @@ export class LandSet {
       this.hazeTint = { warm: new THREE.Color(1.0, 0.72, 0.58), cool: new THREE.Color(0.5, 0.55, 1.0), lobe: new THREE.Vector3(22, 2.2, 0.8) };
       // the deck ends over the ridge east of Bethlehem: the flight comes out from under it into the open dawn
       this.deck = new THREE.Vector4(1850, 2450, -1400, 1.0);
-      landAtmo.uHaze.value.x = 2.2e-5;
-      landAtmo.uHaze.value.y = 1 / 1450;
+      // stronger, lower aerial perspective: each farther ridge bluer and paler; the ray to Moab's top passes above
+      // most of it (the wall stays a sharp dark silhouette), the rift below is filled with glowing haze
+      landAtmo.uHaze.value.x = 7.5e-5;
+      landAtmo.uHaze.value.y = 1 / 820;
       scene.add(this.clouds.mesh);
       this.disposables.push(this.clouds);
       const bl = new THREE.Vector3(PLACES.bethlehem.x, 0, PLACES.bethlehem.z); bl.y = q(bl.x, bl.z);
@@ -401,6 +450,10 @@ export class LandSet {
         tier, ground: this.meshHeight, dem: (x, z) => this.height.height(x, z),
         shade: { tile: local, data: shadeImg.data }, mask: dress, sunDir, views,
         mist: { color: new THREE.Color(0.95, 0.82, 0.74), top: 650 },
+        fog: JUDAH_FOG[tier],
+        // the near ridge of the final pose: a hamlet on the shoulder right of the axis, olive groves on the slopes
+        hamlets: [{ ...judahAhead(620, 130), r: 48 }],
+        groves: [{ ...judahAhead(330, -140), r: 280 }, { ...judahAhead(820, 90), r: 320 }, { ...judahAhead(520, 260), r: 200 }],
       });
       scene.add(dz.group);
       this.disposables.push(dz);
@@ -421,17 +474,34 @@ export class LandSet {
     const shots: Record<string, Shot> = {};
     let sequence: Shot[] = [];
     if (this.location === 'judah') {
-      const e = (x: number, z: number, above: number) => V(x, this.height.height(x, z) + above, z);
-      void e;
-      // one continuous flight (the film plays `flight`): above the sunlit cloud sea, the sun just over the Moab wall
-      // -> dive through the deck -> skim the terraced ridge country east of Bethlehem at ~250-300 m, the desert
-      // falling away in layered haze to the Dead Sea mirror and the blue-violet Moab plateau.
-      const FP = [V(-12500, 3400, 1500), V(-9000, 3060, 1600), V(-6200, 2080, 1500), V(-3800, 1330, 1350), V(-1400, 1075, 1300), V(800, 1015, 1400)];
-      const FL = [V(40000, 1300, 6100), V(40000, 1000, 7000), V(36000, 150, 8200), V(32000, -300, 9500), V(30500, -380, 10500), V(30500, -390, 11500)];
-      shots.cloudSea = path([FP[0], V(-10700, 3230, 1550), FP[1]], [FL[0], V(40000, 1150, 6500), FL[1]], [48, 46], 7);
-      shots.descent = path([FP[1], FP[2], FP[3]], [FL[1], FL[2], FL[3]], [46, 42], 6);
-      shots.judahDawn = path([FP[3], FP[4], FP[5]], [FL[3], FL[4], FL[5]], [42, 38], 9);
-      shots.flight = path(FP, FL, [48, 38], 22);
+      // THE FLIGHT (orchestrator p4): above the sunlit cloud sea, the sun just over the Moab wall -> dive through the
+      // deck -> sink out from under it toward the east edge of the Bethlehem ridge while the lens lengthens ->
+      // a low, long-lens tableau: layered ridgelines of the desert receding toward the rift, valley fog between
+      // them, the Dead Sea a molten strip, Moab a level wall; the near ridge (terraces, ledges, olives, a hamlet).
+      // Keyed on the eased parameter e (CameraRig smoothstep): 7 points = e 0, 1/6, ... 1. The film plays u 0.1-0.78
+      // (e 0.03-0.88): above the deck to film s ~4, through it at s ~5-6, the tableau from s ~9.
+      const J = JUDAH_FINAL;
+      const a = THREE.MathUtils.degToRad(J.az);
+      const dx = Math.sin(a), dz = Math.cos(a);
+      const g0 = this.height.height(J.x, J.z);
+      const C = (back: number, y: number) => V(J.x + dx * back, y, J.z + dz * back);
+      const Cg = (back: number, above: number) => { const p = C(back, 0); p.y = Math.max(this.height.height(p.x, p.z), g0 - 40) + above; return p; };
+      const tp = Math.tan(THREE.MathUtils.degToRad(-J.pitch));
+      const eyeF = g0 + J.above;
+      const FP = [C(-13000, 3400), C(-10400, 3180), C(-7400, 2330), C(-4300, 1480), C(-1650, 1010), Cg(-330, J.above + 22), C(110, eyeF - 4)];
+      const FL = [
+        C(30000, 1500), C(30000, 1250), C(28000, 150), C(20000, -350), C(14000, -380),
+        C(10000, eyeF + 16 - 10330 * tp), C(10000, eyeF - 4 - 9890 * tp),
+      ];
+      const fovK = [46, 45, 43, 36, 28, 23, J.fov];
+      const pc = new THREE.CatmullRomCurve3(FP, false, 'centripetal');
+      const lc = new THREE.CatmullRomCurve3(FL, false, 'centripetal');
+      const fovAt = (e: number) => { const k = Math.min(5.999, Math.max(0, e * 6)); const i = Math.floor(k); const f = k - i; const w = f * f * (3 - 2 * f); return fovK[i] + (fovK[i + 1] - fovK[i]) * w; };
+      const sub = (e0: number, e1: number, d: number, ease = true): Shot => ({ duration: d, ease, at: (u: number): ShotFrame => { const e = e0 + (e1 - e0) * u; return { pos: pc.getPoint(e), look: lc.getPoint(e), fov: fovAt(e) }; } });
+      shots.cloudSea = sub(0, 0.3, 7);
+      shots.descent = sub(0.3, 0.62, 6);
+      shots.judahDawn = sub(0.62, 1, 9);
+      shots.flight = sub(0, 1, 22);
       shots.panorama = path([V(-3000, 2600, 26000), V(-1500, 2600, 25000)], [V(-3000, 0, -30000), V(-1500, 0, -30000)], [62, 60], 8);
       sequence = [shots.cloudSea, shots.descent, shots.judahDawn];
     } else if (this.location === 'coast') {

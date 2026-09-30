@@ -18,8 +18,10 @@ import {
  *   saul.update(dt, camera, renderer.domElement.height, wind);
  *   saul.dispose();                                   // after the film (phones)
  *
- * Update order inside update(): mocap -> proxy arm poses -> human.update (rig, face, eyes) -> post IK (arm reach)
- * -> props -> groom -> outfit (cloth, tzitzit) -> tear.
+ * Update order inside update(): proxy arm masks -> mocap -> human.update (rig, face, eyes) -> heading correction
+ * (measured from the hip + shoulder lines) -> body layer (pelvis drop, fold, twist, seated legs; feet stay planted by
+ * two-bone leg IK) -> head look-at (world space; the eyes pre-compensated) -> arm reach IK (the GRIP goes to the
+ * target) -> upright props -> face light -> groom -> outfit (cloth, tzitzit) -> tear.
  */
 
 export type CastRole = 'saul' | 'samuel' | 'elder' | 'soldier' | 'armourBearer' | 'philistine';
@@ -58,6 +60,8 @@ export class FilmActor {
   /** props (not in the outfit): spear / helmet / shield / staff / bow — keyed by name */
   readonly props: Record<string, THREE.Object3D> = {};
   tear: MeilTear | null = null;
+  /** the soldier's / Philistine's weapon kit as dressed (null for Saul, Samuel, elders) */
+  kit: SoldierKit | null = null;
   /** arm poses from the proxy path (masked out of the mocap); weight 0..1 each */
   readonly armPose: Record<'L' | 'R', { pose: ArmPose | null; weight: number }> = { L: { pose: null, weight: 0 }, R: { pose: null, weight: 0 } };
   /** world-space reach targets for post-IK (e.g. Saul's hand to the corner of the me'il) */
@@ -153,6 +157,7 @@ export class FilmActor {
     const gq = crowd ? 'low' : q;
     let outfit: Outfit;
     let tear: MeilTear | null = null;
+    let kit: SoldierKit | null = null;
     const props: Record<string, THREE.Object3D> = {};
     let groomSpec: GroomStyleSpec;
     let headband: { height: number; radius: [number, number]; width?: number; tilt?: number } | undefined;
@@ -200,6 +205,7 @@ export class FilmActor {
       default: {
         const r = spec.role === 'armourBearer' ? await dressArmourBearer(human, { quality: q, seed, crowd }) : await dressSoldier(human, { quality: q, seed, crowd, kit: spec.kit });
         outfit = r.outfit;
+        kit = r.kit;
         if (r.main) {
           props.main = r.main.object;
           props.main.userData.prop = r.main;
@@ -218,6 +224,7 @@ export class FilmActor {
     mocap.rootMotion = 'inplace';
     const a = new FilmActor({ ...spec, lod }, human, groom, outfit, mocap);
     a.tear = tear;
+    a.kit = spec.role === 'philistine' ? 'spear' : kit;
     {
       // rest pose (nothing played yet): the eye line relative to the head joint, for the absolute look pitch
       human.root.updateMatrixWorld(true);

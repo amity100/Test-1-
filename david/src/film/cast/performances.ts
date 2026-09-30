@@ -15,15 +15,20 @@ import type { FilmActor, ArmPose } from './FilmActor';
  *             9     lowers the spear; his face falls as he sees the old man in the road.
  *             10a   face to face: towering over Samuel (eye line = Samuel's at Saul's collarbone), pleading
  *                   (15:24-25 "חָטָאתִי ... וְשׁוּב עִמִּי") — sad / fear, eyes on Samuel's eyes, breathing high.
- *             10b   Samuel turns to go; Saul lunges (grab_pull_R), his right hand reaches the lower corner of the
- *                   me'il (arm IK onto the cloth), the fist closes, he pulls — the wool tears (desperation, not
- *                   violence; 3.3).
+ *             10b   (TEAR_BEATS, action time) Samuel turns to go (0.2); Saul goes after him (walk, 0.3), lunges
+ *                   low (1.45: the walk frozen in a right-foot stride under a pelvis drop + forward fold, FilmActor
+ *                   .body), the grip IK closes his fist on the lower corner of the me'il (1.95; slow motion from
+ *                   t 1.8-2.3 s), he holds on and pulls back while Samuel's step carries on, looks UP into Samuel's
+ *                   face — the wool tears along the weave (2.08-3.2), threads stretch and snap, the corner with
+ *                   its tzitzit stays in his fist (15:27; desperation, not violence, 3.3).
  *             11    listens, the torn piece in his fist; the verdict lands: the eyes widen, the jaw slackens.
  *             12    the long close-up: shattered — head bowed a little, unfocused eyes, trembling breath, the fist
  *                   with the cloth held at his chest.
  *     Samuel 9-10a  stands in the road, upright and still, wrapped in the me'il; eyes on the king (red-rimmed,
  *                   grieving; iron resolve — not anger, not triumph).
- *             10b   turns away to leave (old_turn_walk), one step — the corner is seized — the wool tears.
+ *             10b   turns away to leave (yaw from samuelAt, the head leading), walks (upright walk, slowed), the
+ *                   corner is seized — a jerk in the chest — keeps his step; the wool tears; he stops and turns his
+ *                   head back over the shoulder to the king.
  *             11    turned back to the king: the verdict, quiet and hard (jaw speech keys, sad + determined).
  *             12    turns and walks away east (walk_old, slow).
  *   RamahPerformance   shot 5: Samuel before the elders at the gate of Ramah (idle_old; the elders talk / argue /
@@ -550,7 +555,8 @@ export class RamahPerformance {
     samuel.mocap.play('idle_king', { fade: 0 });
     samuel.human.rig.faceBias.LeftUpperLidClosed = 0.1;
     samuel.human.rig.faceBias.RightUpperLidClosed = 0.1;
-    const clips = ['talk_gesture', 'idle_old', 'argue', 'idle_bus', 'point_directions', 'idle_shift'];
+    // heads of families, dignified (bible 3.7): no stooped idle_old (it folds them in two)
+    const clips = ['talk_gesture', 'idle_king', 'argue', 'idle_bus', 'point_directions', 'idle_shift'];
     elders.forEach((e, i) => {
       e.ground = ground;
       const mk = elderMarks[i % elderMarks.length];

@@ -122,13 +122,18 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions &
     // column length per th (distance from the top edge of the tube to its lower edge)
     const gd = t.geometry.getAttribute('gdata') as THREE.BufferAttribute;
     const Wc = t.cols + 1;
-    const colLen = (th: number) => {
+    const colLenRaw = (th: number) => {
       const th0 = t.th[0];
       const f = ((((th - th0) / TAU) % 1) + 1) % 1 * t.cols;
       const c0 = Math.floor(f) % t.cols;
       // row 0 is the lower edge (largest distance from the top edge)
       return Math.min(Math.max(gd.getY(c0), gd.getY((t.rows - 1) * Wc + c0)), Math.max(gd.getY(c0 + 1), gd.getY((t.rows - 1) * Wc + c0 + 1)), maxLen(th));
     };
+    // the skirt of the coat hangs level from the belt: rows all the way round (the per-column length left the back
+    // of the skirt bare leather — second cast pass)
+    let skirtLen = 0;
+    if (zoneId === 1) for (let k = 0; k < 96; k++) skirtLen = Math.max(skirtLen, colLenRaw((k / 96) * TAU));
+    const colLen = (th: number) => (zoneId === 1 ? Math.min(skirtLen, maxLen(th)) : colLenRaw(th));
     let rowI = 0;
     for (let d = dStart; ; d += ROW, rowI++) {
       // circumference at this row

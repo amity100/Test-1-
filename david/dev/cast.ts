@@ -94,7 +94,7 @@ async function boot() {
     const at = o.at ?? STUDIO;
     a.place(at, o.yaw ?? -Math.PI / 2);
     a.headingSnap = true;
-    a.mocap.play(o.clip ?? (a.spec.role === 'elder' ? 'idle_old' : 'idle_king'), { fade: 0 });
+    a.mocap.play(o.clip ?? (a.spec.role === 'elder' ? 'idle_bus' : 'idle_king'), { fade: 0 });
     if (a.spec.role === 'saul') {
       a.armPose.L.pose = POSES.helmetL;
       a.armPose.L.weight = 1;
@@ -106,7 +106,16 @@ async function boot() {
       a.upright.R.prop = 'spear';
       a.upright.R.weight = 1;
     }
-    if ((a.spec.role === 'soldier' || a.spec.role === 'armourBearer' || a.spec.role === 'philistine') && a.props.main && !a.props.main.parent) a.holdProp('main', 'R');
+    if ((a.spec.role === 'soldier' || a.spec.role === 'armourBearer' || a.spec.role === 'philistine') && a.props.main) {
+      if (!a.props.main.parent) a.holdProp('main', 'R');
+      // long weapons carried upright at the side (spear / javelin)
+      if (a.kit === 'spear' || a.kit === 'armourBearer') {
+        a.armPose.R.pose = POSES.spearCarryR;
+        a.armPose.R.weight = 1;
+        a.upright.R.prop = 'main';
+        a.upright.R.weight = 1;
+      }
+    }
     if (a.spec.role === 'elder' && a.props.staff && !a.props.staff.parent) a.holdProp('staff', 'R');
     // turnarounds: eyes on the horizon straight ahead
     a.mocap.lookAt = at.clone().add(new THREE.Vector3(Math.sin(a.yaw) * 20, 1.65, Math.cos(a.yaw) * 20));
