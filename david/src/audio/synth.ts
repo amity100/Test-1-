@@ -550,6 +550,8 @@ export class Core {
   readonly musicIn: GainNode;
   readonly musicDuck: GainNode;
   readonly worldIn: GainNode;
+  /** The ambience beds and the legacy wind / cicadas / birds enter the world here (the film score ducks it). */
+  readonly ambIn: GainNode;
   readonly sfxWorld: GainNode;
   readonly uiIn: GainNode;
   readonly slowFilter: BiquadFilterNode;
@@ -620,6 +622,8 @@ export class Core {
     this.worldIn = g(1);
     this.slowFilter = bq('lowpass', 18000, 0.7);
     this.worldIn.connect(this.slowFilter); this.slowFilter.connect(sum);
+    this.ambIn = g(1);
+    this.ambIn.connect(this.worldIn);
     this.sfxWorld = g(1);
     this.sfxWorld.connect(this.worldIn);
     this.uiIn = g(1);

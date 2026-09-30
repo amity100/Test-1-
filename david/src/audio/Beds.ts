@@ -67,7 +67,7 @@ export class Beds {
   constructor(private readonly c: Core, private lite: boolean) {
     const ctx = c.ctx;
     this.bus = ctx.createGain();
-    this.bus.connect(c.worldIn);
+    this.bus.connect(c.ambIn);
     const hall = ctx.createGain(); hall.gain.value = 0.16;
     this.bus.connect(hall); hall.connect(c.hallIn);
     for (const b of BEDS) {

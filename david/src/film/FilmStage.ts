@@ -8,10 +8,10 @@ import type { GilgalArmy } from './crowd/GilgalArmy';
 import type { PhilistineHost } from './crowd/PhilistineHost';
 import { landAtmo, cloudShared } from './land/landAtmo';
 import { INTRO_SHOTS, type FilmSetName } from '../content/introScript';
-import { baseTake, FILM_CAM, gilgalCam, gilgalCamFocusActor, TAKE_OFFSET } from './FilmCams';
+import { baseTake, FILM_CAM, gilgalCam, gilgalFocus, landCam, takeExposure, TAKE_OFFSET, type GilgalCtx, type LandCamCtx } from './FilmCams';
 
 /**
- * THE FILM STAGE of the opening film (docs/intro-script.md): every film-only set, crowd and actor, built behind the
+ * THE FILM STAGE of the opening film (CUT v2: docs/intro-script-v2.md): every film-only set, crowd and actor, built behind the
  * loading screen and disposed set by set as the film leaves it (phones!). This module is imported lazily (it pulls in
  * src/film/land, src/film/gilgal, src/film/cast and src/film/crowd through dynamic imports only).
  *
@@ -28,6 +28,10 @@ import { baseTake, FILM_CAM, gilgalCam, gilgalCamFocusActor, TAKE_OFFSET } from 
  *   gilgal: saul, samuel (hero), armourBearer (desktop) -> GilgalPerformance; the army -> GilgalArmy
  *   ramah:  samuel ('near' LOD, own instance), elders (crowd LOD, 6 / 4 / 3 per tier) -> RamahPerformance
  *   coast:  the Philistine host -> PhilistineHost (column mode on the set's road)
+ *
+ * CAMERAS (cut3): every take is filmed by src/film/FilmCams.ts (landCam: 'flight' / 'glint' / 'elders'; gilgalCam:
+ * the eight Gilgal takes incl. 'tear:insert') with the set's own move as a fallback; per-take exposure multiplies
+ * the set's exposure (FilmCams.TAKE_LOOK). Test only: ?filmsets=judah,gilgal builds just those sets.
  */
 export type FilmStageSet = Exclude<FilmSetName, 'black' | 'world'>;
 
@@ -127,6 +131,9 @@ export class FilmStage {
       return (f: number) => prog(Math.min(0.999, b + w * Math.max(0, Math.min(1, f))), label);
     };
     const yieldFrame = () => new Promise<void>((r) => setTimeout(r, 0));
+    // tests: ?filmsets=judah,gilgal builds only those sets (the others fall back to world vistas)
+    const only = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('filmsets') : null;
+    const wanted = (n: FilmStageSet) => !only || only.split(',').includes(n);
 
     let landMod: typeof import('./land/LandSet') | null = null;
     try {
@@ -152,7 +159,7 @@ export class FilmStage {
 
     // ------------------------------------------------------------------ prologue: the land (shots 2, 4, 5)
     const land = async (loc: LandLocation, w: number, label: string) => {
-      if (!landMod) {
+      if (!landMod || !wanted(loc)) {
         base += w;
         return null;
       }
@@ -217,8 +224,26 @@ export class FilmStage {
             elders.push(e);
             actors.push(e);
           }
-          // the seated elders first (on the benches facing the gate), then the standing arc
-          const marks = [...A.elders.filter((m) => m.seated), ...A.elders.filter((m) => !m.seated)];
+          // CUT v2 (P5, cut3): the dolly comes in over the elders' heads toward Samuel in the gateway — marks[0..1] are
+          // the seated elders nearest the gate on either side (one of them rises and demands, beats.rise), the rest
+          // stand in the arc between the lens and Samuel (the most central first)
+          const seated = A.elders.filter((m) => m.seated);
+          const standing = A.elders.filter((m) => !m.seated);
+          const S0 = A.samuel.pos;
+          const arc = new THREE.Vector3();
+          for (const m of standing) arc.add(m.pos);
+          if (standing.length) arc.multiplyScalar(1 / standing.length);
+          const axis = new THREE.Vector3(arc.x - S0.x, 0, arc.z - S0.z).normalize();
+          const lateral = (p: THREE.Vector3) => Math.abs((p.x - S0.x) * -axis.z + (p.z - S0.z) * axis.x);
+          const nearGate = [...seated].sort((a, b) => a.pos.distanceTo(S0) - b.pos.distanceTo(S0));
+          const sides: typeof seated = [];
+          for (const m of nearGate) {
+            const side = Math.sign((m.pos.x - S0.x) * -axis.z + (m.pos.z - S0.z) * axis.x);
+            if (!sides.some((o) => Math.sign((o.pos.x - S0.x) * -axis.z + (o.pos.z - S0.z) * axis.x) === side)) sides.push(m);
+            if (sides.length === 2) break;
+          }
+          const central = [...standing].sort((a, b) => lateral(a.pos) - lateral(b.pos));
+          const marks = [...sides, ...central, ...seated.filter((m) => !sides.includes(m))];
           for (const a of actors) {
             a.addTo(ramah.set.scene);
             engine.enforceTextureBudget(a.root);
@@ -238,8 +263,8 @@ export class FilmStage {
     }
     await yieldFrame();
 
-    // ------------------------------------------------------------------ Act I + the rise: Gilgal (shots 6-13)
-    {
+    // ------------------------------------------------------------------ Act I: Gilgal (G1-G7)
+    if (wanted('gilgal')) {
       const p = sub(steps.gilgal, 'הַגִּלְגָּל…');
       try {
         const [{ GilgalSet }, { gilgalView }] = await Promise.all([import('./gilgal/GilgalSet'), import('./gilgal/gilgalView')]);
@@ -407,16 +432,38 @@ export class FilmStage {
   ): FilmSetHandle {
     const camera = new THREE.PerspectiveCamera(45, 1, set.near, set.far);
     const base = landView(set, { camera });
+    // per-take exposure (FilmCams.TAKE_LOOK) on top of the set's own
+    let expMul = 1;
+    const baseExp = base.exposure;
     // the land sets share their sun / haze / deck uniforms (module singletons): each view puts its own back
     const view: ViewSpec = {
       ...base,
+      exposure: () => (typeof baseExp === 'function' ? baseExp() : baseExp ?? 0.5) * expMul,
       update: (dt, cam) => {
         applyLand(snap);
         base.update?.(dt, cam);
       },
     };
+    // what the orchestration cameras read from the set (FilmCams.landCam)
+    const camCtx: LandCamCtx = {
+      shotAt: (n, e) => {
+        const s = set.shots[n];
+        if (!s) return null;
+        const f = s.at(Math.max(0, Math.min(1, e)), 0);
+        return { pos: f.pos, look: f.look, fov: f.fov };
+      },
+      height: (x, z) => set.height.height(x, z),
+      coast: set.anchors.coast ? { heading: set.anchors.coast.heading, columnHead: set.anchors.coast.columnHead } : undefined,
+      ramah:
+        name === 'ramah' && set.anchors.ramah
+          ? // the standing elders between the lens and Samuel (actors: [samuel, seated, seated, standing...])
+            { samuel: set.anchors.ramah.samuel.pos, elders: (extra.actors ?? []).slice(3).map((a) => a.root.position) }
+          : undefined,
+    };
+    if (camCtx.ramah && !camCtx.ramah.elders.length && set.anchors.ramah) camCtx.ramah.elders = set.anchors.ramah.elders.filter((m) => !m.seated).slice(0, 4).map((m) => m.pos);
     const engine = this.engine;
     const status: string[] = [];
+    const tmp2 = new THREE.Vector3();
     if (name === 'coast') status.push(extra.host ? 'Philistine host: GPU crowd (PhilistineHost)' : 'Philistine host: set placeholders');
     if (name === 'ramah') status.push(extra.ramah ? `Samuel + ${(extra.actors?.length ?? 1) - 1} elders: FilmActor (RamahPerformance)` : 'Samuel + elders: set placeholders');
     const tmp = new THREE.Vector3();
@@ -426,7 +473,8 @@ export class FilmStage {
       camera,
       status,
       disposed: false,
-      frame(take, u, _t, out) {
+      frame(take, u, t, out) {
+        if (landCam(take, Math.max(0, Math.min(1, u)), t, camCtx, out)) return true;
         const s = set.shots[take];
         if (!s) return false;
         const f = set.frame(s, Math.max(0, Math.min(1, u)));
@@ -438,8 +486,9 @@ export class FilmStage {
       },
       enter(take) {
         resetHair(extra.actors ?? []);
-        // the host marches from the head of its road at the cut into shot 4 (and keeps marching into the glint)
-        if (extra.host && take === 'threat') extra.host.setTravel(0);
+        expMul = takeExposure(take);
+        // the host marches from the head of its road at the cut into P4 (the lens is keyed to the column's head)
+        if (extra.host && (take === 'threat' || take === 'glint')) extra.host.setTravel(0);
       },
       tick(_take, t, dt) {
         const h = engine.renderer.domElement.height;
@@ -449,12 +498,19 @@ export class FilmStage {
         }
         if (extra.ramah) extra.ramah.update(t, dt, camera, h);
       },
-      focus(take) {
+      focus(take, t) {
         if (name === 'ramah' && extra.ramah && extra.actors?.length) {
           const sam = extra.actors[0];
-          if (take === 'elders' && extra.actors.length > 1) return { point: extra.actors[1].eyesWorld(tmp), fStop: 2.8 };
+          // P5: on the elder who rises (the seated elder by the gate), then on Samuel as he turns his face away
+          if (take === 'elders' && extra.actors.length > 1) {
+            const k = Math.max(0, Math.min(1, (t - 2.0) / 0.6));
+            const a = extra.actors[1].eyesWorld(tmp);
+            const b = sam.eyesWorld(tmp2);
+            return { point: a.lerp(b, k * k * (3 - 2 * k)), fStop: 3.2 };
+          }
           return { point: sam.eyesWorld(tmp), fStop: 4 };
         }
+        if (name === 'ramah' && set.anchors.ramah) return { point: tmp.copy(set.anchors.ramah.samuel.pos).add(new THREE.Vector3(0, 1.5, 0)), fStop: 4 };
         return null;
       },
       dispose() {

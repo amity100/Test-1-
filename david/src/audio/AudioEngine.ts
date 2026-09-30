@@ -418,7 +418,7 @@ class Ambience {
     };
 
     const bus = g(1);
-    bus.connect(c.worldIn);
+    bus.connect(c.ambIn);
     const verb = g(0.12);
     bus.connect(verb); verb.connect(c.hallIn);
     this.windBus = g(0); this.cicBus = g(0); this.birdBus = g(0);

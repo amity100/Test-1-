@@ -16,6 +16,8 @@ const INTRO_CUES: readonly IntroCue[] = SHEET === 'v2' || (SHEET !== 'live' && l
 const END_T = lengthOf(INTRO_CUES);
 /** Start of the first shot whose cue is one of `cues` (NaN when none). */
 const cueT = (...cues: string[]): number => (INTRO_CUES.find((c) => c.shot && cues.includes(String(c.cue))) ?? { t: NaN }).t;
+/** Start of the first shot with one of these ids (NaN when none). */
+const shotStart = (...ids: string[]): number => (INTRO_CUES.find((c) => c.shot && ids.includes(String(c.shot))) ?? { t: NaN }).t;
 
 /**
  * The film's call pattern (Intro.ts): playIntro at 0, syncIntro(filmClock) every frame, titleHit on the title,
@@ -34,6 +36,9 @@ function filmCalls(clock: (t: number) => number, skipAt = Infinity) {
     const f = clock(t);
     e.syncIntro(f);
     const cross = (x: number): boolean => prev < x && f >= x;
+    // Intro.ts's own one-shots in the hook (thicket + 1.0 s: a far growl; eyes + 0.2 s: the lamb)
+    if (cross(shotStart('thicket') + 1.0)) e.sfx('bearGrowl', { volume: 0.28, pitch: 0.7 });
+    if (cross(shotStart('eyes', 'lamb') + 0.2)) e.sfx('lambBleat', { volume: 0.5 });
     if (cross(cueT('title'))) e.sfx('titleHit');
     if (cross(END_T)) { e.stopIntro(2.5); e.setAmbienceBed('fields', 2); e.setMusicMood('pastoral', 4); }
     if (t >= skipAt) {

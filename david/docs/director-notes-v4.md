@@ -95,13 +95,16 @@ motion: the fist closing on the wool, the pull, the rip running through the weav
 coming free). No verse on these shots.
 
 ### 11 · The verdict (81.8–90.8 s)
-Nine seconds of almost the same frame: Samuel centred, the long verse at the bottom in small type, his mouth
-barely moving, the background palms and boulders soft. → 4.5 s, a slow push, the words appearing with his speech,
-Saul's shoulder in the foreground.
+At 2 fps: nine seconds of almost the same frame — Samuel centred, looking down, his head drifting a little; his
+mouth barely moves; his white hair and beard read as a spiky white mop (flyaway strands radiating, even with the
+exact groom); the long verse lies in small type across his beard and chest. → 4.5 s, a slow push, his eyes on Saul,
+the words appearing with his speech, Saul's shoulder in the foreground, the hair groomed into heavy locks that move
+in the wind.
 
 ### 12 · Saul alone (90.8–100.8 s)
-Ten seconds: a medium of Saul, then a close-up; he barely moves; the torn piece is not readable. → 2 s on the fist
-and his face.
+At 2 fps: ten seconds — a slow tilt up his scale coat (the flat 'cardboard' scales fill the frame) to a close-up of
+his face; he barely moves, one hand hangs at his side; the torn piece is never readable. → 2 s: the fist with the
+torn corner in the foreground, the focus pulling to his face as he looks down at it, breathing hard.
 
 ### 13 · The rise (100.8–115.8 s)
 Fifteen seconds looking straight down at pale desert ground, then flying over a flat pale landscape into a white

@@ -146,6 +146,7 @@ attribute float cProp;
 varying vec3 vCwColor;
 varying vec4 vCwInfo; // region, metalness, roughness, stripe flag
 varying vec3 vCwBind;
+varying vec3 vCwHair; // models pass: this man's hair colour (brows, stubble line)
 vec3 cwPos;
 vec3 cwNrm;
 
@@ -175,7 +176,7 @@ vec3 cwThigh(vec3 p, vec3 hip, vec3 knee, float r0, float r1) {
 void crowdCompute() {
   int reg = int(cRegion + 0.5);
   int mask = int(iMask + 0.5);
-  if (reg >= 5 && ((mask >> (reg - 5)) & 1) == 0) { cwPos = vec3(0.0, -1000.0, 0.0); cwNrm = vec3(0.0, 1.0, 0.0); vCwColor = vec3(0.0); vCwInfo = vec4(0.0); vCwBind = vec3(0.0); return; }
+  if (reg >= 5 && ((mask >> (reg - 5)) & 1) == 0) { cwPos = vec3(0.0, -1000.0, 0.0); cwNrm = vec3(0.0, 1.0, 0.0); vCwColor = vec3(0.0); vCwInfo = vec4(0.0); vCwBind = vec3(0.0); vCwHair = vec3(0.0); return; }
   vec3 p; vec3 n;
   if (cProp > 0.5) {
     // spear: its own frame from the right-hand grip, pulled toward the vertical (a shaft carried upright / raised)
@@ -283,6 +284,7 @@ void crowdCompute() {
   vCwColor = col;
   vCwInfo = vec4(float(reg), metal, rough, stripe);
   vCwBind = position;
+  vCwHair = hair;
 }
 `;
 
@@ -292,6 +294,21 @@ uniform vec3 uAccent[4];
 varying vec3 vCwColor;
 varying vec4 vCwInfo;
 varying vec3 vCwBind;
+varying vec3 vCwHair;
+// models pass (CUT v2): the face of the baked 'man' body in bind space (src/assets/human/man/rig.json landmarks):
+// eye centre (x mirrored), eyeball radius, mouth line, nose tip
+const vec3 CW_EYE = vec3(0.0288, 1.5991, 0.1210);
+const float CW_EYE_R = 0.0136;
+const float CW_MOUTH_Y = 1.528;
+const vec3 CW_NOSE = vec3(0.0, 1.557, 0.165);
+// bump from a procedural height (metres) via screen derivatives (Mikkelsen, unnormalised: true slopes)
+vec3 cwBump(vec3 surf_pos, vec3 N, float h, float faceDir) {
+  vec3 dpx = dFdx(surf_pos), dpy = dFdy(surf_pos);
+  vec3 R1 = cross(dpy, N), R2 = cross(N, dpx);
+  float det = dot(dpx, R1) * faceDir;
+  vec3 grad = sign(det) * (dFdx(h) * R1 + dFdy(h) * R2);
+  return normalize(abs(det) * N - grad);
+}
 float cwN(vec3 p) {
   vec3 i = floor(p); vec3 f = fract(p); f = f * f * (3.0 - 2.0 * f);
   float n = i.x + i.y * 57.0 + i.z * 113.0;
@@ -327,9 +344,15 @@ export function crowdMaterial(u: CrowdUniforms, lite: boolean): THREE.MeshStanda
         /* glsl */ `#include <color_fragment>
         vec3 cwc = vCwColor;
         int cwr = int(vCwInfo.x + 0.5);
+        float cwRough = vCwInfo.z;
+        float cwDist = length(vViewPosition);
+        // models pass (CUT v2): near the lens the men must not read as mannequins — cloth tone variation, faces with
+        // eye sockets, brows, lips and eyes, strand streaks in the hair / beard shells; all fades out with distance
+        float cwNear = 1.0 - smoothstep(9.0, 22.0, cwDist);
         if (cwr == R_TUNIC) {
-          // woven wool: a fine irregular weave + the narrow stripe some tunics carry near the hem
-          ${lite ? '' : 'cwc *= 0.9 + 0.2 * cwN(vCwBind * vec3(220.0, 90.0, 220.0));'}
+          // woven wool: yarn streaks down the cloth, sweat / dirt blotches, a darker dusty hem
+          ${lite ? 'cwc *= 0.94 + 0.12 * cwN(vCwBind * vec3(90.0, 6.0, 90.0));' : 'cwc *= (0.92 + 0.16 * cwN(vCwBind * vec3(260.0, 5.0, 260.0))) * (0.95 + 0.1 * cwN(vCwBind * vec3(700.0, 400.0, 700.0)));'}
+          cwc *= 1.0 - 0.14 * smoothstep(0.58, 0.82, cwN(vCwBind * 9.0 + 3.0));
           if (uArmy < 0.5 && vCwInfo.w > 0.5) {
             float sy = vCwBind.y - uHemY;
             if (sy > 0.05 && sy < 0.075) cwc = uAccent[int(vCwInfo.w - 1.0)];
@@ -340,16 +363,73 @@ export function crowdMaterial(u: CrowdUniforms, lite: boolean): THREE.MeshStanda
             else if (vCwBind.y < uHemY + 0.05) cwc *= 0.6 + 0.4 * step(0.5, fract(atan(vCwBind.x, vCwBind.z) * 9.0));
           }
         } else if (cwr == R_HAIR || cwr == R_BEARD) {
-          ${lite ? '' : 'cwc *= 0.75 + 0.5 * cwN(vCwBind * vec3(160.0, 600.0, 160.0));'}
+          // strands: fine streaks across the flow (down the beard, back over the scalp), clumps, lighter sun-dried tips
+          ${lite ? 'cwc *= 0.75 + 0.5 * cwN(vCwBind * vec3(160.0, 600.0, 160.0));' : `{
+            vec3 q = cwr == R_BEARD ? vCwBind * vec3(900.0, 70.0, 500.0) : vCwBind * vec3(900.0, 260.0, 160.0);
+            float strand = cwN(q) * 0.6 + cwN(q * 2.1 + 5.0) * 0.4;
+            float clump = cwN(vCwBind * vec3(120.0, 25.0, 60.0));
+            cwc *= mix(1.0, (0.55 + 0.75 * strand) * (0.8 + 0.4 * clump), 0.35 + 0.65 * cwNear);
+            cwRough = 0.55 + 0.25 * strand;
+          }`}
+        } else if (cwr == R_SKIN && vCwBind.y > 1.47 && cwNear > 0.0) {
+          vec3 e = vec3(abs(vCwBind.x), vCwBind.y, vCwBind.z);
+          float front = smoothstep(0.08, 0.11, vCwBind.z);
+          // eye sockets: the lid crease and the shadow under the brow ridge
+          vec2 de = vec2(e.x - CW_EYE.x, (e.y - CW_EYE.y - 0.002) * 1.3);
+          float sock = (1.0 - smoothstep(0.011, 0.023, length(de))) * front;
+          cwc *= 1.0 - 0.3 * sock * cwNear;
+          // brows: a band of this man's hair colour above each eye, thicker toward the nose
+          float by = CW_EYE.y + 0.0165 - 0.1 * (e.x - 0.02) * (e.x - 0.02) / 0.0009 * 0.01;
+          float brow = smoothstep(0.008, 0.012, e.x) * (1.0 - smoothstep(0.043, 0.05, e.x)) * (1.0 - smoothstep(0.0022 + 0.0018 * (1.0 - (e.x - 0.01) / 0.04), 0.0048, abs(e.y - by))) * front;
+          cwc = mix(cwc, vCwHair * 1.2, 0.8 * brow * cwNear);
+          // lips: darker, redder
+          float lip = (1.0 - smoothstep(0.016, 0.025, e.x)) * (1.0 - smoothstep(0.0035, 0.0085, abs(e.y - CW_MOUTH_Y))) * smoothstep(0.12, 0.135, vCwBind.z);
+          cwc = mix(cwc, cwc * vec3(0.86, 0.52, 0.48), 0.65 * lip * cwNear);
+          // the mouth line
+          cwc *= 1.0 - 0.45 * (1.0 - smoothstep(0.0, 0.0012, abs(e.y - CW_MOUTH_Y + 0.0005))) * (1.0 - smoothstep(0.014, 0.022, e.x)) * front * cwNear;
+          // sun-reddened cheeks and nose, sun creases (fine noise)
+          float cheek = (1.0 - smoothstep(0.012, 0.03, length(vec2(e.x - 0.042, e.y - 1.567)))) * front;
+          float nose = 1.0 - smoothstep(0.004, 0.016, length(vCwBind - CW_NOSE));
+          cwc *= mix(vec3(1.0), vec3(1.08, 0.9, 0.86), (0.5 * cheek + 0.6 * nose) * cwNear);
+          ${lite ? '' : 'cwc *= 0.94 + 0.12 * cwN(vCwBind * 900.0);'}
+          cwRough = 0.55 - 0.12 * nose;
+        } else if (cwr == R_EYE) {
+          // the eyeball: ivory sclera, a dark-brown iris and pupil looking forward, the upper lid's shadow
+          vec3 d = vec3(abs(vCwBind.x), vCwBind.y, vCwBind.z) - CW_EYE;
+          float r = length(d.xy);
+          float fwd = step(0.45 * CW_EYE_R, d.z);
+          float iris = (1.0 - smoothstep(0.0046, 0.0058, r)) * fwd;
+          float pupil = (1.0 - smoothstep(0.0017, 0.0023, r)) * fwd;
+          cwc = mix(vec3(0.5, 0.46, 0.4), vec3(0.09, 0.055, 0.035), iris);
+          cwc = mix(cwc, vec3(0.012), pupil);
+          cwc *= mix(0.35, 1.0, smoothstep(0.0055, -0.001, d.y));
+          cwc = mix(vec3(0.09, 0.075, 0.065), cwc, cwNear);
+          cwRough = 0.12;
         } else if (cwr == R_CROWN) {
           cwc *= 0.7 + 0.35 * step(0.35, fract(atan(vCwBind.x, vCwBind.z) * 7.0));
         }
         diffuseColor.rgb *= cwc;`,
       )
-      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = vCwInfo.z;')
-      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = vCwInfo.y;');
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = cwRough;')
+      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = vCwInfo.y;')
+      .replace(
+        '#include <normal_fragment_maps>',
+        lite
+          ? '#include <normal_fragment_maps>'
+          : /* glsl */ `#include <normal_fragment_maps>
+        if (cwr == R_TUNIC && uArmy < 0.5 && cwNear > 0.0) {
+          // folds: vertical folds falling to the hem (deeper toward it) and the cloth gathered under the belt
+          float ang = atan(vCwBind.x, vCwBind.z);
+          float y = vCwBind.y;
+          float skirt = clamp((uBeltY - y) / max(uBeltY - uHemY, 0.1), 0.0, 1.0);
+          float amp = y < uBeltY ? 0.002 + 0.006 * skirt : 0.004 * exp(-(y - uBeltY) / 0.05);
+          float ph = ang * (y < uBeltY ? 11.0 : 19.0) + 2.4 * cwN(vec3(ang * 2.0, y * 3.0, 7.0));
+          float h = amp * (sin(ph) + 0.35 * sin(ph * 2.3 + 1.7)) * cwNear;
+          normal = cwBump(-vViewPosition, normal, h, faceDirection);
+        }`,
+      );
   };
-  m.customProgramCacheKey = () => 'crowd' + (lite ? 'L' : 'H');
+  m.customProgramCacheKey = () => 'crowd2' + (lite ? 'L' : 'H');
   return m;
 }
 

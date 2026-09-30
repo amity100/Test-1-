@@ -85,17 +85,17 @@ const ROLE_OF_SET: Readonly<Record<string, ScoreRole>> = {
  * name, case-insensitive) wins. Every beat is clamped to its shot.
  */
 const SYNC: Readonly<Record<ScoreRole, Readonly<Record<string, readonly [number, number]>>>> = {
-  flight: { card: [0, 0.3], deck: [0, 3.6], out: [0, 4.5] },
+  flight: { card: [0, 0.3], dive: [0, 3.1], deck: [0, 3.6], out: [0, 4.5] },
   rachel: { card: [0, 0.4] },
   threat: {},
   elders: { rise: [0, 0.5], verse: [0, 1.0], turn: [0, 2.6] },
   shofar: { horns: [0, 0.4], card: [0, 0.6] },
   saul: { card: [0, 0.8] },
-  peak: { halt: [0, 0.3], spear: [0, 0.8], roar: [0, 1.1], verse: [0, 1.3] },
+  peak: { halt: [0, 0.3], spear: [0, 0.8], roar: [0, 1.1], spread: [0, 0.4], verse: [0, 1.3] },
   silence: { heads: [0, 0.3], part: [0, 0.8], card: [0, 1.4], step: [0, 2.2] },
   tear: { turn: [0, 0.2], lunge: [0, 0.9], grip: [0, 1.6], pull: [1, 0.2], rip: [1, 0.6], free: [1, 1.8] },
-  verdict: { turn: [0, 0.4], words: [0, 0.9] },
-  broken: { look: [0, 0.3], tighten: [0, 1.2] },
+  verdict: { turn: [0, 0.4], words: [0, 0.9], wordsEnd: [0, 4.04] },
+  broken: { look: [0, 0.3], tighten: [0, 1.2], flash: [0, 1.75] },
   david: { verse: [0, 0.3], turn: [1, 0.5], heart: [1, 1.2] },
   thicket: { birds: [0, 0.4], lamb: [0, 1.5], eyes: [1, 0.7] },
   title: { forms: [0, 0.3], name: [0, 1.6], chapter: [0, 2.4] },
@@ -103,7 +103,8 @@ const SYNC: Readonly<Record<ScoreRole, Readonly<Record<string, readonly [number,
 /** Other names a sheet may give a beat (normalised: lower case, letters only). */
 const ALIAS: Readonly<Record<string, readonly string[]>> = {
   card: ['placecard', 'personcard', 'timecard', 'name'],
-  deck: ['through', 'throughdeck', 'dive', 'clouds'],
+  deck: ['through', 'throughdeck', 'clouds'],
+  dive: ['deckin', 'divein'],
   out: ['ridges', 'burst', 'emerge'],
   rise: ['elderrises', 'rises', 'stand', 'demand'],
   verse: ['text', 'words', 'versestart'],
@@ -112,6 +113,7 @@ const ALIAS: Readonly<Record<string, readonly string[]>> = {
   halt: ['stop'],
   spear: ['spearup', 'raise', 'lift', 'spearraised'],
   roar: ['theroar', 'cheer'],
+  spread: ['roarspread', 'stagger'],
   heads: ['headsturn'],
   part: ['ranksp', 'rankspart', 'parting'],
   step: ['hisstep', 'samuelstep'],
@@ -121,13 +123,16 @@ const ALIAS: Readonly<Record<string, readonly string[]>> = {
   rip: ['ripruns', 'tearruns', 'tear'],
   free: ['cornerfree', 'comesfree', 'release', 'torn'],
   words: ['speech', 'speak', 'verse'],
+  wordsEnd: ['speechend', 'wordsend'],
   look: ['looksdown', 'lookdown'],
   tighten: ['fingers', 'fingerstighten', 'fist'],
+  flash: ['whip', 'light'],
   heart: ['verse'],
   birds: ['birdsstop', 'silence', 'hush'],
-  lamb: ['lamblifts', 'lifts', 'head'],
+  lamb: ['lambhead', 'lamblifts', 'lifts', 'head'],
   eyes: ['eyesopen', 'open'],
   forms: ['david', 'titleforms'],
+  name: ['hebrew', 'davidhe', 'hebrewname'],
   chapter: ['chapterline', 'subtitle'],
 };
 /** Contract lengths of the shots of the multi-shot roles (when a sheet merges them into one shot). */
@@ -167,6 +172,10 @@ interface Sec {
   next: ScoreRole | null;
   /** film times of the on-screen texts inside the section (verses, cards) — accents key on them */
   texts: number[];
+  /** speech-synced verses: film times of their words (the verdict) */
+  words: number[];
+  /** slow-motion factor of the section's first slowed shot (1 = none) */
+  slowmo: number;
 }
 export interface IntroSection { readonly role: ScoreRole; readonly t0: number; readonly t1: number }
 
@@ -413,11 +422,22 @@ export class IntroScore {
   private restoreWorld(now: number, tau: number): void {
     const c = this.c;
     try {
-      for (const p of [c.slowFilter.frequency, c.slowVerb.gain, c.hallRet.gain]) { p.cancelScheduledValues(now); p.setValueAtTime(p.value, now); }
+      for (const p of [c.slowFilter.frequency, c.slowVerb.gain, c.hallRet.gain, c.ambIn.gain]) { p.cancelScheduledValues(now); p.setValueAtTime(p.value, now); }
       c.slowFilter.frequency.setTargetAtTime(c.hz(18000), now, tau / 3);
       c.slowVerb.gain.setTargetAtTime(0, now, tau / 3);
       c.hallRet.gain.setTargetAtTime(c.hallLevel, now, tau / 3);
+      c.ambIn.gain.setTargetAtTime(1, now, tau / 3);
     } catch { /* ignore */ }
+  }
+
+  /** Duck the ambience at once to `level` (the roar that cuts to silence), hold, then let it creep back over `back` s. */
+  private duckAmbience(t: number, level: number, hold: number, back: number): void {
+    const p = this.c.ambIn.gain;
+    p.cancelScheduledValues(t - 0.01);
+    p.setValueAtTime(1, t - 0.005);
+    p.linearRampToValueAtTime(level, t + 0.015);
+    p.setValueAtTime(level, t + hold);
+    p.linearRampToValueAtTime(1, t + hold + back);
   }
 
   /** Kill the reverb tail at once (the roar that "cuts out at once"), then let the hall back in slowly. */
@@ -440,7 +460,7 @@ export class IntroScore {
   private role(r: ScoreRole): Sec | undefined { return this.secs.find((x) => x.role === r); }
   /** A beat the sheet itself carries for this section (shot seconds → film time), or null. */
   private sheetBeat(sec: Sec, name: string): number | null {
-    const keys = [name, ...(ALIAS[name] ?? [])];
+    const keys = [norm(name), ...(ALIAS[name] ?? [])];
     const spec = SYNC[sec.role][name];
     // the contract's shot first (a name like 'turn' exists in several shots), then any shot of the section
     const order = spec && sec.shots[spec[0]] ? [sec.shots[spec[0]], ...sec.shots.filter((_, k) => k !== spec[0])] : sec.shots;
@@ -540,8 +560,9 @@ export class IntroScore {
     this.add(sec, card + 1.6, (t, m, h) => S.pad(m, t, h, [38, 45, 50], {
       level: 0.032, attack: h * 0.85, release: 0.25, cutoff: 480, cutoffEnd: 950, voices: lite ? 2 : 3, detune: 8,
     }), out - card - 1.5);
-    // through the deck: a swell that is sucked into the cloud
-    this.add(sec, deck - 0.9, (t, m) => this.fx.suck(m, t + 0.9, 0.9, 0.035, 1.3));
+    // through the deck: from the dive, a swell sucked into the cloud
+    const dive = clamp(this.beat(sec, 'dive'), card + 0.5, deck - 0.2);
+    this.add(sec, dive, (t, m) => this.fx.suck(m, t + (deck - dive), deck - dive, 0.035, 1.3));
     // OUT over the ridges: the chord opens, the top line climbs A → B♭ → C (→ D at Rachel's stone)
     const rest = end - out;
     const chords: ReadonlyArray<readonly [number, readonly number[]]> = [
@@ -729,7 +750,7 @@ export class IntroScore {
     // slow motion: the world (ambience + army) through the slow filter, the tread slowed and deepened
     this.add(sec, t0, (t, _m, h, fx) => {
       this.muffle(t, 1300, 0.06, 0.35);
-      this.fx.march(fx, t, h, 0.55, 0.42, 2400, 0.12);
+      this.fx.march(fx, t, h, 0.55, clamp(sec.slowmo * 0.85, 0.3, 1), 2400, 0.12);
       this.fx.windSwell(fx, t + 0.4, h - 0.4, 0.04, 250, 700, 0.3, -0.3);
     }, d);
     this.add(sec, end - 0.02, (t) => this.muffle(t, 18000, 0.03, 0), 0, undefined, true);
@@ -813,7 +834,7 @@ export class IntroScore {
     }
     this.add(sec, roar + 0.3, (t, m) => { S.shofar(m, t, 'teruah', 0.24, 220, 293.66); });
     this.add(sec, roar, (t, _m, h, fx) => {
-      this.fx.roar(fx, t, h, 0.17, 0.4);
+      this.fx.roar(fx, t, h, 0.17, clamp(this.beat(sec, 'spread') - sec.shots[0].t, 0.1, 0.8));
       for (let i = 0; i < (lite ? 3 : 6); i++) this.fx.clinks(fx, t + 0.3 + rand(0, 1.2), 0.03, 2);
       for (let i = 0; i < (lite ? 2 : 5); i++) this.fx.knock(fx, t + 0.25 + rand(0, 1.4), 0.05, randi(2, 4));
     }, rest + 0.05);
@@ -824,7 +845,7 @@ export class IntroScore {
     const S = this.s, t0 = sec.t0, end = sec.t1;
     const heads = this.beat(sec, 'heads'), part = this.beat(sec, 'part'), step = this.beat(sec, 'step');
     const card = this.text(sec, 0, this.beat(sec, 'card'));
-    this.add(sec, t0, (t) => this.hallCut(t, 3), 0, undefined, true);
+    this.add(sec, t0, (t) => { this.hallCut(t, 3); this.duckAmbience(t, 0.12, 0.35, 2.2); }, 0, undefined, true);
     // heads turn: wool and a few clinks through the ranks
     this.add(sec, heads, (t, _m, _h, fx) => { this.fabric(fx, t, 0.6, 0.016, -0.3); this.fx.clinks(fx, t + 0.2, 0.008); });
     // the spoil, far away: sheep, the lowing of oxen, a goat
@@ -895,8 +916,8 @@ export class IntroScore {
       S.choir(m, t, h, [38], { level: 0.02, attack: 1.4, release: 0.8, vowel: 'oo', breath: 0.04 });
       S.pad(m, t + 0.6, h - 0.6, [81], { level: 0.006, attack: 1.4, release: 0.8, cutoff: 4000, voices: 1, type: 'sine', lfoCents: 20 });
     }, end - words + 0.2);
-    // the last word of 15:28a ("today"): one deep, soft stroke (six words, ≈0.45 s each)
-    const last = Math.min(end - 0.5, words + 5 * 0.45 + 0.1);
+    // the last word of 15:28a ("today"): one deep, soft stroke — on the sheet's word timing (else ≈0.45 s a word)
+    const last = Math.min(end - 0.3, sec.words.length ? sec.words[sec.words.length - 1] : words + 5 * 0.45 + 0.1);
     this.add(sec, last, (t, m) => { S.drum(m, t, 'boom', 0.2, 0, 0.8); S.drum(m, t + 0.005, 'taiko', 0.12, 0, 0.7); });
   }
 
@@ -920,10 +941,12 @@ export class IntroScore {
     const next = this.secs[sec.i + 1];
     if (next && next.role === 'david') {
       const rl = Math.min(0.6, d * 0.3);
+      const whip = clamp(this.beat(sec, 'flash'), end - rl, end - 0.1);
       this.add(sec, end - rl, (t, m) => {
         riserFx(this.c, S, m, t, rl, 'warm', 0.7, lite);
         [62, 66, 69, 74, 78, 81, 86].forEach((n, i) => S.lyre(m, t + (i / 7) * rl * 0.95, n, 0.22 + i * 0.03, lyrePan(n)));
       });
+      this.add(sec, whip, (t, _m, _h, fx) => this.whoosh(fx, t, end - whip + 0.12, 0.05, 700, 5000, 0.2)); // the whip up into the light
     }
   }
 
@@ -1317,12 +1340,14 @@ function buildSections(cues: readonly IntroCue[]): Sec[] {
   for (const c of shots) {
     const role = roleOf(c) as ScoreRole;
     const sh: Shot = { t: c.t, id: String(c.shot), dur: Number.isFinite(c.dur) ? (c.dur as number) : 0, cut: c.cut ?? '', fade: c.fade ?? 0, beats: sheetBeats(c) };
+    const sm = (c as unknown as { slowmo?: unknown }).slowmo;
+    const slow = typeof sm === 'number' && Number.isFinite(sm) && sm > 0 && sm < 1 ? sm : 1;
     const last = out[out.length - 1];
-    if (last && last.role === role) { last.shots.push(sh); continue; }
+    if (last && last.role === role) { last.shots.push(sh); if (last.slowmo === 1) last.slowmo = slow; continue; }
     if (last) last.t1 = c.t;
     out.push({
-      i: out.length, role, t0: c.t, t1: Infinity, shots: [sh], cut: sh.cut, fade: sh.fade,
-      exit: 'ring', tau: 0.5, gap: 0, next: null, texts: [],
+      slowmo: slow, i: out.length, role, t0: c.t, t1: Infinity, shots: [sh], cut: sh.cut, fade: sh.fade,
+      exit: 'ring', tau: 0.5, gap: 0, next: null, texts: [], words: [],
     });
   }
   if (!out.length) return out;
@@ -1334,7 +1359,14 @@ function buildSections(cues: readonly IntroCue[]): Sec[] {
   for (const c of cues ?? []) {
     if (!c || c.shot || !Number.isFinite(c.t) || !(c.verse || c.narration)) continue;
     const sec = out.find((x) => c.t >= x.t0 && c.t < x.t1);
-    if (sec) sec.texts.push(c.t);
+    if (!sec) continue;
+    sec.texts.push(c.t);
+    // speech-synced words are in seconds from the start of the text's SHOT
+    const ws = (c as unknown as { words?: unknown }).words;
+    if (Array.isArray(ws) && !sec.words.length) {
+      const sh = [...sec.shots].reverse().find((x) => x.t <= c.t + 1e-6) ?? sec.shots[0];
+      for (const w of ws) { const wt = (w as { t?: unknown })?.t; if (typeof wt === 'number' && Number.isFinite(wt)) sec.words.push(sh.t + wt); }
+    }
   }
   for (const sec of out) sec.texts.sort((a, b) => a - b);
   for (let i = 0; i < out.length - 1; i++) {
