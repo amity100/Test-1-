@@ -46,6 +46,8 @@ export const PRECISION = {
     window: 0.25,
     perfect: 0.1,
     cooldown: 0.6,
+    /** A catch keeps the rift open this much longer (s): a burst met on its first round is met whole. */
+    chain: 0.14,
     /** What comes back hits for this (a charged round), this fast (m/s). */
     damage: 60,
     speed: 44,
@@ -211,8 +213,11 @@ export class Parry {
   cd = 0;
   /** Catches in this window (feedback stacks gently after the first). */
   caught = 0;
+  /** The window closes at this `t` (a catch holds it open a little longer). */
+  until: number = PRECISION.parry.window;
 
   reset() {
+    this.until = PRECISION.parry.window;
     this.t = -1;
     this.cd = 0;
     this.caught = 0;
@@ -222,21 +227,28 @@ export class Parry {
   press(): boolean {
     if (this.cd > 0) return false;
     this.t = 0;
+    this.until = PRECISION.parry.window;
     this.cd = PRECISION.parry.cooldown;
     this.caught = 0;
     return true;
+  }
+
+  /** Something was caught: the window holds on for the rest of a burst. */
+  catch() {
+    this.caught++;
+    if (this.t >= 0) this.until = Math.max(this.until, this.t + PRECISION.parry.chain);
   }
 
   update(realDt: number, dt: number) {
     this.cd = Math.max(0, this.cd - realDt);
     if (this.t >= 0) {
       this.t += dt;
-      if (this.t > PRECISION.parry.window) this.t = -1;
+      if (this.t > this.until) this.t = -1;
     }
   }
 
   get open() {
-    return this.t >= 0 && this.t <= PRECISION.parry.window;
+    return this.t >= 0 && this.t <= this.until;
   }
 
   get perfect() {
@@ -287,16 +299,16 @@ export class ParryView {
   private rim: THREE.MeshBasicMaterial;
   private core: THREE.MeshBasicMaterial;
   private flash = 0;
-  private static readonly HOT = new THREE.Color(2.6, 2.9, 3.0);
+  private static readonly HOT = new THREE.Color(1.5, 2.4, 2.8);
   private static readonly COOL = new THREE.Color(0.3, 1.7, 2.6);
 
   constructor() {
     const add = (opacity: number) =>
       new THREE.MeshBasicMaterial({ color: ParryView.COOL.clone(), transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, side: THREE.DoubleSide });
     this.rim = add(1);
-    this.core = add(0.22);
-    const rim = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.6, 40), this.rim);
-    const core = new THREE.Mesh(new THREE.CircleGeometry(0.5, 40), this.core);
+    this.core = add(0.1);
+    const rim = new THREE.Mesh(new THREE.RingGeometry(0.36, 0.42, 40), this.rim);
+    const core = new THREE.Mesh(new THREE.CircleGeometry(0.36, 40), this.core);
     rim.renderOrder = core.renderOrder = 30;
     this.group.add(core, rim);
     this.group.scale.set(1, 1.45, 1);
@@ -310,23 +322,23 @@ export class ParryView {
   }
 
   /** `t`: game s into the window (<0: closed); where (chest height, in front) and facing. */
-  update(t: number, at: V3, face: V3, realDt: number) {
+  update(t: number, at: V3, face: V3, realDt: number, until: number = PRECISION.parry.window) {
     const P = PRECISION.parry;
     this.flash = Math.max(0, this.flash - realDt * 5);
-    const on = t >= 0 && t <= P.window;
+    const on = t >= 0 && t <= until;
     this.group.visible = on || this.flash > 0.05;
     if (!this.group.visible) return;
     this.group.position.copy(at);
     this.group.quaternion.setFromUnitVectors(_zAxis, _a.copy(face).normalize());
     const open = on ? Math.min(1, t / 0.035) : 1;
-    const fade = on ? 1 - Math.max(0, (t - P.window * 0.7) / (P.window * 0.3)) : this.flash;
-    const s = (0.55 + 0.45 * open) * (1 + this.flash * 0.35);
+    const fade = on ? 1 - Math.max(0, (t - until + P.window * 0.3) / (P.window * 0.3)) : this.flash;
+    const s = (0.55 + 0.45 * open) * (1 + this.flash * 0.25);
     this.group.scale.set(s, s * 1.45, s);
     const hot = on && t <= P.perfect ? 1 : this.flash;
     this.rim.color.copy(ParryView.COOL).lerp(ParryView.HOT, hot);
     this.core.color.copy(this.rim.color);
     this.rim.opacity = Math.max(0, fade);
-    this.core.opacity = 0.22 * Math.max(0, fade) + 0.4 * this.flash;
+    this.core.opacity = 0.1 * Math.max(0, fade) + 0.2 * this.flash;
   }
 }
 

@@ -1558,7 +1558,8 @@ export class Game {
     this.lab?.noteKill(ev);
     this.push(ev);
     // the PORTAL first; the STRIKES once you've made your first kill with it
-    this.hint('strikes', t('hint.strikes'), 10);
+    // (PRECISION's rules card says how its keys work)
+    if (!precisionOn()) this.hint('strikes', t('hint.strikes'), 10);
     this.fx.embers(ctx.at, 16);
     // (a kill landing after you died heals no one: you stay dead)
     if (this.respawnT < 0) this.hp = Math.min(LAW.player.hp, this.hp + LAW.player.killHeal);
@@ -2632,7 +2633,8 @@ export class Game {
   private parryCatch(p: Projectile) {
     const P = PRECISION.parry;
     const perfect = this.parry.perfect;
-    const first = this.parry.caught++ === 0;
+    const first = this.parry.caught === 0;
+    this.parry.catch();
     const at = this.parryPoint(new THREE.Vector3());
     const look = this.lookFlat(new THREE.Vector3());
     const shooter = typeof p.owner === 'number' ? (this.enemies.get(p.owner) as Enemy | null) : null;
@@ -2670,10 +2672,10 @@ export class Game {
     // the feel: a hard stop, a flare, a ring, the sound, the word
     this.hitstop = Math.max(this.hitstop, first ? P.hitstop : P.hitstop * 0.5);
     this.parryView.flare();
-    this.fx.flash(at, perfect ? 7 : 5, 0.22, 0x9ff8ff);
+    this.fx.flash(at, perfect ? 4 : 2.5, 0.2, 0x9ff8ff);
     this.fx.ring(at, perfect ? 1.8 : 1.2, 0.25, COL_CHARGED);
     this.fx.sparks(at, look, COL_CHARGED, perfect ? 26 : 16);
-    this.renderer.grade.uniforms.uFlash.value = Math.max(this.renderer.grade.uniforms.uFlash.value, perfect ? 0.7 : 0.4);
+    this.renderer.grade.uniforms.uFlash.value = Math.max(this.renderer.grade.uniforms.uFlash.value, perfect ? 0.35 : 0.2);
     this.rig.kick = Math.max(this.rig.kick, perfect ? 0.9 : 0.6);
     this.audio.parry(at, perfect);
     if (first || perfect) this.hud.callout(t(perfect ? 'prec.call.perfect' : 'prec.call.parry'), perfect ? 'perfect' : 'parry');
@@ -2819,7 +2821,7 @@ export class Game {
     }
     this.hud.setCrossHot(hot);
     this.hud.setDodge(prec ? this.dodgeCd / PRECISION.dodge.cooldown : null);
-    this.parryView.update(prec ? this.parry.t : -1, this.parryPoint(_v), this.lookFlat(_v2), realDt);
+    this.parryView.update(prec ? this.parry.t : -1, this.parryPoint(_v), this.lookFlat(_v2), realDt, this.parry.until);
   }
 
   private grab(q: DynBody) {

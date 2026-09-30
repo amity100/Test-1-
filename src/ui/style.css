@@ -190,9 +190,10 @@ html[dir='rtl'] .tst { letter-spacing: .04em; font-family: 'Heebo', 'Oxanium', s
 .h-cross.hot .tk.s { transform: translateY(-3px); }
 .h-cross.hot .tk.w { transform: translateX(3px); }
 .h-cross.hot .tk.e { transform: translateX(-3px); }
+.h-cross.hot .c-brk u { border-color: #ff3b3b; filter: drop-shadow(0 0 3px rgba(255, 50, 50, 0.8)); }
 .h-cross.flash { animation: xflash .28s ease-out; }
 @keyframes xflash { 0% { transform: scale(1.9) rotate(45deg); filter: brightness(2.5) drop-shadow(0 0 8px #7ff4ff); } 100% { transform: none; filter: none; } }
-.h-dodge { position: absolute; left: -9px; top: 26px; width: 18px; height: 18px; opacity: 0; transition: opacity .15s; pointer-events: none; }
+.h-dodge { position: absolute; left: -52px; top: -9px; width: 18px; height: 18px; opacity: 0; transition: opacity .15s; pointer-events: none; }
 .h-dodge.on { opacity: .9; }
 .h-dodge svg { display: block; width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible; }
 .h-dodge circle { fill: none; stroke-width: 2.6; }

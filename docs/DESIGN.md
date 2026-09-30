@@ -924,4 +924,41 @@ each **combat variant** to choose one.
   `precision`, `onslaught`. The pick is the `combatVariant` setting; F1/F2/F3, the
   pause menu, the main menu and the HUD chips switch it and restart the run.
   Systems read `activeVariant()`: the pick inside the lab, `current` everywhere
-  else; `onVariantChange()` notifies. PRECISION and ONSLAUGHT are flags only so far.
+  else; `onVariantChange()` notifies. ONSLAUGHT is a flag only so far (it will build on
+  PRECISION, whose rules already apply to it: `precisionOn()`).
+- **PRECISION** (`src/game/precision.ts`; the answer to "the game plays itself"). Nothing
+  aims, picks or chases for you; defence and execution are skills:
+  - *Manual aim.* Strikes (REFLECT's key aside), a LOOP cannon's catch, and GRAB take only
+    the man under the crosshair (`aimedEnemy`): the nearest one the aim ray passes within
+    2.5° of his body's axis (never less than his own width, x1.1), in range and in sight;
+    a thumb or a pad 4° (x1.35). No "best target", no switching. The crosshair turns red
+    on a man a strike / GRAB would take.
+  - *GRAB.* Press on a man: the floor end under him (as before). Let go: the exit is where
+    the crosshair is then (`aimedThrow`), tap or hold: in front of the man it's on, else a
+    launcher end just short of what the aim meets, never short of him + 4 m, along the aim.
+    Invalid (a wall in your face) = he climbs out. The hold is x0.5 slow motion for 1.2 s at
+    most; the arc and its outcome show while aiming and on the crosshair before the press.
+  - *PARRY* (RMB / LT / the REFLECT button, relabelled). A small rift in front of you for
+    0.25 s (each catch holds it 0.14 s more, so a burst met on its first round is met
+    whole); 0.6 s from press to press; free. Fire from your front (within ~80°) that meets
+    it (you, 0.55 m wider) goes back at its shooter: rounds and beams as a charged round
+    (44 m/s, homing on him, 60 dmg, a REFLECT kill), grenades lobbed onto him, fused to go
+    off on arrival. Outside the window nothing is caught. The first 0.1 s is PERFECT: he
+    reels 1.5 s (and the blade finishes him meanwhile). Feel: 60 ms hitstop, the rift
+    flares, a screen flash, a ring, sparks, a glassy ring sound, PARRY / PERFECT PARRY.
+  - *DODGE* (V / RB / the SHOVE button, relabelled; SHOVE is gone here). Grounded: down
+    through a floor rift and up 4.5 m the way you move (back with no input) in 0.2 s
+    (0.06 down, 0.14 across, hidden), a 3.2 m/s hop out; untouchable 0.35 s (rounds pass
+    through); 0.8 s lockout; only onto floor about your level (±1.2 m), solid all round,
+    never over the void or water, never through a wall (else as far as there is floor,
+    down to 2 m; none: refused). Come up within 3.2 m behind a man (>105° off his facing):
+    he staggers 0.9 s and is exposed 1.4 s. A pip left of the crosshair shows the lockout.
+  - *BLADE.* Reach only (no lunge). It finishes the exposed: behind him (>95°), reeling,
+    down, unaware, held, or marked by a dodge / a PERFECT parry: FINISHER (140 ms hitstop,
+    0.55 s at x0.3, a flare). A man on his guard facing you (or a brute's charge) turns it
+    aside: a clang, he reels 0.35 s (armour doesn't), you're pushed off at 5 m/s.
+  - *Danger.* No health regen while anyone is on to you; a cleared wave heals you in full.
+    The kill heal stays 15.
+  - *HUD.* The lab panel's PRECISION RULES card (one line per key, the key per device,
+    EN + HE); the red crosshair; the dodge pip; the PARRY / FINISHER / GUARDED callouts;
+    the strike bar's REFLECT button reads PARRY.

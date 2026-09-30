@@ -3,8 +3,9 @@
  * side in the COMBAT LAB so the owner can choose one.
  *
  * - current:   the game exactly as it plays today (the baseline).
- * - precision: (its mechanics come in the next step; a flag for now).
- * - onslaught: (its mechanics come in the step after; a flag for now).
+ * - precision: manual aim, a PARRY, a DODGE, a blade that finishes the
+ *              exposed (precision.ts; systems ask `precisionOn()`).
+ * - onslaught: builds on PRECISION (its own mechanics come in the next step).
  *
  * Systems read `activeVariant()`: the chosen preset while the lab is loaded,
  * CURRENT everywhere else (the missions keep playing as they do today).
