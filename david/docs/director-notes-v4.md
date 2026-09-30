@@ -66,9 +66,12 @@ low in front of him while he strides (slow motion but the stride continuous), du
 and beard moving; the name card huge in the sky's negative space.
 
 ### 8 · The spear (55.8–61.8 s)
-A wide, side-on, far frame of the whole army with Saul a small red figure in it; the "peak" of the act is a
-distant arm-raise; the army's cheer reads as a uniform ripple; nothing comes toward us. The verse is the long
-14:47. → 3 s, a fast push-in from low in front, the whole body in the thrust, the roar of every man different.
+At 2 fps: a slow push toward Saul from low behind the front rank; he lifts the spear straight up with one arm —
+a stiff, small gesture with no weight shift, no shout, his face a dark silhouette; around him every soldier lifts
+his arm in the SAME pose at the same moment (a uniform wall of raised arms); nothing comes toward us. The long
+14:47 verse runs straight across Saul's body. → 3 s, a fast push-in from low in front, the whole body in the thrust
+(weight, chest, open mouth), rim light on his face, the roar of every man different (cheer clips, offsets), the
+verse (9:2) placed in the sky, never across a face or body.
 
 ### 9 · Silence (61.8–69.8 s)
 The camera stands inside the column behind soldiers whose backs, heads and spears fill the frame (crowd-quality
