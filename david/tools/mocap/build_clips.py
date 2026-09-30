@@ -6,7 +6,8 @@ Build the DAVID mocap clip library: CMU BVH takes -> retarget onto the MakeHuman
   python3 tools/mocap/build_clips.py walk idle_*  # a subset (fnmatch patterns)
   python3 tools/mocap/build_clips.py --list
 
-Source: CMU Graphics Lab Motion Capture Database (mocap.cs.cmu.edu, "free for use in research and commercial
+Sources: the Microsoft Rocketbox animation library (MIT, src='rb:<stem>', tools/mocap/rocketbox.py) and the
+CMU Graphics Lab Motion Capture Database (mocap.cs.cmu.edu, "free for use in research and commercial
 projects"), BVH conversion by Bruce Hahne (cgspeed), mirrored at github.com/una-dinosauria/cmu-mocap.
 Takes are cached in $MOCAP_CACHE (default: the scratchpad cache) and never shipped raw: only retargeted,
 filtered, quantized clips are written to src/assets/mocap/.
@@ -39,6 +40,12 @@ _bvh_cache: dict = {}
 def take(t):
     if t in _bvh_cache:
         return _bvh_cache[t]
+    if t.startswith('rb:'):
+        # Microsoft Rocketbox (MIT): 'rb:<file stem>' (tools/mocap/rocketbox.py)
+        import rocketbox
+        b = rocketbox.load(t[3:])
+        _bvh_cache[t] = b
+        return b
     os.makedirs(CACHE, exist_ok=True)
     p = os.path.join(CACHE, t + '.bvh')
     if not os.path.exists(p):
@@ -70,7 +77,9 @@ def build(spec, tg, verbose=True):
     s = int(spec.get('start', 0) * fps_src)
     e = int(spec['end'] * fps_src) if spec.get('end') else nmot
     e = min(e, nmot)
-    clip = retarget(b, tg, s, e, head_pitch=spec.get('headPitch', 0.0), spine_pitch=spec.get('spinePitch', 0.0))
+    # low-pass (in source frames): CMU 120 fps sigma 1.6; Rocketbox (30 fps, already clean) 0.6
+    sigma = spec.get('sigma', 1.6 if fps_src > 60 else 0.6)
+    clip = retarget(b, tg, s, e, sigma120=sigma, head_pitch=spec.get('headPitch', 0.0), spine_pitch=spec.get('spinePitch', 0.0))
     clip.name = spec['name']
     normalize_start(clip)
     ground(clip, tg)
