@@ -63,7 +63,10 @@ def lashes(loop_pos, eye_center, side: int, rng, upper=True, count=110, length=(
         ln = (length[0] if upper else length[1]) * (0.45 + 0.55 * prof) * lat_bias * (0.8 + 0.4 * rng.random())
         # lashes fan laterally toward the outer corner
         fan = tang * (0.25 * (s - 0.35)) * (1 if upper else 0.6)
-        root = root + out * 0.00035 + lid_up * 0.00025
+        # face pass 2: the root sits ON the lid margin, a little toward the opening (was +0.35 mm out, +0.25 mm up the
+        # lid: with the lid-margin strip (the pocket island) in front of the eyeball the lash line read ~1.5 mm above
+        # the upper margin and below the lower one)
+        root = root + out * 0.0001 - lid_up * (0.0007 if upper else 0.0006)
         K = 6
         pts = []
         d0 = out * 0.9 + lid_up * (0.12 if upper else 0.1) + fan
@@ -84,7 +87,7 @@ def lashes(loop_pos, eye_center, side: int, rng, upper=True, count=110, length=(
     return strands, np.asarray(roots), np.asarray(widths)
 
 
-def brows(surface: Surface, eye_center, side: int, lid_loop_pos, rng, density=1.0, thickness=1.0, count=620, width=0.000125):
+def brows(surface: Surface, eye_center, side: int, lid_loop_pos, rng, density=1.0, thickness=1.0, count=620, width=0.000125, lift=0.0):
     """Eyebrow strands lying on the skin above the eye.  side: +1 left (+X), -1 right."""
     c = np.asarray(eye_center)
     P = np.asarray(lid_loop_pos)
@@ -97,7 +100,7 @@ def brows(surface: Surface, eye_center, side: int, lid_loop_pos, rng, density=1.
     x1 = outer + 0.0075
     def centre(s):
         # low, fairly straight male brow with a soft peak ~65% laterally
-        y = top + 0.0085 + 0.0030 * np.sin(np.pi * np.clip(s / 0.68, 0, 1) * 0.5) - 0.0045 * np.clip((s - 0.68) / 0.32, 0, 1) ** 1.6
+        y = top + 0.0085 + lift + 0.0030 * np.sin(np.pi * np.clip(s / 0.68, 0, 1) * 0.5) - 0.0045 * np.clip((s - 0.68) / 0.32, 0, 1) ** 1.6
         return y
     def half_h(s):
         base = 0.0046 * thickness

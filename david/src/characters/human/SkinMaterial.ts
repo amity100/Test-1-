@@ -57,12 +57,18 @@ export class SkinMaterial extends THREE.MeshPhysicalMaterial {
     uDetailNormal: { value: null as THREE.Texture | null },
     uDetailTile: { value: 50.0 }, // detail tile repetitions per metre of skin (tile 2 cm, pores ~0.35 mm apart)
     uDetailStrength: { value: 0.7 },
-    uRoughRange: { value: new THREE.Vector2(0.3, 0.8) },
+    // face pass 2: skin is a MATTE dielectric — primary lobe roughness ~0.45-0.72 (was 0.3-0.8 scaled by 0.72, i.e.
+    // ~0.22-0.58: the forehead and nose shone like plastic under the film key lights)
+    uRoughRange: { value: new THREE.Vector2(0.44, 0.74) },
     uAOIntensity: { value: 1.0 },
     uSssWrap: { value: new THREE.Vector3(0.22, 0.085, 0.06) },
     uSssNormalBlend: { value: new THREE.Vector3(0.85, 0.45, 0.25) },
     uCurvScale: { value: 0.035 },
-    uLobe: { value: new THREE.Vector3(0.72, 1.5, 0.28) }, // lobe1 roughness scale, lobe2 roughness scale, lobe2 mix
+    // dual-lobe specular (d'Eon / UE4 dual specular): lobe 1 = the matte base (roughness x1), lobe 2 = a tighter
+    // sebum sheen (roughness x0.55) weighted ONLY on the T-zone (region G), the lips and sweat — elsewhere ~2.5 %
+    uLobe: { value: new THREE.Vector3(1.0, 0.55, 0.16) }, // lobe1 roughness scale, lobe2 roughness scale, lobe2 max mix
+    /** lip colour multiplier (region map lips); warm, slightly darker lips instead of pale glossy ones */
+    uLipTint: { value: new THREE.Color(0.97, 0.84, 0.8) },
     uTransColor: { value: new THREE.Color(1.0, 0.28, 0.12) },
     uTransScale: { value: 1.25 },
     uTransPower: { value: 3.0 },
@@ -146,7 +152,8 @@ vec3 gRegion = vec3( 0.0 );
 float gLips = 0.0;
 float gOil = 0.0;
 uniform vec2 uRoughRange;
-uniform vec3 uSssWrap, uSssNormalBlend, uLobe, uTransColor, uSkinTint, uShadowScatter;
+uniform vec3 uSssWrap, uSssNormalBlend, uLobe, uTransColor, uSkinTint, uShadowScatter, uLipTint;
+float gLobeMix = 0.0;
 varying float vDetailScale;
 varying vec3 vSkinWorldPos;
 varying vec3 vSkinBind;
@@ -221,6 +228,8 @@ diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * vec3(0.78, 0.7, 0.6
   gRegion = texture2D( uRegionMap, vMapUv ).rgb;
   gLips = smoothstep( 0.72, 0.9, gRegion.g );
   gOil = clamp( gRegion.g / 0.6, 0.0, 1.0 ) * ( 1.0 - gLips );
+  // warm, natural lip colour (the baked lips read pale under warm key light)
+  diffuseColor.rgb *= mix( vec3( 1.0 ), uLipTint, gLips );
   vec3 bp = vSkinBind;
   // capillaries: thin thread-like redness (ridged noise, ~1-3 mm) and a soft flush in the flushed zones —
   // haemoglobin absorbs green and blue (Beer-Lambert), so the tint is pink-red, never orange
@@ -257,8 +266,11 @@ diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * vec3(0.78, 0.7, 0.6
         .replace(
           '#include <roughnessmap_fragment>',
           `float roughnessFactor = mix( uRoughRange.x, uRoughRange.y, gSkinMask.g );
-roughnessFactor = mix( roughnessFactor, 0.18, uWet );
 float gSpecBreak = 1.0;
+// sweat is a thin, PATCHY film on the forehead / nose / upper lip (beads), not a uniform varnish: it feeds the tight
+// second lobe and lowers the base roughness only a little (uWet 0.3 used to turn the whole face into plastic)
+float gWet = uWet * ( 0.3 + 0.7 * gOil ) * smoothstep( 0.3, 0.8, skinNoise3( vSkinBind * 240.0 + 1.7 ) );
+roughnessFactor = mix( roughnessFactor, 0.34, gWet * 0.5 );
 #ifdef SKIN_HERO
 {
   // micro-relief breakup of the sheen (~0.5-2 mm): real skin highlights are granular, a smooth highlight reads as
@@ -273,9 +285,12 @@ float gSpecBreak = 1.0;
 #endif
 #ifdef SKIN_REGION
 // sebum on the T-zone: a little glossier; lips: moist (a sharp, broken-up sheen)
-roughnessFactor *= mix( 1.0, 0.82, gOil );
-roughnessFactor = mix( roughnessFactor, 0.2 + 0.18 * skinNoise3( vSkinBind * 1400.0 ), gLips * uLipWet );
-#endif`,
+roughnessFactor *= mix( 1.0, 0.9, gOil );
+// lips: matte-ish base with a subtle moist sheen carried by the second lobe (was 0.2-0.38 base: glossy, pale lips)
+roughnessFactor = mix( roughnessFactor, 0.4 + 0.12 * skinNoise3( vSkinBind * 1400.0 ), gLips );
+#endif
+// second-lobe weight: sebum T-zone, a moist lip sheen, sweat; a trace elsewhere
+gLobeMix = uLobe.z * ( 0.15 + 0.85 * gOil ) + 0.2 * gLips * uLipWet + 0.35 * gWet;`,
         )
         .replace(
           '#include <normal_fragment_maps>',
@@ -358,7 +373,8 @@ diffuseColor.rgb *= 0.86 + 0.14 * gCavity;
   float curv = length( dn ) / max( length( dp ), 1e-5 );
   gScatter = clamp( 0.3 + curv * uCurvScale, 0.3, 1.0 );
 }
-gSpecOcc = mix( 1.0, gSkinMask.r * gSkinMask.r, 0.85 ) * mix( 1.0, gCavity, 0.75 ) * gSpecBreak;`,
+// specular occlusion: creases / folds (baked AO+cavity, squared) and the pores (micro cavity) hold no highlight
+gSpecOcc = mix( 1.0, gSkinMask.r * gSkinMask.r, 0.9 ) * mix( 1.0, gCavity * gCavity, 0.85 ) * gSpecBreak;`,
         )
         .replace(
           '#include <lights_physical_pars_fragment>',
@@ -383,8 +399,8 @@ void RE_Direct_Skin( const in IncidentLight directLight, const in vec3 geometryP
     PhysicalMaterial m1 = material;
     m1.roughness = clamp( material.roughness * uLobe.x, 0.06, 1.0 );
     PhysicalMaterial m2 = material;
-    m2.roughness = clamp( material.roughness * uLobe.y, 0.06, 1.0 );
-    vec3 spec = mix( BRDF_GGX( L, geometryViewDir, geometryNormal, m1 ), BRDF_GGX( L, geometryViewDir, geometryNormal, m2 ), uLobe.z );
+    m2.roughness = clamp( material.roughness * uLobe.y, 0.14, 1.0 );
+    vec3 spec = mix( BRDF_GGX( L, geometryViewDir, geometryNormal, m1 ), BRDF_GGX( L, geometryViewDir, geometryNormal, m2 ), clamp( gLobeMix, 0.0, 0.6 ) );
   #else
     vec3 spec = BRDF_GGX( L, geometryViewDir, geometryNormal, material );
   #endif
@@ -429,6 +445,16 @@ void RE_Direct_Skin( const in IncidentLight directLight, const in vec3 geometryP
 		{
 			// light diffusing under the skin softens shadow edges per channel: a warm fringe instead of a hard cut
 			float skinSh = ( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] ) : 1.0;
+			// face pass 2: at GRAZING incidence a shadow-map texel stretches ~1/cos across the skin, so the thin hair
+			// strands' shadow turned into a blocky vertical stripe on a rim-lit temple / cheek (golden back light, shot
+			// 16; proven by switching the groom's castShadow off). Where the sun only grazes the skin (N.L ~0.02-0.3)
+			// the shadow term fades out — the N.L / wrap falloff already shapes the light there; beyond the terminator
+			// and on surfaces facing the light the shadow map is used in full.
+			{
+				float nlg = dot( geometryNormal, directLight.direction );
+				float graze = smoothstep( -0.06, 0.02, nlg ) * ( 1.0 - smoothstep( 0.04, 0.32, nlg ) );
+				skinSh = mix( skinSh, 1.0, graze );
+			}
 			directLight.color *= pow( vec3( skinSh ), mix( uShadowScatter, vec3( 1.0 ), uSSSActive ) );
 		}`,
         )
@@ -464,7 +490,7 @@ if ( uSkinPass > 0.5 ) {
   #endif
   #if defined( USE_ENVMAP ) && defined( STANDARD )
     float dotNV = saturate( dot( geometryNormal, geometryViewDir ) );
-    reflectedLight.indirectSpecular *= computeSpecularOcclusion( dotNV, ambientOcclusion, material.roughness );
+    reflectedLight.indirectSpecular *= computeSpecularOcclusion( dotNV, ambientOcclusion, material.roughness ) * mix( 1.0, gCavity, 0.7 );
   #endif
 }`,
         );

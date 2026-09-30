@@ -16,8 +16,8 @@
   "modifiers": {
     "head/head-age-decr|incr": -0.45,
     "head/head-oval": 0.3,
-    "head/head-square": 0.2,
-    "head/head-scale-horiz-decr|incr": 0.02,
+    "head/head-square": 0.35,
+    "head/head-scale-horiz-decr|incr": 0.08,
     "forehead/forehead-scale-vert-decr|incr": -0.1,
     "eyebrows/eyebrows-trans-backward|forward": 0.85,
     "eyebrows/eyebrows-angle-down|up": 0.0,
@@ -38,7 +38,7 @@
     "mouth/mouth-scale-horiz-decr|incr": 0.14,
     "mouth/mouth-philtrum-volume-decr|incr": 0.2,
     "chin/chin-prominent-decr|incr": 0.3,
-    "chin/chin-width-decr|incr": 0.05,
+    "chin/chin-width-decr|incr": 0.18,
     "chin/chin-bones-decr|incr": 0.55,
     "chin/chin-height-decr|incr": -0.42,
     "chin/chin-cleft-decr|incr": 0.15,
@@ -73,7 +73,8 @@
     "head/head-rectangular": 0.0,
     "mouth/mouth-laugh-lines-in|out": 0.0,
     "stomach/stomach-tone-decr|incr": 0.5,
-    "nose/nose-scale-depth-decr|incr": 0.15
+    "nose/nose-scale-depth-decr|incr": 0.15,
+    "head/head-scale-vert-decr|incr": -0.06
   },
   "skin": {
     "seed": 16,
@@ -91,14 +92,14 @@
     "age": 0.0,
     "tan_lines": "tunic_short",
     "hair_color": [
-      0.36,
-      0.17,
-      0.085
+      0.2,
+      0.12,
+      0.075
     ],
     "lip_color": [
-      0.66,
-      0.4,
-      0.36
+      0.6,
+      0.33,
+      0.28
     ]
   },
   "eyes": {
@@ -107,12 +108,13 @@
   },
   "brows": {
     "color": [
-      0.34,
-      0.17,
-      0.08
+      0.2,
+      0.12,
+      0.075
     ],
-    "density": 1.5,
-    "thickness": 1.25
+    "density": 1.4,
+    "thickness": 1.12,
+    "lift": -0.0018
   },
   "face_macro": {
     "muscle": 0.6,
@@ -121,5 +123,9 @@
   },
   "skull_lock": {
     "ref": "ref/david_skull.npz"
+  },
+  "sculpt": {
+    "file": "ref/sculpt_david.npz",
+    "amount": 1.0
   }
 }

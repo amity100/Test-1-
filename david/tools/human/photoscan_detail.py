@@ -39,6 +39,16 @@ from scipy import ndimage
 from scipy.interpolate import RBFInterpolator
 from scipy.spatial import cKDTree
 
+
+def _tmp(path):
+    """atomic asset writes (face pass 2): save to a hidden temp name, then _done() renames it into place"""
+    d, b = os.path.split(path)
+    return os.path.join(d, "." + b + ".tmp")
+
+
+def _done(path):
+    os.replace(_tmp(path), path)
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 LPS = os.path.join(HERE, "ref", "lps")
@@ -437,7 +447,7 @@ def apply(preset, refresh=False):
     m2 = msk.copy()
     m2[..., 0] *= np.clip(1 + 0.08 * k["cav"] * np.minimum(Hs, 0.6), 0.84, 1.04)
     m2[..., 1] = np.clip(msk[..., 1] * np.exp(-0.45 * k["sp"] * w * np.clip(D[..., 5], -0.8, 0.8)), 0.2, 1)
-    save = lambda a, n, q: Image.fromarray((np.clip(a, 0, 1) * 255 + 0.5).astype(np.uint8), "RGB").save(os.path.join(src, n), quality=q, method=6)
+    save = lambda a, n, q: Image.fromarray((np.clip(a, 0, 1) * 255 + 0.5).astype(np.uint8), "RGB").save(_tmp(os.path.join(src, n)), format="WEBP", quality=q, method=6) or _done(os.path.join(src, n))
     save(alb2, "albedo_2k.webp", 90)
     save(np.concatenate([n2[..., :2] * 0.5 + 0.5, pores[..., None]], -1), "normal_2k.webp", 92)
     save(m2, "mask_2k.webp", 90)

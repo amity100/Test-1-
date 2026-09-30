@@ -46,6 +46,10 @@ export class EyeMaterial extends THREE.MeshPhysicalMaterial {
     uCornea: { value: new THREE.Vector4(0, 0, 0, 0) }, // cornea sphere centre z, radius, iris plane z, eyeball radius (local units)
     uCaustic: { value: 1.0 }, // strength of the corneal caustic on the iris (the crescent opposite the light)
     uHero: { value: 0.0 }, // hero close-up 0..1 (HumanModel.setHero): stronger caustic, limbal detail
+    // face pass 2: the brow ridge and the upper lid shade the eye from a HIGH light (the film's face-light spots are
+    // shadowless, so a 3/4 key from above lit a dark iris into a glowing orange disc): sin(elevation) in head space at
+    // which the occlusion starts / is full, and the light that remains (deep-set eyes: lower x/y)
+    uBrowOcc: { value: new THREE.Vector3(0.4, 0.78, 0.28) },
   };
   constructor(p: EyeParams) {
     super({ color: 0xffffff, roughness: 0.075, metalness: 0, ior: 1.376, clearcoat: 0, sheen: 0 });
@@ -69,6 +73,7 @@ uniform mat4 uSocket;
 uniform vec4 uOpening;
 uniform vec4 uCornea;
 uniform float uCaustic, uHero;
+uniform vec3 uBrowOcc;
 varying vec3 vEyeCentreV;
 varying vec3 vEyeFwdV;
 varying vec3 vEyeLocal;
@@ -169,12 +174,20 @@ float gIris = 0.0;`,
           '#include <lights_physical_pars_fragment>',
           `#include <lights_physical_pars_fragment>
 void RE_Direct_Eye( const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight ) {
-  RE_Direct_Physical( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
+  // brow / upper-lid occlusion of a high light (head space elevation of the light direction)
+  IncidentLight dl = directLight;
+  {
+    vec3 Lw = ( vec4( directLight.direction, 0.0 ) * viewMatrix ).xyz;
+    vec3 Ls = normalize( ( uSocket * vec4( Lw, 0.0 ) ).xyz );
+    float sEl = Ls.y / max( length( Ls.yz ), 1e-3 );
+    dl.color *= mix( 1.0, uBrowOcc.z, smoothstep( uBrowOcc.x, uBrowOcc.y, sEl ) );
+  }
+  RE_Direct_Physical( dl, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
   #ifndef EYE_LOW
   if ( gIris > 0.0 ) {
     // the cornea is a lens: light arriving from the side is focused into a bright crescent on the iris on the
     // side AWAY from the light (what makes an iris read as deep and wet, not painted)
-    vec3 L = directLight.direction;
+    vec3 L = dl.direction;
     vec3 fwd = normalize( vEyeFwdV );
     float lf = dot( L, fwd );
     vec3 Lp = L - lf * fwd;
@@ -187,7 +200,7 @@ void RE_Direct_Eye( const in IncidentLight directLight, const in vec3 geometryPo
     float caus = exp( -d * d / mix( 0.06, 0.1, uHero ) ) * smoothstep( 0.08, 0.55, t ) * smoothstep( -0.25, 0.25, lf );
     // (face pass: 1.4 + 1.0 hero -> 0.5 + 0.35 hero and clamped: with a film key light the crescent turned the whole
     // iris into a glowing orange disc)
-    reflectedLight.directDiffuse += min( caus * directLight.color * material.diffuseColor * ( 0.5 + 0.35 * uHero ) * uCaustic * gEyeShadow, vec3( 0.6 ) * material.diffuseColor );
+    reflectedLight.directDiffuse += min( caus * dl.color * material.diffuseColor * ( 0.5 + 0.35 * uHero ) * uCaustic * gEyeShadow, vec3( 0.6 ) * material.diffuseColor );
   }
   #endif
 }

@@ -123,17 +123,22 @@ export function samuelStyle(): GroomStyle {
     curlR: [0.003, 0.007],
     curlPitch: [0.04, 0.07],
     curlStart: 0.25,
-    curlNoise: 0.8,
+    curlNoise: 0.6, // face pass 2: wavy LOCKS with structure, not a fuzzy white mass (was 0.8)
     straightLocks: 0.35,
-    lockR: 0.006,
-    clump: 0.55,
-    frizz: 0.001,
-    flyaway: 0.004,
+    lockR: 0.0068,
+    clump: 0.76, // (was 0.55)
+    frizz: 0.0006, // (was 0.001)
+    flyaway: 0.0025, // (was 0.004)
     width: 0.0002,
     stiffness: 0.35,
     childLen: [0.7, 1.0],
     colors: (R, f, root, tip) => {
       greyWhite(R, f, root, tip, 0.04);
+      // face pass 2: a few darker iron-grey threads deep in the beard give the white mass depth and structure
+      if (R() < 0.12) {
+        root.multiplyScalar(0.55);
+        tip.multiplyScalar(0.75);
+      }
       // tobacco-yellowed / darker round the mouth (the moustache of an old man)
       const must = ss(0.035, 0.015, Math.abs(f.x)) * ss(-0.1, -0.06, f.y);
       if (must > 0.3) root.multiplyScalar(0.85);

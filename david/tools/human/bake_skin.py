@@ -33,6 +33,16 @@ from PIL import Image, ImageFilter
 from scipy import ndimage
 from scipy.spatial import cKDTree
 
+
+def _tmp(path):
+    """atomic asset writes (face pass 2): save to a hidden temp name, then _done() renames it into place"""
+    d, b = os.path.split(path)
+    return os.path.join(d, "." + b + ".tmp")
+
+
+def _done(path):
+    os.replace(_tmp(path), path)
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from build_human import Human, build_body_tiers, eye_data, lid_margin, landmarks, NBODY, OUT, uv_islands  # noqa: E402
@@ -414,7 +424,7 @@ class Baker:
         im = Image.fromarray(a, "RGB")
         if self.size != 1024:
             im = im.resize((1024, 1024), Image.LANCZOS)
-        im.save(os.path.join(outdir, "region_1k.webp"), quality=90, method=6)
+        im.save(_tmp(os.path.join(outdir, "region_1k.webp")), format="WEBP", quality=90, method=6); _done(os.path.join(outdir, "region_1k.webp"))
         print(f"  regions in {time.time() - t0:.1f}s")
 
     # ------------------------------------------------------------------ form definition (geometry unsharp mask)
@@ -717,7 +727,7 @@ class Baker:
             xl = (p[:, 0] - c[0]) * sgn
             s = (xl - x0) / (x1 - x0)
             sc = np.clip(s, 0, 1)
-            cy = topl + 0.0085 + 0.003 * np.sin(np.pi * np.clip(sc / 0.68, 0, 1) * 0.5) - 0.0045 * np.clip((sc - 0.68) / 0.32, 0, 1) ** 1.6
+            cy = topl + 0.0085 + self.preset.get("brows", {}).get("lift", 0.0) + 0.003 * np.sin(np.pi * np.clip(sc / 0.68, 0, 1) * 0.5) - 0.0045 * np.clip((sc - 0.68) / 0.32, 0, 1) ** 1.6
             th = self.preset.get("brows", {}).get("thickness", 1.0)
             hh = 0.0046 * th * (1 - 0.1 * sc) * (1 - 0.72 * np.clip((sc - 0.6) / 0.4, 0, 1) ** 1.3) * (0.85 + 0.15 * np.clip(sc / 0.1, 0, 1))
             dy = (p[:, 1] - c[1]) - cy
@@ -801,7 +811,32 @@ class Baker:
         col = col * (1 - (dust * dust_m * 0.5)[:, None]) + dust_col * (dust * dust_m * 0.5)[:, None]
         # ---------------- eye pocket (conjunctiva / caruncle) and mouth interior
         # conjunctiva / caruncle: moist pale pink, not orange-red (it reads as sore, tired eyes under a warm sun)
-        col = np.where(pocket_isl[:, None], srgb_to_lin([0.78, 0.6, 0.56]), col)
+        # face pass 2: only a THIN moist strip of it shows at the lid margin (the waterline) and the caruncle at the
+        # inner corner; deeper in (the fornix, between lid and eyeball) it falls into shadow. The old uniform pale pink
+        # read as a thick pink band under the eye in close-ups.
+        pc = srgb_to_lin([0.78, 0.6, 0.56]) * np.ones((ntex, 3))
+        pidx = np.nonzero(pocket_isl)[0]
+        if len(pidx):
+            dmin = np.full(len(pidx), 1.0)
+            dcar = np.full(len(pidx), 1.0)
+            for S, sgn in (("L", 1), ("R", -1)):
+                c = self.eyes[S]["center"]
+                loop, _ = lid_margin(h, S)
+                lp = h.v_all[loop]
+                # resample the margin densely (0.2 mm) for a distance lookup
+                seg = [lp[k] + (lp[(k + 1) % len(lp)] - lp[k]) * t for k in range(len(lp)) for t in np.linspace(0, 1, 8, endpoint=False)]
+                dd, _ = cKDTree(np.asarray(seg)).query(p[pidx])
+                dmin = np.minimum(dmin, dd)
+                inner = lp[int(np.argmin((lp[:, 0] - c[0]) * sgn))]
+                dcar = np.minimum(dcar, np.linalg.norm(p[pidx] - inner, axis=1))
+            wl = srgb_to_lin([0.7, 0.44, 0.41])  # the moist waterline
+            fornix = srgb_to_lin([0.3, 0.16, 0.14])  # deep, in the lid's shadow
+            car = srgb_to_lin([0.74, 0.47, 0.45])  # caruncle (pink, fleshy, at the inner corner)
+            k = smoothstep(0.0005, 0.0022, dmin)[:, None]
+            cc = wl * (1 - k) + fornix * k
+            kc = smoothstep(0.0032, 0.0016, dcar)[:, None]
+            pc[pidx] = cc * (1 - kc) + car * kc
+        col = np.where(pocket_isl[:, None], pc, col)
         dm = smoothstep(1.2, 0.6, np.linalg.norm(p - self._mouth_centre(), axis=1) / 0.03)
         col = np.where(mouth_isl[:, None], srgb_to_lin([0.36, 0.12, 0.11]) * (0.15 + 0.85 * (1 - dm))[:, None], col)
         self.albedo = np.clip(col, 0, 1)
@@ -1018,7 +1053,7 @@ class Baker:
             def rs(a, mode):
                 im = Image.fromarray(a, mode)
                 return im if sz == S else im.resize((sz, sz), Image.LANCZOS)
-            rs(aimg, "RGB").save(os.path.join(outdir, f"albedo_{tag}.webp"), quality=90, method=6)
+            rs(aimg, "RGB").save(_tmp(os.path.join(outdir, f"albedo_{tag}.webp")), format="WEBP", quality=90, method=6); _done(os.path.join(outdir, f"albedo_{tag}.webp"))
             if sz == S:
                 xy = nimg_xy
                 pr = pores
@@ -1030,8 +1065,8 @@ class Baker:
                 xy = n3[..., :2] * 0.5 + 0.5
                 pr = np.asarray(Image.fromarray((np.clip(pores, 0, 1) * 255).astype(np.uint8), "L").resize((sz, sz), Image.LANCZOS)).astype(np.float32) / 255
             nimg = np.concatenate([xy, pr[..., None]], -1)
-            Image.fromarray((np.clip(nimg, 0, 1) * 255 + 0.5).astype(np.uint8), "RGB").save(os.path.join(outdir, f"normal_{tag}.webp"), quality=92, method=6)
-            rs(mimg, "RGB").save(os.path.join(outdir, f"mask_{tag}.webp"), quality=90, method=6)
+            Image.fromarray((np.clip(nimg, 0, 1) * 255 + 0.5).astype(np.uint8), "RGB").save(_tmp(os.path.join(outdir, f"normal_{tag}.webp")), format="WEBP", quality=92, method=6); _done(os.path.join(outdir, f"normal_{tag}.webp"))
+            rs(mimg, "RGB").save(_tmp(os.path.join(outdir, f"mask_{tag}.webp")), format="WEBP", quality=90, method=6); _done(os.path.join(outdir, f"mask_{tag}.webp"))
         nimg = (np.clip(np.concatenate([nimg_xy, pores[..., None]], -1), 0, 1) * 255).astype(np.uint8)
         # debug previews (scratch)
         dbg = os.path.join(os.environ.get("HUMAN_DEBUG", "/tmp"), f"{self.name}_masks.png")

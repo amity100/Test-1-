@@ -163,3 +163,48 @@ export function eyesMidpoint(sockets: { eyeL: THREE.Object3D; eyeR: THREE.Object
   sockets.eyeR.getWorldPosition(_p);
   return out.add(_p).multiplyScalar(0.5);
 }
+
+/**
+ * HERO SHADOW for a face close-up in a WORLD set (face pass 2). The world sun's shadow box is 110 m wide (src/world/Sky.ts)
+ * - ~2.7 cm per texel at 4096², 5.4 cm at 2048² - so the hair's and the head's own shadow on a face turns into blocky
+ * steps. For the few seconds of a close-up the box is shrunk around the actor's head (the background is out of focus,
+ * and outside the box the world shaders fall back to their baked long shadows - Sky publishes the box every frame),
+ * then restored. Zero extra cost: same map, same pass.
+ *
+ *   const hs = heroShadow(sky.sun, 1.6);   // on the cut INTO the close-up (half-size in metres)
+ *   ...                                    // Sky.update(camera, focus) keeps the box centred: pass the head as focus
+ *   hs.restore();                          // on the cut OUT
+ *
+ * `halfSize` 1.2-2 m keeps the actor's shoulders and staff in the box; bias / normalBias are scaled to the finer texel.
+ */
+export function heroShadow(sun: THREE.DirectionalLight, halfSize = 1.6): { restore(): void } {
+  const sc = sun.shadow.camera;
+  const saved = { l: sc.left, r: sc.right, t: sc.top, b: sc.bottom, bias: sun.shadow.bias, nb: sun.shadow.normalBias, rad: sun.shadow.radius };
+  const k = halfSize / Math.max(1e-3, saved.r);
+  sc.left = -halfSize;
+  sc.right = halfSize;
+  sc.top = halfSize;
+  sc.bottom = -halfSize;
+  sc.updateProjectionMatrix();
+  // a finer texel needs proportionally less normal offset (3.5 cm on the world box would detach every contact shadow)
+  sun.shadow.normalBias = Math.max(0.004, saved.nb * k);
+  sun.shadow.bias = saved.bias;
+  sun.shadow.radius = Math.max(saved.rad, 2);
+  sun.shadow.needsUpdate = true;
+  let done = false;
+  return {
+    restore() {
+      if (done) return;
+      done = true;
+      sc.left = saved.l;
+      sc.right = saved.r;
+      sc.top = saved.t;
+      sc.bottom = saved.b;
+      sc.updateProjectionMatrix();
+      sun.shadow.bias = saved.bias;
+      sun.shadow.normalBias = saved.nb;
+      sun.shadow.radius = saved.rad;
+      sun.shadow.needsUpdate = true;
+    },
+  };
+}

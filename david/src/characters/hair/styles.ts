@@ -44,11 +44,14 @@ const dir = (out: THREE.Vector3, x: number, y: number, z: number) => out.set(x, 
 // ================================================================================================= DAVID
 /** David (a youth ~17): thick, voluminous, tousled short-to-medium curls (the reference), copper with sun-lightened tips. */
 export function davidStyle(): GroomStyle {
-  // ~12 % lighter, sun-lightened copper (wardrobe polish pass, to match the reference in back light;
-  // was ROOT 0.15 0.08 0.045, MID 0.37 0.21 0.11, TIP 0.66 0.45 0.24)
-  const ROOT: [number, number, number] = [0.17, 0.092, 0.051];
-  const MID: [number, number, number] = [0.415, 0.238, 0.124];
-  const TIP: [number, number, number] = [0.74, 0.51, 0.27];
+  // face pass 2 (visual-bible 3.13, the orchestrator's note): warm CHESTNUT-BROWN with copper/auburn highlights only
+  // where the sun catches it — not bright ginger. Measured on the reference in its golden light: the hair mass is a
+  // dark chestnut (median sRGB ~0.22-0.30 with g/r ~0.4-0.5), only the top ~10 % of pixels are copper-gold. Root/mid
+  // are darker and less saturated (b/r ~0.35 instead of 0.3), the sun-lightened copper stays in the tips on top.
+  // (was ROOT 0.17 0.092 0.051, MID 0.415 0.238 0.124, TIP 0.74 0.51 0.27 — read as orange in every light)
+  const ROOT: [number, number, number] = [0.085, 0.05, 0.032];
+  const MID: [number, number, number] = [0.245, 0.152, 0.09];
+  const TIP: [number, number, number] = [0.58, 0.4, 0.235];
   const scalp: LayerStyle = {
     name: 'david-scalp',
     kind: 0,
@@ -111,9 +114,9 @@ export function davidStyle(): GroomStyle {
       const sun = ss(-0.02, 0.08, f.y) * 0.7 + 0.3 * ss(-0.05, 0.05, f.z);
       lin(MID, tip).lerp(lin(TIP, _c), 0.35 + 0.55 * sun + 0.2 * (R() - 0.5));
       const r = R();
-      if (r < 0.1) tip.lerp(lin([0.86, 0.58, 0.3], _c), 0.5); // bleached strands
-      else if (r < 0.18) tip.multiplyScalar(0.55); // darker strands
-      vary(tip, R, 0.22, 0.02);
+      if (r < 0.1) tip.lerp(lin([0.68, 0.46, 0.27], _c), 0.45); // sun-bleached copper strands
+      else if (r < 0.2) tip.multiplyScalar(0.6); // darker strands
+      vary(tip, R, 0.22, 0);
       root.lerp(tip, 0.18);
     },
   };
@@ -123,7 +126,7 @@ export function davidStyle(): GroomStyle {
     ctrl: { low: 10, medium: 14, high: 18 },
     segs: { low: 14, medium: 24, high: 36 },
     shading: { shift: 0.035, roughness: 0.42, specular: 0.5, backlit: 0.75, scatter: 0.25, aoDirect: 0.6 },
-    capColor: [0.16, 0.085, 0.046],
+    capColor: [0.085, 0.05, 0.032],
     capOffset: 0.006,
     capBeard: 0,
     widthTier: { low: 2.8, medium: 1.5, high: 1 },
@@ -210,7 +213,8 @@ export function saulStyle(): GroomStyle {
       // face pass: the upper edge on the cheeks grows short (a dense, groomed cheek line instead of long sparse
       // strands that read as a hard, stringy mesh edge)
       const cheekEdge = ss(-0.052, -0.026, f.y) * ss(0.03, 0.05, ax);
-      return (must > 0.5 ? 0.026 : L * (1 - 0.6 * under) * (1 - 0.55 * cheekEdge)) * (0.92 + 0.16 * R());
+      // face pass 2: trimmed — no stray long strands onto the chest (a groomed royal beard, 6-8 cm at the chin)
+      return Math.min(0.078, (must > 0.5 ? 0.026 : L * (1 - 0.72 * under) * (1 - 0.55 * cheekEdge)) * (0.92 + 0.16 * R()));
     },
     comb: (f, n, out) => {
       const ax = Math.abs(f.x);

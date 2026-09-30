@@ -44,7 +44,9 @@ scene.add(sky.group);
 const sunEl = light === 'back' ? 7 : light === 'king' ? 24 : light === 'verdict' ? 11 : 13;
 const sunAz = Number(P.get('az') ?? (light === 'back' ? 200 : light === 'king' ? 110 : light === 'verdict' ? 250 : 60));
 sky.setSun(sunEl, sunAz, scene);
-{
+// &ws=1: keep the WORLD's shadow box (110 m, normalBias 3.5 cm — what the film's world takes use); default: a tight box
+const worldShadow = P.get('ws') === '1';
+if (!worldShadow) {
   const sc = sky.sun.shadow.camera;
   sc.left = -1.2; sc.right = 1.2; sc.top = 1.2; sc.bottom = -1.2;
   sc.updateProjectionMatrix();
@@ -138,7 +140,8 @@ function frameCamera(view: string) {
     case 'profile': at(c, left.clone().addScaledVector(fwd, 0.05), 0.95, 24); break;
     case 'back': at(c, fwd.clone().negate().addScaledVector(up, 0.08), 0.95, 24); break;
     case 'back3': at(c, fwd.clone().negate().addScaledVector(left, -0.9).addScaledVector(up, 0.1), 0.95, 24); break;
-    case 'eye': at(head.clone().add(new THREE.Vector3(0.032, 0.0, 0)), fwd.clone().addScaledVector(left, 0.3), 0.2, 22); break;
+    case 'eye': case 'blink': at(head.clone().add(new THREE.Vector3(0.032, 0.0, 0)), fwd.clone().addScaledVector(left, 0.3), 0.2, 22); break;
+    case 'eyes': at(head.clone(), fwd.clone().addScaledVector(up, 0.02), 0.34, 22); break;
     case 'close': at(head.clone().add(new THREE.Vector3(0, -0.035, 0)), fwd.clone().addScaledVector(left, -0.3).addScaledVector(up, 0.02), 0.5, 24); break;
     case 'bust': at(head.clone().add(new THREE.Vector3(0, -0.2, 0)), fwd.clone().addScaledVector(left, -0.4), 2.0, 24); break;
     // the reference: his face turned toward his left, the camera at his right-front, slightly low
@@ -146,13 +149,37 @@ function frameCamera(view: string) {
   }
 }
 
+// &variants=base,nohs,noss,sss0,nocap,nosun — diagnostic toggles rendered from ONE load (key = view or view~variant)
+const variants = (P.get('variants') ?? 'base').split(',');
+function applyVariant(v: string) {
+  const on = (k: string) => v.split('+').includes(k);
+  if (groom) {
+    groom.strands.castShadow = !on('nohs');
+    if (groom.cap) {
+      groom.cap.visible = !on('nocap');
+    }
+  }
+  human.root.traverse((o) => {
+    if ((o as THREE.Mesh).isMesh && o !== groom?.strands && o !== groom?.cap && !(groom && isUnder(o, groom.root))) o.castShadow = !on('noss');
+  });
+  if (post.sss) post.sss.enabled = !on('sss0');
+  sky.sun.intensity = on('nosun') ? 0 : sunI;
+}
+function isUnder(o: THREE.Object3D, r: THREE.Object3D) {
+  for (let p: THREE.Object3D | null = o; p; p = p.parent) if (p === r) return true;
+  return false;
+}
+const sunI = sky.sun.intensity;
 const shots: Record<string, string> = {};
 const times: number[] = [];
-for (const v of views) {
+for (const va of variants) for (const v of views) {
+  applyVariant(va);
   frameCamera(v);
   post.resetHistory();
   for (let i = 0; i < frames; i++) {
     const dt = 1 / 60;
+    // 'blink': the lids closed at the capture (the blink closes in 0.07 s and holds 0.03 s) — the lashes must follow
+    if (v === 'blink' && i === frames - 5) human.rig.blink();
     shared.uTime.value += dt;
     shared.uCamPos.value.copy(camera.position);
     human.update(dt, camera, H);
@@ -165,7 +192,7 @@ for (const v of views) {
     await new Promise((r) => requestAnimationFrame(() => r(null)));
   }
   renderer.getContext().finish();
-  shots[v] = renderer.domElement.toDataURL('image/png');
+  shots[variants.length > 1 ? `${v}~${va}` : v] = renderer.domElement.toDataURL('image/png');
 }
 info.textContent = '';
 const w = window as unknown as Record<string, unknown>;

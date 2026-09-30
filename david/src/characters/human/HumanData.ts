@@ -45,6 +45,10 @@ export interface RigJson {
     noseTip: [number, number, number];
     crown: [number, number, number];
     crownRadius: [number, number];
+    /** mouth corner (his left), top of the upper vermilion, bottom of the lower vermilion (face pass 2 builds) */
+    mouthL?: [number, number, number];
+    lipTop?: [number, number, number];
+    lipBottom?: [number, number, number];
   };
   skin: Record<string, unknown>;
   brows: { color?: [number, number, number]; density?: number; thickness?: number };

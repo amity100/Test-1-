@@ -171,6 +171,13 @@ class Human:
         else:  # variation morphs share the reference normalisation
             self.scale, self.origin = ref.scale, ref.origin.copy()
         self.v_all = (v - self.origin) * self.scale  # metres, incl. helpers
+        sc = preset.get("sculpt")
+        if sc:
+            # face sculpt deltas (tools/human/sculpt_face.py: photoscan structure + landmark goals), metres, every
+            # base-mesh vertex; applied before the skeleton / weights / rest pose / skull lock so all stay consistent
+            D = np.load(os.path.join(HERE, sc["file"]))["delta"].astype(np.float64)
+            if len(D) == len(self.v_all):
+                self.v_all = self.v_all + D * float(sc.get("amount", 1.0))
         self._build_skeleton()
         if ref is None:
             self._build_weights()
@@ -510,8 +517,10 @@ class BinWriter:
 
 
 def write_json(path, obj):
-    with open(path, "w", encoding="utf-8") as f:
+    tmp = os.path.join(os.path.dirname(path), "." + os.path.basename(path) + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(obj, f, separators=(",", ":"))
+    os.replace(tmp, path)
 
 
 
@@ -534,9 +543,13 @@ def landmarks(h: Human):
     nose_v = np.nonzero(np.abs(v[:, 0]) < 0.004)[0]
     nose_v = nose_v[(v[nose_v, 1] > ey - 0.06) & (v[nose_v, 1] < ey)]
     nose = v[nose_v[np.argmax(v[nose_v, 2])]]
+    # face pass 2: the real mouth (hm08 vertex ids, shared topology): the corner (his left), the top of the upper
+    # vermilion and the bottom of the lower one — the beard mask keeps exactly the lips bare (the old estimate from
+    # chin / nose tip sat 1-1.6 cm too low on bearded men and left a bare band under the lower lip)
     return {
         "headTop": top.tolist(), "chin": chin.tolist(), "noseTip": nose.tolist(),
         "crown": crown.tolist(), "crownRadius": [float((cx.max() - cx.min()) / 2), float((cz.max() - cz.min()) / 2)],
+        "mouthL": v[7129].tolist(), "lipTop": v[362].tolist(), "lipBottom": v[492].tolist(),
     }
 
 
@@ -547,6 +560,29 @@ def weights_for_points(tier: Tier, pts: np.ndarray, k=3):
     w = 1.0 / (d + 1e-4)
     w /= w.sum(1, keepdims=True)
     return np.einsum("nk,nkb->nb", w, tier.Wd[i])
+
+
+def loop_weights(h: Human, eyes, pts: np.ndarray) -> np.ndarray:
+    """Bone weights of the nearest point on either lid-margin loop (linear along the loop segment)."""
+    segA, segB, WA, WB = [], [], [], []
+    for S in ("L", "R"):
+        lp = np.asarray(eyes[S]["loop"])
+        nx = np.roll(lp, -1)
+        segA.append(h.v_all[lp])
+        segB.append(h.v_all[nx])
+        WA.append(h.Wd[lp])
+        WB.append(h.Wd[nx])
+    A, B = np.concatenate(segA), np.concatenate(segB)
+    WA, WB = np.concatenate(WA), np.concatenate(WB)
+    out = np.zeros((len(pts), WA.shape[1]), np.float64)
+    AB = B - A
+    L2 = np.maximum((AB ** 2).sum(1), 1e-12)
+    for i, p in enumerate(pts):
+        t = np.clip(((p - A) * AB).sum(1) / L2, 0, 1)
+        d = np.linalg.norm(A + AB * t[:, None] - p, axis=1)
+        j = int(np.argmin(d))
+        out[i] = WA[j] * (1 - t[j]) + WB[j] * t[j]
+    return out
 
 
 def build_strands(h: Human, tier: Tier, eyes, rng_seed=1, density=1.0):
@@ -572,7 +608,7 @@ def build_strands(h: Human, tier: Tier, eyes, rng_seed=1, density=1.0):
         mask = (allnrm[:, 2] > 0.15) & (allpos[:, 1] > c[1] + 0.002) & (np.abs(allpos[:, 0] - c[0]) < 0.05)
         surf = Surface(allpos, allnrm, mask)
         br_s, br_r, br_w = brows(surf, c, side, loop, rng, density=bcfg.get("density", 1.0) * density,
-                                 thickness=bcfg.get("thickness", 1.0))
+                                 thickness=bcfg.get("thickness", 1.0), lift=bcfg.get("lift", 0.0))
         out.append(("lash", up_s + lo_s, np.concatenate([up_r, lo_r]), np.concatenate([up_w, lo_w])))
         out.append(("brow", br_s, br_r, br_w))
     groups = {}
@@ -587,8 +623,11 @@ def build_strands(h: Human, tier: Tier, eyes, rng_seed=1, density=1.0):
         rib["nstrands"] = len(g["strands"])
         rib["points"] = len(g["strands"][0])
         roots = np.concatenate(g["roots"])
-        # skin weights: lashes follow the nearest lid-margin skin, brows the skin under the root
-        Wr = weights_for_points(tier, roots, k=2 if kind == "lash" else 4)
+        # skin weights: lashes carry the EXACT weights of the lid margin (interpolated along the margin loop), brows
+        # the skin under the root. (Face pass 2: nearest-neighbour weights came from skin 1-2 mm off the margin, which
+        # the lid-closure / lower-lid-up pose units move less than the margin itself: the lash line floated ~1-2 mm
+        # above the upper margin and below the lower one in the rest face.)
+        Wr = loop_weights(h, eyes, roots) if kind == "lash" else weights_for_points(tier, roots, k=4)
         rib["Wd"] = Wr[rib["sidx"]]
         # skin normal at root (for shading)
         _, ni = cKDTree(tier.pos).query(roots)
@@ -884,8 +923,10 @@ def build_preset(name: str, tiers=("base", "sub1")):
     data = bw.bytes()
     import gzip
     gz = gzip.compress(data, compresslevel=9, mtime=0)
-    with open(os.path.join(outdir, "human.binz"), "wb") as f:
+    # atomic: write a temp file, then rename (a concurrent vite build never reads a half-written asset)
+    with open(os.path.join(outdir, ".human.binz.tmp"), "wb") as f:
         f.write(gz)
+    os.replace(os.path.join(outdir, ".human.binz.tmp"), os.path.join(outdir, "human.binz"))
     if os.path.exists(os.path.join(outdir, "human.bin")):
         os.remove(os.path.join(outdir, "human.bin"))
     rig["bin"] = {"file": "human.binz", "bytes": len(data), "gzipBytes": len(gz), "layout": bw.layout}

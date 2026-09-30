@@ -174,3 +174,38 @@ to the skull). `src/characters/hair/HeadSurface.ts` uses the same table format.
 * **Face lighting for the film** — `src/film/cast/faceLight.ts` (`FaceLightRig`, presets `goldenBack` / `afternoonKing`
   / `verdict` / `soft`): key / rim / fill spot lights placed relative to the camera → face axis; fixed light count per
   quality (low 1, medium 2, high 3), no shadows, distance cut-off.
+
+## Face pass 2 (30 Sep): sculpt deltas, matte skin, rim-stripe fix, lashes on the margin, beard mouth line
+
+* **Sculpt deltas** — `tools/human/sculpt_face.py <preset>` morphs the FACE toward real anatomy: the Lee Perry-Smith scan
+  (CC BY 3.0) is aligned to the preset by the 14 landmarks (umeyama similarity + a thin-plate warp in the FRONTAL
+  PLANE only, so the scan's depth profile — brow ridge, sockets, cheekbones, nose projection, chin — is what differs);
+  each face vertex takes the normal component of its offset to the scan surface; the field is masked (in front of the
+  ears, below the hairline so the skull lock / groom stay valid, zero on the lids so the eyeballs stay seated), mean-
+  removed and low-passed on the mesh (bone and fat, not detail), scaled by `SETTINGS[preset].amount` (David 0.8, Saul
+  0.55, Samuel 0.6) and summed with named Gaussian goals (cheekbones, jaw angle, chin, brow ridge, lid hood, temples,
+  cheek hollows...). Output `tools/human/ref/sculpt_<preset>.npz` (per-vertex metres, helpers follow — teeth move with
+  the mouth, eyeballs and cranium do not); a preset with `"sculpt": {"file": "ref/sculpt_<preset>.npz", "amount": 1}`
+  gets it in `build_human.Human` before the skeleton / weights / rest pose / skull lock. Landmark vertex ids are cached
+  in `tools/human/ref/lps_lm_idx.json` (hm08 topology, shared by every preset).
+* **Rig landmarks** — `rig.landmarks` now also carries `mouthL` (the left mouth corner), `lipTop`, `lipBottom`
+  (vermilion edges). `HeadSurface.beardMask()` keeps exactly the lips bare (the old estimate from the chin / nose tip sat
+  1-1.6 cm too low on bearded men: a bare dark band under the lower lip between moustache and chin beard).
+* **Skin specular** — matte dual lobe: base roughness 0.44-0.74 (was 0.3-0.8 × 0.72), the tight second lobe
+  (roughness × 0.55) is weighted only on the sebum T-zone (region G), the lips (a subtle moist sheen) and patchy sweat
+  (`uWet` is now a patchy film on the forehead / nose / upper lip, not a whole-face varnish); stronger specular occlusion
+  in creases and pores (AO² and cavity², also on the IBL specular); `uLipTint` warms the lips.
+* **Rim-stripe fix** — shadow maps are unreliable at grazing incidence (a texel stretches ~1/cos across the surface): the
+  hair strands' shadow on a rim-lit temple turned into a blocky vertical stripe (shot 16; proven by switching the
+  groom's castShadow off in `dev/face.html?variants=base,nohs,...`). The skin now fades the sun's shadow where N·L is
+  ~0.02-0.3. For world-set close-ups `heroShadow(sun, halfSize)` in `src/film/cast/faceLight.ts` shrinks the 110 m
+  world shadow box around the actor for the shot (2.7 cm → ~1 mm texels) and restores it.
+* **Lashes** — skinned with the exact interpolated weights of the lid-margin loop (nearest-neighbour weights came from
+  skin 1-2 mm off the margin, which the lid pose units move less) and rooted on the margin, a little toward the opening.
+* **Eye pocket paint** — only a thin moist waterline (0.5-2 mm) and the caruncle stay pink; the fornix behind falls to a
+  dark shadow tone (the uniform pale pink read as a thick pink band under the eye).
+* **Eyes under high key lights** — `EyeMaterial.eyeUniforms.uBrowOcc` (sin elevation start / full, remaining light):
+  the brow ridge / upper lid shade the eyeball from a high light (shadowless film face lights turned dark irises into
+  glowing orange discs).
+* **Brows** — preset `brows.lift` (metres, strands and the painted brow) lowers / raises the brow line.
+* All asset writes of the bakers are atomic (temp file + rename).

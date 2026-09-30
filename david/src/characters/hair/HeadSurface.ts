@@ -230,6 +230,10 @@ export class HeadSurface {
   readonly headTop: THREE.Vector3;
   readonly chin: THREE.Vector3;
   readonly noseTip: THREE.Vector3;
+  /** world y of the top of the upper lip / bottom of the lower lip, half the mouth width (rest pose) */
+  readonly lipTopY: number;
+  readonly lipBottomY: number;
+  readonly mouthHalfW: number;
   readonly headRestPos: THREE.Vector3;
   readonly headRestQuat: THREE.Quaternion;
   readonly jawRestPos: THREE.Vector3;
@@ -288,6 +292,11 @@ export class HeadSurface {
     this.headTop = new THREE.Vector3(...lm.headTop);
     this.chin = new THREE.Vector3(...lm.chin);
     this.noseTip = new THREE.Vector3(...lm.noseTip);
+    // the lips (face pass 2 rigs carry them; older rigs: the corners at ~58 % from the chin to the nose tip)
+    const my = lm.chin[1] + (lm.noseTip[1] - lm.chin[1]) * 0.58;
+    this.lipTopY = lm.lipTop ? lm.lipTop[1] : my + 0.01;
+    this.lipBottomY = lm.lipBottom ? lm.lipBottom[1] : my - 0.009;
+    this.mouthHalfW = lm.mouthL ? Math.abs(lm.mouthL[0] - this.E.x) : 0.025;
     this.headRestPos = human.rig.restWorldPosition('head');
     this.headRestQuat = human.rig.restWorldQuaternion('head');
     this.jawRestPos = human.rig.restWorldPosition('jaw');
@@ -342,8 +351,8 @@ export class HeadSurface {
     const out = new Float32Array(nv);
     const P = this.pos, N = this.nrm, E = this.E;
     const chinY = this.chin.y - E.y;
-    // mouth: vermilion band around the mouth line (between the nose tip and the chin)
-    const mouthY = this.chin.y + (this.noseTip.y - this.chin.y) * 0.42 - E.y;
+    // the lips (vermilion) relative to the eye midpoint
+    const lipTop = this.lipTopY - E.y, lipBot = this.lipBottomY - E.y, lipW = this.mouthHalfW;
     for (let v = 0; v < nv; v++) {
       const r = this.region[v];
       if (r <= 0.01) continue;
@@ -355,9 +364,9 @@ export class HeadSurface {
       const must = head * ss(0.03, 0.022, ax) * ss(-0.066, -0.06, fy) * ss(-0.043, -0.05, fy);
       const under = Math.min(1, r * 2) * ss(chinY + 0.005, chinY - 0.01, fy) * ss(chinY - 0.04, chinY - 0.02, fy) * ss(-0.2, 0.2, N[v * 3 + 2] + 0.3);
       beard = Math.max(beard, must, under);
-      // keep the lips and the nostrils bare
-      const lipW = 0.027;
-      const lips = ss(lipW + 0.004, lipW - 0.004, ax) * ss(0.013, 0.007, Math.abs(fy - mouthY)) * ss(0.0, 0.3, N[v * 3 + 2]);
+      // keep exactly the lips bare (face pass 2): the beard grows right up to the lower vermilion (no bare band
+      // under the lower lip between the moustache and the chin beard) and the mouth reads
+      const lips = ss(lipW + 0.004, lipW - 0.001, ax) * ss(lipTop + 0.0025, lipTop - 0.0005, fy) * ss(lipBot - 0.0025, lipBot + 0.0005, fy) * ss(0.0, 0.3, N[v * 3 + 2]);
       beard *= 1 - lips;
       out[v] = Math.min(1, beard);
     }

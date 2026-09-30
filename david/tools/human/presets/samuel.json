@@ -90,5 +90,9 @@
     ],
     "density": 1.35,
     "thickness": 1.4
+  },
+  "sculpt": {
+    "file": "ref/sculpt_samuel.npz",
+    "amount": 1.0
   }
 }
