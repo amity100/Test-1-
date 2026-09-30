@@ -208,16 +208,17 @@ export class FilmWorld {
     // 19a — THE THICKET: over the lamb's back into the dark between the trunks, a creeping push; the eyes open.
     const bearHead = this.bearAt.clone().add(V(0, 0.95, 0));
     this.paths.thicket = this.path(
-      [lambEnd.clone().addScaledVector(O, 2.2).addScaledVector(Sx, 0.35).add(V(0, 0.72, 0)), lambEnd.clone().addScaledVector(O, 1.3).addScaledVector(Sx, 0.2).add(V(0, 0.68, 0))],
+      // (cut pass 2) higher and to the side: the lamb's back in the lower left, the dark between the trunks open
+      [lambEnd.clone().addScaledVector(O, 2.4).addScaledVector(Sx, 0.95).add(V(0, 1.0, 0)), lambEnd.clone().addScaledVector(O, 1.7).addScaledVector(Sx, 0.75).add(V(0, 0.95, 0))],
       [bearHead.clone(), bearHead.clone()],
       [30, 22],
       false,
     );
     // 19b — THE LAMB: reverse, low and close from the thicket side: it lifts its head (1.3 m, a long lens).
     this.paths.lamb = this.path(
-      [lambEnd.clone().addScaledVector(O, -1.35).addScaledVector(Sx, 0.45).add(V(0, 0.36, 0)), lambEnd.clone().addScaledVector(O, -1.18).addScaledVector(Sx, 0.4).add(V(0, 0.35, 0))],
-      [lambEnd.clone().add(V(0, 0.4, 0)), lambEnd.clone().add(V(0, 0.44, 0))],
-      [30, 27],
+      [lambEnd.clone().addScaledVector(O, -1.95).addScaledVector(Sx, 0.6).add(V(0, 0.5, 0)), lambEnd.clone().addScaledVector(O, -1.72).addScaledVector(Sx, 0.55).add(V(0, 0.48, 0))],
+      [lambEnd.clone().add(V(0, 0.45, 0)), lambEnd.clone().add(V(0, 0.5, 0))],
+      [26, 24],
       false,
     );
   }
@@ -360,8 +361,12 @@ export class FilmWorld {
       if (take === 'peace') {
         lamb.state = t < 3.6 ? 'walk' : 'graze';
         lamb.manualSpeed = t < 3.6 ? 0.5 : 0;
-      } else {
+      } else if (take === 'thicket') {
         lamb.state = 'graze';
+        lamb.manualSpeed = 0;
+      } else {
+        // 19b: standing (not grazing) so the alert lifts its head toward the thicket
+        lamb.state = 'walk';
         lamb.manualSpeed = 0;
       }
       if (take === 'lamb') {
@@ -506,7 +511,7 @@ export class FilmWorld {
     eyes.position.copy(hc).addScaledVector(fwd, 0.2).add(V(0, 0.05, 0));
     eyes.rotation.set(0, bear.heading, 0);
     eyes.visible = open > 0.01;
-    for (const c of eyes.children) c.scale.set(0.055, 0.055 * Math.max(0.04, open), 1);
+    for (const c of eyes.children) c.scale.set(0.09, 0.09 * Math.max(0.04, open), 1);
     if (this.eyeMat) this.eyeMat.opacity = Math.min(1, open * 1.2);
   }
 
@@ -523,7 +528,8 @@ export class FilmWorld {
     x.fillRect(0, 0, 64, 64);
     this.eyeTex = new THREE.CanvasTexture(c);
     this.eyeTex.colorSpace = THREE.SRGBColorSpace;
-    this.eyeMat = new THREE.SpriteMaterial({ map: this.eyeTex, color: new THREE.Color(2.2, 1.6, 0.9), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, toneMapped: false, fog: false });
+    // visual-bible 3.15: a FAINT amber eyeshine (tapetum), never red, never a demon glow
+    this.eyeMat = new THREE.SpriteMaterial({ map: this.eyeTex, color: new THREE.Color(1.5, 1.02, 0.5), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, toneMapped: false, fog: false });
     const g = new THREE.Group();
     g.name = 'film:bear-eyes';
     for (const s of [-1, 1]) {

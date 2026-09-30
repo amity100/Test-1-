@@ -7,6 +7,8 @@ import { SAMUEL, SAUL_HALT, SUN } from './gilgal/gilgalLayout';
  * Orchestration-level camera coverage of the opening film at Gilgal (cut pass 2) — takes that replace or split the
  * set's own camera moves (src/film/gilgal/gilgalShots.ts is unchanged; its blocking drives the actors):
  *
+ *   'spearRaised'  shot 8  low in front of the halted king, backlit, the army behind him (was a far side wide)
+ *   'silence'      shot 9  the set's move + a slow zoom that finds Samuel standing in the road
  *   'king'         shot 7  HERO low angle: the lens 0.3 m off the ground, 3-4 m in front of the striding king, the low
  *                          western sun just beside his head (rim light through the dust); he fills the frame height
  *   'faceOff'      shot 10a coverage A: over Samuel's right shoulder onto Saul (the giant king backlit, looming)
@@ -17,6 +19,7 @@ import { SAMUEL, SAUL_HALT, SUN } from './gilgal/gilgalLayout';
  */
 export const FILM_CAM = {
   silence: { zoomFrom: 2.6, zoomTo: 7.6, fovEnd: 9.5 },
+  spear: { x0: 6.6, z0: 3.7, x1: 5.3, z1: 3.0, lens: 0.45, lookX: -1.4, lookH0: 2.1, lookH1: 2.55, fov0: 38, fov1: 35 },
   king: { d0: 3.9, d1: 3.15, lens: 0.3, side: 0.62, lookH0: 1.3, lookH1: 1.42, lookSide: 0.1, fov0: 40, fov1: 38 },
   faceA: { back: 1.05, side: 0.52, h: 1.5, lookH: 1.78, lookSide: 0.42, fov0: 30, fov1: 27.5, push: 0.18 },
   faceB: { back: 1.0, side: 0.5, h: 1.72, lookH: 1.5, lookSide: 0.38, fov0: 30, fov1: 27.5, push: 0.16 },
@@ -55,6 +58,20 @@ export function gilgalCam(take: string, u: number, t: number, H: (x: number, z: 
     out.look.set(s.x, g + lerp(c.lookH0, c.lookH1, e), s.z + c.lookSide);
     out.fov = lerp(c.fov0, c.fov1, e);
     out.roll = 0.02 * Math.sin(u * 1.6);
+    return true;
+  }
+  if (take === 'spearRaised') {
+    // shot 8, the peak: low in front of the halted king (east of him, the sun behind him in the west), the dust of the
+    // army standing behind him backlit; he raises the spear into the sky and thousands raise theirs behind him
+    const c = FILM_CAM.spear;
+    const s = saulAt('spearRaised', t).pos;
+    const g = H(s.x, s.z);
+    const e = smooth(u);
+    out.pos.set(s.x + lerp(c.x0, c.x1, e), 0, s.z + lerp(c.z0, c.z1, e));
+    out.pos.y = H(out.pos.x, out.pos.z) + c.lens;
+    out.look.set(s.x + c.lookX, g + lerp(c.lookH0, c.lookH1, e), s.z - 0.2);
+    out.fov = lerp(c.fov0, c.fov1, e);
+    out.roll = 0;
     return true;
   }
   if (take === 'silence') {
@@ -96,7 +113,7 @@ export function gilgalCam(take: string, u: number, t: number, H: (x: number, z: 
 
 /** DoF focus of an orchestration take: the far actor's eyes are passed in by the caller; null = use the set's */
 export function gilgalCamFocusActor(take: string): 'saul' | 'samuel' | null {
-  if (take === 'king' || take === 'faceOff') return 'saul';
+  if (take === 'king' || take === 'faceOff' || take === 'spearRaised') return 'saul';
   if (take === 'faceOff:rev') return 'samuel';
   return null;
 }

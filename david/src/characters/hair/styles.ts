@@ -53,7 +53,7 @@ export function davidStyle(): GroomStyle {
     name: 'david-scalp',
     kind: 0,
     mask: (s) => s.scalpMask(0, (phi) => -0.009 * Math.exp(-(((phi - 58) / 16) ** 2))),
-    strands: { low: 3600, medium: 10500, high: 22000 },
+    strands: { low: 4600, medium: 10500, high: 22000 }, // face pass: low 3600 -> 4600 (the scalp showed through on phones)
     locks: 190,
     sim: { low: 16, medium: 32, high: 48 },
     // face pass (the user's order, 30 Sep; visual-bible 3.13): the reference's SHORT-TO-MEDIUM tousled curls — volume on

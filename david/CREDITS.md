@@ -388,3 +388,6 @@ values and re-baked by our own tools (`tools/human`).
   `tools/human/ref/lps/` for the offline tool only; they are not shipped in the game. Attribution: "Lee Perry-Smith
   head scan © Infinite-Realities, CC BY 3.0".
 - Face lighting rig, eye / lash / lid shading and the preset reshapes are own code; the MakeHuman data is CC0 (above).
+
+## Opening film — rough cut orchestration (cut passes 1-2: `src/gameplay/Intro.ts`, `src/film/FilmStage.ts`, `src/film/FilmWorld.ts`, `src/film/FilmCams.ts`, `src/content/introScript.ts`, film typography in `src/ui/`)
+- No third-party assets. Camera coverage, staging, the bear's eye-shine (a runtime canvas gradient) and the film typography are own work; every on-screen quotation comes from the verified catalog `src/content/sources.ts`.
