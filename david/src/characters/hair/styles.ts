@@ -65,10 +65,10 @@ export function davidStyle(): GroomStyle {
       const top = ss(0.03, 0.1, f.y);
       const front = ss(-0.02, 0.06, f.z) * ss(0.02, 0.07, f.y);
       // nape roots (low at the back): a little longer so the back reaches the top of the neck, never the collar
-      const back = ss(0.0, -0.08, f.z) * ss(0.05, -0.04, f.y);
+      const back = ss(-0.06, -0.12, f.z) * ss(0.04, -0.05, f.y);
       // over / around the ears: shorter, so the curls cover only the top of the ear and the lobe shows
-      const side = ss(0.05, 0.075, Math.abs(f.x)) * ss(0.06, 0.0, f.y) * ss(-0.12, -0.04, f.z);
-      return (0.088 + 0.026 * top + 0.028 * front + 0.004 * back - 0.022 * side) * (0.84 + 0.32 * R());
+      const side = ss(0.05, 0.075, Math.abs(f.x)) * ss(0.06, -0.01, f.y) * ss(-0.15, -0.07, f.z);
+      return (0.086 + 0.026 * top + 0.026 * front - 0.018 * back - 0.03 * side) * (0.86 + 0.28 * R());
     },
     comb: (f, n, out) => {
       // whorl at the top-back; hair flows out from it, forward over the forehead, down the sides / back
@@ -90,9 +90,9 @@ export function davidStyle(): GroomStyle {
     gravity: 18,
     combPull: 10,
     tousle: 14,
-    volume: (t, R) => 0.004 + (0.6 * R + 0.005) * ss(0, 0.3, t),
+    volume: (t, R) => 0.003 + (0.5 * R + 0.004) * ss(0, 0.3, t),
     // tousled natural curls (about 1-1.5 turns per lock at this length), defined clumps, a little frizz
-    curlR: [0.012, 0.02],
+    curlR: [0.01, 0.016],
     curlPitch: [0.065, 0.1],
     curlStart: 0.25,
     curlNoise: 0.9,

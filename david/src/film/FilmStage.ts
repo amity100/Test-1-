@@ -406,12 +406,16 @@ export class FilmStage {
         out.roll = f.roll ?? 0;
         return true;
       },
-      enter() {
-        /* the land sets have no per-shot state */
+      enter(take) {
+        // the host marches from the head of its road at the cut into shot 4 (and keeps marching into the glint)
+        if (extra.host && take === 'threat') extra.host.setTravel(0);
       },
       tick(_take, t, dt) {
         const h = engine.renderer.domElement.height;
-        if (extra.host) extra.host.update(dt, camera);
+        if (extra.host) {
+          extra.host.crowd.viewportHeight = h; // keeps the far spear shafts visible
+          extra.host.update(dt, camera);
+        }
         if (extra.ramah) extra.ramah.update(t, dt, camera, h);
       },
       focus(take) {
@@ -483,6 +487,7 @@ export class FilmStage {
         gilgal.setBeat(name, t);
         if (army && armyOk) {
           try {
+            army.crowd.viewportHeight = engine.renderer.domElement.height;
             army.setBeat(name, t);
             army.update(dt, camera);
           } catch (e) {

@@ -176,8 +176,9 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
     direction: 'Black. Wind; a single deep tone. The time card, alone, slow fade.',
   },
   {
-    id: 'land', n: '2', set: 'judah', take: 'flight', span: [0.1, 0.78], dur: 13, cut: 'black', fade: 2.4, cue: 'land', beat: 'judea',
-    text: [{ at: 5.6, seconds: 6.2, kind: 'line', narration: ['tribes'] }],
+    id: 'land', n: '2', set: 'judah', take: 'flight', span: [0.1, 0.92], dur: 13, cut: 'black', fade: 2.4, cue: 'land', beat: 'judea',
+    // span end 0.92 (land pass 4): through the deck at ~4.1-4.9 s, the ridges-in-mist tableau holds from ~8 s
+    text: [{ at: 5.0, seconds: 6.6, kind: 'line', narration: ['tribes'] }],
     direction: 'Above the sunlit cloud sea at dawn, the sun rising behind Moab; the camera sinks and breaks through the '
       + 'deck: the Judean hills with mist in the valleys, the Dead Sea glinting in the east, the Moab wall beyond. '
       + 'The line appears as the camera breaks through.',

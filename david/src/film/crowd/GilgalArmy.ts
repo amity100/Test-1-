@@ -309,7 +309,8 @@ export class GilgalArmy {
         continue;
       }
       if (shot === 'silence' && moved > 0.004 && s.state !== 'step') {
-        ag.play(this.key('walk_c', s), { fade: 0.35, time: s.phase, rate: 0.8 });
+        // phones bake the lite clip set (no walk_c): the step aside uses walk_b there (cut pass 2 fix)
+        ag.play(this.key(this.lite ? 'walk_b' : 'walk_c', s), { fade: 0.35, time: s.phase, rate: 0.8 });
         s.state = 'step';
         continue;
       }

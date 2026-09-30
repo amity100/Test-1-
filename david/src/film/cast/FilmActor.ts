@@ -170,7 +170,7 @@ export class FilmActor {
         props.helmet = r.helmet;
         (props.spear as THREE.Object3D).userData.prop = r.spear;
         groomSpec = 'saul';
-        headband = { height: 0.013, radius: [rx + 0.0078, rz + 0.0078], width: 0.018, tilt: 0.008 };
+        headband = { height: 0.015, radius: [rx + 0.0072, rz + 0.0072], width: 0.013, tilt: 0.008 }; // matches the thin nezer (film.ts)
         break;
       }
       case 'samuel': {

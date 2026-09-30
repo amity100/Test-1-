@@ -548,7 +548,8 @@ Context notes the film must respect (they are why each line is shown *with its r
   **HAIR LENGTH = EXACTLY THE REFERENCE IMAGE (the user's explicit order, 30 Sep): short-to-medium tousled curls,
   NOT long hair** — volume on the crown, a few loose curls falling onto the forehead (not over the eyes), the curls
   cover only the top of the ears (the ear lobes show), at the back they end at the nape/top of the neck and never
-  reach the collar or the shoulders; no ringlets hanging to the jaw; little or
+  reach the collar or the shoulders; no ringlets hanging to the jaw. Colour as in the reference: warm chestnut-brown
+  with copper/auburn highlights where the sun catches it — not a bright ginger/orange; little or
   no beard (a youth's soft down at most); coarse undyed wool tunic, belt/sash, the shepherd's bag at the hip,
   **sling** (wound at the wrist or tucked in the belt), **staff** planted on the rock. Tzitzit only if an outer
   four-cornered mantle is worn.

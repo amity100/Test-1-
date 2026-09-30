@@ -6,7 +6,7 @@ import type { Player } from '../gameplay/Player';
 import type { BearActor } from '../gameplay/BearActor';
 import type { Flock, Animal } from '../characters/Flock';
 import { LAYOUT } from '../world/Layout';
-import { rachelShots, alongPolyline, type RachelShots } from './land/rachel';
+import { rachelShots, alongPolyline, hideTreesNear, type RachelShots } from './land/rachel';
 import type { FilmFocus } from './FilmStage';
 
 /**
@@ -66,6 +66,8 @@ export class FilmWorld {
   private saved: { a: Animal; pos: THREE.Vector3; heading: number; ai: boolean }[] = [];
   private staged = '';
   private extras: Animal[] = [];
+  /** restores the cypresses cleared right round Rachel's pillar for shot 3's composition (visual-bible 3.10) */
+  private restoreTrees: (() => void) | null = null;
 
   constructor(private readonly h: FilmWorldHost) {
     const g = h.engine.terrain;
@@ -215,6 +217,15 @@ export class FilmWorld {
       // anonymous shepherd until a 'man' FilmActor is cast; at 150-300 m he is a small figure against the light)
       if (this.staged !== 'rachel') {
         this.staged = 'rachel';
+        // visual-bible 3.10: no cypress by the tomb — clear ONLY the trees immediately round the pillar for this
+        // composition (small radius; the game world's vegetation is put back when the film leaves the pillar)
+        if (!this.restoreTrees) {
+          try {
+            this.restoreTrees = hideTreesNear(this.h.engine.scene, this.h.engine.village.rachelPillar, 16);
+          } catch (e) {
+            console.warn('[film] hideTreesNear', e);
+          }
+        }
         this.saveFlock();
         const A = this.rachel?.anchors;
         if (A) {
@@ -240,6 +251,7 @@ export class FilmWorld {
     // Act II + the hook: everything back at the pasture
     if (this.staged === 'rachel') {
       this.restoreFlock();
+      this.putTreesBack();
       this.staged = '';
     }
     if (take === 'bethlehem' || take === 'figure' || take === 'face' || take === 'contrast') {
@@ -455,9 +467,20 @@ export class FilmWorld {
     this.eyes = g;
   }
 
+  private putTreesBack() {
+    const r = this.restoreTrees;
+    this.restoreTrees = null;
+    try {
+      r?.();
+    } catch (e) {
+      console.warn('[film] restore trees', e);
+    }
+  }
+
   /** Put the world back for gameplay (David's film performance off, flock AI on, bear hidden, eyes removed). */
   leave() {
     const { player, flock, bear } = this.h;
+    this.putTreesBack();
     player.model.performFilm(null);
     player.model.hold = 'none';
     player.model.lookTarget = null;

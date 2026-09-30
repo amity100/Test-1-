@@ -187,14 +187,17 @@ export async function dressSaulGilgal(human: HumanModel, opts: FilmDressOptions)
   hangFromBelt(fit, coat, sword, { th: 1.45, out: 0.045, drop: 0.012, forward: 0.42, bone: 'pelvis.L', name: 'wardrobeSword' });
   outfit.props.sword = sword;
   // nezer: thin hammered gold band on the bare head, one small lozenge at the front
-  const gold = solidMaterial({ tier, tex: t.metal, color: 0xd6a743, roughness: 0.38, metalness: 1, repeat: [2, 2], normal: 1.3, metalWear: { patina: 0x7a5424, amount: 0.22, edgeBright: 0.6 } });
+  // (third cast pass) hammered, campaign-dulled gold: a smooth bright band caught the low sun and bloomed into a
+  // glowing yellow strip across the forehead in the backlit shots 7-9; it must read as a thin dull-gold band
+  const gold = solidMaterial({ tier, tex: t.metal, color: 0xb08a48, roughness: 0.56, metalness: 1, repeat: [2, 2], normal: 1.6, metalWear: { patina: 0x5e4526, amount: 0.34, edgeBright: 0.12 } });
+  gold.envMapIntensity = 0.7;
   // (lift: the band sits on the forehead ABOVE the brow — visual-bible 3.2; the groom's headband matches, FilmActor)
-  const ring = headRing(fit, { height: 0.018, thickness: 0.0022, material: gold, extra: 0.01, tilt: 0.008, lift: 0.013 });
+  const ring = headRing(fit, { height: 0.012, thickness: 0.0018, material: gold, extra: 0.01, tilt: 0.008, lift: 0.015 });
   {
-    const lz = new THREE.CylinderGeometry(0.013, 0.013, 0.003, 4, 1);
+    const lz = new THREE.CylinderGeometry(0.0085, 0.0085, 0.0024, 4, 1);
     lz.rotateX(Math.PI / 2);
     lz.scale(1, 1.25, 1);
-    lz.translate(0, -0.004, ring.rz + 0.0012);
+    lz.translate(0, -0.0015, ring.rz + 0.001);
     const band = ring.mesh.geometry;
     const merged = merge([band, lz], false);
     merged.computeVertexNormals();

@@ -223,9 +223,16 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions &
   g.setIndex(idx);
   // plain PBR bronze (no wear texture: its bright scratch layer turned the scales silver): colour = F0 of bronze,
   // per-scale tone / overlap shading / dust from the vertex colours
-  const mat = tier === 'low'
-    ? new THREE.MeshStandardMaterial({ color: bronzeHex, roughness: royal ? 0.5 : 0.58, metalness: 0.85, envMapIntensity: 0.45 })
-    : new THREE.MeshPhysicalMaterial({ color: bronzeHex, roughness: royal ? 0.48 : 0.56, metalness: 0.85, envMapIntensity: 0.45, sheen: 0.2, sheenColor: new THREE.Color(0xa8845a), sheenRoughness: 0.8 });
+  // (third cast pass) full metal driven by a per-scale detail map (every scale has uv 0..1): hammered dimples, a
+  // raised central rib and rolled edges in the normal map, so each scale carries its own highlight and dark facet
+  // like beaten bronze — flat-shaded scales at metalness 0.85 read as painted cardboard; the roughness / metalness
+  // maps put packed road dust (rough, non-metal) along the overlap line and keep the rib and the lower edge burnished
+  const maps = scaleDetailMaps();
+  const mat = new THREE.MeshStandardMaterial({
+    color: royal ? 0xb88550 : 0x9a6a40, roughness: royal ? 1.0 : 1.12, metalness: 1, envMapIntensity: 0.85,
+    normalMap: maps.normal, normalScale: new THREE.Vector2(1.1, 1.1), roughnessMap: maps.orm, metalnessMap: maps.orm,
+  });
+  mat.name = 'wardrobe:scaleBronze';
   mat.vertexColors = true;
   mat.side = THREE.DoubleSide;
   // weights: upper zone follows the torso, and near the shoulders blends into the upper arm (like the armhole cap)
@@ -244,6 +251,78 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions &
   m.userData.scales = idx.length / (nu * nv * 6);
   fit.outfit.add(m);
   return m;
+}
+
+let _scaleMaps: { normal: THREE.DataTexture; orm: THREE.DataTexture } | null = null;
+/**
+ * Shared 64² detail maps for one bronze scale (uv u across, v down from the lacing). CPU DataTextures: they survive
+ * a context loss (three re-uploads them), cost 32 KB, and are shared by every scale coat (Saul, Philistine elites).
+ * orm: g = roughness factor, b = metalness factor (three's channels).
+ */
+export function scaleDetailMaps(): { normal: THREE.DataTexture; orm: THREE.DataTexture } {
+  if (_scaleMaps) return _scaleMaps;
+  const N = 64;
+  const R = rng(911);
+  const h = new Float32Array(N * N);
+  const dimples: [number, number, number, number][] = [];
+  for (let k = 0; k < 26; k++) dimples.push([0.1 + 0.8 * R(), 0.12 + 0.82 * R(), 0.05 + 0.06 * R(), 0.25 + 0.35 * R()]);
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const u = (x + 0.5) / N, v = (y + 0.5) / N;
+      const ax = Math.abs(u - 0.5) * 2;
+      // raised rib down the middle (repoussé), fading at the lacing and at the tip
+      let z = 0.9 * Math.exp(-(((u - 0.5) / 0.07) ** 2)) * Math.min(1, v / 0.2) * Math.min(1, (1 - v) / 0.25);
+      // rolled / bevelled edges: the rim bends back toward the backing
+      z -= 0.8 * THREE.MathUtils.smoothstep(ax, 0.72, 1.0) + 0.6 * THREE.MathUtils.smoothstep(v, 0.82, 1.0);
+      // hammer marks
+      for (const [cx, cy, r, d] of dimples) {
+        const q = ((u - cx) ** 2 + (v - cy) ** 2) / (r * r);
+        if (q < 1) z -= d * (1 - q) * (1 - q);
+      }
+      // two lacing holes near the top
+      for (const cx of [0.32, 0.68]) {
+        const q = ((u - cx) ** 2 + (v - 0.1) ** 2) / 0.0016;
+        if (q < 1) z -= 1.2 * (1 - q);
+      }
+      h[y * N + x] = z;
+    }
+  }
+  const nrm = new Uint8Array(new ArrayBuffer(N * N * 4)), orm = new Uint8Array(new ArrayBuffer(N * N * 4));
+  const H = (x: number, y: number) => h[Math.min(N - 1, Math.max(0, y)) * N + Math.min(N - 1, Math.max(0, x))];
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const i = (y * N + x) * 4;
+      const dx = (H(x + 1, y) - H(x - 1, y)) * N * 0.018, dy = (H(x, y + 1) - H(x, y - 1)) * N * 0.018;
+      const l = Math.hypot(dx, dy, 1);
+      nrm[i] = Math.round((-dx / l) * 127.5 + 127.5);
+      nrm[i + 1] = Math.round((-dy / l) * 127.5 + 127.5);
+      nrm[i + 2] = Math.round((1 / l) * 127.5 + 127.5);
+      nrm[i + 3] = 255;
+      const u = (x + 0.5) / N, v = (y + 0.5) / N;
+      // dust packed where the row above overlaps (v < 0.35) and in the hammer marks; burnished rib and lower edge
+      const dustBand = 1 - THREE.MathUtils.smoothstep(v, 0.18, 0.4);
+      const pit = Math.max(0, -H(x, y)) * 0.4;
+      const rib = Math.exp(-(((u - 0.5) / 0.08) ** 2)) * THREE.MathUtils.smoothstep(v, 0.3, 0.6);
+      const rough = THREE.MathUtils.clamp(0.36 + 0.4 * dustBand + 0.18 * pit - 0.12 * rib + 0.06 * (R() - 0.5), 0.2, 0.95);
+      const metal = THREE.MathUtils.clamp(1 - 0.55 * dustBand - 0.2 * pit, 0.3, 1);
+      orm[i] = 255;
+      orm[i + 1] = Math.round(rough * 255);
+      orm[i + 2] = Math.round(metal * 255);
+      orm[i + 3] = 255;
+    }
+  }
+  const mk = (d: Uint8Array<ArrayBuffer>, name: string) => {
+    const t = new THREE.DataTexture(d, N, N, THREE.RGBAFormat);
+    t.name = name;
+    t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+    t.magFilter = THREE.LinearFilter;
+    t.minFilter = THREE.LinearMipmapLinearFilter;
+    t.generateMipmaps = true;
+    t.needsUpdate = true;
+    return t;
+  };
+  _scaleMaps = { normal: mk(nrm, 'scaleNormal'), orm: mk(orm, 'scaleORM') };
+  return _scaleMaps;
 }
 
 // ================================================================================================ HELMET
