@@ -149,6 +149,7 @@ uniform vec3 uDust;
 uniform float uTransmit;
 uniform float uGap;
 uniform vec4 uVar;           // x warp streaks, y stains, z weft bars, w back-lit fibre fuzz
+uniform vec2 uUnder;         // x distance from the hem (m) above which an outer layer covers this cloth, y its albedo there
 #ifdef W_GATHER
 uniform vec4 uGather;        // x lower-edge amount, y upper-edge amount, z falloff (m), w fold spacing (m)
 uniform float uGatherN;      // > 0: folds laid by angle (gdata.w = fraction around the tube), this many around
@@ -308,6 +309,9 @@ if (gl_FrontFacing) wAo *= 0.45;
 #elif defined(W_INSIDE_BACK)
 if (!gl_FrontFacing) wAo *= 0.45;
 #endif
+// finishing pass: an under-layer lies in the shadow of the garment over it — where the outer layer opens (side
+// openings, a torn corner) it must not show as a lit white wedge
+wAo *= mix(1.0, uUnder.y, smoothstep(uUnder.x, uUnder.x + 0.05, vGd.x));
 diffuseColor.rgb = wCol * wAo;
 #ifdef W_LOW
 // phones render 8-bit targets: the smooth shading of the new (thread-scale) cloth posterised into contour bands on
@@ -393,6 +397,8 @@ export interface ClothOptions {
   gather?: { lower?: number; upper?: number; falloff?: number; spacing?: number; around?: number };
   /** models pass: which rasterised side is the garment's INSIDE (darkened); see insideFace(geometry) */
   inside?: 'front' | 'back';
+  /** finishing pass: [distance from the hem (m), albedo] — covered by an outer layer above that distance (in its shadow) */
+  under?: [number, number];
   side?: THREE.Side;
 }
 
@@ -431,6 +437,7 @@ export function clothMaterial(o: ClothOptions): THREE.MeshStandardMaterial {
     uTransmit: { value: o.transmit ?? 0.9 },
     uGap: { value: o.gap ?? 0 },
     uVar: { value: new THREE.Vector4(...(o.variation ?? [0.05, 0.1, 0.02]), o.fuzz ?? 0.25) },
+    uUnder: { value: new THREE.Vector2(...(o.under ?? [99, 1])) },
     uGather: { value: new THREE.Vector4(o.gather?.lower ?? 0, o.gather?.upper ?? 0, o.gather?.falloff ?? 0.07, o.gather?.spacing ?? 0.035) },
     uGatherN: { value: Math.round(o.gather?.around ?? 0) },
     uSunDirW: shared.uSunDir,

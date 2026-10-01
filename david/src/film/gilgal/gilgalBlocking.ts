@@ -169,8 +169,8 @@ const SAM_AWAY = 0.7;
 const SAM_AWAY_Z = 0.26;
 const SAM_TURN_X = 0.64;
 const SAM_TURN_Z = 0.22;
-const SAM_HELD = 0.33;
-const SAM_FREED = 0.6;
+const SAM_HELD = 0.4;
+const SAM_FREED = 0.72;
 const SAM_WAY = new THREE.Vector3(0.85, 0, 0.5);
 /** Saul's travel from his mark to his knee behind the corner (m, east / south: on the old man's south side; perf v6:
  * he stays on that knee — the pull is in his body and arm, the knee does not slide) */
@@ -259,9 +259,11 @@ export function samuelAt(shot: GilgalShotName, t: number): ActorState {
       return { pos: samuelAfter(), yaw: SAMUEL.yaw + Math.PI * 0.5 * (1 - ss(b, b + 0.7, at)), walk: 0, cue: 1 - ss(b, b + 0.7, at), action: 'turned back to the king: the verdict (15:28)' };
     }
     case 'saulAlone': {
-      const d = Math.max(0, at - 1.1) * 0.9;
-      const e = alongExit(Math.max(0, samuelAfter().x - SAMUEL_EXIT[0].x) + d);
-      return { pos: d > 0 ? e.pos : samuelAfter(), yaw: d > 0 ? e.yaw : SAMUEL.yaw + Math.PI * ss(0.2, 1.1, at), walk: d > 0 ? 0.9 : 0, cue: 1, action: 'turns and walks away east' };
+      // 'Saul alone' (perf v6): the old man has already turned and gone east along the road — behind cut4's G7 lens,
+      // which stands east of Saul looking west at him (at his G6 mark he stood beside that lens, a dark blur at the
+      // frame edge)
+      const e = alongExit(Math.max(0, samuelAfter().x - SAMUEL_EXIT[0].x) + 2.8 + at * 0.9);
+      return { pos: e.pos, yaw: e.yaw, walk: 0.9, cue: 1, action: 'walks away east (behind the lens)' };
     }
     case 'rise': {
       const e = alongExit(0.55 + 9.5 + at * 1.1);

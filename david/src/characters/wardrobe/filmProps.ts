@@ -280,7 +280,9 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions &
     // aged (finishing pass): field bronze (#8c5e33), the detail map's polish rougher -> broad, dim highlights
     // (x1.35 rougher: the dusty overlaps go matte, the burnished lower rims still catch the low sun — at x1.75 the coat
     // lost every glint in the backlit stride G2 and read as dark knitwear at a distance)
-    color: royal ? 0xb27c46 : aged ? 0x93633a : 0x9a6a40, roughness: royal ? 1.15 : aged ? 1.35 : 1.25, metalness: 1, envMapIntensity: aged ? 0.55 : 0.72,
+    // (second film check, backlit G5b / G6 at 2 m: the shaded scales mirrored the sky behind the lens as a saturated
+    // copper-orange — the reflected environment is dimmer and less red now; the sun's own glints on the rims stay)
+    color: royal ? 0xb27c46 : aged ? 0x8c5e33 : 0x9a6a40, roughness: royal ? 1.15 : aged ? 1.35 : 1.25, metalness: 1, envMapIntensity: aged ? 0.42 : 0.72,
     normalMap: maps.normal, normalScale: new THREE.Vector2(aged ? 0.75 : 1, aged ? 0.75 : 1), roughnessMap: maps.orm, metalnessMap: maps.orm,
   });
   mat.name = 'wardrobe:scaleBronze';
@@ -292,7 +294,7 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions &
   mat.onBeforeCompile = (sh) => {
     sh.fragmentShader = sh.fragmentShader.replace(
       '#include <lights_fragment_end>',
-      `#include <lights_fragment_end>\nreflectedLight.indirectSpecular *= ${aged ? 'vec3(0.86, 0.62, 0.4)' : 'vec3(1.0, 0.76, 0.5)'};`,
+      `#include <lights_fragment_end>\nreflectedLight.indirectSpecular *= ${aged ? 'vec3(0.8, 0.64, 0.46)' : 'vec3(1.0, 0.76, 0.5)'};`,
     );
     if (cu) {
       // the backing's leg-capsule push (materials.ts wCollide), applied to the point of the backing under each scale

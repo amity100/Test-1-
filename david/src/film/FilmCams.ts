@@ -42,11 +42,12 @@ export const FILM_CAM = {
   // G6 (cut4): a medium close-up on Samuel, 3/4 FRONT from the south-west at eye level — the lens on the line from
   // Samuel toward Saul turned `rot` deg toward the lens side (his eyeline ~off-lens left), a slow 6 % push; the look
   // shifted `lookLeft` m to frame left (his face on the right third, the verse in the left negative space)
-  verdict: { d0: 2.05, d1: 1.92, rot: 34, eyeH: 1.55, dh0: 0.0, dh1: 0.015, lookLeft: 0.12, lookDown: 0.1, follow: 0.55, fov0: 22, fov1: 20.5 },
+  verdict: { d0: 2.05, d1: 1.92, rot: 42, eyeH: 1.55, dh0: 0.0, dh1: 0.015, lookLeft: 0.12, lookDown: 0.1, follow: 0.55, fov0: 22, fov1: 20.5 },
   // G7: the fist and his face; a slow push, the focus pull, the whip up into the light at the end
   // (cut4, director-notes-v5 G7: OPEN on the fist with the torn corner and its tzitzit against the coat, then the tilt
   //  up and the rack focus to his face looking down; the lens rises with the tilt)
-  alone: { dx0: 1.75, dx1: 1.45, dz0: 0.55, dz1: 0.42, h0: 1.02, h1: 1.3, fov0: 24, fov1: 26.5, mix0: 0.04, mix1: 0.8, tilt0: 0.35, tilt1: 1.3, whipAt: 1.7, whip: 7 },
+  //  (the lens on his NORTH side: the fist with the torn corner is held on his south side, so it never covers his face)
+  alone: { dx0: 1.75, dx1: 1.45, dz0: -0.3, dz1: -0.45, h0: 1.05, h1: 1.32, fov0: 24, fov1: 26.5, mix0: 0.04, mix1: 0.8, tilt0: 0.35, tilt1: 1.3, whipAt: 1.7, whip: 7 },
   // P1+P2: the flight re-timed (shot seconds -> the set's flight parameter e), skim altitude over the deck, the bank
   // (cut4: after the burst out of the deck the lens KEEPS FLYING — a glide on the final heading, `glide` m/s eased in
   //  from `glideAt`, sinking `sink` m/s, the lens opening to `glideFov` — the nearest ridge slides under the lens)
@@ -85,7 +86,8 @@ export const TAKE_LOOK: Record<string, { hand: number; freq?: number; exp?: numb
   'rachel-dawn': { hand: 0.22, seed: 2 },
   glint: { hand: 0.2, freq: 0.8, exp: 0.8, seed: 3 },
   elders: { hand: 0.3, seed: 4 },
-  dustWall: { hand: 0.62, freq: 1.15, seed: 5, jolt: 0.02, joltAmp: 0.7 },
+  // (cut4: a touch more exposure — the backlit road read as dark asphalt; G1 notes)
+  dustWall: { hand: 0.62, freq: 1.15, exp: 1.07, seed: 5, jolt: 0.02, joltAmp: 0.7 },
   king: { hand: 0.3, freq: 0.7, seed: 6 },
   spearRaised: { hand: 0.42, freq: 1.0, seed: 7, jolt: 1.1, joltAmp: 1.5 },
   silence: { hand: 0.3, freq: 0.6, seed: 8 },

@@ -240,7 +240,7 @@ export function buildRamahGate(tex: TextureSet, tier: LandTier, frame: { origin:
   }
   // the lintel: a heavy timber beam (cut4: lighter, weathered, its grain readable — it read as a black frame), a second
   // one inside, the wall carried over them
-  piece('wood', meterBox(passW + 1.7, 0.44, 0.52, 1.1), 0, 2.93, 0.38, 0, tmpC.setRGB(0.86, 0.72, 0.56));
+  piece('wood', meterBox(passW + 1.7, 0.44, 0.52, 1.1), 0, 2.93, 0.38, 0, tmpC.setRGB(1.0, 0.86, 0.68));
   piece('wood', meterBox(passW + 1.5, 0.38, 0.45, 1.1), 0, 2.9, -1.0, 0, tmpC.setRGB(0.74, 0.62, 0.48));
   piece('wall', meterBox(passW + 0.6, 0.9, 1.9, 4.8, 0.04), 0, 3.07 + 0.45, -0.35, 0, tmpC.setRGB(0.95, 0.91, 0.84));
   // the passage roofed through the depth of the gate (beams and packed clay): the passage lies in shade

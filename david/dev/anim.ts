@@ -179,29 +179,40 @@ function setCam(c: string | number[]) {
     const s2 = samuelAt('silence', cur ? cur.t : 0).pos;
     set(V(x, 1.62, 0.4 + 1.575), V(s2.x, 1.42, s2.z + 0.35), 13);
   } else if (c === 'g5bCut4' || c === 'g5bCut4w') {
-    // cut4 (FilmCams FILM_CAM.insert, rev 1): the low close two-shot from the south; base G = samuelAt('tear', 2.0) +
-    // TEAR_GRIP, the look 0.15 m west / 0.3 m above it, following the real fist by 0.25
+    // cut4 rev 4 (FilmCams FILM_CAM.insert): F = samuelAt('tear', 2.0) + TEAR_GRIP; lens F + (-0.12 -> 0.06 east,
+    // 2.3 -> 2.22 south), 0.6 m up; look (F.x + 0.05, 0.85, F.z), following the live fist's x by 0.2; fov 36 -> 35
     const t = cur ? cur.t : 2;
     const u = Math.min(1, Math.max(0, (t - 2.0) / 2.5)), e2 = u * u * (3 - 2 * u);
     const sm = samuelAt('tear', 2.0).pos;
-    const G = V(sm.x + TEAR_GRIP.x, TEAR_GRIP.y, sm.z + TEAR_GRIP.z);
-    const look = V(G.x - 0.15, G.y + 0.3, G.z);
+    const F = V(sm.x + TEAR_GRIP.x, TEAR_GRIP.y, sm.z + TEAR_GRIP.z);
+    const look = V(F.x + 0.05, 0.85, F.z);
     saul!.human.sockets.handGripR.getWorldPosition(f);
-    if (f.distanceTo(G) < 1.2) look.lerp(V(f.x - 0.15, f.y + 0.3, f.z), 0.25);
-    set(V(G.x - 0.2 + 0.15 * e2, 0.6 - 0.04 * e2, G.z + 1.95 - 0.17 * e2), look, (c === 'g5bCut4w' ? 45 : 35) - 3 * e2);
+    if (f.distanceTo(F) < 1.2) look.x += (f.x - F.x) * 0.2;
+    set(V(F.x - 0.12 + 0.18 * e2, 0.6, F.z + 2.3 - 0.08 * e2), look, (c === 'g5bCut4w' ? 45 : 36) - 1 * e2);
   } else if (c === 'g6Cut4') {
-    // cut4 (FilmCams FILM_CAM.verdict, rev 1): MCU 3/4 front, the line Samuel -> Saul turned 22 deg south, eye height
-    // 1.55, the look 0.25 m to frame left, a 6 % push
+    // cut4 rev 4 (FILM_CAM.verdict): the line Samuel -> Saul turned 34 deg south, eye height 1.55, look 0.12 m to frame
+    // left and 0.1 m down, following his eyes by 0.55, a 6 % push, fov 22 -> 20.5
     const t = cur ? cur.t : 0;
     const u = Math.min(1, Math.max(0, t / 4.5)), e2 = u * u * (3 - 2 * u);
     const sa = saulAt('verdict', t).pos, sm = samuelAt('verdict', t).pos;
-    const a = V(sa.x - sm.x, 0, sa.z - sm.z).normalize().applyAxisAngle(V(0, 1, 0), 22 * Math.PI / 180);
+    const a = V(sa.x - sm.x, 0, sa.z - sm.z).normalize().applyAxisAngle(V(0, 1, 0), 34 * Math.PI / 180);
     const d = 2.05 - 0.13 * e2;
     const lk = V(sm.x, 1.55, sm.z);
     samuel!.eyesWorld(e);
     if (e.distanceTo(lk) < 0.8) lk.lerp(e, 0.55);
-    lk.add(V(-a.z, 0, a.x).multiplyScalar(0.25));
+    lk.add(V(-a.z, 0, a.x).multiplyScalar(0.12));
+    lk.y -= 0.1;
     set(V(sm.x + a.x * d, 1.55 + 0.015 * e2, sm.z + a.z * d), lk, 22 - 1.5 * e2);
+  } else if (c === 'g7Cut4') {
+    // cut4 rev 4 (FILM_CAM.alone): east of Saul looking west, opening on the fist, tilting to his face by 1.3 s
+    const t = cur ? cur.t : 0;
+    const u = Math.min(1, Math.max(0, t / 2.0)), e2 = u * u * (3 - 2 * u);
+    const s2 = saulAt('saulAlone', t).pos;
+    const p = V(s2.x + 1.75 - 0.3 * e2, 1.02 + 0.28 * e2, s2.z + 0.55 - 0.13 * e2);
+    const a = V(s2.x + 0.22, 0.98, s2.z + 0.3).lerp(saul!.human.sockets.handGripR.getWorldPosition(f), 0.7);
+    saul!.eyesWorld(e);
+    const k = Math.min(1, Math.max(0, (t - 0.35) / 0.95)), sk = k * k * (3 - 2 * k);
+    set(p, a.clone().lerp(e, 0.04 + 0.76 * sk), 24 + 2.5 * e2);
   } else if (c === 'g5aCut4') {
     // cut4 rev 1: medium-wide two-shot from the south at chest height, a lateral move west -> east
     const t = cur ? cur.t : 0;

@@ -131,6 +131,14 @@ export async function dressSamuel(human: HumanModel, opts: FilmDressOptions): Pr
     palette: [0x4e4236, 0x8a7a60, 0x3b3128, 0x6f604c],
     bands: [{ from: 0.05, to: 0.075, motif: 0, pal: 0 }, { from: 0.08, to: 0.088, motif: 0, pal: 1 }],
   });
+  // (finishing pass: the tunic's skirt lies in the me'il's shadow wherever the wool covers it — through the side opening
+  // and the torn corner it showed as a lit white wedge under his hand in the backlit G5b insert; the strip below the
+  // me'il's hem keeps its light)
+  const covered = Math.max(0, meil.hemY - kut.hemY) + 0.05;
+  for (const m of kut.meshes) {
+    if (!/Skirt$/.test(m.name)) continue;
+    for (const mat of ([] as THREE.Material[]).concat((m as THREE.Mesh).material)) (mat.userData.wardrobe?.uUnder?.value as THREE.Vector2 | undefined)?.set(covered, 0.18);
+  }
   // the thrown end over the left shoulder
   // models pass: the thrown end is a heavy band — pleats along its length (shading folds across the ribbon's u,
   // which runs 0..1 over its width) and the weave at its true scale across (the ribbon's u is not in metres)
@@ -138,12 +146,16 @@ export async function dressSamuel(human: HumanModel, opts: FilmDressOptions): Pr
   // thrown end GLOWED pale in the backlit G5b / G6, a light plank across the chest and the back)
   // (and deep pleats along it, little sheen, a shade darker: lit by the verdict's key it read as a smooth tan plank
   // across his chest in the G6 close-up)
-  const throwMat = clothMaterial({ tier, tex: t.weave_medium, tile: 0.22, dye: 0x5e5143, fuzz: 0.3, variation: [0.1, 0.16, 0.03], roughness: 0.97, sheen: 0.12, hem: [0, 0.1, 0.012, 0.25], edgeMask: [1, 1], transmit: 0, gather: { lower: 1.15, falloff: 10, spacing: 0.21 } });
-  (throwMat.userData.wardrobe.uTile.value as THREE.Vector2).x = (0.2 * S) / 0.22;
+  // (second look in the integrated G6: still a tan striped board across his chest under the face key — the band is a
+  // fold of the same DARK wool in the shade of the beard: darker, irregular shallow folds, a quiet edge without teeth)
+  // (third look, the integrated G6 at 1280x720: a smooth brown plank with three even stripes across his chest — the
+  // pleats softer, the weave's relief and the hand-dyed unevenness stronger, a fibre halo on its edges)
+  const throwMat = clothMaterial({ tier, tex: t.weave_medium, tile: 0.22, dye: 0x4a3e33, fuzz: 0.45, normal: 1.6, variation: [0.22, 0.3, 0.06], roughness: 0.98, sheen: 0.08, hem: [0, 0.1, 0.012, 0.06], edgeMask: [1, 1], transmit: 0, gather: { lower: 0.5, falloff: 10, spacing: 0.29 } });
+  (throwMat.userData.wardrobe.uTile.value as THREE.Vector2).x = (0.16 * S) / 0.22;
   throwMat.polygonOffset = true;
   throwMat.polygonOffsetFactor = -2;
   throwMat.polygonOffsetUnits = -2;
-  shoulderThrow(fit, meil, throwMat, { width: 0.2 * S, thickness: 0.012, name: 'meilThrow' });
+  shoulderThrow(fit, meil, throwMat, { width: 0.16 * S, thickness: 0.012, name: 'meilThrow' });
   // (3) cloth belt on the tunic (under the me'il), (4) sandals
   const beltMat = clothMaterial({ tier, tex: t.weave_medium, tile: 0.08, dye: 0x8a7a60, hem: [0, 0.1, 0.01, 0], edgeMask: [0, 0], transmit: 0 });
   beltBand(fit, kut, { width: 0.04 * S, thickness: 0.006, material: beltMat, name: 'belt' });

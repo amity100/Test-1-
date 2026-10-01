@@ -140,6 +140,11 @@ export class FilmActor {
   readonly lookLimits = { yaw: 1.25, up: 0.45, down: 0.7 };
   /** 1/s: how fast the head follows a new target */
   lookRate = 5;
+  /**
+   * yaw (rad, game convention: + turns the face toward the actor's LEFT) added to the HEAD's aim only; the eyes still
+   * converge on the target (perf v6, G6: Samuel's face kept nearer the lens while his eyes hold Saul's)
+   */
+  lookYawOffset = 0;
   private lookYaw = 0;
   private lookPitch = 0;
   /** pitch of (eyes - head joint) in the rest pose: the face is level when the measured pitch equals it */
@@ -449,7 +454,7 @@ export class FilmActor {
       _D.copy(target).sub(_B);
       const tYaw = Math.atan2(_D.x, _D.z);
       const L = this.lookLimits;
-      const rel = THREE.MathUtils.clamp(wrapAngle(tYaw - chest), -L.yaw, L.yaw);
+      const rel = THREE.MathUtils.clamp(wrapAngle(tYaw - chest + this.lookYawOffset), -L.yaw, L.yaw);
       wantYaw = wrapAngle(chest + rel - faceYaw) * w;
       // pitch: the head goes 80% of the way to the target's elevation, measured against the animated face pitch
       // (idle_king carries a proud raised chin), the eyes do the rest

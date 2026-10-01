@@ -455,7 +455,9 @@ export class LandSet {
     this.near = ground ? 0.25 : 6;
     this.far = 210000;
     this.atmosphere = ground
-      ? { density: o.location === 'coast' ? 0.00009 : 0.00011, heightFalloff: 1 / 900, baseHeight: o.location === 'coast' ? -20 : 500, godRays: o.location === 'coast' ? 0.38 : 0.3 }
+      // (cut4: the coast's haze thinned a little — P4 looks down a long lens through the column: dust and heat haze in
+      //  depth, not a flat yellow veil over the near ranks)
+      ? { density: o.location === 'coast' ? 0.000062 : 0.00011, heightFalloff: 1 / 900, baseHeight: o.location === 'coast' ? -20 : 500, godRays: o.location === 'coast' ? 0.3 : 0.3 }
       : { density: 0, heightFalloff: 1 / 1800, baseHeight: -400, godRays: 0.35 };
     const { shots, sequence } = this.buildShots();
     this.shots = shots;

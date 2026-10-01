@@ -76,9 +76,9 @@ export interface FilmOptions {
   mood?: Expression;
   moodWeight?: number;
   /**
-   * 'reveal': the eyes do not settle ON `look` (the lens) but on the distance beside it — the direction to `look`
-   * turned this many radians toward the lens' RIGHT (+), 30 m out (director-notes-v5 D2: "the eyes settling on the
-   * distance — never a stare into the lens"). Default 0.38; 0 = into the lens.
+   * 'reveal': when `look` is near (a lens, within 8 m) the eyes do not settle ON it but on the distance beside it — the
+   * direction to `look` turned this many radians toward the lens' RIGHT (+), 30 m out (director-notes-v5 D2: "the eyes
+   * settling on the distance — never a stare into the lens"). Default 0.38; 0 = into the lens. A far `look` is kept.
    */
   offLens?: number;
 }
@@ -1412,10 +1412,10 @@ export class DavidModel {
     }
     // where to look: the camera (or 3 m to his right-front at eye height), in character space from the neck
     const look = f.look ? this.filmLook.copy(f.look) : this.root.localToWorld(this.filmLook.set(-1.8, 1.55, 2.4));
-    if (f.look && f.offLens) {
-      // the distance beside the lens (its right), 30 m out, a little above the horizon: the eyes settle THERE
-      this.j.neck.getWorldPosition(_v8);
-      _v7.copy(look).sub(_v8);
+    this.j.neck.getWorldPosition(_v8);
+    if (f.look && f.offLens && _v7.copy(look).sub(_v8).lengthSq() < 64) {
+      // `look` is a lens (within 8 m): the eyes settle on the distance beside it (its right), 30 m out, a little above
+      // the horizon — a far point given by the caller (e.g. into the light) is used as it is
       const yl = Math.atan2(_v7.x, _v7.z) + f.offLens;
       look.set(_v8.x + Math.sin(yl) * 30, _v8.y + 0.6, _v8.z + Math.cos(yl) * 30);
     }

@@ -59,12 +59,12 @@ export const WORLD_CAM = {
   // (the lens just above the grass tops: closer, the grass cards read as flat shards; the dawn sky held down a little)
   // (cut4, director-notes-v5 P3: a REAL low dolly through the grass — 4.9 m in 3 s, the lens ~1 m up — and the flock
   //  crossing just behind the stone, 12-20 m from the lens, on the nearest ground the lens sees past it)
-  rachel: { back0: 11.5, back1: 6.6, side0: -1.3, side1: -0.7, h0: 1.05, h1: 0.95, lookFar: 34, lookRight: 6.5, lookH: 1.7, fov0: 31, fov1: 27, flockD: 5, crossL: 10, crossR: 9, exp: 0.85 },
+  rachel: { back0: 11.5, back1: 6.6, side0: -1.3, side1: -0.7, h0: 1.2, h1: 1.1, lookFar: 34, lookRight: 6.5, lookH: 1.7, fov0: 31, fov1: 27, flockD: 5, crossL: 10, crossR: 9, exp: 0.85 },
   // D1: the orbit / crane behind David (azimuth from his back, radius, height above his feet)
   // (the look starts on his shoulders — he sits right of centre — and slides out over the valley as the lens cranes up)
   // (cut4, D1 against the low sun: the lens behind his RIGHT shoulder from the west-south-west — clear of the boulder
   //  WNW of the rock — looking past him into the sun-lit haze: a rim-lit figure, the hills in layers)
-  figure: { az0: 50, az1: 60, r0: 3.3, r1: 3.8, h0: 1.5, h1: 1.8, lookAhead1: 12, lookDown1: 1.5, lookMix0: 0.06, lookMix1: 0.24, headH: 1.55, fov0: 34, fov1: 37, exp: 0.86 },
+  figure: { az0: 50, az1: 56, r0: 3.3, r1: 3.7, h0: 1.5, h1: 1.75, lookAhead1: 12, lookDown1: 2.4, lookMix0: 0.08, lookMix1: 0.2, headH: 1.55, fov0: 34, fov1: 37, exp: 0.86 },
   // D2 (cut4): the push-in on the face, BACKLIT — `az` = SkySystem azimuth of the lens seen from his head (the low sun
   // stands ~115° round from it, behind his far shoulder); at `turn` he turns his head INTO the light toward `turnAz`
   // (a 3/4 profile catching the sun), never into the lens
@@ -73,7 +73,7 @@ export const WORLD_CAM = {
   // (H2: the bear deep in the shade and the picture dark — only the eye-shine, additive and not tone-mapped, reads)
   // (cut4, H1: the lamb ≈20-25 % of the frame height — the lens ~4.4-4.8 m behind it, 0.95 m up, looking a little down
   //  over the grass, which spare grass pushers flatten along the lens' line; the dark bushes of buildProps behind it)
-  hook: { lambSpeed: 0.55, walkUntil: 1.3, camBack0: 4.8, camBack1: 4.4, camSide0: 1.3, camSide1: 1.0, camH: 0.95, lookIn: 1.4, lookH: 0.32, fov0: 34, fov1: 31, bearIn: 12.5, exp1: 0.62, exp2: 0.17, h2H: 1.02, eye: 0.085, shine: 2.0 },
+  hook: { dark: 0.85, lambSpeed: 0.55, walkUntil: 1.3, camBack0: 3.9, camBack1: 3.5, camSide0: 1.3, camSide1: 1.0, camH: 0.95, lookIn: 1.4, lookH: 0.32, fov0: 34, fov1: 31, bearIn: 12.5, exp1: 0.62, exp2: 0.17, h2H: 1.02, h2Fov0: 12.5, h2Fov1: 10.5, eye: 0.12, shine: 2.0 },
 };
 
 export class FilmWorld {
@@ -103,6 +103,8 @@ export class FilmWorld {
   /** H1 / H2 film-only set dressing (cut4): bushes made from the world's own bush meshes (shared geometry + material,
    *  so no shader program is compiled mid-film); removed in leave() */
   private props: { h1: THREE.InstancedMesh[]; h2: THREE.InstancedMesh[] } | null = null;
+  /** restores the world trees cleared right at the H1 lens (a trunk filled a quarter of the frame) */
+  private restoreHookTrees: (() => void) | null = null;
   /** P3 / H1 birds (cut4): small dark silhouettes — crossing the dawn sky behind Rachel's stone, flying up out of the
    *  thicket when the birds fall silent (H1 beats.birdsStop). Built once (pre-compiled), hidden outside those takes. */
   private birds: { group: THREE.Group; mat: THREE.SpriteMaterial; tex: THREE.Texture; list: { s: THREE.Sprite; ph: number; k: number }[] } | null = null;
@@ -300,7 +302,8 @@ export class FilmWorld {
         out.pos.copy(base).addScaledVector(this.out, 1.35 - 0.55 * e).addScaledVector(Sx, 0.38);
         out.pos.y = this.ground(out.pos.x, out.pos.z) + c.h2H;
         out.look.copy(this.bearAt).add(V(0, 0.85, 0));
-        out.fov = lerp(17, 14.5, e);
+        // (cut4: a longer lens than cut v2's 17° — the two eyes ~12 cm apart must read as a PAIR at 640×360)
+        out.fov = lerp(c.h2Fov0, c.h2Fov1, e);
         return true;
       }
     }
@@ -332,24 +335,17 @@ export class FilmWorld {
             console.warn('[film] hideTreesNear', e);
           }
         }
-        this.saveFlock();
-        // the flock crosses behind the stone on the visible line (north -> south), the shepherd ahead of it
-        const A = this.crossA, B = this.crossB;
-        const dir = this.tmp2.copy(B).sub(A);
-        const len = dir.length();
-        dir.normalize();
-        const n = flock.animals.length;
-        flock.animals.forEach((a, i) => {
-          if (a.state === 'carried') return;
-          const s = len * 0.62 - i * (len * 0.75) / Math.max(1, n - 1) + ((i * 7) % 5) * 0.35;
-          const lat = (((i * 37) % 9) - 4) * 0.55;
-          const x = A.x + dir.x * s - dir.z * lat, z = A.z + dir.z * s + dir.x * lat;
-          a.position.set(x, this.ground(x, z), z);
-          a.heading = Math.atan2(dir.x, dir.z) + (((i * 13) % 7) - 3) * 0.06;
-          a.aiEnabled = false;
-          a.state = i % 6 === 5 ? 'graze' : 'walk';
-          a.manualSpeed = i % 6 === 5 ? 0 : 0.95 * (0.9 + (i % 4) * 0.06);
-        });
+        // the shepherd crosses behind the stone on the visible line (south -> north: frame right -> left, toward the
+        // stone) and his flock follows him in a loose drove into the open right half of the frame (perf's
+        // FilmFlock.stageFollow: grazing, dropping behind, trotting to catch up)
+        const dir = this.tmp2.copy(this.crossA).sub(this.crossB).setY(0).normalize();
+        this.placeShepherd(0);
+        try {
+          this.ff.stageFollow(() => this.h.player.pos, dir, { count: 10, back: [1.6, 7.5], spread: 2.4 });
+        } catch (e) {
+          console.warn('[film] P3 flock', e);
+        }
+        void flock;
       }
       m.performFilm(null);
       m.hold = 'none';
@@ -359,6 +355,7 @@ export class FilmWorld {
     }
     // David, the flock and the hook: everything back near the pasture
     if (this.staged === 'rachel') {
+      this.ff.restore();
       this.restoreFlock();
       this.putTreesBack();
       this.staged = '';
@@ -367,6 +364,7 @@ export class FilmWorld {
       this.placeDavid();
       this.hideBear();
       this.showProps(null);
+      this.putHookTreesBack();
       if (this.staged !== 'david') {
         this.staged = 'david';
         this.stageFlockInView();
@@ -381,9 +379,33 @@ export class FilmWorld {
         this.ff.restore();
         this.stageHook();
       }
-      this.showBear();
+      // H1: the bear is not in the picture yet (its breath is heard); H2: the eyes in the dark
+      if (take === 'lamb') this.showBear();
+      else {
+        this.hideBear();
+        if (!this.eyes) this.buildEyes();
+      }
       this.showProps(take);
+      if (take === 'thicket' && !this.restoreHookTrees) {
+        try {
+          const f = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: 32, roll: 0 };
+          this.frame('thicket', 0.5, 1.25, f);
+          this.restoreHookTrees = hideTreesNear(this.h.engine.scene, f.pos, 3.2, ['oak', 'terebinth', 'carob', 'olive']);
+        } catch (e) {
+          console.warn('[film] hook trees', e);
+        }
+      }
       this.expK = 1;
+    }
+  }
+
+  private putHookTreesBack() {
+    const r = this.restoreHookTrees;
+    this.restoreHookTrees = null;
+    try {
+      r?.();
+    } catch (e) {
+      console.warn('[film] restore hook trees', e);
     }
   }
 
@@ -394,12 +416,16 @@ export class FilmWorld {
    */
   private buildProps() {
     if (this.props) return this.props;
-    const src: THREE.InstancedMesh[] = [];
+    // the world's bushes: bark stems ('tree-bush') and leaf domes in chunks ('tree-bush#N'); one source mesh per unique
+    // geometry, leaves and stems kept apart (a prop bush = one leaf dome + one stem)
+    const leaves: THREE.InstancedMesh[] = [], stems: THREE.InstancedMesh[] = [];
+    const seen = new Set<string>();
     this.h.engine.vegetation?.group.traverse((o) => {
       const m = o as THREE.InstancedMesh;
-      if (m.isInstancedMesh && o.name === 'tree-bush') src.push(m);
+      if (!m.isInstancedMesh || !o.name.startsWith('tree-bush') || seen.has(m.geometry.uuid)) return;
+      seen.add(m.geometry.uuid);
+      (m.geometry.getAttribute('position').count >= 60 ? leaves : stems).push(m);
     });
-    const nv = Math.max(1, Math.floor(src.length / 2));
     const O = this.out, Sx = V(-O.z, 0, O.x);
     const at = (b: THREE.Vector3, f: number, l: number) => b.clone().addScaledVector(O, f).addScaledVector(Sx, l);
     const E = this.edge, Ls = this.lambStop, Bp = this.bearAt;
@@ -411,17 +437,17 @@ export class FilmWorld {
     ];
     const H2: [THREE.Vector3, number, number][] = [
       // near silhouettes at the frame's sides (2-4 m from the lens)
-      [at(Ls, -1.2, -1.15), 1.9, 0.7], [at(Ls, -1.9, 1.75), 2.3, 2.4], [at(Ls, -0.6, 2.4), 1.6, 4.4], [at(Ls, -0.9, -2.3), 2.0, 5.6],
-      // round the bear: a gap onto its head, a low bush in front of its body, a dark mass behind it
-      [at(Bp, 3.4, -1.35), 2.0, 1.1], [at(Bp, 2.9, 1.5), 2.2, 3.0], [at(Bp, 1.45, 0.3), 0.95, 0.2], [at(Bp, -1.6, 0.4), 2.8, 2.2],
-      [at(Bp, -0.4, -2.2), 2.4, 4.9], [at(Bp, 0.2, 2.4), 2.5, 0.5],
+      [at(Ls, -1.0, -2.2), 1.15, 0.7], [at(Ls, -1.6, 2.5), 1.3, 2.4], [at(Ls, -0.4, 3.2), 1.0, 4.4], [at(Ls, -0.7, -3.1), 1.2, 5.6],
+      // round the bear: a clear gap onto its head on the lens' line, a low bush in front of its body, a dark mass
+      // behind it
+      [at(Bp, 3.0, -2.5), 1.3, 1.1], [at(Bp, 2.6, 2.6), 1.4, 3.0], [at(Bp, 1.3, 0.25), 0.62, 0.2], [at(Bp, -1.8, 0.3), 2.2, 2.2],
+      [at(Bp, -0.6, -2.6), 1.8, 4.9], [at(Bp, 0.1, 2.8), 1.9, 0.5],
     ];
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), up = V(0, 1, 0);
     const make = (list: [THREE.Vector3, number, number][], name: string) => {
       const out: THREE.InstancedMesh[] = [];
-      src.forEach((m, j) => {
-        const v = Math.floor(j / 2) % nv;
-        const mine = list.filter((_, i) => i % nv === v);
+      const add = (src: THREE.InstancedMesh[]) => src.forEach((m, v) => {
+        const mine = list.filter((_, i) => i % src.length === v);
         if (!mine.length) return;
         const im = new THREE.InstancedMesh(m.geometry, m.material, mine.length);
         mine.forEach(([p, s, yaw], k) => {
@@ -437,6 +463,8 @@ export class FilmWorld {
         this.h.engine.scene.add(im);
         out.push(im);
       });
+      add(leaves);
+      add(stems);
       return out;
     };
     this.props = { h1: make(H1, 'film:h1-bushes'), h2: make(H2, 'film:h2-bushes') };
@@ -459,6 +487,18 @@ export class FilmWorld {
     this.props = null;
   }
 
+  /** P3: the shepherd on the crossing line behind the stone at shot second t (from the right of the frame, walking
+   *  north = frame left, toward the stone; his flock trails behind him in the open right half) */
+  private placeShepherd(t: number) {
+    const A = this.crossA, B = this.crossB;
+    const dir = V(A.x - B.x, 0, A.z - B.z);
+    const len = dir.length();
+    dir.normalize();
+    const s = len * 0.1 + 0.9 * t;
+    const x = B.x + dir.x * s - dir.z * 0.8, z = B.z + dir.z * s + dir.x * 0.8;
+    this.h.player.place(x, z, Math.atan2(dir.x, dir.z));
+  }
+
   /** spare grass pushers 3-5 back to rest (gameplay uses 0-2) */
   private clearPushers() {
     const pu = shared.uPushers.value as THREE.Vector4[];
@@ -476,19 +516,24 @@ export class FilmWorld {
     const m = player.model;
     const c = WORLD_CAM.hook;
     if (take !== 'thicket' && take !== 'lamb') this.setExposure(this.expK);
+    if (take !== 'rachel-dawn' && take !== 'thicket') this.clearPushers();
     this.tickBirds(take, t);
     switch (take) {
       case 'rachel-dawn': {
-        // the shepherd walks ahead of his flock across the view (a small figure against the dawn)
-        const A = this.crossA, B = this.crossB;
-        const dir = this.tmp2.copy(B).sub(A);
-        const len = dir.length();
-        dir.normalize();
-        const s = len * 0.72 + 1.0 * t;
-        const x = A.x + dir.x * s + dir.z * 1.2, z = A.z + dir.z * s - dir.x * 1.2;
-        player.place(x, z, Math.atan2(dir.x, dir.z));
+        // the shepherd walks across the view behind the stone, his flock following (FilmFlock.stageFollow); the grass
+        // right in front of the lens pressed down (spare pushers 3-5): no flat cards across the lens
+        this.placeShepherd(t);
+        const pu = shared.uPushers.value as THREE.Vector4[];
+        if (pu.length >= 6) {
+          const cp = this.h.engine.camera.position;
+          for (let k = 0; k < 3; k++) {
+            const x = cp.x + this.axis.x * (0.9 + 1.3 * k), z = cp.z + this.axis.z * (0.9 + 1.3 * k);
+            pu[3 + k].set(x, this.ground(x, z), z, 1.7);
+          }
+        }
         player.speed = 1.0;
         m.speed = 1.0;
+        this.ff.tick(t, dt, this.h.engine.camera);
         return;
       }
       case 'figure':
@@ -496,7 +541,8 @@ export class FilmWorld {
         this.ff.tick(t, dt, this.h.engine.camera);
         return;
       case 'face':
-        m.performFilm('reveal', t, { look: this.faceCam, turnAt: 0.5, turnDur: WORLD_CAM.face.turnDur });
+        // he turns INTO the light (faceCam = a point 40 m out toward the low sun), not into the lens: offLens 0
+        m.performFilm('reveal', t, { look: this.faceCam, turnAt: 0.5, turnDur: WORLD_CAM.face.turnDur, offLens: 0 });
         this.ff.tick(t, dt, this.h.engine.camera);
         return;
       case 'vista':
@@ -509,11 +555,12 @@ export class FilmWorld {
         // H1: the grass between the lens and the lamb pressed down (spare pushers 3-5 of the shared grass field)
         const pu = shared.uPushers.value as THREE.Vector4[];
         if (take === 'thicket' && pu.length >= 6) {
+          // round the lamb (it stands in a trodden patch, readable), then two along the lens' line
           const cp = this.h.engine.camera.position;
+          const F = [1.0, 0.72, 0.42], R = [1.9, 1.7, 1.6];
           for (let k = 0; k < 3; k++) {
-            const f = 0.28 + k * 0.24;
-            const x = lerp(cp.x, lamb.position.x, f), z = lerp(cp.z, lamb.position.z, f);
-            pu[3 + k].set(x, this.ground(x, z), z, 1.25);
+            const x = lerp(cp.x, lamb.position.x, F[k]), z = lerp(cp.z, lamb.position.z, F[k]);
+            pu[3 + k].set(x, this.ground(x, z), z, R[k]);
           }
         } else this.clearPushers();
         // H1: it walks to the edge, grazes, and at beats.lambHead (1.5 s) its head comes up toward the thicket (anim's
@@ -599,8 +646,9 @@ export class FilmWorld {
     c.updateProjectionMatrix();
     c.updateMatrixWorld(true);
     try {
-      // (cut4, director-notes-v5 D1: the flock IN FRAME, 8-14 sheep 4-15 m from the lens)
-      const n = this.ff.stageInView(c, this.rock, { near: 4, far: 15, max: 14 });
+      // (cut4, director-notes-v5 D1: the flock IN FRAME below him — from the lens on the rock the slope 4-7 m out lies
+      //  under the frame and the letterbox, so the drove is staged where the lens sees the ground: 7-30 m)
+      const n = this.ff.stageInView(c, this.rock, { near: 7, far: 30, max: 14 });
       if (n > 0) return;
     } catch (e) {
       console.warn('[film] flock staging', e);
@@ -667,6 +715,7 @@ export class FilmWorld {
   private hideBear() {
     const { bear } = this.h;
     bear.model.eyeShine = 0;
+    bear.model.darkness = 0;
     if (bear.visible) bear.visible = false;
     if (this.eyes) this.eyes.visible = false;
   }
@@ -737,7 +786,7 @@ export class FilmWorld {
         const go = Math.max(0, t - 0.4 - k * 0.07);
         const O = this.out, Sx = this.tmp.set(-O.z, 0, O.x);
         s.position.copy(this.edge).addScaledVector(O, -0.6 + go * (1.6 + k * 0.25)).addScaledVector(Sx, -2.4 + k * 1.05 + go * (k % 2 ? 0.8 : -0.6));
-        s.position.y = this.ground(this.edge.x, this.edge.z) + 1.3 + (k % 3) * 0.35 + go * (2.1 + (k % 2) * 0.6) + go * go * 0.6;
+        s.position.y = this.ground(this.edge.x, this.edge.z) + 0.6 + (k % 3) * 0.25 + go * (1.1 + (k % 2) * 0.4) + go * go * 0.5;
         const sz = go > 0 ? 0.26 : 0.0001;
         s.scale.set(sz, sz * (0.3 + 0.7 * flap) * 0.5, 1);
         s.visible = go > 0 && k < 5;
@@ -758,6 +807,8 @@ export class FilmWorld {
     // amber glow locked exactly on them (the rig's eye sockets on the head bone; visual-bible 3.15: never red)
     const open = take === 'lamb' ? smooth(clamp01((t - 0.7) / 0.28)) : 0;
     bear.model.eyeShine = WORLD_CAM.hook.shine * open;
+    // its body is not to be seen (models' darkness uniform: pelt, skin, claws, teeth — not the eyes' tapetum)
+    bear.model.darkness = WORLD_CAM.hook.dark;
     const eyes = this.eyes;
     if (!eyes) return;
     const hc = bear.model.headCenter;
@@ -827,6 +878,7 @@ export class FilmWorld {
   leave() {
     const { player, flock, bear } = this.h;
     this.removeProps();
+    this.putHookTreesBack();
     this.clearPushers();
     this.ff.restore();
     this.putTreesBack();
@@ -846,6 +898,7 @@ export class FilmWorld {
     bear.speed = 0;
     bear.model.lookTarget = null;
     bear.model.eyeShine = 0;
+    bear.model.darkness = 0;
     if (this.eyes) {
       this.eyes.removeFromParent();
       this.eyes = null;

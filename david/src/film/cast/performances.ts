@@ -338,6 +338,7 @@ export class GilgalPerformance {
         a.reach[sd].orient = 0;
       }
       a.lookLimits.up = 0.45;
+      a.lookYawOffset = 0;
       a.breath.amp = 0.25;
       a.headRoll = 0;
       a.mocap.lookWeight = 1;
@@ -399,7 +400,8 @@ export class GilgalPerformance {
         saul.place(s0.pos, s0.yaw);
         saul.armPose.R.pose = POSES.clothFistR; // G6 and G7 both open with the fist at his belt (G7 lifts it)
         saul.armPose.R.weight = 1;
-        saul.human.rig.setFingers('R', 'grip');
+        // a closed FIST round the wool (the 'grip' pose wraps the spear's shaft radius and read half-open in G7)
+        saul.human.rig.setFingers('R', 'fist');
         saul.update(0);
         tear.progress = TORN;
         tear.grab(saul.human.sockets.handGripR);
@@ -501,6 +503,7 @@ export class GilgalPerformance {
         break;
       }
       case 'tear':
+        if (this.samPhase === 0 && at >= TEAR_ACTION.turn + 0.15) this.tearLateEntry(at, t);
         this.tearSaul(at, t);
         break;
       case 'verdict': {
@@ -524,12 +527,13 @@ export class GilgalPerformance {
         const lift = ss(B.lookDown - 0.2, B.lookDown + 0.5, t);
         const tight = ss(B.tighten, B.tighten + 0.25, t);
         const base = mixPose(POSES.clothFistR, POSES.clothLookR, lift);
-        const tr = (0.018 + 0.03 * tight) * lift;
+        const tr = (0.018 + 0.036 * tight) * lift;
         base.fa = [base.fa[0] + tr * noise1(t * 9, 1), base.fa[1] + tr * noise1(t * 7, 2), base.fa[2]];
         base.hd = [base.hd[0] + 1.4 * tr * noise1(t * 11, 3) - 0.25 * tight, base.hd[1], base.hd[2] + tr * noise1(t * 8, 4)];
         saul.armPose.R.pose = base;
         saul.armPose.R.weight = 1;
-        saul.human.rig.setFingers('R', tight > 0.5 ? 'fist' : 'grip');
+        // the fist stays closed on the wool; at `tighten` it squeezes (the wrist flexes, the tremble doubles)
+        saul.human.rig.setFingers('R', 'fist');
         // his eyes drop to the fist
         const look = ss(B.lookDown - 0.1, B.lookDown + 0.45, t);
         saul.human.sockets.handGripR.getWorldPosition(this.fist);
@@ -549,7 +553,7 @@ export class GilgalPerformance {
     saul.faceFill = FACE_FILL[shot][0];
     samuel.faceFill = FACE_FILL[shot][1];
     // ---------------------------------------------------------------- SAMUEL
-    if (shot === 'tear') this.tearSamuel(at, adt);
+    if (shot === 'tear') this.tearSamuel(at, adt, t);
     else if (shot === 'saulAlone' || shot === 'rise') {
       samuel.place(m.pos, m.yaw);
       if (m.walk > 0 && samuel.mocap.current()?.name !== 'walk_slow') {
@@ -721,10 +725,33 @@ export class GilgalPerformance {
    * motion carries him); the seized corner jerks him, he leans against it, the wool tears, he comes free, stops, and
    * turns his head back over his shoulder to the king.
    */
-  private tearSamuel(at: number, adt: number) {
+  /**
+   * The tear entered LATE (a seek into the middle of it, e.g. straight into the insert): pick Samuel up where the blocking
+   * has him — mid turn-step, or already striding away — and pose him at once, BEFORE Saul reads the corner of his me'il
+   * (a seek used to leave him turning on his mark against the kneeling king, and Saul reaching for a stale corner).
+   */
+  private tearLateEntry(at: number, t: number) {
+    const { samuel } = this.cast;
+    const A = TEAR_ACTION;
+    const m = samuelAt('tear', t);
+    if (at >= A.grip - 0.2) {
+      samuel.place(m.pos, SAM_AWAY_YAW);
+      samuel.mocap.play('walk_slow', { fade: 0 });
+      this.samPhase = 2;
+    } else {
+      samuel.place(m.pos, m.yaw);
+      samuel.mocap.play('turn_go_L', { fade: 0, time: at - A.turn });
+      this.samPhase = 1;
+    }
+    samuel.root.position.y = this.ground(samuel.root.position.x, samuel.root.position.z);
+    samuel.update(0);
+  }
+
+  private tearSamuel(at: number, adt: number, t: number) {
     const { saul, samuel } = this.cast;
     const A = TEAR_ACTION;
     const mp = samuel.mocap;
+    void t;
     // the ground under the root-motion walk
     samuel.root.position.y = this.ground(samuel.root.position.x, samuel.root.position.z);
     if (this.samPhase === 0 && at >= A.turn) {
@@ -740,7 +767,7 @@ export class GilgalPerformance {
     if (this.samPhase === 2) {
       // checked by the grip (the corner holds him back), slowest while the wool is taut, a stride again once it gives
       const held = ss(A.grip - 0.04, A.grip + 0.14, at) * (1 - ss(A.free, A.free + 0.12, at));
-      mp.matchSpeed('walk_slow', 0.66 * (1 - 0.5 * held));
+      mp.matchSpeed('walk_slow', 0.72 * (1 - 0.45 * held));
       // the turn-step is cut short by the stride: finish the turn onto his way out (ESE along the road, away from the
       // king; cut4's insert sees him stride out of frame right)
       const e = Math.atan2(Math.sin(SAM_AWAY_YAW - samuel.root.rotation.y), Math.cos(SAM_AWAY_YAW - samuel.root.rotation.y));
@@ -784,7 +811,7 @@ export class GilgalPerformance {
     // the head leads the turn: the chest and hips follow (the placement yaw eases in samuelAt)
     samuel.body.twist = -0.3 * (1 - turned) * ss(0, V.turnBack + 0.2, t);
     samuel.lookLimits.yaw = 1.45;
-    samuel.lookRate = 3.2;
+    samuel.lookRate = 2.6;
     // the eyes OPEN and locked on Saul's: they shift between his two eyes every ~0.7 s (a listener's saccades, on top
     // of the rig's micro-saccades), the head follows them only a little
     const which = Math.floor((t + 0.35) / 0.72) % 2 === 0 ? saul.human.sockets.eyeR : saul.human.sockets.eyeL;
@@ -797,6 +824,10 @@ export class GilgalPerformance {
     }
     eyes.y -= 0.035 * Math.min(1, nod);
     samuel.mocap.lookAt = eyes;
+    // his FACE stays nearer the lens (cut4 rev 4: the G6 lens stands 34 deg south of his line to Saul — with the face
+    // full on Saul he read in profile): the head aims ~0.3 rad toward the lens side (his left), the eyes do the rest
+    // (from the first frame: eased in over the turn, the head swung past the lens into profile on the first word)
+    samuel.lookYawOffset = 0.3;
     samuel.headRoll = -0.07 * ss(V.turnBack + 0.3, V.speech, t) + 0.025 * Math.sin(t * 1.3);
     if (this.blinks === 0 && t >= V.speech - 0.28) {
       samuel.human.rig.blink();

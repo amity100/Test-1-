@@ -413,6 +413,14 @@ export class FilmStage {
     // per-take exposure (FilmCams.TAKE_LOOK) on top of the set's own
     let expMul = 1;
     const baseExp = base.exposure;
+    // P4 (cut4): harsher light with real contrast — the grade's contrast raised for the take, put back on leaving
+    let savedContrast: number | null = null;
+    const restoreContrast = () => {
+      if (savedContrast === null) return;
+      engine0.post.grade.uniforms.uContrast.value = savedContrast;
+      savedContrast = null;
+    };
+    const engine0 = this.engine;
     // the land sets share their sun / haze / deck uniforms (module singletons): each view puts its own back
     const view: ViewSpec = {
       ...base,
@@ -420,6 +428,10 @@ export class FilmStage {
       update: (dt, cam) => {
         applyLand(snap);
         base.update?.(dt, cam);
+      },
+      onLeave: () => {
+        restoreContrast();
+        base.onLeave?.();
       },
     };
     // what the orchestration cameras read from the set (FilmCams.landCam)
@@ -469,6 +481,13 @@ export class FilmStage {
       },
       tick(take, t, dt) {
         expMul = takeExposure(take, t);
+        if (name === 'coast') {
+          const u = engine.post.grade.uniforms.uContrast;
+          if (take === 'glint') {
+            if (savedContrast === null) savedContrast = u.value as number;
+            u.value = savedContrast * 1.14;
+          } else restoreContrast();
+        }
         const h = engine.renderer.domElement.height;
         if (extra.host) {
           extra.host.crowd.viewportHeight = h; // keeps the far spear shafts visible
@@ -499,6 +518,7 @@ export class FilmStage {
         return null;
       },
       dispose() {
+        restoreContrast();
         extra.host?.dispose();
         for (const a of extra.actors ?? []) a.dispose();
         set.dispose();

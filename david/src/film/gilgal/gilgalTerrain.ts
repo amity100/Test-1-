@@ -308,8 +308,8 @@ float lum(vec3 c){ return dot(c, vec3(0.2126, 0.7152, 0.0722)); }`)
     float road = (1.0 - smoothstep(${(ROAD_HALF - 1.5).toFixed(2)}, ${(ROAD_HALF + 1.2).toFixed(2)}, dz + (tN(xz * 0.5) - 0.5) * 1.6)) * step(-2500.0, xz.x) * step(xz.x, 3000.0);
     // (cut4, director-notes-v5 G1: the road read as dark grey asphalt against the low sun -> hot, pale, dusty earth:
     //  a lighter, warmer trodden silt, the loose dust on top paler still)
-    vec3 dust = mix(base0 * vec3(1.3, 1.2, 1.04) * mix(1.0, sL, 0.3), pebbles * vec3(1.12, 1.06, 0.96), 0.15) * mix(0.94, 1.06, tN(xz * 1.7));
-    dust = mix(dust, vec3(0.66, 0.57, 0.44), 0.22 * smoothstep(0.35, 0.75, tN(xz * 0.21 + 2.0)));
+    vec3 dust = mix(base0 * vec3(1.42, 1.3, 1.1) * mix(1.0, sL, 0.3), pebbles * vec3(1.15, 1.08, 0.97), 0.15) * mix(0.94, 1.06, tN(xz * 1.7));
+    dust = mix(dust, vec3(0.7, 0.6, 0.46), 0.24 * smoothstep(0.35, 0.75, tN(xz * 0.21 + 2.0)));
     // the camp (black tents, fires, the host's beasts): trampled like the road
     float camp = 1.0 - smoothstep(${(CAMP.r * 0.6).toFixed(1)}, ${(CAMP.r * 1.25).toFixed(1)}, length(xz - vec2(${CAMP.x.toFixed(1)}, ${CAMP.z.toFixed(1)})) + (tN(xz * 0.05) - 0.5) * 30.0);
     float trampled = clamp(road * 0.92 + camp * 0.8, 0.0, 1.0);

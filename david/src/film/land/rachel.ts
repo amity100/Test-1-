@@ -103,7 +103,8 @@ export function hideTreesNear(root: THREE.Object3D, center: THREE.Vector3, radiu
   const names = new Set(kinds.map((k) => `tree-${k}`));
   root.traverse((o) => {
     const im = o as THREE.InstancedMesh;
-    if (!im.isInstancedMesh || !names.has(im.name)) return;
+    // (the world's vegetation is chunked: 'tree-olive#12' is an olive mesh too)
+    if (!im.isInstancedMesh || !names.has(im.name.split('#')[0])) return;
     let touched = false;
     for (let i = 0; i < im.count; i++) {
       im.getMatrixAt(i, m4);
