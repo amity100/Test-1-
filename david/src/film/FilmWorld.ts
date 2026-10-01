@@ -648,7 +648,10 @@ export class FilmWorld {
     try {
       // (cut4, director-notes-v5 D1: the flock IN FRAME below him — from the lens on the rock the slope 4-7 m out lies
       //  under the frame and the letterbox, so the drove is staged where the lens sees the ground: 7-30 m)
-      let n = this.ff.stageInView(c, this.rock, { near: 7, far: 30, max: 14 });
+      // first the open terraces in the lower half of the frame, above the letterbox (orchestrator, v6 review: the
+      // 9-70 m fallback put the drove at 50-75 m, some of it under the bars — too small to read)
+      let n = this.ff.stageInView(c, this.rock, { near: 12, far: 42, max: 14, clear: 0.15, yMin: -0.6 });
+      if (n < 8) n = this.ff.stageInView(c, this.rock, { near: 7, far: 30, max: 14 });
       // the slope beyond the rock drops out of the frame: then the drove where this lens does see ground (the slope
       // and the valley floor further out) — in frame, smaller
       if (n < 6) n = this.ff.stageInView(c, this.rock, { near: 9, far: 70, max: 14, clear: 0.15 });

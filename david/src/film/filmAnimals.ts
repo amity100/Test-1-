@@ -56,9 +56,11 @@ export class FilmFlock {
    * inside the frame with a margin (NDC |x| < 0.85, -0.85 < y < horizon - 0.05), at least `clear` (NDC) from the
    * shepherd's projected feet..head line, `spacing` m apart. Call on the cut with the shot's first camera.
    */
-  stageInView(camera: THREE.PerspectiveCamera, shepherd: THREE.Vector3 | null, o: { near?: number; far?: number; max?: number; clear?: number; spacing?: number; exclude?: Animal[] } = {}) {
+  stageInView(camera: THREE.PerspectiveCamera, shepherd: THREE.Vector3 | null, o: { near?: number; far?: number; max?: number; clear?: number; spacing?: number; exclude?: Animal[]; yMin?: number } = {}) {
     this.restore();
     const near = o.near ?? 5, far = o.far ?? 34, max = o.max ?? 14, clear = o.clear ?? 0.22, spacing = o.spacing ?? 1.5;
+    // the lowest NDC y an animal may stand at (a 2.39 letterbox over a 16:9 canvas hides |y| > ~0.74)
+    const yMin = o.yMin ?? -0.85;
     camera.updateMatrixWorld(true);
     const cam = camera.getWorldPosition(new THREE.Vector3());
     const fwd = camera.getWorldDirection(new THREE.Vector3()).setY(0).normalize();
@@ -85,7 +87,7 @@ export class FilmFlock {
       const p = new THREE.Vector3(x, this.ground(x, z), z);
       // in frame, below the horizon, clear of the shepherd
       _v.copy(p).add(_s.set(0, 0.45, 0)).project(camera);
-      if (_v.z > 1 || Math.abs(_v.x) > 0.85 || _v.y < -0.85 || _v.y > 0.75) continue;
+      if (_v.z > 1 || Math.abs(_v.x) > 0.85 || _v.y < yMin || _v.y > 0.75) continue;
       if (shepherd && Math.abs(_v.x - sx) < clear && _v.y > sy0 - 0.1 && _v.y < sy1 + 0.1) continue;
       if (placed.some((q) => q.distanceTo(p) < spacing)) continue;
       placed.push(p);

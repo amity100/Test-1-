@@ -139,12 +139,12 @@ export class Motes {
     geo.setAttribute('position', new THREE.BufferAttribute(this.offsets, 3));
     geo.setAttribute('aSeed', new THREE.BufferAttribute(seeds, 1));
     const mat = new THREE.ShaderMaterial({
-      uniforms: { uTime: shared.uTime, uCam: shared.uCamPos, uR: { value: radius }, uSunDir: shared.uSunDir, uSunColor: shared.uSunColor, uScale: { value: 600 } },
+      uniforms: { uTime: shared.uTime, uCam: shared.uCamPos, uR: { value: radius }, uSunDir: shared.uSunDir, uSunColor: shared.uSunColor, uScale: { value: 600 }, uMaxPx: { value: 8 } },
       transparent: true,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
       vertexShader: /* glsl */ `
-        attribute float aSeed; uniform float uTime; uniform vec3 uCam; uniform float uR; uniform float uScale; uniform vec3 uSunDir;
+        attribute float aSeed; uniform float uTime; uniform vec3 uCam; uniform float uR; uniform float uScale; uniform float uMaxPx; uniform vec3 uSunDir;
         varying float vA;
         void main(){
           vec3 p = position;
@@ -157,8 +157,10 @@ export class Motes {
           vec3 vd = normalize(w - uCam);
           float back = pow(max(dot(vd, uSunDir), 0.0), 3.0);
           float dist = length(w - uCam);
-          vA = (0.15 + back * 1.4) * smoothstep(uR, uR * 0.5, dist) * smoothstep(0.5, 2.0, dist) * (0.5 + 0.5 * sin(uTime * 3.0 + aSeed * 90.0));
-          gl_PointSize = (0.022 + aSeed * 0.02) * uScale / max(-mv.z, 0.1);
+          // a mote right in front of a long lens would be a big white disc (in the backlit close-ups it landed on a
+          // face): fade them out within 1.5-3.5 m of the lens and cap the size, so they stay glints, never blobs
+          vA = (0.15 + back * 1.4) * smoothstep(uR, uR * 0.5, dist) * smoothstep(1.5, 3.5, dist) * (0.5 + 0.5 * sin(uTime * 3.0 + aSeed * 90.0));
+          gl_PointSize = min((0.022 + aSeed * 0.02) * uScale / max(-mv.z, 0.1), uMaxPx);
           gl_Position = projectionMatrix * mv;
         }`,
       fragmentShader: /* glsl */ `
@@ -175,7 +177,9 @@ export class Motes {
     this.points.renderOrder = 6;
   }
   setPixelScale(heightPx: number, fovDeg: number) {
-    (this.points.material as THREE.ShaderMaterial).uniforms.uScale.value = heightPx / (2 * Math.tan(THREE.MathUtils.degToRad(fovDeg) / 2));
+    const u = (this.points.material as THREE.ShaderMaterial).uniforms;
+    u.uScale.value = heightPx / (2 * Math.tan(THREE.MathUtils.degToRad(fovDeg) / 2));
+    u.uMaxPx.value = Math.max(2, heightPx * 0.011);
   }
 }
 
