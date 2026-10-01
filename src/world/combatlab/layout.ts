@@ -319,7 +319,7 @@ export function labArena(): LabArena {
     pad: { pos: START.pos.clone(), yaw: START.yaw },
     gates: GATES.map((g) => ({ ...g, pos: g.pos.clone() })),
     waves: copyWaves(WAVES),
-    variants: { onslaught: copyWaves(ONSLAUGHT_WAVES) },
+    variants: { onslaught: copyWaves(ONSLAUGHT_WAVES), flow: copyWaves(ONSLAUGHT_WAVES) },
   };
 }
 

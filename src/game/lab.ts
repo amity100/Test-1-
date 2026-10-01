@@ -7,7 +7,7 @@ import { LabHud } from '../ui/labhud';
 import { t } from '../ui/i18n';
 import type { FxKit } from './fxkit';
 import { killTool, LabDirector, type LabRunStats } from './labdirector';
-import { chosenVariant, type CombatVariant } from './variant';
+import { chosenVariant, onslaughtOn, type CombatVariant } from './variant';
 
 /** Kessler's gate orange (HDR), for the arrivals' rift flash. */
 const KESSLER = new THREE.Color(2.6, 0.75, 0.2);
@@ -58,8 +58,8 @@ export class LabMode {
         };
         if (s.leash !== undefined) def.leash = s.leash;
         if (s.kind === 'sniper') def.perch = true;
-        // ONSLAUGHT: every man of its waves fights by its squad rules
-        if (this.director.stats.variant === 'onslaught') {
+        // ONSLAUGHT (and FLOW, which fights it): every man of its waves fights by its squad rules
+        if (onslaughtOn(this.director.stats.variant)) {
           def.onslaught = true;
           if (s.arch) def.archetype = s.arch;
         }

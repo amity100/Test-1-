@@ -46,10 +46,11 @@ const ICON = {
     '<path fill="currentColor" d="M3 10h18v9.5c0 .8-.7 1.5-1.5 1.5h-15c-.8 0-1.5-.7-1.5-1.5z"/><path fill="currentColor" d="M2.6 8.6l-.5-2.3c-.2-.8.3-1.6 1.1-1.8l14.6-3.1c.8-.2 1.6.3 1.8 1.1l.5 2.3z"/>',
   ),
   action: SVG('<path d="M12 3.5l2.2 6.3 6.3 2.2-6.3 2.2L12 20.5l-2.2-6.3L3.5 12l6.3-2.2z" fill="currentColor"/>'),
+  power: SVG('<circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M12 6.5v5.5l3.6 2.2" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>'),
 };
 
 /** Buttons whose finger may keep dragging to look. */
-const DRAG_LOOK = new Set<string>(['jump', 'shove', 'close', 'action', 'crouch']);
+const DRAG_LOOK = new Set<string>(['jump', 'shove', 'close', 'action', 'crouch', 'power']);
 
 function vibrate(ms: number) {
   try {
@@ -96,6 +97,7 @@ export class TouchControls {
         <button class="t-btn t-crouch" data-t="crouch" type="button">${ICON.crouch}</button>
         <button class="t-btn t-shove" data-t="shove" type="button">${ICON.shove}<span class="t-lbl" data-k="touch.shove"></span></button>
         <button class="t-btn t-close" data-t="close" type="button">${ICON.close}</button>
+        <button class="t-btn t-power" data-t="power" type="button">${ICON.power}<span class="t-lbl" data-k="touch.power"></span></button>
         <button class="t-btn t-clip hidden" data-t="clip" type="button">${ICON.clip}</button>
       </div>`;
     root.appendChild(el);
@@ -136,6 +138,13 @@ export class TouchControls {
     if (!n || n.dataset.k === k) return;
     n.dataset.k = k;
     n.textContent = t(k);
+  }
+
+  /** The lab's FLOW: the POWER button shows (it glows when the meter is full; hold it, drag to aim). */
+  setFlow(on: boolean, ready = false) {
+    this.el.classList.toggle('flow', on);
+    const b = this.el.querySelector('.t-power') as HTMLElement | null;
+    if (b && b.classList.contains('ready') !== (on && ready)) b.classList.toggle('ready', on && ready);
   }
 
   show(v: boolean) {

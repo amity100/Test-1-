@@ -7,15 +7,18 @@
  *              exposed (precision.ts; systems ask `precisionOn()`).
  * - onslaught: PRECISION, and an enemy side that attacks (actors/onslaught.ts:
  *              stormers, suppressors, heavy patterns, a squad director, its own waves).
+ * - flow:      FLOW + POWER: ONSLAUGHT's fight with a body that moves fast
+ *              (slide, double jump, wall kicks, rifts keep your speed) and a
+ *              POWER moment that stops time (flow.ts; systems ask `flowOn()`).
  *
  * Systems read `activeVariant()`: the chosen preset while the lab is loaded,
  * CURRENT everywhere else (the missions keep playing as they do today).
  * The choice itself is a setting (`Settings.combatVariant`), kept across
  * world switches and reloads.
  */
-export type CombatVariant = 'current' | 'precision' | 'onslaught';
+export type CombatVariant = 'current' | 'precision' | 'onslaught' | 'flow';
 
-export const VARIANTS: readonly CombatVariant[] = ['current', 'precision', 'onslaught'];
+export const VARIANTS: readonly CombatVariant[] = ['current', 'precision', 'onslaught', 'flow'];
 export const DEFAULT_VARIANT: CombatVariant = 'current';
 
 export const isVariant = (v: unknown): v is CombatVariant => typeof v === 'string' && (VARIANTS as readonly string[]).includes(v);
@@ -58,9 +61,14 @@ export function onVariantChange(f: (v: CombatVariant) => void): () => void {
   return () => listeners.delete(f);
 }
 
-/** F1 / F2 / F3 → a variant (null for any other key code). */
+/** ONSLAUGHT's enemy side (its squads, its waves, its rules for the dodge) fights here: ONSLAUGHT and FLOW. */
+export function onslaughtOn(v: CombatVariant = activeVariant()): boolean {
+  return v === 'onslaught' || v === 'flow';
+}
+
+/** F1 / F2 / F3 / F4 → a variant (null for any other key code). */
 export function variantForKey(code: string): CombatVariant | null {
-  const i = ['F1', 'F2', 'F3'].indexOf(code);
+  const i = ['F1', 'F2', 'F3', 'F4'].indexOf(code);
   return i >= 0 ? VARIANTS[i] : null;
 }
 

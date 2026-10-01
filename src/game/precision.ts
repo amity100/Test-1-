@@ -90,9 +90,9 @@ export const PRECISION = {
   },
 };
 
-/** PRECISION's rules apply (PRECISION itself, and ONSLAUGHT on top of it). */
+/** PRECISION's rules apply (PRECISION itself, and ONSLAUGHT and FLOW on top of it). */
 export function precisionOn(v: CombatVariant = activeVariant()): boolean {
-  return v === 'precision' || v === 'onslaught';
+  return v === 'precision' || v === 'onslaught' || v === 'flow';
 }
 
 const _a = new THREE.Vector3();

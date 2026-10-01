@@ -49,7 +49,8 @@ import { TOWER } from '../world/tower/layout';
 import { buildWorld, WORLD_SKY, WORLD_SUN, type WorldId } from '../world/worlds';
 import { CameraRig } from './camera';
 import { CHAR_RIM, Character, type AnimLibrary, type CharacterAsset, type Look } from './characters';
-import { Player, type PlayerEvents, type PlayerInput } from './player';
+import { dampAngle, Player, type PlayerEvents, type PlayerInput } from './player';
+import { FLOW, FLOW_SPRINT, flowOn, PowerMeter, PowerMoment } from './flow';
 import { BLADE, HiddenBlade } from './blade';
 import { OUTCOME_COLOR, RiftSystem } from './portals';
 import { ArcView, PortalKey, type PortalResult } from './portalkey';
@@ -75,8 +76,8 @@ import { ChallengeSystem } from '../meta/challenges';
 import { META_STRINGS } from '../meta/strings';
 import { LAB_SPAWN_GUARD, LabMode } from './lab';
 import type { LabRunStats } from './labdirector';
-import { activeVariant, setLabActive, setVariant, type CombatVariant } from './variant';
-import { behind, dodgeAt, dodgeSpot, exposedTo, Parry, ParryView, PRECISION, precisionOn, type DodgeRun } from './precision';
+import { activeVariant, onslaughtOn, setLabActive, setVariant, type CombatVariant } from './variant';
+import { aimedEnemy, behind, dodgeAt, dodgeSpot, exposedTo, Parry, ParryView, PRECISION, precisionOn, type DodgeRun } from './precision';
 
 import type { Settings } from './settings';
 import { beginRenderFrame } from '../render/frameonce';
@@ -320,6 +321,17 @@ export class Game {
   private exposedUntil = new Map<number, number>();
   /** The variant the HUD's key labels were last set for. */
   private hudVariant: CombatVariant | '' = '';
+  // FLOW + POWER (a lab variant; see flow.ts)
+  /** POWER: fills as you move; full, it can be held. */
+  private meter = new PowerMeter();
+  /** The POWER moment (held: time near-stopped, marking; then the chain). */
+  private power = new PowerMoment();
+  /** A thumb marks by holding the crosshair on a man: who, and how long (real s). */
+  private powerDwell = { id: -1, t: 0 };
+  /** Where the chain's camera turns to (the last dash's heading). */
+  private powerYaw = 0;
+  /** The man under the crosshair while POWER is held. */
+  private powerAim: EnemyView | null = null;
   /** The lab's run is over: its results card. */
   onLabEnd: (stats: LabRunStats) => void = () => {};
   onPause: () => void = () => {};
@@ -1474,7 +1486,7 @@ export class Game {
       },
       melee: (_e, dmg, push) => {
         // ONSLAUGHT: a DODGE's moment untouchable is untouchable by a blow too (no shove either)
-        if (activeVariant() === 'onslaught' && this.time < this.dodgeSafeUntil) return;
+        if (onslaughtOn() && this.time < this.dodgeSafeUntil) return;
         this.hurtPlayer(dmg, this.player.body.pos);
         this.player.body.vel.add(push);
         this.player.body.onGround = false;
@@ -1596,6 +1608,11 @@ export class Game {
     if (credit.refund) this.strikes.refund(1);
     this.stats.kills++;
     this.lab?.noteKill(ev);
+    // FLOW: a kill fills POWER (in the air, sliding, or rift-charged: twice over); the chain's own don't
+    if (flowOn() && this.power.phase === 'idle') {
+      const pl = this.player;
+      this.meter.add(pl.airborne || pl.slideT > 0 || pl.body.charge > 0 ? FLOW.meter.styleKill : FLOW.meter.kill);
+    }
     this.push(ev);
     // the PORTAL first; the STRIKES once you've made your first kill with it
     // (PRECISION's rules card says how its keys work)
@@ -2024,7 +2041,11 @@ export class Game {
       ts = Math.min(ts, this.slowScale);
     }
     if (this.respawnT >= 0) ts = Math.min(ts, 0.35);
-    this.timeScale = THREE.MathUtils.damp(this.timeScale, ts, 12, realDt);
+    // FLOW: the POWER moment all but stops time (at once: it's the whole point)
+    const flow = flowOn();
+    const pts = flow ? this.power.timeScale() : 1;
+    ts = Math.min(ts, pts);
+    this.timeScale = pts < 1 && this.timeScale > pts ? pts : THREE.MathUtils.damp(this.timeScale, ts, 12, realDt);
     let dt = realDt * this.timeScale;
     if (this.hitstop > 0) {
       this.hitstop -= realDt;
@@ -2065,8 +2086,12 @@ export class Game {
       inp.consumeWheel();
       this.rifts.airDistance = null;
     }
-    if (alive && inp.wasPressed('portal')) this.onPortalPress(this.portal.press());
-    const released = this.portal.update(realDt, alive && inp.isHeld('portal'));
+    // FLOW: POWER (held: marks with the crosshair; let go: the chain); nothing else starts meanwhile
+    if (flow) this.updatePower(realDt, alive);
+    else if (this.power.phase !== 'idle') this.power.reset();
+    const free = alive && this.power.phase === 'idle';
+    if (free && inp.wasPressed('portal')) this.onPortalPress(this.portal.press());
+    const released = this.portal.update(realDt, free && inp.isHeld('portal'));
     if (released) this.onPortalRelease(released);
     // STRIKES: one press, a whole rift attack (none start while the PORTAL is in hand; a LOOP's
     // second press being held still counts, and dying lets go of it)
@@ -2078,10 +2103,10 @@ export class Game {
       const a = `strike${i + 1}` as 'strike1';
       // PRECISION: REFLECT's key is the PARRY (no lock-on, no charge)
       if (prec && i === 0) {
-        if (alive && !this.portal.holding && inp.wasPressed(a)) this.parryPress();
+        if (free && !this.portal.holding && inp.wasPressed(a)) this.parryPress();
         continue;
       }
-      const r = this.strikes.input(STRIKES[i], alive && !this.portal.holding && inp.wasPressed(a), alive && inp.isHeld(a));
+      const r = this.strikes.input(STRIKES[i], free && !this.portal.holding && inp.wasPressed(a), free && inp.isHeld(a));
       if (r) this.onStrike(r);
     }
     this.updateStrikeHud();
@@ -2122,23 +2147,28 @@ export class Game {
     this.touch?.setAiming(aiming);
 
     // ----- player -----
+    // FLOW: crouch at a run is a SLIDE (it doesn't toggle crouching); the chain moves you itself
+    const still = this.respawnT >= 0 || this.boarded || this.power.phase === 'chain';
+    const slide = flow && inp.wasPressed('crouch') && body.onGround && Math.hypot(body.vel.x, body.vel.z) >= FLOW.slide.minSpeed;
     const pin: PlayerInput = {
-      moveX: this.respawnT >= 0 || this.boarded ? 0 : inp.moveX,
-      moveY: this.respawnT >= 0 || this.boarded ? 0 : inp.moveY,
+      moveX: still ? 0 : inp.moveX,
+      moveY: still ? 0 : inp.moveY,
       camYaw: this.rig.yaw,
       jump: !this.boarded && inp.wasPressed('jump'),
       // the touch stick sprints when pushed to its rim (only when it's the stick moving you)
       sprint: inp.isHeld('sprint') || (inp.lastDevice === 'touch' && Math.hypot(inp.moveX, inp.moveY) > 0.95),
-      crouch: this.crouchToggle(),
+      crouch: this.crouchToggle(slide),
       // PRECISION: V is the DODGE (no SHOVE)
       shove: !prec && inp.wasPressed('shove'),
+      slide,
     };
-    if (prec && alive && inp.wasPressed('shove')) this.dodgePress(inp.moveX, inp.moveY);
+    if (prec && free && inp.wasPressed('shove')) this.dodgePress(inp.moveX, inp.moveY);
     const wasAir = p.airborne;
     p.update(dt, pin, this.level.world, this.physics, this.physEv, this.playerEvents(), this.time);
     this.updateDodge(dt);
     this.updateBlade(dt);
     this.updateAirtime(wasAir);
+    if (flow && free) this.meter.update(dt, { speed: Math.hypot(body.vel.x, body.vel.z), grounded: body.onGround, sliding: p.slideT > 0 });
     if (this.playerFling && !p.airborne && p.body.charge <= 0) this.playerFling = false;
     this.keepPlayerOutOfEnemies();
     this.updateShove(dt);
@@ -2235,6 +2265,7 @@ export class Game {
     // (PRECISION: no regen while they're on to you; a cleared wave heals you instead)
     if (this.hp > 0 && this.time - this.lastHurtT > LAW.player.regenDelay && !(prec && this.lab && this.underFire())) this.hp = Math.min(LAW.player.hp, this.hp + LAW.player.regenRate * dt);
     this.updatePrecisionHud(prec, realDt);
+    this.updateFlowHud(flow, realDt);
     this.hud.setHealth(this.hp, LAW.player.hp);
     const boss = this.enemies.boss();
     this.hud.setBoss(boss && boss.fighting ? boss : null);
@@ -2243,8 +2274,14 @@ export class Game {
 
     // ----- camera, fx, audio -----
     const speed = body.vel.length();
-    this.rig.speed = THREE.MathUtils.damp(this.rig.speed, body.charge > 0 ? THREE.MathUtils.clamp((speed - 8) / 22, 0, 1) : 0, 6, realDt);
-    this.rig.update(realDt, body.pos, p.crouched ? 1 : 0, aiming, this.level.world);
+    // (FLOW: plain running fast widens the view too, a slide drops it low)
+    const hs = Math.hypot(body.vel.x, body.vel.z);
+    const rush = flow ? THREE.MathUtils.clamp((hs - FEEL.sprintSpeed) / 9, 0, 1) * 0.7 : 0;
+    this.rig.speed = THREE.MathUtils.damp(this.rig.speed, Math.max(rush, body.charge > 0 ? THREE.MathUtils.clamp((speed - 8) / 22, 0, 1) : 0), 6, realDt);
+    this.rig.wide = THREE.MathUtils.damp(this.rig.wide, flow && this.power.phase !== 'idle' ? 1 : 0, this.power.phase === 'held' ? 7 : 3, realDt);
+    if (flow && this.power.phase === 'chain') this.rig.yaw = dampAngle(this.rig.yaw, this.powerYaw, 9, realDt);
+    this.rig.update(realDt, body.pos, p.slideT > 0 ? 1.35 : p.crouched ? 1 : 0, aiming, this.level.world);
+    if (flow && hs > FLOW_SPRINT * 0.9) this.fx.streak(_v.copy(body.pos).setY(body.pos.y + 1), body.vel, COL_CHARGED);
     if (body.charge > 0 && speed > 8) this.fx.streak(_v.copy(body.pos).setY(body.pos.y + 1), body.vel, COL_CHARGED);
     for (const b of this.physics.bodies) if (b.kind !== 'player' && b.enabled && b.charge > 0 && b.vel.lengthSq() > 64) this.fx.streak(_v.copy(b.pos).setY(b.pos.y + b.height * 0.5), b.vel, COL_ENTRANCE);
     this.fx.setHome(body.pos);
@@ -2272,8 +2309,8 @@ export class Game {
   private noise: { at: V3; radius: number }[] = [];
 
   private crouchState = false;
-  private crouchToggle() {
-    if (this.input.wasPressed('crouch')) this.crouchState = !this.crouchState;
+  private crouchToggle(slide = false) {
+    if (this.input.wasPressed('crouch') && !slide) this.crouchState = !this.crouchState;
     if (this.input.wasPressed('jump') || this.input.isHeld('sprint')) this.crouchState = false;
     this.touch?.setCrouched(this.crouchState);
     return this.crouchState;
@@ -2297,17 +2334,41 @@ export class Game {
         this.audio.shove(this.player.body.pos);
       },
       crossed: (_from, _to, yawDelta) => {
+        if (flowOn()) this.meter.add(FLOW.meter.portal);
         // through a rift mid-lunge: the lunge is over (the rift's momentum carries you on)
         this.blade.cancel();
         this.rig.rotateBy(yawDelta);
         this.rig.kick = Math.max(this.rig.kick, 0.8);
         this.renderer.grade.uniforms.uFlash.value = 1;
       },
+      // FLOW: a kick off a wall (a whoosh, dust off it), the double jump (a ring under you), a slide
+      airJump: (pos, wall) => {
+        this.meter.add(wall ? FLOW.meter.wallJump : FLOW.meter.airJump);
+        if (wall) {
+          this.audio.shove(pos);
+          this.fx.dust(_v.copy(pos).setY(pos.y + 0.9), 0.5);
+          this.rig.kick = Math.max(this.rig.kick, 0.45);
+        } else {
+          this.audio.jump(pos);
+          this.fx.ring(_v.copy(pos).setY(pos.y + 0.05), 1.1, 0.25, COL_EXIT);
+          this.rig.kick = Math.max(this.rig.kick, 0.25);
+        }
+      },
+      slid: (pos) => {
+        this.audio.dodge(pos, false);
+        this.fx.dust(pos, 0.7);
+        this.rig.kick = Math.max(this.rig.kick, 0.35);
+      },
     });
   }
 
   private onPlayerLanded(pos: V3, speed: number, charged: boolean) {
     this.audio.land(pos, speed);
+    // FLOW: a landing you feel (a thud in the camera, dust)
+    if (flowOn() && speed > 6) {
+      this.rig.shake = Math.max(this.rig.shake, Math.min(0.4, (speed - 6) / 25));
+      this.fx.dust(pos, Math.min(1.4, speed / 14));
+    }
     if (speed > 9) this.fx.dust(pos, Math.min(2, speed / 12));
     if (charged && speed >= LAW.cometSpeed) {
       // COMET: shockwave knocks everyone nearby down
@@ -2628,6 +2689,11 @@ export class Game {
   // ------------------------------------------------------------------
 
   private resetPrecision() {
+    this.meter.reset();
+    this.power.reset();
+    this.powerDwell.id = -1;
+    this.powerAim = null;
+    if (this.rig) this.rig.wide = 0;
     this.parry.reset();
     this.dodgeRun = null;
     this.dodgeCd = 0;
@@ -2834,6 +2900,153 @@ export class Game {
       this.fx.sparks(e.chest(_v2), null, COL_EXIT, 10);
       this.audio.impact(e.pos, 5);
     }
+  }
+
+  // ------------------------------------------------------------------
+  // FLOW + POWER (see flow.ts)
+  // ------------------------------------------------------------------
+
+  /**
+   * POWER: full, hold its key and time all but stops (the camera pulls out,
+   * every man is lit); the crosshair marks (a click, or a thumb resting on a
+   * man); let go and the chain runs, one rift-dash and a lethal strike per
+   * mark. Nothing marked: time just runs again.
+   */
+  private updatePower(realDt: number, alive: boolean) {
+    const inp = this.input;
+    const P = this.power;
+    const b = this.player.body;
+    if (!alive && P.phase !== 'idle') {
+      P.reset();
+      return;
+    }
+    if (alive && inp.wasPressed('power')) {
+      if (P.canBegin(this.meter.ready) && !this.portal.holding && !this.dodgeRun && this.respawnT < 0) {
+        P.begin();
+        this.powerDwell.id = -1;
+        const c = this.player.chest(_v);
+        this.audio.riftOpen(c, 'exit');
+        this.audio.parryOpen(c);
+        this.fx.ring(_v2.copy(b.pos).setY(b.pos.y + 0.05), 3.2, 0.5, COL_EXIT);
+        this.renderer.grade.uniforms.uFlash.value = Math.max(this.renderer.grade.uniforms.uFlash.value, 0.6);
+        this.rig.kick = Math.max(this.rig.kick, 0.8);
+        navigator.vibrate?.(25);
+      } else if (!this.meter.ready) this.audio.ui('deny');
+    }
+    this.powerAim = null;
+    if (P.phase === 'held') {
+      // untouchable while time is stopped (and through the chain)
+      this.dodgeSafeUntil = Math.max(this.dodgeSafeUntil, this.time + FLOW.power.safe);
+      const ray = this.rig.aimRay();
+      const touch = inp.lastDevice === 'touch';
+      const e = aimedEnemy(this.level.world, this.enemies.list, (x) => this.zones.active.has(x.def.zone), ray.origin, ray.dir, this.player.eye(_v3), { range: FLOW.power.range, loose: true });
+      this.powerAim = e;
+      let mark = !!e && inp.wasPressed('portal');
+      // a thumb: resting the crosshair on him marks him
+      if (e && touch) {
+        if (this.powerDwell.id !== e.id) this.powerDwell = { id: e.id, t: 0 };
+        this.powerDwell.t += realDt;
+        if (this.powerDwell.t >= FLOW.power.dwell) mark = true;
+      } else this.powerDwell.id = -1;
+      if (mark && e && P.mark(e.id)) {
+        this.audio.laserLock(e.chest(_v));
+        this.fx.ring(_v.copy(e.pos).setY(e.pos.y + 0.05), 1.4, 0.3, COL_ENTRANCE);
+        this.hud.callout(t('flow.call.mark', { n: P.marks.length, max: FLOW.power.maxMarks }), 'parry');
+        navigator.vibrate?.(12);
+      }
+    }
+    const held = P.phase === 'held' && inp.isHeld('power');
+    const r = P.update(realDt);
+    if (P.phase === 'held' && (!held || r.expired)) {
+      if (P.release()) {
+        this.meter.spend();
+        this.audio.riftPass(b.pos, 20);
+        this.hud.callout(t('flow.call.power'), 'finisher');
+      } else this.audio.riftClose(b.pos);
+    }
+    if (P.phase === 'chain') this.dodgeSafeUntil = Math.max(this.dodgeSafeUntil, this.time + FLOW.power.safe);
+    if (r.strike !== null) this.powerStrike(r.strike, P.step);
+    if (r.done) {
+      // the chain is over: a slow beat, then you're running again
+      this.slowT = Math.max(this.slowT, FLOW.power.afterT);
+      this.slowScale = FLOW.power.afterScale;
+      this.dodgeSafeUntil = Math.max(this.dodgeSafeUntil, this.time + FLOW.power.safe);
+    }
+  }
+
+  /** One link of the chain: through a rift to just past him, and he's done. */
+  private powerStrike(id: number, n: number) {
+    const e = this.enemies.get(id);
+    if (!e || !e.alive) return;
+    const P = FLOW.power;
+    const p = this.player;
+    const b = p.body;
+    const from = b.pos.clone();
+    const dir = new THREE.Vector3(e.pos.x - from.x, 0, e.pos.z - from.z);
+    if (dir.lengthSq() < 1e-4) this.lookFlat(dir);
+    dir.normalize();
+    // where you come out: past him (room to stand), else this side of him, else on him
+    const world = this.level.world;
+    const reach = e.radius + P.past;
+    const to = new THREE.Vector3();
+    let found = false;
+    for (const d of [reach, -reach]) {
+      to.set(e.pos.x + dir.x * d, e.pos.y, e.pos.z + dir.z * d);
+      if (!world.overlapsCylinder(to.x, to.z, FEEL.playerRadius, to.y + 0.15, to.y + FEEL.playerHeight)) {
+        found = true;
+        break;
+      }
+    }
+    if (!found) to.copy(e.pos);
+    // the rift you go in by, and the one you come out of
+    this.fx.riftBurst(_v.copy(from).setY(from.y + 1), dir, COL_EXIT);
+    this.fx.ring(_v.copy(from).setY(from.y + 0.05), 1.6, 0.3, COL_EXIT);
+    this.audio.riftOpen(_v.copy(from).setY(from.y + 1), 'entrance');
+    const yaw = Math.atan2(dir.x, dir.z);
+    p.endLunge();
+    p.teleport(to, yaw);
+    b.vel.set(dir.x * P.exitSpeed, 2.5, dir.z * P.exitSpeed);
+    this.playerFling = false;
+    this.powerYaw = yaw;
+    this.fx.riftBurst(_v.copy(to).setY(to.y + 1), dir, COL_ENTRANCE);
+    // the strike
+    const c = e.chest(new THREE.Vector3());
+    const info: HitInfo = { source: 'blade', amount: e.kind === 'boss' ? P.bossDamage : 9999, charged: false, team: 'player', instigator: 'player', from: from.clone(), dir: dir.clone() };
+    this.withKill({ byPlayer: true }, () => this.enemies.hit(e, info));
+    this.audio.riftPass(to, 22);
+    this.audio.bladeFinish(c);
+    this.audio.impact(c, 14);
+    this.fx.sparks(c, dir, COL_SPARK, 34);
+    this.fx.flash(c, 6, 0.3, 0x7ff4ff);
+    this.fx.ring(c, 2.4, 0.35, COL_EXIT);
+    this.hitstop = Math.max(this.hitstop, P.hitstop);
+    this.rig.shake = Math.max(this.rig.shake, P.shake);
+    this.rig.kick = 1;
+    this.renderer.grade.uniforms.uFlash.value = Math.max(this.renderer.grade.uniforms.uFlash.value, 0.85);
+    this.hud.callout(t('flow.call.strike', { n }), 'finisher');
+    navigator.vibrate?.([30, 20, 45]);
+  }
+
+  /** FLOW's HUD: the POWER bar, the speed lines, the lit men while POWER is held. */
+  private updateFlowHud(flow: boolean, realDt: number) {
+    void realDt;
+    const hud = this.lab?.hud;
+    if (!hud) return;
+    if (!flow) {
+      hud.setFlow(null);
+      this.touch?.setFlow(false);
+      return;
+    }
+    const b = this.player.body;
+    const hs = Math.hypot(b.vel.x, b.vel.z);
+    hud.setFlow({
+      meter: this.meter.value,
+      phase: this.power.phase,
+      marks: this.power.marks.length,
+      speed: THREE.MathUtils.clamp((hs - FLOW_SPRINT * 0.85) / 8, 0, 1),
+    });
+    if (this.power.phase === 'held') this.hud.setCrossHot(!!this.powerAim);
+    this.touch?.setFlow(true, this.meter.ready);
   }
 
   /** The blade turned aside by a man on his guard: a clang, he reels a moment, you're pushed off. */
@@ -3120,6 +3333,17 @@ export class Game {
       for (const e of this.enemies.list) if (e.alive && this.zones.active.has(e.def.zone)) project(_v2.copy(e.pos).setY(e.pos.y + e.height + 0.3), 'target', t(`state.${e.searching ? 'suspicious' : e.state}`));
       for (const g of this.level.gates) if (this.zones.active.has(g.zone)) project(g.panel, 'gate');
     }
+    // FLOW's POWER held: every man in reach is lit; the marked ones are numbered
+    if (this.lab && this.power.phase !== 'idle') {
+      const me = this.player.body.pos;
+      for (const e of this.enemies.list) {
+        if (!e.alive || !this.zones.active.has(e.def.zone) || e.pos.distanceTo(me) > FLOW.power.range) continue;
+        const i = this.power.marks.indexOf(e.id);
+        project(_v2.copy(e.pos).setY(e.pos.y + e.height * 0.6), i >= 0 ? 'marked' : 'power', i >= 0 ? String(i + 1) : undefined);
+      }
+      this.hud.setMarkers(list);
+      return;
+    }
     // the lab: the last two of a wave are marked where they are
     if (this.lab) {
       const st = this.lab.standing();
@@ -3198,7 +3422,7 @@ export class Game {
     let m = 0;
     let arc: (typeof this.telegraphs)[number] | null = null;
     // ONSLAUGHT keeps its colours apart: ORANGE gunfire (parry it), RED melee (dodge it)
-    const ons = activeVariant() === 'onslaught';
+    const ons = onslaughtOn();
     for (const th of this.telegraphs) {
       if (th.kind === 'arc') {
         arc = th;

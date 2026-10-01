@@ -5,6 +5,7 @@ import type { CharacterAPI, DynBody, ImpactInfo, LocomotionInput, PhysicsAPI, Ph
 import type { CollisionWorld } from '../world/collision';
 import { Body } from '../sim/physics';
 import { yawOf } from './portalMath';
+import { FLOW, FLOW_SPRINT, FLOW_WALK, flowOn } from './flow';
 
 export interface PlayerInput {
   /** Stick / WASD (x right, y forward) in camera space. */
@@ -18,6 +19,8 @@ export interface PlayerInput {
   crouch: boolean;
   /** Pressed this frame. */
   shove: boolean;
+  /** FLOW: crouch pressed this frame (at a run it's a SLIDE). */
+  slide?: boolean;
 }
 
 export interface PlayerEvents {
@@ -27,9 +30,15 @@ export interface PlayerEvents {
   fallDamage(amount: number): void;
   shoved(from: V3, dir: V3): void;
   crossed(from: RiftEnd, to: RiftEnd, yawDelta: number, speed: number): void;
+  /** FLOW: a jump in the air (off a wall, or the double jump). */
+  airJump?(pos: V3, wall: boolean): void;
+  /** FLOW: a slide starts. */
+  slid?(pos: V3): void;
 }
 
 const _v = new THREE.Vector3();
+const _o = new THREE.Vector3();
+const _n = new THREE.Vector3();
 const SHOVE_SPEED = LAW.shove.distance / FEEL.shoveTime;
 
 /**
@@ -63,6 +72,12 @@ export class Player {
   private readonly lungeDir = new THREE.Vector3();
   private jumpBuf = 0;
   private coyote = 0;
+  // FLOW (flow.ts): the slide, the jumps left in the air, the wall kick's lockout
+  /** Seconds of slide left (0: not sliding). */
+  slideT = 0;
+  private slideCd = 0;
+  airJumps = 0;
+  private wallCd = 0;
   private physEv: PhysicsEvents | null = null;
   private ev: PlayerEvents | null = null;
   private readonly wrapped: PhysicsEvents;
@@ -166,6 +181,7 @@ export class Player {
     }
     if (yaw !== undefined) this.yaw = yaw;
     this.mantle = null;
+    this.slideT = 0;
     this.shoveT = 0;
     this.lungeT = 0;
     this.airTime = 0;
@@ -177,9 +193,28 @@ export class Player {
     this.ev = ev;
     const b = this.body;
     this.shoveCooldown = Math.max(0, this.shoveCooldown - dt);
+    // FLOW: faster legs, a sharper turn, real air control (everyone else: FEEL as always)
+    const flow = flowOn();
+    const walkSpeed = flow ? FLOW_WALK : FEEL.walkSpeed;
+    const sprintSpeed = flow ? FLOW_SPRINT : FEEL.sprintSpeed;
+    const accel = flow ? FLOW.move.accel : FEEL.accel;
+    this.slideCd = Math.max(0, this.slideCd - dt);
+    this.wallCd = Math.max(0, this.wallCd - dt);
+    if (!flow) this.slideT = 0;
+    if (b.onGround) this.airJumps = flow ? FLOW.jump.airJumps : 0;
+    // FLOW: crouch at a run is a SLIDE (a burst of speed that keeps going, low)
+    const hs0 = Math.hypot(b.vel.x, b.vel.z);
+    if (flow && input.slide && b.onGround && !this.mantle && this.slideT <= 0 && this.slideCd <= 0 && !this.carrying && this.lungeT <= 0 && this.shoveT <= 0 && hs0 >= FLOW.slide.minSpeed) {
+      const k = (hs0 + FLOW.slide.boost) / hs0;
+      b.vel.x *= k;
+      b.vel.z *= k;
+      this.slideT = FLOW.slide.maxTime;
+      this.slideCd = FLOW.slide.cooldown;
+      ev.slid?.(b.pos.clone());
+    }
 
     // crouch (stand up only with headroom)
-    let crouch = input.crouch && !this.mantle;
+    let crouch = (input.crouch || this.slideT > 0) && !this.mantle;
     if (!crouch && this.crouched && world.ceilingAt(b.pos.x, b.pos.z, FEEL.playerRadius * 0.7, b.pos.y + 0.5) < b.pos.y + FEEL.playerHeight + 0.02) crouch = true;
     this.crouched = crouch;
     this.crouchT = THREE.MathUtils.damp(this.crouchT, crouch ? 1 : 0, 12, dt);
@@ -215,7 +250,7 @@ export class Player {
       dirZ /= dl;
     }
     this.sprinting = input.sprint && !this.crouched && !this.carrying && inputMag > 0.5;
-    const maxSpeed = this.carrying ? FEEL.carrySpeed : this.sprinting ? FEEL.sprintSpeed : this.crouched ? FEEL.crouchSpeed : FEEL.walkSpeed;
+    const maxSpeed = this.carrying ? FEEL.carrySpeed : this.sprinting ? sprintSpeed : this.crouched ? FEEL.crouchSpeed : walkSpeed;
     const want = inputMag > 0 ? maxSpeed * Math.max(inputMag, 0.35) : 0;
     const tx = dirX * want, tz = dirZ * want;
 
@@ -243,7 +278,14 @@ export class Player {
       const s = this.shoveT > 0 ? SHOVE_SPEED : want;
       b.vel.x = this.shoveDir.x * s;
       b.vel.z = this.shoveDir.z * s;
-    } else if (b.onGround && b.charge > 0 && Math.hypot(b.vel.x, b.vel.z) > FEEL.sprintSpeed) {
+    } else if (this.slideT > 0 && b.onGround) {
+      // FLOW's slide: bleeds speed, steers a little, ends slow or late (a jump out of it keeps it all)
+      const S = FLOW.slide;
+      this.slideT -= dt;
+      const hs1 = Math.max(0, Math.hypot(b.vel.x, b.vel.z) - S.decel * dt);
+      this.steer(hs1, want > 0, dirX, dirZ, S.steer * dt);
+      if (hs1 < S.endSpeed) this.slideT = 0;
+    } else if (b.onGround && b.charge > 0 && Math.hypot(b.vel.x, b.vel.z) > sprintSpeed) {
       // rift slide: momentum skids off instead of stopping dead; a little steering
       const hs0 = Math.hypot(b.vel.x, b.vel.z);
       const hs1 = Math.max(0, hs0 - FEEL.slideDecel * dt);
@@ -261,21 +303,30 @@ export class Player {
       if (!this.sliding) this.char.play('roll', { fade: 0.06 });
       this.sliding = true;
     } else if (b.onGround) {
-      const a = 1 - Math.exp(-FEEL.accel * dt);
-      b.vel.x += (tx - b.vel.x) * a;
-      b.vel.z += (tz - b.vel.z) * a;
-    } else if (want > 0) {
-      // air: only add toward the wish direction, never brake momentum without input
-      const control = b.charge > 0 ? FEEL.chargedAirControl : FEEL.airControl;
-      const cur = b.vel.x * dirX + b.vel.z * dirZ;
-      const add = Math.min(FEEL.accel * control * maxSpeed * dt, want - cur);
-      if (add > 0) {
-        b.vel.x += dirX * add;
-        b.vel.z += dirZ * add;
+      const hs = Math.hypot(b.vel.x, b.vel.z);
+      if (flow && want > 0 && hs > maxSpeed + 0.1 && (b.vel.x * dirX + b.vel.z * dirZ) / hs > 0.5) {
+        // FLOW: over the cap (a slide, a kick, a rift) and still pushing on: the speed bleeds, it doesn't stop
+        this.steer(Math.max(maxSpeed, hs - FLOW.move.overspeedDecel * dt), true, dirX, dirZ, FLOW.slide.steer * 2 * dt);
+      } else {
+        const a = 1 - Math.exp(-accel * dt);
+        b.vel.x += (tx - b.vel.x) * a;
+        b.vel.z += (tz - b.vel.z) * a;
+      }
+    } else {
+      if (this.slideT > 0) this.slideT = 0; // off a ledge: the slide is over, the speed isn't
+      if (want > 0) {
+        // air: only add toward the wish direction, never brake momentum without input
+        const control = b.charge > 0 ? FEEL.chargedAirControl : flow ? FLOW.move.airControl : FEEL.airControl;
+        const cur = b.vel.x * dirX + b.vel.z * dirZ;
+        const add = Math.min(accel * control * maxSpeed * dt, want - cur);
+        if (add > 0) {
+          b.vel.x += dirX * add;
+          b.vel.z += dirZ * add;
+        }
       }
     }
 
-    if (this.sliding && !(b.onGround && b.charge > 0 && Math.hypot(b.vel.x, b.vel.z) > FEEL.sprintSpeed)) this.sliding = false;
+    if (this.sliding && !(b.onGround && b.charge > 0 && Math.hypot(b.vel.x, b.vel.z) > sprintSpeed)) this.sliding = false;
 
     // --- facing ---
     const hs = Math.hypot(b.vel.x, b.vel.z);
@@ -297,8 +348,40 @@ export class Player {
       b.vel.y = FEEL.jumpSpeed;
       b.onGround = false;
       this.crouched = false;
+      this.slideT = 0;
       ev.jumped(b.pos.clone());
       this.char.play('jumpStart', { fade: 0.08 });
+    } else if (flow && this.jumpBuf > 0 && !b.onGround && this.shoveT <= 0 && !lunging) {
+      // FLOW in the air: a ledge in reach is climbed, a wall beside you kicked off, else the double jump
+      if (this.tryMantle(world)) {
+        this.jumpBuf = 0;
+        this.animate(dt, 1.2, true);
+        return;
+      }
+      if (this.airTime >= FLOW.wall.minAir && this.wallCd <= 0 && this.wallKick(world)) {
+        this.jumpBuf = 0;
+        this.wallCd = FLOW.wall.cooldown;
+        this.airJumps = FLOW.jump.airJumps;
+        ev.airJump?.(b.pos.clone(), true);
+        this.char.play('jumpStart', { fade: 0.06 });
+      } else if (this.airJumps > 0) {
+        this.jumpBuf = 0;
+        this.airJumps--;
+        // the second jump turns your flight toward the stick (its speed is kept)
+        const h = Math.hypot(b.vel.x, b.vel.z);
+        if (want > 0 && h > 0.5) {
+          const r = FLOW.jump.redirect;
+          let ux = b.vel.x / h + (dirX - b.vel.x / h) * r, uz = b.vel.z / h + (dirZ - b.vel.z / h) * r;
+          const ul = Math.hypot(ux, uz) || 1;
+          ux /= ul;
+          uz /= ul;
+          b.vel.x = ux * h;
+          b.vel.z = uz * h;
+        }
+        b.vel.y = Math.max(b.vel.y, FLOW.jump.doubleJumpSpeed);
+        ev.airJump?.(b.pos.clone(), false);
+        this.char.play('jumpStart', { fade: 0.06 });
+      }
     }
 
     // --- integrate: gravity, collision, rift crossings ---
@@ -324,6 +407,50 @@ export class Player {
     this.animate(dt, b.onGround ? Math.hypot(b.vel.x, b.vel.z) : hs, b.onGround);
   }
 
+  /** Set horizontal speed `hs`, turned `k` (0..1) toward the stick when it's pushed. */
+  private steer(hs: number, steer: boolean, dirX: number, dirZ: number, k: number) {
+    const b = this.body;
+    const h = Math.hypot(b.vel.x, b.vel.z);
+    if (h < 1e-4) return;
+    let ux = b.vel.x / h, uz = b.vel.z / h;
+    if (steer) {
+      const kk = Math.min(1, k);
+      ux += (dirX - ux) * kk;
+      uz += (dirZ - uz) * kk;
+      const ul = Math.hypot(ux, uz) || 1;
+      ux /= ul;
+      uz /= ul;
+    }
+    b.vel.x = ux * hs;
+    b.vel.z = uz * hs;
+  }
+
+  /** FLOW: the nearest wall beside you (8 ways round, waist high) kicks you off it. */
+  private wallKick(world: CollisionWorld): boolean {
+    const b = this.body;
+    const W = FLOW.wall;
+    _o.set(b.pos.x, b.pos.y + 0.9, b.pos.z);
+    let best = Infinity;
+    for (let k = 0; k < 8; k++) {
+      const a = (k * Math.PI) / 4;
+      const h = world.raycast(_o, _v.set(Math.sin(a), 0, Math.cos(a)), W.reach, { sight: false });
+      if (!h || h.distance >= best || Math.abs(h.normal.y) > 0.5) continue;
+      best = h.distance;
+      _n.set(h.normal.x, 0, h.normal.z).normalize();
+    }
+    if (best === Infinity) return false;
+    // keep the run along the wall, lose what went into it, then out and up
+    const into = b.vel.x * _n.x + b.vel.z * _n.z;
+    b.vel.x -= _n.x * into;
+    b.vel.z -= _n.z * into;
+    b.vel.x += _n.x * W.out;
+    b.vel.z += _n.z * W.out;
+    b.vel.y = Math.max(b.vel.y, W.up);
+    b.onGround = false;
+    this.yaw = Math.atan2(b.vel.x, b.vel.z);
+    return true;
+  }
+
   private animate(dt: number, speed: number, grounded: boolean) {
     const L = this.loco;
     L.speed = speed;
@@ -340,6 +467,13 @@ export class Player {
     const old = this.yaw;
     // out of a door / wall: face where you're going; floors and ceilings keep your yaw
     if (Math.abs(to.normal.y) < 0.5) this.yaw = yawOf(to.normal);
+    // FLOW: a rift is a way to travel: out of a door or a wall, a little faster than in (to a cap)
+    if (flowOn() && Math.abs(to.normal.y) < 0.5) {
+      const v = this.body.vel;
+      const s = v.length();
+      const k = Math.min(FLOW.portal.exitBoost, Math.max(1, FLOW.portal.cap / Math.max(s, 1e-3)));
+      v.multiplyScalar(k);
+    }
     this.shoveT = 0;
     this.lungeT = 0;
     let d = this.yaw - old;

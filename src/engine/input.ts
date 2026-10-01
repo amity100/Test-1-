@@ -22,13 +22,13 @@ export const LOOK = {
  * distance, G flips hatch / door. STRIKES: RMB (or 1) REFLECT, Q (2) LOOP,
  * E (3) SWAP, R (4) DASH; mouse back / forward = SWAP / DASH. X / MMB close
  * your rifts; F action; Space jump; Shift sprint; C crouch; V shove; Tab
- * vision; T clip; K photo; Esc / P pause.
+ * vision; T clip; K photo; Esc / P pause; Z POWER (the lab's FLOW only).
  *
  * Gamepad (standard mapping): RT PORTAL (held: LT cancels, Y flips, D-pad
  * left/right exit distance); LT REFLECT, Y LOOP, D-pad left/right SWAP /
  * DASH; LB close, RB shove, A jump, X action, B crouch, L3 sprint (latches
  * until the stick is released), D-pad down vision, D-pad up photo, View
- * clip, Start pause; right stick look, left stick move.
+ * clip, Start pause, R3 POWER (FLOW); right stick look, left stick move.
  */
 export class Input {
   moveX = 0;
@@ -86,6 +86,8 @@ export class Input {
     KeyE: 'strike3',
     Digit4: 'strike4',
     KeyR: 'strike4',
+    // the lab's FLOW: held = the POWER moment (nothing else reads it)
+    KeyZ: 'power',
   };
 
   constructor(private canvas: HTMLElement) {
@@ -316,6 +318,7 @@ export class Input {
     hold(12, 'photo'); // D-pad up
     hold(8, 'clip'); // View / Back
     hold(9, 'pause'); // Start
+    hold(11, 'power'); // R3 (FLOW)
     // L3 latches sprint until pressed again or the stick is let go
     edge(
       10,

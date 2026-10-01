@@ -1,4 +1,5 @@
 import { fmtTime, LAB_TOOLS, type LabRunStats, type LabTool } from '../game/labdirector';
+import { FLOW } from '../game/flow';
 import { VARIANTS, type CombatVariant } from '../game/variant';
 import { formatNumber, getDevice, onLangChange, t } from './i18n';
 
@@ -38,6 +39,43 @@ export function precisionRules(): string {
   return `<small class="pr-title">${esc(t('prec.title'))}</small>${rows}`;
 }
 
+/** FLOW's own rules (on top of PRECISION's). */
+export const FLOW_RULES = ['slide', 'jump', 'power'] as const;
+
+/** The key each FLOW rule is on, per device (touch: the button's own label). */
+const FLOW_KEYS: Record<(typeof FLOW_RULES)[number], { kbm: string; pad: string; touch: string }> = {
+  slide: { kbm: 'C', pad: 'B', touch: 'touch.crouch' },
+  jump: { kbm: 'SPACE', pad: 'A', touch: 'touch.jump' },
+  power: { kbm: 'Z', pad: 'R3', touch: 'touch.power' },
+};
+
+/** The POWER key's label on this device. */
+export function powerKey(): string {
+  const m = FLOW_KEYS.power;
+  const dev = getDevice();
+  return dev === 'touch' ? t(m.touch) : dev === 'pad' ? m.pad : m.kbm;
+}
+
+export function flowRules(): string {
+  const dev = getDevice();
+  const rows = FLOW_RULES.map((k) => {
+    const m = FLOW_KEYS[k];
+    const key = dev === 'touch' ? t(m.touch) : dev === 'pad' ? m.pad : m.kbm;
+    return `<div class="fr-${k}"><kbd>${esc(key)}</kbd><span>${esc(t(`flow.${k}`))}</span></div>`;
+  }).join('');
+  return `<small class="pr-title fr-title">${esc(t('flow.title'))}</small>${rows}`;
+}
+
+/** What FLOW's HUD shows: the POWER meter and its state, speed (for the lines). */
+export interface FlowHudState {
+  /** 0..1. */
+  meter: number;
+  phase: 'idle' | 'held' | 'chain';
+  marks: number;
+  /** 0..1: how hard the speed lines show. */
+  speed: number;
+}
+
 /** Short labels for the tool grid. */
 export const TOOL_KEY: Record<LabTool, string> = {
   grab: 'lab.tool.grab',
@@ -63,14 +101,33 @@ export class LabHud {
   private shown = false;
   private unsub: () => void;
   private last: LabHudState | null = null;
+  /** FLOW: the POWER bar (bottom centre), the speed lines and the stopped-time veil (full screen). */
+  private flowEl: HTMLDivElement;
+  private flowFill: HTMLElement;
+  private flowLbl: HTMLElement;
+  private linesEl: HTMLDivElement;
+  private stopEl: HTMLDivElement;
+  private flowKey = '';
 
   constructor(private host: HTMLElement) {
     this.el = document.createElement('div');
     this.el.className = 'lab-panel';
     this.banner = document.createElement('div');
     this.banner.className = 'lab-banner';
+    this.linesEl = document.createElement('div');
+    this.linesEl.className = 'flow-lines';
+    this.stopEl = document.createElement('div');
+    this.stopEl.className = 'flow-stop';
+    this.flowEl = document.createElement('div');
+    this.flowEl.className = 'flow-meter';
+    this.flowEl.innerHTML = '<div class="fm-head"><small></small><b></b></div><div class="fm-bar"><i></i></div>';
+    this.flowFill = this.flowEl.querySelector('.fm-bar i') as HTMLElement;
+    this.flowLbl = this.flowEl.querySelector('.fm-head b') as HTMLElement;
+    host.appendChild(this.linesEl);
+    host.appendChild(this.stopEl);
     host.appendChild(this.el);
     host.appendChild(this.banner);
+    host.appendChild(this.flowEl);
     this.el.addEventListener('pointerdown', (e) => {
       const b = (e.target as Element).closest('[data-v]') as HTMLElement | null;
       if (!b) return;
@@ -81,8 +138,36 @@ export class LabHud {
     this.build();
     this.unsub = onLangChange(() => {
       this.build();
+      this.flowKey = '';
       if (this.last) this.update(this.last);
     });
+  }
+
+  /** FLOW's meter and overlays (null: not FLOW, all hidden). DOM writes only on a change. */
+  setFlow(s: FlowHudState | null) {
+    const on = !!s && this.shown;
+    const pct = s ? Math.round(Math.min(1, Math.max(0, s.meter)) * 100) : 0;
+    const ready = !!s && s.meter >= 1;
+    const lines = s ? Math.round(s.speed * 20) / 20 : 0;
+    const key = on && s ? `${pct}|${s.phase}|${s.marks}|${ready}|${lines}|${getDevice()}` : 'off';
+    if (key === this.flowKey) return;
+    this.flowKey = key;
+    this.flowEl.classList.toggle('on', on);
+    this.linesEl.style.opacity = on ? String(lines) : '0';
+    this.stopEl.classList.toggle('on', on && !!s && s.phase !== 'idle');
+    if (!on || !s) return;
+    (this.flowEl.querySelector('.fm-head small') as HTMLElement).textContent = t('flow.meter');
+    this.flowFill.style.width = `${pct}%`;
+    this.flowEl.classList.toggle('ready', ready && s.phase === 'idle');
+    this.flowEl.classList.toggle('held', s.phase !== 'idle');
+    this.flowLbl.textContent =
+      s.phase === 'held'
+        ? t('flow.held', { n: s.marks, max: FLOW.power.maxMarks })
+        : s.phase === 'chain'
+          ? t('flow.chain')
+          : ready
+            ? t('flow.ready', { key: powerKey() })
+            : `${pct}%`;
   }
 
   private build() {
@@ -118,6 +203,7 @@ export class LabHud {
   show(on: boolean) {
     this.shown = on;
     this.el.classList.toggle('on', on);
+    if (!on) this.setFlow(null);
     if (!on) this.banner.className = 'lab-banner';
   }
 
@@ -149,11 +235,11 @@ export class LabHud {
       this.set(`k.${k}`, String(s.stats.kills[k]));
     }
     this.set('kills', formatNumber(n));
-    // PRECISION / ONSLAUGHT: the rules card (CSS hides it under CURRENT)
-    const dev = getDevice();
+    // PRECISION / ONSLAUGHT / FLOW: the rules card (CSS hides it under CURRENT); FLOW adds its own lines
+    const dev = `${getDevice()}|${s.variant === 'flow'}`;
     if (dev !== this.rulesDev) {
       this.rulesDev = dev;
-      this.set('rules', precisionRules(), true);
+      this.set('rules', s.variant === 'flow' ? flowRules() + precisionRules() : precisionRules(), true);
     }
   }
 
@@ -184,6 +270,9 @@ export class LabHud {
     this.unsub();
     this.el.remove();
     this.banner.remove();
+    this.flowEl.remove();
+    this.linesEl.remove();
+    this.stopEl.remove();
   }
 
   get parent() {

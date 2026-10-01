@@ -933,7 +933,9 @@ export type Action =
   | 'portal' | 'close' | 'action' | 'jump' | 'sprint' | 'crouch' | 'shove'
   | 'flip' | 'vision' | 'clip' | 'photo' | 'pause'
   /** The STRIKES: REFLECT, LOOP, SWAP, DASH. */
-  | 'strike1' | 'strike2' | 'strike3' | 'strike4';
+  | 'strike1' | 'strike2' | 'strike3' | 'strike4'
+  /** COMBAT LAB, FLOW only: held = the POWER moment. */
+  | 'power';
 
 export interface AimInfo {
   valid: boolean;
@@ -960,7 +962,7 @@ export interface ScreenMarker {
   y: number;
   onScreen: boolean;
   angle: number;
-  kind: 'threat' | 'objective' | 'target' | 'gate';
+  kind: 'threat' | 'objective' | 'target' | 'gate' | 'power' | 'marked';
   label?: string;
 }
 

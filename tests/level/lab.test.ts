@@ -309,7 +309,7 @@ describe('COMBAT LAB: variants and kill credit', () => {
     expect(activeVariant()).toBe('onslaught');
     setVariant('bogus');
     expect(activeVariant()).toBe('current');
-    expect(['F1', 'F2', 'F3', 'F4'].map(variantForKey)).toEqual(['current', 'precision', 'onslaught', null]);
+    expect(['F1', 'F2', 'F3', 'F4', 'F5'].map(variantForKey)).toEqual(['current', 'precision', 'onslaught', 'flow', null]);
     expect(readSettings(null).combatVariant).toBe('current');
     expect(readSettings(JSON.stringify({ combatVariant: 'precision' })).combatVariant).toBe('precision');
     expect(readSettings(JSON.stringify({ combatVariant: 'nope' })).combatVariant).toBe('current');
