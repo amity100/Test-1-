@@ -1,6 +1,7 @@
 // Score harness: renders the opening film's score + sound design offline through AudioEngine.renderOffline (the
-// runtime code path), driven exactly like src/gameplay/Intro.ts drives it, and downloads float WAVs. Used by the
-// headless verification (dev/screens/score4/). Every time comes from the live shot sheet (INTRO_CUES, CUT v3).
+// runtime code path), driven exactly like src/gameplay/Intro.ts + Story.ts drive it, and downloads float WAVs; plus
+// the bear's hook in gameplay (the 'birdsScatter' / 'eyesSting' sounds and the 'hush' mood). Used by the headless
+// verification (dev/screens/score5/). Every film time comes from the live shot sheet (INTRO_CUES, CUT v4).
 import { AudioEngine, type OfflineRenderOptions } from '../src/audio/AudioEngine';
 import { INTRO_CUES, beatTime, type IntroCue } from '../src/content/introScript';
 
@@ -11,37 +12,39 @@ const lengthOf = (cs: readonly IntroCue[]): number => cs.reduce((m, c) => (c.sho
 const END_T = lengthOf(INTRO_CUES);
 /** Start of the first shot whose cue is one of `cues` (NaN when none). */
 const cueT = (...cues: string[]): number => (INTRO_CUES.find((c) => c.shot && cues.includes(String(c.cue))) ?? { t: NaN }).t;
-/** Start of the first shot with one of these ids (NaN when none). */
-const shotStart = (...ids: string[]): number => (INTRO_CUES.find((c) => c.shot && ids.includes(String(c.shot))) ?? { t: NaN }).t;
 
 /**
- * The film's call pattern (Intro.ts): playIntro at 0, syncIntro(filmClock) every frame, titleHit on the title,
- * stopIntro(2.5) + ambience('fields') at the end, then Story's music('pastoral', 4). `clock(t)` maps audio time ->
- * film clock (stalls).
+ * The film's call pattern: playIntro at 0, syncIntro(filmClock) every frame until the end; at the end Intro.end(false)
+ * (stopIntro(2.5)), Intro.finish (ambience('fields', 2)) and Story's music('pastoral', 4) — `end: 'mood'` leaves the
+ * stopIntro out. A skip (Intro.end(true)): sfx('titleHit') (the score jumps to its logo statement), ambience('fields'),
+ * then Story's music('pastoral', 4) 3.4 s later. `clock(t)` maps audio time -> film clock (stalls, seeks).
  */
-function filmCalls(clock: (t: number) => number, skipAt = Infinity) {
+function filmCalls(clock: (t: number) => number, skipAt = Infinity, end: 'stop' | 'mood' = 'stop') {
   let skipped = false;
+  let done = false;
+  let skipT = 0;
   let prev = -1;
   return (e: AudioEngine, t: number): void => {
     if (t === 0) e.playIntro(INTRO_CUES, 0);
     if (skipped) {
-      if (at(t, skipAt + 3.4)) e.setMusicMood('pastoral', 4);
+      if (at(t, skipT + 3.4)) e.setMusicMood('pastoral', 4);
       return;
     }
+    if (done) return;
     const f = clock(t);
     e.syncIntro(f);
-    const cross = (x: number): boolean => prev < x && f >= x;
-    // Intro.ts's own one-shots in the hook (as cut5 keys them: a far growl 0.6 s before the lamb lifts its head; the
-    // lamb's bleat just after H2 opens, before the eyes)
-    if (cross(shotStart('thicket') + Math.max(0.3, beatTime('thicket', 'lambHead') - shotStart('thicket') - 0.6))) e.sfx('bearGrowl', { volume: 0.28, pitch: 0.7 });
-    if (cross(shotStart('eyes', 'lamb') + Math.min(0.25, (beatTime('eyes', 'eyesOpen') - shotStart('eyes', 'lamb')) * 0.3))) e.sfx('lambBleat', { volume: 0.5 });
-    if (cross(cueT('title'))) e.sfx('titleHit');
-    if (cross(END_T)) { e.stopIntro(2.5); e.setAmbienceBed('fields', 2); e.setMusicMood('pastoral', 4); }
+    if (prev < END_T && f >= END_T) {
+      done = true;
+      if (end === 'stop') e.stopIntro(2.5);
+      e.setAmbienceBed('fields', 2);
+      e.setMusicMood('pastoral', 4);
+      return;
+    }
     if (t >= skipAt) {
-      // Intro.end(skipped): no stopIntro while the score plays, the title hit (jumps the score to its title)
       skipped = true;
+      skipT = t;
       e.sfx('titleHit');
-      e.setAmbienceBed('fields', 1);
+      e.setAmbienceBed('fields', 2);
     }
     prev = f;
   };
@@ -49,22 +52,47 @@ function filmCalls(clock: (t: number) => number, skipAt = Infinity) {
 const straight = (t: number): number => t;
 /** a picture stall (a loading hitch) of `len` s at film time `at`: the film clock stands still, then runs on */
 const stall = (at: number, len: number) => (t: number): number => (t < at ? t : t < at + len ? at : t - len);
-/** CUT v3: the blast that brings the picture in out of the black, and THE ROAR (film times from the sheet's beats) */
-const BLAST = beatTime('dust', 'shofar');
-const ROAR = beatTime('spear', 'roar');
-const STALL_AT = BLAST - 0.8;
-const STALL2_AT = ROAR - 0.6;
+/** CUT v4: the logo over the panorama and its rise (film times from the sheet's beats) */
+const LOGO = beatTime('horizon', 'logo');
+const RISE = beatTime('horizon', 'rise');
+const STALL_AT = LOGO - 0.6;
+const SKIP_EARLY = cueT('saul') + 1;
+const SKIP_D3 = RISE + 0.5;
+const SEEK_TO = cueT('face') + 1;
+
+/**
+ * The bear's hook as Story.bearAttack plays it (cut6's BearHook: H1 3.0 s + H2 2.2 s, its cues in hook seconds — the
+ * birds fly up at 0.45 (birdsScatter), fall silent at 1.0 (music('hush', 1.2)), the lamb bleats at 3.25 (a positional
+ * lambBleat, ≈0.2 after distance), the eyes open at 3.9 (eyesSting); the bear comes out at the end of the hook, 5.2
+ * (music('tension', 1.5) + ambience(0.6, 0.15, 0))) after 6 s of the chapter's pastoral music and fields bed.
+ */
+const H0 = 6.0;
+const HOOK = { scatter: H0 + 0.45, hush: H0 + 1.0, bleat: H0 + 3.25, eyes: H0 + 3.9, tension: H0 + 5.2 };
+function hookCalls() {
+  return (e: AudioEngine, t: number): void => {
+    if (t === 0) { e.setAmbienceBed('fields', 0.5); e.setMusicMood('pastoral', 1); }
+    if (at(t, HOOK.scatter)) e.sfx('birdsScatter');
+    if (at(t, HOOK.hush)) e.setMusicMood('hush', 1.2);
+    if (at(t, HOOK.bleat)) e.sfx('lambBleat', { volume: 0.2, pan: 0.3 });
+    if (at(t, HOOK.eyes)) e.sfx('eyesSting');
+    if (at(t, HOOK.tension)) { e.setMusicMood('tension', 1.5); e.setAmbience({ wind: 0.6, cicadas: 0.15, birds: 0 }); }
+  };
+}
 
 const JOBS: Record<string, Job> = {
   film: { seconds: END_T + 7, script: filmCalls(straight) },
   'film-lite': { seconds: END_T + 7, lite: true, script: filmCalls(straight) },
-  // a 1.4 s stall under the opening black (the blast must land on the late picture), and a 1.0 s stall before the roar
-  'film-stall': { seconds: STALL_AT + 8, script: filmCalls(stall(STALL_AT, 1.4)) },
-  'film-stall-roar': { seconds: STALL2_AT + 6, script: filmCalls(stall(STALL2_AT, 1.0)) },
-  'film-skip': { seconds: cueT('saul') + 9, script: filmCalls(straight, cueT('saul') + 1) },
-  // a seek (Intro.seek / ?introAt=): the film clock jumps from 5 s to the verdict - 2 s; the score must restart there
-  'film-seek': { seconds: 14, script: filmCalls((t) => (t < 5 ? t : t + cueT('verdict') - 7)) },
-  'bed-gilgal': { seconds: 14, script: (e, t) => { if (t === 0) e.setAmbienceBed('gilgal', 0.5); } },
+  // the end without Intro.end's stopIntro (only Story's music('pastoral')): the hand-off must be the same
+  'film-mood': { seconds: END_T + 7, script: filmCalls(straight, Infinity, 'mood') },
+  // a 1.0 s stall just before the logo: the arrival must land on the late picture
+  'film-stall': { seconds: END_T + 8, script: filmCalls(stall(STALL_AT, 1.0)) },
+  // skips: early (G2) and in the crane before the logo — the logo statement, then the score's own hand-off
+  'film-skip': { seconds: SKIP_EARLY + 14, script: filmCalls(straight, SKIP_EARLY) },
+  'film-skip-d3': { seconds: SKIP_D3 + 14, script: filmCalls(straight, SKIP_D3) },
+  // a seek (Intro.seek / ?introAt=): the film clock jumps from 5 s into D2; the score restarts there
+  'film-seek': { seconds: 5 + (END_T - SEEK_TO) + 7, script: filmCalls((t) => (t < 5 ? t : t + SEEK_TO - 5)) },
+  'bear-hook': { seconds: 18, script: hookCalls() },
+  'bear-hook-lite': { seconds: 18, lite: true, script: hookCalls() },
   'bed-fields': { seconds: 14, script: (e, t) => { if (t === 0) e.setAmbienceBed('fields', 0.5); } },
   'sfx-cinematic': { seconds: 10, script: (e, t) => {
     if (at(t, 0.2)) e.sfx('robeTear');
@@ -94,12 +122,15 @@ async function render(name: string): Promise<Record<string, unknown>> {
   const t0 = performance.now();
   let maxVoices = 0, sumVoices = 0, nV = 0, maxAt = 0;
   const busy: Array<[number, number]> = [];
+  const moods: Array<[number, string, boolean]> = [];
   const script: Job['script'] = (e, t) => {
     job.script(e, t);
     const v = e.voices;
     if (v > maxVoices) { maxVoices = v; maxAt = t; }
     if (v >= 45) busy.push([Math.round(t * 10) / 10, v]);
     sumVoices += v; nV++;
+    const last = moods[moods.length - 1];
+    if (!last || last[1] !== e.currentMood || last[2] !== e.introActive) moods.push([Math.round(t * 100) / 100, e.currentMood, e.introActive]);
   };
   let beats: unknown = null;
   const script2: Job['script'] = (e, t) => {
@@ -118,20 +149,24 @@ async function render(name: string): Promise<Record<string, unknown>> {
   a.download = name + '.wav';
   document.body.appendChild(a);
   a.click();
-  return { name, seconds: buf.duration, renderMs: Math.round(ms), peak, maxVoices, meanVoices: Math.round(sumVoices / Math.max(1, nV)), maxVoicesAt: Math.round(maxAt * 100) / 100, busy: busy.filter((_, i) => i % 4 === 0).slice(0, 40), sheet: 'live', beats };
+  return { name, seconds: buf.duration, renderMs: Math.round(ms), peak, maxVoices, meanVoices: Math.round(sumVoices / Math.max(1, nV)), maxVoicesAt: Math.round(maxAt * 100) / 100, busy: busy.filter((_, i) => i % 4 === 0).slice(0, 40), moods, sheet: 'live', beats };
 }
 
 (window as unknown as Record<string, unknown>).renderJob = render;
 const shotMarks = (): Array<[number, string]> => INTRO_CUES.filter((c) => c.shot).map((c) => [Math.round(c.t * 100) / 100, `${c.n}`]);
+const hookMarks: Array<[number, string]> = [[H0, 'hook'], [HOOK.scatter, 'birdsScatter'], [HOOK.hush, 'hush'], [HOOK.bleat, 'bleat'], [HOOK.eyes, 'eyesSting'], [HOOK.tension, 'tension']];
 (window as unknown as Record<string, unknown>).marks = {
   film: [...shotMarks(), [END_T, 'END']],
   'film-lite': [...shotMarks(), [END_T, 'END']],
-  'film-stall': [...shotMarks().filter((m) => m[0] < STALL_AT + 8), [STALL_AT, 'STALL'], [BLAST + 1.4, 'blast@late picture']],
-  'film-stall-roar': [...shotMarks().filter((m) => m[0] < STALL2_AT + 6), [STALL2_AT, 'STALL'], [ROAR + 1.0, 'roar@late picture']],
-  'film-skip': [...shotMarks().filter((m) => m[0] < cueT('saul') + 9), [cueT('saul') + 1, 'SKIP']],
-  'film-seek': [[5, 'SEEK'], [7, 'verdict']],
+  'film-mood': [...shotMarks(), [END_T, 'END']],
+  'film-stall': [...shotMarks(), [STALL_AT, 'STALL'], [LOGO + 1.0, 'logo@late picture'], [END_T + 1.0, 'END(late)']],
+  'film-skip': [...shotMarks().filter((m) => m[0] < SKIP_EARLY + 14), [SKIP_EARLY, 'SKIP'], [SKIP_EARLY + 3.4, 'pastoral req']],
+  'film-skip-d3': [...shotMarks().filter((m) => m[0] < SKIP_D3 + 14), [SKIP_D3, 'SKIP'], [SKIP_D3 + 3.4, 'pastoral req']],
+  'film-seek': [[5, 'SEEK'], [5 + cueT('horizon') - SEEK_TO, 'D3'], [5 + END_T - SEEK_TO, 'END']],
+  'bear-hook': hookMarks,
+  'bear-hook-lite': hookMarks,
 };
-(window as unknown as Record<string, unknown>).shots = INTRO_CUES.filter((c) => c.shot).map((c) => ({ t: c.t, id: c.shot, n: c.n, cue: c.cue, dur: c.dur, cut: c.cut }));
+(window as unknown as Record<string, unknown>).shots = INTRO_CUES.filter((c) => c.shot).map((c) => ({ t: c.t, id: c.shot, n: c.n, cue: c.cue, dur: c.dur, cut: c.cut, beats: c.beats }));
 (window as unknown as Record<string, unknown>).jobNames = Object.keys(JOBS);
 const btns = document.getElementById('btns') as HTMLElement;
 const log = document.getElementById('log') as HTMLElement;
@@ -142,52 +177,54 @@ for (const k of Object.keys(JOBS)) {
   btns.appendChild(b);
 }
 
-// realtime smoke test: the game's path (init(), playIntro mid-film, syncIntro every frame with a 0.8 s stall,
-// then the skip's titleHit and Story's music('pastoral')) on a real AudioContext
+// realtime smoke test: the game's path (init(), playIntro in the crane, syncIntro every frame with a 0.8 s stall before
+// the logo, the end of the film: stopIntro + music('pastoral') at the hand-off) on a real AudioContext
 (window as unknown as Record<string, unknown>).realtime = async (): Promise<Record<string, unknown>> => {
   const e = new AudioEngine();
   await e.init();
-  const start = cueT('peak') - 3;
+  const start = cueT('horizon') - 2;
   let film = start;
   let last = performance.now();
   const log: Array<[number, number]> = [];
   const tp = performance.now();
-  e.playIntro(INTRO_CUES, start); // plans the whole film + bakes the film buffers
+  e.playIntro(INTRO_CUES, start);
   const playIntroMs = Math.round(performance.now() - tp);
-  const stallAt = performance.now() + 2500;
+  const stallAt = performance.now() + (LOGO - 1.2 - start) * 1000;
+  let ended = false;
+  let moodAtEnd = '';
   await new Promise<void>((done) => {
     const iv = setInterval(() => {
       const now = performance.now();
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
       if (!(now > stallAt && now < stallAt + 800)) film += dt; // a stall: the picture stands still
-      e.syncIntro(film);
+      if (!ended) {
+        e.syncIntro(film);
+        log.push([Math.round(film * 1000) / 1000, Math.round(e.introTime() * 1000) / 1000]);
+        if (film >= END_T) { ended = true; e.stopIntro(2.5); e.setMusicMood('pastoral', 4); moodAtEnd = e.currentMood; }
+      }
       e.update(dt);
-      log.push([Math.round(film * 1000) / 1000, Math.round(e.introTime() * 1000) / 1000]);
-      if (now > stallAt + 4500) { clearInterval(iv); done(); }
+      if (film > END_T + 2) { clearInterval(iv); done(); }
     }, 16);
   });
-  const drift = log.map(([f, a]) => a - f);
+  const drift = log.map(([f, a]) => Math.abs(a - f)).filter((x) => Number.isFinite(x)).sort((x, y) => x - y);
+  const pct = (p: number): number => Math.round(1000 * (drift[Math.min(drift.length - 1, Math.floor(p * drift.length))] ?? NaN)) / 1000;
+  const hits = (e as unknown as { intro: { hitLog: Array<[number, number]> } }).intro.hitLog.slice();
   const out: Record<string, unknown> = {
-    state: e.context?.state, introActive: e.introActive, voices: e.voices, bed: e.ambienceBed,
-    maxAbsDriftAfterStall: Math.max(...drift.slice(-60).map(Math.abs)), samples: log.length, playIntroMs,
+    state: e.context?.state, introActiveAfterEnd: e.introActive, voices: e.voices, bed: e.ambienceBed, moodAtEnd, moodAfter: e.currentMood,
+    driftMedian: pct(0.5), drift95: pct(0.95), driftMax: pct(1), samples: log.length, playIntroMidFilmMs: playIntroMs, hits,
   };
-  out.bakeMs = Math.round((e as unknown as { intro: { bakeMs: number } }).intro.bakeMs);
-  // the film's own start (film time 0): playIntro must not carry the bakes
-  const e2 = new AudioEngine();
-  await e2.init();
-  const t2 = performance.now();
-  e2.playIntro(INTRO_CUES, 0);
-  out.playIntroAt0Ms = Math.round(performance.now() - t2);
-  await new Promise((r) => setTimeout(r, 1500));
-  e2.update(0.016);
-  out.bakeMsAt0 = Math.round((e2 as unknown as { intro: { bakeMs: number } }).intro.bakeMs);
-  e2.dispose();
-  e.sfx('titleHit');
-  await new Promise((r) => setTimeout(r, 600));
-  out.afterTitle = e.introTime();
-  e.setMusicMood('pastoral', 2);
-  out.introActiveAfterMood = e.introActive;
   e.dispose();
+  // the film's own start (film time 0, as Intro.ts calls it): planning cost, three times (the first carries the JIT)
+  const at0: number[] = [];
+  for (let k = 0; k < 3; k++) {
+    const e2 = new AudioEngine();
+    await e2.init();
+    const t2 = performance.now();
+    e2.playIntro(INTRO_CUES, 0);
+    at0.push(Math.round(performance.now() - t2));
+    e2.dispose();
+  }
+  out.playIntroAt0Ms = at0;
   return out;
 };

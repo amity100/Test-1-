@@ -1,6 +1,7 @@
 /**
- * DAVID — score and sound design of the opening film "הַטּוֹב מִמֶּךָּ", CUT v3 (60 s: six scenes, 13 long takes, no
- * prologue — docs/intro-script-v3.md "Sound"), synchronised to the film's shot sheet (src/content/introScript.ts).
+ * DAVID — score and sound design of the opening film "הַטּוֹב מִמֶּךָּ", CUT v4 (59 s: six scenes, no prologue; the film
+ * ends on the logo over the panorama and hands over to the game — docs/intro-script-v4.md "Sound" on top of
+ * docs/intro-script-v3.md), synchronised to the film's shot sheet (src/content/introScript.ts).
  *
  * KEYING. The sheet is read when the score starts. Every shot cue gets a musical ROLE (from its `cue`, else from its
  * set); consecutive shots with the same role form one section [t0, t1) with its own bus. The black the film opens on
@@ -9,11 +10,12 @@
  * on-screen text, or a named BEAT inside a shot — the beats of the timing contract (the blast, the horns, the head
  * turn, the halt, the spear, THE ROAR, the heads turning, the ranks parting, Samuel's step, the turn, the lunge, the
  * grip, the pull, the rip, the corner coming free, Samuel's words, the look down, the fingers tightening, the flash,
- * David's turn, the birds stopping, the lamb's head, the eyes, the title's lines). A beat is read from the shot's own
+ * David's turn, the crane rising, the logo, the Hebrew name, the chapter line, the settle). A beat is read from the shot's own
  * `beats` in the sheet (shot seconds), otherwise from the contract (SYNC below), and is clamped to its shot. Nothing
  * is keyed on absolute film seconds: a retimed sheet stays in sync. How a section is left comes from the NEXT shot's
- * transition: the blast out of the black and the smash (the title) cut the bus to silence a breath (GAP) before the
- * frame, the roar is cut ON the frame of the silence, dissolves and the light-flash crossfade over their length.
+ * transition: the blast out of the black cuts the bus to silence a breath (GAP) before the frame, the roar is cut ON
+ * the frame of the silence, dissolves and the light-flash crossfade over their length, David's theme rings on across
+ * the cut into the crane.
  * Events are built just ahead of the audio clock (≤ 0.5 s; the hits of the hard cuts only ≤ 60 ms ahead, so a
  * picture stall before a cut cannot make them early), and the film's clock (syncIntro) re-anchors the score after
  * hitches.
@@ -39,11 +41,15 @@
  *                SAUL ALONE: his motif on a lone cello, falling below the tonic into the warm light-flash.
  *   5 DAVID      a D-major bloom out of the light; the kinnor in 6/8 from the verse, David's motif (D A G F E F D) on
  *                the shepherd's pipe under 15:28b, soft voices; he turns into the light: the voices open, the kinnor
- *                and the pipe answer (in D major), the chord left on the dominant into the dissolve.
- *   6 THICKET    a few last birds fly up and fall silent ON the beat; a low rumble and a thin high tone; the heart from
- *                the lamb's head; leaves, a heavy breath; the eyes (a low sting); the heart quickens; a reverse swell —
- *                SMASH on the loudest hit of the film; DAVID forms from light; the title motif (the rising fifth D–A,
- *                then David's motif resolving in D major) on the kinnor and the pipe; the tail rings into gameplay.
+ *                and the pipe answer (in D major), the last bar on the dominant — which rings on across the cut:
+ *   6 THE LOGO   the crane: the deceptive Bm out of that dominant, then G and A — the strings swelling, the kinnor's
+ *                ostinato and the low strings' pulse building, the pipe's motif (major) rising, a timpani roll and a
+ *                warm riser — into a warm, majestic arrival ON the logo (D major: the tutti, the choir, a strum, the
+ *                motif's tonic; an arrival, not a smash); the theme's answer under the Hebrew name and the chapter line
+ *                (IV–V); from the settle the orchestra lets go into the game's 6/8 (the drone, the kinnor's pastoral
+ *                lilt, the pipe's last cadence) and at the end of the shot the score starts the game's pastoral music
+ *                ON its own bar line (onHandoff) and rings out under it: no silence, no seam.
+ * (The bear's hook — the thicket, the heart, the eyes — left the film in CUT v4: AudioEngine plays it in gameplay.)
  * Period instruments: shofar (1 Sam 13:3), tof, chalil, kinnor, nevel (10:5). The lyre is kept out of Saul's music
  * (it enters his house only after 16:23); drums are the score's, never on screen in Israel's army
  * (docs/visual-bible.md §6); no horses anywhere in the sound (Israel fought on foot, 15:4).
@@ -60,11 +66,12 @@ import { FilmSound } from './FilmSound';
 export type ScoreRole =
   | 'open'
   | 'shofar' | 'saul' | 'peak' | 'silence' | 'tear' | 'verdict' | 'broken'
-  | 'david' | 'thicket' | 'title';
+  | 'david' | 'horizon';
 
 /**
  * Role of a shot from its score cue (FilmCue of the sheet). The prologue's cues of CUT v1/v2 (land, rachel, threat,
- * elders) have no music any more: a shot with an unknown cue is left out (the section before it rings on).
+ * elders) and CUT v3's hook and title (thicket, title) have no music any more: a shot with an unknown cue is left out
+ * (the section before it rings on).
  */
 const ROLE_OF_CUE: Readonly<Record<string, ScoreRole>> = {
   shofar: 'shofar', army: 'shofar', dust: 'shofar',
@@ -75,15 +82,14 @@ const ROLE_OF_CUE: Readonly<Record<string, ScoreRole>> = {
   verdict: 'verdict',
   broken: 'broken', alone: 'broken', saulAlone: 'broken',
   rise: 'david', flash: 'david', bethlehem: 'david', figure: 'david', david: 'david', face: 'david', contrast: 'david',
-  peace: 'thicket', thicket: 'thicket', hook: 'thicket', lamb: 'thicket', eyes: 'thicket',
-  title: 'title',
+  horizon: 'horizon', logo: 'horizon', panorama: 'horizon', crane: 'horizon',
 };
 /** ... or from its set when the cue is unknown (a Gilgal shot without a known cue gets no music of its own). */
-const ROLE_OF_SET: Readonly<Record<string, ScoreRole>> = { world: 'david', black: 'title' };
+const ROLE_OF_SET: Readonly<Record<string, ScoreRole>> = { world: 'david' };
 
 /**
  * Beats inside the shots of each role: [index of the shot inside the role's section, shot seconds] — the timing
- * contract of docs/intro-script-v3.md, used only when the sheet lacks a beat. A beat the sheet carries itself (a shot
+ * contract of docs/intro-script-v3.md / -v4.md, used only when the sheet lacks a beat. A beat the sheet carries itself (a shot
  * cue's `beats`, shot seconds, same name or an ALIAS, case-insensitive) wins. Every beat is clamped to its shot.
  */
 const SYNC: Readonly<Record<ScoreRole, Readonly<Record<string, readonly [number, number]>>>> = {
@@ -96,8 +102,7 @@ const SYNC: Readonly<Record<ScoreRole, Readonly<Record<string, readonly [number,
   verdict: { turn: [0, 0.5], words: [0, 1.2], wordsEnd: [0, 4.9] },
   broken: { look: [0, 0.4], tighten: [0, 1.8], flash: [0, 2.75] },
   david: { verse: [0, 0.6], turn: [1, 0.8] },
-  thicket: { birds: [0, 0.5], lamb: [0, 1.8], eyes: [1, 0.9] },
-  title: { forms: [0, 0.3], name: [0, 1.6], chapter: [0, 2.4] },
+  horizon: { rise: [0, 0.2], logo: [0, 3.6], hebrew: [0, 4.6], chapter: [0, 5.6], logoOut: [0, 8.0], settle: [0, 8.0] },
 };
 /** Other names a sheet may give a beat (normalised: lower case, letters only). */
 const ALIAS: Readonly<Record<string, readonly string[]>> = {
@@ -125,36 +130,35 @@ const ALIAS: Readonly<Record<string, readonly string[]>> = {
   look: ['looksdown', 'lookdown'],
   tighten: ['fingers', 'fingerstighten', 'fist'],
   flash: ['whip', 'light'],
-  birds: ['birdsstop', 'silence', 'hush'],
-  lamb: ['lambhead', 'lamblifts', 'lifts'],
-  eyes: ['eyesopen', 'open'],
-  forms: ['david', 'titleforms'],
-  name: ['hebrew', 'davidhe', 'hebrewname'],
+  rise: ['crane', 'craneup', 'riseup'],
+  logo: ['title', 'logoin', 'davidlogo'],
+  hebrew: ['hebrewname', 'davidhe', 'name'],
   chapter: ['chapterline', 'subtitle'],
+  logoOut: ['logofade', 'lockupout'],
+  settle: ['glide', 'handoff', 'settledown'],
 };
 /** Beat names (normalised) of the first shot's own picture coming in out of the black — the end of the 'open' section. */
 const PICTURE_IN = ['shofar', 'blast', 'picture', 'picturein'];
 /** Contract lengths of the shots of the multi-shot roles (when a sheet merges them into one shot). */
-const SPLIT: Partial<Record<ScoreRole, readonly number[]>> = { tear: [4.0, 5.0], david: [6.0, 4.0], thicket: [3.0, 2.0] };
+const SPLIT: Partial<Record<ScoreRole, readonly number[]>> = { tear: [4.0, 5.0], david: [6.0, 4.0] };
 
 /** Ambience bed per role (the score switches beds until the game calls ambience(name) itself). */
 const ROLE_BED: Readonly<Record<ScoreRole, BedName>> = {
   open: 'none',
   shofar: 'gilgal', saul: 'gilgal', peak: 'gilgal', silence: 'gilgal', tear: 'gilgal', verdict: 'gilgal', broken: 'gilgal',
-  david: 'fields', thicket: 'fields', title: 'none',
+  david: 'fields', horizon: 'fields',
 };
 
-/** How long the title rings when the sheet gives no length (s). */
-const TITLE_LEN = 6;
 /** 120 bpm: every cut of the contract falls on this half-second grid. */
 const BEAT = 0.5;
 /** The pastoral 6/8 (s per eighth: a dotted quarter = 1 s, a bar = 2 s). */
 const STEP68 = 1 / 3;
-/** The breath of silence before a hit on a hard cut or the smash (s). */
+/** The breath of silence before a hit on a hard cut (the blast out of the black) (s). */
 const GAP = 0.07;
 
-// David's motif (D A G F E F D) as [offset from tonic, units] — Dorian, and its major form (the title)
+// David's motif (D A G F E F D) as [offset from tonic, units] — Dorian, and its major form (D A G F♯ E F♯ D: the logo)
 const DAVID: ReadonlyArray<readonly [number, number]> = [[0, 2], [7, 2], [5, 1], [3, 1], [2, 1], [3, 1], [0, 3]];
+const DAVID_MAJOR: ReadonlyArray<readonly [number, number]> = [[0, 2], [7, 2], [5, 1], [4, 1], [2, 1], [4, 1], [0, 3]];
 // the answer as he turns into the light (A B C♯ D C♯ A G A) — D major
 const ANSWER: ReadonlyArray<readonly [number, number]> = [[-5, 1], [-3, 1], [-1, 1], [0, 2], [-1, 1], [-5, 1], [-7, 1], [-5, 3]];
 
@@ -184,6 +188,11 @@ interface Bus { gains: GainNode[]; m: Out; fx: Out; sec: number }
 export class IntroScore {
   /** Ambience bed changes requested by the score (at section starts). */
   onAmbience: ((bed: BedName, fade: number, t: number) => void) | null = null;
+  /**
+   * The hand-off (CUT v4): the end of the film's last shot, at context time `t` — the bar line on which the game's
+   * pastoral music must start (the engine starts it there, phase-locked); the score's last chord rings out under it.
+   */
+  onHandoff: ((t: number) => void) | null = null;
   /** The film's sound design (the engine wires `fx.sfxAt` to its SFX library). */
   readonly fx: FilmSound;
   private secs: Sec[] = [];
@@ -204,11 +213,15 @@ export class IntroScore {
   /** tools: [film time, picture drift (s) when built] of every hard-cut hit (after the tight re-lock) */
   readonly hitLog: Array<[number, number]> = [];
   private running = false;
-  /** the film was skipped: the score plays its title statement on its own clock (the film clock no longer applies) */
+  /** the film was skipped: the score plays its logo statement on its own clock (the film clock no longer applies) */
   private free = false;
   private endT = 0;
+  /** film time of the logo (D3 `logo`): the arrival a skip jumps to */
   private titleT = Infinity;
   private titleAt = -Infinity;
+  /** film time of the hand-off to the game's music (the end of D3), and whether it has happened */
+  private handoffT = Infinity;
+  private handedOff = false;
   private nextRetire = 0;
   private readonly dead: Array<{ t: number; nodes: AudioNode[] }> = [];
   private readonly ctx: BaseAudioContext;
@@ -263,9 +276,11 @@ export class IntroScore {
     this.lead = clamp((Number.isFinite(ac.outputLatency) ? (ac.outputLatency as number) : 0) + (Number.isFinite(ac.baseLatency) ? (ac.baseLatency as number) : 0) - 0.016, 0, 0.12);
     this.anchor = now - t0 - this.lead;
     this.endT = this.secs[this.secs.length - 1].t1;
-    const tsec = this.secs.find((x) => x.role === 'title');
-    this.titleT = tsec ? tsec.t0 : Infinity;
+    const hz = this.secs.find((x) => x.role === 'horizon');
+    this.titleT = hz ? this.beat(hz, 'logo') : Infinity;
     this.titleAt = -Infinity;
+    this.handoffT = hz ? hz.t1 : Infinity;
+    this.handedOff = false;
     this.syncNow = -1;
     this.free = false;
     this.hitLog.length = 0;
@@ -287,15 +302,23 @@ export class IntroScore {
     this.evs.sort((a, b) => a.at - b.at);
   }
 
-  /** Fade everything out over `fade` seconds; pending events are dropped. */
+  /**
+   * Fade everything out over `fade` seconds; pending events are dropped. AT THE HAND-OFF (the end of the last shot —
+   * Intro.end's stopIntro, Story's music('pastoral')) it is not a fade: the game's music has started on the score's bar
+   * line, and the score's last chord rings out under it (its own releases) before the buses close.
+   */
   stop(now: number, fade: number): void {
     if (!this.running) return;
-    const f = Math.max(0.02, fade);
+    const atEnd = Number.isFinite(this.handoffT) && (this.handedOff || this.time(now) >= this.handoffT - 0.35);
+    if (atEnd && !this.handedOff) this.fireHandoff(Math.max(now + 0.004, this.anchor + this.handoffT));
+    const f = atEnd ? 6 : Math.max(0.02, fade);
     const nodes: AudioNode[] = [];
     for (const g of [this.master, this.fxMaster, this.wetMaster]) {
       if (!g) continue;
       const p = g.gain;
-      p.cancelScheduledValues(now); p.setValueAtTime(p.value, now); p.setTargetAtTime(0, now, f / 4);
+      p.cancelScheduledValues(now); p.setValueAtTime(p.value, now);
+      if (atEnd) p.setTargetAtTime(0, now + 3, 1.2);
+      else p.setTargetAtTime(0, now, f / 4);
       nodes.push(g);
     }
     for (const b of this.buses.values()) nodes.push(...b.gains);
@@ -332,9 +355,27 @@ export class IntroScore {
     for (const b of this.buses.values()) this.envelope(b, now);
   }
 
+  /** The hand-off is due: the game's music starts on this bar line (context time `t`). */
+  private fireHandoff(t: number): void {
+    if (this.handedOff) return;
+    this.handedOff = true;
+    if (this.onHandoff) {
+      try { this.onHandoff(t); } catch (err) { if (this.errors++ < 3) console.warn('[IntroScore] hand-off failed', err); }
+    }
+  }
+
   /**
-   * The title card appeared (sfx('titleHit') during the film). In sync: absorbed (the score plays its own hit).
-   * Ahead of the score (the film was skipped): jump to the title statement now. True when absorbed.
+   * True while the score is about to hand over to the game's music by itself (it plays its last section; after a skip,
+   * its logo statement): a request for the pastoral music now waits for that hand-off.
+   */
+  handoffPending(now: number): boolean {
+    return this.running && !this.handedOff && Number.isFinite(this.handoffT) && this.handoffT - this.time(now) < 8;
+  }
+
+  /**
+   * The logo appeared (sfx('titleHit') during the film). In sync: absorbed (the score plays its own warm hit ON the
+   * logo beat). Ahead of the score (the film was skipped): jump to the logo statement now — the hit, the answer, the
+   * settle and the hand-off to the game's music — on the score's own clock. True when absorbed.
    */
   titleCue(now: number): boolean {
     if (!this.running || !Number.isFinite(this.titleT)) return false;
@@ -347,7 +388,7 @@ export class IntroScore {
     }
     this.buses.clear();
     this.restoreWorld(now, 0.3);
-    // from here the score runs on its own clock: a re-lock to the film's last clock report would push the title
+    // from here the score runs on its own clock: a re-lock to the film's last clock report would push the logo
     // statement back to where the film was skipped (CUT v2 lost its title hit on a skip that way)
     this.free = true;
     this.syncNow = -1;
@@ -394,7 +435,10 @@ export class IntroScore {
       }
     }
     if (now >= this.nextRetire) this.retire(now);
-    if (this.ei >= this.evs.length && now > this.anchor + this.endT + 6) {
+    // handed over (its last event): the score is done — its last chord rings out under the game's music (stop at the
+    // hand-off), and it no longer counts as playing (e.g. after a skip, where nobody calls stopIntro)
+    if (this.handedOff && this.ei >= this.evs.length) { this.stop(now, 0); return; }
+    if (this.ei >= this.evs.length && now > this.anchor + this.endT + 8) {
       const nodes: AudioNode[] = [];
       for (const g of [this.master, this.fxMaster, this.wetMaster]) if (g) nodes.push(g);
       for (const b of this.buses.values()) nodes.push(...b.gains);
@@ -544,7 +588,7 @@ export class IntroScore {
     const prev = this.secs[sec.i - 1];
     const bed = ROLE_BED[sec.role];
     if (!prev || ROLE_BED[prev.role] !== bed) {
-      const fade = sec.i === 0 ? 0.8 : sec.role === 'title' ? 0.05 : sec.cut === 'hard' || sec.cut === 'cut' ? 0.25 : Math.max(0.5, sec.fade || 1.2);
+      const fade = sec.i === 0 ? 0.8 : sec.cut === 'hard' || sec.cut === 'cut' ? 0.25 : Math.max(0.5, sec.fade || 1.2);
       // held over the whole run of sections sharing the bed (so starting mid-run still sets it)
       let j = sec.i;
       while (j + 1 < this.secs.length && ROLE_BED[this.secs[j + 1].role] === bed) j++;
@@ -560,8 +604,7 @@ export class IntroScore {
       case 'verdict': this.planVerdict(sec); break;
       case 'broken': this.planBroken(sec); break;
       case 'david': this.planDavid(sec); break;
-      case 'thicket': this.planThicket(sec); break;
-      case 'title': this.planTitle(sec); break;
+      case 'horizon': this.planHorizon(sec); break;
     }
   }
 
@@ -963,6 +1006,9 @@ export class IntroScore {
     const verse = clamp(this.text(sec, 0, this.beat(sec, 'verse')), t0 + 0.1, face - 2);
     const turn = clamp(this.beat(sec, 'turn'), face, end - 1);
     const dis = sec.exit === 'x' ? Math.min(0.8, sec.tau * 3) : 0.3; // the dissolve out (the light cools)
+    // CUT v4: into the crane (D3) the theme rings on — the bed and the voices hold to the cut and let go under its Bm
+    // (a sustained layer's release starts `rel` s before the end of its hold: the hold runs `rel` past the cut)
+    const ring = sec.exit === 'ring', rel = ring ? 0.7 : 0;
     // the bloom of the light: a soft stroke, a kinnor strum, voices opening, a high shimmer; wind in his curls
     this.add(sec, t0, (t, m, _h, fx) => {
       S.drum(m, t, 'boom', 0.14, 0, 1);
@@ -975,15 +1021,15 @@ export class IntroScore {
     // a warm bed of open fifths under both shots (no third against the pipe's Dorian F: the major third arrives with
     // the voices as he turns into the light)
     this.add(sec, t0 + 0.05, (t, m, h) => {
-      S.pad(m, t, h, [38, 45, 50, 57], { level: 0.024, attack: 0.5, release: dis + 0.3, cutoff: 1000, voices: lite ? 2 : 3, detune: 7 });
-      S.choir(m, t, h, lite ? [50, 57] : [50, 57, 62], { level: 0.016, attack: 0.8, release: dis + 0.3, vowel: 'oo', breath: 0.05 });
-    }, end - t0 + 0.2);
+      S.pad(m, t, h, [38, 45, 50, 57], { level: 0.024, attack: 0.5, release: ring ? rel : dis + 0.3, cutoff: 1000, voices: lite ? 2 : 3, detune: 7 });
+      S.choir(m, t, h, lite ? [50, 57] : [50, 57, 62], { level: 0.016, attack: 0.8, release: ring ? rel : dis + 0.3, vowel: 'oo', breath: 0.05 });
+    }, end - t0 + (ring ? rel : 0.2));
     // the kinnor in 6/8 from the verse (a bar = 2 s): D – C – G | as he turns, D – A
     this.kinnor(sec, verse, end - dis * 0.6, ['D', 'C', 'G', 'D', 'A'], 0.45);
     // 15:28b over David: his motif on the shepherd's pipe (D A G F E F D, Dorian) — the bars of the kinnor
     const u = clamp((face + 0.3 - verse) / 11, 0.3, 0.5);
     this.add(sec, verse, (t, m) => { S.ney(m, t, motif(74, DAVID, u), 0.075); });
-    // the flock below him, the birds of the golden hour (they fall silent at the thicket)
+    // the flock below him, the birds of the golden hour (they fall silent at the thicket, in gameplay: the bear's hook)
     this.add(sec, t0 + 0.9, (t, _m, _h, fx) => this.fx.bleat(fx.dry, t, 0.15, 0.45));
     this.add(sec, t0 + 2.4, (t, _m, _h, fx) => this.fx.chukar(this.far(fx, t, 4, 4500, 0.3, 0.5), t, 0.014, -0.6));
     this.add(sec, face - 0.8, (t, _m, _h, fx) => this.fx.bleat(fx.dry, t, 0.11, -0.35, 'lambBleat', 1.08));
@@ -992,93 +1038,191 @@ export class IntroScore {
     // he turns into the light: warm voices open to "ah" across the turn; the kinnor strums and the pipe answers
     const sw = Math.max(face, turn - 0.3), bloom = Math.min(end - 0.8, turn + 1.0);
     this.add(sec, sw, (t, m, h) => {
-      S.choir(m, t, h, lite ? [62, 66, 69] : [57, 62, 66, 69, 74], { level: 0.04, attack: bloom - sw, release: dis + 0.2, vowel: 'oo', to: 'ah', morph: bloom - sw + 0.3, breath: 0.06 });
-      S.pad(m, t, h, [50, 57, 62, 66], { level: 0.028, attack: bloom - sw, release: dis + 0.2, cutoff: 1500, voices: lite ? 2 : 3, detune: 7 });
-    }, end - sw + 0.2);
+      S.choir(m, t, h, lite ? [62, 66, 69] : [57, 62, 66, 69, 74], { level: 0.04, attack: bloom - sw, release: ring ? rel : dis + 0.2, vowel: 'oo', to: 'ah', morph: bloom - sw + 0.3, breath: 0.06 });
+      S.pad(m, t, h, [50, 57, 62, 66], { level: 0.028, attack: bloom - sw, release: ring ? rel : dis + 0.2, cutoff: 1500, voices: lite ? 2 : 3, detune: 7 });
+    }, end - sw + (ring ? rel : 0.2));
     const ans = turn + 0.5;
     this.add(sec, turn, (t, m) => S.strum(m, t, [62, 66, 69, 74, 78], 0.4, 0.05));
     this.add(sec, ans, (t, m) => S.ney(m, t, motif(74, ANSWER, clamp((end - 0.45 - ans) / 11, 0.16, 0.26)), 0.07));
   }
 
-  // ================================================================================ 6 · THE THICKET + THE TITLE
+  // ================================================================================ 6 · THE LOGO, THEN THE GAME
 
-  /** H1 + H2 — the lamb at the thicket's edge; the birds fly up and fall silent; in the dark two eyes open. SMASH. */
-  private planThicket(sec: Sec): void {
+  /**
+   * D3 — THE LOGO over the panorama (CUT v4, 10 s), then the game. The crane: out of D2's dominant the deceptive Bm,
+   * then G and A (vi–IV–V) — the strings swelling and brightening, the kinnor's ostinato in running eighths, the low
+   * strings' pulse, the voices, David's motif (major) rising on the pipe so that its tonic falls ON the logo, a warm
+   * riser and a timpani roll — into the arrival ON `logo`: D major, the tutti and the choir, a strum, a warm stroke and
+   * a cymbal bloom (an arrival, not a smash: the loudest moment of the ending). The theme's answer (A B C♯ D C♯ A G A)
+   * under the Hebrew name, its D on the chapter line (IV, then V); from `settle` the orchestra lets go into the game's
+   * 6/8 — the drone, the kinnor's pastoral lilt, the pipe's last cadence — and ON the end of the shot the score hands
+   * over to the game's pastoral music (onHandoff: the engine starts it on this bar line) and rings out under it.
+   * Every time below comes from the shot's beats (the grid of eighths is anchored on the logo).
+   */
+  private planHorizon(sec: Sec): void {
     const S = this.s, lite = this.lite, t0 = sec.t0, end = sec.t1;
-    const birds = this.beat(sec, 'birds'), lamb = this.beat(sec, 'lamb'), eyes = this.beat(sec, 'eyes');
-    const dark = this.shotStart(sec, 1, (SPLIT.thicket ?? [3])[0]);
-    const t1 = end - (sec.exit === 'cut' ? sec.gap : 0);
-    // the last birds at the thicket's edge, then they fly up — and the pasture holds its breath ON the beat
-    // (from the dissolve: they are heard as the thicket comes in, and every call is over by the beat)
-    const c0 = Math.max(sec.t0 - Math.min(0.5, sec.fade * 0.6), birds - 1.4);
-    if (birds - c0 > 0.3) this.add(sec, c0, (t, _m, _h, fx) => this.chirps(fx, t, birds - c0, 0.012));
-    this.add(sec, Math.max(t0, birds - 0.22), (t, _m, _h, fx) => this.wings(fx, t, 0.5, 0.03));
-    this.add(sec, birds, (t) => { if (this.onAmbience) this.onAmbience('hush', 0.1, t); }, end - birds);
-    // a thin high tone and a low rumble rising from the silence
-    this.add(sec, birds + 0.1, (t, _m, h, fx) => this.fx.rumble(fx, t, h, 0.16), t1 - birds - 0.1);
-    this.add(sec, birds + 0.2, (t, m, h) => S.pad(m, t, h, [93], { level: 0.004, attack: h * 0.7, release: 0.1, cutoff: 6000, voices: 1, type: 'sine', lfoCents: 12 }), t1 - birds - 0.2);
-    // the lamb lifts its head (ears, the wool)
-    this.add(sec, lamb, (t, _m, _h, fx) => this.fabric(fx, t, 0.3, 0.006, 0.4));
-    // the dark of the thicket: leaves shiver, a heavy breath
-    this.add(sec, dark, (t, _m, _h, fx) => this.fx.rustle(fx, t, Math.max(0.4, eyes - dark + 0.2), 0.045));
-    this.add(sec, dark + 0.05, (t, _m, _h, fx) => this.fx.breath(fx, t, 0.06, Math.max(0.3, (eyes - dark) * 0.75), 0.9));
-    // THE EYES: a low sting
-    this.add(sec, eyes, (t, m, _h, fx) => {
-      S.drum(m, t, 'boom', 0.3, 0, 0.8);
-      S.pad(m, t, 1.2, [38, 39], { level: 0.03, attack: 0.02, release: 0.8, cutoff: 600, voices: 2, detune: 10 });
-      S.pad(m, t, 0.9, [75, 76], { level: 0.008, attack: 0.02, release: 0.6, cutoff: 5000, voices: 2, detune: 4, trem: 0.5, tremRate: 13 });
-      this.fx.impact(fx, t, 0.08, 1.2);
-    }, 0, undefined, true);
-    // the heart: slow after the lamb lifts its head, quickening after the eyes
-    let x = lamb + 0.15, gap = 0.9;
-    while (x < t1 - 0.2) {
-      const u = clamp((x - lamb) / Math.max(0.5, t1 - lamb), 0, 1);
-      this.add(sec, x, (t, _m, _h, fx) => this.fx.heart(fx, t, 0.1 + 0.2 * u));
-      gap = x > eyes ? Math.max(0.3, gap * 0.72) : Math.max(0.55, gap * 0.92);
-      x += gap;
+    const P = STEP68;
+    const logo = clamp(this.beat(sec, 'logo'), t0 + 1.2, end - 3);
+    const rise = clamp(this.beat(sec, 'rise'), t0, logo - 1);
+    const heb = clamp(this.beat(sec, 'hebrew'), logo + 0.3, end - 2.2);
+    const chap = clamp(this.beat(sec, 'chapter'), heb + 0.3, end - 1.8);
+    const settle = clamp(Math.min(this.beat(sec, 'settle'), this.beat(sec, 'logoOut')), chap + 0.6, end - 0.8);
+    // the harmony on the dotted quarters of the logo's grid: Bm (out of D2's A) – G – A | D (the logo) – G – A | D
+    const cG = Math.max(rise + 0.4, logo - 6 * P), cA = Math.max(cG + 0.3, logo - 3 * P);
+    const u = clamp((chap - heb) / 3, 0.2, 0.5); // the answer's eighth: its D falls on the chapter line
+    const cA2 = clamp(chap + 3 * u, chap + 0.3, settle - 0.3);
+    const plan: ReadonlyArray<readonly [number, ChordName]> = [[t0, 'Bm'], [cG, 'G'], [cA, 'A'], [logo, 'D'], [chap, 'G'], [cA2, 'A'], [settle, 'D']];
+    const chordAt = (x: number): ChordName => { let c: ChordName = 'Bm'; for (const [a, n] of plan) if (x >= a - 1e-6) c = n; return c; };
+    const segs = plan.map(([a, n], i) => ({ a, n, b: i + 1 < plan.length ? plan[i + 1][0] : end }));
+
+    // ---- the crane: the strings swell (vi–IV–V), brightening, each chord louder than the last
+    const VOX: Partial<Record<ChordName, readonly [readonly number[], readonly number[], number]>> = {
+      // [desktop voicing, phone voicing, bass (desktop; phones an octave up)]
+      Bm: [[47, 54, 59, 62, 66], [54, 59, 62, 66], 35],
+      G: [[43, 50, 55, 59, 62, 67], [50, 55, 59, 67], 31],
+      A: [[45, 52, 57, 61, 64, 69], [52, 57, 61, 69], 33],
+    };
+    const build: ReadonlyArray<readonly [number, number, ChordName, number, number, number]> = [
+      // [from, to, chord, level, cutoff, cutoffEnd] — the Bm comes in ON the cut (out of D2's dominant: no dip)
+      [t0, cG, 'Bm', 0.05, 1000, 1700], [cG, cA, 'G', 0.06, 1400, 2400], [cA, logo, 'A', 0.072, 1900, 3400],
+    ];
+    build.forEach(([a, b, n, level, c0, c1], i) => {
+      const [hi, ph, bass] = VOX[n] as readonly [readonly number[], readonly number[], number];
+      const first = i === 0;
+      this.add(sec, a, (t, m, h) => {
+        S.pad(m, t, h, lite ? ph : hi, { level, attack: first ? 0.3 : 0.22, release: 0.3, cutoff: c0, cutoffEnd: c1, voices: lite ? 2 : 3, detune: 9 });
+        S.pad(m, t, h, lite ? [bass + 12] : [bass, bass + 12], { level: 0.03 + 0.012 * i, attack: first ? 0.4 : 0.18, release: 0.25, cutoff: lite ? 900 : 420, voices: 2, detune: 6 });
+      }, b - a + 0.12);
+    });
+    // the voices carry D2's open "ah" across the cut (on the Bm), grow under the G and open fully on the A
+    this.add(sec, t0, (t, m, h) => S.choir(m, t, h, lite ? [54, 59] : [54, 59, 62], { level: 0.03, attack: 0.3, release: 0.25, vowel: 'ah', to: 'oo', morph: h, breath: 0.06 }), cG - t0 + 0.12);
+    this.add(sec, cG, (t, m, h) => S.choir(m, t, h, lite ? [55, 59] : [55, 59, 62], { level: 0.036, attack: 0.25, release: 0.2, vowel: 'oo', breath: 0.06 }), cA - cG + 0.1);
+    this.add(sec, cA, (t, m, h) => S.choir(m, t, h, lite ? [57, 61, 64] : [57, 61, 64, 69], { level: 0.05, attack: Math.min(0.5, h * 0.5), release: 0.12, vowel: 'oo', to: 'ah', morph: h, breath: 0.08 }), logo - cA + 0.05);
+    // the low strings' pulse from the G: running eighths on the root, growing into the logo
+    for (let k = Math.ceil((cG - logo) / P - 1e-6); logo + k * P < logo - 0.05; k++) {
+      const x = logo + k * P, s6 = ((k % 6) + 6) % 6, w = clamp((x - cG) / Math.max(0.3, logo - cG), 0, 1);
+      const root = rootIn(CHORDS[chordAt(x + 0.01)], 43);
+      this.add(sec, x, (t, m) => S.strStac({ dry: m.dry, wet: null }, t, root, (0.24 + 0.32 * w) * (s6 === 0 || s6 === 3 ? 1.15 : 0.85), 0.2, 0.7));
     }
-    // the pull into the smash
-    const sl = Math.min(0.9, t1 - eyes - 0.05);
-    if (sl > 0.2) {
-      this.add(sec, t1 - sl, (t, m) => {
-        this.fx.suck(m, t + sl, sl, 0.3, 1.4);
-        // a trembling cluster (D–E♭–A) that swells and brightens into the breath before the smash
-        S.pad(m, t, sl + 0.02, lite ? [50, 51, 57] : [38, 50, 51, 57, 63], { level: 0.095, attack: sl * 0.95, release: 0.03, cutoff: 700, cutoffEnd: 3200, voices: 2, detune: 14, trem: 0.4, tremRate: 11 });
+    // David's motif rising on the pipe (D A G F♯ E F♯ — D): its tonic falls ON the logo and is held to the Hebrew name;
+    // strings double it underneath
+    const um = Math.min(P, (logo - rise - 0.3) / 8);
+    const mStart = logo - 8 * um;
+    const motifNs = DAVID_MAJOR.map(([o, n], i) => [74 + o, i === DAVID_MAJOR.length - 1 ? (heb - logo) / um : n] as const);
+    this.add(sec, mStart, (t, m) => {
+      S.ney(m, t, motifNs.map(([n, d]) => ({ midi: n, dur: d * um })), 0.085);
+      this.line(m, t + 0.01, motifNs.map(([n, d], i) => [n - 12, i === motifNs.length - 1 ? 3 : d] as const), um, 0.022, 'str');
+    });
+    // a warm riser and a timpani roll (low tof strokes, accelerating) into the arrival
+    const rl = clamp(logo - cA + 0.4, 0.6, 1.6);
+    this.add(sec, logo - rl, (t, m) => riserFx(this.c, S, m, t, rl, 'warm', 0.8, lite));
+    const roll = Math.min(1.2, logo - cG);
+    for (let x = logo - roll, gap = 0.2; x < logo - 0.05; x += gap, gap = Math.max(0.055, gap * 0.85)) {
+      const w = 1 - (logo - x) / roll;
+      this.add(sec, x, (t, m) => {
+        S.drum(m, t, 'dum', 0.08 + 0.3 * w * w, rand(-0.2, 0.2), 0.9);
+        if (!lite && w > 0.45) S.drum(m, t, 'boom', 0.03 + 0.1 * w, 0, 1.1);
       });
     }
-  }
 
-  /** T — SMASH to black on the loudest hit; DAVID forms from light; the title motif; the tail into gameplay. */
-  private planTitle(sec: Sec): void {
-    const S = this.s, lite = this.lite, t0 = sec.t0;
-    const forms = this.beat(sec, 'forms'), name = this.beat(sec, 'name'), chapter = this.beat(sec, 'chapter');
-    this.add(sec, t0, (t, m, _h, fx) => {
+    // ---- the kinnor's ostinato: running eighths through the crane, the logo and the answer (the chord of the moment,
+    // rolling up and down; a bass pluck on the dotted quarters) — it stops a little before the settle (a tenuto: the
+    // settle's bar is re-anchored there so that it ends ON the hand-off)
+    for (let k = Math.ceil((rise - logo) / P - 1e-6); logo + k * P < settle - P * 0.6; k++) {
+      if (k === 0) continue; // the logo has its own strum
+      const x = logo + k * P, s6 = ((k % 6) + 6) % 6;
+      const ch = CHORDS[chordAt(x + 0.01)];
+      const w = x < logo ? clamp((x - rise) / Math.max(0.5, logo - rise), 0, 1) : clamp((x - logo) / Math.max(0.5, settle - logo), 0, 1);
+      const vel = x < logo ? 0.32 + 0.22 * w : 0.5 - 0.12 * w;
+      const idx = [0, 2, 4, 5, 4, 2][s6];
+      this.add(sec, x, (t, m) => {
+        const ns = voicing(ch, 57, 81);
+        const n = ns[Math.min(ns.length - 1, idx)];
+        if (s6 === 0 || s6 === 3) S.lyre(m, t, rootIn(ch, 43), vel * (s6 === 0 ? 0.75 : 0.55), -0.3);
+        S.lyre(m, t + rand(-0.005, 0.005), n, vel * (s6 === 0 ? 1.1 : s6 === 3 ? 0.95 : 0.8) * rand(0.92, 1.06), lyrePan(n));
+      });
+    }
+
+    // ---- THE LOGO: the arrival (tight: built just before it is due, re-locked to the picture)
+    this.add(sec, logo, (t, m, h) => {
       this.titleAt = t;
-      this.hit(m, t, 1.1, true);
-      this.fx.impact(fx, t, 0.7, 3);
-      this.fx.braam(m, t, lite ? 0.5 : 0.4, 3);
-      S.pad(m, t, 3, [26, 38, 45, 50], { level: 0.2, attack: 0.01, release: 2.4, cutoff: 1800, cutoffEnd: 300, voices: lite ? 2 : 3, detune: 12 });
-      S.choir(m, t + 0.01, 2, lite ? [38, 50, 57, 65] : [38, 50, 57, 62, 65], { level: 0.2, attack: 0.03, release: 2.2, vowel: 'ah', breath: 0.2 });
-      S.drum(m, t + 0.012, 'taiko', 0.7, 0);
-    }, 0, undefined, true);
-    // DAVID forms from light: a high shimmer sweeping in
-    this.add(sec, forms, (t, m) => S.pad(m, t, Math.max(1.2, name - forms + 0.8), [81, 86, 93], { level: 0.009, attack: Math.max(0.4, name - forms), release: 0.8, cutoff: 8000, voices: 2, detune: 8, trem: 0.25, tremRate: 11 }));
-    // דָּוִד: the title motif — the rising fifth D–A on the kinnor and the pipe, then the motif resolving in D major
-    const tail = Math.max(name, t0 + 0.8);
-    const hold = Math.max(0.6, chapter - tail + 0.35);
-    this.add(sec, tail, (t, m) => {
-      S.lyre(m, t, 50, 0.45, -0.2); S.lyre(m, t + 0.02, 57, 0.42, 0.15);
-      S.ney(m, t + 0.05, [{ midi: 74, dur: hold * 0.4 }, { midi: 81, dur: hold * 0.6 + 0.35 }, { midi: 79, dur: 0.26 }, { midi: 78, dur: 0.26 }, { midi: 76, dur: 0.26 }, { midi: 78, dur: 0.34 }, { midi: 74, dur: 2.4 }], 0.12);
-      S.choir(m, t + 0.2, 5, [50, 57, 62, 66], { level: 0.03, attack: 1.4, release: 2.4, vowel: 'oo', breath: 0.05 });
-      S.pad(m, t, 5.6, [26, 38, 45], { level: 0.04, attack: 0.8, release: 2.6, cutoff: 380, voices: 2, detune: 4 });
+      // a warm stroke, not a smash: a deep drum and a taiko pair, a low tof, a soft cymbal bloom
+      S.drum(m, t, 'boom', 0.5, 0, 0.9);
+      S.drum(m, t + 0.004, 'taiko', 0.5, -0.25);
+      S.drum(m, t + 0.016, 'taiko', 0.42, 0.25);
+      S.drum({ dry: m.dry, wet: null }, t, 'dum', 0.32, 0);
+      this.bloom(m, t, lite ? 0.018 : 0.026);
+      // the tutti in D major: low, middle and high strings, the choir on "ah", a full strum of the kinnor
+      S.pad(m, t, h, lite ? [38, 50] : [38, 45], { level: 0.075, attack: 0.04, release: 0.5, cutoff: lite ? 900 : 560, voices: lite ? 2 : 3, detune: 6 });
+      S.pad(m, t, h, lite ? [45, 54, 57] : [45, 50, 54, 57], { level: 0.085, attack: 0.05, release: 0.45, cutoff: 2100, cutoffEnd: 1400, voices: lite ? 2 : 3, detune: 9 });
+      S.pad(m, t + 0.02, h, lite ? [62, 66, 74] : [62, 66, 69, 74], { level: 0.05, attack: 0.12, release: 0.5, cutoff: 4000, cutoffEnd: 2800, voices: lite ? 2 : 3, detune: 8, vib: 9, vibRate: 5.4, vibDelay: 0.3 });
+      S.choir(m, t + 0.01, h, lite ? [50, 57, 62, 66] : [50, 54, 57, 62, 66, 69], { level: 0.1, attack: 0.07, release: 0.6, vowel: 'ah', breath: 0.12 });
+      S.strum(m, t + 0.01, [50, 57, 62, 66, 69, 74, 78], 0.62, 0.028);
+      // the logo forming from light: a high shimmer
+      S.pad(m, t + 0.05, 2.6, [86, 90, 93], { level: 0.007, attack: 0.5, release: 1.4, cutoff: 9000, voices: 2, detune: 8, trem: 0.25, tremRate: 11 });
+    }, chap - logo + 0.15, undefined, true);
+
+    // ---- the theme's answer under the Hebrew name and the chapter line: the pipe (strings doubling), IV then V
+    this.add(sec, heb, (t, m) => {
+      S.ney(m, t, motif(74, ANSWER, u), 0.08);
+      this.line(m, t + 0.01, ANSWER.map(([o, n]) => [74 + o, n] as const), u, 0.026, 'str');
+      // דָּוִד: the rising fifth D–A on the kinnor
+      S.lyre(m, t, 74, 0.42, 0.15); S.lyre(m, t + 0.03, 81, 0.38, 0.3);
     });
-    // the chapter line: a pluck; the resolution on D major — a strum, the voices open
-    this.add(sec, chapter, (t, m) => S.lyre(m, t, 62, 0.3, 0.1));
-    const res = tail + 0.05 + hold + 0.35 + 0.26 * 3 + 0.34;
-    this.add(sec, res, (t, m) => {
-      S.strum(m, t, [50, 57, 62, 66, 69, 74], 0.42, 0.05);
-      S.pad(m, t, 3.4, [62, 66, 69], { level: 0.022, attack: 0.5, release: 2.2, cutoff: 2000, voices: 2, detune: 6 });
-    });
+    // the chapter line: a pluck high over the turn to G
+    this.add(sec, chap, (t, m) => S.lyre(m, t + 0.02, 86, 0.3, 0.25));
+    const ANS: Partial<Record<ChordName, readonly [readonly number[], readonly number[], readonly number[], number]>> = {
+      // [strings, phone strings, choir, bass]
+      G: [[43, 50, 55, 59, 62, 67], [50, 55, 59, 67], [55, 59, 62, 67], 31],
+      A: [[45, 52, 57, 61, 64, 69], [52, 57, 61, 69], [57, 61, 64], 33],
+    };
+    for (const sg of segs) {
+      if (sg.a < chap - 1e-6 || sg.a >= settle - 1e-6) continue;
+      const v = ANS[sg.n];
+      if (!v) continue;
+      const [hi, ph, ch, bass] = v;
+      this.add(sec, sg.a, (t, m, h) => {
+        S.pad(m, t, h, lite ? ph : hi, { level: sg.n === 'G' ? 0.062 : 0.056, attack: 0.18, release: 0.45, cutoff: 2000, cutoffEnd: 1600, voices: lite ? 2 : 3, detune: 9 });
+        S.pad(m, t, h, lite ? [bass + 12] : [bass, bass + 12], { level: 0.04, attack: 0.15, release: 0.4, cutoff: lite ? 900 : 420, voices: 2, detune: 6 });
+        S.choir(m, t + 0.02, h, lite ? ch.slice(0, 3) : ch, { level: sg.n === 'G' ? 0.07 : 0.06, attack: 0.2, release: 0.5, vowel: 'ah', breath: 0.1 });
+        S.drum(m, t, 'taiko', sg.n === 'G' ? 0.24 : 0.2, 0, 0.85);
+      }, sg.b - sg.a + 0.15);
+    }
+
+    // ---- the settle: the cadence on D lets go into the game's 6/8 — the drone, the kinnor's pastoral lilt, the pipe
+    // (the chord holds to the end of the shot and lets go over the hand-off, under the game's own D chord rising; the
+    // drone holds half a second longer and crossfades with the game's drone)
+    const letGo = 3;
+    this.add(sec, settle, (t, m, h) => {
+      S.drum(m, t, 'boom', 0.12, 0, 0.9);
+      S.pad(m, t, h, lite ? [50, 54, 57, 62, 66] : [38, 45, 50, 54, 57, 62, 66], { level: 0.038, attack: 0.25, release: letGo, cutoff: 1700, cutoffEnd: 800, voices: lite ? 2 : 3, detune: 8 });
+      S.choir(m, t + 0.02, h, lite ? [57, 62, 66] : [50, 57, 62, 66], { level: 0.036, attack: 0.3, release: letGo, vowel: 'ah', to: 'oo', morph: 1.6, breath: 0.06 });
+      S.pad(m, t, h + 0.5 + 2, [38, 45, 50], { level: 0.066, attack: 0.9, release: letGo + 2, cutoff: 480, voices: lite ? 2 : 3, detune: 6, lfoCents: 300 });
+    }, end - settle + letGo);
+    const q = (end - settle) / 6;
+    const lilt = [0.72, 0.46, 0.46, 0.6, 0.46, 0.46], pat = [0, 2, 4, 5, 4, 2];
+    for (let j = 0; j < 6; j++) {
+      const jj = j;
+      this.add(sec, settle + j * q, (t, m) => {
+        const ns = voicing(CHORDS.D, 57, 81);
+        if (jj === 0) S.lyre(m, t, 50, 0.38, -0.3);
+        const n = ns[Math.min(ns.length - 1, pat[jj])];
+        S.lyre(m, t + rand(-0.006, 0.006), n, lilt[jj] * 0.85 * rand(0.88, 1.08), lyrePan(n));
+      });
+    }
+    // the pipe's last cadence (F♯ E F♯ — D): its D sounds as the player takes over
+    this.add(sec, end - 3 * q, (t, m) => S.ney(m, t, [{ midi: 78, dur: q }, { midi: 76, dur: q }, { midi: 78, dur: q }, { midi: 74, dur: 1.6 }], 0.055));
+
+    // ---- the world around him: the wind as the crane rises, the flock below on the slope, the glide down
+    this.add(sec, rise, (t, _m, _h, fx) => this.fx.windSwell(fx, t, logo - rise + 1.4, 0.026, 500, 2400, -0.4, 0.4));
+    this.add(sec, rise + 0.7, (t, _m, _h, fx) => this.fx.chukar(this.far(fx, t, 4, 4200, 0.3, 0.5), t, 0.008, -0.55));
+    this.add(sec, logo + 1.5, (t, _m, _h, fx) => { const f = this.far(fx, t, 4, 2200, 0.35, 0.5); this.fx.bleat(f.dry, t, 0.11, 0.35); });
+    this.add(sec, chap + 1.1, (t, _m, _h, fx) => { const f = this.far(fx, t, 4, 2400, 0.3, 0.5); this.fx.bleat(f.dry, t, 0.075, -0.4, 'lambBleat', 1.06); });
+    this.add(sec, settle - 0.2, (t, _m, _h, fx) => this.fx.windSwell(fx, t, end - settle + 1.6, 0.017, 450, 1600, 0.3, -0.2));
+    this.add(sec, settle + 0.9, (t, _m, _h, fx) => this.fx.bleat(fx.dry, t, 0.1, 0.4));
+
+    // ---- the hand-off: ON the end of the shot the game's pastoral music starts on this bar line (tight)
+    this.add(sec, end, (t) => this.fireHandoff(t), 0, undefined, true);
   }
 
   // ================================================================================ instruments
@@ -1158,6 +1302,16 @@ export class IntroScore {
     }
   }
 
+  /** A soft cymbal bloom (the logo's arrival): bright noise that swells in 15 ms and rings down over ~2.5 s. */
+  private bloom(o: Out, t: number, level: number): void {
+    const v = new Voice(this.c);
+    const n = v.noise('white', t), hp = v.filter('highpass', 4200, 0.6), pk = v.filter('peaking', 7000, 0.8, 4), g = v.gain(0);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(level, t + 0.015); g.gain.setTargetAtTime(0, t + 0.02, 0.75);
+    n.connect(hp); hp.connect(pk); pk.connect(g); g.connect(o.dry);
+    if (o.wet) { const w = v.gain(0.6); g.connect(w); w.connect(o.wet); }
+    v.play(t, t + 3.2);
+  }
+
   /** Wool moving (a turn, a mantle, men turning their heads). */
   private fabric(o: Out, t: number, d: number, lvl: number, pan = 0.3): void {
     const v = new Voice(this.c);
@@ -1210,43 +1364,6 @@ export class IntroScore {
     p.connect(o.dry);
     if (o.wet) { const w = v.gain(0.3); p.connect(w); w.connect(o.wet); }
     v.play(t, t + dur + 0.05);
-  }
-
-  /** A few short calls of small birds in the bushes (whistled glides, 2-4.5 kHz) — all of them over by `t + dur`. */
-  private chirps(o: Out, t: number, dur: number, level: number): void {
-    const v = new Voice(this.c);
-    const os = v.osc('sine', 3000, 0, t), g = v.gain(0), p = v.pan(rand(-0.5, 0.5));
-    os.connect(g); g.connect(p); p.connect(o.dry);
-    if (o.wet) { const w = v.gain(0.4); p.connect(w); w.connect(o.wet); }
-    const F = os.frequency, G = g.gain;
-    G.setValueAtTime(0, t);
-    let x = rand(0.02, 0.15);
-    while (x < dur - 0.12) {
-      const d = rand(0.05, 0.11), tt = t + x, f0 = rand(2600, 4200);
-      F.setValueAtTime(f0, tt); F.exponentialRampToValueAtTime(f0 * rand(0.75, 1.3), tt + d);
-      G.setValueAtTime(0, tt); G.linearRampToValueAtTime(level * rand(0.5, 1), tt + 0.012); G.linearRampToValueAtTime(0, tt + d);
-      x += d + rand(0.06, 0.3);
-    }
-    v.play(t, t + dur + 0.02);
-  }
-
-  /** Small birds flying up out of the bushes: bursts of wing flutter (noise beating at ~17-24 Hz). */
-  private wings(o: Out, t: number, dur: number, level: number): void {
-    const v = new Voice(this.c);
-    const p = v.pan(rand(-0.3, 0.4));
-    p.connect(o.dry);
-    if (o.wet) { const w = v.gain(0.35); p.connect(w); w.connect(o.wet); }
-    const k = this.lite ? 2 : 3;
-    for (let i = 0; i < k; i++) {
-      const tt = t + i * rand(0.04, 0.1), d = dur * rand(0.6, 1);
-      const n = v.noise('pink', tt), bp = v.filter('bandpass', rand(1800, 3200), 0.8);
-      const am = v.gain(0.5), osc = v.osc('square', rand(17, 24), 0, tt), depth = v.gain(0.5), env = v.gain(0);
-      osc.connect(depth); depth.connect(am.gain);
-      n.connect(bp); bp.connect(am); am.connect(env); env.connect(p);
-      env.gain.setValueAtTime(0, tt); env.gain.linearRampToValueAtTime(level * rand(0.7, 1), tt + 0.04);
-      env.gain.linearRampToValueAtTime(0, tt + d);
-    }
-    v.play(t, t + dur + 0.35);
   }
 
   /** A human breath (Saul): a short in-breath and a shaking out-breath, in the upper band (not the bear's growl). */
@@ -1389,8 +1506,7 @@ function buildSections(cues: readonly IntroCue[]): Sec[] {
   out[0].t0 = Math.min(out[0].t0, 0);
   const last = out[out.length - 1];
   const lsh = last.shots[last.shots.length - 1];
-  const lend = lsh.t + (lsh.dur > 0 ? lsh.dur : last.role === 'title' ? TITLE_LEN : 8);
-  last.t1 = lend + (last.role === 'title' ? 6 : 0);
+  last.t1 = lsh.t + (lsh.dur > 0 ? lsh.dur : 8);
   // the film opens out of black (CUT v3: G1 holds 1.5 s of black, the picture comes in ON the blast): that black is a
   // section of its own, cut a breath before the picture
   const first = out[0], s0 = first.shots[0];
@@ -1423,6 +1539,8 @@ function buildSections(cues: readonly IntroCue[]): Sec[] {
     sec.next = nx.role;
     if (nx.cut === 'hard' || nx.cut === 'smash') { sec.exit = 'cut'; sec.tau = 0.01; sec.gap = GAP; }
     else if (nx.role === 'silence') { sec.exit = 'cut'; sec.tau = 0.01; sec.gap = 0; }
+    // David's theme rings on across the cut into the crane (D2 -> D3): the logo's swell grows out of it
+    else if (sec.role === 'david' && nx.role === 'horizon') { sec.exit = 'ring'; sec.tau = 0.5; }
     else if (nx.cut === 'dissolve' || nx.cut === 'light' || nx.cut === 'match' || nx.cut === 'black') { sec.exit = 'x'; sec.tau = Math.max(0.12, (nx.fade || 1.2) / 3); }
     else { sec.exit = 'x'; sec.tau = 0.22; }
   }

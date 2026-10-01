@@ -1,5 +1,6 @@
 /**
- * DAVID — sound design of the opening film "הַטּוֹב מִמֶּךָּ" (CUT v3, docs/intro-script-v3.md), synthesised in WebAudio.
+ * DAVID — sound design of the opening film "הַטּוֹב מִמֶּךָּ" (CUT v4, docs/intro-script-v4.md) and of the bear's hook in
+ * gameplay, synthesised in WebAudio.
  *
  * Every generator writes into an `Out` (dry + optional hall send) at an exact context time, so the score
  * (IntroScore.ts) can place it on the film clock. Layers:
@@ -10,7 +11,9 @@
  *   - the spoil (1 Sam 15:14, the bleating of the sheep and the lowing of the oxen): far, faint;
  *   - the torn robe (15:27): a slowed rip — fibres parting, threads snapping — baked as one buffer to the beats;
  *   - David's hills: a chukar and a bulbul at golden hour;
- *   - the thicket (the hook): leaves and twigs shifting, the heavy breathing of something large, a low rumble, the heart;
+ *   - the thicket (CUT v4: the bear's hook in gameplay, played by AudioEngine's 'birdsScatter' / 'eyesSting' and the
+ *     'hush' mood): small birds flushed from the bushes, leaves and twigs shifting, the heavy breathing of something
+ *     large, a low rumble, the heart, the body of a dark sting;
  *   - hits: the sub drop / crack of the big cuts (the shofar, the title smash), the braam, a reverse "suck" into a cut.
  * Nothing here is sampled: all buffers are baked procedurally once (at the start of the film, under the black
  * time card) and reused. Phones (`lite`) get fewer simultaneous voices and sub layers moved into their band.
@@ -450,6 +453,97 @@ export class FilmSound {
     const R = grg.gain;
     R.setValueAtTime(0, e0); R.linearRampToValueAtTime(level * 0.55, e0 + 0.15); R.linearRampToValueAtTime(0, e0 + exhale);
     v.play(t, e0 + exhale + 0.1);
+  }
+
+  /**
+   * Small birds flushed out of the bushes (the bear's hook, gameplay): the bush shaking, a burst of wings — `n` birds
+   * taking off one after another, each a band of noise beating at its wing rate, flying off (the band falling, the
+   * top closing, the level fading) — and their alarm calls (sharp "tchk" chips and a harsh "tcherr", fewer and farther
+   * as they go), into the valley echo. Every call is over by about `t + 2.1`. Returns the end time.
+   */
+  scatter(o: Out, t: number, level: number, n = this.lite ? 4 : 7): number {
+    const v = new Voice(this.c);
+    const echo = v.gain(0.16); echo.connect(this.c.echoSend());
+    // the bush: leaves thrashing, a twig
+    this.rustle(o, t - 0.01, 0.45, level * 0.09, rand(-0.2, 0.2));
+    // the flock bursting out: a short low-mid whoosh of many wings at once
+    const bn = v.noise('pink', t), bb = v.filter('bandpass', 900, 0.7), bg = v.gain(0);
+    bb.frequency.setValueAtTime(700, t); bb.frequency.exponentialRampToValueAtTime(1700, t + 0.3);
+    bg.gain.setValueAtTime(0, t); bg.gain.linearRampToValueAtTime(level * 0.12, t + 0.05); bg.gain.setTargetAtTime(0, t + 0.08, 0.12);
+    bn.connect(bb); bb.connect(bg); out2(bg, o, 0.4, v);
+    let end = t + 0.8;
+    let x = 0;
+    for (let i = 0; i < n; i++) {
+      const tt = t + x, d = rand(0.7, 1.35), pan = rand(-0.85, 0.85);
+      x += rand(0.025, 0.11);
+      const nz = v.noise('pink', tt), bp = v.filter('bandpass', rand(1700, 3300), 0.9), lp = v.filter('lowpass', 9000, 0.6);
+      const am = v.gain(0.45), lfo = v.osc('square', rand(15, 24), 0, tt), depth = v.gain(0.55), env = v.gain(0), p = v.pan(pan);
+      lfo.connect(depth); depth.connect(am.gain);
+      nz.connect(bp); bp.connect(lp); lp.connect(am); am.connect(env); env.connect(p);
+      out2(p, o, 0.5, v); p.connect(echo);
+      const f0 = bp.frequency.value;
+      bp.frequency.setValueAtTime(f0, tt); bp.frequency.exponentialRampToValueAtTime(f0 * 0.75, tt + d);
+      lp.frequency.setValueAtTime(this.c.hz(9000), tt); lp.frequency.exponentialRampToValueAtTime(this.c.hz(2600), tt + d);
+      lfo.frequency.setValueAtTime(lfo.frequency.value, tt); lfo.frequency.linearRampToValueAtTime(lfo.frequency.value * 0.8, tt + d);
+      const E = env.gain, a = level * rand(0.22, 0.34);
+      E.setValueAtTime(0, tt); E.linearRampToValueAtTime(a, tt + 0.03); E.setTargetAtTime(0, tt + 0.08, d * 0.3);
+      end = Math.max(end, tt + d + 0.2);
+    }
+    // the alarm calls: 2-3 callers, each a few sharp chips (a fast downward glide), the last ones far
+    const callers = this.lite ? 2 : 3;
+    for (let k = 0; k < callers; k++) {
+      const os = v.osc(k === 2 ? 'sawtooth' : 'sine', 4000, 0, t), g = v.gain(0), p = v.pan(rand(-0.7, 0.7));
+      let src: AudioNode = os;
+      if (k === 2) { const bp = v.filter('bandpass', 2600, 2.2); os.connect(bp); src = bp; } // the harsh "tcherr"
+      src.connect(g); g.connect(p); out2(p, o, 0.6, v); p.connect(echo);
+      const F = os.frequency, G = g.gain;
+      G.setValueAtTime(0, t);
+      let y = rand(0.02, 0.18) + k * 0.07;
+      let calls = 0;
+      while (y < 1.75 && calls < 7) {
+        const tt = t + y, far = Math.max(0.2, 1 - y / 1.9);
+        if (k === 2) { // a rattling "tcherr": a short burst of fast chips
+          const len = rand(0.14, 0.22);
+          for (let z = 0; z < len; z += 0.028) {
+            F.setValueAtTime(rand(2300, 2900), tt + z); F.exponentialRampToValueAtTime(1700, tt + z + 0.022);
+            G.setValueAtTime(0, tt + z); G.linearRampToValueAtTime(level * 0.06 * far, tt + z + 0.004); G.linearRampToValueAtTime(0, tt + z + 0.024);
+          }
+          y += len + rand(0.25, 0.5);
+        } else { // "tchk": 1-2 sharp chips
+          const f0 = rand(3400, 5200), double = chance(0.5);
+          for (let j = 0; j < (double ? 2 : 1); j++) {
+            const s0 = tt + j * rand(0.06, 0.09), dd = rand(0.035, 0.055);
+            F.setValueAtTime(f0, s0); F.exponentialRampToValueAtTime(f0 * 0.55, s0 + dd);
+            G.setValueAtTime(0, s0); G.linearRampToValueAtTime(level * 0.075 * far, s0 + 0.004); G.linearRampToValueAtTime(0, s0 + dd);
+          }
+          y += rand(0.16, 0.38);
+        }
+        calls++;
+      }
+      end = Math.max(end, t + y + 0.1);
+    }
+    v.play(t, end + 0.6);
+    return end + 0.6;
+  }
+
+  /**
+   * The body of a low, dark sting (the bear's eyes opening in the dark, gameplay): a soft sub drop and a low earth
+   * thump with a falling mid-range body a phone speaker can play — no crack (a sting, not a cut).
+   */
+  sting(o: Out, t: number, level: number): void {
+    const v = new Voice(this.c);
+    const s = v.osc('sine', 58, 0, t), sg = v.gain(0);
+    s.frequency.setValueAtTime(58, t); s.frequency.exponentialRampToValueAtTime(30, t + 1.1);
+    sg.gain.setValueAtTime(0, t); sg.gain.linearRampToValueAtTime(level * 0.8, t + 0.012); sg.gain.setTargetAtTime(0, t + 0.02, 0.45);
+    s.connect(sg); out2(sg, o, 0.3, v);
+    const b = v.noise('brown', t), bl = v.filter('lowpass', 160, 0.7), bg = v.gain(0);
+    bg.gain.setValueAtTime(0, t); bg.gain.linearRampToValueAtTime(level * 0.9, t + 0.02); bg.gain.setTargetAtTime(0, t + 0.03, 0.35);
+    b.connect(bl); bl.connect(bg); out2(bg, o, 0.6, v);
+    const bo = v.osc('triangle', 120, 0, t), bog = v.gain(0), bol = v.filter('lowpass', 650, 0.7);
+    bo.frequency.setValueAtTime(124, t); bo.frequency.exponentialRampToValueAtTime(58, t + 0.5);
+    bog.gain.setValueAtTime(0, t); bog.gain.linearRampToValueAtTime(level * (this.lite ? 0.45 : 0.25), t + 0.01); bog.gain.setTargetAtTime(0, t + 0.02, 0.22);
+    bo.connect(bol); bol.connect(bog); out2(bog, o, 0.4, v);
+    v.play(t, t + 2.4);
   }
 
   /** A low rumble that rises (dread): sub beating on D1 + a lowpassed earth rumble. */

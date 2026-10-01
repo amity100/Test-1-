@@ -1233,11 +1233,15 @@ export abstract class Composer {
   /** Running and not fading out. */
   protected get active(): boolean { return this.running && this.stopAt === Infinity; }
 
-  activate(now: number, fade: number): void {
+  /**
+   * Fade in over `fade` s. A stopped composer starts its first bar at `startAt` (context time; default now + 0.12) —
+   * the film's score hands over on its own bar line that way (phase-locked, no seam).
+   */
+  activate(now: number, fade: number, startAt?: number): void {
     if (!this.running) {
       this.running = true;
       this.step = 0;
-      this.nextTime = now + 0.12;
+      this.nextTime = startAt !== undefined && Number.isFinite(startAt) ? Math.max(now + 0.005, startAt) : now + 0.12;
       this.reset();
     }
     this.stopAt = Infinity;

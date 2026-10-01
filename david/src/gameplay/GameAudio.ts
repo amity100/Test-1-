@@ -13,6 +13,10 @@ export class GameAudio {
   init() {
     return this.engine.init();
   }
+  /**
+   * One-shot sound. The bear's hook (Story.bearAttack, CUT v4): 'birdsScatter' when the birds fly up out of the bushes
+   * (wings + alarm calls, ≈2 s), 'eyesSting' when the eyes open in the dark (a low, dark sting with the bear's breath).
+   */
   sfx(name: SfxName, opts?: SfxOptions) {
     try {
       this.engine.sfx(name, opts);
@@ -30,6 +34,12 @@ export class GameAudio {
     const pan = THREE.MathUtils.clamp(local.x / Math.max(2, Math.abs(local.z) + Math.abs(local.x)), -0.9, 0.9);
     this.sfx(name, { volume: volume * att, pitch, pan });
   }
+  /**
+   * Crossfade the music to a mood. 'hush' (the bear's hook: the birds fall silent) also turns the ambience to the
+   * 'hush' bed — the pastoral and the birds fall away into the wind, a low drone and a slow heartbeat — until
+   * 'tension' takes over. 'pastoral' asked for while the opening film's score is ending waits for the score's own
+   * hand-off (it starts the pastoral on its bar line).
+   */
   music(m: MusicMood, fade = 3) {
     this.engine.setMusicMood(m, fade);
   }
@@ -53,15 +63,17 @@ export class GameAudio {
    * Start the score + sound design of the opening film, synchronised to its shot sheet (reads each shot cue's
    * `cue`, `set`, `t`, `shot`, `dur`, `cut`, `fade`, `beats` and `slowmo`, and the text cues' times and `words`, at
    * call time — every hit is keyed to the named beats of the sheet, so a retimed sheet stays in sync). `startAt` = film
-   * time (s) to start from. The score plays its own hit on the title smash (a sfx('titleHit') at that moment is
-   * absorbed; one made early — a skip — jumps the score to its title hit and tail). While it plays,
+   * time (s) to start from. The score plays its own warm hit ON the logo (D3 `logo`; a sfx('titleHit') at that moment
+   * is absorbed; one made early — a skip — jumps the score to its logo statement). At the end of the last shot the
+   * score hands over to the game's pastoral music by itself, on its own bar line (CUT v4: no silence, no seam): a
+   * stopIntro() or music('pastoral') at that moment is absorbed, its last chord rings out. While it plays,
    * music('title') is ignored and any other music(mood) ends it with that fade. The ambience bed follows the cues
    * automatically until you call ambience(name) yourself. Call syncIntro(filmClock) every frame.
    */
   playIntro(cues: readonly IntroCue[], startAt = 0): void {
     try { this.engine.playIntro(cues, startAt); } catch { /* never let audio break the game */ }
   }
-  /** Fade the intro score out (seconds). */
+  /** Fade the intro score out (seconds); at its hand-off (the end of the film) its last chord rings out instead. */
   stopIntro(fade = 1.5): void {
     try { this.engine.stopIntro(fade); } catch { /* ignore */ }
   }

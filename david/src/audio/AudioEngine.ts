@@ -30,7 +30,9 @@
 // Public types
 // ============================================================================
 
-export type MusicMood = 'silence' | 'title' | 'pastoral' | 'tension' | 'battle' | 'victory';
+/** 'hush' (the bear's hook): the pasture holding its breath — a low drone, a thin high tone, a slow heartbeat; it also
+ *  turns the ambience to the 'hush' bed (the birds and the cicadas fall away, the wind and the leaves stay). */
+export type MusicMood = 'silence' | 'title' | 'pastoral' | 'tension' | 'battle' | 'victory' | 'hush';
 
 export type SfxName =
   | 'footstep' | 'footstepRun' | 'slingRelease' | 'stoneHit' | 'stoneHitBear' | 'jarShatter'
@@ -38,7 +40,10 @@ export type SfxName =
   | 'staffHit' | 'whoosh' | 'grab' | 'davidHurt' | 'davidEffort' | 'pickup' | 'uiObjective'
   | 'uiConfirm' | 'heartbeat' | 'impactBoom' | 'dodge' | 'titleHit' | 'shepherdCall' | 'shepherdWhistle'
   // cinematic extras (score pass): a dark hit + swell, a 2 s riser into a cut, the torn robe (1 Sam 15:27)
-  | 'stinger' | 'riser' | 'robeTear';
+  | 'stinger' | 'riser' | 'robeTear'
+  // the bear's hook in gameplay (CUT v4): small birds flushed from the bushes (wings + alarm calls, ≈2 s); a low, dark
+  // sting with the bear's breath in the dark when its eyes open
+  | 'birdsScatter' | 'eyesSting';
 
 /** volume 0..1 (default 1), pitch multiplier (default 1; slight randomization is added), pan -1..1 */
 export interface SfxOptions { volume?: number; pitch?: number; pan?: number; }
@@ -52,6 +57,7 @@ import {
   Out, Synth, makeMelody, Composer, MOTIF_DEG, MOTIF_LEN,
 } from './synth';
 import { IntroScore, riserFx, robeTearFx } from './IntroScore';
+import { FilmSound } from './FilmSound';
 import { Beds, BED_LEGACY, BED_NAMES, type BedName } from './Beds';
 import type { IntroCue } from '../content/introScript';
 
@@ -137,6 +143,8 @@ const PASTORAL_PROGS: ReadonlyArray<readonly ChordName[]> = [
   ['Dm', 'G', 'Dm', 'C', 'F', 'C', 'G', 'Dm'],
   ['Dm', 'Am', 'G', 'Dm', 'F', 'G', 'C', 'Dm'],
 ];
+/** The first phrase after the opening film's hand-off: four bars still in the film's D major, then the pasture's Dorian. */
+const HANDOFF_PROG: readonly ChordName[] = ['D', 'D', 'G', 'D', 'Dm', 'C', 'G', 'Dm'];
 const CELLS_68: ReadonlyArray<readonly number[]> = [[3, 3], [2, 1, 3], [3, 2, 1], [1, 1, 1, 3], [4, 2], [2, 2, 2], [3, 1, 1, 1]];
 const END_68: ReadonlyArray<readonly number[]> = [[6], [3, 3], [4, 2]];
 
@@ -149,8 +157,15 @@ class PastoralComposer extends Composer {
   private drums = false;
   private light = false;
   private fluteEnd = 0;
+  private opening = false;
 
-  protected reset(): void { this.prog = PASTORAL_PROGS[0]; this.fluteEnd = 0; this.drums = false; this.light = false; }
+  /** The next start continues the opening film (its hand-off): the first phrase stays in the film's D major. */
+  openFromFilm(): void { this.opening = true; }
+
+  protected reset(): void {
+    this.prog = this.opening ? HANDOFF_PROG : PASTORAL_PROGS[0];
+    this.opening = false; this.fluteEnd = 0; this.drums = false; this.light = false;
+  }
 
   protected onStep(step: number, t: number): void {
     const s = this.s;
@@ -238,6 +253,42 @@ class TensionComposer extends Composer {
       }
     }
     if (k === 7) this.motif = null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Hush (the bear's hook, CUT v4): the pasture holding its breath before the bear comes out of the thicket — a low
+// drone rising out of nothing, the E♭ rubbing against it from the second bar, dread under it, a thin high tone, and a
+// slow heartbeat (~62 bpm) a little stronger each bar. setMusicMood('hush') also turns the ambience to the 'hush' bed
+// (the birds and the cicadas fall away; the wind and the leaves stay). The 'tension' mood takes over from it.
+// ---------------------------------------------------------------------------
+class HushComposer extends Composer {
+  protected readonly stepDur = 0.485; // two steps = one heartbeat
+  protected readonly stepsPerBar = 8;
+  private readonly fx: FilmSound;
+
+  constructor(c: Core, s: Synth, mix: number, private readonly isLite: () => boolean) {
+    super(c, s, mix);
+    this.fx = new FilmSound(c, isLite());
+  }
+
+  protected reset(): void { this.fx.setLite(this.isLite()); }
+
+  protected onStep(step: number, t: number): void {
+    const s = this.s, lite = this.isLite();
+    const bar = Math.floor(step / 8), k = step % 8;
+    if (k === 0) {
+      const len = this.barDur;
+      // the drone (overlapping bars; phones an octave up, where their speaker plays)
+      s.pad(this.out, t, len + 2.4, lite ? [50, 57] : [38, 45], { level: 0.045, attack: bar === 0 ? 1.6 : 1.2, release: 2.4, cutoff: lite ? 700 : 380, voices: 2, detune: 8, lfoCents: 180 });
+      if (bar >= 1) s.pad(this.out, t, len + 2, lite ? [51] : [39], { level: 0.016, attack: 2.4, release: 2, cutoff: lite ? 800 : 420, voices: 2, detune: 6 });
+      // dread under it (a sub beating on D; phones get its harmonics)
+      this.fx.rumble(this.dryOut, t, len * 1.5, lite ? 0.05 : 0.07, false);
+      // the held breath: a thin high tone
+      s.pad(this.out, t, len + 1.4, [93], { level: 0.0028, attack: bar === 0 ? 2.2 : 1.2, release: 1.4, cutoff: 6000, voices: 1, type: 'sine', lfoCents: 12 });
+    }
+    // the heart: lub-dub on every other step
+    if (k % 2 === 0) this.fx.heart(this.dryOut, t + 0.01, Math.min(0.17, 0.08 + 0.02 * bar + 0.004 * k) * (lite ? 1.15 : 1));
   }
 }
 
@@ -685,6 +736,7 @@ type Pts = ReadonlyArray<readonly [number, number]>;
 /** Routed around the slow-motion lowpass. */
 const UI_SFX: ReadonlySet<string> = new Set<SfxName>([
   'uiObjective', 'uiConfirm', 'heartbeat', 'titleHit', 'shepherdCall', 'shepherdWhistle', 'stinger', 'riser', 'robeTear',
+  'eyesSting',
 ]);
 /** [voice group, max concurrent] */
 const SFX_LIMIT: Partial<Record<SfxName, readonly [string, number]>> = {
@@ -694,6 +746,7 @@ const SFX_LIMIT: Partial<Record<SfxName, readonly [string, number]>> = {
   stoneHit: ['stone', 6], jarShatter: ['jar', 4], heartbeat: ['heart', 2], titleHit: ['title', 1], impactBoom: ['boom', 2],
   shepherdCall: ['call', 2], shepherdWhistle: ['call', 2],
   stinger: ['stinger', 2], riser: ['riser', 1], robeTear: ['tear', 1],
+  birdsScatter: ['scatter', 1], eyesSting: ['eyes', 1],
 };
 
 /** Loudness trims (measured, K-weighted) so volume 1 of every effect sits well against the score. */
@@ -741,8 +794,14 @@ class SfxLib {
   onTitleHit: ((t: number) => void) | null = null;
   private readonly active = new Map<string, number[]>();
   private readonly table: Record<SfxName, SfxFn>;
+  /** the bear's hook (birds, the dark sting, the bear's breath) */
+  private readonly hook: FilmSound;
+  private lite = false;
+
+  setLite(on: boolean): void { this.lite = on; this.hook.setLite(on); }
 
   constructor(private readonly c: Core, private readonly syn: Synth) {
+    this.hook = new FilmSound(c, false);
     this.table = {
       footstep: (v, t, o, p) => this.sample(v, o, t, 'stepWalk', p * rand(0.9, 1.1), rand(0.4, 0.55)),
       footstepRun: (v, t, o, p) => this.sample(v, o, t, 'stepRun', p * rand(0.92, 1.1), rand(0.55, 0.7)),
@@ -814,6 +873,13 @@ class SfxLib {
         robeTearFx(this.c, { dry: o, wet: w }, t);
         return t + 2;
       },
+      birdsScatter: (v, t, o, p, s) => {
+        const w = v.gain(0.35); w.connect(this.c.hallIn);
+        const e = this.hook.scatter({ dry: o, wet: w }, t, 1, this.lite ? 4 : 7);
+        s.echo(0.05);
+        return e;
+      },
+      eyesSting: (v, t, o, p, s) => this.eyesSting(v, t, o, s),
     };
   }
 
@@ -1158,21 +1224,48 @@ class SfxLib {
     return t + 5;
   }
 
-  /** The DAVID title reveal: boom + taiko + D-minor choir + low strings + shofar + cymbal wash. */
+  /**
+   * The bear's eyes open in the dark between the bushes (the hook, gameplay): a low, dark sting — a soft sub drop and
+   * a low thump, the D–E♭ cluster low in the strings (and in the phone band), a trembling high semitone — and the
+   * bear's heavy breath (in, then a long out-breath with the chest's flutter).
+   */
+  private eyesSting(v: Voice, t: number, o: AudioNode, s: Sends): number {
+    const lo: Out = { dry: o, wet: null };
+    const syn = this.syn;
+    this.hook.sting(lo, t, 0.32);
+    syn.drum(lo, t + 0.005, 'taiko', this.lite ? 0.42 : 0.3, 0, 0.75);
+    syn.pad(lo, t, 1.8, [38, 39], { level: 0.04, attack: 0.02, release: 1.3, cutoff: 650, voices: 2, detune: 10 });
+    syn.pad(lo, t, 1.5, [50, 51], { level: this.lite ? 0.022 : 0.012, attack: 0.03, release: 1.0, cutoff: 1100, voices: 2, detune: 8 });
+    syn.pad(lo, t + 0.02, 1.3, [75, 76], { level: 0.008, attack: 0.05, release: 0.8, cutoff: 5000, voices: 2, detune: 4, trem: 0.5, tremRate: 13 });
+    // the strings' trembling cluster in the middle (what a phone speaker plays of the sting)
+    syn.pad(lo, t + 0.01, 1.5, [62, 63], { level: this.lite ? 0.045 : 0.016, attack: 0.02, release: 1.1, cutoff: 1900, voices: 2, detune: 8, trem: 0.35, tremRate: 9 });
+    this.hook.breath(lo, t + 0.2, this.lite ? 0.1 : 0.075, 0.85, 1.5);
+    s.hall(0.35); s.echo(0.06);
+    return t + 3.2;
+  }
+
+  /**
+   * The DAVID logo's arrival outside the film's score (the film skipped while it is still loading): the same warm
+   * D-major arrival as the score's logo (CUT v4) — a deep stroke and a taiko pair, the choir and the strings in D
+   * major, a full strum of the kinnor, a soft cymbal bloom and a high shimmer (no shofar: in the film the ram's horn is
+   * Saul's army's).
+   */
   private titleHit(v: Voice, t: number, o: AudioNode, s: Sends): number {
     const lo: Out = { dry: o, wet: null };
     const syn = this.syn;
-    this.sample(v, o, t, 'boom', 1, 1);
-    syn.drum(lo, t + 0.004, 'taiko', 0.9, -0.35);
-    syn.drum(lo, t + 0.022, 'taiko', 0.8, 0.35);
-    syn.drum(lo, t, 'dum', 0.7, 0);
-    syn.choir(lo, t + 0.02, 5.5, [50, 57, 62, 65, 69, 74], { level: 0.34, attack: 0.1, release: 3, vowel: 'ah', breath: 0.2 });
-    syn.pad(lo, t, 5, [26, 38, 45, 50], { level: 0.22, attack: 0.06, release: 3, cutoff: 1400, cutoffEnd: 500, voices: 3, detune: 10 });
-    syn.shofar(lo, t + 0.18, 'tekiah', 0.4);
-    this.burst(v, o, t, 'white', 'highpass', 6000, 0.7, 0.08, 0.01, 1.1);
-    s.hall(0.55); s.echo(0.12);
+    this.sample(v, o, t, 'boom', 0.9, 0.9);
+    syn.drum(lo, t + 0.004, 'taiko', 0.75, -0.3);
+    syn.drum(lo, t + 0.018, 'taiko', 0.65, 0.3);
+    syn.drum(lo, t, 'dum', 0.5, 0);
+    syn.choir(lo, t + 0.02, 4.5, [50, 54, 57, 62, 66, 69], { level: 0.3, attack: 0.08, release: 3, vowel: 'ah', breath: 0.15 });
+    syn.pad(lo, t, 4.5, [38, 45, 50, 54, 57], { level: 0.2, attack: 0.05, release: 3, cutoff: 1800, cutoffEnd: 700, voices: 3, detune: 9 });
+    syn.pad(lo, t + 0.02, 4, [62, 66, 69, 74], { level: 0.1, attack: 0.12, release: 2.5, cutoff: 4000, cutoffEnd: 2600, voices: 2, detune: 8, vib: 9, vibRate: 5.4, vibDelay: 0.3 });
+    syn.strum(lo, t + 0.01, [50, 57, 62, 66, 69, 74, 78], 0.8, 0.028);
+    syn.pad(lo, t + 0.05, 2.6, [86, 90, 93], { level: 0.012, attack: 0.5, release: 1.4, cutoff: 9000, voices: 2, detune: 8, trem: 0.25, tremRate: 11 });
+    this.burst(v, o, t, 'white', 'highpass', 4500, 0.6, 0.05, 0.015, 0.8);
+    s.hall(0.55); s.echo(0.1);
     if (this.onTitleHit) this.onTitleHit(t);
-    return t + 7;
+    return t + 6;
   }
 }
 
@@ -1181,7 +1274,9 @@ class SfxLib {
 // ============================================================================
 
 const MUSIC_GAIN = 0.68;
-const MOOD_MIX: Record<Exclude<MusicMood, 'silence'>, number> = { title: 0.85, pastoral: 0.9, tension: 1, battle: 0.95, victory: 0.95 };
+const MOOD_MIX: Record<Exclude<MusicMood, 'silence'>, number> = { title: 0.85, pastoral: 0.9, tension: 1, battle: 0.95, victory: 0.95, hush: 1 };
+/** How fast the pastoral comes up at the film's hand-off (its instruments carry their own attacks). */
+const HANDOFF_FADE = 0.6;
 const UNLOCK_EVENTS = ['pointerdown', 'keydown', 'touchend'] as const;
 /** Level of the intro score bus (relative to the music bus). */
 const INTRO_MIX = 0.92;
@@ -1320,7 +1415,9 @@ export class AudioEngine {
     this.moods.set('tension', new TensionComposer(core, syn, MOOD_MIX.tension));
     this.moods.set('battle', new BattleComposer(core, syn, MOOD_MIX.battle));
     this.moods.set('victory', new VictoryComposer(core, syn, MOOD_MIX.victory));
+    this.moods.set('hush', new HushComposer(core, syn, MOOD_MIX.hush, () => this.lite));
     const lib = new SfxLib(core, syn);
+    lib.setLite(this.lite);
     this.lib = lib;
     lib.onTitleHit = (t) => { if (this.title) this.title.reveal(t); };
     this.amb = new Ambience(core);
@@ -1330,6 +1427,7 @@ export class AudioEngine {
     this.beds = beds;
     const intro = new IntroScore(core, syn, this.lite);
     intro.onAmbience = (bed, fade, t) => { if (this.introAutoAmb) this.applyBed(bed, fade, t); };
+    intro.onHandoff = (t) => this.handoff(t);
     // the film's sound design borrows the flock and the heart from the SFX library, placed at exact times
     intro.fx.sfxAt = (name, t, volume, pan, pitch, dest) => lib.play(name, { volume, pan, pitch }, Math.max(ctx.currentTime, t - 0.012), dest);
     this.intro = intro;
@@ -1387,25 +1485,57 @@ export class AudioEngine {
     this.lite = !!on;
     if (this.beds) this.beds.setLite(this.lite);
     if (this.intro) this.intro.setLite(this.lite);
+    if (this.lib) this.lib.setLite(this.lite);
   }
 
   /**
    * Crossfade to a mood (default ~3 s). Can be called before init(); applied once audio starts.
-   * While the intro score plays, 'title' is absorbed (the intro *is* the title music); any other mood
-   * ends the intro score with the same fade.
+   * While the intro score plays, 'title' is absorbed (the intro *is* the title music); 'pastoral' asked for while the
+   * score plays its last section waits for the score's own hand-off (it starts the pastoral on its bar line); any other
+   * mood ends the intro score with the same fade. 'hush' also turns the ambience to the 'hush' bed.
    */
   setMusicMood(mood: MusicMood, fadeSeconds = 3): void {
-    const m: MusicMood = mood === 'title' || mood === 'pastoral' || mood === 'tension' || mood === 'battle' || mood === 'victory'
+    const m: MusicMood = mood === 'title' || mood === 'pastoral' || mood === 'tension' || mood === 'battle' || mood === 'victory' || mood === 'hush'
       ? mood : 'silence';
     const f = clamp(fin(fadeSeconds, 3), 0, 30);
     if (this.introActive || this.introPending) {
       if (m === 'title') return;
+      if (m === 'pastoral' && this.intro && this.core && this.intro.handoffPending(this.core.ctx.currentTime)) {
+        this.mood = 'pastoral';
+        this.moodFade = f;
+        return;
+      }
       this.stopIntro(Math.max(0.3, f));
     }
-    if (m === this.mood && this.core) return;
+    if (m === this.mood && this.core && (m === 'silence' || this.moods.get(m)?.running)) return;
     this.mood = m;
     this.moodFade = f;
     this.applyMood(f);
+    // the pasture holds its breath: the birds and the cicadas fall away with the music (the wind and the leaves stay)
+    if (m === 'hush') this.setAmbienceBed('hush', Math.max(0.3, f));
+  }
+
+  /**
+   * The opening film's score reached its hand-off (the end of its last shot; `t` = context time of its bar line): the
+   * game's pastoral music starts ON that bar line (phase-locked), its first phrase still in the film's D major, while
+   * the score's last chord rings out under it — unless the game has asked for another mood meanwhile.
+   */
+  private handoff(t: number): void {
+    const c = this.core;
+    if (!c || (this.mood !== 'silence' && this.mood !== 'pastoral' && this.mood !== 'title')) return;
+    const comp = this.moods.get('pastoral');
+    if (!comp) return;
+    const now = c.ctx.currentTime;
+    this.mood = 'pastoral';
+    this.moodFade = HANDOFF_FADE;
+    for (const [name, other] of this.moods) {
+      if (name !== 'pastoral') { try { other.deactivate(now, 1); } catch { /* ignore */ } }
+    }
+    try {
+      if (comp instanceof PastoralComposer && !comp.running) comp.openFromFilm();
+      comp.activate(now, HANDOFF_FADE, t);
+      comp.schedule(now, now + 0.3);
+    } catch { /* ignore */ }
   }
 
   private applyMood(fade: number): void {
@@ -1446,11 +1576,16 @@ export class AudioEngine {
     } catch (e) { console.warn('[AudioEngine] intro failed', e); }
   }
 
-  /** Fade the intro score out (seconds). Safe to call any time. */
+  /**
+   * Fade the intro score out (seconds). Safe to call any time. At the score's hand-off (the end of the film) it is
+   * absorbed: the game's music has started on the score's bar line and its last chord rings out.
+   */
   stopIntro(fade = 1.5): void {
     this.introPending = null;
     if (!this.core || !this.intro) return;
     try { this.intro.stop(this.core.ctx.currentTime, clamp(fin(fade, 1.5), 0.02, 20)); } catch { /* ignore */ }
+    // a mood that was waiting for the score's hand-off (which will not come now) starts at once
+    if (this.mood !== 'silence' && !this.moods.get(this.mood)?.running) this.applyMood(Math.max(0.3, this.moodFade));
   }
 
   /** Optional: report the intro's own clock (s) every frame or so; re-locks the score after hitches. */
