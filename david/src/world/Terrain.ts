@@ -830,8 +830,15 @@ vec3 hblend3(vec3 w, vec3 h){
   float grike = 0.0;
 #ifndef TERRAIN_LOW
   if (wR > 0.02 && dist < 160.0) {
-    vec2 cc = tCell(tRot(p, 0.5) * vec2(0.38, 0.5));
-    grike = (1.0 - smoothstep(0.03, 0.16, cc.y - cc.x)) * (1.0 - smoothstep(110.0, 160.0, dist));
+    // one regular F2-F1 joint net reads as hexagonal floor tiles: warp the domain so the joints wander, add a sparser
+    // net of larger joints, and let the small joints open only in patches (real grikes run in sets and die out)
+    vec2 q = tRot(p, 0.5) * vec2(0.38, 0.5);
+    q += (vec2(dNoise(p * 0.23 + 3.7), dNoise(p * 0.23 - 8.1)) - 0.5) * 1.3;
+    vec2 cc = tCell(q);
+    vec2 cc2 = tCell(q * 0.47 + 11.3);
+    float j1 = (1.0 - smoothstep(0.03, 0.16, cc.y - cc.x)) * smoothstep(0.35, 0.7, dNoise(p * 0.31 + 5.1));
+    float j2 = 1.0 - smoothstep(0.03, 0.12, cc2.y - cc2.x);
+    grike = max(j1, j2) * (1.0 - smoothstep(110.0, 160.0, dist));
     wR *= 1.0 - grike * 0.85;
   }
 #endif
