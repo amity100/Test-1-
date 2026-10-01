@@ -71,7 +71,7 @@ export const WORLD_CAM = {
   face: { az: -15, d0: 2.95, d1: 2.15, side0: 0.16, side1: 0.08, lookSide: 0.26, fov0: 21, fov1: 17.5, turnDur: 1.6, turnAz: 72 },
   // H1 / H2: the hook
   // (H2: the bear deep in the shade and the picture dark — only the eye-shine, additive and not tone-mapped, reads)
-  // (cut4, H1: the lamb ≈20-25 % of the frame height — the lens ~4.4-4.8 m behind it, 0.95 m up, looking a little down
+  // (cut4, H1: the lamb ≈20-25 % of the frame height — the lens ~4.1 -> 3.6 m behind and beside it, 0.95 m up, looking a little down
   //  over the grass, which spare grass pushers flatten along the lens' line; the dark bushes of buildProps behind it)
   hook: { dark: 0.85, lambSpeed: 0.55, walkUntil: 1.3, camBack0: 3.9, camBack1: 3.5, camSide0: 1.3, camSide1: 1.0, camH: 0.95, lookIn: 1.4, lookH: 0.32, fov0: 34, fov1: 31, bearIn: 12.5, exp1: 0.62, exp2: 0.17, h2H: 1.02, h2Fov0: 12.5, h2Fov1: 10.5, eye: 0.12, shine: 2.0 },
 };
@@ -648,7 +648,10 @@ export class FilmWorld {
     try {
       // (cut4, director-notes-v5 D1: the flock IN FRAME below him — from the lens on the rock the slope 4-7 m out lies
       //  under the frame and the letterbox, so the drove is staged where the lens sees the ground: 7-30 m)
-      const n = this.ff.stageInView(c, this.rock, { near: 7, far: 30, max: 14 });
+      let n = this.ff.stageInView(c, this.rock, { near: 7, far: 30, max: 14 });
+      // the slope beyond the rock drops out of the frame: then the drove where this lens does see ground (the slope
+      // and the valley floor further out) — in frame, smaller
+      if (n < 6) n = this.ff.stageInView(c, this.rock, { near: 9, far: 70, max: 14, clear: 0.15 });
       if (n > 0) return;
     } catch (e) {
       console.warn('[film] flock staging', e);
@@ -821,7 +824,7 @@ export class FilmWorld {
       hc.localToWorld(c.position);
       c.scale.set(es, es * Math.max(0.04, open), 1);
     });
-    if (this.eyeMat) this.eyeMat.opacity = Math.min(1, open * 1.1);
+    if (this.eyeMat) this.eyeMat.opacity = Math.min(0.85, open);
   }
 
   private buildEyes() {
@@ -829,8 +832,8 @@ export class FilmWorld {
     c.width = c.height = 64;
     const x = c.getContext('2d')!;
     const gr = x.createRadialGradient(32, 32, 0, 32, 32, 32);
-    gr.addColorStop(0, 'rgba(255,240,200,1)');
-    gr.addColorStop(0.22, 'rgba(255,190,90,0.85)');
+    gr.addColorStop(0, 'rgba(255,244,214,1)');
+    gr.addColorStop(0.22, 'rgba(255,206,120,0.8)');
     gr.addColorStop(0.55, 'rgba(160,90,20,0.25)');
     gr.addColorStop(1, 'rgba(0,0,0,0)');
     x.fillStyle = gr;
@@ -838,7 +841,9 @@ export class FilmWorld {
     this.eyeTex = new THREE.CanvasTexture(c);
     this.eyeTex.colorSpace = THREE.SRGBColorSpace;
     // visual-bible 3.15: a FAINT amber eyeshine (tapetum), never red, never a demon glow
-    this.eyeMat = new THREE.SpriteMaterial({ map: this.eyeTex, color: new THREE.Color(1.7, 1.12, 0.52), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, toneMapped: false, fog: false });
+    // (cut4: no depth test — the glow sits exactly on the rig's eye sockets (verified: NDC within 0.03 of the head) and
+    //  must read THROUGH the leaves in front of it: "two amber eyes open behind the leaves")
+    this.eyeMat = new THREE.SpriteMaterial({ map: this.eyeTex, color: new THREE.Color(1.4, 1.2, 0.72), blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, transparent: true, toneMapped: false, fog: false });
     const g = new THREE.Group();
     g.name = 'film:bear-eyes';
     for (let i = 0; i < 2; i++) {

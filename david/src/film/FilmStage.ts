@@ -219,7 +219,8 @@ export class FilmStage {
           // 0 speaker · 1 seated · 2-5 the arc · 6-7 the near pair the lens dollies in past · 8-10 the outer ring). The
           // 'near' LOD (real faces and beards) for the ones nearest the lens; fewer in all on phones.
           const tierName = engine.quality.tier;
-          const plan = tierName === 'desktop-high' ? { idx: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], near: [6, 7, 0, 2] }
+          // (desktop-high: 3 'near' LODs — 4 with hair sims cost ~27 ms/frame; only the near pair 6-7 keeps its sim)
+          const plan = tierName === 'desktop-high' ? { idx: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], near: [6, 7, 0] }
             : tierName === 'desktop-medium' ? { idx: [0, 1, 2, 3, 4, 5, 6, 7], near: [6, 7] }
               : tierName === 'mobile-high' ? { idx: [0, 2, 3, 4, 5, 6, 7], near: [6, 7] }
                 : { idx: [0, 2, 3, 6, 7], near: [6] };
@@ -230,6 +231,14 @@ export class FilmStage {
             p((k + 1) / (marks.length + 1));
             await yieldFrame();
             const e = await castMod.FilmActor.create({ role: 'elder', quality: q.name, msaa: q.msaa, seed: i + 1, lod: plan.near.includes(i) ? 'near' : 'crowd', ground });
+            // the strand-hair simulation only where the wind in the hair is seen close: the near pair (6, 7)
+            if (i !== 6 && i !== 7) {
+              try {
+                e.groom?.setSimulation(false);
+              } catch {
+                /* hair is cosmetic */
+              }
+            }
             elders.push(e);
             actors.push(e);
           }
