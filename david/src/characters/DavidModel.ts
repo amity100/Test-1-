@@ -63,8 +63,8 @@ export interface DavidParts {
   mocap?: boolean;
 }
 
-/** film performances for the opening film (docs/intro-script.md shots 15-17), see DavidModel.performFilm */
-export type FilmShot = 'back' | 'reveal' | 'wide';
+/** film performances for the opening film (docs/intro-script.md shots 15-17; CUT v4 D3 'horizon'), see DavidModel.performFilm */
+export type FilmShot = 'back' | 'reveal' | 'wide' | 'horizon';
 /** CUT v3 contract (src/content/introScript.ts): D1's length (the 'back' performance is timed to it) and D2's `turn` */
 const FILM_BACK_LEN = INTRO_SHOTS.find((s) => s.take === 'figure')?.dur ?? 6;
 const FILM_TURN_AT = INTRO_SHOTS.find((s) => s.take === 'face')?.beats?.turn ?? 0.8;
@@ -86,6 +86,12 @@ export interface FilmOptions {
    * settling on the distance — never a stare into the lens"). Default 0.38; 0 = into the lens. A far `look` is kept.
    */
   offLens?: number;
+  /** 'horizon' (D3): where his flock grazes, as a turn from his facing (rad, + = to his left); default 0.35 */
+  gaze?: number;
+  /** 'horizon': from this shot second he comes back to the game's own idle stance (the hero hold and every film offset
+   *  fade out) — at `endAt` the film hands him to the player; defaults 8 / 10 (the contract's D3 `settle` / length) */
+  releaseAt?: number;
+  endAt?: number;
 }
 
 // channels (not joints) blended by the pose mixer
@@ -800,7 +806,7 @@ export class DavidModel {
     L: { on: false, w: 0, pos: new THREE.Vector3() },
     R: { on: false, w: 0, pos: new THREE.Vector3() },
   };
-  private film: { shot: FilmShot; t: number; look: THREE.Vector3 | null; wind: number; turnAt: number; turnDur: number; mood: Expression; moodW: number; blinked: boolean; offLens: number } | null = null;
+  private film: { shot: FilmShot; t: number; look: THREE.Vector3 | null; wind: number; turnAt: number; turnDur: number; mood: Expression; moodW: number; blinked: boolean; offLens: number; gaze: number; releaseAt: number; endAt: number } | null = null;
   private filmTurn = 0;
   private filmBlink2 = -1;
   private filmEyes: THREE.Vector3 | null = null;
@@ -1100,7 +1106,8 @@ export class DavidModel {
     // ---------- film performance (opening film shots 15-17): the reference stance, still, wind in the curls
     const film = this.film;
     if (film) {
-      this.hold = 'hero';
+      // (D3 'horizon': from releaseAt he comes back to the game's idle — the hero hold fades out before the hand-off)
+      this.hold = film.shot === 'horizon' && film.t >= film.releaseAt ? 'none' : 'hero';
       this.speed = 0;
       this.lookTarget = null;
     }
@@ -1361,9 +1368,14 @@ export class DavidModel {
       return;
     }
     const f = this.film;
-    const wind = o.wind ?? (shot === 'back' ? 1.8 : shot === 'reveal' ? 1.4 : 1.6);
+    let wind = o.wind ?? (shot === 'back' ? 1.8 : shot === 'reveal' ? 1.4 : 1.6);
+    if (shot === 'horizon') {
+      // the wind in his curls and tunic eases to the game's own over the release (no change at the hand-off)
+      const r0 = o.releaseAt ?? f?.releaseAt ?? 8, r1 = o.endAt ?? f?.endAt ?? 10;
+      wind = THREE.MathUtils.lerp(o.wind ?? 1.7, 1, smooth01((t - r0) / Math.max(0.1, r1 - r0 - 0.2)));
+    }
     if (!f || f.shot !== shot) {
-      this.film = { shot, t, look: o.look ?? null, wind, turnAt: o.turnAt ?? FILM_TURN_AT, turnDur: o.turnDur ?? 2.2, mood: o.mood ?? 'neutral', moodW: o.moodWeight ?? 0.12, blinked: false, offLens: o.offLens ?? 0.38 };
+      this.film = { shot, t, look: o.look ?? null, wind, turnAt: o.turnAt ?? FILM_TURN_AT, turnDur: o.turnDur ?? 2.2, mood: o.mood ?? 'neutral', moodW: o.moodWeight ?? 0.12, blinked: false, offLens: o.offLens ?? 0.38, gaze: o.gaze ?? 0.35, releaseAt: o.releaseAt ?? 8, endAt: o.endAt ?? 10 };
       this.filmBlink2 = -1; // a second blink pending from an earlier (skipped / replayed) shot never fires early
       if (shot !== 'reveal') this.filmTurn = 0;
     } else {
@@ -1375,6 +1387,9 @@ export class DavidModel {
       if (o.mood) f.mood = o.mood;
       if (o.moodWeight !== undefined) f.moodW = o.moodWeight;
       if (o.offLens !== undefined) f.offLens = o.offLens;
+      if (o.gaze !== undefined) f.gaze = o.gaze;
+      if (o.releaseAt !== undefined) f.releaseAt = o.releaseAt;
+      if (o.endAt !== undefined) f.endAt = o.endAt;
     }
     this.windScale = wind;
     this.autoHero = true;
@@ -1385,10 +1400,43 @@ export class DavidModel {
     const f = this.film!;
     const m = this.mixer;
     const rig = this.human.rig;
+    // D3 'horizon': every film offset fades out from releaseAt (the game's idle at the hand-off)
+    const live = f.shot === 'horizon' ? 1 - smooth01((f.t - f.releaseAt) / Math.max(0.1, f.endAt - f.releaseAt - 0.35)) : 1;
     // breathing, visible in every film shot (the chest rises, the shoulders lift a little)
     const br = Math.sin(f.t * Math.PI * 2 * 0.24) * 0.5 + 0.5;
-    m.add('chest', -0.018 * br, 0, 0);
-    m.add('spine', -0.006 * br, 0, 0);
+    m.add('chest', -0.018 * br * live, 0, 0);
+    m.add('spine', -0.006 * br * live, 0, 0);
+    if (f.shot === 'horizon') {
+      // D3 (CUT v4, the logo shot, 10 s): on his rock above the flock — the weight goes over onto the staff and settles;
+      // the head turns from the hero stance's gaze down to his flock grazing on the slope below him and follows it,
+      // then lifts to the horizon and the far hills (a little toward the light) and stays there, breathing, the wind
+      // in his curls; a blink; from releaseAt every offset fades (the hero hold too: update) — at endAt he stands in
+      // the game's idle stance and the player has him
+      this.mood = null;
+      const t = f.t;
+      const shift = smooth01((t - 0.3) / 2.2) - 0.5 * smooth01((t - 4.6) / 1.6) + 0.35 * smooth01((t - 6.4) / 1.3);
+      m.add('hipsX', 0.034 * shift * live);
+      m.add('hips', 0, 0, 0.045 * shift * live);
+      m.add('spine', 0, 0, -0.03 * shift * live);
+      m.add('chest', 0, 0, -0.018 * shift * live);
+      // the turn needed from the hero stance (its head already looks ~0.6 rad to his right): to the flock, 70 % of it
+      // (the eyes do the rest), following it a little; then to the horizon, a little left of his facing (the light)
+      const toFlock = clamp(f.gaze + 0.6, -0.3, 1.25) * 0.7 + 0.08 * Math.sin(t * 0.7);
+      const toHorizon = 0.72 + 0.03 * Math.sin(t * 0.45);
+      const up = smooth01((t - 4.0) / 1.8);
+      const yaw = (toFlock + (toHorizon - toFlock) * up) * smooth01((t - 0.15) / 1.6) * live;
+      const pitch = (0.13 * (1 - up) - 0.035 * up) * smooth01((t - 0.15) / 1.4) * live;
+      m.add('head', pitch * 0.6, yaw * 0.46, 0.012 * Math.sin(t * 0.5) * live);
+      m.add('neck', pitch * 0.4, yaw * 0.3, 0);
+      m.add('chest', 0, yaw * 0.14, 0);
+      m.add('spine', 0, yaw * 0.08, 0);
+      if (!f.blinked && t > 4.4) {
+        f.blinked = true;
+        rig.blink();
+      }
+      this.filmEyes = null;
+      return;
+    }
     if (f.shot !== 'reveal') {
       this.mood = null;
       if (f.shot === 'back') {

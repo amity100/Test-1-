@@ -11,24 +11,30 @@ import { INTRO_CUES, INTRO_SHOTS, introLength, shotStarts, type IntroCue, type I
 import { narration } from '../content/introNarration';
 import { verseArgs } from '../content/sources';
 import type { FilmStage, FilmSetHandle, FilmStageSet } from '../film/FilmStage';
-import { FilmWorld } from '../film/FilmWorld';
+import { FilmWorld, HANDOFF } from '../film/FilmWorld';
 import { applyHandheld } from '../film/FilmCams';
 
 /**
- * THE OPENING FILM "הַטּוֹב מִמֶּךָּ" (CUT v3, docs/intro-script-v3.md: 60 s, six scenes, no prologue): the player of the
- * shot sheet src/content/introScript.ts. The film opens on the time card over black and comes in ON the shofar at
- * Gilgal (G1); it switches between the Gilgal film set (src/film/FilmStage.ts builds only the sets the sheet uses) and
- * the game world (src/film/FilmWorld.ts: David on his rock, the flock, the thicket) with engine.setView /
+ * THE OPENING FILM "הַטּוֹב מִמֶּךָּ" (CUT v4, docs/intro-script-v4.md on top of intro-script-v3.md: 59 s, six scenes, no
+ * prologue): the player of the shot sheet src/content/introScript.ts. The film opens on the time card over black and
+ * comes in ON the shofar at Gilgal (G1); it switches between the Gilgal film set (src/film/FilmStage.ts builds only the
+ * sets the sheet uses) and the game world (src/film/FilmWorld.ts: David on his rock, his flock) with engine.setView /
  * restoreWorldView / resetTemporal on every cut, drives the letterbox, depth of field, the film look and the fades,
  * fires the on-screen text (narration from src/content/introNarration.ts, verses ONLY through the catalog helpers),
- * keeps the score locked to the picture, and hands off to gameplay (David on his rock).
+ * keeps the score locked to the picture, and hands off to gameplay.
  *
- * Black is drawn by the renderer (post.grade uFade), so the time card and the title sit above it and every
- * dissolve from / into black is a real crossfade of the canvas. Transitions are a pure function of film time
- * (seek-safe): the first shot ('black') holds `hold` s of black under the time card and the picture rises out of it
- * over `fade` s exactly on the shofar beat, the G7 -> D1 'light' cut is a warm white flash centred on the cut (uFade
- * toward look.uFadeColor), 'smash' is black in one frame. Every camera gets the handheld layer of src/film/FilmCams.ts
- * (TAKE_LOOK).
+ * CUT v4's end (cut6): the last shot D3 'horizon' is a crane from David's shoulder up over his flock and the land; the
+ * game's LOGO forms over that panorama on the shot's beats (logo / hebrew / chapter, fading from logoOut: UI.logo,
+ * pinned to the film clock), and from `settle` the letterbox retracts and the film look eases off while the crane
+ * glides down into exactly the gameplay camera behind him (CameraRig.followFrame) — at the end of the shot the game
+ * takes over WITHOUT a cut, a dissolve or black. The skip jumps straight to that hand-off (a short dissolve, the logo
+ * over the first seconds of play).
+ *
+ * Black is drawn by the renderer (post.grade uFade), so the time card sits above it and every dissolve from / into
+ * black is a real crossfade of the canvas. Transitions are a pure function of film time (seek-safe): the first shot
+ * ('black') holds `hold` s of black under the time card and the picture rises out of it over `fade` s exactly on the
+ * shofar beat, the G7 -> D1 'light' cut is a warm white flash centred on the cut (uFade toward look.uFadeColor).
+ * Every camera gets the handheld layer of src/film/FilmCams.ts (TAKE_LOOK).
  */
 export interface IntroHost {
   engine: Engine;
@@ -47,8 +53,6 @@ export interface IntroPreloadOptions {
   onProgress?: (f: number, label: string) => void;
 }
 
-/** heading David is given for the first gameplay frame (facing the pasture and the flock) */
-const GAMEPLAY_HEADING = 0.46;
 /** the warm white of the light-flash cut G7 -> D1 */
 const FLASH_LIGHT = new THREE.Color(1.0, 0.95, 0.84);
 const BLACK = new THREE.Color(0, 0, 0);
@@ -148,7 +152,6 @@ export class Intro {
   private readonly frame: ShotFrame = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: 40, roll: 0 };
   private readonly f2: ShotFrame = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: 40, roll: 0 };
   private savedFilm = 0;
-  private titleShown = false;
   private skipArmedT = -1;
   private keyHandler: ((e: KeyboardEvent) => void) | null = null;
   private tapHandler: ((e: PointerEvent) => void) | null = null;
@@ -160,7 +163,13 @@ export class Intro {
   /** ?filmkeep=1 (tests): keep every film set resident so the harness can seek backwards */
   private readonly keepSets = params().get('filmkeep') === '1';
   private readonly liveTexts: { el: HTMLElement; start: number; dur: number }[] = [];
-  private titleStart = -1;
+  /** D3 (CUT v4): film times of the logo's beats and of the settle (the hand-off begins); -1 = the sheet has no logo shot */
+  private readonly logoAt: number = -1;
+  private readonly logoBeats = { hebrew: 1, chapter: 2, out: 4.4, outDur: 1.6 };
+  private readonly settleAt: number = -1;
+  private logoShown = false;
+  private settled = false;
+  private readonly handPivot = new THREE.Vector3();
 
   constructor(private readonly h: IntroHost, _opts: { short?: boolean } = {}) {
     let t = 0;
@@ -169,7 +178,20 @@ export class Intro {
       t += s.dur;
     }
     this.texts.sort((a, b) => a.t - b.t);
-    this.world = new FilmWorld({ engine: h.engine, player: h.player, flock: h.flock, bear: h.bear });
+    // the logo shot (D3): its beats from the contract
+    const d3 = this.plan.find((p) => p.shot.take === 'horizon');
+    if (d3) {
+      const b = d3.shot.beats ?? {};
+      const logo = b.logo ?? 3.6, out = b.logoOut ?? 8.0;
+      this.logoAt = d3.start + logo;
+      this.logoBeats = { hebrew: (b.hebrew ?? 4.6) - logo, chapter: (b.chapter ?? 5.6) - logo, out: out - logo, outDur: Math.max(0.6, Math.min(1.8, d3.shot.dur - out - 0.3)) };
+      this.settleAt = d3.start + (b.settle ?? 8.0);
+    }
+    // D3 lands on the gameplay camera's first frame behind David (the follow camera's own geometry and collision)
+    this.world = new FilmWorld({
+      engine: h.engine, player: h.player, flock: h.flock, bear: h.bear,
+      handoff: (out) => h.cam.followFrame(this.handPivot.copy(h.player.pos).setY(h.player.pos.y + HANDOFF.pivotH), HANDOFF.heading, HANDOFF.pitch, out),
+    });
   }
 
   get done() {
@@ -246,11 +268,15 @@ export class Intro {
     while (i + 1 < this.plan.length && this.t >= this.plan[i + 1].start) i++;
     this.h.ui.clearFilmText(0);
     this.liveTexts.length = 0;
-    if (this.plan[i].shot.id !== 'title' && this.titleShown) {
-      // seeking back out of the title (tests)
-      this.titleShown = false;
-      this.titleStart = -1;
-      this.h.ui.titleCard(false);
+    // the logo and the hand-off of D3 are functions of film time (seeking back out of them: tests)
+    if (this.logoShown && this.t < this.logoAt) {
+      this.logoShown = false;
+      this.h.ui.logo(false);
+    }
+    if (this.settled && this.t < this.settleAt) {
+      this.settled = false;
+      this.h.engine.post.setLetterbox(2.39, 0);
+      this.h.engine.post.setFilmLook(0.85, 0);
     }
     if (i !== this.idx) this.enter(i, true);
     this.textIdx = 0;
@@ -261,10 +287,33 @@ export class Intro {
       this.textIdx++;
     }
     this.updateShot(0);
+    this.logoClock(true);
     this.syncTextClock();
   }
 
-  /** tests: pin every film text / title animation to the film clock (wall-clock CSS would run ahead of slow frames) */
+  /**
+   * D3: the logo over the panorama (turned on at `logo`, every part of it pinned to the film clock — the lockup never
+   * runs ahead of a slow picture) and the hand-off's start at `settle`: the letterbox retracts and the film look eases off
+   * over the glide, so both are gone when the game's camera takes over at the end of the shot. `jump` = after a seek.
+   */
+  private logoClock(jump = false) {
+    if (this.logoAt < 0) return;
+    const { ui, engine } = this.h;
+    if (!this.logoShown && this.t >= this.logoAt) {
+      this.logoShown = true;
+      ui.logo(true, this.logoBeats);
+    }
+    if (this.logoShown) ui.logoAt(this.t - this.logoAt);
+    if (!this.settled && this.t >= this.settleAt) {
+      this.settled = true;
+      const left = Math.max(0, this.length - this.t);
+      const post = engine.post;
+      post.setLetterbox(null, jump ? left : Math.max(0.3, left));
+      post.setFilmLook(this.savedFilm, Math.max(0.3, left));
+    }
+  }
+
+  /** tests: pin every film text animation to the film clock (wall-clock CSS would run ahead of slow frames) */
   private syncTextClock() {
     if (!this.testClock) return;
     for (let k = this.liveTexts.length - 1; k >= 0; k--) {
@@ -278,12 +327,6 @@ export class Intro {
       for (const a of x.el.getAnimations({ subtree: true })) {
         a.pause();
         a.currentTime = Math.max(0, el) * 1000;
-      }
-    }
-    if (this.titleShown && this.titleStart >= 0) {
-      for (const a of this.h.ui.titleElement.getAnimations({ subtree: true })) {
-        a.pause();
-        a.currentTime = Math.max(0, this.t - this.titleStart) * 1000;
       }
     }
   }
@@ -307,6 +350,7 @@ export class Intro {
     }
     this.fireText();
     this.updateShot(dt);
+    this.logoClock();
     this.syncTextClock();
     if (this.skipArmedT >= 0 && performance.now() - this.skipArmedT > 3200) {
       this.skipArmedT = -1;
@@ -324,13 +368,16 @@ export class Intro {
     if (this.state === 'done') return;
     const { engine, ui, audio, cam, player } = this.h;
     const wasLoading = this.state === 'loading';
+    // the film ran to its end on D3: the crane has landed on the gameplay camera — the game takes over without a cut
+    const handoff = !skipped && this.plan[this.idx]?.shot.take === 'horizon';
     this.state = 'done';
     this.skipped = skipped;
     ui.preroll(null);
     ui.skip(false);
     ui.skipHint(false);
     ui.clearFilmText(skipped ? 0.4 : 0.8);
-    // skipped while the score plays: it jumps to its own title statement (the sfx('titleHit') below)
+    // the score hands over to the game's pastoral music by itself at the end of D3 (score5: stopIntro is absorbed
+    // there); skipped while the score plays, it jumps to its logo statement (the sfx('titleHit') below)
     if (!skipped || wasLoading) {
       try {
         audio.stopIntro(skipped ? 1.2 : 2.5);
@@ -339,31 +386,37 @@ export class Intro {
       }
     }
     const post = engine.post;
-    this.world.leave();
-    // SHOT 21 — the game begins: David on his rock, facing the pasture and the flock; the follow camera behind him
+    this.world.leave(handoff);
+    // the game begins: David on his rock facing the pasture and the flock (HANDOFF), the follow camera behind him. At the
+    // hand-off he already stands there (D3 placed him; the game's physics may have settled him a few cm: not moved again)
     const L = { x: 0.2, z: 2.3 };
-    player.place(L.x, L.z, GAMEPLAY_HEADING);
+    if (!handoff || Math.hypot(player.pos.x - L.x, player.pos.z - L.z) > 0.4 || Math.abs(player.heading - HANDOFF.heading) > 1e-3) {
+      player.place(L.x, L.z, HANDOFF.heading);
+    }
     cam.stop();
-    cam.snapBehind(player.heading, 0.15);
+    cam.snapBehind(HANDOFF.heading, HANDOFF.pitch);
     if (skipped) {
-      // a clean dissolve from wherever the film was into gameplay (never a black frame), a short title over it
+      // the skip jumps to the hand-off: a clean dissolve from wherever the film was into the gameplay camera (never a
+      // black frame), the game's logo over the first seconds of play
       if (wasLoading) ui.fade(0, 1.2);
       else if (engine.view) engine.restoreWorldView({ crossfade: 0.8 });
       else engine.crossfade(0.8);
-      this.setBlack(0);
-      ui.titleCard(true);
+      // (on the score's logo statement after a skip: the answer under דָּוִד at +1.0 s, the chapter pluck at +2.0 s)
+      ui.logo(true, { hebrew: 1.0, chapter: 2.0, out: 4.4, outDur: 1.2 });
       audio.sfx('titleHit');
-      window.setTimeout(() => ui.titleCard(false), 3800);
+      window.setTimeout(() => ui.logo(false), 6000);
+      post.setLetterbox(null, 0.8);
+      post.setFilmLook(this.savedFilm, 0.8);
     } else {
-      // out of the title's black: the picture dissolves in under the fading title
-      if (engine.view) engine.restoreWorldView({ crossfade: 2.2 });
-      else engine.crossfade(2.2);
-      this.setBlack(0);
-      window.setTimeout(() => ui.titleCard(false, 1.9), 150);
+      if (engine.view) engine.restoreWorldView();
+      ui.logo(false);
+      // (normally already retracted / eased off over the glide since `settle`)
+      if (!this.settled) {
+        post.setLetterbox(null, 0.6);
+        post.setFilmLook(this.savedFilm, 0.6);
+      }
     }
     this.setBlack(0, BLACK);
-    post.setLetterbox(null, skipped ? 0.8 : 2.4);
-    post.setFilmLook(this.savedFilm, skipped ? 0.8 : 2.6);
     post.setDoF({ enabled: false, target: null });
     this.finish();
   }
@@ -382,7 +435,7 @@ export class Intro {
       engine.post.setDoF({ enabled: false, target: null });
       this.setBlack(0);
       ui.preroll(null);
-      ui.titleCard(false);
+      ui.logo(false);
       ui.clearFilmText(0);
     }
     ui.setBars(null);
@@ -477,19 +530,9 @@ export class Intro {
         if (!this.plan.slice(i).some((p) => p.shot.set === n)) this.stage.release(n);
       }
     }
-    // the title card and its hit (the score keys everything else on the cue sheet itself)
-    try {
-      if (s.id === 'title' && !this.titleShown) {
-        this.titleShown = true;
-        this.titleStart = this.plan[i].start;
-        ui.clearFilmText(0.2);
-        this.liveTexts.length = 0;
-        ui.titleCard(true);
-        audio.sfx('titleHit');
-      }
-    } catch {
-      /* audio never breaks the film */
-    }
+    // (CUT v4: no title card — the logo forms over D3's panorama on its beats: logoClock; the score keys its hit itself)
+    void audio;
+    void ui;
   }
 
   /** camera, actors and depth of field of the current shot */
@@ -513,8 +556,10 @@ export class Intro {
       this.world.frame(tk.take, u, lt, this.frame);
       applyHandheld(tk.take, lt, this.t, this.frame);
       focus = this.world.focus(tk.take, lt);
-      // phones in portrait: re-aim toward the shot's subject (D1: David, not the valley his focus racks into)
-      this.portrait(this.frame, this.world.subject(tk.take, this.pv3) ?? focus?.point ?? null);
+      // phones in portrait: re-aim toward the shot's subject (D1: David, not the valley his focus racks into); D3 lets go
+      // of it over the glide (the last frame is the game's own camera)
+      const keep = tk.take === 'horizon' && this.settleAt >= 0 ? 1 - smooth01((this.t - this.settleAt) / Math.max(0.1, this.length - this.settleAt - 0.1)) : 1;
+      this.portrait(this.frame, this.world.subject(tk.take, this.pv3) ?? focus?.point ?? null, keep);
       cam = this.h.engine.camera;
       camPos = this.frame.pos; // the CameraRig poses the world camera after this update: focus on this frame's lens
     } else if (tk.set === 'stage') {
@@ -552,12 +597,12 @@ export class Intro {
    * to keep ~45 % of the horizontal coverage and turns toward the take's focus point (by design the subject: eyes,
    * the fist, the stone, the lamb).
    */
-  private portrait(f: ShotFrame, subject: THREE.Vector3 | null) {
+  private portrait(f: ShotFrame, subject: THREE.Vector3 | null, keep = 1) {
     const el = this.h.engine.renderer.domElement;
     const aspect = el.clientWidth / Math.max(1, el.clientHeight);
-    if (!(aspect < 0.95)) return;
+    if (!(aspect < 0.95) || keep <= 0) return;
     const fov = f.fov ?? 40;
-    const k = Math.min(2.6, Math.max(1, (0.45 * 2.39) / aspect));
+    const k = 1 + (Math.min(2.6, Math.max(1, (0.45 * 2.39) / aspect)) - 1) * keep;
     const half = Math.atan(Math.tan(THREE.MathUtils.degToRad(fov) / 2) * k);
     f.fov = Math.min(78, THREE.MathUtils.radToDeg(2 * half));
     if (subject) {
@@ -569,7 +614,7 @@ export class Intro {
       if (dist > 1e-4 && sd > 0.3) {
         d.multiplyScalar(1 / dist);
         s.multiplyScalar(1 / sd);
-        d.lerp(s, 0.6).normalize();
+        d.lerp(s, 0.6 * keep).normalize();
         f.look.copy(f.pos).addScaledVector(d, dist);
       }
     }
@@ -578,25 +623,12 @@ export class Intro {
   private readonly pv2 = new THREE.Vector3();
   private readonly pv3 = new THREE.Vector3();
 
-  /** one-shot sounds inside shots (breathing in the thicket, the lamb) */
+  /** one-shot sounds inside shots (CUT v4: none — the score keys everything to the beats; the hook's sounds moved to
+   *  the bear's attack in gameplay, src/gameplay/BearHook.ts) */
   private sfx(s: IntroShot, lt: number) {
-    const fire = (key: string, at: number, fn: () => void) => {
-      if (lt >= at && !this.sfxFired.has(key)) {
-        this.sfxFired.add(key);
-        try {
-          fn();
-        } catch {
-          /* ignore */
-        }
-      }
-    };
-    const a = this.h.audio;
-    // the hook's two one-shots (keyed to the contract's beats): a heavy breath in the thicket while the lamb grazes —
-    // 0.6 s before its head comes up (H1 beats.lambHead) — and the lamb's bleat as the dark opens, well before the eyes
-    // (H2 beats.eyesOpen). The birds fall silent in the score itself (it switches the bed to 'hush' on
-    // beats.birdsStop).
-    if (s.id === 'thicket') fire('breath', Math.max(0.3, (s.beats?.lambHead ?? 1.8) - 0.6), () => a.sfx('bearGrowl', { volume: 0.28, pitch: 0.7 }));
-    if (s.id === 'eyes') fire('lamb', Math.min(0.25, (s.beats?.eyesOpen ?? 0.9) * 0.3), () => a.sfx('lambBleat', { volume: 0.5 }));
+    void s;
+    void lt;
+    void this.sfxFired;
   }
 
   private fireText() {
@@ -645,7 +677,7 @@ export class Intro {
 
   /**
    * The grade's fade for film time t (pure: seek-safe): out of black at the start, the warm light-flash across the
-   * 'light' cut (half before it, half after), black on 'black' / 'smash' shots (the title).
+   * 'light' cut (half before it, half after), black on 'black' shots.
    */
   private fadeState(): { v: number; color: THREE.Color } {
     const p = this.plan[this.idx];

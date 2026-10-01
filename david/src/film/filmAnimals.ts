@@ -8,6 +8,7 @@
  *   on the cut into D1 (the camera already at the shot's first frame):  ff.stageInView(camera, davidFeet);
  *   every frame:                                                          ff.tick(t, dt, camera);
  *   leaving the game-world shots:                                         ff.restore();
+ *   the film hands over to play without a cut (D3):                       ff.release();  (staged animals stay put)
  *   H1 every frame:  lambAtEdge(flock.lamb, t, { lift: beats.lambHead, toward: thicketPoint, walkUntil })
  *                    (H2: t = H1's length + the H2 shot time — the lamb keeps listening)
  *   H1/H2 every frame: bearInThicket(bear.model, take, t) — the bear's breath and the head lifting at `eyesOpen`
@@ -64,8 +65,10 @@ export class FilmFlock {
    * Place up to `max` animals of the flock in the camera's view: on the ground between `near` and `far` metres,
    * inside the frame with a margin (NDC |x| < 0.85, -0.85 < y < horizon - 0.05), at least `clear` (NDC) from the
    * shepherd's projected feet..head line, `spacing` m apart. Call on the cut with the shot's first camera.
+   * D3 (cut6): `minFrom` + `minDist` keep every animal at least that far from a point (the shepherd: the game's first
+   * objective must not be met by the staging), `maxY` keeps them on ground below that height (the slope below him).
    */
-  stageInView(camera: THREE.PerspectiveCamera, shepherd: THREE.Vector3 | null, o: { near?: number; far?: number; max?: number; clear?: number; spacing?: number; exclude?: Animal[]; yMin?: number } = {}) {
+  stageInView(camera: THREE.PerspectiveCamera, shepherd: THREE.Vector3 | null, o: { near?: number; far?: number; max?: number; clear?: number; spacing?: number; exclude?: Animal[]; yMin?: number; minFrom?: THREE.Vector3; minDist?: number; maxY?: number } = {}) {
     this.restore();
     const near = o.near ?? 5, far = o.far ?? 34, max = o.max ?? 14, clear = o.clear ?? 0.22, spacing = o.spacing ?? 1.5;
     // the lowest NDC y an animal may stand at (a 2.39 letterbox over a 16:9 canvas hides |y| > ~0.74)
@@ -94,6 +97,8 @@ export class FilmFlock {
       const dir = _f.copy(fwd).applyAxisAngle(_n.set(0, 1, 0), -ang);
       const x = cam.x + dir.x * d, z = cam.z + dir.z * d;
       const p = new THREE.Vector3(x, this.ground(x, z), z);
+      if (o.maxY !== undefined && p.y > o.maxY) continue;
+      if (o.minFrom && Math.hypot(p.x - o.minFrom.x, p.z - o.minFrom.z) < (o.minDist ?? 0)) continue;
       // in frame, below the horizon, clear of the shepherd
       _v.copy(p).add(_s.set(0, 0.45, 0)).project(camera);
       if (_v.z > 1 || Math.abs(_v.x) > 0.85 || _v.y < yMin || _v.y > 0.75) continue;
@@ -209,6 +214,21 @@ export class FilmFlock {
         a.manualSpeed = 0;
       }
     }
+  }
+
+  /**
+   * The film hands over to play without a cut (D3, cut6): every staged animal stays where it is and goes back to the
+   * game's own AI (grazing; the flock's pasture containment walks the far ones home by itself).
+   */
+  release() {
+    for (const s of this.saved) {
+      s.a.aiEnabled = s.ai;
+      if (s.a.state !== 'carried') s.a.state = 'graze';
+      s.a.manualSpeed = 0;
+    }
+    this.saved.length = 0;
+    this.members.length = 0;
+    this.leader = null;
   }
 
   /** back to where the flock was (the game's own AI) */

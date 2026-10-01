@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { clamp, damp } from '../core/noise';
 
 export interface ShotFrame { pos: THREE.Vector3; look: THREE.Vector3; fov?: number; roll?: number }
+/** vertical field of view (deg) of the follow camera (not aiming) */
+export const FOLLOW_FOV = 52;
 export type Shot = { duration: number; at: (t: number, time: number) => ShotFrame; ease?: boolean };
 
 /** Third-person orbit camera with terrain collision, aim mode, shake, and scripted cinematic shots. */
@@ -62,11 +64,44 @@ export class CameraRig {
     this.shotT = this.shotTotal;
   }
 
-  /** Place the follow camera behind a heading immediately. */
+  /** Place the follow camera behind a heading immediately (the boom at its full length, or the collision limit). */
   snapBehind(heading: number, pitch = 0.12) {
     this.yaw = heading + Math.PI;
     this.pitch = pitch;
     this.initialized = false;
+    // (cut6) deterministic first frame: the boom starts at its wanted length, so the first follow frame after a snap is
+    // exactly followFrame() (the opening film's last shot lands on it without a cut)
+    this.curDist = this.dist;
+  }
+
+  /**
+   * The frame the follow camera shows on its first frame after snapBehind(heading, pitch) with `target` (the pivot:
+   * the player's position + 1.55 m) — same boom, terrain / boulder collision and look point as update(). Pure: no
+   * state changes. The opening film's last shot (D3 'horizon', src/film/FilmWorld.ts) glides into exactly this frame,
+   * and the game takes over without a cut.
+   */
+  followFrame(target: THREE.Vector3, heading: number, pitch: number, out: ShotFrame): ShotFrame {
+    const yaw = heading + Math.PI;
+    const cp = Math.cos(pitch), sp = Math.sin(pitch);
+    const dir = tmpA.set(Math.sin(yaw) * cp, sp, Math.cos(yaw) * cp);
+    const pivot = tmpC.copy(target);
+    const solid = this.solid !== null && !this.solid(pivot.x, pivot.y, pivot.z) ? this.solid : null;
+    const want = this.dist;
+    let d = want;
+    for (let i = 1; i <= 8; i++) {
+      const s = (i / 8) * want;
+      const px = pivot.x + dir.x * s, pz = pivot.z + dir.z * s, py = pivot.y + dir.y * s;
+      if (py < this.ground(px, pz) + 0.35 || (solid !== null && solid(px, py, pz))) {
+        d = Math.max(0.6, s - 0.3);
+        break;
+      }
+    }
+    out.pos.copy(pivot).addScaledVector(dir, d);
+    out.pos.y = Math.max(out.pos.y, this.ground(out.pos.x, out.pos.z) + 0.35);
+    out.look.copy(pivot).addScaledVector(dir, -4);
+    out.fov = FOLLOW_FOV;
+    out.roll = 0;
+    return out;
   }
 
   applyLook(dx: number, dy: number) {
@@ -147,7 +182,7 @@ export class CameraRig {
     cam.position.copy(pos);
     cam.up.set(0, 1, 0);
     cam.lookAt(look);
-    this.fov = THREE.MathUtils.lerp(52, 44, this.aimW);
+    this.fov = THREE.MathUtils.lerp(FOLLOW_FOV, 44, this.aimW);
     this.applyShake(dt, time);
   }
 

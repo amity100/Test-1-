@@ -25,10 +25,13 @@ Quotations appear on screen **only** through the catalog `src/content/sources.ts
 **only** from `src/content/introNarration.ts` (`INTRO_NARRATION[id].text`) and must never be styled as a verse,
 put in quotation marks or given a reference.
 
-**CUT v3 (60 s, six scenes, no prologue — `docs/intro-script-v3.md`; cut5, 1 Oct):** only these **7 text events**
-(+ the title card), each on screen long enough to be read and never across a cut. Dropped from CUT v2 with the
-prologue and the D2 verse: קֶבֶר רָחֵל (P3), 1 Sam 8:5 (P5, Ramah) and 1 Sam 16:7 (D2). Shot ids, film times and
-layout (side / v / lines / gold): `src/content/introScript.ts`.
+**CUT v4 (59 s — `docs/intro-script-v4.md` on top of `docs/intro-script-v3.md`; cut6, 2 Oct):** only these **7 text
+events** + **the game's logo** over the last shot, each on screen long enough to be read and never across a cut. The
+film ends on D3 'horizon' (49-59 s): a crane from David's shoulder up over his flock and the land, the logo over that
+panorama, then the game without a cut. The title card over black, the thicket and the bear's eyes (CUT v3 H1-H2) left
+the film: the thicket and the eyes now open the bear's attack in play (`src/gameplay/BearHook.ts`, no text). Dropped
+earlier with CUT v2's prologue and D2 verse: קֶבֶר רָחֵל (P3), 1 Sam 8:5 (P5, Ramah) and 1 Sam 16:7 (D2). Shot ids,
+film times and layout (side / v / lines / gold): `src/content/introScript.ts`.
 
 | Shot (film time) | On screen | Kind | Id |
 |---|---|---|---|
@@ -39,7 +42,7 @@ layout (side / v / lines / gold): `src/content/introScript.ts`.
 | G4 (18.6-20.9 s, upper right; ends at the cut) | שְׁמוּאֵל | narration (person card) | `INTRO_NARRATION.samuel` |
 | G6 (31.2-36.0 s, upper left, two lines; the words appear with Samuel's lips, VERDICT_WORDS; it ends with the shot) | 1 Sam 15:28, first half (Samuel speaks it; word by word with his lips) | quotation | `s1_15_28_torn_today` |
 | D1 (39.6-44.8 s, upper right, two lines, stagger 0.45 s; the last two words — the film's own title — in gold) | 1 Sam 15:28, second half (writes itself over David) | quotation | `s1_15_28_to_your_neighbor` |
-| T (54.0-60.0 s, the title card) | DAVID · דָּוִד · פֶּרֶק רִאשׁוֹן · הָרֹעֶה | narration (title + chapter card) | `davidLogo`, `davidName`, `chapterTitle` |
+| D3 (the logo over the panorama, in the sky's negative space, centred: DAVID on `logo` 52.6 s, דָּוִד on `hebrew` 53.6, the rule, the chapter line on `chapter` 54.6; it fades from `logoOut` 57.0 and is gone by ≈58.7, before the hand-off at 59.0; also over the first seconds of play after a skip) | **DAVID** (large, Cinzel, gold metal, formed from light with one sweep) · דָּוִד (gold, ≈45 % of its size, Frank Ruhl Libre) · a thin gold rule · פֶּרֶק רִאשׁוֹן · הָרֹעֶה | narration (the game's logo + chapter line; a soft warm-dark glow behind it, never a card) | `davidLogo`, `davidName`, `chapterTitle` |
 
 Exact texts of the verses (all verified, catalog = source of truth):
 

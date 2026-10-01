@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import './style.css';
 import { quoteText, sourceRef } from '../content/sources';
-import { narration, INTRO_FILM_TITLE } from '../content/introNarration';
+import { narration } from '../content/introNarration';
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, html = '') => {
   const e = document.createElement(tag);
@@ -87,10 +87,11 @@ export class UI {
     this.root = el('div', 'ui' + (touch ? ' is-touch' : ''));
     parent.appendChild(this.root);
 
+    // the game's logo lockup, as over the film's last shot (CUT v4): DAVID large in gold metal, דָּוִד beneath it
     this.loading = el('div', 'loading', `
       <div class="ld-inner">
-        <div class="ld-title">דָּוִד</div>
-        <div class="ld-title-en">DAVID</div>
+        <div class="ld-title-en" data-t="${narration('davidLogo')}">${narration('davidLogo')}</div>
+        <div class="ld-title">${narration('davidName')}</div>
         <div class="ld-bar"><div></div></div>
         <div class="ld-label"></div>
         <div class="ld-quote">"${quoteText('ps_23_1_2_loading')}"<span>${sourceRef('ps_23_1_2_loading')}</span></div>
@@ -102,15 +103,17 @@ export class UI {
     this.bars = el('div', 'letterbox', '<div class="lb-top"></div><div class="lb-bot"></div>');
     this.captionEl = el('div', 'caption');
     this.verseEl = el('div', 'verse');
-    // the title card of the opening film (docs/intro-script.md shot 20): every word from the narration module
-    // (src/content/introNarration.ts) — the film's own name "הַטּוֹב מִמֶּךָּ" is a quotation (1 Sam 15:28), rendered
-    // only from the catalog with its reference
+    // THE LOGO (CUT v4, docs/intro-script-v4.md): the game's logo over the panorama of the film's last shot (D3) — DAVID
+    // large (Cinzel, gold metal, formed from light with one sweep), דָּוִד in gold beneath it (≈45 % of its size), a thin
+    // gold rule, the chapter line; every word from the narration module (src/content/introNarration.ts). Over the
+    // picture with a soft glow behind it (never a card). The loading screen shows the same lockup.
     this.titleEl = el('div', 'titlecard', `
-      <div class="tc-film"><span class="tc-film-name">${quoteText(INTRO_FILM_TITLE)}</span><span class="tc-film-ref">${sourceRef(INTRO_FILM_TITLE)}</span></div>
-      <h1 class="tc-he" data-t="${narration('davidName')}">${narration('davidName')}</h1>
-      <div class="tc-title" data-t="${narration('davidLogo')}">${narration('davidLogo')}</div>
-      <div class="tc-line"></div>
-      <div class="tc-chapter">${narration('chapterTitle')}</div>`);
+      <div class="lg">
+        <h1 class="lg-en" data-t="${narration('davidLogo')}">${narration('davidLogo')}</h1>
+        <div class="lg-he" data-t="${narration('davidName')}">${narration('davidName')}</div>
+        <div class="lg-rule"></div>
+        <div class="lg-ch">${narration('chapterTitle')}</div>
+      </div>`);
     this.objEl = el('div', 'objective');
     this.hintEl = el('div', 'hint');
     this.promptEl = el('div', 'prompt');
@@ -249,10 +252,33 @@ export class UI {
     this.captionEl.classList.remove('on');
   }
 
-  /** The title card; `fadeOut` = seconds the card takes to leave (the film's end dissolves slowly into gameplay). */
-  titleCard(on: boolean, fadeOut = 0.35) {
-    this.titleEl.style.transition = on ? '' : `opacity ${fadeOut}s ease`;
-    this.titleEl.classList.toggle('on', on);
+  /**
+   * The game's logo lockup over the picture (CUT v4: the panorama of the film's last shot D3; and over the first seconds
+   * of play after a skip). Turned on at the DAVID beat; `hebrew` / `chapter` = seconds after it that דָּוִד and the
+   * chapter line come in, `out` = when the whole lockup starts to fade and `outDur` how long it takes. Every part is ONE
+   * CSS animation from the moment it is turned on, so the film can pin all of them to its own clock (logoAt).
+   * logo(false) removes it at once.
+   */
+  logo(on: boolean, o: { hebrew?: number; chapter?: number; out?: number; outDur?: number } = {}) {
+    const e = this.titleEl;
+    if (!on) {
+      e.classList.remove('on');
+      return;
+    }
+    e.style.setProperty('--lg-he', `${(o.hebrew ?? 1).toFixed(3)}s`);
+    e.style.setProperty('--lg-ch', `${(o.chapter ?? 2).toFixed(3)}s`);
+    e.style.setProperty('--lg-out', `${(o.out ?? 4.4).toFixed(3)}s`);
+    e.style.setProperty('--lg-outd', `${(o.outDur ?? 1.6).toFixed(3)}s`);
+    e.classList.remove('on');
+    void e.offsetWidth; // restart every animation of the lockup
+    e.classList.add('on');
+  }
+  /** Pin every animation of the logo lockup to `elapsed` seconds since logo(true) (the film's clock, not the wall's). */
+  logoAt(elapsed: number) {
+    for (const a of this.titleEl.getAnimations({ subtree: true })) {
+      a.pause();
+      a.currentTime = Math.max(0, elapsed) * 1000;
+    }
   }
 
   // ------------------------------------------------------------------------------ opening-film typography
@@ -303,7 +329,7 @@ export class UI {
     if (autoRemove) window.setTimeout(() => e.remove(), Math.max(0.1, dur - elapsed) * 1000 + 300);
     return e;
   }
-  /** the title card element (the film pins its animations to the film clock in tests) */
+  /** the logo lockup's element */
   get titleElement(): HTMLElement {
     return this.titleEl;
   }

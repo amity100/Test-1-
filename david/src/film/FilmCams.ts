@@ -111,7 +111,7 @@ export const baseTake = (take: string) => take.split(':')[0] as GilgalShotName;
  * Per take: handheld amplitude (deg, scaled by the lens), exposure multiplier on the set's own exposure, and an
  * impulse (jolt) at shot time `jolt` of `joltAmp` deg (the roar, the shofar). Seeds keep the takes different.
  */
-export const TAKE_LOOK: Record<string, { hand: number; freq?: number; exp?: number; expCurve?: [number, number][]; seed: number; jolt?: number; joltAmp?: number }> = {
+export const TAKE_LOOK: Record<string, { hand: number; freq?: number; exp?: number; expCurve?: [number, number][]; seed: number; jolt?: number; joltAmp?: number; calm?: [number, number] }> = {
   // the sunlit deck blows out at the set's exposure: down over the clouds, back up under them over the ridges
   flight: { hand: 0.28, freq: 0.9, expCurve: [[0, 0.8], [2.4, 0.78], [3.3, 0.95], [4.2, 1.06], [7.5, 1.04]], seed: 1 },
   'rachel-dawn': { hand: 0.22, seed: 2 },
@@ -130,6 +130,10 @@ export const TAKE_LOOK: Record<string, { hand: number; freq?: number; exp?: numb
   saulAlone: { hand: 0.26, freq: 0.7, seed: 12 },
   figure: { hand: 0.2, freq: 0.5, seed: 13 },
   face: { hand: 0.16, freq: 0.5, seed: 14 },
+  // (cut6, CUT v4) D3 'horizon': the crane's operator — a subtle float, calmer as it rises; it fades out over the glide
+  // into the gameplay camera (`calm` = shot seconds) so the last frame is exactly the game's
+  horizon: { hand: 0.17, freq: 0.45, seed: 17, calm: [takeBeat('horizon', 'settle', 8), takeDur('horizon', 10) - 0.15] },
+  // the bear's hook in gameplay (src/gameplay/BearHook.ts, CUT v3's H1 / H2)
   thicket: { hand: 0.34, freq: 0.8, seed: 15 },
   lamb: { hand: 0.24, freq: 0.6, seed: 16 },
 };
@@ -553,7 +557,10 @@ export function applyHandheld(take: string, t: number, ft: number, f: ShotFrame)
   const L = TAKE_LOOK[take];
   if (!L) return;
   const lens = Math.max(0.3, Math.min(1.2, (f.fov ?? 40) / 34));
-  let amp = THREE.MathUtils.degToRad(L.hand) * lens;
+  // `calm`: the hand settles to nothing between these shot seconds (D3 lands exactly on the gameplay camera)
+  const still = L.calm ? 1 - ss(L.calm[0], L.calm[1], t) : 1;
+  if (still <= 0) return;
+  let amp = THREE.MathUtils.degToRad(L.hand) * lens * still;
   const n = shake(ft, L.seed, L.freq ?? 1);
   let yaw = n.yaw * amp, pitch = n.pitch * amp, roll = n.roll * amp * 0.6;
   if (L.jolt !== undefined && t >= L.jolt) {

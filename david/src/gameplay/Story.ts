@@ -12,6 +12,7 @@ import type { Props } from './Props';
 import type { Projectiles } from './Projectiles';
 import type { GameAudio } from './GameAudio';
 import { Intro } from './Intro';
+import { BearHook } from './BearHook';
 import { LAYOUT, SUN } from '../world/Layout';
 import { quoteText, sourceRef, verseArgs } from '../content/sources';
 
@@ -57,6 +58,8 @@ export class Story {
   paused = false;
   freeRoam = false;
   private lambHome = new THREE.Vector3();
+  /** the bear's hook (CUT v4: the opening film's thicket and eyes open the bear's attack) */
+  private hook: BearHook | null = null;
 
   constructor(
     private engine: Engine,
@@ -385,6 +388,8 @@ export class Story {
   // ============================================================================ world reset
   private resetWorld() {
     const L = LAYOUT;
+    // (cut6) a restart in the middle of the bear's hook: its light, bushes and eyes leave with it
+    this.hook?.dispose();
     this.player.place(L.start.x + 0.2, L.start.z + 2.3, 0.46);
     this.player.health = this.player.maxHealth;
     this.player.canSling = this.player.canStrike = this.player.canDodge = false;
@@ -460,14 +465,29 @@ export class Story {
     const fc = this.flockCenter();
     const T = LAYOUT.thicket;
     const toThicket = new THREE.Vector3(T.x - fc.x, 0, T.z - fc.z).normalize();
-    // the lamb has strayed a little toward the thicket
-    const lambSpot = fc.clone().addScaledVector(toThicket, 11);
-    lamb.goTo(lambSpot, 1.0);
-    const start = fc.clone().addScaledVector(toThicket, 52);
+    // THE HOOK (cut6, CUT v4 — the opening film's thicket and eyes, ≈5 s): the lamb has strayed to the edge of the scrub
+    // toward the thicket and grazes; the birds fly up and fall silent; the light dims in the bushes' shade; two faint
+    // amber eyes open in the dark between them (src/gameplay/BearHook.ts) — then the bear comes out of those bushes
+    const hook = this.hook ?? (this.hook = new BearHook({ engine: this.engine, flock: this.flock, bear: this.bear }));
+    hook.dispose();
+    this.cinematic(true);
+    hook.stage(fc, toThicket);
+    hook.onCue = (c) => {
+      if (c === 'birds') this.audio.sfx('birdsScatter');
+      else if (c === 'hush') this.audio.music('hush', 1.2);
+      else if (c === 'bleat') this.audio.at('lambBleat', lamb.position, 0.45);
+      else if (c === 'eyes') this.audio.sfx('eyesSting');
+    };
+    this.beh = (dt) => hook.tick(dt);
+    await this.shots(hook.shots());
+    this.check();
+    hook.end();
+    // the bear comes out of the bushes at the lamb (it stands frozen at the edge, its head up)
+    const lambSpot = lamb.position.clone();
+    const start = hook.bearAt;
     this.bear.place(start.x, start.z, Math.atan2(-toThicket.x, -toThicket.z));
     this.bear.visible = true;
     this.bear.model.hold = 'none';
-    this.cinematic(true);
     this.audio.music('tension', 1.5);
     this.audio.ambience(0.6, 0.15, 0.0);
     const bearPos = () => this.bear.pos;
@@ -521,6 +541,8 @@ export class Story {
     ]);
     this.check();
     if (!grabbed) this.grabLamb(true);
+    // the lamb is the flock's again (in the bear's mouth now); the hook's bushes leave while the lens is on David's face
+    hook.dispose();
     this.ui.verse(...verseArgs('s1_17_34_bear'), 5);
     this.player.model.lookTarget = null;
   }
