@@ -152,7 +152,6 @@ export class Intro {
   private tapHandler: ((e: PointerEvent) => void) | null = null;
   private finished = false;
   private black = 1;
-  private birdsOff = false;
   private readonly sfxFired = new Set<string>();
   /** ?test=1: on-screen text and the title card run on the FILM clock (contact sheets / slow software rendering) */
   private readonly testClock = params().get('test') === '1';
@@ -593,18 +592,11 @@ export class Intro {
       }
     };
     const a = this.h.audio;
-    const b = s.beats ?? {};
-    if (s.id === 'thicket') {
-      // the birds fall silent (beats.birdsStop); the lamb's small bleat as its head comes up
-      fire('birds', b.birdsStop ?? 0.4, () => {
-        if (!this.birdsOff) {
-          this.birdsOff = true;
-          a.ambience(0.32, 0, 0);
-        }
-      });
-      fire('lamb', (b.lambHead ?? 1.5) + 0.1, () => a.sfx('lambBleat', { volume: 0.35 }));
-    }
-    if (s.id === 'eyes') fire('breath', 0.2, () => a.sfx('bearGrowl', { volume: 0.26, pitch: 0.62 }));
+    // the hook's two one-shots, where the score's mix was checked (score3): a heavy breath in the thicket while the lamb
+    // grazes (H1 + 1.0 s), the lamb's bleat as the dark opens (H2 + 0.2 s). The birds fall silent in the score itself
+    // (it switches the bed to 'hush' on beats.birdsStop).
+    if (s.id === 'thicket') fire('breath', 1.0, () => a.sfx('bearGrowl', { volume: 0.28, pitch: 0.7 }));
+    if (s.id === 'eyes') fire('lamb', 0.2, () => a.sfx('lambBleat', { volume: 0.5 }));
   }
 
   private fireText() {

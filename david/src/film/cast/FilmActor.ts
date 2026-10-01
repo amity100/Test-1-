@@ -409,7 +409,11 @@ export class FilmActor {
     if (this.tear) {
       this.tear.wind.copy(wind);
       if (camera) camera.getWorldPosition(this.tear.viewer);
-      this.tear.update(dt);
+      // once torn, the piece hangs from a few grabbed vertices: MeilTear's 6 constraint iterations a step let gravity
+      // and the breeze stretch the 30 x 37 cm corner into a metre-long streamer (measured: 1.2 m in G6, pointing at
+      // G7's lens, so the fist looked empty). Substeps (24 iterations a frame, more air damping) keep it wool-sized.
+      const n = this.tear.isTorn ? TEAR_SUBSTEPS : 1;
+      for (let i = 0; i < n; i++) this.tear.update(dt / n);
     }
   }
 
@@ -680,6 +684,8 @@ export class FilmActor {
 }
 
 const _zero = new THREE.Vector3();
+/** MeilTear steps per frame once the corner is torn (see update) */
+const TEAR_SUBSTEPS = 4;
 
 const SIDES = ['L', 'R'] as const;
 const LOOK_BONES: [string, number][] = [['spine01', 0.1], ['neck01', 0.15], ['neck02', 0.2], ['neck03', 0.2], ['head', 0.35]];

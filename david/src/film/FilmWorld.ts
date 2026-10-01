@@ -65,7 +65,7 @@ export const WORLD_CAM = {
   face: { az: 100, d0: 2.95, d1: 2.15, fov0: 21, fov1: 17.5, turnDur: 1.6 },
   // H1 / H2: the hook
   // (H2: the bear deep in the shade and the picture dark — only the eye-shine, additive and not tone-mapped, reads)
-  hook: { lambSpeed: 0.55, walkUntil: 1.3, camBack: 1.75, camSide: 0.85, camH: 0.64, bearIn: 12.5, exp1: 0.62, exp2: 0.36, h2H: 1.02 },
+  hook: { lambSpeed: 0.55, walkUntil: 1.3, camBack: 1.75, camSide: 0.85, camH: 0.64, bearIn: 12.5, exp1: 0.62, exp2: 0.17, h2H: 1.02, eye: 0.15 },
 };
 
 export class FilmWorld {
@@ -404,7 +404,8 @@ export class FilmWorld {
         this.tickBear(take, t, dt);
         // the light goes out of the hook: down through H1, darker still in the thicket (H2)
         const k = take === 'thicket' ? ss(0.2, 2.5, t) : 1;
-        this.setExposure(take === 'thicket' ? lerp(1, c.exp1, k) : lerp(c.exp1, c.exp2, ss(0, 0.8, t)));
+        // H2: down into the dark at once (the bear only a suggestion; the eye-shine is additive and not tone-mapped)
+        this.setExposure(take === 'thicket' ? lerp(1, c.exp1, k) : lerp(c.exp1 * 0.55, c.exp2, ss(0, 0.6, t)));
         return;
       }
     }
@@ -567,7 +568,8 @@ export class FilmWorld {
     eyes.position.copy(hc).addScaledVector(fwd, 0.2).add(V(0, 0.05, 0));
     eyes.rotation.set(0, bear.heading, 0);
     eyes.visible = open > 0.01;
-    for (const c of eyes.children) c.scale.set(0.1, 0.1 * Math.max(0.04, open), 1);
+    const es = WORLD_CAM.hook.eye;
+    for (const c of eyes.children) c.scale.set(es, es * Math.max(0.04, open), 1);
     if (this.eyeMat) this.eyeMat.opacity = Math.min(1, open * 1.25);
   }
 

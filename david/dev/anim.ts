@@ -146,6 +146,17 @@ function setCam(c: string | number[]) {
     const sa = saulAt('tear', t).pos, sm = samuelAt('tear', t).pos;
     const mid = sa.clone().lerp(sm, 0.5);
     set(V(mid.x - 0.5 + 0.95 * e2, 1.22, mid.z + 6.9 - 1.0 * e2), V(mid.x + 0.25 + 0.3 * e2, 1.2, mid.z), 34 - 3.5 * e2);
+  } else if (c === 'aloneCut') {
+    // cut3's G7 camera (FilmCams FILM_CAM.alone, flat ground): nearly frontal, a slow push to the fist while the look
+    // rises toward the face
+    const t = cur ? cur.t : 0;
+    const u = Math.min(1, Math.max(0, t / 2.0)), e2 = u * u * (3 - 2 * u);
+    const s2 = saulAt('saulAlone', t).pos;
+    const p = V(s2.x + 2.05 - 0.5 * e2, 1.2 + 0.12 * e2, s2.z + 0.62 - 0.17 * e2);
+    const a = V(s2.x + 0.22, 0.98, s2.z + 0.3).lerp(saul!.human.sockets.handGripR.getWorldPosition(f), 0.7);
+    saul!.eyesWorld(e);
+    const k = Math.min(1, Math.max(0, (t - 0.5) / 1.0)), sk = k * k * (3 - 2 * k);
+    set(p, a.clone().lerp(e, 0.34 + 0.18 * sk), 31 - 4 * e2);
   } else if (c === 'samMouth') {
     samuel!.eyesWorld(e);
     saul!.eyesWorld(f);

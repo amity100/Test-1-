@@ -1353,6 +1353,7 @@ export class DavidModel {
     const wind = o.wind ?? (shot === 'back' ? 1.8 : shot === 'reveal' ? 1.4 : 1.6);
     if (!f || f.shot !== shot) {
       this.film = { shot, t, look: o.look ?? null, wind, turnAt: o.turnAt ?? 0.9, turnDur: o.turnDur ?? 2.2, mood: o.mood ?? 'neutral', moodW: o.moodWeight ?? 0.12, blinked: false };
+      this.filmBlink2 = -1; // a second blink pending from an earlier (skipped / replayed) shot never fires early
       if (shot !== 'reveal') this.filmTurn = 0;
     } else {
       f.t = t;

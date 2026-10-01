@@ -449,7 +449,8 @@ REFERENCE = [
       gloss='...for you are but a youth.'),
     E(id='s2_5_4_thirty', src=('II Samuel', 5, 4), q=None, status='reference',
       gloss='David was thirty years old when he began to reign, and he reigned forty years.'),
-    E(id='seder_olam_13_david_29', src=('Seder Olam Rabbah', 13, 2),
+    # (Sefaria's Warsaw 1904 edition now delivers chapter 13 as ONE segment; the quote is unchanged — cut3, 1 Oct)
+    E(id='seder_olam_13_david_29', src=('Seder Olam Rabbah', 13, 1),
       q=['ואותו הפרק נמשח דוד', 'והוא היה בן כ"ט שנים'], status='reference',
       gloss='...and in that period David was anointed ... and he was twenty-nine years old.',
       note='Seder Olam: Saul reigned (alone) about two years; David was anointed in Saul\'s second year, '

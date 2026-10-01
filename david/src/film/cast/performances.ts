@@ -70,6 +70,8 @@ export const actionTime = blockingActionTime;
 
 /** THE TEAR in action time (see gilgalBlocking TEAR_ACTION): turn, lunge, grip, pull, rip, free (legacy name) */
 export const TEAR_BEATS = TEAR_ACTION;
+/** MeilTear.progress once the corner is free: every tear-line vertex released (thresholds reach ~1.11) */
+const TORN = 1.2;
 
 /** arm holds (proxy Euler, character axes; x < 0 swings forward; L: +z = outward, R: -z = outward) */
 export const POSES = {
@@ -364,11 +366,11 @@ export class GilgalPerformance {
       else if (shot === 'verdict' || shot === 'saulAlone' || shot === 'rise') {
         // already torn: the piece in Saul's fist
         saul.place(s0.pos, s0.yaw);
-        saul.armPose.R.pose = shot === 'saulAlone' ? POSES.clothLookR : POSES.clothFistR;
+        saul.armPose.R.pose = POSES.clothFistR; // G6 and G7 both open with the fist at his belt (G7 lifts it)
         saul.armPose.R.weight = 1;
         saul.human.rig.setFingers('R', 'grip');
         saul.update(0);
-        tear.progress = 1;
+        tear.progress = TORN;
         tear.grab(saul.human.sockets.handGripR);
       } else tear.reset();
     }
@@ -637,7 +639,10 @@ export class GilgalPerformance {
       saul.reach.R.target = this.tearTarget;
       saul.reach.R.weight = 1;
     }
-    if (tear) tear.progress = ss(A.rip, A.free, at);
+    // the rip runs rip -> free; at `free` the last threads of the weave let go (MeilTear releases a tear-line vertex
+    // only at progress >= its threshold + 0.12, up to ~1.11: at 1.0 the innermost ones stayed pinned to Samuel's skirt
+    // and stretched the piece from the fist to his hem through G6/G7)
+    if (tear) tear.progress = ss(A.rip, A.free, at) + (TORN - 1) * ss(A.free - 0.04, A.free + 0.04, at);
     // ---- eyes and face: on Samuel; down to the corner as he lunges; UP to Samuel's face as he holds — their eyes
     // meet while the wool gives
     if (at < A.lunge - 0.1) saul.mocap.lookAt = this.eyeOf(samuel, this.saulTarget);

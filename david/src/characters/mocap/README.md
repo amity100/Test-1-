@@ -85,50 +85,52 @@ saul.update(dt, camera, h);                // rig: proxies, fingers, face, eyes 
 | `jog` | 35_17 (0.0–1.4 s) | 0.77 | loop | 3.27 | +2° | 4.2 | loco, game | run/jog |
 | `run` | 16_55 (0.0–1.5 s) | 0.57 | loop | 4.45 | -3° | 3.4 | loco, game | run |
 | `sprint` | 09_01 (0.0–1.2 s) | 0.73 | loop | 3.77 | +2° | 4.2 | loco, game | fast run (subject 9) |
-| `start_walk` | 82_09 (4.8–7.8 s) | 3.00 | — | 0.48 | +3° | 13.8 | loco, game | stand -> confident walk |
-| `start_jog` | 104_06 (0.0–2.4 s) | 2.40 | — | 1.64 | +4° | 12.1 | loco, game | start jog |
-| `stop_jog` | 104_09 (0.3–2.9 s) | 2.63 | — | 1.41 | -3° | 13.2 | loco, game | jog -> stop |
-| `walk_stop` | 16_33 (0.0–2.4 s) | 2.40 | — | 0.66 | -0° | 11.4 | loco, game, film | slow walk, stop, stand |
+| `start_walk` | 82_09 (4.8–7.8 s) | 3.00 | — | 0.48 | +3° | 13.8 | loco, game | stand -> confident walk — *imported, not shipped (`--all`)* |
+| `start_jog` | 104_06 (0.0–2.4 s) | 2.40 | — | 1.64 | +4° | 12.1 | loco, game | start jog — *imported, not shipped (`--all`)* |
+| `stop_jog` | 104_09 (0.3–2.9 s) | 2.63 | — | 1.41 | -3° | 13.2 | loco, game | jog -> stop — *imported, not shipped (`--all`)* |
+| `walk_stop` | 16_33 (0.0–2.4 s) | 2.40 | — | 0.66 | -0° | 11.4 | loco, game, film | slow walk, stop, stand — *imported, not shipped (`--all`)* |
 | `turn_left` | 69_16 (0.0–1.7 s) | 1.70 | — | 0.14 | +64° | 7.7 | loco, game | turn in place ~65 deg left (mirror = right) |
 | `march_c` | 91_19 (2.8–6.8 s) | 1.23 | loop | 1.16 | +1° | 6.6 | film, army, loco | march (subject 91) |
 | `march` | 20_06 (0.0–2.4 s) | 1.50 | loop | 1.08 | -0° | 7.7 | film, army, loco | soldiers march (subject 20) |
 | `walk_king` | 82_09 (6.2–10.3 s) | 1.37 | loop | 0.93 | -1° | 6.9 | film, saul, loco | confident, proud stride |
-| `walk_strong` | 137_42 (2.0–6.2 s) | 1.80 | loop | 0.73 | +0° | 8.6 | film, saul, loco | "strong man" heavy, broad walk |
-| `walk_heavy` | 17_08 (1.0–5.0 s) | 1.73 | loop | 0.69 | +0° | 8.3 | film, saul, loco | muscular heavyset person walk |
+| `walk_strong` | 137_42 (2.0–6.2 s) | 1.80 | loop | 0.73 | +0° | 8.6 | film, saul, loco | "strong man" heavy, broad walk — *imported, not shipped (`--all`)* |
+| `walk_heavy` | 17_08 (1.0–5.0 s) | 1.73 | loop | 0.69 | +0° | 8.3 | film, saul, loco | muscular heavyset person walk — *imported, not shipped (`--all`)* |
 | `walk_halt` | 82_14 (0.5–7.5 s) | 7.00 | — | 0.47 | -49° | 30.9 | film, saul, loco | walk, slow down, come to a halt, stand |
 | `idle_king` | 137_41 (0.5–9.0 s) | 3.20 | loop | 0.01 | +1° | 11.6 | film, saul, idle | "strong man" wait: broad stance |
 | `raise_arm_R` | 13_26 (8.0–9.3 s) | 1.37 | — | 0.03 | -77° | 7.0 | film, saul, army, gesture | right arm thrust up overhead (the spear raise; hold the peak with setSpeed 0) |
 | `cheer_arms` | 79_69 (0.5–6.2 s) | 5.70 | — | 0.00 | +2° | 27.8 | film, army, gesture | very happy: both arms up, cheering |
 | `cheer_reach` | 14_20 (13.0–16.6 s) | 3.60 | — | 0.07 | -3° | 17.3 | film, army, gesture | both arms reach up high |
 | `arms_high` | 05_12 (8.0–11.3 s) | 3.30 | — | 0.15 | -6° | 16.3 | film, army, gesture | one arm swept up high |
-| `cheer_walk` | 142_09 (11.5–14.6 s) | 3.10 | — | 1.20 | +17° | 15.9 | film, army, gesture | joyful walk with the arms up |
+| `cheer_walk` | 142_09 (11.5–14.6 s) | 3.10 | — | 1.20 | +17° | 15.9 | film, army, gesture | joyful walk with the arms up — *imported, not shipped (`--all`)* |
 | `grab_pull_R` | 18_05 (0.0–3.6 s) | 3.67 | — | 0.34 | +149° | 18.3 | film, saul, gesture | step in, seize with the right hand and pull (A pulls B by the elbow) |
-| `grab_R` | 56_02 (10.5–14.0 s) | 3.50 | — | 0.00 | +7° | 15.7 | film, saul, gesture | angry grab forward |
-| `reach_forward` | 15_06 (0.5–3.6 s) | 3.10 | — | 0.01 | -8° | 14.3 | film, gesture | lean forward, reach for |
-| `stagger_back` | 23_12 (0.0–2.5 s) | 2.53 | — | 0.85 | +4° | 12.3 | film, saul, gesture | bumped: stumble / recoil |
-| `flinch` | 77_09 (0.5–3.2 s) | 2.70 | — | 0.04 | -19° | 13.4 | film, gesture | duck / flinch away |
-| `recoil_surprised` | 120_15 (2.5–6.6 s) | 4.10 | — | 0.45 | +4° | 19.4 | film, gesture | surprised, backs away |
+| `grab_R` | 56_02 (10.5–14.0 s) | 3.50 | — | 0.00 | +7° | 15.7 | film, saul, gesture | angry grab forward — *imported, not shipped (`--all`)* |
+| `reach_forward` | 15_06 (0.5–3.6 s) | 3.10 | — | 0.01 | -8° | 14.3 | film, gesture | lean forward, reach for — *imported, not shipped (`--all`)* |
+| `stagger_back` | 23_12 (0.0–2.5 s) | 2.53 | — | 0.85 | +4° | 12.3 | film, saul, gesture | bumped: stumble / recoil — *imported, not shipped (`--all`)* |
+| `flinch` | 77_09 (0.5–3.2 s) | 2.70 | — | 0.04 | -19° | 13.4 | film, gesture | duck / flinch away — *imported, not shipped (`--all`)* |
+| `recoil_surprised` | 120_15 (2.5–6.6 s) | 4.10 | — | 0.45 | +4° | 19.4 | film, gesture | surprised, backs away — *imported, not shipped (`--all`)* |
 | `walk_old` | 142_07 (3.0–11.0 s) | 0.93 | loop | 0.28 | -0° | 4.6 | film, samuel, elders, loco | elderly man walk, slow and upright |
 | `walk_old_hunched` | 137_33 (2.0–8.0 s) | 1.60 | loop | 0.42 | -0° | 7.5 | film, elders, loco | old man walk, stooped |
 | `old_turn_walk` | 142_07 (17.5–23.5 s) | 6.00 | — | 0.06 | +176° | 25.3 | film, samuel, loco | elderly man turns away and walks off |
-| `idle_old` | 137_32 (0.5–9.0 s) | 3.03 | loop | 0.00 | -1° | 13.0 | film, samuel, elders, idle | old man wait |
+| `idle_old` | 137_32 (0.5–9.0 s) | 3.03 | loop | 0.00 | -1° | 13.0 | film, samuel, elders, idle | old man wait — *imported, not shipped (`--all`)* |
 | `talk_gesture` | 18_08 (1.0–13.0 s) | 12.00 | — | 0.02 | -7° | 50.0 | film, elders, gesture | explaining with hand gestures (standing) |
 | `argue` | 18_10 (0.0–3.0 s) | 3.00 | — | 0.03 | -6° | 14.5 | film, elders, gesture | quarrel: angry hand gestures |
 | `point_directions` | 139_25 (0.0–5.5 s) | 5.53 | — | 0.16 | -30° | 26.4 | film, elders, gesture | giving directions, pointing |
 | `kneel` | 23_03 (0.3–5.4 s) | 5.10 | — | 0.06 | -5° | 23.7 | film, game, gesture | kneel down, stay, rise |
 | `kneel_hold` | 23_03 (1.2–4.0 s) | 1.00 | loop | 0.02 | +0° | 4.9 | film, game, idle | kneeling (loop) |
-| `kneel_bow` | 23_03 (1.2–4.0 s) | 1.00 | loop | 0.02 | +0° | 5.0 | film, idle | kneeling, bowed low (kneel_hold + spine/head pitch): obeisance |
+| `kneel_bow` | 23_03 (1.2–4.0 s) | 1.00 | loop | 0.02 | +0° | 5.0 | film, idle | kneeling, bowed low (kneel_hold + spine/head pitch): obeisance — *imported, not shipped (`--all`)* |
 | `idle_soldier` | 137_28 (0.3–6.0 s) | 2.50 | loop | 0.03 | -1° | 10.9 | film, army, idle, game | normal wait |
 | `idle_shift` | 139_02 (0.5–7.8 s) | 4.87 | loop | 0.00 | -0° | 20.1 | film, army, idle, game | shifting weight |
-| `idle_nervous` | 79_73 (0.3–6.2 s) | 2.47 | loop | 0.00 | +0° | 10.8 | film, idle | scared, fidgeting |
+| `idle_nervous` | 79_73 (0.3–6.2 s) | 2.47 | loop | 0.00 | +0° | 10.8 | film, idle | scared, fidgeting — *imported, not shipped (`--all`)* |
 | `idle_bus` | 40_10 (0.5–9.0 s) | 2.57 | loop | 0.00 | +0° | 10.6 | film, idle, elders | wait for the bus: restless stand |
-| `pickup_squat` | 69_70 (1.3–4.8 s) | 3.50 | — | 0.21 | -80° | 16.8 | game | step up, squat, pick up, rise |
+| `pickup_squat` | 69_70 (1.3–4.8 s) | 3.50 | — | 0.21 | -80° | 16.8 | game | step up, squat, pick up, rise — *imported, not shipped (`--all`)* |
 | `pickup_box` | 115_06 (0.0–3.0 s) | 3.00 | — | 0.01 | -2° | 14.6 | game | pick up from the ground bending the knees |
-| `throw_overhand` | 124_01 (0.8–4.6 s) | 3.80 | — | 0.28 | +104° | 18.5 | game | overhand throw (baseball pitch) - base for the sling release |
+| `throw_overhand` | 124_01 (0.8–4.6 s) | 3.80 | — | 0.28 | +104° | 18.5 | game | overhand throw (baseball pitch) - base for the sling release — *imported, not shipped (`--all`)* |
 | `throw_ball` | 141_11 (0.3–3.2 s) | 2.90 | — | 0.06 | -2° | 14.4 | game | overhand throw |
-| `look_around` | 139_01 (4.5–9.0 s) | 4.50 | — | 0.01 | -41° | 20.7 | game, idle | cautious look around |
+| `look_around` | 139_01 (4.5–9.0 s) | 4.50 | — | 0.01 | -41° | 20.7 | game, idle | cautious look around — *imported, not shipped (`--all`)* |
 
-Total **73 clips, 940 KB** since cut v2 (49 CMU + 24 Rocketbox; gzip; the phone downloads only the clips a scene preloads).
+Shipped since cut v2: **55 clips, 697 KB** (31 CMU + 24 Rocketbox; gzip; the phone downloads only the clips a scene
+preloads). The 25 rows marked *not shipped* stay specified in `tools/mocap/clips.py` with `ship=False` and are built
+only by `build_clips.py --all`.
 
 ### What CMU lacks and how it is covered
 
@@ -185,6 +187,9 @@ How they enter the pipeline (`tools/mocap/rocketbox.py`):
 | `walk_n1` | m_walk_neutral_01 (0.0–1.2 s) | 1.20 | loop | 1.11 | -1° | 6.1 | film, army, loco | walk |
 | `walk_n2` | m_walk_neutral_02 (0.0–1.1 s) | 1.07 | loop | 1.46 | +0° | 5.5 | film, army, loco | walk |
 | `walk_stop_rb` | m_walk_stop (0.0–2.0 s) | 2.03 | — | 0.64 | +2° | 9.5 | film, saul, loco | walk, halt in two steps, stand |
+| `turn_go_L` | m_turn_left_180_to_walk (0.0–1.7 s) | 1.67 | — | 0.57 | +156° | 8.4 | film, samuel, loco | turns 180° to the left into a walk away (Samuel turns from Saul) |
+| `turn_go_R` | m_turn_right_180_to_walk | — | — | — | — | — | film, samuel, loco | the same to the right — *imported, not shipped (`--all`)* |
+| `turn_180_L` | m_turn_left_180 | — | — | — | — | — | film, loco | turns 180° on the spot — *imported, not shipped (`--all`)* |
 | `stand_up` | m_sit_stand_up_chair_01 (0.0–2.5 s) | 2.53 | — | 0.18 | +2° | 11.1 | film, elders, gesture | rise from a seat |
 | `talk_angry` | m_gestic_talk_angry_01 (1.5–7.5 s) | 6.00 | — | 0.02 | -3° | 26.7 | film, elders, gesture | angry demand: the arm raised high at 2.5 s |
 | `talk_excited` | m_gestic_talk_excited_02 (1.5–7.5 s) | 6.00 | — | 0.02 | +8° | 26.0 | film, elders, gesture | excited talk, both hands |
@@ -197,6 +202,8 @@ How they enter the pipeline (`tools/mocap/rocketbox.py`):
 | `idle_n1` | m_idle_neutral_01 (0.0–11.6 s) | 3.30 | loop | 0.00 | +0° | 8.1 | film, idle, army, elders | neutral stand, weight shifts |
 | `idle_n2` | m_idle_neutral_02 (0.0–15.4 s) | 3.00 | loop | 0.00 | -0° | 6.8 | film, idle, army | neutral stand |
 | `idle_angry` | m_idle_angry_02 (0.3–8.0 s) | 3.00 | loop | 0.00 | +0° | 12.9 | film, idle, elders | agitated stand, head turns |
+| `look_around_L` | m_idle_look_around_01 (0.3–4.4 s) | 4.10 | — | 0.00 | +3° | 13.9 | film, army, gesture | turns to look to the right and back (the silence: heads turn) |
+| `look_around_R` | m_idle_look_around_02 (0.3–4.3 s) | 4.00 | — | 0.00 | -5° | 14.3 | film, army, gesture | turns to look to the left and back |
 | `crouch_in` | m_crouch_in (0.0–4.5 s) | 4.53 | — | 0.04 | -24° | 17.9 | film, game, gesture | crouch down — *imported, not shipped (`--all`)* |
 | `crouch_idle` | m_crouch_idle (0.0–6.9 s) | 2.00 | loop | 0.00 | +0° | 4.9 | film, game, idle | crouching — *imported, not shipped (`--all`)* |
 | `crouch_out` | m_crouch_out (0.0–4.5 s) | 4.53 | — | 0.04 | +25° | 18.6 | film, game, gesture | rise from a crouch — *imported, not shipped (`--all`)* |
