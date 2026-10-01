@@ -513,7 +513,8 @@ export class Intro {
       this.world.frame(tk.take, u, lt, this.frame);
       applyHandheld(tk.take, lt, this.t, this.frame);
       focus = this.world.focus(tk.take, lt);
-      this.portrait(this.frame, focus?.point ?? null);
+      // phones in portrait: re-aim toward the shot's subject (D1: David, not the valley his focus racks into)
+      this.portrait(this.frame, this.world.subject(tk.take, this.pv3) ?? focus?.point ?? null);
       cam = this.h.engine.camera;
       camPos = this.frame.pos; // the CameraRig poses the world camera after this update: focus on this frame's lens
     } else if (tk.set === 'stage') {
@@ -575,6 +576,7 @@ export class Intro {
   }
   private readonly pv = new THREE.Vector3();
   private readonly pv2 = new THREE.Vector3();
+  private readonly pv3 = new THREE.Vector3();
 
   /** one-shot sounds inside shots (breathing in the thicket, the lamb) */
   private sfx(s: IntroShot, lt: number) {

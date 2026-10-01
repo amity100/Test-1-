@@ -210,7 +210,15 @@ function turnStep(u: number): [number, number, number] {
 export const SAM_TURN_CUT = 1.5;
 /** Samuel's heading once he walks away (ESE along the road, away from the king; game yaw) */
 export const SAM_AWAY_YAW = 1.15;
-const SAM_DIR = new THREE.Vector3(Math.sin(SAM_AWAY_YAW), 0, Math.cos(SAM_AWAY_YAW));
+/**
+ * the way his walk actually goes: Rocketbox m_walk_slow drifts 8.2 deg to the walker's right of his facing (its cycle
+ * advance [-0.188, 1.311]) — measured in the film (perf v7 probe: 57.7 deg); the root motion carries him along it
+ */
+const SAM_WALK_YAW = SAM_AWAY_YAW - Math.atan2(0.1882, 1.3113);
+const SAM_DIR = new THREE.Vector3(Math.sin(SAM_WALK_YAW), 0, Math.cos(SAM_WALK_YAW));
+/** the turn-step's extra drift to the south in the film (the yaw lags the clip during the fade-in; measured: +0.02 m at
+ * 0.5 s, +0.06 at 1.0 s, +0.09 at 1.5 s of the clip) */
+const turnDriftSouth = (u: number) => 0.06 * Math.pow(Math.max(0, u), 1.4);
 /** his pace (m/s of action time): walking away (an old man's walk), held back by the corner (grip -> free), freed */
 export const SAM_PACE = 0.5;
 export const SAM_HELD = 0.25;
@@ -330,12 +338,12 @@ export function samuelAt(shot: GilgalShotName, t: number): ActorState {
       const u = at - A.turn;
       if (u < SAM_TURN_CUT) {
         const [e, so, y] = turnStep(u);
-        return { pos: SAMUEL_STEP.clone().add(new THREE.Vector3(e * SAMUEL_MOCAP_SCALE, 0, so * SAMUEL_MOCAP_SCALE)), yaw: SAMUEL.yaw + y, walk: 0.55, cue: ss(0, SAM_TURN_CUT, u), action: 'turns to go (15:27)' };
+        return { pos: SAMUEL_STEP.clone().add(new THREE.Vector3(e * SAMUEL_MOCAP_SCALE, 0, so * SAMUEL_MOCAP_SCALE + turnDriftSouth(u))), yaw: SAMUEL.yaw + y, walk: 0.55, cue: ss(0, SAM_TURN_CUT, u), action: 'turns to go (15:27)' };
       }
       const [e, so, y] = turnStep(SAM_TURN_CUT);
       const d = samuelWalk(at);
       const yaw = SAMUEL.yaw + y + (SAM_AWAY_YAW - SAMUEL.yaw - y) * Math.min(1, (u - SAM_TURN_CUT) / 0.5);
-      const pos = SAMUEL_STEP.clone().add(new THREE.Vector3(e * SAMUEL_MOCAP_SCALE + SAM_DIR.x * d, 0, so * SAMUEL_MOCAP_SCALE + SAM_DIR.z * d));
+      const pos = SAMUEL_STEP.clone().add(new THREE.Vector3(e * SAMUEL_MOCAP_SCALE + SAM_DIR.x * d, 0, so * SAMUEL_MOCAP_SCALE + turnDriftSouth(SAM_TURN_CUT) + SAM_DIR.z * d));
       const walk = at < A.grip ? SAM_PACE : at < A.free ? SAM_HELD : at < A.free + SAM_STOP ? SAM_FREED : 0;
       return { pos, yaw, walk, cue: 1, action: 'walks away; the corner of his robe is seized and tears' };
     }

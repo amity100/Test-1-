@@ -41,8 +41,9 @@ export const FILM_CAM = {
   // (cut4: the lens starts further back — behind rank ~6 — so the ranks parting fill the near / mid-ground, and the push
   //  continues on a lengthening lens: Samuel >= 35 % of the frame height at the end with his G4 mark nearer the army)
   // (CUT v3: 4 s — the same lane and push (cut4's verified lens positions: between ranks 6 and 7 at the start, clear of
-  //  every man), now running to the cut on the drift ease; Samuel ~38-40 % of the frame height at the end)
-  silence: { x0: -14, x1: -9.6, z0: 1.575, z1: 1.575, h0: 1.98, h1: 1.9, lookSide: -1.8, fov0: 16, fov1: 8, clear: 0.8 },
+  //  every man), now running to the cut on the drift ease; the lens lengthens a little further (8 -> 7.4°: Samuel
+  //  measured 37 % of the picture height at 8.2°) so he ends at ~40 % of the picture height)
+  silence: { x0: -14, x1: -9.6, z0: 1.575, z1: 1.575, h0: 1.98, h1: 1.9, lookSide: -1.8, fov0: 16, fov1: 7.4, clear: 0.8 },
   // G5a: a medium-wide two-shot from the south at chest height (bodies ~70 % of the frame), a slow lateral move
   // west -> east with the action (cut4: backlit by the tear's cheated sun, GilgalSet.setSunCheat)
   // (CUT v3: the lateral move runs over the whole 4 s — Samuel's turn-step, Saul's plea, the lunge and the grip)
@@ -52,8 +53,9 @@ export const FILM_CAM = {
   // the look sits between the fist and Saul's face and follows the real hand a little
   // (framed on the fist at the insert's first frame — the blocking's TEAR_GRIP: Saul's head ~0.6 m west of it on the
   //  left third, Samuel walking away ESE on the right third; the look at chest height of the kneeling king)
-  // (CUT v3: 5 s of slow motion — a slow drift east and a small push over the whole insert)
-  insert: { dx0: -0.18, dx1: 0.12, dz0: 2.34, dz1: 2.18, h0: 0.6, h1: 0.62, lookX: 0.05, lookH: 0.85, follow: 0.2, fov0: 36, fov1: 34.5 },
+  // (CUT v3: 5 s of slow motion — a slow drift east and a small push over the whole insert; the look a little higher and
+  //  the lens a little wider than cut4's: with perf's CUT v3 knee mark the kneeling king's head touched the top edge)
+  insert: { dx0: -0.18, dx1: 0.12, dz0: 2.34, dz1: 2.18, h0: 0.6, h1: 0.62, lookX: 0.05, lookH: 0.93, follow: 0.2, fov0: 39, fov1: 37 },
   // G6 (cut4): a medium close-up on Samuel, 3/4 FRONT from the south-west at eye level — the lens on the line from
   // Samuel toward Saul turned `rot` deg toward the lens side (his eyeline ~off-lens left), a slow 6 % push; the look
   // shifted `lookLeft` m to frame left (his face on the right third, the verse in the left negative space)

@@ -509,6 +509,8 @@ canvas { display: block; outline: none; }
 
 /* phones in portrait: the picture is a band across the middle; the texts sit in it, larger relative to the width */
 @media (max-aspect-ratio: 1/1) {
+  /* (CUT v3: portrait shows a tall sky over G1's army — the card sits higher in it, clear of the spear tips) */
+  .ft-time { top: 40%; }
   .ft-time .ft-main { font-size: clamp(22px, 6.6vw, 36px); line-height: 1.5; animation-name: timeResolveP; }
   .ft-place .ft-main { font-size: clamp(28px, 8.6vw, 42px); }
   .ft-person .ft-name { font-size: clamp(44px, 13.5vw, 68px); }

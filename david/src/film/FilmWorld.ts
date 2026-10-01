@@ -588,6 +588,16 @@ export class FilmWorld {
     }
   }
 
+  /**
+   * The composition's subject of a world take, where it differs from the focus point (phones in portrait re-aim their
+   * narrow lens toward it — Intro.portrait): D1's focus racks out into the valley, but the shot is David on his rock.
+   * null = use the focus point.
+   */
+  subject(take: string, out: THREE.Vector3): THREE.Vector3 | null {
+    if (take === 'figure') return out.copy(this.rock).add(V(0, 1.35, 0));
+    return null;
+  }
+
   /** DoF target of a world take. */
   focus(take: string, t: number): FilmFocus | null {
     const m = this.h.player.model;
