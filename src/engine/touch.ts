@@ -15,6 +15,10 @@ import { onLangChange, t } from '../ui/i18n';
  * - JUMP / SHOVE / ✕ / ACTION / CROUCH: held while touched (the game reads
  *   wasPressed / isHeld). Dragging off a button also looks.
  * - ⇄ FLIP (only while aiming, left thumb), 🎬 (when offered), pause: taps.
+ * - The lab's FLOW: SLIDE (over JUMP, in CROUCH's place; it's the crouch key:
+ *   at a run it slides) and POWER (its ring fills with the meter, it pulses
+ *   when full; hold it). While POWER is held, a tap anywhere off the buttons
+ *   marks the man under it (the game picks him; see FLOW.power.tapRadius).
  * - The STRIKES are their own bar (ui/strikebar).
  */
 
@@ -46,11 +50,25 @@ const ICON = {
     '<path fill="currentColor" d="M3 10h18v9.5c0 .8-.7 1.5-1.5 1.5h-15c-.8 0-1.5-.7-1.5-1.5z"/><path fill="currentColor" d="M2.6 8.6l-.5-2.3c-.2-.8.3-1.6 1.1-1.8l14.6-3.1c.8-.2 1.6.3 1.8 1.1l.5 2.3z"/>',
   ),
   action: SVG('<path d="M12 3.5l2.2 6.3 6.3 2.2-6.3 2.2L12 20.5l-2.2-6.3L3.5 12l6.3-2.2z" fill="currentColor"/>'),
+  slide: SVG(
+    '<path d="M7 4.5l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" opacity=".75"/><path d="M3 17.5h15M15 14l3.5 3.5L15 21" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>',
+  ),
   power: SVG('<circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M12 6.5v5.5l3.6 2.2" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>'),
 };
 
 /** Buttons whose finger may keep dragging to look. */
 const DRAG_LOOK = new Set<string>(['jump', 'shove', 'close', 'action', 'crouch', 'power']);
+
+/** What the lab's FLOW shows on the touch buttons. */
+export interface TouchFlowState {
+  /** POWER meter 0..1 (the ring round the button). */
+  fill: number;
+  ready: boolean;
+  /** POWER is held (time stopped): taps mark. */
+  held: boolean;
+  /** Fast enough that SLIDE slides. */
+  slide: boolean;
+}
 
 function vibrate(ms: number) {
   try {
@@ -73,6 +91,11 @@ export class TouchControls {
   private portalCap: HTMLElement;
   private portalBtn: HTMLButtonElement;
   private crouchBtn: HTMLButtonElement;
+  private slideBtn: HTMLButtonElement;
+  private powerBtn: HTMLButtonElement;
+  /** FLOW's POWER is held: a touch off the buttons is a tap that marks (and a look, never the stick). */
+  private powerHeld = false;
+  private flowKey = '';
   private clipBtn: HTMLButtonElement;
   private shown = true;
   private actionLabel: string | null = null;
@@ -95,9 +118,10 @@ export class TouchControls {
         <button class="t-btn t-rift" data-t="portal" type="button">${ICON.rift}<span class="t-lbl" data-k="touch.portal"></span><span class="t-cap"></span></button>
         <button class="t-btn t-jump" data-t="jump" type="button">${ICON.jump}<span class="t-lbl" data-k="touch.jump"></span></button>
         <button class="t-btn t-crouch" data-t="crouch" type="button">${ICON.crouch}</button>
+        <button class="t-btn t-slide" data-t="crouch" type="button">${ICON.slide}<span class="t-lbl" data-k="touch.slide"></span></button>
         <button class="t-btn t-shove" data-t="shove" type="button">${ICON.shove}<span class="t-lbl" data-k="touch.shove"></span></button>
         <button class="t-btn t-close" data-t="close" type="button">${ICON.close}</button>
-        <button class="t-btn t-power" data-t="power" type="button">${ICON.power}<span class="t-lbl" data-k="touch.power"></span></button>
+        <button class="t-btn t-power" data-t="power" type="button"><i class="t-fill"></i>${ICON.power}<span class="t-lbl" data-k="touch.power"></span></button>
         <button class="t-btn t-clip hidden" data-t="clip" type="button">${ICON.clip}</button>
       </div>`;
     root.appendChild(el);
@@ -110,6 +134,8 @@ export class TouchControls {
     this.portalCap = q('.t-cap');
     this.portalBtn = q('.t-rift');
     this.crouchBtn = q('.t-crouch');
+    this.slideBtn = q('.t-slide');
+    this.powerBtn = q('.t-power');
     this.clipBtn = q('.t-clip');
     this.labels();
     onLangChange(() => this.labels());
@@ -140,11 +166,26 @@ export class TouchControls {
     n.textContent = t(k);
   }
 
-  /** The lab's FLOW: the POWER button shows (it glows when the meter is full; hold it, drag to aim). */
-  setFlow(on: boolean, ready = false) {
-    this.el.classList.toggle('flow', on);
-    const b = this.el.querySelector('.t-power') as HTMLElement | null;
-    if (b && b.classList.contains('ready') !== (on && ready)) b.classList.toggle('ready', on && ready);
+  /**
+   * The lab's FLOW (null: off): SLIDE takes CROUCH's place (lit when you're
+   * fast enough), POWER shows its meter as a ring and pulses when full.
+   * While POWER is held, taps off the buttons mark men.
+   */
+  setFlow(s: TouchFlowState | null) {
+    const fill = s ? Math.round(Math.min(1, Math.max(0, s.fill)) * 50) / 50 : 0;
+    const key = s ? `${fill}|${s.ready}|${s.held}|${s.slide}` : 'off';
+    if (key === this.flowKey) return;
+    this.flowKey = key;
+    this.el.classList.toggle('flow', !!s);
+    this.el.classList.toggle('power-held', !!s && s.held);
+    this.powerBtn.style.setProperty('--fill', String(fill));
+    this.powerBtn.classList.toggle('ready', !!s && s.ready && !s.held);
+    this.powerBtn.classList.toggle('held', !!s && s.held);
+    this.slideBtn.classList.toggle('armed', !!s && s.slide);
+    if (!!s && s.held) {
+      if (!this.powerHeld) vibrate(18);
+    }
+    this.powerHeld = !!s && s.held;
   }
 
   show(v: boolean) {
@@ -226,6 +267,7 @@ export class TouchControls {
 
   setCrouched(v: boolean) {
     this.crouchBtn.classList.toggle('on', v);
+    this.slideBtn.classList.toggle('on', v);
   }
 
   /** Let go of everything (pause, menus, respawn). */
@@ -258,6 +300,12 @@ export class TouchControls {
       const role = hit.dataset.t!;
       const x = tt.clientX,
         y = tt.clientY;
+      // FLOW's POWER held: a touch off the buttons marks the man under it (it may still drag to look)
+      if (this.powerHeld && (role === 'left' || role === 'right')) {
+        this.input.taps.push({ x, y });
+        this.fingers.set(tt.identifier, { kind: 'look', x, y });
+        continue;
+      }
       switch (role) {
         case 'left': {
           if ([...this.fingers.values()].some((f) => f.kind === 'stick')) {

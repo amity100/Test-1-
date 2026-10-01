@@ -148,7 +148,7 @@ export class Menu {
       (v, i) =>
         `<button type="button" data-variant="${v}" class="${v === this.variant ? 'on' : ''}"><span class="vk" dir="ltr">F${i + 1}</span><b>${esc(t(`lab.v.${v}`))}</b>${withNotes ? `<small>${esc(t(`lab.vd.${v}`))}</small>` : ''}</button>`,
     ).join('');
-    return `<div class="variants"><div class="w-top"><span>${esc(t('lab.variant'))}</span><small>${esc(t('lab.variantNote'))}</small></div><div class="vseg">${opts}</div></div>`;
+    return `<div class="variants"><div class="w-top"><span>${esc(t('lab.variant'))}</span><small>${esc(t(IS_TOUCH ? 'lab.variantNoteTouch' : 'lab.variantNote'))}</small></div><div class="vseg">${opts}</div></div>`;
   }
 
   private go(g: Go) {

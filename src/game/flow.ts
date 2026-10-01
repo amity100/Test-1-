@@ -38,8 +38,10 @@ export const FLOW = {
     out: 6.5,
     up: 7.2,
     /** At least this long in the air first, and between kicks (s). */
-    minAir: 0.08,
+    minAir: 0.12,
     cooldown: 0.22,
+    /** Only a wall this tall (m, its top over the floor under you) is kicked off: cover, rails and crates are not (the double jump is yours there). */
+    minHeight: 1.6,
   },
   slide: {
     /** Crouch at this speed or more (m/s) and you slide; it adds `boost` (m/s) once... */
@@ -52,6 +54,10 @@ export const FLOW = {
     /** Steering while sliding (1/s), and the lockout from slide to slide (s). */
     steer: 2.2,
     cooldown: 0.35,
+    /** A slide's burst never takes you past this (m/s): slide after slide doesn't stack speed. */
+    cap: 11.6,
+    /** A jump out of a slide: this much more along it (m/s, to `cap`), and the slide's speed is kept. */
+    jumpBoost: 1.2,
   },
   portal: {
     /** Out of a door or a wall end: speed x this (never above `cap`, m/s). Loops and floor ends are left alone. */
@@ -61,29 +67,42 @@ export const FLOW = {
   meter: {
     /** At the start of a life. */
     start: 0.5,
+    /**
+     * Rates, sized so active, stylish play (running, jumping, sliding, a few
+     * kills) fills it from empty in roughly half a minute; plain running
+     * takes about a minute.
+     */
     /** Per second, per m/s above walking pace. */
-    speed: 0.011,
+    speed: 0.0035,
     /** Per second sliding, per second in the air. */
-    slide: 0.07,
-    air: 0.045,
+    slide: 0.03,
+    air: 0.02,
     /** One-offs: a wall kick, a double jump, a rift crossing. */
-    wallJump: 0.07,
-    airJump: 0.025,
-    portal: 0.06,
+    wallJump: 0.03,
+    airJump: 0.012,
+    portal: 0.03,
     /** A kill; a stylish one (in the air, sliding, or rift-charged). */
-    kill: 0.12,
-    styleKill: 0.24,
+    kill: 0.06,
+    styleKill: 0.12,
     /** Per second standing still on the ground. */
-    drain: 0.025,
+    drain: 0.015,
   },
   power: {
     /** Time while it's held (scale), the longest it holds (real s), the lockout after (real s). */
     timeScale: 0.05,
     maxHold: 4,
     cooldown: 0.8,
-    /** Men it can mark; how far (m); a thumb marks by holding the crosshair on a man this long (real s). */
+    /**
+     * Men it can mark; how far (m). Every man lit in range is markable (no
+     * line of sight: you go to him through rifts). Marks snap: the crosshair
+     * takes the lit man nearest it within `assist` x the screen's height; a
+     * finger tapping the screen, the one within `tapRadius` (CSS px) of it;
+     * a thumb resting the crosshair on a man `dwell` (real s) marks him too.
+     */
     maxMarks: 3,
     range: 48,
+    assist: 0.11,
+    tapRadius: 64,
     dwell: 0.28,
     /** The chain: a beat before the first dash, between dashes, after the last (real s); time meanwhile (scale). */
     firstDelay: 0.12,
@@ -116,6 +135,28 @@ export function flowOn(v: CombatVariant = activeVariant()): boolean {
   return v === 'flow';
 }
 
+/** A lit man where he is on screen (CSS px). */
+export interface PowerCandidate {
+  id: number;
+  x: number;
+  y: number;
+}
+
+/** The man a mark at (x, y) takes: the nearest lit one not yet marked, within `radius` px; null if none. */
+export function pickMark(cands: readonly PowerCandidate[], x: number, y: number, radius: number, marked: readonly number[] = []): number | null {
+  let best: number | null = null;
+  let bd = radius * radius;
+  for (const c of cands) {
+    if (marked.includes(c.id)) continue;
+    const d = (c.x - x) ** 2 + (c.y - y) ** 2;
+    if (d <= bd) {
+      bd = d;
+      best = c.id;
+    }
+  }
+  return best;
+}
+
 /** What the meter reads off the player each frame. */
 export interface FlowMotion {
   /** Horizontal speed (m/s). */
@@ -142,6 +183,8 @@ export class PowerMeter {
 
   /** Game seconds (slow motion fills it slowly). */
   update(dt: number, m: FlowMotion) {
+    // full stays full until it's spent (READY never flickers off because you stopped)
+    if (this.value >= 1) return;
     const M = FLOW.meter;
     let g = Math.max(0, m.speed - FLOW_WALK * 0.6) * M.speed;
     if (m.sliding) g += M.slide;

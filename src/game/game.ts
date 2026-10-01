@@ -50,7 +50,7 @@ import { buildWorld, WORLD_SKY, WORLD_SUN, type WorldId } from '../world/worlds'
 import { CameraRig } from './camera';
 import { CHAR_RIM, Character, type AnimLibrary, type CharacterAsset, type Look } from './characters';
 import { dampAngle, Player, type PlayerEvents, type PlayerInput } from './player';
-import { FLOW, FLOW_SPRINT, flowOn, PowerMeter, PowerMoment } from './flow';
+import { FLOW, FLOW_SPRINT, flowOn, pickMark, PowerMeter, PowerMoment, type PowerCandidate } from './flow';
 import { BLADE, HiddenBlade } from './blade';
 import { OUTCOME_COLOR, RiftSystem } from './portals';
 import { ArcView, PortalKey, type PortalResult } from './portalkey';
@@ -2130,7 +2130,8 @@ export class Game {
     this.rifts.updatePreview(aim, this.handPos(), this.camera, !!H && (H.mode === 'door' || H.mode === 'air' || H.mode === 'hole'));
     this.strikeBar.setDimmed(this.portal.holding);
     // (on a man you could grab, the preview also lays out where a tap would throw him)
-    const pv = !this.portal.holding && alive ? this.portal.preview(!this.strikes.aiming) : null;
+    // (not while FLOW's POWER has time stopped: the marks are the only thing on screen then)
+    const pv = !this.portal.holding && alive && this.power.phase === 'idle' ? this.portal.preview(!this.strikes.aiming) : null;
     this.arcView.update(this.portal.arcN > 1 ? this.portal : this.strikes, this.time);
     if (pv) {
       this.hud.setGateHint({ mode: pv.mode, reason: pv.reason, targetKey: pv.key });
@@ -2934,23 +2935,34 @@ export class Game {
       } else if (!this.meter.ready) this.audio.ui('deny');
     }
     this.powerAim = null;
+    const taps = inp.consumeTaps();
     if (P.phase === 'held') {
       // untouchable while time is stopped (and through the chain)
       this.dodgeSafeUntil = Math.max(this.dodgeSafeUntil, this.time + FLOW.power.safe);
-      const ray = this.rig.aimRay();
-      const touch = inp.lastDevice === 'touch';
-      const e = aimedEnemy(this.level.world, this.enemies.list, (x) => this.zones.active.has(x.def.zone), ray.origin, ray.dir, this.player.eye(_v3), { range: FLOW.power.range, loose: true });
+      // every lit man is markable; the crosshair snaps to the nearest one (no line of sight: rifts take you there)
+      const cands = this.powerCandidates();
+      const w = this.renderer.width, h = this.renderer.height;
+      const aimId = pickMark(cands, w / 2, h / 2, FLOW.power.assist * h, P.marks);
+      const e = aimId !== null ? this.enemies.get(aimId) : null;
       this.powerAim = e;
-      let mark = !!e && inp.wasPressed('portal');
+      const want: number[] = [];
+      if (e && inp.wasPressed('portal')) want.push(e.id);
       // a thumb: resting the crosshair on him marks him
-      if (e && touch) {
+      if (e && inp.lastDevice === 'touch') {
         if (this.powerDwell.id !== e.id) this.powerDwell = { id: e.id, t: 0 };
         this.powerDwell.t += realDt;
-        if (this.powerDwell.t >= FLOW.power.dwell) mark = true;
+        if (this.powerDwell.t >= FLOW.power.dwell) want.push(e.id);
       } else this.powerDwell.id = -1;
-      if (mark && e && P.mark(e.id)) {
-        this.audio.laserLock(e.chest(_v));
-        this.fx.ring(_v.copy(e.pos).setY(e.pos.y + 0.05), 1.4, 0.3, COL_ENTRANCE);
+      // a finger: tapping a man marks him
+      for (const tp of taps) {
+        const id = pickMark(cands, tp.x, tp.y, FLOW.power.tapRadius, [...P.marks, ...want]);
+        if (id !== null) want.push(id);
+      }
+      for (const id of want) {
+        const m = this.enemies.get(id);
+        if (!m || !P.mark(id)) continue;
+        this.audio.laserLock(m.chest(_v));
+        this.fx.ring(_v.copy(m.pos).setY(m.pos.y + 0.05), 1.4, 0.3, COL_ENTRANCE);
         this.hud.callout(t('flow.call.mark', { n: P.marks.length, max: FLOW.power.maxMarks }), 'parry');
         navigator.vibrate?.(12);
       }
@@ -2974,6 +2986,20 @@ export class Game {
     }
   }
 
+  /** The men POWER lights (alive, in play, in range), and where each is on screen (CSS px); behind the camera: none. */
+  private powerCandidates(): PowerCandidate[] {
+    const out: PowerCandidate[] = [];
+    const me = this.player.body.pos;
+    const w = this.renderer.width, h = this.renderer.height;
+    for (const e of this.enemies.list) {
+      if (!e.alive || !this.zones.active.has(e.def.zone) || e.pos.distanceTo(me) > FLOW.power.range) continue;
+      const v = _v.copy(e.pos).setY(e.pos.y + e.height * 0.6).project(this.camera);
+      if (v.z > 1 || v.z < -1) continue;
+      out.push({ id: e.id, x: (v.x * 0.5 + 0.5) * w, y: (1 - (v.y * 0.5 + 0.5)) * h });
+    }
+    return out;
+  }
+
   /** One link of the chain: through a rift to just past him, and he's done. */
   private powerStrike(id: number, n: number) {
     const e = this.enemies.get(id);
@@ -2990,9 +3016,11 @@ export class Game {
     const reach = e.radius + P.past;
     const to = new THREE.Vector3();
     let found = false;
+    // (room to stand, and a floor under it: never over the void or the pool)
+    const floored = (x: number, z: number, y: number) => world.groundAt(x, z, FEEL.playerRadius * 0.6, y + 0.6) >= y - 0.6;
     for (const d of [reach, -reach]) {
       to.set(e.pos.x + dir.x * d, e.pos.y, e.pos.z + dir.z * d);
-      if (!world.overlapsCylinder(to.x, to.z, FEEL.playerRadius, to.y + 0.15, to.y + FEEL.playerHeight)) {
+      if (!world.overlapsCylinder(to.x, to.z, FEEL.playerRadius, to.y + 0.15, to.y + FEEL.playerHeight) && floored(to.x, to.z, to.y)) {
         found = true;
         break;
       }
@@ -3005,7 +3033,10 @@ export class Game {
     const yaw = Math.atan2(dir.x, dir.z);
     p.endLunge();
     p.teleport(to, yaw);
-    b.vel.set(dir.x * P.exitSpeed, 2.5, dir.z * P.exitSpeed);
+    // out of the dash at speed, unless the floor ends ahead (then you stop on it)
+    const ahead = P.exitSpeed * 0.45;
+    const go = floored(to.x + dir.x * ahead, to.z + dir.z * ahead, to.y) ? P.exitSpeed : 0;
+    b.vel.set(dir.x * go, 2.5, dir.z * go);
     this.playerFling = false;
     this.powerYaw = yaw;
     this.fx.riftBurst(_v.copy(to).setY(to.y + 1), dir, COL_ENTRANCE);
@@ -3031,10 +3062,9 @@ export class Game {
   private updateFlowHud(flow: boolean, realDt: number) {
     void realDt;
     const hud = this.lab?.hud;
-    if (!hud) return;
-    if (!flow) {
-      hud.setFlow(null);
-      this.touch?.setFlow(false);
+    if (!hud || !flow) {
+      hud?.setFlow(null);
+      this.touch?.setFlow(null);
       return;
     }
     const b = this.player.body;
@@ -3047,7 +3077,7 @@ export class Game {
       speed: THREE.MathUtils.clamp((hs - FLOW_SPRINT * 0.85) / 8, 0, 1),
     });
     if (this.power.phase === 'held') this.hud.setCrossHot(!!this.powerAim);
-    this.touch?.setFlow(true, this.meter.ready);
+    this.touch?.setFlow({ fill: this.meter.value, ready: this.meter.ready && this.power.canBegin(true), held: this.power.phase === 'held', slide: b.onGround && hs >= FLOW.slide.minSpeed && this.player.slideT <= 0 });
   }
 
   /** The blade turned aside by a man on his guard: a clang, he reels a moment, you're pushed off. */

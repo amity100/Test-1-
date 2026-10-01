@@ -51,6 +51,8 @@ export class Input {
   enabled = true;
   /** Touch UI writes here. */
   touchMove = { x: 0, y: 0 };
+  /** Screen taps (CSS px) the touch UI records while the game asks for them (FLOW's POWER: tap a man to mark him). Read with consumeTaps(). */
+  taps: { x: number; y: number }[] = [];
   /** The game has a PORTAL in hand (set every frame): RMB / LT / Y / D-pad do its things, not their own. */
   portalHolding = false;
   /** Called when the last used device changes (i18n device variants are switched automatically). */
@@ -341,6 +343,13 @@ export class Input {
     this.lookX = 0;
     this.lookY = 0;
     return { x, y };
+  }
+
+  consumeTaps() {
+    if (!this.taps.length) return this.taps;
+    const t = this.taps;
+    this.taps = [];
+    return t;
   }
 
   consumeWheel() {

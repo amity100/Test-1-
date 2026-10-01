@@ -44,7 +44,7 @@ export const FLOW_RULES = ['slide', 'jump', 'power'] as const;
 
 /** The key each FLOW rule is on, per device (touch: the button's own label). */
 const FLOW_KEYS: Record<(typeof FLOW_RULES)[number], { kbm: string; pad: string; touch: string }> = {
-  slide: { kbm: 'C', pad: 'B', touch: 'touch.crouch' },
+  slide: { kbm: 'C', pad: 'B', touch: 'touch.slide' },
   jump: { kbm: 'SPACE', pad: 'A', touch: 'touch.jump' },
   power: { kbm: 'Z', pad: 'R3', touch: 'touch.power' },
 };
@@ -108,6 +108,10 @@ export class LabHud {
   private linesEl: HTMLDivElement;
   private stopEl: HTMLDivElement;
   private flowKey = '';
+  /** FLOW on a phone: one short line on the moves when it comes on (it fades by itself). */
+  private tipEl: HTMLDivElement;
+  private flowWasOn = false;
+  private rulesTimer = 0;
 
   constructor(private host: HTMLElement) {
     this.el = document.createElement('div');
@@ -128,7 +132,20 @@ export class LabHud {
     host.appendChild(this.el);
     host.appendChild(this.banner);
     host.appendChild(this.flowEl);
+    this.tipEl = document.createElement('div');
+    this.tipEl.className = 'flow-tip';
+    host.appendChild(this.tipEl);
     this.el.addEventListener('pointerdown', (e) => {
+      // (phones: the rules card is folded away; RULES opens it a while)
+      if ((e.target as Element).closest('[data-more]')) {
+        e.stopPropagation();
+        e.preventDefault();
+        const open = !this.el.classList.contains('rules-open');
+        this.el.classList.toggle('rules-open', open);
+        clearTimeout(this.rulesTimer);
+        if (open) this.rulesTimer = window.setTimeout(() => this.el.classList.remove('rules-open'), 9000);
+        return;
+      }
       const b = (e.target as Element).closest('[data-v]') as HTMLElement | null;
       if (!b) return;
       e.stopPropagation();
@@ -153,6 +170,15 @@ export class LabHud {
     if (key === this.flowKey) return;
     this.flowKey = key;
     this.flowEl.classList.toggle('on', on);
+    if (on !== this.flowWasOn) {
+      this.flowWasOn = on;
+      this.tipEl.className = 'flow-tip';
+      if (on && getDevice() === 'touch') {
+        this.tipEl.textContent = t('flow.tip');
+        void this.tipEl.offsetWidth;
+        this.tipEl.className = 'flow-tip go';
+      }
+    }
     this.linesEl.style.opacity = on ? String(lines) : '0';
     this.stopEl.classList.toggle('on', on && !!s && s.phase !== 'idle');
     if (!on || !s) return;
@@ -162,7 +188,7 @@ export class LabHud {
     this.flowEl.classList.toggle('held', s.phase !== 'idle');
     this.flowLbl.textContent =
       s.phase === 'held'
-        ? t('flow.held', { n: s.marks, max: FLOW.power.maxMarks })
+        ? t(getDevice() === 'touch' ? 'flow.heldTouch' : 'flow.held', { n: s.marks, max: FLOW.power.maxMarks })
         : s.phase === 'chain'
           ? t('flow.chain')
           : ready
@@ -172,11 +198,12 @@ export class LabHud {
 
   private build() {
     this.cache.clear();
-    const chips = VARIANTS.map((v, i) => `<button type="button" data-v="${v}"><kbd>F${i + 1}</kbd><span>${esc(t(`lab.v.${v}`))}</span></button>`).join('');
+    // (FLOW's chip has a short name for phones, where the four share one row)
+    const chips = VARIANTS.map((v, i) => `<button type="button" data-v="${v}"><kbd>F${i + 1}</kbd><span>${esc(t(`lab.v.${v}`))}</span>${v === 'flow' ? `<em>${esc(t('lab.vs.flow'))}</em>` : ''}</button>`).join('');
     const tools = LAB_TOOLS.map((k) => `<div class="lt-${k}"><small>${esc(t(TOOL_KEY[k]))}</small><b data-f="k.${k}">0</b></div>`).join('');
     this.el.innerHTML = `
       <div class="lp-head"><span class="lp-tag">${esc(t('lab.title'))}</span><div class="lp-vars">${chips}</div></div>
-      <div class="lp-wave"><b data-f="wave"></b><span class="lp-left" data-f="left"></span><span class="lp-wt" data-f="waveT" dir="ltr"></span></div>
+      <div class="lp-wave"><b data-f="wave"></b><span class="lp-left" data-f="left"></span><span class="lp-wt" data-f="waveT" dir="ltr"></span><button type="button" class="lp-more" data-more>${esc(t('lab.rules'))}</button></div>
       <div class="lp-splits" data-f="splits" dir="ltr"></div>
       <div class="lp-stats">
         <div><small>${esc(t('lab.total'))}</small><b data-f="total" dir="ltr"></b></div>
@@ -271,6 +298,8 @@ export class LabHud {
     this.el.remove();
     this.banner.remove();
     this.flowEl.remove();
+    this.tipEl.remove();
+    clearTimeout(this.rulesTimer);
     this.linesEl.remove();
     this.stopEl.remove();
   }

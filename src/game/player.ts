@@ -38,6 +38,7 @@ export interface PlayerEvents {
 
 const _v = new THREE.Vector3();
 const _o = new THREE.Vector3();
+const _o2 = new THREE.Vector3();
 const _n = new THREE.Vector3();
 const SHOVE_SPEED = LAW.shove.distance / FEEL.shoveTime;
 
@@ -205,7 +206,8 @@ export class Player {
     // FLOW: crouch at a run is a SLIDE (a burst of speed that keeps going, low)
     const hs0 = Math.hypot(b.vel.x, b.vel.z);
     if (flow && input.slide && b.onGround && !this.mantle && this.slideT <= 0 && this.slideCd <= 0 && !this.carrying && this.lungeT <= 0 && this.shoveT <= 0 && hs0 >= FLOW.slide.minSpeed) {
-      const k = (hs0 + FLOW.slide.boost) / hs0;
+      // the burst only up to the slide cap (slide after slide doesn't stack speed)
+      const k = Math.max(hs0, Math.min(hs0 + FLOW.slide.boost, FLOW.slide.cap)) / hs0;
       b.vel.x *= k;
       b.vel.z *= k;
       this.slideT = FLOW.slide.maxTime;
@@ -320,8 +322,16 @@ export class Player {
         const cur = b.vel.x * dirX + b.vel.z * dirZ;
         const add = Math.min(accel * control * maxSpeed * dt, want - cur);
         if (add > 0) {
+          const h0 = Math.hypot(b.vel.x, b.vel.z);
           b.vel.x += dirX * add;
           b.vel.z += dirZ * add;
+          // FLOW's strong air control steers your flight, it never builds speed (no air-strafing past the run cap)
+          const h1 = Math.hypot(b.vel.x, b.vel.z);
+          const lim = Math.max(h0, maxSpeed);
+          if (flow && h1 > lim) {
+            b.vel.x *= lim / h1;
+            b.vel.z *= lim / h1;
+          }
         }
       }
     }
@@ -348,6 +358,15 @@ export class Player {
       b.vel.y = FEEL.jumpSpeed;
       b.onGround = false;
       this.crouched = false;
+      if (flow && this.slideT > 0) {
+        // FLOW: a jump out of a slide keeps its speed and adds a little (to the slide cap)
+        const h = Math.hypot(b.vel.x, b.vel.z);
+        if (h > 0.5) {
+          const k = Math.max(h, Math.min(h + FLOW.slide.jumpBoost, FLOW.slide.cap)) / h;
+          b.vel.x *= k;
+          b.vel.z *= k;
+        }
+      }
       this.slideT = 0;
       ev.jumped(b.pos.clone());
       this.char.play('jumpStart', { fade: 0.08 });
@@ -425,16 +444,28 @@ export class Player {
     b.vel.z = uz * hs;
   }
 
-  /** FLOW: the nearest wall beside you (8 ways round, waist high) kicks you off it. */
+  /**
+   * FLOW: the nearest wall beside you (8 ways round, waist high) kicks you
+   * off it, if it's a real wall: its top at least `minHeight` over the floor
+   * under you (cover, rails, crates are jumped over with the double jump).
+   */
   private wallKick(world: CollisionWorld): boolean {
     const b = this.body;
     const W = FLOW.wall;
     _o.set(b.pos.x, b.pos.y + 0.9, b.pos.z);
+    // the floor under you (over a drop: your feet stand in for it)
+    const floor = world.groundAt(b.pos.x, b.pos.z, 0.2, b.pos.y + 0.05);
+    const base = Number.isFinite(floor) && floor > b.pos.y - 6 ? floor : b.pos.y;
     let best = Infinity;
     for (let k = 0; k < 8; k++) {
       const a = (k * Math.PI) / 4;
-      const h = world.raycast(_o, _v.set(Math.sin(a), 0, Math.cos(a)), W.reach, { sight: false });
+      _v.set(Math.sin(a), 0, Math.cos(a));
+      const h = world.raycast(_o, _v, W.reach, { sight: false });
       if (!h || h.distance >= best || Math.abs(h.normal.y) > 0.5) continue;
+      // a real wall: it's there `minHeight` over the floor too, not just at your waist
+      _o2.set(b.pos.x, base + W.minHeight - 0.1, b.pos.z);
+      const t = world.raycast(_o2, _v, W.reach + 0.3, { sight: false });
+      if (!t || Math.abs(t.normal.y) > 0.5) continue;
       best = h.distance;
       _n.set(h.normal.x, 0, h.normal.z).normalize();
     }

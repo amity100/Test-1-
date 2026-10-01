@@ -999,3 +999,58 @@ html[dir='rtl'] .vseg b { letter-spacing: .03em; font-size: 15px; }
 .t-power { right: 96px; bottom: 184px; width: 58px; height: 58px; display: none; border-color: rgba(255, 210, 122, 0.7); }
 .touch.flow .t-power { display: flex; }
 .t-power.ready { background: rgba(255, 210, 122, 0.45); border-color: #fff; animation: fmReady .7s ease-in-out infinite alternate; }
+
+/* FLOW on touch: SLIDE takes CROUCH's place (over JUMP, where the thumb rolls up to it), POWER is a
+   ring that fills with the meter and pulses when full; while it's held the rest of the cluster fades
+   (a tap anywhere off the buttons marks a man) */
+.t-slide { display: none; right: 8px; bottom: 96px; width: 62px; height: 62px; opacity: .62; }
+.t-slide svg { width: 46%; height: 46%; }
+.t-slide.armed { opacity: 1; border-color: #ffd27a; color: #fff2cf; background: rgba(255, 170, 60, 0.3); }
+.t-slide.on { opacity: 1; background: rgba(56, 182, 255, 0.45); border-color: var(--exit); }
+.touch.flow .t-slide { display: flex; }
+.touch.flow .t-crouch { display: none; }
+.touch.flow .t-power { right: 88px; bottom: 178px; width: 66px; height: 66px; }
+.touch.flow .t-clip { right: 176px; bottom: 184px; }
+.t-power { overflow: visible; }
+.t-power svg { color: #ffd27a; }
+.t-power .t-fill { position: absolute; inset: -5px; border-radius: 50%; pointer-events: none; background: conic-gradient(#ffd27a calc(var(--fill, 0) * 1turn), rgba(255, 255, 255, 0.14) 0); -webkit-mask: radial-gradient(closest-side, transparent calc(100% - 5px), #000 calc(100% - 4.5px)); mask: radial-gradient(closest-side, transparent calc(100% - 5px), #000 calc(100% - 4.5px)); }
+.t-power.ready { background: rgba(255, 196, 90, 0.5); border-color: #fff; animation: tPowerReady .8s ease-in-out infinite alternate; }
+.t-power.ready svg { color: #fff; }
+.t-power.ready .t-fill { background: #fff3c4; box-shadow: 0 0 14px rgba(255, 210, 122, 0.9); }
+.t-power.held { background: rgba(127, 244, 255, 0.45); border-color: #7ff4ff; animation: none; transform: scale(.94); }
+.t-power.held svg { color: #fff; }
+.t-power.held .t-fill { background: #7ff4ff; }
+@keyframes tPowerReady { from { box-shadow: 0 0 0 0 rgba(255, 210, 122, 0.0); } to { box-shadow: 0 0 22px 4px rgba(255, 210, 122, 0.75); } }
+.touch.power-held .t-btn:not(.t-power):not(.t-pause) { opacity: .18; }
+.touch.power-held .t-stick { opacity: 0; }
+.ui:has(.touch.power-held) .strikes { opacity: .18; }
+/* the moves, once, short, when FLOW comes on (phones) */
+.flow-tip { position: absolute; left: 50%; top: calc(var(--st) + 98px); transform: translateX(-50%); width: max-content; max-width: min(420px, 40vw); padding: 5px 12px; background: rgba(8, 11, 17, 0.72); border-inline-start: 3px solid #ffd27a; font: 600 11px/1.35 var(--hud-font); color: #fff; text-align: center; opacity: 0; pointer-events: none; }
+html[dir='rtl'] .flow-tip { font-family: 'Heebo', 'Oxanium', sans-serif; font-size: 12px; }
+.flow-tip.go { animation: flowTip 6.5s ease forwards; }
+@keyframes flowTip { 0% { opacity: 0; } 6% { opacity: 1; } 85% { opacity: 1; } 100% { opacity: 0; } }
+/* phones: the lab panel's rules card folds away (it ran off the screen and under the STRIKES); RULES opens it a while */
+.lp-more { display: none; }
+.is-touch .lp-rules { display: none !important; }
+.is-touch .lab-panel.rules-open .lp-rules { display: flex !important; }
+.is-touch .lab-panel[data-variant='precision'] .lp-more, .is-touch .lab-panel[data-variant='onslaught'] .lp-more, .is-touch .lab-panel[data-variant='flow'] .lp-more { display: block; }
+.lp-more { pointer-events: auto; touch-action: manipulation; appearance: none; align-self: flex-start; padding: 5px 10px; border: 1px solid rgba(127, 244, 255, 0.5); background: rgba(127, 244, 255, 0.08); color: #7ff4ff; font: 800 9px var(--hud-font); letter-spacing: .14em; cursor: pointer; }
+.is-touch .lab-panel.rules-open { z-index: 7; }
+.is-touch .lab-panel.rules-open .lp-more { background: rgba(127, 244, 255, 0.3); color: #fff; }
+.is-touch .lp-vars button { min-height: 30px; font-size: 10px; }
+/* phones: the variant picker is a 2 x 2 grid of big targets (no F-keys) */
+.is-touch .vseg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.is-touch .vseg button { grid-template-columns: 1fr; grid-template-areas: 'n' 'd'; min-height: 52px; padding: 8px 10px; }
+.is-touch .vseg .vk { display: none; }
+.is-touch .vseg small { font-size: 10.5px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.is-touch .m-labend .vseg { grid-template-columns: repeat(4, 1fr); }
+.lp-vars em { display: none; font-style: normal; }
+.is-touch .lp-vars { flex-wrap: nowrap; }
+.is-touch .lp-vars button, .is-touch .lp-vars button[data-v='flow'] { flex: 1 1 0; min-height: 28px; padding: 0 1px; font-size: 8px; letter-spacing: 0; overflow: hidden; }
+.is-touch .lp-wave b { white-space: nowrap; }
+.is-touch .lp-left { font-size: 10px; letter-spacing: .08em; white-space: nowrap; }
+.is-touch .lp-vars button[data-v='flow'] span { display: none; }
+.is-touch .lp-vars button[data-v='flow'] em { display: inline; }
+.is-touch .lp-wave .lp-more { margin-inline-start: 4px; padding: 4px 6px; font-size: 8px; letter-spacing: .06em; }
+.is-touch .lp-wave { align-items: center; gap: 6px; }
+.is-touch .lp-wt { font-size: 12px; }
