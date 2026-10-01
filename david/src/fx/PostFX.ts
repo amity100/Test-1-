@@ -916,6 +916,18 @@ export class PostFX {
 
   // ------------------------------------------------------------------------------------------ frame
 
+  /**
+   * Advance the post's timers (dissolve, letterbox, film look, focus rack) by `dt` real seconds without rendering.
+   * Test stepping (main.ts __step) runs most frames without a render; without this a dissolve would last 3-10x
+   * longer in stepped captures than in playback.
+   */
+  tick(dt: number) {
+    this.updateFade(dt);
+    this.updateLetterbox(dt);
+    this.updateFilm(dt);
+    this.updateRack(dt);
+  }
+
   render(dt: number) {
     const r = this.renderer;
     this.grade.uniforms.uTime.value += dt;

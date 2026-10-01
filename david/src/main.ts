@@ -262,7 +262,11 @@ async function boot() {
     // the start screen is opaque: until the start click, redraw only now and then (keeps the canvas valid) instead of
     // spending a phone's GPU and battery on a picture nobody sees
     if (render && (started || idleFrames++ % 30 === 0)) engine.render(rawDt, dt);
-    else engine.tickEnvironment(dt);
+    else {
+      engine.tickEnvironment(dt);
+      // test stepping (__step): keep dissolves and letterbox moves in film time though nothing is drawn
+      if (!render) engine.post.tick(rawDt);
+    }
     // unconsumed edge presses expire each frame
     input.clearEdges();
   };
