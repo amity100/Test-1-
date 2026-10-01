@@ -8,6 +8,12 @@
 // minute, only 6 scenes"): no prologue — the film opens on the time card over black and the shofar at Gilgal; six
 // scenes of 5-12 s, each one or two long takes (3-6.5 s), the camera slow, time to read every text.
 //
+// CUT v4 (the user, 2 Oct): the end of the film is a cinematic, epic introduction of David — "like Assassin's Creed 2
+// when the two brothers are on the roof and then the game's logo": after D1-D2 the camera cranes up and back from
+// David over his flock and the hills, DAVID forms over the panorama, and the film hands over to the game without a
+// cut (docs/intro-script-v4.md). The bear (the thicket and the eyes, CUT v3's H1-H2) is no longer in the film: it
+// opens the bear's attack in gameplay (src/gameplay/Story.ts bearAttack).
+//
 // THE SHARED TIMING CONTRACT (cut · perf · score): every shot's take, length and named BEATS (seconds from the start of
 // the shot) are below. The performances time every action to `beats`, the score keys every hit to them (read
 // `INTRO_SHOTS` / the shot cues' `beats`, never hard-coded seconds). Change a number only together with the other two
@@ -78,8 +84,9 @@ export type FilmCue =
   | 'broken' //     G7     Saul and the torn piece in his fist
   | 'figure' //     D1     (after the light-flash) David from behind above the flock — 15:28b
   | 'face' //       D2     his face turns into the light — 16:7
-  | 'thicket' //    H1+H2  the lamb at the thicket; the birds fall silent; two eyes open; SMASH
-  | 'title' //      T      smash cut to black + the hit: the title
+  | 'horizon' //    D3     CUT v4: the crane up from David over his flock and the hills, the logo over the panorama, the hand-off
+  | 'thicket' //    (unused since CUT v4: the hook moved into gameplay, Story.bearAttack)
+  | 'title' //      (unused since CUT v4: the logo sits over the panorama of D3)
   // ---- unused in CUT v2 (legacy names of the rough cut) ----
   | 'dark'
   | 'faceoff'
@@ -103,9 +110,10 @@ export type IntroShotId =
   | 'saul-alone' //   G7
   | 'figure' //       D1
   | 'face' //         D2
-  | 'thicket' //      H1
-  | 'eyes' //         H2
-  | 'title'; //       T
+  | 'horizon' //      D3 (CUT v4)
+  | 'thicket' //      (unused since CUT v4)
+  | 'eyes' //         (unused since CUT v4)
+  | 'title'; //       (unused since CUT v4)
 
 /** How a text event is laid out (src/ui/UI.ts filmText kinds). */
 export type FilmTextKind = 'time' | 'line' | 'place' | 'person' | 'verse';
@@ -224,8 +232,8 @@ export const VERDICT_WORDS: readonly IntroWord[] = [
 ];
 
 // ---------------------------------------------------------------------------------------------------------
-// THE FILM (CUT v3, 60 s) — 1 Gilgal 0-12 · 2 the spear and the silence 12-21 · 3 the tear 21-30 ·
-// 4 the verdict 30-39 · 5 David 39-49 · 6 the thicket 49-54 · title 54-60
+// THE FILM (CUT v4, 59 s) — 1 Gilgal 0-12 · 2 the spear and the silence 12-21 · 3 the tear 21-30 ·
+// 4 the verdict 30-39 · 5 David 39-49 · 6 the logo over the panorama 49-59, then the game
 // ---------------------------------------------------------------------------------------------------------
 export const INTRO_SHOTS: readonly IntroShot[] = [
   // ================================================================== 1 · GILGAL (12 s): the shofar, the army, the king
@@ -315,23 +323,20 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
       + 'settle on the distance. No text.',
   },
 
-  // ================================================================== 6 · THE THICKET (5 s) — smash to the title
+  // ================================================================== 6 · THE LOGO (CUT v4, 10 s) — into the game
   {
-    id: 'thicket', n: 'H1', set: 'world', take: 'thicket', dur: 3.0, cut: 'dissolve', fade: 0.8, cue: 'thicket', beat: 'flock',
-    beats: { birdsStop: 0.5, lambHead: 1.8 },
-    direction: 'A lamb strays to the edge of the thicket; the birds fly up and fall silent: low in the grass behind the '
-      + 'lamb, the light dims; the lamb grazing, lifting its head, ears twitching.',
-  },
-  {
-    id: 'eyes', n: 'H2', set: 'world', take: 'lamb', dur: 2.0, cut: 'cut', cue: 'thicket', beat: 'flock',
-    beats: { eyesOpen: 0.9, smash: 2.0 },
-    direction: 'In the dark of the thicket two eyes open: a slow creep in; leaves shiver, a breath, the eyes catch the light.',
-  },
-  {
-    id: 'title', n: 'T', set: 'black', take: 'title', dur: 6.0, cut: 'smash', cue: 'title', beat: 'title',
-    beats: { hit: 0.0, david: 0.3, hebrew: 1.6, chapter: 2.4 },
-    direction: 'Smash to black on a hit: דָּוִד forms from light, DAVID small beneath, a gold rule grows, פֶּרֶק רִאשׁוֹן · '
-      + 'הָרֹעֶה last. Then the dissolve into gameplay (David on his rock).',
+    id: 'horizon', n: 'D3', set: 'world', take: 'horizon', dur: 10.0, cut: 'cut', cue: 'horizon', beat: 'title',
+    // rise: the crane starts up from his shoulder · logo: DAVID forms over the panorama · hebrew: דָּוִד · chapter: the
+    // chapter line · logoOut: the logo starts to fade · settle: the camera starts gliding down into the gameplay
+    // camera behind him · the film ends at 10.0 with the game's camera
+    beats: { rise: 0.2, logo: 3.6, hebrew: 4.6, chapter: 5.6, logoOut: 8.0, settle: 8.0 },
+    direction: "THE LOGO SHOT (the user: 'like Assassin's Creed 2, the brothers on the roof, then the game's logo'): from "
+      + "close behind David's shoulder the camera cranes up and back in one long sweeping move, revealing him standing on "
+      + 'the rock above his flock — the sheep grazing and walking on the slope below him, clearly in frame from the high '
+      + 'angle — and the Bethlehem hills to the horizon at golden hour, the low sun, haze in the valleys; he looks out at '
+      + 'the flock and the land, the wind in his curls and his tunic, his weight on the staff. DAVID forms over the '
+      + "panorama (the game's logo, in the sky), דָּוִד beneath it, then the chapter line; they fade from 8.0 while the "
+      + 'camera glides down behind him into the gameplay camera, and the game begins without a cut.',
   },
 ];
 
@@ -403,5 +408,5 @@ export const INTRO_CUES: readonly IntroCue[] = introCues(false);
 /** Kept for API compatibility (the score's tests import it): identical to INTRO_CUES. */
 export const INTRO_CUES_SHORT: readonly IntroCue[] = INTRO_CUES;
 
-/** Total length of the film incl. the title card (60 s). */
+/** Total length of the film (59 s; the logo over the panorama is its last shot). */
 export const INTRO_LENGTH = introLength(INTRO_CUES);
