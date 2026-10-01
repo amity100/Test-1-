@@ -104,6 +104,11 @@ export const MARCH_SPEED = 1.35;
 /** slow-motion factors (the action's fraction of real time): G2 the king's stride, G5b the tear insert */
 export const SLOWMO = { king: spec('king')?.slowmo ?? 0.5, tear: spec('tear:insert')?.slowmo ?? 0.35 };
 export const RAISE_DELAY_PER_RANK = 0.03;
+/**
+ * G4: the lateral offset (m, + = south of the road's centre line) of the lane the camera looks down between the files
+ * (src/film/FilmCams.ts FILM_CAM.silence z0/z1 = 1.575, between files 8 and 9): the ranks part to either side of it
+ */
+export const PART_LANE = 1.575;
 
 export function timeScale(shot: GilgalShotName, t: number) {
   if (shot === 'king') return SLOWMO.king;
@@ -257,8 +262,9 @@ export function armySlot(file: number, rank: number, frontX: number, part = 0, j
   const x = frontX - ARMY.leadGap - rank * ARMY.rankSpacing + j1 * jitter * 2.5;
   let lat = (file - (ARMY.files - 1) / 2) * ARMY.fileSpacing * width + j2 * jitter * 2;
   if (part > 0 && rank < 12) {
-    const side = lat >= 0 ? 1 : -1;
-    const k = part * (1 - rank / 12) * (2.5 - Math.min(2.1, Math.abs(lat) * 0.3));
+    // the men step aside AWAY from the lane the G4 lens looks down (nobody walks into its long-lens ray)
+    const side = lat >= PART_LANE ? 1 : -1;
+    const k = part * (1 - rank / 12) * (2.5 - Math.min(2.1, Math.abs(lat - PART_LANE) * 0.3));
     lat += side * Math.max(0, k);
   }
   return out.set(x, 0, roadZ(x) + lat);

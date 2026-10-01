@@ -7,7 +7,7 @@ import {
 } from './garments';
 import { HullField, TAU, makeFrame, noise1, rng, smoothstep } from './loft';
 import { makeSkinned } from './body';
-import { clothDepthMaterial, clothMaterial, fringeMaterial, insideFace, solidMaterial, texPair, type Tier } from './materials';
+import { clothDepthMaterial, clothMaterial, foldsAround, fringeMaterial, insideFace, insideFaceTube, solidMaterial, texPair, type Tier } from './materials';
 import { Chain, Outfit, Pendulum } from './Outfit';
 import { makeSlingPouch, makeStaff, mergeStatic, slingCordMaterial } from './props';
 
@@ -126,10 +126,10 @@ export async function dressDavid(human: HumanModel, opts: DressOptions): Promise
   // from non-periodic yarn streaks, sweat / dirt blotches, the dusty hem, fraying, holes and the folds gathered under
   // the sash (reference image). The weave still opens up and lets light through at the frayed edges.
   const cloth = { tier, tex: coarse, tile: 0.17, dye: oat, roughness: 0.93, sheen: 0.5, normal: 0.9, gap: 0.12, variation: [0.07, 0.18, 0.025] as [number, number, number] };
-  const tunicUp = clothMaterial({ ...cloth, grime: [0.6, 0.5, 0.38, 0.8], hem: [0, 0.1, 0.022, 0.75], edgeMask: [0, 1], holes: holesUp, transmit: 1.1, inside: insideFace(upper.tube.geometry), gather: { lower: 0.6, falloff: 0.05, spacing: 0.04 } });
-  const tunicSk = clothMaterial({ ...cloth, grime: [0.58, 0.48, 0.36, 0.55], hem: [0.85, 0.22, 0.03, 0.85], edgeMask: [1, 0], holes: holesSkirt, sway: swayCfg, collide: U, collidePad: 0.004, transmit: 1.1, inside: insideFace(skirt.tube.geometry), gather: { upper: 0.55, falloff: 0.11, spacing: 0.05 } });
+  const tunicUp = clothMaterial({ ...cloth, grime: [0.6, 0.5, 0.38, 0.8], hem: [0, 0.1, 0.022, 0.75], edgeMask: [0, 1], holes: holesUp, transmit: 1.1, inside: insideFace(upper.tube.geometry), gather: { lower: 0.6, falloff: 0.05, spacing: 0.04, around: foldsAround(upper.tube, 0, 0.04) } });
+  const tunicSk = clothMaterial({ ...cloth, grime: [0.58, 0.48, 0.36, 0.55], hem: [0.85, 0.22, 0.03, 0.85], edgeMask: [1, 0], holes: holesSkirt, sway: swayCfg, collide: U, collidePad: 0.004, transmit: 1.1, inside: insideFace(skirt.tube.geometry), gather: { upper: 0.55, falloff: 0.11, spacing: 0.05, around: foldsAround(skirt.tube, skirt.tube.rows - 1, 0.05) } });
   const underMat = clothMaterial({ tier, tex: medium, tile: 0.14, dye: 0xe0cfa8, roughness: 0.95, sheen: 0.5, hem: [0.85, 0.12, 0.03, 0.9], edgeMask: [1, 0], sway: swayCfg, collide: U, transmit: 1.0, gap: 0.1, variation: [0.05, 0.14, 0.02] });
-  const sleeveMat = clothMaterial({ ...cloth, grime: [0.6, 0.5, 0.38, 0.65], hem: [0.2, 0.06, 0.022, 0.8], edgeMask: [1, 0], transmit: 1.2 });
+  const sleeveMat = clothMaterial({ ...cloth, grime: [0.6, 0.5, 0.38, 0.65], hem: [0.2, 0.06, 0.022, 0.8], edgeMask: [1, 0], transmit: 1.2, inside: insideFaceTube(sleeves[0].tube) });
   const fringeMat = fringeMaterial({ tier, tex: fringeT, dye: 0xd9ccb2, width: 0.05, sway: swayCfg, collide: U, collidePad: 0.004, dust: 0.5 });
   const fringeMatUnder = fringeMaterial({ tier, tex: fringeT, dye: 0xc9b58c, width: 0.045, sway: swayCfg, collide: U, dust: 0.55 });
   const fringeMatArm = fringeMaterial({ tier, tex: fringeT, dye: 0xd9ccb2, width: 0.05 });

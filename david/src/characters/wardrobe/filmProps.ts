@@ -110,7 +110,7 @@ export interface ScaleArmourOptions {
  * sparkles like beaten metal. Cost for Saul: high ≈ 2,300 scales × 24 tris ≈ 55 k tris, medium × 12, low (bigger
  * scales) × 4.
  */
-export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions & { skirtStiff?: number }): THREE.SkinnedMesh {
+export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions & { skirtStiff?: number; skirtBlur?: number }): THREE.SkinnedMesh {
   const { lm, tier, human } = fit;
   const low = tier === 'low';
   const med = tier === 'medium';
@@ -223,7 +223,8 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions &
             // colour: a thin contact shadow just below the edge of the row above (not a dark band), dust packed along
             // that line, verdigris only deep in the crevices, a burnished lower edge
             const below = v - overlap; // 0 at the overlap line
-            const ao = below < 0 ? 0.55 : 0.62 + 0.38 * Math.min(1, below / 0.18);
+            // (phones: one quad across a scale — a softer contact shadow, or the rows read as dark stripes)
+            const ao = low ? (below < 0 ? 0.72 : 0.8 + 0.2 * Math.min(1, below / 0.18)) : below < 0 ? 0.55 : 0.62 + 0.38 * Math.min(1, below / 0.18);
             c.copy(base).lerp(patina, pat * (below < 0.12 ? 1 : 0.25)).multiplyScalar(tone * ao);
             c.lerp(dust, (royal ? 0.3 : 0.4) * Math.max(0, 1 - Math.abs(below - 0.04) / 0.12) + (zoneId === 1 ? 0.06 : 0.02));
             col.push(c.r, c.g, c.b);
@@ -256,7 +257,9 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions &
   const maps = scaleDetailMaps();
   const mat = new THREE.MeshStandardMaterial({
     // polished bronze (visual-bible §2 #b8773c), a touch more golden than copper
-    color: royal ? 0xbe8c52 : 0x9a6a40, roughness: royal ? 1.0 : 1.15, metalness: 1, envMapIntensity: 0.85,
+    // (film check: in the backlit close-ups the polished scales went pale gold / sequin-like — a touch darker and a
+    // little less mirror-like keeps them bronze)
+    color: royal ? 0xb27c46 : 0x9a6a40, roughness: royal ? 1.15 : 1.25, metalness: 1, envMapIntensity: 0.72,
     normalMap: maps.normal, normalScale: new THREE.Vector2(1, 1), roughnessMap: maps.orm, metalnessMap: maps.orm,
   });
   mat.name = 'wardrobe:scaleBronze';
@@ -275,7 +278,9 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions &
   // weights: upper zone follows the torso, and near the shoulders blends into the upper arm (like the armhole cap)
   const tw = partWeights(fit, C.TORSO | C.NECK, 8);
   const aw = partWeights(fit, C.TORSO | C.NECK | C.UPARM_L | C.UPARM_R, 8);
-  const sw = skirtWeights(fit, o.skirtStiff ?? 0);
+  // (the coat skirt's weights are smoothed like its backing's — see skirtWeights `blur` — or the rows split along
+  // the thigh / hip-crease weight seams in a stride)
+  const sw = skirtWeights(fit, o.skirtStiff ?? 0, o.skirtBlur ?? 0);
   const ap = new THREE.Vector3();
   const w = (i: number, pv: THREE.Vector3) => {
     // a scale's vertices take the weights of a point halfway to its lacing point: less shear inside a scale, no split

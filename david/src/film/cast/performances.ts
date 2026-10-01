@@ -1,9 +1,8 @@
 import * as THREE from 'three';
 import type { Expression } from '../../characters/human/HumanRig';
 import {
-  actionTime as blockingActionTime, armyAt, BEATS, samuelAt, saulAt, SAMUEL_STEP, TEAR_ACTION, timeScale, type GilgalShotName,
+  actionTime as blockingActionTime, armyAt, BEATS, samuelAt, saulAt, TEAR_ACTION, timeScale, type GilgalShotName,
 } from '../gilgal/gilgalBlocking';
-import { SAMUEL } from '../gilgal/gilgalLayout';
 import { INTRO_SHOTS, VERDICT_WORDS, type IntroWord } from '../../content/introScript';
 import type { FilmActor, ArmPose } from './FilmActor';
 
@@ -41,10 +40,10 @@ import type { FilmActor, ArmPose } from './FilmActor';
  */
 
 export const GILGAL_CLIPS = [
-  'walk_cool', 'walk_stop_rb', 'idle_king', 'idle_breathe', 'listen_sad', 'turn_go_L', 'walk_slow', 'walk', 'idle_n1', 'talk_sad',
+  'walk_cool', 'walk_stop_rb', 'idle_king', 'idle_breathe', 'listen_sad', 'turn_go_L', 'walk_slow', 'walk', 'idle_n1',
 ];
 export const RAMAH_CLIPS = [
-  'idle_king', 'listen_sad', 'listen_deny_b', 'listen_deny', 'stand_up', 'talk_angry', 'talk_excited', 'listen_angry', 'idle_angry', 'talk_gesture', 'idle_n1',
+  'listen_sad', 'listen_deny_b', 'stand_up', 'talk_angry', 'talk_excited', 'listen_angry', 'idle_angry', 'talk_gesture', 'idle_n1',
 ];
 /** every clip the film's cast plays that the game does not (release after the film) */
 export const FILM_CAST_CLIPS = [...new Set([...GILGAL_CLIPS, ...RAMAH_CLIPS])].filter((c) => c !== 'walk');
@@ -80,8 +79,9 @@ export const POSES = {
   spearCarryR: { ua: [-0.12, -0.1, -0.16], fa: [-1.2, 0, 0], hd: [0.1, 0, 0.05] } as ArmPose,
   /** the spear thrust to the sky (G3): the arm fully up, a little forward */
   spearRaiseR: { ua: [-2.95, 0.1, -0.22], fa: [-0.12, 0, 0], hd: [0.25, 0, 0] } as ArmPose,
-  /** the fist with the torn cloth held before the chest (G6) */
-  clothFistR: { ua: [-0.35, 0, -0.1], fa: [-1.75, 0.2, 0], hd: [0.2, 0, 0] } as ArmPose,
+  /** the fist with the torn cloth held low at his side, before the belt (G6: kept out of the over-the-shoulder view of
+   *  Samuel's face — at chest height it covered the face) */
+  clothFistR: { ua: [-0.14, 0.05, -0.14], fa: [-0.75, 0.25, 0], hd: [0.12, 0, 0] } as ArmPose,
   /** G7: the fist raised a little into his own eye-line, the cloth hanging from it (readable in the foreground) */
   clothLookR: { ua: [-0.5, 0.08, -0.06], fa: [-1.55, 0.35, 0], hd: [0.3, 0, 0.1] } as ArmPose,
 };
@@ -160,11 +160,11 @@ const VERDICT_VOWELS: { v: string; m?: boolean }[][] = [
 ];
 /** jaw opening and lip shape per vowel (MakeHuman units) — sized to read at a close-up's distance */
 const VOWEL: Record<string, { jaw: number; kiss: number; spread: number }> = {
-  a: { jaw: 0.42, kiss: 0, spread: 0.05 },
-  e: { jaw: 0.26, kiss: 0, spread: 0.32 },
-  i: { jaw: 0.14, kiss: 0, spread: 0.45 },
-  o: { jaw: 0.3, kiss: 0.55, spread: 0 },
-  u: { jaw: 0.16, kiss: 0.85, spread: 0 },
+  a: { jaw: 0.5, kiss: 0, spread: 0.05 },
+  e: { jaw: 0.3, kiss: 0, spread: 0.32 },
+  i: { jaw: 0.16, kiss: 0, spread: 0.45 },
+  o: { jaw: 0.36, kiss: 0.55, spread: 0 },
+  u: { jaw: 0.18, kiss: 0.85, spread: 0 },
 };
 
 /**
@@ -273,24 +273,23 @@ export class GilgalPerformance {
     }
   }
 
-  /** the spear held (upright) or planted in the ground by its butt-spike (26:7) beside the king */
-  private spearPlanted(on: boolean, s?: { pos: THREE.Vector3; yaw: number }) {
+  /**
+   * The spear in his hand (G1-G4) or not with him (G5-G7: the armour-bearer has it — the director's notes: a planted
+   * spear stood as a stray vertical line at the edge of the tear's frame)
+   */
+  private spearPlanted(on: boolean, _s?: { pos: THREE.Vector3; yaw: number }) {
     const { saul } = this.cast;
     const sp = saul.props.spear;
     if (!sp) return;
-    if (on && s) {
+    if (on) {
       const scene = saul.root.parent;
       if (!scene) return;
       scene.add(sp);
-      // behind his right shoulder, out of the way of the lunge and of the camera between the two men
-      const right = V3(-Math.cos(s.yaw), 0, Math.sin(s.yaw));
-      const back = V3(-Math.sin(s.yaw), 0, -Math.cos(s.yaw));
-      const p = s.pos.clone().addScaledVector(right, 0.7).addScaledVector(back, 0.55);
-      sp.position.set(p.x, this.ground(p.x, p.z) - 0.08, p.z);
-      sp.rotation.set(0.03, 0, -0.05);
+      sp.visible = false;
       saul.upright.R.weight = 0;
       saul.human.rig.setFingers('R', 'relaxed');
-    } else if (!on && sp.parent !== null && sp.parent === saul.root.parent) {
+    } else if (sp.parent !== null && sp.parent === saul.root.parent) {
+      sp.visible = true;
       saul.holdProp('spear', 'R');
       saul.upright.R.weight = 1;
     }
@@ -431,9 +430,9 @@ export class GilgalPerformance {
         const dip = ss(B.spearUp - 0.32, B.spearUp - 0.06, t) * (1 - ss(B.spearUp - 0.06, B.spearUp + 0.22, t));
         const drive = ss(B.spearUp - 0.08, B.spearUp + 0.3, t);
         const roar = ss(B.roar - 0.1, B.roar + 0.2, t) * (1 - 0.35 * ss(B.roar + 1.3, B.roar + 1.9, t));
-        saul.body.drop = 0.12 * dip + 0.03 * drive;
-        saul.body.lean = 0.12 * dip - 0.2 * drive - 0.06 * roar;
-        saul.body.twist = 0.16 * drive;
+        saul.body.drop = 0.15 * dip + 0.03 * drive;
+        saul.body.lean = 0.15 * dip - 0.24 * drive - 0.06 * roar;
+        saul.body.twist = 0.18 * drive;
         saul.body.side = -0.04 * drive;
         saul.headRoll = 0.07 * drive;
         const fwd = this._f.set(Math.sin(s.yaw), 0, Math.cos(s.yaw));
@@ -543,8 +542,10 @@ export class GilgalPerformance {
     }
     // ---------------------------------------------------------------- ARMOUR-BEARER one step behind the king
     if (armourBearer) {
-      const back = V3(-Math.sin(s.yaw) * 1.6, 0, -Math.cos(s.yaw) * 1.6).add(V3(Math.cos(s.yaw) * 0.7, 0, -Math.sin(s.yaw) * 0.7));
-      armourBearer.place(s.pos.clone().add(back), s.yaw);
+      // one step behind the king — in the tear he stays where the king stood (he does not slide after the lunge)
+      const anchor = shot === 'tear' ? saulAt('tear', 0) : s;
+      const back = V3(-Math.sin(anchor.yaw) * 1.6, 0, -Math.cos(anchor.yaw) * 1.6).add(V3(Math.cos(anchor.yaw) * 0.7, 0, -Math.sin(anchor.yaw) * 0.7));
+      armourBearer.place(anchor.pos.clone().add(back), anchor.yaw);
       const a = armyAt(shot, t);
       const want = a.walk > 0.2 ? 'walk' : 'idle_n1';
       if (armourBearer.mocap.current()?.name !== want) {
@@ -604,7 +605,7 @@ export class GilgalPerformance {
       this.lungeLegs = true;
     }
     // ---- body: low in the lunge, then up and back as he pulls; the recoil when the wool gives
-    const lunge = ss(A.lunge, A.grip + 0.02, at) * (1 - 0.45 * ss(A.pull - 0.1, A.free, at));
+    const lunge = ss(A.lunge, A.grip + 0.02, at) * (1 - 0.55 * ss(A.pull - 0.1, A.free, at));
     const recoil = ss(A.free - 0.05, A.free + 0.2, at) * (1 - 0.5 * ss(A.free + 0.2, A.end, at));
     // a dive at the hem: the pelvis low, the chest well forward, the head kept low behind the old man's hip (the
     // silhouettes stay apart: the reaching arm is the only link between them)
@@ -629,8 +630,10 @@ export class GilgalPerformance {
       }
     } else {
       // the fist pulls back toward him and up (the wool stretches, then gives), and swings back when it is free
+      // (the insert G5b is framed on the fist: the pull takes the torn corner well away from the hem, the threads
+      // stretching between them, then the recoil when it comes free)
       const p = ss(A.grip + 0.05, A.free, at);
-      this.tearTarget.copy(this.grabAt).addScaledVector(fwd, -0.16 * p - 0.14 * recoil).add(this.tmp2.set(0, 0.1 * p + 0.1 * recoil, 0));
+      this.tearTarget.copy(this.grabAt).addScaledVector(fwd, -0.19 * p - 0.14 * recoil).add(this.tmp2.set(0, 0.18 * p + 0.1 * recoil, 0));
       saul.reach.R.target = this.tearTarget;
       saul.reach.R.weight = 1;
     }
@@ -671,7 +674,7 @@ export class GilgalPerformance {
     if (this.samPhase === 1) {
       // held: the step falters from the grip on (the corner holds him back), then hangs until the wool gives
       const held = ss(A.grip, A.grip + 0.15, at) * (1 - ss(A.free, A.free + 0.12, at));
-      mp.setSpeed('turn_go_L', 1 - 0.55 * held);
+      mp.setSpeed('turn_go_L', 1 - 0.8 * held);
       if (at >= A.free) {
         mp.play('walk_slow', { fade: 0.35, time: 0.55 });
         mp.matchSpeed('walk_slow', 0.55);
@@ -923,4 +926,3 @@ export class RamahPerformance {
   }
 }
 
-export { SAMUEL_STEP, SAMUEL };

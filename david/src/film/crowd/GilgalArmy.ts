@@ -36,6 +36,9 @@ const IDLES_LITE = ['idle_soldier', 'idle_n1'];
 const CHEERS = ['cheer_1', 'cheer_2', 'cheer_3', 'cheer_4', 'cheer_5'];
 const PEAKS = ['raise_arm_R', 'cheer_reach', 'arms_high'];
 
+/** every mocap clip the army and its hero soldiers may play (release them after the film) */
+export const ARMY_CLIPS = [...new Set([...WALKS, ...IDLES, ...CHEERS, ...PEAKS, 'cheer_arms', 'look_around_L', 'look_around_R'])];
+
 /** clips the Israelite army needs (bake once; `lite` for phones: fewer takes, no mirrored ones) */
 export function israelClips(lite: boolean): CrowdClipSpec[] {
   const s: CrowdClipSpec[] = [];

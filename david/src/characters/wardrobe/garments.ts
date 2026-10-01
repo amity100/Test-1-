@@ -562,18 +562,39 @@ export function armWeights(fit: Fit, side: 'L' | 'R', forearm = false) {
  * two thighs lower down (never the shins: the hem must not follow the knee bend).  Legs that still push
  * through are handled by the leg-capsule push-out in the cloth vertex shader.
  */
-/** `stiff` 0..1: a stiff skirt (leather-backed armour) follows the pelvis more and the thighs less (default 0) */
-export function skirtWeights(fit: Fit, stiff = 0) {
+/**
+ * `stiff` 0..1: a stiff skirt (leather-backed armour) follows the pelvis more and the thighs less (default 0).
+ * `blur` (m, default 0 = unchanged): average the body's nearest weights over a disc of this radius on the skirt
+ * (around the body and up/down) — a smooth weight field, so rigid overlapping pieces (Saul's scale coat and its
+ * backing) shear gently between the thighs and across the hip crease instead of splitting along those weight seams.
+ */
+export function skirtWeights(fit: Fit, stiff = 0, blur = 0) {
   const b = fit.body, lm = fit.lm;
   const vOk = b.vertsIn(C.TORSO | C.THIGH_L | C.THIGH_R);
   const bOk = b.bonesIn(C.TORSO | C.THIGH_L | C.THIGH_R);
   const thL = b.boneIndex['upperleg01.L'], thR = b.boneIndex['upperleg01.R'], root = b.boneIndex['root'];
   const hipY = (lm.hip.L.y + lm.hip.R.y) / 2, kneeY = (lm.knee.L.y + lm.knee.R.y) / 2;
+  const zc = (lm.hip.L.z + lm.hip.R.z) / 2;
   const q = new THREE.Vector3();
+  const disc = [[1, 0], [-1, 0], [0, 1], [0, -1], [0.7, 0.7], [-0.7, 0.7], [0.7, -0.7], [-0.7, -0.7]];
+  const nearOf = (p: THREE.Vector3): Weights => {
+    if (blur <= 0) return b.nearestWeights(q.copy(p), 8, vOk, bOk, false);
+    // the horizontal tangent around the body's vertical axis (left-right at the front and back, front-back at the sides)
+    let tx = -(p.z - zc), tz = p.x;
+    const tl = Math.hypot(tx, tz) || 1;
+    tx /= tl;
+    tz /= tl;
+    const acc: Weights = new Map();
+    const add = (w: Weights, k: number) => {
+      for (const [bi, v] of w) acc.set(bi, (acc.get(bi) ?? 0) + v * k);
+    };
+    add(b.nearestWeights(q.copy(p), 8, vOk, bOk, false), 0.2);
+    for (const [a, c] of disc) add(b.nearestWeights(q.set(p.x + tx * a * blur, p.y + c * blur, p.z + tz * a * blur), 8, vOk, bOk, false), 0.1);
+    return normalizeWeights(acc);
+  };
   return memoWeights((_i: number, p: THREE.Vector3): Weights => {
     // sample the body a little above the point so a flared hem still takes the hip/thigh weights
-    q.copy(p);
-    const near = b.nearestWeights(q, 8, vOk, bOk, false);
+    const near = nearOf(p);
     const t = smoothstep(hipY + 0.02, kneeY + 0.06, p.y);
     const side = smoothstep(-0.07, 0.07, p.x);
     const leg = 0.62 * (1 - 0.65 * stiff);
@@ -583,7 +604,7 @@ export function skirtWeights(fit: Fit, stiff = 0) {
       [root, 1 - leg],
     ]);
     return blendWeights(near, normalizeWeights(proc), t * 0.9);
-  });
+  }, blur > 0 ? 0.01 : 0.006);
 }
 
 /** weights of the nearest skin of the given parts */

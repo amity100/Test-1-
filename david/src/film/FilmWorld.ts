@@ -8,6 +8,7 @@ import type { Flock, Animal } from '../characters/Flock';
 import { LAYOUT } from '../world/Layout';
 import { rachelShots, hideTreesNear, type RachelShots } from './land/rachel';
 import type { FilmFocus } from './FilmStage';
+import { FilmFlock, lambAtEdge } from './filmAnimals';
 
 /**
  * The opening film's shots in the GAME WORLD around Bethlehem (CUT v2, docs/intro-script-v2.md): camera takes (lens,
@@ -55,13 +56,16 @@ const headingOf = (d: THREE.Vector3) => Math.atan2(d.x, d.z);
 /** Tunable numbers of the world takes (window.__filmWorldCams under ?test=1). */
 export const WORLD_CAM = {
   // P3: the dolly toward the stone (metres from the pillar along the view axis / to its right), lens height
-  rachel: { back0: 10.2, back1: 6.9, side0: -1.2, side1: -0.7, h0: 0.95, h1: 0.8, lookFar: 34, lookRight: 6.5, lookH: 1.9, fov0: 31, fov1: 27, flockD: 34, exp: 1.0 },
+  // (the lens just above the grass tops: closer, the grass cards read as flat shards; the dawn sky held down a little)
+  rachel: { back0: 10.2, back1: 6.9, side0: -1.2, side1: -0.7, h0: 1.4, h1: 1.25, lookFar: 34, lookRight: 6.5, lookH: 1.9, fov0: 31, fov1: 27, flockD: 34, exp: 0.85 },
   // D1: the orbit / crane behind David (azimuth from his back, radius, height above his feet)
-  figure: { az0: -70, az1: -40, r0: 2.8, r1: 3.2, h0: 1.3, h1: 2.1, lookAhead1: 26, lookDown1: 5.5, fov0: 34, fov1: 38, exp: 1.0 },
+  // (the look starts on his shoulders — he sits right of centre — and slides out over the valley as the lens cranes up)
+  figure: { az0: -48, az1: -30, r0: 3.0, r1: 3.6, h0: 1.4, h1: 1.72, lookAhead1: 12, lookDown1: 1.5, lookMix0: 0.06, lookMix1: 0.24, headH: 1.55, fov0: 34, fov1: 37, exp: 1.0 },
   // D2: the push-in on the face (distance from his head, lens round from the sun)
   face: { az: 100, d0: 2.95, d1: 2.15, fov0: 21, fov1: 17.5, turnDur: 1.6 },
   // H1 / H2: the hook
-  hook: { lambSpeed: 0.55, walkUntil: 1.3, camBack: 1.75, camSide: 0.85, camH: 0.52, bearIn: 9.5, exp1: 0.66, exp2: 0.56 },
+  // (H2: the bear deep in the shade and the picture dark — only the eye-shine, additive and not tone-mapped, reads)
+  hook: { lambSpeed: 0.55, walkUntil: 1.3, camBack: 1.75, camSide: 0.85, camH: 0.64, bearIn: 12.5, exp1: 0.62, exp2: 0.36, h2H: 1.02 },
 };
 
 export class FilmWorld {
@@ -103,6 +107,9 @@ export class FilmWorld {
   private restoreTrees: (() => void) | null = null;
   /** H1: where the lamb stands when it stops (the hook paths are built from it) */
   private readonly lambStop = new THREE.Vector3();
+  /** D1-D2: the flock staged inside the lens' view (anim: src/film/filmAnimals.ts) */
+  private readonly ff: FilmFlock;
+  private readonly stageCam = new THREE.PerspectiveCamera(40, 16 / 9, 0.1, 5000);
 
   constructor(private readonly h: FilmWorldHost) {
     const g = h.engine.terrain;
@@ -142,6 +149,7 @@ export class FilmWorld {
     this.bearAt.y = this.ground(this.bearAt.x, this.bearAt.z);
     this.lambStop.copy(this.lamb0).addScaledVector(this.out, -WORLD_CAM.hook.lambSpeed * WORLD_CAM.hook.walkUntil);
     this.lambStop.y = this.ground(this.lambStop.x, this.lambStop.z);
+    this.ff = new FilmFlock(h.flock, this.ground);
     this.buildPaths();
     if (typeof location !== 'undefined' && new URLSearchParams(location.search).get('test') === '1') {
       (window as unknown as Record<string, unknown>).__filmWorldCams = WORLD_CAM;
@@ -234,11 +242,11 @@ export class FilmWorld {
         const r = lerp(c.r0, c.r1, e);
         out.pos.copy(this.rock).addScaledVector(back, r);
         out.pos.y = Math.max(this.ground(out.pos.x, out.pos.z) + 0.6, this.rock.y + lerp(c.h0, c.h1, e));
-        const shoulders = this.tmp2.copy(this.rock).add(V(0, 1.45, 0));
+        const shoulders = this.tmp2.copy(this.rock).add(V(0, c.headH, 0));
         const valley = this.rock.clone().addScaledVector(this.viewDir, c.lookAhead1);
         valley.y = this.ground(valley.x, valley.z) + 1.0;
         valley.y = Math.max(valley.y, this.rock.y - c.lookDown1);
-        out.look.copy(shoulders).lerp(valley, lerp(0.12, 0.62, ss(0.15, 1, uu)));
+        out.look.copy(shoulders).lerp(valley, lerp(c.lookMix0, c.lookMix1, ss(0.15, 1, uu)));
         // out of the light-flash: the lens settles down from the sky into the hills (the answer to G7's whip up)
         const settle = 1 - ss(0, 0.85, t);
         out.look.y += 3.2 * settle * settle;
@@ -253,7 +261,7 @@ export class FilmWorld {
         const Sx = this.tmp.set(-this.out.z, 0, this.out.x);
         out.pos.copy(lamb).addScaledVector(this.out, c.camBack + 0.35 * (1 - e)).addScaledVector(Sx, c.camSide);
         out.pos.y = this.ground(out.pos.x, out.pos.z) + c.camH + 0.06 * e;
-        out.look.copy(lamb).addScaledVector(this.out, -2.6).add(V(0, 0.42 + 0.15 * e, 0));
+        out.look.copy(lamb).addScaledVector(this.out, -2.6).add(V(0, 0.3 + 0.12 * e, 0));
         out.fov = lerp(33, 29, e);
         return true;
       }
@@ -262,11 +270,11 @@ export class FilmWorld {
         const c = WORLD_CAM.hook;
         const Sx = this.tmp.set(-this.out.z, 0, this.out.x);
         const base = this.lambStop;
+        // (over the lamb's back into the dark between the trunks)
         out.pos.copy(base).addScaledVector(this.out, 1.35 - 0.55 * e).addScaledVector(Sx, 0.38);
-        out.pos.y = this.ground(out.pos.x, out.pos.z) + 0.72;
+        out.pos.y = this.ground(out.pos.x, out.pos.z) + c.h2H;
         out.look.copy(this.bearAt).add(V(0, 0.85, 0));
         out.fov = lerp(17, 14.5, e);
-        void c;
         return true;
       }
     }
@@ -333,7 +341,7 @@ export class FilmWorld {
       this.hideBear();
       if (this.staged !== 'david') {
         this.staged = 'david';
-        this.stageFlockBelow();
+        this.stageFlockInView();
       }
       this.expK = take === 'figure' ? WORLD_CAM.figure.exp : 1;
       return;
@@ -342,6 +350,7 @@ export class FilmWorld {
       this.placeDavid();
       if (this.staged !== 'hook') {
         this.staged = 'hook';
+        this.ff.restore();
         this.stageHook();
       }
       this.showBear();
@@ -376,9 +385,11 @@ export class FilmWorld {
       }
       case 'figure':
         m.performFilm('back', t);
+        this.ff.tick(t, dt, this.h.engine.camera);
         return;
       case 'face':
         m.performFilm('reveal', t, { look: this.faceCam, turnAt: 0.5, turnDur: WORLD_CAM.face.turnDur });
+        this.ff.tick(t, dt, this.h.engine.camera);
         return;
       case 'vista':
         m.performFilm('wide', t);
@@ -387,24 +398,9 @@ export class FilmWorld {
       case 'lamb': {
         m.performFilm('wide', t + 10);
         const lamb = flock.lamb;
-        const a = lamb as unknown as { alert: number; alertDir: number };
-        if (take === 'thicket') {
-          // it walks to the edge, stops and grazes; at 1.5 s its head comes up (the birds have stopped)
-          const walking = t < c.walkUntil;
-          lamb.state = walking ? 'walk' : 'graze';
-          lamb.manualSpeed = walking ? c.lambSpeed : 0;
-          if (t >= 1.5) {
-            lamb.state = 'walk';
-            lamb.manualSpeed = 0;
-            a.alert = 1;
-            a.alertDir = Math.atan2(-this.out.x, -this.out.z);
-          } else a.alert = 0;
-        } else {
-          lamb.state = 'walk';
-          lamb.manualSpeed = 0;
-          a.alert = 1;
-          a.alertDir = Math.atan2(-this.out.x, -this.out.z);
-        }
+        // H1: it walks to the edge, grazes, and at beats.lambHead (1.5 s) its head comes up toward the thicket (anim's
+        // lambAtEdge); H2: it stands listening
+        lambAtEdge(lamb, take === 'thicket' ? t : 2.5 + t, { lift: 1.5, toward: this.bearAt, walkUntil: c.walkUntil, speed: c.lambSpeed });
         this.tickBear(take, t, dt);
         // the light goes out of the hook: down through H1, darker still in the thicket (H2)
         const k = take === 'thicket' ? ss(0.2, 2.5, t) : 1;
@@ -472,7 +468,27 @@ export class FilmWorld {
     this.saved.length = 0;
   }
 
-  /** D1-D2: the flock grazing and walking on the slope below David, in the lens' view (never frozen) */
+  /** D1-D2: the flock grazing and walking below David INSIDE the D1 lens' first frame (FilmFlock.stageInView) */
+  private stageFlockInView() {
+    const f = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: 36, roll: 0 };
+    this.frame('figure', 0.25, 1.0, f);
+    const c = this.stageCam;
+    c.aspect = this.h.engine.camera.aspect || 16 / 9;
+    c.fov = f.fov ?? 36;
+    c.position.copy(f.pos);
+    c.lookAt(f.look);
+    c.updateProjectionMatrix();
+    c.updateMatrixWorld(true);
+    try {
+      const n = this.ff.stageInView(c, this.rock, { near: 7, far: 42, max: 14 });
+      if (n > 0) return;
+    } catch (e) {
+      console.warn('[film] flock staging', e);
+    }
+    this.stageFlockBelow();
+  }
+
+  /** fallback: the flock grazing and walking on the slope below David along his gaze */
   private stageFlockBelow() {
     const { flock } = this.h;
     this.saveFlock();
@@ -609,6 +625,7 @@ export class FilmWorld {
   /** Put the world back for gameplay (David's film performance off, flock AI on, bear hidden, eyes removed). */
   leave() {
     const { player, flock, bear } = this.h;
+    this.ff.restore();
     this.putTreesBack();
     this.restoreExposure();
     player.model.performFilm(null);

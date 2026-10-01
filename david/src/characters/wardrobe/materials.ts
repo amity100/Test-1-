@@ -151,6 +151,7 @@ uniform float uGap;
 uniform vec4 uVar;           // x warp streaks, y stains, z weft bars, w back-lit fibre fuzz
 #ifdef W_GATHER
 uniform vec4 uGather;        // x lower-edge amount, y upper-edge amount, z falloff (m), w fold spacing (m)
+uniform float uGatherN;      // > 0: folds laid by angle (gdata.w = fraction around the tube), this many around
 #endif
 uniform vec3 uSunDirW;
 uniform vec3 uSunCol;
@@ -215,14 +216,23 @@ float wGatherSlope = 0.0;
 #ifdef W_GATHER
 {
   // cloth gathered under a belt: tight vertical folds that open out away from it (crests lighter, troughs darker)
-  float fx = vGUv.x / uGather.w;
-  // (smooth per-fold length variation: a hash per fold index left a seam between folds)
-  float len = uGather.z * (0.55 + 0.9 * wNoise(vec2(fx * 0.9, 3.7)));
+  // folds by angle around a tube (periodic noise on the unit circle: no seam), or along a ribbon's u
+  float fx, len, ph;
+  if (uGatherN > 0.0) {
+    fx = vGd.w * uGatherN;
+    vec2 cs = vec2(cos(vGd.w * 6.2832), sin(vGd.w * 6.2832));
+    len = uGather.z * (0.55 + 0.9 * wNoise(cs * 3.0 + 3.7));
+    ph = fx * 6.2832 + 2.4 * wNoise(cs * 2.3 + 0.7) + 1.1 * wNoise(cs * 6.0 + vec2(vGd.x * 2.5, 1.9));
+  } else {
+    fx = vGUv.x / uGather.w;
+    // (smooth per-fold length variation: a hash per fold index left a seam between folds)
+    len = uGather.z * (0.55 + 0.9 * wNoise(vec2(fx * 0.9, 3.7)));
+    ph = fx * 6.2832 + 2.6 * wNoise(vec2(vGUv.x * 9.0, 0.7)) + 1.2 * wNoise(vec2(vGUv.x * 23.0, vGd.x * 3.0 + 1.9));
+  }
   float amt = uGather.x * exp(-max(vGd.x, 0.0) / len) + uGather.y * exp(-max(vGd.y, 0.0) / len);
 #ifdef W_LOW
   amt *= 0.55; // phones (FXAA, no TAA): half-strength folds, full ones stripe
 #endif
-  float ph = fx * 6.2832 + 2.6 * wNoise(vec2(vGUv.x * 9.0, 0.7)) + 1.2 * wNoise(vec2(vGUv.x * 23.0, vGd.x * 3.0 + 1.9));
   float prof = 0.5 + 0.5 * cos(ph);
   // (tangent-space normal of h = cos(ph): crests at ph = 0 lit, the troughs at ph = PI get the AO below)
   wGatherSlope = amt * sin(ph) * (1.0 + 0.6 * cos(ph));
@@ -299,6 +309,11 @@ if (gl_FrontFacing) wAo *= 0.45;
 if (!gl_FrontFacing) wAo *= 0.45;
 #endif
 diffuseColor.rgb = wCol * wAo;
+#ifdef W_LOW
+// phones render 8-bit targets: the smooth shading of the new (thread-scale) cloth posterised into contour bands on
+// large garment areas — a faint screen-space dither (±1.5 %) breaks them up
+diffuseColor.rgb *= 1.0 + (wHash(gl_FragCoord.xy) - 0.5) * 0.03;
+#endif
 diffuseColor.a = 1.0;
 `;
 
@@ -375,7 +390,7 @@ export interface ClothOptions {
   /** models pass: back-lit fibre fuzz on the silhouette (0..1, wool; default 0.25) */
   fuzz?: number;
   /** models pass: folds gathered under a belt at the [lower, upper] edge of this piece: amount (0..1.5), falloff (m), fold spacing (m) */
-  gather?: { lower?: number; upper?: number; falloff?: number; spacing?: number };
+  gather?: { lower?: number; upper?: number; falloff?: number; spacing?: number; around?: number };
   /** models pass: which rasterised side is the garment's INSIDE (darkened); see insideFace(geometry) */
   inside?: 'front' | 'back';
   side?: THREE.Side;
@@ -417,6 +432,7 @@ export function clothMaterial(o: ClothOptions): THREE.MeshStandardMaterial {
     uGap: { value: o.gap ?? 0 },
     uVar: { value: new THREE.Vector4(...(o.variation ?? [0.05, 0.1, 0.02]), o.fuzz ?? 0.25) },
     uGather: { value: new THREE.Vector4(o.gather?.lower ?? 0, o.gather?.upper ?? 0, o.gather?.falloff ?? 0.07, o.gather?.spacing ?? 0.035) },
+    uGatherN: { value: Math.round(o.gather?.around ?? 0) },
     uSunDirW: shared.uSunDir,
     uSunCol: shared.uSunColor,
     uBands: { value: bands.map((b) => new THREE.Vector4(b.from, b.to, b.motif, b.pal + (b.edge === 'upper' ? 10 : 0))) },
@@ -477,6 +493,47 @@ export function insideFace(geo: THREE.BufferGeometry): 'front' | 'back' {
   }
   // normals outward = the front side is the outside
   return vote >= 0 ? 'back' : 'front';
+}
+
+/**
+ * models pass: insideFace for a loft tube whose axis is not vertical (sleeves along the arm): the outward direction
+ * is taken from each row's own centroid.
+ */
+export function insideFaceTube(tube: { geometry: THREE.BufferGeometry; cols: number; rows: number }): 'front' | 'back' {
+  const p = tube.geometry.getAttribute('position') as THREE.BufferAttribute;
+  const n = tube.geometry.getAttribute('normal') as THREE.BufferAttribute | undefined;
+  if (!n) return 'back';
+  const W = tube.cols + 1;
+  let vote = 0;
+  for (let r = 0; r < tube.rows; r += Math.max(1, Math.floor(tube.rows / 8))) {
+    let cx = 0, cy = 0, cz = 0;
+    for (let c = 0; c < W; c++) {
+      const i = r * W + c;
+      cx += p.getX(i);
+      cy += p.getY(i);
+      cz += p.getZ(i);
+    }
+    cx /= W;
+    cy /= W;
+    cz /= W;
+    for (let c = 0; c < W; c += 2) {
+      const i = r * W + c;
+      vote += Math.sign(n.getX(i) * (p.getX(i) - cx) + n.getY(i) * (p.getY(i) - cy) + n.getZ(i) * (p.getZ(i) - cz));
+    }
+  }
+  return vote >= 0 ? 'back' : 'front';
+}
+
+/** models pass: fold count around a loft tube at one of its rows (circumference / spacing), for `gather.around` */
+export function foldsAround(tube: { pos: Float32Array; cols: number; rows: number }, row: number, spacing: number): number {
+  const W = tube.cols + 1;
+  const r = Math.max(0, Math.min(tube.rows - 1, row));
+  let c = 0;
+  for (let k = 1; k < W; k++) {
+    const i = (r * W + k) * 3, j = (r * W + k - 1) * 3;
+    c += Math.hypot(tube.pos[i] - tube.pos[j], tube.pos[i + 1] - tube.pos[j + 1], tube.pos[i + 2] - tube.pos[j + 2]);
+  }
+  return Math.max(6, Math.round(c / spacing));
 }
 
 /** A depth material for shadows of swaying / colliding garments (so shadows match the hem). */

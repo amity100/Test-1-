@@ -120,6 +120,52 @@ function setCam(c: string | number[]) {
   } else if (c === 'wide') {
     const x = saul ? saul.root.position.x : SAUL_HALT.x;
     set(V(x + 4, 6, 26), V(x - 12, 1, 0), 45);
+  } else if (c === 'insertCut') {
+    // cut3's G5b camera (FILM_CAM.insert): relative to its grip estimate (Samuel's blocking at 2.0 + (-0.35, 1.0, 0.12)),
+    // looking 60 % of the way to Saul's actual hand
+    const t = cur ? cur.t : 2;
+    const u = Math.min(1, Math.max(0, (t - 2.0) / 2.5)), e2 = u * u * (3 - 2 * u);
+    const sm = samuelAt('tear', 2.0).pos;
+    const b = V(sm.x - 0.35, 1.0, sm.z + 0.12);
+    saul!.human.sockets.handGripR.getWorldPosition(f);
+    set(b.clone().add(V(-0.32 + 0.1 * e2, 0.08 - 0.04 * e2, 0.95 - 0.21 * e2)), b.clone().lerp(f, 0.6), 27 - 3.5 * e2);
+  } else if (c === 'spearCut') {
+    // cut3's G3 camera (FILM_CAM.spear): the fast push-in from low in front, east-south of the king
+    const t = cur ? cur.t : 0;
+    const k = 1 - Math.pow(1 - Math.min(1, t / 1.05), 3);
+    const cr = Math.min(1, Math.max(0, (t - 1.05) / 2.2));
+    const d = 10.5 + (5.3 - 10.5) * k - 0.55 * cr * cr * (3 - 2 * cr);
+    const s2 = saulAt('spearRaised', t).pos;
+    const dir = V(0.9, 0, 0.44).normalize();
+    const u2 = Math.min(1, Math.max(0, (t - 0.55) / 0.8)), sm2 = u2 * u2 * (3 - 2 * u2);
+    set(s2.clone().addScaledVector(dir, d).setY(0.8 + (0.46 - 0.8) * k), s2.clone().addScaledVector(dir, -0.7).setY(1.65 + 0.7 * sm2), 42 - 6 * k);
+  } else if (c === 'tearCut') {
+    // cut3's G5a camera (FilmCams FILM_CAM.tear): the wide profile from the south drifting with the action
+    const t = cur ? cur.t : 0;
+    const u = Math.min(1, t / 2.0), e2 = u * u * (3 - 2 * u);
+    const sa = saulAt('tear', t).pos, sm = samuelAt('tear', t).pos;
+    const mid = sa.clone().lerp(sm, 0.5);
+    set(V(mid.x - 0.5 + 0.95 * e2, 1.22, mid.z + 6.9 - 1.0 * e2), V(mid.x + 0.25 + 0.3 * e2, 1.2, mid.z), 34 - 3.5 * e2);
+  } else if (c === 'samMouth') {
+    samuel!.eyesWorld(e);
+    saul!.eyesWorld(f);
+    const d = f.clone().sub(e).setY(0).normalize();
+    set(e.clone().addScaledVector(d, 0.62).add(V(0.12 * -d.z, -0.04, 0.12 * d.x)), e.clone().add(V(0, -0.07, 0)), 22);
+  } else if (c === 'verdictCut') {
+    // cut3's G6 camera (FilmCams FILM_CAM.verdict at u = 0.5): over Saul's right shoulder onto Samuel
+    saul!.root.getWorldPosition(e);
+    samuel!.root.getWorldPosition(f);
+    const a = f.clone().sub(e).setY(0).normalize();
+    const r = V(-a.z, 0, a.x);
+    const p = e.clone().addScaledVector(a, -0.65).addScaledVector(r, 0.53);
+    p.y = 1.63;
+    samuel!.eyesWorld(f);
+    set(p, f.clone().addScaledVector(r, -0.3), 22);
+  } else if (c === 'silenceCut') {
+    // cut3's G4 camera (FILM_CAM.silence at u = 0.5): the lane between files 8 and 9, a long lens on Samuel
+    const x = SAUL_HALT.x - 7.2;
+    const s2 = samuelAt('silence', cur ? cur.t : 0).pos;
+    set(V(x, 1.62, 0.4 + 1.575), V(s2.x, 1.42, s2.z + 0.35), 13);
   } else if (c === 'elders') {
     set(V(-6.2, 1.55, 2.4), V(-0.5, 1.2, 0), 42);
   } else if (c === 'eldersSam') {
@@ -225,7 +271,20 @@ function ramah(t: number, cam: string | number[] = 'elders') {
   return frame();
 }
 
-w.__anim = { shot, ramah, frame, setCam, get saul() { return saul; }, get samuel() { return samuel; }, get perf() { return perf; }, get army() { return army; }, THREE };
+/** mean CPU ms per frame of the performance (+ army) over n frames of a shot from t0 */
+function perfMs(name: GilgalShotName, t0: number, n = 60) {
+  shot(name, t0, 'wide');
+  const a = performance.now();
+  for (let i = 0; i < n; i++) {
+    cur!.t += dt;
+    army?.setBeat(name, cur!.t);
+    army?.update(dt, camera);
+    perf!.update(cur!.t, dt, camera, H);
+  }
+  return (performance.now() - a) / n;
+}
+
+w.__anim = { shot, ramah, frame, setCam, perfMs, get saul() { return saul; }, get samuel() { return samuel; }, get perf() { return perf; }, get army() { return army; }, THREE };
 boot().catch((e) => {
   console.error(e);
   w.__error = String((e && e.stack) || e);

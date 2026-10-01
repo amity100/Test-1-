@@ -82,7 +82,8 @@ function shoulderThrow(fit: Fit, meil: TunicResult, material: THREE.Material, o:
     const th = c.x, y = Math.min(c.y, lm.neck.y - 0.05);
     // (models pass: 0.006 let the me'il's shoulder cap push through the band in a pose — a light jagged patch on
     // Samuel's chest in the verdict close-up)
-    const r = meil.upper.R(y, th) + o.thickness * 0.5 + 0.015;
+    // over the left armhole the me'il's shoulder cap follows the arm: the band stands a little further off there
+    const r = meil.upper.R(y, th) + o.thickness * 0.5 + 0.015 + 0.016 * Math.exp(-(((th - 1.45) / 0.45) ** 2));
     const p = meil.upper.field.point(y, th, r);
     pts.push(p);
     const p2 = meil.upper.field.point(y, th, r + 0.01);
@@ -133,7 +134,7 @@ export async function dressSamuel(human: HumanModel, opts: FilmDressOptions): Pr
   // the thrown end over the left shoulder
   // models pass: the thrown end is a heavy band — pleats along its length (shading folds across the ribbon's u,
   // which runs 0..1 over its width) and the weave at its true scale across (the ribbon's u is not in metres)
-  const throwMat = clothMaterial({ tier, tex: t.weave_medium, tile: 0.22, dye: DARK, fuzz: 0.5, variation: [0.09, 0.14, 0.03], roughness: 0.95, sheen: 0.55, hem: [0, 0.1, 0.012, 0.25], edgeMask: [1, 1], transmit: 0.3, gather: { lower: 1.1, falloff: 10, spacing: 0.3 } });
+  const throwMat = clothMaterial({ tier, tex: t.weave_medium, tile: 0.22, dye: DARK, fuzz: 0.5, variation: [0.09, 0.14, 0.03], roughness: 0.95, sheen: 0.55, hem: [0, 0.1, 0.012, 0.25], edgeMask: [1, 1], transmit: 0.3, gather: { lower: 0.55, falloff: 10, spacing: 0.42 } });
   (throwMat.userData.wardrobe.uTile.value as THREE.Vector2).x = (0.2 * S) / 0.22;
   throwMat.polygonOffset = true;
   throwMat.polygonOffsetFactor = -2;
@@ -189,6 +190,7 @@ export async function dressSaulGilgal(human: HumanModel, opts: FilmDressOptions)
   const coat = fittedTunic(fit, {
     tex: t.leather, tile: 0.25, dye: 0x4a3322, hem: -0.95, sleeve: 0, sleeveless: true, neck: 'round', offset: 0.012, ease: 0.012, flare: 0.08, folds: 0.25,
     skirtStiff: 0.6, // leather-backed scales: the skirt of the coat hangs from the belt (a flexible one bulged out behind in a lunge)
+    skirtBlur: 0.07, // smooth weights: in a stride the rows of scales split along the thigh / hip-crease seams (film G2)
     seed: 8, name: 'shiryonBacking', hide: false, inner: madim.restPos, fray: 0, sheen: 0.25, roughness: 0.6, dust: 0.5,
     armhole: { half: 0.5, top: lm.yArmpit + 0.012 + 0.075 },
     palette: [0x3a2618, 0x3a2618, 0x3a2618, 0x3a2618],
@@ -198,7 +200,7 @@ export async function dressSaulGilgal(human: HumanModel, opts: FilmDressOptions)
   // models pass: many small scales (≈2.5 × 4.8 cm at Saul's height), half-length row overlap, a third sideways
   // (phones: fewer, slightly bigger scales at 4 tris each)
   const sc = opts.crowd ? { width: 0.04, length: 0.075, row: 0.05, side: 0.97 } : tier === 'low' ? { width: 0.028, length: 0.054, row: 0.027, side: 0.72 } : { width: 0.022, length: 0.042, row: 0.021, side: 0.66 };
-  scaleArmour(fit, coat, { metal: t.metal, polish: 'royal', seed: 29, ...sc, skirtStiff: 0.6 });
+  scaleArmour(fit, coat, { metal: t.metal, polish: 'royal', seed: 29, ...sc, skirtStiff: 0.6, skirtBlur: 0.07 });
   // belt over the coat + straight sword at the left hip, girded over the madim (17:39)
   const beltMat = solidMaterial({ tier, tex: t.leather, color: 0x3d2a1c, roughness: 0.55, repeat: [1, 12], normal: 1.2 });
   beltBand(fit, coat, { width: 0.05 * S, thickness: 0.008, material: beltMat, offset: 0.012, name: 'swordBelt' });

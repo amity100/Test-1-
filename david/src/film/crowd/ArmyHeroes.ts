@@ -46,9 +46,9 @@ const ss = (a: number, b: number, x: number) => {
 
 /** heroes per tier: [horn blowers, near soldiers] */
 export const HERO_COUNT: Record<CrowdTier, [number, number]> = {
-  'desktop-high': [3, 4],
-  'desktop-medium': [3, 2],
-  'mobile-high': [2, 1],
+  'desktop-high': [3, 2],
+  'desktop-medium': [3, 1],
+  'mobile-high': [2, 0],
   'mobile-low': [2, 0],
 };
 
@@ -64,6 +64,8 @@ const _s = new THREE.Vector3();
 const _x = new THREE.Vector3();
 const _y = new THREE.Vector3();
 const _z = new THREE.Vector3();
+const _c1 = new THREE.Vector3();
+const _c2 = new THREE.Vector3();
 
 class Hero {
   cue: HeroCue | null = null;
@@ -137,8 +139,8 @@ class Hero {
     // forward-up (not straight up)
     const along = _s.copy(fwd).multiplyScalar(0.85).addScaledVector(up, -0.42).addScaledVector(right, 0.45).normalize();
     // prop axes: +Y along the first stretch, +X the curl (up), +Z = X x Y
-    const curl = new THREE.Vector3().copy(up).addScaledVector(along, -up.dot(along)).normalize();
-    const zAx = new THREE.Vector3().crossVectors(curl, along).normalize();
+    const curl = _c1.copy(up).addScaledVector(along, -up.dot(along)).normalize();
+    const zAx = _c2.crossVectors(curl, along).normalize();
     _m2.makeBasis(curl, along, zAx);
     const blowQ = _q2.setFromRotationMatrix(_m2);
     this.horn.position.copy(carryP).lerp(mouth, w);
@@ -252,6 +254,8 @@ export class ArmyHeroes {
     const heroes: Hero[] = [];
     for (const r of roles) {
       const a = await FilmActor.create({ role: 'soldier', quality: q, seed: r.seed, lod: 'near', kit: r.kit, ground: o.ground });
+      // short soldier's hair: the exact groom, no strand simulation (the heroes' largest CPU cost)
+      a.groom?.setSimulation(false);
       heroes.push(new Hero(a, r));
     }
     return new ArmyHeroes(heroes);

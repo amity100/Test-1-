@@ -315,6 +315,9 @@ export function buildTube(spec: TubeSpec): Tube {
       gd[i * 4] = vArr[i];
       gd[i * 4 + 1] = vLen[c] - vArr[i];
       if (spec.grime) gd[i * 4 + 2] = spec.grime(p.fromArray(pos, i * 3));
+      // models pass: the column's fraction around the body (0..1) — the cloth shader lays folds by angle (the
+      // row arc length in uv.x drifts with the flare and bent vertical folds into diagonal waves)
+      gd[i * 4 + 3] = c / cols;
     }
   }
   const idx: number[] = [];

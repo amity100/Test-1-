@@ -25,14 +25,16 @@ export const FILM_CAM = {
   // G3: a fast push-in from low in front of the halted king, the jolt on the roar
   spear: { d0: 10.5, d1: 5.3, creep: 0.55, dirX: 0.9, dirZ: 0.44, h0: 0.8, h1: 0.46, lookH0: 1.65, lookH1: 2.35, lookBack: 0.7, fov0: 42, fov1: 36, pushT: 1.05 },
   // G4: between the soldiers' shoulders, pushing toward Samuel in the road; the ranks part
-  // (the lane between files 8 and 9 of the formation: Saul stands soft at frame left, Samuel clear beyond him)
-  silence: { x0: -8.6, x1: -5.8, z0: 1.575, z1: 1.575, h: 1.62, fov0: 15, fov1: 10.5, clear: 0.8 },
+  // (the lane between files 8 and 9 of the formation, the lens just over the men's heads — their heads, shoulders
+  //  and spears in the lower frame, never across it; Saul soft at frame left, Samuel clear beyond him)
+  silence: { x0: -11, x1: -7.2, z0: 1.575, z1: 1.575, h0: 1.98, h1: 1.9, lookSide: -1.8, fov0: 20, fov1: 11.5, clear: 0.8 },
   // G5a: wide profile from the south, a slow drift with the action
   tear: { dx0: -0.5, dx1: 0.45, dz0: 6.9, dz1: 5.9, h: 1.22, lookH: 1.2, lookX: 0.25, fov0: 34, fov1: 30.5 },
-  // G5b: the insert on the fist and the ripping wool (north of the grip, raking light from the west)
-  insert: { ox0: -0.28, oz0: -0.95, oy0: 0.1, ox1: -0.2, oz1: -0.74, oy1: 0.06, fov0: 27, fov1: 23.5, follow: 0.6 },
-  // G6: over Saul's right shoulder onto Samuel, a slow push
-  verdict: { back0: 0.78, back1: 0.52, side0: 0.56, side1: 0.5, h: 1.63, lookH: 1.5, lookSide: 0.3, fov0: 24, fov1: 20 },
+  // G5b: the insert on the fist and the ripping wool — from the SOUTH (Saul's right hand holds the corner on his south
+  // side; from the north his own body and the helmet under his left arm hide it), raking light from the west
+  insert: { ox0: -0.32, oz0: 0.95, oy0: 0.08, ox1: -0.22, oz1: 0.74, oy1: 0.04, fov0: 27, fov1: 23.5, follow: 0.6 },
+  // G6: over Saul's right shoulder (a soft edge at frame left) onto Samuel on the right third, a slow push
+  verdict: { back0: 0.92, back1: 0.74, side0: 0.86, side1: 0.8, h: 1.63, lookH: 1.5, lookSide: 0.4, fov0: 18, fov1: 15 },
   // G7: the fist and his face; a slow push, the focus pull, the whip up into the light at the end
   alone: { dx0: 2.05, dx1: 1.55, dz0: 0.62, dz1: 0.45, h0: 1.2, h1: 1.32, fov0: 31, fov1: 27, whipAt: 1.7, whip: 7 },
   // P1+P2: the flight re-timed (shot seconds -> the set's flight parameter e), skim altitude over the deck, the bank
@@ -40,7 +42,8 @@ export const FILM_CAM = {
   // P4: the long-lens lateral track along the Philistine column (ahead and to the side, looking back along it)
   coast: { ahead0: 20, ahead1: 15, side0: 23, side1: 21, h: 1.9, lookBack: 13, lookH: 1.35, fov0: 13.5, fov1: 12, march: 1.2 },
   // P5: the dolly in over the elders' heads toward Samuel
-  elders: { back0: 3.6, back1: 1.3, h0: 2.2, h1: 1.95, side0: 0.9, side1: 0.45, lookH: 1.5, lookSide: 0.55, fov0: 31, fov1: 24.5 },
+  // (wide at the start so the standing elders' heads fill the lower third; the lens ends just over their heads)
+  elders: { back0: 3.4, back1: 1.0, h0: 2.05, h1: 1.85, side0: 0.7, side1: 0.4, lookH: 1.45, lookSide: 0.55, fov0: 34, fov1: 25 },
 };
 
 /** blocking time offset (s) of a split take: its base shot has already run this long */
@@ -57,7 +60,7 @@ export const TAKE_LOOK: Record<string, { hand: number; freq?: number; exp?: numb
   // the sunlit deck blows out at the set's exposure: down over the clouds, back up under them over the ridges
   flight: { hand: 0.28, freq: 0.9, expCurve: [[0, 0.8], [2.4, 0.78], [3.3, 0.95], [4.2, 1.06], [7.5, 1.04]], seed: 1 },
   'rachel-dawn': { hand: 0.22, seed: 2 },
-  glint: { hand: 0.2, freq: 0.8, seed: 3 },
+  glint: { hand: 0.2, freq: 0.8, exp: 0.8, seed: 3 },
   elders: { hand: 0.3, seed: 4 },
   dustWall: { hand: 0.62, freq: 1.15, seed: 5, jolt: 0.02, joltAmp: 0.7 },
   king: { hand: 0.3, freq: 0.7, seed: 6 },
@@ -174,8 +177,8 @@ export function gilgalCam(take: string, u: number, t: number, H: (x: number, z: 
       const sam = samuelAt('silence', t).pos;
       out.pos.set(SAUL_HALT.x + lerp(c.x0, c.x1, e), 0, roadZ(SAUL_HALT.x) + lerp(c.z0, c.z1, e));
       clearOfArmy(out.pos, 'silence', t, c.clear);
-      out.pos.y = H(out.pos.x, out.pos.z) + c.h;
-      out.look.set(sam.x, H(sam.x, sam.z) + 1.42, sam.z + 0.35);
+      out.pos.y = H(out.pos.x, out.pos.z) + lerp(c.h0, c.h1, e);
+      out.look.set(sam.x, H(sam.x, sam.z) + 1.42, sam.z + 0.35 + c.lookSide);
       out.fov = lerp(c.fov0, c.fov1, e);
       return true;
     }

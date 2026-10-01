@@ -2181,7 +2181,9 @@ ${GLSL_NOISE}`,
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
-float fl_Thin = 0.7;
+// models pass: a dense fleece is OPAQUE — only goat hair lets light through (the lamb read see-through, like a
+// jellyfish, with every wool shell adding back-light transmission)
+float fl_Thin = mix(0.1, 0.6, uHairMode);
 float fl_Wrap = 1.0 - uHairMode * 0.5;
 {
   float t = vShell.x;
@@ -2196,18 +2198,19 @@ float fl_Wrap = 1.0 - uHairMode * 0.5;
   float fib = fl_vnoise(fp);
   float fib2 = fl_vnoise(fp * 2.1 + 5.0);
   float m = mix(fib * 0.62 + fib2 * 0.38, 0.55, lod) * 0.7 + clump * 0.42;
-  float thr = 0.2 + t * 0.62 - vLodThin * 0.08;
+  // wool: the inner shells almost solid (a body of fleece), only the outer third wispy
+  float thr = mix(0.06 + t * 0.76, 0.2 + t * 0.62, uHairMode) - vLodThin * 0.08;
   if (m < thr) discard;
   // models pass: deep self-shadowing inside the fleece (the fibres shade each other; the crevices between the
   // staples are dark), so wool reads as a volume and not as a flat bright surface
-  float ao = mix(mix(0.3, 1.0, pow(t, 0.75)), mix(0.52, 1.0, t), uHairMode);
+  float ao = mix(mix(0.24, 1.0, pow(t, 0.8)), mix(0.52, 1.0, t), uHairMode);
   float vari = mix((0.74 + 0.36 * fib) * (0.82 + 0.3 * clump), 0.55 + 0.9 * fib2 * clump, uHairMode);
   diffuseColor.rgb *= uFurColor * ao * vari;
 }`,
       )
       .replace('#include <lights_fragment_begin>', `#include <lights_fragment_begin>\n${GLSL_BACKLIGHT}`);
   };
-  mat.customProgramCacheKey = () => 'flock-shell-v2';
+  mat.customProgramCacheKey = () => 'flock-shell-v3';
   return mat;
 }
 
@@ -2621,21 +2624,21 @@ export class Flock {
     // golden light) — undyed cream wool with road dust, never paper white
     const woolBase = [0xd4c6aa, 0xcfc0a2, 0xd8cbb1, 0xc8b89a];
     const sheepLooks: BodyLook[] = [
-      { wool: woolBase[0], hair: 0x5e3a22, hair2: 0x5e3a22, mottle: 0, dirt: 0x8a7258, dirtH: 0.42, curlFreq: 90, curlAmp: 0.0035, sheen: 0.6, trans: 0.7 },
-      { wool: woolBase[1], hair: 0x2c1d14, hair2: 0x2c1d14, mottle: 0, dirt: 0x86705a, dirtH: 0.45, curlFreq: 90, curlAmp: 0.0035, sheen: 0.6, trans: 0.7 },
-      { wool: woolBase[2], hair: 0x181411, hair2: 0x181411, mottle: 0, dirt: 0x8a7258, dirtH: 0.4, curlFreq: 90, curlAmp: 0.0035, sheen: 0.6, trans: 0.7 },
-      { wool: woolBase[3], hair: 0x7d5232, hair2: 0x7d5232, mottle: 0, dirt: 0x806a54, dirtH: 0.48, curlFreq: 90, curlAmp: 0.0035, sheen: 0.6, trans: 0.7 },
-      { wool: woolBase[0], hair: 0x4a2c1a, hair2: 0xd9ccb5, mottle: 0.85, dirt: 0x8a7258, dirtH: 0.42, curlFreq: 90, curlAmp: 0.0035, sheen: 0.6, trans: 0.7 },
+      { wool: woolBase[0], hair: 0x5e3a22, hair2: 0x5e3a22, mottle: 0, dirt: 0x8a7258, dirtH: 0.42, curlFreq: 90, curlAmp: 0.0035, sheen: 0.5, trans: 0.4 },
+      { wool: woolBase[1], hair: 0x2c1d14, hair2: 0x2c1d14, mottle: 0, dirt: 0x86705a, dirtH: 0.45, curlFreq: 90, curlAmp: 0.0035, sheen: 0.5, trans: 0.4 },
+      { wool: woolBase[2], hair: 0x181411, hair2: 0x181411, mottle: 0, dirt: 0x8a7258, dirtH: 0.4, curlFreq: 90, curlAmp: 0.0035, sheen: 0.5, trans: 0.4 },
+      { wool: woolBase[3], hair: 0x7d5232, hair2: 0x7d5232, mottle: 0, dirt: 0x806a54, dirtH: 0.48, curlFreq: 90, curlAmp: 0.0035, sheen: 0.5, trans: 0.4 },
+      { wool: woolBase[0], hair: 0x4a2c1a, hair2: 0xd9ccb5, mottle: 0.85, dirt: 0x8a7258, dirtH: 0.42, curlFreq: 90, curlAmp: 0.0035, sheen: 0.5, trans: 0.4 },
     ];
     const sheepMats = sheepLooks.map((l) => this.track(makeBodyMaterial(l)));
     const sheepShells = [0, 1, 2, 3].map((i) =>
-      this.track(makeShellMaterial({ color: woolBase[i], tint: 1, fiberFreq: 520, clumpFreq: 34, droop: 0.5, hair: 0, trans: 0.7, rough: 0.95, furScale: 1, count: shellN[0] })),
+      this.track(makeShellMaterial({ color: woolBase[i], tint: 1, fiberFreq: 520, clumpFreq: 34, droop: 0.5, hair: 0, trans: 0.4, rough: 0.95, furScale: 1, count: shellN[0] })),
     );
     const ramMat = this.track(
-      makeBodyMaterial({ wool: 0xcebfa2, hair: 0x3f2717, hair2: 0x3f2717, mottle: 0, dirt: 0x806a54, dirtH: 0.48, curlFreq: 80, curlAmp: 0.004, sheen: 0.6, trans: 0.7 }),
+      makeBodyMaterial({ wool: 0xcebfa2, hair: 0x3f2717, hair2: 0x3f2717, mottle: 0, dirt: 0x806a54, dirtH: 0.48, curlFreq: 80, curlAmp: 0.004, sheen: 0.5, trans: 0.4 }),
     );
     const ramShell = this.track(
-      makeShellMaterial({ color: 0xcebfa2, tint: 1, fiberFreq: 480, clumpFreq: 30, droop: 0.55, hair: 0, trans: 0.9, rough: 0.95, furScale: 1, count: shellN[0] }),
+      makeShellMaterial({ color: 0xcebfa2, tint: 1, fiberFreq: 480, clumpFreq: 30, droop: 0.55, hair: 0, trans: 0.4, rough: 0.95, furScale: 1, count: shellN[0] }),
     );
     const goatLooks: BodyLook[] = [
       { wool: 0x1a1612, hair: 0x1a1612, hair2: 0x1a1612, mottle: 0, dirt: 0x5a4a3a, dirtH: 0.3, curlFreq: 60, curlAmp: 0.001, sheen: 0.0, trans: 0.4 },
@@ -2648,10 +2651,10 @@ export class Flock {
     const lambMat = this.track(
       // the lamb: whiter than the ewes but still wool (albedo ≈ 0.62), dusty legs and belly, less sheen / glow
       // (the short face / leg hair a shade darker than the fleece top: the bare band at the neck read as a white collar)
-      makeBodyMaterial({ wool: 0xdad0bd, hair: 0xc9bfad, hair2: 0xc9bfad, mottle: 0, dirt: 0x9a8468, dirtH: 0.24, curlFreq: 150, curlAmp: 0.0028, sheen: 0.4, trans: 0.55 }),
+      makeBodyMaterial({ wool: 0xd6ccb8, hair: 0xc9bfad, hair2: 0xc9bfad, mottle: 0, dirt: 0x9a8468, dirtH: 0.26, curlFreq: 150, curlAmp: 0.0028, sheen: 0.25, trans: 0.25 }),
     );
     const lambShell = this.track(
-      makeShellMaterial({ color: 0xddd3c1, tint: 1, fiberFreq: 640, clumpFreq: 60, droop: 0.1, hair: 0, trans: 0.6, rough: 0.95, furScale: 1, count: shellN[2], lod: [25, 80] }),
+      makeShellMaterial({ color: 0xd8cebb, tint: 1, fiberFreq: 640, clumpFreq: 60, droop: 0.1, hair: 0, trans: 0.3, rough: 0.95, furScale: 1, count: shellN[2], lod: [25, 80] }),
     );
 
     // ---- animals

@@ -5,6 +5,7 @@ Build the DAVID mocap clip library: CMU BVH takes -> retarget onto the MakeHuman
   python3 tools/mocap/build_clips.py              # every clip in CLIPS (downloads missing takes)
   python3 tools/mocap/build_clips.py walk idle_*  # a subset (fnmatch patterns)
   python3 tools/mocap/build_clips.py --list
+  python3 tools/mocap/build_clips.py --all [patterns]   # also the clips marked ship=False (imported, not shipped)
 
 Sources: the Microsoft Rocketbox animation library (MIT, src='rb:<stem>', tools/mocap/rocketbox.py) and the
 CMU Graphics Lab Motion Capture Database (mocap.cs.cmu.edu, "free for use in research and commercial
@@ -143,7 +144,12 @@ def main(argv):
     index = json.load(open(idx_path)) if os.path.exists(idx_path) else {}
     names = {c['name'] for c in CLIPS}
     index = {k: v for k, v in index.items() if k in names}
+    ship_all = '--all' in argv
     for spec in CLIPS:
+        if spec.get('ship') is False and not ship_all:
+            # imported and checked, but not used by the film or the game: not shipped (phones download less)
+            index.pop(spec['name'], None)
+            continue
         if pats and not any(fnmatch.fnmatch(spec['name'], p) for p in pats):
             continue
         m = build(spec, tg)

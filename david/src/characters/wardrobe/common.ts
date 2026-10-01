@@ -6,7 +6,7 @@ import {
   torsoWeights, tubeAlong, type Fit,
 } from './garments';
 import { HullField, TAU, makeFrame, noise1, smoothstep, type Tube } from './loft';
-import { clothDepthMaterial, clothMaterial, fringeMaterial, insideFace, solidMaterial, type Band, type TexPair, type Tier } from './materials';
+import { clothDepthMaterial, clothMaterial, foldsAround, fringeMaterial, insideFace, insideFaceTube, solidMaterial, type Band, type TexPair, type Tier } from './materials';
 import { Chain, Outfit } from './Outfit';
 
 /*
@@ -24,6 +24,8 @@ export async function beginFit(human: HumanModel, name: string, tier: Tier, seed
 export interface TunicOptions {
   /** 0..1: a stiff skirt (leather-backed armour) follows the pelvis more than the thighs (default 0) */
   skirtStiff?: number;
+  /** (m) smooth the skirt's skin weights over this radius (see skirtWeights; rigid scale coats) */
+  skirtBlur?: number;
   tex: TexPair;
   tile: number;
   dye: THREE.ColorRepresentation;
@@ -156,11 +158,11 @@ export function fittedTunic(fit: Fit, o: TunicOptions): TunicResult {
   const g = o.gather ?? 0;
   // armhole edges get a narrow woven border in the first palette colour (like the neck and hem bands)
   const upBands = ah && o.palette ? [...(o.neckBands ?? []), { from: 0.0, to: 0.01, motif: 0, pal: 0, edge: 'lower' as const }] : o.neckBands;
-  const upMat = clothMaterial({ ...common, bands: upBands, palette: o.palette, hem: [0, 0.1, 0.012, o.fray ?? 0.3], edgeMask: [0, 1], grime: [0.7, 0.62, 0.5, 0.4], inside: insideFace(upper.tube.geometry), ...(g > 0 ? { gather: { lower: g, falloff: 0.06, spacing: 0.03 } } : {}) });
+  const upMat = clothMaterial({ ...common, bands: upBands, palette: o.palette, hem: [0, 0.1, 0.012, o.fray ?? 0.3], edgeMask: [0, 1], grime: [0.7, 0.62, 0.5, 0.4], inside: insideFace(upper.tube.geometry), ...(g > 0 ? { gather: { lower: g, falloff: 0.06, spacing: 0.03, around: foldsAround(upper.tube, 0, 0.03) } } : {}) });
   // outer layers keep their offset from the inner ones where a leg pushes both out (no z-fighting / white flecks)
   const pad = Math.max(0, off * 0.8);
   const sf2 = o.skirtFolds ?? (g > 0 ? [g, 0.09, 0.036] : null);
-  const skMat = clothMaterial({ ...common, bands: o.bands, palette: o.palette, hem: [o.dust ?? 0.45, 0.16, 0.015, o.fray ?? 0.3], edgeMask: [1, 0], sway, collide: U, collidePad: pad, inside: insideFace(skirt.tube.geometry), ...(sf2 ? { gather: { upper: sf2[0], falloff: sf2[1], spacing: sf2[2] } } : {}) });
+  const skMat = clothMaterial({ ...common, bands: o.bands, palette: o.palette, hem: [o.dust ?? 0.45, 0.16, 0.015, o.fray ?? 0.3], edgeMask: [1, 0], sway, collide: U, collidePad: pad, inside: insideFace(skirt.tube.geometry), ...(sf2 ? { gather: { upper: sf2[0], falloff: sf2[1], spacing: sf2[2], around: foldsAround(skirt.tube, skirt.tube.rows - 1, sf2[2]) } } : {}) });
   const meshes: THREE.Object3D[] = [];
   const restPos: Float32Array[] = [upper.tube.pos, skirt.tube.pos];
   let tw = torsoWeights(fit);
@@ -216,18 +218,21 @@ export function fittedTunic(fit: Fit, o: TunicOptions): TunicResult {
     skGeos.push(fringeStrip(skirt.tube, 0.018 * S, o.seed + 7, 0.1));
     mats.push(fringeMaterial({ tier, tex: o.tex, dye: o.dye, width: 0.05, sway, collide: U }));
   }
-  const sk = makeSkinned(human, skGeos.length > 1 ? merge(skGeos) : skirtGeo, mats.length > 1 ? mats : skMat, skirtWeights(fit, o.skirtStiff ?? 0), { name: `${o.name}Skirt`, depthMaterial: clothDepthMaterial({ sway, collide: U, collidePad: pad }) });
+  const sk = makeSkinned(human, skGeos.length > 1 ? merge(skGeos) : skirtGeo, mats.length > 1 ? mats : skMat, skirtWeights(fit, o.skirtStiff ?? 0, o.skirtBlur ?? 0), { name: `${o.name}Skirt`, depthMaterial: clothDepthMaterial({ sway, collide: U, collidePad: pad }) });
   outfit.add(sk);
   meshes.push(sk);
   if (!o.sleeveless) {
     // both sleeves in one skinned mesh (weights chosen per vertex by side): one draw call instead of two
-    const slMat = clothMaterial({ ...common, bands: o.sleeveBands, palette: o.palette, hem: [0, 0.05, 0.012, o.fray ?? 0.3], edgeMask: [1, 0] });
     const geos: THREE.BufferGeometry[] = [];
+    let slInside: 'front' | 'back' = 'back';
     for (const [i, side] of (['L', 'R'] as const).entries()) {
       const s = sleeveTube(fit, { side, length: o.sleeve, top: 0.07 * S, easeTop: 0.003 + off, easeEnd: o.sleeve > 1 ? (low ? 0.022 : 0.014) : 0.02, folds: 0.006, cols: low ? 24 : 40, rows: low ? 18 : 28, seed: o.seed + 40 + i, ragged: 0.004 });
       restPos.push(s.tube.pos);
       geos.push(s.tube.geometry);
+      if (i === 0) slInside = insideFaceTube(s.tube);
     }
+    // (models pass: the sleeve's inside darkened — with the arms raised in the roar it showed as pale jagged fragments)
+    const slMat = clothMaterial({ ...common, bands: o.sleeveBands, palette: o.palette, hem: [0, 0.05, 0.012, o.fray ?? 0.3], edgeMask: [1, 0], inside: slInside });
     const wL = armWeights(fit, 'L', o.sleeve > 1), wR = armWeights(fit, 'R', o.sleeve > 1);
     const m = makeSkinned(human, merge(geos, false), slMat, (i, p) => (p.x > 0 ? wL(i, p) : wR(i, p)), { name: `${o.name}Sleeves` });
     outfit.add(m);

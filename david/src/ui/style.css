@@ -366,7 +366,8 @@ canvas { display: block; outline: none; }
 
 /* the time card: resolves out of a soft blur while the tracking closes 0.6em -> 0.28em (2.5 s), a faint bloom; it
    is carried over the first image and melts away */
-.ft-time { left: 50%; top: 50%; transform: translate(-50%, -50%); width: 94vw; text-align: center; }
+.ft-time { left: 50%; top: 50%; transform: translate(-50%, -50%); width: 94vw; text-align: center; text-wrap: balance; }
+.ft-v, .ft-time .ft-main { text-wrap: balance; }
 .ft.ft-time { opacity: 1; animation: ftMelt 1s ease var(--out, 3s) forwards; }
 /* a soft dark glow behind the card: it is carried over the sunlit cloud deck */
 .ft-time::before {
@@ -387,6 +388,12 @@ canvas { display: block; outline: none; }
   72% { filter: blur(0); }
   100% { opacity: 1; filter: blur(0); letter-spacing: 0.28em; }
 }
+@keyframes timeResolveP {
+  0% { opacity: 0; filter: blur(12px); letter-spacing: 0.42em; }
+  32% { opacity: 1; }
+  72% { filter: blur(0); }
+  100% { opacity: 1; filter: blur(0); letter-spacing: 0.18em; }
+}
 @keyframes ftMelt { from { opacity: 1; filter: blur(0); } to { opacity: 0; filter: blur(8px); letter-spacing: 0.02em; } }
 
 /* a narration line (kept for completeness; CUT v2 has none) */
@@ -394,6 +401,12 @@ canvas { display: block; outline: none; }
 .ft.ft-line { opacity: 1; animation: ftOutC 0.8s ease var(--out, 4s) forwards; }
 .ft-line .ft-main { font: 300 clamp(18px, min(2.6vw, 4.4vh), 40px)/1.4 var(--serif-he); letter-spacing: 0.22em; text-shadow: 0 2px 16px rgba(0, 0, 0, 0.7); }
 
+/* cards over a bright sky: a soft dark glow behind the place / person cards (legibility; it never reads as a box) */
+.ft-place::before, .ft-person::before {
+  content: ''; position: absolute; inset: -34% -22%; z-index: -1; opacity: 0;
+  background: radial-gradient(ellipse at center, rgba(12, 8, 4, 0.34), rgba(12, 8, 4, 0.14) 50%, rgba(0, 0, 0, 0) 74%);
+  animation: glowIn 0.9s ease forwards;
+}
 /* place card: large serif in the negative space, a soft mask wipe from the right (RTL), a gold rule grows under it */
 .ft.ft-place { opacity: 1; animation: ftOutC 0.8s ease var(--out, 2s) forwards; }
 .ft-place .ft-main {
@@ -435,7 +448,7 @@ canvas { display: block; outline: none; }
 @keyframes sweep { to { background-position: -60% 0; } }
 .ft-person .ft-sub {
   margin-top: 0.5em; opacity: 0; font: 400 clamp(12px, min(1.4vw, 2.7vh), 24px)/1.2 var(--serif-he); letter-spacing: 0.42em;
-  color: #f3e5c4; text-shadow: 0 1px 10px rgba(0, 0, 0, 0.85), 0 0 2px rgba(0, 0, 0, 0.5);
+  color: #f6ead0; text-shadow: 0 1px 12px rgba(0, 0, 0, 0.95), 0 0 3px rgba(0, 0, 0, 0.75), 0 0 1px rgba(0, 0, 0, 0.9);
   animation: subIn 1s ease 0.6s forwards;
 }
 .ft-side-left.ft-person .ft-sub { margin-left: 0.1em; }
@@ -487,7 +500,7 @@ canvas { display: block; outline: none; }
 
 /* phones in portrait: the picture is a band across the middle; the texts sit in it, larger relative to the width */
 @media (max-aspect-ratio: 1/1) {
-  .ft-time .ft-main { font-size: clamp(22px, 6.6vw, 36px); letter-spacing: 0.3em; }
+  .ft-time .ft-main { font-size: clamp(22px, 6.6vw, 36px); line-height: 1.5; animation-name: timeResolveP; }
   .ft-place .ft-main { font-size: clamp(28px, 8.6vw, 42px); }
   .ft-person .ft-name { font-size: clamp(44px, 13.5vw, 68px); }
   .ft-person .ft-sub { font-size: clamp(12px, 3.7vw, 17px); letter-spacing: 0.3em; }

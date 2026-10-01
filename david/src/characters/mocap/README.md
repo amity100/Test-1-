@@ -128,7 +128,7 @@ saul.update(dt, camera, h);                // rig: proxies, fingers, face, eyes 
 | `throw_ball` | 141_11 (0.3–3.2 s) | 2.90 | — | 0.06 | -2° | 14.4 | game | overhand throw |
 | `look_around` | 139_01 (4.5–9.0 s) | 4.50 | — | 0.01 | -41° | 20.7 | game, idle | cautious look around |
 
-Total **49 clips, 664 KB** (gzip; the phone downloads only the clips a scene preloads).
+Total **73 clips, 940 KB** since cut v2 (49 CMU + 24 Rocketbox; gzip; the phone downloads only the clips a scene preloads).
 
 ### What CMU lacks and how it is covered
 
@@ -185,14 +185,11 @@ How they enter the pipeline (`tools/mocap/rocketbox.py`):
 | `walk_n1` | m_walk_neutral_01 (0.0–1.2 s) | 1.20 | loop | 1.11 | -1° | 6.1 | film, army, loco | walk |
 | `walk_n2` | m_walk_neutral_02 (0.0–1.1 s) | 1.07 | loop | 1.46 | +0° | 5.5 | film, army, loco | walk |
 | `walk_stop_rb` | m_walk_stop (0.0–2.0 s) | 2.03 | — | 0.64 | +2° | 9.5 | film, saul, loco | walk, halt in two steps, stand |
-| `turn_go_L` | m_turn_left_180_to_walk (0.0–1.7 s) | 1.67 | — | 0.57 | +156° | 8.4 | film, samuel, loco | turn 180 deg to the left into a walk away |
-| `turn_go_R` | m_turn_right_180_to_walk (0.0–2.1 s) | 2.10 | — | 0.16 | -163° | 10.1 | film, samuel, loco | turn 180 deg to the right into a walk away |
-| `turn_180_L` | m_turn_left_180 (0.0–2.5 s) | 2.47 | — | 0.00 | +169° | 11.1 | film, loco | turn 180 deg to the left on the spot |
 | `stand_up` | m_sit_stand_up_chair_01 (0.0–2.5 s) | 2.53 | — | 0.18 | +2° | 11.1 | film, elders, gesture | rise from a seat |
 | `talk_angry` | m_gestic_talk_angry_01 (1.5–7.5 s) | 6.00 | — | 0.02 | -3° | 26.7 | film, elders, gesture | angry demand: the arm raised high at 2.5 s |
 | `talk_excited` | m_gestic_talk_excited_02 (1.5–7.5 s) | 6.00 | — | 0.02 | +8° | 26.0 | film, elders, gesture | excited talk, both hands |
-| `talk_sad` | m_gestic_talk_sad_01 (4.5–10.5 s) | 6.00 | — | 0.01 | -2° | 22.0 | film, elders, samuel, gesture | grave, sad talk |
-| `listen_deny` | m_gestic_listen_deny_03 (0.0–4.1 s) | 4.07 | — | 0.00 | +1° | 13.7 | film, samuel, elders, gesture | listens, shakes the head, turns away |
+| `talk_sad` | m_gestic_talk_sad_01 (4.5–10.5 s) | 6.00 | — | 0.01 | -2° | 22.0 | film, elders, samuel, gesture | grave, sad talk — *imported, not shipped (`--all`)* |
+| `listen_deny` | m_gestic_listen_deny_03 (0.0–4.1 s) | 4.07 | — | 0.00 | +1° | 13.7 | film, samuel, elders, gesture | listens, shakes the head, turns away — *imported, not shipped (`--all`)* |
 | `listen_deny_b` | m_gestic_listen_deny_02 (0.0–3.3 s) | 3.30 | — | 0.00 | +0° | 10.1 | film, samuel, gesture | listens, turns the head away |
 | `listen_sad` | m_gestic_listen_sad_01 (3.0–10.0 s) | 2.50 | loop | 0.00 | +0° | 6.7 | film, samuel, idle | sad, still listening |
 | `listen_angry` | m_gestic_listen_angry_01 (1.0–6.0 s) | 5.00 | — | 0.00 | +3° | 16.7 | film, elders, gesture | listens with crossed arms, angry |
@@ -200,11 +197,9 @@ How they enter the pipeline (`tools/mocap/rocketbox.py`):
 | `idle_n1` | m_idle_neutral_01 (0.0–11.6 s) | 3.30 | loop | 0.00 | +0° | 8.1 | film, idle, army, elders | neutral stand, weight shifts |
 | `idle_n2` | m_idle_neutral_02 (0.0–15.4 s) | 3.00 | loop | 0.00 | -0° | 6.8 | film, idle, army | neutral stand |
 | `idle_angry` | m_idle_angry_02 (0.3–8.0 s) | 3.00 | loop | 0.00 | +0° | 12.9 | film, idle, elders | agitated stand, head turns |
-| `look_around_L` | m_idle_look_around_01 (0.3–4.4 s) | 4.10 | — | 0.00 | +3° | 13.9 | film, army, gesture | turns to look to the right and back |
-| `look_around_R` | m_idle_look_around_02 (0.3–4.3 s) | 4.00 | — | 0.00 | -5° | 14.3 | film, army, gesture | turns to look to the left and back |
-| `crouch_in` | m_crouch_in (0.0–4.5 s) | 4.53 | — | 0.04 | -24° | 17.9 | film, game, gesture | crouch down |
-| `crouch_idle` | m_crouch_idle (0.0–6.9 s) | 2.00 | loop | 0.00 | +0° | 4.9 | film, game, idle | crouching |
-| `crouch_out` | m_crouch_out (0.0–4.5 s) | 4.53 | — | 0.04 | +25° | 18.6 | film, game, gesture | rise from a crouch |
+| `crouch_in` | m_crouch_in (0.0–4.5 s) | 4.53 | — | 0.04 | -24° | 17.9 | film, game, gesture | crouch down — *imported, not shipped (`--all`)* |
+| `crouch_idle` | m_crouch_idle (0.0–6.9 s) | 2.00 | loop | 0.00 | +0° | 4.9 | film, game, idle | crouching — *imported, not shipped (`--all`)* |
+| `crouch_out` | m_crouch_out (0.0–4.5 s) | 4.53 | — | 0.04 | +25° | 18.6 | film, game, gesture | rise from a crouch — *imported, not shipped (`--all`)* |
 
 Checked in contact sheets on the MakeHuman bodies (`dev/mocap.html`: planted-ball slide 0.2–5.6 cm/s, largest joint
 step ≤ 37°/frame, no broken wrists or shoulders; the cheers and walks read naturally). `walk_stop_rb`'s heel figure

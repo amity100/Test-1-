@@ -97,3 +97,33 @@ npx vite build --config <scratch vite config with input dev/crowd-export.html>  
 node export.mjs export.json                                                      # page -> window.__out
 python3 tools/crowd/bake_crowd.py export.json                                    # needs pip install --user pyfqmr
 ```
+
+## Cut v2 behaviour (anim teammate) — the timing contract of `src/content/introScript.ts`
+
+Every beat below is read from the contract through `src/film/gilgal/gilgalBlocking.ts` (`BEATS`, `armyAt`), never
+hard-coded:
+
+* **G1–G2 march** — every man his own take (CMU `march` `march_c` `walk_b..d` + Rocketbox `walk_n1` `walk_n2`
+  `walk_cool_b`, mirrored), phase, pace (±6 %) and spear bob (the `carry` bakes keep 25 % of the arm swing); 45 % of
+  the men look about now and then (`headYaw`).
+* **G3 halt + roar** — the column rolls in onto its marks and halts rank by rank from the king back (`halt` + 0.12 +
+  0.018 s per rank + jitter); at `roar` (+ 0 … `roarSpread`, the front and centre first) every man plays his own take:
+  Rocketbox `cheer_1..5` (m_cheer_01..05) or the CMU raises held at their peak (`raise_arm_R` `cheer_reach`
+  `arms_high`), `cheer_arms`; spear-men never mirror (the spear goes up in the right hand); ~20 % turn their head to
+  shout at a neighbour.
+* **G4 silence** — the roar is cut: the men freeze in their pose (rate 0.05); heads turn to the road (`headsTurn` +
+  0.012 s per rank + jitter); the arms come down over 0.9–1.5 s; some men turn the whole body to look (Rocketbox
+  `look_around_L/R`, desktop); the front ranks STEP aside (`part`): they play a walk at the speed of their slot's move,
+  turn into the step and back — away from the lens lane `PART_LANE` (1.575 m south of the road's centre, FilmCams'
+  G4 lane), so nobody walks into the long lens.
+* **G5–G7** — standing (weight-shifting idles), heads toward the two men.
+* **Hero soldiers** (`ArmyHeroes.ts`): full FilmActors take the slots nearest the lens that are in view on the first
+  frames of every beat (`setActorSlots` hides the crowd figure) and play that soldier's part with the real mocap on
+  the full human (his march take, halt, cheer with the mouth open, freeze, head turn, step aside). Two or three of them
+  are the rams'-horn blowers of G1 (visual-bible 3.4): at `horns` the horn goes from the hand to the lips (placed each
+  frame between the carry and the blowing pose, the hands follow by arm IK), the head goes back, the cheeks fill.
+  Count per tier `HERO_COUNT`: desktop-high 3 horns + 2 spear-men, desktop-medium 3 + 1, phones 2 horns; their hair is
+  the exact groom (no strand sim). `GilgalArmy.create({ heroes: false })` turns them off.
+* **Philistines (P4)** — Rocketbox walks added to the take mix, a slow lateral weave per man (nobody on rails), a glance
+  to the side now and then.
+* Clip lists to release after the film: `ARMY_CLIPS` (GilgalArmy.ts) minus the game's `DAVID_MOCAP`.
