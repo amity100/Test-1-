@@ -67,6 +67,7 @@ export class BearHook {
   private readonly ground: (x: number, z: number) => number;
   private props: { h1: THREE.InstancedMesh[]; h2: THREE.InstancedMesh[] } | null = null;
   private restoreTrees: (() => void) | null = null;
+  private restoreRun: (() => void) | null = null;
   private birds: { group: THREE.Group; mat: THREE.SpriteMaterial; tex: THREE.Texture; list: { s: THREE.Sprite; ph: number; k: number }[] } | null = null;
   private eyes: THREE.Group | null = null;
   private eyeMat: THREE.SpriteMaterial | null = null;
@@ -130,6 +131,15 @@ export class BearHook {
     try {
       this.buildBirds();
       this.buildEyes();
+      // compile their programs now, on the cut into the hook (not on the frame the birds fly up)
+      const { renderer, camera, scene } = this.h.engine;
+      for (const g of [this.birds?.group, this.eyes]) {
+        if (!g) continue;
+        const was = g.visible;
+        g.visible = true;
+        renderer.compile(g, camera, scene);
+        g.visible = was;
+      }
     } catch (e) {
       console.warn('[hook] birds / eyes', e);
     }
@@ -255,9 +265,11 @@ export class BearHook {
       const flap = 0.5 + 0.5 * Math.sin((t * 9.5 + ph * 6.28) * (1 + k * 0.07));
       const go = Math.max(0, t - HOOK.birds - k * 0.07);
       const O = this.out, S = this.side;
-      s.position.copy(this.edge).addScaledVector(O, -0.6 + go * (1.6 + k * 0.25)).addScaledVector(S, -2.4 + k * 1.05 + go * (k % 2 ? 0.8 : -0.6));
-      s.position.y = this.edge.y + 0.6 + (k % 3) * 0.25 + go * (1.1 + (k % 2) * 0.4) + go * go * 0.5;
-      const sz = go > 0 ? 0.26 : 0.0001;
+      // out of the front of the bushes, up over the lamb and away over the lens' shoulders: the H1 frame's top edge is
+      // only ~2.4 m up at the bush wall, so they climb slowly and come toward the lens (larger) — in the picture for ~1 s
+      s.position.copy(this.edge).addScaledVector(O, 0.3 + go * (2.2 + k * 0.3)).addScaledVector(S, -2.0 + k * 0.85 + go * (k % 2 ? 1.1 : -0.9));
+      s.position.y = this.edge.y + 0.7 + (k % 3) * 0.18 + go * (1.0 + (k % 2) * 0.3) + go * go * 0.45;
+      const sz = go > 0 ? 0.32 : 0.0001;
       s.scale.set(sz, sz * (0.3 + 0.7 * flap) * 0.5, 1);
       s.visible = go > 0 && k < 5;
     }
@@ -300,6 +312,7 @@ export class BearHook {
   dispose() {
     this.restoreExposure();
     this.clearPushers();
+    this.restoreRunNow();
     const lamb = this.h.flock.lamb;
     lamb.aiEnabled = true;
     (lamb as unknown as { alert: number }).alert = 0;
@@ -366,8 +379,7 @@ export class BearHook {
     const H1: [THREE.Vector3, number, number][] = [
       [at(E, 0.55, -1.5), 1.45, 0.4], [at(E, 0.15, 0.3), 1.75, 2.1], [at(E, 0.85, 1.9), 1.3, 1.2], [at(E, -0.9, -0.4), 2.1, 3.3],
       [at(E, -0.6, 1.4), 1.9, 5.0], [at(E, 0.35, -3.1), 1.6, 0.9], [at(E, -1.4, -2.3), 2.3, 4.2], [at(E, -1.2, 3.0), 2.2, 1.7],
-      [at(E, 1.1, 3.6), 1.2, 2.6], [at(E, -2.6, 0.9), 2.4, 2.9], [at(E, -2.9, -1.6), 2.2, 0.3], [at(E, -0.2, 5.2), 1.7, 4.6],
-      [at(E, 0.1, -5.0), 1.6, 3.7], [at(E, -3.8, 3.4), 2.5, 1.1], [at(E, -4.4, -3.6), 2.4, 5.4],
+      [at(E, 1.1, 3.6), 1.2, 2.6], [at(E, -2.6, 0.9), 2.4, 2.9], [at(E, -2.9, -1.6), 2.2, 0.3], [at(E, -3.6, 2.6), 2.3, 1.1],
     ];
     const H2: [THREE.Vector3, number, number][] = [
       // near silhouettes at the frame's sides (2-4 m from the lens)
@@ -402,8 +414,61 @@ export class BearHook {
     this.props = { h1: make(H1, 'hook:edge-bushes'), h2: make(H2, 'hook:h2-bushes') };
   }
 
-  /** 1 = the edge's bushes (H1, the attack's shots); 2 = H2's silhouettes instead (the two angles are cut together: a
-   *  cheat — the edge's wall would stand between the H2 lens and the eyes); 0 = none */
+  /** The attack's later angles (from the side of the bear, behind it) are cut in without the edge's bushes — a cheat
+   *  between angles, as H1 / H2 do: the bear runs back through where they stood, and a lens beside it would be in them. */
+  hideBushes() {
+    this.showProps(0);
+  }
+
+  /**
+   * The attack's lenses follow the bear as it runs off toward the thicket (Story.bearAttack: beside it, behind it): the
+   * world's bushes and trees in that corridor — `from` along `dir` for `length` m, `left`..`right` m to the side (the
+   * side = dir turned right, the lenses' side) — are cleared for the shots and put back by dispose() (the lens is on
+   * David's face by then). One pass over the vegetation's instances.
+   */
+  clearRun(from: THREE.Vector3, dir: THREE.Vector3, length: number, left: number, right: number) {
+    this.restoreRunNow();
+    const saved: { mesh: THREE.InstancedMesh; i: number; m: THREE.Matrix4 }[] = [];
+    const m4 = new THREE.Matrix4(), p = new THREE.Vector3(), zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    const d = this.tmp.copy(dir).setY(0).normalize(), sx = -d.z, sz = d.x;
+    const kinds = new Set(['tree-bush', 'tree-oak', 'tree-terebinth', 'tree-carob', 'tree-olive']);
+    this.h.engine.scene.traverse((o) => {
+      const im = o as THREE.InstancedMesh;
+      if (!im.isInstancedMesh || !kinds.has(im.name.split('#')[0])) return;
+      let touched = false;
+      for (let i = 0; i < im.count; i++) {
+        im.getMatrixAt(i, m4);
+        p.setFromMatrixPosition(m4).applyMatrix4(im.matrixWorld);
+        const rx = p.x - from.x, rz = p.z - from.z;
+        const along = rx * d.x + rz * d.z, across = rx * sx + rz * sz;
+        if (along < -4 || along > length || across < left || across > right) continue;
+        saved.push({ mesh: im, i, m: m4.clone() });
+        im.setMatrixAt(i, zero);
+        touched = true;
+      }
+      if (touched) im.instanceMatrix.needsUpdate = true;
+    });
+    this.restoreRun = () => {
+      for (const sv of saved) {
+        sv.mesh.setMatrixAt(sv.i, sv.m);
+        sv.mesh.instanceMatrix.needsUpdate = true;
+      }
+      saved.length = 0;
+    };
+  }
+
+  private restoreRunNow() {
+    const r = this.restoreRun;
+    this.restoreRun = null;
+    try {
+      r?.();
+    } catch (e) {
+      console.warn('[hook] restore run', e);
+    }
+  }
+
+  /** 1 = the edge's bushes (H1, the attack's first shot); 2 = H2's silhouettes instead (the two angles are cut together:
+   *  a cheat — the edge's wall would stand between the H2 lens and the eyes); 0 = none */
   private showProps(level: 0 | 1 | 2) {
     if (!this.props) return;
     for (const m of this.props.h1) m.visible = level === 1;
@@ -416,8 +481,9 @@ export class BearHook {
     c.width = 64;
     c.height = 32;
     const x = c.getContext('2d')!;
-    // a small bird in flight seen from below / the side: two swept wings and a body (a soft-edged dark silhouette)
-    x.fillStyle = 'rgba(28,22,18,1)';
+    // a small bird in flight seen from below / the side: two swept wings and a body (a white silhouette, tinted by the
+    // material: a mid sunlit brown that reads against the dark bushes AND the bright sky)
+    x.fillStyle = 'rgba(255,255,255,1)';
     x.beginPath();
     x.moveTo(2, 9);
     x.quadraticCurveTo(18, 6, 30, 17);
@@ -429,7 +495,7 @@ export class BearHook {
     x.fill();
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
-    const mat = new THREE.SpriteMaterial({ map: tex, color: 0x5a4c40, transparent: true, depthWrite: false, fog: false });
+    const mat = new THREE.SpriteMaterial({ map: tex, color: 0x9c8466, transparent: true, depthWrite: false, fog: false });
     const group = new THREE.Group();
     group.name = 'hook:birds';
     const list: { s: THREE.Sprite; ph: number; k: number }[] = [];

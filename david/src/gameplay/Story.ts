@@ -482,9 +482,13 @@ export class Story {
     await this.shots(hook.shots());
     this.check();
     hook.end();
-    // the bear comes out of the bushes at the lamb (it stands frozen at the edge, its head up)
+    // the bear comes out of the bushes at the lamb (it stands frozen at the edge, its head up): from just inside the
+    // edge (the cut out of the dark hides the step), so it is out of the leaves in the first second of the stalk
     const lambSpot = lamb.position.clone();
-    const start = hook.bearAt;
+    const start = hook.edge.clone().addScaledVector(hook.out, -1.0);
+    // the attack's lenses beside and behind the bear as it runs off toward the thicket: no bush or tree in that corridor
+    // for these shots (put back by hook.dispose(), while the lens is on David's face)
+    hook.clearRun(lambSpot, toThicket, 34, -2.5, 6.5);
     this.bear.place(start.x, start.z, Math.atan2(-toThicket.x, -toThicket.z));
     this.bear.visible = true;
     this.bear.model.hold = 'none';
@@ -517,20 +521,27 @@ export class Story {
       this.bearThreats[0] = this.bear.pos;
     };
     const lambAtStart = lambSpot.clone();
+    // (cut6) the lenses keep their height over the ground where they stand: since CUT v4 the lamb is taken at the edge of
+    // the scrub on the slope toward the thicket, and a lens a few metres uphill of it at its height + 1 m was in the grass
+    const over = (p: THREE.Vector3, h: number) => {
+      p.y = Math.max(p.y, this.engine.terrain.heightAt(p.x, p.z) + h);
+      return p;
+    };
     await this.shots([
       // from among the sheep toward the thicket
       { duration: 3.6, at: (u) => {
-        const p = lambAtStart.clone().addScaledVector(toThicket, -6).add(new THREE.Vector3(1.5, 1.0 + u * 0.3, 0));
+        const p = over(lambAtStart.clone().addScaledVector(toThicket, -6).add(new THREE.Vector3(1.5, 1.0 + u * 0.3, 0)), 1.0 + u * 0.3);
         return { pos: p, look: bearPos().clone().add(new THREE.Vector3(0, 0.8, 0)), fov: 40 - u * 6 };
       } },
       { duration: 3.2, at: (u) => {
+        hook.hideBushes(); // (the cut to the side of the bear: the hook's bushes are not in this angle)
         const b = bearPos();
         const side = new THREE.Vector3(-toThicket.z, 0, toThicket.x);
-        return { pos: b.clone().addScaledVector(side, 5 - u).add(new THREE.Vector3(0, 0.9, 0)).addScaledVector(toThicket, 2), look: b.clone().add(new THREE.Vector3(0, 0.7, 0)), fov: 42 };
+        return { pos: over(b.clone().addScaledVector(side, 5 - u).add(new THREE.Vector3(0, 0.9, 0)).addScaledVector(toThicket, 2), 0.9), look: b.clone().add(new THREE.Vector3(0, 0.7, 0)), fov: 42 };
       } },
       { duration: 3.4, at: (u) => {
         const b = bearPos();
-        return { pos: b.clone().add(new THREE.Vector3(0, 1.3 + u * 0.4, 0)).addScaledVector(toThicket, -3.2).add(new THREE.Vector3(-toThicket.z * 1.8, 0, toThicket.x * 1.8)), look: b.clone().add(new THREE.Vector3(0, 0.9, 0)), fov: 34 };
+        return { pos: over(b.clone().add(new THREE.Vector3(0, 1.3 + u * 0.4, 0)).addScaledVector(toThicket, -3.2).add(new THREE.Vector3(-toThicket.z * 1.8, 0, toThicket.x * 1.8)), 1.3 + u * 0.4), look: b.clone().add(new THREE.Vector3(0, 0.9, 0)), fov: 34 };
       } },
       // David turns — his face as he sees it
       { duration: 3.2, at: (u) => {
