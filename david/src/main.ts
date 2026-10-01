@@ -102,9 +102,9 @@ async function boot() {
     if (started && !wasPausedBeforeLoss) setPaused(false);
   };
 
-  // The opening film needs its stage (the prologue sets, Gilgal, the cast and the armies; lazily imported chunks): it
-  // is built behind this loading screen so the film starts at once after the start click, and it is disposed after the
-  // film. Not built when the film is skipped (?skip=1, ?jump=...) or with ?preload=0 (the intro then builds it itself
+  // The opening film needs its stage (CUT v3: only the Gilgal set with its cast and its army — FilmStage builds just the
+  // sets the shot sheet films in; lazily imported chunks): it is built behind this loading screen so the film starts at
+  // once after the start click, and it is disposed after the film. Not built when the film is skipped (?skip=1, ?jump=...) or with ?preload=0 (the intro then builds it itself
   // behind its pre-roll card). Headless tests (?test=1) keep the lazy path unless ?preload=1.
   const wantIntro = params.get('skip') !== '1' && !params.get('jump');
   const preloadStage = wantIntro && (params.get('preload') ?? (testMode ? '0' : '1')) !== '0';

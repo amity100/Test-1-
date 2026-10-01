@@ -81,6 +81,8 @@ interface Soldier {
   /** per-man random numbers (fixed): timing jitter, choices */
   r: number[];
   state: 'none' | 'march' | 'halt' | 'roar' | 'freeze' | 'lower' | 'look' | 'step' | 'idle';
+  /** CUT v3: how many cheer takes the man has chained in this roar (the roar is held to the cut) */
+  chain: number;
   last: THREE.Vector3;
   yaw: number;
   gx: number;
@@ -297,7 +299,7 @@ export class GilgalArmy {
         this.soldiers.push({
           ag, file: f, rank: r, kit, walk: walks[Math.floor(h(14) * walks.length)], idle: idles[Math.floor(h(20) * idles.length)], cheer,
           mirror: !lite && h(15) < 0.5, carry, phase: h(16) * 3, pace: 0.94 + h(17) * 0.12,
-          r: [h(21), h(22), h(23), h(24), h(25), h(26)], state: 'none', last: new THREE.Vector3(), yaw: Math.PI / 2, gx: 1e9, gz: 1e9, gy: 0,
+          r: [h(21), h(22), h(23), h(24), h(25), h(26)], state: 'none', chain: 0, last: new THREE.Vector3(), yaw: Math.PI / 2, gx: 1e9, gz: 1e9, gy: 0,
         });
       }
     }
@@ -414,9 +416,18 @@ export class GilgalArmy {
         if (time >= roarT && s.state !== 'roar') {
           ag.play(this.cheerKey(s), { fade: 0.16, time: r2 * 0.22, rate: 0.95 + r3 * 0.3 });
           s.state = 'roar';
+          s.chain = 0;
         }
-        // some shout to their neighbours (the head turned half toward the next file)
-        const shout = s.state === 'roar' && r4 < 0.22 ? (r3 < 0.5 ? -0.6 : 0.6) * ss(roarT + 0.25, roarT + 0.6, time) : 0;
+        if (s.state === 'roar') this.keepRoaring(s);
+        // many shout to their neighbours (the head turned half toward the next file, then back to the front, some of
+        // them twice); the others look about as they shout — CUT v3: the roar is 3.3 s long, every head keeps moving
+        let shout = 0;
+        if (s.state === 'roar') {
+          const side = r3 < 0.5 ? -0.6 : 0.6;
+          const w1 = ss(roarT + 0.25 + 0.3 * r0, roarT + 0.6 + 0.3 * r0, time) * (1 - ss(roarT + 1.3 + 0.4 * r1, roarT + 1.7 + 0.4 * r1, time));
+          const w2 = ss(roarT + 2.0 + 0.3 * r2, roarT + 2.35 + 0.3 * r2, time) * (1 - ss(roarT + 2.9 + 0.3 * r0, roarT + 3.3 + 0.3 * r0, time));
+          shout = r4 < 0.4 ? side * (w1 + (r4 < 0.2 ? 0 : -w2)) : r4 < 0.6 ? side * w2 : 0.14 * Math.sin(time * (0.9 + 0.5 * r1) + r2 * 6);
+        }
         ag.headYaw = shout + (s.state === 'roar' ? 0 : 0.12 * Math.sin(time * 0.8 + r2 * 6));
         ag.yaw = face;
         continue;
@@ -478,6 +489,32 @@ export class GilgalArmy {
       ag.headYaw = headToSam * (0.8 + 0.2 * Math.sin(time * 0.4 + r2 * 6));
     }
     this.fillHeroCues(shot, time);
+  }
+
+  /**
+   * CUT v3: the roar is held for 3.3 s to the cut (G3) — no man may end on a held last frame: a cheer take that runs out
+   * hands over to his next take (another cheer, the other side), and a raised spear held at its peak (the ':p' takes)
+   * is pumped — back down the raise and up again, each man his own beat — so spears and fists keep going up and down.
+   */
+  private keepRoaring(s: Soldier) {
+    const ag = s.ag;
+    const c = ag.cur;
+    if (!c) return;
+    if (c.clip.key.endsWith(':p')) {
+      const top = c.clip.duration - 1 / c.clip.fps;
+      const depth = 0.3 + 0.3 * s.r[5];
+      if (c.rate > 0 && c.t >= top) c.rate = -(0.55 + 0.4 * s.r[3]);
+      else if (c.rate < 0 && c.t <= top - depth) c.rate = 0.8 + 0.45 * s.r[2];
+      return;
+    }
+    if (ag.remaining() < 0.3) {
+      s.chain++;
+      const i = CHEERS.indexOf(s.cheer);
+      const next = CHEERS[(Math.max(0, i) + 1 + Math.floor(s.r[5] * 3) + s.chain) % CHEERS.length];
+      // spear-men do not mirror (the spear stays in the right hand); the others alternate sides
+      const mirror = !s.carry && (s.mirror !== (s.chain % 2 === 1));
+      ag.play(this.key(next, s, false, mirror), { fade: 0.35, time: 0.2 + s.r[4] * 0.45, rate: 0.95 + s.r[3] * 0.25 });
+    }
   }
 
   /** the heroes mirror their slots' soldiers (see ArmyHeroes) */

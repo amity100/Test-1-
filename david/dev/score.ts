@@ -1,18 +1,13 @@
 // Score harness: renders the opening film's score + sound design offline through AudioEngine.renderOffline (the
 // runtime code path), driven exactly like src/gameplay/Intro.ts drives it, and downloads float WAVs. Used by the
-// headless verification (dev/screens/score/). Every time comes from the live shot sheet (INTRO_CUES).
+// headless verification (dev/screens/score4/). Every time comes from the live shot sheet (INTRO_CUES, CUT v3).
 import { AudioEngine, type OfflineRenderOptions } from '../src/audio/AudioEngine';
-import { INTRO_CUES as LIVE_CUES, type IntroCue } from '../src/content/introScript';
-import { V2_CUES } from './scoreSheet';
+import { INTRO_CUES, beatTime, type IntroCue } from '../src/content/introScript';
 
 type Job = Omit<OfflineRenderOptions, 'script'> & { script: NonNullable<OfflineRenderOptions['script']> };
 const STEP = 0.05;
 const at = (t: number, t0: number): boolean => t >= t0 && t < t0 + STEP - 1e-9;
 const lengthOf = (cs: readonly IntroCue[]): number => cs.reduce((m, c) => (c.shot && c.dur !== undefined ? Math.max(m, c.t + c.dur) : m), 0);
-// the live sheet (src/content/introScript.ts) once it holds CUT v2; the contract fixture (dev/scoreSheet.ts) while
-// it still holds the 164.8 s rough cut, or with ?sheet=v2
-const SHEET = new URLSearchParams(location.search).get('sheet');
-const INTRO_CUES: readonly IntroCue[] = SHEET === 'v2' || (SHEET !== 'live' && lengthOf(LIVE_CUES) > 90) ? V2_CUES : LIVE_CUES;
 const END_T = lengthOf(INTRO_CUES);
 /** Start of the first shot whose cue is one of `cues` (NaN when none). */
 const cueT = (...cues: string[]): number => (INTRO_CUES.find((c) => c.shot && cues.includes(String(c.cue))) ?? { t: NaN }).t;
@@ -36,9 +31,10 @@ function filmCalls(clock: (t: number) => number, skipAt = Infinity) {
     const f = clock(t);
     e.syncIntro(f);
     const cross = (x: number): boolean => prev < x && f >= x;
-    // Intro.ts's own one-shots in the hook (thicket + 1.0 s: a far growl; eyes + 0.2 s: the lamb)
-    if (cross(shotStart('thicket') + 1.0)) e.sfx('bearGrowl', { volume: 0.28, pitch: 0.7 });
-    if (cross(shotStart('eyes', 'lamb') + 0.2)) e.sfx('lambBleat', { volume: 0.5 });
+    // Intro.ts's own one-shots in the hook (as cut5 keys them: a far growl 0.6 s before the lamb lifts its head; the
+    // lamb's bleat just after H2 opens, before the eyes)
+    if (cross(shotStart('thicket') + Math.max(0.3, beatTime('thicket', 'lambHead') - shotStart('thicket') - 0.6))) e.sfx('bearGrowl', { volume: 0.28, pitch: 0.7 });
+    if (cross(shotStart('eyes', 'lamb') + Math.min(0.25, (beatTime('eyes', 'eyesOpen') - shotStart('eyes', 'lamb')) * 0.3))) e.sfx('lambBleat', { volume: 0.5 });
     if (cross(cueT('title'))) e.sfx('titleHit');
     if (cross(END_T)) { e.stopIntro(2.5); e.setAmbienceBed('fields', 2); e.setMusicMood('pastoral', 4); }
     if (t >= skipAt) {
@@ -51,19 +47,23 @@ function filmCalls(clock: (t: number) => number, skipAt = Infinity) {
   };
 }
 const straight = (t: number): number => t;
-/** a 1.4 s picture stall (loading hitch) just before the shofar cut: the film clock stands still, then runs on */
-const STALL_AT = cueT('shofar') - 1.0;
-const stalled = (t: number): number => (t < STALL_AT ? t : t < STALL_AT + 1.4 ? STALL_AT : t - 1.4);
+/** a picture stall (a loading hitch) of `len` s at film time `at`: the film clock stands still, then runs on */
+const stall = (at: number, len: number) => (t: number): number => (t < at ? t : t < at + len ? at : t - len);
+/** CUT v3: the blast that brings the picture in out of the black, and THE ROAR (film times from the sheet's beats) */
+const BLAST = beatTime('dust', 'shofar');
+const ROAR = beatTime('spear', 'roar');
+const STALL_AT = BLAST - 0.8;
+const STALL2_AT = ROAR - 0.6;
 
 const JOBS: Record<string, Job> = {
   film: { seconds: END_T + 7, script: filmCalls(straight) },
   'film-lite': { seconds: END_T + 7, lite: true, script: filmCalls(straight) },
-  'film-stall': { seconds: STALL_AT + 12, script: filmCalls(stalled) },
+  // a 1.4 s stall under the opening black (the blast must land on the late picture), and a 1.0 s stall before the roar
+  'film-stall': { seconds: STALL_AT + 8, script: filmCalls(stall(STALL_AT, 1.4)) },
+  'film-stall-roar': { seconds: STALL2_AT + 6, script: filmCalls(stall(STALL2_AT, 1.0)) },
   'film-skip': { seconds: cueT('saul') + 9, script: filmCalls(straight, cueT('saul') + 1) },
   // a seek (Intro.seek / ?introAt=): the film clock jumps from 5 s to the verdict - 2 s; the score must restart there
   'film-seek': { seconds: 14, script: filmCalls((t) => (t < 5 ? t : t + cueT('verdict') - 7)) },
-  'bed-heights': { seconds: 14, script: (e, t) => { if (t === 0) e.setAmbienceBed('heights', 0.5); } },
-  'bed-coast': { seconds: 14, script: (e, t) => { if (t === 0) e.setAmbienceBed('coast', 0.5); } },
   'bed-gilgal': { seconds: 14, script: (e, t) => { if (t === 0) e.setAmbienceBed('gilgal', 0.5); } },
   'bed-fields': { seconds: 14, script: (e, t) => { if (t === 0) e.setAmbienceBed('fields', 0.5); } },
   'sfx-cinematic': { seconds: 10, script: (e, t) => {
@@ -118,7 +118,7 @@ async function render(name: string): Promise<Record<string, unknown>> {
   a.download = name + '.wav';
   document.body.appendChild(a);
   a.click();
-  return { name, seconds: buf.duration, renderMs: Math.round(ms), peak, maxVoices, meanVoices: Math.round(sumVoices / Math.max(1, nV)), maxVoicesAt: Math.round(maxAt * 100) / 100, busy: busy.filter((_, i) => i % 4 === 0).slice(0, 40), sheet: INTRO_CUES === V2_CUES ? 'v2-fixture' : 'live', beats };
+  return { name, seconds: buf.duration, renderMs: Math.round(ms), peak, maxVoices, meanVoices: Math.round(sumVoices / Math.max(1, nV)), maxVoicesAt: Math.round(maxAt * 100) / 100, busy: busy.filter((_, i) => i % 4 === 0).slice(0, 40), sheet: 'live', beats };
 }
 
 (window as unknown as Record<string, unknown>).renderJob = render;
@@ -126,7 +126,8 @@ const shotMarks = (): Array<[number, string]> => INTRO_CUES.filter((c) => c.shot
 (window as unknown as Record<string, unknown>).marks = {
   film: [...shotMarks(), [END_T, 'END']],
   'film-lite': [...shotMarks(), [END_T, 'END']],
-  'film-stall': [...shotMarks().filter((m) => m[0] < STALL_AT + 12), [STALL_AT, 'STALL']],
+  'film-stall': [...shotMarks().filter((m) => m[0] < STALL_AT + 8), [STALL_AT, 'STALL'], [BLAST + 1.4, 'blast@late picture']],
+  'film-stall-roar': [...shotMarks().filter((m) => m[0] < STALL2_AT + 6), [STALL2_AT, 'STALL'], [ROAR + 1.0, 'roar@late picture']],
   'film-skip': [...shotMarks().filter((m) => m[0] < cueT('saul') + 9), [cueT('saul') + 1, 'SKIP']],
   'film-seek': [[5, 'SEEK'], [7, 'verdict']],
 };

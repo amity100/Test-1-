@@ -8,18 +8,18 @@ import { ARMY, roadZ, SAMUEL, SAMUEL_EXIT, SAUL_FACE, SAUL_HALT } from './gilgal
  * placeholder figures follow it, and the cast / crowd modules (src/film/cast/performances.ts, src/film/crowd/GilgalArmy)
  * drive their characters from it so camera and actors stay in register.
  *
- * CUT v2 (docs/intro-script-v2.md): every duration, slow-motion factor and BEAT is read from the shared timing contract
+ * CUT v3 (docs/intro-script-v3.md): every duration, slow-motion factor and BEAT is read from the shared timing contract
  * in src/content/introScript.ts (INTRO_SHOTS: the Gilgal takes 'dustWall' 'king' 'spearRaised' 'silence' 'tear'
- * 'tear:insert' 'verdict' 'saulAlone'); the numbers below are only the fallbacks of that contract.
- *   G1 dustWall    3.0  shofar 0 · horns 0.4 · card 0.6       the army marches out of the dust behind the king
- *   G2 king        4.5  slow motion 0.5 · card 0.8             Saul's stride, continuous
- *   G3 spearRaised 3.0  halt 0.3 · spearUp 0.8 · roar 1.1 (+0-0.4 stagger) · verse 1.3
- *   G4 silence     3.0  roarCut 0 · headsTurn 0.3 · part 0.8 · card 1.4 · step 2.2 (Samuel's step)
- *   G5 tear        2.0 + 2.5  ONE continuous action filmed in two takes: 'tear' (G5a, real time: turn 0.2 · lunge
- *                  0.9 · grip 1.6) and 'tear:insert' (G5b, slow motion 0.35: pull 0.2 · rip 0.6 · free 1.8, shot time
- *                  of the insert = blocking time - 2.0)
- *   G6 verdict     4.5  turnBack 0.4 · speech 0.9 .. speechEnd
- *   G7 saulAlone   2.0  lookDown 0.3 · tighten 1.2
+ * 'tear:insert' 'verdict' 'saulAlone'); the numbers below are only the fallbacks of that contract (= CUT v3).
+ *   G1 dustWall    5.5  timeCard 0.2 · shofar 1.5 (the picture) · horns 2.1 · card 2.8   the front rank out of the dust
+ *   G2 king        6.5  slow motion 0.5 (3.25 s of action) · card 1.0 · headTurn 3.6      Saul's stride, continuous
+ *   G3 spearRaised 5.0  halt 0.6 · spearUp 1.3 · roar 1.7 (+0-0.5 stagger) · verse 2.0     the roar held to the cut
+ *   G4 silence     4.0  roarCut 0 · headsTurn 0.4 · part 1.0 · card 1.6 · step 2.8 (Samuel's step)
+ *   G5 tear        4.0 + 5.0  ONE continuous action filmed in two takes: 'tear' (G5a, real time: turn 0.5 · lunge
+ *                  2.2 · grip 3.3) and 'tear:insert' (G5b, slow motion 0.35: pull 0.4 · rip 1.4 · free 3.6; blocking
+ *                  time of the insert = shot time + 4.0)
+ *   G6 verdict     6.0  turnBack 0.5 · speech 1.2 .. speechEnd 4.9, then the held silence
+ *   G7 saulAlone   3.0  lookDown 0.4 · tighten 1.8 · flash 2.75
  *
  * `timeScale` is the slow-motion factor of the action within a shot (1 = real time): animation clocks of the actors
  * advance by dt * timeScale (the camera moves in real time). `actionTime` is its integral.
@@ -39,12 +39,12 @@ function beats<T extends Record<string, number>>(take: string, fb: T): T {
 }
 
 /** G5: blocking time at which the insert (G5b, slow motion) takes over from the wide (G5a) */
-export const TEAR_INSERT_AT = dur('tear', 2.0);
+export const TEAR_INSERT_AT = dur('tear', 4.0);
 
 /** durations (s) of the blocking of each Gilgal shot ('tear' spans both takes G5a + G5b; faceOff / rise: unused) */
 export const SHOT_DURATION: Record<GilgalShotName, number> = {
-  dustWall: dur('dustWall', 3), king: dur('king', 4.5), spearRaised: dur('spearRaised', 3), silence: dur('silence', 3),
-  faceOff: 5, tear: TEAR_INSERT_AT + dur('tear:insert', 2.5), verdict: dur('verdict', 4.5), saulAlone: dur('saulAlone', 2), rise: 15,
+  dustWall: dur('dustWall', 5.5), king: dur('king', 6.5), spearRaised: dur('spearRaised', 5), silence: dur('silence', 4),
+  faceOff: 5, tear: TEAR_INSERT_AT + dur('tear:insert', 5), verdict: dur('verdict', 6), saulAlone: dur('saulAlone', 3), rise: 15,
 };
 
 /** script shot number of each camera shot */
@@ -54,17 +54,22 @@ export const SCRIPT_SHOT: Record<GilgalShotName, string> = {
 
 /** the timing contract's beats (shot seconds; 'tear': blocking time of the base shot, the insert's beats shifted) */
 export const BEATS = {
-  dustWall: beats('dustWall', { shofar: 0, horns: 0.4, card: 0.6 }),
-  king: beats('king', { card: 0.8 }),
-  spearRaised: beats('spearRaised', { halt: 0.3, spearUp: 0.8, roar: 1.1, roarSpread: 0.4, verse: 1.3 }),
-  silence: beats('silence', { roarCut: 0, headsTurn: 0.3, part: 0.8, card: 1.4, step: 2.2 }),
+  dustWall: beats('dustWall', { timeCard: 0.2, shofar: 1.5, horns: 2.1, card: 2.8 }),
+  king: beats('king', { card: 1.0, headTurn: 3.6 }),
+  spearRaised: beats('spearRaised', { halt: 0.6, spearUp: 1.3, roar: 1.7, roarSpread: 0.5, verse: 2.0 }),
+  silence: beats('silence', { roarCut: 0, headsTurn: 0.4, part: 1.0, card: 1.6, step: 2.8 }),
   tear: (() => {
-    const a = beats('tear', { turn: 0.2, lunge: 0.9, grip: 1.6 });
-    const b = beats('tear:insert', { pull: 0.2, rip: 0.6, free: 1.8 });
+    const a = beats('tear', { turn: 0.5, lunge: 2.2, grip: 3.3 });
+    const b = beats('tear:insert', { pull: 0.4, rip: 1.4, free: 3.6 });
     return { ...a, pull: TEAR_INSERT_AT + b.pull, rip: TEAR_INSERT_AT + b.rip, free: TEAR_INSERT_AT + b.free };
   })(),
-  verdict: beats('verdict', { turnBack: 0.4, speech: 0.9, speechEnd: 4.04 }),
-  saulAlone: beats('saulAlone', { lookDown: 0.3, tighten: 1.2, flash: 1.75 }),
+  verdict: beats('verdict', { turnBack: 0.5, speech: 1.2, speechEnd: 4.9 }),
+  saulAlone: beats('saulAlone', { lookDown: 0.4, tighten: 1.8, flash: 2.75 }),
+};
+/** shot lengths of the Gilgal takes (s) — the performances keep every action alive to these cuts */
+export const SHOT_LEN = {
+  dustWall: dur('dustWall', 5.5), king: dur('king', 6.5), spearRaised: dur('spearRaised', 5), silence: dur('silence', 4),
+  tear: TEAR_INSERT_AT, insert: dur('tear:insert', 5), verdict: dur('verdict', 6), saulAlone: dur('saulAlone', 3),
 };
 
 export interface ActorState {
@@ -161,32 +166,97 @@ export const SAMUEL_STEP = SAMUEL.pos.clone().add(new THREE.Vector3(-0.55, 0, 0)
 /** Saul's mark at the start of the tear: 1.7 m west of Samuel, facing him */
 export const SAUL_TEAR = new THREE.Vector3(SAMUEL_STEP.x - 1.7, 0, SAUL_FACE.pos.z);
 /**
- * Samuel's way in the tear: the turn-step to his left (Rocketbox m_turn_left_180_to_walk, root motion) carries him
- * east and a little south (m from SAMUEL_STEP), then — the corner seized — he strides on ESE, held back to a slow pace
- * (SAM_HELD m/s of action time) until the wool gives, a walking pace after it (measured on the performance, perf v6)
+ * G3, the halt: Saul plays Rocketbox m_walk_stop ('walk_stop_rb') in place, started so that its final plant (both feet
+ * down, clip STOP_PLANT s) lands on `halt` + HALT_PLANT; the blocking moves him along the clip's own root curve (clip
+ * seconds -> metres forward, measured from the clip file) times his mocap scale, onto SAUL_HALT — no foot sliding.
  */
-const SAM_AWAY = 0.7;
-const SAM_AWAY_Z = 0.26;
-const SAM_TURN_X = 0.64;
-const SAM_TURN_Z = 0.22;
-const SAM_HELD = 0.4;
-const SAM_FREED = 0.72;
-const SAM_WAY = new THREE.Vector3(0.85, 0, 0.5);
-/** Saul's travel from his mark to his knee behind the corner (m, east / south: on the old man's south side; perf v6:
- * he stays on that knee — the pull is in his body and arm, the knee does not slide) */
-const SAUL_LUNGE = 1.41;
-const SAUL_LUNGE_Z = 0.23;
+export const HALT_PLANT = 0;
+export const STOP_PLANT = 1.13;
+const STOP_CURVE: [number, number][] = [
+  [0.4, 0.413], [0.5, 0.535], [0.6, 0.655], [0.7, 0.769], [0.8, 0.873], [0.9, 0.965], [1.0, 1.044], [1.1, 1.11], [1.2, 1.162],
+  [1.3, 1.203], [1.4, 1.234], [1.5, 1.257], [1.6, 1.273], [1.7, 1.284], [1.8, 1.291], [1.9, 1.296], [2.0, 1.298], [2.034, 1.298],
+];
+/** mocap scales of the two hero actors ((thigh + shin) / 0.8969 of the MakeHuman presets, MocapPlayer.scale) */
+export const SAUL_MOCAP_SCALE = 1.174;
+export const SAMUEL_MOCAP_SCALE = 0.89;
+function stopCurve(u: number) {
+  const C = STOP_CURVE;
+  if (u <= C[0][0]) return C[0][1] - (C[0][0] - u) * 1.2;
+  for (let i = 0; i < C.length - 1; i++) if (u <= C[i + 1][0]) return C[i][1] + (C[i + 1][1] - C[i][1]) * (u - C[i][0]) / (C[i + 1][0] - C[i][0]);
+  return C[C.length - 1][1];
+}
+/**
+ * Samuel's turn-step in the tear (Rocketbox m_turn_left_180_to_walk = 'turn_go_L', root motion measured from the clip
+ * file): clip seconds -> [east m, south m, yaw rad added to his facing west] for his mark facing west
+ */
+const TURN_STEP: [number, number, number, number][] = [
+  [0, 0, 0, 0], [0.133, 0.026, -0.012, 8.4], [0.267, 0.062, -0.023, 18.8], [0.4, 0.109, -0.032, 31.1], [0.533, 0.167, -0.035, 44.7],
+  [0.667, 0.237, -0.029, 59.6], [0.8, 0.318, -0.012, 75.6], [0.933, 0.409, 0.017, 92.3], [1.067, 0.507, 0.058, 109.0],
+  [1.2, 0.61, 0.107, 124.4], [1.333, 0.712, 0.163, 137.6], [1.467, 0.808, 0.218, 147.7], [1.6, 0.891, 0.267, 154.8], [1.633, 0.909, 0.278, 156.1],
+];
+function turnStep(u: number): [number, number, number] {
+  const T = TURN_STEP;
+  if (u <= 0) return [0, 0, 0];
+  for (let i = 0; i < T.length - 1; i++) {
+    if (u <= T[i + 1][0]) {
+      const k = (u - T[i][0]) / (T[i + 1][0] - T[i][0]);
+      return [T[i][1] + (T[i + 1][1] - T[i][1]) * k, T[i][2] + (T[i + 1][2] - T[i][2]) * k, THREE.MathUtils.degToRad(T[i][3] + (T[i + 1][3] - T[i][3]) * k)];
+    }
+  }
+  const l = T[T.length - 1];
+  return [l[1], l[2], THREE.MathUtils.degToRad(l[3])];
+}
+/** clip seconds of the turn-step before the slow walk takes over (its last step; the walk is phase-matched) */
+export const SAM_TURN_CUT = 1.5;
+/** Samuel's heading once he walks away (ESE along the road, away from the king; game yaw) */
+export const SAM_AWAY_YAW = 1.15;
+const SAM_DIR = new THREE.Vector3(Math.sin(SAM_AWAY_YAW), 0, Math.cos(SAM_AWAY_YAW));
+/** his pace (m/s of action time): walking away (an old man's walk), held back by the corner (grip -> free), freed */
+export const SAM_PACE = 0.5;
+export const SAM_HELD = 0.25;
+export const SAM_FREED = 0.72;
+/** he stops this long (action s) after `free` */
+export const SAM_STOP = 0.45;
+/** metres walked after the turn-step by action time `at` (the pace profile above) */
+function samuelWalk(at: number) {
+  const A = TEAR_ACTION;
+  const seg = (a: number, b: number) => Math.max(0, Math.min(at, b) - a);
+  const t1 = A.turn + SAM_TURN_CUT;
+  return seg(t1, Math.max(t1, A.grip)) * SAM_PACE + seg(Math.max(t1, A.grip), A.free) * SAM_HELD + seg(A.free, A.free + SAM_STOP) * SAM_FREED;
+}
+/** Saul's pleading walk after him before the lunge (m east / south of SAUL_TEAR): two steps, the arm out */
+const SAUL_PLEAD = 0.9;
+const SAUL_PLEAD_Z = 0.08;
+/**
+ * G5: Saul on his knee behind the corner — his root `back` m behind the grip (along his facing) and `side` m to its
+ * left, so the right arm is stretched down-forward to it (measured on the performance, perf v6)
+ */
+export const TEAR_KNEEL = { back: 0.74, side: 0.2 };
+let kneelMark: THREE.Vector3 | null = null;
+/** where Saul's knee goes down (blocking estimate: the corner at `grip`, TEAR_KNEEL behind it; he faces east) */
+function tearKneelMark() {
+  if (!kneelMark) {
+    const sm = samuelAt('tear', BEATS.tear.grip).pos;
+    kneelMark = new THREE.Vector3(sm.x + CORNER_OFF.x - TEAR_KNEEL.back, 0, sm.z + CORNER_OFF.z - TEAR_KNEEL.side);
+  }
+  return kneelMark;
+}
 /** the lower corner of the me'il (the grab point) relative to samuelAt('tear', t).pos until the grip (his SOUTH side,
  * knee-low; measured on the performance, perf v6) */
 const CORNER_OFF = { x: -0.26, y: 0.54, z: 0.18 };
 /**
- * Saul's fist on the corner at the FIRST frame of the insert (blocking time TEAR_INSERT_AT = 2.0), relative to
- * samuelAt('tear', TEAR_INSERT_AT).pos (measured on the performance, perf v6: the fist ≈ (11.81, 0.55, 0.81) on flat
- * ground). `pullY`: how far the fist rises by the end of the insert (perf v6: he hauls the corner up and back — +0.26 m
- * by `rip` — then the recoil once the corner is free).
+ * Saul's fist on the corner at the FIRST frame of the insert (blocking time TEAR_INSERT_AT), relative to
+ * samuelAt('tear', TEAR_INSERT_AT).pos: the fist holds the corner where it closed at `grip` (the pull starts in the
+ * insert) while the old man, held back, has walked on a little (CUT v3: x ≈ -0.42, z ≈ 0.11; perf v6 measured -0.39 /
+ * 0.12 on the performance). `pullY`: how far the fist rises by the end of the insert (perf v6: he hauls the corner up
+ * and back — +0.26 m by `rip` — then the recoil once the corner is free).
  * The fist stays with Saul, not with Samuel's walk: for its path through the whole tear use tearGrip(t).
  */
-export const TEAR_GRIP = { x: -0.39, y: 0.55, z: 0.12, pullY: 0.4 };
+export const TEAR_GRIP = (() => {
+  const g = samuelAt('tear', BEATS.tear.grip).pos;
+  const i = samuelAt('tear', TEAR_INSERT_AT).pos;
+  return { x: g.x + CORNER_OFF.x - i.x, y: CORNER_OFF.y, z: g.z + CORNER_OFF.z - i.z, pullY: 0.4 };
+})();
 
 function alongExit(d: number) {
   const pts = SAMUEL_EXIT;
@@ -201,8 +271,9 @@ function alongExit(d: number) {
 /** Saul's feet after the tear (verdict, alone): risen from his knee, a step back from where he knelt, facing the old
  * man (the same mark as in cut v2 — cut4's G6 / G7 cameras are built on it) */
 const saulAfter = () => SAUL_TEAR.clone().add(new THREE.Vector3(1.07, 0, 0.15));
-/** Samuel's feet after the tear (verdict) */
-const samuelAfter = () => SAMUEL_STEP.clone().add(new THREE.Vector3(SAM_AWAY + 0.08, 0, SAM_AWAY_Z * 0.5));
+/** Samuel's feet after the tear (verdict): the mark of cut v2 (cut4's G6 camera is built on it; the cut from G5b is a
+ * new angle — the old man has turned back toward the king) */
+const samuelAfter = () => SAMUEL_STEP.clone().add(new THREE.Vector3(0.78, 0, 0.13));
 
 export function saulAt(shot: GilgalShotName, t: number): ActorState {
   const at = actionTime(shot, t);
@@ -212,19 +283,26 @@ export function saulAt(shot: GilgalShotName, t: number): ActorState {
     case 'spearRaised': {
       // the last step of the halt: decelerating from the march onto his mark by `halt`
       const B = BEATS.spearRaised;
-      const u = Math.min(1, at / Math.max(0.05, B.halt + 0.25));
-      const d = MARCH_SPEED * (B.halt + 0.25) * 0.5;
-      return { pos: onRoad(SAUL_HALT.x - d * (1 - u) * (1 - u)), yaw: Math.PI / 2, walk: MARCH_SPEED * (1 - u), cue: ss(B.spearUp - 0.12, B.spearUp + 0.38, at), action: 'halts; thrusts the spear to the sky with his whole body; roars' };
+      const t0 = Math.max(0, STOP_PLANT - B.halt - HALT_PLANT);
+      const d = SAUL_MOCAP_SCALE * (stopCurve(2.034) - stopCurve(t0 + at));
+      return { pos: onRoad(SAUL_HALT.x - d), yaw: Math.PI / 2, walk: at < B.halt + HALT_PLANT ? MARCH_SPEED * (1 - at / (B.halt + HALT_PLANT)) : 0, cue: ss(B.spearUp - 0.12, B.spearUp + 0.38, at), action: 'halts; thrusts the spear to the sky with his whole body; roars' };
     }
-    case 'silence': return { pos: onRoad(SAUL_HALT.x), yaw: Math.PI / 2, walk: 0, cue: 1 - ss(0.35, 1.7, at), action: 'the roar dies; the spear comes down; he sees the old man in the road' };
+    case 'silence': {
+      const B = BEATS.silence;
+      return { pos: onRoad(SAUL_HALT.x), yaw: Math.PI / 2, walk: 0, cue: 1 - ss(B.headsTurn - 0.05, B.part + 0.9, at), action: 'the roar dies; the spear comes down; he sees the old man in the road' };
+    }
     case 'faceOff': return { pos: SAUL_FACE.pos.clone(), yaw: SAUL_FACE.yaw, walk: 0, cue: 0, action: 'face to face with Samuel' };
     case 'tear': {
       const A = TEAR_ACTION;
-      // a reaction step as the old man turns, the lunge down onto his LEFT knee behind the corner; he pulls with his
-      // body from that knee (the root stays)
-      const go = 0.25 * ss(A.turn + 0.15, A.lunge, at) + 0.75 * ss(A.lunge - 0.05, A.grip, at);
-      const x = SAUL_TEAR.x + SAUL_LUNGE * go;
-      return { pos: new THREE.Vector3(x, 0, SAUL_TEAR.z + SAUL_LUNGE_Z * go), yaw: Math.PI / 2, walk: at > A.turn && at < A.lunge ? 1.6 : 0, cue: ss(A.lunge, A.free, at), action: 'lunges after him onto one knee, seizes the corner of the me\'il, pulls — it tears' };
+      // CUT v3 (perf v7): he pleads after the old man — a slow walk of two steps, the arm out (turn+0.35 .. lunge) —
+      // then rushes (lunge .. +0.55) and drops onto his LEFT knee behind the corner (.. grip); he pulls with his body
+      // from that knee (the root stays)
+      const plead = ss(A.turn + 0.35, A.lunge - 0.05, at);
+      const go = 0.75 * ss(A.lunge - 0.05, A.lunge + 0.55, at) + 0.25 * ss(A.lunge + 0.5, A.grip - 0.08, at);
+      const p = SAUL_TEAR.clone().add(new THREE.Vector3(SAUL_PLEAD * plead, 0, SAUL_PLEAD_Z * plead));
+      p.lerp(tearKneelMark(), go);
+      const walk = at > A.turn + 0.35 && at < A.lunge - 0.05 ? 0.7 : at >= A.lunge - 0.05 && at < A.lunge + 0.55 ? 1.5 : 0;
+      return { pos: p, yaw: Math.PI / 2, walk, cue: ss(A.lunge, A.free, at), action: 'pleads after him; lunges onto one knee, seizes the corner of the me\'il, pulls — it tears' };
     }
     case 'verdict': return { pos: saulAfter(), yaw: Math.PI / 2, walk: 0, cue: 1, action: 'holds the torn piece; listens' };
     case 'saulAlone':
@@ -245,13 +323,21 @@ export function samuelAt(shot: GilgalShotName, t: number): ActorState {
     }
     case 'tear': {
       const A = TEAR_ACTION;
-      // the turn to go (to his LEFT: toward the south / the camera side), the turn-step away east, then — held by the
-      // corner — a slow stride on ESE until the wool gives, a walking pace after it
-      const turn = ss(A.turn, A.turn + 1.2, at);
-      const away = ss(A.turn + 0.25, A.grip, at);
-      const held = Math.max(0, Math.min(at, A.free) - A.grip) * SAM_HELD + Math.max(0, at - A.free) * SAM_FREED;
-      const p = SAMUEL_STEP.clone().add(new THREE.Vector3(SAM_TURN_X * away, 0, SAM_TURN_Z * away)).addScaledVector(SAM_WAY, held);
-      return { pos: p, yaw: SAMUEL.yaw + (156 * Math.PI / 180) * turn, walk: at > A.turn + 0.25 ? (at < A.grip ? 0.7 : at < A.free ? SAM_HELD : SAM_FREED) : 0, cue: turn, action: 'turns to go (15:27); the corner of his robe is seized and tears' };
+      // the old man's turn-step to his LEFT (toward the south / the camera side; the capture's own root motion, measured:
+      // TURN_STEP), then a slow walk away ESE (SAM_PACE) until the corner is seized; held back by it (SAM_HELD) until
+      // the wool gives, one more stride (SAM_FREED), and he stops (CUT v3, perf v7)
+      if (at < A.turn) return { pos: SAMUEL_STEP.clone(), yaw: SAMUEL.yaw, walk: 0, cue: 0, action: 'stands; Saul pleads (15:24-26)' };
+      const u = at - A.turn;
+      if (u < SAM_TURN_CUT) {
+        const [e, so, y] = turnStep(u);
+        return { pos: SAMUEL_STEP.clone().add(new THREE.Vector3(e * SAMUEL_MOCAP_SCALE, 0, so * SAMUEL_MOCAP_SCALE)), yaw: SAMUEL.yaw + y, walk: 0.55, cue: ss(0, SAM_TURN_CUT, u), action: 'turns to go (15:27)' };
+      }
+      const [e, so, y] = turnStep(SAM_TURN_CUT);
+      const d = samuelWalk(at);
+      const yaw = SAMUEL.yaw + y + (SAM_AWAY_YAW - SAMUEL.yaw - y) * Math.min(1, (u - SAM_TURN_CUT) / 0.5);
+      const pos = SAMUEL_STEP.clone().add(new THREE.Vector3(e * SAMUEL_MOCAP_SCALE + SAM_DIR.x * d, 0, so * SAMUEL_MOCAP_SCALE + SAM_DIR.z * d));
+      const walk = at < A.grip ? SAM_PACE : at < A.free ? SAM_HELD : at < A.free + SAM_STOP ? SAM_FREED : 0;
+      return { pos, yaw, walk, cue: 1, action: 'walks away; the corner of his robe is seized and tears' };
     }
     case 'verdict': {
       // held back half-turned, he turns back to the king at `turnBack`
@@ -286,7 +372,7 @@ export function armyAt(shot: GilgalShotName, t: number): ArmyState {
     case 'silence': {
       const B = BEATS.silence;
       // (perf v6, cut4: the files nearest the lens lane step aside 1-2 m between `part` and 2.2 s)
-      return { frontX: SAUL_HALT.x, walk: 0, raise: 1 - ss(B.headsTurn + 0.1, B.part + 0.9, at), part: ss(B.part, Math.max(B.part + 0.8, B.step), at), turn: ss(B.headsTurn, B.headsTurn + 0.6, at) };
+      return { frontX: SAUL_HALT.x, walk: 0, raise: 1 - ss(B.headsTurn + 0.1, B.part + 0.9, at), part: ss(B.part, Math.max(B.part + 0.8, B.step - 0.2), at), turn: ss(B.headsTurn, B.headsTurn + 0.6, at) };
     }
     default: return { frontX: SAUL_HALT.x, walk: 0, raise: 0, part: 1, turn: 1 };
   }

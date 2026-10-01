@@ -265,6 +265,14 @@ the same in-house Web Audio synthesis, keyed to the named beats of `src/content/
 horns in G1 follow visual-bible 3.4 (horns lifted and blown by the men of the front rank); the silence after the roar
 keeps only the wind and the far spoil (15:14). Levels, spectrograms and MP3 previews: `dev/screens/score3/`.
 
+**CUT v3 (60 s, six scenes, no prologue) — the score re-composed again (*score4*: `src/audio/IntroScore.ts`,
+`FilmSound.ts`, `dev/score*`).** Still **no third-party audio, samples or code** — the same in-house Web Audio
+synthesis, keyed to the named beats of `src/content/introScript.ts`: the black with its low air and the time card's
+bloom, the shofar ON the picture, Saul's theme across the slow motion, the build and the roar held to the hard cut,
+the silence, the tear, the verdict, the falling cello, David's 10 s, the birds falling silent, the hook and the title.
+The prologue's music and its coast/Philistine generators were removed. Levels, hit timing, spectrograms and MP3
+previews: `dev/screens/score4/`.
+
 ## Wardrobe & hair polish pass — `src/characters/wardrobe/`, `src/characters/hair/`, `tools/wardrobe/gen_textures.py`, `dev/wardrobe*`
 
 No new third-party assets or code. Everything in this pass is original work, generated at load time or by the

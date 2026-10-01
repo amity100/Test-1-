@@ -257,11 +257,12 @@ export class UI {
 
   // ------------------------------------------------------------------------------ opening-film typography
   /**
-   * One text event of the opening film (CUT v2, docs/intro-script-v2.md "On-screen text"), on its own element over the
-   * canvas (never tied to the canvas crossfades). The text itself comes from src/content/introNarration.ts or, for
+   * One text event of the opening film (the typography of docs/intro-script-v2.md "On-screen text"; CUT v3 has seven of
+   * them, docs/intro-script-v3.md), on its own element over the canvas (never tied to the canvas crossfades). The text itself comes from src/content/introNarration.ts or, for
    * 'verse', from the catalog helpers of src/content/sources.ts — it is only split into words, never changed.
-   *  - 'time'    the time card: centred, large, light serif; resolves out of a soft blur while the tracking closes
-   *              (0.6em -> 0.28em over 2.5 s), a faint bloom; melts away at the end
+   *  - 'time'    the time card: centred, large, light serif, calm — over black, then carried over the first image;
+   *              resolves out of a soft blur while the tracking closes (0.5em -> 0.26em over 2.8 s), a faint bloom;
+   *              melts away at the end
    *  - 'place'   a place card in the negative space: a soft mask wipe from the right (RTL), a gold rule grows under it
    *  - 'person'  `main` = the name, very large in a gold-to-cream metal gradient with one light sweep; `sub` = the
    *              title under it, small and letter-spaced
@@ -302,35 +303,6 @@ export class UI {
     if (autoRemove) window.setTimeout(() => e.remove(), Math.max(0.1, dur - elapsed) * 1000 + 300);
     return e;
   }
-  /**
-   * P1+P2 (the flight): soft cloud wisps rushing past the lens — low over the deck while the lens skims it, then from
-   * every side as it dives through (a pale veil at the heart of the deck). Clipped to the picture (inside --lb), under
-   * the film texts, pure CSS (times = seconds from the start of the flight; `elapsed` = seconds already played).
-   * Removes itself after ~4.2 s unless `autoRemove` is false (the test clock pins it). Returns the element.
-   */
-  filmWisps(elapsed = 0, autoRemove = true): HTMLDivElement {
-    // [delay, duration, x0, y0, x1, y1 (vw / vh), rotation (deg), peak opacity]
-    const W: [number, number, number, number, number, number, number, number][] = [
-      [1.15, 0.62, -6, 10, -62, 44, -8, 0.3],
-      [1.55, 0.58, 7, 12, 66, 46, 10, 0.34],
-      [1.95, 0.55, -3, 14, -40, 52, -4, 0.36],
-      [2.3, 0.5, 9, 9, 70, 40, 12, 0.4],
-      [2.58, 0.46, -10, -2, -72, -10, -16, 0.46],
-      [2.72, 0.44, 8, -6, 70, -30, 18, 0.5],
-      [2.86, 0.42, -4, 6, -58, 42, -6, 0.52],
-      [3.0, 0.42, 5, -9, 50, -44, 8, 0.5],
-      [3.14, 0.44, -8, 3, -74, 22, -12, 0.46],
-      [3.3, 0.48, 6, 8, 64, 40, 6, 0.4],
-      [3.5, 0.55, -2, -4, -30, -40, -3, 0.3],
-    ];
-    const e = el('div', 'film-wisps');
-    e.innerHTML = W.map(([d, du, x0, y0, x1, y1, r, o]) => `<i class="wisp" style="--wdel:${d}s;--wd:${du}s;--x0:${x0}vw;--y0:${y0}vh;--x1:${x1}vw;--y1:${y1}vh;--r:${r}deg;--wo:${o}"></i>`).join('') + '<i class="wisp-veil"></i>';
-    this.root.insertBefore(e, this.filmLayer);
-    if (elapsed > 0) for (const a of e.getAnimations({ subtree: true })) a.currentTime = elapsed * 1000;
-    if (autoRemove) window.setTimeout(() => e.remove(), Math.max(0.1, 4.3 - elapsed) * 1000);
-    return e;
-  }
-
   /** the title card element (the film pins its animations to the film clock in tests) */
   get titleElement(): HTMLElement {
     return this.titleEl;

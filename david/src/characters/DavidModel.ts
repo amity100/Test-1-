@@ -9,6 +9,7 @@ import type { Expression, FingerPose } from './human/HumanRig';
 import { createGroom, type Groom } from './hair';
 import { dressDavid, attachProp, type Outfit, type Prop } from './wardrobe';
 import { MocapLibrary, MocapPose, type MocapClip } from './mocap';
+import { INTRO_SHOTS } from '../content/introScript';
 
 /*
  * Young David — "וְהוּא אַדְמוֹנִי עִם־יְפֵה עֵינַיִם וְטוֹב רֹאִי" (1 Sam 16:12): ruddy, with beautiful eyes, handsome;
@@ -64,12 +65,16 @@ export interface DavidParts {
 
 /** film performances for the opening film (docs/intro-script.md shots 15-17), see DavidModel.performFilm */
 export type FilmShot = 'back' | 'reveal' | 'wide';
+/** CUT v3 contract (src/content/introScript.ts): D1's length (the 'back' performance is timed to it) and D2's `turn` */
+const FILM_BACK_LEN = INTRO_SHOTS.find((s) => s.take === 'figure')?.dur ?? 6;
+const FILM_TURN_AT = INTRO_SHOTS.find((s) => s.take === 'face')?.beats?.turn ?? 0.8;
 export interface FilmOptions {
   /** world point he turns to in 'reveal' (usually the camera); default: 3 m to his right-front at eye height */
   look?: THREE.Vector3 | null;
   /** hair / cloth wind multiplier (default back 1.8, reveal 1.4, wide 1.6) */
   wind?: number;
-  /** 'reveal': when the head turn starts (s into the shot, default 0.9) and how long it takes (default 2.2 s) */
+  /** 'reveal': when the head turn starts (s into the shot, default: the contract's D2 beat `turn`, CUT v3 0.8) and how
+   *  long it takes (default 2.2 s) */
   turnAt?: number;
   turnDur?: number;
   /** face after the turn (default 'neutral': calm; e.g. 'smile' with moodWeight 0.1 for a hint of warmth) */
@@ -1358,7 +1363,7 @@ export class DavidModel {
     const f = this.film;
     const wind = o.wind ?? (shot === 'back' ? 1.8 : shot === 'reveal' ? 1.4 : 1.6);
     if (!f || f.shot !== shot) {
-      this.film = { shot, t, look: o.look ?? null, wind, turnAt: o.turnAt ?? 0.9, turnDur: o.turnDur ?? 2.2, mood: o.mood ?? 'neutral', moodW: o.moodWeight ?? 0.12, blinked: false, offLens: o.offLens ?? 0.38 };
+      this.film = { shot, t, look: o.look ?? null, wind, turnAt: o.turnAt ?? FILM_TURN_AT, turnDur: o.turnDur ?? 2.2, mood: o.mood ?? 'neutral', moodW: o.moodWeight ?? 0.12, blinked: false, offLens: o.offLens ?? 0.38 };
       this.filmBlink2 = -1; // a second blink pending from an earlier (skipped / replayed) shot never fires early
       if (shot !== 'reveal') this.filmTurn = 0;
     } else {
@@ -1387,23 +1392,31 @@ export class DavidModel {
     if (f.shot !== 'reveal') {
       this.mood = null;
       if (f.shot === 'back') {
-        // D1 (cut v2): alive on the rock — the weight goes over onto the staff and settles, the head follows the flock
-        // grazing on the slope below (down and across), the free hand comes up to the sling at his belt and back
-        const u = f.t;
-        const shift = smooth01((u - 0.4) / 1.4) - 0.55 * smooth01((u - 2.6) / 1.3);
+        // D1 (CUT v3, 6 s): alive on the rock through the whole take — the weight goes over onto the staff and settles,
+        // the head follows the flock grazing on the slope below (down and across), the free hand comes up to the sling
+        // at his belt and back down, the weight shifts again, and late in the take his head turns a little further
+        // down the slope (a lamb straying toward the thicket: H1); two blinks. Timed for the contract's D1 length.
+        const u = (f.t * 6) / FILM_BACK_LEN;
+        const shift = smooth01((u - 0.4) / 1.6) - 0.55 * smooth01((u - 3.3) / 1.4) + 0.4 * smooth01((u - 4.9) / 1.1);
         m.add('hipsX', 0.034 * shift);
         m.add('hips', 0, 0, 0.045 * shift);
         m.add('spine', 0, 0, -0.03 * shift);
         m.add('chest', 0, 0, -0.018 * shift);
-        const follow = -0.28 + 0.5 * smooth01((u - 0.3) / 2.2) - 0.12 * smooth01((u - 2.8) / 1.0);
-        m.add('head', 0.1 + 0.03 * Math.sin(u * 0.9), follow * 0.55, 0);
-        m.add('neck', 0.05, follow * 0.35, 0);
-        const hand = smooth01((u - 1.9) / 0.45) * (1 - smooth01((u - 3.1) / 0.5));
+        const follow = -0.28 + 0.5 * smooth01((u - 0.3) / 2.6) - 0.16 * smooth01((u - 3.2) / 1.3) + 0.2 * smooth01((u - 4.7) / 1.0);
+        const down = 0.03 * smooth01((u - 4.7) / 1.0);
+        m.add('head', 0.1 + down + 0.03 * Math.sin(u * 0.9), follow * 0.55, 0.015 * Math.sin(u * 0.6));
+        m.add('neck', 0.05 + down * 0.5, follow * 0.35, 0);
+        const hand = smooth01((u - 2.1) / 0.5) * (1 - smooth01((u - 3.7) / 0.55));
         m.add('uaR', -0.16 * hand, 0, 0.05 * hand);
         m.add('faR', -0.55 * hand, 0.2 * hand, 0);
         m.add('hdR', 0.25 * hand, 0, 0);
         if (!f.blinked && u > 1.3) {
           f.blinked = true;
+          this.filmBlink2 = 4.5 * FILM_BACK_LEN / 6;
+          rig.blink();
+        }
+        if (this.filmBlink2 > 0 && f.t > this.filmBlink2) {
+          this.filmBlink2 = -1;
           rig.blink();
         }
       }
@@ -1436,6 +1449,9 @@ export class DavidModel {
     m.add('neck', pitch * 0.35 * k, yaw * 0.3 * k, 0);
     m.add('chest', 0, yaw * 0.16 * ks, 0);
     m.add('spine', 0, yaw * 0.1 * ks, 0);
+    // settled (CUT v3: D2 holds ~1 s after the turn): the head never parks — a slow drift with the breath
+    const held = clamp((f.t - f.turnAt - f.turnDur * 0.85) / 0.6, 0, 1);
+    m.add('head', 0.012 * Math.sin(f.t * 0.9) * held, 0.018 * Math.sin(f.t * 0.55 + 0.7) * held, 0);
     // the eyes lead the head by ~0.3 s; a blink as the turn begins, and one more as the eyes settle (not a stare)
     this.filmEyes = f.t > f.turnAt - 0.3 ? look : null;
     if (!f.blinked && f.t > f.turnAt + 0.05) {

@@ -11,9 +11,15 @@ import { INTRO_SHOTS, type FilmSetName } from '../content/introScript';
 import { baseTake, FILM_CAM, gilgalCam, gilgalFocus, landCam, SUN_CHEAT, takeExposure, TAKE_OFFSET, type GilgalCtx, type LandCamCtx } from './FilmCams';
 
 /**
- * THE FILM STAGE of the opening film (CUT v2: docs/intro-script-v2.md): every film-only set, crowd and actor, built behind the
- * loading screen and disposed set by set as the film leaves it (phones!). This module is imported lazily (it pulls in
- * src/film/land, src/film/gilgal, src/film/cast and src/film/crowd through dynamic imports only).
+ * THE FILM STAGE of the opening film: the film-only sets, crowds and actors the shot sheet (INTRO_SHOTS) films in, built
+ * behind the loading screen and disposed set by set as the film leaves it (phones!). This module is imported lazily (it
+ * pulls in src/film/gilgal, src/film/cast and src/film/crowd — and src/film/land only if a cut films there — through
+ * dynamic imports only).
+ *
+ * CUT v3 (docs/intro-script-v3.md, 60 s, no prologue): the film is shot at Gilgal and in the game world only, so the
+ * stage builds ONLY the Gilgal set with its cast (Saul, Samuel, the armour-bearer) and its army. The prologue's land
+ * sets (judah / coast / ramah), the Philistine host, the Ramah elders and the land DEM tiles are not built (their code
+ * paths stay, gated by the sheet: a future cut that films there builds them again).
  *
  *   const stage = await FilmStage.load(engine, { onProgress });
  *   stage.sets.gilgal?.view                     ViewSpec for engine.setView
@@ -21,19 +27,23 @@ import { baseTake, FILM_CAM, gilgalCam, gilgalFocus, landCam, SUN_CHEAT, takeExp
  *   stage.sets.gilgal?.enter(take)              on every cut into the set
  *   stage.sets.gilgal?.tick(take, t, dt)        per frame before engine.render (set beat, crowd, actors)
  *   stage.sets.gilgal?.focus(take, t)           DoF target
- *   stage.release('coast')                      dispose a set when the film is done with it; stage.dispose() = all
+ *   stage.release('gilgal')                     dispose a set when the film is done with it; stage.dispose() = all
  *
  * ACTOR SLOTS (FilmActor per role; the cast / crowd teammates' modules drop in here — a failed or missing module falls
  * back to the set's own placeholders so the cut always plays):
  *   gilgal: saul, samuel (hero), armourBearer (desktop) -> GilgalPerformance; the army -> GilgalArmy
- *   ramah:  samuel ('near' LOD, own instance), elders (crowd LOD, 6 / 4 / 3 per tier) -> RamahPerformance
- *   coast:  the Philistine host -> PhilistineHost (column mode on the set's road)
+ *   (unused by CUT v3) ramah: samuel + elders -> RamahPerformance; coast: the Philistine host -> PhilistineHost
  *
- * CAMERAS (cut3): every take is filmed by src/film/FilmCams.ts (landCam: 'flight' / 'glint' / 'elders'; gilgalCam:
- * the eight Gilgal takes incl. 'tear:insert') with the set's own move as a fallback; per-take exposure multiplies
- * the set's exposure (FilmCams.TAKE_LOOK). Test only: ?filmsets=judah,gilgal builds just those sets.
+ * CAMERAS: every take is filmed by src/film/FilmCams.ts (gilgalCam: the eight Gilgal takes incl. 'tear:insert'; landCam
+ * for the land takes) with the set's own move as a fallback; per-take exposure multiplies the set's exposure
+ * (FilmCams.TAKE_LOOK). Test only: ?filmsets=gilgal builds just those of the used sets.
  */
 export type FilmStageSet = Exclude<FilmSetName, 'black' | 'world'>;
+
+/** the film sets the shot sheet actually films in (CUT v3: only 'gilgal') */
+export const USED_SETS: ReadonlySet<FilmStageSet> = new Set(
+  INTRO_SHOTS.map((s) => s.set).filter((n): n is FilmStageSet => n !== 'black' && n !== 'world'),
+);
 
 export interface FilmFocus {
   point: THREE.Vector3;
@@ -113,7 +123,10 @@ export class FilmStage {
 
   private constructor(private readonly engine: Engine) {}
 
-  /** Build every film set (+ crowds and actors) and pre-compile its view. Never rejects: a failed set is left out. */
+  /**
+   * Build the film sets the shot sheet uses (+ their crowds and actors) and pre-compile their views. Never rejects: a
+   * failed set is left out (its shots fall back to a world vista, the cut keeps its timing).
+   */
   static async load(engine: Engine, o: FilmStageOptions = {}): Promise<FilmStage> {
     const t0 = performance.now();
     const stage = new FilmStage(engine);
@@ -122,32 +135,39 @@ export class FilmStage {
     const wantCrowd = o.crowd !== false;
     const q = engine.quality;
     const low = q.name === 'low';
-    // budget of the loading bar per step
-    const steps = { judah: 0.14, coast: 0.14, ramah: 0.16, gilgal: 0.4, compile: 0.16 };
+    const yieldFrame = () => new Promise<void>((r) => setTimeout(r, 0));
+    // only the sets INTRO_SHOTS films in (CUT v3: gilgal); tests: ?filmsets=gilgal narrows them further
+    const only = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('filmsets') : null;
+    const wanted = (n: FilmStageSet) => USED_SETS.has(n) && (!only || only.split(',').includes(n));
+    const needLand = wanted('judah') || wanted('coast') || wanted('ramah');
+    // budget of the loading bar per step (only the steps that run; normalised)
+    const w0 = { judah: wanted('judah') ? 0.14 : 0, coast: wanted('coast') ? 0.14 : 0, ramah: wanted('ramah') ? 0.16 : 0, gilgal: wanted('gilgal') ? 0.62 : 0, compile: 0.18 };
+    const wsum = Object.values(w0).reduce((a, b) => a + b, 0) || 1;
+    const steps = { judah: w0.judah / wsum, coast: w0.coast / wsum, ramah: w0.ramah / wsum, gilgal: w0.gilgal / wsum, compile: w0.compile / wsum };
     let base = 0;
     const sub = (w: number, label: string) => {
       const b = base;
       base += w;
       return (f: number) => prog(Math.min(0.999, b + w * Math.max(0, Math.min(1, f))), label);
     };
-    const yieldFrame = () => new Promise<void>((r) => setTimeout(r, 0));
-    // tests: ?filmsets=judah,gilgal builds only those sets (the others fall back to world vistas)
-    const only = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('filmsets') : null;
-    const wanted = (n: FilmStageSet) => !only || only.split(',').includes(n);
 
+    // the prologue's land sets and their DEM tiles: only when the sheet films there (not in CUT v3)
     let landMod: typeof import('./land/LandSet') | null = null;
-    try {
-      landMod = await import('./land/LandSet');
-      const data = await import('./land/landData');
-      stage.releaseTiles = () => data.releaseTiles();
-    } catch (e) {
-      console.warn('[film] land sets unavailable', e);
+    if (needLand) {
+      try {
+        landMod = await import('./land/LandSet');
+        const data = await import('./land/landData');
+        stage.releaseTiles = () => data.releaseTiles();
+      } catch (e) {
+        console.warn('[film] land sets unavailable', e);
+      }
     }
     let castMod: typeof import('./cast') | null = null;
-    if (wantCast) {
+    if (wantCast && (wanted('gilgal') || wanted('ramah'))) {
       try {
         castMod = await import('./cast');
-        const clips = [...castMod.GILGAL_CLIPS, ...castMod.RAMAH_CLIPS];
+        // the clips of the sets actually built (the Ramah elders' clips only if Ramah is filmed)
+        const clips = [...new Set([...(wanted('gilgal') ? castMod.GILGAL_CLIPS : []), ...(wanted('ramah') ? castMod.RAMAH_CLIPS : [])])];
         await castMod.FilmActor.preloadClips(clips);
         const { MocapLibrary } = await import('../characters/mocap/MocapLibrary');
         stage.releaseClips = () => MocapLibrary.shared.release(FILM_ONLY_CLIPS);
@@ -267,7 +287,9 @@ export class FilmStage {
       const p = sub(steps.gilgal, 'הַגִּלְגָּל…');
       try {
         const [{ GilgalSet }, { gilgalView }] = await Promise.all([import('./gilgal/GilgalSet'), import('./gilgal/gilgalView')]);
-        const gilgal = await GilgalSet.create({ renderer: engine.renderer, quality: engine.quality, tex: engine.tex, onProgress: (f) => p(f * 0.3) });
+        // the raymarched cloud deck of the old 'rise' (shot 13) only if a take still climbs into it (not in CUT v3)
+        const deck = INTRO_SHOTS.some((s) => s.set === 'gilgal' && baseTake(s.take) === 'rise');
+        const gilgal = await GilgalSet.create({ renderer: engine.renderer, quality: engine.quality, tex: engine.tex, deck, onProgress: (f) => p(f * 0.3) });
         gilgal.restoreSharedSun();
         engine.enforceTextureBudget(gilgal.scene);
         let army: GilgalArmy | null = null;

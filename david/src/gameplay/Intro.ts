@@ -15,18 +15,20 @@ import { FilmWorld } from '../film/FilmWorld';
 import { applyHandheld } from '../film/FilmCams';
 
 /**
- * THE OPENING FILM "הַטּוֹב מִמֶּךָּ" (CUT v2, docs/intro-script-v2.md, 58 s): the player of the shot sheet
- * src/content/introScript.ts. It switches between the film sets (src/film/FilmStage.ts: the prologue land sets, Gilgal)
- * and the game world (src/film/FilmWorld.ts: Rachel's pillar, Bethlehem, David, the flock, the thicket) with
- * engine.setView / restoreWorldView / resetTemporal on every cut, drives the letterbox, depth of field, the film look
- * and the fades, fires the on-screen text (narration from src/content/introNarration.ts, verses ONLY through the
- * catalog helpers), keeps the score locked to the picture, and hands off to gameplay (David on his rock).
+ * THE OPENING FILM "הַטּוֹב מִמֶּךָּ" (CUT v3, docs/intro-script-v3.md: 60 s, six scenes, no prologue): the player of the
+ * shot sheet src/content/introScript.ts. The film opens on the time card over black and comes in ON the shofar at
+ * Gilgal (G1); it switches between the Gilgal film set (src/film/FilmStage.ts builds only the sets the sheet uses) and
+ * the game world (src/film/FilmWorld.ts: David on his rock, the flock, the thicket) with engine.setView /
+ * restoreWorldView / resetTemporal on every cut, drives the letterbox, depth of field, the film look and the fades,
+ * fires the on-screen text (narration from src/content/introNarration.ts, verses ONLY through the catalog helpers),
+ * keeps the score locked to the picture, and hands off to gameplay (David on his rock).
  *
  * Black is drawn by the renderer (post.grade uFade), so the time card and the title sit above it and every
- * dissolve from / into black is a real crossfade of the canvas. CUT v2 transitions are a pure function of film time
- * (seek-safe): the first shot rises out of black after `hold`, the G7 -> D1 'light' cut is a warm white flash centred
- * on the cut (uFade toward look.uFadeColor), 'smash' is black in one frame. Every camera gets the handheld layer of
- * src/film/FilmCams.ts (TAKE_LOOK).
+ * dissolve from / into black is a real crossfade of the canvas. Transitions are a pure function of film time
+ * (seek-safe): the first shot ('black') holds `hold` s of black under the time card and the picture rises out of it
+ * over `fade` s exactly on the shofar beat, the G7 -> D1 'light' cut is a warm white flash centred on the cut (uFade
+ * toward look.uFadeColor), 'smash' is black in one frame. Every camera gets the handheld layer of src/film/FilmCams.ts
+ * (TAKE_LOOK).
  */
 export interface IntroHost {
   engine: Engine;
@@ -174,12 +176,13 @@ export class Intro {
     return this.state === 'done';
   }
 
-  /** What is real and what is placeholder on the stage (tests / the report). */
+  /** What is real and what is placeholder on the stage (tests / the report): the film sets the sheet uses. */
   status(): string[] {
     const s = this.stage;
     if (!s) return ['no film stage (world shots only)'];
     const out: string[] = [];
-    for (const n of ['judah', 'coast', 'ramah', 'gilgal'] as FilmStageSet[]) {
+    const used = [...new Set(this.plan.map((p) => p.shot.set))].filter((n): n is FilmStageSet => n !== 'black' && n !== 'world');
+    for (const n of used) {
       const hdl = s.sets[n];
       out.push(`${n}: ${hdl ? (hdl.status.length ? hdl.status.join('; ') : 'set') : 'released or missing'}`);
     }
@@ -474,14 +477,8 @@ export class Intro {
         if (!this.plan.slice(i).some((p) => p.shot.set === n)) this.stage.release(n);
       }
     }
-    // sound design hooks the score does not own (the score keys on the cue sheet itself)
+    // the title card and its hit (the score keys everything else on the cue sheet itself)
     try {
-      if (s.id === 'flight') {
-        // the wisps rushing past the lens (the skim and the dive through the deck), on the film clock in tests
-        const el0 = instant ? Math.max(0, this.t - this.plan[i].start) : 0;
-        const w = ui.filmWisps(el0, !this.testClock);
-        if (this.testClock) this.liveTexts.push({ el: w, start: this.plan[i].start, dur: 4.2 });
-      }
       if (s.id === 'title' && !this.titleShown) {
         this.titleShown = true;
         this.titleStart = this.plan[i].start;
@@ -592,11 +589,12 @@ export class Intro {
       }
     };
     const a = this.h.audio;
-    // the hook's two one-shots, where the score's mix was checked (score3): a heavy breath in the thicket while the lamb
-    // grazes (H1 + 1.0 s), the lamb's bleat as the dark opens (H2 + 0.2 s). The birds fall silent in the score itself
-    // (it switches the bed to 'hush' on beats.birdsStop).
-    if (s.id === 'thicket') fire('breath', 1.0, () => a.sfx('bearGrowl', { volume: 0.28, pitch: 0.7 }));
-    if (s.id === 'eyes') fire('lamb', 0.2, () => a.sfx('lambBleat', { volume: 0.5 }));
+    // the hook's two one-shots (keyed to the contract's beats): a heavy breath in the thicket while the lamb grazes —
+    // 0.6 s before its head comes up (H1 beats.lambHead) — and the lamb's bleat as the dark opens, well before the eyes
+    // (H2 beats.eyesOpen). The birds fall silent in the score itself (it switches the bed to 'hush' on
+    // beats.birdsStop).
+    if (s.id === 'thicket') fire('breath', Math.max(0.3, (s.beats?.lambHead ?? 1.8) - 0.6), () => a.sfx('bearGrowl', { volume: 0.28, pitch: 0.7 }));
+    if (s.id === 'eyes') fire('lamb', Math.min(0.25, (s.beats?.eyesOpen ?? 0.9) * 0.3), () => a.sfx('lambBleat', { volume: 0.5 }));
   }
 
   private fireText() {

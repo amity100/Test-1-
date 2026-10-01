@@ -8,23 +8,26 @@ import type { Flock, Animal } from '../characters/Flock';
 import { LAYOUT } from '../world/Layout';
 import { rachelShots, hideTreesNear, type RachelShots } from './land/rachel';
 import type { FilmFocus } from './FilmStage';
-import { FilmFlock, lambAtEdge } from './filmAnimals';
+import { FilmFlock, lambAtEdge, bearInThicket } from './filmAnimals';
+import { drift, takeBeat, takeDur } from './FilmCams';
+import { INTRO_SHOTS } from '../content/introScript';
 
 /**
- * The opening film's shots in the GAME WORLD around Bethlehem (CUT v2, docs/intro-script-v2.md): camera takes (lens,
- * framing, motivated moves) and the staging of the chapter's own actors — David (DavidModel.performFilm), the flock
- * and the lamb (Flock), the bear in the thicket (BearActor) — plus the eye-shine of H2. Everything is put back by
- * leave() (the game starts right after the film).
+ * The opening film's shots in the GAME WORLD around Bethlehem (CUT v3, docs/intro-script-v3.md: scenes 5 and 6):
+ * camera takes (lens, framing, motivated moves) and the staging of the chapter's own actors — David
+ * (DavidModel.performFilm), the flock and the lamb (Flock), the bear in the thicket (BearActor) — plus the eye-shine
+ * of H2. Every timed event is read from the shots' named BEATS in src/content/introScript.ts; every move runs across
+ * its whole shot (FilmCams.drift). Everything is put back by leave() (the game starts right after the film).
  *
- * Takes (cut3):
- *   'rachel-dawn'  P3  a low dolly through the grass toward Rachel's standing stone at first light (the sun behind it);
- *                      a shepherd and his flock cross behind the stone (David stands in for the anonymous shepherd:
- *                      a small figure against the light)
- *   'figure'       D1  a crane / orbit behind David on his rock revealing the valley, the flock grazing below
- *   'face'         D2  the push-in on his face as he turns into the light
- *   'thicket'      H1  low in the grass following the lamb to the thicket's edge; the light dims
- *   'lamb'         H2  a slow creep into the dark of the thicket: two eyes open
+ * Takes:
+ *   'figure'       D1  (6 s) a slow crane / orbit behind David on his rock against the low sun, the flock below
+ *   'face'         D2  (4 s) the push-in on his face as he turns into the light (beats.turn)
+ *   'thicket'      H1  (3 s) low in the grass following the lamb to the thicket's edge; the birds fly up and fall
+ *                      silent (beats.birdsStop); the light dims; the lamb's head comes up (beats.lambHead)
+ *   'lamb'         H2  (2 s) a slow creep into the dark of the thicket: two eyes open (beats.eyesOpen)
  *   'vista'            a slow crane over the hills (only as the stand-in for a film set that failed to build)
+ *   'rachel-dawn'  P3  of CUT v2 (Rachel's standing stone at dawn) — not filmed in CUT v3; its staging is only built
+ *                      when the sheet has the take
  *
  * World: +X east, -Z north; the chapter's sun is low in the east (LAYOUT SUN: 13 deg, azimuth 100). David's rock is
  * LAYOUT.start (+0.2, +2.3), the pasture SSE of it, the thicket (oaks / terebinths) 150 m east, Bethlehem on its ridge
@@ -64,11 +67,13 @@ export const WORLD_CAM = {
   // (the look starts on his shoulders — he sits right of centre — and slides out over the valley as the lens cranes up)
   // (cut4, D1 against the low sun: the lens behind his RIGHT shoulder from the west-south-west — clear of the boulder
   //  WNW of the rock — looking past him into the sun-lit haze: a rim-lit figure, the hills in layers)
-  figure: { az0: 50, az1: 56, r0: 3.3, r1: 3.7, h0: 1.5, h1: 1.75, lookAhead1: 12, lookDown1: 2.4, lookMix0: 0.08, lookMix1: 0.2, headH: 1.55, fov0: 34, fov1: 37, exp: 0.86 },
+  // (cut5, CUT v3: 6 s — a longer, slower orbit and crane: 10° round his right shoulder, 0.5 m out, 0.35 m up)
+  figure: { az0: 48, az1: 58, r0: 3.3, r1: 3.8, h0: 1.5, h1: 1.85, lookAhead1: 12, lookDown1: 2.4, lookMix0: 0.08, lookMix1: 0.2, headH: 1.55, fov0: 34, fov1: 37, exp: 0.86 },
   // D2 (cut4): the push-in on the face, BACKLIT — `az` = SkySystem azimuth of the lens seen from his head (the low sun
   // stands ~115° round from it, behind his far shoulder); at `turn` he turns his head INTO the light toward `turnAz`
   // (a 3/4 profile catching the sun), never into the lens
-  face: { az: -15, d0: 2.95, d1: 2.15, side0: 0.16, side1: 0.08, lookSide: 0.26, fov0: 21, fov1: 17.5, turnDur: 1.6, turnAz: 72 },
+  // (CUT v3: 4 s, the turn at beats.turn 0.8 — the push runs through the turn, the blink and the settled eyes)
+  face: { az: -15, d0: 3.0, d1: 2.1, side0: 0.16, side1: 0.08, lookSide: 0.26, fov0: 21, fov1: 17.5, turnDur: 1.7, turnAz: 72 },
   // H1 / H2: the hook
   // (H2: the bear deep in the shade and the picture dark — only the eye-shine, additive and not tone-mapped, reads)
   // (cut4, H1: the lamb ≈20-25 % of the frame height — the lens ~4.1 -> 3.6 m behind and beside it, 0.95 m up, looking a little down
@@ -138,11 +143,15 @@ export class FilmWorld {
     const toPasture = V(L.pasture.x - this.rock.x, 0, L.pasture.z - this.rock.z).normalize();
     this.viewDir.copy(this.sunH).multiplyScalar(0.45).addScaledVector(toPasture, 0.55).normalize();
     this.side.set(-this.viewDir.z, 0, this.viewDir.x); // to David's right (viewed from behind)
+    // P3 (CUT v2's Rachel's stone): staged only when the sheet films it (CUT v3 does not)
+    const filmsRachel = INTRO_SHOTS.some((s) => s.set === 'world' && s.take === 'rachel-dawn');
     let rs: RachelShots | null = null;
-    try {
-      rs = rachelShots(this.ground, h.engine.village.rachelPillar);
-    } catch (e) {
-      console.warn('[film] rachel shots', e);
+    if (filmsRachel) {
+      try {
+        rs = rachelShots(this.ground, h.engine.village.rachelPillar);
+      } catch (e) {
+        console.warn('[film] rachel shots', e);
+      }
     }
     this.rachel = rs;
     // P3 geometry: the lens looks from the west toward the dawn (the low sun just beside the stone)
@@ -153,7 +162,7 @@ export class FilmWorld {
     // swing the axis a little south of the sun so the sun disc stands beside the stone, not behind it
     this.axis.applyAxisAngle(V(0, 1, 0), -0.12);
     this.axisR.set(-this.axis.z, 0, this.axis.x);
-    this.buildRachelCross();
+    if (filmsRachel) this.buildRachelCross();
     // the thicket (H1-H2)
     const T = L.thicket;
     this.out.set(L.pasture.x - T.x, 0, L.pasture.z - T.z).normalize();
@@ -227,7 +236,8 @@ export class FilmWorld {
   /** Camera of a world take at normalised u — false for an unknown take. */
   frame(take: string, u: number, t: number, out: ShotFrame): boolean {
     const uu = clamp01(u);
-    const e = smooth(uu);
+    // every move runs across its whole shot and is still drifting at the cut (FilmCams.drift)
+    const e = drift(uu);
     out.roll = 0;
     switch (take) {
       case 'rachel-dawn': {
@@ -541,8 +551,9 @@ export class FilmWorld {
         this.ff.tick(t, dt, this.h.engine.camera);
         return;
       case 'face':
-        // he turns INTO the light (faceCam = a point 40 m out toward the low sun), not into the lens: offLens 0
-        m.performFilm('reveal', t, { look: this.faceCam, turnAt: 0.5, turnDur: WORLD_CAM.face.turnDur, offLens: 0 });
+        // he turns INTO the light (faceCam = a point 40 m out toward the low sun), not into the lens: offLens 0; the
+        // turn on the contract's beat (D2 beats.turn)
+        m.performFilm('reveal', t, { look: this.faceCam, turnAt: takeBeat('face', 'turn', 0.8), turnDur: WORLD_CAM.face.turnDur, offLens: 0 });
         this.ff.tick(t, dt, this.h.engine.camera);
         return;
       case 'vista':
@@ -563,12 +574,13 @@ export class FilmWorld {
             pu[3 + k].set(x, this.ground(x, z), z, R[k]);
           }
         } else this.clearPushers();
-        // H1: it walks to the edge, grazes, and at beats.lambHead (1.5 s) its head comes up toward the thicket (anim's
-        // lambAtEdge); H2: it stands listening
-        lambAtEdge(lamb, take === 'thicket' ? t : 2.5 + t, { lift: 1.5, toward: this.bearAt, walkUntil: c.walkUntil, speed: c.lambSpeed });
+        // H1: it walks to the edge, grazes, and at beats.lambHead its head comes up toward the thicket (perf's
+        // lambAtEdge); H2 continues the same clock (H1's length + t): it stands listening
+        const h1 = takeDur('thicket', 3);
+        lambAtEdge(lamb, take === 'thicket' ? t : h1 + t, { lift: takeBeat('thicket', 'lambHead', 1.8), toward: this.bearAt, walkUntil: c.walkUntil, speed: c.lambSpeed });
         this.tickBear(take, t, dt);
-        // the light goes out of the hook: down through H1, darker still in the thicket (H2)
-        const k = take === 'thicket' ? ss(0.2, 2.5, t) : 1;
+        // the light goes out of the hook: down across the whole of H1, darker still in the thicket (H2)
+        const k = take === 'thicket' ? ss(0.2, h1, t) : 1;
         // H2: down into the dark at once (the bear only a suggestion; the eye-shine is additive and not tone-mapped)
         this.setExposure(take === 'thicket' ? lerp(1, c.exp1, k) : lerp(c.exp1 * 0.55, c.exp2, ss(0, 0.6, t)));
         return;
@@ -721,6 +733,7 @@ export class FilmWorld {
     const { bear } = this.h;
     bear.model.eyeShine = 0;
     bear.model.darkness = 0;
+    bearInThicket(bear.model, null, 0);
     if (bear.visible) bear.visible = false;
     if (this.eyes) this.eyes.visible = false;
   }
@@ -767,7 +780,7 @@ export class FilmWorld {
 
   /**
    * Birds per take (t = shot seconds): P3 a loose line of five crossing the dawn sky behind the stone, frame left ->
-   * right, high; H1 five flying up and away out of the thicket's bushes at beats.birdsStop (0.4 s).
+   * right, high; H1 five flying up and away out of the thicket's bushes at beats.birdsStop.
    */
   private tickBirds(take: string, t: number) {
     const b = this.birds;
@@ -787,8 +800,8 @@ export class FilmWorld {
         s.scale.set(0.42, 0.42 * (0.25 + 0.75 * flap) * 0.5, 1);
         s.visible = k < 5;
       } else {
-        // out of the bushes at the thicket's edge, up and away over the lens' shoulder
-        const go = Math.max(0, t - 0.4 - k * 0.07);
+        // out of the bushes at the thicket's edge, up and away over the lens' shoulder — at beats.birdsStop
+        const go = Math.max(0, t - takeBeat('thicket', 'birdsStop', 0.5) - k * 0.07);
         const O = this.out, Sx = this.tmp.set(-O.z, 0, O.x);
         s.position.copy(this.edge).addScaledVector(O, -0.6 + go * (1.6 + k * 0.25)).addScaledVector(Sx, -2.4 + k * 1.05 + go * (k % 2 ? 0.8 : -0.6));
         s.position.y = this.ground(this.edge.x, this.edge.z) + 0.6 + (k % 3) * 0.25 + go * (1.1 + (k % 2) * 0.4) + go * go * 0.5;
@@ -803,14 +816,20 @@ export class FilmWorld {
   /** the bear in the dark: a breath, the head lifting toward the lamb; the eyes open (the tapetum catching the light) */
   private tickBear(take: string, t: number, dt: number) {
     const { bear } = this.h;
-    const ft = take === 'thicket' ? t : 2.5 + t;
+    const ft = take === 'thicket' ? t : takeDur('thicket', 3) + t;
     bear.heading = Math.atan2(this.out.x, this.out.z) + 0.1 * Math.sin(ft * 0.7);
     bear.speed = 0;
     bear.model.lookTarget = this.h.flock.lamb.position;
+    // perf: the bear's breath in the dark and its head lifting toward the lamb at H2 beats.eyesOpen
+    try {
+      bearInThicket(bear.model, take, t);
+    } catch {
+      /* the performance is cosmetic */
+    }
     void dt;
-    // H2 0.7 s: the eyes open (beats.eyesOpen) — the tapetum of the bear's REAL eyes (models' uniform) and a faint
-    // amber glow locked exactly on them (the rig's eye sockets on the head bone; visual-bible 3.15: never red)
-    const open = take === 'lamb' ? smooth(clamp01((t - 0.7) / 0.28)) : 0;
+    // H2: the eyes open at beats.eyesOpen — the tapetum of the bear's REAL eyes (models' uniform) and a faint amber
+    // glow locked exactly on them (the rig's eye sockets on the head bone; visual-bible 3.15: never red)
+    const open = take === 'lamb' ? smooth(clamp01((t - takeBeat('lamb', 'eyesOpen', 0.9)) / 0.28)) : 0;
     bear.model.eyeShine = WORLD_CAM.hook.shine * open;
     // its body is not to be seen (models' darkness uniform: pelt, skin, claws, teeth — not the eyes' tapetum)
     bear.model.darkness = WORLD_CAM.hook.dark;
@@ -906,6 +925,7 @@ export class FilmWorld {
     bear.model.lookTarget = null;
     bear.model.eyeShine = 0;
     bear.model.darkness = 0;
+    bearInThicket(bear.model, null, 0);
     if (this.eyes) {
       this.eyes.removeFromParent();
       this.eyes = null;

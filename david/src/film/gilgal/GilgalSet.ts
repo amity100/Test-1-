@@ -57,6 +57,9 @@ export interface GilgalSetOptions {
   quality: { name: 'low' | 'medium' | 'high'; shadowSize?: number; texMax?: number; anisotropy?: number };
   /** engine.tex to share the world textures (loaded on demand otherwise) */
   tex?: TextureSet;
+  /** build the raymarched cloud deck of the old 'rise' (shot 13; default true). The film builds it only if a take
+   *  still climbs into it (CUT v3: no) — it costs a 3D noise texture at load and a raymarch program. */
+  deck?: boolean;
   onProgress?: (f: number, label: string) => void;
 }
 
@@ -83,8 +86,8 @@ export class GilgalSet {
   readonly flora: Flora;
   /** 2.5D layered deck (fallback, not in the scene by default) */
   readonly clouds: CloudDeck;
-  /** the raymarched deck shared with the land set (shown in shot 13) */
-  readonly deck: LandClouds;
+  /** the raymarched deck shared with the land set (shown in shot 13); null when not built (GilgalSetOptions.deck) */
+  readonly deck: LandClouds | null;
   /** the land set's shared cloud / haze uniforms as they were before this set took them over (restored on leave) */
   private landSnap: { sunDir: THREE.Vector3; sunCol: THREE.Color; sky: THREE.Texture | null; haze: THREE.Vector4; deck: THREE.Vector4; time: number } | null = null;
   /** deck of the rise in set metres: base, top (= 1850 / 2450 m ASL as in the land set), east edge x, coverage gain */
@@ -175,11 +178,14 @@ export class GilgalSet {
     this.motes = new Motes(this.tier);
     this.clouds = new CloudDeck(this.tier);
     this.veil = new CloudVeil();
-    this.deck = new LandClouds(this.tier, { x0: -48000, x1: 16000, z0: -30000, z1: 42000 });
-    this.deck.mesh.visible = false;
-    // the late-afternoon sun is far stronger than the land set's dawn sun: scale the deck's sun term down
-    this.deck.uniforms.uSunI.value = 5.0;
-    scene.add(this.dust.mesh, this.motes.points, this.deck.mesh, this.veil.mesh);
+    this.deck = opts.deck === false ? null : new LandClouds(this.tier, { x0: -48000, x1: 16000, z0: -30000, z1: 42000 });
+    if (this.deck) {
+      this.deck.mesh.visible = false;
+      // the late-afternoon sun is far stronger than the land set's dawn sun: scale the deck's sun term down
+      this.deck.uniforms.uSunI.value = 5.0;
+      scene.add(this.deck.mesh);
+    }
+    scene.add(this.dust.mesh, this.motes.points, this.veil.mesh);
     // ---------------------------------------------------------------- stand-ins
     this.placeholders = buildPlaceholders(ground, this.tier);
     this.placeholders.group.visible = false;
@@ -268,7 +274,7 @@ export class GilgalSet {
     this.exposure = GilgalSet.BASE_EXPOSURE * this.shots[name].exposure;
     // shot 13 ends inside the cloud deck: the hand-off to the land set's descent through the clouds (shot 14)
     this.veil.uniforms.uAmount.value = name === 'rise' ? 0.85 * THREE.MathUtils.smoothstep(time, 14.1, 15) : 0;
-    this.deck.mesh.visible = name === 'rise';
+    if (this.deck) this.deck.mesh.visible = name === 'rise';
     this.dust.mesh.visible = name !== 'rise' || time < 2.2;
     if (name === 'rise') du.uOpacity.value = 0.75 * (1 - THREE.MathUtils.smoothstep(time, 0.3, 2.0));
   }
@@ -308,7 +314,7 @@ export class GilgalSet {
       }
     }
     this.sky.update(camera, this.focus);
-    this.driveLandClouds();
+    if (this.deck) this.driveLandClouds();
     // depth precision for the rise: close inserts need a 5 cm near plane, the view from 3 km up a far larger one
     const agl = camera.position.y - this.ground.height(camera.position.x, camera.position.z);
     const near = agl > 120 ? Math.min(8, agl * 0.004) : GilgalSet.NEAR;
@@ -426,7 +432,7 @@ export class GilgalSet {
     geos.forEach((g) => g.dispose());
     mats.forEach((m) => m.dispose());
     for (const t of this.ownTex) t.dispose();
-    this.deck.dispose();
+    this.deck?.dispose();
     this.leave();
     if (this.ownsWorld) for (const t of Object.values(this.ownsWorld)) (t as THREE.Texture).dispose();
     this.sky.cubeTarget.dispose();

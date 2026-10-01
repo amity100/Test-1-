@@ -19,6 +19,8 @@ import type { CrowdTier } from './Crowd';
 export interface HeroRole {
   kit: 'horn' | 'spear';
   seed: number;
+  /** index among the heroes of this kit (G1: the horn blowers lift their horns one after another) */
+  index?: number;
 }
 
 /** what the crowd soldier of a slot does now (filled by GilgalArmy.setBeat) */
@@ -52,6 +54,9 @@ export const HERO_COUNT: Record<CrowdTier, [number, number]> = {
   'mobile-low': [2, 0],
 };
 
+/** the roar takes a hero chains through (the crowd's Rocketbox cheers) */
+const HERO_CHEERS = ['cheer_1', 'cheer_2', 'cheer_3', 'cheer_4', 'cheer_5'];
+
 const CARRY = { ua: [-0.12, -0.1, -0.16], fa: [-1.2, 0, 0], hd: [0.1, 0, 0.05] } as { ua: [number, number, number]; fa: [number, number, number]; hd: [number, number, number] };
 
 const _m = new THREE.Matrix4();
@@ -80,6 +85,8 @@ class Hero {
   hornGrip: THREE.Object3D | null = null;
   hornMid: THREE.Vector3 | null = null;
   blow = 0;
+  /** CUT v3 (G3): cheer takes chained in this roar (the roar is held 3.3 s to the cut) */
+  private chain = 0;
   constructor(readonly actor: FilmActor, readonly role: HeroRole) {
     const a = actor;
     a.mocap.rootMotion = 'inplace';
@@ -169,7 +176,15 @@ class Hero {
       if (changed || this.clip !== c.walk) this.play(c.walk, { fade: 0, time: c.phase, mirror: c.mirror });
       mp.matchSpeed(c.walk, MARCH_SPEED * c.pace);
     } else if (st === 'roar') {
-      if (changed) this.play(c.cheer, { fade: 0.16, time: 0.1, mirror: c.mirror && this.role.kit !== 'spear' });
+      if (changed) {
+        this.chain = 0;
+        this.play(c.cheer, { fade: 0.16, time: 0.1, mirror: c.mirror && this.role.kit !== 'spear' });
+      } else if (mp.remaining() < 0.35) {
+        // the take runs out before the cut: on into his next cheer (never a held last frame)
+        this.chain++;
+        const next = HERO_CHEERS[(HERO_CHEERS.indexOf(this.clip) + 1 + ((c.file + this.chain) % 3)) % HERO_CHEERS.length];
+        this.play(next, { fade: 0.35, time: 0.25, mirror: (c.mirror !== (this.chain % 2 === 1)) && this.role.kit !== 'spear' });
+      }
     } else if (st === 'freeze') {
       if (changed && !this.roaring) this.play(c.cheer, { fade: 0, time: 1.2, mirror: c.mirror && this.role.kit !== 'spear' });
       mp.setSpeed(this.clip, 0.05);
@@ -191,8 +206,12 @@ class Hero {
     let blow = 0;
     if (this.role.kit === 'horn') {
       if (shot === 'dustWall') {
-        const h = BEATS.dustWall.horns;
-        blow = ss(h - 0.1, h + 0.35, t) * (1 - ss(2.7, 3.2, t));
+        // CUT v3 (G1 5.5 s): lifted to the lips on `horns` one after another, each a long blast (2.0-2.4 s), then
+        // lowered before the cut
+        const k = this.role.index ?? 0;
+        const h = BEATS.dustWall.horns + 0.15 * k;
+        const end = h + 2.0 + 0.2 * k;
+        blow = ss(h - 0.3, h + 0.08, t) * (1 - ss(end, end + 0.5, t));
       } else if (st === 'roar' || st === 'freeze') blow = 0;
       this.blow = blow;
       this.placeHorn(blow);
@@ -202,7 +221,8 @@ class Hero {
       a.reach.L.weight = blow * 0.9;
       a.human.rig.setFingers('L', blow > 0.3 ? 'grip' : 'relaxed');
       a.human.rig.faceUnits.CheeksPump = 0.75 * ss(0.4, 0.9, blow);
-      a.body.lean = -0.07 * blow;
+      // straining into the blast: leaning back, the chest heaving, a small sway
+      a.body.lean = -0.07 * blow + 0.02 * Math.sin(t * 2.6 + (this.role.index ?? 0)) * blow;
       a.breath.amp = 0.3 + 0.9 * blow;
       a.breath.rate = 0.5;
     }
@@ -218,9 +238,14 @@ class Hero {
     // ---- the shout
     const r = a.human.rig;
     if (st === 'roar') {
-      r.jawOpen = 0.5 + 0.08 * Math.sin(t * 11 + c.file);
-      r.setExpressionWeight('anger', 0.55);
-      r.setExpressionWeight('effort', 0.4);
+      // shouts with breaths between them (each man his own rhythm), never one held open mouth
+      const ph = Math.max(0, t - Math.max(0, c.roarT)) / (1.3 + 0.15 * (c.file % 3)) + 0.17 * c.rank + 0.11 * c.file;
+      const f = ph - Math.floor(ph);
+      const pulse = ss(0, 0.08, f) * (1 - ss(0.68, 0.8, f));
+      r.jawOpen = 0.1 + 0.45 * pulse + 0.05 * Math.sin(t * 11 + c.file) * pulse;
+      r.setExpressionWeight('anger', 0.35 + 0.25 * pulse);
+      r.setExpressionWeight('effort', 0.25 + 0.2 * pulse);
+      a.breath.amp = 0.5 + 0.6 * (1 - pulse);
     } else {
       r.jawOpen = st === 'freeze' ? 0.18 : 0.02;
       r.setExpressionWeight('anger', 0);
@@ -249,8 +274,8 @@ export class ArmyHeroes {
     const { FilmActor } = await import('../cast/FilmActor');
     const q: Quality = o.tier === 'desktop-high' ? 'high' : o.tier === 'desktop-medium' ? 'medium' : 'low';
     const roles: HeroRole[] = [];
-    for (let i = 0; i < horns; i++) roles.push({ kit: 'horn', seed: 31 + i * 7 });
-    for (let i = 0; i < near; i++) roles.push({ kit: 'spear', seed: 61 + i * 5 });
+    for (let i = 0; i < horns; i++) roles.push({ kit: 'horn', seed: 31 + i * 7, index: i });
+    for (let i = 0; i < near; i++) roles.push({ kit: 'spear', seed: 61 + i * 5, index: i });
     const heroes: Hero[] = [];
     for (const r of roles) {
       const a = await FilmActor.create({ role: 'soldier', quality: q, seed: r.seed, lod: 'near', kit: r.kit, ground: o.ground });

@@ -370,29 +370,32 @@ canvas { display: block; outline: none; }
 .ft-v-middle { top: 50%; transform: translateY(-50%); }
 .ft-place.ft-v-bottom, .ft-person.ft-v-bottom { bottom: calc(var(--lb, 11vh) + 9vh); }
 
-/* the time card: resolves out of a soft blur while the tracking closes 0.6em -> 0.28em (2.5 s), a faint bloom; it
-   is carried over the first image and melts away */
-.ft-time { left: 50%; top: 50%; transform: translate(-50%, -50%); width: 94vw; text-align: center; text-wrap: balance; }
+/* the time card (CUT v3: the film opens on it — over black, then carried over the dust wall of G1 as the picture
+   comes in on the shofar): large and calm, it resolves out of a soft blur while the tracking closes 0.5em -> 0.26em
+   (2.8 s), a faint bloom, and melts away as the place card wipes in */
+/* (CUT v3: a little above the centre — over black it is a centred card; over G1's first image it sits in the glowing
+   dust with air above the front rank's heads) */
+.ft-time { left: 50%; top: 45.5%; transform: translate(-50%, -50%); width: 94vw; text-align: center; text-wrap: balance; }
 .ft-v, .ft-time .ft-main { text-wrap: balance; }
 .ft.ft-time { opacity: 1; animation: ftMelt 1s ease var(--out, 3s) forwards; }
-/* a soft dark glow behind the card: it is carried over the sunlit cloud deck */
+/* a soft dark glow behind the card: it is carried over the bright dust of the first image */
 .ft-time::before {
   content: ''; position: absolute; left: 50%; top: 50%; width: min(1100px, 92vw); height: 3.2em; z-index: -1;
-  transform: translate(-50%, -50%); font-size: clamp(24px, min(4.5vw, 8.6vh), 86px); opacity: 0;
+  transform: translate(-50%, -50%); font-size: clamp(26px, min(5.1vw, 9.4vh), 96px); opacity: 0;
   background: radial-gradient(ellipse at center, rgba(20, 12, 4, 0.36), rgba(20, 12, 4, 0.14) 48%, rgba(0, 0, 0, 0) 72%);
   animation: glowIn 1.2s ease 0.35s forwards;
 }
 .ft-time .ft-main {
-  font: 300 clamp(24px, min(4.5vw, 8.6vh), 86px)/1.25 var(--serif-he); color: #f7eedb; letter-spacing: 0.6em;
-  margin-left: -0.28em; opacity: 0;
+  font: 300 clamp(26px, min(5.1vw, 9.4vh), 96px)/1.25 var(--serif-he); color: #f7eedb; letter-spacing: 0.5em;
+  margin-left: -0.26em; opacity: 0;
   text-shadow: 0 0 26px rgba(255, 224, 168, 0.34), 0 0 60px rgba(255, 210, 140, 0.16), 0 1px 3px rgba(0, 0, 0, 0.45);
-  animation: timeResolve 2.5s cubic-bezier(0.16, 0.62, 0.2, 1) forwards;
+  animation: timeResolve 2.8s cubic-bezier(0.22, 0.55, 0.25, 1) forwards;
 }
 @keyframes timeResolve {
-  0% { opacity: 0; filter: blur(14px); letter-spacing: 0.6em; }
-  32% { opacity: 1; }
-  72% { filter: blur(0); }
-  100% { opacity: 1; filter: blur(0); letter-spacing: 0.28em; }
+  0% { opacity: 0; filter: blur(12px); letter-spacing: 0.5em; }
+  36% { opacity: 1; }
+  75% { filter: blur(0); }
+  100% { opacity: 1; filter: blur(0); letter-spacing: 0.26em; }
 }
 @keyframes timeResolveP {
   0% { opacity: 0; filter: blur(12px); letter-spacing: 0.42em; }
@@ -523,26 +526,6 @@ canvas { display: block; outline: none; }
   .ft-v { font-size: clamp(18px, 3.1vw, 30px); }
   .ft-person .ft-name { font-size: clamp(40px, 6.6vw, 64px); }
 }
-
-/* P1+P2: cloud wisps rushing past the lens (UI.filmWisps), clipped to the picture, under the film texts */
-.film-wisps { position: fixed; left: 0; right: 0; top: var(--lb, 11vh); bottom: var(--lb, 11vh); overflow: hidden; pointer-events: none; z-index: 2; }
-.wisp {
-  position: absolute; left: 50%; top: 50%; width: 46vw; height: 15vw; margin: -7.5vw 0 0 -23vw; border-radius: 50%; opacity: 0;
-  background: radial-gradient(ellipse at center, rgba(255, 247, 238, 0.9), rgba(255, 240, 226, 0.4) 36%, rgba(255, 236, 220, 0) 70%);
-  filter: blur(16px); transform: translate(var(--x0), var(--y0)) scale(0.22) rotate(var(--r));
-  animation: wisp var(--wd, 0.5s) cubic-bezier(0.5, 0, 0.9, 0.45) var(--wdel, 0s) forwards;
-}
-@keyframes wisp {
-  0% { opacity: 0; transform: translate(var(--x0), var(--y0)) scale(0.22) rotate(var(--r)); }
-  28% { opacity: var(--wo, 0.4); }
-  100% { opacity: 0; transform: translate(var(--x1), var(--y1)) scale(2.7) rotate(var(--r)); }
-}
-.wisp-veil {
-  position: absolute; inset: 0; opacity: 0;
-  background: radial-gradient(ellipse at 50% 55%, rgba(255, 246, 236, 0.5), rgba(255, 240, 228, 0.28) 55%, rgba(255, 236, 222, 0.12));
-  animation: veil 0.9s ease 2.72s forwards;
-}
-@keyframes veil { 0% { opacity: 0; } 45% { opacity: 0.55; } 100% { opacity: 0; } }
 
 /* cut pass 2: during the film the skip button sits small in the lower letterbox bar (never over the picture) and
    dims after 4 s; the first key / tap brings it back at full strength with the hint (Intro.armSkip -> skipHint) */

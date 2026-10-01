@@ -708,6 +708,15 @@ export class BearModel {
     bearDarkU.value = THREE.MathUtils.clamp(v, 0, 1);
   }
   lookTarget: THREE.Vector3 | null = null;
+  /**
+   * film hooks (perf, CUT v3 H2 — additive, gameplay leaves them at their defaults): `breathDepth` scales the idle
+   * breathing (1 = its own), `breathRate` its pace; `headUp` 0..1 lifts the head and pushes it forward (alert: the eyes
+   * opening on the lamb). See filmAnimals.bearInThicket.
+   */
+  breathDepth = 1;
+  breathRate = 1;
+  headUp = 0;
+  private breathPh = 0;
   deathT = -1;
   ground?: (x: number, z: number) => number;
   onFootfall?: () => void;
@@ -932,10 +941,18 @@ export class BearModel {
 
     // idle: breathing, sniffing, ears
     const idle = 1 - this.loco;
-    const br = Math.sin(t * 1.35);
+    this.breathPh += dt * 1.35 * this.breathRate;
+    const br = Math.sin(this.breathPh) * this.breathDepth;
     add('spine2', 0.012 * br);
     add('spine1', -0.006 * br);
     this.hipsOff.y += 0.004 * br;
+    // the film's alert head (H2): up and forward, the neck lifting with it, a breath moving the head a little
+    if (this.headUp > 1e-3) {
+      // (-x lifts, as in the look-at below)
+      add('neck1', -0.12 * this.headUp);
+      add('neck2', -0.06 * this.headUp);
+      add('head', 0.03 * this.headUp + 0.015 * br * this.headUp);
+    }
     this.sniffT -= dt;
     if (this.sniffT < 0) {
       this.sniffT = 2.5 + Math.random() * 5;

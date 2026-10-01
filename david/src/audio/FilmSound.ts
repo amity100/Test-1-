@@ -1,17 +1,19 @@
 /**
- * DAVID — sound design of the opening film "הַטּוֹב מִמֶּךָּ" (docs/intro-script.md), synthesised in WebAudio.
+ * DAVID — sound design of the opening film "הַטּוֹב מִמֶּךָּ" (CUT v3, docs/intro-script-v3.md), synthesised in WebAudio.
  *
  * Every generator writes into an `Out` (dry + optional hall send) at an exact context time, so the score
  * (IntroScore.ts) can place it on the film clock. Layers:
- *   - wind swells / altitude air (the cloud flight, the rise), dust gusts (Gilgal, the coast);
+ *   - wind swells (Saul's cloak in the slow motion, David on the rock), dust gusts (Gilgal);
  *   - the army of Israel at Gilgal (1 Sam 15:4, 15:12): thousands on foot — a baked marching texture (no
- *     horses, no chariots), bronze clinks of spears and scale armour, the murmur of the ranks and their ROAR;
+ *     horses, no chariots), bronze clinks of spears and scale armour, spear shafts on shields, the murmur of the
+ *     ranks and their ROAR (held to the hard cut);
  *   - the spoil (1 Sam 15:14, the bleating of the sheep and the lowing of the oxen): far, faint;
- *   - the torn robe (15:27): a slowed rip — fibres parting, threads snapping — baked as one buffer;
- *   - the thicket (hook): leaves and twigs shifting, the heavy breathing of something large, a low rumble;
- *   - hits: the sub drop / crack of the hard cuts (the shofar cut, the title smash), a reverse "suck" into a cut.
+ *   - the torn robe (15:27): a slowed rip — fibres parting, threads snapping — baked as one buffer to the beats;
+ *   - David's hills: a chukar and a bulbul at golden hour;
+ *   - the thicket (the hook): leaves and twigs shifting, the heavy breathing of something large, a low rumble, the heart;
+ *   - hits: the sub drop / crack of the big cuts (the shofar, the title smash), the braam, a reverse "suck" into a cut.
  * Nothing here is sampled: all buffers are baked procedurally once (at the start of the film, under the black
- * time card) and reused. Phones (`lite`) get fewer simultaneous voices.
+ * time card) and reused. Phones (`lite`) get fewer simultaneous voices and sub layers moved into their band.
  */
 import { Core, Voice, BQ, bake, addGrains, white, clamp, rand, randi, chance, mtof, type Out, type Curve } from './synth';
 
@@ -107,24 +109,6 @@ export class FilmSound {
     v.play(t, t + dur + 0.05);
   }
 
-  /** Far surf on the coastal plain (the sea beyond the Philistine host). */
-  surf(o: Out, t: number, dur: number, level: number): void {
-    const v = new Voice(this.c);
-    const n = v.noise('pink', t), lp = v.filter('lowpass', 700, 0.5), g = v.gain(0), p = v.pan(-0.5);
-    const G = g.gain;
-    G.setValueAtTime(0, t);
-    let x = 0;
-    while (x < dur) {
-      const w = rand(3.5, 6);
-      G.linearRampToValueAtTime(level * rand(0.7, 1), t + x + w * 0.35);
-      G.linearRampToValueAtTime(level * 0.25, t + Math.min(dur, x + w));
-      x += w;
-    }
-    G.linearRampToValueAtTime(0, t + dur + 0.5);
-    n.connect(lp); lp.connect(g); g.connect(p); out2(p, o, 0.5, v);
-    v.play(t, t + dur + 0.6);
-  }
-
   // ------------------------------------------------------------------------------------------ the army
 
   /**
@@ -163,24 +147,6 @@ export class FilmSound {
       x += rand(0.07, 0.22);
     }
     v.play(t, t + x + 1);
-  }
-
-  /** A heavier bronze strike (the Philistine host: shields, the glint of bronze) — inharmonic, ringing. */
-  bronze(o: Out, t: number, level: number, pan = 0): void {
-    const v = new Voice(this.c);
-    const p = v.pan(pan);
-    out2(p, o, 0.8, v);
-    const f = rand(180, 240);
-    const parts: ReadonlyArray<readonly [number, number, number]> = [[1, 1, 1.4], [2.41, 0.6, 0.9], [3.93, 0.45, 0.6], [5.6, 0.3, 0.35], [8.1, 0.2, 0.2]];
-    for (const [r, a, tau] of parts) {
-      const os = v.osc('sine', this.c.hz(f * r * rand(0.99, 1.01)), 0, t), g = v.gain(0);
-      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(level * a, t + 0.003); g.gain.setTargetAtTime(0, t + 0.003, tau);
-      os.connect(g); g.connect(p);
-    }
-    const n = v.noise('white', t), hp = v.filter('bandpass', 3500, 0.8), ng = v.gain(0);
-    ng.gain.setValueAtTime(0, t); ng.gain.linearRampToValueAtTime(level * 0.5, t + 0.002); ng.gain.setTargetAtTime(0, t + 0.002, 0.03);
-    n.connect(hp); hp.connect(ng); ng.connect(p);
-    v.play(t, t + 6);
   }
 
   /**
@@ -233,10 +199,11 @@ export class FilmSound {
   }
 
   /**
-   * The ROAR of thousands (shot 8): shouting male voices (driven saws, rising pitch, "ah"/"eh" formants),
-   * staggered over `spread` s, over a broadband formant-shaped noise wall and stamping. Rings until `dur`.
+   * The ROAR of thousands (G3): shouting male voices (driven saws, rising pitch, "ah"/"eh" formants), staggered over
+   * `spread` s, over a broadband formant-shaped noise wall and stamping. Rings until `dur`; over its last 0.8 s it
+   * sinks to `tail` × level (1 = held at full voice to the end: the roar the silence cuts off).
    */
-  roar(o: Out, t: number, dur: number, level: number, spread = 0.45): void {
+  roar(o: Out, t: number, dur: number, level: number, spread = 0.45, tail = 0.55): void {
     const v = new Voice(this.c);
     const bus = v.gain(0), p = v.pan(0);
     const drive = v.shaper(this.drive ?? this.c.curve('drive', 3));
@@ -244,7 +211,7 @@ export class FilmSound {
     const B = bus.gain;
     B.setValueAtTime(0, t); B.linearRampToValueAtTime(level * 0.6, t + spread * 0.6);
     B.linearRampToValueAtTime(level, t + spread + 0.5);
-    B.setValueAtTime(level, t + Math.max(spread + 0.6, dur - 0.8)); B.linearRampToValueAtTime(level * 0.55, t + dur);
+    B.setValueAtTime(level, t + Math.max(spread + 0.6, dur - 0.8)); B.linearRampToValueAtTime(level * clamp(tail, 0, 1.2), t + dur);
     // the noise wall ("ahh" of thousands)
     const n = v.noise('pink', t), wall = v.gain(1.1);
     for (const [f, q, g] of [[700, 3, 1], [1150, 4, 0.8], [2600, 5, 0.35], [300, 1.2, 0.6]] as const) {

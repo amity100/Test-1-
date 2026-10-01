@@ -1,16 +1,17 @@
 import * as THREE from 'three';
 import type { Expression } from '../../characters/human/HumanRig';
 import {
-  actionTime as blockingActionTime, armyAt, BEATS, samuelAt, saulAt, TEAR_ACTION, timeScale, type GilgalShotName,
+  actionTime as blockingActionTime, armyAt, BEATS, HALT_PLANT, STOP_PLANT, SAM_AWAY_YAW, SAM_FREED, SAM_HELD, SAM_PACE, SAM_STOP,
+  SAM_TURN_CUT, samuelAt, saulAt, SHOT_LEN, TEAR_ACTION, TEAR_KNEEL, timeScale, type GilgalShotName,
 } from '../gilgal/gilgalBlocking';
 import { INTRO_SHOTS, VERDICT_WORDS, type IntroWord } from '../../content/introScript';
 import type { FilmActor, ArmPose } from './FilmActor';
 
 /*
- * Performances of the opening film, CUT v2 (docs/intro-script-v2.md: the shot list, the timing contract and the
- * performance brief; docs/director-notes-v4.md: what failed in the rough cut). Every beat is read from the shared
- * timing contract (src/content/introScript.ts -> src/film/gilgal/gilgalBlocking BEATS / TEAR_ACTION), so the actors,
- * the cameras and the score stay in register.
+ * Performances of the opening film, CUT v3 (docs/intro-script-v3.md "Performances": 13 long takes, 1.5-2x longer than
+ * CUT v2 — nothing may stop, freeze or loop visibly inside them; docs/intro-script-v2.md for the performance brief).
+ * Every beat is read from the shared timing contract (src/content/introScript.ts -> src/film/gilgal/gilgalBlocking
+ * BEATS / TEAR_ACTION / SHOT_LEN), so the actors, the cameras and the score stay in register.
  *
  *   GilgalPerformance  G1-G7 on the Gilgal set (motion capture: Microsoft Rocketbox + CMU, layered with procedural
  *                      acting: look-at with the rig's saccades and blinks, breathing, weight shifts, grip IK, face keys)
@@ -72,13 +73,15 @@ export const actionTime = blockingActionTime;
 export const TEAR_BEATS = TEAR_ACTION;
 /** MeilTear.progress once the corner is free: every tear-line vertex released (thresholds reach ~1.11) */
 const TORN = 1.2;
-/**
- * G5: Saul on his knee behind the corner — his root `back` m behind the grip (along his facing) and `side` m to its
- * left, so the right arm is stretched down-forward to it (measured on the performance)
- */
-export const TEAR_KNEEL = { back: 0.74, side: 0.2 };
-/** G5: the heading of Samuel's walk away once the corner is seized (ESE, game yaw: forward = (sin, 0, cos)) */
-const SAM_AWAY_YAW = 1.15;
+/** G5: Samuel's walking pace at action time `at` (gilgalBlocking SAM_*: walking away, held by the corner, freed) */
+function samPace(at: number) {
+  const A = TEAR_ACTION;
+  const held = ss(A.grip - 0.04, A.grip + 0.14, at);
+  const freed = ss(A.free, A.free + 0.12, at);
+  return (SAM_PACE + (SAM_HELD - SAM_PACE) * held) * (1 - freed) + SAM_FREED * freed;
+}
+/** G5: Saul on his knee behind the corner (gilgalBlocking TEAR_KNEEL: his root relative to the grab point) */
+export { TEAR_KNEEL };
 
 /** arm holds (proxy Euler, character axes; x < 0 swings forward; L: +z = outward, R: -z = outward) */
 export const POSES = {
@@ -164,6 +167,23 @@ export function speechJaw(t: number, dur: number, syllables: number, pauses: num
   const h = Math.sin((i + 1) * 12.9898 * seed) * 43758.5453;
   const amp = 0.08 + 0.14 * (h - Math.floor(h));
   return amp * Math.sin(Math.PI * f) ** 1.5;
+}
+
+/**
+ * G3 (CUT v3): the roar held for 3.3 s to the cut, as three shouts with a breath between them — `shout` 0..1 (the
+ * mouth open, the voice out), `breath` 0..1 (the chest heaving between shouts), and the spear re-thrust at each new
+ * shout (`pump.dip`: the arm and the body dip, `pump.up`: driven up again). Keyed to the beat `roar`; `end` = the cut.
+ */
+export function roarPulse(t: number, roar: number, end: number, phase = 0) {
+  const win = (a: number, b: number) => ss(a - 0.08, a + 0.15, t) * (1 - ss(b - 0.2, b + 0.05, t));
+  const r = roar + phase;
+  const shout = Math.min(1, win(r, r + 1.25) + win(r + 1.55, r + 2.55) + win(r + 2.85, end + 0.6));
+  const bump = (c: number, w: number) => Math.exp(-(((t - c) / w) ** 2));
+  return {
+    shout,
+    breath: ss(r + 1.0, r + 1.4, t) * (1 - shout),
+    pump: { dip: bump(r + 1.38, 0.2) + bump(r + 2.68, 0.2), up: bump(r + 1.62, 0.18) + bump(r + 2.92, 0.18) },
+  };
 }
 
 /**
@@ -370,8 +390,9 @@ export class GilgalPerformance {
         saul.mocap.matchSpeed('walk_cool', s0.walk);
         break;
       case 'spearRaised':
-        // the halt: the last step of the stop (the clip plants the feet ~0.35 s in), then he stands for the thrust
-        saul.mocap.play('walk_stop_rb', { fade: 0, time: 0.95, onEnd: () => saul.mocap.play('idle_king', { fade: 0.4, time: 0.8 }) });
+        // the halt: the stop's last steps, timed so its final plant lands on `halt` + HALT_PLANT (the blocking decelerates
+        // him over the same window), then he stands for the thrust
+        saul.mocap.play('walk_stop_rb', { fade: 0, time: Math.max(0, STOP_PLANT - BEATS.spearRaised.halt - HALT_PLANT), onEnd: () => saul.mocap.play('idle_king', { fade: 0.4, time: 0.8 }) });
         break;
       case 'silence':
         saul.mocap.play('idle_breathe', { fade: 0, time: 0.4 });
@@ -455,50 +476,67 @@ export class GilgalPerformance {
       case 'dustWall':
       case 'king': {
         saul.mocap.matchSpeed('walk_cool', s.walk);
-        // eyes on the road far ahead; late in G2 the head turns to his right (toward the ranks at his side)
-        const turn = shot === 'king' ? ss(2.4, 3.6, t) * 0.55 : 0;
+        // eyes on the road far ahead (a slow scan of the road, never a fixed stare); in G2 at `headTurn` the head turns to
+        // his right over the ranks at his side and holds there, then eases part of the way back toward the road
+        // (CUT v3: 6.5 s of slow motion — the head is never parked)
+        const K = BEATS.king;
+        const turn = shot === 'king'
+          ? ss(K.headTurn - 0.35, K.headTurn + 1.15, t) * 0.55 - ss(K.headTurn + 1.7, SHOT_LEN.king + 0.4, t) * 0.24
+          : 0.05 * Math.sin(t * 0.7 + 0.6);
+        const scan = 0.05 * Math.sin(t * 0.45 + 1.2) * (1 - ss(K.headTurn - 0.4, K.headTurn, shot === 'king' ? t : 0));
         const fwd = this._f.set(Math.sin(s.yaw), 0, Math.cos(s.yaw));
         const right = this._r.set(-Math.cos(s.yaw), 0, Math.sin(s.yaw));
-        saul.mocap.lookAt = this.tmp.copy(s.pos).addScaledVector(fwd, 30).addScaledVector(right, 30 * Math.tan(turn)).setY(this.ground(s.pos.x, s.pos.z) + 2.1);
+        saul.mocap.lookAt = this.tmp.copy(s.pos).addScaledVector(fwd, 30).addScaledVector(right, 30 * Math.tan(turn + scan)).setY(this.ground(s.pos.x, s.pos.z) + 2.1 - 0.6 * ss(K.headTurn - 0.2, K.headTurn + 1.0, shot === 'king' ? t : 0));
         saul.lookRate = 2.5;
-        this.saulFace.set({ determined: 0.55, anger: 0.08 });
-        this.saulFace.jawTarget = 0;
-        saul.breath.amp = 0.35;
+        // the set jaw and the eyes narrowing a little against the dust as he looks over his men
+        this.saulFace.set({ determined: 0.55 + 0.1 * Math.sin(t * 0.37), anger: 0.08 });
+        this.saulFace.jawTarget = 0.03 + 0.02 * Math.max(0, Math.sin(t * 0.9));
+        saul.breath.amp = 0.4;
         saul.breath.rate = 0.4;
         break;
       }
       case 'spearRaised': {
         const B = BEATS.spearRaised;
-        // the whole body in the thrust: the knee dip (anticipation), the drive up (legs extend, the chest arches
-        // back, a twist onto the spear side), the head back with the shout, then held high, chest heaving
+        // the whole body in the thrust: the knee dip (anticipation), the drive up (legs extend, the chest arches back, a
+        // twist onto the spear side), the head back with the shout. CUT v3: the roar lasts 3.3 s to the cut — three
+        // shouts with a breath between them, the spear driven up again on each (it dips and is thrust back up), the
+        // eyes sweeping over the army; never a held pose
         const dip = ss(B.spearUp - 0.32, B.spearUp - 0.06, t) * (1 - ss(B.spearUp - 0.06, B.spearUp + 0.22, t));
         const drive = ss(B.spearUp - 0.08, B.spearUp + 0.3, t);
-        const roar = ss(B.roar - 0.1, B.roar + 0.2, t) * (1 - 0.35 * ss(B.roar + 1.3, B.roar + 1.9, t));
-        saul.body.drop = 0.15 * dip + 0.03 * drive;
-        saul.body.lean = 0.15 * dip - 0.24 * drive - 0.06 * roar;
-        saul.body.twist = 0.18 * drive;
+        const R = roarPulse(t, B.roar, SHOT_LEN.spearRaised);
+        const roar = ss(B.roar - 0.1, B.roar + 0.2, t) * (0.62 + 0.38 * R.shout);
+        const pump = R.pump;
+        saul.body.drop = 0.15 * dip + 0.03 * drive + 0.06 * pump.dip;
+        saul.body.lean = 0.15 * dip - 0.24 * drive - 0.06 * roar + 0.1 * pump.dip - 0.05 * pump.up;
+        saul.body.twist = 0.18 * drive + 0.06 * Math.sin(t * 0.8) * ss(B.roar + 0.6, B.roar + 1.2, t);
         saul.body.side = -0.04 * drive;
         saul.headRoll = 0.07 * drive;
         const fwd = this._f.set(Math.sin(s.yaw), 0, Math.cos(s.yaw));
+        const right = this._r.set(-Math.cos(s.yaw), 0, Math.sin(s.yaw));
         // the shaft thrust up and forward (toward the ranks he faces), not a pole held straight up
-        saul.upright.R.axis.set(0, 1, 0).addScaledVector(fwd, 0.35 * drive).normalize();
-        // eyes: up to the spear point as it goes up, then out over the army's heads with the shout
-        const upLook = ss(B.spearUp - 0.2, B.spearUp + 0.2, t) * (1 - 0.6 * ss(B.roar + 0.1, B.roar + 0.6, t));
-        saul.mocap.lookAt = this.tmp.copy(s.pos).addScaledVector(fwd, 8).setY(this.ground(s.pos.x, s.pos.z) + 2 + 9 * upLook);
+        saul.upright.R.axis.set(0, 1, 0).addScaledVector(fwd, 0.35 * drive + 0.12 * pump.dip).normalize();
+        // the spear arm: up with the thrust, down a little and up again with each new shout
+        saul.armPose.R.pose = mixPose(POSES.spearCarryR, POSES.spearRaiseR, s.cue * (1 - 0.3 * pump.dip));
+        // eyes: up to the spear point as it goes up, then out over the army's heads with the shout, sweeping the ranks
+        const upLook = ss(B.spearUp - 0.2, B.spearUp + 0.2, t) * (1 - 0.6 * ss(B.roar + 0.1, B.roar + 0.6, t)) + 0.25 * pump.up;
+        const sweep = 0.38 * Math.sin((t - B.roar - 0.6) * 0.9) * ss(B.roar + 0.5, B.roar + 1.1, t);
+        saul.mocap.lookAt = this.tmp.copy(s.pos).addScaledVector(fwd, 8).addScaledVector(right, 8 * Math.tan(sweep)).setY(this.ground(s.pos.x, s.pos.z) + 2 + 9 * upLook);
         saul.lookRate = 7;
         this.saulFace.set({ anger: 0.6 * roar, effort: 0.45 * Math.max(roar, drive * 0.6), determined: 0.45 * (1 - roar) });
-        this.saulFace.jawTarget = 0.62 * roar + 0.05 * Math.sin(t * 9) * roar;
+        this.saulFace.jawTarget = ss(B.roar - 0.1, B.roar + 0.2, t) * (0.12 + 0.52 * R.shout) + 0.05 * Math.sin(t * 9) * R.shout;
         this.saulFace.lips.UpperLipUp = 0.35 * roar;
-        saul.breath.amp = 0.5 + 0.6 * ss(B.roar + 1, B.roar + 1.8, t);
+        saul.breath.amp = 0.5 + 0.7 * R.breath + 0.3 * ss(B.roar + 1, B.roar + 1.8, t);
         saul.breath.rate = 0.55;
         break;
       }
       case 'silence': {
         saul.mocap.lookAt = this.eyeOf(samuel, this.saulTarget);
         saul.lookRate = 3;
-        this.saulFace.set({ awe: 0.3 * ss(0.3, 1.2, t), fear: 0.25 * ss(1.2, 2.6, t), determined: 0.35 * (1 - ss(0.4, 1.6, t)) });
-        this.saulFace.jawTarget = 0.28 * (1 - ss(0.0, 0.45, t)) + 0.05;
-        saul.breath.amp = 0.9 - 0.3 * ss(1, 3, t);
+        const B = BEATS.silence;
+        // the roar dies in his mouth; he sees the old man: awe, then fear as the ranks open; heavy breath settling
+        this.saulFace.set({ awe: 0.3 * ss(B.headsTurn - 0.1, B.part + 0.2, t), fear: 0.25 * ss(B.part + 0.2, B.step - 0.2, t) + 0.1 * ss(B.step, B.step + 0.8, t), determined: 0.35 * (1 - ss(B.headsTurn, B.card, t)) });
+        this.saulFace.jawTarget = 0.28 * (1 - ss(0.0, 0.45, t)) + 0.05 + 0.03 * Math.max(0, Math.sin(t * 2.4));
+        saul.breath.amp = 0.95 - 0.35 * ss(1, SHOT_LEN.silence, t);
         saul.breath.rate = 0.5;
         break;
       }
@@ -514,9 +552,10 @@ export class GilgalPerformance {
         saul.lookRate = 4;
         const V = BEATS.verdict;
         this.saulFace.set({ sad: 0.3 + 0.35 * ss(V.speech + 1, V.speechEnd, t), fear: 0.4 * ss(V.speech, V.speech + 1.5, t), awe: 0.3 * ss(V.speech + 2, V.speechEnd, t) });
-        this.saulFace.jawTarget = 0.06 * ss(V.speechEnd - 0.8, V.speechEnd, t);
-        saul.breath.amp = 0.8;
-        saul.breath.rate = 0.45;
+        this.saulFace.jawTarget = 0.06 * ss(V.speechEnd - 0.8, V.speechEnd, t) + 0.03 * ss(V.speechEnd, V.speechEnd + 0.5, t);
+        // he holds his breath under the words; in the silence after them it comes back, shaking
+        saul.breath.amp = 0.8 - 0.35 * ss(V.speech, V.speech + 0.8, t) * (1 - ss(V.speechEnd, V.speechEnd + 0.4, t)) + 0.3 * ss(V.speechEnd, V.speechEnd + 0.4, t);
+        saul.breath.rate = 0.45 + 0.15 * ss(V.speechEnd, V.speechEnd + 0.4, t);
         break;
       }
       case 'saulAlone':
@@ -610,10 +649,11 @@ export class GilgalPerformance {
   }
 
   /**
-   * G5, Saul: "וַיַּחֲזֵק בִּכְנַף־מְעִילוֹ" — pleading, he sees the old man turn away; he steps after him (the walk),
-   * lunges low (the walk frozen in a long right stride under a pelvis drop + a forward fold), his fist closes on the
-   * lower corner of the me'il (grip), he holds on and pulls back and up (pull) — the wool gives (rip .. free), the
-   * corner stays in his fist. Desperation, not violence (visual-bible 3.3): brows up, a gasp at the grab, shock.
+   * G5, Saul: "וַיַּחֲזֵק בִּכְנַף־מְעִילוֹ" — CUT v3 (G5a 4 s): pleading, he sees the old man turn away; he goes after him
+   * (two slow steps, the right arm out to him, calling), and when the old man walks on he rushes (two quick strides),
+   * lunges and drops onto his left knee — the fist closes on the lower corner of the me'il (grip, arm IK on the skinned
+   * cloth); he holds on, pulls back and up (pull) — the wool gives (rip .. free), the corner stays in his fist and he
+   * sinks back onto his heel with it (15:27; desperation, not violence: brows up, the mouth open).
    */
   private tearSaul(at: number, t: number) {
     const { saul, samuel } = this.cast;
@@ -625,55 +665,62 @@ export class GilgalPerformance {
     const right = this._r.set(-Math.cos(yaw), 0, Math.sin(yaw));
     if (tear) tear.cornerWorld(this.corner);
     else samuel.root.getWorldPosition(this.corner).setY(this.corner.y + 0.5);
-    // ---- placement: the blocking's path, then onto his knee behind the corner (TEAR_KNEEL: root -> grip, his arm
-    // stretched down-forward); the knee does not slide: the mark is fixed once he is down
-    const kneel = ss(A.lunge + 0.02, A.grip - 0.08, at);
+    // ---- placement: the blocking's path (the pleading walk, the rush), then onto his knee behind the corner
+    // (TEAR_KNEEL: root -> grip, his arm stretched down-forward); the knee does not slide: the mark is fixed once down
+    const kneel = ss(A.lunge + 0.5, A.grip - 0.08, at);
     if (!this.kneelSet) {
       const tx = this.corner.x - fwd.x * TEAR_KNEEL.back - right.x * TEAR_KNEEL.side;
       const tz = this.corner.z - fwd.z * TEAR_KNEEL.back - right.z * TEAR_KNEEL.side;
-      const k = ss(A.lunge - 0.15, A.grip - 0.1, at);
+      const k = ss(A.lunge + 0.25, A.grip - 0.1, at);
       this.kneelAt.set(THREE.MathUtils.lerp(s.pos.x, tx, k), 0, THREE.MathUtils.lerp(s.pos.z, tz, k));
       if (at >= A.grip - 0.1) this.kneelSet = true;
     }
     saul.place(this.kneelAt, yaw);
-    // ---- clips: pleading stand -> the step after him -> the lunge (a long stride, right foot forward) -> on his knee
+    // ---- clips: the pleading stand -> walking after him (speed-matched to his way: two slow steps, a hesitation, the
+    // rush) -> the lunge stride (the walk frozen in its long stride, RIGHT foot forward) -> on his knee
     const cur = saul.mocap.current()?.name;
-    const goFrom = A.turn + 0.25;
-    if (at >= goFrom && at < A.lunge + 0.1 && cur !== 'walk') saul.mocap.play('walk', { fade: 0.2, sync: true, time: 0.25 });
-    if (cur === 'walk') saul.mocap.matchSpeed('walk', THREE.MathUtils.clamp(Math.hypot(saul.velocity.x, saul.velocity.z), 0.9, 2.0));
-    if (at >= A.lunge + 0.1 && cur !== 'idle_king') saul.mocap.play('idle_king', { fade: 0.3, time: 0.5 });
-    if (at >= A.lunge - 0.08 && !this.lungeLegs) {
-      // the legs: the walk frozen in its long stride, RIGHT foot forward; the kneel takes them down from there
+    const walking = at >= A.turn + 0.3 && at < A.lunge + 0.5;
+    if (walking && cur !== 'walk') saul.mocap.play('walk', { fade: 0.25, sync: true, time: 0.25 });
+    if (cur === 'walk') saul.mocap.matchSpeed('walk', THREE.MathUtils.clamp(Math.hypot(saul.velocity.x, saul.velocity.z), 0.45, 2.3));
+    if (at >= A.lunge + 0.5 && cur !== 'idle_king') saul.mocap.play('idle_king', { fade: 0.3, time: 0.5 });
+    if (at >= A.lunge + 0.42 && !this.lungeLegs) {
       saul.mocap.playLayer('lunge', 'walk', { mask: 'legs', time: 0.74, speed: 0, fade: 0.2 });
       this.lungeLegs = true;
     }
-    // ---- body: down on his LEFT knee (the right foot planted ahead) as the hand reaches the corner; leaning far
-    // forward into the reach, then back and upright as he pulls; when the wool gives he sinks back onto his heel
+    // ---- body: leaning after him as he pleads; down on his LEFT knee (the right foot planted ahead) as the hand
+    // reaches the corner; leaning far forward into the reach, straining back while he holds (grip -> pull), back and
+    // upright as he pulls; when the wool gives he sinks back onto his heel (slowly, in the slow motion)
+    const pleadArm = ss(A.turn + 0.6, A.turn + 1.05, at) * (1 - ss(A.lunge + 0.1, A.lunge + 0.45, at));
     const pull = ss(A.pull - 0.06, A.rip + 0.08, at);
+    const hold = ss(A.grip, A.grip + 0.25, at) * (1 - pull);
     const recoil = ss(A.free - 0.04, A.free + 0.14, at);
+    const sink = ss(A.free - 0.02, A.free + 0.42, at);
     saul.kneel.side = 'L';
     saul.kneel.fwd = 0.46;
     saul.kneel.w = kneel;
-    saul.kneel.sit = 0.55 * recoil;
-    saul.body.drop = 0.12 * ss(A.lunge - 0.1, A.lunge + 0.25, at) * (1 - kneel);
-    const reachLean = ss(A.lunge - 0.05, A.grip - 0.05, at);
-    saul.body.lean = 0.62 * reachLean - 0.34 * pull - 0.2 * recoil;
-    saul.body.twist = 0.24 * reachLean - 0.08 * pull;
+    saul.kneel.sit = 0.55 * sink;
+    saul.body.drop = 0.12 * ss(A.lunge + 0.35, A.lunge + 0.6, at) * (1 - kneel);
+    const reachLean = ss(A.lunge + 0.3, A.grip - 0.05, at);
+    saul.body.lean = 0.1 * pleadArm + 0.62 * reachLean - 0.07 * hold - 0.34 * pull - 0.2 * recoil + 0.05 * sink;
+    saul.body.twist = 0.08 * pleadArm + 0.24 * reachLean - 0.08 * pull;
     saul.body.side = 0.04 * reachLean;
     saul.headingRate = 12;
-    // ---- arms: the right hand to the corner (IK, the palm turned toward the cloth: the knuckles to the south / the
-    // lens side), the helmet stays under the left arm
+    // ---- arms: the right arm out to him as he pleads (open hand toward his back), then the hand to the corner (IK,
+    // the palm turned toward the cloth: the knuckles to the south / the lens side); the helmet stays under the left arm
     saul.armPose.R.pose = null;
     saul.armPose.R.weight = 0;
     saul.upright.R.weight = 0;
     const palm = this.tmp2.copy(right).multiplyScalar(-1).addScaledVector(fwd, 0.25).add(this._p.set(0, -0.35, 0)).normalize();
     saul.reach.R.palm = palm;
     saul.reach.R.thumb = this._th.set(0, 1, 0).addScaledVector(fwd, 0.55).normalize();
-    saul.reach.R.orient = ss(A.lunge, A.grip - 0.1, at);
+    saul.reach.R.orient = ss(A.lunge + 0.3, A.grip - 0.1, at);
     if (!this.grabbed) {
-      saul.reach.R.target = this.tearTarget.copy(this.corner);
-      saul.reach.R.weight = ss(A.lunge - 0.1, A.grip - 0.06, at);
-      if (at >= A.lunge - 0.1) saul.human.rig.setFingers('R', 'open');
+      const toCorner = ss(A.lunge + 0.1, A.lunge + 0.6, at);
+      // the plead: toward the old man's back at chest height (the arm cannot reach him: it stretches out to him)
+      samuel.headWorld(this.tearTarget).add(this._p.set(0, -0.5, 0)).addScaledVector(fwd, -0.15);
+      saul.reach.R.target = this.tearTarget.lerp(this.corner, toCorner);
+      saul.reach.R.weight = Math.max(0.55 * pleadArm, ss(A.lunge + 0.25, A.grip - 0.06, at));
+      if (pleadArm > 0.2 || at >= A.lunge) saul.human.rig.setFingers('R', 'open');
       if (at >= A.grip && tear) {
         this.grabbed = true;
         saul.human.rig.setFingers('R', 'fist');
@@ -684,10 +731,11 @@ export class GilgalPerformance {
     } else {
       // the fist holds and hauls the corner UP and back toward him (the arm straight; the wool goes taut on a diagonal
       // from the fist down to the old man's hem — and the fist rises into the middle of the low insert frame), then
-      // snaps back toward his chest when it comes free
+      // snaps back toward his chest when it comes free; while he only holds (grip -> pull) the fist trembles with it
+      const tr = 0.006 * hold;
       this.tearTarget.copy(this.grabAt)
-        .addScaledVector(fwd, -0.12 * pull - 0.16 * recoil)
-        .add(this._p.set(0, 0.27 * pull + 0.16 * recoil, 0))
+        .addScaledVector(fwd, -0.12 * pull - 0.16 * recoil - 0.02 * hold)
+        .add(this._p.set(tr * noise1(at * 13, 5), 0.27 * pull + 0.16 * recoil + 0.03 * hold + tr * noise1(at * 11, 6), 0))
         .addScaledVector(right, 0.04 * recoil);
       saul.reach.R.target = this.tearTarget;
       saul.reach.R.weight = 1;
@@ -695,48 +743,50 @@ export class GilgalPerformance {
     // the rip runs rip -> free; at `free` the last threads of the weave let go (MeilTear releases a tear-line vertex
     // only at progress >= its threshold + 0.12, up to ~1.11: TORN = 1.2 lets go of every one)
     if (tear) tear.progress = ss(A.rip, A.free, at) + (TORN - 1) * ss(A.free - 0.04, A.free + 0.04, at);
-    // ---- eyes: on the old man; down to the corner as he lunges; then UP to him as he holds (his face in profile for
-    // the insert): pleading, never violent — the brows up, the mouth open (visual-bible 3.3)
-    if (at < A.lunge - 0.1) saul.mocap.lookAt = this.eyeOf(samuel, this.saulTarget);
+    // ---- eyes: on the old man as he pleads (after him); down to the corner as he lunges; then UP to him as he holds
+    // (his face in profile for the insert): pleading, never violent — the brows up, the mouth open (visual-bible 3.3)
+    if (at < A.lunge + 0.3) saul.mocap.lookAt = this.eyeOf(samuel, this.saulTarget);
     else if (at < A.grip - 0.02) saul.mocap.lookAt = this.corner;
     else saul.mocap.lookAt = samuel.headWorld(this.saulTarget);
     saul.lookRate = 9;
     saul.lookLimits.up = 0.6;
-    const reach = ss(A.lunge - 0.2, A.grip, at);
+    const plead = ss(A.turn + 0.1, A.turn + 0.7, at);
+    const reach = ss(A.lunge + 0.1, A.grip, at);
     const gone = ss(A.free - 0.06, A.free + 0.12, at);
     this.saulFace.set({
-      sad: 0.45 + 0.2 * reach * (1 - gone) + 0.2 * gone, fear: 0.45 + 0.4 * reach - 0.25 * gone,
-      awe: 0.5 * gone, pain: 0.1 * pull * (1 - gone),
+      sad: 0.4 + 0.15 * plead + 0.2 * reach * (1 - gone) + 0.2 * gone, fear: 0.35 + 0.15 * plead + 0.35 * reach - 0.25 * gone,
+      awe: 0.5 * gone, pain: 0.1 * pull * (1 - gone) + 0.08 * hold,
     });
     // the brows climb (anguish, never the frown of violence)
-    this.saulFace.units.LeftInnerBrowUp = this.saulFace.units.RightInnerBrowUp = 0.35 * reach + 0.15 * gone;
-    this.saulFace.units.LeftOuterBrowUp = this.saulFace.units.RightOuterBrowUp = 0.15 * reach;
-    // a pleading word before he moves; the mouth opens with the lunge (a cry: "don't go") and hangs open as it tears —
-    // wide enough to read through the beard in profile
-    this.saulFace.jawTarget = speechJaw(at, A.turn + 0.2, 3, [], 3) * 1.2 + 0.38 * reach * (1 - 0.3 * gone) + 0.1 * gone;
-    this.saulFace.lips.lowerLipDown = 0.4 * reach;
+    this.saulFace.units.LeftInnerBrowUp = this.saulFace.units.RightInnerBrowUp = 0.2 * plead + 0.3 * reach + 0.15 * gone;
+    this.saulFace.units.LeftOuterBrowUp = this.saulFace.units.RightOuterBrowUp = 0.08 * plead + 0.12 * reach;
+    // a pleading word before the old man turns (15:25 "וְשׁוּב עִמִּי"), a call after him as he walks away; the mouth
+    // opens with the lunge (a cry) and hangs open as it tears — wide enough to read through the beard in profile
+    const call = speechJaw(at, A.turn + 0.2, 3, [], 3) * 1.2 + speechJaw(at - (A.turn + 0.75), A.lunge - A.turn - 0.8, 4, [0.55], 5) * 1.35;
+    this.saulFace.jawTarget = call + 0.38 * reach * (1 - 0.3 * gone) + 0.1 * gone;
+    this.saulFace.lips.lowerLipDown = 0.4 * reach + 0.12 * pleadArm;
     this.saulFace.lips.UpperLipUp = 0.16 * reach;
-    saul.breath.amp = 0.9;
+    saul.breath.amp = 0.7 + 0.25 * reach + 0.25 * gone;
     saul.breath.rate = 0.7;
   }
 
   /**
-   * G5, Samuel: "וַיִּסֹּב שְׁמוּאֵל לָלֶכֶת" — the old man's turn-step to his left into a walk away (the capture's root
-   * motion carries him); the seized corner jerks him, he leans against it, the wool tears, he comes free, stops, and
-   * turns his head back over his shoulder to the king.
-   */
-  /**
    * The tear entered LATE (a seek into the middle of it, e.g. straight into the insert): pick Samuel up where the blocking
-   * has him — mid turn-step, or already striding away — and pose him at once, BEFORE Saul reads the corner of his me'il
-   * (a seek used to leave him turning on his mark against the kneeling king, and Saul reaching for a stale corner).
+   * has him — mid turn-step, walking away, or already stopped — and pose him at once, BEFORE Saul reads the corner of his
+   * me'il (a seek used to leave him turning on his mark against the kneeling king, and Saul reaching for a stale corner).
    */
   private tearLateEntry(at: number, t: number) {
     const { samuel } = this.cast;
     const A = TEAR_ACTION;
     const m = samuelAt('tear', t);
-    if (at >= A.grip - 0.2) {
-      samuel.place(m.pos, SAM_AWAY_YAW);
+    if (at >= A.free + SAM_STOP) {
+      samuel.place(m.pos, m.yaw);
+      samuel.mocap.play('listen_sad', { fade: 0, time: 0.2 });
+      this.samPhase = 3;
+    } else if (at >= A.turn + SAM_TURN_CUT) {
+      samuel.place(m.pos, m.yaw);
       samuel.mocap.play('walk_slow', { fade: 0 });
+      samuel.mocap.matchSpeed('walk_slow', samPace(at));
       this.samPhase = 2;
     } else {
       samuel.place(m.pos, m.yaw);
@@ -747,6 +797,11 @@ export class GilgalPerformance {
     samuel.update(0);
   }
 
+  /**
+   * G5, Samuel: "וַיִּסֹּב שְׁמוּאֵל לָלֶכֶת" — the old man's turn-step to his left (the capture's root motion carries him),
+   * then a slow walk away (CUT v3: an old man's pace, never a pause); the seized corner jerks him, he leans against it
+   * and glances back, the wool tears, he stumbles a step forward, stops, and turns his chest back toward the king.
+   */
   private tearSamuel(at: number, adt: number, t: number) {
     const { saul, samuel } = this.cast;
     const A = TEAR_ACTION;
@@ -759,43 +814,50 @@ export class GilgalPerformance {
       mp.play('turn_go_L', { fade: 0.2 });
       this.samPhase = 1;
     }
-    if (this.samPhase === 1 && at >= A.grip - 0.2) {
-      // the turn's walk-away runs on into a slow stride (phase-matched), so his legs keep striding in the insert
-      mp.play('walk_slow', { fade: 0.3, sync: true });
+    if (this.samPhase === 1 && at >= A.turn + SAM_TURN_CUT) {
+      // the turn-step's last step runs on into his slow walk (the same foot planted: the walk enters on its right-foot
+      // stance), so he never stops between the turn and the walk
+      mp.play('walk_slow', { fade: 0.3, time: 0.1 });
+      mp.matchSpeed('walk_slow', samPace(at));
       this.samPhase = 2;
     }
     if (this.samPhase === 2) {
-      // checked by the grip (the corner holds him back), slowest while the wool is taut, a stride again once it gives
-      const held = ss(A.grip - 0.04, A.grip + 0.14, at) * (1 - ss(A.free, A.free + 0.12, at));
-      mp.matchSpeed('walk_slow', 0.72 * (1 - 0.45 * held));
-      // the turn-step is cut short by the stride: finish the turn onto his way out (ESE along the road, away from the
-      // king; cut4's insert sees him stride out of frame right)
+      // walking away; checked by the grip (the corner holds him back), slowest while the wool is taut, a stride again
+      // once it gives
+      mp.matchSpeed('walk_slow', samPace(at));
+      // finish the turn onto his way out (ESE along the road, away from the king)
       const e = Math.atan2(Math.sin(SAM_AWAY_YAW - samuel.root.rotation.y), Math.cos(SAM_AWAY_YAW - samuel.root.rotation.y));
       samuel.root.rotation.y += e * (1 - Math.exp(-5 * adt));
-      // one more step after the rip, then he stops (just after the insert)
-      if (at >= A.free + 0.42) {
+      // one more step after the rip, then he stops (just before the end of the insert)
+      if (at >= A.free + SAM_STOP) {
         mp.play('listen_sad', { fade: 0.45, time: 0.2 });
         this.samPhase = 3;
       }
     }
-    // eyes: on Saul, then ahead (east, his way); a half-glance back as the robe holds him; back to Saul once free
-    if (at < A.turn + 0.1) mp.lookAt = this.eyeOf(saul, this.samTarget);
-    else if (at < A.free + 0.05) {
+    // eyes: on Saul, then ahead (east, his way); a half-glance back over his shoulder as the robe holds him; back to
+    // Saul once free
+    const ahead = () => {
       const fwd = this._f.set(Math.sin(samuel.yaw), 0, Math.cos(samuel.yaw));
       samuel.human.bones.head.getWorldPosition(this.samTarget);
-      mp.lookAt = this.samTarget.addScaledVector(fwd, 20);
+      return this.samTarget.addScaledVector(fwd, 20);
+    };
+    if (at < A.turn + 0.1) mp.lookAt = this.eyeOf(saul, this.samTarget);
+    else if (at < A.free + 0.05) {
+      const back = ss(A.grip + 0.1, A.grip + 0.45, at) * (1 - ss(A.pull + 0.1, A.rip, at)) * 0.45;
+      mp.lookAt = back > 0.01 ? ahead().lerp(this.eyeOf(saul, this.tmp), back) : ahead();
     } else mp.lookAt = this.eyeOf(saul, this.samTarget);
     samuel.lookLimits.yaw = 1.45;
     samuel.lookRate = at < A.free ? 4 : 2.5;
     // the jerk of the held robe (a hitch back in the chest), the lean forward against it; when the wool gives, a
     // stumble forward; the chest turns back toward the king at the end
-    const jerk = ss(A.grip, A.grip + 0.08, at) * (1 - ss(A.grip + 0.12, A.pull + 0.05, at));
-    const against = ss(A.grip + 0.08, A.pull + 0.12, at) * (1 - ss(A.free, A.free + 0.12, at));
+    const jerk = ss(A.grip, A.grip + 0.08, at) * (1 - ss(A.grip + 0.12, A.grip + 0.4, at));
+    const against = ss(A.grip + 0.08, A.grip + 0.45, at) * (1 - ss(A.free, A.free + 0.12, at));
     const stumble = ss(A.free, A.free + 0.1, at) * (1 - ss(A.free + 0.14, A.free + 0.42, at));
-    samuel.body.lean = -0.13 * jerk + 0.12 * against + 0.14 * stumble;
+    samuel.body.lean = -0.13 * jerk + 0.12 * against + 0.14 * stumble + 0.03 * ss(A.turn + 0.8, A.turn + 1.4, at) * (1 - jerk);
     samuel.body.twist = -0.35 * ss(A.free + 0.1, A.end + 0.3, at);
     this.samFace.set({ sad: 0.5 + 0.15 * ss(A.grip, A.free, at), pain: 0.2 * jerk + 0.12 * against });
     this.samFace.jawTarget = 0;
+    samuel.breath.amp = 0.35 + 0.25 * against;
   }
 
   /**
@@ -828,7 +890,11 @@ export class GilgalPerformance {
     // full on Saul he read in profile): the head aims ~0.3 rad toward the lens side (his left), the eyes do the rest
     // (from the first frame: eased in over the turn, the head swung past the lens into profile on the first word)
     samuel.lookYawOffset = 0.3;
-    samuel.headRoll = -0.07 * ss(V.turnBack + 0.3, V.speech, t) + 0.025 * Math.sin(t * 1.3);
+    // the held silence after the last word (CUT v3: speechEnd -> the cut, 1.1 s): the head settles a little lower,
+    // the eyes stay on the king, a long breath out
+    const after = ss(V.speechEnd, V.speechEnd + 0.6, t);
+    eyes.y -= 0.025 * after;
+    samuel.headRoll = -0.07 * ss(V.turnBack + 0.3, V.speech, t) + 0.025 * Math.sin(t * 1.3) - 0.02 * after;
     if (this.blinks === 0 && t >= V.speech - 0.28) {
       samuel.human.rig.blink();
       this.blinks = 1;
@@ -857,8 +923,10 @@ export class GilgalPerformance {
     this.samFace.lips.UpperLipUp = vz.jaw * 0.12;
     this.samFace.jawRate = 26;
     const speaking = ss(V.speech - 0.2, V.speech, t) * (1 - ss(V.speechEnd, V.speechEnd + 0.3, t));
-    this.samFace.set({ sad: 0.16 + 0.06 * (1 - speaking), anger: 0.05 * speaking });
-    samuel.breath.amp = 0.35;
+    this.samFace.set({ sad: 0.16 + 0.06 * (1 - speaking) + 0.08 * after, anger: 0.05 * speaking });
+    // the breath: held under the words, then the long breath out of the silence
+    samuel.breath.amp = 0.35 + 0.35 * after;
+    samuel.breath.rate = 0.3 - 0.08 * after;
   }
 
   /** world position of the tear (the corner of the me'il / Saul's fist) — for the G5 cameras and FX */

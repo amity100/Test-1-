@@ -1,53 +1,71 @@
 import * as THREE from 'three';
 import type { ShotFrame } from '../gameplay/CameraRig';
+import { INTRO_SHOTS } from '../content/introScript';
 import { armyAt, armySlot, samuelAt, saulAt, TEAR_GRIP, TEAR_INSERT_AT, type GilgalShotName } from './gilgal/gilgalBlocking';
 import { ARMY, roadZ, SAMUEL, SAUL_HALT, SUN } from './gilgal/gilgalLayout';
 
 /**
- * THE CAMERAS OF CUT v2 (docs/intro-script-v2.md; cut3). Every take is a motivated move — dolly, push, crane, orbit,
- * lateral track — on eased curves, with a subtle handheld layer (applied by the player, src/gameplay/Intro.ts, from
- * TAKE_LOOK), per-take exposure and a depth-of-field target. The sets' own camera moves (gilgalShots.ts, LandSet
- * shots) stay as fallbacks; the blocking (gilgalBlocking.ts, anim) drives the actors and these cameras follow it.
+ * THE CAMERAS OF THE OPENING FILM — CUT v3 (docs/intro-script-v3.md: 60 s, six scenes, 13 long takes of 3-6.5 s; cut5
+ * on top of cut3 / cut4's compositions). Every take is a motivated move — dolly, push, crane, orbit, lateral track —
+ * that runs SLOWLY across its WHOLE shot (the `drift` ease: no move finishes early and holds, none rushes, and the
+ * lens is still moving at the cut), with a subtle handheld layer (applied by the player, src/gameplay/Intro.ts, from
+ * TAKE_LOOK), per-take exposure and a depth-of-field target. Every timed event of a camera (the shofar, the roar's
+ * jolt, G7's rack and whip) is read from the shot's named BEATS in src/content/introScript.ts, never hard-coded. The
+ * sets' own camera moves (gilgalShots.ts) stay as fallbacks; the blocking (gilgalBlocking.ts, perf) drives the actors
+ * and these cameras follow it.
  *
  *   Gilgal (gilgalCam):  'dustWall' G1 · 'king' G2 · 'spearRaised' G3 · 'silence' G4 · 'tear' G5a · 'tear:insert' G5b
  *                        · 'verdict' G6 · 'saulAlone' G7
- *   Land (landCam):      'flight' P1+P2 (judah) · 'glint' P4 (coast) · 'elders' P5 (ramah)
+ *   Land (landCam):      'flight' 'glint' 'elders' — the prologue of CUT v2 (not filmed in CUT v3; kept compiling)
  *
  * A take name 'base:variant' is filmed with the blocking of `base` (actors, army) at blocking time t + TAKE_OFFSET:
- * the insert G5b continues the tear of G5a (base shot time = insert time + 2.0 s).
+ * the insert G5b continues the tear of G5a (base shot time = insert time + the length of G5a: 4.0 s in CUT v3).
  * FILM_CAM holds the numbers so the framing can be tuned live in the test harness (window.__filmCams, ?test=1).
  */
 export const FILM_CAM = {
   // G1: low beside the front rank as it comes out of the dust, backing away (handheld)
-  dust: { ahead0: 7.2, ahead1: 4.6, side0: 9.4, side1: 8.6, h0: 0.8, h1: 1.0, lookBack: 5, lookSide: 3.4, lookH0: 1.75, lookH1: 1.55, fov0: 44, fov1: 38 },
+  // (cut5, CUT v3: the picture comes in ON the shofar (beats.shofar 1.5) out of 1.5 s of black — the move runs over the
+  //  4 s of picture, the rank gaining on the lens as it backs away; the lens holds its first pose under the black. It
+  //  opens tilted up ~10° into the glowing dust — the time card, centred, is carried over the dust, never over the
+  //  men's heads (they sit in the lower third) — and tilts down onto the front rank as the card melts)
+  dust: { ahead0: 7.6, ahead1: 4.4, side0: 9.4, side1: 8.5, h0: 0.8, h1: 1.05, lookBack: 5, lookSide: 3.4, lookH0: 3.55, lookH1: 1.55, fov0: 44, fov1: 38 },
   // G2: very low in front of the striding king, tracking back with a slow push (the sun just beside his head)
-  king: { d0: 4.7, d1: 3.35, lens: 0.3, side0: 1.05, side1: 0.55, lookH0: 1.32, lookH1: 1.5, lookSide: 0.95, fov0: 38, fov1: 33 },
-  // G3: a fast push-in from low in front of the halted king, the jolt on the roar
-  spear: { d0: 10.5, d1: 5.3, creep: 0.55, dirX: 0.9, dirZ: 0.44, h0: 0.8, h1: 0.46, lookH0: 1.65, lookH1: 2.35, lookBack: 0.7, fov0: 42, fov1: 36, pushT: 1.05 },
+  // (CUT v3: 6.5 s — the same push and arc, spread over the whole take)
+  king: { d0: 4.9, d1: 3.3, lens: 0.3, side0: 1.1, side1: 0.5, lookH0: 1.32, lookH1: 1.52, lookSide: 0.95, fov0: 38, fov1: 33 },
+  // G3: a SLOW push-in from low in front of the halting king across the whole shot (CUT v3: 5 s), the lens tilting up
+  // with the spear (beats.halt -> spearUp) and the jolt + a small punch of the lens on THE ROAR (beats.roar 1.7)
+  spear: { d0: 10.8, d1: 5.2, dirX: 0.9, dirZ: 0.44, h0: 0.82, h1: 0.46, lookH0: 1.65, lookH1: 2.35, lookBack: 0.7, fov0: 42, fov1: 36, punch: 1.6 },
   // G4: between the soldiers' shoulders, pushing toward Samuel in the road; the ranks part
   // (the lane between files 8 and 9 of the formation, the lens just over the men's heads — their heads, shoulders
   //  and spears in the lower frame, never across it; Saul soft at frame left, Samuel clear beyond him)
   // (cut4: the lens starts further back — behind rank ~6 — so the ranks parting fill the near / mid-ground, and the push
   //  continues on a lengthening lens: Samuel >= 35 % of the frame height at the end with his G4 mark nearer the army)
+  // (CUT v3: 4 s — the same lane and push (cut4's verified lens positions: between ranks 6 and 7 at the start, clear of
+  //  every man), now running to the cut on the drift ease; Samuel ~38-40 % of the frame height at the end)
   silence: { x0: -14, x1: -9.6, z0: 1.575, z1: 1.575, h0: 1.98, h1: 1.9, lookSide: -1.8, fov0: 16, fov1: 8, clear: 0.8 },
   // G5a: a medium-wide two-shot from the south at chest height (bodies ~70 % of the frame), a slow lateral move
   // west -> east with the action (cut4: backlit by the tear's cheated sun, GilgalSet.setSunCheat)
-  tear: { dx0: -0.85, dx1: 0.55, dz0: 6.6, dz1: 6.1, h: 1.25, lookH: 1.02, lookX: 0.25, fov0: 30.5, fov1: 28.5 },
+  // (CUT v3: the lateral move runs over the whole 4 s — Samuel's turn-step, Saul's plea, the lunge and the grip)
+  tear: { dx0: -1.0, dx1: 0.65, dz0: 6.65, dz1: 6.05, h: 1.25, lookH: 1.02, lookX: 0.25, fov0: 30.5, fov1: 28.5 },
   // G5b (cut4): a LOW CLOSE TWO-SHOT, not a macro — the lens 0.6 m above the ground ~1.9 m SOUTH of the grip (the same
   // side of the action line as G5a: Saul frame left, Samuel frame right), looking a little up into the backlit sky;
   // the look sits between the fist and Saul's face and follows the real hand a little
   // (framed on the fist at the insert's first frame — the blocking's TEAR_GRIP: Saul's head ~0.6 m west of it on the
   //  left third, Samuel walking away ESE on the right third; the look at chest height of the kneeling king)
-  insert: { dx0: -0.12, dx1: 0.06, dz0: 2.3, dz1: 2.22, h0: 0.6, h1: 0.6, lookX: 0.05, lookH: 0.85, follow: 0.2, fov0: 36, fov1: 35 },
+  // (CUT v3: 5 s of slow motion — a slow drift east and a small push over the whole insert)
+  insert: { dx0: -0.18, dx1: 0.12, dz0: 2.34, dz1: 2.18, h0: 0.6, h1: 0.62, lookX: 0.05, lookH: 0.85, follow: 0.2, fov0: 36, fov1: 34.5 },
   // G6 (cut4): a medium close-up on Samuel, 3/4 FRONT from the south-west at eye level — the lens on the line from
   // Samuel toward Saul turned `rot` deg toward the lens side (his eyeline ~off-lens left), a slow 6 % push; the look
   // shifted `lookLeft` m to frame left (his face on the right third, the verse in the left negative space)
-  verdict: { d0: 2.05, d1: 1.92, rot: 42, eyeH: 1.55, dh0: 0.0, dh1: 0.015, lookLeft: 0.12, lookDown: 0.1, follow: 0.55, fov0: 22, fov1: 20.5 },
+  // (CUT v3: 6 s — the slow push runs through the speech and the held silence after it, ~9 %)
+  verdict: { d0: 2.08, d1: 1.9, rot: 42, eyeH: 1.55, dh0: 0.0, dh1: 0.015, lookLeft: 0.12, lookDown: 0.1, follow: 0.55, fov0: 22, fov1: 20.5 },
   // G7: the fist and his face; a slow push, the focus pull, the whip up into the light at the end
   // (cut4, director-notes-v5 G7: OPEN on the fist with the torn corner and its tzitzit against the coat, then the tilt
   //  up and the rack focus to his face looking down; the lens rises with the tilt)
   //  (the lens on his NORTH side: the fist with the torn corner is held on his south side, so it never covers his face)
-  alone: { dx0: 1.75, dx1: 1.45, dz0: -0.3, dz1: -0.45, h0: 1.05, h1: 1.32, fov0: 24, fov1: 26.5, mix0: 0.04, mix1: 0.8, tilt0: 0.35, tilt1: 1.3, whipAt: 1.7, whip: 7 },
+  //  (CUT v3, 3 s: the rack fist -> face from just after beats.lookDown (`tilt0` s after it) to `tilt1` s before
+  //   beats.tighten; the whip up into the light starts `whipLead` s before beats.flash and runs into the cut)
+  alone: { dx0: 1.75, dx1: 1.42, dz0: -0.3, dz1: -0.46, h0: 1.05, h1: 1.32, fov0: 24, fov1: 26.5, mix0: 0.04, mix1: 0.8, tilt0: 0.1, tilt1: 0.2, whipLead: 0.05, whip: 7 },
   // P1+P2: the flight re-timed (shot seconds -> the set's flight parameter e), skim altitude over the deck, the bank
   // (cut4: after the burst out of the deck the lens KEEPS FLYING — a glide on the final heading, `glide` m/s eased in
   //  from `glideAt`, sinking `sink` m/s, the lens opening to `glideFov` — the nearest ridge slides under the lens)
@@ -70,8 +88,19 @@ export const FILM_CAM = {
  */
 export const SUN_CHEAT: Record<string, number> = { tear: 150, 'tear:insert': 150, verdict: 150 };
 
-/** blocking time offset (s) of a split take: its base shot has already run this long */
-export const TAKE_OFFSET: Record<string, number> = { 'tear:insert': 2.0 };
+/** blocking time offset (s) of a split take: its base shot has already run this long (the G5b insert continues the
+ *  tear at the end of G5a: TEAR_INSERT_AT = the length of G5a in the sheet, 4.0 s in CUT v3) */
+export const TAKE_OFFSET: Record<string, number> = { 'tear:insert': TEAR_INSERT_AT };
+
+/** a named beat of a take from the shared timing contract (INTRO_SHOTS), or the fallback */
+export function takeBeat(take: string, beat: string, fallback: number): number {
+  const b = INTRO_SHOTS.find((s) => s.take === take)?.beats?.[beat];
+  return typeof b === 'number' ? b : fallback;
+}
+/** the length (s) of a take's shot in the sheet, or the fallback */
+export function takeDur(take: string, fallback: number): number {
+  return INTRO_SHOTS.find((s) => s.take === take)?.dur ?? fallback;
+}
 
 /** base Gilgal shot of a take ('tear:insert' -> 'tear') */
 export const baseTake = (take: string) => take.split(':')[0] as GilgalShotName;
@@ -87,12 +116,14 @@ export const TAKE_LOOK: Record<string, { hand: number; freq?: number; exp?: numb
   glint: { hand: 0.2, freq: 0.8, exp: 0.8, seed: 3 },
   elders: { hand: 0.3, seed: 4 },
   // (cut4: a touch more exposure — the backlit road read as dark asphalt; G1 notes)
-  dustWall: { hand: 0.62, freq: 1.15, exp: 1.07, seed: 5, jolt: 0.02, joltAmp: 0.7 },
-  king: { hand: 0.3, freq: 0.7, seed: 6 },
-  spearRaised: { hand: 0.42, freq: 1.0, seed: 7, jolt: 1.1, joltAmp: 1.5 },
-  silence: { hand: 0.3, freq: 0.6, seed: 8 },
-  tear: { hand: 0.4, freq: 0.9, seed: 9 },
-  'tear:insert': { hand: 0.32, freq: 0.7, seed: 10 },
+  // (cut5, CUT v3: the long takes get a calmer hand; the jolts sit on the contract's beats: G1 the shofar blast the
+  //  picture comes in on, G3 THE ROAR)
+  dustWall: { hand: 0.5, freq: 1.0, exp: 1.07, seed: 5, jolt: takeBeat('dustWall', 'shofar', 1.5), joltAmp: 0.7 },
+  king: { hand: 0.28, freq: 0.65, seed: 6 },
+  spearRaised: { hand: 0.36, freq: 0.9, seed: 7, jolt: takeBeat('spearRaised', 'roar', 1.7), joltAmp: 1.5 },
+  silence: { hand: 0.26, freq: 0.55, seed: 8 },
+  tear: { hand: 0.32, freq: 0.8, seed: 9 },
+  'tear:insert': { hand: 0.28, freq: 0.65, seed: 10 },
   verdict: { hand: 0.2, freq: 0.55, seed: 11 },
   saulAlone: { hand: 0.26, freq: 0.7, seed: 12 },
   figure: { hand: 0.2, freq: 0.5, seed: 13 },
@@ -110,10 +141,16 @@ const toSunH = (() => {
 const lerp = (a: number, b: number, u: number) => a + (b - a) * u;
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 const smooth = (u: number) => u * u * (3 - 2 * u);
-/** smootherstep (zero 1st and 2nd derivative at the ends) */
-const smoother = (u: number) => u * u * u * (u * (u * 6 - 15) + 10);
 const ss = (a: number, b: number, x: number) => smooth(clamp01((x - a) / (b - a)));
-const easeOut3 = (u: number) => 1 - Math.pow(1 - clamp01(u), 3);
+/**
+ * The ease of every camera move of CUT v3 (cut5): 60 % smoothstep + 40 % linear over the WHOLE shot. The move starts
+ * and ends gently but never stops (the lens still drifts at 40 % of its mean speed at a cut: the cuts fall on motion),
+ * its peak is only 1.3x the mean speed (no rush in the middle), and it never finishes early and holds.
+ */
+export const drift = (u: number) => {
+  const x = clamp01(u);
+  return 0.4 * x + 0.6 * smooth(x);
+};
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
@@ -141,13 +178,17 @@ function gripPoint(t: number, H: (x: number, z: number) => number, _ctx: GilgalC
  * TAKE_OFFSET). Returns false when the take is not one of these (the set's own move is used).
  */
 export function gilgalCam(take: string, u: number, t: number, H: (x: number, z: number) => number, out: ShotFrame, ctx?: GilgalCtx): boolean {
-  const e = smooth(u);
+  const e = drift(u);
   out.roll = 0;
   switch (take) {
     case 'dustWall': {
       // G1 — the front rank comes out of the dust at the lens: the lens low beside the column's southern files,
-      // a few metres ahead of the first rank and backing away slower than the march (the rank gains on us)
+      // a few metres ahead of the first rank and backing away slower than the march (the rank gains on us).
+      // CUT v3: the shot opens on 1.5 s of black (the time card); the picture comes in ON the shofar — the move runs
+      // over the picture only (shofar -> the cut), the lens holding its first pose (relative to the rank) under the black
       const c = FILM_CAM.dust;
+      const t0 = takeBeat('dustWall', 'shofar', 0), T = takeDur('dustWall', 3);
+      const e = drift((t - t0) / Math.max(0.5, T - t0));
       const a = armyAt('dustWall', t);
       const fx = a.frontX - ARMY.leadGap;
       const zr = roadZ(fx);
@@ -175,23 +216,23 @@ export function gilgalCam(take: string, u: number, t: number, H: (x: number, z: 
       return true;
     }
     case 'spearRaised': {
-      // G3 — the halt: a FAST push-in from low in front of him (east, the sun and the army's dust behind him), eased
-      // out by the time the roar breaks (1.1 s), then a slow creep; the lens tilts up with the spear
+      // G3 — the halt: a SLOW push-in from low in front of him (east, the sun and the army's dust behind him) across
+      // the whole shot (CUT v3: 5 s); the lens tilts up with the spear (halt -> spearUp) and kicks on THE ROAR (the
+      // handheld jolt of TAKE_LOOK + a small punch-in of the lens), then keeps pushing through the roar to the cut
       const c = FILM_CAM.spear;
       const s = saulAt('spearRaised', t).pos;
       const g = H(s.x, s.z);
-      const k = easeOut3(t / c.pushT);
-      const creep = clamp01((t - c.pushT) / 2.2);
-      const d = lerp(c.d0, c.d1, k) - c.creep * smooth(creep);
+      const halt = takeBeat('spearRaised', 'halt', 0.6), up = takeBeat('spearRaised', 'spearUp', 1.3), roar = takeBeat('spearRaised', 'roar', 1.7);
+      const d = lerp(c.d0, c.d1, e);
       _a.set(c.dirX, 0, c.dirZ).normalize();
       out.pos.copy(s).addScaledVector(_a, d);
-      out.pos.y = H(out.pos.x, out.pos.z) + lerp(c.h0, c.h1, k);
+      out.pos.y = H(out.pos.x, out.pos.z) + lerp(c.h0, c.h1, e);
       out.look.copy(s).addScaledVector(_a, -c.lookBack);
-      out.look.y = g + lerp(c.lookH0, c.lookH1, ss(0.55, 1.35, t));
+      out.look.y = g + lerp(c.lookH0, c.lookH1, ss(halt - 0.1, up + 0.55, t));
       // a small punch-in of the lens on the roar
-      const punch = Math.exp(-Math.max(0, t - 1.1) / 0.22) * (t > 1.1 ? 1 : 0);
-      out.fov = lerp(c.fov0, c.fov1, k) - 1.6 * punch;
-      out.roll = 0.03 * (1 - k) - 0.012 * creep;
+      const punch = t > roar ? Math.exp(-(t - roar) / 0.24) : 0;
+      out.fov = lerp(c.fov0, c.fov1, e) - c.punch * punch;
+      out.roll = 0.026 * (1 - e) - 0.01 * e;
       return true;
     }
     case 'silence': {
@@ -259,11 +300,14 @@ export function gilgalCam(take: string, u: number, t: number, H: (x: number, z: 
       return true;
     }
     case 'saulAlone': {
-      // G7 — nearly frontal, the army soft behind him in the dust and the low sun: a slow push to the fist while the
-      // focus pulls up to his face; at the end the lens whips up into the light (the flash into David's hills)
+      // G7 — nearly frontal, the army soft behind him in the dust and the low sun: it opens ON the fist with the torn
+      // corner, tilts and racks up to his face as he looks down (beats.lookDown -> tighten), holds on the face through
+      // the breath and the tighten, and at the end whips up into the light (the whip under way at beats.flash, where
+      // the light-flash into David's hills begins; it runs into the cut)
       const c = FILM_CAM.alone;
       const s = saulAt('saulAlone', t).pos;
       const g = H(s.x, s.z);
+      const w0 = alonePhases();
       out.pos.set(s.x + lerp(c.dx0, c.dx1, e), g + lerp(c.h0, c.h1, e), s.z + lerp(c.dz0, c.dz1, e));
       _a.set(s.x + 0.22, g + 0.98, s.z + 0.3); // the fist at his chest
       const hand = ctx?.saulHand?.(_c);
@@ -271,8 +315,8 @@ export function gilgalCam(take: string, u: number, t: number, H: (x: number, z: 
       _b.set(s.x + 0.05, g + 1.84, s.z);
       const eyes = ctx?.saulEyes?.(_c);
       if (eyes) _b.copy(eyes);
-      out.look.copy(_a).lerp(_b, lerp(c.mix0, c.mix1, ss(c.tilt0, c.tilt1, t)));
-      const w = ss(c.whipAt, 2.05, t);
+      out.look.copy(_a).lerp(_b, lerp(c.mix0, c.mix1, ss(w0.tilt0, w0.tilt1, t)));
+      const w = ss(w0.whip0, w0.whip1, t);
       out.look.y += c.whip * w * w;
       out.fov = lerp(c.fov0, c.fov1, e) + 6 * w;
       out.roll = -0.05 * w;
@@ -280,6 +324,14 @@ export function gilgalCam(take: string, u: number, t: number, H: (x: number, z: 
     }
   }
   return false;
+}
+
+/** G7's timing from the contract: the tilt / rack fist -> face and the whip into the light (shot seconds) */
+function alonePhases() {
+  const c = FILM_CAM.alone;
+  const look = takeBeat('saulAlone', 'lookDown', 0.4), tighten = takeBeat('saulAlone', 'tighten', 1.8);
+  const flash = takeBeat('saulAlone', 'flash', 2.75), T = takeDur('saulAlone', 3);
+  return { tilt0: look + c.tilt0, tilt1: Math.max(look + c.tilt0 + 0.4, tighten - c.tilt1), whip0: flash - c.whipLead, whip1: T + 0.08 };
 }
 
 /** push a lens position out of the soldiers' formation slots (front ranks) so it never enters a man */
@@ -324,9 +376,9 @@ export function gilgalFocus(take: string, t: number, H: (x: number, z: number) =
       return { point: out.set(s.x, H(s.x, s.z) + 1.85, s.z), fStop: 4 };
     }
     case 'silence': {
-      // from the soldiers' heads near the lens to the old man as the ranks part
+      // from the soldiers' heads near the lens to the old man as the ranks part (beats.part -> just after the name card)
       const sam = samuelAt('silence', t).pos;
-      const k = ss(0.55, 1.35, t);
+      const k = ss(takeBeat('silence', 'part', 1.0) - 0.2, takeBeat('silence', 'card', 1.6) + 0.25, t);
       _a.set(SAUL_HALT.x - 4, H(SAUL_HALT.x - 4, 0) + 1.6, roadZ(SAUL_HALT.x));
       _b.set(sam.x, H(sam.x, sam.z) + 1.45, sam.z);
       return { point: out.copy(_a).lerp(_b, k), fStop: 4 };
@@ -352,7 +404,9 @@ export function gilgalFocus(take: string, t: number, H: (x: number, z: number) =
       const hand = ctx?.saulHand?.(_c);
       if (hand) _a.copy(hand);
       const eyes = ctx?.saulEyes?.(_b) ?? _b.set(s.x + 0.05, g + 1.84, s.z);
-      return { point: out.copy(_a).lerp(eyes, ss(0.55, 1.25, t)), fStop: 2.0 };
+      // the rack runs with the tilt (alonePhases), a little ahead of it
+      const w0 = alonePhases();
+      return { point: out.copy(_a).lerp(eyes, ss(w0.tilt0 + 0.05, w0.tilt1 - 0.1, t)), fStop: 2.0 };
     }
   }
   return null;

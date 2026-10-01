@@ -9,6 +9,8 @@
  *   every frame:                                                          ff.tick(t, dt, camera);
  *   leaving the game-world shots:                                         ff.restore();
  *   H1 every frame:  lambAtEdge(flock.lamb, t, { lift: beats.lambHead, toward: thicketPoint, walkUntil })
+ *                    (H2: t = H1's length + the H2 shot time — the lamb keeps listening)
+ *   H1/H2 every frame: bearInThicket(bear.model, take, t) — the bear's breath and the head lifting at `eyesOpen`
  *
  * Every animal placed by stageInView is inside the lens' frame (projected, with a margin), on the ground below the
  * horizon, clear of the shepherd's silhouette and of each other; a third walk slowly across the view (profiles), the
@@ -17,6 +19,13 @@
  */
 import * as THREE from 'three';
 import type { Animal, Flock } from '../characters/Flock';
+import type { BearModel } from '../characters/BearModel';
+import { INTRO_SHOTS } from '../content/introScript';
+
+/** CUT v3 contract: H1 'thicket' (its length and `lambHead`), H2 'lamb' (`eyesOpen`) */
+const H1 = INTRO_SHOTS.find((s) => s.take === 'thicket');
+const H2 = INTRO_SHOTS.find((s) => s.take === 'lamb');
+export const LAMB_BEATS = { h1: H1?.dur ?? 3, lambHead: H1?.beats?.lambHead ?? 1.8, eyesOpen: H2?.beats?.eyesOpen ?? 0.9 };
 
 interface Member {
   a: Animal;
@@ -222,11 +231,13 @@ const lambClock = new WeakMap<Animal, number>();
 
 /**
  * H1: the lamb at the thicket's edge — it walks in (until `walkUntil`), grazes with an ear twitching now and then, and
- * at `lift` its head comes up toward `toward` (Flock's alert look: the head lifts, the ears turn), the ears flick, it
- * takes one hesitant step and stands listening. It never walks on out of the frame.
+ * at `lift` (default: the contract's H1 `lambHead`) its head comes up toward `toward` (Flock's alert look: the head
+ * lifts, the ears turn), the ears flick, it takes one hesitant step and stands listening — the ears still turning (H2:
+ * t runs on past H1's length). It never walks on out of the frame.
  */
-export function lambAtEdge(lamb: Animal, t: number, o: { lift: number; toward: THREE.Vector3; walkUntil?: number; speed?: number }) {
+export function lambAtEdge(lamb: Animal, t: number, o: { lift?: number; toward: THREE.Vector3; walkUntil?: number; speed?: number }) {
   const a = lamb as unknown as { alert: number; alertDir: number; earFlickT: number[]; graze: number };
+  const lift = o.lift ?? LAMB_BEATS.lambHead;
   lamb.aiEnabled = false;
   const last = lambClock.get(lamb) ?? -1;
   lambClock.set(lamb, t);
@@ -236,11 +247,15 @@ export function lambAtEdge(lamb: Animal, t: number, o: { lift: number; toward: T
     if (left) a.earFlickT[0] = 0;
     if (right) a.earFlickT[1] = 0.06;
   };
-  // the ears twitch while it grazes (flies, a sound off in the bushes), then both at once as the head comes up
+  // the ears twitch while it grazes (flies, a sound off in the bushes), then both at once as the head comes up, and
+  // they keep turning while it listens (CUT v3: H1 is 3 s, the lamb lives on into H2)
   if (crossed(0.55)) flick(true, false);
   if (crossed(1.05)) flick(false, true);
-  if (crossed(o.lift)) flick(true, true);
-  if (crossed(o.lift + 0.75)) flick(true, false);
+  if (lift > 1.6 && crossed(lift - 0.35)) flick(true, false);
+  if (crossed(lift)) flick(true, true);
+  if (crossed(lift + 0.75)) flick(true, false);
+  if (crossed(lift + 1.25)) flick(false, true);
+  if (crossed(lift + 2.0)) flick(true, true);
   const walking = t < (o.walkUntil ?? 0);
   if (walking) {
     lamb.state = 'walk';
@@ -249,15 +264,38 @@ export function lambAtEdge(lamb: Animal, t: number, o: { lift: number; toward: T
     return;
   }
   lamb.manualSpeed = 0;
-  if (t < o.lift) {
+  if (t < lift) {
     lamb.state = 'graze';
     a.alert = 0;
     return;
   }
-  // the head comes up and turns to the thicket; one hesitant step, then it stands listening
+  // the head comes up and turns to the thicket; one hesitant step, then it stands listening (the look searching a
+  // little: a sound it cannot place)
   lamb.state = 'walk';
   a.alert = 1;
-  a.alertDir = Math.atan2(o.toward.x - lamb.position.x, o.toward.z - lamb.position.z);
-  const step = t > o.lift + 0.45 && t < o.lift + 0.8;
+  a.alertDir = Math.atan2(o.toward.x - lamb.position.x, o.toward.z - lamb.position.z) + 0.12 * Math.sin((t - lift) * 1.7) * Math.min(1, Math.max(0, t - lift - 0.9));
+  const step = t > lift + 0.45 && t < lift + 0.8;
   lamb.manualSpeed = step ? 0.3 : 0;
+}
+
+/**
+ * H1/H2: the bear in the dark of the thicket (CUT v3) — a slow, deep breath under the leaves in H1; in H2 the head lifts
+ * toward the lamb as the eyes open at `eyesOpen` (the eye-shine is cut5's, FilmWorld), the breath quickening a little.
+ * Pass take = null when leaving the film (back to the gameplay defaults).
+ */
+export function bearInThicket(bear: Pick<BearModel, 'breathDepth' | 'breathRate' | 'headUp'>, take: string | null, t: number) {
+  if (take === 'lamb') {
+    const open = THREE.MathUtils.smoothstep(t, LAMB_BEATS.eyesOpen - 0.2, LAMB_BEATS.eyesOpen + 0.6);
+    bear.breathDepth = 2.2 + 0.6 * open;
+    bear.breathRate = 0.75 + 0.25 * open;
+    bear.headUp = open;
+  } else if (take === 'thicket') {
+    bear.breathDepth = 2.0;
+    bear.breathRate = 0.75;
+    bear.headUp = 0;
+  } else {
+    bear.breathDepth = 1;
+    bear.breathRate = 1;
+    bear.headUp = 0;
+  }
 }
