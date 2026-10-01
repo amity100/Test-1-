@@ -685,7 +685,7 @@ export class FilmActor {
 
 const _zero = new THREE.Vector3();
 /** MeilTear steps per frame once the corner is torn (see update) */
-const TEAR_SUBSTEPS = 4;
+const TEAR_SUBSTEPS = 1;
 
 const SIDES = ['L', 'R'] as const;
 const LOOK_BONES: [string, number][] = [['spine01', 0.1], ['neck01', 0.15], ['neck02', 0.2], ['neck03', 0.2], ['head', 0.35]];
