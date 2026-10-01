@@ -1021,13 +1021,14 @@ html[dir='rtl'] .vseg b { letter-spacing: .03em; font-size: 15px; }
 .t-power.held svg { color: #fff; }
 .t-power.held .t-fill { background: #7ff4ff; }
 @keyframes tPowerReady { from { box-shadow: 0 0 0 0 rgba(255, 210, 122, 0.0); } to { box-shadow: 0 0 22px 4px rgba(255, 210, 122, 0.75); } }
-.touch.power-held .t-btn:not(.t-power):not(.t-pause) { opacity: .18; }
+.touch.power-held .t-btn:not(.t-power):not(.t-pause):not(.t-flip):not(.hidden) { opacity: .18; }
 .touch.power-held .t-stick { opacity: 0; }
 .ui:has(.touch.power-held) .strikes { opacity: .18; }
 /* the moves, once, short, when FLOW comes on (phones) */
 .flow-tip { position: absolute; left: 50%; top: calc(var(--st) + 98px); transform: translateX(-50%); width: max-content; max-width: min(420px, 40vw); padding: 5px 12px; background: rgba(8, 11, 17, 0.72); border-inline-start: 3px solid #ffd27a; font: 600 11px/1.35 var(--hud-font); color: #fff; text-align: center; opacity: 0; pointer-events: none; }
 html[dir='rtl'] .flow-tip { font-family: 'Heebo', 'Oxanium', sans-serif; font-size: 12px; }
-.flow-tip.go { animation: flowTip 6.5s ease forwards; }
+/* (after the WAVE banner has had its say) */
+.flow-tip.go { animation: flowTip 6.5s ease 3.2s forwards; }
 @keyframes flowTip { 0% { opacity: 0; } 6% { opacity: 1; } 85% { opacity: 1; } 100% { opacity: 0; } }
 /* phones: the lab panel's rules card folds away (it ran off the screen and under the STRIKES); RULES opens it a while */
 .lp-more { display: none; }
@@ -1053,4 +1054,11 @@ html[dir='rtl'] .flow-tip { font-family: 'Heebo', 'Oxanium', sans-serif; font-si
 .is-touch .lp-vars button[data-v='flow'] em { display: inline; }
 .is-touch .lp-wave .lp-more { margin-inline-start: 4px; padding: 4px 6px; font-size: 8px; letter-spacing: .06em; }
 .is-touch .lp-wave { align-items: center; gap: 6px; }
-.is-touch .lp-wt { font-size: 12px; }
+.is-touch .lp-wt { font-size: 11px; }
+.is-touch .lab-panel .lp-wave b { font-size: 15px; }
+/* small phones (the lab panel reaches past the middle): the POWER bar and the tip sit beside it */
+@media (max-width: 760px) {
+  .is-touch .flow-meter, .is-touch .flow-tip { left: calc(var(--sl) + 262px); transform: none; width: min(200px, calc(100vw - var(--sl) - 470px)); max-width: none; }
+  .is-touch .flow-meter { min-width: 150px; }
+  .is-touch .flow-tip { font-size: 10px; }
+}

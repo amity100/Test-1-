@@ -463,6 +463,7 @@ export class Menu {
         ${tr(esc(t('strike.reflect')), 'ctl.strike1', true)}${tr(esc(t('strike.loop')), 'ctl.strike2', true)}${tr(esc(t('strike.swap')), 'ctl.strike3', true)}${tr(esc(t('strike.dash')), 'ctl.strike4', true)}
         ${tr(esc(t('touch.jump')), 'ctl.touch.jump')}${tr(esc(t('touch.shove')), 'ctl.touch.shove')}
         ${tr(esc(t('touch.action')), 'ctl.touch.action')}${tr(esc(t('touch.crouch')), 'ctl.touch.crouch')}${tr('🎬', 'ctl.touch.clip')}
+        ${tr(esc(t('touch.slide')), 'ctl.touch.slide')}${tr(esc(t('touch.power')), 'ctl.touch.power')}
       </div>`;
     }
     const tabBtn = (k: 'kbm' | 'pad' | 'touch') =>

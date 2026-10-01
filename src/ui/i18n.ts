@@ -537,6 +537,8 @@ const EN: Record<string, string> = {
   'ctl.touch.action': 'Hidden blade (close up), grab, throw, hijack, lift',
   'ctl.touch.flip': 'Flip the exit (while aiming)',
   'ctl.touch.crouch': 'Crouch',
+  'ctl.touch.slide': 'Lab, FLOW: slide at a run (lit when you can); again in the air: double jump / wall kick on JUMP',
+  'ctl.touch.power': 'Lab, FLOW: the ring is the meter. Full: hold, tap up to 3 men with the other thumb, let go',
   'ctl.touch.clip': 'Save a clip (when offered)',
 
   // trick names (fallbacks: META's strings override these through addStrings)
@@ -1063,6 +1065,8 @@ const HE: Record<string, string> = {
   'ctl.touch.action': 'להב נסתר (מקרוב), תפיסה, זריקה, השתלטות, מעלית',
   'ctl.touch.flip': 'היפוך היציאה (בזמן כיוון)',
   'ctl.touch.crouch': 'כריעה',
+  'ctl.touch.slide': 'מעבדה, זרימה: החלקה בריצה (מואר כשאפשר); באוויר: קפיצה כפולה / בעיטה מקיר בכפתור הקפיצה',
+  'ctl.touch.power': 'מעבדה, זרימה: הטבעת היא המד. מלא: החזק, הקש על עד 3 אויבים באגודל השני, שחרר',
   'ctl.touch.clip': 'שמירת קליפ (כשמוצע)',
 
   'trick.returnToSender': 'החזרה לשולח',

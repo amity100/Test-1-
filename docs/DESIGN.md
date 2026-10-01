@@ -1015,27 +1015,46 @@ each **combat variant** to choose one.
   the same, only the enemies change"). ONSLAUGHT's fight with a different body; gated on
   `flowOn()`, so CURRENT, PRECISION, ONSLAUGHT and the missions move exactly as before.
   - *Speed.* Walk / sprint x1.5 (4.65 / 9 m/s), ground acceleration 26 (14), air control 0.8
-    (0.35). Over the run cap on the ground (a slide, a kick, a rift) and still pushing on, the
+    (0.35); air control turns your flight but never adds speed past max(your speed, the run cap)
+    (no air-strafing to 20 m/s). Over the run cap on the ground (a slide, a kick, a rift) and still pushing on, the
     speed bleeds at 4.5 m/s² instead of stopping. Fast running widens the FOV and draws speed
     lines; a landing over 6 m/s thuds (camera shake, dust).
   - *SLIDE* (crouch — C / B / the crouch button — at 5.5 m/s or more; it doesn't toggle crouching):
-    +2.6 m/s at once, low (camera dips), bleeds 5.5 m/s², steers a little, ends under 3.6 m/s or
-    after 1.5 s; a jump out of it keeps the speed; 0.35 s from slide to slide.
+    +2.6 m/s at once but never past 11.6 m/s (slide after slide doesn't stack), low (camera dips),
+    bleeds 5.5 m/s², steers a little, ends under 3.6 m/s or after 1.5 s; a jump out of it keeps the
+    speed and adds 1.2 m/s (to the same 11.6 cap); 0.35 s from slide to slide.
   - *Jumps.* One DOUBLE JUMP (7 m/s up, the flight turned 70% toward the stick, speed kept);
     in the air a ledge in reach is mantled first, then a wall within 0.85 m (8 rays, waist high)
-    is KICKED off: 6.5 m/s out, 7.2 up, speed along the wall kept, the double jump given back
+    is KICKED off — only a real wall: it must also be there 1.5 m over the floor under you (top
+    ≥ 1.6 m; cover, rails and crates give the double jump) and you've been airborne 0.12 s: 6.5 m/s out, 7.2 up, speed along the wall kept, the double jump given back
     (0.22 s between kicks).
   - *Rifts keep your speed* (physics already turns the velocity through, magnitude whole); out
     of a door or wall end FLOW adds x1.12 (never past 18 m/s; floor ends and loops untouched).
-  - *POWER meter* (0..1, starts at 0.5 each life): per second 0.011 per m/s above 2.8 m/s,
-    +0.07 sliding, +0.045 in the air; +0.07 a wall kick, +0.025 a double jump, +0.06 a rift
-    crossing, +0.12 a kill (+0.24 in the air, sliding or rift-charged); -0.025/s standing still.
+  - *POWER meter* (0..1, starts at 0.5 each life; full stays full until spent): per second
+    0.0035 per m/s above 2.8 m/s, +0.03 sliding, +0.02 in the air; +0.03 a wall kick, +0.012 a
+    double jump, +0.03 a rift crossing, +0.06 a kill (+0.12 in the air, sliding or rift-charged);
+    -0.015/s standing still. Sized so active, stylish play fills it from empty in ~25-30 s (a
+    movement-only bot: 29 s), plain running in ~1 min.
     A bar above the strike bar (top centre on a phone): READY — hold Z (R3 / the POWER button).
   - *POWER moment.* Full, hold its key: time x0.05 at once (cold drained grade, the camera
-    2.8 m further out and 14° wider), every man within 48 m lit; the crosshair marks up to 3
-    (LMB / RT; a thumb by resting on a man 0.28 s). Untouchable while it lasts. Let go (or after
+    2.8 m further out and 14° wider), every man within 48 m lit, and every lit man on screen is markable
+    (no line of sight: rifts take you there). Up to 3: the crosshair snaps to the lit man nearest
+    it within 11% of the screen's height (LMB / RT; a thumb by resting it there 0.28 s), and on a
+    phone a TAP within 64 px of a man marks him. Portal hints hide meanwhile. Untouchable while it lasts. Let go (or after
     4 s): nothing marked, time runs again (0.8 s lockout, the meter kept); marked, the meter is
     spent and the CHAIN runs on the wall clock: 0.12 s, then one link per 0.22 s at x0.18: a rift
-    burst where you stand, you come out 1.1 m past him (else this side) at 9 m/s, he dies (a
+    burst where you stand, you come out 1.1 m past him (else this side; only where there's room
+    to stand AND a floor — never over the void or the pool) at 9 m/s (0 if the floor ends 4 m on), he dies (a
     blade kill; a boss takes 150), 90 ms hitstop, a hard shake, a flash, sparks, a ring, a
     vibration, STRIKE n; the camera swings to each dash. After the last: 0.6 s at x0.35.
+  - *On a phone* (`engine/touch.ts`, landscape). FLOW adds two buttons to the right cluster:
+    **SLIDE** (over JUMP, where the thumb rolls up to; it takes CROUCH's place and is the crouch
+    key: at a run it slides, lit gold when fast enough, else it crouches) and **POWER** (above
+    DODGE: a ring round it fills with the meter, it pulses gold when full, cyan while held).
+    JUMP again in the air: the double jump, or the wall kick by a wall. Hold POWER with the
+    right thumb; while it's held every touch off the buttons is a TAP that marks the man under
+    it (`Input.taps` → `pickMark`), the rest of the controls fade, the stick doesn't appear;
+    drag the POWER thumb to look; let go: the chain. One line on the moves shows once when FLOW
+    comes on (after the WAVE banner, gone in ~6 s). The lab panel on a phone is one row of chips
+    and the wave line; its rules fold behind a RULES chip (9 s open). The menu's variant picker
+    is a 2 x 2 grid of big targets (no F-keys). Checked at 667x375, 844x390, 915x412, 1180x820.
