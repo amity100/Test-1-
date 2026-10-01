@@ -142,7 +142,7 @@ export class Menu {
     return this.world === 'lab';
   }
 
-  /** CURRENT / PRECISION / ONSLAUGHT, F1-F3, each with a line on what it is. */
+  /** CURRENT / PRECISION / ONSLAUGHT / FLOW, F1-F4, each with a line on what it is. */
   private variantSeg(withNotes = true) {
     const opts = VARIANTS.map(
       (v, i) =>

@@ -8,7 +8,7 @@ export interface Settings {
   slowmo: boolean;
   /** Performance overlay (fps, frame / CPU / GPU ms, resolution, draws). */
   perf: boolean;
-  /** The COMBAT LAB's variant (game/variant.ts): CURRENT, PRECISION or ONSLAUGHT. Outside the lab the game is CURRENT. */
+  /** The COMBAT LAB's variant (game/variant.ts): CURRENT, PRECISION, ONSLAUGHT or FLOW. Outside the lab the game is CURRENT. */
   combatVariant: CombatVariant;
   /** Settings format (see readSettings). */
   v: number;

@@ -204,7 +204,7 @@ async function boot() {
   };
   game.onPause = () => menu.showPause();
   game.onEnd = (win, stats, rank) => (menu as any).showEnd(win, stats, rank);
-  // COMBAT LAB: its results card; the variant (F1-F3, the menus, the HUD chips) restarts the run
+  // COMBAT LAB: its results card; the variant (F1-F4, the menus, the HUD chips) restarts the run
   game.onLabEnd = (st) => menu.showLabEnd(st);
   const pickVariant = (v: CombatVariant) => {
     settings.combatVariant = v;

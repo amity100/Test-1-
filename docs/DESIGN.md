@@ -758,6 +758,7 @@ Engine rules this world leans on (both worlds get them):
 | X / MMB | CLOSE (shear) |
 | F | ACTION (hidden blade / grab / throw / hijack / use lift) |
 | Tab | RIFT VISION (routes, cones, outcome icons) |
+| Z (hold) | COMBAT LAB, FLOW only: POWER (pad R3; a touch button) |
 | T | CLIP |
 | K | Photo mode |
 | Esc | Pause |
@@ -921,11 +922,12 @@ each **combat variant** to choose one.
   (`killTool`: GRAB/THROW, REFLECT, LOOP incl. geyser/cannon, SWAP, DASH, BLADE,
   OTHER), per wave too. Lab kills don't count toward the missions' challenges.
 - **Variants** (`src/game/variant.ts`): `current` (the game as it plays today),
-  `precision`, `onslaught`. The pick is the `combatVariant` setting; F1/F2/F3, the
+  `precision`, `onslaught`, `flow`. The pick is the `combatVariant` setting; F1-F4, the
   pause menu, the main menu and the HUD chips switch it and restart the run.
   Systems read `activeVariant()`: the pick inside the lab, `current` everywhere
   else; `onVariantChange()` notifies. ONSLAUGHT is PRECISION (`precisionOn()`) plus the
-  enemy side below.
+  enemy side below; FLOW is ONSLAUGHT (`onslaughtOn()`: its men, waves and dodge rule) plus
+  the body and the POWER moment at the end of this section.
 - **PRECISION** (`src/game/precision.ts`; the answer to "the game plays itself"). Nothing
   aims, picks or chases for you; defence and execution are skills:
   - *Manual aim.* Strikes (REFLECT's key aside), a LOOP cannon's catch, and GRAB take only
@@ -1009,3 +1011,31 @@ each **combat variant** to choose one.
   - *Measured* (headless, a scripted player that reads 65% of attacks with a 0.22 s reaction:
     parry, dodge through, blade finisher): O1-O5 32 / 38 / 45 / 65 / 77 s, 595 damage, 2 deaths;
     with no tools, W1 alone takes 400 damage (4 deaths) a minute.
+- **FLOW + POWER** (`src/game/flow.ts`, every number in `FLOW`; the answer to "the variants feel
+  the same, only the enemies change"). ONSLAUGHT's fight with a different body; gated on
+  `flowOn()`, so CURRENT, PRECISION, ONSLAUGHT and the missions move exactly as before.
+  - *Speed.* Walk / sprint x1.5 (4.65 / 9 m/s), ground acceleration 26 (14), air control 0.8
+    (0.35). Over the run cap on the ground (a slide, a kick, a rift) and still pushing on, the
+    speed bleeds at 4.5 m/s² instead of stopping. Fast running widens the FOV and draws speed
+    lines; a landing over 6 m/s thuds (camera shake, dust).
+  - *SLIDE* (crouch — C / B / the crouch button — at 5.5 m/s or more; it doesn't toggle crouching):
+    +2.6 m/s at once, low (camera dips), bleeds 5.5 m/s², steers a little, ends under 3.6 m/s or
+    after 1.5 s; a jump out of it keeps the speed; 0.35 s from slide to slide.
+  - *Jumps.* One DOUBLE JUMP (7 m/s up, the flight turned 70% toward the stick, speed kept);
+    in the air a ledge in reach is mantled first, then a wall within 0.85 m (8 rays, waist high)
+    is KICKED off: 6.5 m/s out, 7.2 up, speed along the wall kept, the double jump given back
+    (0.22 s between kicks).
+  - *Rifts keep your speed* (physics already turns the velocity through, magnitude whole); out
+    of a door or wall end FLOW adds x1.12 (never past 18 m/s; floor ends and loops untouched).
+  - *POWER meter* (0..1, starts at 0.5 each life): per second 0.011 per m/s above 2.8 m/s,
+    +0.07 sliding, +0.045 in the air; +0.07 a wall kick, +0.025 a double jump, +0.06 a rift
+    crossing, +0.12 a kill (+0.24 in the air, sliding or rift-charged); -0.025/s standing still.
+    A bar above the strike bar (top centre on a phone): READY — hold Z (R3 / the POWER button).
+  - *POWER moment.* Full, hold its key: time x0.05 at once (cold drained grade, the camera
+    2.8 m further out and 14° wider), every man within 48 m lit; the crosshair marks up to 3
+    (LMB / RT; a thumb by resting on a man 0.28 s). Untouchable while it lasts. Let go (or after
+    4 s): nothing marked, time runs again (0.8 s lockout, the meter kept); marked, the meter is
+    spent and the CHAIN runs on the wall clock: 0.12 s, then one link per 0.22 s at x0.18: a rift
+    burst where you stand, you come out 1.1 m past him (else this side) at 9 m/s, he dies (a
+    blade kill; a boss takes 150), 90 ms hitstop, a hard shake, a flash, sparks, a ring, a
+    vibration, STRIKE n; the camera swings to each dash. After the last: 0.6 s at x0.35.

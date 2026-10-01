@@ -88,7 +88,7 @@ export const TOOL_KEY: Record<LabTool, string> = {
 };
 
 /**
- * The COMBAT LAB's HUD: a compact run panel top-left (variant chips F1-F3,
+ * The COMBAT LAB's HUD: a compact run panel top-left (variant chips F1-F4,
  * which also take a tap; the wave, its clock and who's left; the splits;
  * total time, damage, deaths; kills by tool), and the big WAVE banner.
  * DOM writes only when a value changes.

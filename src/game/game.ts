@@ -876,7 +876,7 @@ export class Game {
     if (this.mode !== 'playing') this.start();
   }
 
-  /** Switch the combat variant (F1-F3, the menus, the HUD chips): the run starts over under it. */
+  /** Switch the combat variant (F1-F4, the menus, the HUD chips): the run starts over under it. */
   labVariant(v: CombatVariant) {
     this.settings = { ...this.settings, combatVariant: v };
     setVariant(v);
@@ -3040,7 +3040,8 @@ export class Game {
     const b = this.player.body;
     const hs = Math.hypot(b.vel.x, b.vel.z);
     hud.setFlow({
-      meter: this.meter.value,
+      // (through the chain the bar shows the strikes still to come)
+      meter: this.power.phase === 'chain' ? 1 - this.power.step / Math.max(1, this.power.marks.length) : this.meter.value,
       phase: this.power.phase,
       marks: this.power.marks.length,
       speed: THREE.MathUtils.clamp((hs - FLOW_SPRINT * 0.85) / 8, 0, 1),
@@ -3777,7 +3778,10 @@ export class Game {
     // every transform of the frame is set: world matrices once, for the rift views and the main view alike
     this.scene.updateMatrixWorld();
     if (this.mode !== 'menu') this.rifts.renderViews(this.camera, R.width, R.height, this.helpers, sw, sh);
-    this.renderer.grade.uniforms.uFocus.value = this.rifts.aiming ? 1 : 0;
+    // (FLOW's POWER moment: the same cold, drained grade, harder while time is stopped)
+    const ph = this.power?.phase;
+    const pw = ph === 'held' ? 1.45 : ph === 'chain' ? 1 : 0;
+    this.renderer.grade.uniforms.uFocus.value = Math.max(this.rifts.aiming ? 1 : 0, pw);
     this.renderer.grade.uniforms.uFlash.value = Math.max(0, this.renderer.grade.uniforms.uFlash.value - realDt * 3);
     this.renderer.grade.uniforms.uDamage.value = this.mode === 'playing' ? THREE.MathUtils.clamp(1 - this.hp / 45, 0, 1) * 0.6 : 0;
     this.renderer.render(realDt);

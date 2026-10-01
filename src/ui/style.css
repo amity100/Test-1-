@@ -968,9 +968,12 @@ html[dir='rtl'] .vseg b { letter-spacing: .03em; font-size: 15px; }
    the lit / marked men, the touch POWER button
 --------------------------------------------------------------------------- */
 .lab-panel[data-variant='flow'] .lp-rules { display: flex; }
+.lp-vars { flex-wrap: wrap; }
+.lp-vars button { flex: 1 1 22%; min-width: 0; }
+.lp-vars button[data-v='flow'] { flex-basis: 100%; }
 .lp-rules .fr-title { color: #ffd27a; }
 .lp-rules .fr-title ~ div[class^='fr-'] kbd { border-color: rgba(255, 210, 122, 0.6); color: #ffd27a; background: rgba(255, 210, 122, 0.08); }
-.flow-meter { position: absolute; left: 50%; bottom: calc(var(--sb) + 26px); transform: translateX(-50%); width: min(360px, 60vw); display: none; flex-direction: column; gap: 4px; font-family: var(--hud-font); color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); pointer-events: none; }
+.flow-meter { position: absolute; left: 50%; bottom: calc(var(--sb) + 118px); transform: translateX(-50%); width: min(360px, 60vw); display: none; flex-direction: column; gap: 4px; font-family: var(--hud-font); color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); pointer-events: none; }
 .flow-meter.on { display: flex; }
 .fm-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .fm-head small { font-size: 10px; font-weight: 800; letter-spacing: .32em; color: #ffd27a; }
@@ -983,8 +986,9 @@ html[dir='rtl'] .vseg b { letter-spacing: .03em; font-size: 15px; }
 .flow-meter.held .fm-bar i { background: #7ff4ff; }
 .flow-meter.held .fm-head b { color: #7ff4ff; }
 @keyframes fmReady { from { opacity: .7; } to { opacity: 1; } }
-.is-touch .flow-meter { bottom: auto; top: calc(var(--st) + 14px); width: min(260px, 42vw); }
-.flow-lines { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .15s linear; background: repeating-conic-gradient(from 0deg at 50% 50%, rgba(255, 255, 255, 0.0) 0deg 4deg, rgba(220, 240, 255, 0.16) 4.3deg, rgba(255, 255, 255, 0.0) 4.8deg 9deg); -webkit-mask-image: radial-gradient(ellipse at center, transparent 42%, #000 82%); mask-image: radial-gradient(ellipse at center, transparent 42%, #000 82%); animation: flowLines .18s steps(3) infinite; }
+.is-touch .flow-meter { bottom: auto; top: calc(var(--st) + 66px); width: min(240px, 36vw); }
+.is-touch .fm-head b { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.flow-lines { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .15s linear; background: repeating-conic-gradient(from 0deg at 50% 50%, rgba(255, 255, 255, 0.0) 0deg 4deg, rgba(220, 240, 255, 0.32) 4.3deg, rgba(255, 255, 255, 0.0) 4.8deg 9deg); -webkit-mask-image: radial-gradient(ellipse at center, transparent 42%, #000 82%); mask-image: radial-gradient(ellipse at center, transparent 42%, #000 82%); animation: flowLines .18s steps(3) infinite; }
 @keyframes flowLines { from { transform: rotate(0deg) scale(1.15); } to { transform: rotate(3deg) scale(1.15); } }
 .flow-stop { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .2s ease-out; background: radial-gradient(ellipse at center, rgba(40, 140, 220, 0) 38%, rgba(10, 40, 80, 0.55) 100%); box-shadow: inset 0 0 0 2px rgba(127, 244, 255, 0.35); }
 .flow-stop.on { opacity: 1; }
