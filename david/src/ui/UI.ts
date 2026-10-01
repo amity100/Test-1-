@@ -89,7 +89,8 @@ export class UI {
 
     this.loading = el('div', 'loading', `
       <div class="ld-inner">
-        <div class="ld-title">DAVID</div>
+        <div class="ld-title">דָּוִד</div>
+        <div class="ld-title-en">DAVID</div>
         <div class="ld-bar"><div></div></div>
         <div class="ld-label"></div>
         <div class="ld-quote">"${quoteText('ps_23_1_2_loading')}"<span>${sourceRef('ps_23_1_2_loading')}</span></div>
@@ -484,7 +485,7 @@ export class UI {
       : `<tr><td><span class="key">W A S D</span></td><td>תנועה</td></tr><tr><td><span class="key">Shift</span></td><td>ריצה</td></tr><tr><td><span class="key">עכבר</span></td><td>מצלמה (לחץ על המסך לנעילת הסמן, או גרור עם העכבר)</td></tr><tr><td><span class="key">לחצן שמאלי</span></td><td>החזק לסיבוב הקלע · שחרר לקליעה</td></tr><tr><td><span class="key">F</span> / <span class="key">לחצן ימני</span></td><td>הכאה במקל</td></tr><tr><td><span class="key">E</span></td><td>פעולה: אסוף · הצל · תפוס</td></tr><tr><td><span class="key">Space</span></td><td>התחמקות</td></tr><tr><td><span class="key">Q</span></td><td>קריאה לצאן</td></tr><tr><td><span class="key">Esc</span></td><td>תפריט</td></tr>`;
     this.pauseEl.innerHTML = `
       <div class="p-card">
-        <div class="p-title">DAVID</div>
+        <div class="p-title">דָּוִד</div>
         <div class="p-sub">פרק ראשון · הרועה</div>
         <button class="p-btn" data-a="resume">המשך</button>
         <table class="p-keys">${keys}</table>
