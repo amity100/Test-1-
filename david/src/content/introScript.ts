@@ -129,10 +129,16 @@ export interface IntroText {
   readonly words?: readonly IntroWord[];
   /** verses: the reference fades in this long after the last word appears (default 0.55 s) */
   readonly refAfter?: number;
-  /** where the card sits: the negative space of the composition ('left' / 'right'; 'center' default for verses) */
+  /** where the text sits: the negative space of the composition ('left' / 'right' / 'center') — every verse has an
+   *  explicit anchor (side + v) chosen from its shot's frames (director-notes-v5: never across a face or a body) */
   readonly side?: 'left' | 'right' | 'center';
-  /** vertical placement of place / person cards */
+  /** vertical placement (cards and verses) */
   readonly v?: 'top' | 'middle' | 'bottom';
+  /** verses: 2 = set in two balanced lines (presentation only: the catalog's words are unchanged, only a line break
+   *  is placed between two of them) */
+  readonly lines?: 1 | 2;
+  /** verses: the last N words set in gold (D1: הַטּוֹב מִמֶּךָּ — the film's own title) */
+  readonly gold?: number;
 }
 
 /** Named beats of a shot (seconds from the start of the shot) — the shared timing contract. */
@@ -241,7 +247,8 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
   {
     id: 'elders', n: 'P5', set: 'ramah', take: 'elders', dur: 4.0, cut: 'dissolve', fade: 0.6, cue: 'elders', beat: 'saul-court',
     beats: { rise: 0.5, verse: 1.0, turnAway: 2.6 },
-    text: [{ at: 1.0, seconds: 2.85, kind: 'verse', quote: 's1_8_5_give_us_king', stagger: 0.22 }],
+    // the verse high over the gate wall, never over the elders (cut4: anchor from the frames)
+    text: [{ at: 1.0, seconds: 2.85, kind: 'verse', quote: 's1_8_5_give_us_king', stagger: 0.22, side: 'left', v: 'top', lines: 2 }],
     direction: "Ramah: a dolly in over the elders' heads (they fill the lower third, beards and faces readable) toward "
       + 'Samuel; one elder rises and demands with his arm raised, the others gesture and react; Samuel turns his face '
       + 'away (8:6).',
@@ -266,14 +273,16 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
   {
     id: 'spear', n: 'G3', set: 'gilgal', take: 'spearRaised', dur: 3.0, cut: 'cut', cue: 'peak', beat: 'warriors',
     beats: { halt: 0.3, spearUp: 0.8, roar: 1.1, roarSpread: 0.4, verse: 1.3 },
-    text: [{ at: 1.3, seconds: 2.5, kind: 'verse', quote: 's1_9_2_head_above', stagger: 0.1 }],
+    // into the dusty sky at frame left; GONE by 27.4 (the roar cut at 27.5 is clean silence): 1.3 + 1.6 = 2.9 s
+    text: [{ at: 1.3, seconds: 1.6, kind: 'verse', quote: 's1_9_2_head_above', stagger: 0.1, refAfter: 0.3, side: 'left', v: 'top', lines: 2 }],
     direction: 'The halt; Saul thrusts his spear up with the whole body; THE ROAR (every rank, staggered 0-0.4 s): a '
       + 'fast push-in from low in front, a jolt on the roar; spears and fists raised through the ranks, mouths open.',
   },
   {
     id: 'silence', n: 'G4', set: 'gilgal', take: 'silence', dur: 3.0, cut: 'cut', cue: 'silence', beat: 'saul-hall',
     beats: { roarCut: 0.0, headsTurn: 0.3, part: 0.8, card: 1.4, step: 2.2 },
-    text: [{ at: 1.4, seconds: 2.4, kind: 'person', narration: ['samuel'], side: 'right', v: 'top' }],
+    // ends with the shot (cut4: no card runs across the hard cut into the tear)
+    text: [{ at: 1.4, seconds: 1.6, kind: 'person', narration: ['samuel'], side: 'right', v: 'top' }],
     direction: "The roar cuts to silence. A slow push between the soldiers' shoulders: heads turn, men step aside, the "
       + "ranks part; Samuel stands in the road, white hair and mantle in the wind, and takes one step forward.",
   },
@@ -293,8 +302,9 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
   {
     id: 'verdict', n: 'G6', set: 'gilgal', take: 'verdict', dur: 4.5, cut: 'cut', cue: 'verdict', beat: 'saul-hall',
     beats: { turnBack: 0.4, speech: 0.9, speechEnd: 3.64 },
-    // the words land on the cut: the verse fades out 0.35 s into G7 (Saul hears it)
-    text: [{ at: 0.9, seconds: 3.95, kind: 'verse', quote: 's1_15_28_torn_today', words: VERDICT_WORDS, refAfter: 0.25 }],
+    // the upper-left negative space (his face on the right third); it ends WITH the shot (no verse across a hard cut
+    // except the planned 15:28 split G6 -> D1): 0.9 + 3.6 = 4.5
+    text: [{ at: 0.9, seconds: 3.6, kind: 'verse', quote: 's1_15_28_torn_today', words: VERDICT_WORDS, refAfter: 0.2, side: 'left', v: 'top', lines: 2 }],
     direction: "THE VERDICT: Samuel turns back and speaks, close; a slow push, Saul's shoulder soft in the foreground; the "
       + 'jaw speaks the words as they appear, eyes on Saul, hair in the wind. Near-silence.',
   },
@@ -309,7 +319,9 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
   {
     id: 'figure', n: 'D1', set: 'world', take: 'figure', dur: 4.0, cut: 'light', fade: 0.6, cue: 'figure', beat: 'david',
     beats: { verse: 0.3 },
-    text: [{ at: 0.3, seconds: 3.65, kind: 'verse', quote: 's1_15_28_to_your_neighbor', stagger: 0.34 }],
+    // in the sky at frame right (David on the left third against the sun); its last two words — the film's own title —
+    // in gold
+    text: [{ at: 0.3, seconds: 3.65, kind: 'verse', quote: 's1_15_28_to_your_neighbor', stagger: 0.34, side: 'right', v: 'top', lines: 2, gold: 2 }],
     direction: 'Out of the light-flash: David from behind on a rock above the flock at golden hour, the Bethlehem hills; '
       + 'a slow crane / orbit behind him revealing the valley; wind in his curls and tunic, the flock moving and grazing '
       + 'below, he shifts his weight on his staff. 15:28b writes itself.',
@@ -317,7 +329,8 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
   {
     id: 'face', n: 'D2', set: 'world', take: 'face', dur: 3.5, cut: 'cut', cue: 'face', beat: 'david',
     beats: { turn: 0.5, verse: 1.2 },
-    text: [{ at: 1.2, seconds: 3.0, kind: 'verse', quote: 's1_16_7_looks_heart', stagger: 0.12 }],
+    // frame left at mid height, never over the face; gone as the dissolve into the thicket begins
+    text: [{ at: 1.2, seconds: 2.65, kind: 'verse', quote: 's1_16_7_looks_heart', stagger: 0.12, side: 'left', v: 'middle', lines: 2 }],
     direction: 'His face turns into the light: a slow push-in, backlit rim, shallow focus; the turn, a blink, the eyes '
       + 'settle, wind.',
   },

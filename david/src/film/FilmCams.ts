@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { ShotFrame } from '../gameplay/CameraRig';
-import { armyAt, armySlot, samuelAt, saulAt, type GilgalShotName } from './gilgal/gilgalBlocking';
+import { armyAt, armySlot, samuelAt, saulAt, TEAR_GRIP, TEAR_INSERT_AT, type GilgalShotName } from './gilgal/gilgalBlocking';
 import { ARMY, roadZ, SAMUEL, SAUL_HALT, SUN } from './gilgal/gilgalLayout';
 
 /**
@@ -27,24 +27,47 @@ export const FILM_CAM = {
   // G4: between the soldiers' shoulders, pushing toward Samuel in the road; the ranks part
   // (the lane between files 8 and 9 of the formation, the lens just over the men's heads — their heads, shoulders
   //  and spears in the lower frame, never across it; Saul soft at frame left, Samuel clear beyond him)
-  silence: { x0: -11, x1: -7.2, z0: 1.575, z1: 1.575, h0: 1.98, h1: 1.9, lookSide: -1.8, fov0: 20, fov1: 11.5, clear: 0.8 },
-  // G5a: wide profile from the south, a slow drift with the action
-  tear: { dx0: -0.5, dx1: 0.45, dz0: 6.9, dz1: 5.9, h: 1.22, lookH: 1.2, lookX: 0.25, fov0: 34, fov1: 30.5 },
-  // G5b: the insert on the fist and the ripping wool — from the SOUTH (Saul's right hand holds the corner on his south
-  // side; from the north his own body and the helmet under his left arm hide it), raking light from the west
-  insert: { ox0: -0.32, oz0: 0.95, oy0: 0.08, ox1: -0.22, oz1: 0.74, oy1: 0.04, fov0: 27, fov1: 23.5, follow: 0.6 },
-  // G6: over Saul's right shoulder (a soft edge at frame left) onto Samuel on the right third, a slow push
-  verdict: { back0: 0.92, back1: 0.74, side0: 0.86, side1: 0.8, h: 1.63, lookH: 1.5, lookSide: 0.4, fov0: 18, fov1: 15 },
+  // (cut4: the lens starts further back — behind rank ~6 — so the ranks parting fill the near / mid-ground, and the push
+  //  continues on a lengthening lens: Samuel >= 35 % of the frame height at the end with his G4 mark nearer the army)
+  silence: { x0: -14, x1: -9.6, z0: 1.575, z1: 1.575, h0: 1.98, h1: 1.9, lookSide: -1.8, fov0: 16, fov1: 8, clear: 0.8 },
+  // G5a: a medium-wide two-shot from the south at chest height (bodies ~70 % of the frame), a slow lateral move
+  // west -> east with the action (cut4: backlit by the tear's cheated sun, GilgalSet.setSunCheat)
+  tear: { dx0: -0.85, dx1: 0.55, dz0: 6.6, dz1: 6.1, h: 1.25, lookH: 1.02, lookX: 0.25, fov0: 30.5, fov1: 28.5 },
+  // G5b (cut4): a LOW CLOSE TWO-SHOT, not a macro — the lens 0.6 m above the ground ~1.9 m SOUTH of the grip (the same
+  // side of the action line as G5a: Saul frame left, Samuel frame right), looking a little up into the backlit sky;
+  // the look sits between the fist and Saul's face and follows the real hand a little
+  // (framed on the fist at the insert's first frame — the blocking's TEAR_GRIP: Saul's head ~0.6 m west of it on the
+  //  left third, Samuel walking away ESE on the right third; the look at chest height of the kneeling king)
+  insert: { dx0: -0.12, dx1: 0.06, dz0: 2.3, dz1: 2.22, h0: 0.6, h1: 0.6, lookX: 0.05, lookH: 0.85, follow: 0.2, fov0: 36, fov1: 35 },
+  // G6 (cut4): a medium close-up on Samuel, 3/4 FRONT from the south-west at eye level — the lens on the line from
+  // Samuel toward Saul turned `rot` deg toward the lens side (his eyeline ~off-lens left), a slow 6 % push; the look
+  // shifted `lookLeft` m to frame left (his face on the right third, the verse in the left negative space)
+  verdict: { d0: 2.05, d1: 1.92, rot: 34, eyeH: 1.55, dh0: 0.0, dh1: 0.015, lookLeft: 0.12, lookDown: 0.1, follow: 0.55, fov0: 22, fov1: 20.5 },
   // G7: the fist and his face; a slow push, the focus pull, the whip up into the light at the end
-  alone: { dx0: 2.05, dx1: 1.55, dz0: 0.62, dz1: 0.45, h0: 1.2, h1: 1.32, fov0: 31, fov1: 27, whipAt: 1.7, whip: 7 },
+  // (cut4, director-notes-v5 G7: OPEN on the fist with the torn corner and its tzitzit against the coat, then the tilt
+  //  up and the rack focus to his face looking down; the lens rises with the tilt)
+  alone: { dx0: 1.75, dx1: 1.45, dz0: 0.55, dz1: 0.42, h0: 1.02, h1: 1.3, fov0: 24, fov1: 26.5, mix0: 0.04, mix1: 0.8, tilt0: 0.35, tilt1: 1.3, whipAt: 1.7, whip: 7 },
   // P1+P2: the flight re-timed (shot seconds -> the set's flight parameter e), skim altitude over the deck, the bank
-  flight: { keys: [[0, 0.035], [3.1, 0.3], [3.6, 0.37], [4.5, 0.49], [7.5, 0.935]] as [number, number][], skim0: 230, skim1: 45, deckTop: 2450, diveAt: 2.55, bank: 0.13, bankYaw: 0.1 },
-  // P4: the long-lens lateral track along the Philistine column (ahead and to the side, looking back along it)
-  coast: { ahead0: 20, ahead1: 15, side0: 23, side1: 21, h: 1.9, lookBack: 13, lookH: 1.35, fov0: 13.5, fov1: 12, march: 1.2 },
-  // P5: the dolly in over the elders' heads toward Samuel
-  // (wide at the start so the standing elders' heads fill the lower third; the lens ends just over their heads)
-  elders: { back0: 3.4, back1: 1.0, h0: 2.05, h1: 1.85, side0: 0.7, side1: 0.4, lookH: 1.45, lookSide: 0.55, fov0: 34, fov1: 25 },
+  // (cut4: after the burst out of the deck the lens KEEPS FLYING — a glide on the final heading, `glide` m/s eased in
+  //  from `glideAt`, sinking `sink` m/s, the lens opening to `glideFov` — the nearest ridge slides under the lens)
+  flight: { keys: [[0, 0.035], [3.1, 0.3], [3.6, 0.37], [4.5, 0.49], [7.5, 0.935]] as [number, number][], skim0: 230, skim1: 45, deckTop: 2450, diveAt: 2.55, bank: 0.13, bankYaw: 0.1, glideAt: 4.3, glide: 48, sink: 5.5, glideFov: 33, minAGL: 55 },
+  // P4 (cut4): a long lens AHEAD of the column on the marching men's right, 1.45 m high, looking back down its length:
+  // the column comes diagonally toward the lens, its nearest file (the right edge, lat +2.75) large and soft at the
+  // frame's right edge, the rest receding into the dust; the lens retreats slower than the march and trucks in
+  coast: { ahead0: 11.5, ahead1: 10.5, side0: 4.9, side1: 4.3, h: 1.45, lookBack: 60, lookSide: 0.9, lookH: 1.5, fov0: 11.5, fov1: 10, march: 1.2 },
+  // P5 (cut4): a LOW dolly (the elders' eye height) into the gathering toward Samuel in the gateway, in the gate's frame
+  // (x along the wall, z out of the gate; Samuel at z 1.4): the near pair (marks 6-7) slide out past the frame edges,
+  // the arc and the rising speaker in the mid-ground, Samuel right of centre, the verse high over the wall
+  elders: { x0: 0.45, z0: 10.8, x1: 0.3, z1: 8.6, h0: 1.55, h1: 1.6, lookX: -0.55, lookH: 1.5, fov0: 30, fov1: 25 },
 };
+
+/**
+ * The light cheat of the tear and the verdict (cut4): the Gilgal sun's azimuth (deg, SkySystem convention: from +Z
+ * toward +X; the real sun stands at -95 = west, behind Saul) for these set-ups — NNE, so that from the cameras on the
+ * south side of the action line it stands BEHIND the two men (G5a/G5b) and behind Samuel's face side (G6). Takes not
+ * listed keep the real sun (G7 looks west at Saul: the real sun is behind HIM).
+ */
+export const SUN_CHEAT: Record<string, number> = { tear: 150, 'tear:insert': 150, verdict: 150 };
 
 /** blocking time offset (s) of a split take: its base shot has already run this long */
 export const TAKE_OFFSET: Record<string, number> = { 'tear:insert': 2.0 };
@@ -104,10 +127,10 @@ export interface GilgalCtx {
   samuelEyes?: (out: THREE.Vector3) => THREE.Vector3 | null;
 }
 
-/** where the fist closes on the mantle's corner (blocking estimate; the cast's hand when available) */
-function gripPoint(t: number, H: (x: number, z: number) => number, ctx: GilgalCtx | undefined, out: THREE.Vector3) {
+/** where the fist closes on the mantle's corner (the blocking's TEAR_GRIP on Samuel's tear position at blocking time t) */
+function gripPoint(t: number, H: (x: number, z: number) => number, _ctx: GilgalCtx | undefined, out: THREE.Vector3) {
   const sm = samuelAt('tear', t).pos;
-  out.set(sm.x - 0.35, H(sm.x, sm.z) + 1.0, sm.z + 0.12);
+  out.set(sm.x + TEAR_GRIP.x, H(sm.x, sm.z) + TEAR_GRIP.y, sm.z + TEAR_GRIP.z);
   return out;
 }
 
@@ -190,35 +213,47 @@ export function gilgalCam(take: string, u: number, t: number, H: (x: number, z: 
       _a.copy(sa).lerp(sm, 0.5);
       out.pos.set(_a.x + lerp(c.dx0, c.dx1, e), 0, _a.z + lerp(c.dz0, c.dz1, e));
       out.pos.y = H(out.pos.x, out.pos.z) + c.h;
-      out.look.set(_a.x + c.lookX + 0.3 * e, H(_a.x, _a.z) + c.lookH, _a.z);
+      out.look.set(_a.x + c.lookX + 0.45 * e, H(_a.x, _a.z) + c.lookH, _a.z);
       out.fov = lerp(c.fov0, c.fov1, e);
       return true;
     }
     case 'tear:insert': {
-      // G5b — the insert (slow motion): close on the fist and the ripping wool from the north, the low western sun
-      // raking across the knuckles and the snapping fibres; a slow push, the look following the hand
+      // G5b — the low close two-shot (slow motion): the lens 0.6 m above the sand ~1.9 m south of the grip, looking a
+      // little up so the backlit sky sits behind the two men — Saul kneeling in profile at frame left, the fist in the
+      // dark wool in the middle near the horizon line, Samuel's legs and the lower me'il walking away at frame right;
+      // a slow lateral drift east and a small push. The look follows the real fist only a little (no jitter).
       const c = FILM_CAM.insert;
-      gripPoint(TAKE_OFFSET['tear:insert'], H, ctx, _b);
-      const hand = ctx?.saulHand?.(_c) ?? gripPoint(t, H, ctx, _c);
-      out.pos.set(_b.x + lerp(c.ox0, c.ox1, e), _b.y + lerp(c.oy0, c.oy1, e), _b.z + lerp(c.oz0, c.oz1, e));
-      out.look.copy(_b).lerp(hand, c.follow);
+      gripPoint(TEAR_INSERT_AT, H, ctx, _b);
+      out.pos.set(_b.x + lerp(c.dx0, c.dx1, e), 0, _b.z + lerp(c.dz0, c.dz1, e));
+      out.pos.y = H(out.pos.x, out.pos.z) + lerp(c.h0, c.h1, e);
+      const gy = H(_b.x, _b.z);
+      out.look.set(_b.x + c.lookX, gy + c.lookH, _b.z);
+      const hand = ctx?.saulHand?.(_c);
+      if (hand && hand.distanceTo(_b) < 1.2) out.look.x += (hand.x - _b.x) * c.follow;
       out.fov = lerp(c.fov0, c.fov1, e);
-      out.roll = 0.035;
+      out.roll = 0.012;
       return true;
     }
     case 'verdict': {
-      // G6 — over Saul's right shoulder (soft at frame left) onto Samuel (right third), full-face in the low sun;
-      // a slow push through the whole speech
+      // G6 — a medium close-up on Samuel, 3/4 front at eye level from the lens side of the action line (south-west of
+      // him): the lens on the line Samuel -> Saul turned `rot` deg south, so his eyes on Saul read just off-lens LEFT;
+      // the tear's cheated sun stands behind him on that side (rim through the hair and beard); Saul at most a dark soft
+      // edge at frame left. A slow 6 % push; the look follows his head a little (an operator, not a lock).
       const c = FILM_CAM.verdict;
       const sa = saulAt('verdict', t).pos, sm = samuelAt('verdict', t).pos;
-      _a.set(sm.x - sa.x, 0, sm.z - sa.z).normalize(); // Saul -> Samuel
-      _b.set(-_a.z, 0, _a.x); // Saul's right (= the lens' right)
-      out.pos.copy(sa).addScaledVector(_a, -lerp(c.back0, c.back1, e)).addScaledVector(_b, lerp(c.side0, c.side1, e));
-      out.pos.y = H(sa.x, sa.z) + c.h;
+      const g = H(sm.x, sm.z);
+      _a.set(sa.x - sm.x, 0, sa.z - sm.z).normalize().applyAxisAngle(_up, THREE.MathUtils.degToRad(c.rot)); // Samuel -> lens
+      const d = lerp(c.d0, c.d1, e);
+      out.pos.set(sm.x + _a.x * d, g + c.eyeH + lerp(c.dh0, c.dh1, e), sm.z + _a.z * d);
+      _b.set(sm.x, g + c.eyeH, sm.z);
       const eyes = ctx?.samuelEyes?.(_c);
-      if (eyes) out.look.copy(eyes).addScaledVector(_b, -c.lookSide);
-      else out.look.set(sm.x, H(sm.x, sm.z) + c.lookH, sm.z).addScaledVector(_b, -c.lookSide);
+      if (eyes && eyes.distanceTo(_b) < 0.8) _b.lerp(eyes, c.follow);
+      // the lens' right = (-f.z, f.x) with f = -_a; shift the look to frame left, and a little down (the eyes on the
+      // upper third, the beard and the hands' gesture in the lower frame)
+      out.look.copy(_b).add(_c.set(-_a.z, 0, _a.x).multiplyScalar(c.lookLeft));
+      out.look.y -= c.lookDown;
       out.fov = lerp(c.fov0, c.fov1, e);
+      out.roll = 0;
       return true;
     }
     case 'saulAlone': {
@@ -234,7 +269,7 @@ export function gilgalCam(take: string, u: number, t: number, H: (x: number, z: 
       _b.set(s.x + 0.05, g + 1.84, s.z);
       const eyes = ctx?.saulEyes?.(_c);
       if (eyes) _b.copy(eyes);
-      out.look.copy(_a).lerp(_b, lerp(0.34, 0.52, ss(0.5, 1.5, t)));
+      out.look.copy(_a).lerp(_b, lerp(c.mix0, c.mix1, ss(c.tilt0, c.tilt1, t)));
       const w = ss(c.whipAt, 2.05, t);
       out.look.y += c.whip * w * w;
       out.fov = lerp(c.fov0, c.fov1, e) + 6 * w;
@@ -315,7 +350,7 @@ export function gilgalFocus(take: string, t: number, H: (x: number, z: number) =
       const hand = ctx?.saulHand?.(_c);
       if (hand) _a.copy(hand);
       const eyes = ctx?.saulEyes?.(_b) ?? _b.set(s.x + 0.05, g + 1.84, s.z);
-      return { point: out.copy(_a).lerp(eyes, ss(0.75, 1.3, t)), fStop: 2.0 };
+      return { point: out.copy(_a).lerp(eyes, ss(0.55, 1.25, t)), fStop: 2.0 };
     }
   }
   return null;
@@ -328,7 +363,7 @@ export interface LandCamCtx {
   shotAt?: (name: string, e: number) => { pos: THREE.Vector3; look: THREE.Vector3; fov?: number } | null;
   height: (x: number, z: number) => number;
   coast?: { heading: THREE.Vector3; columnHead: THREE.Vector3 };
-  ramah?: { samuel: THREE.Vector3; elders: THREE.Vector3[] };
+  ramah?: { samuel: THREE.Vector3; gate: THREE.Vector3; gateYaw: number };
 }
 
 /** monotone cubic through (t, v) keys (Fritsch-Carlson) — the flight's speed ramp */
@@ -381,6 +416,14 @@ export function landCam(take: string, u: number, t: number, ctx: LandCamCtx, out
     const skim = c.deckTop + lerp(c.skim0, c.skim1, ss(0, c.diveAt, t));
     const dive = ss(c.diveAt, 3.35, t);
     out.pos.y = lerp(Math.min(out.pos.y, skim), out.pos.y, dive);
+    // the glide after the burst: forward along the heading (an eased start, then a steady speed) and a gentle descent
+    const g = Math.max(0, t - c.glideAt);
+    const glideD = g - 0.45 * (1 - Math.exp(-g / 0.45));
+    const hh = Math.hypot(_a.x, _a.z) || 1;
+    out.pos.x += (_a.x / hh) * c.glide * glideD;
+    out.pos.z += (_a.z / hh) * c.glide * glideD;
+    out.pos.y -= c.sink * glideD;
+    out.pos.y = Math.max(out.pos.y, ctx.height(out.pos.x, out.pos.z) + c.minAGL * ss(c.glideAt, c.glideAt + 0.5, t));
     // the nose: level over the deck, dropping through the dive, then back up toward the ridges and the sun
     const pitch = -0.035 - 0.2 * ss(c.diveAt - 0.3, 3.2, t) + 0.2 * ss(3.45, 4.7, t);
     const yaw = c.bankYaw * (ss(0.3, 2.2, t) - ss(3.4, 5.5, t)) + 0.05 * ss(5, 7.5, t);
@@ -389,42 +432,40 @@ export function landCam(take: string, u: number, t: number, ctx: LandCamCtx, out
     const P = Math.max(-1.2, Math.min(0.4, basePitch * (1 - 0.6 * (1 - dive)) + pitch));
     const Y = baseYaw + yaw;
     out.look.set(out.pos.x + Math.sin(Y) * Math.cos(P) * 100, out.pos.y + Math.sin(P) * 100, out.pos.z + Math.cos(Y) * Math.cos(P) * 100);
-    out.fov = (f.fov ?? 45) + 4 * (1 - ss(0, 3.4, t));
+    out.fov = lerp((f.fov ?? 45) + 4 * (1 - ss(0, 3.4, t)), c.glideFov, ss(c.glideAt + 0.2, 6.6, t));
     // the bank: rolls into the turn toward the sun while racing, levels out through the dive, a last small bank
     out.roll = c.bank * (ss(0.2, 1.8, t) - ss(2.4, 3.6, t)) - 0.05 * ss(4.2, 6, t) + 0.02 * ss(6, 7.5, t);
     return true;
   }
   if (take === 'glint' && ctx.coast) {
-    // P4 — a long lens, ahead of and beside the head of the marching column, looking back along it (the column
-    // recedes diagonally into its dust: depth, not blocks); the lens tracks back against the march so the ranks slide
-    // through the frame; the low morning sun behind the lens puts the glints on the bronze
+    // P4 — a long lens (fov 11.5 -> 10) AHEAD of the column on the marching men's right, 1.45 m high, looking back
+    // down its length: the column comes diagonally toward the lens, the front ranks of its nearest file large and soft
+    // at the frame's right edge, the rest receding into the dust and haze; the lens retreats slower than the march
+    // (the ranks gain on it) and trucks in toward the column; the morning sun behind the lens' left shoulder
     const c = FILM_CAM.coast;
     const hd = ctx.coast.heading;
-    _a.set(-hd.z, 0, hd.x); // the column's left
+    _a.set(-hd.z, 0, hd.x); // the marching men's right (the side of the host's flank columns)
     _b.copy(ctx.coast.columnHead).addScaledVector(hd, c.march * t); // the head now
     out.pos.copy(_b).addScaledVector(hd, lerp(c.ahead0, c.ahead1, e)).addScaledVector(_a, lerp(c.side0, c.side1, e));
     out.pos.y = ctx.height(out.pos.x, out.pos.z) + c.h;
-    out.look.copy(_b).addScaledVector(hd, -c.lookBack);
+    out.look.copy(_b).addScaledVector(hd, -c.lookBack).addScaledVector(_a, c.lookSide);
     out.look.y = ctx.height(out.look.x, out.look.z) + c.lookH;
     out.fov = lerp(c.fov0, c.fov1, e);
+    out.roll = 0.006 * Math.sin(u * 2.6);
     return true;
   }
-  if (take === 'elders' && ctx.ramah && ctx.ramah.elders.length) {
-    // P5 — behind the elders, the lens dollies in over their heads toward Samuel in the gateway (they fill the lower
-    // third); Samuel on the right third of the frame
+  if (take === 'elders' && ctx.ramah) {
+    // P5 — a low dolly into the gathering toward Samuel in the gateway (gate frame: x along the wall, z out of it)
     const c = FILM_CAM.elders;
-    const S = ctx.ramah.samuel;
-    _c.set(0, 0, 0);
-    for (const p of ctx.ramah.elders) _c.add(p);
-    _c.multiplyScalar(1 / ctx.ramah.elders.length);
-    _a.set(S.x - _c.x, 0, S.z - _c.z).normalize(); // toward Samuel
-    _b.set(-_a.z, 0, _a.x); // the lens' right
-    out.pos.copy(_c).addScaledVector(_a, -lerp(c.back0, c.back1, e)).addScaledVector(_b, lerp(c.side0, c.side1, e));
-    out.pos.y = Math.max(ctx.height(out.pos.x, out.pos.z), _c.y) + lerp(c.h0, c.h1, e);
-    out.look.copy(S).addScaledVector(_b, -c.lookSide);
-    out.look.y = ctx.height(S.x, S.z) + c.lookH;
+    const R = ctx.ramah;
+    const cy = Math.cos(R.gateYaw), sy = Math.sin(R.gateYaw);
+    const W = (lx: number, lz: number, o: THREE.Vector3) => o.set(R.gate.x + lx * cy + lz * sy, 0, R.gate.z - lx * sy + lz * cy);
+    W(lerp(c.x0, c.x1, e), lerp(c.z0, c.z1, e), out.pos);
+    out.pos.y = ctx.height(out.pos.x, out.pos.z) + lerp(c.h0, c.h1, e);
+    W(c.lookX, 1.4, out.look);
+    out.look.y = ctx.height(R.samuel.x, R.samuel.z) + c.lookH;
     out.fov = lerp(c.fov0, c.fov1, e);
-    out.roll = 0.01 * Math.sin(u * 3);
+    out.roll = 0.008 * Math.sin(u * 3);
     return true;
   }
   return false;

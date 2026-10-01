@@ -614,6 +614,8 @@ export class Intro {
     const o = {
       side: x.side,
       v: x.v,
+      lines: x.lines,
+      gold: x.gold,
       stagger: x.stagger,
       refAfter: x.refAfter,
       // speech-synced words: shot seconds -> seconds from the text's start

@@ -1925,6 +1925,13 @@ float fl_vnoise(vec3 p) {
 }
 `;
 
+/**
+ * finishing pass: a bounce board for the flock (one shared scale; 0 = off). The shadow side of a sheep on a sunlit
+ * field gets warm light back from the ground; with only the blue sky in the IBL a backlit lamb read as a cold grey
+ * lump (H1, D1 against the low sun).
+ */
+export const flockBounce = { value: 1 };
+
 /** translucency / wrap lighting injected right after the direct light loop */
 const GLSL_BACKLIGHT = /* glsl */ `
 #if NUM_DIR_LIGHTS > 0
@@ -1942,6 +1949,11 @@ const GLSL_BACKLIGHT = /* glsl */ `
   float fl_tr = fl_Thin * uTrans * fl_back * mix(fl_rim * 1.6, 0.45 + 0.55 * fl_rim, fl_whole);
   float fl_wrap = clamp((fl_ndl + 0.5) / 1.5, 0.0, 1.0) - clamp(fl_ndl, 0.0, 1.0);
   reflectedLight.directDiffuse += fl_Lc * diffuseColor.rgb * (fl_tr + fl_Wrap * fl_wrap * 0.3);
+  // warm bounce from the sunlit ground onto the faces turned down / away (world-space normal)
+  vec3 fl_nW = inverseTransformDirection(normal, viewMatrix);
+  float fl_sunUp = clamp(inverseTransformDirection(fl_L, viewMatrix).y, 0.0, 1.0);
+  float fl_down = clamp(0.55 - 0.45 * fl_nW.y, 0.0, 1.0) * (1.0 - 0.6 * clamp(fl_ndl, 0.0, 1.0));
+  reflectedLight.indirectDiffuse += directionalLights[NUM_DIR_LIGHTS - 1].color * BRDF_Lambert(diffuseColor.rgb) * vec3(1.0, 0.84, 0.6) * (0.16 + 0.5 * fl_sunUp) * fl_down * uFlBounce;
 }
 #endif
 `;
@@ -1980,6 +1992,7 @@ function makeBodyMaterial(look: BodyLook): THREE.MeshPhysicalMaterial {
     uCurlAmp: { value: look.curlAmp },
     uTrans: { value: look.trans },
     uSeed: { value: Math.random() * 10 },
+    uFlBounce: flockBounce,
   };
   mat.userData.uniforms = uniforms;
   mat.onBeforeCompile = (shader) => {
@@ -2006,7 +2019,7 @@ vMat = aMat; vAux = aAux; vFlow = aFlow; vBindPos = position;`,
         '#include <common>',
         `#include <common>
 uniform vec3 uWool; uniform vec3 uHair; uniform vec3 uHair2; uniform float uMottle;
-uniform vec3 uDirt; uniform float uDirtH; uniform float uCurlFreq; uniform float uCurlAmp; uniform float uTrans; uniform float uSeed;
+uniform vec3 uDirt; uniform float uDirtH; uniform float uCurlFreq; uniform float uCurlAmp; uniform float uTrans; uniform float uSeed; uniform float uFlBounce;
 varying vec4 vMat; varying vec4 vAux; varying vec3 vFlow; varying vec3 vBindPos;
 ${GLSL_NOISE}
 vec3 fl_bump(vec3 surf_pos, vec3 surf_norm, float h, float faceDir) {
@@ -2095,7 +2108,7 @@ material.sheenColor *= smoothstep(0.0, 0.5, fl_Wool) + 0.25 * vAux.z;
       .replace('#include <lights_fragment_begin>', `#include <lights_fragment_begin>\n${GLSL_BACKLIGHT}`);
   };
   // identical shader code for every variant: share one program (defines such as USE_SHEEN still split it)
-  mat.customProgramCacheKey = () => 'flock-body-v3';
+  mat.customProgramCacheKey = () => 'flock-body-v4';
   return mat;
 }
 
@@ -2130,6 +2143,7 @@ function makeShellMaterial(look: ShellLook): THREE.MeshStandardMaterial {
     uDroop: { value: look.droop },
     uHairMode: { value: look.hair },
     uTrans: { value: look.trans },
+    uFlBounce: flockBounce,
     uFurScale: { value: look.furScale },
     uShellCount: { value: look.count },
     uLod: { value: new THREE.Vector2(...(look.lod ?? [14, 55])) },
@@ -2174,7 +2188,7 @@ vShell = aShell; vBindPos = position;
       .replace(
         '#include <common>',
         `#include <common>
-uniform vec3 uFurColor; uniform float uFiberFreq; uniform float uClumpFreq; uniform float uHairMode; uniform float uTrans;
+uniform vec3 uFurColor; uniform float uFiberFreq; uniform float uClumpFreq; uniform float uHairMode; uniform float uTrans; uniform float uFlBounce;
 varying vec4 vShell; varying vec3 vBindPos; varying float vLodThin;
 ${GLSL_NOISE}`,
       )
@@ -2208,9 +2222,22 @@ float fl_Wrap = 1.0 - uHairMode * 0.5;
   diffuseColor.rgb *= uFurColor * ao * vari;
 }`,
       )
-      .replace('#include <lights_fragment_begin>', `#include <lights_fragment_begin>\n${GLSL_BACKLIGHT}`);
+      .replace(
+        '#include <lights_fragment_begin>',
+        `#include <lights_fragment_begin>\n${GLSL_BACKLIGHT}
+#if NUM_DIR_LIGHTS > 0
+{
+  // finishing pass: backlit wool glows only at its silhouette, in the outer wisps (a halo round the lamb against the
+  // low sun — not the old see-through body)
+  vec3 hl_V = normalize(vViewPosition);
+  float hl_back = pow(clamp(dot(-directLight.direction, hl_V), 0.0, 1.0), 3.0);
+  float hl_rim = pow(1.0 - clamp(abs(dot(normal, hl_V)), 0.0, 1.0), 3.0);
+  reflectedLight.directDiffuse += directionalLights[NUM_DIR_LIGHTS - 1].color * diffuseColor.rgb * hl_back * hl_rim * smoothstep(0.45, 1.0, vShell.x) * (1.0 - uHairMode) * 0.55;
+}
+#endif`,
+      );
   };
-  mat.customProgramCacheKey = () => 'flock-shell-v3';
+  mat.customProgramCacheKey = () => 'flock-shell-v4';
   return mat;
 }
 
@@ -2651,7 +2678,9 @@ export class Flock {
     const lambMat = this.track(
       // the lamb: whiter than the ewes but still wool (albedo ≈ 0.62), dusty legs and belly, less sheen / glow
       // (the short face / leg hair a shade darker than the fleece top: the bare band at the neck read as a white collar)
-      makeBodyMaterial({ wool: 0xd6ccb8, hair: 0xc9bfad, hair2: 0xc9bfad, mottle: 0, dirt: 0x9a8468, dirtH: 0.26, curlFreq: 150, curlAmp: 0.0028, sheen: 0.25, trans: 0.25 }),
+      // (finishing pass: a warm fawn face, ears and legs — the Awassi lamb's short hair is darker than its fleece; in
+      // the thicket shot H1 the cream face and ears melted into the cream wool at 20 % of the frame height)
+      makeBodyMaterial({ wool: 0xd6ccb8, hair: 0xb39a7c, hair2: 0xa98e70, mottle: 0, dirt: 0x9a8468, dirtH: 0.26, curlFreq: 150, curlAmp: 0.0028, sheen: 0.25, trans: 0.25 }),
     );
     const lambShell = this.track(
       makeShellMaterial({ color: 0xd8cebb, tint: 1, fiberFreq: 640, clumpFreq: 60, droop: 0.1, hair: 0, trans: 0.3, rough: 0.95, furScale: 1, count: shellN[2], lod: [25, 80] }),

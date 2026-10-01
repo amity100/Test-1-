@@ -117,6 +117,14 @@
       0.31
     ],
     "density": 1.25,
-    "thickness": 1.25
+    "thickness": 1.25,
+    "pepper": 0.3,
+    "pepperColor": [
+      0.16,
+      0.15,
+      0.14
+    ],
+    "opacity": 0.8,
+    "tip": 1.3
   }
 }

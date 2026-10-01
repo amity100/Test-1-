@@ -57,7 +57,9 @@ export function samuelStyle(): GroomStyle {
     mask: (s) => s.scalpMask(0, (phi) => 0.006 * Math.exp(-(((phi - 40) / 22) ** 2))), // a little receded at the temples (age)
     // second cast pass: denser and fuller (read stringy / sparse at medium): more, broader strands in bigger locks
     strands: { low: 4600, medium: 18000, high: 30000 },
-    locks: 240,
+    // (finishing pass: more, broader locks with less clumping — in the backlit verdict MCU the hair read as ropes /
+    // dreadlocks with dark gaps between them)
+    locks: 320,
     sim: { low: 16, medium: 32, high: 48 },
     length: (f, n, R) => {
       // uncut since birth: very long at the back (to mid-back), long at the sides (over the shoulders), the front
@@ -88,11 +90,11 @@ export function samuelStyle(): GroomStyle {
     curlStart: 0.3,
     curlNoise: 0.35,
     straightLocks: 0.3,
-    lockR: 0.012,
-    clump: 0.84,
+    lockR: 0.015,
+    clump: 0.72,
     frizz: 0.0005, // (cast 0.0015, originally 0.0022)
     flyaway: 0.003, // (cast 0.014, originally 0.03)
-    width: 0.00015,
+    width: 0.00017,
     stiffness: 0.3,
     childLen: [0.72, 1.0],
     colors: (R, f, root, tip) => greyWhite(R, f, root, tip, 0.1),
@@ -103,7 +105,7 @@ export function samuelStyle(): GroomStyle {
     reach: 0.66,
     mask: (s) => s.beardMask(),
     strands: { low: 2800, medium: 9000, high: 17000 },
-    locks: 200,
+    locks: 300,
     sim: { low: 8, medium: 12, high: 18 },
     length: (f, n, R) => {
       const ax = Math.abs(f.x);
@@ -118,7 +120,9 @@ export function samuelStyle(): GroomStyle {
     comb: (f, n, out) => {
       const ax = Math.abs(f.x);
       const must = ss(0.03, 0.02, ax) * ss(-0.075, -0.06, f.y);
-      dir(out, Math.sign(f.x) * (0.1 + 0.9 * must), -1, 0.35 - 0.25 * must);
+      // (finishing pass: the moustache falls over the lip into the beard, the beard hangs straight down to the chest
+      // — combed out sideways (0.1 + 0.9 must) it read as a white fan / broom in the verdict)
+      dir(out, Math.sign(f.x) * (0.04 + 0.5 * must), -1, 0.3 - 0.2 * must);
       return out;
     },
     // models pass: a heavy, full beard falling in groomed wavy locks (no radiating strays)
@@ -130,13 +134,14 @@ export function samuelStyle(): GroomStyle {
     curlR: [0.0025, 0.005],
     curlPitch: [0.06, 0.1],
     curlStart: 0.25,
-    curlNoise: 0.35, // (face pass 2 0.6, originally 0.8)
+    curlNoise: 0.25, // (models pass 0.35, face pass 2 0.6, originally 0.8)
     straightLocks: 0.35,
-    lockR: 0.0068,
-    clump: 0.88, // (face pass 2 0.76, originally 0.55)
+    lockR: 0.009,
+    // finishing pass: a full, heavy mass — 0.88 made ~200 thin separate wisps (stringy, see-through) at 640x360
+    clump: 0.7, // (models pass 0.88, face pass 2 0.76, originally 0.55)
     frizz: 0.0003, // (0.0006)
-    flyaway: 0.0008, // (0.0025)
-    width: 0.0002,
+    flyaway: 0.0004, // (0.0008, 0.0025)
+    width: 0.00024,
     stiffness: 0.35,
     childLen: [0.7, 1.0],
     colors: (R, f, root, tip) => {
@@ -157,7 +162,9 @@ export function samuelStyle(): GroomStyle {
     ctrl: { low: 10, medium: 14, high: 20 },
     segs: { low: 14, medium: 24, high: 38 },
     // (models pass: less back-lit glow — the white mass lit up like a halo against the low sun)
-    shading: { shift: 0.03, roughness: 0.45, specular: 0.42, backlit: 0.55, scatter: 0.75, aoDirect: 0.55 },
+    // (finishing pass: white hair scatters light through the whole mass — more scatter, less occlusion inside the
+    // locks: the dark lock interiors striped the hair like ropes in the backlit verdict MCU)
+    shading: { shift: 0.03, roughness: 0.45, specular: 0.42, backlit: 0.55, scatter: 0.9, aoDirect: 0.4 },
     capColor: [0.62, 0.6, 0.56], // the scalp cap near the white hair (models pass: a shade greyer — the beard read as a white wall)
     capOffset: 0.005,
     capBeard: 0.55,
@@ -169,7 +176,8 @@ export function samuelStyle(): GroomStyle {
 /** Elders of Israel (50-75): long greying / white beards, long hair; seeded grey fraction, beard length, waviness. */
 export function elderStyle(seed: number): GroomStyle {
   const R0 = rng(seed * 4513 + 71);
-  const grey = 0.35 + 0.65 * R0(); // 0.35 greying .. 1 white
+  // (finishing pass: salt and pepper more than snow — out of focus near the lens a white head read as a white blob)
+  const grey = 0.25 + 0.6 * R0(); // 0.25 greying .. 0.85 mostly white
   const beardLen = 0.1 + 0.1 * R0();
   const hairLen = 0.14 + 0.12 * R0();
   const wavy = R0();
@@ -186,7 +194,8 @@ export function elderStyle(seed: number): GroomStyle {
     reach: 0.42,
     mask: (s) => s.scalpMask(0.004 + 0.012 * R0()), // receding with age
     strands: { low: 2400, medium: 7000, high: 14000 },
-    locks: 180,
+    // (finishing pass: fuller groomed locks — the near elders of P5 are seen from behind, their hair large in frame)
+    locks: 260,
     sim: { low: 8, medium: 16, high: 24 },
     length: (f, n, R) => (hairLen + 0.08 * ss(0.02, -0.08, f.z)) * (0.8 + 0.4 * R()),
     comb: (f, n, out) => {
@@ -204,11 +213,11 @@ export function elderStyle(seed: number): GroomStyle {
     curlPitch: wavy > 0.5 ? [0.04, 0.065] : [0.09, 0.15],
     curlStart: 0.25,
     curlNoise: 0.45,
-    lockR: 0.008,
-    clump: 0.76,
+    lockR: 0.01,
+    clump: 0.68,
     frizz: 0.0008,
-    flyaway: 0.005,
-    width: 0.00011,
+    flyaway: 0.003,
+    width: 0.00013,
     stiffness: 0.25,
     childLen: [0.75, 1.0],
     colors: col(0.12),
@@ -231,7 +240,7 @@ export function elderStyle(seed: number): GroomStyle {
     comb: (f, n, out) => {
       const ax = Math.abs(f.x);
       const must = ss(0.03, 0.02, ax) * ss(-0.075, -0.06, f.y);
-      dir(out, Math.sign(f.x) * (0.12 + 0.9 * must), -1, 0.35 - 0.25 * must);
+      dir(out, Math.sign(f.x) * (0.06 + 0.55 * must), -1, 0.32 - 0.22 * must);
       return out;
     },
     lift: 0.14,
@@ -243,11 +252,11 @@ export function elderStyle(seed: number): GroomStyle {
     curlPitch: [0.035, 0.06],
     curlStart: 0.2,
     curlNoise: 0.45,
-    lockR: 0.0055,
-    clump: 0.8,
+    lockR: 0.0075,
+    clump: 0.7,
     frizz: 0.0005,
-    flyaway: 0.002,
-    width: 0.00017,
+    flyaway: 0.0012,
+    width: 0.0002,
     stiffness: 0.4,
     childLen: [0.7, 1.0],
     colors: col(0.05),

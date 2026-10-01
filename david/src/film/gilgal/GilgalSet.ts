@@ -108,6 +108,8 @@ export class GilgalSet {
   private readonly setSun = { dir: new THREE.Vector3(), color: new THREE.Color() };
   private readonly gameSun = { dir: new THREE.Vector3(), color: new THREE.Color() };
   private readonly focus = new THREE.Vector3();
+  /** cut4: the per-take light cheat (setSunCheat) — the sun's direction for the close set-ups, null = the set's sun */
+  private cheatDir: THREE.Vector3 | null = null;
   private shadowHalf = 0;
   private placeholdersOn = false;
 
@@ -271,10 +273,25 @@ export class GilgalSet {
     if (name === 'rise') du.uOpacity.value = 0.75 * (1 - THREE.MathUtils.smoothstep(time, 0.3, 2.0));
   }
 
+  /**
+   * A cinematographer's light cheat for one set-up (cut4): the sun (key light, shadows, the sky's glow — the sky LUT is
+   * azimuth-relative, so it rotates with it) is moved to `azimuthDeg` at the set's own elevation; null = the real sun.
+   * The tear and the verdict (G5a-G6) are filmed from the south with the sun BEHIND the two men (docs/director-notes-v5:
+   * "the low sun behind them", "the sun behind him"); the image-based ambient keeps the real sky (subtle).
+   */
+  setSunCheat(azimuthDeg: number | null) {
+    if (azimuthDeg === null) {
+      this.cheatDir = null;
+      return;
+    }
+    const phi = THREE.MathUtils.degToRad(90 - SUN.elevation), theta = THREE.MathUtils.degToRad(azimuthDeg);
+    this.cheatDir = (this.cheatDir ?? new THREE.Vector3()).setFromSphericalCoords(1, phi, theta);
+  }
+
   /** Per frame (before rendering): sun uniforms, sky dome / shadow frame, cloud deck, point sprite scale. */
   update(dt: number, camera: THREE.PerspectiveCamera, opts: { advanceTime?: boolean } = {}) {
     if (opts.advanceTime) shared.uTime.value += dt;
-    shared.uSunDir.value.copy(this.setSun.dir);
+    shared.uSunDir.value.copy(this.cheatDir ?? this.setSun.dir);
     shared.uSunColor.value.copy(this.setSun.color);
     if (!this.beat) {
       // free camera: frame the sun shadows on the ground ~15 m ahead of the lens
@@ -344,7 +361,7 @@ export class GilgalSet {
         haze: landAtmo.uHaze.value.clone(), deck: cloudShared.uDeck.value.clone(), time: cloudShared.uCloudTime.value,
       };
     }
-    landAtmo.uSunDirA.value.copy(this.setSun.dir);
+    landAtmo.uSunDirA.value.copy(this.cheatDir ?? this.setSun.dir);
     landAtmo.uSunColA.value.copy(this.setSun.color);
     landAtmo.tSkyCube.value = this.sky.cubeTarget.texture;
     landAtmo.uHaze.value.set(2.4e-5, 1 / 1900, -400 - ORIGIN_ASL, 1);

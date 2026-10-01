@@ -4,7 +4,7 @@ import { C } from './body';
 import { blendWeights } from './body';
 import { partWeights, skirtWeights, tubeSurface, type Fit } from './garments';
 import { rng, TAU, type Tube } from './loft';
-import { solidMaterial, type TexPair, type Tier } from './materials';
+import { solidMaterial, type OutfitUniforms, type TexPair, type Tier } from './materials';
 import type { Prop } from './Outfit';
 import { mergeStatic } from './props';
 import type { TunicResult } from './common';
@@ -90,8 +90,17 @@ export interface ScaleArmourOptions {
   row?: number;
   /** horizontal spacing of the scales in a row as a fraction of their width (< 1 = they overlap sideways; default 0.97) */
   side?: number;
-  /** polished royal bronze (Saul) or dull field bronze (Philistines) */
-  polish?: 'royal' | 'field';
+  /**
+   * polished royal bronze, dull field bronze (Philistines) or 'aged' — the king's coat after a campaign (finishing pass:
+   * dark field bronze #8c5e33 with patina #56745b and dust in the overlaps, broad dim highlights; the polished coat
+   * read as orange roof tiles / gold sequins in the close-ups G6 / G7)
+   */
+  polish?: 'royal' | 'field' | 'aged';
+  /**
+   * leg-capsule push like the backing's (the outfit's capsules, `pad` = the backing's collide pad, m): in a kneel the
+   * pushed leather backing came out OVER the unpushed scales — black patches on the coat skirt (G5a / G5b)
+   */
+  collide?: { uniforms: OutfitUniforms; pad: number };
   seed?: number;
   /** skip scales below this height on the coat skirt (m, rest) */
   hemY?: number;
@@ -131,12 +140,14 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions &
   // tried and dropped: across the skirt's pelvis/thigh weight seam the two halves of the coat split apart. The scales
   // keep per-vertex weights; `anchor` is kept for a softer blend below)
   const anchor: number[] = [];
+  const lifts: number[] = []; // height of each vertex above the backing (the collision push keeps it)
+  const aged = o.polish === 'aged';
   const royal = (o.polish ?? 'royal') === 'royal';
   const base = new THREE.Color(1, 1, 1);
   // verdigris in the crevices, relative to the bronze F0 (the vertex colour multiplies the material colour)
-  const bronzeHex = royal ? 0xb8773c : 0x8c5e33;
+  const bronzeHex = royal ? 0xb8773c : 0x8c5e33; // ('aged' = field bronze)
   const bc = new THREE.Color(bronzeHex);
-  const patina = new THREE.Color(0x56745b).multiply(new THREE.Color(1 / bc.r, 1 / bc.g, 1 / bc.b)).multiplyScalar(0.8);
+  const patina = new THREE.Color(0x56745b).multiply(new THREE.Color(1 / bc.r, 1 / bc.g, 1 / bc.b)).multiplyScalar(aged ? 1.05 : 0.8);
   // (metal: the vertex colour scales F0, so road dust must darken and desaturate it, never brighten it)
   const dust = new THREE.Color(0.55, 0.42, 0.3);
   const c = new THREE.Color();
@@ -192,10 +203,14 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions &
         // hand-made scales: each sits a little differently on its lacing — a small twist, a facet, a dent, a darker
         // replaced scale here and there; the variation is what makes rows of scales sparkle like beaten metal
         const tone = (0.82 + 0.3 * R()) * (R() < 0.06 ? 0.7 : 1);
-        const pat = Math.pow(R(), 4) * (royal ? 0.35 : 0.7);
+        // aged: patina on many scales (strongest in the overlaps), a few almost green
+        // (a dark F0 tint on a full metal: strong / frequent patina read as dark blotches — keep it to the overlaps)
+        const pat = aged ? Math.min(1, Math.pow(R(), 3) * 0.5 + (R() < 0.04 ? 0.25 : 0)) : Math.pow(R(), 4) * (royal ? 0.35 : 0.7);
         const tl = tilt * (0.8 + 0.4 * R());
         const rot = (R() - 0.5) * 0.08;
-        const dnT = (R() - 0.5) * 0.36, dnD = (R() - 0.5) * 0.28; // facet: the whole scale catches light differently
+        // facet: the whole scale catches light differently (aged: a third of it — the per-scale sparkle was the "sequins")
+        const fac = aged ? 0.5 : 1;
+        const dnT = (R() - 0.5) * 0.36 * fac, dnD = (R() - 0.5) * 0.28 * fac;
         const ca = Math.cos(rot), sa = Math.sin(rot);
         const vi0 = pos.length / 3;
         const ax = s0.p.x + tmpD.x * L * 0.5, ay = s0.p.y + tmpD.y * L * 0.5, az = s0.p.z + tmpD.z * L * 0.5;
@@ -212,8 +227,10 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions &
             // neighbour, a slight cup across and the repoussé rib (the rest of the relief is in the normal map)
             const cup = 0.0006 * S * (1 - u * u);
             const lift = tl * v + edge * (0.5 - 0.5 * u) + cup + 0.0006 * S * Math.max(0, 1 - Math.abs(u) * 2.4) * Math.sin(Math.PI * v);
-            q.copy(s0.p).addScaledVector(tmpT, xr).addScaledVector(tmpD, yr).addScaledVector(nrm, lift + 0.0016 + (zoneId === 1 ? 0.0025 : 0));
+            const hgt = lift + 0.0016 + (zoneId === 1 ? 0.0025 : 0);
+            q.copy(s0.p).addScaledVector(tmpT, xr).addScaledVector(tmpD, yr).addScaledVector(nrm, hgt);
             pos.push(q.x, q.y, q.z);
+            lifts.push(hgt);
             // normal: the base normal tilted by the lift slope (down), the cup (across) and the scale's facet
             const nx = -u * 0.12 + dnT - edge / W;
             const ny = -tl / L + dnD;
@@ -225,8 +242,8 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions &
             const below = v - overlap; // 0 at the overlap line
             // (phones: one quad across a scale — a softer contact shadow, or the rows read as dark stripes)
             const ao = low ? (below < 0 ? 0.72 : 0.8 + 0.2 * Math.min(1, below / 0.18)) : below < 0 ? 0.55 : 0.62 + 0.38 * Math.min(1, below / 0.18);
-            c.copy(base).lerp(patina, pat * (below < 0.12 ? 1 : 0.25)).multiplyScalar(tone * ao);
-            c.lerp(dust, (royal ? 0.3 : 0.4) * Math.max(0, 1 - Math.abs(below - 0.04) / 0.12) + (zoneId === 1 ? 0.06 : 0.02));
+            c.copy(base).lerp(patina, pat * (below < 0.12 ? 1 : aged ? 0.3 : 0.25)).multiplyScalar(tone * ao);
+            c.lerp(dust, (royal ? 0.3 : aged ? 0.5 : 0.4) * Math.max(0, 1 - Math.abs(below - 0.04) / (aged ? 0.16 : 0.12)) + (zoneId === 1 ? (aged ? 0.12 : 0.06) : aged ? 0.06 : 0.02));
             col.push(c.r, c.g, c.b);
             zone.push(zoneId);
             anchor.push(ax, ay, az);
@@ -250,6 +267,7 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions &
   g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setAttribute('aLift', new THREE.Float32BufferAttribute(lifts, 1));
   g.setIndex(idx);
   // full metal driven by the per-scale detail map (every scale has uv 0..1): hammered dimples, the raised rib and
   // the rolled edge in the normal map; roughness / metalness maps put packed road dust (rough, non-metal) along the
@@ -259,20 +277,55 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions &
     // polished bronze (visual-bible §2 #b8773c), a touch more golden than copper
     // (film check: in the backlit close-ups the polished scales went pale gold / sequin-like — a touch darker and a
     // little less mirror-like keeps them bronze)
-    color: royal ? 0xb27c46 : 0x9a6a40, roughness: royal ? 1.15 : 1.25, metalness: 1, envMapIntensity: 0.72,
-    normalMap: maps.normal, normalScale: new THREE.Vector2(1, 1), roughnessMap: maps.orm, metalnessMap: maps.orm,
+    // aged (finishing pass): field bronze (#8c5e33), the detail map's polish rougher -> broad, dim highlights
+    // (x1.35 rougher: the dusty overlaps go matte, the burnished lower rims still catch the low sun — at x1.75 the coat
+    // lost every glint in the backlit stride G2 and read as dark knitwear at a distance)
+    color: royal ? 0xb27c46 : aged ? 0x93633a : 0x9a6a40, roughness: royal ? 1.15 : aged ? 1.35 : 1.25, metalness: 1, envMapIntensity: aged ? 0.55 : 0.72,
+    normalMap: maps.normal, normalScale: new THREE.Vector2(aged ? 0.75 : 1, aged ? 0.75 : 1), roughnessMap: maps.orm, metalnessMap: maps.orm,
   });
   mat.name = 'wardrobe:scaleBronze';
+  const co = o.collide;
+  const cu = co ? { uCapA: co.uniforms.uCapA, uCapB: co.uniforms.uCapB, uCapPad: { value: co.pad } } : null;
   // the environment the coat reflects is mostly pale sky: through the facets (grazing Fresnel) it turned scales
   // silver-lilac. Warm the reflected environment (dust-laden air, the sunlit plain the lower facets see) so the coat
   // stays bronze in every shot; the direct sun highlight is untouched.
   mat.onBeforeCompile = (sh) => {
     sh.fragmentShader = sh.fragmentShader.replace(
       '#include <lights_fragment_end>',
-      '#include <lights_fragment_end>\nreflectedLight.indirectSpecular *= vec3(1.0, 0.76, 0.5);',
+      `#include <lights_fragment_end>\nreflectedLight.indirectSpecular *= ${aged ? 'vec3(0.86, 0.62, 0.4)' : 'vec3(1.0, 0.76, 0.5)'};`,
     );
+    if (cu) {
+      // the backing's leg-capsule push (materials.ts wCollide), applied to the point of the backing under each scale
+      // vertex, then the vertex's own height above it: the scales ride on the pushed leather, layering intact
+      Object.assign(sh.uniforms, cu);
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', `#include <common>
+attribute float aLift;
+uniform vec4 uCapA[4];
+uniform vec4 uCapB[4];
+uniform float uCapPad;
+vec3 sCollide(vec3 p) {
+  for (int i = 0; i < 4; i++) {
+    vec3 a = uCapA[i].xyz, b = uCapB[i].xyz;
+    float r = uCapA[i].w + uCapPad;
+    vec3 ab = b - a;
+    float t = clamp(dot(p - a, ab) / max(dot(ab, ab), 1e-6), 0.0, 1.0);
+    vec3 c = a + ab * t;
+    vec3 d = p - c;
+    float l = length(d);
+    if (l < r && l > 1e-5) p = c + d * (r / l);
+  }
+  return p;
+}`)
+        .replace('#include <skinning_vertex>', `#include <skinning_vertex>
+{
+  vec3 sn = normalize(objectNormal);
+  vec3 sb = transformed - sn * aLift;
+  transformed = sCollide(sb) + sn * aLift;
+}`);
+    }
   };
-  mat.customProgramCacheKey = () => 'scaleBronze2';
+  mat.customProgramCacheKey = () => (aged ? 'scaleBronze3a' : 'scaleBronze2') + (cu ? '|c' : '');
   mat.vertexColors = true;
   mat.side = THREE.DoubleSide;
   // weights: upper zone follows the torso, and near the shoulders blends into the upper arm (like the armhole cap)
@@ -293,6 +346,7 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions &
   const m = makeSkinned(human, g, mat, w, { name: 'scaleArmour' });
   // makeSkinned rebuilds the geometry without vertex colours: carry them over (same vertex order)
   m.geometry.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  m.geometry.setAttribute('aLift', new THREE.Float32BufferAttribute(lifts, 1));
   m.userData.scales = idx.length / (nu * nv * 6);
   fit.outfit.add(m);
   return m;

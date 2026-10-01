@@ -51,7 +51,15 @@ export interface RigJson {
     lipBottom?: [number, number, number];
   };
   skin: Record<string, unknown>;
-  brows: { color?: [number, number, number]; density?: number; thickness?: number };
+  /**
+   * brow strands (tools/human/strands.py): colour (sRGB), build-time density / thickness / width / wiry / length, and
+   * runtime look — `pepper` = fraction of strands drawn in `pepperColor` (salt-and-pepper grey brows), `opacity`,
+   * `tip` = tip brightness over the root (default 1.5)
+   */
+  brows: {
+    color?: [number, number, number]; density?: number; thickness?: number; width?: number; wiry?: number; length?: number;
+    pepper?: number; pepperColor?: [number, number, number]; opacity?: number; tip?: number;
+  };
   irisStyle: { iris?: string; seed?: number };
   bin: { file: string; bytes: number; gzipBytes?: number; layout: Record<string, BinEntry> };
   variations: string[];

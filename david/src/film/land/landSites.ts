@@ -238,10 +238,21 @@ export function buildRamahGate(tex: TextureSet, tier: LandTier, frame: { origin:
     // wall between the stubs and the first houses of the ring
     piece('wall', meterBox(9, H + 1.6, 1.1, 4.8, 0.05), sgn * (passW / 2 + stubW + 4.2), (H + 1.6) / 2 - 1.6, -1.6, 0, tmpC.setRGB(0.92, 0.88, 0.8));
   }
-  piece('wood', meterBox(passW + 1.4, 0.35, 0.45, 1.5), 0, 2.9, 0.35, 0, tmpC.setRGB(0.62, 0.5, 0.38));
-  piece('wood', meterBox(passW + 1.4, 0.35, 0.45, 1.5), 0, 2.9, -1.0, 0, tmpC.setRGB(0.62, 0.5, 0.38));
+  // the lintel: a heavy timber beam (cut4: lighter, weathered, its grain readable — it read as a black frame), a second
+  // one inside, the wall carried over them
+  piece('wood', meterBox(passW + 1.7, 0.44, 0.52, 1.1), 0, 2.93, 0.38, 0, tmpC.setRGB(0.86, 0.72, 0.56));
+  piece('wood', meterBox(passW + 1.5, 0.38, 0.45, 1.1), 0, 2.9, -1.0, 0, tmpC.setRGB(0.74, 0.62, 0.48));
   piece('wall', meterBox(passW + 0.6, 0.9, 1.9, 4.8, 0.04), 0, 3.07 + 0.45, -0.35, 0, tmpC.setRGB(0.95, 0.91, 0.84));
-  for (const sgn of [-1, 1]) piece('wood', meterBox(1.9, 2.7, 0.12, 1.0), sgn * (passW / 2 - 0.1), 1.35, -1.4, sgn * Math.PI / 2, tmpC.setRGB(0.66, 0.54, 0.42));
+  // the passage roofed through the depth of the gate (beams and packed clay): the passage lies in shade
+  piece('roof', meterBox(passW + 0.4, 0.32, 4.1, 2.2), 0, 3.12, -1.55, 0, tmpC.setRGB(0.5, 0.45, 0.39));
+  // the two door leaves standing OPEN, swung inward ~70° from their hinges at the outer face (planked, dark with age)
+  for (const sgn of [-1, 1]) {
+    const th = 1.22; // 70°
+    const hx = sgn * (passW / 2 - 0.08), hz = -0.18, w = 1.42;
+    piece('wood', meterBox(w, 2.62, 0.1, 0.9), hx - sgn * (w / 2) * Math.cos(th), 1.31, hz - (w / 2) * Math.sin(th), sgn < 0 ? th : -th, tmpC.setRGB(0.55, 0.44, 0.33));
+    // the door posts against the stubs
+    piece('wood', meterBox(0.24, 2.75, 0.3, 1.0), sgn * (passW / 2 + 0.02), 1.37, 0.32, 0, tmpC.setRGB(0.7, 0.58, 0.45));
+  }
   piece('bench', meterBox(passW, 0.18, 1.0, 1.4), 0, 0.02, 0.4, 0, tmpC.setRGB(0.9, 0.87, 0.8));
   // terraces on the slope below the gate (dry-stone risers following the contour), olives planted on them
   const terraceOlives: { x: number; z: number; s: number; yaw: number }[] = [];
@@ -269,26 +280,28 @@ export function buildRamahGate(tex: TextureSet, tier: LandTier, frame: { origin:
     group.add(mesh);
   }
   void wallM; void add;
-  // the elders on the benches and before the gate; Samuel stands in the gateway facing them
+  // "וַיִּתְקַבְּצוּ כֹּל זִקְנֵי יִשְׂרָאֵל וַיָּבֹאוּ אֶל־שְׁמוּאֵל הָרָמָתָה" (8:4) — cut4 (P5, director-notes-v5): the elders gathered
+  // in a LOOSE ARC before Samuel in the gateway, in the order the film casts them (FilmStage takes the first N per tier):
+  //   0 the speaker, seated on the bench left of the passage (he rises and demands, RamahPerformance's lead: the
+  //     seated elder nearest Samuel) · 1 seated on the right bench · 2-5 the arc 3-4 m before Samuel (backs and
+  //     profiles to the lens) · 6-7 the near pair the lens dollies in past (heads and shoulders in the foreground,
+  //     turned toward each other) · 8-10 the outer ring
+  // Local gate frame (x along the wall, z out of the gate); `turn` = extra yaw off "facing Samuel" (rad).
   const elders: Mark[] = [];
   const benchY = 0.46;
-  for (const sgn of [-1, 1]) {
-    for (let i = 0; i < 4; i++) {
-      const lx = sgn * (passW / 2 + 1.0 + i * 1.6);
-      const p = toWorld(lx, benchY, 0.95);
-      elders.push({ pos: p, yaw: frame.yaw + sgn * 0.35, role: 'elder-seated', seated: true });
-    }
+  const ARC: [number, number, boolean, number][] = [
+    [-2.1, 0.95, true, -0.25], [3.0, 0.95, true, 0.2],
+    [-1.3, 3.6, false, 0.15], [1.6, 3.9, false, -0.2], [-2.6, 2.7, false, 0.1], [2.7, 2.9, false, -0.1],
+    [-0.85, 7.6, false, 0.55], [1.25, 7.2, false, -0.6],
+    [-4.2, 4.8, false, 0.05], [4.0, 5.2, false, -0.1], [-2.4, 6.0, false, 0.3],
+  ];
+  for (const [lx, lz, seated, turn] of ARC) {
+    const p = toWorld(lx, seated ? benchY : 0, lz);
+    if (!seated) p.y = ground(p.x, p.z);
+    const toSamuel = Math.atan2(-lx, 1.4 - lz);
+    elders.push({ pos: p, yaw: frame.yaw + toSamuel + turn, role: seated ? 'elder-seated' : 'elder', seated });
   }
-  const standing = tier === 'low' ? 8 : 12;
-  for (let i = 0; i < standing; i++) {
-    const a = -1.1 + (i / (standing - 1)) * 2.2;
-    const r = 9 + (i % 2) * 1.6 + rnd() * 0.6;
-    const lx = Math.sin(a) * r, lz = 1.0 + Math.cos(a) * r * 0.75 + 1.5;
-    const p = toWorld(lx, 0, lz);
-    p.y = ground(p.x, p.z);
-    const toGate = Math.atan2(-(lx), -(lz - 2.5));
-    elders.push({ pos: p, yaw: frame.yaw + toGate, role: 'elder' });
-  }
+  void rnd;
   const samuelP = toWorld(0, 0, 1.4);
   samuelP.y = ground(samuelP.x, samuelP.z);
   const samuel: Mark = { pos: samuelP, yaw: frame.yaw, role: 'samuel' };

@@ -202,11 +202,19 @@ vec3 bearUnderTint(vec3 bp) {
 }
 `;
 
+/**
+ * finishing pass: darkness of the bear's body 0..1 (the pelt, skin, claws, teeth — NOT the eyes' tapetum shine): the
+ * film's H2 ("two eyes open in the dark", the body unseen) sets ≈0.85; 0 in gameplay. Shared by every bear.
+ */
+const bearDarkU = { value: 0 };
+const DARK_OUT = '#include <opaque_fragment>\ngl_FragColor.rgb *= 1.0 - uBearDark;';
+
 function makeBodyMaterial(a: BearAssets, shared: Record<string, THREE.IUniform>) {
   const m = new THREE.MeshStandardMaterial({ map: a.albedo, normalMap: a.normal, roughness: 1, metalness: 0 });
   m.name = 'bear-body';
   m.onBeforeCompile = (s) => {
-    Object.assign(s.uniforms, shared, { uMaskMap: { value: a.mask } });
+    Object.assign(s.uniforms, shared, { uMaskMap: { value: a.mask }, uBearDark: bearDarkU });
+    s.fragmentShader = s.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uBearDark;').replace('#include <opaque_fragment>', DARK_OUT);
     s.vertexShader = s.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vBindP;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBindP = position;');
@@ -250,7 +258,7 @@ reflectedLight.indirectSpecular *= bearAO * bearAO;
 reflectedLight.directDiffuse *= mix(1.0, bearAO, 0.45);`,
       );
   };
-  m.customProgramCacheKey = () => 'bear-body-v2';
+  m.customProgramCacheKey = () => 'bear-body-v3';
   return m;
 }
 
@@ -258,7 +266,8 @@ function makeFurMaterial(a: BearAssets, shared: Record<string, THREE.IUniform>, 
   const m = new THREE.MeshStandardMaterial({ map: a.albedo, roughness: 0.8, metalness: 0 });
   m.name = 'bear-fur';
   m.onBeforeCompile = (s) => {
-    Object.assign(s.uniforms, shared, uniforms, { uMaskMap: { value: a.mask }, uStrands: { value: a.strands } });
+    Object.assign(s.uniforms, shared, uniforms, { uMaskMap: { value: a.mask }, uStrands: { value: a.strands }, uBearDark: bearDarkU });
+    s.fragmentShader = s.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uBearDark;').replace('#include <opaque_fragment>', DARK_OUT);
     s.vertexShader = s.vertexShader
       .replace(
         '#include <common>',
@@ -470,7 +479,7 @@ void RE_Direct_Fur(const in IncidentLight directLight, const in vec3 geometryPos
 }`,
       );
   };
-  m.customProgramCacheKey = () => 'bear-fur-v3';
+  m.customProgramCacheKey = () => 'bear-fur-v4';
   return m;
 }
 
@@ -482,11 +491,14 @@ function makeExtrasMaterial() {
   m.name = 'bear-extras';
   m.onBeforeCompile = (s) => {
     s.uniforms.uEyeShine = eyeShineU;
+    s.uniforms.uBearDark = bearDarkU;
     s.vertexShader = s.vertexShader
       .replace('#include <common>', `#include <common>\nattribute vec4 aux;\nvarying vec4 vAux;\nvarying vec3 vBindN;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>\nvAux = aux;\nvBindN = normal;`);
     s.fragmentShader = s.fragmentShader
-      .replace('#include <common>', `#include <common>\nvarying vec4 vAux;\nvarying vec3 vBindN;\nuniform float uEyeShine;\nfloat exRough; float exCoat; float exShine = 0.0;`)
+      .replace('#include <common>', `#include <common>\nvarying vec4 vAux;\nvarying vec3 vBindN;\nuniform float uEyeShine;\nuniform float uBearDark;\nfloat exRough; float exCoat; float exShine = 0.0;`)
+      // the dark of H2 takes the claws and teeth; the eyes keep their light (the tapetum shine is all that is seen)
+      .replace('#include <opaque_fragment>', '#include <opaque_fragment>\nif (vAux.x > 0.5) gl_FragColor.rgb *= 1.0 - uBearDark;')
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
@@ -531,7 +543,7 @@ if (uEyeShine > 0.0 && exShine > 0.0) {
 }`,
       );
   };
-  m.customProgramCacheKey = () => 'bear-extras-v3';
+  m.customProgramCacheKey = () => 'bear-extras-v4';
   return m;
 }
 
@@ -684,6 +696,16 @@ export class BearModel {
   }
   set eyeShine(v: number) {
     eyeShineU.value = Math.max(0, v);
+  }
+  /**
+   * finishing pass: darkness 0..1 of the bear's body (pelt, skin, claws, teeth; NOT the eye-shine) — the film's H2
+   * sets ≈0.85 so only the two amber eyes read in the thicket; 0 in gameplay. Shared by every bear (one uniform).
+   */
+  get darkness() {
+    return bearDarkU.value;
+  }
+  set darkness(v: number) {
+    bearDarkU.value = THREE.MathUtils.clamp(v, 0, 1);
   }
   lookTarget: THREE.Vector3 | null = null;
   deathT = -1;

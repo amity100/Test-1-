@@ -608,7 +608,8 @@ def build_strands(h: Human, tier: Tier, eyes, rng_seed=1, density=1.0):
         mask = (allnrm[:, 2] > 0.15) & (allpos[:, 1] > c[1] + 0.002) & (np.abs(allpos[:, 0] - c[0]) < 0.05)
         surf = Surface(allpos, allnrm, mask)
         br_s, br_r, br_w = brows(surf, c, side, loop, rng, density=bcfg.get("density", 1.0) * density,
-                                 thickness=bcfg.get("thickness", 1.0), lift=bcfg.get("lift", 0.0))
+                                 thickness=bcfg.get("thickness", 1.0), lift=bcfg.get("lift", 0.0),
+                                 width=bcfg.get("width", 0.000125), wiry=bcfg.get("wiry", 0.0), length=bcfg.get("length", 1.0))
         out.append(("lash", up_s + lo_s, np.concatenate([up_r, lo_r]), np.concatenate([up_w, lo_w])))
         out.append(("brow", br_s, br_r, br_w))
     groups = {}

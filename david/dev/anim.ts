@@ -13,7 +13,7 @@
 import * as THREE from 'three';
 import { FilmActor, GilgalPerformance, RamahPerformance, GILGAL_CLIPS, RAMAH_CLIPS } from '../src/film/cast';
 import { MocapLibrary } from '../src/characters/mocap';
-import { saulAt, samuelAt, type GilgalShotName } from '../src/film/gilgal/gilgalBlocking';
+import { saulAt, samuelAt, TEAR_GRIP, type GilgalShotName } from '../src/film/gilgal/gilgalBlocking';
 import { SAUL_HALT, ARMY } from '../src/film/gilgal/gilgalLayout';
 import type { GilgalArmy } from '../src/film/crowd/GilgalArmy';
 import type { CrowdTier } from '../src/film/crowd/Crowd';
@@ -65,6 +65,7 @@ let army: GilgalArmy | null = null;
 let ramahPerf: RamahPerformance | null = null;
 const elders: FilmActor[] = [];
 let cur: { name: string; t: number } | null = null;
+let ramahT = -1;
 const dt = 1 / 30;
 
 function setCam(c: string | number[]) {
@@ -177,6 +178,43 @@ function setCam(c: string | number[]) {
     const x = SAUL_HALT.x - 7.2;
     const s2 = samuelAt('silence', cur ? cur.t : 0).pos;
     set(V(x, 1.62, 0.4 + 1.575), V(s2.x, 1.42, s2.z + 0.35), 13);
+  } else if (c === 'g5bCut4' || c === 'g5bCut4w') {
+    // cut4 (FilmCams FILM_CAM.insert, rev 1): the low close two-shot from the south; base G = samuelAt('tear', 2.0) +
+    // TEAR_GRIP, the look 0.15 m west / 0.3 m above it, following the real fist by 0.25
+    const t = cur ? cur.t : 2;
+    const u = Math.min(1, Math.max(0, (t - 2.0) / 2.5)), e2 = u * u * (3 - 2 * u);
+    const sm = samuelAt('tear', 2.0).pos;
+    const G = V(sm.x + TEAR_GRIP.x, TEAR_GRIP.y, sm.z + TEAR_GRIP.z);
+    const look = V(G.x - 0.15, G.y + 0.3, G.z);
+    saul!.human.sockets.handGripR.getWorldPosition(f);
+    if (f.distanceTo(G) < 1.2) look.lerp(V(f.x - 0.15, f.y + 0.3, f.z), 0.25);
+    set(V(G.x - 0.2 + 0.15 * e2, 0.6 - 0.04 * e2, G.z + 1.95 - 0.17 * e2), look, (c === 'g5bCut4w' ? 45 : 35) - 3 * e2);
+  } else if (c === 'g6Cut4') {
+    // cut4 (FilmCams FILM_CAM.verdict, rev 1): MCU 3/4 front, the line Samuel -> Saul turned 22 deg south, eye height
+    // 1.55, the look 0.25 m to frame left, a 6 % push
+    const t = cur ? cur.t : 0;
+    const u = Math.min(1, Math.max(0, t / 4.5)), e2 = u * u * (3 - 2 * u);
+    const sa = saulAt('verdict', t).pos, sm = samuelAt('verdict', t).pos;
+    const a = V(sa.x - sm.x, 0, sa.z - sm.z).normalize().applyAxisAngle(V(0, 1, 0), 22 * Math.PI / 180);
+    const d = 2.05 - 0.13 * e2;
+    const lk = V(sm.x, 1.55, sm.z);
+    samuel!.eyesWorld(e);
+    if (e.distanceTo(lk) < 0.8) lk.lerp(e, 0.55);
+    lk.add(V(-a.z, 0, a.x).multiplyScalar(0.25));
+    set(V(sm.x + a.x * d, 1.55 + 0.015 * e2, sm.z + a.z * d), lk, 22 - 1.5 * e2);
+  } else if (c === 'g5aCut4') {
+    // cut4 rev 1: medium-wide two-shot from the south at chest height, a lateral move west -> east
+    const t = cur ? cur.t : 0;
+    const u = Math.min(1, t / 2.0), e2 = u * u * (3 - 2 * u);
+    const sa = saulAt('tear', t).pos, sm = samuelAt('tear', t).pos;
+    const mid = sa.clone().lerp(sm, 0.5);
+    set(V(mid.x - 0.6 + 1.2 * e2, 1.25, mid.z + 5.0), V(mid.x, 0.95, mid.z), 30 - 2 * e2);
+  } else if (c === 'eldersCut4') {
+    // cut4's P5 lens (FILM_CAM.elders, gate frame at the origin): a low dolly through the group toward Samuel
+    const u = Math.min(1, Math.max(0, ramahT / 4)), e2 = u * u * (3 - 2 * u);
+    set(V(0.45 - 0.15 * e2, 1.55 + 0.05 * e2, 10.8 - 2.2 * e2), V(-0.55, 1.5, 1.4), 30 - 5 * e2);
+  } else if (c === 'eldersHigh') {
+    set(V(1.5, 6.5, 13), V(0, 0.8, 3.5), 40);
   } else if (c === 'elders') {
     set(V(-6.2, 1.55, 2.4), V(-0.5, 1.2, 0), 42);
   } else if (c === 'eldersSam') {
@@ -211,27 +249,35 @@ async function boot() {
     army.crowd.viewportHeight = H;
   }
   if (mode === 'ramah') {
+    // cut4's P5 gate frame (landSites, gateYaw 0 at the origin): +Z out of the gate toward the lens, Samuel at (0, 0, 1.4)
     samuel = await FilmActor.create({ role: 'samuel', quality: q, lod: 'near', ground: flat });
     samuel.addTo(scene);
-    const n = +(P.get('elders') ?? 4);
-    for (let i = 0; i < n; i++) {
-      const e = await FilmActor.create({ role: 'elder', quality: q, seed: i + 1, lod: i < 2 ? 'near' : 'crowd', ground: flat });
+    const ARC: [number, number, boolean, number][] = [
+      [-2.1, 0.95, true, -0.25], [3.0, 0.95, true, 0.2],
+      [-1.3, 3.6, false, 0.15], [1.6, 3.9, false, -0.2], [-2.6, 2.7, false, 0.1], [2.7, 2.9, false, -0.1],
+      [-0.85, 7.6, false, 0.55], [1.25, 7.2, false, -0.6],
+      [-4.2, 4.8, false, 0.05], [4.0, 5.2, false, -0.1], [-2.4, 6.0, false, 0.3],
+    ];
+    const idx = (P.get('idx') ?? '0,1,2,3,4,5,6,7,8,9,10').split(',').map(Number);
+    const near = (P.get('near') ?? '6,7,0,2').split(',').map(Number);
+    const marks = idx.map((i) => {
+      const [lx, lz, seated, turn] = ARC[i];
+      return { pos: V(lx, seated ? 0.46 : 0, lz), yaw: Math.atan2(-lx, 1.4 - lz) + turn, seated };
+    });
+    for (const i of idx) {
+      const e = await FilmActor.create({ role: 'elder', quality: q, seed: i + 1, lod: near.includes(i) ? 'near' : 'crowd', ground: flat });
       e.addTo(scene);
       elders.push(e);
     }
-    // benches: the seated elder faces Samuel across 2.6 m
-    const bench = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.45, 1.6), new THREE.MeshStandardMaterial({ color: 0x8c7a62 }));
-    bench.position.set(-2.75, 0.225, 0.4);
-    scene.add(bench);
-    const marks = [
-      { pos: V(-2.62, 0.45, 0.35), yaw: Math.PI / 2, seated: true },
-      { pos: V(-3.1, 0, -1.25), yaw: Math.PI / 2 - 0.25 },
-      { pos: V(-3.35, 0, 1.55), yaw: Math.PI / 2 + 0.3 },
-      { pos: V(-4.2, 0, -0.2), yaw: Math.PI / 2 },
-      { pos: V(-4.6, 0, 1.2), yaw: Math.PI / 2 + 0.2 },
-      { pos: V(-4.4, 0, -1.6), yaw: Math.PI / 2 - 0.3 },
-    ];
-    ramahPerf = new RamahPerformance(samuel, elders, { pos: V(0, 0, 0), yaw: -Math.PI / 2 }, marks, flat);
+    for (const bx of [-2.1, 3.0]) {
+      const bench = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.46, 0.5), new THREE.MeshStandardMaterial({ color: 0x8c7a62 }));
+      bench.position.set(bx, 0.23, 0.95);
+      scene.add(bench);
+    }
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(14, 3.2, 0.8), new THREE.MeshStandardMaterial({ color: 0xa89a82 }));
+    wall.position.set(0, 1.6, -0.4);
+    scene.add(wall);
+    ramahPerf = new RamahPerformance(samuel, elders, { pos: V(0, 0, 1.4), yaw: 0 }, marks, flat, {}, P.get('infer') === '1' ? undefined : idx);
   }
   w.__ready = true;
 }
@@ -263,7 +309,6 @@ function shot(name: GilgalShotName, t: number, cam: string | number[] = 'side') 
   return frame();
 }
 
-let ramahT = -1;
 function ramah(t: number, cam: string | number[] = 'elders') {
   if (!ramahPerf) throw new Error('mode');
   if (t < ramahT) ramahT = -1;

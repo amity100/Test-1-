@@ -47,8 +47,12 @@ export interface TunicOptions {
   roughness?: number;
   /** extra radial offset for outer layers */
   offset?: number;
-  /** open side slits from the hem up to this height (tabard / four-cornered robe) and slit half-angle */
-  sideSlit?: { top: number; half: number };
+  /**
+   * open side slits from the hem up to this height (tabard / four-cornered robe) and slit half-angle; `underlap` (m):
+   * the wrap overlaps itself — behind each slit the same cloth a little deeper (finishing pass: through the slits the
+   * light tunic showed as bright stripes down the side in the backlit close-ups)
+   */
+  sideSlit?: { top: number; half: number; underlap?: number };
   sleeveless?: boolean;
   /** rest positions of garments under this one (TunicResult.restPos of the inner layer) */
   inner?: Float32Array[];
@@ -87,6 +91,13 @@ export interface TunicResult {
   meshes: THREE.Object3D[];
   /** rest positions of every tube of this garment (pass as `inner` to the next layer) */
   restPos: Float32Array[];
+  /**
+   * the skirt's material with another leg-push pad (m) — for a layer that lies just under the skirt (an underlap) and
+   * must stay under it where a stride pushes both out (finishing pass)
+   */
+  skirtMaterialFor?: (pad: number) => THREE.Material;
+  /** the skirt's leg-push pad (m) */
+  skirtPad?: number;
 }
 
 export function fittedTunic(fit: Fit, o: TunicOptions): TunicResult {
@@ -162,7 +173,8 @@ export function fittedTunic(fit: Fit, o: TunicOptions): TunicResult {
   // outer layers keep their offset from the inner ones where a leg pushes both out (no z-fighting / white flecks)
   const pad = Math.max(0, off * 0.8);
   const sf2 = o.skirtFolds ?? (g > 0 ? [g, 0.09, 0.036] : null);
-  const skMat = clothMaterial({ ...common, bands: o.bands, palette: o.palette, hem: [o.dust ?? 0.45, 0.16, 0.015, o.fray ?? 0.3], edgeMask: [1, 0], sway, collide: U, collidePad: pad, inside: insideFace(skirt.tube.geometry), ...(sf2 ? { gather: { upper: sf2[0], falloff: sf2[1], spacing: sf2[2], around: foldsAround(skirt.tube, skirt.tube.rows - 1, sf2[2]) } } : {}) });
+  const skMatFor = (cpad: number) => clothMaterial({ ...common, bands: o.bands, palette: o.palette, hem: [o.dust ?? 0.45, 0.16, 0.015, o.fray ?? 0.3], edgeMask: [1, 0], sway, collide: U, collidePad: cpad, inside: insideFace(skirt.tube.geometry), ...(sf2 ? { gather: { upper: sf2[0], falloff: sf2[1], spacing: sf2[2], around: foldsAround(skirt.tube, skirt.tube.rows - 1, sf2[2]) } } : {}) });
+  const skMat = skMatFor(pad);
   const meshes: THREE.Object3D[] = [];
   const restPos: Float32Array[] = [upper.tube.pos, skirt.tube.pos];
   let tw = torsoWeights(fit);
@@ -181,6 +193,7 @@ export function fittedTunic(fit: Fit, o: TunicOptions): TunicResult {
   meshes.push(up);
   // side slits (four corners): drop skirt quads near θ = ±90° below the slit top
   let skirtGeo = skirt.tube.geometry;
+  let slitUnder: THREE.BufferGeometry | null = null;
   const corners: THREE.Vector3[] = [];
   if (o.sideSlit) {
     const idx = skirtGeo.getIndex()!;
@@ -192,10 +205,39 @@ export function fittedTunic(fit: Fit, o: TunicOptions): TunicResult {
       const side = Math.abs(Math.cos(th)) < Math.sin(o.sideSlit!.half);
       return side && y < o.sideSlit!.top;
     };
+    const dropped: number[] = [];
     for (let t = 0; t < idx.count; t += 3) {
       const a = idx.getX(t), b = idx.getX(t + 1), c = idx.getX(t + 2);
-      if (cut(a) && cut(b) && cut(c)) continue;
+      if (cut(a) && cut(b) && cut(c)) {
+        dropped.push(a, b, c);
+        continue;
+      }
       keep.push(a, b, c);
+    }
+    const under = o.sideSlit.underlap ?? 0;
+    if (under > 0 && dropped.length) {
+      // the slit's quads and a margin under its edges (seen at a grazing angle a sliver of the tunic showed between
+      // the edge and an underlap of exactly the slit's width), set back toward the body by `under` (radially), as one
+      // more skinned skirt piece
+      const wide = (i: number) => {
+        const th = skirt.tube.th[i];
+        return Math.abs(Math.cos(th)) < Math.sin(o.sideSlit!.half + 0.07) && skirt.tube.pos[i * 3 + 1] < o.sideSlit!.top + 0.03;
+      };
+      const ut: number[] = [];
+      for (let t = 0; t < idx.count; t += 3) {
+        const a = idx.getX(t), b = idx.getX(t + 1), c = idx.getX(t + 2);
+        if (wide(a) && wide(b) && wide(c)) ut.push(a, b, c);
+      }
+      const ug = skirtGeo.clone();
+      ug.setIndex(ut);
+      const pa = (ug.getAttribute('position') as THREE.BufferAttribute).clone();
+      for (let i = 0; i < pa.count; i++) {
+        const x = pa.getX(i), z = pa.getZ(i);
+        const l = Math.hypot(x, z) || 1;
+        pa.setXYZ(i, x - (x / l) * under, pa.getY(i), z - (z / l) * under);
+      }
+      ug.setAttribute('position', pa);
+      slitUnder = ug;
     }
     skirtGeo = skirtGeo.clone();
     skirtGeo.setIndex(keep);
@@ -221,6 +263,12 @@ export function fittedTunic(fit: Fit, o: TunicOptions): TunicResult {
   const sk = makeSkinned(human, skGeos.length > 1 ? merge(skGeos) : skirtGeo, mats.length > 1 ? mats : skMat, skirtWeights(fit, o.skirtStiff ?? 0, o.skirtBlur ?? 0), { name: `${o.name}Skirt`, depthMaterial: clothDepthMaterial({ sway, collide: U, collidePad: pad }) });
   outfit.add(sk);
   meshes.push(sk);
+  if (slitUnder) {
+    // (not in `meshes`: meshes[1] stays the skirt, which the me'il's tear splits)
+    // (its own leg-push pad: where a stride pushes both out it stays under the skirt, no z-fighting)
+    const um = makeSkinned(human, slitUnder, skMatFor(Math.max(0, pad - (o.sideSlit?.underlap ?? 0))), skirtWeights(fit, o.skirtStiff ?? 0, o.skirtBlur ?? 0), { name: `${o.name}SlitUnderlap` });
+    outfit.add(um);
+  }
   if (!o.sleeveless) {
     // both sleeves in one skinned mesh (weights chosen per vertex by side): one draw call instead of two
     const geos: THREE.BufferGeometry[] = [];
@@ -252,7 +300,7 @@ export function fittedTunic(fit: Fit, o: TunicOptions): TunicResult {
       return p.y < neckline(th) - 0.03 && p.y > hemY + 0.08 && !(o.sideSlit && p.y < o.sideSlit.top && Math.abs(p.x) > 0.08);
     });
   }
-  return { upper, skirt, hemY, beltY, corners, meshes, restPos };
+  return { upper, skirt, hemY, beltY, corners, meshes, restPos, skirtMaterialFor: skMatFor, skirtPad: pad };
 }
 
 /** A belt / sash band around the waist over the garment (flat band + optional hanging ends). */

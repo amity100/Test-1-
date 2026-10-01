@@ -547,3 +547,89 @@ canvas { display: block; outline: none; }
 .ui.film .skip.on { animation: skipDim 1.2s ease 4s forwards; }
 .ui.film .skip.on.strong { animation: none; opacity: 1; }
 @keyframes skipDim { to { opacity: 0.3; } }
+
+/* ===================================================================================================================
+   cut4 (finishing pass, docs/director-notes-v5.md "Typography of the verses"): the verses leave the subtitle slot.
+   Each verse text event has an explicit anchor in the composition's NEGATIVE SPACE (introScript.ts side + v, chosen
+   from the shot's frames: never across a face, a body or the action), ≈1.35× the cut-v2 size (≈4vw desktop, ≥22 px on
+   phones), weight 450, warm ivory, a generous line height; long verses in two balanced lines (UI.filmText places a
+   line break between two of the catalog's words — the words are never changed); word by word; the reference small and
+   letter-spaced after the words. D1's last two words (the film's own title) in gold metal.
+   =================================================================================================================== */
+.ft-verse { left: auto; right: auto; top: auto; bottom: auto; transform: none; width: auto; max-width: 92vw; text-align: center; }
+.ft-verse.ft-side-center { left: 50%; transform: translateX(-50%); }
+.ft-verse.ft-side-left { left: max(5.5vw, calc(env(safe-area-inset-left, 0px) + 18px)); }
+.ft-verse.ft-side-right { right: max(5.5vw, calc(env(safe-area-inset-right, 0px) + 18px)); }
+.ft-verse.ft-v-top { top: calc(var(--lb, 11vh) + 4.6vh + env(safe-area-inset-top, 0px)); }
+.ft-verse.ft-v-middle { top: 50%; transform: translateY(-50%); }
+.ft-verse.ft-side-center.ft-v-middle { transform: translate(-50%, -50%); }
+.ft-verse.ft-v-bottom { bottom: calc(var(--lb, 11vh) + 4.4vh + env(safe-area-inset-bottom, 0px)); }
+.ft-verse::before { inset: -26% -12%; background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.17) 48%, rgba(0, 0, 0, 0) 72%); }
+.ft-verse .ft-v {
+  white-space: nowrap; font: 450 clamp(24px, min(4.1vw, 7.6vh), 84px)/1.48 var(--serif-he); letter-spacing: 0.012em; color: #fbf3e2;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.7), 0 0 3px rgba(0, 0, 0, 0.5);
+}
+.ft-verse .ft-ref { margin-top: 0.7em; font-size: clamp(11px, min(1.05vw, 2vh), 19px); letter-spacing: 0.36em; }
+/* the film's own title inside 15:28b (D1): gold metal, the person cards' treatment */
+.ft-v .w.gold {
+  background: linear-gradient(176deg, #fffaec 0%, #f8e7b8 24%, #e2b86c 48%, #b07d3e 63%, #eed59c 81%, #fff4d6 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: none;
+  animation-name: wordInGold;
+}
+@keyframes wordInGold {
+  from { opacity: 0; filter: blur(8px) drop-shadow(0 2px 14px rgba(0, 0, 0, 0)); transform: translateY(0.2em); }
+  to { opacity: 1; filter: blur(0) drop-shadow(0 2px 14px rgba(0, 0, 0, 0.7)) drop-shadow(0 0 18px rgba(255, 196, 110, 0.35)); transform: none; }
+}
+/* phones in portrait: the picture is a tall band; verses span the width at the top of the picture (v top / middle)
+   or at its bottom (v bottom) — the portrait lens keeps the subject in the middle */
+@media (max-aspect-ratio: 1/1) {
+  .ft-verse, .ft-verse.ft-side-left, .ft-verse.ft-side-right, .ft-verse.ft-side-center { left: 50%; right: auto; transform: translateX(-50%); width: 92vw; max-width: 92vw; }
+  .ft-verse.ft-v-top, .ft-verse.ft-v-middle { top: calc(var(--lb, 11vh) + 3.2vh + env(safe-area-inset-top, 0px)); bottom: auto; }
+  .ft-verse.ft-v-bottom { bottom: calc(var(--lb, 11vh) + 3vh + env(safe-area-inset-bottom, 0px)); }
+  .ft-verse .ft-v { white-space: normal; text-wrap: balance; font-size: clamp(22px, 6.4vw, 34px); line-height: 1.5; }
+  .ft-verse .ft-ref { font-size: 11px; letter-spacing: 0.26em; }
+}
+/* landscape phones: a short picture (~290 px between the bars) */
+@media (max-height: 500px) and (min-aspect-ratio: 3/2) {
+  .ft-verse.ft-v-top { top: calc(var(--lb, 11vh) + 3vh + env(safe-area-inset-top, 0px)); }
+  .ft-verse.ft-side-left { left: max(4.5vw, calc(env(safe-area-inset-left, 0px) + 16px)); }
+  .ft-verse.ft-side-right { right: max(4.5vw, calc(env(safe-area-inset-right, 0px) + 16px)); }
+  .ft-verse .ft-v { font-size: clamp(22px, min(3.8vw, 8vh), 38px); }
+}
+
+/* THE TITLE (cut4): דָּוִד is the hero — very large, Frank Ruhl Libre, the gold metal treatment, formed from light at the
+   hit (0.3 s) with one light sweep; DAVID small and letter-spaced as the secondary line (1.6 s); the gold rule (2.0 s);
+   פֶּרֶק רִאשׁוֹן · הָרֹעֶה last (2.4 s) — the title shot's beats */
+.ui .titlecard .tc-he {
+  position: relative; margin: 0; direction: rtl; opacity: 0;
+  font: 600 clamp(92px, min(17vw, 31vh), 270px)/1.02 var(--serif-he); letter-spacing: 0.05em;
+  background: linear-gradient(176deg, #fffaec 0%, #f8e7b8 22%, #deb267 46%, #a8763a 62%, #ecd39a 80%, #fff4d6 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: none;
+  filter: drop-shadow(0 4px 28px rgba(0, 0, 0, 0.6)) drop-shadow(0 0 40px rgba(255, 190, 90, 0.28));
+}
+.ui .titlecard .tc-he::after {
+  content: attr(data-t); position: absolute; inset: 0; letter-spacing: inherit; filter: none;
+  background: linear-gradient(100deg, rgba(255, 255, 255, 0) 36%, rgba(255, 255, 250, 0.95) 50%, rgba(255, 255, 255, 0) 64%);
+  background-size: 260% 100%; background-position: 160% 0; background-repeat: no-repeat;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.ui .titlecard.on .tc-he { animation: heroForm 1.9s cubic-bezier(0.18, 0.66, 0.12, 1) 0.3s both; }
+.ui .titlecard.on .tc-he::after { animation: sweep 2.2s cubic-bezier(0.45, 0.1, 0.3, 1) 1.1s forwards; }
+@keyframes heroForm {
+  0% { opacity: 0; letter-spacing: 0.42em; filter: blur(22px) brightness(2.6) drop-shadow(0 0 0 rgba(255, 190, 90, 0)); }
+  30% { opacity: 1; }
+  100% { opacity: 1; letter-spacing: 0.05em; filter: blur(0) brightness(1) drop-shadow(0 4px 28px rgba(0, 0, 0, 0.6)) drop-shadow(0 0 40px rgba(255, 190, 90, 0.28)); }
+}
+.ui .titlecard .tc-title {
+  margin: 0.55em 0 0; margin-inline-start: 0.9em; direction: ltr; opacity: 0;
+  font: 600 clamp(14px, min(1.75vw, 3.3vh), 28px)/1 var(--latin); letter-spacing: 0.9em;
+  background: none; -webkit-background-clip: border-box; background-clip: border-box; color: #f1dca8;
+  filter: none; text-shadow: 0 1px 12px rgba(0, 0, 0, 0.8);
+}
+.ui .titlecard .tc-title::after { content: none; }
+.ui .titlecard.on .tc-title { animation: fadeUpBlur 1.3s ease 1.6s both; }
+.ui .titlecard .tc-line { margin: 20px auto 16px; }
+@media (max-aspect-ratio: 1/1) {
+  .ui .titlecard .tc-he { font-size: clamp(84px, 30vw, 150px); }
+  .ui .titlecard .tc-title { font-size: clamp(13px, 3.6vw, 18px); letter-spacing: 0.7em; margin-inline-start: 0.7em; }
+}

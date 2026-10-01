@@ -27,6 +27,12 @@ export interface TearOptions {
   freeMaterial: THREE.Material;
   /** thread colour */
   threadColor?: THREE.ColorRepresentation;
+  /**
+   * finishing pass: the wrap's inner layer under the corner — a copy of the corner `under.inset` m deeper, drawn with
+   * `under.material` (the skirt's material with a smaller leg-push pad), always shown: when Saul pulls the corner away
+   * and tears it off, dark wool shows beneath, not the light tunic (a white wedge in the low two-shot G5b)
+   */
+  under?: { material: THREE.Material; inset: number };
 }
 
 const _m = new THREE.Matrix4();
@@ -57,6 +63,63 @@ export function skinnedWorld(mesh: THREE.SkinnedMesh, i: number, out: THREE.Vect
   return out.applyMatrix4(mesh.matrixWorld);
 }
 
+/**
+ * The selected corner as ONE piece of cloth: union-find over the selection's triangles plus welds of vertices that
+ * share a rest position (< 0.5 mm: the loft duplicates them along seams and the slit); the largest component stays,
+ * any other island's triangles go back to the skirt (`mainT`). Returns the piece and its weld pairs (vertex indices).
+ */
+function connectedPiece(flapT0: number[], mainT: number[], P: ArrayLike<number>): { flapT: number[]; welds: number[] } {
+  const verts = [...new Set(flapT0)];
+  const parent = new Map<number, number>();
+  for (const v of verts) parent.set(v, v);
+  const find = (v: number): number => {
+    let r = v;
+    while (parent.get(r)! !== r) r = parent.get(r)!;
+    let x = v;
+    while (parent.get(x)! !== r) {
+      const nx = parent.get(x)!;
+      parent.set(x, r);
+      x = nx;
+    }
+    return r;
+  };
+  const union = (a: number, b: number) => {
+    const ra = find(a), rb = find(b);
+    if (ra !== rb) parent.set(ra, rb);
+  };
+  for (let t = 0; t < flapT0.length; t += 3) {
+    union(flapT0[t], flapT0[t + 1]);
+    union(flapT0[t + 1], flapT0[t + 2]);
+  }
+  const q = (x: number) => Math.round(x / 0.0005);
+  const byKey = new Map<string, number>();
+  const pairs: number[] = [];
+  for (const v of verts) {
+    const k = `${q(P[v * 3])},${q(P[v * 3 + 1])},${q(P[v * 3 + 2])}`;
+    const o = byKey.get(k);
+    if (o === undefined) byKey.set(k, v);
+    else {
+      pairs.push(o, v);
+      union(o, v);
+    }
+  }
+  const count = new Map<number, number>();
+  for (let t = 0; t < flapT0.length; t += 3) {
+    const r = find(flapT0[t]);
+    count.set(r, (count.get(r) ?? 0) + 1);
+  }
+  let best = -1, bestN = -1;
+  for (const [r, c] of count) if (c > bestN) {
+    bestN = c;
+    best = r;
+  }
+  const flapT: number[] = [];
+  for (let t = 0; t < flapT0.length; t += 3) (find(flapT0[t]) === best ? flapT : mainT).push(flapT0[t], flapT0[t + 1], flapT0[t + 2]);
+  const welds: number[] = [];
+  for (let i = 0; i < pairs.length; i += 2) if (find(pairs[i]) === best) welds.push(pairs[i], pairs[i + 1]);
+  return { flapT, welds };
+}
+
 interface Thread {
   edge: number; // particle index of the flap edge vertex
   skirtV: number; // vertex index in the skirt mesh
@@ -76,6 +139,18 @@ const _s = new THREE.Vector3();
 const _d = new THREE.Vector3();
 /** tear progress over which a tear-line vertex lets go of the skirt (see update) */
 const RELEASE = 0.12;
+/**
+ * finishing pass: the tear front sweeps the line from EDGE0 to EDGE0 + EDGE_SPAN (± EDGE_JITTER), so every vertex is
+ * free by progress 1 (threshold + RELEASE ≤ 1). Before, thresholds reached ~1.11 and at progress 1 (documented as
+ * "torn through") the innermost vertices stayed pinned: the piece was stretched from Saul's fist to Samuel's hem.
+ */
+const EDGE0 = 0.1, EDGE_SPAN = 0.74, EDGE_JITTER = 0.04;
+/** constraint iterations per step (the long-range attachments carry the hanging piece, see update) */
+const ITERS = 8;
+/** short frayed fibres standing off the torn edge of the free piece (per tear-line particle, before snapping) */
+const FRAY_PER_EDGE = 2;
+/** radius (m) of cloth round the grab point that the fist gathers, and how tightly (offset scale in the hand) */
+const GRAB_R = 0.09, BUNCH = 0.45;
 
 export class MeilTear {
   /** the free piece (world space, add to the scene; hidden until the tear starts) */
@@ -86,6 +161,8 @@ export class MeilTear {
   readonly viewer = new THREE.Vector3(0, 1.6, 10);
   /** skinned flap (part of the robe while intact) */
   readonly flapSkinned: THREE.SkinnedMesh;
+  /** the wrap's inner layer under the corner (TearOptions.under), or null */
+  readonly under: THREE.SkinnedMesh | null = null;
   /** 0 intact .. 1 torn through */
   progress = 0;
   wind = new THREE.Vector3();
@@ -108,9 +185,22 @@ export class MeilTear {
   private cornerP = 0; // particle nearest the corner tip
   private tzitzitSockets: THREE.Object3D[] = [];
   private tzitzitAnchor = new THREE.Object3D();
+  /** particle the tzitzit hang from once torn (the one nearest the corner's tassel socket) */
+  private tzitzitP = -1;
   private posAttr: THREE.BufferAttribute;
   private lineAttr: THREE.BufferAttribute;
   private readonly segs: Float32Array;
+  /** rest geodesic distance (along the cloth) of every particle from the grabbed corner: long-range attachments */
+  private readonly geo: Float32Array;
+  /** per-step pin targets of the tear line (CPU-skinned once per step, not once per iteration) and their weights */
+  private readonly pinT: Float32Array;
+  private readonly pinK: Float32Array;
+  /** frayed fibres standing off the torn edge: particle, its in-cloth neighbour (the fibre points away from it) */
+  private readonly fray: { k: number; nb: number; len: number; tilt: THREE.Vector3; w: number }[] = [];
+  /** ribbon half-width of every segment (threads: 2 per thread; then the frayed fibres) */
+  private readonly segW: Float32Array;
+  /** welded duplicate pairs (diagnostics) */
+  readonly weldCount: number;
 
   /**
    * @param skirtMesh the me'il skirt SkinnedMesh (makeSkinned; vertex order = tube order)
@@ -126,17 +216,12 @@ export class MeilTear {
     const idx = g.getIndex()!;
     const P = tube.pos;
     const nv = P.length / 3;
-    // stepped tear line: height of the boundary as a function of the arc distance from the slit edge
-    const steps = 4;
-    const stepH: number[] = [], stepA: number[] = [];
-    for (let s = 0; s < steps; s++) {
-      stepA.push(((s + 1) / steps) * width * (0.85 + 0.3 * R()));
-      stepH.push(height * (1 - s / steps) * (0.9 + 0.2 * R()));
-    }
-    const boundary = (arc: number) => {
-      for (let s = 0; s < steps; s++) if (arc < stepA[s]) return stepH[s] + (nz(arc * 40) - 0.5) * 0.012;
-      return -1;
-    };
+    // the tear line ALONG THE WEAVE (visual-bible 3.3; finishing pass): from the slit edge a run along the weft
+    // (level, `height` above the hem) out to `width`, then down along the warp to the hem — an L whose runs jog by a
+    // thread group (±1.2 cm) here and there, with a few mm of ragged fray. (The old staircase of four big steps read as a
+    // spiky dark leaf in the low two-shot G5b.)
+    const jog = (x: number, k: number) => 0.012 * Math.round((nz(x * 9 + k) - 0.5) * 2.6) + (nz(x * 45 + k + 3) - 0.5) * 0.006;
+    void R;
     const arcOf = (i: number) => {
       const x = P[i * 3], z = P[i * 3 + 2];
       const th = Math.atan2(x, z);
@@ -147,14 +232,20 @@ export class MeilTear {
     const inside = (i: number) => {
       const arc = arcOf(i);
       if (arc < -0.03) return false;
-      return P[i * 3 + 1] - hemY < boundary(Math.max(0, arc));
+      const y = P[i * 3 + 1] - hemY;
+      return y < height + jog(Math.max(0, arc), 0) && arc < width + jog(y, 17);
     };
-    const flapT: number[] = [], mainT: number[] = [];
+    const flapT0: number[] = [], mainT: number[] = [];
     for (let t = 0; t < idx.count; t += 3) {
       const a = idx.getX(t), b = idx.getX(t + 1), c = idx.getX(t + 2);
       const n = (inside(a) ? 1 : 0) + (inside(b) ? 1 : 0) + (inside(c) ? 1 : 0);
-      (n >= 2 ? flapT : mainT).push(a, b, c);
+      (n >= 2 ? flapT0 : mainT).push(a, b, c);
     }
+    // finishing pass: ONE connected piece. Vertices that share a rest position (the loft duplicates them along seams /
+    // the slit) are welded; any other island of the selection (a sliver of the neighbouring panel across the side
+    // slit) goes back to the skirt — a detached 19-particle strip free-fell to y = -38 m once it was released.
+    const { flapT, welds } = connectedPiece(flapT0, mainT, P);
+    this.weldCount = welds.length / 2;
     // skinned flap: same attributes, its own index
     const fg = g.clone();
     fg.setIndex(flapT);
@@ -168,6 +259,26 @@ export class MeilTear {
     flap.frustumCulled = false;
     skirtMesh.parent!.add(flap);
     this.flapSkinned = flap;
+    if (o.under) {
+      // the inner layer of the wrap under the corner (bind space ≈ rest space: set back radially)
+      const ug = g.clone();
+      ug.setIndex(flapT);
+      const pa = (ug.getAttribute('position') as THREE.BufferAttribute).clone();
+      for (let i = 0; i < pa.count; i++) {
+        const x = pa.getX(i), z = pa.getZ(i);
+        const l = Math.hypot(x, z) || 1;
+        pa.setXYZ(i, x - (x / l) * o.under.inset, pa.getY(i), z - (z / l) * o.under.inset);
+      }
+      ug.setAttribute('position', pa);
+      const um = new THREE.SkinnedMesh(ug, o.under.material);
+      um.name = 'meilCornerUnder';
+      um.bind(skirtMesh.skeleton, skirtMesh.bindMatrix);
+      um.castShadow = false;
+      um.receiveShadow = skirtMesh.receiveShadow;
+      um.frustumCulled = false;
+      skirtMesh.parent!.add(um);
+      this.under = um;
+    }
     // particles = vertices used by the flap
     const map = new Int32Array(nv).fill(-1);
     const list: number[] = [];
@@ -198,6 +309,8 @@ export class MeilTear {
       addC(flapT[t + 1], flapT[t + 2]);
       addC(flapT[t + 2], flapT[t]);
     }
+    // welded duplicates: zero-length constraints (they move as one point)
+    for (let i = 0; i < welds.length; i += 2) if (map[welds[i]] >= 0 && map[welds[i + 1]] >= 0) addC(welds[i], welds[i + 1]);
     this.cons = Uint32Array.from(cons);
     this.rest = Float32Array.from(rest);
     // tear-line vertices: used by both sets. Release order: from the slit edge inward (the tear runs from the
@@ -210,8 +323,10 @@ export class MeilTear {
       const v = list[k];
       const arc = Math.max(0, arcOf(v));
       if (inMain[v]) {
-        this.edgeTau[k] = arc;
-        maxArc = Math.max(maxArc, arc);
+        // the front runs along the L: out along the weft from the slit edge, then down the warp to the hem
+        const along = arc + Math.max(0, height - (P[v * 3 + 1] - hemY));
+        this.edgeTau[k] = along;
+        maxArc = Math.max(maxArc, along);
       }
       // the grab point: on the slit edge near the top of the piece (the highest point Saul's hand can reach)
       const s = Math.abs(arc - 0.04) + Math.abs(P[v * 3 + 1] - hemY - (height - 0.035));
@@ -221,28 +336,82 @@ export class MeilTear {
       }
     }
     this.cornerP = Math.max(0, bestCorner);
+    // neighbours along the cloth (constraint graph; welds included) — for the geodesics and the frayed fibres
+    const nbr: number[][] = Array.from({ length: n }, () => []);
+    const nbrL: number[][] = Array.from({ length: n }, () => []);
+    for (let c = 0; c < this.rest.length; c++) {
+      const a = this.cons[c * 2], b = this.cons[c * 2 + 1];
+      nbr[a].push(b);
+      nbrL[a].push(this.rest[c]);
+      nbr[b].push(a);
+      nbrL[b].push(this.rest[c]);
+    }
     for (let k = 0; k < n; k++) {
       if (this.edgeTau[k] >= 0) {
-        // the tear front sweeps the line from the edge (0.15) to the inside (0.95), a little ragged
+        // the tear front sweeps the line from the slit edge inward, a little ragged; every vertex is free by progress 1
         const f = this.edgeTau[k] / Math.max(1e-3, maxArc);
-        this.edgeTau[k] = 0.15 + 0.8 * f + (R() - 0.5) * 0.08;
+        this.edgeTau[k] = EDGE0 + EDGE_SPAN * f + (R() - 0.5) * 2 * EDGE_JITTER;
         // 2-4 threads per edge vertex, spread a few mm along the weave; most snap early (1-4 cm), a few hold long
         const nT = 2 + Math.floor(R() * 3);
         for (let q = 0; q < nT; q++) {
           const off = () => new THREE.Vector3((R() - 0.5) * 0.012, (R() - 0.5) * 0.012, (R() - 0.5) * 0.012);
           this.threadList.push({
             // wool threads stretch a long way before they give (the slow-motion shot needs them visible): 2-9 cm,
-            // a few up to 15 cm
+            // a few up to 15 cm. Finishing pass: 2-3.4 mm yarns (homespun ≈1.5 mm + its fuzz) — at 1.2-2.4 mm they
+            // were under a pixel at 640×360 and never read in the insert
             edge: k, skirtV: list[k], state: 0, breakLen: 0.02 + 0.07 * R() ** 1.5 + (R() < 0.15 ? 0.06 * R() : 0),
-            dA: new THREE.Vector3(), dB: new THREE.Vector3(), oA: off(), oB: off(), w: 0.0006 + 0.0006 * R(), d0: -1,
+            dA: new THREE.Vector3(), dB: new THREE.Vector3(), oA: off(), oB: off(), w: 0.001 + 0.0007 * R(), d0: -1,
           });
+        }
+        // the frayed edge of the free piece: short fibres standing off the torn line (they appear as the front
+        // passes and stay — the stepped edge reads fuzzy, not cut)
+        let inner = -1, best = -Infinity;
+        for (const j of nbr[k]) {
+          // the in-cloth neighbour farthest from the tear line (the fibre points away from it, out of the piece)
+          const s2 = this.edgeTau[j] >= 0 ? -1 : Math.hypot(P[list[j] * 3] - P[list[k] * 3], P[list[j] * 3 + 1] - P[list[k] * 3 + 1], P[list[j] * 3 + 2] - P[list[k] * 3 + 2]);
+          if (s2 > best) {
+            best = s2;
+            inner = j;
+          }
+        }
+        if (inner >= 0) {
+          for (let q = 0; q < FRAY_PER_EDGE; q++) {
+            this.fray.push({ k, nb: inner, len: 0.006 + 0.012 * R() ** 1.4, tilt: new THREE.Vector3((R() - 0.5) * 1.1, (R() - 0.5) * 0.9 - 0.7, (R() - 0.5) * 1.1), w: 0.0006 + 0.0005 * R() });
+          }
         }
       }
       const v = list[k];
       const cx = P[this.vIdx[this.cornerP] * 3], cy = P[this.vIdx[this.cornerP] * 3 + 1], cz = P[this.vIdx[this.cornerP] * 3 + 2];
       const d = Math.hypot(P[v * 3] - cx, P[v * 3 + 1] - cy, P[v * 3 + 2] - cz);
-      this.grabW[k] = Math.max(0, 1 - d / 0.06);
+      // finishing pass: a bigger wad in the fist (9 cm of cloth gathered round the grab point; at 6 cm the piece
+      // seemed to hang a few cm beside the knuckles in the close two-shot)
+      this.grabW[k] = Math.max(0, 1 - d / GRAB_R);
     }
+    // long-range attachments (Kim et al. 2012): the rest geodesic from the grabbed corner bounds how far any point may
+    // hang from the fist — no stretching into a streamer whatever the iteration count (Dijkstra, ~260 particles)
+    this.geo = new Float32Array(n).fill(Infinity);
+    {
+      const done = new Uint8Array(n);
+      this.geo[this.cornerP] = 0;
+      for (let it = 0; it < n; it++) {
+        let u = -1, bu = Infinity;
+        for (let k = 0; k < n; k++) if (!done[k] && this.geo[k] < bu) {
+          bu = this.geo[k];
+          u = k;
+        }
+        if (u < 0) break;
+        done[u] = 1;
+        const nb = nbr[u], nl = nbrL[u];
+        for (let j = 0; j < nb.length; j++) {
+          const d = bu + nl[j];
+          if (d < this.geo[nb[j]]) this.geo[nb[j]] = d;
+        }
+      }
+      // (an unreachable particle cannot exist after connectedPiece; keep a finite bound anyway)
+      for (let k = 0; k < n; k++) if (!Number.isFinite(this.geo[k])) this.geo[k] = 0.6;
+    }
+    this.pinT = new Float32Array(n * 3);
+    this.pinK = new Float32Array(n);
     // free mesh (world space)
     const free = new THREE.BufferGeometry();
     this.posAttr = new THREE.BufferAttribute(new Float32Array(n * 3), 3);
@@ -263,22 +432,31 @@ export class MeilTear {
     this.free.castShadow = true;
     this.free.receiveShadow = true;
     this.free.frustumCulled = false;
-    // threads: 2 segments per thread (stretched: edge -> skirt; snapped: two frayed ends), each a camera-facing quad
+    // threads: 2 segments per thread (stretched: edge -> skirt; snapped: two frayed ends), then one per frayed fibre of
+    // the free piece's edge; each a camera-facing quad
     const nT = this.threadList.length;
-    this.segs = new Float32Array(nT * 4 * 3);
+    const nSeg = nT * 2 + this.fray.length;
+    this.segs = new Float32Array(nSeg * 2 * 3);
+    this.segW = new Float32Array(nSeg);
+    this.threadList.forEach((t, i) => {
+      this.segW[i * 2] = t.w;
+      this.segW[i * 2 + 1] = t.w * 0.8;
+    });
+    this.fray.forEach((f, i) => (this.segW[nT * 2 + i] = f.w));
     const lg = new THREE.BufferGeometry();
-    this.lineAttr = new THREE.BufferAttribute(new Float32Array(nT * 2 * 4 * 3), 3);
+    this.lineAttr = new THREE.BufferAttribute(new Float32Array(nSeg * 4 * 3), 3);
     this.lineAttr.setUsage(THREE.DynamicDrawUsage);
     lg.setAttribute('position', this.lineAttr);
     const ti: number[] = [];
-    for (let q = 0; q < nT * 2; q++) {
+    for (let q = 0; q < nSeg; q++) {
       const b = q * 4;
       ti.push(b, b + 1, b + 2, b + 1, b + 3, b + 2);
     }
     lg.setIndex(ti);
-    // undyed wool fibres, a shade lighter than the cloth (they catch the backlight)
-    const tc = new THREE.Color(o.threadColor ?? 0x8a7a64).multiplyScalar(1.7);
-    this.threads = new THREE.Mesh(lg, new THREE.MeshBasicMaterial({ color: tc, transparent: true, opacity: 0.92, side: THREE.DoubleSide, depthWrite: false }));
+    // undyed wool fibres, a shade lighter than the cloth (they catch the backlight; finishing pass: x1.7 / 0.92 made
+    // them glowing white sticks against the dark wool)
+    const tc = new THREE.Color(o.threadColor ?? 0x8a7a64).multiplyScalar(1.25);
+    this.threads = new THREE.Mesh(lg, new THREE.MeshBasicMaterial({ color: tc, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
     this.threads.name = 'meilThreads';
     this.threads.visible = false;
     this.threads.frustumCulled = false;
@@ -298,15 +476,35 @@ export class MeilTear {
 
   /** the hand closes on the corner: grab vertices follow `socket` (e.g. saul.sockets.handGripR) from now on */
   grab(socket: THREE.Object3D) {
+    const wasTorn = this.started;
     this.start();
     this.hand = socket;
     socket.updateWorldMatrix(true, false);
+    if (wasTorn) {
+      // re-grabbed after a cut (G6 / G7 open with the piece in the fist, the actors re-placed): carry the torn piece
+      // rigidly to the hand first — bunching it from where it was left spread up to 0.4 m of cloth round the fist
+      _a.setFromMatrixPosition(socket.matrixWorld).sub(_b.fromArray(this.p, this.cornerP * 3));
+      for (let k = 0; k < this.vIdx.length; k++) {
+        const i = k * 3;
+        this.p[i] += _a.x;
+        this.p[i + 1] += _a.y;
+        this.p[i + 2] += _a.z;
+        this.prev[i] = this.p[i];
+        this.prev[i + 1] = this.p[i + 1];
+        this.prev[i + 2] = this.p[i + 2];
+      }
+    }
     _m.copy(socket.matrixWorld).invert();
+    // the wad sits between the grip centre and the palm (a hand socket 'handGripX' sized for a spear shaft lies just in
+    // front of the knuckles once the fingers close into a fist: the piece seemed to hang beside the hand)
+    const palm = socket.parent?.getObjectByName(socket.name.replace('handGrip', 'palm'));
+    if (palm && palm !== socket) _d.copy(palm.getWorldPosition(_s)).applyMatrix4(_m).multiplyScalar(0.55);
+    else _d.set(0, 0, 0);
     for (let k = 0; k < this.grabW.length; k++) {
       if (this.grabW[k] <= 0) continue;
       _v.fromArray(this.p, k * 3).applyMatrix4(_m);
-      // pull the offsets toward the fist (the cloth is bunched in the hand)
-      _v.multiplyScalar(0.2);
+      // pull the offsets toward the fist (the cloth is bunched in the hand, a wad round the fingers)
+      _v.multiplyScalar(BUNCH).add(_d);
       _v.toArray(this.grabOff, k * 3);
     }
     this.handOn = 0;
@@ -330,12 +528,22 @@ export class MeilTear {
     this.free.visible = true;
     this.threads.visible = true;
     this.writeMesh();
-    // tzitzit move with the piece
+    // tzitzit move with the piece — from the particle at their own corner (the tassel hangs from the torn piece's
+    // hem corner, below the fist), not from the grabbed point
     if (this.tzitzitSockets.length) {
       const scene = this.free.parent;
       if (scene) {
+        this.tzitzitSockets[0].getWorldPosition(_a);
+        let best = Infinity;
+        for (let k = 0; k < n; k++) {
+          const d = _b.fromArray(this.p, k * 3).distanceToSquared(_a);
+          if (d < best) {
+            best = d;
+            this.tzitzitP = k;
+          }
+        }
         scene.add(this.tzitzitAnchor);
-        this.tzitzitAnchor.position.fromArray(this.p, this.cornerP * 3);
+        this.tzitzitAnchor.position.fromArray(this.p, this.tzitzitP * 3);
         this.tzitzitAnchor.updateMatrixWorld(true);
         for (const s of this.tzitzitSockets) this.tzitzitAnchor.attach(s);
       }
@@ -360,6 +568,8 @@ export class MeilTear {
       const home = s.userData.tearHome as THREE.Object3D | undefined;
       if (home) home.attach(s);
     }
+    this.tzitzitAnchor.removeFromParent();
+    this.tzitzitP = -1;
   }
 
   get isTorn() {
@@ -387,8 +597,22 @@ export class MeilTear {
     }
     this.handOn = Math.min(1, this.handOn + dt * 8);
     if (this.hand) this.hand.updateWorldMatrix(true, false);
-    const iters = 6;
-    for (let it = 0; it < iters; it++) {
+    // the tear line's pins this step: CPU-skinned once (not once per iteration); weight 1 until the front reaches the
+    // vertex, then giving over RELEASE; everything is free from progress 1 on
+    const PT = this.pinT, PK = this.pinK;
+    for (let k = 0; k < n; k++) {
+      const tau = this.edgeTau[k];
+      let kp = 0;
+      if (tau >= 0 && this.progress < 1 && this.progress < tau + RELEASE) kp = this.progress < tau ? 1 : 1 - (this.progress - tau) / RELEASE;
+      PK[k] = kp;
+      if (kp > 0) {
+        skinnedWorld(this.skirtRef.mesh, this.vIdx[k], _v);
+        _v.toArray(PT, k * 3);
+      }
+    }
+    const lra = this.hand && this.handOn > 0.25;
+    const ci = this.cornerP * 3;
+    for (let it = 0; it < ITERS; it++) {
       // distance constraints
       const C = this.cons, L = this.rest;
       for (let c = 0; c < L.length; c++) {
@@ -410,15 +634,13 @@ export class MeilTear {
       // pins: the tear line (until the front passes) and the hand
       for (let k = 0; k < n; k++) {
         const i = k * 3;
-        const tau = this.edgeTau[k];
-        if (tau >= 0 && this.progress < tau + RELEASE) {
+        const kp = PK[k];
+        if (kp > 0) {
           // the weave gives gradually as the tear front passes (a hard release jumped the edge across the gap in
           // one step and every thread snapped on that frame, unseen)
-          const kp = this.progress < tau ? 1 : 1 - (this.progress - tau) / RELEASE;
-          skinnedWorld(this.skirtRef.mesh, this.vIdx[k], _v);
-          p[i] += (_v.x - p[i]) * kp;
-          p[i + 1] += (_v.y - p[i + 1]) * kp;
-          p[i + 2] += (_v.z - p[i + 2]) * kp;
+          p[i] += (PT[i] - p[i]) * kp;
+          p[i + 1] += (PT[i + 1] - p[i + 1]) * kp;
+          p[i + 2] += (PT[i + 2] - p[i + 2]) * kp;
         }
         const gw = this.grabW[k] * this.handOn;
         if (this.hand && gw > 0) {
@@ -426,6 +648,25 @@ export class MeilTear {
           p[i] += (_v.x - p[i]) * gw;
           p[i + 1] += (_v.y - p[i + 1]) * gw;
           p[i + 2] += (_v.z - p[i + 2]) * gw;
+        }
+      }
+      // long-range attachments: no free point farther from the fist than its rest distance along the cloth (+3 %) —
+      // the piece hangs wool-sized from the hand at any frame rate (it stretched into a 1.2-1.6 m streamer at 6
+      // iterations; the substep workaround in FilmActor is no longer needed)
+      if (lra) {
+        const ax = p[ci], ay = p[ci + 1], az = p[ci + 2];
+        for (let k = 0; k < n; k++) {
+          if (PK[k] > 0.02 || k === this.cornerP) continue;
+          const i = k * 3;
+          const dx = p[i] - ax, dy = p[i + 1] - ay, dz = p[i + 2] - az;
+          const d = Math.hypot(dx, dy, dz);
+          const lim = this.geo[k] * 1.03 + 0.002;
+          if (d > lim) {
+            const s = lim / d;
+            p[i] = ax + dx * s;
+            p[i + 1] = ay + dy * s;
+            p[i + 2] = az + dz * s;
+          }
         }
       }
     }
@@ -447,9 +688,10 @@ export class MeilTear {
         if (d > t.d0 + t.breakLen) {
           t.state = 2;
           const dir = _b.clone().sub(_a).normalize();
-          // frayed ends 1-3 cm, drooping
-          t.dA.copy(dir).multiplyScalar(0.01 + 0.02 * Math.random()).add(_v.set(0, -0.008, 0));
-          t.dB.copy(dir).multiplyScalar(-(0.01 + 0.02 * Math.random())).add(_v.set(0, -0.01, 0));
+          // frayed ends 0.8-2.4 cm, falling limp (finishing pass: along the snap direction they stuck out of the torn
+          // piece sideways like white sticks)
+          t.dA.copy(dir).multiplyScalar(0.35).add(_v.set((Math.random() - 0.5) * 0.4, -0.75, (Math.random() - 0.5) * 0.4)).normalize().multiplyScalar(0.008 + 0.016 * Math.random());
+          t.dB.copy(dir).multiplyScalar(-0.35).add(_v.set((Math.random() - 0.5) * 0.4, -0.75, (Math.random() - 0.5) * 0.4)).normalize().multiplyScalar(0.008 + 0.016 * Math.random());
           this.onSnap?.(_a.clone().lerp(_b, 0.5));
         } else {
           _a.toArray(la, o);
@@ -475,9 +717,29 @@ export class MeilTear {
       }
       o += 12;
     }
+    // the frayed edge of the free piece: once the front has passed a tear-line particle, short fibres stand off it,
+    // pointing out of the piece (away from its in-cloth neighbour), drooping a little
+    for (const f of this.fray) {
+      const i = f.k * 3;
+      _a.fromArray(p, i);
+      if (this.progress < this.edgeTau[f.k]) {
+        _a.toArray(la, o);
+        _a.toArray(la, o + 3);
+        o += 6;
+        continue;
+      }
+      _d.fromArray(p, f.nb * 3);
+      _b.copy(_a).sub(_d);
+      const l = _b.length();
+      if (l > 1e-6) _b.multiplyScalar(1 / l);
+      _b.add(f.tilt).normalize().multiplyScalar(f.len).add(_a);
+      _a.toArray(la, o);
+      _b.toArray(la, o + 3);
+      o += 6;
+    }
     this.writeThreads();
-    if (this.tzitzitSockets.length) {
-      this.tzitzitAnchor.position.fromArray(p, this.cornerP * 3);
+    if (this.tzitzitSockets.length && this.tzitzitP >= 0) {
+      this.tzitzitAnchor.position.fromArray(p, this.tzitzitP * 3);
       this.tzitzitAnchor.updateMatrixWorld(true);
     }
   }
@@ -485,12 +747,12 @@ export class MeilTear {
   /** segments -> camera-facing quads */
   private writeThreads() {
     const S = this.segs, out = this.lineAttr.array as Float32Array;
-    const n = this.threadList.length * 2;
+    const n = this.segW.length;
     for (let q = 0; q < n; q++) {
       const i = q * 6, o = q * 12;
       _a.fromArray(S, i);
       _b.fromArray(S, i + 3);
-      const w = this.threadList[q >> 1].w * ((q & 1) ? 0.8 : 1);
+      const w = this.segW[q];
       _d.copy(_b).sub(_a);
       _s.copy(_a).add(_b).multiplyScalar(0.5).sub(this.viewer).cross(_d);
       const l = _s.length();
@@ -518,6 +780,8 @@ export class MeilTear {
     this.threads.geometry.dispose();
     (this.threads.material as THREE.Material).dispose();
     this.flapSkinned.geometry.dispose();
+    this.under?.geometry.dispose();
+    this.under?.removeFromParent();
     this.free.removeFromParent();
     this.threads.removeFromParent();
     this.tzitzitAnchor.removeFromParent();

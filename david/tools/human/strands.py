@@ -87,8 +87,13 @@ def lashes(loop_pos, eye_center, side: int, rng, upper=True, count=110, length=(
     return strands, np.asarray(roots), np.asarray(widths)
 
 
-def brows(surface: Surface, eye_center, side: int, lid_loop_pos, rng, density=1.0, thickness=1.0, count=620, width=0.000125, lift=0.0):
-    """Eyebrow strands lying on the skin above the eye.  side: +1 left (+X), -1 right."""
+def brows(surface: Surface, eye_center, side: int, lid_loop_pos, rng, density=1.0, thickness=1.0, count=620, width=0.000125, lift=0.0,
+          wiry=0.0, length=1.0):
+    """Eyebrow strands lying on the skin above the eye.  side: +1 left (+X), -1 right.
+
+    finishing pass (old men, Samuel): `wiry` = fraction of long, coarse hairs that rise off the skin and curl out (the
+    unruly brow of a man of 70), `length` scales every strand. With wiry = 0 the random sequence is unchanged (other
+    presets rebuild bit-identical)."""
     c = np.asarray(eye_center)
     P = np.asarray(lid_loop_pos)
     lat = (P[:, 0] - c[0]) * side
@@ -131,7 +136,14 @@ def brows(surface: Surface, eye_center, side: int, lid_loop_pos, rng, density=1.
         ang -= v * np.deg2rad(18) * (0.4 + s)  # herringbone: upper hairs point down, lower up
         ang += rng.normal(0, np.deg2rad(8))
         d2 = np.array([side * np.cos(ang), np.sin(ang), 0.0])
-        ln = (0.0068 - 0.0022 * s) * (0.75 + 0.5 * rng.random()) * (1.1 if s < 0.14 else 1.0)
+        ln = (0.0068 - 0.0022 * s) * (0.75 + 0.5 * rng.random()) * (1.1 if s < 0.14 else 1.0) * length
+        coarse = 0.0
+        if wiry > 0 and rng.random() < wiry * (0.4 + 1.2 * s):
+            # a long coarse hair (more of them toward the tail): 1.6-2.6x as long, standing off the skin and curling
+            coarse = 1.0
+            ln *= 1.6 + 1.0 * rng.random()
+            d2 = d2 + np.array([side * 0.15 * rng.normal(), 0.35 + 0.3 * rng.random(), 0.0])
+            d2 /= np.linalg.norm(d2)
         K = 5
         pts = []
         q = p + nrm * 0.00025
@@ -143,13 +155,15 @@ def brows(surface: Surface, eye_center, side: int, lid_loop_pos, rng, density=1.
             qn = q + d * step
             qs, nn, _ = surface.project(qn)
             lift = 0.00025 + 0.00055 * (i + 1) / (K - 1)
+            if coarse:
+                lift = 0.0004 + 0.0032 * ((i + 1) / (K - 1)) ** 1.5
             q2 = qs + nn * lift
             d = q2 - q
             d /= np.linalg.norm(d)
             q = q2
         strands.append(np.asarray(pts))
         roots.append(p)
-        widths.append(width * (0.75 + 0.5 * rng.random()))
+        widths.append(width * (0.75 + 0.5 * rng.random()) * (1.5 if coarse else 1.0))
     return strands, np.asarray(roots), np.asarray(widths)
 
 

@@ -84,7 +84,9 @@ export function crowdUniforms(army: 'israel' | 'philistine'): CrowdUniforms {
       value: isr
         ? [C(0xcdbf9f), C(0xc4b492), C(0xb9a887), C(0xa89a7c), C(0x8f8674), C(0x74644f), C(0x5e5143), C(0x9c7a5a)]
         : // models pass: dusty linen, a little darker and more varied (the host read as bright blocks at a distance)
-          [C(0xc6bca2), C(0xbaad8e), C(0xb1a386), C(0xa39578), C(0xc0b498), C(0x988a6e), C(0xb4a787), C(0x8e7f64)],
+          // finishing pass: two dyed kilts in eight (madder-brown, a dull brown wool) — "one bright mass of identical
+          // figures" in P4; the elite ranks add their dark bronze corselets
+          [C(0xc6bca2), C(0xbaad8e), C(0xb1a386), C(0xa39578), C(0xc0b498), C(0x988a6e), C(0x8c6248), C(0x77684f)],
     },
     // head-cloths, bedrolls / rolled mantles
     uCloth: { value: [C(0xc9bc9c), C(0xb3a283), C(0x8a7a62), C(0x6a5b48)] },
@@ -262,7 +264,10 @@ void crowdCompute() {
   }
   else if (reg == R_TUNIC) {
     col = uTunic[int(h.y * 7.999)] * (0.94 + 0.12 * h2.y);
-    stripe = h2.z < 0.18 ? 1.0 + floor(h2.x * 2.999) : 0.0;
+    // Israel: an accent stripe on some tunics; Philistines (finishing pass): the flag of the elite ranks (helmeted men
+    // wear the bronze banded corselet, visual bible 3.9) + 2 = a coloured kilt border
+    if (uArmy > 0.5) stripe = (((mask >> (R_HELMET - 5)) & 1) == 1 ? 1.0 : 0.0) + (h2.z < 0.35 ? 2.0 + 2.0 * floor(h2.x * 1.999) : 0.0);
+    else stripe = h2.z < 0.18 ? 1.0 + floor(h2.x * 2.999) : 0.0;
     rough = 0.95;
   }
   else if (reg == R_BELT || reg == R_SANDALS || reg == R_WATERSKIN) { col = cc * (0.75 + 0.5 * h2.y); rough = 0.6; }
@@ -347,6 +352,7 @@ export function crowdMaterial(u: CrowdUniforms, lite: boolean): THREE.MeshStanda
         vec3 cwc = vCwColor;
         int cwr = int(vCwInfo.x + 0.5);
         float cwRough = vCwInfo.z;
+        float cwMetal = vCwInfo.y;
         float cwDist = length(vViewPosition);
         // models pass (CUT v2): near the lens the men must not read as mannequins — cloth tone variation, faces with
         // eye sockets, brows, lips and eyes, strand streaks in the hair / beard shells; all fades out with distance
@@ -361,8 +367,21 @@ export function crowdMaterial(u: CrowdUniforms, lite: boolean): THREE.MeshStanda
           }
           if (uArmy > 0.5) {
             // Peleset ribbed corselet above the belt, kilt with a darker tasselled hem below it
-            if (vCwBind.y > uBeltY + 0.03) cwc *= mix(vec3(0.45, 0.36, 0.28), vec3(1.05), step(0.45, fract(vCwBind.y * 26.0)));
-            else if (vCwBind.y < uHemY + 0.05) cwc *= 0.6 + 0.4 * step(0.5, fract(atan(vCwBind.x, vCwBind.z) * 9.0));
+            // (finishing pass: the elite / front ranks wear it of BRONZE bands — 17:5, visual bible 3.9 "bronze scale or
+            // banded corselets" — dark field bronze #8c5e33 with darker lacing lines; some kilts carry a coloured border)
+            float pf = vCwInfo.w;
+            bool pElite = mod(pf, 2.0) > 0.5;
+            if (vCwBind.y > uBeltY + 0.03) {
+              // the bands overlap: a thin shadowed seam under each (at 26 bands/m a 42 % dark band read as a striped
+              // shirt in the long-lens close files of P4)
+              float band = smoothstep(0.1, 0.2, fract(vCwBind.y * 26.0));
+              if (pElite) {
+                cwc = mix(vec3(0.2, 0.11, 0.05), vec3(0.36, 0.2, 0.09), band) * (0.88 + 0.24 * cwN(vCwBind * vec3(60.0, 8.0, 60.0)));
+                cwMetal = 0.85;
+                cwRough = 0.45 + 0.12 * (1.0 - band);
+              } else cwc *= mix(vec3(0.7, 0.62, 0.54), vec3(1.0), band);
+            } else if (vCwBind.y < uHemY + 0.05) cwc *= 0.6 + 0.4 * step(0.5, fract(atan(vCwBind.x, vCwBind.z) * 9.0));
+            else if (pf > 1.5 && vCwBind.y < uHemY + 0.1) cwc = uAccent[int(pf > 3.5 ? 1.0 : 0.0) + (pElite ? 2 : 0)] * 0.9;
           }
         } else if (cwr == R_HAIR || cwr == R_BEARD) {
           ${lite ? '' : `if (cwNear > 0.0 && cwr == R_HAIR) {
@@ -425,7 +444,7 @@ export function crowdMaterial(u: CrowdUniforms, lite: boolean): THREE.MeshStanda
         diffuseColor.rgb *= cwc;`,
       )
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = cwRough;')
-      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = vCwInfo.y;')
+      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = cwMetal;')
       .replace(
         '#include <normal_fragment_maps>',
         lite
@@ -443,7 +462,7 @@ export function crowdMaterial(u: CrowdUniforms, lite: boolean): THREE.MeshStanda
         }`,
       );
   };
-  m.customProgramCacheKey = () => 'crowd2' + (lite ? 'L' : 'H');
+  m.customProgramCacheKey = () => 'crowd3' + (lite ? 'L' : 'H');
   return m;
 }
 

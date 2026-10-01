@@ -8,7 +8,7 @@ import type { GilgalArmy } from './crowd/GilgalArmy';
 import type { PhilistineHost } from './crowd/PhilistineHost';
 import { landAtmo, cloudShared } from './land/landAtmo';
 import { INTRO_SHOTS, type FilmSetName } from '../content/introScript';
-import { baseTake, FILM_CAM, gilgalCam, gilgalFocus, landCam, takeExposure, TAKE_OFFSET, type GilgalCtx, type LandCamCtx } from './FilmCams';
+import { baseTake, FILM_CAM, gilgalCam, gilgalFocus, landCam, SUN_CHEAT, takeExposure, TAKE_OFFSET, type GilgalCtx, type LandCamCtx } from './FilmCams';
 
 /**
  * THE FILM STAGE of the opening film (CUT v2: docs/intro-script-v2.md): every film-only set, crowd and actor, built behind the
@@ -215,40 +215,30 @@ export class FilmStage {
           const ground = (x: number, z: number) => ramah.set.height.height(x, z);
           const samuel = await castMod.FilmActor.create({ role: 'samuel', quality: q.name, msaa: q.msaa, lod: 'near', ground });
           actors.push(samuel);
-          const n = low ? 3 : q.name === 'medium' ? 4 : 6;
+          // P5 (cut4, director-notes-v5): "כֹּל זִקְנֵי יִשְׂרָאֵל" — 8-12 elders in a loose arc before Samuel (landSites marks
+          // 0 speaker · 1 seated · 2-5 the arc · 6-7 the near pair the lens dollies in past · 8-10 the outer ring). The
+          // 'near' LOD (real faces and beards) for the ones nearest the lens; fewer in all on phones.
+          const tierName = engine.quality.tier;
+          const plan = tierName === 'desktop-high' ? { idx: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], near: [6, 7, 0, 2] }
+            : tierName === 'desktop-medium' ? { idx: [0, 1, 2, 3, 4, 5, 6, 7], near: [6, 7] }
+              : tierName === 'mobile-high' ? { idx: [0, 2, 3, 4, 5, 6, 7], near: [6, 7] }
+                : { idx: [0, 2, 3, 6, 7], near: [6] };
+          const marks = plan.idx.filter((i) => i < A.elders.length).map((i) => A.elders[i]);
           const elders: FilmActor[] = [];
-          for (let i = 0; i < n; i++) {
-            p((i + 1) / (n + 1));
+          for (let k = 0; k < marks.length; k++) {
+            const i = plan.idx[k];
+            p((k + 1) / (marks.length + 1));
             await yieldFrame();
-            const e = await castMod.FilmActor.create({ role: 'elder', quality: q.name, msaa: q.msaa, seed: i + 1, lod: i < 2 ? 'near' : 'crowd', ground });
+            const e = await castMod.FilmActor.create({ role: 'elder', quality: q.name, msaa: q.msaa, seed: i + 1, lod: plan.near.includes(i) ? 'near' : 'crowd', ground });
             elders.push(e);
             actors.push(e);
           }
-          // CUT v2 (P5, cut3): the dolly comes in over the elders' heads toward Samuel in the gateway — marks[0..1] are
-          // the seated elders nearest the gate on either side (one of them rises and demands, beats.rise), the rest
-          // stand in the arc between the lens and Samuel (the most central first)
-          const seated = A.elders.filter((m) => m.seated);
-          const standing = A.elders.filter((m) => !m.seated);
-          const S0 = A.samuel.pos;
-          const arc = new THREE.Vector3();
-          for (const m of standing) arc.add(m.pos);
-          if (standing.length) arc.multiplyScalar(1 / standing.length);
-          const axis = new THREE.Vector3(arc.x - S0.x, 0, arc.z - S0.z).normalize();
-          const lateral = (p: THREE.Vector3) => Math.abs((p.x - S0.x) * -axis.z + (p.z - S0.z) * axis.x);
-          const nearGate = [...seated].sort((a, b) => a.pos.distanceTo(S0) - b.pos.distanceTo(S0));
-          const sides: typeof seated = [];
-          for (const m of nearGate) {
-            const side = Math.sign((m.pos.x - S0.x) * -axis.z + (m.pos.z - S0.z) * axis.x);
-            if (!sides.some((o) => Math.sign((o.pos.x - S0.x) * -axis.z + (o.pos.z - S0.z) * axis.x) === side)) sides.push(m);
-            if (sides.length === 2) break;
-          }
-          const central = [...standing].sort((a, b) => lateral(a.pos) - lateral(b.pos));
-          const marks = [...sides, ...central, ...seated.filter((m) => !sides.includes(m))];
           for (const a of actors) {
             a.addTo(ramah.set.scene);
             engine.enforceTextureBudget(a.root);
           }
-          perf = new castMod.RamahPerformance(samuel, elders, A.samuel, marks, ground);
+          // `roles`: the landSites index of each elder (perf's parts: 0 rises, 2<->3 talk/nod, 6<->7 the near pair ...)
+          perf = new castMod.RamahPerformance(samuel, elders, A.samuel, marks, ground, undefined, plan.idx.slice(0, marks.length));
           ramah.set.showPlaceholders(false);
         } catch (e) {
           console.warn('[film] Ramah cast failed (placeholders)', e);
@@ -444,11 +434,10 @@ export class FilmStage {
       coast: set.anchors.coast ? { heading: set.anchors.coast.heading, columnHead: set.anchors.coast.columnHead } : undefined,
       ramah:
         name === 'ramah' && set.anchors.ramah
-          ? // the standing elders between the lens and Samuel (actors: [samuel, seated, seated, standing...])
-            { samuel: set.anchors.ramah.samuel.pos, elders: (extra.actors ?? []).slice(3).map((a) => a.root.position) }
+          ? // P5 (cut4): the dolly is laid out in the gate's own frame (landSites: x along the wall, z out of the gate)
+            { samuel: set.anchors.ramah.samuel.pos, gate: set.anchors.ramah.gate, gateYaw: set.anchors.ramah.gateYaw }
           : undefined,
     };
-    if (camCtx.ramah && !camCtx.ramah.elders.length && set.anchors.ramah) camCtx.ramah.elders = set.anchors.ramah.elders.filter((m) => !m.seated).slice(0, 4).map((m) => m.pos);
     const engine = this.engine;
     const status: string[] = [];
     const tmp2 = new THREE.Vector3();
@@ -500,6 +489,13 @@ export class FilmStage {
           return { point: sam.eyesWorld(tmp), fStop: 4 };
         }
         if (name === 'ramah' && set.anchors.ramah) return { point: tmp.copy(set.anchors.ramah.samuel.pos).add(new THREE.Vector3(0, 1.5, 0)), fStop: 4 };
+        if (name === 'coast' && take === 'glint' && camCtx.coast) {
+          // P4 (cut4): the focus ~30 m down the column — the nearest files large and SOFT, the bronze further back sharp
+          const c = camCtx.coast;
+          tmp.copy(c.columnHead).addScaledVector(c.heading, FILM_CAM.coast.march * t - 30);
+          tmp.y = set.height.height(tmp.x, tmp.z) + 1.5;
+          return { point: tmp, fStop: 2.8 };
+        }
         return null;
       },
       dispose() {
@@ -522,7 +518,11 @@ export class FilmStage {
     const engine = this.engine;
     const tmp = new THREE.Vector3();
     const H = (x: number, z: number) => gilgal.height(x, z);
-    if (new URLSearchParams(location.search).get('test') === '1') (window as unknown as Record<string, unknown>).__filmCams = FILM_CAM;
+    if (new URLSearchParams(location.search).get('test') === '1') {
+      (window as unknown as Record<string, unknown>).__filmCams = FILM_CAM;
+      // test only: the Gilgal cast (cut4 measures the blocking in the frames)
+      (window as unknown as Record<string, unknown>).__gilgalActors = actors;
+    }
     // what the cameras read from the cast (FilmCams): Saul's right hand (the grip), both men's eyes
     const handSocket = (a: FilmActor | undefined) => {
       try {
@@ -574,14 +574,17 @@ export class FilmStage {
         const cont = current !== null && current !== take && baseTake(current) === name; // 'tear' -> 'tear:insert'
         current = take;
         expMul = takeExposure(take);
+        // the light cheat of the tear and the verdict: the sun behind the two men (FilmCams.SUN_CHEAT)
+        gilgal.setSunCheat(SUN_CHEAT[take] ?? null);
         // every cut: the strand-hair sims start from rest (a pose / heading jump across a cut — Samuel turns back
         // between 10b and 11 — otherwise whips the hair and beard outward for a second)
         resetHair(actors);
-        // Samuel's long hair and beard flare outward under the slow-motion tear and in the verdict close-up (the
-        // guide sim leaves its collision field there); those two shots use the exact groom, the others the sim
+        // Samuel's long hair and beard flare outward under the slow-motion tear (the guide sim leaves its collision
+        // field there): the tear uses the exact groom; the verdict close-up has the simulation ON (cut4: the wind in
+        // his hair and beard, director-notes-v5 G6)
         const samuelActor = actors[1];
         try {
-          samuelActor?.groom?.setSimulation(!(name === 'tear' || name === 'verdict'));
+          samuelActor?.groom?.setSimulation(name !== 'tear');
         } catch {
           /* hair is cosmetic */
         }
@@ -623,11 +626,11 @@ export class FilmStage {
           }
         }
         if (rig && actors.length >= 2) {
-          // face light of the close shots (faceLight.ts presets): G2 / G3 / G7 'afternoonKing' on Saul, G6 'verdict'
-          // on Samuel; off in the wides and the insert
-          const who = take === 'king' || take === 'saulAlone' || take === 'spearRaised' ? actors[0] : take === 'verdict' ? actors[1] : null;
+          // face light of the close shots (faceLight.ts presets): G2 / G3 / G7 'afternoonKing' on Saul, G5b
+          // 'tearProfile' on Saul's profile (cut4), G6 'verdict' on Samuel; off in the wides
+          const who = take === 'king' || take === 'saulAlone' || take === 'spearRaised' || take === 'tear:insert' ? actors[0] : take === 'verdict' ? actors[1] : null;
           if (who) {
-            rig.setPreset(take === 'verdict' ? 'verdict' : 'afternoonKing', take === 'spearRaised' ? 0.7 : 1);
+            rig.setPreset(take === 'verdict' ? 'verdict' : take === 'tear:insert' ? 'tearProfile' : 'afternoonKing', take === 'spearRaised' ? 0.7 : 1);
             rig.update(who.eyesWorld(tmp), camera);
           } else rig.setPreset('off', 0);
         }

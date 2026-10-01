@@ -17,7 +17,7 @@
  * front ranks step aside to open the road for Samuel, heads turning toward him; later shots: standing, idle.
  */
 import * as THREE from 'three';
-import { armyAt, armySlot, timeScale, BEATS, MARCH_SPEED, type GilgalShotName } from '../gilgal/gilgalBlocking';
+import { armyAt, armySlot, samuelAt, timeScale, BEATS, MARCH_SPEED, type GilgalShotName } from '../gilgal/gilgalBlocking';
 import { ARMY, SAMUEL, roadZ } from '../gilgal/gilgalLayout';
 import { Crowd, type CrowdAgent, type CrowdTier } from './Crowd';
 import { CrowdAnim, type CrowdClipSpec } from './CrowdAnim';
@@ -342,6 +342,10 @@ export class GilgalArmy {
     this.beat = shot;
     this.beatT = time;
     const st = armyAt(shot, time);
+    // where the old man stands in this shot (heads and the heroes' eyes turn to him; G4 has its own mark, cut4 v6)
+    const sp = samuelAt(shot, time).pos;
+    this.samuel.copy(sp);
+    this.samEyes.set(sp.x, this.ground(sp.x, sp.z) + 1.55, sp.z);
     this.front.x = st.frontX;
     this.front.walk = st.walk > 0.2;
     const pos = this.tmp;

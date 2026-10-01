@@ -20,14 +20,32 @@ export interface FilmTextOptions {
   stagger?: number;
   /** verses: the reference fades in this long after the last word (default 0.55 s) */
   refAfter?: number;
-  /** cards: the negative space of the composition the card sits in */
+  /** cards and verses: the negative space of the composition the text sits in */
   side?: 'left' | 'right' | 'center';
-  /** cards: vertical placement */
+  /** cards and verses: vertical placement */
   v?: 'top' | 'middle' | 'bottom';
+  /** verses: 2 = two balanced lines (a line break between two of the catalog's words; the words are unchanged) */
+  lines?: 1 | 2;
+  /** verses: the last N words in gold (D1: the film's own title) */
+  gold?: number;
 }
 
 /** split a catalog text into words (on spaces; a maqaf keeps two words together) — the text itself is never changed */
 const splitWords = (t: string) => t.split(' ').filter((w) => w.length > 0);
+/** visible width proxy of a Hebrew word: its letters without niqqud / cantillation marks */
+const letters = (w: string) => w.replace(/[\u0591-\u05C7]/g, '').length;
+/** index of the word after which a verse breaks into two lines of the most equal width */
+function balancedBreak(words: readonly string[]): number {
+  const len = words.map((w) => letters(w) + 1);
+  const total = len.reduce((a, b) => a + b, 0);
+  let best = 0, bd = Infinity, acc = 0;
+  for (let i = 0; i < words.length - 1; i++) {
+    acc += len[i];
+    const d = Math.abs(total - 2 * acc);
+    if (d < bd) { bd = d; best = i; }
+  }
+  return best;
+}
 
 /** All DOM overlays: loading, start, cinematic letterbox & captions, title card, HUD, QTE, menus. */
 export class UI {
@@ -88,8 +106,8 @@ export class UI {
     // only from the catalog with its reference
     this.titleEl = el('div', 'titlecard', `
       <div class="tc-film"><span class="tc-film-name">${quoteText(INTRO_FILM_TITLE)}</span><span class="tc-film-ref">${sourceRef(INTRO_FILM_TITLE)}</span></div>
-      <h1 class="tc-title" data-t="${narration('davidLogo')}">${narration('davidLogo')}</h1>
-      <div class="tc-he">${narration('davidName')}</div>
+      <h1 class="tc-he" data-t="${narration('davidName')}">${narration('davidName')}</h1>
+      <div class="tc-title" data-t="${narration('davidLogo')}">${narration('davidLogo')}</div>
       <div class="tc-line"></div>
       <div class="tc-chapter">${narration('chapterTitle')}</div>`);
     this.objEl = el('div', 'objective');
@@ -260,7 +278,10 @@ export class UI {
       const words = splitWords(main);
       const step = o.stagger ?? 0.11;
       const at = (i: number) => (o.words && o.words[i] !== undefined ? o.words[i] : i * step);
-      const spans = words.map((w, i) => `<span class="w" style="--d:${at(i).toFixed(3)}s">${w}</span>`).join(' ');
+      const brk = (o.lines ?? 1) === 2 && words.length > 1 ? balancedBreak(words) : -1;
+      const gold0 = words.length - Math.max(0, Math.min(words.length, o.gold ?? 0));
+      const spans = words.map((w, i) => `<span class="w${i >= gold0 ? ' gold' : ''}" style="--d:${at(i).toFixed(3)}s"${i >= gold0 ? ` data-t="${w}"` : ''}>${w}</span>${i === words.length - 1 ? '' : i === brk ? '<br>' : ' '}`).join('');
+      if (brk >= 0) e.classList.add('ft-2l');
       const last = at(words.length - 1);
       e.style.setProperty('--ref', `${(last + (o.refAfter ?? 0.55)).toFixed(2)}s`);
       inner = `<div class="ft-v">${spans}</div>${sub ? `<div class="ft-ref">${sub}</div>` : ''}`;

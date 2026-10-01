@@ -15,6 +15,9 @@ export interface StrandOptions {
   minPixels?: number;
   widthScale?: number;
   roughness?: number;
+  /** fraction of strands (by their per-strand random) drawn in `pepperColor` — grey brows are salt and pepper */
+  pepper?: number;
+  pepperColor?: THREE.Color;
 }
 
 export class StrandMaterial extends THREE.MeshStandardMaterial {
@@ -25,6 +28,8 @@ export class StrandMaterial extends THREE.MeshStandardMaterial {
     uRootColor: { value: new THREE.Color() },
     uTipColor: { value: new THREE.Color() },
     uOpacity: { value: 1 },
+    uPepper: { value: 0 },
+    uPepperColor: { value: new THREE.Color(0.06, 0.05, 0.045) },
   };
   constructor(o: StrandOptions) {
     super({ color: 0xffffff, roughness: o.roughness ?? 0.7, metalness: 0, transparent: true, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 0.25 });
@@ -35,6 +40,8 @@ export class StrandMaterial extends THREE.MeshStandardMaterial {
     u.uOpacity.value = o.opacity ?? 1;
     u.uMinPx.value = o.minPixels ?? 0.65;
     u.uWidthScale.value = o.widthScale ?? 1;
+    u.uPepper.value = o.pepper ?? 0;
+    if (o.pepperColor) u.uPepperColor.value.copy(o.pepperColor);
     this.onBeforeCompile = (s) => {
       Object.assign(s.uniforms, u);
       s.vertexShader = s.vertexShader
@@ -78,8 +85,8 @@ varying float vStrandRand;`,
         .replace(
           '#include <common>',
           `#include <common>
-uniform vec3 uRootColor, uTipColor;
-uniform float uOpacity;
+uniform vec3 uRootColor, uTipColor, uPepperColor;
+uniform float uOpacity, uPepper;
 varying float vStrandT;
 varying float vStrandSide;
 varying float vStrandAlpha;
@@ -101,6 +108,7 @@ varying float vStrandRand;`,
           '#include <map_fragment>',
           `#include <map_fragment>
 diffuseColor.rgb = mix( uRootColor, uTipColor, smoothstep( 0.1, 1.0, vStrandT ) ) * ( 0.75 + 0.5 * vStrandRand );
+if ( vStrandRand < uPepper ) diffuseColor.rgb = uPepperColor * ( 0.8 + 0.6 * vStrandRand / max( uPepper, 1e-3 ) );
 float edge = 1.0 - vStrandSide * vStrandSide;
 diffuseColor.a = uOpacity * vStrandAlpha * smoothstep( 0.0, 0.35, edge ) * ( 1.0 - smoothstep( 0.82, 1.0, vStrandT ) );
 if ( diffuseColor.a < 0.004 ) discard;`,

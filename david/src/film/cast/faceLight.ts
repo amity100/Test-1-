@@ -20,7 +20,7 @@
  */
 import * as THREE from 'three';
 
-export type FaceLightPresetName = 'goldenBack' | 'afternoonKing' | 'verdict' | 'soft' | 'off';
+export type FaceLightPresetName = 'goldenBack' | 'afternoonKing' | 'verdict' | 'tearProfile' | 'soft' | 'off';
 
 export interface FaceLightSpot {
   az: number;
@@ -62,10 +62,21 @@ export const FACE_LIGHT_PRESETS: Record<Exclude<FaceLightPresetName, 'off'>, Fac
     rim: { az: -150, el: 28, dist: 1.4, lux: 2.6, color: 0xffc47e, penumbra: 0.8 },
     fill: { az: -35, el: 2, dist: 1.3, lux: 0.28, color: 0xc4d2ff, penumbra: 1 },
   },
+  // (cut4, G6 v6: the tear's cheated sun now really stands behind him on the frame-left side — the key is a soft warm
+  //  bounce near the lens (the eyes read, a catch-light), the rim a strong kick on his face side through the hair and
+  //  beard; the face sits in the fill, not in a flat front light)
   verdict: {
-    key: { az: 55, el: 24, dist: 1.2, lux: 1.6, color: 0xffdcb2, penumbra: 0.85 },
-    rim: { az: -162, el: 16, dist: 1.4, lux: 3.0, color: 0xffb35c, penumbra: 0.8 },
-    fill: { az: -30, el: 6, dist: 1.3, lux: 0.25, color: 0xbfd0ff, penumbra: 1 },
+    key: { az: 26, el: 12, dist: 1.2, lux: 1.0, color: 0xffd9ae, penumbra: 1 },
+    rim: { az: -150, el: 20, dist: 1.4, lux: 3.6, color: 0xffb35c, penumbra: 0.8 },
+    fill: { az: -40, el: 4, dist: 1.3, lux: 0.3, color: 0xbfd0ff, penumbra: 1 },
+  },
+  // tearProfile  G5b (cut4) - Saul on his knee in profile (facing frame right), the cheated sun behind the two men:
+  //              a warm low key from the camera's right (the side his face points to) so the anguish reads inside the
+  //              backlit silhouette, a kick from behind on the sun side, a faint cool fill
+  tearProfile: {
+    key: { az: 48, el: 10, dist: 1.3, lux: 1.15, color: 0xffd7aa, penumbra: 1 },
+    rim: { az: 150, el: 18, dist: 1.4, lux: 2.2, color: 0xffb566, penumbra: 0.8 },
+    fill: { az: -35, el: 4, dist: 1.3, lux: 0.3, color: 0xbfd0ff, penumbra: 1 },
   },
   soft: {
     key: { az: 30, el: 20, dist: 1.2, lux: 1.4, color: 0xfff0dc, penumbra: 1 },

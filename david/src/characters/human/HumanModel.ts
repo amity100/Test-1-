@@ -267,7 +267,13 @@ export class HumanModel {
       return mesh;
     };
     const browCol = new THREE.Color().setRGB(bc[0], bc[1], bc[2], THREE.SRGBColorSpace); // preset colours are sRGB
-    this.brows = mkStrands('brow', new StrandMaterial({ color: browCol, tipColor: browCol.clone().multiplyScalar(1.5), opacity: 0.92, widthScale: 1.0 }));
+    // (finishing pass: per-preset salt-and-pepper, opacity and tip brightness — Samuel's white brows read as two cotton
+    // balls with every strand the same light grey at 0.92 opacity)
+    const pc = rig.brows.pepperColor;
+    this.brows = mkStrands('brow', new StrandMaterial({
+      color: browCol, tipColor: browCol.clone().multiplyScalar(rig.brows.tip ?? 1.5), opacity: rig.brows.opacity ?? 0.92, widthScale: 1.0,
+      pepper: rig.brows.pepper ?? 0, pepperColor: pc ? new THREE.Color().setRGB(pc[0], pc[1], pc[2], THREE.SRGBColorSpace) : undefined,
+    }));
     // face pass: lashes are near-black at every hair colour (they read as a dark lash LINE that frames the eye); the
     // old brow-tinted, glossy lashes caught the back light and read as a pale "eyeliner" rim above the eye
     const lashCol = browCol.clone().multiplyScalar(0.12).lerp(new THREE.Color(0.012, 0.008, 0.006), 0.6);

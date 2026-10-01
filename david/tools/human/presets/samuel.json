@@ -83,13 +83,24 @@
     "seed": 21
   },
   "brows": {
+    "_comment": "finishing pass: natural white brows of a man of 70 - thin groomed strands, sparse enough for the skin to show, a few long coarse hairs, a quarter of them iron-grey (salt and pepper); the old 1.35 / 1.4 / 0.62 brows read as two cotton balls at 640x360",
     "color": [
-      0.62,
       0.6,
-      0.56
+      0.585,
+      0.55
     ],
-    "density": 1.35,
-    "thickness": 1.4
+    "density": 0.62,
+    "thickness": 1.05,
+    "width": 0.0001,
+    "wiry": 0.08,
+    "pepper": 0.28,
+    "pepperColor": [
+      0.3,
+      0.285,
+      0.265
+    ],
+    "opacity": 0.78,
+    "tip": 1.25
   },
   "sculpt": {
     "file": "ref/sculpt_samuel.npz",

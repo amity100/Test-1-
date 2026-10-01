@@ -8,6 +8,11 @@ import type { SDFGrid } from './HeadSurface';
  * still head keeps the exact groom), wind drag with gusts, head collision against the rest-pose SDF.
  * Output: per guide point displacement in head space -> a K x G float texture the vertex shader reads
  * (children blend two guides). No allocations per frame.
+ *
+ * Finishing pass — long hair lies on the body: a guide point below the chin (a long beard on the chest, hair over the
+ * shoulders and down the back) takes its style memory from the CHEST frame instead of the head (`setBody`, weight per
+ * point). Before, every point followed the head rigidly: a pure head turn (no gravity change) swung Samuel's long
+ * beard out to one side like a fan.
  */
 export class HairSim {
   readonly tex: THREE.DataTexture;
@@ -28,6 +33,14 @@ export class HairSim {
   private readonly gGroom = new THREE.Vector3();
   private readonly q = new THREE.Quaternion();
   private readonly sq = new THREE.Vector3();
+  /** chest anchoring: the body bone, head-space rest point -> body-bone local (rest), per-point weight 0..1 */
+  private body: THREE.Object3D | null = null;
+  private readonly headToBody = new THREE.Matrix4();
+  private bodyW: Float32Array | null = null;
+  private readonly B = new THREE.Matrix4();
+  private readonly gB = new THREE.Vector3();
+  private readonly gGroomB = new THREE.Vector3();
+  private readonly qB = new THREE.Quaternion();
 
   /**
    * @param guides G*K*3 rest positions in head space
@@ -60,6 +73,26 @@ export class HairSim {
     this.tex.needsUpdate = true;
     // gravity as groomed: world -Y expressed in head space at rest
     this.gGroom.set(0, -9.81, 0).applyMatrix4(new THREE.Matrix4().extractRotation(fromRest));
+  }
+
+  /**
+   * Anchor the lower hair to the body: `bone` (e.g. the upper chest), `boneRest` its rest matrix in the same rest
+   * character space as `toRest`, `weight(restPoint)` 0..1 per guide point (rest character space).
+   */
+  setBody(bone: THREE.Object3D, boneRest: THREE.Matrix4, weight: (p: THREE.Vector3) => number) {
+    this.body = bone;
+    this.headToBody.copy(boneRest).invert().multiply(this.toRest);
+    const n = this.G * this.K;
+    const W = new Float32Array(n);
+    let any = false;
+    for (let i = 0; i < n; i++) {
+      this.v.fromArray(this.restL, i * 3).applyMatrix4(this.toRest);
+      W[i] = Math.max(0, Math.min(1, weight(this.v)));
+      if (W[i] > 0) any = true;
+    }
+    this.bodyW = any ? W : null;
+    // gravity as groomed, in the body bone's rest frame
+    this.gGroomB.set(0, -9.81, 0).applyMatrix4(new THREE.Matrix4().extractRotation(boneRest.clone().invert()));
   }
 
   reset() {
@@ -95,6 +128,14 @@ export class HairSim {
     this.q.setFromRotationMatrix(M);
     const gd = this.g.copy(this.gGroom).applyQuaternion(this.q).multiplyScalar(-1);
     gd.y -= 9.81;
+    const BW = this.body ? this.bodyW : null;
+    let gdB = gd;
+    if (BW) {
+      this.B.copy(this.body!.matrixWorld).multiply(this.headToBody);
+      this.qB.setFromRotationMatrix(this.body!.matrixWorld);
+      gdB = this.gB.copy(this.gGroomB).applyQuaternion(this.qB).multiplyScalar(-1);
+      gdB.y -= 9.81;
+    }
     const damp = Math.exp(-3.2 * h);
     const t = this.time;
     for (let s = 0; s < steps; s++) {
@@ -120,11 +161,17 @@ export class HairSim {
           Q[i] = px;
           Q[i + 1] = py;
           Q[i + 2] = pz;
-          P[i] = px + vx + gd.x * h * h * 0.6;
-          P[i + 1] = py + vy + gd.y * h * h * 0.6;
-          P[i + 2] = pz + vz + gd.z * h * h * 0.6;
-          // style memory: pull toward the groomed shape
+          const bw = BW ? BW[g * K + k] : 0;
+          const gx = bw > 0 ? gd.x + (gdB.x - gd.x) * bw : gd.x, gy = bw > 0 ? gd.y + (gdB.y - gd.y) * bw : gd.y, gz = bw > 0 ? gd.z + (gdB.z - gd.z) * bw : gd.z;
+          P[i] = px + vx + gx * h * h * 0.6;
+          P[i + 1] = py + vy + gy * h * h * 0.6;
+          P[i + 2] = pz + vz + gz * h * h * 0.6;
+          // style memory: pull toward the groomed shape (below the chin: as it lies on the chest / shoulders / back)
           w.fromArray(R, i).applyMatrix4(M);
+          if (bw > 0) {
+            this.sq.fromArray(R, i).applyMatrix4(this.B);
+            w.lerp(this.sq, bw);
+          }
           const ks = this.stiff[g] * (1 - 0.65 * tk);
           P[i] += (w.x - P[i]) * ks;
           P[i + 1] += (w.y - P[i + 1]) * ks;

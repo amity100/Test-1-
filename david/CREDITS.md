@@ -431,3 +431,11 @@ values and re-baked by our own tools (`tools/human`).
   redistributed. The FBX parsing (three.js's `FBXLoader`, MIT, part of the `three` dependency, run in Node), the
   retargeting onto the MakeHuman skeleton and the cleanup are the existing pipeline plus own code.
 
+
+## Models — finishing pass on CUT v2 (models teammate: `src/characters/wardrobe/` incl. `tear.ts`, `src/characters/hair/`, `src/characters/human/`, `tools/human/{strands,build_human}.py`, `tools/human/presets/samuel.json`, `src/assets/human/samuel/`, `src/film/crowd/crowdShader.ts`, the looks of `src/characters/Flock.ts` and `src/characters/BearModel.ts`, `dev/models*`)
+- No third-party assets. Samuel's rebuilt brow strands (sparse white brows with long coarse hairs and salt-and-pepper
+  strands; `python3 tools/human/build_human.py samuel` from the CC0 MakeHuman data already credited above — only the
+  brow and lash arrays of `src/assets/human/samuel/human.binz` changed), the torn corner's solver (welded single piece,
+  long-range attachments, frayed edge), the chest-anchored hair simulation, the aged bronze scale coat, the elite
+  Philistine bronze corselets, the flock's ground bounce and wool halo and the bear's darkness control are all own
+  procedural work (CC0 by construction).

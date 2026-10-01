@@ -25,6 +25,8 @@ interface Member {
   turn: number;
   stepT: number;
   stepFor: number;
+  /** follow mode (P3): the place behind the shepherd (along / across his way, m) and a wander phase */
+  follow?: { back: number; side: number; ph: number; grazeT: number };
 }
 
 const _v = new THREE.Vector3();
@@ -101,10 +103,70 @@ export class FilmFlock {
     return this.members.length;
   }
 
+  private leader: (() => THREE.Vector3 | null) | null = null;
+  private readonly way = new THREE.Vector3(1, 0, 0);
+  private readonly lead = new THREE.Vector3();
+
+  /**
+   * P3: the flock follows its shepherd across the view in a loose drove — `count` animals placed behind him along his
+   * way (`dir`, horizontal) between `back[0]` and `back[1]` m and up to `spread` m to either side; every frame (tick)
+   * each one heads for its own place behind the moving shepherd: it grazes when it is there, drops behind, and walks or
+   * trots to catch up — never in step, never frozen. `leader` returns the shepherd's feet each frame.
+   */
+  stageFollow(leader: () => THREE.Vector3 | null, dir: THREE.Vector3, o: { count?: number; back?: [number, number]; spread?: number; exclude?: Animal[] } = {}) {
+    this.restore();
+    const count = o.count ?? 10, back = o.back ?? [1.6, 7.5], spread = o.spread ?? 2.4;
+    this.leader = leader;
+    this.way.copy(dir).setY(0).normalize();
+    const L = leader();
+    if (!L) return 0;
+    const side = _r.set(-this.way.z, 0, this.way.x);
+    const pool = this.flock.animals.filter((a) => a.state !== 'carried' && a !== this.flock.lamb && !(o.exclude ?? []).includes(a));
+    for (let k = 0; k < Math.min(count, pool.length); k++) {
+      const a = pool[k];
+      const f = { back: back[0] + (back[1] - back[0]) * hash(k, 11), side: (hash(k, 12) - 0.5) * 2 * spread, ph: hash(k, 13) * 6.28, grazeT: hash(k, 14) * 2 };
+      this.saved.push({ a, pos: a.position.clone(), heading: a.heading, ai: a.aiEnabled, state: a.state, speed: a.manualSpeed });
+      const x = L.x - this.way.x * f.back + side.x * f.side, z = L.z - this.way.z * f.back + side.z * f.side;
+      a.position.set(x, this.ground(x, z), z);
+      a.heading = Math.atan2(this.way.x, this.way.z) + (hash(k, 15) - 0.5) * 0.8;
+      a.aiEnabled = false;
+      a.state = 'walk';
+      a.manualSpeed = 0.5;
+      this.members.push({ a, walk: false, speed: 0, turn: 0, stepT: 0, stepFor: 0, follow: f });
+    }
+    return this.members.length;
+  }
+
   /** per frame: walkers turn gently (and back at the frame's edge), grazers take a step now and then */
-  tick(_t: number, dt: number, camera?: THREE.Camera) {
+  tick(t: number, dt: number, camera?: THREE.Camera) {
+    const L = this.leader ? this.leader() : null;
+    if (L) this.lead.copy(L);
     for (const m of this.members) {
       const a = m.a;
+      if (m.follow && L) {
+        // its place behind the shepherd, wandering a little; head for it, graze when there
+        const F = m.follow;
+        const side = _r.set(-this.way.z, 0, this.way.x);
+        const wb = F.back + 0.7 * Math.sin(t * 0.35 + F.ph), ws = F.side + 0.5 * Math.sin(t * 0.27 + 2 * F.ph);
+        const tx = this.lead.x - this.way.x * wb + side.x * ws, tz = this.lead.z - this.way.z * wb + side.z * ws;
+        const dx = tx - a.position.x, dz = tz - a.position.z;
+        const d = Math.hypot(dx, dz);
+        F.grazeT -= dt;
+        if (d < 0.45 && F.grazeT <= 0) {
+          // there: graze a moment (the shepherd walks on, it drops behind)
+          a.state = 'graze';
+          a.manualSpeed = 0;
+          if (d < 0.2) F.grazeT = 0.6 + hash(Math.floor(t * 3), F.ph) * 1.2;
+          continue;
+        }
+        const want = Math.atan2(dx, dz);
+        const e = Math.atan2(Math.sin(want - a.heading), Math.cos(want - a.heading));
+        a.heading += e * Math.min(1, dt * 2.5);
+        a.state = 'walk';
+        // a walk, a trot when it has fallen behind
+        a.manualSpeed = THREE.MathUtils.clamp(0.35 + d * 0.55, 0.35, 1.9) * (0.92 + 0.16 * hash(F.ph * 10, 3));
+        continue;
+      }
       if (m.walk) {
         a.heading += m.turn * dt;
         if (camera) {
@@ -149,17 +211,34 @@ export class FilmFlock {
     }
     this.saved.length = 0;
     this.members.length = 0;
+    this.leader = null;
   }
 }
 
+/** per lamb: the last film time it was performed at (one-shot cues fire on crossings, safe under stepped playback) */
+const lambClock = new WeakMap<Animal, number>();
+
 /**
- * H1: the lamb at the thicket's edge — it walks in (until `walkUntil`), grazes, and at `lift` its head comes up toward
- * `toward` (Flock's alert look: the head lifts, the ears turn), a flick of the ears, then it stands listening. It never
- * walks on out of the frame.
+ * H1: the lamb at the thicket's edge — it walks in (until `walkUntil`), grazes with an ear twitching now and then, and
+ * at `lift` its head comes up toward `toward` (Flock's alert look: the head lifts, the ears turn), the ears flick, it
+ * takes one hesitant step and stands listening. It never walks on out of the frame.
  */
 export function lambAtEdge(lamb: Animal, t: number, o: { lift: number; toward: THREE.Vector3; walkUntil?: number; speed?: number }) {
   const a = lamb as unknown as { alert: number; alertDir: number; earFlickT: number[]; graze: number };
   lamb.aiEnabled = false;
+  const last = lambClock.get(lamb) ?? -1;
+  lambClock.set(lamb, t);
+  const crossed = (at: number) => (last < at && t >= at) || (last > t && t >= at && t - at < 0.1);
+  const flick = (left: boolean, right: boolean) => {
+    if (!a.earFlickT) return;
+    if (left) a.earFlickT[0] = 0;
+    if (right) a.earFlickT[1] = 0.06;
+  };
+  // the ears twitch while it grazes (flies, a sound off in the bushes), then both at once as the head comes up
+  if (crossed(0.55)) flick(true, false);
+  if (crossed(1.05)) flick(false, true);
+  if (crossed(o.lift)) flick(true, true);
+  if (crossed(o.lift + 0.75)) flick(true, false);
   const walking = t < (o.walkUntil ?? 0);
   if (walking) {
     lamb.state = 'walk';
@@ -173,12 +252,10 @@ export function lambAtEdge(lamb: Animal, t: number, o: { lift: number; toward: T
     a.alert = 0;
     return;
   }
-  // the head comes up and turns to the thicket; the ears flick once as it lifts
+  // the head comes up and turns to the thicket; one hesitant step, then it stands listening
   lamb.state = 'walk';
   a.alert = 1;
   a.alertDir = Math.atan2(o.toward.x - lamb.position.x, o.toward.z - lamb.position.z);
-  if (t - o.lift < 0.05 && a.earFlickT) {
-    a.earFlickT[0] = 0;
-    a.earFlickT[1] = 0.08;
-  }
+  const step = t > o.lift + 0.45 && t < o.lift + 0.8;
+  lamb.manualSpeed = step ? 0.3 : 0;
 }

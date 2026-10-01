@@ -75,6 +75,12 @@ export interface FilmOptions {
   /** face after the turn (default 'neutral': calm; e.g. 'smile' with moodWeight 0.1 for a hint of warmth) */
   mood?: Expression;
   moodWeight?: number;
+  /**
+   * 'reveal': the eyes do not settle ON `look` (the lens) but on the distance beside it — the direction to `look`
+   * turned this many radians toward the lens' RIGHT (+), 30 m out (director-notes-v5 D2: "the eyes settling on the
+   * distance — never a stare into the lens"). Default 0.38; 0 = into the lens.
+   */
+  offLens?: number;
 }
 
 // channels (not joints) blended by the pose mixer
@@ -789,7 +795,7 @@ export class DavidModel {
     L: { on: false, w: 0, pos: new THREE.Vector3() },
     R: { on: false, w: 0, pos: new THREE.Vector3() },
   };
-  private film: { shot: FilmShot; t: number; look: THREE.Vector3 | null; wind: number; turnAt: number; turnDur: number; mood: Expression; moodW: number; blinked: boolean } | null = null;
+  private film: { shot: FilmShot; t: number; look: THREE.Vector3 | null; wind: number; turnAt: number; turnDur: number; mood: Expression; moodW: number; blinked: boolean; offLens: number } | null = null;
   private filmTurn = 0;
   private filmBlink2 = -1;
   private filmEyes: THREE.Vector3 | null = null;
@@ -1352,7 +1358,7 @@ export class DavidModel {
     const f = this.film;
     const wind = o.wind ?? (shot === 'back' ? 1.8 : shot === 'reveal' ? 1.4 : 1.6);
     if (!f || f.shot !== shot) {
-      this.film = { shot, t, look: o.look ?? null, wind, turnAt: o.turnAt ?? 0.9, turnDur: o.turnDur ?? 2.2, mood: o.mood ?? 'neutral', moodW: o.moodWeight ?? 0.12, blinked: false };
+      this.film = { shot, t, look: o.look ?? null, wind, turnAt: o.turnAt ?? 0.9, turnDur: o.turnDur ?? 2.2, mood: o.mood ?? 'neutral', moodW: o.moodWeight ?? 0.12, blinked: false, offLens: o.offLens ?? 0.38 };
       this.filmBlink2 = -1; // a second blink pending from an earlier (skipped / replayed) shot never fires early
       if (shot !== 'reveal') this.filmTurn = 0;
     } else {
@@ -1363,6 +1369,7 @@ export class DavidModel {
       if (o.turnDur !== undefined) f.turnDur = o.turnDur;
       if (o.mood) f.mood = o.mood;
       if (o.moodWeight !== undefined) f.moodW = o.moodWeight;
+      if (o.offLens !== undefined) f.offLens = o.offLens;
     }
     this.windScale = wind;
     this.autoHero = true;
@@ -1405,6 +1412,13 @@ export class DavidModel {
     }
     // where to look: the camera (or 3 m to his right-front at eye height), in character space from the neck
     const look = f.look ? this.filmLook.copy(f.look) : this.root.localToWorld(this.filmLook.set(-1.8, 1.55, 2.4));
+    if (f.look && f.offLens) {
+      // the distance beside the lens (its right), 30 m out, a little above the horizon: the eyes settle THERE
+      this.j.neck.getWorldPosition(_v8);
+      _v7.copy(look).sub(_v8);
+      const yl = Math.atan2(_v7.x, _v7.z) + f.offLens;
+      look.set(_v8.x + Math.sin(yl) * 30, _v8.y + 0.6, _v8.z + Math.cos(yl) * 30);
+    }
     this.j.neck.getWorldPosition(_v8);
     this.root.worldToLocal(_v8);
     const d = this.root.worldToLocal(_v7.copy(look)).sub(_v8);

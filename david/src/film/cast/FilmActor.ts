@@ -64,8 +64,19 @@ export class FilmActor {
   kit: SoldierKit | null = null;
   /** arm poses from the proxy path (masked out of the mocap); weight 0..1 each */
   readonly armPose: Record<'L' | 'R', { pose: ArmPose | null; weight: number }> = { L: { pose: null, weight: 0 }, R: { pose: null, weight: 0 } };
-  /** world-space reach targets for post-IK (e.g. Saul's hand to the corner of the me'il) */
-  readonly reach: Record<'L' | 'R', { target: THREE.Vector3 | null; weight: number; grip?: boolean }> = { L: { target: null, weight: 0, grip: true }, R: { target: null, weight: 0, grip: true } };
+  /**
+   * world-space reach targets for post-IK (e.g. Saul's hand to the corner of the me'il). With `palm` (+ optional
+   * `thumb`) the hand is also turned: the palm faces `palm` (world dir) and the thumb side of the fist points along
+   * `thumb`, blended by `orient` (0..1) — the G5b fist shows its knuckles to the lens.
+   */
+  readonly reach: Record<'L' | 'R', { target: THREE.Vector3 | null; weight: number; grip?: boolean; palm?: THREE.Vector3 | null; thumb?: THREE.Vector3 | null; orient?: number }> = { L: { target: null, weight: 0, grip: true }, R: { target: null, weight: 0, grip: true } };
+  /**
+   * Down on one knee (perf pass v6, the tear): `w` 0..1 blends the legs from the capture's into a kneel — the pelvis
+   * drops to kneeling height, the `side` knee goes down onto the ground under the hip (the shin back, the foot on its
+   * toes), the other foot is planted ahead with the knee up. `fwd` = how far the front foot is planted ahead of its hip
+   * (m, ≈ the thigh length puts the shin vertical); `sit` 0..1 sinks the pelvis back toward the heel (a recoil).
+   */
+  readonly kneel = { w: 0, side: 'L' as 'L' | 'R', fwd: 0.5, sit: 0 };
   /** keep a held prop's shaft world-aligned with `axis` (e.g. a carried spear upright) by turning the wrist */
   readonly upright: Record<'L' | 'R', { weight: number; axis: THREE.Vector3; prop: string | null }> = {
     L: { weight: 0, axis: new THREE.Vector3(0, 1, 0), prop: null },
@@ -389,13 +400,16 @@ export class FilmActor {
           // the GRIP (inside the closed hand), not the wrist, goes to the target: two passes (the hand turns)
           const sock = side === 'L' ? this.human.sockets.handGripL : this.human.sockets.handGripR;
           const wr = (this.human.bones as Record<string, THREE.Object3D>)[`wrist.${side}`];
-          const passes = r.weight > 0.999 ? 2 : 1;
+          const ow = r.palm ? (r.orient ?? 1) * r.weight : 0;
+          const passes = r.weight > 0.999 || ow > 0.001 ? 3 : 1;
           for (let pass = 0; pass < passes; pass++) {
+            if (ow > 0.001) this.orientHand(side, r.palm!, r.thumb ?? null, ow);
             sock.getWorldPosition(_G);
             wr.getWorldPosition(_W2);
             _G2.copy(r.target).sub(_G).add(_W2);
             this.armIK(side, _G2, r.weight);
           }
+          if (ow > 0.001) this.orientHand(side, r.palm!, r.thumb ?? null, ow);
         }
       }
     }
@@ -412,7 +426,7 @@ export class FilmActor {
       // once torn, the piece hangs from the few grabbed vertices at its corner: with MeilTear's 6 constraint iterations
       // a step, gravity stretched the 30 x 37 cm corner to a 1.2-1.6 m streamer below Saul's fist (measured in G6/G7).
       // Four substeps (24 iterations a frame, a little more air damping) keep it hanging ~0.5 m, wool-sized.
-      const n = this.tear.isTorn ? TEAR_SUBSTEPS : 1;
+      const n = this.tear.isTorn ? FilmActor.tearSubsteps : 1;
       for (let i = 0; i < n; i++) this.tear.update(dt / n);
     }
   }
@@ -505,11 +519,24 @@ export class FilmActor {
       this.body.drop = Math.max(0, hy - (this.root.position.y + this.seatTop + 0.085)) * this.seatWeight;
     }
     this.applyBreath();
-    const { drop, lean, twist, side, feetFwd } = this.body;
-    if (Math.abs(drop) < 1e-4 && Math.abs(lean) < 1e-4 && Math.abs(twist) < 1e-4 && Math.abs(side) < 1e-4 && Math.abs(feetFwd) < 1e-4) return;
+    const { lean, twist, side, feetFwd } = this.body;
+    let drop = this.body.drop;
+    const kw = THREE.MathUtils.clamp(this.kneel.w, 0, 1);
+    if (Math.abs(drop) < 1e-4 && Math.abs(lean) < 1e-4 && Math.abs(twist) < 1e-4 && Math.abs(side) < 1e-4 && Math.abs(feetFwd) < 1e-4 && kw < 1e-3) return;
     const b = this.human.bones as Record<string, THREE.Object3D>;
     const rootB = b.root;
     if (!rootB) return;
+    // the kneel: the pelvis drops so the down-leg's thigh stands almost vertical on its knee (the ground under the root)
+    let gY = 0, la = 0.45, lb = 0.45;
+    if (kw > 1e-3) {
+      gY = this.root.getWorldPosition(_kP).y;
+      const s = this.kneel.side;
+      la = b[`upperleg01.${s}`].getWorldPosition(_kH).distanceTo(b[`lowerleg01.${s}`].getWorldPosition(_kK));
+      lb = _kK.distanceTo(b[`foot.${s}`].getWorldPosition(_kP));
+      const hy = (b['upperleg01.L'].getWorldPosition(_v).y + b['upperleg01.R'].getWorldPosition(_v2).y) / 2;
+      const want = gY + 0.065 + la * 0.95 - 0.1 * this.kneel.sit;
+      drop = THREE.MathUtils.lerp(drop, Math.max(0, hy - want), kw);
+    }
     // the feet as the mocap left them (they stay planted)
     for (let i = 0; i < 2; i++) {
       const f = b[`foot.${SIDES[i]}`];
@@ -524,7 +551,7 @@ export class FilmActor {
     // pelvis: down (and a little back as the hips fold), to the side
     rootB.getWorldPosition(_v);
     _v.y -= drop;
-    _v.addScaledVector(fwd, -0.04 * Math.max(0, lean)).addScaledVector(right, side);
+    _v.addScaledVector(fwd, -0.04 * Math.max(0, lean) - 0.09 * this.kneel.sit * kw).addScaledVector(right, side);
     rootB.parent!.worldToLocal(_v);
     rootB.position.copy(_v);
     rootB.updateMatrixWorld(true);
@@ -539,10 +566,45 @@ export class FilmActor {
       rotateWorld(bone, _q.setFromAxisAngle(left, lean * f));
       if (twist) rotateWorld(bone, _q.setFromAxisAngle(_axU.set(0, 1, 0), twist * f * 1.3));
     }
+    _kPole[0].copy(fwd);
+    _kPole[1].copy(fwd);
+    if (kw > 1e-3) {
+      // the kneel targets, from the hips as they now are: the down knee on the ground a little ahead of its hip, the
+      // shin back and up to the ankle (the foot on its toes behind), the front foot planted ahead under its knee
+      const iD = this.kneel.side === 'L' ? 0 : 1, iU = 1 - iD;
+      const sD = SIDES[iD], sU = SIDES[iU];
+      b[`upperleg01.${sD}`].getWorldPosition(_kH);
+      const kY = gY + 0.065;
+      const dy = Math.max(0, _kH.y - kY);
+      const h = Math.min(0.6 * la, Math.sqrt(Math.max(0, la * la - dy * dy)));
+      _kK.copy(_kH).addScaledVector(fwd, h).setY(kY);
+      const up = _axU.set(0, 1, 0);
+      const sa = 0.3; // the shin's rise from the knee back to the ankle (rad)
+      _kP.copy(_kK).addScaledVector(fwd, -Math.cos(sa) * lb).addScaledVector(up, Math.sin(sa) * lb);
+      // the foot as the capture left it: heel -> toe direction, turned to point down onto its toes behind
+      const toes = b[`toes.${sD}`];
+      if (toes) {
+        _v.copy(toes.position).applyQuaternion(_fq[iD]);
+        if (_v.lengthSq() > 1e-6) {
+          _v.normalize();
+          _v2.copy(up).multiplyScalar(-1).addScaledVector(fwd, -0.3).normalize();
+          _kQ.setFromUnitVectors(_v, _v2).multiply(_fq[iD]);
+          _fq[iD].slerp(_kQ, kw);
+        }
+      }
+      _ank[iD].lerp(_kP, kw);
+      // the down knee's pole: from the hip-ankle line toward the knee on the ground
+      _kPole[iD].copy(_kK).sub(_v.copy(_kH).add(_kP).multiplyScalar(0.5)).normalize().multiplyScalar(kw).addScaledVector(fwd, 1 - kw).normalize();
+      // the front foot: planted `fwd` ahead of its hip, the ankle at the capture's standing height
+      b[`upperleg01.${sU}`].getWorldPosition(_kH);
+      _kP.copy(_kH).addScaledVector(fwd, this.kneel.fwd).addScaledVector(right, (iU === 1 ? 1 : -1) * 0.03).setY(gY + 0.085);
+      _ank[iU].lerp(_kP, kw);
+      _kPole[iU].copy(fwd).addScaledVector(up, 0.35 * kw).normalize();
+    }
     // legs: back onto the planted feet (knees bend forward)
     for (let i = 0; i < 2; i++) {
       const s = SIDES[i];
-      twoBone(b[`upperleg01.${s}`], b[`lowerleg01.${s}`], b[`foot.${s}`], _ank[i], fwd);
+      twoBone(b[`upperleg01.${s}`], b[`lowerleg01.${s}`], b[`foot.${s}`], _ank[i], _kPole[i]);
       setWorldQuat(b[`foot.${s}`], _fq[i]);
     }
   }
@@ -576,6 +638,30 @@ export class FilmActor {
     _q2.slerp(_q3.identity(), 1 - w);
     rotateWorld(ua, _q2);
     ua.updateMatrixWorld(true);
+  }
+
+  /**
+   * turn the wrist so that the fist's grip socket faces the given world directions: its +X (out of the palm) along
+   * `palm`, its +Y (the thumb / index side of the grip hole) as close to `thumb` as the palm allows; blended by `w`
+   */
+  orientHand(side: 'L' | 'R', palm: THREE.Vector3, thumb: THREE.Vector3 | null, w: number) {
+    const sock = side === 'L' ? this.human.sockets.handGripL : this.human.sockets.handGripR;
+    const wr = (this.human.bones as Record<string, THREE.Object3D>)[`wrist.${side}`];
+    if (!wr) return;
+    sock.updateWorldMatrix(true, false);
+    sock.getWorldQuaternion(_q2);
+    const x = _oX.copy(palm).normalize();
+    const y = _oY;
+    if (thumb) y.copy(thumb);
+    else y.set(0, 1, 0).applyQuaternion(_q2);
+    y.addScaledVector(x, -y.dot(x));
+    if (y.lengthSq() < 1e-6) y.set(0, 1, 0).applyQuaternion(_q2).addScaledVector(x, -x.dot(_v.set(0, 1, 0).applyQuaternion(_q2)));
+    y.normalize();
+    const z = _oZ.crossVectors(x, y);
+    _oM.makeBasis(x, y, z);
+    _q.setFromRotationMatrix(_oM).multiply(_q2.invert());
+    _q.slerp(_q3.identity(), 1 - Math.min(1, w));
+    rotateWorld(wr, _q);
   }
 
   /** turn the wrist so that the held prop's +Y axis points along `axis` (world) */
@@ -677,6 +763,13 @@ export class FilmActor {
     this.root.removeFromParent();
   }
 
+  /**
+   * MeilTear steps per frame once the corner is torn (see update). The cut-v2 workaround was 4 (6 constraint iterations
+   * let gravity stretch the hanging piece to a streamer); models' robust MeilTear (welds + long-range attachments,
+   * finishing pass v6) holds it at 1.
+   */
+  static tearSubsteps = 1;
+
   /** preload the mocap clips of the film's performances (behind the loading screen) */
   static preloadClips(names: string[]) {
     return MocapLibrary.shared.preload(names);
@@ -684,8 +777,6 @@ export class FilmActor {
 }
 
 const _zero = new THREE.Vector3();
-/** MeilTear steps per frame once the corner is torn (see update) */
-const TEAR_SUBSTEPS = 4;
 
 const SIDES = ['L', 'R'] as const;
 const LOOK_BONES: [string, number][] = [['spine01', 0.1], ['neck01', 0.15], ['neck02', 0.2], ['neck03', 0.2], ['head', 0.35]];
@@ -697,6 +788,9 @@ const _rwP = new THREE.Quaternion(), _rwW = new THREE.Quaternion();
 const _A = new THREE.Vector3(), _B = new THREE.Vector3(), _C = new THREE.Vector3(), _D = new THREE.Vector3(), _P = new THREE.Vector3();
 const _tq = new THREE.Quaternion();
 const _G = new THREE.Vector3(), _G2 = new THREE.Vector3(), _W2 = new THREE.Vector3();
+const _oX = new THREE.Vector3(), _oY = new THREE.Vector3(), _oZ = new THREE.Vector3(), _oM = new THREE.Matrix4();
+const _kH = new THREE.Vector3(), _kK = new THREE.Vector3(), _kP = new THREE.Vector3(), _kQ = new THREE.Quaternion();
+const _kPole = [new THREE.Vector3(), new THREE.Vector3()];
 
 /** apply a world-space rotation `dq` to a bone (children follow) */
 function rotateWorld(bone: THREE.Object3D, dq: THREE.Quaternion) {

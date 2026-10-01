@@ -40,7 +40,7 @@ if (shotId === 'title') {
     for (const x of s.text ?? []) {
       const ts = t0 + x.at;
       if (T < ts || T > ts + x.seconds) continue;
-      const o = { side: x.side, v: x.v, stagger: x.stagger, refAfter: x.refAfter, words: x.words ? x.words.map((w) => Math.max(0, w.t - x.at)) : undefined };
+      const o = { side: x.side, v: x.v, lines: x.lines, gold: x.gold, stagger: x.stagger, refAfter: x.refAfter, words: x.words ? x.words.map((w) => Math.max(0, w.t - x.at)) : undefined };
       let e: HTMLElement;
       if (x.kind === 'verse' && x.quote) {
         const [text, ref] = verseArgs(x.quote);

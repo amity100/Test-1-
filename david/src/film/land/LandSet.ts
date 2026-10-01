@@ -34,9 +34,10 @@ export const LAND_LIGHT: Record<LandLocation, { elevation: number; azimuth: numb
   // dawn (visual-bible 3.11 / §4: rising behind Moab): the sun just clear of the plateau, a little north of the
   // camera's axis so the hills get raking side light (terraces, olive shadows) and the Dead Sea its glitter path
   judah: { elevation: 4.2, azimuth: 93, exposure: 0.5 },
-  // early morning (visual-bible §4 shot 4): the sun in the east BEHIND the camera, which faces west over the host
-  // toward Ashdod, the dunes and the sea — frontal warm light on the Philistines, bronze glints toward the lens
-  coast: { elevation: 10, azimuth: 72, exposure: 0.52 },
+  // morning (visual-bible §4 shot 4): the sun in the south-east BEHIND the camera's left shoulder — the lens faces
+  // west-north-west back down the marching column (cut4, P4) — a harder side-front light than the old frontal one:
+  // modelling, real shadows and contrast, bronze glints toward the lens (director-notes-v5 P4: "not flat yellow")
+  coast: { elevation: 20, azimuth: 32, exposure: 0.46 },
   // morning at the gate of Ramah
   ramah: { elevation: 15, azimuth: 105, exposure: 0.56 },
 };

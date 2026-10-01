@@ -226,7 +226,8 @@ const FRAG_BODY = /* glsl */ `
   if (!hit && (impSeg(p, N - up * 0.08 * s, PV + up * 0.12 * s, 0.155 * s * gi) || impSeg(p, shL, shR, 0.075 * s))) {
     hit = true; col = tunic; rough = 0.95;
     if (abs(p.y - (PV.y + 0.1 * s * ey)) < 0.028 * s * ey) col = vec3(0.2, 0.12, 0.07);
-    if (uArmy > 0.5 && p.y > PV.y + 0.14 * s * ey) col *= mix(vec3(0.45, 0.36, 0.28), vec3(1.05), step(0.45, fract(p.y / (0.038 * s * ey))));
+    // (finishing pass: thin seams like the mesh LODs' — a 45 % dark band striped the far host like shirts)
+    if (uArmy > 0.5 && p.y > PV.y + 0.14 * s * ey) col *= mix(vec3(0.7, 0.62, 0.54), vec3(1.0), smoothstep(0.1, 0.2, fract(p.y / (0.038 * s * ey))));
   }
   // the skirt of the tunic / kilt down to the knees, swinging with the stride
   vec2 kn = (KnL + KnR) * 0.5;

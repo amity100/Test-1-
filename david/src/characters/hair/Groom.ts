@@ -317,6 +317,15 @@ export async function createGroom(human: HumanModel, spec: GroomStyleSpec, opts:
     sim = new HairSim(set.simGuides, K, set.G, set.simStiff, S.sdf, toRest, fromRest);
     U.uSim.value = sim.tex;
     U.uSimOn.value = 1;
+    // finishing pass: hair hanging below the chin (long beards, hair over the shoulders and back) lies on the body —
+    // its style memory follows the upper chest, not the head (a head turn no longer fans a long beard sideways)
+    const bodyBone = (human.bones as Record<string, THREE.Object3D>).spine01 ?? (human.bones as Record<string, THREE.Object3D>).neck01;
+    if (bodyBone) {
+      const name = (human.bones as Record<string, THREE.Object3D>).spine01 ? 'spine01' : 'neck01';
+      const boneRest = new THREE.Matrix4().compose(human.rig.restWorldPosition(name), human.rig.restWorldQuaternion(name), new THREE.Vector3(1, 1, 1));
+      const chinY = S.chin.y;
+      sim.setBody(bodyBone, boneRest, (p) => 0.9 * ss(chinY - 0.015, chinY - 0.11, p.y));
+    }
   } else {
     const t = new THREE.DataTexture(new Float32Array(4), 1, 1, THREE.RGBAFormat, THREE.FloatType);
     t.needsUpdate = true;

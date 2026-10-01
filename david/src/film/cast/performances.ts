@@ -72,6 +72,13 @@ export const actionTime = blockingActionTime;
 export const TEAR_BEATS = TEAR_ACTION;
 /** MeilTear.progress once the corner is free: every tear-line vertex released (thresholds reach ~1.11) */
 const TORN = 1.2;
+/**
+ * G5: Saul on his knee behind the corner — his root `back` m behind the grip (along his facing) and `side` m to its
+ * left, so the right arm is stretched down-forward to it (measured on the performance)
+ */
+export const TEAR_KNEEL = { back: 0.74, side: 0.2 };
+/** G5: the heading of Samuel's walk away once the corner is seized (ESE, game yaw: forward = (sin, 0, cos)) */
+const SAM_AWAY_YAW = 1.15;
 
 /** arm holds (proxy Euler, character axes; x < 0 swings forward; L: +z = outward, R: -z = outward) */
 export const POSES = {
@@ -99,6 +106,9 @@ export class FaceDriver {
   private lipsCur: Record<string, number> = {};
   /** jaw follow rate (1/s): 18 is a speaking mouth; lower for slow moves */
   jawRate = 18;
+  /** other face units (brows, lids …), eased at the expression rate */
+  readonly units: Record<string, number> = {};
+  private unitsCur: Record<string, number> = {};
   constructor(readonly actor: FilmActor, readonly rate = 3) {}
   set(t: Partial<Record<Expression, number>>) {
     for (const k in this.target) this.target[k as Expression] = 0;
@@ -106,6 +116,7 @@ export class FaceDriver {
   }
   snap() {
     Object.assign(this.cur, this.target);
+    Object.assign(this.unitsCur, this.units);
     this.jaw = this.jawTarget;
   }
   update(dt: number) {
@@ -126,10 +137,18 @@ export class FaceDriver {
       if (Math.abs(c) < 1e-3) delete rig.faceUnits[u];
       else rig.faceUnits[u] = c;
     }
+    for (const u of new Set([...Object.keys(this.units), ...Object.keys(this.unitsCur)])) {
+      if (u in this.lips) continue;
+      const c = (this.unitsCur[u] ?? 0) + ((this.units[u] ?? 0) - (this.unitsCur[u] ?? 0)) * k;
+      this.unitsCur[u] = c;
+      if (Math.abs(c) < 1e-3) delete rig.faceUnits[u];
+      else rig.faceUnits[u] = c;
+    }
   }
-  /** clear the mouth shapes */
+  /** clear the mouth shapes (and the extra units) */
   quiet() {
     for (const k in this.lips) this.lips[k] = 0;
+    for (const k in this.units) this.units[k] = 0;
     this.jawTarget = 0;
   }
 }
@@ -226,9 +245,14 @@ export class GilgalPerformance {
   private readonly fist = new THREE.Vector3();
   private readonly _f = new THREE.Vector3();
   private readonly _r = new THREE.Vector3();
+  private readonly _p = new THREE.Vector3();
+  private readonly _th = new THREE.Vector3();
+  /** Saul's mark on his knee in the tear (fixed once he is down: the knee never slides) */
+  private readonly kneelAt = new THREE.Vector3();
+  private kneelSet = false;
   private lungeLegs = false;
   private samPhase = 0;
-  private blinked = false;
+  private blinks = 0;
   /** wind (world m/s) passed to the actors' hair / cloth: a steady westerly with slow gusts (never a jump) */
   readonly wind = new THREE.Vector3(1.4, 0, 0.3);
   private readonly windBase = new THREE.Vector3(1.4, 0, 0.3);
@@ -260,8 +284,6 @@ export class GilgalPerformance {
       samuel.faceLightRig.side = 0.85; // a 3/4 key on the old face: the lines of age need modelling, a flat fill erases them
       samuel.faceLightRig.up = 0.35;
     }
-    samuel.human.rig.faceBias.LeftUpperLidClosed = 0.12; // heavy, tired lids (15:11 he cried all night) — the eyes stay alive
-    samuel.human.rig.faceBias.RightUpperLidClosed = 0.12;
     if (samuel.tear) samuel.tear.onSnap = (p) => this.onThreadSnap?.(p);
     if (cast.armourBearer) {
       cast.armourBearer.ground = ground;
@@ -308,6 +330,14 @@ export class GilgalPerformance {
       if (!a) continue;
       a.headingSnap = true;
       a.body.drop = a.body.lean = a.body.twist = a.body.side = 0;
+      a.kneel.w = 0;
+      a.kneel.sit = 0;
+      for (const sd of ['L', 'R'] as const) {
+        a.reach[sd].palm = null;
+        a.reach[sd].thumb = null;
+        a.reach[sd].orient = 0;
+      }
+      a.lookLimits.up = 0.45;
       a.breath.amp = 0.25;
       a.headRoll = 0;
       a.mocap.lookWeight = 1;
@@ -322,8 +352,9 @@ export class GilgalPerformance {
     saul.upright.R.axis.set(0, 1, 0);
     this.grabbed = false;
     this.freed = false;
+    this.kneelSet = false;
     this.samPhase = 0;
-    this.blinked = false;
+    this.blinks = 0;
     saul.reach.R.weight = 0;
     saul.reach.R.target = null;
     if (this.lungeLegs) saul.mocap.stopLayer('lunge', 0.001);
@@ -378,6 +409,15 @@ export class GilgalPerformance {
     this.samFace.set({});
     this.saulFace.quiet();
     this.samFace.quiet();
+    // Samuel's lids: a little heavy and tired (15:11 he cried all night), but OPEN — in the verdict close-up wide open
+    // on the king (the director's notes v5: at 640x360 the old lids + the squint of 'determined' read as closed eyes)
+    const fb = samuel.human.rig.faceBias;
+    const open = shot === 'verdict' || shot === 'saulAlone';
+    fb.LeftUpperLidClosed = fb.RightUpperLidClosed = open ? 0 : 0.08;
+    fb.LeftUpperLidOpen = fb.RightUpperLidOpen = open ? 0.3 : 0.08;
+    fb.LeftLowerLidUp = fb.RightLowerLidUp = open ? 0.06 : 0.12;
+    samuel.armPose.R.pose = null;
+    samuel.armPose.R.weight = 0;
   }
 
   /** per frame: shot-local time t (s, real time, like CameraRig; for 'tear:insert' the base shot's time) and dt */
@@ -509,7 +549,7 @@ export class GilgalPerformance {
     saul.faceFill = FACE_FILL[shot][0];
     samuel.faceFill = FACE_FILL[shot][1];
     // ---------------------------------------------------------------- SAMUEL
-    if (shot === 'tear') this.tearSamuel(at);
+    if (shot === 'tear') this.tearSamuel(at, adt);
     else if (shot === 'saulAlone' || shot === 'rise') {
       samuel.place(m.pos, m.yaw);
       if (m.walk > 0 && samuel.mocap.current()?.name !== 'walk_slow') {
@@ -545,8 +585,10 @@ export class GilgalPerformance {
     // ---------------------------------------------------------------- ARMOUR-BEARER one step behind the king
     if (armourBearer) {
       // one step behind the king — in the tear he stays where the king stood (he does not slide after the lunge)
+      // (cut4 v6: in G5a/G5b he stays well back west, x < 7, clear of the two-shot)
       const anchor = shot === 'tear' ? saulAt('tear', 0) : s;
-      const back = V3(-Math.sin(anchor.yaw) * 1.6, 0, -Math.cos(anchor.yaw) * 1.6).add(V3(Math.cos(anchor.yaw) * 0.7, 0, -Math.sin(anchor.yaw) * 0.7));
+      const bd = shot === 'tear' ? 3.4 : 1.6;
+      const back = V3(-Math.sin(anchor.yaw) * bd, 0, -Math.cos(anchor.yaw) * bd).add(V3(Math.cos(anchor.yaw) * 0.7, 0, -Math.sin(anchor.yaw) * 0.7));
       armourBearer.place(anchor.pos.clone().add(back), anchor.yaw);
       const a = armyAt(shot, t);
       const want = a.walk > 0.2 ? 'walk' : 'idle_n1';
@@ -579,49 +621,54 @@ export class GilgalPerformance {
     const right = this._r.set(-Math.cos(yaw), 0, Math.sin(yaw));
     if (tear) tear.cornerWorld(this.corner);
     else samuel.root.getWorldPosition(this.corner).setY(this.corner.y + 0.5);
-    // ---- placement: the blocking's path, pulled onto a lunge distance behind the corner as the reach closes
-    const lungeReach = 0.74; // root -> grip, horizontally, at full lunge (2 m man diving low, arm down-forward)
-    const tx = this.corner.x - fwd.x * lungeReach - right.x * 0.22;
-    const tz = this.corner.z - fwd.z * lungeReach - right.z * 0.22;
-    let x: number, z: number;
-    if (!this.grabbed) {
-      const k = ss(A.lunge - 0.1, A.grip - 0.05, at);
-      x = THREE.MathUtils.lerp(s.pos.x, tx, k);
-      z = THREE.MathUtils.lerp(s.pos.z, tz, k);
-    } else {
-      // after the grip he plants and pulls back (his weight against the old man's step), then recoils as it gives
-      const pull = 0.12 * ss(A.pull - 0.05, A.free, at) + 0.08 * ss(A.free, A.free + 0.3, at);
-      x = this.grabAt.x - fwd.x * (lungeReach + pull) - right.x * 0.22;
-      z = this.grabAt.z - fwd.z * (lungeReach + pull) - right.z * 0.22;
+    // ---- placement: the blocking's path, then onto his knee behind the corner (TEAR_KNEEL: root -> grip, his arm
+    // stretched down-forward); the knee does not slide: the mark is fixed once he is down
+    const kneel = ss(A.lunge + 0.02, A.grip - 0.08, at);
+    if (!this.kneelSet) {
+      const tx = this.corner.x - fwd.x * TEAR_KNEEL.back - right.x * TEAR_KNEEL.side;
+      const tz = this.corner.z - fwd.z * TEAR_KNEEL.back - right.z * TEAR_KNEEL.side;
+      const k = ss(A.lunge - 0.15, A.grip - 0.1, at);
+      this.kneelAt.set(THREE.MathUtils.lerp(s.pos.x, tx, k), 0, THREE.MathUtils.lerp(s.pos.z, tz, k));
+      if (at >= A.grip - 0.1) this.kneelSet = true;
     }
-    saul.place(this.tmp.set(x, 0, z), yaw);
-    // ---- clips: pleading stand -> the step after him -> the lunge (stand + frozen stride) -> hold
+    saul.place(this.kneelAt, yaw);
+    // ---- clips: pleading stand -> the step after him -> the lunge (a long stride, right foot forward) -> on his knee
     const cur = saul.mocap.current()?.name;
     const goFrom = A.turn + 0.25;
     if (at >= goFrom && at < A.lunge + 0.1 && cur !== 'walk') saul.mocap.play('walk', { fade: 0.2, sync: true, time: 0.25 });
     if (cur === 'walk') saul.mocap.matchSpeed('walk', THREE.MathUtils.clamp(Math.hypot(saul.velocity.x, saul.velocity.z), 0.9, 2.0));
     if (at >= A.lunge + 0.1 && cur !== 'idle_king') saul.mocap.play('idle_king', { fade: 0.3, time: 0.5 });
     if (at >= A.lunge - 0.08 && !this.lungeLegs) {
-      // the legs: the walk frozen in a long stride, RIGHT foot forward — with the pelvis drop, a lunge onto the reach
-      saul.mocap.playLayer('lunge', 'walk', { mask: 'legs', time: 0.74, speed: 0, fade: 0.25 });
+      // the legs: the walk frozen in its long stride, RIGHT foot forward; the kneel takes them down from there
+      saul.mocap.playLayer('lunge', 'walk', { mask: 'legs', time: 0.74, speed: 0, fade: 0.2 });
       this.lungeLegs = true;
     }
-    // ---- body: low in the lunge, then up and back as he pulls; the recoil when the wool gives
-    const lunge = ss(A.lunge, A.grip + 0.02, at) * (1 - 0.55 * ss(A.pull - 0.1, A.free, at));
-    const recoil = ss(A.free - 0.05, A.free + 0.2, at) * (1 - 0.5 * ss(A.free + 0.2, A.end, at));
-    // a dive at the hem: the pelvis low, the chest well forward, the head kept low behind the old man's hip (the
-    // silhouettes stay apart: the reaching arm is the only link between them)
-    saul.body.drop = 0.5 * lunge;
-    saul.body.lean = 0.78 * lunge - 0.16 * ss(A.pull, A.free, at) - 0.1 * recoil;
-    saul.body.twist = 0.2 * lunge;
+    // ---- body: down on his LEFT knee (the right foot planted ahead) as the hand reaches the corner; leaning far
+    // forward into the reach, then back and upright as he pulls; when the wool gives he sinks back onto his heel
+    const pull = ss(A.pull - 0.06, A.rip + 0.08, at);
+    const recoil = ss(A.free - 0.04, A.free + 0.14, at);
+    saul.kneel.side = 'L';
+    saul.kneel.fwd = 0.46;
+    saul.kneel.w = kneel;
+    saul.kneel.sit = 0.55 * recoil;
+    saul.body.drop = 0.12 * ss(A.lunge - 0.1, A.lunge + 0.25, at) * (1 - kneel);
+    const reachLean = ss(A.lunge - 0.05, A.grip - 0.05, at);
+    saul.body.lean = 0.62 * reachLean - 0.34 * pull - 0.2 * recoil;
+    saul.body.twist = 0.24 * reachLean - 0.08 * pull;
+    saul.body.side = 0.04 * reachLean;
     saul.headingRate = 12;
-    // ---- arms: the right hand to the corner (IK), the helmet stays under the left arm
+    // ---- arms: the right hand to the corner (IK, the palm turned toward the cloth: the knuckles to the south / the
+    // lens side), the helmet stays under the left arm
     saul.armPose.R.pose = null;
     saul.armPose.R.weight = 0;
     saul.upright.R.weight = 0;
+    const palm = this.tmp2.copy(right).multiplyScalar(-1).addScaledVector(fwd, 0.25).add(this._p.set(0, -0.35, 0)).normalize();
+    saul.reach.R.palm = palm;
+    saul.reach.R.thumb = this._th.set(0, 1, 0).addScaledVector(fwd, 0.55).normalize();
+    saul.reach.R.orient = ss(A.lunge, A.grip - 0.1, at);
     if (!this.grabbed) {
       saul.reach.R.target = this.tearTarget.copy(this.corner);
-      saul.reach.R.weight = ss(A.lunge - 0.1, A.grip - 0.04, at);
+      saul.reach.R.weight = ss(A.lunge - 0.1, A.grip - 0.06, at);
       if (at >= A.lunge - 0.1) saul.human.rig.setFingers('R', 'open');
       if (at >= A.grip && tear) {
         this.grabbed = true;
@@ -631,34 +678,42 @@ export class GilgalPerformance {
         this.grabAt.copy(this.corner);
       }
     } else {
-      // the fist pulls back toward him and up (the wool stretches, then gives), and swings back when it is free
-      // (the insert G5b is framed on the fist: the pull takes the torn corner well away from the hem, the threads
-      // stretching between them, then the recoil when it comes free)
-      const p = ss(A.grip + 0.05, A.free, at);
-      this.tearTarget.copy(this.grabAt).addScaledVector(fwd, -0.19 * p - 0.14 * recoil).add(this.tmp2.set(0, 0.18 * p + 0.1 * recoil, 0));
+      // the fist holds and hauls the corner UP and back toward him (the arm straight; the wool goes taut on a diagonal
+      // from the fist down to the old man's hem — and the fist rises into the middle of the low insert frame), then
+      // snaps back toward his chest when it comes free
+      this.tearTarget.copy(this.grabAt)
+        .addScaledVector(fwd, -0.12 * pull - 0.16 * recoil)
+        .add(this._p.set(0, 0.27 * pull + 0.16 * recoil, 0))
+        .addScaledVector(right, 0.04 * recoil);
       saul.reach.R.target = this.tearTarget;
       saul.reach.R.weight = 1;
     }
     // the rip runs rip -> free; at `free` the last threads of the weave let go (MeilTear releases a tear-line vertex
-    // only at progress >= its threshold + 0.12, up to ~1.11: at 1.0 the innermost ones stayed pinned to Samuel's skirt
-    // and stretched the piece from the fist to his hem through G6/G7)
+    // only at progress >= its threshold + 0.12, up to ~1.11: TORN = 1.2 lets go of every one)
     if (tear) tear.progress = ss(A.rip, A.free, at) + (TORN - 1) * ss(A.free - 0.04, A.free + 0.04, at);
-    // ---- eyes and face: on Samuel; down to the corner as he lunges; UP to Samuel's face as he holds — their eyes
-    // meet while the wool gives
+    // ---- eyes: on the old man; down to the corner as he lunges; then UP to him as he holds (his face in profile for
+    // the insert): pleading, never violent — the brows up, the mouth open (visual-bible 3.3)
     if (at < A.lunge - 0.1) saul.mocap.lookAt = this.eyeOf(samuel, this.saulTarget);
-    else if (at < A.grip + 0.12) saul.mocap.lookAt = this.corner;
-    else saul.mocap.lookAt = this.eyeOf(samuel, this.saulTarget);
+    else if (at < A.grip - 0.02) saul.mocap.lookAt = this.corner;
+    else saul.mocap.lookAt = samuel.headWorld(this.saulTarget);
     saul.lookRate = 9;
+    saul.lookLimits.up = 0.6;
     const reach = ss(A.lunge - 0.2, A.grip, at);
-    const gone = ss(A.free - 0.1, A.free + 0.15, at);
+    const gone = ss(A.free - 0.06, A.free + 0.12, at);
     this.saulFace.set({
-      sad: 0.5 * (1 - reach) + 0.3 * gone, fear: 0.35 + 0.2 * reach - 0.1 * gone, effort: 0.6 * reach * (1 - gone),
-      awe: 0.45 * gone, pain: 0.15 * gone,
+      sad: 0.45 + 0.2 * reach * (1 - gone) + 0.2 * gone, fear: 0.45 + 0.4 * reach - 0.25 * gone,
+      awe: 0.5 * gone, pain: 0.1 * pull * (1 - gone),
     });
-    // a pleading word before he moves; a gasp as he lunges; the mouth hangs open when it tears
-    this.saulFace.jawTarget = speechJaw(at, A.turn + 0.2, 3, [], 3) * 1.2 + 0.2 * ss(A.lunge, A.grip, at) * (1 - ss(A.grip + 0.15, A.pull, at)) + 0.16 * gone;
-    saul.breath.amp = 0.8;
-    saul.breath.rate = 0.6;
+    // the brows climb (anguish, never the frown of violence)
+    this.saulFace.units.LeftInnerBrowUp = this.saulFace.units.RightInnerBrowUp = 0.35 * reach + 0.15 * gone;
+    this.saulFace.units.LeftOuterBrowUp = this.saulFace.units.RightOuterBrowUp = 0.15 * reach;
+    // a pleading word before he moves; the mouth opens with the lunge (a cry: "don't go") and hangs open as it tears —
+    // wide enough to read through the beard in profile
+    this.saulFace.jawTarget = speechJaw(at, A.turn + 0.2, 3, [], 3) * 1.2 + 0.38 * reach * (1 - 0.3 * gone) + 0.1 * gone;
+    this.saulFace.lips.lowerLipDown = 0.4 * reach;
+    this.saulFace.lips.UpperLipUp = 0.16 * reach;
+    saul.breath.amp = 0.9;
+    saul.breath.rate = 0.7;
   }
 
   /**
@@ -666,32 +721,37 @@ export class GilgalPerformance {
    * motion carries him); the seized corner jerks him, he leans against it, the wool tears, he comes free, stops, and
    * turns his head back over his shoulder to the king.
    */
-  private tearSamuel(at: number) {
+  private tearSamuel(at: number, adt: number) {
     const { saul, samuel } = this.cast;
     const A = TEAR_ACTION;
     const mp = samuel.mocap;
     // the ground under the root-motion walk
     samuel.root.position.y = this.ground(samuel.root.position.x, samuel.root.position.z);
     if (this.samPhase === 0 && at >= A.turn) {
+      // the old man's turn-step to his left into a walk away (the capture's root motion carries him)
       mp.play('turn_go_L', { fade: 0.2 });
       this.samPhase = 1;
     }
-    if (this.samPhase === 1) {
-      // held: the step falters from the grip on (the corner holds him back), then hangs until the wool gives
-      const held = ss(A.grip, A.grip + 0.15, at) * (1 - ss(A.free, A.free + 0.12, at));
-      mp.setSpeed('turn_go_L', 1 - 0.8 * held);
-      if (at >= A.free) {
-        mp.play('walk_slow', { fade: 0.35, time: 0.55 });
-        mp.matchSpeed('walk_slow', 0.55);
-        this.samPhase = 2;
+    if (this.samPhase === 1 && at >= A.grip - 0.2) {
+      // the turn's walk-away runs on into a slow stride (phase-matched), so his legs keep striding in the insert
+      mp.play('walk_slow', { fade: 0.3, sync: true });
+      this.samPhase = 2;
+    }
+    if (this.samPhase === 2) {
+      // checked by the grip (the corner holds him back), slowest while the wool is taut, a stride again once it gives
+      const held = ss(A.grip - 0.04, A.grip + 0.14, at) * (1 - ss(A.free, A.free + 0.12, at));
+      mp.matchSpeed('walk_slow', 0.66 * (1 - 0.5 * held));
+      // the turn-step is cut short by the stride: finish the turn onto his way out (ESE along the road, away from the
+      // king; cut4's insert sees him stride out of frame right)
+      const e = Math.atan2(Math.sin(SAM_AWAY_YAW - samuel.root.rotation.y), Math.cos(SAM_AWAY_YAW - samuel.root.rotation.y));
+      samuel.root.rotation.y += e * (1 - Math.exp(-5 * adt));
+      // one more step after the rip, then he stops (just after the insert)
+      if (at >= A.free + 0.42) {
+        mp.play('listen_sad', { fade: 0.45, time: 0.2 });
+        this.samPhase = 3;
       }
     }
-    if (this.samPhase === 2 && at >= A.free + 0.35) {
-      // he stops
-      mp.play('listen_sad', { fade: 0.45, time: 0.2 });
-      this.samPhase = 3;
-    }
-    // eyes: on Saul, then ahead (east, his way), then back over the shoulder once free
+    // eyes: on Saul, then ahead (east, his way); a half-glance back as the robe holds him; back to Saul once free
     if (at < A.turn + 0.1) mp.lookAt = this.eyeOf(saul, this.samTarget);
     else if (at < A.free + 0.05) {
       const fwd = this._f.set(Math.sin(samuel.yaw), 0, Math.cos(samuel.yaw));
@@ -700,12 +760,14 @@ export class GilgalPerformance {
     } else mp.lookAt = this.eyeOf(saul, this.samTarget);
     samuel.lookLimits.yaw = 1.45;
     samuel.lookRate = at < A.free ? 4 : 2.5;
-    // the jerk of the held robe (a hitch back in the chest), then the lean against it; the chest turns back to him
-    const jerk = ss(A.grip, A.grip + 0.1, at) * (1 - ss(A.grip + 0.15, A.pull + 0.1, at));
-    const against = ss(A.grip + 0.1, A.pull + 0.1, at) * (1 - ss(A.free, A.free + 0.2, at));
-    samuel.body.lean = -0.12 * jerk + 0.1 * against;
-    samuel.body.twist = -0.4 * ss(A.free, A.end + 0.2, at);
-    this.samFace.set({ sad: 0.5 + 0.15 * ss(A.grip, A.free, at), determined: 0.35, pain: 0.2 * jerk + 0.1 * against });
+    // the jerk of the held robe (a hitch back in the chest), the lean forward against it; when the wool gives, a
+    // stumble forward; the chest turns back toward the king at the end
+    const jerk = ss(A.grip, A.grip + 0.08, at) * (1 - ss(A.grip + 0.12, A.pull + 0.05, at));
+    const against = ss(A.grip + 0.08, A.pull + 0.12, at) * (1 - ss(A.free, A.free + 0.12, at));
+    const stumble = ss(A.free, A.free + 0.1, at) * (1 - ss(A.free + 0.14, A.free + 0.42, at));
+    samuel.body.lean = -0.13 * jerk + 0.12 * against + 0.14 * stumble;
+    samuel.body.twist = -0.35 * ss(A.free + 0.1, A.end + 0.3, at);
+    this.samFace.set({ sad: 0.5 + 0.15 * ss(A.grip, A.free, at), pain: 0.2 * jerk + 0.12 * against });
     this.samFace.jawTarget = 0;
   }
 
@@ -723,7 +785,10 @@ export class GilgalPerformance {
     samuel.body.twist = -0.3 * (1 - turned) * ss(0, V.turnBack + 0.2, t);
     samuel.lookLimits.yaw = 1.45;
     samuel.lookRate = 3.2;
-    const eyes = this.eyeOf(saul, this.samTarget);
+    // the eyes OPEN and locked on Saul's: they shift between his two eyes every ~0.7 s (a listener's saccades, on top
+    // of the rig's micro-saccades), the head follows them only a little
+    const which = Math.floor((t + 0.35) / 0.72) % 2 === 0 ? saul.human.sockets.eyeR : saul.human.sockets.eyeL;
+    const eyes = this.eyeOf(saul, this.samTarget).lerp(which.getWorldPosition(this.tmp), 0.85);
     // small nods on the stressed syllables (the last of each word) — the look target dips a few centimetres
     let nod = 0;
     for (const w of VERDICT_WORDS) {
@@ -732,11 +797,25 @@ export class GilgalPerformance {
     }
     eyes.y -= 0.035 * Math.min(1, nod);
     samuel.mocap.lookAt = eyes;
-    samuel.headRoll = -0.06 * ss(V.turnBack + 0.3, V.speech, t);
-    if (!this.blinked && t >= V.speech - 0.28) {
+    samuel.headRoll = -0.07 * ss(V.turnBack + 0.3, V.speech, t) + 0.025 * Math.sin(t * 1.3);
+    if (this.blinks === 0 && t >= V.speech - 0.28) {
       samuel.human.rig.blink();
-      this.blinked = true;
+      this.blinks = 1;
     }
+    if (this.blinks === 1 && t >= V.speechEnd + 0.12) {
+      samuel.human.rig.blink();
+      this.blinks = 2;
+    }
+    // a small gesture of the right hand on the first words ("קָרַע ה׳"): the forearm lifts, the open hand turned
+    // down, then it settles back as the verdict goes on
+    const gest = ss(V.speech - 0.15, V.speech + 0.35, t) * (1 - ss(V.speech + 1.3, V.speech + 2.2, t));
+    samuel.armPose.R.pose = VERDICT_HAND_R;
+    samuel.armPose.R.weight = 0.75 * gest;
+    if (gest > 0.05) samuel.human.rig.setFingers('R', 'relaxed');
+    // grave, the brows a little drawn up (grief) and down (judgement) — never the squint of 'determined'
+    this.samFace.units.LeftInnerBrowUp = this.samFace.units.RightInnerBrowUp = 0.22;
+    this.samFace.units.LeftBrowDown = this.samFace.units.RightBrowDown = 0.1;
+    this.samFace.units.NasolabialDeepener = 0.15;
     // speech
     const vz = speechViseme(t, VERDICT_WORDS, VERDICT_VOWELS, 1);
     this.samFace.jawTarget = vz.jaw;
@@ -747,7 +826,7 @@ export class GilgalPerformance {
     this.samFace.lips.UpperLipUp = vz.jaw * 0.12;
     this.samFace.jawRate = 26;
     const speaking = ss(V.speech - 0.2, V.speech, t) * (1 - ss(V.speechEnd, V.speechEnd + 0.3, t));
-    this.samFace.set({ sad: 0.35 + 0.1 * (1 - speaking), determined: 0.5 * speaking + 0.2, anger: 0.08 * speaking });
+    this.samFace.set({ sad: 0.16 + 0.06 * (1 - speaking), anger: 0.05 * speaking });
     samuel.breath.amp = 0.35;
   }
 
@@ -774,6 +853,15 @@ export interface RamahMark {
   seated?: boolean;
 }
 
+/** G6: Samuel's small gesture on the first words of the verdict — the forearm lifted, the open hand turned down */
+const VERDICT_HAND_R: ArmPose = { ua: [-0.28, 0.06, -0.1], fa: [-1.05, 0.55, 0], hd: [0.25, 0, -0.1] };
+
+/** an elder's hand on his staff: the elbow bent, the hand forward at hip height (proxy Euler; L mirrors R) */
+const STAFF_HOLD: Record<'L' | 'R', ArmPose> = {
+  R: { ua: [-0.14, -0.08, -0.14], fa: [-1.15, 0, 0], hd: [0.1, 0, 0.05] },
+  L: { ua: [-0.14, 0.08, 0.14], fa: [-1.15, 0, 0], hd: [0.1, 0, -0.05] },
+};
+
 /** the demanding elder's raised arm (proxy Euler, over the capture) */
 const DEMAND_R: ArmPose = { ua: [-2.45, 0.2, -0.38], fa: [-0.55, 0.1, 0], hd: [0.35, 0, 0.1] };
 
@@ -783,6 +871,12 @@ const RAMAH_BEATS = (() => {
   return { rise: b.rise ?? 0.5, verse: b.verse ?? 1.0, turnAway: b.turnAway ?? 2.6 };
 })();
 
+/**
+ * The parts of the elders in P5 (cut4's marks, landSites: 0 the speaker on the left bench · 1 the right bench · 2-3 the
+ * central pair of the arc · 4-5 the arc · 6-7 the near pair the lens dollies past · 8-10 the outer ring)
+ */
+export type ElderRole = 'speaker' | 'seated' | 'pair' | 'arc' | 'near' | 'outer';
+
 export class RamahPerformance {
   private faces: FaceDriver[] = [];
   private samFace: FaceDriver;
@@ -791,15 +885,25 @@ export class RamahPerformance {
   private readonly leadEyes = new THREE.Vector3();
   private readonly away = new THREE.Vector3();
   private readonly tmp = new THREE.Vector3();
+  private readonly tmp2 = new THREE.Vector3();
+  /** each elder's own look target (never shared) */
+  private readonly looks: THREE.Vector3[] = [];
   readonly wind = new THREE.Vector3(0.8, 0, -0.2);
   /** beats (seconds of the shot): the elder rises, the verse, Samuel turns his face away */
   readonly beats: { rise: number; verse: number; turnAway: number };
+  /** each elder's part (see ElderRole) and the man he turns to (pairs), -1 = none */
+  readonly roles: ElderRole[] = [];
+  readonly partner: number[] = [];
   private lead = -1;
   private leadPhase = 0;
   private samPhase = 0;
   private lastT = -1;
 
-  constructor(readonly samuel: FilmActor, readonly elders: FilmActor[], readonly samuelMark: RamahMark, readonly elderMarks: RamahMark[], readonly ground: (x: number, z: number) => number = () => 0, beats: Partial<{ rise: number; verse: number; turnAway: number }> = {}) {
+  /**
+   * @param roles optional canonical mark index of each elder (cut4's landSites order, e.g. FilmStage's plan.idx); without
+   *              it the parts are read from the marks' places before the gate (seated / distance / side)
+   */
+  constructor(readonly samuel: FilmActor, readonly elders: FilmActor[], readonly samuelMark: RamahMark, readonly elderMarks: RamahMark[], readonly ground: (x: number, z: number) => number = () => 0, beats: Partial<{ rise: number; verse: number; turnAway: number }> = {}, roles?: number[]) {
     this.beats = { ...RAMAH_BEATS, ...beats };
     samuel.ground = ground;
     samuel.enableFaceLight(0xffe2c4);
@@ -809,18 +913,12 @@ export class RamahPerformance {
     samuel.place(samuelMark.pos, samuelMark.yaw);
     samuel.root.updateMatrixWorld(true);
     samuel.eyesWorld(this.samEyes);
-    samuel.human.rig.faceBias.LeftUpperLidClosed = 0.1;
-    samuel.human.rig.faceBias.RightUpperLidClosed = 0.1;
+    // tired but open eyes (the elders' demand is answered with grief, 8:6)
+    const fb = samuel.human.rig.faceBias;
+    fb.LeftUpperLidClosed = fb.RightUpperLidClosed = 0.06;
+    fb.LeftUpperLidOpen = fb.RightUpperLidOpen = 0.1;
     this.samFace = new FaceDriver(samuel, 2);
-    // the demanding elder: the seated man nearest the line to Samuel (he rises and demands); else the first
-    let best = -1, bd = 1e9;
-    elders.forEach((_, i) => {
-      const mk = elderMarks[i % elderMarks.length];
-      if (!mk.seated) return;
-      const d = mk.pos.distanceTo(samuelMark.pos);
-      if (d < bd) { bd = d; best = i; }
-    });
-    this.lead = best >= 0 ? best : 0;
+    this.assignRoles(roles);
     elders.forEach((e, i) => {
       e.ground = ground;
       const mk = elderMarks[i % elderMarks.length];
@@ -829,8 +927,58 @@ export class RamahPerformance {
       e.headingSnap = true;
       const f = new FaceDriver(e, 2.5);
       this.faces.push(f);
+      this.looks.push(new THREE.Vector3());
     });
     this.reset();
+  }
+
+  /** the parts: from the canonical indices when given, else from the marks (seated nearest Samuel = the speaker) */
+  private assignRoles(roles?: number[]) {
+    const { elders, elderMarks, samuelMark } = this;
+    const n = elders.length;
+    const mk = (i: number) => elderMarks[i % elderMarks.length];
+    this.roles.length = 0;
+    this.partner.length = 0;
+    for (let i = 0; i < n; i++) {
+      this.roles.push('outer');
+      this.partner.push(-1);
+    }
+    if (roles && roles.length >= n) {
+      const at = (r: number) => roles.indexOf(r);
+      for (let i = 0; i < n; i++) {
+        const r = roles[i];
+        this.roles[i] = r === 0 ? 'speaker' : r === 1 ? 'seated' : r === 2 || r === 3 ? 'pair' : r === 4 || r === 5 ? 'arc' : r === 6 || r === 7 ? 'near' : 'outer';
+        const pr = r === 2 ? 3 : r === 3 ? 2 : r === 6 ? 7 : r === 7 ? 6 : -1;
+        if (pr >= 0) this.partner[i] = at(pr);
+        if (this.partner[i] < 0 && (this.roles[i] === 'pair' || this.roles[i] === 'near')) this.roles[i] = this.roles[i] === 'pair' ? 'arc' : 'near';
+      }
+      this.lead = at(0);
+    }
+    if (this.lead < 0) {
+      // read the parts from the places: local frame of Samuel's mark (z out of the gate toward the lens, x along it)
+      const y = samuelMark.yaw, fx = Math.sin(y), fz = Math.cos(y);
+      const loc = elders.map((_, i) => {
+        const dx = mk(i).pos.x - samuelMark.pos.x, dz = mk(i).pos.z - samuelMark.pos.z;
+        return { x: dx * fz - dz * fx, z: dx * fx + dz * fz };
+      });
+      const seated = elders.map((_, i) => i).filter((i) => mk(i).seated).sort((a, b) => mk(a).pos.distanceTo(samuelMark.pos) - mk(b).pos.distanceTo(samuelMark.pos));
+      seated.forEach((i, k) => (this.roles[i] = k === 0 ? 'speaker' : 'seated'));
+      this.lead = seated.length ? seated[0] : 0;
+      if (!seated.length) this.roles[0] = 'speaker';
+      const standing = elders.map((_, i) => i).filter((i) => this.roles[i] !== 'speaker' && !mk(i).seated);
+      for (const i of standing) this.roles[i] = loc[i].z < 5.2 ? 'arc' : Math.abs(loc[i].x) < 1.9 ? 'near' : 'outer';
+      // the central man on each side of the arc / of the near group turn to each other
+      for (const g of ['arc', 'near'] as const) {
+        const grp = standing.filter((i) => this.roles[i] === g);
+        const l = grp.filter((i) => loc[i].x < 0).sort((a, b) => Math.abs(loc[a].x) - Math.abs(loc[b].x))[0];
+        const r = grp.filter((i) => loc[i].x >= 0).sort((a, b) => Math.abs(loc[a].x) - Math.abs(loc[b].x))[0];
+        if (l !== undefined && r !== undefined) {
+          this.partner[l] = r;
+          this.partner[r] = l;
+          if (g === 'arc') this.roles[l] = this.roles[r] = 'pair';
+        }
+      }
+    }
   }
 
   /** back to the first frame of the shot (every clip, pose and face) */
@@ -841,10 +989,20 @@ export class RamahPerformance {
     this.samPhase = 0;
     this.leadPhase = 0;
     // heads of families, dignified (bible 3.7), and angry: talk, gesture, lean in, arms akimbo — never frozen
-    const standing = ['talk_excited', 'listen_angry', 'idle_angry', 'talk_gesture', 'idle_n1'];
+    const arcClips = ['talk_excited', 'idle_angry', 'talk_gesture', 'listen_angry'];
     elders.forEach((e, i) => {
       const mk = elderMarks[i % elderMarks.length];
+      const role = this.roles[i];
       e.place(mk.pos, mk.yaw);
+      e.body.twist = e.body.lean = 0;
+      e.headRoll = 0;
+      e.breath.amp = 0.45;
+      e.breath.rate = 0.32 + 0.04 * (i % 3);
+      e.upright.L.weight = e.upright.R.weight = 0;
+      if (i !== this.lead) for (const sd of ['L', 'R'] as const) {
+        e.armPose[sd].pose = null;
+        e.armPose[sd].weight = 0;
+      }
       if (i === this.lead) {
         // seated on the bench (the capture's own seated pose; the pelvis held onto the bench), about to rise
         e.sit(mk.seated ? mk.pos.y - this.ground(mk.pos.x, mk.pos.z) : 0);
@@ -854,16 +1012,32 @@ export class RamahPerformance {
         e.cancelHeading = true;
       } else {
         if (mk.seated) e.sit(mk.pos.y - this.ground(mk.pos.x, mk.pos.z));
-        const clip = mk.seated ? (i % 2 ? 'talk_excited' : 'idle_n1') : standing[i % standing.length];
+        else e.sit(0);
+        // the pair: one speaks to the other, who listens and nods; the near pair (backs to the lens) and the staff
+        // holders keep their arms free (idles with weight shifts), the others gesture
+        const p = this.partner[i];
+        const clip = mk.seated ? 'talk_excited'
+          : role === 'pair' ? (p >= 0 && i < p ? 'talk_gesture' : 'idle_angry')
+            : role === 'near' || e.props.staff ? (i % 2 ? 'idle_angry' : 'idle_n1')
+              : arcClips[i % arcClips.length];
         e.mocap.play(clip, { fade: 0, time: (i * 1.37) % 3, mirror: i % 2 === 1 });
+        if (e.props.staff) {
+          // the staff stands on the ground beside him (its grip is ~1 m up the shaft: the elbow bent, the hand forward
+          // at hip height, the shaft kept upright — it sways a little as he shifts his weight)
+          const sd = i % 2 ? 'R' : 'L';
+          e.upright[sd].prop = 'staff';
+          e.upright[sd].weight = 0.85;
+          e.armPose[sd].pose = STAFF_HOLD[sd];
+          e.armPose[sd].weight = 0.85;
+        }
       }
-      e.mocap.lookAt = this.samEyes;
+      e.mocap.lookAt = this.looks[i].copy(this.samEyes);
       e.headingSnap = true;
       const f = this.faces[i];
       f.set(i === this.lead ? { anger: 0.3, determined: 0.4 } : i % 3 === 0 ? { determined: 0.45, anger: 0.15 } : i % 3 === 1 ? { anger: 0.3, sad: 0.1 } : { determined: 0.3, fear: 0.1 });
       f.snap();
     });
-    this.samFace.set({ sad: 0.35, determined: 0.3 });
+    this.samFace.set({ sad: 0.35 });
     this.samFace.snap();
     this.lastT = -1;
   }
@@ -873,9 +1047,14 @@ export class RamahPerformance {
     this.lastT = t;
     const B = this.beats;
     this.samuel.eyesWorld(this.samEyes);
+    const leader = this.elders[this.lead];
+    if (leader) leader.eyesWorld(this.leadEyes);
+    else this.leadEyes.copy(this.samEyes);
     // ---- the elders: one rises and demands (8:5 is theirs: "שִׂימָה־לָּנוּ מֶלֶךְ"), the others react
     this.elders.forEach((e, i) => {
       const f = this.faces[i];
+      const role = this.roles[i];
+      const look = this.looks[i];
       if (i === this.lead) {
         const mk = this.elderMarks[i % this.elderMarks.length];
         if (this.leadPhase === 0 && t >= B.rise) {
@@ -893,31 +1072,51 @@ export class RamahPerformance {
         }
         f.jawTarget = speechJaw(t - B.verse, 2.6, 12, [0.52], 11) * 2.0;
         f.set({ anger: 0.35 + 0.25 * ss(B.verse, B.verse + 0.6, t), determined: 0.4 });
-        e.mocap.lookAt = this.samEyes;
+        e.mocap.lookAt = look.copy(this.samEyes);
         // the demand: the right arm thrown up, the hand open toward Samuel ("שִׂימָה־לָּנוּ מֶלֶךְ"), over the capture
         const demand = ss(B.verse + 0.4, B.verse + 0.8, t) * (1 - ss(B.verse + 1.8, B.verse + 2.3, t));
         e.armPose.R.pose = DEMAND_R;
         e.armPose.R.weight = 0.85 * demand;
+        // forward into the demand, chest out
+        e.body.lean = 0.08 * demand;
+        e.breath.amp = 0.7;
       } else {
-        // murmurs of assent, a second voice
-        f.jawTarget = i % 3 === 1 ? speechJaw(t - B.verse - 0.5 - i * 0.2, 2.2, 9, [0.4], 13 + i) * 1.4 : 0;
-        // they look at Samuel, and at the elder on his feet when he rises
-        const leader = this.elders[this.lead];
-        e.mocap.lookAt = leader && t > B.rise + 0.3 && i % 2 === 0 ? leader.eyesWorld(this.leadEyes) : this.samEyes;
+        // who he looks at: Samuel; the speaker once he is up; his partner while they talk (heads turned to each other)
+        const p = this.partner[i];
+        const ph = (i * 0.37) % 0.5;
+        const toLeader = t > B.rise + 0.3 + ph * 0.6;
+        const talk = p >= 0 ? ss(B.rise + 0.25 + ph, B.rise + 0.6 + ph, t) * (1 - ss(B.verse + 0.75, B.verse + 1.1, t)) : 0;
+        const afterTurn = ss(B.turnAway - 0.1, B.turnAway + 0.4, t) * ((i % 3) / 2);
+        look.copy(toLeader && role !== 'near' ? this.leadEyes : this.samEyes);
+        if (talk > 0.01) look.lerp(this.elders[p].eyesWorld(this.tmp2), talk);
+        if (afterTurn > 0) look.lerp(this.samEyes, afterTurn);
+        // nods (assent to the demand / to each other): quick dips of the look target, staggered per man
+        const n1 = B.rise + 0.7 + (i % 4) * 0.23, n2 = B.verse + 0.85 + (i % 3) * 0.2;
+        const nod = Math.exp(-((t - n1) ** 2) / 0.006) + 0.8 * Math.exp(-((t - n2) ** 2) / 0.008) + (role === 'pair' && i > p ? Math.exp(-((t - n1 - 0.45) ** 2) / 0.006) : 0);
+        look.y -= 0.09 * Math.min(1.2, nod);
+        e.mocap.lookAt = look;
+        e.lookRate = 3.5;
+        // turning to each other shows in the shoulders too (from behind, the near pair)
+        const side = p >= 0 ? Math.sign(i - p) : 0;
+        e.body.twist = (role === 'near' ? 0.22 : 0.14) * talk * side + 0.04 * Math.sin(t * 0.9 + i);
+        e.headRoll = 0.05 * Math.sin(t * 1.1 + i * 1.7);
+        // the staff shifts as he moves his weight
+        for (const sd of ['L', 'R'] as const) if (e.upright[sd].prop) e.upright[sd].axis.set(0.035 * Math.sin(t * 0.7 + i), 1, 0.03 * Math.cos(t * 0.5 + i)).normalize();
+        // murmurs of assent, a second voice; the pair's talker speaks to his partner
+        const talker = role === 'pair' && p >= 0 && i < p;
+        f.jawTarget = talker ? speechJaw(t - B.rise - 0.35, 1.9, 8, [0.45], 21 + i) * 1.6
+          : i % 3 === 1 ? speechJaw(t - B.verse - 0.5 - i * 0.2, 2.2, 9, [0.4], 13 + i) * 1.4 : 0;
       }
       f.update(dt);
       e.update(dt, camera, viewportH, this.wind);
     });
     // ---- Samuel: grave, listening; at turnAway he turns his face away (8:6 "וַיֵּרַע הַדָּבָר בְּעֵינֵי שְׁמוּאֵל")
     const sam = this.samuel;
-    const leader = this.elders[this.lead];
     if (this.samPhase === 0 && t >= B.turnAway - 0.35) {
       sam.mocap.play('listen_deny_b', { fade: 0.4, time: 0.55 });
       this.samPhase = 1;
     }
     const away = ss(B.turnAway, B.turnAway + 0.7, t);
-    if (leader) leader.eyesWorld(this.leadEyes);
-    else this.leadEyes.copy(this.samEyes).add(V3(0, 0, 3));
     // away: to his right and down (the eyes lowered), relative to the elders' direction
     const d = this.tmp.copy(this.leadEyes).sub(this.samEyes);
     const yaw = Math.atan2(d.x, d.z) - 1.05;
@@ -925,9 +1124,8 @@ export class RamahPerformance {
     sam.mocap.lookAt = this.tmp.copy(this.leadEyes).lerp(this.away, away);
     sam.lookRate = 2.2;
     sam.lookLimits.yaw = 1.3;
-    this.samFace.set({ sad: 0.35 + 0.3 * away, determined: 0.3, pain: 0.15 * away });
+    this.samFace.set({ sad: 0.3 + 0.3 * away, pain: 0.15 * away });
     this.samFace.update(dt);
     sam.update(dt, camera, viewportH, this.wind);
   }
 }
-

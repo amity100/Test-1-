@@ -70,7 +70,7 @@ function hash(a: number, b: number) {
   return h - Math.floor(h);
 }
 
-interface Man { ag: CrowdAgent; x: number; z: number; pace: number; seg: number; gx: number; gz: number; gy: number; /** weave + head: phase, rate */ ph: number; hr: number }
+interface Man { ag: CrowdAgent; x: number; z: number; pace: number; seg: number; gx: number; gz: number; gy: number; /** weave + head: phase, rate */ ph: number; hr: number; /** the front ranks of the main column (the large foreground of P4) */ front: boolean; /** the spear's own carry angle */ lean0: number }
 
 export class PhilistineHost {
   readonly crowd: Crowd;
@@ -153,7 +153,11 @@ export class PhilistineHost {
           const elite = (ci === 0 && r < 3) || r % 16 === 0 || h(4) < 0.06;
           const ag = crowd.agents[i];
           kit(ag, h, elite);
-          this.men.push({ ag, x: lat, z: -back, pace: 0.97 + h(13) * 0.06, seg: 0, gx: 1e9, gz: 1e9, gy: 0, ph: h(14) * 6.28, hr: 0.2 + h(15) * 0.5 });
+          // the front ranks (the lens' foreground): a wider spread of pace and carry, so no two neighbours step or hold
+          // the spear alike
+          const front = ci === 0 && r < 8;
+          if (front) ag.lean = 0.06 + h(16) * 0.34;
+          this.men.push({ ag, x: lat, z: -back, pace: front ? 0.95 + h(13) * 0.1 : 0.97 + h(13) * 0.06, seg: 0, gx: 1e9, gz: 1e9, gy: 0, ph: h(14) * 6.28, hr: 0.2 + h(15) * 0.5, front, lean0: ag.lean });
         }
       });
     } else {
@@ -169,7 +173,7 @@ export class PhilistineHost {
         const back = r * 1.45 + Math.abs(c - (companies - 1) / 2) * 6 + (h(2) - 0.5) * 0.6;
         const ag = crowd.agents[i];
         kit(ag, h, r < 2 + Math.floor(h(3) * 2) || h(4) < 0.08);
-        this.men.push({ ag, x: lat, z: -back, pace: 0.95 + h(13) * 0.1, seg: 0, gx: 1e9, gz: 1e9, gy: 0, ph: h(14) * 6.28, hr: 0.2 + h(15) * 0.5 });
+        this.men.push({ ag, x: lat, z: -back, pace: 0.95 + h(13) * 0.1, seg: 0, gx: 1e9, gz: 1e9, gy: 0, ph: h(14) * 6.28, hr: 0.2 + h(15) * 0.5, front: r < 3, lean0: ag.lean });
       }
     }
     this.place();
@@ -251,9 +255,14 @@ export class PhilistineHost {
     for (const m of this.men) {
       if (m.ag.cur) m.ag.cur.rate = (this.speed / Math.max(0.5, m.ag.cur.clip.speed)) * m.pace;
       m.ag.stride = this.speed > 0.05 ? 1 : 0;
-      // the heads are not locked forward: a glance to the side now and then
+      // the heads are not locked forward: a glance to the side now and then; the front ranks look about (to a
+      // neighbour, across the plain) on their own slow rhythms
       const g = Math.sin(this.clock * m.hr + m.ph);
-      m.ag.headYaw = 0.4 * Math.sign(g) * Math.max(0, Math.abs(g) - 0.6) / 0.4;
+      m.ag.headYaw = m.front
+        ? 0.32 * Math.sin(this.clock * (0.45 + m.hr) + m.ph) * (0.45 + 0.55 * Math.sin(this.clock * 0.31 + 2.1 * m.ph))
+        : 0.4 * Math.sign(g) * Math.max(0, Math.abs(g) - 0.6) / 0.4;
+      // the carried spear sways a little with each man's own stride (never a fence of parallel shafts)
+      m.ag.lean = m.lean0 + (this.speed > 0.05 ? (m.front ? 0.06 : 0.035) * Math.sin(this.clock * 4.6 * m.pace + m.ph) : 0);
     }
     this.place();
     this.crowd.update(dt, camera);
