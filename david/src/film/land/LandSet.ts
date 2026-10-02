@@ -6,7 +6,7 @@ import { SkySystem } from '../../world/Sky';
 import { loadTextures, type TextureSet } from '../../world/Textures';
 import { cloudShared, GLSL_CLOUD_WEATHER, landAtmo } from './landAtmo';
 import { LandClouds } from './landClouds';
-import { GEO, landAssetUrl, LandHeight, loadLandcover, loadTile, PLACES, shadeTexture, type HeightTile } from './landData';
+import { GEO, landAssetUrl, LandHeight, loadLandcover, loadTile, PLACES, shadeTextureSteps, type HeightTile } from './landData';
 import { buildJudahDressing, loadDressMask, type JudahDressInput } from './landJudah';
 import { buildArmyPlaceholders, buildDust, buildRamahGate, mannequinGeometry, roadGlslFor, type Mark } from './landSites';
 import { buildAshdod } from './landCoast';
@@ -168,7 +168,7 @@ export class LandSet {
     await y();
     const set = new LandSet();
     const it = set.build(o, region, local, regLC, locLC, tex, dress);
-    const N = o.location === 'judah' ? 8 : o.location === 'coast' ? 10 : 9;
+    const N = o.location === 'judah' ? 26 : o.location === 'coast' ? 28 : 27;
     for (let k = 0; ; k++) {
       const ts = performance.now();
       const r = it.next();
@@ -329,10 +329,11 @@ export class LandSet {
 
     yield 'sky';
     // ------------------------------------------------------------------ terrain
-    const regShade = shadeTexture(region, new LandHeight(region, null), sunDir, { maxDist: 45000 });
+    // (the shading textures are the heaviest CPU work of a land set: computed in bands of rows, a yield after each)
+    const regShade = yield* shadeTextureSteps(region, new LandHeight(region, null), sunDir, { maxDist: 45000 }, 'shade:region');
     this.disposables.push(regShade);
     yield 'shade:region';
-    const locShade = shadeTexture(local, this.height, sunDir, { maxDist: 30000, useMods: true });
+    const locShade = yield* shadeTextureSteps(local, this.height, sunDir, { maxDist: 30000, useMods: true }, 'shade:local');
     this.disposables.push(locShade);
     yield 'shade:local';
     const nTheta = tier === 'high' ? 448 : tier === 'medium' ? 320 : 200;

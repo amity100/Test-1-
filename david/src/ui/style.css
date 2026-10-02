@@ -205,6 +205,8 @@ canvas { display: block; outline: none; }
 .stonebag i.s { background: radial-gradient(circle at 35% 30%, #fffaf0, #e3d6bb 60%, #b8a684); box-shadow: 0 0 5px rgba(255, 220, 150, 0.55); }
 .stonebag i.in { outline: 1.5px solid var(--gold); outline-offset: 1.5px; }
 .stonebag .sb-e { font: 400 12px var(--sans-he); color: #ffb08a; }
+.stonebag .sb-g { display: inline-flex; gap: 3px; align-items: center; }
+.stonebag .sb-n { font: 500 12px var(--sans-he); color: #eadcc0; direction: ltr; font-variant-numeric: tabular-nums; }
 .ui.is-touch .stonebag { left: 72px; top: 64px; }
 .rating { position: fixed; inset: 0; display: grid; place-items: center; opacity: 0; pointer-events: none; transition: opacity 0.4s; }
 .rating.on { opacity: 1; }
@@ -231,8 +233,18 @@ canvas { display: block; outline: none; }
 }
 @media (max-width: 700px) {
   .rangepanel { top: 12px; min-width: 0; max-width: 62vw; }
-  .ui.is-touch .stonebag { left: 12px; top: 58px; }
   .praise { top: 27%; }
+}
+/* landscape phones: the bag in the menu button's row (the control hints use the column under it); upright phones: a
+   narrow column under the menu button, clear of the round's panel (top centre) and of the hints (kept off it) */
+@media (max-height: 500px) {
+  .ui.is-touch .stonebag { left: 66px; top: 23px; }
+  .ui.is-touch .hint .rh { max-width: calc(50vw - 136px); }
+}
+@media (max-aspect-ratio: 17/20) {
+  .ui.is-touch .stonebag { left: 14px; top: 66px; flex-direction: column; gap: 5px; padding: 6px 6px 7px; }
+  .ui.is-touch .stonebag .sb-l { margin: 0 0 1px; font-size: 11px; }
+  .ui.is-touch .hint .rh { max-width: calc(100vw - 96px); }
 }
 .marker { position: fixed; left: 0; top: 0; opacity: 0; transition: opacity 0.5s; text-align: center; }
 .marker.on { opacity: 1; }

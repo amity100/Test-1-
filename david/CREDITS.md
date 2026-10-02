@@ -124,6 +124,17 @@ Realism pass (animals, 2nd session): re-sculpted bear skull (longer dished muzzl
 skull surface), longer legs, re-baked maps and a new coarse-lock fur shader; lamb face detail. Still entirely
 our own code and procedural data: no new third-party assets or tools.
 
+Bear motion v2 (*bear1*, gameplay v2 §4 — `src/characters/BearModel.ts` "motion", `src/gameplay/BearActor.ts`,
+`dev/bear.html` + `dev/bearHarness.ts`): the walk, amble, gallop, turns, rearing, the fight's moves (huff / jaw-pop /
+stomp, bite lunge, rear-and-slam, stagger, the bluff charge's brake), fatigue, the jaw hold and the collapse are our own
+procedural code (world-space paw planting, two-bone IK with a sliding shoulder blade, key poses). **No motion-capture
+data or third-party animation is used or shipped.** Reference facts only (not assets): brown-bear gaits and foot
+mechanics as described in the locomotion literature — lateral-sequence walks with long duty factors, ambles, rotary
+gallops, plantigrade heel-strike hind feet (e.g. Shine et al. 2015, *J. Exp. Biol.* 218: 3102–3109, grizzly bear
+locomotion and ground reaction forces) — and the warning behaviour of brown bears (huffing, jaw-popping, ground slaps
+with a forepaw, bluff charges that stop short) from wildlife-management descriptions. The collapse pose was solved with
+a small numpy / scipy FK script in a scratch directory (build-time only, nothing ships).
+
 ## Environment (Judean hills, Bethlehem, vegetation, sky) — `tools/world/`, `src/world/`, `src/assets/world/`
 
 - **All world textures are our own procedural work** (no photographs, scans or third-party images):
@@ -437,6 +448,7 @@ values and re-baked by our own tools (`tools/human`).
 
 ## Opening film — rough cut orchestration (cut passes 1-2: `src/gameplay/Intro.ts`, `src/film/FilmStage.ts`, `src/film/FilmWorld.ts`, `src/film/FilmCams.ts`, `src/content/introScript.ts`, film typography in `src/ui/`)
 - No third-party assets. Camera coverage, staging, the bear's eye-shine (a runtime canvas gradient) and the film typography are own work; every on-screen quotation comes from the verified catalog `src/content/sources.ts`.
+- CUT v5 (cut7: the prologue's assembly and land shots — `src/gameplay/Intro.ts` (the moving dissolves, the seamless map cut, the G1 pre-roll), `src/film/FilmStage.ts` (one independent builder per set), `src/film/FilmCams.ts` (P1 'flight', P6 'threat', P7 'elders', G1's offset), `src/film/land/**` (the lower dawn deck, the late-afternoon Ramah, the softened coastal cover, the step-wise build), `src/film/crowd/` (the host's linen), `src/film/cast/` (Ramah's beats)): no third-party assets — the cameras, the dissolves and the set changes are own work on the existing SRTM / Natural Earth land data credited above.
 - CUT v4 (cut6: the logo shot D3 and the hand-off into play, `src/film/FilmWorld.ts`, `src/gameplay/Intro.ts`, `src/gameplay/CameraRig.ts` `followFrame`; the logo lockup in `src/ui/`; the bear's hook in play, `src/gameplay/BearHook.ts`): no third-party assets — the crane, the lockup (the Cinzel / Frank Ruhl Libre fonts credited above), the hook's bushes (instanced copies of the world's own bush meshes), birds and eye-shine (runtime canvas sprites) are own work.
 
 ## Models pass for CUT v2 (models teammate: `src/characters/wardrobe/`, `src/characters/hair/`, `tools/wardrobe/gen_textures.py`, `src/assets/wardrobe/weave_*`, `src/film/crowd/crowdShader.ts`, the looks of `src/characters/Flock.ts` and `src/characters/BearModel.ts`)

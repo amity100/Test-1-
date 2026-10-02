@@ -83,7 +83,7 @@ async function boot() {
     info.textContent = `${take} t=${t.toFixed(2)}  calls ${r.calls}  tris ${(r.tris / 1e6).toFixed(2)}M  near ${r.near.toFixed(0)} far ${(r.far / 1000).toFixed(0)}km  fov ${r.fov.toFixed(1)}`;
     return r;
   };
-  w.__mapH = { shot, handle, post, renderer, buildMs, stats: () => ({ tier: q.tier, buildMs, memory: renderer.info.memory, status: handle.status }) };
+  w.__mapH = { shot, handle, post, renderer, buildMs, stats: () => ({ tier: q.tier, buildMs, memory: renderer.info.memory, status: handle.status, steps: (w.__map as { steps?: unknown } | undefined)?.steps }) };
   w.__ready = true;
   if (params.get('hud') === '0') info.style.display = 'none';
   const play = params.get('play');

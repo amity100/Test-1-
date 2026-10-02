@@ -583,7 +583,8 @@ export interface BearMove {
   dur: number;
   /** the strike frame: the claws / jaws / forepaws at their target */
   hit?: number;
-  /** metres from the bear's root (between its feet) to the centre of the blow, along its heading */
+  /** metres from the bear's root (between its feet) to the centre of the blow, along its heading (measured at the strike
+   *  frame — add the target's body radius, ~0.3 m for David, for a hit test) */
   reach?: number;
   /** half-width (m) of the blow across the heading at `reach` */
   width?: number;
@@ -596,19 +597,19 @@ export interface BearMove {
 export const BEAR_MOVES: Record<BearActionName, BearMove> = {
   // forepaw swat on all fours (right paw unless play(…, {side: 1})): weight onto the other foreleg, the shoulder winds
   // back and drives the paw across, claws out; it lands ahead and inside
-  swipe: { dur: 0.95, hit: 0.47, reach: 1.9, width: 1.0, tell: [0, 0.3], open: [0.6, 0.95] },
+  swipe: { dur: 0.95, hit: 0.47, reach: 1.05, width: 0.6, tell: [0, 0.3], open: [0.6, 0.95] },
   // standing swat (reared; from all fours it half-rises first)
-  swipeHigh: { dur: 0.95, hit: 0.5, reach: 2.1, width: 1.1, tell: [0, 0.34], open: [0.62, 0.95] },
+  swipeHigh: { dur: 0.95, hit: 0.5, reach: 0.9, width: 0.65, tell: [0, 0.34], open: [0.62, 0.95] },
   // flinch (a blow landed)
   hurt: { dur: 0.6, open: [0, 0.45] },
   // the warning display: head low and swinging, ears back, two huffs, two jaw-pops, a forepaw stomp at 1.86
   huff: { dur: 2.4, tell: [0, 2.4] },
   // a short bluff lunge and a slap of the ground with a forepaw (a blow if David stands right there)
-  stomp: { dur: 1.15, hit: 0.56, reach: 1.25, width: 0.6, tell: [0, 0.38], open: [0.72, 1.15] },
+  stomp: { dur: 1.15, hit: 0.56, reach: 0.8, width: 0.3, tell: [0, 0.38], open: [0.72, 1.15] },
   // the bite lunge: sinks back, then the neck shoots out, the jaws wide; they snap at `hit`; overreached after
-  bite: { dur: 1.15, hit: 0.46, reach: 1.75, width: 0.5, tell: [0, 0.26], open: [0.55, 1.0] },
+  bite: { dur: 1.15, hit: 0.46, reach: 1.4, width: 0.35, tell: [0, 0.26], open: [0.55, 1.0] },
   // rears to its full height, arms up, and comes down with both forepaws together (the slam at `hit`)
-  rearSlam: { dur: 2.5, hit: 1.62, reach: 1.45, width: 0.85, tell: [0, 1.3], open: [1.7, 2.45] },
+  rearSlam: { dur: 2.5, hit: 1.62, reach: 1.0, width: 0.45, tell: [0, 1.3], open: [1.7, 2.45] },
   // hit hard: lurches sideways (play(…, {side}) = the side it lurches toward), a foreleg buckles, steps to catch itself
   stagger: { dur: 1.3, open: [0, 1.1] },
   // a charge pulled up short (a bluff): forelegs braced ahead, haunches down, a skid, then a huff with the head low
@@ -642,8 +643,9 @@ const sw = (v: number) => [0, 0, v] as [number, number, number]; // the lateral 
 const SWIPE = new Clip([
   { t: 0, p: pose({}) },
   { t: 0.3, e: 'in', p: pose({ spine1: [0, -0.08, -0.03], spine2: [0.02, -0.2, -0.08], neck1: [0.04, 0.12, 0], neck2: [0, 0.06, 0], head: [0.04, 0.14, 0.08], earL: [-0.55, 0, 0.12], earR: [-0.55, 0, -0.12], jaw: [0.14, 0, 0], sway: sw(0.05) }, -0.035, -0.05) },
-  { t: 0.47, e: 'out', p: pose({ spine1: [0.02, 0.1, 0.03], spine2: [0.06, 0.28, 0.07], neck1: [0, -0.16, 0], neck2: [0, -0.06, 0], head: [0.1, -0.26, -0.1], earL: [-0.8, 0, 0.2], earR: [-0.8, 0, -0.2], jaw: [0.34, 0, 0], sway: sw(-0.02) }, -0.025, 0.1) },
-  { t: 0.64, p: pose({ spine1: [0.01, 0.06, 0.01], spine2: [0.04, 0.15, 0.04], neck1: [0, -0.08, 0], head: [0.06, -0.12, -0.05], earL: [-0.5, 0, 0.1], earR: [-0.5, 0, -0.1], jaw: [0.14, 0, 0] }, -0.012, 0.05) },
+  // (the head lifts and turns away from the swinging paw — to its left — so the paw passes below and in front of it)
+  { t: 0.47, e: 'out', p: pose({ spine1: [0.02, 0.1, 0.03], spine2: [0.06, 0.28, 0.07], neck1: [-0.12, 0.1, 0.04], neck2: [-0.05, 0.06, 0], head: [-0.04, 0.2, 0.16], earL: [-0.8, 0, 0.2], earR: [-0.8, 0, -0.2], jaw: [0.34, 0, 0], sway: sw(-0.02) }, -0.025, 0.1) },
+  { t: 0.64, p: pose({ spine1: [0.01, 0.06, 0.01], spine2: [0.04, 0.15, 0.04], neck1: [-0.05, 0.06, 0.02], head: [0.02, 0.1, 0.06], earL: [-0.5, 0, 0.1], earR: [-0.5, 0, -0.1], jaw: [0.14, 0, 0] }, -0.012, 0.05) },
   { t: 0.95, p: pose({}) },
 ]);
 const SWIPE_PAW: PawScript = {
@@ -651,7 +653,7 @@ const SWIPE_PAW: PawScript = {
   keys: [
     { t: 0, p: null, pitch: 0 },
     { t: 0.3, p: [-0.4, 0.56, 0.36], pitch: 1.05, yaw: -0.3 },
-    { t: 0.47, p: [0.02, 0.52, 1.0], pitch: -0.35, yaw: 0.55 },
+    { t: 0.47, p: [0.0, 0.44, 1.07], pitch: -0.35, yaw: 0.55 },
     { t: 0.64, p: [0.16, 0.24, 0.82], pitch: 0.3, yaw: 0.35 },
     { t: 0.84, p: [-0.12, 0, 0.64], pitch: 0, yaw: 0 },
   ],
@@ -661,8 +663,8 @@ const SWIPE_PAW: PawScript = {
 const SWIPE_HIGH = new Clip([
   { t: 0, p: pose({}) },
   { t: 0.34, e: 'in', p: pose({ scapR: [-0.4, 0, -0.35], humR: [-2.0, 0.2, 0.9], foreR: [-1.1, 0, 0], wristR: [0.55, 0, 0], toesR: [-0.4, 0, 0], humL: [0.15, 0, 0.1], spine1: [-0.04, 0, -0.14], spine2: [-0.05, 0, -0.28], neck1: [0.02, 0.06, 0.04], neck2: [0.02, 0.05, 0.02], head: [0.12, 0.06, 0], earL: [-0.5, 0, 0.12], earR: [-0.5, 0, -0.12], jaw: [0.12, 0, 0], sway: sw(0.04) }, -0.02, -0.03) },
-  { t: 0.5, e: 'out', p: pose({ scapR: [0.1, 0, 0.1], humR: [-0.6, -0.35, 0.55], foreR: [-0.3, 0, 0], wristR: [-0.2, 0, 0], toesR: [-0.45, 0, 0], humL: [-0.1, 0, -0.05], spine1: [0.1, 0, 0.2], spine2: [0.12, 0, 0.36], neck1: [0.1, -0.12, -0.08], neck2: [0.04, -0.08, -0.04], head: [0.1, -0.12, 0], earL: [-0.7, 0, 0.15], earR: [-0.7, 0, -0.15], jaw: [0.35, 0, 0], sway: sw(-0.03) }, -0.05, 0.08) },
-  { t: 0.66, p: pose({ scapR: [0.05, 0, 0.05], humR: [-0.2, -0.2, 0.3], foreR: [-0.5, 0, 0], wristR: [0.2, 0, 0], spine1: [0.05, 0, 0.1], spine2: [0.06, 0, 0.16], neck1: [0.05, -0.06, -0.04], head: [0.05, -0.06, 0], earL: [-0.4, 0, 0.1], earR: [-0.4, 0, -0.1], jaw: [0.12, 0, 0] }, -0.03, 0.05) },
+  { t: 0.5, e: 'out', p: pose({ scapR: [-0.1, 0, 0.1], humR: [-1.05, -0.3, 0.45], foreR: [-0.12, 0, 0], wristR: [-0.25, 0, 0], toesR: [-0.45, 0, 0], humL: [-0.1, 0, -0.05], hips: [0.16, 0, 0], spine1: [0.16, 0, 0.2], spine2: [0.16, 0, 0.36], neck1: [-0.12, -0.12, -0.08], neck2: [-0.08, -0.08, -0.04], head: [0.0, -0.12, 0], earL: [-0.7, 0, 0.15], earR: [-0.7, 0, -0.15], jaw: [0.35, 0, 0], sway: sw(-0.03) }, -0.07, 0.16) },
+  { t: 0.66, p: pose({ scapR: [0.05, 0, 0.05], humR: [-0.45, -0.2, 0.3], foreR: [-0.45, 0, 0], wristR: [0.2, 0, 0], hips: [0.08, 0, 0], spine1: [0.08, 0, 0.1], spine2: [0.08, 0, 0.16], neck1: [-0.04, -0.06, -0.04], head: [0.02, -0.06, 0], earL: [-0.4, 0, 0.1], earR: [-0.4, 0, -0.1], jaw: [0.12, 0, 0] }, -0.04, 0.08) },
   { t: 0.95, p: pose({}) },
 ]);
 
@@ -722,14 +724,14 @@ const BITE_PAW: PawScript = {
 // rear-and-slam: the rear machinery raises the bear (rearSet); the arms rise to threaten, then both forepaws come down
 // (deltas on top of the REAR pose: the upper arms forward and up, elbows bent, the paws open, claws spread)
 const ARMS_UP = {
-  scapL: [-0.2, 0, 0.07], humL: [-0.85, 0.15, 0.3], foreL: [0.2, 0, 0], wristL: [-0.65, 0, 0], toesL: [-0.75, 0, 0],
-  scapR: [-0.2, 0, -0.07], humR: [-0.85, -0.15, -0.3], foreR: [0.2, 0, 0], wristR: [-0.65, 0, 0], toesR: [-0.75, 0, 0],
+  scapL: [-0.2, 0, 0.04], humL: [-0.95, 0.1, 0.1], foreL: [0.15, 0, 0], wristL: [-0.55, 0, 0], toesL: [-0.75, 0, 0],
+  scapR: [-0.2, 0, -0.04], humR: [-0.95, -0.1, -0.1], foreR: [0.15, 0, 0], wristR: [-0.55, 0, 0], toesR: [-0.75, 0, 0],
 } as Record<string, [number, number, number]>;
 const REAR_SLAM = new Clip([
   { t: 0, p: pose({}) },
   { t: 0.5, p: pose({ earL: [-0.4, 0, 0.1], earR: [-0.4, 0, -0.1] }) },
   { t: 0.95, p: pose({ ...ARMS_UP, neck1: [-0.05, 0, 0], head: [-0.08, 0, 0], jaw: [0.5, 0, 0], earL: [-0.85, 0, 0.22], earR: [-0.85, 0, -0.22] }, 0.0, 0) },
-  { t: 1.3, e: 'in', p: pose({ ...ARMS_UP, humL: [-1.0, 0.15, 0.36], humR: [-1.0, -0.15, -0.36], neck1: [-0.08, 0, 0], head: [-0.1, 0, 0], jaw: [0.6, 0, 0], earL: [-0.9, 0, 0.25], earR: [-0.9, 0, -0.25] }, 0.01, 0) },
+  { t: 1.3, e: 'in', p: pose({ ...ARMS_UP, humL: [-1.08, 0.1, 0.13], humR: [-1.08, -0.1, -0.13], neck1: [-0.08, 0, 0], head: [-0.1, 0, 0], jaw: [0.6, 0, 0], earL: [-0.9, 0, 0.25], earR: [-0.9, 0, -0.25] }, 0.01, 0) },
   { t: 1.62, e: 'out', p: pose({ spine1: [0.1, 0, 0], spine2: [0.12, 0, 0], neck1: [0.38, 0, 0], neck2: [0.1, 0, 0], head: [0.12, 0, 0], jaw: [0.4, 0, 0], earL: [-0.9, 0, 0.25], earR: [-0.9, 0, -0.25] }, -0.1, 0.2) },
   { t: 1.95, p: pose({ spine1: [0.04, 0, 0], spine2: [0.05, 0, 0], neck1: [0.28, 0, 0], head: [0.08, 0, 0], jaw: [0.18, 0, 0], earL: [-0.8, 0, 0.2], earR: [-0.8, 0, -0.2] }, -0.05, 0.14) },
   { t: 2.5, p: pose({}) },
@@ -763,11 +765,11 @@ const BRAKE = new Clip([
 // death: the forelegs buckle, it rolls heavily onto its side (impact + a small bounce), the head drops last
 const DEATH = new Clip([
   { t: 0, p: pose({}) },
-  { t: 0.45, e: 'in', p: pose({ hips: [0.12, 0, 0.1], spine1: [0.15, 0, 0.05], spine2: [0.18, 0, 0.05], neck1: [0.4, 0, 0.1], neck2: [0.2, 0, 0], head: [0.25, 0.1, 0.2], humL: [-0.35, 0, 0.1], foreL: [0.6, 0, 0], humR: [-0.2, 0, -0.1], foreR: [0.7, 0, 0], femL: [0.5, 0, 0], tibL: [0.9, 0, 0], femR: [0.4, 0, 0], tibR: [0.8, 0, 0], jaw: [0.2, 0, 0], earL: [-0.4, 0, 0], earR: [-0.4, 0, 0] }, -0.33, 0.04) },
+  { t: 0.45, e: 'in', p: pose({ hips: [0.12, 0, 0.1], spine1: [0.15, 0, 0.05], spine2: [0.18, 0, 0.05], neck1: [-0.25, 0, 0.1], neck2: [-0.1, 0, 0], head: [0.05, 0.1, 0.2], humL: [0.48, 0, 0.1], foreL: [-2.38, 0, 0], wristL: [1.34, 0, 0], humR: [0.48, 0, -0.1], foreR: [-2.38, 0, 0], wristR: [1.34, 0, 0], femL: [-0.87, 0, 0], tibL: [1.04, 0, 0], ankleL: [-0.44, 0, 0], femR: [-0.96, 0, 0], tibR: [1.15, 0, 0], ankleR: [-0.46, 0, 0], jaw: [0.2, 0, 0], earL: [-0.4, 0, 0], earR: [-0.4, 0, 0] }, -0.33, 0.04) },
   { t: 1.0, e: 'out', p: pose({ hips: [0.05, 0, 1.32], spine1: [0.05, 0.05, 0.04], spine2: [0.02, 0.1, 0.02], neck1: [0.25, 0.1, 0.04], neck2: [0.15, 0.1, 0], head: [0.3, 0.1, 0.1], humL: [-0.6, 0, -0.2], foreL: [-0.4, 0, 0], wristL: [0.6, 0, 0], humR: [-0.4, 0, 0.1], foreR: [-0.3, 0, 0], wristR: [0.5, 0, 0], femL: [-0.3, 0, -0.2], tibL: [0.5, 0, 0], ankleL: [0.3, 0, 0], femR: [-0.5, 0, 0.08], tibR: [0.4, 0, 0], ankleR: [0.3, 0, 0], jaw: [0.3, 0, 0], earL: [-0.3, 0, 0], earR: [-0.3, 0, 0], tail: [0.3, 0, 0] }, -0.545, 0.02) },
   { t: 1.16, p: pose({ hips: [0.05, 0, 1.25], spine1: [0.05, 0.05, 0.04], spine2: [0.02, 0.1, 0.02], neck1: [0.18, 0.1, 0.04], neck2: [0.12, 0.1, 0], head: [0.22, 0.1, 0.1], humL: [-0.65, 0, -0.25], foreL: [-0.38, 0, 0], wristL: [0.65, 0, 0], humR: [-0.45, 0, 0.1], foreR: [-0.32, 0, 0], wristR: [0.55, 0, 0], femL: [-0.35, 0, -0.22], tibL: [0.45, 0, 0], ankleL: [0.38, 0, 0], femR: [-0.55, 0, 0.09], tibR: [0.38, 0, 0], ankleR: [0.35, 0, 0], jaw: [0.32, 0, 0], earL: [-0.25, 0, 0], earR: [-0.25, 0, 0], tail: [0.32, 0, 0] }, -0.51, 0.02) },
   { t: 1.45, p: pose({ hips: [0.05, 0, 1.35], spine1: [0.04, 0.06, 0.03], spine2: [0.02, 0.13, 0.02], neck1: [0.14, 0.14, 0.04], neck2: [0.1, 0.1, 0.02], head: [0.22, 0.14, 0.1], humL: [-0.72, 0, -0.28], foreL: [-0.36, 0, 0], wristL: [0.68, 0, 0], toesL: [0.3, 0, 0], humR: [-0.52, 0, 0.11], foreR: [-0.34, 0, 0], wristR: [0.58, 0, 0], femL: [-0.42, 0, -0.24], tibL: [0.42, 0, 0], ankleL: [0.42, 0, 0], femR: [-0.58, 0, 0.1], tibR: [0.36, 0, 0], ankleR: [0.38, 0, 0], jaw: [0.34, 0, 0], earL: [-0.2, 0, 0], earR: [-0.2, 0, 0], tail: [0.34, 0, 0] }, -0.55, 0.02) },
-  { t: 2.8, p: pose({ hips: [0.05, 0, 1.36], spine1: [0.04, 0.06, 0.03], spine2: [0.02, 0.14, 0.02], neck1: [0.1, 0.15, 0.04], neck2: [0.1, 0.1, 0.02], head: [0.2, 0.15, 0.1], humL: [-0.75, 0, -0.3], foreL: [-0.35, 0, 0], wristL: [0.7, 0, 0], toesL: [0.4, 0, 0], humR: [-0.55, 0, 0.12], foreR: [-0.35, 0, 0], wristR: [0.6, 0, 0], femL: [-0.45, 0, -0.25], tibL: [0.4, 0, 0], ankleL: [0.45, 0, 0], femR: [-0.6, 0, 0.1], tibR: [0.35, 0, 0], ankleR: [0.4, 0, 0], jaw: [0.36, 0, 0], earL: [-0.2, 0, 0], earR: [-0.2, 0, 0], tail: [0.35, 0, 0] }, -0.555, 0.02) },
+  { t: 2.8, p: pose({ hips: [0.05, 0, 1.36], spine1: [0.04, 0.06, 0.03], spine2: [0.02, 0.14, 0.02], neck1: [0.1, -0.35, 0.04], neck2: [0.1, -0.25, 0.02], head: [0.2, -0.2, 0.1], humL: [-0.75, 0, -0.3], foreL: [-0.35, 0, 0], wristL: [0.7, 0, 0], toesL: [0.4, 0, 0], humR: [-0.55, 0, 0.12], foreR: [-0.35, 0, 0], wristR: [0.6, 0, 0], femL: [-0.45, 0, -0.25], tibL: [0.4, 0, 0], ankleL: [0.45, 0, 0], femR: [-0.6, 0, 0.1], tibR: [0.35, 0, 0], ankleR: [0.4, 0, 0], jaw: [0.36, 0, 0], earL: [-0.2, 0, 0], earR: [-0.2, 0, 0], tail: [0.35, 0, 0] }, -0.555, 0.02) },
 ]);
 
 // the standing pose ("וַיָּקָם עָלַי"): hind legs are placed by IK, everything else FK; the forelegs hang relaxed
@@ -894,6 +896,8 @@ interface Leg {
   /** root-space contact this frame (for scripts that start "where the paw is") */
   cur: THREE.Vector3;
   pitch: number;
+  /** how far the end joint may be from the upper joint before a planted paw must lift (the shoulder blade adds some) */
+  reach: number;
 }
 
 interface BoneRec {
@@ -1164,6 +1168,7 @@ export class BearModel {
         plant: new THREE.Vector3(), from: new THREE.Vector3(), to: new THREE.Vector3(),
         swing: -1, swingDur: 0.3, lift: 0.08, forced: null, wantPrev: false, cool: 0,
         ikW: 1, scrW: 0, scr: new THREE.Vector3(), scrPitch: 0, scrYaw: 0, cur: def.contact.clone(), pitch: 0,
+        reach: pos(def.upper).distanceTo(pos(def.lower)) + pos(def.lower).distanceTo(endW) + (def.front ? 0.14 : 0.03),
       });
     }
     this.fk();
@@ -1296,9 +1301,10 @@ export class BearModel {
       const rate = k === 'down' ? 3 : k === 'held' ? 4 : 5;
       this.holdW[k] = damp(this.holdW[k], this.hold === k ? 1 : 0, rate, dt);
     }
-    if (this.hold === 'down') this.deathT = this.deathT < 0 ? 0 : this.deathT + dt;
+    // struck down while standing it first drops forward onto its forepaws; the collapse starts once it is down on them
+    if (this.hold === 'down') this.deathT = this.deathT < 0 ? 0 : this.rearK < 0.22 ? this.deathT + dt : 0;
     else this.deathT = -1;
-    const down = this.holdW.down;
+    const down = this.holdW.down * smoothstep(0, 0.12, Math.max(0, this.deathT));
     const held = this.holdW.held * (1 - down);
     const cw = this.holdW.carry * (1 - down);
 
@@ -1313,14 +1319,14 @@ export class BearModel {
       if (this.vS > 1.9) this.rearDrop = true;
       else if (this.vS < 1.0) this.rearDrop = false;
     } else this.rearDrop = false;
-    const rearWant = this.hold === 'rear' && !this.rearDrop && down < 0.05 ? 1 : 0;
+    const rearWant = this.hold === 'rear' && !this.rearDrop ? 1 : 0;
     const r0 = this.rearK;
     if (a && def?.rearSet) this.rearK = def.rearSet(a.t);
     else {
       const rmin = a && def?.rearMin ? def.rearMin(a.t) : 0;
       const want = Math.max(rearWant, rmin);
       const upRate = rmin > rearWant ? 0.4 : 1.05;
-      this.rearK = want > this.rearK ? Math.min(want, this.rearK + dt / upRate) : Math.max(want, this.rearK - dt / (down > 0.05 ? 0.9 : 0.62));
+      this.rearK = want > this.rearK ? Math.min(want, this.rearK + dt / upRate) : Math.max(want, this.rearK - dt / (this.hold === 'down' ? 0.55 : 0.62));
     }
     const r = this.rearK;
     if (r > r0 + 1e-5) this.rearRising = true;
@@ -1361,7 +1367,9 @@ export class BearModel {
     const frontFree = smoothstep(0.22, 0.55, r); // the forelegs leave the ground as it rises
     for (let i = 0; i < 4; i++) {
       const L = this.legs[i];
-      let ik = 1 - down * smoothstep(0.38, 0.75, Math.max(0, this.deathT));
+      // (the paws stay planted through the buckle and the roll: the lower legs fold under it, the upper ones lift off as it
+      // rolls; the lying pose takes over once it is down on its side)
+      let ik = 1 - down * smoothstep(0.98, 1.12, Math.max(0, this.deathT));
       if (L.front) ik *= 1 - frontFree;
       L.ikW = ik;
       L.scrW = 0;
@@ -1574,6 +1582,26 @@ export class BearModel {
       }
       this.hipsOff.y += (p.hipsY ?? 0) * fadeIn;
       this.hipsOff.z += (p.hipsZ ?? 0) * fadeIn;
+      // the warning display: the low head swings from side to side; each huff is a forceful blow out (the chest
+      // pumps, the lips puff); each jaw-pop the jaw drops open and claps shut
+      if (a.name === 'huff') {
+        const sw2 = smoothstep(0.3, 0.55, a.t) * (1 - smoothstep(1.45, 1.65, a.t));
+        const ph = TAU * 1.05 * (a.t - 0.3);
+        add('neck1', 0, 0.26 * Math.sin(ph) * sw2, 0.05 * Math.sin(ph) * sw2);
+        add('head', 0, 0.14 * Math.sin(ph - 0.6) * sw2, 0.08 * Math.sin(ph - 0.6) * sw2);
+      }
+      for (const c of def.cues ?? []) {
+        const d = a.t - c.t;
+        if (c.cue === 'jawPop' && d > -0.13 && d < 0.05) add('jaw', 0.34 * (d < 0 ? smoothstep(-0.13, -0.05, d) : 1 - d / 0.05));
+        else if (c.cue === 'huff' && d > -0.06 && d < 0.3) {
+          const k = bump((d + 0.06) / 0.36);
+          add('spine2', 0.055 * k);
+          add('spine1', -0.02 * k);
+          add('jaw', 0.07 * k);
+          add('head', -0.05 * k);
+          this.lipOff.y += 0.005 * k;
+        }
+      }
       this.runCues(a, def);
       for (const e of a.events) if (!e.fired && a.t >= e.t) {
         e.fired = true;
@@ -1795,7 +1823,13 @@ export class BearModel {
       const want = moving && u >= this.duty;
       const err = this.idealWorld(i, 0, _v2).distanceTo(_v1.copy(L.plant).setY(_v2.y));
       const maxErr = L.front ? 0.62 : 0.72;
-      if (want && !L.wantPrev) {
+      // a paw the leg can no longer reach (the body has run on past it) lifts now instead of dragging behind
+      let overreach = false;
+      if (moving && L.cool <= 0) {
+        _v1.copy(L.plant).applyMatrix4(this.rootInv).add(L.offs);
+        overreach = _v1.distanceTo(this.bones[L.iu].wp) > L.reach;
+      }
+      if ((want && !L.wantPrev) || overreach) {
         const dur = clamp((1 - this.duty) / Math.max(this.freq, 0.3), 0.14, 0.6);
         this.startSwing(i, dur, (L.front ? G.liftF : G.liftH) * (0.55 + 0.45 * smoothstep(0.1, 1.2, v)) + (L.front ? 0.02 : 0.015));
       } else if (!moving || err > maxErr) {

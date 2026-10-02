@@ -147,39 +147,57 @@ export class Range {
     return out;
   }
 
-  /** the eye at the station: can it see p (the terrain does not hide it)? */
-  private visible(p: THREE.Vector3) {
-    const e = _v.copy(this.station).add(_w.set(0, 1.65, 0));
-    for (let i = 1; i < 24; i++) {
-      const u = i / 24;
-      const x = e.x + (p.x - e.x) * u, y = e.y + (p.y - e.y) * u, z = e.z + (p.z - e.z) * u;
-      if (this.engine.terrain.heightAt(x, z) > y - 0.06) return false;
+  /**
+   * Can the slinger see p from the throwing mark — from his eyes and from the aim lens behind his shoulder — over the
+   * dry grass on the slope (`clear` above the ground along the sight line; none in the last metre before p)?
+   */
+  private visible(p: THREE.Vector3, clear = 0.3) {
+    const eyes = [_v.copy(this.station).add(_w.set(0, 1.65, 0)), this.station.clone().addScaledVector(this.F, -1.85).add(_w.set(0, 2.1, 0))];
+    for (const e of eyes) {
+      const d = e.distanceTo(p), n = Math.max(12, Math.ceil(d / 0.3));
+      for (let i = 1; i < n; i++) {
+        const u = i / n;
+        const x = e.x + (p.x - e.x) * u, y = e.y + (p.y - e.y) * u, z = e.z + (p.z - e.z) * u;
+        if (this.engine.terrain.heightAt(x, z) > y - ((1 - u) * d < 1 ? 0.04 : clear)) return false;
+      }
     }
     return true;
   }
 
-  /** the base for a target on the ground at (ahead, right): lifted onto a cairn when the slope would hide it */
-  private base(ahead: number, right: number, want: number, rockMat: THREE.Material, rockGeo: THREE.BufferGeometry, rnd: () => number) {
+  /**
+   * The base for a target on the ground at (ahead, right) whose middle is `mid` above its base: a cairn `want` high,
+   * built up (to 2.6 m at most) when the slope would hide the target's middle.
+   */
+  private base(ahead: number, right: number, want: number, mid: number, rockMat: THREE.Material, rockGeo: THREE.BufferGeometry, rnd: () => number) {
     const p = this.at(ahead, right);
-    let h = want;
     const probe = new THREE.Vector3();
-    for (let k = 0; k < 6; k++) {
-      probe.copy(p).y += h + 0.2;
-      if (this.visible(probe)) break;
-      h += 0.3;
+    const seen = (h: number) => this.visible(probe.set(p.x, p.y + h + mid, p.z));
+    let h = want;
+    if (!seen(h)) {
+      let lo = h, hi = 2.6;
+      if (seen(hi)) {
+        for (let k = 0; k < 6; k++) {
+          const m = (lo + hi) / 2;
+          if (seen(m)) hi = m;
+          else lo = m;
+        }
+      }
+      h = Math.min(2.6, hi + 0.1);
     }
     if (h > 0.05) {
-      // a small cairn of fieldstones (the shepherd's stand for a target): instanced with the others
+      // a cairn of fieldstones (the shepherd's stand for a target): instanced with the others; a tall one is broader
       const n = Math.max(2, Math.round(h / 0.18) + 1);
+      const tall = Math.min(1, h / 2);
       for (let i = 0; i < n; i++) {
-        const s = 0.2 + rnd() * 0.08 - i * 0.012;
+        const s = (0.2 + rnd() * 0.08) * (1 + 0.35 * tall) - i * 0.012 * (1 - 0.55 * tall);
         this.cairnM.push(new THREE.Matrix4().compose(
           new THREE.Vector3(p.x + (rnd() - 0.5) * 0.12, p.y + (i / n) * h + 0.05, p.z + (rnd() - 0.5) * 0.12),
           new THREE.Quaternion().setFromEuler(new THREE.Euler(rnd(), rnd() * 6, rnd() * 0.3)),
           new THREE.Vector3(s * 1.3, s * 0.8, s * 1.15),
         ));
       }
-      this.solids.push({ id: 'cairn', center: () => new THREE.Vector3(p.x, p.y + h * 0.5, p.z), radius: 0.22, enabled: () => true, onHit: () => undefined, kind: 'solid', material: 'rock' });
+      const bottom = new THREE.Vector3(p.x, p.y + 0.1, p.z), top = new THREE.Vector3(p.x, p.y + Math.max(0.1, h - 0.12), p.z);
+      this.solids.push({ id: 'cairn', center: () => bottom.clone().lerp(top, 0.5), radius: 0.22, enabled: () => true, onHit: () => undefined, kind: 'solid', material: 'rock', segment: () => [bottom, top] as const });
     }
     p.y += h;
     return p;
@@ -270,7 +288,7 @@ export class Range {
     {
       const spots: [number, number, 'jar' | 'gourd'][] = [[22.5, -1.0, 'jar'], [26.5, 2.4, 'gourd'], [30.5, -3.0, 'jar'], [34.5, 1.2, 'gourd']];
       for (const [a, r, kind] of spots) {
-        const b = this.base(a, r, 0.35, rockMat, rockGeo, rnd);
+        const b = this.base(a, r, 0.35, kind === 'jar' ? 0.28 * 1.25 : 0.15 * 1.2, rockMat, rockGeo, rnd);
         // (larger storage jars and big gourds out there: at 30 m a water jar is a few pixels on a phone)
         if (kind === 'jar') this.addJar(2, b, 1.25, clay, jarGeo, true);
         else this.addGourd(2, b, 1.2, rnd);
@@ -287,7 +305,7 @@ export class Range {
     await lap();
     // ---- the terebinth (rounds 3 and 4): a gnarled tree on the near bank, a long low branch out over the line
     const tree = this.at(18.0, -9.6);
-    // (a big old tree: its long low branch ≈4 m up, so what hangs from it shows above the brow of the slope ≈12 m out)
+    // (a big old tree down on the wadi floor: its long low branch ≈4 m up, what hangs from it stands against the far bank)
     const branchEnd = this.at(19.9, -3.4, 4.05);
     const branchStart = tree.clone().add(_w.set(0, 3.1, 0));
     {
@@ -532,8 +550,8 @@ export class Range {
   }
 
   private addLog(round: number, rnd: () => number, clay: THREE.Material, jarGeo: THREE.BufferGeometry) {
-    // the log rolls across the line at ≈23 m, downhill; a small jar lashed to its end (on its axis) turns with it
-    // across the open wadi floor at 28 m (both ends visible from the mark), toward its lower side
+    // the log rolls across the line at 28 m, on the foot of the far bank (in full view from the mark), toward its
+    // lower side; a small jar lashed to its end (on its axis) turns with it
     const a = this.at(28.0, -9.0), b = this.at(28.0, 1.0);
     const down = a.y > b.y ? 1 : -1; // roll toward the lower end
     const from = down > 0 ? a : b, to = down > 0 ? b : a;

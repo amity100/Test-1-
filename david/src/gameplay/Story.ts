@@ -84,7 +84,7 @@ export class Story {
       this.ui.slingRelease(kind, shot.timing);
       this.range?.onShot(shot);
     };
-    player.onNoStones = () => this.ui.hint('<span class="h-item">הַיַּלְקוּט רֵיק — מַלֵּא אוֹתוֹ מֵעֲרֵמַת הָאֲבָנִים שֶׁלְּיַד סִמַּן הַקְּלִיעָה, אוֹ בַּנַּחַל</span>', 4);
+    player.onNoStones = () => this.ui.hint('<span class="h-item rh">הַיַּלְקוּט רֵיק — מַלֵּא אוֹתוֹ מֵעֲרֵמַת הָאֲבָנִים שֶׁלְּיַד סִמַּן הַקְּלִיעָה, אוֹ בַּנַּחַל</span>', 4);
     projectiles.onResolve = (shot) => this.onShotResolved(shot);
     if (new URLSearchParams(location.search).get('jump') === 'stones') this.jump = 'stones';
     // bear hit zones
@@ -481,7 +481,7 @@ export class Story {
     p.canSling = true;
     p.bag.plain = Math.max(p.bag.plain, 8);
     p.bag.preferSmooth = false;
-    this.ui.objective('הִתְאַמֵּן בַּקֶּלַע', 'עֲמֹד עַל סִמַּן הַקְּלִיעָה שֶׁבַּנַּחַל, לְיַד עֲרֵמַת הָאֲבָנִים');
+    this.ui.objective('הִתְאַמֵּן בַּקֶּלַע', 'עֲמֹד עַל סִמַּן הַקְּלִיעָה שֶׁעַל שְׂפַת הַנַּחַל, לְיַד עֲרֵמַת הָאֲבָנִים');
     this.ui.hint([K.sling, withLabel(K.look, 'כַּוֵּן')]);
     this.setMarker(R.station.clone().add(new THREE.Vector3(0, 0.9, 0)), 'סִמַּן הַקְּלִיעָה');
     this.beh = () => this.ui.stoneBag({ smooth: p.bag.smooth, plain: p.bag.plain, pouch: p.pouchKind });
@@ -523,9 +523,9 @@ export class Story {
     p.bag.preferSmooth = r === 4; // the finale: his chosen smooth stones first
     p.sfx('roundStart', 0.8);
     this.ui.praise(def.title, 1.8);
-    if (r === 1) this.ui.hint('<span class="h-item">הַחְזֵק — הַקֶּלַע מִסְתּוֹבֵב · שַׁחְרֵר כְּשֶׁהַכִּיס עוֹבֵר בָּאוֹר שֶׁבְּרֹאשׁ הַטַּבַּעַת</span>', 10);
-    else if (r === 2) this.ui.hint('<span class="h-item">בַּמֶּרְחָק הָאֶבֶן יוֹרֶדֶת — כַּוֵּן מֵעַל הַמַּטָּרָה, וְהָרוּחַ מְסִיטָה אוֹתָהּ</span>', 10);
-    else if (r === 3) this.ui.hint('<span class="h-item">כַּוֵּן לְאָן שֶׁהַמַּטָּרָה תַּגִּיעַ — לֹא לְאָן שֶׁהִיא עַכְשָׁו</span>', 9);
+    if (r === 1) this.ui.hint('<span class="h-item rh">הַחְזֵק — הַקֶּלַע מִסְתּוֹבֵב · שַׁחְרֵר כְּשֶׁהַכִּיס עוֹבֵר בָּאוֹר שֶׁבְּרֹאשׁ הַטַּבַּעַת</span>', 10);
+    else if (r === 2) this.ui.hint('<span class="h-item rh">בַּמֶּרְחָק הָאֶבֶן יוֹרֶדֶת — כַּוֵּן מֵעַל הַמַּטָּרָה, וְהָרוּחַ מְסִיטָה אוֹתָהּ</span>', 10);
+    else if (r === 3) this.ui.hint('<span class="h-item rh">כַּוֵּן לְאָן שֶׁהַמַּטָּרָה תַּגִּיעַ — לֹא לְאָן שֶׁהִיא עַכְשָׁו</span>', 9);
     else this.ui.verse(...verseArgs('jdg_20_16_slingers'), 8);
     let done = false, skip = false;
     R.onRoundDone = () => {
@@ -553,6 +553,7 @@ export class Story {
     this.check();
     this.beh = null;
     this.setMarker(null);
+    if (r === ROUNDS.length) this.ui.hideVerse(); // the slingers' verse of the finale never outlives its round
     if (!R.stats.done) R.live = false;
     return this.showRating(R.stats, r);
   }

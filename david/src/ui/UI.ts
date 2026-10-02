@@ -501,7 +501,10 @@ export class UI {
     e.classList.add('on');
   }
 
-  /** the stones in the shepherd's bag (smooth ones gold); null hides it */
+  /**
+   * the stones in the shepherd's bag (smooth ones gold, one dot each up to five; the plain ones from the heap one dot
+   * each up to four, more as one dot and a count) and the one in the pouch (ringed); null hides it
+   */
   stoneBag(b: { smooth: number; plain: number; pouch: 'smooth' | 'plain' | null } | null) {
     const e = this.bagEl ?? (this.bagEl = this.hudEl('stonebag'));
     if (!b) {
@@ -511,8 +514,9 @@ export class UI {
     const key = `${b.smooth}/${b.plain}/${b.pouch}`;
     if (key !== this.lastBag) {
       this.lastBag = key;
-      const n = (k: number, cls: string) => Array.from({ length: Math.min(12, k) }, () => `<i class="${cls}"></i>`).join('');
-      e.innerHTML = `<span class="sb-l">יַלְקוּט</span>${b.pouch ? `<i class="${b.pouch === 'smooth' ? 's' : 'p'} in"></i>` : ''}${n(b.smooth, 's')}${n(b.plain, 'p')}${b.smooth + b.plain + (b.pouch ? 1 : 0) === 0 ? '<span class="sb-e">רֵיק</span>' : ''}`;
+      const n = (k: number, cls: string, max: number) =>
+        k <= max ? Array.from({ length: k }, () => `<i class="${cls}"></i>`).join('') : `<span class="sb-g"><i class="${cls}"></i><span class="sb-n">×${k}</span></span>`;
+      e.innerHTML = `<span class="sb-l">יַלְקוּט</span>${b.pouch ? `<i class="${b.pouch === 'smooth' ? 's' : 'p'} in"></i>` : ''}${n(b.smooth, 's', 5)}${n(b.plain, 'p', 4)}${b.smooth + b.plain + (b.pouch ? 1 : 0) === 0 ? '<span class="sb-e">רֵיק</span>' : ''}`;
     }
     e.classList.add('on');
   }

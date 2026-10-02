@@ -2,7 +2,9 @@
 // scenarios that reproduce how the game drives it (Story's speeds, holds, faces and actions), renders from a
 // side / gameplay / front / close camera, and measures foot sliding while a paw is planted.
 //   /dev/bear.html?q=medium&w=640&h=360[&post=1][&fur=0]
-//   window.__setup(name) -> duration (s)   window.__step(sec)   window.__render(cam)   window.__metrics()
+//   window.__setup(name) -> duration (s)   window.__step(sec)   window.__render(cam)   window.__metrics() (per-paw slip)
+//   window.__probe() (paws / mouth / grip in the bear's root frame, the move playing)   window.__perf(name, n) (ms/update)
+//   capture scripts: scratchpad/cut/bear1_cap.mjs (8 fps strips), bear1_keys.mjs (key frames + probes), bear1_game.mjs
 //   scenarios: see SCENARIOS below          cams: side | game | front | close | rear3q | top
 import * as THREE from 'three';
 import { SkySystem } from '../src/world/Sky';
@@ -39,7 +41,7 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(40, W / H, 0.05, 26000);
 const sky = new SkySystem(renderer, 2048);
 scene.add(sky.group);
-sky.setSun(...((P.get('sun') ?? '22,120').split(',').map(Number) as [number, number]), scene);
+sky.setSun(...((P.get('sun') ?? '24,55').split(',').map(Number) as [number, number]), scene);
 const sc = sky.sun.shadow.camera;
 sc.left = -5; sc.right = 5; sc.top = 5; sc.bottom = -5;
 sc.updateProjectionMatrix();
@@ -60,7 +62,7 @@ const tex = (u: string, srgb: boolean, rep: number) => {
   t.anisotropy = 8;
   return t;
 };
-const gGeo = new THREE.PlaneGeometry(300, 300, 300, 300);
+const gGeo = new THREE.PlaneGeometry(300, 300, 150, 150);
 gGeo.rotateX(-Math.PI / 2);
 const gp = gGeo.attributes.position as THREE.BufferAttribute;
 for (let i = 0; i < gp.count; i++) gp.setY(i, groundH(gp.getX(i), gp.getZ(i)));
@@ -70,7 +72,7 @@ ground.receiveShadow = true;
 scene.add(ground);
 // reference stones every 2 m (sliding paws read against them)
 {
-  const g = new THREE.IcosahedronGeometry(0.06, 0);
+  const g = new THREE.TetrahedronGeometry(0.07, 0);
   const m = new THREE.MeshStandardMaterial({ color: 0xd9cdb6, roughness: 0.9 });
   const n = 60 * 60;
   const inst = new THREE.InstancedMesh(g, m, n);
@@ -223,7 +225,7 @@ const SCENARIOS: Record<string, Scenario> = {
     o('d', t, 1.0, () => { actor.alive = false; M().roar = 0; M().hold = 'down'; });
   }; } },
   // ---- the fight's new moves (BearModel v2 API; the harness skips what an older model lacks)
-  warn: { dur: 6, setup: () => { placeDavid(5); const o = once(); return (t, dt) => {
+  warn: { dur: 6, setup: () => { placeDavid(3.6); const o = once(); return (t, dt) => {
     actor.stop(dt); actor.face(davidPos, dt, 3); M().lookTarget = davidPos;
     o('w', t, 0.5, () => call('play', 'huff'));
     o('w2', t, 3.2, () => call('play', 'stomp'));
@@ -240,7 +242,7 @@ const SCENARIOS: Record<string, Scenario> = {
   stagger: { dur: 4.5, setup: () => { placeDavid(4); const o = once(); return (t, dt) => {
     actor.stop(dt); M().lookTarget = davidPos;
     o('s', t, 0.6, () => call('play', 'stagger'));
-    o('s2', t, 2.6, () => call('play', 'stagger', -1));
+    o('s2', t, 2.2, () => call('play', 'stagger', [], { side: 1 }));
   }; } },
   bluff: { dur: 5, setup: () => { placeDavid(16); const o = once(); return (t, dt) => {
     M().lookTarget = davidPos;
@@ -280,6 +282,7 @@ function setup(name: string) {
   start.set(0, groundH(0, 0), 0);
   actor.place(0, 0, heading0);
   david.visible = false;
+  davidOn = false;
   // settle into the idle (holds blend, legs plant)
   for (let i = 0; i < 90; i++) { actor.stop(DT); actor.update(DT); }
   call('resetMotion');
@@ -330,12 +333,14 @@ function setCam(name: string) {
   const tgt = camTarget.copy(b).add(V(0, 0.65, 0));
   if (name === 'side') { pos = tgt.clone().addScaledVector(R, -4.9).add(V(0, 0.3, 0)); look = tgt.clone().add(V(0, -0.05, 0)); fov = 34; }
   else if (name === 'game') {
-    // the gameplay follow camera: 3.6 m behind David at 1.55 m + a little, fov 52 — David ~4 m from the bear
+    // the gameplay follow camera over David's right shoulder (boom 3.6 m at 1.55 m, fov 52), framed on the bear; the
+    // stand-in post is hidden for it (it only marks where David stands)
     const toB = b.clone().sub(davidPos); toB.y = 0;
-    const d = david.visible && toB.length() > 0.5 ? toB.normalize() : F.clone();
-    const dp = david.visible ? davidPos : b.clone().addScaledVector(d, -4);
-    pos = dp.clone().addScaledVector(d, -3.6).add(V(0, 1.55 + 0.75, 0));
-    look = dp.clone().addScaledVector(d, 4).add(V(0, 1.0, 0));
+    const d = davidOn && toB.length() > 0.5 ? toB.normalize() : F.clone();
+    const dp = davidOn ? davidPos.clone() : b.clone().addScaledVector(d, -4);
+    const side = V(-d.z, 0, d.x);
+    pos = dp.clone().addScaledVector(d, -2.9).addScaledVector(side, -0.75).add(V(0, 2.05, 0));
+    look = b.clone().add(V(0, 0.75, 0)).lerp(dp.clone().add(V(0, 1.2, 0)), 0.2);
     fov = 52;
   } else if (name === 'front') { pos = tgt.clone().addScaledVector(F, 6.5).addScaledVector(R, 1.8).add(V(0, 0.7, 0)); look = tgt.clone().add(V(0, 0.25, 0)); fov = 38; }
   else if (name === 'close') { pos = tgt.clone().addScaledVector(F, 2.9).addScaledVector(R, -1.6).add(V(0, 0.45, 0)); look = tgt.clone().add(V(0, 0.15, 0)).addScaledVector(F, 0.5); fov = 40; }
@@ -352,7 +357,10 @@ function setCam(name: string) {
   sky.update(camera, tgt);
 }
 
+let davidOn = false;
 function render(cam: string) {
+  davidOn = david.visible || davidOn;
+  david.visible = davidOn && cam !== 'game';
   setCam(cam);
   shared.uTime.value = simT;
   if (post) post.render(1 / 60);
@@ -382,6 +390,25 @@ async function main() {
   win.__metrics = () => {
     const r = metrics.slide.map((s, i) => (metrics.contactT[i] > 0 ? s / metrics.contactT[i] : 0));
     return { slip: r.map((x) => +x.toFixed(3)), contact: metrics.contactT.map((x) => +x.toFixed(2)), maxPen: +metrics.maxPen.toFixed(3), t: +simT.toFixed(2), pos: actor.pos.toArray().map((x) => +x.toFixed(2)), heading: +actor.heading.toFixed(3), speed: +actor.speed.toFixed(2) };
+  };
+  // where the paws' balls and the mouth / head are now, in the bear's root frame (x left, y up, z forward), metres
+  win.__probe = () => {
+    const m = actor.model;
+    m.root.updateMatrixWorld(true);
+    const inv = m.root.matrixWorld.clone().invert();
+    const rs = (o: THREE.Object3D) => o.getWorldPosition(new THREE.Vector3()).applyMatrix4(inv).toArray().map((v) => +v.toFixed(2));
+    return { fl: rs(m.j.toesL), fr: rs(m.j.toesR), hl: rs(m.j.htoesL), hr: rs(m.j.htoesR), mouth: rs(m.mouthSocket), head: rs(m.headCenter), grip: rs(m.beardSocket), cur: (m as unknown as { current: unknown }).current };
+  };
+  // CPU cost of the motion: ms per BearActor.update (model incl.) over n frames of a scenario (no rendering)
+  win.__perf = (name: string, n = 600) => {
+    setup(name);
+    const t0 = performance.now();
+    for (let i = 0; i < n; i++) {
+      simT += DT;
+      driver(simT, DT);
+      actor.update(DT);
+    }
+    return +((performance.now() - t0) / n).toFixed(4);
   };
   win.__scenarios = Object.keys(SCENARIOS);
   win.__actor = actor;

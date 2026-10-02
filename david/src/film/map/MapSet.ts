@@ -51,7 +51,15 @@ const ramp = (t: number, t0: number, d: number) => smooth01((t - t0) / d);
 export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Promise<FilmSetHandle> {
   const t0 = performance.now();
   const prog = o.onProgress ?? (() => {});
-  const yieldFrame = o.yieldFrame ?? (() => new Promise<void>((r) => setTimeout(r, 0)));
+  const yield0 = o.yieldFrame ?? (() => new Promise<void>((r) => setTimeout(r, 0)));
+  // build cost per synchronous step (between two yields): the report / the loading wave (window.__map.steps)
+  const steps: { step: string; ms: number }[] = [];
+  let mark = performance.now();
+  const yieldFrame = async (step: string) => {
+    steps.push({ step, ms: Math.round((performance.now() - mark) * 10) / 10 });
+    await yield0();
+    mark = performance.now();
+  };
   const tier = engine.quality.tier;
   // desktop: everything 'hi' (~1.77 MB); mobile-high: the 2048 px map with the 1024 px inset and globe (~1.07 MB);
   // mobile-low: all 'lo' (~0.50 MB). The mesh: 769 x 721 vertices on desktop, 385 x 361 on phones.
@@ -70,12 +78,13 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
     loadBitmap(`map_inset_shade_${insetTier}.webp`),
   ]);
   prog(0.3);
-  await yieldFrame();
-  const heights = new MapHeights(heightImg);
+  steps.push({ step: 'fetch+decode (async, off-thread)', ms: Math.round(performance.now() - t0) });
+  await yield0();
+  mark = performance.now();
+  const heights = await MapHeights.create(heightImg, () => yieldFrame('heights (strip)'));
   if ('close' in heightImg) heightImg.close();
   const ground = (lon: number, lat: number) => Math.max(heights.at(lon, lat), 0) * edgeFade(lon, lat) + Math.min(heights.at(lon, lat), 0);
   prog(0.38);
-  await yieldFrame();
 
   const scene = new THREE.Scene();
   scene.matrixWorldAutoUpdate = true;
@@ -90,13 +99,17 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
     uEarthC: { value: earthC },
     uR: { value: MAP.R },
     uSunDir: { value: sunDir },
-    uSunCol: { value: new THREE.Color(1.0, 0.8, 0.6) },
+    uSunCol: { value: new THREE.Color(1.0, 0.84, 0.65) },
     uSkyCol: { value: new THREE.Color(0.42, 0.52, 0.72) },
-    uHazeK: { value: 2.5e-5 },
+    // the light's balance (shared by the terrain and the far globe: the box never shows against it)
+    uSunK: { value: 3.55 },
+    uAmbK: { value: 0.46 },
+    uSat: { value: 1.14 },
+    uHazeK: { value: 2.1e-5 },
     uHazeH: { value: 8000 },
     uHazeTint: { value: new THREE.Vector3(0.5, 0.74, 1.2) },
-    uHazeCol: { value: new THREE.Color(0.41, 0.52, 0.71) },
-    uHazeSun: { value: new THREE.Color(1.3, 0.92, 0.6) },
+    uHazeCol: { value: new THREE.Color(0.37, 0.48, 0.67) },
+    uHazeSun: { value: new THREE.Color(1.18, 0.86, 0.58) },
   };
 
   // ---- 2. the terrain mesh (lon / lat grid on the sphere, exaggerated relief; built in yielding row bands)
@@ -119,9 +132,10 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
       uv[k * 2] = (lon - b.lon0) / (b.lon1 - b.lon0);
       uv[k * 2 + 1] = (b.lat1 - lat) / (b.lat1 - b.lat0);
     }
-    if ((j & 63) === 63) {
+    // (small bands while the code is still cold, then 64 rows)
+    if ((j < 128 && (j & 15) === 15) || (j & 63) === 63) {
       prog(0.38 + 0.3 * (j / H));
-      await yieldFrame();
+      await yieldFrame('mesh rows');
     }
   }
   const idx = new Uint32Array((W - 1) * (H - 1) * 6);
@@ -136,14 +150,15 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
       idx[n++] = c;
       idx[n++] = c + 1;
     }
+    if ((j & 127) === 127) await yieldFrame('mesh index');
   }
   const tGeo = new THREE.BufferGeometry();
   tGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   tGeo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
   tGeo.setIndex(new THREE.BufferAttribute(idx, 1));
-  tGeo.computeBoundingSphere();
+  // (no bounding sphere: the terrain is never frustum-culled — it would cost a pass over 0.55 M vertices)
   prog(0.72);
-  await yieldFrame();
+  await yieldFrame('mesh index');
 
   const tColor = bitmapTexture(colorImg, true);
   const tShade = bitmapTexture(shadeImg, false);
@@ -158,8 +173,6 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
       ...common,
       tColor: { value: tColor },
       tShade: { value: tShade },
-      uSunK: { value: 3.3 },
-      uAmbK: { value: 0.62 },
       uTime: { value: 0 },
       uTexel: { value: new THREE.Vector2(1 / colorImg.width, 1 / colorImg.height) },
       tIColor: { value: tIColor },
@@ -198,8 +211,6 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
       uToEcef: { value: toEcef },
       uGlobeBox: { value: new THREE.Vector4(g.lon0, g.lon1, g.lat0, g.lat1) },
       uHole: { value: new THREE.Vector4(b.lon0 + 0.03, b.lon1 - 0.03, b.lat0 + 0.03, b.lat1 - 0.03) },
-      uSunK: { value: 3.3 },
-      uAmbK: { value: 0.62 },
     },
   });
   const globe = new THREE.Mesh(new THREE.SphereGeometry(MAP.R - 300, 192, 96), globeMat);
@@ -225,7 +236,7 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
   sky.renderOrder = -10;
   scene.add(sky);
   prog(0.78);
-  await yieldFrame();
+  await yieldFrame('materials');
 
   // ---- 4. the route: a sampled smooth curve draped over the land, drawn as a screen-space ribbon
   const keys = routeKeys();
@@ -362,7 +373,7 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
     return { id, ...gl };
   });
   prog(0.86);
-  await yieldFrame();
+  await yieldFrame('route');
 
   // ---- 5. the labels (DOM, the film's typography)
   const LT = labelTimes();
@@ -466,7 +477,7 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
     scene,
     camera,
     sky: null,
-    exposure: 0.5,
+    exposure: 0.52,
     atmosphere: { density: 0, godRays: 0 },
     update: (dt, cam) => {
       time += dt;
@@ -501,12 +512,14 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
     onLeave: () => labels.show(false),
   };
 
+  steps.push({ step: 'labels + view', ms: Math.round((performance.now() - mark) * 10) / 10 });
   prog(1);
   const buildMs = performance.now() - t0;
+  const longest = steps.filter((x) => !x.step.startsWith('fetch')).reduce((m, x) => Math.max(m, x.ms), 0);
   const tris = idx.length / 3 + 192 * 96 * 2 + 48 * 24 * 2 + ridx.length / 3;
-  const status = [`map: real terrain ${W}x${H} (${(tris / 1e6).toFixed(2)} M tris), ${texTier} textures, route + ${specs.length} labels; built in ${buildMs.toFixed(0)} ms`];
+  const status = [`map: real terrain ${W}x${H} (${(tris / 1e6).toFixed(2)} M tris), ${texTier} textures, route + ${specs.length} labels; built in ${buildMs.toFixed(0)} ms (longest step ${longest} ms)`];
   if (typeof location !== 'undefined' && new URLSearchParams(location.search).get('test') === '1') {
-    (window as unknown as Record<string, unknown>).__map = { camAt, headAt, labels, view, camera, scene, buildMs, tris, heights, sTime };
+    (window as unknown as Record<string, unknown>).__map = { camAt, headAt, labels, view, camera, scene, buildMs, tris, heights, sTime, steps, longest };
   }
 
   const _g = new THREE.Vector3();

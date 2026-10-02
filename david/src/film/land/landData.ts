@@ -138,6 +138,18 @@ export class LandHeight {
  * set's sun, incl. the Earth's curvature), A = convexity (ridges bright, gullies dark).
  */
 export function shadeTexture(tile: HeightTile, H: LandHeight, sunDir: THREE.Vector3, opts: { step?: number; maxDist?: number; useMods?: boolean } = {}): THREE.DataTexture {
+  const it = shadeTextureSteps(tile, H, sunDir, opts, 'shade');
+  for (;;) {
+    const r = it.next();
+    if (r.done) return r.value;
+  }
+}
+
+/**
+ * shadeTexture in bands of rows (cut7, CUT v5: the film sets build in small yielding steps): yields `label` after the
+ * heights and after every ~1/8 of the rows; returns the texture (LandSet's build does `yield* shadeTextureSteps(...)`).
+ */
+export function* shadeTextureSteps(tile: HeightTile, H: LandHeight, sunDir: THREE.Vector3, opts: { step?: number; maxDist?: number; useMods?: boolean } = {}, label = 'shade'): Generator<string, THREE.DataTexture, void> {
   const { w, h, x0, z0, dx } = tile;
   const out = new Uint8Array(w * h * 4);
   const hs = new Float32Array(w * h);
@@ -145,6 +157,8 @@ export function shadeTexture(tile: HeightTile, H: LandHeight, sunDir: THREE.Vect
     const x = x0 + i * dx, z = z0 + j * dx;
     hs[j * w + i] = opts.useMods ? H.height(x, z) : H.raw(x, z);
   }
+  yield label + ':heights';
+  const band = Math.max(8, Math.ceil(h / 8));
   const sh = Math.hypot(sunDir.x, sunDir.z) || 1;
   const sx = sunDir.x / sh, sz = sunDir.z / sh, tanE = sunDir.y / sh;
   const step0 = opts.step ?? dx;
@@ -178,6 +192,7 @@ export function shadeTexture(tile: HeightTile, H: LandHeight, sunDir: THREE.Vect
       const conv = c - (l + r + u + d) * 0.25;
       out[k * 4 + 3] = Math.round(Math.max(0, Math.min(1, 0.5 + conv / (dx * 0.25))) * 255);
     }
+    if ((j + 1) % band === 0 && j + 1 < h) yield label;
   }
   const tex = new THREE.DataTexture(out, w, h, THREE.RGBAFormat, THREE.UnsignedByteType);
   tex.wrapS = tex.wrapT = THREE.MirroredRepeatWrapping;

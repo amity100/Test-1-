@@ -37,14 +37,15 @@ export const D4_BLEATS: readonly { t: number; who: 'lamb' | 'ewe'; v: number }[]
 
 /**
  * (cut8, CUT v5) D3 'watch' / D4: the key animals on the slope below David's rock (world x, z, heading): a ewe with a lamb
- * nursing at her near (right) flank, a ewe with her lamb, a goat on the boulder at `goatRock`, the two rams; `extraLambs`
+ * nursing at her near (right) flank, a ewe with her lamb, a goat on the pale limestone outcrop at `goatRock` (on a placed
+ * rock's top if one is there), the two rams; `extraLambs`
  * lambs are born into the flock for it (Flock.addLamb — they stay in the game's flock: "ewes and their lambs").
  */
 export const D3_STAGE = {
-  nurse: [1.5, 14.6, -1.33] as number[],
-  ewe2: [-2.4, 18.2, 0.6] as number[],
-  goatRock: [6.7, 15.0, -0.9] as number[],
-  rams: [[5.6, 24.2, 2.5], [-1.2, 27.4, -0.5]] as number[][],
+  nurse: [3.4, 12.6, -1.05] as number[],
+  ewe2: [4.8, 14.6, 0.5] as number[],
+  goatRock: [-2.6, 9.6, -1.2] as number[],
+  rams: [[-0.8, 17.5, 2.2], [2.0, 20.5, -0.8]] as number[][],
   extraLambs: 2,
 };
 

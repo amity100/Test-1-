@@ -16,6 +16,11 @@ uniform float uHazeH;      // scale height (m)
 uniform vec3 uHazeTint;    // spectral weights of the extinction (blue scatters most)
 uniform vec3 uHazeCol;     // in-scattered colour (away from the sun)
 uniform vec3 uHazeSun;     // in-scattered colour toward the sun
+uniform float uSunK;       // the sun's and the sky's weights on the baked shade (shared: terrain and globe)
+uniform float uAmbK;
+uniform float uSat;        // the land's saturation (a satellite image's colour at first light)
+
+vec3 mapSat(vec3 c) { return max(mix(vec3(dot(c, vec3(0.2126, 0.7152, 0.0722))), c, uSat), 0.0); }
 
 float mapAlt(vec3 p) { return length(p - uEarthC) - uR; }
 
@@ -59,8 +64,6 @@ uniform sampler2D tIShade;
 uniform vec4 uInset;         // its box in the map's uv (u0, v0, u1, v1)
 uniform vec2 uITexel;
 uniform vec2 uBoxDeg;        // the map box's span (deg): its outer margin melts into the coarser globe
-uniform float uSunK;
-uniform float uAmbK;
 uniform float uTime;
 uniform vec2 uTexel;
 varying vec2 vUv;
@@ -80,10 +83,11 @@ void main() {
   float bias = 3.2 * (1.0 - smoothstep(0.0, 0.75, min(dd.x, dd.y)));
   vec4 c = texture2D(tColor, vUv, bias);
   float sh = texture2D(tShade, vUv, bias).r;
-  // the inset (always sampled: no derivatives in divergent flow), melted in over its outer 4 %
+  // the inset (always sampled: no derivatives in divergent flow), melted in over its outer 11 % (~8-14 km: its edge
+  // never reads as a line where the detail changes)
   vec2 iuv = (vUv - uInset.xy) / (uInset.zw - uInset.xy);
   vec2 ie = min(iuv, 1.0 - iuv);
-  float wIn = smoothstep(0.0, 0.04, min(ie.x, ie.y));
+  float wIn = smoothstep(0.0, 0.11, min(ie.x, ie.y));
   vec4 ci = texture2D(tIColor, clamp(iuv, 0.0, 1.0));
   float si = texture2D(tIShade, clamp(iuv, 0.0, 1.0)).r;
   c = mix(c, ci, wIn);
@@ -95,7 +99,7 @@ void main() {
   vec2 dq = mix(vUv / uTexel, iuv / uITexel, wIn);
   float dn = vnoise(dq * 2.3) * 0.6 + vnoise(dq * 5.1) * 0.4;
   alb *= 0.93 + 0.14 * dn * (1.0 - water);
-  vec3 land = alb * (uSunCol * sh * uSunK + uSkyCol * uAmbK);
+  vec3 land = mapSat(alb * (uSunCol * sh * uSunK + uSkyCol * uAmbK));
 
   vec3 col = land;
   if (water > 0.001) {
@@ -135,8 +139,6 @@ uniform sampler2D tGlobe;
 uniform mat3 uToEcef;     // world (tangent frame) -> Earth-centred, Earth-fixed
 uniform vec4 uGlobeBox;   // lon0, lon1, lat0, lat1 (deg) of the globe texture
 uniform vec4 uHole;       // the map box (deg), inset: the terrain mesh covers it
-uniform float uSunK;
-uniform float uAmbK;
 varying vec3 vWorld;
 ${MAP_COMMON}
 void main() {
@@ -148,7 +150,7 @@ void main() {
   // the bake stores albedo x (its relief's sun / flat ground's) x 0.5: lit here as the map's flat ground (shade 0.303)
   vec3 alb = texture2D(tGlobe, clamp(uv, 0.002, 0.998)).rgb * 2.0;
   float sea = smoothstep(0.004, 0.016, alb.b - alb.r);   // (linear albedo: deep water b - r ~ 0.04, land < 0)
-  vec3 landCol = alb * (uSunCol * 0.303 * uSunK + uSkyCol * uAmbK);
+  vec3 landCol = mapSat(alb * (uSunCol * 0.303 * uSunK + uSkyCol * uAmbK));
   vec3 N = normalize(vWorld - uEarthC);
   vec3 V = normalize(uCamPos - vWorld);
   float fres = 0.02 + 0.98 * pow(1.0 - max(dot(N, V), 0.0), 5.0);

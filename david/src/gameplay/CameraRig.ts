@@ -191,11 +191,23 @@ export class CameraRig {
     this.smoothTarget.x = damp(this.smoothTarget.x, this.target.x, 14, dt);
     this.smoothTarget.z = damp(this.smoothTarget.z, this.target.z, 14, dt);
     this.smoothTarget.y = damp(this.smoothTarget.y, this.target.y, 8, dt);
-    const want = THREE.MathUtils.lerp(THREE.MathUtils.lerp(this.dist, 2.25, this.closeW), 1.9, this.aimW);
+    // (play1) the aim lens: over his right shoulder, 1.9 m back, aimFov vertical. Phones held upright (aspect < 0.85):
+    // that lens was ≈15° across and his raised sling arm filled half the screen, so there it goes over his LEFT
+    // shoulder, 2.4 m back, with a horizontal field of 0.8 × aimFov — his head at ≈80 % of the width, the sling arm
+    // and the whirl at the right edge, the reticle's middle clear
+    const portrait = cam.aspect < 0.85;
+    const aimBoom = portrait ? 2.4 : 1.9;
+    let aimLat = 0.62, aimV = this.aimFovCur;
+    if (portrait) {
+      const th = Math.tan(THREE.MathUtils.degToRad(0.4 * this.aimFovCur));
+      aimV = THREE.MathUtils.radToDeg(2 * Math.atan(th / cam.aspect));
+      aimLat = -0.6 * aimBoom * th;
+    }
+    const want = THREE.MathUtils.lerp(THREE.MathUtils.lerp(this.dist, 2.25, this.closeW), aimBoom, this.aimW);
     const cp = Math.cos(this.pitch), sp = Math.sin(this.pitch);
     const dir = tmpA.set(Math.sin(this.yaw) * cp, sp, Math.cos(this.yaw) * cp);
     const right = tmpB.set(-Math.cos(this.yaw), 0, Math.sin(this.yaw));
-    const pivot = tmpC.copy(this.smoothTarget).addScaledVector(right, -0.62 * this.aimW);
+    const pivot = tmpC.copy(this.smoothTarget).addScaledVector(right, -aimLat * this.aimW);
     pivot.y += 0.08 * this.aimW - 0.55 * this.closeW * (1 - this.aimW);
     // terrain (and boulder) collision along the boom; boulders are ignored while the pivot itself is inside one's
     // margin (David pressed against a rock), so the camera never jams onto his head
@@ -223,7 +235,7 @@ export class CameraRig {
     cam.position.copy(pos);
     cam.up.set(0, 1, 0);
     cam.lookAt(look);
-    this.fov = THREE.MathUtils.lerp(FOLLOW_FOV - 6 * this.closeW, this.aimFovCur, this.aimW);
+    this.fov = THREE.MathUtils.lerp(FOLLOW_FOV - 6 * this.closeW, aimV, this.aimW);
     this.applyShake(dt, time);
   }
 

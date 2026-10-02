@@ -73,7 +73,8 @@ const smooth01 = (x: number) => {
 /** distance along a ray to the ground (null = it never meets it within ~60 km: the sky / the horizon) */
 function rayToGround(o: THREE.Vector3, d: THREE.Vector3, ground: (x: number, z: number) => number): number | null {
   let prev = 0;
-  for (let t = 1.5; t < 60000; t *= 1.18) {
+  // (geometric steps from 1.5 m to ~400 km: the realistic map's lens is up to ~100 km from its ground)
+  for (let t = 1.5; t < 400000; t *= 1.18) {
     if (o.y + d.y * t <= ground(o.x + d.x * t, o.z + d.z * t)) {
       let a = prev, b = t;
       for (let k = 0; k < 10; k++) {
@@ -705,7 +706,8 @@ export class Intro {
     const dir = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 2).normalize().negate();
     const ground = tk.set === 'world' ? (x: number, z: number) => engine.terrain.heightAt(x, z) : hdl?.ground ? (x: number, z: number) => hdl.ground!(x, z) : null;
     let depth = ok ? Math.max(1, this.f4.look.distanceTo(this.f4.pos)) : 100;
-    if (ground) depth = rayToGround(pos, dir, ground) ?? 30000;
+    // (a view of the sky or the horizon: the scene is effectively at infinity — the move is the pan / tilt only)
+    if (ground) depth = rayToGround(pos, dir, ground) ?? 1e7;
     // the capture: one more render of the outgoing view, the picture between the bars copied into a 2D canvas
     const t0 = performance.now();
     try {
@@ -775,9 +777,9 @@ export class Intro {
     const Hp = d.wrap.clientHeight || H;
     const roll = -d.vRoll * ee;
     // a pan / tilt / roll would bring the layer's edges into the frame: it grows just enough to keep covering it
-    // (invisible under the fade); a pull-back (s < 1) is let shrink, its edges feathered away (below)
+    // (invisible under the fade); only a real pull-back (s < 0.9) is let shrink, its edges feathered away (below)
     let s = s0;
-    if (s0 >= 1) {
+    if (s0 >= 0.9) {
       for (let k = 0; k < 2; k++) {
         const ax = Math.abs(ndcX * (W / 2) * s), ay = Math.abs(ndcY * (H / 2) * s);
         const rot = Math.abs(Math.sin(roll));

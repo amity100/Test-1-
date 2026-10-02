@@ -292,9 +292,10 @@ export function buildRamahGate(tex: TextureSet, tier: LandTier, frame: { origin:
   const ARC: [number, number, boolean, number][] = [
     [-2.1, 0.95, true, -0.25], [3.0, 0.95, true, 0.2],
     [-1.3, 3.6, false, 0.15], [1.6, 3.9, false, -0.2], [-2.6, 2.7, false, 0.1], [2.7, 2.9, false, -0.1],
-    // (cut7, CUT v5: the near pair turned further toward each other — their profiles, beards and faces in the lens'
-    //  near foreground as it dollies past them)
-    [-0.85, 7.6, false, 0.85], [1.25, 7.2, false, -0.9],
+    // (cut7, CUT v5: the near pair turned to each other and half back toward the lens — two elders murmuring with each
+    //  other in the near foreground: their faces, beards and profiles at the 'near' LOD as the lens dollies past them,
+    //  their heads turning between each other and Samuel)
+    [-0.85, 7.6, false, 1.9], [1.25, 7.2, false, -1.95],
     [-4.2, 4.8, false, 0.05], [4.0, 5.2, false, -0.1], [-2.4, 6.0, false, 0.3],
   ];
   for (const [lx, lz, seated, turn] of ARC) {

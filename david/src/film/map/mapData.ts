@@ -125,22 +125,32 @@ export class MapHeights {
   readonly w: number;
   readonly h: number;
   readonly data: Float32Array;
-  constructor(img: ImageBitmap | HTMLImageElement) {
-    this.w = img.width;
-    this.h = img.height;
+  private constructor(w: number, h: number) {
+    this.w = w;
+    this.h = h;
+    this.data = new Float32Array(w * h);
+  }
+  /** read the map back in horizontal strips, yielding between them (no long main-thread block in a background build) */
+  static async create(img: ImageBitmap | HTMLImageElement, yieldFrame: () => Promise<void>, rows = 96): Promise<MapHeights> {
+    const m = new MapHeights(img.width, img.height);
     const c = document.createElement('canvas');
-    c.width = this.w;
-    c.height = this.h;
+    c.width = m.w;
+    c.height = m.h;
     const g = c.getContext('2d', { willReadFrequently: true })!;
     g.drawImage(img as CanvasImageSource, 0, 0);
-    const px = g.getImageData(0, 0, this.w, this.h).data;
-    this.data = new Float32Array(this.w * this.h);
     const span = MAP.hMax - MAP.hMin;
-    for (let i = 0; i < this.data.length; i++) {
-      const q = px[i * 4] / 255;
-      this.data[i] = MAP.hMin + span * q * q;
+    for (let y0 = 0; y0 < m.h; y0 += rows) {
+      const n = Math.min(rows, m.h - y0);
+      const px = g.getImageData(0, y0, m.w, n).data;
+      const off = y0 * m.w;
+      for (let i = 0; i < n * m.w; i++) {
+        const q = px[i * 4] / 255;
+        m.data[off + i] = MAP.hMin + span * q * q;
+      }
+      await yieldFrame();
     }
     c.width = c.height = 1;
+    return m;
   }
   /** bilinear height (m, real) at lon / lat; outside the box: the edge */
   at(lon: number, lat: number): number {

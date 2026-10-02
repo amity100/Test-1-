@@ -295,10 +295,10 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
     ],
     direction: "Rachel's tomb by the road to Ephrath at first light: Jacob's single standing stone (Gen 35:20) on its low "
       + 'mound of fieldstones beside the worn road (Rashi on Gen 48:7: the road is the point) — no dome, no building; a low '
-      + 'dolly up the road toward it, the dawn light raking in from the right, grass and branches in the wind, birds; a '
-      + 'shepherd and his flock come down the road toward Bethlehem behind it; from `rise` the lens lifts away and climbs, '
-      + 'pulling back over the road and turning to the north, looking down — the map continues the climb (the end view: '
-      + 'scratchpad/wf/cut8_notes.md).',
+      + 'dolly through the grass toward it, looking into the dawn (the sun just beside the stone), grass and branches in the '
+      + 'wind, birds; a shepherd and his flock cross behind it, clear of the brush; from `rise` the lens lifts away and '
+      + 'climbs, pulling back over the road and turning to the north, looking down — the map continues the climb (the end '
+      + 'view: scratchpad/wf/cut8_notes.md).',
   },
   {
     id: 'map-exodus', n: 'P4', set: 'map', take: 'exodus', dur: 13.0, cut: 'dissolve', fade: 1.4, cue: 'map', beat: 'judea',

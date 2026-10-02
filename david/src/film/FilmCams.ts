@@ -157,7 +157,9 @@ export const baseTake = (take: string) => take.split(':')[0] as GilgalShotName;
 export const TAKE_LOOK: Record<string, { hand: number; freq?: number; exp?: number; expCurve?: [number, number][]; seed: number; jolt?: number; joltAmp?: number; calm?: [number, number] }> = {
   // the sunlit deck blows out at the set's exposure: down over the clouds, back up under them over the ridges
   // (cut7, CUT v5: P1's slow flight — a calm aerial float; the sunlit cloud tops held down, opening up under the deck)
-  flight: { hand: 0.14, freq: 0.5, expCurve: [[0, 0.8], [6.0, 0.8], [7.4, 0.98], [8.6, 1.18], [11, 1.32]], seed: 1 },
+  // (the end opened up further — x1.6 by the cut: the lens turns away from the dawn onto the ridge, and P2's morning
+  //  world opens much brighter; the two meet in the dissolve)
+  flight: { hand: 0.14, freq: 0.5, expCurve: [[0, 0.8], [6.0, 0.8], [7.4, 0.98], [8.6, 1.22], [10.2, 1.48], [11.2, 1.62], [12.4, 1.66]], seed: 1 },
   // (cut8, CUT v5) P3 the low dolly on the road's verge (an operator's hand), calming as the crane lifts away
   'rachel-dawn': { hand: 0.2, freq: 0.6, seed: 2, calm: [takeBeat('rachel-dawn', 'rise', 4) + 0.2, takeDur('rachel-dawn', 6)] },
   // (cut8, CUT v5) P2 the aerial drift toward Bethlehem: a helicopter's faint float

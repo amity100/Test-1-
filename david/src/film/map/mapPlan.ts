@@ -107,7 +107,7 @@ export function exodusKeys(): CamKey[] {
     { t: eg - 0.4, lon: 33.3, lat: 31.3, range: 1_250_000, heading: 0, pitch: 22, fov: 26 },
     // then it settles slowly onto the land while the road draws (the whole road stays in the frame)
     { t: eg + 1.6, lon: 33.6, lat: 30.9, range: 860_000, heading: 1, pitch: 40, fov: 26 },
-    { t: dur, lon: 34.25, lat: 30.78, range: 760_000, heading: 3, pitch: 47, fov: 26 },
+    { t: dur, lon: 34.35, lat: 31.0, range: 760_000, heading: 3, pitch: 47, fov: 26 },
   ];
 }
 

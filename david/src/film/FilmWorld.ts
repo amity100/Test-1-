@@ -121,12 +121,13 @@ export const WORLD_CAM = {
   // P3 (cut8 on cut4's composition): the low dolly toward the stone along the dawn axis (`axis` < 0: the low sun's
   // heading turned `axisTurn` rad south, so the sun disc stands just beside the stone), `back` m before the pillar,
   // `side` m to the right of the axis, `h` m over the ground (just over the grass tops: the drove reads over them); the
-  // look `lookFar` m beyond the pillar, `lookRight` m to the right, `lookH` m up. The shepherd and his flock cross behind
-  // the stone (right -> left, on the nearest ground the lens sees past it, `flockD`+ m behind it; the grass pressed round
-  // them). From beats.rise the crane: up `riseH` m (log-height, k `riseK` /s) and back over the road south of the stone
+  // look `lookFar` m beyond the pillar, `lookRight` m to the right, `lookH` m up. The shepherd leads his flock out along
+  // the shepherds' path from the town to the pasture (LAYOUT.path runs just behind the stone): from `walkFrom` to
+  // `walkTo` (x east, z south of the pillar, m) at `walk` m/s — behind the stone, left to right, on the bare path (the
+  // grass pressed round them). From beats.rise the crane: up `riseH` m (log-height, k `riseK` /s) and back over the road south of the stone
   // (`riseTo` + the height / tan pitch: the stone stays ahead, below), turning to `riseHead` (deg: 180 = north) and
   // tilting down to `risePitch` (deg) by `riseAt` s
-  rachel: { axis: -1, axisTurn: -0.12, back0: 11.6, back1: 6.8, side0: -1.3, side1: -0.7, h0: 1.32, h1: 1.22, lookFar: 34, lookRight: 6.5, lookH: 1.75, fov0: 31, fov1: 27.5, flockD: 5, crossL: 10, crossR: 9, walk: 0.9, exp: 0.88, riseH: 160, riseK: 3.0, riseTo: [0, 8], riseHead: 180, risePitch: -58, riseFov: 40, riseAt: 5.6 },
+  rachel: { axis: -1, axisTurn: -0.12, back0: 11.6, back1: 6.8, side0: -1.3, side1: -0.7, h0: 1.45, h1: 1.35, lookFar: 34, lookRight: 6.5, lookH: 1.75, fov0: 31, fov1: 27.5, walkFrom: [2.5, -7.0], walkTo: [22, 20], walk: 1.05, exp: 0.88, riseH: 160, riseK: 3.0, riseTo: [0, 0], riseHead: 180, risePitch: -58, riseFov: 40, riseAt: 5.6 },
   // D1: the orbit / crane behind David (azimuth from his back, radius, height above his feet)
   figure: { az0: 48, az1: 58, r0: 3.3, r1: 3.8, h0: 1.5, h1: 1.85, lookAhead1: 12, lookDown1: 2.4, lookMix0: 0.08, lookMix1: 0.2, headH: 1.55, fov0: 34, fov1: 37, exp: 0.86 },
   // D2 (cut4): the push-in on the face, BACKLIT (see frame('face'))
@@ -134,7 +135,7 @@ export const WORLD_CAM = {
   // D3 (cut8): over his right shoulder from behind and a little above — `heading` (rad) of his gaze (the flock below),
   // the lens `back` m behind his feet, `right` m to his right, `up` m over his feet, drifting slowly (0 -> 1 over the
   // shot); the look `lookD` m out along his gaze, `lookDown` m under his feet; the lens
-  watch: { heading: 0.3, back0: 2.1, back1: 1.9, right0: 0.75, right1: 0.55, up0: 2.02, up1: 1.96, lookD: 30, lookDown0: 7.2, lookDown1: 7.5, fov0: 56, fov1: 54, fStopFlock: 5.6, fStopHim: 3.2 },
+  watch: { heading: 0.12, back0: 2.0, back1: 1.85, right0: 0.72, right1: 0.56, up0: 2.0, up1: 1.95, lookD: 30, lookDown0: 7.75, lookDown1: 7.9, fov0: 48, fov1: 46, fStopFlock: 5.6, fStopHim: 3.2 },
   // D4 (cut8): the follow lens in David's frame — keys [t (shot s), az (deg: the lens' heading seen from his feet; his
   // left side ≈ 107, behind him ≈ 197), r (m), h (m over his feet), yaw bias (deg, + = the frame turns left), pitch bias
   // (deg, + = up: sky for the logo), fov]; the look aims at the action (framing point) plus the biases; the last key is
@@ -146,9 +147,9 @@ export const WORLD_CAM = {
     keys: [
       [0, 168, 4.4, 2.55, 0, 0, 44],
       [1.4, 167, 4.3, 2.45, 0, 0, 44],
-      [4.2, 160, 3.8, 2.3, 0, -1, 44],
-      [5.6, 162, 3.7, 2.2, 0, 1, 44],
-      [7.2, 172, 4.3, 1.95, 0, 5, 44],
+      [4.2, 124, 3.6, 2.45, 0, -2, 44],
+      [5.6, 128, 3.5, 2.35, 0, 0, 44],
+      [7.2, 166, 4.2, 2.0, 0, 5, 44],
       [9.4, 176, 4.6, 1.85, 0, 6, 45],
       [11.2, 172, 3.9, 1.95, 0, 3, 45],
       [13.0, 180, 3.2, 2.15, 0, 2, 47],
@@ -272,29 +273,12 @@ export class FilmWorld {
     this.axisR.set(-this.axis.z, 0, this.axis.x);
   }
 
-  /** P3: the line behind the stone the flock crosses on — the nearest distance (>= flockD) where the ground is seen */
+  /** P3: the shepherd's way out along the shepherds' path behind the stone (from the town toward the pasture) */
   private buildRachelCross() {
     const c = WORLD_CAM.rachel;
     const P = this.pillar;
-    const lens = P.clone().addScaledVector(this.axis, -c.back1);
-    lens.y = this.ground(lens.x, lens.z) + c.h1;
-    let best = c.flockD;
-    for (let d = c.flockD; d <= c.flockD + 40; d += 2) {
-      const q = P.clone().addScaledVector(this.axis, d);
-      q.y = this.ground(q.x, q.z) + 0.45;
-      let seen = true;
-      for (let k = 1; k < 24 && seen; k++) {
-        const r = lens.clone().lerp(q, k / 24);
-        if (this.ground(r.x, r.z) > r.y - 0.05) seen = false;
-      }
-      if (seen) {
-        best = d;
-        break;
-      }
-    }
-    // right -> left across the view, toward the stone's side of the frame (the drove trails into the open right half)
-    this.crossA.copy(P).addScaledVector(this.axis, best).addScaledVector(this.axisR, -c.crossL);
-    this.crossB.copy(P).addScaledVector(this.axis, best + 1.5).addScaledVector(this.axisR, c.crossR);
+    this.crossB.set(P.x + c.walkFrom[0], 0, P.z + c.walkFrom[1]);
+    this.crossA.set(P.x + c.walkTo[0], 0, P.z + c.walkTo[1]);
   }
 
   private path(pos: THREE.Vector3[], look: THREE.Vector3[], fov: [number, number], ease = true): Path {
@@ -459,21 +443,16 @@ export class FilmWorld {
     // h(t) = h(ground) * exp(lnk) scaled so that it reaches riseH at T: h = h0 * exp(lnk - lnEnd) * riseH / h0 ... with a
     // floor at the ground lens: the rise adds height above the dolly's own
     const hRise = tc <= 0 ? 0 : Math.max(0, hEnd * Math.exp(lnk - lnEnd) - hEnd * Math.exp(-lnEnd));
-    const w = ss(rise, rise + (c.riseAt - rise) * 0.95, t);
-    // over to the road south of the stone as it rises, turning to the north (the stone ahead, below)
+    const w = ss(rise + 0.1, c.riseAt, t);
+    // over to the road south of the stone as it rises (the pull-back grows with the height, so the lens ends due south of
+    // the stone on the line pitched `risePitch` down onto it)
     const mv = smooth(clamp01((t - rise) / (c.riseAt - rise + 0.6)));
-    const yaw0 = c.axis * DEG, yaw1 = c.riseHead * DEG;
-    const yaw = yaw0 + wrap(yaw1 - yaw0) * smooth(w);
-    // (the pull-back grows with the height: the stone stays near the centre of the frame as the land opens round it)
     const pull = c.riseTo[1] + hRise / Math.tan(-c.risePitch * DEG);
     out.pos.set(lerp(lx, P.x + c.riseTo[0], mv), gy + hRise, lerp(lz, P.z + pull, mv));
-    // the look: from the dolly's look (toward the dawn) to the climb's (north, pitched down) as the crane rises
-    const dist = 40;
-    const lookY0 = Math.atan2(look.y - out.pos.y, Math.hypot(look.x - out.pos.x, look.z - out.pos.z));
-    const pitch = lerp(lookY0, c.risePitch * DEG, smooth(w));
-    const baseYaw = Math.atan2(look.x - out.pos.x, look.z - out.pos.z);
-    const y = lerp(baseYaw, baseYaw + wrap(yaw - baseYaw), smooth(w));
-    out.look.set(out.pos.x + Math.sin(y) * Math.cos(pitch) * dist, out.pos.y + Math.sin(pitch) * dist, out.pos.z + Math.cos(y) * Math.cos(pitch) * dist);
+    // the look: from the dolly's look (into the dawn) onto the stone as the crane rises — a pan that follows the stone
+    // round to the north (the stone stays in the frame; at the end: heading north, pitch = risePitch)
+    out.look.copy(look).lerp(this.tmp2.set(P.x, P.y, P.z), smooth(w));
+    void wrap;
     out.fov = lerp(lerp(c.fov0, c.fov1, ed), c.riseFov, smooth(w));
     out.roll = 0.012 * Math.sin(Math.min(1, t / T) * 2.4) * (1 - w);
   }
@@ -521,7 +500,7 @@ export class FilmWorld {
       const hTan = Math.atan2(tan.x, tan.z);
       let hd = startH + wrap(toLamb - startH) * 0.55 * ss(b('lamb', 0.3) + 0.35, w1a, t);
       hd = hd + wrap(hTan - hd) * ss(w1a - 0.15, w1a + 0.45, t);
-      hd = hd + wrap(toLamb - hd) * ss(w1b - 0.5, w1b + 0.1, t);
+      hd = hd + wrap(toLamb - 0.45 - hd) * ss(w1b - 0.5, w1b + 0.1, t);
       out.heading = hd;
       out.phase = t < w1a ? 'rock' : t < w1b ? 'walk1' : 'kneel1';
       return out;
@@ -532,7 +511,7 @@ export class FilmWorld {
     const tan = c2.getTangentAt(Math.min(0.999, Math.max(0.001, p.s)), this.tmp3);
     const hTan = Math.atan2(tan.x, tan.z);
     const toEwe = Math.atan2(ewe.x - out.pos.x, ewe.z - out.pos.z);
-    const toLamb = Math.atan2(lamb.x - d.kneel1[0], lamb.z - d.kneel1[1]);
+    const toLamb = Math.atan2(lamb.x - d.kneel1[0], lamb.z - d.kneel1[1]) - 0.45;
     let hd = toLamb + wrap(hTan - toLamb) * ss(w2a - 0.3, w2a + 0.5, t);
     hd = hd + wrap(toEwe - hd) * ss(w2b - 0.6, w2b + 0.1, t);
     hd = hd + wrap(HANDOFF.heading - hd) * ss(setDown + d.u2, setDown + d.u2 + 1.6, t);
@@ -641,7 +620,7 @@ export class FilmWorld {
           const dir = this.tmp2.copy(this.crossA).sub(this.crossB).setY(0).normalize();
           this.placeShepherd(0);
           try {
-            this.ff.stageFollow(() => this.h.player.pos, dir, { count: 11, back: [1.6, 8.5], spread: 2.6 });
+            this.ff.stageFollow(() => this.h.player.pos, dir, { count: 11, back: [1.4, 9.0], spread: 1.6 });
           } catch (e) {
             console.warn('[film] P3 flock', e);
           }
@@ -706,8 +685,8 @@ export class FilmWorld {
     const dir = this.tmp.set(A.x - B.x, 0, A.z - B.z);
     dir.normalize();
     const w = WORLD_CAM.rachel.walk;
-    const s = 2.0 + w * t;
-    this.movePlayer(B.x + dir.x * s - dir.z * 0.8, B.z + dir.z * s + dir.x * 0.8, Math.atan2(dir.x, dir.z), w);
+    const s = 4.0 + w * t;
+    this.movePlayer(B.x + dir.x * s, B.z + dir.z * s, Math.atan2(dir.x, dir.z), w);
   }
 
   /** P2: the shepherd walking his terrace (from beats.flock; before it he stands at the head of his flock) */
@@ -894,8 +873,10 @@ export class FilmWorld {
     // a goat on a boulder (a rock collider with a top: its flat top)
     const goat = flock.animals.find((a) => a.kind === 'goat' && !used.includes(a)) ?? null;
     if (goat) {
-      const rock = this.h.engine.colliders.all.find((c) => c.tag === 'rock' && c.top !== undefined && Math.hypot(c.x - S.goatRock[0], c.z - S.goatRock[1]) < 2.5);
-      if (rock && rock.top !== undefined) put(goat, rock.x, rock.z, S.goatRock[2], Math.max(0, rock.top - this.ground(rock.x, rock.z) - 0.05));
+      // on the rock's top (the world's placed rocks: the low limestone slabs have no collider)
+      const placed = (this.h.engine as unknown as { rocks?: { placed?: { x: number; z: number; s: number; h: number }[] } }).rocks?.placed ?? [];
+      const pr = placed.find((r) => Math.hypot(r.x - S.goatRock[0], r.z - S.goatRock[1]) < 1.2);
+      if (pr) put(goat, pr.x, pr.z, S.goatRock[2], Math.max(0, pr.h - 0.05));
       else put(goat, S.goatRock[0], S.goatRock[1], S.goatRock[2]);
     }
     // the rams
@@ -1273,12 +1254,18 @@ export class FilmWorld {
     const restores: (() => void)[] = [];
     try {
       const sc = this.h.engine.scene;
-      restores.push(hideTreesNear(sc, this.h.engine.village.rachelPillar, 16));
+      // (no cypress anywhere near the tomb in the frame: visual-bible 3.10 — a later, ornamental planting)
+      restores.push(hideTreesNear(sc, this.h.engine.village.rachelPillar, 40));
       const kinds = ['olive', 'oak', 'terebinth', 'cypress', 'bush'];
       // along the lens' track and past the stone to the crossing line, a little wider toward the frame's right
       for (const d of [-c.back0 + 1.5, -c.back0 * 0.5, 0, 4, 9, 14]) {
         const p = this.pillar.clone().addScaledVector(this.axis, d).addScaledVector(this.axisR, d > 0 ? 3.5 : 0.8);
         restores.push(hideTreesNear(sc, p, d > 0 ? 9 : 5.5, kinds));
+      }
+      // the crane lifts beside the lens and turns north over the road: nothing in its way on that side
+      for (const [d, l, r] of [[-c.back1, -6, 7], [-c.back0, -6, 7], [-2, -11, 7]]) {
+        const p = this.pillar.clone().addScaledVector(this.axis, d).addScaledVector(this.axisR, l);
+        restores.push(hideTreesNear(sc, p, r, kinds));
       }
     } catch (e) {
       console.warn('[film] hideTreesNear', e);
