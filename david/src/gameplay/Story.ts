@@ -530,7 +530,8 @@ export class Story {
     await this.shots([
       // from among the sheep toward the thicket
       { duration: 3.6, at: (u) => {
-        const p = over(lambAtStart.clone().addScaledVector(toThicket, -6).add(new THREE.Vector3(1.5, 1.0 + u * 0.3, 0)), 1.0 + u * 0.3);
+        // (over the tall grass of the scrub's edge, not through it: a lens at 1 m filled the frame's foot with blades)
+        const p = over(lambAtStart.clone().addScaledVector(toThicket, -6).add(new THREE.Vector3(1.5, 1.55 + u * 0.25, 0)), 1.55 + u * 0.25);
         return { pos: p, look: bearPos().clone().add(new THREE.Vector3(0, 0.8, 0)), fov: 40 - u * 6 };
       } },
       { duration: 3.2, at: (u) => {
