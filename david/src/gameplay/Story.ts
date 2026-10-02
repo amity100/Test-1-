@@ -1184,7 +1184,12 @@ export class Story {
     if (this.player.outOfBounds > 0 && !this.cam.inCinematic) this.ui.hint('<span class="h-item">הַצֹּאן זְקוּקִים לְךָ — חֲזֹר אֶל הַמִּרְעֶה</span>', 2);
     // shared pushers for grass
     const pu = shared.uPushers.value;
-    pu[0].set(this.player.pos.x, this.player.pos.y, this.player.pos.z, 0.7);
+    // David parts the grass round his legs; the parted patch sits a little toward the camera (the grass between the lens
+    // and his shins hid his legs in the tall straw — on a phone's small screen they seemed to vanish)
+    const cp = this.engine.camera.position;
+    const tx = cp.x - this.player.pos.x, tz = cp.z - this.player.pos.z, tl = Math.hypot(tx, tz) || 1;
+    const off = this.cam.inCinematic ? 0 : 0.3;
+    pu[0].set(this.player.pos.x + (tx / tl) * off, this.player.pos.y, this.player.pos.z + (tz / tl) * off, this.cam.inCinematic ? 0.7 : 0.95);
     if (this.bear.visible) pu[1].set(this.bear.pos.x, this.bear.pos.y, this.bear.pos.z, 1.3);
     else pu[1].set(0, -999, 0, 0);
     const lp = this.flock.lamb.position;

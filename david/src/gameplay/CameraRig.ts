@@ -1,9 +1,16 @@
 import * as THREE from 'three';
-import { clamp, damp } from '../core/noise';
+import { clamp, damp, smoothstep } from '../core/noise';
 
 export interface ShotFrame { pos: THREE.Vector3; look: THREE.Vector3; fov?: number; roll?: number }
 /** vertical field of view (deg) of the follow camera (not aiming) */
 export const FOLLOW_FOV = 52;
+/**
+ * Phones held upright: the follow camera looks down this much more (rad), so David stands in the middle of the screen
+ * with his legs and feet above the touch controls (the action buttons and the joystick fill the bottom third of a
+ * portrait screen; with the landscape framing his legs were under them and in the grass: "their legs disappear").
+ * Full at aspect <= 0.62, none from 1.0 (landscape); faded out while aiming.
+ */
+const PORTRAIT_TILT = THREE.MathUtils.degToRad(11);
 export type Shot = { duration: number; at: (t: number, time: number) => ShotFrame; ease?: boolean };
 
 /** Third-person orbit camera with terrain collision, aim mode, shake, and scripted cinematic shots. */
@@ -99,9 +106,21 @@ export class CameraRig {
     out.pos.copy(pivot).addScaledVector(dir, d);
     out.pos.y = Math.max(out.pos.y, this.ground(out.pos.x, out.pos.z) + 0.35);
     out.look.copy(pivot).addScaledVector(dir, -4);
+    this.portraitTilt(out.pos, out.look, 0);
     out.fov = FOLLOW_FOV;
     out.roll = 0;
     return out;
+  }
+
+  /** Tilt the follow camera's look point down on portrait screens (see PORTRAIT_TILT); `aimW` fades it out. */
+  private portraitTilt(pos: THREE.Vector3, look: THREE.Vector3, aimW: number) {
+    const k = (1 - smoothstep(0.62, 1.0, this.camera.aspect)) * (1 - aimW);
+    if (k <= 0.001) return;
+    const vx = look.x - pos.x, vz = look.z - pos.z;
+    const h = Math.hypot(vx, vz);
+    if (h < 1e-4) return;
+    const th = Math.atan2(look.y - pos.y, h) - PORTRAIT_TILT * k;
+    look.y = pos.y + h * Math.tan(Math.max(-1.3, th));
   }
 
   applyLook(dx: number, dy: number) {
@@ -173,6 +192,7 @@ export class CameraRig {
     const pos = tmpD.copy(pivot).addScaledVector(dir, this.curDist);
     pos.y = Math.max(pos.y, this.ground(pos.x, pos.z) + 0.35);
     const look = tmpE.copy(pivot).addScaledVector(dir, -4);
+    this.portraitTilt(pos, look, this.aimW);
     if (this.blendFromCine > 0 && this.lastCine) {
       this.blendFromCine = Math.max(0, this.blendFromCine - dt / 1.2);
       const b = this.blendFromCine * this.blendFromCine * (3 - 2 * this.blendFromCine);
