@@ -31,8 +31,11 @@
 // ============================================================================
 
 /** 'hush' (the bear's hook): the pasture holding its breath — a low drone, a thin high tone, a slow heartbeat; it also
- *  turns the ambience to the 'hush' bed (the birds and the cicadas fall away, the wind and the leaves stay). */
-export type MusicMood = 'silence' | 'title' | 'pastoral' | 'tension' | 'battle' | 'victory' | 'hush';
+ *  turns the ambience to the 'hush' bed (the birds and the cicadas fall away, the wind and the leaves stay).
+ *  'grip' (the bear's fight: the slow-motion hold on its jaw — a drone, a trembling high semitone, the choir holding its
+ *  breath, a slow heart; it loops while held) and 'fightEnd' (the last blow and the bear's fall: a deep hit, D minor
+ *  opening into D major, then a quiet drone until 'victory'). */
+export type MusicMood = 'silence' | 'title' | 'pastoral' | 'tension' | 'battle' | 'victory' | 'hush' | 'grip' | 'fightEnd';
 
 export type SfxName =
   | 'footstep' | 'footstepRun' | 'slingRelease' | 'stoneHit' | 'stoneHitBear' | 'jarShatter'
@@ -52,7 +55,12 @@ export type SfxName =
   // choosing the five smooth stones in the stream bed
   | 'pebblesKneel' | 'gravelReach' | 'waterRinse' | 'stoneRub' | 'stoneToBag' | 'stoneToss'
   // the practice range's stings (kinnor, frame drum, the shepherd's pipe)
-  | 'roundStart' | 'roundComplete' | 'rating1' | 'rating2' | 'rating3' | 'streak' | 'praise';
+  | 'roundStart' | 'roundComplete' | 'rating1' | 'rating2' | 'rating3' | 'streak' | 'praise'
+  // the bear's fight (bear1's names, gameplay v2 §4): the warnings, the paws, the jaws, the bluff, the fall, the panting
+  | 'bearHuff' | 'bearJawPop' | 'bearStomp' | 'bearSnap' | 'bearSlam' | 'bearLand' | 'bearSkid' | 'bearCollapse' | 'bearPant' | 'bearStep'
+  // ... and what the fight needs besides: the staff's blow on the bear, David knocked down, the grip's struggle, and the
+  // score's stings for the rise (the fight begins) and the grip (the slow motion)
+  | 'staffBlow' | 'davidFall' | 'gripStruggle' | 'riseSting' | 'gripSting';
 
 /** volume 0..1 (default 1), pitch multiplier (default 1; slight randomization is added), pan -1..1 */
 export interface SfxOptions { volume?: number; pitch?: number; pan?: number; }
@@ -303,7 +311,72 @@ class HushComposer extends Composer {
 }
 
 // ---------------------------------------------------------------------------
-// Battle: 118 bpm doumbek maqsum/baladi, taiko accents, spiccato ostinato, choir stabs, shofar.
+// Grip (the bear's fight, gameplay v2 §4 — 17:35 "וְהֶחֱזַקְתִּי בִּזְקָנוֹ"): the slow-motion hold on the bear's jaw — a low
+// drone, a trembling high semitone that tightens bar by bar, the choir holding its breath (D A D E♭), a slow heart (one
+// beat every 2 s, the world in slow motion) and a low tof. It loops while the player holds; 'fightEnd' takes over.
+// ---------------------------------------------------------------------------
+class GripComposer extends Composer {
+  protected readonly stepDur = 0.5;
+  protected readonly stepsPerBar = 8;
+  private readonly fx: FilmSound;
+
+  constructor(c: Core, s: Synth, mix: number, private readonly isLite: () => boolean) {
+    super(c, s, mix);
+    this.fx = new FilmSound(c, isLite());
+  }
+
+  protected reset(): void { this.fx.setLite(this.isLite()); }
+
+  protected onStep(step: number, t: number): void {
+    const s = this.s, lite = this.isLite();
+    const bar = Math.floor(step / 8), k = step % 8, b = Math.min(4, bar);
+    if (k === 0) {
+      const len = this.barDur;
+      s.pad(this.out, t, len + 1.5, lite ? [50, 57] : [38, 45, 50], { level: 0.05, attack: bar === 0 ? 0.6 : 1.2, release: 1.5, cutoff: lite ? 700 : 420, voices: 2, detune: 8, lfoCents: 200 });
+      s.pad(this.out, t, len + 1.2, bar % 2 ? [75, 76] : [74, 75], { level: 0.016 + 0.004 * b, attack: 1.2, release: 1.2, cutoff: 5200, voices: 2, detune: 5, trem: 0.5, tremRate: 9 + b });
+      s.choir(this.out, t, len + 1.2, lite ? [57, 62, 63] : [50, 57, 62, 63], { level: 0.035 + 0.008 * b, attack: 2, release: 1.2, vowel: 'oh', to: 'ah', morph: len, breath: 0.12 });
+    }
+    if (k % 4 === 0) this.fx.heart(this.dryOut, t + 0.01, Math.min(0.2, 0.12 + 0.02 * bar) * (lite ? 1.15 : 1));
+    if (k === 6 && bar >= 1) s.drum(this.dryOut, t, 'dum', 0.2 + 0.04 * b, 0);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Fight end (17:35 "וְהִכִּתִיו וַהֲמִיתִּיו"): the last blow and the bear's fall — a deep hit on a dark D minor that opens
+// into D major (the lamb saved), then a quiet drone with the kinnor's D–A (the head of David's motif) every other bar,
+// until the game calls 'victory' (or 'pastoral').
+// ---------------------------------------------------------------------------
+class FightEndComposer extends Composer {
+  protected readonly stepDur = 0.5;
+  protected readonly stepsPerBar = 8;
+
+  constructor(c: Core, s: Synth, mix: number, private readonly isLite: () => boolean) { super(c, s, mix); }
+
+  protected reset(): void { /* stateless */ }
+
+  protected onStep(step: number, t: number): void {
+    const s = this.s, lite = this.isLite();
+    const bar = Math.floor(step / 8), k = step % 8;
+    if (step === 0) {
+      // the blow and the fall: straight to the music bus (independent of the mood's fade-in)
+      const hit: Out = { dry: this.c.musicIn, wet: this.c.hallIn };
+      s.drum(hit, t, 'boom', 0.55, 0);
+      s.drum(hit, t + 0.005, 'taiko', 0.6, -0.2); s.drum(hit, t + 0.018, 'taiko', 0.5, 0.2);
+      s.pad(hit, t, 2.2, lite ? [50, 53, 57, 62] : [38, 45, 50, 53, 57], { level: 0.1, attack: 0.03, release: 1.4, cutoff: 1600, cutoffEnd: 700, voices: lite ? 2 : 3, detune: 10 });
+      s.choir(hit, t + 0.02, 2.0, [50, 53, 57, 62], { level: 0.08, attack: 0.05, release: 1.2, vowel: 'ah', breath: 0.14 });
+      // the chord opens (the minor third rising to the major) as the bear lies still
+      s.choir(this.out, t + 1.6, 4.5, lite ? [57, 62, 66] : [50, 57, 62, 66], { level: 0.05, attack: 1.4, release: 2.0, vowel: 'oo', to: 'ah', morph: 2, breath: 0.06 });
+      s.pad(this.out, t + 1.6, 5, lite ? [50, 57, 62, 66] : [38, 45, 50, 57, 62, 66], { level: 0.035, attack: 1.6, release: 2.4, cutoff: 1400, voices: lite ? 2 : 3, detune: 7 });
+    }
+    if (bar >= 1 && k === 0) {
+      s.pad(this.out, t, this.barDur + 2, lite ? [50, 57] : [38, 45, 50], { level: 0.05, attack: 1.5, release: 2, cutoff: lite ? 700 : 460, voices: lite ? 2 : 3, detune: 6, lfoCents: 300 });
+      if (bar % 2 === 1) { s.lyre(this.out, t + 0.5, 62, 0.4, -0.2); s.lyre(this.out, t + 1.5, 69, 0.36, 0.25); }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Battle: 118 bpm doumbek maqsum/baladi, taiko accents, spiccato ostinato, choir stabs, the score's low horn calls.
 // ---------------------------------------------------------------------------
 const BATTLE_SECTIONS: ReadonlyArray<readonly ChordName[]> = [
   ['D', 'Eb', 'D', 'Cm', 'D', 'Bb', 'Cm', 'D'],
@@ -324,13 +397,25 @@ class BattleComposer extends Composer {
 
   protected reset(): void { this.sec = BATTLE_SECTIONS[0]; this.pat = DRUM_PATTERNS[0]; this.full = true; this.alt = false; }
 
+  /** A call of the score's brass-like low horns: D–A–D swelling, or (alternately) a falling D–C–D. */
+  private hornCall(t: number, alt: boolean): void {
+    const ns: ReadonlyArray<readonly [number, number]> = alt ? [[50, 0.35], [48, 0.25], [50, 0.9]] : [[45, 0.3], [50, 1.1]];
+    let x = 0;
+    for (const [m, d] of ns) {
+      this.s.pad(this.out, t + x, d + 0.2, [m, m - 12], { level: 0.06, attack: Math.min(0.12, d * 0.4), release: 0.35, cutoff: 1500, cutoffEnd: 900, q: 1.3, voices: 2, detune: 6, lfoCents: 60 });
+      x += d;
+    }
+  }
+
   protected onStep(step: number, t: number): void {
     const s = this.s;
     const bar = Math.floor(step / 16), k = step % 16, bis = bar % 8, section = Math.floor(bar / 8);
     if (k === 0 && bis === 0) {
       if (section > 0) { this.sec = pick(BATTLE_SECTIONS); this.full = section % 2 === 0 || chance(0.5); }
       s.drum(this.out, t, 'boom', 0.3, 0);
-      if (section === 0 || chance(0.75)) { s.shofar(this.out, t + 0.05, this.alt ? 'teruah' : 'tekiah', 0.24); this.alt = !this.alt; }
+      // the score's low horns call each section (CUT v5: the shofar is the signal of Saul's army at Gilgal, 13:3 — never
+      // in a shepherd's fight alone with a bear)
+      if (section === 0 || chance(0.75)) { this.hornCall(t + 0.05, this.alt); this.alt = !this.alt; }
     }
     if (k === 0 && bar % 2 === 0) this.pat = pick(DRUM_PATTERNS);
     const chord = CHORDS[this.sec[bis]];
@@ -755,6 +840,7 @@ const UI_SFX: ReadonlySet<string> = new Set<SfxName>([
   'uiObjective', 'uiConfirm', 'heartbeat', 'titleHit', 'shepherdCall', 'shepherdWhistle', 'stinger', 'riser', 'robeTear',
   'eyesSting',
   'hitConfirm', 'roundStart', 'roundComplete', 'rating1', 'rating2', 'rating3', 'streak', 'praise',
+  'riseSting', 'gripSting',
 ]);
 /** [voice group, max concurrent] */
 const SFX_LIMIT: Partial<Record<SfxName, readonly [string, number]>> = {
@@ -771,6 +857,10 @@ const SFX_LIMIT: Partial<Record<SfxName, readonly [string, number]>> = {
   hitConfirm: ['hitUi', 3], pebblesKneel: ['bed', 2], gravelReach: ['bed', 2], waterRinse: ['rinse', 2], stoneRub: ['rub', 2],
   stoneToBag: ['bag', 2], stoneToss: ['toss', 3], roundStart: ['sting', 2], roundComplete: ['sting', 2], rating1: ['rating', 1],
   rating2: ['rating', 1], rating3: ['rating', 1], streak: ['streak', 3], praise: ['praise', 1],
+  bearHuff: ['bearBreath', 3], bearPant: ['bearBreath', 3], bearJawPop: ['jaw', 2], bearStomp: ['bearFoot', 3],
+  bearStep: ['bearFoot', 4], bearLand: ['bearFoot', 3], bearSlam: ['bearBig', 1], bearCollapse: ['bearBig', 1],
+  bearSkid: ['bearSkid', 1], bearSnap: ['bearSnap', 2], staffBlow: ['staffBlow', 3], davidFall: ['davidFall', 1],
+  gripStruggle: ['grip', 2], riseSting: ['riseSting', 1], gripSting: ['gripSting', 1],
 };
 
 /** Loudness trims (measured, K-weighted) so volume 1 of every effect sits well against the score. */
@@ -780,6 +870,10 @@ const SFX_GAIN: Partial<Record<SfxName, number>> = {
   impactBoom: 0.65, titleHit: 0.6,
   // gameplay v2 (measured in dev/score.ts 'sfx-game' against the pastoral music, which sits near -19 LUFS)
   skinThud: 0.75, roundComplete: 0.82, pebblesKneel: 1.2, gravelReach: 1.3, waterRinse: 1.45, stoneRub: 1.4, stoneToss: 1.2,
+  // the bear's fight (measured in dev/score.ts 'bear-fight' at volume 1, no distance: under the bear's voice and the
+  // battle music — at() takes off ≈5 dB more at 5 m)
+  bearHuff: 0.5, bearJawPop: 1.0, bearStomp: 0.8, bearLand: 0.85, bearStep: 0.55, bearSnap: 0.85, bearSlam: 0.85,
+  bearPant: 0.9, bearSkid: 0.9, bearCollapse: 0.9, davidFall: 0.85, gripStruggle: 0.9, riseSting: 0.72, gripSting: 0.68,
 };
 
 interface BleatPreset {
@@ -799,7 +893,15 @@ interface BeastPreset {
   dur: readonly [number, number]; f0: Pts; F1: Pts; amp: Pts; noise: Pts;
   rasp: readonly [number, number]; raspDepth: number; drive: number; wet: number; echo: number; level: number;
 }
-const BEASTS: Record<'roar' | 'growl' | 'hurt' | 'death', BeastPreset> = {
+type BeastKind = 'roar' | 'growl' | 'hurt' | 'death' | 'grunt' | 'strain';
+const BEASTS: Record<BeastKind, BeastPreset> = {
+  // the bear's fight: a short grunt of effort (a lunge, a slam) and the long strained growl through a held jaw (the grip)
+  grunt: { dur: [0.16, 0.24], f0: [[0, 70], [0.3, 96], [1, 60]], F1: [[0, 350], [0.3, 520], [1, 300]],
+    amp: [[0, 0], [0.15, 1], [0.6, 0.7], [1, 0]], noise: [[0, 0.6], [1, 0.5]],
+    rasp: [30, 22], raspDepth: 0.6, drive: 3.5, wet: 0.15, echo: 0.04, level: 0.75 },
+  strain: { dur: [2.2, 2.6], f0: [[0, 48], [0.2, 62], [0.5, 58], [0.8, 66], [1, 50]], F1: [[0, 280], [0.3, 420], [0.7, 460], [1, 300]],
+    amp: [[0, 0], [0.1, 0.7], [0.4, 0.9], [0.7, 1], [0.9, 0.8], [1, 0]], noise: [[0, 0.5], [1, 0.6]],
+    rasp: [26, 18], raspDepth: 0.8, drive: 3.5, wet: 0.2, echo: 0.05, level: 0.7 },
   roar: { dur: [1.7, 2.4], f0: [[0, 50], [0.12, 78], [0.35, 98], [0.7, 84], [1, 48]],
     F1: [[0, 300], [0.1, 560], [0.5, 650], [0.85, 520], [1, 320]],
     amp: [[0, 0], [0.08, 0.8], [0.25, 1], [0.7, 0.9], [0.9, 0.5], [1, 0]], noise: [[0, 0.5], [1, 0.6]],
@@ -934,6 +1036,22 @@ class SfxLib {
       rating3: (v, t, o, p, s) => this.rangeSting(t, o, p, s, 'r3'),
       streak: (v, t, o, p, s) => this.streak(t, o, p, s),
       praise: (v, t, o, p, s) => this.praise(t, o, p, s),
+      // the bear's fight
+      bearHuff: (v, t, o, p, s) => this.bearHuff(v, t, o, p, s),
+      bearJawPop: (v, t, o, p, s) => this.bearJawPop(v, t, o, p, s),
+      bearStomp: (v, t, o, p, s) => this.bearStomp(v, t, o, p, s),
+      bearSnap: (v, t, o, p, s) => this.bearSnap(v, t, o, p, s),
+      bearSlam: (v, t, o, p, s) => this.bearSlam(v, t, o, p, s),
+      bearLand: (v, t, o, p, s) => this.bearLand(v, t, o, p, s),
+      bearSkid: (v, t, o, p, s) => this.bearSkid(v, t, o, p, s),
+      bearCollapse: (v, t, o, p, s) => this.bearCollapse(v, t, o, p, s),
+      bearPant: (v, t, o, p, s) => this.bearPant(v, t, o, p, s),
+      bearStep: (v, t, o, p) => this.bearStep(v, t, o, p),
+      staffBlow: (v, t, o, p, s) => this.staffBlow(v, t, o, p, s),
+      davidFall: (v, t, o, p, s) => this.davidFall(v, t, o, p, s),
+      gripStruggle: (v, t, o, p, s) => this.gripStruggle(v, t, o, p, s),
+      riseSting: (v, t, o, p, s) => this.riseSting(v, t, o, s),
+      gripSting: (v, t, o, p, s) => this.gripSting(v, t, o, s),
     };
   }
 
@@ -1171,7 +1289,7 @@ class SfxLib {
   }
 
   /** Bear vocalisations: detuned saws + noise, rasp AM, distortion and moving formants. */
-  private beast(v: Voice, t: number, out: AudioNode, p: number, kind: 'roar' | 'growl' | 'hurt' | 'death', s: Sends): number {
+  private beast(v: Voice, t: number, out: AudioNode, p: number, kind: BeastKind, s: Sends): number {
     const B = BEASTS[kind];
     const c = this.c;
     const dur = rand(B.dur[0], B.dur[1]) / Math.sqrt(p);
@@ -1262,6 +1380,251 @@ class SfxLib {
     tone.connect(o); air.connect(o);
     s.echo(0.35); s.hall(0.2);
     return e + 0.1;
+  }
+
+  // --- the bear's fight (bear1's names, docs/gameplay-v2.md §4; 1 Sam 17:34-35) ----------------------------------------
+
+  /** The mid-range body of a heavy impact (a falling triangle through a lowpass): what a phone speaker plays of a thud
+   *  whose weight is below its range — stronger in the phone voicing. */
+  private body(v: Voice, o: AudioNode, t: number, f0: number, f1: number, amp: number, tau: number): void {
+    // phones: an octave up (a phone speaker starts near 250-300 Hz)
+    const k = this.lite ? 1.9 : 1;
+    const bo = v.osc('triangle', f0 * k, 0, t), lp = v.filter('lowpass', 900, 0.7), g = v.gain(0);
+    bo.frequency.setValueAtTime(f0 * k, t); bo.frequency.exponentialRampToValueAtTime(Math.max(20, f1 * k), t + tau * 2.5);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(amp * (this.lite ? 1.3 : 1), t + 0.004); g.gain.setTargetAtTime(0, t + 0.006, tau);
+    bo.connect(lp); lp.connect(g); g.connect(o);
+    // the knock of the ground itself, in the band a phone plays
+    this.burst(v, o, t, 'pink', 'bandpass', 480, 1.1, amp * (this.lite ? 1.1 : 0.6), 0.002, tau * 0.6);
+  }
+
+  /** A forceful blow of air through the nose and mouth (the bear's warning, ≈0.35 s): a nasal burst over the chest's push. */
+  private bearHuff(v: Voice, t: number, o: AudioNode, p: number, s: Sends): number {
+    const c = this.c;
+    const d = 0.32 / Math.sqrt(p);
+    const n = v.noise('pink', t), bp = v.filter('bandpass', 700 * p, 0.9), nas = v.filter('peaking', 1200 * p, 2.5, 6), g = v.gain(0);
+    bp.frequency.setValueAtTime(c.hz(950 * p), t); bp.frequency.exponentialRampToValueAtTime(c.hz(450 * p), t + d);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(1.0, t + 0.018); g.gain.setTargetAtTime(0, t + 0.03, d * 0.32);
+    n.connect(bp); bp.connect(nas); nas.connect(g); g.connect(o);
+    const ch = v.noise('brown', t), lp = v.filter('lowpass', 260, 0.8), cg = v.gain(0);
+    cg.gain.setValueAtTime(0, t); cg.gain.linearRampToValueAtTime(1.4, t + 0.012); cg.gain.setTargetAtTime(0, t + 0.02, d * 0.25);
+    ch.connect(lp); lp.connect(cg); cg.connect(o);
+    this.thump(v, o, t, 85 * p, 50 * p, 0.25, 0.05, 0.06);
+    s.hall(0.06);
+    return t + d + 0.15;
+  }
+
+  /** The jaw popping (≈0.12 s): the teeth clacked together — a hollow, woody clack, sometimes doubled. */
+  private bearJawPop(v: Voice, t: number, o: AudioNode, p: number, s: Sends): number {
+    const n = chance(0.5) ? 2 : 1;
+    for (let k = 0; k < n; k++) {
+      const tt = t + k * rand(0.06, 0.09), f = rand(950, 1300) * p, a = k ? 0.6 : 1;
+      this.ping(v, o, tt, f, 0.32 * a, 0.012); this.ping(v, o, tt, f * 1.9, 0.14 * a, 0.007); this.ping(v, o, tt, rand(380, 460) * p, 0.26 * a, 0.03);
+      this.burst(v, o, tt, 'white', 'bandpass', 2200 * p, 1.2, 0.3 * a, 0.0004, 0.004);
+    }
+    s.hall(0.08); s.echo(0.06);
+    return t + 0.3;
+  }
+
+  /** A heavy forepaw slapped on dry ground (strength by volume): a deep thud, the pad's slap, grit and dust. */
+  private bearStomp(v: Voice, t: number, o: AudioNode, p: number, s: Sends): number {
+    this.thump(v, o, t, 72 * p, 38 * p, 0.6, 0.09, 0.08);
+    this.thump(v, o, t, 150 * p, 90 * p, 0.4, 0.035, 0.04);
+    this.body(v, o, t, 160 * p, 75 * p, 0.35, 0.06);
+    this.burst(v, o, t, 'pink', 'lowpass', 1400 * p, 0.8, 0.6, 0.002, 0.03);
+    this.sample(v, o, t + 0.01, 'gravel', p * rand(0.75, 0.9), 0.45);
+    this.burst(v, o, t + 0.02, 'pink', 'bandpass', 2600, 0.7, 0.08, 0.04, 0.12);
+    s.hall(0.05); s.echo(0.05);
+    return t + 0.6;
+  }
+
+  /** The jaws closing on air in a bite lunge: a short grunt of effort and the wet clack of the teeth. */
+  private bearSnap(v: Voice, t: number, o: AudioNode, p: number, s: Sends): number {
+    const e = this.beast(v, t, o, p, 'grunt', s);
+    const tc = t + 0.05, f = rand(800, 1100) * p;
+    this.ping(v, o, tc, f, 0.4, 0.01); this.ping(v, o, tc, f * 2.1, 0.15, 0.006); this.ping(v, o, tc, 330 * p, 0.3, 0.035);
+    this.burst(v, o, tc, 'white', 'bandpass', 2600 * p, 1.6, 0.35, 0.0005, 0.008);
+    this.burst(v, o, tc + 0.004, 'pink', 'bandpass', 1500 * p, 3, 0.25, 0.002, 0.02);
+    return Math.max(e, t + 0.4);
+  }
+
+  /** Both forepaws coming down from full height (strength 1.4 by volume): a deep double thud, dust thrown up, a grunt. */
+  private bearSlam(v: Voice, t: number, o: AudioNode, p: number, s: Sends): number {
+    for (const [dt, a] of [[0, 1], [rand(0.03, 0.06), 0.8]] as const) {
+      this.thump(v, o, t + dt, 64 * p, 30 * p, 0.85 * a, 0.14, 0.12);
+      this.thump(v, o, t + dt, 140 * p, 80 * p, 0.38 * a, 0.04, 0.05);
+      this.body(v, o, t + dt, 140 * p, 62 * p, 0.45 * a, 0.08);
+      this.burst(v, o, t + dt, 'pink', 'lowpass', 1200 * p, 0.8, 0.55 * a, 0.002, 0.04);
+    }
+    this.sample(v, o, t + 0.02, 'gravel', p * 0.7, 0.55);
+    this.sample(v, o, t + 0.05, 'skid', p * 0.8, 0.25);
+    const n = v.noise('pink', t + 0.03), bp = v.filter('bandpass', 1800, 0.6), g = v.gain(0);
+    g.gain.setValueAtTime(0, t + 0.03); g.gain.linearRampToValueAtTime(0.12, t + 0.12); g.gain.setTargetAtTime(0, t + 0.2, 0.25);
+    n.connect(bp); bp.connect(g); g.connect(o);
+    this.beast(v, t, o, p * 0.9, 'grunt', s);
+    s.echo(0.1);
+    return t + 1.2;
+  }
+
+  /** Dropping from standing onto the forepaws (lighter than the slam): two thuds close together, a little grit. */
+  private bearLand(v: Voice, t: number, o: AudioNode, p: number, s: Sends): number {
+    for (const [dt, a] of [[0, 1], [rand(0.07, 0.12), 0.75]] as const) {
+      this.thump(v, o, t + dt, 78 * p, 42 * p, 0.45 * a, 0.08, 0.07);
+      this.thump(v, o, t + dt, 160 * p, 95 * p, 0.3 * a, 0.03, 0.04);
+      this.body(v, o, t + dt, 170 * p, 80 * p, 0.32 * a, 0.05);
+      this.burst(v, o, t + dt, 'pink', 'lowpass', 1300 * p, 0.8, 0.3 * a, 0.002, 0.03);
+    }
+    this.sample(v, o, t + 0.03, 'gravel', p * 0.85, 0.3);
+    s.hall(0.05);
+    return t + 0.7;
+  }
+
+  /** Paws braking hard on gravel and dry grass (≈0.5 s, the bluff charge pulled up short): skids, grit, the grass torn. */
+  private bearSkid(v: Voice, t: number, o: AudioNode, p: number, s: Sends): number {
+    const d = 0.5 / Math.sqrt(p);
+    this.sample(v, o, t, 'skid', p * rand(0.7, 0.8), 0.7);
+    this.sample(v, o, t + 0.08, 'skid', p * rand(0.8, 0.9), 0.5);
+    this.sample(v, o, t + 0.04, 'gravel', p * 0.8, 0.45);
+    this.sample(v, o, t + 0.22, 'gravel', p * 0.9, 0.3);
+    const n = v.noise('white', t), bp = v.filter('bandpass', 3200, 0.9), g = v.gain(0);
+    const G = g.gain;
+    G.setValueAtTime(0, t);
+    for (let x = 0; x < d; x += rand(0.01, 0.025)) G.linearRampToValueAtTime(rand(0.03, 0.14) * (1 - 0.7 * x / d), t + x);
+    G.linearRampToValueAtTime(0, t + d + 0.05);
+    n.connect(bp); bp.connect(g); g.connect(o);
+    this.thump(v, o, t + d * 0.85, 90 * p, 50 * p, 0.35, 0.05, 0.05);
+    s.hall(0.05);
+    return t + d + 0.3;
+  }
+
+  /** A heavy body falling on its side: the impact and the body settling, dust, and a long exhale (the breath leaving it). */
+  private bearCollapse(v: Voice, t: number, o: AudioNode, p: number, s: Sends): number {
+    this.thump(v, o, t, 58 * p, 28 * p, 0.85, 0.18, 0.14);
+    this.thump(v, o, t, 120 * p, 70 * p, 0.42, 0.06, 0.06);
+    this.body(v, o, t, 120 * p, 55 * p, 0.5, 0.1);
+    this.burst(v, o, t, 'pink', 'lowpass', 900 * p, 0.8, 0.7, 0.003, 0.06);
+    this.thump(v, o, t + 0.16, 70 * p, 36 * p, 0.45, 0.1, 0.08);
+    this.sample(v, o, t + 0.02, 'gravel', p * 0.65, 0.5);
+    this.sample(v, o, t + 0.05, 'rustle', p * 0.6, 0.3);
+    const n = v.noise('pink', t + 0.05), bp = v.filter('bandpass', 1500, 0.6), g = v.gain(0);
+    g.gain.setValueAtTime(0, t + 0.05); g.gain.linearRampToValueAtTime(0.1, t + 0.2); g.gain.setTargetAtTime(0, t + 0.3, 0.35);
+    n.connect(bp); bp.connect(g); g.connect(o);
+    this.hook.breath({ dry: o, wet: null }, t + 0.35, this.lite ? 0.12 : 0.09, 0.12, 1.7);
+    s.hall(0.1); s.echo(0.08);
+    return t + 2.5;
+  }
+
+  /**
+   * The open-mouthed panting of a tired bear: one 0.6 s one-shot = two breaths (call it again to keep it panting).
+   * `pitch` follows the fatigue: 1 = quick, hard panting; lower = slower, heavier and more rasping (0.7 = spent).
+   */
+  private bearPant(v: Voice, t: number, o: AudioNode, p: number, s: Sends): number {
+    const c = this.c;
+    const cyc = 0.3 / p, r = clamp((1.2 - p) * 0.5 + 0.12, 0.08, 0.4);
+    for (let k = 0; k < 2; k++) {
+      const t0 = t + k * cyc, ti = cyc * 0.4, te = cyc * 0.55;
+      const n = v.noise('pink', t0), bp = v.filter('bandpass', 900 * p, 0.8), g = v.gain(0);
+      bp.frequency.setValueAtTime(c.hz(1100 * p), t0); bp.frequency.setValueAtTime(c.hz(700 * p), t0 + ti);
+      g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(0.35, t0 + ti * 0.6); g.gain.linearRampToValueAtTime(0.08, t0 + ti);
+      g.gain.linearRampToValueAtTime(0.6, t0 + ti + te * 0.25); g.gain.linearRampToValueAtTime(0, t0 + ti + te);
+      n.connect(bp); bp.connect(g); g.connect(o);
+      // the out-breath voiced in the chest: a low rasp, stronger the more tired it is
+      const gr = v.osc('sawtooth', 52 * p, 0, t0 + ti), lp = v.filter('lowpass', 380, 1.2), am = v.osc('sine', 26, 0, t0 + ti);
+      const ag = v.gain(0.5), base = v.gain(0.5), rg = v.gain(0);
+      am.connect(ag); ag.connect(base.gain);
+      gr.connect(lp); lp.connect(base); base.connect(rg); rg.connect(o);
+      rg.gain.setValueAtTime(0, t0 + ti); rg.gain.linearRampToValueAtTime(r, t0 + ti + te * 0.3); rg.gain.linearRampToValueAtTime(0, t0 + ti + te);
+    }
+    s.hall(0.05);
+    return t + 2 * cyc + 0.1;
+  }
+
+  /** A paw on dry ground (very soft; the close camera only; pitch < 1 = a heavier step): a padded thud, a little grit. */
+  private bearStep(v: Voice, t: number, o: AudioNode, p: number): number {
+    this.thump(v, o, t, 90 * p, 55 * p, 0.28, 0.05, 0.05);
+    this.burst(v, o, t, 'pink', 'lowpass', 900, 0.8, 0.12, 0.003, 0.03);
+    this.sample(v, o, t + 0.01, 'gravel', rand(0.8, 1.0), 0.12);
+    return t + 0.35;
+  }
+
+  /**
+   * David's staff striking the bear (pitch ≈1.3 on the snout — the sensitive spot — 1 on the head): wood into fur and
+   * bone — the staff's knock damped by the fur, the slap into flesh, a bony crack (sharper on the snout). The swing's air
+   * is 'whoosh'; 'staffHit' stays the knock of wood on wood or rock.
+   */
+  private staffBlow(v: Voice, t: number, o: AudioNode, p: number, s: Sends): number {
+    const f = rand(240, 300) * p;
+    this.ping(v, o, t, f, 0.5, 0.022); this.ping(v, o, t, f * 2.35, 0.2, 0.012); this.ping(v, o, t, f * 4.1, 0.08, 0.007);
+    this.thump(v, o, t, 110 * p, 60 * p, 0.4, 0.05, 0.06);
+    this.body(v, o, t, 210 * p, 120 * p, 0.25, 0.04);
+    this.burst(v, o, t, 'pink', 'lowpass', 1800 * p, 0.8, 1.0, 0.0015, 0.025);
+    this.burst(v, o, t, 'white', 'bandpass', 3000 * p, 1.2, 0.4 * clamp(p - 0.7, 0.2, 0.7), 0.0004, 0.005);
+    s.hall(0.08); s.echo(0.06);
+    return t + 0.5;
+  }
+
+  /** David knocked down onto dry ground: his shoulder, then his hip hitting the earth, grit and dust, the tunic, the bag. */
+  private davidFall(v: Voice, t: number, o: AudioNode, p: number, s: Sends): number {
+    this.thump(v, o, t, 95 * p, 50 * p, 0.6, 0.07, 0.07);
+    this.thump(v, o, t + rand(0.08, 0.12), 110 * p, 60 * p, 0.35, 0.05, 0.05);
+    this.burst(v, o, t, 'pink', 'lowpass', 1300 * p, 0.8, 0.45, 0.002, 0.04);
+    this.sample(v, o, t + 0.01, 'skid', p * rand(0.85, 1.0), 0.45);
+    this.sample(v, o, t + 0.03, 'gravel', p * rand(0.85, 1.0), 0.45);
+    this.sample(v, o, t + 0.02, 'rustle', p * rand(0.8, 0.95), 0.35);
+    const f = rand(1500, 2000);
+    this.ping(v, o, t + 0.06, f, 0.08, 0.008); this.ping(v, o, t + 0.1, f * 1.2, 0.06, 0.007);
+    const n = v.noise('pink', t + 0.05), bp = v.filter('bandpass', 2000, 0.6), g = v.gain(0);
+    g.gain.setValueAtTime(0, t + 0.05); g.gain.linearRampToValueAtTime(0.08, t + 0.15); g.gain.setTargetAtTime(0, t + 0.2, 0.2);
+    n.connect(bp); bp.connect(g); g.connect(o);
+    s.hall(0.06);
+    return t + 0.9;
+  }
+
+  /**
+   * The grip (≈2.6 s; call it again to hold longer): the bear straining against David's hold on its jaw — a strained,
+   * rasping growl through the held jaw — under David's effort breaths, the fur and the tunic grinding.
+   */
+  private gripStruggle(v: Voice, t: number, o: AudioNode, p: number, s: Sends): number {
+    const e = this.beast(v, t, o, p, 'strain', s);
+    for (const x of [0.15, 0.85, 1.55, 2.15]) this.human(v, t + x + rand(-0.05, 0.05), o, rand(0.95, 1.08), 'effort', 0.5);
+    const n = v.noise('pink', t), bp = v.filter('bandpass', 2200, 0.7), g = v.gain(0);
+    const G = g.gain;
+    G.setValueAtTime(0, t);
+    for (let x = 0; x < 2.5; x += rand(0.06, 0.15)) G.linearRampToValueAtTime(rand(0.02, 0.09), t + x);
+    G.linearRampToValueAtTime(0, t + 2.6);
+    n.connect(bp); bp.connect(g); g.connect(o);
+    return Math.max(e, t + 2.7);
+  }
+
+  /**
+   * The bear rears up to its full height against him (17:35 "וַיָּקָם עָלַי" — the fight begins; UI): a deep hit, a low
+   * horn cluster (D–E♭) swelling and falling, the choir's groan, a trembling high cluster.
+   */
+  private riseSting(v: Voice, t: number, o: AudioNode, s: Sends): number {
+    const lo: Out = { dry: o, wet: null }, syn = this.syn, lite = this.lite;
+    this.sample(v, o, t, 'boom', 0.9, 0.42);
+    syn.drum(lo, t + 0.004, 'taiko', 0.75, -0.25); syn.drum(lo, t + 0.018, 'taiko', 0.62, 0.25);
+    syn.pad(lo, t, 2.6, lite ? [50, 51, 57] : [38, 39, 50, 51], { level: 0.12, attack: 0.08, release: 1.6, cutoff: 1500, cutoffEnd: 700, q: 1.3, voices: lite ? 2 : 3, detune: 10 });
+    syn.pad(lo, t + 0.01, 2.2, [62, 63], { level: lite ? 0.06 : 0.04, attack: 0.1, release: 1.4, cutoff: 2400, cutoffEnd: 1100, q: 1.3, voices: 2, detune: 8 });
+    syn.choir(lo, t + 0.03, 2.4, [50, 51, 57], { level: 0.09, attack: 0.1, release: 1.4, vowel: 'oh', to: 'ah', morph: 1.2, breath: 0.12 });
+    syn.pad(lo, t + 0.05, 1.8, [75, 76, 81], { level: 0.02, attack: 0.9, release: 0.6, cutoff: 5000, voices: 2, detune: 6, trem: 0.5, tremRate: 11 });
+    s.hall(0.4); s.echo(0.08);
+    return t + 3.5;
+  }
+
+  /**
+   * The grip on the jaw (17:35 "וְהֶחֱזַקְתִּי בִּזְקָנוֹ" — Targum Yonatan: by his jaw; the slow motion begins; UI): a deep,
+   * soft stroke, the heart's double knock, a held trembling high cluster, the choir's breath held.
+   */
+  private gripSting(v: Voice, t: number, o: AudioNode, s: Sends): number {
+    const lo: Out = { dry: o, wet: null }, syn = this.syn, lite = this.lite;
+    this.sample(v, o, t, 'boom', 0.8, 0.6);
+    syn.drum(lo, t + 0.006, 'taiko', 0.68, -0.2); syn.drum(lo, t + 0.02, 'taiko', 0.55, 0.2);
+    this.hook.heart(lo, t + 0.3, lite ? 0.26 : 0.2);
+    syn.pad(lo, t + 0.02, 3.2, [74, 75, 81], { level: 0.05, attack: 0.2, release: 1.2, cutoff: 4500, voices: 2, detune: 6, trem: 0.55, tremRate: 9 });
+    syn.choir(lo, t + 0.03, 3.0, lite ? [57, 62, 63] : [50, 57, 62, 63], { level: 0.1, attack: 0.25, release: 1.2, vowel: 'ah', breath: 0.14 });
+    syn.pad(lo, t, 3.4, lite ? [50, 57, 62] : [38, 45, 50, 57], { level: 0.07, attack: 0.15, release: 1.4, cutoff: 900, voices: 2, detune: 8 });
+    s.hall(0.45);
+    return t + 4.5;
   }
 
   // --- gameplay v2 (docs/gameplay-v2.md; play1's names): the sling in the sash, the stones, the range ----------------
@@ -1709,7 +2072,7 @@ class SfxLib {
 // ============================================================================
 
 const MUSIC_GAIN = 0.68;
-const MOOD_MIX: Record<Exclude<MusicMood, 'silence'>, number> = { title: 0.85, pastoral: 0.9, tension: 1, battle: 0.95, victory: 0.95, hush: 1 };
+const MOOD_MIX: Record<Exclude<MusicMood, 'silence'>, number> = { title: 0.85, pastoral: 0.9, tension: 1, battle: 0.95, victory: 0.95, hush: 1, grip: 1, fightEnd: 1 };
 /** How fast the pastoral comes up at the film's hand-off (its instruments carry their own attacks). */
 const HANDOFF_FADE = 0.6;
 const UNLOCK_EVENTS = ['pointerdown', 'keydown', 'touchend'] as const;
@@ -1851,6 +2214,8 @@ export class AudioEngine {
     this.moods.set('battle', new BattleComposer(core, syn, MOOD_MIX.battle));
     this.moods.set('victory', new VictoryComposer(core, syn, MOOD_MIX.victory));
     this.moods.set('hush', new HushComposer(core, syn, MOOD_MIX.hush, () => this.lite));
+    this.moods.set('grip', new GripComposer(core, syn, MOOD_MIX.grip, () => this.lite));
+    this.moods.set('fightEnd', new FightEndComposer(core, syn, MOOD_MIX.fightEnd, () => this.lite));
     const lib = new SfxLib(core, syn);
     lib.setLite(this.lite);
     this.lib = lib;
@@ -1931,7 +2296,7 @@ export class AudioEngine {
    */
   setMusicMood(mood: MusicMood, fadeSeconds = 3): void {
     const m: MusicMood = mood === 'title' || mood === 'pastoral' || mood === 'tension' || mood === 'battle' || mood === 'victory' || mood === 'hush'
-      ? mood : 'silence';
+      || mood === 'grip' || mood === 'fightEnd' ? mood : 'silence';
     const f = clamp(fin(fadeSeconds, 3), 0, 30);
     if (this.introActive || this.introPending) {
       if (m === 'title') return;

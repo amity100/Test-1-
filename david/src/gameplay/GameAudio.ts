@@ -21,6 +21,12 @@ export class GameAudio {
    * waterSplash, gourdSplit, cordSnap, skinThud, stoneOnRock / stoneOnWood / stoneOnEarth, hitConfirm (UI); the stream
    * bed — pebblesKneel, gravelReach, waterRinse, stoneRub, stoneToBag, stoneToss; the stings (UI) — roundStart,
    * roundComplete, rating1 / rating2 / rating3, streak (pitch = 1 + 0.12·(streak − 2)), praise.
+   * The bear's fight (bear1's names; positional through at()): bearHuff, bearJawPop, bearStomp, bearSnap, bearSlam,
+   * bearLand, bearSkid, bearCollapse, bearPant (one 0.6 s pair of breaths — call again to keep panting; pitch 1 = quick,
+   * lower = more tired: slower, heavier, rasping), bearStep (very soft), with bearRoar / bearGrowl / bearHurt / bearDeath;
+   * staffBlow (the staff on the bear: pitch ≈1.3 on the snout, 1 on the head), davidFall (knocked down onto dry ground),
+   * gripStruggle (≈2.6 s of the bear straining in the grip under David's effort breaths — call again to hold longer);
+   * the score's stings (UI): riseSting (the bear rears up against him: the fight begins), gripSting (the grip on the jaw).
    */
   sfx(name: SfxName, opts?: SfxOptions) {
     try {
@@ -43,7 +49,9 @@ export class GameAudio {
    * Crossfade the music to a mood. 'hush' (the bear's hook: the birds fall silent) also turns the ambience to the
    * 'hush' bed — the pastoral and the birds fall away into the wind, a low drone and a slow heartbeat — until
    * 'tension' takes over. 'pastoral' asked for while the opening film's score is ending waits for the score's own
-   * hand-off (it starts the pastoral on its bar line).
+   * hand-off (it starts the pastoral on its bar line). The bear's fight: 'battle' (the fight), 'grip' (the slow-motion
+   * hold on the jaw, looping while held — pair it with sfx('gripSting')), 'fightEnd' (the last blow and the fall: its own
+   * hit, D minor opening into D major, then a quiet drone until 'victory').
    */
   music(m: MusicMood, fade = 3) {
     this.engine.setMusicMood(m, fade);
