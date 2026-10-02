@@ -500,3 +500,8 @@ values and re-baked by our own tools (`tools/human`).
   see "Source texts") and checked by `tools/sources/verify_sources.py` (section "map names").
 - Everything else — the sphere terrain, the sky and the atmosphere's limb, the aerial perspective, the route ribbon and
   its glows, the DOM labels, the camera — is own code (CC0 by construction).
+
+## Opening film — the world takes P2, P3, D3, D4 and the hand-off (cut8: `src/film/FilmWorld.ts`, `src/film/filmAnimals.ts`, `src/film/land/rachel.ts`, the film section of `src/characters/DavidModel.ts`, `src/characters/Flock.ts`, `src/world/Village.ts`)
+- No third-party assets. The cradle hold (the lamb in David's arms), the lamb's folded pose, nursing, the goat's perch,
+  the extra lambs, the village's gateway, the cameras and the staging are own code (CC0 by construction); the morning
+  smoke over Bethlehem reuses the project's own `Smoke` particles (src/palace/palaceFx.ts).

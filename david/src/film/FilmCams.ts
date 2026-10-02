@@ -114,12 +114,12 @@ export const FILM_CAM = {
   // P5 (cut4): a LOW dolly (the elders' eye height) into the gathering toward Samuel in the gateway, in the gate's frame
   // (x along the wall, z out of the gate; Samuel at z 1.4): the near pair (marks 6-7) slide out past the frame edges,
   // the arc and the rising speaker in the mid-ground, Samuel right of centre, the verse high over the wall
-  // (cut7, CUT v5 P7 — 8 s, late afternoon: the dolly comes in LOW from the right of the gathering, diagonally across
-  //  it toward the left of the gate, so the elders of the arc's left side and the speaker on the left bench — who all
-  //  face Samuel — turn their faces toward the lens (3/4 fronts), the near pair's heads and beards slide through the
-  //  foreground, Samuel stands right of centre in the shaded passage (his face to the lens until he turns it away to
-  //  his right at `away`), the verse over the wall upper left; the lens a little below the elders' eyes)
-  elders: { x0: 3.6, z0: 10.6, x1: 2.45, z1: 8.75, h0: 1.22, h1: 1.34, lookX: -0.95, lookZ: 1.7, lookH: 1.42, fov0: 30, fov1: 24.5 },
+  // (cut7, CUT v5 P7 — 8 s, late afternoon: a slower, lower dolly (1.3 m in 8 s, a little under the elders' eyes) on
+  //  the gate's axis: the near pair — turned to each other, their profiles and beards at the 'near' LOD — frame the
+  //  picture left and right in the foreground for the whole shot (probed: ndc x -0.5..-0.86 / +0.6..+1.1), the speaker
+  //  on the left bench rising in profile, Samuel centred in the shaded passage facing the lens (his turn away at `away`
+  //  reads), the place card and the verse over the sunlit wall above the elders' heads. scratchpad/cut7/ramah_comp.py)
+  elders: { x0: 0.35, z0: 11.2, x1: 0.2, z1: 9.9, h0: 1.48, h1: 1.54, lookX: -0.4, lookZ: 1.4, lookH: 1.48, fov0: 31, fov1: 27.5 },
 };
 
 /**
@@ -158,7 +158,10 @@ export const TAKE_LOOK: Record<string, { hand: number; freq?: number; exp?: numb
   // the sunlit deck blows out at the set's exposure: down over the clouds, back up under them over the ridges
   // (cut7, CUT v5: P1's slow flight — a calm aerial float; the sunlit cloud tops held down, opening up under the deck)
   flight: { hand: 0.14, freq: 0.5, expCurve: [[0, 0.8], [6.0, 0.8], [7.4, 0.98], [8.6, 1.18], [11, 1.32]], seed: 1 },
-  'rachel-dawn': { hand: 0.22, seed: 2 },
+  // (cut8, CUT v5) P3 the low dolly on the road's verge (an operator's hand), calming as the crane lifts away
+  'rachel-dawn': { hand: 0.2, freq: 0.6, seed: 2, calm: [takeBeat('rachel-dawn', 'rise', 4) + 0.2, takeDur('rachel-dawn', 6)] },
+  // (cut8, CUT v5) P2 the aerial drift toward Bethlehem: a helicopter's faint float
+  bethlehem: { hand: 0.1, freq: 0.45, seed: 18 },
   glint: { hand: 0.2, freq: 0.8, exp: 0.8, seed: 3 },
   // (cut7, CUT v5) P6 the crane down to the host: a crane's float, calmer as it comes down onto the long lens
   threat: { hand: 0.16, freq: 0.6, exp: 1.0, seed: 3 },
@@ -179,7 +182,10 @@ export const TAKE_LOOK: Record<string, { hand: number; freq?: number; exp?: numb
   face: { hand: 0.16, freq: 0.5, seed: 14 },
   // (cut6, CUT v4) D3 'horizon': the crane's operator — a subtle float, calmer as it rises; it fades out over the glide
   // into the gameplay camera (`calm` = shot seconds) so the last frame is exactly the game's
-  horizon: { hand: 0.17, freq: 0.45, seed: 17, calm: [takeBeat('horizon', 'settle', 8), takeDur('horizon', 10) - 0.15] },
+  // (cut8, CUT v5) D3 'watch' over his shoulder: a calm hand; D4 'horizon' (18 s, one take): the follow lens' operator,
+  // settling to nothing over the glide into the gameplay camera (`calm` = shot seconds)
+  watch: { hand: 0.15, freq: 0.5, seed: 19 },
+  horizon: { hand: 0.15, freq: 0.45, seed: 17, calm: [takeBeat('horizon', 'settle', 14.6), takeDur('horizon', 18) - 0.15] },
   // the bear's hook in gameplay (src/gameplay/BearHook.ts, CUT v3's H1 / H2)
   thicket: { hand: 0.34, freq: 0.8, seed: 15 },
   lamb: { hand: 0.24, freq: 0.6, seed: 16 },

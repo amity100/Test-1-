@@ -23,9 +23,11 @@ import { MapLabels, type LabelSpec } from './mapLabels';
  *   const handle = await createMapSet(engine, { onProgress });   // a FilmSetHandle ('map'); async, yielding steps
  *   handle.frame('exodus' | 'tribes', u, t, out) / enter / tick / focus (null: deep focus) / dispose()
  *
- * Its own scene and camera; no shadow maps, no lights (the light is baked + analytic), one draw per part:
- * sky, globe, terrain, route, 7 glows. Per tier: 'hi' textures (2048 px) everywhere but mobile-low ('lo', 1024 px);
- * the terrain mesh 769 x 587 vertices on desktop, 385 x 294 on phones.
+ * Its own scene and camera; no shadow maps, no lights (the light is baked + analytic), one draw per part: sky, globe,
+ * terrain, route, 7 glows (~25 draw calls with the post chain). The terrain mesh: 769 x 721 vertices (1.1 M triangles)
+ * on desktop, 385 x 361 (0.28 M) on phones. Textures per tier: desktop all 'hi' (2048 px map + 2048 px inset of ~56 m
+ * texels + 2048 px globe: ~1.77 MB to download); mobile-high the 2048 px map with the 1024 px inset and globe
+ * (~1.08 MB); mobile-low all 'lo' (~0.50 MB). Decoded with createImageBitmap (off the main thread where supported).
  */
 export interface MapSetOptions {
   onProgress?: (f: number) => void;
@@ -51,17 +53,21 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
   const prog = o.onProgress ?? (() => {});
   const yieldFrame = o.yieldFrame ?? (() => new Promise<void>((r) => setTimeout(r, 0)));
   const tier = engine.quality.tier;
+  // desktop: everything 'hi' (~1.77 MB); mobile-high: the 2048 px map with the 1024 px inset and globe (~1.07 MB);
+  // mobile-low: all 'lo' (~0.50 MB). The mesh: 769 x 721 vertices on desktop, 385 x 361 on phones.
   const texTier = tier === 'mobile-low' ? 'lo' : 'hi';
   const meshTier = tier.startsWith('mobile') ? 'lo' : 'hi';
+  const insetTier = tier.startsWith('mobile') ? 'lo' : 'hi';
+  const globeName = tier.startsWith('mobile') ? 'map_globe_lo.webp' : 'map_globe.webp';
 
   // ---- 1. the assets (fetched and decoded in parallel; createImageBitmap decodes off the main thread)
   const [colorImg, shadeImg, heightImg, globeImg, iColorImg, iShadeImg] = await Promise.all([
     loadBitmap(`map_color_${texTier}.webp`),
     loadBitmap(`map_shade_${texTier}.webp`),
     loadBitmap(`map_height_${meshTier}.webp`),
-    loadBitmap('map_globe.webp'),
-    loadBitmap(`map_inset_color_${texTier}.webp`),
-    loadBitmap(`map_inset_shade_${texTier}.webp`),
+    loadBitmap(globeName),
+    loadBitmap(`map_inset_color_${insetTier}.webp`),
+    loadBitmap(`map_inset_shade_${insetTier}.webp`),
   ]);
   prog(0.3);
   await yieldFrame();
@@ -86,10 +92,10 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
     uSunDir: { value: sunDir },
     uSunCol: { value: new THREE.Color(1.0, 0.8, 0.6) },
     uSkyCol: { value: new THREE.Color(0.42, 0.52, 0.72) },
-    uHazeK: { value: 3.0e-5 },
+    uHazeK: { value: 2.5e-5 },
     uHazeH: { value: 8000 },
     uHazeTint: { value: new THREE.Vector3(0.5, 0.74, 1.2) },
-    uHazeCol: { value: new THREE.Color(0.44, 0.55, 0.74) },
+    uHazeCol: { value: new THREE.Color(0.41, 0.52, 0.71) },
     uHazeSun: { value: new THREE.Color(1.3, 0.92, 0.6) },
   };
 
@@ -165,6 +171,7 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
         ),
       },
       uITexel: { value: new THREE.Vector2(1 / iColorImg.width, 1 / iColorImg.height) },
+      uBoxDeg: { value: new THREE.Vector2(b.lon1 - b.lon0, b.lat1 - b.lat0) },
     },
   });
   const terrain = new THREE.Mesh(tGeo, terrainMat);
@@ -361,8 +368,9 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
   const LT = labelTimes();
   const p4Ids = Object.keys(LT) as MapNameId[];
   // the crowded corner at the end of the road: Jericho west of its point, Gilgal below, the plains of Moab east
-  const PLACE: Partial<Record<MapNameId, LabelSpec['at']>> = { jericho: 'w', gilgal: 's', moabPlains: 'e', ashkelon: 'w', gaza: 'w', gath: 'e', ekron: 'e' };
-  const specs: LabelSpec[] = [...p4Ids, ...TRIBE_ORDER, ...PHILISTINE_CITIES].map((id) => ({ id, pos: at(id, N[id].kind === 'sea' ? 0 : 800), at: PLACE[id], dot: id !== 'jericho' }));
+  // (the Kinneret's name west of the lake, the river's east of it: they never stack in a narrow portrait frame)
+  const PLACE: Partial<Record<MapNameId, LabelSpec['at']>> = { jericho: 'w', gilgal: 's', moabPlains: 'e', ashkelon: 'w', gaza: 'w', gath: 'e', ekron: 'e', kinneret: 'w', jordan: 'e' };
+  const specs: LabelSpec[] = [...p4Ids, ...TRIBE_ORDER, ...PHILISTINE_CITIES].map((id) => ({ id, pos: at(id, N[id].kind === 'sea' ? 0 : 800), at: PLACE[id], dot: id !== 'jericho' && id !== 'jordan' }));
   const canvas = engine.renderer.domElement;
   const labels = new MapLabels(canvas.parentElement ?? document.body, specs);
   prog(0.92);
@@ -390,7 +398,10 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
     const s = Math.max(0, Math.min(1, (1.2 - aspect) / (1.2 - 0.46))) * ease;
     const tan0 = Math.tan(THREE.MathUtils.degToRad(pose.fov) / 2);
     const tanP = tan0 * (1 + 0.9 * s);
-    const range = pose.range * (1 + s * Math.max(0, (0.62 * 2.39) / (1.9 * Math.max(aspect, 0.3)) - 1));
+    // (P4 keeps the whole road in a narrow portrait frame from further away; P5 comes in close over the land of Israel —
+    //  narrow and tall, it fills a portrait frame — so the extra distance melts away over its first seconds)
+    const near5 = take === 'tribes' ? 0.9 * ramp(t, 0, 2.8) : 0;
+    const range = pose.range * (1 + s * (1 - near5) * Math.max(0, (0.62 * 2.39) / (1.9 * Math.max(aspect, 0.3)) - 1));
     const pitch = Math.min(84, pose.pitch + 9 * s);
     const k = aspect < 0.95 ? 1 + (Math.min(2.6, Math.max(1, (0.45 * 2.39) / aspect)) - 1) * ease : 1;
     geoBasis(pose.lon, pose.lat, E, Nn, U);
@@ -451,7 +462,6 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
   // ---- 7. the view
   let near = 100, far = 4e6;
   let pxScale = 1;
-  const tmpRange = { v: 1000 };
   const view: ViewSpec = {
     scene,
     camera,
@@ -460,10 +470,13 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
     atmosphere: { density: 0, godRays: 0 },
     update: (dt, cam) => {
       time += dt;
-      // clip planes from the lens' distance to its ground point and the horizon's distance
+      // clip planes from the lens' height over the ground under it and the horizon's distance (a pure function of the
+      // camera: frame() stays free of side effects — the moving dissolve samples it)
       const alt = Math.max(50, cam.position.distanceTo(earthC) - MAP.R);
+      const gg = worldToGeo(cam.position);
+      const agl = Math.max(50, alt - Math.max(0, ground(gg.lon, gg.lat)) * MAP.exag);
       const horizon = Math.sqrt(2 * MAP.R * alt + alt * alt);
-      near = Math.max(20, Math.min(tmpRange.v * 0.22, alt * 0.35));
+      near = Math.max(20, agl * 0.3);
       far = Math.max(near * 50, horizon * 1.25 + 300_000);
       if (Math.abs(cam.near - near) > 1e-3 || Math.abs(cam.far - far) > 1e-3) {
         cam.near = near;
@@ -516,7 +529,7 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
       return geoToWorld(gg.lon, gg.lat, ground(gg.lon, gg.lat), _g).y;
     },
     frame(take, _u, t, out) {
-      tmpRange.v = camAt(take, t, out);
+      camAt(take, t, out);
       return true;
     },
     enter(take) {

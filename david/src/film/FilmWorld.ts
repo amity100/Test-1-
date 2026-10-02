@@ -117,13 +117,16 @@ export const WORLD_CAM = {
   // it, the look at `lookH` m over the centre's ground (`lookD` m beyond it), a slow crab `side` m to the right, the bank
   // `roll` (deg) easing out of P1's turn; the shepherd and his flock on the terraces: their walk starts `flockD` m from
   // the centre toward the lens and `flockSide` m to its side, along the contour at `walk` m/s
-  bethlehem: { head: -120, d0: 410, d1: 300, h0: 150, h1: 66, lookH: 6, lookD: 30, side0: 0, side1: 16, fov0: 41, fov1: 37.5, roll0: -3, roll1: 0, yaw0: 15, yawT: 1.25, flockD: 205, flockSide: -22, walk: 1.0, exp: 1.0 },
-  // P3 (cut8): the low dolly toward the stone along `axis` (deg heading: NE, the dawn glow just right of the frame),
-  // `back` m before the pillar, `side` m to the right of the axis, `h` m over the grass; the look `lookFar` m beyond the
-  // pillar, `lookRight` m to the right, `lookH` m up; from beats.rise the crane: up `riseH` m (log-height, k `riseK` /s),
-  // over to `riseTo` (x, z m from the pillar: above the road south of the stone), turning to `riseHead` (deg: 180 =
-  // north) and tilting down to `risePitch` (deg) by `riseAt` s — the stone and the road stay in the frame
-  rachel: { axis: 138, back0: 12.4, back1: 7.0, side0: -1.1, side1: -0.6, h0: 1.15, h1: 1.05, lookFar: 36, lookRight: 5.5, lookH: 1.9, fov0: 33, fov1: 28.5, flockD: 5, crossL: 11, crossR: 10, exp: 0.88, riseH: 160, riseK: 3.0, riseTo: [0, 8], riseHead: 180, risePitch: -58, riseFov: 40, riseAt: 5.6 },
+  bethlehem: { head: -120, d0: 335, d1: 210, h0: 135, h1: 58, lookH: 4, lookD: 20, side0: 0, side1: 18, fov0: 41, fov1: 37, roll0: -3, roll1: 0, yaw0: 15, yawT: 1.25, flockD: 118, flockSide: -26, walk: 1.0, exp: 1.04 },
+  // P3 (cut8 on cut4's composition): the low dolly toward the stone along the dawn axis (`axis` < 0: the low sun's
+  // heading turned `axisTurn` rad south, so the sun disc stands just beside the stone), `back` m before the pillar,
+  // `side` m to the right of the axis, `h` m over the ground (just over the grass tops: the drove reads over them); the
+  // look `lookFar` m beyond the pillar, `lookRight` m to the right, `lookH` m up. The shepherd and his flock cross behind
+  // the stone (right -> left, on the nearest ground the lens sees past it, `flockD`+ m behind it; the grass pressed round
+  // them). From beats.rise the crane: up `riseH` m (log-height, k `riseK` /s) and back over the road south of the stone
+  // (`riseTo` + the height / tan pitch: the stone stays ahead, below), turning to `riseHead` (deg: 180 = north) and
+  // tilting down to `risePitch` (deg) by `riseAt` s
+  rachel: { axis: -1, axisTurn: -0.12, back0: 11.6, back1: 6.8, side0: -1.3, side1: -0.7, h0: 1.32, h1: 1.22, lookFar: 34, lookRight: 6.5, lookH: 1.75, fov0: 31, fov1: 27.5, flockD: 5, crossL: 10, crossR: 9, walk: 0.9, exp: 0.88, riseH: 160, riseK: 3.0, riseTo: [0, 8], riseHead: 180, risePitch: -58, riseFov: 40, riseAt: 5.6 },
   // D1: the orbit / crane behind David (azimuth from his back, radius, height above his feet)
   figure: { az0: 48, az1: 58, r0: 3.3, r1: 3.8, h0: 1.5, h1: 1.85, lookAhead1: 12, lookDown1: 2.4, lookMix0: 0.08, lookMix1: 0.2, headH: 1.55, fov0: 34, fov1: 37, exp: 0.86 },
   // D2 (cut4): the push-in on the face, BACKLIT (see frame('face'))
@@ -260,10 +263,12 @@ export class FilmWorld {
     }
   }
 
-  /** P3's view axis (from WORLD_CAM.rachel.axis) and its right */
+  /** P3's view axis (WORLD_CAM.rachel.axis deg, or < 0: toward the dawn — the sun's heading turned a little south, so
+   *  the sun disc stands beside the stone, not behind it) and its right */
   private setRachelAxis() {
-    const a = WORLD_CAM.rachel.axis * DEG;
-    this.axis.set(Math.sin(a), 0, Math.cos(a));
+    const c = WORLD_CAM.rachel;
+    if (c.axis >= 0) this.axis.set(Math.sin(c.axis * DEG), 0, Math.cos(c.axis * DEG));
+    else this.axis.copy(this.sunH).applyAxisAngle(V(0, 1, 0), c.axisTurn).normalize();
     this.axisR.set(-this.axis.z, 0, this.axis.x);
   }
 
@@ -287,7 +292,7 @@ export class FilmWorld {
         break;
       }
     }
-    // right -> left across the view (the shepherd walks toward the stone's side of the frame, his flock trailing)
+    // right -> left across the view, toward the stone's side of the frame (the drove trails into the open right half)
     this.crossA.copy(P).addScaledVector(this.axis, best).addScaledVector(this.axisR, -c.crossL);
     this.crossB.copy(P).addScaledVector(this.axis, best + 1.5).addScaledVector(this.axisR, c.crossR);
   }
@@ -699,11 +704,10 @@ export class FilmWorld {
   private placeShepherd(t: number) {
     const A = this.crossA, B = this.crossB;
     const dir = this.tmp.set(A.x - B.x, 0, A.z - B.z);
-    const len = dir.length();
     dir.normalize();
-    const s = len * 0.12 + 1.0 * t;
-    const x = B.x + dir.x * s - dir.z * 0.8, z = B.z + dir.z * s + dir.x * 0.8;
-    this.movePlayer(x, z, Math.atan2(dir.x, dir.z), t > 0 ? 1.0 : 0);
+    const w = WORLD_CAM.rachel.walk;
+    const s = 2.0 + w * t;
+    this.movePlayer(B.x + dir.x * s - dir.z * 0.8, B.z + dir.z * s + dir.x * 0.8, Math.atan2(dir.x, dir.z), w);
   }
 
   /** P2: the shepherd walking his terrace (from beats.flock; before it he stands at the head of his flock) */
@@ -724,6 +728,23 @@ export class FilmWorld {
     p.pos.y = this.ground(x, z);
     p.heading = heading;
     p.speed = speed;
+  }
+
+  /** one spare grass pusher (3-5; gameplay uses 0-2) at x / z, radius r */
+  private setPusher(k: number, x: number, z: number, r: number) {
+    const pu = shared.uPushers.value as THREE.Vector4[];
+    if (pu.length > k) pu[k].set(x, this.ground(x, z), z, r);
+  }
+
+  /** D3 / D4: the grass pressed round the newborn (on the ground) and round its ewe / the nursing pair */
+  private pushFamily() {
+    const lamb = this.h.flock.lamb;
+    if (lamb.state !== 'carried') this.setPusher(3, lamb.position.x, lamb.position.z, 1.3);
+    else this.setPusher(3, 0, 0, 0);
+    const e = this.cast.ewe;
+    if (e) this.setPusher(4, e.position.x, e.position.z, 1.4);
+    const n = this.cast.nurseEwe;
+    if (n && this.staged === 'end') this.setPusher(5, n.position.x, n.position.z, 1.3);
   }
 
   /** spare grass pushers 3-5 back to rest (gameplay uses 0-2) */
@@ -765,8 +786,13 @@ export class FilmWorld {
       }
       case 'rachel-dawn': {
         this.placeShepherd(t);
-        this.pushGrassAtLens(this.axis);
-        m.speed = 1.0;
+        // the grass pressed in front of the lens, round the shepherd and through his drove (they read over the straw)
+        const cp = this.h.engine.camera.position;
+        this.setPusher(3, cp.x + this.axis.x * 1.3, cp.z + this.axis.z * 1.3, 1.7);
+        this.setPusher(4, player.pos.x, player.pos.z, 1.5);
+        const dw = this.tmp.copy(this.crossB).sub(this.crossA).setY(0).normalize();
+        this.setPusher(5, player.pos.x + dw.x * 4, player.pos.z + dw.z * 4, 2.6);
+        m.speed = WORLD_CAM.rachel.walk;
         this.ff.tick(t, dt, this.h.engine.camera);
         return;
       }
@@ -783,7 +809,11 @@ export class FilmWorld {
       case 'watch': {
         // D3: on his rock, watching his flock below (the head following it), the wind in his curls; the cast lives
         this.feet.copy(player.pos);
-        this.pushGrassAtLens(this.tmp.set(Math.sin(WORLD_CAM.watch.heading), 0, Math.cos(WORLD_CAM.watch.heading)));
+        // the grass pressed round the newborn on the rocks and the nursing pair (they read over the straw), and in
+        // front of the lens
+        this.pushFamily();
+        const cp = this.h.engine.camera.position, wh = WORLD_CAM.watch.heading;
+        this.setPusher(5, cp.x + Math.sin(wh) * 1.3, cp.z + Math.cos(wh) * 1.3, 1.6);
         m.performFilm('watch', t, { gaze: this.flockGaze(), wind: 1.7 });
         this.ff.tick(t, dt, this.h.engine.camera);
         this.tickCast(-1, t, dt);
@@ -792,6 +822,7 @@ export class FilmWorld {
       case 'horizon':
         this.clearPushers();
         this.tickD4(t, dt);
+        this.pushFamily();
         return;
       case 'vista':
         m.performFilm('wide', t);
@@ -1245,7 +1276,7 @@ export class FilmWorld {
       restores.push(hideTreesNear(sc, this.h.engine.village.rachelPillar, 16));
       const kinds = ['olive', 'oak', 'terebinth', 'cypress', 'bush'];
       // along the lens' track and past the stone to the crossing line, a little wider toward the frame's right
-      for (const d of [-c.back0 + 1.5, -c.back0 * 0.5, 0, 4, 9]) {
+      for (const d of [-c.back0 + 1.5, -c.back0 * 0.5, 0, 4, 9, 14]) {
         const p = this.pillar.clone().addScaledVector(this.axis, d).addScaledVector(this.axisR, d > 0 ? 3.5 : 0.8);
         restores.push(hideTreesNear(sc, p, d > 0 ? 9 : 5.5, kinds));
       }

@@ -268,17 +268,22 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
       { at: 0.4, seconds: 3.6, kind: 'time', narration: ['timeCard'] },
       { at: 5.4, seconds: 4.8, kind: 'person', narration: ['landIsrael', 'judahDays'], side: 'right', v: 'top' },
     ],
-    direction: 'Out of black (the time card): dawn — out of the sea of clouds and down over the hills of Judah: ridge '
-      + 'after ridge in the valley fog, terraces and olive groves on the near slopes, the Dead Sea glinting in the east and '
-      + 'the mountains of Moab beyond; one long, slow, majestic flight (never fast). The two-line card in the sky.',
+    direction: 'Out of black (the time card): dawn over a sea of clouds lying on the hills east of Bethlehem, the sun '
+      + 'rising over Moab, the deck breaking up over the desert toward the Dead Sea; ONE slow flight (cut7: keyed, ~60 m/s) '
+      + 'glides east and sinks through the deck while banking right, comes out under it over the hills of Judah in the '
+      + 'valley fog (terraces and olives below, broken clouds lit from beneath) and turns on round to the west-north-west '
+      + "until Bethlehem's ridge is ahead with the sun behind the lens — P2's aerial continues it through the dissolve. "
+      + 'The two-line card in the sky.',
   },
   {
     id: 'bethlehem', n: 'P2', set: 'world', take: 'bethlehem', dur: 7.0, cut: 'dissolve', fade: 1.0, cue: 'bethlehem', beat: 'bethlehem',
     beats: { card: 1.0, flock: 2.2 },
     text: [{ at: 1.0, seconds: 4.8, kind: 'person', narration: ['bethlehem', 'bethlehemJesse'], side: 'left', v: 'top' }],
-    direction: 'Bethlehem on its ridge in the early morning: the village of stone houses, threshing floors and terraces, '
-      + 'smoke rising from the roofs, the vineyards and olives below; a slow aerial drift toward the village; a shepherd '
-      + 'leads a flock out along the terraces (`flock`). Peaceful, alive, the light warming.',
+    direction: 'Bethlehem on its ridge in the early morning (one flight with P1 through the dissolve: from the ESE, the low '
+      + 'sun behind the right shoulder): a village of a few dozen four-room houses of fieldstone with flat roofs of packed '
+      + 'earth and courtyards — no city wall, no towers, a modest gateway by the well — the threshing floor, terraces with '
+      + 'olives on the slopes below, thin morning smoke from a few roofs; the glide slows into a drift toward the village; '
+      + 'from `flock` a shepherd leads his flock along a terrace (small in the frame). Peaceful, alive, the light warming.',
   },
   {
     id: 'rachel', n: 'P3', set: 'world', take: 'rachel-dawn', dur: 6.0, cut: 'dissolve', fade: 0.8, cue: 'rachel', beat: 'rachel',
@@ -288,9 +293,12 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
       { at: 0.6, seconds: 3.2, kind: 'place', narration: ['rachelTomb'], side: 'right', v: 'top' },
       { at: 1.6, seconds: 3.9, kind: 'verse', quote: 'gen_35_19_rachel_buried', stagger: 0.16, side: 'left', v: 'top', lines: 2 },
     ],
-    direction: "Rachel's tomb by the road to Ephrath at first light: Jacob's standing stone (Gen 35:20) among the stones "
-      + 'and the brush; a shepherd and his flock pass behind it; from `rise` the lens lifts away and climbs into the sky '
-      + 'over the road and the hills (the map continues the climb).',
+    direction: "Rachel's tomb by the road to Ephrath at first light: Jacob's single standing stone (Gen 35:20) on its low "
+      + 'mound of fieldstones beside the worn road (Rashi on Gen 48:7: the road is the point) — no dome, no building; a low '
+      + 'dolly up the road toward it, the dawn light raking in from the right, grass and branches in the wind, birds; a '
+      + 'shepherd and his flock come down the road toward Bethlehem behind it; from `rise` the lens lifts away and climbs, '
+      + 'pulling back over the road and turning to the north, looking down — the map continues the climb (the end view: '
+      + 'scratchpad/wf/cut8_notes.md).',
   },
   {
     id: 'map-exodus', n: 'P4', set: 'map', take: 'exodus', dur: 13.0, cut: 'dissolve', fade: 1.4, cue: 'map', beat: 'judea',
@@ -327,8 +335,10 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
       { at: 0.6, seconds: 3.0, kind: 'place', narration: ['philistia'], side: 'right', v: 'top' },
       { at: 1.8, seconds: 4.8, kind: 'verse', quote: 's1_13_19_no_smith_film', stagger: 0.14, side: 'left', v: 'top', lines: 2 },
     ],
-    direction: 'The Philistine host on the coastal plain: the column marching, bronze glinting, dust in the low sun, the '
-      + 'sea beyond; a long lens, a slow lateral track. Menace, power, iron that Israel does not have (13:19).',
+    direction: "The Philistine host on the coastal plain, the map's descent continued: from a crane 220 m over the plain, "
+      + "looking back WNW down the column marching inland out of Ashdod (its tell behind it, the sea a pale band), the lens "
+      + 'comes down on a log-height ease to a long lens at a man\'s height beside the front ranks — bronze glinting, dust in '
+      + 'the low morning sun, the near files large. Menace, power, iron that Israel does not have (13:19 in the sky).',
   },
   {
     id: 'elders', n: 'P7', set: 'ramah', take: 'elders', dur: 8.0, cut: 'cut', cue: 'elders', beat: 'saul-court',
@@ -338,9 +348,11 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
       { at: 0.5, seconds: 2.8, kind: 'place', narration: ['ramah'], side: 'right', v: 'top' },
       { at: 2.4, seconds: 4.4, kind: 'verse', quote: 's1_8_5_give_us_king', stagger: 0.16, side: 'left', v: 'top', lines: 2 },
     ],
-    direction: 'Ramah: the elders of Israel before old Samuel (8:4); a slow dolly in over their heads; one elder rises, '
-      + 'his arm out — "give us a king" — the others murmur and nod; Samuel, white-haired, listens and turns his face '
-      + 'away (8:6). Then the hard cut on the shofar into Gilgal.',
+    direction: 'Ramah in the late afternoon light (the sun low in the WSW raking the gate\'s stones, the roofed passage in '
+      + 'shade, the doors open): the elders of Israel before old Samuel (8:4); a slow, low dolly in on the gate\'s axis, '
+      + 'the near pair — turned to each other — framing it left and right; the speaker rises from the bench, his arm out '
+      + '(`rise`, 8:5 at `verse`), the others murmur and nod; Samuel in the gateway listens and turns his face away at '
+      + '`away` (8:6). Then the hard cut on the shofar into Gilgal.',
   },
 
   // ================================================================== 1 · GILGAL (10.5 s): the shofar, the army, the king
@@ -352,7 +364,8 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
     text: [{ at: 1.3, seconds: 2.5, kind: 'place', narration: ['gilgal'], side: 'left', v: 'top' }],
     direction: 'HARD CUT ON THE SHOFAR BLAST out of Ramah: low and close to the front rank as it comes out of the dust '
       + "wall at the lens, the lens backing away slowly; rams' horns lifted and blown in the front rank, the ranks "
-      + 'marching (not in lockstep), dust in the low sun. Exactly the frames of the old G1 from its shofar on.',
+      + 'marching (not in lockstep), dust in the low sun. Exactly the frames of the old G1 from its shofar on (TAKE_OFFSET '
+      + '1.5: the blocking, the horns, the set and the camera on the old clock; the set pre-rolled under the end of P7).',
   },
   {
     id: 'king', n: 'G2', set: 'gilgal', take: 'king', dur: 6.5, cut: 'cut', cue: 'saul', beat: 'warriors', slowmo: 0.5,
@@ -434,10 +447,11 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
     // verse: Ps 78:70-71 writes itself · rack: the focus racks from the flock back to him
     beats: { verse: 1.0, rack: 5.2 },
     text: [{ at: 1.0, seconds: 6.6, kind: 'verse', quote: 'ps_78_70_71_chose_david', stagger: 0.17, side: 'right', v: 'top', lines: 2 }],
-    direction: 'WHAT HE SEES (the user: "David must be seen watching his flock for a few seconds"): over his shoulder from '
-      + 'behind and a little above, the flock grazing on the slope below him — ewes and their lambs, a lamb nursing, the '
-      + 'rams, a goat on a rock — close enough to read every animal, in the warm low light; he watches them, calm, the '
-      + 'wind in his curls; a slow drift; at `rack` the focus comes back to him. Ps 78:70-71 in the sky.',
+    direction: 'WHAT HE SEES (the user: "David must be seen watching his flock for a few seconds"): over his right shoulder '
+      + 'from behind and a little above, the flock grazing on the slope below him — ewes and their lambs (one nursing at '
+      + 'her flank), the newborn on the rocks just below him, its mother further down, the rams, a goat on a rock — in the '
+      + 'warm low light from the left; he watches them, calm, the wind in his curls; a slow push over his shoulder (never '
+      + 'an orbit); at `rack` the focus comes back from the flock to him. Ps 78:70-71 over the far hills and the sky.',
   },
   {
     // the logo shot of CUT v4 re-made as one long, motivated take (same id / take: Intro's logo and hand-off code)
@@ -451,11 +465,13 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
       + 'moves away a little in a way that fits — not the strange orbit of CUT v4): a newborn lamb has fallen behind on the '
       + 'rocks and bleats for its mother; David steps down, kneels, gathers it into his arms (Isa 40:11 "וּבְחֵיקוֹ '
       + 'יִשָּׂא") and carries it down to the ewe — the spirit of Shemot Rabbah 2:2, the midrash on Ps 78:70-71 (he '
-      + 'shepherds each lamb according to its strength). ONE long take: the lens follows him at a respectful distance, '
-      + 'slow and steady. While he carries it DAVID forms in the sky, דָּוִד beneath it, then the chapter line. He sets '
-      + 'the lamb down by its mother and straightens; the lockup fades; the camera eases back and settles behind him at '
-      + 'the gameplay framing (a pull-back and a gentle descent, the yaw almost unchanged) and the game begins without a '
-      + 'cut.',
+      + 'shepherds each lamb according to its strength). ONE long take: the lens follows him from behind, on the uphill '
+      + 'side, at a respectful distance, slow and steady — high over his shoulder for the gathering (one forearm under the '
+      + 'lamb, the other hand over its back, its head at his shoulder, the staff leaning in the crook of his arm), lower '
+      + 'behind him as he carries it down the slope. While he carries it DAVID forms in the sky, דָּוִד beneath it, then '
+      + 'the chapter line. He kneels and sets the lamb down by its mother — it goes to her flank and nurses — and he '
+      + 'straightens and looks out over his flock; the lockup fades; the camera eases back and down behind him onto the '
+      + 'gameplay camera (yaw almost unchanged, no orbit) and the game begins without a cut, among the flock.',
   },
 ];
 

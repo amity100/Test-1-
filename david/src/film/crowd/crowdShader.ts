@@ -86,7 +86,9 @@ export function crowdUniforms(army: 'israel' | 'philistine'): CrowdUniforms {
         : // models pass: dusty linen, a little darker and more varied (the host read as bright blocks at a distance)
           // finishing pass: two dyed kilts in eight (madder-brown, a dull brown wool) — "one bright mass of identical
           // figures" in P4; the elite ranks add their dark bronze corselets
-          [C(0xc6bca2), C(0xbaad8e), C(0xb1a386), C(0xa39578), C(0xc0b498), C(0x988a6e), C(0x8c6248), C(0x77684f)],
+          // (cut7, CUT v5 P6: a crane now sees the whole column in the low sun — the linen a shade darker and duller,
+          //  an ochre-dyed kilt added, so the column reads as men in a host and not a white ribbon)
+          [C(0xb8ad92), C(0xab9e81), C(0xa49679), C(0x968a6e), C(0xb3a78b), C(0x8c7f64), C(0x8a5a44), C(0x9a7442)],
     },
     // head-cloths, bedrolls / rolled mantles
     uCloth: { value: [C(0xc9bc9c), C(0xb3a283), C(0x8a7a62), C(0x6a5b48)] },

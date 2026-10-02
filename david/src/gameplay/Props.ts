@@ -218,10 +218,18 @@ export class StreamBed {
 
   /** pebbles in the field: 1 on desktop, fewer on phones */
   density = 1;
+  /** main-thread ms of each build step */
+  readonly stepMs: number[] = [];
   /** build in small steps (a frame between them): ~1-3 ms each */
-  async build(yieldFrame: () => Promise<void>) {
+  async build(yieldFrame0: () => Promise<void>) {
     if (this.built) return;
     this.built = true;
+    let t0 = performance.now();
+    const yieldFrame = async () => {
+      this.stepMs.push(+(performance.now() - t0).toFixed(1));
+      await yieldFrame0();
+      t0 = performance.now();
+    };
     const T = this.terrain;
     const S = LAYOUT.stones;
     const rnd = mulberry32(1740);

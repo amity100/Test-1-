@@ -8,7 +8,7 @@ import type { GilgalArmy } from './crowd/GilgalArmy';
 import type { PhilistineHost } from './crowd/PhilistineHost';
 import { landAtmo, cloudShared } from './land/landAtmo';
 import { INTRO_SHOTS, type FilmSetName } from '../content/introScript';
-import { baseTake, FILM_CAM, gilgalCam, gilgalFocus, landCam, SUN_CHEAT, takeExposure, TAKE_OFFSET, type GilgalCtx, type LandCamCtx } from './FilmCams';
+import { baseTake, FILM_CAM, gilgalCam, gilgalFocus, landCam, SUN_CHEAT, takeBeat, takeExposure, TAKE_OFFSET, type GilgalCtx, type LandCamCtx } from './FilmCams';
 
 /**
  * THE FILM STAGE of the opening film: the film-only sets, crowds and actors the shot sheet (INTRO_SHOTS) films in, built
@@ -123,6 +123,8 @@ export interface FilmSetBuildStat {
   /** JS heap growth over the build (MB, Chrome only) */
   heapMB?: number;
   ok: boolean;
+  /** the land sets: each synchronous build step (ms) between two yields (LandSet.buildSteps) */
+  steps?: { step: string; ms: number }[];
 }
 
 // ==== map1: the 'map' set (P4-P5) — map1 owns this block (src/film/map/**); cut7 owns the rest of this file ====
@@ -216,6 +218,7 @@ export class FilmStage {
   private readonly building: Partial<Record<FilmStageSet, Promise<FilmSetHandle | null>>> = {};
   private landModP: Promise<typeof import('./land/LandSet') | null> | null = null;
   private castModP: Promise<typeof import('./cast') | null> | null = null;
+  private readonly landSteps: Partial<Record<FilmStageSet, { step: string; ms: number }[]>> = {};
 
   private constructor(private readonly engine: Engine, private readonly opts: FilmStageOptions = {}) {}
 
@@ -292,7 +295,7 @@ export class FilmStage {
     }
     if (h) this.sets[name] = h;
     const heap1 = heapMB();
-    this.buildStats[name] = { ms: Math.round(performance.now() - t0), longestStepMs: mon.stop(), heapMB: heap0 !== null && heap1 !== null ? Math.round(heap1 - heap0) : undefined, ok: !!h };
+    this.buildStats[name] = { ms: Math.round(performance.now() - t0), longestStepMs: mon.stop(), heapMB: heap0 !== null && heap1 !== null ? Math.round(heap1 - heap0) : undefined, ok: !!h, steps: this.landSteps[name] };
     onProgress(1);
     return h;
   }
@@ -367,6 +370,7 @@ export class FilmStage {
     // the set itself takes this share of the set's bar (the coast's host and Ramah's cast the rest)
     const share = loc === 'judah' ? 1 : loc === 'coast' ? 0.55 : 0.4;
     const set = await landMod.LandSet.create({ renderer: engine.renderer, quality: q, location: loc, tex: engine.tex, onProgress: (f) => c.progress(f * share), yieldFrame: c.yieldFrame });
+    this.landSteps[loc] = set.buildSteps;
     set.restoreSharedSun();
     engine.enforceTextureBudget(set.scene);
     const snap = snapLand();
@@ -671,9 +675,11 @@ export class FilmStage {
       focus(take, t) {
         if (name === 'ramah' && extra.ramah && extra.actors?.length) {
           const sam = extra.actors[0];
-          // P5: on the elder who rises (the seated elder by the gate), then on Samuel as he turns his face away
+          // P7: on the elder who rises (the seated elder by the gate) through the demand, then on Samuel as he turns
+          // his face away (the contract's `away`)
           if (take === 'elders' && extra.actors.length > 1) {
-            const k = Math.max(0, Math.min(1, (t - 2.0) / 0.6));
+            const away = takeBeat('elders', 'away', 6.0);
+            const k = Math.max(0, Math.min(1, (t - (away - 0.75)) / 0.6));
             const a = extra.actors[1].eyesWorld(tmp);
             const b = sam.eyesWorld(tmp2);
             return { point: a.lerp(b, k * k * (3 - 2 * k)), fStop: 3.2 };

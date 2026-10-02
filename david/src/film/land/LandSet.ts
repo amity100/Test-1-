@@ -39,7 +39,9 @@ export const LAND_LIGHT: Record<LandLocation, { elevation: number; azimuth: numb
   // morning (visual-bible §4 shot 4): the sun in the south-east BEHIND the camera's left shoulder — the lens faces
   // west-north-west back down the marching column (cut4, P4) — a harder side-front light than the old frontal one:
   // modelling, real shadows and contrast, bronze glints toward the lens (director-notes-v5 P4: "not flat yellow")
-  coast: { elevation: 20, azimuth: 32, exposure: 0.46 },
+  // (cut7, CUT v5 P6: lower — el 12 — for long shadows of the files across the road and warmer, harder light; the lens
+  //  looks back WNW down the column, the sun behind its left shoulder)
+  coast: { elevation: 12, azimuth: 36, exposure: 0.5 },
   // CUT v5 (cut7, intro-script-v5 P7: "the light of late afternoon"): the sun low in the WEST-SOUTH-WEST (bearing ~240),
   // raking across the gate's south face from the left of the lens (texture on every stone, long shadows to the
   // north-east), the roofed passage in shade, the elders rim-lit from behind-left
@@ -353,6 +355,8 @@ export class LandSet {
       nearHills: o.location === 'judah',
       valleyFog: o.location === 'judah' ? JUDAH_FOG[tier] : undefined,
       village: villageLook,
+      // P6 (cut7): no modern field outlines on the coastal plain under the crane
+      lcSoft: o.location === 'coast' ? 3.5 : undefined,
     }, tier);
     const terrain = new THREE.Mesh(geo, tmat);
     terrain.name = 'land:terrain';

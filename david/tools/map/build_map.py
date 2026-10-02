@@ -36,7 +36,8 @@ Outputs (src/assets/map/; local frame = lon/lat equirectangular over BBOX):
   map_shade_{hi,lo}.webp   L: the baked morning sun (Lambert x soft relief shadow) on the EXAGGERATED relief
   map_height_{hi,lo}.webp  L lossless: height at the mesh vertices, h = H_MIN + (H_MAX - H_MIN) * (q / 255)^2
                            (water surfaces at their level: sea 0, Dead Sea -398, Kinneret -210, Hula 70)
-  map_globe.webp           RGB: the far globe (lon GLOBE[0..1], lat GLOBE[2..3]), land colour + sea, no relief
+  map_globe.webp           RGB: the far globe (lon GLOBE[0..1], lat GLOBE[2..3]): the same palette and morning sun on
+                           its z6 relief, stored relative to flat ground and halved in linear light (the shader doubles)
 The constants below are mirrored in src/film/map/mapData.ts (keep them identical).
 """
 import argparse
@@ -56,7 +57,7 @@ ROOT = os.path.abspath(os.path.join(HERE, '..', '..'))
 OUT = os.path.join(ROOT, 'src', 'assets', 'map')
 
 # ---- the frame (mirror in mapData.ts) -------------------------------------------------------------------------
-BBOX = (29.5, 37.5, 27.5, 33.6)          # lon0, lon1, lat0, lat1
+BBOX = (29.5, 37.5, 27.0, 34.5)          # lon0, lon1, lat0, lat1 (Lebanon and the Bashan in, so no edge shows in P5)
 GLOBE = (5.0, 65.0, 5.0, 55.0)           # the far globe texture
 EXAG = 2.6                               # relief exaggeration (mesh and baked shade)
 H_MIN, H_MAX = -430.0, 2900.0            # height map range (m, before exaggeration)
@@ -544,10 +545,10 @@ def build(cache, preview=None):
     # its (coarser, z5) relief, stored RELATIVE to flat ground and halved (rgb = albedo * shade / flat * 0.5): lit as
     # flat ground by the shader, it continues the map's look past the box edges (no seam where the box meets it)
     gl0, gl1, gb0, gb1 = GLOBE
-    GW, GH = 1024, int(round(1024 * (gb1 - gb0) / (gl1 - gl0)))
+    GW, GH = 2048, int(round(2048 * (gb1 - gb0) / (gl1 - gl0)))
     GLON, GLAT = grid(gl0, gl1, gb0, gb1, GW, GH)
-    gm, gx0, gy0 = terrarium_mosaic(cache, 5, gl0, gl1, gb0, gb1)
-    GD = sample_merc(gm, gx0, gy0, 5, GLON, GLAT).astype(np.float32)
+    gm, gx0, gy0 = terrarium_mosaic(cache, 6, gl0, gl1, gb0, gb1)
+    GD = sample_merc(gm, gx0, gy0, 6, GLON, GLAT).astype(np.float32)
     gcrop, cx0, cy0 = load_ne1(cache, gl0, gl1, gb0, gb1)
     gw = gcrop.min(-1) > 0.985
     gidx = ndimage.distance_transform_edt(gw, return_distances=False, return_indices=True)
@@ -580,8 +581,12 @@ def build(cache, preview=None):
     rel = np.where(gsea, 1.0, rel)
     # halved in LINEAR light (the GPU decodes the sRGB texture to linear; the shader doubles it)
     genc = lin_to_srgb(srgb_to_lin(gA) * rel[..., None] * 0.5)
+    gim = Image.fromarray(np.clip(genc * 255 + 0.5, 0, 255).astype(np.uint8), 'RGB')
     p = os.path.join(OUT, 'map_globe.webp')
-    Image.fromarray(np.clip(genc * 255 + 0.5, 0, 255).astype(np.uint8), 'RGB').save(p, 'WEBP', quality=80, method=6)
+    gim.save(p, 'WEBP', quality=76, method=6)
+    sizes[p] = os.path.getsize(p)
+    p = os.path.join(OUT, 'map_globe_lo.webp')                               # phones
+    gim.resize((GW // 2, GH // 2), Image.LANCZOS).save(p, 'WEBP', quality=76, method=6)
     sizes[p] = os.path.getsize(p)
 
     sizes.update(inset_sizes)
@@ -589,7 +594,7 @@ def build(cache, preview=None):
     for p, s in sizes.items():
         log(f'{os.path.basename(p):24s} {s / 1024:8.1f} KB')
         for t in tot:
-            if f'_{t}.' in p or 'globe' in p:
+            if f'_{t}.' in p or (p.endswith('map_globe.webp') and t == 'hi'):
                 tot[t] += s
     log('download per tier (KB):', {k: round(v / 1024) for k, v in tot.items()})
 

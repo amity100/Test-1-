@@ -161,7 +161,7 @@ export function mapCamPath(): MapCamPath {
   const M = {
     lon: tangents(ch.lon, 0, 0),
     lat: tangents(ch.lat, 0, 0),
-    lr: tangents(ch.lr, 2.5, slope(ch.lr, n - 2) * 0.7),
+    lr: tangents(ch.lr, 2.5, slope(ch.lr, n - 2) * 1.0),
     heading: tangents(ch.heading, 0, slope(ch.heading, n - 2) * 0.45),
     pitch: tangents(ch.pitch, 0, slope(ch.pitch, n - 2) * 0.45),
     fov: tangents(ch.fov, 0, 0),

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { damp, dampAngle } from '../core/noise';
+import { clamp, damp, dampAngle, angleDiff } from '../core/noise';
 import { BearModel, type BearModelOptions } from '../characters/BearModel';
 import type { Terrain } from '../world/Terrain';
 import type { Colliders } from '../core/Colliders';
@@ -7,6 +7,10 @@ import type { Colliders } from '../core/Colliders';
 /**
  * Positions the bear model in the world: steering, ground following, slope alignment.
  * `opts.quality` picks the model's detail tier (defaults to engine.quality.name when available).
+ *
+ * bear1 (gameplay v2 §4): a heavy animal turns at a bounded rate (never a rigid spin — the model bends its body and
+ * steps its paws round), stands up on its hind legs only for short, slow steps, tires (BearModel.fatigue slows it), and
+ * can charge (a fast, committed run with wide turns) and brake (a bluff charge pulled up short).
  */
 export class BearActor {
   readonly model: BearModel;
@@ -36,6 +40,29 @@ export class BearActor {
     this.pos.set(x, this.terrain.heightAt(x, z), z);
     this.heading = heading;
     this.speed = 0;
+    // a teleport: the paws are re-planted where the body now stands (no step across the jump)
+    this.model.resetMotion();
+  }
+
+  /** the fastest the bear can swing its heading (rad/s): quick on the spot, wide at a gallop, slow when reared */
+  private maxYawRate(speed: number) {
+    if (this.model.reared > 0.5) return 1.4;
+    return speed < 0.3 ? 2.3 : 2.6 - 0.11 * Math.min(speed, 9);
+  }
+
+  /** turn toward a heading with the lambda of dampAngle, but never faster than the bear can */
+  private turnTo(target: number, lambda: number, dt: number, maxRate: number) {
+    const want = dampAngle(this.heading, target, lambda, dt);
+    const d = clamp(angleDiff(this.heading, want), -maxRate * dt, maxRate * dt);
+    this.heading += d;
+  }
+
+  /** the speed the bear can actually do: tired it is slower; reared it takes only short steps */
+  private capSpeed(speed: number) {
+    let s = speed * (1 - 0.3 * clamp(this.model.fatigue, 0, 1));
+    // a standing bear drops to all fours to cover ground fast (asked for > 1.9 m/s); below that it shuffles upright
+    if (this.model.hold === 'rear' && s < 1.9) s = Math.min(s, 0.85);
+    return s;
   }
 
   /** Steer toward target at the given speed. Returns true when within stopDist. */
@@ -46,13 +73,34 @@ export class BearActor {
       this.speed = damp(this.speed, 0, 5, dt);
       return true;
     }
-    this.heading = dampAngle(this.heading, Math.atan2(dx, dz), 4.5, dt);
-    this.speed = damp(this.speed, speed, 2.5, dt);
+    this.turnTo(Math.atan2(dx, dz), 4.5, dt, this.maxYawRate(this.speed));
+    // it slows into a sharp turn (a heavy body cannot corner at speed)
+    const off = Math.abs(angleDiff(this.heading, Math.atan2(dx, dz)));
+    const s = this.capSpeed(speed) * (1 - 0.45 * clamp((off - 0.6) / 1.4, 0, 1));
+    this.speed = damp(this.speed, s, 2.5, dt);
     return false;
   }
 
+  /**
+   * A committed charge at `target` (a gallop; the bluff variant is the caller's: brake() short of the target and
+   * model.play('brake')). Faster acceleration than moveTo, wide turns. Returns true when within stopDist.
+   */
+  charge(target: THREE.Vector3, dt: number, speed = 9, stopDist = 1.4) {
+    const dx = target.x - this.pos.x, dz = target.z - this.pos.z;
+    const d = Math.hypot(dx, dz);
+    if (d < stopDist) return true;
+    this.turnTo(Math.atan2(dx, dz), 3, dt, Math.min(1.6, this.maxYawRate(this.speed)));
+    this.speed = damp(this.speed, this.capSpeed(speed), 3.2, dt);
+    return false;
+  }
+
+  /** a hard stop (the forelegs braced — play the model's 'brake' with it for the bluff charge) */
+  brake(dt: number) {
+    this.speed = damp(this.speed, 0, 6.5, dt);
+  }
+
   face(target: THREE.Vector3, dt: number, rate = 4) {
-    this.heading = dampAngle(this.heading, Math.atan2(target.x - this.pos.x, target.z - this.pos.z), rate, dt);
+    this.turnTo(Math.atan2(target.x - this.pos.x, target.z - this.pos.z), rate, dt, this.maxYawRate(this.speed));
   }
 
   stop(dt: number) {

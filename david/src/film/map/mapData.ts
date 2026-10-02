@@ -10,7 +10,7 @@ import * as THREE from 'three';
  * Heights are exaggerated by EXAG (the relief reads from 100+ km up).
  */
 export const MAP = {
-  bbox: { lon0: 29.5, lon1: 37.5, lat0: 27.5, lat1: 33.6 },
+  bbox: { lon0: 29.5, lon1: 37.5, lat0: 27.0, lat1: 34.5 },
   globe: { lon0: 5.0, lon1: 65.0, lat0: 5.0, lat1: 55.0 },
   exag: 2.6,
   hMin: -430,

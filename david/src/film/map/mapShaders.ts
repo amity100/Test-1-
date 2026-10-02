@@ -58,6 +58,7 @@ uniform sampler2D tIColor;   // the ~56 m inset (coastal plain, Judah)
 uniform sampler2D tIShade;
 uniform vec4 uInset;         // its box in the map's uv (u0, v0, u1, v1)
 uniform vec2 uITexel;
+uniform vec2 uBoxDeg;        // the map box's span (deg): its outer margin melts into the coarser globe
 uniform float uSunK;
 uniform float uAmbK;
 uniform float uTime;
@@ -74,8 +75,11 @@ float vnoise(vec2 p) {
 }
 
 void main() {
-  vec4 c = texture2D(tColor, vUv);
-  float sh = texture2D(tShade, vUv).r;
+  // toward the box's edges the map blurs progressively to the far globe's resolution (mip bias): no seam where they meet
+  vec2 dd = min(vUv, 1.0 - vUv) * uBoxDeg;
+  float bias = 3.2 * (1.0 - smoothstep(0.0, 0.75, min(dd.x, dd.y)));
+  vec4 c = texture2D(tColor, vUv, bias);
+  float sh = texture2D(tShade, vUv, bias).r;
   // the inset (always sampled: no derivatives in divergent flow), melted in over its outer 4 %
   vec2 iuv = (vUv - uInset.xy) / (uInset.zw - uInset.xy);
   vec2 ie = min(iuv, 1.0 - iuv);
@@ -93,23 +97,26 @@ void main() {
   alb *= 0.93 + 0.14 * dn * (1.0 - water);
   vec3 land = alb * (uSunCol * sh * uSunK + uSkyCol * uAmbK);
 
-  // water: the sphere's normal with a slow wave field (a broad, soft sheen toward the low sun)
-  vec3 N = normalize(vWorld - uEarthC);
-  vec3 V = normalize(uCamPos - vWorld);
-  vec2 wq = vUv / uTexel;
-  float w1 = vnoise(wq * 0.9 + vec2(uTime * 0.05, 0.0)) - 0.5;
-  float w2 = vnoise(wq * 2.7 - vec2(0.0, uTime * 0.07)) - 0.5;
-  vec3 tX = normalize(cross(N, vec3(0.0, 0.0, 1.0)));
-  vec3 tZ = cross(tX, N);
-  vec3 Nw = normalize(N + (tX * w1 + tZ * w2) * 0.06);
-  float ndv = max(dot(N, V), 0.0);
-  float fres = 0.02 + 0.98 * pow(1.0 - ndv, 5.0);
-  vec3 R = reflect(-V, Nw);
-  float rs = max(dot(R, uSunDir), 0.0);
-  float spec = pow(rs, 220.0) * 5.0 + pow(rs, 28.0) * 0.32;
-  vec3 skyR = mix(uHazeCol * 1.15, uHazeSun * 1.2, pow(rs, 3.0) * 0.6);
-  vec3 wcol = alb * (uSunCol * max(uSunDir.y, 0.15) * uSunK * 0.9 + uSkyCol * uAmbK) * (1.0 - fres) + skyR * fres + uSunCol * spec;
-  vec3 col = mix(land, wcol, water);
+  vec3 col = land;
+  if (water > 0.001) {
+    // water: the sphere's normal with a slow wave field (a broad, soft sheen toward the low sun)
+    vec3 N = normalize(vWorld - uEarthC);
+    vec3 V = normalize(uCamPos - vWorld);
+    vec2 wq = vUv / uTexel;
+    float w1 = vnoise(wq * 0.9 + vec2(uTime * 0.05, 0.0)) - 0.5;
+    float w2 = vnoise(wq * 2.7 - vec2(0.0, uTime * 0.07)) - 0.5;
+    vec3 tX = normalize(cross(N, vec3(0.0, 0.0, 1.0)));
+    vec3 tZ = cross(tX, N);
+    vec3 Nw = normalize(N + (tX * w1 + tZ * w2) * 0.06);
+    float ndv = max(dot(N, V), 0.0);
+    float fres = 0.02 + 0.98 * pow(1.0 - ndv, 5.0);
+    vec3 R = reflect(-V, Nw);
+    float rs = max(dot(R, uSunDir), 0.0);
+    float spec = pow(rs, 220.0) * 5.0 + pow(rs, 28.0) * 0.32;
+    vec3 skyR = mix(uHazeCol * 1.15, uHazeSun * 1.2, pow(rs, 3.0) * 0.6);
+    vec3 wcol = alb * (uSunCol * max(uSunDir.y, 0.15) * uSunK * 0.9 + uSkyCol * uAmbK) * (1.0 - fres) + skyR * fres + uSunCol * spec;
+    col = mix(land, wcol, water);
+  }
   gl_FragColor = vec4(mapHaze(col, vWorld), 1.0);
 }
 `;
@@ -140,7 +147,7 @@ void main() {
   vec2 uv = vec2((lon - uGlobeBox.x) / (uGlobeBox.y - uGlobeBox.x), (uGlobeBox.w - lat) / (uGlobeBox.w - uGlobeBox.z));
   // the bake stores albedo x (its relief's sun / flat ground's) x 0.5: lit here as the map's flat ground (shade 0.303)
   vec3 alb = texture2D(tGlobe, clamp(uv, 0.002, 0.998)).rgb * 2.0;
-  float sea = smoothstep(0.015, 0.05, alb.b - alb.r);
+  float sea = smoothstep(0.004, 0.016, alb.b - alb.r);   // (linear albedo: deep water b - r ~ 0.04, land < 0)
   vec3 landCol = alb * (uSunCol * 0.303 * uSunK + uSkyCol * uAmbK);
   vec3 N = normalize(vWorld - uEarthC);
   vec3 V = normalize(uCamPos - vWorld);

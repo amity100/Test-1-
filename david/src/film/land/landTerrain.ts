@@ -146,6 +146,9 @@ export interface TerrainLook {
   nearHills?: boolean;
   /** a hilltop village: beaten earth in the plaza (x, z, r) and dry, pale, stony ground round the village (cx, cz, rIn, rOut) */
   village?: { plaza: THREE.Vector3; center: THREE.Vector2; rIn: number; rOut: number };
+  /** (cut7) sample the local land-cover softened (mip bias): the satellite-derived cover of the coastal plain carries
+   *  the outlines of MODERN fields — seen from a crane they read as a grid; softened they become a natural mottling */
+  lcSoft?: number;
 }
 
 export const terrainUniforms = () => ({
@@ -181,6 +184,7 @@ export function landMaterial(tt: TerrainTex, look: TerrainLook, tier: LandTier):
   u.uMistColor.value.copy(look.mistColor);
   const defines: Record<string, string> = {};
   if (look.near) defines.LAND_NEAR = '1';
+  if (look.lcSoft) defines.LAND_LCSOFT = look.lcSoft.toFixed(2);
   if (look.cloudShadowGlsl) defines.LAND_CLOUDSHADOW = '1';
   if (look.roadGlsl) defines.LAND_ROAD = '1';
   if (tier !== 'low') defines.LAND_HQ = '1';
@@ -225,7 +229,11 @@ export function landMaterial(tt: TerrainTex, look: TerrainLook, tier: LandTier):
         float edge = min(min(xz.x - uLocEdge.x, uLocEdge.z - xz.x), min(xz.y - uLocEdge.y, uLocEdge.w - xz.y));
         float wl = smoothstep(0.0, 1200.0, edge);
         vec4 sh = shR, lc = lcR;
+        #ifdef LAND_LCSOFT
+        if (wl > 0.0) { sh = mix(shR, texture2D(tLocShade, uvL), wl); lc = mix(lcR, texture2D(tLocLC, uvL, LAND_LCSOFT), wl); }
+        #else
         if (wl > 0.0) { sh = mix(shR, texture2D(tLocShade, uvL), wl); lc = mix(lcR, texture2D(tLocLC, uvL), wl); }
+        #endif
         vec2 nxz = sh.xy * 2.0 - 1.0;
         vec3 nW = normalize(vec3(nxz.x, sqrt(max(1.0 - dot(nxz, nxz), 0.04)), nxz.y));
         vec3 landN0 = nW;

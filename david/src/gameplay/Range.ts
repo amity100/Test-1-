@@ -186,12 +186,20 @@ export class Range {
   }
 
   private buildP: Promise<void> | null = null;
+  /** main-thread ms of each build step (between the frames it yields) */
+  readonly stepMs: number[] = [];
   private cairnM: THREE.Matrix4[] = [];
   /** build once (later calls wait for the same build) */
   build() {
     return (this.buildP ??= this.buildSteps());
   }
   private async buildSteps() {
+    let t0 = performance.now();
+    const lap = async () => {
+      this.stepMs.push(+(performance.now() - t0).toFixed(1));
+      await nextFrame();
+      t0 = performance.now();
+    };
     const eng = this.engine;
     const ground = (x: number, z: number) => eng.terrain.heightAt(x, z);
     const rnd = mulberry32(2016);
@@ -226,7 +234,7 @@ export class Range {
       heap.receiveShadow = true;
       this.group.add(heap);
     }
-    await nextFrame();
+    await lap();
     // ---- 1. the warm-up: a terrace wall of fieldstones with three jars at 12-16 m
     {
       // (its own sector, right of the line: nothing farther out is behind it)
@@ -257,7 +265,7 @@ export class Range {
         this.addJar(1, base, 0.95 + rnd() * 0.15, i === 1 ? clayPale : clay, jarGeo, false);
       }
     }
-    await nextFrame();
+    await lap();
     // ---- 2. at a distance: jars and gourds on the far bank, 22-35 m
     {
       const spots: [number, number, 'jar' | 'gourd'][] = [[22.5, -1.0, 'jar'], [26.5, 2.4, 'gourd'], [30.5, -3.0, 'jar'], [34.5, 1.2, 'gourd']];
@@ -276,7 +284,7 @@ export class Range {
         this.group.add(im);
       }
     }
-    await nextFrame();
+    await lap();
     // ---- the terebinth (rounds 3 and 4): a gnarled tree on the near bank, a long low branch out over the line
     const tree = this.at(18.0, -9.6);
     // (a big old tree: its long low branch ≈4 m up, so what hangs from it shows above the brow of the slope ≈12 m out)
@@ -307,7 +315,7 @@ export class Range {
       this.solids.push({ id: 'trunk', center: () => tree.clone().add(_w.set(0, 1.6, 0)), radius: 0.36, enabled: () => true, onHit: () => undefined, kind: 'solid', material: 'wood', segment: () => [tree.clone().add(new THREE.Vector3(0, 0.2, 0)), tree.clone().add(new THREE.Vector3(0, 3.2, 0))] as const });
       this.solids.push({ id: 'branch', center: () => mid, radius: 0.09, enabled: () => true, onHit: () => undefined, kind: 'solid', material: 'wood', segment: () => [branchStart, branchEnd] as const });
     }
-    await nextFrame();
+    await lap();
     // ---- 3. moving: a gourd swinging under the branch, a jar lashed to a rolling log
     {
       const pivot = branchStart.clone().lerp(branchEnd, 0.5).add(_w.set(0, 0.16, 0));
@@ -318,6 +326,7 @@ export class Range {
     this.addSkin(4, branchEnd.clone().add(_w.set(0, -0.06, 0)));
     for (const s of this.solids) this.projectiles.targets.push(s);
     this.setRoundVisible(0);
+    this.stepMs.push(+(performance.now() - t0).toFixed(1));
     this.built = true;
   }
 
@@ -463,11 +472,11 @@ export class Range {
     const tip = new THREE.Vector3();
     let ang = 0, falling = false;
     const fallV = new THREE.Vector3();
-    // a pendulum across the line of throw (it swings left-right in the slinger's view): period ≈ 2.2 s at 1.25 m
-    const amp = 0.48;
+    // a pendulum across the line of throw (it swings left-right in the slinger's view): ±0.45 m, ≈2.6 s a swing
+    const amp = 0.36;
     const phase0 = rnd() * 6;
     const place = (t: number) => {
-      ang = amp * Math.sin((2 * Math.PI * t) / 2.25 + phase0);
+      ang = amp * Math.sin((2 * Math.PI * t) / 2.6 + phase0);
       tip.copy(pivot).addScaledVector(this.R, Math.sin(ang) * len).add(_w.set(0, -Math.cos(ang) * len, 0));
       g.position.copy(tip);
       g.rotation.set(0, 0, 0);
@@ -587,7 +596,7 @@ export class Range {
             wait -= dt;
             return;
           }
-          const sp = 1.5 + Math.min(1.1, s * 0.12); // it picks up speed down the slope
+          const sp = 1.15 + Math.min(0.75, s * 0.09); // it picks up speed down the slope
           s += sp * dt;
           setAt(Math.min(s, total));
           if (s >= total) {
