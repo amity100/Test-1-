@@ -68,10 +68,45 @@ export const FILM_CAM = {
   //  (CUT v3, 3 s: the rack fist -> face from just after beats.lookDown (`tilt0` s after it) to `tilt1` s before
   //   beats.tighten; the whip up into the light starts `whipLead` s before beats.flash and runs into the cut)
   alone: { dx0: 1.75, dx1: 1.42, dz0: -0.3, dz1: -0.46, h0: 1.05, h1: 1.32, fov0: 24, fov1: 26.5, mix0: 0.04, mix1: 0.8, tilt0: 0.1, tilt1: 0.2, whipLead: 0.05, whip: 7 },
-  // P1+P2: the flight re-timed (shot seconds -> the set's flight parameter e), skim altitude over the deck, the bank
-  // (cut4: after the burst out of the deck the lens KEEPS FLYING — a glide on the final heading, `glide` m/s eased in
-  //  from `glideAt`, sinking `sink` m/s, the lens opening to `glideFov` — the nearest ridge slides under the lens)
-  flight: { keys: [[0, 0.035], [3.1, 0.3], [3.6, 0.37], [4.5, 0.49], [7.5, 0.935]] as [number, number][], skim0: 230, skim1: 45, deckTop: 2450, diveAt: 2.55, bank: 0.13, bankYaw: 0.1, glideAt: 4.3, glide: 48, sink: 5.5, glideFov: 33, minAGL: 55 },
+  // P1 'flight' (cut7, CUT v5): ONE slow, majestic flight over the hills of Judah at dawn — 8 s of picture after the
+  // black (P1 beats.picture 3.0). Keys in the judah set's metres (Bethlehem at the origin, +x east, +z SOUTH, alt =
+  // metres above the sea): [t (shot s), x, alt, z, bearing (compass deg), pitch (deg, - = down), roll (deg, - = banking
+  // right), fov]; every channel a C1 monotone cubic (no overshoot), still moving at the cut (the dissolve carries it on).
+  //  3.0  over the sea of clouds ~1.1 km east of Bethlehem, looking east into the sunrise over Moab: the deck below,
+  //       breaking up eastward over the desert, the Dead Sea's glint and the Moab wall beyond (LandSet: deck 1000-1300 m)
+  //  4.6-6.4  gliding east and sinking onto the cloud tops, beginning to bank right (south): the heads slide under the lens
+  //  6.4-8.0  through the deck (its broken eastern part; the fastest part of the turn and of the sink inside the cloud)
+  //  8.0-11   below it: the hills of Judah in the valley fog, terraces and olives below, banking on round to the west-
+  //           north-west until Bethlehem's ridge is ahead (the town ~1.3 km away a little right of centre, the low sun
+  //           behind the lens' right shoulder) — cut8's P2 'bethlehem' opens on the same heading (bearing ~300), lower
+  //           (85-90 m over the ground): the moving dissolve carries this flight on under it
+  // The deck's cover thins from `thinAt` (the morning burning it off) so the end view has broken, under-lit clouds over
+  // the ridge, not a ceiling. Speeds: ~60 m/s along the path, the sink ~45 m/s over the clouds, ~160 m/s through them.
+  flight: {
+    keys: [
+      [2.0, 1030, 1468, 228, 97, -6, 0, 50],
+      [3.0, 1060, 1455, 230, 98, -6.5, -0.5, 50],
+      [4.6, 1150, 1418, 240, 106, -8, -2, 49],
+      [6.4, 1250, 1335, 278, 128, -11, -4.5, 47],
+      [7.2, 1295, 1200, 318, 160, -13, -6.5, 45.5],
+      [8.0, 1312, 1015, 380, 205, -12.5, -7.5, 44],
+      [9.6, 1268, 905, 505, 250, -10, -6, 42.5],
+      [11.0, 1170, 850, 598, 282, -8, -3, 41],
+      [12.4, 1075, 815, 650, 297, -7.5, -1.2, 40],
+    ] as [number, number, number, number, number, number, number, number][],
+    minAGL: 60,
+    thinAt: [7.0, 10.2] as [number, number],
+    thinTo: 0.38,
+  },
+  // P6 'threat' (cut7, CUT v5): the Philistine host — the map's descent continued: a crane that comes down out of the
+  // sky toward the head of the column marching at the lens (ESE, out of Ashdod) on the marching men's right (the sunlit
+  // flank; the morning sun behind the lens' left shoulder). High and wide at the start (the column snaking back to
+  // Ashdod's tell, the sea a pale band on the horizon, the sky's negative space for the card and 13:19), it sinks on a
+  // LOG-height ease (a constant apparent rate that slows as it nears the ground, like the map's descent) to a long lens
+  // at a man's height ahead of the column's right files: the near ranks large, the bronze glinting, the column soft
+  // behind them in its dust. Every distance is relative to the head of the column (it marches 1.2 m/s toward the lens).
+  // (from 220 m to a man's height on a log ease = a mean -0.68 /s of log-height: the map's descent rate at the cut)
+  threat: { ahead0: 600, ahead1: 24, side0: 160, side1: 6.5, h0: 220, h1: 1.9, back0: 1200, back1: 70, lookSide0: 0, lookSide1: 1.2, lookH0: 2.5, lookH1: 1.55, fov0: 34, fov1: 12, contrast: 1.1, focusBack: 6, fStop: 5.6 },
   // P4 (cut4): a long lens AHEAD of the column on the marching men's right, 1.45 m high, looking back down its length:
   // the column comes diagonally toward the lens, its nearest file (the right edge, lat +2.75) large and soft at the
   // frame's right edge, the rest receding into the dust; the lens retreats slower than the march and trucks in
@@ -79,7 +114,12 @@ export const FILM_CAM = {
   // P5 (cut4): a LOW dolly (the elders' eye height) into the gathering toward Samuel in the gateway, in the gate's frame
   // (x along the wall, z out of the gate; Samuel at z 1.4): the near pair (marks 6-7) slide out past the frame edges,
   // the arc and the rising speaker in the mid-ground, Samuel right of centre, the verse high over the wall
-  elders: { x0: 0.45, z0: 10.8, x1: 0.3, z1: 8.6, h0: 1.55, h1: 1.6, lookX: -0.55, lookH: 1.5, fov0: 30, fov1: 25 },
+  // (cut7, CUT v5 P7 — 8 s, late afternoon: the dolly comes in LOW from the right of the gathering, diagonally across
+  //  it toward the left of the gate, so the elders of the arc's left side and the speaker on the left bench — who all
+  //  face Samuel — turn their faces toward the lens (3/4 fronts), the near pair's heads and beards slide through the
+  //  foreground, Samuel stands right of centre in the shaded passage (his face to the lens until he turns it away to
+  //  his right at `away`), the verse over the wall upper left; the lens a little below the elders' eyes)
+  elders: { x0: 3.6, z0: 10.6, x1: 2.45, z1: 8.75, h0: 1.22, h1: 1.34, lookX: -0.95, lookZ: 1.7, lookH: 1.42, fov0: 30, fov1: 24.5 },
 };
 
 /**
@@ -91,8 +131,11 @@ export const FILM_CAM = {
 export const SUN_CHEAT: Record<string, number> = { tear: 150, 'tear:insert': 150, verdict: 150 };
 
 /** blocking time offset (s) of a split take: its base shot has already run this long (the G5b insert continues the
- *  tear at the end of G5a: TEAR_INSERT_AT = the length of G5a in the sheet, 4.0 s in CUT v3) */
-export const TAKE_OFFSET: Record<string, number> = { 'tear:insert': TEAR_INSERT_AT };
+ *  tear at the end of G5a: TEAR_INSERT_AT = the length of G5a in the sheet, 4.0 s in CUT v3).
+ *  CUT v5 (cut7): G1 'dustWall' starts ON its shofar — shot time 0 = the old G1's 1.5 s (the black and the time card of
+ *  CUT v3/v4 moved to P1): the army's blocking, the horns, the set's beat and the camera run on the old clock, so
+ *  G1-G7 are the frames of CUT v4 (Intro pre-rolls the set through the 1.5 s under the end of P7) */
+export const TAKE_OFFSET: Record<string, number> = { 'tear:insert': TEAR_INSERT_AT, dustWall: 1.5 };
 
 /** a named beat of a take from the shared timing contract (INTRO_SHOTS), or the fallback */
 export function takeBeat(take: string, beat: string, fallback: number): number {
@@ -113,10 +156,14 @@ export const baseTake = (take: string) => take.split(':')[0] as GilgalShotName;
  */
 export const TAKE_LOOK: Record<string, { hand: number; freq?: number; exp?: number; expCurve?: [number, number][]; seed: number; jolt?: number; joltAmp?: number; calm?: [number, number] }> = {
   // the sunlit deck blows out at the set's exposure: down over the clouds, back up under them over the ridges
-  flight: { hand: 0.28, freq: 0.9, expCurve: [[0, 0.8], [2.4, 0.78], [3.3, 0.95], [4.2, 1.06], [7.5, 1.04]], seed: 1 },
+  // (cut7, CUT v5: P1's slow flight — a calm aerial float; the sunlit cloud tops held down, opening up under the deck)
+  flight: { hand: 0.14, freq: 0.5, expCurve: [[0, 0.8], [6.0, 0.8], [7.4, 0.98], [8.6, 1.18], [11, 1.32]], seed: 1 },
   'rachel-dawn': { hand: 0.22, seed: 2 },
   glint: { hand: 0.2, freq: 0.8, exp: 0.8, seed: 3 },
-  elders: { hand: 0.3, seed: 4 },
+  // (cut7, CUT v5) P6 the crane down to the host: a crane's float, calmer as it comes down onto the long lens
+  threat: { hand: 0.16, freq: 0.6, exp: 1.0, seed: 3 },
+  // (cut7, CUT v5) P7 the low dolly through the elders: an operator's hand, the dolly's sway
+  elders: { hand: 0.22, freq: 0.7, seed: 4 },
   // (cut4: a touch more exposure — the backlit road read as dark asphalt; G1 notes)
   // (cut5, CUT v3: the long takes get a calmer hand; the jolts sit on the contract's beats: G1 the shofar blast the
   //  picture comes in on, G3 THE ROAR)
@@ -136,6 +183,10 @@ export const TAKE_LOOK: Record<string, { hand: number; freq?: number; exp?: numb
   // the bear's hook in gameplay (src/gameplay/BearHook.ts, CUT v3's H1 / H2)
   thicket: { hand: 0.34, freq: 0.8, seed: 15 },
   lamb: { hand: 0.24, freq: 0.6, seed: 16 },
+  // (map1, CUT v5) P4 'exodus' / P5 'tribes' — the realistic 3D map (src/film/map): a satellite's calm, only a faint
+  // drift of the hand; the SAME entry for both takes so the noise (on the film clock) runs on across the invisible cut
+  exodus: { hand: 0.05, freq: 0.32, seed: 18 },
+  tribes: { hand: 0.05, freq: 0.32, seed: 18 },
 };
 
 /** horizontal direction toward the low western sun of the Gilgal set */
@@ -193,7 +244,10 @@ export function gilgalCam(take: string, u: number, t: number, H: (x: number, z: 
       // CUT v3: the shot opens on 1.5 s of black (the time card); the picture comes in ON the shofar — the move runs
       // over the picture only (shofar -> the cut), the lens holding its first pose (relative to the rank) under the black
       const c = FILM_CAM.dust;
-      const t0 = takeBeat('dustWall', 'shofar', 0), T = takeDur('dustWall', 3);
+      // (CUT v5: `t` is blocking time = shot time + TAKE_OFFSET 1.5 — the move runs from the shofar to the cut exactly
+      //  as in CUT v4: e = drift((t - 1.5) / 4))
+      const off = TAKE_OFFSET.dustWall ?? 0;
+      const t0 = off + takeBeat('dustWall', 'shofar', 0), T = off + takeDur('dustWall', 4);
       const e = drift((t - t0) / Math.max(0.5, T - t0));
       const a = armyAt('dustWall', t);
       const fx = a.frontX - ARMY.leadGap;
@@ -464,39 +518,34 @@ function monotone(keys: readonly [number, number][], t: number): number {
 export function landCam(take: string, u: number, t: number, ctx: LandCamCtx, out: ShotFrame): boolean {
   const e = smooth(u);
   out.roll = 0;
-  if (take === 'flight' && ctx.shotAt) {
-    // P1+P2 — ONE fast flight on the set's curve, re-timed: racing low over the sunlit deck (skim altitude), a bank
-    // into the sun, the nose drops and it dives through the deck (~3.1-3.6 s), out over the Judean ridges in the
-    // valley fog, still racing forward and banking into the light until the tableau settles
-    const c = FILM_CAM.flight;
-    const k = monotone(c.keys, t);
-    const f = ctx.shotAt('flight', Math.min(1, k));
-    if (!f) return false;
-    out.pos.copy(f.pos);
-    _a.copy(f.look).sub(f.pos).normalize(); // the set's heading at this point of the curve
-    // skim: before the dive, stay low over the deck top (the cloud tops race past), then join the curve's descent
-    const skim = c.deckTop + lerp(c.skim0, c.skim1, ss(0, c.diveAt, t));
-    const dive = ss(c.diveAt, 3.35, t);
-    out.pos.y = lerp(Math.min(out.pos.y, skim), out.pos.y, dive);
-    // the glide after the burst: forward along the heading (an eased start, then a steady speed) and a gentle descent
-    const g = Math.max(0, t - c.glideAt);
-    const glideD = g - 0.45 * (1 - Math.exp(-g / 0.45));
-    const hh = Math.hypot(_a.x, _a.z) || 1;
-    out.pos.x += (_a.x / hh) * c.glide * glideD;
-    out.pos.z += (_a.z / hh) * c.glide * glideD;
-    out.pos.y -= c.sink * glideD;
-    out.pos.y = Math.max(out.pos.y, ctx.height(out.pos.x, out.pos.z) + c.minAGL * ss(c.glideAt, c.glideAt + 0.5, t));
-    // the nose: level over the deck, dropping through the dive, then back up toward the ridges and the sun
-    const pitch = -0.035 - 0.2 * ss(c.diveAt - 0.3, 3.2, t) + 0.2 * ss(3.45, 4.7, t);
-    const yaw = c.bankYaw * (ss(0.3, 2.2, t) - ss(3.4, 5.5, t)) + 0.05 * ss(5, 7.5, t);
-    const horiz = Math.hypot(_a.x, _a.z);
-    const baseYaw = Math.atan2(_a.x, _a.z), basePitch = Math.atan2(_a.y, horiz);
-    const P = Math.max(-1.2, Math.min(0.4, basePitch * (1 - 0.6 * (1 - dive)) + pitch));
-    const Y = baseYaw + yaw;
-    out.look.set(out.pos.x + Math.sin(Y) * Math.cos(P) * 100, out.pos.y + Math.sin(P) * 100, out.pos.z + Math.cos(Y) * Math.cos(P) * 100);
-    out.fov = lerp((f.fov ?? 45) + 4 * (1 - ss(0, 3.4, t)), c.glideFov, ss(c.glideAt + 0.2, 6.6, t));
-    // the bank: rolls into the turn toward the sun while racing, levels out through the dive, a last small bank
-    out.roll = c.bank * (ss(0.2, 1.8, t) - ss(2.4, 3.6, t)) - 0.05 * ss(4.2, 6, t) + 0.02 * ss(6, 7.5, t);
+  if (take === 'flight') {
+    // P1 (cut7, CUT v5) — ONE slow flight on its keys (FILM_CAM.flight): over the clouds into the sunrise, through the
+    // deck, banking round to Bethlehem's ridge; each channel a monotone cubic of shot seconds
+    const K = FILM_CAM.flight.keys;
+    const ch = (i: number) => monotone(K.map((k) => [k[0], k[i]] as [number, number]), t);
+    out.pos.set(ch(1), ch(2), ch(3));
+    out.pos.y = Math.max(out.pos.y, ctx.height(out.pos.x, out.pos.z) + FILM_CAM.flight.minAGL);
+    const b = THREE.MathUtils.degToRad(ch(4)), p = THREE.MathUtils.degToRad(ch(5));
+    out.look.set(out.pos.x + Math.sin(b) * Math.cos(p) * 1000, out.pos.y + Math.sin(p) * 1000, out.pos.z - Math.cos(b) * Math.cos(p) * 1000);
+    out.roll = THREE.MathUtils.degToRad(ch(6));
+    out.fov = ch(7);
+    return true;
+  }
+  if (take === 'threat' && ctx.coast) {
+    // P6 (cut7) — the crane down out of the sky to the head of the column (FILM_CAM.threat): every distance
+    // log-interpolated on the drift ease (the apparent speed stays constant, the descent slows as it nears the ground)
+    const c = FILM_CAM.threat;
+    const hd = ctx.coast.heading;
+    const k = drift(u);
+    const L = (a: number, b: number) => a * Math.pow(b / a, k);
+    _a.set(-hd.z, 0, hd.x); // the marching men's right: the sunlit flank of the main column
+    _b.copy(ctx.coast.columnHead).addScaledVector(hd, FILM_CAM.coast.march * t); // the head now
+    out.pos.copy(_b).addScaledVector(hd, L(c.ahead0, c.ahead1)).addScaledVector(_a, L(c.side0, c.side1));
+    out.pos.y = ctx.height(out.pos.x, out.pos.z) + L(c.h0, c.h1);
+    out.look.copy(_b).addScaledVector(hd, -L(c.back0, c.back1)).addScaledVector(_a, lerp(c.lookSide0, c.lookSide1, k));
+    out.look.y = ctx.height(out.look.x, out.look.z) + lerp(c.lookH0, c.lookH1, k);
+    out.fov = lerp(c.fov0, c.fov1, k);
+    out.roll = 0.012 * (1 - k) * Math.sin(u * 2.4);
     return true;
   }
   if (take === 'glint' && ctx.coast) {
@@ -517,16 +566,18 @@ export function landCam(take: string, u: number, t: number, ctx: LandCamCtx, out
     return true;
   }
   if (take === 'elders' && ctx.ramah) {
-    // P5 — a low dolly into the gathering toward Samuel in the gateway (gate frame: x along the wall, z out of it)
+    // P7 — a low dolly into the gathering toward Samuel in the gateway (gate frame: x along the wall, z out of it),
+    // running across the whole 8 s on the drift ease (still moving at the hard cut into Gilgal)
     const c = FILM_CAM.elders;
     const R = ctx.ramah;
+    const ed = drift(u);
     const cy = Math.cos(R.gateYaw), sy = Math.sin(R.gateYaw);
     const W = (lx: number, lz: number, o: THREE.Vector3) => o.set(R.gate.x + lx * cy + lz * sy, 0, R.gate.z - lx * sy + lz * cy);
-    W(lerp(c.x0, c.x1, e), lerp(c.z0, c.z1, e), out.pos);
-    out.pos.y = ctx.height(out.pos.x, out.pos.z) + lerp(c.h0, c.h1, e);
-    W(c.lookX, 1.4, out.look);
+    W(lerp(c.x0, c.x1, ed), lerp(c.z0, c.z1, ed), out.pos);
+    out.pos.y = ctx.height(out.pos.x, out.pos.z) + lerp(c.h0, c.h1, ed);
+    W(c.lookX, c.lookZ, out.look);
     out.look.y = ctx.height(R.samuel.x, R.samuel.z) + c.lookH;
-    out.fov = lerp(c.fov0, c.fov1, e);
+    out.fov = lerp(c.fov0, c.fov1, ed);
     out.roll = 0.008 * Math.sin(u * 3);
     return true;
   }

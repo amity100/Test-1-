@@ -49,9 +49,17 @@ import { INTRO_SHOTS } from '../content/introScript';
  * Loading is async: `await DavidModel.preload(engine.quality.name, { msaa })` during boot, then `new DavidModel()`.
  */
 
-export type HoldPose = 'none' | 'spin' | 'grab' | 'carry' | 'kneel' | 'thanks' | 'pull' | 'hero';
+/** ('cradle' = cut8, film only: the newborn lamb gathered in his arms against his chest — D4 'horizon', Isa 40:11) */
+export type HoldPose = 'none' | 'spin' | 'grab' | 'carry' | 'kneel' | 'thanks' | 'pull' | 'hero' | 'cradle';
 export type StaffMode = 'plant' | 'strike' | 'back';
-export type ActionName = 'throw' | 'strike' | 'strikeHigh' | 'pick' | 'call' | 'dodge' | 'hurt';
+export type ActionName = 'throw' | 'strike' | 'strikeHigh' | 'pick' | 'call' | 'dodge' | 'hurt' | 'stone' | 'stoneToss';
+/**
+ * (play1, gameplay v2 §1) where the sling is: tucked under the sash at the right hip ('stowed'), being drawn out of it
+ * (pulled from the sash, a stone from the bag into the pouch, the grip — 'draw'), in the hand ready ('idle', "armed"),
+ * whirling ('spin'), just released ('release'), being reloaded between throws ('reload') or folded and tucked back
+ * ('stow').
+ */
+export type SlingState = 'stowed' | 'draw' | 'idle' | 'spin' | 'release' | 'reload' | 'stow';
 
 export interface DavidParts {
   human: HumanModel;
@@ -64,7 +72,9 @@ export interface DavidParts {
 }
 
 /** film performances for the opening film (docs/intro-script.md shots 15-17; CUT v4 D3 'horizon'), see DavidModel.performFilm */
-export type FilmShot = 'back' | 'reveal' | 'wide' | 'horizon';
+/** (cut8, CUT v5) 'watch' = D3 (on his rock, watching his flock below); 'gather' = D4 (he steps down, kneels, gathers the
+ *  newborn lamb into his arms, carries it to its ewe and sets it down — the film world drives the walk and the holds) */
+export type FilmShot = 'back' | 'reveal' | 'wide' | 'horizon' | 'watch' | 'gather';
 /** CUT v3 contract (src/content/introScript.ts): D1's length (the 'back' performance is timed to it) and D2's `turn` */
 const FILM_BACK_LEN = INTRO_SHOTS.find((s) => s.take === 'figure')?.dur ?? 6;
 const FILM_TURN_AT = INTRO_SHOTS.find((s) => s.take === 'face')?.beats?.turn ?? 0.8;
@@ -142,18 +152,12 @@ function full(r: Record<string, E3>, hipsY = -0.012, hipsZ = 0): Pose {
   return pose({ ...IDLE.r, plantW: E(0), ...r }, hipsY, hipsZ);
 }
 
+/** (play1) the sling cast: the whirl itself is the wind-up, so the cord slips THROW_RELEASE s after the player lets go */
+export const THROW_RELEASE = 0.085;
 const THROW = new Clip([
   { t: 0, p: SPIN },
-  // extra wind-up: arm drops back, shoulders coil further
-  { t: 0.09, e: 'in', p: pose({
-    hips: E(0.04, -0.28, 0), spine: E(-0.02, -0.2, 0.05), chest: E(-0.06, -0.42, 0.06), neck: E(0, 0.2, 0), head: E(0.02, 0.42, -0.04),
-    uaR: E(-2.35, 0.25, -0.95), faR: E(-0.75), hdR: E(0.35),
-    uaL: E(-0.95, 0, 0.35), faL: E(-0.7),
-    thL: E(-0.3, 0.1, 0.1), shinL: E(0.25), thR: E(0.25, -0.2, -0.1), shinR: E(0.2), ftR: E(-0.25),
-    staff: E(0.25, 0.7, 0.65), staffW: E(1), plantW: E(0),
-  }, -0.04) },
   // release: hips and chest uncoil toward the target, the arm whips over, weight onto the front foot
-  { t: 0.19, e: 'out', p: pose({
+  { t: THROW_RELEASE, e: 'out', p: pose({
     hips: E(0.1, 0.22, 0), spine: E(0.1, 0.18, -0.02), chest: E(0.14, 0.32, -0.04), neck: E(0.02, -0.12, 0), head: E(0.0, -0.3, 0.03),
     uaR: E(-1.95, 0, -0.35), faR: E(-0.2), hdR: E(-0.2),
     uaL: E(-0.45, 0, 0.55), faL: E(-0.8),
@@ -161,14 +165,14 @@ const THROW = new Clip([
     staff: E(0.45, 0.6, 0.35), staffW: E(1), plantW: E(0),
   }, -0.06, 0.05) },
   // follow-through across the body
-  { t: 0.36, p: pose({
+  { t: 0.27, p: pose({
     hips: E(0.14, 0.3, 0), spine: E(0.18, 0.24, -0.03), chest: E(0.22, 0.42, -0.06), neck: E(0.02, -0.18, 0), head: E(-0.02, -0.38, 0.03),
     uaR: E(-0.75, 0, 0.12), faR: E(-0.55), hdR: E(0.1),
     uaL: E(-0.35, 0, 0.5), faL: E(-0.9),
     thL: E(-0.45, 0.05, 0.08), shinL: E(0.45), ftL: E(0.1), thR: E(0.4, -0.1, -0.1), shinR: E(0.35), ftR: E(-0.5),
     staff: E(0.4, 0.7, 0.3), staffW: E(1), plantW: E(0),
   }, -0.075, 0.06) },
-  { t: 0.62, p: pose({
+  { t: 0.54, p: pose({
     hips: E(0.03, 0.06, 0.02), spine: E(0.03, 0.02, -0.02), chest: E(0, 0.02, -0.01), neck: E(0.02), head: E(-0.02),
     uaR: E(0.02, 0, -0.1), faR: E(-0.35), hdR: E(0.1),
     uaL: E(-0.25, 0, 0.4), faL: E(-1.25),
@@ -292,6 +296,53 @@ const PICK = new Clip([
   { t: 1.05, p: pose({ hips: E(0.03), spine: E(0.03), uaR: E(0.02, 0, -0.1), faR: E(-0.35), uaL: E(-0.22, 0, 0.4), faL: E(-1.28), thL: E(-0.04), shinL: E(0.05), thR: E(0.05, 0, -0.06), shinR: E(0.12), staff: E(-0.03, 1, 0.05), staffW: E(1), plantW: E(0) }) },
 ]);
 
+// ---- (play1, gameplay v2 §2) choosing a smooth stone in the stream bed (1 Sam 17:40 "וַיִּבְחַר־לוֹ"): down on the
+// right knee in the gravel, the left hand on the planted staff; the right hand (IK onto `pickTarget`) reaches into the
+// gravel / the water and lifts the stone, turns it in the fingers before the eyes; a good one is rubbed clean on the
+// tunic over the raised knee and goes into the bag at the left hip (the flap lifts); a rough or flat one is tossed back
+const STAND_PICK = pose({ hips: E(0.03), spine: E(0.04), uaR: E(0.02, 0, -0.1), faR: E(-0.35), uaL: E(-0.25, 0, 0.4), faL: E(-1.25), thL: E(-0.04), shinL: E(0.05), thR: E(0.05, 0, -0.06), shinR: E(0.12), staff: E(0, 1, 0.1), staffW: E(1), plantW: E(0) });
+const KNEEL_LEGS = { thL: E(-1.45, 0, 0.12), shinL: E(1.5), ftL: E(0.0), thR: E(0.12, 0, -0.06), shinR: E(1.62), ftR: E(0.62) };
+const KNEEL_REACH = pose({
+  hips: E(0.22, 0.12, 0), spine: E(0.34, 0.06, 0), chest: E(0.2, 0.08, 0), neck: E(0.12), head: E(0.32, 0.08),
+  ...KNEEL_LEGS,
+  uaR: E(-0.95, 0, -0.18), faR: E(-0.3), hdR: E(0.3),
+  uaL: E(-0.62, 0, 0.32), faL: E(-1.15),
+  staff: E(0.06, 1, 0.12), staffW: E(1), butt: E(0.3, 0, 0.5), plantW: E(1),
+}, -0.47, 0.02);
+const KNEEL_LOOK = pose({
+  hips: E(0.1, 0.05, 0), spine: E(0.12, 0.02, 0), chest: E(0.02, 0.06, 0), neck: E(0.14), head: E(0.36, -0.12),
+  ...KNEEL_LEGS,
+  uaR: E(-0.62, 0, -0.42), faR: E(-2.05, 0.3, 0), hdR: E(0.15, 0.2, 0),
+  uaL: E(-0.62, 0, 0.32), faL: E(-1.15),
+  staff: E(0.04, 1, 0.08), staffW: E(1), butt: E(0.3, 0, 0.5), plantW: E(1),
+}, -0.45, 0.02);
+const KNEEL_RUB = pose({ ...KNEEL_LOOK.r, head: E(0.4, 0.15), neck: E(0.16, 0.05), uaR: E(-0.55, 0, 0.12), faR: E(-1.35, 0.2, 0), hdR: E(0.25) }, -0.46, 0.02);
+const KNEEL_BAG = pose({ ...KNEEL_LOOK.r, chest: E(0.08, 0.22, 0), spine: E(0.14, 0.1, 0), head: E(0.42, 0.3), neck: E(0.14, 0.12), uaR: E(-0.4, 0, 0.32), faR: E(-1.25), hdR: E(0.3) }, -0.46, 0.02);
+const KNEEL_TOSS = pose({ ...KNEEL_LOOK.r, chest: E(0.06, -0.18, 0), head: E(0.2, -0.35), uaR: E(-1.05, 0, -0.75), faR: E(-0.35), hdR: E(-0.35) }, -0.45, 0.02);
+const STONE = new Clip([
+  { t: 0, p: STAND_PICK },
+  { t: 0.36, e: 'out', p: KNEEL_REACH },
+  { t: 0.56, p: pose({ ...KNEEL_REACH.r, uaR: E(-0.88, 0, -0.14), faR: E(-0.18), hdR: E(0.22) }, -0.48, 0.02) },
+  { t: 0.86, p: KNEEL_LOOK },
+  { t: 1.04, p: KNEEL_LOOK },
+  { t: 1.2, p: KNEEL_RUB },
+  { t: 1.32, p: KNEEL_RUB },
+  { t: 1.5, p: KNEEL_BAG },
+  { t: 1.62, p: KNEEL_BAG },
+  { t: 1.98, p: STAND_PICK },
+]);
+const STONE_TOSS = new Clip([
+  { t: 0, p: STAND_PICK },
+  { t: 0.36, e: 'out', p: KNEEL_REACH },
+  { t: 0.56, p: pose({ ...KNEEL_REACH.r, uaR: E(-0.88, 0, -0.14), faR: E(-0.18), hdR: E(0.22) }, -0.48, 0.02) },
+  { t: 0.86, p: KNEEL_LOOK },
+  { t: 1.08, p: KNEEL_LOOK },
+  { t: 1.2, e: 'out', p: KNEEL_TOSS },
+  { t: 1.62, p: STAND_PICK },
+]);
+/** (play1) the stone actions' beats (s): the hand closes on the stone, is before the eyes, rubs, at the bag; the toss */
+export const STONE_BEATS = { grasp: 0.52, look: 0.86, rub: 1.2, bag: 1.52, end: 1.98, toss: 1.17, tossEnd: 1.62 } as const;
+
 /** calling the flock: right hand cupped at the mouth (IK), chest lifted, head raised toward the flock */
 const CALL_UP = pose({
   spine: E(-0.04), chest: E(-0.1), neck: E(-0.08), head: E(-0.16, -0.05),
@@ -347,6 +398,9 @@ const ACTIONS: Record<ActionName, ActionDef> = {
   call: { clip: CALL, mask: [...UPPER_R, 'head', 'neck', 'chest', 'spine'], legs: false, fadeIn: 0.1, fadeOut: 0.25 },
   dodge: { clip: DODGE, legs: true, fadeIn: 0.04, fadeOut: 0.18 },
   hurt: { clip: HURT, mask: [...UPPER_L, ...UPPER_R, ...TORSO, 'hips', ...LEGS], legs: true, fadeIn: 0.03, fadeOut: 0.2 },
+  // (play1) choosing a smooth stone: kept (into the bag) / examined and tossed back
+  stone: { clip: STONE, legs: true, fadeIn: 0.12, fadeOut: 0.3 },
+  stoneToss: { clip: STONE_TOSS, legs: true, fadeIn: 0.12, fadeOut: 0.3 },
 };
 
 interface ActiveAction { name: ActionName; def: ActionDef; t: number; events: { t: number; fn: () => void; fired: boolean }[]; mocap?: boolean }
@@ -819,7 +873,7 @@ export class DavidModel {
   private runW = 0;
   private time = 0;
   hold: HoldPose = 'none';
-  private holdW: Record<HoldPose, number> = { none: 0, spin: 0, grab: 0, carry: 0, kneel: 0, thanks: 0, pull: 0, hero: 0 };
+  private holdW: Record<HoldPose, number> = { none: 0, spin: 0, grab: 0, carry: 0, kneel: 0, thanks: 0, pull: 0, hero: 0, cradle: 0 };
   private action: ActiveAction | null = null;
   private actionW = 0;
   private pullT = 0;
@@ -845,7 +899,6 @@ export class DavidModel {
   private glanceTarget = new THREE.Vector2();
   private glanceT = 3;
   private idleT = 0;
-  private reloadT = -1;
   private stoneShown = true;
   private lastExpr: Expression | '' = '';
   private stillT = 0;
@@ -880,8 +933,32 @@ export class DavidModel {
    */
   private readonly armErr: Record<'L' | 'R', THREE.Vector3> = { L: new THREE.Vector3(), R: new THREE.Vector3() };
 
-  // sling
-  readonly sling = { state: 'idle' as 'idle' | 'spin' | 'release' | 'stowed', pouch: new THREE.Vector3(), prev: new THREE.Vector3(), releaseT: 0, loaded: true };
+  // sling (play1, gameplay v2 §1): carried folded under the sash at the right hip, drawn to sling, reloaded from the
+  // bag between throws while he stays armed, folded and tucked back. `state` is driven by drawSling() / stowSling() /
+  // the Player (spin) / releaseSling(); `loaded` = a stone lies in the pouch.
+  readonly sling = { state: 'stowed' as SlingState, pouch: new THREE.Vector3(), prev: new THREE.Vector3(), releaseT: 0, loaded: false };
+  /** seconds into the current draw / reload / stow */
+  slingT = 0;
+  /** stones the draw / reload can take from the bag (the Player keeps the count); 0 = the pouch stays empty */
+  bagStones = 99;
+  /** the Player drives the whirl (spinPhase in radians, spinRate in revolutions / s); otherwise the model runs it */
+  spinExternal = false;
+  spinRate = 0;
+  /** (play1) world point the right hand reaches for in the 'stone' / 'stoneToss' actions (the stone in the bed) */
+  pickTarget: THREE.Vector3 | null = null;
+  /** sling beats for sound and gameplay: drawStart, stoneIn (a stone laid in the pouch), gripped (ready to whirl),
+   *  reloadStart, stowStart, stowed (tucked under the sash) */
+  onSling?: (e: 'drawStart' | 'stoneIn' | 'gripped' | 'reloadStart' | 'stowStart' | 'stowed') => void;
+  private slingLayout: 'tucked' | 'bunched' | 'hanging' = 'tucked';
+  private layoutFrom: THREE.Vector3[] = Array.from({ length: NC * 2 }, () => new THREE.Vector3());
+  private layoutK = 1;
+  private gripped = false;
+  private stoneInDone = false;
+  private tuck: THREE.Object3D | null = null;
+  private flap: THREE.Object3D | null = null;
+  private flapOpen = 0;
+  private readonly tuckSway = { ax: 0, az: 0, vx: 0, vz: 0, prev: new THREE.Vector3(), vel: new THREE.Vector3(), started: false };
+  private readonly heldStoneGeo: THREE.BufferGeometry;
   private sim = new SlingSim();
   private cordA: Rope;
   private cordB: Rope;
@@ -980,12 +1057,22 @@ export class DavidModel {
     this.pouchStone.position.set(0, 0.006, 0);
     this.pouchStone.castShadow = true;
     this.pouch.add(this.pouchStone);
-    this.handStone = new THREE.Mesh(pebbleGeometry(29, 1.05), stoneMat);
+    this.heldStoneGeo = pebbleGeometry(29, 1.05);
+    this.handStone = new THREE.Mesh(this.heldStoneGeo, stoneMat);
     this.handStone.visible = false;
     human.sockets.palmR.add(this.handStone);
     this.handStone.position.set(0.018, 0, 0.012);
     human.sockets.handGripR.add(this.slingAnchor);
     this.slingAnchor.position.set(0, -0.038, 0);
+    // (play1) where the folded sling is tucked (the wardrobe's socket on the sash at the right hip; a fallback socket on
+    // the pelvis if an older outfit has none) and the bag's flap
+    this.tuck = outfit.props.slingTuck ?? null;
+    if (!this.tuck) {
+      human.root.updateMatrixWorld(true);
+      const p = human.rig.pelvis.clone().add(_v1.set(-0.15, 0.06, 0.07));
+      this.tuck = human.addSocket('slingTuckFallback', 'spine05', p, _q1.setFromEuler(_e1.set(0, -1.2, 0)));
+    }
+    this.flap = outfit.props.satchelFlap ?? null;
 
     this.root.traverse((o) => {
       if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).receiveShadow = true;
@@ -1025,7 +1112,7 @@ export class DavidModel {
         mo.play('action', 'pickup_box', { t: PICK_MO[0], rate: (PICK_MO[1] - PICK_MO[0]) / PICK.duration, end: PICK_MO[1], mask: MASK_LOWER, fade: 0.12 });
         mocap = true;
       } else if (name === 'throw') {
-        mo.play('action', 'throw_ball', { t: THROW_MO - 0.19, end: THROW_MO + 0.43, mask: MASK_LOWER, fade: 0.08, weight: 0.85 });
+        mo.play('action', 'throw_ball', { t: THROW_MO - THROW_RELEASE, end: THROW_MO + 0.43, mask: MASK_LOWER, fade: 0.08, weight: 0.85 });
         mocap = true;
       }
     }
@@ -1105,9 +1192,10 @@ export class DavidModel {
 
     // ---------- film performance (opening film shots 15-17): the reference stance, still, wind in the curls
     const film = this.film;
-    if (film) {
+    if (film && film.shot !== 'gather') {
       // (D3 'horizon': from releaseAt he comes back to the game's idle — the hero hold fades out before the hand-off)
-      this.hold = film.shot === 'horizon' && film.t >= film.releaseAt ? 'none' : 'hero';
+      // (cut8, CUT v5 D4 'gather': the film world walks him, kneels him and sets the cradle hold itself — not forced here)
+      this.hold = (film.shot === 'horizon' || film.shot === 'watch') && film.t >= film.releaseAt ? 'none' : 'hero';
       this.speed = 0;
       this.lookTarget = null;
     }
@@ -1205,6 +1293,8 @@ export class DavidModel {
     if (H.grab > 0.001) m.layer(GRAB_BEARD, H.grab);
     if (H.carry > 0.001) m.layer(CARRY, H.carry, CARRY_MASK);
     if (H.kneel > 0.001) m.layer(KNEEL, H.kneel, mo && mw > 0.5 ? KNEEL_UPPER : undefined);
+    // (cut8, film D4) the cradle (arms bent before the chest) and the forward reach / bend to gather or set down the lamb
+    if (H.cradle > 0.001 || this.cradleBend > 0.001) this.filmCradlePose(H.cradle);
     if (H.thanks > 0.001) m.layer(THANKS, H.thanks, lw > 0.3 ? THANKS_UPPER : undefined);
     if (H.pull > 0.001) {
       this.pullT += dt;
@@ -1237,15 +1327,20 @@ export class DavidModel {
       if (a.t >= dur) this.action = null;
     } else this.actionW = 0;
 
-    // ---------- reload gesture (right hand to the satchel after a throw)
-    if (this.reloadT >= 0) {
-      this.reloadT += dt;
-      const u = this.reloadT / 0.75;
-      const w = Math.sin(Math.PI * clamp(u, 0, 1)) * (1 - H.spin);
-      if (w > 0.001) {
-        m.layer(RELOAD, w, RELOAD_MASK);
+    // ---------- (play1) the sling's draw / reload / stow: the trunk turns a little toward the bag at the left hip and the
+    // head glances down at it while the right hand takes a stone (the hand itself is placed by slingArm's IK)
+    this.stepSlingCarry(dt);
+    {
+      const bagW = this.slingBagWeight();
+      if (bagW > 0.001) m.layer(RELOAD, bagW * 0.85 * (1 - H.spin), RELOAD_MASK);
+      // the stone pick: the stone turned in the fingers before the eyes
+      const a = this.action;
+      if (a && (a.name === 'stone' || a.name === 'stoneToss')) {
+        const u = smooth01((a.t - STONE_BEATS.look + 0.06) / 0.12) * (1 - smooth01((a.t - (a.name === 'stone' ? STONE_BEATS.rub : STONE_BEATS.toss) + 0.04) / 0.1));
+        if (u > 0.001) m.add('hdR', 0.25 * Math.sin(a.t * 13) * u * this.actionW, 0.55 * Math.sin(a.t * 9 + 1) * u * this.actionW, 0);
+        // the toss: a small shake of the head first
+        if (a.name === 'stoneToss') m.add('head', 0, 0.12 * Math.sin((a.t - 1.0) * 26) * smooth01((a.t - 0.98) / 0.05) * (1 - smooth01((a.t - 1.16) / 0.05)) * this.actionW, 0);
       }
-      if (u >= 1) this.reloadT = -1;
     }
 
     // ---------- head look-at
@@ -1285,6 +1380,7 @@ export class DavidModel {
 
     // ---------- arms: staff, hands on targets
     this.solveArms(dt);
+    this.slingArm(); // (play1) the right hand drawing / reloading / stowing the sling, the stone pick's reach
 
     // ---------- fingers, face, eyes
     this.updateFace();
@@ -1295,6 +1391,8 @@ export class DavidModel {
     this.measureArmError();
     this.placeStaff(dt);
     this.updateProps();
+    // (cut8, film D4) the lamb's body follows his arms (after the pose is final)
+    if (this.cradle) this.filmCradlePlace();
     const wind = _v6.copy(shared.uWind.value).multiplyScalar(1.4 * shared.uWindStrength.value * this.windScale);
     this.outfit.update(dt, { velocity: this.velocity, wind });
     this.groom?.update(dt, wind);
@@ -1369,7 +1467,7 @@ export class DavidModel {
     }
     const f = this.film;
     let wind = o.wind ?? (shot === 'back' ? 1.8 : shot === 'reveal' ? 1.4 : 1.6);
-    if (shot === 'horizon') {
+    if (shot === 'horizon' || shot === 'gather') {
       // the wind in his curls and tunic eases to the game's own over the release (no change at the hand-off)
       const r0 = o.releaseAt ?? f?.releaseAt ?? 8, r1 = o.endAt ?? f?.endAt ?? 10;
       wind = THREE.MathUtils.lerp(o.wind ?? 1.7, 1, smooth01((t - r0) / Math.max(0.1, r1 - r0 - 0.2)));
@@ -1401,11 +1499,20 @@ export class DavidModel {
     const m = this.mixer;
     const rig = this.human.rig;
     // D3 'horizon': every film offset fades out from releaseAt (the game's idle at the hand-off)
-    const live = f.shot === 'horizon' ? 1 - smooth01((f.t - f.releaseAt) / Math.max(0.1, f.endAt - f.releaseAt - 0.35)) : 1;
+    const live = f.shot === 'horizon' || f.shot === 'gather' ? 1 - smooth01((f.t - f.releaseAt) / Math.max(0.1, f.endAt - f.releaseAt - 0.35)) : 1;
     // breathing, visible in every film shot (the chest rises, the shoulders lift a little)
     const br = Math.sin(f.t * Math.PI * 2 * 0.24) * 0.5 + 0.5;
     m.add('chest', -0.018 * br * live, 0, 0);
     m.add('spine', -0.006 * br * live, 0, 0);
+    // (cut8, CUT v5) D3 'watch' and D4 'gather'
+    if (f.shot === 'watch') {
+      this.filmWatch(f.t, f.gaze);
+      return;
+    }
+    if (f.shot === 'gather') {
+      this.filmGather(f.t, live);
+      return;
+    }
     if (f.shot === 'horizon') {
       // D3 (CUT v4, the logo shot, 10 s): on his rock above the flock — the weight goes over onto the staff and settles;
       // the head turns from the hero stance's gaze down to his flock grazing on the slope below him and follows it,
@@ -1513,6 +1620,158 @@ export class DavidModel {
     }
     this.mood = u > 0.35 ? f.mood : 'neutral';
     this.moodWeight = f.moodW;
+  }
+
+  // ---- (cut8, CUT v5) D3 'watch' and D4 'gather': David watches his flock; he gathers the newborn lamb into his arms
+  /** the lamb gathered into his arms (film only — FilmWorld sets it): its object (re-placed every frame after the pose),
+   *  its body centre in that object's space, where it lies on the ground (`from`, world) and how far it is lifted
+   *  (`lift` 0 = on the ground, 1 = in the cradle against his chest) */
+  cradle: { obj: THREE.Object3D; center: THREE.Vector3; from: THREE.Matrix4; lift: number } | null = null;
+  /** 0..1 his hands on the lamb (arm IK onto the cradle frame) */
+  cradleReach = 0;
+  /** 0..1 the forward bend of the trunk (kneeling to gather the lamb, or to set it down) */
+  cradleBend = 0;
+  /** 0..1 the staff leaning on his left shoulder in the crook of the arm instead of in the hand */
+  staffCrookW = 0;
+  private cradleSock: THREE.Object3D | null = null;
+
+  /** D3: on his rock, his eyes on his flock below (the head following it a little); as the focus comes back to him
+   *  (beats.rack) the head lifts a touch and he breathes out; two blinks */
+  private filmWatch(t: number, gaze: number) {
+    const m = this.mixer;
+    this.mood = null;
+    const shift = smooth01((t - 0.4) / 2.0) - 0.45 * smooth01((t - 4.4) / 1.6);
+    m.add('hipsX', 0.03 * shift);
+    m.add('hips', 0, 0, 0.04 * shift);
+    m.add('spine', 0, 0, -0.026 * shift);
+    // the hero stance turns the head ~0.6 rad to his right: down to the flock (the eyes do the rest), following it
+    const toFlock = clamp(gaze + 0.6, -0.3, 1.25) * 0.7 + 0.07 * Math.sin(t * 0.62) + 0.05 * smooth01((t - 2.4) / 2.2);
+    const lift = smooth01((t - 4.9) / 1.4);
+    const yaw = toFlock * smooth01((t + 0.6) / 1.4);
+    const pitch = 0.15 - 0.07 * lift + 0.015 * Math.sin(t * 0.8);
+    m.add('head', pitch * 0.6, yaw * 0.46, 0.012 * Math.sin(t * 0.5));
+    m.add('neck', pitch * 0.4, yaw * 0.3, 0);
+    m.add('chest', -0.01 * lift, yaw * 0.12, 0);
+    const rig = this.human.rig;
+    const f = this.film!;
+    if (!f.blinked && t > 2.3) {
+      f.blinked = true;
+      this.filmBlink2 = 6.6;
+      rig.blink();
+    }
+    if (this.filmBlink2 > 0 && t > this.filmBlink2) {
+      this.filmBlink2 = -1;
+      rig.blink();
+    }
+    this.filmEyes = null;
+  }
+
+  /** D4: the film world walks / kneels him and sets the cradle weights; here: the eyes on what he looks at (the lamb,
+   *  the ewe, the flock), blinks, a hint of a smile while the lamb is in his arms */
+  private filmGather(t: number, live: number) {
+    const rig = this.human.rig;
+    const f = this.film!;
+    this.filmEyes = this.lookTarget;
+    this.mood = this.cradleReach > 0.6 ? 'smile' : null;
+    this.moodWeight = 0.14 * live;
+    if (!f.blinked && t > 1.6) {
+      f.blinked = true;
+      this.filmBlink2 = 7.3;
+      rig.blink();
+    }
+    if (this.filmBlink2 > 0 && t > this.filmBlink2) {
+      this.filmBlink2 = t < 10 ? 12.9 : -1;
+      rig.blink();
+    }
+  }
+
+  /** the cradle socket on his chest: the lamb's body centre in front of his lower chest, its head toward his left
+   *  shoulder (built on first use: CRADLE in the rest pose) */
+  private cradleSocket(): THREE.Object3D {
+    if (this.cradleSock) return this.cradleSock;
+    const C = CRADLE;
+    const fwd = new THREE.Vector3(C.fwd[0], C.fwd[1], C.fwd[2]).normalize();
+    const x = new THREE.Vector3(C.up[0], C.up[1], C.up[2]).cross(fwd).normalize();
+    const y = new THREE.Vector3().crossVectors(fwd, x).normalize();
+    const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, fwd));
+    this.cradleSock = this.human.addSocket('cradle', 'spine02', new THREE.Vector3(C.pos[0], C.pos[1], C.pos[2]), q);
+    return this.cradleSock;
+  }
+
+  /** the lamb's body-centre frame (world): in the cradle, blended from where it lies on the ground by `lift` */
+  private cradleFrame(out: THREE.Matrix4): THREE.Matrix4 {
+    const c = this.cradle!;
+    const s = this.cradleSocket();
+    s.updateWorldMatrix(true, false);
+    s.matrixWorld.decompose(_crP, _crQ, _s1);
+    const k = smooth01(c.lift);
+    if (k < 0.999) {
+      // the ground pose's body centre and orientation
+      c.from.decompose(_crP2, _crQ2, _crS);
+      _crP2.add(_cr1.copy(c.center).multiply(_crS).applyQuaternion(_crQ2));
+      _crP.lerpVectors(_crP2, _crP, k);
+      _crQ.slerpQuaternions(_crQ2, _crQ, k);
+    }
+    return out.compose(_crP, _crQ, _s1.set(1, 1, 1));
+  }
+
+  /** the lamb's object placed so that its body centre sits in the cradle frame (after the pose is final) */
+  private filmCradlePlace() {
+    const c = this.cradle!;
+    this.cradleFrame(_crM);
+    _crM.decompose(_crP, _crQ, _s1);
+    const sc = c.obj.scale.x || 1;
+    _crP.sub(_cr1.copy(c.center).multiplyScalar(sc).applyQuaternion(_crQ));
+    _crM.compose(_crP, _crQ, _crS.set(sc, sc, sc));
+    const o = c.obj;
+    if (o.parent) {
+      o.parent.updateWorldMatrix(true, false);
+      _crM.premultiply(_crM2.copy(o.parent.matrixWorld).invert());
+    }
+    _crM.decompose(o.position, o.quaternion, o.scale);
+    o.updateMatrixWorld(true);
+  }
+
+  /** his hands on the lamb: the right forearm under its belly (the hand under its chest), the left hand over its back */
+  private filmCradleArms(rootQ: THREE.Quaternion) {
+    const C = CRADLE;
+    const w = smooth01(this.cradleReach);
+    this.cradleFrame(_crM);
+    _cr3.set(C.rh[0], C.rh[1], C.rh[2]).applyMatrix4(_crM);
+    this.armIK('R', _cr3, _pole.set(-0.8, -1, -0.1).applyQuaternion(rootQ), w);
+    _cr3.set(C.lh[0], C.lh[1], C.lh[2]).applyMatrix4(_crM);
+    this.armIK('L', _cr3, _pole.set(0.75, -1, -0.35).applyQuaternion(rootQ), w);
+  }
+
+  /** the cradle's arms (bent before the chest) and the forward bend to gather / set down the lamb */
+  private filmCradlePose(hc: number) {
+    const m = this.mixer;
+    if (hc > 0.001) m.layer(CRADLE_POSE, hc, CARRY_MASK);
+    const b = smooth01(this.cradleBend);
+    if (b > 0.001) {
+      m.add('hips', 0.16 * b, 0, 0);
+      m.add('spine', 0.3 * b, 0, 0);
+      m.add('chest', 0.2 * b, 0, 0);
+      m.add('neck', 0.05 * b, 0, 0);
+      m.add('head', 0.14 * b, 0, 0);
+    }
+  }
+
+  /** the staff leaning on his left shoulder, pinned in the crook of the arm: blends the hand placement `m1` (world) */
+  private filmStaffCrook(m1: THREE.Matrix4) {
+    const C = CRADLE;
+    this.root.updateWorldMatrix(true, false);
+    const top = _cr1.set(C.staffTop[0], C.staffTop[1], C.staffTop[2]).applyMatrix4(this.root.matrixWorld);
+    const butt = _cr2.set(C.staffButt[0], C.staffButt[1], C.staffButt[2]).applyMatrix4(this.root.matrixWorld);
+    const p = this.staffProp;
+    const axisL = _cr3.copy(p.tip.position).sub(p.butt.position).normalize();
+    const q = _crQ2.setFromUnitVectors(axisL, _cr4.copy(top).sub(butt).normalize());
+    const pos = _cr4.copy(p.butt.position).applyQuaternion(q).negate().add(butt);
+    m1.decompose(_crP, _crQ, _s1);
+    const w = smooth01(this.staffCrookW);
+    _crP.lerp(pos, w);
+    _crQ.slerp(q, w);
+    m1.compose(_crP, _crQ, _s1.set(1, 1, 1));
   }
 
   /** procedural walk/run: pelvis, spine counter-rotation, arm swing, head stabilisation (into this.walkPose) */
@@ -1850,7 +2109,7 @@ export class DavidModel {
     // hero stance (the reference): the hand high on the staff, at shoulder height
     const slideT = this.staffMode === 'strike' && !onBack ? 0.82 : 0.22 * (1 - planted) + 0.5 * H.kneel - 0.2 * this.heroW * planted;
     this.staffSlide = damp(this.staffSlide, slideT, 11, dt);
-    const inHand = 1 - this.staffBackW;
+    const inHand = (1 - this.staffBackW) * (1 - this.staffCrookW);
     // staff direction (character -> world)
     const sd = c.staff;
     const dirW = _dirW.set(sd[0], sd[1], sd[2]);
@@ -1924,6 +2183,8 @@ export class DavidModel {
         this.armIK(s, _carryT.copy(t), _pole.set(sg * 0.7, -1, -0.1).applyQuaternion(rootQ), H.carry);
       }
     }
+    // (cut8, film D4) the lamb gathered in his arms: the hands on it (on the ground, rising, in the cradle)
+    if (this.cradle && this.cradleReach > 0.001) this.filmCradleArms(rootQ);
     // pick: after the grasp, the stone goes to the satchel at the left hip
     if (this.action?.name === 'pick' && this.hold !== 'carry') {
       const t = this.action.t;
@@ -1957,6 +2218,8 @@ export class DavidModel {
       _q1.slerp(_q2, w);
       _m1.compose(_v3, _q1, _s1.set(1, 1, 1));
     }
+    // (cut8, film D4) the staff leaning on his left shoulder, pinned in the crook of the arm while he holds the lamb
+    if (this.staffCrookW > 0.001) this.filmStaffCrook(_m1);
     _m2.copy(hr.matrixWorld).invert().multiply(_m1);
     _m2.decompose(o.position, o.quaternion, _s1);
     o.updateMatrixWorld(true);
@@ -1965,8 +2228,30 @@ export class DavidModel {
   private updateProps() {
     // stone in the right hand while picking (hidden once it is in the satchel, never while taking up the lamb)
     const a = this.action;
-    const holdingStone = !!a && a.name === 'pick' && a.t > 0.5 && a.t < 0.86 && this.hold !== 'carry';
+    let holdingStone = !!a && a.name === 'pick' && a.t > 0.5 && a.t < 0.86 && this.hold !== 'carry';
+    // (play1) the chosen stone from the grasp until it is in the bag / tossed back; a sling stone from the bag to the pouch
+    if (a && a.name === 'stone') holdingStone = a.t > STONE_BEATS.grasp && a.t < STONE_BEATS.bag + 0.05;
+    else if (a && a.name === 'stoneToss') holdingStone = a.t > STONE_BEATS.grasp && a.t < STONE_BEATS.toss + 0.02;
+    if (!holdingStone) holdingStone = this.slingStoneInHand();
     this.handStone.visible = holdingStone;
+    // the bag's flap lifts while a hand is at it
+    if (this.flap) {
+      let open = this.slingBagWeight();
+      if (a && a.name === 'stone') open = Math.max(open, smooth01((a.t - STONE_BEATS.bag + 0.14) / 0.12) * (1 - smooth01((a.t - STONE_BEATS.bag - 0.12) / 0.12)));
+      this.flapOpen += (open - this.flapOpen) * Math.min(1, 0.35 + open * 0.4);
+      this.flap.rotation.x = -1.05 * this.flapOpen;
+    }
+  }
+
+  /**
+   * (play1) Use this geometry / material for the stone in his hand (the stone he is choosing in the stream bed); null
+   * restores the sling stone.
+   */
+  setHeldStone(geo: THREE.BufferGeometry | null, mat?: THREE.Material, scale = 1) {
+    this.handStone.geometry = geo ?? this.heldStoneGeo;
+    if (mat) this.handStone.material = mat;
+    else if (!geo) this.handStone.material = this.pouchStone.material;
+    this.handStone.scale.setScalar(geo ? scale : 1);
   }
 
   private updateFace() {
@@ -1994,39 +2279,57 @@ export class DavidModel {
     }
     rig.jawOpen = a && a.name === 'call' ? 0.22 * this.actionW : this.exertion * 0.05 + (this.hold === 'pull' ? 0.04 : 0);
     // fingers
-    const inHand = this.staffBackW < 0.5;
-    const L: FingerPose = inHand ? 'grip' : H.carry > 0.5 ? 'grip' : this.hold === 'pull' ? 'fist' : 'relaxed';
+    const inHand = this.staffBackW < 0.5 && this.staffCrookW < 0.5;
+    const L: FingerPose = inHand ? 'grip' : H.carry > 0.5 || this.cradleReach > 0.5 ? 'grip' : this.hold === 'pull' ? 'fist' : 'relaxed';
     let R: FingerPose = 'fist';
     if (a && a.name === 'pick' && this.hold !== 'carry') R = a.t < 0.46 ? 'open' : 'fist';
+    else if (a && (a.name === 'stone' || a.name === 'stoneToss')) R = a.t < STONE_BEATS.grasp - 0.06 || (a.name === 'stoneToss' && a.t > STONE_BEATS.toss) || (a.name === 'stone' && a.t > STONE_BEATS.bag + 0.05) ? 'open' : 'grip'; // (play1)
+    else if (this.slingHandOpen()) R = 'open'; // (play1) reaching for the sling at the sash / into the bag
     else if (a && a.name === 'call') R = 'cup';
     else if (this.hold === 'thanks') R = 'open';
-    else if (this.hold === 'carry' || this.hold === 'pull') R = 'grip';
+    else if (this.hold === 'carry' || this.hold === 'pull' || this.cradleReach > 0.5) R = 'grip';
     else if (this.hold === 'grab') R = 'fist';
     if (L !== this.fingerL) { rig.setFingers('L', L); this.fingerL = L; }
     if (R !== this.fingerR) { rig.setFingers('R', R); this.fingerR = R; }
   }
 
   // ----------------------------------------------------------------------------------- sling
-  /** Simulate the sling in world space. `aimDir` is the horizontal throwing direction (world). */
+  /**
+   * (play1, gameplay v2 §1) Simulate the sling in world space — every frame after update(). `aimDir` is the
+   * horizontal throwing direction (world). Tucked under the sash it is a short folded strap: the fold under the wraps,
+   * the pouch and the cords' ends hanging a hand's breadth below the sash with a small damped sway (a pendulum about
+   * the tuck driven by the hip's acceleration, kept off the thigh). In the hand it is the verlet chain (two cords +
+   * the pouch) pinned in the fist — bunched (the pouch held in the fist, the cords in a loop under it) while he draws,
+   * reloads or stows it — or whirled on a circle (spin).
+   */
   updateSling(dt: number, aimDir: THREE.Vector3) {
     const S = this.sling;
-    const hidden = S.state === 'stowed' || this.hold === 'carry' || this.hold === 'pull' || this.hold === 'grab' || this.hold === 'thanks' || this.hold === 'kneel';
-    const show = !hidden && this.root.visible;
+    const show = this.root.visible;
     if (show !== this.slingShown) {
       this.slingShown = show;
       this.cordA.mesh.visible = this.cordB.mesh.visible = this.pouch.visible = show;
       if (!show) this.slingInit = false;
     }
     if (!show) return;
+    // the right hand is needed elsewhere (the lamb, the grapple, the clinch, the call, a pick): the sling goes back
+    // under the sash at once
+    if (S.state !== 'stowed' && S.state !== 'stow' && this.slingHandsBusy()) this.stowSling(true);
+    if (S.state === 'spin' && this.hold !== 'spin' && this.action?.name !== 'throw') S.state = 'idle';
     this.slingAnchor.updateWorldMatrix(true, false);
     const hand = _hand.setFromMatrixPosition(this.slingAnchor.matrixWorld);
     const rootQ = this.root.getWorldQuaternion(_q4);
     const side = _side.set(1, 0, 0).applyQuaternion(rootQ);
     const sim = this.sim;
     if (!this.slingInit) {
-      sim.reset(hand, side);
+      if (this.slingLayout === 'tucked') this.layoutTucked(0, 0);
+      else sim.reset(hand, side);
+      for (let i = 0; i < NC; i++) {
+        sim.pa[i].copy(sim.a[i]);
+        sim.pb[i].copy(sim.b[i]);
+      }
       S.pouch.copy(sim.a[NC - 1]).add(sim.b[NC - 1]).multiplyScalar(0.5);
       S.prev.copy(S.pouch);
+      this.layoutK = 1;
       this.slingInit = true;
     }
     // leg capsules for collisions (world)
@@ -2051,8 +2354,9 @@ export class DavidModel {
       const aim = _aim.copy(aimDir).setY(0);
       if (aim.lengthSq() < 1e-6) aim.set(0, 0, 1).applyQuaternion(rootQ);
       aim.normalize();
-      const speed = (Math.PI * 2) * (1.7 + this.spinPower * 4.6);
-      this.spinPhase += dt * speed;
+      // (play1) the Player runs the whirl (its phase decides the release timing); the release point is phase 0 (mod 2π):
+      // the pouch beside the head moving forward along the aim
+      if (!this.spinExternal) this.spinPhase += dt * (Math.PI * 2) * (1.4 + this.spinPower * 1.6);
       const up = _v3.set(0, 1, 0).addScaledVector(aim, -0.3).normalize();
       const u = _v4.crossVectors(up, aim).normalize();
       const wv = _v5.crossVectors(u, up).normalize();
@@ -2060,7 +2364,7 @@ export class DavidModel {
       let tx: number, ty: number, tz: number;
       if (throwing) {
         // release swing: the pouch whips over the shoulder and forward along the aim
-        const k = clamp(this.action!.t / 0.19, 0, 1);
+        const k = clamp(this.action!.t / THROW_RELEASE, 0, 1);
         const ang = THREE.MathUtils.lerp(1.35, 0.15, k * k);
         tx = hand.x + (aim.x * Math.cos(ang) + up.x * Math.sin(ang)) * R;
         ty = hand.y + (aim.y * Math.cos(ang) + up.y * Math.sin(ang)) * R;
@@ -2087,16 +2391,33 @@ export class DavidModel {
       }
       sim.pa[NC - 1].copy(sim.a[NC - 1]);
       sim.pb[NC - 1].copy(sim.b[NC - 1]);
+    } else if (this.slingLayout === 'tucked') {
+      // (play1) folded under the sash: laid out about the tuck (sway + thigh), blended in from the hand at the tuck
+      this.layoutTucked(dt, capCount);
+      if (this.layoutK < 1) {
+        this.layoutK = Math.min(1, this.layoutK + dt / 0.16);
+        const k = smooth01(this.layoutK);
+        for (let i = 0; i < NC; i++) {
+          sim.a[i].lerpVectors(this.layoutFrom[i], sim.a[i], k);
+          sim.b[i].lerpVectors(this.layoutFrom[NC + i], sim.b[i], k);
+        }
+      }
+      for (let i = 0; i < NC; i++) {
+        sim.pa[i].copy(sim.a[i]);
+        sim.pb[i].copy(sim.b[i]);
+      }
+      sim.bPinned = true;
+      S.pouch.copy(sim.a[NC - 1]).add(sim.b[NC - 1]).multiplyScalar(0.5);
     } else {
       // hanging / released: verlet chain, B's hand end free after the release until David gathers it again
       if (S.state === 'release') {
         S.releaseT += dt;
         sim.bPinned = false;
-        if (S.releaseT > 0.55) {
-          S.state = 'idle';
-          this.reloadT = S.loaded ? -1 : 0;
-        }
       }
+      // (play1) bunched: the pouch is held in the fist with the cords' ends (drawing, reloading, stowing) — its two ends
+      // are gathered to the palm and the cords hang in a loop under the fist
+      const palm = this.slingLayout === 'bunched' ? this.human.sockets.palmR.getWorldPosition(_slPalm) : null;
+      if (palm) this.layoutK = Math.min(1, this.layoutK + dt / 0.1);
       let pinB: THREE.Vector3 | null = hand;
       if (!sim.bPinned) {
         if (S.state === 'release') pinB = null;
@@ -2118,6 +2439,17 @@ export class DavidModel {
           p0.x += vx; p0.y += vy - 9.81 * h * h; p0.z += vz;
         }
         sim.constrain(hand, 4, this.caps, capCount, pinB, false);
+        if (palm) {
+          const k = smooth01(this.layoutK);
+          for (let c = 0; c < 2; c++) {
+            const p = c === 0 ? sim.a[NC - 1] : sim.b[NC - 1], q = c === 0 ? sim.pa[NC - 1] : sim.pb[NC - 1];
+            const sg = (c === 0 ? -0.5 : 0.5) * POUCH_W * 0.55;
+            p.x += (palm.x + side.x * sg - p.x) * k;
+            p.y += (palm.y - 0.012 - p.y) * k;
+            p.z += (palm.z + side.z * sg - p.z) * k;
+            q.copy(p);
+          }
+        }
         // running: the pouch is gathered up into the sling hand (the slack cords hang in two short loops)
         // instead of flailing at full length round the legs
         const gather = S.state === 'idle' ? smooth01((this.runW - 0.15) / 0.5) : 0;
@@ -2145,7 +2477,8 @@ export class DavidModel {
     const X = _v1.subVectors(sim.b[NC - 1], sim.a[NC - 1]);
     if (X.lengthSq() < 1e-10) X.copy(side);
     X.normalize();
-    const Y = _v2.subVectors(hand, S.pouch);
+    // (play1) the cup faces the cords: the fist, or the fold under the sash while tucked
+    const Y = _v2.subVectors(this.slingLayout === 'tucked' ? _fold : this.slingLayout === 'bunched' ? _v2.copy(S.pouch).add(UP) : hand, S.pouch);
     Y.addScaledVector(X, -Y.dot(X));
     if (Y.lengthSq() < 1e-10) Y.set(0, 1, 0);
     Y.normalize();
@@ -2154,7 +2487,7 @@ export class DavidModel {
     this.pouch.quaternion.setFromRotationMatrix(_m1);
     this.pouch.position.copy(S.pouch);
     this.pouch.updateMatrixWorld(true);
-    const showStone = S.loaded && S.state !== 'release' && !(this.reloadT >= 0 && this.reloadT < 0.55);
+    const showStone = S.loaded && S.state !== 'release' && this.slingLayout !== 'tucked';
     if (showStone !== this.stoneShown) {
       this.pouchStone.visible = showStone;
       this.stoneShown = showStone;
@@ -2177,10 +2510,320 @@ export class DavidModel {
     S.loaded = false;
     return { pos, vel };
   }
+
+  // ---- (play1, gameplay v2 §1) the sling carried, drawn, reloaded and stowed ------------------------------------------
+  /** the sling is out of the sash (drawing, armed, whirling, just released, reloading or being stowed) */
+  get slingArmed() {
+    return this.sling.state !== 'stowed';
+  }
+  /** armed with a stone in the pouch and the cords' ends in the fingers: the whirl can start */
+  get slingReady() {
+    const S = this.sling;
+    return S.state === 'idle' && S.loaded;
+  }
+  /**
+   * Draw the sling (≈0.7 s): the right hand pulls it from under the sash, the cords fall open, the hand takes a stone
+   * from the bag and lays it in the pouch, the fingers take the cords' ends (onSling 'gripped': the whirl can begin).
+   * Already armed but empty: reload instead. Returns false when nothing starts.
+   */
+  drawSling(): boolean {
+    const S = this.sling;
+    if (S.state === 'stowed' || S.state === 'stow') {
+      S.state = 'draw';
+      this.slingT = 0;
+      this.stoneInDone = this.gripped = false;
+      S.loaded = false;
+      this.onSling?.('drawStart');
+      return true;
+    }
+    return this.reloadSling();
+  }
+  /** armed and empty: a stone from the bag into the pouch (≈0.45 s) */
+  reloadSling(): boolean {
+    const S = this.sling;
+    if (S.state !== 'idle' || S.loaded || this.bagStones <= 0) return false;
+    S.state = 'reload';
+    this.slingT = 0;
+    this.stoneInDone = this.gripped = false;
+    this.onSling?.('reloadStart');
+    return true;
+  }
+  /** fold the sling and tuck it back under the sash (≈0.4 s); `instant`: at once (cuts, the hands needed elsewhere) */
+  stowSling(instant = false) {
+    const S = this.sling;
+    if (S.state === 'stowed') return;
+    if (this.hold === 'spin') this.hold = 'none';
+    if (instant) {
+      S.state = 'stowed';
+      S.loaded = false;
+      this.slingLayout = 'tucked';
+      this.layoutK = 1;
+      this.slingInit = false;
+      this.sim.bPinned = true;
+      return;
+    }
+    if (S.state === 'stow') return;
+    S.state = 'stow';
+    this.slingT = 0;
+    this.onSling?.('stowStart');
+  }
+
+  private stepSlingCarry(dt: number) {
+    const S = this.sling;
+    const st = S.state;
+    if (st === 'draw' || st === 'reload' || st === 'stow') this.slingT += dt;
+    const t = this.slingT;
+    if (st === 'draw') {
+      if (t >= SL_DRAW.grasp && this.slingLayout === 'tucked') this.setSlingLayout('bunched');
+      if (t >= SL_DRAW.stoneIn && !this.stoneInDone) this.stoneIn();
+      if (t >= SL_DRAW.drop && this.slingLayout === 'bunched') this.setSlingLayout('hanging');
+      if (t >= SL_DRAW.grip && !this.gripped) {
+        this.gripped = true;
+        this.onSling?.('gripped');
+      }
+      if (t >= SL_DRAW.end) S.state = 'idle';
+    } else if (st === 'release') {
+      if (S.releaseT > 0.4) {
+        if (this.bagStones > 0) {
+          S.state = 'reload';
+          this.slingT = 0;
+          this.stoneInDone = this.gripped = false;
+          this.onSling?.('reloadStart');
+        } else S.state = 'idle';
+      }
+    } else if (st === 'reload') {
+      if (t < SL_RELOAD.drop && this.slingLayout === 'hanging') this.setSlingLayout('bunched');
+      if (t >= SL_RELOAD.stoneIn && !this.stoneInDone) this.stoneIn();
+      if (t >= SL_RELOAD.drop && this.slingLayout === 'bunched') this.setSlingLayout('hanging');
+      if (t >= SL_RELOAD.grip && !this.gripped) {
+        this.gripped = true;
+        this.onSling?.('gripped');
+      }
+      if (t >= SL_RELOAD.end) S.state = 'idle';
+    } else if (st === 'stow') {
+      if (t < SL_STOW.tuck && this.slingLayout === 'hanging') this.setSlingLayout('bunched');
+      if (t >= SL_STOW.tuck && this.slingLayout !== 'tucked') {
+        this.setSlingLayout('tucked');
+        S.loaded = false;
+        this.onSling?.('stowed');
+      }
+      if (t >= SL_STOW.end) S.state = 'stowed';
+    }
+  }
+
+  private stoneIn() {
+    this.stoneInDone = true;
+    if (this.bagStones > 0) {
+      this.sling.loaded = true;
+      this.onSling?.('stoneIn');
+    }
+  }
+
+  private setSlingLayout(l: 'tucked' | 'bunched' | 'hanging') {
+    if (l === this.slingLayout) return;
+    const sim = this.sim;
+    for (let i = 0; i < NC; i++) {
+      this.layoutFrom[i].copy(sim.a[i]);
+      this.layoutFrom[NC + i].copy(sim.b[i]);
+    }
+    this.layoutK = l === 'hanging' ? 1 : 0;
+    this.slingLayout = l;
+  }
+
+  /** (play1) the folded sling under the sash: the fold, a damped sway, the pouch and the cords' ends below the sash */
+  private layoutTucked(dt: number, capCount: number) {
+    const T = this.tuck!;
+    T.updateWorldMatrix(true, false);
+    const e = T.matrixWorld.elements;
+    const X = _tX.set(e[0], e[1], e[2]).normalize(); // along the sash, toward his front
+    const Y = _tY.set(e[4], e[5], e[6]).normalize();
+    const Z = _tZ.set(e[8], e[9], e[10]).normalize(); // out of the body
+    const F = _fold.setFromMatrixPosition(T.matrixWorld);
+    const sw = this.tuckSway;
+    if (!sw.started || dt <= 0) {
+      sw.prev.copy(F);
+      sw.vel.set(0, 0, 0);
+      sw.started = true;
+    } else {
+      // a short strap of leather and cord pressed against the hip: a stiff, well damped pendulum about the tuck,
+      // driven by the hip's horizontal acceleration (and a little by the wind) — a small sway with the gait
+      const nv = _slA.subVectors(F, sw.prev).divideScalar(dt);
+      sw.prev.copy(F);
+      if (nv.lengthSq() > 225) {
+        sw.vel.set(0, 0, 0);
+        sw.ax = sw.az = sw.vx = sw.vz = 0;
+      } else {
+        const acc = _slB.subVectors(nv, sw.vel).divideScalar(dt);
+        sw.vel.copy(nv);
+        const h = Math.min(dt, 1 / 30);
+        const w0 = Math.PI * 2 * 1.6, k = w0 * w0, c = 2 * 0.5 * w0, gain = 2.2;
+        const wind = shared.uWind.value, ws = 0.5 * shared.uWindStrength.value * this.windScale;
+        const ax = clamp(acc.dot(X), -25, 25), az = clamp(acc.dot(Z), -25, 25);
+        sw.vx += (-k * sw.ax - c * sw.vx - ax * gain + (wind.x * X.x + wind.z * X.z) * ws) * h;
+        sw.vz += (-k * sw.az - c * sw.vz - az * gain + (wind.x * Z.x + wind.z * Z.z) * ws) * h;
+        sw.ax = clamp(sw.ax + sw.vx * h, -0.28, 0.28);
+        sw.az = clamp(sw.az + sw.vz * h, -0.12, 0.26);
+      }
+    }
+    // hanging direction: down, a little out over the skirt, swayed
+    const hd = _slC.copy(Y).multiplyScalar(-1).addScaledVector(X, Math.tan(sw.ax)).addScaledVector(Z, 0.3 + Math.tan(sw.az)).normalize();
+    const sim = this.sim;
+    // the pouch folded double a hand's breadth below the sash; the cords' ends (the finger loop, the knot) beside it
+    const P = _slD.copy(F).addScaledVector(hd, 0.125).addScaledVector(Z, 0.012);
+    const eA = _slE.copy(F).addScaledVector(hd, 0.098).addScaledVector(X, -0.022).addScaledVector(Z, 0.02);
+    const eB = _slF.copy(F).addScaledVector(hd, 0.086).addScaledVector(X, 0.002).addScaledVector(Z, 0.024);
+    const pw = POUCH_W * 0.5;
+    for (let c = 0; c < 2; c++) {
+      const pts = c === 0 ? sim.a : sim.b;
+      const end = c === 0 ? eA : eB;
+      const sg = c === 0 ? -1 : 1;
+      const pe = _slG.copy(P).addScaledVector(X, sg * pw);
+      const fx = F.x + X.x * sg * 0.007, fy = F.y + X.y * sg * 0.007, fz = F.z + X.z * sg * 0.007;
+      for (let i = 0; i < NC; i++) {
+        const p = pts[i];
+        if (i <= 3) {
+          const u = i / 3; // the cord's end .. the fold under the sash
+          p.set(end.x + (fx - end.x) * u, end.y + (fy - end.y) * u, end.z + (fz - end.z) * u).addScaledVector(Z, 0.007 * Math.sin(Math.PI * u));
+        } else {
+          const u = (i - 3) / 3; // the fold .. the pouch
+          p.set(fx + (pe.x - fx) * u, fy + (pe.y - fy) * u, fz + (pe.z - fz) * u).addScaledVector(Z, 0.006 * Math.sin(Math.PI * u));
+        }
+      }
+    }
+    // never through the leg: off the thigh capsules (the fold itself stays under the sash)
+    const C = this.caps;
+    for (let c = 0; c < capCount; c++) {
+      const o = c * 7;
+      _v1.set(C[o], C[o + 1], C[o + 2]);
+      _v2.set(C[o + 3], C[o + 4], C[o + 5]);
+      for (let i = 0; i < NC; i++) {
+        if (i === 3) continue;
+        pushOutOfCapsule(sim.a[i], _v1, _v2, C[o + 6] - 0.015);
+        pushOutOfCapsule(sim.b[i], _v1, _v2, C[o + 6] - 0.015);
+      }
+    }
+  }
+
+  /** (play1) the right hand: to the sash and the bag while the sling is drawn / reloaded / stowed; the stone pick */
+  private slingArm() {
+    const S = this.sling;
+    const st = S.state;
+    const a = this.action;
+    const rq = this.human.root.getWorldQuaternion(_slQ);
+    let w = 0;
+    if (st === 'draw' || st === 'reload' || st === 'stow') w = this.slingPath(st, this.slingT, _slT, rq);
+    else if (a && (a.name === 'stone' || a.name === 'stoneToss')) w = this.stonePath(a.name, a.t, _slT, rq) * this.actionW;
+    if (w <= 0.001) return;
+    this.armIK('R', _slT, _slP.set(-0.8, -0.6, -0.35).applyQuaternion(rq), w);
+  }
+
+  /** key points of the right hand's sling path (world): 0 the tuck, 1 pulled out, 2 above the bag, 3 in the bag, 4 in
+   *  front at the waist (the stone into the pouch, the cords' ends taken), 5 gathering the sling, 6 tucked in */
+  private slingKeys(rq: THREE.Quaternion) {
+    const K = _slK;
+    const T = this.tuck!;
+    T.updateWorldMatrix(true, false);
+    const e = T.matrixWorld.elements;
+    const tz = _slA.set(e[8], e[9], e[10]).normalize(), ty = _slB.set(e[4], e[5], e[6]).normalize();
+    K[0].setFromMatrixPosition(T.matrixWorld).addScaledVector(tz, 0.035).addScaledVector(ty, -0.03);
+    K[1].copy(K[0]).addScaledVector(tz, 0.07).add(_slC.set(0, 0.07, 0.06).applyQuaternion(rq));
+    const root = this.root.getWorldPosition(_slD);
+    const bag = this.outfit.props.satchel;
+    if (bag) bag.getWorldPosition(K[2]);
+    else K[2].set(0.2, 0.92, 0.04).applyQuaternion(rq).add(root);
+    K[3].copy(K[2]).add(_slC.set(0.0, -0.025, 0.07).applyQuaternion(rq));
+    K[2].add(_slC.set(0.01, 0.05, 0.09).applyQuaternion(rq));
+    K[4].set(-0.15, 1.02, 0.3).applyQuaternion(rq).add(root);
+    K[5].set(-0.17, 0.96, 0.24).applyQuaternion(rq).add(root);
+    K[6].copy(K[0]).addScaledVector(tz, -0.02);
+    return K;
+  }
+
+  /** the hand's target along the draw / reload / stow path at time t; returns the IK weight */
+  private slingPath(st: 'draw' | 'reload' | 'stow', t: number, out: THREE.Vector3, rq: THREE.Quaternion) {
+    const K = this.slingKeys(rq);
+    const keys = st === 'draw' ? PATH_DRAW : st === 'reload' ? PATH_RELOAD : PATH_STOW;
+    let i = 0;
+    while (i < keys.length - 1 && t > keys[i + 1][0]) i++;
+    const [t0, k0] = keys[i];
+    const [t1, k1] = keys[Math.min(keys.length - 1, i + 1)];
+    out.lerpVectors(K[k0], K[k1], t1 > t0 ? smooth01((t - t0) / (t1 - t0)) : 1);
+    const end = keys[keys.length - 1][0];
+    const fadeIn = st === 'draw' ? 0.14 : 0.08;
+    const fadeOut = st === 'stow' ? 0.13 : 0.1;
+    return smooth01(t / fadeIn) * (1 - smooth01((t - (end - fadeOut)) / fadeOut));
+  }
+
+  /** the stone pick: reach into the gravel onto pickTarget, rub on the tunic over the raised knee, into the bag */
+  private stonePath(name: 'stone' | 'stoneToss', t: number, out: THREE.Vector3, rq: THREE.Quaternion) {
+    const wReach = this.pickTarget ? smooth01((t - 0.14) / 0.18) * (1 - smooth01((t - 0.6) / 0.16)) : 0;
+    const wRub = name === 'stone' ? smooth01((t - 1.08) / 0.1) * (1 - smooth01((t - 1.36) / 0.1)) : 0;
+    const wBag = name === 'stone' ? smooth01((t - 1.38) / 0.12) * (1 - smooth01((t - 1.68) / 0.14)) : 0;
+    const sum = wReach + wRub + wBag;
+    if (sum <= 0.001) return 0;
+    out.set(0, 0, 0);
+    if (wReach > 0) out.addScaledVector(_slE.copy(this.pickTarget!).add(_slF.set(0, 0.03, 0)), wReach);
+    if (wRub > 0) {
+      // on the tunic over the raised left knee, three strokes along the thigh
+      const knee = this.j.shinL.getWorldPosition(_slE);
+      const hip = this.j.thL.getWorldPosition(_slF);
+      const along = _slG.subVectors(hip, knee).normalize();
+      knee.addScaledVector(along, 0.09 + 0.035 * Math.sin((t - 1.1) * 24)).add(_slC.set(-0.03, 0.07, 0).applyQuaternion(rq));
+      out.addScaledVector(knee, wRub);
+    }
+    if (wBag > 0) {
+      const K = this.slingKeys(rq);
+      out.addScaledVector(_slE.lerpVectors(K[2], K[3], smooth01((t - 1.46) / 0.1)), wBag);
+    }
+    out.divideScalar(sum);
+    return Math.min(1, sum);
+  }
+
+  /** the trunk's turn and the glance toward the bag while a stone is taken (draw / reload) */
+  private slingBagWeight() {
+    const st = this.sling.state, t = this.slingT;
+    if (st === 'draw') return smooth01((t - 0.3) / 0.1) * (1 - smooth01((t - 0.52) / 0.08));
+    if (st === 'reload') return smooth01((t - 0.12) / 0.08) * (1 - smooth01((t - 0.3) / 0.07));
+    return 0;
+  }
+  private slingStoneInHand() {
+    const st = this.sling.state, t = this.slingT;
+    if (this.bagStones <= 0) return false;
+    if (st === 'draw') return t > 0.45 && t < SL_DRAW.stoneIn;
+    if (st === 'reload') return t > 0.25 && t < SL_RELOAD.stoneIn;
+    return false;
+  }
+  private slingHandOpen() {
+    const st = this.sling.state, t = this.slingT;
+    if (st === 'draw') return t < 0.13 || (t > 0.37 && t < 0.45);
+    if (st === 'reload') return t > 0.15 && t < 0.25;
+    if (st === 'stow') return t > SL_STOW.tuck + 0.02;
+    return false;
+  }
+  private slingHandsBusy() {
+    const h = this.hold;
+    if (h === 'carry' || h === 'pull' || h === 'grab' || h === 'thanks' || h === 'kneel' || (h as string) === 'cradle') return true;
+    const n = this.action?.name;
+    return n === 'call' || n === 'pick' || n === 'stone' || n === 'stoneToss';
+  }
 }
 
+// (play1) the sling's beats (s) and the right hand's paths (time, key point of slingKeys)
+const SL_DRAW = { grasp: 0.15, stoneIn: 0.53, drop: 0.58, grip: 0.62, end: 0.7 } as const;
+const SL_RELOAD = { stoneIn: 0.31, drop: 0.35, grip: 0.4, end: 0.46 } as const;
+const SL_STOW = { tuck: 0.27, end: 0.42 } as const;
+const PATH_DRAW: readonly (readonly [number, number])[] = [[0, 0], [0.15, 0], [0.27, 1], [0.4, 2], [0.47, 3], [0.53, 2], [0.62, 4], [0.7, 4]];
+const PATH_RELOAD: readonly (readonly [number, number])[] = [[0, 5], [0.1, 5], [0.2, 2], [0.27, 3], [0.33, 4], [0.46, 4]];
+const PATH_STOW: readonly (readonly [number, number])[] = [[0, 5], [0.1, 5], [0.24, 0], [0.3, 6], [0.42, 6]];
+const _slQ = new THREE.Quaternion();
+const _slT = new THREE.Vector3(), _slP = new THREE.Vector3(), _slPalm = new THREE.Vector3();
+const _slA = new THREE.Vector3(), _slB = new THREE.Vector3(), _slC = new THREE.Vector3(), _slD = new THREE.Vector3();
+const _slE = new THREE.Vector3(), _slF = new THREE.Vector3(), _slG = new THREE.Vector3();
+const _tX = new THREE.Vector3(), _tY = new THREE.Vector3(), _tZ = new THREE.Vector3(), _fold = new THREE.Vector3();
+const _slK = Array.from({ length: 7 }, () => new THREE.Vector3());
+
 const SPIN_ALL = Object.keys(SPIN.r);
-const HOLDS: readonly HoldPose[] = ['none', 'spin', 'grab', 'carry', 'kneel', 'thanks', 'pull', 'hero'];
+const HOLDS: readonly HoldPose[] = ['none', 'spin', 'grab', 'carry', 'kneel', 'thanks', 'pull', 'hero', 'cradle'];
 const WALK_MASK = ['hips', 'hipsX', ...TORSO, ...UPPER_L, ...UPPER_R, 'staff', 'staffW', 'plantW'];
 const SPIN_UPPER = [...UPPER_R, ...UPPER_L, ...TORSO, 'staff', 'staffW', 'plantW'];
 const CARRY_MASK = [...UPPER_L, ...UPPER_R, 'chest', 'neck', 'head', 'staffW', 'plantW'];
@@ -2222,3 +2865,40 @@ const _side = new THREE.Vector3();
 const _aim = new THREE.Vector3();
 const _pinB = new THREE.Vector3();
 export { LEGS };
+
+// ---- (cut8, CUT v5 D4) the cradle: "בִּזְרֹעוֹ יְקַבֵּץ טְלָאִים וּבְחֵיקוֹ יִשָּׂא" (Isa 40:11) — film only
+/**
+ * The newborn lamb in his arms (character space: +X his left, +Y up, +Z forward, metres from his feet): its body centre
+ * before his lower chest, its head (+Z of the lamb) toward his left shoulder, its back (+Y) up and a little outward; the
+ * hands in the lamb's body frame (x its left — against his chest, y its back, z toward its head): the right forearm under
+ * its belly with the hand under its chest, the left hand over its back at the shoulders; the staff pinned in the crook of
+ * his left arm, leaning on the shoulder (its top behind the shoulder, its foot a hand's breadth off the ground).
+ * Tunable live under ?test=1 (window.__cradle).
+ */
+export const CRADLE = {
+  pos: [0.04, 1.1, 0.27] as number[],
+  fwd: [0.85, 0.42, -0.12] as number[],
+  up: [0, 1, 0.45] as number[],
+  rh: [-0.03, -0.12, 0.1] as number[],
+  lh: [-0.07, 0.09, 0.06] as number[],
+  staffTop: [0.25, 1.83, -0.12] as number[],
+  staffButt: [0.31, 0.1, 0.17] as number[],
+};
+/** the cradle's arms: forearms bent up before the chest, the chest a little back against the weight */
+const CRADLE_POSE = pose({
+  spine: E(-0.03), chest: E(-0.06), neck: E(0.08), head: E(0.14),
+  uaL: E(-0.35, 0, 0.3), faL: E(-1.75), hdL: E(0.15),
+  uaR: E(-0.45, 0, -0.25), faR: E(-1.9), hdR: E(-0.2, 0.6, 0),
+  staffW: E(0), plantW: E(0),
+});
+const _cr1 = new THREE.Vector3();
+const _cr2 = new THREE.Vector3();
+const _cr3 = new THREE.Vector3();
+const _cr4 = new THREE.Vector3();
+const _crP = new THREE.Vector3();
+const _crP2 = new THREE.Vector3();
+const _crS = new THREE.Vector3();
+const _crQ = new THREE.Quaternion();
+const _crQ2 = new THREE.Quaternion();
+const _crM = new THREE.Matrix4();
+const _crM2 = new THREE.Matrix4();

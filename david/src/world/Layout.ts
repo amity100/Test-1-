@@ -23,7 +23,10 @@ export const LAYOUT = {
     [4, 8], [-18, -40], [-52, -96], [-96, -150], [-140, -196], [-176, -236], [-206, -270], [-226, -296],
   ] as P2[],
   pasture: { x: 22, z: 46, r: 20 },
-  targets: { x: -54, z: 92 }, // clay jars on a field wall by the wadi (sling practice)
+  targets: { x: -54, z: 92 }, // the middle of the sling range: trees, bushes and boulders keep clear, the slope stays smooth
+  // (play1, gameplay v2 §3) the sling range in the wadi: David's throwing mark on the north bank, facing the wadi
+  // (+Z, south): the warm-up wall at 12-16 m, the far bank at 22-35 m, the terebinth at ≈19 m
+  range: { x: -50, z: 79, facing: -0.3 },
   stones: { x: -32, z: 104 }, // smooth stones in the wadi bed
   thicket: { x: 150, z: -10, r: 36 }, // oak / terebinth thicket where the bear lurks
   bearLair: { x: 200, z: -50 },

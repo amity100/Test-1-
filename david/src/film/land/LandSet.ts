@@ -27,6 +27,8 @@ export interface LandSetOptions {
   /** engine.tex (world textures, for the ground-level sets); loaded when absent and needed */
   tex?: TextureSet;
   onProgress?: (f: number, label: string) => void;
+  /** await between the heavy build steps (FilmStage's builder context: a frame for the page / a running film) */
+  yieldFrame?: () => Promise<void>;
 }
 
 /** Sun (SkySystem degrees: elevation, azimuth from +Z (south) toward +X (east)) and exposure per location. */
@@ -38,8 +40,10 @@ export const LAND_LIGHT: Record<LandLocation, { elevation: number; azimuth: numb
   // west-north-west back down the marching column (cut4, P4) — a harder side-front light than the old frontal one:
   // modelling, real shadows and contrast, bronze glints toward the lens (director-notes-v5 P4: "not flat yellow")
   coast: { elevation: 20, azimuth: 32, exposure: 0.46 },
-  // morning at the gate of Ramah
-  ramah: { elevation: 15, azimuth: 105, exposure: 0.56 },
+  // CUT v5 (cut7, intro-script-v5 P7: "the light of late afternoon"): the sun low in the WEST-SOUTH-WEST (bearing ~240),
+  // raking across the gate's south face from the left of the lens (texture on every stone, long shadows to the
+  // north-east), the roofed passage in shade, the elders rim-lit from behind-left
+  ramah: { elevation: 15, azimuth: -60, exposure: 0.6 },
 };
 
 /**
@@ -102,24 +106,25 @@ function vnoise(x: number, y: number) {
 
 export class LandSet {
   readonly scene = new THREE.Scene();
-  readonly sky: SkySystem;
-  readonly location: LandLocation;
-  readonly tier: LandTier;
-  readonly height: LandHeight;
-  readonly shots: Record<string, Shot>;
+  // (cut7, CUT v5: assigned by the step-wise build — LandSet.create runs it in small yielding steps)
+  sky!: SkySystem;
+  location!: LandLocation;
+  tier!: LandTier;
+  height!: LandHeight;
+  shots!: Record<string, Shot>;
   /** shots in the order of the script */
-  readonly sequence: Shot[];
-  readonly anchors: { judah?: JudahAnchors; coast?: CoastAnchors; ramah?: RamahAnchors };
+  sequence!: Shot[];
+  anchors!: { judah?: JudahAnchors; coast?: CoastAnchors; ramah?: RamahAnchors };
   readonly placeholders = new THREE.Group();
-  exposure: number;
+  exposure = 0.5;
   /** PostFX atmosphere for the view (the aerial set hazes its own materials: density 0) */
-  readonly atmosphere: { density: number; heightFalloff: number; baseHeight: number; godRays: number };
-  readonly near: number;
-  readonly far: number;
+  atmosphere!: { density: number; heightFalloff: number; baseHeight: number; godRays: number };
+  near = 1;
+  far = 210000;
   private readonly disposables: { dispose(): void }[] = [];
-  private readonly clouds: LandClouds | null = null;
+  private clouds: LandClouds | null = null;
   private readonly waters: THREE.Mesh[] = [];
-  private readonly dust: { material: THREE.ShaderMaterial } | null = null;
+  private dust: { material: THREE.ShaderMaterial } | null = null;
   private readonly gameSun = { dir: new THREE.Vector3(), color: new THREE.Color() };
   private readonly focus = new THREE.Vector3();
   private time = 0;
@@ -133,10 +138,19 @@ export class LandSet {
   dressCounts: { olives: number; walls: number; houses: number } | null = null;
   private floraTris = 0;
   buildMs = 0;
+  /** (cut7) the build's steps: name and synchronous ms of each (between two yields) — the cost per tier */
+  readonly buildSteps: { step: string; ms: number }[] = [];
 
+  /**
+   * Download the set's tiles and build it in small synchronous steps (layout, sky, shading, terrain, water, content,
+   * shots, dressing) with `yieldFrame` awaited between them, so a background build never blocks a frame for long. The
+   * shared sun / haze uniforms are put back before every yield (another view may render in between) and re-applied
+   * after it.
+   */
   static async create(o: LandSetOptions): Promise<LandSet> {
     const t0 = performance.now();
     const prog = o.onProgress ?? (() => {});
+    const y = o.yieldFrame ?? (() => Promise.resolve());
     prog(0.05, 'land');
     const localName = o.location;
     const needTex = o.location !== 'judah';
@@ -148,14 +162,39 @@ export class LandSet {
       needTex ? (o.tex ? Promise.resolve(o.tex) : loadTextures(o.renderer, () => {}, o.quality as never)) : Promise.resolve(null),
       o.location === 'judah' ? loadTile('judah').then((t) => loadDressMask(landAssetUrl('judah_dress.webp'), t)).catch(() => null) : Promise.resolve(null),
     ]);
-    prog(0.6, 'land');
-    const set = new LandSet(o, region, local, regLC, locLC, tex, dress);
+    prog(0.3, 'land');
+    await y();
+    const set = new LandSet();
+    const it = set.build(o, region, local, regLC, locLC, tex, dress);
+    const N = o.location === 'judah' ? 8 : o.location === 'coast' ? 10 : 9;
+    for (let k = 0; ; k++) {
+      const ts = performance.now();
+      const r = it.next();
+      set.buildSteps.push({ step: r.done ? 'finish' : r.value, ms: Math.round(performance.now() - ts) });
+      if (r.done) break;
+      prog(0.3 + 0.7 * Math.min(1, (k + 1) / N), 'land');
+      // never leave the shared sun / haze changed across a yield: put the game's back, re-apply this set's after it
+      const mine = { sun: shared.uSunDir.value.clone(), col: shared.uSunColor.value.clone(), dirA: landAtmo.uSunDirA.value.clone(), colA: landAtmo.uSunColA.value.clone(), sky: landAtmo.tSkyCube.value, haze: landAtmo.uHaze.value.clone() };
+      set.restoreSharedSun();
+      await y();
+      set.gameSun.dir.copy(shared.uSunDir.value);
+      set.gameSun.color.copy(shared.uSunColor.value);
+      shared.uSunDir.value.copy(mine.sun);
+      shared.uSunColor.value.copy(mine.col);
+      landAtmo.uSunDirA.value.copy(mine.dirA);
+      landAtmo.uSunColA.value.copy(mine.colA);
+      landAtmo.tSkyCube.value = mine.sky;
+      landAtmo.uHaze.value.copy(mine.haze);
+    }
     set.buildMs = performance.now() - t0;
     prog(1, 'land');
     return set;
   }
 
-  private constructor(o: LandSetOptions, region: HeightTile, local: HeightTile, regLC: THREE.Texture, locLC: THREE.Texture, tex: TextureSet | null, dress: JudahDressInput['mask'] | null = null) {
+  private constructor() {}
+
+  /** the build, step by step (each `yield` = a point where create() gives a frame back) */
+  private *build(o: LandSetOptions, region: HeightTile, local: HeightTile, regLC: THREE.Texture, locLC: THREE.Texture, tex: TextureSet | null, dress: JudahDressInput['mask'] | null = null): Generator<string, void, void> {
     const tier: LandTier = o.quality.name;
     this.tier = tier;
     this.location = o.location;
@@ -256,6 +295,7 @@ export class LandSet {
       villageLook = { plaza: new THREE.Vector3(focus.x + Math.sin(yaw) * 9, focus.z + Math.cos(yaw) * 9, 24), center: new THREE.Vector2(cx, cz), rIn: 95, rOut: 190 };
     }
 
+    yield 'layout';
     // ------------------------------------------------------------------ sun / sky
     this.sky.setSun(L.elevation, L.azimuth, scene);
     landAtmo.tSkyCube.value = this.sky.cubeTarget.texture;
@@ -285,10 +325,14 @@ export class LandSet {
       this.sky.sun.color.multiply(new THREE.Color(1.0, 0.84, 0.9));
     }
 
+    yield 'sky';
     // ------------------------------------------------------------------ terrain
     const regShade = shadeTexture(region, new LandHeight(region, null), sunDir, { maxDist: 45000 });
+    this.disposables.push(regShade);
+    yield 'shade:region';
     const locShade = shadeTexture(local, this.height, sunDir, { maxDist: 30000, useMods: true });
-    this.disposables.push(regShade, locShade);
+    this.disposables.push(locShade);
+    yield 'shade:local';
     const nTheta = tier === 'high' ? 448 : tier === 'medium' ? 320 : 200;
     const polarOpts = { nTheta, r0: ground ? 0.8 : 20, rMax: 150000 };
     const geo = polarTerrain(this.height, focus.x, focus.z, {
@@ -317,26 +361,34 @@ export class LandSet {
     scene.add(terrain);
     this.disposables.push(geo, tmat);
     landAtmo.uHaze.value.w = ground ? 0 : 1;
+    yield 'terrain';
 
     // ------------------------------------------------------------------ water: the Mediterranean and the Dead Sea
     const sea = waterMesh({ x0: -140000, x1: -30000, z0: -150000, z1: 150000, level: 0, cx: focus.x, cz: focus.z, deep: new THREE.Color(0.012, 0.045, 0.075), glitter: 1, name: 'sea' });
     const ds = waterMesh({ x0: 14000, x1: 48000, z0: -20000, z1: 60000, level: GEO.deadSea, cx: focus.x, cz: focus.z, deep: new THREE.Color(0.02, 0.07, 0.075), glitter: 1.2, name: 'deadsea' });
     for (const w of [sea, ds]) { scene.add(w); this.waters.push(w); this.disposables.push(w.geometry, w.material as THREE.Material); }
+    yield 'water';
 
     // ------------------------------------------------------------------ location content
     const q = (x: number, z: number) => this.height.height(x, z);
     if (o.location === 'judah') {
-      this.clouds = new LandClouds(tier, { x0: -75000, x1: 70000, z0: -70000, z1: 80000 });
+      // CUT v5 (cut7): ONE slow flight (FilmCams 'flight') sinks through the deck: a thinner, lower deck (300 m, its
+      // base ~220 m over Bethlehem's ridge) lying over the ridge and thinning out eastward over the desert (its edge
+      // ~3.5 km east of the town); the low dawn sun shines in UNDER it (its shadow falls ~10 km to the west)
+      const deck = new THREE.Vector4(1000, 1300, 3500, 1.0);
+      this.clouds = new LandClouds(tier, { x0: -75000, x1: 70000, z0: -70000, z1: 80000 }, deck);
       // dawn cloud sea: rose-gold sunlit tops, blue-violet shade in the troughs, lavender underside
       const cu = this.clouds.uniforms;
       (cu.uSunTint.value as THREE.Color).setRGB(1.0, 0.8, 0.66);
       (cu.uAmbTop.value as THREE.Color).setRGB(0.27, 0.31, 0.62);
       (cu.uAmbBottom.value as THREE.Color).setRGB(0.24, 0.2, 0.3);
       cu.uSunI.value = 9.5;
+      // a 300 m slab: denser per metre than the old 600 m deck, so it still reads as a sea of clouds from above
+      cu.uExt.value = 0.017;
       // aerial perspective: bluer away from the sun, so the Moab wall reads as a blue-violet silhouette
       this.hazeTint = { warm: new THREE.Color(1.0, 0.72, 0.6), cool: new THREE.Color(0.44, 0.52, 1.05), lobe: new THREE.Vector3(30, 2.2, 0.82) };
       // the deck ends over the ridge east of Bethlehem: the flight comes out from under it into the open dawn
-      this.deck = new THREE.Vector4(1850, 2450, -1400, 1.0);
+      this.deck = deck.clone();
       // stronger, lower aerial perspective: each farther ridge bluer and paler; the ray to Moab's top passes above
       // most of it (the wall stays a sharp dark silhouette), the rift below is filled with glowing haze
       landAtmo.uHaze.value.x = 6.2e-5;
@@ -364,10 +416,12 @@ export class LandSet {
       scene.add(dust.mesh);
       this.dust = dust;
       this.disposables.push(dust);
+      yield 'coast:column';
       // Ashdod on its tell, behind the host
       const town = buildAshdod(tex!, tier, new THREE.Vector3(PLACES.ashdod.x, 0, PLACES.ashdod.z), q, rnd);
       scene.add(town.group);
       this.disposables.push(town);
+      yield 'coast:ashdod';
       // the plain: scrub along the balks and the road, olive groves, sycamore figs (1 Kings 10:27) near the fields
       const onRoad = (x: number, z: number) => {
         let d = 1e9;
@@ -408,6 +462,7 @@ export class LandSet {
       this.disposables.push(...gate.materials);
       for (const m of gate.materials) for (const t of ((m.userData.ownTextures ?? []) as THREE.Texture[])) this.disposables.push(t);
       gate.group.traverse((c) => { if ((c as THREE.Mesh).isMesh) this.disposables.push((c as THREE.Mesh).geometry); });
+      yield 'ramah:gate';
       // olives on the terraces below the gate, a few figs / terebinths about the village; the beaten-earth plaza
       const fl = buildFlora(tex!, tier, q, {
         olive: gate.terraceOlives.filter((_, i) => tier !== 'low' || i % 2 === 0),
@@ -450,6 +505,7 @@ export class LandSet {
       anchors.ramah = { gate: focus.clone(), gateYaw: 0.25, samuel: gate.samuel, elders: gate.elders, plazaY: focus.y, altar: gate.altar };
     }
     scene.add(this.placeholders);
+    yield 'content';
 
     // ------------------------------------------------------------------ view parameters and shots
     this.near = ground ? 0.25 : 6;
@@ -462,6 +518,7 @@ export class LandSet {
     const { shots, sequence } = this.buildShots();
     this.shots = shots;
     this.sequence = sequence;
+    yield 'shots';
 
     // the inhabited hill country seen at the end of the flight: terrace walls, olive groves, hamlets (landJudah.ts)
     if (o.location === 'judah' && dress) {
@@ -572,6 +629,9 @@ export class LandSet {
   }
 
   showPlaceholders(on: boolean) { this.placeholders.visible = on; }
+
+  /** judah: the deck's cover 0..1 (the morning burning it off: P1 thins it once the lens is below it) */
+  setDeckCover(w: number) { if (this.deck) this.deck.w = Math.max(0, Math.min(1, w)); }
 
   /** per frame: sky dome follow, shadow framing around the action, water / cloud / dust time */
   update(dt: number, camera: THREE.PerspectiveCamera) {

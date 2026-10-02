@@ -12,6 +12,13 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, html = '
 
 export interface KeyHint { key: string; touch: string; label: string }
 
+/** (play1) an SVG arc of the circle (cx, cy, r) centred on its top, `deg` wide in all (the sling's release window) */
+function arcPath(cx: number, cy: number, r: number, deg: number) {
+  const h = Math.min(179.5, Math.max(0.5, deg / 2)) * (Math.PI / 180);
+  const x0 = cx - r * Math.sin(h), y0 = cy - r * Math.cos(h), x1 = cx + r * Math.sin(h);
+  return `M${x0.toFixed(2)} ${y0.toFixed(2)} A${r} ${r} 0 ${h > Math.PI / 2 ? 1 : 0} 1 ${x1.toFixed(2)} ${y0.toFixed(2)}`;
+}
+
 /** Layout of one film text event (CUT v2 typography, docs/intro-script-v2.md). */
 export interface FilmTextOptions {
   /** verses: seconds from the text's start at which each word appears (speech-synced); overrides `stagger` */
@@ -117,7 +124,9 @@ export class UI {
     this.objEl = el('div', 'objective');
     this.hintEl = el('div', 'hint');
     this.promptEl = el('div', 'prompt');
-    this.crossEl = el('div', 'crosshair', '<svg viewBox="0 0 100 100"><circle class="ring-bg" cx="50" cy="50" r="30"/><circle class="ring" cx="50" cy="50" r="30"/><circle class="dot" cx="50" cy="50" r="2.6"/></svg><div class="range">מחוץ לטווח — סובב חזק יותר</div>');
+    // (play1) the sling's reticle and timing ring: the launch direction (the centre), the release window lit at the top
+    // of the ring (narrowing with power), the pouch running round it at the whirl's pace, the power inside
+    this.crossEl = el('div', 'crosshair', `<svg viewBox="0 0 120 120"><circle class="ring-bg" cx="60" cy="60" r="44"/><path class="win"/><path class="win-p"/><circle class="ring" cx="60" cy="60" r="36"/><line class="rel" x1="60" y1="8" x2="60" y2="22"/><circle class="pouch" cx="60" cy="16" r="5"/><circle class="dot" cx="60" cy="60" r="2.4"/><path class="tick" d="M60 50 V54 M60 66 V70 M50 60 H54 M66 60 H70"/></svg><div class="cue"></div><div class="range">מִחוּץ לַטְּוָח — סוֹבֵב חָזָק יוֹתֵר</div>`);
     this.markerEl = el('div', 'marker', '<div class="mk-diamond"></div><div class="mk-label"></div>');
     this.healthEl = el('div', 'health');
     this.bossEl = el('div', 'boss', '<div class="boss-name">הַדֹּב</div><div class="boss-bar"><div></div></div>');
@@ -388,14 +397,145 @@ export class UI {
     if (text) this.counterEl.innerHTML = text;
   }
 
-  crosshair(visible: boolean, power = 0, onTarget = false, inRange = true) {
-    this.crossEl.classList.toggle('on', visible);
-    if (!visible) return;
-    const ring = this.crossEl.querySelector('.ring') as SVGCircleElement;
-    const c = 2 * Math.PI * 30;
-    ring.style.strokeDasharray = `${c * power} ${c}`;
+  // ------------------------------------------------------------------------------ HUD: the sling (play1, gameplay v2 §3)
+  private ring: { win: SVGPathElement; winP: SVGPathElement; pow: SVGCircleElement; pouch: SVGCircleElement; rel: SVGLineElement; cue: HTMLDivElement } | null = null;
+  private lastWin = -1;
+  private relUntil = 0;
+  private hitEl: HTMLDivElement | null = null;
+  private praiseEl: HTMLDivElement | null = null;
+  private panelEl: HTMLDivElement | null = null;
+  private ratingEl: HTMLDivElement | null = null;
+  private bagEl: HTMLDivElement | null = null;
+  private lastPanel = '';
+  private lastBag = '';
+  private hudEl(cls: string) {
+    const e = el('div', cls);
+    this.root.appendChild(e);
+    return e;
+  }
+  /**
+   * The sling's reticle. `s` (the Player's hud) drives the timing ring: the window arc at the top (its half width in
+   * revolutions of the whirl), the perfect part of it, the pouch running round the ring (it passes the top at every
+   * integer phase — release while it is inside the lit arc), the power inside; the ring fades in with the aim camera.
+   */
+  crosshair(visible: boolean, power = 0, onTarget = false, inRange = true, s?: { aim: number; whirling: boolean; phase: number; window: number; perfectFrac: number; power: number; smooth: boolean; loading: boolean }) {
+    const now = performance.now();
+    const showRel = now < this.relUntil;
+    const on = visible || showRel;
+    this.crossEl.classList.toggle('on', on);
+    if (!on) return;
+    if (!this.ring) {
+      const q = <T extends Element>(c: string) => this.crossEl.querySelector(c) as T;
+      this.ring = { win: q('.win'), winP: q('.win-p'), pow: q('.ring'), pouch: q('.pouch'), rel: q('.rel'), cue: q('.cue') };
+    }
+    const R = this.ring;
+    this.crossEl.style.opacity = s ? String(Math.max(showRel ? 1 : 0, Math.min(1, s.aim * 1.25))) : '';
+    const c = 2 * Math.PI * 36;
+    R.pow.style.strokeDasharray = `${c * (s ? s.power : power)} ${c}`;
     this.crossEl.classList.toggle('target', onTarget);
     this.crossEl.classList.toggle('far', !inRange && power > 0.2);
+    if (!s) return;
+    if (Math.abs(s.window - this.lastWin) > 0.002) {
+      this.lastWin = s.window;
+      R.win.setAttribute('d', arcPath(60, 60, 44, s.window * 360));
+      R.winP.setAttribute('d', arcPath(60, 60, 44, s.window * s.perfectFrac * 360));
+    }
+    const ph = s.phase - Math.floor(s.phase);
+    const th = ph * Math.PI * 2;
+    R.pouch.setAttribute('cx', (60 + 44 * Math.sin(th)).toFixed(2));
+    R.pouch.setAttribute('cy', (60 - 44 * Math.cos(th)).toFixed(2));
+    const err = s.phase - Math.round(s.phase);
+    this.crossEl.classList.toggle('whirl', s.whirling);
+    this.crossEl.classList.toggle('loading', s.loading);
+    this.crossEl.classList.toggle('inwin', s.whirling && Math.abs(err) <= s.window);
+    this.crossEl.classList.toggle('smooth', s.smooth);
+  }
+
+  /** the release's read-out on the ring: where in the window he let go (a tick), and a word (0.9 s) */
+  slingRelease(kind: 'perfect' | 'sweet' | 'early' | 'late', err: number) {
+    if (!this.ring) return;
+    const R = this.ring;
+    const deg = Math.max(-170, Math.min(170, err * 360));
+    R.rel.setAttribute('transform', `rotate(${deg.toFixed(1)} 60 60)`);
+    this.crossEl.classList.remove('r-perfect', 'r-sweet', 'r-early', 'r-late', 'rel-on');
+    void this.crossEl.offsetWidth;
+    this.crossEl.classList.add(`r-${kind}`, 'rel-on');
+    R.cue.textContent = kind === 'perfect' ? 'מֻשְׁלָם' : kind === 'sweet' ? '' : kind === 'early' ? 'מֻקְדָּם מִדַּי' : 'מְאֻחָר מִדַּי';
+    this.relUntil = performance.now() + 900;
+  }
+
+  /** a hit: the marker flashes round the reticle (perfect: gold and larger) */
+  hitMarker(strong = false) {
+    const e = this.hitEl ?? (this.hitEl = this.hudEl('hitmark'));
+    e.className = 'hitmark';
+    void e.offsetWidth;
+    e.className = `hitmark on${strong ? ' strong' : ''}`;
+  }
+
+  /** a short Hebrew praise line over the scene (narration style — never a verse) */
+  praise(text: string, seconds = 1.6, miss = false) {
+    const e = this.praiseEl ?? (this.praiseEl = this.hudEl('praise'));
+    e.textContent = text;
+    e.classList.remove('on');
+    e.classList.toggle('miss', miss);
+    void e.offsetWidth;
+    e.classList.add('on');
+    this.later('praise', seconds * 1000, () => e.classList.remove('on'));
+  }
+
+  /** the practice round's panel (top centre): round and title, targets left, stones, streak, time, the wind */
+  rangePanel(p: { round: number; rounds: number; title: string; targets: boolean[]; streak: number; time: number; wind?: string; note?: string } | null) {
+    const e = this.panelEl ?? (this.panelEl = this.hudEl('rangepanel'));
+    if (!p) {
+      e.classList.remove('on');
+      this.lastPanel = '';
+      return;
+    }
+    const tgt = p.targets.map((d) => `<i class="${d ? 'd' : ''}"></i>`).join('');
+    const m = Math.floor(p.time / 60), sec = Math.floor(p.time % 60);
+    const html = `<div class="rp-head"><span class="rp-n">${p.round}/${p.rounds}</span><span class="rp-title">${p.title}</span></div><div class="rp-row"><span class="rp-t">${tgt}</span>${p.streak >= 2 ? `<span class="rp-streak">רֶצֶף ×${p.streak}</span>` : ''}<span class="rp-time">${m}:${String(sec).padStart(2, '0')}</span></div>${p.wind ? `<div class="rp-wind">${p.wind}</div>` : ''}${p.note ? `<div class="rp-note">${p.note}</div>` : ''}`;
+    if (html !== this.lastPanel) {
+      this.lastPanel = html;
+      e.innerHTML = html;
+    }
+    e.classList.add('on');
+  }
+
+  /** the stones in the shepherd's bag (smooth ones gold); null hides it */
+  stoneBag(b: { smooth: number; plain: number; pouch: 'smooth' | 'plain' | null } | null) {
+    const e = this.bagEl ?? (this.bagEl = this.hudEl('stonebag'));
+    if (!b) {
+      e.classList.remove('on');
+      return;
+    }
+    const key = `${b.smooth}/${b.plain}/${b.pouch}`;
+    if (key !== this.lastBag) {
+      this.lastBag = key;
+      const n = (k: number, cls: string) => Array.from({ length: Math.min(12, k) }, () => `<i class="${cls}"></i>`).join('');
+      e.innerHTML = `<span class="sb-l">יַלְקוּט</span>${b.pouch ? `<i class="${b.pouch === 'smooth' ? 's' : 'p'} in"></i>` : ''}${n(b.smooth, 's')}${n(b.plain, 'p')}${b.smooth + b.plain + (b.pouch ? 1 : 0) === 0 ? '<span class="sb-e">רֵיק</span>' : ''}`;
+    }
+    e.classList.add('on');
+  }
+
+  /**
+   * A round's result: its title, one to three marks, the lines (label, value) and the choices — continue (E /
+   * פְּעֻלָּה) and try again (R / the button). null hides it.
+   */
+  rating(card: { title: string; marks: number; verdict: string; lines: [string, string][]; retry: boolean; next: string } | null, onNext?: () => void, onRetry?: () => void) {
+    const e = this.ratingEl ?? (this.ratingEl = this.hudEl('rating'));
+    if (!card) {
+      e.classList.remove('on');
+      return;
+    }
+    const marks = [0, 1, 2].map((i) => `<i class="${i < card.marks ? 'on' : ''}" style="--i:${i}"></i>`).join('');
+    const lines = card.lines.map(([a, b]) => `<div class="rt-l"><span>${a}</span><b>${b}</b></div>`).join('');
+    const k = (key: string, touch: string) => (this.touch ? (touch ? `<span class="key">${touch}</span>` : '') : `<span class="key">${key}</span>`);
+    e.innerHTML = `<div class="rt-card"><div class="rt-title">${card.title}</div><div class="rt-marks">${marks}</div><div class="rt-verdict">${card.verdict}</div><div class="rt-lines">${lines}</div><div class="rt-btns"><button class="p-btn" data-a="next">${k('E', '')}${card.next}</button>${card.retry ? `<button class="p-btn ghost" data-a="retry">${k('R', '')}נַסֵּה שׁוּב</button>` : ''}</div></div>`;
+    e.querySelector('[data-a="next"]')?.addEventListener('click', (ev) => { ev.stopPropagation(); onNext?.(); });
+    e.querySelector('[data-a="retry"]')?.addEventListener('click', (ev) => { ev.stopPropagation(); onRetry?.(); });
+    e.classList.remove('on');
+    void e.offsetWidth;
+    e.classList.add('on');
   }
 
   marker(camera: THREE.Camera, pos: THREE.Vector3 | null, label = '') {

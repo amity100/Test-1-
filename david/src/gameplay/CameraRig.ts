@@ -35,6 +35,18 @@ export class CameraRig {
   fov = 50;
   sensitivity = 0.0024;
   private initialized = false;
+  /**
+   * (play1, gameplay v2 §3) the aim camera: over the right shoulder, eased in over the sling's draw (≈0.6 s, so the
+   * draw never feels like lag); its field of view narrows with the distance of what the reticle is on (aimFov, set by
+   * the Player: ≈38° at 12 m .. 26° at 35 m) so a jar at 30 m is still a target on a phone.
+   */
+  aimFov = 36;
+  private aimFovCur = 36;
+  /** multiplier on the look sensitivity (the Player: slower while zoomed in, touch aim friction over a target) */
+  lookScale = 1;
+  /** 0..1: closer and lower behind him (he kneels in the stream bed to choose a stone) */
+  close = 0;
+  private closeW = 0;
 
   /** optional solid-obstacle test for the follow camera's boom (boulders: Colliders.solidAt) */
   solid: ((x: number, y: number, z: number) => boolean) | null = null;
@@ -55,6 +67,10 @@ export class CameraRig {
 
   get inCinematic() {
     return this.mode === 'cinematic';
+  }
+  /** (play1) 0..1: how far the aim camera has eased in */
+  get aimWeight() {
+    return this.aimW;
   }
 
   /** Abort any cinematic immediately and return to the follow camera (no completion callback). */
@@ -124,8 +140,10 @@ export class CameraRig {
   }
 
   applyLook(dx: number, dy: number) {
-    this.yaw -= dx * this.sensitivity;
-    this.pitch = clamp(this.pitch + dy * this.sensitivity, -0.55, 0.9);
+    // (play1) finer while aiming through the narrower lens
+    const s = this.sensitivity * this.lookScale * THREE.MathUtils.lerp(1, this.aimFovCur / FOLLOW_FOV, this.aimW);
+    this.yaw -= dx * s;
+    this.pitch = clamp(this.pitch + dy * s, -0.55, 0.9);
   }
 
   update(dt: number, time: number) {
@@ -162,7 +180,10 @@ export class CameraRig {
       }
     }
     // ---------- follow
-    this.aimW = damp(this.aimW, this.aim, 10, dt);
+    // (play1) the aim eases in over the draw (rate 6: ~95 % in 0.5 s) and out a little faster
+    this.aimW = damp(this.aimW, this.aim, this.aim > this.aimW ? 6 : 8, dt);
+    this.aimFovCur = damp(this.aimFovCur, this.aimFov, 3, dt);
+    this.closeW = damp(this.closeW, this.close, 2.6, dt);
     if (!this.initialized) {
       this.smoothTarget.copy(this.target);
       this.initialized = true;
@@ -170,12 +191,12 @@ export class CameraRig {
     this.smoothTarget.x = damp(this.smoothTarget.x, this.target.x, 14, dt);
     this.smoothTarget.z = damp(this.smoothTarget.z, this.target.z, 14, dt);
     this.smoothTarget.y = damp(this.smoothTarget.y, this.target.y, 8, dt);
-    const want = THREE.MathUtils.lerp(this.dist, 1.9, this.aimW);
+    const want = THREE.MathUtils.lerp(THREE.MathUtils.lerp(this.dist, 2.25, this.closeW), 1.9, this.aimW);
     const cp = Math.cos(this.pitch), sp = Math.sin(this.pitch);
     const dir = tmpA.set(Math.sin(this.yaw) * cp, sp, Math.cos(this.yaw) * cp);
     const right = tmpB.set(-Math.cos(this.yaw), 0, Math.sin(this.yaw));
     const pivot = tmpC.copy(this.smoothTarget).addScaledVector(right, -0.62 * this.aimW);
-    pivot.y += 0.08 * this.aimW;
+    pivot.y += 0.08 * this.aimW - 0.55 * this.closeW * (1 - this.aimW);
     // terrain (and boulder) collision along the boom; boulders are ignored while the pivot itself is inside one's
     // margin (David pressed against a rock), so the camera never jams onto his head
     const solid = this.solid !== null && !this.solid(pivot.x, pivot.y, pivot.z) ? this.solid : null;
@@ -202,7 +223,7 @@ export class CameraRig {
     cam.position.copy(pos);
     cam.up.set(0, 1, 0);
     cam.lookAt(look);
-    this.fov = THREE.MathUtils.lerp(FOLLOW_FOV, 44, this.aimW);
+    this.fov = THREE.MathUtils.lerp(FOLLOW_FOV - 6 * this.closeW, this.aimFovCur, this.aimW);
     this.applyShake(dt, time);
   }
 

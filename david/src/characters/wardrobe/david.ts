@@ -277,6 +277,18 @@ export async function dressDavid(human: HumanModel, opts: DressOptions): Promise
   sashMat.vertexColors = true;
   const sashMesh = makeSkinned(human, merge(sashGeos, false), sashMat, partWeights(fit, C.TORSO, 8), { name: 'sash' });
   outfit.add(sashMesh);
+  // (play1, gameplay v2 §1) the sling is carried folded and tucked under the sash at the RIGHT hip (a shepherd's way
+  // of carrying it while walking; 1 Sam 17:40 has it in his hand only as he goes out to sling): the socket sits a
+  // little inside the wraps, just under their middle, so the fold hides under the sash and the pouch and the cords'
+  // ends hang a hand's breadth below it (DavidModel lays them out and sways them)
+  {
+    const th = -1.2;
+    const p = upper.field.point(beltY - 0.012 * S, th, ringR(th) + cordR * 0.75);
+    const zx = new THREE.Vector3(Math.sin(th), 0, Math.cos(th));
+    const tx = new THREE.Vector3(Math.cos(th), 0, -Math.sin(th)); // along the sash toward his front (X x Y = Z)
+    const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(tx, new THREE.Vector3(0, 1, 0), zx));
+    outfit.props.slingTuck = human.addSocket('wardrobeSlingTuck', 'spine05', p, q);
+  }
   // hanging cords (verlet) with frayed tassels
   const knotSock = human.addSocket('wardrobeKnot', 'spine05', knotBase.clone().addScaledVector(outDir, 0.008).add(new THREE.Vector3(0, -0.022, 0)));
   const cordMat = solidMaterial({ tier, tex: rope, color: 0xffffff, roughness: 0.9, repeat: [1, 1 / 0.02], normal: 1.4 });
@@ -307,6 +319,7 @@ export async function dressDavid(human: HumanModel, opts: DressOptions): Promise
   bagSock.add(satchel.pivot);
   outfit.add(satchel.pivot);
   outfit.props.satchel = satchel.pivot;
+  outfit.props.satchelFlap = satchel.flap;
   outfit.pendulums.push(new Pendulum(bagSock, satchel.swing, { freq: 1.25, damping: 0.18, gain: 0.02, limit: 0.3 }));
   // strap path: bag front corner -> up the left chest -> over the left shoulder -> down the back -> bag back corner
   const bagWorld = (x: number, y: number) => new THREE.Vector3(x, y, 0.0).applyQuaternion(bagRot).add(bagSurf);
@@ -467,18 +480,29 @@ function buildSatchel(tier: Tier, t: { coarse: Awaited<ReturnType<typeof texPair
   flapGeo.computeVertexNormals();
   const flapMat = solidMaterial({ tier, tex: t.leather, color: 0x4e3220, roughness: 0.6, repeat: [1, 1], normal: 1.4, sheen: low ? 0 : 0.25 });
   flapMat.side = THREE.DoubleSide;
+  // (play1, gameplay v2 §2) the flap (with its lacing and toggle) hangs on its own hinge at the back-top edge, so it
+  // can lift open when a stone goes into the bag (DavidModel); one extra draw call
+  const flapPivot = new THREE.Group();
+  flapPivot.name = 'satchelFlap';
+  const hinge = new THREE.Vector3(0, 0.004, -(b(0.02) + 0.006) * 0.45);
+  flapPivot.position.copy(hinge);
+  swing.add(flapPivot);
+  flapGeo.translate(-hinge.x, -hinge.y, -hinge.z);
   const flap = new THREE.Mesh(flapGeo, flapMat);
   flap.castShadow = true;
-  swing.add(flap);
+  flapPivot.add(flap);
   // laced edge of the flap + a toggle
   const lace = tubeAlong(edge, 0.0028, low ? 4 : 5, { twist: 400 });
+  lace.translate(-hinge.x, -hinge.y, -hinge.z);
   const laceMat = flapMat; // leather thong lacing (same material: merged into the flap's draw call)
-  swing.add(new THREE.Mesh(lace, laceMat));
+  flapPivot.add(new THREE.Mesh(lace, laceMat));
   const toggle = new THREE.CylinderGeometry(0.006, 0.006, 0.03, 8);
   toggle.rotateZ(Math.PI / 2);
   const mid = edge[Math.floor(edge.length / 2)];
-  toggle.translate(mid.x, mid.y - 0.008, mid.z + 0.004);
-  swing.add(new THREE.Mesh(toggle, laceMat));
+  toggle.translate(mid.x - hinge.x, mid.y - 0.008 - hinge.y, mid.z + 0.004 - hinge.z);
+  flapPivot.add(new THREE.Mesh(toggle, laceMat));
+  flapPivot.traverse((c) => ((c as THREE.Mesh).isMesh ? ((c as THREE.Mesh).castShadow = true) : null));
+  mergeStatic(flapPivot);
   // strap loops at the top corners
   for (const sx of [-1, 1]) {
     const loop = new THREE.TorusGeometry(0.011, 0.0035, 5, 10);
@@ -486,8 +510,8 @@ function buildSatchel(tier: Tier, t: { coarse: Awaited<ReturnType<typeof texPair
     swing.add(new THREE.Mesh(loop, flapMat));
   }
   swing.traverse((c) => ((c as THREE.Mesh).isMesh ? ((c as THREE.Mesh).castShadow = true) : null));
-  mergeStatic(swing); // bag + one leather mesh (flap, lacing, toggle, loops): 2 draw calls
-  return { pivot, swing };
+  mergeStatic(swing); // bag + the strap loops; the flap (+ lacing, toggle) on its hinge: 3 draw calls
+  return { pivot, swing, flap: flapPivot };
 }
 
 // ------------------------------------------------------------------------------------------ sandals

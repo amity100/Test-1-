@@ -8,9 +8,12 @@ import type { Animal, Flock } from '../characters/Flock';
 import { CameraRig, orbit, type Shot } from './CameraRig';
 import type { Player } from './Player';
 import type { BearActor } from './BearActor';
-import type { Props } from './Props';
-import type { Projectiles } from './Projectiles';
+import type { Props, Candidate } from './Props';
+import type { Projectiles, ShotInfo } from './Projectiles';
 import type { GameAudio } from './GameAudio';
+import type { SfxName } from '../audio/AudioEngine';
+import { Range, ROUNDS, type RoundStats } from './Range';
+import { STONE_BEATS, THROW_RELEASE } from '../characters/DavidModel';
 import { Intro } from './Intro';
 import { BearHook } from './BearHook';
 import { LAYOUT, SUN } from '../world/Layout';
@@ -73,21 +76,17 @@ export class Story {
     private props: Props,
     private projectiles: Projectiles,
   ) {
-    // sling targets: jars
-    for (const jar of props.jars) {
-      projectiles.targets.push({
-        id: 'jar',
-        center: () => jar.center,
-        radius: 0.26,
-        enabled: () => jar.alive,
-        onHit: (_at, vel) => {
-          jar.shatter(vel);
-          this.audio.at('jarShatter', jar.center, 1);
-          this.engine.particles.dustBurst(jar.center, 10, 0.8, new THREE.Color(0.72, 0.45, 0.3));
-          this.jarsBroken++;
-        },
-      });
-    }
+    // (play1) the sling's targets: the range (src/gameplay/Range.ts) registers its own jars, gourds, the cord and its
+    // solids when it is built (lazily, at the stones objective); every release is read out on the reticle, and while
+    // a round is live a miss says where the stone went (high / low / left / right)
+    player.onShot = (shot) => {
+      const kind = shot.perfect ? 'perfect' : shot.sweet ? 'sweet' : shot.timing < 0 ? 'early' : 'late';
+      this.ui.slingRelease(kind, shot.timing);
+      this.range?.onShot(shot);
+    };
+    player.onNoStones = () => this.ui.hint('<span class="h-item">הַיַּלְקוּט רֵיק — מַלֵּא אוֹתוֹ מֵעֲרֵמַת הָאֲבָנִים שֶׁלְּיַד סִמַּן הַקְּלִיעָה, אוֹ בַּנַּחַל</span>', 4);
+    projectiles.onResolve = (shot) => this.onShotResolved(shot);
+    if (new URLSearchParams(location.search).get('jump') === 'stones') this.jump = 'stones';
     // bear hit zones
     const pts: THREE.Vector3[] = [];
     const zone = (i: number, r: number) => ({
@@ -98,10 +97,12 @@ export class Story {
       onHit: (at: THREE.Vector3) => this.hitBear(at, 'sling'),
     });
     projectiles.targets.push(zone(1, 0.55), zone(2, 0.32), zone(0, 0.5));
-    projectiles.onGroundHit = (at, speed) => {
+    projectiles.onGroundHit = (at, speed, material) => {
       if (speed > 6) {
-        this.audio.at('stoneHit', at, 0.8);
-        this.engine.particles.dustBurst(at, 5, 0.6);
+        // (play1) a stone on rock / wood / earth
+        const n = material === 'rock' ? 'stoneOnRock' : material === 'wood' ? 'stoneOnWood' : 'stoneOnEarth';
+        this.audio.at(n as SfxName, at, 0.8);
+        this.engine.particles.dustBurst(at, material === 'earth' ? 6 : 4, material === 'earth' ? 0.7 : 0.45);
       }
     };
     player.onStrikeImpact = (tip) => this.onStaffImpact(tip);
@@ -180,7 +181,7 @@ export class Story {
   }
 
   // ============================================================================ main script
-  jump: '' | 'sling' | 'bear' | 'fight' | 'end' = '';
+  jump: '' | 'sling' | 'bear' | 'fight' | 'end' | 'stones' = '';
 
   private async run(skipIntro: boolean) {
     const L = LAYOUT;
@@ -201,137 +202,75 @@ export class Story {
     }
     this.check();
 
-    // ---------------------------------------------------------------- 1. walk to the flock
+    // (cut8, CUT v5) the film ends with David AMONG his flock (D4: the lamb back with its ewe, the flock grazing round
+    // him), so the chapter goes on from there: 1. call the flock; 2. lead it down to the stream bed — where the five
+    // smooth stones begin (play1). No objective that the film has already fulfilled.
+    // ---------------------------------------------------------------- 1. call the flock
     this.cinematic(false);
     // after a skipped film the score's title statement plays under the title card first
     if (introSkipped) this.after(3.4, () => this.audio.music('pastoral', 4), true);
     else this.audio.music('pastoral', 4);
-    this.ui.objective('לֵךְ אֶל הַצֹּאן', 'הָעֵדֶר רוֹעֶה בַּמִּרְעֶה שֶׁבְּמוֹרַד הַגִּבְעָה');
-    this.ui.hint([K.move, K.look, K.run]);
-    this.setMarker(() => this.flockCenter().add(new THREE.Vector3(0, 1.5, 0)), 'הַצֹּאן');
-    await this.until(() => this.player.pos.distanceTo(this.flockCenter()) < 17 || this.flock.countNear(this.player.pos, 8) >= 3);
-    this.check();
-    this.ui.hint(null);
-    this.audio.sfx('uiObjective');
-
-    // ---------------------------------------------------------------- 2. call the flock
     this.ui.objective('קְרָא לַצֹּאן', 'אֱסֹף אֶת הָעֵדֶר אֵלֶיךָ');
-    this.ui.hint([K.call]);
+    this.ui.hint([K.call, K.move, K.look]);
     this.setMarker(null);
-    let called = false;
-    this.beh = () => {
-      if (!called && this.input.take('call')) {
-        called = true;
-        this.player.model.play('call');
-        this.audio.sfx('shepherdCall', { volume: 0.9 });
-        this.after(0.35, () => this.flock.call(this.player.pos));
-      }
+    let calls = 0;
+    const callFlock = () => {
+      calls++;
+      this.player.model.play('call');
+      this.audio.sfx('shepherdCall', { volume: 0.9 });
+      this.after(0.35, () => this.flock.call(this.player.pos));
     };
-    await this.until(() => called);
+    this.beh = () => {
+      if (calls === 0 && this.input.take('call')) callFlock();
+    };
+    await this.until(() => calls > 0);
     this.check();
     this.ui.hint(null);
-    await this.wait(2.5);
-    this.ui.toast('מִדְרָשׁ', `${quoteText('shr_2_2_flock')}<small>${sourceRef('shr_2_2_flock')}</small>`, 16);
-    await this.wait(3);
-    this.check();
-
-    // ---------------------------------------------------------------- 3. five smooth stones
-    this.ui.objective('לַקֵּט חֲמִשָּׁה חַלֻּקֵי אֲבָנִים מִן הַנַּחַל', 'כְּפִי שֶׁיַּעֲשֶׂה יוֹם אֶחָד בְּעֵמֶק הָאֵלָה');
-    const stonesArea = this.groundV(L.stones.x, L.stones.z, 0.6);
-    const nearestStone = () => {
-      let best: THREE.Vector3 | null = null;
-      let bd = Infinity;
-      for (const s of this.props.stones) {
-        if (s.taken) continue;
-        const d = s.mesh.position.distanceTo(this.player.pos);
-        if (d < bd) { bd = d; best = s.mesh.position; }
-      }
-      return { pos: best, dist: bd };
-    };
-    // far away: point at the stream bed; close by: point at the nearest remaining stone
-    this.setMarker(() => {
-      const n = nearestStone();
-      if (!n.pos) return null;
-      return this.player.pos.distanceTo(stonesArea) > 28 ? stonesArea : n.pos.clone().add(new THREE.Vector3(0, 0.9, 0));
-    }, 'הַנַּחַל');
-    let taken = 0;
-    let picking = false;
-    this.ui.counter(`חַלֻּקֵי אֲבָנִים <b>0 / 5</b>`);
-    this.beh = () => {
-      this.props.setStoneGlint(true, this.time);
-      let near: (typeof this.props.stones)[number] | null = null;
-      let best = 2.4;
-      for (const s of this.props.stones) {
-        if (s.taken) continue;
-        const d = Math.hypot(s.mesh.position.x - this.player.pos.x, s.mesh.position.z - this.player.pos.z);
-        if (d < best) { best = d; near = s; }
-      }
-      this.ui.prompt(near && !picking ? withLabel(K.interact, 'אֱסֹף אֶבֶן חֲלָקָה') : null);
-      if (near && !picking && this.input.take('interact')) {
-        picking = true;
-        const st = near;
-        let done = false;
-        const collect = () => {
-          if (done) return;
-          done = true;
-          st.taken = true;
-          st.setVisible(false);
-          taken++;
-          this.audio.sfx('pickup');
-          this.ui.counter(`חַלֻּקֵי אֲבָנִים <b>${taken} / 5</b>`);
-          picking = false;
-        };
-        this.player.faceToward(st.mesh.position, 1, 100);
-        this.player.model.play('pick', [{ t: 0.5, fn: collect }]);
-        // fail-safe: never leave the objective stuck if the animation gets interrupted
-        this.after(1.1, collect, true);
-      }
-    };
-    await this.until(() => taken >= 5);
-    this.check();
-    this.props.setStoneGlint(false, 0);
-    this.ui.prompt(null);
-    this.ui.counter(null);
     this.audio.sfx('uiObjective');
-    this.ui.verse(...verseArgs('s1_17_40_stones'), 6);
-    await this.wait(2);
-
-    // ---------------------------------------------------------------- 4. sling practice
-    this.player.canSling = true;
-    this.ui.objective('הִתְאַמֵּן בַּקֶּלַע', 'נַפֵּץ אֶת שְׁלֹשֶׁת הַכַּדִּים שֶׁעַל הַגָּדֵר');
-    this.ui.hint([K.sling, withLabel(K.look, 'כַּוֵּן')]);
-    const jarC = this.props.jars[1].center.clone().add(new THREE.Vector3(0, 0.8, 0));
-    this.setMarker(jarC, 'הַכַּדִּים');
-    this.jarsBroken = 0;
-    this.ui.counter(`כַּדִּים <b>0 / 3</b>`);
-    let lastBroken = 0;
-    this.beh = () => {
-      if (this.jarsBroken !== lastBroken) {
-        lastBroken = this.jarsBroken;
-        this.ui.counter(`כַּדִּים <b>${this.jarsBroken} / 3</b>`);
-        if (this.jarsBroken === 1) this.ui.verse(...verseArgs('jdg_20_16_slingers'), 6);
-      }
-      // gentle coaching if throws keep missing
-      if (this.player.throws === 4 && this.jarsBroken === 0) {
-        this.ui.hint('<span class="h-item">טיפ: סובב את הקלע זמן רב יותר — הטבעת מתמלאת — כדי שהאבן תגיע רחוק ובקו ישר יותר</span>', 8);
-        this.player.throws++;
-      }
-    };
-    await this.until(() => this.jarsBroken >= 3);
+    await this.wait(1.6);
     this.check();
-    this.ui.counter(null);
-    this.audio.sfx('uiObjective');
-    this.player.canStrike = true;
-    this.player.canDodge = true;
-    this.ui.hint([K.strike, K.dodge], 9);
-    await this.wait(2.5);
 
-    // ---------------------------------------------------------------- 5. back to the flock
-    this.ui.objective('חֲזֹר אֶל הָעֵדֶר', 'אַל תַּשְׁאִיר אֶת הַצֹּאן לְבַד זְמַן רַב');
-    this.setMarker(() => this.flockCenter().add(new THREE.Vector3(0, 1.5, 0)), 'הַצֹּאן');
-    const t0 = this.time;
-    this.beh = null;
-    await this.until(() => this.player.pos.distanceTo(this.flockCenter()) < 20 || this.time - t0 > 70);
+    // ---------------------------------------------------------------- 2. lead the flock down to the stream bed
+    // (Ex 3:1 "וַיִּנְהַג אֶת־הַצֹּאן": the flock follows its shepherd — Flock.call keeps it following while he walks; a
+    // second call gathers the stragglers; when he reaches the stream bed the pasture moves to the wadi's meadow)
+    const wadi = this.groundV(L.stones.x + 14, L.stones.z - 16, 0);
+    this.ui.objective('נְהַג אֶת הַצֹּאן אֶל הַנַּחַל', 'הָעֵדֶר הוֹלֵךְ אַחֲרֶיךָ — קְרָא שׁוּב אִם יִתְפַּזֵּר');
+    this.ui.hint([K.move, K.run, K.call], 10);
+    this.setMarker(() => wadi.clone().add(new THREE.Vector3(0, 1.4, 0)), 'הַנַּחַל');
+    let arrivedT = -1;
+    let told = false;
+    this.beh = () => {
+      if (this.input.take('call')) callFlock();
+      // the flock keeps following while he leads it (a call lasts ~13 s; refreshed while he walks on with it)
+      if (calls > 0 && Math.hypot(this.player.pos.x - wadi.x, this.player.pos.z - wadi.z) > 26 && this.flock.countNear(this.player.pos, 14) >= 4) {
+        for (const a of this.flock.animals) if (a.state === 'follow') a.followT = Math.max(a.followT, 4);
+      }
+      if (!told && this.time > 0) {
+        told = true;
+        this.after(2.5, () => this.ui.toast('מִדְרָשׁ', `${quoteText('shr_2_2_flock')}<small>${sourceRef('shr_2_2_flock')}</small>`, 16));
+      }
+      const atWadi = Math.hypot(this.player.pos.x - wadi.x, this.player.pos.z - wadi.z) < 26;
+      if (atWadi && arrivedT < 0) arrivedT = this.time;
+    };
+    await this.until(() => arrivedT >= 0 && (this.flock.countNear(this.player.pos, 20) >= 3 || this.time - arrivedT > 40));
+    this.check();
+    // the flock grazes on the wadi's bank while he chooses his stones
+    this.flock.setPasture(wadi.clone().add(new THREE.Vector3(10, 0, -8)), 20);
+    this.setMarker(null);
+    this.ui.hint(null);
+    this.audio.sfx('uiObjective');
+    await this.wait(1.2);
+    this.check();
+
+    // ---------------------------------------------------------------- 3. five smooth stones (play1)
+    void L;
+    await this.stonesObjective();
+    this.check();
+    // ---------------------------------------------------------------- 4. sling practice (play1)
+    await this.practiceObjective();
+    this.check();
+    // ---------------------------------------------------------------- 5. back to the flock (play1)
+    await this.returnObjective();
     this.check();
 
     // ---------------------------------------------------------------- 6. the bear takes a lamb
@@ -357,6 +296,422 @@ export class Story {
     await this.ending();
   }
 
+  // ============================================================================ (play1) objectives 3-5
+  // the five smooth stones, the sling practice, back to the flock (docs/gameplay-v2.md §2-3); helpers below
+  private range: Range | null = null;
+  /** a round of the range is being played (the practice or a replay) */
+  private practicing = false;
+  /** after the practice the range can be played again from its mark (back to the flock; free roam) */
+  private rangeOpen = false;
+  private rangePrompt = false;
+  private pickMove: ((dt: number) => void) | null = null;
+  private followShot: ShotInfo | null = null;
+  private followT = 0;
+  private static readonly GOOD_LINES = ['חָלָק וְעָגֹל', 'זֶה יָעוּף יָשָׁר', 'חַלּוּק טוֹב'];
+  private static readonly REJECT_LINES: Record<string, string> = { flat: 'שָׁטוּחַ מִדַּי', rough: 'לֹא חָלָק דַּיּוֹ', angular: 'חַד וְשָׁבוּר', smooth: '' };
+
+  /** the sling range (built lazily: small steps, a frame between them) */
+  private ensureRange() {
+    if (!this.range) {
+      this.range = new Range(this.engine, this.projectiles, {
+        slowMo: (s, sec) => {
+          this.slowMo(s);
+          this.after(sec, () => this.slowMo(1), true);
+        },
+        shake: (a) => this.cam.addShake(a),
+        sfx: (n, v, p) => this.player.sfx(n, v, p),
+        sfxAt: (n, at, v, p) => this.audio.at(n as SfxName, at, v ?? 1, p ?? 1),
+        hitMarker: (s) => this.ui.hitMarker(s),
+        praise: (t) => this.ui.praise(t),
+        followStone: (shot) => this.followStone(shot),
+        later: (s, fn) => this.after(s, fn, true),
+      }, this.props.jars);
+      this.props.group.add(this.range.group);
+    }
+    return this.range;
+  }
+
+  private atStation() {
+    const R = this.range;
+    return !!R && Math.hypot(this.player.pos.x - R.station.x, this.player.pos.z - R.station.z) < 2.6;
+  }
+
+  /** 3. "וַיִּבְחַר־לוֹ חֲמִשָּׁה חַלֻּקֵי־אֲבָנִים מִן־הַנַּחַל" — he chooses them: only good stones count */
+  private async stonesObjective() {
+    const L = LAYOUT;
+    const bed = this.props.bed;
+    const tier = this.engine.quality.tier;
+    void this.props.buildBed(tier === 'mobile-low' ? 0.45 : tier === 'mobile-high' ? 0.65 : tier === 'desktop-medium' ? 0.8 : 1);
+    // the range is set up meanwhile, in the background
+    void this.ensureRange().build();
+    this.range?.stop();
+    this.practicing = this.rangeOpen = false;
+    this.player.canSling = false;
+    // the shepherd's bag is empty until he chooses his stones
+    this.player.bag.smooth = this.player.bag.plain = 0;
+    this.player.bag.preferSmooth = false;
+    this.ui.objective('בְּחַר חָמֵשׁ אֲבָנִים לַקֶּלַע בַּנַּחַל', 'רַק חֲלָקוֹת וַעֲגֻלּוֹת, שֶׁהַמַּיִם לִטְּשׁוּ — כְּפִי שֶׁיַּעֲשֶׂה יוֹם אֶחָד בְּעֵמֶק הָאֵלָה');
+    const bedPos = this.groundV(L.stones.x, L.stones.z, 0.6);
+    const bedMarker = () => (Math.hypot(this.player.pos.x - bedPos.x, this.player.pos.z - bedPos.z) > 10 ? bedPos : null);
+    this.setMarker(bedMarker, 'הַנַּחַל');
+    let taken = 0, busy = false, searchT = 0, hinted = 0;
+    const count = () => this.ui.counter(`חַלֻּקֵי אֲבָנִים <b>${taken} / 5</b>`);
+    count();
+    this.beh = (dt) => {
+      const inBed = Math.hypot(this.player.pos.x - bedPos.x, this.player.pos.z - bedPos.z) < 15;
+      bed.update(inBed ? this.player.pos : null, this.time);
+      this.pickMove?.(dt);
+      if (!bed.built || busy) {
+        this.ui.prompt(null);
+        return;
+      }
+      if (inBed) searchT += dt;
+      // a gentle hint after a long search; later the nearest good stone is pointed at for a few seconds
+      if (searchT > 40 && hinted === 0) {
+        hinted = 1;
+        this.ui.hint('<span class="h-item">חַפֵּשׂ חַלּוּקִים עֲגֻלִּים וּמַבְרִיקִים — לְיַד הַמַּיִם הֵם הַחֲלָקִים בְּיוֹתֵר</span>', 9);
+      }
+      if (searchT > 80 && hinted === 1) {
+        hinted = 2;
+        const g = bed.nearestGood(this.player.pos);
+        if (g) {
+          this.setMarker(g.pos.clone().add(new THREE.Vector3(0, 0.45, 0)), '');
+          this.after(6, () => this.setMarker(bedMarker, 'הַנַּחַל'));
+        }
+      }
+      const c = bed.nearest(this.player.pos, this.player.forward, 1.45);
+      this.ui.prompt(c ? withLabel(K.interact, 'בְּחַן אֶת הָאֶבֶן') : null);
+      this.player.model.lookTarget = c ? c.pos : null;
+      if (c && this.input.take('interact') && !this.player.model.busy) {
+        busy = true;
+        this.ui.prompt(null);
+        void this.pickStone(c).then((good) => {
+          busy = false;
+          if (good) {
+            taken++;
+            searchT = 0;
+            count();
+          }
+        });
+      }
+    };
+    await this.until(() => taken >= 5 && !busy);
+    this.check();
+    this.beh = null;
+    this.player.model.lookTarget = null;
+    this.ui.prompt(null);
+    this.ui.counter(null);
+    this.setMarker(null);
+    this.audio.sfx('uiObjective');
+    this.ui.verse(...verseArgs('s1_17_40_stones'), 6);
+    await this.wait(2);
+  }
+
+  /**
+   * One stone examined (≈1.6-2 s): he steps to it, goes down on one knee, reaches into the gravel (or the trickle),
+   * lifts it and turns it in his fingers; a smooth one is rubbed clean and goes into the bag (the flap lifts); a
+   * flat / rough / broken one is tossed back with a word. Resolves true for a good stone.
+   */
+  private pickStone(c: Candidate): Promise<boolean> {
+    const p = this.player, m = p.model, bed = this.props.bed;
+    const good = c.kind === 'smooth';
+    p.stowSling(true);
+    p.controlEnabled = false;
+    this.cam.close = 1;
+    // kneel at arm's length: the stone ≈0.5 m ahead of him, a little to his right
+    const to = new THREE.Vector3(c.pos.x - p.pos.x, 0, c.pos.z - p.pos.z);
+    if (to.lengthSq() < 1e-4) to.copy(p.forward);
+    to.normalize();
+    const right = new THREE.Vector3(-to.z, 0, to.x);
+    const spot = c.pos.clone().addScaledVector(to, -0.5).addScaledVector(right, -0.1);
+    const from = p.pos.clone();
+    let k = 0;
+    this.pickMove = (dt) => {
+      k = Math.min(1, k + dt / 0.3);
+      const e = k * k * (3 - 2 * k);
+      p.pos.lerpVectors(from, spot, e);
+      p.pos.y = this.engine.terrain.heightAt(p.pos.x, p.pos.z);
+      p.faceToward(c.pos, dt, 16);
+    };
+    m.pickTarget = c.pos.clone();
+    const look = bed.look(c);
+    m.setHeldStone(look.geo, look.mat, look.scale);
+    const B = STONE_BEATS;
+    const ev: { t: number; fn: () => void }[] = [
+      { t: 0.24, fn: () => p.sfx('pebblesKneel', 0.7) },
+      { t: B.grasp - 0.1, fn: () => p.sfx(c.wet ? 'waterRinse' : 'gravelReach', 0.7) },
+      { t: B.grasp, fn: () => bed.take(c) },
+    ];
+    if (good) {
+      ev.push({ t: B.look + 0.22, fn: () => this.ui.praise(Story.GOOD_LINES[Math.floor(Math.random() * Story.GOOD_LINES.length)], 1.3) });
+      ev.push({ t: B.rub, fn: () => p.sfx('stoneRub', 0.6) });
+      ev.push({ t: B.bag, fn: () => {
+        p.sfx('stoneToBag', 0.8);
+        p.bag.smooth++;
+      } });
+    } else {
+      ev.push({ t: B.look + 0.2, fn: () => this.ui.praise(Story.REJECT_LINES[c.kind] || 'לֹא זֶה', 1.5, true) });
+      ev.push({ t: B.toss, fn: () => {
+        const hand = m.handSocketR.getWorldPosition(new THREE.Vector3());
+        const vel = right.clone().multiplyScalar(1.3 + Math.random() * 0.6).addScaledVector(to, 0.8).add(new THREE.Vector3(0, 1.7, 0));
+        this.props.toss(look.geo, look.mat, hand, vel, (at) => {
+          p.sfx('stoneToss', 0.6);
+          bed.putBack(c, at.clone());
+        });
+      } });
+    }
+    m.play(good ? 'stone' : 'stoneToss', ev);
+    return new Promise((resolve) => {
+      this.after((good ? B.end : B.tossEnd) + 0.02, () => {
+        m.pickTarget = null;
+        m.setHeldStone(null);
+        this.pickMove = null;
+        p.controlEnabled = true;
+        this.cam.close = 0;
+        resolve(good);
+      });
+    });
+  }
+
+  /** 4. the sling practice: to the throwing mark, then the four rounds (each with its rating; retry or go on) */
+  private async practiceObjective(startRound = 1) {
+    const R = this.ensureRange();
+    await R.build();
+    const p = this.player;
+    p.canSling = true;
+    p.bag.plain = Math.max(p.bag.plain, 8);
+    p.bag.preferSmooth = false;
+    this.ui.objective('הִתְאַמֵּן בַּקֶּלַע', 'עֲמֹד עַל סִמַּן הַקְּלִיעָה שֶׁבַּנַּחַל, לְיַד עֲרֵמַת הָאֲבָנִים');
+    this.ui.hint([K.sling, withLabel(K.look, 'כַּוֵּן')]);
+    this.setMarker(R.station.clone().add(new THREE.Vector3(0, 0.9, 0)), 'סִמַּן הַקְּלִיעָה');
+    this.beh = () => this.ui.stoneBag({ smooth: p.bag.smooth, plain: p.bag.plain, pouch: p.pouchKind });
+    await this.until(() => this.atStation());
+    this.check();
+    this.ui.hint(null);
+    this.setMarker(null);
+    this.ui.objective(null); // the round's panel says what to do
+    this.practicing = true;
+    try {
+      for (let r = Math.max(1, Math.min(ROUNDS.length, startRound)); r <= ROUNDS.length; ) {
+        const res = await this.playRound(r);
+        this.check();
+        if (res === 'retry') continue;
+        r++;
+      }
+    } finally {
+      this.practicing = false;
+      R.stop();
+      this.ui.rangePanel(null);
+    }
+    this.rangeOpen = true;
+    // he fills his bag at the heap before he goes back up (the smooth stones he chose are still in it)
+    p.bag.plain = Math.max(p.bag.plain, 6);
+    p.bag.preferSmooth = true;
+    this.ui.stoneBag(null);
+    this.audio.sfx('uiObjective');
+    p.canStrike = true;
+    p.canDodge = true;
+    this.ui.hint([K.strike, K.dodge], 9);
+    await this.wait(1.5);
+  }
+
+  private async playRound(r: number): Promise<'next' | 'retry'> {
+    const R = this.range!;
+    const def = ROUNDS[r - 1];
+    const p = this.player;
+    R.startRound(r);
+    p.bag.preferSmooth = r === 4; // the finale: his chosen smooth stones first
+    p.sfx('roundStart', 0.8);
+    this.ui.praise(def.title, 1.8);
+    if (r === 1) this.ui.hint('<span class="h-item">הַחְזֵק — הַקֶּלַע מִסְתּוֹבֵב · שַׁחְרֵר כְּשֶׁהַכִּיס עוֹבֵר בָּאוֹר שֶׁבְּרֹאשׁ הַטַּבַּעַת</span>', 10);
+    else if (r === 2) this.ui.hint('<span class="h-item">בַּמֶּרְחָק הָאֶבֶן יוֹרֶדֶת — כַּוֵּן מֵעַל הַמַּטָּרָה, וְהָרוּחַ מְסִיטָה אוֹתָהּ</span>', 10);
+    else if (r === 3) this.ui.hint('<span class="h-item">כַּוֵּן לְאָן שֶׁהַמַּטָּרָה תַּגִּיעַ — לֹא לְאָן שֶׁהִיא עַכְשָׁו</span>', 9);
+    else this.ui.verse(...verseArgs('jdg_20_16_slingers'), 8);
+    let done = false, skip = false;
+    R.onRoundDone = () => {
+      done = true;
+    };
+    const focus = new THREE.Vector3();
+    this.setMarker(() => (p.aiming || p.hud.aim > 0.05 || R.stats.stones > 0 ? null : R.focus(focus).add(new THREE.Vector3(0, 0.8, 0))), 'הַמַּטָּרוֹת');
+    this.beh = () => {
+      const at = this.atStation();
+      R.offMark = !at;
+      // the heap beside the mark: he refills his bag when it runs low
+      if (at && p.bag.plain < 4) {
+        p.bag.plain = 8;
+        p.sfx('stoneToBag', 0.6);
+      }
+      this.ui.rangePanel({
+        round: r, rounds: ROUNDS.length, title: def.title, targets: R.targetStates(), streak: R.stats.streak, time: R.stats.time,
+        wind: R.windText(),
+        note: !at ? 'חֲזֹר אֶל סִמַּן הַקְּלִיעָה' : R.canSkip ? `${this.ui.touch ? K.interact.touch : K.interact.key} — הַמְשֵׁךְ הָלְאָה, אוֹ נַסֵּה עוֹד` : undefined,
+      });
+      this.ui.stoneBag({ smooth: p.bag.smooth, plain: p.bag.plain, pouch: p.pouchKind });
+      if (R.canSkip && this.input.take('interact')) skip = true;
+    };
+    await this.until(() => done || skip);
+    this.check();
+    this.beh = null;
+    this.setMarker(null);
+    if (!R.stats.done) R.live = false;
+    return this.showRating(R.stats, r);
+  }
+
+  private async showRating(st: RoundStats, r: number): Promise<'next' | 'retry'> {
+    const def = ROUNDS[r - 1];
+    const marks = st.done ? st.marks : 0;
+    this.player.sfx(marks >= 3 ? 'rating3' : marks === 2 ? 'rating2' : marks === 1 ? 'rating1' : 'roundComplete', 0.9);
+    const verdict = marks >= 3 ? 'יָד שֶׁל קַלָּע' : marks === 2 ? 'טוֹב — וְעוֹד יִהְיֶה טוֹב יוֹתֵר' : marks === 1 ? 'עָשִׂיתָ זֹאת — עַכְשָׁו בְּפָחוֹת אֲבָנִים' : 'נַמְשִׁיךְ — וְנָשׁוּב לָזֶה';
+    const mm = Math.floor(st.time / 60), ss = Math.floor(st.time % 60);
+    const lines: [string, string][] = [
+      ['פְּגִיעוֹת', `${st.hits} / ${st.targets}`],
+      ['אֲבָנִים', `${st.stones}`],
+      ['שִׁחְרוּר מֻשְׁלָם', `${st.perfects}`],
+      ['רֶצֶף', `${st.bestStreak}`],
+      ['זְמַן', `${mm}:${String(ss).padStart(2, '0')}`],
+    ];
+    let choice: 'next' | 'retry' | null = null;
+    const last = r === ROUNDS.length;
+    this.ui.rangePanel(null);
+    this.ui.rating({ title: def.title, marks, verdict, lines, retry: true, next: last ? 'סִיּוּם' : 'הַסִּבּוּב הַבָּא' }, () => (choice = 'next'), () => (choice = 'retry'));
+    this.beh = () => {
+      if (this.input.take('interact')) choice = 'next';
+      else if (this.input.take('retry')) choice = 'retry';
+    };
+    await this.until(() => choice !== null);
+    this.beh = null;
+    this.ui.rating(null);
+    return choice ?? 'next';
+  }
+
+  /** 5. back to the flock (the range stays open: its mark offers another go) */
+  private async returnObjective() {
+    const show = () => {
+      this.ui.objective('חֲזֹר אֶל הָעֵדֶר', 'אַל תַּשְׁאִיר אֶת הַצֹּאן לְבַד זְמַן רַב');
+      this.setMarker(() => this.flockCenter().add(new THREE.Vector3(0, 1.5, 0)), 'הַצֹּאן');
+    };
+    show();
+    this.rangeOpen = true;
+    this.onReplayEnd = show;
+    const t0 = this.time;
+    this.beh = null;
+    await this.until(() => !this.practicing && (this.player.pos.distanceTo(this.flockCenter()) < 20 || this.time - t0 > 70));
+    this.check();
+    this.onReplayEnd = null;
+    this.ui.prompt(null);
+    this.rangePrompt = false;
+  }
+  private onReplayEnd: (() => void) | null = null;
+
+  /** the range again from its mark: all four rounds (the best marks are kept) */
+  private async replayRange() {
+    const R = this.range;
+    if (!R || this.practicing) return;
+    const p = this.player;
+    const prevBeh = this.beh;
+    const canSling = p.canSling;
+    this.practicing = true;
+    p.canSling = true;
+    p.bag.plain = Math.max(p.bag.plain, 8);
+    this.ui.objective(null);
+    this.setMarker(null);
+    try {
+      for (let r = 1; r <= ROUNDS.length; ) {
+        const res = await this.playRound(r);
+        if (res === 'retry') continue;
+        r++;
+      }
+    } finally {
+      R.stop();
+      this.practicing = false;
+      this.ui.rangePanel(null);
+      this.ui.stoneBag(null);
+      this.beh = prevBeh;
+      p.canSling = canSling || this.freeRoam;
+      p.bag.preferSmooth = true;
+      if (this.freeRoam) this.ui.objective('שׁוֹטֵט בְּשָׂדוֹת בֵּית לֶחֶם', 'הַפֶּרֶק הַבָּא יַגִּיעַ בְּקָרוֹב');
+      this.onReplayEnd?.();
+    }
+  }
+
+  /** per frame: the range lives on; its replay prompt at the mark; the lens that follows a perfect long shot */
+  private rangeTick(dt: number) {
+    const R = this.range;
+    if (!R) return;
+    R.update(dt);
+    if (this.followShot) {
+      this.followT += dt;
+      const s = this.followShot;
+      if ((s.resolved && this.followT > s.flight + THROW_RELEASE + 0.4) || this.followT > 2.6 || this.input.take('skip')) {
+        this.followShot = null;
+        this.cam.skipShots();
+        this.slowMo(1);
+      }
+    }
+    const open = (this.rangeOpen || this.freeRoam) && !this.practicing && R.built && !this.cam.inCinematic && this.player.controlEnabled;
+    const at = open && this.atStation();
+    if (at) {
+      this.ui.prompt(withLabel(K.interact, 'הִתְאַמֵּן שׁוּב בַּקֶּלַע'));
+      this.rangePrompt = true;
+      if (this.input.take('interact')) {
+        this.ui.prompt(null);
+        this.rangePrompt = false;
+        void this.replayRange();
+      }
+    } else if (this.rangePrompt) {
+      this.ui.prompt(null);
+      this.rangePrompt = false;
+    }
+  }
+
+  /** a perfect long shot: a lens behind the stone for its flight, in slow motion (brief; Enter / Esc skips) */
+  private followStone(shot: ShotInfo) {
+    if (this.cam.inCinematic || this.followShot) return;
+    this.after(THROW_RELEASE + 0.03, () => {
+      const f0 = this.projectiles.firstFlying();
+      if (!f0 || this.cam.inCinematic) return;
+      this.followShot = shot;
+      this.followT = 0;
+      this.slowMo(0.45);
+      const pos = new THREE.Vector3(), look = new THREE.Vector3(), dir = new THREE.Vector3(), side = new THREE.Vector3();
+      const end = new THREE.Vector3().copy(f0.pos);
+      this.cam.playShots([{ duration: 3, ease: false, at: () => {
+        const f = this.projectiles.firstFlying();
+        if (f) {
+          end.copy(f.pos);
+          dir.copy(f.vel).normalize();
+        }
+        side.set(-dir.z, 0, dir.x).normalize();
+        pos.copy(end).addScaledVector(dir, -1.7).addScaledVector(side, 0.35).add(_up35);
+        pos.y = Math.max(pos.y, this.engine.terrain.heightAt(pos.x, pos.z) + 0.4);
+        look.copy(end).addScaledVector(dir, 3);
+        return { pos, look, fov: 40 };
+      } }], () => this.slowMo(1));
+    }, true);
+  }
+
+  /** a throw resolved: the range scores it; a miss near what he aimed at says where the stone went */
+  private onShotResolved(shot: ShotInfo) {
+    const R = this.range;
+    R?.onResolve(shot);
+    if (!R || !R.live || shot.hit || !shot.intent || shot.missDist > 4) return;
+    const right = _missR.setFromMatrixColumn(this.engine.camera.matrixWorld, 0);
+    const o = shot.missOffset;
+    // along the throw: a stone that came down before the target (on the bank above it — the targets stand lower,
+    // in the wadi) fell SHORT; one that passed over it went LONG; otherwise high / low, left / right
+    const c = shot.intent.center();
+    const dh = _missD.set(c.x - shot.from.x, 0, c.z - shot.from.z).normalize();
+    const along = o.x * dh.x + o.z * dh.z;
+    const up = o.y, side = o.dot(right);
+    const words: string[] = [];
+    if (along < -0.6) words.push('קָצָר');
+    else if (along > 0.6) words.push('אָרֹךְ');
+    else if (Math.abs(up) > 0.1 && Math.abs(up) >= Math.abs(side) * 0.5) words.push(up < 0 ? 'נָמוּךְ' : 'גָּבוֹהַּ');
+    if (Math.abs(side) > 0.1 && Math.abs(side) >= Math.abs(up) * 0.5) words.push(side < 0 ? 'שְׂמֹאלָה' : 'יָמִינָה');
+    if (!words.length) words.push('קָרוֹב');
+    this.ui.praise(`${words.join(' · ')}${shot.missDist < 0.45 ? ' — כִּמְעַט' : ''}`, 1.3, true);
+  }
+
   /** Developer shortcut (?jump=...) to test later beats directly. */
   private async debugJump(j: string) {
     this.ui.fade(0, 0.5);
@@ -366,9 +721,33 @@ export class Story {
     this.player.place(fc.x - 12, fc.z - 12, 0.7);
     this.cam.snapBehind(0.7, 0.15);
     this.player.canSling = this.player.canStrike = this.player.canDodge = true;
-    if (j === 'sling') {
-      this.player.place(LAYOUT.targets.x - 10, LAYOUT.targets.z - 8, 0.9);
-      this.cam.snapBehind(0.9, 0.1);
+    // (play1) test jumps start with his bag filled (five smooth stones + practice stones)
+    this.player.bag.smooth = 5;
+    this.player.bag.plain = 6;
+    this.player.bag.preferSmooth = true;
+    if (j === 'sling' || j === 'stones') {
+      // (play1) ?jump=stones: the stream bed; ?jump=sling: the sling practice with the five smooth stones in the bag
+      // (?round=N starts at round N) — then the chapter goes on from there
+      const R = LAYOUT.range;
+      if (j === 'stones') {
+        this.player.place(LAYOUT.stones.x - 6, LAYOUT.stones.z - 9, 0.5);
+        this.cam.snapBehind(0.5, 0.15);
+        await this.stonesObjective();
+      } else {
+        this.player.place(R.x + 1.5, R.z - 7, R.facing);
+        this.cam.snapBehind(R.facing, 0.1);
+        this.player.bag.smooth = 5;
+      }
+      await this.practiceObjective(Number(new URLSearchParams(location.search).get('round') ?? 1) || 1);
+      await this.returnObjective();
+      await this.bearAttack();
+      await this.chase();
+      await this.rescue();
+      await this.rise();
+      await this.fight();
+      await this.clinch();
+      await this.aftermath();
+      await this.ending();
       return;
     }
     await this.bearAttack();
@@ -1171,10 +1550,12 @@ export class Story {
       for (const w of ready) w.resolve();
     }
     this.beh?.(dt);
+    this.rangeTick(dt); // (play1) the range lives on (the swinging gourd, the rag in the wind), its replay, the stone lens
     // HUD
     const mp = this.markerFn ? this.markerFn() : this.markerPos;
     this.ui.marker(this.engine.camera, this.cam.inCinematic ? null : mp, this.markerLabel);
-    this.ui.crosshair(this.player.aiming && !this.cam.inCinematic, this.player.power, this.player.aimOnTarget, this.player.aimInRange);
+    // (play1) the sling's reticle and timing ring (it fades in with the aim lens)
+    this.ui.crosshair((this.player.aiming || this.player.hud.aim > 0.02) && !this.cam.inCinematic, this.player.power, this.player.aimOnTarget, this.player.aimInRange, this.player.hud);
     this.ui.health(this.showHealth && !this.cam.inCinematic, this.player.health, this.player.maxHealth);
     this.ui.boss(this.showBoss, this.bossHP);
     const red = this.engine.post.grade.uniforms.uRed;
@@ -1205,3 +1586,8 @@ export class Story {
     return this.flock.lamb;
   }
 }
+
+// (play1) scratch
+const _up35 = new THREE.Vector3(0, 0.35, 0);
+const _missR = new THREE.Vector3();
+const _missD = new THREE.Vector3();

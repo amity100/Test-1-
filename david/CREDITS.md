@@ -283,6 +283,18 @@ line at the end of the shot. The film's thicket, heart, eyes and title smash wer
 hook in gameplay gets `sfx('birdsScatter')`, `music('hush')` and `sfx('eyesSting')`. Levels, hit timing, spectrograms
 and MP3 previews: `dev/screens/score5/`.
 
+**CUT v5 (134.5 s: the prologue, Gilgal, David, the lamb and the logo) and the sounds of gameplay v2 (*score6*:
+`src/audio/IntroScore.ts`, `FilmSound.ts`, `AudioEngine.ts`, `Beds.ts`, `synth.ts`, `src/gameplay/GameAudio.ts`,
+`dev/score*`).** Still **no third-party audio, samples, impulse responses or code** — the same in-house Web Audio
+synthesis (new in-house instruments: a singing voice with vowel formants for a shepherd's far call and Rachel's
+lament, small bronze sheep bells by modal synthesis, an anvil, rushing water, a brass-like horn section). The
+prologue's music keyed to its beats (the land theme, Bethlehem's pastoral, Rachel's line, the processional across the
+map, the Judges and the Philistine cities, the host's war drums, the elders at Ramah, the shofar on the hard cut); the
+new end (D3 the flock, D4 the lamb's bleats, the logo's arrival, the set-down cadence, the hand-off on the game's own
+grid); a new 'ramah' ambience bed; the gameplay v2 sounds (the sling drawn from and stowed in the sash, the stone
+loaded, each pass of the whirl, the perfect release, the stone's whistle, the range's hits, the stream bed, the
+range's stings). Levels, hit timing, spectrograms and MP3 previews: `dev/screens/score6/`.
+
 ## Wardrobe & hair polish pass — `src/characters/wardrobe/`, `src/characters/hair/`, `tools/wardrobe/gen_textures.py`, `dev/wardrobe*`
 
 No new third-party assets or code. Everything in this pass is original work, generated at load time or by the
@@ -458,3 +470,33 @@ values and re-baked by our own tools (`tools/human`).
   long-range attachments, frayed edge), the chest-anchored hair simulation, the aged bronze scale coat, the elite
   Philistine bronze corselets, the flock's ground bounce and wool halo and the bear's darkness control are all own
   procedural work (CC0 by construction).
+
+## Gameplay v2 — the sling, the five smooth stones, the sling range (play1: `src/gameplay/{Player,Projectiles,Props,Range}.ts`, the sling sections of `src/characters/DavidModel.ts`, `src/characters/wardrobe/david.ts` (the sling's tuck, the bag's flap), `src/core/Input.ts`, the aim camera in `src/gameplay/CameraRig.ts`, the HUD in `src/ui/`)
+- No third-party assets. The sling carried folded under the sash, its draw / reload / stow choreography (arm IK on the
+  existing rig), the stream bed (instanced procedural pebbles, the trickle), the range's targets (lathed jars and bottle
+  gourds, a goatskin waterskin, a lashed log, a rag on a stick, cairns), the stone ballistics (gravity, quadratic drag
+  from a smooth pebble's size and mass, wind) and the timing ring are all own procedural work (CC0 by construction).
+  The range's terebinth reuses the project's own tree generator (`src/world/TreeGen.ts`) and textures. The segment-vs-
+  segment closest-point routine follows the textbook method (C. Ericson, Real-Time Collision Detection, §5.1.9) —
+  written from scratch, no code copied.
+
+## Opening film — the realistic 3D map, P4-P5 (map1: `src/film/map/`, `tools/map/build_map.py`, `src/assets/map/`, `src/content/mapNames.ts`, `dev/map*`)
+- **Elevation and bathymetry:** AWS Open Data *Terrain Tiles* (`s3://elevation-tiles-prod`, Mapzen / Tilezen "joerd",
+  terrarium PNG encoding), zooms 5 / 9 / 12. Over this region its sources are NASA **SRTM** (land), USGS **GMTED2010**
+  and NOAA **ETOPO1** (bathymetry, gaps) — all **public domain** (U.S. Government works). Resampled, restored to
+  ~1000 BCE (the Dead Sea at -398 m with its southern basin under water, Lake Hula restored, the Suez Canal's cut
+  filled) and baked into `src/assets/map/map_height_*.webp`, `map_shade_*.webp`, `map_inset_shade_*.webp` and the
+  relief of `map_globe.webp`.
+- **Natural colour:** **Natural Earth I** raster `NE1_HR_LC` (land cover, no shaded relief; naturalearthdata.com,
+  **public domain** — "Made with Natural Earth"), via `naturalearth.s3.amazonaws.com`. Its pale palette is transferred to
+  a satellite albedo and detailed from the relief by `tools/map/build_map.py` (own code) into `map_color_*.webp`,
+  `map_inset_color_*.webp` and `map_globe.webp`.
+- **Rivers:** Natural Earth 10m physical vectors (`ne_10m_rivers_lake_centerlines`, **public domain**): the Nile, its
+  Rosetta and Damietta branches and the Jordan only (the modern Suez / Ismailiya / Nubariya canals are not drawn). The
+  Nile's Pelusiac branch, Lake Hula's outline and the floodplain limits are own approximate drawings after the
+  published reconstructions named in the tool's header (M. Bietak 1975; A. Sneh & T. Weissbrod 1973; pre-1950 survey
+  maps of the Hula) — no map image was copied.
+- **Names on the map:** the pointed biblical names are taken from *Miqra according to the Masorah* via Sefaria (CC BY-SA,
+  see "Source texts") and checked by `tools/sources/verify_sources.py` (section "map names").
+- Everything else — the sphere terrain, the sky and the atmosphere's limb, the aerial perspective, the route ribbon and
+  its glows, the DOM labels, the camera — is own code (CC0 by construction).

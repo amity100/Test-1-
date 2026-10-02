@@ -967,7 +967,8 @@ const DEMAND_R: ArmPose = { ua: [-2.45, 0.2, -0.38], fa: [-0.55, 0.1, 0], hd: [0
 /** the shot's beats (P5 of the contract, introScript 'ramah' : 'elders'; seconds of the shot) */
 const RAMAH_BEATS = (() => {
   const b = INTRO_SHOTS.find((x) => x.set === 'ramah' && x.take === 'elders')?.beats ?? {};
-  return { rise: b.rise ?? 0.5, verse: b.verse ?? 1.0, turnAway: b.turnAway ?? 2.6 };
+  // (CUT v5: the contract names Samuel's turn `away`; `turnAway` was CUT v2's name)
+  return { rise: b.rise ?? 0.5, verse: b.verse ?? 1.0, turnAway: b.away ?? b.turnAway ?? 2.6 };
 })();
 
 /**

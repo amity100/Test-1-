@@ -551,6 +551,74 @@ def scan_intro_narration(ck: Checker, catalog: dict) -> None:
         ck.findings.append(f)
 
 
+# ============================================================================ the map's names (map1)
+MAP_NAMES_FILE = 'src/content/mapNames.ts'
+_HEB_LETTER = lambda c: 'א' <= c <= 'ת'  # noqa: E731
+_HEB_POINT = lambda c: '֑' <= c <= 'ׇ' and c not in '־׀׃׆'  # noqa: E731
+_PREFIXES = 'והבכלמש'
+
+
+def _name_in_verse(name: str, text: str) -> bool:
+    """`name` occurs in `text` as a whole word (or word group): nothing of a longer word after it, and before it a word
+    boundary or a prefix letter (ו ה ב כ ל מ ש, with its points) that itself starts a word"""
+    i = text.find(name)
+    while i >= 0:
+        j = i + len(name)
+        after = j >= len(text) or not (_HEB_LETTER(text[j]) or _HEB_POINT(text[j]))
+        before = i == 0 or not (_HEB_LETTER(text[i - 1]) or _HEB_POINT(text[i - 1]))
+        if not before:
+            m = i - 1
+            while m >= 0 and _HEB_POINT(text[m]):
+                m -= 1
+            if m >= 0 and text[m] in _PREFIXES:
+                k = m - 1
+                while k >= 0 and _HEB_POINT(text[k]):
+                    k -= 1
+                if k >= 0 and text[k] in _PREFIXES:  # two prefixes (וּבְ־, וְהַ…)
+                    m = k
+                before = m == 0 or not (_HEB_LETTER(text[m - 1]) or _HEB_POINT(text[m - 1]))
+        if after and before:
+            return True
+        i = text.find(name, i + 1)
+    return False
+
+
+def check_map_names(C: L.Corpus, quiet: bool) -> int:
+    """src/content/mapNames.ts (the labels of the opening film's map): every name pointed, no quotation marks, and found
+    in its source verse exactly as written (a whole word, a prefix letter of the verse allowed before it)"""
+    names = load_catalog(MAP_NAMES_FILE, 'MAP_NAMES')
+    print(f'\n== map names ({MAP_NAMES_FILE})')
+    if not names:
+        print('  not found or empty')
+        return 0
+    fails = 0
+    for key, e in names.items():
+        probs = []
+        he = NFC(e.get('he', ''))
+        if e.get('id') != key:
+            probs.append(f'id {e.get("id")!r} != key')
+        if not he:
+            probs.append('empty name')
+        for w in re.split(r'[\s־]+', he):
+            if w and not L.has_niqqud(w):
+                probs.append(f'unpointed word {w!r}')
+        if re.search('["\'״׳“”]', he):
+            probs.append('quotation marks / geresh in a name')
+        ref = e.get('refEn', '')
+        verse = None
+        try:
+            verse, _ = source_for_entry(C, {'refEn': ref})
+        except Exception as ex:  # noqa: BLE001
+            probs.append(f'cannot load {ref!r}: {ex}')
+        if verse is not None and he and not _name_in_verse(he, NFC(verse)):
+            probs.append(f'not found as a word in {ref}')
+        fails += bool(probs)
+        if probs or not quiet:
+            print(f'  [{"FAIL" if probs else "OK"}] {key:12s} {he:16s} {ref}' + ''.join(f'\n         - {x}' for x in probs))
+    print(f'  {len(names)} names, {fails} problem(s)')
+    return fails
+
+
 # ============================================================================ main
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -600,6 +668,9 @@ def main() -> int:
             if probs or not args.quiet:
                 print(f'  [{status}] {cid:32s} {e.get("refEn", "")}' + ''.join(f'\n         - {x}' for x in probs))
         catalog.update(cat)
+
+    # ---- 1b. the map's names (map1, CUT v5 P4-P5: src/content/mapNames.ts)
+    fails += check_map_names(C, args.quiet)
 
     # ---- 2. game strings
     ck = Checker(C, catalog)

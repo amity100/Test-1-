@@ -1,24 +1,96 @@
 import * as THREE from 'three';
 import { pebbleGeometry } from '../characters/DavidModel';
 
+/**
+ * Something a slung stone can hit: a sphere (`center` + `radius`) or, with `segment`, a capsule (the thin cord that
+ * holds the waterskin, Judg 20:16). `solid` things (the terrace wall, a log, a branch, the bear) stop the stone;
+ * every target does. `onHit` gets the point, the stone's velocity and the shot that threw it (null: tossed / test).
+ */
 export interface HitTarget {
   id: string;
   center: () => THREE.Vector3;
   radius: number;
   enabled: () => boolean;
-  onHit: (at: THREE.Vector3, vel: THREE.Vector3) => void;
+  onHit: (at: THREE.Vector3, vel: THREE.Vector3, shot: ShotInfo | null) => void;
+  /** capsule targets: the segment's two ends (world); `center` should be its middle */
+  segment?: () => readonly [THREE.Vector3, THREE.Vector3];
+  /** 'target': counts as a hit for the range; 'solid': only stops the stone (sound + dust) */
+  kind?: 'target' | 'solid';
+  /** what the stone sounds like on it (solids): 'rock' | 'wood' | 'earth' */
+  material?: 'rock' | 'wood' | 'earth' | 'clay' | 'skin';
 }
 
-const TRAIL = 6;
-interface Stone { mesh: THREE.Mesh; vel: THREE.Vector3; spin: THREE.Vector3; life: number; resting: boolean; trail: THREE.Vector3[]; trailN: number }
+/** One throw of the sling (Player fills it at the release; Projectiles resolves it into a hit or a miss). */
+export interface ShotInfo {
+  id: number;
+  /** 0..1: how long the whirl was (speed, range, a flatter shot) */
+  power: number;
+  /** launch speed (m/s) */
+  speed: number;
+  /** release timing error in revolutions of the whirl: < 0 early, > 0 late; |timing| <= window = sweet */
+  timing: number;
+  /** the sweet window's half width (revolutions) at this power; the perfect window is PERFECT_FRAC of it */
+  window: number;
+  perfect: boolean;
+  sweet: boolean;
+  /** one of the five smooth stones he chose (flies truer) */
+  smooth: boolean;
+  /** the deviation the timing gave (degrees: + right, + up) */
+  devRight: number;
+  devUp: number;
+  /** distance from the throw to what the reticle was on */
+  aimDist: number;
+  /** what the reticle was on (or the target nearest to the aim line), for the miss read-out */
+  intent: HitTarget | null;
+  /** the stone's closest pass by `intent` (filled during the flight): offset from its centre, world, and the distance */
+  missOffset: THREE.Vector3;
+  missDist: number;
+  /** set when resolved */
+  hit: HitTarget | null;
+  resolved: boolean;
+  /** where it came to rest / hit */
+  at: THREE.Vector3;
+  /** game time of the throw (s) and flight time */
+  t0: number;
+  flight: number;
+  /** the throw's origin */
+  from: THREE.Vector3;
+}
+
+const TRAIL = 8;
+interface Stone {
+  mesh: THREE.Mesh;
+  vel: THREE.Vector3;
+  spin: THREE.Vector3;
+  life: number;
+  resting: boolean;
+  trail: THREE.Vector3[];
+  trailN: number;
+  shot: ShotInfo | null;
+  k: number;
+}
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
+const _rel = new THREE.Vector3();
+const _off = new THREE.Vector3();
 
-/** Sling stones: ballistic flight, sphere targets, terrain impacts, a faint motion trail. No per-frame allocations. */
+/** quadratic air drag of a smooth wadi pebble (5-7 cm, 100-200 g): k = ρ·Cd·A / 2m ≈ 1.2·0.45·0.0028 / 0.3 */
+export const STONE_DRAG = 0.0052;
+/** rough heap stones are a little less regular: more drag */
+export const STONE_DRAG_ROUGH = 0.0062;
+
+/**
+ * Sling stones: real ballistics — gravity, quadratic air drag and the wind (the same wind that moves the grass:
+ * `wind` m/s, set by the range) — sphere / capsule targets, solids and terrain impacts, a short motion trail at
+ * speed; each throw is resolved into a hit or a miss with the stone's closest pass by the intended target (the
+ * player's read-out: high / low / left / right). No per-frame allocations in the flight loop.
+ */
 export class Projectiles {
   readonly group = new THREE.Group();
   readonly targets: HitTarget[] = [];
+  /** wind velocity (m/s, world, horizontal) acting on the stones in flight */
+  readonly wind = new THREE.Vector3();
   private stones: Stone[] = [];
   private pool: Stone[] = [];
   // a smooth wadi pebble, the same shape David loads into the pouch (1 Sam 17:40 "חַלֻּקֵּי אֲבָנִים")
@@ -26,22 +98,30 @@ export class Projectiles {
   private mat = new THREE.MeshStandardMaterial({ color: 0xd2c6ae, roughness: 0.45 });
   private trailGeo: THREE.BufferGeometry;
   private trailPos: Float32Array;
+  private trailCol: Float32Array;
   private trailLine: THREE.LineSegments;
-  onGroundHit?: (at: THREE.Vector3, speed: number) => void;
+  private time = 0;
+  /** a stone hit the ground / a solid (sound + dust) */
+  onGroundHit?: (at: THREE.Vector3, speed: number, material: 'rock' | 'wood' | 'earth' | 'clay' | 'skin') => void;
+  /** every throw ends here once: a hit (`shot.hit`) or a miss (with `missOffset` / `missDist` from `intent`) */
+  onResolve?: (shot: ShotInfo) => void;
 
   constructor(private ground: (x: number, z: number) => number) {
-    this.trailPos = new Float32Array(64 * 6);
+    this.trailPos = new Float32Array(96 * 6);
+    this.trailCol = new Float32Array(96 * 8);
     this.trailGeo = new THREE.BufferGeometry();
     this.trailGeo.setAttribute('position', new THREE.BufferAttribute(this.trailPos, 3).setUsage(THREE.DynamicDrawUsage));
-    this.trailLine = new THREE.LineSegments(this.trailGeo, new THREE.LineBasicMaterial({ color: 0xfff1d0, transparent: true, opacity: 0.35, depthWrite: false }));
+    this.trailGeo.setAttribute('color', new THREE.BufferAttribute(this.trailCol, 4).setUsage(THREE.DynamicDrawUsage));
+    this.trailLine = new THREE.LineSegments(this.trailGeo, new THREE.LineBasicMaterial({ color: 0xfff1d0, vertexColors: true, transparent: true, opacity: 0.55, depthWrite: false }));
     this.trailLine.frustumCulled = false;
     this.group.add(this.trailLine);
   }
 
-  fire(pos: THREE.Vector3, vel: THREE.Vector3) {
+  /** Fire a stone; `shot` (from the Player) is resolved into a hit or a miss. `drag` per stone (smooth / rough). */
+  fire(pos: THREE.Vector3, vel: THREE.Vector3, shot: ShotInfo | null = null, drag = STONE_DRAG) {
     const s = this.pool.pop() ?? {
       mesh: new THREE.Mesh(this.geo, this.mat), vel: new THREE.Vector3(), spin: new THREE.Vector3(), life: 0, resting: false,
-      trail: Array.from({ length: TRAIL }, () => new THREE.Vector3()), trailN: 0,
+      trail: Array.from({ length: TRAIL }, () => new THREE.Vector3()), trailN: 0, shot: null, k: STONE_DRAG,
     };
     s.mesh.castShadow = true;
     s.mesh.position.copy(pos);
@@ -53,64 +133,116 @@ export class Projectiles {
     s.resting = false;
     s.trailN = 1;
     s.trail[0].copy(pos);
+    s.shot = shot;
+    s.k = drag;
+    if (shot) {
+      shot.missDist = Infinity;
+      shot.missOffset.set(0, 0, 0);
+      shot.resolved = false;
+      shot.hit = null;
+      shot.t0 = this.time;
+      shot.from.copy(pos);
+    }
     this.group.add(s.mesh);
     this.stones.push(s);
   }
 
-  /** Solve the launch velocity to hit `target` with speed v (low arc). Falls back to 42° max range. */
-  static solve(from: THREE.Vector3, target: THREE.Vector3, v: number, g = 9.81) {
-    const d = new THREE.Vector3().subVectors(target, from);
-    const x = Math.hypot(d.x, d.z);
-    const y = d.y;
-    const v2 = v * v;
-    const disc = v2 * v2 - g * (g * x * x + 2 * y * v2);
-    let ang: number;
-    let inRange = true;
-    if (disc < 0 || x < 0.01) {
-      ang = x < 0.01 ? Math.PI / 2 : Math.PI / 4.3;
-      inRange = false;
-    } else ang = Math.atan2(v2 - Math.sqrt(disc), g * x);
-    const hd = new THREE.Vector3(d.x, 0, d.z).normalize();
-    const vel = hd.multiplyScalar(Math.cos(ang) * v);
-    vel.y = Math.sin(ang) * v;
-    return { vel, inRange };
+  /** stones in flight (not resting) */
+  get flying() {
+    let n = 0;
+    for (const s of this.stones) if (!s.resting) n++;
+    return n;
+  }
+  /** the first stone in flight (the follow camera), or null */
+  firstFlying(): { pos: THREE.Vector3; vel: THREE.Vector3; shot: ShotInfo | null } | null {
+    for (const s of this.stones) if (!s.resting) return { pos: s.mesh.position, vel: s.vel, shot: s.shot };
+    return null;
+  }
+
+  /**
+   * Predict where a throw lands (no targets): integrates the same physics as update(); used by the tuning bots and
+   * tests (never by the player's aim — the game does not solve the trajectory for him).
+   */
+  static predict(from: THREE.Vector3, vel: THREE.Vector3, wind: THREE.Vector3, k: number, ground: (x: number, z: number) => number, maxT = 4, out = new THREE.Vector3()) {
+    const p = out.copy(from), v = _a.copy(vel);
+    const h = 1 / 240;
+    for (let t = 0; t < maxT; t += h) {
+      stepStone(p, v, wind, k, h);
+      if (p.y < ground(p.x, p.z)) break;
+    }
+    return p;
   }
 
   update(dt: number) {
-    const g = 9.81;
+    this.time += dt;
     const a = _a, b = _b;
     let seg = 0;
     for (const s of this.stones) {
       s.life += dt;
       if (s.resting) continue;
-      const steps = 4;
+      const steps = Math.max(4, Math.ceil(dt / (1 / 240)));
       const h = dt / steps;
       for (let k = 0; k < steps && !s.resting; k++) {
         a.copy(s.mesh.position);
-        s.vel.y -= g * h;
-        s.mesh.position.addScaledVector(s.vel, h);
+        stepStone(s.mesh.position, s.vel, this.wind, s.k, h);
         b.copy(s.mesh.position);
-        // targets
-        for (const t of this.targets) {
-          if (!t.enabled()) continue;
-          if (segSphere(a, b, t.center(), t.radius)) {
-            t.onHit(b.clone(), s.vel.clone());
-            s.resting = true;
-            s.life = 99;
-            break;
+        // closest pass by the intended target (for the miss read-out)
+        const shot = s.shot;
+        if (shot && shot.intent && !shot.resolved) {
+          const c = shot.intent.center();
+          const d = closestOnSeg(a, b, c, _off);
+          if (d < shot.missDist) {
+            shot.missDist = d;
+            shot.missOffset.copy(_off).sub(c);
           }
         }
-        if (s.resting) break;
+        // targets and solids
+        let hitT: HitTarget | null = null;
+        let best = Infinity;
+        for (const t of this.targets) {
+          if (!t.enabled()) continue;
+          let u: number;
+          if (t.segment) {
+            const [p0, p1] = t.segment();
+            u = segCapsule(a, b, p0, p1, t.radius);
+          } else u = segSphere(a, b, t.center(), t.radius);
+          if (u >= 0 && u < best) {
+            best = u;
+            hitT = t;
+          }
+        }
+        if (hitT) {
+          const at = a.clone().lerp(b, best);
+          s.mesh.position.copy(at);
+          s.resting = true;
+          s.life = 99;
+          if (shot && !shot.resolved && hitT.kind !== 'solid') {
+            shot.hit = hitT;
+            this.resolve(shot, at);
+          }
+          hitT.onHit(at, s.vel.clone(), shot);
+          if (hitT.kind === 'solid') {
+            this.onGroundHit?.(at, s.vel.length(), hitT.material ?? 'rock');
+            if (shot && !shot.resolved) this.resolve(shot, at);
+          }
+          break;
+        }
         const gy = this.ground(b.x, b.z);
         if (b.y < gy + 0.02) {
           s.mesh.position.y = gy + 0.025;
           const speed = s.vel.length();
-          this.onGroundHit?.(s.mesh.position.clone(), speed);
+          this.onGroundHit?.(s.mesh.position, speed, 'earth');
           s.vel.multiplyScalar(0.25);
           s.vel.y = Math.abs(s.vel.y) * 0.3;
           s.spin.multiplyScalar(0.3);
+          if (shot && !shot.resolved) this.resolve(shot, s.mesh.position);
           if (speed < 4) s.resting = true;
         }
+      }
+      // gone far away / too long
+      if (!s.resting && (s.life > 5 || s.mesh.position.y < -500)) {
+        s.resting = true;
+        if (s.shot && !s.shot.resolved) this.resolve(s.shot, s.mesh.position);
       }
       s.mesh.rotation.x += s.spin.x * dt;
       s.mesh.rotation.y += s.spin.y * dt;
@@ -132,19 +264,73 @@ export class Projectiles {
         this.pool.push(s);
       }
     }
-    const P = this.trailPos;
+    // a short trail behind fast stones (brighter toward the stone, only at speed)
+    const P = this.trailPos, C = this.trailCol;
     for (const s of this.stones) {
-      if (s.resting || s.life > 1.5) continue;
-      for (let i = 0; i < s.trailN - 1 && seg < 64; i++, seg++) {
-        const p = s.trail[i], q = s.trail[i + 1], o = seg * 6;
+      if (s.resting || s.life > 1.6) continue;
+      const sp = s.vel.length();
+      const alpha = Math.min(1, Math.max(0, (sp - 12) / 18));
+      if (alpha <= 0.01) continue;
+      for (let i = 0; i < s.trailN - 1 && seg < 96; i++, seg++) {
+        const p = s.trail[i], q = s.trail[i + 1], o = seg * 6, oc = seg * 8;
         P[o] = p.x; P[o + 1] = p.y; P[o + 2] = p.z; P[o + 3] = q.x; P[o + 4] = q.y; P[o + 5] = q.z;
+        const f0 = (i / (s.trailN - 1)) * alpha, f1 = ((i + 1) / (s.trailN - 1)) * alpha;
+        C[oc] = 1; C[oc + 1] = 0.95; C[oc + 2] = 0.84; C[oc + 3] = f0;
+        C[oc + 4] = 1; C[oc + 5] = 0.95; C[oc + 6] = 0.84; C[oc + 7] = f1;
       }
     }
     this.trailGeo.setDrawRange(0, seg * 2);
     (this.trailGeo.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
+    (this.trailGeo.getAttribute('color') as THREE.BufferAttribute).needsUpdate = true;
+  }
+
+  private resolve(shot: ShotInfo, at: THREE.Vector3) {
+    shot.resolved = true;
+    shot.at.copy(at);
+    shot.flight = this.time - shot.t0;
+    this.onResolve?.(shot);
+  }
+
+  /** a fresh ShotInfo (the Player fills it) */
+  static newShot(id: number): ShotInfo {
+    return {
+      id, power: 0, speed: 0, timing: 0, window: 0.12, perfect: false, sweet: false, smooth: false, devRight: 0, devUp: 0,
+      aimDist: 0, intent: null, missOffset: new THREE.Vector3(), missDist: Infinity, hit: null, resolved: false,
+      at: new THREE.Vector3(), t0: 0, flight: 0, from: new THREE.Vector3(),
+    };
+  }
+
+  /** Solve the launch velocity to hit `target` with speed v (low arc, no drag). Kept for scripted throws and tests. */
+  static solve(from: THREE.Vector3, target: THREE.Vector3, v: number, g = 9.81) {
+    const d = new THREE.Vector3().subVectors(target, from);
+    const x = Math.hypot(d.x, d.z);
+    const y = d.y;
+    const v2 = v * v;
+    const disc = v2 * v2 - g * (g * x * x + 2 * y * v2);
+    let ang: number;
+    let inRange = true;
+    if (disc < 0 || x < 0.01) {
+      ang = x < 0.01 ? Math.PI / 2 : Math.PI / 4.3;
+      inRange = false;
+    } else ang = Math.atan2(v2 - Math.sqrt(disc), g * x);
+    const hd = new THREE.Vector3(d.x, 0, d.z).normalize();
+    const vel = hd.multiplyScalar(Math.cos(ang) * v);
+    vel.y = Math.sin(ang) * v;
+    return { vel, inRange };
   }
 }
 
+/** one integration step of a stone: gravity + quadratic drag against the air moving with the wind (semi-implicit) */
+function stepStone(p: THREE.Vector3, v: THREE.Vector3, wind: THREE.Vector3, k: number, h: number) {
+  const r = _rel.subVectors(v, wind);
+  const sp = r.length();
+  v.x -= k * sp * r.x * h;
+  v.y -= (9.81 + k * sp * r.y) * h;
+  v.z -= k * sp * r.z * h;
+  p.addScaledVector(v, h);
+}
+
+/** segment a-b vs sphere: the parameter (0..1) of the first contact, or -1 */
 function segSphere(a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, r: number) {
   const abx = b.x - a.x, aby = b.y - a.y, abz = b.z - a.z;
   const acx = c.x - a.x, acy = c.y - a.y, acz = c.z - a.z;
@@ -152,7 +338,44 @@ function segSphere(a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, r: numb
   let t = l2 > 0 ? (acx * abx + acy * aby + acz * abz) / l2 : 0;
   t = Math.max(0, Math.min(1, t));
   const px = a.x + abx * t - c.x, py = a.y + aby * t - c.y, pz = a.z + abz * t - c.z;
-  return px * px + py * py + pz * pz <= r * r;
+  return px * px + py * py + pz * pz <= r * r ? t : -1;
+}
+
+/** segment a-b (the stone's path this step) vs capsule p0-p1 of radius r: the parameter on a-b, or -1 */
+function segCapsule(a: THREE.Vector3, b: THREE.Vector3, p0: THREE.Vector3, p1: THREE.Vector3, r: number) {
+  // closest points between two segments (Ericson, Real-Time Collision Detection 5.1.9)
+  const d1x = b.x - a.x, d1y = b.y - a.y, d1z = b.z - a.z;
+  const d2x = p1.x - p0.x, d2y = p1.y - p0.y, d2z = p1.z - p0.z;
+  const rx = a.x - p0.x, ry = a.y - p0.y, rz = a.z - p0.z;
+  const A = d1x * d1x + d1y * d1y + d1z * d1z, E = d2x * d2x + d2y * d2y + d2z * d2z;
+  const F = d2x * rx + d2y * ry + d2z * rz;
+  let s: number, t: number;
+  if (A <= 1e-12 && E <= 1e-12) { s = 0; t = 0; }
+  else if (A <= 1e-12) { s = 0; t = Math.max(0, Math.min(1, F / E)); }
+  else {
+    const c = d1x * rx + d1y * ry + d1z * rz;
+    if (E <= 1e-12) { t = 0; s = Math.max(0, Math.min(1, -c / A)); }
+    else {
+      const bb = d1x * d2x + d1y * d2y + d1z * d2z;
+      const den = A * E - bb * bb;
+      s = den > 1e-12 ? Math.max(0, Math.min(1, (bb * F - c * E) / den)) : 0;
+      t = (bb * s + F) / E;
+      if (t < 0) { t = 0; s = Math.max(0, Math.min(1, -c / A)); }
+      else if (t > 1) { t = 1; s = Math.max(0, Math.min(1, (bb - c) / A)); }
+    }
+  }
+  const qx = a.x + d1x * s - (p0.x + d2x * t), qy = a.y + d1y * s - (p0.y + d2y * t), qz = a.z + d1z * s - (p0.z + d2z * t);
+  return qx * qx + qy * qy + qz * qz <= r * r ? s : -1;
+}
+
+/** distance from c to segment a-b; `out` = the closest point */
+function closestOnSeg(a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, out: THREE.Vector3) {
+  const abx = b.x - a.x, aby = b.y - a.y, abz = b.z - a.z;
+  const l2 = abx * abx + aby * aby + abz * abz;
+  let t = l2 > 0 ? ((c.x - a.x) * abx + (c.y - a.y) * aby + (c.z - a.z) * abz) / l2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  out.set(a.x + abx * t, a.y + aby * t, a.z + abz * t);
+  return out.distanceTo(c);
 }
 
 /** Ray vs sphere: distance along the ray or -1. */
@@ -164,4 +387,15 @@ export function raySphere(o: THREE.Vector3, d: THREE.Vector3, c: THREE.Vector3, 
   if (disc < 0) return -1;
   const t = -b - Math.sqrt(disc);
   return t > 0 ? t : -1;
+}
+
+/** Ray vs capsule (p0-p1, radius r): distance along the ray or -1 (sampled; fine for thin cords). */
+export function rayCapsule(o: THREE.Vector3, d: THREE.Vector3, p0: THREE.Vector3, p1: THREE.Vector3, r: number) {
+  let best = -1;
+  for (let i = 0; i <= 12; i++) {
+    const c = _off.lerpVectors(p0, p1, i / 12);
+    const t = raySphere(o, d, c, r);
+    if (t > 0 && (best < 0 || t < best)) best = t;
+  }
+  return best;
 }

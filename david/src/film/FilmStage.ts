@@ -13,15 +13,18 @@ import { baseTake, FILM_CAM, gilgalCam, gilgalFocus, landCam, SUN_CHEAT, takeExp
 /**
  * THE FILM STAGE of the opening film: the film-only sets, crowds and actors the shot sheet (INTRO_SHOTS) films in, built
  * behind the loading screen and disposed set by set as the film leaves it (phones!). This module is imported lazily (it
- * pulls in src/film/gilgal, src/film/cast and src/film/crowd — and src/film/land only if a cut films there — through
- * dynamic imports only).
+ * pulls in src/film/gilgal, src/film/cast, src/film/crowd, src/film/land and src/film/map through dynamic imports only).
  *
- * CUT v3 (docs/intro-script-v3.md, 60 s, no prologue): the film is shot at Gilgal and in the game world only, so the
- * stage builds ONLY the Gilgal set with its cast (Saul, Samuel, the armour-bearer) and its army. The prologue's land
- * sets (judah / coast / ramah), the Philistine host, the Ramah elders and the land DEM tiles are not built (their code
- * paths stay, gated by the sheet: a future cut that films there builds them again).
+ * CUT v5 (docs/intro-script-v5.md, 134.5 s): the prologue films in the land sets 'judah' (P1 the flight), 'map' (P4-P5,
+ * map1's realistic 3D map), 'coast' (P6 the Philistine host) and 'ramah' (P7 the elders), then 'gilgal' (G1-G7); the
+ * rest is the game world (FilmWorld). EVERY SET IS AN INDEPENDENT ASYNC BUILDER (buildSet: no ordering assumptions, its
+ * own progress, small yielding steps, its own build time in buildStats) so the loading wave can start the film once
+ * judah (+ the world) is ready and build the map, coast, ramah and Gilgal in the background during the prologue:
  *
- *   const stage = await FilmStage.load(engine, { onProgress });
+ *   const stage = await FilmStage.load(engine, { onProgress });     every used set in film order + the pre-compile
+ *   // or progressively:
+ *   const stage = FilmStage.create(engine, opts);
+ *   await stage.buildSet('judah', (f) => bar(f));  await stage.precompileSet('judah');   ... the others later
  *   stage.sets.gilgal?.view                     ViewSpec for engine.setView
  *   stage.sets.gilgal?.frame(take, u, t, out)   camera of a take (u = normalised, t = shot seconds)
  *   stage.sets.gilgal?.enter(take)              on every cut into the set
@@ -29,18 +32,19 @@ import { baseTake, FILM_CAM, gilgalCam, gilgalFocus, landCam, SUN_CHEAT, takeExp
  *   stage.sets.gilgal?.focus(take, t)           DoF target
  *   stage.release('gilgal')                     dispose a set when the film is done with it; stage.dispose() = all
  *
- * ACTOR SLOTS (FilmActor per role; the cast / crowd teammates' modules drop in here — a failed or missing module falls
- * back to the set's own placeholders so the cut always plays):
+ * ACTOR SLOTS (FilmActor per role; a failed or missing module falls back to the set's own placeholders so the cut
+ * always plays):
  *   gilgal: saul, samuel (hero), armourBearer (desktop) -> GilgalPerformance; the army -> GilgalArmy
- *   (unused by CUT v3) ramah: samuel + elders -> RamahPerformance; coast: the Philistine host -> PhilistineHost
+ *   ramah: samuel + 5-11 elders -> RamahPerformance; coast: the Philistine host -> PhilistineHost
  *
  * CAMERAS: every take is filmed by src/film/FilmCams.ts (gilgalCam: the eight Gilgal takes incl. 'tear:insert'; landCam
- * for the land takes) with the set's own move as a fallback; per-take exposure multiplies the set's exposure
- * (FilmCams.TAKE_LOOK). Test only: ?filmsets=gilgal builds just those of the used sets.
+ * for the land takes 'flight' 'threat' 'elders') with the set's own move as a fallback; per-take exposure multiplies the
+ * set's exposure (FilmCams.TAKE_LOOK). The map films itself (map1). Test only: ?filmsets=judah,map builds just those of
+ * the used sets (the others fall back to a world vista).
  */
 export type FilmStageSet = Exclude<FilmSetName, 'black' | 'world'>;
 
-/** the film sets the shot sheet actually films in (CUT v3: only 'gilgal') */
+/** the film sets the shot sheet actually films in, in film order (CUT v5: judah, map, coast, ramah, gilgal) */
 export const USED_SETS: ReadonlySet<FilmStageSet> = new Set(
   INTRO_SHOTS.map((s) => s.set).filter((n): n is FilmStageSet => n !== 'black' && n !== 'world'),
 );
@@ -66,6 +70,17 @@ export interface FilmSetHandle {
   readonly status: string[];
   disposed: boolean;
   dispose(): void;
+  /** OPTIONAL: the ground height under (x, z) in this view (the moving dissolve's depth estimate, Intro) */
+  ground?(x: number, z: number): number;
+  /** OPTIONAL: extra poses for the view's pre-compile (default: the middle of every take) */
+  precompilePoses?: { pos: THREE.Vector3; look: THREE.Vector3 }[];
+  /**
+   * OPTIONAL: run the set through the seconds BEFORE its first shot while the previous shot is still on screen (t < 0 =
+   * seconds before the cut; nothing is shown) — G1: the 1.5 s of blocking before the shofar, so the army's walk phases,
+   * the horn blowers and the hair are exactly those of CUT v4's continuous playback. enter(take) after a preroll of the
+   * same take keeps that state.
+   */
+  preroll?(take: string, t: number, dt: number): void;
 }
 
 export interface FilmStageOptions {
@@ -75,6 +90,49 @@ export interface FilmStageOptions {
   /** build the GPU crowds. default true; ?filmcrowd=0 */
   crowd?: boolean;
 }
+
+/**
+ * What a set builder gets (FilmStage.buildSet): everything it needs to build ONE set on its own — no ordering
+ * assumptions about the other sets, its own progress, and a yield to call between heavy steps (the builder may run
+ * while the film plays: no step may block the main thread for long, and no global state may be left changed across
+ * a yield).
+ */
+export interface FilmSetBuildContext {
+  readonly engine: Engine;
+  /** engine.quality.tier ('desktop-high' | 'desktop-medium' | 'mobile-high' | 'mobile-low') */
+  readonly tier: string;
+  /** the takes the shot sheet films in this set (in film order) */
+  readonly takes: readonly string[];
+  /** build the cast (FilmActors) / the GPU crowds (tests: ?filmcast=0 / ?filmcrowd=0) */
+  readonly cast: boolean;
+  readonly crowd: boolean;
+  /** this set's own build progress, 0..1 */
+  progress(f: number): void;
+  /** await between heavy steps: gives the event loop (and a running film) a frame */
+  yieldFrame(): Promise<void>;
+}
+
+/** what a set's build cost (FilmStage.buildStats; window.__filmSetStats under ?test=1) */
+export interface FilmSetBuildStat {
+  /** wall-clock ms from the start of the build to the handle (incl. downloads and yields) */
+  ms: number;
+  /** the longest synchronous step between two yields (ms): what a background build would cost a frame */
+  longestStepMs: number;
+  /** pre-compile of the view (ms), once done */
+  precompileMs?: number;
+  /** JS heap growth over the build (MB, Chrome only) */
+  heapMB?: number;
+  ok: boolean;
+}
+
+// ==== map1: the 'map' set (P4-P5) — map1 owns this block (src/film/map/**); cut7 owns the rest of this file ====
+// The realistic 3D map (src/film/map/MapSet.ts): its own scene / camera / DOM labels, built in small yielding steps
+// (fetch + off-thread decode of 4 small webp, the terrain mesh in row bands); its handle films 'exodus' and 'tribes'.
+async function buildMapSet(c: FilmSetBuildContext): Promise<FilmSetHandle | null> {
+  const { createMapSet } = await import('./map/MapSet');
+  return createMapSet(c.engine, { onProgress: (f) => c.progress(f), yieldFrame: () => c.yieldFrame() });
+}
+// ==== end of map1's block ====
 
 const smooth = (u: number) => u * u * (3 - 2 * u);
 
@@ -115,282 +173,357 @@ const applyLand = (s: LandSnap) => {
 /** clips only the film uses (released after it; generic clips stay: gameplay may share them) */
 const FILM_ONLY_CLIPS = ['walk_king', 'walk_halt', 'idle_king', 'grab_pull_R', 'old_turn_walk', 'walk_old', 'talk_gesture', 'argue', 'point_directions', 'idle_bus', 'walk_old_hunched'];
 
+/**
+ * P7 'elders': the elders per tier (landSites mark indices, in the order of RamahPerformance's parts) and those at the
+ * 'near' LOD (real faces and beards; the hair simulation only on the near pair 6-7)
+ */
+const RAMAH_PLAN: Record<string, { idx: number[]; near: number[] }> = {
+  'desktop-high': { idx: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], near: [6, 7, 0] },
+  'desktop-medium': { idx: [0, 1, 2, 3, 4, 5, 6, 7], near: [6, 7] },
+  'mobile-high': { idx: [0, 2, 3, 4, 5, 6, 7], near: [6, 7] },
+  'mobile-low': { idx: [0, 2, 3, 6, 7], near: [6] },
+};
+
+/** the loading bar's label of each set's build */
+const SET_LABEL: Record<FilmStageSet, string> = { judah: 'הָאָרֶץ…', map: 'הַדֶּרֶךְ…', coast: 'אֶרֶץ פְּלִשְׁתִּים…', ramah: 'הָרָמָה…', gilgal: 'הַגִּלְגָּל…' };
+/** relative build cost of each set (the loading bar's shares) */
+const SET_WEIGHT: Record<FilmStageSet, number> = { judah: 0.12, map: 0.1, coast: 0.14, ramah: 0.16, gilgal: 0.5 };
+
+/** JS heap in use (MB; Chrome only, else null) */
+function heapMB(): number | null {
+  const m = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory;
+  return m ? m.usedJSHeapSize / 1048576 : null;
+}
+
+/** measures the longest main-thread block (ms) while it runs: the gaps of a 10 ms interval timer */
+function blockMonitor() {
+  let last = performance.now(), worst = 0;
+  const id = setInterval(() => {
+    const now = performance.now();
+    worst = Math.max(worst, now - last - 10);
+    last = now;
+  }, 10);
+  return { stop: () => (clearInterval(id), Math.max(0, Math.round(worst))) };
+}
+
 export class FilmStage {
   readonly sets: Partial<Record<FilmStageSet, FilmSetHandle>> = {};
+  /** per set: build time, its longest main-thread block, the pre-compile, heap growth (the report / the loading wave) */
+  readonly buildStats: Partial<Record<FilmStageSet, FilmSetBuildStat>> = {};
   loadMs = 0;
   private releaseTiles: (() => void) | null = null;
   private releaseClips: (() => void) | null = null;
+  private readonly building: Partial<Record<FilmStageSet, Promise<FilmSetHandle | null>>> = {};
+  private landModP: Promise<typeof import('./land/LandSet') | null> | null = null;
+  private castModP: Promise<typeof import('./cast') | null> | null = null;
 
-  private constructor(private readonly engine: Engine) {}
+  private constructor(private readonly engine: Engine, private readonly opts: FilmStageOptions = {}) {}
+
+  /** An empty stage: build its sets one by one (buildSet + precompileSet) — the progressive loading path. */
+  static create(engine: Engine, o: FilmStageOptions = {}): FilmStage {
+    const s = new FilmStage(engine, o);
+    if (typeof location !== 'undefined' && new URLSearchParams(location.search).get('test') === '1') (window as unknown as Record<string, unknown>).__filmSetStats = s.buildStats;
+    return s;
+  }
 
   /**
-   * Build the film sets the shot sheet uses (+ their crowds and actors) and pre-compile their views. Never rejects: a
-   * failed set is left out (its shots fall back to a world vista, the cut keeps its timing).
+   * Build every film set the shot sheet uses, in film order (+ their crowds and actors), and pre-compile their views.
+   * Never rejects: a failed set is left out (its shots fall back to a world vista, the cut keeps its timing).
    */
   static async load(engine: Engine, o: FilmStageOptions = {}): Promise<FilmStage> {
     const t0 = performance.now();
-    const stage = new FilmStage(engine);
+    const stage = FilmStage.create(engine, o);
     const prog = o.onProgress ?? (() => {});
-    const wantCast = o.cast !== false;
-    const wantCrowd = o.crowd !== false;
-    const q = engine.quality;
-    const low = q.name === 'low';
-    const yieldFrame = () => new Promise<void>((r) => setTimeout(r, 0));
-    // only the sets INTRO_SHOTS films in (CUT v3: gilgal); tests: ?filmsets=gilgal narrows them further
-    const only = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('filmsets') : null;
-    const wanted = (n: FilmStageSet) => USED_SETS.has(n) && (!only || only.split(',').includes(n));
-    const needLand = wanted('judah') || wanted('coast') || wanted('ramah');
-    // budget of the loading bar per step (only the steps that run; normalised)
-    const w0 = { judah: wanted('judah') ? 0.14 : 0, coast: wanted('coast') ? 0.14 : 0, ramah: wanted('ramah') ? 0.16 : 0, gilgal: wanted('gilgal') ? 0.62 : 0, compile: 0.18 };
-    const wsum = Object.values(w0).reduce((a, b) => a + b, 0) || 1;
-    const steps = { judah: w0.judah / wsum, coast: w0.coast / wsum, ramah: w0.ramah / wsum, gilgal: w0.gilgal / wsum, compile: w0.compile / wsum };
+    const names = stage.wantedSets();
+    // the loading bar: each set's share by its build cost, then the pre-compile
+    const COMPILE = 0.16;
+    const sum = names.reduce((a, n) => a + SET_WEIGHT[n], COMPILE);
     let base = 0;
-    const sub = (w: number, label: string) => {
-      const b = base;
+    for (const n of names) {
+      const w = SET_WEIGHT[n] / sum, b = base;
+      await stage.buildSet(n, (f) => prog(Math.min(0.999, b + w * f), SET_LABEL[n]));
       base += w;
-      return (f: number) => prog(Math.min(0.999, b + w * Math.max(0, Math.min(1, f))), label);
-    };
-
-    // the prologue's land sets and their DEM tiles: only when the sheet films there (not in CUT v3)
-    let landMod: typeof import('./land/LandSet') | null = null;
-    if (needLand) {
-      try {
-        landMod = await import('./land/LandSet');
-        const data = await import('./land/landData');
-        stage.releaseTiles = () => data.releaseTiles();
-      } catch (e) {
-        console.warn('[film] land sets unavailable', e);
-      }
     }
-    let castMod: typeof import('./cast') | null = null;
-    if (wantCast && (wanted('gilgal') || wanted('ramah'))) {
-      try {
-        castMod = await import('./cast');
-        // the clips of the sets actually built (the Ramah elders' clips only if Ramah is filmed)
-        const clips = [...new Set([...(wanted('gilgal') ? castMod.GILGAL_CLIPS : []), ...(wanted('ramah') ? castMod.RAMAH_CLIPS : [])])];
-        await castMod.FilmActor.preloadClips(clips);
-        const { MocapLibrary } = await import('../characters/mocap/MocapLibrary');
-        stage.releaseClips = () => MocapLibrary.shared.release(FILM_ONLY_CLIPS);
-      } catch (e) {
-        console.warn('[film] cast unavailable (placeholders)', e);
-        castMod = null;
-      }
-    }
-
-    // ------------------------------------------------------------------ prologue: the land (shots 2, 4, 5)
-    const land = async (loc: LandLocation, w: number, label: string) => {
-      if (!landMod || !wanted(loc)) {
-        base += w;
-        return null;
-      }
-      const p = sub(w, label);
-      try {
-        const set = await landMod.LandSet.create({ renderer: engine.renderer, quality: engine.quality, location: loc, tex: engine.tex, onProgress: (f) => p(f * 0.6) });
-        set.restoreSharedSun();
-        engine.enforceTextureBudget(set.scene);
-        return { set, snap: snapLand(), p };
-      } catch (e) {
-        console.warn(`[film] land set ${loc} failed`, e);
-        return null;
-      }
-    };
-
-    const judah = await land('judah', steps.judah, 'הָאָרֶץ…');
-    if (judah && landMod) stage.sets.judah = stage.landHandle('judah', judah.set, judah.snap, landMod.landView);
-    await yieldFrame();
-
-    const coast = await land('coast', steps.coast, 'אֶרֶץ פְּלִשְׁתִּים…');
-    if (coast && landMod) {
-      let host: PhilistineHost | null = null;
-      if (wantCrowd) {
-        try {
-          const { PhilistineHost } = await import('./crowd/PhilistineHost');
-          const a = coast.set.anchors.coast!;
-          host = await PhilistineHost.create({
-            tier: engine.quality.tier,
-            coast: { route: a.route, columnHead: a.columnHead, columnWidth: a.columnWidth },
-            ground: (x, z) => coast.set.height.height(x, z),
-          });
-          coast.set.scene.add(host.group);
-          coast.set.showPlaceholders(false);
-        } catch (e) {
-          console.warn('[film] Philistine host failed (placeholders)', e);
-          host = null;
-          coast.set.showPlaceholders(true);
-        }
-      }
-      coast.p(1);
-      stage.sets.coast = stage.landHandle('coast', coast.set, coast.snap, landMod.landView, { host });
-    }
-    await yieldFrame();
-
-    const ramah = await land('ramah', steps.ramah * 0.4, 'הָרָמָה…');
-    if (ramah && landMod) {
-      let perf: RamahPerformance | null = null;
-      const actors: FilmActor[] = [];
-      const p = sub(steps.ramah * 0.6, 'הָרָמָה…');
-      if (castMod) {
-        try {
-          const A = ramah.set.anchors.ramah!;
-          const ground = (x: number, z: number) => ramah.set.height.height(x, z);
-          const samuel = await castMod.FilmActor.create({ role: 'samuel', quality: q.name, msaa: q.msaa, lod: 'near', ground });
-          actors.push(samuel);
-          // P5 (cut4, director-notes-v5): "כֹּל זִקְנֵי יִשְׂרָאֵל" — 8-12 elders in a loose arc before Samuel (landSites marks
-          // 0 speaker · 1 seated · 2-5 the arc · 6-7 the near pair the lens dollies in past · 8-10 the outer ring). The
-          // 'near' LOD (real faces and beards) for the ones nearest the lens; fewer in all on phones.
-          const tierName = engine.quality.tier;
-          // (desktop-high: 3 'near' LODs — 4 with hair sims cost ~27 ms/frame; only the near pair 6-7 keeps its sim)
-          const plan = tierName === 'desktop-high' ? { idx: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], near: [6, 7, 0] }
-            : tierName === 'desktop-medium' ? { idx: [0, 1, 2, 3, 4, 5, 6, 7], near: [6, 7] }
-              : tierName === 'mobile-high' ? { idx: [0, 2, 3, 4, 5, 6, 7], near: [6, 7] }
-                : { idx: [0, 2, 3, 6, 7], near: [6] };
-          const marks = plan.idx.filter((i) => i < A.elders.length).map((i) => A.elders[i]);
-          const elders: FilmActor[] = [];
-          for (let k = 0; k < marks.length; k++) {
-            const i = plan.idx[k];
-            p((k + 1) / (marks.length + 1));
-            await yieldFrame();
-            const e = await castMod.FilmActor.create({ role: 'elder', quality: q.name, msaa: q.msaa, seed: i + 1, lod: plan.near.includes(i) ? 'near' : 'crowd', ground });
-            // the strand-hair simulation only where the wind in the hair is seen close: the near pair (6, 7)
-            if (i !== 6 && i !== 7) {
-              try {
-                e.groom?.setSimulation(false);
-              } catch {
-                /* hair is cosmetic */
-              }
-            }
-            elders.push(e);
-            actors.push(e);
-          }
-          for (const a of actors) {
-            a.addTo(ramah.set.scene);
-            engine.enforceTextureBudget(a.root);
-          }
-          // `roles`: the landSites index of each elder (perf's parts: 0 rises, 2<->3 talk/nod, 6<->7 the near pair ...)
-          perf = new castMod.RamahPerformance(samuel, elders, A.samuel, marks, ground, undefined, plan.idx.slice(0, marks.length));
-          ramah.set.showPlaceholders(false);
-        } catch (e) {
-          console.warn('[film] Ramah cast failed (placeholders)', e);
-          for (const a of actors) a.dispose();
-          actors.length = 0;
-          perf = null;
-          ramah.set.showPlaceholders(true);
-        }
-      }
-      p(1);
-      stage.sets.ramah = stage.landHandle('ramah', ramah.set, ramah.snap, landMod.landView, { ramah: perf, actors });
-    }
-    await yieldFrame();
-
-    // ------------------------------------------------------------------ Act I: Gilgal (G1-G7)
-    if (wanted('gilgal')) {
-      const p = sub(steps.gilgal, 'הַגִּלְגָּל…');
-      try {
-        const [{ GilgalSet }, { gilgalView }] = await Promise.all([import('./gilgal/GilgalSet'), import('./gilgal/gilgalView')]);
-        // the raymarched cloud deck of the old 'rise' (shot 13) only if a take still climbs into it (not in CUT v3)
-        const deck = INTRO_SHOTS.some((s) => s.set === 'gilgal' && baseTake(s.take) === 'rise');
-        const gilgal = await GilgalSet.create({ renderer: engine.renderer, quality: engine.quality, tex: engine.tex, deck, onProgress: (f) => p(f * 0.3) });
-        gilgal.restoreSharedSun();
-        engine.enforceTextureBudget(gilgal.scene);
-        let army: GilgalArmy | null = null;
-        if (wantCrowd) {
-          try {
-            const { GilgalArmy } = await import('./crowd/GilgalArmy');
-            army = await GilgalArmy.create({ tier: engine.quality.tier, ground: (x, z) => gilgal.ground.height(x, z) });
-            gilgal.scene.add(army.group);
-          } catch (e) {
-            console.warn('[film] Gilgal army failed', e);
-            army = null;
-          }
-        }
-        p(0.5);
-        let perf: GilgalPerformance | null = null;
-        const actors: FilmActor[] = [];
-        if (castMod) {
-          try {
-            const ground = (x: number, z: number) => gilgal.height(x, z);
-            const saul = await castMod.FilmActor.create({ role: 'saul', quality: q.name, msaa: q.msaa, ground });
-            actors.push(saul);
-            p(0.65);
-            await yieldFrame();
-            const samuel = await castMod.FilmActor.create({ role: 'samuel', quality: q.name, msaa: q.msaa, ground });
-            actors.push(samuel);
-            p(0.8);
-            let armourBearer: FilmActor | undefined;
-            if (!low) {
-              await yieldFrame();
-              armourBearer = await castMod.FilmActor.create({ role: 'armourBearer', quality: q.name, msaa: q.msaa, seed: 3, lod: 'near', ground });
-              actors.push(armourBearer);
-            }
-            for (const a of actors) {
-              a.addTo(gilgal.scene);
-              engine.enforceTextureBudget(a.root);
-            }
-            perf = new castMod.GilgalPerformance({ saul, samuel, armourBearer }, ground);
-          } catch (e) {
-            console.warn('[film] Gilgal cast failed (placeholders)', e);
-            for (const a of actors) a.dispose();
-            actors.length = 0;
-            perf = null;
-          }
-        }
-        // face lighting of the close-ups (src/film/cast/faceLight.ts, face pass): one fixed rig for the whole set,
-        // added BEFORE the precompile (a light changes every shader); re-aimed per shot, off = intensity 0
-        let rig: import('./cast/faceLight').FaceLightRig | null = null;
-        if (perf && castMod) {
-          try {
-            const { FaceLightRig } = await import('./cast/faceLight');
-            rig = new FaceLightRig({ quality: q.name });
-            rig.addTo(gilgal.scene);
-            rig.setPreset('off', 0);
-            // the rig replaces the performances' own fill in its shots (no double key on the face)
-            const FF = castMod.FACE_FILL as Partial<Record<string, [number, number]>>;
-            for (const [shot, who] of [['king', 0], ['spearRaised', 0], ['saulAlone', 0], ['verdict', 1]] as [string, number][]) {
-              const f = FF[shot];
-              if (f) f[who] = 0;
-            }
-          } catch (e) {
-            console.warn('[film] face light rig', e);
-            rig = null;
-          }
-        }
-        // the set's own stand-ins cover what the cast / crowd modules could not build
-        if (!perf || !army) gilgal.showPlaceholders(true);
-        p(1);
-        const cam = new THREE.PerspectiveCamera(40, 1, 0.05, 90000);
-        stage.sets.gilgal = stage.gilgalHandle(gilgal, gilgalView(gilgal, { camera: cam }), cam, army, perf, actors, rig);
-      } catch (e) {
-        console.warn('[film] Gilgal set failed', e);
-      }
-    }
-
-    // ------------------------------------------------------------------ pre-compile every view for the final tier
-    {
-      const p = sub(steps.compile, 'מֵכִין אֶת הַסֶּרֶט…');
-      const names = Object.keys(stage.sets) as FilmStageSet[];
-      let i = 0;
-      for (const name of names) {
-        const h = stage.sets[name]!;
-        try {
-          const takes = INTRO_SHOTS.filter((s) => s.set === name);
-          const f: ShotFrame = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: 40, roll: 0 };
-          const poses: { pos: THREE.Vector3; look: THREE.Vector3 }[] = [];
-          for (const s of takes) {
-            h.enter(s.take);
-            h.tick(s.take, s.dur * 0.5, 0);
-            if (h.frame(s.take, 0.5, s.dur * 0.5, f)) poses.push({ pos: f.pos.clone(), look: f.look.clone() });
-          }
-          await engine.precompileView(h.view, poses);
-        } catch (e) {
-          console.warn(`[film] precompile ${name}`, e);
-        }
-        p(++i / names.length);
-        await yieldFrame();
-      }
+    const built = names.filter((n) => stage.sets[n]);
+    for (let i = 0; i < built.length; i++) {
+      await stage.precompileSet(built[i]);
+      prog(Math.min(0.999, base + (COMPILE / sum) * ((i + 1) / built.length)), 'מֵכִין אֶת הַסֶּרֶט…');
     }
     stage.loadMs = performance.now() - t0;
     prog(1, '');
     return stage;
+  }
+
+  /** the film sets this stage builds: the sheet's sets in film order (tests: ?filmsets=judah,map narrows them) */
+  wantedSets(): FilmStageSet[] {
+    const only = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('filmsets') : null;
+    return [...USED_SETS].filter((n) => !only || only.split(',').includes(n));
+  }
+
+  /**
+   * Build ONE set (idempotent: the same promise for the same set; never rejects — null if it failed). Independent of
+   * every other set: it imports and preloads what it needs itself, reports its own progress (0..1) and yields between
+   * its heavy steps. The handle is in `sets` when the promise resolves; pre-compile it with precompileSet().
+   */
+  buildSet(name: FilmStageSet, onProgress?: (f: number) => void): Promise<FilmSetHandle | null> {
+    return (this.building[name] ??= this.runBuilder(name, onProgress ?? (() => {})));
+  }
+
+  private async runBuilder(name: FilmStageSet, onProgress: (f: number) => void): Promise<FilmSetHandle | null> {
+    const engine = this.engine;
+    const t0 = performance.now();
+    const heap0 = heapMB();
+    const mon = blockMonitor();
+    const c: FilmSetBuildContext = {
+      engine,
+      tier: engine.quality.tier,
+      takes: INTRO_SHOTS.filter((s) => s.set === name).map((s) => s.take),
+      cast: this.opts.cast !== false,
+      crowd: this.opts.crowd !== false,
+      progress: (f) => onProgress(Math.max(0, Math.min(1, f))),
+      yieldFrame: () => new Promise<void>((r) => setTimeout(r, 0)),
+    };
+    let h: FilmSetHandle | null = null;
+    try {
+      h = name === 'map' ? await buildMapSet(c) : name === 'gilgal' ? await this.buildGilgal(c) : await this.buildLand(name, c);
+    } catch (e) {
+      console.warn(`[film] set ${name} failed`, e);
+      h = null;
+    }
+    if (h) this.sets[name] = h;
+    const heap1 = heapMB();
+    this.buildStats[name] = { ms: Math.round(performance.now() - t0), longestStepMs: mon.stop(), heapMB: heap0 !== null && heap1 !== null ? Math.round(heap1 - heap0) : undefined, ok: !!h };
+    onProgress(1);
+    return h;
+  }
+
+  /**
+   * Pre-compile one built set's view for this tier (compiles its programs, renders a frame from the middle of each of its
+   * takes: uploads, shadow maps, first-use passes) so the first cut into it never hitches. It renders to the canvas:
+   * call it behind the loading screen or under a black / an opaque frame.
+   */
+  async precompileSet(name: FilmStageSet): Promise<void> {
+    const h = this.sets[name];
+    if (!h) return;
+    const t0 = performance.now();
+    try {
+      const f: ShotFrame = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: 40, roll: 0 };
+      const poses = [...(h.precompilePoses ?? [])];
+      for (const s of INTRO_SHOTS.filter((x) => x.set === name)) {
+        h.enter(s.take);
+        h.tick(s.take, s.dur * 0.5, 0);
+        if (h.frame(s.take, 0.5, s.dur * 0.5, f)) poses.push({ pos: f.pos.clone(), look: f.look.clone() });
+      }
+      await this.engine.precompileView(h.view, poses);
+    } catch (e) {
+      console.warn(`[film] precompile ${name}`, e);
+    }
+    const st = this.buildStats[name];
+    if (st) st.precompileMs = Math.round(performance.now() - t0);
+    await new Promise<void>((r) => setTimeout(r, 0));
+  }
+
+  /** the land sets' module (the DEM tiles are released with the stage); null if it failed to load */
+  private landModule(): Promise<typeof import('./land/LandSet') | null> {
+    return (this.landModP ??= (async () => {
+      try {
+        const mod = await import('./land/LandSet');
+        const data = await import('./land/landData');
+        this.releaseTiles = () => data.releaseTiles();
+        return mod;
+      } catch (e) {
+        console.warn('[film] land sets unavailable', e);
+        return null;
+      }
+    })());
+  }
+
+  /** the cast module with the clips a set needs preloaded (each set asks for its own); null = the set's placeholders */
+  private async castModule(pick: (m: typeof import('./cast')) => readonly string[]): Promise<typeof import('./cast') | null> {
+    const mod = await (this.castModP ??= import('./cast').catch((e) => {
+      console.warn('[film] cast unavailable (placeholders)', e);
+      return null;
+    }));
+    if (!mod) return null;
+    try {
+      await mod.FilmActor.preloadClips([...pick(mod)]);
+      if (!this.releaseClips) {
+        const { MocapLibrary } = await import('../characters/mocap/MocapLibrary');
+        this.releaseClips = () => MocapLibrary.shared.release(FILM_ONLY_CLIPS);
+      }
+      return mod;
+    } catch (e) {
+      console.warn('[film] cast clips unavailable (placeholders)', e);
+      return null;
+    }
+  }
+
+  // ------------------------------------------------------------------ the prologue's land sets: judah (P1), coast (P6), ramah (P7)
+  private async buildLand(loc: LandLocation, c: FilmSetBuildContext): Promise<FilmSetHandle | null> {
+    const engine = this.engine;
+    const q = engine.quality;
+    const landMod = await this.landModule();
+    if (!landMod) return null;
+    // the set itself takes this share of the set's bar (the coast's host and Ramah's cast the rest)
+    const share = loc === 'judah' ? 1 : loc === 'coast' ? 0.55 : 0.4;
+    const set = await landMod.LandSet.create({ renderer: engine.renderer, quality: q, location: loc, tex: engine.tex, onProgress: (f) => c.progress(f * share), yieldFrame: c.yieldFrame });
+    set.restoreSharedSun();
+    engine.enforceTextureBudget(set.scene);
+    const snap = snapLand();
+    await c.yieldFrame();
+    if (loc === 'judah') return this.landHandle('judah', set, snap, landMod.landView);
+    if (loc === 'coast') {
+      let host: PhilistineHost | null = null;
+      if (c.crowd) {
+        try {
+          const { PhilistineHost } = await import('./crowd/PhilistineHost');
+          const a = set.anchors.coast!;
+          host = await PhilistineHost.create({
+            tier: q.tier,
+            coast: { route: a.route, columnHead: a.columnHead, columnWidth: a.columnWidth },
+            ground: (x, z) => set.height.height(x, z),
+          });
+          set.scene.add(host.group);
+          set.showPlaceholders(false);
+        } catch (e) {
+          console.warn('[film] Philistine host failed (placeholders)', e);
+          host = null;
+          set.showPlaceholders(true);
+        }
+      }
+      return this.landHandle('coast', set, snap, landMod.landView, { host });
+    }
+    // ramah: Samuel in the gateway and the elders before him
+    let perf: RamahPerformance | null = null;
+    const actors: FilmActor[] = [];
+    const castMod = c.cast ? await this.castModule((m) => m.RAMAH_CLIPS) : null;
+    if (castMod) {
+      try {
+        const A = set.anchors.ramah!;
+        const ground = (x: number, z: number) => set.height.height(x, z);
+        const samuel = await castMod.FilmActor.create({ role: 'samuel', quality: q.name, msaa: q.msaa, lod: 'near', ground });
+        actors.push(samuel);
+        // P7 (cut4, director-notes-v5): "כֹּל זִקְנֵי יִשְׂרָאֵל" — 8-12 elders in a loose arc before Samuel (landSites marks
+        // 0 speaker · 1 seated · 2-5 the arc · 6-7 the near pair the lens dollies in past · 8-10 the outer ring). The
+        // 'near' LOD (real faces and beards) for the ones nearest the lens; fewer in all on phones (RAMAH_PLAN).
+        const plan = RAMAH_PLAN[q.tier] ?? RAMAH_PLAN['mobile-low'];
+        const marks = plan.idx.filter((i) => i < A.elders.length).map((i) => A.elders[i]);
+        const elders: FilmActor[] = [];
+        for (let k = 0; k < marks.length; k++) {
+          const i = plan.idx[k];
+          c.progress(share + (1 - share) * ((k + 1) / (marks.length + 1)));
+          await c.yieldFrame();
+          const e = await castMod.FilmActor.create({ role: 'elder', quality: q.name, msaa: q.msaa, seed: i + 1, lod: plan.near.includes(i) ? 'near' : 'crowd', ground });
+          // the strand-hair simulation only where the wind in the hair is seen close: the near pair (6, 7)
+          if (i !== 6 && i !== 7) {
+            try {
+              e.groom?.setSimulation(false);
+            } catch {
+              /* hair is cosmetic */
+            }
+          }
+          elders.push(e);
+          actors.push(e);
+        }
+        for (const a of actors) {
+          a.addTo(set.scene);
+          engine.enforceTextureBudget(a.root);
+        }
+        // `roles`: the landSites index of each elder (perf's parts: 0 rises, 2<->3 talk/nod, 6<->7 the near pair ...)
+        perf = new castMod.RamahPerformance(samuel, elders, A.samuel, marks, ground, undefined, plan.idx.slice(0, marks.length));
+        set.showPlaceholders(false);
+      } catch (e) {
+        console.warn('[film] Ramah cast failed (placeholders)', e);
+        for (const a of actors) a.dispose();
+        actors.length = 0;
+        perf = null;
+        set.showPlaceholders(true);
+      }
+    }
+    return this.landHandle('ramah', set, snap, landMod.landView, { ramah: perf, actors });
+  }
+
+  // ------------------------------------------------------------------ Gilgal (G1-G7)
+  private async buildGilgal(c: FilmSetBuildContext): Promise<FilmSetHandle | null> {
+    const engine = this.engine;
+    const q = engine.quality;
+    const low = q.name === 'low';
+    const castMod = c.cast ? await this.castModule((m) => m.GILGAL_CLIPS) : null;
+    const [{ GilgalSet }, { gilgalView }] = await Promise.all([import('./gilgal/GilgalSet'), import('./gilgal/gilgalView')]);
+    // the raymarched cloud deck of the old 'rise' (shot 13) only if a take still climbs into it (not since CUT v3)
+    const deck = INTRO_SHOTS.some((s) => s.set === 'gilgal' && baseTake(s.take) === 'rise');
+    const gilgal = await GilgalSet.create({ renderer: engine.renderer, quality: engine.quality, tex: engine.tex, deck, onProgress: (f) => c.progress(f * 0.3) });
+    gilgal.restoreSharedSun();
+    engine.enforceTextureBudget(gilgal.scene);
+    await c.yieldFrame();
+    let army: GilgalArmy | null = null;
+    if (c.crowd) {
+      try {
+        const { GilgalArmy } = await import('./crowd/GilgalArmy');
+        army = await GilgalArmy.create({ tier: engine.quality.tier, ground: (x, z) => gilgal.ground.height(x, z) });
+        gilgal.scene.add(army.group);
+      } catch (e) {
+        console.warn('[film] Gilgal army failed', e);
+        army = null;
+      }
+    }
+    c.progress(0.5);
+    await c.yieldFrame();
+    let perf: GilgalPerformance | null = null;
+    const actors: FilmActor[] = [];
+    if (castMod) {
+      try {
+        const ground = (x: number, z: number) => gilgal.height(x, z);
+        const saul = await castMod.FilmActor.create({ role: 'saul', quality: q.name, msaa: q.msaa, ground });
+        actors.push(saul);
+        c.progress(0.65);
+        await c.yieldFrame();
+        const samuel = await castMod.FilmActor.create({ role: 'samuel', quality: q.name, msaa: q.msaa, ground });
+        actors.push(samuel);
+        c.progress(0.8);
+        let armourBearer: FilmActor | undefined;
+        if (!low) {
+          await c.yieldFrame();
+          armourBearer = await castMod.FilmActor.create({ role: 'armourBearer', quality: q.name, msaa: q.msaa, seed: 3, lod: 'near', ground });
+          actors.push(armourBearer);
+        }
+        for (const a of actors) {
+          a.addTo(gilgal.scene);
+          engine.enforceTextureBudget(a.root);
+        }
+        perf = new castMod.GilgalPerformance({ saul, samuel, armourBearer }, ground);
+      } catch (e) {
+        console.warn('[film] Gilgal cast failed (placeholders)', e);
+        for (const a of actors) a.dispose();
+        actors.length = 0;
+        perf = null;
+      }
+    }
+    // face lighting of the close-ups (src/film/cast/faceLight.ts, face pass): one fixed rig for the whole set,
+    // added BEFORE the precompile (a light changes every shader); re-aimed per shot, off = intensity 0
+    let rig: import('./cast/faceLight').FaceLightRig | null = null;
+    if (perf && castMod) {
+      try {
+        const { FaceLightRig } = await import('./cast/faceLight');
+        rig = new FaceLightRig({ quality: q.name });
+        rig.addTo(gilgal.scene);
+        rig.setPreset('off', 0);
+        // the rig replaces the performances' own fill in its shots (no double key on the face)
+        const FF = castMod.FACE_FILL as Partial<Record<string, [number, number]>>;
+        for (const [shot, who] of [['king', 0], ['spearRaised', 0], ['saulAlone', 0], ['verdict', 1]] as [string, number][]) {
+          const f = FF[shot];
+          if (f) f[who] = 0;
+        }
+      } catch (e) {
+        console.warn('[film] face light rig', e);
+        rig = null;
+      }
+    }
+    // the set's own stand-ins cover what the cast / crowd modules could not build
+    if (!perf || !army) gilgal.showPlaceholders(true);
+    c.progress(1);
+    const cam = new THREE.PerspectiveCamera(40, 1, 0.05, 90000);
+    return this.gilgalHandle(gilgal, gilgalView(gilgal, { camera: cam }), cam, army, perf, actors, rig);
   }
 
   /** Dispose one set (after the film has left it for good). */
@@ -444,7 +577,7 @@ export class FilmStage {
     // per-take exposure (FilmCams.TAKE_LOOK) on top of the set's own
     let expMul = 1;
     const baseExp = base.exposure;
-    // P4 (cut4): harsher light with real contrast — the grade's contrast raised for the take, put back on leaving
+    // P6 (cut4's P4): harsher light with real contrast — the grade's contrast raised for the take, put back on leaving
     let savedContrast: number | null = null;
     const restoreContrast = () => {
       if (savedContrast === null) return;
@@ -466,6 +599,8 @@ export class FilmStage {
       },
     };
     // what the orchestration cameras read from the set (FilmCams.landCam)
+    // test only: the cameras' numbers live (window.__filmCams) also when only land sets are built (?filmsets=judah)
+    if (typeof location !== 'undefined' && new URLSearchParams(location.search).get('test') === '1') (window as unknown as Record<string, unknown>).__filmCams = FILM_CAM;
     const camCtx: LandCamCtx = {
       shotAt: (n, e) => {
         const s = set.shots[n];
@@ -493,6 +628,7 @@ export class FilmStage {
       camera,
       status,
       disposed: false,
+      ground: (x, z) => set.height.height(x, z),
       frame(take, u, t, out) {
         if (landCam(take, Math.max(0, Math.min(1, u)), t, camCtx, out)) return true;
         const s = set.shots[take];
@@ -512,11 +648,17 @@ export class FilmStage {
       },
       tick(take, t, dt) {
         expMul = takeExposure(take, t);
+        if (name === 'judah' && take === 'flight') {
+          // P1: the deck burns off a little once the lens is below it (broken, under-lit clouds over the ridge)
+          const F = FILM_CAM.flight;
+          const k = Math.max(0, Math.min(1, (t - F.thinAt[0]) / (F.thinAt[1] - F.thinAt[0])));
+          set.setDeckCover(1 - (1 - F.thinTo) * k * k * (3 - 2 * k));
+        }
         if (name === 'coast') {
           const u = engine.post.grade.uniforms.uContrast;
-          if (take === 'glint') {
+          if (take === 'glint' || take === 'threat') {
             if (savedContrast === null) savedContrast = u.value as number;
-            u.value = savedContrast * 1.14;
+            u.value = savedContrast * (take === 'threat' ? FILM_CAM.threat.contrast : 1.14);
           } else restoreContrast();
         }
         const h = engine.renderer.domElement.height;
@@ -539,6 +681,14 @@ export class FilmStage {
           return { point: sam.eyesWorld(tmp), fStop: 4 };
         }
         if (name === 'ramah' && set.anchors.ramah) return { point: tmp.copy(set.anchors.ramah.samuel.pos).add(new THREE.Vector3(0, 1.5, 0)), fStop: 4 };
+        if (name === 'coast' && take === 'threat' && camCtx.coast) {
+          // P6 (cut7): on the head of the column (it marches toward the lens): deep at the high start, the near files
+          // sharp and the column behind them soft as the lens comes down
+          const c = camCtx.coast;
+          tmp.copy(c.columnHead).addScaledVector(c.heading, FILM_CAM.coast.march * t - FILM_CAM.threat.focusBack);
+          tmp.y = set.height.height(tmp.x, tmp.z) + 1.5;
+          return { point: tmp, fStop: FILM_CAM.threat.fStop };
+        }
         if (name === 'coast' && take === 'glint' && camCtx.coast) {
           // P4 (cut4): the focus ~30 m down the column — the nearest files large and SOFT, the bronze further back sharp
           const c = camCtx.coast;
@@ -595,6 +745,8 @@ export class FilmStage {
     const baseExp = view.exposure;
     view.exposure = () => (typeof baseExp === 'function' ? baseExp() : baseExp ?? 0.6) * expMul;
     let current: string | null = null;
+    /** the take the set has been pre-rolled into under the previous shot (G1: CUT v5's hard cut on the shofar) */
+    let prerolled: string | null = null;
     let armyOk = !!army;
     const status = [
       perf ? `Saul + Samuel${actors.length > 2 ? ' + armour-bearer' : ''}: FilmActor (GilgalPerformance)` : 'Saul + Samuel: set stand-ins',
@@ -606,6 +758,17 @@ export class FilmStage {
       camera,
       status,
       disposed: false,
+      ground: H,
+      preroll(take, t0, dt) {
+        // CUT v5 (cut7): G1 comes in on a hard cut at its shofar (blocking time TAKE_OFFSET 1.5). The set, the army, the
+        // horn blowers and the hair run the 1.5 s of blocking before it while P7 is still on screen — exactly what they
+        // did under CUT v4's black — so the frames from the shofar on are CUT v4's (walk phases, hair, mocap clocks)
+        if (current !== take || prerolled !== take) {
+          this.enter(take);
+          prerolled = take;
+        }
+        this.tick(take, t0, dt);
+      },
       frame(take, u, t, out) {
         // the cut3 cameras (FilmCams) first, else the set's own move
         if (gilgalCam(take, Math.max(0, Math.min(1, u)), t + (TAKE_OFFSET[take] ?? 0), H, out, ctx)) return true;
@@ -622,6 +785,14 @@ export class FilmStage {
       enter(take) {
         const name = baseTake(take);
         if (!gilgal.shots[name]) return;
+        if (prerolled === take && current === take) {
+          // the cut into a take the set has already been running under the previous shot: keep its state
+          prerolled = null;
+          expMul = takeExposure(take);
+          gilgal.setSunCheat(SUN_CHEAT[take] ?? null);
+          return;
+        }
+        prerolled = null;
         const cont = current !== null && current !== take && baseTake(current) === name; // 'tear' -> 'tear:insert'
         current = take;
         expMul = takeExposure(take);

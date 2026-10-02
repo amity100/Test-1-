@@ -140,16 +140,100 @@ canvas { display: block; outline: none; }
   font: 500 17px var(--serif-he); opacity: 0; transition: opacity 0.3s, transform 0.3s; text-shadow: var(--shadow);
 }
 .prompt.on { opacity: 1; transform: translate(-50%, 0); }
-.crosshair { position: fixed; left: 50%; top: 50%; width: 64px; height: 64px; transform: translate(-50%, -50%); opacity: 0; transition: opacity 0.2s; }
-.crosshair.on { opacity: 1; }
-.crosshair svg { width: 100%; height: 100%; overflow: visible; }
-.crosshair .ring-bg { fill: none; stroke: rgba(255, 255, 255, 0.18); stroke-width: 2; }
-.crosshair .ring { fill: none; stroke: var(--gold-2); stroke-width: 3; transform: rotate(-90deg); transform-origin: 50% 50%; transition: stroke 0.2s; filter: drop-shadow(0 0 4px rgba(255, 200, 100, 0.8)); }
+/* (play1, gameplay v2 §3) the sling's reticle and timing ring: the release window lit at the top of the ring, the
+   pouch running round it at the whirl's pace, the power inside; a tick and a word where he let go */
+.crosshair { position: fixed; left: 50%; top: 50%; width: 112px; height: 112px; transform: translate(-50%, -50%); opacity: 0; transition: opacity 0.15s; display: none; }
+.crosshair.on { display: block; opacity: 1; }
+.ui.is-touch .crosshair { width: 136px; height: 136px; }
+.crosshair svg { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.55)); }
+.crosshair .ring-bg { fill: none; stroke: rgba(255, 245, 225, 0.22); stroke-width: 2.5; }
+.crosshair .win { fill: none; stroke: rgba(247, 227, 176, 0.5); stroke-width: 6; stroke-linecap: round; transition: stroke 0.08s; }
+.crosshair .win-p { fill: none; stroke: rgba(255, 214, 120, 0.85); stroke-width: 6; stroke-linecap: round; }
+.crosshair.inwin .win { stroke: rgba(255, 236, 190, 0.95); }
+.crosshair.inwin .win-p { stroke: #ffd36e; filter: drop-shadow(0 0 5px rgba(255, 200, 100, 0.95)); }
+.crosshair .ring { fill: none; stroke: rgba(247, 227, 176, 0.75); stroke-width: 2.2; transform: rotate(-90deg); transform-origin: 50% 50%; transition: stroke 0.2s; }
+.crosshair .pouch { fill: #fff6e2; stroke: rgba(60, 38, 18, 0.8); stroke-width: 1.2; opacity: 0; transition: opacity 0.15s; }
+.crosshair.whirl .pouch { opacity: 1; }
+.crosshair.inwin .pouch { fill: #ffd36e; }
+.crosshair.loading .ring-bg { animation: ringWait 0.7s ease-in-out infinite; }
+@keyframes ringWait { 50% { stroke: rgba(255, 245, 225, 0.5); } }
 .crosshair .dot { fill: #fff; }
-.crosshair.target .ring { stroke: #ff8a5c; }
-.crosshair.target .dot { fill: #ff8a5c; }
-.crosshair .range { position: absolute; top: 72px; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 12px; opacity: 0; color: #ffcf9a; text-shadow: var(--shadow); transition: opacity 0.3s; }
+.crosshair .tick { stroke: rgba(255, 255, 255, 0.85); stroke-width: 1.6; }
+.crosshair.target .dot { fill: #ffb37a; }
+.crosshair.target .tick { stroke: #ffb37a; }
+.crosshair .rel { stroke: transparent; stroke-width: 4; stroke-linecap: round; }
+.crosshair.rel-on .rel { animation: relFade 0.9s ease-out forwards; }
+.crosshair.r-perfect .rel { stroke: #ffd36e; }
+.crosshair.r-sweet .rel { stroke: #fff6e2; }
+.crosshair.r-early .rel, .crosshair.r-late .rel { stroke: #ff8a5c; }
+@keyframes relFade { 0%, 60% { opacity: 1; } 100% { opacity: 0; } }
+.crosshair.r-perfect.rel-on .win-p { animation: perfFlash 0.5s ease-out; }
+@keyframes perfFlash { 0% { stroke: #fff; stroke-width: 11; } 100% { } }
+.crosshair .cue { position: absolute; top: -30px; left: 50%; transform: translateX(-50%); white-space: nowrap; font: 600 17px var(--serif-he); color: #fff3d8; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9); opacity: 0; }
+.crosshair.rel-on .cue { animation: relFade 0.9s ease-out forwards; }
+.crosshair.r-perfect .cue { color: #ffd36e; }
+.crosshair.r-early .cue, .crosshair.r-late .cue { color: #ffb08a; }
+.crosshair .range { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 12px; opacity: 0; color: #ffcf9a; text-shadow: var(--shadow); transition: opacity 0.3s; }
 .crosshair.far .range { opacity: 0.9; }
+.hitmark { position: fixed; left: 50%; top: 50%; width: 40px; height: 40px; margin: -20px 0 0 -20px; opacity: 0; pointer-events: none; }
+.hitmark::before, .hitmark::after { content: ''; position: absolute; inset: 0; background:
+  linear-gradient(45deg, transparent 46%, #fff 46%, #fff 54%, transparent 54%) center / 100% 100% no-repeat; -webkit-mask: radial-gradient(circle, transparent 38%, #000 40%); mask: radial-gradient(circle, transparent 38%, #000 40%); }
+.hitmark::after { transform: rotate(90deg); }
+.hitmark.on { animation: hitm 0.38s ease-out forwards; }
+.hitmark.strong::before, .hitmark.strong::after { filter: drop-shadow(0 0 4px #ffc85a); background-image: linear-gradient(45deg, transparent 44%, #ffd36e 44%, #ffd36e 56%, transparent 56%); }
+.hitmark.strong.on { animation: hitm 0.5s ease-out forwards; }
+@keyframes hitm { 0% { opacity: 1; transform: scale(1.5); } 70% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1); } }
+.praise { position: fixed; left: 50%; top: 31%; transform: translate(-50%, 0) scale(0.92); font: 600 clamp(24px, 3.2vw, 36px) var(--serif-he); color: #fff3d8; letter-spacing: 0.04em; text-shadow: 0 2px 16px rgba(0, 0, 0, 0.75), 0 0 2px rgba(0, 0, 0, 0.6); opacity: 0; white-space: nowrap; transition: opacity 0.35s, transform 0.5s cubic-bezier(0.2, 1.4, 0.4, 1); }
+.praise.on { opacity: 1; transform: translate(-50%, 0) scale(1); }
+.praise.miss { font-size: clamp(17px, 2vw, 22px); font-weight: 500; color: #f1dcc0; top: 58%; }
+.rangepanel { position: fixed; left: 50%; top: 18px; transform: translate(-50%, -6px); min-width: 210px; padding: 7px 16px 8px; text-align: center; background: linear-gradient(180deg, rgba(10, 7, 4, 0.66), rgba(10, 7, 4, 0.4)); border-bottom: 1px solid rgba(232, 199, 126, 0.45); opacity: 0; transition: opacity 0.5s, transform 0.5s; text-shadow: var(--shadow); }
+.rangepanel.on { opacity: 1; transform: translate(-50%, 0); }
+.rp-head { display: flex; gap: 10px; justify-content: center; align-items: baseline; }
+.rp-n { font: 500 12px var(--sans-he); color: var(--gold); letter-spacing: 0.15em; direction: ltr; }
+.rp-title { font: 600 17px var(--serif-he); color: #fff6e2; }
+.rp-row { display: flex; gap: 12px; justify-content: center; align-items: center; margin-top: 4px; font: 500 13px var(--sans-he); color: #f3e3c0; }
+.rp-t { display: inline-flex; gap: 5px; direction: ltr; }
+.rp-t i { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid rgba(247, 227, 176, 0.85); box-sizing: border-box; }
+.rp-t i.d { background: var(--gold); border-color: var(--gold); box-shadow: 0 0 6px rgba(255, 200, 110, 0.8); }
+.rp-streak { color: #ffd36e; font-weight: 700; }
+.rp-time { direction: ltr; opacity: 0.85; font-variant-numeric: tabular-nums; }
+.rp-wind, .rp-note { margin-top: 3px; font: 400 12.5px var(--sans-he); color: #eadcc0; opacity: 0.9; }
+.stonebag { position: fixed; left: 28px; top: 74px; display: flex; gap: 4px; align-items: center; padding: 5px 10px; background: rgba(10, 7, 4, 0.42); border: 1px solid rgba(232, 199, 126, 0.25); opacity: 0; transition: opacity 0.5s; direction: rtl; }
+.stonebag.on { opacity: 1; }
+.stonebag .sb-l { font: 500 12px var(--serif-he); color: var(--gold-2); margin-left: 6px; }
+.stonebag i { width: 9px; height: 8px; border-radius: 50%; background: #b9ab92; box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.35); }
+.stonebag i.s { background: radial-gradient(circle at 35% 30%, #fffaf0, #e3d6bb 60%, #b8a684); box-shadow: 0 0 5px rgba(255, 220, 150, 0.55); }
+.stonebag i.in { outline: 1.5px solid var(--gold); outline-offset: 1.5px; }
+.stonebag .sb-e { font: 400 12px var(--sans-he); color: #ffb08a; }
+.ui.is-touch .stonebag { left: 72px; top: 64px; }
+.rating { position: fixed; inset: 0; display: grid; place-items: center; opacity: 0; pointer-events: none; transition: opacity 0.4s; }
+.rating.on { opacity: 1; }
+.rating.on .rt-card { pointer-events: auto; }
+.rt-card { min-width: min(360px, 86vw); padding: 18px 26px 16px; text-align: center; background: radial-gradient(ellipse at 50% 0%, rgba(40, 28, 14, 0.82), rgba(10, 7, 4, 0.8)); border: 1px solid rgba(232, 199, 126, 0.4); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5); }
+.rt-title { font: 600 22px var(--serif-he); color: #fff6e2; }
+.rt-marks { display: flex; gap: 14px; justify-content: center; margin: 12px 0 6px; direction: ltr; }
+.rt-marks i { width: 26px; height: 22px; border-radius: 50%; border: 2px solid rgba(232, 199, 126, 0.5); box-sizing: border-box; }
+.rt-marks i.on { border-color: var(--gold); background: radial-gradient(circle at 35% 30%, #fffaf0, #e8c77e 55%, #9c7434); box-shadow: 0 0 12px rgba(255, 200, 100, 0.7); animation: markIn 0.5s cubic-bezier(0.2, 1.6, 0.4, 1) both; animation-delay: calc(0.25s + var(--i) * 0.28s); }
+@keyframes markIn { from { transform: scale(0.2); opacity: 0; } to { transform: none; opacity: 1; } }
+.rt-verdict { font: 500 16px var(--serif-he); color: var(--gold-2); margin-bottom: 10px; }
+.rt-lines { display: grid; gap: 4px; margin: 0 auto 14px; max-width: 280px; }
+.rt-l { display: flex; justify-content: space-between; font: 400 14px var(--sans-he); color: #eadcc0; }
+.rt-l b { font-weight: 600; color: #fff3d8; }
+.rt-btns { display: flex; gap: 10px; justify-content: center; }
+.rt-btns .key { margin-left: 6px; }
+@media (max-height: 500px) {
+  .rangepanel { top: 8px; padding: 5px 12px 6px; }
+  .rp-title { font-size: 15px; }
+  .rt-card { padding: 10px 18px 10px; }
+  .rt-marks { margin: 6px 0 4px; }
+  .rt-lines { margin-bottom: 8px; }
+  .ui.is-touch .crosshair { width: 120px; height: 120px; }
+}
+@media (max-width: 700px) {
+  .rangepanel { top: 12px; min-width: 0; max-width: 62vw; }
+  .ui.is-touch .stonebag { left: 12px; top: 58px; }
+  .praise { top: 27%; }
+}
 .marker { position: fixed; left: 0; top: 0; opacity: 0; transition: opacity 0.5s; text-align: center; }
 .marker.on { opacity: 1; }
 .mk-diamond { width: 14px; height: 14px; margin: -7px auto 0; transform: rotate(45deg); border: 2px solid var(--gold-2); background: rgba(232, 199, 126, 0.25); box-shadow: 0 0 12px rgba(255, 200, 110, 0.7); animation: mk 2s ease-in-out infinite; }
@@ -634,3 +718,52 @@ canvas { display: block; outline: none; }
 @media (max-height: 500px) and (min-aspect-ratio: 3/2) {
   .titlecard { --lg-size: clamp(46px, min(9.6vw, 21vh), 100px); --logo-y: 39%; }
 }
+
+/* map labels (map1) ==================================================================================================
+   CUT v5 P4-P5 (src/film/map/mapLabels.ts): the pointed biblical names of src/content/mapNames.ts pinned to the land of
+   the realistic 3D map. Each .ml is a 0x0 anchor moved by the set every frame (translate3d to the projected point);
+   its text sits above the point (places, cities: a small dot on the point) or centred on it (regions, seas, tribes).
+   Under the film's own text layer (.ui z 10), above the canvas; the set fades each label (inline opacity). */
+.map-labels { position: fixed; inset: 0; z-index: 9; pointer-events: none; overflow: hidden; }
+.map-labels .ml { position: absolute; left: 0; top: 0; width: 0; height: 0; visibility: hidden; opacity: 0; will-change: transform, opacity; }
+.map-labels .ml-t {
+  position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); white-space: nowrap; direction: rtl;
+  font: 500 clamp(14px, 1.3vw, 23px)/1.1 var(--serif-he); color: #fbf2de; letter-spacing: 0.06em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 9px rgba(0, 0, 0, 0.6), 0 0 22px rgba(0, 0, 0, 0.35);
+}
+.map-labels .ml-place .ml-t, .map-labels .ml-city .ml-t { transform: translate(-50%, calc(-100% - 0.42em)); }
+.map-labels .ml-dot {
+  position: absolute; left: -3px; top: -3px; width: 6px; height: 6px; border-radius: 50%;
+  background: #fff3d6; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45), 0 0 8px 2px rgba(255, 214, 140, 0.7);
+}
+.map-labels .ml-region .ml-t { font-weight: 400; font-size: clamp(16px, 1.75vw, 31px); letter-spacing: 0.34em; color: #f7ecd6; opacity: 0.92; }
+.map-labels .ml-sea .ml-t { font-weight: 400; font-size: clamp(14px, 1.45vw, 26px); letter-spacing: 0.26em; color: #e3edf3; opacity: 0.9; }
+.map-labels .ml-tribe .ml-t {
+  font-weight: 600; font-size: clamp(15px, 1.6vw, 28px); letter-spacing: 0.16em; color: #fbedcc;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 8px rgba(0, 0, 0, 0.7), 0 0 20px rgba(0, 0, 0, 0.45);
+}
+.map-labels .ml-city .ml-t {
+  font-weight: 600; font-size: clamp(13px, 1.28vw, 22px); color: #ffdfae;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.92), 0 0 10px rgba(40, 12, 0, 0.7), 0 0 18px rgba(255, 140, 60, 0.35);
+}
+.map-labels .ml-city .ml-dot { background: #ffd08a; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 0 10px 3px rgba(255, 150, 60, 0.75); }
+/* placement around the point in the crowded corners (LabelSpec.at): west / east of it, below it, centred */
+.map-labels .ml.ml-at-w .ml-t { transform: translate(calc(-100% - 0.55em), -50%); }
+.map-labels .ml.ml-at-e .ml-t { transform: translate(0.55em, -50%); }
+.map-labels .ml.ml-at-s .ml-t { transform: translate(-50%, 0.45em); }
+.map-labels .ml.ml-at-c .ml-t { transform: translate(-50%, -50%); }
+/* phones held upright: the picture is narrow — sizes from the width, still >= 13 px */
+@media (max-aspect-ratio: 1/1) {
+  .map-labels .ml-t { font-size: clamp(13px, 3.5vw, 18px); }
+  .map-labels .ml-region .ml-t { font-size: clamp(14px, 4.1vw, 20px); letter-spacing: 0.26em; }
+  .map-labels .ml-sea .ml-t { font-size: clamp(13px, 3.6vw, 18px); letter-spacing: 0.2em; }
+  .map-labels .ml-tribe .ml-t { font-size: clamp(13px, 3.6vw, 18px); letter-spacing: 0.12em; }
+  .map-labels .ml-city .ml-t { font-size: clamp(13px, 3.4vw, 17px); }
+}
+/* landscape phones: a short picture */
+@media (max-height: 500px) and (min-aspect-ratio: 3/2) {
+  .map-labels .ml-t { font-size: 13px; }
+  .map-labels .ml-region .ml-t { font-size: 15px; }
+  .map-labels .ml-sea .ml-t, .map-labels .ml-tribe .ml-t, .map-labels .ml-city .ml-t { font-size: 13.5px; }
+}
+/* /map labels (map1) */

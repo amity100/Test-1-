@@ -118,7 +118,8 @@ export class Village {
 
     // Houses clustered on the crest, oriented loosely along lanes (Iron Age pillared / four-room houses:
     // fieldstone walls on a stone socle, mud plaster, flat roofs of beams, brushwood and rolled clay)
-    for (let tries = 0; tries < 2000 && houses.length < 84; tries++) {
+    // (cut8, CUT v5 P2 — intro-script-v5: "a village of a few dozen four-room houses — no walls of a city, no towers")
+    for (let tries = 0; tries < 2000 && houses.length < 54; tries++) {
       const a = rnd() * Math.PI * 2;
       const r = Math.sqrt(rnd()) * (L.r - 6);
       const x = L.x + Math.cos(a) * r;
@@ -189,7 +190,7 @@ export class Village {
         }
       }
       // courtyard wall, tabun oven, goat-hair awning
-      if (rnd() < 0.6) {
+      if (rnd() < 0.82) {
         const cd = 4 + rnd() * 3;
         const cc = tint.clone().multiplyScalar(0.9);
         const [cx0, cz0] = [Math.cos(h.rot), -Math.sin(h.rot)];
@@ -242,7 +243,9 @@ export class Village {
         this.colliders.add({ x: h.x + along.x, z: h.z + along.z, r: Math.min(h.w, h.d) * 0.55, tag: 'house' });
       }
     }
-    // Town wall ring with a gate facing the shepherds' path (east)
+    // The village's edge and its gateway facing the shepherds' path (east). (cut8, CUT v5: Iron Age I-IIA Bethlehem has no
+    // city wall and no towers — intro-script-v5 P2, visual-bible 3.8 / 3.12: the outer houses form the edge; a modest
+    // gateway — two short stub walls of fieldstone, a timber lintel, the plank leaves open — by the well, 2 Sam 23:15)
     const gateAngle = Math.atan2(LAYOUT.path[LAYOUT.path.length - 1][1] - L.z, LAYOUT.path[LAYOUT.path.length - 1][0] - L.x);
     this.gate.set(L.x + Math.cos(gateAngle) * (L.r + 2), 0, L.z + Math.sin(gateAngle) * (L.r + 2));
     this.gate.y = this.terrain.heightAt(this.gate.x, this.gate.z);
@@ -252,49 +255,40 @@ export class Village {
       const am = (a0 + a1) / 2;
       let da = Math.abs(am - gateAngle);
       da = Math.min(da, Math.PI * 2 - da);
-      if (da < 0.07) continue; // gate opening
+      if (da < 0.07 || da > 0.2) continue; // the gate opening; the stub walls only beside it
       const rr = L.r + 2 + Math.sin(i * 1.7) * 1.2;
       const x0 = L.x + Math.cos(a0) * rr, z0 = L.z + Math.sin(a0) * rr;
       const x1 = L.x + Math.cos(a1) * rr, z1 = L.z + Math.sin(a1) * rr;
       const len = Math.hypot(x1 - x0, z1 - z0);
       const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
       const y = this.terrain.heightAt(mx, mz) - 0.8;
-      // battered fieldstone wall: 2.4 m thick at the foot, 1.7 m at the top
-      const g = new THREE.BoxGeometry(len + 0.3, 4.2, 2.4, Math.max(1, Math.round(len / 2)), 3, 1);
+      // a stub wall of fieldstone beside the gateway: 1.4 m thick, a man's height and a little more
+      const g = new THREE.BoxGeometry(len + 0.3, 3.2, 1.4, Math.max(1, Math.round(len / 2)), 3, 1);
       {
         const pp = g.getAttribute('position') as THREE.BufferAttribute;
         for (let k = 0; k < pp.count; k++) {
           const yy = pp.getY(k);
-          const t = (yy + 2.1) / 4.2;
+          const t = (yy + 1.6) / 3.2;
           pp.setZ(k, pp.getZ(k) * (1 - 0.3 * t));
           pp.setY(k, yy + Math.sin(pp.getX(k) * 0.9 + i) * 0.12 * t);
         }
         g.computeVertexNormals();
       }
-      g.translate(0, y + 2.1, 0);
+      g.translate(0, y + 1.6, 0);
       g.rotateY(-Math.atan2(z1 - z0, x1 - x0));
       g.translate(mx, 0, mz);
       tint.setHSL(0.09, 0.07, 0.68 + Math.sin(i * 3.1) * 0.05);
       townWall.push(colorize(g, tint));
       this.colliders.add({ x: mx, z: mz, r: len * 0.55, tag: 'wall' });
     }
-    // gate towers
-    for (const side of [-1, 1]) {
-      const a = gateAngle + side * 0.095;
-      const x = L.x + Math.cos(a) * (L.r + 2), z = L.z + Math.sin(a) * (L.r + 2);
-      const y = this.terrain.heightAt(x, z) - 0.8;
-      townWall.push(roughBox(4.2, 6.0, 4.2, y, -a, x, z, new THREE.Color().setHSL(0.09, 0.07, 0.7), 0.08));
-      townWall.push(box(4.4, 0.6, 4.4, 0, y + 6.0, 0, -a, x, z, new THREE.Color().setHSL(0.09, 0.06, 0.66)));
-    }
-    // gate: a flat timber-and-stone lintel between the towers (no arches in Iron Age Judah) and two plank
-    // door leaves standing open inward
+    // gateway: a flat timber lintel on the stub walls (no arches in Iron Age Judah) and two plank door leaves standing
+    // open inward (cut8: no towers, no stone superstructure)
     {
       const gx = L.x + Math.cos(gateAngle) * (L.r + 2), gz = L.z + Math.sin(gateAngle) * (L.r + 2);
       const gy = this.terrain.heightAt(gx, gz) - 0.8;
       const tang = -gateAngle - Math.PI / 2; // local X along the wall line
-      townWall.push(box(9.0, 1.3, 2.6, 0, gy + 4.2, 0, tang, gx, gz, new THREE.Color().setHSL(0.09, 0.07, 0.68)));
-      wood.push(box(9.2, 0.35, 0.4, 0, gy + 3.9, 1.0, tang, gx, gz, woodDark));
-      wood.push(box(9.2, 0.35, 0.4, 0, gy + 3.9, -1.0, tang, gx, gz, woodDark));
+      wood.push(box(6.4, 0.35, 0.4, 0, gy + 3.55, 0.5, tang, gx, gz, woodDark));
+      wood.push(box(6.4, 0.35, 0.4, 0, gy + 3.55, -0.5, tang, gx, gz, woodDark));
       for (const side of [-1, 1]) {
         const leaf = new THREE.BoxGeometry(2.1, 3.2, 0.14);
         leaf.translate(-side * 1.05, 1.6, 0);
@@ -308,7 +302,8 @@ export class Village {
     const wallMat = masonryMaterial(this.tex, this.tex.wall, this.tex.wallN, 2.6, 0xeee8dc, 'wall', 0.6, 0.55);
     const townWallMat = masonryMaterial(this.tex, this.tex.wall, this.tex.wallN, 3.6, 0xeae4d8, 'townwall', 0.6, 0.2);
     // roofs: rolled grey-brown clay and straw (the terra rossa texture, strongly desaturated)
-    const roofMat = masonryMaterial(this.tex, this.tex.soil, this.tex.soilN, 3.0, 0xd8cfc0, 'roof', 0.3, 0.3);
+    // (cut8: a greyer packed-earth tone — the terra rossa read as red-brown tiles from the air)
+    const roofMat = masonryMaterial(this.tex, this.tex.soil, this.tex.soilN, 3.0, 0xcfc9bf, 'roof', 0.14, 0.38);
     const woodMat = masonryMaterial(this.tex, this.tex.bark, this.tex.barkN, 0.6, 0xd8c8b0, 'wood', 0.7, 0);
     const clayMat = masonryMaterial(this.tex, this.tex.soil, this.tex.soilN, 1.2, 0xe8d4b8, 'clay', 0.55, 0.3);
     const merge = (list: THREE.BufferGeometry[]) => mergeGeometries(list.map((g) => (g.index ? g.toNonIndexed() : g)));

@@ -22,6 +22,31 @@ import * as THREE from 'three';
 import type { Animal, Flock } from '../characters/Flock';
 import type { BearModel } from '../characters/BearModel';
 import { INTRO_SHOTS } from '../content/introScript';
+import { D4_BLEATS as SCORE_BLEATS } from '../audio/IntroScore';
+
+/**
+ * (cut8, CUT v5) D4 'horizon': the newborn lamb's and its mother's bleats in D4 shot seconds — ONE source of truth: the
+ * score's schedule (src/audio/IntroScore.ts D4_BLEATS, score6, keyed to the contract's beats: the score plays the voices,
+ * FilmWorld lifts the heads and opens the mouths at the same times; the ewe's closed-mouth murmur is not animated).
+ */
+const D4S = INTRO_SHOTS.find((s) => s.take === 'horizon');
+const d4b = (k: string, f: number) => D4S?.beats?.[k] ?? f;
+export const D4_BLEATS: readonly { t: number; who: 'lamb' | 'ewe'; v: number }[] = SCORE_BLEATS.filter((b) => !b.murmur)
+  .map((b) => ({ t: d4b(b.beat, 0) + b.offset, who: b.who, v: b.v }))
+  .sort((a, b) => a.t - b.t);
+
+/**
+ * (cut8, CUT v5) D3 'watch' / D4: the key animals on the slope below David's rock (world x, z, heading): a ewe with a lamb
+ * nursing at her near (right) flank, a ewe with her lamb, a goat on the boulder at `goatRock`, the two rams; `extraLambs`
+ * lambs are born into the flock for it (Flock.addLamb — they stay in the game's flock: "ewes and their lambs").
+ */
+export const D3_STAGE = {
+  nurse: [1.5, 14.6, -1.33] as number[],
+  ewe2: [-2.4, 18.2, 0.6] as number[],
+  goatRock: [6.7, 15.0, -0.9] as number[],
+  rams: [[5.6, 24.2, 2.5], [-1.2, 27.4, -0.5]] as number[][],
+  extraLambs: 2,
+};
 
 /** CUT v3 contract: H1 'thicket' (its length and `lambHead`), H2 'lamb' (`eyesOpen`) */
 const H1 = INTRO_SHOTS.find((s) => s.take === 'thicket');

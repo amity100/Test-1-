@@ -14,6 +14,7 @@
 import * as THREE from 'three';
 import type { FilmActor, Quality } from '../cast/FilmActor';
 import { BEATS, MARCH_SPEED, type GilgalShotName } from '../gilgal/gilgalBlocking';
+import { TAKE_OFFSET } from '../FilmCams';
 import type { CrowdTier } from './Crowd';
 
 export interface HeroRole {
@@ -208,8 +209,10 @@ class Hero {
       if (shot === 'dustWall') {
         // CUT v3 (G1 5.5 s): lifted to the lips on `horns` one after another, each a long blast (2.0-2.4 s), then
         // lowered before the cut
+        // (CUT v5: the contract's G1 beats are shot seconds from the shofar; the blocking runs on the old clock, so the
+        //  horns come up at the same blocking second as in CUT v4: beats.horns + TAKE_OFFSET 1.5 = 2.1)
         const k = this.role.index ?? 0;
-        const h = BEATS.dustWall.horns + 0.15 * k;
+        const h = BEATS.dustWall.horns + (TAKE_OFFSET.dustWall ?? 0) + 0.15 * k;
         const end = h + 2.0 + 0.2 * k;
         blow = ss(h - 0.3, h + 0.08, t) * (1 - ss(end, end + 0.5, t));
       } else if (st === 'roar' || st === 'freeze') blow = 0;

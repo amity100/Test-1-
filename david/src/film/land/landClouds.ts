@@ -78,9 +78,10 @@ export class LandClouds {
   readonly material: THREE.ShaderMaterial;
   private readonly noise: THREE.Data3DTexture;
   readonly uniforms: Record<string, THREE.IUniform>;
-  constructor(tier: LandTier, box: { x0: number; x1: number; z0: number; z1: number }) {
+  /** `deck` (bottom, top, edge x, cover): the slab the proxy box encloses (default: the shared deck uniform's) */
+  constructor(tier: LandTier, box: { x0: number; x1: number; z0: number; z1: number }, deckSlab?: THREE.Vector4) {
     this.noise = cloudNoise3D(tier === 'low' ? 32 : 64);
-    const deck = cloudShared.uDeck.value;
+    const deck = deckSlab ?? cloudShared.uDeck.value;
     const steps = tier === 'high' ? 72 : tier === 'medium' ? 44 : 22;
     const lightSteps = tier === 'low' ? 2 : 4;
     this.uniforms = {

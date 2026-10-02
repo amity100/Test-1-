@@ -34,7 +34,8 @@ import * as THREE from 'three';
 export type GroundFn = (x: number, z: number) => number;
 export type AnimalKind = 'sheep' | 'ram' | 'goat' | 'lamb';
 export type AnimalState = 'graze' | 'walk' | 'follow' | 'flee' | 'carried';
-export type CarryMode = 'none' | 'mouth' | 'shoulders';
+/** ('arms' = cut8, CUT v5 D4: the newborn lamb cradled in David's arms against his chest, Isa 40:11) */
+export type CarryMode = 'none' | 'mouth' | 'shoulders' | 'arms';
 export type SoundKind = 'sheepBleat' | 'lambBleat' | 'goatBleat';
 
 export interface FlockOptions {
@@ -2315,6 +2316,14 @@ export class Animal {
   /** @internal */ alert = 0;
   /** @internal */ alertDir = 0;
   /** @internal */ mother: Animal | null = null;
+  /** (cut8) a lamb: the ewe it suckles from now (it goes to her flank, puts its head up under her belly, its tail
+   *  wagging; she stands for it and turns to sniff it) — null = not nursing */
+  nurse: Animal | null = null;
+  /** (cut8) seconds the lamb goes on nursing (counts down while it nurses; at 0 it lets go and follows her) */
+  nurseFor = 0;
+  /** (cut8) standing on a rock: metres added to the ground under its hooves (a flat top — a goat on a boulder) */
+  perch = 0;
+  /** @internal a lamb nurses from her this frame */ suckled = false;
   /** @internal */ sepX = 0;
   /** @internal */ sepZ = 0;
   /** @internal */ lastSafe = new THREE.Vector3();
@@ -2587,6 +2596,10 @@ export class Animal {
 // Flock
 // ============================================================================
 
+/** (cut8) the lamb in David's arms: leg bone angles (rad: [hip, knee, fetlock]) for the folded fore / hind legs, the
+ *  neck and head pitch (+ = nose down) — tunable live under ?test=1 (window.__cradled) */
+export const CRADLED = { front: [0.55, 1.75, 0.35], hind: [-0.95, -1.3, 0.5], neck: -0.15, head: -0.1 };
+
 const GAITS = {
   // offsets for [FL, FR, HL, HR], duty factor, stride length (m, for scale 1)
   walk: { off: [0.25, 0.75, 0.0, 0.5], duty: 0.68, stride: 0.75 },
@@ -2611,6 +2624,9 @@ export class Flock {
   private rng: () => number;
   private cache: AssetCache;
   private materials: THREE.Material[] = [];
+  /** (cut8) the lamb's assets and materials, kept so more lambs can be born into the flock (addLamb) */
+  private lambKit: { a: KindAssets; m: THREE.Material; s: THREE.Material | null } | null = null;
+  private lambSeed = 0;
   private bleatTimer = 3;
   private callPending = false;
   private pending: { a: Animal; t: number; v: number }[] = [];
@@ -2702,6 +2718,8 @@ export class Flock {
     if (aRam) for (let i = 0; i < nRams; i++) add('ram', aRam, ramMat, ramShell);
     if (aGoat) for (let i = 0; i < nGoats; i++) add('goat', aGoat, goatMats[i % goatMats.length], goatShells[i % goatShells.length]);
     this.lamb = add('lamb', aLamb, lambMat, lambShell);
+    this.lambKit = { a: aLamb, m: lambMat, s: lambShell };
+    this.lambSeed = sd + 101;
     const ewes = this.animals.filter((a) => a.kind === 'sheep');
     if (ewes.length) this.lamb.mother = ewes[Math.floor(r() * ewes.length)];
 
@@ -2774,6 +2792,37 @@ export class Flock {
     }
     if (n > 0) this.callPending = true;
     return n;
+  }
+
+  /**
+   * (cut8, CUT v5 — "ewes and their lambs") a lamb born to `mother`: placed at her side, it keeps near her (the flock's
+   * lamb rule) and nurses when told (Animal.nurse). Shares the lamb's geometry and materials (no new asset, no new
+   * shader). Returns the new animal; removeAnimal() takes it out again.
+   */
+  addLamb(mother: Animal): Animal {
+    const k = this.lambKit!;
+    const an = new Animal(this, 'lamb', k.a, k.m, k.s, this.lambSeed++);
+    an.mother = mother;
+    this.animals.push(an);
+    this.group.add(an.object);
+    const h = mother.heading + 1.4;
+    const x = mother.position.x + Math.sin(h) * 0.9, z = mother.position.z + Math.cos(h) * 0.9;
+    an.position.set(x, this.ground(x, z), z);
+    an.heading = mother.heading;
+    an.lastSafe.copy(an.position);
+    an.object.position.copy(an.position);
+    an.object.rotation.set(0, an.heading, 0);
+    return an;
+  }
+
+  /** take an animal out of the flock (one added by addLamb): its skeleton freed, its object removed */
+  removeAnimal(a: Animal): void {
+    const i = this.animals.indexOf(a);
+    if (i < 0 || a === this.lamb) return;
+    this.animals.splice(i, 1);
+    for (const o of this.animals) if (o.nurse === a) o.nurse = null;
+    for (const m of a.meshes) m.skeleton.dispose();
+    a.object.removeFromParent();
   }
 
   setPasture(center: THREE.Vector3, radius?: number): void {
@@ -2895,9 +2944,11 @@ export class Flock {
         a.sepZ += (dz / d) * (R - d) / R * 1.5;
       }
     }
+    for (const a of A) a.suckled = false;
+    for (const a of A) if (a.nurse && a.state !== 'carried' && a.nurse.state !== 'carried') a.nurse.suckled = true;
     for (const a of A) {
       if (a.state !== 'carried') {
-        if (a.aiEnabled) this.think(a, dt, ctx);
+        if (a.aiEnabled && !a.nurse) this.think(a, dt, ctx);
         this.move(a, dt);
       }
     }
@@ -3017,7 +3068,7 @@ export class Flock {
               tx = this.pastureCenter.x + ((tx - this.pastureCenter.x) / dc) * lim;
               tz = this.pastureCenter.z + ((tz - this.pastureCenter.z) / dc) * lim;
             }
-            if (a === this.lamb && a.mother && a.mother.state !== 'carried') {
+            if (a.kind === 'lamb' && a.mother && a.mother.state !== 'carried') {
               tx = a.mother.position.x + (r() - 0.5) * 3;
               tz = a.mother.position.z + (r() - 0.5) * 3;
             }
@@ -3097,7 +3148,7 @@ export class Flock {
     }
 
     // lamb stays near its mother
-    if (a === this.lamb && a.mother && a.mother.state !== 'carried' && (a.state === 'graze' || a.state === 'walk')) {
+    if (a.kind === 'lamb' && a.mother && a.mother.state !== 'carried' && (a.state === 'graze' || a.state === 'walk')) {
       const mx = a.mother.position.x - px, mz = a.mother.position.z - pz;
       const md = Math.hypot(mx, mz);
       if (md > 3.5) {
@@ -3191,7 +3242,18 @@ export class Flock {
   }
 
   private move(a: Animal, dt: number) {
+    if (a.nurse && a.nurse.state !== 'carried') {
+      this.moveNursing(a, a.nurse, dt);
+      return;
+    }
     let dvx: number, dvz: number;
+    if (a.suckled) {
+      // she stands for her lamb
+      a.speed = approach(a.speed, 0, 2.5 * dt);
+      a.yawRate = 0;
+      a.position.set(a.position.x, this.ground(a.position.x, a.position.z) + a.perch, a.position.z);
+      return;
+    }
     if (a.aiEnabled) {
       dvx = a.desX;
       dvz = a.desZ;
@@ -3243,7 +3305,53 @@ export class Flock {
         }
       } else a.lastSafe.set(nx, 0, nz);
     }
-    a.position.set(nx, this.ground(nx, nz), nz);
+    a.position.set(nx, this.ground(nx, nz) + a.perch, nz);
+  }
+
+  /**
+   * (cut8) a lamb going to its mother and nursing: it trots / walks to her flank (if it is more than a stride away), then
+   * stands at her side facing her tail, its head up under her belly at the udder (animateHead), its tail wagging.
+   */
+  private moveNursing(a: Animal, ewe: Animal, dt: number) {
+    a.nurseFor -= dt;
+    if (a.nurseFor <= 0) {
+      a.nurse = null;
+      a.state = 'graze';
+      a.timer = 2;
+      return;
+    }
+    const sh = Math.sin(ewe.heading), ch = Math.cos(ewe.heading);
+    const sz = ewe.size * ewe.rig.scale;
+    // the spot: beside her right flank, a little behind the middle; the lamb faces her tail, turned in toward the udder
+    const side = -0.3 * sz, back = -0.02 * sz;
+    const tx = ewe.position.x + ch * side + sh * back, tz = ewe.position.z - sh * side + ch * back;
+    const want = wrapAngle(ewe.heading + PI - 0.42);
+    const dx = tx - a.position.x, dz = tz - a.position.z;
+    const d = Math.hypot(dx, dz);
+    const prevH = a.heading;
+    if (d > 0.45) {
+      // go to her: a trot when far, a walk when near, turning toward the spot then into position
+      const s = clamp(0.35 + d * 0.9, 0.35, a.trotSpeed * 0.95);
+      const head = Math.atan2(dx, dz);
+      const dh = wrapAngle(head - a.heading);
+      a.heading = wrapAngle(a.heading + clamp(dh, -3.2 * dt, 3.2 * dt));
+      a.speed = approach(a.speed, s * clamp(Math.cos(dh) * 1.3, 0.15, 1), 3.5 * dt);
+      a.state = 'walk';
+      a.graze = Math.max(0, a.graze - dt * 3);
+      const nx = a.position.x + Math.sin(a.heading) * a.speed * dt, nz = a.position.z + Math.cos(a.heading) * a.speed * dt;
+      a.position.set(nx, this.ground(nx, nz) + a.perch, nz);
+    } else {
+      // there: ease into the spot, settle the heading, stand (the nursing head pose in animateHead)
+      const k = 1 - Math.exp(-6 * dt);
+      const nx = a.position.x + dx * k, nz = a.position.z + dz * k;
+      a.position.set(nx, this.ground(nx, nz) + a.perch, nz);
+      a.heading = wrapAngle(a.heading + wrapAngle(want - a.heading) * (1 - Math.exp(-4 * dt)));
+      a.speed = approach(a.speed, 0, 3 * dt);
+      a.state = 'graze';
+      a.graze = 0;
+    }
+    a.yawRate = wrapAngle(a.heading - prevH) / Math.max(1e-4, dt);
+    a.alert = 0;
   }
 
   // -------------------------------------------------------------------- animation
@@ -3307,10 +3415,12 @@ export class Flock {
     const sz = a.size;
     const Lh = 0.36 * s * sz, Wh = 0.12 * s * sz;
     const px = a.position.x, pz = a.position.z;
-    const gF = this.ground(px + sh * Lh, pz + ch * Lh);
-    const gB = this.ground(px - sh * Lh, pz - ch * Lh);
-    const gL = this.ground(px + ch * Wh, pz - sh * Wh);
-    const gR = this.ground(px - ch * Wh, pz + sh * Wh);
+    // (cut8) perched on a rock: a flat top at its own height
+    const pc = a.perch;
+    const gF = pc > 0 ? a.position.y : this.ground(px + sh * Lh, pz + ch * Lh);
+    const gB = pc > 0 ? a.position.y : this.ground(px - sh * Lh, pz - ch * Lh);
+    const gL = pc > 0 ? a.position.y : this.ground(px + ch * Wh, pz - sh * Wh);
+    const gR = pc > 0 ? a.position.y : this.ground(px - ch * Wh, pz + sh * Wh);
     const y0 = a.position.y;
     const pitchT = Math.atan2(gB - gF, 2 * Lh) * 0.75;
     const rollT = Math.atan2(gL - gR, 2 * Wh) * 0.3;
@@ -3413,7 +3523,7 @@ export class Flock {
       // world ground height under this hoof
       const wx = px + (L.rest.x * ch + rz * sh) * sz;
       const wz = pz + (-L.rest.x * sh + rz * ch) * sz;
-      const gy = (this.ground(wx, wz) - y0) / sz;
+      const gy = pc > 0 ? 0 : (this.ground(wx, wz) - y0) / sz;
       const ty = gy + lift - (hopY > 0 ? 0 : 0);
       // hoof target in body-bone space
       _v.set(L.rest.x - rig.body[0], ty - bodyY, rz - rig.body[2]).applyQuaternion(_qi);
@@ -3441,6 +3551,7 @@ export class Flock {
       a.tailWag = Math.max(0, a.tailWag - dt);
       tail.rotation.set(-0.3 - 0.1 * a.alert, Math.sin(time * 26) * 0.35 * Math.min(1, a.tailWag * 2), 0);
     } else if (a.kind === 'lamb') {
+      if (a.nurse && a.speed < 0.3) a.tailWag = 0.9; // a nursing lamb wags its tail all the while
       a.tailWagT -= dt;
       if (a.tailWagT < 0) {
         a.tailWag = 0.9;
@@ -3499,6 +3610,11 @@ export class Flock {
       tYaw = clamp(rel, -1.3, 1.3);
       tPitch = -0.1;
     }
+    // (cut8) the ewe a lamb nurses from turns her head back along her right flank to sniff it
+    if (a.suckled) {
+      tYaw = -1.05 + 0.12 * Math.sin(time * 0.7 + a.id);
+      tPitch = 0.18;
+    }
     a.lookYaw = damp(a.lookYaw, tYaw, 4, dt);
     a.lookPitch = damp(a.lookPitch, tPitch, 4, dt);
 
@@ -3523,6 +3639,12 @@ export class Flock {
     np += Math.sin(ph * TAU * 2 + 1.2) * 0.04 * wW * amp;
     np += Math.sin(ph * TAU * 2) * 0.03 * wT * amp;
     np += Math.sin(ph * TAU + 2.2) * 0.12 * wC * amp;
+    // (cut8) nursing: the lamb's neck stretched up under her belly to the udder, butting now and then
+    if (a.nurse && a.speed < 0.3) {
+      const bump = Math.pow(Math.max(0, Math.sin(time * 4.6 + a.id)), 6) * 0.14;
+      np = lerp(np, -0.5 + bump, 0.92);
+      hp = lerp(hp, -0.42 - bump * 0.4, 0.92);
+    }
     // bleat: head lifts, mouth opens
     np -= bleatK * 0.3;
     hp -= bleatK * 0.25;
@@ -3593,6 +3715,32 @@ export class Flock {
       B[B_HEAD].rotation.set(-0.3 - bleatK * 0.25, yaw * 0.3, Math.sin(time * 2.9) * 0.12 * S);
       B[B_JAW].rotation.set(bleatK * 0.5 + Math.max(0, Math.sin(time * 7)) * 0.04 * S, 0, 0);
       B[B_TAIL].rotation.set(-0.3, Math.sin(time * 14) * 0.4 * S, 0);
+    } else if (a.carryMode === 'arms') {
+      // (cut8, D4) cradled in David's arms against his chest: the legs folded under it (the forelegs tucked back at the
+      // knee, the hind legs folded forward under the belly), the body soft, the head up at his shoulder looking about,
+      // the ears easy; a small stir now and then
+      const stir = Math.pow(Math.max(0, Math.sin(time * 0.9 + a.id)), 8);
+      B[B_BODY].rotation.set(0.04 * stir, 0, 0.03 * Math.sin(time * 1.3));
+      for (let l = 0; l < 4; l++) {
+        const L = a.legs[l];
+        const sway = Math.sin(time * 1.2 + l * 1.7) * 0.05 + stir * 0.25 * (l % 2 ? 1 : -1);
+        if (L.front) {
+          B[legBone(l, 0)].rotation.set(CRADLED.front[0] + sway, 0, (l % 2 ? 1 : -1) * 0.08);
+          B[legBone(l, 1)].rotation.set(CRADLED.front[1], 0, 0);
+          B[legBone(l, 2)].rotation.set(CRADLED.front[2], 0, 0);
+        } else {
+          B[legBone(l, 0)].rotation.set(CRADLED.hind[0] + sway * 0.6, 0, (l % 2 ? 1 : -1) * 0.1);
+          B[legBone(l, 1)].rotation.set(CRADLED.hind[1], 0, 0);
+          B[legBone(l, 2)].rotation.set(CRADLED.hind[2], 0, 0);
+        }
+      }
+      a.neckPitch = damp(a.neckPitch, CRADLED.neck + Math.sin(time * 0.5) * 0.06 - bleatK * 0.35, 3, dt);
+      const look = Math.sin(time * 0.41 + a.id) * 0.3 + Math.sin(time * 1.07) * 0.08;
+      B[B_NECK1].rotation.set(a.neckPitch * 0.5, look * 0.3, 0);
+      B[B_NECK2].rotation.set(a.neckPitch * 0.5, look * 0.3, 0);
+      B[B_HEAD].rotation.set(CRADLED.head - bleatK * 0.25, look * 0.4, 0.08 * Math.sin(time * 0.63));
+      B[B_JAW].rotation.set(bleatK * 0.45, 0, 0);
+      B[B_TAIL].rotation.set(0.15, Math.sin(time * 20) * 0.3 * stir, 0);
     } else {
       // across the shepherd's shoulders: legs gathered forward / back, body relaxed
       B[B_BODY].rotation.set(0, 0, 0);

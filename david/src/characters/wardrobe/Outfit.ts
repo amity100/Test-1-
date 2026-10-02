@@ -23,6 +23,14 @@ export interface OutfitProps {
   slingPouch?: THREE.Object3D;
   slingCordMaterial?: THREE.Material;
   satchel?: THREE.Object3D;
+  /**
+   * (play1, gameplay v2) where the folded sling is tucked under the sash at the right hip: a socket on the sash
+   * (X along the sash toward his front, Y up, Z out of the body), its origin a little inside the wraps (the fold hides
+   * under them; the pouch and the cords' ends hang below the sash)
+   */
+  slingTuck?: THREE.Object3D;
+  /** (play1) the satchel's leather flap on its own pivot (hinge at the back-top edge; rotation.x < 0 lifts it open) */
+  satchelFlap?: THREE.Object3D;
   spear?: Prop;
   sword?: THREE.Object3D;
   shield?: THREE.Object3D;

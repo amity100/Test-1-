@@ -1,0 +1,5 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": { "noEmit": true },
+  "include": ["map.ts", "../src/film/map", "../src/content/mapNames.ts"]
+}

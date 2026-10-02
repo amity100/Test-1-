@@ -4,7 +4,7 @@ import * as THREE from 'three';
  * Unified input: keyboard + mouse (pointer lock) and touch (virtual joystick, look-drag, buttons).
  * Edge-triggered actions are consumed with `take()`.
  */
-export type Action = 'sling' | 'strike' | 'interact' | 'call' | 'dodge' | 'skip' | 'pause';
+export type Action = 'sling' | 'strike' | 'interact' | 'call' | 'dodge' | 'skip' | 'pause' | 'retry';
 
 export class Input {
   readonly move = new THREE.Vector2(); // x = right, y = forward, magnitude 0..1
@@ -28,6 +28,16 @@ export class Input {
   private joyKnob!: HTMLDivElement;
   wheel = 0;
   lockFailed = false;
+  /**
+   * (play1) when the sling was let go (performance.now() of the event; 0 = a scripted release): the release is timed
+   * against the whirl at the moment of the event, not at the next frame (phones run at 30 fps)
+   */
+  private releaseStamp = 0;
+  /** (play1, touch) the finger on the sling button: it aims while it is held (drag), and throws when lifted */
+  private slingTouchId: number | null = null;
+  private slingTouchLast = new THREE.Vector2();
+  /** (play1) touch aim sensitivity while the sling is held (px -> look units) */
+  slingDragScale = 1.25;
 
   constructor(private canvas: HTMLCanvasElement, private uiRoot: HTMLElement) {
     this.isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -50,7 +60,7 @@ export class Input {
     });
     document.addEventListener('pointerlockerror', () => (this.lockFailed = true));
     addEventListener('mouseup', (e) => {
-      if (e.button === 0 && this.slingHeld) { this.slingHeld = false; this.released.add('sling'); }
+      if (e.button === 0 && this.slingHeld) { this.slingHeld = false; this.released.add('sling'); this.releaseStamp = performance.now(); }
     });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     addEventListener('mousemove', (e) => {
@@ -78,6 +88,7 @@ export class Input {
       if (k === 'KeyQ') this.pressed.add('call');
       if (k === 'Space') this.pressed.add('dodge');
       if (k === 'KeyF') this.pressed.add('strike');
+      if (k === 'KeyR') this.pressed.add('retry'); // (play1) the sling range: try the round again
       if (k === 'Enter') this.pressed.add('skip');
       if (k === 'Escape' || k === 'KeyP') this.pressed.add('pause');
     }
@@ -101,6 +112,22 @@ export class Input {
   /** Programmatic presses (used by touch buttons). */
   press(a: Action) {
     this.pressed.add(a);
+  }
+  /** (play1) Programmatic hold / release of the sling (tests and bots): a scripted release is timed on the frame. */
+  holdSling(on: boolean) {
+    if (on && !this.slingHeld) {
+      this.slingHeld = true;
+      this.pressed.add('sling');
+    } else if (!on && this.slingHeld) {
+      this.slingHeld = false;
+      this.released.add('sling');
+      this.releaseStamp = 0;
+    }
+  }
+  /** (play1) seconds between the sling's release event and now (0 for scripted releases), at most 0.1 */
+  releaseLag() {
+    if (!this.releaseStamp) return 0;
+    return Math.min(0.1, Math.max(0, (performance.now() - this.releaseStamp) / 1000));
   }
 
   update() {
@@ -149,14 +176,38 @@ export class Input {
         e.preventDefault();
         e.stopPropagation();
         b.classList.add('on');
-        if (a === 'sling') this.slingHeld = true;
+        if (a === 'sling') {
+          // (play1) hold the sling button to draw and whirl; the same thumb drags to aim; lifting it throws
+          this.slingHeld = true;
+          const t = e.changedTouches[0];
+          if (t) {
+            this.slingTouchId = t.identifier;
+            this.slingTouchLast.set(t.clientX, t.clientY);
+          }
+        }
         if (a === 'interact') this.interactHeld = true;
         this.pressed.add(a);
       }, { passive: false });
+      if (a === 'sling') {
+        b.addEventListener('touchmove', (e) => {
+          e.preventDefault();
+          for (const t of Array.from(e.changedTouches)) {
+            if (t.identifier !== this.slingTouchId) continue;
+            this.lookDX += (t.clientX - this.slingTouchLast.x) * this.slingDragScale;
+            this.lookDY += (t.clientY - this.slingTouchLast.y) * this.slingDragScale;
+            this.slingTouchLast.set(t.clientX, t.clientY);
+          }
+        }, { passive: false });
+      }
       const end = (e: Event) => {
         e.preventDefault();
         b.classList.remove('on');
-        if (a === 'sling' && this.slingHeld) { this.slingHeld = false; this.released.add('sling'); }
+        if (a === 'sling' && this.slingHeld) {
+          this.slingHeld = false;
+          this.released.add('sling');
+          this.releaseStamp = performance.now();
+          this.slingTouchId = null;
+        }
         if (a === 'interact') this.interactHeld = false;
       };
       b.addEventListener('touchend', end, { passive: false });
