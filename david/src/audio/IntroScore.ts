@@ -1,58 +1,70 @@
 /**
- * DAVID — score and sound design of the opening film "הַטּוֹב מִמֶּךָּ", CUT v4 (59 s: six scenes, no prologue; the film
- * ends on the logo over the panorama and hands over to the game — docs/intro-script-v4.md "Sound" on top of
- * docs/intro-script-v3.md), synchronised to the film's shot sheet (src/content/introScript.ts).
+ * DAVID — score and sound design of the opening film "הַטּוֹב מִמֶּךָּ", CUT v5 (134.5 s: a 61 s prologue — the land, Bethlehem,
+ * Rachel's tomb, the realistic map, the Philistines, Ramah — then Gilgal, David, and the new end: David watching his
+ * flock, the lamb gathered into his arms under the logo, the hand-off into the game; docs/intro-script-v5.md "Sound" on
+ * top of -v4 / -v3), synchronised to the film's shot sheet (src/content/introScript.ts).
  *
  * KEYING. The sheet is read when the score starts. Every shot cue gets a musical ROLE (from its `cue`, else from its
- * set); consecutive shots with the same role form one section [t0, t1) with its own bus. The black the film opens on
- * (the first shot's 'black' transition, up to the beat its picture comes in on — G1's `shofar`) is a section of its
- * own ('open'), so its bus is cut a breath before the blast. Every event is placed relative to a shot start, an
- * on-screen text, or a named BEAT inside a shot — the beats of the timing contract (the blast, the horns, the head
- * turn, the halt, the spear, THE ROAR, the heads turning, the ranks parting, Samuel's step, the turn, the lunge, the
- * grip, the pull, the rip, the corner coming free, Samuel's words, the look down, the fingers tightening, the flash,
- * David's turn, the crane rising, the logo, the Hebrew name, the chapter line, the settle). A beat is read from the shot's own
- * `beats` in the sheet (shot seconds), otherwise from the contract (SYNC below), and is clamped to its shot. Nothing
- * is keyed on absolute film seconds: a retimed sheet stays in sync. How a section is left comes from the NEXT shot's
- * transition: the blast out of the black cuts the bus to silence a breath (GAP) before the frame, the roar is cut ON
- * the frame of the silence, dissolves and the light-flash crossfade over their length, David's theme rings on across
- * the cut into the crane.
- * Events are built just ahead of the audio clock (≤ 0.5 s; the hits of the hard cuts only ≤ 60 ms ahead, so a
- * picture stall before a cut cannot make them early), and the film's clock (syncIntro) re-anchors the score after
- * hitches.
+ * set); consecutive shots with the same role form one section [t0, t1) with its own bus. A first shot that comes out of
+ * black ON A HIT (CUT v3/v4: the shofar) gets an 'open' section for its black; one whose picture RISES out of black
+ * (CUT v5's P1: `fade` > 0.3) keeps its black inside its own section. Every event is placed relative to a shot start, an
+ * on-screen text, or a named BEAT inside a shot — the beats of the timing contract (the time card, the picture, the
+ * flock, the rise, the climb, Egypt, the exodus, the wilderness, the Jordan, Gilgal, the tribes, the cities, the rise
+ * and the turning away at Ramah, the blast, the horns, … the lamb, the descent, the kneel, the lift, the logo, the
+ * Hebrew name, the chapter line, the set-down, the logo out, the settle). A beat is read from the shot's own `beats` in
+ * the sheet (shot seconds), otherwise from the contract (SYNC below), and is clamped to its shot. Nothing is keyed on
+ * absolute film seconds: a retimed sheet stays in sync. How a section is left comes from the NEXT shot's transition
+ * (and RING for the musical joins): the blast out of Ramah cuts the bus to silence a breath (GAP) before the frame, the
+ * roar is cut ON the frame of the silence, dissolves crossfade over their length, the prologue's joins and David's theme
+ * ring on across their cuts. Events are built just ahead of the audio clock (≤ 0.5 s; the hits of the hard cuts only
+ * ≤ 60 ms ahead, so a picture stall before a cut cannot make them early), and the film's clock (syncIntro) re-anchors
+ * the score after hitches.
  *
- * THE ARC (D minor / Phrygian for the king, D Dorian → D major for David; the drums at 120 bpm — every cut of the
- * contract falls on its half-second grid):
- *   1 GILGAL     out of black, a low air in the dark and one deep bloom under the time card, a swell sucked into a
- *                breath of silence — THE SHOFAR with the picture (the blast, the hit, a low chord), the front rank's
- *                horns, the army out of the dust (thousands on foot, the murmur, bronze), a slow processional of drums
- *                and low men's voices. SAUL in slow motion: the world muffled, the drums at half time, his theme
- *                D A B♭-A G F in low strings and men's voices across the whole take — its B♭ on the head turn over the
- *                ranks — and the E held into:
+ * THE ARC (D: the land in open fifths and D major, the history darkening to D minor / Phrygian for the king, D Dorian →
+ * D major for David):
+ *   0 PROLOGUE   out of silence a low air and, under the time card, a deep bloom on a D pedal; the LAND theme (D A | G A C
+ *                | D, horns and strings, the light an open fifth above) rises with the picture into D major; BETHLEHEM
+ *                in 6/8 — the kinnor, the pipe, a few sheep bells, a shepherd's far call; RACHEL — a woman's wordless
+ *                lament (A B♭ A G F E D), rising with the lens into the sky; THE MAP — the climb swells to a broad D
+ *                minor on Egypt, the processional (the land theme as a march: the tof, low strings, horns) walks out
+ *                with the line of light, thins to wind and a lonely pipe in the wilderness, rolls across the Jordan
+ *                (water, a kinnor glissando) and ARRIVES at Gilgal in D major, ringing on through the invisible cut;
+ *                THE JUDGES — twelve plucks for the tribes, then "no king in Israel": the harmony slips to B♭ and G
+ *                minor, an uneven pulse, the king's three notes (D A B♭); five strokes and a low Phrygian horn cluster
+ *                for the Philistine cities; THE HOST — war drums and low horns (D E♭ D C D), thousands on foot, bronze,
+ *                the anvil under 13:19; RAMAH — the elders' murmur, the king's notes again under "give us a king", a
+ *                tense, unresolved cluster when Samuel turns away, sucked into a breath of silence —
+ *   1 GILGAL     THE SHOFAR with the hard cut (the blast, the hit, a low chord), the front rank's horns, the army out of
+ *                the dust (thousands on foot, the murmur, bronze), a slow processional of drums and low men's voices.
+ *                SAUL in slow motion: the world muffled, the drums at half time, his theme D A B♭-A G F in low strings
+ *                and men's voices across the whole take — its B♭ on the head turn over the ranks — and the E held into:
  *   2 THE SPEAR  the halt (thousands of feet stop), a drum roll and a riser, the spear going up, and ON THE ROAR the
  *                theme resolves to D at full power (choir, strings, drums, thousands shouting, the teruah), its head
- *                restated and held 3.3 s — cut in mid-phrase by SILENCE: the reverb tail killed, wind, the far
- *                bleating and lowing of the spoil (15:14), the ranks shuffling apart, a ground tone and one high A
- *                under Samuel's name, his step.
- *   3 THE TEAR   the turn (wool, an old man's steps walking away), Saul pleading after him over a quickening low pulse,
- *                the lunge (bronze scales), the grip; the world drops into slow motion; the slowed wool rip baked to
- *                the pull / rip / corner-free beats, under a semitone of grief (A–B♭) that swells and breaks with the
- *                cloth; Samuel walks on, Saul sinks back.
- *   4 VERDICT    near-silence (a ground tone, a thread), one deep stroke on its last word, then the held silence;
- *                SAUL ALONE: his motif on a lone cello, falling below the tonic into the warm light-flash.
- *   5 DAVID      a D-major bloom out of the light; the kinnor in 6/8 from the verse, David's motif (D A G F E F D) on
- *                the shepherd's pipe under 15:28b, soft voices; he turns into the light: the voices open, the kinnor
- *                and the pipe answer (in D major), the last bar on the dominant — which rings on across the cut:
- *   6 THE LOGO   the crane: the deceptive Bm out of that dominant, then G and A — the strings swelling, the kinnor's
- *                ostinato and the low strings' pulse building, the pipe's motif (major) rising, a timpani roll and a
- *                warm riser — into a warm, majestic arrival ON the logo (D major: the tutti, the choir, a strum, the
- *                motif's tonic; an arrival, not a smash); the theme's answer under the Hebrew name and the chapter line
- *                (IV–V); from the settle the orchestra lets go into the game's 6/8 (the drone, the kinnor's pastoral
- *                lilt, the pipe's last cadence) and at the end of the shot the score starts the game's pastoral music
- *                ON its own bar line (onHandoff) and rings out under it: no silence, no seam.
- * (The bear's hook — the thicket, the heart, the eyes — left the film in CUT v4: AudioEngine plays it in gameplay.)
- * Period instruments: shofar (1 Sam 13:3), tof, chalil, kinnor, nevel (10:5). The lyre is kept out of Saul's music
- * (it enters his house only after 16:23); drums are the score's, never on screen in Israel's army
- * (docs/visual-bible.md §6); no horses anywhere in the sound (Israel fought on foot, 15:4).
+ *                restated and held — cut in mid-phrase by SILENCE: the reverb tail killed, wind, the far bleating and
+ *                lowing of the spoil (15:14), the ranks shuffling apart, a ground tone and one high A under Samuel's
+ *                name, his step.
+ *   3 THE TEAR   the turn, Saul pleading after him over a quickening low pulse, the lunge, the grip; the world drops
+ *                into slow motion; the slowed wool rip baked to the pull / rip / corner-free beats, under a semitone of
+ *                grief (A–B♭) that swells and breaks with the cloth; Samuel walks on, Saul sinks back.
+ *   4 VERDICT    near-silence, one deep stroke on its last word, then the held silence; SAUL ALONE: his motif on a lone
+ *                cello, falling below the tonic into the warm light-flash.
+ *   5 DAVID      a D-major bloom out of the light; the kinnor in 6/8, David's motif (D A G F E F D) on the shepherd's pipe
+ *                under 15:28b; he turns into the light: the voices open, the kinnor and the pipe answer — the last bar
+ *                on the dominant, ringing on across the cut into:
+ *   6 THE FLOCK  (D3) warm and intimate: the kinnor's lilt in D major, a tender pipe line under Ps 78:70-71, soft voices,
+ *                the flock's bells close by, the wind; the focus comes back to him on the motif's head.
+ *     THE LAMB   (D4, one take) the music thins to a held chord for the lamb's bleat; he steps down (the kinnor walks,
+ *     AND THE    vi–IV), kneels (a hush), gathers it up (the strings and the voices swell, David's motif rising on the
+ *     LOGO       pipe so that its tonic falls ON the logo) — the warm D-major arrival on `logo` (the tutti, the choir, a
+ *                strum, a warm stroke: an arrival, not a smash); the theme's answer under the Hebrew name, the chapter
+ *                line on IV; a tender V–I cadence ON `setDown` (the lamb back with its mother, the ewe answering); the
+ *                lockup fades into an afterglow; from `settle` the orchestra lets go into the game's 6/8 ON the game's
+ *                own grid and at the end of the shot the score starts the game's pastoral music on its bar line
+ *                (onHandoff) and rings out under it: no silence, no seam. A skip plays a compact logo statement.
+ * Period instruments: shofar (1 Sam 13:3), tof, chalil, kinnor, nevel (10:5); the lament is a woman's voice (Jer
+ * 31:15, Rachel weeping for her children; Rashi on Gen 48:7). The lyre is kept out of Saul's music (it enters his house
+ * only after 16:23); drums are the score's, never on screen in Israel's army (docs/visual-bible.md §6); no horses in
+ * Israel's sound (Israel fought on foot, 15:4); the Philistine host is heard on foot (the picture shows infantry).
  */
 import type { IntroCue } from '../content/introScript';
 import type { BedName } from './Beds';
@@ -60,20 +72,27 @@ import {
   Core, Synth, Voice, clamp, rand, randi, chance, pick, CHORDS, voicing, rootIn, lyrePan,
   type Out, type ChordName, type NeyNote,
 } from './synth';
-import { FilmSound } from './FilmSound';
+import { FilmSound, type SungNote } from './FilmSound';
 
 /** The musical role of a shot (several consecutive shots of one role share a section and its bus). */
 export type ScoreRole =
   | 'open'
+  | 'land' | 'bethlehem' | 'rachel' | 'map' | 'judges' | 'threat' | 'elders'
   | 'shofar' | 'saul' | 'peak' | 'silence' | 'tear' | 'verdict' | 'broken'
-  | 'david' | 'horizon';
+  | 'david' | 'watch' | 'horizon';
 
 /**
- * Role of a shot from its score cue (FilmCue of the sheet). The prologue's cues of CUT v1/v2 (land, rachel, threat,
- * elders) and CUT v3's hook and title (thicket, title) have no music any more: a shot with an unknown cue is left out
- * (the section before it rings on).
+ * Role of a shot from its score cue (FilmCue of the sheet). CUT v3's hook and title (thicket, title) have no music any
+ * more: a shot with an unknown cue is left out (the section before it rings on).
  */
 const ROLE_OF_CUE: Readonly<Record<string, ScoreRole>> = {
+  land: 'land', judea: 'land', flight: 'land',
+  bethlehem: 'bethlehem',
+  rachel: 'rachel',
+  map: 'map', exodus: 'map',
+  judges: 'judges', tribes: 'judges',
+  threat: 'threat', philistines: 'threat', coast: 'threat',
+  elders: 'elders', ramah: 'elders',
   shofar: 'shofar', army: 'shofar', dust: 'shofar',
   saul: 'saul', king: 'saul', stride: 'saul',
   peak: 'peak', spear: 'peak', roar: 'peak',
@@ -81,20 +100,29 @@ const ROLE_OF_CUE: Readonly<Record<string, ScoreRole>> = {
   faceoff: 'tear', tear: 'tear', rip: 'tear',
   verdict: 'verdict',
   broken: 'broken', alone: 'broken', saulAlone: 'broken',
-  rise: 'david', flash: 'david', bethlehem: 'david', figure: 'david', david: 'david', face: 'david', contrast: 'david',
+  rise: 'david', flash: 'david', figure: 'david', david: 'david', face: 'david', contrast: 'david',
+  watch: 'watch', flock: 'watch',
   horizon: 'horizon', logo: 'horizon', panorama: 'horizon', crane: 'horizon',
 };
 /** ... or from its set when the cue is unknown (a Gilgal shot without a known cue gets no music of its own). */
-const ROLE_OF_SET: Readonly<Record<string, ScoreRole>> = { world: 'david' };
+const ROLE_OF_SET: Readonly<Record<string, ScoreRole>> = { world: 'david', judah: 'land', map: 'map', coast: 'threat', ramah: 'elders' };
 
 /**
  * Beats inside the shots of each role: [index of the shot inside the role's section, shot seconds] — the timing
- * contract of docs/intro-script-v3.md / -v4.md, used only when the sheet lacks a beat. A beat the sheet carries itself (a shot
- * cue's `beats`, shot seconds, same name or an ALIAS, case-insensitive) wins. Every beat is clamped to its shot.
+ * contract of docs/intro-script-v5.md (and -v3 / -v4), used only when the sheet lacks a beat. A beat the sheet carries
+ * itself (a shot cue's `beats`, shot seconds, same name or an ALIAS, case-insensitive) wins. Every beat is clamped to its
+ * shot.
  */
 const SYNC: Readonly<Record<ScoreRole, Readonly<Record<string, readonly [number, number]>>>> = {
   open: { time: [0, 0.2], blast: [0, 1.5] },
-  shofar: { blast: [0, 1.5], horns: [0, 2.1], card: [0, 2.8] },
+  land: { time: [0, 0.4], picture: [0, 3.0], card: [0, 5.4] },
+  bethlehem: { card: [0, 1.0], flock: [0, 2.2] },
+  rachel: { card: [0, 0.6], verse: [0, 1.6], rise: [0, 4.0] },
+  map: { climb: [0, 0], egypt: [0, 3.0], exodus: [0, 3.4], wilderness: [0, 6.0], jordan: [0, 9.0], gilgal: [0, 10.2] },
+  judges: { tribes: [0, 0.4], verse: [0, 2.6], cities: [0, 6.2] },
+  threat: { card: [0, 0.6], verse: [0, 1.8] },
+  elders: { card: [0, 0.5], rise: [0, 1.6], verse: [0, 2.4], away: [0, 6.0] },
+  shofar: { blast: [0, 0], horns: [0, 0.6], card: [0, 1.3] },
   saul: { card: [0, 1.0], head: [0, 3.6] },
   peak: { halt: [0, 0.6], spear: [0, 1.3], roar: [0, 1.7], spread: [0, 0.5], verse: [0, 2.0] },
   silence: { heads: [0, 0.4], part: [0, 1.0], card: [0, 1.6], step: [0, 2.8] },
@@ -102,12 +130,17 @@ const SYNC: Readonly<Record<ScoreRole, Readonly<Record<string, readonly [number,
   verdict: { turn: [0, 0.5], words: [0, 1.2], wordsEnd: [0, 4.9] },
   broken: { look: [0, 0.4], tighten: [0, 1.8], flash: [0, 2.75] },
   david: { verse: [0, 0.6], turn: [1, 0.8] },
-  horizon: { rise: [0, 0.2], logo: [0, 3.6], hebrew: [0, 4.6], chapter: [0, 5.6], logoOut: [0, 8.0], settle: [0, 8.0] },
+  watch: { verse: [0, 1.0], rack: [0, 5.2] },
+  horizon: {
+    lamb: [0, 0.3], descend: [0, 1.4], kneel: [0, 4.2], lift: [0, 5.0], logo: [0, 6.6], hebrew: [0, 7.6], chapter: [0, 8.6],
+    setDown: [0, 11.2], logoOut: [0, 12.2], settle: [0, 14.6],
+  },
 };
 /** Other names a sheet may give a beat (normalised: lower case, letters only). */
 const ALIAS: Readonly<Record<string, readonly string[]>> = {
   time: ['timecard'],
   blast: ['shofar', 'picture', 'picturein'],
+  picture: ['picturein', 'imagein'],
   card: ['placecard', 'personcard', 'name'],
   head: ['headturn', 'turnhead', 'look'],
   verse: ['text', 'versestart'],
@@ -130,31 +163,75 @@ const ALIAS: Readonly<Record<string, readonly string[]>> = {
   look: ['looksdown', 'lookdown'],
   tighten: ['fingers', 'fingerstighten', 'fist'],
   flash: ['whip', 'light'],
-  rise: ['crane', 'craneup', 'riseup'],
+  rise: ['crane', 'craneup', 'riseup', 'stand'],
+  climb: ['start'],
+  egypt: ['region', 'mitzrayim'],
+  exodus: ['route', 'line', 'linestart'],
+  wilderness: ['desert', 'midbar'],
+  jordan: ['crossing'],
+  gilgal: ['arrival', 'camp'],
+  tribes: ['tribenames'],
+  cities: ['philistines', 'fivecities'],
+  away: ['turnsaway', 'samuelaway'],
+  rack: ['focus', 'refocus'],
+  lamb: ['bleat', 'lambbleat'],
+  descend: ['stepdown', 'down'],
+  kneel: ['kneels'],
+  lift: ['gather', 'pickup', 'lifts'],
   logo: ['title', 'logoin', 'davidlogo'],
   hebrew: ['hebrewname', 'davidhe', 'name'],
   chapter: ['chapterline', 'subtitle'],
+  setDown: ['setdown', 'putdown', 'mother'],
   logoOut: ['logofade', 'lockupout'],
   settle: ['glide', 'handoff', 'settledown'],
 };
-/** Beat names (normalised) of the first shot's own picture coming in out of the black — the end of the 'open' section. */
+/** Beat names (normalised) of the first shot's own picture coming in out of the black on a HIT — the end of 'open'. */
 const PICTURE_IN = ['shofar', 'blast', 'picture', 'picturein'];
 /** Contract lengths of the shots of the multi-shot roles (when a sheet merges them into one shot). */
 const SPLIT: Partial<Record<ScoreRole, readonly number[]>> = { tear: [4.0, 5.0], david: [6.0, 4.0] };
+/** Musical joins that ring on across their cut or dissolve ("from>to"): the bus is not faded, the layers overlap. */
+const RING: ReadonlySet<string> = new Set([
+  'land>bethlehem', 'bethlehem>rachel', 'rachel>map', 'map>judges', 'judges>threat',
+  'david>watch', 'david>horizon', 'watch>horizon',
+]);
 
 /** Ambience bed per role (the score switches beds until the game calls ambience(name) itself). */
 const ROLE_BED: Readonly<Record<ScoreRole, BedName>> = {
   open: 'none',
+  land: 'heights', bethlehem: 'dawn', rachel: 'dawn', map: 'heights', judges: 'heights', threat: 'coast', elders: 'ramah',
   shofar: 'gilgal', saul: 'gilgal', peak: 'gilgal', silence: 'gilgal', tear: 'gilgal', verdict: 'gilgal', broken: 'gilgal',
-  david: 'fields', horizon: 'fields',
+  david: 'fields', watch: 'fields', horizon: 'fields',
 };
 
 /** 120 bpm: every cut of the contract falls on this half-second grid. */
 const BEAT = 0.5;
 /** The pastoral 6/8 (s per eighth: a dotted quarter = 1 s, a bar = 2 s). */
 const STEP68 = 1 / 3;
-/** The breath of silence before a hit on a hard cut (the blast out of the black) (s). */
+/** The breath of silence before a hit on a hard cut (the blast out of Ramah) (s). */
 const GAP = 0.07;
+/**
+ * The game's pastoral 6/8 (s per eighth; AudioEngine's PastoralComposer runs on it): the score's settle lets go on this
+ * grid, so its last bar ends exactly on the hand-off and the game's first bar continues it.
+ */
+export const PASTORAL_EIGHTH = 0.34;
+const GAME_EIGHTH = PASTORAL_EIGHTH;
+/** A skip's compact logo statement (s after the skip): the answer, the chapter pluck, the let-go, the hand-off. */
+export const SKIP_STATEMENT = { hebrew: 1.0, chapter: 2.0, settle: 4.4, end: 6.4 } as const;
+/**
+ * The voices of D4's cue — the newborn lamb, then its mother (the ewe) — played by the score: film time = the shot's beat
+ * + offset (s). cut8 can move the mouths on the same times (Flock animal bleat(0): animation only).
+ */
+export const D4_BLEATS: ReadonlyArray<{ who: 'lamb' | 'ewe'; beat: string; offset: number; v: number; far?: boolean; murmur?: boolean }> = [
+  // cut8's schedule (scratchpad/wf/cut8_notes.md, 2 Oct 08:26) — D4 shot time = the beat + offset
+  { who: 'lamb', beat: 'lamb', offset: 0, v: 0.85 }, //            the newborn, plaintive, alone on the rocks (0.3)
+  { who: 'lamb', beat: 'lamb', offset: 1.25, v: 0.95 }, //         louder, as David steps down (1.55)
+  { who: 'ewe', beat: 'descend', offset: 1.2, v: 0.6, far: true }, // its mother answers from below, far (2.6)
+  { who: 'lamb', beat: 'kneel', offset: 0.35, v: 0.55 }, //        as he kneels to it (4.55)
+  { who: 'lamb', beat: 'chapter', offset: 0.7, v: 0.3 }, //        soft, in his arms (9.3)
+  { who: 'ewe', beat: 'setDown', offset: -0.5, v: 0.7 }, //        she calls as he brings it (10.7)
+  { who: 'lamb', beat: 'setDown', offset: 0.35, v: 0.6 }, //       it answers and runs to her (11.55)
+  { who: 'ewe', beat: 'setDown', offset: 1.0, v: 0.35, murmur: true }, // her low murmur as it nurses (12.2; no mouth)
+];
 
 // David's motif (D A G F E F D) as [offset from tonic, units] — Dorian, and its major form (D A G F♯ E F♯ D: the logo)
 const DAVID: ReadonlyArray<readonly [number, number]> = [[0, 2], [7, 2], [5, 1], [3, 1], [2, 1], [3, 1], [0, 3]];
@@ -393,8 +470,18 @@ export class IntroScore {
     this.free = true;
     this.syncNow = -1;
     this.anchor = now - this.titleT;
-    this.evs = this.evs.filter((e) => e.at >= this.titleT - 0.01);
+    // CUT v5: the compact logo statement (the hit now, the answer +1.0, the chapter +2.0, the let-go +4.4, the hand-off
+    // +6.4) — the film's own D4 statement (setDown, the afterglow) is 11 s long, too long for a player who skipped
+    const L = this.titleT, K = SKIP_STATEMENT;
+    const sec = newSec(this.secs.length, 'horizon', L, { t: L, id: 'skip', dur: K.end, cut: 'cut', fade: 0, beats: null }, 1);
+    sec.t1 = L + K.end;
+    this.secs.push(sec);
+    this.evs = [];
     this.ei = 0;
+    this.planStatement(sec, L, L + K.hebrew, L + K.chapter, NaN, NaN, L + K.settle, L + K.end);
+    this.evs.sort((a, b) => a.at - b.at);
+    this.handoffT = L + K.end;
+    this.endT = this.handoffT;
     return true;
   }
 
@@ -588,14 +675,24 @@ export class IntroScore {
     const prev = this.secs[sec.i - 1];
     const bed = ROLE_BED[sec.role];
     if (!prev || ROLE_BED[prev.role] !== bed) {
-      const fade = sec.i === 0 ? 0.8 : sec.cut === 'hard' || sec.cut === 'cut' ? 0.25 : Math.max(0.5, sec.fade || 1.2);
+      // a picture rising out of black (CUT v5's P1): silence under the black, the bed comes in with the picture
+      const pic = !prev && sec.cut === 'black' && sec.role !== 'open' ? clamp(this.beat(sec, 'picture'), sec.t0, sec.t1 - 0.5) : sec.t0;
+      const fade = pic > sec.t0 ? 2.5 : sec.i === 0 ? 0.8 : sec.cut === 'hard' || sec.cut === 'cut' ? 0.25 : Math.max(0.5, sec.fade || 1.2);
       // held over the whole run of sections sharing the bed (so starting mid-run still sets it)
       let j = sec.i;
       while (j + 1 < this.secs.length && ROLE_BED[this.secs[j + 1].role] === bed) j++;
-      this.add(sec, sec.t0, (t) => { if (this.onAmbience) this.onAmbience(bed, fade, t); }, this.secs[j].t1 - sec.t0);
+      if (pic > sec.t0) this.add(sec, sec.t0, (t) => { if (this.onAmbience) this.onAmbience('none', 0.3, t); });
+      this.add(sec, pic, (t) => { if (this.onAmbience) this.onAmbience(bed, fade, t); }, this.secs[j].t1 - pic);
     }
     switch (sec.role) {
       case 'open': this.planOpen(sec); break;
+      case 'land': this.planLand(sec); break;
+      case 'bethlehem': this.planBethlehem(sec); break;
+      case 'rachel': this.planRachel(sec); break;
+      case 'map': this.planMap(sec); break;
+      case 'judges': this.planJudges(sec); break;
+      case 'threat': this.planThreat(sec); break;
+      case 'elders': this.planElders(sec); break;
       case 'shofar': this.planShofar(sec); break;
       case 'saul': this.planSaul(sec); break;
       case 'peak': this.planPeak(sec); break;
@@ -604,8 +701,392 @@ export class IntroScore {
       case 'verdict': this.planVerdict(sec); break;
       case 'broken': this.planBroken(sec); break;
       case 'david': this.planDavid(sec); break;
+      case 'watch': this.planWatch(sec); break;
       case 'horizon': this.planHorizon(sec); break;
     }
+  }
+
+  // ================================================================================ 0 · THE PROLOGUE (CUT v5)
+
+  /**
+   * P1 — THE LAND (out of black). Out of silence: a low air and, under the time card, a deep soft bloom on a D pedal.
+   * ON `picture` the land theme rises with the image (the dawn above the clouds, the hills of Judah): the light (a high
+   * open fifth) shimmering in, the theme D | A | G A | C | D on the low horns (cellos below), the C chord (♭VII) under
+   * its C, and on its D the choir opens into D major as the flight banks toward Bethlehem — ringing on into the dissolve.
+   */
+  private planLand(sec: Sec): void {
+    const S = this.s, lite = this.lite, t0 = sec.t0, end = sec.t1;
+    const time = clamp(this.text(sec, 0, this.beat(sec, 'time')), t0, end - 4);
+    const pic = clamp(this.beat(sec, 'picture'), time + 0.4, end - 4);
+    const card = clamp(this.text(sec, 1, this.beat(sec, 'card')), pic, end - 1);
+    const rel = sec.exit === 'ring' ? 1.6 : 0.4;
+    // out of silence: the low air in the dark, opening as the picture rises (the 'heights' bed takes over from it)
+    this.add(sec, t0 + 0.15, (t, _m, h, fx) => {
+      this.air(fx, t, h, 0.032);
+      this.fx.windSwell(fx, t + 0.3, h - 0.3, 0.03, 280, 900, -0.4, 0.3);
+    }, pic + 1.6 - t0 - 0.15);
+    // the time card: a deep, soft bloom; the D pedal (the ground, low voices) from the black into the picture
+    this.add(sec, time, (t, m, h) => {
+      S.drum(m, t, 'boom', 0.15, 0, 0.85);
+      this.ground(m, t, h, 0.05, 1.4, 1.2);
+      S.choir(m, t + 0.1, h, [38, 45], { level: 0.02, attack: 2.4, release: 1.2, vowel: 'oo', breath: 0.04 });
+    }, pic + 2.4 - time);
+    // the picture: dawn — the light (a high open fifth shimmering in) and the drone opening (D–A, no third yet)
+    this.add(sec, pic, (t, m, h, fx) => {
+      S.pad(m, t, h, [74, 81], { level: 0.014, attack: 1.8, release: rel, cutoff: 5200, voices: 2, detune: 7, trem: 0.22, tremRate: 7 });
+      S.pad(m, t, h, lite ? [50, 57] : [45, 50, 57], { level: 0.026, attack: 1.6, release: rel, cutoff: 800, cutoffEnd: 1600, voices: lite ? 2 : 3, detune: 7 });
+      // through the deck of clouds and over the ridges: the air moving past the lens
+      this.fx.windSwell(fx, t + 0.8, 4.6, 0.028, 350, 1700, -0.4, 0.3);
+      this.fx.windSwell(fx, t + 4.6, Math.max(1, end - t - 4.2), 0.02, 400, 1500, 0.3, -0.2);
+    }, end - pic + rel);
+    // the LAND theme on the low horns (cellos an octave below): D | A | G A | C | D, rising to the octave
+    const th0 = pic + 0.45, u = (end - 0.3 - th0) / 11;
+    const theme: Array<readonly [number, number]> = [[50, 2], [57, 2], [55, 1], [57, 1], [60, 2], [62, 3 + rel / u]];
+    this.add(sec, th0, (t, m) => {
+      this.line(m, t, theme, u, 0.066, 'horn');
+      this.line(m, t + 0.02, theme.map(([n, b]) => [n - 12, b] as const), u, 0.024, 'cello');
+    });
+    // under its C the ♭VII (C major over the drone); on its D the choir opens to D major (the dawn's F♯)
+    const cC = th0 + 6 * u, cD = th0 + 8 * u;
+    this.add(sec, cC, (t, m, h) => {
+      S.pad(m, t, h, lite ? [55, 60, 64] : [48, 55, 60, 64], { level: 0.026, attack: 0.5, release: 0.6, cutoff: 1500, voices: lite ? 2 : 3, detune: 8 });
+      S.choir(m, t + 0.05, h, lite ? [55, 60] : [48, 55, 60], { level: 0.02, attack: 0.6, release: 0.6, vowel: 'oh', breath: 0.05 });
+    }, cD - cC + 0.35);
+    this.add(sec, cD, (t, m, h) => {
+      S.drum(m, t, 'boom', 0.1, 0, 0.95);
+      S.strum(m, t + 0.02, [50, 57, 62, 66, 69, 74], 0.3, 0.045);
+      S.choir(m, t, h, lite ? [57, 62, 66] : [50, 57, 62, 66, 69], { level: 0.05, attack: 0.9, release: rel, vowel: 'oh', to: 'ah', morph: 1.6, breath: 0.07 });
+      S.pad(m, t, h, lite ? [62, 66, 69] : [62, 66, 69, 74], { level: 0.028, attack: 1.0, release: rel, cutoff: 2800, voices: lite ? 2 : 3, detune: 8, vib: 7, vibRate: 5.3, vibDelay: 0.6 });
+    }, end - cD + rel);
+    // the land card: a soft glint over the gold
+    this.add(sec, card, (t, m) => {
+      S.pad(m, t, 2.2, [81, 86], { level: 0.006, attack: 0.5, release: 1.4, cutoff: 7000, voices: 2, detune: 6, trem: 0.3, tremRate: 10 });
+      S.lyre(m, t + 0.03, 86, 0.2, 0.35);
+    });
+  }
+
+  /**
+   * P2 — BETHLEHEM (the chapter's own town in the early light): the morning's D major settling in a warm drone, the
+   * kinnor's 6/8 lilt (D | G | D | C — the C♮ of the hills, leading into Rachel's D minor), the pipe's morning tune from
+   * the person card; from `flock` a few small bells as a shepherd leads a flock out along the terraces, his far call
+   * across the valley (and its echo), far bleats.
+   */
+  private planBethlehem(sec: Sec): void {
+    const S = this.s, lite = this.lite, t0 = sec.t0, end = sec.t1;
+    const card = clamp(this.text(sec, 0, this.beat(sec, 'card')), t0, end - 2);
+    const flock = clamp(this.beat(sec, 'flock'), t0 + 0.5, end - 2);
+    const rel = sec.exit === 'ring' ? 1.2 : 0.4;
+    this.add(sec, t0, (t, m, h) => {
+      S.pad(m, t, h, lite ? [50, 57] : [38, 45, 50, 57], { level: 0.02, attack: 1.2, release: rel, cutoff: 700, voices: 2, detune: 6, lfoCents: 200 });
+      S.pad(m, t + 0.3, h - 0.3, lite ? [62, 66] : [57, 62, 66], { level: 0.011, attack: 1.5, release: rel, cutoff: 1800, voices: 2, detune: 8 });
+    }, end - t0 + rel);
+    const k0 = t0 + 0.4;
+    this.kinnor(sec, k0, end - 0.05, ['D', 'G', 'D', 'C'], 0.5);
+    // the pipe (the chalil): a morning tune in D Mixolydian, on the kinnor's dotted quarters
+    const P = STEP68;
+    const p0 = k0 + Math.ceil((card + 0.2 - k0) / (3 * P) - 1e-6) * 3 * P;
+    const tune: Array<readonly [number, number]> = [[69, 2], [74, 1], [76, 1], [78, 2], [76, 1], [74, 1], [72, 1], [69, 3], [-1, 1], [67, 1], [69, 1], [72, 1], [74, 3]];
+    this.add(sec, p0, (t, m) => S.ney(m, t, tune.map(([n, d]) => ({ midi: n, dur: d * P })), 0.058));
+    // the flock goes out: a few small bells on the terraces, the shepherd's far call (and the valley's echo), bleats
+    this.add(sec, flock, (t, _m, h, fx) => this.fx.bells(this.far(fx, t, h + 2, 4200, 0.12, 0.45), t, h, 0.05, 3, 0.45, 0.35), end - flock + 1.2);
+    this.add(sec, flock + 0.45, (t, _m, _h, fx) => {
+      const f = this.far(fx, t, 4.5, 2400, 0.45, 0.6);
+      this.fx.sing(f, t, [{ midi: 57, dur: 0.2, vowel: 'eh' }, { midi: 62, dur: 0.62, vowel: 'oh', accent: 1.1 }, { midi: 60, dur: 0.14, vowel: 'oh' }, { midi: 57, dur: 0.85, vowel: 'oh' }], 0.04, false, 18);
+    });
+    this.add(sec, flock + 1.6, (t, _m, _h, fx) => { const f = this.far(fx, t, 3, 2000, 0.3, 0.5); this.fx.bleat(f.dry, t, 0.14, 0.5); });
+    this.add(sec, flock + 2.9, (t, _m, _h, fx) => { const f = this.far(fx, t, 3, 2400, 0.3, 0.5); this.fx.bleat(f.dry, t, 0.1, 0.3, 'lambBleat', 1.05); });
+    if (end - flock > 4.2) this.add(sec, flock + 4.0, (t, _m, _h, fx) => { const f = this.far(fx, t, 3, 1800, 0.3, 0.5); this.fx.bleat(f.dry, t, 0.09, 0.6, 'goatBleat'); });
+  }
+
+  /**
+   * P3 — RACHEL'S TOMB (Gen 35:19-20). A tender, ancient line: a woman's wordless lament (A B♭ A G F E D — Rachel
+   * weeping for her children, Jer 31:15) over a soft D minor and a low ground; the kinnor's slow arpeggio under the
+   * verse; the flock passing behind the stone (bells, a lamb); from `rise` the line rises (A C D, held, opening to 'ah')
+   * with the lens into the sky, the strings climbing B♭ – C (♭VI – ♭VII) into the map's D.
+   */
+  private planRachel(sec: Sec): void {
+    const S = this.s, lite = this.lite, t0 = sec.t0, end = sec.t1;
+    const card = clamp(this.text(sec, 0, this.beat(sec, 'card')), t0, end - 2);
+    const verse = clamp(this.text(sec, 1, this.beat(sec, 'verse')), card, end - 1.5);
+    const rise = clamp(this.beat(sec, 'rise'), verse + 0.8, end - 0.6);
+    const rel = sec.exit === 'ring' ? 1.4 : 0.4;
+    this.add(sec, t0, (t, m, h) => {
+      this.ground(m, t, h, 0.032, 1.0, 0.8);
+      S.pad(m, t, h, lite ? [50, 57, 62] : [38, 45, 50, 57, 62], { level: 0.02, attack: 1.2, release: 0.8, cutoff: 900, voices: lite ? 2 : 3, detune: 6 });
+      S.pad(m, t + 0.4, h - 0.4, [65, 69], { level: 0.007, attack: 1.4, release: 0.8, cutoff: 2400, voices: 2, detune: 7 });
+    }, rise - t0 + 0.7);
+    // Rachel's line: a woman's voice, from just before the verse to the rise
+    const l0 = Math.max(card + 0.2, verse - 0.6), k = (rise - 0.08 - l0) / 3.0;
+    const lament: SungNote[] = [
+      { midi: 69, dur: 0.5 * k, vowel: 'oo' }, { midi: 70, dur: 0.3 * k, vowel: 'oo', accent: 1.1 }, { midi: 69, dur: 0.42 * k, vowel: 'oo' },
+      { midi: 67, dur: 0.2 * k, vowel: 'oo' }, { midi: 65, dur: 0.55 * k, vowel: 'ah' }, { midi: 64, dur: 0.3 * k, vowel: 'oo' }, { midi: 62, dur: 0.73 * k, vowel: 'oo' },
+    ];
+    this.add(sec, l0, (t, m) => {
+      this.fx.sing(m, t, lament, 0.042, true, 28);
+      // a solo cello in unison under the voice: body, and the synthetic voice is never exposed alone
+      this.line(m, t + 0.03, lament.map((n) => [n.midi, n.dur] as const), 1, 0.014, 'cello');
+    });
+    this.add(sec, verse, (t, m) => [50, 57, 62, 65, 69].forEach((n, i) => S.lyre(m, t + i * 0.13, n, 0.3 - i * 0.02, lyrePan(n))));
+    // the rise: the line climbs with the lens and is held into the sky; the strings climb B♭ – C under it
+    const hold = end - rise - 0.78 + 1.0;
+    this.add(sec, rise, (t, m) => {
+      this.fx.sing(m, t, [{ midi: 69, dur: 0.42, vowel: 'oo' }, { midi: 72, dur: 0.36, vowel: 'oo' }, { midi: 74, dur: Math.max(0.6, hold), vowel: 'ah', accent: 1.15 }], 0.048, true, 30);
+    });
+    const half = (end - rise) / 2;
+    this.add(sec, rise, (t, m, h) => {
+      S.pad(m, t, h, lite ? [53, 58, 62] : [46, 53, 58, 62, 65], { level: 0.026, attack: 0.5, release: 0.4, cutoff: 1500, voices: lite ? 2 : 3, detune: 8 });
+      S.choir(m, t + 0.05, h, lite ? [58, 62] : [53, 58, 62], { level: 0.018, attack: 0.6, release: 0.4, vowel: 'oo', breath: 0.05 });
+    }, half + 0.2);
+    this.add(sec, rise + half, (t, m, h) => {
+      S.pad(m, t, h, lite ? [55, 60, 64] : [48, 55, 60, 64, 67], { level: 0.03, attack: 0.4, release: rel, cutoff: 1900, voices: lite ? 2 : 3, detune: 8 });
+      S.choir(m, t + 0.05, h, lite ? [60, 64] : [55, 60, 64], { level: 0.022, attack: 0.5, release: rel, vowel: 'oo', to: 'ah', morph: h, breath: 0.06 });
+    }, end - rise - half + rel);
+    this.add(sec, rise, (t, _m, h, fx) => this.fx.windSwell(fx, t, h, 0.03, 400, 1800, -0.2, 0.4), end - rise + 1.3);
+    // the shepherd and the flock pass behind the stone: bells close by, a lamb, a ewe
+    this.add(sec, card, (t, _m, h, fx) => this.fx.bells(fx, t, h, 0.032, 3, -0.15, 0.5), Math.max(1, rise - card + 0.6));
+    this.add(sec, card + 1.3, (t, _m, _h, fx) => this.fx.bleat(fx.dry, t, 0.09, -0.35, 'lambBleat', 1.06));
+    this.add(sec, card + 2.7, (t, _m, _h, fx) => this.fx.bleat(fx.dry, t, 0.08, 0.2));
+  }
+
+  /**
+   * P4 — THE MAP: out of Egypt to Gilgal. The climb swells (D minor, rising) to a broad, deep D minor on `egypt`; on
+   * `exodus` the processional walks out with the line of light (the tof on the beats, low strings, the land theme on
+   * the horns, its D landing on `wilderness`); the WILDERNESS is sparse and windswept (a bare fifth trembling, a far drum,
+   * the pipe's lonely, circling line — forty years); the JORDAN is crossed (a roll, water, the kinnor's glissando, the
+   * dominant rising) into the ARRIVAL at `gilgal`: D major (the choir, the strings, a strum, a warm stroke and the glow),
+   * ringing on through the invisible cut into P5.
+   */
+  private planMap(sec: Sec): void {
+    const S = this.s, lite = this.lite, t0 = sec.t0, end = sec.t1;
+    const egypt = clamp(this.beat(sec, 'egypt'), t0 + 0.5, end - 6);
+    const exo = clamp(this.beat(sec, 'exodus'), egypt, end - 5);
+    const wild = clamp(this.beat(sec, 'wilderness'), exo + 1, end - 3);
+    const jor = clamp(this.beat(sec, 'jordan'), wild + 1, end - 1.5);
+    const gil = clamp(this.beat(sec, 'gilgal'), jor + 0.4, end - 0.8);
+    const rel = sec.exit === 'ring' ? 2.2 : 0.5;
+    // the climb: up out of the hills into the whole region — the strings and the voices swell, the air rises
+    this.add(sec, t0, (t, m, h) => {
+      S.pad(m, t, h, lite ? [50, 57, 62, 65] : [45, 50, 57, 62, 65], { level: 0.034, attack: h * 0.85, release: 0.3, cutoff: 800, cutoffEnd: 2400, voices: lite ? 2 : 3, detune: 8 });
+      S.choir(m, t + 0.2, h - 0.2, lite ? [57, 62] : [50, 57, 62], { level: 0.032, attack: (h - 0.2) * 0.8, release: 0.3, vowel: 'oo', to: 'oh', morph: h, breath: 0.05 });
+    }, egypt - t0 + 0.25);
+    this.add(sec, t0 + 0.2, (t, _m, h, fx) => this.fx.windSwell(fx, t, h, 0.034, 300, 1500, -0.3, 0.3), egypt - t0 + 0.8);
+    // Egypt: the whole region below — a broad, deep D minor (the house of bondage)
+    this.add(sec, egypt, (t, m, h) => {
+      S.drum(m, t, 'boom', 0.16, 0, 0.8);
+      S.drum(m, t + 0.01, 'taiko', 0.3, 0, 0.8);
+      this.ground(m, t, h, 0.03, 0.3, 0.8);
+      S.pad(m, t, h, lite ? [50, 57, 62, 65] : [38, 45, 50, 53, 57, 62], { level: 0.04, attack: 0.25, release: 0.6, cutoff: 1500, cutoffEnd: 1000, voices: lite ? 2 : 3, detune: 9 });
+      S.choir(m, t + 0.02, h, lite ? [50, 57, 62] : [45, 50, 53, 57], { level: 0.04, attack: 0.3, release: 0.6, vowel: 'oh', breath: 0.08 });
+    }, wild - egypt + 0.4);
+    // the exodus: the processional walks out with the line of light (the land theme on the horns, its D on `wilderness`)
+    const q = (wild - exo) / 4;
+    for (let k = 0; k < 4; k++) {
+      const kk = k, w = k / 3;
+      this.add(sec, exo + k * q, (t, m) => {
+        const dry: Out = { dry: m.dry, wet: null };
+        S.drum(dry, t, 'dum', 0.32 + 0.1 * w, kk % 2 ? 0.15 : -0.15);
+        if (kk % 2 === 0) S.drum(m, t, 'taiko', 0.26 + 0.1 * w, 0, 0.9);
+        S.drum(dry, t + q * 0.5, 'tek', lite ? 0.1 : 0.08, 0.2);
+        S.drum(dry, t + q * 0.75, 'ka', lite ? 0.07 : 0.06, -0.2);
+        S.strStac(dry, t, kk === 3 ? 45 : 50, 0.42 + 0.1 * w, 0.24, 0.8);
+        S.strStac(dry, t + q * 0.5, 50, 0.26, 0.18, 0.7);
+      });
+    }
+    this.add(sec, exo + 0.02, (t, m) => {
+      const th: Array<readonly [number, number]> = [[50, 1], [57, 1], [55, 0.5], [57, 0.5], [60, 1]];
+      this.line(m, t, th, q, 0.064, 'horn');
+      this.line(m, t + 0.01, th.map(([n, b]) => [n + 12, b] as const), q, 0.026, 'str');
+    });
+    // the wilderness: sparse and windswept — the theme's D held, a bare fifth trembling, a far drum, the lonely pipe
+    this.add(sec, wild, (t, m, h, fx) => {
+      this.line(m, t, [[62, 1]], h, 0.04, 'horn');
+      S.pad(m, t, h, lite ? [57, 62, 69] : [57, 62, 69], { level: 0.02, attack: 0.4, release: 0.6, cutoff: 1600, voices: 2, detune: 6, trem: 0.45, tremRate: 6 });
+      this.fx.windSwell(fx, t, h * 0.62, 0.06, 350, 1500, -0.5, 0.2);
+      this.fx.windSwell(fx, t + h * 0.42, h * 0.7, 0.05, 400, 1700, 0.4, -0.3);
+    }, jor - wild + 0.2);
+    for (let x = wild + 0.75; x < jor - 0.3; x += 1.1) this.add(sec, x, (t, m) => S.drum(m, t, 'dum', 0.12, 0, 0.85));
+    const pw = (jor - wild - 0.35) / 3.2;
+    const wander: Array<readonly [number, number]> = [[74, 0.5], [76, 0.3], [77, 0.6], [76, 0.3], [74, 0.4], [72, 0.3], [74, 0.8]];
+    this.add(sec, wild + 0.3, (t, m) => S.ney(m, t, wander.map(([n, d]) => ({ midi: n, dur: d * pw })), 0.07));
+    // the Jordan: the crossing — a roll, the water, the kinnor's glissando, the dominant rising into the arrival
+    const jl = gil - jor;
+    for (let x = jor, g = 0.16; x < gil - 0.05; x += g, g = Math.max(0.06, g * 0.84)) {
+      const w = (x - jor) / jl;
+      this.add(sec, x, (t, m) => S.drum({ dry: m.dry, wet: null }, t, 'dum', 0.1 + 0.25 * w * w, rand(-0.2, 0.2), 0.95));
+    }
+    this.add(sec, jor, (t, m, h, fx) => {
+      this.fx.rush(fx, t, h, 0.05, -0.2);
+      S.pad(m, t, h + 0.05, lite ? [57, 61, 64] : [45, 52, 57, 61, 64], { level: 0.045, attack: h * 0.8, release: 0.05, cutoff: 1300, cutoffEnd: 3200, voices: lite ? 2 : 3, detune: 9 });
+      S.choir(m, t, h + 0.05, [57, 61, 64, 69], { level: 0.042, attack: h * 0.85, release: 0.05, vowel: 'oh', to: 'ah', morph: h, breath: 0.08 });
+      [62, 64, 66, 69, 71, 74, 76, 78, 81].forEach((n, i) => S.lyre(m, t + (i / 9) * h * 0.95, n, 0.18 + i * 0.025, lyrePan(n)));
+    }, jl);
+    // Gilgal: the arrival — D major (Josh 4:19), a warm stroke, the choir, a strum, the glow; it rings on into P5
+    this.add(sec, gil, (t, m, h) => {
+      S.drum(m, t, 'boom', 0.22, 0, 0.9);
+      S.drum(m, t + 0.004, 'taiko', 0.38, -0.2); S.drum(m, t + 0.016, 'taiko', 0.3, 0.2);
+      S.strum(m, t + 0.01, [50, 57, 62, 66, 69, 74, 78], 0.55, 0.03);
+      S.pad(m, t, h, lite ? [50, 57, 62, 66] : [45, 50, 57, 62, 66], { level: 0.056, attack: 0.05, release: rel, cutoff: 2300, cutoffEnd: 1300, voices: lite ? 2 : 3, detune: 8 });
+      S.choir(m, t + 0.01, h, lite ? [57, 62, 66] : [50, 57, 62, 66, 69], { level: 0.075, attack: 0.08, release: rel, vowel: 'ah', breath: 0.1 });
+      S.pad(m, t + 0.05, h, [74, 78, 81], { level: 0.016, attack: 0.6, release: rel, cutoff: 6000, voices: 2, detune: 8, trem: 0.25, tremRate: 9 });
+      this.line(m, t, [[62, 1]], h, 0.05, 'horn');
+      this.line(m, t + 0.01, [[57, 1]], h, 0.036, 'horn');
+    }, end - gil + rel);
+  }
+
+  /**
+   * P5 — THE TRIBES, THE JUDGES AND THE PHILISTINES (the same camera): the arrival's D settles under the tribes' names (a
+   * pluck of the kinnor for each of the twelve, D – G/D); "in those days there was no king in Israel" — the harmony slips
+   * (B♭ over the D pedal, then G minor), an uneven pulse in the low strings, a high tremolo rubbing (A–B♭), and the king's
+   * three notes in the cellos (D A B♭: the king they will ask for); on `cities` five strokes (the five cities) and a low
+   * Phrygian horn cluster (D–E♭) swelling with the descent toward the coast, into the host.
+   */
+  private planJudges(sec: Sec): void {
+    const S = this.s, lite = this.lite, t0 = sec.t0, end = sec.t1;
+    const tribes = clamp(this.beat(sec, 'tribes'), t0, end - 4);
+    const verse = clamp(this.text(sec, 0, this.beat(sec, 'verse')), tribes + 0.6, end - 3);
+    const cities = clamp(this.beat(sec, 'cities'), verse + 1, end - 0.8);
+    const rel = sec.exit === 'ring' ? 1.2 : 0.4;
+    const pent = [62, 64, 66, 69, 71, 74, 76, 78, 81];
+    const gap = Math.min(0.19, (verse - tribes - 0.3) / 12);
+    for (let i = 0; i < 12; i++) {
+      this.add(sec, tribes + 0.05 + i * gap + rand(-0.03, 0.03), (t, m) => { const n = pick(pent); S.lyre(m, t, n, rand(0.2, 0.3), lyrePan(n)); });
+    }
+    const gT = tribes + Math.min(1.1, (verse - tribes) * 0.5);
+    this.add(sec, gT, (t, m, h) => {
+      S.pad(m, t, h, lite ? [55, 59, 62] : [43, 50, 55, 59, 62], { level: 0.024, attack: 0.6, release: 0.5, cutoff: 1500, voices: lite ? 2 : 3, detune: 7 });
+    }, verse - gT + 0.35);
+    // no king: B♭ over the D pedal, then G minor; a high tremolo rubbing; the low strings' uneven pulse
+    const mid = verse + (cities - verse) * 0.5;
+    this.add(sec, verse, (t, m, h) => {
+      this.ground(m, t, h, 0.04, 0.6, 0.5);
+      S.pad(m, t, mid - verse + 0.25, lite ? [53, 58, 62] : [46, 53, 58, 62], { level: 0.03, attack: 0.5, release: 0.3, cutoff: 1200, voices: lite ? 2 : 3, detune: 9 });
+      S.pad(m, t + 0.8, h - 0.8, [81, 82], { level: 0.005, attack: 1.4, release: 0.4, cutoff: 4000, voices: 2, detune: 4, trem: 0.5, tremRate: 8 });
+    }, cities - verse + 0.35);
+    this.add(sec, mid, (t, m, h) => {
+      S.pad(m, t, h, lite ? [55, 58, 62] : [43, 50, 55, 58, 62], { level: 0.03, attack: 0.4, release: 0.35, cutoff: 1000, voices: lite ? 2 : 3, detune: 9 });
+      S.choir(m, t, h, [43, 50], { level: 0.022, attack: 0.6, release: 0.35, vowel: 'oo', breath: 0.06 });
+    }, cities - mid + 0.4);
+    this.add(sec, verse + 0.3, (t, m) => this.line(m, t, [[50, 0.8], [57, 0.8], [58, Math.max(0.6, cities - verse - 1.9)]], 1, 0.052, 'cello'));
+    const lim = [0.45, 0.3, 0.6, 0.25, 0.7, 0.3, 0.5];
+    for (let x = verse + 0.1, k = 0; x < cities - 0.15; x += lim[k % lim.length], k++) {
+      const kk = k;
+      this.add(sec, x, (t, m) => S.strStac({ dry: m.dry, wet: null }, t, kk % 5 === 3 ? 39 : 38, 0.3 + 0.04 * (kk % 3), 0.26, 0.45));
+    }
+    // the five Philistine cities: five strokes, a low Phrygian horn cluster swelling into the descent to the coast
+    const cg = Math.min(0.36, (end - cities - 0.6) / 5);
+    for (let i = 0; i < 5; i++) {
+      const ii = i;
+      this.add(sec, cities + i * cg, (t, m) => {
+        S.drum(m, t, 'taiko', 0.24 + 0.05 * ii, ii % 2 ? 0.25 : -0.25, 0.85);
+        S.drum(m, t + 0.005, 'boom', 0.06 + 0.02 * ii, 0, 0.9);
+      });
+    }
+    this.add(sec, cities, (t, m, h) => {
+      this.horn(m, t, h, lite ? [50, 51, 57] : [38, 39, 50, 51, 57], 0.045, Math.min(h * 0.7, 2.2), rel);
+      if (!lite) S.pad(m, t, h, [26], { level: 0.03, attack: h * 0.6, release: rel, cutoff: 140, voices: 2, detune: 4, type: 'triangle' });
+      S.choir(m, t + 0.3, h - 0.3, [50, 51, 57], { level: 0.03, attack: h * 0.6, release: rel, vowel: 'oh', breath: 0.08 });
+    }, end - cities + rel);
+    const rl = Math.min(2.2, end - cities);
+    this.add(sec, end - rl, (t, m) => riserFx(this.c, S, m, t, rl, 'dark', 0.8, lite));
+  }
+
+  /**
+   * P6 — THE PHILISTINE HOST on the coastal plain: war drums (X . . x X . x . per bar, a deep boom on every bar, growing)
+   * and low brass-like horns (D E♭ D C D — the Phrygian menace) under thousands on foot heard from a distance, bronze
+   * glinting and the murmur of a foreign host; under 13:19 the anvil (iron, which Israel's smiths did not have). The
+   * drums stop dead on the cut to Ramah: the downbeat never comes.
+   */
+  private planThreat(sec: Sec): void {
+    const S = this.s, lite = this.lite, t0 = sec.t0, end = sec.t1;
+    const card = clamp(this.text(sec, 0, this.beat(sec, 'card')), t0, end - 2);
+    const verse = clamp(this.text(sec, 1, this.beat(sec, 'verse')), card, end - 1.5);
+    this.add(sec, t0, (t, _m, h, fx) => {
+      this.fx.march(fx, t, h, 0.42, 0.92, 4200, 0.8);
+      this.fx.murmur(this.far(fx, t, h + 1, 1800, 0, 0.4), t + 0.3, h - 0.3, 0.17, lite ? 2 : 3);
+    }, end - t0 + 0.05);
+    for (let x = t0 + 0.4; x < end - 0.2; x += rand(0.3, 0.6)) this.add(sec, x, (t, _m, _h, fx) => this.fx.clinks(fx, t, rand(0.01, 0.022)));
+    const st = BEAT / 2, pat = 'X..xX.x.';
+    for (let x = t0, k = 0; x < end - 0.05; x += st, k++) {
+      const c = pat[k % 8], u = clamp((x - t0) / Math.max(1, end - t0), 0, 1), kk = k;
+      if (c === '.') {
+        if (k % 8 === 7 || k % 8 === 2) this.add(sec, x, (t, m) => S.drum({ dry: m.dry, wet: null }, t, k % 8 === 7 ? 'tek' : 'ka', (lite ? 0.12 : 0.09) + 0.07 * u, 0.25));
+        continue;
+      }
+      this.add(sec, x, (t, m) => {
+        const dry: Out = { dry: m.dry, wet: null };
+        if (c === 'X') { S.drum(m, t, 'taiko', 0.48 + 0.2 * u, kk % 16 ? 0.2 : -0.2, 0.82); S.drum(dry, t, 'dum', 0.38 + 0.12 * u, 0); }
+        else S.drum(dry, t, 'dum', 0.3 + 0.12 * u, 0.1);
+        if (kk % 8 === 0) S.drum(m, t + 0.004, 'boom', 0.08 + 0.06 * u, 0, 0.9);
+        if (kk % 8 === 0 || kk % 8 === 4) S.strStac(dry, t, kk % 8 ? 45 : 50, 0.5 + 0.2 * u, 0.3, 0.8);
+      });
+    }
+    const motif: Array<readonly [number, number]> = [[50, 2], [51, 1], [50, 1], [48, 2], [50, 1.3]];
+    this.add(sec, t0 + 0.02, (t, m) => {
+      this.line(m, t, motif, 1, 0.085, 'horn');
+      this.line(m, t + 0.012, motif.map(([n, b]) => [n - 12, b] as const), 1, lite ? 0.03 : 0.05, 'horn');
+      // phones: the menace an octave up too, where their speaker plays
+      if (lite) this.line(m, t + 0.006, motif.map(([n, b]) => [n + 12, b] as const), 1, 0.04, 'horn');
+      this.line(m, t + 0.008, motif.map(([n, b]) => [n + 7, b] as const), 1, 0.04, 'horn');
+      S.choir(m, t, end - t0, [50, 57], { level: 0.03, attack: 1.5, release: 0.2, vowel: 'oh', breath: 0.08 });
+    });
+    // 13:19 — no smith in all the land of Israel: iron on the anvil, far off, twice (and once more)
+    this.add(sec, verse + 0.1, (t, _m, _h, fx) => this.fx.anvil(this.far(fx, t, 4, 7000, 0.25, 0.6), t, 0.05, 0.35));
+    this.add(sec, verse + 0.55, (t, _m, _h, fx) => this.fx.anvil(this.far(fx, t, 4, 7000, 0.25, 0.6), t, 0.04, 0.35));
+    if (end - verse > 3) this.add(sec, verse + 2.55, (t, _m, _h, fx) => this.fx.anvil(this.far(fx, t, 4, 6000, 0.25, 0.6), t, 0.03, 0.4));
+  }
+
+  /**
+   * P7 — RAMAH (1 Sam 8:4-6): the elders' murmur in the gateway (hushing as one of them rises, swelling in agreement
+   * under the demand, falling silent when Samuel turns away), a low ground and a thin high tone; under "give us a king"
+   * the king's three notes (D A B♭) in the low strings and the men's voices — the B♭ held, trembling; on `away` a tense,
+   * unresolved cluster (D E♭ A B♭) swells, sucked into a breath of silence before the shofar (the bus is cut GAP s
+   * before the frame).
+   */
+  private planElders(sec: Sec): void {
+    const S = this.s, lite = this.lite, t0 = sec.t0, end = sec.t1;
+    const t1 = end - sec.gap;
+    const rise = clamp(this.beat(sec, 'rise'), t0 + 0.3, t1 - 3);
+    const verse = clamp(this.text(sec, 1, this.beat(sec, 'verse')), rise, t1 - 2.5);
+    const away = clamp(this.beat(sec, 'away'), verse + 1, t1 - 0.8);
+    // the gateway: the elders' murmur (8-12 old men, close)
+    this.add(sec, t0, (t, _m, h, fx) => this.fx.murmur(fx, t, h, 0.21, 4), rise - t0 + 0.4);
+    this.add(sec, verse + 0.5, (t, _m, h, fx) => this.fx.murmur(fx, t, h, 0.2, lite ? 3 : 5), away - verse - 0.3);
+    // an elder rises: wool, his staff on the stones; Samuel turns his face away: his mantle, a step
+    this.add(sec, rise, (t, _m, _h, fx) => { this.fabric(fx, t, 0.7, 0.02, -0.2); this.fx.knock(fx, t + 0.35, 0.03, 1); });
+    this.add(sec, away, (t, _m, _h, fx) => { this.fabric(fx, t, 0.8, 0.018, 0.3); this.step(fx, t + 0.5, 0.18, 0.3); });
+    // the ground, a thin high tone, the strings' bare D–A (tension without a third)
+    this.add(sec, t0, (t, m, h) => {
+      this.ground(m, t, h, 0.04, 0.8, 0.05);
+      S.pad(m, t, h, lite ? [50, 57] : [38, 45, 50, 57], { level: 0.026, attack: 0.9, release: 0.05, cutoff: 800, voices: 2, detune: 6 });
+      S.pad(m, t + 0.6, h - 0.6, [81], { level: 0.004, attack: 1.6, release: 0.05, cutoff: 4000, voices: 1, type: 'sine', lfoCents: 20 });
+    }, t1 - t0);
+    // "give us a king": the king's notes in the low strings and the men's voices — D, A, then the B♭ held, trembling
+    const kn: Array<readonly [number, number]> = [[50, 1], [57, 1], [58, Math.max(0.8, away - verse - 2 + 0.3)]];
+    this.add(sec, verse, (t, m) => {
+      this.line(m, t, kn, 1, 0.058, 'str');
+      this.line(m, t + 0.02, kn, 1, 0.045, 'men');
+    });
+    // Samuel turns away: the unresolved cluster swells, sucked into the breath before the blast
+    this.add(sec, away, (t, m) => {
+      const sw = Math.max(0.4, t1 - away);
+      S.pad(m, t, sw + 0.01, lite ? [50, 51, 57, 58] : [38, 50, 51, 57, 58], { level: 0.03, attack: 0.35, release: 0.02, cutoff: 700, cutoffEnd: 1400, voices: 2, detune: 10 });
+      S.pad(m, t, sw + 0.01, lite ? [50, 51, 57, 58] : [38, 50, 51, 57, 58], { level: 0.075, attack: sw * 0.95, release: 0.02, cutoff: 500, cutoffEnd: 2800, voices: lite ? 2 : 3, detune: 12 });
+      S.choir(m, t, sw + 0.01, [50, 51, 57, 58], { level: 0.065, attack: sw * 0.8, release: 0.02, vowel: 'oo', to: 'ah', morph: sw, breath: 0.1 });
+      this.fx.suck(m, t1, Math.min(1.2, sw), 0.3, 1.1);
+    });
+    // the world holds its breath with the music: the gate's wind and voices duck, the hall's tail is cut, for the
+    // breath of silence before the blast (the hall comes back with it)
+    this.add(sec, t1 - 0.012, (t) => {
+      this.duckAmbience(t, 0.1, end - t1 + 0.02, 0.5);
+      const p = this.c.hallRet.gain, g = end - t1 + 0.012;
+      p.cancelScheduledValues(t); p.setValueAtTime(this.c.hallLevel, t);
+      p.linearRampToValueAtTime(0.06, t + 0.025); p.setValueAtTime(0.06, t + g); p.linearRampToValueAtTime(this.c.hallLevel, t + g + 0.2);
+    }, 0, undefined, true);
+  }
+
+  /** A brass-like low horn section (the score's horns): a swelling chord with a slow brassy opening. */
+  private horn(m: Out, t: number, dur: number, midis: readonly number[], level: number, attack: number, release: number): void {
+    this.s.pad(m, t, dur, midis, { level, attack, release, cutoff: 1300, cutoffEnd: 900, q: 1.3, voices: this.lite ? 2 : 3, detune: 6, lfoCents: 60 });
   }
 
   // ================================================================================ 1 · GILGAL
@@ -649,7 +1130,7 @@ export class IntroScore {
     // and men's voices that blooms and sinks into the march
     this.add(sec, blast, (t, m, _h, fx) => {
       S.shofar(m, t, 'gedolah', 0.5, 220, 293.66);
-      this.hit(m, t, 0.8, true);
+      this.hit(m, t, 0.88, true);
       this.fx.impact(fx, t, 0.45, 2.2);
       S.pad(m, t, 0.35, [26, 38, 45, 50], { level: 0.12, attack: 0.02, release: 2.4, cutoff: 1500, cutoffEnd: 420, voices: lite ? 2 : 3, detune: 11 });
       S.choir(m, t + 0.01, 0.4, lite ? [38, 45, 50] : [38, 45, 50, 57], { level: 0.09, attack: 0.04, release: 2.2, vowel: 'ah', breath: 0.16 });
@@ -810,7 +1291,7 @@ export class IntroScore {
       this.fx.clinks(fx, t + 0.08, 0.025, 4);
     });
     // THE ROAR: the hit, the theme's D at full power, thousands shouting, spears on shields, the shofarot above
-    this.add(sec, roar, (t, m) => this.hit(m, t, 1.08, true), 0, undefined, true);
+    this.add(sec, roar, (t, m) => this.hit(m, t, 1.02, true), 0, undefined, true);
     const rest = end - roar;
     this.add(sec, roar, (t, m, h) => {
       // Dm — B♭ — A: the cut comes on the dominant, the B♭ of the theme rubbing against it
@@ -1046,94 +1527,107 @@ export class IntroScore {
     this.add(sec, ans, (t, m) => S.ney(m, t, motif(74, ANSWER, clamp((end - 0.45 - ans) / 11, 0.16, 0.26)), 0.07));
   }
 
-  // ================================================================================ 6 · THE LOGO, THEN THE GAME
+  // ================================================================================ 6 · THE FLOCK, THE LAMB AND THE LOGO
 
   /**
-   * D3 — THE LOGO over the panorama (CUT v4, 10 s), then the game. The crane: out of D2's dominant the deceptive Bm,
-   * then G and A (vi–IV–V) — the strings swelling and brightening, the kinnor's ostinato in running eighths, the low
-   * strings' pulse, the voices, David's motif (major) rising on the pipe so that its tonic falls ON the logo, a warm
-   * riser and a timpani roll — into the arrival ON `logo`: D major, the tutti and the choir, a strum, a warm stroke and
-   * a cymbal bloom (an arrival, not a smash: the loudest moment of the ending). The theme's answer (A B C♯ D C♯ A G A)
-   * under the Hebrew name, its D on the chapter line (IV, then V); from `settle` the orchestra lets go into the game's
-   * 6/8 — the drone, the kinnor's pastoral lilt, the pipe's last cadence — and ON the end of the shot the score hands
-   * over to the game's pastoral music (onHandoff: the engine starts it on this bar line) and rings out under it.
-   * Every time below comes from the shot's beats (the grid of eighths is anchored on the logo).
+   * D3 — DAVID WATCHES HIS FLOCK (CUT v5): warm and intimate. Out of D2's dominant a soft D major (the kinnor's low strum,
+   * a warm bed, the wind in his curls); the kinnor's 6/8 lilt (D | G | D | G); soft voices under Ps 78:70-71; the pipe's
+   * tender line from the second bar; the flock close by — a few bells, a lamb nursing and its mother, a ram; on `rack`
+   * (the focus back on him) the cellos sing the head of his motif (D–A) and the voices warm.
+   */
+  private planWatch(sec: Sec): void {
+    const S = this.s, lite = this.lite, t0 = sec.t0, end = sec.t1;
+    const verse = clamp(this.text(sec, 0, this.beat(sec, 'verse')), t0 + 0.2, end - 3);
+    const rack = clamp(this.beat(sec, 'rack'), verse + 1, end - 1);
+    const P = STEP68;
+    const rel = sec.exit === 'ring' ? 0.9 : 0.4;
+    this.add(sec, t0, (t, m, h, fx) => {
+      S.strum(m, t + 0.02, [50, 57, 62, 66], 0.28, 0.05);
+      S.pad(m, t, h, lite ? [50, 57, 62, 66] : [38, 45, 50, 57, 62, 66], { level: 0.027, attack: 0.45, release: rel, cutoff: 1300, voices: lite ? 2 : 3, detune: 7 });
+      this.fx.windSwell(fx, t + 0.2, 4.2, 0.018, 600, 2200, -0.3, 0.3);
+      this.fx.windSwell(fx, t + 4.1, Math.max(1, end - t - 3.8), 0.015, 550, 2000, 0.3, -0.2);
+    }, end - t0 + rel);
+    const k0 = t0 + 0.35;
+    this.kinnor(sec, k0, end - 0.1, ['D', 'G', 'D', 'G'], 0.48);
+    this.add(sec, verse, (t, m, h) => S.choir(m, t, h, lite ? [57, 62] : [57, 62, 66], { level: 0.016, attack: 1.5, release: 0.8, vowel: 'oo', breath: 0.04 }), rack - verse + 0.6);
+    // the pipe's tender line (D major) from the second bar
+    const p0 = k0 + 6 * P;
+    const line: Array<readonly [number, number]> = [[78, 2], [76, 1], [74, 2], [71, 1], [69, 3], [71, 1], [74, 2], [76, 3]];
+    this.add(sec, p0, (t, m) => S.ney(m, t, line.map(([n, d]) => ({ midi: n, dur: d * P })), 0.05));
+    // the focus comes back to him: the head of his motif in the cellos, the voices warming
+    this.add(sec, rack, (t, m, h) => {
+      this.line(m, t, [[50, 1], [57, 2]], Math.min(0.9, (end - rack) / 3), 0.034, 'cello');
+      S.choir(m, t + 0.05, h, lite ? [62, 66, 69] : [57, 62, 66, 69], { level: 0.02, attack: 0.9, release: 0.7, vowel: 'oo', to: 'ah', morph: 1.6, breath: 0.05 });
+    }, end - rack + 0.4);
+    // the flock below him: bells close by, a lamb nursing and its mother, a goat, a ram
+    this.add(sec, t0 + 0.3, (t, _m, h, fx) => this.fx.bells(fx, t, h, 0.03, 3, 0.1, 0.7, 0.6), end - t0 - 0.2);
+    this.add(sec, t0 + 2.1, (t, _m, _h, fx) => this.fx.bleat(fx.dry, t, 0.1, 0.25, 'lambBleat', 1.04));
+    this.add(sec, t0 + 2.8, (t, _m, _h, fx) => this.fx.bleat(fx.dry, t, 0.08, 0.35, 'sheepBleat', 0.86));
+    this.add(sec, t0 + 5.6, (t, _m, _h, fx) => { const f = this.far(fx, t, 3, 2600, 0.25, 0.5); this.fx.bleat(f.dry, t, 0.08, -0.5, 'goatBleat'); });
+    if (end - rack > 1.6) this.add(sec, rack + 1.3, (t, _m, _h, fx) => this.fx.bleat(fx.dry, t, 0.07, -0.25, 'sheepBleat', 0.78));
+  }
+
+  /**
+   * D4 — THE LAMB AND THE LOGO (CUT v5, one long take), then the game. On `lamb` the music thins to a held G(add9) for
+   * the newborn lamb's bleat (again a breath later); from `descend` the kinnor walks on the logo's grid (Bm – G); at
+   * `kneel` a hush (Em7, the kinnor rests); on `lift` the strings and the voices swell (G – A), David's motif rising on
+   * the pipe so that its tonic falls ON the logo, a warm riser and a timpani roll — then the logo statement
+   * (planStatement): the warm D-major arrival ON `logo`, the answer under the Hebrew name and the chapter line, a tender
+   * cadence ON `setDown`, the afterglow after `logoOut`, the let-go into the game's 6/8 from `settle` and the hand-off at
+   * the end of the shot. The lamb's and the ewe's voices are the score's (D4_BLEATS).
    */
   private planHorizon(sec: Sec): void {
     const S = this.s, lite = this.lite, t0 = sec.t0, end = sec.t1;
     const P = STEP68;
-    const logo = clamp(this.beat(sec, 'logo'), t0 + 1.2, end - 3);
-    const rise = clamp(this.beat(sec, 'rise'), t0, logo - 1);
-    const heb = clamp(this.beat(sec, 'hebrew'), logo + 0.3, end - 2.2);
-    const chap = clamp(this.beat(sec, 'chapter'), heb + 0.3, end - 1.8);
-    const settle = clamp(Math.min(this.beat(sec, 'settle'), this.beat(sec, 'logoOut')), chap + 0.6, end - 0.8);
-    // the harmony on the dotted quarters of the logo's grid: Bm (out of D2's A) – G – A | D (the logo) – G – A | D
-    const cG = Math.max(rise + 0.4, logo - 6 * P), cA = Math.max(cG + 0.3, logo - 3 * P);
-    const u = clamp((chap - heb) / 3, 0.2, 0.5); // the answer's eighth: its D falls on the chapter line
-    const cA2 = clamp(chap + 3 * u, chap + 0.3, settle - 0.3);
-    const plan: ReadonlyArray<readonly [number, ChordName]> = [[t0, 'Bm'], [cG, 'G'], [cA, 'A'], [logo, 'D'], [chap, 'G'], [cA2, 'A'], [settle, 'D']];
+    const logo = clamp(this.beat(sec, 'logo'), t0 + 2.0, end - 4);
+    const lamb = clamp(this.beat(sec, 'lamb'), t0, logo - 1.6);
+    const descend = clamp(this.beat(sec, 'descend'), lamb + 0.3, logo - 1.2);
+    const kneel = clamp(this.beat(sec, 'kneel'), descend + 0.3, logo - 0.8);
+    const lift = clamp(this.beat(sec, 'lift'), kneel + 0.2, logo - 0.4);
+    const heb = clamp(this.beat(sec, 'hebrew'), logo + 0.3, end - 3);
+    const chap = clamp(this.beat(sec, 'chapter'), heb + 0.3, end - 2.6);
+    const setDown = clamp(this.beat(sec, 'setDown'), chap + 0.6, end - 1.6);
+    const logoOut = clamp(this.beat(sec, 'logoOut'), setDown, end - 1.2);
+    const settle = clamp(this.beat(sec, 'settle'), logoOut, end - 0.8);
+    // ---- the lamb: the world listens (a held G(add9), soft); its bleats are the cue
+    this.add(sec, t0, (t, m, h) => {
+      S.pad(m, t, h, lite ? [55, 59, 62, 69] : [43, 50, 55, 59, 62, 69], { level: 0.018, attack: 0.5, release: 0.6, cutoff: 1300, voices: lite ? 2 : 3, detune: 7 });
+      S.choir(m, t + 0.1, h, [55, 62], { level: 0.011, attack: 0.8, release: 0.6, vowel: 'oo', breath: 0.04 });
+    }, descend - t0 + 0.5);
+    this.bleats(sec, 'lamb', lamb);
+    this.bleats(sec, 'descend', descend);
+    this.bleats(sec, 'kneel', kneel);
+    // ---- the walk down (the kinnor on the logo's grid: Bm – G), the kneel (a hush: Em7), the lift (G – A, swelling)
+    const gB = descend, gG = descend + Math.max(0.6, (kneel - descend) * 0.5), gA = Math.max(lift + 0.3, logo - 3 * P);
+    const plan: ReadonlyArray<readonly [number, ChordName]> = [[gB, 'Bm'], [gG, 'G'], [kneel, 'Em'], [lift, 'G'], [gA, 'A'], [logo, 'D']];
     const chordAt = (x: number): ChordName => { let c: ChordName = 'Bm'; for (const [a, n] of plan) if (x >= a - 1e-6) c = n; return c; };
-    const segs = plan.map(([a, n], i) => ({ a, n, b: i + 1 < plan.length ? plan[i + 1][0] : end }));
-
-    // ---- the crane: the strings swell (vi–IV–V), brightening, each chord louder than the last
-    const VOX: Partial<Record<ChordName, readonly [readonly number[], readonly number[], number]>> = {
-      // [desktop voicing, phone voicing, bass (desktop; phones an octave up)]
-      Bm: [[47, 54, 59, 62, 66], [54, 59, 62, 66], 35],
-      G: [[43, 50, 55, 59, 62, 67], [50, 55, 59, 67], 31],
-      A: [[45, 52, 57, 61, 64, 69], [52, 57, 61, 69], 33],
+    const VOX: Partial<Record<ChordName, readonly [readonly number[], readonly number[], number, number]>> = {
+      // [desktop voicing, phone voicing, bass (desktop; phones an octave up), level]
+      Bm: [[47, 54, 59, 62, 66], [54, 59, 62, 66], 35, 0.026],
+      G: [[43, 50, 55, 59, 62, 67], [50, 55, 59, 67], 31, 0.03],
+      Em: [[40, 47, 55, 59, 62, 64], [52, 55, 59, 62], 28, 0.024],
+      A: [[45, 52, 57, 61, 64, 69], [52, 57, 61, 69], 33, 0.06],
     };
-    const build: ReadonlyArray<readonly [number, number, ChordName, number, number, number]> = [
-      // [from, to, chord, level, cutoff, cutoffEnd] — the Bm comes in ON the cut (out of D2's dominant: no dip)
-      [t0, cG, 'Bm', 0.05, 1000, 1700], [cG, cA, 'G', 0.06, 1400, 2400], [cA, logo, 'A', 0.072, 1900, 3400],
-    ];
-    build.forEach(([a, b, n, level, c0, c1], i) => {
-      const [hi, ph, bass] = VOX[n] as readonly [readonly number[], readonly number[], number];
-      const first = i === 0;
+    plan.forEach(([a, n], i) => {
+      if (n === 'D') return;
+      const b = plan[i + 1][0], v = VOX[n];
+      if (!v) return;
+      const [hi, ph, bass, level] = v;
+      const swell = a >= lift - 1e-6;
+      const lv = swell && n === 'G' ? 0.045 : level;
       this.add(sec, a, (t, m, h) => {
-        S.pad(m, t, h, lite ? ph : hi, { level, attack: first ? 0.3 : 0.22, release: 0.3, cutoff: c0, cutoffEnd: c1, voices: lite ? 2 : 3, detune: 9 });
-        S.pad(m, t, h, lite ? [bass + 12] : [bass, bass + 12], { level: 0.03 + 0.012 * i, attack: first ? 0.4 : 0.18, release: 0.25, cutoff: lite ? 900 : 420, voices: 2, detune: 6 });
+        S.pad(m, t, h, lite ? ph : hi, { level: lv, attack: swell ? Math.min(0.6, h * 0.8) : 0.35, release: 0.3, cutoff: swell ? 1400 : 1000, cutoffEnd: swell ? 3200 : 1300, voices: lite ? 2 : 3, detune: 9 });
+        S.pad(m, t, h, lite ? [bass + 12] : [bass, bass + 12], { level: 0.022 + (swell ? 0.016 : 0), attack: 0.3, release: 0.25, cutoff: lite ? 900 : 420, voices: 2, detune: 6 });
+        if (swell) S.choir(m, t, h, lite ? ph.slice(1, 4) : hi.slice(2, 6), { level: n === 'A' ? 0.05 : 0.036, attack: Math.min(0.5, h * 0.6), release: 0.12, vowel: 'oo', to: 'ah', morph: h, breath: 0.08 });
       }, b - a + 0.12);
     });
-    // the voices carry D2's open "ah" across the cut (on the Bm), grow under the G and open fully on the A
-    this.add(sec, t0, (t, m, h) => S.choir(m, t, h, lite ? [54, 59] : [54, 59, 62], { level: 0.03, attack: 0.3, release: 0.25, vowel: 'ah', to: 'oo', morph: h, breath: 0.06 }), cG - t0 + 0.12);
-    this.add(sec, cG, (t, m, h) => S.choir(m, t, h, lite ? [55, 59] : [55, 59, 62], { level: 0.036, attack: 0.25, release: 0.2, vowel: 'oo', breath: 0.06 }), cA - cG + 0.1);
-    this.add(sec, cA, (t, m, h) => S.choir(m, t, h, lite ? [57, 61, 64] : [57, 61, 64, 69], { level: 0.05, attack: Math.min(0.5, h * 0.5), release: 0.12, vowel: 'oo', to: 'ah', morph: h, breath: 0.08 }), logo - cA + 0.05);
-    // the low strings' pulse from the G: running eighths on the root, growing into the logo
-    for (let k = Math.ceil((cG - logo) / P - 1e-6); logo + k * P < logo - 0.05; k++) {
-      const x = logo + k * P, s6 = ((k % 6) + 6) % 6, w = clamp((x - cG) / Math.max(0.3, logo - cG), 0, 1);
-      const root = rootIn(CHORDS[chordAt(x + 0.01)], 43);
-      this.add(sec, x, (t, m) => S.strStac({ dry: m.dry, wet: null }, t, root, (0.24 + 0.32 * w) * (s6 === 0 || s6 === 3 ? 1.15 : 0.85), 0.2, 0.7));
-    }
-    // David's motif rising on the pipe (D A G F♯ E F♯ — D): its tonic falls ON the logo and is held to the Hebrew name;
-    // strings double it underneath
-    const um = Math.min(P, (logo - rise - 0.3) / 8);
-    const mStart = logo - 8 * um;
-    const motifNs = DAVID_MAJOR.map(([o, n], i) => [74 + o, i === DAVID_MAJOR.length - 1 ? (heb - logo) / um : n] as const);
-    this.add(sec, mStart, (t, m) => {
-      S.ney(m, t, motifNs.map(([n, d]) => ({ midi: n, dur: d * um })), 0.085);
-      this.line(m, t + 0.01, motifNs.map(([n, d], i) => [n - 12, i === motifNs.length - 1 ? 3 : d] as const), um, 0.022, 'str');
-    });
-    // a warm riser and a timpani roll (low tof strokes, accelerating) into the arrival
-    const rl = clamp(logo - cA + 0.4, 0.6, 1.6);
-    this.add(sec, logo - rl, (t, m) => riserFx(this.c, S, m, t, rl, 'warm', 0.8, lite));
-    const roll = Math.min(1.2, logo - cG);
-    for (let x = logo - roll, gap = 0.2; x < logo - 0.05; x += gap, gap = Math.max(0.055, gap * 0.85)) {
-      const w = 1 - (logo - x) / roll;
-      this.add(sec, x, (t, m) => {
-        S.drum(m, t, 'dum', 0.08 + 0.3 * w * w, rand(-0.2, 0.2), 0.9);
-        if (!lite && w > 0.45) S.drum(m, t, 'boom', 0.03 + 0.1 * w, 0, 1.1);
-      });
-    }
-
-    // ---- the kinnor's ostinato: running eighths through the crane, the logo and the answer (the chord of the moment,
-    // rolling up and down; a bass pluck on the dotted quarters) — it stops a little before the settle (a tenuto: the
-    // settle's bar is re-anchored there so that it ends ON the hand-off)
-    for (let k = Math.ceil((rise - logo) / P - 1e-6); logo + k * P < settle - P * 0.6; k++) {
-      if (k === 0) continue; // the logo has its own strum
+    // the kinnor walks (running eighths on the logo's grid, the chord of the moment) — it rests at the kneel
+    for (let k = Math.ceil((descend + 0.1 - logo) / P - 1e-6); logo + k * P < logo - 0.05; k++) {
       const x = logo + k * P, s6 = ((k % 6) + 6) % 6;
+      if (x > kneel - 0.12 && x < lift - 0.05) continue;
       const ch = CHORDS[chordAt(x + 0.01)];
-      const w = x < logo ? clamp((x - rise) / Math.max(0.5, logo - rise), 0, 1) : clamp((x - logo) / Math.max(0.5, settle - logo), 0, 1);
-      const vel = x < logo ? 0.32 + 0.22 * w : 0.5 - 0.12 * w;
+      const w = clamp((x - descend) / Math.max(0.5, logo - descend), 0, 1);
+      const vel = 0.3 + 0.24 * w;
       const idx = [0, 2, 4, 5, 4, 2][s6];
       this.add(sec, x, (t, m) => {
         const ns = voicing(ch, 57, 81);
@@ -1142,85 +1636,206 @@ export class IntroScore {
         S.lyre(m, t + rand(-0.005, 0.005), n, vel * (s6 === 0 ? 1.1 : s6 === 3 ? 0.95 : 0.8) * rand(0.92, 1.06), lyrePan(n));
       });
     }
+    // the low strings' pulse from the lift, growing into the logo
+    for (let k = Math.ceil((lift - logo) / P - 1e-6); logo + k * P < logo - 0.05; k++) {
+      const x = logo + k * P, s6 = ((k % 6) + 6) % 6, w = clamp((x - lift) / Math.max(0.3, logo - lift), 0, 1);
+      const root = rootIn(CHORDS[chordAt(x + 0.01)], 43);
+      this.add(sec, x, (t, m) => S.strStac({ dry: m.dry, wet: null }, t, root, (0.24 + 0.32 * w) * (s6 === 0 || s6 === 3 ? 1.15 : 0.85), 0.2, 0.7));
+    }
+    // David's motif rising on the pipe (D A G F♯ E F♯ — D): from the kneel, its tonic ON the logo, held to the Hebrew name
+    const um = Math.min(P, (logo - kneel + 0.3) / 8);
+    const mStart = logo - 8 * um;
+    const motifNs = DAVID_MAJOR.map(([o, n], i) => [74 + o, i === DAVID_MAJOR.length - 1 ? (heb - logo) / um : n] as const);
+    this.add(sec, mStart, (t, m) => {
+      S.ney(m, t, motifNs.map(([n, d]) => ({ midi: n, dur: d * um })), 0.08);
+      this.line(m, t + 0.01, motifNs.map(([n, d], i) => [n - 12, i === motifNs.length - 1 ? 3 : d] as const), um, 0.02, 'str');
+    });
+    // a warm riser and a timpani roll into the arrival
+    const rl = clamp(logo - gA + 0.4, 0.6, 1.6);
+    this.add(sec, logo - rl, (t, m) => riserFx(this.c, S, m, t, rl, 'warm', 0.8, lite));
+    const roll = Math.min(1.2, logo - lift);
+    for (let x = logo - roll, g = 0.2; x < logo - 0.05; x += g, g = Math.max(0.055, g * 0.85)) {
+      const w = 1 - (logo - x) / roll;
+      this.add(sec, x, (t, m) => {
+        S.drum(m, t, 'dum', 0.08 + 0.3 * w * w, rand(-0.2, 0.2), 0.9);
+        if (!lite && w > 0.45) S.drum(m, t, 'boom', 0.03 + 0.1 * w, 0, 1.1);
+      });
+    }
+    // ---- his steps down the rocks to the lamb, the kneel (gravel under the knee, wool), the lift (wool, the lamb)
+    for (let x = descend + 0.15, k = 0; x < kneel - 0.25; x += rand(0.48, 0.6), k++) {
+      const kk = k;
+      this.add(sec, x, (t, _m, _h, fx) => this.step(fx, t, 0.16 - 0.01 * kk, clamp(-0.15 + 0.06 * kk, -0.4, 0.4), kk % 3 === 2 ? 'gravel' : 'stepWalk'));
+    }
+    this.add(sec, kneel, (t, _m, _h, fx) => { this.step(fx, t, 0.14, 0, 'gravel', 0.8); this.fabric(fx, t + 0.05, 0.5, 0.014, 0.1); });
+    this.add(sec, lift, (t, _m, _h, fx) => this.fabric(fx, t, 0.7, 0.016, -0.1));
+    // he carries it down to the ewe: soft steps
+    for (let x = lift + 0.7, k = 0; x < setDown - 0.45; x += rand(0.55, 0.68), k++) {
+      const kk = k;
+      this.add(sec, x, (t, _m, _h, fx) => this.step(fx, t, 0.11, kk % 2 ? 0.15 : -0.1, kk % 4 === 3 ? 'gravel' : 'stepWalk'));
+    }
+    // ---- the logo statement: the arrival, the answer, the set-down, the afterglow, the let-go and the hand-off
+    this.planStatement(sec, logo, heb, chap, setDown, logoOut, settle, end);
+  }
 
-    // ---- THE LOGO: the arrival (tight: built just before it is due, re-locked to the picture)
+  /**
+   * The bleats of D4's cue that fall on the beat `beat` (film time `at`): the lamb on `lamb`, again a breath later
+   * (keyed to `descend`'s side of it), softly at the lift, while it is carried (`chapter`), and at the set-down the ewe's
+   * call, the lamb's answer and the ewe's low murmur — D4_BLEATS (cut8 animates the mouths on the same times).
+   */
+  private bleats(sec: Sec, beat: string, at: number): void {
+    for (const b of D4_BLEATS) {
+      if (b.beat !== beat) continue;
+      const lamb = b.who === 'lamb';
+      const vol = (lamb ? 0.34 : 0.28) * b.v, pitch = lamb ? 1.16 : b.murmur ? 0.8 : 0.92, pan = lamb ? 0.12 : 0.3;
+      this.add(sec, at + b.offset, (t, _m, _h, fx) => {
+        const o = b.far ? this.far(fx, t, 3, 2200, 0.3, 0.5).dry : fx.dry;
+        this.fx.bleat(o, t, b.far ? vol * 1.3 : vol, pan, lamb ? 'lambBleat' : 'sheepBleat', pitch);
+      });
+    }
+  }
+
+
+  /**
+   * THE LOGO STATEMENT (the film's D4 from `logo` on, and a skip's compact version): ON `logo` the warm D-major arrival
+   * (tight: built just before it is due, re-locked to the picture) — a deep drum and a taiko pair, a low tof, a soft
+   * cymbal bloom, the tutti, the choir on 'ah', a full strum, a high shimmer: an arrival, not a smash; the theme's answer
+   * (A B C♯ D C♯ A G A) on the pipe under the Hebrew name, its D on the chapter line (IV). With a `setDown` (the film):
+   * IV – ii – V7 into a tender cadence ON `setDown` (the kinnor's falling arpeggio, the ewe and the lamb), the lockup's
+   * fade into an afterglow (D – G/D – D, bells, wind); without (a skip): IV – V into the settle. From `settle` the
+   * orchestra lets go into the game's 6/8 ON the game's own grid (the drone, the kinnor's lilt, the pipe's last cadence
+   * F♯ E F♯ — D, its D on the hand-off), and ON `end` the score hands over to the game's pastoral music (onHandoff).
+   */
+  private planStatement(sec: Sec, logo: number, heb: number, chap: number, setDown: number, logoOut: number, settle: number, end: number): void {
+    const S = this.s, lite = this.lite;
+    const film = Number.isFinite(setDown);
+    const u = clamp((chap - heb) / 3, 0.2, 0.5); // the answer's eighth: its D falls on the chapter line
     this.add(sec, logo, (t, m, h) => {
       this.titleAt = t;
-      // a warm stroke, not a smash: a deep drum and a taiko pair, a low tof, a soft cymbal bloom
-      S.drum(m, t, 'boom', 0.5, 0, 0.9);
-      S.drum(m, t + 0.004, 'taiko', 0.5, -0.25);
-      S.drum(m, t + 0.016, 'taiko', 0.42, 0.25);
-      S.drum({ dry: m.dry, wet: null }, t, 'dum', 0.32, 0);
-      this.bloom(m, t, lite ? 0.018 : 0.026);
-      // the tutti in D major: low, middle and high strings, the choir on "ah", a full strum of the kinnor
-      S.pad(m, t, h, lite ? [38, 50] : [38, 45], { level: 0.075, attack: 0.04, release: 0.5, cutoff: lite ? 900 : 560, voices: lite ? 2 : 3, detune: 6 });
-      S.pad(m, t, h, lite ? [45, 54, 57] : [45, 50, 54, 57], { level: 0.085, attack: 0.05, release: 0.45, cutoff: 2100, cutoffEnd: 1400, voices: lite ? 2 : 3, detune: 9 });
-      S.pad(m, t + 0.02, h, lite ? [62, 66, 74] : [62, 66, 69, 74], { level: 0.05, attack: 0.12, release: 0.5, cutoff: 4000, cutoffEnd: 2800, voices: lite ? 2 : 3, detune: 8, vib: 9, vibRate: 5.4, vibDelay: 0.3 });
-      S.choir(m, t + 0.01, h, lite ? [50, 57, 62, 66] : [50, 54, 57, 62, 66, 69], { level: 0.1, attack: 0.07, release: 0.6, vowel: 'ah', breath: 0.12 });
-      S.strum(m, t + 0.01, [50, 57, 62, 66, 69, 74, 78], 0.62, 0.028);
-      // the logo forming from light: a high shimmer
+      S.drum(m, t, 'boom', 0.42, 0, 0.9);
+      S.drum(m, t + 0.004, 'taiko', 0.56, -0.25);
+      S.drum(m, t + 0.016, 'taiko', 0.47, 0.25);
+      S.drum({ dry: m.dry, wet: null }, t, 'dum', 0.36, 0);
+      this.bloom(m, t, lite ? 0.02 : 0.029);
+      S.pad(m, t, h, lite ? [38, 50] : [38, 45], { level: 0.085, attack: 0.04, release: 0.5, cutoff: lite ? 900 : 560, voices: lite ? 2 : 3, detune: 6 });
+      S.pad(m, t, h, lite ? [45, 54, 57] : [45, 50, 54, 57], { level: 0.098, attack: 0.05, release: 0.45, cutoff: 2100, cutoffEnd: 1400, voices: lite ? 2 : 3, detune: 9 });
+      S.pad(m, t + 0.02, h, lite ? [62, 66, 74] : [62, 66, 69, 74], { level: 0.058, attack: 0.12, release: 0.5, cutoff: 4000, cutoffEnd: 2800, voices: lite ? 2 : 3, detune: 8, vib: 9, vibRate: 5.4, vibDelay: 0.3 });
+      S.choir(m, t + 0.01, h, lite ? [50, 57, 62, 66] : [50, 54, 57, 62, 66, 69], { level: 0.115, attack: 0.07, release: 0.6, vowel: 'ah', breath: 0.12 });
+      S.strum(m, t + 0.01, [50, 57, 62, 66, 69, 74, 78], 0.7, 0.028);
+      // the light of the lockup: the high strings open above the choir (presence, not weight)
+      S.pad(m, t + 0.03, h, lite ? [74, 78, 81] : [74, 78, 81, 86], { level: 0.034, attack: 0.18, release: 0.6, cutoff: 6000, cutoffEnd: 4200, voices: lite ? 2 : 3, detune: 7, vib: 8, vibRate: 5.5, vibDelay: 0.25 });
+      S.choir(m, t + 0.02, h, [74, 78], { level: 0.05, attack: 0.1, release: 0.6, vowel: 'ah', breath: 0.1 });
       S.pad(m, t + 0.05, 2.6, [86, 90, 93], { level: 0.007, attack: 0.5, release: 1.4, cutoff: 9000, voices: 2, detune: 8, trem: 0.25, tremRate: 11 });
     }, chap - logo + 0.15, undefined, true);
-
-    // ---- the theme's answer under the Hebrew name and the chapter line: the pipe (strings doubling), IV then V
+    // the theme's answer under the Hebrew name (the pipe, strings doubling; דָּוִד: the kinnor's rising fifth D–A)
     this.add(sec, heb, (t, m) => {
       S.ney(m, t, motif(74, ANSWER, u), 0.08);
       this.line(m, t + 0.01, ANSWER.map(([o, n]) => [74 + o, n] as const), u, 0.026, 'str');
-      // דָּוִד: the rising fifth D–A on the kinnor
       S.lyre(m, t, 74, 0.42, 0.15); S.lyre(m, t + 0.03, 81, 0.38, 0.3);
     });
-    // the chapter line: a pluck high over the turn to G
     this.add(sec, chap, (t, m) => S.lyre(m, t + 0.02, 86, 0.3, 0.25));
+    // the harmony after the chapter line
     const ANS: Partial<Record<ChordName, readonly [readonly number[], readonly number[], readonly number[], number]>> = {
       // [strings, phone strings, choir, bass]
       G: [[43, 50, 55, 59, 62, 67], [50, 55, 59, 67], [55, 59, 62, 67], 31],
+      Em: [[40, 47, 52, 55, 59, 64], [52, 55, 59, 64], [55, 59, 64], 28],
       A: [[45, 52, 57, 61, 64, 69], [52, 57, 61, 69], [57, 61, 64], 33],
     };
-    for (const sg of segs) {
-      if (sg.a < chap - 1e-6 || sg.a >= settle - 1e-6) continue;
-      const v = ANS[sg.n];
+    const segs: Array<readonly [number, number, ChordName, number]> = [];
+    if (film) {
+      const e1 = clamp(chap + (setDown - chap) * 0.38, chap + 0.3, setDown - 0.6), a1 = clamp(setDown - Math.min(0.9, (setDown - chap) * 0.3), e1 + 0.2, setDown - 0.2);
+      segs.push([chap, e1, 'G', 1], [e1, a1, 'Em', 0.85], [a1, setDown, 'A', 0.9]);
+    } else {
+      const a1 = clamp(chap + 3 * u, chap + 0.3, settle - 0.3);
+      segs.push([chap, a1, 'G', 1], [a1, settle, 'A', 0.9]);
+    }
+    for (const [a, b, n, k] of segs) {
+      const v = ANS[n];
       if (!v) continue;
       const [hi, ph, ch, bass] = v;
-      this.add(sec, sg.a, (t, m, h) => {
-        S.pad(m, t, h, lite ? ph : hi, { level: sg.n === 'G' ? 0.062 : 0.056, attack: 0.18, release: 0.45, cutoff: 2000, cutoffEnd: 1600, voices: lite ? 2 : 3, detune: 9 });
-        S.pad(m, t, h, lite ? [bass + 12] : [bass, bass + 12], { level: 0.04, attack: 0.15, release: 0.4, cutoff: lite ? 900 : 420, voices: 2, detune: 6 });
-        S.choir(m, t + 0.02, h, lite ? ch.slice(0, 3) : ch, { level: sg.n === 'G' ? 0.07 : 0.06, attack: 0.2, release: 0.5, vowel: 'ah', breath: 0.1 });
-        S.drum(m, t, 'taiko', sg.n === 'G' ? 0.24 : 0.2, 0, 0.85);
-      }, sg.b - sg.a + 0.15);
+      this.add(sec, a, (t, m, h) => {
+        S.pad(m, t, h, lite ? ph : hi, { level: 0.058 * k, attack: 0.18, release: 0.45, cutoff: 2000, cutoffEnd: 1600, voices: lite ? 2 : 3, detune: 9 });
+        S.pad(m, t, h, lite ? [bass + 12] : [bass, bass + 12], { level: 0.038 * k, attack: 0.15, release: 0.4, cutoff: lite ? 900 : 420, voices: 2, detune: 6 });
+        S.choir(m, t + 0.02, h, lite ? ch.slice(0, 3) : ch, { level: 0.064 * k, attack: 0.2, release: 0.5, vowel: 'ah', breath: 0.1 });
+        if (n === 'G') S.drum(m, t, 'taiko', 0.22, 0, 0.85);
+      }, b - a + 0.15);
     }
-
-    // ---- the settle: the cadence on D lets go into the game's 6/8 — the drone, the kinnor's pastoral lilt, the pipe
-    // (the chord holds to the end of the shot and lets go over the hand-off, under the game's own D chord rising; the
-    // drone holds half a second longer and crossfades with the game's drone)
-    const letGo = 3;
-    this.add(sec, settle, (t, m, h) => {
-      S.drum(m, t, 'boom', 0.12, 0, 0.9);
-      S.pad(m, t, h, lite ? [50, 54, 57, 62, 66] : [38, 45, 50, 54, 57, 62, 66], { level: 0.038, attack: 0.25, release: letGo, cutoff: 1700, cutoffEnd: 800, voices: lite ? 2 : 3, detune: 8 });
-      S.choir(m, t + 0.02, h, lite ? [57, 62, 66] : [50, 57, 62, 66], { level: 0.036, attack: 0.3, release: letGo, vowel: 'ah', to: 'oo', morph: 1.6, breath: 0.06 });
-      S.pad(m, t, h + 0.5 + 2, [38, 45, 50], { level: 0.066, attack: 0.9, release: letGo + 2, cutoff: 480, voices: lite ? 2 : 3, detune: 6, lfoCents: 300 });
-    }, end - settle + letGo);
-    const q = (end - settle) / 6;
-    const lilt = [0.72, 0.46, 0.46, 0.6, 0.46, 0.46], pat = [0, 2, 4, 5, 4, 2];
-    for (let j = 0; j < 6; j++) {
-      const jj = j;
-      this.add(sec, settle + j * q, (t, m) => {
-        const ns = voicing(CHORDS.D, 57, 81);
-        if (jj === 0) S.lyre(m, t, 50, 0.38, -0.3);
-        const n = ns[Math.min(ns.length - 1, pat[jj])];
-        S.lyre(m, t + rand(-0.006, 0.006), n, lilt[jj] * 0.85 * rand(0.88, 1.08), lyrePan(n));
+    // the kinnor keeps the 6/8 under the answer and the carrying (eighths on the logo's grid, the chord of the moment)
+    const P = STEP68;
+    const kEnd = film ? setDown - 0.12 : settle - P * 0.6;
+    const chordAt = (x: number): ChordName => { let c: ChordName = 'D'; for (const [a, , n] of segs) if (x >= a - 1e-6) c = n; return c; };
+    for (let k = 1; logo + k * P < kEnd; k++) {
+      const x = logo + k * P, s6 = k % 6;
+      const ch = CHORDS[chordAt(x + 0.01)];
+      const w = clamp((x - logo) / Math.max(0.5, kEnd - logo), 0, 1);
+      const vel = 0.5 - 0.16 * w;
+      const idx = [0, 2, 4, 5, 4, 2][s6];
+      this.add(sec, x, (t, m) => {
+        const ns = voicing(ch, 57, 81);
+        const n = ns[Math.min(ns.length - 1, idx)];
+        if (s6 === 0 || s6 === 3) S.lyre(m, t, rootIn(ch, 43), vel * (s6 === 0 ? 0.75 : 0.55), -0.3);
+        S.lyre(m, t + rand(-0.005, 0.005), n, vel * (s6 === 0 ? 1.1 : s6 === 3 ? 0.95 : 0.8) * rand(0.92, 1.06), lyrePan(n));
       });
     }
-    // the pipe's last cadence (F♯ E F♯ — D): its D sounds as the player takes over
+    if (film) {
+      // the set-down: a tender cadence — D (the strings soft, the choir 'oo'), the kinnor's falling arpeggio, a soft stroke
+      this.add(sec, setDown, (t, m, h) => {
+        S.drum(m, t, 'boom', 0.12, 0, 0.95);
+        [81, 78, 74, 69, 66, 62].forEach((n, i) => S.lyre(m, t + 0.02 + i * 0.11, n, 0.42 - i * 0.03, lyrePan(n)));
+        S.pad(m, t, h, lite ? [50, 57, 62, 66] : [38, 45, 50, 57, 62, 66], { level: 0.04, attack: 0.3, release: 0.8, cutoff: 1500, cutoffEnd: 1100, voices: lite ? 2 : 3, detune: 8 });
+        S.choir(m, t + 0.05, h, lite ? [57, 62, 66] : [50, 57, 62, 66], { level: 0.04, attack: 0.4, release: 0.8, vowel: 'ah', to: 'oo', morph: h * 0.6, breath: 0.06 });
+      }, logoOut - setDown + 0.8);
+      this.bleats(sec, 'chapter', chap);
+      this.bleats(sec, 'setDown', setDown);
+      this.add(sec, setDown - 1.0, (t, _m, h, fx) => this.fx.bells(fx, t, h, 0.03, 3, 0, 0.8, 0.5), end - setDown + 1.6);
+      // the lockup fades: the afterglow — D, G/D, D, the strings thinning; the wind
+      const g1 = logoOut + (settle - logoOut) * 0.35, d1 = logoOut + (settle - logoOut) * 0.7;
+      this.add(sec, logoOut, (t, m, h) => {
+        S.pad(m, t, h, lite ? [50, 57, 62, 66] : [38, 45, 50, 57, 62, 66], { level: 0.034, attack: 0.4, release: 0.6, cutoff: 1400, voices: lite ? 2 : 3, detune: 7 });
+        S.choir(m, t, h, lite ? [57, 62] : [50, 57, 62], { level: 0.02, attack: 0.5, release: 0.6, vowel: 'oo', breath: 0.04 });
+      }, g1 - logoOut + 0.3);
+      this.add(sec, g1, (t, m, h) => {
+        S.pad(m, t, h, lite ? [55, 59, 62, 67] : [38, 50, 55, 59, 62, 67], { level: 0.032, attack: 0.4, release: 0.5, cutoff: 1400, voices: lite ? 2 : 3, detune: 7 });
+        S.ney(m, t + 0.1, [{ midi: 79, dur: 0.45 }, { midi: 78, dur: 0.3 }, { midi: 76, dur: 0.6 }], 0.05);
+      }, d1 - g1 + 0.3);
+      this.add(sec, d1, (t, m, h) => S.pad(m, t, h, lite ? [50, 57, 62, 66] : [38, 45, 50, 57, 62, 66], { level: 0.03, attack: 0.4, release: 0.4, cutoff: 1300, voices: lite ? 2 : 3, detune: 7 }), settle - d1 + 0.3);
+      // the kinnor keeps a soft lilt through the afterglow (dotted quarters on the logo's grid): no thinning before the
+      // settle takes over on the game's grid
+      for (let k = Math.ceil((setDown + 1.0 - logo) / (3 * P)); logo + k * 3 * P < settle - 0.4; k++) {
+        const x = logo + k * 3 * P, ch = CHORDS[x >= g1 && x < d1 ? 'G' : 'D'], first = k % 2 === 0;
+        this.add(sec, x, (t, m) => {
+          const ns = voicing(ch, 57, 81);
+          if (first) S.lyre(m, t, rootIn(ch, 43), 0.24, -0.3);
+          const n = ns[first ? 2 : 4] ?? ns[0];
+          S.lyre(m, t + 0.004, n, first ? 0.34 : 0.28, lyrePan(n));
+        });
+      }
+      this.add(sec, logoOut, (t, _m, h, fx) => this.fx.windSwell(fx, t, h, 0.016, 500, 1800, 0.3, -0.3), end - logoOut + 1.2);
+    }
+    // ---- the settle: the cadence on D lets go into the game's 6/8 — ON THE GAME'S GRID (its eighth, so the last bar
+    // ends exactly on the hand-off): the drone, the kinnor's pastoral lilt (a pickup, then a full bar), the pipe's last
+    // cadence (F♯ E F♯ — D: its D sounds as the player takes over)
+    const letGo = 3;
+    this.add(sec, settle, (t, m, h) => {
+      S.drum(m, t, 'boom', 0.1, 0, 0.9);
+      S.pad(m, t, h, lite ? [50, 54, 57, 62, 66] : [38, 45, 50, 54, 57, 62, 66], { level: 0.034, attack: 0.3, release: letGo, cutoff: 1700, cutoffEnd: 800, voices: lite ? 2 : 3, detune: 8 });
+      S.choir(m, t + 0.02, h, lite ? [57, 62, 66] : [50, 57, 62, 66], { level: 0.032, attack: 0.35, release: letGo, vowel: 'ah', to: 'oo', morph: 1.6, breath: 0.06 });
+      S.pad(m, t, h + 0.5 + 2, [38, 45, 50], { level: 0.066, attack: 0.9, release: letGo + 2, cutoff: 480, voices: lite ? 2 : 3, detune: 6, lfoCents: 300 });
+    }, end - settle + letGo);
+    const n8 = Math.max(3, Math.round((end - settle) / GAME_EIGHTH));
+    const q = (end - settle) / n8;
+    const lilt = [0.72, 0.46, 0.46, 0.6, 0.46, 0.46], pat = [0, 2, 4, 5, 4, 2];
+    for (let j = 0; j < n8; j++) {
+      const s6 = (((j - n8) % 6) + 6) % 6, jj = j;
+      this.add(sec, settle + j * q, (t, m) => {
+        const ns = voicing(CHORDS.D, 57, 81);
+        if (s6 === 0 || jj === 0) S.lyre(m, t, 50, 0.36, -0.3);
+        const n = ns[Math.min(ns.length - 1, pat[s6])];
+        S.lyre(m, t + rand(-0.006, 0.006), n, lilt[s6] * 0.85 * rand(0.88, 1.08), lyrePan(n));
+      });
+    }
     this.add(sec, end - 3 * q, (t, m) => S.ney(m, t, [{ midi: 78, dur: q }, { midi: 76, dur: q }, { midi: 78, dur: q }, { midi: 74, dur: 1.6 }], 0.055));
-
-    // ---- the world around him: the wind as the crane rises, the flock below on the slope, the glide down
-    this.add(sec, rise, (t, _m, _h, fx) => this.fx.windSwell(fx, t, logo - rise + 1.4, 0.026, 500, 2400, -0.4, 0.4));
-    this.add(sec, rise + 0.7, (t, _m, _h, fx) => this.fx.chukar(this.far(fx, t, 4, 4200, 0.3, 0.5), t, 0.008, -0.55));
-    this.add(sec, logo + 1.5, (t, _m, _h, fx) => { const f = this.far(fx, t, 4, 2200, 0.35, 0.5); this.fx.bleat(f.dry, t, 0.11, 0.35); });
-    this.add(sec, chap + 1.1, (t, _m, _h, fx) => { const f = this.far(fx, t, 4, 2400, 0.3, 0.5); this.fx.bleat(f.dry, t, 0.075, -0.4, 'lambBleat', 1.06); });
-    this.add(sec, settle - 0.2, (t, _m, _h, fx) => this.fx.windSwell(fx, t, end - settle + 1.6, 0.017, 450, 1600, 0.3, -0.2));
-    this.add(sec, settle + 0.9, (t, _m, _h, fx) => this.fx.bleat(fx.dry, t, 0.1, 0.4));
-
+    this.add(sec, settle - 0.2, (t, _m, _h, fx) => this.fx.windSwell(fx, t, end - settle + 1.6, 0.016, 450, 1600, 0.3, -0.2));
+    if (!film) this.add(sec, settle + 0.6, (t, _m, _h, fx) => this.fx.bleat(fx.dry, t, 0.1, 0.4));
     // ---- the hand-off: ON the end of the shot the game's pastoral music starts on this bar line (tight)
     this.add(sec, end, (t) => this.fireHandoff(t), 0, undefined, true);
   }
@@ -1245,14 +1860,20 @@ export class IntroScore {
   }
 
   /** Legato line: low strings, men's voices, a lone cello, or a humming voice (rests: midi < 0). */
-  private line(o: Out, t: number, ns: ReadonlyArray<readonly [number, number]>, beat: number, level: number, inst: 'str' | 'men' | 'cello' | 'hum'): void {
+  private line(o: Out, t: number, ns: ReadonlyArray<readonly [number, number]>, beat: number, level: number, inst: 'str' | 'men' | 'cello' | 'hum' | 'horn'): void {
     let x = 0;
     for (const [m, b] of ns) {
       const d = b * beat;
       const tt = t + x;
       x += d;
       if (m < 0) continue;
-      if (inst === 'str' || inst === 'cello') {
+      if (inst === 'horn') {
+        // a brass-like horn section: each note opens with a brassy swell (the lowpass sweeping up), slightly detached
+        this.s.pad(o, tt, d + 0.22, [m], {
+          level, attack: Math.min(0.2, d * 0.3), release: 0.35, cutoff: 1500, cutoffEnd: 1000, q: 1.3,
+          voices: this.lite ? 2 : 3, detune: 5, lfoCents: 60, vib: d > 0.6 ? 6 : 0, vibRate: 5, vibDelay: 0.45,
+        });
+      } else if (inst === 'str' || inst === 'cello') {
         this.s.pad(o, tt, d + 0.3, inst === 'str' ? [m, m - 12] : [m], {
           level, attack: Math.min(0.3, d * 0.35), release: 0.5, cutoff: inst === 'str' ? 1200 : 900, q: 1,
           voices: this.lite ? 2 : 3, detune: inst === 'str' ? 9 : 5, lfoCents: 120,
@@ -1507,11 +2128,12 @@ function buildSections(cues: readonly IntroCue[]): Sec[] {
   const last = out[out.length - 1];
   const lsh = last.shots[last.shots.length - 1];
   last.t1 = lsh.t + (lsh.dur > 0 ? lsh.dur : 8);
-  // the film opens out of black (CUT v3: G1 holds 1.5 s of black, the picture comes in ON the blast): that black is a
-  // section of its own, cut a breath before the picture
+  // the film opens out of black ON A HIT (CUT v3/v4: G1 holds 1.5 s of black, the picture comes in ON the blast): that
+  // black is a section of its own, cut a breath before the picture. A picture that RISES out of black (CUT v5's P1:
+  // `fade` 1.6) keeps its black inside its own section (the land theme rises with it).
   const first = out[0], s0 = first.shots[0];
   const pin = s0.beats ? PICTURE_IN.map((k) => s0.beats?.[k]).find((v) => v !== undefined) : undefined;
-  if (first.cut === 'black' && pin !== undefined) {
+  if (first.cut === 'black' && pin !== undefined && !(s0.fade >= 0.3)) {
     const at = s0.t + clamp(pin, 0, Math.max(0, s0.dur - 0.5));
     if (at - first.t0 > 0.4 && first.t1 - at > 0.5) {
       const open = newSec(0, 'open', first.t0, s0, 1);
@@ -1539,8 +2161,10 @@ function buildSections(cues: readonly IntroCue[]): Sec[] {
     sec.next = nx.role;
     if (nx.cut === 'hard' || nx.cut === 'smash') { sec.exit = 'cut'; sec.tau = 0.01; sec.gap = GAP; }
     else if (nx.role === 'silence') { sec.exit = 'cut'; sec.tau = 0.01; sec.gap = 0; }
-    // David's theme rings on across the cut into the crane (D2 -> D3): the logo's swell grows out of it
-    else if (sec.role === 'david' && nx.role === 'horizon') { sec.exit = 'ring'; sec.tau = 0.5; }
+    // the prologue's joins and David's theme ring on across their cuts (D2 -> D3 -> D4: one arc into the logo)
+    else if (RING.has(`${sec.role}>${nx.role}`)) { sec.exit = 'ring'; sec.tau = 0.5; }
+    // the war drums of the host stop dead on the cut to Ramah (their tail rings in the hall)
+    else if (sec.role === 'threat' && nx.cut === 'cut') { sec.exit = 'x'; sec.tau = 0.03; }
     else if (nx.cut === 'dissolve' || nx.cut === 'light' || nx.cut === 'match' || nx.cut === 'black') { sec.exit = 'x'; sec.tau = Math.max(0.12, (nx.fade || 1.2) / 3); }
     else { sec.exit = 'x'; sec.tau = 0.22; }
   }

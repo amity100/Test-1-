@@ -20,6 +20,16 @@
  */
 import { Core, Voice, BQ, bake, addGrains, white, clamp, rand, randi, chance, mtof, type Out, type Curve } from './synth';
 
+/** A sung note (FilmSound.sing): midi (< 0 = a breath rest), seconds, vowel, an optional level accent. */
+export interface SungNote { midi: number; dur: number; vowel?: 'ah' | 'oh' | 'oo' | 'eh'; accent?: number }
+/** Vowel formants F1-F3 (Hz) of a man's and a woman's voice. */
+const VOX_M: Record<'ah' | 'oh' | 'oo' | 'eh', readonly [number, number, number]> = {
+  ah: [730, 1090, 2440], oh: [570, 840, 2410], oo: [330, 870, 2240], eh: [530, 1840, 2480],
+};
+const VOX_F: Record<'ah' | 'oh' | 'oo' | 'eh', readonly [number, number, number]> = {
+  ah: [850, 1220, 2810], oh: [600, 930, 2710], oo: [400, 950, 2670], eh: [610, 2100, 2990],
+};
+
 /** Flock / heart sounds borrowed from the engine's SFX library, played at an exact time into `dest`. */
 export type FilmSfx = 'sheepBleat' | 'goatBleat' | 'lambBleat' | 'heartbeat' | 'bearGrowl';
 export type SfxAtFn = (name: FilmSfx, t: number, volume: number, pan: number, pitch: number, dest: AudioNode) => void;
@@ -362,6 +372,120 @@ export class FilmSound {
 
   heartbeat(dest: AudioNode, t: number, vol: number, pitch = 1): void {
     if (this.sfxAt) this.sfxAt('heartbeat', t, vol, 0, pitch, dest);
+  }
+
+  /**
+   * A few small bronze bells on the flock (CUT v5): `n` animals walking or grazing for `dur` s — each bell its own pitch,
+   * the clapper knocking irregularly (a step, a double knock, a pause), from the baked 'bell' bank. Small and dull, never
+   * Alpine cowbells (bells are known in the Bible — פַּעֲמֹן Ex 28:33, מְצִלּוֹת Zech 14:20 — and small bronze bells in the
+   * Iron Age Levant). `spread` = how far apart they sit in the stereo field around `pan`.
+   */
+  bells(o: Out, t: number, dur: number, level: number, n = 3, pan = 0, spread = 0.6, walk = 1): void {
+    const k = this.lite ? Math.min(2, n) : n;
+    for (let b = 0; b < k; b++) {
+      const rate = rand(0.72, 1.3), p0 = clamp(pan + rand(-spread, spread), -0.95, 0.95);
+      let x = rand(0, Math.min(0.8, dur * 0.3)), guard = 0;
+      while (x < dur && guard++ < 48) {
+        const tt = t + x, a = level * rand(0.35, 1);
+        const buf = this.c.bank('bell')[Math.floor(Math.random() * 3) % Math.max(1, this.c.bank('bell').length)];
+        const v = new Voice(this.c);
+        const s = v.buffer(buf, rate * rand(0.995, 1.005), tt), g = v.gain(a), p = v.pan(p0), lp = v.filter('lowpass', 6500, 0.6);
+        s.connect(lp); lp.connect(g); g.connect(p); out2(p, o, 0.5, v);
+        v.play(tt, tt + buf.duration / rate + 0.05);
+        // a sheep's gait: knocks at its steps, sometimes a double knock, sometimes it stands and grazes
+        x += chance(0.28) ? rand(0.08, 0.15) : chance(0.2 / walk) ? rand(1.0, 2.2) : rand(0.32, 0.7) / walk;
+      }
+    }
+  }
+
+  /**
+   * One human voice singing a wordless line — a shepherd's far call across the valley, Rachel's lament: a glottal source
+   * with a slow pitch drift and a delayed vibrato, portamento between the notes, three vowel formants (a man's or a
+   * woman's) and breath. `notes`: midi (< 0 = a breath), dur (s), vowel. Returns the end time.
+   */
+  sing(o: Out, t: number, notes: ReadonlyArray<SungNote>, level: number, female = false, vib = 32): number {
+    const first = notes.find((n) => n.midi >= 0);
+    if (!first) return t;
+    const v = new Voice(this.c);
+    const F = female ? VOX_F : VOX_M;
+    const src = v.osc('sawtooth', mtof(first.midi), 0, t);
+    const soft = v.filter('lowpass', female ? 3400 : 2600, 0.5);
+    const vibO = v.osc('sine', rand(5.0, 5.7), 0, t), vg = v.gain(0);
+    vibO.connect(vg); vg.connect(src.detune);
+    const dr = v.osc('sine', rand(0.25, 0.6), 0, t), dg = v.gain(7);
+    dr.connect(dg); dg.connect(src.detune);
+    const nz = v.noise('white', t), nh = v.filter('bandpass', female ? 3000 : 2200, 0.6), ng = v.gain(0);
+    nz.connect(nh); nh.connect(ng);
+    const pre = v.gain(1);
+    src.connect(soft); soft.connect(pre); ng.connect(pre);
+    const bank = [v.filter('bandpass', 500, 7), v.filter('bandpass', 1000, 10), v.filter('bandpass', 2700, 14)];
+    const sum = v.gain(1);
+    [1, 0.5, 0.2].forEach((gg, i) => { const g = v.gain(gg * 5.5); pre.connect(bank[i]); bank[i].connect(g); g.connect(sum); });
+    const body = v.filter('lowpass', female ? 700 : 450, 0.7), bg = v.gain(0.35);
+    pre.connect(body); body.connect(bg); bg.connect(sum);
+    const env = v.gain(0);
+    sum.connect(env); out2(env, o, 1, v);
+    const E = env.gain, P = src.frequency, N = ng.gain, VG = vg.gain;
+    E.setValueAtTime(0, t); N.setValueAtTime(0, t); VG.setValueAtTime(0, t);
+    let s = t, prev = -1;
+    for (const n of notes) {
+      const e = s + n.dur;
+      if (n.midi < 0) {
+        E.setTargetAtTime(0, s, 0.04);
+        N.setTargetAtTime(level * 0.05, s, 0.03); N.setTargetAtTime(0, s + n.dur * 0.6, 0.03);
+        s = e; prev = -1;
+        continue;
+      }
+      const f = mtof(n.midi), vw = F[n.vowel ?? 'oo'];
+      if (prev < 0) {
+        P.setValueAtTime(f * 0.97, s); P.exponentialRampToValueAtTime(f, s + Math.min(0.08, n.dur * 0.4));
+        E.setValueAtTime(0, s); E.linearRampToValueAtTime(level, s + Math.min(0.09, n.dur * 0.45));
+        N.setValueAtTime(level * 0.12, s); N.setTargetAtTime(level * 0.025, s + 0.05, 0.05);
+      } else {
+        P.setValueAtTime(mtof(prev), s); P.exponentialRampToValueAtTime(f, s + Math.min(0.07, n.dur * 0.4));
+        E.setTargetAtTime(level * (n.accent ?? 1), s, 0.04);
+      }
+      bank.forEach((bp, i) => bp.frequency.setTargetAtTime(this.c.hz(vw[i]), s, 0.05));
+      E.setTargetAtTime(level * 0.8 * (n.accent ?? 1), s + n.dur * 0.5, n.dur * 0.6);
+      VG.setValueAtTime(0, s);
+      if (n.dur > 0.32) { VG.setValueAtTime(0, s + Math.min(0.28, n.dur * 0.4)); VG.linearRampToValueAtTime(vib, e); }
+      prev = n.midi; s = e;
+    }
+    E.setTargetAtTime(0, s, 0.08); N.setTargetAtTime(0, s, 0.05);
+    v.play(t, s + 0.6);
+    return s;
+  }
+
+  /** Iron struck on an anvil, far away (1 Sam 13:19-20 — the smiths were the Philistines'): a bright ring and a click. */
+  anvil(o: Out, t: number, level: number, pan = 0.3): void {
+    const v = new Voice(this.c);
+    const p = v.pan(pan);
+    out2(p, o, 0.7, v);
+    const e = v.gain(0.35); p.connect(e); e.connect(this.c.echoSend());
+    const f0 = rand(780, 900);
+    const modes: ReadonlyArray<readonly [number, number, number]> = [[1, 1, 0.9], [2.71, 0.6, 0.55], [5.03, 0.35, 0.3], [6.42, 0.22, 0.2], [8.3, 0.12, 0.12]];
+    for (const [r, a, tau] of modes) {
+      const os = v.osc('sine', this.c.hz(f0 * r), 0, t), g = v.gain(0);
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(level * a, t + 0.0012); g.gain.setTargetAtTime(0, t + 0.0012, tau * rand(0.85, 1.1));
+      os.connect(g); g.connect(p);
+    }
+    const n = v.noise('white', t), hp = v.filter('highpass', 3000, 0.7), ng = v.gain(0);
+    ng.gain.setValueAtTime(0, t); ng.gain.linearRampToValueAtTime(level * 0.9, t + 0.0008); ng.gain.setTargetAtTime(0, t + 0.001, 0.006);
+    n.connect(hp); hp.connect(ng); ng.connect(p);
+    v.play(t, t + 3.5);
+  }
+
+  /** Water rushing (the Jordan crossed, Josh 3:16): a swelling band of noise with a slow churn, `dur` s. */
+  rush(o: Out, t: number, dur: number, level: number, pan = 0): void {
+    const v = new Voice(this.c);
+    const n = v.noise('pink', t), bp = v.filter('bandpass', 700, 0.6), hp = v.filter('highpass', 250, 0.7), g = v.gain(0), p = v.pan(pan);
+    const am = v.osc('sine', rand(3, 5), 0, t), ag = v.gain(0.25), base = v.gain(0.75);
+    am.connect(ag); ag.connect(base.gain);
+    bp.frequency.setValueAtTime(500, t); bp.frequency.exponentialRampToValueAtTime(1600, t + dur);
+    n.connect(bp); bp.connect(hp); hp.connect(base); base.connect(g); g.connect(p); out2(p, o, 0.6, v);
+    const G = g.gain;
+    G.setValueAtTime(0, t); G.linearRampToValueAtTime(level * 0.4, t + dur * 0.5); G.linearRampToValueAtTime(level, t + dur * 0.92); G.linearRampToValueAtTime(0, t + dur + 0.25);
+    v.play(t, t + dur + 0.3);
   }
 
   // ------------------------------------------------------------------------------------------ the robe

@@ -479,6 +479,34 @@ export function bakeRustle(ctx: BaseAudioContext): AudioBuffer {
   }, 0.8);
 }
 
+/**
+ * A small bronze bell on a sheep or a goat (CUT v5: the flock at Bethlehem, at Rachel's stone, below David): a dull
+ * clapper knock and a short inharmonic ring (modal synthesis — damped sinusoid recurrences, no per-sample sin()).
+ * Played back at a rate per bell (pitch).
+ */
+export function bakeBell(ctx: BaseAudioContext): AudioBuffer {
+  return bake(ctx, 1.4, 1, (d, sr, len) => {
+    const y = d[0];
+    const f0 = rand(860, 1020);
+    const modes: ReadonlyArray<readonly [number, number, number]> = [
+      [1, 1, rand(0.38, 0.55)], [2.13, 0.55, 0.26], [2.98, 0.36, 0.19], [4.32, 0.22, 0.1], [5.95, 0.12, 0.05],
+    ];
+    for (const [r, a, tau] of modes) {
+      const w = (TAU * f0 * r * rand(0.992, 1.008)) / sr;
+      if (w >= Math.PI) continue;
+      const rr = Math.exp(-1 / (tau * sr)), c1 = 2 * rr * Math.cos(w), c2 = rr * rr, ph = Math.random() * TAU;
+      let y1 = Math.sin(ph - w) / rr, y2 = Math.sin(ph - 2 * w) / (rr * rr);
+      for (let i = 0; i < len; i++) { const v = c1 * y1 - c2 * y2; y2 = y1; y1 = v; y[i] += v * a; }
+    }
+    // the clapper: a dull knock (wood / bronze, damped by the wool)
+    const bp = new BQ('bp', rand(1800, 2600), 1.3, sr);
+    const n = Math.floor(0.005 * sr);
+    for (let i = 0; i < n; i++) y[i] += bp.run(white()) * 1.4 * (1 - i / n);
+    const fi = Math.floor(0.0008 * sr);
+    for (let i = 0; i < fi; i++) y[i] *= i / fi;
+  }, 0.85, 24000);
+}
+
 export interface KSNote { buf: AudioBuffer; rate: number; }
 
 /**
@@ -526,7 +554,7 @@ export function bakeKS(ctx: BaseAudioContext, midi: number, bright: number): KSN
   return { buf, rate };
 }
 
-export type BankName = DrumKind | 'stepWalk' | 'stepRun' | 'skid' | 'gravel' | 'jar' | 'rustle';
+export type BankName = DrumKind | 'stepWalk' | 'stepRun' | 'skid' | 'gravel' | 'jar' | 'rustle' | 'bell';
 export const BANKS: Record<BankName, { n: number; make: (ctx: BaseAudioContext) => AudioBuffer }> = {
   dum: { n: 3, make: (c) => bakeDrum(c, 'dum') },
   tek: { n: 3, make: (c) => bakeDrum(c, 'tek') },
@@ -539,6 +567,7 @@ export const BANKS: Record<BankName, { n: number; make: (ctx: BaseAudioContext) 
   gravel: { n: 3, make: bakeGravel },
   jar: { n: 3, make: bakeJar },
   rustle: { n: 3, make: bakeRustle },
+  bell: { n: 3, make: bakeBell },
 };
 
 // ============================================================================
@@ -572,7 +601,7 @@ export class Core {
 
   private garbage: Array<{ t: number; nodes: AudioNode[] }> = [];
   private readonly banks = new Map<BankName, AudioBuffer[]>();
-  private readonly warmQueue: BankName[] = ['stepWalk', 'dum', 'tek', 'ka', 'taiko', 'stepRun', 'gravel', 'boom', 'jar', 'rustle', 'skid'];
+  private readonly warmQueue: BankName[] = ['stepWalk', 'dum', 'tek', 'ka', 'taiko', 'stepRun', 'gravel', 'boom', 'jar', 'rustle', 'skid', 'bell'];
   private readonly conv: ConvolverNode;
   private readonly sum: GainNode;
   private readonly echoRet: GainNode;

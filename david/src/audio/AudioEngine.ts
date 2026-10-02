@@ -43,7 +43,16 @@ export type SfxName =
   | 'stinger' | 'riser' | 'robeTear'
   // the bear's hook in gameplay (CUT v4): small birds flushed from the bushes (wings + alarm calls, ≈2 s); a low, dark
   // sting with the bear's breath in the dark when its eyes open
-  | 'birdsScatter' | 'eyesSting';
+  | 'birdsScatter' | 'eyesSting'
+  // gameplay v2 (play1's names, docs/gameplay-v2.md): the sling carried in the sash, drawn and stowed, the stone loaded,
+  // one pass of the whirl (the timing beat), the perfect release, the stone's whistle
+  | 'slingDraw' | 'slingStow' | 'stoneToPouch' | 'slingWhoosh' | 'slingPerfect' | 'stoneWhistle'
+  // hits on the range (clay, water, gourds, the cord and the waterskin, a miss on rock / wood / earth, the hit marker)
+  | 'waterSplash' | 'gourdSplit' | 'cordSnap' | 'skinThud' | 'stoneOnRock' | 'stoneOnWood' | 'stoneOnEarth' | 'hitConfirm'
+  // choosing the five smooth stones in the stream bed
+  | 'pebblesKneel' | 'gravelReach' | 'waterRinse' | 'stoneRub' | 'stoneToBag' | 'stoneToss'
+  // the practice range's stings (kinnor, frame drum, the shepherd's pipe)
+  | 'roundStart' | 'roundComplete' | 'rating1' | 'rating2' | 'rating3' | 'streak' | 'praise';
 
 /** volume 0..1 (default 1), pitch multiplier (default 1; slight randomization is added), pan -1..1 */
 export interface SfxOptions { volume?: number; pitch?: number; pan?: number; }
@@ -56,7 +65,7 @@ import {
   voicing, rootIn, degToMidi, lyrePan, bake, BankName, Core, Voice,
   Out, Synth, makeMelody, Composer, MOTIF_DEG, MOTIF_LEN,
 } from './synth';
-import { IntroScore, riserFx, robeTearFx } from './IntroScore';
+import { IntroScore, riserFx, robeTearFx, PASTORAL_EIGHTH } from './IntroScore';
 import { FilmSound } from './FilmSound';
 import { Beds, BED_LEGACY, BED_NAMES, type BedName } from './Beds';
 import type { IntroCue } from '../content/introScript';
@@ -149,7 +158,8 @@ const CELLS_68: ReadonlyArray<readonly number[]> = [[3, 3], [2, 1, 3], [3, 2, 1]
 const END_68: ReadonlyArray<readonly number[]> = [[6], [3, 3], [4, 2]];
 
 class PastoralComposer extends Composer {
-  protected readonly stepDur = 0.34;
+  /** the eighth of the 6/8 (the opening film's settle lets go on this same grid: IntroScore.PASTORAL_EIGHTH) */
+  protected readonly stepDur = PASTORAL_EIGHTH;
   protected readonly stepsPerBar = 6;
   private prog: readonly ChordName[] = PASTORAL_PROGS[0];
   private pat: readonly number[] = LYRE_68[0];
@@ -666,6 +676,7 @@ class SlingSpin {
   private lastActive = -10;
   private lastSet = -10;
   private lastPower = -1;
+  private lastRate = -1;
 
   constructor(private readonly c: Core) {}
 
@@ -693,18 +704,24 @@ class SlingSpin {
     this.lfo = lfo; this.bp = bp; this.fmD = fmD; this.level = level;
   }
 
-  set(active: boolean, power: number, now: number): void {
+  /**
+   * `rate` (gameplay v2): the whirl's revolutions per second as the picture shows them (1.4 .. 3.0) — the loop's pulse
+   * follows it exactly and sits ~3 dB lower, under the per-revolution 'slingWhoosh' accents; without it (older callers)
+   * the pulse follows the power (2 + 5·power).
+   */
+  set(active: boolean, power: number, now: number, rate?: number): void {
     const pw = clamp(fin(power, 0), 0, 1);
+    const rr = rate !== undefined && Number.isFinite(rate) && rate > 0 ? clamp(rate, 0.5, 8) : -1;
     if (active) { this.lastActive = now; if (!this.lfo) this.build(now); }
     if (!this.lfo || !this.bp || !this.fmD || !this.level) return;
-    if (active === this.active && Math.abs(pw - this.lastPower) < 0.01 && now - this.lastSet < 0.2) return;
-    this.active = active; this.lastPower = pw; this.lastSet = now;
+    if (active === this.active && Math.abs(pw - this.lastPower) < 0.01 && Math.abs(rr - this.lastRate) < 0.02 && now - this.lastSet < 0.2) return;
+    this.active = active; this.lastPower = pw; this.lastRate = rr; this.lastSet = now;
     const sp = this.c.slowPitch;
     if (active) {
-      this.lfo.frequency.setTargetAtTime((2 + 5 * pw) * sp, now, 0.06);
+      this.lfo.frequency.setTargetAtTime((rr > 0 ? rr : 2 + 5 * pw) * sp, now, 0.06);
       this.bp.frequency.setTargetAtTime(this.c.hz((420 + 1100 * pw) * sp), now, 0.08);
       this.fmD.gain.setTargetAtTime((200 + 500 * pw) * sp, now, 0.08);
-      this.level.gain.setTargetAtTime(SLING_GAIN * (0.35 + 0.65 * pw), now, 0.06);
+      this.level.gain.setTargetAtTime(SLING_GAIN * (0.35 + 0.65 * pw) * (rr > 0 ? 0.7 : 1), now, 0.06);
     } else {
       this.level.gain.setTargetAtTime(0, now, 0.035);
     }
@@ -737,6 +754,7 @@ type Pts = ReadonlyArray<readonly [number, number]>;
 const UI_SFX: ReadonlySet<string> = new Set<SfxName>([
   'uiObjective', 'uiConfirm', 'heartbeat', 'titleHit', 'shepherdCall', 'shepherdWhistle', 'stinger', 'riser', 'robeTear',
   'eyesSting',
+  'hitConfirm', 'roundStart', 'roundComplete', 'rating1', 'rating2', 'rating3', 'streak', 'praise',
 ]);
 /** [voice group, max concurrent] */
 const SFX_LIMIT: Partial<Record<SfxName, readonly [string, number]>> = {
@@ -747,6 +765,12 @@ const SFX_LIMIT: Partial<Record<SfxName, readonly [string, number]>> = {
   shepherdCall: ['call', 2], shepherdWhistle: ['call', 2],
   stinger: ['stinger', 2], riser: ['riser', 1], robeTear: ['tear', 1],
   birdsScatter: ['scatter', 1], eyesSting: ['eyes', 1],
+  slingDraw: ['slingHand', 2], slingStow: ['slingHand', 2], stoneToPouch: ['pouch', 2], slingWhoosh: ['whirl', 3],
+  slingPerfect: ['perfect', 2], stoneWhistle: ['whistle', 4], waterSplash: ['water', 4], gourdSplit: ['gourd', 3],
+  cordSnap: ['cord', 2], skinThud: ['skin', 2], stoneOnRock: ['stone', 6], stoneOnWood: ['stone', 6], stoneOnEarth: ['stone', 6],
+  hitConfirm: ['hitUi', 3], pebblesKneel: ['bed', 2], gravelReach: ['bed', 2], waterRinse: ['rinse', 2], stoneRub: ['rub', 2],
+  stoneToBag: ['bag', 2], stoneToss: ['toss', 3], roundStart: ['sting', 2], roundComplete: ['sting', 2], rating1: ['rating', 1],
+  rating2: ['rating', 1], rating3: ['rating', 1], streak: ['streak', 3], praise: ['praise', 1],
 };
 
 /** Loudness trims (measured, K-weighted) so volume 1 of every effect sits well against the score. */
@@ -754,6 +778,8 @@ const SFX_GAIN: Partial<Record<SfxName, number>> = {
   footstep: 1.3, stoneHitBear: 0.75, jarShatter: 0.7, sheepBleat: 0.6, lambBleat: 0.6, goatBleat: 0.42,
   bearRoar: 0.7, bearGrowl: 0.85, bearHurt: 0.6, bearDeath: 0.7, davidHurt: 0.6, heartbeat: 0.7,
   impactBoom: 0.65, titleHit: 0.6,
+  // gameplay v2 (measured in dev/score.ts 'sfx-game' against the pastoral music, which sits near -19 LUFS)
+  skinThud: 0.75, roundComplete: 0.82, pebblesKneel: 1.2, gravelReach: 1.3, waterRinse: 1.45, stoneRub: 1.4, stoneToss: 1.2,
 };
 
 interface BleatPreset {
@@ -880,6 +906,34 @@ class SfxLib {
         return e;
       },
       eyesSting: (v, t, o, p, s) => this.eyesSting(v, t, o, s),
+      // gameplay v2
+      slingDraw: (v, t, o, p) => this.slingDraw(v, t, o, p),
+      slingStow: (v, t, o, p) => this.slingStow(v, t, o, p),
+      stoneToPouch: (v, t, o, p) => this.stoneToPouch(v, t, o, p),
+      slingWhoosh: (v, t, o, p) => this.slingWhoosh(v, t, o, p),
+      slingPerfect: (v, t, o, p, s) => this.slingPerfect(v, t, o, p, s),
+      stoneWhistle: (v, t, o, p, s) => this.stoneWhistle(v, t, o, p, s),
+      waterSplash: (v, t, o, p, s) => this.waterSplash(v, t, o, p, s, 1),
+      gourdSplit: (v, t, o, p, s) => this.gourdSplit(v, t, o, p, s),
+      cordSnap: (v, t, o, p, s) => this.cordSnap(v, t, o, p, s),
+      skinThud: (v, t, o, p, s) => this.skinThud(v, t, o, p, s),
+      stoneOnRock: (v, t, o, p, s) => this.stoneOn(v, t, o, p, s, 'rock'),
+      stoneOnWood: (v, t, o, p, s) => this.stoneOn(v, t, o, p, s, 'wood'),
+      stoneOnEarth: (v, t, o, p, s) => this.stoneOn(v, t, o, p, s, 'earth'),
+      hitConfirm: (v, t, o, p) => this.hitConfirm(v, t, o, p),
+      pebblesKneel: (v, t, o, p) => this.pebblesKneel(v, t, o, p),
+      gravelReach: (v, t, o, p) => this.gravelReach(v, t, o, p),
+      waterRinse: (v, t, o, p, s) => this.waterRinse(v, t, o, p, s),
+      stoneRub: (v, t, o, p) => this.stoneRub(v, t, o, p),
+      stoneToBag: (v, t, o, p) => this.stoneToBag(v, t, o, p),
+      stoneToss: (v, t, o, p) => this.stoneToss(v, t, o, p),
+      roundStart: (v, t, o, p, s) => this.rangeSting(t, o, p, s, 'start'),
+      roundComplete: (v, t, o, p, s) => this.rangeSting(t, o, p, s, 'complete'),
+      rating1: (v, t, o, p, s) => this.rangeSting(t, o, p, s, 'r1'),
+      rating2: (v, t, o, p, s) => this.rangeSting(t, o, p, s, 'r2'),
+      rating3: (v, t, o, p, s) => this.rangeSting(t, o, p, s, 'r3'),
+      streak: (v, t, o, p, s) => this.streak(t, o, p, s),
+      praise: (v, t, o, p, s) => this.praise(t, o, p, s),
     };
   }
 
@@ -1208,6 +1262,387 @@ class SfxLib {
     tone.connect(o); air.connect(o);
     s.echo(0.35); s.hall(0.2);
     return e + 0.1;
+  }
+
+  // --- gameplay v2 (docs/gameplay-v2.md; play1's names): the sling in the sash, the stones, the range ----------------
+
+  /** The sling pulled out from under the sash: a short leather slide against the wool, the two cords flicking open. */
+  private slingDraw(v: Voice, t: number, o: AudioNode, p: number): number {
+    const c = this.c;
+    const n = v.noise('pink', t), bp = v.filter('bandpass', 1300 * p, 1.1), g = v.gain(0);
+    bp.frequency.setValueAtTime(c.hz(1100 * p), t); bp.frequency.exponentialRampToValueAtTime(c.hz(2600 * p), t + 0.14);
+    const G = g.gain;
+    G.setValueAtTime(0, t);
+    for (let x = 0; x < 0.15; x += rand(0.012, 0.025)) G.linearRampToValueAtTime(rand(0.15, 0.4), t + x);
+    G.linearRampToValueAtTime(0, t + 0.17);
+    n.connect(bp); bp.connect(g); g.connect(o);
+    this.sample(v, o, t + 0.01, 'rustle', p * rand(1.1, 1.3), 0.25);
+    this.swoosh(v, o, t + 0.13, p * 1.3, 0.09, 900, 2600, 1400, 0.55);
+    this.swoosh(v, o, t + 0.2, p * 1.2, 0.08, 800, 2300, 1200, 0.4);
+    this.burst(v, o, t + 0.27, 'white', 'bandpass', 3200 * p, 1.4, 0.18, 0.0006, 0.006);
+    return t + 0.4;
+  }
+
+  /** The sling folded and tucked back under the sash: a cord swish, the leather and the wool, a soft tuck. */
+  private slingStow(v: Voice, t: number, o: AudioNode, p: number): number {
+    this.swoosh(v, o, t, p * 1.1, 0.12, 700, 2000, 1000, 0.45);
+    this.sample(v, o, t + 0.08, 'rustle', p * rand(0.85, 1.0), 0.35);
+    const n = v.noise('pink', t + 0.1), bp = v.filter('bandpass', 1700 * p, 0.8), g = v.gain(0);
+    const G = g.gain;
+    G.setValueAtTime(0, t + 0.1);
+    for (let x = 0.1; x < 0.3; x += rand(0.015, 0.03)) G.linearRampToValueAtTime(rand(0.08, 0.25), t + x);
+    G.linearRampToValueAtTime(0, t + 0.33);
+    n.connect(bp); bp.connect(g); g.connect(o);
+    this.thump(v, o, t + 0.3, 170 * p, 90 * p, 0.14, 0.03, 0.04);
+    return t + 0.45;
+  }
+
+  /** A stone from the shepherd's bag into the pouch: a muffled clack among the stones in the bag, a soft leather tap. */
+  private stoneToPouch(v: Voice, t: number, o: AudioNode, p: number): number {
+    const lp = v.filter('lowpass', 2400, 0.7);
+    lp.connect(o);
+    const f = rand(1500, 2100) * p;
+    this.ping(v, lp, t, f, 0.3, 0.012); this.ping(v, lp, t, f * 1.6, 0.16, 0.008);
+    this.ping(v, lp, t + rand(0.03, 0.05), f * 0.86, 0.16, 0.01);
+    this.burst(v, lp, t, 'white', 'bandpass', 2500, 1, 0.25, 0.0005, 0.004);
+    this.sample(v, o, t + 0.04, 'rustle', p * rand(0.9, 1.1), 0.18);
+    const t2 = t + 0.2;
+    this.thump(v, o, t2, 210 * p, 120 * p, 0.2, 0.025, 0.03);
+    this.burst(v, o, t2, 'pink', 'bandpass', 900 * p, 1.6, 0.25, 0.002, 0.025);
+    return t + 0.4;
+  }
+
+  /**
+   * ONE pass of the whirling pouch (play1 calls it once per revolution, at the release point: the timing beat): a short
+   * "whum" with a crisp front — the air torn by the pouch (a band rising and falling past the ear) over the cords' low
+   * thrum. `p` = the whirl's speed (0.85..1.3).
+   */
+  private slingWhoosh(v: Voice, t: number, o: AudioNode, p: number): number {
+    const c = this.c;
+    const d = clamp(0.17 / Math.sqrt(p), 0.11, 0.2);
+    const n = v.noise('pink', t), bp = v.filter('bandpass', 500 * p, 1.6), g = v.gain(0);
+    bp.frequency.setValueAtTime(c.hz(380 * p), t); bp.frequency.exponentialRampToValueAtTime(c.hz(1100 * p), t + d * 0.35);
+    bp.frequency.exponentialRampToValueAtTime(c.hz(420 * p), t + d);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(1.1, t + 0.012); g.gain.setTargetAtTime(0, t + d * 0.35, d * 0.28);
+    n.connect(bp); bp.connect(g); g.connect(o);
+    const th = v.osc('triangle', 95 * p, 0, t), tl = v.filter('lowpass', 500, 0.7), tg = v.gain(0);
+    th.frequency.setValueAtTime(110 * p, t); th.frequency.exponentialRampToValueAtTime(75 * p, t + d);
+    tg.gain.setValueAtTime(0, t); tg.gain.linearRampToValueAtTime(0.32, t + 0.01); tg.gain.setTargetAtTime(0, t + 0.02, d * 0.3);
+    th.connect(tl); tl.connect(tg); tg.connect(o);
+    this.burst(v, o, t, 'white', 'highpass', 2500, 0.7, 0.16, 0.0008, 0.01);
+    return t + d + 0.08;
+  }
+
+  /**
+   * A PERFECT release (on top of slingRelease): the crisp crack of the cord's free end and a subtle bright accent — a
+   * kinnor harmonic high above and a tiny bell.
+   */
+  private slingPerfect(v: Voice, t: number, o: AudioNode, p: number, s: Sends): number {
+    this.burst(v, o, t, 'white', 'highpass', 1800, 0.7, 0.9, 0.0003, 0.0035);
+    this.burst(v, o, t + 0.002, 'white', 'bandpass', 4200, 1.2, 0.5, 0.0004, 0.012);
+    this.thump(v, o, t, 320, 140, 0.18, 0.012, 0.02);
+    const tr = Math.round(12 * Math.log2(clamp(p, 0.5, 2)));
+    this.syn.lyre({ dry: o, wet: null }, t + 0.03, 93 + tr, 0.3, 0.2);
+    this.syn.lyre({ dry: o, wet: null }, t + 0.05, 98 + tr, 0.16, -0.2);
+    const b = pick(this.c.bank('bell'));
+    const bs = v.buffer(b, 2.1 * p, t + 0.04), bg = v.gain(0.07);
+    bs.connect(bg); bg.connect(o);
+    s.hall(0.25); s.echo(0.08);
+    return t + 1.6;
+  }
+
+  /**
+   * The stone's whistle in flight, receding (`p` = its speed, 0.8..1.25): a narrow band of rushing air and a faint tone
+   * wobbling with the stone's tumble, falling a little as it flies away and fading out.
+   */
+  private stoneWhistle(v: Voice, t: number, o: AudioNode, p: number, s: Sends): number {
+    const c = this.c;
+    const d = clamp(0.75 / Math.sqrt(p), 0.5, 0.95), f0 = rand(1900, 2300) * p;
+    const n = v.noise('white', t), bp = v.filter('bandpass', f0, 9), g = v.gain(0);
+    bp.frequency.setValueAtTime(c.hz(f0), t); bp.frequency.exponentialRampToValueAtTime(c.hz(f0 * 0.8), t + d);
+    const tone = v.osc('sine', f0, 0, t), tg = v.gain(0);
+    tone.frequency.setValueAtTime(c.hz(f0), t); tone.frequency.exponentialRampToValueAtTime(c.hz(f0 * 0.8), t + d);
+    const wob = v.osc('sine', rand(18, 30) * p, 0, t), wg = v.gain(f0 * 0.02);
+    wob.connect(wg); wg.connect(tone.frequency); wg.connect(bp.frequency);
+    const G = g.gain, T = tg.gain;
+    G.setValueAtTime(0, t); G.linearRampToValueAtTime(2.2, t + 0.04); G.setTargetAtTime(0, t + 0.08, d * 0.35);
+    T.setValueAtTime(0, t); T.linearRampToValueAtTime(0.05, t + 0.05); T.setTargetAtTime(0, t + 0.1, d * 0.3);
+    n.connect(bp); bp.connect(g); g.connect(o);
+    tone.connect(tg); tg.connect(o);
+    this.burst(v, o, t, 'pink', 'bandpass', 700, 0.9, 0.25, 0.01, 0.06);
+    s.echo(0.05);
+    return t + d + 0.2;
+  }
+
+  /** Water splashing out on the ground (a jar burst, the waterskin; `size` 1 = a jar's worth): a slap, a spray, drops. */
+  private waterSplash(v: Voice, t: number, o: AudioNode, p: number, s: Sends, size: number): number {
+    const c = this.c;
+    const d = 0.55 * size / Math.sqrt(p);
+    this.burst(v, o, t, 'pink', 'lowpass', 900 * p, 0.8, 0.5 * size, 0.002, 0.04);
+    this.thump(v, o, t, 140 * p, 70 * p, 0.2 * size, 0.04, 0.05);
+    const n = v.noise('white', t), bp = v.filter('bandpass', 2400 * p, 0.8), g = v.gain(0);
+    bp.frequency.setValueAtTime(c.hz(1800 * p), t); bp.frequency.exponentialRampToValueAtTime(c.hz(3200 * p), t + d);
+    const G = g.gain;
+    G.setValueAtTime(0, t);
+    for (let x = 0; x < d; x += rand(0.008, 0.02)) G.linearRampToValueAtTime(rand(0.05, 0.4) * size * Math.exp(-x / (d * 0.45)), t + x);
+    G.linearRampToValueAtTime(0, t + d + 0.02);
+    n.connect(bp); bp.connect(g); g.connect(o);
+    const k = Math.max(2, Math.round(randi(5, 9) * size));
+    for (let i = 0; i < k; i++) {
+      const tt = t + 0.02 + Math.pow(Math.random(), 1.4) * d, f = rand(900, 2600) * p;
+      const os = v.osc('sine', f, 0, tt), og = v.gain(0);
+      os.frequency.setValueAtTime(f, tt); os.frequency.exponentialRampToValueAtTime(f * rand(1.4, 2.0), tt + 0.025);
+      og.gain.setValueAtTime(0, tt); og.gain.linearRampToValueAtTime(rand(0.03, 0.08) * size, tt + 0.002); og.gain.setTargetAtTime(0, tt + 0.004, 0.012);
+      os.connect(og); og.connect(o);
+    }
+    s.hall(0.08);
+    return t + d + 0.15;
+  }
+
+  /** A dry gourd cracking open under the stone: a hollow "tock", a crack running along the shell, the seeds, a half falling. */
+  private gourdSplit(v: Voice, t: number, o: AudioNode, p: number, s: Sends): number {
+    const f = rand(330, 420) * p;
+    this.ping(v, o, t, f, 0.5, 0.035); this.ping(v, o, t, f * 2.4, 0.22, 0.018); this.ping(v, o, t, f * 3.9, 0.1, 0.01);
+    this.burst(v, o, t, 'white', 'bandpass', 1800 * p, 1, 0.35, 0.0006, 0.006);
+    const t2 = t + 0.015;
+    const n = v.noise('white', t2), bp = v.filter('bandpass', 2800 * p, 1.2), g = v.gain(0);
+    const G = g.gain;
+    G.setValueAtTime(0, t2);
+    for (let x = 0; x < 0.09; x += rand(0.004, 0.012)) { G.setValueAtTime(rand(0.2, 0.9), t2 + x); G.setTargetAtTime(0, t2 + x + 0.001, 0.003); }
+    n.connect(bp); bp.connect(g); g.connect(o);
+    this.sample(v, o, t + 0.06, 'gravel', p * rand(1.3, 1.6), 0.22);
+    this.thump(v, o, t + rand(0.22, 0.3), 260 * p, 150 * p, 0.12, 0.02, 0.03);
+    s.hall(0.1);
+    return t + 0.6;
+  }
+
+  /** The thin cord holding the waterskin snapping (Judg 20:16, the finale): a taut twang collapsing, a crack, the ends whipping. */
+  private cordSnap(v: Voice, t: number, o: AudioNode, p: number, s: Sends): number {
+    const f = rand(620, 820) * p;
+    const os = v.osc('sawtooth', f, 0, t), lp = v.filter('lowpass', 3500, 1.2), g = v.gain(0);
+    os.frequency.setValueAtTime(f, t); os.frequency.exponentialRampToValueAtTime(f * 0.45, t + 0.07);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.22, t + 0.002); g.gain.setTargetAtTime(0, t + 0.003, 0.03);
+    os.connect(lp); lp.connect(g); g.connect(o);
+    this.burst(v, o, t, 'white', 'highpass', 2500, 0.7, 0.7, 0.0003, 0.004);
+    this.burst(v, o, t + 0.001, 'white', 'bandpass', 5000, 1.5, 0.3, 0.0005, 0.01);
+    this.swoosh(v, o, t + 0.02, p * 1.6, 0.12, 1200, 3500, 1800, 0.35);
+    s.hall(0.12); s.echo(0.1);
+    return t + 0.35;
+  }
+
+  /** The waterskin falling to the ground: a heavy, soft, wet thud and the water rolling inside the leather. */
+  private skinThud(v: Voice, t: number, o: AudioNode, p: number, s: Sends): number {
+    const c = this.c;
+    this.thump(v, o, t, 95 * p, 48 * p, 0.3, 0.1, 0.09);
+    this.thump(v, o, t, 190 * p, 110 * p, 0.2, 0.05, 0.06);
+    this.burst(v, o, t, 'brown', 'lowpass', 420 * p, 0.7, 0.45, 0.003, 0.05);
+    this.burst(v, o, t, 'pink', 'bandpass', 900 * p, 1, 0.3, 0.002, 0.03);
+    const t2 = t + 0.04;
+    const n = v.noise('pink', t2), bp = v.filter('bandpass', 650 * p, 1.4), g = v.gain(0);
+    const am = v.osc('sine', rand(6, 8), 0, t2), ag = v.gain(0.5), base = v.gain(0.5);
+    am.connect(ag); ag.connect(base.gain);
+    bp.frequency.setValueAtTime(c.hz(500 * p), t2); bp.frequency.linearRampToValueAtTime(c.hz(900 * p), t2 + 0.3);
+    g.gain.setValueAtTime(0, t2); g.gain.linearRampToValueAtTime(0.55, t2 + 0.03); g.gain.setTargetAtTime(0, t2 + 0.06, 0.12);
+    n.connect(bp); bp.connect(base); base.connect(g); g.connect(o);
+    this.sample(v, o, t + 0.01, 'gravel', p * 0.7, 0.2);
+    s.hall(0.06);
+    return t + 0.7;
+  }
+
+  /** A sling stone striking (a miss): on rock (a bright clack, chips), on wood (a hollow knock), into earth (a dull thud). */
+  private stoneOn(v: Voice, t: number, o: AudioNode, p: number, s: Sends, kind: 'rock' | 'wood' | 'earth'): number {
+    if (kind === 'rock') {
+      const f = rand(2400, 3400) * p;
+      this.ping(v, o, t, f, 0.35, 0.008); this.ping(v, o, t, f * 1.47, 0.22, 0.006); this.ping(v, o, t, f * 0.62, 0.18, 0.012);
+      this.burst(v, o, t, 'white', 'highpass', 3000, 0.7, 0.55, 0.0003, 0.003);
+      this.thump(v, o, t, 160 * p, 80 * p, 0.22, 0.025, 0.04);
+      this.sample(v, o, t + 0.02, 'gravel', p * rand(1.1, 1.4), 0.22);
+      s.hall(0.1); s.echo(0.12);
+      return t + 0.5;
+    }
+    if (kind === 'wood') {
+      const f = rand(380, 520) * p;
+      this.ping(v, o, t, f, 0.42, 0.04); this.ping(v, o, t, f * 2.6, 0.18, 0.02); this.ping(v, o, t, f * 4.1, 0.08, 0.012);
+      this.burst(v, o, t, 'white', 'bandpass', 1700 * p, 1, 0.3, 0.0005, 0.006);
+      this.thump(v, o, t, 120 * p, 70 * p, 0.25, 0.04, 0.05);
+      s.hall(0.1); s.echo(0.1);
+      return t + 0.45;
+    }
+    this.thump(v, o, t, 120 * p, 55 * p, 0.32, 0.045, 0.06);
+    this.burst(v, o, t, 'brown', 'lowpass', 700, 0.7, 0.35, 0.002, 0.035);
+    this.burst(v, o, t, 'pink', 'bandpass', 1300, 0.8, 0.28, 0.002, 0.025);
+    this.sample(v, o, t + 0.015, 'gravel', p * rand(0.8, 1.0), 0.42);
+    s.hall(0.05);
+    return t + 0.45;
+  }
+
+  /** The hit marker's accent (UI): a soft, dry wooden "tok". */
+  private hitConfirm(v: Voice, t: number, o: AudioNode, p: number): number {
+    this.ping(v, o, t, 820 * p, 0.2, 0.022); this.ping(v, o, t, 1960 * p, 0.08, 0.01);
+    this.burst(v, o, t, 'white', 'bandpass', 2600 * p, 1.2, 0.12, 0.0004, 0.004);
+    return t + 0.2;
+  }
+
+  /** A knee going down onto the stream bed: pebbles crunching and settling under it, the tunic. */
+  private pebblesKneel(v: Voice, t: number, o: AudioNode, p: number): number {
+    this.thump(v, o, t + 0.04, 130 * p, 70 * p, 0.3, 0.035, 0.05);
+    this.sample(v, o, t, 'gravel', p * rand(0.75, 0.9), 0.5);
+    this.sample(v, o, t + 0.07, 'gravel', p * rand(0.9, 1.05), 0.35);
+    this.sample(v, o, t + 0.05, 'skid', p * rand(0.9, 1.1), 0.18);
+    this.sample(v, o, t + 0.02, 'rustle', p * rand(0.7, 0.85), 0.15);
+    return t + 0.6;
+  }
+
+  /** A hand reaching into the gravel and lifting a stone out: pebbles shifting, a small clack as it comes free. */
+  private gravelReach(v: Voice, t: number, o: AudioNode, p: number): number {
+    this.sample(v, o, t, 'gravel', p * rand(1.0, 1.2), 0.3);
+    this.sample(v, o, t + 0.12, 'gravel', p * rand(1.1, 1.3), 0.26);
+    const n = v.noise('pink', t), bp = v.filter('bandpass', 3000 * p, 0.9), g = v.gain(0);
+    const G = g.gain;
+    G.setValueAtTime(0, t);
+    for (let x = 0; x < 0.32; x += rand(0.01, 0.025)) G.linearRampToValueAtTime(rand(0.02, 0.12), t + x);
+    G.linearRampToValueAtTime(0, t + 0.36);
+    n.connect(bp); bp.connect(g); g.connect(o);
+    const f = rand(1800, 2600) * p;
+    this.ping(v, o, t + 0.33, f, 0.16, 0.008); this.ping(v, o, t + 0.33, f * 1.5, 0.08, 0.005);
+    return t + 0.55;
+  }
+
+  /** The stone rinsed in the trickle: a small splash, then the water running off the hand in drops. */
+  private waterRinse(v: Voice, t: number, o: AudioNode, p: number, s: Sends): number {
+    this.waterSplash(v, t, o, p * 1.15, s, 0.45);
+    const t2 = t + 0.12, d = 0.45;
+    const n = v.noise('white', t2), bp = v.filter('bandpass', 3200 * p, 1.4), g = v.gain(0);
+    const G = g.gain;
+    G.setValueAtTime(0, t2);
+    for (let x = 0; x < d; x += rand(0.006, 0.016)) G.linearRampToValueAtTime(rand(0.03, 0.14) * (1 - x / d), t2 + x);
+    G.linearRampToValueAtTime(0, t2 + d + 0.02);
+    n.connect(bp); bp.connect(g); g.connect(o);
+    for (let i = 0; i < 4; i++) {
+      const tt = t2 + rand(0.1, d), f = rand(1200, 2400) * p;
+      const os = v.osc('sine', f, 0, tt), og = v.gain(0);
+      os.frequency.setValueAtTime(f, tt); os.frequency.exponentialRampToValueAtTime(f * 1.6, tt + 0.02);
+      og.gain.setValueAtTime(0, tt); og.gain.linearRampToValueAtTime(0.04, tt + 0.002); og.gain.setTargetAtTime(0, tt + 0.003, 0.01);
+      os.connect(og); og.connect(o);
+    }
+    return t + 0.75;
+  }
+
+  /** The stone rubbed clean between palm and thumb: a soft, dry scrape, twice. */
+  private stoneRub(v: Voice, t: number, o: AudioNode, p: number): number {
+    const c = this.c;
+    const n = v.noise('pink', t), bp = v.filter('bandpass', 2100 * p, 1.1), hp = v.filter('highpass', 900, 0.7), g = v.gain(0);
+    const G = g.gain;
+    G.setValueAtTime(0, t);
+    for (const [a, b] of [[0, 0.15], [0.17, 0.33]] as const) {
+      G.linearRampToValueAtTime(0.02, t + a); G.linearRampToValueAtTime(0.22, t + a + (b - a) * 0.4); G.linearRampToValueAtTime(0.03, t + b);
+      bp.frequency.setValueAtTime(c.hz(1700 * p), t + a); bp.frequency.linearRampToValueAtTime(c.hz(2600 * p), t + b);
+    }
+    G.linearRampToValueAtTime(0, t + 0.36);
+    n.connect(bp); bp.connect(hp); hp.connect(g); g.connect(o);
+    return t + 0.4;
+  }
+
+  /** Into the shepherd's bag: the leather flap lifted, the stone clicking among the others, the flap falling back. */
+  private stoneToBag(v: Voice, t: number, o: AudioNode, p: number): number {
+    this.burst(v, o, t, 'pink', 'bandpass', 700 * p, 1.4, 0.3, 0.01, 0.05);
+    this.sample(v, o, t + 0.02, 'rustle', p * rand(0.8, 0.95), 0.2);
+    const lp = v.filter('lowpass', 2600, 0.7);
+    lp.connect(o);
+    for (let i = 0; i < 3; i++) {
+      const tt = t + 0.16 + i * rand(0.035, 0.06), f = rand(1400, 2200) * p, a = i ? 0.14 : 0.26;
+      this.ping(v, lp, tt, f, a, 0.01); this.ping(v, lp, tt, f * 1.55, a * 0.5, 0.007);
+    }
+    this.thump(v, o, t + 0.17, 180 * p, 100 * p, 0.16, 0.025, 0.03);
+    this.burst(v, o, t + 0.36, 'pink', 'lowpass', 1100 * p, 0.8, 0.3, 0.003, 0.03);
+    this.thump(v, o, t + 0.36, 140 * p, 90 * p, 0.12, 0.02, 0.03);
+    return t + 0.55;
+  }
+
+  /** A rough or flat stone tossed back: a flick of the hand, then a light clack on the gravel a metre or two away. */
+  private stoneToss(v: Voice, t: number, o: AudioNode, p: number): number {
+    this.swoosh(v, o, t, p * 1.5, 0.1, 900, 2400, 1300, 0.16);
+    const t2 = t + rand(0.13, 0.18), lp = v.filter('lowpass', 5000, 0.7), g = v.gain(0.85);
+    lp.connect(g); g.connect(o);
+    const f = rand(2200, 3000) * p;
+    this.ping(v, lp, t2, f, 0.24, 0.007); this.ping(v, lp, t2, f * 1.52, 0.12, 0.005);
+    this.burst(v, lp, t2, 'white', 'highpass', 2800, 0.7, 0.25, 0.0003, 0.003);
+    this.sample(v, lp, t2 + 0.01, 'gravel', p * rand(1.2, 1.5), 0.18);
+    this.ping(v, lp, t2 + rand(0.07, 0.1), f * 0.9, 0.08, 0.005);
+    return t2 + 0.35;
+  }
+
+  /**
+   * The practice range's stings (UI; short, ancient instruments): 'start' a frame-drum double tap; 'complete' a kinnor
+   * flourish over the frame drum; the round's rating — 'r1' one pluck, 'r2' a rising three-note figure over the drum,
+   * 'r3' the fullest: a rising strum, a drum roll and the shepherd's pipe's short call. `p` transposes (1 = D).
+   */
+  private rangeSting(t: number, o: AudioNode, p: number, s: Sends, kind: 'start' | 'complete' | 'r1' | 'r2' | 'r3'): number {
+    const S = this.syn, out: Out = { dry: o, wet: null };
+    const tr = Math.round(12 * Math.log2(clamp(p, 0.5, 2)));
+    switch (kind) {
+      case 'start':
+        // a small frame drum (the tof held in the hand: higher than the score's), struck twice, a slap of the fingers
+        S.drum(out, t, 'dum', 0.5, -0.1, 1.5); S.drum(out, t, 'ka', 0.14, -0.1);
+        S.drum(out, t + 0.16, 'dum', 0.38, 0.1, 1.55); S.drum(out, t + 0.16, 'tek', 0.16, 0.15);
+        s.hall(0.15);
+        return t + 0.9;
+      case 'complete':
+        [62, 66, 69, 74, 78, 81].forEach((m, i) => S.lyre(out, t + i * 0.07, m + tr, 0.32 + i * 0.03, lyrePan(m)));
+        S.drum(out, t, 'dum', 0.36, 0); S.drum(out, t + 0.21, 'tek', 0.1, 0.15); S.drum(out, t + 0.42, 'dum', 0.3, -0.1);
+        S.lyre(out, t + 0.48, 86 + tr, 0.34, 0.3);
+        s.hall(0.3);
+        return t + 2.4;
+      case 'r1':
+        S.lyre(out, t, 74 + tr, 0.55, 0); S.drum(out, t, 'dum', 0.24, 0);
+        s.hall(0.25);
+        return t + 2;
+      case 'r2':
+        S.drum(out, t, 'dum', 0.32, -0.1); S.drum(out, t + 0.18, 'tek', 0.1, 0.15);
+        S.lyre(out, t, 69 + tr, 0.5, -0.2); S.lyre(out, t + 0.18, 74 + tr, 0.55, 0.1); S.lyre(out, t + 0.36, 78 + tr, 0.5, 0.25);
+        s.hall(0.3);
+        return t + 2.2;
+      default: {
+        S.drum(out, t, 'dum', 0.38, -0.1); S.drum(out, t + 0.12, 'tek', 0.1, 0.15); S.drum(out, t + 0.24, 'dum', 0.3, 0.1);
+        S.drum(out, t + 0.36, 'tek', 0.12, -0.15); S.drum(out, t + 0.48, 'dum', 0.42, 0);
+        S.strum(out, t, [62, 66, 69, 74, 78, 81].map((m) => m + tr), 0.55, 0.06);
+        S.lyre(out, t + 0.48, 86 + tr, 0.5, 0.3);
+        const end = S.ney(out, t + 0.5, [{ midi: 81 + tr, dur: 0.14 }, { midi: 86 + tr, dur: 0.36 }, { midi: 88 + tr, dur: 0.09 }, { midi: 86 + tr, dur: 0.12 }, { midi: 81 + tr, dur: 0.55 }], 0.11);
+        s.hall(0.35); s.echo(0.15);
+        return Math.max(end + 0.6, t + 2.6);
+      }
+    }
+  }
+
+  /**
+   * A streak accent (UI): one bright kinnor pluck with its octave below, rising with the streak (play1 passes pitch =
+   * 1 + 0.12·(streak − 2)) — snapped to the D-major pentatonic, so a long streak climbs a scale instead of a slide.
+   */
+  private streak(t: number, o: AudioNode, p: number, s: Sends): number {
+    const PENT = [0, 2, 4, 7, 9];
+    const want = 81 + 12 * Math.log2(clamp(p, 0.5, 4));
+    let best = 81, bd = 99;
+    for (let m = 76; m <= 100; m++) {
+      if (!PENT.includes((((m - 74) % 12) + 12) % 12)) continue;
+      const d = Math.abs(m - want);
+      if (d < bd) { bd = d; best = m; }
+    }
+    const lift = 1 + clamp((best - 81) / 24, 0, 0.6); // the KS's high strings are quieter: keep the streak's level as it climbs
+    this.syn.lyre({ dry: o, wet: null }, t, best, 0.6 * lift, lyrePan(best));
+    this.syn.lyre({ dry: o, wet: null }, t + 0.012, best - 12, 0.25, -lyrePan(best));
+    s.hall(0.3);
+    return t + 1.6;
+  }
+
+  /** A breath of the shepherd's pipe under a Hebrew praise line (UI, ≈0.8 s): a short rising phrase in D. */
+  private praise(t: number, o: AudioNode, p: number, s: Sends): number {
+    const tr = Math.round(12 * Math.log2(clamp(p, 0.5, 2)));
+    const PH: ReadonlyArray<ReadonlyArray<readonly [number, number]>> = [
+      [[74, 0.12], [76, 0.1], [78, 0.5]], [[69, 0.12], [74, 0.45]], [[78, 0.1], [76, 0.1], [74, 0.12], [81, 0.45]],
+    ];
+    const end = this.syn.ney({ dry: o, wet: null }, t, pick(PH).map(([m, d]) => ({ midi: m + tr, dur: d })), 0.1);
+    s.hall(0.3); s.echo(0.25);
+    return end + 0.4;
   }
 
   /** Cinematic dark hit: sub boom, taiko pair, a low string cluster that blooms and sinks, a choir groan. */
@@ -1676,9 +2111,10 @@ export class AudioEngine {
     } catch { /* ignore */ }
   }
 
-  slingSpin(active: boolean, power: number): void {
+  /** The whirling sling's continuous whum (call every frame while whirling); `revPerSec` = the whirl's rate (gameplay v2). */
+  slingSpin(active: boolean, power: number, revPerSec?: number): void {
     if (!this._ready || !this.sling || !this.core) return;
-    try { this.sling.set(!!active, power, this.core.ctx.currentTime); } catch { /* ignore */ }
+    try { this.sling.set(!!active, power, this.core.ctx.currentTime, revPerSec); } catch { /* ignore */ }
   }
 
   setSlowMotion(amount: number): void {

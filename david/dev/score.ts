@@ -1,13 +1,26 @@
 // Score harness: renders the opening film's score + sound design offline through AudioEngine.renderOffline (the
 // runtime code path), driven exactly like src/gameplay/Intro.ts + Story.ts drive it, and downloads float WAVs; plus
-// the bear's hook in gameplay (the 'birdsScatter' / 'eyesSting' sounds and the 'hush' mood). Used by the headless
-// verification (dev/screens/score5/). Every film time comes from the live shot sheet (INTRO_CUES, CUT v4).
+// the bear's hook in gameplay (the 'birdsScatter' / 'eyesSting' sounds and the 'hush' mood) and the sounds of gameplay
+// v2 in sequence. Used by the headless verification (dev/screens/score6/). Every film time comes from the live shot
+// sheet (INTRO_CUES, CUT v5).
 import { AudioEngine, type OfflineRenderOptions } from '../src/audio/AudioEngine';
 import { INTRO_CUES, beatTime, type IntroCue } from '../src/content/introScript';
 
 type Job = Omit<OfflineRenderOptions, 'script'> & { script: NonNullable<OfflineRenderOptions['script']> };
 const STEP = 0.05;
-const at = (t: number, t0: number): boolean => t >= t0 && t < t0 + STEP - 1e-9;
+/**
+ * true on the first script step at or after t0 — exactly once per (job run, t0): the offline render's steps are
+ * quantised to its 128-sample quantum, so their spacing wobbles around STEP (a window test could fire twice or never)
+ */
+const onceDone = new Set<string>();
+const at = (t: number, t0: number, key = ''): boolean => {
+  if (t < 1e-9) onceDone.clear();
+  const k = key + '@' + t0;
+  if (t < t0 - 1e-5 || onceDone.has(k)) return false;
+  if (t > t0 + 0.5) return false;
+  onceDone.add(k);
+  return true;
+};
 const lengthOf = (cs: readonly IntroCue[]): number => cs.reduce((m, c) => (c.shot && c.dur !== undefined ? Math.max(m, c.t + c.dur) : m), 0);
 const END_T = lengthOf(INTRO_CUES);
 /** Start of the first shot whose cue is one of `cues` (NaN when none). */
@@ -19,13 +32,13 @@ const cueT = (...cues: string[]): number => (INTRO_CUES.find((c) => c.shot && cu
  * stopIntro out. A skip (Intro.end(true)): sfx('titleHit') (the score jumps to its logo statement), ambience('fields'),
  * then Story's music('pastoral', 4) 3.4 s later. `clock(t)` maps audio time -> film clock (stalls, seeks).
  */
-function filmCalls(clock: (t: number) => number, skipAt = Infinity, end: 'stop' | 'mood' = 'stop') {
+function filmCalls(clock: (t: number) => number, skipAt = Infinity, end: 'stop' | 'mood' = 'stop', from = 0) {
   let skipped = false;
   let done = false;
   let skipT = 0;
   let prev = -1;
   return (e: AudioEngine, t: number): void => {
-    if (t === 0) e.playIntro(INTRO_CUES, 0);
+    if (t === 0) e.playIntro(INTRO_CUES, from);
     if (skipped) {
       if (at(t, skipT + 3.4)) e.setMusicMood('pastoral', 4);
       return;
@@ -52,13 +65,18 @@ function filmCalls(clock: (t: number) => number, skipAt = Infinity, end: 'stop' 
 const straight = (t: number): number => t;
 /** a picture stall (a loading hitch) of `len` s at film time `at`: the film clock stands still, then runs on */
 const stall = (at: number, len: number) => (t: number): number => (t < at ? t : t < at + len ? at : t - len);
-/** CUT v4: the logo over the panorama and its rise (film times from the sheet's beats) */
+/** CUT v5: the logo in D4 and the lift before it (film times from the sheet's beats) */
 const LOGO = beatTime('horizon', 'logo');
-const RISE = beatTime('horizon', 'rise');
+const LIFT = beatTime('horizon', 'lift');
 const STALL_AT = LOGO - 0.6;
 const SKIP_EARLY = cueT('saul') + 1;
-const SKIP_D3 = RISE + 0.5;
+const SKIP_PRO = cueT('map') + 2;
+const SKIP_D4 = LIFT + 0.3;
 const SEEK_TO = cueT('face') + 1;
+const SEEK_PRO = cueT('judges') + 0.5;
+/** partial windows (fast iteration): the prologue into Gilgal, and D2 → the hand-off */
+const PRO_END = cueT('shofar') + 5;
+const END_FROM = cueT('face');
 
 /**
  * The bear's hook as Story.bearAttack plays it (cut6's BearHook: H1 3.0 s + H2 2.2 s, its cues in hook seconds — the
@@ -79,6 +97,44 @@ function hookCalls() {
   };
 }
 
+/** every named beat of the shots in [a, b) as a mark (film time, 'shot:beat') */
+function beatMarks(a: number, b: number): Array<[number, string]> {
+  const out: Array<[number, string]> = [];
+  for (const c of INTRO_CUES) {
+    if (!c.shot || !c.beats) continue;
+    for (const [k, v] of Object.entries(c.beats)) { const x = c.t + v; if (x >= a && x < b && v > 0) out.push([Math.round(x * 100) / 100, `${c.n}:${k}`]); }
+  }
+  return out;
+}
+
+/**
+ * The sounds of gameplay v2 in sequence (the names play1 calls; a name the engine does not know is silently ignored,
+ * so this job also shows which names exist): [time, name, options].
+ */
+const GAME_SFX: ReadonlyArray<readonly [number, string, { volume?: number; pitch?: number; pan?: number }?]> = [
+  [0.5, 'slingDraw'], [1.0, 'stoneToPouch'],
+  // the whirl (slingSpin every frame at its rate + one slingWhoosh per revolution), the perfect release, the flight
+  [1.6, 'slingWhoosh', { pitch: 0.9, volume: 0.45 }], [2.15, 'slingWhoosh', { pitch: 1.05, volume: 0.6 }], [2.6, 'slingWhoosh', { pitch: 1.2, volume: 0.75 }],
+  [3.0, 'slingRelease', { volume: 0.9 }], [3.0, 'slingPerfect'], [3.02, 'stoneWhistle', { pitch: 1.15, volume: 0.9 }],
+  [3.8, 'hitConfirm'], [3.8, 'jarShatter'], [3.8, 'waterSplash'],
+  [5.0, 'stoneOnRock'], [5.8, 'stoneOnWood'], [6.6, 'stoneOnEarth'], [7.6, 'gourdSplit'], [8.8, 'cordSnap'],
+  [9.6, 'skinThud'], [9.62, 'waterSplash', { volume: 0.6 }],
+  [10.6, 'slingStow'], [11.6, 'pebblesKneel'], [12.3, 'gravelReach'], [13.0, 'waterRinse'], [13.8, 'stoneRub'],
+  [14.4, 'stoneToBag'], [15.4, 'stoneToss'],
+  [16.6, 'roundStart'], [17.6, 'streak', { pitch: 1 }], [18.3, 'streak', { pitch: 1.12 }], [19.0, 'streak', { pitch: 1.24 }],
+  [20.0, 'roundComplete'], [22.5, 'rating1'], [24.6, 'rating2'], [27.0, 'rating3'], [30.4, 'praise'],
+];
+const GAME_SFX_LEN = 32.5;
+const fired: Array<[number, string]> = [];
+(window as unknown as Record<string, unknown>).fired = fired;
+function gameSfx() {
+  return (e: AudioEngine, t: number): void => {
+    if (t === 0) { e.setAmbienceBed('fields', 0.5); fired.length = 0; }
+    for (const [x, name, o] of GAME_SFX) if (at(t, x, name)) { fired.push([Math.round(t * 1000) / 1000, name]); e.sfx(name as Parameters<AudioEngine['sfx']>[0], o); }
+    if (t >= 1.4 && t < 3.0) { const u = (t - 1.4) / 1.6; e.slingSpin(true, u, 1.4 + 1.6 * u); }
+  };
+}
+
 const JOBS: Record<string, Job> = {
   film: { seconds: END_T + 7, script: filmCalls(straight) },
   'film-lite': { seconds: END_T + 7, lite: true, script: filmCalls(straight) },
@@ -88,9 +144,19 @@ const JOBS: Record<string, Job> = {
   'film-stall': { seconds: END_T + 8, script: filmCalls(stall(STALL_AT, 1.0)) },
   // skips: early (G2) and in the crane before the logo — the logo statement, then the score's own hand-off
   'film-skip': { seconds: SKIP_EARLY + 14, script: filmCalls(straight, SKIP_EARLY) },
-  'film-skip-d3': { seconds: SKIP_D3 + 14, script: filmCalls(straight, SKIP_D3) },
+  'film-skip-d4': { seconds: SKIP_D4 + 14, script: filmCalls(straight, SKIP_D4) },
+  'film-skip-pro': { seconds: SKIP_PRO + 14, script: filmCalls(straight, SKIP_PRO) },
   // a seek (Intro.seek / ?introAt=): the film clock jumps from 5 s into D2; the score restarts there
   'film-seek': { seconds: 5 + (END_T - SEEK_TO) + 7, script: filmCalls((t) => (t < 5 ? t : t + SEEK_TO - 5)) },
+  'film-seek-pro': { seconds: 5 + (PRO_END - SEEK_PRO), script: filmCalls((t) => (t < 5 ? t : t + SEEK_PRO - 5)) },
+  // partial windows: the prologue into Gilgal (0 → G1 + 5) and D2 → the hand-off (+7 s of the game's pastoral)
+  prologue: { seconds: PRO_END, script: filmCalls(straight) },
+  'prologue-lite': { seconds: PRO_END, lite: true, script: filmCalls(straight) },
+  ending: { seconds: END_T - END_FROM + 7, script: filmCalls((t) => t + END_FROM, Infinity, 'stop', END_FROM) },
+  'ending-lite': { seconds: END_T - END_FROM + 7, lite: true, script: filmCalls((t) => t + END_FROM, Infinity, 'stop', END_FROM) },
+  // the gameplay v2 sounds in sequence (play1's names; see GAME_SFX)
+  'sfx-game': { seconds: GAME_SFX_LEN, script: gameSfx() },
+  'sfx-game-lite': { seconds: GAME_SFX_LEN, lite: true, script: gameSfx() },
   'bear-hook': { seconds: 18, script: hookCalls() },
   'bear-hook-lite': { seconds: 18, lite: true, script: hookCalls() },
   'bed-fields': { seconds: 14, script: (e, t) => { if (t === 0) e.setAmbienceBed('fields', 0.5); } },
@@ -161,8 +227,16 @@ const hookMarks: Array<[number, string]> = [[H0, 'hook'], [HOOK.scatter, 'birdsS
   'film-mood': [...shotMarks(), [END_T, 'END']],
   'film-stall': [...shotMarks(), [STALL_AT, 'STALL'], [LOGO + 1.0, 'logo@late picture'], [END_T + 1.0, 'END(late)']],
   'film-skip': [...shotMarks().filter((m) => m[0] < SKIP_EARLY + 14), [SKIP_EARLY, 'SKIP'], [SKIP_EARLY + 3.4, 'pastoral req']],
-  'film-skip-d3': [...shotMarks().filter((m) => m[0] < SKIP_D3 + 14), [SKIP_D3, 'SKIP'], [SKIP_D3 + 3.4, 'pastoral req']],
-  'film-seek': [[5, 'SEEK'], [5 + cueT('horizon') - SEEK_TO, 'D3'], [5 + END_T - SEEK_TO, 'END']],
+  'film-skip-d4': [...shotMarks().filter((m) => m[0] < SKIP_D4 + 14), [SKIP_D4, 'SKIP'], [SKIP_D4 + 3.4, 'pastoral req']],
+  'film-skip-pro': [...shotMarks().filter((m) => m[0] < SKIP_PRO + 14), [SKIP_PRO, 'SKIP'], [SKIP_PRO + 3.4, 'pastoral req']],
+  'film-seek': [[5, 'SEEK'], [5 + cueT('watch') - SEEK_TO, 'D3'], [5 + cueT('horizon') - SEEK_TO, 'D4'], [5 + END_T - SEEK_TO, 'END']],
+  'film-seek-pro': [[5, 'SEEK'], [5 + cueT('threat') - SEEK_PRO, 'P6'], [5 + cueT('elders') - SEEK_PRO, 'P7'], [5 + cueT('shofar') - SEEK_PRO, 'G1']],
+  prologue: [...shotMarks().filter((m) => m[0] < PRO_END), ...beatMarks(0, PRO_END)],
+  'prologue-lite': [...shotMarks().filter((m) => m[0] < PRO_END), ...beatMarks(0, PRO_END)],
+  ending: [...shotMarks().filter((m) => m[0] >= END_FROM).map(([x, n]) => [x - END_FROM, n] as [number, string]), ...beatMarks(END_FROM, END_T).map(([x, n]) => [x - END_FROM, n] as [number, string]), [END_T - END_FROM, 'END']],
+  'ending-lite': [...shotMarks().filter((m) => m[0] >= END_FROM).map(([x, n]) => [x - END_FROM, n] as [number, string]), ...beatMarks(END_FROM, END_T).map(([x, n]) => [x - END_FROM, n] as [number, string]), [END_T - END_FROM, 'END']],
+  'sfx-game': GAME_SFX.map(([x, n]) => [x, n] as [number, string]),
+  'sfx-game-lite': GAME_SFX.map(([x, n]) => [x, n] as [number, string]),
   'bear-hook': hookMarks,
   'bear-hook-lite': hookMarks,
 };
@@ -227,4 +301,17 @@ for (const k of Object.keys(JOBS)) {
   }
   out.playIntroAt0Ms = at0;
   return out;
+};
+
+// probe: render one sound effect alone (the library called directly, so an exception is reported, not swallowed)
+(window as unknown as Record<string, unknown>).probeSfx = async (name: string, pitch = 1, volume = 1): Promise<Record<string, unknown>> => {
+  const errors: string[] = [];
+  const buf = await AudioEngine.renderOffline({ seconds: 3, step: STEP, script: (e, t) => {
+    if (t !== 0) return;
+    const x = e as unknown as { lib: { play: (n: string, o: unknown, now: number) => void }; core: { ctx: BaseAudioContext } };
+    try { x.lib.play(name, { pitch, volume }, x.core.ctx.currentTime + 0.2); } catch (err) { errors.push(String((err as Error)?.stack ?? err)); }
+  } });
+  let peak = 0;
+  for (let c = 0; c < buf.numberOfChannels; c++) { const d = buf.getChannelData(c); for (let i = 0; i < d.length; i++) peak = Math.max(peak, Math.abs(d[i])); }
+  return { name, pitch, peak: Math.round(2000 * Math.log10(peak + 1e-9)) / 100, errors };
 };

@@ -13,7 +13,9 @@
  *   the opening film's beds (IntroScore.ts): dawn (the fields at first light — larks, no cicadas),
  *                    heights (air above the clouds: broad gusts, a thin whistle), coast (the sea beyond
  *                    the plain, grit on the wind), gilgal (hot dusty gusts of the Jordan valley — the
- *                    army itself is the score's sound design), hush (the pasture holding its breath).
+ *                    army itself is the score's sound design), hush (the pasture holding its breath),
+ *                    ramah (CUT v5: the town gate on its height in the late afternoon — the wind, far voices
+ *                    in the town, a dog, cooking fires, a far donkey; no bronze: the elders are the score's).
  *
  * Continuous layers are built only while their bed is audible (sources stop and disconnect a few
  * seconds after the bed fades out); sporadic events are short-lived Voices, a handful per second
@@ -21,9 +23,9 @@
  */
 import { Core, Voice, SmoothNoise, bake, BQ, addGrains, white, clamp, rand, randi, chance, pick, lerp } from './synth';
 
-export type BedName = 'fields' | 'dawn' | 'gibeah-exterior' | 'gibeah-hall' | 'heights' | 'coast' | 'gilgal' | 'hush' | 'none';
+export type BedName = 'fields' | 'dawn' | 'gibeah-exterior' | 'gibeah-hall' | 'heights' | 'coast' | 'gilgal' | 'hush' | 'ramah' | 'none';
 type Bed = Exclude<BedName, 'none'>;
-const BEDS: readonly Bed[] = ['fields', 'dawn', 'gibeah-exterior', 'gibeah-hall', 'heights', 'coast', 'gilgal', 'hush'];
+const BEDS: readonly Bed[] = ['fields', 'dawn', 'gibeah-exterior', 'gibeah-hall', 'heights', 'coast', 'gilgal', 'hush', 'ramah'];
 /** Every valid bed name (for input validation). */
 export const BED_NAMES: ReadonlySet<string> = new Set<string>([...BEDS, 'none']);
 
@@ -39,6 +41,7 @@ export const BED_LEGACY: Record<BedName, { wind: number; cicadas: number; birds:
   coast: { wind: 0.5, cicadas: 0.12, birds: 0.04 },
   gilgal: { wind: 0.55, cicadas: 0.1, birds: 0 },
   hush: { wind: 0.3, cicadas: 0, birds: 0 },
+  ramah: { wind: 0.45, cicadas: 0.2, birds: 0.12 }, // CUT v5's P7: the town gate on its height in the late afternoon
   none: { wind: 0, cicadas: 0, birds: 0 },
 };
 
@@ -131,6 +134,11 @@ export class Beds {
           if (due('dog', 13, 28)) this.dog(t, s.far);
           if (due('donkey', 28, 55)) this.donkey(t, s.far);
           break;
+        case 'ramah':
+          if (due('voice', 1.6, 3.6)) this.voice(t, s.far, 0.022, chance(0.08));
+          if (due('dog', 10, 22)) this.dog(t, s.far);
+          if (due('donkey', 18, 40)) this.donkey(t, s.far);
+          break;
         case 'gibeah-hall':
           if (due('murmur', 2.4, 6)) this.voice(t, s.far, 0.014, false);
           if (due('sputter', 2.5, 7)) this.sputter(t, s.gain);
@@ -164,6 +172,7 @@ export class Beds {
     const s = this.st[b];
     // first events soon after the bed starts (so a short shot still "reads")
     if (b === 'gibeah-exterior') s.next = { voice: at + rand(0.3, 1), clink: at + rand(0.8, 2), dog: at + rand(2.5, 5), donkey: at + rand(6, 14) };
+    else if (b === 'ramah') s.next = { voice: at + rand(0.8, 2), dog: at + rand(3, 6), donkey: at + rand(5.5, 7.5) };
     else if (b === 'gibeah-hall') s.next = { murmur: at + rand(0.8, 2), sputter: at + rand(0.5, 2), fabric: at + rand(1.5, 3), steps: at + rand(1.2, 3) };
     else if (b === 'fields' || b === 'dawn') s.next = { lark: at + rand(0.5, 2.5), flock: at + rand(1.5, 4), leaf: at + rand(1, 3) };
     else s.next = {};
@@ -197,7 +206,7 @@ export class Beds {
         }
         break;
       }
-      case 'gibeah-exterior': {
+      case 'gibeah-exterior': case 'ramah': {
         // cooking fires: crackle loop + a soft low flame breath
         const cr = loop(this.crackleBuf());
         const cg = g(0.05), cp = this.panNode(L, -0.35);
@@ -284,7 +293,7 @@ export class Beds {
       const g2 = gust * gust;
       if (P.leafHi) P.leafHi.setTargetAtTime(0.004 + 0.03 * g2, now, 0.3);
       if (P.leafMid) P.leafMid.setTargetAtTime(0.002 + 0.02 * g2 * gust, now, 0.3);
-    } else if (b === 'gibeah-exterior') {
+    } else if (b === 'gibeah-exterior' || b === 'ramah') {
       if (P.flame) P.flame.setTargetAtTime(0.03 + 0.03 * this.flick.at(ph * 1.7), now, 0.15);
     } else if (b === 'heights') {
       if (P.air) P.air.setTargetAtTime(0.012 + 0.05 * gust * gust, now, 0.35);

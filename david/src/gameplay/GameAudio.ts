@@ -16,6 +16,11 @@ export class GameAudio {
   /**
    * One-shot sound. The bear's hook (Story.bearAttack, CUT v4): 'birdsScatter' when the birds fly up out of the bushes
    * (wings + alarm calls, ≈2 s), 'eyesSting' when the eyes open in the dark (a low, dark sting with the bear's breath).
+   * Gameplay v2 (play1's names): the sling — slingDraw, slingStow, stoneToPouch, slingWhoosh (one pass of the whirl: the
+   * timing beat; pitch = whirl speed), slingPerfect (with slingRelease), stoneWhistle (pitch = speed); the range's hits —
+   * waterSplash, gourdSplit, cordSnap, skinThud, stoneOnRock / stoneOnWood / stoneOnEarth, hitConfirm (UI); the stream
+   * bed — pebblesKneel, gravelReach, waterRinse, stoneRub, stoneToBag, stoneToss; the stings (UI) — roundStart,
+   * roundComplete, rating1 / rating2 / rating3, streak (pitch = 1 + 0.12·(streak − 2)), praise.
    */
   sfx(name: SfxName, opts?: SfxOptions) {
     try {
@@ -45,7 +50,7 @@ export class GameAudio {
   }
   /**
    * Either the legacy continuous levels `ambience(wind, cicadas, birds)` (0..1 each) or a named bed
-   * `ambience('fields' | 'dawn' | 'gibeah-exterior' | 'gibeah-hall' | 'heights' | 'coast' | 'gilgal' | 'hush' | 'none', fade = 1.5)`.
+   * `ambience('fields' | 'dawn' | 'gibeah-exterior' | 'gibeah-hall' | 'heights' | 'coast' | 'gilgal' | 'hush' | 'ramah' | 'none', fade = 1.5)`.
    * While the opening film's score plays it owns the ambience: legacy level calls are ignored then, and a named
    * call takes the ambience over from the score.
    */
@@ -85,8 +90,13 @@ export class GameAudio {
   setLite(on: boolean): void {
     this.engine.setLite(on);
   }
-  slingSpin(active: boolean, power: number) {
-    this.engine.slingSpin(active, power);
+  /**
+   * The whirling sling's continuous whum — call every frame while whirling. `revPerSec` (gameplay v2) = the whirl's
+   * revolutions per second as the picture shows them (the loop's pulse follows it, under the per-revolution
+   * sfx('slingWhoosh') accents); without it the pulse follows the power.
+   */
+  slingSpin(active: boolean, power: number, revPerSec?: number) {
+    this.engine.slingSpin(active, power, revPerSec);
   }
   slowMo(a: number) {
     this.engine.setSlowMotion(a);
