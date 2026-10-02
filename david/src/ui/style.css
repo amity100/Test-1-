@@ -608,9 +608,15 @@ canvas { display: block; outline: none; }
 .lg-ch {
   direction: rtl; opacity: 0;
   font: 400 clamp(13px, calc(var(--lg-size) * 0.15), 27px)/1.2 var(--serif-he); letter-spacing: 0.4em; margin-right: 0.4em;
-  color: #f8ecd2; text-shadow: 0 1px 12px rgba(10, 6, 2, 0.9), 0 0 3px rgba(10, 6, 2, 0.7);
+  color: #f8ecd2; text-shadow: 0 1px 12px rgba(10, 6, 2, 0.95), 0 0 4px rgba(10, 6, 2, 0.85), 0 0 20px rgba(10, 6, 2, 0.5);
 }
 .titlecard.on .lg-ch { animation: lgCh 1.4s ease var(--lg-ch, 2s) both; }
+/* the chapter line sits low in the lockup, over the far ridge and the busy terrain: its own soft dark halo (never a box) */
+.lg-ch { position: relative; }
+.lg-ch::before {
+  content: ''; position: absolute; inset: -70% -14%; z-index: -1; pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(16, 9, 3, 0.46), rgba(16, 9, 3, 0.2) 48%, rgba(16, 9, 3, 0) 74%);
+}
 @keyframes lgCh { from { opacity: 0; letter-spacing: 0.6em; margin-right: 0.6em; } to { opacity: 0.96; letter-spacing: 0.4em; margin-right: 0.4em; } }
 /* phones in portrait: a tall picture — the lockup higher in the sky, the letters tighter so DAVID spans ~3/4 of the width */
 @media (max-aspect-ratio: 1/1) {
@@ -621,8 +627,8 @@ canvas { display: block; outline: none; }
     26% { opacity: 1; }
     100% { opacity: 1; letter-spacing: 0.17em; margin-left: 0.17em; transform: none; filter: blur(0) brightness(1) drop-shadow(0 3px 16px rgba(20, 10, 2, 0.6)) drop-shadow(0 0 34px rgba(255, 196, 110, 0.3)); }
   }
-  .lg-ch { font-size: clamp(12px, 3.5vw, 16px); letter-spacing: 0.3em; margin-right: 0.3em; }
-  @keyframes lgCh { from { opacity: 0; letter-spacing: 0.5em; margin-right: 0.5em; } to { opacity: 0.96; letter-spacing: 0.3em; margin-right: 0.3em; } }
+  .lg-ch { font-size: clamp(13px, 3.9vw, 17px); letter-spacing: 0.28em; margin-right: 0.28em; }
+  @keyframes lgCh { from { opacity: 0; letter-spacing: 0.48em; margin-right: 0.48em; } to { opacity: 0.97; letter-spacing: 0.28em; margin-right: 0.28em; } }
 }
 /* landscape phones: a short picture (~350 px between the bars) */
 @media (max-height: 500px) and (min-aspect-ratio: 3/2) {

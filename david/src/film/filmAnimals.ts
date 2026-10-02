@@ -65,10 +65,14 @@ export class FilmFlock {
    * Place up to `max` animals of the flock in the camera's view: on the ground between `near` and `far` metres,
    * inside the frame with a margin (NDC |x| < 0.85, -0.85 < y < horizon - 0.05), at least `clear` (NDC) from the
    * shepherd's projected feet..head line, `spacing` m apart. Call on the cut with the shot's first camera.
-   * D3 (cut6): `minFrom` + `minDist` keep every animal at least that far from a point (the shepherd: the game's first
-   * objective must not be met by the staging), `maxY` keeps them on ground below that height (the slope below him).
+   * D3 (cut6): `minFrom` + `minDist` / `maxDist` keep every animal in that band of distance from a point (the shepherd:
+   * the game's first objective must not be met by the staging, and the sheep must be near enough to read), `sector`
+   * keeps them in that range of headings seen from it (radians, Player convention), `maxY` on ground below that height
+   * (the slope below him); `sheepFirst` takes the cream sheep (and the lamb, the rams) before the dark goats;
+   * `lineOfSight` keeps only spots the lens really sees (the ray from the lens to the animal's back clears the ground
+   * and, if given, `solid` — the rocks): a slope below a brow projects into the frame but can be hidden behind it.
    */
-  stageInView(camera: THREE.PerspectiveCamera, shepherd: THREE.Vector3 | null, o: { near?: number; far?: number; max?: number; clear?: number; spacing?: number; exclude?: Animal[]; yMin?: number; minFrom?: THREE.Vector3; minDist?: number; maxY?: number } = {}) {
+  stageInView(camera: THREE.PerspectiveCamera, shepherd: THREE.Vector3 | null, o: { near?: number; far?: number; max?: number; clear?: number; spacing?: number; exclude?: Animal[]; yMin?: number; minFrom?: THREE.Vector3; minDist?: number; maxDist?: number; sector?: [number, number]; maxY?: number; sheepFirst?: boolean; lineOfSight?: boolean; solid?: (x: number, y: number, z: number) => boolean } = {}) {
     this.restore();
     const near = o.near ?? 5, far = o.far ?? 34, max = o.max ?? 14, clear = o.clear ?? 0.22, spacing = o.spacing ?? 1.5;
     // the lowest NDC y an animal may stand at (a 2.39 letterbox over a 16:9 canvas hides |y| > ~0.74)
@@ -88,9 +92,15 @@ export class FilmFlock {
       sy1 = _v.y;
     }
     const pool = this.flock.animals.filter((a) => a.state !== 'carried' && !(o.exclude ?? []).includes(a));
+    if (o.sheepFirst) {
+      const rank = (a: Animal) => (a.kind === 'goat' ? 2 : a.kind === 'ram' ? 1 : 0);
+      pool.sort((a, b) => rank(a) - rank(b));
+    }
     const placed: THREE.Vector3[] = [];
     let k = 0;
-    for (let tries = 0; tries < 400 && placed.length < max && k < pool.length; tries++) {
+    // (D3's narrow bands of distance and sight need more candidates; every other call keeps its original 400)
+    const maxTries = o.lineOfSight || o.maxDist !== undefined ? 1200 : 400;
+    for (let tries = 0; tries < maxTries && placed.length < max && k < pool.length; tries++) {
       const u = hash(tries, 1), w = hash(tries, 2);
       const ang = (u - 0.5) * hfov * 0.8;
       const d = near + (far - near) * Math.pow(w, 0.8);
@@ -98,12 +108,30 @@ export class FilmFlock {
       const x = cam.x + dir.x * d, z = cam.z + dir.z * d;
       const p = new THREE.Vector3(x, this.ground(x, z), z);
       if (o.maxY !== undefined && p.y > o.maxY) continue;
-      if (o.minFrom && Math.hypot(p.x - o.minFrom.x, p.z - o.minFrom.z) < (o.minDist ?? 0)) continue;
+      if (o.minFrom) {
+        const fx = p.x - o.minFrom.x, fz = p.z - o.minFrom.z;
+        const fd = Math.hypot(fx, fz);
+        if (fd < (o.minDist ?? 0) || fd > (o.maxDist ?? Infinity)) continue;
+        if (o.sector) {
+          const h = Math.atan2(fx, fz), mid = (o.sector[0] + o.sector[1]) / 2, half = (o.sector[1] - o.sector[0]) / 2;
+          if (Math.abs(Math.atan2(Math.sin(h - mid), Math.cos(h - mid))) > half) continue;
+        }
+      }
       // in frame, below the horizon, clear of the shepherd
       _v.copy(p).add(_s.set(0, 0.45, 0)).project(camera);
       if (_v.z > 1 || Math.abs(_v.x) > 0.85 || _v.y < yMin || _v.y > 0.75) continue;
       if (shepherd && Math.abs(_v.x - sx) < clear && _v.y > sy0 - 0.1 && _v.y < sy1 + 0.1) continue;
       if (placed.some((q) => q.distanceTo(p) < spacing)) continue;
+      if (o.lineOfSight) {
+        const ty = p.y + 0.45;
+        let hidden = false;
+        for (let s = 1; s < 48 && !hidden; s++) {
+          const u = s / 48;
+          const x = cam.x + (p.x - cam.x) * u, y = cam.y + (ty - cam.y) * u, z = cam.z + (p.z - cam.z) * u;
+          if (this.ground(x, z) > y - 0.08 || (o.solid && o.solid(x, y, z))) hidden = true;
+        }
+        if (hidden) continue;
+      }
       placed.push(p);
       const a = pool[k++];
       this.saved.push({ a, pos: a.position.clone(), heading: a.heading, ai: a.aiEnabled, state: a.state, speed: a.manualSpeed });

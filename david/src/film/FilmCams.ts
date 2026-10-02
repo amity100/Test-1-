@@ -589,6 +589,31 @@ export function applyHandheld(take: string, t: number, ft: number, f: ShotFrame)
   f.roll = (f.roll ?? 0) + roll;
 }
 
+/**
+ * Phones in portrait (Intro.portrait; FilmWorld stages the flock in the same lens): the shots are composed for a 2.39
+ * frame and the lens keeps its vertical angle, so a tall screen would show only the middle of the composition. The lens
+ * widens to keep ~45 % of the horizontal coverage and turns toward the shot's subject (horizontally, the tilt kept).
+ * `keep` 0..1 scales the whole correction (D3 lets go of it over the glide into the game's camera).
+ */
+export function portraitLens(f: ShotFrame, subject: THREE.Vector3 | null, aspect: number, keep = 1) {
+  if (!(aspect < 0.95) || keep <= 0) return;
+  const fov = f.fov ?? 40;
+  const k = 1 + (Math.min(2.6, Math.max(1, (0.45 * 2.39) / aspect)) - 1) * keep;
+  const half = Math.atan(Math.tan(THREE.MathUtils.degToRad(fov) / 2) * k);
+  f.fov = Math.min(78, THREE.MathUtils.radToDeg(2 * half));
+  if (!subject) return;
+  const d = _a.copy(f.look).sub(f.pos);
+  const dist = d.length();
+  const s = _b.copy(subject).sub(f.pos);
+  const sd = s.length();
+  if (dist > 1e-4 && sd > 0.3) {
+    d.multiplyScalar(1 / dist);
+    s.multiplyScalar(1 / sd);
+    d.lerp(s, 0.6 * keep).normalize();
+    f.look.copy(f.pos).addScaledVector(d, dist);
+  }
+}
+
 /** exposure multiplier of a take at shot second t (on top of the set's own) */
 export function takeExposure(take: string, t = 0): number {
   const L = TAKE_LOOK[take];

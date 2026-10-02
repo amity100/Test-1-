@@ -9,7 +9,7 @@ import { LAYOUT } from '../world/Layout';
 import { rachelShots, hideTreesNear, type RachelShots } from './land/rachel';
 import type { FilmFocus } from './FilmStage';
 import { FilmFlock } from './filmAnimals';
-import { drift, takeBeat, takeDur } from './FilmCams';
+import { drift, portraitLens, takeBeat, takeDur } from './FilmCams';
 import { INTRO_SHOTS } from '../content/introScript';
 
 /**
@@ -23,11 +23,11 @@ import { INTRO_SHOTS } from '../content/introScript';
  *   'figure'       D1  (6 s) a slow crane / orbit behind David on his rock against the low sun, the flock below
  *   'face'         D2  (4 s) the push-in on his face as he turns into the light (beats.turn)
  *   'horizon'      D3  (10 s, CUT v4) THE LOGO SHOT: one long crane — from close behind his shoulder (his curls, the
- *                      low sun ahead) up, back and around in a wide arc to the panorama (by ~4 s: David small on the
- *                      rock, his flock on the slope below him, the hills to the horizon in the haze, the sun's glow), a
- *                      slow drift under the logo, and from beats.settle a glide down and in that lands EXACTLY on the
- *                      gameplay camera behind him at the end of the shot (the `handoff` frame the player gives:
- *                      CameraRig.followFrame) — the game takes over without a cut
+ *                      low sun ahead) up, back and around behind him in a wide arc to the panorama (by ~4 s, from the
+ *                      north-north-east: David small on the rock, his flock grazing on the slope below him, the hills to
+ *                      the horizon in the haze), a slow drift under the logo, and from beats.settle a glide down and in,
+ *                      round behind him, that lands EXACTLY on the gameplay camera at the end of the shot (the
+ *                      `handoff` frame the player gives: CameraRig.followFrame) — the game takes over without a cut
  *   'vista'            a slow crane over the hills (only as the stand-in for a film set that failed to build)
  *   'rachel-dawn'  P3  of CUT v2 (Rachel's standing stone at dawn) — not filmed since CUT v3; its staging is only built
  *                      when the sheet has the take
@@ -95,28 +95,37 @@ export const WORLD_CAM = {
   // run time. The channels are C1 monotone cubics (no overshoot), still at both ends (the landing is soft and exact).
   //  0.0  close behind his right shoulder (west of him, at his head's height), his curls against the low sun ahead
   //  0.8  pulling back to the south-west, clear of the boulder NW of him (collider r 0.99 m, top 2.63 m, 3.1 m out)
-  //  1.6-3.2  up and over that boulder and the one behind it (8.5 m out, top 3.36 m), swinging round behind him to the
-  //       north — the line of sight to his head passes above the boulder's top all the way
-  //  4.2  the panorama: David small on the rock right of centre, his flock on the slope beyond and below him, the hills
-  //       in the haze to the horizon, the sun's glow at the left — the crane settling a little lower and further out
-  //       under the logo, so the sky (its negative space: UI.logo) opens up
-  //  8.0  `settle`: then the glide down and in onto the gameplay camera behind him (10.0)
+  //  1.5  up over that boulder's sector, high and looking down on him (the line of sight to his head stays above the
+  //       boulder's near edge — checked against the colliders every 0.1 s: never occluded)
+  //  2.2  on round behind him to the north, the crane pulling back and TILTING UP: the land and the horizon, the low
+  //       sun's glow (≈51.2 s)
+  //  3.0  behind him (north), the lens panning on to the south: his flock on the slope below him comes into view
+  //  4.2  the panorama, from the north-north-east (over the brow of the eastern slope, the only side from which the
+  //       slope south of the rock is not hidden behind it): David small on the rock right of centre, his flock grazing
+  //       and walking on that slope below and left of him (cream sheep, dark goats: 12-36 m from him, 25-50 m from the
+  //       lens), the hills to the horizon in the haze (≈43 % from the top), the sky's negative space for the logo
+  //       (UI.logo); it drifts slowly back round toward his back and a little lower under the logo
+  //  8.0  `settle`: then the glide down and in, round behind him, onto the gameplay camera (10.0)
   // The look of every key is solved so that his head sits at a chosen point of the frame (0.30 / -0.06 at the start,
-  // 0.22 / -0.40 in the panorama; NDC, 16:9): the lens tilts with the crane and never loses him.
+  // 0.50 / -0.20 in the panorama; NDC, 16:9): the lens tilts with the crane and never loses him for long.
   horizon: {
     keys: [
       [0, 270, 1.2, 1.62, 101.59, 2.09, 42],
       [0.2, 270.8, 1.28, 1.66, 102.47, 3.47, 42.2],
       [0.8, 278, 2.6, 2.5, 108.69, 16.97, 43.5],
-      [1.6, 264, 5.6, 4.9, 93.95, 24.73, 46],
-      [2.4, 246, 8.4, 6.6, 75.78, 23.12, 47.5],
-      [3.2, 228, 10.8, 7.2, 58.26, 18.43, 49],
-      [4.2, 212, 12.6, 6.4, 42.9, 10.84, 50],
-      [8, 205, 13.4, 5.8, 35.9, 7.1, 51],
+      [1.5, 252, 4.8, 5, 82.56, 26.42, 46.5],
+      [2.2, 223, 8.4, 6.4, 53.51, 15.29, 50],
+      [3, 186, 11.6, 5.2, 20.83, 9.89, 51],
+      [4.2, 150, 13, 3.6, -6.35, 4.2, 52],
+      [8, 156, 13.4, 3.4, -1.48, 2.87, 52.5],
     ] as [number, number, number, number, number, number, number][],
-    // the flock staged in the panorama's lens (FilmFlock.stageInView at the lens of `stageAt` s): beyond and below him on
-    // the slope, at least `minD` m from him (the game's first objective — "go to the flock" — must not be met at once)
-    stageAt: 4.8, near: 17, far: 46, max: 16, minD: 9, below: 1.2,
+    // the flock staged in the panorama's lens (FilmFlock.stageInView at the lens of `stageAt` s): on the slopes below his
+    // rock (the headings `sector` deg seen from him: south round through east to north-east), `minD`-`maxD` m from him —
+    // near enough that the cream sheep read in the panorama (10-19 px long at 640 x 360), never so near that the game's
+    // first objective ("go to the flock": 17 m from its centre, or 3 animals within 8 m) is met at once — at least
+    // `below` m lower than his feet, and only where the lens really sees the ground (lineOfSight: the slope just south of
+    // the rock is hidden behind its brow from the north-west); the sheep before the goats
+    stageAt: 4.8, near: 10, far: 52, max: 18, minD: 12, maxD: 35, sector: [-40, 170] as [number, number], below: 1.0,
     // depth of field: on his curls at the start, deeper as the panorama opens, everything sharp before the hand-off
     fStop0: 2.4, fStop1: 6.5,
   },
@@ -620,12 +629,16 @@ export class FilmWorld {
     this.saved.length = 0;
   }
 
-  /** a stand-in camera at a take's frame (for staging the flock in the lens) */
+  /** a stand-in camera at a take's frame (for staging the flock in the lens) — on a phone in portrait the lens the viewer
+   *  really has (widened and turned toward the shot's subject: Intro.portrait / FilmCams.portraitLens) */
   private stageLens(take: string, t: number) {
     const f = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: 36, roll: 0 };
     this.frame(take, t / takeDur(take, 6), t, f);
+    const el = this.h.engine.renderer.domElement;
+    const aspect = el.clientWidth / Math.max(1, el.clientHeight) || 16 / 9;
+    if (aspect < 0.95) portraitLens(f, this.subject(take, this.tmp2) ?? null, aspect, 1);
     const c = this.stageCam;
-    c.aspect = Math.max(1.25, this.h.engine.camera.aspect || 16 / 9);
+    c.aspect = aspect < 0.95 ? aspect : Math.max(1.25, this.h.engine.camera.aspect || 16 / 9);
     c.fov = f.fov ?? 36;
     c.position.copy(f.pos);
     c.lookAt(f.look);
@@ -663,8 +676,11 @@ export class FilmWorld {
     this.feet.copy(this.h.player.pos);
     const cam = this.stageLens('horizon', c.stageAt);
     try {
-      let n = this.ff.stageInView(cam, this.feet, { near: c.near, far: c.far, max: c.max, clear: 0.1, spacing: 1.6, yMin: -0.66, minFrom: this.feet, minDist: c.minD, maxY: this.feet.y - c.below });
-      if (n < 8) n = this.ff.stageInView(cam, this.feet, { near: c.near, far: c.far * 1.6, max: c.max, clear: 0.1, spacing: 1.6, yMin: -0.66, minFrom: this.feet, minDist: c.minD });
+      const sector: [number, number] = [THREE.MathUtils.degToRad(c.sector[0]), THREE.MathUtils.degToRad(c.sector[1])];
+      const rocks = (x: number, y: number, z: number) => this.h.engine.colliders.solidAt(x, y, z, 0.05);
+      let n = this.ff.stageInView(cam, this.feet, { near: c.near, far: c.far, max: c.max, clear: 0.1, spacing: 1.5, yMin: -0.66, minFrom: this.feet, minDist: c.minD, maxDist: c.maxD, sector, maxY: this.feet.y - c.below, sheepFirst: true, lineOfSight: true, solid: rocks });
+      // (a lens that sees too little of those slopes: anywhere below him in the frame, a little further out)
+      if (n < 10) n = this.ff.stageInView(cam, this.feet, { near: c.near, far: c.far * 1.4, max: c.max, clear: 0.1, spacing: 1.5, yMin: -0.66, minFrom: this.feet, minDist: c.minD, maxDist: c.maxD * 1.5, maxY: this.feet.y - c.below, sheepFirst: true, lineOfSight: true, solid: rocks });
       if (n > 0) return;
     } catch (e) {
       console.warn('[film] D3 flock staging', e);

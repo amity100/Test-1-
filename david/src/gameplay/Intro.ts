@@ -12,7 +12,7 @@ import { narration } from '../content/introNarration';
 import { verseArgs } from '../content/sources';
 import type { FilmStage, FilmSetHandle, FilmStageSet } from '../film/FilmStage';
 import { FilmWorld, HANDOFF } from '../film/FilmWorld';
-import { applyHandheld } from '../film/FilmCams';
+import { applyHandheld, portraitLens } from '../film/FilmCams';
 
 /**
  * THE OPENING FILM "הַטּוֹב מִמֶּךָּ" (CUT v4, docs/intro-script-v4.md on top of intro-script-v3.md: 59 s, six scenes, no
@@ -599,28 +599,8 @@ export class Intro {
    */
   private portrait(f: ShotFrame, subject: THREE.Vector3 | null, keep = 1) {
     const el = this.h.engine.renderer.domElement;
-    const aspect = el.clientWidth / Math.max(1, el.clientHeight);
-    if (!(aspect < 0.95) || keep <= 0) return;
-    const fov = f.fov ?? 40;
-    const k = 1 + (Math.min(2.6, Math.max(1, (0.45 * 2.39) / aspect)) - 1) * keep;
-    const half = Math.atan(Math.tan(THREE.MathUtils.degToRad(fov) / 2) * k);
-    f.fov = Math.min(78, THREE.MathUtils.radToDeg(2 * half));
-    if (subject) {
-      // re-aim horizontally toward the subject (keep the shot's tilt)
-      const d = this.pv.copy(f.look).sub(f.pos);
-      const dist = d.length();
-      const s = this.pv2.copy(subject).sub(f.pos);
-      const sd = s.length();
-      if (dist > 1e-4 && sd > 0.3) {
-        d.multiplyScalar(1 / dist);
-        s.multiplyScalar(1 / sd);
-        d.lerp(s, 0.6 * keep).normalize();
-        f.look.copy(f.pos).addScaledVector(d, dist);
-      }
-    }
+    portraitLens(f, subject, el.clientWidth / Math.max(1, el.clientHeight), keep);
   }
-  private readonly pv = new THREE.Vector3();
-  private readonly pv2 = new THREE.Vector3();
   private readonly pv3 = new THREE.Vector3();
 
   /** one-shot sounds inside shots (CUT v4: none — the score keys everything to the beats; the hook's sounds moved to
