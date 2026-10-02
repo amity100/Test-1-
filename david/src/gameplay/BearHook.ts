@@ -51,9 +51,9 @@ export const HOOK = {
   // H1: the lens ~4.1 -> 3.6 m behind and beside the lamb, 0.95 m up, looking a little down over the grass
   camBack0: 3.9, camBack1: 3.5, camSide0: 1.3, camSide1: 1.0, camH: 0.95, lookIn: 1.4, lookH: 0.32, fov0: 34, fov1: 31,
   // H2: over the lamb's back into the dark (the lens framed for the bear's head ~`h2Frame` m wide)
-  h2H: 1.02, h2Frame0: 5.6, h2Frame1: 4.7,
+  h2H: 1.02, h2Frame0: 4.8, h2Frame1: 3.6,
   // the light: down across H1 (×exp1), down to ×exp2 in H2; the bear's body dark, its eyes a faint amber glow
-  exp1: 0.62, exp2: 0.17, dark: 0.85, eye: 0.12, shine: 2.0,
+  exp1: 0.62, exp2: 0.17, dark: 0.85, eye: 0.16, shine: 2.4,
 };
 
 export class BearHook {
@@ -252,7 +252,7 @@ export class BearHook {
       hc.localToWorld(ch.position);
       ch.scale.set(HOOK.eye, HOOK.eye * Math.max(0.04, open), 1);
     });
-    if (this.eyeMat) this.eyeMat.opacity = Math.min(0.85, open);
+    if (this.eyeMat) this.eyeMat.opacity = Math.min(0.95, open);
   }
 
   /** H1: five small birds fly up out of the bushes and away over the lens' shoulder at `birds` */
