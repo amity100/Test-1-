@@ -129,7 +129,7 @@ export class UI {
     this.crossEl = el('div', 'crosshair', `<svg viewBox="0 0 120 120"><circle class="ring-bg" cx="60" cy="60" r="44"/><path class="win"/><path class="win-p"/><circle class="ring" cx="60" cy="60" r="36"/><line class="rel" x1="60" y1="8" x2="60" y2="22"/><circle class="pouch" cx="60" cy="16" r="5"/><circle class="dot" cx="60" cy="60" r="2.4"/><path class="tick" d="M60 50 V54 M60 66 V70 M50 60 H54 M66 60 H70"/></svg><div class="cue"></div><div class="range">מִחוּץ לַטְּוָח — סוֹבֵב חָזָק יוֹתֵר</div>`);
     this.markerEl = el('div', 'marker', '<div class="mk-diamond"></div><div class="mk-label"></div>');
     this.healthEl = el('div', 'health');
-    this.bossEl = el('div', 'boss', '<div class="boss-name">הַדֹּב</div><div class="boss-bar"><div></div></div>');
+    this.bossEl = el('div', 'boss', '<div class="boss-name">הַדֹּב</div><div class="boss-bar"><div></div></div><div class="boss-note"></div>');
     this.qteEl = el('div', 'qte');
     this.toastEl = el('div', 'toast');
     this.counterEl = el('div', 'counter');
@@ -474,6 +474,7 @@ export class UI {
 
   /** a short Hebrew praise line over the scene (narration style — never a verse) */
   praise(text: string, seconds = 1.6, miss = false) {
+    if (this.ratingEl?.classList.contains('on')) return; // never behind the round's card
     const e = this.praiseEl ?? (this.praiseEl = this.hudEl('praise'));
     e.textContent = text;
     e.classList.remove('on');
@@ -537,6 +538,13 @@ export class UI {
     e.innerHTML = `<div class="rt-card"><div class="rt-title">${card.title}</div><div class="rt-marks">${marks}</div><div class="rt-verdict">${card.verdict}</div><div class="rt-lines">${lines}</div><div class="rt-btns"><button class="p-btn" data-a="next">${k('E', '')}${card.next}</button>${card.retry ? `<button class="p-btn ghost" data-a="retry">${k('R', '')}נַסֵּה שׁוּב</button>` : ''}</div></div>`;
     e.querySelector('[data-a="next"]')?.addEventListener('click', (ev) => { ev.stopPropagation(); onNext?.(); });
     e.querySelector('[data-a="retry"]')?.addEventListener('click', (ev) => { ev.stopPropagation(); onRetry?.(); });
+    // the last hit's praise line must not show through the card (it read as a ghost title behind the round's name)
+    if (this.praiseEl) {
+      this.praiseEl.classList.add('gone');
+      this.praiseEl.classList.remove('on');
+      void this.praiseEl.offsetWidth;
+      this.praiseEl.classList.remove('gone');
+    }
     e.classList.remove('on');
     void e.offsetWidth;
     e.classList.add('on');
@@ -577,6 +585,35 @@ export class UI {
   boss(visible: boolean, frac = 1) {
     this.bossEl.classList.toggle('on', visible);
     (this.bossEl.querySelector('.boss-bar div') as HTMLDivElement).style.width = `${Math.max(0, frac) * 100}%`;
+  }
+
+  // ------------------------------------------------------------------------------ HUD: the bear fight (bear1)
+  private lastBossNote = '';
+  /** a short line under the bear's bar: how it is (tired, panting) or what it is about to do; '' / null hides it */
+  bossNote(text: string | null, warn = false) {
+    const t = text ?? '';
+    const key = t + (warn ? '!' : '');
+    if (key === this.lastBossNote) return;
+    this.lastBossNote = key;
+    const n = this.bossEl.querySelector('.boss-note') as HTMLDivElement;
+    n.textContent = t;
+    n.classList.toggle('warn', warn);
+    n.classList.toggle('on', !!t);
+  }
+
+  /**
+   * the struggle at the jaw: which way to throw your weight (dir -1 = to the left of the screen, +1 = right, 0 = hold
+   * steady), the grip's strength 0..1, the label; null hides it
+   */
+  grip(state: { dir: -1 | 0 | 1; strength: number; label: string } | null) {
+    if (!state) {
+      if (this.qteEl.classList.contains('pull')) this.qteEl.className = 'qte';
+      return;
+    }
+    const arrow = state.dir < 0 ? '⟵' : state.dir > 0 ? '⟶' : '•';
+    const hint = this.touch ? 'הַטֵּה אֶת הַג׳ויסטיק' : 'A / D';
+    this.qteEl.innerHTML = `<div class="q-label">${state.label}</div><div class="q-arrow ${state.dir ? 'go' : ''}">${arrow}</div><div class="q-mash grip"><div style="width:${Math.max(0, Math.min(1, state.strength)) * 100}%"></div></div><div class="q-key"><span>${hint}</span></div>`;
+    this.qteEl.className = 'qte on pull';
   }
 
   /** QTE overlays: mash meter, timing ring, or a single urgent press. */

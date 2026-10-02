@@ -135,6 +135,43 @@ function gameSfx() {
   };
 }
 
+/**
+ * The bear's fight (bear1's calls, gameplay v2 §4) as a mini-fight: the warnings (huffs, the jaw popping, a stomp), the
+ * rise (bearRoar + riseSting → 'battle'), a lunge dodged and a blow on the snout, a bluff charge pulled up short, the slam
+ * that knocks David down, the bear tiring (panting), a blow on the head, the grip (gripSting + 'grip' + slow motion + the
+ * struggle), the last blow ('fightEnd'), the collapse, the last breaths, then 'victory'. [time, call, a, b]
+ */
+const BEAR_FIGHT: ReadonlyArray<readonly [number, string, number?, number?]> = [
+  [0.8, 'bearHuff', 0.9], [1.25, 'bearHuff', 1], [1.5, 'bearJawPop', 1], [2.1, 'bearStomp', 0.9], [2.7, 'bearJawPop', 0.9], [3.1, 'bearHuff', 1],
+  [4.2, 'bearRoar', 1.2], [4.2, 'riseSting'], [4.3, 'music:battle', 1.2], [6.0, 'bearLand', 1],
+  [6.9, 'bearStep', 0.8], [7.4, 'bearStep', 0.8], [7.9, 'bearStep', 0.8],
+  [8.6, 'bearSnap', 1], [8.75, 'dodge', 0.8], [9.4, 'whoosh', 0.9], [9.55, 'staffBlow', 1, 1.3], [9.6, 'bearHurt', 0.9],
+  [10.8, 'bearSkid', 1], [11.5, 'bearHuff', 1], [11.9, 'bearJawPop', 1],
+  [12.9, 'bearSlam', 1.4], [13.0, 'davidFall', 1], [13.05, 'davidHurt', 0.9],
+  [14.6, 'bearPant', 0.8, 0.95], [15.2, 'bearPant', 0.8, 0.95], [15.8, 'bearPant', 0.8, 0.92], [16.4, 'bearPant', 0.8, 0.9],
+  [17.0, 'whoosh', 0.9], [17.15, 'staffBlow', 1, 1], [17.2, 'bearHurt', 1], [18.2, 'bearPant', 0.8, 0.85], [18.8, 'bearGrowl', 0.9],
+  [19.6, 'bearSnap', 1], [20.0, 'gripSting'], [20.0, 'music:grip', 0.3], [20.0, 'slow:0.8'], [20.05, 'grab', 1], [20.1, 'gripStruggle', 1], [22.7, 'gripStruggle', 1],
+  [25.0, 'whoosh', 1], [25.15, 'staffBlow', 1.2, 1], [25.15, 'music:fightEnd', 0.15], [25.2, 'slow:0'], [25.3, 'bearHurt', 1, 0.8],
+  [25.9, 'bearCollapse', 1], [27.6, 'bearPant', 0.6, 0.7], [28.4, 'bearPant', 0.45, 0.65],
+  [31.5, 'music:victory', 3],
+];
+const BEAR_FIGHT_LEN = 38;
+/** the fight's sounds alone (no music), 1.6 s apart at volume 1, pitch 1: their own levels against the bed */
+const BEAR_SFX = ['bearHuff', 'bearJawPop', 'bearStomp', 'bearSnap', 'bearSlam', 'bearLand', 'bearSkid', 'bearCollapse', 'bearPant', 'bearStep',
+  'staffBlow', 'davidFall', 'gripStruggle', 'riseSting', 'gripSting', 'bearGrowl', 'bearHurt', 'staffHit'];
+const BEAR_SFX_AT = (i: number): number => 0.5 + i * 1.6 + (i > 7 ? 1.2 : 0) + (i > 12 ? 1.6 : 0) + (i > 13 ? 1.4 : 0) + (i > 14 ? 2.2 : 0);
+function bearFight() {
+  return (e: AudioEngine, t: number): void => {
+    if (t === 0) { e.setAmbienceBed('fields', 0.5); e.setAmbience({ wind: 0.6, cicadas: 0.15, birds: 0 }); e.setMusicMood('tension', 0.5); }
+    for (const [x, call, a, b] of BEAR_FIGHT) {
+      if (!at(t, x, call)) continue;
+      if (call.startsWith('music:')) e.setMusicMood(call.slice(6) as Parameters<AudioEngine['setMusicMood']>[0], a ?? 1);
+      else if (call.startsWith('slow:')) e.setSlowMotion(Number(call.slice(5)));
+      else e.sfx(call as Parameters<AudioEngine['sfx']>[0], { volume: a ?? 1, pitch: b ?? 1, pan: 0.1 });
+    }
+  };
+}
+
 const JOBS: Record<string, Job> = {
   film: { seconds: END_T + 7, script: filmCalls(straight) },
   'film-lite': { seconds: END_T + 7, lite: true, script: filmCalls(straight) },
@@ -157,6 +194,17 @@ const JOBS: Record<string, Job> = {
   // the gameplay v2 sounds in sequence (play1's names; see GAME_SFX)
   'sfx-game': { seconds: GAME_SFX_LEN, script: gameSfx() },
   'sfx-game-lite': { seconds: GAME_SFX_LEN, lite: true, script: gameSfx() },
+  // the bear's fight (bear1's names + the fight's music states and stings)
+  'bear-fight': { seconds: BEAR_FIGHT_LEN, script: bearFight() },
+  'bear-fight-lite': { seconds: BEAR_FIGHT_LEN, lite: true, script: bearFight() },
+  'bear-sfx': { seconds: BEAR_SFX_AT(BEAR_SFX.length) + 1, script: (e, t) => {
+    if (t === 0) e.setAmbienceBed('fields', 0.5);
+    BEAR_SFX.forEach((n, i) => { if (at(t, BEAR_SFX_AT(i), n)) e.sfx(n as Parameters<AudioEngine['sfx']>[0]); });
+  } },
+  'bear-sfx-lite': { seconds: BEAR_SFX_AT(BEAR_SFX.length) + 1, lite: true, script: (e, t) => {
+    if (t === 0) e.setAmbienceBed('fields', 0.5);
+    BEAR_SFX.forEach((n, i) => { if (at(t, BEAR_SFX_AT(i), n)) e.sfx(n as Parameters<AudioEngine['sfx']>[0]); });
+  } },
   'bear-hook': { seconds: 18, script: hookCalls() },
   'bear-hook-lite': { seconds: 18, lite: true, script: hookCalls() },
   'bed-fields': { seconds: 14, script: (e, t) => { if (t === 0) e.setAmbienceBed('fields', 0.5); } },
@@ -237,6 +285,10 @@ const hookMarks: Array<[number, string]> = [[H0, 'hook'], [HOOK.scatter, 'birdsS
   'ending-lite': [...shotMarks().filter((m) => m[0] >= END_FROM).map(([x, n]) => [x - END_FROM, n] as [number, string]), ...beatMarks(END_FROM, END_T).map(([x, n]) => [x - END_FROM, n] as [number, string]), [END_T - END_FROM, 'END']],
   'sfx-game': GAME_SFX.map(([x, n]) => [x, n] as [number, string]),
   'sfx-game-lite': GAME_SFX.map(([x, n]) => [x, n] as [number, string]),
+  'bear-fight': BEAR_FIGHT.filter(([, c]) => !c.startsWith('slow')).map(([x, c]) => [x, c] as [number, string]),
+  'bear-fight-lite': BEAR_FIGHT.filter(([, c]) => !c.startsWith('slow')).map(([x, c]) => [x, c] as [number, string]),
+  'bear-sfx': BEAR_SFX.map((n, i) => [BEAR_SFX_AT(i), n] as [number, string]),
+  'bear-sfx-lite': BEAR_SFX.map((n, i) => [BEAR_SFX_AT(i), n] as [number, string]),
   'bear-hook': hookMarks,
   'bear-hook-lite': hookMarks,
 };

@@ -282,7 +282,8 @@ export async function dressDavid(human: HumanModel, opts: DressOptions): Promise
   // little inside the wraps, just under their middle, so the fold hides under the sash and the pouch and the cords'
   // ends hang a hand's breadth below it (DavidModel lays them out and sways them)
   {
-    const th = -1.2;
+    // (polish) at the side of the right hip rather than in front of it: the bundle hangs along the outside of the thigh
+    const th = -1.4;
     const p = upper.field.point(beltY - 0.012 * S, th, ringR(th) + cordR * 0.75);
     const zx = new THREE.Vector3(Math.sin(th), 0, Math.cos(th));
     const tx = new THREE.Vector3(Math.cos(th), 0, -Math.sin(th)); // along the sash toward his front (X x Y = Z)

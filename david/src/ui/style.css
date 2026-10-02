@@ -186,6 +186,7 @@ canvas { display: block; outline: none; }
 .praise { position: fixed; left: 50%; top: 31%; transform: translate(-50%, 0) scale(0.92); font: 600 clamp(24px, 3.2vw, 36px) var(--serif-he); color: #fff3d8; letter-spacing: 0.04em; text-shadow: 0 2px 16px rgba(0, 0, 0, 0.75), 0 0 2px rgba(0, 0, 0, 0.6); opacity: 0; white-space: nowrap; transition: opacity 0.35s, transform 0.5s cubic-bezier(0.2, 1.4, 0.4, 1); }
 .praise.on { opacity: 1; transform: translate(-50%, 0) scale(1); }
 .praise.miss { font-size: clamp(17px, 2vw, 22px); font-weight: 500; color: #f1dcc0; top: 58%; }
+.praise.gone { transition: none !important; opacity: 0 !important; }
 .rangepanel { position: fixed; left: 50%; top: 18px; transform: translate(-50%, -6px); min-width: 210px; padding: 7px 16px 8px; text-align: center; background: linear-gradient(180deg, rgba(10, 7, 4, 0.66), rgba(10, 7, 4, 0.4)); border-bottom: 1px solid rgba(232, 199, 126, 0.45); opacity: 0; transition: opacity 0.5s, transform 0.5s; text-shadow: var(--shadow); }
 .rangepanel.on { opacity: 1; transform: translate(-50%, 0); }
 .rp-head { display: flex; gap: 10px; justify-content: center; align-items: baseline; }
@@ -281,6 +282,16 @@ canvas { display: block; outline: none; }
 .q-timing .key { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); margin: 0; font-size: 18px; }
 .qte.ok .q-target { border-color: #9dffb0; box-shadow: 0 0 30px rgba(140, 255, 170, 0.9); }
 .qte.bad .q-target { border-color: #ff7a6a; }
+/* (bear1) the fight: the bear's state under its bar; the struggle at the jaw (which way to pull, the grip's strength) */
+.boss-note { min-height: 18px; margin-top: 6px; font: 500 15px var(--serif-he); color: #f3dcc0; text-shadow: var(--shadow); opacity: 0; transition: opacity 0.3s; }
+.boss-note.on { opacity: 0.92; }
+.boss-note.warn { color: #ffb08a; }
+.q-arrow { font: 400 clamp(54px, 9vw, 96px)/1 serif; color: #ffe3a6; text-shadow: 0 0 22px rgba(255, 190, 90, 0.85); margin: -6px 0 6px; direction: ltr; }
+.q-arrow.go { animation: keyPulse 0.28s ease-in-out infinite alternate; }
+.q-mash.grip div { background: linear-gradient(90deg, #8a3a1c, #e59a5a, #ffe3a6); }
+.qte.ok .q-mash.grip { box-shadow: 0 0 24px rgba(140, 255, 170, 0.8); }
+.qte.bad .q-mash.grip { box-shadow: 0 0 24px rgba(255, 110, 90, 0.9); }
+@media (max-width: 700px) { .boss-note { font-size: 13px; } .qte { top: 52%; } }
 
 /* ------------------------------------------------------------------ toast / fade / skip */
 .toast {

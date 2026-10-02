@@ -68,7 +68,16 @@ interface Stone {
   trailN: number;
   shot: ShotInfo | null;
   k: number;
+  /** the whole flight as dots every PATH_STEP m (a thrown stone's path stays readable until it fades after landing) */
+  path: Float32Array;
+  pathN: number;
+  /** the time it came down (a hit, a solid, the ground), -1 while in flight */
+  landed: number;
 }
+/** a sling stone's radius (m): it touches a target when its centre passes within the target's radius plus this */
+const STONE_R = 0.025;
+/** dots of a stone's path: spacing (m), most per stone, how long they stay after the stone came down (s) */
+const PATH_STEP = 0.55, PATH_MAX = 96, PATH_FADE = 1.6;
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
@@ -101,6 +110,12 @@ export class Projectiles {
   private trailCol: Float32Array;
   private trailLine: THREE.LineSegments;
   private time = 0;
+  private pathGeo: THREE.BufferGeometry;
+  private pathPos: Float32Array;
+  private pathCol: Float32Array;
+  private pathDots: THREE.Points;
+  /** the renderer's pixel ratio (the path's dots are a few device pixels wide on every screen) */
+  pxScale = 1;
   /** a stone hit the ground / a solid (sound + dust) */
   onGroundHit?: (at: THREE.Vector3, speed: number, material: 'rock' | 'wood' | 'earth' | 'clay' | 'skin') => void;
   /** every throw ends here once: a hit (`shot.hit`) or a miss (with `missOffset` / `missDist` from `intent`) */
@@ -115,6 +130,16 @@ export class Projectiles {
     this.trailLine = new THREE.LineSegments(this.trailGeo, new THREE.LineBasicMaterial({ color: 0xfff1d0, vertexColors: true, transparent: true, opacity: 0.55, depthWrite: false }));
     this.trailLine.frustumCulled = false;
     this.group.add(this.trailLine);
+    // the flight's dotted path (faint, warm white; a few px on any screen): a miss shows where the stone went
+    const n = PATH_MAX * 4;
+    this.pathPos = new Float32Array(n * 3);
+    this.pathCol = new Float32Array(n * 4);
+    this.pathGeo = new THREE.BufferGeometry();
+    this.pathGeo.setAttribute('position', new THREE.BufferAttribute(this.pathPos, 3).setUsage(THREE.DynamicDrawUsage));
+    this.pathGeo.setAttribute('color', new THREE.BufferAttribute(this.pathCol, 4).setUsage(THREE.DynamicDrawUsage));
+    this.pathDots = new THREE.Points(this.pathGeo, new THREE.PointsMaterial({ size: 3, sizeAttenuation: false, vertexColors: true, transparent: true, depthWrite: false }));
+    this.pathDots.frustumCulled = false;
+    this.group.add(this.pathDots);
   }
 
   /** Fire a stone; `shot` (from the Player) is resolved into a hit or a miss. `drag` per stone (smooth / rough). */
@@ -122,8 +147,10 @@ export class Projectiles {
     const s = this.pool.pop() ?? {
       mesh: new THREE.Mesh(this.geo, this.mat), vel: new THREE.Vector3(), spin: new THREE.Vector3(), life: 0, resting: false,
       trail: Array.from({ length: TRAIL }, () => new THREE.Vector3()), trailN: 0, shot: null, k: STONE_DRAG,
+      path: new Float32Array(PATH_MAX * 3), pathN: 0, landed: -1,
     };
     s.mesh.castShadow = true;
+    s.mesh.visible = true;
     s.mesh.position.copy(pos);
     s.mesh.rotation.set(Math.random() * 6, Math.random() * 6, 0);
     s.vel.copy(vel);
@@ -133,6 +160,11 @@ export class Projectiles {
     s.resting = false;
     s.trailN = 1;
     s.trail[0].copy(pos);
+    s.pathN = 1;
+    s.landed = -1;
+    s.path[0] = pos.x;
+    s.path[1] = pos.y;
+    s.path[2] = pos.z;
     s.shot = shot;
     s.k = drag;
     if (shot) {
@@ -186,6 +218,16 @@ export class Projectiles {
         a.copy(s.mesh.position);
         stepStone(s.mesh.position, s.vel, this.wind, s.k, h);
         b.copy(s.mesh.position);
+        // the dotted path: a dot every PATH_STEP m of the flight
+        if (s.landed < 0 && s.pathN < PATH_MAX) {
+          const o = (s.pathN - 1) * 3, dx = b.x - s.path[o], dy = b.y - s.path[o + 1], dz = b.z - s.path[o + 2];
+          if (dx * dx + dy * dy + dz * dz >= PATH_STEP * PATH_STEP) {
+            s.path[o + 3] = b.x;
+            s.path[o + 4] = b.y;
+            s.path[o + 5] = b.z;
+            s.pathN++;
+          }
+        }
         // closest pass by the intended target (for the miss read-out)
         const shot = s.shot;
         if (shot && shot.intent && !shot.resolved) {
@@ -204,8 +246,8 @@ export class Projectiles {
           let u: number;
           if (t.segment) {
             const [p0, p1] = t.segment();
-            u = segCapsule(a, b, p0, p1, t.radius);
-          } else u = segSphere(a, b, t.center(), t.radius);
+            u = segCapsule(a, b, p0, p1, t.radius + STONE_R);
+          } else u = segSphere(a, b, t.center(), t.radius + STONE_R);
           if (u >= 0 && u < best) {
             best = u;
             hitT = t;
@@ -215,7 +257,13 @@ export class Projectiles {
           const at = a.clone().lerp(b, best);
           s.mesh.position.copy(at);
           s.resting = true;
-          s.life = 99;
+          // gone with the hit; it is retired once its path has faded
+          s.mesh.visible = false;
+          if (s.landed < 0) {
+            this.pathEnd(s, at);
+            s.landed = this.time;
+          }
+          s.life = Math.max(s.life, 6 - PATH_FADE - 0.05);
           if (shot && !shot.resolved && hitT.kind !== 'solid') {
             shot.hit = hitT;
             this.resolve(shot, at);
@@ -230,6 +278,10 @@ export class Projectiles {
         const gy = this.ground(b.x, b.z);
         if (b.y < gy + 0.02) {
           s.mesh.position.y = gy + 0.025;
+          if (s.landed < 0) {
+            this.pathEnd(s, s.mesh.position);
+            s.landed = this.time;
+          }
           const speed = s.vel.length();
           this.onGroundHit?.(s.mesh.position, speed, 'earth');
           s.vel.multiplyScalar(0.25);
@@ -242,6 +294,7 @@ export class Projectiles {
       // gone far away / too long
       if (!s.resting && (s.life > 5 || s.mesh.position.y < -500)) {
         s.resting = true;
+        if (s.landed < 0) s.landed = this.time;
         if (s.shot && !s.shot.resolved) this.resolve(s.shot, s.mesh.position);
       }
       s.mesh.rotation.x += s.spin.x * dt;
@@ -279,9 +332,43 @@ export class Projectiles {
         C[oc + 4] = 1; C[oc + 5] = 0.95; C[oc + 6] = 0.84; C[oc + 7] = f1;
       }
     }
+    // the flights' dotted paths: faint while the stone flies (older dots fainter), then fading out after it came down
+    const DP = this.pathPos, DC = this.pathCol, cap = DP.length / 3;
+    let dots = 0;
+    for (const s of this.stones) {
+      if (!s.shot || s.pathN < 2) continue;
+      const fade = s.landed < 0 ? 1 : 1 - (this.time - s.landed) / PATH_FADE;
+      if (fade <= 0.01) continue;
+      for (let i = 0; i < s.pathN && dots < cap; i++, dots++) {
+        const o = dots * 3, oc = dots * 4, q = i * 3;
+        DP[o] = s.path[q];
+        DP[o + 1] = s.path[q + 1];
+        DP[o + 2] = s.path[q + 2];
+        DC[oc] = 1;
+        DC[oc + 1] = 0.94;
+        DC[oc + 2] = 0.8;
+        DC[oc + 3] = 0.6 * fade * (0.45 + 0.55 * (i / (s.pathN - 1)));
+      }
+    }
+    this.pathGeo.setDrawRange(0, dots);
+    if (dots > 0) {
+      (this.pathGeo.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
+      (this.pathGeo.getAttribute('color') as THREE.BufferAttribute).needsUpdate = true;
+    }
+    (this.pathDots.material as THREE.PointsMaterial).size = 2.6 * Math.max(1, this.pxScale);
     this.trailGeo.setDrawRange(0, seg * 2);
     (this.trailGeo.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
     (this.trailGeo.getAttribute('color') as THREE.BufferAttribute).needsUpdate = true;
+  }
+
+  /** the path's last dot where the stone came down */
+  private pathEnd(s: Stone, at: THREE.Vector3) {
+    if (s.pathN >= PATH_MAX) return;
+    const o = s.pathN * 3;
+    s.path[o] = at.x;
+    s.path[o + 1] = at.y;
+    s.path[o + 2] = at.z;
+    s.pathN++;
   }
 
   private resolve(shot: ShotInfo, at: THREE.Vector3) {

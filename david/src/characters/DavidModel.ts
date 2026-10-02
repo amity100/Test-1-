@@ -5,7 +5,7 @@ import type { TextureSet } from '../world/Textures';
 import { Clip, PoseMixer, pose, type Pose, type E3, UPPER_L, UPPER_R, TORSO, LEGS } from './Rig';
 import { Rope } from './Rope';
 import { HumanModel, type HumanQuality } from './human/HumanModel';
-import type { Expression, FingerPose } from './human/HumanRig';
+import type { Expression, FingerPose, FingerShape } from './human/HumanRig';
 import { createGroom, type Groom } from './hair';
 import { dressDavid, attachProp, type Outfit, type Prop } from './wardrobe';
 import { MocapLibrary, MocapPose, type MocapClip } from './mocap';
@@ -52,7 +52,7 @@ import { INTRO_SHOTS } from '../content/introScript';
 /** ('cradle' = cut8, film only: the newborn lamb gathered in his arms against his chest — D4 'horizon', Isa 40:11) */
 export type HoldPose = 'none' | 'spin' | 'grab' | 'carry' | 'kneel' | 'thanks' | 'pull' | 'hero' | 'cradle';
 export type StaffMode = 'plant' | 'strike' | 'back';
-export type ActionName = 'throw' | 'strike' | 'strikeHigh' | 'pick' | 'call' | 'dodge' | 'hurt' | 'stone' | 'stoneToss';
+export type ActionName = 'throw' | 'strike' | 'strikeHigh' | 'pick' | 'call' | 'dodge' | 'hurt' | 'stone' | 'stoneToss' | 'jab' | 'knockdown';
 /**
  * (play1, gameplay v2 §1) where the sling is: tucked under the sash at the right hip ('stowed'), being drawn out of it
  * (pulled from the sash, a stone from the bag into the pouch, the grip — 'draw'), in the hand ready ('idle', "armed"),
@@ -140,7 +140,7 @@ const HERO = pose({
 const SPIN = pose({
   hips: E(0.04, -0.18, 0), hipsX: E(-0.02),
   spine: E(0.02, -0.14, 0.04), chest: E(0.0, -0.28, 0.05), neck: E(0, 0.14, 0), head: E(0.02, 0.34, -0.04),
-  uaR: E(-2.25, 0, -0.62), faR: E(-1.3), hdR: E(0.2, 0, 0),
+  uaR: E(-2.25, 0, -0.62), faR: E(-1.3), hdR: E(0.06, 0, 0),
   uaL: E(-0.6, 0, 0.45), faL: E(-1.0), hdL: E(0),
   thL: E(-0.28, 0.1, 0.1), shinL: E(0.22), ftL: E(0.06),
   thR: E(0.22, -0.2, -0.1), shinR: E(0.16), ftR: E(-0.22, -0.1, 0),
@@ -389,8 +389,79 @@ const HURT = new Clip([
   { t: 0.48, p: full({}) },
 ]);
 
+// ---- (bear1, gameplay v2 §4) the fight: a jab of the staff's end at the bear's face / nose — he keeps his distance with
+// the long staff (the left hand slid to the butt, as in the strike); the left shoulder drives it, the lead leg lunges.
+// The point arrives at JAB_HIT s.
+export const JAB_HIT = 0.19;
+const JAB = new Clip([
+  { t: 0, p: STRIKE_READY },
+  { t: 0.1, e: 'in', p: pose({
+    hips: E(0.02, 0.16, 0), spine: E(0.02, 0.1, 0), chest: E(-0.02, 0.26, 0), neck: E(0, -0.12, 0), head: E(0.02, -0.22, 0),
+    uaL: E(-0.72, 0, 0.32), faL: E(-1.62), hdL: E(0.1),
+    uaR: E(-0.25, 0, -0.35), faR: E(-1.05), hdR: E(0.1),
+    thL: E(-0.22, 0, 0.06), shinL: E(0.2), ftL: E(0.04), thR: E(0.12, 0, -0.06), shinR: E(0.3), ftR: E(-0.12),
+    staff: E(0.0, 0.3, 1), staffW: E(1), plantW: E(0),
+  }, -0.05, -0.05) },
+  { t: JAB_HIT, e: 'out', p: pose({
+    hips: E(0.08, -0.16, 0), spine: E(0.1, -0.12, 0), chest: E(0.12, -0.3, 0), neck: E(0, 0.12, 0), head: E(-0.04, 0.22, 0),
+    uaL: E(-1.52, 0, 0.05), faL: E(-0.1), hdL: E(-0.1),
+    uaR: E(-0.3, 0, -0.45), faR: E(-0.9), hdR: E(0.05),
+    thL: E(-0.66, 0, 0.06), shinL: E(0.52), ftL: E(0.1), thR: E(0.42, 0, -0.06), shinR: E(0.26), ftR: E(-0.32),
+    staff: E(0.0, 0.12, 1), staffW: E(1), plantW: E(0),
+  }, -0.08, 0.1) },
+  { t: 0.3, p: pose({
+    hips: E(0.07, -0.12, 0), spine: E(0.08, -0.1, 0), chest: E(0.1, -0.24, 0), neck: E(0, 0.1, 0), head: E(-0.03, 0.18, 0),
+    uaL: E(-1.4, 0, 0.1), faL: E(-0.32), hdL: E(-0.05),
+    uaR: E(-0.28, 0, -0.42), faR: E(-0.95),
+    thL: E(-0.6, 0, 0.06), shinL: E(0.48), ftL: E(0.1), thR: E(0.38, 0, -0.06), shinR: E(0.26), ftR: E(-0.3),
+    staff: E(0.0, 0.2, 1), staffW: E(1), plantW: E(0),
+  }, -0.075, 0.08) },
+  { t: 0.48, p: STRIKE_READY },
+]);
+
+// ---- (bear1) knocked down by a blow of the bear: thrown back, down onto the right knee and the left hand, a moment on
+// the ground, then he pushes himself up on the staff (Player keeps control off for KNOCKDOWN_UP s)
+export const KNOCKDOWN_UP = 1.75;
+const KNOCKDOWN = new Clip([
+  { t: 0, p: full({}) },
+  { t: 0.1, e: 'out', p: full({
+    hips: E(-0.25, 0.2, 0.1), spine: E(-0.2, 0.1, 0.04), chest: E(-0.35, 0.15, 0.1), neck: E(-0.15, 0.05), head: E(-0.35, 0.2, 0.05),
+    uaL: E(-1.4, 0, 1.0), faL: E(-0.5), hdL: E(0.2), uaR: E(-1.2, 0, -1.0), faR: E(-0.6), hdR: E(0.2),
+    thL: E(-0.4, 0, 0.1), shinL: E(0.3), ftL: E(-0.1), thR: E(0.3, 0, -0.1), shinR: E(0.5), ftR: E(-0.3),
+    staff: E(0.4, 0.7, -0.4), staffW: E(1),
+  }, -0.1, -0.15) },
+  { t: 0.42, e: 'in', p: full({
+    hips: E(0.35, 0.1, 0.1), spine: E(0.4, 0.04, 0), chest: E(0.25, 0.06, 0), neck: E(0.1), head: E(0.25, 0.1),
+    uaL: E(-0.6, 0, 0.3), faL: E(-0.2), hdL: E(0.5), uaR: E(-0.5, 0, -0.3), faR: E(-0.9), hdR: E(0.2),
+    thL: E(-1.3, 0, 0.15), shinL: E(1.45), ftL: E(0.0), thR: E(0.15, 0, -0.06), shinR: E(1.6), ftR: E(0.6),
+    staff: E(0.9, 0.15, 0.4), staffW: E(1),
+  }, -0.5, -0.05) },
+  { t: 0.55, p: full({
+    hips: E(0.38, 0.1, 0.1), spine: E(0.42, 0.04, 0), chest: E(0.26, 0.06, 0), neck: E(0.12), head: E(0.3, 0.12),
+    uaL: E(-0.62, 0, 0.3), faL: E(-0.15), hdL: E(0.5), uaR: E(-0.5, 0, -0.3), faR: E(-0.9), hdR: E(0.2),
+    thL: E(-1.32, 0, 0.15), shinL: E(1.48), ftL: E(0.0), thR: E(0.16, 0, -0.06), shinR: E(1.62), ftR: E(0.62),
+    staff: E(0.9, 0.15, 0.4), staffW: E(1),
+  }, -0.53, -0.05) },
+  { t: 1.05, p: full({
+    hips: E(0.3, 0.08, 0.08), spine: E(0.32, 0.02, 0), chest: E(0.18, 0.04, 0), neck: E(0.06, 0.1), head: E(0.12, 0.25),
+    uaL: E(-0.66, 0, 0.32), faL: E(-0.4), hdL: E(0.3), uaR: E(-0.45, 0, -0.3), faR: E(-0.95), hdR: E(0.2),
+    thL: E(-1.3, 0, 0.15), shinL: E(1.45), ftL: E(0.0), thR: E(0.15, 0, -0.06), shinR: E(1.6), ftR: E(0.6),
+    staff: E(0.4, 0.85, 0.3), staffW: E(1),
+  }, -0.5, -0.04) },
+  { t: 1.45, e: 'out', p: full({
+    hips: E(0.12, 0.04, 0), spine: E(0.14, 0.02, 0), chest: E(0.04, 0.04, 0), neck: E(0.04), head: E(0.08, 0.05),
+    uaL: E(-0.62, 0, 0.36), faL: E(-1.1), hdL: E(0.1), uaR: E(-0.3, 0, -0.25), faR: E(-0.8),
+    thL: E(-0.9, 0, 0.12), shinL: E(1.0), ftL: E(0.0), thR: E(0.1, 0, -0.06), shinR: E(0.9), ftR: E(0.2),
+    staff: E(0.05, 1, 0.2), staffW: E(1),
+  }, -0.3, -0.02) },
+  { t: 1.9, p: full({}) },
+]);
+
 interface ActionDef { clip: Clip; mask?: readonly string[]; legs: boolean; fadeIn: number; fadeOut: number }
 const ACTIONS: Record<ActionName, ActionDef> = {
+  // (bear1) the fight
+  jab: { clip: JAB, legs: true, fadeIn: 0.04, fadeOut: 0.14 },
+  knockdown: { clip: KNOCKDOWN, legs: true, fadeIn: 0.04, fadeOut: 0.3 },
   throw: { clip: THROW, legs: true, fadeIn: 0.05, fadeOut: 0.2 },
   strike: { clip: STRIKE, legs: true, fadeIn: 0.05, fadeOut: 0.18 },
   strikeHigh: { clip: STRIKE_HIGH, mask: [...UPPER_L, 'chest', 'spine', 'staff', 'staffW', 'plantW'], legs: false, fadeIn: 0.04, fadeOut: 0.12 },
@@ -958,6 +1029,19 @@ export class DavidModel {
   private flap: THREE.Object3D | null = null;
   private flapOpen = 0;
   private readonly tuckSway = { ax: 0, az: 0, vx: 0, vz: 0, prev: new THREE.Vector3(), vel: new THREE.Vector3(), started: false };
+  /** (play1) the tucked bundle's lower end, its hanging direction and the way out of the body (the folded pouch) */
+  private readonly tuckBot = new THREE.Vector3();
+  private readonly tuckHd = new THREE.Vector3(0, -1, 0);
+  private readonly tuckOut = new THREE.Vector3(0, 0, 1);
+  /** (play1) the pouch folded double (shown while tucked) and the open pouch's own meshes */
+  private pouchFolded: THREE.Mesh | null = null;
+  private pouchOpen: THREE.Object3D[] = [];
+  private pouchFoldShown = false;
+  /** (play1) the sling hand's finger shape (the cords' ends in the fist) and the staff-grip shape it stands in for */
+  private readonly slingGrip: FingerShape = { f: [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]], t: [0, 0, 0], tOpp: 0, tw: [0, 0, 0], spread: [0, 0, 0, 0], cup: 0 };
+  private gripShapeR: FingerShape | null = null;
+  private slingGripOn = false;
+  private letGo = 0;
   private readonly heldStoneGeo: THREE.BufferGeometry;
   private sim = new SlingSim();
   private cordA: Rope;
@@ -1052,6 +1136,35 @@ export class DavidModel {
       o.castShadow = true;
       o.receiveShadow = true;
     });
+    // (play1) the pouch folded double for the tuck: the half beyond the middle turned over onto the other (leather on
+    // leather), so both ends — where the cords are tied — come together at the top and the fold hangs at the bottom
+    {
+      const open: THREE.Mesh[] = [];
+      this.pouch.traverse((o) => {
+        if ((o as THREE.Mesh).isMesh) open.push(o as THREE.Mesh);
+      });
+      this.pouchOpen = open;
+      const src = open[0];
+      if (src) {
+        const g = src.geometry.clone();
+        const p = g.getAttribute('position') as THREE.BufferAttribute;
+        for (let i = 0; i < p.count; i++) {
+          const x = p.getX(i), y = p.getY(i);
+          if (x < 0) p.setXY(i, -x, -y + 0.0042);
+        }
+        p.needsUpdate = true;
+        g.computeVertexNormals();
+        const m = new THREE.Mesh(g, src.material);
+        m.position.copy(src.position);
+        m.quaternion.copy(src.quaternion);
+        m.scale.copy(src.scale);
+        m.castShadow = src.castShadow;
+        m.receiveShadow = true;
+        m.visible = false;
+        (src.parent ?? this.pouch).add(m);
+        this.pouchFolded = m;
+      }
+    }
     const stoneMat = new THREE.MeshStandardMaterial({ color: 0xcfc3ab, roughness: 0.42, metalness: 0 });
     this.pouchStone = new THREE.Mesh(pebbleGeometry(11), stoneMat);
     this.pouchStone.position.set(0, 0.006, 0);
@@ -1286,7 +1399,7 @@ export class DavidModel {
       sp.r.uaR[0] += Math.sin(a) * 0.13;
       sp.r.uaR[2] += Math.cos(a) * 0.12;
       sp.r.faR[0] += Math.sin(a + 0.9) * 0.14;
-      sp.r.hdR[0] += Math.sin(a + 1.6) * 0.25;
+      sp.r.hdR[0] += Math.sin(a + 1.6) * 0.14; // (play1) the fist leads the cords round; the wrist only rolls with it
       sp.r.chest[1] += Math.sin(a) * 0.025 * (0.4 + this.spinPower);
       m.layer(sp, H.spin, lw > 0.3 ? SPIN_UPPER : SPIN_ALL);
     }
@@ -2263,8 +2376,8 @@ export class DavidModel {
       e = this.mood;
       w = this.moodWeight;
     }
-    else if (a && a.name === 'hurt') e = 'pain';
-    else if (a && (a.name === 'throw' || a.name === 'strike' || a.name === 'strikeHigh')) e = 'effort';
+    else if (a && (a.name === 'hurt' || a.name === 'knockdown')) e = 'pain';
+    else if (a && (a.name === 'throw' || a.name === 'strike' || a.name === 'strikeHigh' || a.name === 'jab')) e = 'effort';
     else if (this.hold === 'pull') e = 'effort';
     else if (this.hold === 'grab') { e = 'anger'; w = 0.85; }
     else if (this.hold === 'spin') { e = 'determined'; w = 0.6 + 0.4 * this.spinPower; }
@@ -2289,6 +2402,16 @@ export class DavidModel {
     else if (this.hold === 'thanks') R = 'open';
     else if (this.hold === 'carry' || this.hold === 'pull' || this.cradleReach > 0.5) R = 'grip';
     else if (this.hold === 'grab') R = 'fist';
+    else if (this.slingHeld()) R = 'grip'; // (play1) the cords' ends in the fist (the sling grip below)
+    // (play1) the sling hand: the finger loop on the middle finger, the knot pressed under the thumb against the hooked
+    // forefinger — a closed fist with the cords coming out of it; at the release the thumb and forefinger let the knot go
+    if (R === 'grip' && this.slingHeld()) {
+      lerpFingerShape(this.slingGrip, SLING_FIST, SLING_LET_GO, this.letGo);
+      if (rig.gripShape.R !== this.slingGrip) {
+        this.gripShapeR = rig.gripShape.R;
+        rig.gripShape.R = this.slingGrip;
+      }
+    } else if (rig.gripShape.R === this.slingGrip && this.gripShapeR) rig.gripShape.R = this.gripShapeR;
     if (L !== this.fingerL) { rig.setFingers('L', L); this.fingerL = L; }
     if (R !== this.fingerR) { rig.setFingers('R', R); this.fingerR = R; }
   }
@@ -2483,9 +2606,24 @@ export class DavidModel {
     if (Y.lengthSq() < 1e-10) Y.set(0, 1, 0);
     Y.normalize();
     const Z = _v3.crossVectors(X, Y);
+    // (play1) tucked: the pouch folded double hangs from the foot of the bundle, its two ends (the cords) up, the fold
+    // down, lying flat along the thigh
+    const folded = this.slingLayout === 'tucked' && this.pouchFolded !== null && this.layoutK > 0.5;
+    if (folded) {
+      X.copy(this.tuckHd).negate();
+      Y.copy(this.tuckOut);
+      Z.crossVectors(X, Y).normalize();
+      Y.crossVectors(Z, X).normalize();
+    }
     _m1.makeBasis(X, Y, Z);
     this.pouch.quaternion.setFromRotationMatrix(_m1);
-    this.pouch.position.copy(S.pouch);
+    if (folded) this.pouch.position.copy(this.tuckBot).addScaledVector(this.tuckHd, 0.047).addScaledVector(this.tuckOut, 0.003);
+    else this.pouch.position.copy(S.pouch);
+    if (folded !== this.pouchFoldShown) {
+      this.pouchFoldShown = folded;
+      for (const o of this.pouchOpen) o.visible = !folded;
+      if (this.pouchFolded) this.pouchFolded.visible = folded;
+    }
     this.pouch.updateMatrixWorld(true);
     const showStone = S.loaded && S.state !== 'release' && this.slingLayout !== 'tucked';
     if (showStone !== this.stoneShown) {
@@ -2571,6 +2709,9 @@ export class DavidModel {
   private stepSlingCarry(dt: number) {
     const S = this.sling;
     const st = S.state;
+    // the thumb and forefinger let go of the knot at the release and close on it again as he gathers the sling
+    const lg = st === 'release' && S.releaseT < 0.3 ? 1 : 0;
+    this.letGo += (lg - this.letGo) * (1 - Math.exp(-(lg > this.letGo ? 45 : 8) * dt));
     if (st === 'draw' || st === 'reload' || st === 'stow') this.slingT += dt;
     const t = this.slingT;
     if (st === 'draw') {
@@ -2665,42 +2806,46 @@ export class DavidModel {
         sw.az = clamp(sw.az + sw.vz * h, -0.12, 0.26);
       }
     }
-    // hanging direction: down, a little out over the skirt, swayed
-    const hd = _slC.copy(Y).multiplyScalar(-1).addScaledVector(X, Math.tan(sw.ax)).addScaledVector(Z, 0.3 + Math.tan(sw.az)).normalize();
+    // hanging direction: down along the side of the thigh, a little out, swayed
+    const hd = _slC.copy(Y).multiplyScalar(-1).addScaledVector(X, Math.tan(sw.ax)).addScaledVector(Z, 0.2 + Math.tan(sw.az)).normalize();
     const sim = this.sim;
-    // the pouch folded double a hand's breadth below the sash; the cords' ends (the finger loop, the knot) beside it
-    const P = _slD.copy(F).addScaledVector(hd, 0.125).addScaledVector(Z, 0.012);
-    const eA = _slE.copy(F).addScaledVector(hd, 0.098).addScaledVector(X, -0.022).addScaledVector(Z, 0.02);
-    const eB = _slF.copy(F).addScaledVector(hd, 0.086).addScaledVector(X, 0.002).addScaledVector(Z, 0.024);
-    const pw = POUCH_W * 0.5;
-    for (let c = 0; c < 2; c++) {
-      const pts = c === 0 ? sim.a : sim.b;
-      const end = c === 0 ? eA : eB;
-      const sg = c === 0 ? -1 : 1;
-      const pe = _slG.copy(P).addScaledVector(X, sg * pw);
-      const fx = F.x + X.x * sg * 0.007, fy = F.y + X.y * sg * 0.007, fz = F.z + X.z * sg * 0.007;
-      for (let i = 0; i < NC; i++) {
-        const p = pts[i];
-        if (i <= 3) {
-          const u = i / 3; // the cord's end .. the fold under the sash
-          p.set(end.x + (fx - end.x) * u, end.y + (fy - end.y) * u, end.z + (fz - end.z) * u).addScaledVector(Z, 0.007 * Math.sin(Math.PI * u));
-        } else {
-          const u = (i - 3) / 3; // the fold .. the pouch
-          p.set(fx + (pe.x - fx) * u, fy + (pe.y - fy) * u, fz + (pe.z - fz) * u).addScaledVector(Z, 0.006 * Math.sin(Math.PI * u));
-        }
-      }
-    }
-    // never through the leg: off the thigh capsules (the fold itself stays under the sash)
+    // folded away: both cords doubled into ONE narrow bundle (≈17 cm, a slight twist) whose top is tucked under the sash;
+    // at its lower end the finger loop, the knot and the pouch folded double hang together. The bundle keeps off the
+    // thigh as a whole (its lower end pushed out of the leg capsules), so it never splays.
+    const Bot = _slD.copy(F).addScaledVector(hd, 0.168).addScaledVector(Z, 0.004);
     const C = this.caps;
     for (let c = 0; c < capCount; c++) {
       const o = c * 7;
       _v1.set(C[o], C[o + 1], C[o + 2]);
       _v2.set(C[o + 3], C[o + 4], C[o + 5]);
+      pushOutOfCapsule(Bot, _v1, _v2, C[o + 6] - 0.008);
+    }
+    const ax = _slE.subVectors(Bot, F);
+    const len = ax.length();
+    ax.divideScalar(Math.max(1e-6, len));
+    const px = _slF.copy(X).addScaledVector(ax, -ax.dot(X)).normalize(); // across the bundle, toward his front
+    const pz = _slG.crossVectors(px, ax).normalize();
+    if (pz.dot(Z) < 0) pz.negate(); // out of the body
+    this.tuckBot.copy(Bot);
+    this.tuckHd.copy(ax);
+    this.tuckOut.copy(pz);
+    const strand = (p: THREE.Vector3, s: number, u: number) => {
+      // four strands (A up / down, B up / down) round the bundle's axis; a slight twist; pinched in under the sash
+      const phi = s * Math.PI * 0.5 + 0.4 + 1.15 * u;
+      const r = 0.0052 * (0.55 + 0.45 * smooth01(u * 4));
+      p.copy(F).addScaledVector(ax, len * u).addScaledVector(px, Math.cos(phi) * r).addScaledVector(pz, Math.sin(phi) * r - 0.004 * (1 - smooth01(u * 5)));
+    };
+    for (let c = 0; c < 2; c++) {
+      const pts = c === 0 ? sim.a : sim.b;
       for (let i = 0; i < NC; i++) {
-        if (i === 3) continue;
-        pushOutOfCapsule(sim.a[i], _v1, _v2, C[o + 6] - 0.015);
-        pushOutOfCapsule(sim.b[i], _v1, _v2, C[o + 6] - 0.015);
+        // 0..3: from the cord's end at the bundle's foot up to the fold under the sash; 3..6: back down to the pouch
+        if (i <= 3) strand(pts[i], c * 2, 1 - i / 3);
+        else strand(pts[i], c * 2 + 1, (i - 3) / 3);
       }
+      // the finger loop and the knot just below the foot of the bundle, beside the folded pouch
+      pts[0].addScaledVector(ax, c === 0 ? 0.016 : 0.024).addScaledVector(px, c === 0 ? 0.011 : -0.009);
+      // the pouch's two ends together at its top
+      pts[NC - 1].copy(Bot).addScaledVector(ax, 0.004).addScaledVector(px, c === 0 ? -0.004 : 0.004);
     }
   }
 
@@ -2800,6 +2945,14 @@ export class DavidModel {
     if (st === 'stow') return t > SL_STOW.tuck + 0.02;
     return false;
   }
+  /** (play1) the cords' ends are in his fingers: armed, whirling, just released, or gripped while drawing / reloading */
+  private slingHeld() {
+    const st = this.sling.state, t = this.slingT;
+    if (st === 'idle' || st === 'spin' || st === 'release') return true;
+    if (st === 'draw') return t >= SL_DRAW.grip - 0.04;
+    if (st === 'reload') return t >= SL_RELOAD.grip - 0.04;
+    return false;
+  }
   private slingHandsBusy() {
     const h = this.hold;
     if (h === 'carry' || h === 'pull' || h === 'grab' || h === 'thanks' || h === 'kneel' || (h as string) === 'cradle') return true;
@@ -2812,6 +2965,28 @@ export class DavidModel {
 const SL_DRAW = { grasp: 0.15, stoneIn: 0.53, drop: 0.58, grip: 0.62, end: 0.7 } as const;
 const SL_RELOAD = { stoneIn: 0.31, drop: 0.35, grip: 0.4, end: 0.46 } as const;
 const SL_STOW = { tuck: 0.27, end: 0.42 } as const;
+// (play1) the sling hand's fingers (degrees, HumanRig's FingerShape: [MCP, PIP, DIP] index / middle / ring / little,
+// thumb [CMC, MCP, IP]): a tight fist round the finger loop, the forefinger hooked and the thumb pressed over the knot;
+// letting go, the thumb and forefinger open while the loop stays on the middle finger
+const SLING_FIST: FingerShape = {
+  f: [[64, 94, 60], [88, 104, 66], [92, 106, 68], [95, 108, 70]], t: [16, 30, 28], tOpp: 38, tw: [30, 42, 36], spread: [3, 1, 3, 6], cup: 16,
+};
+const SLING_LET_GO: FingerShape = {
+  f: [[16, 20, 8], [70, 90, 56], [84, 100, 62], [90, 104, 66]], t: [-4, 4, 4], tOpp: 8, tw: [0, 0, 0], spread: [4, 1, 3, 6], cup: 10,
+};
+function lerpFingerShape(out: FingerShape, a: FingerShape, b: FingerShape, k: number) {
+  const m = (x: number, y: number) => x + (y - x) * k;
+  for (let i = 0; i < 4; i++) {
+    for (let j = 0; j < 3; j++) out.f[i][j] = m(a.f[i][j], b.f[i][j]);
+    out.spread[i] = m(a.spread[i], b.spread[i]);
+  }
+  for (let j = 0; j < 3; j++) {
+    out.t[j] = m(a.t[j], b.t[j]);
+    out.tw![j] = m(a.tw?.[j] ?? 0, b.tw?.[j] ?? 0);
+  }
+  out.tOpp = m(a.tOpp, b.tOpp);
+  out.cup = m(a.cup, b.cup);
+}
 const PATH_DRAW: readonly (readonly [number, number])[] = [[0, 0], [0.15, 0], [0.27, 1], [0.4, 2], [0.47, 3], [0.53, 2], [0.62, 4], [0.7, 4]];
 const PATH_RELOAD: readonly (readonly [number, number])[] = [[0, 5], [0.1, 5], [0.2, 2], [0.27, 3], [0.33, 4], [0.46, 4]];
 const PATH_STOW: readonly (readonly [number, number])[] = [[0, 5], [0.1, 5], [0.24, 0], [0.3, 6], [0.42, 6]];

@@ -16,6 +16,8 @@ import { Range, ROUNDS, type RoundStats } from './Range';
 import { STONE_BEATS, THROW_RELEASE } from '../characters/DavidModel';
 import { Intro } from './Intro';
 import { BearHook } from './BearHook';
+import { BearFight, FightBot, type FightResult } from './BearFight';
+import { BEAR_MOVES } from '../characters/BearModel';
 import { LAYOUT, SUN } from '../world/Layout';
 import { quoteText, sourceRef, verseArgs } from '../content/sources';
 
@@ -94,7 +96,8 @@ export class Story {
       center: () => this.bear.model.hitPoints(pts)[i],
       radius: r,
       enabled: () => this.bear.visible && this.bear.alive && this.bearVulnerable,
-      onHit: (at: THREE.Vector3) => this.hitBear(at, 'sling'),
+      // (bear1) zone 2 is the head, 0 the hindquarters, 1 the chest
+      onHit: (at: THREE.Vector3) => this.hitBear(at, 'sling', i === 2 ? 'head' : i === 0 ? 'rump' : 'body'),
     });
     projectiles.targets.push(zone(1, 0.55), zone(2, 0.32), zone(0, 0.5));
     projectiles.onGroundHit = (at, speed, material) => {
@@ -102,15 +105,22 @@ export class Story {
         // (play1) a stone on rock / wood / earth
         const n = material === 'rock' ? 'stoneOnRock' : material === 'wood' ? 'stoneOnWood' : 'stoneOnEarth';
         this.audio.at(n as SfxName, at, 0.8);
-        this.engine.particles.dustBurst(at, material === 'earth' ? 6 : 4, material === 'earth' ? 0.7 : 0.45);
+        // at the range a miss must show where it came down, from the aim lens 20-35 m away: a bigger, paler puff
+        if (this.practicing) this.engine.particles.dustBurst(at, material === 'earth' ? 14 : 9, material === 'earth' ? 1.2 : 0.8, _dustPale);
+        else this.engine.particles.dustBurst(at, material === 'earth' ? 6 : 4, material === 'earth' ? 0.7 : 0.45);
       }
     };
-    player.onStrikeImpact = (tip) => this.onStaffImpact(tip);
+    player.onStrikeImpact = (tip, _fwd, kind) => this.onStaffImpact(tip, kind);
   }
 
   jarsBroken = 0;
   bearVulnerable = false;
-  private bearHitCB: ((kind: 'sling' | 'staff') => void) | null = null;
+  private bearHitCB: ((kind: 'sling' | 'staff', zone: 'head' | 'rump' | 'body', at: THREE.Vector3) => void) | null = null;
+  /** (bear1) the fight in progress (BearFight: the bear's moves, David's counters, fatigue) */
+  fightRun: BearFight | null = null;
+  /** (bear1) test bots for the fight (?bot=careful|average|careless) and the stats of the last fights */
+  private bot: FightBot | null = null;
+  readonly fightLog: { attempt: number; result: string; time: number; fatigue: number; counters: number; knockdowns: number; stats: unknown }[] = [];
 
   // ============================================================================ script plumbing
   private until(pred: () => boolean) {
@@ -637,6 +647,7 @@ export class Story {
 
   /** per frame: the range lives on; its replay prompt at the mark; the lens that follows a perfect long shot */
   private rangeTick(dt: number) {
+    this.projectiles.pxScale = this.engine.renderer.getPixelRatio(); // the flight's dots: a few device px wide
     const R = this.range;
     if (!R) return;
     R.update(dt);
@@ -1592,3 +1603,4 @@ export class Story {
 const _up35 = new THREE.Vector3(0, 0.35, 0);
 const _missR = new THREE.Vector3();
 const _missD = new THREE.Vector3();
+const _dustPale = new THREE.Color(0.86, 0.79, 0.66);

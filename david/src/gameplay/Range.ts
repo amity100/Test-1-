@@ -41,7 +41,7 @@ export interface RoundDef {
 
 export const ROUNDS: RoundDef[] = [
   { title: 'הִתְחַמְּמוּת', note: 'שְׁלֹשָׁה כַּדִּים עַל הַגָּדֵר — לְמַד אֶת הַקֶּצֶב: שַׁחְרֵר כְּשֶׁהַכִּיס בָּאוֹר', wind: 0, windFrom: 'left', maxStones: 9, par3: 3, par2: 5 },
-  { title: 'לְמֵרָחוֹק', note: 'עַל הַגָּדָה שֶׁמִּנֶּגֶד — הָאֶבֶן יוֹרֶדֶת בַּדֶּרֶךְ: כַּוֵּן גָּבוֹהַּ יוֹתֵר, וְשִׂים לֵב לָרוּחַ', wind: 4.2, windFrom: 'left', maxStones: 14, par3: 5, par2: 8 },
+  { title: 'לְמֵרָחוֹק', note: 'עַל הַגָּדָה שֶׁמִּנֶּגֶד — הָאֶבֶן יוֹרֶדֶת בַּדֶּרֶךְ: כַּוֵּן גָּבוֹהַּ יוֹתֵר, וְשִׂים לֵב לָרוּחַ', wind: 2.8, windFrom: 'left', maxStones: 14, par3: 5, par2: 8 },
   { title: 'מַטָּרוֹת נָעוֹת', note: 'הַדְּלַעַת בַּחֶבֶל וְהַכַּד עַל הַבּוּל הַמִּתְגַּלְגֵּל — כַּוֵּן לְפָנֵיהֶם', wind: 1.5, windFrom: 'right', maxStones: 12, par3: 3, par2: 5 },
   { title: 'הַחֶבֶל הַדַּק', note: 'פְּגַע בַּחֶבֶל שֶׁעָלָיו תָּלוּי הַנֹּאד — לֹא בַּנֹּאד', wind: 0.8, windFrom: 'left', maxStones: 10, par3: 2, par2: 4 },
 ];
@@ -102,6 +102,13 @@ export interface RoundStats {
 
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
+
+// (polish, "challenging and fun") the difficulty's knobs (re-tuned with the bots — see the report's table): the far
+// bank's jars / gourds (scale), the swinging gourd (amplitude rad, period s, body scale), the log (its jar's scale,
+// its speed m/s); round 2's wind is in ROUNDS
+const FAR_JAR = 1.4, FAR_GOURD = 1.45;
+const SWING_AMP = 0.27, SWING_PERIOD = 3.2, SWING_GOURD = 1.25;
+const LOG_JAR = 0.72, LOG_SPEED = 0.82;
 
 export class Range {
   readonly group = new THREE.Group();
@@ -288,10 +295,10 @@ export class Range {
     {
       const spots: [number, number, 'jar' | 'gourd'][] = [[22.5, -1.0, 'jar'], [26.5, 2.4, 'gourd'], [30.5, -3.0, 'jar'], [34.5, 1.2, 'gourd']];
       for (const [a, r, kind] of spots) {
-        const b = this.base(a, r, 0.35, kind === 'jar' ? 0.28 * 1.25 : 0.15 * 1.2, rockMat, rockGeo, rnd);
+        const b = this.base(a, r, 0.35, kind === 'jar' ? 0.28 * FAR_JAR : 0.15 * FAR_GOURD, rockMat, rockGeo, rnd);
         // (larger storage jars and big gourds out there: at 30 m a water jar is a few pixels on a phone)
-        if (kind === 'jar') this.addJar(2, b, 1.25, clay, jarGeo, true);
-        else this.addGourd(2, b, 1.2, rnd);
+        if (kind === 'jar') this.addJar(2, b, FAR_JAR, clay, jarGeo, true);
+        else this.addGourd(2, b, FAR_GOURD, rnd);
       }
       // the rag on its stick: shows the wind beside the far targets
       this.addCloth(this.at(27, -5.8), rnd);
@@ -480,6 +487,7 @@ export class Range {
     const body = new THREE.Mesh(geo, mat);
     body.castShadow = true;
     body.position.y = -0.37; // hangs by its stalk
+    body.scale.setScalar(SWING_GOURD); // (polish) a big bottle gourd: the moving target reads at 20 m
     g.add(body);
     this.group.add(g);
     const cordGeo = new THREE.BufferGeometry().setFromPoints([pivot, pivot.clone()]);
@@ -490,11 +498,11 @@ export class Range {
     const tip = new THREE.Vector3();
     let ang = 0, falling = false;
     const fallV = new THREE.Vector3();
-    // a pendulum across the line of throw (it swings left-right in the slinger's view): ±0.45 m, ≈2.6 s a swing
-    const amp = 0.36;
+    // a pendulum across the line of throw (it swings left-right in the slinger's view): ±0.34 m, an even 3.2 s a swing
+    const amp = SWING_AMP;
     const phase0 = rnd() * 6;
     const place = (t: number) => {
-      ang = amp * Math.sin((2 * Math.PI * t) / 2.6 + phase0);
+      ang = amp * Math.sin((2 * Math.PI * t) / SWING_PERIOD + phase0);
       tip.copy(pivot).addScaledVector(this.R, Math.sin(ang) * len).add(_w.set(0, -Math.cos(ang) * len, 0));
       g.position.copy(tip);
       g.rotation.set(0, 0, 0);
@@ -508,7 +516,7 @@ export class Range {
     const t: RTarget = {
       id: 'swing', round, alive: true, counts: true,
       hit: {
-        id: 'gourd', center: () => center, radius: 0.17, kind: 'target', material: 'wood',
+        id: 'gourd', center: () => center, radius: 0.15 * SWING_GOURD + 0.01, kind: 'target', material: 'wood',
         enabled: () => this.live && !this.offMark && this.round === round && t.alive,
         onHit: (_at, v, shot) => {
           t.alive = false;
@@ -566,7 +574,7 @@ export class Range {
     log.rotation.x = Math.PI / 2; // the log's axis along the holder's z (the line of throw)
     const jar = new THREE.Mesh(jarGeo, clay);
     jar.castShadow = true;
-    jar.scale.setScalar(0.62);
+    jar.scale.setScalar(LOG_JAR);
     jar.rotation.x = -Math.PI / 2; // lying on its side, its base against the log's end
     jar.position.set(0, 0, -logL / 2 - 0.01);
     spinner.add(jar);
@@ -595,7 +603,7 @@ export class Range {
     const t: RTarget = {
       id: 'log', round, alive: true, counts: true,
       hit: {
-        id: 'jar', center: () => center, radius: 0.18, kind: 'target', material: 'clay',
+        id: 'jar', center: () => center, radius: 0.29 * LOG_JAR, kind: 'target', material: 'clay',
         enabled: () => this.live && !this.offMark && this.round === round && t.alive && alpha > 0.5,
         onHit: (_at, v, shot) => {
           t.alive = false;
@@ -614,7 +622,7 @@ export class Range {
             wait -= dt;
             return;
           }
-          const sp = 1.15 + Math.min(0.75, s * 0.09); // it picks up speed down the slope
+          const sp = LOG_SPEED + Math.min(0.25, s * 0.035); // it picks up a little speed down the slope
           s += sp * dt;
           setAt(Math.min(s, total));
           if (s >= total) {
@@ -704,7 +712,7 @@ export class Range {
     const cordT: RTarget = {
       id: 'cord', round, alive: true, counts: true,
       hit: {
-        id: 'cord', center: () => cordA.clone().lerp(cordB, 0.5), radius: 0.07, kind: 'target', material: 'skin',
+        id: 'cord', center: () => cordA.clone().lerp(cordB, 0.5), radius: 0.05, kind: 'target', material: 'skin',
         segment: () => [cordA, cordB] as const,
         enabled: () => this.live && !this.offMark && this.round === round && cordT.alive,
         onHit: (_at, v, shot) => {

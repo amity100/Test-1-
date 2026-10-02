@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { clamp, damp, smoothstep } from '../core/noise';
+import { clamp, damp, dampAngle, smoothstep } from '../core/noise';
 
 export interface ShotFrame { pos: THREE.Vector3; look: THREE.Vector3; fov?: number; roll?: number }
 /** vertical field of view (deg) of the follow camera (not aiming) */
@@ -47,6 +47,16 @@ export class CameraRig {
   /** 0..1: closer and lower behind him (he kneels in the stream bed to choose a stone) */
   close = 0;
   private closeW = 0;
+
+  /**
+   * (bear1, gameplay v2 §4) the fight's framing: while set (the bear's position), the follow lens swings round behind
+   * David so the bear stands beyond him a little to the side, looks between them and pulls back, so its tells read; it
+   * yields while the player drags the view (and while aiming the sling). `combatSide` = which side (±1).
+   */
+  combatFocus: THREE.Vector3 | null = null;
+  combatSide = 1;
+  private combatW = 0;
+  private lookIdle = 9;
 
   /** optional solid-obstacle test for the follow camera's boom (boulders: Colliders.solidAt) */
   solid: ((x: number, y: number, z: number) => boolean) | null = null;
@@ -142,6 +152,7 @@ export class CameraRig {
   applyLook(dx: number, dy: number) {
     // (play1) finer while aiming through the narrower lens
     const s = this.sensitivity * this.lookScale * THREE.MathUtils.lerp(1, this.aimFovCur / FOLLOW_FOV, this.aimW);
+    if (Math.abs(dx) + Math.abs(dy) > 0.5) this.lookIdle = 0; // (bear1) the combat framing yields to the player's look
     this.yaw -= dx * s;
     this.pitch = clamp(this.pitch + dy * s, -0.55, 0.9);
   }
@@ -196,14 +207,27 @@ export class CameraRig {
     // shoulder, 2.4 m back, with a horizontal field of 0.8 × aimFov — his head at ≈80 % of the width, the sling arm
     // and the whirl at the right edge, the reticle's middle clear
     const portrait = cam.aspect < 0.85;
-    const aimBoom = portrait ? 2.4 : 1.9;
-    let aimLat = 0.62, aimV = this.aimFovCur;
+    // (polish) desktop / landscape: a little farther back and more to the right, so his raised sling arm stands left of
+    // the left-centre of the frame (where the far bank's and the terebinth's targets sit while he aims at another)
+    const aimBoom = portrait ? 2.4 : 2.12;
+    let aimLat = 0.78, aimV = this.aimFovCur;
     if (portrait) {
       const th = Math.tan(THREE.MathUtils.degToRad(0.4 * this.aimFovCur));
       aimV = THREE.MathUtils.radToDeg(2 * Math.atan(th / cam.aspect));
       aimLat = -0.6 * aimBoom * th;
     }
-    const want = THREE.MathUtils.lerp(THREE.MathUtils.lerp(this.dist, 2.25, this.closeW), aimBoom, this.aimW);
+    // (bear1) the combat framing: behind him, the bear beyond, the lens a little to the side (it yields to his own look)
+    this.lookIdle += dt;
+    this.combatW = damp(this.combatW, this.combatFocus && this.aim < 0.5 ? 1 : 0, 2.5, dt);
+    if (this.combatW > 0.01 && this.combatFocus) {
+      const fx = this.combatFocus.x - this.smoothTarget.x, fz = this.combatFocus.z - this.smoothTarget.z;
+      if (Math.hypot(fx, fz) > 0.6) {
+        const k = this.combatW * smoothstep(0.8, 1.8, this.lookIdle);
+        this.yaw = dampAngle(this.yaw, Math.atan2(fx, fz) + Math.PI + 0.3 * this.combatSide, 2.4 * k, dt);
+        this.pitch = damp(this.pitch, 0.2, 1.6 * k, dt);
+      }
+    }
+    const want = THREE.MathUtils.lerp(THREE.MathUtils.lerp(THREE.MathUtils.lerp(this.dist, 2.25, this.closeW), 4.3, this.combatW * (1 - this.aimW)), aimBoom, this.aimW);
     const cp = Math.cos(this.pitch), sp = Math.sin(this.pitch);
     const dir = tmpA.set(Math.sin(this.yaw) * cp, sp, Math.cos(this.yaw) * cp);
     const right = tmpB.set(-Math.cos(this.yaw), 0, Math.sin(this.yaw));
@@ -225,6 +249,11 @@ export class CameraRig {
     const pos = tmpD.copy(pivot).addScaledVector(dir, this.curDist);
     pos.y = Math.max(pos.y, this.ground(pos.x, pos.z) + 0.35);
     const look = tmpE.copy(pivot).addScaledVector(dir, -4);
+    if (this.combatW > 0.01 && this.combatFocus) {
+      // (bear1) look between David and the bear (its chest), so both stay in the frame
+      const cw = this.combatW * (1 - this.aimW) * 0.55;
+      look.lerp(tmpB.set(this.combatFocus.x, this.combatFocus.y + 0.95, this.combatFocus.z).lerp(pivot, 0.4), cw);
+    }
     this.portraitTilt(pos, look, this.aimW);
     if (this.blendFromCine > 0 && this.lastCine) {
       this.blendFromCine = Math.max(0, this.blendFromCine - dt / 1.2);

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { clamp, damp, dampAngle, smoothstep } from '../core/noise';
 import type { Input } from '../core/Input';
 import type { Engine } from '../core/Engine';
-import { DavidModel, THROW_RELEASE } from '../characters/DavidModel';
+import { DavidModel, THROW_RELEASE, JAB_HIT, KNOCKDOWN_UP } from '../characters/DavidModel';
 import type { CameraRig } from './CameraRig';
 import { Projectiles, raySphere, rayCapsule, STONE_DRAG, STONE_DRAG_ROUGH, type HitTarget, type ShotInfo } from './Projectiles';
 import type { GameAudio } from './GameAudio';
@@ -133,7 +133,16 @@ export class Player {
   /** what the reticle is on (a range target, the bear) and how far it is */
   aimTarget: HitTarget | null = null;
   aimDist = 30;
-  onStrikeImpact?: (tip: THREE.Vector3, forward: THREE.Vector3) => void;
+  /** (bear1) the staff connects: a jab of its end (`kind` 'jab', the face / nose at reach) or the swung blow ('strike') */
+  onStrikeImpact?: (tip: THREE.Vector3, forward: THREE.Vector3, kind: 'jab' | 'strike') => void;
+  /** (bear1) which blow the staff button gives now (the fight: a jab at reach, the swung blow when the head is close) */
+  strikeKind?: () => 'jab' | 'strike';
+  /** (bear1) > 0: knocked down — no movement, blows or dodges until he is up again */
+  stunT = 0;
+  private knockVel = new THREE.Vector3();
+  /** (bear1) the last dodge: its world direction and when it began (Story reads sidestep vs straight back) */
+  readonly lastDodgeDir = new THREE.Vector3();
+  lastDodgeAt = -1;
   onThrow?: () => void;
   onDodge?: () => void;
   /** (play1) every release of the sling, with its timing */
@@ -251,8 +260,16 @@ export class Player {
     this.heading = dampAngle(this.heading, Math.atan2(p.x - this.pos.x, p.z - this.pos.z), rate, dt);
   }
 
+  /** in the first moments of a dodge he is out of the blow's way (later in it only where he moved to counts) */
+  get dodging() {
+    return this.dodgeT >= 0;
+  }
+  get evading() {
+    return this.dodgeT >= 0 && this.dodgeT < 0.2;
+  }
+
   hurt(from: THREE.Vector3, dmg = 1) {
-    if (this.invuln > 0 || this.dodgeT >= 0) return false;
+    if (this.invuln > 0 || this.evading) return false;
     this.health = Math.max(0, this.health - dmg);
     this.invuln = 1.1;
     this.model.play('hurt');
@@ -262,13 +279,43 @@ export class Player {
     return true;
   }
 
+  /**
+   * (bear1) a blow of the bear: he is thrown back (slid, not teleported), goes down onto a knee and a hand and gets up
+   * on the staff — no control for KNOCKDOWN_UP s. Returns false when he was out of its way (invulnerable / evading).
+   */
+  knockDown(from: THREE.Vector3, dmg = 1, push = 1.5) {
+    if (this.invuln > 0 || this.evading) return false;
+    this.health = Math.max(0, this.health - dmg);
+    this.invuln = KNOCKDOWN_UP + 0.5;
+    this.stunT = KNOCKDOWN_UP;
+    this.dodgeT = -1;
+    this.speed = 0;
+    this.cancelAim();
+    this.model.staffMode = 'plant';
+    this.model.play('knockdown');
+    // thrown away from the blow: v0 so that it slides `push` m (exponential decay at 7 /s)
+    this.knockVel.set(this.pos.x - from.x, 0, this.pos.z - from.z);
+    if (this.knockVel.lengthSq() < 1e-6) this.knockVel.copy(this.forward).multiplyScalar(-1);
+    this.knockVel.normalize().multiplyScalar(push * 7);
+    this.heading = Math.atan2(from.x - this.pos.x, from.z - this.pos.z);
+    this.audio.sfx('davidHurt', { volume: 1 });
+    return true;
+  }
+
   update(dt: number, input: Input, cam: CameraRig, time: number) {
     const m = this.model;
     this.invuln = Math.max(0, this.invuln - dt);
+    // (bear1) knocked down: the slide away from the blow, then on the ground until he is up
+    this.stunT = Math.max(0, this.stunT - dt);
+    if (this.knockVel.lengthSq() > 1e-4) {
+      this.pos.addScaledVector(this.knockVel, dt);
+      this.knockVel.multiplyScalar(Math.exp(-7 * dt));
+    }
+    const stunned = this.stunT > 0;
     // ------------------------------------------------ movement
     const camF = cam.forward();
     const camR = this._camR.set(-camF.z, 0, camF.x);
-    const mv = this.controlEnabled ? input.move : this._mv.set(0, 0);
+    const mv = this.controlEnabled && !stunned ? input.move : this._mv.set(0, 0);
     const wish = this._wish.set(0, 0, 0).addScaledVector(camF, mv.y).addScaledVector(camR, mv.x);
     const mag = Math.min(1, wish.length());
     const sprinting = this.controlEnabled && input.sprint && this.canSprint && !this.carrying && mag > 0.55;
@@ -281,7 +328,7 @@ export class Player {
       if (this.aiming) target = 1.25;
       if (m.hold === 'pull' || m.hold === 'grab') target = 0;
     }
-    if (this.dodgeT < 0 && this.controlEnabled) {
+    if (this.dodgeT < 0 && this.controlEnabled && !stunned) {
       this.speed = damp(this.speed, target, target > this.speed ? 6 : 9, dt);
       if (this.aiming) {
         this.heading = dampAngle(this.heading, Math.atan2(camF.x, camF.z), 14, dt);
@@ -315,13 +362,21 @@ export class Player {
     this.updateSling(dt, input, cam, sprinting && mag > 0.55);
 
     // ------------------------------------------------ staff strike
-    if (input.take('strike') && this.controlEnabled && this.canStrike && !this.carrying && !m.busy && !this.aiming) {
+    if (input.take('strike') && this.controlEnabled && !stunned && this.canStrike && !this.carrying && !m.busy && !this.aiming) {
       m.staffMode = 'strike';
       this.strikeT = 0;
-      m.play('strike', [
-        { t: 0.13, fn: () => this.audio.sfx('whoosh', { volume: 0.7 }) },
-        { t: 0.26, fn: () => this.onStrikeImpact?.(m.staffTip(), this.forward) },
-      ]);
+      if ((this.strikeKind?.() ?? 'strike') === 'jab') {
+        // (bear1) the jab: the staff's end driven at the face from out of the bear's reach
+        m.play('jab', [
+          { t: 0.09, fn: () => this.audio.sfx('whoosh', { volume: 0.55, pitch: 1.25 }) },
+          { t: JAB_HIT, fn: () => this.onStrikeImpact?.(m.staffTip(), this.forward, 'jab') },
+        ]);
+      } else {
+        m.play('strike', [
+          { t: 0.13, fn: () => this.audio.sfx('whoosh', { volume: 0.7 }) },
+          { t: 0.26, fn: () => this.onStrikeImpact?.(m.staffTip(), this.forward, 'strike') },
+        ]);
+      }
     }
     if (this.strikeT >= 0) {
       this.strikeT += dt;
@@ -331,12 +386,15 @@ export class Player {
       }
     }
     // ------------------------------------------------ dodge
-    if (input.take('dodge') && this.controlEnabled && this.canDodge && this.dodgeT < 0 && m.actionName !== 'dodge') {
+    if (input.take('dodge') && this.controlEnabled && !stunned && this.canDodge && this.dodgeT < 0 && m.actionName !== 'dodge') {
       this.dodgeDir.copy(mag > 0.05 ? wish : this.fwdInto(this._fwd).multiplyScalar(-1)).setY(0).normalize();
       this.dodgeT = 0;
+      this.lastDodgeDir.copy(this.dodgeDir);
+      this.lastDodgeAt = time;
       // lean toward the side of the dodge (character space: +x = his left)
       m.dodgeSide = this.dodgeDir.x * Math.cos(this.heading) - this.dodgeDir.z * Math.sin(this.heading);
-      this.invuln = Math.max(this.invuln, 0.45);
+      // (bear1) only the first instant of the dodge is out of harm's way: after that, where he moved to decides
+      this.invuln = Math.max(this.invuln, 0.2);
       m.play('dodge');
       this.audio.sfx('dodge', { volume: 0.8 });
       this.onDodge?.();
@@ -401,6 +459,8 @@ export class Player {
       }
     } else cam.lookScale = 1;
     this.postAim = Math.max(0, this.postAim - dt);
+    // (play1) the aim lens stays until the stone has come down (and a little after): a miss shows where it went
+    if (this.postAim > 0 && this.lastShot && !this.lastShot.resolved) this.postAim = Math.max(this.postAim, 0.5);
     if (this.speed > 1.0 || !this.controlEnabled) this.postAim = 0;
     cam.aim = this.aiming || this.postAim > 0 ? 1 : 0;
     cam.aimFov = THREE.MathUtils.lerp(40, 26, smoothstep(10, 36, this.aimDist));
