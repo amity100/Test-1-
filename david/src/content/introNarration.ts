@@ -216,6 +216,56 @@ export const INTRO_NARRATION = {
     note: 'Optional place card for shot 14 (non-pausal form בֵּית לֶחֶם).',
     optional: true,
   },
+  // ------------------------------------------------------------------ CUT v5: the prologue (docs/intro-script-v5.md)
+  landIsrael: {
+    id: 'landIsrael',
+    kind: 'place',
+    shots: [1],
+    text: 'אֶרֶץ יִשְׂרָאֵל',
+    rtl: true,
+    en: 'The Land of Israel',
+    note: 'First card of the prologue (P1, the big line of a two-line card). The biblical name (1 Sam 13:19).',
+  },
+  judahDays: {
+    id: 'judahDays',
+    kind: 'line',
+    shots: [1],
+    text: 'הָרֵי יְהוּדָה · בִּימֵי שָׁאוּל הַמֶּלֶךְ',
+    rtl: true,
+    en: 'The hills of Judah · in the days of King Saul',
+    note:
+      'Second line of the P1 card. הַר יְהוּדָה (Josh 20:7, 21:11) in the common plural; בִּימֵי שָׁאוּל (1 Sam 17:12, ' +
+      '1 Chr 5:10). The time of the story: the reign of Saul (~1020-1000 BCE).',
+  },
+  bethlehemJesse: {
+    id: 'bethlehemJesse',
+    kind: 'line',
+    shots: [2],
+    text: 'עִירוֹ שֶׁל יִשַׁי בֶּן עוֹבֵד',
+    rtl: true,
+    en: 'The town of Jesse son of Obed',
+    note:
+      'Second line of the P2 card (under בֵּית לֶחֶם). Jesse of Bethlehem (1 Sam 16:1, 17:12), son of Obed (Ruth 4:17, ' +
+      '21-22; 1 Chr 2:12). Plain narration, not a verse.',
+  },
+  exodus: {
+    id: 'exodus',
+    kind: 'line',
+    shots: [4],
+    text: 'יְצִיאַת מִצְרַיִם',
+    rtl: true,
+    en: 'The Exodus from Egypt',
+    note: 'The traditional name of the event (Ex 12-14); the map draws the road out of Egypt.',
+  },
+  wilderness: {
+    id: 'wilderness',
+    kind: 'line',
+    shots: [4],
+    text: 'אַרְבָּעִים שָׁנָה בַּמִּדְבָּר',
+    rtl: true,
+    en: 'Forty years in the wilderness',
+    note: 'Num 14:33-34; Deut 8:2 (three words in common with Deut 8:2, below the four-word limit).',
+  },
   actLand: {
     id: 'actLand',
     kind: 'act',

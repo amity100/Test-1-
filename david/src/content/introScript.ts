@@ -14,17 +14,29 @@
 // cut (docs/intro-script-v4.md). The bear (the thicket and the eyes, CUT v3's H1-H2) is no longer in the film: it
 // opens the bear's attack in gameplay (src/gameplay/Story.ts bearAttack).
 //
+// CUT v5 (the user, 2 Oct: "before the Saul part, something that shows the period ... where we are, what the people
+// of Israel went through to get there — a general idea"; approved the outline with a REALISTIC 3D map; Rachel's tomb
+// inside the prologue, never between the two halves of 15:28) — docs/intro-script-v5.md: a 61 s PROLOGUE before
+// Gilgal (the land of Israel at dawn, Bethlehem, Rachel's tomb, the realistic 3D map: out of Egypt, forty years in the
+// wilderness, across the Jordan to Gilgal, the tribes in the days of the Judges, the five Philistine cities; the
+// Philistine host; the elders at Ramah: give us a king), then Gilgal on the shofar as before; and a NEW END (the user:
+// David must be seen watching his flock for several seconds, a verse to know him, the DAVID logo while he does
+// something noble, and a fitting camera move — no strange orbit): D3 'watch' (Ps 78:70-71) and D4 'horizon' (one long
+// take: he gathers a lamb into his arms and carries it to its mother; the logo; the camera eases back and settles
+// behind him into the game).
+//
 // THE SHARED TIMING CONTRACT (cut · perf · score): every shot's take, length and named BEATS (seconds from the start of
 // the shot) are below. The performances time every action to `beats`, the score keys every hit to them (read
 // `INTRO_SHOTS` / the shot cues' `beats`, never hard-coded seconds). Change a number only together with the other two
 // teammates (and write it in your report).
 //
-// Every shot names the SET it is filmed in ('black', the Gilgal set of src/film/gilgal, or 'world' = the chapter's game
-// world around Bethlehem; the prologue land sets 'judah' | 'coast' | 'ramah' of src/film/land are not used by CUT v3),
+// Every shot names the SET it is filmed in ('black', the Gilgal set of src/film/gilgal, 'world' = the chapter's game
+// world around Bethlehem, the prologue land sets 'judah' | 'coast' | 'ramah' of src/film/land, or CUT v5's realistic 3D
+// map 'map' of src/film/map),
 // the TAKE inside that set (a named camera move; 'base:variant' = a second angle filmed on the blocking of `base`, see
 // src/film/FilmCams.ts), its length, how it comes in (transition), the score cue and the on-screen text.
 //
-// On-screen text rules (docs/visual-bible.md §1, intro-script-v3 "Text"): ONLY the 7 text events below.
+// On-screen text rules (docs/visual-bible.md §1, intro-script-v5 "Text"): ONLY the text events below.
 //  * `narration` ids come from ./introNarration (narration(id)) — never styled or referenced as a verse;
 //  * `quote` ids are catalog ids of ./sources, shown ONLY through verseArgs / quoteText / sourceRef /
 //    quoteWithRefHtml — never hand-typed. Words appear one by one (`stagger`, or `words` = timed to speech).
@@ -63,7 +75,7 @@ export type IntroWorld = 'field' | 'gibeah';
 export type IntroTransition = 'cut' | 'dissolve' | 'match' | 'light' | 'black' | 'smash' | 'hard';
 
 /** Where a shot is filmed. */
-export type FilmSetName = 'black' | 'judah' | 'coast' | 'ramah' | 'gilgal' | 'world';
+export type FilmSetName = 'black' | 'judah' | 'coast' | 'ramah' | 'gilgal' | 'world' | 'map';
 
 /**
  * Score cue names (data-driven: the score keys the music on these; consecutive shots with the same cue form one
@@ -84,7 +96,10 @@ export type FilmCue =
   | 'broken' //     G7     Saul and the torn piece in his fist
   | 'figure' //     D1     (after the light-flash) David from behind above the flock — 15:28b
   | 'face' //       D2     his face turns into the light — 16:7
-  | 'horizon' //    D3     CUT v4: the crane up from David over his flock and the hills, the logo over the panorama, the hand-off
+  | 'horizon' //    D4     CUT v5: he gathers a lamb into his arms and carries it to its mother; the logo; the camera eases back into the game
+  | 'map' //        P4     CUT v5: the realistic 3D map — out of Egypt, the wilderness, across the Jordan to Gilgal
+  | 'judges' //     P5     CUT v5: the map — the tribes in their land, "no king in Israel", the five Philistine cities
+  | 'watch' //      D3     CUT v5: David watches his flock (Ps 78:70-71)
   | 'thicket' //    (unused since CUT v4: the hook moved into gameplay, Story.bearAttack)
   | 'title' //      (unused since CUT v4: the logo sits over the panorama of D3)
   // ---- unused in CUT v2 (legacy names of the rough cut) ----
@@ -96,6 +111,12 @@ export type FilmCue =
   | 'peace';
 
 export type IntroShotId =
+  | 'land' //         P1 (CUT v5) out of black: the land of Israel at dawn — the Judean hills
+  | 'bethlehem' //    P2 (CUT v5) Bethlehem on its ridge
+  | 'map-exodus' //   P4 (CUT v5) the realistic 3D map: the road out of Egypt to Gilgal
+  | 'map-tribes' //   P5 (CUT v5) the map: the tribes, the Judges, the Philistine cities
+  | 'philistines' //  P6 (CUT v5) the Philistine host on the coastal plain
+  | 'watch' //        D3 (CUT v5) David watches his flock
   | 'flight' //       P1+P2
   | 'rachel' //       P3
   | 'coast' //        P4
@@ -110,7 +131,7 @@ export type IntroShotId =
   | 'saul-alone' //   G7
   | 'figure' //       D1
   | 'face' //         D2
-  | 'horizon' //      D3 (CUT v4)
+  | 'horizon' //      D4 (CUT v5; D3 of CUT v4)
   | 'thicket' //      (unused since CUT v4)
   | 'eyes' //         (unused since CUT v4)
   | 'title'; //       (unused since CUT v4)
@@ -232,22 +253,106 @@ export const VERDICT_WORDS: readonly IntroWord[] = [
 ];
 
 // ---------------------------------------------------------------------------------------------------------
-// THE FILM (CUT v4, 59 s) — 1 Gilgal 0-12 · 2 the spear and the silence 12-21 · 3 the tear 21-30 ·
-// 4 the verdict 30-39 · 5 David 39-49 · 6 the logo over the panorama 49-59, then the game
+// THE FILM (CUT v5, 134.5 s) — PROLOGUE 0-61 (the land · Bethlehem · Rachel · the map · the Philistines · Ramah) ·
+// 1 Gilgal 61-71.5 · 2 the spear and the silence 71.5-80.5 · 3 the tear 80.5-89.5 · 4 the verdict 89.5-98.5 ·
+// 5 David 98.5-108.5 · 6 the flock, the lamb and the logo 108.5-134.5, then the game
 // ---------------------------------------------------------------------------------------------------------
 export const INTRO_SHOTS: readonly IntroShot[] = [
-  // ================================================================== 1 · GILGAL (12 s): the shofar, the army, the king
+  // ================================================================== PROLOGUE (CUT v5, 61 s): a general idea — where, when, and how
   {
-    id: 'dust', n: 'G1', set: 'gilgal', take: 'dustWall', dur: 5.5, cut: 'black', hold: 1.5, fade: 0.2, cue: 'shofar', beat: 'warriors',
-    // 0-1.5 s black with the time card; the picture comes in ON the shofar blast (1.5)
-    beats: { timeCard: 0.2, shofar: 1.5, horns: 2.1, card: 2.8 },
+    id: 'land', n: 'P1', set: 'judah', take: 'flight', dur: 11.0, cut: 'black', hold: 3.0, fade: 1.6, cue: 'land', beat: 'judea',
+    // timeCard: the time card over black · picture: the picture rises out of black (the sea of clouds at dawn) ·
+    // card: the land card
+    beats: { timeCard: 0.4, picture: 3.0, card: 5.4 },
     text: [
-      { at: 0.2, seconds: 3.6, kind: 'time', narration: ['timeCard'] },
-      { at: 2.8, seconds: 2.5, kind: 'place', narration: ['gilgal'], side: 'left', v: 'top' },
+      { at: 0.4, seconds: 3.6, kind: 'time', narration: ['timeCard'] },
+      { at: 5.4, seconds: 4.8, kind: 'person', narration: ['landIsrael', 'judahDays'], side: 'right', v: 'top' },
     ],
-    direction: 'Out of black (the time card) ON the shofar blast: low and close to the front rank as it comes out of the '
-      + "dust wall at the lens, the lens backing away slowly; rams' horns lifted and blown in the front rank, the ranks "
-      + 'marching (not in lockstep), dust in the low sun. A long take: time to see the army.',
+    direction: 'Out of black (the time card): dawn — out of the sea of clouds and down over the hills of Judah: ridge '
+      + 'after ridge in the valley fog, terraces and olive groves on the near slopes, the Dead Sea glinting in the east and '
+      + 'the mountains of Moab beyond; one long, slow, majestic flight (never fast). The two-line card in the sky.',
+  },
+  {
+    id: 'bethlehem', n: 'P2', set: 'world', take: 'bethlehem', dur: 7.0, cut: 'dissolve', fade: 1.0, cue: 'bethlehem', beat: 'bethlehem',
+    beats: { card: 1.0, flock: 2.2 },
+    text: [{ at: 1.0, seconds: 4.8, kind: 'person', narration: ['bethlehem', 'bethlehemJesse'], side: 'left', v: 'top' }],
+    direction: 'Bethlehem on its ridge in the early morning: the village of stone houses, threshing floors and terraces, '
+      + 'smoke rising from the roofs, the vineyards and olives below; a slow aerial drift toward the village; a shepherd '
+      + 'leads a flock out along the terraces (`flock`). Peaceful, alive, the light warming.',
+  },
+  {
+    id: 'rachel', n: 'P3', set: 'world', take: 'rachel-dawn', dur: 6.0, cut: 'dissolve', fade: 0.8, cue: 'rachel', beat: 'rachel',
+    // rise: the lens starts to rise into the sky (the map takes over in P4 by a dissolve at the same view)
+    beats: { card: 0.6, verse: 1.6, rise: 4.0 },
+    text: [
+      { at: 0.6, seconds: 3.2, kind: 'place', narration: ['rachelTomb'], side: 'right', v: 'top' },
+      { at: 1.6, seconds: 3.9, kind: 'verse', quote: 'gen_35_19_rachel_buried', stagger: 0.16, side: 'left', v: 'top', lines: 2 },
+    ],
+    direction: "Rachel's tomb by the road to Ephrath at first light: Jacob's standing stone (Gen 35:20) among the stones "
+      + 'and the brush; a shepherd and his flock pass behind it; from `rise` the lens lifts away and climbs into the sky '
+      + 'over the road and the hills (the map continues the climb).',
+  },
+  {
+    id: 'map-exodus', n: 'P4', set: 'map', take: 'exodus', dur: 13.0, cut: 'dissolve', fade: 1.4, cue: 'map', beat: 'judea',
+    // climb: still climbing from Bethlehem up to the whole region · egypt: the land of Egypt in view, the road starts
+    // out of the Nile delta · wilderness: the road wanders in the wilderness · jordan: the road reaches the plains of
+    // Moab and crosses the Jordan · gilgal: it ends at Gilgal (the verse)
+    beats: { climb: 0.0, egypt: 3.0, exodus: 3.4, wilderness: 6.0, jordan: 9.0, gilgal: 10.2 },
+    text: [
+      { at: 3.4, seconds: 2.8, kind: 'line', narration: ['exodus'], v: 'bottom' },
+      { at: 6.3, seconds: 2.8, kind: 'line', narration: ['wilderness'], v: 'bottom' },
+      { at: 10.2, seconds: 3.6, kind: 'verse', quote: 'josh_4_19_camped_gilgal', stagger: 0.16, side: 'center', v: 'bottom', lines: 1 },
+    ],
+    direction: 'THE MAP — REALISTIC 3D (the user): the real land seen from very high, like a satellite view at dawn — the '
+      + 'Great Sea, the Nile delta, the wilderness, the Dead Sea, the Jordan valley, the hills; a line of light draws the '
+      + 'road out of Egypt (`exodus`), wanders in the wilderness (forty years), comes up to the plains of Moab and crosses '
+      + 'the Jordan to Gilgal (`gilgal`), where it ends in a glow. Place names in biblical Hebrew appear on the land as the '
+      + 'road reaches them. The camera keeps moving, slow and grand. No specific mountain is marked as Sinai.',
+  },
+  {
+    id: 'map-tribes', n: 'P5', set: 'map', take: 'tribes', dur: 9.0, cut: 'cut', cue: 'judges', beat: 'judea',
+    // the same continuous camera as P4 (the cut is invisible) · tribes: the names of the tribes spread over their land ·
+    // verse: "no king in Israel" · cities: the five Philistine cities glow on the coast and the lens starts down to them
+    beats: { tribes: 0.4, verse: 2.6, cities: 6.2 },
+    text: [{ at: 2.6, seconds: 3.9, kind: 'verse', quote: 'jdg_21_25_no_king', stagger: 0.16, side: 'center', v: 'bottom', lines: 2 }],
+    direction: 'The map continues (same camera, no visible cut): the lens comes lower over the land of Israel; the names '
+      + 'of the twelve tribes appear over their territories (Dan in the north, as in the days of Saul); then on the '
+      + 'coastal plain the five Philistine cities glow — Gaza, Ashkelon, Ashdod, Gath, Ekron (`cities`) — and the lens '
+      + 'starts to descend toward the coast.',
+  },
+  {
+    id: 'philistines', n: 'P6', set: 'coast', take: 'threat', dur: 7.0, cut: 'dissolve', fade: 1.0, cue: 'threat', beat: 'warriors',
+    beats: { card: 0.6, verse: 1.8 },
+    text: [
+      { at: 0.6, seconds: 3.0, kind: 'place', narration: ['philistia'], side: 'right', v: 'top' },
+      { at: 1.8, seconds: 4.8, kind: 'verse', quote: 's1_13_19_no_smith_film', stagger: 0.14, side: 'left', v: 'top', lines: 2 },
+    ],
+    direction: 'The Philistine host on the coastal plain: the column marching, bronze glinting, dust in the low sun, the '
+      + 'sea beyond; a long lens, a slow lateral track. Menace, power, iron that Israel does not have (13:19).',
+  },
+  {
+    id: 'elders', n: 'P7', set: 'ramah', take: 'elders', dur: 8.0, cut: 'cut', cue: 'elders', beat: 'saul-court',
+    // rise: an elder rises · verse: "give us a king" · away: Samuel turns his face away (8:6)
+    beats: { card: 0.5, rise: 1.6, verse: 2.4, away: 6.0 },
+    text: [
+      { at: 0.5, seconds: 2.8, kind: 'place', narration: ['ramah'], side: 'right', v: 'top' },
+      { at: 2.4, seconds: 4.4, kind: 'verse', quote: 's1_8_5_give_us_king', stagger: 0.16, side: 'left', v: 'top', lines: 2 },
+    ],
+    direction: 'Ramah: the elders of Israel before old Samuel (8:4); a slow dolly in over their heads; one elder rises, '
+      + 'his arm out — "give us a king" — the others murmur and nod; Samuel, white-haired, listens and turns his face '
+      + 'away (8:6). Then the hard cut on the shofar into Gilgal.',
+  },
+
+  // ================================================================== 1 · GILGAL (10.5 s): the shofar, the army, the king
+  {
+    // CUT v5: the shot of CUT v3/v4 from its shofar on (the black and the time card moved to P1): a HARD CUT on the blast.
+    // Shot time 0 = the old G1's 1.5 s (the blocking and the camera run on the old clock: TAKE_OFFSET 1.5)
+    id: 'dust', n: 'G1', set: 'gilgal', take: 'dustWall', dur: 4.0, cut: 'hard', cue: 'shofar', beat: 'warriors',
+    beats: { shofar: 0.0, horns: 0.6, card: 1.3 },
+    text: [{ at: 1.3, seconds: 2.5, kind: 'place', narration: ['gilgal'], side: 'left', v: 'top' }],
+    direction: 'HARD CUT ON THE SHOFAR BLAST out of Ramah: low and close to the front rank as it comes out of the dust '
+      + "wall at the lens, the lens backing away slowly; rams' horns lifted and blown in the front rank, the ranks "
+      + 'marching (not in lockstep), dust in the low sun. Exactly the frames of the old G1 from its shofar on.',
   },
   {
     id: 'king', n: 'G2', set: 'gilgal', take: 'king', dur: 6.5, cut: 'cut', cue: 'saul', beat: 'warriors', slowmo: 0.5,
@@ -323,26 +428,40 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
       + 'settle on the distance. No text.',
   },
 
-  // ================================================================== 6 · THE LOGO (CUT v4, 10 s) — into the game
+  // ================================================================== 6 · THE FLOCK, THE LAMB AND THE LOGO (CUT v5, 26 s) — into the game
   {
-    id: 'horizon', n: 'D3', set: 'world', take: 'horizon', dur: 10.0, cut: 'cut', cue: 'horizon', beat: 'title',
-    // rise: the crane starts up from his shoulder · logo: DAVID forms over the panorama · hebrew: דָּוִד · chapter: the
-    // chapter line · logoOut: the logo starts to fade · settle: the camera starts gliding down into the gameplay
-    // camera behind him · the film ends at 10.0 with the game's camera
-    beats: { rise: 0.2, logo: 3.6, hebrew: 4.6, chapter: 5.6, logoOut: 8.0, settle: 8.0 },
-    direction: "THE LOGO SHOT (the user: 'like Assassin's Creed 2, the brothers on the roof, then the game's logo'): from "
-      + "close behind David's shoulder the camera cranes up and back in one long sweeping move, revealing him standing on "
-      + 'the rock above his flock — the sheep grazing and walking on the slope below him, clearly in frame from the high '
-      + 'angle — and the Bethlehem hills to the horizon at golden hour, the low sun, haze in the valleys; he looks out at '
-      + 'the flock and the land, the wind in his curls and his tunic, his weight on the staff. DAVID forms over the '
-      + "panorama (the game's logo, in the sky), דָּוִד beneath it, then the chapter line; they fade from 8.0 while the "
-      + 'camera glides down behind him into the gameplay camera, and the game begins without a cut.',
+    id: 'watch', n: 'D3', set: 'world', take: 'watch', dur: 8.0, cut: 'cut', cue: 'watch', beat: 'flock',
+    // verse: Ps 78:70-71 writes itself · rack: the focus racks from the flock back to him
+    beats: { verse: 1.0, rack: 5.2 },
+    text: [{ at: 1.0, seconds: 6.6, kind: 'verse', quote: 'ps_78_70_71_chose_david', stagger: 0.17, side: 'right', v: 'top', lines: 2 }],
+    direction: 'WHAT HE SEES (the user: "David must be seen watching his flock for a few seconds"): over his shoulder from '
+      + 'behind and a little above, the flock grazing on the slope below him — ewes and their lambs, a lamb nursing, the '
+      + 'rams, a goat on a rock — close enough to read every animal, in the warm low light; he watches them, calm, the '
+      + 'wind in his curls; a slow drift; at `rack` the focus comes back to him. Ps 78:70-71 in the sky.',
+  },
+  {
+    // the logo shot of CUT v4 re-made as one long, motivated take (same id / take: Intro's logo and hand-off code)
+    id: 'horizon', n: 'D4', set: 'world', take: 'horizon', dur: 18.0, cut: 'cut', cue: 'horizon', beat: 'title',
+    // lamb: a newborn lamb, left behind on the rocks, bleats · descend: David steps down to it · kneel / lift: he kneels
+    // and gathers it into his arms · logo / hebrew / chapter: the lockup forms while he carries it to its mother ·
+    // setDown: he sets it down by the ewe · logoOut: the lockup fades · settle: the camera eases back and down behind
+    // him into the gameplay camera (no orbit) · the film ends at 18.0 with the game's camera
+    beats: { lamb: 0.3, descend: 1.4, kneel: 4.2, lift: 5.0, logo: 6.6, hebrew: 7.6, chapter: 8.6, setDown: 11.2, logoOut: 12.2, settle: 14.6 },
+    direction: 'THE NOBLE ACT AND THE LOGO (the user: the DAVID title "while he does something noble", then the camera '
+      + 'moves away a little in a way that fits — not the strange orbit of CUT v4): a newborn lamb has fallen behind on the '
+      + 'rocks and bleats for its mother; David steps down, kneels, gathers it into his arms (Isa 40:11 "וּבְחֵיקוֹ '
+      + 'יִשָּׂא") and carries it down to the ewe — the spirit of Shemot Rabbah 2:2, the midrash on Ps 78:70-71 (he '
+      + 'shepherds each lamb according to its strength). ONE long take: the lens follows him at a respectful distance, '
+      + 'slow and steady. While he carries it DAVID forms in the sky, דָּוִד beneath it, then the chapter line. He sets '
+      + 'the lamb down by its mother and straightens; the lockup fades; the camera eases back and settles behind him at '
+      + 'the gameplay framing (a pull-back and a gentle descent, the yaw almost unchanged) and the game begins without a '
+      + 'cut.',
   },
 ];
 
 /** Legacy world flag of a shot (the score's pastoral / king contrast). */
 function worldOf(s: IntroShot): IntroWorld {
-  return s.set === 'coast' || s.set === 'ramah' || s.set === 'gilgal' ? 'gibeah' : 'field';
+  return s.set === 'coast' || s.set === 'ramah' || s.set === 'gilgal' || s.set === 'map' ? 'gibeah' : 'field';
 }
 
 /**
@@ -408,5 +527,5 @@ export const INTRO_CUES: readonly IntroCue[] = introCues(false);
 /** Kept for API compatibility (the score's tests import it): identical to INTRO_CUES. */
 export const INTRO_CUES_SHORT: readonly IntroCue[] = INTRO_CUES;
 
-/** Total length of the film (59 s; the logo over the panorama is its last shot). */
+/** Total length of the film (CUT v5: 134.5 s — the prologue, Gilgal, David; the lamb and the logo are its last shot). */
 export const INTRO_LENGTH = introLength(INTRO_CUES);
