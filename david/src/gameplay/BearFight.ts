@@ -145,6 +145,29 @@ export class BearFight {
     this.lastBearPos.copy(bear.pos);
   }
 
+  /** the struggle at the jaw failed: it shook him off — the fight goes on (still exhausted: the next bite offers the grip) */
+  resume() {
+    const { bear, cam, player } = this.h;
+    this.result = null;
+    this.move = null;
+    bear.model.onCue = (cue, at, s) => this.onCue(cue, at, s);
+    cam.combatFocus = bear.pos;
+    player.strikeKind = () => this.strikeKind();
+    this.cd = 1.2;
+    this.openWindow(0.6);
+    this.setPhase('recover');
+  }
+
+  /** 0..1: how far it is from being taken (fatigue and counters) */
+  get progress() {
+    return 0.65 * clamp(this.fatigue / FIGHT.gripFatigue, 0, 1) + 0.35 * clamp(this.counters / FIGHT.gripCounters, 0, 1);
+  }
+
+  /** for tests and the HUD */
+  get state() {
+    return { phase: this.phase, open: this.open, move: this.move?.name ?? null, fatigue: +this.fatigue.toFixed(3), counters: this.counters, gripReady: this.gripReady, time: +this.time.toFixed(1) };
+  }
+
   dispose() {
     const { bear, cam, player, ui } = this.h;
     cam.combatFocus = null;
@@ -580,8 +603,6 @@ export class BearFight {
   /** the bar: how far it is from being taken (fatigue and counters); the note: its state / its tell / its opening */
   private hud(d: number) {
     const { ui, bear } = this.h;
-    const prog = 0.65 * clamp(this.fatigue / FIGHT.gripFatigue, 0, 1) + 0.35 * clamp(this.counters / FIGHT.gripCounters, 0, 1);
-    ui.boss(true, 1 - prog * 0.92);
     const cur = bear.model.current;
     if (this.gripReady) ui.bossNote('כּוֹשֵׁל — תְּפֹס אוֹתוֹ בַּנְּשִׁיכָה הַבָּאָה', false);
     else if (this.phase === 'charge') ui.bossNote(this.chargeBluff ? 'מִסְתָּעֵר!' : 'מִסְתָּעֵר!', true);
@@ -590,5 +611,155 @@ export class BearFight {
     else if (this.phase === 'display') ui.bossNote('נוֹשֵׁף וּמַקִּישׁ בְּשִׁנָּיו — הַקֶּלַע!', false);
     else if (this.fatigue > 0.45) ui.bossNote('מִתְעַיֵּף', false);
     else ui.bossNote(d > 6 ? 'אוֹרֵב' : null);
+  }
+}
+
+// ------------------------------------------------------------------------------------------------ test bots
+/**
+ * (bear1) scripted players for tuning (?bot=careful|average|careless): they fight through the real controls — Input
+ * presses and the touch stick (camera-relative), with a reaction time — never by touching the fight's state.
+ *  careful: keeps 2.6-3.4 m, sidesteps every tell after ~0.18 s, one blow per open window, the sling at the huff
+ *           display, the grip on time;
+ *  average: reacts in ~0.34 s, sidesteps 70 % of the time (else straight back), strikes in half the windows and now
+ *           and then outside them, the sling sometimes;
+ *  careless: walks up to it and mashes the staff, dodges late and straight back.
+ */
+export class FightBot {
+  private lastMove = '';
+  private react = -1;
+  private dodged = false;
+  private struckWin = false;
+  private mash = 0;
+  private slingOn = false;
+  private side = 1;
+  private grip = -1;
+  private pullDelay = -1;
+  private pullRight = true;
+  constructor(readonly level: 'careful' | 'average' | 'careless') {}
+
+  private get rt() {
+    return this.level === 'careful' ? 0.18 : this.level === 'average' ? 0.34 : 0.55;
+  }
+
+  private stick(h: FightHost, wx: number, wz: number) {
+    const f = h.cam.forward(_v);
+    const rx = -f.z, rz = f.x;
+    const tm = (h.input as unknown as { touchMove: THREE.Vector2 }).touchMove;
+    const l = Math.hypot(wx, wz);
+    if (l < 1e-3) tm.set(0, 0);
+    else tm.set((wx * rx + wz * rz) / l, (wx * f.x + wz * f.z) / l);
+  }
+
+  release(h: FightHost) {
+    (h.input as unknown as { touchMove: THREE.Vector2 }).touchMove.set(0, 0);
+    if (this.slingOn) h.input.holdSling(false);
+    this.slingOn = false;
+  }
+
+  fight(dt: number, f: BearFight, h: FightHost) {
+    const { input, player: p, bear: b } = h;
+    const cur = b.model.current;
+    const ox = b.pos.x - p.pos.x, oz = b.pos.z - p.pos.z;
+    const d = Math.hypot(ox, oz) || 1;
+    const tx = ox / d, tz = oz / d; // toward the bear
+    const careful = this.level === 'careful', average = this.level === 'average';
+    const phase = (f as unknown as { phase: string }).phase;
+    const open = (f as unknown as { open: number }).open > 0 || (!!cur && cur.open) || phase === 'crash';
+    if (p.stunT > 0) {
+      this.stick(h, 0, 0);
+      return;
+    }
+    // a new move: the reaction clock starts
+    const key = cur ? cur.name + Math.floor(cur.t * 0) : phase === 'charge' ? 'charge' : '';
+    if (key && key !== this.lastMove) {
+      this.lastMove = key;
+      this.react = this.rt * (0.8 + 0.4 * Math.random());
+      this.dodged = false;
+      this.struckWin = false;
+      this.side = Math.random() < 0.5 ? 1 : -1;
+    }
+    if (!key) this.lastMove = '';
+    this.react -= dt;
+    // ---- the sling at the huff display / when it backs off
+    if ((careful || (average && Math.random() < 0.5)) && (phase === 'display' || phase === 'retreat') && d > 3.8 && p.stones > 0) {
+      this.stick(h, 0, 0);
+      if (!this.slingOn) {
+        input.holdSling(true);
+        this.slingOn = true;
+      } else if (p.whirling && p.whirlT > 0.8) {
+        const e = p.whirlPhase - Math.round(p.whirlPhase);
+        if (Math.abs(e) < p.window * (careful ? 0.4 : 0.9)) {
+          input.holdSling(false);
+          this.slingOn = false;
+        }
+      }
+      return;
+    } else if (this.slingOn) {
+      input.holdSling(false);
+      this.slingOn = false;
+    }
+    // ---- the grip, in the bite of an exhausted bear
+    if (f.gripReady && cur?.name === 'bite') {
+      if (this.grip < 0) this.grip = careful ? 0.44 + Math.random() * 0.12 : average ? 0.25 + Math.random() * 0.6 : 2;
+      if (cur.t >= this.grip) {
+        input.press('interact');
+        this.grip = 9;
+      }
+    } else this.grip = -1;
+    // ---- a blow coming (its tell) or a charge: get out of its line
+    const threat = (phase === 'charge' && d < 4.2) || (!!cur && cur.tell && !cur.open && cur.name !== 'huff' && d < 3.4);
+    if (threat && !this.dodged && this.react <= 0) {
+      this.dodged = true;
+      const sideways = careful || (average && Math.random() < 0.7);
+      if (this.level === 'careless' && Math.random() < 0.5) return; // it did not see it coming
+      const sx = sideways ? -tz * this.side : -tx, sz = sideways ? tx * this.side : -tz;
+      this.stick(h, sx, sz);
+      input.press('dodge');
+      return;
+    }
+    // ---- the opening: in and strike once
+    if (open && !this.struckWin && (careful || (average && Math.random() < 0.55) || this.level === 'careless')) {
+      if (d > 2.3) this.stick(h, tx, tz);
+      else {
+        this.stick(h, 0, 0);
+        input.press('strike');
+        this.struckWin = true;
+      }
+      return;
+    }
+    // ---- careless: walks up and mashes; average: an occasional blow outside the windows
+    if (this.level === 'careless') {
+      this.mash -= dt;
+      if (d > 1.7) this.stick(h, tx, tz);
+      else this.stick(h, 0, 0);
+      if (d < 2.6 && this.mash <= 0) {
+        input.press('strike');
+        this.mash = 0.35;
+      }
+      return;
+    }
+    if (average && d < 2.4 && Math.random() < dt * 0.5) input.press('strike');
+    // ---- keep the distance: in the band, strafe slowly round it
+    const lo = careful ? 2.6 : 2.2, hi = careful ? 3.4 : 3.9;
+    if (d < lo) this.stick(h, -tx, -tz);
+    else if (d > hi) this.stick(h, tx, tz);
+    else this.stick(h, -tz * this.side * 0.4, tx * this.side * 0.4);
+  }
+
+  /** the struggle at the jaw: the stick x to hold (needSign = which way the arrow points; 0 = rest) */
+  struggle(dt: number, needSign: number, h: FightHost) {
+    const tm = (h.input as unknown as { touchMove: THREE.Vector2 }).touchMove;
+    if (!needSign) {
+      this.pullDelay = -1;
+      tm.set(0, 0);
+      return;
+    }
+    if (this.pullDelay < 0) {
+      this.pullDelay = this.rt * (0.8 + 0.4 * Math.random());
+      this.pullRight = this.level === 'careful' ? true : this.level === 'average' ? Math.random() < 0.85 : Math.random() < 0.5;
+    }
+    this.pullDelay -= dt;
+    if (this.pullDelay > 0) return;
+    tm.set(this.pullRight ? needSign : -needSign, 0);
   }
 }

@@ -41,7 +41,7 @@ export interface RoundDef {
 
 export const ROUNDS: RoundDef[] = [
   { title: 'הִתְחַמְּמוּת', note: 'שְׁלֹשָׁה כַּדִּים עַל הַגָּדֵר — לְמַד אֶת הַקֶּצֶב: שַׁחְרֵר כְּשֶׁהַכִּיס בָּאוֹר', wind: 0, windFrom: 'left', maxStones: 9, par3: 3, par2: 5 },
-  { title: 'לְמֵרָחוֹק', note: 'עַל הַגָּדָה שֶׁמִּנֶּגֶד — הָאֶבֶן יוֹרֶדֶת בַּדֶּרֶךְ: כַּוֵּן גָּבוֹהַּ יוֹתֵר, וְשִׂים לֵב לָרוּחַ', wind: 2.8, windFrom: 'left', maxStones: 14, par3: 5, par2: 8 },
+  { title: 'לְמֵרָחוֹק', note: 'עַל הַגָּדָה שֶׁמִּנֶּגֶד — הָאֶבֶן יוֹרֶדֶת בַּדֶּרֶךְ: כַּוֵּן גָּבוֹהַּ יוֹתֵר, וְשִׂים לֵב לָרוּחַ', wind: 2.5, windFrom: 'left', maxStones: 14, par3: 5, par2: 8 },
   { title: 'מַטָּרוֹת נָעוֹת', note: 'הַדְּלַעַת בַּחֶבֶל וְהַכַּד עַל הַבּוּל הַמִּתְגַּלְגֵּל — כַּוֵּן לְפָנֵיהֶם', wind: 1.5, windFrom: 'right', maxStones: 12, par3: 3, par2: 5 },
   { title: 'הַחֶבֶל הַדַּק', note: 'פְּגַע בַּחֶבֶל שֶׁעָלָיו תָּלוּי הַנֹּאד — לֹא בַּנֹּאד', wind: 0.8, windFrom: 'left', maxStones: 10, par3: 2, par2: 4 },
 ];
@@ -106,9 +106,9 @@ const _w = new THREE.Vector3();
 // (polish, "challenging and fun") the difficulty's knobs (re-tuned with the bots — see the report's table): the far
 // bank's jars / gourds (scale), the swinging gourd (amplitude rad, period s, body scale), the log (its jar's scale,
 // its speed m/s); round 2's wind is in ROUNDS
-const FAR_JAR = 1.4, FAR_GOURD = 1.45;
-const SWING_AMP = 0.27, SWING_PERIOD = 3.2, SWING_GOURD = 1.25;
-const LOG_JAR = 0.72, LOG_SPEED = 0.82;
+const FAR_JAR = 1.55, FAR_GOURD = 1.6;
+const SWING_AMP = 0.24, SWING_PERIOD = 3.4, SWING_GOURD = 1.4;
+const LOG_JAR = 0.8, LOG_SPEED = 0.7;
 
 export class Range {
   readonly group = new THREE.Group();
@@ -498,7 +498,7 @@ export class Range {
     const tip = new THREE.Vector3();
     let ang = 0, falling = false;
     const fallV = new THREE.Vector3();
-    // a pendulum across the line of throw (it swings left-right in the slinger's view): ±0.34 m, an even 3.2 s a swing
+    // a pendulum across the line of throw (it swings left-right in the slinger's view): ±0.3 m, an even 3.4 s a swing
     const amp = SWING_AMP;
     const phase0 = rnd() * 6;
     const place = (t: number) => {

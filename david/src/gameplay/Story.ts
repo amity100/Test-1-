@@ -16,7 +16,8 @@ import { Range, ROUNDS, type RoundStats } from './Range';
 import { STONE_BEATS, THROW_RELEASE } from '../characters/DavidModel';
 import { Intro } from './Intro';
 import { BearHook } from './BearHook';
-import { BearFight, FightBot, type FightResult } from './BearFight';
+import { BearFight, FightBot, type FightResult, type FightHost } from './BearFight';
+import { smoothstep } from '../core/noise';
 import { BEAR_MOVES } from '../characters/BearModel';
 import { LAYOUT, SUN } from '../world/Layout';
 import { quoteText, sourceRef, verseArgs } from '../content/sources';
@@ -764,13 +765,15 @@ export class Story {
     }
     await this.bearAttack();
     if (j === 'bear') { await this.chase(); await this.rescue(); await this.rise(); await this.fight(); await this.clinch(); await this.aftermath(); await this.ending(); return; }
-    // fight / end: fast-forward the chase
-    this.bear.hits = 3;
+    // (bear1) fight / end: fast-forward the chase and the rescue — the lamb is out of its jaws, he stands before it
     const bf = new THREE.Vector3(Math.sin(this.bear.heading), 0, Math.cos(this.bear.heading));
-    this.player.place(this.bear.pos.x + bf.x * 2.4, this.bear.pos.z + bf.z * 2.4, this.bear.heading + Math.PI);
-    await this.rescue();
+    this.player.place(this.bear.pos.x + bf.x * 3.2, this.bear.pos.z + bf.z * 3.2, this.bear.heading + Math.PI);
+    this.freeLambNow();
     await this.rise();
     if (j === 'fight') { await this.fight(); await this.clinch(); await this.aftermath(); await this.ending(); return; }
+    // end: straight to the grip on its jaw
+    this.bot = new URLSearchParams(location.search).get('bot') ? new FightBot('careful') : null;
+    while (!(await this.struggle())) this.cinematic(false);
     await this.clinch();
     await this.aftermath();
     await this.ending();
@@ -795,6 +798,20 @@ export class Story {
     this.bear.model.lookTarget = null;
     this.bear.place(L.bearLair.x, L.bearLair.z, Math.PI);
     this.bearVulnerable = false;
+    // (bear1) a restart in the middle of the fight: its state, framing and HUD leave with it
+    this.fightRun?.dispose();
+    this.fightRun = null;
+    this.bearHitCB = null;
+    this.bot?.release(this.fightHost());
+    this.bot = null;
+    this.cam.combatFocus = null;
+    this.player.strikeKind = undefined;
+    this.player.stunT = 0;
+    this.bear.model.fatigue = 0;
+    this.bear.model.struggle = 0;
+    this.bear.model.gripPull = null;
+    this.ui.grip(null);
+    this.ui.bossNote(null);
     this.showBoss = false;
     this.showHealth = false;
     this.bossHP = 1;
@@ -966,18 +983,25 @@ export class Story {
     this.audio.at('bearGrowl', this.bear.pos, 0.8);
   }
 
-  private hitBear(at: THREE.Vector3, kind: 'sling' | 'staff') {
+  /** (bear1) a stone or the staff landed on the bear: the fight weighs it (counter / neutral / in its tell); in the chase
+   *  and the rescue the current beat's callback decides what it does */
+  private hitBear(at: THREE.Vector3, kind: 'sling' | 'staff', zone: 'head' | 'rump' | 'body' = 'body') {
     if (!this.bear.alive) return;
     this.bear.hits++;
+    if (this.fightRun) {
+      if (kind === 'sling') this.fightRun.onSlingHit(at, zone === 'head');
+      return;
+    }
     this.audio.at(kind === 'sling' ? 'stoneHitBear' : 'staffHit', at, 1);
     this.audio.at('bearHurt', this.bear.pos, 0.9);
     this.engine.particles.dustBurst(at, 6, 0.5, new THREE.Color(0.55, 0.42, 0.3));
-    if (!this.bear.model.busy) this.bear.model.play('hurt');
-    this.cam.addShake(kind === 'staff' ? 0.6 : 0.25);
-    this.bearHitCB?.(kind);
+    this.ui.hitMarker(zone === 'head');
+    this.cam.addShake(kind === 'staff' ? 0.5 : 0.2);
+    if (this.bearHitCB) this.bearHitCB(kind, zone, at);
+    else if (!this.bear.model.busy) this.bear.model.play('hurt');
   }
 
-  private onStaffImpact(tip: THREE.Vector3) {
+  private onStaffImpact(tip: THREE.Vector3, kind: 'jab' | 'strike' = 'strike') {
     // jars
     for (const jar of this.props.jars) {
       if (jar.alive && tip.distanceTo(jar.center) < 0.6) {
@@ -987,11 +1011,15 @@ export class Story {
       }
     }
     if (this.bear.visible && this.bear.alive && this.bearVulnerable) {
+      // (bear1) the fight: the staff's end at the face / the swung blow at the head, weighed by the bear's moment
+      if (this.fightRun) {
+        this.fightRun.onStaffHit(kind, tip);
+        return;
+      }
       const pts = this.bear.model.hitPoints([]);
-      let d = Infinity;
-      for (const p of pts) d = Math.min(d, p.distanceTo(tip));
-      const flat = Math.hypot(this.bear.pos.x - this.player.pos.x, this.bear.pos.z - this.player.pos.z);
-      if (d < 1.0 || flat < 1.9) this.hitBear(tip, 'staff');
+      const onHead = tip.distanceTo(pts[2]) < (kind === 'jab' ? 0.5 : 0.6);
+      const onBody = Math.min(tip.distanceTo(pts[0]), tip.distanceTo(pts[1])) < 0.75;
+      if (onHead || onBody) this.hitBear(tip, 'staff', onHead ? 'head' : 'body');
     }
   }
 
@@ -1003,170 +1031,213 @@ export class Story {
     this.audio.music('battle', 1.2);
     this.player.canSling = this.player.canStrike = this.player.canDodge = true;
     this.cam.snapBehind(Math.atan2(this.bear.pos.x - this.player.pos.x, this.bear.pos.z - this.player.pos.z), 0.12);
-    this.ui.objective('רְדֹף אַחֲרֵי הַדֹּב!', '"וְיָצָאתִי אַחֲרָיו" — הַכֵּה אוֹתוֹ בַּקֶּלַע אוֹ בַּמַּקֵּל');
-    this.ui.hint([K.run, K.sling, K.strike], 8);
+    // (bear1) "וְיָצָאתִי אַחֲרָיו": it makes off with the lamb toward the thicket and stops now and then to look back at him
+    // over the lamb — the moment to stop, draw the sling and throw; a stone to the hindquarters makes it stumble, turn
+    // and snarl; cornered at the thicket's edge (or after two good stones) it turns at bay
+    this.ui.objective('רְדֹף אַחֲרֵי הַדֹּב', 'כְּשֶׁהוּא עוֹצֵר וּמַבִּיט לְאָחוֹר — עֲצֹר וְקַלַּע בּוֹ');
+    this.ui.hint([K.run, K.sling], 9);
     this.setMarker(() => this.bear.pos.clone().add(new THREE.Vector3(0, 1.8, 0)), 'הַדֹּב');
-    this.showBoss = true;
+    this.showBoss = false;
     this.showHealth = true;
     this.bearVulnerable = true;
     this.bear.hits = 0;
-    let stagger = 0;
-    let atBay = false;
-    let swipeCD = 2.5;
-    this.bearHitCB = () => {
-      stagger = 0.9;
-      this.bossHP = Math.max(0.62, 1 - this.bear.hits * 0.12);
+    let st: 'run' | 'look' | 'stumble' | 'snarl' | 'bay' = 'run';
+    let stT = 0;
+    let nextLook = 3.2;
+    let stones = 0;
+    const b = this.bear;
+    this.bearHitCB = (kind, zone) => {
+      if (kind !== 'sling' || st === 'bay') return;
+      stones++;
+      // a stone to the hindquarters (or anywhere on it): it stumbles, turns on him and snarls with the lamb in its jaws
+      st = 'stumble';
+      stT = 0;
+      b.model.play('stagger', [], { side: Math.random() < 0.5 ? 1 : -1 });
+      this.audio.at('bearHurt', b.pos, 1, zone === 'rump' ? 1.05 : 0.95);
+      this.ui.praise(zone === 'rump' ? 'בַּיַּרְכָה!' : 'פְּגִיעָה!', 1.1);
     };
     this.beh = (dt) => {
-      const dist = this.bear.pos.distanceTo(this.player.pos);
-      if (stagger > 0) {
-        stagger -= dt;
-        this.bear.stop(dt);
-      } else if (!atBay) {
-        const sp = dist > 42 ? 1.6 : dist > 22 ? 3.8 : 4.9;
-        const arrived = this.bear.moveTo(clearing, sp, dt, 2.5);
-        if (arrived || this.bear.hits >= 3) {
-          atBay = true;
-          this.audio.at('bearGrowl', this.bear.pos, 1);
-          this.ui.objective('הַכֵּה אֶת הַדֹּב', '"וְהִכִּתִיו" — הוּא נִלְכַּד בַּסְּבַךְ, וְהַשֶּׂה עֲדַיִן בְּפִיו');
+      stT += dt;
+      const dist = b.pos.distanceTo(this.player.pos);
+      if (st === 'run') {
+        b.model.lookTarget = null;
+        // it keeps ahead of him: walks while he is far, ambles off when he comes on
+        const sp = dist > 30 ? 1.5 : dist > 14 ? 3.0 : 4.1;
+        const arrived = b.moveTo(clearing, sp, dt, 2.5);
+        nextLook -= dt;
+        if (arrived || stones >= 2 || dist < 3.2) {
+          st = 'bay';
+          stT = 0;
+        } else if (nextLook <= 0 && dist < 36) {
+          st = 'look';
+          stT = 0;
+          nextLook = 4.8 + Math.random() * 2.4;
         }
+      } else if (st === 'look') {
+        // stops, half-turns and looks back at him over the lamb
+        b.brake(dt);
+        b.face(this.player.pos, dt, 1.1);
+        b.model.lookTarget = this.player.pos;
+        if (stT > 2.3) st = 'run';
+      } else if (st === 'stumble') {
+        b.brake(dt);
+        if (stT > 0.85) {
+          st = 'snarl';
+          stT = 0;
+          b.model.play('stomp');
+          this.audio.at('bearGrowl', b.pos, 1, 0.9);
+        }
+      } else if (st === 'snarl') {
+        b.stop(dt);
+        b.face(this.player.pos, dt, 2.4);
+        b.model.lookTarget = this.player.pos;
+        if (stT > 1.7) st = 'run';
       } else {
-        this.bear.face(this.player.pos, dt, 3);
-        this.bear.stop(dt);
-        this.bear.model.lookTarget = this.player.pos;
-        // a warning swipe if David comes too close before landing enough blows
-        swipeCD -= dt;
-        if (dist < 2.4 && swipeCD < 0 && this.bear.hits < 3 && !this.bear.model.busy) {
-          swipeCD = 2.2;
-          this.bearSwipe('swipe', 2.6);
-        }
+        b.stop(dt);
+        b.face(this.player.pos, dt, 2.2);
+        b.model.lookTarget = this.player.pos;
       }
-      this.bearThreats[0] = this.bear.pos;
+      this.bearThreats[0] = b.pos;
     };
-    await this.until(() => atBay && this.bear.hits >= 3 && this.bear.pos.distanceTo(this.player.pos) < 2.8);
+    await this.until(() => st === 'bay' && b.pos.distanceTo(this.player.pos) < 7.5);
     this.check();
+    this.bearHitCB = null;
   }
 
-  /** Bear swipe with telegraph; resolves hit/miss at the strike frame. */
-  private bearSwipe(kind: 'swipe' | 'swipeHigh', reach: number, onResult?: (hit: boolean) => void) {
-    const hitT = kind === 'swipe' ? 0.46 : 0.5;
-    this.audio.at('bearGrowl', this.bear.pos, 0.9, 1.1);
-    this.bear.model.play(kind, [{
-      t: hitT,
+  /** (bear1, tests) the lamb out of its jaws at once (the ?jump=fight / end shortcuts skip the chase and the rescue) */
+  private freeLambNow() {
+    const lamb = this.flock.lamb;
+    if (lamb.object.parent === this.flock.group) return;
+    const w = lamb.object.getWorldPosition(new THREE.Vector3());
+    this.flock.group.attach(lamb.object);
+    const toFlock = this.flockCenter().sub(w).setY(0).normalize();
+    const p = w.clone().addScaledVector(toFlock, 6);
+    lamb.object.position.set(p.x, this.engine.terrain.heightAt(p.x, p.z), p.z);
+    lamb.object.rotation.set(0, 0, 0);
+    lamb.setCarried('none');
+    this.lambHome.copy(p);
+    this.bear.model.hold = 'none';
+  }
+
+  /** (bear1) a blow of the bear (a move of BEAR_MOVES) resolved at its strike frame from where David is */
+  private bearBlow(name: 'swipe' | 'stomp' | 'bite', side: number, lunge = 0) {
+    const b = this.bear;
+    const spec = BEAR_MOVES[name];
+    this.audio.at('bearGrowl', b.pos, 0.9, 1.1);
+    b.model.play(name, [{
+      t: spec.hit ?? 0.47,
       fn: () => {
-        const d = this.bear.pos.distanceTo(this.player.pos);
-        const toP = new THREE.Vector3(this.player.pos.x - this.bear.pos.x, 0, this.player.pos.z - this.bear.pos.z).normalize();
-        const fwd = new THREE.Vector3(Math.sin(this.bear.heading), 0, Math.cos(this.bear.heading));
-        const inArc = toP.dot(fwd) > 0.2;
-        let hit = false;
-        this.audio.at('whoosh', this.bear.pos, 0.9, 0.7);
-        if (d < reach && inArc) hit = this.player.hurt(this.bear.pos);
-        if (hit) {
+        const fx = Math.sin(b.heading), fz = Math.cos(b.heading);
+        const ox = this.player.pos.x - b.pos.x, oz = this.player.pos.z - b.pos.z;
+        const along = ox * fx + oz * fz, lat = Math.abs(ox * fz - oz * fx);
+        this.audio.at('whoosh', b.pos, 0.9, 0.7);
+        if (along > 0.2 && along < (spec.reach ?? 1) + lunge + 0.6 && lat < (spec.width ?? 0.4) + 0.36 && this.player.knockDown(b.pos)) {
           this.cam.addShake(1);
           this.engine.post.grade.uniforms.uRed.value = 1;
         }
-        onResult?.(hit);
       },
-    }]);
-    return hitT;
+    }], { side });
   }
 
   // ============================================================================ rescue
+  /**
+   * (bear1) "וְהִכִּתִיו וְהִצַּלְתִּי מִפִּיו": at bay at the thicket's edge with the lamb in its jaws, it swats at him when he
+   * comes in and lunges at him stomping when he hangs back (its head comes low); a blow of the staff to its snout in its
+   * opening — after a swat, or the head lowered after the stomp — or a stone to the head makes it open its jaws: he
+   * pulls the lamb free and it bolts back toward the flock.
+   */
   private async rescue() {
     const lamb = this.flock.lamb;
-    for (;;) {
-      this.ui.objective('הַצֵּל אֶת הַשֶּׂה מִפִּיו', '"וְהִצַּלְתִּי מִפִּיו"');
-      let go = false;
-      this.beh = (dt) => {
-        this.bear.face(this.player.pos, dt, 3);
-        this.bear.stop(dt);
-        const d = this.bear.pos.distanceTo(this.player.pos);
-        this.ui.prompt(d < 3.0 ? withLabel(K.interact, 'חֲטֹף אֶת הַשֶּׂה מִפִּי הַדֹּב') : null);
-        if (d < 3.0 && this.input.take('interact')) go = true;
-      };
-      await this.until(() => go);
-      this.check();
-      this.beh = null;
-      this.ui.prompt(null);
-      // grapple: David seizes the lamb and pulls
-      this.player.controlEnabled = false;
-      this.player.aiming = false;
-      this.player.model.hold = 'pull';
-      this.bearVulnerable = false;
-      const bearF = new THREE.Vector3(Math.sin(this.bear.heading), 0, Math.cos(this.bear.heading));
-      // close enough that both fists reach the lamb in the jaws (DavidModel aims them at pullTarget)
-      const stand = this.bear.pos.clone().addScaledVector(bearF, 1.15);
-      let prog = 0.15;
-      let time = 0;
-      const lambAt = new THREE.Vector3();
-      this.ui.letterbox(true);
-      this.beh = (dt) => {
-        time += dt;
-        this.player.model.pullTarget = lamb.object.getWorldPosition(lambAt);
-        this.player.moveToward(stand, 2, dt, 0.1);
-        this.player.faceToward(this.bear.pos, dt, 12);
-        this.bear.stop(dt);
-        this.bear.model.lookTarget = this.player.pos;
-        // the bear thrashes its head
-        this.bear.heading += Math.sin(time * 9) * 0.6 * dt;
-        prog = Math.max(0, prog - dt * 0.12);
-        if (this.input.take('interact')) {
-          prog += 0.09;
-          this.audio.sfx('davidEffort', { volume: 0.6, pitch: 0.9 + Math.random() * 0.3 });
-          this.cam.addShake(0.15);
-        }
-        this.ui.qte('mash', clamp(prog, 0, 1), 'מְשֹׁךְ אֶת הַשֶּׂה!', K.interact);
-      };
-      this.cam.playShots([{ duration: 30, ease: false, at: (_u, tt) => {
-        // side-on two-shot of the tug of war, wide enough (with the letterbox bars) for David's head and the lamb
-        const side = new THREE.Vector3(-bearF.z, 0, bearF.x);
-        const mid = this.player.pos.clone().lerp(this.bear.pos, 0.45);
-        const pos = mid.clone().addScaledVector(side, 3.7).add(new THREE.Vector3(0, 1.3 + Math.sin(tt * 0.5) * 0.08, 0)).addScaledVector(bearF, 0.5);
-        pos.y = Math.max(pos.y, this.engine.terrain.heightAt(pos.x, pos.z) + 0.6);
-        return { pos, look: mid.clone().add(new THREE.Vector3(0, 1.0, 0)), fov: 40 };
-      } }]);
-      await this.until(() => prog >= 1 || time > 6.5);
-      this.check();
-      this.beh = null;
-      this.player.model.pullTarget = null;
-      this.ui.qte(null);
-      if (prog >= 1) {
-        this.ui.flashQte(true);
-        // free the lamb
-        const w = lamb.object.getWorldPosition(new THREE.Vector3());
-        this.flock.group.attach(lamb.object);
-        lamb.object.position.set(w.x, this.engine.terrain.heightAt(w.x, w.z), w.z);
-        lamb.object.rotation.set(0, this.player.heading, 0);
-        lamb.setCarried('none');
-        const flee = this.player.pos.clone().addScaledVector(bearF, 7).add(new THREE.Vector3(2, 0, -1));
-        lamb.goTo(flee, 2.6);
-        this.lambHome.copy(flee);
-        this.bear.model.hold = 'none';
-        this.player.model.hold = 'none';
-        this.audio.at('lambBleat', w, 1);
-        this.audio.at('bearHurt', this.bear.pos, 1);
-        this.ui.verse(...verseArgs('s1_17_35_smote_delivered'), 4);
-        this.bossHP = 0.55;
-        this.cam.skipShots();
-        await this.wait(0.8);
-        this.check();
-        break;
-      } else {
-        // failed: the bear shakes free and swipes
-        this.player.model.hold = 'none';
-        this.cam.skipShots();
-        this.ui.letterbox(false);
-        this.player.controlEnabled = true;
-        this.bearVulnerable = true;
-        this.player.hurt(this.bear.pos);
-        this.cam.addShake(0.8);
-        this.engine.post.grade.uniforms.uRed.value = 1;
-        this.ui.hint('<span class="h-item">לחץ מהר יותר כדי לחלץ את השה</span>', 4);
-        if (this.player.health <= 0) this.player.health = this.player.maxHealth;
-        await this.wait(1.5);
-        this.check();
+    const b = this.bear;
+    this.cinematic(false);
+    this.player.canSling = this.player.canStrike = this.player.canDodge = true;
+    this.ui.objective('הַצֵּל אֶת הַשֶּׂה מִפִּיו', 'הַכֵּה בְּאַפּוֹ כְּשֶׁהוּא נִפְתָּח: אַחֲרֵי שֶׁהוּא מַכֶּה, אוֹ כְּשֶׁרֹאשׁוֹ יוֹרֵד');
+    this.ui.hint([K.dodge, K.strike, K.sling], 9);
+    this.setMarker(null);
+    this.showHealth = true;
+    this.showBoss = false;
+    this.bearVulnerable = true;
+    this.cam.combatFocus = b.pos;
+    this.player.strikeKind = () => {
+      const hc = b.model.headCenter.getWorldPosition(_bearV);
+      return Math.hypot(hc.x - this.player.pos.x, hc.z - this.player.pos.z) < 1.55 ? 'strike' : 'jab';
+    };
+    let freed = false;
+    let cd = 1.4;
+    const opening = () => !!b.model.current?.open;
+    this.bearHitCB = (kind, zone) => {
+      if (freed) return;
+      if (zone === 'head' && opening()) {
+        freed = true;
+        return;
       }
-    }
+      // a blow outside its opening: it flinches, growls and comes at him
+      if (!b.model.busy) b.model.play('hurt');
+      this.audio.at('bearGrowl', b.pos, 1, 0.95);
+      if (kind === 'staff') cd = Math.min(cd, 0.25);
+    };
+    this.beh = (dt) => {
+      const d = b.pos.distanceTo(this.player.pos);
+      b.model.lookTarget = this.player.pos;
+      if (!b.model.busy) {
+        b.face(this.player.pos, dt, 2.6);
+        b.stop(dt);
+        cd -= dt;
+        if (cd <= 0 && this.player.stunT <= 0) {
+          if (d < 2.5) {
+            const side = (this.player.pos.x - b.pos.x) * Math.cos(b.heading) - (this.player.pos.z - b.pos.z) * Math.sin(b.heading) > 0 ? 1 : -1;
+            this.bearBlow('swipe', side);
+            cd = 1.5 + Math.random() * 0.8;
+          } else if (d < 4.6) {
+            this.bearBlow('stomp', -1);
+            cd = 2.0 + Math.random() * 1.0;
+          } else cd = 0.5;
+        }
+      } else b.speed = 0;
+      this.ui.prompt(null);
+      if (this.player.health <= 0 && this.player.stunT <= 0.3) {
+        // knocked down for good: he gets up again (the lamb is still in its jaws)
+        this.player.health = this.player.maxHealth;
+        this.ui.hint('<span class="h-item">קוּם — הַשֶּׂה עֲדַיִן בְּפִיו</span>', 3);
+      }
+      this.bearThreats[0] = b.pos;
+    };
+    await this.until(() => freed);
+    this.check();
+    this.player.strikeKind = undefined;
+    this.bearHitCB = null;
+    // the jaws open: he snatches the lamb and it bolts back toward the flock (it stops, trembling, on the way)
+    this.ui.letterbox(true);
+    this.player.controlEnabled = false;
+    this.player.cancelAim();
+    this.bearVulnerable = false;
+    b.model.hold = 'none';
+    b.model.play('hurt');
+    this.audio.at('bearHurt', b.pos, 1.1);
+    this.player.model.hold = 'pull';
+    const w = lamb.object.getWorldPosition(new THREE.Vector3());
+    this.player.model.pullTarget = w.clone();
+    this.flock.group.attach(lamb.object);
+    lamb.object.position.set(w.x, this.engine.terrain.heightAt(w.x, w.z), w.z);
+    lamb.object.rotation.set(0, this.player.heading, 0);
+    lamb.setCarried('none');
+    const toFlock = this.flockCenter().sub(w).setY(0);
+    const run = Math.min(16, toFlock.length() * 0.6);
+    const flee = w.clone().addScaledVector(toFlock.normalize(), run);
+    flee.y = this.engine.terrain.heightAt(flee.x, flee.z);
+    lamb.goTo(flee, 3.2);
+    this.lambHome.copy(flee);
+    this.audio.at('lambBleat', w, 1);
+    this.ui.verse(...verseArgs('s1_17_35_smote_delivered'), 4);
+    this.cam.addShake(0.5);
+    await this.wait(0.7);
+    this.check();
+    this.player.model.hold = 'none';
+    this.player.model.pullTarget = null;
+    this.cam.combatFocus = null;
+    this.beh = null;
+    await this.wait(0.4);
+    this.check();
   }
 
   // ============================================================================ "and it rose against me"
@@ -1224,167 +1295,312 @@ export class Story {
   }
 
   // ============================================================================ fight
+  /**
+   * (bear1) THE FIGHT (src/gameplay/BearFight.ts: the bear's telegraphed moves, David's counters, its fatigue), then the
+   * grip on its jaw. A knock-out sends him back to the fight's start — a checkpoint, never the chapter's start. The grip
+   * is earned (exhausted + enough counters) and offered at its next bite lunge; if it shakes him off in the struggle,
+   * the fight goes on.
+   */
   private async fight() {
+    const ck = { b: this.bear.pos.clone(), bh: this.bear.heading, d: this.player.pos.clone(), dh: this.player.heading };
+    const q = new URLSearchParams(location.search).get('bot');
+    this.bot = q === 'careful' || q === 'average' || q === 'careless' ? new FightBot(q) : null;
+    let attempt = 0;
+    let fight: BearFight | null = null;
+    for (;;) {
+      if (!fight) fight = this.newFight(++attempt);
+      const r = await this.fightUntil(fight);
+      this.logFight(fight, attempt, r);
+      if (r === 'knockout') {
+        fight.dispose();
+        this.fightRun = null;
+        fight = null;
+        await this.knockedOut(ck);
+        continue;
+      }
+      if (await this.struggle()) {
+        fight.dispose();
+        this.fightRun = null;
+        break;
+      }
+      // it shook him off: the fight goes on (still exhausted: its next bite offers the grip again)
+      fight.resume();
+      this.cinematic(false);
+    }
+    this.bot?.release(this.fightHost());
+  }
+
+  private fightHost(): FightHost {
+    return {
+      engine: this.engine, ui: this.ui, input: this.input, audio: this.audio, cam: this.cam, player: this.player, bear: this.bear,
+      slowMo: (s) => this.slowMo(s), later: (s, fn) => this.after(s, fn, true), gripKey: withLabel(K.interact, ''),
+    };
+  }
+
+  private newFight(attempt: number) {
     this.cinematic(false);
-    this.cam.snapBehind(Math.atan2(this.bear.pos.x - this.player.pos.x, this.bear.pos.z - this.player.pos.z), 0.05);
     this.player.canSling = this.player.canStrike = this.player.canDodge = true;
-    this.bearVulnerable = true;
-    this.ui.objective('עֲמֹד מוּלוֹ', 'הִתְחַמֵּק מִמַּכּוֹתָיו — וְחַכֵּה לְרֶגַע שֶׁיְּאַבֵּד שִׁוּוּי מִשְׁקָל');
-    this.ui.hint([K.dodge, K.strike], 8);
+    this.player.health = this.player.maxHealth;
+    this.player.bag.preferSmooth = true;
+    this.ui.objective('עֲמֹד מוּלוֹ', 'קְרָא אֶת תְּנוּעוֹתָיו: זוּז הַצִּדָּה מִפָּנָיו — וְהַכֵּה כְּשֶׁהוּא נִפְתָּח');
+    this.ui.hint([K.dodge, K.strike, K.sling], attempt > 1 ? 6 : 10);
     this.setMarker(null);
-    let dodges = 0;
-    let cd = 1.8;
-    let opening = false;
-    let openT = 0;
-    let grabbed = false;
-    let evadeWindow = 0;
-    this.bearHitCB = (kind) => {
-      if (kind === 'staff') dodges++;
-    };
-    const onDodge = () => {
-      if (evadeWindow > 0) {
-        dodges++;
-        evadeWindow = 0;
-        this.ui.flashQte(true);
-      }
-    };
-    this.player.onDodge = onDodge;
+    this.showBoss = true;
+    this.showHealth = true;
+    this.bearVulnerable = true;
+    this.bossHP = 1;
+    const f = new BearFight(this.fightHost(), 0);
+    this.fightRun = f;
+    f.start();
+    return f;
+  }
+
+  private async fightUntil(f: BearFight): Promise<FightResult> {
+    const host = this.fightHost();
     this.beh = (dt) => {
-      const dist = this.bear.pos.distanceTo(this.player.pos);
-      this.bear.model.lookTarget = this.player.pos;
-      evadeWindow = Math.max(0, evadeWindow - dt);
-      if (!opening) {
-        this.bear.face(this.player.pos, dt, 2.5);
-        // lumbers after David on its hind legs; drops its pace only when close
-        if (dist > 2.3 && !this.bear.model.busy) this.bear.moveTo(this.player.pos, dist > 7 ? 3.4 : dist > 4 ? 2.2 : 1.2, dt, 2.2);
-        else this.bear.stop(dt);
-        cd -= dt;
-        if (cd < 0 && dist < 3.6 && !this.bear.model.busy) {
-          cd = 2.3 + Math.random() * 0.9;
-          evadeWindow = 0.62;
-          this.ui.qte('press', 0, 'הִתְחַמֵּק!', K.dodge);
-          const hitT = this.bearSwipe('swipeHigh', 2.9, (hit) => {
-            this.ui.qte(null);
-            if (!hit && this.bear.pos.distanceTo(this.player.pos) < 4.2) {
-              // missed David — counts as an evasion
-              if (evadeWindow <= 0) return;
-              dodges++;
-              evadeWindow = 0;
-            }
-          });
-          void hitT;
-        }
-        if (this.player.health <= 0) {
-          // David is knocked down — rise again
-          this.player.health = this.player.maxHealth;
-          this.ui.verse(...verseArgs('ps_23_1_shepherd'), 3);
-          this.player.model.play('hurt');
-          dodges = Math.max(0, dodges - 1);
-        }
-        if (dodges >= 2 && !this.bear.model.busy) {
-          opening = true;
-          openT = 0;
-          this.slowMo(0.3);
-          this.audio.at('bearHurt', this.bear.pos, 1, 0.8);
-          this.bear.model.play('hurt');
-        }
-      } else {
-        openT += dt / Math.max(0.3, this.timeScale);
-        this.bear.stop(dt);
-        const close = dist < 3.8;
-        this.ui.qte('press', 0, close ? 'תְּפֹס בִּזְקָנוֹ!' : 'הִתְקָרֵב — וּתְפֹס בִּזְקָנוֹ!', K.interact);
-        if (this.input.take('interact') && close) grabbed = true;
-        if (openT > 3.2 && !grabbed) {
-          opening = false;
-          dodges = 0;
-          cd = 1.2;
-          this.slowMo(1);
-          this.ui.qte(null);
+      this.bot?.fight(dt, f, host);
+      f.update(dt);
+      this.bossHP = 1 - f.progress * 0.92;
+      this.bearThreats[0] = this.bear.pos;
+    };
+    await this.until(() => f.result !== null);
+    this.check();
+    return f.result!;
+  }
+
+  private logFight(f: BearFight, attempt: number, result: string) {
+    this.fightLog.push({ attempt, result, time: +f.time.toFixed(1), fatigue: +f.fatigue.toFixed(2), counters: f.counters, knockdowns: f.knockdowns, stats: JSON.parse(JSON.stringify(f.stats)) });
+  }
+
+  /** knocked out: a breath of black, then back to where the fight began (he on his feet, the bear risen again) */
+  private async knockedOut(ck: { b: THREE.Vector3; bh: number; d: THREE.Vector3; dh: number }) {
+    this.cinematic(true);
+    this.ui.qte(null);
+    this.ui.grip(null);
+    this.ui.bossNote(null);
+    this.slowMo(0.5);
+    this.audio.sfx('heartbeat', { volume: 0.9 });
+    this.ui.fade(1, 1.1);
+    await this.wait(0.7);
+    this.check();
+    this.slowMo(1);
+    this.player.place(ck.d.x, ck.d.z, ck.dh);
+    this.player.health = this.player.maxHealth;
+    this.player.stunT = 0;
+    this.player.model.hold = 'none';
+    this.player.model.staffMode = 'plant';
+    this.bear.place(ck.b.x, ck.b.z, ck.bh);
+    this.bear.model.hold = 'rear';
+    this.bear.model.fatigue = 0;
+    this.bear.model.gripPull = null;
+    this.bear.model.lookTarget = this.player.pos;
+    this.cam.snapBehind(Math.atan2(ck.b.x - ck.d.x, ck.b.z - ck.d.z), 0.15);
+    this.ui.caption('קוּם', 'עוֹד לֹא תַּם הַקְּרָב — קְרָא אֶת תְּנוּעוֹתָיו', 3);
+    this.ui.fade(0, 0.9);
+    await this.wait(1.4);
+    this.check();
+  }
+
+  /**
+   * (bear1) "וְהֶחֱזַקְתִּי בִּזְקָנוֹ": he sidesteps the open jaws and seizes the fur under its chin together with the lower
+   * jaw (Targum Yonatan: "וַאֲחָדִית בְּלוֹעֵיהּ"; Radak: the beard with the lower jaw), forces its head up and aside and
+   * holds on through its thrashing — each wrench is read and met by throwing his weight against it (the arrow); mashing
+   * both ways loses the grip. Resolves true when he held it, false when it shook him off.
+   */
+  private async struggle(): Promise<boolean> {
+    const b = this.bear, p = this.player, host = this.fightHost();
+    this.ui.letterbox(true);
+    this.ui.qte(null);
+    this.ui.objective(null);
+    this.ui.bossNote(null);
+    p.controlEnabled = false;
+    p.cancelAim();
+    p.model.hold = 'grab';
+    p.model.staffMode = 'strike';
+    b.model.play('hurt');
+    b.model.hold = 'held';
+    b.model.struggle = 0.35;
+    b.speed = 0;
+    this.bearVulnerable = false;
+    this.cam.combatFocus = null;
+    // he is on the side he stood (+1 = its left)
+    this.gripSide = (p.pos.x - b.pos.x) * Math.cos(b.heading) - (p.pos.z - b.pos.z) * Math.sin(b.heading) > 0 ? 1 : -1;
+    this.slowMo(0.35);
+    this.after(0.9, () => this.slowMo(1), true);
+    this.ui.verse(...verseArgs('s1_17_35_beard'), 4.5);
+    this.audio.sfx('grab');
+    this.audio.at('bearRoar', b.pos, 1, 1.15);
+    this.cam.addShake(0.6);
+    let strength = 1;
+    let wins = 0;
+    let ph: 'rest' | 'tele' | 'pull' = 'rest';
+    let pt = -0.4;
+    let dir = 1;
+    let need = 1;
+    let okT = 0;
+    let wrongT = 0;
+    let done: 'held' | 'lost' | null = null;
+    this.beh = (dt) => {
+      pt += dt;
+      const wrench = ph === 'pull' ? dir * 0.42 * (1 - smoothstep(0, 0.28, okT)) : ph === 'tele' ? dir * 0.12 : 0;
+      this.holdJaw(dt, wrench);
+      if (ph === 'rest' && pt > 0.6) {
+        // it gathers itself and wrenches its head to one side: he must throw his weight the other way
+        ph = 'tele';
+        pt = 0;
+        dir = Math.random() < 0.5 ? -1 : 1;
+        const camR = _bearV.setFromMatrixColumn(this.engine.camera.matrixWorld, 0);
+        const lx = Math.cos(b.heading), lz = -Math.sin(b.heading);
+        need = -Math.sign((lx * camR.x + lz * camR.z) * dir) || 1;
+        okT = 0;
+        wrongT = 0;
+        b.model.struggle = 0.75;
+      } else if (ph === 'tele' && pt > 0.42) {
+        ph = 'pull';
+        pt = 0;
+        this.audio.at('bearGrowl', b.pos, 1, 1.15);
+        this.cam.addShake(0.35);
+      } else if (ph === 'pull') {
+        const x = this.input.move.x;
+        if (x * need > 0.5) okT += dt;
+        else okT = Math.max(0, okT - dt * 0.5);
+        if (x * need < -0.5 && pt < 0.32) wrongT += dt;
+        if (okT >= 0.28) {
+          wins++;
+          ph = 'rest';
+          pt = 0;
+          this.ui.flashQte(true);
+          this.audio.sfx('davidEffort', { volume: 0.7 });
+          b.model.struggle = Math.max(0.12, 0.32 - 0.07 * wins);
+        } else if (wrongT > 0.12 || pt > 0.85) {
+          strength -= 0.42;
+          ph = 'rest';
+          pt = 0;
+          this.ui.flashQte(false);
+          this.cam.addShake(0.5);
+          this.audio.at('bearRoar', b.pos, 0.8, 1.2);
+          b.model.struggle = 0.5;
         }
       }
-      this.showBoss = true;
+      if (wins >= 3) done = 'held';
+      else if (strength <= 0.01) done = 'lost';
+      this.ui.grip({ dir: ph === 'rest' ? 0 : (need as -1 | 1), strength, label: ph === 'rest' ? 'אֲחֹז בִּזְקָנוֹ' : 'הַחֲזֵק — הַטֵּה אֶת מִשְׁקָלְךָ נֶגְדּוֹ' });
+      this.bot?.struggle(dt, ph === 'rest' ? 0 : need, host);
     };
-    await this.until(() => grabbed);
+    this.cam.playShots([this.gripShot()]);
+    await this.until(() => done !== null);
     this.check();
-    this.player.onDodge = undefined;
-    this.ui.qte(null);
+    this.ui.grip(null);
+    if (done === 'held') return true;
+    // it wrenches free and throws him off
+    b.model.hold = 'none';
+    b.model.gripPull = null;
+    b.model.struggle = 0;
+    p.model.hold = 'none';
+    p.model.lookTarget = null;
+    p.model.staffMode = 'plant';
+    this.cam.skipShots();
+    this.ui.letterbox(false);
+    p.controlEnabled = true;
+    this.bearVulnerable = true;
+    p.knockDown(b.pos, 1, 1.8);
+    this.ui.hint('<span class="h-item">הוּא נִשְׁמַט מִיָּדְךָ — הַטֵּה אֶת מִשְׁקָלְךָ נֶגֶד כָּל מְשִׁיכָה שֶׁלּוֹ</span>', 4);
+    return false;
+  }
+
+  private gripSide = 1;
+
+  /** he holds it by the jaw: beside its head, his right hand on the grip socket, its head forced up and aside */
+  private holdJaw(dt: number, wrench: number) {
+    const b = this.bear, p = this.player;
+    const fx = Math.sin(b.heading), fz = Math.cos(b.heading);
+    const lx = Math.cos(b.heading), lz = -Math.sin(b.heading);
+    const s = this.gripSide;
+    const stand = _bearW.set(b.pos.x + fx * 1.0 + lx * 0.62 * s, 0, b.pos.z + fz * 1.0 + lz * 0.62 * s);
+    p.moveToward(stand, 2.5, dt, 0.06);
+    const head = b.model.headCenter.getWorldPosition(_bearV);
+    p.faceToward(head, dt, 12);
+    p.model.lookTarget = b.model.gripSocket.getWorldPosition(p.model.lookTarget ?? new THREE.Vector3());
+    const g = b.model.gripPull ?? (b.model.gripPull = new THREE.Vector3());
+    g.copy(head).add(_bearU.set(lx * (0.28 * s + wrench) + fx * 0.1, 0.3, lz * (0.28 * s + wrench) + fz * 0.1));
+    b.stop(dt);
+  }
+
+  /** the struggle's lens: a close two-shot from its side, drifting with them */
+  private gripShot(): Shot {
+    const b = this.bear;
+    return { duration: 60, ease: false, at: (_u, tt) => {
+      const fx = Math.sin(b.heading), fz = Math.cos(b.heading);
+      const side = new THREE.Vector3(fz, 0, -fx).multiplyScalar(this.gripSide);
+      const mid = this.player.pos.clone().lerp(b.pos, 0.5);
+      const a = Math.sin(tt * 0.3) * 0.35;
+      const pos = mid.clone().addScaledVector(side, 3.3 * Math.cos(a)).add(new THREE.Vector3(fx, 0, fz).multiplyScalar(1.4 + Math.sin(a) * 1.2)).add(new THREE.Vector3(0, 1.05, 0));
+      pos.y = Math.max(pos.y, this.engine.terrain.heightAt(pos.x, pos.z) + 0.6);
+      return { pos, look: mid.clone().add(new THREE.Vector3(0, 1.0, 0)), fov: 42 };
+    } };
   }
 
   // ============================================================================ "I caught it by its beard, struck it and killed it"
+  /** (bear1) "וְהִכִּתִיו וַהֲמִיתִּיו": holding its jaw, the finishing blow of the staff — timed; slow motion; it falls */
   private async clinch() {
-    this.cinematic(true);
+    const b = this.bear, p = this.player;
+    this.ui.letterbox(true);
     this.slowMo(1);
-    this.player.canSling = false;
-    this.player.aiming = false;
-    this.player.model.hold = 'grab';
-    this.player.model.staffMode = 'strike';
-    this.bear.model.hold = 'rear';
+    p.controlEnabled = false;
+    p.canSling = false;
+    p.cancelAim();
+    p.model.hold = 'grab';
+    p.model.staffMode = 'strike';
+    b.model.hold = 'held';
+    b.model.struggle = 0.12;
     this.bearVulnerable = false;
-    this.ui.verse(...verseArgs('s1_17_35_beard'), 3.5);
-    this.audio.sfx('grab');
-    this.audio.at('bearRoar', this.bear.pos, 1, 1.1);
-    const bearF = () => new THREE.Vector3(Math.sin(this.bear.heading), 0, Math.cos(this.bear.heading));
-    let strikes = 0;
-    let ringT = -0.8;
+    if (!this.cam.inCinematic) this.cam.playShots([this.gripShot()]);
+    let ringT = -0.5;
     const ringDur = 1.15;
     let resolved = false;
+    let struck = false;
     this.beh = (dt) => {
-      const stand = this.bear.pos.clone().addScaledVector(bearF(), 0.95);
-      this.player.moveToward(stand, 3, dt, 0.08);
-      this.player.faceToward(this.bear.pos, dt, 14);
-      this.bear.face(this.player.pos, dt, 4);
-      this.bear.stop(dt);
-      this.bear.model.roar = 0.25 + Math.sin(this.time * 7) * 0.15;
-      this.player.model.lookTarget = this.bear.model.headCenter.getWorldPosition(new THREE.Vector3());
+      this.holdJaw(dt, 0);
       ringT += dt;
       if (ringT >= 0 && !resolved) {
         const u = clamp(1 - ringT / ringDur, -0.3, 1);
         this.ui.qte('timing', Math.max(0, u), 'הַכֵּה!', withLabel(K.strike, ''));
+        if (this.bot && u < 0.1) this.input.press('strike');
         const pressed = this.input.take('strike') || this.input.take('sling');
         if (pressed || u <= -0.25) {
           resolved = true;
-          const good = pressed && u < 0.2 && u > -0.25;
+          const good = pressed && u < 0.22 && u > -0.25;
           this.ui.flashQte(good);
           if (good) {
-            strikes++;
-            this.player.model.play('strikeHigh', [{
+            p.model.play('strikeHigh', [{
               t: 0.27,
               fn: () => {
-                this.audio.at('staffHit', this.bear.pos, 1.2);
-                this.audio.at('bearHurt', this.bear.pos, 1);
-                this.bear.model.play('hurt');
-                this.cam.addShake(1.1);
-                this.slowMo(0.25);
-                this.after(0.38, () => this.slowMo(1), true);
-                this.bossHP = Math.max(0, 0.55 - strikes * 0.185);
-                this.engine.particles.dustBurst(this.bear.model.headCenter.getWorldPosition(new THREE.Vector3()), 8, 0.6, new THREE.Color(0.6, 0.45, 0.3));
+                struck = true;
+                this.audio.at('staffHit', b.pos, 1.3);
+                this.audio.at('bearHurt', b.pos, 1);
+                this.cam.addShake(1.2);
+                this.slowMo(0.22);
+                this.engine.particles.dustBurst(b.model.headCenter.getWorldPosition(new THREE.Vector3()), 8, 0.6, new THREE.Color(0.6, 0.45, 0.3));
               },
             }]);
           } else {
-            this.bear.model.play('hurt');
-            this.cam.addShake(0.4);
+            this.after(0.6, () => {
+              resolved = false;
+              ringT = -0.45;
+            }, true);
           }
-          this.after(0.7, () => {
-            resolved = false;
-            ringT = -0.55;
-          }, true);
         }
       }
     };
-    const side = () => new THREE.Vector3(-bearF().z, 0, bearF().x);
-    this.cam.playShots([{ duration: 60, ease: false, at: (_u, tt) => {
-      const mid = this.player.pos.clone().lerp(this.bear.pos, 0.5);
-      const a = Math.sin(tt * 0.25) * 0.5;
-      const s = side().multiplyScalar(Math.cos(a) * 3.4).addScaledVector(bearF(), Math.sin(a) * 3.4 + 1.2);
-      return { pos: mid.clone().add(s).add(new THREE.Vector3(0, 1.0, 0)), look: mid.clone().add(new THREE.Vector3(0, 1.45, 0)), fov: 40 };
-    } }]);
-    await this.until(() => strikes >= 3 && !this.player.model.busy);
+    await this.until(() => struck && !p.model.busy);
     this.check();
     this.ui.qte(null);
     this.beh = null;
     // death
     this.bear.alive = false;
     this.bear.model.roar = 0;
+    this.bear.model.gripPull = null;
+    this.bear.model.struggle = 0;
     this.bear.model.hold = 'down';
     this.player.model.hold = 'none';
     this.player.model.staffMode = 'plant';
@@ -1604,3 +1820,7 @@ const _up35 = new THREE.Vector3(0, 0.35, 0);
 const _missR = new THREE.Vector3();
 const _missD = new THREE.Vector3();
 const _dustPale = new THREE.Color(0.86, 0.79, 0.66);
+// (bear1) scratch
+const _bearV = new THREE.Vector3();
+const _bearW = new THREE.Vector3();
+const _bearU = new THREE.Vector3();
