@@ -1,4 +1,4 @@
-import { onLangChange, t } from './i18n';
+import { getLang, onLangChange, t } from './i18n';
 
 /** What the hand would do on a press (the chip by the crosshair). */
 export type ReachVerb = 'snatch' | 'pull' | 'portal' | 'late';
@@ -97,6 +97,8 @@ export class ReachHud {
   /** One short line on the controls (low on the screen, gone in a few seconds by itself). */
   tip(text: string) {
     const el = this.el.querySelector('.rh-tip') as HTMLElement;
+    // (Hebrew reads right to left, its key names inside it too)
+    el.dir = getLang() === 'he' ? 'rtl' : 'ltr';
     el.textContent = text;
     el.className = 'rh-tip';
     void el.offsetWidth;
