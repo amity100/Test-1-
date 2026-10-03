@@ -299,6 +299,7 @@ export class Player {
     this.knockVel.normalize().multiplyScalar(push * 7);
     this.heading = Math.atan2(from.x - this.pos.x, from.z - this.pos.z);
     this.audio.sfx('davidHurt', { volume: 1 });
+    this.sfx('davidFall', 1);
     return true;
   }
 

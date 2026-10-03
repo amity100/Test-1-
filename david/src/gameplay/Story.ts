@@ -992,7 +992,8 @@ export class Story {
       if (kind === 'sling') this.fightRun.onSlingHit(at, zone === 'head');
       return;
     }
-    this.audio.at(kind === 'sling' ? 'stoneHitBear' : 'staffHit', at, 1);
+    // (bear1) the staff on the bear: wood into fur and bone — a sharper crack on the snout
+    this.audio.at((kind === 'sling' ? 'stoneHitBear' : 'staffBlow') as SfxName, at, 1, kind === 'staff' && zone === 'head' ? 1.3 : 1);
     this.audio.at('bearHurt', this.bear.pos, 0.9);
     this.engine.particles.dustBurst(at, 6, 0.5, new THREE.Color(0.55, 0.42, 0.3));
     this.ui.hitMarker(zone === 'head');
@@ -1251,6 +1252,7 @@ export class Story {
     this.bear.model.hold = 'rear';
     this.audio.music('silence', 0.6);
     let t = 0;
+    let roared = false;
     this.beh = (dt) => {
       t += dt;
       this.player.moveToward(stand, 2.4, dt, 0.2);
@@ -1258,8 +1260,12 @@ export class Story {
       this.bear.face(this.player.pos, dt, 3);
       this.bear.stop(dt);
       this.bear.model.roar = t > 1.0 && t < 3.6 ? Math.min(1, (t - 1.0) * 2) : damp(this.bear.model.roar, 0, 4, dt);
-      if (t > 1.0 && t < 1.05) {
+      if (t > 1.0 && !roared) {
+        roared = true;
         this.audio.at('bearRoar', this.bear.pos, 1.2);
+        // (bear1 / score6) the fight's opening hit: "וַיָּקָם עָלַי"
+        this.audio.sfx('riseSting' as SfxName);
+        this.audio.music('battle', 1.2);
         this.cam.addShake(0.9);
         this.slowMo(0.45);
         this.audio.sfx('heartbeat', { volume: 0.8 });
@@ -1430,6 +1436,10 @@ export class Story {
     this.ui.verse(...verseArgs('s1_17_35_beard'), 4.5);
     this.audio.sfx('grab');
     this.audio.at('bearRoar', b.pos, 1, 1.15);
+    // (score6) the grip's sting and its slow-motion music (it loops while he holds); the strain under it
+    this.audio.sfx('gripSting' as SfxName);
+    this.audio.music('grip', 0.3);
+    let strainT = 0;
     this.cam.addShake(0.6);
     let strength = 1;
     let wins = 0;
@@ -1482,6 +1492,11 @@ export class Story {
           b.model.struggle = 0.5;
         }
       }
+      strainT -= dt;
+      if (strainT <= 0) {
+        strainT = 2.5;
+        this.audio.at('gripStruggle' as SfxName, b.pos, 1);
+      }
       if (wins >= 3) done = 'held';
       else if (strength <= 0.01) done = 'lost';
       this.ui.grip({ dir: ph === 'rest' ? 0 : (need as -1 | 1), strength, label: ph === 'rest' ? 'אֲחֹז בִּזְקָנוֹ' : 'הַחֲזֵק — הַטֵּה אֶת מִשְׁקָלְךָ נֶגְדּוֹ' });
@@ -1504,6 +1519,7 @@ export class Story {
     p.controlEnabled = true;
     this.bearVulnerable = true;
     p.knockDown(b.pos, 1, 1.8);
+    this.audio.music('battle', 0.8);
     this.ui.hint('<span class="h-item">הוּא נִשְׁמַט מִיָּדְךָ — הַטֵּה אֶת מִשְׁקָלְךָ נֶגֶד כָּל מְשִׁיכָה שֶׁלּוֹ</span>', 4);
     return false;
   }
@@ -1573,11 +1589,16 @@ export class Story {
           this.ui.flashQte(good);
           if (good) {
             p.model.play('strikeHigh', [{
+              t: 0.12,
+              fn: () => this.audio.sfx('whoosh', { volume: 0.8, pitch: 0.85 }),
+            }, {
               t: 0.27,
               fn: () => {
                 struck = true;
-                this.audio.at('staffHit', b.pos, 1.3);
+                // (score6) the killing blow: the staff on its head, its cry, and the score's own hit ("fightEnd")
+                this.audio.at('staffBlow' as SfxName, b.pos, 1.3, 1);
                 this.audio.at('bearHurt', b.pos, 1);
+                this.audio.music('fightEnd', 0.2);
                 this.cam.addShake(1.2);
                 this.slowMo(0.22);
                 this.engine.particles.dustBurst(b.model.headCenter.getWorldPosition(new THREE.Vector3()), 8, 0.6, new THREE.Color(0.6, 0.45, 0.3));
@@ -1592,9 +1613,12 @@ export class Story {
         }
       }
     };
-    await this.until(() => struck && !p.model.busy);
+    // the blow lands: it sags in his grip at once (his swing finishes over it)
+    await this.until(() => struck);
     this.check();
     this.ui.qte(null);
+    await this.wait(0.1);
+    this.check();
     this.beh = null;
     // death
     this.bear.alive = false;
@@ -1605,7 +1629,12 @@ export class Story {
     this.player.model.hold = 'none';
     this.player.model.staffMode = 'plant';
     this.player.model.lookTarget = this.bear.pos.clone().add(new THREE.Vector3(0, 0.3, 0));
-    this.audio.at('bearDeath', this.bear.pos, 1.1);
+    // (score6) the fall itself — on the model's cue, the frame its body meets the ground
+    this.bear.model.onCue = (cue, at) => {
+      if (cue !== 'collapse') return;
+      this.audio.at('bearCollapse' as SfxName, at, 1);
+      this.bear.model.onCue = undefined;
+    };
     this.slowMo(0.4);
     this.ui.verse(...verseArgs('s1_17_35_slew'), 5);
     this.bossHP = 0;
@@ -1620,7 +1649,7 @@ export class Story {
     this.engine.particles.dustBurst(bp, 18, 1.2);
     this.showBoss = false;
     this.showHealth = false;
-    this.audio.music('victory', 3);
+    // (score6) 'fightEnd' holds its drone until the lamb is lifted: the victory comes in there (aftermath)
     this.audio.ambience(0.5, 0.4, 0.2);
   }
 
@@ -1654,6 +1683,7 @@ export class Story {
         this.player.carrying = true;
         this.player.model.hold = 'carry';
         this.audio.sfx('lambBleat', { volume: 0.6 });
+        this.audio.music('victory', 3);
       },
     }]);
     await this.wait(1.0);

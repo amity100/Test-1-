@@ -552,7 +552,12 @@ export class Intro {
     this.keyHandler = (e: KeyboardEvent) => {
       if (e.repeat || ['Shift', 'Control', 'Alt', 'Meta', 'Tab', 'CapsLock'].includes(e.key) || /^F\d+$/.test(e.key)) return;
       if (e.key === 'Enter' || e.key === 'Escape') {
-        if (performance.now() - t0 > 700) this.skip();
+        if (performance.now() - t0 > 700) {
+          // (cut8) the key that skips the film stops here: it must not reach the game's input too (Escape would open the
+          // pause menu on the first frame of play)
+          e.stopPropagation();
+          this.skip();
+        }
         return;
       }
       poke();

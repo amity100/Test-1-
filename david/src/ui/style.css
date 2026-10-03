@@ -637,6 +637,10 @@ canvas { display: block; outline: none; }
   .ft-verse.ft-v-bottom { bottom: calc(var(--lb, 11vh) + 3vh + env(safe-area-inset-bottom, 0px)); }
   .ft-verse .ft-v { white-space: normal; text-wrap: balance; font-size: clamp(22px, 6.4vw, 34px); line-height: 1.5; }
   .ft-verse .ft-ref { font-size: 11px; letter-spacing: 0.26em; }
+  /* (cut8, CUT v5) a place / person card at the top while a verse comes in (P3, P6, P7): the verse sits under the card
+     (on a phone held upright both would share the top of the picture) */
+  .film-layer:has(.ft-place.ft-v-top, .ft-person.ft-v-top) .ft-verse.ft-v-top { top: calc(var(--lb, 11vh) + 12.5vh + env(safe-area-inset-top, 0px)); }
+  .ft-verse.ft-v-top { transition: top 0.9s cubic-bezier(0.4, 0, 0.2, 1); }
 }
 /* landscape phones: a short picture (~290 px between the bars) */
 @media (max-height: 500px) and (min-aspect-ratio: 3/2) {

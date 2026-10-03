@@ -223,14 +223,23 @@ export function landMaterial(tt: TerrainTex, look: TerrainLook, tier: LandTier):
         vec2 xz = vLandW.xz;
         landDist = length(vLandW - cameraPosition);
         vec2 uvR = (xz - uRegBox.xy) * uRegBox.zw;
+        #ifdef LAND_LCSOFT
+        // (cut7: the regional tiles' coarse texels, magnified under the crane of P6, read as a grid of square 'fields':
+        //  their lookup is warped by a slow noise so the patches become natural, irregular mottling)
+        vec2 uvW = uvR + (vec2(dNoise(xz * 0.0011), dNoise(xz * 0.0011 + 31.0)) - 0.5) * 1100.0 * uRegBox.zw;
+        vec4 shR = texture2D(tRegShade, uvW, LAND_LCSOFT * 0.5);
+        vec4 lcR = texture2D(tRegLC, uvW, LAND_LCSOFT * 0.5);
+        #else
         vec4 shR = texture2D(tRegShade, uvR);
         vec4 lcR = texture2D(tRegLC, uvR);
+        #endif
         vec2 uvL = (xz - uLocBox.xy) * uLocBox.zw;
         float edge = min(min(xz.x - uLocEdge.x, uLocEdge.z - xz.x), min(xz.y - uLocEdge.y, uLocEdge.w - xz.y));
         float wl = smoothstep(0.0, 1200.0, edge);
         vec4 sh = shR, lc = lcR;
         #ifdef LAND_LCSOFT
-        if (wl > 0.0) { sh = mix(shR, texture2D(tLocShade, uvL), wl); lc = mix(lcR, texture2D(tLocLC, uvL, LAND_LCSOFT), wl); }
+        // (the DEM's levelled modern fields also show in the shading at a low sun: its normals softened the same way)
+        if (wl > 0.0) { sh = mix(shR, texture2D(tLocShade, uvL, LAND_LCSOFT * 0.7), wl); lc = mix(lcR, texture2D(tLocLC, uvL, LAND_LCSOFT), wl); }
         #else
         if (wl > 0.0) { sh = mix(shR, texture2D(tLocShade, uvL), wl); lc = mix(lcR, texture2D(tLocLC, uvL), wl); }
         #endif

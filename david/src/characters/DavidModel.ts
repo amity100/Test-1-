@@ -1148,9 +1148,14 @@ export class DavidModel {
       if (src) {
         const g = src.geometry.clone();
         const p = g.getAttribute('position') as THREE.BufferAttribute;
+        // folded along its length (the two sides of the cup laid together): a narrow double strip of leather that
+        // continues the bundle of cords, not a fan at its end
         for (let i = 0; i < p.count; i++) {
-          const x = p.getX(i), y = p.getY(i);
-          if (x < 0) p.setXY(i, -x, -y + 0.0042);
+          const y = p.getY(i), z = p.getZ(i);
+          if (z < 0) {
+            p.setY(i, -y + 0.0042);
+            p.setZ(i, -z);
+          }
         }
         p.needsUpdate = true;
         g.computeVertexNormals();
@@ -2617,7 +2622,8 @@ export class DavidModel {
     }
     _m1.makeBasis(X, Y, Z);
     this.pouch.quaternion.setFromRotationMatrix(_m1);
-    if (folded) this.pouch.position.copy(this.tuckBot).addScaledVector(this.tuckHd, 0.047).addScaledVector(this.tuckOut, 0.003);
+    // (the folded strip spans its local x ±0.045 and z 0..0.027: centred under the foot of the bundle)
+    if (folded) this.pouch.position.copy(this.tuckBot).addScaledVector(this.tuckHd, 0.047).addScaledVector(this.tuckOut, 0.003).addScaledVector(Z, -0.0135);
     else this.pouch.position.copy(S.pouch);
     if (folded !== this.pouchFoldShown) {
       this.pouchFoldShown = folded;
@@ -2812,7 +2818,7 @@ export class DavidModel {
     // folded away: both cords doubled into ONE narrow bundle (≈17 cm, a slight twist) whose top is tucked under the sash;
     // at its lower end the finger loop, the knot and the pouch folded double hang together. The bundle keeps off the
     // thigh as a whole (its lower end pushed out of the leg capsules), so it never splays.
-    const Bot = _slD.copy(F).addScaledVector(hd, 0.168).addScaledVector(Z, 0.004);
+    const Bot = _slD.copy(F).addScaledVector(hd, 0.13).addScaledVector(Z, 0.004);
     const C = this.caps;
     for (let c = 0; c < capCount; c++) {
       const o = c * 7;
@@ -2969,7 +2975,7 @@ const SL_STOW = { tuck: 0.27, end: 0.42 } as const;
 // thumb [CMC, MCP, IP]): a tight fist round the finger loop, the forefinger hooked and the thumb pressed over the knot;
 // letting go, the thumb and forefinger open while the loop stays on the middle finger
 const SLING_FIST: FingerShape = {
-  f: [[64, 94, 60], [88, 104, 66], [92, 106, 68], [95, 108, 70]], t: [16, 30, 28], tOpp: 38, tw: [30, 42, 36], spread: [3, 1, 3, 6], cup: 16,
+  f: [[64, 94, 60], [88, 104, 66], [92, 106, 68], [95, 108, 70]], t: [26, 34, 30], tOpp: 46, tw: [30, 42, 36], spread: [3, 1, 3, 6], cup: 16,
 };
 const SLING_LET_GO: FingerShape = {
   f: [[16, 20, 8], [70, 90, 56], [84, 100, 62], [90, 104, 66]], t: [-4, 4, 4], tOpp: 8, tw: [0, 0, 0], spread: [4, 1, 3, 6], cup: 10,

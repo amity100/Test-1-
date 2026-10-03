@@ -357,7 +357,7 @@ export class LandSet {
       valleyFog: o.location === 'judah' ? JUDAH_FOG[tier] : undefined,
       village: villageLook,
       // P6 (cut7): no modern field outlines on the coastal plain under the crane
-      lcSoft: o.location === 'coast' ? 3.5 : undefined,
+      lcSoft: o.location === 'coast' ? 4.5 : undefined,
     }, tier);
     const terrain = new THREE.Mesh(geo, tmat);
     terrain.name = 'land:terrain';

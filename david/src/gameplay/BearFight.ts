@@ -127,6 +127,7 @@ export class BearFight {
   private retreatTo = new THREE.Vector3();
   private punish = 0;
   private gripPressT = -1;
+  private pantT = 0;
 
   constructor(private h: FightHost, startFatigue = 0) {
     this.fatigue = startFatigue;
@@ -140,6 +141,7 @@ export class BearFight {
     this.cd = 1.0;
     bear.model.fatigue = this.fatigue;
     bear.model.onCue = (cue, at, s) => this.onCue(cue, at, s);
+    bear.model.onStep = (_leg, at, s) => this.sfxAt('bearStep', at, Math.min(1, 0.3 + 0.35 * s), 1.05 - 0.15 * Math.min(1, s));
     cam.combatFocus = bear.pos;
     player.strikeKind = () => this.strikeKind();
     this.lastBearPos.copy(bear.pos);
@@ -173,6 +175,7 @@ export class BearFight {
     cam.combatFocus = null;
     player.strikeKind = undefined;
     bear.model.onCue = undefined;
+    bear.model.onStep = undefined;
     ui.bossNote(null);
     ui.qte(null);
   }
@@ -196,6 +199,12 @@ export class BearFight {
     this.punish = Math.max(0, this.punish - dt);
     this.fatigue = clamp(this.fatigue + FIGHT.fatiguePerSec * dt, 0, 1);
     m.fatigue = damp(m.fatigue, this.fatigue, 1.5, dt);
+    // tired, it pants (one pair of breaths every ≈0.6 s; slower and heavier as it tires)
+    this.pantT -= dt;
+    if (this.fatigue > 0.35 && this.pantT <= 0 && this.phase !== 'charge' && !(m.current && m.current.tell)) {
+      this.pantT = 0.6 + 0.25 * this.fatigue;
+      this.sfxAt('bearPant', bear.pos, 0.45 + 0.5 * this.fatigue, 1 - 0.3 * this.fatigue);
+    }
     m.lookTarget = player.pos;
     const B = bear.pos, D = player.pos;
     const dx = D.x - B.x, dz = D.z - B.z;
@@ -361,7 +370,7 @@ export class BearFight {
     const { bear } = this.h;
     const l = name === 'bite' ? [0.24, 0.46] : name === 'swipe' ? [0.28, 0.47] : name === 'stomp' ? [0.34, 0.56] : name === 'rearSlam' ? [1.32, 1.62] : name === 'swipeHigh' ? [0.3, 0.5] : [0, 0];
     this.move = { name, side, l0: l[0], l1: l[1], lunge, resolved: false, gripOffer: false };
-    bear.model.play(name, [], { side });
+    bear.model.play(name, name === 'bite' ? [{ t: 0.41, fn: () => this.sfxAt('bearSnap', bear.pos, 1) }] : [], { side });
     if (name === 'bite' && this.gripReady) {
       this.move.gripOffer = true;
       this.stats.gripOffers++;
@@ -526,7 +535,7 @@ export class BearFight {
     const onHead = dh < (kind === 'jab' ? 0.5 : 0.6);
     if (!onHead && db > 0.75) return false;
     const table = onHead ? (kind === 'jab' ? FIGHT.jabHead : FIGHT.strikeHead) : kind === 'jab' ? FIGHT.jabBody : FIGHT.strikeBody;
-    this.landed(table, 'staffHit', tip, onHead, kind);
+    this.landed(table, 'staffBlow', tip, onHead, kind);
     return true;
   }
 
@@ -546,7 +555,7 @@ export class BearFight {
     const v = counter ? table[0] : tell ? table[2] : table[1];
     this.dealt += v;
     this.fatigue = clamp(this.fatigue + FIGHT.fatiguePerHit * v, 0, 1);
-    this.sfxAt(sound, at, 1);
+    this.sfxAt(sound, at, 1, sound === 'staffBlow' ? (onHead && kind === 'jab' ? 1.3 : onHead ? 1 : 0.9) : 1);
     this.sfxAt('bearHurt', bear.pos, 0.6 + 0.4 * Math.min(1, v));
     engine.particles.dustBurst(at, 5, 0.45, new THREE.Color(0.55, 0.42, 0.3));
     ui.hitMarker(counter);
@@ -582,9 +591,9 @@ export class BearFight {
 
   // ---------------------------------------------------------------------------------------------- sounds, HUD
   private onCue(cue: string, at: THREE.Vector3, s: number) {
-    const map: Record<string, string> = { huff: 'bearHuff', jawPop: 'bearJawPop', stomp: 'bearStomp', snap: 'bearSnap', slam: 'bearSlam', land: 'bearLand', skid: 'bearSkid', collapse: 'bearCollapse' };
+    const map: Record<string, string> = { huff: 'bearHuff', jawPop: 'bearJawPop', stomp: 'bearStomp', slam: 'bearSlam', land: 'bearLand', skid: 'bearSkid', collapse: 'bearCollapse' };
     const n = map[cue];
-    if (n) this.sfxAt(n, at, Math.min(1, 0.6 + 0.3 * s));
+    if (n) this.sfxAt(n, at, cue === 'slam' ? 1.4 : Math.min(1, 0.6 + 0.3 * s));
     if (cue === 'slam' || cue === 'stomp') {
       this.h.cam.addShake(cue === 'slam' ? 0.6 : 0.25);
       this.h.engine.particles.dustBurst(at, cue === 'slam' ? 14 : 6, cue === 'slam' ? 1.1 : 0.6);
