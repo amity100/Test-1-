@@ -3,8 +3,15 @@ import { labWaves, type LabArena, type LabGate, type LabSpawn, type LabWave } fr
 import { chosenVariant, setVariant, type CombatVariant } from './variant';
 
 /** What a lab kill is credited to (the run's KILLS BY TOOL). */
-export type LabTool = 'grab' | 'reflect' | 'loop' | 'swap' | 'dash' | 'blade' | 'other';
+export type LabTool = 'grab' | 'reflect' | 'loop' | 'swap' | 'dash' | 'blade' | 'rifle' | 'knife' | 'redirect' | 'other';
 export const LAB_TOOLS: readonly LabTool[] = ['grab', 'reflect', 'loop', 'swap', 'dash', 'blade', 'other'];
+/** REACH's own: a round, a knife, a portal of theirs you moved, anything else. */
+export const REACH_TOOLS: readonly LabTool[] = ['rifle', 'knife', 'redirect', 'other'];
+
+/** The tools a run under `v` credits (the HUD and the results list these). */
+export function labTools(v: CombatVariant): readonly LabTool[] {
+  return v === 'reach' ? REACH_TOOLS : LAB_TOOLS;
+}
 
 /**
  * The tool behind a kill. STRIKES by name (LOOP's geyser and cannon are LOOP),
@@ -70,7 +77,7 @@ export const LAB_TIMING = {
   spacing: 0.6,
 };
 
-const zeroKills = (): Record<LabTool, number> => ({ grab: 0, reflect: 0, loop: 0, swap: 0, dash: 0, blade: 0, other: 0 });
+const zeroKills = (): Record<LabTool, number> => ({ grab: 0, reflect: 0, loop: 0, swap: 0, dash: 0, blade: 0, rifle: 0, knife: 0, redirect: 0, other: 0 });
 
 /**
  * The lab's WAVE DIRECTOR: a fixed escalating sequence, a breather with a
@@ -161,6 +168,7 @@ export class LabDirector {
     this.stats.total += dt;
     if (this.phase === 'breather') {
       this.breatherT -= dt;
+      this.spawnDue(dt);
       if (this.breatherT <= 0) this.fight();
       return;
     }
@@ -176,18 +184,7 @@ export class LabDirector {
         this.held.length = 0;
       }
     }
-    for (let i = 0; i < this.queue.length; ) {
-      const q = this.queue[i];
-      q.t -= dt;
-      if (q.t > 0) {
-        i++;
-        continue;
-      }
-      this.queue.splice(i, 1);
-      const gate = this.arena.gates.find((g) => g.id === q.spawn.gate);
-      if (!gate) continue;
-      this.ids.push(this.hooks.spawn(q.spawn, gate, this.wave + 1));
-    }
+    this.spawnDue(dt);
     if (this.queue.length || this.held.length || this.ids.some((id) => this.hooks.alive(id))) return;
     // the wave is down
     const w = this.stats.waves[this.wave];
@@ -223,11 +220,12 @@ export class LabDirector {
 
   totalKills() {
     let n = 0;
-    for (const k of LAB_TOOLS) n += this.stats.kills[k];
+    for (const k of Object.keys(this.stats.kills) as LabTool[]) n += this.stats.kills[k];
     return n;
   }
 
   private breathe(wave: number, secs: number) {
+    secs = this.waves[wave].lead ?? secs;
     this.phase = 'breather';
     this.wave = wave;
     this.breatherT = secs;
@@ -235,25 +233,47 @@ export class LabDirector {
     this.ids.length = 0;
     this.queue.length = 0;
     this.held.length = 0;
-    this.hooks.announce?.(wave + 1, this.waves[wave], secs);
+    const def = this.waves[wave];
+    // REACH: its men come in now and stand still through the countdown
+    if (def.ready) this.enqueue(def.spawns);
+    this.hooks.announce?.(wave + 1, def, secs);
   }
 
   private fight() {
     this.phase = 'fight';
     this.waveT = 0;
     const def = this.waves[this.wave];
+    if (def.ready) return;
     const first = def.pulse ? def.spawns.filter((q) => q.pulse !== 2) : def.spawns;
     this.held = def.pulse ? def.spawns.filter((q) => q.pulse === 2) : [];
     this.enqueue(first);
   }
 
+  /** The men whose turn at their gate has come step through. */
+  private spawnDue(dt: number) {
+    for (let i = 0; i < this.queue.length; ) {
+      const q = this.queue[i];
+      q.t -= dt;
+      if (q.t > 0) {
+        i++;
+        continue;
+      }
+      this.queue.splice(i, 1);
+      const gate = this.arena.gates.find((g) => g.id === q.spawn.gate);
+      if (!gate) continue;
+      this.ids.push(this.hooks.spawn(q.spawn, gate, this.wave + 1));
+    }
+  }
+
   /** Each gate lets its men through one by one; the gates open together. */
   private enqueue(spawns: readonly LabSpawn[]) {
     const perGate = new Map<string, number>();
+    const ready = !!this.waves[this.wave]?.ready;
     for (const sp of spawns) {
       const k = perGate.get(sp.gate) ?? 0;
       perGate.set(sp.gate, k + 1);
-      this.queue.push({ spawn: sp, t: k * LAB_TIMING.spacing });
+      // (REACH's men all appear together, at their posts, as the banner comes up)
+      this.queue.push({ spawn: sp, t: ready ? 0.15 * this.queue.length : k * LAB_TIMING.spacing });
     }
   }
 }

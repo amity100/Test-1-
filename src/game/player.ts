@@ -5,7 +5,7 @@ import type { CharacterAPI, DynBody, ImpactInfo, LocomotionInput, PhysicsAPI, Ph
 import type { CollisionWorld } from '../world/collision';
 import { Body } from '../sim/physics';
 import { yawOf } from './portalMath';
-import { FLOW, FLOW_SPRINT, FLOW_WALK, flowOn } from './flow';
+import { FLOW, FLOW_SPRINT, FLOW_WALK, flowBodyOn } from './flow';
 
 export interface PlayerInput {
   /** Stick / WASD (x right, y forward) in camera space. */
@@ -62,6 +62,8 @@ export class Player {
   lastSafe = new THREE.Vector3();
   /** 0..1 gauntlet raised (set by the game while aiming). */
   aim = 0;
+  /** 0..1 a held rifle raised (REACH: the game sets it while you hold one). */
+  weaponUp = 0;
   crouchT = 0;
 
   private stride = 0;
@@ -194,8 +196,8 @@ export class Player {
     this.ev = ev;
     const b = this.body;
     this.shoveCooldown = Math.max(0, this.shoveCooldown - dt);
-    // FLOW: faster legs, a sharper turn, real air control (everyone else: FEEL as always)
-    const flow = flowOn();
+    // FLOW (and REACH, on FLOW's body): faster legs, a sharper turn, real air control (everyone else: FEEL as always)
+    const flow = flowBodyOn();
     const walkSpeed = flow ? FLOW_WALK : FEEL.walkSpeed;
     const sprintSpeed = flow ? FLOW_SPRINT : FEEL.sprintSpeed;
     const accel = flow ? FLOW.move.accel : FEEL.accel;
@@ -341,7 +343,7 @@ export class Player {
     // --- facing ---
     const hs = Math.hypot(b.vel.x, b.vel.z);
     if (lunging) this.yaw = yawOf(this.lungeDir);
-    else if (this.aim > 0.3) this.yaw = dampAngle(this.yaw, input.camYaw, 18, dt);
+    else if (this.aim > 0.3 || this.weaponUp > 0.3) this.yaw = dampAngle(this.yaw, input.camYaw, 18, dt);
     else if (this.shoveT > 0) this.yaw = yawOf(this.shoveDir);
     else if (hs > 0.3 && inputMag > 0.05) this.yaw = dampAngle(this.yaw, Math.atan2(b.vel.x, b.vel.z), 11, dt);
 
@@ -489,6 +491,7 @@ export class Player {
     L.vy = this.body.vel.y;
     L.crouch = this.crouchT;
     L.aim = this.aim;
+    L.weaponUp = this.weaponUp;
     this.char.root.position.copy(this.body.pos);
     this.char.root.rotation.y = this.yaw;
     this.char.update(dt, L);
@@ -499,7 +502,7 @@ export class Player {
     // out of a door / wall: face where you're going; floors and ceilings keep your yaw
     if (Math.abs(to.normal.y) < 0.5) this.yaw = yawOf(to.normal);
     // FLOW: a rift is a way to travel: out of a door or a wall, a little faster than in (to a cap)
-    if (flowOn() && Math.abs(to.normal.y) < 0.5) {
+    if (flowBodyOn() && Math.abs(to.normal.y) < 0.5) {
       const v = this.body.vel;
       const s = v.length();
       const k = Math.min(FLOW.portal.exitBoost, Math.max(1, FLOW.portal.cap / Math.max(s, 1e-3)));

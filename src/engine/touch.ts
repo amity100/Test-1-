@@ -54,10 +54,26 @@ const ICON = {
     '<path d="M7 4.5l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" opacity=".75"/><path d="M3 17.5h15M15 14l3.5 3.5L15 21" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>',
   ),
   power: SVG('<circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M12 6.5v5.5l3.6 2.2" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>'),
+  hand: SVG('<path d="M6.5 12.5V8a1.2 1.2 0 012.4 0v3.5M8.9 11V6a1.2 1.2 0 012.4 0v5M11.3 11V6.6a1.2 1.2 0 012.4 0v5M13.7 11.6V8.6a1.2 1.2 0 012.4 0v5.6c0 3.4-2.3 5.8-5.3 5.8-2.5 0-3.8-1.3-5.1-3.4L4.4 13.4a1.2 1.2 0 012-1.3l.1.4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>'),
+  weapon: SVG('<circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v5M12 16.5v5M2.5 12h5M16.5 12h5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>'),
+  travel: SVG('<ellipse cx="8" cy="12" rx="3.6" ry="7.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M12.5 12h8M17.5 8.5L21 12l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>'),
 };
 
+/** REACH's buttons and the actions they hold down (the game reads them as WEAPON, HAND, TRAVEL). */
+const REACH_BTN: Record<string, Action> = { 'r-weapon': 'portal', 'r-hand': 'strike1', 'r-travel': 'strike2' };
+
+/** What REACH shows on its buttons. */
+export interface TouchReachState {
+  /** What HAND does now (its caption; null: nothing in reach). `kind` styles it. */
+  hand: string | null;
+  handKind: string | null;
+  /** WEAPON's caption (the rounds left, KNIFE) and whether a stab through a window is on. */
+  weapon: string | null;
+  far: boolean;
+}
+
 /** Buttons whose finger may keep dragging to look. */
-const DRAG_LOOK = new Set<string>(['jump', 'shove', 'close', 'action', 'crouch', 'power']);
+const DRAG_LOOK = new Set<string>(['jump', 'shove', 'close', 'action', 'crouch', 'power', 'portal', 'strike1', 'strike2']);
 
 /** What the lab's FLOW shows on the touch buttons. */
 export interface TouchFlowState {
@@ -96,6 +112,7 @@ export class TouchControls {
   /** FLOW's POWER is held: a touch off the buttons is a tap that marks (and a look, never the stick). */
   private powerHeld = false;
   private flowKey = '';
+  private reachKey = '';
   private clipBtn: HTMLButtonElement;
   private shown = true;
   private actionLabel: string | null = null;
@@ -123,6 +140,9 @@ export class TouchControls {
         <button class="t-btn t-close" data-t="close" type="button">${ICON.close}</button>
         <button class="t-btn t-power" data-t="power" type="button"><i class="t-fill"></i>${ICON.power}<span class="t-lbl" data-k="touch.power"></span></button>
         <button class="t-btn t-clip hidden" data-t="clip" type="button">${ICON.clip}</button>
+        <button class="t-btn t-weapon" data-t="r-weapon" type="button">${ICON.weapon}<span class="t-lbl" data-k="touch.weapon"></span><span class="t-cap"></span></button>
+        <button class="t-btn t-hand" data-t="r-hand" type="button">${ICON.hand}<span class="t-lbl" data-k="touch.hand"></span><span class="t-cap"></span></button>
+        <button class="t-btn t-travel" data-t="r-travel" type="button">${ICON.travel}<span class="t-lbl" data-k="touch.travel"></span></button>
       </div>`;
     root.appendChild(el);
     const q = <T extends HTMLElement>(s: string) => el.querySelector(s) as T;
@@ -186,6 +206,24 @@ export class TouchControls {
       if (!this.powerHeld) vibrate(18);
     }
     this.powerHeld = !!s && s.held;
+  }
+
+  /** REACH (null: off): WEAPON, HAND and TRAVEL take the PORTAL's and the strikes' places; SLIDE and JUMP stay. */
+  setReach(s: TouchReachState | null) {
+    const key = s ? `${s.hand}|${s.handKind}|${s.weapon}|${s.far}` : 'off';
+    if (key === this.reachKey) return;
+    this.reachKey = key;
+    this.el.classList.toggle('reach', !!s);
+    const hand = this.el.querySelector('.t-hand') as HTMLElement;
+    const weap = this.el.querySelector('.t-weapon') as HTMLElement;
+    const hc = hand.querySelector('.t-cap') as HTMLElement;
+    const wc = weap.querySelector('.t-cap') as HTMLElement;
+    hc.textContent = s?.hand ?? '';
+    hand.classList.toggle('has-cap', !!s?.hand);
+    hand.dataset.kind = s?.handKind ?? '';
+    wc.textContent = s?.weapon ?? '';
+    weap.classList.toggle('has-cap', !!s?.weapon);
+    weap.classList.toggle('far', !!s?.far);
   }
 
   show(v: boolean) {
@@ -351,7 +389,7 @@ export class TouchControls {
           vibrate(12);
           break;
         default: {
-          const action = role as Action;
+          const action = REACH_BTN[role] ?? (role as Action);
           this.fingers.set(tt.identifier, { kind: 'btn', el: hit, action, x, y, sx: x, sy: y, drag: false });
           this.input.down(action);
           hit.classList.add('down');

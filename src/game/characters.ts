@@ -447,7 +447,11 @@ function geo(): Record<string, THREE.BufferGeometry> {
   // hidden blade: a slim housing along the forearm; the edge grows out of it along +Y
   const sheath = box(0.028, 0.15, 0.022);
   const edge = box(0.006, 0.3, 0.026, 0, 0.15, 0);
-  GEO = { rifle, rifleGlow, launcher, launcherGlow, sniper, sniperGlow, shield, shieldRim, shieldGlow, dome, plate, coat, hem, collar, bracer, ring, core, satchel, sheath, edge };
+  // REACH's knife: grip at the origin, the blade along +Z (a clean wedge), its edge lit
+  const blade = new THREE.CylinderGeometry(0.004, 0.026, 0.27, 3).rotateX(Math.PI / 2).rotateZ(Math.PI / 2).scale(1, 1, 1).translate(0, 0.005, 0.2);
+  const knife = merge([box(0.03, 0.035, 0.12, 0, 0, 0), box(0.07, 0.02, 0.022, 0, 0.002, 0.065), blade]);
+  const knifeGlow = box(0.006, 0.006, 0.24, 0, -0.012, 0.2);
+  GEO = { knife, knifeGlow, rifle, rifleGlow, launcher, launcherGlow, sniper, sniperGlow, shield, shieldRim, shieldGlow, dome, plate, coat, hem, collar, bracer, ring, core, satchel, sheath, edge };
   return GEO;
 }
 
@@ -562,6 +566,31 @@ function handWeapon(kind: 'rifle' | 'launcher' | 'sniper', glow: number): Attach
       out.compose(_v, _q.identity(), _one);
     },
   };
+}
+
+/** A weapon's mesh (grip at the origin, along +Z): REACH's floor pickups and the guns in hand. */
+export function weaponMesh(kind: 'rifle' | 'knife', glow: number, glowK = 2.5): THREE.Group {
+  const g = new THREE.Group();
+  const G = geo();
+  g.add(meshOf(G[kind], metalMat()));
+  g.add(meshOf(G[`${kind}Glow`], glowMat(glow, glowK)));
+  return g;
+}
+
+/** REACH: a rifle and a knife in the right hand, both hidden until the game hands him one. */
+function heldWeapons(glow: number): AttachDef[] {
+  return (['rifle', 'knife'] as const).map((kind) => ({
+    id: kind === 'rifle' ? 'heldRifle' : 'heldKnife',
+    bone: 'RightHand',
+    pose: 'aim' as const,
+    mesh: () => weaponMesh(kind, glow),
+    place: (p: (b: string) => THREE.Vector3, out: THREE.Matrix4) => {
+      _v.lerpVectors(p('RightHand'), p('RightHandMiddle1'), 0.55);
+      // grip in the palm, straight ahead in the aim pose (a knife's blade too)
+      _v.y -= kind === 'rifle' ? 0.02 : 0.03;
+      out.compose(_v, _q.identity(), _one);
+    },
+  }));
 }
 
 function attachmentsFor(look: Look): AttachDef[] {
@@ -1070,6 +1099,31 @@ export class Character implements CharacterAPI {
     if (!e) return;
     e.visible = k > 0.01;
     e.scale.y = Math.max(0.01, k);
+  }
+
+  /**
+   * REACH: give this character the two weapons it can hold (hidden), once.
+   * `glow`: the weapon's lit strip (the hero cyan, Kessler red).
+   */
+  addHeldWeapons(glow: number) {
+    if (this.attachments.heldRifle) return;
+    this.attach(heldWeapons(glow));
+    this.setHeld(null);
+  }
+
+  /** REACH: which weapon shows in his hand (null: empty-handed). His own built-in gun hides while any of this is in use. */
+  setHeld(kind: 'rifle' | 'knife' | null) {
+    const a = this.attachments;
+    if (a.heldRifle) a.heldRifle.visible = kind === 'rifle';
+    if (a.heldKnife) a.heldKnife.visible = kind === 'knife';
+    if (a.rifle) a.rifle.visible = false;
+  }
+
+  /** REACH: the muzzle of the rifle in hand (else the right hand). */
+  heldMuzzle(out = new THREE.Vector3()): THREE.Vector3 {
+    const w = this.attachments.heldRifle;
+    if (!w || !w.visible) return this.bonePos('RightHand', out);
+    return w.localToWorld(out.set(0, 0.07, 0.52));
   }
 
   /** Weapon muzzle (rifleman / grenadier / sniper), else the right hand. */

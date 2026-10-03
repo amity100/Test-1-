@@ -8,7 +8,7 @@ import { PerfHud } from './ui/perfhud';
 import { setWorldStrings, t } from './ui/i18n';
 import type { ZoneId } from './core/contracts';
 import { readWorld, saveWorld, WORLDS, type WorldId } from './world/worlds';
-import { setVariant, variantForKey, type CombatVariant } from './game/variant';
+import { setVariant, type CombatVariant } from './game/variant';
 
 /** A world's own texts (Halcyon's names for the pier's places); the harbour's are the base strings. */
 const useWorldStrings = (w: WorldId) => setWorldStrings(w === 'harbour' ? '' : w);
@@ -204,7 +204,7 @@ async function boot() {
   };
   game.onPause = () => menu.showPause();
   game.onEnd = (win, stats, rank) => (menu as any).showEnd(win, stats, rank);
-  // COMBAT LAB: its results card; the variant (F1-F4, the menus, the HUD chips) restarts the run
+  // COMBAT LAB: its results card; the variant (the menus, the HUD chip: only what the lab offers) restarts the run
   game.onLabEnd = (st) => menu.showLabEnd(st);
   const pickVariant = (v: CombatVariant) => {
     settings.combatVariant = v;
@@ -216,15 +216,6 @@ async function boot() {
   if (game.lab) game.lab.hud.onPick = pickVariant;
   window.addEventListener('keydown', (e) => {
     if (game.world !== 'lab' || e.repeat) return;
-    const v = variantForKey(e.code);
-    if (v) {
-      e.preventDefault();
-      if (game.mode === 'replay' || game.mode === 'photo') return;
-      pickVariant(v);
-      // (a menu on screen shows the new pick)
-      if (game.mode !== 'playing' && menu.isOpen) (menu as any).current?.();
-      return;
-    }
     if (e.code === 'Enter' || e.code === 'NumpadEnter') {
       if (game.mode === 'playing') {
         e.preventDefault();

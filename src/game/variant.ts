@@ -10,20 +10,37 @@
  * - flow:      FLOW + POWER: ONSLAUGHT's fight with a body that moves fast
  *              (slide, double jump, wall kicks, rifts keep your speed) and a
  *              POWER moment that stops time (flow.ts; systems ask `flowOn()`).
+ * - reach:     REACH: the remote hand (snatch weapons, pull men, stab through a
+ *              window), weapons on the floor, enemies with portals of their own
+ *              (reach.ts; systems ask `reachOn()`). FLOW's body, none of the rest.
+ *              The lab's default and, for now, the only variant its UI offers.
  *
  * Systems read `activeVariant()`: the chosen preset while the lab is loaded,
  * CURRENT everywhere else (the missions keep playing as they do today).
  * The choice itself is a setting (`Settings.combatVariant`), kept across
  * world switches and reloads.
  */
-export type CombatVariant = 'current' | 'precision' | 'onslaught' | 'flow';
+export type CombatVariant = 'current' | 'precision' | 'onslaught' | 'flow' | 'reach';
 
-export const VARIANTS: readonly CombatVariant[] = ['current', 'precision', 'onslaught', 'flow'];
+export const VARIANTS: readonly CombatVariant[] = ['current', 'precision', 'onslaught', 'flow', 'reach'];
+/** The variant outside the lab (the missions): the game as it plays today. */
 export const DEFAULT_VARIANT: CombatVariant = 'current';
+/** The lab's own default (a new player, an old saved pick the UI no longer offers). */
+export const LAB_DEFAULT: CombatVariant = 'reach';
+/**
+ * What the lab's UI offers (its chips, the menus). The other variants stay in
+ * the code until the owner signs off on REACH; nothing in the UI reaches them.
+ */
+export const LAB_OFFERED: readonly CombatVariant[] = ['reach'];
+
+/** The lab's pick from a saved setting: an offered variant, else the lab's default. */
+export function offeredVariant(v: unknown): CombatVariant {
+  return isVariant(v) && LAB_OFFERED.includes(v) ? v : LAB_DEFAULT;
+}
 
 export const isVariant = (v: unknown): v is CombatVariant => typeof v === 'string' && (VARIANTS as readonly string[]).includes(v);
 
-let chosen: CombatVariant = DEFAULT_VARIANT;
+let chosen: CombatVariant = LAB_DEFAULT;
 let labOn = false;
 const listeners = new Set<(v: CombatVariant) => void>();
 
@@ -66,7 +83,12 @@ export function onslaughtOn(v: CombatVariant = activeVariant()): boolean {
   return v === 'onslaught' || v === 'flow';
 }
 
-/** F1 / F2 / F3 / F4 → a variant (null for any other key code). */
+/** REACH's rules apply (only that variant, only in the lab). */
+export function reachOn(v: CombatVariant = activeVariant()): boolean {
+  return v === 'reach';
+}
+
+/** F1 / F2 / F3 / F4 → a variant (null for any other key code). No longer bound in the UI (the lab offers REACH only). */
 export function variantForKey(code: string): CombatVariant | null {
   const i = ['F1', 'F2', 'F3', 'F4'].indexOf(code);
   return i >= 0 ? VARIANTS[i] : null;

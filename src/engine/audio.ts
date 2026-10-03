@@ -77,6 +77,15 @@ const O = {
   horn: { bus: 'amb' },
   clunk: { ref: 5, gap: 0.2 },
   shout: { ref: 6, gap: 0.4, cap: 2 },
+  // REACH
+  reachWindow: { ref: 5, gap: 0.04, cap: 4 },
+  reachSnatch: { ref: 6, gap: 0.04, cap: 3, crit: true },
+  reachPull: { ref: 7, gap: 0.08, crit: true },
+  reachGrab: { ref: 6, gap: 0.08, crit: true },
+  reachSteal: { ref: 14, gap: 0.2, crit: true },
+  reachRifle: { ref: 6, gap: 0.03, cap: 4 },
+  reachSwing: { ref: 4, gap: 0.08 },
+  reachClatter: { ref: 4, gap: 0.1, cap: 2 },
 } satisfies Record<string, VoiceOpts>;
 
 const RANKS: readonly StyleRank[] = ['D', 'C', 'B', 'A', 'S', 'SS', 'SSS'];
@@ -1468,6 +1477,100 @@ export class Audio implements AudioAPI {
       this.tone(v, v.out, 'sine', h, 150, 48, 0.2, 0.9, 0.002, 0.24);
       this.hiss(v, v.out, 'crackle', 'bandpass', h, 1500, 1000, 0.8, 0.6, 0.002, 0.14);
       this.hiss(v, v.out, 'white', 'highpass', h, 2500, 2500, 0.7, 0.5, 0.001, 0.05);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // REACH
+  // ---------------------------------------------------------------------------
+
+  /** A hand window snaps open: a short bright zip (yours glassy and high, theirs lower and rough). */
+  reachWindow(pos: V3, mine: boolean): void {
+    this.one('reachWindow', pos, mine ? 0.5 : 0.45, O.reachWindow, (v, t) => {
+      const k = mine ? 1 : 0.6;
+      this.hiss(v, v.out, 'white', 'bandpass', t, 1800 * k, 7000 * k, 3, 0.4, 0.002, 0.08);
+      this.tone(v, v.out, mine ? 'sine' : 'sawtooth', t, 700 * k, 1500 * k, 0.05, mine ? 0.16 : 0.08, 0.002, 0.09);
+    });
+  }
+
+  /** The hand comes back with it: a whoosh and a solid catch. */
+  reachSnatch(pos: V3, mine: boolean): void {
+    this.one('reachSnatch', pos, mine ? 0.8 : 0.55, O.reachSnatch, (v, t) => {
+      const g = this.gainN(v, v.out, 0);
+      g.gain.setValueAtTime(EPS, t);
+      g.gain.exponentialRampToValueAtTime(0.55, t + 0.06);
+      g.gain.exponentialRampToValueAtTime(EPS, t + 0.16);
+      const bp = this.filt(v, g, 'bandpass', 900, 1.6);
+      glide(bp.frequency, t, 4200, 700, 0.15);
+      this.noise(v, bp, 'white', t, t + 0.17);
+      this.tone(v, v.out, 'triangle', t + 0.1, 520, 260, 0.05, 0.35, 0.001, 0.08);
+      this.hiss(v, v.out, 'crackle', 'highpass', t + 0.1, 3000, 3000, 0.7, 0.3, 0.001, 0.05);
+    });
+  }
+
+  /** A man yanked off his feet: a heavy rising whoomp. */
+  reachPull(pos: V3): void {
+    this.one('reachPull', pos, 0.85, O.reachPull, (v, t) => {
+      this.tone(v, v.out, 'sine', t, 70, 210, 0.22, 0.8, 0.005, 0.3);
+      const g = this.gainN(v, v.out, 0);
+      g.gain.setValueAtTime(EPS, t);
+      g.gain.exponentialRampToValueAtTime(0.6, t + 0.12);
+      g.gain.exponentialRampToValueAtTime(EPS, t + 0.32);
+      const bp = this.filt(v, g, 'bandpass', 500, 1.2);
+      glide(bp.frequency, t, 300, 2400, 0.3);
+      this.noise(v, bp, 'pink', t, t + 0.33);
+    });
+  }
+
+  /** Their portal in your hand (and let go): a deep pluck. */
+  reachGrab(pos: V3): void {
+    this.one('reachGrab', pos, 0.75, O.reachGrab, (v, t) => {
+      this.tone(v, v.out, 'sine', t, 160, 60, 0.18, 0.7, 0.002, 0.25);
+      this.ring(v, v.out, t + 0.01, [880, 1320, 1760], [0.12, 0.08, 0.05], 0.35, 0.98);
+      this.hiss(v, v.out, 'white', 'bandpass', t, 6000, 1500, 2, 0.3, 0.002, 0.1);
+    });
+  }
+
+  /** Their hand coming for yours: a harsh double warning, never dropped. */
+  reachSteal(pos: V3): void {
+    this.one('reachSteal', pos, 0.7, O.reachSteal, (v, t) => {
+      const bp = this.filt(v, v.out, 'bandpass', 1100, 0.9);
+      for (let i = 0; i < 2; i++) {
+        const tt = t + i * 0.16;
+        const g = this.gainN(v, bp, 0);
+        g.gain.setValueAtTime(0, tt);
+        g.gain.linearRampToValueAtTime(0.45, tt + 0.005);
+        g.gain.setValueAtTime(0.45, tt + 0.09);
+        g.gain.linearRampToValueAtTime(0, tt + 0.1);
+        this.osc(v, g, 'sawtooth', 620 - i * 90, tt, tt + 0.11);
+        this.osc(v, g, 'square', 930 - i * 130, tt, tt + 0.11);
+      }
+    });
+  }
+
+  /** Your rifle: a tight, bright crack with a low punch. */
+  reachRifle(pos: V3): void {
+    this.one('reachRifle', pos, 0.6, O.reachRifle, (v, t) => {
+      const k = rnd(0.95, 1.05);
+      this.hiss(v, v.out, 'white', 'highpass', t, 1800 * k, 1800 * k, 0.7, 0.6, 0.001, 0.05);
+      this.tone(v, v.out, 'square', t, 1400 * k, 180 * k, 0.06, 0.25, 0.001, 0.09);
+      this.tone(v, v.out, 'sine', t, 140, 50, 0.08, 0.9, 0.002, 0.12);
+    });
+  }
+
+  /** A knife through the air. */
+  reachSwing(pos: V3): void {
+    this.one('reachSwing', pos, 0.45, O.reachSwing, (v, t) => {
+      this.hiss(v, v.out, 'white', 'bandpass', t, 1200, 4800, 2.5, 0.35, 0.01, 0.13, 0.1);
+    });
+  }
+
+  /** A spent rifle hits the floor. */
+  reachClatter(pos: V3): void {
+    this.one('reachClatter', pos, 0.5, O.reachClatter, (v, t) => {
+      this.ring(v, v.out, t, [1850, 2770, 4100], [0.1, 0.07, 0.05], 0.25, 1);
+      this.ring(v, v.out, t + 0.09, [1700, 2600], [0.06, 0.04], 0.2, 1);
+      this.hiss(v, v.out, 'crackle', 'bandpass', t, 2500, 2500, 0.8, 0.3, 0.001, 0.1);
     });
   }
 

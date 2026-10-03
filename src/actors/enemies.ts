@@ -30,6 +30,7 @@ import { angleDiff, dampAngle, hdist, mulberry32, stepAngle, yawTo } from './aim
 import { chargeUpdate, combat, endAttack, muzzleOf, provokeAttack, type Brain } from './behaviors';
 import { Enemy } from './enemy';
 import { onsCombat, OnsSquad, type OnsBrain } from './onslaught';
+import type { ReachAI } from './reachai';
 import { detectRate, seePlayer, seesPoint } from './perception';
 import { TurretRig } from './turret';
 import { AI, KIND, ONS } from './tuning';
@@ -112,6 +113,8 @@ export class EnemySystem implements EnemyAPI, Brain, OnsBrain {
   private rng = mulberry32(0x5eed);
   /** ONSLAUGHT's squad director (only men spawned with `def.onslaught` answer to it). */
   readonly squad = new OnsSquad();
+  /** REACH's brain (the game sets it in the lab; only men spawned with `def.reach` answer to it). */
+  reachBrain: ReachAI | null = null;
   private _ctx: EnemyContext | null = null;
   time = 0;
 
@@ -389,6 +392,12 @@ export class EnemySystem implements EnemyAPI, Brain, OnsBrain {
       } else this.halt(e, dt);
       return;
     }
+    // REACH: its own brain, always on to you (it looks for itself)
+    if (e.reach && this.reachBrain) {
+      if (e.mode !== 'combat') this.enterCombat(e, null, false);
+      this.reachBrain.think(this, e, dt);
+      return;
+    }
     this.perceive(e, dt);
     if (e.mode === 'combat') {
       // (ONSLAUGHT's men fight by its squad rules; false: the plain behaviour)
@@ -413,7 +422,7 @@ export class EnemySystem implements EnemyAPI, Brain, OnsBrain {
     }
     root.rotation.y = e.yaw;
     // (an ONSLAUGHT stormer runs with his gun down; a suppressor kneels to fire)
-    L.weaponUp = e.tune.gun && e.mode === 'combat' && e.arch !== 'stormer' ? 1 : 0;
+    L.weaponUp = e.reach ? e.reachPose : e.tune.gun && e.mode === 'combat' && e.arch !== 'stormer' ? 1 : 0;
     if (e.arch === 'suppressor') L.crouch = e.atkKind === 'suppress' && (e.atk === 'aim' || e.atk === 'fire') ? 1 : 0;
     L.downed = e.state === 'downed' || e.state === 'stunned';
     L.aim = e.kind === 'turret' ? e.pitch : 0;

@@ -3,7 +3,7 @@ import type { WorldId } from '../world/worlds';
 import { IS_TOUCH, type QualityName } from '../config';
 import { formatNumber, getDevice, getLang, setLang, t, type Lang } from './i18n';
 import { fmtTime, LAB_TOOLS, type LabRunStats } from '../game/labdirector';
-import { VARIANTS, type CombatVariant } from '../game/variant';
+import { LAB_DEFAULT, LAB_OFFERED, type CombatVariant } from '../game/variant';
 import { TOOL_KEY } from './labhud';
 
 import type { Settings } from '../game/settings';
@@ -68,7 +68,7 @@ export class Menu {
   /** A combat variant picked (COMBAT LAB). */
   onVariant: (v: CombatVariant) => void = () => {};
   /** The lab's variant (shown on its selectors). */
-  variant: CombatVariant = 'current';
+  variant: CombatVariant = LAB_DEFAULT;
 
   /** The loaded world and the ones on offer (WORLD toggle; hidden with fewer than two). */
   world: WorldId = 'harbour';
@@ -142,13 +142,12 @@ export class Menu {
     return this.world === 'lab';
   }
 
-  /** CURRENT / PRECISION / ONSLAUGHT / FLOW, F1-F4, each with a line on what it is. */
+  /** What the lab offers (REACH, for now: the old variants stay in the code, out of the UI), each with a line on what it is. */
   private variantSeg(withNotes = true) {
-    const opts = VARIANTS.map(
-      (v, i) =>
-        `<button type="button" data-variant="${v}" class="${v === this.variant ? 'on' : ''}"><span class="vk" dir="ltr">F${i + 1}</span><b>${esc(t(`lab.v.${v}`))}</b>${withNotes ? `<small>${esc(t(`lab.vd.${v}`))}</small>` : ''}</button>`,
+    const opts = LAB_OFFERED.map(
+      (v) => `<button type="button" data-variant="${v}" class="${v === this.variant ? 'on' : ''}"><b>${esc(t(`lab.v.${v}`))}</b>${withNotes ? `<small>${esc(t(`lab.vd.${v}`))}</small>` : ''}</button>`,
     ).join('');
-    return `<div class="variants"><div class="w-top"><span>${esc(t('lab.variant'))}</span><small>${esc(t(IS_TOUCH ? 'lab.variantNoteTouch' : 'lab.variantNote'))}</small></div><div class="vseg">${opts}</div></div>`;
+    return `<div class="variants one"><div class="w-top"><span>${esc(t('lab.variant'))}</span></div><div class="vseg">${opts}</div></div>`;
   }
 
   private go(g: Go) {

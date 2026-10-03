@@ -432,6 +432,10 @@ export interface CharacterAPI {
   setOpacity(o: number): void;
   /** Whether it casts a shadow now (phones: only the men near you do; optional for stand-ins). */
   setShadow?(on: boolean): void;
+  /** REACH: which weapon shows in the right hand (null: none). Optional for stand-ins. */
+  setHeld?(kind: 'rifle' | 'knife' | null): void;
+  /** REACH: the muzzle of the rifle in hand (else the right hand). Optional for stand-ins. */
+  heldMuzzle?(out?: THREE.Vector3): THREE.Vector3;
   dispose(): void;
 }
 
@@ -471,6 +475,11 @@ export interface SpawnDef {
   onslaught?: boolean;
   /** ONSLAUGHT: a rifleman who fights as a STORMER (melee rusher) or a SUPPRESSOR (long bursts). */
   archetype?: 'stormer' | 'suppressor';
+  /**
+   * COMBAT LAB, REACH only: he fights by REACH's rules (actors/reachai.ts: empty-handed
+   * at first, weapons off the floor, red windows and portals). Never set elsewhere.
+   */
+  reach?: boolean;
 }
 
 export interface EnemyView {

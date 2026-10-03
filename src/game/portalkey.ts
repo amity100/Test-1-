@@ -81,6 +81,8 @@ export interface PortalHost extends SpotHost {
   live(e: EnemyView): boolean;
   /** A hanging load under the crosshair. */
   hangingUnderCrosshair(): Prop | null;
+  /** REACH: the key only ever takes you somewhere (a DOOR, or AIR as you fall); nothing else. */
+  travelOnly?(): boolean;
 }
 
 export interface PortalResult {
@@ -245,6 +247,7 @@ export class PortalKey {
       r.mode = 'air';
       return r;
     }
+    if (h.travelOnly?.()) return r;
     const hang = h.hangingUnderCrosshair();
     if (hang) {
       r.mode = 'load';

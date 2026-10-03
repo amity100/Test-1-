@@ -1,6 +1,6 @@
-import { fmtTime, LAB_TOOLS, type LabRunStats, type LabTool } from '../game/labdirector';
+import { fmtTime, labTools, type LabRunStats, type LabTool } from '../game/labdirector';
 import { FLOW } from '../game/flow';
-import { VARIANTS, type CombatVariant } from '../game/variant';
+import { LAB_OFFERED, type CombatVariant } from '../game/variant';
 import { formatNumber, getDevice, onLangChange, t } from './i18n';
 
 export interface LabHudState {
@@ -66,6 +66,26 @@ export function flowRules(): string {
   return `<small class="pr-title fr-title">${esc(t('flow.title'))}</small>${rows}`;
 }
 
+/** REACH's rules card: three lines, the key per device (touch: the button's own label). */
+export const REACH_RULES = ['hand', 'weapon', 'travel'] as const;
+const REACH_KEYS: Record<(typeof REACH_RULES)[number], { kbm: string; pad: string; touch: string }> = {
+  hand: { kbm: 'RMB', pad: 'LT', touch: 'touch.hand' },
+  weapon: { kbm: 'LMB', pad: 'RT', touch: 'touch.weapon' },
+  travel: { kbm: 'Q', pad: 'Y', touch: 'touch.travel' },
+};
+
+/** A REACH key's label on this device. */
+export function reachKey(k: (typeof REACH_RULES)[number]): string {
+  const m = REACH_KEYS[k];
+  const dev = getDevice();
+  return dev === 'touch' ? t(m.touch) : dev === 'pad' ? m.pad : m.kbm;
+}
+
+export function reachRules(): string {
+  const rows = REACH_RULES.map((k) => `<div class="rr-${k}"><kbd>${esc(reachKey(k))}</kbd><span>${esc(t(`reach.rule.${k}`))}</span></div>`).join('');
+  return `<small class="pr-title rr-title">${esc(t('reach.rule.title'))}</small>${rows}<div class="rr-race"><span>${esc(t('reach.rule.race'))}</span></div>`;
+}
+
 /** What FLOW's HUD shows: the POWER meter and its state, speed (for the lines). */
 export interface FlowHudState {
   /** 0..1. */
@@ -84,6 +104,9 @@ export const TOOL_KEY: Record<LabTool, string> = {
   swap: 'lab.tool.swap',
   dash: 'lab.tool.dash',
   blade: 'lab.tool.blade',
+  rifle: 'lab.tool.rifle',
+  knife: 'lab.tool.knife',
+  redirect: 'lab.tool.redirect',
   other: 'lab.tool.other',
 };
 
@@ -198,9 +221,9 @@ export class LabHud {
 
   private build() {
     this.cache.clear();
-    // (FLOW's chip has a short name for phones, where the four share one row)
-    const chips = VARIANTS.map((v, i) => `<button type="button" data-v="${v}"><kbd>F${i + 1}</kbd><span>${esc(t(`lab.v.${v}`))}</span>${v === 'flow' ? `<em>${esc(t('lab.vs.flow'))}</em>` : ''}</button>`).join('');
-    const tools = LAB_TOOLS.map((k) => `<div class="lt-${k}"><small>${esc(t(TOOL_KEY[k]))}</small><b data-f="k.${k}">0</b></div>`).join('');
+    // (only what the lab offers: REACH, for now; no F-keys)
+    const chips = LAB_OFFERED.map((v) => `<button type="button" data-v="${v}"><span>${esc(t(`lab.v.${v}`))}</span></button>`).join('');
+    const tools = labTools(this.toolsFor).map((k) => `<div class="lt-${k}"><small>${esc(t(TOOL_KEY[k]))}</small><b data-f="k.${k}">0</b></div>`).join('');
     this.el.innerHTML = `
       <div class="lp-head"><span class="lp-tag">${esc(t('lab.title'))}</span><div class="lp-vars">${chips}</div></div>
       <div class="lp-wave"><b data-f="wave"></b><span class="lp-left" data-f="left"></span><span class="lp-wt" data-f="waveT" dir="ltr"></span><button type="button" class="lp-more" data-more>${esc(t('lab.rules'))}</button></div>
@@ -217,6 +240,10 @@ export class LabHud {
   }
 
   private rulesDev = '';
+  /** The variant the tool grid was built for. */
+  private toolsFor: CombatVariant = 'reach';
+  private countEl: HTMLDivElement | null = null;
+  private countKey = '';
 
   private set(f: string, v: string, html = false) {
     if (this.cache.get(f) === v) return;
@@ -237,6 +264,10 @@ export class LabHud {
   update(s: LabHudState) {
     this.last = s;
     if (!this.shown) return;
+    if (s.variant !== this.toolsFor) {
+      this.toolsFor = s.variant;
+      this.build();
+    }
     const vk = `v:${s.variant}`;
     if (this.cache.get('variant') !== vk) {
       this.cache.set('variant', vk);
@@ -257,16 +288,16 @@ export class LabHud {
     this.set('dmg', formatNumber(Math.round(s.stats.damage)));
     this.set('deaths', formatNumber(s.stats.deaths));
     let n = 0;
-    for (const k of LAB_TOOLS) {
+    for (const k of labTools(s.variant)) {
       n += s.stats.kills[k];
       this.set(`k.${k}`, String(s.stats.kills[k]));
     }
     this.set('kills', formatNumber(n));
     // PRECISION / ONSLAUGHT / FLOW: the rules card (CSS hides it under CURRENT); FLOW adds its own lines
-    const dev = `${getDevice()}|${s.variant === 'flow'}`;
+    const dev = `${getDevice()}|${s.variant}`;
     if (dev !== this.rulesDev) {
       this.rulesDev = dev;
-      this.set('rules', s.variant === 'flow' ? flowRules() + precisionRules() : precisionRules(), true);
+      this.set('rules', s.variant === 'reach' ? reachRules() : s.variant === 'flow' ? flowRules() + precisionRules() : precisionRules(), true);
     }
   }
 
@@ -285,6 +316,30 @@ export class LabHud {
     if (cd.textContent !== v) cd.textContent = v;
   }
 
+  /**
+   * REACH's countdown: a big 3 · 2 · 1, then GO (null: off). Only the number
+   * changes the DOM.
+   */
+  count(secs: number | null) {
+    if (!this.countEl) {
+      this.countEl = document.createElement('div');
+      this.countEl.className = 'lab-count';
+      this.host.appendChild(this.countEl);
+    }
+    const el = this.countEl;
+    const k = secs === null ? '' : secs > 3 ? '' : secs > 0 ? String(Math.ceil(secs)) : 'GO';
+    if (k === this.countKey) return;
+    this.countKey = k;
+    if (!k) {
+      el.className = 'lab-count';
+      return;
+    }
+    el.textContent = k === 'GO' ? t('reach.go') : k;
+    el.className = 'lab-count';
+    void el.offsetWidth;
+    el.className = `lab-count on${k === 'GO' ? ' go' : ''}`;
+  }
+
   /** WAVE n CLEAR and its split. */
   cleared(n: number, time: number) {
     this.banner.innerHTML = `<h2 class="clr">${esc(t('lab.clear', { n }))}</h2><p dir="ltr">${fmtTime(time)}</p>`;
@@ -299,6 +354,7 @@ export class LabHud {
     this.banner.remove();
     this.flowEl.remove();
     this.tipEl.remove();
+    this.countEl?.remove();
     clearTimeout(this.rulesTimer);
     this.linesEl.remove();
     this.stopEl.remove();

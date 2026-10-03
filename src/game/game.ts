@@ -50,7 +50,9 @@ import { buildWorld, WORLD_SKY, WORLD_SUN, type WorldId } from '../world/worlds'
 import { CameraRig } from './camera';
 import { CHAR_RIM, Character, type AnimLibrary, type CharacterAsset, type Look } from './characters';
 import { dampAngle, Player, type PlayerEvents, type PlayerInput } from './player';
-import { FLOW, FLOW_SPRINT, flowOn, pickMark, PowerMeter, PowerMoment, type PowerCandidate } from './flow';
+import { FLOW, FLOW_SPRINT, flowBodyOn, flowOn, pickMark, PowerMeter, PowerMoment, type PowerCandidate } from './flow';
+import { ReachMode } from './reachmode';
+import { STRIP_HERO, STRIP_KESSLER } from './reachfx';
 import { BLADE, HiddenBlade } from './blade';
 import { OUTCOME_COLOR, RiftSystem } from './portals';
 import { ArcView, PortalKey, type PortalResult } from './portalkey';
@@ -76,7 +78,7 @@ import { ChallengeSystem } from '../meta/challenges';
 import { META_STRINGS } from '../meta/strings';
 import { LAB_SPAWN_GUARD, LabMode } from './lab';
 import type { LabRunStats } from './labdirector';
-import { activeVariant, onslaughtOn, setLabActive, setVariant, type CombatVariant } from './variant';
+import { activeVariant, onslaughtOn, reachOn, setLabActive, setVariant, type CombatVariant } from './variant';
 import { aimedEnemy, behind, dodgeAt, dodgeSpot, exposedTo, Parry, ParryView, PRECISION, precisionOn, type DodgeRun } from './precision';
 
 import type { Settings } from './settings';
@@ -303,6 +305,10 @@ export class Game {
   stats: RunStats = { time: 0, kills: 0, bestCombo: 0, styleTotal: 0, tricks: 0, deaths: 0, challenges: 0 };
   /** The COMBAT LAB (only while the lab world is loaded): its wave director and HUD. */
   lab: LabMode | null = null;
+  /** REACH (the lab's remote hand, its weapons and its enemy side; only while the lab is loaded). */
+  reach: ReachMode | null = null;
+  /** When you last went through a rift (game time): their hand loses you. */
+  private lastCrossT = -99;
   /** The lab's results are in (the run ends on them, not on the mission's end screen). */
   private labStats: LabRunStats | null = null;
   /** Game time until which the player can't be hurt (a lab respawn on the pad). */
@@ -469,6 +475,8 @@ export class Game {
     this.strikeMarks?.clear();
     this.lab?.dispose();
     this.lab = null;
+    this.reach?.dispose();
+    this.reach = null;
     this.hud?.el.classList.remove('lab');
     setLabActive(false);
   }
@@ -587,7 +595,12 @@ export class Game {
     this.projectiles = new Projectiles(world, this.rifts, this.physics, this.projectileHooks());
     this.scene.add(this.projectiles.group);
     this.scene.add(this.parryView.group);
-    this.enemies = new EnemySystem(this.physics, this.enemyHooks(), (kind, def) => new Character(asset, anims, def?.onslaught && def.archetype ? def.archetype : LOOKS[kind]));
+    this.enemies = new EnemySystem(this.physics, this.enemyHooks(), (kind, def) => {
+      const c = new Character(asset, anims, def?.onslaught && def.archetype ? def.archetype : LOOKS[kind]);
+      // REACH: his hands start empty (his own rifle hidden); the weapons he takes show in them
+      if (def?.reach) c.addHeldWeapons(STRIP_KESSLER);
+      return c;
+    });
     // the COMBAT LAB: its director brings the fights, its variant is in force
     const arena = this.level.lab;
     this.lab = arena
@@ -601,11 +614,16 @@ export class Game {
             if (precisionOn() && this.hp > 0 && this.respawnT < 0) {
               this.hp = LAW.player.hp;
             }
-            this.slowT = Math.max(this.slowT, 0.9);
-            this.slowScale = 0.3;
+            // (REACH: a short beat, no long slow motion)
+            this.slowT = Math.max(this.slowT, reachOn() ? 0.45 : 0.9);
+            this.slowScale = reachOn() ? 0.45 : 0.3;
             this.audio.sting('alert');
           },
           onFinished: (st) => this.labFinished(st),
+          onWave: (_n, def) => {
+            if (reachOn()) this.reach?.beginWave(def);
+          },
+          toolFor: (ev) => (reachOn() && this.reach ? this.reach.toolFor(ev) : null),
         })
       : null;
     this.hud.el.classList.toggle('lab', !!arena);
@@ -649,6 +667,7 @@ export class Game {
       looseAim: () => this.input.lastDevice === 'touch' || this.input.lastDevice === 'pad',
       live: (e) => this.zones.active.has(e.def.zone),
       hangingUnderCrosshair: () => this.hangingUnderCrosshair(),
+      travelOnly: () => !!this.lab && reachOn(),
     });
     this.blade = new HiddenBlade({ world, enemies: this.enemies.list, live: (e) => this.zones.active.has(e.def.zone), rifts: this.rifts, reachOnly: () => precisionOn() });
     this.arcView = new ArcView(OUTCOME_COLOR);
@@ -662,6 +681,15 @@ export class Game {
     this.player = new Player(heroChar, body);
     this.hero = heroChar;
     this.scene.add(heroChar.root);
+    // the COMBAT LAB's REACH: weapons in the hero's hand, the enemy side's brain, its look
+    if (arena) {
+      heroChar.addHeldWeapons(STRIP_HERO);
+      const reach = (this.reach = this.makeReach());
+      this.enemies.reachBrain = reach.ai;
+      this.scene.add(reach.fx.group);
+      // (one of everything it draws, so the programs compile with the world's)
+      reach.fx.warm(this.camera.position.clone().addScaledVector(this.camera.getWorldDirection(new THREE.Vector3()), 6));
+    }
 
     // rift hologram
     const holo = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.2, 1.6, 1.4), transparent: true, opacity: 0.28, depthWrite: false, blending: THREE.AdditiveBlending });
@@ -799,6 +827,7 @@ export class Game {
       this.scene.remove(c.root);
       c.root.traverse((o) => (o as THREE.SkinnedMesh).skeleton?.dispose());
     }
+    this.reach?.fx.warm(null);
     this.worldObjs = this.scene.children.filter((o) => !before.has(o));
     this.newRun();
   }
@@ -861,6 +890,7 @@ export class Game {
     this.clearHints();
     this.labStats = null;
     this.guardUntil = -1;
+    this.reach?.reset();
     this.lab?.restart();
     this.updateObjective(true);
   }
@@ -886,6 +916,60 @@ export class Game {
     if (playing) this.hud.toast(t('lab.switched', { v: t(`lab.v.${v}`) }), 'good');
   }
 
+  /** REACH, wired to this world. */
+  private makeReach(): ReachMode {
+    const game = this;
+    return new ReachMode(
+      {
+        get world() {
+          return game.level.world;
+        },
+        get enemies() {
+          return game.enemies;
+        },
+        fx: this.fx,
+        audio: this.audio,
+        camera: this.camera,
+        get player() {
+          return game.player;
+        },
+        get hero() {
+          return game.hero;
+        },
+        aimRay: () => this.rig.aimRay(),
+        eye: (out) => this.player.eye(out),
+        device: () => this.input.lastDevice,
+        time: () => this.time,
+        alive: () => this.hp > 0 && this.respawnT < 0,
+        safe: () => this.time < this.guardUntil || this.respawnT >= 0,
+        fighting: () => !!this.lab?.fighting,
+        standAt: (x, z, y) => this.standAt(x, z, y),
+        lost: (p) => p.y < this.killYAt(p) || (this.level.isSea(p) && p.y < this.level.seaY + 0.2),
+        exitOutcome: (p) => {
+          if (this.level.isSea(p)) return 'water';
+          const g = this.level.world.groundAt(p.x, p.z, 0.25, p.y + 0.6);
+          return g === -Infinity || g < this.killYAt(_v.set(p.x, g, p.z)) ? 'void' : 'floor';
+        },
+        hurt: (amount, from) => this.hurtPlayer(amount, from),
+        hitstop: (s) => (this.hitstop = Math.max(this.hitstop, s)),
+        shake: (k) => (this.rig.shake = Math.max(this.rig.shake, k)),
+        kick: (k) => (this.rig.kick = Math.max(this.rig.kick, k)),
+        lastCrossT: () => this.lastCrossT,
+      },
+      this.hud.el,
+    );
+  }
+
+  /** Solid floor a man can stand on at (x, z) about level `y` (none over the void or the water, none inside a wall): its top, else null. */
+  private standAt(x: number, z: number, y: number): number | null {
+    const w = this.level.world;
+    const g = w.groundAt(x, z, 0.3, y + 1.2);
+    if (g === -Infinity || Math.abs(g - y) > 1.3) return null;
+    if (this.level.isSea(_v.set(x, g, z)) || g < this.killYAt(_v)) return null;
+    if (w.overlapsCylinder(x, z, 0.35, g + 0.15, g + 1.7)) return null;
+    return g;
+  }
+
   /** W5 is down: a slow beat, then the results card. */
   private labFinished(st: LabRunStats) {
     this.labStats = st;
@@ -908,6 +992,7 @@ export class Game {
     this.strikes?.reset();
     this.portal?.reset();
     this.blade?.reset();
+    this.reach?.onRespawn();
     this.strikeMarks?.clear();
     this.riftMarked?.clear();
     this.resetPrecision();
@@ -1616,7 +1701,7 @@ export class Game {
     this.push(ev);
     // the PORTAL first; the STRIKES once you've made your first kill with it
     // (PRECISION's rules card says how its keys work)
-    if (!precisionOn()) this.hint('strikes', t('hint.strikes'), 10);
+    if (!precisionOn() && !reachOn()) this.hint('strikes', t('hint.strikes'), 10);
     this.fx.embers(ctx.at, 16);
     // (a kill landing after you died heals no one: you stay dead)
     if (this.respawnT < 0) this.hp = Math.min(LAW.player.hp, this.hp + LAW.player.killHeal);
@@ -1922,6 +2007,7 @@ export class Game {
     void from;
     if (this.hp <= 0) {
       this.hp = 0;
+      if (this.reach?.on) this.reach.playerDown();
       this.respawnT = 1.1;
       this.player.char.die('shot');
       this.slowT = 1.1;
@@ -1947,7 +2033,8 @@ export class Game {
       this.lastDevice = this.input.lastDevice;
       setDevice(this.input.lastDevice);
     }
-    this.strikeBar.show(this.mode === 'playing');
+    // (REACH has no strikes: their bar stays away)
+    this.strikeBar.show(this.mode === 'playing' && !(this.lab && reachOn()));
     switch (this.mode) {
       case 'playing':
         this.update(realDt);
@@ -2028,8 +2115,11 @@ export class Game {
     let ts = 1;
     // (aboard the train: nothing more to do but ride)
     const alive = this.respawnT < 0 && !this.boarded;
-    // held PORTAL (aiming the exit) and the LOOP cannon run in slow motion
-    if (this.settings.slowmo && alive) {
+    // REACH: the lab's default (its HUD and its look on; the old verbs below all off)
+    const reach = !!this.reach && reachOn();
+    this.reach?.show(reach);
+    // held PORTAL (aiming the exit) and the LOOP cannon run in slow motion (REACH: no long slow motion)
+    if (this.settings.slowmo && alive && !reach) {
       // (a grab, a fall: time slows at once; a door or a load once you're aiming)
       const H = this.portal.hold;
       if (H && (this.portal.aiming || H.mode === 'grab' || H.mode === 'air')) ts = this.portal.timeScale();
@@ -2090,8 +2180,10 @@ export class Game {
     if (flow) this.updatePower(realDt, alive);
     else if (this.power.phase !== 'idle') this.power.reset();
     const free = alive && this.power.phase === 'idle';
-    if (free && inp.wasPressed('portal')) this.onPortalPress(this.portal.press());
-    const released = this.portal.update(realDt, free && inp.isHeld('portal'));
+    // (REACH: the PORTAL is on Q / Y / its button, travel only; LMB is the weapon)
+    const travelKey = reach ? 'strike2' : 'portal';
+    if (free && inp.wasPressed(travelKey)) this.onPortalPress(this.portal.press());
+    const released = this.portal.update(realDt, free && inp.isHeld(travelKey));
     if (released) this.onPortalRelease(released);
     // STRIKES: one press, a whole rift attack (none start while the PORTAL is in hand; a LOOP's
     // second press being held still counts, and dying lets go of it)
@@ -2099,7 +2191,7 @@ export class Game {
     const prec = precisionOn();
     this.parry.update(realDt, dt);
     this.dodgeCd = Math.max(0, this.dodgeCd - realDt);
-    for (let i = 0; i < STRIKES.length; i++) {
+    for (let i = 0; i < STRIKES.length && !reach; i++) {
       const a = `strike${i + 1}` as 'strike1';
       // PRECISION: REFLECT's key is the PARRY (no lock-on, no charge)
       if (prec && i === 0) {
@@ -2131,7 +2223,7 @@ export class Game {
     this.strikeBar.setDimmed(this.portal.holding);
     // (on a man you could grab, the preview also lays out where a tap would throw him)
     // (not while FLOW's POWER has time stopped: the marks are the only thing on screen then)
-    const pv = !this.portal.holding && alive && this.power.phase === 'idle' ? this.portal.preview(!this.strikes.aiming) : null;
+    const pv = !reach && !this.portal.holding && alive && this.power.phase === 'idle' ? this.portal.preview(!this.strikes.aiming) : null;
     this.arcView.update(this.portal.arcN > 1 ? this.portal : this.strikes, this.time);
     if (pv) {
       this.hud.setGateHint({ mode: pv.mode, reason: pv.reason, targetKey: pv.key });
@@ -2143,14 +2235,15 @@ export class Game {
     }
     this.hud.setRiftState({ exit: this.rifts.hasExit(), entrance: this.rifts.hasEntrance(), aiming, orientation: this.rifts.orientation });
     this.touch?.setPortalHeld(this.portal.holding);
-    this.input.portalHolding = this.portal.holding;
+    this.input.portalHolding = !reach && this.portal.holding;
     this.touch?.setFlip(!!H && this.portal.aiming && (H.mode === 'door' || H.mode === 'air' || H.mode === 'hole'));
     this.touch?.setAiming(aiming);
 
     // ----- player -----
     // FLOW: crouch at a run is a SLIDE (it doesn't toggle crouching); the chain moves you itself
     const still = this.respawnT >= 0 || this.boarded || this.power.phase === 'chain';
-    const slide = flow && inp.wasPressed('crouch') && body.onGround && Math.hypot(body.vel.x, body.vel.z) >= FLOW.slide.minSpeed;
+    const flowBody = flowBodyOn();
+    const slide = flowBody && inp.wasPressed('crouch') && body.onGround && Math.hypot(body.vel.x, body.vel.z) >= FLOW.slide.minSpeed;
     const pin: PlayerInput = {
       moveX: still ? 0 : inp.moveX,
       moveY: still ? 0 : inp.moveY,
@@ -2159,15 +2252,19 @@ export class Game {
       // the touch stick sprints when pushed to its rim (only when it's the stick moving you)
       sprint: inp.isHeld('sprint') || (inp.lastDevice === 'touch' && Math.hypot(inp.moveX, inp.moveY) > 0.95),
       crouch: this.crouchToggle(slide),
-      // PRECISION: V is the DODGE (no SHOVE)
-      shove: !prec && inp.wasPressed('shove'),
+      // PRECISION: V is the DODGE (no SHOVE); REACH: neither
+      shove: !prec && !reach && inp.wasPressed('shove'),
       slide,
     };
     if (prec && free && inp.wasPressed('shove')) this.dodgePress(inp.moveX, inp.moveY);
+    // REACH: the WEAPON and the HAND (before you move: a stab's step in moves you this frame)
+    if (reach) this.reach!.update(dt, realDt, { fire: free && inp.isHeld('portal'), firePress: free && inp.wasPressed('portal'), hand: free && inp.isHeld('strike1'), handPress: free && inp.wasPressed('strike1') });
+    this.touch?.setReach(reach ? this.reach!.touchState() : null);
     const wasAir = p.airborne;
     p.update(dt, pin, this.level.world, this.physics, this.physEv, this.playerEvents(), this.time);
     this.updateDodge(dt);
-    this.updateBlade(dt);
+    if (!reach) this.updateBlade(dt);
+    else this.hero.setBlade(0);
     this.updateAirtime(wasAir);
     if (flow && free) this.meter.update(dt, { speed: Math.hypot(body.vel.x, body.vel.z), grounded: body.onGround, sliding: p.slideT > 0 });
     if (this.playerFling && !p.airborne && p.body.charge <= 0) this.playerFling = false;
@@ -2277,12 +2374,12 @@ export class Game {
     const speed = body.vel.length();
     // (FLOW: plain running fast widens the view too, a slide drops it low)
     const hs = Math.hypot(body.vel.x, body.vel.z);
-    const rush = flow ? THREE.MathUtils.clamp((hs - FEEL.sprintSpeed) / 9, 0, 1) * 0.7 : 0;
+    const rush = flowBody ? THREE.MathUtils.clamp((hs - FEEL.sprintSpeed) / 9, 0, 1) * 0.7 : 0;
     this.rig.speed = THREE.MathUtils.damp(this.rig.speed, Math.max(rush, body.charge > 0 ? THREE.MathUtils.clamp((speed - 8) / 22, 0, 1) : 0), 6, realDt);
     this.rig.wide = THREE.MathUtils.damp(this.rig.wide, flow && this.power.phase !== 'idle' ? 1 : 0, this.power.phase === 'held' ? 7 : 3, realDt);
     if (flow && this.power.phase === 'chain') this.rig.yaw = dampAngle(this.rig.yaw, this.powerYaw, 9, realDt);
     this.rig.update(realDt, body.pos, p.slideT > 0 ? 1.35 : p.crouched ? 1 : 0, aiming, this.level.world);
-    if (flow && hs > FLOW_SPRINT * 0.9) this.fx.streak(_v.copy(body.pos).setY(body.pos.y + 1), body.vel, COL_CHARGED);
+    if (flowBody && hs > FLOW_SPRINT * 0.9) this.fx.streak(_v.copy(body.pos).setY(body.pos.y + 1), body.vel, COL_CHARGED);
     if (body.charge > 0 && speed > 8) this.fx.streak(_v.copy(body.pos).setY(body.pos.y + 1), body.vel, COL_CHARGED);
     for (const b of this.physics.bodies) if (b.kind !== 'player' && b.enabled && b.charge > 0 && b.vel.lengthSq() > 64) this.fx.streak(_v.copy(b.pos).setY(b.pos.y + b.height * 0.5), b.vel, COL_ENTRANCE);
     this.fx.setHome(body.pos);
@@ -2336,6 +2433,7 @@ export class Game {
       },
       crossed: (_from, _to, yawDelta) => {
         if (flowOn()) this.meter.add(FLOW.meter.portal);
+        this.lastCrossT = this.time;
         // through a rift mid-lunge: the lunge is over (the rift's momentum carries you on)
         this.blade.cancel();
         this.rig.rotateBy(yawDelta);
@@ -2480,6 +2578,8 @@ export class Game {
   }
 
   private trapTargets(): TrapTarget[] {
+    // REACH: the PORTAL is for travel only (no hatch over a man, no load)
+    if (this.lab && reachOn()) return [];
     const out = this.enemies.trapTargets().filter((tt) => {
       const e = this.enemies.byKey(tt.key);
       return !e || this.zones.active.has(e.def.zone);
@@ -2569,6 +2669,8 @@ export class Game {
     const p = this.player;
     const b = p.body;
     if (this.respawnT >= 0) return null;
+    // REACH: no blade, no grabs by hand: the WEAPON and the HAND do it all
+    if (this.lab && reachOn()) return null;
     if (this.carried) return { label: t('prompt.throw'), run: () => this.throwCarried() };
     const f = p.forward(_v2);
     // HIDDEN BLADE: anyone in reach, or a lunge away ahead of you (the label stays through its cooldown)

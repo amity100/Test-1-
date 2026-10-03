@@ -120,6 +120,15 @@ export interface LabWave {
   subKey: string;
   spawns: LabSpawn[];
   /**
+   * REACH: its men come in at the banner and stand still for the countdown
+   * (the breather), each on his post; the fight (and the race for the weapons)
+   * starts at GO. `lead`: the countdown's length (s).
+   */
+  ready?: boolean;
+  lead?: number;
+  /** REACH: the weapons scattered on the floor for this wave (everyone starts empty-handed). */
+  weapons?: { kind: 'rifle' | 'knife'; pos: THREE.Vector3 }[];
+  /**
    * The spawns marked `pulse: 2` come through `at` s into the wave, or as soon
    * as no more than `left` of the first pulse still stand, whichever is first.
    */
@@ -307,10 +316,67 @@ export const ONSLAUGHT_WAVES: LabWave[] = [
   },
 ];
 
+/** A REACH man: empty-handed on his post when the wave's banner comes up (the gate only names where he's from). */
+const bare = (x: number, y: number, z: number): LabSpawn => s('rifleman', 'pusher', 'rings', x, y, z);
+const rifle = (x: number, y: number, z: number) => ({ kind: 'rifle' as const, pos: V(x, y, z) });
+const knife = (x: number, y: number, z: number) => ({ kind: 'knife' as const, pos: V(x, y, z) });
+
+/**
+ * REACH's waves (DESIGN §14): 3, 4, 6 men, everyone empty-handed, about 1.5
+ * weapons a fighter (you included) on the floor, ~60% rifles: some near you,
+ * some near them, some between (the races), some by the void's edge or the
+ * pool (the risk). Lead times are REACH.waves (game/reach.ts).
+ */
+export const REACH_WAVES: LabWave[] = [
+  // R1: three men; 4 rifles, 2 knives
+  {
+    subKey: 'lab.r1',
+    ready: true,
+    spawns: [bare(-14, 0, 6), bare(14, 0, 2), bare(0, 0, 16)],
+    weapons: [knife(4, 0, -17), rifle(-3, 0, -13), rifle(12, 0, -10), rifle(-12, 0, -4), rifle(14.6, 0, -12), knife(6, 0, 24.5)],
+  },
+  // R2: four; 5 rifles, 3 knives (one on the ring, one by the void, one by the pool)
+  {
+    subKey: 'lab.r2',
+    ready: true,
+    spawns: [bare(-20, 0, -6), bare(20, 0, 8), bare(-6, RING.y, 9.4), bare(8, 0, 20)],
+    weapons: [
+      rifle(0, 0, -14),
+      knife(-8, 0, -18),
+      rifle(-19, 0, -14),
+      knife(7, 0, -9),
+      rifle(14, 0, -20),
+      rifle(22, 0, 4),
+      knife(-10, 0, 25),
+      rifle(2, RING.y, -4.5),
+    ],
+  },
+  // R3: six, one on the ring right in front of you; 7 rifles, 4 knives
+  {
+    subKey: 'lab.r3',
+    ready: true,
+    spawns: [bare(-22, 0, 2), bare(22, 0, 10), bare(-8, 0, 18), bare(8, 0, 18), bare(-14, 0, -18), bare(0, RING.y, -5)],
+    weapons: [
+      rifle(0, 0, -12),
+      knife(-5, 0, -20),
+      rifle(-12, 0, -12),
+      knife(-18, 0, -8),
+      rifle(12, 0, -14),
+      rifle(14.6, 0, -4),
+      knife(20, 0, 4),
+      rifle(-4, 0, 24.5),
+      knife(10, 0, 25),
+      rifle(-24, 0, 12),
+      rifle(24, 0, 18),
+    ],
+  },
+];
+
 const copyWaves = (ws: LabWave[]): LabWave[] =>
   ws.map((w) => {
-    const o: LabWave = { subKey: w.subKey, spawns: w.spawns.map((q) => ({ ...q, post: q.post.clone() })) };
+    const o: LabWave = { ...w, spawns: w.spawns.map((q) => ({ ...q, post: q.post.clone() })) };
     if (w.pulse) o.pulse = { ...w.pulse };
+    if (w.weapons) o.weapons = w.weapons.map((q) => ({ kind: q.kind, pos: q.pos.clone() }));
     return o;
   });
 
@@ -319,7 +385,7 @@ export function labArena(): LabArena {
     pad: { pos: START.pos.clone(), yaw: START.yaw },
     gates: GATES.map((g) => ({ ...g, pos: g.pos.clone() })),
     waves: copyWaves(WAVES),
-    variants: { onslaught: copyWaves(ONSLAUGHT_WAVES), flow: copyWaves(ONSLAUGHT_WAVES) },
+    variants: { onslaught: copyWaves(ONSLAUGHT_WAVES), flow: copyWaves(ONSLAUGHT_WAVES), reach: copyWaves(REACH_WAVES) },
   };
 }
 

@@ -77,7 +77,7 @@ afterEach(() => {
 
 describe('FLOW: the gate', () => {
   it('is FLOW only, and only in the lab; FLOW plays PRECISION and fights ONSLAUGHT', () => {
-    expect(VARIANTS).toEqual(['current', 'precision', 'onslaught', 'flow']);
+    expect(VARIANTS).toEqual(['current', 'precision', 'onslaught', 'flow', 'reach']);
     expect(variantForKey('F4')).toBe('flow');
     for (const v of ['current', 'precision', 'onslaught'] as const) expect(flowOn(v), v).toBe(false);
     expect(flowOn('flow')).toBe(true);
@@ -88,7 +88,8 @@ describe('FLOW: the gate', () => {
     expect(flowOn()).toBe(false); // outside the lab: CURRENT
     setLabActive(true);
     expect(flowOn()).toBe(true);
-    expect(readSettings(JSON.stringify({ combatVariant: 'flow' })).combatVariant).toBe('flow');
+    // (the lab offers REACH only now: an old FLOW pick comes back as REACH)
+    expect(readSettings(JSON.stringify({ combatVariant: 'flow' })).combatVariant).toBe('reach');
   });
 
   it('the other variants run and sprint exactly as before; FLOW 1.5x', () => {

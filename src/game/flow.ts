@@ -135,6 +135,15 @@ export function flowOn(v: CombatVariant = activeVariant()): boolean {
   return v === 'flow';
 }
 
+/**
+ * FLOW's BODY moves the player (faster run, slide, double jump, wall kicks,
+ * rifts keep your speed): FLOW, and REACH, which borrows the body and none of
+ * the rest (no meter, no POWER moment).
+ */
+export function flowBodyOn(v: CombatVariant = activeVariant()): boolean {
+  return v === 'flow' || v === 'reach';
+}
+
 /** A lit man where he is on screen (CSS px). */
 export interface PowerCandidate {
   id: number;

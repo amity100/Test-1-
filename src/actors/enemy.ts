@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { CharacterAPI, DynBody, EnemyKind, EnemyState, EnemyView, LocomotionInput, SpawnDef, V3 } from '../core/contracts';
 import type { NavGrid } from '../world/nav';
 import { KIND, ONS, type KindTune } from './tuning';
+import { REACH } from '../game/reach';
 
 /** What he believes (states like stagger/launched are only bodily). */
 export type Mode = 'calm' | 'suspicious' | 'combat';
@@ -220,13 +221,19 @@ export class Enemy implements EnemyView {
   readonly arch: 'stormer' | 'suppressor' | null;
   readonly ons: OnsState | null;
 
+  // --- REACH (only for a man spawned with `def.reach`)
+  readonly reach: boolean;
+  /** How far up his rifle is (the game's REACH brain sets it: 0 empty-handed / a knife). */
+  reachPose = 0;
+
   constructor(readonly id: number, readonly def: SpawnDef, char: CharacterAPI, body: DynBody | null, senseOffset: number) {
     this.key = `enemy:${id}`;
     this.kind = def.kind;
     this.tune = KIND[def.kind];
     this.arch = def.onslaught ? def.archetype ?? null : null;
     this.ons = def.onslaught ? new OnsState() : null;
-    this.hp = this.maxHp = this.arch ? ONS[this.arch].hp : this.tune.hp;
+    this.reach = !!def.reach;
+    this.hp = this.maxHp = this.arch ? ONS[this.arch].hp : this.reach ? REACH.enemy.hp : this.tune.hp;
     this.radius = this.tune.radius;
     this.height = this.tune.height;
     this.char = char;
