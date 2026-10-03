@@ -1127,7 +1127,7 @@ html[dir='rtl'] .flow-tip { font-family: 'Heebo', 'Oxanium', sans-serif; font-si
 .touch.reach .t-travel svg { width: 48%; height: 48%; }
 .touch.reach .t-slide { right: 8px; bottom: 92px; width: 64px; height: 64px; opacity: .9; }
 .touch.reach .t-clip { right: 196px; bottom: 120px; }
-.t-weapon .t-cap, .t-hand .t-cap { display: none; position: absolute; top: -10px; left: 50%; transform: translateX(-50%); padding: 1px 6px; border-radius: 8px; font: 800 9.5px var(--hud-font); letter-spacing: .06em; background: #7ff4ff; color: #04202a; white-space: nowrap; }
+.t-weapon .t-cap, .t-hand .t-cap { display: none; position: absolute; top: -10px; bottom: auto; height: auto; line-height: 1.4; left: 50%; transform: translateX(-50%); padding: 1px 6px; border-radius: 8px; font: 800 9.5px var(--hud-font); letter-spacing: .06em; background: #7ff4ff; color: #04202a; white-space: nowrap; }
 .t-weapon.has-cap .t-cap, .t-hand.has-cap .t-cap { display: block; }
 .t-weapon .t-cap { background: #fff; color: #0b0e14; }
 .t-hand[data-kind='late'] .t-cap { background: #ff4a6a; color: #fff; }

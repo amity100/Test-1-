@@ -156,6 +156,8 @@ class Mind {
   readonly spot = new THREE.Vector3();
   spotT = 0;
   side = 1;
+  /** Empty-handed and on his way to a weapon (he keeps walking while he thinks again). */
+  walking = false;
   constructor(rand: () => number) {
     const E = REACH.enemy;
     this.react = E.react[0] + (E.react[1] - E.react[0]) * rand();
@@ -180,11 +182,14 @@ const between = (r: readonly [number, number], k: number) => r[0] + (r[1] - r[0]
  */
 export class ReachAI {
   private minds = new Map<number, Mind>();
+  /** When their last portal opened (game time). */
+  private lastPortalT = -99;
 
   constructor(readonly host: ReachAIHost) {}
 
   reset() {
     this.minds.clear();
+    this.lastPortalT = -99;
   }
 
   mind(e: Enemy, rand: () => number): Mind {
@@ -273,21 +278,27 @@ export class ReachAI {
     }
     m.react -= dt;
     if (m.react > 0) {
-      // (thinking: he turns to it, or to you)
-      sys.halt(e, dt);
-      sys.face(e, best ? best.pos : pl.pos, dt);
+      // (thinking: on his way to it if he already was, else he turns to it, or to you)
+      if (m.walking && best) sys.moveTo(e, best.pos, REACH.enemy.run, dt, true);
+      else {
+        sys.halt(e, dt);
+        sys.face(e, best ? best.pos : pl.pos, dt);
+      }
       return;
     }
+    m.walking = false;
     // yours, if you have one and he has you in sight
     const yours = H.armory.heldBy('player');
     if (yours && pl.alive && !pl.safe && m.stealCd <= 0) {
-      if (this.sees(e, pl.hand) && sys.rand() < REACH.enemy.steal.chance) {
+      // (one hand at a time comes for yours)
+      const busy = H.hands.list.some((w) => w.kind === 'steal');
+      if (!busy && this.sees(e, pl.hand) && sys.rand() < REACH.enemy.steal.chance) {
         this.steal(e, m, yours, sys.rand());
         return;
       }
       m.stealCd = 1.2;
     }
-    if (best && bd <= REACH.range + 1 && this.sees(e, best.pos)) {
+    if (best && bd <= REACH.range + 1 && this.sees(e, _c.copy(best.pos).setY(best.pos.y + 0.3))) {
       if (H.armory.claim(best, e.id)) {
         e.eye(_eye);
         windowSpot(_eye, best.pos, _a, _b);
@@ -300,7 +311,8 @@ export class ReachAI {
     }
     if (best) {
       sys.moveTo(e, best.pos, REACH.enemy.run, dt, true);
-      m.react = 0.2;
+      m.walking = true;
+      m.react = 0.25;
       return;
     }
     // nothing on the floor: he keeps you in sight, waiting for his chance at yours
@@ -470,11 +482,12 @@ export class ReachAI {
   // His red portals
   // ------------------------------------------------------------------
 
-  /** A portal pair: its entrance just ahead of him, its exit `gap` m from you (on solid floor). */
+  /** A portal pair: its entrance just ahead of him, its exit `gap` m from you (on solid floor). One of theirs at a time, a beat apart. */
   private openPortal(sys: EnemySystem, e: Enemy, m: Mind, gap: number): boolean {
     const H = this.host;
     const pl = H.player();
     const P = REACH.enemy.portal;
+    if (H.portals.list.length || sys.time - this.lastPortalT < P.gap) return false;
     // the exit: around you, toward his side first, on floor you could stand on
     const base = Math.atan2(e.pos.x - pl.pos.x, e.pos.z - pl.pos.z);
     let exit: THREE.Vector3 | null = null;
@@ -498,11 +511,25 @@ export class ReachAI {
     if (ay === null) return false;
     const by = Math.atan2(pl.pos.x - exit.x, pl.pos.z - exit.z);
     const p = H.portals.open(e.id, _a.set(ax, ay, az), yawIn, exit, by);
+    this.lastPortalT = sys.time;
     m.portalId = p.id;
     m.portalCd = between(P.cooldown, sys.rand());
     H.opened('portal', exit);
     e.char.play('interact', { fade: 0.08 });
     return true;
+  }
+
+  /** To a spot: by the nav while it's far, straight at it for the last couple of metres (the nav's cells are coarse). */
+  private walk(sys: EnemySystem, e: Enemy, to: V3, d: number, speed: number, dt: number) {
+    const b = e.body;
+    if (d > 2.5 || !b || b.simulate) {
+      sys.moveTo(e, to, speed, dt, true);
+      return;
+    }
+    const k = speed / Math.max(d, 1e-3);
+    e.moveVel.set((to.x - e.pos.x) * k, 0, (to.z - e.pos.z) * k);
+    b.vel.set(e.moveVel.x, 0, e.moveVel.z);
+    sys.face(e, to, dt);
   }
 
   private portalWalk(sys: EnemySystem, e: Enemy, m: Mind, dt: number) {
@@ -514,15 +541,15 @@ export class ReachAI {
     const d = hd(e.pos, p.a);
     // he walks up to it while it opens; he waits there while your hand has it
     if (!RedPortals.isOpen(p) || p.held) {
-      if (d > 0.9) sys.moveTo(e, p.a, 2.6, dt, true);
+      if (d > 1.3) this.walk(sys, e, p.a, d, 2.6, dt);
       else {
         sys.halt(e, dt);
         sys.face(e, _a.copy(p.a).addScaledVector(_b.set(Math.sin(p.ay), 0, Math.cos(p.ay)), 2), dt);
       }
       return;
     }
-    if (d > 0.55) {
-      sys.moveTo(e, p.a, REACH.enemy.knifeRun, dt, true);
+    if (d > 0.8) {
+      this.walk(sys, e, p.a, d, REACH.enemy.knifeRun, dt);
       return;
     }
     arrive(sys, e, p);

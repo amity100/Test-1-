@@ -343,7 +343,7 @@ export class Player {
     // --- facing ---
     const hs = Math.hypot(b.vel.x, b.vel.z);
     if (lunging) this.yaw = yawOf(this.lungeDir);
-    else if (this.aim > 0.3 || this.weaponUp > 0.3) this.yaw = dampAngle(this.yaw, input.camYaw, 18, dt);
+    else if (this.aim > 0.3 || this.weaponUp > 0.6) this.yaw = dampAngle(this.yaw, input.camYaw, 18, dt);
     else if (this.shoveT > 0) this.yaw = yawOf(this.shoveDir);
     else if (hs > 0.3 && inputMag > 0.05) this.yaw = dampAngle(this.yaw, Math.atan2(b.vel.x, b.vel.z), 11, dt);
 

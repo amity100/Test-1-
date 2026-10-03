@@ -1577,7 +1577,7 @@ export class EnemySystem implements EnemyAPI, Brain, OnsBrain {
    * The PORTAL grabs him (on) or lets go (off): while held he stops whatever
    * he was doing, stands pinned in the floor end and sinks into it.
    */
-  hold(v: EnemyView, on: boolean) {
+  hold(v: EnemyView, on: boolean, quiet = false) {
     const e = this.own(v);
     if (!e || !e.alive) return;
     this.blind(e);
@@ -1600,7 +1600,8 @@ export class EnemySystem implements EnemyAPI, Brain, OnsBrain {
     }
     e.char.setTumble(null);
     e.char.play('hitChest');
-    this.bark(e, 'bark.grabbed', true);
+    // (REACH's hand pulls him to you by the collar: no floor to cry about)
+    if (!quiet) this.bark(e, 'bark.grabbed', true);
     this.noticeFall(e);
     this.press(e);
   }

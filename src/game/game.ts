@@ -960,6 +960,22 @@ export class Game {
     );
   }
 
+  /** REACH: of the lab's respawn spots, the one whose nearest living man is furthest away. */
+  private labRespawn(): V3 {
+    const lab = this.lab!;
+    let best = lab.arena.pad.pos;
+    let bd = -1;
+    for (const p of lab.arena.respawns ?? []) {
+      let d = Infinity;
+      for (const e of this.enemies.list) if (e.alive) d = Math.min(d, e.pos.distanceTo(p));
+      if (d > bd + 0.5) {
+        bd = d;
+        best = p;
+      }
+    }
+    return best;
+  }
+
   /** Solid floor a man can stand on at (x, z) about level `y` (none over the void or the water, none inside a wall): its top, else null. */
   private standAt(x: number, z: number, y: number): number | null {
     const w = this.level.world;
@@ -1096,7 +1112,9 @@ export class Game {
     if (this.lab) {
       // the lab: back on the pad, the wave goes on (the run records the death)
       if (died) this.lab.noteDeath();
-      this.respawnPlayer(this.lab.arena.pad.pos, this.lab.arena.pad.yaw);
+      // (REACH: the spot furthest from them, so nobody waits on the pad with a knife)
+      const at = reachOn() ? this.labRespawn() : this.lab.arena.pad.pos;
+      this.respawnPlayer(at, at === this.lab.arena.pad.pos ? this.lab.arena.pad.yaw : Math.atan2(-at.x, -at.z));
       this.guardUntil = this.time + LAB_SPAWN_GUARD;
       this.push({ type: 'death', t: this.time });
       return;

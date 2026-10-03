@@ -137,6 +137,8 @@ export interface LabWave {
 
 export interface LabArena {
   pad: { pos: THREE.Vector3; yaw: number };
+  /** REACH: where you may come back after a death (the one furthest from them; the pad among them). */
+  respawns?: THREE.Vector3[];
   gates: LabGate[];
   /** The baseline sequence (CURRENT, PRECISION). */
   waves: LabWave[];
@@ -383,6 +385,7 @@ const copyWaves = (ws: LabWave[]): LabWave[] =>
 export function labArena(): LabArena {
   return {
     pad: { pos: START.pos.clone(), yaw: START.yaw },
+    respawns: [START.pos.clone(), V(-25, 0, -25), V(23, 0, -26), V(-26, 0, 9), V(26, 0, 22)],
     gates: GATES.map((g) => ({ ...g, pos: g.pos.clone() })),
     waves: copyWaves(WAVES),
     variants: { onslaught: copyWaves(ONSLAUGHT_WAVES), flow: copyWaves(ONSLAUGHT_WAVES), reach: copyWaves(REACH_WAVES) },

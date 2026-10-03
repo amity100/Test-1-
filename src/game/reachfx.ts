@@ -9,9 +9,15 @@ import { Armory, type Weapon } from './weapons';
 export const REACH_CYAN = new THREE.Color(0.25, 1.6, 2.4);
 /** Theirs: Kessler red-magenta. */
 export const REACH_RED = new THREE.Color(2.8, 0.18, 0.55);
-/** Floor weapons' glow: rifles amber, knives pale steel. */
-const GLOW_RIFLE = new THREE.Color(2.2, 1.1, 0.25);
-const GLOW_KNIFE = new THREE.Color(1.3, 1.7, 2.1);
+/**
+ * Floor weapons' marks (solid colours: the lab's floor is pale, an additive
+ * glow washes out on it): rifles amber, knives ice blue; yours to take cyan,
+ * spoken for (their hand is on its way) red.
+ */
+const MARK_RIFLE = new THREE.Color(1, 0.5, 0.06);
+const MARK_KNIFE = new THREE.Color(0.35, 0.75, 1);
+const MARK_AIM = new THREE.Color(0.1, 0.95, 1);
+const MARK_THEIRS = new THREE.Color(1, 0.1, 0.32);
 /** The weapons' lit strips (sRGB hex for the shared emissive materials). */
 export const STRIP_HERO = 0x19f0ff;
 export const STRIP_KESSLER = 0xff2a5a;
@@ -42,7 +48,9 @@ function faceMaterial(col: THREE.Color) {
 
 const RING = new THREE.TorusGeometry(1, 0.075, 6, 40);
 const DISC = new THREE.CircleGeometry(1, 32);
-const HALO = new THREE.RingGeometry(0.32, 0.62, 32).rotateX(-Math.PI / 2);
+const HALO = new THREE.RingGeometry(0.5, 0.64, 40).rotateX(-Math.PI / 2);
+const PAD = new THREE.CircleGeometry(0.5, 40).rotateX(-Math.PI / 2);
+const TIP = new THREE.OctahedronGeometry(0.11, 0).scale(1, 1.6, 1);
 const MARK = new THREE.RingGeometry(0.62, 0.78, 40).rotateX(-Math.PI / 2);
 const BEAM = new THREE.CylinderGeometry(0.018, 0.018, 1, 6).translate(0, 0.5, 0);
 const TRACER = new THREE.BoxGeometry(0.035, 0.035, 1).translate(0, 0, 0.5);
@@ -109,27 +117,40 @@ class PortalView {
   }
 }
 
+const solid = (c: THREE.Color, opacity = 1) => new THREE.MeshBasicMaterial({ color: c.clone(), transparent: true, opacity, depthWrite: false, toneMapped: false });
+
 class FloorView {
   readonly g = new THREE.Group();
   readonly mesh: THREE.Object3D;
   readonly haloMat: THREE.MeshBasicMaterial;
   readonly beamMat: THREE.MeshBasicMaterial;
+  readonly padMat: THREE.MeshBasicMaterial;
   readonly halo: THREE.Mesh;
   readonly beam: THREE.Mesh;
+  readonly pad: THREE.Mesh;
+  readonly tip: THREE.Mesh;
   constructor(readonly kind: Weapon['kind']) {
     this.mesh = weaponMesh(kind, STRIP_FLOOR[kind], 3.2);
-    // lying on its side
+    // lying on its side, big enough to read from across the deck
     this.mesh.rotation.z = Math.PI / 2;
-    this.mesh.scale.setScalar(kind === 'knife' ? 1.6 : 1.15);
-    this.haloMat = add(kind === 'rifle' ? GLOW_RIFLE : GLOW_KNIFE);
-    this.beamMat = add(kind === 'rifle' ? GLOW_RIFLE : GLOW_KNIFE);
+    this.mesh.scale.setScalar(kind === 'knife' ? 2.4 : 1.45);
+    if (kind === 'knife') this.mesh.position.z = -0.2;
+    const col = kind === 'rifle' ? MARK_RIFLE : MARK_KNIFE;
+    this.haloMat = solid(col, 0.95);
+    this.beamMat = solid(col, 0.55);
+    // a dark pad under it: the weapon stands out on the pale floor
+    this.padMat = solid(new THREE.Color(0.04, 0.05, 0.08), 0.42);
     this.halo = new THREE.Mesh(HALO, this.haloMat);
+    this.pad = new THREE.Mesh(PAD, this.padMat);
     this.beam = new THREE.Mesh(BEAM, this.beamMat);
-    this.beam.scale.y = 1.4;
+    this.beam.scale.set(1.3, 2.1, 1.3);
+    this.tip = new THREE.Mesh(TIP, this.haloMat);
+    this.tip.position.y = 2.25;
+    for (const m of [this.halo, this.pad]) m.renderOrder = 1;
     const spin = new THREE.Group();
     spin.add(this.mesh);
     spin.name = 'spin';
-    this.g.add(spin, this.halo, this.beam);
+    this.g.add(this.pad, this.halo, spin, this.beam, this.tip);
   }
 }
 
@@ -306,17 +327,19 @@ export class ReachFx {
       const spent = Armory.spent(w);
       const aimed = !!s.aim && s.aim.kind === 'weapon' && s.aim.id === w.id;
       const theirs = w.claim !== null && w.claim !== 'player';
-      const col = aimed ? REACH_CYAN : theirs ? REACH_RED : w.kind === 'rifle' ? GLOW_RIFLE : GLOW_KNIFE;
+      const col = aimed ? MARK_AIM : theirs ? MARK_THEIRS : w.kind === 'rifle' ? MARK_RIFLE : MARK_KNIFE;
       v.haloMat.color.copy(col);
       v.beamMat.color.copy(col);
-      const pulse = 0.5 + 0.5 * Math.sin(t * (aimed ? 9 : 3) + w.id);
-      v.haloMat.opacity = spent ? 0 : aimed ? 0.9 : 0.35 + 0.25 * pulse;
-      v.beamMat.opacity = spent ? 0 : aimed ? 0.55 : 0.16 + 0.08 * pulse;
-      v.halo.position.y = 0.02 - (w.pos.y - (w.pos.y - 0.08));
-      v.halo.position.y = -0.06;
-      v.halo.scale.setScalar(aimed ? 1.35 + 0.15 * pulse : 1);
-      v.beam.visible = !spent && w.resting;
-      v.mesh.position.y = w.resting && !spent ? 0.05 + 0.04 * pulse : 0;
+      const pulse = 0.5 + 0.5 * Math.sin(t * (aimed || theirs ? 10 : 2.6) + w.id);
+      v.haloMat.opacity = spent ? 0 : 0.75 + 0.25 * pulse;
+      v.beamMat.opacity = spent ? 0 : aimed ? 0.75 : 0.35 + 0.15 * pulse;
+      v.padMat.opacity = spent ? 0.15 : 0.42;
+      v.halo.position.y = v.pad.position.y = -0.06;
+      v.halo.scale.setScalar(aimed ? 1.25 + 0.12 * pulse : 1);
+      v.beam.visible = v.tip.visible = !spent && w.resting;
+      v.tip.position.y = 2.25 + 0.08 * pulse;
+      v.tip.rotation.y = t * 1.5;
+      v.mesh.position.y = w.resting && !spent ? 0.06 + 0.05 * pulse : 0;
     }
     for (const [id, v] of this.floor) {
       if (id < 0 || seen.has(id)) continue;

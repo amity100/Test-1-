@@ -65,8 +65,14 @@ export const REACH = {
     stunnedMul: 2,
   },
   knife: {
-    /** A stab up close reaches this far (m from your feet to his). */
+    /** A stab up close reaches this far (m from your feet to his): it kills. */
     melee: 2.4,
+    /**
+     * Through a window it hurts this much (two for a man on his feet; a man
+     * reeling from your pull dies of one) and rocks him this long (s).
+     */
+    windowDamage: 35,
+    windowStagger: 0.6,
     /** Beyond that, within REACH.range and in sight: through a window. */
     cooldown: 0.42,
     windowCooldown: 0.75,
@@ -102,8 +108,8 @@ export const REACH = {
       /** Starts the blow this close (m); it lands within hitRange in front of him (±60°). */
       reach: 2.1,
       hitRange: 2.6,
-      windup: 0.42,
-      damage: 34,
+      windup: 0.45,
+      damage: 25,
       push: 6,
       cooldown: 1.1,
     },
@@ -130,6 +136,8 @@ export const REACH = {
       flank: 9,
       /** The entrance, this far in front of him (m). */
       ahead: 1.4,
+      /** Only one of theirs open at a time, at least this long apart (s). */
+      gap: 3,
       /** Its size (m). */
       width: 1.1,
       height: 2.1,
@@ -356,9 +364,10 @@ export function windowSpot(eye: V3, target: V3, out: THREE.Vector3, dirOut: THRE
 /** The lab's KILLS BY TOOL under REACH: a round, a knife, a portal you moved, anything else. */
 export type ReachTool = 'rifle' | 'knife' | 'redirect' | 'other';
 
-export function reachKillTool(cause: string, viaRedirect: boolean, byPlayer: boolean): ReachTool {
+/** `yours`: what of yours hit him last, just now (null: nothing of yours). */
+export function reachKillTool(cause: string, viaRedirect: boolean, yours: 'rifle' | 'knife' | null): ReachTool {
   if (viaRedirect) return 'redirect';
+  if (yours) return yours;
   if (cause === 'blade') return 'knife';
-  if (cause === 'bolt' && byPlayer) return 'rifle';
   return 'other';
 }

@@ -221,7 +221,7 @@ export class ReachMode {
     const now = this.h.time();
     const r = this.redirected.get(ev.enemyId);
     const hit = this.lastHit.get(ev.enemyId);
-    const mine = !!hit && now - hit.t < 0.6;
+    const mine = hit && now - hit.t < 0.6 ? hit.tool : null;
     return reachKillTool(ev.cause, r !== undefined && now - r < 8, mine);
   }
 
@@ -298,7 +298,8 @@ export class ReachMode {
     // weapons in hands (shown once they've arrived)
     const mineNow = this.armory.heldBy('player');
     h.hero.setHeld(mineNow && !this.flights.has(mineNow.id) ? mineNow.kind : null);
-    const up = mineNow?.kind === 'rifle' && now - this.firedT < 0.9 ? 1 : 0;
+    // (a rifle: carried half up, all the way up while you fire and a beat after)
+    const up = mineNow?.kind === 'rifle' ? (now - this.firedT < 0.9 ? 1 : 0.45) : 0;
     h.player.weaponUp = THREE.MathUtils.damp(h.player.weaponUp, up, 14, realDt);
     for (const e of h.enemies.list) {
       if (!e.alive || !e.reach) continue;
@@ -549,7 +550,7 @@ export class ReachMode {
           }
         }
         if (!to) to = new THREE.Vector3(p.x + fwd.x * 1.2, p.y, p.z + fwd.z * 1.2);
-        h.enemies.hold(e, true);
+        h.enemies.hold(e, true, true);
         e.body.userData.manual = true;
         this.pulls.push({ id: e.id, from: e.pos.clone(), to, t: 0 });
         h.audio.reachPull(e.chest(_a));
@@ -560,7 +561,9 @@ export class ReachMode {
       case 'stab': {
         const e = w.enemyId !== null ? h.enemies.get(w.enemyId) : null;
         if (!e || !e.alive) return false;
-        this.knifeKill(e as Enemy, w.at);
+        // (a man reeling from your pull dies of it; one on his feet takes two)
+        if ((this.stunUntil.get(e.id) ?? -1) > h.time()) this.knifeKill(e as Enemy, w.at);
+        else this.knifeHurt(e as Enemy, w.at);
         return true;
       }
     }
@@ -818,6 +821,20 @@ export class ReachMode {
     h.shake(0.25);
     h.fx.sparks(c, null, REACH_RED, 16);
     h.fx.flash(c, 3, 0.08, 0xff3a5a);
+    h.audio.bladeFinish(c);
+  }
+
+  /** A stab through a window into a man on his feet: it hurts and rocks him (the second one finishes him). */
+  private knifeHurt(e: Enemy, from: V3) {
+    const h = this.h;
+    const K = REACH.knife;
+    const c = e.chest(new THREE.Vector3());
+    this.lastHit.set(e.id, { tool: 'knife', t: h.time() });
+    const dir = _b.subVectors(c, from).normalize().clone();
+    h.enemies.hit(e, { source: 'melee', amount: K.windowDamage, charged: false, team: 'player', instigator: 'player', dir, from: new THREE.Vector3().copy(from) });
+    if (e.alive) h.enemies.stagger(e, K.windowStagger, dir.multiplyScalar(2));
+    h.hitstop(REACH.hand.hitstop);
+    h.fx.sparks(c, null, REACH_RED, 10);
     h.audio.bladeFinish(c);
   }
 
