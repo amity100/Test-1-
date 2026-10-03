@@ -295,6 +295,9 @@ canvas { display: block; outline: none; }
 .qte.ok .q-mash.grip { box-shadow: 0 0 24px rgba(140, 255, 170, 0.8); }
 .qte.bad .q-mash.grip { box-shadow: 0 0 24px rgba(255, 110, 90, 0.9); }
 @media (max-width: 700px) { .boss-note { font-size: 13px; } .qte { top: 52%; } }
+/* the struggle's arrow and meter sit below the two of them (the jaw in his hand stays clear), between the thumbs */
+.qte.pull { top: 74%; }
+@media (max-height: 460px) { .qte.pull { top: 70%; } }
 
 /* ------------------------------------------------------------------ toast / fade / skip */
 .toast {

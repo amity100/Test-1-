@@ -1383,7 +1383,9 @@ export class Story {
     this.showHealth = true;
     this.bearVulnerable = true;
     this.bossHP = 1;
-    const f = new BearFight(this.fightHost(), 0);
+    // a little mercy on a retry: the bear is still worn from the last round (fatigue carried over, at most 0.39) —
+    // the grip still needs the counters, so it is never given away
+    const f = new BearFight(this.fightHost(), Math.min(0.39, 0.13 * (attempt - 1)));
     this.fightRun = f;
     f.start();
     return f;

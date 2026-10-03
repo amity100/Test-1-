@@ -63,7 +63,7 @@ export const FIGHT = {
   slingHead: [0.9, 0.7, 0.5],
   slingBody: [0.5, 0.35, 0.25],
   /** seconds between the bear's moves: fresh .. exhausted (+ up to `cdRand`) */
-  cd0: 0.75,
+  cd0: 1.0,
   cd1: 2.0,
   cdRand: 0.7,
   /** David's body radius for the blows' hit test (m) */
