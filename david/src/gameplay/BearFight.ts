@@ -755,6 +755,114 @@ export class FightBot {
     else this.stick(h, -tz * this.side * 0.4, tx * this.side * 0.4);
   }
 
+  private sprint(h: FightHost, on: boolean) {
+    (h.input as unknown as { touchSprint: boolean }).touchSprint = on;
+  }
+
+  /** aim the camera's line at a point (the sling throws along it) */
+  private aimAt(h: FightHost, c: THREE.Vector3) {
+    const o = h.engine.camera.position;
+    const dx = c.x - o.x, dy = c.y - o.y, dz = c.z - o.z;
+    h.cam.yaw = Math.atan2(-dx, -dz);
+    h.cam.pitch = Math.atan2(-dy, Math.hypot(dx, dz));
+  }
+
+  /** a whirl of the sling released in its window (returns true while it is busy with it) */
+  private slingAt(h: FightHost, c: THREE.Vector3) {
+    const p = h.player;
+    this.stick(h, 0, 0);
+    this.sprint(h, false);
+    this.aimAt(h, c);
+    if (!this.slingOn) {
+      h.input.holdSling(true);
+      this.slingOn = true;
+    } else if (p.whirling && p.whirlT > 0.8) {
+      const e = p.whirlPhase - Math.round(p.whirlPhase);
+      if (Math.abs(e) < p.window * (this.level === 'careful' ? 0.4 : 0.9)) {
+        h.input.holdSling(false);
+        this.slingOn = false;
+      }
+    }
+  }
+
+  /** (tests) the chase: after it at a run; when it stops to look back, the careful/average bot stands and throws */
+  chase(dt: number, h: FightHost, looking: boolean) {
+    const { player: p, bear: b } = h;
+    const ox = b.pos.x - p.pos.x, oz = b.pos.z - p.pos.z;
+    const d = Math.hypot(ox, oz) || 1;
+    this.react -= dt;
+    if (looking && this.level !== 'careless' && d > 7 && d < 24 && p.stones > 0) {
+      this.slingAt(h, _w.copy(b.pos).setY(b.pos.y + 0.75));
+      return;
+    }
+    if (this.slingOn) {
+      h.input.holdSling(false);
+      this.slingOn = false;
+    }
+    this.stick(h, ox / d, oz / d);
+    this.sprint(h, d > 4);
+  }
+
+  /** (tests) the rescue: at its edge, out of its swats, a blow to its snout in its opening */
+  rescue(dt: number, h: FightHost) {
+    const { input, player: p, bear: b } = h;
+    const cur = b.model.current;
+    this.sprint(h, false);
+    if (p.stunT > 0) {
+      this.stick(h, 0, 0);
+      return;
+    }
+    const ox = b.pos.x - p.pos.x, oz = b.pos.z - p.pos.z;
+    const d = Math.hypot(ox, oz) || 1;
+    const tx = ox / d, tz = oz / d;
+    const key = cur ? cur.name : '';
+    if (key && key !== this.lastMove) {
+      this.lastMove = key;
+      this.react = this.rt * (0.8 + 0.4 * Math.random());
+      this.dodged = false;
+      this.struckWin = false;
+      this.side = Math.random() < 0.5 ? 1 : -1;
+    }
+    if (!key) this.lastMove = '';
+    this.react -= dt;
+    if (cur && cur.tell && !cur.open && d < 4.2 && !this.dodged && this.react <= 0) {
+      this.dodged = true;
+      if (this.level === 'careless' && Math.random() < 0.5) return;
+      this.stick(h, -tz * this.side, tx * this.side);
+      input.press('dodge');
+      return;
+    }
+    if (cur && cur.open && !this.struckWin) {
+      const hc = b.model.headCenter.getWorldPosition(_v);
+      const dh = Math.hypot(hc.x - p.pos.x, hc.z - p.pos.z);
+      if (dh > 1.35) this.stick(h, hc.x - p.pos.x, hc.z - p.pos.z);
+      else {
+        this.stick(h, 0, 0);
+        input.press('strike');
+        this.struckWin = true;
+      }
+      return;
+    }
+    // its edge: just out of the swat, inside the stomp (it lowers its head there)
+    if (d < 2.7) this.stick(h, -tx, -tz);
+    else if (d > 3.6) this.stick(h, tx, tz);
+    else this.stick(h, -tz * this.side * 0.3, tx * this.side * 0.3);
+  }
+
+  /** (tests) walk to a point; true when there */
+  walkTo(h: FightHost, at: THREE.Vector3, within = 1.2) {
+    const p = h.player;
+    const dx = at.x - p.pos.x, dz = at.z - p.pos.z;
+    const d = Math.hypot(dx, dz);
+    this.sprint(h, false);
+    if (d < within) {
+      this.stick(h, 0, 0);
+      return true;
+    }
+    this.stick(h, dx, dz);
+    return false;
+  }
+
   /** the struggle at the jaw: the stick x to hold (needSign = which way the arrow points; 0 = rest) */
   struggle(dt: number, needSign: number, h: FightHost) {
     const tm = (h.input as unknown as { touchMove: THREE.Vector2 }).touchMove;

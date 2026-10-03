@@ -1047,6 +1047,8 @@ export class Story {
     let nextLook = 3.2;
     let stones = 0;
     const b = this.bear;
+    const host = this.fightHost();
+    this.bot = this.bot ?? this.botFromUrl();
     this.bearHitCB = (kind, zone) => {
       if (kind !== 'sling' || st === 'bay') return;
       stones++;
@@ -1099,10 +1101,18 @@ export class Story {
         b.model.lookTarget = this.player.pos;
       }
       this.bearThreats[0] = b.pos;
+      this.bot?.chase(dt, host, st === 'look');
     };
     await this.until(() => st === 'bay' && b.pos.distanceTo(this.player.pos) < 7.5);
     this.check();
+    this.bot?.release(host);
     this.bearHitCB = null;
+  }
+
+  /** (bear1, tests) ?bot=careful|average|careless: a scripted player for the bear's chapter (BearFight.ts) */
+  private botFromUrl(): FightBot | null {
+    const q = new URLSearchParams(location.search).get('bot');
+    return q === 'careful' || q === 'average' || q === 'careless' ? new FightBot(q) : null;
   }
 
   /** (bear1, tests) the lamb out of its jaws at once (the ?jump=fight / end shortcuts skip the chase and the rescue) */
@@ -1165,6 +1175,8 @@ export class Story {
     };
     let freed = false;
     let cd = 1.4;
+    const host = this.fightHost();
+    this.bot = this.bot ?? this.botFromUrl();
     const opening = () => !!b.model.current?.open;
     this.bearHitCB = (kind, zone) => {
       if (freed) return;
@@ -1202,9 +1214,11 @@ export class Story {
         this.ui.hint('<span class="h-item">קוּם — הַשֶּׂה עֲדַיִן בְּפִיו</span>', 3);
       }
       this.bearThreats[0] = b.pos;
+      this.bot?.rescue(dt, host);
     };
     await this.until(() => freed);
     this.check();
+    this.bot?.release(host);
     this.player.strikeKind = undefined;
     this.bearHitCB = null;
     // the jaws open: he snatches the lamb and it bolts back toward the flock (it stops, trembling, on the way)
@@ -1309,8 +1323,7 @@ export class Story {
    */
   private async fight() {
     const ck = { b: this.bear.pos.clone(), bh: this.bear.heading, d: this.player.pos.clone(), dh: this.player.heading };
-    const q = new URLSearchParams(location.search).get('bot');
-    this.bot = q === 'careful' || q === 'average' || q === 'careless' ? new FightBot(q) : null;
+    this.bot = this.botFromUrl();
     let attempt = 0;
     let fight: BearFight | null = null;
     for (;;) {
@@ -1661,10 +1674,12 @@ export class Story {
     this.ui.objective('הָרֵם אֶת הַשֶּׂה', 'הוּא רוֹעֵד מִפַּחַד — שָׂא אוֹתוֹ עַל כְּתֵפֶיךָ');
     this.setMarker(() => lamb.position.clone().add(new THREE.Vector3(0, 1.0, 0)), 'הַשֶּׂה');
     let lifted = false;
+    const host = this.fightHost();
     this.beh = () => {
       if (lamb.state !== 'carried' && lamb.position.distanceTo(this.player.pos) > 6 && Math.random() < 0.01) lamb.goTo(this.lambHome, 0.6);
       const d = Math.hypot(lamb.position.x - this.player.pos.x, lamb.position.z - this.player.pos.z);
       this.ui.prompt(d < 1.9 ? withLabel(K.interact, 'הָרֵם אֶת הַשֶּׂה') : null);
+      if (this.bot?.walkTo(host, lamb.position, 1.5)) this.input.press('interact');
       if (d < 1.9 && this.input.take('interact')) lifted = true;
     };
     await this.until(() => lifted);
@@ -1690,9 +1705,11 @@ export class Story {
     this.check();
     this.ui.objective('הָשֵׁב אֶת הַשֶּׂה אֶל הָעֵדֶר');
     this.setMarker(() => this.flockCenter().add(new THREE.Vector3(0, 1.5, 0)), 'הָעֵדֶר');
-    this.beh = null;
+    const bot = this.bot;
+    this.beh = bot ? () => void bot.walkTo(host, this.flockCenter(), 6) : null;
     await this.until(() => this.player.pos.distanceTo(this.flockCenter()) < 9);
     this.check();
+    bot?.release(host);
   }
 
   private async ending() {
