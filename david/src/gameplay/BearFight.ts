@@ -89,6 +89,8 @@ interface MoveRun {
   l1: number;
   lunge: number;
   resolved: boolean;
+  /** its opening has begun (one counter in it) */
+  opened?: boolean;
   /** the grip was offered in this bite */
   gripOffer: boolean;
 }
@@ -132,6 +134,8 @@ export class BearFight {
   private cd = 1.2;
   private move: MoveRun | null = null;
   private open = 0; // seconds of open window left (counter hits)
+  /** counters still allowed in the current opening (one per opening; two after a crash): mashing earns nothing */
+  private winBudget = 0;
   private openFromMove = false;
   private chargeDir = new THREE.Vector3();
   private chargeFrom = new THREE.Vector3();
@@ -267,6 +271,12 @@ export class BearFight {
       case 'recover': {
         bear.stop(dt);
         bear.face(D, dt, 1.5);
+        // blows rained on it after its opening are answered as soon as it is on its feet
+        if (this.punish > 0 && d < 2.4 && !m.busy) {
+          this.punish = 0;
+          this.startMove('swipe', this.sideOf(), 0.25);
+          break;
+        }
         if (this.pt > 0.25 && this.open <= 0) this.setPhase('engage');
         break;
       }
@@ -417,7 +427,8 @@ export class BearFight {
       const mvn = mv?.name;
       this.move = null;
       ui.qte(null);
-      if (mvn && BEAR_MOVES[mvn].open) this.openWindow(0.35);
+      // (the same opening: no new counter)
+      if (mvn && BEAR_MOVES[mvn].open) this.open = Math.max(this.open, 0.35 / Math.max(0.3, m.actionRate));
       this.setPhase('recover');
       this.cd = this.cooldown();
       return;
@@ -435,7 +446,13 @@ export class BearFight {
     }
     // the open window opens with the move's own
     const ow = BEAR_MOVES[mv.name].open;
-    if (ow && t >= ow[0] && t <= ow[1]) this.open = Math.max(this.open, 0.05 / Math.max(0.3, m.actionRate));
+    if (ow && t >= ow[0] && t <= ow[1]) {
+      if (!mv.opened) {
+        mv.opened = true;
+        this.winBudget = 1;
+      }
+      this.open = Math.max(this.open, 0.05 / Math.max(0.3, m.actionRate));
+    }
     // the grip: offered in the bite of an exhausted bear — a timed sidestep-and-seize
     if (mv.gripOffer) {
       const [g0, g1] = FIGHT.gripWin;
@@ -461,7 +478,9 @@ export class BearFight {
     return FIGHT.cd0 + (FIGHT.cd1 - FIGHT.cd0) * this.fatigue + Math.random() * FIGHT.cdRand;
   }
 
-  private openWindow(sec: number) {
+  /** a new opening (a pulled-up charge, a crash, the fight resumed): `budget` counters may land in it */
+  private openWindow(sec: number, budget = 1) {
+    if (this.open <= 0) this.winBudget = budget;
     this.open = Math.max(this.open, sec / Math.max(0.3, this.h.bear.model.actionRate));
   }
 
@@ -529,7 +548,7 @@ export class BearFight {
       bear.model.play('stagger', [], { side: Math.random() < 0.5 ? 1 : -1 });
       this.sfxAt('bearHurt', B, 1);
       this.h.cam.addShake(0.4);
-      this.openWindow(1.8);
+      this.openWindow(1.8, 2);
       this.fatigue = clamp(this.fatigue + 0.03, 0, 1);
       this.setPhase('crash');
       return;
@@ -580,7 +599,10 @@ export class BearFight {
     const m = bear.model;
     const cur = m.current;
     const tell = !!cur && cur.tell && !cur.open && (cur.name !== 'huff');
-    const counter = this.open > 0 || (!!cur && cur.open) || this.phase === 'crash' || (this.phase === 'display' && kind === 'sling');
+    // a counter: the first blow in its opening (one per opening — two after a crash); a stone in its huff display
+    const slingDisplay = this.phase === 'display' && kind === 'sling';
+    const counter = slingDisplay || ((this.open > 0 || this.phase === 'crash') && this.winBudget > 0);
+    if (counter && !slingDisplay) this.winBudget--;
     const v = counter ? table[0] : tell ? table[2] : table[1];
     this.dealt += v;
     this.fatigue = clamp(this.fatigue + FIGHT.fatiguePerHit * v, 0, 1);
@@ -599,7 +621,9 @@ export class BearFight {
           const right = (player.pos.x - bear.pos.x) * Math.cos(bear.heading) - (player.pos.z - bear.pos.z) * Math.sin(bear.heading);
           m.play('stagger', [], { side: right > 0 ? -1 : 1 });
           this.move = null;
-          this.openWindow(0.9);
+          // the stagger is the reward: no new opening (a second blow on it is a careless one)
+          this.open = 0;
+          this.cd = Math.max(this.cd, 1.05);
           this.setPhase('recover');
         } else if (!m.busy || cur?.name === 'huff') {
           m.play('hurt');
@@ -614,7 +638,7 @@ export class BearFight {
       this.stats.neutral++;
       if (!m.busy) m.play('hurt');
       // careless blows up close are answered
-      if (kind !== 'sling' && this.phase === 'engage') this.punish = 0.9;
+      if (kind !== 'sling' && (this.phase === 'engage' || this.phase === 'recover')) this.punish = 1.6;
     }
   }
 
@@ -645,7 +669,7 @@ export class BearFight {
     if (this.gripReady) ui.bossNote('כּוֹשֵׁל — תְּפֹס אוֹתוֹ בַּנְּשִׁיכָה הַבָּאָה', false);
     else if (this.phase === 'charge') ui.bossNote(this.chargeBluff ? 'מִסְתָּעֵר!' : 'מִסְתָּעֵר!', true);
     else if (cur && cur.tell && !cur.open && cur.name !== 'huff') ui.bossNote('מִתְכּוֹנֵן לְהַכּוֹת', true);
-    else if (this.open > 0 || (cur && cur.open) || this.phase === 'crash') ui.bossNote('פָּרוּץ — הַכֵּה עַכְשָׁו', false);
+    else if ((this.open > 0 || this.phase === 'crash') && this.winBudget > 0) ui.bossNote('פָּרוּץ — הַכֵּה עַכְשָׁו', false);
     else if (this.phase === 'display') ui.bossNote('נוֹשֵׁף וּמַקִּישׁ בְּשִׁנָּיו — הַקֶּלַע!', false);
     else if (this.fatigue > 0.45) ui.bossNote('מִתְעַיֵּף', false);
     else ui.bossNote(d > 6 ? 'אוֹרֵב' : null);
@@ -702,7 +726,8 @@ export class FightBot {
     const tx = ox / d, tz = oz / d; // toward the bear
     const careful = this.level === 'careful', average = this.level === 'average';
     const phase = (f as unknown as { phase: string }).phase;
-    const open = (f as unknown as { open: number }).open > 0 || (!!cur && cur.open) || phase === 'crash';
+    const fo = f as unknown as { open: number; winBudget: number };
+    const open = (fo.open > 0 || phase === 'crash') && fo.winBudget > 0;
     if (p.stunT > 0) {
       this.stick(h, 0, 0);
       return;
