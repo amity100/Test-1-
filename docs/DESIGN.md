@@ -922,12 +922,45 @@ each **combat variant** to choose one.
   (`killTool`: GRAB/THROW, REFLECT, LOOP incl. geyser/cannon, SWAP, DASH, BLADE,
   OTHER), per wave too. Lab kills don't count toward the missions' challenges.
 - **Variants** (`src/game/variant.ts`): `current` (the game as it plays today),
-  `precision`, `onslaught`, `flow`. The pick is the `combatVariant` setting; F1-F4, the
-  pause menu, the main menu and the HUD chips switch it and restart the run.
+  `precision`, `onslaught`, `flow`, `reach`. **REACH is the lab's default and the only one its
+  UI offers now** (`LAB_OFFERED`; a saved pick it doesn't offer reads back as REACH); the other
+  four stay in the code, unreachable from the UI, until the owner signs off. No F-keys. The pick is
+  the `combatVariant` setting; the pause menu, the main menu and the HUD chip show it.
   Systems read `activeVariant()`: the pick inside the lab, `current` everywhere
   else; `onVariantChange()` notifies. ONSLAUGHT is PRECISION (`precisionOn()`) plus the
   enemy side below; FLOW is ONSLAUGHT (`onslaughtOn()`: its men, waves and dodge rule) plus
   the body and the POWER moment at the end of this section.
+- **REACH** (the approved core mechanic; `game/reach.ts` — every number in `REACH` — with
+  `game/weapons.ts`, `game/reachmode.ts`, `game/reachfx.ts`, `actors/reachai.ts`, `ui/reachhud.ts`;
+  gated on `reachOn()`, so the missions and the other variants play exactly as before).
+  - *The HAND* (RMB / LT / HAND). Aim at anything you see within 30 m (magnetism 2.2° mouse, 4.5°
+    pad, 8° thumb): a small cyan window opens just short of it (0.15 s) and your arm comes out.
+    On a weapon (on the floor or in a man's hands): it flies to your hand. On a man: he's yanked to
+    you by the collar (0.3 s) and lands 1.7 m in front of you, reeling 1.5 s. On their red portal:
+    press takes it, aim, let go: its exit is where you aimed (a tap: right in front of you). What
+    the aim is on is marked, and a chip by the crosshair says what a press does (SNATCH RIFLE /
+    PULL / TAKE PORTAL / TAKEN). Where things overlap: their portal, then a weapon, then a man.
+  - *Weapons on the floor*. Every wave starts with everyone empty-handed and ~1.5 weapons per fighter
+    (you included) scattered, ~60% rifles; they glow (an amber or ice ring, a light pillar). The
+    first window to open next to one takes it (a later one comes back empty: TOO LATE). One weapon
+    in hand; taking another drops it. RIFLE (LMB / RT / WEAPON): one magazine of 12, 22 a round
+    (double on a reeling man), spent it's thrown aside. KNIFE: up close one stab kills; a man within
+    30 m in plain sight is stabbed through a window (35: two for a man on his feet, one if he's
+    reeling). A knife lost over the edge comes back where the wave put it.
+  - *PORTAL* (Q / Y / PORTAL): travel only (the old door / fall portal: press, aim, let go), no slow
+    motion. The body is FLOW's (run, slide, double jump, wall kick) without the meter or POWER.
+    The strikes, PARRY, DODGE, lock-on, the blade lunge, SHOVE and POWER are all off.
+  - *Their side* (`ReachAI`, the brain `EnemySystem` asks for men spawned with `def.reach`; 60 hp).
+    A human beat (0.4-1.0 s) after GO, then the nearest weapon in sight through a red window (or
+    on foot); with you armed and in sight, sometimes your weapon: a red window by your hand,
+    0.5 s to get away (move 1.6 m or go through a portal) or pull him first. A rifle keeps 9-18 m and
+    fires bursts of 3 bolts (15 each) after a 0.5 s red laser, at most 2 guns on you; spent, it's
+    dropped and he goes for another. A knife runs at you, a 0.45 s red wind-up, 25. Their RED PORTALS
+    (one at a time, 3 s apart) open 0.5 s before they step in: a knife's exit 2.6 m from you, a rifle's
+    flank 9 m out. Out of an exit you moved they tumble: over the void or the pool, that's the end.
+  - *Waves* (`REACH_WAVES`): 3, 4, 6 men on their posts as the banner comes up, frozen through a big
+    3-2-1, then GO (one line on the keys shows once). Death: back at whichever respawn spot is
+    furthest from them. KILLS BY TOOL: RIFLE, KNIFE, PORTAL (a redirect), OTHER.
 - **PRECISION** (`src/game/precision.ts`; the answer to "the game plays itself"). Nothing
   aims, picks or chases for you; defence and execution are skills:
   - *Manual aim.* Strikes (REFLECT's key aside), a LOOP cannon's catch, and GRAB take only

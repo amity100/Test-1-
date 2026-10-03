@@ -1132,3 +1132,7 @@ html[dir='rtl'] .flow-tip { font-family: 'Heebo', 'Oxanium', sans-serif; font-si
 .t-weapon .t-cap { background: #fff; color: #0b0e14; }
 .t-hand[data-kind='late'] .t-cap { background: #ff4a6a; color: #fff; }
 .t-hand[data-kind='portal'] .t-cap { background: #ff4a9a; color: #fff; }
+.rh-tip { position: absolute; left: 50%; bottom: calc(var(--sb, 0px) + 82px); transform: translateX(-50%); padding: 4px 12px; font-size: 12px; font-weight: 700; letter-spacing: .1em; white-space: nowrap; color: #dff9ff; background: rgba(8, 11, 17, 0.6); border-radius: 3px; opacity: 0; }
+.rh-tip.go { animation: rhTip 5.5s ease forwards; }
+@keyframes rhTip { 0% { opacity: 0; } 6% { opacity: 1; } 82% { opacity: 1; } 100% { opacity: 0; } }
+.is-touch .rh-tip { bottom: calc(var(--sb, 0px) + 44px); font-size: 10px; }

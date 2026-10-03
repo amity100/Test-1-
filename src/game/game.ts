@@ -890,7 +890,7 @@ export class Game {
     this.clearHints();
     this.labStats = null;
     this.guardUntil = -1;
-    this.reach?.reset();
+    this.reach?.newRun();
     this.lab?.restart();
     this.updateObjective(true);
   }

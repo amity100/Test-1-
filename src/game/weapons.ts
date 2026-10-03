@@ -165,7 +165,14 @@ export class Armory {
         w.pos.y = g + LIE_Y;
         w.vel.set(0, 0, 0);
         w.resting = true;
-      } else if (lost(w.pos)) w.gone = true;
+      } else if (lost(w.pos)) {
+        // (a knife is never lost for good: it comes back where the wave put it, so the fight can't run dry)
+        if (w.kind === 'knife') {
+          w.pos.set(w.spawnPos.x, w.spawnPos.y + LIE_Y, w.spawnPos.z);
+          w.vel.set(0, 0, 0);
+          w.resting = true;
+        } else w.gone = true;
+      }
     }
   }
 }

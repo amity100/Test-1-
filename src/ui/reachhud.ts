@@ -65,7 +65,8 @@ export class ReachHud {
       <div class="rh-stab"><i>${REACH_ICON.knife}</i><b></b><kbd></kbd></div>
       <div class="rh-warn"></div>
       <div class="rh-call"></div>
-      <div class="rh-weap"><i></i><b></b><span></span></div>`;
+      <div class="rh-weap"><i></i><b></b><span></span></div>
+      <div class="rh-tip"></div>`;
     root.appendChild(el);
     this.el = el;
     this.chip = el.querySelector('.rh-chip') as HTMLDivElement;
@@ -91,6 +92,15 @@ export class ReachHud {
     if (this.cache.get(k) === v) return;
     this.cache.set(k, v);
     apply();
+  }
+
+  /** One short line on the controls (low on the screen, gone in a few seconds by itself). */
+  tip(text: string) {
+    const el = this.el.querySelector('.rh-tip') as HTMLElement;
+    el.textContent = text;
+    el.className = 'rh-tip';
+    void el.offsetWidth;
+    el.className = 'rh-tip go';
   }
 
   /** A one-word callout under the crosshair (it fades by itself). */

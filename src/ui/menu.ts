@@ -2,7 +2,7 @@ import type { StyleRank, ZoneId } from '../core/contracts';
 import type { WorldId } from '../world/worlds';
 import { IS_TOUCH, type QualityName } from '../config';
 import { formatNumber, getDevice, getLang, setLang, t, type Lang } from './i18n';
-import { fmtTime, LAB_TOOLS, type LabRunStats } from '../game/labdirector';
+import { fmtTime, labTools, type LabRunStats } from '../game/labdirector';
 import { LAB_DEFAULT, LAB_OFFERED, type CombatVariant } from '../game/variant';
 import { TOOL_KEY } from './labhud';
 
@@ -331,15 +331,16 @@ export class Menu {
   showLabEnd(r: LabRunStats) {
     this.back = () => this.showLabEnd(r);
     let kills = 0;
-    for (const k of LAB_TOOLS) kills += r.kills[k];
-    const most = Math.max(1, ...LAB_TOOLS.map((k) => r.kills[k]));
+    const TOOLS = labTools(r.variant);
+    for (const k of TOOLS) kills += r.kills[k];
+    const most = Math.max(1, ...TOOLS.map((k) => r.kills[k]));
     const waves = r.waves
       .map(
         (w, i) =>
           `<tr><th>${esc(t('lab.wave', { n: i + 1 }))}</th><td dir="ltr">${fmtTime(w.time)}</td><td>${formatNumber(w.kills)}</td><td>${formatNumber(Math.round(w.damage))}</td><td>${formatNumber(w.deaths)}</td></tr>`,
       )
       .join('');
-    const tools = LAB_TOOLS.map(
+    const tools = TOOLS.map(
       (k) => `<div class="lr-tool"><span>${esc(t(TOOL_KEY[k]))}</span><i><u style="transform:scaleX(${(r.kills[k] / most).toFixed(3)})"></u></i><b>${formatNumber(r.kills[k])}</b></div>`,
     ).join('');
     this.render(

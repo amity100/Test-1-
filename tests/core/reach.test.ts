@@ -125,16 +125,24 @@ describe('REACH: weapons on the floor', () => {
     expect(Armory.live(k)).toBe(true);
   });
 
-  it('dropped weapons fall and settle; into the void they are lost', () => {
+  it('dropped weapons fall and settle; a rifle into the void is lost, a knife comes back where the wave put it', () => {
     const A = new Armory();
-    const w = A.add('knife', V(0, 0, 0));
+    const ground = (x: number) => (x < 10 ? 0 : -Infinity);
+    const lost = (p: THREE.Vector3) => p.y < -9;
+    const w = A.add('rifle', V(0, 0, 0));
     A.drop(w, V(0, 2, 0));
-    for (let i = 0; i < 120; i++) A.update(1 / 60, (x) => (x < 10 ? 0 : -Infinity), (p) => p.y < -9);
+    for (let i = 0; i < 120; i++) A.update(1 / 60, ground, lost);
     expect(w.resting).toBe(true);
     expect(w.pos.y).toBeCloseTo(0.08, 2);
     A.drop(w, V(20, 2, 0));
-    for (let i = 0; i < 200; i++) A.update(1 / 60, (x) => (x < 10 ? 0 : -Infinity), (p) => p.y < -9);
+    for (let i = 0; i < 200; i++) A.update(1 / 60, ground, lost);
     expect(w.gone).toBe(true);
+    const k = A.add('knife', V(3, 0, 1));
+    A.drop(k, V(20, 2, 0));
+    for (let i = 0; i < 200; i++) A.update(1 / 60, ground, lost);
+    expect(k.gone).toBe(false);
+    expect(k.resting).toBe(true);
+    expect(k.pos.x).toBe(3);
   });
 });
 
@@ -237,7 +245,7 @@ function rig(o: { hole?: boolean } = {}) {
     kick: noop,
     lastCrossT: () => state.crossT,
   };
-  const hud = { update: noop, show: noop, dispose: noop, callout: (k: string) => calls.push(k) };
+  const hud = { update: noop, show: noop, dispose: noop, tip: noop, callout: (k: string) => calls.push(k) };
   const R = new ReachMode(host, null, hud as any);
   sc.sys.reachBrain = R.ai;
   const input = { fire: false, firePress: false, hand: false, handPress: false };

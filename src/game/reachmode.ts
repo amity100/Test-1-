@@ -90,7 +90,7 @@ export class ReachMode {
   readonly portals = new RedPortals();
   readonly ai: ReachAI;
   readonly fx = new ReachFx();
-  readonly hud: Pick<ReachHud, 'update' | 'callout' | 'show' | 'dispose'>;
+  readonly hud: Pick<ReachHud, 'update' | 'callout' | 'show' | 'dispose' | 'tip'>;
   aim: ReachAim | null = null;
   private handCd = 0;
   private fireCd = 0;
@@ -110,9 +110,12 @@ export class ReachMode {
   private lastHit = new Map<number, { tool: 'rifle' | 'knife'; t: number }>();
   private firedT = -99;
   private shown = false;
+  /** The fight was on last frame (GO shows the one-line tip, once a run). */
+  private wasGo = false;
+  private tipped = false;
 
   /** `hud`: the HUD to drive (tests pass a stand-in); else one is built under `hudRoot`. */
-  constructor(private h: ReachHost, hudRoot: HTMLElement | null, hud?: Pick<ReachHud, 'update' | 'callout' | 'show' | 'dispose'>) {
+  constructor(private h: ReachHost, hudRoot: HTMLElement | null, hud?: Pick<ReachHud, 'update' | 'callout' | 'show' | 'dispose' | 'tip'>) {
     this.hud = hud ?? new ReachHud(hudRoot!);
     this.ai = new ReachAI({
       armory: this.armory,
@@ -164,6 +167,12 @@ export class ReachMode {
 
   get on() {
     return this.shown;
+  }
+
+  /** A new run: the tip shows again at its first GO. */
+  newRun() {
+    this.tipped = false;
+    this.reset();
   }
 
   /** Everything of the last fight goes (a new run, a variant switch). */
@@ -238,6 +247,11 @@ export class ReachMode {
     this.knifeCd -= dt;
     const alive = h.alive();
     const go = h.fighting();
+    if (go && !this.wasGo && !this.tipped) {
+      this.tipped = true;
+      this.hud.tip(t(`reach.tip.${h.device()}`));
+    }
+    this.wasGo = go;
 
     // a man who goes down lets go of what he held
     for (const w of this.armory.list) {
@@ -456,6 +470,7 @@ export class ReachMode {
       return;
     }
     this.handCd = REACH.hand.cooldown;
+    this.faceAim();
     const eye = h.eye(_eye);
     if (a.kind === 'portal') {
       const p = this.portals.get(a.id);
@@ -689,9 +704,16 @@ export class ReachMode {
   // The weapon
   // ------------------------------------------------------------------
 
+  /** You turn to where you aim (a hand, a stab, a shot all go that way). */
+  private faceAim() {
+    const d = this.h.aimRay().dir;
+    if (Math.abs(d.x) + Math.abs(d.z) > 1e-4) this.h.player.yaw = Math.atan2(d.x, d.z);
+  }
+
   private shoot(w: Weapon) {
     const h = this.h;
     if (!this.armory.fire(w)) return;
+    this.faceAim();
     const now = h.time();
     this.fireCd = REACH.rifle.interval;
     this.firedT = now;
@@ -793,6 +815,7 @@ export class ReachMode {
   private stab() {
     const h = this.h;
     const tgt = this.knifeTarget();
+    this.faceAim();
     h.hero.play('strike', { fade: 0.04 });
     h.audio.reachSwing(h.player.chest(_a));
     if (!tgt) {
