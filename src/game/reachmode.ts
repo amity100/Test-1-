@@ -90,7 +90,7 @@ export class ReachMode {
   readonly portals = new RedPortals();
   readonly ai: ReachAI;
   readonly fx = new ReachFx();
-  readonly hud: ReachHud;
+  readonly hud: Pick<ReachHud, 'update' | 'callout' | 'show' | 'dispose'>;
   aim: ReachAim | null = null;
   private handCd = 0;
   private fireCd = 0;
@@ -111,8 +111,9 @@ export class ReachMode {
   private firedT = -99;
   private shown = false;
 
-  constructor(private h: ReachHost, hudRoot: HTMLElement) {
-    this.hud = new ReachHud(hudRoot);
+  /** `hud`: the HUD to drive (tests pass a stand-in); else one is built under `hudRoot`. */
+  constructor(private h: ReachHost, hudRoot: HTMLElement | null, hud?: Pick<ReachHud, 'update' | 'callout' | 'show' | 'dispose'>) {
+    this.hud = hud ?? new ReachHud(hudRoot!);
     this.ai = new ReachAI({
       armory: this.armory,
       hands: this.hands,
@@ -416,7 +417,7 @@ export class ReachMode {
       if (typeof w.holder === 'number' && !h.enemies.get(w.holder)?.alive) continue;
       const at = this.weaponAt(w, new THREE.Vector3());
       if (w.holder === null) at.y += 0.12;
-      C.push({ kind: 'weapon', id: w.id, a: at, b: at, r: R.radiusWeapon });
+      C.push({ kind: 'weapon', id: w.id, a: at, b: at, r: w.holder === null ? R.radiusWeapon : R.radiusHeld });
     }
     for (const e of h.enemies.list) {
       if (!e.alive || !e.body || !e.reach || this.pulls.some((q) => q.id === e.id)) continue;

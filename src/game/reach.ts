@@ -39,6 +39,8 @@ export const REACH = {
     hitstop: 0.05,
     /** What the aim takes, in this order when it's on more than one: their portal, a weapon, a man. */
     radiusWeapon: 0.38,
+    /** A weapon in a man's hands is a smaller mark (his head and his legs are still him: aim there to pull him). */
+    radiusHeld: 0.28,
     radiusBody: 0.42,
     radiusPortal: 0.9,
   },
