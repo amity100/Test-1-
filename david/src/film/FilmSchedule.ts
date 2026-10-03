@@ -26,7 +26,7 @@ import { bootMark } from '../core/bootProfile';
  *   await sched.enterFilm(() => intro.t);             // no canvas pre-compile from here on
  *   sched.stop()                                       // the film is over / skipped: stop building (Intro.release)
  */
-export type SetState = 'queued' | 'building' | 'compiling' | 'ready' | 'failed' | 'skipped';
+export type SetState = 'queued' | 'building' | 'built' | 'compiling' | 'ready' | 'failed' | 'skipped';
 /** a job of the builder: a film set, or 'world' — the game world's first-frame warm-up when the boot left it out */
 export type FilmJob = FilmStageSet | 'world';
 
@@ -35,7 +35,7 @@ export interface FilmScheduleOptions extends FilmStageOptions {
    * the game world's first-frame warm-up, moved off the critical path (main.ts, when no benchmark needs it): run first,
    * on the canvas while covered, else off the canvas in slices — before the film's first shot in the world (P2)
    */
-  primeWorld?: (covered: () => boolean, slice: { budgetMs: number; yieldFrame: () => Promise<void> }) => Promise<void>;
+  primeWorld?: (covered: () => boolean, slice: { budgetMs: () => number; yieldFrame: () => Promise<void> }) => Promise<void>;
 }
 
 /**
@@ -43,11 +43,26 @@ export interface FilmScheduleOptions extends FilmStageOptions {
  * (mobile-low / desktop-high; see the report). Only ratios are used: the device's own speed scales them.
  */
 const REL_COST: Record<'desktop' | 'mobile', Record<FilmJob, number>> = {
-  desktop: { world: 1.0, judah: 1, map: 0.34, coast: 0.6, ramah: 3.6, gilgal: 4.1 },
-  mobile: { world: 1.4, judah: 1, map: 0.31, coast: 0.71, ramah: 2.1, gilgal: 2.75 },
+  // desktop-high 1280x720: judah 16.0 + 85.0 s, world prime 88 s, map 1.0 + 46.8, coast 3.7 + 33.0, ramah 54.5 + 107.1,
+  // gilgal 48.2 + 190.7 (build + pre-compile); mobile-low 390x844: judah 6.7 + 10.2, world 24.3, map 0.9 + 8.7,
+  // coast 4.9 + 8.5, ramah 21.6 + 24.2, gilgal 11.2 + 48.3
+  desktop: { world: 0.87, judah: 1, map: 0.47, coast: 0.36, ramah: 1.6, gilgal: 2.37 },
+  mobile: { world: 1.44, judah: 1, map: 0.57, coast: 0.79, ramah: 2.7, gilgal: 3.5 },
 };
-/** share of the wall clock the background builder gets while the film plays (frame-budgeted slices) */
-const FILM_SHARE = 0.35;
+/** the share of each set's cost that is its BUILD (the rest: its pre-compile / prepare), measured as above */
+const BUILD_SHARE: Record<'desktop' | 'mobile', Record<FilmJob, number>> = {
+  desktop: { world: 0, judah: 0.16, map: 0.02, coast: 0.1, ramah: 0.34, gilgal: 0.2 },
+  mobile: { world: 0, judah: 0.4, map: 0.1, coast: 0.37, ramah: 0.47, gilgal: 0.19 },
+};
+/**
+ * Builders with long synchronous steps that a frame budget cannot split (the cast's FilmActor and crowd creation, the
+ * coast's terrain shading): they are built while the picture is covered — the start screen, or a held start — never
+ * under the film. Their pre-compile, the map and the world's warm-up run in slices during the film.
+ */
+const HEAVY: ReadonlySet<FilmJob> = new Set<FilmJob>(['coast', 'ramah', 'gilgal']);
+/** share of the wall clock the background builder gets while the film plays (frame-budgeted slices; conservative) */
+const FILM_SHARE_DESKTOP = 0.45;
+const FILM_SHARE_MOBILE = 0.35;
 /** a set must be predicted ready this many seconds (and this fraction) before its deadline */
 const MARGIN_S = 3;
 const MARGIN_F = 0.8;
@@ -78,6 +93,7 @@ export class FilmSchedule {
   /** film mode: the main-thread time of each background slice (what the builder costs a frame) */
   readonly slices = { n: 0, maxMs: 0, over16: 0, over50: 0, over100: 0, top: [] as { set: string; ms: number }[] };
   private readonly rel: Record<FilmJob, number>;
+  private readonly bshare: Record<FilmJob, number>;
   /** this device's ms per unit of REL_COST (from the sets built so far, covered mode) */
   private unitMs = 0;
   /**
@@ -86,18 +102,21 @@ export class FilmSchedule {
    */
   private readonly holdScale: number;
   private readonly budgetMs: number;
+  private readonly share: number;
 
   private constructor(
     private readonly engine: Engine,
     opts: FilmScheduleOptions,
   ) {
     this.budgetMs = engine.quality.mobile ? 5 : 7;
+    this.share = engine.quality.mobile ? FILM_SHARE_MOBILE : FILM_SHARE_DESKTOP;
     const hs = typeof location !== 'undefined' ? Number(new URLSearchParams(location.search).get('holdscale')) : NaN;
     this.holdScale = Number.isFinite(hs) && hs > 0 ? hs : 1;
     const { primeWorld, ...stageOpts } = opts;
     this.primeWorld = primeWorld;
     this.stage = FilmStage.create(engine, { ...stageOpts, yieldFrame: () => this.yieldSlice() });
     this.rel = REL_COST[engine.quality.mobile ? 'mobile' : 'desktop'];
+    this.bshare = BUILD_SHARE[engine.quality.mobile ? 'mobile' : 'desktop'];
     const starts = shotStarts();
     const only = this.stage.wantedSets();
     for (const p of starts) {
@@ -143,31 +162,48 @@ export class FilmSchedule {
     for (const n of names) {
       const r = this.rel[n] ?? 1;
       w += r;
-      const st = this.state[n];
-      d += r * (st === 'ready' || st === 'failed' || st === 'skipped' ? 1 : st === 'compiling' ? 0.7 + 0.3 * (this.progressOf[n] ?? 0) : st === 'building' ? 0.7 * (this.progressOf[n] ?? 0) : 0);
+      d += r * this.doneFrac(n);
     }
     return w > 0 ? d / w : 1;
   }
 
+  /** the fraction of a job's work done (its build share, then its prepare) */
+  private doneFrac(n: FilmJob): number {
+    const st = this.state[n], b = this.bshare[n] ?? 0.3, p = this.progressOf[n] ?? 0;
+    if (st === 'ready' || st === 'failed' || st === 'skipped') return 1;
+    if (st === 'compiling') return b + (1 - b) * p;
+    if (st === 'built') return b;
+    if (st === 'building') return b * p;
+    return 0;
+  }
+
+  /** the heavy builds not finished yet (they must be, before the picture goes on screen) */
+  private heavyPending(): FilmJob[] {
+    return this.order.filter((n) => HEAVY.has(n) && (this.state[n] === 'queued' || this.state[n] === 'building'));
+  }
+
   /**
-   * Seconds the film start must still wait on this device (0 = safe now): for every set not ready yet, its predicted
-   * ready time if the film started now (the remaining work in deadline order, at FILM_SHARE of the wall clock) must lie
-   * MARGIN before its deadline. Before any set has been measured the answer is "not yet".
+   * Seconds the film start must still wait on this device (0 = safe now): the heavy builds must be done (at full
+   * speed, behind the cover), and for every job not ready its predicted ready time if the film started now (the
+   * remaining work in deadline order, at `share` of the wall clock) must lie MARGIN before its deadline. Before any set
+   * has been measured the answer is "not yet".
    */
   startWait(): number {
     if (this.unitMs <= 0) return Infinity;
+    let heavy = 0;
+    for (const n of this.heavyPending()) heavy += ((this.rel[n] ?? 1) * ((this.bshare[n] ?? 0.3) - this.doneFrac(n)) * this.unitMs) / 1000;
     let cum = 0, wait = 0;
     for (const n of this.order) {
       const st = this.state[n];
       if (st === 'ready' || st === 'failed' || st === 'skipped') continue;
-      const p = st === 'compiling' ? 0.7 + 0.3 * (this.progressOf[n] ?? 0) : st === 'building' ? 0.7 * (this.progressOf[n] ?? 0) : 0;
-      const remain = ((this.rel[n] ?? 1) * (1 - p) * this.unitMs * this.holdScale) / 1000;
-      cum += remain / FILM_SHARE;
+      const done = HEAVY.has(n) ? Math.max(this.doneFrac(n), this.bshare[n] ?? 0.3) : this.doneFrac(n);
+      const remain = ((this.rel[n] ?? 1) * (1 - done) * this.unitMs * this.holdScale) / 1000;
+      cum += remain / this.share;
       const limit = Math.min(this.deadline[n]! * MARGIN_F, this.deadline[n]! - MARGIN_S);
-      // covered (holding) runs at full speed: the excess shrinks by FILM_SHARE of the remaining-work estimate per second
-      if (cum > limit) wait = Math.max(wait, ((cum - limit) * FILM_SHARE) / this.holdScale);
+      // covered (holding) runs at full speed: the excess shrinks by `share` of the remaining-work estimate per second
+      if (cum > limit) wait = Math.max(wait, ((cum - limit) * this.share) / this.holdScale);
     }
-    return wait;
+    return heavy + wait;
   }
 
   /**
@@ -176,6 +212,8 @@ export class FilmSchedule {
    */
   async waitForStart(onProgress?: (f: number) => void): Promise<void> {
     this.covered = true;
+    // test only: ?hold=0 starts at once (the harness exercises the film-time builds on a slow box)
+    if (typeof location !== 'undefined' && new URLSearchParams(location.search).get('hold') === '0') return;
     const first = this.startWait();
     for (;;) {
       if (this.stopped) return;
@@ -194,6 +232,8 @@ export class FilmSchedule {
     if (filmClock) this.filmClock = filmClock;
     while (this.canvasBusy) await this.canvasBusy;
     this.covered = false;
+    // the first film-mode slice is measured from here (covered work never counts as a slice)
+    this.sliceT = performance.now();
   }
 
   /** stop building (the film was skipped or is over); the stage's own dispose frees what was built */
@@ -221,6 +261,11 @@ export class FilmSchedule {
     this.sliceT = performance.now();
   }
 
+  /** a slice's main-thread budget: big while covered (the start screen stays responsive), small while the film plays */
+  private sliceBudget(): number {
+    return this.covered ? 40 : this.urgent ? this.budgetMs * 4 : this.budgetMs;
+  }
+
   private noteSlice(ms: number) {
     const s = this.slices;
     s.n++;
@@ -236,82 +281,105 @@ export class FilmSchedule {
   }
 
   private async run() {
-    let unitsDone = 0, msDone = 0;
-    // the first sets (judah) before anything else: the start screen waits for them; then the rest by deadline
+    // A: the first sets (judah) — the start screen waits for them; B: the heavy builds, while the start screen covers;
+    // C: everything else in deadline order (the world's warm-up, the map, the heavy sets' pre-compiles)
     const first = this.firstSets();
-    const order = [...first, ...this.order.filter((n) => !first.includes(n))];
-    for (const n of order) {
-      if (this.stopped) break;
-      // a set whose shots the film has already passed is not built any more (a late device; tests seeking ahead)
-      const clock = this.filmClock?.();
-      if (clock !== undefined && clock > this.deadline[n]! + 30) {
-        this.state[n] = 'skipped';
-        this.resolve[n]?.();
-        continue;
-      }
-      if (!this.covered) {
-        await nextFrame();
-        this.sliceT = performance.now();
-      }
-      const t0 = performance.now();
-      const covered0 = this.covered;
-      this.state[n] = 'building';
-      this.current = n;
-      if (n === 'world') {
-        // the game world's first-frame warm-up (no build: the world is built at boot)
-        this.state[n] = 'compiling';
-        // sliced in both modes (the start screen stays responsive): covered = bigger slices, a macrotask between them
-        await this.primeWorld!(() => this.covered, { budgetMs: this.covered ? 40 : this.budgetMs, yieldFrame: () => this.frameYield() }).catch((e) => console.warn('[film] world prime', e));
-        const t2w = performance.now();
-        this.times[n] = { build: 0, prep: Math.round(t2w - t0), covered: covered0 && this.covered, readyAt: Math.round(t2w) };
-        this.state[n] = 'ready';
-        this.progressOf[n] = 1;
-        bootMark('job:world');
-        this.resolve[n]?.();
-        continue;
-      }
-      const h = await this.stage.buildSet(n, (f) => (this.progressOf[n] = f));
-      const t1 = performance.now();
-      if (!h || this.stopped) {
-        // stopped while it was building (the film was skipped / is over): free it at once
-        if (h && this.stopped) this.stage.release(n);
-        this.state[n] = this.stopped ? 'skipped' : 'failed';
-        this.resolve[n]?.();
-        continue;
-      }
-      this.state[n] = 'compiling';
-      this.progressOf[n] = 0;
-      if (this.covered) {
-        // behind the loading / start screen: programs and uploads in slices first (the start screen stays responsive),
-        // then — if the picture is still covered — the full warm-up on the canvas (a click waits for it: enterFilm)
-        await this.stage.prepareSet(n, { budgetMs: 40, yieldFrame: () => this.frameYield() });
-        if (this.covered) {
-          const p = this.stage.precompileSet(n);
-          this.canvasBusy = p;
-          await p;
-          this.canvasBusy = null;
-        }
-      } else {
-        this.watchDeadline(n);
-        await this.stage.prepareSet(n, { budgetMs: this.budgetMs, yieldFrame: () => this.frameYield() });
-      }
-      const t2 = performance.now();
-      this.times[n] = { build: Math.round(t1 - t0), prep: Math.round(t2 - t1), covered: covered0 && this.covered, readyAt: Math.round(t2) };
-      // the device's speed: measured in covered mode only (the film-mode wall clock is mostly the film's own frames)
-      if (covered0 && this.covered) {
-        unitsDone += this.rel[n] ?? 1;
-        msDone += t2 - t0;
-        this.unitMs = msDone / unitsDone;
-      } else if (this.unitMs <= 0) this.unitMs = ((t2 - t0) * FILM_SHARE) / (this.rel[n] ?? 1);
-      this.state[n] = 'ready';
-      this.progressOf[n] = 1;
-      bootMark('set:' + n);
-      this.resolve[n]?.();
-      // the start screen comes up the moment the first sets are ready (its continuation runs before the next job)
-      if (first.includes(n)) await macrotask();
-    }
+    for (const n of first) await this.job(n, false);
+    // the start screen comes up the moment the first sets are ready (its continuation runs before the next job)
+    await macrotask();
+    for (const n of this.order) if (HEAVY.has(n) && !first.includes(n)) await this.job(n, true);
+    for (const n of this.order) if (!first.includes(n)) await this.job(n, false);
     this.current = null;
     this.urgent = false;
+  }
+
+  /** one job: build (unless built) and prepare a set — or only build it (`buildOnly`); 'world' = the world's warm-up */
+  private async job(n: FilmJob, buildOnly: boolean): Promise<void> {
+    if (this.stopped) return;
+    const st0 = this.state[n];
+    if (st0 === 'ready' || st0 === 'failed' || st0 === 'skipped' || (buildOnly && st0 === 'built')) return;
+    // a set whose shots the film has already passed is not built any more (a late device; tests seeking ahead)
+    const clock = this.filmClock?.();
+    if (clock !== undefined && clock > this.deadline[n]! + 30) {
+      this.state[n] = 'skipped';
+      this.resolve[n]?.();
+      return;
+    }
+    if (!this.covered) {
+      await nextFrame();
+      this.sliceT = performance.now();
+    }
+    this.current = n;
+    const t0 = performance.now();
+    const covered0 = this.covered;
+    const time = (this.times[n] ??= { build: 0, prep: 0, covered: true, readyAt: 0 });
+    if (n === 'world') {
+      // the game world's first-frame warm-up (no build: the world is built at boot); sliced in both modes (the start
+      // screen stays responsive): covered = bigger slices, a macrotask between them
+      this.state[n] = 'compiling';
+      await this.primeWorld!(() => this.covered, { budgetMs: () => this.sliceBudget(), yieldFrame: () => this.frameYield() }).catch((e) => console.warn('[film] world prime', e));
+      this.finish(n, t0, covered0, time, 'prep');
+      return;
+    }
+    const name = n as FilmStageSet;
+    if (this.state[n] !== 'built') {
+      this.state[n] = 'building';
+      this.progressOf[n] = 0;
+      const h = await this.stage.buildSet(name, (f) => (this.progressOf[n] = f));
+      time.build = Math.round(performance.now() - t0);
+      time.covered &&= covered0 && this.covered;
+      if (!h || this.stopped) {
+        // stopped while it was building (the film was skipped / is over): free it at once
+        if (h && this.stopped) this.stage.release(name);
+        this.state[n] = this.stopped ? 'skipped' : 'failed';
+        this.resolve[n]?.();
+        return;
+      }
+      this.state[n] = 'built';
+      this.progressOf[n] = 0;
+      this.calibrate(n, performance.now() - t0, covered0, this.bshare[n] ?? 0.3);
+      if (buildOnly) return;
+    }
+    const t1 = performance.now();
+    const covered1 = this.covered;
+    this.state[n] = 'compiling';
+    if (this.covered) {
+      // behind the loading / start screen: programs and uploads in slices first (the start screen stays responsive),
+      // then — if the picture is still covered — the full warm-up on the canvas (a click waits for it: enterFilm)
+      await this.stage.prepareSet(name, { budgetMs: () => this.sliceBudget(), yieldFrame: () => this.frameYield() });
+      if (this.covered) {
+        const p = this.stage.precompileSet(name);
+        this.canvasBusy = p;
+        await p;
+        this.canvasBusy = null;
+      }
+    } else {
+      this.watchDeadline(n);
+      await this.stage.prepareSet(name, { budgetMs: () => this.sliceBudget(), yieldFrame: () => this.frameYield() });
+    }
+    this.calibrate(n, performance.now() - t1, covered1, 1 - (this.bshare[n] ?? 0.3));
+    this.finish(n, t1, covered1, time, 'prep');
+  }
+
+  private finish(n: FilmJob, t0: number, covered0: boolean, time: { build: number; prep: number; covered: boolean; readyAt: number }, part: 'prep') {
+    const t = performance.now();
+    time[part] = Math.round(t - t0);
+    time.covered &&= covered0 && this.covered;
+    time.readyAt = Math.round(t);
+    this.state[n] = 'ready';
+    this.progressOf[n] = 1;
+    bootMark((n === 'world' ? 'job:' : 'set:') + n);
+    this.resolve[n]?.();
+  }
+
+  /** the device's speed (ms per REL_COST unit), from work done while covered (film-mode wall time is mostly the film) */
+  private unitsDone = 0;
+  private msDone = 0;
+  private calibrate(n: FilmJob, ms: number, covered: boolean, frac: number) {
+    if (!(covered && this.covered)) return;
+    this.unitsDone += (this.rel[n] ?? 1) * frac;
+    this.msDone += ms;
+    if (this.unitsDone > 0) this.unitMs = this.msDone / this.unitsDone;
   }
 
   /** a prepare slice's yield (same budget rule as the builder's) */
@@ -330,6 +398,6 @@ export class FilmSchedule {
 
   /** for the report: is every set built and prepared (or given up)? */
   get settled(): boolean {
-    return this.order.every((n) => this.state[n] !== 'queued' && this.state[n] !== 'building' && this.state[n] !== 'compiling');
+    return this.order.every((n) => this.state[n] === 'ready' || this.state[n] === 'failed' || this.state[n] === 'skipped');
   }
 }

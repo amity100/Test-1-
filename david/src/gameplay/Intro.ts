@@ -63,7 +63,7 @@ export interface IntroPreloadOptions {
   short?: boolean;
   onProgress?: (f: number, label: string) => void;
   /** load1: the world's first-frame warm-up, for the background builder to run before P2 (main.ts; progressive only) */
-  primeWorld?: (covered: () => boolean, slice: { budgetMs: number; yieldFrame: () => Promise<void> }) => Promise<void>;
+  primeWorld?: (covered: () => boolean, slice: { budgetMs: () => number; yieldFrame: () => Promise<void> }) => Promise<void>;
 }
 
 /** the warm white of the light-flash cut G7 -> D1 */

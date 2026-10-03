@@ -87,7 +87,7 @@ export const D4 = {
   kneel1: [-5.17, 12.9],
   wayOn: [[-3.56, 11.55]],
   kneel2: [HANDOFF.x, HANDOFF.z],
-  ewe: [-0.49, 9.86],
+  ewe: [-0.5, 10.59],
   /** the lamb set down this far in front of him */
   setDownD: 0.62,
   /** seconds relative to the beats: the walk down starts at descend + d0 and ends at kneel + d1; he kneels at kneel +
@@ -158,9 +158,10 @@ export const WORLD_CAM = {
       [1.4, 174, 4.5, 2.6, 0, 0, 44],
       [3.9, 178, 4.2, 2.5, 0, 0, 43],
       [5.0, 178, 3.9, 2.4, 0, -1, 42],
-      [6.6, 172, 4.0, 2.35, 0, 5, 41],
-      [9.0, 168, 4.1, 2.35, 0, 6, 41],
-      [11.2, 168, 4.0, 2.45, 0, 4, 43],
+      [6.6, 172, 4.0, 2.35, 0, 3, 41],
+      [7.8, 170, 4.05, 2.35, 0, 6.5, 41],
+      [9.0, 168, 4.1, 2.35, 0, 7, 41],
+      [11.2, 168, 4.5, 2.5, 0, 7, 43],
       [13.0, 172, 3.4, 2.55, 0, 1, 47],
       [14.6, 175, 3.3, 2.5, 0, 0, 49],
     ] as [number, number, number, number, number, number, number][],
@@ -894,6 +895,17 @@ export class FilmWorld {
       if (rams[i]) put(rams[i], r[0], r[1], r[2]);
     });
     this.cast = { ewe, lambs, nurseEwe: ewB, goat };
+    // (v9 review) the bush 3.5 m below his stand filled D3's frame: hidden for D3 / D4 (put back when the film leaves —
+    // at the hand-off it is just outside the game camera's view)
+    if (!this.restoreTrees) {
+      try {
+        const sc = this.h.engine.scene;
+        const r = hideTreesNear(sc, V(-8.9, 0, 14.2), 3.0, ['olive', 'oak', 'terebinth', 'cypress', 'bush']);
+        this.restoreTrees = r;
+      } catch (e) {
+        console.warn('[film] D3 bush', e);
+      }
+    }
     // the rest of the flock in D3's lens: on the slope below him, in sight, 8-32 m from him
     const cam = this.stageLens('watch', 3.5);
     try {

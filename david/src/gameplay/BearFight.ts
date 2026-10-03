@@ -50,11 +50,11 @@ export type FightResult = 'grip' | 'knockout';
 /** the tuning (one place; the table in the bear1 report comes from bot runs against these) */
 export const FIGHT = {
   /** fatigue per unit of hit value, and per second of fighting */
-  fatiguePerHit: 0.021,
+  fatiguePerHit: 0.0056,
   fatiguePerSec: 0.0021,
   /** the grip needs this fatigue AND this many counter hits */
   gripFatigue: 0.68,
-  gripCounters: 6,
+  gripCounters: 10,
   /** hit values: [counter (open window), neutral, in its tell (swatted through)] */
   jabHead: [1.0, 0.45, 0.2],
   jabBody: [0.45, 0.2, 0.1],

@@ -339,10 +339,10 @@ export class FilmStage {
    * load1: prepare one built set WITHOUT the canvas — for a set that finishes building while the film plays (the
    * canvas pre-compile above would show it): Engine.prepareView compiles its programs (parallel where the driver can)
    * and uploads its geometry / textures / shadow map into a scratch target in frame-budgeted slices. It never calls the
-   * handle's enter / tick (the land sets' tick writes the on-screen grade), except Gilgal's (its own set, army and
-   * cast only): its army and actors are posed once in the background instead of on the pre-roll's first frame.
+   * handle's enter / tick (judah's and the coast's tick write the on-screen grade), except Gilgal's and Ramah's (their
+   * own set, army and cast only), replayed exactly as precompileSet does so the simulations reach their shots unchanged.
    */
-  async prepareSet(name: FilmStageSet, opts: { budgetMs?: number; yieldFrame?: () => Promise<void> } = {}): Promise<void> {
+  async prepareSet(name: FilmStageSet, opts: { budgetMs?: number | (() => number); yieldFrame?: () => Promise<void> } = {}): Promise<void> {
     const h = this.sets[name];
     if (!h) return;
     const t0 = performance.now();
@@ -351,10 +351,14 @@ export class FilmStage {
       const f: ShotFrame = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: 40, roll: 0 };
       let pose = h.precompilePoses?.[0];
       if (!pose && shots[0] && h.frame(shots[0].take, 0.5, shots[0].dur * 0.5, f)) pose = { pos: f.pos.clone(), look: f.look.clone() };
-      if (name === 'gilgal' && shots[0]) {
-        h.enter(shots[0].take);
-        h.tick(shots[0].take, 0, 0);
-        await (opts.yieldFrame ?? (() => new Promise<void>((r) => setTimeout(r, 0))))();
+      if (name === 'gilgal' || name === 'ramah') {
+        // the same enter / tick history as precompileSet (the middle of every take, dt 0), so the hair sims and the
+        // army's phases reach G1 / P7 exactly as with the old loading; these two handles touch only their own set
+        for (const s of shots) {
+          h.enter(s.take);
+          h.tick(s.take, s.dur * 0.5, 0);
+          await (opts.yieldFrame ?? (() => new Promise<void>((r) => setTimeout(r, 0))))();
+        }
       }
       const r = await this.engine.prepareView(h.view, { budgetMs: opts.budgetMs, yieldFrame: opts.yieldFrame, pose });
       const st = this.buildStats[name];

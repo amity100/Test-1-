@@ -1570,17 +1570,25 @@ export class Story {
     b.stop(dt);
   }
 
-  /** the struggle's lens: a close two-shot from its side, drifting with them */
+  /**
+   * the struggle's lens: in front of its head, a little to the side away from him — its face (the jaw in his hand) and
+   * David beyond it, both in the frame; drifting slowly with them (he stands at its head on side `gripSide`, so a lens on
+   * his own side would see only his back)
+   */
   private gripShot(): Shot {
     const b = this.bear;
+    const head = new THREE.Vector3();
     return { duration: 60, ease: false, at: (_u, tt) => {
       const fx = Math.sin(b.heading), fz = Math.cos(b.heading);
-      const side = new THREE.Vector3(fz, 0, -fx).multiplyScalar(this.gripSide);
-      const mid = this.player.pos.clone().lerp(b.pos, 0.5);
-      const a = Math.sin(tt * 0.3) * 0.35;
-      const pos = mid.clone().addScaledVector(side, 3.3 * Math.cos(a)).add(new THREE.Vector3(fx, 0, fz).multiplyScalar(1.4 + Math.sin(a) * 1.2)).add(new THREE.Vector3(0, 1.05, 0));
-      pos.y = Math.max(pos.y, this.engine.terrain.heightAt(pos.x, pos.z) + 0.6);
-      return { pos, look: mid.clone().add(new THREE.Vector3(0, 1.0, 0)), fov: 42 };
+      const lx = Math.cos(b.heading), lz = -Math.sin(b.heading);
+      const s = -this.gripSide;
+      const a = Math.sin(tt * 0.3) * 0.3;
+      b.model.headCenter.getWorldPosition(head);
+      const out = 3.4 + Math.sin(tt * 0.21) * 0.25;
+      const pos = new THREE.Vector3(b.pos.x + fx * out + lx * s * (1.25 + a), 0, b.pos.z + fz * out + lz * s * (1.25 + a));
+      pos.y = Math.max(head.y + 0.3, this.engine.terrain.heightAt(pos.x, pos.z) + 0.6);
+      const look = head.clone().lerp(_bearW.set(this.player.pos.x, this.player.pos.y + 1.2, this.player.pos.z), 0.4);
+      return { pos, look, fov: 46 };
     } };
   }
 

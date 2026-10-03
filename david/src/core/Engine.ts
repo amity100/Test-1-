@@ -1116,7 +1116,7 @@ export class Engine {
    * variant the first pass missed). Every slice stays within `budgetMs` of main-thread time and a frame is awaited
    * between slices (`yieldFrame`). Visibility / frustum flags are put back exactly. Resolves with what it did.
    */
-  async prepareView(view: ViewSpec, opts: { budgetMs?: number; yieldFrame?: () => Promise<void>; pose?: BenchView } = {}): Promise<{ objects: number; programs: number; slices: number; worstMs: number; ms: number }> {
+  async prepareView(view: ViewSpec, opts: { budgetMs?: number | (() => number); yieldFrame?: () => Promise<void>; pose?: BenchView } = {}): Promise<{ objects: number; programs: number; slices: number; worstMs: number; ms: number }> {
     const t0 = performance.now();
     const r = this.renderer;
     const scene = view.scene;
@@ -1130,7 +1130,8 @@ export class Engine {
       cam.quaternion.copy(src.quaternion);
     }
     cam.updateMatrixWorld();
-    const budget = opts.budgetMs ?? 6;
+    // (a function: the budget may change while it runs — the start click puts the picture on screen)
+    const budgetOf = () => (typeof opts.budgetMs === 'function' ? opts.budgetMs() : opts.budgetMs ?? 6);
     const nextFrame = opts.yieldFrame ?? (() => new Promise<void>((res) => requestAnimationFrame(() => setTimeout(res, 0))));
     const items: THREE.Object3D[] = [];
     scene.traverse((o) => {
@@ -1141,23 +1142,27 @@ export class Engine {
     let sliceT = performance.now();
     const tick = async () => {
       const el = performance.now() - sliceT;
-      if (el < budget) return;
+      if (el < budgetOf()) return;
       worst = Math.max(worst, el);
       slices++;
       await nextFrame();
       sliceT = performance.now();
     };
-    // (1) programs: compile(group, camera, targetScene) — the group's materials with the view scene's lights / fog
+    // (1) programs: compile(group, camera, targetScene) — the group's materials with the view scene's lights / fog.
+    // Only with KHR_parallel_shader_compile: without it the GPU process compiles its queue in order and the first draw
+    // would wait for ALL of them at once — there each program compiles on its own object's draw in (2), one small slice
+    // at a time.
+    const parallel = r.extensions.has('KHR_parallel_shader_compile');
     const pending: Promise<unknown>[] = [];
     const programs0 = r.info.programs?.length ?? 0;
     const scene0 = this.post.sceneTarget;
-    for (let i = 0; i < items.length && !this.contextLost; ) {
+    for (let i = 0; parallel && i < items.length && !this.contextLost; ) {
       const batch: THREE.Object3D[] = [];
       const bt = performance.now();
       const prevRT = r.getRenderTarget();
       r.setRenderTarget(scene0);
       try {
-        while (i < items.length && performance.now() - bt < budget * 0.5) {
+        while (i < items.length && performance.now() - bt < budgetOf() * 0.5) {
           batch.length = 0;
           for (let k = 0; k < 8 && i < items.length; k++) batch.push(items[i++]);
           // a duck-typed group: compile() only traverses it (its lights come from targetScene)
@@ -1173,13 +1178,6 @@ export class Engine {
     }
     // the driver compiles in parallel; bounded like precompile() (a lost context never resolves)
     await Promise.race([Promise.all(pending), new Promise((res) => setTimeout(res, 15000))]);
-    if (!r.extensions.has('KHR_parallel_shader_compile')) {
-      // without the extension the programs still compile in the GPU process, but a draw blocks until its program is
-      // linked: give the queue time (frames keep coming) before the first draw of (2)
-      const fresh = (r.info.programs?.length ?? 0) - programs0;
-      const until = performance.now() + Math.min(6000, Math.max(0, fresh) * 25);
-      while (performance.now() < until) await nextFrame();
-    }
     await tick();
     // (2) uploads: draw the meshes a few at a time into a scratch target (everything else hidden; lights unchanged)
     if (!this.scratchRT) this.scratchRT = new THREE.WebGLRenderTarget(64, 64, { type: this.floatTargets ? THREE.HalfFloatType : THREE.UnsignedByteType, depthBuffer: true });
@@ -1197,7 +1195,7 @@ export class Engine {
     const autoUpdate = scene.matrixWorldAutoUpdate;
     try {
       let k = 0;
-      let per = 4;
+      let per = parallel ? 4 : 1;
       while (k < items.length && !this.contextLost) {
         const bt = performance.now();
         const batch = items.slice(k, k + per);
@@ -1215,6 +1213,7 @@ export class Engine {
         }
         const ms = performance.now() - bt;
         // grow the groups while they are cheap, shrink them when one was expensive
+        const budget = budgetOf();
         per = ms < budget * 0.25 ? Math.min(64, per * 2) : ms > budget ? Math.max(1, per >> 1) : per;
         await tick();
       }
@@ -1387,7 +1386,7 @@ export class Engine {
    * behind the start screen (`covered`), else off the canvas in frame-budgeted slices (prepareView: while the film plays,
    * before the first shot in the world).
    */
-  async primeWorld(views: BenchView[], covered: () => boolean, slice: { budgetMs?: number; yieldFrame?: () => Promise<void> } = {}) {
+  async primeWorld(views: BenchView[], covered: () => boolean, slice: { budgetMs?: number | (() => number); yieldFrame?: () => Promise<void> } = {}) {
     if (this.contextLost) return;
     // (both modes) the programs and uploads in slices off the canvas: the start screen stays responsive meanwhile
     await this.prepareView({ scene: this.scene, camera: this.camera }, { ...slice, pose: views[0] });
