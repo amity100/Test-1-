@@ -95,6 +95,23 @@ interface MoveRun {
 
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
+const _face = new THREE.Vector3();
+
+/**
+ * how far a point is from the line the blow sweeps in front of him (his frame: forward, up) — the swung blow comes down
+ * from over his shoulder to 1.75 m ahead at knee height and can land with the staff's length; the jab drives its last
+ * part level out to 2.15 m. Deterministic (the clip's pose and blending never decide a hit); the tip only places the effect.
+ */
+export function staffDist(p: Player, _tip: THREE.Vector3, q: THREE.Vector3, kind: 'jab' | 'strike') {
+  const fx = Math.sin(p.heading), fz = Math.cos(p.heading);
+  const a0 = kind === 'jab' ? 0.6 : 0.35, h0 = 1.1;
+  const a1 = kind === 'jab' ? 2.15 : 1.75, h1 = kind === 'jab' ? 1.0 : 0.6;
+  const dx = q.x - p.pos.x, dz = q.z - p.pos.z;
+  const along = dx * fx + dz * fz, lat = dx * fz - dz * fx, up = q.y - p.pos.y;
+  const sx = a1 - a0, sy = h1 - h0;
+  const u = clamp(((along - a0) * sx + (up - h0) * sy) / (sx * sx + sy * sy), 0, 1);
+  return Math.hypot(a0 + sx * u - along, h0 + sy * u - up, lat);
+}
 
 export class BearFight {
   fatigue = 0;
@@ -144,6 +161,7 @@ export class BearFight {
     bear.model.onStep = (_leg, at, s) => this.sfxAt('bearStep', at, Math.min(1, 0.3 + 0.35 * s), 1.05 - 0.15 * Math.min(1, s));
     cam.combatFocus = bear.pos;
     player.strikeKind = () => this.strikeKind();
+    player.strikeAt = () => this.headIfNear();
     this.lastBearPos.copy(bear.pos);
   }
 
@@ -155,6 +173,7 @@ export class BearFight {
     bear.model.onCue = (cue, at, s) => this.onCue(cue, at, s);
     cam.combatFocus = bear.pos;
     player.strikeKind = () => this.strikeKind();
+    player.strikeAt = () => this.headIfNear();
     this.cd = 1.2;
     this.openWindow(0.6);
     this.setPhase('recover');
@@ -174,10 +193,18 @@ export class BearFight {
     const { bear, cam, player, ui } = this.h;
     cam.combatFocus = null;
     player.strikeKind = undefined;
+    player.strikeAt = undefined;
     bear.model.onCue = undefined;
     bear.model.onStep = undefined;
     ui.bossNote(null);
     ui.qte(null);
+  }
+
+  /** the head he squares up to when he swings (none when it is out of any blow's reach) */
+  private headIfNear() {
+    const { bear, player } = this.h;
+    const hc = bear.model.headCenter.getWorldPosition(_face);
+    return Math.hypot(hc.x - player.pos.x, hc.z - player.pos.z) < 3.4 ? hc : null;
   }
 
   /** the blow the staff button gives: the swung blow when the head is within its reach, else the jab */
@@ -532,15 +559,8 @@ export class BearFight {
     const head = pts[2];
     // the staff from his hands to its end (a blow can land with its length, not only its tip)
     const p = this.h.player;
-    const hands = _w.set(p.pos.x + p.forward.x * 0.3, p.pos.y + 1.05, p.pos.z + p.forward.z * 0.3);
-    const seg = (q: THREE.Vector3) => {
-      const ax = tip.x - hands.x, ay = tip.y - hands.y, az = tip.z - hands.z;
-      const l2 = ax * ax + ay * ay + az * az || 1;
-      const u = clamp(((q.x - hands.x) * ax + (q.y - hands.y) * ay + (q.z - hands.z) * az) / l2, kind === 'jab' ? 0.6 : 0.35, 1);
-      return Math.hypot(hands.x + ax * u - q.x, hands.y + ay * u - q.y, hands.z + az * u - q.z);
-    };
-    const dh = seg(head);
-    const db = Math.min(seg(pts[0]), seg(pts[1]));
+    const dh = staffDist(p, tip, head, kind);
+    const db = Math.min(staffDist(p, tip, pts[0], kind), staffDist(p, tip, pts[1], kind));
     const onHead = dh < (kind === 'jab' ? 0.5 : 0.6);
     if (!onHead && db > 0.75) return false;
     const table = onHead ? (kind === 'jab' ? FIGHT.jabHead : FIGHT.strikeHead) : kind === 'jab' ? FIGHT.jabBody : FIGHT.strikeBody;
@@ -818,7 +838,7 @@ export class FightBot {
   }
 
   /** (tests) the rescue: at its edge, out of its swats, a blow to its snout in its opening */
-  rescue(dt: number, h: FightHost) {
+  rescue(dt: number, h: FightHost, open: boolean) {
     const { input, player: p, bear: b } = h;
     const cur = b.model.current;
     this.sprint(h, false);
@@ -846,7 +866,7 @@ export class FightBot {
       input.press('dodge');
       return;
     }
-    if (cur && cur.open && !this.struckWin) {
+    if (open && !this.struckWin) {
       const hc = b.model.headCenter.getWorldPosition(_v);
       const dh = Math.hypot(hc.x - p.pos.x, hc.z - p.pos.z);
       if (dh > 1.35) this.stick(h, hc.x - p.pos.x, hc.z - p.pos.z);

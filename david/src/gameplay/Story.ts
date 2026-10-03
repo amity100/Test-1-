@@ -16,7 +16,7 @@ import { Range, ROUNDS, type RoundStats } from './Range';
 import { STONE_BEATS, THROW_RELEASE } from '../characters/DavidModel';
 import { Intro } from './Intro';
 import { BearHook } from './BearHook';
-import { BearFight, FightBot, type FightResult, type FightHost } from './BearFight';
+import { BearFight, FightBot, staffDist, type FightResult, type FightHost } from './BearFight';
 import { smoothstep } from '../core/noise';
 import { BEAR_MOVES } from '../characters/BearModel';
 import { LAYOUT, SUN } from '../world/Layout';
@@ -806,6 +806,7 @@ export class Story {
     this.bot = null;
     this.cam.combatFocus = null;
     this.player.strikeKind = undefined;
+    this.player.strikeAt = undefined;
     this.player.stunT = 0;
     this.bear.model.fatigue = 0;
     this.bear.model.struggle = 0;
@@ -1018,8 +1019,9 @@ export class Story {
         return;
       }
       const pts = this.bear.model.hitPoints([]);
-      const onHead = tip.distanceTo(pts[2]) < (kind === 'jab' ? 0.5 : 0.6);
-      const onBody = Math.min(tip.distanceTo(pts[0]), tip.distanceTo(pts[1])) < 0.75;
+      const p = this.player;
+      const onHead = staffDist(p, tip, pts[2], kind) < (kind === 'jab' ? 0.5 : 0.6);
+      const onBody = Math.min(staffDist(p, tip, pts[0], kind), staffDist(p, tip, pts[1], kind)) < 0.75;
       if (onHead || onBody) this.hitBear(tip, 'staff', onHead ? 'head' : 'body');
     }
   }
@@ -1173,11 +1175,21 @@ export class Story {
       const hc = b.model.headCenter.getWorldPosition(_bearV);
       return Math.hypot(hc.x - this.player.pos.x, hc.z - this.player.pos.z) < 1.55 ? 'strike' : 'jab';
     };
+    const faceHead = new THREE.Vector3();
+    this.player.strikeAt = () => {
+      b.model.headCenter.getWorldPosition(faceHead);
+      return Math.hypot(faceHead.x - this.player.pos.x, faceHead.z - this.player.pos.z) < 3.4 ? faceHead : null;
+    };
     let freed = false;
     let cd = 1.4;
     const host = this.fightHost();
     this.bot = this.bot ?? this.botFromUrl();
-    const opening = () => !!b.model.current?.open;
+    // its opening: the move's own window (overreached after a swat, the head low after the stomp) and a moment after it
+    let openT = 0;
+    const opening = () => {
+      const c = b.model.current;
+      return (!!c && c.open && c.name !== 'hurt') || openT > 0;
+    };
     this.bearHitCB = (kind, zone) => {
       if (freed) return;
       if (zone === 'head' && opening()) {
@@ -1192,6 +1204,8 @@ export class Story {
     this.beh = (dt) => {
       const d = b.pos.distanceTo(this.player.pos);
       b.model.lookTarget = this.player.pos;
+      const oc = b.model.current;
+      openT = oc && oc.open && oc.name !== 'hurt' ? 0.8 : Math.max(0, openT - dt);
       if (!b.model.busy) {
         b.face(this.player.pos, dt, 2.6);
         b.stop(dt);
@@ -1214,12 +1228,13 @@ export class Story {
         this.ui.hint('<span class="h-item">קוּם — הַשֶּׂה עֲדַיִן בְּפִיו</span>', 3);
       }
       this.bearThreats[0] = b.pos;
-      this.bot?.rescue(dt, host);
+      this.bot?.rescue(dt, host, opening());
     };
     await this.until(() => freed);
     this.check();
     this.bot?.release(host);
     this.player.strikeKind = undefined;
+    this.player.strikeAt = undefined;
     this.bearHitCB = null;
     // the jaws open: he snatches the lamb and it bolts back toward the flock (it stops, trembling, on the way)
     this.ui.letterbox(true);

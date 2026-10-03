@@ -96,6 +96,9 @@ export const FILM_CAM = {
     ] as [number, number, number, number, number, number, number, number][],
     minAGL: 60,
     thinAt: [7.0, 10.2] as [number, number],
+    // the last 1.5 s warmer (grade highlight warmth +warmAdd, FilmStage's judah handle) into P2's warm morning
+    warmAt: [9.5, 11.0] as [number, number],
+    warmAdd: 0.055,
     thinTo: 0.38,
   },
   // P6 'threat' (cut7, CUT v5): the Philistine host — the map's descent continued: a crane that comes down out of the
@@ -114,12 +117,15 @@ export const FILM_CAM = {
   // P5 (cut4): a LOW dolly (the elders' eye height) into the gathering toward Samuel in the gateway, in the gate's frame
   // (x along the wall, z out of the gate; Samuel at z 1.4): the near pair (marks 6-7) slide out past the frame edges,
   // the arc and the rising speaker in the mid-ground, Samuel right of centre, the verse high over the wall
-  // (cut7, CUT v5 P7 — 8 s, late afternoon: a slower, lower dolly (1.3 m in 8 s, a little under the elders' eyes) on
-  //  the gate's axis: the near pair — turned to each other, their profiles and beards at the 'near' LOD — frame the
-  //  picture left and right in the foreground for the whole shot (probed: ndc x -0.5..-0.86 / +0.6..+1.1), the speaker
-  //  on the left bench rising in profile, Samuel centred in the shaded passage facing the lens (his turn away at `away`
-  //  reads), the place card and the verse over the sunlit wall above the elders' heads. scratchpad/cut7/ramah_comp.py)
-  elders: { x0: 0.35, z0: 11.2, x1: 0.2, z1: 9.9, h0: 1.48, h1: 1.54, lookX: -0.4, lookZ: 1.4, lookH: 1.48, fov0: 31, fov1: 27.5 },
+  // (cut7, CUT v5 P7 — the CONFRONTATION, 8 s, late afternoon. A low two-shot from Samuel's right side, just outside
+  //  the gateway, looking across him at the speaker on the RIGHT bench (landSites mark 0, facing Samuel = facing the
+  //  lens ~15 deg off: three-quarter FRONT as he rises at `rise` and throws his arm up at `verse`, lit by the low
+  //  west sun he faces); Samuel large at the left of the frame (2.9 -> 2.0 m, 57-62 % of the frame height, his face
+  //  three-quarter from his sunlit right) — at `away` he turns his face from the speaker across to his right and down,
+  //  toward the lens (RamahPerformance); an elder in profile between them (mark 3, near LOD), another three-quarter at
+  //  the right edge (mark 5). One slow push (0.8 m) and a tightening lens; the lens tilted a little up so the place
+  //  card and the verse sit over the sunlit wall above every head. Probed: scratchpad/cut7/ramah_comp2.py)
+  elders: { x0: -2.2, z0: 3.4, x1: -1.62, z1: 2.78, h0: 1.47, h1: 1.5, lookX: 1.9, lookZ: 1.25, lookH: 1.88, fov0: 34, fov1: 30 },
 };
 
 /**
@@ -159,7 +165,7 @@ export const TAKE_LOOK: Record<string, { hand: number; freq?: number; exp?: numb
   // (cut7, CUT v5: P1's slow flight — a calm aerial float; the sunlit cloud tops held down, opening up under the deck)
   // (the end opened up further — x1.6 by the cut: the lens turns away from the dawn onto the ridge, and P2's morning
   //  world opens much brighter; the two meet in the dissolve)
-  flight: { hand: 0.14, freq: 0.5, expCurve: [[0, 0.8], [6.0, 0.8], [7.4, 0.98], [8.6, 1.25], [10.0, 1.6], [11.0, 1.95], [12.4, 2.05]], seed: 1 },
+  flight: { hand: 0.14, freq: 0.5, expCurve: [[0, 0.8], [6.0, 0.8], [7.4, 0.98], [8.6, 1.25], [9.6, 1.55], [11.0, 2.2], [12.4, 2.3]], seed: 1 },
   // (cut8, CUT v5) P3 the low dolly on the road's verge (an operator's hand), calming as the crane lifts away
   'rachel-dawn': { hand: 0.2, freq: 0.6, seed: 2, calm: [takeBeat('rachel-dawn', 'rise', 4) + 0.2, takeDur('rachel-dawn', 6)] },
   // (cut8, CUT v5) P2 the aerial drift toward Bethlehem: a helicopter's faint float

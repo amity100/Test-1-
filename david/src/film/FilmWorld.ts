@@ -63,24 +63,31 @@ export interface FilmWorldHost {
  * height of its pivot over his feet (main.ts: cam.target = feet + 1.55). Intro.end() places him here (also after a
  * skip); D4's lens lands on CameraRig.followFrame of exactly this.
  */
-export const HANDOFF = { x: 0.55, z: 10.2, heading: 0.35, pitch: 0.15, pivotH: 1.55 };
+export const HANDOFF = { x: -1.95, z: 10.2, heading: 0, pitch: 0.2, pivotH: 1.55 };
 
 /**
  * D4 'horizon' (cut8): the choreography in world x / z (the ground is the terrain's) and its timing relative to the
  * contract's beats (lamb 0.3 · descend 1.4 · kneel 4.2 · lift 5.0 · logo 6.6 · setDown 11.2 · logoOut 12.2 · settle
  * 14.6 · 18.0). Tunable live under ?test=1 (window.__filmWorldCams.d4).
- *  - lamb:      the newborn, fallen behind on the rocks 3.6 m below his rock (it bleats for its mother)
- *  - wayDown:   his way down round the west side of the small boulder in front of his rock, to `kneel1` before the lamb
- *  - wayOn:     his way on down the slope with the lamb in his arms to `kneel2`, before its mother
- *  - ewe:       the lamb's mother (Flock: lamb.mother), waiting on the slope below, looking up at it
+ * The take is staged ACROSS the lens (the orchestrator's review of v9): the lens stays on the uphill side, north of him
+ * (az ≈ 168-180, never round him); he walks down to the lamb, kneels with it at his front-left (his left side to the
+ * lens), carries it along the slope toward the lens' side (north-east: his face, the lamb's head at his left shoulder
+ * and its body across his chest toward the lens, under the logo), kneels to its mother, and only HIS turn to the
+ * hand-off heading (out over the flock and the valley) puts the lens behind him.
+ *  - stand:     his place in D3 and at D4's start (on the shoulder of the ridge, his flock on the slope below him)
+ *  - lamb:      the newborn, fallen behind on the rocks below him (it bleats for its mother)
+ *  - wayDown:   his way down the slope to `kneel1`, beside the lamb (west of it)
+ *  - wayOn:     his way along the slope with the lamb in his arms to `kneel2`, before its mother
+ *  - ewe:       the lamb's mother (Flock: lamb.mother), waiting along the slope, looking toward it
  */
 export const D4 = {
-  lamb: [0.15, 5.85],
-  wayDown: [[-0.55, 2.95], [-0.45, 4.25]],
-  kneel1: [-0.05, 5.2],
-  wayOn: [[0.22, 7.7]],
+  stand: [-7.85, 10.65],
+  lamb: [-4.6, 12.58],
+  wayDown: [[-6.51, 11.78]],
+  kneel1: [-5.17, 12.9],
+  wayOn: [[-3.56, 11.55]],
   kneel2: [HANDOFF.x, HANDOFF.z],
-  ewe: [1.05, 11.55],
+  ewe: [-0.49, 9.86],
   /** the lamb set down this far in front of him */
   setDownD: 0.62,
   /** seconds relative to the beats: the walk down starts at descend + d0 and ends at kneel + d1; he kneels at kneel +
@@ -135,25 +142,27 @@ export const WORLD_CAM = {
   // D3 (cut8): over his right shoulder from behind and a little above — `heading` (rad) of his gaze (the flock below),
   // the lens `back` m behind his feet, `right` m to his right, `up` m over his feet, drifting slowly (0 -> 1 over the
   // shot); the look `lookD` m out along his gaze, `lookDown` m under his feet; the lens
-  watch: { heading: 0.12, back0: 2.0, back1: 1.85, right0: 0.72, right1: 0.56, up0: 2.0, up1: 1.95, lookD: 30, lookDown0: 7.75, lookDown1: 7.9, fov0: 48, fov1: 46, fStopFlock: 5.6, fStopHim: 3.2 },
+  watch: { heading: 0.3, back0: 2.0, back1: 1.85, right0: 0.72, right1: 0.56, up0: 2.0, up1: 1.95, lookD: 14, lookDown0: 3.0, lookDown1: 3.15, fov0: 48, fov1: 46, fStopFlock: 5.6, fStopHim: 3.2 },
   // D4 (cut8): the follow lens in David's frame — keys [t (shot s), az (deg: the lens' heading seen from his feet; his
   // left side ≈ 107, behind him ≈ 197), r (m), h (m over his feet), yaw bias (deg, + = the frame turns left), pitch bias
   // (deg, + = up: sky for the logo), fov]; the look aims at the action (framing point) plus the biases; the last key is
   // the gameplay camera itself (added at run time) — every channel a C1 monotone cubic, still at both ends.
-  // The lens stays BEHIND him on the uphill side (az 160-190: behind-left, never round him): high over his shoulder to
-  // see the lamb below and the gathering, lower behind him as he carries it down the slope (the valley, the far hills
-  // and the sky ahead for the logo; the low sun from the left), then back and down onto the game's camera
+  // The lens stays on the UPHILL side, north of him (az 168-180), tracking with his walk — it never circles him: his
+  // back as he goes down to the lamb, his left side as he kneels and lifts it, his face and the lamb (its head at his
+  // left shoulder) as he carries it along the slope under the logo (the sky and the far hills above them; the low sun
+  // from the left), his left side as he sets it down by its mother; his own turn to the hand-off heading puts the lens
+  // behind him, and from `settle` it only eases back and a little down onto the game's camera (az 180)
   horizon: {
     keys: [
-      [0, 168, 4.4, 2.55, 0, 0, 44],
-      [1.4, 167, 4.3, 2.45, 0, 0, 44],
-      [4.2, 124, 3.6, 2.45, 0, -2, 44],
-      [5.6, 128, 3.5, 2.35, 0, 0, 44],
-      [7.2, 166, 4.2, 2.0, 0, 5, 44],
-      [9.4, 176, 4.6, 1.85, 0, 6, 45],
-      [11.2, 172, 3.9, 1.95, 0, 3, 45],
-      [13.0, 180, 3.2, 2.15, 0, 2, 47],
-      [14.6, 188, 2.7, 2.4, 0, 1, 49],
+      [0, 172, 4.6, 2.7, 0, 0, 44],
+      [1.4, 174, 4.5, 2.6, 0, 0, 44],
+      [3.9, 178, 4.2, 2.5, 0, 0, 43],
+      [5.0, 178, 3.9, 2.4, 0, -1, 42],
+      [6.6, 172, 4.0, 2.35, 0, 5, 41],
+      [9.0, 168, 4.1, 2.35, 0, 6, 41],
+      [11.2, 168, 4.0, 2.45, 0, 4, 43],
+      [13.0, 172, 3.4, 2.55, 0, 1, 47],
+      [14.6, 175, 3.3, 2.5, 0, 0, 49],
     ] as [number, number, number, number, number, number, number][],
     // depth of field: on him / the lamb; everything sharp before the hand-off (the game's camera has none)
     fStop0: 3.2, fStop1: 5.6,
@@ -304,7 +313,7 @@ export class FilmWorld {
   private buildWalks() {
     const d = WORLD_CAM.d4;
     const P = (p: number[]) => V(p[0], 0, p[1]);
-    this.walk1 = new THREE.CatmullRomCurve3([V(this.rock.x, 0, this.rock.z), ...d.wayDown.map(P), P(d.kneel1)], false, 'centripetal');
+    this.walk1 = new THREE.CatmullRomCurve3([P(d.stand), ...d.wayDown.map(P), P(d.kneel1)], false, 'centripetal');
     this.walk2 = new THREE.CatmullRomCurve3([P(d.kneel1), ...d.wayOn.map(P), P(d.kneel2)], false, 'centripetal');
   }
 
@@ -649,10 +658,10 @@ export class FilmWorld {
       if (this.staged !== 'end') {
         this.unstage();
         this.staged = 'end';
-        this.placeDavid(WORLD_CAM.watch.heading);
+        this.placeDavid(WORLD_CAM.watch.heading, WORLD_CAM.d4.stand);
         this.stageEnd();
       }
-      if (take === 'watch') this.placeDavid(WORLD_CAM.watch.heading);
+      if (take === 'watch') this.placeDavid(WORLD_CAM.watch.heading, WORLD_CAM.d4.stand);
       this.lastD4 = -1;
       this.expK = 1;
       return;
@@ -889,9 +898,10 @@ export class FilmWorld {
     const cam = this.stageLens('watch', 3.5);
     try {
       const rocks = (x: number, y: number, z: number) => this.h.engine.colliders.solidAt(x, y, z, 0.05);
-      const sector: [number, number] = [WORLD_CAM.watch.heading - 0.75, WORLD_CAM.watch.heading + 0.8];
-      let n = this.ff.stageInView(cam, this.feet, { near: 7, far: 42, max: 16, clear: 0.1, spacing: 1.6, yMin: -0.66, minFrom: this.feet, minDist: 8.5, maxDist: 32, sector, maxY: this.feet.y - 1.2, lineOfSight: true, solid: rocks, exclude: used });
-      if (n < 8) n = this.ff.stageInView(cam, this.feet, { near: 7, far: 55, max: 16, clear: 0.1, spacing: 1.6, yMin: -0.66, minFrom: this.feet, minDist: 8.5, maxDist: 45, maxY: this.feet.y - 1.0, exclude: used });
+      // (v9 review: 10-15 animals within 6-20 m on the slope below and beside him, readable at 640x360)
+      const sector: [number, number] = [WORLD_CAM.watch.heading - 0.6, WORLD_CAM.watch.heading + 0.55];
+      let n = this.ff.stageInView(cam, this.feet, { near: 5, far: 24, max: 9, clear: 0.1, spacing: 1.7, yMin: -0.75, minFrom: this.feet, minDist: 6, maxDist: 20, sector, maxY: this.feet.y - 0.8, lineOfSight: true, solid: rocks, exclude: used, sheepFirst: true });
+      if (n < 6) n = this.ff.stageInView(cam, this.feet, { near: 5, far: 30, max: 9, clear: 0.1, spacing: 1.6, yMin: -0.75, minFrom: this.feet, minDist: 6, maxDist: 24, maxY: this.feet.y - 0.5, exclude: used, sheepFirst: true });
       void n;
     } catch (e) {
       console.warn('[film] D3 flock staging', e);
@@ -1074,7 +1084,7 @@ export class FilmWorld {
       const up = ss(lift, lift + d.l1, t);
       const down = ss(setDown + d.s0, setDown + d.s1, t);
       if (down > 0) {
-        const fw = V(Math.sin(HANDOFF.heading), 0, Math.cos(HANDOFF.heading));
+        const fw = V(d.ewe[0] - d.kneel2[0], 0, d.ewe[1] - d.kneel2[1]).normalize();
         const L1 = V(d.kneel2[0] + fw.x * d.setDownD, 0, d.kneel2[1] + fw.z * d.setDownD);
         L1.y = this.ground(L1.x, L1.z);
         const eweH = Math.atan2(d.ewe[0] - L1.x, d.ewe[1] - L1.z);
@@ -1156,10 +1166,11 @@ export class FilmWorld {
     }
   }
 
-  private placeDavid(heading = headingOf(this.viewDir)) {
+  private placeDavid(heading = headingOf(this.viewDir), at?: number[]) {
     const { player } = this.h;
-    if (Math.hypot(player.pos.x - this.rock.x, player.pos.z - this.rock.z) > 0.3 || Math.abs(player.heading - heading) > 1e-3) {
-      player.place(this.rock.x, this.rock.z, heading);
+    const x = at ? at[0] : this.rock.x, z = at ? at[1] : this.rock.z;
+    if (Math.hypot(player.pos.x - x, player.pos.z - z) > 0.3 || Math.abs(player.heading - heading) > 1e-3) {
+      player.place(x, z, heading);
     }
     this.feet.copy(player.pos);
     player.speed = 0;

@@ -64,6 +64,9 @@ canvas { display: block; outline: none; }
 .ld-quote { margin-top: 42px; font: 400 clamp(16px, 2.2vw, 21px)/1.6 var(--serif-he); opacity: 0.75; }
 .ld-quote span { display: block; font-size: 12px; letter-spacing: 0.2em; opacity: 0.6; margin-top: 6px; font-family: var(--sans-he); }
 .loading.ready .ld-bar, .loading.ready .ld-label { display: none; }
+/* load1: a start click held while the film's later sets finish (slow devices): the bar comes back, the button rests */
+.loading.ready.holding .ld-bar, .loading.ready.holding .ld-label { display: block; }
+.loading.holding .start-btn { opacity: 0.45; animation: none; cursor: default; }
 /* short landscape screens: the lockup, the verse and the start button all fit between the screen's edges */
 @media (max-height: 500px) {
   .ld-bar { margin: 18px auto 8px; }

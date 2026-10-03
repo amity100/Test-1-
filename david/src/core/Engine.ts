@@ -13,6 +13,7 @@ import { Village } from '../world/Village';
 import { loadTextures, type TextureSet } from '../world/Textures';
 import { configureWorld } from '../world/WorldQuality';
 import { SUN } from '../world/Layout';
+import { bootLog, bootStep, bootSync } from './bootProfile';
 
 // =====================================================================================================
 // Quality tiers
@@ -218,16 +219,16 @@ export function makeQuality(tier: TierName, mobile: boolean, gpu: string, render
  * Initial quality: `?q=` (low|medium|high or a tier name) forces a tier and disables the benchmark;
  * otherwise the last benchmark result stored on this device, otherwise a guess from the GPU string.
  */
-export function detectQuality(gl: WebGLRenderingContext | WebGL2RenderingContext | null = null): Quality & { forced: boolean } {
+export function detectQuality(gl: WebGLRenderingContext | WebGL2RenderingContext | null = null): Quality & { forced: boolean; stored?: boolean } {
   const params = new URLSearchParams(location.search);
   const mobile = isMobileDevice();
   const gpu = gpuName(gl);
   const forced = tierFromParam(params.get('q'), mobile);
   const stored = forced ? null : readStored(gpu);
-  const q = forced
+  const q: Quality & { forced: boolean; stored?: boolean } = forced
     ? { ...makeQuality(forced, mobile, gpu), forced: true }
     : stored
-      ? { ...makeQuality(stored.tier, mobile, gpu, stored.scale), forced: false }
+      ? { ...makeQuality(stored.tier, mobile, gpu, stored.scale), forced: false, stored: true }
       : { ...makeQuality(guessTier(mobile, gpu), mobile, gpu), forced: false };
   // developer A/B overrides: ?pr=1.5 (max pixel ratio), ?sharpen=0..1, ?aa=fxaa|none, ?msaa=0|2|4, ?texmax=512,
   // ?taa=0|1|hq|lq, ?dof=0|16|22|43
@@ -583,6 +584,11 @@ export class Engine {
   readonly quality: Quality;
   /** true when the tier was forced with ?q= (no benchmark, no persistence) */
   readonly qualityForced: boolean;
+  /**
+   * load1: the tier came from this device's stored benchmark result (localStorage, < 21 days, same GPU): the warm-up
+   * does not measure again (the runtime governor still steps it down — and stores that — after sustained slowness)
+   */
+  readonly qualityStored: boolean;
   tex!: TextureSet;
   terrain!: Terrain;
   sky!: SkySystem;
@@ -638,7 +644,8 @@ export class Engine {
     const gl = this.renderer.getContext();
     const q = detectQuality(gl);
     this.qualityForced = q.forced;
-    const { forced: _forced, ...quality } = q;
+    this.qualityStored = !!q.stored;
+    const { forced: _forced, stored: _stored, ...quality } = q;
     this.quality = quality;
     const ext = this.renderer.extensions;
     this.floatTargets = ext.has('EXT_color_buffer_float') || ext.has('EXT_color_buffer_half_float');
@@ -687,50 +694,77 @@ export class Engine {
 
   async build(progress: (f: number, label: string) => void) {
     const q = this.quality;
-    const step = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
+    // a frame for the loading bar between steps — or 50 ms at most (load1: a busy compositor / GPU process must not
+    // hold the build: rAF can take seconds while another tab or the driver keeps the GPU busy)
+    const step = () =>
+      new Promise<void>((r) => {
+        let done = false;
+        const go = () => {
+          if (done) return;
+          done = true;
+          r();
+        };
+        requestAnimationFrame(go);
+        setTimeout(go, 50);
+      });
     // world modules resolve their content tier / texture caps from the engine's quality (see WorldQuality)
     configureWorld(q);
     progress(0.02, 'טוען מרקמים…');
-    this.tex = await loadTextures(this.renderer, (f) => progress(0.02 + f * 0.2, 'טוען מרקמים…'), q);
+    // (load1: every part timed into the boot profile, window.__boot)
+    this.tex = await bootStep('world:textures', () => loadTextures(this.renderer, (f) => progress(0.02 + f * 0.2, 'טוען מרקמים…'), q));
     progress(0.25, 'מעצב את הרי יהודה…');
     await step();
-    this.terrain = new Terrain({ nearSpacing: q.nearSpacing, farSegments: q.farSegments });
+    this.terrain = bootSync('world:terrain', () => new Terrain({ nearSpacing: q.nearSpacing, farSegments: q.farSegments }));
     progress(0.45, 'מדליק את השמש…');
     await step();
-    this.sky = new SkySystem(this.renderer, q.shadowSize);
-    this.scene.add(this.sky.group);
-    this.sky.setSun(SUN.elevation, SUN.azimuth, this.scene);
-    this.terrain.build(this.tex, shared.uSunDir.value);
-    this.scene.add(this.terrain.group);
+    bootSync('world:sky+terrainMesh', () => {
+      this.sky = new SkySystem(this.renderer, q.shadowSize);
+      this.scene.add(this.sky.group);
+      this.sky.setSun(SUN.elevation, SUN.azimuth, this.scene);
+      this.terrain.build(this.tex, shared.uSunDir.value);
+      this.scene.add(this.terrain.group);
+    });
     progress(0.6, 'בונה את בית לחם…');
     await step();
-    this.village = new Village(this.terrain, this.tex, this.colliders);
-    this.village.build();
-    this.scene.add(this.village.group);
+    bootSync('world:village', () => {
+      this.village = new Village(this.terrain, this.tex, this.colliders);
+      this.village.build();
+      this.scene.add(this.village.group);
+    });
     progress(0.7, 'נוטע עצי זית…');
     await step();
-    this.rocks = new Rocks(this.terrain, this.tex, this.colliders, q.rocks);
-    this.rocks.build();
-    this.scene.add(this.rocks.group);
-    this.vegetation = new Vegetation(this.terrain, this.tex, this.colliders, { treeScale: q.treeScale, shrubs: q.shrubs, farTrees: q.farTrees });
-    this.vegetation.build();
-    this.scene.add(this.vegetation.group);
+    bootSync('world:rocks', () => {
+      this.rocks = new Rocks(this.terrain, this.tex, this.colliders, q.rocks);
+      this.rocks.build();
+      this.scene.add(this.rocks.group);
+    });
+    bootSync('world:vegetation', () => {
+      this.vegetation = new Vegetation(this.terrain, this.tex, this.colliders, { treeScale: q.treeScale, shrubs: q.shrubs, farTrees: q.farTrees });
+      this.vegetation.build();
+      this.scene.add(this.vegetation.group);
+    });
     progress(0.82, 'מגדל עשב…');
     await step();
-    this.grass = new Grass(this.terrain, q.grassCount, q.grassPatch);
-    this.scene.add(this.grass.mesh);
-    this.particles = new ParticleSystem(q.particles);
-    this.scene.add(this.particles.points);
-    this.motes = new Motes(q.motes);
-    this.scene.add(this.motes.points);
-    this.smoke = new SmokeColumns(this.particles, this.village.smokeSources);
+    bootSync('world:grass+fx', () => {
+      this.grass = new Grass(this.terrain, q.grassCount, q.grassPatch);
+      this.scene.add(this.grass.mesh);
+      this.particles = new ParticleSystem(q.particles);
+      this.scene.add(this.particles.points);
+      this.motes = new Motes(q.motes);
+      this.scene.add(this.motes.points);
+      this.smoke = new SmokeColumns(this.particles, this.village.smokeSources);
+    });
     // static scenery: spatial chunks so the camera / shadow frustums can cull (?chunk=0 to compare)
     if (new URLSearchParams(location.search).get('chunk') !== '0') {
-      for (const g of [this.rocks.group, this.vegetation.group, this.village.group]) this.chunkStatic(g);
+      bootSync('world:chunk', () => {
+        for (const g of [this.rocks.group, this.vegetation.group, this.village.group]) this.chunkStatic(g);
+      });
     }
-    this.enforceTextureBudget();
-    this.makePost();
-    this.applySize(true);
+    bootSync('world:texBudget+post', () => {
+      this.enforceTextureBudget();
+      this.makePost();
+      this.applySize(true);
+    });
     const onResize = () => this.requestResize();
     addEventListener('resize', onResize);
     addEventListener('orientationchange', onResize);
@@ -1073,6 +1107,127 @@ export class Engine {
     else this.restoreWorldView();
   }
 
+  /**
+   * load1: prepare a view WITHOUT touching the canvas, the active view, the shared camera, the TAA history or any
+   * uniform — for a film set built while the film plays. (1) Its programs are created for this post chain's scene
+   * target in small groups of objects (with the view scene's own lights; KHR_parallel_shader_compile lets the driver
+   * compile them off the main thread — we only poll), then (2) its meshes are drawn in small groups into a 64×64
+   * scratch target from a scratch camera (geometry and texture uploads, its light's shadow map and depth programs, any
+   * variant the first pass missed). Every slice stays within `budgetMs` of main-thread time and a frame is awaited
+   * between slices (`yieldFrame`). Visibility / frustum flags are put back exactly. Resolves with what it did.
+   */
+  async prepareView(view: ViewSpec, opts: { budgetMs?: number; yieldFrame?: () => Promise<void>; pose?: BenchView } = {}): Promise<{ objects: number; programs: number; slices: number; worstMs: number; ms: number }> {
+    const t0 = performance.now();
+    const r = this.renderer;
+    const scene = view.scene;
+    const src = view.camera ?? this.camera;
+    const cam = new THREE.PerspectiveCamera(src.fov, src.aspect || 1, src.near, src.far);
+    if (opts.pose) {
+      cam.position.copy(opts.pose.pos);
+      cam.lookAt(opts.pose.look);
+    } else {
+      cam.position.copy(src.position);
+      cam.quaternion.copy(src.quaternion);
+    }
+    cam.updateMatrixWorld();
+    const budget = opts.budgetMs ?? 6;
+    const nextFrame = opts.yieldFrame ?? (() => new Promise<void>((res) => requestAnimationFrame(() => setTimeout(res, 0))));
+    const items: THREE.Object3D[] = [];
+    scene.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if ((m.isMesh || (o as THREE.Points).isPoints || (o as THREE.Line).isLine || (o as THREE.Sprite).isSprite) && m.material) items.push(o);
+    });
+    let slices = 0, worst = 0;
+    let sliceT = performance.now();
+    const tick = async () => {
+      const el = performance.now() - sliceT;
+      if (el < budget) return;
+      worst = Math.max(worst, el);
+      slices++;
+      await nextFrame();
+      sliceT = performance.now();
+    };
+    // (1) programs: compile(group, camera, targetScene) — the group's materials with the view scene's lights / fog
+    const pending: Promise<unknown>[] = [];
+    const programs0 = r.info.programs?.length ?? 0;
+    const scene0 = this.post.sceneTarget;
+    for (let i = 0; i < items.length && !this.contextLost; ) {
+      const batch: THREE.Object3D[] = [];
+      const bt = performance.now();
+      const prevRT = r.getRenderTarget();
+      r.setRenderTarget(scene0);
+      try {
+        while (i < items.length && performance.now() - bt < budget * 0.5) {
+          batch.length = 0;
+          for (let k = 0; k < 8 && i < items.length; k++) batch.push(items[i++]);
+          // a duck-typed group: compile() only traverses it (its lights come from targetScene)
+          const group = { traverse: (fn: (o: THREE.Object3D) => void) => batch.forEach(fn), traverseVisible: () => undefined } as unknown as THREE.Object3D;
+          pending.push(r.compileAsync(group, cam, scene));
+        }
+      } catch (e) {
+        console.warn('[engine] prepareView compile', e);
+      } finally {
+        r.setRenderTarget(prevRT);
+      }
+      await tick();
+    }
+    // the driver compiles in parallel; bounded like precompile() (a lost context never resolves)
+    await Promise.race([Promise.all(pending), new Promise((res) => setTimeout(res, 15000))]);
+    if (!r.extensions.has('KHR_parallel_shader_compile')) {
+      // without the extension the programs still compile in the GPU process, but a draw blocks until its program is
+      // linked: give the queue time (frames keep coming) before the first draw of (2)
+      const fresh = (r.info.programs?.length ?? 0) - programs0;
+      const until = performance.now() + Math.min(6000, Math.max(0, fresh) * 25);
+      while (performance.now() < until) await nextFrame();
+    }
+    await tick();
+    // (2) uploads: draw the meshes a few at a time into a scratch target (everything else hidden; lights unchanged)
+    if (!this.scratchRT) this.scratchRT = new THREE.WebGLRenderTarget(64, 64, { type: this.floatTargets ? THREE.HalfFloatType : THREE.UnsignedByteType, depthBuffer: true });
+    const vis = new Map<THREE.Object3D, boolean>();
+    const cull = new Map<THREE.Object3D, boolean>();
+    const itemSet = new Set(items);
+    scene.traverse((o) => {
+      vis.set(o, o.visible);
+      if (itemSet.has(o)) {
+        cull.set(o, o.frustumCulled);
+        o.visible = false;
+        o.frustumCulled = false;
+      } else if (!(o as THREE.Light).isLight) o.visible = true; // groups: let their children through
+    });
+    const autoUpdate = scene.matrixWorldAutoUpdate;
+    try {
+      let k = 0;
+      let per = 4;
+      while (k < items.length && !this.contextLost) {
+        const bt = performance.now();
+        const batch = items.slice(k, k + per);
+        k += batch.length;
+        for (const o of batch) o.visible = true;
+        const prevRT = r.getRenderTarget();
+        try {
+          r.setRenderTarget(this.scratchRT);
+          r.render(scene, cam);
+        } catch (e) {
+          console.warn('[engine] prepareView render', e);
+        } finally {
+          r.setRenderTarget(prevRT);
+          for (const o of batch) o.visible = false;
+        }
+        const ms = performance.now() - bt;
+        // grow the groups while they are cheap, shrink them when one was expensive
+        per = ms < budget * 0.25 ? Math.min(64, per * 2) : ms > budget ? Math.max(1, per >> 1) : per;
+        await tick();
+      }
+    } finally {
+      scene.matrixWorldAutoUpdate = autoUpdate;
+      for (const [o, v] of vis) o.visible = v;
+      for (const [o, c] of cull) o.frustumCulled = c;
+    }
+    return { objects: items.length, programs: (r.info.programs?.length ?? 0) - programs0, slices, worstMs: Math.round(worst), ms: Math.round(performance.now() - t0) };
+  }
+
+  private scratchRT: THREE.WebGLRenderTarget | null = null;
+
   // ------------------------------------------------------------------------------------------ views (intro)
 
   /**
@@ -1221,13 +1376,51 @@ export class Engine {
    * is stored per device so the next session starts at the right tier. Never runs during play.
    * `force` runs the benchmark even on software GPUs / forced tiers (tests of the ladder itself).
    */
-  async warmup(opts: { views?: BenchView[]; bench?: boolean; precompile?: boolean; force?: boolean } = {}): Promise<BenchResult | null> {
+  /** load1: would warmup() measure this device (the benchmark)? (same rule as inside warmup) */
+  willBenchmark(opts: { bench?: boolean; force?: boolean } = {}): boolean {
+    return !this.contextLost && !!(opts.force || ((opts.bench ?? true) && !this.qualityForced && !this.qualityStored && !isSoftwareGpu(this.quality.gpu)));
+  }
+
+  /**
+   * load1: the world's first-frame warm-up (what warmup's `prime` does: one full frame from each view — uploads, shadow
+   * maps, first-use programs, the post chain), run LATER than the warm-up when no benchmark needs it: on the canvas
+   * behind the start screen (`covered`), else off the canvas in frame-budgeted slices (prepareView: while the film plays,
+   * before the first shot in the world).
+   */
+  async primeWorld(views: BenchView[], covered: () => boolean, slice: { budgetMs?: number; yieldFrame?: () => Promise<void> } = {}) {
+    if (this.contextLost) return;
+    // (both modes) the programs and uploads in slices off the canvas: the start screen stays responsive meanwhile
+    await this.prepareView({ scene: this.scene, camera: this.camera }, { ...slice, pose: views[0] });
+    // checked now, not when it began: the click may have put the picture on screen meanwhile
+    if (!covered() || this.contextLost) return;
+    // covered (behind the start screen): one real frame per view as well — the post chain's first use at full size
+    const cam = this.camera;
+    const pos = cam.position.clone(), quat = cam.quaternion.clone(), focus = this.focus.clone();
+    const back = this.activeView;
+    if (back) this.restoreWorldView();
+    for (const v of views) {
+      cam.position.copy(v.pos);
+      cam.lookAt(v.look);
+      cam.updateMatrixWorld();
+      this.focus.copy(v.look);
+      this.renderStill();
+    }
+    this.gpuSync();
+    cam.position.copy(pos);
+    cam.quaternion.copy(quat);
+    cam.updateMatrixWorld();
+    this.focus.copy(focus);
+    if (back) this.setView(back);
+    this.post.resetHistory();
+  }
+
+  async warmup(opts: { views?: BenchView[]; bench?: boolean; precompile?: boolean; force?: boolean; prime?: boolean } = {}): Promise<BenchResult | null> {
     const q = this.quality;
     const cam = this.camera;
     const savedPos = cam.position.clone();
     const savedQuat = cam.quaternion.clone();
     this.enforceTextureBudget();
-    if (opts.precompile ?? true) await this.precompile();
+    if (opts.precompile ?? true) await bootStep('warmup:compile', () => this.precompile());
     const views = opts.views?.length ? opts.views : [{ pos: cam.position.clone(), look: cam.position.clone().add(cam.getWorldDirection(new THREE.Vector3())) }];
     const setView = (v: BenchView) => {
       cam.position.copy(v.pos);
@@ -1235,16 +1428,22 @@ export class Engine {
       cam.updateMatrixWorld();
       this.focus.copy(v.look);
     };
-    const bench = !this.contextLost && (opts.force || ((opts.bench ?? true) && !this.qualityForced && !isSoftwareGpu(q.gpu)));
-    if (bench || (opts.precompile ?? true)) {
+    // (load1) a device with a stored result is not measured again: the stored tier / scale are applied by detectQuality
+    // and the governor keeps them honest (?bench=force measures anyway)
+    const bench = this.willBenchmark(opts);
+    // (load1) prime: false = the caller primes the world later (primeWorld); a benchmark always primes first
+    if (bench || ((opts.precompile ?? true) && opts.prime !== false)) {
       // prime: uploads, shadow maps, first-use programs
-      for (const v of views) {
-        setView(v);
-        this.renderStill();
-      }
-      this.gpuSync();
+      bootSync('warmup:prime', () => {
+        for (const v of views) {
+          setView(v);
+          this.renderStill();
+        }
+        this.gpuSync();
+      });
     }
     let result: BenchResult | null = null;
+    const tBench = performance.now();
     if (bench) {
       const log: string[] = [];
       const t0 = performance.now();
@@ -1324,6 +1523,7 @@ export class Engine {
       writeStored({ tier, scale, ms, when: Date.now(), gpu: q.gpu });
       result = { tier, renderScale: scale, ms, pixelRatio: q.pixelRatio, log };
       console.info('[engine] warm-up benchmark', log.join(' → '), `(${(performance.now() - t0).toFixed(0)} ms)`);
+      bootLog.steps.push({ name: 'warmup:bench', start: Math.round(tBench), ms: Math.round(performance.now() - tBench) });
     }
     cam.position.copy(savedPos);
     cam.quaternion.copy(savedQuat);

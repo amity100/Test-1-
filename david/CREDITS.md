@@ -135,6 +135,12 @@ locomotion and ground reaction forces) — and the warning behaviour of brown be
 with a forepaw, bluff charges that stop short) from wildlife-management descriptions. The collapse pose was solved with
 a small numpy / scipy FK script in a scratch directory (build-time only, nothing ships).
 
+The bear fight (*bear1*, gameplay v2 §4 — `src/gameplay/BearFight.ts`, the bear's sections of `src/gameplay/Story.ts`,
+David's jab / knock-down clips and combat code in `DavidModel.ts` / `Player.ts`, the combat framing in `CameraRig.ts`,
+the combat HUD in `UI.ts` / `style.css`): our own code and key poses; no third-party assets. Its sounds are score6's
+(see the audio section). The structure follows 1 Sam 17:34-35 with the grip after Targum Yonatan and Radak, quoted on
+screen only through `src/content/sources.ts`.
+
 ## Environment (Judean hills, Bethlehem, vegetation, sky) — `tools/world/`, `src/world/`, `src/assets/world/`
 
 - **All world textures are our own procedural work** (no photographs, scans or third-party images):

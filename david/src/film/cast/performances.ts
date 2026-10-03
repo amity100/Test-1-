@@ -1174,7 +1174,9 @@ export class RamahPerformance {
         f.set({ anger: 0.35 + 0.25 * ss(B.verse, B.verse + 0.6, t), determined: 0.4 });
         e.mocap.lookAt = look.copy(this.samEyes);
         // the demand: the right arm thrown up, the hand open toward Samuel ("שִׂימָה־לָּנוּ מֶלֶךְ"), over the capture
-        const demand = ss(B.verse + 0.4, B.verse + 0.8, t) * (1 - ss(B.verse + 1.8, B.verse + 2.3, t));
+        // (cut7, CUT v5: the arm comes up as he rises — intro-script-v5 P7 "at `rise` the speaking elder rises and lifts
+        //  his arm" — and is held through the demand of `verse`)
+        const demand = ss(B.rise + 0.65, B.rise + 1.15, t) * (1 - ss(B.verse + 1.8, B.verse + 2.3, t));
         e.armPose.R.pose = DEMAND_R;
         e.armPose.R.weight = 0.85 * demand;
         // forward into the demand, chest out
@@ -1217,9 +1219,9 @@ export class RamahPerformance {
       this.samPhase = 1;
     }
     const away = ss(B.turnAway, B.turnAway + 0.7, t);
-    // away: to his right and down (the eyes lowered), relative to the elders' direction
-    const d = this.tmp.copy(this.leadEyes).sub(this.samEyes);
-    const yaw = Math.atan2(d.x, d.z) - 1.05;
+    // away: (cut7, CUT v5) from the speaker — on his left now, the right bench — across to his RIGHT and down (the eyes
+    // lowered): toward the confrontation's lens on his right, so his face is seen turning away (8:6)
+    const yaw = this.samuelMark.yaw - 0.62;
     this.away.set(this.samEyes.x + Math.sin(yaw) * 4, this.samEyes.y - 0.9, this.samEyes.z + Math.cos(yaw) * 4);
     sam.mocap.lookAt = this.tmp.copy(this.leadEyes).lerp(this.away, away);
     sam.lookRate = 2.2;

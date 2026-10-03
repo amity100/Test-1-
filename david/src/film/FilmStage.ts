@@ -89,6 +89,11 @@ export interface FilmStageOptions {
   cast?: boolean;
   /** build the GPU crowds. default true; ?filmcrowd=0 */
   crowd?: boolean;
+  /**
+   * load1 (the scheduling): what a builder's yieldFrame() awaits. Default: one macrotask (setTimeout 0) — the loading
+   * screen's pace; the background builder (FilmSchedule) passes a frame-budgeted yield while the film plays.
+   */
+  yieldFrame?: () => Promise<void>;
 }
 
 /**
@@ -177,14 +182,18 @@ const FILM_ONLY_CLIPS = ['walk_king', 'walk_halt', 'idle_king', 'grab_pull_R', '
 
 /**
  * P7 'elders': the elders per tier (landSites mark indices, in the order of RamahPerformance's parts) and those at the
- * 'near' LOD (real faces and beards; the hair simulation only on the near pair 6-7)
+ * 'near' LOD (real faces and beards) — (cut7, CUT v5) the ones the confrontation's lens is close to: the speaker (0),
+ * the elder in profile between him and Samuel (3), the one at the right edge (5); the same counts per tier as before
+ * (3 / 2 / 2 / 1), the hair simulation on two of them (RAMAH_SIM) — no cost increase on any tier
  */
 const RAMAH_PLAN: Record<string, { idx: number[]; near: number[] }> = {
-  'desktop-high': { idx: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], near: [6, 7, 0] },
-  'desktop-medium': { idx: [0, 1, 2, 3, 4, 5, 6, 7], near: [6, 7] },
-  'mobile-high': { idx: [0, 2, 3, 4, 5, 6, 7], near: [6, 7] },
-  'mobile-low': { idx: [0, 2, 3, 6, 7], near: [6] },
+  'desktop-high': { idx: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], near: [0, 3, 5] },
+  'desktop-medium': { idx: [0, 1, 2, 3, 4, 5, 6, 7], near: [0, 3] },
+  'mobile-high': { idx: [0, 2, 3, 4, 5, 6, 7], near: [0, 3] },
+  'mobile-low': { idx: [0, 2, 3, 6, 7], near: [0] },
 };
+/** the elders whose strand hair is simulated (wind in the hair seen close): the speaker and the elder beside him */
+const RAMAH_SIM = [0, 3];
 
 /** the loading bar's label of each set's build */
 const SET_LABEL: Record<FilmStageSet, string> = { judah: 'הָאָרֶץ…', map: 'הַדֶּרֶךְ…', coast: 'אֶרֶץ פְּלִשְׁתִּים…', ramah: 'הָרָמָה…', gilgal: 'הַגִּלְגָּל…' };
@@ -284,7 +293,7 @@ export class FilmStage {
       cast: this.opts.cast !== false,
       crowd: this.opts.crowd !== false,
       progress: (f) => onProgress(Math.max(0, Math.min(1, f))),
-      yieldFrame: () => new Promise<void>((r) => setTimeout(r, 0)),
+      yieldFrame: this.opts.yieldFrame ?? (() => new Promise<void>((r) => setTimeout(r, 0))),
     };
     let h: FilmSetHandle | null = null;
     try {
@@ -324,6 +333,37 @@ export class FilmStage {
     const st = this.buildStats[name];
     if (st) st.precompileMs = Math.round(performance.now() - t0);
     await new Promise<void>((r) => setTimeout(r, 0));
+  }
+
+  /**
+   * load1: prepare one built set WITHOUT the canvas — for a set that finishes building while the film plays (the
+   * canvas pre-compile above would show it): Engine.prepareView compiles its programs (parallel where the driver can)
+   * and uploads its geometry / textures / shadow map into a scratch target in frame-budgeted slices. It never calls the
+   * handle's enter / tick (the land sets' tick writes the on-screen grade), except Gilgal's (its own set, army and
+   * cast only): its army and actors are posed once in the background instead of on the pre-roll's first frame.
+   */
+  async prepareSet(name: FilmStageSet, opts: { budgetMs?: number; yieldFrame?: () => Promise<void> } = {}): Promise<void> {
+    const h = this.sets[name];
+    if (!h) return;
+    const t0 = performance.now();
+    try {
+      const shots = INTRO_SHOTS.filter((x) => x.set === name);
+      const f: ShotFrame = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: 40, roll: 0 };
+      let pose = h.precompilePoses?.[0];
+      if (!pose && shots[0] && h.frame(shots[0].take, 0.5, shots[0].dur * 0.5, f)) pose = { pos: f.pos.clone(), look: f.look.clone() };
+      if (name === 'gilgal' && shots[0]) {
+        h.enter(shots[0].take);
+        h.tick(shots[0].take, 0, 0);
+        await (opts.yieldFrame ?? (() => new Promise<void>((r) => setTimeout(r, 0))))();
+      }
+      const r = await this.engine.prepareView(h.view, { budgetMs: opts.budgetMs, yieldFrame: opts.yieldFrame, pose });
+      const st = this.buildStats[name];
+      if (st) (st as FilmSetBuildStat & { prepare?: unknown }).prepare = r;
+    } catch (e) {
+      console.warn(`[film] prepare ${name}`, e);
+    }
+    const st = this.buildStats[name];
+    if (st) st.precompileMs = Math.round(performance.now() - t0);
   }
 
   /** the land sets' module (the DEM tiles are released with the stage); null if it failed to load */
@@ -418,8 +458,8 @@ export class FilmStage {
           c.progress(share + (1 - share) * ((k + 1) / (marks.length + 1)));
           await c.yieldFrame();
           const e = await castMod.FilmActor.create({ role: 'elder', quality: q.name, msaa: q.msaa, seed: i + 1, lod: plan.near.includes(i) ? 'near' : 'crowd', ground });
-          // the strand-hair simulation only where the wind in the hair is seen close: the near pair (6, 7)
-          if (i !== 6 && i !== 7) {
+          // the strand-hair simulation only where the wind in the hair is seen close (RAMAH_SIM)
+          if (!RAMAH_SIM.includes(i)) {
             try {
               e.groom?.setSimulation(false);
             } catch {
@@ -583,7 +623,13 @@ export class FilmStage {
     const baseExp = base.exposure;
     // P6 (cut4's P4): harsher light with real contrast — the grade's contrast raised for the take, put back on leaving
     let savedContrast: number | null = null;
+    // P1 (cut7): the last 1.5 s of the flight a touch warmer (the grade's highlight warmth) toward P2's morning
+    let savedWarm: number | null = null;
     const restoreContrast = () => {
+      if (savedWarm !== null) {
+        engine0.post.grade.uniforms.uWarm.value = savedWarm;
+        savedWarm = null;
+      }
       if (savedContrast === null) return;
       engine0.post.grade.uniforms.uContrast.value = savedContrast;
       savedContrast = null;
@@ -657,6 +703,11 @@ export class FilmStage {
           const F = FILM_CAM.flight;
           const k = Math.max(0, Math.min(1, (t - F.thinAt[0]) / (F.thinAt[1] - F.thinAt[0])));
           set.setDeckCover(1 - (1 - F.thinTo) * k * k * (3 - 2 * k));
+          // the end of the flight warmer (it dissolves into the world's warm morning); put back when the view is left
+          const uw = engine.post.grade.uniforms.uWarm;
+          if (savedWarm === null) savedWarm = uw.value as number;
+          const w = Math.max(0, Math.min(1, (t - F.warmAt[0]) / (F.warmAt[1] - F.warmAt[0])));
+          uw.value = savedWarm + F.warmAdd * w * w * (3 - 2 * w);
         }
         if (name === 'coast') {
           const u = engine.post.grade.uniforms.uContrast;

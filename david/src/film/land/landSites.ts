@@ -289,13 +289,14 @@ export function buildRamahGate(tex: TextureSet, tier: LandTier, frame: { origin:
   // Local gate frame (x along the wall, z out of the gate); `turn` = extra yaw off "facing Samuel" (rad).
   const elders: Mark[] = [];
   const benchY = 0.46;
+  // (cut7, CUT v5 P7 — the confrontation filmed from Samuel's right, just outside the gateway (FilmCams FILM_CAM.elders):
+  //  the speaker (0) now sits on the RIGHT bench facing Samuel — three-quarter front to the lens, his face to the low
+  //  west sun; 1 on the left bench; 2 and 4 moved back out of the lens' lane; 3 a step in front of Samuel's left, in
+  //  profile between the two men; 5 three-quarter at the right edge; 6-7 the pair and 8-10 the outer ring behind)
   const ARC: [number, number, boolean, number][] = [
-    [-2.1, 0.95, true, -0.25], [3.0, 0.95, true, 0.2],
-    [-1.3, 3.6, false, 0.15], [1.6, 3.9, false, -0.2], [-2.6, 2.7, false, 0.1], [2.7, 2.9, false, -0.1],
-    // (cut7, CUT v5: the near pair turned to each other and half back toward the lens — two elders murmuring with each
-    //  other in the near foreground: their faces, beards and profiles at the 'near' LOD as the lens dollies past them,
-    //  their heads turning between each other and Samuel)
-    [-0.85, 7.6, false, 1.9], [1.25, 7.2, false, -1.95],
+    [3.0, 0.95, true, 0.0], [-2.1, 0.95, true, 0.25],
+    [-2.15, 4.45, false, 0.15], [1.0, 2.45, false, -0.2], [-3.35, 3.05, false, 0.1], [2.7, 2.9, false, -0.1],
+    [-0.85, 7.6, false, 0.55], [1.25, 7.2, false, -0.6],
     [-4.2, 4.8, false, 0.05], [4.0, 5.2, false, -0.1], [-2.4, 6.0, false, 0.3],
   ];
   for (const [lx, lz, seated, turn] of ARC) {

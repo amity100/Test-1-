@@ -11,8 +11,10 @@ import { INTRO_CUES, INTRO_SHOTS, introLength, shotStarts, type IntroCue, type I
 import { narration } from '../content/introNarration';
 import { verseArgs } from '../content/sources';
 import type { FilmStage, FilmSetHandle, FilmStageSet } from '../film/FilmStage';
+import type { FilmSchedule } from '../film/FilmSchedule';
 import { FilmWorld, HANDOFF } from '../film/FilmWorld';
 import { applyHandheld, portraitLens, TAKE_OFFSET } from '../film/FilmCams';
+import { bootMark } from '../core/bootProfile';
 
 /**
  * THE OPENING FILM "הַטּוֹב מִמֶּךָּ" (CUT v5, docs/intro-script-v5.md: 134.5 s): the player of the shot sheet
@@ -60,6 +62,8 @@ export interface IntroPreloadOptions {
   /** kept for API compatibility (the approved film has one cut) */
   short?: boolean;
   onProgress?: (f: number, label: string) => void;
+  /** load1: the world's first-frame warm-up, for the background builder to run before P2 (main.ts; progressive only) */
+  primeWorld?: (covered: () => boolean, slice: { budgetMs: number; yieldFrame: () => Promise<void> }) => Promise<void>;
 }
 
 /** the warm white of the light-flash cut G7 -> D1 */
@@ -91,6 +95,8 @@ function rayToGround(o: THREE.Vector3, d: THREE.Vector3, ground: (x: number, z: 
 
 let stageP: Promise<FilmStage | null> | null = null;
 let stageLive: FilmStage | null = null;
+/** load1: the background builder of the progressive start (null = everything was built before the start screen) */
+let schedLive: FilmSchedule | null = null;
 let releaseWanted = false;
 let progressSink: ((f: number, label: string) => void) | null = null;
 let progressF = 0;
@@ -147,17 +153,38 @@ export class Intro {
     if (stageP) return stageP;
     releaseWanted = false;
     const p = params();
-    stageP = import('../film/FilmStage')
-      .then(({ FilmStage }) =>
-        FilmStage.load(engine, {
-          cast: p.get('filmcast') !== '0',
-          crowd: p.get('filmcrowd') !== '0',
-          onProgress: (f, label) => {
-            progressF = f;
-            progressSink?.(f, label);
-          },
-        }),
-      )
+    const stageOpts = { cast: p.get('filmcast') !== '0', crowd: p.get('filmcrowd') !== '0' };
+    // load1 (the progressive start): only the film's first set (judah) is built before this resolves; the map, the coast,
+    // Ramah and Gilgal are built by a background builder on the start screen and during the prologue (FilmSchedule).
+    // Tests keep the old full preload unless ?progressive=1 (their harness seeks anywhere in the film at once).
+    const load = Intro.progressive()
+      ? import('../film/FilmSchedule').then(async ({ FilmSchedule }) => {
+          const sched = FilmSchedule.start(engine, { ...stageOpts, primeWorld: opts.primeWorld });
+          schedLive = sched;
+          (window as unknown as Record<string, unknown>).__filmSched = sched;
+          const first = sched.firstSets();
+          const label = narration('chapterTitle');
+          const tick = setInterval(() => {
+            progressF = sched.progress(first);
+            progressSink?.(progressF, label);
+          }, 200);
+          try {
+            for (const n of first) await sched.ready(n);
+          } finally {
+            clearInterval(tick);
+          }
+          return sched.stage;
+        })
+      : import('../film/FilmStage').then(({ FilmStage }) =>
+          FilmStage.load(engine, {
+            ...stageOpts,
+            onProgress: (f, label) => {
+              progressF = f;
+              progressSink?.(f, label);
+            },
+          }),
+        );
+    stageP = load
       .then(
         (s) => {
           if (releaseWanted) {
@@ -177,10 +204,27 @@ export class Intro {
     return stageP;
   }
 
+  /**
+   * load1: build the film progressively (the first set before the start screen, the rest in the background)? Default
+   * on; ?progressive=0 builds every set before the start screen (the old loading); tests (?test=1) default off.
+   */
+  static progressive(): boolean {
+    const p = params();
+    return (p.get('progressive') ?? (p.get('test') === '1' ? '0' : '1')) !== '0';
+  }
+
+  /** load1: the background builder of the progressive start (null when the stage was built in full) */
+  static get schedule(): FilmSchedule | null {
+    return schedLive;
+  }
+
   /** Dispose the film stage (after the film, or when it is skipped). */
   static release(engine: Engine) {
     releaseWanted = true;
     progressSink = null;
+    // load1: stop the background builder first (a set it finishes later is freed as it lands)
+    schedLive?.stop();
+    schedLive = null;
     const s = stageLive;
     stageLive = null;
     stageP = null;
@@ -307,16 +351,32 @@ export class Intro {
       return;
     }
     const label = narration('chapterTitle');
-    Intro.preload(engine, { onProgress: (f) => ui.preroll(label, f) }).then((s) => {
+    Intro.preload(engine, { onProgress: (f) => ui.preroll(label, f) }).then(async (s) => {
       if (this.state !== 'loading') return;
       this.stage = s;
+      const sched = schedLive;
+      if (sched) {
+        // load1: the later sets build in the background. If they would not be ready before their shots on this device
+        // the film waits here (black, the pre-roll card: the canvas is covered) — the start screen normally held for it
+        // already (main.ts) and this returns at once. From the first frame on nothing is pre-compiled on the canvas.
+        let shown = false;
+        await sched.waitForStart((f) => {
+          if (f < 1 || shown) {
+            shown = true;
+            ui.preroll(label, f);
+          }
+        });
+        await sched.enterFilm(() => this.t);
+        if (this.state !== 'loading') return;
+      }
       this.startFilm();
     });
-    if (this.state === 'loading') ui.preroll(label, progressF);
+    if (this.state === 'loading' && !schedLive) ui.preroll(label, progressF);
   }
 
   private startFilm() {
     const { ui, audio } = this.h;
+    bootMark('film:start');
     ui.preroll(null);
     this.state = 'playing';
     this.t = 0;

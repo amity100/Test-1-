@@ -448,8 +448,9 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
     beats: { verse: 1.0, rack: 5.2 },
     text: [{ at: 1.0, seconds: 6.6, kind: 'verse', quote: 'ps_78_70_71_chose_david', stagger: 0.17, side: 'right', v: 'top', lines: 2 }],
     direction: 'WHAT HE SEES (the user: "David must be seen watching his flock for a few seconds"): over his right shoulder '
-      + 'from behind and a little above, the flock grazing on the slope below him — ewes and their lambs (one nursing at '
-      + 'her flank), the newborn on the rocks just below him, its mother further down, the rams, a goat on a rock — in the '
+      + 'from behind and a little above, looking DOWN onto the flock grazing on the slope below him, 7-17 m away (the '
+      + 'v9 review: readable, no pale rock filling the frame) — ewes and their lambs (one nursing at her flank), the rams, '
+      + 'a goat — in the '
       + 'warm low light from the left; he watches them, calm, the wind in his curls; a slow push over his shoulder (never '
       + 'an orbit); at `rack` the focus comes back from the flock to him. Ps 78:70-71 over the far hills and the sky.',
   },
@@ -464,14 +465,16 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
     direction: 'THE NOBLE ACT AND THE LOGO (the user: the DAVID title "while he does something noble", then the camera '
       + 'moves away a little in a way that fits — not the strange orbit of CUT v4): a newborn lamb has fallen behind on the '
       + 'rocks and bleats for its mother; David steps down, kneels, gathers it into his arms (Isa 40:11 "וּבְחֵיקוֹ '
-      + 'יִשָּׂא") and carries it down to the ewe — the spirit of Shemot Rabbah 2:2, the midrash on Ps 78:70-71 (he '
-      + 'shepherds each lamb according to its strength). ONE long take: the lens follows him from behind, on the uphill '
-      + 'side, at a respectful distance, slow and steady — high over his shoulder for the gathering (one forearm under the '
-      + 'lamb, the other hand over its back, its head at his shoulder, the staff leaning in the crook of his arm), lower '
-      + 'behind him as he carries it down the slope. While he carries it DAVID forms in the sky, דָּוִד beneath it, then '
-      + 'the chapter line. He kneels and sets the lamb down by its mother — it goes to her flank and nurses — and he '
-      + 'straightens and looks out over his flock; the lockup fades; the camera eases back and down behind him onto the '
-      + 'gameplay camera (yaw almost unchanged, no orbit) and the game begins without a cut, among the flock.',
+      + 'יִשָּׂא") and carries it along the slope to the ewe — the spirit of Shemot Rabbah 2:2, the midrash on Ps 78:70-71 (he '
+      + 'shepherds each lamb according to its strength). ONE long take, the lens on the uphill side of the slope at about '
+      + '4 m, tracking with his walk and never circling him (the orchestrator\'s v9 review: the lamb must be SEEN): his '
+      + 'back as he steps down to the lamb, his left side as he kneels and gathers it (one forearm under the lamb, the '
+      + 'other hand over its back, the staff leaning in the crook of his arm), then his face and the lamb — its head at '
+      + 'his left shoulder — as he carries it along the slope across the frame. While he carries it DAVID forms in the '
+      + 'sky, דָּוִד beneath it, then the chapter line. He kneels and sets the lamb down by its mother — it runs to her '
+      + 'flank and nurses — straightens and TURNS to look out over his flock and the valley: his turn, not the camera, '
+      + 'puts the lens behind him; the lockup fades; the camera only eases back and a little down onto the gameplay '
+      + 'camera (yaw almost unchanged, no orbit) and the game begins without a cut, among the flock.',
   },
 ];
 

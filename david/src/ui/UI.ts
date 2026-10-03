@@ -154,7 +154,12 @@ export class UI {
     this.loadLabel.textContent = label;
   }
 
-  showStart(quality: string, onStart: () => void) {
+  /**
+   * The start screen. `beforeStart` (load1, the progressive start): awaited after the click while the start screen still
+   * covers the picture — the film's later sets may need a few more seconds on a slow device: the bar comes back with
+   * its progress (`progress(f)`) and the film starts by itself when it resolves.
+   */
+  showStart(quality: string, onStart: () => void, beforeStart?: (progress: (f: number) => void) => Promise<void>) {
     this.loading.classList.add('ready');
     const inner = this.loading.querySelector('.ld-inner') as HTMLDivElement;
     const btn = el('button', 'start-btn', 'הַתְחֵל');
@@ -167,6 +172,18 @@ export class UI {
         if (this.touch && document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen().catch(() => undefined);
       } catch {
         /* ignore */
+      }
+      if (beforeStart) {
+        let held = false;
+        await beforeStart((f) => {
+          if (f >= 1 && !held) return;
+          if (!held) {
+            held = true;
+            this.loading.classList.add('holding');
+          }
+          this.setLoading(f, 'מֵכִין אֶת הַסֶּרֶט…');
+        }).catch(() => undefined);
+        this.loading.classList.remove('holding');
       }
       this.loading.classList.add('gone');
       setTimeout(() => this.loading.remove(), 1600);

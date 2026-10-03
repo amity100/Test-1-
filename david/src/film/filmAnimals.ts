@@ -36,16 +36,17 @@ export const D4_BLEATS: readonly { t: number; who: 'lamb' | 'ewe'; v: number }[]
   .sort((a, b) => a.t - b.t);
 
 /**
- * (cut8, CUT v5) D3 'watch' / D4: the key animals on the slope below David's rock (world x, z, heading): a ewe with a lamb
- * nursing at her near (right) flank, a ewe with her lamb, a goat on the pale limestone outcrop at `goatRock` (on a placed
- * rock's top if one is there), the two rams; `extraLambs`
+ * (cut8, CUT v5) D3 'watch' / D4: the key animals on the slope below David's stand (FilmWorld D4.stand; world x, z,
+ * heading), 7-17 m from him inside D3's lens (v9 review: the flock readable below him): a ewe with a lamb nursing at her
+ * near (right) flank turned to the lens, a ewe with her lamb, a goat at `goatRock` (on a placed rock's top if one is
+ * there) looking up at him, the two rams further down; `extraLambs`
  * lambs are born into the flock for it (Flock.addLamb — they stay in the game's flock: "ewes and their lambs").
  */
 export const D3_STAGE = {
-  nurse: [3.4, 12.6, -1.05] as number[],
-  ewe2: [4.8, 14.6, 0.5] as number[],
-  goatRock: [-2.6, 9.6, -1.2] as number[],
-  rams: [[-0.8, 17.5, 2.2], [2.0, 20.5, -0.8]] as number[][],
+  nurse: [-7.05, 18.6, -1.27] as number[],
+  ewe2: [-3.05, 20.55, 0.6] as number[],
+  goatRock: [-8.46, 17.62, 2.9] as number[],
+  rams: [[-5.05, 24.35, 1.9], [-9.55, 27.55, -0.4]] as number[][],
   extraLambs: 2,
 };
 

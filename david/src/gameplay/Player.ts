@@ -137,6 +137,9 @@ export class Player {
   onStrikeImpact?: (tip: THREE.Vector3, forward: THREE.Vector3, kind: 'jab' | 'strike') => void;
   /** (bear1) which blow the staff button gives now (the fight: a jab at reach, the swung blow when the head is close) */
   strikeKind?: () => 'jab' | 'strike';
+  /** (bear1) what a blow turns him to (the bear's head in the fight): he squares up to it as he swings */
+  strikeAt?: () => THREE.Vector3 | null;
+  private strikeFaceT = 0;
   /** (bear1) > 0: knocked down — no movement, blows or dodges until he is up again */
   stunT = 0;
   private knockVel = new THREE.Vector3();
@@ -329,9 +332,15 @@ export class Player {
       if (this.aiming) target = 1.25;
       if (m.hold === 'pull' || m.hold === 'grab') target = 0;
     }
+    // (bear1) a blow at the bear: he squares up to its head as he swings (and plants his feet)
+    this.strikeFaceT = Math.max(0, this.strikeFaceT - dt);
+    const faceAt = this.strikeFaceT > 0 ? this.strikeAt?.() : null;
+    if (faceAt) target = Math.min(target, 0.8);
     if (this.dodgeT < 0 && this.controlEnabled && !stunned) {
       this.speed = damp(this.speed, target, target > this.speed ? 6 : 9, dt);
-      if (this.aiming) {
+      if (faceAt) {
+        this.heading = dampAngle(this.heading, Math.atan2(faceAt.x - this.pos.x, faceAt.z - this.pos.z), 26, dt);
+      } else if (this.aiming) {
         this.heading = dampAngle(this.heading, Math.atan2(camF.x, camF.z), 14, dt);
       } else if (mag > 0.05) {
         this.heading = dampAngle(this.heading, Math.atan2(wish.x, wish.z), 9, dt);
@@ -366,6 +375,7 @@ export class Player {
     if (input.take('strike') && this.controlEnabled && !stunned && this.canStrike && !this.carrying && !m.busy && !this.aiming) {
       m.staffMode = 'strike';
       this.strikeT = 0;
+      this.strikeFaceT = this.strikeAt ? 0.3 : 0;
       if ((this.strikeKind?.() ?? 'strike') === 'jab') {
         // (bear1) the jab: the staff's end driven at the face from out of the bear's reach
         m.play('jab', [
