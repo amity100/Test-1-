@@ -530,8 +530,17 @@ export class BearFight {
     if (this.result) return false;
     const pts = bear.model.hitPoints([]);
     const head = pts[2];
-    const dh = tip.distanceTo(head);
-    const db = Math.min(tip.distanceTo(pts[0]), tip.distanceTo(pts[1]));
+    // the staff from his hands to its end (a blow can land with its length, not only its tip)
+    const p = this.h.player;
+    const hands = _w.set(p.pos.x + p.forward.x * 0.3, p.pos.y + 1.05, p.pos.z + p.forward.z * 0.3);
+    const seg = (q: THREE.Vector3) => {
+      const ax = tip.x - hands.x, ay = tip.y - hands.y, az = tip.z - hands.z;
+      const l2 = ax * ax + ay * ay + az * az || 1;
+      const u = clamp(((q.x - hands.x) * ax + (q.y - hands.y) * ay + (q.z - hands.z) * az) / l2, kind === 'jab' ? 0.6 : 0.35, 1);
+      return Math.hypot(hands.x + ax * u - q.x, hands.y + ay * u - q.y, hands.z + az * u - q.z);
+    };
+    const dh = seg(head);
+    const db = Math.min(seg(pts[0]), seg(pts[1]));
     const onHead = dh < (kind === 'jab' ? 0.5 : 0.6);
     if (!onHead && db > 0.75) return false;
     const table = onHead ? (kind === 'jab' ? FIGHT.jabHead : FIGHT.strikeHead) : kind === 'jab' ? FIGHT.jabBody : FIGHT.strikeBody;
@@ -728,11 +737,16 @@ export class FightBot {
     }
     // ---- the opening: in and strike once
     if (open && !this.struckWin && (careful || (average && Math.random() < 0.55) || this.level === 'careless')) {
-      if (d > 2.3) this.stick(h, tx, tz);
+      // in to its head (the swung blow reaches ~1.5 m), the blow once he is free to swing
+      const hc = b.model.headCenter.getWorldPosition(_w);
+      const hx = hc.x - p.pos.x, hz = hc.z - p.pos.z;
+      if (Math.hypot(hx, hz) > 1.4) this.stick(h, hx, hz);
       else {
         this.stick(h, 0, 0);
-        input.press('strike');
-        this.struckWin = true;
+        if (!p.model.busy) {
+          input.press('strike');
+          this.struckWin = true;
+        }
       }
       return;
     }
@@ -838,8 +852,10 @@ export class FightBot {
       if (dh > 1.35) this.stick(h, hc.x - p.pos.x, hc.z - p.pos.z);
       else {
         this.stick(h, 0, 0);
-        input.press('strike');
-        this.struckWin = true;
+        if (!p.model.busy) {
+          input.press('strike');
+          this.struckWin = true;
+        }
       }
       return;
     }
