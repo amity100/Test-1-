@@ -37,7 +37,7 @@ function faceMaterial(col: THREE.Color) {
         float sw = 0.5 + 0.5 * sin(a * 3.0 + r * 9.0 - uT * 7.0);
         float rim = smoothstep(0.55, 1.0, r);
         vec3 c = mix(vec3(0.015, 0.02, 0.035), uCol * 0.55, rim * 0.85 + sw * 0.22 * r);
-        gl_FragColor = vec4(c, uA * (0.82 + 0.18 * rim));
+        gl_FragColor = vec4(c, uA * (0.5 + 0.45 * rim));
       }`,
     transparent: true,
     depthWrite: false,
@@ -66,9 +66,10 @@ const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const Z = new THREE.Vector3(0, 0, 1);
 
-/** One window: its rim, its face, and an arm that comes out of it. */
+/** One window: its rim and face (turned to you, so it always reads as a window), and an arm that comes out of it at what it's after. */
 class WindowView {
   readonly g = new THREE.Group();
+  readonly disc = new THREE.Group();
   readonly ring: THREE.Mesh;
   readonly face: THREE.Mesh;
   readonly faceMat: THREE.ShaderMaterial;
@@ -91,7 +92,8 @@ class WindowView {
     this.knife.position.set(0, -0.01, 0.06);
     this.hand.add(this.knife);
     this.arm.add(this.forearm, c, this.hand);
-    this.g.add(this.face, this.ring, this.arm);
+    this.disc.add(this.face, this.ring);
+    this.g.add(this.disc, this.arm);
     this.g.visible = false;
   }
 }
@@ -227,6 +229,7 @@ export class ReachFx {
       o.visible = !!at;
       if (at) o.position.copy(at);
     }
+    if (at) for (const w of [...this.windows, ...this.redWindows]) w.disc.scale.setScalar(0.4);
     if (!at) {
       for (const k of [-1, -2]) {
         const v = this.floor.get(k);
@@ -356,14 +359,16 @@ export class ReachFx {
       const view = (red ? this.redWindows : this.windows)[(red ? ri : ni) - 1];
       g.visible = true;
       g.position.copy(w.at);
-      g.quaternion.setFromUnitVectors(Z, w.dir);
+      // (the window faces you; the arm comes out of it toward what it's after)
+      view.disc.quaternion.copy(s.camera.quaternion);
+      view.arm.quaternion.setFromUnitVectors(Z, w.dir);
       const land = Hands.landAt(w);
       const life = Hands.life(w);
       // the window grows open (a telegraphed one throbs while it waits), shrinks shut at the end
       const openK = w.tele > 0 && w.t < w.tele ? (0.35 + 0.65 * (w.t / w.tele)) * (0.85 + 0.15 * Math.sin(t * 40)) : Math.min(1, w.t / 0.06);
       const shut = Math.min(1, Math.max(0, (life - w.t) / 0.08));
       const r = REACH.hand.radius * openK * shut * (w.kind === 'pull' ? 1.25 : 1);
-      g.scale.setScalar(Math.max(0.001, r));
+      view.disc.scale.setScalar(Math.max(0.001, r));
       view.faceMat.uniforms.uT.value = t;
       view.ringMat.opacity = w.tele > 0 && w.t < w.tele ? 0.6 + 0.4 * Math.sin(t * 30) : 1;
       // the arm, out to what it's after (in the window's frame: scale undone)
@@ -372,7 +377,6 @@ export class ReachFx {
       const k = Hands.extent(w);
       const len = Math.max(0.02, k * reach);
       view.arm.visible = w.t >= w.tele && k > 0.01;
-      view.arm.scale.setScalar(1 / Math.max(0.001, r));
       view.forearm.scale.set(1, 1, Math.max(0.02, len - 0.1));
       view.hand.position.set(0, 0, Math.max(0, len - 0.1));
       view.knife.visible = w.kind === 'stab';

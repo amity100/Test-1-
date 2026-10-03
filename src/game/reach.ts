@@ -353,13 +353,22 @@ export function knifeReach(dist: number, sight: boolean): 'melee' | 'window' | n
   return null;
 }
 
-/** Where a hand window opens for what's at `target` (seen from `eye`): just short of it toward you, the hand pointing at it. */
+/**
+ * Where a hand window opens for what's at `target` (seen from `eye`): beside
+ * it, a little above and toward you, so the arm is seen reaching across to it
+ * (straight on, the window would hide its own arm); `dirOut`: the way the arm
+ * comes out (at it).
+ */
 export function windowSpot(eye: V3, target: V3, out: THREE.Vector3, dirOut: THREE.Vector3, standOff = REACH.hand.standOff) {
-  dirOut.subVectors(target, eye);
+  // (toward it, flat; then its right-hand side as you look at it)
+  dirOut.set(target.x - eye.x, 0, target.z - eye.z);
   const d = dirOut.length();
   if (d < 1e-6) dirOut.set(0, 0, 1);
   else dirOut.multiplyScalar(1 / d);
-  out.copy(target).addScaledVector(dirOut, -Math.min(standOff, d * 0.5));
+  const sx = -dirOut.z, sz = dirOut.x;
+  const near = Math.min(0.3, d * 0.2);
+  out.set(target.x - sx * standOff - dirOut.x * near, target.y + 0.45, target.z - sz * standOff - dirOut.z * near);
+  dirOut.subVectors(target, out).normalize();
   return out;
 }
 

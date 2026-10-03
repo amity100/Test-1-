@@ -72,11 +72,17 @@ describe('REACH: what the hand takes', () => {
     expect(asked).toEqual([1, 2]);
   });
 
-  it('the window opens just short of what it is after, toward you, the hand pointing at it', () => {
+  it('the window opens beside what it is after (the arm seen reaching across), the hand pointing at it', () => {
     const at = new THREE.Vector3(), dir = new THREE.Vector3();
-    windowSpot(V(0, 1.5, 0), V(0, 1.5, 10), at, dir);
-    expect(at.z).toBeCloseTo(10 - REACH.hand.standOff, 5);
-    expect(dir.z).toBeCloseTo(1, 5);
+    const target = V(0, 1.5, 10);
+    windowSpot(V(0, 1.5, 0), target, at, dir);
+    const off = at.distanceTo(target);
+    expect(off).toBeGreaterThan(REACH.hand.standOff * 0.9);
+    expect(off).toBeLessThan(REACH.hand.standOff + 0.5);
+    // to one side of the line of sight, a little nearer you, never past it
+    expect(Math.abs(at.x)).toBeCloseTo(REACH.hand.standOff, 5);
+    expect(at.z).toBeLessThan(10);
+    expect(dir.dot(target.clone().sub(at).normalize())).toBeCloseTo(1, 5);
   });
 });
 
