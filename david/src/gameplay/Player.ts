@@ -518,7 +518,9 @@ export class Player {
     const m = this.model;
     const wasGold = this.slingGold;
     this.whirlT += dt;
-    this.power = clamp(this.whirlT / SLING.powerTime, 0, 1);
+    // the power fills fast at first and eases into full (the last turns add little): a hold of 0.7 s is already ≈0.9
+    const u = clamp(this.whirlT / SLING.powerTime, 0, 1);
+    this.power = 1 - (1 - u) * (1 - u);
     const rate = THREE.MathUtils.lerp(SLING.rate0, SLING.rate1, Math.pow(this.power, 0.85));
     const before = this.whirlPhase;
     this.whirlPhase += rate * dt;

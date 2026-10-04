@@ -742,7 +742,9 @@ export class FilmStage {
             const k = Math.max(0, Math.min(1, (t - (away - 0.75)) / 0.6));
             const a = extra.actors[1].eyesWorld(tmp);
             const b = sam.eyesWorld(tmp2);
-            return { point: a.lerp(b, k * k * (3 - 2 * k)), fStop: 3.2 };
+            // (wave 4: deeper while on the speaker — Samuel's profile in the foreground reads, not a soft white mass)
+            const ke = k * k * (3 - 2 * k);
+            return { point: a.lerp(b, ke), fStop: 6.3 - 2.8 * ke };
           }
           return { point: sam.eyesWorld(tmp), fStop: 4 };
         }

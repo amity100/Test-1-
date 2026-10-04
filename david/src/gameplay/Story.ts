@@ -84,7 +84,7 @@ export class Story {
     // a round is live a miss says where the stone went (high / low / left / right)
     player.onShot = (shot) => {
       // (gameplay v2.1) a gold release is a strong throw; a weak one is said so
-      this.ui.slingRelease(shot.perfect ? 'gold' : shot.power < 0.45 ? 'weak' : 'full');
+      this.ui.slingRelease(shot.perfect ? 'gold' : shot.power < 0.7 ? 'weak' : 'full');
       if (this.range) this.range.onTargetAtRelease = player.aimOnTarget;
       this.range?.onShot(shot);
     };

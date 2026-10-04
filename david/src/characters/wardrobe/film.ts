@@ -449,13 +449,14 @@ export async function dressElder(human: HumanModel, opts: FilmDressOptions): Pro
   let head: { height: number; lift: number; extra: number; tilt: number } | null = null;
   if (headKind === 'band') {
     const band = clothMaterial({ tier, tex: t.weave_medium, tile: 0.08, dye: hcol, hem: [0, 0.1, 0.01, 0], edgeMask: [0, 0], transmit: 0 });
-    headRing(fit, { height: 0.022, thickness: 0.004, material: band, extra: 0.012 });
-    head = { height: 0.022, lift: 0, extra: 0.012, tilt: 0 };
+    // (on the forehead, clear of the brows — the contact sheet: low bands covered the brows of the long faces)
+    headRing(fit, { height: 0.022, thickness: 0.004, material: band, extra: 0.01, lift: 0.014 });
+    head = { height: 0.022, lift: 0.014, extra: 0.01, tilt: 0 };
   } else if (headKind === 'cloth') {
-    // a wrapped head-cloth: a deep band of wool wound round the head (the crown shows above it)
+    // a wrapped head-cloth: a deep band of wool wound round the head high on the forehead (the crown shows above it)
     const cloth = clothMaterial({ tier, tex: t.weave_medium, tile: 0.1, dye: hcol, hem: [0, 0.1, 0.01, 0], edgeMask: [0, 0], transmit: 0.3 });
-    headRing(fit, { height: 0.068, thickness: 0.018, material: cloth, extra: 0.013, lift: 0.012, tilt: 0.012 });
-    head = { height: 0.068, lift: 0.012, extra: 0.013, tilt: 0.012 };
+    headRing(fit, { height: 0.052, thickness: 0.016, material: cloth, extra: 0.008, lift: 0.03, tilt: 0.008 });
+    head = { height: 0.052, lift: 0.03, extra: 0.008, tilt: 0.008 };
   }
   sandals(fit, t.leather, { wraps: 1, height: 0.05 });
   const staff = R() < 0.55 ? makeStaff(tier, t.wood, t.bark, { length: 1.35 * S + R() * 0.15, gripAt: 1.0 * S, seed }) : null;

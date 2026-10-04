@@ -41,7 +41,7 @@ export interface RoundDef {
 
 export const ROUNDS: RoundDef[] = [
   { title: 'הִתְחַמְּמוּת', note: 'שְׁלֹשָׁה כַּדִּים עַל הַגָּדֵר — שַׁחְרֵר כְּשֶׁהַטַּבַּעַת זְהֻבָּה', wind: 0, windFrom: 'left', maxStones: 9, par3: 3, par2: 5 },
-  { title: 'לְמֵרָחוֹק', note: 'עַל הַגָּדָה שֶׁמִּנֶּגֶד — רַק זְרִיקָה חֲזָקָה תַּגִּיעַ; כַּוֵּן מוּל הָרוּחַ', wind: 2.5, windFrom: 'left', maxStones: 14, par3: 5, par2: 8 },
+  { title: 'לְמֵרָחוֹק', note: 'עַל הַגָּדָה שֶׁמִּנֶּגֶד — רַק זְרִיקָה חֲזָקָה תַּגִּיעַ; כַּוֵּן מוּל הָרוּחַ', wind: 2.2, windFrom: 'left', maxStones: 14, par3: 5, par2: 8 },
   { title: 'מַטָּרוֹת נָעוֹת', note: 'הַדְּלַעַת בַּחֶבֶל וְהַכַּד עַל הַבּוּל הַמִּתְגַּלְגֵּל — כַּוֵּן לְפָנֵיהֶם', wind: 1.5, windFrom: 'right', maxStones: 12, par3: 3, par2: 5 },
   { title: 'הַחֶבֶל הַדַּק', note: 'פְּגַע בַּחֶבֶל שֶׁעָלָיו תָּלוּי הַנֹּאד — לֹא בַּנֹּאד', wind: 0.8, windFrom: 'left', maxStones: 10, par3: 2, par2: 4 },
 ];
@@ -106,9 +106,12 @@ const _w = new THREE.Vector3();
 // (polish, "challenging and fun") the difficulty's knobs (re-tuned with the bots — see the report's table): the far
 // bank's jars / gourds (scale), the swinging gourd (amplitude rad, period s, body scale), the log (its jar's scale,
 // its speed m/s); round 2's wind is in ROUNDS
-const FAR_JAR = 1.55, FAR_GOURD = 1.6;
-const SWING_AMP = 0.24, SWING_PERIOD = 3.4, SWING_GOURD = 1.4;
-const LOG_JAR = 0.8, LOG_SPEED = 0.7;
+// (w4) the hit zones a little more forgiving (the targets themselves grow with them: what he sees is what he can hit):
+// the far jars 1.55 -> 1.65, the far gourds 1.6 -> 1.9, the swinging gourd 1.4 -> 1.95 and a slower swing (3.4 -> 4.2 s),
+// the log's jar 0.8 -> 1.1 and a slower log (0.7 -> 0.55 m/s); round 2's wind 2.5 -> 2.2 m/s (in ROUNDS)
+const FAR_JAR = 1.65, FAR_GOURD = 1.9;
+const SWING_AMP = 0.24, SWING_PERIOD = 4.2, SWING_GOURD = 1.95;
+const LOG_JAR = 1.1, LOG_SPEED = 0.55;
 
 export class Range {
   readonly group = new THREE.Group();

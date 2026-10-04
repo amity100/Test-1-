@@ -354,10 +354,12 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
       { at: 2.4, seconds: 4.4, kind: 'verse', quote: 's1_8_5_give_us_king', stagger: 0.16, side: 'left', v: 'top', lines: 2 },
     ],
     direction: 'Ramah in the late afternoon light (the sun low in the WSW raking the gate\'s stones, the roofed passage in '
-      + 'shade, the doors open): the elders of Israel before old Samuel (8:4); a slow, low dolly in on the gate\'s axis, '
-      + 'the near pair — turned to each other — framing it left and right; the speaker rises from the bench, his arm out '
-      + '(`rise`, 8:5 at `verse`), the others murmur and nod; Samuel in the gateway listens and turns his face away at '
-      + '`away` (8:6). Then the hard cut on the shofar into Gilgal.',
+      + 'shade, the doors open): the elders of Israel before old Samuel (8:4) — every one a different man, none like him '
+      + '(cut7, wave 4: dark, black, greying and salt-and-pepper hair and beards, head-bands and head-cloths of madder, '
+      + 'ochre, cream and brown, mantles of undyed browns, greys and goat-hair black; only Samuel white-haired and '
+      + "bare-headed); a slow, low dolly from Samuel's right side: his white head in the foreground, the speaker rising "
+      + 'from the bench before the gate wall, his arm out (`rise`, 8:5 at `verse`), the others murmur and nod; the focus '
+      + 'racks to Samuel as he turns his face away at `away` (8:6). Then the hard cut on the shofar into Gilgal.',
   },
 
   // ================================================================== 1 · GILGAL (10.5 s): the shofar, the army, the king

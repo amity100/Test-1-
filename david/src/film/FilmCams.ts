@@ -122,7 +122,7 @@ export const FILM_CAM = {
   // morning sun behind the lens' left shoulder), looking back WNW down the road toward Ashdod — the direction P5's map
   // was descending in: the elite front ranks (bronze helmets, scale corselets, round shields, spears) and the feather
   // crowns behind them march at the lens out of their own dust, large and clear, the column soft behind them. The lens
-  // holds its place while they come on (`rise[0]`), then ONE slow crane move up and back (every distance log-
+  // holds its place while they come on (to the beat `crane`), then ONE slow crane move up and back (every distance log-
   // interpolated on a smoothstep that is still moving at the cut): the column revealed stretching back down the road
   // to Ashdod's tell, the plain hazy, the sea's pale band beyond. The lens stays low enough that the plain is always seen
   // at a grazing angle (no field pattern), the sky's upper third free for the card (right) and 13:19 (left).
@@ -130,7 +130,9 @@ export const FILM_CAM = {
   // the look point behind the head NOW (it marches 1.2 m/s at the lens); h / lookH over the ground.
   // (probed at 640x360, desktop-high: the elite front rank ~9 m off at the first frame, ~70 % of the picture height;
   //  the crane ends ~7 m up, ~33 m ahead of the head: the column from the lower frame back to Ashdod's tell)
-  threat: { ahead0: 9.5, ahead1: 56, side0: 4.1, side1: 15, h0: 1.15, h1: 10, back0: 6, back1: 130, lookSide0: 1.3, lookSide1: 0, lookH0: 1.42, lookH1: 0, fov0: 20, fov1: 25, rise: [2.6, 12.0] as [number, number], contrast: 1.1, focusBack: 1.0, fStop: 5.6 },
+  // (the crane starts on the contract's beat `crane` (2.0 s; the score thins the near footfall with it) and runs
+  //  `riseLen` s on a smoothstep — still moving at the cut)
+  threat: { ahead0: 9.5, ahead1: 56, side0: 4.1, side1: 15, h0: 1.15, h1: 10, back0: 6, back1: 130, lookSide0: 1.3, lookSide1: 0, lookH0: 1.42, lookH1: 0, fov0: 20, fov1: 25, riseLen: 10.6, contrast: 1.1, focusBack: 1.0, fStop: 5.6 },
   // P4 (cut4): a long lens AHEAD of the column on the marching men's right, 1.45 m high, looking back down its length:
   // the column comes diagonally toward the lens, its nearest file (the right edge, lat +2.75) large and soft at the
   // frame's right edge, the rest receding into the dust; the lens retreats slower than the march and trucks in
@@ -146,7 +148,9 @@ export const FILM_CAM = {
   //  toward the lens (RamahPerformance); an elder in profile between them (mark 3, near LOD), another three-quarter at
   //  the right edge (mark 5). One slow push (0.8 m) and a tightening lens; the lens tilted a little up so the place
   //  card and the verse sit over the sunlit wall above every head. Probed: scratchpad/cut7/ramah_comp2.py)
-  elders: { x0: -2.2, z0: 3.4, x1: -1.62, z1: 2.78, h0: 1.47, h1: 1.5, lookX: 1.9, lookZ: 1.25, lookH: 1.88, fov0: 34, fov1: 30 },
+  // (wave 4: the look lower and the lens a little longer — the rising speaker in the middle of the frame, not at its
+  //  foot under a wall; the place card over the sky, 8:5 over the gate's dark passage)
+  elders: { x0: -2.2, z0: 3.4, x1: -1.62, z1: 2.78, h0: 1.47, h1: 1.5, lookX: 1.9, lookZ: 1.25, lookH: 1.6, fov0: 31, fov1: 27.5 },
 };
 
 /**
@@ -574,7 +578,8 @@ export function landCam(take: string, u: number, t: number, ctx: LandCamCtx, out
     // (a constant apparent rate; still moving at the cut)
     const c = FILM_CAM.threat;
     const hd = ctx.coast.heading;
-    const k = ss(c.rise[0], c.rise[1], t);
+    const r0 = takeBeat('threat', 'crane', 2.0);
+    const k = ss(r0, r0 + c.riseLen, t);
     const L = (a: number, b: number) => a * Math.pow(b / a, k);
     _a.set(-hd.z, 0, hd.x); // the marching men's right: the sunlit flank of the main column
     out.pos.copy(ctx.coast.columnHead).addScaledVector(hd, L(c.ahead0, c.ahead1)).addScaledVector(_a, L(c.side0, c.side1));

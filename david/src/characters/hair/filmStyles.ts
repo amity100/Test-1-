@@ -201,21 +201,21 @@ export const ELDER_LOOKS: ElderLook[] = [
   // 1 · mark 0, THE SPEAKER (~55): dark brown, grey streaks at the temples, a full round beard
   { hair: DARK_BROWN, grey: 0.16, greyAt: 'temples', beard: 'round', beardLen: 0.12, hairLen: 0.17, wavy: 0.7 },
   // 2 · mark 1, seated (~45): black, short trimmed beard
-  { hair: BLACK, grey: 0.03, greyAt: 'mix', beard: 'short', beardLen: 0.045, hairLen: 0.13, wavy: 0.2 },
+  { hair: BLACK, grey: 0.03, greyAt: 'mix', beard: 'short', beardLen: 0.045, hairLen: 0.085, wavy: 0.2 },
   // 3 · mark 2 (~62): salt and pepper, long narrow beard
-  { hair: DARK_BROWN, grey: 0.42, greyAt: 'mix', beard: 'long', beardLen: 0.2, hairLen: 0.2, wavy: 0.3 },
+  { hair: DARK_BROWN, grey: 0.42, greyAt: 'mix', beard: 'long', beardLen: 0.2, hairLen: 0.1, wavy: 0.3 },
   // 4 · mark 3, the pair's near man (~50): chestnut brown, full round beard
   { hair: CHESTNUT, grey: 0.06, greyAt: 'temples', beard: 'round', beardLen: 0.13, hairLen: 0.22, wavy: 0.85 },
   // 5 · mark 4 (~45): dark brown, short beard
   { hair: DARK_BROWN, grey: 0.02, greyAt: 'mix', beard: 'short', beardLen: 0.05, hairLen: 0.12, wavy: 0.6 },
   // 6 · mark 5 (~68): the one clearly grey — iron-grey (never white), long beard
-  { hair: BROWN, grey: 0.82, greyAt: 'all', beard: 'long', beardLen: 0.19, hairLen: 0.2, wavy: 0.4 },
+  { hair: BROWN, grey: 0.82, greyAt: 'all', beard: 'long', beardLen: 0.19, hairLen: 0.1, wavy: 0.4 },
   // 7 · mark 6, near pair (~58): black, grey streaks, full round beard
-  { hair: BLACK, grey: 0.18, greyAt: 'temples', beard: 'round', beardLen: 0.11, hairLen: 0.16, wavy: 0.55 },
+  { hair: BLACK, grey: 0.18, greyAt: 'temples', beard: 'round', beardLen: 0.11, hairLen: 0.09, wavy: 0.55 },
   // 8 · mark 7, near pair (~52): dark brown, long narrow beard
-  { hair: DARK_BROWN, grey: 0.05, greyAt: 'mix', beard: 'long', beardLen: 0.18, hairLen: 0.19, wavy: 0.15 },
+  { hair: DARK_BROWN, grey: 0.05, greyAt: 'mix', beard: 'long', beardLen: 0.18, hairLen: 0.1, wavy: 0.15 },
   // 9 · mark 8 (~64): salt and pepper, short beard
-  { hair: BROWN, grey: 0.45, greyAt: 'mix', beard: 'short', beardLen: 0.06, hairLen: 0.14, wavy: 0.5 },
+  { hair: BROWN, grey: 0.45, greyAt: 'mix', beard: 'short', beardLen: 0.06, hairLen: 0.08, wavy: 0.5 },
   // 10 · mark 9 (~48): brown, full beard
   { hair: BROWN, grey: 0.04, greyAt: 'temples', beard: 'round', beardLen: 0.1, hairLen: 0.18, wavy: 0.9 },
   // 11 · mark 10 (~57): black, grey streaks, long beard
