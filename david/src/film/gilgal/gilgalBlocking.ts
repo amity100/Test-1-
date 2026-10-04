@@ -22,6 +22,9 @@ import { ARMY, roadZ, SAMUEL, SAMUEL_EXIT, SAUL_FACE, SAUL_HALT } from './gilgal
  *                  time of the insert = shot time + 4.0)
  *   G6 verdict     6.0  turnBack 0.5 · speech 1.2 .. speechEnd 4.9, then the held silence
  *   G7 saulAlone   3.0  lookDown 0.4 · tighten 1.8 · flash 2.75
+ * CUT v6 (cut7, Gilgal tightened — read from the contract, nothing hard-coded): G2 6.0 · G4 5.0 (headsTurn 0.3, part
+ * 0.8, card 0.8, step 2.0, verse 1.8; Samuel walks up from 4 m) · G5a 3.5 (turn 0.3, lunge 1.7, grip 2.8) · G5b 4.0
+ * (pull 0.3, rip 1.1, free 3.0; blocking time = shot time + 3.5) · G6 5.5.
  *
  * `timeScale` is the slow-motion factor of the action within a shot (1 = real time): animation clocks of the actors
  * advance by dt * timeScale (the camera moves in real time). `actionTime` is its integral.
@@ -162,7 +165,8 @@ export function tearGrip(t: number, out = new THREE.Vector3()) {
  * the distance of the tear (G5a: 1.7 m) — and answers him (15:26). G5a+ keep SAMUEL_STEP (the cut to G5a moves on along
  * the road: the two men's distance, sides and facing are the same). G1-G3 keep SAMUEL.pos (he is not in their frames).
  */
-export const SAMUEL_G4_FROM = 5.0;
+// (CUT v6: G4 is 5 s, the step at 2.0 — he comes from 4 m: an old man's 0.9 m/s)
+export const SAMUEL_G4_FROM = 4.0;
 export const SAMUEL_G4_AT = 1.85;
 /** his pace (m/s) on the way up: SAMUEL_G4_FROM - SAMUEL_G4_AT metres = the pace over `step` + half the last step */
 const SAM_G4_PACE = (SAMUEL_G4_FROM - SAMUEL_G4_AT) / (BEATS.silence.step + 0.35);

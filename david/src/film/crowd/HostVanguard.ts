@@ -43,14 +43,21 @@ import { PHILISTINE_CROWN_TIME } from '../../characters/wardrobe/film';
  * The men stand 6-25 m from P6's long lens (~250-400 px tall at 1280x720): the 'medium' body is ample there and is
  * ~half the 'high' one's 93 k triangles.
  */
-export const VANGUARD: Record<CrowdTier, { n: number; lod: 'near' | 'crowd'; q: Quality }> = {
-  'desktop-high': { n: 12, lod: 'near', q: 'medium' },
-  'desktop-medium': { n: 8, lod: 'near', q: 'low' },
-  'mobile-high': { n: 6, lod: 'crowd', q: 'low' },
-  'mobile-low': { n: 5, lod: 'crowd', q: 'low' },
+export const VANGUARD: Record<CrowdTier, { n: number; lod: 'near' | 'crowd'; q: Quality; shadows: 'full' | 'lite' | 'none' }> = {
+  'desktop-high': { n: 12, lod: 'near', q: 'medium', shadows: 'full' },
+  'desktop-medium': { n: 8, lod: 'near', q: 'low', shadows: 'full' },
+  'mobile-high': { n: 6, lod: 'crowd', q: 'low', shadows: 'lite' },
+  'mobile-low': { n: 4, lod: 'crowd', q: 'low', shadows: 'none' },
 };
-/** meshes inside the head (teeth, tongue, brows, lashes, eyes): never cast a shadow (they were ~25 k triangles a man) */
-const NO_SHADOW = /teeth|tongue|brow|lash|eye|caruncle|tear/i;
+/** phones ('lite'): only the large surfaces cast (the body, the kilt's skirt, the corselet, the shield) */
+const LITE_SHADOW = /^body$|kiltSkirt|corselet|shield/i;
+/**
+ * no shadow from the small parts (each a draw call in the shadow pass): the face's inner meshes (teeth, brows, lashes,
+ * eyes — ~25 k triangles a man), the hair, belts, sword, sandals, greaves, the spear's fittings, the tassels, the sleeves
+ * and the kilt's linen under the corselet. The body, the kilt's skirt, the corselet and its scales, the helmet / crown,
+ * the shield and the spear shaft keep theirs (the long morning shadows on the plain).
+ */
+const NO_SHADOW = /teeth|tongue|brow|lash|eye|caruncle|tear|strand|groom|hair|belt|sword|sheath|hilt|sandal|greave|bind|butt|socket|fringe|tassel|Sleeve|kiltUpper/i;
 
 /**
  * the march takes of the vanguard: natural walks with natural speeds near the host's 1.2 m/s, so the time-warp keeps
@@ -203,11 +210,12 @@ class VanMan {
     a.groom?.setSimulation(false);
     // under the bronze helmet the hair is cropped and hidden (the short groom stuck out below the rim as a ragged mane)
     if (slot.elite) a.groom?.setVisible(false);
-    // never seen: the teeth (the mouths stay closed on the march); the kilt's linen under the corselet casts no shadow
+    // never seen from P6's lens (each a draw call): the teeth (the mouths stay closed on the march), the lashes and the
+    // eyes' tear lines (under a pixel at 6-25 m), and under the elite's scale corselet the kilt's linen body (its sleeves
+    // and skirt stay)
     a.root.traverse((m) => {
       if (!(m as THREE.Mesh).isMesh) return;
-      if (/teeth|tongue/i.test(m.name)) m.visible = false;
-      if (slot.elite && /kiltUpper/.test(m.name)) m.castShadow = false;
+      if (/teeth|tongue|lash|tearLine/i.test(m.name) || (slot.elite && /kiltUpper/.test(m.name))) m.visible = false;
     });
     let crown: THREE.Object3D | null = null;
     a.root.traverse((o) => {
@@ -278,8 +286,9 @@ class VanMan {
     if (this.clock >= this.glanceAt) {
       const k = this.h(30 + Math.floor(this.clock * 3.7));
       const k2 = this.h(40 + Math.floor(this.clock * 5.3));
-      // 60 % straight ahead (small drift), 25 % a neighbour / across the column, 15 % out over the plain
-      this.glanceYaw = k < 0.6 ? (k2 - 0.5) * 0.25 : k < 0.85 ? (k2 < 0.5 ? -1 : 1) * (0.35 + 0.3 * k2) : (k2 < 0.5 ? -1 : 1) * (0.55 + 0.35 * k2);
+      // 60 % straight ahead (small drift), 25 % a neighbour / across the column, 15 % out over the plain to the left —
+      // the lens stands off their right front: a glance that way stays short of it (no man looks into the camera)
+      this.glanceYaw = k < 0.6 ? (k2 - 0.5) * 0.25 : k < 0.85 ? (k2 < 0.5 ? -0.26 : 0.35 + 0.3 * k2) : 0.55 + 0.35 * k2;
       this.glancePitch = -0.05 + 0.12 * (k2 - 0.5);
       this.glanceAt = this.clock + (k < 0.6 ? 1.6 + 2.2 * k2 : 0.7 + 0.9 * k2);
     }
@@ -366,8 +375,13 @@ export class HostVanguard {
       const a = await FilmActor.create({ role: 'philistine', quality: q, seed: s.seed, lod, rank: s.elite ? 'elite' : 'rank', ground: o.ground });
       ms.push(Math.round(performance.now() - ta));
       a.addTo(o.parent);
+      const sh = VANGUARD[o.tier].shadows;
       a.root.traverse((m) => {
-        if ((m as THREE.Mesh).isMesh && NO_SHADOW.test(m.name)) m.castShadow = false;
+        if (!(m as THREE.Mesh).isMesh) return;
+        const n = m.name, pn = m.parent?.name ?? '';
+        if (sh === 'none' || NO_SHADOW.test(n) || NO_SHADOW.test(pn) || (sh === 'lite' && !LITE_SHADOW.test(n) && !LITE_SHADOW.test(pn))) m.castShadow = false;
+        // mobile-low: the brows too (a draw call; a pixel at the phone's size)
+        if (o.tier === 'mobile-low' && /brow/i.test(n)) m.visible = false;
       });
       men.push(new VanMan(a, s, i, o.dust));
     }

@@ -109,6 +109,11 @@ export const FILM_CAM = {
       [12.4, 1075, 815, 650, 297, -7.5, -1.2, 40],
     ] as [number, number, number, number, number, number, number, number][],
     minAGL: 60,
+    // (cut7, CUT v6 — P1 is 6.5 s: "straight into the most beautiful part of the dawn flight"): the keys are CUT v5's
+    // clock; the shot plays them from `t0` at `rate` (flightT): over the cloud sea in the sunrise, the dive through the
+    // gap in the deck at 2.7-3.6 s, out under it over the ridges as the land card comes up (3.2)
+    t0: 4.0,
+    rate: 1.1,
     // (wave 4 — the orchestrator: ~1 s of flat lavender fog inside the deck at 7-8 s) the flight dives through a GAP
     // in the deck ([x, z, x radius, z radius] m, clear within 45 % of the radii), long to the south the way the lens
     // looks on its way down: the gap opens ahead as the lens nears it (the deck breaking up), the lens pitches down
@@ -137,9 +142,10 @@ export const FILM_CAM = {
   // the look point behind the head NOW (it marches 1.2 m/s at the lens); h / lookH over the ground.
   // (probed at 640x360, desktop-high: the elite front rank ~9 m off at the first frame, ~70 % of the picture height;
   //  the crane ends ~7 m up, ~33 m ahead of the head: the column from the lower frame back to Ashdod's tell)
+  // (CUT v6: 7 s, the crane from `crane` 2.4 over 6.4 s — still rising at the cut)
   // (the crane starts on the contract's beat `crane` (2.0 s; the score thins the near footfall with it) and runs
   //  `riseLen` s on a smoothstep — still moving at the cut)
-  threat: { ahead0: 9.5, ahead1: 56, side0: 4.1, side1: 15, h0: 1.15, h1: 10, back0: 6, back1: 130, lookSide0: 1.3, lookSide1: 0, lookH0: 1.42, lookH1: 0, fov0: 20, fov1: 25, riseLen: 10.6, contrast: 1.1, focusBack: 1.0, fStop: 5.6 },
+  threat: { ahead0: 9.5, ahead1: 56, side0: 4.1, side1: 15, h0: 1.15, h1: 10, back0: 6, back1: 130, lookSide0: 1.3, lookSide1: 0, lookH0: 1.42, lookH1: 0, fov0: 20, fov1: 25, riseLen: 6.4, contrast: 1.1, focusBack: 1.0, fStop: 5.6 },
   // P4 (cut4): a long lens AHEAD of the column on the marching men's right, 1.45 m high, looking back down its length:
   // the column comes diagonally toward the lens, its nearest file (the right edge, lat +2.75) large and soft at the
   // frame's right edge, the rest receding into the dust; the lens retreats slower than the march and trucks in
@@ -157,7 +163,9 @@ export const FILM_CAM = {
   //  card and the verse sit over the sunlit wall above every head. Probed: scratchpad/cut7/ramah_comp2.py)
   // (wave 4: the look lower and the lens a little longer — the rising speaker in the middle of the frame, not at its
   //  foot under a wall; the place card over the sky, 8:5 over the gate's dark passage)
-  elders: { x0: -2.2, z0: 3.4, x1: -1.62, z1: 2.78, h0: 1.47, h1: 1.5, lookX: 1.9, lookZ: 1.25, lookH: 1.6, fov0: 31, fov1: 27.5 },
+  // (cut7, CUT v6: 5 s — a quicker, longer push (ease-out); `snapX/Z`, `samH`, `fovSnap`: the snap onto Samuel's face at
+  //  `away`)
+  elders: { x0: -2.45, z0: 3.75, x1: -1.62, z1: 2.78, h0: 1.45, h1: 1.5, lookX: 1.9, lookZ: 1.25, lookH: 1.6, fov0: 33, fov1: 27, snapX: 0.15, snapZ: -0.25, samH: 1.55, fovSnap: 16 },
 };
 
 /**
@@ -178,6 +186,11 @@ export const SUN_CHEAT: Record<string, number> = { silence: 150, tear: 150, 'tea
 export const TAKE_OFFSET: Record<string, number> = { 'tear:insert': TEAR_INSERT_AT, dustWall: 1.5 };
 
 /** a named beat of a take from the shared timing contract (INTRO_SHOTS), or the fallback */
+/** (cut7, CUT v6) P1's shot seconds -> the flight's own clock (its keys, deck, warmth and exposure curve) */
+export function flightT(t: number): number {
+  return FILM_CAM.flight.t0 + t * FILM_CAM.flight.rate;
+}
+
 export function takeBeat(take: string, beat: string, fallback: number): number {
   const b = INTRO_SHOTS.find((s) => s.take === take)?.beats?.[beat];
   return typeof b === 'number' ? b : fallback;
@@ -350,7 +363,11 @@ export function gilgalCam(take: string, u: number, t: number, H: (x: number, z: 
       // stands before him (FILM_CAM.silence). The lens is kept clear of the men (their formation slots).
       const c = FILM_CAM.silence;
       const sam = samuelAt('silence', t).pos;
-      const ch = (i: number) => monotone(c.keys.map((k) => [k[0], k[i]] as [number, number]), t);
+      // (CUT v6: the keys are timed on CUT v5.2's beats — part 1.0, step 2.8, 6.5 s; they are played on the contract's
+      //  beats now: the shot's time mapped piecewise onto that clock)
+      const P = takeBeat('silence', 'part', 1.0), S = takeBeat('silence', 'step', 2.8), D = takeDur('silence', 6.5);
+      const tk = t <= P ? t * (1.0 / P) : t <= S ? 1.0 + ((t - P) * 1.8) / (S - P) : 2.8 + ((t - S) * 3.7) / Math.max(0.1, D - S);
+      const ch = (i: number) => monotone(c.keys.map((k) => [k[0], k[i]] as [number, number]), tk);
       out.pos.set(SAUL_HALT.x + ch(1), 0, roadZ(SAUL_HALT.x) + ch(2));
       clearOfArmy(out.pos, 'silence', t, c.clear);
       out.pos.y = H(out.pos.x, out.pos.z) + ch(3);
@@ -572,7 +589,8 @@ export function landCam(take: string, u: number, t: number, ctx: LandCamCtx, out
     // P1 (cut7, CUT v5) — ONE slow flight on its keys (FILM_CAM.flight): over the clouds into the sunrise, through the
     // deck, banking round to Bethlehem's ridge; each channel a monotone cubic of shot seconds
     const K = FILM_CAM.flight.keys;
-    const ch = (i: number) => monotone(K.map((k) => [k[0], k[i]] as [number, number]), t);
+    const tf = flightT(t);
+    const ch = (i: number) => monotone(K.map((k) => [k[0], k[i]] as [number, number]), tf);
     out.pos.set(ch(1), ch(2), ch(3));
     out.pos.y = Math.max(out.pos.y, ctx.height(out.pos.x, out.pos.z) + FILM_CAM.flight.minAGL);
     const b = THREE.MathUtils.degToRad(ch(4)), p = THREE.MathUtils.degToRad(ch(5));
@@ -620,16 +638,24 @@ export function landCam(take: string, u: number, t: number, ctx: LandCamCtx, out
   if (take === 'elders' && ctx.ramah) {
     // P7 — a low dolly into the gathering toward Samuel in the gateway (gate frame: x along the wall, z out of it),
     // running across the whole 8 s on the drift ease (still moving at the hard cut into Gilgal)
+    // (cut7, CUT v6, 5 s — "fast and dynamic"): a QUICK push that starts at speed (ease-out) on the rising elder and
+    // his thrust-out arm; at `away` a sharp move onto Samuel's face — the look snaps across to him and the lens
+    // tightens (a snap push on the long lens) as his eyes close and he turns away (8:6); still drifting at the cut
     const c = FILM_CAM.elders;
     const R = ctx.ramah;
-    const ed = drift(u);
+    const ed = (1 - Math.pow(1 - 0.92 * Math.min(1, u), 2.3)) / (1 - Math.pow(0.08, 2.3));
     const cy = Math.cos(R.gateYaw), sy = Math.sin(R.gateYaw);
     const W = (lx: number, lz: number, o: THREE.Vector3) => o.set(R.gate.x + lx * cy + lz * sy, 0, R.gate.z - lx * sy + lz * cy);
-    W(lerp(c.x0, c.x1, ed), lerp(c.z0, c.z1, ed), out.pos);
+    const away = takeBeat('elders', 'away', 3.4);
+    const snap = ss(away - 0.1, away + 0.32, t);
+    W(lerp(c.x0, c.x1, ed) + c.snapX * snap, lerp(c.z0, c.z1, ed) + c.snapZ * snap, out.pos);
     out.pos.y = ctx.height(out.pos.x, out.pos.z) + lerp(c.h0, c.h1, ed);
     W(c.lookX, c.lookZ, out.look);
     out.look.y = ctx.height(R.samuel.x, R.samuel.z) + c.lookH;
-    out.fov = lerp(c.fov0, c.fov1, ed);
+    // onto Samuel's face (his eyes ~1.58 m over his mark)
+    _c.set(R.samuel.x, ctx.height(R.samuel.x, R.samuel.z) + c.samH, R.samuel.z);
+    out.look.lerp(_c, snap);
+    out.fov = lerp(lerp(c.fov0, c.fov1, ed), c.fovSnap - 1.5 * ss(away + 0.3, takeDur('elders', 5) + 0.5, t), snap);
     out.roll = 0.008 * Math.sin(u * 3);
     return true;
   }

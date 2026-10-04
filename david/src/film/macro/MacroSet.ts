@@ -161,7 +161,9 @@ void weave(vec2 m, float strain, out float h, out vec3 col, out float gap, out f
   // crevices darker
   col *= 0.6 + 0.4 * smoothstep(0.0, 0.7, max(hw, hf));
   // the felted wool closes many of the gaps (more of them open as the weave is pulled)
-  gap = (1.0 - inW) * (1.0 - inF) * max(step(0.55, mh2(ci + 3.3)), smoothstep(0.15, 0.6, strain));
+  // (and the felting is uneven: denser patches, a few wider gaps)
+  float felt = mvn(m * 38.0) * 0.6 + mvn(m * 9.0) * 0.4;
+  gap = (1.0 - inW) * (1.0 - inF) * max(step(0.45 + 0.35 * felt, mh2(ci + 3.3)) * (0.35 + 0.65 * mh2(ci * 1.31 + 7.0)), smoothstep(0.15, 0.6, strain));
   // the yarns' fuzzy rims (they catch the backlight)
   rim = (1.0 - smoothstep(0.0, 0.35, max(hw, hf))) * max(inW, inF);
   // a rolled hem: the last 4 mm denser and a shade darker
@@ -342,9 +344,9 @@ export async function createMacroSet(c: FilmSetBuildContext): Promise<FilmSetHan
   const bounce = new THREE.DirectionalLight(0xffbf86, 2.1);
   bounce.position.set(-0.3, -0.45, 1.0);
   scene.add(bounce);
-  // a kicker from behind on Saul's side: the rim of the knuckles and the forearm
-  const kick = new THREE.DirectionalLight(0xffd8a8, 2.4);
-  kick.position.set(0.75, 0.4, -0.5);
+  // a kicker from behind (the sun's side, unshadowed): the rim along the knuckles and the forearm's top edge
+  const kick = new THREE.DirectionalLight(0xffd8a8, 3.0);
+  kick.position.set(-0.55, 0.6, -0.45);
   scene.add(kick);
   await c.yieldFrame();
 
@@ -412,7 +414,18 @@ export async function createMacroSet(c: FilmSetBuildContext): Promise<FilmSetHan
   const TZ = 8; // tzitzit strands (4 doubled), one of them tekhelet
   const TZSEG = 18;
   const FIB = 3; // frayed fibres per snapped end
-  const strandsMax = threads.length * 2 + threads.length * 2 * FIB + TZ;
+  // the wool's fuzz: loose fibres standing off the surface near the lens' focus and along the torn edges (they catch the
+  // backlight — the halo of wool at macro scale); anchored at material points, they move with the cloth
+  const FUZZ_EDGE = mobile ? 220 : 520, FUZZ_SURF = mobile ? 260 : 640;
+  const fuzz: { a: number; b: number; edge: number; len: number; dx: number; dy: number; dz: number; curl: number }[] = [];
+  for (let i = 0; i < FUZZ_EDGE + FUZZ_SURF; i++) {
+    const r = (k: number) => hash(i * 3.17 + k * 11.3 + 0.7);
+    const edge = i < FUZZ_EDGE ? (r(1) < 0.5 ? 1 : -1) : 0;
+    const a = edge ? -0.16 + (SLIT - 0.002 + 0.16) * r(2) : -0.16 + 0.27 * r(2);
+    const b = edge ? 0 : -0.1 + 0.17 * r(3);
+    fuzz.push({ a, b, edge, len: edge ? 0.0018 + 0.004 * r(4) : 0.0012 + 0.003 * r(4) * r(4), dx: r(5) - 0.5, dy: r(6) - 0.5, dz: 0.4 + r(7), curl: (r(8) - 0.5) * 2 });
+  }
+  const strandsMax = threads.length * 2 + threads.length * 2 * FIB + TZ + fuzz.length;
   const vMax = strandsMax * TZSEG * 2;
   const rPos = new Float32Array(vMax * 3), rCol = new Float32Array(vMax * 3), rRib = new Float32Array(vMax * 2);
   const rIdx = new Uint32Array(strandsMax * (TZSEG - 1) * 6);
@@ -683,6 +696,34 @@ export async function createMacroSet(c: FilmSetBuildContext): Promise<FilmSetHan
           strand(P, 4, 0.00022, FIBRE, 0.6);
         }
       }
+    }
+    // the fuzz
+    for (const fz of fuzz) {
+      const l = lineB(fz.a);
+      let len = fz.len, rel = 1;
+      if (fz.edge) {
+        // edge fibres are freed as the edge tears (inside the weave before)
+        rel = releaseAt(fz.a, t);
+        if (rel < 0.05) continue;
+        len *= rel;
+        const bb = l + fz.edge * (0.0006 + 0.0025 * Math.abs(fz.dy));
+        if (fz.edge > 0) upperPoint(fz.a, bb, t, rel, _u);
+        else lowerPoint(fz.a, bb, t, rel, _u);
+        // pointing out of the edge into the opening, and toward the lens a little
+        _e.copy(AY).multiplyScalar(-fz.edge).addScaledVector(AX, fz.dx * 1.2).addScaledVector(AZ, fz.dz * 0.5).normalize();
+      } else {
+        const up = fz.b > l;
+        const relA = releaseAt(fz.a, t);
+        if (up) upperPoint(fz.a, fz.b, t, relA, _u);
+        else lowerPoint(fz.a, fz.b, t, relA, _u);
+        _e.copy(AZ).multiplyScalar(fz.dz).addScaledVector(AX, fz.dx).addScaledVector(AY, fz.dy).normalize();
+      }
+      P[0].copy(_u);
+      for (let k = 1; k < 4; k++) {
+        _e.addScaledVector(GRAV, 0.12).addScaledVector(AX, fz.curl * 0.15).normalize();
+        P[k].copy(P[k - 1]).addScaledVector(_e, len / 3);
+      }
+      strand(P, 4, 0.00016, FIBRE, 0.5);
     }
     // the tzitzit from the corner's hole: the wound knot, then the loose strings swinging with the corner
     lowerPoint(CORNER.x, CORNER.y, t, 1, _g);

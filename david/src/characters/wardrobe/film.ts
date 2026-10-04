@@ -497,8 +497,15 @@ function flutterCrown(crown: THREE.Group, seed: number) {
           float q = 0.0045 * sin(uCrownTime * 8.3 + ph) + 0.0025 * sin(uCrownTime * 14.1 + ph * 1.7 + 0.6);
           vec3 side = vec3(outv.z, 0.0, -outv.x);
           transformed += (outv * q + side * 0.0018 * sin(uCrownTime * 11.7 + ph * 2.3) + uCrownBend) * ct;
+          // each strip its own tone (reed / feather, sun-bleached to dun), the tips a little darker and frayed-looking
+          float sh = fract(sin(floor(ang * 8.913 + 40.0) * 12.9898) * 43758.5453);
+          vCrownTone = (0.72 + 0.33 * sh) * (1.0 - 0.22 * smoothstep(0.55, 1.0, sqrt(ct)));
         }`,
-      );
+      )
+      .replace('#include <common>', '#include <common>\nvarying float vCrownTone;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vCrownTone;')
+      .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= vCrownTone;');
   };
   mat.customProgramCacheKey = () => 'philCrownFlutter';
   crown.userData.flutter = { bend: bend.value };

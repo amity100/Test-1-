@@ -989,7 +989,9 @@ const DEMAND_R: ArmPose = { ua: [-2.45, 0.2, -0.38], fa: [-0.55, 0.1, 0], hd: [0
 const RAMAH_BEATS = (() => {
   const b = INTRO_SHOTS.find((x) => x.set === 'ramah' && x.take === 'elders')?.beats ?? {};
   // (CUT v5: the contract names Samuel's turn `away`; `turnAway` was CUT v2's name)
-  return { rise: b.rise ?? 0.5, verse: b.verse ?? 1.0, turnAway: b.away ?? b.turnAway ?? 2.6 };
+  // (cut7, CUT v6: "fast and dynamic — cut straight into the action": the elder's rise began `lead` s BEFORE the shot,
+  //  so its first frame finds him already coming up off the bench, the arm on its way out toward Samuel)
+  return { rise: b.rise ?? 0.5, verse: b.verse ?? 1.0, turnAway: b.away ?? b.turnAway ?? 2.6, lead: b.rise !== undefined && b.rise < 0.5 ? 0.65 : 0 };
 })();
 
 /**
@@ -1011,7 +1013,7 @@ export class RamahPerformance {
   private readonly looks: THREE.Vector3[] = [];
   readonly wind = new THREE.Vector3(0.8, 0, -0.2);
   /** beats (seconds of the shot): the elder rises, the verse, Samuel turns his face away */
-  readonly beats: { rise: number; verse: number; turnAway: number };
+  readonly beats: { rise: number; verse: number; turnAway: number; lead: number };
   /** each elder's part (see ElderRole) and the man he turns to (pairs), -1 = none */
   readonly roles: ElderRole[] = [];
   readonly partner: number[] = [];
@@ -1178,14 +1180,16 @@ export class RamahPerformance {
       const look = this.looks[i];
       if (i === this.lead) {
         const mk = this.elderMarks[i % this.elderMarks.length];
-        if (this.leadPhase === 0 && t >= B.rise) {
+        // (CUT v6: the rise starts `lead` s before the shot — the clip and the seat are run on from that moment)
+        const r0 = B.rise - B.lead;
+        if (this.leadPhase === 0 && t >= r0) {
           // up from the seat (the capture rises and steps forward); the pelvis is let go of the bench as he rises
-          e.mocap.play('stand_up', { fade: 0.15, time: 0.5, speed: 1.3 });
+          e.mocap.play('stand_up', { fade: t > r0 + 0.05 ? 0 : 0.15, time: 0.5 + 1.3 * Math.max(0, t - r0), speed: 1.3 });
           this.leadPhase = 1;
         }
-        if (mk.seated) e.seatWeight = 1 - ss(B.rise + 0.1, B.rise + 0.6, t);
+        if (mk.seated) e.seatWeight = 1 - ss(r0 + 0.1, r0 + 0.6, t);
         e.body.feetFwd = 0;
-        if (this.leadPhase === 1 && t >= B.rise + 1.05) {
+        if (this.leadPhase === 1 && t >= r0 + 1.05) {
           // on his feet: the demand — talk_angry swings the arm up about 1 s after this point
           e.sit(0);
           e.mocap.play('talk_angry', { fade: 0.35, time: 2.6 });
@@ -1197,7 +1201,10 @@ export class RamahPerformance {
         // the demand: the right arm thrown up, the hand open toward Samuel ("שִׂימָה־לָּנוּ מֶלֶךְ"), over the capture
         // (cut7, CUT v5: the arm comes up as he rises — intro-script-v5 P7 "at `rise` the speaking elder rises and lifts
         //  his arm" — and is held through the demand of `verse`)
-        const demand = ss(B.rise + 0.65, B.rise + 1.15, t) * (1 - ss(B.verse + 1.8, B.verse + 2.3, t));
+        // (CUT v6: thrust out from the first frame and held until Samuel turns away)
+        const demand = B.lead > 0
+          ? ss(r0 + 0.35, r0 + 0.85, t) * (1 - ss(B.turnAway + 0.1, B.turnAway + 0.7, t))
+          : ss(B.rise + 0.65, B.rise + 1.15, t) * (1 - ss(B.verse + 1.8, B.verse + 2.3, t));
         e.armPose.R.pose = DEMAND_R;
         e.armPose.R.weight = 0.85 * demand;
         // forward into the demand, chest out
@@ -1248,6 +1255,10 @@ export class RamahPerformance {
     sam.lookRate = 2.2;
     sam.lookLimits.yaw = 1.3;
     this.samFace.set({ sad: 0.3 + 0.3 * away, pain: 0.15 * away });
+    // (cut7, CUT v6) his eyes close as he turns away (8:6 — the grief of it), then half open, lowered
+    const shut = ss(B.turnAway - 0.05, B.turnAway + 0.35, t) * (1 - 0.45 * ss(B.turnAway + 1.0, B.turnAway + 1.5, t));
+    const fu = sam.human.rig.faceUnits;
+    fu.LeftUpperLidClosed = fu.RightUpperLidClosed = 0.85 * shut;
     this.samFace.update(dt);
     sam.update(dt, camera, viewportH, this.wind);
   }

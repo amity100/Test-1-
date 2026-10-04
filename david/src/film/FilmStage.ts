@@ -8,7 +8,7 @@ import type { GilgalArmy } from './crowd/GilgalArmy';
 import type { PhilistineHost } from './crowd/PhilistineHost';
 import { landAtmo, cloudShared } from './land/landAtmo';
 import { INTRO_SHOTS, type FilmSetName } from '../content/introScript';
-import { baseTake, FILM_CAM, gilgalCam, gilgalFocus, landCam, SUN_CHEAT, takeBeat, takeExposure, TAKE_OFFSET, type GilgalCtx, type LandCamCtx } from './FilmCams';
+import { baseTake, FILM_CAM, flightT, gilgalCam, gilgalFocus, landCam, SUN_CHEAT, takeBeat, takeExposure, TAKE_OFFSET, type GilgalCtx, type LandCamCtx } from './FilmCams';
 
 /**
  * THE FILM STAGE of the opening film: the film-only sets, crowds and actors the shot sheet (INTRO_SHOTS) films in, built
@@ -713,7 +713,9 @@ export class FilmStage {
         // the host marches from the head of its road at the cut into P4 (the lens is keyed to the column's head)
         if (extra.host && (take === 'threat' || take === 'glint')) extra.host.setTravel(0);
       },
-      tick(take, t, dt) {
+      tick(take, t0, dt) {
+        // (CUT v6: P1 plays the flight's own clock from FILM_CAM.flight.t0 — the deck, the warmth and the exposure too)
+        const t = take === 'flight' ? flightT(t0) : t0;
         expMul = takeExposure(take, t);
         if (name === 'judah' && take === 'flight') {
           // P1: the deck burns off a little once the lens is below it (broken, under-lit clouds over the ridge)
@@ -751,7 +753,8 @@ export class FilmStage {
           // his face away (the contract's `away`)
           if (take === 'elders' && extra.actors.length > 1) {
             const away = takeBeat('elders', 'away', 6.0);
-            const k = Math.max(0, Math.min(1, (t - (away - 0.75)) / 0.6));
+            // (CUT v6: the rack lands with the camera's snap onto his face at `away`)
+            const k = Math.max(0, Math.min(1, (t - (away - 0.12)) / 0.38));
             const a = extra.actors[1].eyesWorld(tmp);
             const b = sam.eyesWorld(tmp2);
             // (wave 4: deeper while on the speaker — Samuel's profile in the foreground reads, not a soft white mass)

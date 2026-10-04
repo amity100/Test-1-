@@ -30,17 +30,17 @@ import { INTRO_SHOTS } from '../content/introScript';
  *                      crossing behind it, unobstructed, birds; from `rise` the lens lifts away and climbs, turning to
  *                      the north and tilting down — the map (P4) continues the climb through the dissolve
  *                      (the end view: scratchpad/wf/cut8_notes.md)
- *   'figure'       D1  (6 s) a slow crane / orbit behind David on his rock against the low sun, the flock below
- *   'face'         D2  (4 s) the push-in on his face as he turns into the light (beats.turn)
- *   'watch'        D3  (8 s, cut8) over his right shoulder from behind and a little above: his flock grazing on the slope
- *                      below him — ewes and lambs (one nursing), the rams, a goat on a rock — a slow drift; at `rack`
- *                      the focus comes back to him (Ps 78:70-71 in the sky)
- *   'horizon'      D4  (18 s, cut8) ONE long take: the newborn lamb fallen behind on the rocks below him bleats; he steps
- *                      down, kneels, gathers it into his arms (the cradle hold, Isa 40:11), carries it down to its ewe
- *                      under the logo, kneels and sets it down; it runs to her and nurses; he straightens and looks out
- *                      over his flock; from `settle` the lens eases back and down behind him onto exactly the gameplay
- *                      camera (CameraRig.followFrame) — the game takes over without a cut (no orbit: the lens tracks
- *                      him from behind-left and comes round only ~45 deg over the whole 18 s)
+ *   (CUT v6: P2 and P3 are no longer in the film — their code stays, unused)
+ *   'glimpse:rock' F1  (0.8 s, cut8 wave 5) a flash inside Saul's glory: far behind the boy on his rock, against the low
+ *                      sun above the valley — a silhouette, never the face; graded cooler and softer (applyGlimpseGrade)
+ *   'glimpse:hand' F2  (0.8 s) a flash: his young hand closing on the staff, sheep passing out of focus below
+ *   'figure'       D1  (5.5 s) a slow crane behind David on his rock against the low sun, the flock below
+ *   'face'         D2  (4 s) the reveal — the first face of the film: the push-in as he turns into the light
+ *   'watch'        D3  (6 s) over his right shoulder, down onto his flock on the slope below (Ps 78:70-71)
+ *   'horizon'      D4  (14 s) ONE take with the light behind him: he walks up through his sheep (a hand on a ewe's back),
+ *                      kneels to the newborn, gathers it up with both hands under it (its legs hanging, then folding; its
+ *                      head turning up to him) and rises under its weight; carries it to its mother under the logo; sets
+ *                      it down — it nurses; he turns out over the flock; the lens eases onto the game's camera (HANDOFF)
  *   'vista'            a slow crane over the hills (only as the stand-in for a film set that failed to build)
  *
  * World: +X east, -Z north (+Z south); the chapter's sun is low in the east (LAYOUT SUN: 13 deg, azimuth 100). David's
@@ -166,13 +166,13 @@ export const WORLD_CAM = {
     keys: [
       [0, 250, 3.9, 2.1, 0, 0, 40],
       [1.2, 249, 3.7, 2.05, 0, 0, 40],
-      [3.0, 246, 3.2, 1.9, 0, -1, 40],
-      [3.9, 244, 2.9, 1.8, 0, -2, 38],
-      [5.0, 243, 3.0, 1.85, 0, 0, 38],
-      [6.2, 245, 3.6, 2.2, 0, 3, 40],
-      [7.4, 245, 3.9, 2.4, 0, 3.5, 40],
-      [8.5, 242, 3.9, 2.5, 0, 3.5, 41],
-      [9.6, 236, 3.7, 2.5, 0, 2.5, 43],
+      [3.0, 246, 3.0, 1.9, 0, -2, 40],
+      [3.9, 244, 2.6, 1.8, 0, -3, 38],
+      [5.0, 243, 2.7, 1.85, 0, -2, 38],
+      [6.2, 245, 3.2, 2.1, 0, 1.5, 40],
+      [7.4, 245, 3.4, 2.2, 0, 2, 40],
+      [8.5, 242, 3.4, 2.3, 0, 2, 41],
+      [9.6, 236, 3.4, 2.4, 0, 1.5, 43],
       [11.4, 224, 3.5, 2.4, 0, 0, 48],
     ] as [number, number, number, number, number, number, number][],
     // depth of field: on him / the lamb; everything sharp before the hand-off (the game's camera has none)
@@ -182,7 +182,7 @@ export const WORLD_CAM = {
   // (wave 5) F1 'glimpse:rock' (0.8 s flash): far behind the boy on his rock against the low sun — `dist0`→`dist1` m back
   // along the sun's heading turned `azOff` deg, `h` m over the ground there, the frame `pitchUp` deg above him (the sun's
   // glow in it), fov `fov`; a silhouette, never the face
-  glimpseRock: { dist0: 19, dist1: 18, azOff: 9, h: 1.6, pitchUp: 10, fov: 34, fStop: 2.8 },
+  glimpseRock: { dist0: 11.5, dist1: 11, azOff: 12, h: 2.4, pitchUp: 8, fov: 34, fStop: 2.8 },
   // F2 'glimpse:hand' (0.8 s flash): close behind-left of his staff hand, `d0`→`d1` m, looking past it along his gaze
   // (the flock out of focus below); the fingers close on the staff at `close` s
   glimpseHand: { d0: 0.72, d1: 0.6, left: 0.22, up: 0.18, ahead: 0.25, fov: 30, fStop: 1.4, close: 0.22 },
@@ -407,7 +407,7 @@ export class FilmWorld {
         const D = this.viewDir, Lx = D.z, Lz = -D.x; // his left (viewed from behind: -side)
         const dd = lerp(c.d0, c.d1, smooth(uu));
         out.pos.set(hand.x - D.x * dd + Lx * c.left, hand.y + c.up, hand.z - D.z * dd + Lz * c.left);
-        out.look.set(hand.x + D.x * c.ahead, hand.y - 0.04, hand.z + D.z * c.ahead);
+        out.look.set(hand.x + D.x * c.ahead, hand.y + 0.02, hand.z + D.z * c.ahead);
         out.fov = c.fov;
         out.roll = -0.01;
         return true;
@@ -724,6 +724,7 @@ export class FilmWorld {
       if (this.staged !== 'david') {
         this.unstage();
         this.staged = 'david';
+        this.saveFlock(); // (wave 5) the game's own places first (F2 moves a few sheep itself)
         this.stageFlockInView();
       }
       this.expK = take === 'figure' ? WORLD_CAM.figure.exp : 1;
@@ -849,6 +850,7 @@ export class FilmWorld {
         this.clearPushers();
         m.performFilm('back', 1.2 + t, { wind: 2.4 });
         m.filmGripOpen = take === 'glimpse:hand' && t < WORLD_CAM.glimpseHand.close;
+        if (take === 'glimpse:hand') this.passingSheep(t);
         this.applyGlimpseGrade();
         this.ff.tick(t, dt, this.h.engine.camera);
         return;
@@ -989,11 +991,12 @@ export class FilmWorld {
     if (forD4) {
       // D4: the rest of the flock round him in the lens (the light behind them), clear of his way and of the lamb's spots
       const cam4 = this.stageLens('horizon', 2.0);
-      const lensTrack: THREE.Vector3[] = [];
+      const lensTrack: THREE.Vector3[] = [], herTrack: THREE.Vector3[] = [];
       const fr = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: 40, roll: 0 };
-      for (const tl of [0, 1.5, 3, 4, 5, 6.5, 8, 9.5, 11, 12.5]) {
+      for (const tl of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12.5]) {
         this.horizonFrame(tl, fr);
         lensTrack.push(fr.pos.clone());
+        herTrack.push(this.d4Pose(tl, this.d4p).pos.clone());
       }
       this.d4Pose(0, this.d4p);
       const segs = [d.start, ...d.wayDown, d.kneel1, ...d.wayOn, d.kneel2, d.lamb, d.ewe];
@@ -1005,7 +1008,14 @@ export class FilmWorld {
           if (Math.hypot(x - a[0] - vx * u, z - a[1] - vz * u) < 1.1) return true;
         }
         if (Math.hypot(x - d.lamb[0], z - d.lamb[1]) < 1.4 || Math.hypot(x - d.ewe[0], z - d.ewe[1]) < 1.6) return true;
-        for (const L of lensTrack) if (Math.hypot(x - L.x, z - L.z) < 2.6) return true;
+        for (let i = 0; i < lensTrack.length; i++) {
+          // nothing right in front of the lens, nor between it and him
+          const L = lensTrack[i], P = herTrack[i];
+          if (Math.hypot(x - L.x, z - L.z) < 3.4) return true;
+          const vx = P.x - L.x, vz = P.z - L.z, L2 = vx * vx + vz * vz || 1;
+          const u = Math.max(0, Math.min(1, ((x - L.x) * vx + (z - L.z) * vz) / L2));
+          if (Math.hypot(x - L.x - vx * u, z - L.z - vz * u) < 1.3) return true;
+        }
         return false;
       };
       try {
@@ -1568,6 +1578,28 @@ export class FilmWorld {
     if (!s) return;
     s.points.removeFromParent();
     s.dispose();
+  }
+
+  /** F2: three sheep walking across behind his hand, a few metres down the slope (out of focus) — seek-safe */
+  private passingSheep(t: number) {
+    const { flock } = this.h;
+    const list = flock.animals.filter((a) => a.kind === 'sheep' && a.state !== 'carried' && a !== flock.lamb && a !== flock.lamb.mother).slice(-3);
+    if (!list.length) return;
+    this.saveFlock();
+    const hand = this.handOf(this.tmp3);
+    const D = this.viewDir, S = this.side;
+    const lanes = [[4.6, -1.6], [5.6, -0.2], [6.8, -2.6]];
+    list.forEach((a, i) => {
+      const [f, s0] = lanes[i];
+      const sd = s0 + 0.55 * t;
+      const x = hand.x + D.x * f + S.x * sd, z = hand.z + D.z * f + S.z * sd;
+      a.aiEnabled = false;
+      a.position.set(x, this.ground(x, z), z);
+      a.object.position.copy(a.position);
+      a.heading = Math.atan2(S.x, S.z);
+      a.state = 'walk';
+      a.manualSpeed = 0.55;
+    });
   }
 
   /** F2: his staff hand (world) */

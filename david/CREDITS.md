@@ -534,3 +534,8 @@ values and re-baked by our own tools (`tools/human`).
 - No third-party assets. The cradle hold (the lamb in David's arms), the lamb's folded pose, nursing, the goat's perch,
   the extra lambs, the village's gateway, the cameras and the staging are own code (CC0 by construction); the morning
   smoke over Bethlehem reuses the project's own `Smoke` particles (src/palace/palaceFx.ts).
+
+## Opening film — the Philistine host of P6 at cinematic level (host1, wave 5: `src/film/crowd/HostVanguard.ts`, `src/film/crowd/PhilistineHost.ts`, the crowd code it uses (`Crowd.ts` LOD hysteresis, `CrowdAnim.ts` side carry / leg scale, `CrowdDust.ts` foot puffs), `dressPhilistine` in `src/characters/wardrobe/film.ts`, `dev/host*`)
+- No third-party assets. The vanguard of full actors reuses the project's own FilmActor humans, costumes and the motion
+  capture already credited above (CMU Graphics Lab Motion Capture Database; Microsoft Rocketbox, MIT); the spear and
+  shield dynamics, the crown flutter, the gait selection and the bench are own code (CC0 by construction).

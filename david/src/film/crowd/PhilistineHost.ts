@@ -221,8 +221,10 @@ export class PhilistineHost {
         by[k] = (by[k] ?? 0) + n;
       });
     }
-    const top = Object.entries(by).sort((x, y) => y[1] - x[1]).slice(0, 12).map(([k, v]) => `${k}:${Math.round(v / this.vanguard!.actors.length)}`);
-    return { actors: this.vanguard.actors.length, meshes, tris: Math.round(tris), slots: this.vanMen.map((m) => `${m.file}:${m.rank}`), perActor: top, buildMs: this.vanguard.buildMs, totalMs: this.vanguard.totalMs };
+    const top = Object.entries(by).sort((x, y) => y[1] - x[1]).map(([k, v]) => `${k}:${Math.round(v / this.vanguard!.actors.length)}`);
+    let casters = 0;
+    for (const a of this.vanguard.actors) a.root.traverse((o) => { if ((o as THREE.Mesh).isMesh && o.visible && o.castShadow) casters++; });
+    return { actors: this.vanguard.actors.length, meshes, tris: Math.round(tris), slots: this.vanMen.map((m) => `${m.file}:${m.rank}`), perActor: top, shadowCasters: casters, buildMs: this.vanguard.buildMs, totalMs: this.vanguard.totalMs };
   }
 
   /** the cut into the shot: the vanguard back on its takes' phases (FilmStage calls setTravel(0) on enter) */
@@ -281,7 +283,9 @@ export class PhilistineHost {
           // m.x is along the marching men's right = -(the land set's `side`), so a flank at + lies on the camera side
           const lat = -c.lat + (f - (c.files - 1) / 2) * 1.1 + (h(1) - 0.5) * 0.45;
           const back = c.start + r * 1.4 + comp * 5.5 + (h(2) - 0.5) * 0.6;
-          const elite = (ci === 0 && r < 3) || r % 16 === 0 || h(4) < 0.06;
+          // (wave 5) the champions of the front rank in bronze helmets and scale (17:5-6), the feathered crowns from the
+          // second rank on (Medinet Habu) — before: three helmeted ranks, so no crown was ever near the lens
+          const elite = (ci === 0 && r < 1) || r % 16 === 0 || h(4) < 0.06;
           const ag = crowd.agents[i];
           kit(ag, h, elite);
           // the front ranks (the lens' foreground): a wider spread of pace and carry, so no two neighbours step or hold

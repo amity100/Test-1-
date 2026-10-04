@@ -17,12 +17,13 @@ import { applyHandheld, portraitLens, TAKE_OFFSET } from '../film/FilmCams';
 import { bootMark } from '../core/bootProfile';
 
 /**
- * THE OPENING FILM "הַטּוֹב מִמֶּךָּ" (CUT v5.2, docs/intro-script-v5.md: 141.5 s): the player of the shot sheet
- * src/content/introScript.ts. The PROLOGUE (cut7): P1 out of black (the time card, the picture rising on `picture`) — the
- * flight over the hills of Judah (land set 'judah'); dissolves into Bethlehem (P2) and Rachel's tomb (P3) in the game
- * world, into the realistic 3D map (P4, map1's set 'map'; P4 -> P5 an invisible cut inside it), into the Philistine host
- * (P6, 'coast'); a cut to the elders at Ramah (P7, 'ramah'); then the HARD CUT on the shofar into Gilgal (G1, its blocking
- * pre-rolled under P7's last 1.5 s so G1-G7 are CUT v4's frames). It switches between the film sets
+ * THE OPENING FILM "הַטּוֹב מִמֶּךָּ" (CUT v6, docs/intro-script-v6.md: 103.6 s): the player of the shot sheet
+ * src/content/introScript.ts. CUT v6 (cut7's assembly): the COLD OPEN C0 out of black on the cold open's own small set
+ * 'macro' (src/film/macro: the fist, the corner of the me'il, the threads — the film never waits for Gilgal), the smash to
+ * the TITLE T on black (UI .ft-title), P1 out of black (the best of the dawn flight: FilmCams flightT), the map P4
+ * (map1), the Philistine host P6 ('coast', host1's animation), a cut to Ramah P7; the HARD CUT on the shofar into Gilgal
+ * (G1, its blocking pre-rolled under P7's last 1.5 s), the two silent 0.8 s flashes F1 / F2 (cut8's world takes) cut hard
+ * into and out of Gilgal, then G3-G7 and David (D1-D4, cut8). It switches between the film sets
  * (src/film/FilmStage.ts) and the game world (src/film/FilmWorld.ts) with engine.setView / restoreWorldView /
  * resetTemporal, drives the letterbox, depth of field, the film look and the fades, fires the on-screen text (narration
  * from src/content/introNarration.ts, verses ONLY through the catalog helpers), keeps the score locked to the picture,

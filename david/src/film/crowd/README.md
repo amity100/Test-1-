@@ -127,3 +127,35 @@ hard-coded:
 * **Philistines (P4)** — Rocketbox walks added to the take mix, a slow lateral weave per man (nobody on rails), a glance
   to the side now and then.
 * Clip lists to release after the film: `ARMY_CLIPS` (GilgalArmy.ts) minus the game's `DAVID_MOCAP`.
+
+## Wave 5 (host1) — the Philistine host of P6 at the level of a game cinematic
+
+The user on P6: "the animation here is most embarrassing and looks very bad". What read as bad (8 fps strips of the
+CUT v6 P6, desktop-high): the front ranks that fill the picture were 5 k-triangle crowd figures (painted dark faces,
+bronze helmets reading as bald scalps); every spear a rigid shaft pulled upright from a fist held in front of the belt,
+so the shafts crossed the faces like a fence; the round shields glued to the swinging forearm (a disc flipping from face-on
+to edge-on between frames); two of the six takes ('march', 'march_c') parade high-kicks (bench probe: foot lift 0.36 /
+0.88 m, thigh swing 62° / 77°) and two played at 0.8x (walk_d 1.54, walk_n2 1.46 m/s against the host's 1.2 m/s:
+slow-motion strides); the playback rate ignored the baked body's leg scale and each man's height (up to ±10 % foot
+slide); the weave moved men sideways without turning them (crabbing); greaves glowing like neon tubes.
+
+* **HostVanguard.ts** — the men of the main column nearest the P6 lens are full FilmActors (`VANGUARD` per tier:
+  desktop-high 12 'near' at 'medium', desktop-medium 8 'near' 'low', mobile-high 6 'crowd', mobile-low 4 'crowd'); the
+  crowd figure of each slot is hidden and the actor walks exactly where the host places that man. Each has his own
+  natural walk (walk_b / walk_n1 / walk_cool / walk / walk_c, mirrored on alternate files, own phase), time-warped to
+  his ground speed (`MocapPlayer.matchSpeed`), feet on the plain by foot IK on a pre-sampled local ground grid; the
+  spear in the right fist (arm pose + 25 % of the capture's swing) with the shaft a damped pendulum on the grip (it
+  lags the fist and nods on every heel strike, each man's own rest tilt, always out to his right); the shield by its
+  central grip at the left hip, placed in the man's frame every frame with its own swing; glances (never into the
+  lens), breathing, a set face, blinks; dust puffs at real footfalls (`CrowdDust.emit`); the feather crowns' strips
+  quiver and bend with the head (`dressPhilistine` flutter, `PHILISTINE_CROWN_TIME`). Built in `slice` steps inside
+  `PhilistineHost.create`, disposed with the host. Draw-call trims: no shadow from small parts, teeth / lashes / tear
+  lines / the kilt body under the scale corselet hidden, the helmeted men's hair hidden under the helmet.
+* **PhilistineHost.ts** — natural walks only; rate = ground speed / (clip speed x `CrowdAnim.legScale` x height);
+  yaw follows the weave; the spear's sway on each man's gait phase; the front rank elite (helmets, scale), the feathered
+  crowns from the second rank on; `lodHysteresis` 0.12 (no LOD flicker); `vanguard` / `lens` options, `vanguardStats()`.
+* **CrowdAnim.ts** — `carry: 'side'` (Philistines only: the fist at the right hip so the upright shaft rises beside the
+  shoulder; the shield arm bent and half-damped) and `legScale`. Saul's army keeps `carry: true` (unchanged).
+* **Crowd.ts** — optional `lodHysteresis` (default 0: Gilgal unchanged). **CrowdDust.ts** — `emit()` (additive).
+* Bench: `dev/host.html?q=high|medium|mhigh|low&van=0` (the coast set + host through PostFX, filmed by FilmCams'
+  'threat' lens; `window.__h` enter / sim / render / stats / clipProbe / slideProbe).

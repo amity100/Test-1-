@@ -203,8 +203,47 @@ async function boot() {
     }
     return { clip, lift: +lift.toFixed(3), swingDeg: +swing.toFixed(1), stepsPerS: +(steps / (secs - 0.5)).toFixed(2) };
   };
+  // foot-slide probe (no rendering): run the host for `secs` (from the cut) and measure, for every vanguard actor, how
+  // fast a PLANTED foot (ankle within 4 cm of its lowest height) moves over the ground (cm/s, mean and 90th percentile)
+  const slideProbe = (secs = 3, dt = 1 / 60, tol = 0.015) => {
+    enter();
+    const A = host.vanguardActors;
+    const prev = A.map(() => [new THREE.Vector3(), new THREE.Vector3()]);
+    const hs: number[][][] = A.map(() => [[], []]);
+    const vs: number[][][] = A.map(() => [[], []]);
+    const P = new THREE.Vector3();
+    for (let i = 0; i < secs / dt; i++) {
+      tick(dt);
+      A.forEach((a, k) => {
+        const b = a.human.bones as Record<string, THREE.Object3D>;
+        ['L', 'R'].forEach((s, j) => {
+          b[`foot.${s}`].getWorldPosition(P);
+          const h = P.y - set.height.height(P.x, P.z);
+          if (i > 30) {
+            hs[k][j].push(h);
+            vs[k][j].push(Math.hypot(P.x - prev[k][j].x, P.z - prev[k][j].z) / dt * 100);
+          }
+          prev[k][j].copy(P);
+        });
+      });
+    }
+    const per = A.map((a, k) => {
+      // planted share: samples a foot moves < 15 cm/s; stance floor: the median of each 0.6 s window's slowest sample
+      let still = 0, tot = 0;
+      const floors: number[] = [];
+      for (let j = 0; j < 2; j++) {
+        const v = vs[k][j];
+        v.forEach((x) => { tot++; if (x < 15) still++; });
+        const W = Math.round(0.6 / dt);
+        for (let i = 0; i + W <= v.length; i += W) floors.push(Math.min(...v.slice(i, i + W)));
+      }
+      floors.sort((x, y) => x - y);
+      return { clip: a.mocap.current()?.name, plantedShare: +(still / Math.max(1, tot)).toFixed(2), stanceFloorCmS: +(floors[Math.floor(floors.length / 2)] ?? 0).toFixed(1), worstFloor: +(floors[floors.length - 1] ?? 0).toFixed(1) };
+    });
+    return per;
+  };
   enter();
-  w.__h = { set, host, camera, renderer, post, info, enter, sim, render, stats, st, THREE, coast: c, clipProbe };
+  w.__h = { set, host, camera, renderer, post, info, enter, sim, render, stats, st, THREE, coast: c, clipProbe, slideProbe };
   w.__ready = true;
 }
 boot().catch((e) => {
