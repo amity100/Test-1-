@@ -36,6 +36,9 @@ export interface FilmTextOptions {
   lines?: 1 | 2;
   /** verses: the last N words in gold (D1: the film's own title) */
   gold?: number;
+  /** (cut7, CUT v6) the film's TITLE treatment (shot T: הַטּוֹב מִמֶּךָּ on black): large, centred, gold metal formed
+   *  slowly with a light sweep, the reference small and late under a thin gold rule (style.css .ft-title) */
+  title?: boolean;
 }
 
 /** split a catalog text into words (on spaces; a maqaf keeps two words together) — the text itself is never changed */
@@ -337,6 +340,7 @@ export class UI {
       const gold0 = words.length - Math.max(0, Math.min(words.length, o.gold ?? 0));
       const spans = words.map((w, i) => `<span class="w${i >= gold0 ? ' gold' : ''}" style="--d:${at(i).toFixed(3)}s"${i >= gold0 ? ` data-t="${w}"` : ''}>${w}</span>${i === words.length - 1 ? '' : i === brk ? '<br>' : ' '}`).join('');
       if (brk >= 0) e.classList.add('ft-2l');
+      if (o.title) e.classList.add('ft-title');
       const last = at(words.length - 1);
       e.style.setProperty('--ref', `${(last + (o.refAfter ?? 0.55)).toFixed(2)}s`);
       inner = `<div class="ft-v">${spans}</div>${sub ? `<div class="ft-ref">${sub}</div>` : ''}`;

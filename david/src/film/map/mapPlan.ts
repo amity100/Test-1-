@@ -1,87 +1,112 @@
 import { takeBeat, takeDur } from '../FilmCams';
+import { MAP_NAMES, TRIBE_ORDER } from '../../content/mapNames';
 
 /**
- * THE MAP'S SCRIPT (CUT v5 P4 'exodus' 13 s + P5 'tribes' 9 s, docs/intro-script-v5.md): the route of the journey and
- * the camera, both keyed to the shots' beats in src/content/introScript.ts (never hard-coded seconds).
+ * THE MAP'S SCRIPT — CUT v6 (docs/intro-script-v6.md): P4 'map-exodus', take 'exodus', ONE 10 s shot tied to the story.
+ * Everything is keyed to the shot's beats in src/content/introScript.ts (egypt, flock, verse, jordan, gilgal, land,
+ * noKing — never hard-coded seconds).
  *
- * THE ROUTE (lon, lat): out of רַעְמְסֵס in the eastern delta (Ex 12:37) by Succoth (Tell el-Maskhuta) over the isthmus
- * between Lake Timsah and the Bitter Lakes into the wilderness (no point is marked as the crossing of the sea, no
- * mountain as Sinai: the line passes on without a halt), the forty years' wandering in loops over the central
- * wilderness and the Negev highlands with the long stay at Kadesh (Deut 1:46: the head rests there and pulses), down
- * to Etzion-Gever at the head of the gulf (Num 33:35-36), around the land of Edom by the desert east of it (Num 21:4,
- * 21:11 "in the wilderness which is before Moab, toward the sunrising"), across the Arnon to the plains of Moab
- * (Num 22:1), across the Jordan opposite Jericho (Josh 3:16) and to Gilgal (Josh 4:19), where it ends in a glow.
- * The way through the wilderness is not known station by station (Num 33's stations are mostly unidentified): the
- * loops are an artistic reading of "forty years", not a claimed itinerary.
+ * The user: "connect it to our story — how we got to David's story; something similar happens with the people of Israel
+ * — but not too long". The film's answer is Ps 78:52 (on screen from `verse`): out of Egypt God led His people LIKE A
+ * FLOCK through the wilderness — the psalm that at the end chooses David from the sheepfolds (78:70-71, over D3). So the
+ * road out of Egypt is drawn as a FLOCK OF LIGHT: one leading light and many small warm lights following it, spreading
+ * and gathering like sheep, across the wilderness and the Jordan to Gilgal; then the flock scatters over the land, each
+ * light to its own place, and the leading light goes out — "in those days there was no king in Israel, every man did
+ * what was right in his own eyes" (Judg 21:25, from `noKing`); the lens sinks over the land and turns WNW to the coast,
+ * where the five Philistine cities glow — the dissolve lands on P6's front rank.
+ *
+ * THE ROUTE (lon, lat): out of רַעְמְסֵס in the eastern delta (Ex 12:37) by Succoth over the isthmus WITHOUT a halt or a
+ * mark (no point is marked as the crossing of the sea), into the wilderness (one sweep: no station, no mountain is
+ * marked as Sinai), Kadesh (Deut 1:46; the flock rests a moment), by the hills of Seir (Deut 2:1) down to Etzion-Gever
+ * (Num 33:35), around Edom by the desert east of it (Num 21:4, 21:11), across the Arnon to the plains of Moab (Num
+ * 22:1), across the Jordan opposite Jericho (Josh 3:16) to Gilgal (Josh 4:19). Num 33's stations are mostly
+ * unidentified: the sweep is an artistic reading of the forty years, not an itinerary.
  */
 export interface RouteKey {
   lon: number;
   lat: number;
-  /** shot seconds (P4) when the head reaches this point (undefined: by arc length between the timed keys) */
+  /** shot seconds when the leading light reaches this point (undefined: by arc length between the timed keys) */
   t?: number;
-  /** the head rests here this long (s) */
+  /** the flock rests here this long (s) */
   hold?: number;
 }
 
 const B = (beat: string, fb: number) => takeBeat('exodus', beat, fb);
 
+/** the shot's beats (with the contract's fallbacks) */
+export function mapBeats() {
+  return {
+    egypt: B('egypt', 0.6),
+    flock: B('flock', 1.4),
+    verse: B('verse', 1.8),
+    jordan: B('jordan', 4.8),
+    gilgal: B('gilgal', 5.4),
+    land: B('land', 5.8),
+    noKing: B('noKing', 6.0),
+    dur: takeDur('exodus', 10),
+  };
+}
+
 export function routeKeys(): RouteKey[] {
-  const E = B('exodus', 3.4), W = B('wilderness', 6.0), J = B('jordan', 9.0), G = B('gilgal', 10.2);
-  const K = W + (J - W) * 0.43; // Kadesh
+  const b = mapBeats();
+  const FL = b.flock, J = b.jordan, G = b.gilgal;
+  const span = J - FL; // the crossing of the wilderness
   return [
-    { lon: 31.83, lat: 30.8, t: E }, // רַעְמְסֵס (Qantir)
+    { lon: 31.83, lat: 30.8, t: FL }, // רַעְמְסֵס (Qantir) — not labelled in CUT v6
     { lon: 32.02, lat: 30.64 },
     { lon: 32.12, lat: 30.54 }, // Succoth (Tell el-Maskhuta)
-    { lon: 32.35, lat: 30.45 }, // the isthmus (Serapeum ridge) — no halt, no mark
+    { lon: 32.35, lat: 30.45 }, // the isthmus — no halt, no mark
     { lon: 32.75, lat: 30.25 },
-    { lon: 33.1, lat: 29.95, t: W }, // the wilderness
-    // the wandering: one long sweep south through the wilderness and back north to Kadesh
-    { lon: 33.45, lat: 29.55 },
-    { lon: 33.86, lat: 29.36 },
-    { lon: 34.26, lat: 29.56 },
-    { lon: 34.4, lat: 29.96 },
-    { lon: 34.22, lat: 30.32 },
-    { lon: 34.42, lat: 30.64, t: K, hold: 0.45 }, // קָדֵשׁ — "many days" (Deut 1:46)
-    // "we compassed mount Seir many days" (Deut 2:1): a turn by the hills of Seir, down to the gulf
-    { lon: 34.8, lat: 30.56 },
-    { lon: 34.96, lat: 30.15 },
-    { lon: 34.98, lat: 29.56 }, // Etzion-Gever, the head of the gulf (Num 33:35)
+    { lon: 33.1, lat: 29.95, t: FL + span * 0.26 }, // the wilderness
+    { lon: 33.5, lat: 29.6 },
+    { lon: 33.95, lat: 29.5 },
+    { lon: 34.3, lat: 29.8 },
+    { lon: 34.28, lat: 30.25 },
+    { lon: 34.42, lat: 30.64, t: FL + span * 0.52, hold: 0.18 }, // קָדֵשׁ — the long stay (Deut 1:46)
+    { lon: 34.8, lat: 30.5 },
+    { lon: 34.95, lat: 30.1 },
+    { lon: 34.98, lat: 29.56 }, // Etzion-Gever (Num 33:35)
     { lon: 35.36, lat: 29.47 },
-    { lon: 35.8, lat: 29.8 }, // around Edom, by the desert east of it (Num 21:4, 21:11)
+    { lon: 35.8, lat: 29.8 }, // around Edom, by the desert east of it
     { lon: 36.03, lat: 30.3 },
     { lon: 36.07, lat: 30.86 },
     { lon: 35.95, lat: 31.3 }, // across the Arnon
     { lon: 35.8, lat: 31.62 },
-    { lon: 35.63, lat: 31.8, t: J - 0.1 }, // עַרְבוֹת מוֹאָב
+    { lon: 35.63, lat: 31.8, t: J - 0.15 }, // עַרְבוֹת מוֹאָב
     { lon: 35.555, lat: 31.835 }, // the Jordan opposite Jericho
-    { lon: 35.52, lat: 31.848, t: J + 0.55 },
+    { lon: 35.52, lat: 31.848, t: J + 0.32 },
     { lon: 35.5, lat: 31.855, t: G }, // הַגִּלְגָּל
   ];
 }
 
-/** shot times (P4) at which each label comes up: as the head reaches it, the regions on the beats */
-export function labelTimes(): Record<string, number> {
-  const E = B('exodus', 3.4), W = B('wilderness', 6.0), J = B('jordan', 9.0), G = B('gilgal', 10.2), eg = B('egypt', 3.0);
-  const K = W + (J - W) * 0.43;
-  return {
-    egypt: eg - 0.2,
-    greatSea: eg + 0.3,
-    raamses: E,
-    wilderness: W + 0.1,
-    kadesh: K - 0.1,
-    edom: K + 0.75,
-    saltSea: J - 0.75,
-    moabPlains: J - 0.25,
-    kinneret: J + 0.1,
-    jordan: J + 0.15,
-    jericho: J + 0.4,
-    gilgal: G - 0.05,
-  };
+/** the few names that orient (the user: fewer words): Egypt over the delta, the Jordan at the crossing */
+export function labelPlan(): { id: 'egypt' | 'jordan'; t0: number; t1: number }[] {
+  const b = mapBeats();
+  return [
+    { id: 'egypt', t0: b.egypt - 0.1, t1: b.jordan - 0.3 },
+    { id: 'jordan', t0: b.jordan - 0.35, t1: b.noKing + 1.2 },
+  ];
+}
+
+/**
+ * Where the scattered lights settle (from `land`): the inheritances of the tribes (mapNames' tribe points, no names
+ * on screen), each light jittered around one of them — "every man to his inheritance" (Judg 21:24).
+ */
+export function scatterHomes(n: number, seed = 7): { lon: number; lat: number }[] {
+  let s = seed >>> 0;
+  const rnd = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const out: { lon: number; lat: number }[] = [];
+  for (let i = 0; i < n; i++) {
+    const t = MAP_NAMES[TRIBE_ORDER[i % TRIBE_ORDER.length]];
+    const a = rnd() * Math.PI * 2, r = Math.sqrt(rnd());
+    out.push({ lon: t.lon + Math.cos(a) * r * 0.16, lat: t.lat + Math.sin(a) * r * 0.13 });
+  }
+  return out;
 }
 
 // ------------------------------------------------------------------------------------------------- the camera
 /** one pose of the map camera: looking at a ground point from `range` metres, `heading` (deg, from north
- *  clockwise) and `pitch` (deg below the horizon); `fov` = vertical lens angle for the 2.39 picture */
+ *  clockwise) and `pitch` (deg below the horizon); `fov` = vertical lens angle (16:9 canvas, 2.39 picture) */
 export interface MapPose {
   lon: number;
   lat: number;
@@ -95,55 +120,40 @@ export interface CamKey extends MapPose {
   t: number;
 }
 
-/** P4: from above Rachel's tomb (P3's rising lens) up to the whole region by `egypt`, then a slow drift */
+/**
+ * P4's ONE move: out of P1's dive through the cloud deck the lens is already high above the region — the Earth's curved
+ * horizon and the atmosphere's limb along the top — and it keeps coming forward and down (the dive continues), settling
+ * onto the region while the flock crosses the wilderness (north-up: the delta lower-left, the wilderness low, the rift
+ * right); from `land` it sinks over the land of Israel while the lights scatter, and turns WNW (bearing 290) toward
+ * the coast and the Philistine cities — P6 opens on the same bearing on the front rank.
+ */
 export function exodusKeys(): CamKey[] {
-  const eg = B('egypt', 3.0), dur = takeDur('exodus', 13);
+  const b = mapBeats();
   return [
-    // P3's end view (cut8_notes): above Rachel's tomb, heading north, pitch -58, fov 40 — the map starts higher on
-    // the same climb (the 1.4 s moving dissolve hides the change of scale; below ~2 km its 375 m texels are too soft)
-    { t: 0, lon: 35.2024, lat: 31.7193, range: 2600, heading: 0, pitch: 58, fov: 40 },
-    // the top of the climb (just before `egypt`): the lens lifts its eyes over the region to the Earth's curved horizon
-    // and the atmosphere's limb (from ~560 km the curvature tilts the lens ~11 deg further down: pitch 22 shows it)
-    { t: eg - 0.4, lon: 33.3, lat: 31.3, range: 1_250_000, heading: 0, pitch: 22, fov: 26 },
-    // then it settles slowly onto the land while the road draws (the whole road stays in the frame)
-    { t: eg + 1.6, lon: 33.6, lat: 30.9, range: 860_000, heading: 1, pitch: 40, fov: 26 },
-    { t: dur, lon: 34.35, lat: 31.0, range: 760_000, heading: 3, pitch: 47, fov: 26 },
+    { t: 0, lon: 33.35, lat: 31.45, range: 1_320_000, heading: 0, pitch: 21, fov: 26 },
+    { t: b.flock, lon: 33.3, lat: 30.75, range: 1_000_000, heading: 0, pitch: 33, fov: 26 },
+    { t: (b.flock + b.jordan) / 2, lon: 34.05, lat: 30.05, range: 800_000, heading: -2, pitch: 44, fov: 26 },
+    { t: b.jordan - 0.5, lon: 35.05, lat: 30.2, range: 700_000, heading: -7, pitch: 47, fov: 26 },
+    { t: b.gilgal, lon: 35.15, lat: 31.4, range: 520_000, heading: -14, pitch: 46, fov: 26 },
+    { t: b.land + 0.9, lon: 35.0, lat: 31.7, range: 360_000, heading: -30, pitch: 45, fov: 26 },
+    { t: b.dur, lon: 34.8, lat: 31.72, range: 118_000, heading: -70, pitch: 24, fov: 28 },
   ];
 }
 
-/** P5 (continues P4's last pose): lower over the land of Israel; from `cities` down toward Ashdod's coast, the lens
- *  turning WNW (bearing 290) over the coastal plain toward the city and the Great Sea — P6 opens on the same bearing
- *  (cut7_notes D: the host on the plain ESE of Ashdod, the sea beyond) */
-export function tribesKeys(): CamKey[] {
-  const tb = takeBeat('tribes', 'tribes', 0.4), ci = takeBeat('tribes', 'cities', 6.2), dur = takeDur('tribes', 9);
-  return [
-    // the twelve tribes over their land, Dan at the top, Simeon above the verse's band
-    { t: tb + 2.4, lon: 35.12, lat: 32.15, range: 560_000, heading: 0, pitch: 46, fov: 26 },
-    { t: ci, lon: 34.95, lat: 31.82, range: 300_000, heading: -8, pitch: 45, fov: 26 },
-    // the end: high over the plain east of Ashdod, looking WNW past Ashdod's tell (a little below the centre) to the
-    // shore and the Great Sea, the five cities glowing, still descending at the cut
-    { t: dur, lon: 34.64, lat: 31.765, range: 115_000, heading: -70, pitch: 36, fov: 28 },
-  ];
-}
+const lerp = (a: number, b: number, u: number) => a + (b - a) * u;
 
 /**
- * THE MAP CAMERA: ONE cubic Hermite spline through P4's and P5's keys on a common clock (P5 seconds + P4's length),
- * Catmull-Rom tangents at the inner keys (C1: the move flows through every key and through the invisible P4 -> P5 cut
- * without a stop), the range in LOG space (a climb / descent at a constant perceived speed). The first key's
- * log-range slope is P3's climb (cut8: k = 2.5 / s); the last keeps moving (end on motion: the moving dissolve into P6
- * extrapolates it). Over a big climb / descent the ground point moves in proportion to the height gained (linear in
- * range), so the land never slides sideways under a low lens.
+ * The camera: ONE cubic Hermite spline through the keys, Catmull-Rom tangents inside (C1: no stop at any key), the range
+ * in LOG space (a constant perceived speed of climb / descent). It starts moving (forward and down, the dive of P1 goes
+ * on) and ends moving (the moving dissolve into P6 extrapolates it). Over a big change of range the ground point moves
+ * in proportion to the height gained / lost, so the land never slides sideways under a low lens.
  */
 export interface MapCamPath {
   pose(take: string, t: number, out: MapPose): MapPose;
 }
 
-const smooth = (u: number) => u * u * (3 - 2 * u);
-const lerp = (a: number, b: number, u: number) => a + (b - a) * u;
-
 export function mapCamPath(): MapCamPath {
-  const d4 = takeDur('exodus', 13);
-  const keys = [...exodusKeys(), ...tribesKeys().map((k) => ({ ...k, t: k.t + d4 }))];
+  const keys = exodusKeys();
   const n = keys.length;
   const T = keys.map((k) => k.t);
   const ch = {
@@ -155,15 +165,14 @@ export function mapCamPath(): MapCamPath {
     fov: keys.map((k) => k.fov),
   };
   const slope = (v: number[], i: number) => (v[i + 1] - v[i]) / (T[i + 1] - T[i]);
-  /** tangents (value / s): Catmull-Rom inside; the ends as given */
   const tangents = (v: number[], m0: number, mEnd: number) =>
     v.map((_, i) => (i === 0 ? m0 : i === n - 1 ? mEnd : (v[i + 1] - v[i - 1]) / (T[i + 1] - T[i - 1])));
   const M = {
-    lon: tangents(ch.lon, 0, 0),
-    lat: tangents(ch.lat, 0, 0),
-    lr: tangents(ch.lr, 2.5, slope(ch.lr, n - 2) * 1.0),
-    heading: tangents(ch.heading, 0, slope(ch.heading, n - 2) * 0.45),
-    pitch: tangents(ch.pitch, 0, slope(ch.pitch, n - 2) * 0.45),
+    lon: tangents(ch.lon, slope(ch.lon, 0) * 0.5, 0),
+    lat: tangents(ch.lat, slope(ch.lat, 0) * 0.5, 0),
+    lr: tangents(ch.lr, slope(ch.lr, 0) * 0.9, slope(ch.lr, n - 2) * 0.85),
+    heading: tangents(ch.heading, 0, slope(ch.heading, n - 2) * 0.4),
+    pitch: tangents(ch.pitch, slope(ch.pitch, 0) * 0.9, slope(ch.pitch, n - 2) * 0.4),
     fov: tangents(ch.fov, 0, 0),
   };
   const herm = (v: number[], m: number[], i: number, u: number, dt: number) => {
@@ -171,8 +180,8 @@ export function mapCamPath(): MapCamPath {
     return (2 * u3 - 3 * u2 + 1) * v[i] + (u3 - 2 * u2 + u) * dt * m[i] + (-2 * u3 + 3 * u2) * v[i + 1] + (u3 - u2) * dt * m[i + 1];
   };
   return {
-    pose(take, t, out) {
-      const tc = Math.max(T[0], Math.min(T[n - 1], take === 'tribes' ? d4 + t : t));
+    pose(_take, t, out) {
+      const tc = Math.max(T[0], Math.min(T[n - 1], t));
       let i = 0;
       while (i < n - 2 && tc > T[i + 1]) i++;
       const dt = T[i + 1] - T[i];
@@ -182,7 +191,7 @@ export function mapCamPath(): MapCamPath {
       out.pitch = herm(ch.pitch, M.pitch, i, u, dt);
       out.fov = herm(ch.fov, M.fov, i, u, dt);
       const ra = keys[i].range, rb = keys[i + 1].range;
-      if (Math.abs(Math.log(rb / ra)) > 1.5) {
+      if (Math.abs(Math.log(rb / ra)) > 1.0) {
         const w = Math.max(0, Math.min(1, (out.range - ra) / (rb - ra)));
         out.lon = lerp(ch.lon[i], ch.lon[i + 1], w);
         out.lat = lerp(ch.lat[i], ch.lat[i + 1], w);
@@ -194,5 +203,3 @@ export function mapCamPath(): MapCamPath {
     },
   };
 }
-
-export { smooth };

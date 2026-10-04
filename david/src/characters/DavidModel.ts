@@ -1397,7 +1397,7 @@ export class DavidModel {
     if (H.carry > 0.001) m.layer(CARRY, H.carry, CARRY_MASK);
     if (H.kneel > 0.001) m.layer(KNEEL, H.kneel, mo && mw > 0.5 ? KNEEL_UPPER : undefined);
     // (cut8, film D4) the cradle (arms bent before the chest) and the forward reach / bend to gather or set down the lamb
-    if (H.cradle > 0.001 || this.cradleBend > 0.001) this.filmCradlePose(H.cradle);
+    if (H.cradle > 0.001 || this.cradleBend > 0.001 || this.cradleEffort > 0.001) this.filmCradlePose(H.cradle);
     if (H.thanks > 0.001) m.layer(THANKS, H.thanks, lw > 0.3 ? THANKS_UPPER : undefined);
     if (H.pull > 0.001) {
       this.pullT += dt;
@@ -1526,7 +1526,8 @@ export class DavidModel {
       mo.slots.kneel.target = 1;
     } else if (this.kneelOn) {
       this.kneelOn = false;
-      mo.play('kneel', 'kneel', { t: 3.6, rate: 1.3, mask: MASK_BODY, end: 4.8, fade: 0.2 });
+      // (cut8, film D4) rising with the lamb in his arms: slower, under its weight
+      mo.play('kneel', 'kneel', { t: 3.6, rate: this.cradle ? 0.95 : 1.3, mask: MASK_BODY, end: 4.8, fade: 0.2 });
     }
     mo.update(dt, v, still);
     const o = mo.out, r = this.moPose.r;
@@ -1735,6 +1736,15 @@ export class DavidModel {
   cradleBend = 0;
   /** 0..1 the staff leaning on his left shoulder in the crook of the arm instead of in the hand */
   staffCrookW = 0;
+  /** (wave 5) 0..1 his body taking the lamb's weight: the chest back over the hips, the head down to it (as he lifts it
+   *  and rises with it) */
+  cradleEffort = 0;
+  /** (wave 5) film only: a world point his RIGHT hand rests on (a ewe's back as he walks through his flock; the staff is
+   *  in his left) and its weight */
+  filmHandR: THREE.Vector3 | null = null;
+  filmHandRW = 0;
+  /** (wave 5) film only: the staff hand open (F2: the young hand about to close on the staff) */
+  filmGripOpen = false;
   private cradleSock: THREE.Object3D | null = null;
 
   /** D3: on his rock, his eyes on his flock below (the head following it a little); as the focus comes back to him
@@ -1811,8 +1821,14 @@ export class DavidModel {
       // the ground pose's body centre and orientation
       c.from.decompose(_crP2, _crQ2, _crS);
       _crP2.add(_cr1.copy(c.center).multiply(_crS).applyQuaternion(_crQ2));
-      _crP.lerpVectors(_crP2, _crP, k);
-      _crQ.slerpQuaternions(_crQ2, _crQ, k);
+      // (wave 5) lifted under its chest and belly it comes UP first, level, and only then in to his chest, turning into
+      // the cradle on the way (set down: out from the chest, level, then lowered) — not a straight glide of a prop
+      const kv = smooth01(Math.min(1, c.lift * 1.6)), kh = smooth01(Math.max(0, (c.lift - 0.12) / 0.88));
+      const kr = smooth01(Math.max(0, Math.min(1, (c.lift - 0.3) / 0.6)));
+      const y = _crP2.y + (_crP.y - _crP2.y) * kv;
+      _crP.lerpVectors(_crP2, _crP, kh);
+      _crP.y = y;
+      _crQ.slerpQuaternions(_crQ2, _crQ, kr);
     }
     return out.compose(_crP, _crQ, _s1.set(1, 1, 1));
   }
@@ -1841,7 +1857,8 @@ export class DavidModel {
     this.cradleFrame(_crM);
     _cr3.set(C.rh[0], C.rh[1], C.rh[2]).applyMatrix4(_crM);
     this.armIK('R', _cr3, _pole.set(-0.8, -1, -0.1).applyQuaternion(rootQ), w);
-    _cr3.set(C.lh[0], C.lh[1], C.lh[2]).applyMatrix4(_crM);
+    const over = this.cradle ? smooth01((this.cradle.lift - 0.6) / 0.35) : 1;
+    _cr3.set(C.lhUnder[0] + (C.lh[0] - C.lhUnder[0]) * over, C.lhUnder[1] + (C.lh[1] - C.lhUnder[1]) * over, C.lhUnder[2] + (C.lh[2] - C.lhUnder[2]) * over).applyMatrix4(_crM);
     this.armIK('L', _cr3, _pole.set(0.75, -1, -0.35).applyQuaternion(rootQ), w);
   }
 
@@ -1851,11 +1868,20 @@ export class DavidModel {
     if (hc > 0.001) m.layer(CRADLE_POSE, hc, CARRY_MASK);
     const b = smooth01(this.cradleBend);
     if (b > 0.001) {
-      m.add('hips', 0.16 * b, 0, 0);
-      m.add('spine', 0.3 * b, 0, 0);
-      m.add('chest', 0.2 * b, 0, 0);
-      m.add('neck', 0.05 * b, 0, 0);
-      m.add('head', 0.14 * b, 0, 0);
+      // (wave 5) gentler over the kneel (the knee down already lowers him: no jackknife from the hips)
+      m.add('hips', 0.1 * b, 0, 0);
+      m.add('spine', 0.21 * b, 0, 0);
+      m.add('chest', 0.15 * b, 0, 0);
+      m.add('neck', 0.06 * b, 0, 0);
+      m.add('head', 0.16 * b, 0, 0);
+    }
+    // (wave 5) the weight: the chest back over the hips, the shoulders braced, the head down to the lamb
+    const e = smooth01(this.cradleEffort);
+    if (e > 0.001) {
+      m.add('spine', -0.07 * e, 0, 0);
+      m.add('chest', -0.06 * e, 0, 0);
+      m.add('neck', 0.06 * e, 0, 0);
+      m.add('head', 0.12 * e, 0, 0);
     }
   }
 
@@ -2287,6 +2313,8 @@ export class DavidModel {
     }
     // (cut8, film D4) the lamb gathered in his arms: the hands on it (on the ground, rising, in the cradle)
     if (this.cradle && this.cradleReach > 0.001) this.filmCradleArms(rootQ);
+    // (cut8, wave 5, film D4) his right hand resting on a ewe's back as he walks through his flock
+    if (this.filmHandR && this.filmHandRW > 0.001) this.armIK('R', this.filmHandR, _pole.set(-0.85, -1, -0.15).applyQuaternion(rootQ), smooth01(this.filmHandRW));
     // pick: after the grasp, the stone goes to the satchel at the left hip
     if (this.action?.name === 'pick' && this.hold !== 'carry') {
       const t = this.action.t;
@@ -2381,7 +2409,8 @@ export class DavidModel {
     rig.jawOpen = a && a.name === 'call' ? 0.22 * this.actionW : this.exertion * 0.05 + (this.hold === 'pull' ? 0.04 : 0);
     // fingers
     const inHand = this.staffBackW < 0.5 && this.staffCrookW < 0.5;
-    const L: FingerPose = inHand ? 'grip' : H.carry > 0.5 || this.cradleReach > 0.5 ? 'grip' : this.hold === 'pull' ? 'fist' : 'relaxed';
+    let L: FingerPose = inHand ? 'grip' : H.carry > 0.5 || this.cradleReach > 0.5 ? 'grip' : this.hold === 'pull' ? 'fist' : 'relaxed';
+    if (this.filmGripOpen) L = 'relaxed'; // (cut8, film F2) the hand about to close on the staff
     let R: FingerPose = 'fist';
     if (a && a.name === 'pick' && this.hold !== 'carry') R = a.t < 0.46 ? 'open' : 'fist';
     else if (a && a.name === 'stone') R = a.t < STONE_BEATS.grasp - 0.06 || a.t > STONE_BEATS.bag + 0.05 ? 'open' : 'grip'; // (play1)
@@ -2389,6 +2418,7 @@ export class DavidModel {
     else if (a && a.name === 'call') R = 'cup';
     else if (this.hold === 'thanks') R = 'open';
     else if (this.hold === 'carry' || this.hold === 'pull' || this.cradleReach > 0.5) R = 'grip';
+    else if (this.filmHandRW > 0.5) R = 'relaxed'; // (cut8, film D4) resting on a ewe's back
     else if (this.hold === 'grab') R = 'fist';
     else if (this.slingHeld()) R = 'grip'; // (play1) the cords' ends in the fist (the sling grip below)
     // (play1) the sling hand: the finger loop on the middle finger, the knot pressed under the thumb against the hooked
@@ -3037,6 +3067,8 @@ export const CRADLE = {
   up: [0, 1, 0.45] as number[],
   rh: [-0.03, -0.12, 0.1] as number[],
   lh: [-0.07, 0.09, 0.06] as number[],
+  /** (wave 5) the left hand under its belly while it is gathered from the ground (it comes over its back at his chest) */
+  lhUnder: [-0.02, -0.13, -0.13] as number[],
   staffTop: [0.25, 1.83, -0.12] as number[],
   staffButt: [0.31, 0.1, 0.17] as number[],
 };

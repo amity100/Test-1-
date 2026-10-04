@@ -316,6 +316,11 @@ valley's echo (in-house: five filtered reflections of the shout) into a hush (a 
 the ranks, the spoil far off), his step without a drum, a grave low-horn line under 1 Sam 15:26 ringing into the tear;
 the Philistine host from P6's first frame, receding under Ramah. Same in-house synthesis, no third-party audio.
 Before/after plots, measurements and MP3s: `dev/screens/score6/w4/`.
+CUT v6 (103.6 s, *score6*, wave 5): the cold open's near silence (breath, wind, the wool under strain, each thread
+snapping — a new in-house thread-snap and strain), the title's one deep pulse and low note, "before" as one build into
+the shofar, and from the shofar one unbroken line of Saul's music through Samuel's arrival (darker, never a hush) to its
+peak on the tear; the shepherd's flashes as a faint shimmer over it. Same in-house synthesis, no third-party audio.
+Plots, measurements and MP3s: `dev/screens/score6/w5/`.
 
 ## Wardrobe & hair polish pass — `src/characters/wardrobe/`, `src/characters/hair/`, `tools/wardrobe/gen_textures.py`, `dev/wardrobe*`
 

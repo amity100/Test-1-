@@ -466,6 +466,44 @@ export async function dressElder(human: HumanModel, opts: FilmDressOptions): Pro
 }
 
 // ================================================================================================ PHILISTINES
+/**
+ * (host1, wave 5 — P6, "cloth and plumes frozen") the reed / feather strips of a Philistine crown are not a rigid
+ * comb: each strip quivers on its own phase with the march and the breeze, and all of them bend back against the head's
+ * motion (the wearer's code sets `crown.userData.flutter.bend`, crown-local metres at the tips, from the head's
+ * acceleration). The displacement grows with the square of the height up the strip (the band holds the roots).
+ * `PHILISTINE_CROWN_TIME.value` is the shared clock (the host's vanguard advances it).
+ */
+export const PHILISTINE_CROWN_TIME = { value: 0 };
+function flutterCrown(crown: THREE.Group, seed: number) {
+  const strips = crown.children[0] as THREE.Mesh | undefined;
+  if (!strips?.isMesh) return;
+  const bend = { value: new THREE.Vector3() };
+  const mat = strips.material as THREE.MeshStandardMaterial;
+  const phase = seed * 1.618;
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uCrownTime = PHILISTINE_CROWN_TIME;
+    sh.uniforms.uCrownBend = bend;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uCrownTime;\nuniform vec3 uCrownBend;')
+      .replace(
+        '#include <begin_vertex>',
+        /* glsl */ `#include <begin_vertex>
+        {
+          float ct = clamp(position.y / 0.15, 0.0, 1.0);
+          ct *= ct;
+          float ang = atan(position.x, position.z);
+          vec3 outv = normalize(vec3(position.x, 0.0, position.z) + vec3(1e-5));
+          float ph = ang * 7.0 + ${phase.toFixed(3)};
+          float q = 0.0045 * sin(uCrownTime * 8.3 + ph) + 0.0025 * sin(uCrownTime * 14.1 + ph * 1.7 + 0.6);
+          vec3 side = vec3(outv.z, 0.0, -outv.x);
+          transformed += (outv * q + side * 0.0018 * sin(uCrownTime * 11.7 + ph * 2.3) + uCrownBend) * ct;
+        }`,
+      );
+  };
+  mat.customProgramCacheKey = () => 'philCrownFlutter';
+  crown.userData.flutter = { bend: bend.value };
+}
+
 export async function dressPhilistine(human: HumanModel, opts: FilmDressOptions & { rank?: 'elite' | 'rank' }): Promise<SoldierResult> {
   const t0 = performance.now();
   const tier = opts.quality;
@@ -495,6 +533,14 @@ export async function dressPhilistine(human: HumanModel, opts: FilmDressOptions 
     for (const side of ['L', 'R'] as const) {
       const knee = body.joint(`lowerleg01.${side}`), ank = body.joint(`foot.${side}`);
       const g = makeGreave(tier, t.metal, { length: knee.distanceTo(ank) * 0.8, radius: 0.052 * S });
+      // (host1, wave 5) field bronze on the march: dulled by the road's dust and the leather ties — at roughness 0.42 the
+      // smooth shin shells mirrored the bright low sky and read as two glowing orange tubes in P6's low lens
+      {
+        const gm = g.material as THREE.MeshStandardMaterial;
+        gm.roughness = 0.66;
+        gm.color.setHex(0x6a4527);
+        gm.envMapIntensity = 0.45;
+      }
       const mid = knee.clone().lerp(ank, 0.45).add(new THREE.Vector3(0, 0, 0.004));
       const sock = human.addSocket(`greave${side}`, `lowerleg01.${side}`, mid, new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), knee.clone().sub(ank).normalize()));
       sock.add(g);
@@ -506,6 +552,8 @@ export async function dressPhilistine(human: HumanModel, opts: FilmDressOptions 
     const [rx, rz] = human.metrics.crownRadius;
     const crown = makeFeatherCrown(tier, rx + 0.012, rz + 0.012, { seed });
     crown.position.y = -0.02;
+    // (wave 5) the strips quiver and bend with the head (the GPU crowd's crowns are baked separately, not these)
+    flutterCrown(crown, seed);
     human.sockets.crownAnchor.add(crown);
     outfit.add(crown);
   }

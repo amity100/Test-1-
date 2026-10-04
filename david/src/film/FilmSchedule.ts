@@ -9,8 +9,8 @@ import { slice, type Slicer } from '../core/slice';
  * THE PROGRESSIVE START (load1, CUT v5): the film's sets are built by ONE background builder, in the order of their
  * deadlines, while the start screen is up and while the prologue plays —
  *
- *   judah (P1)              before the start screen (the film opens on it)
- *   map (P4, film 24.0)     coast (P6, 46.0)     ramah (P7, 53.0)     gilgal (G1's pre-roll, 59.5)
+ *   macro (C0) + judah (P1) before the start screen (CUT v6, cut7: the film opens on the cold open's small set)
+ *   map (P4, film 14.5)     coast (P6, 24.5)     ramah (P7, 31.5)     gilgal (G1's pre-roll, 35.0)     world (F1, 46.5)
  *
  * Two modes. COVERED (the loading / start screen or a black card covers the canvas): every builder step runs back to
  * back and a set is pre-compiled on the canvas (FilmStage.precompileSet: the full first-frame warm-up, what the old
@@ -47,13 +47,13 @@ const REL_COST: Record<'desktop' | 'mobile', Record<FilmJob, number>> = {
   // desktop-high 1280x720: judah 16.0 + 85.0 s, world prime 88 s, map 1.0 + 46.8, coast 3.7 + 33.0, ramah 54.5 + 107.1,
   // gilgal 48.2 + 190.7 (build + pre-compile); mobile-low 390x844: judah 6.7 + 10.2, world 24.3, map 0.9 + 8.7,
   // coast 4.9 + 8.5, ramah 21.6 + 24.2, gilgal 11.2 + 48.3
-  desktop: { world: 0.87, judah: 1, map: 0.47, coast: 0.36, ramah: 1.6, gilgal: 2.37 },
-  mobile: { world: 1.44, judah: 1, map: 0.57, coast: 0.79, ramah: 2.7, gilgal: 3.5 },
+  desktop: { world: 0.87, macro: 0.08, judah: 1, map: 0.47, coast: 0.36, ramah: 1.6, gilgal: 2.37 },
+  mobile: { world: 1.44, macro: 0.1, judah: 1, map: 0.57, coast: 0.79, ramah: 2.7, gilgal: 3.5 },
 };
 /** the share of each set's cost that is its BUILD (the rest: its pre-compile / prepare), measured as above */
 const BUILD_SHARE: Record<'desktop' | 'mobile', Record<FilmJob, number>> = {
-  desktop: { world: 0, judah: 0.16, map: 0.02, coast: 0.1, ramah: 0.34, gilgal: 0.2 },
-  mobile: { world: 0, judah: 0.4, map: 0.1, coast: 0.37, ramah: 0.47, gilgal: 0.19 },
+  desktop: { world: 0, macro: 0.4, judah: 0.16, map: 0.02, coast: 0.1, ramah: 0.34, gilgal: 0.2 },
+  mobile: { world: 0, macro: 0.5, judah: 0.4, map: 0.1, coast: 0.37, ramah: 0.47, gilgal: 0.19 },
 };
 /**
  * The sets with the big builds (the cast's FilmActors and crowds, the coast's terrain shading). Since wave 4b their
@@ -190,9 +190,12 @@ export class FilmSchedule {
     return this.done[name] ?? Promise.resolve();
   }
 
-  /** the sets needed in the film's first seconds (before any background work could finish): judah */
+  /**
+   * the sets needed in the film's first seconds (before any background work could finish): CUT v6 (cut7) the cold
+   * open's small 'macro' set (0 s) and judah (P1 at 8 s, after the title) — the device's speed is calibrated on them
+   */
   firstSets(): FilmJob[] {
-    return this.order.filter((n) => n !== 'world' && this.deadline[n]! < 8);
+    return this.order.filter((n) => n !== 'world' && this.deadline[n]! < 10);
   }
 
   states(): Partial<Record<FilmJob, SetState>> {

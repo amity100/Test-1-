@@ -270,3 +270,38 @@ void main() {
   gl_FragColor = vec4(uCol * g * uAlpha, 1.0);
 }
 `;
+
+/**
+ * The flock of light (CUT v6, Ps 78:52): point sprites, additive — a warm core and a soft halo; per light a size (CSS
+ * px, scaled by the device pixel ratio) and an intensity (the leader brighter, the followers twinkling).
+ */
+export const FLOCK_VERT = /* glsl */ `
+attribute float aSize;
+attribute float aAlpha;
+attribute float aWarm;
+uniform float uPx;
+varying float vAlpha;
+varying float vWarm;
+void main() {
+  vec4 c = projectionMatrix * viewMatrix * vec4(position, 1.0);
+  gl_Position = c;
+  gl_PointSize = aSize * uPx;
+  vAlpha = aAlpha;
+  vWarm = aWarm;
+}
+`;
+
+export const FLOCK_FRAG = /* glsl */ `
+uniform vec3 uCore;
+uniform vec3 uWarmCol;
+varying float vAlpha;
+varying float vWarm;
+void main() {
+  vec2 q = gl_PointCoord * 2.0 - 1.0;
+  float r2 = dot(q, q);
+  if (r2 > 1.0) discard;
+  float g = exp(-r2 * 16.0) * 1.5 + exp(-r2 * 3.2) * 0.26;
+  vec3 col = mix(uCore, uWarmCol, vWarm);
+  gl_FragColor = vec4(col * g * vAlpha, 1.0);
+}
+`;

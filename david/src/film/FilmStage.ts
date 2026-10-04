@@ -52,6 +52,8 @@ export const USED_SETS: ReadonlySet<FilmStageSet> = new Set(
 export interface FilmFocus {
   point: THREE.Vector3;
   fStop: number;
+  /** optional: the largest blur (fraction of the image height; default 0.012) — C0's macro wants a deeper bokeh */
+  maxBlur?: number;
 }
 
 export interface FilmSetHandle {
@@ -132,14 +134,20 @@ export interface FilmSetBuildStat {
   steps?: { step: string; ms: number }[];
 }
 
-// ==== map1: the 'map' set (P4-P5) — map1 owns this block (src/film/map/**); cut7 owns the rest of this file ====
+// ==== map1: the 'map' set (P4) — map1 owns this block (src/film/map/**); cut7 owns the rest of this file ====
 // The realistic 3D map (src/film/map/MapSet.ts): its own scene / camera / DOM labels, built in small yielding steps
-// (fetch + off-thread decode of 4 small webp, the terrain mesh in row bands); its handle films 'exodus' and 'tribes'.
+// (fetch + off-thread decode of 4 small webp, the terrain mesh in row bands); its handle films 'exodus' (CUT v6).
 async function buildMapSet(c: FilmSetBuildContext): Promise<FilmSetHandle | null> {
   const { createMapSet } = await import('./map/MapSet');
   return createMapSet(c.engine, { onProgress: (f) => c.progress(f), yieldFrame: () => c.yieldFrame() });
 }
 // ==== end of map1's block ====
+
+/** (cut7, CUT v6) the cold open's own small set (C0): the fist, the corner of the me'il, the threads — src/film/macro */
+async function buildMacroSet(c: FilmSetBuildContext): Promise<FilmSetHandle | null> {
+  const { createMacroSet } = await import('./macro/MacroSet');
+  return createMacroSet(c);
+}
 
 const smooth = (u: number) => u * u * (3 - 2 * u);
 
@@ -196,9 +204,9 @@ const RAMAH_PLAN: Record<string, { idx: number[]; near: number[] }> = {
 const RAMAH_SIM = [0, 3];
 
 /** the loading bar's label of each set's build */
-const SET_LABEL: Record<FilmStageSet, string> = { judah: 'הָאָרֶץ…', map: 'הַדֶּרֶךְ…', coast: 'אֶרֶץ פְּלִשְׁתִּים…', ramah: 'הָרָמָה…', gilgal: 'הַגִּלְגָּל…' };
+const SET_LABEL: Record<FilmStageSet, string> = { macro: 'הַכָּנָף…', judah: 'הָאָרֶץ…', map: 'הַדֶּרֶךְ…', coast: 'אֶרֶץ פְּלִשְׁתִּים…', ramah: 'הָרָמָה…', gilgal: 'הַגִּלְגָּל…' };
 /** relative build cost of each set (the loading bar's shares) */
-const SET_WEIGHT: Record<FilmStageSet, number> = { judah: 0.12, map: 0.1, coast: 0.14, ramah: 0.16, gilgal: 0.5 };
+const SET_WEIGHT: Record<FilmStageSet, number> = { macro: 0.03, judah: 0.12, map: 0.1, coast: 0.14, ramah: 0.16, gilgal: 0.5 };
 /** (cut7, wave 4) the haze colour of P2's morning that P1's end warms into (FILM_CAM.flight.hazeShift) */
 const HAZE_P2 = new THREE.Color(1.0, 0.86, 0.6);
 
@@ -299,7 +307,7 @@ export class FilmStage {
     };
     let h: FilmSetHandle | null = null;
     try {
-      h = name === 'map' ? await buildMapSet(c) : name === 'gilgal' ? await this.buildGilgal(c) : await this.buildLand(name, c);
+      h = name === 'map' ? await buildMapSet(c) : name === 'macro' ? await buildMacroSet(c) : name === 'gilgal' ? await this.buildGilgal(c) : await this.buildLand(name, c);
     } catch (e) {
       console.warn(`[film] set ${name} failed`, e);
       h = null;

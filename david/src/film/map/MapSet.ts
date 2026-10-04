@@ -2,32 +2,33 @@ import * as THREE from 'three';
 import type { ViewSpec } from '../../core/Engine';
 import type { ShotFrame } from '../../gameplay/CameraRig';
 import type { FilmSetHandle } from '../FilmStage';
-import { MAP_NAMES, PHILISTINE_CITIES, TRIBE_ORDER, type MapNameId } from '../../content/mapNames';
-import { takeBeat, takeDur } from '../FilmCams';
+import { MAP_NAMES, PHILISTINE_CITIES, type MapNameId } from '../../content/mapNames';
+import { slice } from '../../core/slice';
 import { MAP, MapHeights, bitmapTexture, edgeFade, geoBasis, geoToWorld, loadBitmap, worldToGeo } from './mapData';
-import { GLOBE_FRAG, GLOBE_VERT, GLOW_FRAG, GLOW_VERT, ROUTE_FRAG, ROUTE_VERT, SKY_FRAG, SKY_VERT, TERRAIN_FRAG, TERRAIN_VERT } from './mapShaders';
-import { labelTimes, mapCamPath, routeKeys, type MapPose } from './mapPlan';
+import { FLOCK_FRAG, FLOCK_VERT, GLOBE_FRAG, GLOBE_VERT, GLOW_FRAG, GLOW_VERT, ROUTE_FRAG, ROUTE_VERT, SKY_FRAG, SKY_VERT, TERRAIN_FRAG, TERRAIN_VERT } from './mapShaders';
+import { labelPlan, mapBeats, mapCamPath, routeKeys, scatterHomes, type MapPose } from './mapPlan';
 import { MapLabels, type LabelSpec } from './mapLabels';
 
 /**
- * THE REALISTIC 3D MAP of the opening film (CUT v5 — P4 'map-exodus' take 'exodus' 13 s, P5 'map-tribes' take 'tribes'
- * 9 s; docs/intro-script-v5.md): the real land from the Nile delta and the Gulf of Suez to the Galilee and the Bashan
- * seen like a satellite view at first light — real elevation and natural colour restored to ~1000 BCE
- * (tools/map/build_map.py, src/assets/map), the relief exaggerated x2.6, the morning sun low in the east baked into
- * soft long shadows, the sea with its depth colour and a soft glint, the aerial perspective of a real atmosphere, the
- * Earth's curvature and the atmosphere's limb at the highest point. On it the road out of Egypt draws itself as a
- * glowing ribbon (mapPlan.ts), the biblical names come up as it reaches them (mapLabels.ts, src/content/mapNames.ts),
- * then the tribes over their land and the five Philistine cities glowing on the coast, and the lens comes down toward
- * Ashdod for P6.
+ * THE REALISTIC 3D MAP of the opening film (CUT v6 — P4 'map-exodus', take 'exodus', 10 s; docs/intro-script-v6.md):
+ * the real land from the Nile delta and the Gulf of Suez to the Galilee and the Bashan seen like a satellite view at
+ * first light — real elevation and natural colour restored to ~1000 BCE (tools/map/build_map.py, src/assets/map), the
+ * relief exaggerated x2.6, the morning sun low in the east baked into soft long shadows, the sea with its depth colour
+ * and a soft glint, the aerial perspective of a real atmosphere, the Earth's curvature and the atmosphere's limb. On it
+ * the road out of Egypt is walked by a FLOCK OF LIGHT (Ps 78:52; mapPlan.ts): a leading light and many small warm lights
+ * behind it, spreading and gathering like sheep, across the wilderness and the Jordan to Gilgal; at `land` they scatter
+ * over the land, at `noKing` the leading light goes out (Judg 21:25), and the lens sinks and turns WNW toward the coast
+ * where the five Philistine cities kindle — the dissolve lands on P6. Two names orient: Egypt and the Jordan.
  *
  *   const handle = await createMapSet(engine, { onProgress });   // a FilmSetHandle ('map'); async, yielding steps
- *   handle.frame('exodus' | 'tribes', u, t, out) / enter / tick / focus (null: deep focus) / dispose()
+ *   handle.frame('exodus', u, t, out) / enter / tick / focus (null: deep focus) / dispose()
  *
  * Its own scene and camera; no shadow maps, no lights (the light is baked + analytic), one draw per part: sky, globe,
- * terrain, route, 7 glows (~25 draw calls with the post chain). The terrain mesh: 769 x 721 vertices (1.1 M triangles)
- * on desktop, 385 x 361 (0.28 M) on phones. Textures per tier: desktop all 'hi' (2048 px map + 2048 px inset of ~56 m
- * texels + 2048 px globe: ~1.77 MB to download); mobile-high the 2048 px map with the 1024 px inset and globe
- * (~1.08 MB); mobile-low all 'lo' (~0.50 MB). Decoded with createImageBitmap (off the main thread where supported).
+ * terrain, trace, flock (one Points draw), 7 glows (~25 draw calls with the post chain). The terrain mesh: 769 x 721
+ * vertices (1.1 M triangles) on desktop, 385 x 361 (0.28 M) on phones; the flock 84 / 70 / 56 / 42 lights per tier.
+ * Textures per tier: desktop all 'hi' (2048 px map + 2048 px inset of ~56 m texels + 2048 px globe: ~1.77 MB to
+ * download); mobile-high the 2048 px map with the 1024 px inset and globe (~1.08 MB); mobile-low all 'lo' (~0.50 MB).
+ * Decoded with createImageBitmap (off the main thread where supported).
  */
 export interface MapSetOptions {
   onProgress?: (f: number) => void;
@@ -132,6 +133,7 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
       uv[k * 2] = (lon - b.lon0) / (b.lon1 - b.lon0);
       uv[k * 2 + 1] = (b.lat1 - lat) / (b.lat1 - b.lat0);
     }
+    if (slice.due()) await slice.pause();
     // (small bands while the code is still cold, then 64 rows)
     if ((j < 128 && (j & 15) === 15) || (j & 63) === 63) {
       prog(0.38 + 0.3 * (j / H));
@@ -151,6 +153,7 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
       idx[n++] = c + 1;
     }
     if ((j & 127) === 127) await yieldFrame('mesh index');
+    else if (slice.due()) await slice.pause();
   }
   const tGeo = new THREE.BufferGeometry();
   tGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
@@ -238,8 +241,9 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
   prog(0.78);
   await yieldFrame('materials');
 
-  // ---- 4. the route: a sampled smooth curve draped over the land, drawn as a screen-space ribbon
+  // ---- 4. the road: a smooth curve draped over the land; the leading light walks it on the beats, the flock follows
   const keys = routeKeys();
+  const BT = mapBeats();
   const SAMPLES = meshTier === 'hi' ? 900 : 520;
   const curve = new THREE.CatmullRomCurve3(keys.map((k) => new THREE.Vector3(k.lon, k.lat, 0)), false, 'centripetal', 0.5);
   const geoPts = curve.getSpacedPoints(SAMPLES - 1);
@@ -248,7 +252,7 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
   for (let i = 1; i < SAMPLES; i++) along[i] = along[i - 1] + rPos[i].distanceTo(rPos[i - 1]);
   const total = along[SAMPLES - 1];
   for (let i = 0; i < SAMPLES; i++) along[i] /= total;
-  // the time each sample is reached (timed keys; arc length between them; holds)
+  // the time each sample is reached (timed keys; arc length between them; the rest at Kadesh)
   const keyIdx = keys.map((k) => {
     let best = 0, bd = 1e9;
     for (let i = 0; i < SAMPLES; i++) {
@@ -270,7 +274,7 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
   }
   for (let i = 0; i < timed[0].i; i++) sTime[i] = timed[0].t;
   for (let i = timed[timed.length - 1].i; i < SAMPLES; i++) sTime[i] = timed[timed.length - 1].t;
-  /** the route fraction drawn at P4 shot time t (eased within each timed span) */
+  /** the route fraction the leading light has reached at shot time t */
   const headAt = (t: number): number => {
     if (t <= sTime[0]) return 0;
     if (t >= sTime[SAMPLES - 1]) return 1;
@@ -283,16 +287,26 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
     const f = (t - sTime[lo]) / Math.max(1e-6, sTime[hi] - sTime[lo]);
     return along[lo] + (along[hi] - along[lo]) * f;
   };
-  const posOnRoute = (f: number, out: THREE.Vector3) => {
+  /** the point (and the ground's tangent / side directions) at route fraction f */
+  const tng = new THREE.Vector3(), side = new THREE.Vector3(), upv = new THREE.Vector3();
+  const posOnRoute = (f: number, out: THREE.Vector3, withSide = false) => {
+    const ff = Math.max(0, Math.min(1, f));
     let lo = 0, hi = SAMPLES - 1;
     while (hi - lo > 1) {
       const m = (lo + hi) >> 1;
-      if (along[m] <= f) lo = m;
+      if (along[m] <= ff) lo = m;
       else hi = m;
     }
-    const k = (f - along[lo]) / Math.max(1e-9, along[hi] - along[lo]);
-    return out.copy(rPos[lo]).lerp(rPos[hi], Math.max(0, Math.min(1, k)));
+    const k = (ff - along[lo]) / Math.max(1e-9, along[hi] - along[lo]);
+    out.copy(rPos[lo]).lerp(rPos[hi], Math.max(0, Math.min(1, k)));
+    if (withSide) {
+      tng.copy(rPos[hi]).sub(rPos[lo]).normalize();
+      upv.copy(out).sub(earthC).normalize();
+      side.crossVectors(tng, upv).normalize();
+    }
+    return out;
   };
+  // a faint trace of the road behind the flock (where the people walked), never brighter than the lights
   const rv = SAMPLES * 2;
   const rp = new Float32Array(rv * 3), rprev = new Float32Array(rv * 3), rnext = new Float32Array(rv * 3);
   const rside = new Float32Array(rv), ralong = new Float32Array(rv);
@@ -325,13 +339,13 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
     fragmentShader: ROUTE_FRAG,
     uniforms: {
       uRes: { value: res },
-      uWidth: { value: 3.2 },
+      uWidth: { value: 1.6 },
       uHead: { value: 0 },
-      uTail: { value: 0.08 },
-      uDim: { value: 0.42 },
+      uTail: { value: 0.05 },
+      uDim: { value: 0.3 },
       uFade: { value: 1 },
-      uCol: { value: new THREE.Color(1.0, 0.62, 0.26).multiplyScalar(1.7) },
-      uHeadCol: { value: new THREE.Color(1.0, 0.88, 0.62).multiplyScalar(2.4) },
+      uCol: { value: new THREE.Color(1.0, 0.62, 0.3).multiplyScalar(0.55) },
+      uHeadCol: { value: new THREE.Color(1.0, 0.86, 0.6).multiplyScalar(0.5) },
     },
     transparent: true,
     depthWrite: false,
@@ -343,7 +357,58 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
   route.renderOrder = 5;
   scene.add(route);
 
-  // glows: the route's head, Gilgal at the end, the five Philistine cities
+  // ---- 5. the flock of light (Ps 78:52): a leader and its followers — point sprites, positions per frame on the CPU
+  // (one Points draw; ~150 lights cost a few microseconds of CPU per frame)
+  const NF = tier === 'desktop-high' ? 150 : tier === 'desktop-medium' ? 124 : tier === 'mobile-high' ? 104 : 80;
+  let seed = 1234567;
+  const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const gauss = () => (rnd() + rnd() + rnd() - 1.5) / 1.5;
+  /** per follower: how far behind the leader it walks (SECONDS of the leader's road: where the leader rests, the flock
+   *  closes up behind it; where it moves on, the flock strings out), its place across the flock and along it at a rest,
+   *  wobble phases, size, warmth, brightness, and when it leaves Gilgal for its inheritance */
+  const fol = Array.from({ length: NF }, () => ({
+    lagT: 0.03 + 0.3 * Math.pow(rnd(), 1.3),
+    side: gauss(),
+    fwd: gauss(),
+    ph1: rnd() * 6.283, ph2: rnd() * 6.283, f1: 0.5 + rnd() * 0.7, f2: 0.7 + rnd() * 1.1,
+    size: 6.0 + rnd() * 4.0,
+    warm: 0.55 + rnd() * 0.45,
+    bright: 0.6 + rnd() * 0.4,
+    delay: rnd(),
+  }));
+  const homes = scatterHomes(NF).map((h) => geoToWorld(h.lon, h.lat, ground(h.lon, h.lat) + 450 / MAP.exag));
+  const gilgalP = posOnRoute(1, new THREE.Vector3());
+  const NP = NF + 1; // + the leader
+  const fPos = new Float32Array(NP * 3), fSize = new Float32Array(NP), fAlpha = new Float32Array(NP), fWarm = new Float32Array(NP);
+  const fGeo = new THREE.BufferGeometry();
+  const posAttr = new THREE.BufferAttribute(fPos, 3).setUsage(THREE.DynamicDrawUsage);
+  const alphaAttr = new THREE.BufferAttribute(fAlpha, 1).setUsage(THREE.DynamicDrawUsage);
+  const sizeAttr = new THREE.BufferAttribute(fSize, 1).setUsage(THREE.DynamicDrawUsage);
+  fGeo.setAttribute('position', posAttr);
+  fGeo.setAttribute('aSize', sizeAttr);
+  fGeo.setAttribute('aAlpha', alphaAttr);
+  fGeo.setAttribute('aWarm', new THREE.BufferAttribute(fWarm, 1));
+  for (let i = 0; i < NF; i++) fWarm[i] = fol[i].warm;
+  fWarm[NF] = 0.08;
+  const flockMat = new THREE.ShaderMaterial({
+    vertexShader: FLOCK_VERT,
+    fragmentShader: FLOCK_FRAG,
+    uniforms: {
+      uPx: { value: 1 },
+      uCore: { value: new THREE.Color(1.0, 0.95, 0.84).multiplyScalar(3.0) },
+      uWarmCol: { value: new THREE.Color(1.0, 0.66, 0.3).multiplyScalar(2.6) },
+    },
+    transparent: true,
+    depthWrite: false,
+    depthTest: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const flock = new THREE.Points(fGeo, flockMat);
+  flock.frustumCulled = false;
+  flock.renderOrder = 7;
+  scene.add(flock);
+
+  // glows: the leader's halo, Gilgal at the end of the road, the five Philistine cities
   const quad = new THREE.PlaneGeometry(2, 2);
   const glow = (col: THREE.Color, size: number) => {
     const m = new THREE.ShaderMaterial({
@@ -362,61 +427,56 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
     scene.add(me);
     return { mesh: me, mat: m };
   };
-  const head = glow(new THREE.Color(1.0, 0.86, 0.6).multiplyScalar(2.4), 15);
-  const gilgalGlow = glow(new THREE.Color(1.0, 0.82, 0.52).multiplyScalar(2.2), 26);
+  const head = glow(new THREE.Color(1.0, 0.88, 0.64).multiplyScalar(1.6), 26);
+  const gilgalGlow = glow(new THREE.Color(1.0, 0.82, 0.52).multiplyScalar(1.5), 30);
+  gilgalGlow.mesh.position.copy(gilgalP);
   const N = MAP_NAMES;
   const at = (id: MapNameId, lift = 600) => geoToWorld(N[id].lon, N[id].lat, ground(N[id].lon, N[id].lat) + lift / MAP.exag);
-  gilgalGlow.mesh.position.copy(at('gilgal'));
   const cityGlows = PHILISTINE_CITIES.map((id) => {
-    const gl = glow(new THREE.Color(1.0, 0.62, 0.32).multiplyScalar(2.2), 17);
+    const gl = glow(new THREE.Color(1.0, 0.42, 0.18).multiplyScalar(2.4), 22);
     gl.mesh.position.copy(at(id));
     return { id, ...gl };
   });
   prog(0.86);
-  await yieldFrame('route');
+  await yieldFrame('route + flock');
 
-  // ---- 5. the labels (DOM, the film's typography)
-  const LT = labelTimes();
-  const p4Ids = Object.keys(LT) as MapNameId[];
-  // the crowded corner at the end of the road: Jericho west of its point, Gilgal below, the plains of Moab east
-  // (the Kinneret's name west of the lake, the river's east of it: they never stack in a narrow portrait frame)
-  const PLACE: Partial<Record<MapNameId, LabelSpec['at']>> = { jericho: 'w', gilgal: 's', moabPlains: 'e', ashkelon: 'w', gaza: 'w', gath: 'e', ekron: 'e', kinneret: 'w', jordan: 'e' };
-  const specs: LabelSpec[] = [...p4Ids, ...TRIBE_ORDER, ...PHILISTINE_CITIES].map((id) => ({ id, pos: at(id, N[id].kind === 'sea' ? 0 : 800), at: PLACE[id], dot: id !== 'jericho' && id !== 'jordan' }));
+  // ---- 6. the names that orient (DOM, the film's typography): Egypt, the Jordan
+  const LP = labelPlan();
+  // (Egypt's name a little east of the delta's centre: a phone held upright sees only the delta's eastern half)
+  const egyptAt = geoToWorld(31.3, 30.5, ground(31.3, 30.5) + 800 / MAP.exag);
+  const specs: LabelSpec[] = LP.map((l) => ({ id: l.id, pos: l.id === 'egypt' ? egyptAt : at(l.id, 800), at: l.id === 'jordan' ? 'e' : undefined, dot: false }));
   const canvas = engine.renderer.domElement;
   const labels = new MapLabels(canvas.parentElement ?? document.body, specs);
   prog(0.92);
 
-  // ---- 6. the shot logic (pure functions of the take and the shot time: seek-safe)
-  const DUR4 = takeDur('exodus', 13);
-  const DUR5 = takeDur('tribes', 9);
-  const TB = takeBeat('tribes', 'tribes', 0.4), CI = takeBeat('tribes', 'cities', 6.2), V5 = takeBeat('tribes', 'verse', 2.6);
-  const GG = takeBeat('exodus', 'gilgal', 10.2);
+  // ---- 7. the shot logic (pure functions of the shot time: seek-safe)
+  const DUR = BT.dur;
   const path = mapCamPath();
   const pose: MapPose = { lon: 0, lat: 0, range: 1, heading: 0, pitch: 45, fov: 30 };
   const E = new THREE.Vector3(), Nn = new THREE.Vector3(), U = new THREE.Vector3(), T = new THREE.Vector3(), F = new THREE.Vector3();
-  let curTake = 'exodus';
   let curT = 0;
   let time = 0;
-  /** the camera of a take at shot time t (aspect-aware: portrait phones see the taller region from further and higher) */
+  /** the camera at shot time t (aspect-aware: phones held upright see the taller region from further and higher) */
   const camAt = (take: string, t: number, out: ShotFrame) => {
     path.pose(take, t, pose);
     const aspect = camera.aspect || 16 / 9;
     // portrait: a taller lens, further away and a little steeper (the region is taller than wide); the player's
-    // portraitLens widens a portrait lens by k afterwards — pre-divided here so the result is this lens
-    // (P4's first seconds: the portrait framing eases in after the dissolve — at the cut the lens is P3's own, widened
-    //  by the player's portraitLens exactly like P3's last frame)
-    const ease = take === 'exodus' ? ramp(t, 0.9, 1.6) : 1;
-    const s = Math.max(0, Math.min(1, (1.2 - aspect) / (1.2 - 0.46))) * ease;
+    // portraitLens widens a portrait lens by k afterwards — pre-divided here so the result is this lens. From `land`
+    // the extra distance melts away: the land of Israel, narrow and tall, fills a portrait frame.
+    const s = Math.max(0, Math.min(1, (1.2 - aspect) / (1.2 - 0.46)));
     const tan0 = Math.tan(THREE.MathUtils.degToRad(pose.fov) / 2);
     const tanP = tan0 * (1 + 0.9 * s);
-    // (P4 keeps the whole road in a narrow portrait frame from further away; P5 comes in close over the land of Israel —
-    //  narrow and tall, it fills a portrait frame — so the extra distance melts away over its first seconds)
-    const near5 = take === 'tribes' ? 0.9 * ramp(t, 0, 2.8) : 0;
-    const range = pose.range * (1 + s * (1 - near5) * Math.max(0, (0.62 * 2.39) / (1.9 * Math.max(aspect, 0.3)) - 1));
-    const pitch = Math.min(84, pose.pitch + 9 * s);
-    const k = aspect < 0.95 ? 1 + (Math.min(2.6, Math.max(1, (0.45 * 2.39) / aspect)) - 1) * ease : 1;
-    geoBasis(pose.lon, pose.lat, E, Nn, U);
-    T.copy(geoToWorld(pose.lon, pose.lat, ground(pose.lon, pose.lat), T));
+    const close = 0.85 * ramp(t, BT.land - 0.6, 2.6);
+    // the first seconds held upright: not further away but steeper and further north — the limb along the top, the
+    // near ground still inside the map's sharp box (a tall frame from that height would reach far south of it)
+    const early = s * (1 - ramp(t, 0, BT.flock + 1.4));
+    const rangeK = 1 + s * (1 - close) * Math.max(0, (0.62 * 2.39) / (1.9 * Math.max(aspect, 0.3)) - 1);
+    const range = pose.range * (rangeK + (0.95 - rangeK) * early);
+    const pitch = Math.min(84, pose.pitch + 9 * s + 6 * early);
+    const tLat = pose.lat + 1.1 * early;
+    const k = aspect < 0.95 ? Math.min(2.6, Math.max(1, (0.45 * 2.39) / aspect)) : 1;
+    geoBasis(pose.lon, tLat, E, Nn, U);
+    T.copy(geoToWorld(pose.lon, tLat, ground(pose.lon, tLat), T));
     const hd = THREE.MathUtils.degToRad(pose.heading), pt = THREE.MathUtils.degToRad(pitch);
     F.copy(E).multiplyScalar(Math.sin(hd)).addScaledVector(Nn, Math.cos(hd)).multiplyScalar(Math.cos(pt)).addScaledVector(U, -Math.sin(pt)).normalize();
     out.pos.copy(T).addScaledVector(F, -range);
@@ -426,58 +486,109 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
     return range;
   };
 
-  /** per frame: the route, the glows and the labels for the take's time */
-  const shotState = (take: string, t: number) => {
-    const p5 = take === 'tribes';
-    const t4 = p5 ? DUR4 + t : t; // the P4 clock continues under P5 (the route is finished by then)
-    const hf = headAt(t4);
-    const ru = routeMat.uniforms;
-    ru.uHead.value = hf;
-    ru.uFade.value = p5 ? 1 - ramp(t, TB, 1.6) : 1;
-    ru.uTail.value = 0.07;
-    // the head: visible while drawing, it melts into the Gilgal glow at the end
-    const drawing = t4 > sTime[0] - 0.05 && t4 < GG + 0.4;
-    head.mat.uniforms.uAlpha.value = drawing ? ramp(t4, sTime[0] - 0.05, 0.25) * (1 - ramp(t4, GG - 0.05, 0.45)) : 0;
-    posOnRoute(hf, head.mesh.position);
-    // Gilgal's glow: a soft swell at the end of the road, a slow breath, fading as the tribes come up
-    const gl = ramp(t4, GG - 0.15, 0.6) * (1 - (p5 ? ramp(t, TB + 0.6, 1.6) : 0));
-    gilgalGlow.mat.uniforms.uAlpha.value = gl * (0.85 + 0.15 * Math.sin(time * 2.1));
-    gilgalGlow.mat.uniforms.uSizePx.value = (22 + 10 * ramp(t4, GG - 0.15, 0.9) * (1 - ramp(t4, GG + 0.75, 1.5) * 0.4)) * pxScale;
-    head.mat.uniforms.uSizePx.value = 15 * pxScale;
-    for (const cg of cityGlows) cg.mat.uniforms.uSizePx.value = 17 * pxScale;
-    // the Philistine cities: glowing at `cities`, one after another (1 Sam 6:17's order)
-    cityGlows.forEach((c, i) => {
-      const a = p5 ? ramp(t, CI + i * 0.16, 0.5) : 0;
-      c.mat.uniforms.uAlpha.value = a * (0.82 + 0.18 * Math.sin(time * 2.6 + i * 1.3));
-    });
-    // labels
-    const out5 = p5 ? 1 - ramp(t, DUR5 - 0.75, 0.6) : 1;
-    for (const id of p4Ids) {
-      const t0l = LT[id];
-      let a = ramp(t4, t0l, 0.55);
-      // the plains of Moab give way to Jericho and Gilgal once the road has crossed (one corner, three names)
-      if (id === 'moabPlains') a *= 1 - 0.75 * ramp(t4, LT.jericho - 0.1, 0.6);
-      if (p5) a *= id === 'greatSea' ? 1 - ramp(t, CI + 1.2, 0.8) : 1 - ramp(t, TB - 0.3, 0.8);
-      labels.set(id, a * out5);
-    }
-    TRIBE_ORDER.forEach((id, i) => {
-      const a = p5 ? ramp(t, TB + 0.25 + i * 0.11, 0.6) * (1 - 0.55 * ramp(t, CI, 0.7)) : 0;
-      labels.set(id, a * out5);
-    });
-    PHILISTINE_CITIES.forEach((id, i) => {
-      labels.set(id, p5 ? ramp(t, CI + 0.15 + i * 0.16, 0.5) * out5 : 0);
-    });
-    void V5;
+  // ---- the light: the land at first light. Over the wilderness the sun is not yet up — the land lies in the blue of
+  // the dawn and the flock's lights read on it; as the flock crosses the Jordan the sun comes up over the land (the
+  // forty years compressed: this is a map, not a day) and the coast is in P6's morning light at the dissolve
+  const L0 = {
+    sunK: common.uSunK.value, ambK: common.uAmbK.value,
+    sunCol: common.uSunCol.value.clone(), hazeCol: common.uHazeCol.value.clone(), hazeSun: common.uHazeSun.value.clone(),
+    zen: (skyMat.uniforms.uZenith.value as THREE.Color).clone(), hor: (skyMat.uniforms.uHorizon.value as THREE.Color).clone(),
+  };
+  const dawnSun = new THREE.Color(1.0, 0.58, 0.36);
+  const lightAt = (t: number) => {
+    const d = 0.3 + 0.7 * ramp(t, BT.jordan - 0.5, 2.8);
+    common.uSunK.value = L0.sunK * (0.14 + 0.86 * d);
+    common.uAmbK.value = L0.ambK * (0.55 + 0.45 * d);
+    common.uSunCol.value.copy(dawnSun).lerp(L0.sunCol, d);
+    common.uHazeCol.value.copy(L0.hazeCol).multiplyScalar(0.45 + 0.55 * d);
+    common.uHazeSun.value.copy(L0.hazeSun).multiplyScalar(0.5 + 0.5 * d);
+    (skyMat.uniforms.uZenith.value as THREE.Color).copy(L0.zen).multiplyScalar(0.5 + 0.5 * d);
+    (skyMat.uniforms.uHorizon.value as THREE.Color).copy(L0.hor).multiplyScalar(0.5 + 0.5 * d);
+    return d;
   };
 
-  // ---- 7. the view
+  const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3();
+  /** per frame: the light, the flock, its leader, the trace, the glows and the names for the shot time t */
+  const shotState = (t: number, camRange: number) => {
+    const dawn = lightAt(t);
+    const hf = headAt(t);
+    const ru = routeMat.uniforms;
+    ru.uHead.value = hf;
+    ru.uFade.value = 0.6 * ramp(t, BT.flock, 0.4) * (1 - ramp(t, BT.land, 1.2));
+    // the flock's width (metres): wide in the open wilderness, narrow through the isthmus and at the crossing; it keeps
+    // about the same size in the picture while the lens comes down
+    const vk = Math.max(0.3, Math.min(1.5, camRange / 800_000));
+    const spreadAt = (f: number) => {
+      const narrow = Math.min(1, Math.abs(f - along[keyIdx[3]]) / 0.035) * Math.min(1, Math.abs(f - along[keyIdx[keyIdx.length - 3]]) / 0.03);
+      return (8_000 + 20_000 * narrow) * vk;
+    };
+    const started = ramp(t, BT.flock - 0.15, 0.45);
+    const scatterT = BT.land;
+    const settledAll = ramp(t, scatterT + 1.0, 1.6);
+    for (let i = 0; i < NF; i++) {
+      const L = fol[i];
+      const tw = time;
+      // where it walks: the leader's road `lagT` seconds ago (the lag breathes a little: the flock stretches and closes)
+      const tl = t - L.lagT * (1 + 0.14 * Math.sin(tw * L.f1 + L.ph1));
+      const f = headAt(tl);
+      // resting (at Kadesh, at Gilgal): the lights spread round their leader instead of along the road
+      const fA = headAt(tl - 0.08);
+      const rest = 1 - Math.min(1, Math.abs(f - fA) / 0.006);
+      posOnRoute(f, tmpA, true);
+      const restR = 27_000 * vk;
+      const sp = (spreadAt(f) * (1 - rest) + restR * rest) * (0.45 + 0.55 * started);
+      const lat = L.side + 0.25 * Math.sin(tw * L.f2 + L.ph2);
+      tmpA.addScaledVector(side, lat * sp).addScaledVector(tng, (L.fwd * 0.8 + 0.15 * Math.sin(tw * L.f2 * 0.7 + L.ph1)) * sp * rest);
+      // from `land`: each light leaves for its inheritance (an ease over ~1.5-2.3 s, some a little later)
+      const sc = ramp(t, scatterT + L.delay * 0.5, 1.5 + L.delay * 0.8);
+      if (sc > 0) tmpA.lerp(homes[i], sc);
+      fPos[i * 3] = tmpA.x;
+      fPos[i * 3 + 1] = tmpA.y;
+      fPos[i * 3 + 2] = tmpA.z;
+      // each comes out of Rameses as the line pays out, twinkling; once settled they burn low and unsteady, each on
+      // its own (Judg 21:25), and a little dimmer as the sun comes up
+      const born = ramp(t, BT.flock - 0.1 + L.lagT * 0.8, 0.25);
+      const tw2 = 0.8 + 0.2 * Math.sin(tw * 2.3 + L.ph1) * (1 - settledAll) + settledAll * 0.28 * Math.sin(tw * (3.1 + L.f2 * 2) + L.ph2);
+      fAlpha[i] = born * L.bright * tw2 * (1.2 - 0.3 * dawn) * (1 - 0.45 * rest * (1 - sc));
+      fSize[i] = L.size * (1 + 0.35 * settledAll);
+    }
+    // the leader: walks the road ahead of them, rests at Gilgal; at `noKing` it goes out
+    posOnRoute(hf, tmpB);
+    fPos[NF * 3] = tmpB.x;
+    fPos[NF * 3 + 1] = tmpB.y;
+    fPos[NF * 3 + 2] = tmpB.z;
+    const leader = started * (1 - ramp(t, BT.noKing - 0.1, 0.9));
+    fAlpha[NF] = leader * 1.7;
+    fSize[NF] = 15;
+    posAttr.needsUpdate = true;
+    alphaAttr.needsUpdate = true;
+    sizeAttr.needsUpdate = true;
+    head.mesh.position.copy(tmpB);
+    head.mat.uniforms.uAlpha.value = leader * 0.42 * (1 - 0.5 * ramp(t, BT.gilgal - 0.2, 0.4));
+    head.mat.uniforms.uSizePx.value = 34 * pxScale;
+    // Gilgal: a soft swell as the flock gathers there, gone as it scatters
+    const gl = ramp(t, BT.gilgal - 0.15, 0.5) * (1 - ramp(t, BT.land + 0.2, 1.2));
+    gilgalGlow.mat.uniforms.uAlpha.value = gl * 0.45 * (0.85 + 0.15 * Math.sin(time * 2.1));
+    gilgalGlow.mat.uniforms.uSizePx.value = 40 * pxScale;
+    // the five Philistine cities: they kindle on the coast (1 Sam 6:17's order) as the lens turns toward them
+    cityGlows.forEach((c, i) => {
+      const a = ramp(t, BT.noKing + 1.0 + i * 0.2, 0.6);
+      c.mat.uniforms.uAlpha.value = a * (0.8 + 0.2 * Math.sin(time * 2.6 + i * 1.3));
+      c.mat.uniforms.uSizePx.value = 22 * pxScale;
+    });
+    // the names
+    for (const l of LP) labels.set(l.id, ramp(t, l.t0, 0.5) * (1 - ramp(t, l.t1 - 0.6, 0.6)));
+  };
+
+  // ---- 8. the view
   let near = 100, far = 4e6;
   let pxScale = 1;
   const view: ViewSpec = {
     scene,
     camera,
     sky: null,
-    exposure: 0.52,
+    // the dawn: a little lower over the wilderness, P6's morning at the end (lightAt)
+    exposure: () => 0.52 * (0.8 + 0.2 * lightAt(curT)),
     atmosphere: { density: 0, godRays: 0 },
     update: (dt, cam) => {
       time += dt;
@@ -501,11 +612,12 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
       terrainMat.uniforms.uTime.value = time;
       const c = engine.renderer.domElement;
       res.set(Math.max(1, c.width) / 2, Math.max(1, c.height) / 2);
-      // line widths and glow sizes are given in CSS pixels
+      // line widths, light and glow sizes are given in CSS pixels
       const dpr = c.width / Math.max(1, c.clientWidth || c.width);
-      routeMat.uniforms.uWidth.value = 3.2 * dpr;
+      routeMat.uniforms.uWidth.value = 1.6 * dpr;
+      flockMat.uniforms.uPx.value = dpr * Math.min(1.25, Math.max(0.8, c.clientHeight / 620));
       pxScale = dpr;
-      shotState(curTake, curT);
+      shotState(curT, cam.position.distanceTo(T.copy(geoToWorld(pose.lon, pose.lat, 0, T))));
       labels.show(true);
       labels.update(cam, c, engine.post.letterboxBars, 0.24);
     },
@@ -517,16 +629,16 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
   const buildMs = performance.now() - t0;
   const longest = steps.filter((x) => !x.step.startsWith('fetch')).reduce((m, x) => Math.max(m, x.ms), 0);
   const tris = idx.length / 3 + 192 * 96 * 2 + 48 * 24 * 2 + ridx.length / 3;
-  const status = [`map: real terrain ${W}x${H} (${(tris / 1e6).toFixed(2)} M tris), ${texTier} textures, route + ${specs.length} labels; built in ${buildMs.toFixed(0)} ms (longest step ${longest} ms)`];
+  const status = [`map: real terrain ${W}x${H} (${(tris / 1e6).toFixed(2)} M tris), ${texTier} textures, the road + a flock of ${NF} lights, ${specs.length} names; built in ${buildMs.toFixed(0)} ms (longest step ${longest} ms)`];
   if (typeof location !== 'undefined' && new URLSearchParams(location.search).get('test') === '1') {
-    (window as unknown as Record<string, unknown>).__map = { camAt, headAt, labels, view, camera, scene, buildMs, tris, heights, sTime, steps, longest };
+    (window as unknown as Record<string, unknown>).__map = { camAt, headAt, labels, view, camera, scene, buildMs, tris, heights, sTime, steps, longest, NF, fPos, fAlpha };
   }
 
   const _g = new THREE.Vector3();
   const poseList: { pos: THREE.Vector3; look: THREE.Vector3 }[] = [];
-  for (const [take, t] of [['exodus', 0.3], ['exodus', 3.0], ['exodus', 9.0], ['tribes', 4.0], ['tribes', DUR5 - 0.2]] as [string, number][]) {
+  for (const t of [0.3, BT.flock + 1.5, BT.land, DUR - 0.2]) {
     const f: ShotFrame = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: 30, roll: 0 };
-    camAt(take, t, f);
+    camAt('exodus', t, f);
     poseList.push({ pos: f.pos, look: f.look });
   }
 
@@ -545,12 +657,11 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
       camAt(take, t, out);
       return true;
     },
-    enter(take) {
-      curTake = take;
+    enter() {
+      /* every state is a function of the shot time */
     },
-    tick(take, t, dt) {
+    tick(_take, t, dt) {
       void dt;
-      curTake = take;
       curT = t;
     },
     focus() {
@@ -558,8 +669,8 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
     },
     dispose() {
       labels.dispose();
-      for (const o2 of [tGeo, globe.geometry, sky.geometry, rGeo, quad]) o2.dispose();
-      for (const m of [terrainMat, globeMat, skyMat, routeMat, head.mat, gilgalGlow.mat, ...cityGlows.map((c) => c.mat)]) m.dispose();
+      for (const o2 of [tGeo, globe.geometry, sky.geometry, rGeo, quad, fGeo]) o2.dispose();
+      for (const m of [terrainMat, globeMat, skyMat, routeMat, flockMat, head.mat, gilgalGlow.mat, ...cityGlows.map((c) => c.mat)]) m.dispose();
       for (const tx of [tColor, tShade, tGlobe, tIColor, tIShade]) tx.dispose();
       for (const im of [colorImg, shadeImg, globeImg, iColorImg, iShadeImg]) if ('close' in im) im.close();
       scene.clear();

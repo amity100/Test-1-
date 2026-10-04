@@ -50,6 +50,17 @@ export const D3_STAGE = {
   extraLambs: 2,
 };
 
+/**
+ * (cut8, wave 5) D4 'horizon': the key animals round the lamb's place while he walks up through his flock (world x, z,
+ * heading) — a ewe with a lamb nursing at her flank turned to the lens, a ewe with her lamb, a goat, the rams below.
+ */
+export const D4_STAGE = {
+  nurse: [0.25, 13.3, -0.44] as number[],
+  ewe2: [0.9, 15.9, 0.4] as number[],
+  goat: [-3.9, 16.75, 2.2] as number[],
+  rams: [[2.4, 17.6, 0.3], [-0.6, 18.4, 2.6]] as number[][],
+};
+
 /** CUT v3 contract: H1 'thicket' (its length and `lambHead`), H2 'lamb' (`eyesOpen`) */
 const H1 = INTRO_SHOTS.find((s) => s.take === 'thicket');
 const H2 = INTRO_SHOTS.find((s) => s.take === 'lamb');
@@ -99,7 +110,7 @@ export class FilmFlock {
    * `lineOfSight` keeps only spots the lens really sees (the ray from the lens to the animal's back clears the ground
    * and, if given, `solid` — the rocks): a slope below a brow projects into the frame but can be hidden behind it.
    */
-  stageInView(camera: THREE.PerspectiveCamera, shepherd: THREE.Vector3 | null, o: { near?: number; far?: number; max?: number; clear?: number; spacing?: number; exclude?: Animal[]; yMin?: number; minFrom?: THREE.Vector3; minDist?: number; maxDist?: number; sector?: [number, number]; maxY?: number; sheepFirst?: boolean; lineOfSight?: boolean; solid?: (x: number, y: number, z: number) => boolean } = {}) {
+  stageInView(camera: THREE.PerspectiveCamera, shepherd: THREE.Vector3 | null, o: { near?: number; far?: number; max?: number; clear?: number; spacing?: number; exclude?: Animal[]; yMin?: number; minFrom?: THREE.Vector3; minDist?: number; maxDist?: number; sector?: [number, number]; maxY?: number; sheepFirst?: boolean; lineOfSight?: boolean; solid?: (x: number, y: number, z: number) => boolean; avoid?: (x: number, z: number) => boolean; walk?: number } = {}) {
     this.restore();
     const near = o.near ?? 5, far = o.far ?? 34, max = o.max ?? 14, clear = o.clear ?? 0.22, spacing = o.spacing ?? 1.5;
     // the lowest NDC y an animal may stand at (a 2.39 letterbox over a 16:9 canvas hides |y| > ~0.74)
@@ -135,6 +146,7 @@ export class FilmFlock {
       const x = cam.x + dir.x * d, z = cam.z + dir.z * d;
       const p = new THREE.Vector3(x, this.ground(x, z), z);
       if (o.maxY !== undefined && p.y > o.maxY) continue;
+      if (o.avoid && o.avoid(p.x, p.z)) continue; // (cut8, wave 5) e.g. clear of David's way in D4
       if (o.minFrom) {
         const fx = p.x - o.minFrom.x, fz = p.z - o.minFrom.z;
         const fd = Math.hypot(fx, fz);
@@ -163,7 +175,7 @@ export class FilmFlock {
       const a = pool[k++];
       this.saved.push({ a, pos: a.position.clone(), heading: a.heading, ai: a.aiEnabled, state: a.state, speed: a.manualSpeed });
       a.position.copy(p);
-      const walk = hash(tries, 3) < 0.34;
+      const walk = hash(tries, 3) < (o.walk ?? 0.34);
       // walkers cross the view (profiles), grazers face anywhere
       a.heading = walk ? Math.atan2(right.x, right.z) + (hash(tries, 4) < 0.5 ? 0 : Math.PI) + (hash(tries, 5) - 0.5) * 0.6 : hash(tries, 6) * Math.PI * 2;
       a.aiEnabled = false;

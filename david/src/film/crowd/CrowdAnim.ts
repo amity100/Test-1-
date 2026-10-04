@@ -27,7 +27,11 @@ export interface CrowdClipSpec {
   /** mocap clip name */
   clip: string;
   mirror?: boolean;
-  carry?: boolean;
+  /**
+   * the right arm in a spear-carry pose. true = the hand at the belt (Saul's army); (host1, wave 5) 'side' = the fist at
+   * the right hip with the forearm forward, so an upright shaft rises BESIDE the shoulder and not across the face
+   */
+  carry?: boolean | 'side';
   /** only this part of the clip (seconds) */
   range?: [number, number];
   /** force looping on/off (default: the clip's own flag) */
@@ -65,12 +69,18 @@ export class CrowdAnim {
   readonly clips = new Map<string, BakedClip>();
   readonly totalFrames: number;
   readonly bakeMs: number;
+  /**
+   * (host1, wave 5) the baked body's leg length / the clips' reference leg length: a take covers clip.speed x legScale
+   * metres per second at rate 1 (x the agent's height scale) — a crowd matching its feet to its ground speed needs it
+   */
+  readonly legScale: number;
 
-  private constructor(tex: THREE.DataTexture, clips: BakedClip[], frames: number, ms: number) {
+  private constructor(tex: THREE.DataTexture, clips: BakedClip[], frames: number, ms: number, legScale = 1) {
     this.texture = tex;
     for (const c of clips) this.clips.set(c.key, c);
     this.totalFrames = frames;
     this.bakeMs = ms;
+    this.legScale = legScale;
   }
 
   get(key: string): BakedClip {
@@ -128,6 +138,22 @@ export class CrowdAnim {
     };
     const carryIdx = new Map<number, THREE.Quaternion>();
     MOCAP_BONES.forEach((b, i) => { if (carry[b]) carryIdx.set(i, carry[b]); });
+    // (wave 5) the side carry: the upper arm hanging a little out and back, the forearm forward, the fist turned so its
+    // grip hole stands upright at the hip
+    const side: Record<string, THREE.Quaternion> = {
+      'upperarm01.R': new THREE.Quaternion().setFromEuler(_e.set(0.06, 0, -0.2)),
+      'upperarm02.R': new THREE.Quaternion(),
+      'lowerarm01.R': new THREE.Quaternion().setFromEuler(_e.set(-1.3, -0.1, 0)),
+      'lowerarm02.R': new THREE.Quaternion().setFromEuler(_e.set(0, -0.35, 0)),
+      'wrist.R': new THREE.Quaternion().setFromEuler(_e.set(0.3, 0, 0.1)),
+      // the shield arm: the forearm forward at the left side (the shield's weight damps the swing: see sideW)
+      'upperarm01.L': new THREE.Quaternion().setFromEuler(_e.set(-0.12, 0, 0.12)),
+      'lowerarm01.L': new THREE.Quaternion().setFromEuler(_e.set(-0.95, 0.1, 0)),
+    };
+    const sideIdx = new Map<number, THREE.Quaternion>();
+    MOCAP_BONES.forEach((b, i) => { if (side[b]) sideIdx.set(i, side[b]); });
+    // how much of the side pose replaces the capture per bone (the spear arm firmly, the shield arm half: it still swings)
+    const sideW = (b: number) => (MOCAP_BONES[b].endsWith('.L') ? 0.5 : 0.82);
 
     // frame count
     const plan = specs.map((s) => {
@@ -157,8 +183,8 @@ export class CrowdAnim {
         const q = pose.q;
         for (let b = 1; b < CROWD_BONES; b++) {
           _q.set(q[b * 4], q[b * 4 + 1], q[b * 4 + 2], q[b * 4 + 3]);
-          const cq = s.carry ? carryIdx.get(b) : undefined;
-          if (cq) _q.slerp(cq, 0.75);
+          const cq = s.carry === 'side' ? sideIdx.get(b) : s.carry ? carryIdx.get(b) : undefined;
+          if (cq) _q.slerp(cq, s.carry === 'side' ? sideW(b) : 0.75);
           for (const ri of rigIdx[b]) {
             const r = rest[ri];
             r.bone.quaternion.copy(r.P).multiply(_q2.copy(_q)).multiply(r.Q);
@@ -197,7 +223,7 @@ export class CrowdAnim {
     tex.generateMipmaps = false;
     tex.needsUpdate = true;
     tex.name = 'crowd.anim';
-    return new CrowdAnim(tex, baked, total, performance.now() - t0);
+    return new CrowdAnim(tex, baked, total, performance.now() - t0, scale);
   }
 
   dispose() {

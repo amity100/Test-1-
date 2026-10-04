@@ -136,6 +136,8 @@ export class CrowdAgent {
   /** per-agent cached lod / distance (read-only) */
   lod = -1;
   dist = 0;
+  /** (wave 5) the LOD of the previous update (hysteresis) */
+  lodPrev = -1;
   constructor(readonly index: number, private readonly anim: CrowdAnim) {}
 
   /** play a baked clip key (e.g. 'march:c', 'cheer_reach:m', see clipKey) with a cross-fade */
@@ -206,6 +208,12 @@ export interface CrowdOptions {
   impostors?: boolean | [number, number, number];
   /** agents nearer than this to the camera are not drawn (a lens inside the ranks); default 0.9 m */
   nearHide?: number;
+  /**
+   * (host1, wave 5) LOD hysteresis as a fraction of each switch distance (e.g. 0.12): an agent keeps its LOD until it
+   * is clearly past the boundary, so a man walking along a switch distance never flips between meshes. Default 0 (the
+   * old behaviour; Saul's army does not pass it).
+   */
+  lodHysteresis?: number;
 }
 
 /**
@@ -236,7 +244,7 @@ export class Crowd {
   /** agents nearer than this (m) to the camera are skipped (the camera stands inside the ranks in shot 9) */
   nearHide: number;
   private readonly buf: { pose: Float32Array; vari: Float32Array; a: Float32Array; b: Float32Array; mask: Float32Array; attrs: THREE.InstancedBufferAttribute[] }[] = [];
-  private readonly cfg: { d: [number, number, number]; caps: [number, number, number]; imp: [number, number, number] | null };
+  private readonly cfg: { d: [number, number, number]; caps: [number, number, number]; imp: [number, number, number] | null; hys: number };
   private readonly order: Int32Array;
   private readonly keyd: Float32Array;
   private readonly mat: THREE.MeshStandardMaterial;
@@ -251,7 +259,7 @@ export class Crowd {
   private constructor(o: CrowdOptions, m: Awaited<ReturnType<typeof loadMesh>>) {
     const t = TIER_LOD[o.tier];
     const imp = o.impostors === true ? t.imp : o.impostors ? o.impostors : null;
-    this.cfg = { d: o.lodDistances ?? t.d, caps: o.lodCaps ?? t.caps, imp };
+    this.cfg = { d: o.lodDistances ?? t.d, caps: o.lodCaps ?? t.caps, imp, hys: Math.max(0, o.lodHysteresis ?? 0) };
     this.nearHide = o.nearHide ?? 0.9;
     this.uniforms = crowdUniforms(o.army);
     const u = this.uniforms;
@@ -342,6 +350,7 @@ export class Crowd {
     const near = this.nearHide;
     for (const ag of this.agents) {
       ag.advance(dt);
+      ag.lodPrev = ag.lod;
       ag.lod = -1;
       if (!ag.visible || !ag.cur) continue;
       _sphere.center.set(ag.pos.x, ag.pos.y + 1.3 * ag.scale, ag.pos.z);
@@ -374,6 +383,12 @@ export class Crowd {
     for (let i = 0; i < n; i++) {
       const ag = this.agents[ord[i]];
       let lod = ag.dist < this.cfg.d[0] ? 0 : ag.dist < this.cfg.d[1] ? 1 : ag.dist < d2 ? 2 : 3;
+      const hy = this.cfg.hys;
+      if (hy > 0 && ag.lodPrev >= 0 && lod !== ag.lodPrev) {
+        // keep the previous LOD while the distance is within the hysteresis band of the boundary between them
+        const pick = (x: number) => (x < this.cfg.d[0] ? 0 : x < this.cfg.d[1] ? 1 : x < d2 ? 2 : 3);
+        if (ag.lodPrev >= pick(ag.dist * (1 - hy)) && ag.lodPrev <= pick(ag.dist * (1 + hy))) lod = ag.lodPrev;
+      }
       if (lod >= nl) lod = nl - 1;
       while (lod < nl && counts[lod] >= this.buf[lod].mask.length) lod++;
       if (lod >= nl) break;

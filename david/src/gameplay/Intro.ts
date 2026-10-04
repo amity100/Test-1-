@@ -106,6 +106,8 @@ const params = () => new URLSearchParams(typeof location !== 'undefined' ? locat
 interface TextEvent {
   t: number;
   x: IntroText;
+  /** the shot the text belongs to (CUT v6: the title card T gets the title treatment) */
+  shot: IntroShot;
 }
 
 /** CUT v5: cuts between two takes of the same set whose camera is continuous (no TAA reset: the cut is invisible) */
@@ -289,7 +291,7 @@ export class Intro {
   constructor(private readonly h: IntroHost, _opts: { short?: boolean } = {}) {
     let t = 0;
     for (const s of INTRO_SHOTS) {
-      for (const x of s.text ?? []) this.texts.push({ t: t + x.at, x });
+      for (const x of s.text ?? []) this.texts.push({ t: t + x.at, x, shot: s });
       t += s.dur;
     }
     this.texts.sort((a, b) => a.t - b.t);
@@ -418,7 +420,7 @@ export class Intro {
     while (this.textIdx < this.texts.length && this.texts[this.textIdx].t < this.t - 0.05) {
       // text that is still on screen at t is shown again, part-way through its animation
       const e = this.texts[this.textIdx];
-      if (e.t + e.x.seconds > this.t + 0.2) this.showText(e.x, e.t, this.t - e.t);
+      if (e.t + e.x.seconds > this.t + 0.2) this.showText(e.x, e.t, this.t - e.t, e.shot);
       this.textIdx++;
     }
     this.updateShot(0);
@@ -690,6 +692,8 @@ export class Intro {
     this.releaseAt = -1;
     if (!this.stage || this.keepSets) return;
     for (const n of Object.keys(this.stage.sets) as FilmStageSet[]) {
+      // (CUT v6: a black card keeps the last set's view bound — C0's macro set under the title — it goes at the next cut)
+      if (this.stage.sets[n]?.view === this.h.engine.view) continue;
       if (!this.plan.slice(Math.max(0, this.idx)).some((p) => p.shot.set === n)) this.stage.release(n);
     }
   }
@@ -882,7 +886,7 @@ export class Intro {
     // time inside the take: the span's offset + real seconds (the Gilgal blocking runs on shot seconds)
     const tk = this.takeOf(s);
     const post = this.h.engine.post;
-    let focus: { point: THREE.Vector3; fStop: number } | null = null;
+    let focus: { point: THREE.Vector3; fStop: number; maxBlur?: number } | null = null;
     let cam: THREE.PerspectiveCamera | null = null;
     let camPos: THREE.Vector3 | null = null;
     this.applyFade();
@@ -922,7 +926,7 @@ export class Intro {
     if (!post.dofAvailable) return;
     if (focus && cam) {
       const d = Math.max(0.2, focus.point.distanceTo(camPos ?? cam.position));
-      post.setDoF({ enabled: true, focusDistance: d, fStop: focus.fStop, focalLength: null, target: null });
+      post.setDoF({ enabled: true, focusDistance: d, fStop: focus.fStop, focalLength: null, target: null, maxBlur: focus.maxBlur ?? 0.012 });
     } else if (post.dofSettings.enabled) post.setDoF({ enabled: false, target: null });
   }
 
@@ -949,22 +953,26 @@ export class Intro {
   private fireText() {
     while (this.textIdx < this.texts.length && this.t >= this.texts[this.textIdx].t) {
       const e = this.texts[this.textIdx++];
-      this.showText(e.x, e.t, 0);
+      this.showText(e.x, e.t, 0, e.shot);
     }
   }
 
   /** one text event (started at film time `start`; `elapsed` s of it already played: seek) */
-  private showText(x: IntroText, start: number, elapsed: number) {
+  private showText(x: IntroText, start: number, elapsed: number, shot?: IntroShot) {
     const { ui } = this.h;
     const auto = !this.testClock;
     let el: HTMLElement | null = null;
+    // CUT v6 (cut7): the title card T — הַטּוֹב מִמֶּךָּ on black — gets the title treatment (UI .ft-title), its
+    // reference small and late
+    const title = shot?.id === 'title' && x.kind === 'verse';
     const o = {
       side: x.side,
       v: x.v,
       lines: x.lines,
       gold: x.gold,
       stagger: x.stagger,
-      refAfter: x.refAfter,
+      refAfter: x.refAfter ?? (title ? 0.95 : undefined),
+      title,
       // speech-synced words: shot seconds -> seconds from the text's start
       words: x.words ? x.words.map((w) => Math.max(0, w.t - x.at)) : undefined,
     };

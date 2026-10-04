@@ -75,7 +75,8 @@ export type IntroWorld = 'field' | 'gibeah';
 export type IntroTransition = 'cut' | 'dissolve' | 'match' | 'light' | 'black' | 'smash' | 'hard';
 
 /** Where a shot is filmed. */
-export type FilmSetName = 'black' | 'judah' | 'coast' | 'ramah' | 'gilgal' | 'world' | 'map';
+/** (CUT v6) 'macro': the cold open's own small close-up set (cut7, src/film/macro) — the film starts without Gilgal */
+export type FilmSetName = 'black' | 'macro' | 'judah' | 'coast' | 'ramah' | 'gilgal' | 'world' | 'map';
 
 /**
  * Score cue names (data-driven: the score keys the music on these; consecutive shots with the same cue form one
@@ -275,11 +276,12 @@ export const VERDICT_WORDS: readonly IntroWord[] = [
 export const INTRO_SHOTS: readonly IntroShot[] = [
   // ================================================================== THE COLD OPEN (8 s): the question
   {
-    id: 'cold', n: 'C0', set: 'gilgal', take: 'tear:macro', dur: 5.0, cut: 'black', hold: 0.5, fade: 0.6, cue: 'cold', beat: 'saul-hall', slowmo: 0.25,
+    id: 'cold', n: 'C0', set: 'macro', take: 'tear:macro', dur: 5.0, cut: 'black', hold: 0.5, fade: 0.6, cue: 'cold', beat: 'saul-hall', slowmo: 0.25,
     // grip: the fist closes on the wool · pull: the cloth goes taut · rip: the first threads snap · snap: the last thread
     beats: { grip: 0.8, pull: 1.8, rip: 2.7, snap: 4.2 },
-    // TO BE a set of its own, 'macro' (cut7 adds the set): a small, quickly built close-up set (the fist, the sleeve, the mantle's corner, a warm out-of-focus
-    // ground) — the film starts at once; the Gilgal set is not needed until G1 (36.5 s)
+    // (cut7) a set of its own, 'macro' (src/film/macro/MacroSet.ts): a small close-up set built in a fraction of a second
+    // (Saul's fist, the corner of Samuel's me'il with its tzitzit, the threads, a warm out-of-focus ground) — the film
+    // starts at once; the Gilgal set is not needed until G1 (36.5 s)
     direction: 'COLD OPEN, before anything is known: near silence (breath, wool, wind). Extreme close-up, very slow '
       + 'motion, shallow focus, warm backlight through the weave: a man\'s fist (scale armour at the wrist, no face) '
       + 'closes on dark wool at the corner of a mantle (its tzitzit); the pull; the weave stretches and the threads snap '
@@ -448,7 +450,7 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
 
 /** Legacy world flag of a shot (the score's pastoral / king contrast). */
 function worldOf(s: IntroShot): IntroWorld {
-  return s.set === 'coast' || s.set === 'ramah' || s.set === 'gilgal' || s.set === 'map' ? 'gibeah' : 'field';
+  return s.set === 'coast' || s.set === 'ramah' || s.set === 'gilgal' || s.set === 'map' || s.set === 'macro' ? 'gibeah' : 'field';
 }
 
 /**

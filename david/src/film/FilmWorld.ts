@@ -9,7 +9,7 @@ import { CRADLE } from '../characters/DavidModel';
 import { LAYOUT } from '../world/Layout';
 import { rachelShots, hideTreesNear, type RachelShots } from './land/rachel';
 import type { FilmFocus } from './FilmStage';
-import { FilmFlock, D4_BLEATS, D3_STAGE } from './filmAnimals';
+import { FilmFlock, D4_BLEATS, D3_STAGE, D4_STAGE } from './filmAnimals';
 import { drift, portraitLens, takeBeat, takeDur } from './FilmCams';
 import { INTRO_SHOTS } from '../content/introScript';
 
@@ -63,39 +63,49 @@ export interface FilmWorldHost {
  * height of its pivot over his feet (main.ts: cam.target = feet + 1.55). Intro.end() places him here (also after a
  * skip); D4's lens lands on CameraRig.followFrame of exactly this.
  */
-export const HANDOFF = { x: -1.95, z: 10.2, heading: 0, pitch: 0.2, pivotH: 1.55 };
+export const HANDOFF = { x: -1.95, z: 10.2, heading: 0.6, pitch: 0.2, pivotH: 1.55 };
 
 /**
- * D4 'horizon' (cut8): the choreography in world x / z (the ground is the terrain's) and its timing relative to the
- * contract's beats (lamb 0.3 · descend 1.4 · kneel 4.2 · lift 5.0 · logo 6.6 · setDown 11.2 · logoOut 12.2 · settle
- * 14.6 · 18.0). Tunable live under ?test=1 (window.__filmWorldCams.d4).
- * The take is staged ACROSS the lens (the orchestrator's review of v9): the lens stays on the uphill side, north of him
- * (az ≈ 168-180, never round him); he walks down to the lamb, kneels with it at his front-left (his left side to the
- * lens), carries it along the slope toward the lens' side (north-east: his face, the lamb's head at his left shoulder
- * and its body across his chest toward the lens, under the logo), kneels to its mother, and only HIS turn to the
- * hand-off heading (out over the flock and the valley) puts the lens behind him.
- *  - stand:     his place in D3 and at D4's start (on the shoulder of the ridge, his flock on the slope below him)
- *  - lamb:      the newborn, fallen behind on the rocks below him (it bleats for its mother)
- *  - wayDown:   his way down the slope to `kneel1`, beside the lamb (west of it)
+ * D4 'horizon' (cut8, CUT v6 — 14 s): the choreography in world x / z (the ground is the terrain's) and its timing
+ * relative to the contract's beats (lamb 0.3 · descend 1.2 · kneel 3.4 · lift 4.0 · logo 5.2 · setDown 9.0 · logoOut 9.8
+ * · settle 11.4 · 14.0). Tunable live under ?test=1 (window.__filmWorldCams.d4).
+ * The user (wave 5): David must look natural and artistic, busy with his flock — one composed take WITH THE LIGHT BEHIND
+ * HIM: the lens stays up the slope on his left (west, az ≈ 250 → 214), looking toward the low sun (the glare at the
+ * frame's top left), tracking with his walk, never circling him. He walks slowly up through his sheep, his right hand on
+ * a ewe's back, the staff in his left; the newborn bleats; he goes to it, kneels, slides both hands under its chest and
+ * belly and lifts it (its legs hanging, then folding; its head turning up to him) to his chest, and rises under its
+ * weight; he carries it a few steps along the slope under the logo, kneels to its mother and sets it down — she turns to
+ * it, it nurses; he rises and turns out over the flock and the valley (HANDOFF.heading): his own turn puts the lens
+ * behind him; from `settle` the lens only eases back onto the game's camera.
+ *  - stand:     his place in D3 (on the shoulder of the ridge, his flock on the slope below him)
+ *  - start:     D4's first frame: among his sheep, walking slowly up the slope (at `slow` m/s until `descend`)
+ *  - guide:     the ewe walking at his right with his hand on her back (the staff in his left): [m to his right, m
+ *               ahead]; let go at `guideOff`
+ *  - lamb:      the newborn, fallen behind (it bleats for its mother) — at his front-left when he kneels
+ *  - wayDown:   his way up to `kneel1`, beside the lamb
  *  - wayOn:     his way along the slope with the lamb in his arms to `kneel2`, before its mother
- *  - ewe:       the lamb's mother (Flock: lamb.mother), waiting along the slope, looking toward it
+ *  - ewe:       the lamb's mother (Flock: lamb.mother), waiting a little up the slope, looking toward it
  */
 export const D4 = {
   stand: [-7.85, 10.65],
-  lamb: [-4.6, 12.58],
-  wayDown: [[-6.51, 11.78]],
-  kneel1: [-5.17, 12.9],
-  wayOn: [[-3.56, 11.55]],
+  start: [-2.2, 14.55],
+  slow: 0.5,
+  guide: [0.62, 0.3],
+  guideOff: 1.45,
+  lamb: [-2.61, 11.67],
+  wayDown: [[-2.3, 13.4]],
+  kneel1: [-2.4, 12.25],
+  wayOn: [[-2.2, 11.2]],
   kneel2: [HANDOFF.x, HANDOFF.z],
-  ewe: [-0.5, 10.59],
+  ewe: [-1.68, 8.93],
   /** the lamb set down this far in front of him */
   setDownD: 0.62,
-  /** seconds relative to the beats: the walk down starts at descend + d0 and ends at kneel + d1; he kneels at kneel +
-   *  k1; the hands reach the lamb over [lift + r0, lift]; it rises to his chest over [lift, lift + l1]; he stands up from
-   *  lift + u1; the walk on runs [lift + w0, setDown + w1]; he kneels at setDown + k2; the lamb is lowered over [setDown
-   *  + s0, setDown + s1], let go at setDown + s2; he rises at setDown + u2; his gaze goes out over the flock at settle +
-   *  g0 */
-  d0: -0.12, d1: -0.25, k1: -0.25, r0: -0.45, l1: 1.35, u1: 0.72, w0: 1.6, w1: -0.6, k2: -0.72, s0: -0.5, s1: 0.12, s2: 0.2, u2: 0.8, g0: -0.9,
+  /** seconds relative to the beats: the walk up ends at kneel + d1 (slow until descend + d0); he kneels at kneel + k1;
+   *  the hands slide under the lamb over [lift + r0, lift]; it rises to his chest over [lift, lift + l1]; he stands up
+   *  under its weight from lift + u1; the walk on runs [lift + w0, setDown + w1]; he kneels at setDown + k2; the lamb is
+   *  lowered over [setDown + s0, setDown + s1], let go at setDown + s2; he rises at setDown + u2; his gaze goes out over
+   *  the flock at settle + g0 */
+  d0: 0, d1: -0.2, k1: -0.2, r0: -0.45, l1: 1.0, u1: 1.15, w0: 2.1, w1: -0.55, k2: -0.55, s0: -0.25, s1: 0.15, s2: 0.3, u2: 0.75, g0: -1.2,
 };
 
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
@@ -147,32 +157,42 @@ export const WORLD_CAM = {
   // left side ≈ 107, behind him ≈ 197), r (m), h (m over his feet), yaw bias (deg, + = the frame turns left), pitch bias
   // (deg, + = up: sky for the logo), fov]; the look aims at the action (framing point) plus the biases; the last key is
   // the gameplay camera itself (added at run time) — every channel a C1 monotone cubic, still at both ends.
-  // The lens stays on the UPHILL side, north of him (az 168-180), tracking with his walk — it never circles him: his
-  // back as he goes down to the lamb, his left side as he kneels and lifts it, his face and the lamb (its head at his
-  // left shoulder) as he carries it along the slope under the logo (the sky and the far hills above them; the low sun
-  // from the left), his left side as he sets it down by its mother; his own turn to the hand-off heading puts the lens
-  // behind him, and from `settle` it only eases back and a little down onto the game's camera (az 180)
+  // (wave 5) WITH THE LIGHT BEHIND HIM: the lens up the slope on his left (west, az 250), looking toward the low sun (its
+  // glare at the frame's top left), tracking with his walk — never circling him: his left side as he walks up through his
+  // sheep, close and low for the gathering (his hands under the lamb, its head turning up to him), back and up as he
+  // rises and carries it under the logo (the lockup above him), his left side as he sets it down by its mother; his own
+  // turn to the hand-off heading puts the lens behind him, and from `settle` it eases back onto the game's camera (az 214)
   horizon: {
     keys: [
-      [0, 172, 4.6, 2.7, 0, 0, 44],
-      [1.4, 174, 4.5, 2.6, 0, 0, 44],
-      [3.9, 178, 4.2, 2.5, 0, 0, 43],
-      [5.0, 178, 3.9, 2.4, 0, -1, 42],
-      [6.6, 172, 4.0, 2.35, 0, 3, 41],
-      [7.8, 170, 4.05, 2.35, 0, 6.5, 41],
-      [9.0, 168, 4.1, 2.35, 0, 7, 41],
-      [11.2, 168, 4.5, 2.5, 0, 7, 43],
-      [13.0, 172, 3.4, 2.55, 0, 1, 47],
-      [14.6, 175, 3.3, 2.5, 0, 0, 49],
+      [0, 250, 3.9, 2.1, 0, 0, 40],
+      [1.2, 249, 3.7, 2.05, 0, 0, 40],
+      [3.0, 246, 3.2, 1.9, 0, -1, 40],
+      [3.9, 244, 2.9, 1.8, 0, -2, 38],
+      [5.0, 243, 3.0, 1.85, 0, 0, 38],
+      [6.2, 245, 3.6, 2.2, 0, 3, 40],
+      [7.4, 245, 3.9, 2.4, 0, 3.5, 40],
+      [8.5, 242, 3.9, 2.5, 0, 3.5, 41],
+      [9.6, 236, 3.7, 2.5, 0, 2.5, 43],
+      [11.4, 224, 3.5, 2.4, 0, 0, 48],
     ] as [number, number, number, number, number, number, number][],
     // depth of field: on him / the lamb; everything sharp before the hand-off (the game's camera has none)
     fStop0: 3.2, fStop1: 5.6,
   },
   d4: D4,
+  // (wave 5) F1 'glimpse:rock' (0.8 s flash): far behind the boy on his rock against the low sun — `dist0`→`dist1` m back
+  // along the sun's heading turned `azOff` deg, `h` m over the ground there, the frame `pitchUp` deg above him (the sun's
+  // glow in it), fov `fov`; a silhouette, never the face
+  glimpseRock: { dist0: 19, dist1: 18, azOff: 9, h: 1.6, pitchUp: 10, fov: 34, fStop: 2.8 },
+  // F2 'glimpse:hand' (0.8 s flash): close behind-left of his staff hand, `d0`→`d1` m, looking past it along his gaze
+  // (the flock out of focus below); the fingers close on the staff at `close` s
+  glimpseHand: { d0: 0.72, d1: 0.6, left: 0.22, up: 0.18, ahead: 0.25, fov: 30, fStop: 1.4, close: 0.22 },
+  // F1 / F2: graded a touch cooler and softer than Gilgal (a memory, a premonition): highlight warmth + `warm`,
+  // saturation × `sat`, contrast × `contrast`, desaturation + `desat`, vignette + `vignette`, exposure × `exp`
+  glimpseGrade: { warm: -0.09, sat: 0.74, contrast: 0.88, desat: 0.1, vignette: 0.1, exp: 0.92 },
 };
 
 export class FilmWorld {
-  readonly takes = new Set(['bethlehem', 'rachel-dawn', 'figure', 'face', 'watch', 'horizon', 'vista']);
+  readonly takes = new Set(['bethlehem', 'rachel-dawn', 'glimpse:rock', 'glimpse:hand', 'figure', 'face', 'watch', 'horizon', 'vista']);
   private readonly paths: Record<string, Path> = {};
   private readonly rachel: RachelShots | null;
   private readonly ground: (x: number, z: number) => number;
@@ -213,7 +233,7 @@ export class FilmWorld {
   private walk1: THREE.CatmullRomCurve3 | null = null;
   private walk2: THREE.CatmullRomCurve3 | null = null;
   /** D3 / D4: the key animals (the newborn's mother, the extra lambs and their ewes, the goat on the rock, the rams) */
-  private cast: { ewe: Animal | null; lambs: Animal[]; nurseEwe: Animal | null; goat: Animal | null } = { ewe: null, lambs: [], nurseEwe: null, goat: null };
+  private cast: { ewe: Animal | null; lambs: Animal[]; nurseEwe: Animal | null; goat: Animal | null; guide: Animal | null } = { ewe: null, lambs: [], nurseEwe: null, goat: null, guide: null };
   /** D4: where the newborn is in the story (seek-safe: re-derived from the shot time every frame) */
   private lambPhase: 'ground' | 'arms' | 'free' = 'ground';
   private readonly lambFrom = new THREE.Matrix4();
@@ -314,7 +334,7 @@ export class FilmWorld {
   private buildWalks() {
     const d = WORLD_CAM.d4;
     const P = (p: number[]) => V(p[0], 0, p[1]);
-    this.walk1 = new THREE.CatmullRomCurve3([P(d.stand), ...d.wayDown.map(P), P(d.kneel1)], false, 'centripetal');
+    this.walk1 = new THREE.CatmullRomCurve3([P(d.start), ...d.wayDown.map(P), P(d.kneel1)], false, 'centripetal');
     this.walk2 = new THREE.CatmullRomCurve3([P(d.kneel1), ...d.wayOn.map(P), P(d.kneel2)], false, 'centripetal');
   }
 
@@ -368,6 +388,30 @@ export class FilmWorld {
       case 'rachel-dawn':
         this.rachelFrame(t, out);
         return true;
+      case 'glimpse:rock': {
+        // F1 (wave 5): far behind him on his rock, toward the low sun — a silhouette above the valley; a slight push
+        const c = WORLD_CAM.glimpseRock;
+        const a = Math.atan2(this.sunH.x, this.sunH.z) + Math.PI + c.azOff * DEG;
+        const dd = lerp(c.dist0, c.dist1, uu);
+        out.pos.set(this.rock.x + Math.sin(a) * dd, 0, this.rock.z + Math.cos(a) * dd);
+        out.pos.y = this.ground(out.pos.x, out.pos.z) + c.h;
+        out.look.set(this.rock.x, this.rock.y + 1.2 + dd * Math.tan(c.pitchUp * DEG), this.rock.z);
+        out.fov = c.fov;
+        out.roll = 0.004;
+        return true;
+      }
+      case 'glimpse:hand': {
+        // F2 (wave 5): his staff hand, close, from behind-left; past it, down the slope, his flock out of focus
+        const c = WORLD_CAM.glimpseHand;
+        const hand = this.handOf(this.tmp2);
+        const D = this.viewDir, Lx = D.z, Lz = -D.x; // his left (viewed from behind: -side)
+        const dd = lerp(c.d0, c.d1, smooth(uu));
+        out.pos.set(hand.x - D.x * dd + Lx * c.left, hand.y + c.up, hand.z - D.z * dd + Lz * c.left);
+        out.look.set(hand.x + D.x * c.ahead, hand.y - 0.04, hand.z + D.z * c.ahead);
+        out.fov = c.fov;
+        out.roll = -0.01;
+        return true;
+      }
       case 'figure': {
         const c = WORLD_CAM.figure;
         const az = THREE.MathUtils.degToRad(lerp(c.az0, c.az1, e));
@@ -486,45 +530,45 @@ export class FilmWorld {
   private d4Pose(t: number, out: { pos: THREE.Vector3; heading: number; speed: number; phase: string }) {
     const d = WORLD_CAM.d4;
     const b = (k: string, f: number) => takeBeat('horizon', k, f);
-    const desc = b('descend', 1.4), kneel = b('kneel', 4.2), lift = b('lift', 5.0), setDown = b('setDown', 11.2);
+    const desc = b('descend', 1.2), kneel = b('kneel', 3.4), lift = b('lift', 4.0), setDown = b('setDown', 9.0);
     const w1a = desc + d.d0, w1b = kneel + d.d1, w2a = lift + d.w0, w2b = setDown + d.w1;
     const c1 = this.walk1!, c2 = this.walk2!;
     const lamb = this.tmp.set(d.lamb[0], 0, d.lamb[1]);
     const ewe = this.tmp2.set(d.ewe[0], 0, d.ewe[1]);
-    // the walk's progress: a calm start and arrival (drift-like ease), the speed for the walk cycle
-    const prog = (a: number, bb: number) => {
-      const u = clamp01((t - a) / (bb - a));
-      const s = 0.35 * u + 0.65 * smoother(u);
-      const du = t > a && t < bb ? (0.35 + 0.65 * 30 * u * u * (u - 1) * (u - 1)) / (bb - a) : 0;
-      return { s, du };
-    };
-    const startH = WORLD_CAM.watch.heading;
     if (t < w2a) {
-      const p = prog(w1a, w1b);
-      c1.getPointAt(p.s, out.pos);
-      out.speed = p.du * c1.getLength();
-      const tan = c1.getTangentAt(Math.min(0.999, Math.max(0.001, p.s)), this.tmp3);
+      // (wave 5) already walking at the cut: slowly up through his sheep (`slow` m/s, his hand on a ewe's back) until
+      // `descend`, then on to the lamb (a Hermite profile: from that pace to a standstill beside it)
+      const L1 = c1.getLength();
+      const s0 = d.slow * Math.max(0, w1a);
+      let dist = d.slow * Math.max(0, t), v = d.slow;
+      if (t > w1a) {
+        const T2 = Math.max(0.3, w1b - w1a), u = clamp01((t - w1a) / T2), R = Math.max(0, L1 - s0), m0 = d.slow * T2;
+        dist = s0 + (-2 * u * u * u + 3 * u * u) * R + (u * u * u - 2 * u * u + u) * m0;
+        v = t < w1b ? ((-6 * u * u + 6 * u) * R + (3 * u * u - 4 * u + 1) * m0) / T2 : 0;
+      }
+      const sN = clamp01(dist / L1);
+      c1.getPointAt(sN, out.pos);
+      out.speed = Math.max(0, v);
+      const tan = c1.getTangentAt(Math.min(0.999, Math.max(0.001, sN)), this.tmp3);
       const toLamb = Math.atan2(lamb.x - out.pos.x, lamb.z - out.pos.z);
-      // on the rock: his gaze on the flock (D3), turning toward the lamb as it bleats; walking: along his way; kneeling:
-      // to the lamb
+      // walking: along his way; arriving: he turns to the lamb and kneels facing it
       const hTan = Math.atan2(tan.x, tan.z);
-      let hd = startH + wrap(toLamb - startH) * 0.55 * ss(b('lamb', 0.3) + 0.35, w1a, t);
-      hd = hd + wrap(hTan - hd) * ss(w1a - 0.15, w1a + 0.45, t);
-      hd = hd + wrap(toLamb - 0.45 - hd) * ss(w1b - 0.5, w1b + 0.1, t);
-      out.heading = hd;
-      out.phase = t < w1a ? 'rock' : t < w1b ? 'walk1' : 'kneel1';
+      out.heading = hTan + wrap(toLamb - hTan) * ss(w1b - 0.45, w1b + 0.15, t);
+      out.phase = t < w1a ? 'flock' : t < w1b ? 'walk1' : 'kneel1';
       return out;
     }
-    const p = prog(w2a, w2b);
-    c2.getPointAt(p.s, out.pos);
-    out.speed = p.du * c2.getLength();
-    const tan = c2.getTangentAt(Math.min(0.999, Math.max(0.001, p.s)), this.tmp3);
+    // the carry: a calm, even pace with the weight in his arms (no hurry), to the ewe
+    const u = clamp01((t - w2a) / (w2b - w2a));
+    const ps = 0.6 * u + 0.4 * smoother(u);
+    c2.getPointAt(ps, out.pos);
+    out.speed = t > w2a && t < w2b ? ((0.6 + 0.4 * 30 * u * u * (u - 1) * (u - 1)) / (w2b - w2a)) * c2.getLength() : 0;
+    const tan = c2.getTangentAt(Math.min(0.999, Math.max(0.001, ps)), this.tmp3);
     const hTan = Math.atan2(tan.x, tan.z);
     const toEwe = Math.atan2(ewe.x - out.pos.x, ewe.z - out.pos.z);
-    const toLamb = Math.atan2(lamb.x - d.kneel1[0], lamb.z - d.kneel1[1]) - 0.45;
-    let hd = toLamb + wrap(hTan - toLamb) * ss(w2a - 0.3, w2a + 0.5, t);
+    const toLamb = Math.atan2(lamb.x - d.kneel1[0], lamb.z - d.kneel1[1]);
+    let hd = toLamb + wrap(hTan - toLamb) * ss(w2a - 0.5, w2a + 0.4, t);
     hd = hd + wrap(toEwe - hd) * ss(w2b - 0.6, w2b + 0.1, t);
-    hd = hd + wrap(HANDOFF.heading - hd) * ss(setDown + d.u2, setDown + d.u2 + 1.6, t);
+    hd = hd + wrap(HANDOFF.heading - hd) * ss(setDown + d.u2 + 0.15, setDown + d.u2 + 1.55, t);
     out.heading = hd;
     out.phase = t < w2b ? 'walk2' : t < setDown + d.u2 ? 'kneel2' : 'stand';
     return out;
@@ -538,13 +582,15 @@ export class FilmWorld {
   private d4Subject(t: number, P: THREE.Vector3, out: THREE.Vector3) {
     const d = WORLD_CAM.d4;
     const b = (k: string, f: number) => takeBeat('horizon', k, f);
-    const lift = b('lift', 5.0), setDown = b('setDown', 11.2), settle = b('settle', 14.6);
+    const desc = b('descend', 1.2), lift = b('lift', 4.0), setDown = b('setDown', 9.0), settle = b('settle', 11.4);
     const head = this.tmp3.set(P.x, P.y + 1.45, P.z);
     out.copy(head);
-    // the lamb on the rocks below him (he goes to it)
+    // among his sheep: his chest and his hand on the ewe's back
+    out.y -= 0.3 * (1 - ss(desc - 0.3, desc + 0.8, t));
+    // the lamb (he goes to it; the gathering framed between his face and his hands)
     const lamb = V(d.lamb[0], 0, d.lamb[1]);
     lamb.y = this.ground(lamb.x, lamb.z) + 0.35;
-    const wLamb = 0.42 * (1 - ss(lift - 0.2, lift + 1.0, t));
+    const wLamb = 0.45 * ss(desc - 0.4, desc + 1.2, t) * (1 - ss(lift + 0.3, lift + 1.3, t));
     out.lerp(lamb, wLamb);
     // with the lamb in his arms: his chest
     out.y -= 0.2 * ss(lift, lift + 1.2, t) * (1 - ss(setDown - 0.4, setDown + 0.6, t));
@@ -574,7 +620,8 @@ export class FilmWorld {
     // the lens round his feet (az / r / h channels); near the end the frame of the hand-off itself (David's final feet)
     const az = crane(K, 1, tt) * DEG, r = crane(K, 2, tt), hh = crane(K, 3, tt);
     out.pos.set(P.x + Math.sin(az) * r, P.y + hh, P.z + Math.cos(az) * r);
-    const gy = this.ground(out.pos.x, out.pos.z) + 0.45;
+    // (wave 5) over the straw (≈0.7 m) until it settles onto the game's camera
+    const gy = this.ground(out.pos.x, out.pos.z) + lerp(1.0, 0.45, ss(takeBeat('horizon', 'settle', 11.4), T - 0.4, tt));
     if (out.pos.y < gy) out.pos.y = gy;
     // the look: at the action's framing point, turned by the biases (sky for the logo, the subject off-centre)
     const S = this.d4Subject(tt, P, this.tmp2);
@@ -655,19 +702,24 @@ export class FilmWorld {
     if (this.staged === 'rachel' || this.staged === 'bethlehem') this.unstage();
     this.hideBear();
     if (take === 'watch' || take === 'horizon') {
-      // D3 / D4: one staging for both (the cut between them is continuous): David on his rock, his flock below him
-      if (this.staged !== 'end') {
-        this.unstage();
-        this.staged = 'end';
-        this.placeDavid(WORLD_CAM.watch.heading, WORLD_CAM.d4.stand);
-        this.stageEnd();
+      // D3 / D4 (wave 5: a staging each — D4 is among his sheep, a cut later): David above his flock / walking through it
+      const key = take === 'watch' ? 'end3' : 'end4';
+      if (this.staged !== key) {
+        if (this.staged !== 'end3' && this.staged !== 'end4') this.unstage();
+        this.staged = key;
+        if (take === 'watch') this.placeDavid(WORLD_CAM.watch.heading, WORLD_CAM.d4.stand);
+        else {
+          const p0 = this.d4Pose(0, this.d4p);
+          this.placeDavid(p0.heading, [p0.pos.x, p0.pos.z]);
+        }
+        this.stageEnd(take);
       }
       if (take === 'watch') this.placeDavid(WORLD_CAM.watch.heading, WORLD_CAM.d4.stand);
       this.lastD4 = -1;
       this.expK = 1;
       return;
     }
-    if (take === 'figure' || take === 'face' || take === 'vista') {
+    if (take === 'figure' || take === 'face' || take === 'vista' || take === 'glimpse:rock' || take === 'glimpse:hand') {
       this.placeDavid();
       if (this.staged !== 'david') {
         this.unstage();
@@ -733,7 +785,7 @@ export class FilmWorld {
     const e = this.cast.ewe;
     if (e) this.setPusher(4, e.position.x, e.position.z, 1.4);
     const n = this.cast.nurseEwe;
-    if (n && this.staged === 'end') this.setPusher(5, n.position.x, n.position.z, 1.3);
+    if (n && (this.staged === 'end3' || this.staged === 'end4')) this.setPusher(5, n.position.x, n.position.z, 1.3);
   }
 
   /** spare grass pushers 3-5 back to rest (gameplay uses 0-2) */
@@ -755,6 +807,8 @@ export class FilmWorld {
 
   /** The film leaves the world for a film set / black: the world's own exposure comes back first. */
   suspend() {
+    this.restoreGlimpseGrade();
+    this.h.player.model.filmGripOpen = false;
     this.restoreExposure();
   }
 
@@ -762,6 +816,10 @@ export class FilmWorld {
   tick(take: string, t: number, dt: number) {
     const { player } = this.h;
     const m = player.model;
+    if (take !== 'glimpse:rock' && take !== 'glimpse:hand') {
+      this.restoreGlimpseGrade();
+      m.filmGripOpen = false;
+    }
     this.setExposure(this.expK);
     this.tickBirds(take, t);
     switch (take) {
@@ -785,6 +843,15 @@ export class FilmWorld {
         this.ff.tick(t, dt, this.h.engine.camera);
         return;
       }
+      case 'glimpse:rock':
+      case 'glimpse:hand':
+        // F1 / F2 (wave 5): the boy of D1, seen only in flashes; the grade cooler and softer (restored on the next cut)
+        this.clearPushers();
+        m.performFilm('back', 1.2 + t, { wind: 2.4 });
+        m.filmGripOpen = take === 'glimpse:hand' && t < WORLD_CAM.glimpseHand.close;
+        this.applyGlimpseGrade();
+        this.ff.tick(t, dt, this.h.engine.camera);
+        return;
       case 'figure':
         this.clearPushers();
         m.performFilm('back', t);
@@ -841,7 +908,7 @@ export class FilmWorld {
    * her flank, a ewe with her lamb, a goat on a boulder, the two rams, and the rest of the flock grazing on the slope in
    * D3's lens (FilmFlock.stageInView, line of sight).
    */
-  private stageEnd() {
+  private stageEnd(take: string) {
     const { flock } = this.h;
     const d = WORLD_CAM.d4;
     const S = D3_STAGE;
@@ -864,37 +931,50 @@ export class FilmWorld {
     };
     // the newborn on the rocks below his rock, and its mother further down looking up the slope toward it
     if (lamb.state === 'carried') this.releaseLamb(true);
-    put(lamb, d.lamb[0], d.lamb[1], 0.9);
+    put(lamb, d.lamb[0], d.lamb[1], Math.atan2(d.kneel1[0] - d.lamb[0], d.kneel1[1] - d.lamb[1]) + Math.PI / 2);
     (lamb as unknown as { graze: number }).graze = 0;
-    if (ewe) put(ewe, d.ewe[0], d.ewe[1], Math.atan2(d.lamb[0] - d.ewe[0], d.lamb[1] - d.ewe[1]));
+    this.lambPhase = 'ground';
+    if (ewe) put(ewe, d.ewe[0], d.ewe[1], Math.atan2(d.kneel2[0] - d.ewe[0], d.kneel2[1] - d.ewe[1]) + 0.5);
+    const S4 = D4_STAGE;
+    const forD4 = take === 'horizon';
     // "ewes and their lambs": two more lambs born to two ewes (kept in the game's flock afterwards)
     const lambs = this.ensureLambs(sheep);
     const [ewB, ewC] = [lambs[0]?.mother ?? null, lambs[1]?.mother ?? null];
+    const SN = forD4 ? S4.nurse : S.nurse, SE = forD4 ? S4.ewe2 : S.ewe2, SG = forD4 ? S4.goat : S.goatRock, SR = forD4 ? S4.rams : S.rams;
     if (ewB && lambs[0]) {
-      put(ewB, S.nurse[0], S.nurse[1], S.nurse[2]);
-      put(lambs[0], S.nurse[0] + 0.6, S.nurse[1] - 0.4, S.nurse[2] + Math.PI);
+      put(ewB, SN[0], SN[1], SN[2]);
+      put(lambs[0], SN[0] + 0.6, SN[1] - 0.4, SN[2] + Math.PI);
       lambs[0].nurse = ewB;
       lambs[0].nurseFor = 1e9;
     }
     if (ewC && lambs[1]) {
-      put(ewC, S.ewe2[0], S.ewe2[1], S.ewe2[2]);
-      put(lambs[1], S.ewe2[0] + 0.9, S.ewe2[1] + 0.5, S.ewe2[2] - 0.5);
+      put(ewC, SE[0], SE[1], SE[2]);
+      put(lambs[1], SE[0] + 0.9, SE[1] + 0.5, SE[2] - 0.5);
     }
     // a goat on a boulder (a rock collider with a top: its flat top)
     const goat = flock.animals.find((a) => a.kind === 'goat' && !used.includes(a)) ?? null;
     if (goat) {
       // on the rock's top (the world's placed rocks: the low limestone slabs have no collider)
       const placed = (this.h.engine as unknown as { rocks?: { placed?: { x: number; z: number; s: number; h: number }[] } }).rocks?.placed ?? [];
-      const pr = placed.find((r) => Math.hypot(r.x - S.goatRock[0], r.z - S.goatRock[1]) < 1.2);
-      if (pr) put(goat, pr.x, pr.z, S.goatRock[2], Math.max(0, pr.h - 0.05));
-      else put(goat, S.goatRock[0], S.goatRock[1], S.goatRock[2]);
+      const pr = placed.find((r) => Math.hypot(r.x - SG[0], r.z - SG[1]) < 1.2);
+      if (pr) put(goat, pr.x, pr.z, SG[2], Math.max(0, pr.h - 0.05));
+      else put(goat, SG[0], SG[1], SG[2]);
     }
     // the rams
     const rams = flock.animals.filter((a) => a.kind === 'ram' && !used.includes(a));
-    S.rams.forEach((r, i) => {
+    SR.forEach((r, i) => {
       if (rams[i]) put(rams[i], r[0], r[1], r[2]);
     });
-    this.cast = { ewe, lambs, nurseEwe: ewB, goat };
+    // D4: the ewe walking at his left, his hand on her back (tickCast walks her)
+    let guide: Animal | null = null;
+    if (forD4) {
+      guide = flock.animals.find((a) => a.kind === 'sheep' && !used.includes(a)) ?? null;
+      if (guide) {
+        const g = this.guidePos(0, this.guideV);
+        put(guide, g.x, g.z, this.guideHeading);
+      }
+    }
+    this.cast = { ewe, lambs, nurseEwe: ewB, goat, guide };
     // (v9 review) the bush 3.5 m below his stand filled D3's frame: hidden for D3 / D4 (put back when the film leaves —
     // at the hand-off it is just outside the game camera's view)
     if (!this.restoreTrees) {
@@ -905,6 +985,35 @@ export class FilmWorld {
       } catch (e) {
         console.warn('[film] D3 bush', e);
       }
+    }
+    if (forD4) {
+      // D4: the rest of the flock round him in the lens (the light behind them), clear of his way and of the lamb's spots
+      const cam4 = this.stageLens('horizon', 2.0);
+      const lensTrack: THREE.Vector3[] = [];
+      const fr = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: 40, roll: 0 };
+      for (const tl of [0, 1.5, 3, 4, 5, 6.5, 8, 9.5, 11, 12.5]) {
+        this.horizonFrame(tl, fr);
+        lensTrack.push(fr.pos.clone());
+      }
+      this.d4Pose(0, this.d4p);
+      const segs = [d.start, ...d.wayDown, d.kneel1, ...d.wayOn, d.kneel2, d.lamb, d.ewe];
+      const avoid = (x: number, z: number) => {
+        for (let i = 0; i + 1 < 6; i++) {
+          const a = segs[i], c = segs[i + 1];
+          const vx = c[0] - a[0], vz = c[1] - a[1], L2 = vx * vx + vz * vz || 1;
+          const u = Math.max(0, Math.min(1, ((x - a[0]) * vx + (z - a[1]) * vz) / L2));
+          if (Math.hypot(x - a[0] - vx * u, z - a[1] - vz * u) < 1.1) return true;
+        }
+        if (Math.hypot(x - d.lamb[0], z - d.lamb[1]) < 1.4 || Math.hypot(x - d.ewe[0], z - d.ewe[1]) < 1.6) return true;
+        for (const L of lensTrack) if (Math.hypot(x - L.x, z - L.z) < 2.6) return true;
+        return false;
+      };
+      try {
+        this.ff.stageInView(cam4, this.feet, { near: 4.0, far: 18, max: 11, clear: 0.12, spacing: 1.5, yMin: -0.8, minFrom: this.feet, minDist: 1.2, maxDist: 12, avoid, exclude: used.concat(guide ? [guide] : []), sheepFirst: true, walk: 0.12 });
+      } catch (e) {
+        console.warn('[film] D4 flock staging', e);
+      }
+      return;
     }
     // the rest of the flock in D3's lens: on the slope below him, in sight, 8-32 m from him
     const cam = this.stageLens('watch', 3.5);
@@ -959,6 +1068,17 @@ export class FilmWorld {
       }
       return;
     }
+    // D4: the ewe at his side (his hand on her back), then grazing where she stopped
+    const g = c.guide;
+    if (g) {
+      const gp = this.guidePos(t, this.guideV);
+      g.aiEnabled = false;
+      g.position.copy(gp);
+      g.object.position.copy(gp);
+      g.heading = this.guideHeading;
+      g.state = this.guideSpeed > 0.02 ? 'walk' : 'graze';
+      g.manualSpeed = this.guideSpeed;
+    }
     // D4: the bleats (heads up, mouths open: the score plays the sounds — FilmWorld.bleatSound), on crossings
     for (const b of D4_BLEATS) {
       if (this.lastD4 < b.t && t >= b.t && t - b.t < 0.25) {
@@ -998,43 +1118,60 @@ export class FilmWorld {
     const m = player.model;
     const d = WORLD_CAM.d4;
     const b = (k: string, f: number) => takeBeat('horizon', k, f);
-    const lamb0 = b('lamb', 0.3), kneel = b('kneel', 4.2), lift = b('lift', 5.0), setDown = b('setDown', 11.2), settle = b('settle', 14.6);
-    const T = takeDur('horizon', 18);
+    const lamb0 = b('lamb', 0.3), kneel = b('kneel', 3.4), lift = b('lift', 4.0), setDown = b('setDown', 9.0), settle = b('settle', 11.4);
+    const T = takeDur('horizon', 14);
     const pose = this.d4Pose(t, this.d4p);
     this.movePlayer(pose.pos.x, pose.pos.z, pose.heading, pose.speed);
     this.feet.copy(player.pos);
-    // the holds: on the rock (the reference stance, as in D3) · walking · kneeling to the lamb · the cradle · kneeling
-    // to set it down · standing (the game's idle)
+    // the holds: walking through his sheep (the staff in his hand) · kneeling to the lamb · the cradle · kneeling to set
+    // it down · standing (the game's idle)
     const kneel1 = t >= kneel + d.k1 && t < lift + d.u1;
     const kneel2 = t >= setDown + d.k2 && t < setDown + d.u2;
     const carrying = t >= lift + d.u1 && t < setDown + d.k2;
     m.performFilm('gather', t, { releaseAt: settle, endAt: T, wind: 1.6 });
-    m.hold = t < b('descend', 1.4) + d.d0 - 0.25 ? 'hero' : kneel1 || kneel2 ? 'kneel' : carrying ? 'cradle' : 'none';
+    m.hold = kneel1 || kneel2 ? 'kneel' : carrying ? 'cradle' : 'none';
     m.speed = player.speed;
-    // the cradle: the hands reach the lamb on the ground, it rises to his chest as he stands; lowered to the ground at
-    // its mother's side, the hands let go
+    // (wave 5) the gathering, with weight and care: both hands slide under its chest and belly (the trunk bends over it),
+    // it comes up level and in to his chest (the legs hanging, then folding under it), a breath with it held close, then
+    // he rises under its weight (the chest back, the head down to it); set down: lowered, the legs reaching for the
+    // ground, the hands let go
     const reachIn = ss(lift + d.r0, lift - 0.02, t), reachOut = 1 - ss(setDown + d.s2, setDown + d.s2 + 0.45, t);
     m.cradleReach = Math.min(reachIn, reachOut);
-    m.cradleBend = Math.max(ss(kneel + d.k1 + 0.2, lift + d.r0 + 0.1, t) * (1 - ss(lift + 0.25, lift + d.u1 + 0.4, t)), ss(setDown + d.k2 + 0.25, setDown + d.s0 + 0.3, t) * (1 - ss(setDown + d.s2, setDown + d.u2 + 0.3, t)));
+    m.cradleBend = Math.max(
+      ss(kneel + d.k1 + 0.15, lift + d.r0 + 0.2, t) * (1 - ss(lift + 0.35, lift + d.l1, t)),
+      ss(setDown + d.k2 + 0.2, setDown + d.s0 + 0.25, t) * (1 - ss(setDown + d.s2, setDown + d.u2 + 0.3, t)),
+    );
+    const rise = lift + d.u1;
+    m.cradleEffort = Math.max(0.55 * ss(lift, lift + 0.45, t) * (1 - ss(lift + 0.7, rise, t)), ss(rise - 0.1, rise + 0.45, t) * (1 - ss(rise + 0.8, rise + 1.5, t)));
     m.staffCrookW = ss(kneel + d.k1 - 0.15, kneel + d.k1 + 0.45, t) * (1 - ss(setDown + d.u2 + 0.1, setDown + d.u2 + 0.75, t));
+    // his right hand on the back of the ewe walking at his side (the staff in his left), until he goes to the lamb
+    const guide = this.cast.guide;
+    if (guide && t < d.guideOff + 0.6) {
+      m.filmHandR = guide.backGrip.getWorldPosition(this.handV);
+      m.filmHandR.y += 0.04;
+      m.filmHandRW = ss(0.0, 0.3, t) * (1 - ss(d.guideOff - 0.35, d.guideOff + 0.05, t));
+    } else {
+      m.filmHandR = null;
+      m.filmHandRW = 0;
+    }
     this.syncLamb(t);
-    // where he looks: the lamb (from its first bleat) · the way · the lamb in his arms now and then · its mother · the lamb
-    // nursing · out over his flock
+    // where he looks: out over his flock as he walks · the lamb (from its bleat) · the lamb in his arms · his way and its
+    // mother, with a look down to the lamb · the lamb at her flank · out over his flock and the valley
     const look = this.lookV;
     const lambW = this.d4Lamb(this.lambV);
     lambW.y += 0.3;
-    if (t < lamb0 + 0.25) m.lookTarget = null;
-    else if (t < lift + d.u1 + 0.2) m.lookTarget = look.copy(lambW);
+    const over = V(player.pos.x + Math.sin(HANDOFF.heading) * 14, player.pos.y - 2.4, player.pos.z + Math.cos(HANDOFF.heading) * 14);
+    if (t < lamb0 + 0.55) m.lookTarget = look.copy(over);
+    else if (t < rise + 0.9) m.lookTarget = look.copy(lambW);
     else if (t < setDown + d.u2 + 0.9) {
-      const glance = ss(7.3, 7.6, t) * (1 - ss(8.3, 8.6, t)) + ss(9.6, 9.9, t) * (1 - ss(10.2, 10.5, t));
+      const glance = ss(rise + 1.7, rise + 2.0, t) * (1 - ss(rise + 2.6, rise + 2.9, t));
       const ewe = V(d.ewe[0], this.ground(d.ewe[0], d.ewe[1]) + 0.55, d.ewe[1]);
       const ahead = V(player.pos.x + Math.sin(pose.heading) * 6, player.pos.y - 0.6, player.pos.z + Math.cos(pose.heading) * 6);
-      ahead.lerp(ewe, ss(lift + d.w0 + 1.2, setDown - 1.2, t));
+      ahead.lerp(ewe, ss(lift + d.w0 + 0.6, setDown - 0.9, t));
       if (t > setDown + d.k2 - 0.2) ahead.copy(lambW);
       m.lookTarget = look.copy(ahead).lerp(lambW, glance * 0.85);
     } else {
-      const out = V(player.pos.x + Math.sin(HANDOFF.heading) * 14, player.pos.y - 1.6, player.pos.z + Math.cos(HANDOFF.heading) * 14);
-      m.lookTarget = look.copy(lambW).lerp(out, ss(settle + d.g0, settle + d.g0 + 1.4, t));
+      m.lookTarget = look.copy(lambW).lerp(over, ss(settle + d.g0, settle + d.g0 + 1.4, t));
       if (t > settle + 1.2) m.lookTarget = null;
     }
     this.ff.tick(t, dt, this.h.engine.camera);
@@ -1042,6 +1179,27 @@ export class FilmWorld {
     this.lastD4 = t;
     void flock;
   }
+  private readonly handV = new THREE.Vector3();
+  private readonly guideV = new THREE.Vector3();
+  private readonly gp = { pos: new THREE.Vector3(), heading: 0, speed: 0, phase: '' };
+  private guideHeading = 0;
+  private guideSpeed = 0;
+  /** D4: the ewe walking at his left with his hand on her back (seek-safe); after he lets go she walks on a step and
+   *  stops to graze */
+  private guidePos(t: number, out: THREE.Vector3): THREE.Vector3 {
+    const d = WORLD_CAM.d4;
+    const p = this.d4Pose(Math.min(t, d.guideOff), this.gp);
+    const h = p.heading, fx = Math.sin(h), fz = Math.cos(h);
+    out.set(p.pos.x - Math.cos(h) * d.guide[0] + fx * d.guide[1], 0, p.pos.z + Math.sin(h) * d.guide[0] + fz * d.guide[1]);
+    const tau = Math.min(Math.max(0, t - d.guideOff), 1.2);
+    out.x += fx * 0.5 * (tau - (tau * tau) / 2.4);
+    out.z += fz * 0.5 * (tau - (tau * tau) / 2.4);
+    out.y = this.ground(out.x, out.z);
+    this.guideHeading = h;
+    this.guideSpeed = t < d.guideOff ? p.speed : 0.5 * Math.max(0, 1 - tau / 1.2);
+    return out;
+  }
+  private readonly lookFaceV = new THREE.Vector3();
 
   /**
    * D4: the newborn lamb's state from the shot time (seek-safe): on the ground at its spot (bleating, looking at him as
@@ -1053,7 +1211,7 @@ export class FilmWorld {
     const m = player.model;
     const lamb = flock.lamb;
     const d = WORLD_CAM.d4;
-    const lift = takeBeat('horizon', 'lift', 5.0), setDown = takeBeat('horizon', 'setDown', 11.2);
+    const lift = takeBeat('horizon', 'lift', 4.0), setDown = takeBeat('horizon', 'setDown', 9.0);
     const want = t < lift - 0.02 ? 'ground' : t < setDown + d.s2 ? 'arms' : 'free';
     if (want !== this.lambPhase) {
       if (want === 'ground') {
@@ -1061,12 +1219,13 @@ export class FilmWorld {
         lamb.nurse = null;
         lamb.position.set(d.lamb[0], this.ground(d.lamb[0], d.lamb[1]), d.lamb[1]);
         lamb.object.position.copy(lamb.position);
-        lamb.heading = 0.9;
+        // (wave 5) standing side-on to where he will kneel (his hands go under its chest and belly; no turn at the lift)
+        lamb.heading = Math.atan2(d.kneel1[0] - d.lamb[0], d.kneel1[1] - d.lamb[1]) + Math.PI / 2;
       } else if (want === 'arms') {
         lamb.nurse = null;
         // its pose where it stands (the cradle blends from it)
         const L0 = V(d.lamb[0], this.ground(d.lamb[0], d.lamb[1]), d.lamb[1]);
-        const toHim = Math.atan2(player.pos.x - L0.x, player.pos.z - L0.z) + Math.PI / 2;
+        const toHim = Math.atan2(d.kneel1[0] - L0.x, d.kneel1[1] - L0.z) + Math.PI / 2;
         this.lambFrom.compose(L0, new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), toHim), V(lamb.size, lamb.size, lamb.size));
         lamb.setCarried('arms');
         const rc = (lamb as unknown as { rig: { center: number[] } }).rig.center;
@@ -1086,8 +1245,8 @@ export class FilmWorld {
       // alone on the rocks: it bleats (tickCast), its head turns to him as he comes, a hesitant step
       const al = lamb as unknown as { alert: number; alertDir: number; graze: number };
       lamb.aiEnabled = false;
-      lamb.state = t > 2.4 && t < 2.9 ? 'walk' : 'graze';
-      lamb.manualSpeed = t > 2.4 && t < 2.9 ? 0.18 : 0;
+      lamb.state = 'graze';
+      lamb.manualSpeed = 0;
       al.graze = 0;
       al.alert = t > takeBeat('horizon', 'lamb', 0.3) + 0.6 ? 1 : 0.4;
       al.alertDir = Math.atan2(player.pos.x - lamb.position.x, player.pos.z - lamb.position.z);
@@ -1095,6 +1254,14 @@ export class FilmWorld {
       // lifted with him as he rises; lowered at its mother's side (the ground pose there, facing her)
       const up = ss(lift, lift + d.l1, t);
       const down = ss(setDown + d.s0, setDown + d.s1, t);
+      // (wave 5) alive in his hands: the legs hang and paddle as it leaves the ground and fold as it comes to his chest;
+      // they reach for the ground as it is set down; it looks up at his face, then about; toward its mother at the end
+      lamb.cradleFold = ss(lift + 0.3, lift + d.l1 + 0.15, t) * (1 - ss(setDown + d.s0 - 0.1, setDown + d.s1 - 0.1, t));
+      lamb.cradleStir = 0.7 * (1 - ss(lift + 0.45, lift + d.l1 + 0.3, t)) + 0.5 * ss(setDown + d.s0 - 0.2, setDown + d.s1, t);
+      const face = m.human?.sockets?.eyeL;
+      if (t < lift + d.u1 + 0.6 && face) lamb.cradleLook = face.getWorldPosition(this.lookFaceV);
+      else if (t > setDown - 1.0 && this.cast.ewe) lamb.cradleLook = this.lookFaceV.copy(this.cast.ewe.position).setY(this.cast.ewe.position.y + 0.55);
+      else lamb.cradleLook = null;
       if (down > 0) {
         const fw = V(d.ewe[0] - d.kneel2[0], 0, d.ewe[1] - d.kneel2[1]).normalize();
         const L1 = V(d.kneel2[0] + fw.x * d.setDownD, 0, d.kneel2[1] + fw.z * d.setDownD);
@@ -1114,7 +1281,13 @@ export class FilmWorld {
     if (m.cradle) m.cradle = null;
     m.cradleReach = 0;
     m.cradleBend = 0;
+    m.cradleEffort = 0;
     m.staffCrookW = 0;
+    m.filmHandR = null;
+    m.filmHandRW = 0;
+    lamb.cradleFold = 1;
+    lamb.cradleStir = 0;
+    lamb.cradleLook = null;
     if (lamb.state === 'carried' && lamb.carryMode === 'arms') {
       if (lamb.object.parent !== flock.group) flock.group.attach(lamb.object);
       lamb.setCarried('none');
@@ -1130,7 +1303,8 @@ export class FilmWorld {
    * narrow lens toward it — Intro.portrait). null = use the focus point.
    */
   subject(take: string, out: THREE.Vector3): THREE.Vector3 | null {
-    if (take === 'figure') return out.copy(this.rock).add(V(0, 1.35, 0));
+    if (take === 'figure' || take === 'glimpse:rock') return out.copy(this.rock).add(V(0, 1.35, 0));
+    if (take === 'glimpse:hand') return this.handOf(out);
     if (take === 'watch') return out.copy(this.feet).add(V(0, 0.4, 0)).addScaledVector(V(Math.sin(WORLD_CAM.watch.heading), 0, Math.cos(WORLD_CAM.watch.heading)), 4.5).setY(this.feet.y + 0.2);
     if (take === 'horizon') return out.copy(this.feet).add(V(0, 1.1, 0));
     if (take === 'bethlehem') return out.set(LAYOUT.bethlehem.x, this.ground(LAYOUT.bethlehem.x, LAYOUT.bethlehem.z) + 6, LAYOUT.bethlehem.z);
@@ -1153,6 +1327,10 @@ export class FilmWorld {
       }
       case 'face':
         return { point: eye(this.tmp), fStop: 1.8 };
+      case 'glimpse:rock':
+        return { point: this.tmp.copy(this.rock).add(V(0, 1.2, 0)), fStop: WORLD_CAM.glimpseRock.fStop };
+      case 'glimpse:hand':
+        return { point: this.handOf(this.tmp), fStop: WORLD_CAM.glimpseHand.fStop };
       case 'watch': {
         // on the flock below (the nursing ewe), racking back to him at beats.rack
         const c = WORLD_CAM.watch;
@@ -1392,6 +1570,38 @@ export class FilmWorld {
     s.dispose();
   }
 
+  /** F2: his staff hand (world) */
+  private handOf(out: THREE.Vector3): THREE.Vector3 {
+    const j = (this.h.player.model as unknown as { j?: Record<string, THREE.Object3D> }).j;
+    if (j?.hdL) return j.hdL.getWorldPosition(out);
+    return out.copy(this.rock).add(V(0, 1.05, 0)).addScaledVector(this.side, -0.3);
+  }
+
+  /** F1 / F2: the flashes' grade over the current one (saved once, given back by restoreGlimpseGrade) */
+  private glimpse0: { warm: number; sat: number; contrast: number; desat: number; vignette: number } | null = null;
+  private applyGlimpseGrade() {
+    const u = this.h.engine.post.grade.uniforms;
+    if (!this.glimpse0) this.glimpse0 = { warm: u.uWarm.value, sat: u.uSaturation.value, contrast: u.uContrast.value, desat: u.uDesat.value, vignette: u.uVignette.value };
+    const g = WORLD_CAM.glimpseGrade, s0 = this.glimpse0;
+    u.uWarm.value = s0.warm + g.warm;
+    u.uSaturation.value = s0.sat * g.sat;
+    u.uContrast.value = s0.contrast * g.contrast;
+    u.uDesat.value = Math.min(1, s0.desat + g.desat);
+    u.uVignette.value = s0.vignette + g.vignette;
+    this.setExposure(this.expK * g.exp);
+  }
+  private restoreGlimpseGrade() {
+    const s0 = this.glimpse0;
+    if (!s0) return;
+    const u = this.h.engine.post.grade.uniforms;
+    u.uWarm.value = s0.warm;
+    u.uSaturation.value = s0.sat;
+    u.uContrast.value = s0.contrast;
+    u.uDesat.value = s0.desat;
+    u.uVignette.value = s0.vignette;
+    this.glimpse0 = null;
+  }
+
   /** world exposure × k (k = 1 restores the world's own) */
   private setExposure(k: number) {
     const r = this.h.engine.renderer;
@@ -1425,7 +1635,7 @@ export class FilmWorld {
     const { player, flock, bear } = this.h;
     this.clearPushers();
     this.stopSmoke();
-    const ended = this.staged === 'end';
+    const ended = this.staged === 'end3' || this.staged === 'end4';
     if (handoff && ended) {
       this.ff.release();
     } else {
@@ -1439,6 +1649,8 @@ export class FilmWorld {
       this.stageForPlay();
     }
     this.putTreesBack();
+    this.restoreGlimpseGrade();
+    player.model.filmGripOpen = false;
     this.restoreExposure();
     this.releaseLamb(false);
     player.model.performFilm(null);

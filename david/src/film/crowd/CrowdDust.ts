@@ -178,6 +178,8 @@ export class CrowdDust {
     if (emitted) {
       for (const at of [this.attrA, this.attrB]) {
         at.clearUpdateRanges();
+        // (wave 5) puffs written by emit() since the last upload stay in the upload
+        for (const i of this.pending) at.addUpdateRange(i * 4, 4);
         const start = this.lo, end = this.lo + emitted;
         if (end <= this.cap) at.addUpdateRange(start * 4, emitted * 4);
         else {
@@ -186,6 +188,32 @@ export class CrowdDust {
         }
         at.needsUpdate = true;
       }
+    }
+    this.pending.length = 0;
+  }
+  private readonly pending: number[] = [];
+
+  /**
+   * (host1, wave 5) one puff at a given foot — the full actors of the host's vanguard emit where a foot actually came
+   * down (MocapPlayer.onFootstep); (fx, fz) = the walker's forward, `size` ≈ his height scale. Written now, aged with
+   * the others (the next update uploads it).
+   */
+  emit(x: number, y: number, z: number, fx: number, fz: number, size = 1) {
+    const i = this.head;
+    this.head = (this.head + 1) % this.cap;
+    const o = i * 4;
+    this.a[o] = x + fx * 0.05;
+    this.a[o + 1] = y;
+    this.a[o + 2] = z + fz * 0.05;
+    this.a[o + 3] = this.uniforms.uTime.value;
+    this.b[o] = -fx * (0.2 + this.rnd() * 0.3) + (this.rnd() - 0.5) * 0.4;
+    this.b[o + 1] = -fz * (0.2 + this.rnd() * 0.3) + (this.rnd() - 0.5) * 0.4;
+    this.b[o + 2] = (0.45 + this.rnd() * 0.5) * size;
+    this.b[o + 3] = this.rnd() * 100;
+    this.pending.push(i);
+    for (const at of [this.attrA, this.attrB]) {
+      at.addUpdateRange(i * 4, 4);
+      at.needsUpdate = true;
     }
   }
 

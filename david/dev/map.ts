@@ -1,9 +1,9 @@
-// dev/map.html — the realistic 3D map of CUT v5 (src/film/map/MapSet.ts) alone through the game's PostFX, with the
+// dev/map.html — the realistic 3D map of CUT v6 (P4) (src/film/map/MapSet.ts) alone through the game's PostFX, with the
 // film's letterbox and its label layer: iterate on the look / camera / route / labels without the whole film.
 //
-//   ?q=desktop-high|desktop-medium|mobile-high|mobile-low   ?lb=0 (no letterbox)   ?play=exodus|tribes (real time)
+//   ?q=desktop-high|desktop-medium|mobile-high|mobile-low   ?lb=0 (no letterbox)   ?play=exodus (real time)
 //
-// window.__mapH: shot(take, t, frames?) renders take 'exodus' | 'tribes' at shot second t (frames: settle TAA /
+// window.__mapH: shot(take, t, frames?) renders take 'exodus' at shot second t (frames: settle TAA /
 // dt = 1/30 between them); stats(); ready.
 import * as THREE from 'three';
 import '../src/ui/style.css';
@@ -74,7 +74,7 @@ async function boot() {
     post.render(dt);
   };
   const shot = (take: string, t: number, frames = 2) => {
-    filmT = (take === 'tribes' ? 37 : 24) + t;
+    filmT = 14.5 + t; // P4 starts at 14.5 s in CUT v6
     for (let i = 0; i < frames; i++) {
       pose(take, t);
       renderFrame(i === 0 ? 0 : 1 / 30);
@@ -89,7 +89,7 @@ async function boot() {
   const play = params.get('play');
   if (play) {
     let t = 0, last = performance.now();
-    const dur = play === 'tribes' ? 9 : 13;
+    const dur = 10;
     const loop = () => {
       const now = performance.now();
       const dt = Math.min(0.1, (now - last) / 1000);

@@ -2260,6 +2260,7 @@ interface LegState {
 }
 
 const _v = new THREE.Vector3();
+const _cl = new THREE.Vector3(); // (cut8) the cradled lamb's look target in its body frame
 const _q = new THREE.Quaternion();
 const _qi = new THREE.Quaternion();
 const _m = new THREE.Matrix4();
@@ -2323,7 +2324,15 @@ export class Animal {
   nurseFor = 0;
   /** (cut8) standing on a rock: metres added to the ground under its hooves (a flat top — a goat on a boulder) */
   perch = 0;
+  /** (cut8, wave 5) carried in 'arms': 0 = the legs hanging as it is lifted under the chest and belly (or reaching for
+   *  the ground as it is set down), 1 = folded against him in the cradle */
+  cradleFold = 1;
+  /** (cut8, wave 5) carried in 'arms': 0..1 how much it stirs (the legs paddle, the body wriggles) */
+  cradleStir = 0;
+  /** (cut8, wave 5) carried in 'arms': a world point its head turns to (his face; its mother) — null = it looks about */
+  cradleLook: THREE.Vector3 | null = null;
   /** @internal a lamb nurses from her this frame */ suckled = false;
+  /** @internal (cut8) the cradled head's turn */ cradleYaw = 0;
   /** @internal */ sepX = 0;
   /** @internal */ sepZ = 0;
   /** @internal */ lastSafe = new THREE.Vector3();
@@ -3716,29 +3725,45 @@ export class Flock {
       B[B_JAW].rotation.set(bleatK * 0.5 + Math.max(0, Math.sin(time * 7)) * 0.04 * S, 0, 0);
       B[B_TAIL].rotation.set(-0.3, Math.sin(time * 14) * 0.4 * S, 0);
     } else if (a.carryMode === 'arms') {
-      // (cut8, D4) cradled in David's arms against his chest: the legs folded under it (the forelegs tucked back at the
-      // knee, the hind legs folded forward under the belly), the body soft, the head up at his shoulder looking about,
-      // the ears easy; a small stir now and then
-      const stir = Math.pow(Math.max(0, Math.sin(time * 0.9 + a.id)), 8);
-      B[B_BODY].rotation.set(0.04 * stir, 0, 0.03 * Math.sin(time * 1.3));
+      // (cut8, D4; wave 5) in David's arms: lifted under its chest and belly the legs hang and paddle a little (fold 0),
+      // drawn to his chest they fold under it (the forelegs tucked back at the knee, the hind legs forward under the
+      // belly: fold 1), set down they reach for the ground again; the body soft, a wriggle when it stirs; the head alive —
+      // up to his face, toward its mother, or looking about — the ears easy
+      const f = clamp(a.cradleFold, 0, 1);
+      const fs = f * f * (3 - 2 * f);
+      const stir = Math.max(Math.pow(Math.max(0, Math.sin(time * 0.9 + a.id)), 8), a.cradleStir);
+      B[B_BODY].rotation.set(0.04 * stir + 0.05 * Math.sin(time * 6.1) * a.cradleStir, 0.04 * Math.sin(time * 4.3) * a.cradleStir, 0.03 * Math.sin(time * 1.3));
       for (let l = 0; l < 4; l++) {
         const L = a.legs[l];
-        const sway = Math.sin(time * 1.2 + l * 1.7) * 0.05 + stir * 0.25 * (l % 2 ? 1 : -1);
+        const sg = l % 2 ? 1 : -1;
+        const sway = Math.sin(time * 1.2 + l * 1.7) * 0.05 + stir * 0.25 * sg;
+        // the hanging legs: down under gravity, a little bent, paddling when it stirs
+        const pad = Math.sin(time * (7.5 + l * 0.9) + l * 1.9) * 0.35 * a.cradleStir;
+        const bend = 0.18 + 0.4 * Math.max(0, Math.sin(time * (7.5 + l * 0.9) + l * 1.9 + 1.1)) * a.cradleStir;
         if (L.front) {
-          B[legBone(l, 0)].rotation.set(CRADLED.front[0] + sway, 0, (l % 2 ? 1 : -1) * 0.08);
-          B[legBone(l, 1)].rotation.set(CRADLED.front[1], 0, 0);
-          B[legBone(l, 2)].rotation.set(CRADLED.front[2], 0, 0);
+          B[legBone(l, 0)].rotation.set(lerp(0.1 + pad, CRADLED.front[0] + sway, fs), 0, sg * lerp(0.05, 0.08, fs));
+          B[legBone(l, 1)].rotation.set(lerp(bend, CRADLED.front[1], fs), 0, 0);
+          B[legBone(l, 2)].rotation.set(lerp(bend * 0.5, CRADLED.front[2], fs), 0, 0);
         } else {
-          B[legBone(l, 0)].rotation.set(CRADLED.hind[0] + sway * 0.6, 0, (l % 2 ? 1 : -1) * 0.1);
-          B[legBone(l, 1)].rotation.set(CRADLED.hind[1], 0, 0);
-          B[legBone(l, 2)].rotation.set(CRADLED.hind[2], 0, 0);
+          B[legBone(l, 0)].rotation.set(lerp(-0.08 + pad * 0.8, CRADLED.hind[0] + sway * 0.6, fs), 0, sg * lerp(0.06, 0.1, fs));
+          B[legBone(l, 1)].rotation.set(lerp(-bend, CRADLED.hind[1], fs), 0, 0);
+          B[legBone(l, 2)].rotation.set(lerp(bend * 0.5, CRADLED.hind[2], fs), 0, 0);
         }
       }
-      a.neckPitch = damp(a.neckPitch, CRADLED.neck + Math.sin(time * 0.5) * 0.06 - bleatK * 0.35, 3, dt);
-      const look = Math.sin(time * 0.41 + a.id) * 0.3 + Math.sin(time * 1.07) * 0.08;
-      B[B_NECK1].rotation.set(a.neckPitch * 0.5, look * 0.3, 0);
-      B[B_NECK2].rotation.set(a.neckPitch * 0.5, look * 0.3, 0);
-      B[B_HEAD].rotation.set(CRADLED.head - bleatK * 0.25, look * 0.4, 0.08 * Math.sin(time * 0.63));
+      // the head: toward cradleLook (in the body's own frame), else looking about
+      let yaw = Math.sin(time * 0.41 + a.id) * 0.3 + Math.sin(time * 1.07) * 0.08;
+      let pitch = CRADLED.neck + Math.sin(time * 0.5) * 0.06;
+      if (a.cradleLook) {
+        const lp = _cl.copy(a.cradleLook);
+        B[B_BODY].worldToLocal(lp);
+        yaw = clamp(Math.atan2(lp.x, lp.z), -1.0, 1.0) + Math.sin(time * 1.3) * 0.05;
+        pitch = clamp(-Math.atan2(lp.y - 0.25, Math.hypot(lp.x, lp.z)), -0.9, 0.5);
+      }
+      a.neckPitch = damp(a.neckPitch, pitch - bleatK * 0.35, 4, dt);
+      a.cradleYaw = damp(a.cradleYaw, yaw, 4, dt);
+      B[B_NECK1].rotation.set(a.neckPitch * 0.5, a.cradleYaw * 0.3, 0);
+      B[B_NECK2].rotation.set(a.neckPitch * 0.5, a.cradleYaw * 0.3, 0);
+      B[B_HEAD].rotation.set(CRADLED.head - bleatK * 0.25, a.cradleYaw * 0.4, 0.08 * Math.sin(time * 0.63));
       B[B_JAW].rotation.set(bleatK * 0.45, 0, 0);
       B[B_TAIL].rotation.set(0.15, Math.sin(time * 20) * 0.3 * stir, 0);
     } else {
