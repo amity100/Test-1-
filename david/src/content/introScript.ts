@@ -253,11 +253,11 @@ export const VERDICT_WORDS: readonly IntroWord[] = [
 ];
 
 // ---------------------------------------------------------------------------------------------------------
-// THE FILM (CUT v5.1, 139 s; the user, 4 Oct: the Philistines longer and clear from the first frame, the tribes not rushed —
-// P5 9 -> 10.5 s, P6 7 -> 10 s) — PROLOGUE 0-65.5 (the land · Bethlehem · Rachel · the map · the Philistines · Ramah) ·
-// 1 Gilgal 65.5-76 · 2 the spear and the silence 76-85 · 3 the tear 85-94 · 4 the verdict 94-103 · 5 David 103-113 ·
-// 6 the flock, the lamb and the logo 113-139, then the game
-// 5 David 98.5-108.5 · 6 the flock, the lamb and the logo 108.5-134.5, then the game
+// THE FILM (CUT v5.2, 141.5 s; the user, 4 Oct: the Philistines longer and clear from the first frame, the tribes not rushed —
+// P5 9 -> 10.5 s, P6 7 -> 10 s; Samuel not rushed at Gilgal and the reason he turns to go on screen — G4 4 -> 6.5 s with
+// 15:26) — PROLOGUE 0-65.5 (the land · Bethlehem · Rachel · the map · the Philistines · Ramah) · 1 Gilgal 65.5-76 ·
+// 2 the spear and Samuel 76-87.5 · 3 the tear 87.5-96.5 · 4 the verdict 96.5-105.5 · 5 David 105.5-115.5 ·
+// 6 the flock, the lamb and the logo 115.5-141.5, then the game
 // ---------------------------------------------------------------------------------------------------------
 export const INTRO_SHOTS: readonly IntroShot[] = [
   // ================================================================== PROLOGUE (CUT v5, 61 s): a general idea — where, when, and how
@@ -389,11 +389,19 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
       + 'to feel it.',
   },
   {
-    id: 'silence', n: 'G4', set: 'gilgal', take: 'silence', dur: 4.0, cut: 'cut', cue: 'silence', beat: 'saul-hall',
-    beats: { roarCut: 0.0, headsTurn: 0.4, part: 1.0, card: 1.6, step: 2.8 },
-    text: [{ at: 1.6, seconds: 2.3, kind: 'person', narration: ['samuel'], side: 'right', v: 'top' }],
-    direction: "The roar cuts to silence. A slow push between the soldiers' shoulders: heads turn, men step aside, the "
-      + 'ranks part; Samuel stands in the road, white hair and mantle in the wind, and takes one step forward.',
+    id: 'silence', n: 'G4', set: 'gilgal', take: 'silence', dur: 6.5, cut: 'cut', cue: 'silence', beat: 'saul-hall',
+    // CUT v5.2 (the user: the music must not stop "with a boom" when Samuel comes; nothing too fast to take in): the roar
+    // ebbs away (its echo in the valley) instead of stopping dead · Samuel steps forward and stands before Saul ·
+    // verse: his answer (15:26) — the reason he turns to go in G5a (15:27)
+    beats: { roarCut: 0.0, headsTurn: 0.4, part: 1.0, card: 1.6, step: 2.8, verse: 3.0 },
+    text: [
+      { at: 1.6, seconds: 2.3, kind: 'person', narration: ['samuel'], side: 'right', v: 'top' },
+      { at: 3.0, seconds: 3.4, kind: 'verse', quote: 's1_15_26_rejected_film', stagger: 0.16, side: 'left', v: 'top', lines: 2 },
+    ],
+    direction: "The roar ebbs into the valley's echo and a hush. A slow push between the soldiers' shoulders: heads turn, "
+      + 'men step aside, the ranks part; Samuel stands in the road, white hair and mantle in the wind, takes one step '
+      + 'forward and stands before Saul (the lens is Saul\'s eye-line); his answer, 15:26, comes up beside him — then he '
+      + 'turns to go (G5a).',
   },
 
   // ================================================================== 3 · THE TEAR (9 s)
@@ -548,5 +556,5 @@ export const INTRO_CUES: readonly IntroCue[] = introCues(false);
 /** Kept for API compatibility (the score's tests import it): identical to INTRO_CUES. */
 export const INTRO_CUES_SHORT: readonly IntroCue[] = INTRO_CUES;
 
-/** Total length of the film (CUT v5.1: 139 s — the prologue, Gilgal, David; the lamb and the logo are its last shot). */
+/** Total length of the film (CUT v5.2: 141.5 s — the prologue, Gilgal, David; the lamb and the logo are its last shot). */
 export const INTRO_LENGTH = introLength(INTRO_CUES);

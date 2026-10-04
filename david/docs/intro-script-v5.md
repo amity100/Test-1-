@@ -180,3 +180,33 @@ tier).
 Same cut on every device. Portrait (390×844) and landscape (844×390) framings for every new shot (portraitLens where
 a subject must stay in frame); budgets per tier as before (8M / 5M / 2.5M / 1.5M triangles per frame incl. shadows);
 the map light on mobile-low.
+
+## CUT v5.1 / v5.2 — the user's notes of 4 Oct (binding; the numbers are in `src/content/introScript.ts`)
+
+> "לגבי הסרטון בחלק שרואים את הפלישתים אני צריך שזה יהיה יותר ברור מההתחלה ויראה יותר טוב כי כרגע בהתחלה זה נראה
+> רינדור לא מוצלח בכלל... וזה צריך להיות גם טיפה יותר זמן החלק הזה של הפלישתים"
+>
+> "וכשרואים את שאול המוזיקה לא אמורה פתאום להיפסק בבום כששמואל מגיע זה מוזר המעבר החד במוזיקה הזאת"
+>
+> "כשרואים את שמואל מדבר עם עוד כמה אנשים האנשים נראים בול כמו שמואל (מדבר על קטע אחר, לא הקטע שהוא בא מול שאול)
+> זה צריך להשתפר"
+>
+> "תעבור על הסרט ממש כעורך וידאו ברמות הכי גבוהות בעולם למשחקי מחשב, ואם יש משהו שרונדר קצת פחות טוב או חיתוך
+> פחות הגיוני תסדר את זה... או אם יש מעבר מהיר מידי והצופה לא מספיק לצפות"
+>
+> (and a phone screenshot: Saul at Gilgal without his lower body — fixed in the engine: humans use standard 4-influence
+> skinning on phones and Apple / mobile GPUs, `?skin=safe|dqs`)
+
+* **P5 'map-tribes' 9 → 10.5 s** (the tribes are not rushed; the map camera is keyed to the beats and stretches with it).
+* **P6 'philistines' 7 → 10 s, re-staged:** it opens ON the host — clear, close, beautiful from its first frame (the
+  front ranks marching out of the dust in the low morning sun: feathered crowns, round shields, spears, bronze glinting),
+  then reveals the column and the plain toward Ashdod and the sea. No high, flat view of the plain at its start.
+* **P7 'elders':** the elders of Israel are many different men, none of them like Samuel — dark, black, brown and
+  grey-streaked hair and beards (only Samuel white), different beard shapes, head-cloths of different colours, mantles
+  of different colours and weaves, different builds and ages (40-70).
+* **G4 'silence' 4 → 6.5 s:** the roar ebbs away (its echo in the valley, the music thinning to a hush and a low drone
+  — never a dead stop "with a boom"); Samuel steps forward and stands before Saul; his answer, 15:26 "כִּי מָאַסְתָּה
+  אֶת־דְּבַר ה׳ וַיִּמְאָסְךָ ה׳ מִהְיוֹת מֶלֶךְ עַל־יִשְׂרָאֵל" (catalog `s1_15_26_rejected_film`), comes up — the reason
+  he turns to go in G5a (15:27). The film is 141.5 s.
+* **The editor's pass:** no shot may start or end on a frame that reads as unfinished (flat fog, soft blobs, a texture
+  grid, a pop); every text event stays long enough to read twice; every cut has a reason (a look, a movement, a sound).
