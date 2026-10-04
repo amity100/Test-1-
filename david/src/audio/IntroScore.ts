@@ -15,8 +15,8 @@
  * the sheet (shot seconds), otherwise from the contract (SYNC below), and is clamped to its shot. Nothing is keyed on
  * absolute film seconds: a retimed sheet stays in sync. How a section is left comes from the NEXT shot's transition
  * (and RING for the musical joins): the blast out of Ramah cuts the bus to silence a breath (GAP) before the frame, the
- * roar is cut ON the frame of the silence, dissolves crossfade over their length, the prologue's joins and David's theme
- * ring on across their cuts. Events are built just ahead of the audio clock (≤ 0.5 s; the hits of the hard cuts only
+ * roar (and the host into Ramah) FALLS from the frame (CUT v5.2: sags, then dies away — never a dead stop), dissolves
+ * crossfade over their length, the prologue's joins and David's theme ring on across their cuts. Events are built just ahead of the audio clock (≤ 0.5 s; the hits of the hard cuts only
  * ≤ 60 ms ahead, so a picture stall before a cut cannot make them early), and the film's clock (syncIntro) re-anchors
  * the score after hitches.
  *
@@ -31,8 +31,9 @@
  *                (water, a kinnor glissando) and ARRIVES at Gilgal in D major, ringing on through the invisible cut;
  *                THE JUDGES — twelve plucks for the tribes, then "no king in Israel": the harmony slips to B♭ and G
  *                minor, an uneven pulse, the king's three notes (D A B♭); five strokes and a low Phrygian horn cluster
- *                for the Philistine cities; THE HOST — war drums and low horns (D E♭ D C D), thousands on foot, bronze,
- *                the anvil under 13:19; RAMAH — the elders' murmur, the king's notes again under "give us a king", a
+ *                for the Philistine cities; THE HOST — (CUT v5.2: from its first frame) war drums and low horns (D E♭ D
+ *                C D … A), thousands on foot, bronze, the anvil under 13:19, its last stroke ringing across the cut as
+ *                it falls away; RAMAH — the elders' murmur, the king's notes again under "give us a king", a
  *                tense, unresolved cluster when Samuel turns away, sucked into a breath of silence —
  *   1 GILGAL     THE SHOFAR with the hard cut (the blast, the hit, a low chord), the front rank's horns, the army out of
  *                the dust (thousands on foot, the murmur, bronze), a slow processional of drums and low men's voices.
@@ -40,9 +41,12 @@
  *                and men's voices across the whole take — its B♭ on the head turn over the ranks — and the E held into:
  *   2 THE SPEAR  the halt (thousands of feet stop), a drum roll and a riser, the spear going up, and ON THE ROAR the
  *                theme resolves to D at full power (choir, strings, drums, thousands shouting, the teruah), its head
- *                restated and held — cut in mid-phrase by SILENCE: the reverb tail killed, wind, the far bleating and
- *                lowing of the spoil (15:14), the ranks shuffling apart, a ground tone and one high A under Samuel's
- *                name, his step.
+ *                restated and held — then (CUT v5.2, the user: never "a boom" when Samuel comes) THE HUSH: the roar
+ *                FALLS on the cut — it sags and dies away over ≈2 s while the valley gives it back and its reverb rings
+ *                on, the theme's B♭ sighing to A — into a low pedal on A and a wordless 'oo', the wind, the far bleating
+ *                and lowing of the spoil (15:14), the ranks shuffling apart, a ground tone and one high A under Samuel's
+ *                name, his step (no drum); under his answer (15:26) a grave line on a solo low horn (D C B♭ A) whose A
+ *                rings into the tear.
  *   3 THE TEAR   the turn, Saul pleading after him over a quickening low pulse, the lunge, the grip; the world drops
  *                into slow motion; the slowed wool rip baked to the pull / rip / corner-free beats, under a semitone of
  *                grief (A–B♭) that swells and breaks with the cloth; Samuel walks on, Saul sinks back.
@@ -125,7 +129,7 @@ const SYNC: Readonly<Record<ScoreRole, Readonly<Record<string, readonly [number,
   shofar: { blast: [0, 0], horns: [0, 0.6], card: [0, 1.3] },
   saul: { card: [0, 1.0], head: [0, 3.6] },
   peak: { halt: [0, 0.6], spear: [0, 1.3], roar: [0, 1.7], spread: [0, 0.5], verse: [0, 2.0] },
-  silence: { heads: [0, 0.4], part: [0, 1.0], card: [0, 1.6], step: [0, 2.8] },
+  silence: { heads: [0, 0.4], part: [0, 1.0], card: [0, 1.6], step: [0, 2.8], verse: [0, 3.0] },
   tear: { turn: [0, 0.5], lunge: [0, 2.2], grip: [0, 3.3], pull: [1, 0.4], rip: [1, 1.4], free: [1, 3.6] },
   verdict: { turn: [0, 0.5], words: [0, 1.2], wordsEnd: [0, 4.9] },
   broken: { look: [0, 0.4], tighten: [0, 1.8], flash: [0, 2.75] },
@@ -239,14 +243,16 @@ const DAVID_MAJOR: ReadonlyArray<readonly [number, number]> = [[0, 2], [7, 2], [
 // the answer as he turns into the light (A B C♯ D C♯ A G A) — D major
 const ANSWER: ReadonlyArray<readonly [number, number]> = [[-5, 1], [-3, 1], [-1, 1], [0, 2], [-1, 1], [-5, 1], [-7, 1], [-5, 3]];
 
-type Exit = 'cut' | 'x' | 'ring';
+/** cut: off at the frame (a breath early before a hit) · x: crossfade · ring: rings on · fall (CUT v5.2): sags to `fallTo`
+ *  on the frame and dies away (tau) — the roar into G4's hush, the host into Ramah: never a dead stop */
+type Exit = 'cut' | 'x' | 'ring' | 'fall';
 interface Shot { t: number; id: string; dur: number; cut: string; fade: number; beats: Readonly<Record<string, number>> | null }
 interface Sec {
   i: number; role: ScoreRole; t0: number; t1: number; shots: Shot[];
   /** how this section comes in (its first shot's transition) */
   cut: string; fade: number;
-  /** how its bus leaves at t1 (a 'cut' leaves `gap` s early) */
-  exit: Exit; tau: number; gap: number;
+  /** how its bus leaves at t1 (a 'cut' leaves `gap` s early; a 'fall' sags to `fallTo` on the frame, then decays with `tau`) */
+  exit: Exit; tau: number; gap: number; fallTo: number;
   next: ScoreRole | null;
   /** film times of the on-screen texts inside the section (verses, cards) — accents key on them */
   texts: number[];
@@ -260,7 +266,11 @@ export interface IntroSection { readonly role: ScoreRole; readonly t0: number; r
 /** (t = context time, m = music out, hold = sustain length, fx = sound-design out) */
 type Fn = (t: number, m: Out, hold: number, fx: Out) => void;
 interface Ev { at: number; bus: number; hold: number; fn: Fn; tight: boolean }
-interface Bus { gains: GainNode[]; m: Out; fx: Out; sec: number }
+interface Bus {
+  gains: GainNode[]; m: Out; fx: Out; sec: number;
+  /** the gain schedule in force (context time its exit starts), or — after a re-anchor mid-exit — where it carried on from */
+  endAt?: number; carry?: { t: number; v: number };
+}
 
 export class IntroScore {
   /** Ambience bed changes requested by the score (at section starts). */
@@ -369,10 +379,14 @@ export class IntroScore {
     this.running = true;
   }
 
-  /** Starting mid-way: sustained events already under way restart shortened; one-shots before t0 are dropped. */
+  /** Starting mid-way: sustained events already under way restart shortened; one-shots before t0 are dropped, and so
+   *  is what was under way on a section that has already left (its fall / crossfade / cut is over — e.g. ?introAt=
+   *  inside G4 must not restart the roar), except a section that rings on into the next. */
   private trimBefore(t0: number): void {
     this.evs = this.evs.filter((e) => {
       if (e.at >= t0 - 0.02) return true;
+      const own = this.secs[e.bus];
+      if (own && own.exit !== 'ring' && own.t1 <= t0 + 0.05) return false;
       if (e.hold > 0 && e.at + e.hold > t0 + 0.6) { e.hold -= t0 - e.at; e.at = t0; return true; }
       return false;
     });
@@ -564,19 +578,57 @@ export class IntroScore {
     return b;
   }
 
-  /** Section bus envelope: hold, then cut (a breath early before a hit) / crossfade at the section end. */
+  /**
+   * Section bus envelope: hold, then cut (a breath early before a hit) / crossfade / fall at the section end. Called
+   * again on every re-anchor (a hitch, the relock before a hard-cut hit): a bus already on its way out — its cut, fall
+   * or crossfade under way, or closed — carries on from where it is and never comes back up (the roar falling into G4's
+   * hush must not swell again on a hitch; Ramah's bus must not reopen in the breath before the shofar).
+   */
   private envelope(b: Bus, now: number): void {
     const sec = this.secs[b.sec];
     if (!sec) return;
+    const v = this.busValue(b, sec, now);
+    if (sec.exit !== 'ring' && v < 0.98) {
+      for (const g of b.gains.slice(0, 4)) {
+        const p = g.gain;
+        p.cancelScheduledValues(now);
+        p.setValueAtTime(v, now);
+        if (v <= 1e-4) continue;
+        if (sec.exit === 'cut') p.linearRampToValueAtTime(0, now + 0.03);
+        else if (sec.exit === 'fall' && v > sec.fallTo) { p.linearRampToValueAtTime(sec.fallTo, now + 0.1); p.setTargetAtTime(0, now + 0.1, sec.tau); }
+        else p.setTargetAtTime(0, now, sec.tau);
+      }
+      b.carry = { t: now, v };
+      return;
+    }
     const t1 = Math.max(now + 0.05, this.anchor + sec.t1 - (sec.exit === 'cut' ? sec.gap : 0));
+    b.endAt = t1; b.carry = undefined;
     for (const g of b.gains.slice(0, 4)) {
       const p = g.gain;
-      const v0 = p.value;
       p.cancelScheduledValues(now);
-      p.setValueAtTime(v0 > 0 ? v0 : 1, now);
+      p.setValueAtTime(v, now);
       if (sec.exit === 'cut') { p.setValueAtTime(1, Math.max(now, t1 - 0.03)); p.linearRampToValueAtTime(0, t1 + 0.012); }
       else if (sec.exit === 'x') { p.setValueAtTime(1, t1); p.setTargetAtTime(0, t1, sec.tau); }
+      else if (sec.exit === 'fall') { p.setValueAtTime(1, t1); p.linearRampToValueAtTime(sec.fallTo, t1 + 0.12); p.setTargetAtTime(0, t1 + 0.12, sec.tau); }
     }
+  }
+  /** The bus gain `envelope` has scheduled, at context time `now` (computed — not read back from the AudioParam). */
+  private busValue(b: Bus, sec: Sec, now: number): number {
+    if (sec.exit === 'ring') return 1;
+    const c = b.carry;
+    if (c) {
+      const dt = Math.max(0, now - c.t);
+      if (c.v <= 1e-4) return 0;
+      if (sec.exit === 'cut') return Math.max(0, c.v * (1 - dt / 0.03));
+      if (sec.exit === 'fall' && c.v > sec.fallTo) return dt < 0.1 ? c.v + (sec.fallTo - c.v) * (dt / 0.1) : sec.fallTo * Math.exp(-(dt - 0.1) / sec.tau);
+      return c.v * Math.exp(-dt / sec.tau);
+    }
+    const e = b.endAt;
+    if (e === undefined) return 1;
+    if (sec.exit === 'cut') return now < e - 0.03 ? 1 : Math.max(0, 1 - (now - (e - 0.03)) / 0.042);
+    if (now < e) return 1;
+    if (sec.exit === 'x') return Math.exp(-(now - e) / sec.tau);
+    return now < e + 0.12 ? 1 + (sec.fallTo - 1) * ((now - e) / 0.12) : sec.fallTo * Math.exp(-(now - e - 0.12) / sec.tau);
   }
 
   // ---------------------------------------------------------------------------------- world hooks
@@ -599,7 +651,8 @@ export class IntroScore {
     } catch { /* ignore */ }
   }
 
-  /** Duck the ambience at once to `level` (the roar that cuts to silence), hold, then let it creep back over `back` s. */
+  /** Duck the ambience at once to `level` (G4 after the roar: 0.55 when the roar falls, 0.12 for a hard silence), hold,
+   *  then let it creep back over `back` s. */
   private duckAmbience(t: number, level: number, hold: number, back: number): void {
     const p = this.c.ambIn.gain;
     p.cancelScheduledValues(t - 0.01);
@@ -991,23 +1044,38 @@ export class IntroScore {
   }
 
   /**
-   * P6 — THE PHILISTINE HOST on the coastal plain: war drums (X . . x X . x . per bar, a deep boom on every bar, growing)
-   * and low brass-like horns (D E♭ D C D — the Phrygian menace) under thousands on foot heard from a distance, bronze
-   * glinting and the murmur of a foreign host; under 13:19 the anvil (iron, which Israel's smiths did not have). The
-   * drums stop dead on the cut to Ramah: the downbeat never comes.
+   * P6 — THE PHILISTINE HOST (CUT v5.2: 10 s, re-staged to open ON the host — close and clear from its first frame): the
+   * menace at once — the front ranks' footfall near and full, the war drums already marching on the first frame (X . . x
+   * X . x . per bar, a deep boom each bar, growing), the brass-like low horns (D E♭ D C D, E♭ D, then down to the
+   * dominant A), thousands on foot, bronze glinting, a foreign host's murmur; under 13:19 the anvil (iron, which Israel's
+   * smiths did not have). No final stroke (never "a boom" at a cut): over the last bar the drums thin away, the horns'
+   * A and the men's 'oh' hold, and on the cut the host RECEDES under Ramah's quiet (the 'fall' exit, ≈1.5 s) as if the
+   * lens had left it marching on — the next downbeat never lands on Ramah's first frame.
    */
   private planThreat(sec: Sec): void {
-    const S = this.s, lite = this.lite, t0 = sec.t0, end = sec.t1;
+    const S = this.s, lite = this.lite, t0 = sec.t0, end = sec.t1, D = end - t0;
     const card = clamp(this.text(sec, 0, this.beat(sec, 'card')), t0, end - 2);
     const verse = clamp(this.text(sec, 1, this.beat(sec, 'verse')), card, end - 1.5);
-    this.add(sec, t0, (t, _m, h, fx) => {
-      this.fx.march(fx, t, h, 0.42, 0.92, 4200, 0.8);
-      this.fx.murmur(this.far(fx, t, h + 1, 1800, 0, 0.4), t + 0.3, h - 0.3, 0.17, lite ? 2 : 3);
-    }, end - t0 + 0.05);
-    for (let x = t0 + 0.4; x < end - 0.2; x += rand(0.3, 0.6)) this.add(sec, x, (t, _m, _h, fx) => this.fx.clinks(fx, t, rand(0.01, 0.022)));
-    const st = BEAT / 2, pat = 'X..xX.x.';
-    for (let x = t0, k = 0; x < end - 0.05; x += st, k++) {
-      const c = pat[k % 8], u = clamp((x - t0) / Math.max(1, end - t0), 0, 1), kk = k;
+    const fall = sec.exit === 'fall' ? 1.3 : 0.05;
+    // cut7's lens (FILM_CAM.threat): beside the front ranks, still, for its first 2 s, then one slow crane up and back
+    // (still rising at the cut) — the near footfall full at once (no slow build), thinning as the lens climbs away from
+    // it into the massed, darker tread of the whole column
+    // (the contract's `crane` beat: when the lens starts its rise — 2.0 s if a sheet has none)
+    const crane = Math.min(this.sheetBeat(sec, 'crane') ?? t0 + 2.0, end - 1), near = Math.min(end, crane + 5.5);
+    this.add(sec, t0, (t, _m, h, fx) => this.fx.march(fx, t, h, 0.5, 0.92, 6000, 0.12, Math.max(0.3, near - crane - 0.5)), near - t0);
+    this.add(sec, t0, (t, _m, h, fx) => this.fx.murmur(this.far(fx, t, h + 1, 2000, 0, 0.4), t + 0.1, h - 0.1, 0.17, lite ? 2 : 3), D + fall);
+    this.add(sec, crane - 1, (t, _m, h, fx) => this.fx.march(fx, t, h, 0.4, 0.86, 2600, 3.5), end + fall - crane + 1);
+    for (let x = t0 + 0.15; x < end - 0.2; x += rand(0.3, 0.6)) {
+      const w = 1 - 0.6 * clamp((x - crane - 0.5) / 5.5, 0, 1);
+      this.add(sec, x, (t, _m, _h, fx) => this.fx.clinks(fx, t, rand(0.012, 0.024) * w));
+    }
+    // the first frame: the host is already there — a downbeat accent
+    this.add(sec, t0, (t, m) => { S.drum(m, t, 'taiko', 0.62, -0.15); S.drum(m, t + 0.012, 'taiko', 0.5, 0.15); S.drum(m, t + 0.004, 'boom', 0.12, 0, 0.9); });
+    // the pattern grows over the shot, then thins over its last bar (a diminuendo to the cut — no final stroke)
+    const st = BEAT / 2, pat = 'X..xX.x.', thin = Math.min(2, D * 0.2);
+    for (let x = t0 + st, k = 1; x < end - 0.3; x += st, k++) {
+      const g = clamp((end - x) / thin, 0.3, 1);
+      const c = pat[k % 8], u = (0.4 + 0.6 * clamp((x - t0) / Math.max(1, D), 0, 1)) * g, kk = k;
       if (c === '.') {
         if (k % 8 === 7 || k % 8 === 2) this.add(sec, x, (t, m) => S.drum({ dry: m.dry, wet: null }, t, k % 8 === 7 ? 'tek' : 'ka', (lite ? 0.12 : 0.09) + 0.07 * u, 0.25));
         continue;
@@ -1020,14 +1088,16 @@ export class IntroScore {
         if (kk % 8 === 0 || kk % 8 === 4) S.strStac(dry, t, kk % 8 ? 45 : 50, 0.5 + 0.2 * u, 0.3, 0.8);
       });
     }
-    const motif: Array<readonly [number, number]> = [[50, 2], [51, 1], [50, 1], [48, 2], [50, 1.3]];
+    // the low horns: the menace motif over the whole shot, down to the dominant (A) held into the fall
+    const un = D / 10.2;
+    const motif: Array<readonly [number, number]> = [[50, 2], [51, 1], [50, 1], [48, 2], [50, 1], [51, 0.5], [50, 0.5], [45, 2.2 + (fall - 0.3) / un]];
     this.add(sec, t0 + 0.02, (t, m) => {
-      this.line(m, t, motif, 1, 0.085, 'horn');
-      this.line(m, t + 0.012, motif.map(([n, b]) => [n - 12, b] as const), 1, lite ? 0.03 : 0.05, 'horn');
+      this.line(m, t, motif, un, 0.085, 'horn');
+      this.line(m, t + 0.012, motif.map(([n, b]) => [n - 12, b] as const), un, lite ? 0.03 : 0.05, 'horn');
       // phones: the menace an octave up too, where their speaker plays
-      if (lite) this.line(m, t + 0.006, motif.map(([n, b]) => [n + 12, b] as const), 1, 0.04, 'horn');
-      this.line(m, t + 0.008, motif.map(([n, b]) => [n + 7, b] as const), 1, 0.04, 'horn');
-      S.choir(m, t, end - t0, [50, 57], { level: 0.03, attack: 1.5, release: 0.2, vowel: 'oh', breath: 0.08 });
+      if (lite) this.line(m, t + 0.006, motif.map(([n, b]) => [n + 12, b] as const), un, 0.04, 'horn');
+      this.line(m, t + 0.008, motif.map(([n, b]) => [n + 7, b] as const), un, 0.04, 'horn');
+      S.choir(m, t, D + fall, [50, 57], { level: 0.03, attack: 1.2, release: Math.max(0.2, fall), vowel: 'oh', breath: 0.08 });
     });
     // 13:19 — no smith in all the land of Israel: iron on the anvil, far off, twice (and once more)
     this.add(sec, verse + 0.1, (t, _m, _h, fx) => this.fx.anvil(this.far(fx, t, 4, 7000, 0.25, 0.6), t, 0.05, 0.35));
@@ -1239,8 +1309,9 @@ export class IntroScore {
   // ================================================================================ 2 · THE SPEAR AND THE SILENCE
 
   /**
-   * G3 — the halt, the spear raised, and THE ROAR of thousands ON the theme's resolution, held to the hard cut: the
-   * theme's head restated at full power, cut in mid-phrase by the silence.
+   * G3 — the halt, the spear raised, and THE ROAR of thousands ON the theme's resolution, held to the cut: the theme's
+   * head restated at full power — then (CUT v5.2, the 'fall' exit) the roar and the chord sag on G4's first frame and
+   * die away over ≈2 s with their reverb, the B♭ sighing to A, into G4's hush (planSilence).
    */
   private planPeak(sec: Sec): void {
     const S = this.s, lite = this.lite, t0 = sec.t0, end = sec.t1;
@@ -1293,18 +1364,29 @@ export class IntroScore {
     // THE ROAR: the hit, the theme's D at full power, thousands shouting, spears on shields, the shofarot above
     this.add(sec, roar, (t, m) => this.hit(m, t, 1.02, true), 0, undefined, true);
     const rest = end - roar;
+    // CUT v5.2: into G4 the section FALLS (exit 'fall'): the last chord, the theme's B♭ and the roar are not switched off
+    // on the frame — they lose their weight and die away into the valley's echo and the hush
+    const fall = sec.exit === 'fall', fr = fall ? 2.2 : 0;
     this.add(sec, roar, (t, m, h) => {
       // Dm — B♭ — A: the cut comes on the dominant, the B♭ of the theme rubbing against it
       const chords: ReadonlyArray<readonly [ChordName, number]> = [['Dm', 0], ['Bb', 0.45], ['A', 0.75]];
       chords.forEach(([cn, f], i) => {
         const ch = CHORDS[cn];
-        const len = (i + 1 < chords.length ? chords[i + 1][1] * rest : h) - f * rest;
-        S.choir(m, t + f * rest, len + 0.3, voicing(ch, 50, 74).slice(0, lite ? 4 : 7), { level: 0.11, attack: 0.04, release: 0.25, vowel: 'ah', breath: 0.16 });
-        S.pad(m, t + f * rest, len + 0.25, [rootIn(ch, 26), rootIn(ch, 38), rootIn(ch, 38) + 7], { level: 0.105, attack: 0.03, release: 0.2, cutoff: 1800, voices: lite ? 2 : 3, detune: 11 });
+        const last = i + 1 === chords.length;
+        const len = (last ? h : chords[i + 1][1] * rest) - f * rest;
+        const rc = last && fall ? fr : 0.25, rp = last && fall ? fr : 0.2;
+        S.choir(m, t + f * rest, len + (last && fall ? rc : 0.3), voicing(ch, 50, 74).slice(0, lite ? 4 : 7), { level: 0.11, attack: 0.04, release: rc, vowel: 'ah', breath: 0.16 });
+        S.pad(m, t + f * rest, len + (last && fall ? rp : 0.25), [rootIn(ch, 26), rootIn(ch, 38), rootIn(ch, 38) + 7], { level: 0.105, attack: 0.03, release: rp, cutoff: 1800, voices: lite ? 2 : 3, detune: 11 });
       });
-      // the theme resolved: D in the high strings and the men, then its head again (A, B♭) — cut in mid-phrase
-      this.line(m, t, [[74, 0.45 * rest], [81, 0.3 * rest], [82, 0.25 * rest + 0.1]], 1, 0.075, 'str');
-      this.line(m, t, [[38, 0.75 * rest], [45, 0.25 * rest + 0.1]], 1, 0.08, 'men');
+      // the theme resolved: D in the high strings and the men, then its head again (A, B♭); falling into G4 (CUT v5.2),
+      // the B♭ sighs down to A as the roar dies (the thread the hush keeps) — the old cut in mid-phrase without a fall
+      if (fall) {
+        this.line(m, t, [[74, 0.45 * rest], [81, 0.3 * rest], [82, 0.25 * rest + 0.05], [81, 1.8]], 1, 0.075, 'str');
+        this.line(m, t, [[38, 0.75 * rest], [45, 0.25 * rest + 1.6]], 1, 0.08, 'men');
+      } else {
+        this.line(m, t, [[74, 0.45 * rest], [81, 0.3 * rest], [82, 0.25 * rest + 0.1]], 1, 0.075, 'str');
+        this.line(m, t, [[38, 0.75 * rest], [45, 0.25 * rest + 0.1]], 1, 0.08, 'men');
+      }
     }, rest);
     for (let x = roar, k = 0; x < end - 0.05; x += BEAT, k++) {
       const kk = k, u = clamp((x - roar) / Math.max(0.5, rest), 0, 1);
@@ -1319,19 +1401,45 @@ export class IntroScore {
     this.add(sec, roar + 0.3, (t, m) => S.shofar(m, t, 'teruah', 0.24, 220, 293.66));
     if (rest > 2.2) this.add(sec, roar + 1.75, (t, m) => S.shofar(this.panned(m, t, 3, -0.4), t, 'tekiah', 0.18, 214, 286));
     this.add(sec, roar, (t, _m, h, fx) => {
-      this.fx.roar(fx, t, h, 0.21, spread, 1);
+      this.fx.roar(fx, t, h, 0.21, spread, 1, fall ? rest : undefined);
       const k = Math.round(clamp(rest / 1.6, 1, 2) * (lite ? 3 : 5));
       for (let i = 0; i < k; i++) this.fx.clinks(fx, t + 0.3 + rand(0, rest - 0.5), 0.03, 2);
       for (let i = 0; i < Math.round(k * 0.7); i++) this.fx.knock(fx, t + 0.25 + rand(0, rest - 0.4), 0.05, randi(2, 4));
-    }, rest + 0.05);
+    }, rest + (fall ? 2.8 : 0.05));
   }
 
-  /** G4 — SILENCE: the roar cut at once; wind and the far bleating and lowing of the spoil (15:14); the ranks part. */
+  /**
+   * G4 — THE HUSH (CUT v5.2: 6.5 s — the user: the music must not stop "with a boom" when Samuel comes). The roar FALLS
+   * (the peak's 'fall' exit: it sags on the frame and dies away, its reverb ringing on) while the valley gives it back
+   * (roarEcho); the music thins to a hush — the theme's B♭ sighing to A, a low pedal on A (the dominant the roar ended on)
+   * in the low strings and a wordless 'oo', the wind coming back; the army's small sounds (heads turning, wool, bronze,
+   * the ranks stepping aside), the spoil far off (15:14); Samuel's step (no drum under it); under his answer (15:26) a
+   * quiet, grave line on the tear's bus — a solo low horn D–C–B♭–A over D minor → G minor → A, the choir holding its
+   * breath — whose A rings into the tear (G5a) with the ground tone and the high A that carry through it.
+   */
   private planSilence(sec: Sec): void {
-    const S = this.s, t0 = sec.t0, end = sec.t1, d = end - t0;
+    const S = this.s, lite = this.lite, t0 = sec.t0, end = sec.t1, d = end - t0;
     const heads = this.beat(sec, 'heads'), part = this.beat(sec, 'part'), step = this.beat(sec, 'step');
     const card = clamp(this.text(sec, 0, this.beat(sec, 'card')), t0, end - 0.4);
-    this.add(sec, t0, (t) => { this.hallCut(t, 3); this.duckAmbience(t, 0.12, 0.35, 2.2); }, 0, undefined, true);
+    const verse = clamp(this.text(sec, 1, this.beat(sec, 'verse')), Math.min(step, end - 1.2), end - 1);
+    const tear = this.secs[sec.i + 1]?.role === 'tear' ? this.secs[sec.i + 1] : undefined;
+    const fell = this.secs[sec.i - 1]?.exit === 'fall';
+    // the world after the roar: the ambience dips a little and the wind comes back (CUT v5.2: no hall cut, no dead stop)
+    this.add(sec, t0, (t) => { this.duckAmbience(t, fell ? 0.55 : 0.12, 0.3, 2.4); if (!fell) this.hallCut(t, 3); }, 0, undefined, true);
+    if (fell) {
+      // the valley gives the roar back; the wind rises as it fades
+      this.add(sec, t0, (t, _m, _h, fx) => this.fx.roarEcho(fx, t, 0.075));
+      this.add(sec, t0 + 0.5, (t, _m, h, fx) => this.fx.windSwell(fx, t, h, 0.022, 350, 1200, -0.3, 0.3), Math.min(4.5, d));
+      // the hush: a low pedal on A (the dominant the roar ended on) in the low strings and a wordless 'oo'
+      const hushEnd = Math.min(end, verse + 0.6);
+      this.add(sec, t0 + 0.15, (t, m, h) => {
+        S.pad(m, t, h, lite ? [45, 57] : [33, 45, 57], { level: 0.03, attack: 1.0, release: 0.7, cutoff: 700, voices: 2, detune: 6, lfoCents: 150 });
+        S.choir(m, t + 0.2, h - 0.2, lite ? [57, 64] : [45, 52, 57], { level: 0.024, attack: 1.3, release: 0.7, vowel: 'oo', breath: 0.05 });
+      }, hushEnd - t0 - 0.15);
+      // bronze and wool through the ranks as the men lower their spears
+      this.add(sec, t0 + 0.9, (t, _m, _h, fx) => { this.fx.clinks(fx, t, 0.01, 2); this.fabric(fx, t + 0.1, 0.6, 0.01, 0.35); });
+      this.add(sec, t0 + 2.2, (t, _m, _h, fx) => this.fx.clinks(fx, t, 0.008));
+    }
     // heads turn: wool and a few clinks through the ranks
     this.add(sec, heads, (t, _m, _h, fx) => { this.fabric(fx, t, 0.6, 0.016, -0.3); this.fx.clinks(fx, t + 0.2, 0.008); });
     // the spoil, far away: sheep, the lowing of oxen, a goat, sheep again
@@ -1339,6 +1447,7 @@ export class IntroScore {
     this.add(sec, t0 + 1.25, (t, _m, _h, fx) => this.fx.lowing(this.far(fx, t, 4, 1400, 0.4, 0.5), t, 0.018, 0.55));
     this.add(sec, t0 + 2.3, (t, _m, _h, fx) => { const f = this.far(fx, t, 4, 1800, 0.35, 0.5); this.fx.bleat(f.dry, t, 0.13, 0.7, 'goatBleat'); });
     if (d > 3.4) this.add(sec, t0 + 3.3, (t, _m, _h, fx) => { const f = this.far(fx, t, 4, 1600, 0.35, 0.5); this.fx.bleat(f.dry, t, 0.11, -0.3, 'sheepBleat', 0.94); });
+    if (d > 5.6) this.add(sec, t0 + 5.4, (t, _m, _h, fx) => this.fx.lowing(this.far(fx, t, 4, 1300, 0.4, 0.5), t, 0.012, -0.5));
     // the front ranks part: men stepping aside, cloth, a clink
     this.add(sec, part, (t, _m, h, fx) => {
       this.fx.march(fx, t, h, 0.06, 0.72, 1100, 0.25);
@@ -1346,13 +1455,28 @@ export class IntroScore {
       this.fabric(fx, t + h * 0.2, 0.7, 0.01, 0.4);
     }, Math.max(0.6, step - part));
     // under Samuel's name: the ground tone creeps in, and one high A that will carry through the tear
-    const tear = this.secs[sec.i + 1]?.role === 'tear' ? this.secs[sec.i + 1] : undefined;
     this.add(sec, card, (t, m, h) => this.ground(m, t, h, 0.05, 1.2, 0.6), (tear ? tear.t1 : end) - card + 0.3, tear);
     this.add(sec, card + 0.2, (t, m, h) => S.pad(m, t, h, [69], {
       level: 0.03, attack: Math.min(2.5, h * 0.3), release: 0.5, cutoff: 1500, voices: 2, detune: 4, lfoCents: 40, vib: 9, vibRate: 5.2, vibDelay: 1.2,
     }), (tear ? tear.t1 : end) - card - 0.2, tear);
-    // his step forward
-    this.add(sec, step, (t, m, _h, fx) => { this.step(fx, t, 0.5, 0.1); S.drum(m, t + 0.01, 'boom', 0.1, 0, 0.9); });
+    // his step forward: the sandal on the earth, his mantle (CUT v5.2: no drum under it — the user's "boom")
+    this.add(sec, step, (t, _m, _h, fx) => { this.step(fx, t, 0.45, 0.1); this.fabric(fx, t + 0.05, 0.5, 0.012, 0.15); });
+    if (!fell) return;
+    // his answer (15:26): a quiet, grave line on the TEAR's bus (it rings across the cut into G5a) — the solo low horn
+    // D–C–B♭–A, the strings D minor → G minor → A (open), the choir holding its breath
+    const u = Math.min(0.95, (end - verse) / 3.6);
+    const into = tear ? Math.min(tear.t1 - 0.5, end + 1.6) : end + 0.4;
+    const aAt = verse + 2.65 * u;
+    this.add(sec, verse + 0.05, (t, m) => this.line(m, t, [[50, 1.0], [48, 0.65], [46, 1.0], [45, Math.max(1, (into - aAt) / u)]], u, 0.032, 'horn'), 0, tear);
+    const segs: ReadonlyArray<readonly [number, number, readonly number[], readonly number[]]> = [
+      [verse, verse + 1.65 * u, [38, 50, 53, 57], [50, 53, 57]],
+      [verse + 1.65 * u, aAt, [43, 50, 55, 58], [50, 55, 58]],
+      [aAt, into, [33, 45, 52, 57], [45, 52, 57]],
+    ];
+    for (const [a0, a1, hi, ph] of segs) {
+      this.add(sec, a0, (t, m, h) => S.pad(m, t, h, lite ? ph : hi, { level: 0.017, attack: 0.5, release: 0.6, cutoff: 1100, voices: 2, detune: 7 }), a1 - a0 + 0.35, tear);
+    }
+    this.add(sec, verse, (t, m, h) => S.choir(m, t, h, [57, 62], { level: 0.015, attack: 1.0, release: 0.8, vowel: 'oo', breath: 0.05 }), into - verse, tear);
   }
 
   // ================================================================================ 3 · THE TEAR
@@ -2100,7 +2224,7 @@ function roleOf(c: IntroCue): ScoreRole | null {
 }
 
 function newSec(i: number, role: ScoreRole, t0: number, sh: Shot, slowmo: number): Sec {
-  return { slowmo, i, role, t0, t1: Infinity, shots: [sh], cut: sh.cut, fade: sh.fade, exit: 'ring', tau: 0.5, gap: 0, next: null, texts: [], words: [] };
+  return { slowmo, i, role, t0, t1: Infinity, shots: [sh], cut: sh.cut, fade: sh.fade, exit: 'ring', tau: 0.5, gap: 0, fallTo: 1, next: null, texts: [], words: [] };
 }
 
 /**
@@ -2160,11 +2284,14 @@ function buildSections(cues: readonly IntroCue[]): Sec[] {
     const sec = out[i], nx = out[i + 1];
     sec.next = nx.role;
     if (nx.cut === 'hard' || nx.cut === 'smash') { sec.exit = 'cut'; sec.tau = 0.01; sec.gap = GAP; }
-    else if (nx.role === 'silence') { sec.exit = 'cut'; sec.tau = 0.01; sec.gap = 0; }
+    // CUT v5.2 (the user: the music must not stop "with a boom" when Samuel comes): the roar into the silence FALLS — it
+    // sags on the frame and dies away into the valley's echo and the hush (≈2 s), its reverb tail ringing on
+    else if (nx.role === 'silence') { sec.exit = 'fall'; sec.tau = 0.85; sec.gap = 0; sec.fallTo = 0.72; }
     // the prologue's joins and David's theme ring on across their cuts (D2 -> D3 -> D4: one arc into the logo)
     else if (RING.has(`${sec.role}>${nx.role}`)) { sec.exit = 'ring'; sec.tau = 0.5; }
-    // the war drums of the host stop dead on the cut to Ramah (their tail rings in the hall)
-    else if (sec.role === 'threat' && nx.cut === 'cut') { sec.exit = 'x'; sec.tau = 0.03; }
+    // the host into Ramah: no last stroke — the drums thin over the last bar and the host recedes (≈1.5 s) under the
+    // gate's quiet, as if the lens had left it marching on
+    else if (sec.role === 'threat' && nx.cut === 'cut') { sec.exit = 'fall'; sec.tau = 0.9; sec.fallTo = 0.6; }
     else if (nx.cut === 'dissolve' || nx.cut === 'light' || nx.cut === 'match' || nx.cut === 'black') { sec.exit = 'x'; sec.tau = Math.max(0.12, (nx.fade || 1.2) / 3); }
     else { sec.exit = 'x'; sec.tau = 0.22; }
   }

@@ -332,15 +332,18 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
   },
   {
     id: 'philistines', n: 'P6', set: 'coast', take: 'threat', dur: 10.0, cut: 'dissolve', fade: 1.0, cue: 'threat', beat: 'warriors',
-    beats: { card: 0.8, verse: 3.2 },
+    // crane: the lens leaves the front ranks and starts its slow rise over the column (the score's footfall thins with it)
+    beats: { card: 0.8, crane: 2.0, verse: 3.2 },
     text: [
       { at: 0.8, seconds: 3.4, kind: 'place', narration: ['philistia'], side: 'right', v: 'top' },
       { at: 3.2, seconds: 5.6, kind: 'verse', quote: 's1_13_19_no_smith_film', stagger: 0.14, side: 'left', v: 'top', lines: 2 },
     ],
-    direction: "The Philistine host on the coastal plain, the map's descent continued: from a crane 220 m over the plain, "
-      + "looking back WNW down the column marching inland out of Ashdod (its tell behind it, the sea a pale band), the lens "
-      + 'comes down on a log-height ease to a long lens at a man\'s height beside the front ranks — bronze glinting, dust in '
-      + 'the low morning sun, the near files large. Menace, power, iron that Israel does not have (13:19 in the sky).',
+    direction: 'The Philistine host on the coastal plain in the low morning sun, ON the host from the first frame (cut7, '
+      + 'CUT v5.2): a low lens beside the road ahead of the column, looking back WNW down it (the way the map was '
+      + 'descending): the elite front rank — bronze helmets, scale corselets, round shields, iron-headed spears — and the '
+      + 'feather crowns behind them march at the lens out of their own dust, large and clear; then ONE slow crane up and '
+      + "back reveals the column stretching back down the road to Ashdod's tell in the haze. Menace, power, iron that "
+      + 'Israel does not have (13:19 in the sky).',
   },
   {
     id: 'elders', n: 'P7', set: 'ramah', take: 'elders', dur: 8.0, cut: 'cut', cue: 'elders', beat: 'saul-court',

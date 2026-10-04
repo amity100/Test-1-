@@ -311,6 +311,11 @@ new end (D3 the flock, D4 the lamb's bleats, the logo's arrival, the set-down ca
 grid); a new 'ramah' ambience bed; the gameplay v2 sounds (the sling drawn from and stowed in the sash, the stone
 loaded, each pass of the whirl, the perfect release, the stone's whistle, the range's hits, the stream bed, the
 range's stings). Levels, hit timing, spectrograms and MP3 previews: `dev/screens/score6/`.
+CUT v5.2 (141.5 s, *score6*, wave 4): the roar no longer stops dead when Samuel comes — it falls away over ≈2 s with the
+valley's echo (in-house: five filtered reflections of the shout) into a hush (a low pedal and a wordless choir, the wind,
+the ranks, the spoil far off), his step without a drum, a grave low-horn line under 1 Sam 15:26 ringing into the tear;
+the Philistine host from P6's first frame, receding under Ramah. Same in-house synthesis, no third-party audio.
+Before/after plots, measurements and MP3s: `dev/screens/score6/w4/`.
 
 ## Wardrobe & hair polish pass — `src/characters/wardrobe/`, `src/characters/hair/`, `tools/wardrobe/gen_textures.py`, `dev/wardrobe*`
 

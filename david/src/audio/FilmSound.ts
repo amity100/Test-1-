@@ -128,7 +128,7 @@ export class FilmSound {
    * Thousands on foot (a looped baked texture of loose ranks on dry earth). `rate` < 1 slows and deepens it
    * (the slow motion of shot 7); `lp` = lowpass (distance).
    */
-  march(o: Out, t: number, dur: number, level: number, rate = 1, lp = 6000, fadeIn = 0.4): void {
+  march(o: Out, t: number, dur: number, level: number, rate = 1, lp = 6000, fadeIn = 0.4, fadeOut = 0.3): void {
     if (!this.marchBuf) this.marchBuf = bakeMarch(this.c.ctx);
     const v = new Voice(this.c);
     const s = v.buffer(this.marchBuf, rate, t);
@@ -136,7 +136,7 @@ export class FilmSound {
     const f = v.filter('lowpass', lp, 0.6), g = v.gain(0);
     const G = g.gain;
     G.setValueAtTime(0, t); G.linearRampToValueAtTime(level, t + fadeIn);
-    G.setValueAtTime(level, t + Math.max(fadeIn, dur - 0.3)); G.linearRampToValueAtTime(0, t + dur);
+    G.setValueAtTime(level, t + Math.max(fadeIn, dur - Math.max(0.05, fadeOut))); G.linearRampToValueAtTime(0, t + dur);
     s.connect(f); f.connect(g); out2(g, o, 0.25, v);
     v.play(t, t + dur + 0.05);
   }
@@ -214,7 +214,8 @@ export class FilmSound {
   /**
    * The ROAR of thousands (G3): shouting male voices (driven saws, rising pitch, "ah"/"eh" formants), staggered over
    * `spread` s, over a broadband formant-shaped noise wall and stamping. Rings until `dur`; over its last 0.8 s it
-   * sinks to `tail` × level (1 = held at full voice to the end: the roar the silence cuts off).
+   * sinks to `tail` × level (1 = held at full voice to the end). With `fall` (CUT v5.2: s after `t`, the cut into G4's
+   * hush) it is held at full voice to `fall`, then sags and dies away (≈2 s, the stamping thinning with it) instead.
    */
   roar(o: Out, t: number, dur: number, level: number, spread = 0.45, tail = 0.55, fall?: number): void {
     const v = new Voice(this.c);

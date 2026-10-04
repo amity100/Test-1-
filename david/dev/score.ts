@@ -74,6 +74,8 @@ const SKIP_PRO = cueT('map') + 2;
 const SKIP_D4 = LIFT + 0.3;
 const SEEK_TO = cueT('face') + 1;
 const SEEK_PRO = cueT('judges') + 0.5;
+/** CUT v5.2: a seek / a hidden-tab jump landing inside G4's hush (1.5 s after the roar's cut) — the roar must not restart */
+const SEEK_G4 = cueT('silence') + 1.5;
 /** partial windows (fast iteration): the prologue into Gilgal, and D2 → the hand-off */
 const PRO_END = cueT('shofar') + 5;
 const END_FROM = cueT('face');
@@ -186,6 +188,12 @@ const JOBS: Record<string, Job> = {
   // a seek (Intro.seek / ?introAt=): the film clock jumps from 5 s into D2; the score restarts there
   'film-seek': { seconds: 5 + (END_T - SEEK_TO) + 7, script: filmCalls((t) => (t < 5 ? t : t + SEEK_TO - 5)) },
   'film-seek-pro': { seconds: 5 + (PRO_END - SEEK_PRO), script: filmCalls((t) => (t < 5 ? t : t + SEEK_PRO - 5)) },
+  'film-seek-g4': { seconds: 5 + (cueT('verdict') - SEEK_G4), script: filmCalls((t) => (t < 5 ? t : t + SEEK_G4 - 5)) },
+  // re-anchors in the middle of an exit (wave 4): a 0.4 s picture hitch while the roar falls into G4 (sync re-anchors),
+  // and a 60 ms hitch just before the shofar (the hit's relock re-anchors while Ramah's bus is ramping out) — the
+  // falling / cut bus must carry on from where it is, never swell back
+  'g4-stall': { seconds: cueT('tear') + 2 - cueT('peak') + 0.4, script: filmCalls((t) => stall(cueT('silence') + 0.3, 0.4)(t + cueT('peak')), Infinity, 'stop', cueT('peak')) },
+  'g1-stall': { seconds: 7, script: filmCalls((t) => stall(cueT('shofar') - 0.12, 0.06)(t + cueT('shofar') - 3), Infinity, 'stop', cueT('shofar') - 3) },
   // partial windows: the prologue into Gilgal (0 → G1 + 5) and D2 → the hand-off (+7 s of the game's pastoral)
   prologue: { seconds: PRO_END, script: filmCalls(straight) },
   'prologue-lite': { seconds: PRO_END, lite: true, script: filmCalls(straight) },
@@ -279,6 +287,9 @@ const hookMarks: Array<[number, string]> = [[H0, 'hook'], [HOOK.scatter, 'birdsS
   'film-skip-pro': [...shotMarks().filter((m) => m[0] < SKIP_PRO + 14), [SKIP_PRO, 'SKIP'], [SKIP_PRO + 3.4, 'pastoral req']],
   'film-seek': [[5, 'SEEK'], [5 + cueT('watch') - SEEK_TO, 'D3'], [5 + cueT('horizon') - SEEK_TO, 'D4'], [5 + END_T - SEEK_TO, 'END']],
   'film-seek-pro': [[5, 'SEEK'], [5 + cueT('threat') - SEEK_PRO, 'P6'], [5 + cueT('elders') - SEEK_PRO, 'P7'], [5 + cueT('shofar') - SEEK_PRO, 'G1']],
+  'g4-stall': [[cueT('silence') - cueT('peak'), 'G4'], [cueT('silence') + 0.3 - cueT('peak'), 'STALL 0.4'], [cueT('tear') + 0.4 - cueT('peak'), 'G5a']],
+  'g1-stall': [[2.88, 'STALL 0.06'], [3.06, 'G1 (late picture)']],
+  'film-seek-g4': [[5, 'SEEK'], [5 + beatTime('silence', 'verse') - SEEK_G4, 'verse'], [5 + cueT('tear') - SEEK_G4, 'G5a'], [5 + cueT('verdict') - SEEK_G4 - 0.01, 'G6']],
   prologue: [...shotMarks().filter((m) => m[0] < PRO_END), ...beatMarks(0, PRO_END)],
   'prologue-lite': [...shotMarks().filter((m) => m[0] < PRO_END), ...beatMarks(0, PRO_END)],
   ending: [...shotMarks().filter((m) => m[0] >= END_FROM).map(([x, n]) => [x - END_FROM, n] as [number, string]), ...beatMarks(END_FROM, END_T).map(([x, n]) => [x - END_FROM, n] as [number, string]), [END_T - END_FROM, 'END']],
