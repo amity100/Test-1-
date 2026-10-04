@@ -190,6 +190,8 @@ class Mind {
   winT = 0;
   /** Aiming into your window (not at you). */
   intoWindow = false;
+  /** Out of sight of you this long (s). */
+  blindT = 0;
   role: ReachRole = 'gunner';
   constructor(rand: () => number) {
     const E = REACH.enemy;
@@ -493,6 +495,15 @@ export class ReachAI {
       return;
     }
     const sees = pl.alive && this.sees(e, pl.chest, 60);
+    // out of sight of you too long (an edge, a wall in the way): a portal round to where he can see you
+    m.blindT = sees ? 0 : m.blindT + dt;
+    if (m.blindT > 2.5 && m.gun === 'idle' && m.portalCd <= 0) {
+      m.portalCd = 1;
+      if (this.openPortal(sys, e, m, REACH.enemy.portal.flank)) {
+        m.blindT = 0;
+        return;
+      }
+    }
     if (m.gun === 'aim') {
       sys.halt(e, dt);
       sys.face(e, pl.pos, dt);
@@ -600,12 +611,13 @@ export class ReachAI {
       H.windup(e, K.windup);
       return;
     }
-    // from afar: a red portal right by you, now and then
-    if (m.portalCd <= 0 && d > REACH.enemy.portal.knifeFrom) {
-      m.portalCd = 1.5;
-      if (sys.rand() < REACH.enemy.portal.knifeChance && this.openPortal(sys, e, m, REACH.enemy.portal.near)) return;
+    // from afar (or with no way down to you): a red portal right by you
+    const gap = Math.abs(pl.pos.y - e.pos.y) >= 1.6;
+    if (m.portalCd <= 0 && (d > REACH.enemy.portal.knifeFrom || gap)) {
+      m.portalCd = gap ? 0.8 : 1.5;
+      if ((gap || sys.rand() < REACH.enemy.portal.knifeChance) && this.openPortal(sys, e, m, REACH.enemy.portal.near)) return;
     }
-    if (d <= K.reach) {
+    if (d <= K.reach && !gap) {
       sys.halt(e, dt);
       sys.face(e, pl.pos, dt);
       return;
@@ -639,10 +651,16 @@ export class ReachAI {
       break;
     }
     if (!exit) return false;
-    // the entrance: in front of him, toward you
-    const yawIn = Math.atan2(pl.pos.x - e.pos.x, pl.pos.z - e.pos.z);
-    const ax = e.pos.x + Math.sin(yawIn) * P.ahead, az = e.pos.z + Math.cos(yawIn) * P.ahead;
-    const ay = H.standAt(ax, az, e.pos.y);
+    // the entrance: in front of him, toward you (else to a side, or behind him: an edge in the way)
+    const to = Math.atan2(pl.pos.x - e.pos.x, pl.pos.z - e.pos.z);
+    let yawIn = to, ax = 0, az = 0, ay: number | null = null;
+    for (const off of [0, 0.9, -0.9, 1.8, -1.8, Math.PI]) {
+      yawIn = to + off;
+      ax = e.pos.x + Math.sin(yawIn) * P.ahead;
+      az = e.pos.z + Math.cos(yawIn) * P.ahead;
+      ay = H.standAt(ax, az, e.pos.y);
+      if (ay !== null) break;
+    }
     if (ay === null) return false;
     const by = Math.atan2(pl.pos.x - exit.x, pl.pos.z - exit.z);
     const p = H.portals.open(e.id, _a.set(ax, ay, az), yawIn, exit, by);

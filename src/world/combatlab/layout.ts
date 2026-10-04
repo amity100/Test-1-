@@ -334,12 +334,12 @@ const knife = (x: number, y: number, z: number) => ({ kind: 'knife' as const, po
  * a portal at you), GUNNERS and FLANKERS. Countdowns are REACH.waves.
  */
 export const REACH_WAVES: LabWave[] = [
-  // R1: three gunners; 3 rifles, 2 knives between you and them
+  // R1: three gunners; 3 rifles between you and them, 2 knives nearer them
   {
     subKey: 'lab.r1',
     ready: true,
     spawns: [bare(-14, 0, 4, G), bare(14, 0, 6, G), bare(0, 0, 18, G)],
-    weapons: [rifle(-7, 0, -10), knife(-5, 0, -12.5), rifle(7, 0, -9), knife(5.5, 0, -12.5), rifle(0, 0, -9)],
+    weapons: [rifle(-7, 0, -10), knife(-11, 0, -4), rifle(7, 0, -9), knife(11, 0, -3), rifle(0, 0, -9)],
   },
   // R2: four, a rusher among them, one up on the ring; 4 rifles, 3 knives
   {

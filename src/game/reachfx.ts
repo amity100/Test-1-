@@ -501,6 +501,8 @@ export class ReachFx {
       this.farMark.position.set(f.pos.x, f.pos.y + REACH.window.height / 2 + 0.45, f.pos.z);
       const dcam = s.camera.position.distanceTo(this.farMark.position);
       this.farMark.scale.setScalar(Math.max(1, dcam * 0.045));
+      // (right by it — you went through — it needs no finding)
+      if (s.camera.position.distanceTo(f.pos as THREE.Vector3) < 5) this.farMark.visible = this.farFrame.visible = false;
       this.farMark.rotation.y = t * 2;
     }
 

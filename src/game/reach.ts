@@ -45,8 +45,9 @@ export const REACH = {
     open: 0.2,
     life: 4,
     cooldown: 0.35,
-    /** The near window: this far ahead of you (m). */
+    /** The near window: this far ahead of you (m), and this much further per m/s you run at it (s). */
     ahead: 1.4,
+    lead: 0.35,
     /** The hand reaches this far from the window's plane (either side, m), the knife this far, this far across and up/down from its centre. */
     reach: 1.6,
     knife: 1.3,
@@ -89,7 +90,7 @@ export const REACH = {
    * for `react` s). Right behind him (within `hearRange` m) he hears it after
    * `hear` s: be quick.
    */
-  notice: { range: 8, cos: 0.5, time: 0.35, react: 1.6, hear: 1.1, hearRange: 2.2 },
+  notice: { range: 8, cos: 0.5, time: 0.35, react: 1.6, hear: 0.8, hearRange: 2.2 },
   rifle: {
     /** One magazine; empty, it's dropped for good (take another weapon). */
     mag: 12,

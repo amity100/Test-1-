@@ -619,7 +619,9 @@ export class ReachMode {
     const aim = flat(ray.dir, new THREE.Vector3());
     const feet = h.player.body.pos;
     // the near one: in front of you, facing you (nearer if a wall is in the way)
-    let ahead: number = REACH.window.ahead;
+    // (on the run it opens further ahead: a beat to see it and go through it, or round it)
+    const v = h.player.body.vel;
+    let ahead: number = REACH.window.ahead + Math.max(0, v.x * aim.x + v.z * aim.z) * REACH.window.lead;
     const wall = h.world.raycast(_a.set(feet.x, feet.y + 1, feet.z), aim, ahead + 0.5, { sight: false });
     if (wall) ahead = Math.max(0.6, wall.distance - 0.45);
     const near = nearSpot(feet, aim, ahead);
