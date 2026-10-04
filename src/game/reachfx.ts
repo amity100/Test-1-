@@ -204,7 +204,7 @@ export interface ReachFxState {
   /** Where whatever a window is after is now (a man's chest, a weapon). */
   targetOf(w: HandWindow, out: THREE.Vector3): THREE.Vector3 | null;
   /** The WINDOW key's ghost (null: not aiming). */
-  ghost: (WindowSpot & { seen: boolean }) | null;
+  ghost: (WindowSpot & { seen: boolean; behind?: boolean }) | null;
   /** The open pair: `k` how open (0..1), `left` its time left (s). */
   win: { far: { pos: V3; look: V3 }; near: { pos: V3; look: V3 }; k: number; left: number } | null;
   /** What the hand would take at the far window (red: he sees it coming). */

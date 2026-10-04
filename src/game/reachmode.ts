@@ -149,7 +149,7 @@ export class ReachMode {
   /** The window pair (one at a time). */
   win: ReachWindow | null = null;
   /** The WINDOW key is held: where it would open. */
-  ghost: (WindowSpot & { seen: boolean }) | null = null;
+  ghost: (WindowSpot & { seen: boolean; behind: boolean }) | null = null;
   /** What HAND would do now (null: no window). */
   plan: HandPlan | null = null;
   private winSeq = 0;
@@ -446,7 +446,7 @@ export class ReachMode {
     for (const p of this.portals.list) if (p.crossedT < 0 && !p.held && p.b.distanceTo(h.player.body.pos) < 12) incoming = true;
     const st: ReachHudState = {
       device: h.device(),
-      ghost: this.ghost ? { ok: this.ghost.ok, seen: this.ghost.seen } : null,
+      ghost: this.ghost ? { ok: this.ghost.ok, seen: this.ghost.seen, behind: this.ghost.behind } : null,
       hand: this.plan ? { verb: this.plan.verb, blocked: this.plan.blocked } : null,
       stab: mineNow?.kind === 'knife' ? this.stabState() : null,
       held: this.held ? this.heldOutcome : null,
@@ -497,12 +497,11 @@ export class ReachMode {
         const base = this.airDist ?? (this.ghost ? this.ghost.dist : 12);
         this.airDist = THREE.MathUtils.clamp(base + inp.wheel * REACH.window.step, REACH.window.min, REACH.range);
       }
-      // (on a man: just past him along your aim — behind him if he faces you, at his side if he's side-on)
-      const air = this.airDist ?? this.pastMan(ray.origin, ray.dir, eye);
+      const air = this.airDist ?? this.aimStop(ray.origin, ray.dir, eye);
       const spot = placeWindow(h.world, ray.origin, ray.dir, eye, air, (x, z, y) => h.world.groundAt(x, z, 0.3, y));
       if (h.device() === 'touch') this.magnet(spot, ray.origin, ray.dir);
       this.faceTarget(spot);
-      this.ghost = Object.assign(spot, { seen: this.seenAt(spot.pos) });
+      this.ghost = Object.assign(spot, { seen: this.seenAt(spot.pos), behind: this.behindAt(spot) });
     } else if (this.wasWindow && this.ghost && alive) {
       // let go: it opens there
       if (this.ghost.ok && this.winCd <= 0) this.openWindow(this.ghost);
@@ -513,11 +512,12 @@ export class ReachMode {
   }
 
   /**
-   * What the aim is on (in sight, within reach), and so how far the window
-   * stands (m from your eyes): just past a man, right on a weapon on the
-   * floor; null: nothing (the first surface it meets).
+   * A weapon on the floor right under the aim (in sight, within reach): how
+   * far it is (m from your eyes; the window stands on it). Men don't stop the
+   * aim: getting a window right behind one is yours to do (aim at the floor
+   * behind his feet, at the wall behind him, or set the distance).
    */
-  private pastMan(origin: V3, dir: V3, eye: V3): number | null {
+  private aimStop(origin: V3, dir: V3, eye: V3): number | null {
     const h = this.h;
     let best: number | null = null;
     for (const w of this.armory.list) {
@@ -528,18 +528,6 @@ export class ReachMode {
       const d = Math.hypot(w.pos.x - eye.x, w.pos.z - eye.z);
       if (d > REACH.range || (best !== null && d >= best)) continue;
       if (!h.world.lineOfSight(eye, _c.copy(w.pos).setY(w.pos.y + 0.3))) continue;
-      best = d;
-    }
-    for (const e0 of h.enemies.list) {
-      const e = e0 as Enemy;
-      if (!e.alive || !e.reach || !e.body) continue;
-      const s = rayDistToBody(origin, dir, e.pos, e.height, _a);
-      if (s <= 0) continue;
-      const perp = _b.copy(origin).addScaledVector(dir, s).distanceTo(_a);
-      if (perp > e.radius + 0.3) continue;
-      const d = Math.hypot(e.pos.x - eye.x, e.pos.z - eye.z) + REACH.window.past;
-      if (d > REACH.range || (best !== null && d >= best)) continue;
-      if (!h.world.lineOfSight(eye, _c.set(e.pos.x, e.pos.y + 1.2, e.pos.z))) continue;
       best = d;
     }
     return best;
@@ -600,6 +588,17 @@ export class ReachMode {
     flat(_d.subVectors(this.h.player.body.pos, _c), spot.look);
     spot.dist = spot.pos.distanceTo(this.h.eye(_eye));
     spot.ok = spot.dist >= W.min && spot.dist <= REACH.range + 1.5;
+  }
+
+  /** A man right by the spot (the knife's reach) with his back or side to it. */
+  private behindAt(spot: WindowSpot): boolean {
+    for (const e0 of this.h.enemies.list) {
+      const e = e0 as Enemy;
+      if (!e.alive || !e.reach || !e.body) continue;
+      if (!byWindow(spot.pos, spot.look, bodyPoint(e.pos, e.height, spot.pos, _a), REACH.window.knife)) continue;
+      if (sideOf(e.pos, e.yaw, spot.pos) !== 'front') return true;
+    }
+    return false;
   }
 
   /** Some man on his feet would have a window here in his eyes. */
@@ -667,6 +666,13 @@ export class ReachMode {
     for (const e of h.enemies.list) {
       if (!e.alive || !e.reach || win.noticed.has(e.id) || !this.able(e.id)) continue;
       e.eye(_a);
+      // (right behind him, a window left open too long is heard)
+      const heard = win.t > REACH.notice.hear && Math.hypot(e.pos.x - win.far.pos.x, e.pos.z - win.far.pos.z) < REACH.notice.hearRange;
+      if (heard) {
+        win.noticed.add(e.id);
+        h.audio.shout(e.chest(_b));
+        continue;
+      }
       if (!inHisEyes(_a, e.yaw, win.far.pos) || !h.world.lineOfSight(_a, win.far.pos)) {
         win.seen.delete(e.id);
         continue;

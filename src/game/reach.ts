@@ -83,8 +83,13 @@ export const REACH = {
     stun: 1.2,
     hitstop: 0.07,
   },
-  /** A window in front of a man: within this (m) and this cone (cos of the half-angle), seen for this long (s), and he knows it's there. */
-  notice: { range: 8, cos: 0.5, time: 0.35, react: 1.6 },
+  /**
+   * A window in front of a man: within `range` (m) and this cone (cos of the
+   * half-angle), seen for `time` (s), and he knows it's there (he turns to it
+   * for `react` s). Right behind him (within `hearRange` m) he hears it after
+   * `hear` s: be quick.
+   */
+  notice: { range: 8, cos: 0.5, time: 0.35, react: 1.6, hear: 1.1, hearRange: 2.2 },
   rifle: {
     /** One magazine; empty, it's dropped for good (take another weapon). */
     mag: 12,

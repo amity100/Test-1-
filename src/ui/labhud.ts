@@ -304,7 +304,7 @@ export class LabHud {
   /** WAVE n: the banner, with a countdown to the first man through. */
   announce(n: number, waves: number, sub: string, variant: CombatVariant) {
     // (REACH: the rules card shows itself through W1's start, then folds behind RULES)
-    if (n === 1 && variant === 'reach') {
+    if (n === 1 && variant === 'reach' && getDevice() !== 'touch') {
       this.el.classList.add('rules-open');
       clearTimeout(this.rulesTimer);
       this.rulesTimer = window.setTimeout(() => this.el.classList.remove('rules-open'), 11000);

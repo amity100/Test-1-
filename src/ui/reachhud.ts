@@ -15,7 +15,7 @@ export interface ThreatArrow {
 export interface ReachHudState {
   device: 'kbm' | 'pad' | 'touch';
   /** The WINDOW key is held: the ghost can open there; someone would see it. */
-  ghost: { ok: boolean; seen: boolean } | null;
+  ghost: { ok: boolean; seen: boolean; behind: boolean } | null;
   /** A window is open: what HAND does there; blocked = he sees it coming. */
   hand: { verb: ReachHandVerb; blocked: boolean } | null;
   stab: ReachStab;
@@ -143,7 +143,7 @@ export class ReachHud {
     // the chip: a held portal's exit, else the ghost, else the hand at the window
     let chipKey = 'off';
     if (s.held) chipKey = `held|${s.held}`;
-    else if (s.ghost) chipKey = `ghost|${s.ghost.ok}|${s.ghost.seen}`;
+    else if (s.ghost) chipKey = `ghost|${s.ghost.ok}|${s.ghost.seen}|${s.ghost.behind}`;
     else if (s.hand) chipKey = `hand|${s.hand.verb}|${s.hand.blocked}|${s.device}`;
     this.put('chip', chipKey, () => {
       const c = this.chip;
@@ -158,9 +158,10 @@ export class ReachHud {
         word = t(`reach.exit.${s.held}`);
         cls = bad ? 'deadly' : 'held';
       } else if (s.ghost) {
-        icon = s.ghost.seen ? REACH_ICON.eye : REACH_ICON.window;
-        word = t(!s.ghost.ok ? 'reach.ghost.near' : s.ghost.seen ? 'reach.ghost.seen' : 'reach.ghost.ok');
-        cls = !s.ghost.ok ? 'bad' : s.ghost.seen ? 'seen' : 'ghost';
+        const g = s.ghost;
+        icon = g.seen ? REACH_ICON.eye : g.behind ? REACH_ICON.knife : REACH_ICON.window;
+        word = t(!g.ok ? 'reach.ghost.near' : g.seen ? 'reach.ghost.seen' : g.behind ? 'reach.ghost.behind' : 'reach.ghost.ok');
+        cls = !g.ok ? 'bad' : g.seen ? 'seen' : g.behind ? 'behind' : 'ghost';
       } else {
         const h = s.hand!;
         icon = h.blocked ? REACH_ICON.eye : h.verb === 'pull' ? REACH_ICON.pull : h.verb === 'portal' ? REACH_ICON.portal : h.verb === 'empty' ? REACH_ICON.none : h.verb === 'disarm' ? REACH_ICON.hand : REACH_ICON[h.verb];

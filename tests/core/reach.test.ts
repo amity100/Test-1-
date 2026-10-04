@@ -463,7 +463,7 @@ describe('REACH: the hand at the far window', () => {
     expect(calls).toContain('reach.late');
   });
 
-  it('aimed at a man, the window stands just past him along your aim (behind him if he faces you)', () => {
+  it('a man does not stop the aim (the window goes on to the first surface); the floor just behind his feet puts it right behind him: BEHIND HIM', () => {
     const { R, man, freeze, step, aimAt, input } = rig();
     const e = man(V(0, 0, 14), Math.PI);
     step(1);
@@ -471,8 +471,14 @@ describe('REACH: the hand at the far window', () => {
     aimAt(V(0, 1.2, 14));
     input.window = true;
     step(2);
-    expect(R.ghost!.pos.z).toBeCloseTo(14 + REACH.window.past, 0);
+    expect(R.ghost!.pos.z).toBeGreaterThan(20);
+    expect(R.ghost!.behind).toBe(false);
+    aimAt(V(0, 0, 14.9));
+    step(2);
+    expect(R.ghost!.surface).toBe('floor');
+    expect(R.ghost!.pos.z).toBeCloseTo(14.9, 0);
     expect(sideOf(e.pos, e.yaw, R.ghost!.pos)).toBe('back');
+    expect(R.ghost!.behind).toBe(true);
     input.window = false;
   });
 
@@ -481,10 +487,11 @@ describe('REACH: the hand at the far window', () => {
     const e = man(V(0, 0, 14), Math.PI);
     step(1);
     freeze(e);
-    aimAt(V(0, 1.2, 14));
+    aimAt(V(0, 0, 14.9));
     input.window = true;
     step(2);
     expect(R.ghost!.look.z).toBeCloseTo(-1, 2);
+    aimAt(V(0, 1.2, 14));
     R.airDist = 12.8;
     step(1);
     expect(R.ghost!.pos.z).toBeLessThan(14);
@@ -679,6 +686,21 @@ describe('REACH: they see your window', () => {
       step(Math.ceil(REACH.notice.time * 60) + 3);
       expect(R.win!.noticed.has(e.id), how).toBe(how === 'front');
     }
+  });
+
+  it('right behind him, a window left open too long is heard: he turns to it', () => {
+    const { R, man, freeze, unpin, openAt, step } = rig();
+    const e = man(V(0, 0, 13.2), 0);
+    step(1);
+    freeze(e);
+    openAt(V(0, 1.5, 12));
+    step(Math.ceil(REACH.notice.time * 60) + 2);
+    expect(R.win!.noticed.has(e.id)).toBe(false);
+    unpin(e);
+    step(Math.ceil((REACH.notice.hear - REACH.notice.time) * 60) + 4);
+    expect(R.win!.noticed.has(e.id)).toBe(true);
+    step(30);
+    expect(sideOf(e.pos, e.yaw, R.win!.far.pos)).toBe('front');
   });
 
   it('a rifleman on the far side of your window shoots into it: the laser shows the way, the round comes out of your near window at you', () => {

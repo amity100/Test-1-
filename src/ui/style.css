@@ -1138,7 +1138,7 @@ html[dir='rtl'] .flow-tip { font-family: 'Heebo', 'Oxanium', sans-serif; font-si
 .rh-tip { position: absolute; left: 50%; bottom: calc(var(--sb, 0px) + 82px); transform: translateX(-50%); padding: 4px 12px; font-size: 12px; font-weight: 700; letter-spacing: .1em; white-space: nowrap; color: #dff9ff; background: rgba(8, 11, 17, 0.6); border-radius: 3px; opacity: 0; }
 .rh-tip.go { animation: rhTip 5.5s ease forwards; }
 @keyframes rhTip { 0% { opacity: 0; } 6% { opacity: 1; } 82% { opacity: 1; } 100% { opacity: 0; } }
-.is-touch .rh-tip { bottom: calc(var(--sb, 0px) + 44px); font-size: 10px; }
+.is-touch .rh-tip { bottom: auto; top: calc(var(--st, 0px) + 54px); font-size: 10px; }
 
 /* ---- REACH: the window grammar ---- */
 /* the old mode's leftovers stay away under REACH (STYLE, the rift pips, the score bank) */
@@ -1151,9 +1151,10 @@ html[dir='rtl'] .flow-tip { font-family: 'Heebo', 'Oxanium', sans-serif; font-si
 .lab-panel[data-variant='reach'] .lp-more { display: block; }
 .lab-panel[data-variant='reach'] .lp-wave b { font-size: 15px; }
 .lab-panel[data-variant='reach'] .lp-rules > div { font-size: 11px; }
-.is-touch .lab-panel[data-variant='reach'] { top: calc(var(--st) + 8px); left: calc(var(--sl) + 64px); padding: 3px 8px 4px; max-width: 240px; }
+.is-touch .lab-panel[data-variant='reach'] { top: calc(var(--st) + 8px); left: auto; right: calc(var(--sr) + 12px); padding: 3px 8px 4px; max-width: 260px; }
 .is-touch .lab-panel[data-variant='reach'] .lp-wave b { font-size: 12px; }
 .rh-chip.ghost { border-color: rgba(127, 244, 255, 0.9); }
+.rh-chip.behind { border-color: #7ff4ff; background: rgba(4, 50, 60, 0.85); color: #fff; }
 .rh-chip.seen { border-color: #ffb83a; color: #ffe2a6; background: rgba(40, 24, 2, 0.78); }
 .rh-chip.bad { border-color: #ff4a6a; color: #ffc0cc; background: rgba(60, 4, 14, 0.78); }
 .rh-chip.dim { opacity: .55 !important; border-color: rgba(255, 255, 255, 0.4); color: #ddd; }
