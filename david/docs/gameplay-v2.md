@@ -128,3 +128,41 @@ The verse is the fight's structure (1 Sam 17:34–35): "וּבָא הָאֲרִ�
   (pointed where shown in the film's style), never styled as verses, never quotation marks around non-quotes.
 * The sling: two cords and a leather pouch (as now); the stones: smooth wadi pebbles (5–7 cm, ≈100–200 g); no metal
   targets, no modern objects.
+
+## v2.1 — the user's notes of 4 Oct (binding; they replace §2's rejects and §3's release timing)
+
+> "כשאוספים את האבנים זה מייאש ולוקח יותר מידי זמן זה לא אמור להיות כזה קשה ומורכב אמורים למצוא אותה ממש מהר הם
+> פשוט אמורות להיות מפוזרות יותר לא באזור אחד אבל כל אבן שיש אמורה להיות מתאימה כי מה שעשית עכשיו שיש אבנים שלא
+> מתאימות זה פשוט האריך את זה להרבה מאוד זמן"
+>
+> "באתי לקלוע על הכדים המכניקה ששמת היא לא מהנה מספיק והיא יותר מידי קשה צריכה להיות מכניקה שהיא מהנה כלומר אפשר
+> לירות חלש אפשר לירות ממש חזק תלוי במיומנות של השחקן ויש בה איזה שהוא אתגר אבל לא יותר מידיי כי כרגע זה פשוט
+> יותר מידיי קשה לעצור את הסיבוב של המקלע בדיוק בזמן הנכון"
+
+### The five smooth stones — quick and pleasant (replaces §2's rejects)
+
+* **Every stone he can pick up is a good one** (smooth, round, the right size). No rough or flat stones to examine and
+  toss back, no "not smooth enough" lines; the bed's gravel stays as scenery only.
+* **Scattered widely, easy to see:** 9-10 smooth stones spread along the whole visible stretch of the stream bed and its
+  edges (not in one patch) — each lying on top of the gravel or at the water's edge, a little larger, paler and more
+  polished than the gravel, with a wet sheen; a soft natural glint of the sun on the nearest ones. A first-time player
+  finds five in about 30-60 s.
+* **Quick to take:** the prompt from ≈1.8 m in any facing; the pick ≈1.0-1.2 s (down, take it, a short look as he
+  rises, into the bag), the camera barely moves; he can walk on at once. A gentle pointer to the nearest stone after
+  ≈20 s without a find.
+
+### The sling — power by skill, a fair challenge (replaces §3's release timing)
+
+* **Hold to whirl, release to throw — at any moment.** No timing window on the whirl and no penalty for the moment of
+  release: the stone always leaves the pouch at the right point of the circle (the animation adapts within ≈0.1 s).
+* **Power is the skill:** while he whirls, a clear power gauge round the reticle fills (≈1 s from weak to full); a weak
+  throw is slow and drops short, a strong one flies fast, flat and far. The gauge's top is a gold "strong" zone that
+  lasts ≈0.6 s — released there the throw is full power with a small bonus (a gold flash, a distinct sound, a little
+  faster and truer); held past it, his arm tires and the aim begins to sway gently (he can still throw).
+* **Aim:** the reticle is where a full-power stone goes (its drop at that distance is allowed for); a weaker stone falls
+  short of it, more the weaker it is. Wind (round 2) drifts the stone a little — aim into it; moving targets need a lead.
+  Hit zones are a little forgiving. Aim assist only as a small magnetism on touch screens.
+* **Challenge without frustration:** an average player clears every round within its stones; the rating (one to three
+  marks) is where the challenge lives (stones used, strong releases, streaks, time). Round 4's cord stays the finale —
+  hard but reachable.
+* Phones: the same — hold the sling button to whirl, drag to aim, lift to throw; the gauge large and clear.
