@@ -235,12 +235,11 @@ export class DualQuatSkinning {
     // the renderer calls skeleton.update() once per frame before drawing any mesh bound to it
     const orig = skeleton.update.bind(skeleton);
     if (SAFE) {
-      // safe mode: no dual quaternions; every skinned geometry under this human keeps its 4 largest influences
-      // (garments attached later are picked up within a few frames)
-      let frame = 0;
+      // safe mode: no dual quaternions; every skinned geometry under this human keeps its 4 largest influences. The
+      // renderer calls this before it draws any mesh bound to the skeleton, so a garment or a near LOD attached at any
+      // time is converted before its first draw (the walk is a few hundred nodes; converted geometries are skipped)
       skeleton.update = () => {
-        if (frame < 240 ? true : frame % 30 === 0) this.convertTree();
-        frame++;
+        this.convertTree();
         orig();
       };
     } else {
