@@ -216,7 +216,7 @@ export class FilmSound {
    * `spread` s, over a broadband formant-shaped noise wall and stamping. Rings until `dur`; over its last 0.8 s it
    * sinks to `tail` × level (1 = held at full voice to the end: the roar the silence cuts off).
    */
-  roar(o: Out, t: number, dur: number, level: number, spread = 0.45, tail = 0.55): void {
+  roar(o: Out, t: number, dur: number, level: number, spread = 0.45, tail = 0.55, fall?: number): void {
     const v = new Voice(this.c);
     const bus = v.gain(0), p = v.pan(0);
     const drive = v.shaper(this.drive ?? this.c.curve('drive', 3));
@@ -224,7 +224,15 @@ export class FilmSound {
     const B = bus.gain;
     B.setValueAtTime(0, t); B.linearRampToValueAtTime(level * 0.6, t + spread * 0.6);
     B.linearRampToValueAtTime(level, t + spread + 0.5);
-    B.setValueAtTime(level, t + Math.max(spread + 0.6, dur - 0.8)); B.linearRampToValueAtTime(level * clamp(tail, 0, 1.2), t + dur);
+    const fl = fall !== undefined && Number.isFinite(fall) && fall < dur - 0.3 ? Math.max(spread + 0.7, fall) : -1;
+    if (fl > 0) {
+      // CUT v5.2 (G4): the roar is not switched off — at `fall` the ranks run out of breath: the shout sags a little at
+      // once and dies away over ≈1.5-2 s (the drive cleaning up as it goes, the voices dropping out one by one)
+      B.setValueAtTime(level, t + fl - 0.04); B.linearRampToValueAtTime(level * 0.8, t + fl + 0.1);
+      B.setTargetAtTime(0, t + fl + 0.1, 0.75);
+    } else {
+      B.setValueAtTime(level, t + Math.max(spread + 0.6, dur - 0.8)); B.linearRampToValueAtTime(level * clamp(tail, 0, 1.2), t + dur);
+    }
     // the noise wall ("ahh" of thousands)
     const n = v.noise('pink', t), wall = v.gain(1.1);
     for (const [f, q, g] of [[700, 3, 1], [1150, 4, 0.8], [2600, 5, 0.35], [300, 1.2, 0.6]] as const) {
@@ -266,11 +274,37 @@ export class FilmSound {
     const st = v.noise('brown', t), sl = v.filter('lowpass', 140, 0.8), sg = v.gain(0);
     const S = sg.gain;
     S.setValueAtTime(0, t);
-    for (let x = spread; x < dur - 0.2; x += rand(0.18, 0.32)) {
-      S.setValueAtTime(0, t + x); S.linearRampToValueAtTime(rand(0.8, 1.4), t + x + 0.01); S.setTargetAtTime(0, t + x + 0.01, 0.05);
+    for (let x = spread; x < (fl > 0 ? fl + 0.5 : dur) - 0.2; x += rand(0.18, 0.32)) {
+      const w = fl > 0 && x > fl ? Math.max(0, 1 - (x - fl) / 0.5) : 1;
+      S.setValueAtTime(0, t + x); S.linearRampToValueAtTime(rand(0.8, 1.4) * w, t + x + 0.01); S.setTargetAtTime(0, t + x + 0.01, 0.05);
     }
     st.connect(sl); sl.connect(sg); sg.connect(p);
     v.play(t, t + dur + 0.1);
+  }
+
+  /**
+   * The roar's echo rolling back from the valley's walls (CUT v5.2, G4: the roar ebbs instead of stopping dead): a few
+   * late reflections of the crowd's "ahh" through its formants — each darker and fainter than the last, from alternating
+   * sides — over ≈2.5 s.
+   */
+  roarEcho(o: Out, t: number, level: number): void {
+    const v = new Voice(this.c);
+    const refl: ReadonlyArray<readonly [number, number, number, number]> = [
+      // [delay (s), gain, lowpass (Hz), pan]
+      [0.14, 0.6, 3400, -0.55], [0.46, 0.42, 2700, 0.6], [0.86, 0.28, 2100, -0.4], [1.32, 0.17, 1600, 0.45], [1.9, 0.09, 1200, -0.25],
+    ];
+    for (const [dl, g0, lp, pan] of refl) {
+      const tt = t + dl, d = 0.55 + dl * 0.3;
+      const n = v.noise('pink', tt), lpf = v.filter('lowpass', lp, 0.6), g = v.gain(0), pn = v.pan(pan), sum = v.gain(1);
+      for (const [f, q, gg] of [[700, 2.5, 1], [1150, 3.5, 0.75], [2400, 4, 0.3], [320, 1.2, 0.5]] as const) {
+        const bp = v.filter('bandpass', f, q), gx = v.gain(gg);
+        n.connect(bp); bp.connect(gx); gx.connect(sum);
+      }
+      sum.connect(lpf); lpf.connect(g); g.connect(pn); out2(pn, o, 1, v);
+      const G = g.gain;
+      G.setValueAtTime(0, tt); G.linearRampToValueAtTime(level * g0, tt + 0.07 + dl * 0.05); G.setTargetAtTime(0, tt + 0.1 + dl * 0.05, d * 0.35);
+    }
+    v.play(t, t + 3.4);
   }
 
   /** Spear shafts knocking on leather-faced wooden shields (visual-bible 3.16): a dull woody thud. */

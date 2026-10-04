@@ -319,7 +319,6 @@ export class Story {
   private followShot: ShotInfo | null = null;
   private followT = 0;
   private static readonly GOOD_LINES = ['חָלָק וְעָגֹל', 'זֶה יָעוּף יָשָׁר', 'חַלּוּק טוֹב'];
-  private static readonly REJECT_LINES: Record<string, string> = { flat: 'שָׁטוּחַ מִדַּי', rough: 'לֹא חָלָק דַּיּוֹ', angular: 'חַד וְשָׁבוּר', smooth: '' };
 
   /** the sling range (built lazily: small steps, a frame between them) */
   private ensureRange() {
@@ -347,7 +346,10 @@ export class Story {
     return !!R && Math.hypot(this.player.pos.x - R.station.x, this.player.pos.z - R.station.z) < 2.6;
   }
 
-  /** 3. "וַיִּבְחַר־לוֹ חֲמִשָּׁה חַלֻּקֵי־אֲבָנִים מִן־הַנַּחַל" — he chooses them: only good stones count */
+  /**
+   * 3. "וַיִּבְחַר־לוֹ חֲמִשָּׁה חַלֻּקֵי־אֲבָנִים מִן־הַנַּחַל" — quick and pleasant (gameplay v2.1): every stone he can
+   * take is a good one, ten of them spread along the bed; a quick pick each; a gentle pointer after 20 s without one
+   */
   private async stonesObjective() {
     const L = LAYOUT;
     const bed = this.props.bed;
@@ -361,11 +363,11 @@ export class Story {
     // the shepherd's bag is empty until he chooses his stones
     this.player.bag.smooth = this.player.bag.plain = 0;
     this.player.bag.preferSmooth = false;
-    this.ui.objective('בְּחַר חָמֵשׁ אֲבָנִים לַקֶּלַע בַּנַּחַל', 'רַק חֲלָקוֹת וַעֲגֻלּוֹת, שֶׁהַמַּיִם לִטְּשׁוּ — כְּפִי שֶׁיַּעֲשֶׂה יוֹם אֶחָד בְּעֵמֶק הָאֵלָה');
+    this.ui.objective('אֱסֹף חָמֵשׁ אֲבָנִים לַקֶּלַע', 'אֲבָנִים חֲלָקוֹת, שֶׁהַמַּיִם לִטְּשׁוּ, פְּזוּרוֹת לְאֹרֶךְ הַנַּחַל וְעַל גְּדוֹתָיו');
     const bedPos = this.groundV(L.stones.x, L.stones.z, 0.6);
     const bedMarker = () => (Math.hypot(this.player.pos.x - bedPos.x, this.player.pos.z - bedPos.z) > 10 ? bedPos : null);
     this.setMarker(bedMarker, 'הַנַּחַל');
-    let taken = 0, busy = false, searchT = 0, hinted = 0;
+    let taken = 0, busy = false, searchT = 0, pointing = false;
     const count = () => this.ui.counter(`חַלֻּקֵי אֲבָנִים <b>${taken} / 5</b>`);
     count();
     this.beh = (dt) => {
@@ -377,32 +379,30 @@ export class Story {
         return;
       }
       if (inBed) searchT += dt;
-      // a gentle hint after a long search; later the nearest good stone is pointed at for a few seconds
-      if (searchT > 40 && hinted === 0) {
-        hinted = 1;
-        this.ui.hint('<span class="h-item">חַפֵּשׂ חַלּוּקִים עֲגֻלִּים וּמַבְרִיקִים — לְיַד הַמַּיִם הֵם הַחֲלָקִים בְּיוֹתֵר</span>', 9);
-      }
-      if (searchT > 80 && hinted === 1) {
-        hinted = 2;
-        const g = bed.nearestGood(this.player.pos);
+      // a gentle pointer to the nearest stone after 20 s without a find (for a few seconds; again after another 20 s)
+      if (searchT > 20 && !pointing) {
+        const g = bed.nearestStone(this.player.pos);
         if (g) {
+          pointing = true;
           this.setMarker(g.pos.clone().add(new THREE.Vector3(0, 0.45, 0)), '');
-          this.after(6, () => this.setMarker(bedMarker, 'הַנַּחַל'));
+          this.after(5, () => {
+            pointing = false;
+            searchT = 0;
+            this.setMarker(bedMarker, 'הַנַּחַל');
+          });
         }
       }
-      const c = bed.nearest(this.player.pos, this.player.forward, 1.45);
-      this.ui.prompt(c ? withLabel(K.interact, 'בְּחַן אֶת הָאֶבֶן') : null);
+      const c = bed.nearest(this.player.pos, 1.8);
+      this.ui.prompt(c ? withLabel(K.interact, 'קַח אֶת הָאֶבֶן') : null);
       this.player.model.lookTarget = c ? c.pos : null;
       if (c && this.input.take('interact') && !this.player.model.busy) {
         busy = true;
         this.ui.prompt(null);
-        void this.pickStone(c).then((good) => {
+        void this.pickStone(c, taken).then(() => {
           busy = false;
-          if (good) {
-            taken++;
-            searchT = 0;
-            count();
-          }
+          taken++;
+          searchT = 0;
+          count();
         });
       }
     };
@@ -419,67 +419,53 @@ export class Story {
   }
 
   /**
-   * One stone examined (≈1.6-2 s): he steps to it, goes down on one knee, reaches into the gravel (or the trickle),
-   * lifts it and turns it in his fingers; a smooth one is rubbed clean and goes into the bag (the flap lifts); a
-   * flat / rough / broken one is tossed back with a word. Resolves true for a good stone.
+   * One stone taken (gameplay v2.1, ≈1.1 s): a step to arm's length, down on one knee, the hand takes it from the
+   * gravel (or the water's edge), a short look as he rises, into the bag (the flap lifts). The camera barely moves;
+   * he walks on at once. `n` = stones already in the bag (a word now and then, not every time).
    */
-  private pickStone(c: Candidate): Promise<boolean> {
+  private pickStone(c: Candidate, n: number): Promise<void> {
     const p = this.player, m = p.model, bed = this.props.bed;
-    const good = c.kind === 'smooth';
     p.stowSling(true);
     p.controlEnabled = false;
-    this.cam.close = 1;
-    // kneel at arm's length: the stone ≈0.5 m ahead of him, a little to his right
+    this.cam.close = 0.15;
+    // kneel at arm's length: the stone ≈0.45 m ahead of him, a little to his right
     const to = new THREE.Vector3(c.pos.x - p.pos.x, 0, c.pos.z - p.pos.z);
     if (to.lengthSq() < 1e-4) to.copy(p.forward);
     to.normalize();
     const right = new THREE.Vector3(-to.z, 0, to.x);
-    const spot = c.pos.clone().addScaledVector(to, -0.5).addScaledVector(right, -0.1);
+    const spot = c.pos.clone().addScaledVector(to, -0.45).addScaledVector(right, -0.1);
     const from = p.pos.clone();
     let k = 0;
     this.pickMove = (dt) => {
-      k = Math.min(1, k + dt / 0.3);
+      k = Math.min(1, k + dt / 0.2);
       const e = k * k * (3 - 2 * k);
       p.pos.lerpVectors(from, spot, e);
       p.pos.y = this.engine.terrain.heightAt(p.pos.x, p.pos.z);
-      p.faceToward(c.pos, dt, 16);
+      p.faceToward(c.pos, dt, 20);
     };
     m.pickTarget = c.pos.clone();
     const look = bed.look(c);
     m.setHeldStone(look.geo, look.mat, look.scale);
     const B = STONE_BEATS;
     const ev: { t: number; fn: () => void }[] = [
-      { t: 0.24, fn: () => p.sfx('pebblesKneel', 0.7) },
-      { t: B.grasp - 0.1, fn: () => p.sfx(c.wet ? 'waterRinse' : 'gravelReach', 0.7) },
+      { t: 0.1, fn: () => p.sfx('pebblesKneel', 0.6) },
+      { t: B.grasp - 0.08, fn: () => p.sfx(c.wet ? 'waterRinse' : 'gravelReach', 0.65) },
       { t: B.grasp, fn: () => bed.take(c) },
-    ];
-    if (good) {
-      ev.push({ t: B.look + 0.22, fn: () => this.ui.praise(Story.GOOD_LINES[Math.floor(Math.random() * Story.GOOD_LINES.length)], 1.3) });
-      ev.push({ t: B.rub, fn: () => p.sfx('stoneRub', 0.6) });
-      ev.push({ t: B.bag, fn: () => {
+      { t: B.bag, fn: () => {
         p.sfx('stoneToBag', 0.8);
         p.bag.smooth++;
-      } });
-    } else {
-      ev.push({ t: B.look + 0.2, fn: () => this.ui.praise(Story.REJECT_LINES[c.kind] || 'לֹא זֶה', 1.5, true) });
-      ev.push({ t: B.toss, fn: () => {
-        const hand = m.handSocketR.getWorldPosition(new THREE.Vector3());
-        const vel = right.clone().multiplyScalar(1.3 + Math.random() * 0.6).addScaledVector(to, 0.8).add(new THREE.Vector3(0, 1.7, 0));
-        this.props.toss(look.geo, look.mat, hand, vel, (at) => {
-          p.sfx('stoneToss', 0.6);
-          bed.putBack(c, at.clone());
-        });
-      } });
-    }
-    m.play(good ? 'stone' : 'stoneToss', ev);
+      } },
+    ];
+    if (n % 2 === 0) ev.push({ t: B.look, fn: () => this.ui.praise(Story.GOOD_LINES[(n / 2) % Story.GOOD_LINES.length], 1.0) });
+    m.play('stone', ev);
     return new Promise((resolve) => {
-      this.after((good ? B.end : B.tossEnd) + 0.02, () => {
+      this.after(B.end + 0.02, () => {
         m.pickTarget = null;
         m.setHeldStone(null);
         this.pickMove = null;
         p.controlEnabled = true;
         this.cam.close = 0;
-        resolve(good);
+        resolve();
       });
     });
   }

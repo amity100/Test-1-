@@ -292,7 +292,41 @@ async function boot() {
   let pausedFrames = 0;
   let idleFrames = 0;
   const camDir = new THREE.Vector3();
+  // load1 (wave 4): main-thread ms per frame by system, draw calls and triangles over all passes — ?perf=1 or tests
+  // (window.__frameStats; __frameStats.reset() starts a new window)
+  const perfOn = testMode || params.has('perf');
+  const fstats = {
+    n: 0,
+    ms: {} as Record<string, number>,
+    max: {} as Record<string, number>,
+    calls: 0,
+    tris: 0,
+    reset() {
+      this.n = 0;
+      this.ms = {};
+      this.max = {};
+      this.calls = 0;
+      this.tris = 0;
+    },
+  };
+  if (perfOn) {
+    engine.renderer.info.autoReset = false;
+    (window as unknown as Record<string, unknown>).__frameStats = fstats;
+  }
+  let lapT = 0;
+  const lap = (k: string) => {
+    if (!perfOn) return;
+    const t = performance.now();
+    const d = t - lapT;
+    lapT = t;
+    fstats.ms[k] = (fstats.ms[k] ?? 0) + d;
+    if (d > (fstats.max[k] ?? 0)) fstats.max[k] = d;
+  };
   const frame = (rawDt: number, render = true) => {
+    if (perfOn) {
+      lapT = performance.now();
+      engine.renderer.info.reset();
+    }
     input.update();
     if (started && input.take('pause') && !cam.inCinematic) setPaused(!paused);
     if (paused) {
@@ -303,23 +337,30 @@ async function boot() {
       return;
     }
     pausedFrames = 0;
+    lap('input');
     const dt = started ? story.update(rawDt) : rawDt;
+    lap('story');
     time += dt;
     if (!cam.inCinematic && started) {
       const look = input.consumeLook();
       cam.applyLook(look.x, look.y);
     } else input.consumeLook();
     player.update(dt, input, cam, time);
+    lap('player');
     flock.update(dt, time, { shepherd: player.pos, threats: story.threats, camera: engine.camera });
+    lap('flock');
     bear.update(dt);
+    lap('bear');
     projectiles.update(dt);
     props.update(dt);
+    lap('props');
     cam.target.set(player.pos.x, player.pos.y + 1.55, player.pos.z);
     cam.update(rawDt, time);
     engine.setFov(cam.fov);
     if (cam.inCinematic) engine.focus.copy(engine.camera.position).addScaledVector(engine.camera.getWorldDirection(camDir), 18);
     else engine.focus.copy(player.pos);
     audio.update(rawDt);
+    lap('cam+audio');
     // the start screen is opaque: until the start click, redraw only now and then (keeps the canvas valid) instead of
     // spending a phone's GPU and battery on a picture nobody sees — and not at all while the film's sets are being built
     // behind it (load1: the GPU is theirs); nor while the film's start is held under its black card
@@ -332,6 +373,12 @@ async function boot() {
     }
     // unconsumed edge presses expire each frame
     input.clearEdges();
+    if (perfOn) {
+      lap('render');
+      fstats.n++;
+      fstats.calls += engine.renderer.info.render.calls;
+      fstats.tris += engine.renderer.info.render.triangles;
+    }
   };
   // black-frame watchdog: every frame in test runs, every 30th with ?watchdog=1 (field diagnostics)
   const watchdog = testMode || params.has('watchdog') ? new FrameWatchdog(engine.renderer, testMode ? 1 : 30) : null;

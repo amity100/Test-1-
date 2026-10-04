@@ -139,12 +139,8 @@ export function nextFrame() {
 }
 
 // ------------------------------------------------------------------------------------------ the stream bed
-/** what a pebble in the bed is like (gameplay v2 §2): only 'smooth' ones are worth the bag */
-export type PebbleKind = 'smooth' | 'flat' | 'rough' | 'angular';
-
-/** one stone he can pick up and examine */
+/** one smooth stone he can pick up (gameplay v2.1: every one of them is a good one) */
 export interface Candidate {
-  kind: PebbleKind;
   pos: THREE.Vector3;
   taken: boolean;
   /** the instanced mesh it lives in and its index (hidden when picked) */
@@ -156,7 +152,29 @@ export interface Candidate {
   home: THREE.Vector3;
   homeQ: THREE.Quaternion;
   homeS: number;
-  moved: boolean;
+}
+
+/** a soft four-pointed star of light (the sun on a wet, polished stone) */
+let _glintTex: THREE.Texture | null = null;
+function glintTexture() {
+  if (_glintTex) return _glintTex;
+  const n = 32, c = document.createElement('canvas');
+  c.width = c.height = n;
+  const g = c.getContext('2d');
+  if (g) {
+    const r = g.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2);
+    r.addColorStop(0, 'rgba(255,255,255,1)');
+    r.addColorStop(0.18, 'rgba(255,250,235,0.55)');
+    r.addColorStop(1, 'rgba(255,245,225,0)');
+    g.fillStyle = r;
+    g.fillRect(0, 0, n, n);
+    g.globalCompositeOperation = 'lighter';
+    g.fillStyle = 'rgba(255,250,235,0.5)';
+    g.fillRect(n / 2 - 0.75, 2, 1.5, n - 4);
+    g.fillRect(2, n / 2 - 0.75, n - 4, 1.5);
+  }
+  _glintTex = new THREE.CanvasTexture(c);
+  return _glintTex;
 }
 
 /**
@@ -187,9 +205,9 @@ export function pebbleShape(seed: number, round: number, flat: number, elong = 1
 
 /**
  * The stream bed of the five smooth stones (1 Sam 17:40 "וַיִּבְחַר־לוֹ חֲמִשָּׁה חַלֻּקֵי־אֲבָנִים מִן־הַנַּחַל"): a field
- * of pebbles of every shape along the wadi (instanced), a thin trickle down its middle, and among them stones the
- * right size for a sling — most of them flat, rough or broken; the smooth, round, polished ones are fewer, with a
- * wet sheen where the trickle runs. No beacons: a near good stone only catches the light a little.
+ * of pebbles of every shape along the wadi (instanced scenery), a thin trickle down its middle, and on it ten smooth,
+ * polished sling stones spread along the whole stretch (gameplay v2.1: every stone he can take is a good one), the
+ * ones at the water's edge wet and glossy. No beacons: the sun glints softly on the nearest ones.
  */
 export class StreamBed {
   readonly group = new THREE.Group();
@@ -197,6 +215,7 @@ export class StreamBed {
   /** the bed's axis (world): centre, along, across */
   readonly center = new THREE.Vector3();
   private glint: { c: Candidate; base: THREE.Color } | null = null;
+  private glints: THREE.Sprite[] = [];
   private readonly tmpM = new THREE.Matrix4();
   private readonly tmpC = new THREE.Color();
   readonly goodGeo: THREE.BufferGeometry[] = [];
@@ -208,10 +227,10 @@ export class StreamBed {
     const stoneMap = tex.gravel ?? null;
     void stoneMap;
     this.materials = {
-      // water-worn limestone / flint pebbles: pale, smooth, a soft sheen
-      smooth: new THREE.MeshStandardMaterial({ color: 0xe9e2d2, roughness: 0.34, metalness: 0 }),
-      // wet: darker, glossy (the trickle)
-      wet: new THREE.MeshStandardMaterial({ color: 0xb8ad98, roughness: 0.12, metalness: 0.02 }),
+      // water-worn limestone / flint pebbles: pale, polished, a soft sheen
+      smooth: new THREE.MeshStandardMaterial({ color: 0xf2ecdf, roughness: 0.24, metalness: 0 }),
+      // wet: at the water's edge, a little darker and glossy
+      wet: new THREE.MeshStandardMaterial({ color: 0xd6ccb8, roughness: 0.09, metalness: 0.02 }),
       rough: new THREE.MeshStandardMaterial({ color: 0xd2c6b0, roughness: 0.9, metalness: 0 }),
     };
   }
@@ -315,87 +334,89 @@ export class StreamBed {
       this.meshes.push(im);
       await yieldFrame();
     }
-    // ---- the candidates: sling-sized stones (5-7 cm), most of them not good enough
-    const kinds: { kind: PebbleKind; n: number; geo: THREE.BufferGeometry[] }[] = [
-      { kind: 'smooth', n: 9, geo: [pebbleShape(101, 1, 0.66, 1.18, 2), pebbleShape(113, 1, 0.74, 1.1, 2), pebbleShape(127, 1, 0.6, 1.25, 2)] },
-      { kind: 'flat', n: 8, geo: [pebbleShape(203, 0.75, 0.3, 1.25, 2), pebbleShape(211, 0.6, 0.26, 1.35, 2)] },
-      { kind: 'rough', n: 8, geo: [pebbleShape(307, 0.35, 0.7, 1.1, 2), pebbleShape(311, 0.3, 0.62, 1.15, 2)] },
-      { kind: 'angular', n: 7, geo: [pebbleShape(401, 0.0, 0.6, 1.2, 2), pebbleShape(419, 0.05, 0.55, 1.05, 2)] },
+    // ---- the stones he can take (gameplay v2.1): EVERY one a good one — ten smooth, water-worn sling stones (≈7-9 cm,
+    // a little larger, paler and more polished than the gravel), spread along the whole stretch of the bed and its
+    // edges, a few metres apart, on top of the gravel, at the water's edge (wet and glossy) or up at the bed's edge
+    const geos = [pebbleShape(101, 1, 0.66, 1.18, 2), pebbleShape(113, 1, 0.74, 1.1, 2), pebbleShape(127, 1, 0.6, 1.25, 2)];
+    this.goodGeo.push(...geos);
+    // [along the bed (m), side of the water (-1 / 1), where: 0 the water's edge, 1 the gravel, 2 the bed's edge]
+    const spots: [number, number, number][] = [
+      [-11.4, 1, 1], [-9.2, -1, 0], [-6.9, 1, 2], [-4.6, -1, 1], [-2.3, 1, 0], [0.1, -1, 2], [2.4, 1, 1], [4.8, -1, 0], [7.2, 1, 2], [9.6, -1, 1],
     ];
-    this.goodGeo.push(...kinds[0].geo);
     const used: THREE.Vector3[] = [];
-    let wetN = 0;
-    for (const k of kinds) {
-      for (let gi = 0; gi < k.geo.length; gi++) {
-        const n = Math.ceil(k.n / k.geo.length) - (gi === k.geo.length - 1 ? Math.ceil(k.n / k.geo.length) * k.geo.length - k.n : 0);
-        if (n <= 0) continue;
-        const wet = k.kind === 'smooth' && gi === 0;
-        const mat = k.kind === 'smooth' ? (wet ? this.materials.wet : this.materials.smooth) : this.materials.rough;
-        const im = new THREE.InstancedMesh(k.geo[gi], mat, n);
+    const placed: { pp: THREE.Vector3; g: number; wet: boolean; s: number; q: THREE.Quaternion }[] = [];
+    for (let i = 0; i < spots.length; i++) {
+      const [u0, side, where] = spots[i];
+      const off = where === 0 ? 0.42 : where === 1 ? 1.25 : 2.6;
+      let pp: THREE.Vector3 | null = null;
+      for (let tries = 0; tries < 30 && !pp; tries++) {
+        const u = u0 + (rnd() - 0.5) * 1.2;
+        const v = trickleV(u) + side * (off + (rnd() - 0.5) * (where === 0 ? 0.12 : 0.5));
+        at(u, v, p);
+        if (!this.colliders.free(p.x, p.z, 0.5)) continue;
+        if (T.slopeAt(p.x, p.z) > 0.5) continue;
+        if (used.some((o) => Math.hypot(o.x - p.x, o.z - p.z) < 1.4)) continue;
+        pp = p.clone();
+      }
+      if (!pp) pp = at(u0, trickleV(u0) + side * off, new THREE.Vector3());
+      used.push(pp);
+      const s = 0.033 + rnd() * 0.004;
+      e.set((rnd() - 0.5) * 0.25, rnd() * Math.PI * 2, (rnd() - 0.5) * 0.25);
+      placed.push({ pp, g: i % geos.length, wet: where === 0, s, q: new THREE.Quaternion().setFromEuler(e) });
+    }
+    for (const wet of [false, true]) {
+      for (let g = 0; g < geos.length; g++) {
+        const here = placed.filter((x) => x.wet === wet && x.g === g);
+        if (!here.length) continue;
+        const im = new THREE.InstancedMesh(geos[g], wet ? this.materials.wet : this.materials.smooth, here.length);
         im.castShadow = true;
         im.receiveShadow = true;
-        for (let i = 0; i < n; i++) {
-          // spread over the bed; the smooth ones mostly where the water has worked them (near the trickle)
-          let pp: THREE.Vector3 | null = null;
-          for (let tries = 0; tries < 40 && !pp; tries++) {
-            const u = (rnd() - 0.5) * 22;
-            const near = k.kind === 'smooth' ? (wet ? 0.25 : 1.2) : 3.2;
-            const v = trickleV(u) + (rnd() - 0.5) * 2 * near + (wet ? 0 : (rnd() - 0.5) * 0.6);
-            at(u, v, p);
-            if (!this.colliders.free(p.x, p.z, 0.6)) continue;
-            if (T.slopeAt(p.x, p.z) > 0.45) continue;
-            if (used.some((o) => Math.hypot(o.x - p.x, o.z - p.z) < 0.75)) continue;
-            pp = p.clone();
-          }
-          if (!pp) pp = at((rnd() - 0.5) * 18, (rnd() - 0.5) * 3, new THREE.Vector3());
-          used.push(pp);
-          const s = 0.028 + rnd() * 0.006; // ≈ 5.6-6.8 cm long
-          e.set((rnd() - 0.5) * 0.3, rnd() * Math.PI * 2, (rnd() - 0.5) * 0.3);
-          q.setFromEuler(e);
-          sc.set(s, s, s);
-          const y = pp.y + s * 0.42;
-          m4.compose(p.set(pp.x, y, pp.z), q, sc);
+        here.forEach((x, i) => {
+          // lying on the gravel, a good part of it showing
+          const y = x.pp.y + x.s * 0.5;
+          m4.compose(p.set(x.pp.x, y, x.pp.z), x.q, sc.set(x.s, x.s, x.s));
           im.setMatrixAt(i, m4);
-          this.tmpC.setHSL(0.09 + rnd() * 0.03, k.kind === 'smooth' ? 0.1 : 0.16, k.kind === 'smooth' ? 0.86 : 0.66 + rnd() * 0.12);
+          this.tmpC.setHSL(0.1 + rnd() * 0.025, 0.08, wet ? 0.8 : 0.9);
           im.setColorAt(i, this.tmpC);
-          this.candidates.push({ kind: k.kind, pos: new THREE.Vector3(pp.x, y, pp.z), taken: false, mesh: im, index: i, wet, home: new THREE.Vector3(pp.x, y, pp.z), homeQ: q.clone(), homeS: s, moved: false });
-          if (wet) wetN++;
-        }
+          this.candidates.push({ pos: new THREE.Vector3(x.pp.x, y, x.pp.z), taken: false, mesh: im, index: i, wet, home: new THREE.Vector3(x.pp.x, y, x.pp.z), homeQ: x.q.clone(), homeS: x.s });
+        });
         im.instanceMatrix.needsUpdate = true;
         if (im.instanceColor) im.instanceColor.needsUpdate = true;
-        im.userData.kind = k.kind;
         this.group.add(im);
         this.meshes.push(im);
       }
-      await yieldFrame();
     }
-    void wetN;
+    // the sun's glint on the nearest ones (a soft star that comes and goes; never a beacon)
+    this.glints = Array.from({ length: 3 }, () => {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: glintTexture(), color: 0xfff6e0, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+      sp.scale.setScalar(0.11);
+      sp.visible = false;
+      this.group.add(sp);
+      return sp;
+    });
+    await yieldFrame();
   }
 
-  /** the candidate he would examine: the nearest one within `reach` of `at`, preferring the one in front */
-  nearest(at: THREE.Vector3, fwd: THREE.Vector3, reach = 1.5): Candidate | null {
-    let best: Candidate | null = null, bs = Infinity;
+  /** the stone he would take: the nearest one within `reach` of `at`, in any facing (gameplay v2.1: ≈1.8 m) */
+  nearest(at: THREE.Vector3, reach = 1.8): Candidate | null {
+    let best: Candidate | null = null, bd = reach;
     for (const c of this.candidates) {
       if (c.taken) continue;
-      const dx = c.pos.x - at.x, dz = c.pos.z - at.z;
-      const d = Math.hypot(dx, dz);
-      if (d > reach) continue;
-      const front = (dx * fwd.x + dz * fwd.z) / Math.max(1e-3, d);
-      const score = d * (1.6 - 0.6 * front);
-      if (score < bs) {
-        bs = score;
+      const d = Math.hypot(c.pos.x - at.x, c.pos.z - at.z);
+      if (d <= bd) {
+        bd = d;
         best = c;
       }
     }
     return best;
   }
 
-  /** the nearest good stone still in the bed (the gentle hint) */
-  nearestGood(at: THREE.Vector3): Candidate | null {
+  /** the nearest stone still in the bed, at any distance (the gentle pointer, the glints) */
+  nearestStone(at: THREE.Vector3): Candidate | null {
     let best: Candidate | null = null, bd = Infinity;
     for (const c of this.candidates) {
-      if (c.taken || c.kind !== 'smooth') continue;
-      const d = c.pos.distanceTo(at);
+      if (c.taken) continue;
+      const d = Math.hypot(c.pos.x - at.x, c.pos.z - at.z);
       if (d < bd) {
         bd = d;
         best = c;
@@ -407,17 +428,16 @@ export class StreamBed {
   /** every stone back where it was (a restart of the chapter) */
   resetAll() {
     for (const c of this.candidates) {
-      if (!c.taken && !c.moved) continue;
+      if (!c.taken) continue;
       c.taken = false;
       c.pos.copy(c.home);
-      c.moved = false;
       this.tmpM.compose(c.home, c.homeQ, new THREE.Vector3(c.homeS, c.homeS, c.homeS));
       c.mesh.setMatrixAt(c.index, this.tmpM);
       c.mesh.instanceMatrix.needsUpdate = true;
     }
   }
 
-  /** hide a picked (or tossed) candidate */
+  /** hide a picked stone */
   take(c: Candidate) {
     c.taken = true;
     this.tmpM.makeScale(0, 0, 0);
@@ -426,28 +446,34 @@ export class StreamBed {
     if (this.glint?.c === c) this.glint = null;
   }
 
-  /** put a tossed stone back down at p (it lies in the bed again; it can be examined again) */
-  putBack(c: Candidate, p: THREE.Vector3) {
-    c.taken = false;
-    c.moved = true;
-    c.pos.copy(p);
-    const s = 0.03;
-    this.tmpM.compose(p, new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.random() * 0.3, Math.random() * 6, 0)), new THREE.Vector3(s, s, s));
-    c.mesh.setMatrixAt(c.index, this.tmpM);
-    c.mesh.instanceMatrix.needsUpdate = true;
-  }
-
   /** the geometry / material of a candidate (the stone in his hand) */
   look(c: Candidate) {
     return { geo: c.mesh.geometry, mat: c.mesh.material as THREE.Material, scale: 0.03 };
   }
 
-  /** the subtle cue: a good stone within ~2.6 m catches the light (its colour brightens a little with a slow pulse) */
+  /**
+   * The soft cues: the sun glints now and then on the three stones nearest to him within 14 m (a small star that comes
+   * and goes, each at its own pace); the very nearest within 2.6 m brightens a little with a slow pulse.
+   */
   update(near: THREE.Vector3 | null, time: number) {
     let target: Candidate | null = null;
     if (near) {
-      const g = this.nearestGood(near);
+      const g = this.nearestStone(near);
       if (g && Math.hypot(g.pos.x - near.x, g.pos.z - near.z) < 2.6) target = g;
+    }
+    if (this.glints.length) {
+      const free = near ? this.candidates.filter((c) => !c.taken && Math.hypot(c.pos.x - near.x, c.pos.z - near.z) < 14) : [];
+      if (near) free.sort((a, b) => Math.hypot(a.pos.x - near.x, a.pos.z - near.z) - Math.hypot(b.pos.x - near.x, b.pos.z - near.z));
+      this.glints.forEach((sp, i) => {
+        const c = free[i];
+        sp.visible = !!c;
+        if (!c) return;
+        sp.position.set(c.pos.x, c.pos.y + c.homeS * 0.55, c.pos.z);
+        const ph = time * (1.3 + i * 0.37) + c.index * 2.1 + i * 1.7;
+        const tw = Math.pow(Math.max(0, Math.sin(ph)), 3);
+        (sp.material as THREE.SpriteMaterial).opacity = 0.18 + 0.72 * tw;
+        sp.scale.setScalar(0.08 + 0.06 * tw);
+      });
     }
     if (this.glint && this.glint.c !== target) {
       this.glint.c.mesh.setColorAt(this.glint.c.index, this.glint.base);
@@ -472,42 +498,6 @@ export class StreamBed {
   }
 }
 
-/** A tossed-back stone in flight (the rejected pebble): a few bounces, then it lies in the bed again */
-export class TossedStone {
-  readonly mesh: THREE.Mesh;
-  private vel = new THREE.Vector3();
-  private t = 0;
-  done = false;
-  onLand?: (p: THREE.Vector3) => void;
-  private landed = false;
-  constructor(geo: THREE.BufferGeometry, mat: THREE.Material, from: THREE.Vector3, vel: THREE.Vector3, private ground: (x: number, z: number) => number) {
-    this.mesh = new THREE.Mesh(geo, mat);
-    this.mesh.scale.setScalar(0.03);
-    this.mesh.position.copy(from);
-    this.vel.copy(vel);
-    this.mesh.castShadow = true;
-  }
-  update(dt: number) {
-    if (this.done) return;
-    this.t += dt;
-    this.vel.y -= 9.81 * dt;
-    this.mesh.position.addScaledVector(this.vel, dt);
-    this.mesh.rotation.x += dt * 9;
-    this.mesh.rotation.z += dt * 6;
-    const gy = this.ground(this.mesh.position.x, this.mesh.position.z) + 0.02;
-    if (this.mesh.position.y < gy) {
-      this.mesh.position.y = gy;
-      if (!this.landed) {
-        this.landed = true;
-        this.onLand?.(this.mesh.position);
-      }
-      this.vel.multiplyScalar(0.3);
-      this.vel.y = Math.abs(this.vel.y) * 0.35;
-      if (this.vel.length() < 0.3 || this.t > 2) this.done = true;
-    }
-  }
-}
-
 /**
  * The chapter's small props: the stream bed of the five smooth stones (built lazily when the stones objective starts)
  * and the warm-up jars of the sling range (filled by the Range, src/gameplay/Range.ts). Nothing is built at boot.
@@ -517,7 +507,6 @@ export class Props {
   /** the range's clay jars (Range fills it; Story's staff can break them too) */
   readonly jars: Jar[] = [];
   readonly bed: StreamBed;
-  private tossed: TossedStone[] = [];
 
   constructor(private terrain: Terrain, tex: TextureSet, colliders: Colliders) {
     this.bed = new StreamBed(terrain, tex, colliders);
@@ -530,15 +519,6 @@ export class Props {
     return this.bed.build(nextFrame);
   }
 
-  /** toss a rejected stone back into the bed */
-  toss(geo: THREE.BufferGeometry, mat: THREE.Material, from: THREE.Vector3, vel: THREE.Vector3, onLand?: (p: THREE.Vector3) => void) {
-    const t = new TossedStone(geo, mat, from, vel, (x, z) => this.terrain.heightAt(x, z));
-    t.onLand = onLand;
-    this.group.add(t.mesh);
-    this.tossed.push(t);
-    return t;
-  }
-
   reset() {
     for (const j of this.jars) j.reset();
     this.bed.resetAll();
@@ -546,13 +526,5 @@ export class Props {
 
   update(dt: number) {
     for (const j of this.jars) j.update(dt);
-    for (let i = this.tossed.length - 1; i >= 0; i--) {
-      const t = this.tossed[i];
-      t.update(dt);
-      if (t.done) {
-        this.group.remove(t.mesh);
-        this.tossed.splice(i, 1);
-      }
-    }
   }
 }

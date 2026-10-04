@@ -52,7 +52,7 @@ import { INTRO_SHOTS } from '../content/introScript';
 /** ('cradle' = cut8, film only: the newborn lamb gathered in his arms against his chest — D4 'horizon', Isa 40:11) */
 export type HoldPose = 'none' | 'spin' | 'grab' | 'carry' | 'kneel' | 'thanks' | 'pull' | 'hero' | 'cradle';
 export type StaffMode = 'plant' | 'strike' | 'back';
-export type ActionName = 'throw' | 'strike' | 'strikeHigh' | 'pick' | 'call' | 'dodge' | 'hurt' | 'stone' | 'stoneToss' | 'jab' | 'knockdown';
+export type ActionName = 'throw' | 'strike' | 'strikeHigh' | 'pick' | 'call' | 'dodge' | 'hurt' | 'stone' | 'jab' | 'knockdown';
 /**
  * (play1, gameplay v2 §1) where the sling is: tucked under the sash at the right hip ('stowed'), being drawn out of it
  * (pulled from the sash, a stone from the bag into the pouch, the grip — 'draw'), in the hand ready ('idle', "armed"),
@@ -316,32 +316,18 @@ const KNEEL_LOOK = pose({
   uaL: E(-0.62, 0, 0.32), faL: E(-1.15),
   staff: E(0.04, 1, 0.08), staffW: E(1), butt: E(0.3, 0, 0.5), plantW: E(1),
 }, -0.45, 0.02);
-const KNEEL_RUB = pose({ ...KNEEL_LOOK.r, head: E(0.4, 0.15), neck: E(0.16, 0.05), uaR: E(-0.55, 0, 0.12), faR: E(-1.35, 0.2, 0), hdR: E(0.25) }, -0.46, 0.02);
 const KNEEL_BAG = pose({ ...KNEEL_LOOK.r, chest: E(0.08, 0.22, 0), spine: E(0.14, 0.1, 0), head: E(0.42, 0.3), neck: E(0.14, 0.12), uaR: E(-0.4, 0, 0.32), faR: E(-1.25), hdR: E(0.3) }, -0.46, 0.02);
-const KNEEL_TOSS = pose({ ...KNEEL_LOOK.r, chest: E(0.06, -0.18, 0), head: E(0.2, -0.35), uaR: E(-1.05, 0, -0.75), faR: E(-0.35), hdR: E(-0.35) }, -0.45, 0.02);
+// (play1, gameplay v2.1) the quick pick, ≈1.1 s: down, take it, a short look as he rises, into the bag
 const STONE = new Clip([
   { t: 0, p: STAND_PICK },
-  { t: 0.36, e: 'out', p: KNEEL_REACH },
-  { t: 0.56, p: pose({ ...KNEEL_REACH.r, uaR: E(-0.88, 0, -0.14), faR: E(-0.18), hdR: E(0.22) }, -0.48, 0.02) },
-  { t: 0.86, p: KNEEL_LOOK },
-  { t: 1.04, p: KNEEL_LOOK },
-  { t: 1.2, p: KNEEL_RUB },
-  { t: 1.32, p: KNEEL_RUB },
-  { t: 1.5, p: KNEEL_BAG },
-  { t: 1.62, p: KNEEL_BAG },
-  { t: 1.98, p: STAND_PICK },
+  { t: 0.26, e: 'out', p: KNEEL_REACH },
+  { t: 0.4, p: pose({ ...KNEEL_REACH.r, uaR: E(-0.88, 0, -0.14), faR: E(-0.18), hdR: E(0.22) }, -0.48, 0.02) },
+  { t: 0.6, p: KNEEL_LOOK },
+  { t: 0.8, p: KNEEL_BAG },
+  { t: 1.1, p: STAND_PICK },
 ]);
-const STONE_TOSS = new Clip([
-  { t: 0, p: STAND_PICK },
-  { t: 0.36, e: 'out', p: KNEEL_REACH },
-  { t: 0.56, p: pose({ ...KNEEL_REACH.r, uaR: E(-0.88, 0, -0.14), faR: E(-0.18), hdR: E(0.22) }, -0.48, 0.02) },
-  { t: 0.86, p: KNEEL_LOOK },
-  { t: 1.08, p: KNEEL_LOOK },
-  { t: 1.2, e: 'out', p: KNEEL_TOSS },
-  { t: 1.62, p: STAND_PICK },
-]);
-/** (play1) the stone actions' beats (s): the hand closes on the stone, is before the eyes, rubs, at the bag; the toss */
-export const STONE_BEATS = { grasp: 0.52, look: 0.86, rub: 1.2, bag: 1.52, end: 1.98, toss: 1.17, tossEnd: 1.62 } as const;
+/** (play1) the stone pick's beats (s): the hand closes on the stone, it is before his eyes, at the bag, the end */
+export const STONE_BEATS = { grasp: 0.36, look: 0.6, bag: 0.84, end: 1.1 } as const;
 
 /** calling the flock: right hand cupped at the mouth (IK), chest lifted, head raised toward the flock */
 const CALL_UP = pose({
@@ -470,8 +456,7 @@ const ACTIONS: Record<ActionName, ActionDef> = {
   dodge: { clip: DODGE, legs: true, fadeIn: 0.04, fadeOut: 0.18 },
   hurt: { clip: HURT, mask: [...UPPER_L, ...UPPER_R, ...TORSO, 'hips', ...LEGS], legs: true, fadeIn: 0.03, fadeOut: 0.2 },
   // (play1) choosing a smooth stone: kept (into the bag) / examined and tossed back
-  stone: { clip: STONE, legs: true, fadeIn: 0.12, fadeOut: 0.3 },
-  stoneToss: { clip: STONE_TOSS, legs: true, fadeIn: 0.12, fadeOut: 0.3 },
+  stone: { clip: STONE, legs: true, fadeIn: 0.08, fadeOut: 0.2 },
 };
 
 interface ActiveAction { name: ActionName; def: ActionDef; t: number; events: { t: number; fn: () => void; fired: boolean }[]; mocap?: boolean }
@@ -1453,11 +1438,10 @@ export class DavidModel {
       if (bagW > 0.001) m.layer(RELOAD, bagW * 0.85 * (1 - H.spin), RELOAD_MASK);
       // the stone pick: the stone turned in the fingers before the eyes
       const a = this.action;
-      if (a && (a.name === 'stone' || a.name === 'stoneToss')) {
-        const u = smooth01((a.t - STONE_BEATS.look + 0.06) / 0.12) * (1 - smooth01((a.t - (a.name === 'stone' ? STONE_BEATS.rub : STONE_BEATS.toss) + 0.04) / 0.1));
+      if (a && a.name === 'stone') {
+        // a short look as he rises: the stone turned once in the fingers
+        const u = smooth01((a.t - STONE_BEATS.look + 0.1) / 0.08) * (1 - smooth01((a.t - STONE_BEATS.bag + 0.08) / 0.08));
         if (u > 0.001) m.add('hdR', 0.25 * Math.sin(a.t * 13) * u * this.actionW, 0.55 * Math.sin(a.t * 9 + 1) * u * this.actionW, 0);
-        // the toss: a small shake of the head first
-        if (a.name === 'stoneToss') m.add('head', 0, 0.12 * Math.sin((a.t - 1.0) * 26) * smooth01((a.t - 0.98) / 0.05) * (1 - smooth01((a.t - 1.16) / 0.05)) * this.actionW, 0);
       }
     }
 
@@ -2347,9 +2331,8 @@ export class DavidModel {
     // stone in the right hand while picking (hidden once it is in the satchel, never while taking up the lamb)
     const a = this.action;
     let holdingStone = !!a && a.name === 'pick' && a.t > 0.5 && a.t < 0.86 && this.hold !== 'carry';
-    // (play1) the chosen stone from the grasp until it is in the bag / tossed back; a sling stone from the bag to the pouch
+    // (play1) the stone from the grasp until it is in the bag; a sling stone from the bag to the pouch
     if (a && a.name === 'stone') holdingStone = a.t > STONE_BEATS.grasp && a.t < STONE_BEATS.bag + 0.05;
-    else if (a && a.name === 'stoneToss') holdingStone = a.t > STONE_BEATS.grasp && a.t < STONE_BEATS.toss + 0.02;
     if (!holdingStone) holdingStone = this.slingStoneInHand();
     this.handStone.visible = holdingStone;
     // the bag's flap lifts while a hand is at it
@@ -2401,7 +2384,7 @@ export class DavidModel {
     const L: FingerPose = inHand ? 'grip' : H.carry > 0.5 || this.cradleReach > 0.5 ? 'grip' : this.hold === 'pull' ? 'fist' : 'relaxed';
     let R: FingerPose = 'fist';
     if (a && a.name === 'pick' && this.hold !== 'carry') R = a.t < 0.46 ? 'open' : 'fist';
-    else if (a && (a.name === 'stone' || a.name === 'stoneToss')) R = a.t < STONE_BEATS.grasp - 0.06 || (a.name === 'stoneToss' && a.t > STONE_BEATS.toss) || (a.name === 'stone' && a.t > STONE_BEATS.bag + 0.05) ? 'open' : 'grip'; // (play1)
+    else if (a && a.name === 'stone') R = a.t < STONE_BEATS.grasp - 0.06 || a.t > STONE_BEATS.bag + 0.05 ? 'open' : 'grip'; // (play1)
     else if (this.slingHandOpen()) R = 'open'; // (play1) reaching for the sling at the sash / into the bag
     else if (a && a.name === 'call') R = 'cup';
     else if (this.hold === 'thanks') R = 'open';
