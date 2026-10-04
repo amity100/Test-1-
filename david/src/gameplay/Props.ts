@@ -158,27 +158,28 @@ export interface Candidate {
 let _glintTex: THREE.Texture | null = null;
 function glintTexture() {
   if (_glintTex) return _glintTex;
-  const n = 32, c = document.createElement('canvas');
-  c.width = c.height = n;
-  const g = c.getContext('2d');
-  if (g) {
-    const r = g.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2);
-    r.addColorStop(0, 'rgba(255,255,255,1)');
-    r.addColorStop(0.24, 'rgba(255,253,245,0.92)');
-    r.addColorStop(0.46, 'rgba(255,248,230,0.36)');
-    r.addColorStop(1, 'rgba(255,245,225,0)');
-    g.fillStyle = r;
-    g.fillRect(0, 0, n, n);
-    // four soft rays (a star of the sun on wet stone)
-    g.globalCompositeOperation = 'lighter';
-    for (const [w, a] of [[2.2, 0.35], [1, 0.75]] as const) {
-      g.fillStyle = `rgba(255,250,235,${a})`;
-      g.fillRect(n / 2 - w / 2, 1, w, n - 2);
-      g.fillRect(1, n / 2 - w / 2, n - 2, w);
+  // (w4) built from numbers (no 2D canvas: a first canvas context can cost tens of ms on some devices): a soft round
+  // core and four thin rays, white with the alpha carrying the shape
+  const n = 32, d = new Uint8Array(n * n * 4);
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      const dx = ((x + 0.5) / n) * 2 - 1, dy = ((y + 0.5) / n) * 2 - 1, r = Math.hypot(dx, dy);
+      let a = r < 0.24 ? 1 - (r / 0.24) * 0.08 : r < 0.46 ? 0.92 - ((r - 0.24) / 0.22) * 0.56 : Math.max(0, 0.36 * (1 - (r - 0.46) / 0.54));
+      const ray = Math.max(0, 1 - (Math.abs(dx) * n) / 2.2, 1 - (Math.abs(dy) * n) / 2.2) * Math.max(0, 1 - r);
+      a = Math.min(1, a + ray * 0.75);
+      const k = (y * n + x) * 4;
+      d[k] = 255;
+      d[k + 1] = 250;
+      d[k + 2] = 236;
+      d[k + 3] = Math.round(a * 255);
     }
   }
-  _glintTex = new THREE.CanvasTexture(c);
-  return _glintTex;
+  const t = new THREE.DataTexture(d, n, n, THREE.RGBAFormat);
+  t.magFilter = THREE.LinearFilter;
+  t.minFilter = THREE.LinearFilter;
+  t.needsUpdate = true;
+  _glintTex = t;
+  return t;
 }
 
 /**
@@ -375,6 +376,7 @@ export class StreamBed {
     // edges, a few metres apart, on top of the gravel, at the water's edge (wet and glossy) or up at the bed's edge
     const geos = [pebbleShape(101, 1, 0.66, 1.18, 2), pebbleShape(113, 1, 0.74, 1.1, 2), pebbleShape(127, 1, 0.6, 1.25, 2)];
     this.goodGeo.push(...geos);
+    await yieldFrame();
     // [along the bed (m), side of the water (-1 / 1), where: 0 the water's edge, 1 the gravel, 2 the bed's edge]
     const spots: [number, number, number][] = [
       [-11.4, 1, 1], [-9.2, -1, 0], [-6.9, 1, 2], [-4.6, -1, 1], [-2.3, 1, 0], [0.1, -1, 2], [2.4, 1, 1], [4.8, -1, 0], [7.2, 1, 2], [9.6, -1, 1],
@@ -389,10 +391,11 @@ export class StreamBed {
         const u = u0 + (rnd() - 0.5) * 1.2;
         const v = trickleV(u) + side * (off + (rnd() - 0.5) * (where === 0 ? 0.12 : 0.5));
         at(u, v, p);
-        if (!this.colliders.free(p.x, p.z, 0.5)) continue;
-        if (T.slopeAt(p.x, p.z) > 0.5) continue;
+        // the cheap tests first (the colliders' query is the dear one)
         if (T.maskAt(p.x, p.z).grass > 0.06) continue; // never hidden in the bank's grass
+        if (T.slopeAt(p.x, p.z) > 0.5) continue;
         if (used.some((o) => Math.hypot(o.x - p.x, o.z - p.z) < 1.4)) continue;
+        if (!this.colliders.free(p.x, p.z, 0.5)) continue;
         pp = p.clone();
       }
       if (!pp) pp = at(u0, trickleV(u0) + side * off, new THREE.Vector3());
@@ -400,7 +403,9 @@ export class StreamBed {
       const s = 0.039 + rnd() * 0.005;
       e.set((rnd() - 0.5) * 0.25, rnd() * Math.PI * 2, (rnd() - 0.5) * 0.25);
       placed.push({ pp, g: i % geos.length, wet: where === 0, s, q: new THREE.Quaternion().setFromEuler(e) });
+      if (i % 3 === 2) await yieldFrame(); // the spot search in small steps (the terrain's tests are not free)
     }
+    await yieldFrame();
     for (const wet of [false, true]) {
       for (let g = 0; g < geos.length; g++) {
         const here = placed.filter((x) => x.wet === wet && x.g === g);
@@ -485,7 +490,7 @@ export class StreamBed {
 
   /** the geometry / material of a candidate (the stone in his hand) */
   look(c: Candidate) {
-    return { geo: c.mesh.geometry, mat: c.mesh.material as THREE.Material, scale: 0.034 };
+    return { geo: c.mesh.geometry, mat: c.mesh.material as THREE.Material, scale: c.homeS };
   }
 
   /**

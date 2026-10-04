@@ -573,6 +573,7 @@ export class Story {
     let choice: 'next' | 'retry' | null = null;
     const last = r === ROUNDS.length;
     this.ui.rangePanel(null);
+    this.ui.hint(null); // (w4) a quick round: the round's hint must not run across the card
     this.ui.rating({ title: def.title, marks, verdict, lines, retry: true, next: last ? 'סִיּוּם' : 'הַסִּבּוּב הַבָּא' }, () => (choice = 'next'), () => (choice = 'retry'));
     this.beh = () => {
       if (this.input.take('interact')) choice = 'next';

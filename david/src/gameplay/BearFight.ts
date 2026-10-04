@@ -744,7 +744,7 @@ export class FightBot {
     if (!key) this.lastMove = '';
     this.react -= dt;
     // ---- the sling at the huff display / when it backs off
-    if ((careful || (average && Math.random() < 0.5)) && (phase === 'display' || phase === 'retreat') && d > 3.8 && p.stones > 0) {
+    if ((careful || (average && Math.random() < 0.5)) && (phase === 'display' || phase === 'retreat') && d > 2.6 && p.stones > 0) {
       this.stick(h, 0, 0);
       if (!this.slingOn) {
         input.holdSling(true);
