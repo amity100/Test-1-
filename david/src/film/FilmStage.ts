@@ -199,6 +199,8 @@ const RAMAH_SIM = [0, 3];
 const SET_LABEL: Record<FilmStageSet, string> = { judah: 'הָאָרֶץ…', map: 'הַדֶּרֶךְ…', coast: 'אֶרֶץ פְּלִשְׁתִּים…', ramah: 'הָרָמָה…', gilgal: 'הַגִּלְגָּל…' };
 /** relative build cost of each set (the loading bar's shares) */
 const SET_WEIGHT: Record<FilmStageSet, number> = { judah: 0.12, map: 0.1, coast: 0.14, ramah: 0.16, gilgal: 0.5 };
+/** (cut7, wave 4) the haze colour of P2's morning that P1's end warms into (FILM_CAM.flight.hazeShift) */
+const HAZE_P2 = new THREE.Color(1.0, 0.86, 0.6);
 
 /** JS heap in use (MB; Chrome only, else null) */
 function heapMB(): number | null {
@@ -711,12 +713,14 @@ export class FilmStage {
           const k = Math.max(0, Math.min(1, (t - F.thinAt[0]) / (F.thinAt[1] - F.thinAt[0])));
           set.setDeckCover(1 - (1 - F.thinTo) * k * k * (3 - 2 * k));
           // (wave 4) the gap in the deck the flight dives through (never a flat fog inside the cloud)
-          set.setDeckHole(F.hole[0], F.hole[1], F.hole[2], 1);
+          set.setDeckHole(F.hole[0], F.hole[1], F.hole[2], F.hole[3]);
           // the end of the flight warmer (it dissolves into the world's warm morning); put back when the view is left
           const uw = engine.post.grade.uniforms.uWarm;
           if (savedWarm === null) savedWarm = uw.value as number;
           const w = Math.max(0, Math.min(1, (t - F.warmAt[0]) / (F.warmAt[1] - F.warmAt[0])));
           uw.value = savedWarm + F.warmAdd * w * w * (3 - 2 * w);
+          // (wave 4) and the blue-violet haze away from the sun warms to P2's morning gold: the dissolve is one light
+          set.setHazeShift(w * w * (3 - 2 * w) * F.hazeShift, HAZE_P2);
         }
         if (name === 'coast') {
           const u = engine.post.grade.uniforms.uContrast;

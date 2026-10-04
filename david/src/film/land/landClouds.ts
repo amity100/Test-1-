@@ -88,8 +88,9 @@ export class LandClouds {
       ...landAtmo, ...cloudShared,
       tNoise: { value: this.noise },
       uExt: { value: 0.0085 },
-      // (cut7, wave 4) a gap in the deck: (x, z) centre, radius (m), strength 0..1 — P1's flight dives through it
-      uHole: { value: new THREE.Vector4(0, 0, 1, 0) },
+      // (cut7, wave 4) a gap in the deck: (x, z) centre, (x, z) radii (m) of its soft edge; radius 0 = none — P1's
+      // flight dives through it
+      uHole: { value: new THREE.Vector4(0, 0, 0, 0) },
       uAmbTop: { value: new THREE.Color(0.34, 0.34, 0.56) },
       uAmbBottom: { value: new THREE.Color(0.22, 0.19, 0.27) },
       uSunI: { value: 8.5 },
@@ -131,8 +132,8 @@ export class LandClouds {
           float hf = (p.y - uDeck.x) / (uDeck.y - uDeck.x);
           if (hf <= 0.0 || hf >= 1.0) return 0.0;
           float cov = cloudWeather(p.xz);
-          // the gap the flight dives through (its walls lit like the deck's broken edge)
-          cov *= 1.0 - uHole.w * (1.0 - smoothstep(uHole.z * 0.45, uHole.z, length(p.xz - uHole.xy)));
+          // the gap the flight dives through (an ellipse, clear within 45 % of its radii, its edge soft)
+          if (uHole.z > 0.0) cov *= smoothstep(0.45, 1.0, length((p.xz - uHole.xy) / uHole.zw));
           if (cov < 0.02) return 0.0;
           vec3 wind = vec3(uCloudTime * 0.00035, 0.0, uCloudTime * 0.00012);
           float n = texture(tNoise, p * vec3(1.0 / 5200.0, 1.0 / 2600.0, 1.0 / 5200.0) + wind).r;

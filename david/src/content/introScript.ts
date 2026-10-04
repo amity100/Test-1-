@@ -404,9 +404,10 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
       { at: 3.0, seconds: 3.4, kind: 'verse', quote: 's1_15_26_rejected_film', stagger: 0.16, side: 'left', v: 'top', lines: 2 },
     ],
     direction: "The roar ebbs into the valley's echo and a hush. A slow push between the soldiers' shoulders: heads turn, "
-      + 'men step aside, the ranks part; Samuel stands in the road, white hair and mantle in the wind, takes one step '
-      + 'forward and stands before Saul (the lens is Saul\'s eye-line); his answer, 15:26, comes up beside him — then he '
-      + 'turns to go (G5a).',
+      + 'men step aside, the ranks part; Samuel is coming up the road to the king, white hair and mantle in the wind — '
+      + 'his last step at `step` — and stands before Saul, as close as in the tear (cut7: the lens comes through the '
+      + "parted rank to the king's right shoulder, his eye-line; Samuel knee-up to waist-up, his eyes on the king, his "
+      + 'breath, the wind); his answer, 15:26, comes up beside him as he speaks — then he turns to go (G5a).',
   },
 
   // ================================================================== 3 · THE TEAR (9 s)

@@ -638,8 +638,13 @@ export class LandSet {
   /** judah: the deck's cover 0..1 (the morning burning it off: P1 thins it once the lens is below it) */
   setDeckCover(w: number) { if (this.deck) this.deck.w = Math.max(0, Math.min(1, w)); }
 
-  /** judah: a gap in the deck centred at (x, z), `r` m across its soft edge (P1's flight dives through it); w 0 = none */
-  setDeckHole(x: number, z: number, r: number, w = 1) { (this.clouds?.uniforms.uHole?.value as THREE.Vector4 | undefined)?.set(x, z, r, w); }
+  private hazeShift = 0;
+  private readonly hazeShiftTo = new THREE.Color();
+  /** the haze away from the sun shifted toward `color` by w 0..1 (judah: P1's end into P2's warm morning) */
+  setHazeShift(w: number, color: THREE.Color) { this.hazeShift = Math.max(0, Math.min(1, w)); this.hazeShiftTo.copy(color); }
+
+  /** judah: an elliptic gap in the deck centred at (x, z) with radii (rx, rz) m (P1's flight dives through it); rx 0 = none */
+  setDeckHole(x: number, z: number, rx: number, rz: number) { (this.clouds?.uniforms.uHole?.value as THREE.Vector4 | undefined)?.set(x, z, rx, rz); }
 
   /** per frame: sky dome follow, shadow framing around the action, water / cloud / dust time */
   update(dt: number, camera: THREE.PerspectiveCamera) {
@@ -648,7 +653,11 @@ export class LandSet {
     shared.uSunColor.value.copy(landAtmo.uSunColA.value);
     landAtmo.tSkyCube.value = this.sky.cubeTarget.texture;
     landAtmo.uHaze.value.w = this.location === 'judah' ? 1 : 0;
-    if (this.hazeTint) { landAtmo.uHazeWarm.value.copy(this.hazeTint.warm); landAtmo.uHazeCool.value.copy(this.hazeTint.cool); landAtmo.uHazeLobe.value.copy(this.hazeTint.lobe); }
+    if (this.hazeTint) {
+      landAtmo.uHazeWarm.value.copy(this.hazeTint.warm);
+      landAtmo.uHazeCool.value.copy(this.hazeTint.cool).lerp(this.hazeShiftTo, this.hazeShift);
+      landAtmo.uHazeLobe.value.copy(this.hazeTint.lobe);
+    }
     if (this.deck) { cloudShared.uDeck.value.copy(this.deck); cloudShared.uPuffs.value = 0; }
     cloudShared.uCloudTime.value = this.time;
     for (const w of this.waters) (w.material as THREE.ShaderMaterial).uniforms.uTime.value = this.time;

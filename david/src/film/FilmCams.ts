@@ -52,9 +52,11 @@ export const FILM_CAM = {
   //  Keys: [shot s, x from Saul's halt, lateral from the road's centre (+ = south), height over the ground] — every
   //  channel a monotone cubic (still drifting at the cut); the look on Samuel's face, `lookSide` m to frame right of it)
   silence: {
-    // (the lens keeps >= 0.9 m from the front rank until it has stepped aside — Crowd.nearHide never pops a man)
-    keys: [[0, -6.6, 1.575, 1.7], [1.2, -6.48, 1.57, 1.71], [1.75, -5.65, 1.5, 1.74], [3.0, -3.8, 1.0, 1.81], [3.8, -3.08, 0.78, 1.84], [6.5, -2.4, 0.66, 1.86]] as [number, number, number, number][],
-    lookSide: 0.18, lookH: 1.52, fov0: 31, fov1: 26, clear: 0.6,
+    // (the lens keeps >= 0.9 m from the front rank until it has stepped aside — Crowd.nearHide never pops a man — and
+    //  >= 1.6 m to the king's right, so his back never covers the old man: probed at 640x360, desktop-high)
+    keys: [[0, -6.6, 1.575, 1.7], [1.2, -6.48, 1.6, 1.71], [1.75, -5.65, 1.65, 1.74], [3.0, -3.6, 1.7, 1.8], [3.8, -2.85, 1.68, 1.83], [6.5, -2.05, 1.62, 1.85]] as [number, number, number, number][],
+    // the lens lengthens from `part` to the cut: Samuel knee-up -> waist-up, the king's shoulder at the frame's left
+    lookSide: -0.3, lookH: 1.52, fov0: 31, fov1: 20, clear: 0.6,
   },
   // G5a: a medium-wide two-shot from the south at chest height (bodies ~70 % of the frame), a slow lateral move
   // west -> east with the action (cut4: backlit by the tear's cheated sun, GilgalSet.setSunCheat)
@@ -100,21 +102,26 @@ export const FILM_CAM = {
       [3.0, 1060, 1455, 230, 98, -6.5, -0.5, 50],
       [4.6, 1150, 1418, 240, 106, -8, -2, 49],
       [6.4, 1250, 1335, 278, 128, -11, -4.5, 47],
-      [7.2, 1295, 1200, 318, 160, -13, -6.5, 45.5],
-      [8.0, 1312, 1015, 380, 205, -12.5, -7.5, 44],
+      [7.2, 1295, 1200, 318, 160, -21, -6.5, 45.5],
+      [8.0, 1312, 1015, 380, 205, -16, -7.5, 44],
       [9.6, 1268, 905, 505, 250, -10, -6, 42.5],
       [11.0, 1170, 850, 598, 282, -8, -3, 41],
       [12.4, 1075, 815, 650, 297, -7.5, -1.2, 40],
     ] as [number, number, number, number, number, number, number, number][],
     minAGL: 60,
     // (wave 4 — the orchestrator: ~1 s of flat lavender fog inside the deck at 7-8 s) the flight dives through a GAP
-    // in the deck ([x, z, radius m], clear within 45 % of the radius): the gap opens ahead as the lens nears it (the
-    // deck breaking up), its lit walls slide past the lens on the way down, the hills show through it below
-    hole: [1290, 340, 330] as [number, number, number],
+    // in the deck ([x, z, x radius, z radius] m, clear within 45 % of the radii), long to the south the way the lens
+    // looks on its way down: the gap opens ahead as the lens nears it (the deck breaking up), the lens pitches down
+    // into it (keys 7.2-8.0) and sees the hills through it, its walls sliding past the frame's edges
+    hole: [1300, 640, 330, 680] as [number, number, number, number],
     thinAt: [7.0, 10.2] as [number, number],
     // the last 1.5 s warmer (grade highlight warmth +warmAdd, FilmStage's judah handle) into P2's warm morning
     warmAt: [9.5, 11.0] as [number, number],
-    warmAdd: 0.055,
+    // (wave 4 — "P1's end still darker and redder than P2": less red, the light opened further below, and the blue-
+    //  violet haze away from the sun warmed toward P2's gold over warmAt: measured mean RGB at the cut 122/91/81 vs
+    //  P2's 143/112/60 before the haze shift)
+    warmAdd: 0.02,
+    hazeShift: 0.75,
     thinTo: 0.38,
   },
   // P6 'threat' (cut7, CUT v5.2, 10 s — the user: "clearer from the start and better looking"): ON the host from the
@@ -192,7 +199,8 @@ export const TAKE_LOOK: Record<string, { hand: number; freq?: number; exp?: numb
   // (cut7, CUT v5: P1's slow flight — a calm aerial float; the sunlit cloud tops held down, opening up under the deck)
   // (the end opened up further — x1.6 by the cut: the lens turns away from the dawn onto the ridge, and P2's morning
   //  world opens much brighter; the two meet in the dissolve)
-  flight: { hand: 0.14, freq: 0.5, expCurve: [[0, 0.8], [6.0, 0.8], [7.4, 0.98], [8.6, 1.25], [9.6, 1.55], [11.0, 2.2], [12.4, 2.3]], seed: 1 },
+  // (wave 4: the end opened to P2's morning — x3.2 by the cut — so the dissolve is one light)
+  flight: { hand: 0.14, freq: 0.5, expCurve: [[0, 0.8], [6.0, 0.8], [7.4, 0.98], [8.6, 1.35], [9.6, 1.85], [11.0, 3.2], [12.4, 3.5]], seed: 1 },
   // (cut8, CUT v5) P3 the low dolly on the road's verge (an operator's hand), calming as the crane lifts away
   'rachel-dawn': { hand: 0.2, freq: 0.6, seed: 2, calm: [takeBeat('rachel-dawn', 'rise', 4) + 0.2, takeDur('rachel-dawn', 6)] },
   // (cut8, CUT v5) P2 the aerial drift toward Bethlehem: a helicopter's faint float
@@ -347,7 +355,8 @@ export function gilgalCam(take: string, u: number, t: number, H: (x: number, z: 
       clearOfArmy(out.pos, 'silence', t, c.clear);
       out.pos.y = H(out.pos.x, out.pos.z) + ch(3);
       out.look.set(sam.x, H(sam.x, sam.z) + c.lookH, sam.z + c.lookSide);
-      out.fov = lerp(c.fov0, c.fov1, ss(1.0, 4.0, t));
+      // (still lengthening at the cut)
+      out.fov = lerp(c.fov0, c.fov1, ss(takeBeat('silence', 'part', 1.0), takeDur('silence', 6.5) + 1.2, t));
       return true;
     }
     case 'tear': {
