@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLSL_NOISE, shared } from '../../core/Shared';
 import { Simplex2, smoothstep } from '../../core/noise';
 import { gunzip } from '../../characters/human/inflate';
+import { runSync } from '../../core/slice';
 import type { TextureSet } from '../../world/Textures';
 import { CAMP, ROAD_GLSL, ROAD_HALF, roadZ, STONES } from './gilgalLayout';
 import features from '../../assets/gilgal/gilgal_features.json';
@@ -87,6 +88,11 @@ function cr(p0: number, p1: number, p2: number, p3: number, t: number) {
 
 /** Polar-grid terrain mesh around the site out to `R` (60 km: the haze hides the clamped DEM edge). */
 export function terrainGeometry(ground: GilgalGround, tier: GilgalTier, R = 60000) {
+  return runSync(terrainGeometrySteps(ground, tier, R));
+}
+
+/** (load1, wave 4b) the same geometry as steps: a possible pause between rings / groups of vertices (core/slice) */
+export function* terrainGeometrySteps(ground: GilgalGround, tier: GilgalTier, R = 60000): Generator<void, THREE.BufferGeometry, void> {
   const radial = tier === 'high' ? 440 : tier === 'medium' ? 320 : 208;
   const drMin = tier === 'high' ? 0.7 : tier === 'medium' ? 1.0 : 1.5;
   const grow = tier === 'high' ? 0.021 : tier === 'medium' ? 0.029 : 0.043;
@@ -101,6 +107,7 @@ export function terrainGeometry(ground: GilgalGround, tier: GilgalTier, R = 6000
   const idx: number[] = [];
   const spacing: number[] = [drMin];
   for (let i = 1; i < rings.length; i++) {
+    yield;
     const rr = rings[i];
     const off = (i % 2) * 0.5;
     for (let k = 0; k < radial; k++) {
@@ -126,6 +133,7 @@ export function terrainGeometry(ground: GilgalGround, tier: GilgalTier, R = 6000
   }
   const v = new THREE.Vector3();
   for (let i = 0; i < pos.length; i += 3) {
+    if (i % 768 === 0) yield;
     const e = Math.max(0.35, Math.min(60, spacing[i / 3] * 0.7));
     ground.normal(pos[i], pos[i + 2], e, v);
     nor.push(v.x, v.y, v.z);

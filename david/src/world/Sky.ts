@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { shared } from '../core/Shared';
 import { worldShared } from './WorldShared';
+import { runSync } from '../core/slice';
 
 /**
  * Golden-hour sky over the Judean hills.
@@ -257,8 +258,11 @@ export class SkySystem {
     this.pmrem = new THREE.PMREMGenerator(renderer);
   }
 
-  /** Ray-march the atmosphere into the sky-view LUT for the current sun direction. */
-  private computeLut(sunDir: THREE.Vector3) {
+  /**
+   * Ray-march the atmosphere into the sky-view LUT for the current sun direction. (load1, wave 4b: as steps — a possible
+   * pause between groups of rows when the film's sets build in slices, core/slice; the same LUT)
+   */
+  private *computeLutSteps(sunDir: THREE.Vector3): Generator<void, void, void> {
     const data = this.lutData;
     const r0 = RE + OBS_H;
     const sunMu0 = sunDir.y;
@@ -272,6 +276,7 @@ export class SkySystem {
     const SUN_E = 13; // solar irradiance scale -> scene units (tuned against the engine exposure)
     const steps = 16;
     for (let j = 0; j < LUT_H; j++) {
+      if ((j & 3) === 3) yield;
       const v = (j + 0.5) / LUT_H;
       const el = v >= 0.5 ? Math.pow((v - 0.5) * 2, 2) * (Math.PI / 2) : -Math.pow((0.5 - v) * 2, 2) * (12 * Math.PI / 180);
       const dy = Math.sin(el), dh = Math.cos(el);
@@ -329,13 +334,21 @@ export class SkySystem {
 
   /** Sets the sun from elevation/azimuth in degrees and updates colours, lights and captures. */
   setSun(elevationDeg: number, azimuthDeg: number, scene: THREE.Scene) {
+    runSync(this.setSunSteps(elevationDeg, azimuthDeg, scene));
+  }
+
+  /**
+   * (load1, wave 4b) setSun as steps for the film's sliced builds (core/slice): the same values. The caller keeps the
+   * shared sun this sets across its pauses (LandSet / GilgalSet put the game's back during a pause, theirs after it).
+   */
+  *setSunSteps(elevationDeg: number, azimuthDeg: number, scene: THREE.Scene): Generator<void, void, void> {
     this.elevation = elevationDeg;
     this.azimuth = azimuthDeg;
     const phi = THREE.MathUtils.degToRad(90 - elevationDeg);
     const theta = THREE.MathUtils.degToRad(azimuthDeg);
     const dir = new THREE.Vector3().setFromSphericalCoords(1, phi, theta);
     shared.uSunDir.value.copy(dir);
-    this.computeLut(dir);
+    yield* this.computeLutSteps(dir);
     // sunlight through the same atmosphere (+ a touch more warmth: golden hour is what the chapter is about)
     const tr = [0, 0, 0];
     transmittanceTo(RE + OBS_H, Math.max(dir.y, 0.01), tr);
@@ -356,6 +369,7 @@ export class SkySystem {
     this.hemi.intensity = 0.28 + 0.3 * THREE.MathUtils.smoothstep(elevationDeg, -4, 20);
     (this.skyUniforms.uGround.value as THREE.Color).setRGB(0.3 * c.r, 0.21 * c.g, 0.13 * c.b).multiplyScalar(1.2);
     this.cloudUniforms.uBright.value = 0.55 + 0.6 * THREE.MathUtils.smoothstep(elevationDeg, -3, 10);
+    yield;
     this.capture(scene);
   }
 

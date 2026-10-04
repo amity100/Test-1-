@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { skinShading } from '../../fx/SSS';
+import { runSync } from '../../core/slice';
 
 /*
  * Realistic skin on top of MeshPhysicalMaterial (keeps three.js lights, shadows, IBL and fog/post compatibility).
@@ -513,6 +514,11 @@ if ( uSkinPass > 0.5 ) {
 
 /** Per-vertex UV density (uv units per metre) so detail textures keep a constant world scale. */
 export function uvDensityAttribute(g: THREE.BufferGeometry): THREE.BufferAttribute {
+  return runSync(uvDensityAttributeSteps(g));
+}
+
+/** (load1, wave 4b) uvDensityAttribute as steps (a possible pause between groups of triangles; core/slice), same values */
+export function* uvDensityAttributeSteps(g: THREE.BufferGeometry): Generator<void, THREE.BufferAttribute, void> {
   const pos = g.getAttribute('position') as THREE.BufferAttribute;
   const uv = g.getAttribute('uv') as THREE.BufferAttribute;
   const idx = g.getIndex()!;
@@ -521,6 +527,7 @@ export function uvDensityAttribute(g: THREE.BufferGeometry): THREE.BufferAttribu
   const cnt = new Float32Array(n);
   const a = new THREE.Vector3(), b = new THREE.Vector3();
   for (let t = 0; t < idx.count; t += 3) {
+    if (t % 12288 === 0) yield;
     for (let k = 0; k < 3; k++) {
       const i = idx.getX(t + k), j = idx.getX(t + ((k + 1) % 3));
       a.fromBufferAttribute(pos, i);

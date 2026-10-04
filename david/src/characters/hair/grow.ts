@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { HeadSurface, rng, ss, vnoise, type Roots } from './HeadSurface';
+import { runSliced, runSync } from '../../core/slice';
 
 /*
  * Strand grooming (deterministic, at load):
@@ -171,6 +172,16 @@ export interface LayerBuild {
 
 /** Grow all layers into one strand set with K control points per strand. */
 export function growStrands(S: HeadSurface, layers: LayerBuild[], K: number, headband: Headband | null): StrandSet {
+  return runSync(growStrandsSteps(S, layers, K, headband));
+}
+
+/** (wave 4b) the same strands, grown in slices while the film's background builder runs (core/slice) */
+export function growStrandsAsync(S: HeadSurface, layers: LayerBuild[], K: number, headband: Headband | null): Promise<StrandSet> {
+  return runSliced(growStrandsSteps(S, layers, K, headband));
+}
+
+/** the strand growth as steps: it may stop between locks / strands / passes (never inside one), so the result is the same */
+function* growStrandsSteps(S: HeadSurface, layers: LayerBuild[], K: number, headband: Headband | null): Generator<void, StrandSet, void> {
   const total = layers.reduce((a, l) => a + l.count, 0);
   const simTotal = layers.reduce((a, l) => a + l.simCount, 0);
   const set: StrandSet = {
@@ -185,12 +196,15 @@ export function growStrands(S: HeadSurface, layers: LayerBuild[], K: number, hea
     const R = rng(L.seed);
     const mask = st.mask(S);
     // ---- locks (guides)
-    const cand = S.sampleRoots(mask, Math.max(st.locks * 12, 600), L.seed + 11);
+    yield;
+    const cand = yield* S.sampleRootsSteps(mask, Math.max(st.locks * 12, 600), L.seed + 11);
     if (!cand.n) continue;
-    const lockRoots = HeadSurface.poisson(cand, st.locks, L.seed + 12);
+    yield;
+    const lockRoots = yield* HeadSurface.poissonSteps(cand, st.locks, L.seed + 12);
     const guides: Guide[] = [];
     const rp = new THREE.Vector3(), rn = new THREE.Vector3();
     for (let i = 0; i < lockRoots.n; i++) {
+      yield;
       rp.fromArray(lockRoots.pos, i * 3);
       rn.fromArray(lockRoots.nrm, i * 3);
       _f.copy(rp).sub(S.E);
@@ -210,6 +224,7 @@ export function growStrands(S: HeadSurface, layers: LayerBuild[], K: number, hea
       const dist = new Float32Array(guides.length).fill(1e9);
       let cur = 0;
       for (let s = 0; s < Math.min(L.simCount, guides.length); s++) {
+        if ((s & 7) === 7) yield;
         simIdx.push(cur);
         let bi = 0, bd = -1;
         for (let i = 0; i < guides.length; i++) {
@@ -256,7 +271,9 @@ export function growStrands(S: HeadSurface, layers: LayerBuild[], K: number, hea
       }
     }
     // ---- children
-    const roots: Roots = S.sampleRoots(mask, L.count, L.seed + 21);
+    yield;
+    const roots: Roots = yield* S.sampleRootsSteps(mask, L.count, L.seed + 21);
+    yield;
     // lock lookup grid (2 cm cells)
     const cell = 0.02;
     const grid = new Map<number, number[]>();
@@ -294,6 +311,7 @@ export function growStrands(S: HeadSurface, layers: LayerBuild[], K: number, hea
     let maxPush = 0;
     const pre = new THREE.Vector3();
     for (let c = 0; c < roots.n; c++) {
+      if ((c & 15) === 15) yield;
       const si = set.n++;
       const x0 = roots.pos[c * 3], y0 = roots.pos[c * 3 + 1], z0 = roots.pos[c * 3 + 2];
       // occasionally join the second-nearest lock (softer lock borders)
@@ -366,14 +384,17 @@ export function growStrands(S: HeadSurface, layers: LayerBuild[], K: number, hea
     }
     set.diag.push({ name: st.name, n: set.n - first, meanLen: sum / Math.max(1, set.n - first), maxLen: mx, maxPush });
   }
-  if (headband) compressHeadband(S, set, headband);
-  bakeAO(S, set);
-  shuffleStrands(set, layers.length ? layers[0].seed + 99 : 99);
+  yield;
+  if (headband) yield* compressHeadband(S, set, headband);
+  yield;
+  yield* bakeAO(S, set);
+  yield;
+  yield* shuffleStrands(set, layers.length ? layers[0].seed + 99 : 99);
   return set;
 }
 
 /** Global strand permutation: the distance LOD draws a prefix, which must sample every layer (hair + beard). */
-function shuffleStrands(set: StrandSet, seed: number) {
+function* shuffleStrands(set: StrandSet, seed: number): Generator<void, void, void> {
   const n = set.n, K = set.K;
   const R = rng(seed);
   const perm = new Uint32Array(n);
@@ -390,20 +411,24 @@ function shuffleStrands(set: StrandSet, seed: number) {
     arr.set(o);
   };
   re(set.pts, K * 4);
+  yield;
   re(set.a, 4);
+  yield;
   re(set.b, 4);
+  yield;
   re(set.rootCol, 3);
   re(set.tipCol, 3);
 }
 
 /** Press hair outside the band ellipse in toward it, with a soft vertical falloff. */
-function compressHeadband(S: HeadSurface, set: StrandSet, hb: Headband) {
+function* compressHeadband(S: HeadSurface, set: StrandSet, hb: Headband): Generator<void, void, void> {
   const cx = S.crown.x, cz = S.crown.z;
   const cy = S.crown.y + hb.height;
   const halfW = (hb.width ?? 0.014) * 0.5;
   const [rx, rz] = hb.radius;
-  const apply = (arr: Float32Array, stride: number, count: number) => {
+  const apply = function* (arr: Float32Array, stride: number, count: number): Generator<void, void, void> {
     for (let i = 0; i < count; i++) {
+      if ((i & 8191) === 8191) yield;
       const o = i * stride;
       const dx = arr[o] - cx, dz = arr[o + 2] - cz;
       const e = Math.sqrt((dx / rx) ** 2 + (dz / rz) ** 2);
@@ -419,17 +444,18 @@ function compressHeadband(S: HeadSurface, set: StrandSet, hb: Headband) {
       arr[o + 2] = cz + dz * k;
     }
   };
-  apply(set.pts, 4, set.n * set.K);
-  apply(set.simGuides, 3, set.G * set.K);
+  yield* apply(set.pts, 4, set.n * set.K);
+  yield* apply(set.simGuides, 3, set.G * set.K);
 }
 
 /** Ambient occlusion per control point: blurred strand density + proximity to the skin. */
-function bakeAO(S: HeadSurface, set: StrandSet) {
+function* bakeAO(S: HeadSurface, set: StrandSet): Generator<void, void, void> {
   const n = set.n * set.K;
   if (!n) return;
   const pts = set.pts;
   let x0 = 1e9, y0 = 1e9, z0 = 1e9, x1 = -1e9, y1 = -1e9, z1 = -1e9;
   for (let i = 0; i < n; i++) {
+    if ((i & 16383) === 16383) yield;
     const x = pts[i * 4], y = pts[i * 4 + 1], z = pts[i * 4 + 2];
     if (x < x0) x0 = x;
     if (y < y0) y0 = y;
@@ -446,6 +472,7 @@ function bakeAO(S: HeadSurface, set: StrandSet) {
   const dens = new Float32Array(N);
   // splat: strand width x segment length per voxel volume = extinction coefficient (1/m)
   for (let s = 0; s < set.n; s++) {
+    if ((s & 255) === 255) yield;
     const w = set.a[s * 4];
     for (let k = 0; k < set.K; k++) {
       const i = (s * set.K + k) * 4;
@@ -457,11 +484,12 @@ function bakeAO(S: HeadSurface, set: StrandSet) {
   }
   // separable box blur (radius 1 voxel), twice
   const tmp = new Float32Array(N);
-  const blur = (src: Float32Array, dst: Float32Array, axis: 0 | 1 | 2, r: number) => {
+  const blur = function* (src: Float32Array, dst: Float32Array, axis: 0 | 1 | 2, r: number): Generator<void, void, void> {
     const st = axis === 0 ? 1 : axis === 1 ? nx : nx * ny;
     const len = axis === 0 ? nx : axis === 1 ? ny : nz;
     const lines = N / len;
     for (let l = 0; l < lines; l++) {
+      if ((l & 1023) === 1023) yield;
       let start: number;
       if (axis === 0) start = l * nx;
       else if (axis === 1) start = (l % nx) + Math.floor(l / nx) * nx * ny;
@@ -477,9 +505,9 @@ function bakeAO(S: HeadSurface, set: StrandSet) {
     }
   };
   for (let pass = 0; pass < 2; pass++) {
-    blur(dens, tmp, 0, 1);
-    blur(tmp, dens, 1, 1);
-    blur(dens, tmp, 2, 1);
+    yield* blur(dens, tmp, 0, 1);
+    yield* blur(tmp, dens, 1, 1);
+    yield* blur(dens, tmp, 2, 1);
     dens.set(tmp);
   }
   const vol = h * h * h;
@@ -497,6 +525,7 @@ function bakeAO(S: HeadSurface, set: StrandSet) {
   };
   const g = new THREE.Vector3();
   for (let i = 0; i < n; i++) {
+    if ((i & 1023) === 1023) yield;
     const x = pts[i * 4], y = pts[i * 4 + 1], z = pts[i * 4 + 2];
     // optical depth of the hair lying further out from the head (outward = skin SDF gradient)
     S.sdf.grad(x, y, z, g);

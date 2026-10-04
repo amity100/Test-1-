@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { shared } from '../../core/Shared';
+import { slice, sliceMarks, SLICE_STEP } from '../../core/slice';
 import type { ViewSpec } from '../../core/Engine';
 import type { Shot, ShotFrame } from '../../gameplay/CameraRig';
 import { SkySystem } from '../../world/Sky';
@@ -8,10 +9,10 @@ import { cloudShared, GLSL_CLOUD_WEATHER, landAtmo } from './landAtmo';
 import { LandClouds } from './landClouds';
 import { GEO, landAssetUrl, LandHeight, loadLandcover, loadTile, PLACES, shadeTextureSteps, type HeightTile } from './landData';
 import { buildJudahDressing, loadDressMask, type JudahDressInput } from './landJudah';
-import { buildArmyPlaceholders, buildDust, buildRamahGate, mannequinGeometry, roadGlslFor, type Mark } from './landSites';
+import { buildArmyPlaceholders, buildDust, buildRamahGateSteps, mannequinGeometry, roadGlslFor, type Mark } from './landSites';
 import { buildAshdod } from './landCoast';
 import { buildFlora, grove, scatter } from './landFlora';
-import { landMaterial, polarSampler, polarTerrain, type LandTier } from './landTerrain';
+import { landMaterial, polarSampler, polarTerrainSteps, type LandTier } from './landTerrain';
 import { waterMesh } from './landWater';
 
 export type { Mark } from './landSites';
@@ -169,16 +170,25 @@ export class LandSet {
     const set = new LandSet();
     const it = set.build(o, region, local, regLC, locLC, tex, dress);
     const N = o.location === 'judah' ? 26 : o.location === 'coast' ? 28 : 27;
-    for (let k = 0; ; k++) {
+    let acc = 0;
+    for (let k = 0; ; ) {
       const ts = performance.now();
       const r = it.next();
-      set.buildSteps.push({ step: r.done ? 'finish' : r.value, ms: Math.round(performance.now() - ts) });
+      acc += performance.now() - ts;
+      // (load1, wave 4b) a slice pause inside a long step (the shading rows, core/slice): not a step of its own
+      const part = !r.done && r.value === SLICE_STEP;
+      if (!part) {
+        set.buildSteps.push({ step: r.done ? 'finish' : r.value, ms: Math.round(acc) });
+        acc = 0;
+      }
       if (r.done) break;
-      prog(0.3 + 0.7 * Math.min(1, (k + 1) / N), 'land');
+      if (!part) prog(0.3 + 0.7 * Math.min(1, (k + 1) / N), 'land');
+      if (!part) k++;
       // never leave the shared sun / haze changed across a yield: put the game's back, re-apply this set's after it
       const mine = { sun: shared.uSunDir.value.clone(), col: shared.uSunColor.value.clone(), dirA: landAtmo.uSunDirA.value.clone(), colA: landAtmo.uSunColA.value.clone(), sky: landAtmo.tSkyCube.value, haze: landAtmo.uHaze.value.clone() };
       set.restoreSharedSun();
-      await y();
+      if (part) await slice.pause();
+      else await y();
       set.gameSun.dir.copy(shared.uSunDir.value);
       set.gameSun.color.copy(shared.uSunColor.value);
       shared.uSunDir.value.copy(mine.sun);
@@ -299,7 +309,8 @@ export class LandSet {
 
     yield 'layout';
     // ------------------------------------------------------------------ sun / sky
-    this.sky.setSun(L.elevation, L.azimuth, scene);
+    // (load1, wave 4b: the sky's LUT in slices when the film's builder runs — core/slice; create() keeps the shared sun)
+    yield* sliceMarks(this.sky.setSunSteps(L.elevation, L.azimuth, scene));
     landAtmo.tSkyCube.value = this.sky.cubeTarget.texture;
     landAtmo.uSunDirA.value.copy(shared.uSunDir.value);
     landAtmo.uSunColA.value.copy(shared.uSunColor.value);
@@ -338,7 +349,7 @@ export class LandSet {
     yield 'shade:local';
     const nTheta = tier === 'high' ? 448 : tier === 'medium' ? 320 : 200;
     const polarOpts = { nTheta, r0: ground ? 0.8 : 20, rMax: 150000 };
-    const geo = polarTerrain(this.height, focus.x, focus.z, {
+    const geo = yield* polarTerrainSteps(this.height, focus.x, focus.z, {
       ...polarOpts,
       underwater: (x) => (x < -30000 ? 0 : x > 12000 && x < 60000 ? GEO.deadSea : null),
     });
@@ -462,7 +473,7 @@ export class LandSet {
       const cam = camC.clone(); cam.y = q(cam.x, cam.z);
       anchors.coast = { route, heading, columnWidth: 6.3, columnHead: headAt.clone(), camera: cam, town: new THREE.Vector3(PLACES.ashdod.x, town.top, PLACES.ashdod.z), townGate: town.gate.setY(q(town.gate.x, town.gate.z)) };
     } else if (o.location === 'ramah') {
-      const gate = buildRamahGate(tex!, tier, { origin: focus.clone(), yaw: 0.25 }, q, rnd);
+      const gate = yield* buildRamahGateSteps(tex!, tier, { origin: focus.clone(), yaw: 0.25 }, q, rnd);
       scene.add(gate.group);
       this.disposables.push(...gate.materials);
       for (const m of gate.materials) for (const t of ((m.userData.ownTextures ?? []) as THREE.Texture[])) this.disposables.push(t);

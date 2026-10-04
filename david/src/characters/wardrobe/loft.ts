@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { BodyIndex, hull2, rayPoly } from './body';
+import { runSync } from '../../core/slice';
 
 /*
  * Ring lofting: a garment tube is described in a frame (origin, axis, ref, side) by its radius R(s, θ) around a
@@ -47,17 +48,32 @@ export class HullField {
     readonly nt: number,
     slabHalf: number,
     smooth = 1,
+    /** (load1, wave 4b) measure later, step by step: `yield* field.steps()` (bodyTube's sliced build) */
+    defer = false,
   ) {
     const ns = (this.ns = Math.max(2, Math.round((s1 - s0) / ds) + 1));
     this.rad = new Float32Array(ns * nt);
     this.ca = new Float32Array(ns);
     this.cb = new Float32Array(ns);
     this.count = new Uint16Array(ns);
+    this.pending = { mask, slabHalf, smooth };
+    if (!defer) runSync(this.steps());
+  }
+
+  private pending: { mask: number | ((i: number, s: number) => boolean); slabHalf: number; smooth: number } | null = null;
+
+  /** the field's measurement (the constructor's work until wave 4b) as steps: each `yield` is a possible pause */
+  *steps(): Generator<void, void, void> {
+    if (!this.pending) return;
+    const { mask, slabHalf, smooth } = this.pending;
+    this.pending = null;
+    const { ns, nt, s0, s1, ds, body, frame } = this;
     const { origin, axis, ref, side } = frame;
     // project the eligible vertices once, bucket by s
     const P = body.pos;
     const S: number[] = [], A: number[] = [], B: number[] = [], I: number[] = [];
     for (let i = 0; i < body.n; i++) {
+      if ((i & 2047) === 2047) yield;
       const x = P[i * 3] - origin.x, y = P[i * 3 + 1] - origin.y, z = P[i * 3 + 2] - origin.z;
       const s = x * axis.x + y * axis.y + z * axis.z;
       if (s < s0 - slabHalf * 2 || s > s1 + slabHalf * 2) continue;
@@ -67,8 +83,10 @@ export class HullField {
       B.push(x * side.x + y * side.y + z * side.z);
       I.push(i);
     }
+    yield;
     const order = S.map((_, i) => i).sort((a, b) => S[a] - S[b]);
     const sortedS = order.map((i) => S[i]);
+    yield;
     const lowerBound = (v: number) => {
       let lo = 0, hi = sortedS.length;
       while (lo < hi) {
@@ -81,6 +99,7 @@ export class HullField {
     const pts: number[] = [];
     const hulls: (number[] | null)[] = new Array(ns).fill(null);
     for (let k = 0; k < ns; k++) {
+      yield;
       const s = s0 + k * ds;
       pts.length = 0;
       for (let q = lowerBound(s - slabHalf); q < sortedS.length && sortedS[q] <= s + slabHalf; q++) {
@@ -119,6 +138,7 @@ export class HullField {
     {
       const R = Math.max(1, Math.round(0.025 / ds));
       for (let pass = 0; pass < 2; pass++) {
+        yield;
         const a0 = this.ca.slice(), b0 = this.cb.slice();
         for (let k = 0; k < ns; k++) {
           if (!hulls[k]) continue;
@@ -136,6 +156,7 @@ export class HullField {
       }
     }
     for (let k = 0; k < ns; k++) {
+      if ((k & 3) === 3) yield;
       const h = hulls[k];
       if (!h) continue;
       let ca = this.ca[k], cb = this.cb[k];
@@ -168,7 +189,10 @@ export class HullField {
       this.cb[k] = this.cb[src];
       for (let t = 0; t < nt; t++) this.rad[k * nt + t] = this.rad[src * nt + t];
     }
-    for (let it = 0; it < smooth; it++) this.smooth();
+    for (let it = 0; it < smooth; it++) {
+      yield;
+      this.smooth();
+    }
   }
 
   private smooth() {
@@ -261,6 +285,11 @@ export interface Tube {
 }
 
 export function buildTube(spec: TubeSpec): Tube {
+  return runSync(buildTubeSteps(spec));
+}
+
+/** (load1, wave 4b) the same tube as steps: a possible pause between columns / rows (core/slice) */
+export function* buildTubeSteps(spec: TubeSpec): Generator<void, Tube, void> {
   const { field, cols, rows } = spec;
   const th0 = spec.theta0 ?? 0;
   const PS = spec.profileSamples ?? 160;
@@ -274,6 +303,7 @@ export function buildTube(spec: TubeSpec): Tube {
   const prof = new Float32Array((PS + 1) * 3);
   const cum = new Float32Array(PS + 1);
   for (let c = 0; c < W; c++) {
+    yield;
     const th = th0 + (c / cols) * TAU;
     const sl = spec.sLow(th), sh = spec.sHigh(th);
     // fine profile
@@ -303,6 +333,7 @@ export function buildTube(spec: TubeSpec): Tube {
   const uv = new Float32Array(n * 2);
   const gd = new Float32Array(n * 4);
   for (let r = 0; r < rows; r++) {
+    if ((r & 7) === 7) yield;
     let u = 0;
     for (let c = 0; c < W; c++) {
       const i = r * W + c;
@@ -327,6 +358,7 @@ export function buildTube(spec: TubeSpec): Tube {
       if (spec.flip) idx.push(a, b, d, b, e, d);
       else idx.push(a, d, b, b, d, e);
     }
+  yield;
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos.slice(), 3));
   g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));

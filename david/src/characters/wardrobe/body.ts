@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { HumanModel } from '../human/HumanModel';
+import { runSliced, runSync } from '../../core/slice';
 
 /*
  * Body analysis for garment fitting (rest pose, arms down, character space: +Z forward, +X = character's left).
@@ -224,13 +225,39 @@ function restDualQuats(human: HumanModel, mats: THREE.Matrix4[]): Float32Array {
   return out;
 }
 
+type SkinnedOpts = { depthMaterial?: THREE.Material; name?: string; castShadow?: boolean };
+
 export function makeSkinned(
   human: HumanModel,
   geo: THREE.BufferGeometry,
   material: THREE.Material | THREE.Material[],
   weights: (i: number, p: THREE.Vector3) => Weights,
-  opts: { depthMaterial?: THREE.Material; name?: string; castShadow?: boolean } = {},
+  opts: SkinnedOpts = {},
 ): THREE.SkinnedMesh {
+  return runSync(makeSkinnedSteps(human, geo, material, weights, opts));
+}
+
+/**
+ * makeSkinned for the film's background builds (load1, wave 4b): the same computation, pausing between groups of
+ * vertices whenever the active slicer's budget is used (src/core/slice.ts) — identical result.
+ */
+export function makeSkinnedAsync(
+  human: HumanModel,
+  geo: THREE.BufferGeometry,
+  material: THREE.Material | THREE.Material[],
+  weights: (i: number, p: THREE.Vector3) => Weights,
+  opts: SkinnedOpts = {},
+): Promise<THREE.SkinnedMesh> {
+  return runSliced(makeSkinnedSteps(human, geo, material, weights, opts));
+}
+
+function* makeSkinnedSteps(
+  human: HumanModel,
+  geo: THREE.BufferGeometry,
+  material: THREE.Material | THREE.Material[],
+  weights: (i: number, p: THREE.Vector3) => Weights,
+  opts: SkinnedOpts = {},
+): Generator<void, THREE.SkinnedMesh, void> {
   const pos = geo.getAttribute('position') as THREE.BufferAttribute;
   const n = pos.count;
   const si = new Uint16Array(n * 8);
@@ -251,6 +278,9 @@ export function makeSkinned(
   const v = new THREE.Vector3();
   const accR = new THREE.Vector4(), accD = new THREE.Vector4();
   for (let i = 0; i < n; i++) {
+    // (a possible pause before each vertex: the slicer decides; the state below is per vertex — one vertex's weight
+    // search can take a few ms on a dense garment)
+    yield;
     _p.fromBufferAttribute(pos, i);
     const w = weights(i, _p);
     let m = 0;

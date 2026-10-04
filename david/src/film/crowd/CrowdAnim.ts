@@ -17,6 +17,7 @@ import type { RigJson } from '../../characters/human/HumanData';
 import { humanAssetUrl } from '../../characters/human/assets';
 import { MocapLibrary, MOCAP_BONES } from '../../characters/mocap';
 import { MocapPose, type MocapClip } from '../../characters/mocap/MocapClip';
+import { slice } from '../../core/slice';
 
 export const CROWD_BONES = MOCAP_BONES.length; // 36
 export const TEX_PER_FRAME = CROWD_BONES * 3; // 108
@@ -149,6 +150,8 @@ export class CrowdAnim {
       const pk = s.peak ? (MOCAP_BONES as readonly string[]).indexOf(s.peak) : -1;
       let best = -1e9, bestF = frames - 1;
       for (let f = 0; f < frames; f++, frame++) {
+        // (wave 4b) a pause between frames when the film's builder slice is used up (core/slice); same frames, same order
+        if (slice.due()) await slice.pause();
         c.sample(r0 + f / c.fps, pose, !!s.mirror);
         rig.update(0);
         const q = pose.q;

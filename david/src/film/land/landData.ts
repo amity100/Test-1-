@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { gunzip } from '../../characters/human/inflate';
+import { slice, SLICE_STEP } from '../../core/slice';
 
 /**
  * Real elevation of the land of Judah / Philistia / Moab for the opening film's prologue sets.
@@ -153,9 +154,13 @@ export function* shadeTextureSteps(tile: HeightTile, H: LandHeight, sunDir: THRE
   const { w, h, x0, z0, dx } = tile;
   const out = new Uint8Array(w * h * 4);
   const hs = new Float32Array(w * h);
-  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
-    const x = x0 + i * dx, z = z0 + j * dx;
-    hs[j * w + i] = opts.useMods ? H.height(x, z) : H.raw(x, z);
+  for (let j = 0; j < h; j++) {
+    // (wave 4b) a pause between rows when the film's builder slice is used up (core/slice); same rows, same order
+    if (slice.due()) yield SLICE_STEP;
+    for (let i = 0; i < w; i++) {
+      const x = x0 + i * dx, z = z0 + j * dx;
+      hs[j * w + i] = opts.useMods ? H.height(x, z) : H.raw(x, z);
+    }
   }
   yield label + ':heights';
   const band = Math.max(8, Math.ceil(h / 8));
@@ -166,6 +171,8 @@ export function* shadeTextureSteps(tile: HeightTile, H: LandHeight, sunDir: THRE
   const R2 = 2 * GEO.R;
   for (let j = 0; j < h; j++) {
     for (let i = 0; i < w; i++) {
+      // (wave 4b) a pause inside long rows too (a pixel's horizon march can be long): every 32 pixels if the slice is due
+      if ((i & 31) === 31 && slice.due()) yield SLICE_STEP;
       const k = j * w + i;
       const c = hs[k];
       const l = hs[j * w + Math.max(0, i - 1)], r = hs[j * w + Math.min(w - 1, i + 1)];
@@ -193,6 +200,7 @@ export function* shadeTextureSteps(tile: HeightTile, H: LandHeight, sunDir: THRE
       out[k * 4 + 3] = Math.round(Math.max(0, Math.min(1, 0.5 + conv / (dx * 0.25))) * 255);
     }
     if ((j + 1) % band === 0 && j + 1 < h) yield label;
+    else if (slice.due()) yield SLICE_STEP;
   }
   const tex = new THREE.DataTexture(out, w, h, THREE.RGBAFormat, THREE.UnsignedByteType);
   tex.wrapS = tex.wrapT = THREE.MirroredRepeatWrapping;

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { TextureSet } from '../../world/Textures';
 import type { LandTier } from './landTerrain';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { runSync, slice, SLICE_STEP } from '../../core/slice';
 import fortA from '../../assets/palace/fortstone_a.webp?url';
 import fortN from '../../assets/palace/fortstone_n.webp?url';
 
@@ -106,6 +107,14 @@ export function mergeSimple(parts: THREE.BufferGeometry[]): THREE.BufferGeometry
  * +X along the wall. Returned marks are in set (world) coordinates.
  */
 export function buildRamahGate(tex: TextureSet, tier: LandTier, frame: { origin: THREE.Vector3; yaw: number }, ground: (x: number, z: number) => number, rnd: () => number) {
+  return runSync(buildRamahGateSteps(tex, tier, frame, ground, rnd));
+}
+
+/**
+ * (load1, wave 4b) the same gate and village as steps for LandSet's build: SLICE_STEP between houses when the film's
+ * builder slice is due (core/slice) — the same houses in the same order (the same `rnd` draws)
+ */
+export function* buildRamahGateSteps(tex: TextureSet, tier: LandTier, frame: { origin: THREE.Vector3; yaw: number }, ground: (x: number, z: number) => number, rnd: () => number) {
   const group = new THREE.Group();
   group.name = 'land:ramah-gate';
   const toWorld = (lx: number, ly: number, lz: number, out = new THREE.Vector3()) => {
@@ -220,6 +229,7 @@ export function buildRamahGate(tex: TextureSet, tier: LandTier, frame: { origin:
       // front faces into the village (toward the centre): house +Z = inward
       house(hx, hz, a + Math.PI, W, D, false);
       if (sg > 0) ang += (W + 0.6) / ringR;
+      if (slice.due()) yield SLICE_STEP;
     }
   }
   // inner houses; Samuel's house (slightly larger) near the high point, by the altar
@@ -227,8 +237,10 @@ export function buildRamahGate(tex: TextureSet, tier: LandTier, frame: { origin:
   for (let i = 0; i < nIn; i++) {
     const a = rnd() * Math.PI * 2, r = 14 + rnd() * 20;
     house(ringC.x + Math.sin(a) * r, ringC.z + Math.cos(a) * r, rnd() * Math.PI * 2, 8.5 + rnd() * 2, 10 + rnd() * 2);
+    if (slice.due()) yield SLICE_STEP;
   }
   house(-8, -34, 0.3, 12.5, 14, true);
+  if (slice.due()) yield SLICE_STEP;
   // gate: short wall stubs flanking the passage + benches on the outer face (the elders sit here, Ruth 4:1-2)
   for (const sgn of [-1, 1]) {
     const cx = sgn * (passW / 2 + stubW / 2);
@@ -257,6 +269,7 @@ export function buildRamahGate(tex: TextureSet, tier: LandTier, frame: { origin:
   // terraces on the slope below the gate (dry-stone risers following the contour), olives planted on them
   const terraceOlives: { x: number; z: number; s: number; yaw: number }[] = [];
   for (let i = 0; i < (tier === 'low' ? 3 : 5); i++) {
+    if (slice.due()) yield SLICE_STEP;
     const R = ringR + 16 + i * 11;
     for (let a = -1.25; a < 1.25; a += 0.07) {
       const lx = Math.sin(a) * R, lz = ringC.z + Math.cos(a) * R;
@@ -271,6 +284,7 @@ export function buildRamahGate(tex: TextureSet, tier: LandTier, frame: { origin:
   for (const m of [houseM, roofM, woodM, benchM]) (m as THREE.MeshStandardMaterial).vertexColors = true;
   for (const k of Object.keys(parts) as (keyof typeof parts)[]) {
     if (!parts[k].length) continue;
+    if (slice.due()) yield SLICE_STEP;
     const g = mergeGeometries(parts[k].map((x) => { x.deleteAttribute('uv1'); return x; }), false);
     for (const x of parts[k]) x.dispose();
     if (!g) continue;

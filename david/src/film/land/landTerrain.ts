@@ -3,6 +3,7 @@ import { GLSL_NOISE, shared } from '../../core/Shared';
 import type { TextureSet } from '../../world/Textures';
 import { GEO, type HeightTile, type LandHeight } from './landData';
 import { cloudShared, GLSL_LAND_HAZE, landAtmo } from './landAtmo';
+import { runSync, slice, SLICE_STEP } from '../../core/slice';
 
 export type LandTier = 'low' | 'medium' | 'high';
 
@@ -12,6 +13,11 @@ export type LandTier = 'low' | 'medium' | 'high';
  * drop d^2 / 2R (relative to the focus) is baked into y, so the far Moab ridge and the sea horizon sit right.
  */
 export function polarTerrain(H: LandHeight, cx: number, cz: number, o: { nTheta: number; r0: number; rMax: number; underwater?: (x: number, z: number) => number | null }): THREE.BufferGeometry {
+  return runSync(polarTerrainSteps(H, cx, cz, o));
+}
+
+/** (load1, wave 4b) the same mesh as steps for LandSet's build: SLICE_STEP between rings when the slice is due (core/slice) */
+export function* polarTerrainSteps(H: LandHeight, cx: number, cz: number, o: { nTheta: number; r0: number; rMax: number; underwater?: (x: number, z: number) => number | null }): Generator<string, THREE.BufferGeometry, void> {
   const nT = o.nTheta;
   const k = (2 * Math.PI) / nT;
   const radii: number[] = [0];
@@ -29,6 +35,7 @@ export function polarTerrain(H: LandHeight, cx: number, cz: number, o: { nTheta:
   };
   put(0, cx, cz);
   for (let i = 1; i < nR; i++) {
+    if (slice.due()) yield SLICE_STEP;
     const rr = radii[i];
     const off = (i & 1) * 0.5; // stagger alternate rings: better triangles
     for (let j = 0; j < nT; j++) {

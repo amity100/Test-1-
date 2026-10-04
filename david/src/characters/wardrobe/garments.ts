@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { HumanModel } from '../human/HumanModel';
 import { ARMS, BodyIndex, C, LEGS, blendWeights, normalizeWeights, type Weights } from './body';
-import { HullField, TAU, buildTube, foldNoise, makeFrame, noise1, smoothstep, type Tube } from './loft';
+import { HullField, TAU, buildTube, buildTubeSteps, foldNoise, makeFrame, noise1, smoothstep, type Tube } from './loft';
+import { runSliced, runSync } from '../../core/slice';
 import type { Outfit } from './Outfit';
 import type { Tier } from './materials';
 
@@ -113,7 +114,19 @@ export interface BodyTubeSpec {
 }
 
 /** A vertical tube around the torso/legs (tunic top, skirt, robe) fitted to the rest-pose body. */
-export function bodyTube(fit: Fit, spec: BodyTubeSpec): { tube: Tube; field: HullField; R: (s: number, th: number) => number } {
+export function bodyTube(fit: Fit, spec: BodyTubeSpec): BodyTubeResult {
+  return runSync(bodyTubeSteps(fit, spec));
+}
+
+/** (load1, wave 4b) the same tube, built in slices while the film's background builder runs (core/slice) */
+export function bodyTubeAsync(fit: Fit, spec: BodyTubeSpec): Promise<BodyTubeResult> {
+  return runSliced(bodyTubeSteps(fit, spec));
+}
+
+type BodyTubeResult = { tube: Tube; field: HullField; R: (s: number, th: number) => number };
+
+/** bodyTube as steps: it may stop between slabs / passes / columns (never inside one), so the result is the same */
+function* bodyTubeSteps(fit: Fit, spec: BodyTubeSpec): Generator<void, BodyTubeResult, void> {
   const body = fit.body;
   let lo = Infinity, hi = -Infinity;
   for (let i = 0; i < 64; i++) {
@@ -127,8 +140,10 @@ export function bodyTube(fit: Fit, spec: BodyTubeSpec): { tube: Tube; field: Hul
   const armsAbove = spec.armsAbove ?? Infinity;
   // slab +-12 mm (was 6): the phone-tier body has vertex rings 2-3 cm apart, and thin slabs between them made
   // under-sampled hull slices that printed as horizontal bands on the skirt
-  const F1 = new HullField(body, frame, spec.mask, lo - 0.02, hi + 0.02, ds, nt, 0.012, 2);
-  const F2 = armsAbove < hi ? new HullField(body, frame, spec.mask | C.UPARM_L | C.UPARM_R, lo - 0.02, hi + 0.02, ds, nt, 0.012, 2) : null;
+  const F1 = new HullField(body, frame, spec.mask, lo - 0.02, hi + 0.02, ds, nt, 0.012, 2, true);
+  yield* F1.steps();
+  const F2 = armsAbove < hi ? new HullField(body, frame, spec.mask | C.UPARM_L | C.UPARM_R, lo - 0.02, hi + 0.02, ds, nt, 0.012, 2, true) : null;
+  if (F2) yield* F2.steps();
   const G = new RadiusGrid(F1);
   const { ns } = F1;
   // arms join the hull only toward the sides (no flat panel bridging the chest to the front of the arm)
@@ -143,6 +158,7 @@ export function bodyTube(fit: Fit, spec: BodyTubeSpec): { tube: Tube; field: Hul
   };
   // hang pass (top -> down)
   for (let k = ns - 1; k >= 0; k--) {
+    if ((k & 15) === 15) yield;
     const y = F1.s0 + k * ds;
     const e = spec.ease(y);
     for (let t = 0; t < nt; t++) {
@@ -159,6 +175,7 @@ export function bodyTube(fit: Fit, spec: BodyTubeSpec): { tube: Tube; field: Hul
     const R = 8;
     const v = G.v, mx = new Float32Array(v.length);
     for (let t = 0; t < nt; t++) {
+      if ((t & 7) === 7) yield;
       for (let k = 0; k < ns; k++) {
         let m = -Infinity;
         for (let dk = -R; dk <= R; dk++) m = Math.max(m, v[Math.min(ns - 1, Math.max(0, k + dk)) * nt + t]);
@@ -176,6 +193,7 @@ export function bodyTube(fit: Fit, spec: BodyTubeSpec): { tube: Tube; field: Hul
     const [yc, hw, ec] = spec.cinch;
     const bl = spec.blouse ?? 0;
     for (let k = 0; k < ns; k++) {
+      if ((k & 15) === 15) yield;
       const y = F1.s0 + k * ds;
       const d = y - yc;
       for (let t = 0; t < nt; t++) {
@@ -203,6 +221,7 @@ export function bodyTube(fit: Fit, spec: BodyTubeSpec): { tube: Tube; field: Hul
     const v = G.v, tmp = new Float32Array(v.length), floor = new Float32Array(v.length);
     for (let k = 0; k < ns; k++) for (let t = 0; t < nt; t++) floor[k * nt + t] = H(k, t) + 0.0015;
     for (let pass = 0; pass < 3; pass++) {
+      yield;
       for (let k = 0; k < ns; k++)
         for (let t = 0; t < nt; t++) {
           let a = 0;
@@ -219,6 +238,7 @@ export function bodyTube(fit: Fit, spec: BodyTubeSpec): { tube: Tube; field: Hul
     const p = new THREE.Vector3();
     for (const arr of spec.inner)
       for (let i = 0; i < arr.length; i += 3) {
+        if (i % 6144 === 0) yield;
         p.fromArray(arr, i);
         const l = F1.toLocal(p);
         const k = Math.round((l.s - F1.s0) / ds);
@@ -244,6 +264,7 @@ export function bodyTube(fit: Fit, spec: BodyTubeSpec): { tube: Tube; field: Hul
       }
     }
     for (let pass = 0; pass < 2; pass++) {
+      yield;
       const src = innerMax.slice();
       for (let k = 0; k < ns; k++)
         for (let t = 0; t < nt; t++) {
@@ -259,10 +280,11 @@ export function bodyTube(fit: Fit, spec: BodyTubeSpec): { tube: Tube; field: Hul
     }
     // smooth envelope: a max filter followed by a box blur of the same radius is >= the input everywhere, so the
     // outer layer still never dips into the inner one, but the 5 mm bin steps (horizontal ridges) are gone
-    const smooth1 = (rk: number, rt: number) => {
+    const smooth1 = function* (rk: number, rt: number): Generator<void, void, void> {
       const src = innerMax!.slice();
       const mx = new Float32Array(ns * nt);
-      for (let k = 0; k < ns; k++)
+      for (let k = 0; k < ns; k++) {
+        if ((k & 7) === 7) yield;
         for (let t = 0; t < nt; t++) {
           let m = 0;
           for (let dk = -rk; dk <= rk; dk++) {
@@ -271,8 +293,10 @@ export function bodyTube(fit: Fit, spec: BodyTubeSpec): { tube: Tube; field: Hul
           }
           mx[k * nt + t] = m;
         }
+      }
       const cnt = (2 * rk + 1) * (2 * rt + 1);
-      for (let k = 0; k < ns; k++)
+      for (let k = 0; k < ns; k++) {
+        if ((k & 7) === 7) yield;
         for (let t = 0; t < nt; t++) {
           let a = 0;
           for (let dk = -rk; dk <= rk; dk++) {
@@ -282,8 +306,9 @@ export function bodyTube(fit: Fit, spec: BodyTubeSpec): { tube: Tube; field: Hul
           // empty bins (no inner cloth there) stay empty
           innerMax![k * nt + t] = src[k * nt + t] > 0 ? a / cnt : 0;
         }
+      }
     };
-    smooth1(3, 2);
+    yield* smooth1(3, 2);
   }
   const innerGap = spec.innerGap ?? 0.006;
   const fold = spec.folds ? foldNoise(spec.folds.seed, spec.folds.count, spec.folds.k[0], spec.folds.k[1]) : null;
@@ -317,7 +342,8 @@ export function bodyTube(fit: Fit, spec: BodyTubeSpec): { tube: Tube; field: Hul
     }
     return r;
   };
-  const tube = buildTube({ field: F1, cols: spec.cols, rows: spec.rows, theta0: spec.theta0 ?? Math.PI / 2, radius: R, sLow: spec.low, sHigh: spec.high, grime: spec.grime });
+  yield;
+  const tube = yield* buildTubeSteps({ field: F1, cols: spec.cols, rows: spec.rows, theta0: spec.theta0 ?? Math.PI / 2, radius: R, sLow: spec.low, sHigh: spec.high, grime: spec.grime });
   return { tube, field: F1, R };
 }
 

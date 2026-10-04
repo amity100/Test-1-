@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { HumanModel } from '../../characters/human/HumanModel';
 import { createGroom, type Groom, type GroomStyleSpec } from '../../characters/hair';
+import { slice } from '../../core/slice';
 import { MocapLibrary, MocapPlayer, MOCAP_BONES } from '../../characters/mocap';
 import {
   attachProp, dressArmourBearer, dressElder, dressPhilistine, dressSamuel, dressSaulGilgal, dressSoldier,
@@ -211,6 +212,9 @@ export class FilmActor {
         : preset === 'man' || preset === 'elder' ? { seed: spec.role === 'philistine' ? seed + 400 : seed } : {}),
       ...(crowd ? { geometry: 'base' as const, textureSize: 1024 as const } : {}),
     });
+    // (wave 4b) the film's background builder: a pause between the big steps once its slice is used up (core/slice);
+    // the fits, the hair and the crowds' bakes also pause inside their long loops
+    if (slice.due()) await slice.pause();
     const gq = crowd ? 'low' : q;
     let outfit: Outfit;
     let tear: MeilTear | null = null;
@@ -278,8 +282,10 @@ export class FilmActor {
         groomSpec = { kind: 'soldier', seed, headband: false };
       }
     }
+    if (slice.due()) await slice.pause();
     // (models pass: the elders' long beards and hair are their identity — at crowd LOD half density read stringy)
     const groom = await createGroom(human, groomSpec, { quality: gq, msaa: spec.msaa, headband, density: crowd ? (spec.role === 'elder' ? 0.8 : 0.5) : 1, simulate: !crowd });
+    if (slice.due()) await slice.pause();
     const mocap = new MocapPlayer(human);
     mocap.rootMotion = 'inplace';
     const a = new FilmActor({ ...spec, lod }, human, groom, outfit, mocap);

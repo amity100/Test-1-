@@ -144,11 +144,11 @@ async function main() {
     const fit = await beginFit(human, 'crowd:israel', tier, 11);
     const S = fit.lm.height / 1.75;
     fit.outfit.capsules.push(...legCapsules(fit, 0.014, 0.05));
-    const t = fittedTunic(fit, { tex: medium, tile: 0.14, dye: 0xcdbf9f, hem: -0.08, sleeve: 0.55, neck: 'slit', flare: 0.14, seed: 11, name: 'tunic', fray: 0.3, dust: 0.5 });
+    const t = await fittedTunic(fit, { tex: medium, tile: 0.14, dye: 0xcdbf9f, hem: -0.08, sleeve: 0.55, neck: 'slit', flare: 0.14, seed: 11, name: 'tunic', fray: 0.3, dust: 0.5 });
     const belt = solidMaterial({ tier, tex: leather, color: 0x4a2f1d, roughness: 0.6, repeat: [1, 12], normal: 1.2 });
     belt.name = 'belt';
-    beltBand(fit, t, { width: 0.045 * S, thickness: 0.006, material: belt, name: 'belt' });
-    const jerk = fittedTunic(fit, { tex: leather, tile: 0.3, dye: 0x6b4a30, hem: -1.6, sleeve: 0, sleeveless: true, neck: 'round', offset: 0.007, flare: 0.05, folds: 0.3, seed: 14, name: 'jerkin', hide: false, fray: 0, sheen: 0.3, roughness: 0.62, inner: t.restPos });
+    await beltBand(fit, t, { width: 0.045 * S, thickness: 0.006, material: belt, name: 'belt' });
+    const jerk = await fittedTunic(fit, { tex: leather, tile: 0.3, dye: 0x6b4a30, hem: -1.6, sleeve: 0, sleeveless: true, neck: 'round', offset: 0.007, flare: 0.05, folds: 0.3, seed: 14, name: 'jerkin', hide: false, fray: 0, sheen: 0.3, roughness: 0.62, inner: t.restPos });
     void jerk;
     const band = clothMaterial({ tier, tex: medium, tile: 0.08, dye: 0x8e3f2c, hem: [0, 0.1, 0.01, 0], edgeMask: [0, 0], transmit: 0 });
     band.name = 'headband';
@@ -158,7 +158,7 @@ async function main() {
     headRing(fit, { height: 0.05, thickness: 0.012, material: cloth, extra: 0.024, lift: 0.006, tilt: 0.012 });
     const dagger = makeDagger(tier, leather, metal, wood);
     hangFromBelt(fit, t, dagger, { th: -1.0, out: 0.02, drop: 0.005, forward: -0.3, bone: 'pelvis.R', name: 'wardrobeDagger' });
-    sandals(fit, leather, { wraps: 1.5, height: 0.07 });
+    await sandals(fit, leather, { wraps: 1.5, height: 0.07 });
     fit.outfit.finish(performance.now());
     const spear = makeSpear(tier, wood, metal, leather, { length: 2.3, head: 0.26, gripAt: 1.1, seed: 3 });
     const shield = makeShield(tier, leather, metal, wood, { radius: 0.29, oval: 1, boss: 'leather', seed: 3 });
@@ -171,10 +171,10 @@ async function main() {
     const S = fit.lm.height / 1.75;
     fit.outfit.capsules.push(...legCapsules(fit, 0.014, 0.05));
     // kilt + ribbed corselet: a short sleeveless tunic (the bands are painted per instance in the crowd shader)
-    const t = fittedTunic(fit, { tex: medium, tile: 0.14, dye: 0xd9cba8, hem: -0.45, sleeve: 0, sleeveless: true, neck: 'round', flare: 0.2, seed: 21, name: 'tunic', fray: 0.1, dust: 0.3 });
+    const t = await fittedTunic(fit, { tex: medium, tile: 0.14, dye: 0xd9cba8, hem: -0.45, sleeve: 0, sleeveless: true, neck: 'round', flare: 0.2, seed: 21, name: 'tunic', fray: 0.1, dust: 0.3 });
     const belt = solidMaterial({ tier, tex: leather, color: 0x4a2f1d, roughness: 0.6, repeat: [1, 12], normal: 1.2 });
     belt.name = 'belt';
-    beltBand(fit, t, { width: 0.07 * S, thickness: 0.008, material: belt, name: 'belt' });
+    await beltBand(fit, t, { width: 0.07 * S, thickness: 0.008, material: belt, name: 'belt' });
     const band = clothMaterial({ tier, tex: medium, tile: 0.08, dye: 0x8e3f2c, hem: [0, 0.1, 0.01, 0], edgeMask: [0, 0], transmit: 0 });
     band.name = 'headband';
     headRing(fit, { height: 0.03, thickness: 0.006, material: band, extra: 0.011 });

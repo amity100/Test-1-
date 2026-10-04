@@ -3,6 +3,7 @@ import { FilmStage, USED_SETS, type FilmStageOptions, type FilmStageSet } from '
 import { shotStarts } from '../content/introScript';
 import { TAKE_OFFSET } from './FilmCams';
 import { bootMark } from '../core/bootProfile';
+import { slice, type Slicer } from '../core/slice';
 
 /**
  * THE PROGRESSIVE START (load1, CUT v5): the film's sets are built by ONE background builder, in the order of their
@@ -55,9 +56,11 @@ const BUILD_SHARE: Record<'desktop' | 'mobile', Record<FilmJob, number>> = {
   mobile: { world: 0, judah: 0.4, map: 0.1, coast: 0.37, ramah: 0.47, gilgal: 0.19 },
 };
 /**
- * Builders with long synchronous steps that a frame budget cannot split (the cast's FilmActor and crowd creation, the
- * coast's terrain shading): they are built while the picture is covered — the start screen, or a held start — never
- * under the film. Their pre-compile, the map and the world's warm-up run in slices during the film.
+ * The sets with the big builds (the cast's FilmActors and crowds, the coast's terrain shading). Since wave 4b their
+ * long loops run in slices (core/slice: the skinning fits, the hair's distance field and strands, the crowds' bakes, the
+ * land shading rows), so on a device with KHR_parallel_shader_compile they are built under the film in deadline order
+ * like everything else. Without parallel compiles the whole film is still built and compiled behind the cover (the
+ * hold), and these builds go first there.
  */
 const HEAVY: ReadonlySet<FilmJob> = new Set<FilmJob>(['coast', 'ramah', 'gilgal']);
 /** share of the wall clock the background builder gets while the film plays (frame-budgeted slices; conservative) */
@@ -69,6 +72,19 @@ const MARGIN_F = 0.8;
 
 const nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 const macrotask = () => new Promise<void>((r) => setTimeout(r, 0));
+/** a macrotask without the timer clamp (chained setTimeouts wait >= 4 ms each): a covered slice's pause */
+const yieldTask = (() => {
+  if (typeof MessageChannel === 'undefined') return macrotask;
+  const ch = new MessageChannel();
+  const q: (() => void)[] = [];
+  ch.port1.onmessage = () => q.shift()?.();
+  return () =>
+    new Promise<void>((r) => {
+      q.push(r);
+      ch.port2.postMessage(0);
+    });
+})();
+const testParam = (k: string) => (typeof location !== 'undefined' ? new URLSearchParams(location.search).get(k) : null);
 
 export class FilmSchedule {
   readonly stage: FilmStage;
@@ -86,12 +102,29 @@ export class FilmSchedule {
   private urgent = false;
   private canvasBusy: Promise<void> | null = null;
   private sliceT = 0;
+  /** performance.now() ms when the picture went on screen (enterFilm; 0 = not yet) */
+  private filmAt = 0;
+  /** film mode: the last frame's time (rAF) and the display's frame interval, for the slices between frames */
+  private rafAt = 0;
+  private rafDt = 1000 / 60;
+  /** film mode: every slice as [end ms, length ms, build 1 / prepare 0, urgent 1 / 0] (bounded; for frame traces) */
+  readonly sliceLog: number[] = [];
   private filmClock: (() => number) | null = null;
   /** the set being built / prepared */
   private current: FilmJob | null = null;
   private readonly primeWorld: FilmScheduleOptions['primeWorld'];
-  /** film mode: the main-thread time of each background slice (what the builder costs a frame) */
-  readonly slices = { n: 0, maxMs: 0, over16: 0, over50: 0, over100: 0, top: [] as { set: string; ms: number }[] };
+  /**
+   * film mode: the main-thread time of each background slice (what the builder costs a frame); `build` = the slices of
+   * set builds alone (the rest are prepares: uploads, and on a device without parallel compiles the program links)
+   */
+  readonly slices = { n: 0, maxMs: 0, over16: 0, over50: 0, over100: 0, awaited: 0, top: [] as { set: string; ms: number }[], build: { n: 0, maxMs: 0, over8: 0, over16: 0, overMax: 0, urgent: 0, hist: [0, 0, 0, 0, 0, 0] as number[] } };
+  /** (wave 4b) what the builder did when (performance.now() ms): for frame-time traces */
+  readonly windows: { job: FilmJob; kind: 'build' | 'prep'; t0: number; t1: number; covered: boolean }[] = [];
+  /** (wave 4b) the slicer the build code consults (core/slice): the builder's budget rule, inside the long loops */
+  private readonly slicer: Slicer = {
+    due: () => performance.now() - this.sliceT >= this.sliceBudget(),
+    pause: () => this.slicePause(),
+  };
   private readonly rel: Record<FilmJob, number>;
   private readonly bshare: Record<FilmJob, number>;
   /** this device's ms per unit of REL_COST (from the sets built so far, covered mode) */
@@ -112,7 +145,9 @@ export class FilmSchedule {
   ) {
     this.budgetMs = engine.quality.mobile ? 5 : 7;
     this.share = engine.quality.mobile ? FILM_SHARE_MOBILE : FILM_SHARE_DESKTOP;
-    this.parallel = engine.renderer.extensions.has('KHR_parallel_shader_compile');
+    // (test only: ?parallel=1 schedules as on a device with parallel compiles — on a software-GPU box the prepares then
+    // stall the film; it exercises the film-time builds and the hold prediction)
+    this.parallel = engine.renderer.extensions.has('KHR_parallel_shader_compile') || testParam('parallel') === '1';
     const hs = typeof location !== 'undefined' ? Number(new URLSearchParams(location.search).get('holdscale')) : NaN;
     this.holdScale = Number.isFinite(hs) && hs > 0 ? hs : 1;
     const { primeWorld, ...stageOpts } = opts;
@@ -185,16 +220,12 @@ export class FilmSchedule {
     return 0;
   }
 
-  /** the heavy builds not finished yet (they must be, before the picture goes on screen) */
-  private heavyPending(): FilmJob[] {
-    return this.order.filter((n) => HEAVY.has(n) && (this.state[n] === 'queued' || this.state[n] === 'building'));
-  }
-
   /**
-   * Seconds the film start must still wait on this device (0 = safe now): the heavy builds must be done (at full
-   * speed, behind the cover), and for every job not ready its predicted ready time if the film started now (the
-   * remaining work in deadline order, at `share` of the wall clock) must lie MARGIN before its deadline. Before any set
-   * has been measured the answer is "not yet".
+   * Seconds the film start must still wait on this device (0 = safe now): for every job not ready its predicted ready
+   * time if the film started now (the remaining work in deadline order, at `share` of the wall clock) must lie MARGIN
+   * before its deadline. Every build runs in slices (wave 4b), so nothing has to be built before the picture goes on
+   * screen; without KHR_parallel_shader_compile the programs cannot compile under the film, so everything is built and
+   * compiled first. Before any set has been measured the answer is "not yet".
    */
   startWait(): number {
     if (this.unitMs <= 0) return Infinity;
@@ -205,20 +236,17 @@ export class FilmSchedule {
       for (const n of this.order) all += ((this.rel[n] ?? 1) * (1 - this.doneFrac(n)) * this.unitMs) / 1000;
       return this.settled ? 0 : Math.max(0.2, all);
     }
-    let heavy = 0;
-    for (const n of this.heavyPending()) heavy += ((this.rel[n] ?? 1) * ((this.bshare[n] ?? 0.3) - this.doneFrac(n)) * this.unitMs) / 1000;
     let cum = 0, wait = 0;
     for (const n of this.order) {
       const st = this.state[n];
       if (st === 'ready' || st === 'failed' || st === 'skipped') continue;
-      const done = HEAVY.has(n) ? Math.max(this.doneFrac(n), this.bshare[n] ?? 0.3) : this.doneFrac(n);
-      const remain = ((this.rel[n] ?? 1) * (1 - done) * this.unitMs * this.holdScale) / 1000;
+      const remain = ((this.rel[n] ?? 1) * (1 - this.doneFrac(n)) * this.unitMs * this.holdScale) / 1000;
       cum += remain / this.share;
       const limit = Math.min(this.deadline[n]! * MARGIN_F, this.deadline[n]! - MARGIN_S);
       // covered (holding) runs at full speed: the excess shrinks by `share` of the remaining-work estimate per second
       if (cum > limit) wait = Math.max(wait, ((cum - limit) * this.share) / this.holdScale);
     }
-    return heavy + wait;
+    return wait;
   }
 
   /**
@@ -248,7 +276,9 @@ export class FilmSchedule {
     while (this.canvasBusy) await this.canvasBusy;
     this.covered = false;
     // the first film-mode slice is measured from here (covered work never counts as a slice)
-    this.sliceT = performance.now();
+    this.startSlice();
+    this.filmAt = Math.round(this.sliceT);
+    if (!this.settled) this.startFrameCount();
   }
 
   /** stop building (the film was skipped or is over); the stage's own dispose frees what was built */
@@ -261,19 +291,56 @@ export class FilmSchedule {
   }
 
   report() {
-    return { order: this.order, deadline: this.deadline, state: this.state, times: this.times, unitMs: Math.round(this.unitMs), startWait: this.startWait(), parallel: this.parallel, slices: this.slices, stats: this.stage.buildStats };
+    return { order: this.order, deadline: this.deadline, state: this.state, times: this.times, unitMs: Math.round(this.unitMs), startWait: this.startWait(), parallel: this.parallel, slices: this.slices, windows: this.windows, filmAt: this.filmAt, sliceLog: this.sliceLog, stats: this.stage.buildStats };
   }
 
   // ------------------------------------------------------------------------------------------ the builder
   /** a builder step's yield: back-to-back while covered, a frame once a slice has used its budget while the film plays */
   private async yieldSlice(): Promise<void> {
-    if (this.covered) return macrotask();
+    if (this.covered) {
+      await macrotask();
+      this.startSlice();
+      return;
+    }
     const now = performance.now();
     if (this.current && this.filmClock) this.urgent = this.filmClock() > this.deadline[this.current]! - 8;
     if (now - this.sliceT < (this.urgent ? this.budgetMs * 4 : this.budgetMs)) return;
     this.noteSlice(now - this.sliceT);
-    await nextFrame();
-    this.sliceT = performance.now();
+    await this.frameGap();
+    this.startSlice();
+  }
+
+  /**
+   * (wave 4b) the pause of a long build loop (core/slice), once its slice has used the budget: a frame while the film
+   * plays, a task while covered (the start screen stays responsive)
+   */
+  private async slicePause(): Promise<void> {
+    if (this.covered) {
+      await yieldTask();
+      this.startSlice();
+      return;
+    }
+    this.noteSlice(performance.now() - this.sliceT);
+    await this.frameGap();
+    this.startSlice();
+  }
+
+  /**
+   * (wave 4b) film mode, between two slices: if one more whole slice still fits in this frame's idle time before the
+   * next frame (with a margin) it runs at once — a task, so input and the frame stay first — else after the next
+   * frame's rendering. A paced phone (30 fps) has idle frames: the builder gets more of the wall clock, never a long task.
+   */
+  private async frameGap(): Promise<void> {
+    if (this.rafAt > 0 && performance.now() + this.sliceBudget() + 4 < this.rafAt + this.rafDt) return yieldTask();
+    await new Promise<void>((r) =>
+      requestAnimationFrame((t) => {
+        // the display's frame interval (60 Hz: 16.7 ms; 120 Hz: 8.3 ms), never assumed longer than 60 Hz's
+        const d = t - this.rafAt;
+        if (this.rafAt > 0 && d > 4) this.rafDt += (Math.min(1000 / 60, d) - this.rafDt) * 0.1;
+        this.rafAt = t;
+        setTimeout(r, 0);
+      }),
+    );
   }
 
   /** a slice's main-thread budget: big while covered (the start screen stays responsive), small while the film plays */
@@ -281,8 +348,47 @@ export class FilmSchedule {
     return this.covered ? 40 : this.urgent ? this.budgetMs * 4 : this.budgetMs;
   }
 
+  /** a new slice starts now (its main-thread time is measured from here) */
+  private startSlice() {
+    this.sliceT = performance.now();
+    this.sliceRaf = this.rafCount;
+  }
+
+  /** film mode: frames counted while the builder runs — a "slice" that spans a frame was an await on I/O, not work */
+  private rafCount = 0;
+  private sliceRaf = 0;
+  private ticking = false;
+  private startFrameCount() {
+    if (this.ticking || typeof requestAnimationFrame === 'undefined') return;
+    this.ticking = true;
+    const tick = () => {
+      this.rafCount++;
+      if (this.ticking) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+
   private noteSlice(ms: number) {
     const s = this.slices;
+    const building = !!this.current && this.state[this.current] === 'building';
+    // the slice spanned a frame: the builder awaited a download / decode / import meanwhile (not one block of work)
+    const io = this.rafCount !== this.sliceRaf;
+    if (this.sliceLog.length < 60000) this.sliceLog.push(Math.round(performance.now()), Math.round(ms * 10) / 10, io ? 2 : building ? 1 : 0, this.urgent ? 1 : 0);
+    if (io) {
+      s.awaited++;
+      return;
+    }
+    if (building) {
+      const b = s.build;
+      b.n++;
+      b.maxMs = Math.max(b.maxMs, Math.round(ms * 10) / 10);
+      if (ms > 8) b.over8++;
+      if (ms > 16) b.over16++;
+      // past the budget = the last indivisible step of the slice (a loop's unit, or code that does not slice)
+      b.overMax = Math.max(b.overMax, Math.round((ms - this.sliceBudget()) * 10) / 10);
+      if (this.urgent) b.urgent++;
+      b.hist[ms <= 6 ? 0 : ms <= 8 ? 1 : ms <= 12 ? 2 : ms <= 16 ? 3 : ms <= 33 ? 4 : 5]++;
+    }
     s.n++;
     s.maxMs = Math.max(s.maxMs, Math.round(ms));
     if (ms > 16) s.over16++;
@@ -296,16 +402,24 @@ export class FilmSchedule {
   }
 
   private async run() {
-    // A: the first sets (judah) — the start screen waits for them; B: the heavy builds, while the start screen covers;
-    // C: everything else in deadline order (the world's warm-up, the map, the heavy sets' pre-compiles)
-    const first = this.firstSets();
-    for (const n of first) await this.job(n, false);
-    // the start screen comes up the moment the first sets are ready (its continuation runs before the next job)
-    await macrotask();
-    for (const n of this.order) if (HEAVY.has(n) && !first.includes(n)) await this.job(n, true);
-    for (const n of this.order) if (!first.includes(n)) await this.job(n, false);
-    this.current = null;
-    this.urgent = false;
+    // A: the first sets (judah) — the start screen waits for them; then everything else in deadline order (the world's
+    // warm-up, the map, coast, ramah, gilgal), covered while the start screen is up, under the film after the click.
+    // Without parallel compiles (B) the heavy builds go first, behind the cover (the hold waits for everything there).
+    // The long build loops consult the slicer (core/slice) while it runs: no step blocks a frame for long.
+    slice.set(this.slicer);
+    try {
+      const first = this.firstSets();
+      for (const n of first) await this.job(n, false);
+      // the start screen comes up the moment the first sets are ready (its continuation runs before the next job)
+      await macrotask();
+      if (!this.parallel) for (const n of this.order) if (HEAVY.has(n) && !first.includes(n)) await this.job(n, true);
+      for (const n of this.order) if (!first.includes(n)) await this.job(n, false);
+    } finally {
+      slice.set(null);
+      this.ticking = false;
+      this.current = null;
+      this.urgent = false;
+    }
   }
 
   /** one job: build (unless built) and prepare a set — or only build it (`buildOnly`); 'world' = the world's warm-up */
@@ -322,7 +436,7 @@ export class FilmSchedule {
     }
     if (!this.covered) {
       await nextFrame();
-      this.sliceT = performance.now();
+      this.startSlice();
     }
     this.current = n;
     const t0 = performance.now();
@@ -333,6 +447,7 @@ export class FilmSchedule {
       // screen stays responsive): covered = bigger slices, a macrotask between them
       this.state[n] = 'compiling';
       await this.primeWorld!(() => this.covered, { budgetMs: () => this.sliceBudget(), yieldFrame: () => this.frameYield() }).catch((e) => console.warn('[film] world prime', e));
+      this.windows.push({ job: n, kind: 'prep', t0: Math.round(t0), t1: Math.round(performance.now()), covered: covered0 && this.covered });
       this.finish(n, t0, covered0, time, 'prep');
       return;
     }
@@ -342,6 +457,7 @@ export class FilmSchedule {
       this.progressOf[n] = 0;
       const h = await this.stage.buildSet(name, (f) => (this.progressOf[n] = f));
       time.build = Math.round(performance.now() - t0);
+      this.windows.push({ job: n, kind: 'build', t0: Math.round(t0), t1: Math.round(performance.now()), covered: covered0 && this.covered });
       time.covered &&= covered0 && this.covered;
       if (!h || this.stopped) {
         // stopped while it was building (the film was skipped / is over): free it at once
@@ -377,6 +493,7 @@ export class FilmSchedule {
       await this.stage.prepareSet(name, { budgetMs: () => this.sliceBudget(), yieldFrame: () => this.frameYield() });
     }
     this.calibrate(n, performance.now() - t1, covered1, 1 - (this.bshare[n] ?? 0.3));
+    this.windows.push({ job: n, kind: 'prep', t0: Math.round(t1), t1: Math.round(performance.now()), covered: covered1 && this.covered });
     this.finish(n, t1, covered1, time, 'prep');
   }
 
@@ -403,10 +520,14 @@ export class FilmSchedule {
 
   /** a prepare slice's yield (same budget rule as the builder's) */
   private async frameYield(): Promise<void> {
-    if (this.covered) return macrotask();
+    if (this.covered) {
+      await macrotask();
+      this.startSlice();
+      return;
+    }
     this.noteSlice(performance.now() - this.sliceT);
-    await nextFrame();
-    this.sliceT = performance.now();
+    await this.frameGap();
+    this.startSlice();
   }
 
   /** film mode: the slices grow if the set being prepared is close to its deadline on the film clock */

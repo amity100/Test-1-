@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import type { HumanModel } from '../human/HumanModel';
 import { HeadSurface, rng, ss } from './HeadSurface';
-import { growStrands, type Headband, type LayerBuild, type Tier } from './grow';
+import { growStrandsAsync, type Headband, type LayerBuild, type Tier } from './grow';
 import { HairCapMaterial, HairDepthMaterial, HairMaterial, createHairUniforms, type HairUniforms } from './HairMaterial';
 import { HairSim } from './HairSim';
 import { enhanceLashes } from './lashes';
+import { slice } from '../../core/slice';
 import { capNoise, davidStyle, manStyle, saulStyle, type GroomStyle, type ManStyleOptions } from './styles';
 import { elderStyle, philistineStyle, samuelStyle, soldierStyle } from './filmStyles';
 
@@ -227,7 +228,8 @@ export async function createGroom(human: HumanModel, spec: GroomStyleSpec, opts:
   const msaa = opts.msaa ?? (q === 'low' ? 0 : 4);
   const { style, seed } = resolveStyle(spec);
   const reach = style.layers.reduce((a, l) => Math.max(a, l.reach ?? 0.22), 0.22);
-  const S = new HeadSurface(human, q === 'low' ? 0.008 : 0.006, reach);
+  // (wave 4b) built in slices when the film's background builder runs (core/slice); straight through otherwise
+  const S = await HeadSurface.create(human, q === 'low' ? 0.008 : 0.006, reach);
   const t1 = performance.now();
   // let the loading screen breathe between the heavy steps
   await Promise.resolve();
@@ -243,8 +245,9 @@ export async function createGroom(human: HumanModel, spec: GroomStyleSpec, opts:
   }));
   const K = style.ctrl[q];
   const segs = style.segs[q];
-  const set = growStrands(S, layers, K, headband);
+  const set = await growStrandsAsync(S, layers, K, headband);
   const t2 = performance.now();
+  if (slice.due()) await slice.pause();
   // ---- rest character space -> head bone space
   const toRest = new THREE.Matrix4().compose(S.headRestPos, S.headRestQuat, new THREE.Vector3(1, 1, 1));
   const fromRest = toRest.clone().invert();
@@ -268,6 +271,7 @@ export async function createGroom(human: HumanModel, spec: GroomStyleSpec, opts:
     const row = Math.floor(s / spr), col = (s % spr) * K;
     texData.set(set.pts.subarray(s * K * 4, (s + 1) * K * 4), (row * texW + col) * 4);
   }
+  if (slice.due()) await slice.pause();
   const pointsTex = new THREE.DataTexture(texData, texW, texH, THREE.RGBAFormat, THREE.FloatType);
   pointsTex.minFilter = pointsTex.magFilter = THREE.NearestFilter;
   pointsTex.generateMipmaps = false;
@@ -313,6 +317,7 @@ export async function createGroom(human: HumanModel, spec: GroomStyleSpec, opts:
   U.uBeardR.value.set(0.06, 0.075, 0.07);
   // ---- simulation
   let sim: HairSim | null = null;
+  if (slice.due()) await slice.pause();
   if (set.G > 0) {
     sim = new HairSim(set.simGuides, K, set.G, set.simStiff, S.sdf, toRest, fromRest);
     U.uSim.value = sim.tex;
@@ -332,6 +337,7 @@ export async function createGroom(human: HumanModel, spec: GroomStyleSpec, opts:
     U.uSim.value = t;
   }
   // ---- cap
+  if (slice.due()) await slice.pause();
   const cap = buildCap(S, style, fromRest);
   // jaw: head-space rest point -> rest character -> jaw rest local
   const jawRest = new THREE.Matrix4().compose(S.jawRestPos, S.jawRestQuat, new THREE.Vector3(1, 1, 1));

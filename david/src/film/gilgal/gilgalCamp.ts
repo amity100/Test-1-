@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mulberry32, Simplex2 } from '../../core/noise';
+import { runSync } from '../../core/slice';
 import { Smoke } from '../../palace/palaceFx';
 import type { TextureSet } from '../../world/Textures';
 import { mergeSimple } from './gilgalFlora';
@@ -15,6 +16,11 @@ import type { GilgalGround, GilgalTier } from './gilgalTerrain';
  * (docs/visual-bible.md 3.6: MUST altar, camp traces, acacia; MUST-NOT Tabernacle / Ark / monument.)
  */
 export function buildCamp(ground: GilgalGround, world: TextureSet, tier: GilgalTier) {
+  return runSync(buildCampSteps(ground, world, tier));
+}
+
+/** (load1, wave 4b) the same camp as steps (GilgalSet's sliced build, core/slice): the same parts in the same order */
+export function* buildCampSteps(ground: GilgalGround, world: TextureSet, tier: GilgalTier) {
   const group = new THREE.Group();
   group.name = 'gilgal:camp';
   const rand = mulberry32(3131);
@@ -34,6 +40,7 @@ export function buildCamp(ground: GilgalGround, world: TextureSet, tier: GilgalT
     const y = (c + 0.5) * (ALTAR.height / courses);
     const inset = c * 0.04;
     for (let side = 0; side < 4; side++) {
+      yield;
       const n = 7;
       for (let k = 0; k < n; k++) {
         const t = (k + 0.5 + (rand() - 0.5) * 0.3) / n * 2 - 1;
@@ -57,7 +64,9 @@ export function buildCamp(ground: GilgalGround, world: TextureSet, tier: GilgalT
     g.translate((rand() - 0.5) * (ALTAR.size - 0.5), ALTAR.height - 0.02, (rand() - 0.5) * (ALTAR.size - 0.5));
     parts.push(g);
   }
+  yield;
   const altarGeo = mergeSimple(parts.map((g) => (g.index ? g : g)));
+  yield;
   {
     const p = altarGeo.getAttribute('position');
     const col = new Float32Array(p.count * 3);
@@ -71,8 +80,10 @@ export function buildCamp(ground: GilgalGround, world: TextureSet, tier: GilgalT
       col[i * 3 + 2] = v * (1 - soot * 0.87) * 0.87;
     }
     altarGeo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    yield;
     altarGeo.computeVertexNormals();
   }
+  yield;
   const altar = new THREE.Mesh(altarGeo, stoneMat);
   altar.position.set(ALTAR.x, ay - 0.05, ALTAR.z);
   altar.rotation.y = 0.2;
@@ -116,12 +127,14 @@ export function buildCamp(ground: GilgalGround, world: TextureSet, tier: GilgalT
   tents.castShadow = tents.receiveShadow = true;
   tents.computeBoundingSphere();
   group.add(tents);
+  yield;
   // ---------------------------------------------------------------- smoke: the altar (thin) and the camp fires
   const smoke = new Smoke([
     { pos: new THREE.Vector3(ALTAR.x, ay + ALTAR.height + 0.1, ALTAR.z), rate: 1, size: 1.4, height: 18, dark: 0.15 },
     ...fires.map((p) => ({ pos: p, rate: 1, size: 1.8, height: 16, dark: 0.1 })),
   ], tier === 'low' ? 14 : 28);
   group.add(smoke.points);
+  yield;
   // ---------------------------------------------------------------- acacias: flat-topped umbrella crowns
   const acacia = buildAcacias(ground, world, tier, rand);
   group.add(acacia);

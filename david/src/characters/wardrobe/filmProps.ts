@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { makeSkinned } from './body';
+import { makeSkinnedAsync } from './body';
+import { slice } from '../../core/slice';
 import { C } from './body';
 import { blendWeights } from './body';
 import { partWeights, skirtWeights, tubeSurface, type Fit } from './garments';
@@ -119,7 +120,7 @@ export interface ScaleArmourOptions {
  * sparkles like beaten metal. Cost for Saul: high ≈ 2,300 scales × 24 tris ≈ 55 k tris, medium × 12, low (bigger
  * scales) × 4.
  */
-export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions & { skirtStiff?: number; skirtBlur?: number }): THREE.SkinnedMesh {
+export async function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions & { skirtStiff?: number; skirtBlur?: number }): Promise<THREE.SkinnedMesh> {
   const { lm, tier, human } = fit;
   const low = tier === 'low';
   const med = tier === 'medium';
@@ -260,8 +261,12 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions &
   };
   const upperT = coat.upper.tube, skirtT = coat.skirt.tube;
   // upper: from just under the neck edge to the belt; skirt: from the belt to the hem
+  // (load1, wave 4b) a pause between the parts when the film's background builder slice is used up (core/slice)
+  if (slice.due()) await slice.pause();
   place(upperT, 0, 0.012 * S, () => 9, 0);
+  if (slice.due()) await slice.pause();
   place(skirtT, 1, 0.02 * S, () => 9, 1);
+  if (slice.due()) await slice.pause();
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
@@ -272,7 +277,9 @@ export function scaleArmour(fit: Fit, coat: TunicResult, o: ScaleArmourOptions &
   // full metal driven by the per-scale detail map (every scale has uv 0..1): hammered dimples, the raised rib and
   // the rolled edge in the normal map; roughness / metalness maps put packed road dust (rough, non-metal) along the
   // overlap line and keep the rib and the lower edge burnished (sharp highlights)
+  if (slice.due()) await slice.pause();
   const maps = scaleDetailMaps();
+  if (slice.due()) await slice.pause();
   const mat = new THREE.MeshStandardMaterial({
     // polished bronze (visual-bible §2 #b8773c), a touch more golden than copper
     // (film check: in the backlit close-ups the polished scales went pale gold / sequin-like — a touch darker and a
@@ -345,7 +352,7 @@ vec3 sCollide(vec3 p) {
     const t = THREE.MathUtils.smoothstep(p.y, lm.yArmpit - 0.02, lm.yArmpit + 0.08) * THREE.MathUtils.smoothstep(side, 0.55, 0.9) * 0.85;
     return t > 0.01 ? blendWeights(tw(i, p), aw(i, p), t) : tw(i, p);
   };
-  const m = makeSkinned(human, g, mat, w, { name: 'scaleArmour' });
+  const m = await makeSkinnedAsync(human, g, mat, w, { name: 'scaleArmour' });
   // makeSkinned rebuilds the geometry without vertex colours: carry them over (same vertex order)
   m.geometry.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   m.geometry.setAttribute('aLift', new THREE.Float32BufferAttribute(lifts, 1));

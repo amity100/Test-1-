@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import type { HumanModel } from '../human/HumanModel';
-import { BodyIndex, C, blendWeights, hull2, makeSkinned, rayPoly } from './body';
+import { BodyIndex, C, blendWeights, hull2, makeSkinnedAsync, rayPoly } from './body';
 import {
-  armWeights, bodyTube, fringeStrip, landmarks, legCapsules, merge, partWeights, ribbon, skirtWeights, sleeveTube,
+  armWeights, bodyTube, bodyTubeAsync, fringeStrip, landmarks, legCapsules, merge, partWeights, ribbon, skirtWeights, sleeveTube,
   torsoWeights, tubeAlong, type Fit,
 } from './garments';
 import { HullField, TAU, makeFrame, noise1, smoothstep, type Tube } from './loft';
 import { clothDepthMaterial, clothMaterial, foldsAround, fringeMaterial, insideFace, insideFaceTube, solidMaterial, type Band, type TexPair, type Tier } from './materials';
 import { Chain, Outfit } from './Outfit';
+import { slice } from '../../core/slice';
 
 /*
  * Shared garment recipes for Saul and the men of the court (David has his own hand-tuned recipe in david.ts):
@@ -16,7 +17,12 @@ import { Chain, Outfit } from './Outfit';
 
 export async function beginFit(human: HumanModel, name: string, tier: Tier, seed: number): Promise<Fit> {
   const outfit = new Outfit(human, name);
+  // (load1, wave 4b) a pause between the steps when the film's background builder slice is used up (core/slice)
+  if (slice.due()) await slice.pause();
+  await human.warmRest();
+  if (slice.due()) await slice.pause();
   const body = new BodyIndex(human);
+  if (slice.due()) await slice.pause();
   const lm = landmarks(body);
   return { human, body, tier, lm, outfit, seed };
 }
@@ -100,7 +106,7 @@ export interface TunicResult {
   skirtPad?: number;
 }
 
-export function fittedTunic(fit: Fit, o: TunicOptions): TunicResult {
+export async function fittedTunic(fit: Fit, o: TunicOptions): Promise<TunicResult> {
   const { lm, tier, human, outfit } = fit;
   const low = tier === 'low';
   const S = lm.height / 1.75;
@@ -133,7 +139,7 @@ export function fittedTunic(fit: Fit, o: TunicOptions): TunicResult {
     return upLow0 + (ah.top - upLow0) * w * w * (3 - 2 * w);
   };
   const sf = o.shoulderFolds ?? 0;
-  const upper = bodyTube(fit, {
+  const upper = await bodyTubeAsync(fit, {
     low: upLow,
     high: neckline,
     mask: C.TORSO | C.NECK,
@@ -151,7 +157,7 @@ export function fittedTunic(fit: Fit, o: TunicOptions): TunicResult {
     grime: () => 0.15,
     inner: o.inner,
   });
-  const skirt = bodyTube(fit, {
+  const skirt = await bodyTubeAsync(fit, {
     low: hem, high: () => beltY + 0.035 * S,
     mask: C.TORSO | C.THIGH_L | C.THIGH_R | C.SHIN_L | C.SHIN_R,
     ease: () => 0.012 + off,
@@ -188,7 +194,7 @@ export function fittedTunic(fit: Fit, o: TunicOptions): TunicResult {
       return t > 0.01 ? blendWeights(t0w(i, p), aw(i, p), t) : t0w(i, p);
     };
   }
-  const up = makeSkinned(human, upper.tube.geometry, upMat, tw, { name: `${o.name}Upper` });
+  const up = await makeSkinnedAsync(human, upper.tube.geometry, upMat, tw, { name: `${o.name}Upper` });
   outfit.add(up);
   meshes.push(up);
   // side slits (four corners): drop skirt quads near θ = ±90° below the slit top
@@ -260,13 +266,13 @@ export function fittedTunic(fit: Fit, o: TunicOptions): TunicResult {
     skGeos.push(fringeStrip(skirt.tube, 0.018 * S, o.seed + 7, 0.1));
     mats.push(fringeMaterial({ tier, tex: o.tex, dye: o.dye, width: 0.05, sway, collide: U }));
   }
-  const sk = makeSkinned(human, skGeos.length > 1 ? merge(skGeos) : skirtGeo, mats.length > 1 ? mats : skMat, skirtWeights(fit, o.skirtStiff ?? 0, o.skirtBlur ?? 0), { name: `${o.name}Skirt`, depthMaterial: clothDepthMaterial({ sway, collide: U, collidePad: pad }) });
+  const sk = await makeSkinnedAsync(human, skGeos.length > 1 ? merge(skGeos) : skirtGeo, mats.length > 1 ? mats : skMat, skirtWeights(fit, o.skirtStiff ?? 0, o.skirtBlur ?? 0), { name: `${o.name}Skirt`, depthMaterial: clothDepthMaterial({ sway, collide: U, collidePad: pad }) });
   outfit.add(sk);
   meshes.push(sk);
   if (slitUnder) {
     // (not in `meshes`: meshes[1] stays the skirt, which the me'il's tear splits)
     // (its own leg-push pad: where a stride pushes both out it stays under the skirt, no z-fighting)
-    const um = makeSkinned(human, slitUnder, skMatFor(Math.max(0, pad - (o.sideSlit?.underlap ?? 0))), skirtWeights(fit, o.skirtStiff ?? 0, o.skirtBlur ?? 0), { name: `${o.name}SlitUnderlap` });
+    const um = await makeSkinnedAsync(human, slitUnder, skMatFor(Math.max(0, pad - (o.sideSlit?.underlap ?? 0))), skirtWeights(fit, o.skirtStiff ?? 0, o.skirtBlur ?? 0), { name: `${o.name}SlitUnderlap` });
     outfit.add(um);
   }
   if (!o.sleeveless) {
@@ -282,7 +288,7 @@ export function fittedTunic(fit: Fit, o: TunicOptions): TunicResult {
     // (models pass: the sleeve's inside darkened — with the arms raised in the roar it showed as pale jagged fragments)
     const slMat = clothMaterial({ ...common, bands: o.sleeveBands, palette: o.palette, hem: [0, 0.05, 0.012, o.fray ?? 0.3], edgeMask: [1, 0], inside: slInside });
     const wL = armWeights(fit, 'L', o.sleeve > 1), wR = armWeights(fit, 'R', o.sleeve > 1);
-    const m = makeSkinned(human, merge(geos, false), slMat, (i, p) => (p.x > 0 ? wL(i, p) : wR(i, p)), { name: `${o.name}Sleeves` });
+    const m = await makeSkinnedAsync(human, merge(geos, false), slMat, (i, p) => (p.x > 0 ? wL(i, p) : wR(i, p)), { name: `${o.name}Sleeves` });
     outfit.add(m);
     meshes.push(m);
   }
@@ -304,7 +310,7 @@ export function fittedTunic(fit: Fit, o: TunicOptions): TunicResult {
 }
 
 /** A belt / sash band around the waist over the garment (flat band + optional hanging ends). */
-export function beltBand(fit: Fit, t: TunicResult, o: { width: number; thickness: number; material: THREE.Material; offset?: number; name: string }) {
+export async function beltBand(fit: Fit, t: TunicResult, o: { width: number; thickness: number; material: THREE.Material; offset?: number; name: string }) {
   const { tier, human, outfit } = fit;
   const low = tier === 'low';
   const pts: THREE.Vector3[] = [], nrm: THREE.Vector3[] = [];
@@ -318,7 +324,7 @@ export function beltBand(fit: Fit, t: TunicResult, o: { width: number; thickness
   }
   const g = ribbon(pts, nrm, o.width, o.thickness, { closed: true });
   // ribbon(): width along w = t x n (vertical here) -> fine; uv.y = along
-  const m = makeSkinned(human, g, o.material, partWeights(fit, C.TORSO, 8), { name: o.name });
+  const m = await makeSkinnedAsync(human, g, o.material, partWeights(fit, C.TORSO, 8), { name: o.name });
   outfit.add(m);
   return m;
 }
@@ -390,7 +396,7 @@ export function tzitzit(
 }
 
 /** Leather sandals (sole + criss-cross thongs). */
-export function sandals(fit: Fit, leather: TexPair, o: { color?: number; wraps?: number; height?: number } = {}): THREE.Group {
+export async function sandals(fit: Fit, leather: TexPair, o: { color?: number; wraps?: number; height?: number } = {}): Promise<THREE.Group> {
   const { body, lm, tier, human } = fit;
   const low = tier === 'low';
   const S = lm.height / 1.75;
@@ -509,7 +515,7 @@ export function sandals(fit: Fit, leather: TexPair, o: { color?: number; wraps?:
     void legMask;
   }
   // soles take the foot's weights only (never the shin), straps above the foot the shin's too
-  grp.add(makeSkinned(human, merge(all, false), mat, (i, p) => {
+  grp.add(await makeSkinnedAsync(human, merge(all, false), mat, (i, p) => {
     const s = p.x > 0 ? 'L' : 'R';
     return p.y < 0.012 ? wFoot[s](i, p) : wLeg[s](i, p);
   }, { name: 'sandals' }));
@@ -536,7 +542,7 @@ export function hangFromBelt(fit: Fit, t: TunicResult, obj: THREE.Object3D, o: {
 }
 
 /** Rigid ring (armlet / bracelet) around a limb at fraction t between two joints. */
-export function limbRing(fit: Fit, o: { side: 'L' | 'R'; from: string; to: string; t: number; bone: string; mask: number; width: number; thickness: number; clearance: number; material: THREE.Material; ridges?: number }) {
+export async function limbRing(fit: Fit, o: { side: 'L' | 'R'; from: string; to: string; t: number; bone: string; mask: number; width: number; thickness: number; clearance: number; material: THREE.Material; ridges?: number }) {
   const { body, human, tier } = fit;
   const a = body.joint(`${o.from}.${o.side}`), b = body.joint(`${o.to}.${o.side}`);
   const axis = a.clone().sub(b).normalize();
@@ -566,7 +572,7 @@ export function limbRing(fit: Fit, o: { side: 'L' | 'R'; from: string; to: strin
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   g.setIndex(idx);
   g.computeVertexNormals();
-  const m = makeSkinned(human, g, o.material, () => new Map([[body.boneIndex[o.bone], 1]]), { name: 'limbRing' });
+  const m = await makeSkinnedAsync(human, g, o.material, () => new Map([[body.boneIndex[o.bone], 1]]), { name: 'limbRing' });
   fit.outfit.add(m);
   return m;
 }

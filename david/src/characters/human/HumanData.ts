@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { gunzip } from './inflate';
+import { runSync } from '../../core/slice';
 
 /*
  * Runtime side of the MakeHuman pipeline (tools/human/build_human.py).
@@ -193,12 +194,18 @@ export function variationDelta(d: HumanData, variation?: Record<string, number>)
  * vertices of the base mesh with inverse-distance weights, so they can follow the variation morphs of the skin.
  */
 export function skinNeighbours(d: HumanData, pts: ArrayLike<number>): { idx: Uint32Array; w: Float32Array } {
+  return runSync(skinNeighboursSteps(d, pts));
+}
+
+/** (load1, wave 4b) skinNeighbours as steps (a possible pause between groups of points; core/slice), same result */
+export function* skinNeighboursSteps(d: HumanData, pts: ArrayLike<number>): Generator<void, { idx: Uint32Array; w: Float32Array }, void> {
   const cp = d.float('mesh.position');
   const cell = 0.012;
   let grid = gridCache.get(d);
   if (!grid) {
     grid = new Map<number, number[]>();
     for (let i = 0; i < cp.length / 3; i++) {
+      if ((i & 4095) === 4095) yield;
       const k = hashCell(Math.floor(cp[i * 3] / cell), Math.floor(cp[i * 3 + 1] / cell), Math.floor(cp[i * 3 + 2] / cell));
       let l = grid.get(k);
       if (!l) grid.set(k, (l = []));
@@ -211,6 +218,7 @@ export function skinNeighbours(d: HumanData, pts: ArrayLike<number>): { idx: Uin
   const w = new Float32Array(n * 3);
   const best = [0, 0, 0], bd = [0, 0, 0];
   for (let p = 0; p < n; p++) {
+    if ((p & 63) === 63) yield;
     const x = pts[p * 3], y = pts[p * 3 + 1], z = pts[p * 3 + 2];
     const cx = Math.floor(x / cell), cy = Math.floor(y / cell), cz = Math.floor(z / cell);
     bd[0] = bd[1] = bd[2] = Infinity;
@@ -509,8 +517,9 @@ const topoCache = new WeakMap<HumanData, Map<number, BodyTopo>>();
  * its own BufferGeometry that shares those attributes (and the positions / normals too when it has no variation).
  * Variation instances only re-apply the cached subdivision stencil and recompute normals (tangents are shared).
  */
-export function buildBodyGeometry(d: HumanData, level: 0 | 1 | 2, variation?: Record<string, number>): BodyGeometryInfo {
-  if (level === 2 && variationDelta(d, variation)) level = 1;
+export function buildBodyGeometry(d: HumanData, level: 0 | 1 | 2, variation?: Record<string, number>, pre?: { delta: Float32Array | null }): BodyGeometryInfo {
+  // (load1, wave 4b) `pre.delta` = variationDelta(d, variation) computed once by the caller (HumanModel.load): the same values
+  if (level === 2 && (pre ? pre.delta : variationDelta(d, variation))) level = 1;
   let perData = topoCache.get(d);
   if (!perData) topoCache.set(d, (perData = new Map()));
   let topo = perData.get(level);
@@ -518,7 +527,7 @@ export function buildBodyGeometry(d: HumanData, level: 0 | 1 | 2, variation?: Re
   const g = new THREE.BufferGeometry();
   for (const [name, a] of Object.entries(topo.attrs)) g.setAttribute(name, a);
   g.setIndex(topo.index);
-  const delta = variationDelta(d, variation);
+  const delta = pre ? pre.delta : variationDelta(d, variation);
   if (delta) {
     const cp = d.float('mesh.position').slice();
     for (let i = 0; i < cp.length; i++) cp[i] += delta[i];
@@ -557,8 +566,26 @@ export function buildBodyGeometry(d: HumanData, level: 0 | 1 | 2, variation?: Re
   return { geometry: g, posIndex: topo.posIndex, vertexCount: topo.vertexCount, triangleCount: topo.triangleCount };
 }
 
+/**
+ * (load1, wave 4b) build the body topology of `level` into the cache in steps (a possible pause between them;
+ * core/slice) — buildBodyGeometry then finds it there. The same topology as building it on first use.
+ */
+export function* warmBodyTopoSteps(d: HumanData, level: 0 | 1 | 2, variation?: Record<string, number>, pre?: { delta: Float32Array | null }): Generator<void, void, void> {
+  if (level === 2 && (pre ? pre.delta : variationDelta(d, variation))) level = 1;
+  let perData = topoCache.get(d);
+  if (!perData) topoCache.set(d, (perData = new Map()));
+  if (perData.has(level)) return;
+  const topo = yield* buildTopoSteps(d, level);
+  if (!perData.has(level)) perData.set(level, topo);
+}
+
 function buildTopo(d: HumanData, level: 0 | 1 | 2): BodyTopo {
+  return runSync(buildTopoSteps(d, level));
+}
+
+function* buildTopoSteps(d: HumanData, level: 0 | 1 | 2): Generator<void, BodyTopo, void> {
   let c = controlMesh(d);
+  yield;
   if (level === 1) c = subdivide(c, true);
   // hero level: the first level stays on the subdivision surface (not pushed to the limit), the second goes to it
   if (level === 2) c = subdivide(subdivide(c, false), true);
@@ -569,6 +596,7 @@ function buildTopo(d: HumanData, level: 0 | 1 | 2): BodyTopo {
   const triT = new Uint32Array(F * 6);
   const order = [0, 1, 2, 0, 2, 3];
   for (let f = 0; f < F; f++) {
+    if ((f & 4095) === 4095) yield;
     for (let k = 0; k < 6; k++) {
       triP[f * 6 + k] = c.quads[f * 4 + order[k]];
       triT[f * 6 + k] = c.quadsUV[f * 4 + order[k]];
@@ -578,6 +606,7 @@ function buildTopo(d: HumanData, level: 0 | 1 | 2): BodyTopo {
   const wn = new Float32Array(V * 3);
   const pa = new THREE.Vector3(), pb = new THREE.Vector3(), pc = new THREE.Vector3(), n = new THREE.Vector3();
   for (let t = 0; t < triP.length; t += 3) {
+    if (t % 24576 === 0) yield;
     const a = triP[t], b = triP[t + 1], cc = triP[t + 2];
     pa.fromArray(c.pos, a * 3);
     pb.fromArray(c.pos, b * 3).sub(pa);
@@ -596,6 +625,7 @@ function buildTopo(d: HumanData, level: 0 | 1 | 2): BodyTopo {
   const uvIndex: number[] = [];
   const index = new Uint32Array(triP.length);
   for (let i = 0; i < triP.length; i++) {
+    if ((i & 16383) === 16383) yield;
     const k = triP[i] * T + triT[i];
     let r = key.get(k);
     if (r === undefined) {
@@ -615,6 +645,7 @@ function buildTopo(d: HumanData, level: 0 | 1 | 2): BodyTopo {
   const skinIndex2 = new Uint16Array(N * 4);
   const skinWeight2 = new Float32Array(N * 4);
   for (let i = 0; i < N; i++) {
+    if ((i & 8191) === 8191) yield;
     const p = posIndex[i], t = uvIndex[i];
     position[i * 3] = c.pos[p * 3];
     position[i * 3 + 1] = c.pos[p * 3 + 1];
@@ -633,7 +664,9 @@ function buildTopo(d: HumanData, level: 0 | 1 | 2): BodyTopo {
       skinWeight2[i * 4 + k] = c.skinW[p * SKIN_K + 4 + k];
     }
   }
-  const tangent = computeTangents(position, normal, uv, index);
+  yield;
+  const tangent = yield* computeTangentsSteps(position, normal, uv, index);
+  yield;
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(position, 3));
   g.setAttribute('normal', new THREE.BufferAttribute(normal, 3));
@@ -659,10 +692,16 @@ function buildTopo(d: HumanData, level: 0 | 1 | 2): BodyTopo {
 
 /** Same accumulation as tools/human/geom.py:tangents (so baked normal maps match). */
 export function computeTangents(pos: Float32Array, nrm: Float32Array, uv: Float32Array, index: ArrayLike<number>) {
+  return runSync(computeTangentsSteps(pos, nrm, uv, index));
+}
+
+/** (load1, wave 4b) computeTangents as steps (core/slice), same result */
+function* computeTangentsSteps(pos: Float32Array, nrm: Float32Array, uv: Float32Array, index: ArrayLike<number>): Generator<void, Float32Array, void> {
   const N = pos.length / 3;
   const T = new Float32Array(N * 3);
   const B = new Float32Array(N * 3);
   for (let t = 0; t < index.length; t += 3) {
+    if (t % 24576 === 0) yield;
     const i0 = index[t], i1 = index[t + 1], i2 = index[t + 2];
     const e1x = pos[i1 * 3] - pos[i0 * 3], e1y = pos[i1 * 3 + 1] - pos[i0 * 3 + 1], e1z = pos[i1 * 3 + 2] - pos[i0 * 3 + 2];
     const e2x = pos[i2 * 3] - pos[i0 * 3], e2y = pos[i2 * 3 + 1] - pos[i0 * 3 + 1], e2z = pos[i2 * 3 + 2] - pos[i0 * 3 + 2];
@@ -682,6 +721,7 @@ export function computeTangents(pos: Float32Array, nrm: Float32Array, uv: Float3
     }
   }
   const out = new Float32Array(N * 4);
+  yield;
   for (let i = 0; i < N; i++) {
     const nx = nrm[i * 3], ny = nrm[i * 3 + 1], nz = nrm[i * 3 + 2];
     let tx = T[i * 3], ty = T[i * 3 + 1], tz = T[i * 3 + 2];
@@ -711,7 +751,7 @@ const auxCache = new WeakMap<HumanData, Map<string, { g: THREE.BufferGeometry | 
  * instance gets its own BufferGeometry sharing the attributes.  With `variation`, the vertices follow the variation
  * morphs of the nearest skin (brows stay on the brow ridge, lashes / tear lines on the lid margins, teeth in the mouth).
  */
-export function buildAuxGeometry(d: HumanData, prefix: 'lash' | 'brow' | 'tear' | 'teeth', keepEvery = 1, variation?: Record<string, number>): THREE.BufferGeometry | null {
+export function buildAuxGeometry(d: HumanData, prefix: 'lash' | 'brow' | 'tear' | 'teeth', keepEvery = 1, variation?: Record<string, number>, pre?: { delta: Float32Array | null }): THREE.BufferGeometry | null {
   let per = auxCache.get(d);
   if (!per) auxCache.set(d, (per = new Map()));
   const key = `${prefix}:${keepEvery}`;
@@ -721,13 +761,30 @@ export function buildAuxGeometry(d: HumanData, prefix: 'lash' | 'brow' | 'tear' 
   const g = new THREE.BufferGeometry();
   for (const [name, a] of Object.entries(e.g.attributes)) g.setAttribute(name, a);
   g.setIndex(e.g.getIndex());
-  const delta = variationDelta(d, variation);
+  // (load1, wave 4b) `pre.delta` = variationDelta(d, variation) computed once by the caller: the same values
+  const delta = pre ? pre.delta : variationDelta(d, variation);
   if (delta) {
     const base = e.g.getAttribute('position').array as Float32Array;
     if (!e.nb) e.nb = skinNeighbours(d, base);
     g.setAttribute('position', new THREE.BufferAttribute(followSkin(base.slice(), e.nb, delta), 3));
   }
   return g;
+}
+
+/**
+ * (load1, wave 4b) the cached parts of buildAuxGeometry (the base geometry and, for a model with variation morphs, its
+ * skin neighbours) built in steps (core/slice); buildAuxGeometry then finds them in the cache. The same values.
+ */
+export function* warmAuxSteps(d: HumanData, prefix: 'lash' | 'brow' | 'tear' | 'teeth', keepEvery: number, needNeighbours: boolean): Generator<void, void, void> {
+  let per = auxCache.get(d);
+  if (!per) auxCache.set(d, (per = new Map()));
+  const key = `${prefix}:${keepEvery}`;
+  let e = per.get(key);
+  if (!e) per.set(key, (e = { g: buildAuxBase(d, prefix, keepEvery) }));
+  if (!e.g || !needNeighbours || e.nb) return;
+  yield;
+  const nb = yield* skinNeighboursSteps(d, e.g.getAttribute('position').array as Float32Array);
+  e.nb ??= nb;
 }
 
 function buildAuxBase(d: HumanData, prefix: 'lash' | 'brow' | 'tear' | 'teeth', keepEvery = 1): THREE.BufferGeometry | null {

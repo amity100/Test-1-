@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { HumanModel } from '../human/HumanModel';
+import { runSliced, runSync } from '../../core/slice';
 
 /*
  * HeadSurface — the grooming "canvas": the rest-pose skin of the head / neck / shoulders of a HumanModel
@@ -84,7 +85,17 @@ export class SDFGrid {
    * Build from a vertex cloud with normals: nearest vertex per node by two-pass chamfer propagation, then
    * the signed distance to that vertex's tangent plane (near the skin) / to the vertex (far away).
    */
-  static fromVertices(pos: Float32Array, nrm: Float32Array, use: Uint8Array, min: THREE.Vector3, max: THREE.Vector3, h: number) {
+  static fromVertices(pos: Float32Array, nrm: Float32Array, use: Uint8Array, min: THREE.Vector3, max: THREE.Vector3, h: number): SDFGrid {
+    return runSync(SDFGrid.fromVerticesSteps(pos, nrm, use, min, max, h));
+  }
+
+  /** load1 (wave 4b): the same field, pausing between slabs of the grid when the active slicer is due (src/core/slice.ts) */
+  static fromVerticesAsync(pos: Float32Array, nrm: Float32Array, use: Uint8Array, min: THREE.Vector3, max: THREE.Vector3, h: number): Promise<SDFGrid> {
+    return runSliced(SDFGrid.fromVerticesSteps(pos, nrm, use, min, max, h));
+  }
+
+  /** the build, a possible pause after every k-slab of a sweep (the arithmetic and its order are unchanged) */
+  static *fromVerticesSteps(pos: Float32Array, nrm: Float32Array, use: Uint8Array, min: THREE.Vector3, max: THREE.Vector3, h: number): Generator<void, SDFGrid, void> {
     const nx = Math.ceil((max.x - min.x) / h) + 1, ny = Math.ceil((max.y - min.y) / h) + 1, nz = Math.ceil((max.z - min.z) / h) + 1;
     const N = nx * ny * nz;
     const near = new Int32Array(N).fill(-1);
@@ -115,11 +126,12 @@ export class SDFGrid {
     // (load1, wave 4: same result, faster) the 13 offsets as flat typed arrays, the neighbour's index as one add
     const odi = Int32Array.from(offs, (o) => o[0]), odj = Int32Array.from(offs, (o) => o[1]), odk = Int32Array.from(offs, (o) => o[2]);
     const olin = Int32Array.from(offs, (o) => o[0] + nx * (o[1] + ny * o[2]));
-    const sweep = (sign: number) => {
+    const sweep = function* (sign: number): Generator<void, void, void> {
       const ks = sign > 0 ? 0 : nz - 1, ke = sign > 0 ? nz : -1;
       const js = sign > 0 ? 0 : ny - 1, je = sign > 0 ? ny : -1;
       const is = sign > 0 ? 0 : nx - 1, ie = sign > 0 ? nx : -1;
-      for (let k = ks; k !== ke; k += sign)
+      for (let k = ks; k !== ke; k += sign) {
+        yield;
         for (let j = js; j !== je; j += sign)
           for (let i = is; i !== ie; i += sign) {
             const c = i + nx * (j + ny * k);
@@ -147,13 +159,15 @@ export class SDFGrid {
             best[c] = bd;
             near[c] = bv;
           }
+      }
     };
-    sweep(1);
-    sweep(-1);
-    sweep(1);
-    sweep(-1);
+    yield* sweep(1);
+    yield* sweep(-1);
+    yield* sweep(1);
+    yield* sweep(-1);
     const out = new Float32Array(N);
-    for (let k = 0; k < nz; k++)
+    for (let k = 0; k < nz; k++) {
+      yield;
       for (let j = 0; j < ny; j++)
         for (let i = 0; i < nx; i++) {
           const c = i + nx * (j + ny * k);
@@ -169,6 +183,7 @@ export class SDFGrid {
           const b = ss(h * 1.2, h * 3.5, dist);
           out[c] = plane * (1 - b) + sgn * dist * b;
         }
+    }
     return new SDFGrid(min.clone(), h, nx, ny, nz, out);
   }
 
@@ -248,11 +263,25 @@ export class HeadSurface {
   readonly headRestQuat: THREE.Quaternion;
   readonly jawRestPos: THREE.Vector3;
   readonly jawRestQuat: THREE.Quaternion;
-  readonly sdf: SDFGrid;
+  sdf!: SDFGrid;
+  /** (wave 4b) the field's inputs while HeadSurface.create builds it in slices */
+  private sdfArgs: { use: Uint8Array; min: THREE.Vector3; max: THREE.Vector3; cell: number } | null = null;
   private scalpCache: Float32Array | null = null;
   private beardCache: Float32Array | null = null;
 
-  constructor(readonly human: HumanModel, sdfCell = 0.006, reach = 0.22) {
+  /**
+   * load1 (wave 4b): the same surface with its distance field built in slices (the film's background builds; the
+   * constructor builds it at once)
+   */
+  static async create(human: HumanModel, sdfCell = 0.006, reach = 0.22): Promise<HeadSurface> {
+    const s = new HeadSurface(human, sdfCell, reach, true);
+    const a = s.sdfArgs!;
+    s.sdf = await SDFGrid.fromVerticesAsync(s.pos, s.nrm, a.use, a.min, a.max, a.cell);
+    s.sdfArgs = null;
+    return s;
+  }
+
+  constructor(readonly human: HumanModel, sdfCell = 0.006, reach = 0.22, deferSdf = false) {
     const rig = human.data.rig;
     this.pos = human.restPositions();
     this.nrm = human.restNormals();
@@ -321,7 +350,8 @@ export class HeadSurface {
       const x = this.pos[v * 3], y = this.pos[v * 3 + 1], z = this.pos[v * 3 + 2];
       use[v] = x > min.x - 0.02 && x < max.x + 0.02 && y > min.y - 0.02 && y < max.y + 0.02 && z > min.z - 0.02 && z < max.z + 0.02 ? 1 : 0;
     }
-    this.sdf = SDFGrid.fromVertices(this.pos, this.nrm, use, min, max, sdfCell);
+    if (deferSdf) this.sdfArgs = { use, min, max, cell: sdfCell };
+    else this.sdf = SDFGrid.fromVertices(this.pos, this.nrm, use, min, max, sdfCell);
   }
 
   /** scalp growth mask per vertex (bake_skin.py hairline + ear exclusion by a flap-thickness test) */
@@ -386,12 +416,18 @@ export class HeadSurface {
 
   /** area x mask weighted random roots (stratified), rest pose */
   sampleRoots(mask: Float32Array, n: number, seed: number, maskPow = 1): Roots {
+    return runSync(this.sampleRootsSteps(mask, n, seed, maskPow));
+  }
+
+  /** (load1, wave 4b) sampleRoots as steps (a possible pause between groups of triangles / samples; core/slice) */
+  *sampleRootsSteps(mask: Float32Array, n: number, seed: number, maskPow = 1): Generator<void, Roots, void> {
     const T = this.tris, P = this.pos, Nn = this.nrm;
     const nt = T.length / 3;
     const cdf = new Float64Array(nt);
     let acc = 0;
     const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
     for (let t = 0; t < nt; t++) {
+      if ((t & 8191) === 8191) yield;
       const i0 = T[t * 3], i1 = T[t * 3 + 1], i2 = T[t * 3 + 2];
       const m = (mask[i0] + mask[i1] + mask[i2]) / 3;
       if (m > 0.002) {
@@ -409,6 +445,7 @@ export class HeadSurface {
       return out;
     }
     for (let s = 0; s < n; s++) {
+      if ((s & 1023) === 1023) yield;
       const u = ((s + R()) / n) * acc;
       let lo = 0, hi = nt - 1;
       while (lo < hi) {
@@ -431,6 +468,7 @@ export class HeadSurface {
       out.mask[s] = mask[i0] * w0 + mask[i1] * w1 + mask[i2] * w2;
     }
     // shuffle: any prefix is a uniform subset (distance LOD draws a prefix)
+    yield;
     const perm = new Uint32Array(n);
     for (let i = 0; i < n; i++) perm[i] = i;
     for (let i = n - 1; i > 0; i--) {
@@ -449,6 +487,11 @@ export class HeadSurface {
 
   /** blue-noise-ish subset of roots (greedy dart throwing), for clump / lock centres */
   static poisson(roots: Roots, n: number, seed: number): Roots {
+    return runSync(HeadSurface.poissonSteps(roots, n, seed));
+  }
+
+  /** (load1, wave 4b) poisson as steps (a possible pause between groups of candidates; core/slice), the same picks */
+  static *poissonSteps(roots: Roots, n: number, seed: number): Generator<void, Roots, void> {
     const R = rng(seed);
     const pick: number[] = [];
     let r = 0.02;
@@ -456,6 +499,7 @@ export class HeadSurface {
     const total = roots.n;
     for (let pass = 0; pass < 6 && pick.length < n; pass++) {
       for (let i = 0; i < total && pick.length < n; i++) {
+        if ((i & 63) === 63) yield;
         const k = Math.floor(R() * total);
         let ok = true;
         for (const j of pick) {

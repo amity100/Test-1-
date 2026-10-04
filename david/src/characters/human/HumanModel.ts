@@ -1,12 +1,13 @@
 import * as THREE from 'three';
-import { HumanData, buildAuxGeometry, buildBodyGeometry, followSkin, skinNeighbours, variationDelta, type RigJson } from './HumanData';
+import { HumanData, buildAuxGeometry, buildBodyGeometry, followSkin, skinNeighbours, variationDelta, warmAuxSteps, warmBodyTopoSteps, type RigJson } from './HumanData';
 import { HumanRig } from './HumanRig';
-import { SkinMaterial, uvDensityAttribute } from './SkinMaterial';
+import { SkinMaterial, uvDensityAttribute, uvDensityAttributeSteps } from './SkinMaterial';
 import { EyeBall, WetMaterial } from './EyeModel';
 import { registerSkinMesh, unregisterSkinMesh } from '../../fx/SSS';
 import { StrandMaterial } from './HairStrands';
 import { hasHumanAsset, humanAssetUrl } from './assets';
 import { DualQuatSkinning, defaultDQSFactor } from './DualQuatSkinning';
+import { runSliced, runSync, slice } from '../../core/slice';
 
 /*
  * HumanModel — a realistic, skinned human built from MakeHuman (CC0) data by tools/human/build_human.py.
@@ -92,6 +93,67 @@ function mulberry(seed: number) {
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+/** the model's variation morphs and skin tint: the options' own, or seeded ones (presets that ship variations) */
+function resolveVariation(rig: RigJson, options: HumanLoadOptions): { variation: Record<string, number> | undefined; tint: THREE.Color | undefined } {
+  let variation = options.variation;
+  let tint = options.skinTint?.clone();
+  if (!variation && options.seed !== undefined && rig.variations.length) {
+    const rnd = mulberry(options.seed * 9973 + 17);
+    variation = {};
+    const BODY = ['heavy', 'lean', 'strong'].filter((v) => rig.variations.includes(v));
+    if (BODY.length && rnd() < 0.8) variation[BODY[Math.floor(rnd() * BODY.length)]] = 0.35 + rnd() * 0.65;
+    if (rig.variations.includes('older') && rnd() < 0.45) variation.older = rnd();
+    // face morphs are linear deltas: negative weights give the opposite trait (smaller nose, narrower jaw...)
+    for (const v of rig.variations) if (!(v in variation) && !['heavy', 'lean', 'strong', 'older'].includes(v)) variation[v] = rnd() * 1.7 - 0.7;
+    const tone = 0.86 + rnd() * 0.22;
+    tint = new THREE.Color(tone * (1 + (rnd() - 0.5) * 0.06), tone, tone * (1 - rnd() * 0.06));
+  }
+  return { variation, tint };
+}
+
+const bodyLevel = (o: HumanLoadOptions): 0 | 1 => ((o.geometry ?? (o.quality === 'high' ? 'sub1' : 'base')) === 'sub1' ? 1 : 0);
+const strandKeep = (o: HumanLoadOptions) => (o.quality === 'low' ? 2 : 1);
+
+/** (load1, wave 4b) the per-model geometry, built ahead of the constructor (HumanModel.load) */
+interface HumanPrebuild {
+  variation: Record<string, number> | undefined;
+  tint: THREE.Color | undefined;
+  bg: ReturnType<typeof buildBodyGeometry>;
+  aux: Record<'brow' | 'lash' | 'tear' | 'teeth', THREE.BufferGeometry | null>;
+  /** variationDelta(data, variation), computed once (it was computed by every part) */
+  delta: Float32Array | null;
+}
+
+async function prebuildGeometry(data: HumanData, o: HumanLoadOptions): Promise<HumanPrebuild> {
+  const { variation, tint } = resolveVariation(data.rig, o);
+  if (slice.due()) await slice.pause();
+  const delta = variationDelta(data, variation);
+  const pre = { delta };
+  // the preset's topology and strand neighbours (cached: built once per preset) in steps, then this model's parts
+  if (slice.due()) await slice.pause();
+  await runSliced(warmBodyTopoSteps(data, bodyLevel(o), variation, pre));
+  if (slice.due()) await slice.pause();
+  const bg = buildBodyGeometry(data, bodyLevel(o), variation, pre);
+  {
+    // the uv-density attribute of this topology (cached: computed once, from the first model's geometry, as before)
+    const uvA = bg.geometry.getAttribute('uv') as THREE.BufferAttribute;
+    if (!densityCache.get(uvA)) {
+      const ds = await runSliced(uvDensityAttributeSteps(bg.geometry));
+      if (!densityCache.get(uvA)) densityCache.set(uvA, ds);
+    }
+  }
+  const keep = strandKeep(o);
+  const aux = { brow: null, lash: null, tear: null, teeth: null } as HumanPrebuild['aux'];
+  for (const [p, k] of [['brow', keep], ['lash', keep], ['tear', 1], ['teeth', 1]] as const) {
+    if (slice.due()) await slice.pause();
+    await runSliced(warmAuxSteps(data, p, k, !!delta));
+    if (slice.due()) await slice.pause();
+    aux[p] = buildAuxGeometry(data, p, k, variation, pre);
+  }
+  if (slice.due()) await slice.pause();
+  return { variation, tint, bg, aux, delta };
 }
 
 /**
@@ -189,7 +251,11 @@ export class HumanModel {
       // region map (flush / sebum+lips / freckle zones): medium + high only (phones keep the baked look)
       o.quality === 'low' ? Promise.resolve(null) : loadTex(`${o.preset}/region_1k.webp`, false, 4),
     ]);
-    const m = new HumanModel(data, o, { albedo, normal, mask, detail, eye, region });
+    // (load1, wave 4b) the per-model geometry (the variation morphs of the body, brows, lashes, tear lines, teeth) is
+    // built before the constructor, a pause between the parts when the film's background builder slice is used up
+    // (core/slice) — the same calls in the same order of their results, so the same model
+    const pre = await prebuildGeometry(data, o);
+    const m = new HumanModel(data, o, { albedo, normal, mask, detail, eye, region }, pre);
     (m.metrics as { loadMs: number }).loadMs = performance.now() - t0;
     return m;
   }
@@ -198,29 +264,18 @@ export class HumanModel {
     readonly data: HumanData,
     readonly options: HumanLoadOptions,
     tex: { albedo: THREE.Texture | null; normal: THREE.Texture | null; mask: THREE.Texture | null; detail: THREE.Texture | null; eye: THREE.Texture | null; region?: THREE.Texture | null },
+    pre?: HumanPrebuild,
   ) {
     const q = options.quality;
     const rig = data.rig;
     this.root.name = `human:${rig.preset}`;
     // ---- variations
-    let variation = options.variation;
-    let tint = options.skinTint?.clone();
-    if (!variation && options.seed !== undefined && rig.variations.length) {
-      const rnd = mulberry(options.seed * 9973 + 17);
-      variation = {};
-      const BODY = ['heavy', 'lean', 'strong'].filter((v) => rig.variations.includes(v));
-      if (BODY.length && rnd() < 0.8) variation[BODY[Math.floor(rnd() * BODY.length)]] = 0.35 + rnd() * 0.65;
-      if (rig.variations.includes('older') && rnd() < 0.45) variation.older = rnd();
-      // face morphs are linear deltas: negative weights give the opposite trait (smaller nose, narrower jaw...)
-      for (const v of rig.variations) if (!(v in variation) && !['heavy', 'lean', 'strong', 'older'].includes(v)) variation[v] = rnd() * 1.7 - 0.7;
-      const tone = 0.86 + rnd() * 0.22;
-      tint = new THREE.Color(tone * (1 + (rnd() - 0.5) * 0.06), tone, tone * (1 - rnd() * 0.06));
-    }
+    const { variation, tint } = pre ?? resolveVariation(rig, options);
     // ---- rig + skeleton (joint positions follow the variation morphs: joints are linear in the morph)
     const rigJson = variation ? this.jointVariation(variation) : rig;
     this.rig = new HumanRig(rigJson, this.root);
-    const level = (options.geometry ?? (q === 'high' ? 'sub1' : 'base')) === 'sub1' ? 1 : 0;
-    const bg = buildBodyGeometry(data, level, variation);
+    const level = bodyLevel(options);
+    const bg = pre?.bg ?? buildBodyGeometry(data, level, variation);
     this.posIndex = bg.posIndex;
     {
       const uvA = bg.geometry.getAttribute('uv') as THREE.BufferAttribute;
@@ -256,9 +311,9 @@ export class HumanModel {
     // ---- strands (brows, lashes) and tear lines share the skeleton
     const bo = options.brows;
     const bc = bo?.color ?? rig.brows.color ?? [0.12, 0.07, 0.04];
-    const keep = q === 'low' ? 2 : 1;
+    const keep = strandKeep(options);
     const mkStrands = (prefix: 'brow' | 'lash', mat: StrandMaterial) => {
-      const g = buildAuxGeometry(data, prefix, keep, variation);
+      const g = pre ? pre.aux[prefix] : buildAuxGeometry(data, prefix, keep, variation);
       if (!g) return null;
       const mesh = new THREE.SkinnedMesh(g, mat);
       mesh.name = prefix;
@@ -283,7 +338,7 @@ export class HumanModel {
     const lashMat = new StrandMaterial({ color: lashCol, tipColor: lashCol.clone().multiplyScalar(1.6), opacity: 1, widthScale: 1.15, roughness: 0.85 });
     lashMat.envMapIntensity = 0.08;
     this.lashes = mkStrands('lash', lashMat);
-    const tg = buildAuxGeometry(data, 'tear', 1, variation);
+    const tg = pre ? pre.aux.tear : buildAuxGeometry(data, 'tear', 1, variation);
     if (tg) {
       // the wet meniscus along the lower lid: a thin bright specular line gives the eyes life
       const tl = new THREE.SkinnedMesh(tg, new WetMaterial(0.045, 0.9));
@@ -294,7 +349,7 @@ export class HumanModel {
       tl.bind(this.skeleton, new THREE.Matrix4());
       this.tearLines = tl;
     }
-    const teethG = buildAuxGeometry(data, 'teeth', 1, variation);
+    const teethG = pre ? pre.aux.teeth : buildAuxGeometry(data, 'teeth', 1, variation);
     if (teethG) {
       const tm = teethMaterial(teethG);
       const teeth = new THREE.SkinnedMesh(teethG, tm);
@@ -305,7 +360,7 @@ export class HumanModel {
       this.teeth = teeth;
     }
     // ---- eyes (rigid, parented to the eye bones)
-    const vDelta = variationDelta(data, variation);
+    const vDelta = pre ? pre.delta : variationDelta(data, variation);
     const mkEye = (S: 'L' | 'R') => {
       const e = rig.eyes[S];
       let op = e.opening;
@@ -541,9 +596,28 @@ export class HumanModel {
 
   private _rest: Float32Array | null = null;
   private _restN: Float32Array | null = null;
+  /**
+   * (load1, wave 4b) compute the cached rest-pose positions and normals in steps (a possible pause between groups of
+   * vertices when the film's builder slice is used up; core/slice): the same arrays restPositions / restNormals return
+   */
+  async warmRest(): Promise<void> {
+    if (!this._rest) {
+      const r = await runSliced(this.computeRestSteps(this.baseGeo));
+      this._rest ??= r;
+    }
+    if (!this._restN) {
+      const n = await runSliced(this.restNormalsSteps());
+      this._restN ??= n;
+    }
+  }
+
   /** Body vertex normals in the rest pose (character space). */
   restNormals(): Float32Array {
     if (this._restN) return this._restN;
+    this._restN = runSync(this.restNormalsSteps());
+    return this._restN;
+  }
+  private *restNormalsSteps(): Generator<void, Float32Array, void> {
     const g = this.baseGeo;
     const nrm = g.getAttribute('normal') as THREE.BufferAttribute;
     const rots = this.rig.rest.map((r) => r.Q);
@@ -551,12 +625,12 @@ export class HumanModel {
     const v = new THREE.Vector3(), acc = new THREE.Vector3(), t = new THREE.Vector3();
     const inf = this.influenceReader(g);
     for (let i = 0; i < nrm.count; i++) {
+      if ((i & 2047) === 2047) yield;
       v.fromBufferAttribute(nrm, i);
       acc.set(0, 0, 0);
       inf(i, (b, w) => acc.addScaledVector(t.copy(v).applyQuaternion(rots[b]), w));
       acc.normalize().toArray(out, i * 3);
     }
-    this._restN = out;
     return out;
   }
   /** Body vertex positions in the rest pose (arms down), character space. */
@@ -568,12 +642,16 @@ export class HumanModel {
     return this._rest;
   }
   private computeRest(g: THREE.BufferGeometry): Float32Array {
+    return runSync(this.computeRestSteps(g));
+  }
+  private *computeRestSteps(g: THREE.BufferGeometry): Generator<void, Float32Array, void> {
     const pos = g.getAttribute('position') as THREE.BufferAttribute;
     const mats = this.restSkinMatrices();
     const out = new Float32Array(pos.count * 3);
     const v = new THREE.Vector3(), acc = new THREE.Vector3(), t = new THREE.Vector3();
     const inf = this.influenceReader(g);
     for (let i = 0; i < pos.count; i++) {
+      if ((i & 2047) === 2047) yield;
       v.fromBufferAttribute(pos, i);
       acc.set(0, 0, 0);
       inf(i, (b, w) => acc.addScaledVector(t.copy(v).applyMatrix4(mats[b]), w));
