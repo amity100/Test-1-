@@ -480,6 +480,23 @@ export const SOURCES = {
     note: "First half of the verse; a longer two-piece form is s1_14_47_took_kingship.",
     crossCheck: "WLC identical",
   },
+  ps_78_52_flock: {
+    id: "ps_78_52_flock",
+    kind: "tanakh",
+    ref: "תְּהִלִּים עח, נב",
+    refEn: "Psalms 78:52",
+    edition: "Miqra according to the Masorah",
+    license: "CC-BY-SA",
+    text: "וַיַּסַּע כַּצֹּאן עַמּוֹ וַיְנַהֲגֵם כַּעֵדֶר בַּמִּדְבָּר",
+    quote: [
+      "וַיַּסַּע כַּצֹּאן עַמּוֹ וַיְנַהֲגֵם כַּעֵדֶר בַּמִּדְבָּר",
+    ],
+    status: "intro",
+    use: "Opening film CUT v6 P4 (the map: out of Egypt through the wilderness - the people led like a flock)",
+    gloss: "But He made His own people go forth like sheep, and guided them in the wilderness like a flock.",
+    note: "Psalm 78 tells the whole road of the film: the Exodus and the wilderness (78:52), then the choice of David the shepherd (78:70-71, shown over David at the end).",
+    crossCheck: "WLC identical",
+  },
   josh_4_19_camped_gilgal: {
     id: "josh_4_19_camped_gilgal",
     kind: "tanakh",

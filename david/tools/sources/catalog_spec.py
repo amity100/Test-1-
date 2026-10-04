@@ -145,6 +145,14 @@ DISPLAY = [
       status='intro', use='Opening film shot 8 (Saul raises his spear; the army roars)',
       gloss='So Saul took the kingship over Israel and fought against all his enemies on every side.',
       note='First half of the verse; a longer two-piece form is s1_14_47_took_kingship.'),
+    # CUT v6 (the user, 4 Oct: the map must connect to OUR story): out of Egypt He led His people like a flock - the same
+    # psalm whose verses 70-71 choose David from the sheepfolds at the end of the film
+    E(id='ps_78_52_flock', src=('Psalms', 78, 52),
+      q=['ויסע כצאן עמו וינהגם כעדר במדבר'],
+      status='intro', use='Opening film CUT v6 P4 (the map: out of Egypt through the wilderness - the people led like a flock)',
+      gloss='But He made His own people go forth like sheep, and guided them in the wilderness like a flock.',
+      note='Psalm 78 tells the whole road of the film: the Exodus and the wilderness (78:52), then the choice of David the '
+           'shepherd (78:70-71, shown over David at the end).'),
     # CUT v5 prologue (docs/intro-script-v5.md): the map (P4, P5) and the Philistine host (P6)
     E(id='josh_4_19_camped_gilgal', src=('Joshua', 4, 19),
       q=['והעם עלו מן הירדן', 'ויחנו בגלגל'],
