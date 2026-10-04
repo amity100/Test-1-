@@ -1000,7 +1000,7 @@ export class DavidModel {
   /** the Player drives the whirl (spinPhase in radians, spinRate in revolutions / s); otherwise the model runs it */
   spinExternal = false;
   spinRate = 0;
-  /** (play1) world point the right hand reaches for in the 'stone' / 'stoneToss' actions (the stone in the bed) */
+  /** (play1) world point the right hand reaches for in the 'stone' action (the stone in the bed) */
   pickTarget: THREE.Vector3 | null = null;
   /** sling beats for sound and gameplay: drawStart, stoneIn (a stone laid in the pouch), gripped (ready to whirl),
    *  reloadStart, stowStart, stowed (tucked under the sash) */
@@ -2846,7 +2846,7 @@ export class DavidModel {
     const rq = this.human.root.getWorldQuaternion(_slQ);
     let w = 0;
     if (st === 'draw' || st === 'reload' || st === 'stow') w = this.slingPath(st, this.slingT, _slT, rq);
-    else if (a && (a.name === 'stone' || a.name === 'stoneToss')) w = this.stonePath(a.name, a.t, _slT, rq) * this.actionW;
+    else if (a && a.name === 'stone') w = this.stonePath(a.t, _slT, rq) * this.actionW;
     if (w <= 0.001) return;
     this.armIK('R', _slT, _slP.set(-0.8, -0.6, -0.35).applyQuaternion(rq), w);
   }
@@ -2888,26 +2888,18 @@ export class DavidModel {
     return smooth01(t / fadeIn) * (1 - smooth01((t - (end - fadeOut)) / fadeOut));
   }
 
-  /** the stone pick: reach into the gravel onto pickTarget, rub on the tunic over the raised knee, into the bag */
-  private stonePath(name: 'stone' | 'stoneToss', t: number, out: THREE.Vector3, rq: THREE.Quaternion) {
-    const wReach = this.pickTarget ? smooth01((t - 0.14) / 0.18) * (1 - smooth01((t - 0.6) / 0.16)) : 0;
-    const wRub = name === 'stone' ? smooth01((t - 1.08) / 0.1) * (1 - smooth01((t - 1.36) / 0.1)) : 0;
-    const wBag = name === 'stone' ? smooth01((t - 1.38) / 0.12) * (1 - smooth01((t - 1.68) / 0.14)) : 0;
-    const sum = wReach + wRub + wBag;
+  /** the quick stone pick (gameplay v2.1): the hand onto pickTarget in the gravel, then into the bag at the left hip */
+  private stonePath(t: number, out: THREE.Vector3, rq: THREE.Quaternion) {
+    const B = STONE_BEATS;
+    const wReach = this.pickTarget ? smooth01((t - 0.08) / 0.14) * (1 - smooth01((t - B.grasp - 0.04) / 0.12)) : 0;
+    const wBag = smooth01((t - B.bag + 0.16) / 0.1) * (1 - smooth01((t - B.bag - 0.06) / 0.12));
+    const sum = wReach + wBag;
     if (sum <= 0.001) return 0;
     out.set(0, 0, 0);
     if (wReach > 0) out.addScaledVector(_slE.copy(this.pickTarget!).add(_slF.set(0, 0.03, 0)), wReach);
-    if (wRub > 0) {
-      // on the tunic over the raised left knee, three strokes along the thigh
-      const knee = this.j.shinL.getWorldPosition(_slE);
-      const hip = this.j.thL.getWorldPosition(_slF);
-      const along = _slG.subVectors(hip, knee).normalize();
-      knee.addScaledVector(along, 0.09 + 0.035 * Math.sin((t - 1.1) * 24)).add(_slC.set(-0.03, 0.07, 0).applyQuaternion(rq));
-      out.addScaledVector(knee, wRub);
-    }
     if (wBag > 0) {
       const K = this.slingKeys(rq);
-      out.addScaledVector(_slE.lerpVectors(K[2], K[3], smooth01((t - 1.46) / 0.1)), wBag);
+      out.addScaledVector(_slE.lerpVectors(K[2], K[3], smooth01((t - B.bag + 0.1) / 0.08)), wBag);
     }
     out.divideScalar(sum);
     return Math.min(1, sum);
@@ -2946,7 +2938,7 @@ export class DavidModel {
     const h = this.hold;
     if (h === 'carry' || h === 'pull' || h === 'grab' || h === 'thanks' || h === 'kneel' || (h as string) === 'cradle') return true;
     const n = this.action?.name;
-    return n === 'call' || n === 'pick' || n === 'stone' || n === 'stoneToss';
+    return n === 'call' || n === 'pick' || n === 'stone';
   }
 }
 
