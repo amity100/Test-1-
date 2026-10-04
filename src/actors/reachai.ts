@@ -287,6 +287,15 @@ export class ReachAI {
     }
     // your window, in front of him: he deals with it first
     if (this.reactWindow(sys, e, m, held, dt)) return;
+    // out of sight of you too long (up on a ledge, a wall in the way): a portal round to where he can see you
+    m.blindT = pl.alive && !this.sees(e, pl.chest, 60) ? m.blindT + dt : 0;
+    if (m.blindT > 3 && m.gun === 'idle' && m.windT < 0 && m.portalCd <= 0) {
+      m.portalCd = 1;
+      if (this.openPortal(sys, e, m, held?.kind === 'knife' ? REACH.enemy.portal.near : REACH.enemy.portal.flank)) {
+        m.blindT = 0;
+        return;
+      }
+    }
     if (!held) return this.unarmed(sys, e, m, dt);
     if (held.kind === 'rifle') return this.rifle(sys, e, m, held, dt);
     return this.knife(sys, e, m, dt);
@@ -495,15 +504,6 @@ export class ReachAI {
       return;
     }
     const sees = pl.alive && this.sees(e, pl.chest, 60);
-    // out of sight of you too long (an edge, a wall in the way): a portal round to where he can see you
-    m.blindT = sees ? 0 : m.blindT + dt;
-    if (m.blindT > 2.5 && m.gun === 'idle' && m.portalCd <= 0) {
-      m.portalCd = 1;
-      if (this.openPortal(sys, e, m, REACH.enemy.portal.flank)) {
-        m.blindT = 0;
-        return;
-      }
-    }
     if (m.gun === 'aim') {
       sys.halt(e, dt);
       sys.face(e, pl.pos, dt);
