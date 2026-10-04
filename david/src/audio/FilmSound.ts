@@ -561,6 +561,56 @@ export class FilmSound {
     v.play(t, t + len + 0.2);
   }
 
+  /**
+   * One thread of the weave snapping, close (CUT v6's cold open, in slow motion): a dry, bright tick (the break), the
+   * thread's released tension as a tiny falling ping, and a soft low body (the cloth jumping). `slow` < 1 lowers and
+   * stretches it (the slow motion); the ping stays short — a real, tiny sound, not an effect.
+   */
+  threadSnap(o: Out, t: number, level: number, pan = 0, slow = 1): void {
+    const v = new Voice(this.c);
+    const sl = clamp(slow, 0.3, 1.5);
+    const p = v.pan(pan);
+    out2(p, o, 0.25, v);
+    const n = v.noise('white', t), bp = v.filter('bandpass', this.c.hz(rand(2400, 4200) * (0.6 + 0.4 * sl)), 2.2), g = v.gain(0);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(level, t + 0.0008); g.gain.setTargetAtTime(0, t + 0.0008, 0.0035 / sl);
+    n.connect(bp); bp.connect(g); g.connect(p);
+    const f0 = rand(650, 1250) * (0.5 + 0.5 * sl);
+    const os = v.osc('triangle', f0, 0, t), og = v.gain(0);
+    os.frequency.setValueAtTime(f0, t); os.frequency.exponentialRampToValueAtTime(f0 * 0.45, t + 0.06 / sl);
+    og.gain.setValueAtTime(0, t); og.gain.linearRampToValueAtTime(level * 0.3, t + 0.002); og.gain.setTargetAtTime(0, t + 0.002, 0.02 / sl);
+    os.connect(og); og.connect(p);
+    const b = v.noise('pink', t), lp = v.filter('lowpass', 520 * (0.6 + 0.4 * sl), 0.8), bg = v.gain(0);
+    bg.gain.setValueAtTime(0, t); bg.gain.linearRampToValueAtTime(level * 0.55, t + 0.004); bg.gain.setTargetAtTime(0, t + 0.004, 0.028 / sl);
+    b.connect(lp); lp.connect(bg); bg.connect(p);
+    v.play(t, t + 0.35 / sl);
+  }
+
+  /**
+   * Wool under strain (the cold open): the weave creaking as it is pulled — a fibrous stick-slip crackle in a band that
+   * tightens (rises) over `dur`, and the low groan of the stretched cloth under it (phones: an octave up).
+   */
+  strain(o: Out, t: number, dur: number, level: number, pan = 0): void {
+    const v = new Voice(this.c);
+    const p = v.pan(pan);
+    out2(p, o, 0.3, v);
+    const n = v.noise('pink', t), bp = v.filter('bandpass', 700, 2.5), g = v.gain(0);
+    bp.frequency.setValueAtTime(this.c.hz(560), t); bp.frequency.exponentialRampToValueAtTime(this.c.hz(1500), t + dur);
+    const G = g.gain;
+    G.setValueAtTime(0, t);
+    for (let x = 0.02; x < dur; x += rand(0.02, 0.055)) {
+      const u = x / dur;
+      G.linearRampToValueAtTime(level * (0.2 + 0.8 * u) * (chance(0.32) ? rand(0.6, 1) : rand(0.04, 0.22)), t + x);
+    }
+    G.linearRampToValueAtTime(0, t + dur + 0.04);
+    n.connect(bp); bp.connect(g); g.connect(p);
+    const k = this.lite ? 2 : 1;
+    const gr = v.osc('sawtooth', 46 * k, 0, t), lp = v.filter('lowpass', 240 * k, 2), gg = v.gain(0);
+    gr.frequency.setValueAtTime(44 * k, t); gr.frequency.linearRampToValueAtTime(60 * k, t + dur);
+    gg.gain.setValueAtTime(0, t); gg.gain.linearRampToValueAtTime(level * 0.2, t + dur * 0.9); gg.gain.setTargetAtTime(0, t + dur, 0.05);
+    gr.connect(lp); lp.connect(gg); gg.connect(p);
+    v.play(t, t + dur + 0.35);
+  }
+
   // ------------------------------------------------------------------------------------------ the thicket
 
   /** Something large shifting in the thicket: leaves, a twig cracking, a low body brush. */

@@ -73,7 +73,7 @@ const SKIP_EARLY = cueT('saul') + 1;
 const SKIP_PRO = cueT('map') + 2;
 const SKIP_D4 = LIFT + 0.3;
 const SEEK_TO = cueT('face') + 1;
-const SEEK_PRO = cueT('judges') + 0.5;
+const SEEK_PRO = cueT('map') + 3; // CUT v6: into the map (the judges' map is gone)
 /** CUT v5.2: a seek / a hidden-tab jump landing inside G4's hush (1.5 s after the roar's cut) — the roar must not restart */
 const SEEK_G4 = cueT('silence') + 1.5;
 /** partial windows (fast iteration): the prologue into Gilgal, and D2 → the hand-off */
