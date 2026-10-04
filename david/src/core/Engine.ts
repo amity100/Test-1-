@@ -777,16 +777,6 @@ export class Engine {
       this.makePost();
       this.applySize(true);
     });
-    // (load1, wave 4) the static scenery never moves after it is built (wind and sway live in the shaders, hidden trees
-    // are instance matrices): its matrices are composed once here instead of on every frame (?staticmat=0 to compare)
-    if (new URLSearchParams(location.search).get('staticmat') !== '0') {
-      for (const g of [this.terrain.group, this.village.group, this.rocks.group, this.vegetation.group]) {
-        g.updateMatrixWorld(true);
-        g.traverse((o) => {
-          o.matrixAutoUpdate = false;
-        });
-      }
-    }
     const onResize = () => this.requestResize();
     addEventListener('resize', onResize);
     addEventListener('orientationchange', onResize);

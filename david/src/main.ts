@@ -472,8 +472,37 @@ async function boot() {
     }
   };
   let last = performance.now();
-  // phones: cap at 60 fps on 90/120 Hz screens (steadier pacing, less heat -> less thermal throttling)
-  const minFrameMs = engine.quality.mobile && params.get('fps') !== 'max' ? 1000 / 60 - 2.5 : 0;
+  // phones: cap at 60 fps on 90/120 Hz screens (steadier pacing, less heat -> less thermal throttling) — and EVEN PACING
+  // (the user, 4 Oct: "the game should run smoother on the phone, without harming the graphics at all"): a phone that
+  // cannot hold ~48 fps for a few seconds is paced to an even 30 fps. Every picture held for the same two refreshes reads
+  // smoother than 35-47 fps arriving unevenly (one, two or three refreshes each), and nothing in the picture changes.
+  // What is on screen decides the cost, so it measures afresh whenever the mode changes (the film, a cinematic, play).
+  // ?fps=max uncapped, ?fps=60 or ?fps=30 fixed; window.__pace shows the state.
+  const fpsParam = params.get('fps');
+  const pace = { auto: engine.quality.mobile && fpsParam === null, cap: fpsParam === '30' ? 30 : 60, ema: 1000 / 60, slow: 0, mode: '' };
+  (window as unknown as Record<string, unknown>).__pace = pace;
+  const capMs = () => (engine.quality.mobile && fpsParam !== 'max' ? 1000 / pace.cap - 2.5 : 0);
+  let minFrameMs = capMs();
+  const paceTick = (realDt: number) => {
+    if (!pace.auto) return;
+    const film = (window as unknown as { __intro?: { state: string } }).__intro?.state === 'playing';
+    const mode = !started ? 'start' : film ? 'film' : cam.inCinematic ? 'cine' : 'play';
+    if (mode !== pace.mode) {
+      pace.mode = mode;
+      pace.cap = 60;
+      pace.ema = 1000 / 60;
+      pace.slow = 0;
+      minFrameMs = capMs();
+      return;
+    }
+    if (!started || paused || document.hidden || filmHolding() || realDt > 0.25 || pace.cap === 30) return;
+    pace.ema += (realDt * 1000 - pace.ema) * 0.06;
+    pace.slow = pace.ema > 21 ? pace.slow + realDt : Math.max(0, pace.slow - 0.5 * realDt);
+    if (pace.slow > 3) {
+      pace.cap = 30;
+      minFrameMs = capMs();
+    }
+  };
   const tick = () => {
     requestAnimationFrame(tick);
     const now = performance.now();
@@ -482,6 +511,7 @@ async function boot() {
     const rawDt = Math.min(0.05, Math.max(0.0001, realDt));
     last = now;
     safeFrame(rawDt);
+    paceTick(realDt);
     // performance governor: sheds post / shadow cost after sustained slowness; never resizes the canvas
     engine.perfTick(realDt, started && !paused && !document.hidden);
   };
