@@ -131,10 +131,10 @@ export function exodusKeys(): CamKey[] {
   const b = mapBeats();
   return [
     { t: 0, lon: 33.35, lat: 31.45, range: 1_320_000, heading: 0, pitch: 21, fov: 26 },
-    { t: b.flock, lon: 33.3, lat: 30.75, range: 1_000_000, heading: 0, pitch: 33, fov: 26 },
-    { t: (b.flock + b.jordan) / 2, lon: 34.05, lat: 30.05, range: 800_000, heading: -2, pitch: 44, fov: 26 },
-    { t: b.jordan - 0.5, lon: 35.05, lat: 30.2, range: 700_000, heading: -7, pitch: 47, fov: 26 },
-    { t: b.gilgal, lon: 35.15, lat: 31.4, range: 520_000, heading: -14, pitch: 46, fov: 26 },
+    { t: b.flock, lon: 33.3, lat: 30.55, range: 1_000_000, heading: 0, pitch: 33, fov: 26 },
+    { t: (b.flock + b.jordan) / 2, lon: 34.05, lat: 29.7, range: 800_000, heading: -2, pitch: 44, fov: 26 },
+    { t: b.jordan - 0.5, lon: 35.05, lat: 29.85, range: 700_000, heading: -7, pitch: 47, fov: 26 },
+    { t: b.gilgal, lon: 35.15, lat: 31.45, range: 520_000, heading: -14, pitch: 46, fov: 26 },
     { t: b.land + 0.9, lon: 35.0, lat: 31.7, range: 360_000, heading: -30, pitch: 45, fov: 26 },
     { t: b.dur, lon: 34.8, lat: 31.72, range: 118_000, heading: -70, pitch: 24, fov: 28 },
   ];
