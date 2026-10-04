@@ -223,6 +223,7 @@ export class Enemy implements EnemyView {
 
   // --- REACH (only for a man spawned with `def.reach`)
   readonly reach: boolean;
+  readonly reachRole: 'rusher' | 'gunner' | 'flanker' | null;
   /** How far up his rifle is (the game's REACH brain sets it: 0 empty-handed / a knife). */
   reachPose = 0;
 
@@ -233,6 +234,7 @@ export class Enemy implements EnemyView {
     this.arch = def.onslaught ? def.archetype ?? null : null;
     this.ons = def.onslaught ? new OnsState() : null;
     this.reach = !!def.reach;
+    this.reachRole = def.reachRole ?? null;
     this.hp = this.maxHp = this.arch ? ONS[this.arch].hp : this.reach ? REACH.enemy.hp : this.tune.hp;
     this.radius = this.tune.radius;
     this.height = this.tune.height;

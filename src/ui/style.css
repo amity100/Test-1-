@@ -1110,12 +1110,12 @@ html[dir='rtl'] .flow-tip { font-family: 'Heebo', 'Oxanium', sans-serif; font-si
 .lab-panel[data-variant='reach'] .lp-rules { display: flex; }
 .lab-panel[data-variant='reach'] .lp-vars button { cursor: default; }
 .lp-rules .rr-title { color: #7ff4ff; }
-.lp-rules .rr-race span { color: #ffd2a6; }
 .lab-panel[data-variant='reach'] .lp-tools { grid-template-columns: repeat(4, 1fr); }
 /* REACH on a phone: WEAPON (where the thumb rests), HAND above it, TRAVEL, SLIDE and JUMP */
-.t-weapon, .t-hand, .t-travel { display: none; }
+.t-weapon, .t-hand, .t-window { display: none; }
 .touch.reach .t-rift, .touch.reach .t-shove, .touch.reach .t-close, .touch.reach .t-power, .touch.reach .t-crouch, .touch.reach .t-action { display: none; }
-.touch.reach .t-weapon, .touch.reach .t-hand, .touch.reach .t-travel, .touch.reach .t-slide { display: flex; }
+.touch.reach .t-weapon, .touch.reach .t-hand, .touch.reach .t-window, .touch.reach .t-slide { display: flex; }
+.touch.reach .t-flip { display: none; }
 .touch.reach .t-weapon { right: 92px; bottom: 0; width: 98px; height: 98px; border: 3px solid rgba(255, 255, 255, 0.85); background: radial-gradient(circle, rgba(255, 255, 255, 0.2) 0%, rgba(8, 12, 20, 0.55) 72%); }
 .touch.reach .t-weapon svg { width: 40%; height: 40%; }
 .touch.reach .t-weapon.far { border-color: #7ff4ff; }
@@ -1123,8 +1123,11 @@ html[dir='rtl'] .flow-tip { font-family: 'Heebo', 'Oxanium', sans-serif; font-si
 .touch.reach .t-hand svg { width: 46%; height: 46%; color: #7ff4ff; }
 .touch.reach .t-hand[data-kind='late'] { border-color: #ff4a6a; }
 .touch.reach .t-hand[data-kind='portal'] { border-color: #ff4a9a; }
-.touch.reach .t-travel { right: 14px; bottom: 170px; width: 60px; height: 60px; }
-.touch.reach .t-travel svg { width: 48%; height: 48%; }
+.touch.reach .t-window { right: 196px; bottom: 4px; width: 92px; height: 92px; border: 3px solid var(--exit); color: #bfe6ff; background: radial-gradient(circle, rgba(56, 182, 255, 0.22) 0%, rgba(8, 22, 38, 0.55) 72%); }
+.touch.reach .t-window svg { width: 42%; height: 42%; color: #7ff4ff; }
+.touch.reach .t-window.down { background: rgba(56, 220, 255, 0.45); }
+.touch.reach .t-window.open { box-shadow: 0 0 18px rgba(127, 244, 255, 0.7); }
+.touch.reach .t-hand:not(.live) { opacity: .55; }
 .touch.reach .t-slide { right: 8px; bottom: 92px; width: 64px; height: 64px; opacity: .9; }
 .touch.reach .t-clip { right: 196px; bottom: 120px; }
 .t-weapon .t-cap, .t-hand .t-cap { display: none; position: absolute; top: -10px; bottom: auto; height: auto; line-height: 1.4; left: 50%; transform: translateX(-50%); padding: 1px 6px; border-radius: 8px; font: 800 9.5px var(--hud-font); letter-spacing: .06em; background: #7ff4ff; color: #04202a; white-space: nowrap; }
@@ -1136,3 +1139,39 @@ html[dir='rtl'] .flow-tip { font-family: 'Heebo', 'Oxanium', sans-serif; font-si
 .rh-tip.go { animation: rhTip 5.5s ease forwards; }
 @keyframes rhTip { 0% { opacity: 0; } 6% { opacity: 1; } 82% { opacity: 1; } 100% { opacity: 0; } }
 .is-touch .rh-tip { bottom: calc(var(--sb, 0px) + 44px); font-size: 10px; }
+
+/* ---- REACH: the window grammar ---- */
+/* the old mode's leftovers stay away under REACH (STYLE, the rift pips, the score bank) */
+.reach-on .h-style, .reach-on .h-pips, .reach-on .h-bank, .reach-on .h-gate, .reach-on .h-aim { display: none !important; }
+/* the lab panel: a compact strip top-left (wave, who's left, the clock; the rules folded behind RULES) */
+.lab-panel[data-variant='reach'] { width: auto; min-width: 0; max-width: 300px; padding: 5px 10px 6px; gap: 4px; background: linear-gradient(180deg, rgba(8, 11, 17, 0.62), rgba(8, 11, 17, 0.45)); }
+.lab-panel[data-variant='reach'] .lp-head, .lab-panel[data-variant='reach'] .lp-splits, .lab-panel[data-variant='reach'] .lp-stats, .lab-panel[data-variant='reach'] .lp-tools { display: none; }
+.lab-panel[data-variant='reach'] .lp-rules { display: none; }
+.lab-panel[data-variant='reach'].rules-open .lp-rules { display: flex !important; }
+.lab-panel[data-variant='reach'] .lp-more { display: block; }
+.lab-panel[data-variant='reach'] .lp-wave b { font-size: 15px; }
+.lab-panel[data-variant='reach'] .lp-rules > div { font-size: 11px; }
+.is-touch .lab-panel[data-variant='reach'] { top: calc(var(--st) + 8px); left: calc(var(--sl) + 64px); padding: 3px 8px 4px; max-width: 240px; }
+.is-touch .lab-panel[data-variant='reach'] .lp-wave b { font-size: 12px; }
+.rh-chip.ghost { border-color: rgba(127, 244, 255, 0.9); }
+.rh-chip.seen { border-color: #ffb83a; color: #ffe2a6; background: rgba(40, 24, 2, 0.78); }
+.rh-chip.bad { border-color: #ff4a6a; color: #ffc0cc; background: rgba(60, 4, 14, 0.78); }
+.rh-chip.dim { opacity: .55 !important; border-color: rgba(255, 255, 255, 0.4); color: #ddd; }
+.rh-chip.deadly { border-color: #ff4a6a; background: rgba(60, 4, 14, 0.78); color: #ffd0d8; }
+.rh-chip.v-pull, .rh-chip.v-disarm { border-color: #7ff4ff; color: #dffcff; }
+.rh-stab.kill, .rh-stab.melee { border-color: #7ff4ff; color: #7ff4ff; }
+.rh-stab.blocked { border-color: #ffb83a; color: #ffe2a6; }
+.rh-stab.miss { opacity: .55; }
+.rh-time { position: absolute; left: 50%; top: 50%; width: 46px; height: 3px; transform: translate(-50%, 24px); background: rgba(255, 255, 255, 0.18); opacity: 0; transition: opacity .12s; }
+.rh-time.on { opacity: 1; }
+.rh-time u { display: block; height: 100%; background: #7ff4ff; transform-origin: left center; box-shadow: 0 0 6px #7ff4ff; }
+.rh-arrows { position: absolute; inset: 0; }
+.rh-arrows > i { position: absolute; display: none; width: 0; height: 0; }
+.rh-arrows > i.on { display: block; }
+.rh-arrows > i::before { content: ''; position: absolute; left: -15px; top: -15px; width: 30px; height: 30px; transform: rotate(var(--r)); background: linear-gradient(90deg, transparent 0 22%, #ff2a55 22% 100%); clip-path: polygon(100% 50%, 20% 0, 40% 50%, 20% 100%); filter: drop-shadow(0 0 4px rgba(255, 30, 70, 0.9)); }
+.rh-arrows > i b { position: absolute; left: -11px; top: -11px; width: 22px; height: 22px; color: #ffd4dc; transform: translate(calc(cos(var(--r)) * -24px), calc(sin(var(--r)) * -24px)); }
+.rh-arrows > i b svg { display: block; width: 100%; height: 100%; filter: drop-shadow(0 0 3px #000); }
+.rh-arrows > i.urgent::before { animation: rhArrow .3s ease-in-out infinite alternate; }
+@keyframes rhArrow { from { opacity: .55; } to { opacity: 1; } }
+.is-touch .rh-arrows > i::before { left: -12px; top: -12px; width: 24px; height: 24px; }
+.is-touch .rh-arrows > i b { width: 16px; height: 16px; left: -8px; top: -8px; }

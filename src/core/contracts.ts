@@ -480,6 +480,8 @@ export interface SpawnDef {
    * at first, weapons off the floor, red windows and portals). Never set elsewhere.
    */
   reach?: boolean;
+  /** REACH: how he fights (a RUSHER: knife and portals at you; a GUNNER: rifle at range; a FLANKER: rifle and portals round your side). */
+  reachRole?: 'rusher' | 'gunner' | 'flanker';
 }
 
 export interface EnemyView {

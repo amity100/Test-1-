@@ -66,12 +66,12 @@ export function flowRules(): string {
   return `<small class="pr-title fr-title">${esc(t('flow.title'))}</small>${rows}`;
 }
 
-/** REACH's rules card: three lines, the key per device (touch: the button's own label). */
-export const REACH_RULES = ['hand', 'weapon', 'travel'] as const;
+/** REACH's rules card: the one rule, then three lines, the key per device (touch: the button's own label). */
+export const REACH_RULES = ['window', 'hand', 'weapon'] as const;
 const REACH_KEYS: Record<(typeof REACH_RULES)[number], { kbm: string; pad: string; touch: string }> = {
-  hand: { kbm: 'RMB', pad: 'LT', touch: 'touch.hand' },
+  window: { kbm: 'RMB', pad: 'LT', touch: 'touch.window' },
+  hand: { kbm: 'E', pad: 'RB', touch: 'touch.hand' },
   weapon: { kbm: 'LMB', pad: 'RT', touch: 'touch.weapon' },
-  travel: { kbm: 'Q', pad: 'Y', touch: 'touch.travel' },
 };
 
 /** A REACH key's label on this device. */
@@ -83,7 +83,7 @@ export function reachKey(k: (typeof REACH_RULES)[number]): string {
 
 export function reachRules(): string {
   const rows = REACH_RULES.map((k) => `<div class="rr-${k}"><kbd>${esc(reachKey(k))}</kbd><span>${esc(t(`reach.rule.${k}`))}</span></div>`).join('');
-  return `<small class="pr-title rr-title">${esc(t('reach.rule.title'))}</small>${rows}<div class="rr-race"><span>${esc(t('reach.rule.race'))}</span></div>`;
+  return `<small class="pr-title rr-title">${esc(t('reach.rule.title'))}</small>${rows}`;
 }
 
 /** What FLOW's HUD shows: the POWER meter and its state, speed (for the lines). */
@@ -303,6 +303,12 @@ export class LabHud {
 
   /** WAVE n: the banner, with a countdown to the first man through. */
   announce(n: number, waves: number, sub: string, variant: CombatVariant) {
+    // (REACH: the rules card shows itself through W1's start, then folds behind RULES)
+    if (n === 1 && variant === 'reach') {
+      this.el.classList.add('rules-open');
+      clearTimeout(this.rulesTimer);
+      this.rulesTimer = window.setTimeout(() => this.el.classList.remove('rules-open'), 11000);
+    }
     this.banner.innerHTML = `<small>${esc(t('lab.title'))} · ${esc(t(`lab.v.${variant}`))}</small><h2>${esc(t('lab.wave', { n }))}<em dir="ltr">/${waves}</em></h2><p>${esc(sub)}</p><b class="cd" dir="ltr"></b>`;
     this.banner.className = 'lab-banner';
     void this.banner.offsetWidth;

@@ -309,6 +309,8 @@ export class Game {
   reach: ReachMode | null = null;
   /** When you last went through a rift (game time): their hand loses you. */
   private lastCrossT = -99;
+  /** The wheel's steps this frame, for REACH's window. */
+  private reachWheel = 0;
   /** The lab's results are in (the run ends on them, not on the mission's end screen). */
   private labStats: LabRunStats | null = null;
   /** Game time until which the player can't be hurt (a lab respawn on the pad). */
@@ -667,7 +669,6 @@ export class Game {
       looseAim: () => this.input.lastDevice === 'touch' || this.input.lastDevice === 'pad',
       live: (e) => this.zones.active.has(e.def.zone),
       hangingUnderCrosshair: () => this.hangingUnderCrosshair(),
-      travelOnly: () => !!this.lab && reachOn(),
     });
     this.blade = new HiddenBlade({ world, enemies: this.enemies.list, live: (e) => this.zones.active.has(e.def.zone), rifts: this.rifts, reachOnly: () => precisionOn() });
     this.arcView = new ArcView(OUTCOME_COLOR);
@@ -955,6 +956,10 @@ export class Game {
         shake: (k) => (this.rig.shake = Math.max(this.rig.shake, k)),
         kick: (k) => (this.rig.kick = Math.max(this.rig.kick, k)),
         lastCrossT: () => this.lastCrossT,
+        get rifts() {
+          return game.rifts;
+        },
+        markForAllies: (id, secs) => this.riftMarked.set(id, this.time + secs),
       },
       this.hud.el,
     );
@@ -1272,6 +1277,11 @@ export class Game {
   private hintQueue: { key: string; html: string; dur: number; full: boolean }[] = [];
   private hintHold = 0;
   private updateHints(realDt: number) {
+    // (REACH: its own one tip; none of the old ones)
+    if (this.lab && reachOn()) {
+      this.hintQueue.length = 0;
+      return;
+    }
     this.hintHold -= realDt;
     if (this.hintHold > 0 || !this.hintQueue.length || this.hud.hintOpen) return;
     const h = this.hintQueue.shift()!;
@@ -1343,6 +1353,12 @@ export class Game {
         return true;
       },
       onCross: (p, from, to) => {
+        // REACH: a round of theirs through your window is still theirs (it hits you; nobody steers it)
+        if (this.reach?.on && this.reach.isWindowEnd(from)) {
+          if (p.team === 'kessler') p.charged = false;
+          this.fx.riftBurst(to.position, to.normal, COL_CHARGED);
+          return;
+        }
         // through a live REFLECT pair: whatever it hits now is the strike's work
         if (this.strikes.viaReflect(from)) this.reflected.add(p);
         if (p.kind === 'bolt') this.steerReturned(p, to);
@@ -2136,6 +2152,7 @@ export class Game {
     // REACH: the lab's default (its HUD and its look on; the old verbs below all off)
     const reach = !!this.reach && reachOn();
     this.reach?.show(reach);
+    this.hud.el.classList.toggle('reach-on', reach);
     // held PORTAL (aiming the exit) and the LOOP cannon run in slow motion (REACH: no long slow motion)
     if (this.settings.slowmo && alive && !reach) {
       // (a grab, a fall: time slows at once; a door or a load once you're aiming)
@@ -2191,17 +2208,17 @@ export class Game {
         this.audio.ui('click');
       }
     } else {
-      inp.consumeWheel();
+      // (REACH: the wheel sets how far its window stands in mid-air)
+      this.reachWheel = inp.consumeWheel();
       this.rifts.airDistance = null;
     }
     // FLOW: POWER (held: marks with the crosshair; let go: the chain); nothing else starts meanwhile
     if (flow) this.updatePower(realDt, alive);
     else if (this.power.phase !== 'idle') this.power.reset();
     const free = alive && this.power.phase === 'idle';
-    // (REACH: the PORTAL is on Q / Y / its button, travel only; LMB is the weapon)
-    const travelKey = reach ? 'strike2' : 'portal';
-    if (free && inp.wasPressed(travelKey)) this.onPortalPress(this.portal.press());
-    const released = this.portal.update(realDt, free && inp.isHeld(travelKey));
+    // (REACH has no PORTAL key: its window is your way through; LMB is the weapon)
+    if (free && !reach && inp.wasPressed('portal')) this.onPortalPress(this.portal.press());
+    const released = this.portal.update(realDt, free && !reach && inp.isHeld('portal'));
     if (released) this.onPortalRelease(released);
     // STRIKES: one press, a whole rift attack (none start while the PORTAL is in hand; a LOOP's
     // second press being held still counts, and dying lets go of it)
@@ -2254,7 +2271,7 @@ export class Game {
     this.hud.setRiftState({ exit: this.rifts.hasExit(), entrance: this.rifts.hasEntrance(), aiming, orientation: this.rifts.orientation });
     this.touch?.setPortalHeld(this.portal.holding);
     this.input.portalHolding = !reach && this.portal.holding;
-    this.touch?.setFlip(!!H && this.portal.aiming && (H.mode === 'door' || H.mode === 'air' || H.mode === 'hole'));
+    this.touch?.setFlip(!reach && !!H && this.portal.aiming && (H.mode === 'door' || H.mode === 'air' || H.mode === 'hole'));
     this.touch?.setAiming(aiming);
 
     // ----- player -----
@@ -2276,7 +2293,18 @@ export class Game {
     };
     if (prec && free && inp.wasPressed('shove')) this.dodgePress(inp.moveX, inp.moveY);
     // REACH: the WEAPON and the HAND (before you move: a stab's step in moves you this frame)
-    if (reach) this.reach!.update(dt, realDt, { fire: free && inp.isHeld('portal'), firePress: free && inp.wasPressed('portal'), hand: free && inp.isHeld('strike1'), handPress: free && inp.wasPressed('strike1') });
+    // (WINDOW: RMB / LT / its button; HAND: E / MMB / F / RB / X / its button; WEAPON: LMB / RT / its button)
+    if (reach) {
+      const handKeys = ['strike3', 'close', 'action', 'shove'] as const;
+      this.reach!.update(dt, realDt, {
+        fire: free && inp.isHeld('portal'),
+        firePress: free && inp.wasPressed('portal'),
+        window: free && inp.isHeld('strike1'),
+        hand: free && handKeys.some((k) => inp.isHeld(k)),
+        handPress: free && handKeys.some((k) => inp.wasPressed(k)),
+        wheel: this.reachWheel,
+      });
+    }
     this.touch?.setReach(reach ? this.reach!.touchState() : null);
     const wasAir = p.airborne;
     p.update(dt, pin, this.level.world, this.physics, this.physEv, this.playerEvents(), this.time);

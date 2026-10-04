@@ -1510,9 +1510,9 @@ export class RiftSystem implements RiftAPI {
    * (fixed attacks: mirror, geyser, drop). `boost`: minimum speed out of `b`
    * (and `a`). Returns its id; it closes itself after `life` seconds.
    */
-  openStrike(a: RiftFrame & { kind: RiftEndKind }, b: RiftFrame & { kind: RiftEndKind }, life: number, boost = 0, aimAt = -1): number {
-    const pa = this.acquire('entrance', 'entrance', 'player');
-    const pb = this.acquire('exit', 'exit', 'player');
+  openStrike(a: RiftFrame & { kind: RiftEndKind }, b: RiftFrame & { kind: RiftEndKind }, life: number, boost = 0, aimAt = -1, colors: [RiftColorKey, RiftColorKey] = ['entrance', 'exit']): number {
+    const pa = this.acquire(colors[0], 'entrance', 'player');
+    const pb = this.acquire(colors[1], 'exit', 'player');
     pa.openTime = pb.openTime = FEEL.entranceOpenTime;
     pa.boost = pb.boost = boost;
     pb.aimAt = aimAt;

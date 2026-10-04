@@ -1,19 +1,26 @@
 import * as THREE from 'three';
 import type { V3 } from '../core/contracts';
 import type { CollisionWorld } from '../world/collision';
-import { Hands, REACH, windowSpot } from '../game/reach';
+import { Hands, REACH, windowLocal, windowSpot } from '../game/reach';
 import { Armory, type Weapon } from '../game/weapons';
 import type { Enemy } from './enemy';
 import type { EnemySystem } from './enemies';
 
 /**
  * REACH's enemy side (DESIGN §14): men who start each wave empty-handed and
- * race you for the weapons on the floor with red windows of their own, steal
+ * race you for the weapons on the floor (running to them, or with big red
+ * windows of their own: the first hand to TOUCH a weapon gets it), steal
  * yours, shoot (the bolts everyone knows) or come at you with a knife, and
  * open RED PORTALS to charge or flank you. Every one of their portals opens
  * REACH.enemy.portal.telegraph s before they step in, so you can see it
- * coming and take it off them (your hand holds it; its exit goes where you
- * aim: the void, the pool, your knife).
+ * coming and take it off them (your window by it, your hand on it; its exit
+ * goes where you aim: up high, into a wall, the void, the pool, your knife).
+ * A window of yours opening in front of a man is noticed: he turns to it,
+ * and a rifleman on its far side shoots into it (out of your near window).
+ *
+ * Three kinds of man (LabSpawn.reachRole): a RUSHER goes for a knife and
+ * portals in at you; a GUNNER goes for a rifle and keeps his distance; a
+ * FLANKER goes for a rifle and portals round your side.
  */
 
 /** One red portal: the entrance by its owner, the exit where he means to come out. */
@@ -123,6 +130,8 @@ export interface ReachAIHost {
   /** The fight is on (GO): before it nobody moves. */
   go(): boolean;
   player(): { pos: V3; chest: V3; hand: V3; alive: boolean; safe: boolean };
+  /** Your window pair (null: none open). */
+  window(): ReachAIWindow | null;
   /** Solid floor to stand on at (x, z) about level `y` (not the void, not the pool, no wall in the way): its top, else null. */
   standAt(x: number, z: number, y: number): number | null;
   /** His red laser (a burst coming), 0..1. */
@@ -136,7 +145,25 @@ export interface ReachAIHost {
   opened(kind: 'window' | 'steal' | 'portal', at: V3): void;
   /** He dropped his spent rifle (sound). */
   discarded(e: Enemy, w: Weapon): void;
+  /** He picked one up off the floor by walking over it. */
+  picked(e: Enemy, w: Weapon): void;
 }
+
+/** Your window as they see it. */
+export interface ReachAIWindow {
+  /** Changes with every new window. */
+  id: number;
+  far: V3;
+  /** Which way the far window looks out (unit, flat): in front of it, it's a window to you. */
+  farLook: V3;
+  near: V3;
+  /** He has noticed it. */
+  noticed(id: number): boolean;
+  /** Where `p` (by your near window: you) is, seen through the far one (aim there to hit it through the window). */
+  through(p: V3, out: THREE.Vector3): THREE.Vector3;
+}
+
+export type ReachRole = 'rusher' | 'gunner' | 'flanker';
 
 /** A man's mind under REACH. */
 class Mind {
@@ -158,6 +185,12 @@ class Mind {
   side = 1;
   /** Empty-handed and on his way to a weapon (he keeps walking while he thinks again). */
   walking = false;
+  /** Your window he's dealing with (its id), and for how long so far (s). */
+  winId = -1;
+  winT = 0;
+  /** Aiming into your window (not at you). */
+  intoWindow = false;
+  role: ReachRole = 'gunner';
   constructor(rand: () => number) {
     const E = REACH.enemy;
     this.react = E.react[0] + (E.react[1] - E.react[0]) * rand();
@@ -194,8 +227,17 @@ export class ReachAI {
 
   mind(e: Enemy, rand: () => number): Mind {
     let m = this.minds.get(e.id);
-    if (!m) this.minds.set(e.id, (m = new Mind(rand)));
+    if (!m) {
+      this.minds.set(e.id, (m = new Mind(rand)));
+      m.role = e.reachRole ?? (['gunner', 'rusher', 'flanker'] as const)[e.id % 3];
+    }
     return m;
+  }
+
+  /** He has a gun on you (or on your window): the laser, the burst. */
+  aiming(id: number): boolean {
+    const m = this.minds.get(id);
+    return !!m && m.gun !== 'idle';
   }
 
   /** He just lost his weapon (stolen, spent): a beat before he goes for another. */
@@ -240,9 +282,90 @@ export class ReachAI {
       sys.face(e, win.at, dt);
       return;
     }
+    // your window, in front of him: he deals with it first
+    if (this.reactWindow(sys, e, m, held, dt)) return;
     if (!held) return this.unarmed(sys, e, m, dt);
     if (held.kind === 'rifle') return this.rifle(sys, e, m, held, dt);
     return this.knife(sys, e, m, dt);
+  }
+
+  /**
+   * He has noticed your window: he turns to it (a hand out of it gets slapped
+   * away, his gun held on to) and, with a rifle on its far side, shoots into
+   * it: the rounds come out of your near window, at you (the laser shows the
+   * way). A beat later he gets on with the fight, still watching it.
+   */
+  private reactWindow(sys: EnemySystem, e: Enemy, m: Mind, held: Weapon | null, dt: number): boolean {
+    const H = this.host;
+    const w = H.window();
+    if (!w || !w.noticed(e.id)) {
+      if (m.intoWindow) {
+        m.intoWindow = false;
+        m.gun = 'idle';
+      }
+      m.winId = -1;
+      return false;
+    }
+    if (m.winId !== w.id) {
+      m.winId = w.id;
+      m.winT = 0;
+    }
+    m.winT += dt;
+    const N = REACH.notice;
+    const pl = H.player();
+    const front = windowLocal(w.far, w.farLook, e.pos).along > 0.25;
+    const R = REACH.enemy.rifle;
+    // a rifle on its far side: into the window
+    if (held?.kind === 'rifle' && held.ammo > 0 && front && pl.alive && !pl.safe) {
+      if (!m.intoWindow) {
+        if (m.gun !== 'idle' || m.winT > N.react) return false;
+        m.intoWindow = true;
+        m.gun = 'aim';
+        m.gunT = R.aim;
+      }
+      sys.halt(e, dt);
+      sys.face(e, w.far, dt);
+      const aimAt = w.through(pl.chest, _c);
+      this.muzzle(e, _a);
+      if (m.gun === 'aim') {
+        m.gunT -= dt;
+        const k = 1 - Math.max(0, m.gunT) / R.aim;
+        H.laser(e, _a, aimAt, k);
+        H.laser(e, w.near, pl.chest, k);
+        if (m.gunT <= 0) {
+          m.gun = 'fire';
+          m.shots = R.shots;
+          m.gunT = 0;
+        }
+        return true;
+      }
+      if (m.gun === 'fire') {
+        m.gunT -= dt;
+        if (m.gunT <= 0 && m.shots > 0) {
+          if (H.armory.fire(held)) {
+            _b.subVectors(aimAt, _a).normalize();
+            H.fireBolt(e, _a, _b);
+            e.char.play('shoot', { fade: 0.04 });
+          }
+          m.shots--;
+          m.gunT = R.gap;
+        }
+        if (m.shots <= 0 || held.ammo <= 0) {
+          m.gun = 'idle';
+          m.intoWindow = false;
+          m.gunT = between(R.rest, sys.rand());
+          m.winT = N.react;
+        }
+        return true;
+      }
+      m.intoWindow = false;
+      return false;
+    }
+    // anyone else: turned to it, on guard, for a beat
+    if (m.winT > N.react || m.windT >= 0 || m.gun !== 'idle') return false;
+    sys.halt(e, dt);
+    sys.face(e, w.far, dt);
+    return true;
   }
 
   /** Where his rounds leave from: the rifle in his hand. */
@@ -263,23 +386,34 @@ export class ReachAI {
   private unarmed(sys: EnemySystem, e: Enemy, m: Mind, dt: number) {
     const H = this.host;
     const pl = H.player();
+    const E = REACH.enemy;
     m.gun = 'idle';
     m.windT = -1;
-    // the nearest weapon worth having, his goal while he thinks
+    // the weapon he wants: the nearest, his own kind a little nearer still
+    const likes = m.role === 'rusher' ? 'knife' : 'rifle';
     let best: Weapon | null = null;
     let bd = Infinity;
     for (const w of H.armory.free()) {
       if (!w.resting) continue;
-      const d = e.pos.distanceTo(w.pos);
+      const d = e.pos.distanceTo(w.pos) - (w.kind === likes ? 4 : 0);
       if (d < bd) {
         bd = d;
         best = w;
       }
     }
+    const dist = best ? hd(e.pos, best.pos) : Infinity;
+    // he's on it: his (a touch)
+    if (best && dist <= E.touch && Math.abs(best.pos.y - e.pos.y) < 1.3) {
+      H.armory.touch(best, e.id);
+      H.picked(e, best);
+      m.walking = false;
+      m.react = between(E.regrab, sys.rand()) * 0.6;
+      return;
+    }
     m.react -= dt;
     if (m.react > 0) {
       // (thinking: on his way to it if he already was, else he turns to it, or to you)
-      if (m.walking && best) sys.moveTo(e, best.pos, REACH.enemy.run, dt, true);
+      if (m.walking && best) sys.moveTo(e, best.pos, E.run, dt, true);
       else {
         sys.halt(e, dt);
         sys.face(e, best ? best.pos : pl.pos, dt);
@@ -290,33 +424,32 @@ export class ReachAI {
     // yours, if you have one and he has you in sight
     const yours = H.armory.heldBy('player');
     if (yours && pl.alive && !pl.safe && m.stealCd <= 0) {
-      // (one hand at a time comes for yours)
       const busy = H.hands.list.some((w) => w.kind === 'steal');
-      if (!busy && this.sees(e, pl.hand) && sys.rand() < REACH.enemy.steal.chance) {
+      if (!busy && this.sees(e, pl.hand) && sys.rand() < E.steal.chance) {
         this.steal(e, m, yours, sys.rand());
         return;
       }
-      m.stealCd = 1.2;
+      m.stealCd = 1.5;
     }
-    if (best && bd <= REACH.range + 1 && this.sees(e, _c.copy(best.pos).setY(best.pos.y + 0.3))) {
-      if (H.armory.claim(best, e.id)) {
-        e.eye(_eye);
-        windowSpot(_eye, best.pos, _a, _b);
-        H.hands.open({ owner: e.id, kind: 'snatch', at: _a, dir: _b, weapon: best });
-        H.opened('window', _a);
-        e.char.play('interact', { fade: 0.08 });
-        m.react = between(REACH.enemy.regrab, sys.rand());
-        return;
-      }
+    // a window of his own for it (a big red one: you see the race), or the run
+    if (best && dist > 3 && dist <= E.windowRange && sys.rand() < 0.55 && this.sees(e, _c.copy(best.pos).setY(best.pos.y + 0.3))) {
+      e.eye(_eye);
+      windowSpot(_eye, best.pos, _a, _b);
+      H.armory.claim(best, e.id);
+      H.hands.open({ owner: e.id, kind: 'snatch', at: _a, dir: _b, weapon: best, tele: E.windowTele, out: E.windowOut });
+      H.opened('window', _a);
+      e.char.play('interact', { fade: 0.08 });
+      m.react = between(E.regrab, sys.rand());
+      return;
     }
     if (best) {
-      sys.moveTo(e, best.pos, REACH.enemy.run, dt, true);
+      sys.moveTo(e, best.pos, E.run, dt, true);
       m.walking = true;
-      m.react = 0.25;
+      m.react = 0.3;
       return;
     }
     // nothing on the floor: he keeps you in sight, waiting for his chance at yours
-    if (hd(e.pos, pl.pos) > 12) sys.moveTo(e, pl.pos, REACH.enemy.run * 0.7, dt, true);
+    if (hd(e.pos, pl.pos) > 12) sys.moveTo(e, pl.pos, E.run * 0.7, dt, true);
     else {
       sys.halt(e, dt);
       sys.face(e, pl.pos, dt);
@@ -403,7 +536,8 @@ export class ReachAI {
     // between bursts: a flank through a portal now and then
     if (m.portalCd <= 0) {
       m.portalCd = 1.5;
-      if (sees && d > 6 && sys.rand() < REACH.enemy.portal.rifleChance && this.openPortal(sys, e, m, REACH.enemy.portal.flank)) return;
+      const chance = m.role === 'flanker' ? REACH.enemy.portal.flankerChance : REACH.enemy.portal.rifleChance;
+      if (sees && d > 6 && sys.rand() < chance && this.openPortal(sys, e, m, REACH.enemy.portal.flank)) return;
     }
     // keep his distance, in sight of you, moving
     m.gunT -= dt;

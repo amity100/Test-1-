@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { V3 } from '../core/contracts';
 import { weaponMesh } from './characters';
-import { Hands, REACH, type HandWindow } from './reach';
+import { Hands, REACH, type HandWindow, type WindowSpot } from './reach';
 import type { RedPortal } from '../actors/reachai';
 import { Armory, type Weapon } from './weapons';
 
@@ -22,6 +22,34 @@ const MARK_THEIRS = new THREE.Color(1, 0.1, 0.32);
 export const STRIP_HERO = 0x19f0ff;
 export const STRIP_KESSLER = 0xff2a5a;
 const STRIP_FLOOR = { rifle: 0xffa236, knife: 0xcfe8ff };
+
+const solid = (c: THREE.Color, opacity = 1) => new THREE.MeshBasicMaterial({ color: c.clone(), transparent: true, opacity, depthWrite: false, toneMapped: false });
+/** Their hand windows: an oval this wide and tall (radii, m) — readable at 30 m. */
+const RED_WINDOW = { w: 0.75, h: 1.12 };
+/** The ghost: cyan where it can open, amber where a man would see it, red where it can't. */
+const GHOST_OK = new THREE.Color(0.35, 1, 1);
+const GHOST_SEEN = new THREE.Color(1, 0.72, 0.15);
+const GHOST_BAD = new THREE.Color(1, 0.2, 0.25);
+
+/** A w x h rectangle's edges (centred, in its XY plane). */
+function frameEdges(w: number, h: number) {
+  const x = w / 2, y = h / 2;
+  const v = [-x, -y, 0, x, -y, 0, x, -y, 0, x, y, 0, x, y, 0, -x, y, 0, -x, y, 0, -x, -y, 0];
+  return new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
+}
+
+/** A flat chevron on the floor pointing +Z (the way a window looks). */
+const CHEVRON = (() => {
+  const sh = new THREE.Shape();
+  sh.moveTo(-0.32, -0.1);
+  sh.lineTo(0, 0.22);
+  sh.lineTo(0.32, -0.1);
+  sh.lineTo(0.2, -0.1);
+  sh.lineTo(0, 0.1);
+  sh.lineTo(-0.2, -0.1);
+  sh.closePath();
+  return new THREE.ShapeGeometry(sh).rotateX(-Math.PI / 2).scale(1, 1, -1);
+})();
 
 const add = (c: THREE.Color) => new THREE.MeshBasicMaterial({ color: c, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
 
@@ -78,7 +106,9 @@ class WindowView {
   readonly hand = new THREE.Group();
   readonly knife: THREE.Object3D;
   readonly ringMat: THREE.MeshBasicMaterial;
-  constructor(col: THREE.Color, skin: THREE.Material, cuff: THREE.Material) {
+  /** Theirs: a light pillar over it (a race you can see from across the deck). */
+  readonly beam: THREE.Mesh | null = null;
+  constructor(col: THREE.Color, skin: THREE.Material, cuff: THREE.Material, red = false) {
     this.ringMat = add(col);
     this.ring = new THREE.Mesh(RING, this.ringMat);
     this.faceMat = faceMaterial(col);
@@ -94,6 +124,11 @@ class WindowView {
     this.arm.add(this.forearm, c, this.hand);
     this.disc.add(this.face, this.ring);
     this.g.add(this.disc, this.arm);
+    if (red) {
+      this.beam = new THREE.Mesh(BEAM, solid(new THREE.Color(1, 0.15, 0.35), 0.6));
+      this.beam.position.y = RED_WINDOW.h;
+      this.g.add(this.beam);
+    }
     this.g.visible = false;
   }
 }
@@ -106,6 +141,7 @@ class PortalView {
   readonly floorMat = add(REACH_RED);
   readonly oval = new THREE.Group();
   readonly floor: THREE.Mesh;
+  readonly beam: THREE.Mesh;
   constructor() {
     const ring = new THREE.Mesh(RING, this.ringMat);
     const face = new THREE.Mesh(DISC, this.faceMat);
@@ -114,12 +150,14 @@ class PortalView {
     this.oval.add(face, ring);
     this.floor = new THREE.Mesh(MARK, this.floorMat);
     this.floor.scale.setScalar(1.2);
-    this.g.add(this.oval, this.floor);
+    this.beam = new THREE.Mesh(BEAM, solid(new THREE.Color(1, 0.12, 0.35), 0.55));
+    this.beam.position.y = REACH.enemy.portal.height;
+    this.beam.scale.set(2, 7, 2);
+    this.g.add(this.oval, this.floor, this.beam);
     this.g.visible = false;
   }
 }
 
-const solid = (c: THREE.Color, opacity = 1) => new THREE.MeshBasicMaterial({ color: c.clone(), transparent: true, opacity, depthWrite: false, toneMapped: false });
 
 class FloorView {
   readonly g = new THREE.Group();
@@ -161,14 +199,20 @@ export interface ReachFxState {
   armory: Armory;
   hands: Hands;
   portals: readonly RedPortal[];
-  /** Where an owner's hand is (your gauntlet; his right hand) for the window by you. */
+  /** Where an owner's hand is (your gauntlet; his right hand). */
   handOf(owner: 'player' | number, out: THREE.Vector3): THREE.Vector3 | null;
   /** Where whatever a window is after is now (a man's chest, a weapon). */
   targetOf(w: HandWindow, out: THREE.Vector3): THREE.Vector3 | null;
-  /** The hand's target under the crosshair (the highlight). */
-  aim: { kind: 'weapon' | 'body' | 'portal'; id: number; at: V3; ok: boolean } | null;
+  /** The WINDOW key's ghost (null: not aiming). */
+  ghost: (WindowSpot & { seen: boolean }) | null;
+  /** The open pair: `k` how open (0..1), `left` its time left (s). */
+  win: { far: { pos: V3; look: V3 }; near: { pos: V3; look: V3 }; k: number; left: number } | null;
+  /** What the hand would take at the far window (red: he sees it coming). */
+  mark: { at: V3; bad: boolean } | null;
   /** The red portal in your hand (its exit is drawn cyan). */
   heldPortal: number;
+  /** How far over the floor the ghost's bottom is (m; the drop line). */
+  groundGap?: number;
   /** Where a weapon flying to a hand is (null: not flying). */
   flying(w: Weapon, out: THREE.Vector3): THREE.Vector3 | null;
   camera: THREE.Camera;
@@ -185,8 +229,17 @@ export class ReachFx {
   private windows: WindowView[] = [];
   private redWindows: WindowView[] = [];
   private portals: PortalView[] = [];
-  private nearWin: THREE.Group;
-  private nearMat: THREE.MeshBasicMaterial;
+  /** The ghost: the window's outline where it would open, a chevron the way it looks, a line to the floor. */
+  private ghost: THREE.Group;
+  private ghostMat: THREE.LineBasicMaterial;
+  private ghostFill: THREE.MeshBasicMaterial;
+  private ghostArrow: THREE.Mesh;
+  private ghostDrop: THREE.Line;
+  /** The far window's marker (a diamond over it, readable from afar) and its frame. */
+  private farMark: THREE.Group;
+  private farMat: THREE.MeshBasicMaterial;
+  private farFrame: THREE.LineSegments;
+  private farFrameMat: THREE.LineBasicMaterial;
   private tracers: { m: THREE.Mesh; mat: THREE.MeshBasicMaterial; t: number }[] = [];
   private mark: THREE.Mesh;
   private markMat: THREE.MeshBasicMaterial;
@@ -199,16 +252,35 @@ export class ReachFx {
 
   constructor() {
     this.group.name = 'reach';
-    this.nearMat = add(REACH_CYAN);
-    this.nearWin = new THREE.Group();
-    this.nearWin.add(new THREE.Mesh(RING, this.nearMat));
-    this.nearWin.scale.setScalar(0.22);
-    this.nearWin.visible = false;
+    const W = REACH.window;
+    // the ghost
+    this.ghostMat = new THREE.LineBasicMaterial({ color: GHOST_OK, transparent: true, opacity: 0.95, depthTest: false, toneMapped: false });
+    this.ghostFill = new THREE.MeshBasicMaterial({ color: GHOST_OK, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
+    this.ghost = new THREE.Group();
+    const rect = new THREE.LineSegments(frameEdges(W.width, W.height), this.ghostMat);
+    rect.renderOrder = 6;
+    const fill = new THREE.Mesh(new THREE.PlaneGeometry(W.width, W.height), this.ghostFill);
+    this.ghostArrow = new THREE.Mesh(CHEVRON, this.ghostFill.clone());
+    (this.ghostArrow.material as THREE.MeshBasicMaterial).opacity = 0.85;
+    this.ghostArrow.position.set(0, -W.height / 2 + 0.03, 0.55);
+    this.ghost.add(rect, fill, this.ghostArrow);
+    this.ghostDrop = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, -1, 0)]), this.ghostMat);
+    this.ghostDrop.frustumCulled = false;
+    this.ghost.visible = this.ghostDrop.visible = false;
+    // the far window's marker and frame
+    this.farMat = solid(new THREE.Color(0.2, 1, 1));
+    this.farMark = new THREE.Group();
+    const dia = new THREE.Mesh(new THREE.OctahedronGeometry(0.16, 0).scale(0.8, 1.3, 0.8), this.farMat);
+    dia.renderOrder = 7;
+    this.farMark.add(dia);
+    this.farFrameMat = new THREE.LineBasicMaterial({ color: new THREE.Color(0.3, 1, 1), transparent: true, opacity: 1, toneMapped: false });
+    this.farFrame = new THREE.LineSegments(frameEdges(W.width + 0.12, W.height + 0.12), this.farFrameMat);
+    this.farMark.visible = this.farFrame.visible = false;
     this.markMat = add(REACH_CYAN);
     this.mark = new THREE.Mesh(MARK, this.markMat);
     this.mark.visible = false;
     this.mark.renderOrder = 4;
-    this.group.add(this.nearWin, this.mark);
+    this.group.add(this.ghost, this.ghostDrop, this.farMark, this.farFrame, this.mark);
     for (let i = 0; i < 6; i++) {
       const m = add(REACH_CYAN);
       const mesh = new THREE.Mesh(TRACER, m);
@@ -244,7 +316,7 @@ export class ReachFx {
   private win(i: number, red: boolean): THREE.Group {
     const pool = red ? this.redWindows : this.windows;
     while (pool.length <= i) {
-      const w = red ? new WindowView(REACH_RED, this.redSkin, this.redCuff) : new WindowView(REACH_CYAN, this.heroSkin, this.heroCuff);
+      const w = red ? new WindowView(REACH_RED, this.redSkin, this.redCuff, true) : new WindowView(REACH_CYAN, this.heroSkin, this.heroCuff);
       pool.push(w);
       this.group.add(w.g);
     }
@@ -294,7 +366,8 @@ export class ReachFx {
     for (const p of this.portals) p.g.visible = false;
     for (const tr of this.tracers) tr.m.visible = false;
     this.mark.visible = false;
-    this.nearWin.visible = false;
+    this.ghost.visible = this.ghostDrop.visible = false;
+    this.farMark.visible = this.farFrame.visible = false;
   }
 
   update(dt: number, s: ReachFxState) {
@@ -328,7 +401,7 @@ export class ReachFx {
       g.position.copy(w.pos);
       (g.getObjectByName('spin') as THREE.Object3D).rotation.y = w.yaw;
       const spent = Armory.spent(w);
-      const aimed = !!s.aim && s.aim.kind === 'weapon' && s.aim.id === w.id;
+      const aimed = w.claim === 'player';
       const theirs = w.claim !== null && w.claim !== 'player';
       const col = aimed ? MARK_AIM : theirs ? MARK_THEIRS : w.kind === 'rifle' ? MARK_RIFLE : MARK_KNIFE;
       v.haloMat.color.copy(col);
@@ -350,28 +423,31 @@ export class ReachFx {
       this.floor.delete(id);
     }
 
-    // ----- hand windows -----
+    // ----- hands: yours out of the far window, theirs out of big red windows -----
     let ni = 0, ri = 0;
-    let near = false;
     for (const w of s.hands.list) {
       const red = w.owner !== 'player';
       const g = this.win(red ? ri++ : ni++, red);
       const view = (red ? this.redWindows : this.windows)[(red ? ri : ni) - 1];
       g.visible = true;
       g.position.copy(w.at);
-      // (the window faces you; the arm comes out of it toward what it's after)
       view.disc.quaternion.copy(s.camera.quaternion);
       view.arm.quaternion.setFromUnitVectors(Z, w.dir);
-      const land = Hands.landAt(w);
       const life = Hands.life(w);
-      // the window grows open (a telegraphed one throbs while it waits), shrinks shut at the end
-      const openK = w.tele > 0 && w.t < w.tele ? (0.35 + 0.65 * (w.t / w.tele)) * (0.85 + 0.15 * Math.sin(t * 40)) : Math.min(1, w.t / 0.06);
-      const shut = Math.min(1, Math.max(0, (life - w.t) / 0.08));
-      const r = REACH.hand.radius * openK * shut * (w.kind === 'pull' ? 1.25 : 1);
-      view.disc.scale.setScalar(Math.max(0.001, r));
-      view.faceMat.uniforms.uT.value = t;
-      view.ringMat.opacity = w.tele > 0 && w.t < w.tele ? 0.6 + 0.4 * Math.sin(t * 30) : 1;
-      // the arm, out to what it's after (in the window's frame: scale undone)
+      // (yours: the far window is the window; theirs: a red one, big enough to read across the deck)
+      view.disc.visible = !w.far;
+      if (!w.far) {
+        const openK = w.tele > 0 && w.t < w.tele ? (0.35 + 0.65 * (w.t / w.tele)) * (0.85 + 0.15 * Math.sin(t * 40)) : Math.min(1, w.t / 0.06);
+        const shut = Math.min(1, Math.max(0, (life - w.t) / 0.08));
+        const k = Math.max(0.001, openK * shut);
+        view.disc.scale.set(RED_WINDOW.w * k, RED_WINDOW.h * k, 1);
+        view.faceMat.uniforms.uT.value = t;
+        view.ringMat.opacity = w.tele > 0 && w.t < w.tele ? 0.6 + 0.4 * Math.sin(t * 30) : 1;
+        if (view.beam) {
+          view.beam.visible = true;
+          view.beam.scale.set(1, 6 * k, 1);
+        }
+      } else if (view.beam) view.beam.visible = false;
       const tgt = s.targetOf(w, _v2);
       const reach = tgt ? Math.max(0.3, tgt.distanceTo(w.at) - 0.08) : 0.8;
       const k = Hands.extent(w);
@@ -379,19 +455,53 @@ export class ReachFx {
       view.arm.visible = w.t >= w.tele && k > 0.01;
       view.forearm.scale.set(1, 1, Math.max(0.02, len - 0.1));
       view.hand.position.set(0, 0, Math.max(0, len - 0.1));
-      view.knife.visible = w.kind === 'stab';
+      view.knife.visible = w.kind === 'stab' || (w.kind === 'whiff' && w.far && w.out < REACH.hand.out - 1e-3);
       view.hand.rotation.z = w.result ? 0.6 : 0;
-      if (!red) near = near || w.t < land + REACH.hand.back;
+      // (a whiff: the hand opens and closes on nothing)
+      view.hand.rotation.x = w.kind === 'whiff' ? Math.sin(t * 30) * 0.3 * k : 0;
+      view.arm.scale.setScalar(w.far ? 1.6 : 1.3);
+      if (w.far) view.hand.position.z /= 1.6;
+      if (w.far) view.forearm.scale.z /= 1.6;
+      if (!w.far) {
+        view.hand.position.z /= 1.3;
+        view.forearm.scale.z /= 1.3;
+      }
     }
     for (let i = ni; i < this.windows.length; i++) this.windows[i].g.visible = false;
     for (let i = ri; i < this.redWindows.length; i++) this.redWindows[i].g.visible = false;
-    // the little window by your gauntlet while your hand is out
-    const hp = near ? s.handOf('player', _v) : null;
-    this.nearWin.visible = !!hp;
-    if (hp) {
-      this.nearWin.position.copy(hp);
-      this.nearWin.quaternion.copy(s.camera.quaternion);
-      this.nearMat.opacity = 0.9;
+
+    // ----- the ghost -----
+    const gh = s.ghost;
+    this.ghost.visible = this.ghostDrop.visible = !!gh;
+    if (gh) {
+      const col = !gh.ok ? GHOST_BAD : gh.seen ? GHOST_SEEN : GHOST_OK;
+      this.ghostMat.color.copy(col);
+      this.ghostFill.color.copy(col);
+      (this.ghostArrow.material as THREE.MeshBasicMaterial).color.copy(col);
+      this.ghost.position.copy(gh.pos);
+      this.ghost.rotation.set(0, Math.atan2(gh.look.x, gh.look.z), 0);
+      this.ghostFill.opacity = 0.1 + 0.06 * Math.sin(t * 8);
+      // (to the floor under it: where it is in depth)
+      const H2 = REACH.window.height / 2;
+      this.ghostDrop.position.set(gh.pos.x, gh.pos.y - H2, gh.pos.z);
+      this.ghostDrop.scale.set(1, Math.max(0.01, s.groundGap ?? 0), 1);
+      this.ghostDrop.visible = (s.groundGap ?? 0) > 0.2;
+    }
+
+    // ----- the far window: a frame and a marker you can find from anywhere -----
+    const wn = s.win;
+    this.farMark.visible = this.farFrame.visible = !!wn;
+    if (wn) {
+      const f = wn.far;
+      this.farFrame.position.copy(f.pos);
+      this.farFrame.rotation.set(0, Math.atan2(f.look.x, f.look.z), 0);
+      this.farFrame.scale.setScalar(Math.max(0.01, wn.k));
+      // (it blinks in its last second)
+      this.farFrameMat.opacity = wn.left < 1 ? 0.4 + 0.6 * (Math.sin(t * 25) > 0 ? 1 : 0) : 1;
+      this.farMark.position.set(f.pos.x, f.pos.y + REACH.window.height / 2 + 0.45, f.pos.z);
+      const dcam = s.camera.position.distanceTo(this.farMark.position);
+      this.farMark.scale.setScalar(Math.max(1, dcam * 0.045));
+      this.farMark.rotation.y = t * 2;
     }
 
     // ----- their portals -----
@@ -421,8 +531,8 @@ export class ReachFx {
         (view.faceMat.uniforms.uCol.value as THREE.Color).copy(col);
         view.ringMat.opacity = open < 1 ? 0.55 + 0.45 * Math.sin(t * 28) : 1;
         view.floorMat.opacity = 0.6 * closing;
-        const aimed = !!s.aim && s.aim.kind === 'portal' && s.aim.id === p.id;
-        view.floor.scale.setScalar(aimed ? 1.5 + 0.2 * Math.sin(t * 10) : 1.2);
+        view.floor.scale.setScalar(1.2 + 0.15 * Math.sin(t * 6));
+        view.beam.visible = open < 1 || p.crossedT < 0;
       }
     }
     for (let i = pi; i < this.portals.length; i++) this.portals[i].g.visible = false;
@@ -435,13 +545,14 @@ export class ReachFx {
       if (tr.t > 0.08) tr.m.visible = false;
     }
 
-    // ----- the mark on a man (or a portal) your hand would take -----
-    const a = s.aim;
-    this.mark.visible = !!a && a.kind !== 'weapon';
-    if (a && a.kind !== 'weapon') {
-      this.mark.position.set(a.at.x, a.at.y + 0.05, a.at.z);
-      this.mark.scale.setScalar(1 + 0.08 * Math.sin(t * 10));
-      this.markMat.color.copy(a.ok ? REACH_CYAN : REACH_RED);
+    // ----- what the hand would take at the far window -----
+    const mk = s.mark;
+    this.mark.visible = !!mk;
+    if (mk) {
+      this.mark.position.set(mk.at.x, mk.at.y + 0.05, mk.at.z);
+      this.mark.rotation.set(0, 0, 0);
+      this.mark.scale.setScalar(0.8 + 0.08 * Math.sin(t * 10));
+      this.markMat.color.copy(mk.bad ? REACH_RED : REACH_CYAN);
       this.markMat.opacity = 0.95;
     }
   }

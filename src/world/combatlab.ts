@@ -261,11 +261,6 @@ function buildDeck({ ctx, mb }: Lab) {
   // the void edge: a wide band on the lip, its face striped down, warnings
   bandX(mb, -31, 31, DECK.z1, 0, -1, 0.3, 0.6);
   for (const x of [-18, 0, 18]) floorDecal(mb, 'VOID', x, 0, DECK.z1 - 1.6, 3.2, C.orange);
-  // distance marks down the lane from the pad (painted lines, numbers)
-  for (const [z, id] of [[-14, '10 M'], [-4, '20 M'], [6, '30 M'], [16, '40 M']] as [number, DecalId][]) {
-    mb.box('stripe', -3, 0, z - 0.04, 3, 0.004, z + 0.04, 0xff8a3a, 1, { ao: 0 });
-    floorDecal(mb, id, 4.3, 0, z + 0.05, 2.2, 0x3a4048);
-  }
 }
 
 // ---------------------------------------------------------------------------

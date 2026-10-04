@@ -1,19 +1,47 @@
 import * as THREE from 'three';
-import type { HitInfo, KillEvent, V3 } from '../core/contracts';
+import type { HitInfo, KillEvent, RaySegment, RiftEndKind, V3 } from '../core/contracts';
 import type { CollisionWorld } from '../world/collision';
 import type { Enemy, EnemySystem } from '../actors/enemies';
-import { ReachAI, RedPortals, type RedPortal } from '../actors/reachai';
+import { ReachAI, RedPortals, type ReachAIWindow, type RedPortal } from '../actors/reachai';
 import type { Audio } from '../engine/audio';
 import type { LabWave } from '../world/combatlab/layout';
-import { ReachHud, type ReachVerb } from '../ui/reachhud';
+import { ReachHud, type ReachHandVerb, type ReachHudState, type ReachStab, type ThreatArrow } from '../ui/reachhud';
 import { t } from '../ui/i18n';
 import type { Character } from './characters';
 import type { FxKit } from './fxkit';
 import type { LabTool } from './labdirector';
 import type { Player } from './player';
-import { Hands, knifeReach, pickAim, REACH, reachKillTool, windowSpot, type AimCandidate, type HandWindow } from './reach';
+import { passPoint, type RiftFrame } from './portalMath';
+import type { RiftColorKey } from './portals';
+import {
+  bodyPoint,
+  byWindow,
+  edgeArrow,
+  flat,
+  Hands,
+  inHisEyes,
+  nearSpot,
+  placeWindow,
+  pullLanding,
+  REACH,
+  reachKillTool,
+  redirectOutcome,
+  sideOf,
+  windowFrame,
+  type HandWindow,
+  type ThreatKind,
+  type WindowSpot,
+} from './reach';
 import { REACH_CYAN, REACH_RED, ReachFx } from './reachfx';
 import { Armory, type Owner, type Weapon } from './weapons';
+
+/** The rift system as REACH uses it (its window pair is a short-lived pair of rift ends). */
+export interface ReachRifts {
+  openStrike(a: RiftFrame & { kind: RiftEndKind }, b: RiftFrame & { kind: RiftEndKind }, life: number, boost?: number, aimAt?: number, colors?: [RiftColorKey, RiftColorKey]): number;
+  closeStrike(id: number): void;
+  strikeEnds(id: number): { a: RiftFrame; b: RiftFrame } | null;
+  raycastThrough(origin: V3, dir: V3, maxDist: number, world: CollisionWorld, maxHops?: number): RaySegment[];
+}
 
 /** What REACH needs from the game. */
 export interface ReachHost {
@@ -24,6 +52,7 @@ export interface ReachHost {
   readonly camera: THREE.Camera;
   readonly player: Player;
   readonly hero: Character;
+  readonly rifts: ReachRifts;
   aimRay(): { origin: V3; dir: V3 };
   eye(out: THREE.Vector3): THREE.Vector3;
   device(): 'kbm' | 'pad' | 'touch';
@@ -47,6 +76,8 @@ export interface ReachHost {
   kick(k: number): void;
   /** When you last went through a rift (game time; -inf: never). */
   lastCrossT(): number;
+  /** His own side's rounds hit him for this long (a man you put in their line of fire). */
+  markForAllies(id: number, secs: number): void;
 }
 
 /** The game's input to REACH this frame. */
@@ -54,35 +85,59 @@ export interface ReachInput {
   /** WEAPON (LMB / RT / the WEAPON button). */
   fire: boolean;
   firePress: boolean;
-  /** HAND (RMB / LT / the HAND button). */
+  /** WINDOW held (RMB / LT / the WINDOW button): aim the ghost; let go: it opens. */
+  window: boolean;
+  /** HAND (E / MMB / RB / the HAND button). */
   hand: boolean;
   handPress: boolean;
+  /** Wheel steps this frame (+: further). */
+  wheel?: number;
 }
 
-/** What the hand would take now (the HUD's chip, the highlight). */
-export interface ReachAim {
-  kind: AimCandidate['kind'];
+/** The open window pair. */
+export interface ReachWindow {
   id: number;
-  verb: ReachVerb;
-  /** The point on it the aim is nearest. */
-  point: THREE.Vector3;
-  /** Where to draw the mark (a man's feet, a portal's foot). */
+  /** The rift pair it is (-1: none, a stand-in world). */
+  strike: number;
+  readonly near: { pos: THREE.Vector3; look: THREE.Vector3 };
+  readonly far: { pos: THREE.Vector3; look: THREE.Vector3; surface: WindowSpot['surface'] };
+  /** Seconds since it opened. */
+  t: number;
+  /** Seconds each man has had it in his eyes; who has noticed it. */
+  readonly seen: Map<number, number>;
+  readonly noticed: Set<number>;
+}
+
+/** What the HAND would do at the far window now. */
+export interface HandPlan {
+  verb: ReachHandVerb;
+  /** He sees it coming (aware, in front of him): slapped away / he holds on. */
+  blocked: boolean;
+  weapon: Weapon | null;
+  enemy: Enemy | null;
+  portal: RedPortal | null;
+  /** Where the hand goes. */
   at: THREE.Vector3;
-  what: Weapon['kind'] | null;
 }
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const _c = new THREE.Vector3();
+const _d = new THREE.Vector3();
 const _eye = new THREE.Vector3();
+const _ndc = new THREE.Vector3();
 
 const ABLE = new Set(['combat', 'idle', 'patrol', 'suspicious', 'charge']);
 
+/** Exit outcome of a portal you hold (the chip says it). */
+export type HeldOutcome = 'floor' | 'void' | 'water' | 'high' | 'fall' | 'wall';
+
 /**
- * REACH in the game (the lab's default variant; DESIGN §14): your hand, your
- * weapon, the weapons on the floor, the enemy side (actors/reachai.ts) and its
- * portals, and their look and HUD. The Game owns one while the lab is loaded
- * and calls update() only while REACH is the variant in force.
+ * REACH in the game (the lab's default variant; DESIGN §14): your window
+ * pair, your hand and your weapon through it, the weapons on the floor, the
+ * enemy side (actors/reachai.ts) and its portals, and their look and HUD. The
+ * Game owns one while the lab is loaded and calls update() only while REACH
+ * is the variant in force.
  */
 export class ReachMode {
   readonly armory = new Armory();
@@ -91,28 +146,41 @@ export class ReachMode {
   readonly ai: ReachAI;
   readonly fx = new ReachFx();
   readonly hud: Pick<ReachHud, 'update' | 'callout' | 'show' | 'dispose' | 'tip'>;
-  aim: ReachAim | null = null;
+  /** The window pair (one at a time). */
+  win: ReachWindow | null = null;
+  /** The WINDOW key is held: where it would open. */
+  ghost: (WindowSpot & { seen: boolean }) | null = null;
+  /** What HAND would do now (null: no window). */
+  plan: HandPlan | null = null;
+  private winSeq = 0;
+  private winCd = 0;
+  /** Mid-air distance set with the wheel (null: the first thing the aim meets: a surface, or just past a man). */
+  airDist: number | null = null;
+  private wasWindow = false;
   private handCd = 0;
   private fireCd = 0;
   private knifeCd = 0;
   /** A portal of theirs in your hand: its exit follows your aim. */
   private held: { p: RedPortal; t: number } | null = null;
-  private heldOutcome: 'floor' | 'void' | 'water' = 'floor';
+  private heldOutcome: HeldOutcome = 'floor';
   /** Weapons on their way to a hand: from where, how long so far. */
   private flights = new Map<number, { from: THREE.Vector3; t: number }>();
-  /** Men your hand is pulling to you. */
-  private pulls: { id: number; from: THREE.Vector3; to: THREE.Vector3; t: number }[] = [];
-  /** Reeling from a pull until (game time): rounds do more. */
+  /** Men your hand is pulling through: to the far window, then out of the near one to your crosshair. */
+  private pulls: { id: number; phase: 'in' | 'out'; from: THREE.Vector3; to: THREE.Vector3; t: number }[] = [];
+  /** Reeling (from your pull, a fall, a slam) until (game time): rounds do more. */
   private stunUntil = new Map<number, number>();
   /** Out of a portal exit you moved (game time): his death is that portal's. */
   private redirected = new Map<number, number>();
+  /** Men out of a portal you moved, in the air: the fall / the slam still to come. */
+  private flying = new Map<number, { t: number; y0: number; slamT: number; slammed: boolean; wasUp: boolean }>();
   private seenCross = new Set<number>();
   private lastHit = new Map<number, { tool: 'rifle' | 'knife'; t: number }>();
   private firedT = -99;
   private shown = false;
-  /** The fight was on last frame (GO shows the one-line tip, once a run). */
   private wasGo = false;
   private tipped = false;
+  /** The threat arrows this frame (the HUD's; tests read them). */
+  arrows: ThreatArrow[] = [];
 
   /** `hud`: the HUD to drive (tests pass a stand-in); else one is built under `hudRoot`. */
   constructor(private h: ReachHost, hudRoot: HTMLElement | null, hud?: Pick<ReachHud, 'update' | 'callout' | 'show' | 'dispose' | 'tip'>) {
@@ -127,6 +195,7 @@ export class ReachMode {
         const p = h.player;
         return { pos: p.body.pos, chest: p.chest(_c), hand: this.handOf('player', _b), alive: h.alive(), safe: h.safe() };
       },
+      window: () => this.aiWindow(),
       standAt: (x, z, y) => h.standAt(x, z, y),
       laser: (e, from, to, t01) => h.enemies.hooks.telegraph(e, 'laser', from, to, t01),
       fireBolt: (e, from, dir) => h.enemies.hooks.fireBolt(e, from, dir),
@@ -147,6 +216,10 @@ export class ReachMode {
         if (kind === 'portal') h.audio.riftOpen(at, 'gate');
         else if (kind === 'steal') h.audio.reachSteal(at);
         else h.audio.reachWindow(at, false);
+      },
+      picked: (e, w) => {
+        h.audio.reachSnatch(w.pos, false);
+        e.char.play('interact', { fade: 0.06 });
       },
       discarded: (_e, w) => h.audio.reachClatter(w.pos),
     });
@@ -186,10 +259,15 @@ export class ReachMode {
     this.pulls.length = 0;
     this.stunUntil.clear();
     this.redirected.clear();
+    this.flying.clear();
     this.seenCross.clear();
     this.lastHit.clear();
+    this.closeWindow();
+    this.ghost = null;
+    this.plan = null;
+    this.airDist = null;
     this.held = null;
-    this.aim = null;
+    this.arrows = [];
     this.fx.clear();
     this.h.hero.setHeld(null);
     this.h.player.weaponUp = 0;
@@ -202,7 +280,7 @@ export class ReachMode {
     for (const w of def.weapons ?? []) this.armory.add(w.kind, w.pos, (k++ * 2.39996) % (Math.PI * 2));
   }
 
-  /** You went down: your weapon falls where you were, your hand lets go. */
+  /** You went down: your weapon falls where you were, your hand lets go, your window shuts. */
   playerDown() {
     const p = this.h.player.body.pos;
     const w = this.armory.heldBy('player');
@@ -217,13 +295,11 @@ export class ReachMode {
   }
 
   private releaseMine() {
-    for (const w of [...this.hands.list]) {
-      if (w.owner !== 'player') continue;
-      if (w.weapon) this.armory.unclaim(w.weapon, 'player');
-      this.hands.cancel(w);
-    }
+    for (const w of [...this.hands.list]) if (w.owner === 'player') this.hands.cancel(w);
     if (this.held) this.portals.release(this.held.p);
     this.held = null;
+    this.ghost = null;
+    this.closeWindow();
   }
 
   /** The lab's KILLS BY TOOL for this death. */
@@ -235,6 +311,14 @@ export class ReachMode {
     return reachKillTool(ev.cause, r !== undefined && now - r < 8, mine);
   }
 
+  /** An end of your window pair (a round through it stays theirs: it hits you). */
+  isWindowEnd(end: { position: V3 }): boolean {
+    const w = this.win;
+    if (!w || w.strike < 0) return false;
+    const ends = this.h.rifts.strikeEnds(w.strike);
+    return !!ends && ((ends.a as object) === end || (ends.b as object) === end);
+  }
+
   // ------------------------------------------------------------------
   // Per frame
   // ------------------------------------------------------------------
@@ -243,6 +327,7 @@ export class ReachMode {
     const h = this.h;
     const now = h.time();
     this.handCd -= realDt;
+    this.winCd -= realDt;
     this.fireCd -= dt;
     this.knifeCd -= dt;
     const alive = h.alive();
@@ -263,14 +348,27 @@ export class ReachMode {
       this.flights.delete(w.id);
     }
 
-    // what the hand would take
-    this.aim = alive && !this.held ? this.pickHand() : null;
+    // the window: hold to aim the ghost, let go to open it; it shuts by itself
+    this.updateWindowKey(alive, inp);
+    const win = this.win;
+    if (win) {
+      win.t += dt;
+      if (win.t >= REACH.window.life) this.closeWindow();
+      else this.updateNotice(win, dt);
+    }
+
+    // what the hand would do there
+    this.plan = alive && this.win && !this.held ? this.planHand() : null;
 
     // the hand
     if (this.held) this.updateHeldPortal(realDt, inp.hand);
     else if (inp.handPress && alive && this.handCd <= 0 && !this.hands.of('player')) {
-      if (go) this.handPress();
-      else h.audio.ui('deny');
+      if (!go) h.audio.ui('deny');
+      else if (!this.win) {
+        h.audio.ui('deny');
+        this.hud.callout('reach.noWindow', 'info');
+        this.handCd = 0.2;
+      } else this.handPress();
     }
 
     // the weapon
@@ -282,6 +380,9 @@ export class ReachMode {
     } else if (alive && go && !mine && inp.firePress) {
       this.hud.callout('reach.noWeapon', 'info');
     }
+
+    // empty hands walking over a weapon: it's yours (a touch)
+    if (alive && go && !mine) this.pickUp();
 
     // hands, pulls, flights, portals, the floor
     for (const w of [...this.hands.list]) {
@@ -302,8 +403,9 @@ export class ReachMode {
       _a.copy(p.b).setY(p.b.y + 1.1);
       h.fx.riftBurst(_a, _b.set(Math.sin(p.by), 0, Math.cos(p.by)), p.redirected ? REACH_CYAN : REACH_RED);
       h.audio.riftPass(_a, 6);
-      if (p.redirected) this.redirected.set(p.owner, now);
+      if (p.redirected) this.redirectedOut(p, now);
     }
+    this.updateFlying(dt);
     this.armory.update(
       dt,
       (x, z, y) => h.world.groundAt(x, z, 0.05, y),
@@ -313,7 +415,6 @@ export class ReachMode {
     // weapons in hands (shown once they've arrived)
     const mineNow = this.armory.heldBy('player');
     h.hero.setHeld(mineNow && !this.flights.has(mineNow.id) ? mineNow.kind : null);
-    // (a rifle: carried half up, all the way up while you fire and a beat after)
     const up = mineNow?.kind === 'rifle' ? (now - this.firedT < 0.9 ? 1 : 0.45) : 0;
     h.player.weaponUp = THREE.MathUtils.damp(h.player.weaponUp, up, 14, realDt);
     for (const e of h.enemies.list) {
@@ -329,41 +430,48 @@ export class ReachMode {
       portals: this.portals.list,
       handOf: (o, out) => this.handOf(o, out),
       targetOf: (w, out) => this.targetOf(w, out),
-      aim: this.aim ? { kind: this.aim.kind, id: this.aim.id, at: this.aim.at, ok: this.aim.verb !== 'late' } : null,
+      ghost: this.ghost,
+      win: this.win ? { far: this.win.far, near: this.win.near, k: Math.min(1, this.win.t / REACH.window.open), left: REACH.window.life - this.win.t } : null,
+      mark: this.plan && this.plan.verb !== 'empty' ? { at: this.plan.at, bad: this.plan.blocked } : null,
       heldPortal: this.held ? this.held.p.id : -1,
+      groundGap: this.ghost ? this.ghostGap(this.ghost) : 0,
       flying: (w, out) => this.flyPos(w, out),
       camera: h.camera,
     });
+    this.arrows = this.threats();
     let warn = false;
     for (const w of this.hands.list) if (w.kind === 'steal' && w.t < w.tele) warn = true;
     let incoming = false;
-    for (const p of this.portals.list) if (p.crossedT < 0 && !p.held && p.b.distanceTo(h.player.body.pos) < 6) incoming = true;
-    const knifeOn = mineNow?.kind === 'knife' ? this.knifeTarget() : null;
-    this.hud.update({
+    for (const p of this.portals.list) if (p.crossedT < 0 && !p.held && p.b.distanceTo(h.player.body.pos) < 12) incoming = true;
+    const st: ReachHudState = {
       device: h.device(),
-      aim: this.aim ? { verb: this.aim.verb, what: this.aim.what } : null,
-      stab: knifeOn ? knifeOn.how : null,
+      ghost: this.ghost ? { ok: this.ghost.ok, seen: this.ghost.seen } : null,
+      hand: this.plan ? { verb: this.plan.verb, blocked: this.plan.blocked } : null,
+      stab: mineNow?.kind === 'knife' ? this.stabState() : null,
       held: this.held ? this.heldOutcome : null,
       weapon: mineNow ? { kind: mineNow.kind, ammo: mineNow.ammo } : null,
+      window: this.win ? Math.max(0, REACH.window.life - this.win.t) / REACH.window.life : null,
       warn,
       incoming,
       go,
-    });
+      arrows: this.arrows,
+    };
+    this.hud.update(st);
 
-    // stale bookkeeping
-    for (const [id, t] of this.stunUntil) if (t < now) this.stunUntil.delete(id);
+    for (const [id, tt] of this.stunUntil) if (tt < now) this.stunUntil.delete(id);
   }
 
   /** What the phone's buttons say: HAND's verb, WEAPON's rounds (or KNIFE). */
-  touchState(): { hand: string | null; handKind: string | null; weapon: string | null; far: boolean } {
-    const a = this.aim;
+  touchState(): { hand: string | null; handKind: string | null; weapon: string | null; far: boolean; window: boolean } {
+    const p = this.plan;
     const w = this.armory.heldBy('player');
-    const verb = this.held ? `reach.exit.${this.heldOutcome}` : a ? (a.verb === 'snatch' && a.what ? `reach.verb.snatch.${a.what}` : `reach.verb.${a.verb}`) : null;
+    const verb = this.held ? `reach.exit.${this.heldOutcome}` : p ? `reach.verb.${p.blocked ? 'blocked' : p.verb}` : null;
     return {
       hand: verb ? t(verb) : null,
-      handKind: this.held ? 'portal' : a ? a.verb : null,
+      handKind: this.held ? 'portal' : p ? (p.blocked ? 'late' : p.verb) : null,
       weapon: w ? (w.kind === 'rifle' ? String(w.ammo) : t('reach.w.knife')) : null,
-      far: w?.kind === 'knife' && this.knifeTarget()?.how === 'window',
+      far: !!this.win && w?.kind === 'knife',
+      window: !!this.win,
     };
   }
 
@@ -374,7 +482,177 @@ export class ReachMode {
   }
 
   // ------------------------------------------------------------------
-  // Aiming the hand
+  // The window
+  // ------------------------------------------------------------------
+
+  private updateWindowKey(alive: boolean, inp: ReachInput) {
+    const h = this.h;
+    const holding = alive && inp.window && !this.held;
+    if (holding) {
+      if (!this.wasWindow) this.airDist = null;
+      const ray = h.aimRay();
+      const eye = h.eye(_eye);
+      if (inp.wheel) {
+        const base = this.airDist ?? (this.ghost ? this.ghost.dist : 12);
+        this.airDist = THREE.MathUtils.clamp(base + inp.wheel * REACH.window.step, REACH.window.min, REACH.range);
+      }
+      // (on a man: just past him along your aim — behind him if he faces you, at his side if he's side-on)
+      const air = this.airDist ?? this.pastMan(ray.origin, ray.dir, eye);
+      const spot = placeWindow(h.world, ray.origin, ray.dir, eye, air, (x, z, y) => h.world.groundAt(x, z, 0.3, y));
+      if (h.device() === 'touch') this.magnet(spot, ray.origin, ray.dir);
+      this.ghost = Object.assign(spot, { seen: this.seenAt(spot.pos) });
+    } else if (this.wasWindow && this.ghost && alive) {
+      // let go: it opens there
+      if (this.ghost.ok && this.winCd <= 0) this.openWindow(this.ghost);
+      else h.audio.ui('deny');
+      this.ghost = null;
+    } else this.ghost = null;
+    this.wasWindow = holding;
+  }
+
+  /** The man the aim is on (in sight, within reach): how far just past him is (m from your eyes), else null. */
+  private pastMan(origin: V3, dir: V3, eye: V3): number | null {
+    const h = this.h;
+    let best: number | null = null;
+    for (const e0 of h.enemies.list) {
+      const e = e0 as Enemy;
+      if (!e.alive || !e.reach || !e.body) continue;
+      const s = rayDistToBody(origin, dir, e.pos, e.height, _a);
+      if (s <= 0) continue;
+      const perp = _b.copy(origin).addScaledVector(dir, s).distanceTo(_a);
+      if (perp > e.radius + 0.3) continue;
+      const d = Math.hypot(e.pos.x - eye.x, e.pos.z - eye.z) + REACH.window.past;
+      if (d > REACH.range || (best !== null && d >= best)) continue;
+      if (!h.world.lineOfSight(eye, _c.set(e.pos.x, e.pos.y + 1.2, e.pos.z))) continue;
+      best = d;
+    }
+    return best;
+  }
+
+  /** How far the ghost's bottom is over the floor under it (m; 0 on it, or no floor). */
+  private ghostGap(g: WindowSpot): number {
+    const bottom = g.pos.y - REACH.window.height / 2;
+    const fl = this.h.world.groundAt(g.pos.x, g.pos.z, 0.2, bottom);
+    return fl === -Infinity ? 0 : Math.max(0, bottom - fl);
+  }
+
+  /** A thumb's help: the ghost leans onto the spot behind the man nearest the crosshair (a small radius). */
+  private magnet(spot: WindowSpot, origin: V3, dir: V3) {
+    const W = REACH.window;
+    let best: Enemy | null = null;
+    let bestErr = W.magnet;
+    for (const e of this.h.enemies.list) {
+      if (!e.alive || !e.reach) continue;
+      _a.set(e.pos.x, e.pos.y + 1.1, e.pos.z).sub(origin);
+      const d = _a.length();
+      if (d > REACH.range + 4) continue;
+      const err = Math.acos(THREE.MathUtils.clamp(_a.dot(dir) / d, -1, 1));
+      if (err < bestErr) {
+        bestErr = err;
+        best = e as Enemy;
+      }
+    }
+    if (!best) return;
+    const f = best.forward(_b).setY(0).normalize();
+    _c.set(best.pos.x - f.x * W.behind, best.pos.y + W.height / 2 + 0.02, best.pos.z - f.z * W.behind);
+    if (_c.distanceTo(spot.pos) > W.snap) return;
+    if (this.h.standAt(_c.x, _c.z, best.pos.y) === null) return;
+    spot.pos.copy(_c);
+    spot.surface = 'floor';
+    flat(_d.subVectors(_c, this.h.player.body.pos), spot.look);
+    spot.dist = spot.pos.distanceTo(this.h.eye(_eye));
+    spot.ok = spot.dist >= W.min && spot.dist <= REACH.range + 1.5;
+  }
+
+  /** Some man on his feet would have a window here in his eyes. */
+  private seenAt(p: V3): boolean {
+    for (const e of this.h.enemies.list) {
+      if (!e.alive || !e.reach || !this.able(e.id)) continue;
+      e.eye(_a);
+      if (inHisEyes(_a, e.yaw, p) && this.h.world.lineOfSight(_a, p)) return true;
+    }
+    return false;
+  }
+
+  /** Open the pair: the far window at the ghost, its twin in front of you. */
+  openWindow(spot: WindowSpot) {
+    const h = this.h;
+    this.closeWindow();
+    const ray = h.aimRay();
+    const aim = flat(ray.dir, new THREE.Vector3());
+    const feet = h.player.body.pos;
+    // the near one: in front of you, facing you (nearer if a wall is in the way)
+    let ahead: number = REACH.window.ahead;
+    const wall = h.world.raycast(_a.set(feet.x, feet.y + 1, feet.z), aim, ahead + 0.5, { sight: false });
+    if (wall) ahead = Math.max(0.6, wall.distance - 0.45);
+    const near = nearSpot(feet, aim, ahead);
+    const g = h.world.groundAt(near.pos.x, near.pos.z, 0.3, feet.y + 1);
+    if (g > -Infinity && Math.abs(g - feet.y) < 1.2) near.pos.y = g + REACH.window.height / 2 + 0.02;
+    const far = { pos: spot.pos.clone(), look: spot.look.clone(), surface: spot.surface };
+    const strike = h.rifts.openStrike(
+      windowFrame(near.pos, near.look, 'stand'),
+      windowFrame(far.pos, far.look, far.surface === 'floor' ? 'stand' : 'air'),
+      REACH.window.life + 0.5,
+      0,
+      -1,
+      ['exit', 'exit'],
+    );
+    this.win = { id: ++this.winSeq, strike, near, far, t: 0, seen: new Map(), noticed: new Set() };
+    this.winCd = REACH.window.cooldown;
+    this.faceAim();
+    h.hero.play('interact', { fade: 0.06 });
+    h.audio.reachWindow(far.pos, true);
+    h.fx.ring(_a.copy(far.pos).setY(far.pos.y - REACH.window.height / 2 + 0.05), 1.4, 0.3, REACH_CYAN);
+  }
+
+  closeWindow() {
+    const w = this.win;
+    if (!w) return;
+    if (w.strike >= 0) this.h.rifts.closeStrike(w.strike);
+    this.win = null;
+    for (const hw of [...this.hands.list]) if (hw.owner === 'player' && hw.far) this.hands.cancel(hw);
+  }
+
+  /** Who has the far window in his eyes, and who has noticed it. */
+  private updateNotice(win: ReachWindow, dt: number) {
+    const h = this.h;
+    for (const e of h.enemies.list) {
+      if (!e.alive || !e.reach || win.noticed.has(e.id) || !this.able(e.id)) continue;
+      e.eye(_a);
+      if (!inHisEyes(_a, e.yaw, win.far.pos) || !h.world.lineOfSight(_a, win.far.pos)) {
+        win.seen.delete(e.id);
+        continue;
+      }
+      const s = (win.seen.get(e.id) ?? 0) + dt;
+      win.seen.set(e.id, s);
+      if (s >= REACH.notice.time) {
+        win.noticed.add(e.id);
+        h.audio.shout(e.chest(_b));
+      }
+    }
+  }
+
+  /** The window as the enemy side sees it. */
+  private aiWindow(): ReachAIWindow | null {
+    const w = this.win;
+    if (!w) return null;
+    return {
+      id: w.id,
+      far: w.far.pos,
+      farLook: w.far.look,
+      near: w.near.pos,
+      noticed: (id) => w.noticed.has(id),
+      through: (p, out) => {
+        const ends = w.strike >= 0 ? this.h.rifts.strikeEnds(w.strike) : null;
+        if (!ends) return out.copy(w.far.pos);
+        // (where `p` by the near window is, seen through the far one)
+        return passPoint(ends.a, ends.b, _d.copy(p), out);
+      },
+    };
+  }
+
+  // ------------------------------------------------------------------
+  // The hand
   // ------------------------------------------------------------------
 
   /** Where an owner's hand is: your gauntlet (left), his right hand. */
@@ -403,6 +681,11 @@ export class ReachMode {
 
   private targetOf(w: HandWindow, out: THREE.Vector3): THREE.Vector3 | null {
     if (w.kind === 'steal') return this.handOf('player', out);
+    if (w.kind === 'whiff') return out.copy(w.at).addScaledVector(w.dir, 1.1);
+    if (w.kind === 'grab') {
+      const p = w.enemyId !== null ? this.portals.get(w.enemyId) : null;
+      return p ? out.copy(p.held ? p.a : p.b).setY((p.held ? p.a.y : p.b.y) + 1.1) : null;
+    }
     if (w.weapon) return w.weapon.holder === w.owner ? null : this.weaponAt(w.weapon, out);
     if (w.enemyId !== null) {
       const e = this.h.enemies.get(w.enemyId);
@@ -411,107 +694,117 @@ export class ReachMode {
     return null;
   }
 
-  private cands: AimCandidate[] = [];
-
-  private pickHand(): ReachAim | null {
-    const h = this.h;
-    const eye = h.eye(_eye);
-    const C = this.cands;
-    C.length = 0;
-    const R = REACH.hand;
-    for (const p of this.portals.list) {
-      if (p.dead || p.crossedT >= 0) continue;
-      const pa = new THREE.Vector3(p.a.x, p.a.y + 1.05, p.a.z);
-      const pb = new THREE.Vector3(p.b.x, p.b.y + 1.05, p.b.z);
-      C.push({ kind: 'portal', id: p.id, a: pa, b: pa, r: R.radiusPortal });
-      C.push({ kind: 'portal', id: p.id, a: pb, b: pb, r: R.radiusPortal });
-    }
-    for (const w of this.armory.list) {
-      if (!Armory.live(w) || w.holder === 'player' || this.flights.has(w.id)) continue;
-      if (typeof w.holder === 'number' && !h.enemies.get(w.holder)?.alive) continue;
-      const at = this.weaponAt(w, new THREE.Vector3());
-      if (w.holder === null) at.y += 0.12;
-      C.push({ kind: 'weapon', id: w.id, a: at, b: at, r: w.holder === null ? R.radiusWeapon : R.radiusHeld });
-    }
-    for (const e of h.enemies.list) {
-      if (!e.alive || !e.body || !e.reach || this.pulls.some((q) => q.id === e.id)) continue;
-      const p = e.pos;
-      C.push({ kind: 'body', id: e.id, a: new THREE.Vector3(p.x, p.y + 0.25, p.z), b: new THREE.Vector3(p.x, p.y + e.height - 0.1, p.z), r: R.radiusBody });
-    }
-    const ray = h.aimRay();
-    const cone = THREE.MathUtils.degToRad(R.cone[h.device()]);
-    const pick = pickAim(ray.origin, ray.dir, eye, C, { range: REACH.range, cone, sees: (_c2, pt) => h.world.lineOfSight(eye, pt) });
-    if (!pick) return null;
-    const c = pick.cand;
-    if (c.kind === 'portal') {
-      const p = this.portals.get(c.id)!;
-      const end = pick.point.distanceTo(_a.set(p.a.x, p.a.y + 1.05, p.a.z)) < 0.01 ? p.a : p.b;
-      return { kind: 'portal', id: c.id, verb: 'portal', point: pick.point, at: end.clone(), what: null };
-    }
-    if (c.kind === 'weapon') {
-      const w = this.armory.get(c.id)!;
-      const late = w.claim !== null && w.claim !== 'player';
-      return { kind: 'weapon', id: c.id, verb: late ? 'late' : 'snatch', point: pick.point, at: pick.point.clone(), what: w.kind };
-    }
-    const e = h.enemies.get(c.id)!;
-    return { kind: 'body', id: c.id, verb: 'pull', point: pick.point, at: e.pos.clone(), what: null };
+  /** He sees your hand coming: noticed the window, and it's in front of him. */
+  private guards(e: Enemy): boolean {
+    const w = this.win;
+    if (!w || !this.able(e.id) || !w.noticed.has(e.id)) return false;
+    return sideOf(e.pos, e.yaw, w.far.pos) === 'front';
   }
 
-  // ------------------------------------------------------------------
-  // The hand
-  // ------------------------------------------------------------------
+  /** What HAND does at the far window now: their portal, a weapon (off the floor, out of a man's hands), the man, nothing. */
+  planHand(): HandPlan | null {
+    const w = this.win;
+    if (!w) return null;
+    const h = this.h;
+    const R = REACH.window;
+    const F = w.far;
+    for (const p of this.portals.list) {
+      if (p.dead || p.crossedT >= 0) continue;
+      for (const end of [p.a, p.b]) {
+        _a.set(end.x, end.y + 1.1, end.z);
+        if (byWindow(F.pos, F.look, _a, R.reach + 0.5)) return { verb: 'portal', blocked: false, weapon: null, enemy: null, portal: p, at: _a.clone() };
+      }
+    }
+    let best: HandPlan | null = null;
+    let bd = Infinity;
+    for (const wp of this.armory.list) {
+      if (!Armory.live(wp) || wp.holder !== null || this.flights.has(wp.id)) continue;
+      if (!byWindow(F.pos, F.look, wp.pos, R.reach)) continue;
+      const d = wp.pos.distanceTo(F.pos);
+      if (d < bd) {
+        bd = d;
+        best = { verb: wp.kind === 'rifle' ? 'rifle' : 'knife', blocked: false, weapon: wp, enemy: null, portal: null, at: wp.pos.clone() };
+      }
+    }
+    for (const e0 of h.enemies.list) {
+      const e = e0 as Enemy;
+      if (!e.alive || !e.body || !e.reach || this.pulls.some((q) => q.id === e.id)) continue;
+      const pt = bodyPoint(e.pos, e.height, F.pos, _a);
+      if (!byWindow(F.pos, F.look, pt, R.reach)) continue;
+      const d = pt.distanceTo(F.pos) - 0.2;
+      if (d >= bd) continue;
+      bd = d;
+      const held = this.armory.heldBy(e.id);
+      if (held && !this.flights.has(held.id)) best = { verb: 'disarm', blocked: this.guards(e), weapon: held, enemy: e, portal: null, at: this.weaponAt(held, new THREE.Vector3()) };
+      else best = { verb: 'pull', blocked: this.guards(e), weapon: null, enemy: e, portal: null, at: e.chest(new THREE.Vector3()) };
+    }
+    return best ?? { verb: 'empty', blocked: false, weapon: null, enemy: null, portal: null, at: F.pos.clone() };
+  }
 
   private handPress() {
     const h = this.h;
-    const a = this.aim;
-    if (!a) {
-      h.audio.ui('deny');
-      this.handCd = 0.12;
-      return;
-    }
+    const w = this.win!;
+    const plan = this.plan ?? this.planHand()!;
     this.handCd = REACH.hand.cooldown;
-    this.faceAim();
-    const eye = h.eye(_eye);
-    if (a.kind === 'portal') {
-      const p = this.portals.get(a.id);
-      if (!p || !this.portals.grab(p)) return;
-      this.held = { p, t: 0 };
-      h.audio.reachGrab(a.point);
-      h.hitstop(0.04);
-      h.hero.play('interact', { fade: 0.06 });
-      h.fx.ring(_a.copy(a.at).setY(a.at.y + 0.06), 1.6, 0.3, REACH_CYAN);
+    h.hero.play('interact', { fade: 0.06 });
+    h.audio.reachWindow(w.far.pos, true);
+    // (pressed while it's still opening: the hand comes out once it's open)
+    const out = Math.max(0, REACH.window.open - w.t) + REACH.hand.out;
+    const from = _a.copy(w.far.pos);
+    const dir = _b.subVectors(plan.at, from);
+    if (dir.lengthSq() < 1e-6) dir.copy(w.far.look);
+    if (plan.verb === 'portal') {
+      this.hands.open({ owner: 'player', kind: 'grab', at: from, dir, enemyId: plan.portal!.id, out, far: true });
       return;
     }
-    windowSpot(eye, a.point, _a, _b);
-    if (a.kind === 'weapon') {
-      const w = this.armory.get(a.id);
-      // (spoken for: your window opens anyway, and comes back empty: TOO LATE)
-      const won = !!w && this.armory.claim(w, 'player');
-      this.hands.open({ owner: 'player', kind: 'snatch', at: _a, dir: _b, weapon: won ? w : null });
-    } else this.hands.open({ owner: 'player', kind: 'pull', at: _a, dir: _b, enemyId: a.id });
-    h.audio.reachWindow(_a, true);
-    h.hero.play('interact', { fade: 0.06 });
+    if (plan.verb === 'empty') {
+      this.hands.open({ owner: 'player', kind: 'whiff', at: from, dir: w.far.look, out, far: true });
+      return;
+    }
+    if (plan.verb === 'pull') {
+      this.hands.open({ owner: 'player', kind: 'pull', at: from, dir, enemyId: plan.enemy!.id, out, far: true });
+      return;
+    }
+    // a weapon: off the floor, or out of his hands
+    this.armory.claim(plan.weapon!, 'player');
+    this.hands.open({ owner: 'player', kind: 'snatch', at: from, dir, weapon: plan.weapon, enemyId: plan.enemy?.id ?? null, out, far: true });
   }
 
-  /** The hand got there (a window of anyone's): did it get what it was after. */
+  /** The hand got there (anyone's): did it get what it was after. */
   private resolve(w: HandWindow): boolean {
     const h = this.h;
     const me = w.owner === 'player';
     switch (w.kind) {
       case 'snatch': {
         const wp = w.weapon;
-        if (!wp || wp.claim !== w.owner || wp.gone) {
+        if (!wp) return false;
+        const victim = w.enemyId !== null ? (h.enemies.get(w.enemyId) as Enemy | null) : null;
+        if (me) {
+          // someone else's hand got there first
+          if (wp.holder !== null && wp.holder !== w.enemyId) {
+            this.hud.callout('reach.late', 'warn');
+            h.audio.ui('deny');
+            this.handCd = REACH.hand.whiff;
+            return false;
+          }
+          // he saw it coming: he holds on
+          if (victim && this.guards(victim)) return this.blocked(victim, 'reach.holdsOn');
+          // (the weapon must still be by the window)
+          const win = this.win;
+          if (!win || !byWindow(win.far.pos, win.far.look, this.weaponAt(wp, _c), REACH.window.reach + 0.6)) return this.whiffed();
+        }
+        const start = this.weaponAt(wp, new THREE.Vector3());
+        const feet = me ? h.player.body.pos : (h.enemies.get(w.owner as number)?.pos ?? wp.pos);
+        const from = wp.holder;
+        if (!this.armory.touch(wp, w.owner, typeof from === 'number' && (!me || from === w.enemyId) ? from : null, _a.set(feet.x, feet.y + 1, feet.z))) {
           if (me) {
             this.hud.callout('reach.late', 'warn');
             h.audio.ui('deny');
+            this.handCd = REACH.hand.whiff;
           }
+          if (wp.claim === w.owner) wp.claim = null;
           return false;
         }
-        const from = wp.holder;
-        const start = this.weaponAt(wp, new THREE.Vector3());
-        const feet = me ? h.player.body.pos : (h.enemies.get(w.owner as number)?.pos ?? wp.pos);
-        const dropped = this.armory.give(wp, w.owner, _a.set(feet.x, feet.y + 1, feet.z));
-        if (dropped) dropped.vel.set((Math.random() - 0.5) * 2, 3, (Math.random() - 0.5) * 2);
         this.flights.set(wp.id, { from: start, t: 0 });
         if (typeof from === 'number') {
           const e = h.enemies.get(from) as Enemy | null;
@@ -548,46 +841,85 @@ export class ReachMode {
       }
       case 'pull': {
         const e = w.enemyId !== null ? (h.enemies.get(w.enemyId) as Enemy | null) : null;
-        if (!e || !e.alive || !e.body) return false;
-        const pl = h.player;
-        const fwd = _b.set(Math.sin(pl.yaw), 0, Math.cos(pl.yaw));
-        const ray = h.aimRay();
-        fwd.set(ray.dir.x, 0, ray.dir.z);
-        if (fwd.lengthSq() < 1e-6) fwd.set(Math.sin(pl.yaw), 0, Math.cos(pl.yaw));
-        fwd.normalize();
-        const p = pl.body.pos;
-        let to: THREE.Vector3 | null = null;
-        for (const k of [REACH.pull.ahead, 1.2]) {
-          const x = p.x + fwd.x * k, z = p.z + fwd.z * k;
-          const y = h.standAt(x, z, p.y);
-          if (y !== null) {
-            to = new THREE.Vector3(x, y, z);
-            break;
-          }
-        }
-        if (!to) to = new THREE.Vector3(p.x + fwd.x * 1.2, p.y, p.z + fwd.z * 1.2);
+        const win = this.win;
+        if (!e || !e.alive || !e.body || !win) return this.whiffed();
+        if (this.guards(e)) return this.blocked(e, 'reach.slapped');
+        if (!byWindow(win.far.pos, win.far.look, bodyPoint(e.pos, e.height, win.far.pos, _a), REACH.window.reach + 0.6)) return this.whiffed();
         h.enemies.hold(e, true, true);
         e.body.userData.manual = true;
-        this.pulls.push({ id: e.id, from: e.pos.clone(), to, t: 0 });
+        const into = new THREE.Vector3(win.far.pos.x, win.far.pos.y - REACH.window.height / 2 + 0.05, win.far.pos.z);
+        this.pulls.push({ id: e.id, phase: 'in', from: e.pos.clone(), to: into, t: 0 });
         h.audio.reachPull(e.chest(_a));
         h.hitstop(REACH.pull.hitstop);
         h.shake(0.2);
         return true;
       }
       case 'stab': {
-        const e = w.enemyId !== null ? h.enemies.get(w.enemyId) : null;
-        if (!e || !e.alive) return false;
-        // (a man reeling from your pull dies of it; one on his feet takes two)
-        if ((this.stunUntil.get(e.id) ?? -1) > h.time()) this.knifeKill(e as Enemy, w.at);
-        else this.knifeHurt(e as Enemy, w.at);
+        const e = w.enemyId !== null ? (h.enemies.get(w.enemyId) as Enemy | null) : null;
+        const win = this.win;
+        if (!e || !e.alive || !win) return this.whiffed();
+        if (!byWindow(win.far.pos, win.far.look, bodyPoint(e.pos, e.height, win.far.pos, _a), REACH.window.knife + 0.5)) return this.whiffed();
+        // from the front he parries it; from behind or the side it's over
+        if (this.able(e.id) && sideOf(e.pos, e.yaw, win.far.pos) === 'front') {
+          win.noticed.add(e.id);
+          return this.blocked(e, 'reach.parried');
+        }
+        this.knifeKill(e, win.far.pos);
         return true;
       }
+      case 'grab': {
+        const p = w.enemyId !== null ? this.portals.get(w.enemyId) : null;
+        if (!p || !this.portals.grab(p)) return this.whiffed();
+        this.held = { p, t: 0 };
+        h.audio.reachGrab(p.b);
+        h.hitstop(0.04);
+        h.fx.ring(_a.copy(p.b).setY(p.b.y + 0.06), 1.6, 0.3, REACH_CYAN);
+        return true;
+      }
+      case 'whiff':
+        return this.whiffed();
     }
     return false;
   }
 
+  /** Nothing there: a visible whiff and a beat to recover. */
+  private whiffed(): false {
+    this.handCd = REACH.hand.whiff;
+    this.hud.callout('reach.whiff', 'info');
+    this.h.audio.reachSwing(this.win?.far.pos ?? this.h.player.chest(_a));
+    return false;
+  }
+
+  /** He saw it coming: the hand (or the knife) knocked away, a beat to recover. */
+  private blocked(e: Enemy, key: string): false {
+    const h = this.h;
+    this.handCd = REACH.hand.whiff;
+    this.knifeCd = Math.max(this.knifeCd, REACH.hand.whiff);
+    this.hud.callout(key, 'warn');
+    const at = this.win?.far.pos ?? e.chest(_a);
+    h.fx.sparks(_b.copy(at), null, new THREE.Color(2, 2, 2), 12);
+    h.audio.reachClatter(at);
+    e.char.play('strike', { fade: 0.04 });
+    return false;
+  }
+
+  /** Empty hands over a weapon on the floor: it's yours. */
+  private pickUp() {
+    const p = this.h.player.body.pos;
+    for (const w of this.armory.list) {
+      if (w.holder !== null || !Armory.live(w) || !w.resting) continue;
+      if (Math.hypot(w.pos.x - p.x, w.pos.z - p.z) > REACH.hand.touch || Math.abs(w.pos.y - p.y) > 1.3) continue;
+      const from = w.pos.clone();
+      if (!this.armory.touch(w, 'player')) continue;
+      this.flights.set(w.id, { from, t: 0 });
+      this.h.audio.reachSnatch(from, true);
+      return;
+    }
+  }
+
   private updatePulls(dt: number) {
     const h = this.h;
+    const P = REACH.pull;
     for (let i = 0; i < this.pulls.length; ) {
       const q = this.pulls[i];
       const e = h.enemies.get(q.id) as Enemy | null;
@@ -597,21 +929,52 @@ export class ReachMode {
         continue;
       }
       q.t += dt;
-      const k = Math.min(1, q.t / REACH.pull.time);
-      const ease = 1 - (1 - k) * (1 - k);
+      const len = q.phase === 'in' ? P.through : P.out;
+      const k = Math.min(1, q.t / len);
+      const ease = q.phase === 'in' ? k * k : 1 - (1 - k) * (1 - k);
       e.body.pos.lerpVectors(q.from, q.to, ease);
-      e.body.pos.y += Math.sin(Math.PI * k) * REACH.pull.arc;
+      if (q.phase === 'out') e.body.pos.y += Math.sin(Math.PI * k) * P.arc;
       e.body.vel.set(0, 0, 0);
       const pl = h.player.body.pos;
-      e.yaw = Math.atan2(pl.x - e.pos.x, pl.z - e.pos.z);
+      if (q.phase === 'out') e.yaw = Math.atan2(pl.x - e.pos.x, pl.z - e.pos.z);
       h.fx.streak(_a.copy(e.pos).setY(e.pos.y + 1), _b.subVectors(q.to, q.from).multiplyScalar(3), REACH_CYAN);
-      if (k >= 1) {
-        this.endPull(q, true);
-        this.pulls.splice(i, 1);
+      if (k < 1) {
+        i++;
         continue;
       }
-      i++;
+      if (q.phase === 'in') {
+        // through: out of the near window, onto your crosshair
+        const win = this.win;
+        const nearFeet = win ? _c.set(win.near.pos.x, win.near.pos.y - REACH.window.height / 2, win.near.pos.z) : _c.copy(pl);
+        h.fx.riftBurst(_a.copy(win?.far.pos ?? e.pos), win?.far.look ?? _b.set(0, 0, 1), REACH_CYAN);
+        q.from.copy(nearFeet);
+        q.to.copy(this.landing());
+        q.phase = 'out';
+        q.t = 0;
+        e.body.pos.copy(nearFeet);
+        e.char.root.position.copy(nearFeet);
+        if (win) h.fx.riftBurst(_a.copy(win.near.pos), win.near.look, REACH_CYAN);
+        // (the window has done its work: it shuts behind him)
+        this.closeWindow();
+        i++;
+        continue;
+      }
+      this.endPull(q, true);
+      this.pulls.splice(i, 1);
     }
+  }
+
+  /** Where a pulled man lands: on your crosshair, a stab away (nearer if there's no floor). */
+  private landing(): THREE.Vector3 {
+    const h = this.h;
+    const aim = flat(h.aimRay().dir, _d);
+    const p = h.player.body.pos;
+    for (const k of [REACH.pull.land, 1.6, 1.25]) {
+      const at = pullLanding(p, aim, new THREE.Vector3(), k);
+      const y = h.standAt(at.x, at.z, p.y);
+      if (y !== null && h.world.lineOfSight(_a.set(p.x, p.y + 1, p.z), _b.set(at.x, y + 1, at.z))) return at.setY(y);
+    }
+    return pullLanding(p, aim, new THREE.Vector3(), 1.2);
   }
 
   private endPull(q: { id: number }, landed: boolean) {
@@ -625,12 +988,18 @@ export class ReachMode {
     h.enemies.hold(e, false);
     h.enemies.setSink(e, 0);
     if (!landed || !e.alive) return;
+    const pl = h.player.body.pos;
+    e.yaw = Math.atan2(pl.x - e.pos.x, pl.z - e.pos.z);
     h.enemies.stagger(e, REACH.pull.stun);
     this.stunUntil.set(e.id, h.time() + REACH.pull.stun);
     h.fx.dust(e.pos, 0.8);
     h.fx.ring(_a.copy(e.pos).setY(e.pos.y + 0.05), 1.1, 0.3, REACH_CYAN);
     h.audio.impact(e.pos, 7);
   }
+
+  // ------------------------------------------------------------------
+  // Their portal in your hand
+  // ------------------------------------------------------------------
 
   /** Their portal in your hand: its exit where you aim; let go (or held too long) and it stays there. */
   private updateHeldPortal(realDt: number, held: boolean) {
@@ -641,7 +1010,6 @@ export class ReachMode {
       return;
     }
     H.t += realDt;
-    // a tap: the exit right in front of you (he comes out tumbling at your feet)
     const tap = !held && H.t < 0.18;
     const spot = tap ? this.exitAhead() : this.exitFromAim();
     this.portals.aim(p, spot.pos, spot.yaw);
@@ -656,7 +1024,7 @@ export class ReachMode {
     h.fx.riftBurst(_a.copy(p.b).setY(p.b.y + 1), _b.set(Math.sin(p.by), 0, Math.cos(p.by)), REACH_CYAN);
   }
 
-  private exitAhead(): { pos: THREE.Vector3; yaw: number; outcome: 'floor' | 'void' | 'water' } {
+  private exitAhead(): { pos: THREE.Vector3; yaw: number; outcome: HeldOutcome } {
     const h = this.h;
     const ray = h.aimRay();
     const yaw = Math.atan2(ray.dir.x, ray.dir.z);
@@ -664,16 +1032,18 @@ export class ReachMode {
     for (const k of [3, 2]) {
       const x = p.x + Math.sin(yaw) * k, z = p.z + Math.cos(yaw) * k;
       const y = h.standAt(x, z, p.y);
-      if (y !== null) {
-        const pos = new THREE.Vector3(x, y, z);
-        return { pos, yaw, outcome: 'floor' };
-      }
+      if (y !== null) return { pos: new THREE.Vector3(x, y, z), yaw, outcome: 'floor' };
     }
     return this.exitFromAim();
   }
 
-  /** Where the aim puts an exit: on the floor it meets, off a wall it meets, over the void or the water it passes. */
-  private exitFromAim(): { pos: THREE.Vector3; yaw: number; outcome: 'floor' | 'void' | 'water' } {
+  /**
+   * Where the aim puts an exit (his feet): on the floor it meets; in front of
+   * a wall it meets, at the height you aimed (he flies into it, and falls from
+   * there); in mid-air where the aim ends (high up: a long fall); over the
+   * void or the water, where the aim crosses the deck's height.
+   */
+  exitFromAim(): { pos: THREE.Vector3; yaw: number; outcome: HeldOutcome } {
     const h = this.h;
     const ray = h.aimRay();
     const eye = h.eye(_eye);
@@ -684,20 +1054,98 @@ export class ReachMode {
     if (hit && hit.point.y > -0.6) {
       if (hit.normal.y > 0.6) pos = hit.point.clone();
       else {
-        pos = hit.point.clone().addScaledVector(hit.normal, 0.7);
-        const g = h.world.groundAt(pos.x, pos.z, 0.2, pos.y + 0.3);
-        pos.y = g > -Infinity && pos.y - g < 2.5 ? g : pos.y - 1;
+        // (his chest at the spot you aimed, in front of it)
+        pos = hit.point.clone().addScaledVector(flat(hit.normal, _a), 0.75);
+        pos.y -= 1.0;
+        const g = h.world.groundAt(pos.x, pos.z, 0.2, pos.y + 1.2);
+        if (g > -Infinity && pos.y < g + 0.5) pos.y = g;
       }
     } else if (dir.y < -0.02) {
-      // (down past the deck's edge, into the pool or the pit: where the aim crosses deck height)
       const s = (0.4 - ray.origin.y) / dir.y;
       pos = new THREE.Vector3().copy(ray.origin).addScaledVector(dir, s);
-    } else pos = new THREE.Vector3().copy(ray.origin).addScaledVector(dir, 26);
-    // never further than the hand reaches
+    } else {
+      pos = new THREE.Vector3().copy(ray.origin).addScaledVector(dir, 22);
+      pos.y -= 1.0;
+    }
     const d = pos.distanceTo(eye);
     const max = REACH.range + 4;
     if (d > max) pos.lerpVectors(eye, pos, max / d);
-    return { pos, yaw, outcome: h.exitOutcome(pos) };
+    return { pos, yaw, outcome: this.outcomeAt(pos, yaw) };
+  }
+
+  /** What a man coming out at `pos` (his feet), flying toward `yaw`, is in for. */
+  outcomeAt(pos: V3, yaw: number): HeldOutcome {
+    const h = this.h;
+    const base = h.exitOutcome(pos);
+    const g = h.world.groundAt(pos.x, pos.z, 0.25, pos.y + 0.6);
+    const height = g === -Infinity ? Infinity : pos.y - g;
+    const wall = h.world.raycast(_a.set(pos.x, pos.y + 1, pos.z), _b.set(Math.sin(yaw), 0, Math.cos(yaw)), 4, { sight: false });
+    return redirectOutcome(base, height, wall ? wall.distance : Infinity);
+  }
+
+  /** He's out of a portal you moved: the fall and the slam are on their way; his own side's fire finds him. */
+  private redirectedOut(p: RedPortal, now: number) {
+    const h = this.h;
+    this.redirected.set(p.owner, now);
+    h.markForAllies(p.owner, REACH.redirect.allyFire);
+    const e = h.enemies.get(p.owner) as Enemy | null;
+    if (!e || !e.alive) return;
+    const wall = h.world.raycast(_a.set(p.b.x, p.b.y + 1, p.b.z), _b.set(Math.sin(p.by), 0, Math.cos(p.by)), REACH.redirect.slam + 0.4, { sight: false });
+    const slamT = wall ? Math.max(0.04, (wall.distance - 0.45) / REACH.enemy.portal.outSpeed) : -1;
+    this.flying.set(e.id, { t: 0, y0: p.b.y, slamT, slammed: false, wasUp: false });
+  }
+
+  private updateFlying(dt: number) {
+    const h = this.h;
+    const R = REACH.redirect;
+    for (const [id, f] of this.flying) {
+      const e = h.enemies.get(id) as Enemy | null;
+      if (!e || !e.alive || !e.body) {
+        this.flying.delete(id);
+        continue;
+      }
+      f.t += dt;
+      if (f.slamT >= 0 && !f.slammed && f.t >= f.slamT) {
+        f.slammed = true;
+        const c = e.chest(new THREE.Vector3());
+        this.hurtBy(e, R.slamDamage, 'melee', c);
+        e.body.vel.x *= -0.25;
+        e.body.vel.z *= -0.25;
+        h.fx.sparks(c, null, REACH_RED, 14);
+        h.fx.dust(c, 0.9);
+        h.audio.impact(c, 9);
+        h.shake(0.25);
+        this.hud.callout('reach.slam', 'good');
+        if (!e.alive) {
+          this.flying.delete(id);
+          continue;
+        }
+      }
+      const inAir = e.state === 'launched' && !e.body.onGround;
+      if (inAir) f.wasUp = true;
+      if (f.t < 0.12 || (inAir && f.t < 6)) continue;
+      // down
+      this.flying.delete(id);
+      const drop = f.y0 - e.pos.y;
+      if (drop >= R.kill) {
+        this.hurtBy(e, 999, 'melee', e.pos);
+        h.fx.dust(e.pos, 1.4);
+        h.audio.impact(e.pos, 12);
+        this.hud.callout('reach.fall', 'good');
+      } else if (drop >= R.stagger || f.slammed) {
+        if (drop >= R.stagger) this.hurtBy(e, R.fallDamage, 'melee', e.pos);
+        if (e.alive) {
+          const s = f.slammed ? R.slamStun : R.staggerTime;
+          h.enemies.stagger(e, s);
+          this.stunUntil.set(e.id, h.time() + s);
+          h.fx.dust(e.pos, 1);
+        }
+      }
+    }
+  }
+
+  private hurtBy(e: Enemy, amount: number, source: HitInfo['source'], from: V3) {
+    this.h.enemies.hit(e, { source, amount, charged: false, team: 'player', instigator: 'player', dir: new THREE.Vector3(0, -1, 0), from: new THREE.Vector3().copy(from) });
   }
 
   // ------------------------------------------------------------------
@@ -718,33 +1166,51 @@ export class ReachMode {
     this.fireCd = REACH.rifle.interval;
     this.firedT = now;
     const ray = h.aimRay();
-    const o = ray.origin as THREE.Vector3, dir = ray.dir as THREE.Vector3;
-    const wall = h.world.raycast(o, dir, REACH.rifle.range);
-    let far = wall ? wall.distance : REACH.rifle.range;
-    // a man on the line (a thumb or a pad gets a little help)
+    // (through the near window: out of the far one)
+    const segs = h.rifts.raycastThrough(ray.origin, ray.dir, REACH.rifle.range, h.world, 1);
     const assist = THREE.MathUtils.degToRad(h.device() === 'touch' ? 2.5 : h.device() === 'pad' ? 1.5 : 0);
+    const muzzle = h.hero.heldMuzzle(new THREE.Vector3());
     let best: Enemy | null = null;
-    let bestS = far;
-    let bestErr = Infinity;
-    for (const e of h.enemies.list) {
-      if (!e.alive || !e.body) continue;
-      const p = e.pos;
-      const s = rayDistToBody(o, dir, p, e.height, _a);
-      if (s <= 0 || s > far) continue;
-      const perp = _b.copy(o).addScaledVector(dir, s).distanceTo(_a);
-      const err = Math.max(0, perp - e.radius - 0.05) / s;
-      if (err > Math.tan(assist) + 1e-6) continue;
-      if (err < bestErr || (err === bestErr && s < bestS)) {
-        best = e;
-        bestS = s;
-        bestErr = err;
+    let hitAt: THREE.Vector3 | null = null;
+    let segEnd: THREE.Vector3 | null = null;
+    let through = false;
+    for (let si = 0; si < segs.length && !best; si++) {
+      const sg = segs[si];
+      const o = sg.from as THREE.Vector3;
+      const dir = _d.subVectors(sg.to, sg.from);
+      const far = dir.length();
+      if (far < 1e-4) continue;
+      dir.multiplyScalar(1 / far);
+      let bestS = far;
+      let bestErr = Infinity;
+      for (const e0 of h.enemies.list) {
+        const e = e0 as Enemy;
+        if (!e.alive || !e.body) continue;
+        const s = rayDistToBody(o, dir, e.pos, e.height, _a);
+        if (s <= 0 || s > far) continue;
+        const perp = _b.copy(o).addScaledVector(dir, s).distanceTo(_a);
+        // (a reeling man right in front of you: generous, he's yours)
+        const near = (this.stunUntil.get(e.id) ?? -1) > now && e.pos.distanceTo(h.player.body.pos) < 4 ? 0.35 : 0;
+        const err = Math.max(0, perp - e.radius - 0.05 - near) / s;
+        if (err > Math.tan(assist) + 1e-6) continue;
+        if (err < bestErr || (err === bestErr && s < bestS)) {
+          best = e;
+          bestS = s;
+          bestErr = err;
+        }
       }
+      if (best) {
+        hitAt = bestErr === 0 ? new THREE.Vector3().copy(o).addScaledVector(dir, bestS) : best.chest(new THREE.Vector3());
+        through = si > 0;
+      } else if (si === segs.length - 1) {
+        hitAt = new THREE.Vector3().copy(sg.to);
+        through = si > 0;
+        if (sg.hit) h.fx.sparks(hitAt, sg.hit.normal, REACH_CYAN, 6);
+      }
+      if (si === 0 && segs.length > 1) segEnd = new THREE.Vector3().copy(sg.to);
     }
-    const muzzle = h.hero.heldMuzzle(_c);
-    let hitAt: THREE.Vector3;
+    if (!hitAt) hitAt = new THREE.Vector3().copy(ray.origin).addScaledVector(ray.dir, REACH.rifle.range);
     if (best) {
-      hitAt = best.chest(new THREE.Vector3());
-      if (bestErr === 0) hitAt.copy(o).addScaledVector(dir, bestS);
       const stunned = (this.stunUntil.get(best.id) ?? -1) > now;
       const info: HitInfo = {
         source: 'bolt',
@@ -752,24 +1218,23 @@ export class ReachMode {
         charged: false,
         team: 'player',
         instigator: 'player',
-        dir: dir.clone(),
+        dir: hitAt.clone().sub(muzzle).normalize(),
         from: muzzle.clone(),
       };
       this.lastHit.set(best.id, { tool: 'rifle', t: now });
       h.enemies.hit(best, info);
       h.fx.sparks(hitAt, null, REACH_RED, 10);
       h.audio.boltImpact(hitAt, false);
-    } else {
-      far = Math.min(far, REACH.rifle.range);
-      hitAt = new THREE.Vector3().copy(o).addScaledVector(dir, far);
-      if (wall) h.fx.sparks(hitAt, wall.normal, REACH_CYAN, 6);
     }
-    this.fx.tracer(muzzle, hitAt);
+    // the tracer: to the near window, then out of the far one
+    if (through && segEnd && segs.length > 1) {
+      this.fx.tracer(muzzle, segEnd);
+      this.fx.tracer(segs[1].from, hitAt);
+    } else this.fx.tracer(muzzle, hitAt);
     h.fx.flash(muzzle, 2.5, 0.05, 0x7ff4ff);
     h.audio.reachRifle(muzzle);
     h.kick(0.18);
     if (w.ammo <= 0) {
-      // spent: thrown aside (take another weapon)
       const hand = h.hero.bonePos('RightHand', new THREE.Vector3());
       this.armory.drop(w, hand, _a.set(Math.cos(h.player.yaw) * 2.5, 3, -Math.sin(h.player.yaw) * 2.5));
       this.hud.callout('reach.empty', 'info');
@@ -777,63 +1242,86 @@ export class ReachMode {
     }
   }
 
-  /** The man your knife would go for now, and how (up close, or through a window). */
-  private knifeTarget(): { e: Enemy; how: 'melee' | 'window' } | null {
+  /** The man right in front of you within a stab (no window needed). */
+  private meleeTarget(): Enemy | null {
     const h = this.h;
-    const a = this.aim;
-    let e: Enemy | null = null;
-    if (a?.kind === 'body') e = h.enemies.get(a.id) as Enemy | null;
-    else if (a?.kind === 'weapon') {
-      const w = this.armory.get(a.id);
-      if (w && typeof w.holder === 'number') e = h.enemies.get(w.holder) as Enemy | null;
-    }
     const p = h.player.body.pos;
-    if (!e) {
-      // up close, the one in front of you
-      const ray = h.aimRay();
-      const fy = Math.atan2(ray.dir.x, ray.dir.z);
-      let bd = REACH.knife.melee;
-      for (const o of h.enemies.list) {
-        if (!o.alive || !o.body) continue;
-        const d = Math.hypot(o.pos.x - p.x, o.pos.z - p.z);
-        if (d > bd || Math.abs(o.pos.y - p.y) > 1.5) continue;
-        let off = Math.atan2(o.pos.x - p.x, o.pos.z - p.z) - fy;
-        while (off > Math.PI) off -= Math.PI * 2;
-        while (off < -Math.PI) off += Math.PI * 2;
-        if (Math.abs(off) > 0.9) continue;
+    const ray = h.aimRay();
+    const fy = Math.atan2(ray.dir.x, ray.dir.z);
+    let bd: number = REACH.knife.melee;
+    let best: Enemy | null = null;
+    for (const o of h.enemies.list) {
+      if (!o.alive || !o.body) continue;
+      const d = Math.hypot(o.pos.x - p.x, o.pos.z - p.z);
+      if (d > bd || Math.abs(o.pos.y - p.y) > 1.5) continue;
+      let off = Math.atan2(o.pos.x - p.x, o.pos.z - p.z) - fy;
+      while (off > Math.PI) off -= Math.PI * 2;
+      while (off < -Math.PI) off += Math.PI * 2;
+      if (Math.abs(off) > 0.9) continue;
+      bd = d;
+      best = o as Enemy;
+    }
+    return best;
+  }
+
+  /** The man right by the far window, within the knife's reach. */
+  private windowTarget(): Enemy | null {
+    const w = this.win;
+    if (!w) return null;
+    let best: Enemy | null = null;
+    let bd = Infinity;
+    for (const e0 of this.h.enemies.list) {
+      const e = e0 as Enemy;
+      if (!e.alive || !e.body || !e.reach) continue;
+      const pt = bodyPoint(e.pos, e.height, w.far.pos, _a);
+      if (!byWindow(w.far.pos, w.far.look, pt, REACH.window.knife)) continue;
+      const d = pt.distanceTo(w.far.pos);
+      if (d < bd) {
         bd = d;
-        e = o;
+        best = e;
       }
     }
-    if (!e || !e.alive) return null;
-    const d = Math.hypot(e.pos.x - p.x, e.pos.z - p.z);
-    const eye = h.eye(_eye);
-    const how = knifeReach(d, h.world.lineOfSight(eye, e.chest(_a)) && eye.distanceTo(_a) <= REACH.range);
-    return how ? { e, how } : null;
+    return best;
+  }
+
+  /** What the knife does on a press now. */
+  stabState(): ReachStab {
+    if (this.meleeTarget()) return 'melee';
+    if (!this.win) return null;
+    const e = this.windowTarget();
+    if (!e) return 'miss';
+    return this.able(e.id) && sideOf(e.pos, e.yaw, this.win.far.pos) === 'front' ? 'blocked' : 'kill';
   }
 
   private stab() {
     const h = this.h;
-    const tgt = this.knifeTarget();
+    const close = this.meleeTarget();
     this.faceAim();
     h.hero.play('strike', { fade: 0.04 });
     h.audio.reachSwing(h.player.chest(_a));
-    if (!tgt) {
+    if (close) {
+      this.knifeCd = REACH.knife.cooldown;
+      const p = h.player.body.pos;
+      h.player.lunge(_a.set(close.pos.x - p.x, 0, close.pos.z - p.z), REACH.knife.lunge, REACH.knife.lungeTime);
+      this.knifeKill(close, h.player.chest(_b));
+      return;
+    }
+    const w = this.win;
+    if (!w || this.hands.of('player')) {
       this.knifeCd = 0.3;
       return;
     }
-    const e = tgt.e;
-    if (tgt.how === 'melee') {
-      this.knifeCd = REACH.knife.cooldown;
-      const p = h.player.body.pos;
-      h.player.lunge(_a.set(e.pos.x - p.x, 0, e.pos.z - p.z), REACH.knife.lunge, REACH.knife.lungeTime);
-      this.knifeKill(e, h.player.chest(_b));
+    // through the window: the knife comes out of the far one
+    this.knifeCd = REACH.knife.windowCooldown;
+    const e = this.windowTarget();
+    const out = Math.max(0, REACH.window.open - w.t) + REACH.knife.stab;
+    if (!e) {
+      this.hands.open({ owner: 'player', kind: 'whiff', at: w.far.pos, dir: w.far.look, out, far: true });
       return;
     }
-    this.knifeCd = REACH.knife.windowCooldown;
-    windowSpot(h.eye(_eye), e.chest(_c), _a, _b, 0.55);
-    this.hands.open({ owner: 'player', kind: 'stab', at: _a, dir: _b, enemyId: e.id });
-    h.audio.reachWindow(_a, true);
+    const dir = e.chest(_b).sub(w.far.pos);
+    this.hands.open({ owner: 'player', kind: 'stab', at: w.far.pos, dir, enemyId: e.id, out, far: true });
+    h.audio.reachWindow(w.far.pos, true);
   }
 
   private knifeKill(e: Enemy, from: V3) {
@@ -848,18 +1336,45 @@ export class ReachMode {
     h.audio.bladeFinish(c);
   }
 
-  /** A stab through a window into a man on his feet: it hurts and rocks him (the second one finishes him). */
-  private knifeHurt(e: Enemy, from: V3) {
+  // ------------------------------------------------------------------
+  // What you can't see
+  // ------------------------------------------------------------------
+
+  /** Edge arrows for every threat off the screen: their windows and portals, a thief, a gun on you, a knife coming. */
+  private threats(): ThreatArrow[] {
     const h = this.h;
-    const K = REACH.knife;
-    const c = e.chest(new THREE.Vector3());
-    this.lastHit.set(e.id, { tool: 'knife', t: h.time() });
-    const dir = _b.subVectors(c, from).normalize().clone();
-    h.enemies.hit(e, { source: 'melee', amount: K.windowDamage, charged: false, team: 'player', instigator: 'player', dir, from: new THREE.Vector3().copy(from) });
-    if (e.alive) h.enemies.stagger(e, K.windowStagger, dir.multiplyScalar(2));
-    h.hitstop(REACH.hand.hitstop);
-    h.fx.sparks(c, null, REACH_RED, 10);
-    h.audio.bladeFinish(c);
+    const cam = h.camera;
+    const me = h.player.body.pos;
+    const out: ThreatArrow[] = [];
+    const seen = new Set<string>();
+    const add = (p: V3, kind: ThreatKind, key: string, urgent: boolean) => {
+      if (seen.has(key) || out.length >= 8) return;
+      if (_a.copy(p).distanceTo(me) > REACH.range + 2) return;
+      _ndc.copy(p).applyMatrix4(cam.matrixWorldInverse);
+      const behind = _ndc.z > 0;
+      _ndc.copy(p).project(cam);
+      const ang = edgeArrow(_ndc.x, _ndc.y, behind);
+      if (ang === null) return;
+      seen.add(key);
+      out.push({ ang, kind, urgent });
+    };
+    for (const w of this.hands.list) {
+      if (w.owner === 'player') continue;
+      const e = h.enemies.get(w.owner as number);
+      if (w.kind === 'steal' && e) add(e.chest(_b), 'thief', `e${e.id}`, true);
+      else add(w.at, 'window', `w${w.id}`, false);
+    }
+    for (const p of this.portals.list) {
+      if (p.crossedT >= 0) continue;
+      add(_c.copy(p.b).setY(p.b.y + 1.1), 'portal', `p${p.id}`, p.b.distanceTo(me) < 10);
+    }
+    for (const e of h.enemies.list) {
+      if (!e.alive || !e.reach) continue;
+      const w = this.armory.heldBy(e.id);
+      if (this.ai.aiming(e.id)) add(e.chest(_b), 'gun', `e${e.id}`, true);
+      else if (w?.kind === 'knife' && e.pos.distanceTo(me) < 12) add(e.chest(_b), 'knife', `e${e.id}`, e.pos.distanceTo(me) < 6);
+    }
+    return out;
   }
 
   dispose() {
@@ -870,7 +1385,6 @@ export class ReachMode {
 
 /** Along the ray (o, unit d), the distance where it passes nearest a man's axis (feet p, height ht); `out`: that point on his axis. */
 function rayDistToBody(o: V3, d: V3, p: V3, ht: number, out: THREE.Vector3): number {
-  // closest approach in the horizontal plane, then clamp to his height
   const dx = d.x, dz = d.z;
   const A = dx * dx + dz * dz;
   let s: number;
@@ -878,7 +1392,6 @@ function rayDistToBody(o: V3, d: V3, p: V3, ht: number, out: THREE.Vector3): num
   else s = ((p.x - o.x) * dx + (p.z - o.z) * dz) / A;
   const y = o.y + d.y * s;
   out.set(p.x, THREE.MathUtils.clamp(y, p.y + 0.1, p.y + ht), p.z);
-  // the point on the ray nearest that point of him
   return Math.max(0, _c.subVectors(out, o).dot(d));
 }
 

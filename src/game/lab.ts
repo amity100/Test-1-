@@ -122,6 +122,7 @@ export class LabMode {
       state: 'combat',
       reach: true,
     };
+    if (s.reachRole) def.reachRole = s.reachRole;
     const v = host.enemies.spawn(def) as Enemy;
     host.enemies.inform(v, pl);
     const at = s.post.clone().setY(s.post.y + 1.1);

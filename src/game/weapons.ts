@@ -14,7 +14,7 @@ export interface Weapon {
   ammo: number;
   /** In someone's hand (null: on the floor, or falling). */
   holder: Owner | null;
-  /** A hand window is reaching for it: whoever opened theirs first. */
+  /** A hand is on its way to it (the last one sent; it's only a mark: the first hand to TOUCH it wins). */
   claim: Owner | null;
   /** On the floor: where it lies (its centre). In a hand: the last hand position the game wrote. */
   readonly pos: THREE.Vector3;
@@ -35,9 +35,10 @@ const GRAVITY = 22;
 
 /**
  * Every weapon of the fight and who has it. A weapon is on the floor or in
- * one hand; a hand window CLAIMS it the moment it opens (the first window
- * wins the race; any later one finds it spoken for); it changes hands when the
- * hand gets there. A spent rifle is dropped and nobody can take it again.
+ * one hand; it changes hands only when a hand TOUCHES it (a hand out of a
+ * window getting there, or a man walking over it): sending a hand for it only
+ * marks it (`claim`), the race is decided on arrival. A spent rifle is dropped
+ * and nobody can take it again.
  */
 export class Armory {
   readonly list: Weapon[] = [];
@@ -86,20 +87,28 @@ export class Armory {
     return null;
   }
 
-  /** On the floor, worth having, and nobody's hand on its way to it. */
+  /** On the floor and worth having (hands may be on their way: the first to touch it wins). */
   free(): Weapon[] {
-    return this.list.filter((w) => w.holder === null && w.claim === null && Armory.live(w));
+    return this.list.filter((w) => w.holder === null && Armory.live(w));
+  }
+
+  /** `by` sends a hand for `w` (a mark only): false if it's already his or not worth having. */
+  claim(w: Weapon, by: Owner): boolean {
+    if (!Armory.live(w) || w.holder === by) return false;
+    w.claim = by;
+    return true;
   }
 
   /**
-   * `by`'s window opens for `w`: true if it's the first (the race is won the
-   * moment the window opens). Already spoken for, already his, or not worth
-   * having: false.
+   * `by`'s hand touches `w` now: it's his if it's still there for the taking
+   * (on the floor, or `from` the man the hand was sent at). Returns whether
+   * it got it; whatever he held is dropped at `dropAt`.
    */
-  claim(w: Weapon, by: Owner): boolean {
+  touch(w: Weapon, by: Owner, from: Owner | null = null, dropAt?: V3): boolean {
     if (!Armory.live(w) || w.holder === by) return false;
-    if (w.claim !== null && w.claim !== by) return false;
-    w.claim = by;
+    if (w.holder !== null && w.holder !== from) return false;
+    if (w.holder === null && !w.resting && w.vel.lengthSq() > 30) return false;
+    this.give(w, by, dropAt);
     return true;
   }
 
